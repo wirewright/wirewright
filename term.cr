@@ -4,12 +4,15 @@ module Ww
 
   # Lists the possible types of terms.
   enum TermType : UInt8
-    Any
-    Number
-    String
-    Symbol
-    Boolean
-    Dict
+    # WARNING! This enum is assumed to contain at most 8 values (0-7)
+    # by the rest of the code.
+
+    Any     = 0
+    Number  = 1
+    String  = 2
+    Symbol  = 3
+    Boolean = 4
+    Dict    = 5
 
     def self.parse(cls : Term::Num.class)
       TermType::Number
@@ -86,7 +89,17 @@ module Ww
     # Automatically upcasts `self` to `Term` and tries to run *call* on it.
     macro method_missing(call)
       {% unless Term.has_method?(call.name) %}
-        {% raise "no such method in Term: #{call.name}, cannot automatically upcast" %}
+        {% raise "#{call}: no such method in Term, cannot automatically upcast" %}
+      {% end %}
+
+      # Oh Crystal gods, just add Def#callable_by?(Call) or something...
+      {% candidate = Term.methods.find { |method| method.name == call.name && (method.args.size == call.args.size || method.splat_index) } %}
+      {% unless candidate %}
+        {% raise "#{call}: no such method in term, cannot automatically upcast" %}
+      {% end %}
+
+      {% if call.named_args && !candidate.double_splat %}
+        {% raise "#{call}: giving named arguments to a double-splatless method is unsupported during automatic upcast" %}
       {% end %}
 
       upcast.{{call}}
@@ -127,14 +140,38 @@ module Ww
       Term.new(Pointer(Void).new(term.@k.@mem.address))
     end
 
+    # :nodoc:
+    def unsafe_as_n : Num
+      Num.new(Num::Kernel.new(@mem))
+    end
+
     # Constructs a generic `Term` instance from the given string *term*.
     def self.[](term : Str) : Term
       Term.new(Pointer(Void).new(term.@value.as(Void*).address | Tag::Str.value))
     end
 
+    # :nodoc:
+    def unsafe_as_s : Str
+      Str.new(Pointer(Void).new(@mem.address >> 3 << 3).as(String))
+    end
+
     # Constructs a generic `Term` from the given symbol *term*.
     def self.[](term : Sym) : Term
-      Term.new(Pointer(Void).new(term.@id << 3 | Tag::Sym.value))
+      data = term.@id.to_u64
+      data |= term.@flags.value.to_u64 << 32
+      data |= term.@type.value.to_u64 << 32 + 8
+      Term.new(Pointer(Void).new((data << 3) | Tag::Sym.value))
+    end
+
+    # :nodoc:
+    def unsafe_as_sym : Sym
+      data = @mem.address >> 3
+      id = (data & 0xffffffff).to_u32
+      data >>= 32
+      flags = Sym::Flags.new((data & 0xff).to_u8)
+      data >>= 8
+      type = TermType.new((data & 0xff).to_u8)
+      Sym.new(id, type, flags)
     end
 
     # Constructs a generic `Term` from the given boolean *term*.
@@ -146,9 +183,19 @@ module Ww
       end
     end
 
+    # :nodoc:
+    def unsafe_as_b : Boolean
+      Boolean.new((@mem.address >> 3) == 1)
+    end
+
     # Constructs a generic `Term` from the given dictionary *term*.
     def self.[](term : Dict) : Term
       Term.new(term.as(Void*))
+    end
+
+    # :nodoc:
+    def unsafe_as_d : Dict
+      @mem.as(Dict)
     end
 
     def to_json(builder : JSON::Builder)
@@ -169,31 +216,6 @@ module Ww
       in .boolean?            then TermType::Boolean
       in .dict?               then TermType::Dict
       end
-    end
-
-    # :nodoc:
-    def unsafe_as_n : Num
-      Num.new(Num::Kernel.new(@mem))
-    end
-
-    # :nodoc:
-    def unsafe_as_s : Str
-      Str.new(Pointer(Void).new(@mem.address >> 3 << 3).as(String))
-    end
-
-    # :nodoc:
-    def unsafe_as_b : Boolean
-      Boolean.new((@mem.address >> 3) == 1)
-    end
-
-    # :nodoc:
-    def unsafe_as_sym : Sym
-      Sym.new((@mem.address >> 3).to_u32)
-    end
-
-    # :nodoc:
-    def unsafe_as_d : Dict
-      @mem.as(Dict)
     end
 
     # Returns `self`.
@@ -252,8 +274,8 @@ module Ww
       tag.dict? ? unsafe_as_d : raise TypeCastError.new
     end
 
-    # Returns a dictionary where *key* is bound to `self`, followed by a number
-    # of *rest* pairs.
+    # Returns a dictionary where *key* is bound to `self`, followed by
+    # key-value pairs from *rest* (if any).
     def pack(key, **rest) : Dict
       Term[**rest].with(key, self)
     end
@@ -294,7 +316,7 @@ module Ww
       {% found_some = false %}
       {% return_types = [] of ::NoReturn %}
 
-      isolate do
+      pass do
         %instance = downcast
         {% for candidate in ITerm.includers %}
           {% for method in candidate.methods %}
@@ -375,7 +397,7 @@ module Ww
       Dict.build do |commit|
         object.each_with_index do |el, i|
           next if el.nil?
-          commit.assoc(Term.of(i), Term.of(el))
+          commit.with(i, el)
         end
       end
     end
@@ -388,7 +410,7 @@ module Ww
         Dict.build do |commit|
           object.each do |k, v|
             next if v.nil?
-            commit.assoc(Term.of(k), Term.of(v))
+            commit.with(k, v)
           end
         end
       end
@@ -444,11 +466,11 @@ module Ww
       Dict.build do |commit|
         items.each_with_index do |el, i|
           next if el.nil?
-          commit.assoc(Term.of(i), Term.of(el))
+          commit.with(i, el)
         end
         entries.each do |k, v|
           next if v.nil?
-          commit.assoc(Term.of(k), Term.of(v))
+          commit.with(k, v)
         end
       end
     end

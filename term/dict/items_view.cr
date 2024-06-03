@@ -1,6 +1,6 @@
 module Ww
-  # Sits on top of a dictionary (see `Dict`) and provides a view of its items
-  # part. Most read/cursor-like operations can be completed without rebuilding
+  # Sits on top of an itemsonly dictionary (see `Dict`) and provides a view of
+  # the items. Most read/cursor-like operations can be completed without rebuilding
   # the dictionary. `ItemsView` does the bookkeeping to make that possible.
   struct Term::Dict::ItemsView
     include Enumerable(Term)
@@ -74,9 +74,7 @@ module Ww
       end
 
       Dict.build(itemsonly: true) do |commit|
-        each do |item|
-          commit.assoc(Term.of(commit.size), item)
-        end
+        each { |item| commit.with(commit.size, item) }
       end
     end
 
@@ -160,6 +158,11 @@ module Ww
         yield ItemsView.new(@dict, from, to + 1), i
         from = to + 1
       end
+    end
+
+    # Returns `true` if the underlying dictionary and *dict* are the same.
+    def same?(dict : Dict) : Bool
+      @dict.same?(dict)
     end
 
     def inspect(io)

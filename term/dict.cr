@@ -32,6 +32,23 @@ module Ww
       end
     end
 
+    struct Commit
+      def initialize(@commit : Pf::Map::Commit(Term, Term))
+      end
+
+      def size
+        @commit.size
+      end
+
+      def with(key, value)
+        @commit.assoc(Term.of(key), Term.of(value))
+      end
+
+      def without(key, value)
+        @commit.dissoc(Term.of(key))
+      end
+    end
+
     @hashcode : UInt64?
 
     def initialize(@map = Pf::Map(Term, Term).new, itemsonly = false, entryonly = false)
@@ -39,9 +56,9 @@ module Ww
       @entries = self if entryonly
     end
 
-    def self.build(**kwargs, &)
+    def self.build(**kwargs, & : Commit ->)
       map = Pf::Map(Term, Term).transaction do |commit|
-        yield commit
+        yield Commit.new(commit)
       end
 
       new(map, **kwargs)
@@ -76,6 +93,10 @@ module Ww
     # Essentially, returns `true` if this dictionary is a list; and `false`
     # otherwise.
     def itemsonly? : Bool
+      if items = @items
+        return items.same?(self)
+      end
+
       (Term[0]...Term[size]).all?(&.upcast.in?(@map))
     end
 
@@ -138,7 +159,9 @@ module Ww
     # If *value* is `nil` acts as `without`. This is mainly useful during
     # conversion from JSON (via `Term.[]`), treating `null` as absence.
     def with(key, value) : Dict
-      return without(key) if value.nil? || value.is_a?(JSON::Any) && value.raw.nil?
+      if value.nil? || value.is_a?(JSON::Any) && value.raw.nil?
+        return without(key)
+      end
 
       key, value = Term.of(key), Term.of(value)
 
