@@ -148,7 +148,7 @@ module Ww
       io << '_' # Humpf... What if the user omits it?
 
       case @type
-      in .any?     
+      in .any?
       in .number?  then io << "number"
       in .string?  then io << "string"
       in .symbol?  then io << "symbol"
@@ -163,4 +163,13 @@ module Ww
 
     def_equals_and_hash @id
   end
+
+  # Frequently used symbols.
+
+  SYMBOL_BIND_AT = Term[:"bind@"]
+  SYMBOL_HELD_AT = Term[:"held@"]
+  SYMBOL_HOLD    = Term[:hold]
+  SYMBOL_PLACE   = Term[:place]
+  SYMBOL_PASTE   = Term[:paste]
+  SYMBOL_EMBED   = Term[:embed]
 end

@@ -86,6 +86,11 @@ module Ww
       self === other.downcast
     end
 
+    # Writes a string representation of this term to *io*.
+    def to_s(io)
+      inspect(io)
+    end
+
     # Automatically upcasts `self` to `Term` and tries to run *call* on it.
     macro method_missing(call)
       {% unless Term.has_method?(call.name) %}
@@ -115,8 +120,6 @@ module Ww
   # All terms (including dictionary terms `Term::Dict`) are persistent, thread-safe,
   # and immutable.
   struct Term
-    include Pf::Eq
-
     enum Tag : UInt8
       Dict    = 0u8 # << MUST be here
       NumRat  = 1u8

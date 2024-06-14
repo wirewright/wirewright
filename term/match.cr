@@ -11,18 +11,18 @@ module Ww
       args = pattern.move(1)
 
       case pattern.first?
-      when Term[:"bind@"]
+      when SYMBOL_BIND_AT
         return :malformed unless args.size == 2
         name, subpattern = args
         return :matchless unless env = unify?(env, subpattern.downcast, term.downcast)
         return :matchless unless env = env.unify?(name, term)
         env
-      when Term[:"held@"]
+      when SYMBOL_HELD_AT
         return :malformed unless args.size == 1
         subpattern = args[0]
         if term.is_a?(Term::Dict)
           items, entries = term.partition
-          if entries.empty? && items.size == 2 && items[0] == Term[:hold]
+          if entries.empty? && items.size == 2 && items[0] == SYMBOL_HOLD
             term = items[1]
           end
         end

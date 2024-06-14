@@ -1,16 +1,11 @@
 module Ww
-  # Sits on top of an itemsonly dictionary (see `Dict`) and provides a view of
-  # the items. Most read/cursor-like operations can be completed without rebuilding
-  # the dictionary. `ItemsView` does the bookkeeping to make that possible.
   struct Term::Dict::ItemsView
-    include Enumerable(Term)
+    include Indexable(Term)
 
-    def initialize(@dict : Dict, @b = 0, @e : Int32 = dict.size)
-    end
-
-    # Returns `true` if there are no items in this items view.
-    def empty? : Bool
-      size.zero?
+    def initialize(@node : ItemNode, @b : Int32, @e : Int32, @available : Int32)
+      unless 0 <= @b <= @e <= @available # Sanity
+        raise ArgumentError.new
+      end
     end
 
     # Returns the amount of items in this items view.
@@ -18,18 +13,14 @@ module Ww
       @e - @b
     end
 
-    # Returns the first term in this items view. If none, returns nil.
-    def first? : Term?
-      return if empty?
+    # Looks up *index*-th term in this items view without doing a bounds check.
+    def unsafe_fetch(index : Int) : Term
+      unless coat = @node.fetch?(Probes::FetchItem.new(@b + index))
+        raise ArgumentError.new
+      end
 
-      @dict[@b]?
-    end
-
-    # Looks up *index*-th term in this items view.
-    #
-    # Raises `KeyError` if the term is not found.
-    def [](index : Number | Term::Num) : Term
-      @dict[@b + index]
+      entry, *_ = coat
+      entry.value
     end
 
     # Returns an empty items view pointing at the end of this items view. Can be
@@ -41,7 +32,7 @@ module Ww
     # V1.end        [.]
     # ```
     def end : ItemsView
-      ItemsView.new(@dict, @e, @e)
+      ItemsView.new(@node, @e, @e, @available)
     end
 
     # Moves the beginning of this items view *delta* items forward (`delta > 0`) or
@@ -64,28 +55,28 @@ module Ww
     # V1.move(3)           [.]
     # ```
     def move(delta : Int32) : ItemsView
-      ItemsView.new(@dict, (@b + delta).clamp(0..@e), @e)
+      ItemsView.new(@node, (@b + delta).clamp(0..@e), @e, @available)
+    end
+
+    # Expands the view range to enclose all dictionary items.
+    def expand : ItemsView
+      ItemsView.new(@node, 0, @available, @available)
     end
 
     # Builds and returns an itemsonly dictionary with items from this items view.
     def collect : Dict
-      if @b == 0 && @e == @dict.size
-        return @dict
+      if @b == 0 && @e == @available
+        return Dict.new(@node, PairNode.new, @available, 0)
       end
 
-      Dict.build(itemsonly: true) do |commit|
+      Dict.build do |commit|
         each { |item| commit.with(commit.size, item) }
       end
     end
 
-    # Yields each successive item from this items view.
-    def each(& : Term ->) : Nil
-      (@b...@e).each { |index| yield @dict[index] }
-    end
-
     # Yields each consecutive item from this items view until the block returns
     # `false`, or no more items remain. Returns the view containing the remaining
-    # of the items (empty in case no more items remain).
+    # items (empty in case no more items remain).
     #
     # ```text
     # D                      1 2 3 4 -5 -6 -7
@@ -108,11 +99,11 @@ module Ww
     # Raises `ArgumentError` if the underlying dictionaries of this and *other*
     # differ by value.
     def upto(other : ItemsView) : ItemsView
-      unless @dict == other.@dict
+      unless expand == other.expand
         raise ArgumentError.new
       end
 
-      ItemsView.new(@dict, @b, Math.min(other.@b, @e))
+      ItemsView.new(@node, @b, Math.min(other.@b, @e), @available)
     end
 
     # Passes each consecutive item from this items view through the block,
@@ -147,7 +138,7 @@ module Ww
     # Splits this view into *n* equally-sized (if possible, otherwise left-
     # leaning) subviews.
     def split(n : Int32, & : ItemsView, Int32 ->) : Nil
-      return if n.zero?
+      return unless n.positive?
       return if size < n
 
       step, rem = size.divmod(n)
@@ -155,22 +146,43 @@ module Ww
       n.times do |i|
         to = from + step - 1
         to += 1 if i < rem
-        yield ItemsView.new(@dict, from, to + 1), i
+        yield ItemsView.new(@node, from, to + 1, @available), i
         from = to + 1
       end
     end
 
-    # Returns `true` if the underlying dictionary and *dict* are the same.
-    def same?(dict : Dict) : Bool
-      @dict.same?(dict)
+    # Returns `true` if this and *other* item views are equal by value, meaning
+    # their underlying dictionaries are equal by value and the item views themselves
+    # point to the same region of those dictionaries.
+    def ==(other : ItemsView) : Bool
+      return false unless @b == other.@b && @e == other.@e
+      return true if @node.same?(other.@node)
+
+      other = other.expand
+      expand.each_with_index do |item, index|
+        return false unless item == other[index]
+      end
+
+      true
+    end
+
+    # :nodoc:
+    def ==(other) : Bool
+      false
+    end
+
+    def hash(hasher)
+      hasher = {@b, @e}.hash(hasher)
+      expand.each_with_index do |item, index|
+        hasher = {item, index}.hash(hasher)
+      end
+      hasher
     end
 
     def inspect(io)
       io << "ItemsView("
-      collect.inspect(io)
+      join(io, ", ") { |item| io << item }
       io << ")"
     end
-
-    def_equals_and_hash @dict, @b, @e
   end
 end

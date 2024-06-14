@@ -6,22 +6,22 @@ module Ww::Sparse::Grammar
   # :nodoc:
   EXPORTS = grammar
 
-  # Returns the Synthax rule for a `Sparse::Query`.
+  # Returns the Synthax rule for a Sparse query (see `TermAST.query`).
   def query : Sthx::Rule
     EXPORTS[:query]
   end
 
-  # Returns the Synthax rule for `Sparse::AST::Node` and its descendants.
+  # Returns the Synthax rule for a Sparse pattern (see `TermAST.pattern`).
   def pattern : Sthx::Rule
     EXPORTS[:pattern]
   end
 
-  # Returns the Syntax rule for `Sparse::AST::Dict` (e.g. `{ x 100, y 200 }`).
+  # Returns the Syntax rule for a Sparse dictionary pattern (e.g. `{ x 100, y 200 }`).
   def dict : Sthx::Rule
     EXPORTS[:dict]
   end
 
-  # Returns the Syntax rule for list `Sparse::AST::Dict` (e.g. `[100, 200]`).
+  # Returns the Syntax rule for a Sparse list pattern (e.g. `[100, 200]`).
   def list : Sthx::Rule
     EXPORTS[:list]
   end
