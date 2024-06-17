@@ -247,6 +247,16 @@ module Ww
       dig?(*keys) || raise KeyError.new
     end
 
+    # Alias of `dig`.
+    def [](*keys) : Term
+      dig(*keys)
+    end
+
+    # Alias of `dig?`.
+    def []?(*keys) : Term?
+      dig?(*keys)
+    end
+    
     # Yields each entry from this dictionary.
     def each_entry(& : Term, Term ->) : Nil
       @items.each { |entry| yield Term.of(entry.index), entry.value }
