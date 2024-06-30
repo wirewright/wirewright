@@ -9,6 +9,10 @@ module Ww
     # :nodoc:
     delegate :inspect, to: @value
 
+    def to?(type : String.class) : String
+      @value
+    end
+
     # Returns the number of characters in this string.
     def charcount : Int32
       @value.size

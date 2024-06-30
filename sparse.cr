@@ -1,8 +1,3 @@
-require "./sparse/grammar"
-require "./sparse/transcribe"
-require "./sparse/translate"
-require "./sparse/instance"
-
 module Ww::Sparse::TermAST
   # Parses *source*, assumed to be a Sparse query. Returns the resulting Term AST.
   # The format of the AST is `(sparse ...)`. If could not parse, returns `nil`.
@@ -48,3 +43,9 @@ module Ww::Sparse::TermAST
     transcribe(source, tree.children[0])
   end
 end
+
+require "./sparse/grammar"
+require "./sparse/transcribe"
+require "./sparse/translate"
+require "./sparse/instance"
+require "./sparse/xgraph"

@@ -59,6 +59,18 @@ module Ww
       Kernel.to_big_r(@k)
     end
 
+    def to?(type : Int32.class) : Int32?
+      to_i
+    end
+
+    def to?(type : Float64.class) : Float64?
+      to_f64
+    end
+
+    def to?(type : BigRational.class) : BigRational?
+      to_big_r
+    end
+
     # Returns `true` if this number is zero.
     def zero? : Bool
       Kernel.zero?(@k)

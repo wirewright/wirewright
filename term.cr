@@ -70,6 +70,16 @@ module Ww
       upcast.to_json(builder)
     end
 
+    # Attempts to convert this term to the given Crystal *type*. If unsuccessful,
+    # returns `nil`.
+    def to?(type)
+    end
+
+    # Same as `to?`, but raises `TypeCastError` instead of returning `nil`.
+    def to(type)
+      to?(type) || raise TypeCastError.new
+    end
+
     def downcast
       self
     end
@@ -492,3 +502,5 @@ require "./term/boolean"
 require "./term/dict"
 require "./term/ir"
 require "./term/match"
+require "./term/trie"
+require "./term/map"
