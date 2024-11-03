@@ -6,6 +6,8 @@ module Ww
     include Comparable(Num)
     include Comparable(Number)
 
+    EPS = Term[0.001]
+
     struct ::Number
       include Comparable(::Ww::Term::Num)
 
@@ -59,16 +61,13 @@ module Ww
       Kernel.to_big_r(@k)
     end
 
-    def to?(type : Int32.class) : Int32?
-      to_i
+    private def convert?(type : T.class) forall T
+      T.new(@k.v)
+    rescue OverflowError
     end
 
-    def to?(type : Float64.class) : Float64?
-      to_f64
-    end
-
-    def to?(type : BigRational.class) : BigRational?
-      to_big_r
+    def to?(type : Number.class)
+      convert?(type)
     end
 
     # Returns `true` if this number is zero.
@@ -106,6 +105,18 @@ module Ww
     # Returns `true` if this number is divisible by *other*.
     def divisible_by?(other) : Bool
       Kernel.divisible_by?(@k, norm(other).@k)
+    end
+
+    # Returns `true` if this number is approximately equal to *other*.
+    #
+    # Epsilon (maximum distance) is given by *eps*.
+    def approx?(other, eps : Num = EPS) : Bool
+      (self - other).abs <= eps
+    end
+
+    # Returns the absolute value of this number.
+    def abs : Num
+      negative? ? self * -1 : self
     end
 
     # Returns the reciprocal (multiplicative inverse) of this number.
@@ -198,6 +209,28 @@ module Ww
       raise MathDomainError.new if negative?
 
       Num.new(Kernel.isqrt(@k))
+    end
+
+    def floor
+      Num.new(Kernel.floor(@k))
+    end
+
+    def uszpair(other : Num)
+      unless positive? && other.positive?
+        raise ArgumentError.new
+      end
+
+      self >= other ? self**2 + self + other : self + other**2
+    end
+
+    def uszunpair : {Num, Num}
+      unless positive?
+        raise ArgumentError.new
+      end
+
+      t1 = sqrt.floor
+      t2 = self - t1**2
+      t2 < t1 ? {t2, t1} : {t1, t2 - t1}
     end
 
     # ???

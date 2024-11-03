@@ -37,7 +37,7 @@ module Ww
   end
 
   struct Term::Num::Kernel
-    {% for cls in %w(UInt8 Int8 UInt16 Int16 Int32) %}
+    {% for cls in %w(UInt8 Int8 UInt16 Int16) %}
       # Constructs an integer-typed kernel.
       def self.from(object : {{cls.id}})
         from(object.to_i)
@@ -54,13 +54,21 @@ module Ww
       new(Pointer(Void).new(Box.box(object).address | Tag::NumRat.value))
     end
 
-    # Constructs a rational-typed kernel.
-    def self.from(object)
-      if object.is_a?(UInt32) && Int32::MIN <= object <= Int32::MAX
+    def self.from(object : Int)
+      if Int32::MIN <= object <= Int32::MAX
         return from(object.to_i)
       end
 
       from(object.to_big_d.to_big_r)
+    end
+
+    # Constructs a rational-typed kernel.
+    def self.from(object : Float)
+      from(object.to_big_d.to_big_r)
+    end
+
+    def self.from(object : BigDecimal)
+      from(object.to_big_r)
     end
 
     def self.to_i(k : Kernel)
@@ -208,6 +216,10 @@ module Ww
 
     def self.tan(a : Kernel)
       from(Math.tan(a.v))
+    end
+
+    def self.floor(a : Kernel)
+      from(a.v.floor)
     end
 
     def self.divisible_by?(a : Kernel, b : Kernel)

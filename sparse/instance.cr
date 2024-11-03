@@ -1,6 +1,4 @@
 module Ww::Sparse::TermAST
-  private INSTANCE_PATTERN_CACHE = [] of Term
-
   private def instance(term : Term, state : Term, seen : Set(Term)) : Term
     instance?(term, state, seen) || term
   end
@@ -19,7 +17,7 @@ module Ww::Sparse::TermAST
 
   private def instance?(term : Term, state : Term, seen : Set(Term), approve : Term -> Bool) : Term?
     {% begin %}
-      Term.case(term, cache: INSTANCE_PATTERN_CACHE) do
+      Term.case(term) do
         given :"/?", :factor_ do |factor|
           term = term
             .with(1, instance(factor, state, seen, &.type.number?))
@@ -28,7 +26,7 @@ module Ww::Sparse::TermAST
           approve.call(term) ? term : nil
         end
 
-        given :pair, :"path+", :value_ do |path, value|
+        given :pair, :"path_+", :value_ do |path, value|
           term = term
             .replace do |i, v|
               if i == Term[term.size - 1]
@@ -73,7 +71,7 @@ module Ww::Sparse::TermAST
 
         # Math functions that take a single numeric argument, n.
         {% for pattern in [{:+, :n_}, {:-, :n_}, {:*, :n_}, {:/, :n_}, {:**, :n_}] %}
-          given :"->>", {{pattern}}, :"deps+" do |n, deps|
+          given :"->>", {{pattern}}, :"deps_+" do |n, deps|
             n = instance(n, state, seen, &.type.number?)
             term = term
               .replace do |i, v|
@@ -105,7 +103,7 @@ module Ww::Sparse::TermAST
           result
         end
 
-        given :hole, :"path+", escaped: :escaped_boolean do |path, escaped|
+        given :hole, :"path_+", escaped: :escaped_boolean do |path, escaped|
           # Instantiate parts of the path.
           term = term
             .replace do |_, part|
@@ -161,7 +159,7 @@ module Ww::Sparse::TermAST
           result
         end
 
-        given :hole, :"path+", escaped: :escaped_boolean, default: :default_ do |path, escaped, default|
+        given :hole, :"path_+", escaped: :escaped_boolean, default: :default_ do |path, escaped, default|
           term = term
             .replace do |_, part|
               instance(part, state, seen) { |replacement| !replacement.type.dict? }
@@ -199,7 +197,7 @@ module Ww::Sparse::TermAST
           result
         end
 
-        given :rescue, :"branches+" do |branches|
+        given :rescue, :"branches_+" do |branches|
           branches.ie.each do |branch|
             next unless branch = instance?(branch, state, seen, approve)
             next unless translatable?(term: branch)

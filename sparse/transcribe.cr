@@ -1,7 +1,7 @@
 module Ww::Sparse::TermAST
   extend self
 
-  # Evaluates escape sequences in *text*.
+  # Evaluates escape sequences in *string*.
   private def unescape(string : String)
     return string if string.empty?
 

@@ -2,11 +2,13 @@ module Ww
   struct Term::Dict::ItemsView
     include Indexable(Term)
 
-    def initialize(@node : ItemNode, @b : Int32, @e : Int32, @available : Int32)
+    def initialize(@node : ItemNode, @b : Int32, @e : Int32, @available : Int32, @sketch0 : UInt64)
       unless 0 <= @b <= @e <= @available # Sanity
         raise ArgumentError.new
       end
     end
+
+    private def_change
 
     # Returns the amount of items in this items view.
     def size : Int32
@@ -23,6 +25,17 @@ module Ww
       entry.value
     end
 
+    # Returns an empty items view pointing at the beginning of this items view.
+    #
+    # ```text
+    # D           1 2 3
+    # V1        [      .]
+    # V1.begin  [.]
+    # ```
+    def begin : ItemsView
+      change(e: @b)
+    end
+
     # Returns an empty items view pointing at the end of this items view. Can be
     # used to e.g. detect when iteration reached the end of the items view.
     #
@@ -32,7 +45,7 @@ module Ww
     # V1.end        [.]
     # ```
     def end : ItemsView
-      ItemsView.new(@node, @e, @e, @available)
+      change(b: @e)
     end
 
     # Moves the beginning of this items view *delta* items forward (`delta > 0`) or
@@ -55,18 +68,36 @@ module Ww
     # V1.move(3)           [.]
     # ```
     def move(delta : Int32) : ItemsView
-      ItemsView.new(@node, (@b + delta).clamp(0..@e), @e, @available)
+      change(b: (@b + delta).clamp(0..@e))
+    end
+
+    # Shorthand for `move`.
+    def +(delta : Int32) : ItemsView
+      move(delta)
+    end
+
+    # :ditto:
+    def -(delta : Int32) : ItemsView
+      move(-delta)
+    end
+
+    def grow(delta : Int32) : ItemsView
+      change(e: (@e + delta).clamp(@b..@available))
+    end
+
+    def remaining : ItemsView
+      change(b: @e, e: @available)
     end
 
     # Expands the view range to enclose all dictionary items.
     def expand : ItemsView
-      ItemsView.new(@node, 0, @available, @available)
+      change(b: 0, e: @available)
     end
 
     # Builds and returns an itemsonly dictionary with items from this items view.
     def collect : Dict
       if @b == 0 && @e == @available
-        return Dict.new(@node, PairNode.new, @available, 0)
+        return Dict.new(@node, PairNode.new, @available, 0, @sketch0)
       end
 
       Dict.build do |commit|
@@ -103,7 +134,7 @@ module Ww
         raise ArgumentError.new
       end
 
-      ItemsView.new(@node, @b, Math.min(other.@b, @e), @available)
+      change(e: Math.min(other.@b, @e))
     end
 
     # Passes each consecutive item from this items view through the block,
@@ -135,18 +166,21 @@ module Ww
       end
     end
 
-    # Splits this view into *n* equally-sized (if possible, otherwise left-
-    # leaning) subviews.
-    def split(n : Int32, & : ItemsView, Int32 ->) : Nil
+    # Splits this view into *n* equally-sized (if possible, otherwise left-leaning)
+    # subviews. Yields each subview followed by its index.
+    #
+    # *empty* can be specified to allow or disallow emission of empty subviews
+    # (they are disallowed by default).
+    def split(n : Int32, *, empty : Bool = false, & : ItemsView, Int32 ->) : Nil
       return unless n.positive?
-      return if size < n
+      return unless empty || size >= n
 
       step, rem = size.divmod(n)
       from = @b
       n.times do |i|
         to = from + step - 1
         to += 1 if i < rem
-        yield ItemsView.new(@node, from, to + 1, @available), i
+        yield change(b: from, e: to + 1), i
         from = to + 1
       end
     end

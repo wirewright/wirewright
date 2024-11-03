@@ -4,25 +4,32 @@ module Ww
   class Term::Dict
     include ITerm
 
-    private alias ItemNode = Pf::Core::Node(Item)
-    private alias PairNode = Pf::Core::Node(Pair)
+    # :nodoc:
+    alias ItemNode = Pf::Core::Node(Item)
 
-    private struct Item
+    # :nodoc:
+    alias PairNode = Pf::Core::Node(Pair)
+
+    # :nodoc:
+    struct Item
       getter index, value
 
       def initialize(@index : Int32, @value : Term)
       end
     end
 
-    private struct Pair
+    # :nodoc:
+    struct Pair
       getter key, value
 
       def initialize(@key : Term, @value : Term)
       end
     end
 
+    # :nodoc:
+    #
     # An enumerable over dictionary pairs.
-    private struct PairEnumerable
+    struct EntryEnumerable
       include Enumerable({Term, Term})
 
       def initialize(@dict : Dict)
@@ -33,9 +40,11 @@ module Ww
       end
     end
 
+    # :nodoc:
+    #
     # An enumerable over dictionary items (keys 0 through n where n is the size
     # of the dictionary).
-    private struct ItemEnumerable
+    struct ItemEnumerable
       include Enumerable(Term)
 
       def initialize(dict : Dict)
@@ -75,6 +84,11 @@ module Ww
         (@dict || @parent).size
       end
 
+      # Runs `Dict::ItemsView#size` on the dictionary built so far.
+      def itemsize : Int32
+        (@dict || @parent).items.size
+      end
+
       # Runs `Dict#[]?` on the dictionary built so far.
       def []?(key : K) : V?
         (@dict || @parent)[key]?
@@ -93,6 +107,8 @@ module Ww
       # Raises `ReadonlyError` if called by a fiber other than the fiber that
       # initiated the transaction.
       def with(key, value) : self
+        return without(key) if value.nil?
+
         raise Pf::ResolvedError.new if @resolved
         raise Pf::ReadonlyError.new unless @fiber == Pf.fiber_id
 
@@ -118,6 +134,16 @@ module Ww
         keys.each { |key| dict.without!(key, @id) }
 
         self
+      end
+
+      # Shorthand for `with(itemsize, item)`.
+      def append(item) : self
+        self.with(itemsize, item)
+      end
+
+      # Shorthand for `append`.
+      def <<(item) : self
+        append(item)
       end
 
       # :nodoc:
@@ -148,16 +174,18 @@ module Ww
 
       @items = EMPTY_ITEM_NODE
       @pairs = EMPTY_PAIR_NODE
+
+      @sketch = 0u64
     end
 
-    protected def initialize(@items, @pairs, @nitems, @npairs)
+    protected def initialize(@items, @pairs, @nitems, @npairs, @sketch)
     end
 
     # Must be possible to do `initialize(*state)`. Must not include any cached
     # data: dictionaries constructed from `state` are expected be mutated without
     # notice -- and stale cache will make the dictionary dysfunctional.
     protected def state
-      {@items, @pairs, @nitems, @npairs}
+      {@items, @pairs, @nitems, @npairs, @sketch}
     end
 
     # Yields a `Commit` object so that you can build a dictionary without having
@@ -184,6 +212,11 @@ module Ww
     # Returns `true` if this dictionary contains no entries.
     def empty? : Bool
       size.zero?
+    end
+
+    # Shorthand for `!empty?`.
+    def nonempty? : Bool
+      !empty?
     end
 
     # Returns `true` if this dictionary contains the given *key*.
@@ -225,14 +258,29 @@ module Ww
       at?(key) || raise KeyError.new
     end
 
+    # Returns the value associated with the given *key*, or *default* if *key*
+    # is not associated with any value.
+    def at(key, *, default) : Term
+      at?(key) || Term.of(default)
+    end
+
+    # Transforms the value associated with the given *key* using the block, or
+    # returns *orelse* without transforming it if *key* is not associated with
+    # any value.
+    def at(key, *, orelse, &) : Term
+      return Term.of(orelse) unless value = at?(key)
+
+      Term.of(yield value)
+    end
+
     # Alias of `at`.
-    def [](key) : Term
-      at(key)
+    def [](*args, **kwargs) : Term
+      at(*args, **kwargs)
     end
 
     # Alias of `at?`.
-    def []?(key) : Term?
-      at?(key)
+    def []?(*args, **kwargs) : Term?
+      at?(*args, **kwargs)
     end
 
     # Traverses nested dictionaries for each key in *keys*, returns the value that
@@ -244,7 +292,7 @@ module Ww
     # Same as `dig?`, but raises `KeyError` instead of returning `nil` if some key
     # was not found during traversal.
     def dig(*keys) : Term
-      dig?(*keys) || raise KeyError.new
+      dig?(*keys) || raise KeyError.new("#{keys}")
     end
 
     # Alias of `dig`.
@@ -256,16 +304,31 @@ module Ww
     def []?(*keys) : Term?
       dig?(*keys)
     end
-    
+
     # Yields each entry from this dictionary.
     def each_entry(& : Term, Term ->) : Nil
       @items.each { |entry| yield Term.of(entry.index), entry.value }
       @pairs.each { |entry| yield entry.key, entry.value }
     end
 
+    # Yields each item from this dictionary followed by its index. **Items are yielded
+    # out of order**.
+    def each_item_with_index(& : Term, Int32 ->) : Nil
+      @items.each { |entry| yield entry.value, entry.index }
+    end
+
+    def each_item_unordered(& : Term ->) : Nil
+      @items.each { |entry| yield entry.value }
+    end
+
+    # Yields each pair from this dictionary.
+    def each_pair(& : Term, Term ->)
+      @pairs.each { |entry| yield entry.key, entry.value }
+    end
+
     # Returns an enumerable based on `each_entry`.
     def ee : Enumerable({Term, Term})
-      PairEnumerable.new(self)
+      EntryEnumerable.new(self)
     end
 
     # Returns an enumerable for items found in this dictionary.
@@ -273,6 +336,11 @@ module Ww
     # See also: `items`.
     def ie : Enumerable(Term)
       ItemEnumerable.new(self)
+    end
+
+    # Returns an enumerable based on `each_pair`.
+    def pe : Enumerable({Term, Term})
+      pairs.ee
     end
 
     # Returns `true` if all entries of `self` are included in *other*.
@@ -285,6 +353,35 @@ module Ww
       other.subset_of?(self)
     end
 
+    def like?(other) : Bool
+      (@sketch & other.@sketch) == other.@sketch
+    end
+
+    def sketch_superset_of?(subset : UInt64) : Bool
+      (@sketch & subset) == subset
+    end
+
+    def probably_includes?(symbol : Term::Sym) : Bool
+      Dict.probably_includes?(@sketch, symbol)
+    end
+
+    def self.probably_includes?(sketch : UInt64, symbol : Term::Sym) : Bool
+      bucket = symbol.hash % 64
+      sketch.bit(bucket) == 1
+    end
+
+    def self.mix(sketch : UInt64, value : Term)
+      case value.type
+      when .symbol?
+        bucket = value.unsafe_as_sym.hash % 64
+        sketch | (0b1u64 << bucket)
+      when .dict?
+        sketch | value.unsafe_as_d.@sketch
+      else
+        sketch
+      end
+    end
+
     # :nodoc:
     def with(key : Term::Num, value : Term) : Dict
       return with_default(key, value) unless key.whole? && key.positive?
@@ -294,7 +391,7 @@ module Ww
 
       added, items = @items.add(Probes::AssocItemImm.new(index, value))
       unless added # Overridden or completely unchanged
-        return @items.same?(items) ? self : Dict.new(items, @pairs, @nitems, @npairs)
+        return @items.same?(items) ? self : Dict.new(items, @pairs, @nitems, @npairs, Dict.mix(@sketch, value))
       end
 
       state = Gap.promote(index + 1,
@@ -304,7 +401,7 @@ module Ww
         pairs: @pairs,
       )
 
-      Dict.new(*state)
+      Dict.new(*state, Dict.mix(@sketch, value))
     end
 
     # :nodoc:
@@ -312,27 +409,95 @@ module Ww
       with_default(key, value)
     end
 
-    private def with_default(key : ITerm, value : Term) : Dict
-      added, pairs = @pairs.add(Probes::AssocPairImm.new(key.upcast, value))
-      unless added # Overridden or completely unchanged
-        return @pairs.same?(pairs) ? self : Dict.new(@items, pairs, @nitems, @npairs)
-      end
-
-      Dict.new(@items, pairs, @nitems, @npairs + 1)
-    end
-
     # Returns a copy of this dictionary extended with an association between
     # *key* and *value*. If *key* was present already its value is updated
     # in the copy.
     #
     # If *value* is `nil` acts as `without`. This is mainly useful during
-    # conversion from JSON (via `Term.[]`), treating `null` as absence. [x]
+    # conversion from JSON (via `Term.[]`), treating `null` as absence.
     def with(key, value) : Dict
       if value.nil? || value.is_a?(JSON::Any) && value.raw.nil?
         return without(key)
       end
 
       self.with(Term[key], Term.of(value))
+    end
+
+    private def with_default(key : ITerm, value : Term) : Dict
+      added, pairs = @pairs.add(Probes::AssocPairImm.new(key.upcast, value))
+      unless added # Overridden or completely unchanged
+        return @pairs.same?(pairs) ? self : Dict.new(@items, pairs, @nitems, @npairs, Dict.mix(@sketch, value))
+      end
+
+      Dict.new(@items, pairs, @nitems, @npairs + 1, Dict.mix(@sketch, value))
+    end
+
+    def where(key, eq value) : Dict
+      self.with(key, value)
+    end
+
+    def where(key, *keys, eq value) : Dict
+      self.with(key, (self[key]? || Term[]).where(*keys, eq: value))
+    end
+
+    def where(key, *keys, eq value : Nil) : Dict
+      return self unless v0 = self[key]?
+      v1 = v0.where(*keys, eq: nil)
+      v1.empty? ? without(key) : self.with(key, v1)
+    end
+
+    def morph(place)
+      where(*place[...-1], eq: place[-1])
+    end
+
+    def morph(place, *places)
+      morph(place).morph(*places)
+    end
+
+    def where(prefix : BiList(Term), eq value) : Dict
+      case prefix
+      when .empty?
+        raise ArgumentError.new
+      when .one?
+        self.with(prefix.first, value)
+      else
+        key = prefix.first
+
+        unless value0 = self[key]?
+          value0 = Term[]
+        end
+
+        unless value0.type.dict?
+          # Replace non-dictionary values with dictionaries if such a case ever
+          # occurs. It shouldn't.
+          value0 = Term[]
+        end
+
+        self.with(key, value0.where(prefix.rest, value))
+      end
+    end
+
+    def where(prefix : ItemsView, eq value) : Dict
+      case prefix.size
+      when 0
+        raise ArgumentError.new
+      when 1
+        self.with(prefix.first, value)
+      else
+        key = prefix.first
+
+        unless value0 = self[key]?
+          value0 = Term[]
+        end
+
+        unless value0.type.dict?
+          # Replace non-dictionary values with dictionaries if such a case ever
+          # occurs. It shouldn't.
+          value0 = Term[]
+        end
+
+        self.with(key, value0.where(prefix.move(1), value))
+      end
     end
 
     # :nodoc:
@@ -342,24 +507,19 @@ module Ww
 
       state = Gap.demote(
         end_exclusive: key.to_i,
-        lchop: true, # < will remove the item
+        rdrop: true, # < will remove the item
         nitems: @nitems,
         npairs: @npairs,
         items: @items,
         pairs: @pairs,
       )
 
-      Dict.new(*state)
+      Dict.new(*state, @sketch)
     end
 
     # :nodoc:
     def without(key : ITerm) : Dict
       without_default(key)
-    end
-
-    private def without_default(key : ITerm) : Dict
-      removed, pairs = @pairs.delete(Probes::DissocPairImm.new(key.upcast))
-      removed ? Dict.new(@items, pairs, @nitems, @npairs - 1) : self
     end
 
     # :nodoc:
@@ -370,20 +530,20 @@ module Ww
     # Returns a copy of this dictionary that is guaranteed not to contain
     # an association with the given *key*.
     def without(key) : Dict
-      without(Term[key])
+      without(Term.of(key))
     end
 
     # Returns a copy of this dictionary that is guaranteed not to contain
     # associations with any of the given *keys*.
-    def without(keys : Enumerable) : Dict
+    def without(*keys) : Dict
       transaction do |commit|
         keys.each { |key| commit.without(key) }
       end
     end
 
-    # :ditto:
-    def without(*keys) : Dict
-      without(keys)
+    private def without_default(key : ITerm) : Dict
+      removed, pairs = @pairs.delete(Probes::DissocPairImm.new(key.upcast))
+      removed ? Dict.new(@items, pairs, @nitems, @npairs - 1, @sketch) : self
     end
 
     protected def with!(key : Term::Num, value : Term, author) : Dict
@@ -404,6 +564,10 @@ module Ww
         )
       end
 
+      # If value is unchanged (e.g. with(0, :x) followed by with (0, :x)) nothing
+      # will happen since the bit has already been set.
+      @sketch = Dict.mix(@sketch, value)
+
       self
     end
 
@@ -416,6 +580,10 @@ module Ww
       if added # Added a new pair
         @npairs += 1
       end
+
+      # If value is unchanged (e.g. with(0, :x) followed by with (0, :x)) nothing
+      # will happen since the bit has already been set.
+      @sketch = Dict.mix(@sketch, value)
 
       self
     end
@@ -431,7 +599,7 @@ module Ww
       @items, @pairs, @nitems, @npairs = Gap.demote(
         end_exclusive: key.to_i,
         author: author,
-        lchop: true, # < will remove the item
+        rdrop: true, # < will remove the item
         nitems: @nitems,
         npairs: @npairs,
         items: @items,
@@ -506,6 +674,24 @@ module Ww
       return self if state == instance.state
 
       instance
+    end
+
+    def subst1(term, replacement) : Dict
+      term, replacement = Term.of(term), Term.of(replacement)
+
+      replace { |_, v| v == term ? replacement : nil }
+    end
+
+    def subst(env) : Dict
+      env = env.as_d
+
+      replace do |_, v0|
+        if v1 = env[v0]?
+          v1
+        elsif v0.type.dict?
+          v0.unsafe_as_d.subst(env).upcast
+        end
+      end
     end
 
     # :nodoc:
@@ -599,9 +785,7 @@ module Ww
     # Merges this dictionary with a *newer* one. If two keys are equal and both
     # values are dictionaries, merging descends recursively. Otherwise, *newer*'s
     # value is preferred.
-    def &(newer) : Dict
-      newer = newer.as_d
-
+    def &(newer : Dict) : Dict
       return newer if empty?
       return self if newer.empty?
 
@@ -648,6 +832,153 @@ module Ww
       end
     end
 
+    def &-(other : Dict) : Dict?
+      if empty? || other.empty?
+        return self
+      end
+
+      result = transaction do |commit|
+        other.each_entry do |k, v1|
+          next unless v0 = self[k]?
+          if v0.type.dict? && v1.type.dict? && !(v0.empty? && v1.empty?)
+            commit.with(k, v0 &- v1)
+          elsif v0 == v1
+            commit.without(k)
+          end
+        end
+      end
+
+      result.empty? ? nil : result
+    end
+
+    def each_prefix(prefix : BiList(Term), term : Term::Dict, &fn : BiList(Term), Term ->)
+      term.each_entry do |k, v|
+        each_prefix(prefix.append(k), v.downcast, &fn)
+      end
+    end
+
+    def each_prefix(prefix : BiList(Term), term : ITerm, &fn : BiList(Term), Term ->)
+      fn.call(prefix, term.upcast)
+    end
+
+    def each_prefix(&fn : BiList(Term), Term ->)
+      each_prefix(BiList(Term)[], self, &fn)
+    end
+
+    # Shallow diff. Returns `{entries present in self but absent in other, entries absent in self but present in other}`.
+    def diff1(other) : {Dict, Dict}
+      added = Term::Dict.build do |commit|
+        each_entry do |k, v1|
+          next if (v0 = other[k]?) && v0 == v1
+          commit.with(k, v1)
+        end
+      end
+
+      removed = Term::Dict.build do |commit|
+        other.each_entry do |k, v0|
+          next if k.in?(self)
+          commit.with(k, v0)
+        end
+      end
+
+      {added, removed}
+    end
+
+    def diff1x(other) : {Dict, Dict, Dict}
+      added = Term[]
+      changed = Term[]
+      removed = Term[]
+
+      added = Term::Dict.build do |added|
+        changed = Term::Dict.build do |changed|
+          each_entry do |k, v1|
+            next if (v0 = other[k]?) && v0 == v1
+
+            (v0 ? changed : added).with(k, v1)
+          end
+        end
+      end
+
+      removed = Term::Dict.build do |commit|
+        other.each_entry do |k, v0|
+          next if k.in?(self)
+          commit.with(k, v0)
+        end
+      end
+
+      {added, changed, removed}
+    end
+
+    def self.diff(k : Term, older : Dict, newer : Dict, added0, removed0) : {Dict, Dict}
+      added, removed = diff(older, newer)
+
+      {added.empty? ? added0 : added0.with(k, added),
+       removed.empty? ? removed0 : removed0.with(k, removed)}
+    end
+
+    def self.diff(k : Term, older : ITerm?, newer : ITerm, added0, removed0) : {Dict, Dict}
+      older == newer ? {added0, removed0} : {added0.with(k, newer), removed0}
+    end
+
+    def self.diff(k : Term, older : ITerm, newer : Nil, added0, removed0) : {Dict, Dict}
+      {added0, removed0.with(k, older)}
+    end
+
+    def self.diff(older : Dict, newer : Dict) : {Dict, Dict}
+      added, removed = Term[], Term[]
+
+      older.each_entry do |k, v0|
+        v1 = newer[k]?
+        added, removed = diff(k, v0.downcast, v1.try(&.downcast), added, removed)
+      end
+
+      newer.each_entry do |k, v1|
+        v0 = older[k]?
+        added, removed = diff(k, v0.try(&.downcast), v1.downcast, added, removed)
+      end
+
+      {added, removed}
+    end
+
+    # Deep diff. Returns `{present in self but absent in other, absent in self but present in other}`.
+    def diff(older) : {Dict, Dict}
+      Dict.diff(older.as_d, newer: self)
+
+      # seen0 = {} of BiList(Term) => Term
+      # seen1 = {} of BiList(Term) => Term
+
+      # each_prefix do |prefix, value|
+      #   seen0.put_if_absent(prefix) { value }
+      # end
+
+      # other.each_prefix do |prefix, value|
+      #   seen1.put_if_absent(prefix) { value }
+      # end
+
+      # lhs = seen0.reduce(Term[]) do |added, (prefix, v0)|
+      #   if (v1 = seen1[prefix]?) && v0 == v1
+      #     added
+      #   else
+      #     added.where(prefix, eq: v0)
+      #   end
+      # end
+
+      # rhs = seen1.reduce(Term[]) do |removed, (prefix, v1)|
+      #   if seen0.has_key?(prefix)
+      #     removed
+      #   else
+      #     removed.where(prefix, eq: v1)
+      #   end
+      # end
+
+      # {lhs, rhs}
+      # lhs = seen0 - seen1
+      # rhs = seen1 - seen0
+
+      # {lhs.reduce(Term[]) { |delta, (prefix, value)| delta.where(prefix, value) },
+      #  rhs.reduce(Term[]) { |delta, (prefix, value)| delta.where(prefix, value) }}
+    end
+
     # In practice `partition` and `pairs` are called very often. Therefore by
     # losing 8 bytes per existing dict, we gain a lot more -- because otherwise
     # for each new dict created by `partition` we lose 32 bytes (if without @pairsonly).
@@ -674,12 +1005,12 @@ module Ww
     # This method is more efficient than using `partition` and discarding
     # the pairs part.
     def items : Dict::ItemsView
-      ItemsView.new(@items, b: 0, e: @nitems, available: @nitems)
+      ItemsView.new(@items, b: 0, e: @nitems, available: @nitems, sketch0: @sketch)
     end
 
     # Returns the pairs part of `partition` (see the latter for more info).
     def pairs : Dict
-      @pairsonly ||= Dict.new(EMPTY_ITEM_NODE, @pairs, 0, @npairs)
+      @pairsonly ||= Dict.new(EMPTY_ITEM_NODE, @pairs, 0, @npairs, @sketch)
     end
 
     def to_ir : IR
@@ -716,6 +1047,14 @@ module Ww
     # Returns `true` if this and *other* dictionaries are equal. Returns `false` otherwise.
     def ==(other : Dict) : Bool
       return true if same?(other)
+
+      # Sketches of equal dicts have *something* in common. They may be substantially
+      # different or even junky if either (or both) dictionaries have "rich histories";
+      # but there must exist an intersection of bits.
+      if @sketch > 0 && other.@sketch > 0 && (@sketch & other.@sketch) == 0
+        return false
+      end
+
       return false unless @nitems == other.@nitems && @npairs == other.@npairs
       return false if (hx = @hash) && (hy = other.@hash) && hx != hy
 
@@ -725,11 +1064,6 @@ module Ww
       end
 
       true
-    end
-
-    # :nodoc:
-    def ==(other) : Bool
-      false
     end
 
     def inspect(io)
@@ -755,14 +1089,13 @@ module Ww
   end
 
   private module Term::Dict::Gap
-    # Demotes *end exclusive*-th and successive items to become pairs. Changes
+    # Demotes *end exclusive*-th and successive items so they become pairs. Changes
     # are authored by *author*, thereby saving a few copies.
     #
     # Returns new `Dict` state tuple from which you can initialize a `Dict`,
     # or mutate an existing one. See also: `Dict#state`.
     #
     # ```text
-    #  ITEMS                     PAIRS
     #  ITEMS                     PAIRS
     # +-----------------------+
     # | 0   1   2   3   4   5 |  x   y
@@ -776,7 +1109,7 @@ module Ww
     # +-----------+
     # ```
     #
-    # If *lchop* is `true` the *end exclusive*-th item is removed rather than
+    # If *rdrop* is `true` the *end exclusive*-th item is removed rather than
     # becoming a pair.
     #
     # ```text
@@ -785,14 +1118,14 @@ module Ww
     # | 0   1   2   3   4   5 |  x   y
     # +-----------------------+
     #
-    #              | Gap.demote(3, lchop: true)
+    #              | Gap.demote(3, rdrop: true)
     #              v
     #  ITEMS         PAIRS
     # +-----------+
     # | 0   1   2 |  4   5   x   y
     # +-----------+
     # ```
-    def self.demote(end_exclusive, lchop, items, pairs, nitems, npairs, author = nil)
+    def self.demote(end_exclusive, rdrop, items, pairs, nitems, npairs, author = nil)
       (end_exclusive...nitems).each do |index|
         hole = uninitialized Term
         author ||= Commit.genid
@@ -804,7 +1137,7 @@ module Ww
 
         nitems -= 1
 
-        next if lchop && index == end_exclusive
+        next if rdrop && index == end_exclusive
 
         added, pairs = pairs.add(Probes::AssocPairMut.new(Term.of(index), value: hole, author: author))
         unless added
@@ -817,7 +1150,7 @@ module Ww
       {items, pairs, nitems, npairs}
     end
 
-    # Promotes *end exclusive*-th pair and successive pairs to become pairs.
+    # Promotes *end exclusive*-th pair and successive pairs so they become items.
     # Changes are authored by *author*, thereby saving a few copies.
     #
     # Returns new `Dict` state tuple from which you can initialize a `Dict`,
@@ -909,7 +1242,7 @@ module Ww
       end
 
       def replace?(stored : E) : Bool
-        @value != stored.value
+        !@value.same?(stored.value)
       end
 
       def value : E

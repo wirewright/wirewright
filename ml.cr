@@ -16,14 +16,21 @@
 #      effects purely using "commands" or something similar, return them, and the impure
 #      outside world interprets them.
 module Ww::ML
+  extend self
+
   class SyntaxError < Exception
+    # Returns the byte index near which the error occured in the source string.
+    getter byte_index : Int32
+
+    def initialize(@message : String, @byte_index : Int32)
+    end
   end
 
   # Parses and returns multiple top-level WwML expressions from *source*,
   # wrapping them in an itemsonly dictionary.
   #
   # Raises `SyntaxError` in case *source* contains a syntax error.
-  def self.parse(source : String) : Term
+  def parse(source : String) : Term
     lexer = Text::Lexer.new(source)
     parser = Text::Parser.new(lexer)
     parser.expressions
@@ -32,10 +39,52 @@ module Ww::ML
   # Parses and returns a single top-level WwML expression term from *source*.
   #
   # Raises `SyntaxError` in case *source* contains a syntax error.
-  def self.parse1(source : String) : Term
+  def parse1(source : String) : Term
     lexer = Text::Lexer.new(source)
     parser = Text::Parser.new(lexer)
     parser.expression
+  end
+
+  EDGE_ALLOWED_DEFAULT = {TermType::Number, TermType::String, TermType::Symbol}
+
+  def edge?(term : Term::Dict, *, allowed = EDGE_ALLOWED_DEFAULT) : Bool
+    return false unless term.itemsonly?
+    return false unless term.size == 2
+    return false unless term.probably_includes?(SYM_EDGE.unsafe_as_sym)
+
+    term.ee.all? do |k, v|
+      case k
+      when Term[0] then v == SYM_EDGE
+      when Term[1] then v.type.in?(allowed)
+      else
+        unreachable
+      end
+    end
+  end
+
+  def edge?(term : ITerm, *, allowed = EDGE_ALLOWED_DEFAULT) : Bool
+    false
+  end
+
+  # Returns `true` if *term* is a well-formed edge. Returns `false` otherwise.
+  def edge?(term : Term, allowed = EDGE_ALLOWED_DEFAULT) : Bool
+    return false unless term.type.dict?
+
+    edge?(term.unsafe_as_d, allowed: allowed)
+  end
+
+  def hold?(term : Term::Dict) : Bool
+    term.itemsonly? && term.size == 2 && term[0] == SYMBOL_HOLD
+  end
+
+  def hold?(term : ITerm) : Bool
+    false
+  end
+
+  def hold?(term : Term) : Bool
+    return false unless term.type.dict?
+
+    hold?(term.unsafe_as_d)
   end
 end
 

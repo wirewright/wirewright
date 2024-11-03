@@ -58,10 +58,14 @@ module Ww::Sparse
     # Creates and returns a new ground `Vertex` for use in relations within
     # this graph.
     #
-    # *cleanup* is an optional function that will be called when the vertex
-    # is removed from the graph.
+    # *cleanup* is an optional includer of `VertexUnmount` whose `VertexUnmount#unmount`
+    # method will be called when the vertex is removed from the graph.
+    def vertex(cleanup : VertexUnmount) : Vertex
+      Vertex.new(self, cleanup: cleanup)
+    end
+
     def vertex(&cleanup : ->) : Vertex
-      Vertex.new(self, &cleanup)
+      vertex(ProcVertexUnmount.new(cleanup))
     end
 
     # :ditto:
@@ -176,6 +180,28 @@ module Ww::Sparse
     end
   end
 
+  module Xgraph::VertexUnmount
+    abstract def unmount(vertex : Vertex) : Nil
+  end
+
+  struct Xgraph::NopVertexUnmount
+    include VertexUnmount
+
+    def unmount(vertex : Vertex) : Nil
+    end
+  end
+
+  struct Xgraph::ProcVertexUnmount
+    include VertexUnmount
+
+    def initialize(@proc : ->)
+    end
+
+    def unmount(vertex : Vertex) : Nil
+      @proc.call
+    end
+  end
+
   # Represents a vertex bound to an `Xgraph`. `Vertex` instances act as vertices
   # and edge labels simultaneously.
   #
@@ -186,16 +212,10 @@ module Ww::Sparse
   # part isn't really reachable most of the times. Therefore a split-layer architecture
   # is employed.
   class Xgraph::Vertex
-    private NOP = ->{}
-
     private on_demand up : Hash(Vertex, Vertex)
 
-    protected def initialize(@graph : Xgraph, @down : {Vertex, Vertex}? = nil, &@cleanup : ->)
+    protected def initialize(@graph : Xgraph, @down : {Vertex, Vertex}? = nil, @cleanup : VertexUnmount = NopVertexUnmount.new)
       @graph.nground += 1 unless @down
-    end
-
-    protected def initialize(*args, **kwargs)
-      initialize(*args, **kwargs, &NOP)
     end
 
     # Returns `true` if this vertex belongs to the given *graph*.
@@ -244,7 +264,7 @@ module Ww::Sparse
 
       unless down = @down
         @graph.nground -= 1
-        @cleanup.call
+        @cleanup.unmount(self)
         return
       end
 

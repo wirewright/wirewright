@@ -1,11 +1,9 @@
 module Ww::Sparse::TermAST
-  private TRANSLATABLE_PATTERN_CACHE = [] of Term
-
   # Returns `true` if an inner *term* (one inside `(sparse ...)`) is translatable.
   # Otherwise, returns `false`.
   private def translatable?(*, term : Term) : Bool
     {% begin %}
-      Term.case(term, cache: TRANSLATABLE_PATTERN_CACHE) do
+      Term.case(term) do
         given :any? { true }
         given :number? { true }
         given :string? { true }
@@ -26,24 +24,24 @@ module Ww::Sparse::TermAST
 
         given :range, bx: :_number, ex: :_number { true }
 
-        given :&, :"conjuncts+" do |conjuncts|
+        given :&, :"conjuncts_+" do |conjuncts|
           conjuncts.ie.all? { |conjunct| translatable?(term: conjunct) }
         end
 
-        given :pair, :"path+", :value_ do |path, value|
+        given :pair, :"path_+", :value_ do |path, value|
           path.ie.none?(&.type.dict?) && translatable?(term: value)
         end
 
         {% for pattern in [{:+, :_number}, {:-, :_number}, {:*, :_number},
                            {:/, :_number}, {:**, :_number}, {:upcase},
                            {:downcase}, {:size}, {:sin}, {:cos}, {:tan}] %}
-          given :"->>", {{pattern}}, :"deps+" do |deps|
+          given :"->>", {{pattern}}, :"deps_+" do |deps|
             deps.ie.all? { |dep| translatable?(term: dep) }
           end
         {% end %}
 
         # Return true for literals such as `12`, `true`, `"hello world"`, and
-        # false otherwise.
+        # false otherwise (e.g. `(hole ...)` will return false).
         otherwise { !term.type.dict? }
       end
     {% end %}
@@ -69,6 +67,87 @@ module Ww::Sparse::TermAST
   # :ditto:
   def translatable?(*, query : Term)
     translatable?(query: query.downcast)
+  end
+
+  # Returns `true` if *hole* is a well-formed Term AST hole.
+  private def valid?(*, hole : Term) : Bool
+    Term.case(hole) do
+      given :hole, :"path_*", escaped: :_boolean do |path|
+        path.ie.all? { |step| !step.type.dict? || valid?(hole: step) }
+      end
+
+      given :hole, :"path_*", escaped: :_boolean, default: :default_ do |path, escaped, default|
+        valid?(term: default) && path.ie.all? { |step| !step.type.dict? || valid?(hole: step) }
+      end
+
+      otherwise { false }
+    end
+  end
+
+  # Returns `true` if an inner *term* (one inside `(sparse ...)`) is well-formed
+  # Term AST. Otherwise, returns `false`.
+  private def valid?(*, term : Term) : Bool
+    {% begin %}
+      Term.case(term) do
+        given :any? { true }
+        given :number? { true }
+        given :string? { true }
+        given :symbol? { true }
+        given :dict? { true }
+        given :boolean? { true }
+        given :"/?", :_number { true }
+
+        given :range, b: :_number, e: :_number { true }
+        given :range, b: :_number { true }
+        given :range, e: :_number { true }
+
+        given :range, bx: :_number, e: :_number { true }
+        given :range, bx: :_number { true }
+
+        given :range, b: :_number, ex: :_number { true }
+        given :range, ex: :_number { true }
+
+        given :range, bx: :_number, ex: :_number { true }
+
+        given :&, :"conjuncts_+" do |conjuncts|
+          conjuncts.ie.all? { |conjunct| valid?(term: conjunct) }
+        end
+
+        given :pair, :"path_+", :value_ do |path, value|
+          path.ie.none?(&.type.dict?) && valid?(term: value)
+        end
+
+        {% for pattern in [{:+, :_number}, {:-, :_number}, {:*, :_number},
+                           {:/, :_number}, {:**, :_number}, {:upcase},
+                           {:downcase}, {:size}, {:sin}, {:cos}, {:tan}] %}
+          given :"->>", {{pattern}}, :"deps_+" do |deps|
+            deps.ie.all? { |dep| valid?(term: dep) }
+          end
+        {% end %}
+
+        given :rescue, :"branches_+" do |branches|
+          branches.ie.all? { |branch| valid?(term: branch) }
+        end
+
+        match :_dict do
+          if term[0]? == Term[:hole]
+            return valid?(hole: term)
+          end
+          false
+        end
+
+        otherwise { true }
+      end
+    {% end %}
+  end
+
+  # Returns `true` if *query* is a well-formed Sparse Term AST query. Otherwise,
+  # returns `false`.
+  def valid?(*, query) : Bool
+    Term.case(query) do
+      given :sparse, :"branches_+" { |branches| branches.ie.all? { |branch| valid?(term: branch) } }
+      otherwise { false }
+    end
   end
 
   # :nodoc:
@@ -97,13 +176,11 @@ module Ww::Sparse::TermAST
     term.upcast
   end
 
-  private UNSAFE_TRANSLATE_PATTERN_CACHE = [] of Term
-
   # Raises `CannotTranslateException` if impossible to translate *pattern* or one
   # of its subterms.
   private def translate(pattern : Term, builder : Unit::Builder, prefix : Unit::Builder ->) : Nil
     {% begin %}
-      Term.case(pattern, cache: UNSAFE_TRANSLATE_PATTERN_CACHE) do
+      Term.case(pattern) do
         {% for match, base in {:any?     => Unit::IsAny,
                                :number?  => Unit::IsNum,
                                :string?  => Unit::IsStr,
@@ -117,7 +194,7 @@ module Ww::Sparse::TermAST
           end
         {% end %}
 
-        given :pair, :"path+", :value_ do |path, value|
+        given :pair, :"path_+", :value_ do |path, value|
           return unless path.ie.none?(&.type.dict?)
 
           translate(value, builder) do |builder|
@@ -128,7 +205,7 @@ module Ww::Sparse::TermAST
           end
         end
 
-        given :&, :"conjuncts+" do |conjuncts|
+        given :&, :"conjuncts_+" do |conjuncts|
           builder.join(conjuncts.ie) do |conjunct|
             translate(conjunct, builder, prefix)
           end
@@ -179,7 +256,7 @@ module Ww::Sparse::TermAST
                         { {:tan}, nil, Unit::IsNum, "Tan.new" }] %}
           {% signature, args, inpcheck, constructor = spec %}
 
-          given :"->>", {{signature}}, :"deps+" do |{% if args %} {{args.map(&.id).splat}}, {% end %} deps|
+          given :"->>", {{signature}}, :"deps_+" do |{% if args %} {{args.map(&.id).splat}}, {% end %} deps|
             deps.ie.each do |dep|
               translate(dep, builder) do
                 prefix.call(builder)

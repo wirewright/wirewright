@@ -21,9 +21,7 @@ module Ww
     # Returns the character at the given *index*, or `nil` if *index* is out
     # of bounds.
     def char_at?(index : Int) : Str?
-      return unless chr = @value[index]?
-
-      Str.new(chr.to_s)
+      Term[@value[index]?]
     end
 
     # :nodoc:
@@ -32,8 +30,8 @@ module Ww
     end
 
     # Concatenates ("stitches") this and *other* strings.
-    def stitch(other : Term) : Str
-      stitch(other.as_s)
+    def stitch(other) : Str
+      stitch(Term.of(other).as_s)
     end
 
     # Returns an uppercase version of this string.
@@ -44,6 +42,22 @@ module Ww
     # Returns a lowercase version of this string.
     def downcase : Str
       Term[@value.downcase]
+    end
+
+    def first : Str
+      Term[@value[0]? || ""]
+    end
+
+    def rest : Str
+      Term[@value.lchop]
+    end
+
+    def prior : Str
+      Term[@value.rchop]
+    end
+
+    def last : Str
+      Term[@value[-1]? || ""]
     end
 
     # :inherit:

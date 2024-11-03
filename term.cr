@@ -38,17 +38,6 @@ module Ww
       TermType::Any
     end
 
-    def symbolize : ::Symbol
-      case self
-      in .any?     then :any
-      in .number?  then :number
-      in .string?  then :string
-      in .symbol?  then :symbol
-      in .boolean? then :boolean
-      in .dict?    then :dict
-      end
-    end
-
     def check : Sparse::Unit::Base
       case self
       in .any?     then Sparse::Unit::IsAny.new
@@ -63,6 +52,23 @@ module Ww
     def subtype?(other : TermType)
       other.any? || self == other
     end
+
+    def blank(io : IO)
+      io << "_"
+
+      case self
+      in .any?
+      in .number?  then io << "number"
+      in .symbol?  then io << "symbol"
+      in .string?  then io << "string"
+      in .boolean? then io << "boolean"
+      in .dict?    then io << "dict"
+      end
+    end
+
+    def blank : ::String
+      ::String.build { |io| blank(io) }
+    end
   end
 
   module ITerm
@@ -72,12 +78,22 @@ module Ww
 
     # Attempts to convert this term to the given Crystal *type*. If unsuccessful,
     # returns `nil`.
-    def to?(type)
+    def to?(type : T.class) : T? forall T
+    end
+
+    macro included
+      def to?(type : {{@type}}.class)
+        self
+      end
     end
 
     # Same as `to?`, but raises `TypeCastError` instead of returning `nil`.
-    def to(type)
-      to?(type) || raise TypeCastError.new
+    def to(type : T.class) : T forall T
+      result = to?(type)
+      if result.nil?
+        raise TypeCastError.new
+      end
+      result
     end
 
     def downcast
@@ -85,14 +101,22 @@ module Ww
     end
 
     def upcast : Term
-      Term[self]
+      Term.of(self)
     end
 
-    def ==(other : Term)
+    def &(newer : ITerm) : ITerm
+      newer
+    end
+
+    def &-(other : ITerm) : ITerm?
+      self == other ? nil : self
+    end
+
+    def ==(other : Term) : Bool
       self == other.downcast
     end
 
-    def ===(other : Term)
+    def ===(other : Term) : Bool
       self === other.downcast
     end
 
@@ -149,7 +173,7 @@ module Ww
     end
 
     # Constructs a generic `Term` instance from the given number *term*.
-    def self.[](term : Num) : Term
+    def self.of(term : Num) : Term
       Term.new(Pointer(Void).new(term.@k.@mem.address))
     end
 
@@ -159,7 +183,7 @@ module Ww
     end
 
     # Constructs a generic `Term` instance from the given string *term*.
-    def self.[](term : Str) : Term
+    def self.of(term : Str) : Term
       Term.new(Pointer(Void).new(term.@value.as(Void*).address | Tag::Str.value))
     end
 
@@ -169,30 +193,23 @@ module Ww
     end
 
     # Constructs a generic `Term` from the given symbol *term*.
-    def self.[](term : Sym) : Term
-      data = term.@id.to_u64
-      data |= term.@flags.value.to_u64 << 32
-      data |= term.@type.value.to_u64 << 32 + 8
-      Term.new(Pointer(Void).new((data << 3) | Tag::Sym.value))
+    def self.of(term : Sym) : Term
+      data = term.@spec
+      Term.new(Pointer(Void).new(((data << 3) | Tag::Sym.value).to_u64))
     end
 
     # :nodoc:
     def unsafe_as_sym : Sym
       data = @mem.address >> 3
-      id = (data & 0xffffffff).to_u32
-      data >>= 32
-      flags = Sym::Flags.new((data & 0xff).to_u8)
-      data >>= 8
-      type = TermType.new((data & 0xff).to_u8)
-      Sym.new(id, type, flags)
+      Sym.new(data.to_u32)
     end
 
     # Constructs a generic `Term` from the given boolean *term*.
-    def self.[](term : Boolean) : Term
+    def self.of(term : Boolean) : Term
       if term.true?
-        Term.new(Pointer(Void).new(1 << 3 | Tag::Boolean.value))
+        Term.new(Pointer(Void).new((1 << 3 | Tag::Boolean.value).to_u64))
       else
-        Term.new(Pointer(Void).new(Tag::Boolean.value))
+        Term.new(Pointer(Void).new(Tag::Boolean.value.to_u64))
       end
     end
 
@@ -202,7 +219,7 @@ module Ww
     end
 
     # Constructs a generic `Term` from the given dictionary *term*.
-    def self.[](term : Dict) : Term
+    def self.of(term : Dict) : Term
       Term.new(term.as(Void*))
     end
 
@@ -245,6 +262,33 @@ module Ww
       in .sym?                then unsafe_as_sym
       in .dict?               then unsafe_as_d
       end
+    end
+
+    def to(type : T.class) : T forall T
+      downcast.to(type)
+    end
+
+    def as_n? : Num?
+      case tag
+      when .num_int?, .num_rat?
+        unsafe_as_n
+      end
+    end
+
+    def as_s? : Str?
+      tag.str? ? unsafe_as_s : nil
+    end
+
+    def as_b? : Boolean?
+      tag.boolean? ? unsafe_as_b : nil
+    end
+
+    def as_sym? : Sym?
+      tag.sym? ? unsafe_as_sym : nil
+    end
+
+    def as_d? : Dict?
+      tag.dict? ? unsafe_as_d : nil
     end
 
     # Attempts to cast this term into a number term `Term::Num`.
@@ -293,6 +337,18 @@ module Ww
       Term[**rest].with(key, self)
     end
 
+    def &(newer : Term) : Term
+      (downcast & newer.downcast).upcast
+    end
+
+    def &-(other : Term) : Term?
+      (downcast &- other.downcast).try(&.upcast)
+    end
+
+    def each_prefix(&fn : BiList(Term), Term ->) : Nil
+      type.dict? ? unsafe_as_d.each_prefix(&fn) : fn.call(BiList(Term)[], self)
+    end
+
     # Computes and returns the hexdigest of this term using the given *algorithm*.
     def hexdigest(*, algorithm : Digest = Digest::SHA256.new) : String
       digest = IO::Digest.new(IO::Empty.new, algorithm, mode: IO::Digest::DigestMode::Write)
@@ -309,6 +365,16 @@ module Ww
       downcast.inspect(io)
     end
 
+    # Returns `true` if this and *other* terms are equal by reference.
+    def same?(other : Term) : Bool
+      @mem == other.@mem
+    end
+
+    # :ditto:
+    def same?(other : ITerm) : Bool
+      @mem == other.upcast
+    end
+
     # Returns `true` if this and *other* terms are equal.
     def ==(other : Term) : Bool
       @mem == other.@mem || downcast == other.downcast
@@ -316,7 +382,7 @@ module Ww
 
     # :ditto:
     def ==(other : ITerm) : Bool
-      downcast == other
+      self == other.upcast # Gives a chance to compare @mem first
     end
 
     def hash(hasher)
@@ -368,8 +434,12 @@ module Ww
 
   struct Term
     # Downcasts `Term` for compatibility with other `[]` constructors.
-    def self.[](object : Term)
+    def self.[](object : Term) : ITerm
       object.downcast
+    end
+
+    def self.[](object : ITerm) : ITerm
+      object
     end
 
     # Constructs a number term from the given number *object*.
@@ -432,19 +502,12 @@ module Ww
     # Constructs a dictionary from the given `JSON::Any` *object*.
     #
     # Raises `ArgumentError` on `null`.
-    def self.[](object : JSON::Any) : Term
+    def self.[](object : JSON::Any) : ITerm
       if (value = object.as_f? || object.as_s? || object.as_a? || object.as_h? || object.as_bool?).nil?
         raise ArgumentError.new
       end
 
-      Term.of(value)
-    end
-
-    # Constructs a term from the given term IR *object*.
-    #
-    # Opposite of `#to_ir`.
-    def self.[](object : IR) : Term
-      Term[object.to_term]
+      Term[value]
     end
 
     # Passes `nil` through so you can safely construct off nilable types
@@ -454,7 +517,7 @@ module Ww
 
     # :nodoc:
     def self.[](object)
-      raise TypeCastError.new
+      raise TypeCastError.new("cannot cast object of type #{object.class} to Term")
     end
 
     # Constructs an empty dictionary.
@@ -488,6 +551,9 @@ module Ww
       end
     end
 
+    def self.of(object : Nil) : Nil
+    end
+
     # Same as `.[]` but upcasts to generic `Term` for you.
     def self.of(*args, **kwargs) : Term
       Term[*args, **kwargs].upcast
@@ -504,3 +570,4 @@ require "./term/ir"
 require "./term/match"
 require "./term/trie"
 require "./term/map"
+require "./term/case"
