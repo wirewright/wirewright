@@ -1,0 +1,11 @@
+/docs/
+/lib/
+/bin/
+/.shards/
+*.dwarf
+cachegrind.out.*
+callgrind.out.*
+massif.out.*
+flamegraph.svg
+perf.data
+perf.data.*

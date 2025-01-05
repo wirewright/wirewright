@@ -1,0 +1,6 @@
+version: 2.0
+shards:
+  permafrost:
+    git: https://github.com/homonoidian/permafrost.git
+    version: 0.3.1
+

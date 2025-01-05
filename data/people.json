@@ -1,0 +1,659 @@
+[
+  {
+    "index": 0,
+    "isActive": true,
+    "age": 21,
+    "name": "Cora Burks",
+    "friends": [
+      {
+        "index": 0,
+        "name": "Sofia Hoffman",
+        "relatives": [
+          {
+            "index": 0,
+            "name": "Wendi Henderson"
+          },
+          {
+            "index": 1,
+            "name": "Flynn Drake"
+          },
+          {
+            "index": 2,
+            "name": "Phoebe Vasquez"
+          }
+        ]
+      },
+      {
+        "index": 1,
+        "name": "Kerri Galloway",
+        "relatives": [
+          {
+            "index": 0,
+            "name": "Anne Burch"
+          },
+          {
+            "index": 1,
+            "name": "Hayden Key"
+          },
+          {
+            "index": 2,
+            "name": "Short Meadows"
+          }
+        ]
+      },
+      {
+        "index": 2,
+        "name": "Wright Anderson",
+        "relatives": [
+          {
+            "index": 0,
+            "name": "Lesa Vang"
+          },
+          {
+            "index": 1,
+            "name": "Bowen Ayala"
+          },
+          {
+            "index": 2,
+            "name": "Roslyn Cash"
+          },
+          {
+            "index": 3,
+            "name": "Deidre Jimenez"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "index": 1,
+    "isActive": false,
+    "age": 26,
+    "name": "Herrera Price",
+    "friends": []
+  },
+  {
+    "index": 2,
+    "isActive": true,
+    "age": 21,
+    "name": "Tonya Robles",
+    "friends": []
+  },
+  {
+    "index": 3,
+    "isActive": true,
+    "age": 22,
+    "name": "Macdonald Booker",
+    "friends": [
+      {
+        "index": 0,
+        "name": "Lorna Wilson",
+        "relatives": [
+          {
+            "index": 0,
+            "name": "Edna Mosley"
+          },
+          {
+            "index": 1,
+            "name": "Kathie Benson"
+          },
+          {
+            "index": 2,
+            "name": "Young Warren"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "index": 4,
+    "isActive": true,
+    "age": 32,
+    "name": "Alvarez Buchanan",
+    "friends": [
+      {
+        "index": 0,
+        "name": "Allison Gilbert",
+        "relatives": [
+          {
+            "index": 0,
+            "name": "Naomi Hale"
+          },
+          {
+            "index": 1,
+            "name": "Brown Miller"
+          }
+        ]
+      },
+      {
+        "index": 1,
+        "name": "Katelyn Hoover",
+        "relatives": [
+          {
+            "index": 0,
+            "name": "Paula Gates"
+          },
+          {
+            "index": 1,
+            "name": "Mccarthy Hughes"
+          },
+          {
+            "index": 2,
+            "name": "Wilson Mann"
+          },
+          {
+            "index": 3,
+            "name": "Amber Stephenson"
+          },
+          {
+            "index": 4,
+            "name": "Socorro Walker"
+          }
+        ]
+      },
+      {
+        "index": 2,
+        "name": "Gayle Stevens",
+        "relatives": [
+          {
+            "index": 0,
+            "name": "Kellie Greer"
+          },
+          {
+            "index": 1,
+            "name": "Daisy Bright"
+          },
+          {
+            "index": 2,
+            "name": "Magdalena Jacobs"
+          },
+          {
+            "index": 3,
+            "name": "Parker Garcia"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "index": 5,
+    "isActive": false,
+    "age": 32,
+    "name": "Conley Hamilton",
+    "friends": [
+      {
+        "index": 0,
+        "name": "Shanna Patrick",
+        "relatives": []
+      },
+      {
+        "index": 1,
+        "name": "Stafford Oconnor",
+        "relatives": [
+          {
+            "index": 0,
+            "name": "Noelle Leblanc"
+          },
+          {
+            "index": 1,
+            "name": "Rosalinda Graham"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "index": 6,
+    "isActive": true,
+    "age": 32,
+    "name": "Jessie Juarez",
+    "friends": [
+      {
+        "index": 0,
+        "name": "Warren Munoz",
+        "relatives": [
+          {
+            "index": 0,
+            "name": "Esmeralda Trujillo"
+          },
+          {
+            "index": 1,
+            "name": "Skinner Stout"
+          }
+        ]
+      },
+      {
+        "index": 1,
+        "name": "Flossie Whitfield",
+        "relatives": [
+          {
+            "index": 0,
+            "name": "Obrien Mathews"
+          },
+          {
+            "index": 1,
+            "name": "Thelma Macias"
+          },
+          {
+            "index": 2,
+            "name": "Lambert Greene"
+          },
+          {
+            "index": 3,
+            "name": "Justine Allison"
+          },
+          {
+            "index": 4,
+            "name": "Juanita Daniels"
+          }
+        ]
+      },
+      {
+        "index": 2,
+        "name": "Elsa Bradley",
+        "relatives": [
+          {
+            "index": 0,
+            "name": "Leon Underwood"
+          },
+          {
+            "index": 1,
+            "name": "Catalina Schroeder"
+          },
+          {
+            "index": 2,
+            "name": "Ochoa England"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "index": 7,
+    "isActive": false,
+    "age": 30,
+    "name": "Addie Franco",
+    "friends": []
+  },
+  {
+    "index": 8,
+    "isActive": false,
+    "age": 40,
+    "name": "Fay Mcmahon",
+    "friends": []
+  },
+  {
+    "index": 9,
+    "isActive": false,
+    "age": 22,
+    "name": "Valenzuela Valencia",
+    "friends": [
+      {
+        "index": 0,
+        "name": "Jillian Chavez",
+        "relatives": [
+          {
+            "index": 0,
+            "name": "Tonia Clark"
+          },
+          {
+            "index": 1,
+            "name": "Dianna Snyder"
+          }
+        ]
+      },
+      {
+        "index": 1,
+        "name": "Roxie Fernandez",
+        "relatives": [
+          {
+            "index": 0,
+            "name": "Renee Maddox"
+          },
+          {
+            "index": 1,
+            "name": "Mitchell Cooley"
+          }
+        ]
+      },
+      {
+        "index": 2,
+        "name": "Boone Steele",
+        "relatives": [
+          {
+            "index": 0,
+            "name": "Caitlin Sheppard"
+          },
+          {
+            "index": 1,
+            "name": "Heidi Hood"
+          },
+          {
+            "index": 2,
+            "name": "Bartlett Winters"
+          },
+          {
+            "index": 3,
+            "name": "Cabrera Forbes"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "index": 10,
+    "isActive": false,
+    "age": 21,
+    "name": "Claudine Carroll",
+    "friends": [
+      {
+        "index": 0,
+        "name": "Velma Pitts",
+        "relatives": [
+          {
+            "index": 0,
+            "name": "Haney Mcfadden"
+          },
+          {
+            "index": 1,
+            "name": "Humphrey Pacheco"
+          },
+          {
+            "index": 2,
+            "name": "Cindy Stanley"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "index": 11,
+    "isActive": false,
+    "age": 37,
+    "name": "Samantha Bell",
+    "friends": [
+      {
+        "index": 0,
+        "name": "Graciela Armstrong",
+        "relatives": [
+          {
+            "index": 0,
+            "name": "Bertha Glover"
+          },
+          {
+            "index": 1,
+            "name": "Leann Hurst"
+          },
+          {
+            "index": 2,
+            "name": "Scott Lowe"
+          }
+        ]
+      },
+      {
+        "index": 1,
+        "name": "Heather Nash",
+        "relatives": [
+          {
+            "index": 0,
+            "name": "Olive Frazier"
+          },
+          {
+            "index": 1,
+            "name": "Hudson Raymond"
+          },
+          {
+            "index": 2,
+            "name": "Key Brennan"
+          },
+          {
+            "index": 3,
+            "name": "Tanya Guerra"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "index": 12,
+    "isActive": true,
+    "age": 27,
+    "name": "Imogene Conway",
+    "friends": [
+      {
+        "index": 0,
+        "name": "Michael Ferrell",
+        "relatives": []
+      }
+    ]
+  },
+  {
+    "index": 13,
+    "isActive": false,
+    "age": 37,
+    "name": "Kristen Lara",
+    "friends": [
+      {
+        "index": 0,
+        "name": "Vicky Hanson",
+        "relatives": [
+          {
+            "index": 0,
+            "name": "Chris Mullen"
+          },
+          {
+            "index": 1,
+            "name": "Nolan Mays"
+          }
+        ]
+      },
+      {
+        "index": 1,
+        "name": "Geraldine Bradshaw",
+        "relatives": [
+          {
+            "index": 0,
+            "name": "Julia Strong"
+          },
+          {
+            "index": 1,
+            "name": "Fuller Compton"
+          },
+          {
+            "index": 2,
+            "name": "Leonard Huff"
+          },
+          {
+            "index": 3,
+            "name": "Mcdowell Baker"
+          },
+          {
+            "index": 4,
+            "name": "Chandler Dunlap"
+          }
+        ]
+      },
+      {
+        "index": 2,
+        "name": "Cassie Lawrence",
+        "relatives": []
+      }
+    ]
+  },
+  {
+    "index": 14,
+    "isActive": true,
+    "age": 26,
+    "name": "Talley Jarvis",
+    "friends": []
+  },
+  {
+    "index": 15,
+    "isActive": false,
+    "age": 40,
+    "name": "Holly Tyler",
+    "friends": [
+      {
+        "index": 0,
+        "name": "Marissa Scott",
+        "relatives": [
+          {
+            "index": 0,
+            "name": "Rosanna Rose"
+          },
+          {
+            "index": 1,
+            "name": "Latoya Fleming"
+          },
+          {
+            "index": 2,
+            "name": "Tommie Cobb"
+          },
+          {
+            "index": 3,
+            "name": "Mai Ingram"
+          },
+          {
+            "index": 4,
+            "name": "Jennifer Randall"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "index": 16,
+    "isActive": true,
+    "age": 27,
+    "name": "Conner Bishop",
+    "friends": [
+      {
+        "index": 0,
+        "name": "Vinson Mclean",
+        "relatives": [
+          {
+            "index": 0,
+            "name": "Collins Lane"
+          },
+          {
+            "index": 1,
+            "name": "Ellison Pratt"
+          }
+        ]
+      },
+      {
+        "index": 1,
+        "name": "Ava Wiggins",
+        "relatives": []
+      }
+    ]
+  },
+  {
+    "index": 17,
+    "isActive": false,
+    "age": 32,
+    "name": "Gloria Strickland",
+    "friends": [
+      {
+        "index": 0,
+        "name": "Bertie Morris",
+        "relatives": [
+          {
+            "index": 0,
+            "name": "Janna Yates"
+          }
+        ]
+      },
+      {
+        "index": 1,
+        "name": "Trujillo Reid",
+        "relatives": []
+      },
+      {
+        "index": 2,
+        "name": "Valarie Mendez",
+        "relatives": [
+          {
+            "index": 0,
+            "name": "Maldonado Waters"
+          },
+          {
+            "index": 1,
+            "name": "Tamara Hutchinson"
+          },
+          {
+            "index": 2,
+            "name": "Coleen Brady"
+          },
+          {
+            "index": 3,
+            "name": "Ruth Jefferson"
+          },
+          {
+            "index": 4,
+            "name": "Carmen Lindsay"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "index": 18,
+    "isActive": false,
+    "age": 24,
+    "name": "Tammi Hansen",
+    "friends": []
+  },
+  {
+    "index": 19,
+    "isActive": true,
+    "age": 22,
+    "name": "Lawanda Duke",
+    "friends": [
+      {
+        "index": 0,
+        "name": "Keisha Blanchard",
+        "relatives": [
+          {
+            "index": 0,
+            "name": "Hull Donaldson"
+          },
+          {
+            "index": 1,
+            "name": "Helene Townsend"
+          },
+          {
+            "index": 2,
+            "name": "Osborne Powers"
+          },
+          {
+            "index": 3,
+            "name": "Delores Castillo"
+          }
+        ]
+      },
+      {
+        "index": 1,
+        "name": "Kate Chambers",
+        "relatives": [
+          {
+            "index": 0,
+            "name": "Shannon Griffith"
+          },
+          {
+            "index": 1,
+            "name": "Luella Riggs"
+          },
+          {
+            "index": 2,
+            "name": "Regina Bass"
+          },
+          {
+            "index": 3,
+            "name": "Mclean Knight"
+          }
+        ]
+      }
+    ]
+  }
+]
