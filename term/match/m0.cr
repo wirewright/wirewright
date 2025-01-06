@@ -76,37 +76,36 @@ module Ww::Term::M0
   # Returns a match env if *pattern* matches *matchee*. Returns `nil` otherwise.
   #
   # M0 implements a tiny subset of constructs from the main pattern matching language
-  # M1 (publicly known as `Term::Match`): *all* patterns that M0 can match, M1 will match;
-  # and *some* patterns that M1 can match, M0 will match.
+  # `M1`: *all* patterns that M0 can match, M1 will match; and *some* patterns that M1
+  # can match, M0 will match.
   #
   # The following constructs are supported in M0:
   #
   # - Literals: `100 "hello" xyzzy true ...`.
-  # - Blanks (named and unnamed, with an optional type): `_ _number x_number`.
-  # - Partition: split a dictionary into its items and pairs partition, e.g.:
-  #   `(%partition <items pattern> <dict pattern>)`: split dictionary into its items
-  # - Match p1-N on first N items of an itemspart, correspondingly: `(<p1> <p2> ... <pN> _*)`.
-  # - `(%literal _)`: match literally, mainly for escaping 3-5.
-  # - Recursive application of all of the above on dictionary items and pairs,
-  #   for example: `(+ a_number 100 x: x_string)`.
+  # - Blanks (named, unnamed, typed, untyped): `_ _number x_number`.
+  # - Partition: split a dictionary into its items and pairs partition, for
+  #   example `(%partition itemspart_ pairspart_)`.
+  # - Match p1-N on the first N items of an itemspart, correspondingly, for
+  #   example `(a b c _*)`.
+  # - `(%literal _)`: match literally, mainly for escaping the above and itself.
+  # - Recursive application of all of the above and itself on dictionary items
+  #   and pairs, for example: `(+ a_number 100 x: x_string)`.
   #
-  # The returned match env contains blank names mapped to term that they have captured
-  #  E.g. `(+ a_ b_)` on `(+ 1 2)` will return the following match env: `{ a: (1: true) b: (2: true) }`.
-  # The semantics for using the same blank across the pattern is preserved in that such
-  # use would be treated as an assertion of equality. And for instance running `(+ a_ a_)`
-  # on `(+ x y)` will fail, whereas running the same pattern on `(+ x x)` will succeed.
+  # The returned match env contains blank names mapped to the term that they have captured
+  #  E.g. `(+ a_ b_)` on `(+ 1 2)` will return the following match env: `{a: 1, b: 2}`.
+  #
+  # The semantics for using the same blank across the pattern is preserved, in that such
+  # uses would be treated as an assertion of equality. And for instance running `(+ a_ a_)`
+  # on `(+ x y)` will fail, whereas running the same pattern on `(+ x x)` will succeed with
+  # a match env `{a: x}`.
   #
   # M0 exists to simplify the implementation of the compiler for M1, since the latter
   # needs to do lots of `Term` pattern matching itself.
   #
-  # Since I did not want to run into the various paradoxes arising from self-dependence,
+  # Since I did not want to run into the various paradoxes arising from self-reference,
   # I've decided to have a separate, much dumber implementation of an entire engine.
   # I could have made M1 depend on M1 with careful control flow etc.; but there's too
   # much circularity anyway.
-  #
-  # `case` is the main user of this method, not you; try to use `case` instead even
-  # if you have just one case; `case` offers some optimizations for the stupid algorithm
-  # we're using here.
   def match?(pattern : Term, matchee : Term) : Term::Dict?
     Term::Dict.build do |commit|
       return unless match?(commit, pattern.downcast, matchee.downcast)

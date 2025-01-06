@@ -21,12 +21,20 @@
 # TODO: short syntax for nested "ignore everything else" patterns in partition, i.e.:
 #   wrap: (¦ _ collapse: (¦ _ newlines: true)) ==> wrap.collapse.newlines: true
 # TODO: maybe use something else (:? perhaps, or ⦂) instead of ⋮ for defaults in partition
-# because it is too similar to ¦. Actually, maybe use ⋮ instead of ¦.
-#   (+ 1 2 ⋮ x: 10 y⦂ 20) instead of (+ 1 2 ¦ x: 10 y⋮ 20)
+# because it is too similar to ¦.
 # TODO: in general, partition should hold the majority of these "syntaxes". most of
 #   them should not leak out into the outer language. If you don't use partition syntax,
 #   you won't have these shorthands around, and that's exactly what we want!
-# TODO: have some sort of shorthand for ($ by path X), ($ X)? $~X, $:X?
+
+# TODO: general: I'm more and more in favor of throwing this parser away and actually
+# creating a parsing engine (like we have pattern matching engine etc.) that can accept
+# grammars as Terms. This would be a huge awesome unifying move for the project since
+# this way we'll be able to interface the outside world with the system 1) via network
+# 2) via UI 3) via syntax (user-defined). And one of those grammars can be the WwML grammar itself!
+#
+# This would cause a considerable performance hit though, but for performance sensitive
+# stuff (e.g. talking over the network) we'll have WwMR anyway (the machine-readable
+# representation of terms)
 
 module Ww::ML::Text
   # An exclusive range, specifies the begin and end of the source substring that
@@ -597,35 +605,36 @@ module Ww::ML::Text
 
               value = slot
 
+              raise "I refuse to do anything circular"
               # Yay we're using the parser inside itself!!
-              Term.case(key) do
-                givenpi %((%literal %let) name_ body_) do
-                  pairs = pairs.with(name, {:"%default", value, key})
-                end
+              # Term.case(key) do
+              #   givenpi %((%literal %let) name_ body_) do
+              #     pairs = pairs.with(name, {:"%default", value, key})
+              #   end
 
-                matchp %(_symbol) do
-                  key0 = key.unsafe_as_sym
+              #   matchp %(_symbol) do
+              #     key0 = key.unsafe_as_sym
 
-                  # The client wants to specify the type themselves.
-                  if blank = key0.blank?
-                    name = blank.name? || raise "unnamed blank with a default makes no sense"
-                    pairs = pairs.with(name, {:"%default", value, key0})
-                    next
-                  end
+              #     # The client wants to specify the type themselves.
+              #     if blank = key0.blank?
+              #       name = blank.name? || raise "unnamed blank with a default makes no sense"
+              #       pairs = pairs.with(name, {:"%default", value, key0})
+              #       next
+              #     end
 
-                  # Infer the type from value and synthesize a symbol.
-                  key1 = String.build do |io|
-                    io << key0
-                    value.type.blank(io)
-                  end
+              #     # Infer the type from value and synthesize a symbol.
+              #     key1 = String.build do |io|
+              #       io << key0
+              #       value.type.blank(io)
+              #     end
 
-                  pairs = pairs.with(key0, {:"%default", value, Term::Sym.new(key1)})
-                end
+              #     pairs = pairs.with(key0, {:"%default", value, Term::Sym.new(key1)})
+              #   end
 
-                otherwise do
-                  pairs = pairs.with(key, {:"%default", value, {:"%let", key, Term::Sym.new(value.type.blank)}})
-                end
-              end
+              #   otherwise do
+              #     pairs = pairs.with(key, {:"%default", value, {:"%let", key, Term::Sym.new(value.type.blank)}})
+              #   end
+              # end
             else
               if pairs.empty? && key.type.symbol? && (blank = key.blank?) && blank.poly?
                 # ¦ pairs_*

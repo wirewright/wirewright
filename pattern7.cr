@@ -60,12 +60,8 @@
 # ~ will work
 # · not needed
 
-# TODO: to support e.g. dynamic min/max bounds in %number or %plural we must introduce
-# some sort of (%new) construct to allow e.g. (%new x (%number 0 < (whole _) <= x))
-# such a construct "instantiates" the pattern with each potential value of `x`
-# it acts as pass until the value is learned.
-# TODO: some tests fail due to unstable hash. Use fnv1a or something similar & fast
-#       as a hashing algorithm for terms! This will cause less failures = progress.
+# TODO: we're pure so our hash must be deterministic, regardless of threats! Use fnv1a or something similar & fast
+#       as a hashing algorithm for terms! E.g. the order of (keys (x: 1 y: 2)) must be the same across all machines&runs.
 
 # --- After the above & tests are in place:
 
@@ -81,28 +77,28 @@
 #   keypath communication & caching so that must be implemented along the way.
 # - At this point we should be able to detect and compile *recursively simple patterns*.
 #
-# Recursively simple patterns (determined at compile-time) should be compiled into
+# Recursively simple patterns (determined at compile-time) should (?) be compiled into
 # a simpler operator hierarchy (e.g. Simple or something like that) that skips feedback etc.
 # Simple patterns should be optimized down to nanoseconds. An example of a simple
 # pattern is (+ a_number b_number). It should match in perhaps ~30ns + 2 * dict with().
 #
-# - Additional optimizations: (_*), (xs_*), (¦ _), (¦ xs_), (_* ¦ _), (_* ¦ xs_). ([xs]_* x_), (x_ [xs]_*), (fst_ _* lst_), etc.
+# Ideally Simple should be embeddable into the constraint system, perhaps via some sort of
+# a "bridge" node.
 #
-# - Stuff like (_* ¦ _ x: (%optional 0 x_)) should result in a single O::Pair node. Nothing more.
+# - Required&easy optimizations: (_*), (xs_*), (¦ _), (¦ xs_), (_* ¦ _), (_* ¦ xs_). (xs_* x_), (x_ xs_*), (fst_ _* lst_), etc.
+#
+# - Stuff like (_* ¦ _ x: (%optional 0 x_)) should result in a single PairRequired node. Nothing more.
+#   This would be a good sign the optimizer is doing what it should.
 #
 # - If we detect that no pattern-matching features are used in a dictionary, that dictionary
 #   should be compiled into a Literal().
 #
-# Ideally it should be embeddable into the constraint system, perhaps via some sort of
-# a "bridge" node.
 #
 # - At this point we should be able to determine the following:
 #   sketch subset from pattern (dict)
 #   specificity of pattern
-#   max depth required by pattern (dict)
-#
-# - At this point it should be possible to implement Term.case, move everything into a clean
-#   directory, and begin work on porting soma11 to this new pattern runtime.
+#   max det&indet depth of pattern
+#   max det&indet breadth of pattern
 
 ###
 
@@ -116,7 +112,7 @@
 #
 # This would connect the pattern system to pttrie5, a great feat.
 #
-# (Not for long though since pttrie5 is probably going to go in favor of a single-set-based solution
+# (Not for long though since pttrie5 is probably going to be ditched in favor of a single-set-based solution
 #  since the latter offers so much)
 
 ###
@@ -2012,7 +2008,7 @@ module ::Ww::Term::M1::Operator
           candidates << key
         end
       in Fb::Request
-        fb
+        return fb
       end
     end
 
@@ -2648,9 +2644,10 @@ module ::Ww::Term::M1
       Term.of(output)
     end
 
+    # TODO: switch to using matchpis here and everywhere!
     def self.operator(item : Term, captures : Bag(Term)) : Operator::Item::Any
       Term.case(item, engine: Term::M0) do
-        match({:"%singular", :child_}, cue: :"%singular") do |child|
+        matchpi %[(%singular child_)], cue: :"%singular" do
           Operator::Item::Singular.new(M1.operator(child, captures))
         end
 

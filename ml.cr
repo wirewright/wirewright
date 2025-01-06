@@ -1,20 +1,3 @@
-# WwML stands for **W**ire**w**right **M**arkup **L**anguage. WwML turns terms
-# into a purely functional programming language.
-#
-# WwML is a *true* purely functional programming language. There are no escape
-# hatches as far as WwML is concerned. You cannot print, cannot save files to
-# disk, etc.
-#
-# To be practical, though, one must make effects work somehow. So, we employ
-# two general techniques:
-#
-#   1. Inspecting the WwML source code before or after pure interpretation, or both;
-#      in effect, observing it from the outside and acting upon observations impurely.
-#   2. Producing effects based on the output of pure WwML code. While the first technique
-#      is only possible in homoiconic languages such as Lisp or WwML, the second one
-#      is used in the functional programming world in one form or another. We represent
-#      effects purely using "commands" or something similar, return them, and the impure
-#      outside world interprets them.
 module Ww::ML
   extend self
 
@@ -75,7 +58,7 @@ module Ww::ML
   # edge names by setting *allowed* to `{TermType::Symbol}`.
   #
   # - With the default *allowed* a well-formed edge corresponds to the pattern
-  #   `((%literal edge) (%either _number _string _symbol))`.
+  #   `((%literal edge) (%any° _number _string _symbol))`.
   def edge?(term : Term, allowed = EDGE_ALLOWED_DEFAULT) : Bool
     return false unless term.type.dict?
 
@@ -117,11 +100,11 @@ module Ww::ML
   #
   # Meta-symbols can also be used as general-purpose "special symbols" that
   # the user must not be able to synthesize/edit/etc.; only obtainable from/
-  # by machine code. They are used as gensyms in backspec, for instance.
+  # by machine code.
   #
   # Meta-symbols are symbols that begin with `(` and end with `)`; so they are
-  # imparseable for µsoma, WwML, and explicitly blocked in WwMR. For instance,
-  # `Term[:"(x)"]` is a meta-symbol.
+  # imparseable for µsoma and WwML. Therefore, a human cannot type them. For
+  # instance, `Term[:"(x)"]` is a meta-symbol.
   def meta?(term : Term) : Bool
     meta?(term.downcast)
   end

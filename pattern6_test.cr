@@ -2,7 +2,6 @@ require "./wirewright"
 
 CASES  = File.read("#{__DIR__}/patterns.test.wwml")
 PEOPLE = Term.of(JSON.parse(File.read("#{__DIR__}/data/people.json")))
-WORDS  = File.read_lines("./data/words.txt")
 
 class Statistics
   getter ncases : Int32

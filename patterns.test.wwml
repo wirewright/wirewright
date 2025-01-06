@@ -2411,7 +2411,7 @@
   (backmap ((%layer qux←(+ a_ b_) x: a_ y: b_) {b: ($up a), a: ($up b), qux: (($up qux))})
     (= (+ 1 2 x: 1 y: 2) ((+ 2 1) x: 2 y: 1)))
 
-  ;; %layer replacement **will** conflict with anything you put with %any. There is
+  ;; %layer replacement **will** conflict with anything you put with %all. There is
   ;; nothing *easy and intuitive* we can do about it. Either we'll get "consensus" but
   ;; hard-to-understand behavior, or "conflicting" but easy-to-understand one. You are
   ;; not advised to do the stuff I'm about to do in the tests below.
