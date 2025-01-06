@@ -8,46 +8,16 @@ module Ww::ML::Formatter
 
   def format(pp, term : Term, style : Style)
     Term.case(term) do
-      givenp %(edge (%either _number _symbol _string)) do
+      matchp %[(edge (%any° _number _symbol _string))] do
         pp.text("@")
         format(pp, term[1], style)
       end
 
-      givenp %(hold _) do
-        pp.text("'")
-        format(pp, term[1], style)
-      end
-
-      givenp %(embed _) do
-        pp.text("`")
-        format(pp, term[1], style)
-      end
-
-      givenp %(place (leaf _)) do
-        pp.text("^")
-        format(pp, term[1, 1], style)
-      end
-
-      givenp %(paste (leaf _)) do
-        pp.text("^:")
-        format(pp, term[1, 1], style)
-      end
-
-      givenp %(place _) do
-        pp.text("\\")
-        format(pp, term[1], style)
-      end
-
-      givenp %(paste _) do
-        pp.text("\\:")
-        format(pp, term[1], style)
-      end
-
-      givenp %() do
+      matchpi %[()] do
         pp.text("()")
       end
 
-      givenp %(%partition () _dict) do
+      matchpi %[(¦ _)] do
         pp.group(1, "{", "}") do
           index = 0
           term.ee.each do |k, v|
@@ -64,7 +34,7 @@ module Ww::ML::Formatter
         end
       end
 
-      givenp %(%partition _dict ()) do
+      matchpi %[(_* ¦)] do
         pp.group(1, "(", ")") do
           term.ie.each_with_index do |item, index|
             pp.breakable if index > 0
@@ -73,7 +43,7 @@ module Ww::ML::Formatter
         end
       end
 
-      matchp %(_dict) do
+      matchpi %[_dict] do
         pp.group(1, "(", ")") do
           term.ie.each_with_index do |item, index|
             pp.breakable if index > 0
@@ -92,7 +62,7 @@ module Ww::ML::Formatter
         end
       end
 
-      matchp %((%either _number _string _boolean _symbol)) do
+      matchpi %((%any° _number _string _boolean _symbol)) do
         pp.text(term)
       end
     end

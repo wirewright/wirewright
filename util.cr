@@ -2140,6 +2140,16 @@ struct Bag(T)
   protected def initialize(@storage)
   end
 
+  # Returns the number of unique objects in this bag.
+  def size
+    @storage.size
+  end
+
+  # Returns the number of objects of which there is more than one occurrence in this bag.
+  def nrepeats
+    @storage.count { |_, tally| tally > 1 }
+  end
+
   def tally?(object : T) : UInt16?
     @storage[object]?
   end

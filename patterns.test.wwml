@@ -1,3 +1,5 @@
+;; TODO: bring backmap & pattern tests on the same topic near each other
+
 ;; Literal equality
 (group
   (pattern 1 (+ 1) (- -1 "foo"))
@@ -1581,6 +1583,55 @@
     (= ((a 1 b 2 c 3) c) {k: c, kvs: ({v: 3})})
     (= ((a 1 b 2 c 3 c 5) c) {k: c, kvs: ({v: 3})})))
 
+;; %past
+(group
+  (pattern ((%past x_) foo postfix_*)
+    (= (foo) {postfix: ()})
+    (= (foo 1 2 3) {postfix: (1 2 3)})
+    (= (a foo 1 2 3) {x: a, postfix: (1 2 3)})
+    (= (a a a foo 1 2 3) {x: a, postfix: (1 2 3)})
+    (- (a b foo 1 2 3) (a b c foo 1 2 3)))
+
+  (pattern ((%past x_ min: 1) foo postfix_*)
+    (= (a foo 1 2 3) {x: a, postfix: (1 2 3)})
+    (= (a a a foo 1 2 3) {x: a, postfix: (1 2 3)})
+    (- (foo 1 2 3) (a b foo 1 2 3) (a b c foo 1 2 3)))
+
+  (pattern ((%past x_ max: 2) foo postfix_*)
+    (= (foo 1 2 3) {postfix: (1 2 3)})
+    (= (a foo 1 2 3) {x: a, postfix: (1 2 3)})
+    (= (a a foo 1 2 3) {x: a, postfix: (1 2 3)})
+    (- (a a a foo 1 2 3) (a b foo 1 2 3) (a b c foo 1 2 3)))
+
+  (pattern ((%past x_ min: 1 max: 2) foo postfix_*)
+    (= (a foo 1 2 3) {x: a, postfix: (1 2 3)})
+    (= (a a foo 1 2 3) {x: a, postfix: (1 2 3)})
+    (- (foo 1 2 3) (a a a foo 1 2 3) (a b foo 1 2 3) (a b c foo 1 2 3)))
+  
+  (pattern ((%gap n_) (%past _) n_ rest_*)
+    (= (0) {n: 0, rest: ()})
+    (= (0 a b c) {n: 0, rest: (a b c)})
+    (= (x y z 0 a b c) {n: 0, rest: (a b c)})
+    (= (x 1 a b c) {n: 1, rest: (a b c)})
+    (= (x y z 1 a b c) {n: 1, rest: (a b c)})
+    (= (x y z 3 a b c) {n: 3, rest: (a b c)})
+    (= (x y z 2 a b c) {n: 2, rest: (a b c)})
+    (= (x y 2 z a b c) {n: 2, rest: (z a b c)})
+    (= (x y 1 z a b c) {n: 1, rest: (z a b c)})
+    (- (a b c) (x 2 a b c)))
+
+  (pattern ((%gap n_) (%group skipped (%past _)) n_ rest_*)
+    (= (0) {n: 0, skipped: (), rest: ()})
+    (= (0 a b c) {n: 0, skipped: (), rest: (a b c)})
+    (= (x y z 0 a b c) {n: 0, skipped: (x y z), rest: (a b c)})
+    (= (x 1 a b c) {n: 1, skipped: (), rest: (a b c)})
+    (= (x y z 1 a b c) {n: 1, skipped: (y z), rest: (a b c)})
+    (= (x y z 3 a b c) {n: 3, skipped: (), rest: (a b c)})
+    (= (x y z 2 a b c) {n: 2, skipped: (z), rest: (a b c)})
+    (= (x y 2 z a b c) {n: 2, skipped: (), rest: (z a b c)})
+    (= (x y 1 z a b c) {n: 1, skipped: (y), rest: (z a b c)})
+    (- (a b c) (x 2 a b c))))
+
 ;; %item: match first
 (group
   (pattern (%item x_)
@@ -2112,6 +2163,24 @@
     (= (a b) (a b a b))
     (= (a b c) (a c b a c))
     (= (a b c d) (a d b c a d))))
+
+;; %many replacement
+(backmap (((%many xs x_ min: 0) n_) {n: (seen ↓n)})
+  (= (a) ((seen a)))
+  (= (a b) (a (seen b)))
+  (= (a b c) (a b (seen c))))
+
+;; %past replacement
+(backmap (((%gap n_) ⭳m (%past _) n_ rest_*) {n: (seen ↓n), rest: (seen ↓rest), m: bound})
+  (= (0) (bound (seen 0) (seen ())))
+  (= (0 a b c) (bound (seen 0) (seen (a b c))))
+  (= (x y z 0 a b c) (bound x y z (seen 0) (seen (a b c))))
+  (= (x 1 a b c) (x bound (seen 1) (seen (a b c))))
+  (= (x y z 1 a b c) (x bound y z (seen 1) (seen (a b c))))
+  (= (x y z 3 a b c) (x y z bound (seen 3) (seen (a b c))))
+  (= (x y z 2 a b c) (x y bound z (seen 2) (seen (a b c))))
+  (= (x y 2 z a b c) (x y bound (seen 2) (seen (z a b c))))
+  (= (x y 1 z a b c) (x bound y (seen 1) (seen (z a b c)))))
 
 ;; %group replacement
 (backmap ((x_ (%group xs a_ b_) y_)
@@ -2894,6 +2963,79 @@
            {x: b, path: ((value 3))}
            {x: c, path: ((value 5))})}))
   
+;; TODO: Bounds
+
+;; Specificity (ascending, each dict is a level [i.e. same specificity])
+;; Order/duplication in levels is irrelevant.
+(specificity
+  ;; Lowest specificity -- least specific
+  (level _)
+  (level _number _string _boolean _dict)
+  (level (+ _ _))
+  ;; TODO: after bounds are tested, add more examples here
+  ;; Highest specificity -- most specific
+  (level 1/3 "hello" qux true))
+ 
+;; Head
+;; Make sure pattern head is determined properly
+;;
+;; TODO: right now we carefully avoid testing things such as ((+ a b) x_ y_),
+;; that is, with a dictionary literal head. I have still not decided whether
+;; the upcoming automatic determining of whether a dictionary is a literal or
+;; not should remain an optimization [detail] or become a public feature. I'm
+;; leaning toward the latter though.
+(head
+  ;; Toplevel
+  (- 1/3 qux "hello" true () a_ x←a (%literal (+ a b)))
+  ;; Singular
+  (of (a) a)
+  (of (a b c) a)
+  (of (x (a) b c) x)
+  (of ((%literal (+ a b))) (+ a b))
+  (of ((%literal ())) ())
+  (- ((a) b c) ((a)) (_) (x_) (x_ a b c))
+  ;; Make sure itemspart partition is followed
+  (of (a x: qux) a)
+  (of (a b c x: qux) a)
+  (of (x (a) b c x: qux) x)
+  ;; Let
+  (of (x←a) a)
+  (of (x←a b c) a)
+  (- (x←_) (x←(+ _ _)) ((+ _ _)))
+  ;; The easy part is over :)
+  ;; Plural
+  (- (_*) (xs_*) (xs_+ a) ((%many xs a)))
+  ;; Group
+  (of ((%group xs a)) a)
+  (of ((%group xs a b c)) a)
+  ;; Gap, optional
+  (- ((%gap n_)) ((%optional 0 x_)))
+  ;; Slot
+  (of (⭳x a) a)
+  (of (⭳x ⭳y a) a)
+  (of (⭳x ⭳y a b c) a)
+  (of (⭳x ⭳y a b c x: qux) a)
+  (of (⭳x ⭳y (%literal (+ _ _)) b c) (+ _ _))
+  ;; Slot in group
+  (of ((%group xs ⭳x a) b_ c_) a)
+  (of ((%group xs ⭳x ⭳y a) b_ c_) a)
+  (of ((%group xs ⭳x ⭳y) a b_ c_) a)
+  (of ((%group xs ⭳x ⭳y) (%group ys a b c) b_ c_) a)
+  (of ((%group xs ⭳x ⭳y) (%group ys ⭳z ⭳qux a) b_ c_) a)
+  (of ((%group xs ⭳x ⭳y) (%group ys ⭳z ⭳qux a) b_ c_ x: qux y: qyx) a)
+  ;; Slot before group, in group
+  (of (⭳s0 ⭳s1 ⭳s2 (%group xs ⭳x ⭳y) (%group ys ⭳z ⭳qux a) b_ c_ x: qux y: qyx) a)
+  ;; Nested group
+  (of ((%group xs (%group ys a))) a)
+  (of ((%group xs ⭳x (%group ys a))) a)
+  (of ((%group xs ⭳x ⭳y (%group ys a))) a)
+  (of ((%group xs ⭳x ⭳y (%group ys ⭳z a))) a)
+  (of ((%group xs ⭳x ⭳y (%group ys ⭳z (%group zs ⭳foo ⭳bar) a) b c) d e) a)
+  ;; Slot in nested group
+  (- (⭳x) (⭳x ⭳y) (⭳x a_) (⭳x ⭳y (+ _ _) b c)))
+
+;; TODO: test empty %many, %group, %past
+
 ;; TODO: the following tests do not belong here. They are editor tests
 ;; and must test the entire editor "pipeline". Thus we first need to bring
 ;; soma11 in and with it, all the editor rules (ported to the new pattern

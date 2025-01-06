@@ -35,7 +35,10 @@
 # │ %dict: %plural min max   │   +   │   +     │   +   │            │    ~     │       │
 # │ %dict: %plural skip mm   │   +   │   +     │   +   │            │    ·     │       │
 # │ %dict: %optional (item)  │   ~   │   ~     │   ~   │            │    ~     │       │
-# │ %dict: %many             │   ~   │   ~     │   ~   │            │    ·     │       │
+# │ %dict: %many             │   ~   │   ~     │   ~   │            │    ~     │       │
+# │ %dict: %many/max         │       │         │       │            │          │       │
+# │ %dict: %past             │   ~   │   ~     │   ~   │            │    ~     │       │
+# │ %dict: %past/max         │   ~   │   ~     │   ~   │            │    ~     │       │
 # │ %dict: %group            │   ~   │   ~     │   ~   │            │    ~     │       │
 # │ %dict: %gap min max      │   +   │   +     │   +   │            │    ·     │       │
 # │ %dict: %pair/required    │   +   │   +     │   +   │            │    ~     │       │
@@ -47,12 +50,12 @@
 # │ %dict: %entries source   │   ~   │   ~     │   ~   │            │    ~     │       │
 # │ item first               │   ~   │   ~     │   ~   │            │    ~     │       │
 # │ item source              │   ~   │   ~     │   ~   │            │    ~     │       │
-# │ item store               │   ~   │   ~     │   ~   │            │    ·     │       │
+# │ item store               │   ~   │   ~     │   ~   │            │    ~     │       │
 # │ dig first dfs            │   ~   │   ~     │   ~   │            │    ~     │       │
 # │ dig source dfs           │   ~   │   ~     │   ~   │            │    ~     │       │
-# │ dig & store dfs          │   ~   │   ~     │   ~   │            │    ·     │       │
+# │ dig & store dfs          │   ~   │   ~     │   ~   │            │    ~     │       │
 # │ dig first bfs            │   ~   │   ~     │   ~   │            │    ~     │       │
-# │ dig & store bfs          │   ~   │   ~     │   ~   │            │    ·     │       │
+# │ dig & store bfs          │   ~   │   ~     │   ~   │            │    ~     │       │
 # │ %keypath                 │   ~   │   ~     │   ~   │            │    ·     │       │
 # │ %new                     │   ~   │   ~     │   ~   │            │    ~     │       │
 # └──────────────────────────┴───────┴─────────┴───────┴────────────┴──────────┴───────┘
@@ -934,7 +937,7 @@ module ::Ww::Term::M1::Operator
   defcase Boolean
 
   # TODO: split into Entry, Itemsonly, Pairsonly, do not use `Kind`.
-  defcase Dict, min : Endpoint::Type, max : Endpoint::Type, sketch : UInt64, kind : Kind do
+  defcase Dict, min : Magnitude, max : Magnitude, sketch : UInt64, kind : Kind do
     enum Kind : UInt8
       Entry
       Itemsonly
@@ -942,13 +945,13 @@ module ::Ww::Term::M1::Operator
     end
 
     def self.new : Dict
-      new(Endpoint::Unknown, Endpoint::Unknown, 0, :entry)
+      new(Magnitude::INFINITY, Magnitude::INFINITY, 0, :entry)
     end
 
-    def sizes : Range(UInt32?, UInt32?)
+    def sizes : Range(Magnitude?, Magnitude?)
       Range.new(
-        min == Endpoint::Unknown ? nil : min,
-        max == Endpoint::Unknown ? nil : max,
+        min == Magnitude::INFINITY ? nil : min,
+        max == Magnitude::INFINITY ? nil : max,
         exclusive: false
       )
     end
@@ -1033,35 +1036,44 @@ module ::Ww::Term::M1::Operator
   defcase Keypath, capture : Term
 end
 
-# TODO: use a different name (or even better, remove?)
-module ::Ww::Term::M1::Endpoint
-  alias Type = UInt32
+alias Magnitude = Float64
 
-  Unknown = Type::MAX
+# record ::Ww::Term::M1::Magnitude, v : UInt32 do
+#   Infinity = new(UInt32::MAX)
 
-  def self.[](a : Type) : Type
-    a
-  end
+#   def self.[](v : UInt32) : Magnitude
+#     Magnitude[v]
+#   end
 
-  def self.sum(a : Type, b : Type)
-    Unknown.in?(a, b) ? Unknown : a + b
-  end
+#   def self.sum(a : Magnitude, b : Magnitude)
+#     Infinity.in?(a, b) ? Infinity : Magnitude[a.v + b.v]
+#   end
 
-  def self.product(a : Type, b : Type)
-    Unknown.in?(a, b) ? Unknown : a * b
-  end
-end
+#   def self.product(a : Magnitude, b : Magnitude)
+#     Infinity.in?(a, b) ? Infinity : Magnitude[a * b]
+#   end
+
+#   def self.max(a : Magnitude, b : Magnitude)
+#     Math.max(a.v, b.v) # Infinity will win if it's there
+#   end
+
+#   def self.weak(a : Magnitude)
+
+#   end
+# end
 
 module ::Ww::Term::M1::Operator::Item
-  alias Any = Singular | Slot | Plural | Group | Gap | Optional | Many
+  alias Any = Singular | Slot | Plural | Group | Gap | Optional | Many | Past
 
   record Singular, tail : Operator::Any
   record Slot, capture : Term
   record Plural, capture : Term?, min : UInt8, max : UInt8, type : TermType, strategy : ExpandStrategy
+
   record Group, capture : Term, children : Array(Any)
   record Gap, measurer : Operator::Any, strategy : ExpandStrategy
   record Optional, default : Term, tail : Operator::Any
   record Many, capture : Term, children : Array(Any), interior : Set(Term), min : UInt8, max : UInt8
+  record Past, children : Array(Any), min : UInt8, max : UInt8, greedy : Bool
 end
 
 module ::Ww::Term::M1::Operator::Env
@@ -2234,7 +2246,7 @@ module ::Ww::Term::M1::Operator::Item
     item
   end
 
-  def self.neighbor?(item : Group | Many, rest) : Any?
+  def self.neighbor?(item : Group | Many | Past, rest) : Any?
     neighbor?(item.children.to_readonly_slice)
   end
 
@@ -2453,7 +2465,8 @@ module ::Ww::Term::M1::Operator::Item
     expand(feed, pivot: (feed.size / (successors.amount + 1)).ceil.to_i, strategy: strategy) do |prefix, suffix|
       matchee = Term.of(prefix.size)
 
-      case fb = Operator.match(env.keypathless, item.measurer, matchee, Operator::Ahead::Fn.new { |in1| ahead.call(ord + prefix.size, suffix, in1.keypath(&.forward(prefix.size))) })
+      kp0 = env.keypath
+      case fb = Operator.match(env.keypathless, item.measurer, matchee, Operator::Ahead::Fn.new { |in1| ahead.call(ord + prefix.size, suffix, in1.goto(kp0).keypath(&.forward(prefix.size))) })
       in Fb::MatchOne
         envs << fb.env
         next if fb.more
@@ -2503,6 +2516,13 @@ module ::Ww::Term::M1::Operator::Item
     end
 
     cont = ItemAhead::Fn.new do |ord, ofeed, candidate|
+      if feed == ofeed
+        # This continuation is run after the ahead check. This means ahead refuses to
+        # consume feed. And we did not move while trying to consume feed. Thus this is
+        # a hard mismatch.
+        next Fb::Mismatch.new(candidate.env)
+      end
+
       pruned, capture = candidate.partition(item.interior)
 
       many(ord, pruned, item, successors, ofeed, ahead, memo.append(capture.env))
@@ -2516,15 +2536,77 @@ module ::Ww::Term::M1::Operator::Item
     cont = ItemAhead::Fn.new do |ord, ofeed, in1|
       size = feed.upto(ofeed).size
 
+      kp1 = in1.keypath
       in2 = in1
         .goto(kp0)
         .mount(item.capture, &.span(size))
-        .keypath(&.forward(size))
+        .goto(kp1)
 
       ahead.call(ord, ofeed, in2)
     end
 
     many(ord, env, item, successors, feed, cont, memo: Term[])
+  end
+
+  def self.past_lazy(ord, env, item : Past, successors, feed, ahead, memo)
+    if memo > item.max > 0
+      return Fb::Mismatch.new(env.env)
+    end
+
+    if memo >= item.min
+      case fb = ahead.call(ord, feed, env)
+      in Fb::Match, Fb::Request
+        return fb
+      in Fb::Mismatch
+      end
+    end
+
+    cont = ItemAhead::Fn.new do |ord, ofeed, candidate|
+      if feed == ofeed
+        # This continuation is run after the ahead check. This means ahead refuses to
+        # consume feed. And we did not move while trying to consume feed. Thus this is
+        # a hard mismatch.
+        next Fb::Mismatch.new(candidate.env)
+      end
+
+      past_lazy(ord, candidate, item, successors, ofeed, ahead, memo + 1)
+    end
+
+    sequence(ord, env, item.children.to_readonly_slice, successors, feed, cont)
+  end
+  
+  def self.past_greedy(ord, env, item : Past, successors, feed, ahead, memo)
+    if memo > item.max > 0
+      return Fb::Mismatch.new(env.env)
+    end
+
+    cont = ItemAhead::Fn.new do |ord, ofeed, candidate|
+      if feed == ofeed
+        # Let the sequence() mismatch check do its job
+        next Fb::Mismatch.new(candidate.env)
+      end
+
+      past_greedy(ord, candidate, item, successors, ofeed, ahead, memo + 1)
+    end
+
+    case fb = sequence(ord, env, item.children.to_readonly_slice, successors, feed, cont)
+    in Fb::Match, Fb::Request
+      fb
+    in Fb::Mismatch
+      if memo >= item.min
+        ahead.call(ord, feed, env)
+      else
+        fb
+      end
+    end
+  end
+
+  def self.match(ord, env, item : Past, successors, feed, ahead)
+    if item.greedy
+      past_greedy(ord, env, item, successors, feed, ahead, memo: 0)
+    else
+      past_lazy(ord, env, item, successors, feed, ahead, memo: 0)
+    end
   end
 
   struct ItemAhead::Rest
@@ -2621,6 +2703,30 @@ module ::Ww::Term::M1
           end
         end
 
+        match({:"%partition", {:"%past", :_, :"_*"}, :opts_}, cue: :"%past") do |opts|
+          continue unless opts = Schemas::Past.validated?(opts)
+
+          opts.transaction do |commit|
+            commit << :"%past"
+            (1...item.items.size).each do |index|
+              commit.with(index, normal(item[index]))
+            end
+            commit.with(:greedy, false)
+          end
+        end
+
+        match({:"%partition", {:"%past/max", :_, :"_*"}, :opts_}, cue: :"%past/max") do |opts|
+          continue unless opts = Schemas::Past.validated?(opts)
+
+          opts.transaction do |commit|
+            commit << :"%past"
+            (1...item.items.size).each do |index|
+              commit.with(index, normal(item[index]))
+            end
+            commit.with(:greedy, true)
+          end
+        end
+
         match(
           {:"%gap", :measurer_},
           {:"%gap/min", :measurer_},
@@ -2669,6 +2775,13 @@ module ::Ww::Term::M1
           interior = inner - exterior
 
           Operator::Item::Many.new(capture, item.items.move(2).map { |member| Item.operator(member, captures) }, interior.set, min, max)
+        end
+
+        match({:"%partition", {:"%past", :_, :"_*", }, {min: :min0_, max: :max0_, greedy: :greedy_boolean}}, cue: :"%past") do |min0, max0, greedy|
+          min = min0.to(UInt8)
+          max = max0 == SYM_INF ? 0u8 : max0.to(UInt8)
+
+          Operator::Item::Past.new(item.items.move(1).map { |member| Item.operator(member, captures) }, min, max, greedy: greedy.true?)
         end
 
         match({:"%optional", :default_, :body_}, cue: :"%optional") do |default, body|
@@ -2742,58 +2855,59 @@ module ::Ww::Term::M1
     end
 
     def self.bounds(item : Term)
-      ML.case(item) do
+      Term.case(item, engine: Term::M0) do
         match({:"%singular", :_}) do
-          {Endpoint[1], Endpoint[1]}
+          {Magnitude.new(1), Magnitude.new(1)}
         end
 
         match(
           {:"%partition", {:"%plural", {:"%capture", :_}}, :_},
           {:"%partition", {:"%plural"}, :_},
         ) do
-          min = item[:min]?
-          max = item[:max]?
+          min = item[:min].to(Magnitude)
+          max = item[:max] == SYM_INF ? Magnitude::INFINITY : item[:max].to(Magnitude)
 
-          {min ? min.to(Endpoint::Type) : Endpoint[0], max ? max.to(Endpoint::Type) : Endpoint::Unknown}
+          {min, max}
         end
 
         match({:"%gap", :_}) do
-          {Endpoint[0], Endpoint::Unknown}
+          {Magnitude.new(0), Magnitude::INFINITY}
         end
 
         match({:"%group", :_, :_, :"_*"}) do
           children = item.items.move(2)
 
-          bounds(children)
+          M1.bounds(children) { |child| bounds(child) }
         end
 
+        # FIXME: min
         match({:"%many", :_, :_, :"_*"}) do
           children = item.items.move(2)
 
-          min, max = bounds(children)
+          min, max = M1.bounds(children) { |child| bounds(child) }
 
-          min0 = Endpoint[1]
-          max0 = Endpoint::Unknown
+          min0 = Magnitude.new(1)
+          max0 = Magnitude::INFINITY
 
-          {Endpoint.product(min, min0), Endpoint.product(max, max0)}
+          {min * min0, max * max0}
         end
 
         match({:"%optional", :_, :_}) do
-          {Endpoint[0], Endpoint[1]}
+          {Magnitude.new(0), Magnitude.new(1)}
         end
       end
     end
   end
 
-  def self.bounds(items : Enumerable(Term), & : Term -> {Endpoint::Type, Endpoint::Type})
-    min = Endpoint[0]
-    max = Endpoint[0]
+  def self.bounds(items : Enumerable(Term), & : Term -> {Magnitude, Magnitude})
+    min = Magnitude.new(0)
+    max = Magnitude.new(0)
 
     items.each do |item|
       min1, max1 = yield item
-      min = Endpoint.sum(min, min1)
-      max = Endpoint.sum(max, max1)
-      # We could `break` here if b0 and e0 are Unknown, but that's pretty rare and probably
+      min += min1
+      max += max1
+      # We could `break` here if b0 and e0 are Infinity, but that's pretty rare and probably
       # isn't worth it. Most often at least b0 is going to be known which requires a scan.
     end
 
@@ -2821,18 +2935,18 @@ module ::Ww::Term::M1
       end
     end
 
-    def self.bounds(pair : Term) : {Endpoint::Type, Endpoint::Type}
-      Term.case(pair, engine: Term::M) do
+    def self.bounds(pair : Term) : {Magnitude, Magnitude}
+      Term.case(pair, engine: Term::M0) do
         match({:"%pair/optional", :_, :_, :_}) do
-          {Endpoint[0], Endpoint[1]}
+          {Magnitude.new(0), Magnitude.new(1)}
         end
 
         match({:"%pair/absent", :_}, {:"%pair/absent", :_, :_}) do
-          {Endpoint::Unknown, Endpoint[1]}
+          {Magnitude::INFINITY, Magnitude.new(1)}
         end
 
         match({:"%pair/required", :_, :_}) do
-          {Endpoint[1], Endpoint[1]}
+          {Magnitude.new(1), Magnitude.new(1)}
         end
       end
     end
@@ -2874,6 +2988,12 @@ module ::Ww::Term::M1
 
   Schemas::Many = Term::M0::PairSchema.build do
     key :min, values: 0..UInt8::MAX, default: 1
+    key :max, values: 1..UInt8::MAX, default: SYM_INF
+    where { |min, max| min.as_n <= max.as_n }
+  end
+  
+  Schemas::Past = Term::M0::PairSchema.build do
+    key :min, values: 0..UInt8::MAX, default: 0
     key :max, values: 1..UInt8::MAX, default: SYM_INF
     where { |min, max| min.as_n <= max.as_n }
   end
@@ -3040,7 +3160,7 @@ module ::Ww::Term::M1
 
       match({:"%item°", :_, :"_*"}, cue: :"%item°") do
         pattern.transaction do |commit|
-          commit.with(0, :"%item/source")
+          commit.with(0, :"%items/source")
           (1...pattern.size).each do |index|
             commit.with(index, normal(pattern[index]))
           end
@@ -3049,6 +3169,7 @@ module ::Ww::Term::M1
 
       match({:"%item", :_, :"_*"}, cue: :"%item") do
         pattern.transaction do |commit|
+          commit.with(0, :"%items/first")
           (1...pattern.size).each do |index|
             commit.with(index, normal(pattern[index]))
           end
@@ -3059,7 +3180,7 @@ module ::Ww::Term::M1
         continue unless opts = Schemas::Items.validated?(opts)
 
         opts.transaction do |commit|
-          commit << :"%items" << {:"%capture", capture}
+          commit << :"%items/all" << {:"%capture", capture}
           commit.concat(pattern.items.move(2)) { |item| normal(item) }
         end
       end
@@ -3161,19 +3282,19 @@ module ::Ww::Term::M1
       match({:"%partition", {:"%leaf°", :body_}, :opts_}, cue: :"%leaf°") do |body, opts|
         continue unless opts = Schemas::LeafUnbounded.validated?(opts)
 
-        opts.morph({0, :"%leaf/source"}, {1, normal(body)})
+        opts.morph({0, :"%leaves/source"}, {1, normal(body)})
       end
 
       match({:"%partition", {:"%leaf", :body_}, :opts_}, cue: :"%leaf") do |body, opts|
         continue unless opts = Schemas::LeafUnbounded.validated?(opts)
 
-        opts.morph({0, :"%leaf/first"}, {1, normal(body)})
+        opts.morph({0, :"%leaves/first"}, {1, normal(body)})
       end
 
       match({:"%partition", {:"%leaves", :capture_, :body_}, :opts_}, cue: :"%leaves") do |capture, body, opts|
         continue unless opts = Schemas::LeafBounded.validated?(opts)
 
-        opts.morph({0, :"%leaf/all"}, {1, {:"%capture", capture}}, {2, normal(body)})
+        opts.morph({0, :"%leaves/all"}, {1, {:"%capture", capture}}, {2, normal(body)})
       end
 
       # Leave %new's as-is. They are normalized and compiled when their
@@ -3256,7 +3377,7 @@ module ::Ww::Term::M1
       end
 
       match(Term[:"%dict", min: :min_number, max: :max_number, sketch: :sketch_number], cue: :"%dict") do |min, max, sketch|
-        Operator::Dict.new(min.to(Endpoint::Type), max.to(Endpoint::Type), sketch.to(UInt64), :entry)
+        Operator::Dict.new(min.to(Magnitude), max.to(Magnitude), sketch.to(UInt64), :entry)
       end
 
       match({:"%layer", :below_, :side_}, cue: :"%layer") do |below, side|
@@ -3343,13 +3464,13 @@ module ::Ww::Term::M1
         Operator::Tally.new(operator(successor, captures))
       end
 
-      match({:"%item", :_, :"_*"}, cue: :"%item") do
+     match({:"%items/first", :_, :"_*"}, cue: :"%items/first") do
         sequence = node.items.move(1)
 
         Operator::ScanFirst.new(sequence.map { |item| operator(item, captures).as(Operator::Any) })
       end
 
-      match({:"%item/source", :_, :"_*"}, :"%item/source") do
+      match({:"%items/source", :_, :"_*"}, :"%items/source") do
         sequence = node.items.move(1)
 
         Operator::ScanSource.new(sequence.map { |item| operator(item, captures).as(Operator::Any) })
@@ -3357,9 +3478,9 @@ module ::Ww::Term::M1
 
       match(
         {:"%partition",
-         {:"%items", {:"%capture", :capture_}, :_, :"_*"},
+         {:"%items/all", {:"%capture", :capture_}, :_, :"_*"},
          {min: :min0_, max: :max0_}},
-        cue: {:"%items", :"%capture"}
+        cue: {:"%items/all", :"%capture"}
       ) do |capture, min0, max0|
         min = min0.to(UInt8)
         max = max0 == SYM_INF ? 0u8 : max0.to(UInt8)
@@ -3424,19 +3545,19 @@ module ::Ww::Term::M1
         )
       end
 
-      match(Term[:"%leaf/first", :body_, in: :part_, order: :dfs, self: :depth0_boolean], cue: :"%leaf/first") do |body, part, depth0|
+      match(Term[:"%leaves/first", :body_, in: :part_, order: :dfs, self: :depth0_boolean], cue: :"%leaves/first") do |body, part, depth0|
         Operator::DfsFirst.new(operator(body, captures), part: search_part(part), depth0: depth0.true?)
       end
 
-      match(Term[:"%leaf/first", :body_, in: :part_, order: :bfs, self: :depth0_boolean], cue: :"%leaf/first") do |body, part, depth0|
+      match(Term[:"%leaves/first", :body_, in: :part_, order: :bfs, self: :depth0_boolean], cue: :"%leaves/first") do |body, part, depth0|
         Operator::BfsFirst.new(operator(body, captures), part: search_part(part), depth0: depth0.true?)
       end
 
-      match(Term[:"%leaf/source", :body_, in: :part_, order: :dfs, self: :depth0_boolean], cue: :"%leaf/source") do |body, part, depth0|
+      match(Term[:"%leaves/source", :body_, in: :part_, order: :dfs, self: :depth0_boolean], cue: :"%leaves/source") do |body, part, depth0|
         Operator::DfsSource.new(operator(body, captures), part: search_part(part), depth0: depth0.true?)
       end
 
-      match(Term[:"%leaf/all", {:"%capture", :capture_}, :body_, in: :part_, min: :min_, max: :max_, order: :dfs, self: :depth0_boolean], cue: :"%leaf/all") do |capture, body, part, min, max, depth0|
+      match(Term[:"%leaves/all", {:"%capture", :capture_}, :body_, in: :part_, min: :min_, max: :max_, order: :dfs, self: :depth0_boolean], cue: :"%leaves/all") do |capture, body, part, min, max, depth0|
         outer = captures
         inner = Bag(Term).new
 
@@ -3455,7 +3576,7 @@ module ::Ww::Term::M1
         end
       end
 
-      match(Term[:"%leaf/all", {:"%capture", :capture_}, :body_, in: :part_, min: :min_, max: :max_, order: :bfs, self: :depth0_boolean], cue: :"%leaf/all") do |capture, body, part, min, max, depth0|
+      match(Term[:"%leaves/all", {:"%capture", :capture_}, :body_, in: :part_, min: :min_, max: :max_, order: :bfs, self: :depth0_boolean], cue: :"%leaves/all") do |capture, body, part, min, max, depth0|
         outer = captures
         inner = Bag(Term).new
 
@@ -4152,10 +4273,6 @@ module ::Ww::Term::M1
     end
   end
 
-  def self.depth(keypath : Term::Dict) : UInt32
-    keypath.size.to_u32
-  end
-
   def self.backmap?(pattern : Term, backdict : Term, matchee : Term, *, env = Term[]) : Term?
     # Perform a match, requesting the pattern matching engine to provide keypaths
     # for each capture for which that would make sense.
@@ -4187,7 +4304,7 @@ module ::Ww::Term::M1
 
           meta = Metadata.new(capture, plural, body, env)
           trie = Term::Dict.enhance(trie, keypath.items, :endpoint, action: meta)
-          depth = Math.max(depth(keypath), depth)
+          depth = Math.max(keypath.size.to_u32, depth)
         end
       end
     end
@@ -4256,5 +4373,275 @@ class ::Ww::Term::Dict
 
   def self.enhance(dict : Term::Dict, key, *rest, action) : Term::Dict
     enhance(dict, key, Enhance.new(rest, action))
+  end
+end
+
+# TODO: bug: walk will walk into %keypath (and other nodes taking literals such as %pipe args, %captures, etc.)
+#      FIX THIS !!!
+# TODO: bounds is broken in many ways, fix with tests !!!
+# TODO: for specificity, we probably also want to count the no. of %literals and use that BEFORE
+#       node count. so that 1/3 wins to (+ _ _), right now it looses on opcount which is fucked up !
+# TODO: in general, opcount seems to be a STUPIDLY wrong choice. some nodes such as %plural are less specific
+#       but have a high node count. so we should ditch opcount and use %number/%string/etc. count instead
+#       (i.e. typed vs. %pass which is untyped), this is the main node-based metric.
+
+module ::Ww::Term::M1
+  # Returns the number of operators in a normal pattern *normp*. This is one
+  # of the main metrics for determining the specificity of a pattern.
+  #
+  # Note: `%pass` is the only operator ignored during opcount. The main reason why
+  # this is done is to let patterns like `_number` win over `_` on opcount without
+  # any further work counting typed/untyped patterns and so on.
+  def self.opcount(normp : Term) : Magnitude
+    count = Magnitude.new(0)
+
+    walk(normp) do |node|
+      Term.case(node) do
+        matchpi %[(%pass)] {}
+
+        otherwise { count += Magnitude.new(1) }
+      end
+
+
+      WalkDecision::Continue
+    end
+
+    count
+  end
+
+  # Returns the minimum and maximum expected matchee depth for a normal pattern
+  # *normp*. They participate in determining the specificity of a pattern.
+  #
+  # Operators such as `%leaf` make it impossible to tell the *maximum* depth of
+  # the pattern; but leave the possibility of determining its *minimum required
+  # depth*. Additionally, `%leaf` and its variants introduce one level of depth
+  # themselves when their `self` option is turned off.
+  def self.depth(normp : Term) : {Magnitude, Magnitude}
+    mindepth = Magnitude.new(0)
+    maxdepth = Magnitude.new(0)
+
+    walk(normp) do |node|
+      Term.case(node) do
+        # - The two basic "boundaries" between dictionaries are %singular and %pair/required.
+        #   Each "crossing" of those boundaries results in re-evaluation of min-depth.
+        # - In non-self mode %leaf variants also act as such bondaries.
+        matchpi(
+          %[(%singular child_)],
+          %[(%pair/required _ child_)],
+          %[(%leaves/first child_ in: _ order: _ self: false)],
+          %[(%leaves/source child_ in: _ order: _ self: false)],
+          %[(%leaves/all (%capture _) child_ in: _ order: _ self: false min: _ max: _)],
+        ) do
+          child_min, child_max = depth(child)
+
+          mindepth = Math.max(mindepth, child_min + Magnitude.new(1))
+          maxdepth = Math.max(maxdepth, child_max + Magnitude.new(1))
+
+          WalkDecision::Skip
+        end
+
+        # Take into account the depth of the literal dicts in the pattern.
+        matchpi %[(%literal value_dict)] do
+          value_depth = Magnitude.new(value.maxdepth)
+          
+          mindepth = Math.max(mindepth, value_depth)
+          maxdepth = Math.max(maxdepth, value_depth)
+
+          WalkDecision::Skip
+        end
+
+        # Take into account keypool itself and depths of the keys listed in it.
+        matchpi %[(%keypool keys_*)] do
+          max_key_depth = keys.items.max_of { |key| Magnitude.new(key.type.dict? ? key.maxdepth : 0) }
+
+          mindepth = Math.max(mindepth, Magnitude.new(max_key_depth + 1))
+          maxdepth = Math.max(maxdepth, Magnitude.new(max_key_depth + 1))
+
+          WalkDecision::Skip
+        end
+
+        # These all introduce one level of nesting.
+        matchpi(
+          %[(%items/first _+)],
+          %[(%items/source _+)],
+          %[(%items/all (%capture _) _+)],
+          %[(%entries/source _ _)],
+          %[(%entries/all (%capture _) _ _)]
+        ) do
+          mindepth = Math.max(mindepth, Magnitude.new(1))
+          maxdepth = Math.max(maxdepth, Magnitude.new(1))
+
+          WalkDecision::Continue
+        end
+
+        otherwise { WalkDecision::Continue }
+      end
+    end
+
+    {mindepth, maxdepth}
+  end
+
+  # Returns the minimum and maximum expected matchee breadth for a normal pattern
+  # *normp*. They participate in determining the specificity of a pattern.
+  def self.breadth(normp : Term) : {Magnitude, Magnitude}
+    minbreadth = Magnitude.new(0)
+    maxbreadth = Magnitude.new(0)
+
+    walk(normp) do |node|
+      Term.case(node) do
+        matchpi %[(%itemspart children_*)] do
+          min, max = bounds(children.items) { |item| Item.bounds(item) }
+
+          minbreadth = Math.max(minbreadth, min)
+          maxbreadth = Math.max(maxbreadth, max)
+        end
+
+        matchpi(
+          %[(%pair/required _ _)],
+          %[(%pair/optional _ _ _)],
+          %[(%pair/absent _)],
+          %[(%pair/absent _ _)]
+        ) do
+          min, max = Pair.bounds(node)
+
+          minbreadth = Math.max(minbreadth, min)
+          maxbreadth = Math.max(maxbreadth, max)
+        end
+
+        otherwise {}
+      end
+
+      WalkDecision::Continue
+    end
+
+    {minbreadth, maxbreadth}
+  end
+
+  def self.capcount(captures : Bag(Term)) : {Magnitude, Magnitude}
+    {Magnitude.new(captures.size), Magnitude.new(captures.nrepeats)}
+  end
+  
+  # A summary of measurements concerning the specificity of a pattern. 
+  record Specificity,
+    opcount : Magnitude,
+    mindepth : Magnitude,
+    maxdepth : Magnitude,
+    minbreadth : Magnitude,
+    maxbreadth : Magnitude,
+    ncaptures : Magnitude,
+    ncaptureqs : Magnitude
+
+  struct Specificity
+    include Comparable(Specificity)
+
+    def ord
+      # Infinity should lose during comparison (i.e., infinity -> less specific,
+      # concrete value -> more specific).
+      {opcount, mindepth, minbreadth, maxdepth, maxbreadth, ncaptureqs, ncaptures}.map do |score|
+        score == Float32::INFINITY ? -score : score
+      end
+    end
+
+    def <=>(other : Specificity)
+      ord <=> other.ord
+    end
+  end
+
+  # Returns the specificity of a normal pattern *normp*.
+  #
+  # In single-way rewriting (which basically means most of rewriting we are doing
+  # here in Wirewright), having a way to order patterns/rules is important for
+  # correctness on the end of the programmer's expectation (because the rewrite system
+  # itself does not care; all it cares about is whether a rewrite is possible). Some
+  # patterns inherently "know more" about their expected matchee and we must give way
+  # to those patterns vs. more general/abstract ones.
+  #
+  # Thus we make "level-of-detail" measurements on the pattern, and summarize the results
+  # of these measurements under so-called `Specificity`. Importantly enough, pattern
+  # specificities are comparable.
+  #
+  # An alternative to single-way is multiway rewriting, where we perform all possible
+  # rewrites. See, for instance, the work of Stephen Wolfram. We will support multiway
+  # rewriting in the future; in the context of Wirewright, this seems computationally
+  # possible vs. e.g. what Wolfram is proposing, since his "all possible rewrites"
+  # map neatly onto an optimizing pattern matching engine that we're trying to build
+  # here. In practice, however, multiway rewriting is rarely *necessary*, so we focus
+  # more on single-way rewriting.
+  def self.specificity(normp : Term, captures : Bag(Term) = captures(normp)) : Specificity
+    Specificity.new(opcount(normp), *depth(normp), *breadth(normp), *capcount(captures))
+  end
+
+  # :nodoc:
+  module Head
+    alias Any = Some | More | None
+
+    record Some, term : Term
+    record More
+    record None
+
+    def self.operator(candidate : Term) : Any
+      Term.case(candidate) do
+        matchpi %[((%literal %let) _ successor_)] { Head.operator(successor) }
+        matchpi %[((%literal %literal) term_)] { Some.new(term) }
+        matchpi %[(%any° _number _symbol _string _boolean)] { Some.new(candidate) }
+        otherwise { None.new }
+      end
+    end
+
+    def self.singular(candidate : Term) : Any
+      Term.case(candidate) do
+        matchpi %[(%singular value_)] { Head.operator(value) }
+        matchpi %[(%group _ items_+)] { Head.item(items) }
+        otherwise { None.new }
+      end
+    end
+
+    def self.item(items : Term) : Any
+      Term.case(items) do
+        matchpi %[((%past ((%literal %slot) _)))] { More.new }
+        matchpi %[((%past/max ((%literal %slot) _)) successor_ successors_*)] do
+          head = Head.singular(successor)
+          head.is_a?(More) ? Head.item(successors) : head
+        end
+        otherwise { None.new }
+      end
+    end
+  end
+
+  # Returns the "head" of a normal pattern *normp*.
+  #
+  # The head of a pattern is the first literal in an expected dictionary matchee.
+  # For example, in `(+ a_ b_)` that would be `+`; and in `(⭳a ⭳b x←qux x_ y_)` that
+  # would be `qux`. On the other hand, for `qux` or `(xs_* qux)` the head is
+  # indeterminate (because we'd have to know how many `xs` there were), therefore,
+  # `nil` is returned.
+  def self.head?(normp : Term) : Term?
+    Term.case(normp) do
+      matchpi %[(%itemspart items_+)] do
+        case response = Head.item(items)
+        in Head::Some then response.term
+        in Head::None, Head::More
+        end
+      end
+      matchpi %[((%literal %partition) itemspart_ _)] { head?(itemspart) }
+      otherwise {}
+    end
+  end
+end 
+
+class ::Ww::Term::Dict
+  # Some day this will be cached in the tree; right now, it isn't.
+  #
+  # Recurses into both keys and values (the former to support dict sets).
+  #
+  # Counts itself too (smallest possible value is 1).
+  def maxdepth : UInt32
+    maxdepth = 1u32
+
+    each_entry do |k, v|
+      maxdepth = {maxdepth, k.maxdepth, v.maxdepth}.max
+    end
+
+    maxdepth
   end
 end

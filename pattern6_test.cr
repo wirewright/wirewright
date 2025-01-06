@@ -12,7 +12,11 @@ class Statistics
     @duration = 0.nanoseconds
   end
 
-  def run(timed = true, accounted = true, &)
+  def account
+    @ncases += 1
+  end
+
+  def run(timed = true, &)
     unless timed
       return yield
     end
@@ -24,10 +28,6 @@ class Statistics
     ensure
       elapsed = Time.monotonic - start
       @duration += elapsed
-    end
-  ensure
-    if accounted
-      @ncases += 1
     end
   end
 end
@@ -49,14 +49,16 @@ def catch(ctx, pattern)
   end
 end
 
+# TODO: split, this shouldn't be a megamethod. One strange way to do this is to
+# match deep pairs, i.e. parent-child pairs (for toplevel it's symbol "toplevel")
+#  I.e. (group body_*) is going to turn into toplevel (group body_*)
 def process(queue, testcase, ctx)
-  Term.case(testcase, engine: Term::M0) do
-    match({:group, :"_*"}, cue: :group) do
-      body = testcase.items.move(1)
-      queue.concat(body.to_a.shuffle!)
+  Term.case(testcase) do
+    matchpi %[(group body_*)] do
+      queue.concat(body.items.to_a.shuffle!)
     end
 
-    match({:template, :name_symbol, :subject_, :body_}, cue: :template) do |name, subject, body|
+    matchpi %[(template name_symbol subject_ body_)] do
       if ctx.templates.has_key?(name)
         raise ArgumentError.new("template '#{name}' already exists")
       end
@@ -64,50 +66,46 @@ def process(queue, testcase, ctx)
       ctx.templates[name] = Term.of(subject, body)
     end
 
-    match({:instance, :name_symbol, :"_*"}, cue: :instance) do |name|
+    matchpi %[(instance name_symbol values_*)] do
       unless template = ctx.templates[name]?
         queue << testcase
         return
       end
 
       subject, body = template
-
-      values = testcase.items.move(2)
-      values.each do |value|
+      values.items.each do |value|
         queue << Term.of(body.subst(Term[].with(subject, value)))
       end
     end
 
-    match({:backmap, {:pattern_, :"_*"}, :"_*"}, cue: :backmap) do |pattern|
-      rule = testcase[1]
+    matchpi %[(backmap rule←(pattern_ backdict_) body_*)] do
       catch(ctx, rule) do
-        layers = rule.items.move(1)
-        body = testcase.items.move(2)
-
         first = true
         match = ->(matchee : Term) do
-          result = ctx.stats.run(accounted: first) { Term::M1.backmap?(pattern, layers[0], matchee) }
-          first = false
-          result
+          begin
+            ctx.stats.run { Term::M1.backmap?(pattern, backdict, matchee) }
+          ensure
+            if first
+              ctx.stats.account
+            end
+            first = false
+          end
         end
 
-        body.each do |exp|
-          Term.case(exp, engine: Term::M0) do
-            match({:"=", :matchee_, :"_*"}, cue: :"=") do |matchee|
+        body.items.each do |exp|
+          Term.case(exp) do
+            matchpi %[(= matchee_ whitelist_*)] do
               result = match.call(matchee)
-              unless result.in?(exp.items.move(2).to_set)
-                failure = Term.of(:mismatch, rule, exp, matchee)
-                failure = failure.append(result)
-                ctx.failures << Term.of(failure)
-              end
+              next if result.in?(whitelist.items.to_set)
+
+              ctx.failures << Term.of(:mismatch, rule, exp, matchee, result)
             end
 
-            match({:-, :"_*"}, cue: :-) do
-              matchees = exp.items.move(1)
-              matchees.each do |matchee|
-                if result = match.call(matchee)
-                  ctx.failures << Term.of(:match, rule, exp, matchee, result)
-                end
+            matchpi %[(- blacklist_*)] do
+              blacklist.items.each do |matchee|
+                next unless result = match.call(matchee)
+
+                ctx.failures << Term.of(:match, rule, exp, matchee, result)
               end
             end
           end
@@ -115,58 +113,119 @@ def process(queue, testcase, ctx)
       end
     end
 
-    # Pattern test case.
-    match({:pattern, :pattern_, :"_*"}, cue: :pattern) do |pattern|
+    matchpi %[(pattern pattern_ body_*)] do
       catch(ctx, pattern) do
         first = true
         match = ->(matchee : Term) do
-          envs = ctx.stats.run(accounted: first) { Term::M1.matches(pattern, matchee) }
-          envs.map!(&.without(:"(keypaths)"))
-          first = false
-          envs
+          begin
+            envs = ctx.stats.run { Term::M1.matches(pattern, matchee) }
+            envs.map!(&.without(:"(keypaths)"))
+          ensure
+            if first
+              ctx.stats.account
+            end
+            first = false
+          end
         end
 
-        args = testcase.items.move(2)
-        args.each do |arg|
-          Term.case(arg, engine: Term::M0) do
-            match({:+, :"_*"}, cue: :+) do
-              matchees = arg.items.move(1)
-              matchees.each do |matchee|
+        body.items.each do |exp|
+          Term.case(exp) do
+            matchpi %[(+ whitelist_*)] do
+              whitelist.items.each do |matchee|
                 envs = match.call(matchee)
-                if envs.empty?
-                  ctx.failures << Term.of(:mismatch, pattern, arg, matchee)
-                end
+                next unless envs.empty?
+                ctx.failures << Term.of(:mismatch, pattern, exp, matchee)
               end
             end
 
-            match({:-, :"_*"}, cue: :-) do
-              matchees = arg.items.move(1)
-              matchees.each do |matchee|
+            matchpi %[(- blacklist_*)] do
+              blacklist.items.each do |matchee|
                 envs = match.call(matchee)
-                unless envs.empty?
-                  ctx.failures << Term.of(:match, pattern, arg, matchee, envs)
-                end
+                next if envs.empty?
+                ctx.failures << Term.of(:match, pattern, exp, matchee, envs)
               end
             end
 
-            match({:"=", :"$$PEOPLE", :"_*"}, cue: :"$$PEOPLE") do
+            matchpi %[(= $$PEOPLE matches_*)] do
               envs = match.call(PEOPLE)
-              unless envs.to_set == arg.items.move(2).to_set
-                ctx.failures << Term.of(:mismatch, pattern, arg, :"$$PEOPLE", envs)
-              end
+              next if envs.to_set == matches.items.to_set
+              ctx.failures << Term.of(:mismatch, pattern, exp, :"$$PEOPLE", envs)
             end
 
-            match({:"=", :matchee_, :"_*"}, cue: :"=") do |matchee|
+            matchpi %[(= matchee_ matches_*)] do
               envs = match.call(matchee)
-              unless envs.to_set == arg.items.move(2).to_set
-                ctx.failures << Term.of(:mismatch, pattern, arg, matchee, envs)
-              end
+              next if envs.to_set == matches.items.to_set
+              ctx.failures << Term.of(:mismatch, pattern, exp, matchee, envs)
             end
 
-            match({:"⊆", :matchee_, :"_*"}, cue: :"⊆") do |matchee|
+            matchpi %[(⊆ matchee_ matchsets_*)] do
               envs = match.call(matchee)
-              unless envs.to_set.in?(arg.items.move(2).map(&.items.to_set))
-                ctx.failures << Term.of(:mismatch, pattern, arg, matchee, envs)
+              next if envs.to_set.in?(matchsets.items.map(&.items.to_set))
+              ctx.failures << Term.of(:mismatch, pattern, exp, matchee, envs)
+            end
+          end
+        end
+      end
+    end
+
+    matchpi %[(specificity levels_*)] do
+      catch(ctx, testcase) do
+        patterns = {} of Term::M1::Specificity => Set(Term)
+
+        levels.items.each do |level|
+          Term.case(level) do
+            matchpi %[(level members_*)] do
+              members.each_entry do |_, pattern|
+                normp = Term::M1.normal(pattern)
+                specificity = ctx.stats.run { Term::M1.specificity(normp) }
+
+                neighbors = patterns.put_if_absent(specificity) { Set(Term).new }
+                neighbors << pattern
+              end
+            end
+          end
+        end
+
+        unsorted = patterns.to_a
+        sorted = unsorted.sort_by { |specificity, _| specificity }
+
+        unsorted.zip(sorted) do |llevel, rlevel|
+          next if llevel == rlevel
+
+          ctx.failures << Term.of(:"mismatch/specificity", llevel, rlevel)
+        end
+      ensure
+        ctx.stats.account
+      end
+    end
+
+    matchpi %[(head exps_*)] do
+      exps.items.each do |exp|
+        Term.case(exp) do
+          matchpi %[(- blacklist_*)] do
+            ctx.stats.account
+
+            catch(ctx, exp) do
+              blacklist.items.each do |item|
+                normitem = Term::M1.normal(item)
+                next unless head = ctx.stats.run { Term::M1.head?(normitem) }
+
+                ctx.failures << Term.of(:"mismatch/head", item, :==, :nothing, :GOT, head)
+              end
+            end
+          end
+
+          matchpi %[(of lhs_ rhs_)] do
+            ctx.stats.account
+
+            catch(ctx, exp) do
+              normlhs = Term::M1.normal(lhs)
+              head = ctx.stats.run { Term::M1.head?(normlhs) }
+
+              if head.nil?
+                ctx.failures << Term.of(:"mismatch/head", lhs, :==, rhs, :GOT, :nothing)
+              elsif head != rhs
+                ctx.failures << Term.of(:"mismatch/head", lhs, :==, rhs, :GOT, head)
               end
             end
           end
