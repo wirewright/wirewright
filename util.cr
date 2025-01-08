@@ -2141,13 +2141,13 @@ struct Bag(T)
   end
 
   # Returns the number of unique objects in this bag.
-  def size
-    @storage.size
+  def nunique : UInt32
+    @storage.size.to_u32
   end
 
   # Returns the number of objects of which there is more than one occurrence in this bag.
-  def nrepeats
-    @storage.count { |_, tally| tally > 1 }
+  def nrepeats : UInt32
+    @storage.count { |_, tally| tally > 1 }.to_u32
   end
 
   def tally?(object : T) : UInt16?

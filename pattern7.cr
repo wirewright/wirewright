@@ -2647,7 +2647,7 @@ end
 module ::Ww::Term::M1
   module Item
     def self.normal(item : Term) : Term
-      output = Term.case(item, engine: Term::M0) do
+      Term.of_case(item, engine: Term::M0) do
         match(:_symbol) do
           continue unless blank = item.blank?
           continue unless blank.poly?
@@ -2746,8 +2746,6 @@ module ::Ww::Term::M1
           Term.of(:"%singular", M1.normal(item))
         end
       end
-
-      Term.of(output)
     end
 
     # TODO: switch to using matchpis here and everywhere!
@@ -2854,69 +2852,69 @@ module ::Ww::Term::M1
       end
     end
 
-    def self.bounds(item : Term)
-      Term.case(item, engine: Term::M0) do
-        match({:"%singular", :_}) do
-          {Magnitude.new(1), Magnitude.new(1)}
-        end
+  #   def self.bounds(item : Term)
+  #     Term.case(item, engine: Term::M0) do
+  #       match({:"%singular", :_}) do
+  #         {Magnitude.new(1), Magnitude.new(1)}
+  #       end
 
-        match(
-          {:"%partition", {:"%plural", {:"%capture", :_}}, :_},
-          {:"%partition", {:"%plural"}, :_},
-        ) do
-          min = item[:min].to(Magnitude)
-          max = item[:max] == SYM_INF ? Magnitude::INFINITY : item[:max].to(Magnitude)
+  #       match(
+  #         {:"%partition", {:"%plural", {:"%capture", :_}}, :_},
+  #         {:"%partition", {:"%plural"}, :_},
+  #       ) do
+  #         min = item[:min].to(Magnitude)
+  #         max = item[:max] == SYM_INF ? Magnitude::INFINITY : item[:max].to(Magnitude)
 
-          {min, max}
-        end
+  #         {min, max}
+  #       end
 
-        match({:"%gap", :_}) do
-          {Magnitude.new(0), Magnitude::INFINITY}
-        end
+  #       match({:"%gap", :_}) do
+  #         {Magnitude.new(0), Magnitude::INFINITY}
+  #       end
 
-        match({:"%group", :_, :_, :"_*"}) do
-          children = item.items.move(2)
+  #       match({:"%group", :_, :_, :"_*"}) do
+  #         children = item.items.move(2)
 
-          M1.bounds(children) { |child| bounds(child) }
-        end
+  #         M1.bounds(children) { |child| bounds(child) }
+  #       end
 
-        # FIXME: min
-        match({:"%many", :_, :_, :"_*"}) do
-          children = item.items.move(2)
+  #       # FIXME: min
+  #       match({:"%many", :_, :_, :"_*"}) do
+  #         children = item.items.move(2)
 
-          min, max = M1.bounds(children) { |child| bounds(child) }
+  #         min, max = M1.bounds(children) { |child| bounds(child) }
 
-          min0 = Magnitude.new(1)
-          max0 = Magnitude::INFINITY
+  #         min0 = Magnitude.new(1)
+  #         max0 = Magnitude::INFINITY
 
-          {min * min0, max * max0}
-        end
+  #         {min * min0, max * max0}
+  #       end
 
-        match({:"%optional", :_, :_}) do
-          {Magnitude.new(0), Magnitude.new(1)}
-        end
-      end
-    end
+  #       match({:"%optional", :_, :_}) do
+  #         {Magnitude.new(0), Magnitude.new(1)}
+  #       end
+  #     end
+  #   end
   end
 
-  def self.bounds(items : Enumerable(Term), & : Term -> {Magnitude, Magnitude})
-    min = Magnitude.new(0)
-    max = Magnitude.new(0)
+  # def self.bounds(items : Enumerable(Term), & : Term -> {Magnitude, Magnitude})
+  #   min = Magnitude.new(0)
+  #   max = Magnitude.new(0)
 
-    items.each do |item|
-      min1, max1 = yield item
-      min += min1
-      max += max1
-      # We could `break` here if b0 and e0 are Infinity, but that's pretty rare and probably
-      # isn't worth it. Most often at least b0 is going to be known which requires a scan.
-    end
+  #   items.each do |item|
+  #     min1, max1 = yield item
+  #     min += min1
+  #     max += max1
+  #     # We could `break` here if b0 and e0 are Infinity, but that's pretty rare and probably
+  #     # isn't worth it. Most often at least b0 is going to be known which requires a scan.
+  #   end
 
-    {min, max}
-  end
+  #   {min, max}
+  # end
 
   module Pair
     def self.normal(key : Term, value : Term) : Term
-      Term.case(value, engine: Term::M0) do
+      Term.of_case(value, engine: Term::M0) do
         match({:"%optional", :default_, :body_}, cue: :"%optional") do |default, body|
           Term.of(:"%pair/optional", key, default, M1.normal(body))
         end
@@ -2935,21 +2933,21 @@ module ::Ww::Term::M1
       end
     end
 
-    def self.bounds(pair : Term) : {Magnitude, Magnitude}
-      Term.case(pair, engine: Term::M0) do
-        match({:"%pair/optional", :_, :_, :_}) do
-          {Magnitude.new(0), Magnitude.new(1)}
-        end
+    # def self.bounds(pair : Term) : {Magnitude, Magnitude}
+    #   Term.case(pair, engine: Term::M0) do
+    #     match({:"%pair/optional", :_, :_, :_}) do
+    #       {Magnitude.new(0), Magnitude.new(1)}
+    #     end
 
-        match({:"%pair/absent", :_}, {:"%pair/absent", :_, :_}) do
-          {Magnitude::INFINITY, Magnitude.new(1)}
-        end
+    #     match({:"%pair/absent", :_}, {:"%pair/absent", :_, :_}) do
+    #       {Magnitude::INFINITY, Magnitude.new(1)}
+    #     end
 
-        match({:"%pair/required", :_, :_}) do
-          {Magnitude.new(1), Magnitude.new(1)}
-        end
-      end
-    end
+    #     match({:"%pair/required", :_, :_}) do
+    #       {Magnitude.new(1), Magnitude.new(1)}
+    #     end
+    #   end
+    # end
   end
 
   Schemas::LeafUnbounded = Term::M0::PairSchema.build do
@@ -3024,10 +3022,10 @@ module ::Ww::Term::M1
   # inevitable implementation errors). Diagnostics can help the programmer find potential
   # mistakes at their level of reasoning.
   def self.normal(pattern : Term) : Term
-    output = Term.case(pattern, engine: Term::M0) do
+    Term.of_case(pattern, engine: Term::M0) do
       # Convert blanks to their corresponding %-nodes.
       match({:"%literal", :_}) { Term.of({:"%pass"}) }
-      match({:"%literal", :_number}) { Term.of({:"%number"}) }
+      match({:"%literal", :_number}) { Term.of({:"%number", :_}) }
       match({:"%literal", :_string}) { Term.of({:"%string"}) }
       match({:"%literal", :_symbol}) { Term.of({:"%symbol"}) }
       match({:"%literal", :_boolean}) { Term.of({:"%boolean"}) }
@@ -3218,7 +3216,7 @@ module ::Ww::Term::M1
 
       # Arg-less %number is normal.
       match(
-        {:"%number"},
+        {:"%number", {:"%literal", :_}},
         {:"%number", {:"%literal", {:whole, :_}}},
         cue: :"%number"
       ) { pattern }
@@ -3327,8 +3325,6 @@ module ::Ww::Term::M1
 
       otherwise { Term.of(:"%literal", pattern) }
     end
-
-    Term.of(output)
   end
 
   def self.search_part(term : Term) : Search::Part
@@ -3389,20 +3385,6 @@ module ::Ww::Term::M1
 
         Operator::Layer.new(operator(below, captures), entries)
       end
-
-      # match({:"%partition", {:"%layer", :rest_}, Term[]}, cue: :"%layer") do |rest|
-      #   Operator::Both.new(Operator::Dict.new, operator(rest, captures))
-      # end
-
-      # match({:"%partition", {:"%layer", :rest_}, :pairs_}, cue: :"%layer") do |rest, pairs|
-      #   residue = operator(rest, captures)
-
-      #   pairs.each_entry do |key, value|
-      #     residue = Operator::Peel.new(key, operator(value, captures), residue)
-      #   end
-
-      #   residue
-      # end
 
       match({:"%pair/required", :key_, :value_}, cue: :"%pair/required") do |key, value|
         Operator::PairRequired.new(key, operator(value, captures))
@@ -3666,7 +3648,9 @@ module ::Ww::Term::M1
         Operator::Not.new(blacklist.set)
       end
 
-      match({:"%number"}, cue: :"%number") { Operator::Num.new }
+      match({:"%number", {:"%literal", :_}}, cue: :"%number") do
+        Operator::Num.new
+      end
 
       match({:"%number", {:"%literal", {:whole, :_}}}, cue: {:"%number", :whole}) do
         Operator::Num.new(min: nil, max: nil, options: :whole)
@@ -4032,11 +4016,12 @@ module ::Ww::Term::M1
   end
 
   #      { 
-  #  1   {
-  #      { 
-  #  w   { 
+  #      { TODO: implement Ruleset.
+  #  1   { TODO: see if source-based absr/relr is needed *right now*. Especially if we can encode soma11 editor rewrite using Env + Source absr/relr, that'd be good
+  #      { TODO: use old absr, relr, start porting rules & making editor tests. improve specificity
+  #  w   {       if that's ever needed.
+  #  e   { 
   #  e   { TODO: implement Source-based absr and relr for it
-  #  e   { TODO: implement Ruleset. implement specificity
   #  k   { TODO: implement the new Env
   #      { TODO: port editor interpret, eval ruleset
   #      { TODO: editor tests infra, automated editor "motion capture" with T?UI, replay
@@ -4378,42 +4363,16 @@ end
 
 # TODO: bug: walk will walk into %keypath (and other nodes taking literals such as %pipe args, %captures, etc.)
 #      FIX THIS !!!
-# TODO: bounds is broken in many ways, fix with tests !!!
-# TODO: for specificity, we probably also want to count the no. of %literals and use that BEFORE
-#       node count. so that 1/3 wins to (+ _ _), right now it looses on opcount which is fucked up !
-# TODO: in general, opcount seems to be a STUPIDLY wrong choice. some nodes such as %plural are less specific
-#       but have a high node count. so we should ditch opcount and use %number/%string/etc. count instead
-#       (i.e. typed vs. %pass which is untyped), this is the main node-based metric.
+# This can be fixed trivially on the normal-form-end by making each such literal
+# argument wrapped in (%hold) . This way, all walk has to do is to avoid
+# walking into %capture, %literal, and %hold; that's it.
 
 module ::Ww::Term::M1
-  # Returns the number of operators in a normal pattern *normp*. This is one
-  # of the main metrics for determining the specificity of a pattern.
-  #
-  # Note: `%pass` is the only operator ignored during opcount. The main reason why
-  # this is done is to let patterns like `_number` win over `_` on opcount without
-  # any further work counting typed/untyped patterns and so on.
-  def self.opcount(normp : Term) : Magnitude
-    count = Magnitude.new(0)
-
-    walk(normp) do |node|
-      Term.case(node) do
-        matchpi %[(%pass)] {}
-
-        otherwise { count += Magnitude.new(1) }
-      end
-
-
-      WalkDecision::Continue
-    end
-
-    count
-  end
-
   # Returns the minimum and maximum expected matchee depth for a normal pattern
   # *normp*. They participate in determining the specificity of a pattern.
   #
-  # Operators such as `%leaf` make it impossible to tell the *maximum* depth of
-  # the pattern; but leave the possibility of determining its *minimum required
+  # Operators such as `%leaf` make it impossible to tell the *maximum* expected depth
+  # of the matchee; but leave the possibility of determining its *minimum required
   # depth*. Additionally, `%leaf` and its variants introduce one level of depth
   # themselves when their `self` option is turned off.
   def self.depth(normp : Term) : {Magnitude, Magnitude}
@@ -4481,94 +4440,145 @@ module ::Ww::Term::M1
     {mindepth, maxdepth}
   end
 
-  # Returns the minimum and maximum expected matchee breadth for a normal pattern
-  # *normp*. They participate in determining the specificity of a pattern.
-  def self.breadth(normp : Term) : {Magnitude, Magnitude}
-    minbreadth = Magnitude.new(0)
-    maxbreadth = Magnitude.new(0)
-
-    walk(normp) do |node|
-      Term.case(node) do
-        matchpi %[(%itemspart children_*)] do
-          min, max = bounds(children.items) { |item| Item.bounds(item) }
-
-          minbreadth = Math.max(minbreadth, min)
-          maxbreadth = Math.max(maxbreadth, max)
-        end
-
-        matchpi(
-          %[(%pair/required _ _)],
-          %[(%pair/optional _ _ _)],
-          %[(%pair/absent _)],
-          %[(%pair/absent _ _)]
-        ) do
-          min, max = Pair.bounds(node)
-
-          minbreadth = Math.max(minbreadth, min)
-          maxbreadth = Math.max(maxbreadth, max)
-        end
-
-        otherwise {}
-      end
-
-      WalkDecision::Continue
-    end
-
-    {minbreadth, maxbreadth}
-  end
-
-  def self.capcount(captures : Bag(Term)) : {Magnitude, Magnitude}
-    {Magnitude.new(captures.size), Magnitude.new(captures.nrepeats)}
-  end
-  
   # A summary of measurements concerning the specificity of a pattern. 
-  record Specificity,
-    opcount : Magnitude,
-    mindepth : Magnitude,
-    maxdepth : Magnitude,
-    minbreadth : Magnitude,
-    maxbreadth : Magnitude,
-    ncaptures : Magnitude,
-    ncaptureqs : Magnitude
-
-  struct Specificity
-    include Comparable(Specificity)
-
-    def ord
-      # Infinity should lose during comparison (i.e., infinity -> less specific,
-      # concrete value -> more specific).
-      {opcount, mindepth, minbreadth, maxdepth, maxbreadth, ncaptureqs, ncaptures}.map do |score|
-        score == Float32::INFINITY ? -score : score
-      end
-    end
-
-    def <=>(other : Specificity)
-      ord <=> other.ord
-    end
-  end
+  alias Specificity = {UInt32, UInt32, UInt32}
 
   # Returns the specificity of a normal pattern *normp*.
   #
   # In single-way rewriting (which basically means most of rewriting we are doing
-  # here in Wirewright), having a way to order patterns/rules is important for
-  # correctness on the end of the programmer's expectation (because the rewrite system
-  # itself does not care; all it cares about is whether a rewrite is possible). Some
-  # patterns inherently "know more" about their expected matchee and we must give way
-  # to those patterns vs. more general/abstract ones.
+  # here in Wirewright), having a way to order patterns/rules is important, mostly
+  # for the programmer (because the rewrite system itself does not care; all it cares
+  # about is whether a rewrite is possible). Some patterns inherently "know more" about
+  # their expected matchee and we must give way to those patterns vs. more general/
+  # abstract ones. This way, the programmer may expect the most specific pattern to win.
   #
-  # Thus we make "level-of-detail" measurements on the pattern, and summarize the results
-  # of these measurements under so-called `Specificity`. Importantly enough, pattern
-  # specificities are comparable.
+  # Thus we make some crude, recursive "level-of-detail" measurements of a pattern,
+  # and summarize them under in its corresponding `Specificity` struct. Importantly
+  # enough, pattern specificities are comparable.
   #
   # An alternative to single-way is multiway rewriting, where we perform all possible
   # rewrites. See, for instance, the work of Stephen Wolfram. We will support multiway
-  # rewriting in the future; in the context of Wirewright, this seems computationally
-  # possible vs. e.g. what Wolfram is proposing, since his "all possible rewrites"
-  # map neatly onto an optimizing pattern matching engine that we're trying to build
-  # here. In practice, however, multiway rewriting is rarely *necessary*, so we focus
-  # more on single-way rewriting.
-  def self.specificity(normp : Term, captures : Bag(Term) = captures(normp)) : Specificity
-    Specificity.new(opcount(normp), *depth(normp), *breadth(normp), *capcount(captures))
+  # rewriting in the future; in the context of Wirewright, this seems at least to some
+  # extent computationally possible vs. e.g. what Wolfram is (appears to me to be?)
+  # showing. Regardless, his "all possible rewrites" map neatly onto an optimizing
+  # pattern matching engine that we're trying to build here. Despite all this,
+  # in practice, multiway rewriting is rarely *needed*, will inevitably be slower, and
+  # is hard to interface with. So we focus more on single-way rewriting.
+  def self.specificity(normp : Term, *, toplevel : Bool) : Specificity
+    if toplevel
+      Term.case(normp) do
+        # Recurse into top-level `%let`s.
+        matchpi %[((%literal %let) _ successor_)] do
+          return specificity(successor, toplevel: true)
+        end
+
+        # If we have a literal or %any at the top level, issue max specificity
+        # and exit immediately.
+        matchpi %[((%literal %literal) _)], %[(%any/literal _+)] do
+          return UInt32::MAX, 0u32, 0u32
+        end
+
+        otherwise {}
+      end
+    end
+
+    captures = Set(Term).new
+    repeats = literals = restrictions = 0u32
+
+    walk(normp) do |operator|
+      Term.case(operator) do
+        matchpi %[(%capture _)] do
+          unless captures.add?(operator)
+            repeats += 1
+          end
+
+          WalkDecision::Continue
+        end
+
+        matchpi %[((%literal %literal) _)], %[(%any/literal _+)]  do
+          literals += 1
+
+          WalkDecision::Continue
+        end
+
+        # Count stuff such as (%number _ < 10) as two restrictions: one on the type
+        # and one on the magnitude; and e.g. (%number (whole _) < 10) as three: one on
+        # the type, one on the magnitude, and one on the value.
+        matchpi(
+          %[((%literal %number) (%literal _) _ _)],
+          %[((%literal %number) (%literal (whole _)))],
+        ) do
+          restrictions += 2
+
+          WalkDecision::Continue
+        end
+
+        matchpi %[((%literal %number) (%literal (whole _)) _ _)] do
+          restrictions += 2 
+
+          WalkDecision::Continue
+        end
+
+        # Count stuff such as (%number 0 < _ < 10) as three restrictions: one on the type
+        # and two on the magnitude.
+        matchpi %[((%literal %number) _ _ (%literal _) _ _)] do
+          restrictions += 3
+
+          WalkDecision::Continue
+        end
+
+        # Count stuff such as (%number 0 < (whole _) < 10) as four restrictions: one on
+        # the type, two on the magnitude, and one on the value.
+        matchpi %[((%literal %number) _ _ (%literal (whole _)) _ _)] do
+          restrictions += 4
+
+          WalkDecision::Continue
+        end
+
+        # Rather than listing all operators that make restrictions, we list those that
+        # *do not*. This is because most operators make restrictions.
+        matchpi(
+          %[((%literal %pass))],
+          %[((%literal %let) _ _)],
+          %[((%literal %not) _+)],
+          %[((%literal %new) _)],
+        ) { WalkDecision::Continue }
+
+        # %all takes max specificity of its offshoots.
+        matchpi %[((%literal %all) offshoots_+)] do
+          literals1, repeats1, restrictions1 = offshoots.items.max_of do |branch|
+            specificity(branch, toplevel: false)
+          end
+
+          literals += literals1
+          repeats += repeats1
+          restrictions += restrictions1
+
+          WalkDecision::Skip
+        end
+
+        # %any° takes min specificity of its branches.
+        matchpi %[(%any/source branches_+)] do
+          literals1, repeats1, restrictions1 = branches.items.min_of do |branch|
+            specificity(branch, toplevel: false)
+          end
+
+          literals += literals1
+          repeats += repeats1
+          restrictions += restrictions1
+
+          WalkDecision::Skip
+        end
+
+        otherwise do
+          restrictions += 1
+
+          WalkDecision::Continue
+        end
+      end
+    end
+
+    {literals, repeats, restrictions}
   end
 
   # :nodoc:
@@ -4645,3 +4655,5 @@ class ::Ww::Term::Dict
     maxdepth
   end
 end
+
+

@@ -574,6 +574,10 @@ module Ww
 
       raise ArgumentError.new("no match found for #{matchee}")
     end
+
+    macro of_case(*args, **kwargs, &block)
+      ::Ww::Term.of(::Ww::Term.case({{args.splat}}, {{kwargs.double_splat}}) {{block}})
+    end
   end
 end
 

@@ -331,7 +331,7 @@
 
 ;; %number
 (group
-  (pattern (%number)
+  (pattern (%number _)
     (+ 0 1 -1 1/3)
     (- a "foo" true ()))
 
@@ -2965,16 +2965,61 @@
   
 ;; TODO: Bounds
 
+;; TODO: depth
+
 ;; Specificity (ascending, each dict is a level [i.e. same specificity])
 ;; Order/duplication in levels is irrelevant.
 (specificity
   ;; Lowest specificity -- least specific
-  (level _)
-  (level _number _string _boolean _dict)
-  (level (+ _ _))
-  ;; TODO: after bounds are tested, add more examples here
+  (level _ x_ x←_ (%not a b c))
+  (level x_number x_string x_boolean x_dict _number _string _boolean _dict)
+  (level (+ _ _) (+ x_ _) (+ _ y_) (+ x_ y_))
+  (level (+ _number y_) (+ x_ _number) (+ x_number y_) (+ x_ y_number))
+  (level (+ x_number y_number))
+  (level (+ x←(%number _ < 5) y_number))
+  (level (+ x←(%number _ < 5) y←(%number _ < 5)))
+  (level (+ 0 _) (+ _ 0))
+  (level (+ 0 _number) (+ (%any 0 1) _number))
+  (level (+ 0 0 _))
   ;; Highest specificity -- most specific
-  (level 1/3 "hello" qux true))
+  (level 1/3 "hello" qux true (%any a b c) x←0))
+
+;; Having more literals wins (we use _ to prevent auto %literal inference)
+(specificity
+  (level (_))
+  (level (a _))
+  (level (a _ b))
+  (level (a _ b c))
+  (level (a _ b c d))
+  (level ((a _ b) (c _ d))))
+
+;; %not specificity
+(specificity
+  (level (%not a b c))
+  (level a b c))
+
+;; %number specificity
+(specificity
+  (level _number (%number _))
+  (level (%number (whole _)) (%number _ < 10))
+  (level (%number 0 < _ < 10))
+  (level (%number 0 < (whole _) < 10) (%number u8) (%number i64)))
+
+;; %any° takes minimum specificity of its branches
+(specificity
+  (level (%any° 0 x_) (%any° x_ y_)) ;; blank wins
+  (level (%any° _number 0) (%any° (+ a_ b_) _number) (%any° (%number _ < 10) _number)) ;; _number wins
+  (level (%any° (%number _ < 10) 0)) ;; %number wins
+  (level (%any° (%number 0 < _ < 10) (%number -10 < _ < 0)) ;; both win
+         (%any° (%number 0 < _ < 10) 100)) ;; %number wins
+  (level (%any° 100 200) (%any° (%any 0 1 2) (%any 3 4 5)))) ;; both win
+
+;; %all takes maximum specificity of its branches
+(specificity
+  (level (%all _ _) (%all x_ _) (%all _ y_) (%all x_ y_)) ;; both win
+  (level (%all x_number y_) (%all x_ y_number) (%all x_number y_number)) ;; _number wins
+  (level (%all x_number (%number _ < 0))) ;; %number wins
+  (level (%all 0 x_) (%all (%any 0 1 2) x_))) ;; 0/%any wins
  
 ;; Head
 ;; Make sure pattern head is determined properly

@@ -172,27 +172,37 @@ def process(queue, testcase, ctx)
       catch(ctx, testcase) do
         patterns = {} of Term::M1::Specificity => Set(Term)
 
+        specificity0 = nil
+
         levels.items.each do |level|
           Term.case(level) do
             matchpi %[(level members_*)] do
+              specificity1 = nil
+
               members.each_entry do |_, pattern|
                 normp = Term::M1.normal(pattern)
-                specificity = ctx.stats.run { Term::M1.specificity(normp) }
+                specificity2 = ctx.stats.run { Term::M1.specificity(normp, toplevel: true) }
+                specificity1 ||= specificity2
+                next if specificity1 == specificity2
 
-                neighbors = patterns.put_if_absent(specificity) { Set(Term).new }
-                neighbors << pattern
+                ctx.failures << Term.of(:"mismatch/specificity", pattern, :==, specificity1, :GOT, specificity2)
               end
+
+              next unless specificity1
+
+              unless specificity0
+                specificity0 = specificity1
+                next
+              end
+
+              unless specificity0 < specificity1
+                ctx.failures << Term.of(:"mismatch/specificity", level, :>, specificity0, :GOT, specificity1)
+                next
+              end
+
+              specificity0 = specificity1
             end
           end
-        end
-
-        unsorted = patterns.to_a
-        sorted = unsorted.sort_by { |specificity, _| specificity }
-
-        unsorted.zip(sorted) do |llevel, rlevel|
-          next if llevel == rlevel
-
-          ctx.failures << Term.of(:"mismatch/specificity", llevel, rlevel)
         end
       ensure
         ctx.stats.account
