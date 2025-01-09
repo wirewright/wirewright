@@ -3889,9 +3889,9 @@ module ::Ww::Term::M1
 
   PATTERN_CACHE = Pf::Cache(Void*, Operator::Any).new
 
-  def self.operator(pattern : Term, *, fresh = false) : Operator::Any
+  def self.operator(pattern : Term, *, normalize = true, fresh = false) : Operator::Any
     PATTERN_CACHE.fetch(pattern.unsafe_repr, fresh: fresh) do
-      normal = normal(pattern)
+      normal = normalize ? normal(pattern) : pattern
       captures = captures(normal)
       operator(normal, captures)
     end
@@ -4443,6 +4443,10 @@ module ::Ww::Term::M1
   # A summary of measurements concerning the specificity of a pattern. 
   alias Specificity = {UInt32, UInt32, UInt32}
 
+  # Specificity assigned to a top-level literal pattern such as `qux`, `(+ 1 2)`,
+  # or a top-level literal alternative, e.g. `(%any 0 1 2)`.
+  LITERAL_SPECIFICITY = {UInt32::MAX, 0u32, 0u32}
+
   # Returns the specificity of a normal pattern *normp*.
   #
   # In single-way rewriting (which basically means most of rewriting we are doing
@@ -4475,7 +4479,7 @@ module ::Ww::Term::M1
         # If we have a literal or %any at the top level, issue max specificity
         # and exit immediately.
         matchpi %[((%literal %literal) _)], %[(%any/literal _+)] do
-          return UInt32::MAX, 0u32, 0u32
+          return LITERAL_SPECIFICITY
         end
 
         otherwise {}
@@ -4638,6 +4642,169 @@ module ::Ww::Term::M1
     end
   end
 end 
+
+# Groups a pattern term with associated parseouts. In addition, acts as a namespace
+# for data structures containing itself.
+#
+# Comparison by content is implemented by comparing the pattern terms and can be
+# done using `==` or `hash`. Comparison by identity is accessible via `id`.
+struct Pattern
+  private alias O = Term::M1::Operator
+
+  # Returns the globally unique id of this pattern.
+  getter id : UInt32
+
+  # Returns the term from which this pattern originated.
+  getter term : Term
+
+  # Returns the specificity of this pattern.
+  getter specificity : Term::M1::Specificity
+
+  @@ids = Atomic(UInt32).new(0u32)
+
+  # :nodoc:
+  def initialize(@term, @specificity, @operator : O::Any)
+    @id = @@ids.add(1, :relaxed)
+  end
+
+  # Attempts to match this pattern on *matchee*. Returns the resulting positive
+  # or negative `Response`.
+  def response(matchee : Term, *, keypaths = false, env = Term[]) : Response::Any
+    case fb = O.feedback(env, @operator, matchee, keypaths: keypaths)
+    in O::Fb::MatchOne  then Response::PositiveOne.new(self, fb.env)
+    in O::Fb::MatchMany then Response::PositiveMany.new(self, fb.envs)
+    in O::Fb::Mismatch  then Response::Negative.new
+    end
+  end
+
+  def inspect(io)
+    io << "Pattern#" << id << "(" << @term << ")"
+  end
+
+  # Compares two patterns based on their origin `term`.
+  def_equals_and_hash @term
+end
+
+# Groups the various types of responses produced by a `Pattern`.
+module Pattern::Response
+  alias Any = Positive | Negative
+  alias Positive = PositiveOne | PositiveMany
+
+  # Positive response of *pattern* that resulted in one environment.
+  record PositiveOne, pattern : Pattern, env : Term::Dict
+
+  # Positive response of *pattern* that resulted in multiple environments.
+  record PositiveMany, pattern : Pattern, envs : Array(Term::Dict)
+
+  # Negative response.
+  record Negative
+end
+
+# :nodoc:
+#
+# A sequence of `Pattern`s ordered by their specificity (see `Term::M1.specificity`).
+struct Pattern::Seq
+  def initialize
+    @patterns = [] of Pattern
+  end
+
+  # Adds a new *pattern* to this sequence.
+  def add(pattern : Pattern) : Nil
+    unless index = @patterns.bsearch_index { |other| other.specificity <= pattern.specificity }
+      @patterns << pattern
+      return
+    end
+
+    return if pattern == @patterns[index]
+
+    @patterns.insert(index, pattern)
+  end
+
+  # Returns the first positive response of a member pattern to *matchee*. If none,
+  # returns a negative response.
+  def response(matchee : Term) : Pattern::Response::Any
+    @patterns.each do |pattern|
+      case fb = pattern.response(matchee)
+      in Pattern::Response::Positive
+        return fb
+      in Pattern::Response::Negative
+      end
+    end
+
+    Pattern::Response::Negative.new
+  end
+
+  # Returns an array of positive responses of member patterns to *matchee*.
+  def responses(matchee : Term) : Array(Pattern::Response::Positive)
+    @patterns.compact_map do |pattern|
+      case fb = pattern.response(matchee)
+      in Pattern::Response::Positive
+        fb
+      in Pattern::Response::Negative
+      end
+    end
+  end
+
+  # Compares two pattern sequences by the pattern terms that they contain.
+  def_equals_and_hash @patterns
+end
+
+# An object capable of parsing pattern terms into `Pattern`s and organizing them
+# for efficient response to matchees.
+struct Pattern::Set
+  def initialize
+    @headed = {} of Term => Seq
+    @headless = Seq.new
+  end
+
+  # Adds *pattern* to this pattern set.
+  def add(pattern : Term) : Nil
+    normp = Term::M1.normal(pattern)
+    specificity = Term::M1.specificity(normp, toplevel: true)
+    operator = Term::M1.operator(normp, normalize: false)
+
+    pobj = Pattern.new(normp, specificity, operator)
+
+    if head = Term::M1.head?(normp)
+      group = @headed.put_if_absent(head) { Seq.new }
+      group.add(pobj)
+    else
+      @headless.add(pobj)
+    end
+  end
+
+  # Returns the first response of this pattern set to *matchee*. If none, returns
+  # a negative response.
+  #
+  # This is the foundation for single-way rewriting.
+  def response(matchee : Term) : Pattern::Response::Any
+    if (dict = matchee.as_d?) && (head = dict.items.first?) && (group = @headed[head]?)
+      case fb = group.response(matchee)
+      in Pattern::Response::Positive 
+        return fb
+      in Pattern::Response::Negative 
+      end
+    end
+
+    @headless.response(matchee)
+  end
+
+  # Returns an array of all positive responses of this pattern set to *matchee*.
+  #
+  # This is the foundation for multiway rewriting.
+  def responses(matchee : Term) : Array(Pattern::Response::Positive)
+    responses = [] of Pattern::Response::Positive
+
+    if (dict = matchee.as_d?) && (head = dict.items.first?) && (group = @headed[head]?)
+      responses.concat group.responses(matchee)
+    end
+
+    responses.concat @headless.responses(matchee)
+  end
+
+  # Compares two pattern sets by the pattern terms that they contain.
+  def_equals_and_hash @headed, @headless
+end
 
 class ::Ww::Term::Dict
   # Some day this will be cached in the tree; right now, it isn't.
