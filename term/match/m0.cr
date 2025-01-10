@@ -106,9 +106,17 @@ module Ww::Term::M0
   # I've decided to have a separate, much dumber implementation of an entire engine.
   # I could have made M1 depend on M1 with careful control flow etc.; but there's too
   # much circularity anyway.
-  def match?(pattern : Term, matchee : Term) : Term::Dict?
-    Term::Dict.build do |commit|
+  def match?(pattern : Term, matchee : Term, *, env = Term[]) : Term::Dict?
+    env.transaction do |commit|
       return unless match?(commit, pattern.downcast, matchee.downcast)
     end
+  end
+
+  def matches(pattern : Term, matchee : Term, *, env env0 = Term[]) : Array(Term::Dict)
+    unless env1 = match?(pattern, matchee, env: env0)
+      return [] of Term::Dict
+    end
+
+    [env1]
   end
 end

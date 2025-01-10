@@ -2049,6 +2049,7 @@ module ::Ww::Term::M1::Operator
     Env.feedback(envs, fallback: env.env)
   end
 
+  # TODO: cache New like we cache Term.cases
   def match(behind0, op : New, matchee : Term, ahead0)
     # If we already know all the subjects, this is the best case and
     # an immediate fast path toward instantiation. 
@@ -3716,31 +3717,6 @@ module ::Ww::Term::M1
     end
   end
 
-  # struct BlanksForm
-  #   include Search::Form
-
-  #   def initialize(@bag = Bag(Term).new, @version = 0u32)
-  #   end
-
-  #   private def_change
-
-  #   def fill(item : Search::Result::Item)
-  #     unless (symbol = item.term.as_sym?) && (blank = symbol.blank?) && (name = blank.name?)
-  #       return self
-  #     end
-
-  #     @bag << Term.of(name)
-
-  #     change(version: @version + 1)
-  #   end
-
-  #   def close
-  #     @bag
-  #   end
-
-  #   def_equals_and_hash @version
-  # end
-
   private def self.blank_name?(term : Term) : Term?
     return unless symbol = term.as_sym?
     return unless blank = symbol.blank?
@@ -3752,28 +3728,23 @@ module ::Ww::Term::M1
   # Returns a bag of blank names in *term*. The blanks are interpreted as "holes"
   # rather than like in patterns; so *term* can be any term whatsoever.
   def self.blanks(term : Term) : Bag(Term)
-    if name0 = blank_name?(term)
-      return Bag{name0}
-    end
-
     blanks = Bag(Term).new
+    blanks0(term, blanks)
+    blanks
+  end
 
-    Search.traverse(term, spec: Search::Spec::Dfs.new(:items_unordered)) do |item|
-      item = item.as(Search::Result::Item)
-
-      if name1 = blank_name?(item.term)
-        blanks << Term.of(name1)
-
-        Search::Accept
-      else
-        Search::Reject
-      end
+  private def self.blanks0(term : Term, blanks : Bag(Term)) : Nil
+    if name0 = blank_name?(term)
+      blanks << name0
+      return
     end
 
-    blanks
+    return unless dict = term.as_d?
 
-    # spec = Search::Spec::Dfs.new(:items_unordered)
-    # Search.fill(form, dict, spec)
+    dict.each_entry do |key, value|
+      blanks0(key, blanks)
+      blanks0(value, blanks)
+    end
   end
 
   # Recursively substitutes blanks in *term*, by name, with values from *subt*.
@@ -3789,7 +3760,7 @@ module ::Ww::Term::M1
     bsubst0(term, subt)
   end
 
-  def self.bsubst0(term : Term, subt : Term::Dict) : Term
+  private def self.bsubst0(term : Term, subt : Term::Dict) : Term
     return term unless dict0 = term.as_d?
 
     dict1 = Term::Dict.build do |dict1|
@@ -3915,23 +3886,7 @@ module ::Ww::Term::M1
 end
 
 module ::Ww::Term::M1
-  # Lets the block replace items in the given *range* with zero or more items
-  # by appending to the commit. Returns the modified copy of *dict*.
-  private def self.replace(dict : Term::Dict, range : Range(Term::Num, Term::Num), & : Term::Dict::Commit ->) : Term::Dict
-    dict.pairs.transaction do |commit|
-      # Copy before
-      (Term[0]...range.begin).each do |index|
-        commit.append(dict[index])
-      end
 
-      yield commit
-
-      # Copy after
-      (range.end...dict.items.size).each do |index|
-        commit.append(dict[index])
-      end
-    end
-  end
 end
 
 module ::Ww::Term::M1
@@ -4189,9 +4144,7 @@ module ::Ww::Term::M1
     # insertions in a single transaction
     if insertions
       insertions.each do |b, e, _, values|
-        matchee = replace(matchee, b...e) do |commit|
-          values.items.each { |value| commit << value }
-        end
+        matchee = matchee.replace(b...e, &.concat(values.items))
       end
     end
 
@@ -4258,12 +4211,7 @@ module ::Ww::Term::M1
     end
   end
 
-  def self.backmap?(pattern : Term, backdict : Term, matchee : Term, *, env = Term[]) : Term?
-    # Perform a match, requesting the pattern matching engine to provide keypaths
-    # for each capture for which that would make sense.
-    envs = matches(pattern, matchee, env: env, keypaths: true)
-    return if envs.empty?
-
+  def self.backmap(envs : Enumerable(Term::Dict), backspec : Term, matchee : Term) : Term
     # Collapse all keypaths into a trie. Enhance the trie with metadata. Simultaneously,
     # figure out the depth of the trie by finding the maximum keypath size.
     trie = Term[]
@@ -4282,8 +4230,8 @@ module ::Ww::Term::M1
 
           plural = false
 
-          if body = backdict[capture]?
-          elsif body = backdict[{capture}]?
+          if body = backspec[capture]?
+          elsif body = backspec[{capture}]?
             plural = true
           end
 
@@ -4307,6 +4255,18 @@ module ::Ww::Term::M1
     end
 
     matchee
+  end
+
+  def self.backmap?(operator : Operator::Any, backspec : Term, matchee : Term, *, env = Term[]) : Term?
+    case fb = Operator.feedback(env, operator, matchee, keypaths: true)
+    in Operator::Fb::Match
+      backmap(fb.envs, backspec, matchee)
+    in Operator::Fb::Mismatch
+    end
+  end
+
+  def self.backmap?(pattern : Term, backspec : Term, matchee : Term, *, env = Term[]) : Term?
+    backmap?(operator(pattern), backspec, matchee, env: env)
   end
 end
 
@@ -4643,167 +4603,161 @@ module ::Ww::Term::M1
   end
 end 
 
-# Groups a pattern term with associated parseouts. In addition, acts as a namespace
-# for data structures containing itself.
-#
-# Comparison by content is implemented by comparing the pattern terms and can be
-# done using `==` or `hash`. Comparison by identity is accessible via `id`.
+# Represents a pattern within a `Pset`. Has no expected use outside of `Pset`.
 struct Pattern
   private alias O = Term::M1::Operator
 
-  # Returns the globally unique id of this pattern.
-  getter id : UInt32
+  # Returns the index of this pattern. You are free to treat it as `Pset`-unique
+  # identifier of this pattern.
+  getter index : UInt32
 
-  # Returns the term from which this pattern originated.
-  getter term : Term
-
-  # Returns the specificity of this pattern.
-  getter specificity : Term::M1::Specificity
-
-  @@ids = Atomic(UInt32).new(0u32)
+  # Returns the underlying M1 operator.
+  getter operator : O::Any
 
   # :nodoc:
-  def initialize(@term, @specificity, @operator : O::Any)
-    @id = @@ids.add(1, :relaxed)
+  def initialize(@index : UInt32, @operator : O::Any)
   end
 
-  # Attempts to match this pattern on *matchee*. Returns the resulting positive
-  # or negative `Response`.
-  def response(matchee : Term, *, keypaths = false, env = Term[]) : Response::Any
+  # Returns the response of this pattern to *matchee* (may be positive or negative).
+  def response(matchee : Term, *, env = Term[], keypaths = false) : Pr::Any
     case fb = O.feedback(env, @operator, matchee, keypaths: keypaths)
-    in O::Fb::MatchOne  then Response::PositiveOne.new(self, fb.env)
-    in O::Fb::MatchMany then Response::PositiveMany.new(self, fb.envs)
-    in O::Fb::Mismatch  then Response::Negative.new
+    in O::Fb::MatchOne  then Pr::One.new(self, fb.env)
+    in O::Fb::MatchMany then Pr::Many.new(self, fb.envs)
+    in O::Fb::Mismatch  then Pr::Neg.new
     end
   end
-
-  def inspect(io)
-    io << "Pattern#" << id << "(" << @term << ")"
-  end
-
-  # Compares two patterns based on their origin `term`.
-  def_equals_and_hash @term
+  
+  def_equals_and_hash @index
 end
 
-# Groups the various types of responses produced by a `Pattern`.
-module Pattern::Response
-  alias Any = Positive | Negative
-  alias Positive = PositiveOne | PositiveMany
+# Short for "pattern response". Groups the various types of responses produced
+# by `Pattern` and `Pset`.
+module Pr
+  alias Any = Pos | Neg
+  alias Pos = One | Many
 
   # Positive response of *pattern* that resulted in one environment.
-  record PositiveOne, pattern : Pattern, env : Term::Dict
+  record One, pattern : Pattern, env : Term::Dict
 
   # Positive response of *pattern* that resulted in multiple environments.
-  record PositiveMany, pattern : Pattern, envs : Array(Term::Dict)
+  record Many, pattern : Pattern, envs : Array(Term::Dict) do
+    def ones(& : One ->)
+      envs.each { |env| yield One.new(pattern, env) }
+    end
+  end
 
   # Negative response.
-  record Negative
+  record Neg
 end
 
-# :nodoc:
-#
-# A sequence of `Pattern`s ordered by their specificity (see `Term::M1.specificity`).
-struct Pattern::Seq
-  def initialize
-    @patterns = [] of Pattern
+# An object capable of parsing pattern terms into `Pattern`s (a thin wrapper
+# around `Term::M1::Operator`) and organizing them for efficient response
+# to matchees.
+class Pset
+  # :nodoc:
+  def initialize(@headed : Hash(Term, Slice(Pattern)), @headless : Slice(Pattern))
   end
 
-  # Adds a new *pattern* to this sequence.
-  def add(pattern : Pattern) : Nil
-    unless index = @patterns.bsearch_index { |other| other.specificity <= pattern.specificity }
-      @patterns << pattern
-      return
-    end
+  # Constructs a pattern set by extracting patterns from *base* using *selector*.
+  #
+  # Considers only matches of *selector* that contain a capture named `pattern`.
+  # The contents of this capture are treated as a pattern and added to the pattern set. 
+  #
+  # Yields normal `pattern` (see `Term::M1.normal`), followed by match env of
+  # *selector* for further handling by the block. Expects the block to return
+  # `true` if the pattern should be handled and finally added to the set; or
+  # `false`/`nil` if the pattern should be ignored.
+  #
+  # ```
+  # pset = Pset.select(ML.parse1(%[(rule pattern_ body_)])) do |normp, env|
+  #   # Do something with env[:body]
+  #   # ...
+  #  
+  #   true # E.g. body is valid
+  # end
+  # ```
+  def self.select(selector : Term, base : Term, & : Term, Term::Dict -> Bool?) : Pset
+    seen = Set(Term).new
 
-    return if pattern == @patterns[index]
+    headed = {} of Term => Array(Int32)
+    headless = [] of Int32
 
-    @patterns.insert(index, pattern)
-  end
+    patterns = [] of Pattern
+    specificities = [] of Term::M1::Specificity
 
-  # Returns the first positive response of a member pattern to *matchee*. If none,
-  # returns a negative response.
-  def response(matchee : Term) : Pattern::Response::Any
-    @patterns.each do |pattern|
-      case fb = pattern.response(matchee)
-      in Pattern::Response::Positive
-        return fb
-      in Pattern::Response::Negative
+    base.each_item_unordered do |item|
+      envs = Term.matches(selector, item)
+      envs.each do |env|
+        next unless pattern = env[:pattern]?
+        next unless seen.add?(pattern)
+
+        index = seen.size - 1
+
+        normp = Term::M1.normal(pattern)
+
+        specificity = Term::M1.specificity(normp, toplevel: true)
+        specificities << specificity
+
+        operator = Term::M1.operator(normp, normalize: false)
+
+        pattern = Pattern.new(index.to_u32, operator)
+        next unless yield normp, env
+
+        patterns << pattern
+
+        if head = Term::M1.head?(normp)
+          neighbors = headed.put_if_absent(head) { [] of Int32 }
+          neighbors << index
+        else
+          headless << index
+        end
       end
     end
 
-    Pattern::Response::Negative.new
-  end
-
-  # Returns an array of positive responses of member patterns to *matchee*.
-  def responses(matchee : Term) : Array(Pattern::Response::Positive)
-    @patterns.compact_map do |pattern|
-      case fb = pattern.response(matchee)
-      in Pattern::Response::Positive
-        fb
-      in Pattern::Response::Negative
-      end
+    # Now that we have everything neatly organized, sort headed and headless
+    # patterns by specificity, descending.
+    headless.sort! { |a, b| specificities.unsafe_fetch(b) <=> specificities.unsafe_fetch(a) }
+    headed.each do |_, neighbors|
+      neighbors.sort! { |a, b| specificities.unsafe_fetch(b) <=> specificities.unsafe_fetch(a) }
     end
-  end
 
-  # Compares two pattern sequences by the pattern terms that they contain.
-  def_equals_and_hash @patterns
-end
-
-# An object capable of parsing pattern terms into `Pattern`s and organizing them
-# for efficient response to matchees.
-struct Pattern::Set
-  def initialize
-    @headed = {} of Term => Seq
-    @headless = Seq.new
-  end
-
-  # Adds *pattern* to this pattern set.
-  def add(pattern : Term) : Nil
-    normp = Term::M1.normal(pattern)
-    specificity = Term::M1.specificity(normp, toplevel: true)
-    operator = Term::M1.operator(normp, normalize: false)
-
-    pobj = Pattern.new(normp, specificity, operator)
-
-    if head = Term::M1.head?(normp)
-      group = @headed.put_if_absent(head) { Seq.new }
-      group.add(pobj)
-    else
-      @headless.add(pobj)
+    oheaded = headed.transform_values do |indices|
+      indices.to_readonly_slice.map(read_only: true) { |index| patterns[index] }
     end
+
+    oheadless = headless.to_readonly_slice.map(read_only: true) { |index| patterns[index] }
+
+    new(oheaded, oheadless)
+  end
+
+  private def response(neighbors : Slice(Pattern), matchee : Term) : Pr::Any
+    neighbors.first_of?(&.response(matchee).as?(Pr::Pos)) || Pr::Neg.new
+  end
+
+  private def responses(neighbors : Slice(Pattern), matchee : Term) : Array(Pr::Pos)
+    neighbors.compact_map(&.response(matchee).as?(Pr::Pos))
   end
 
   # Returns the first response of this pattern set to *matchee*. If none, returns
   # a negative response.
-  #
-  # This is the foundation for single-way rewriting.
-  def response(matchee : Term) : Pattern::Response::Any
-    if (dict = matchee.as_d?) && (head = dict.items.first?) && (group = @headed[head]?)
-      case fb = group.response(matchee)
-      in Pattern::Response::Positive 
-        return fb
-      in Pattern::Response::Negative 
-      end
-    end
-
-    @headless.response(matchee)
+  def response(matchee : Term) : Pr::Any
+    matchee.as_d?
+      .try { |dict| dict.items.first? }
+      .try { |head| @headed[head]? }
+      .try { |neighbors| response(neighbors, matchee).as?(Pr::Pos) }
+      .orelse { response(@headless, matchee) }
   end
 
   # Returns an array of all positive responses of this pattern set to *matchee*.
-  #
-  # This is the foundation for multiway rewriting.
-  def responses(matchee : Term) : Array(Pattern::Response::Positive)
-    responses = [] of Pattern::Response::Positive
+  def responses(matchee : Term) : Array(Pr::Pos)
+    responses = [] of Pr::Pos
 
-    if (dict = matchee.as_d?) && (head = dict.items.first?) && (group = @headed[head]?)
-      responses.concat group.responses(matchee)
+    if (dict = matchee.as_d?) && (head = dict.items.first?) && (neighbors = @headed[head]?)
+      responses.concat(responses(neighbors, matchee))
     end
 
-    responses.concat @headless.responses(matchee)
+    responses.concat(responses(@headless, matchee))
   end
-
-  # Compares two pattern sets by the pattern terms that they contain.
-  def_equals_and_hash @headed, @headless
 end
 
 class ::Ww::Term::Dict
@@ -4820,6 +4774,24 @@ class ::Ww::Term::Dict
     end
 
     maxdepth
+  end
+
+  # Lets the block replace items in the given *range* with zero or more items
+  # by appending to the commit. Returns the modified copy of `self`.
+  def replace(range : Range(Term::Num, Term::Num), & : Term::Dict::Commit ->) : Term::Dict
+    pairs.transaction do |commit|
+      # Copy before
+      (Term[0]...range.begin).each do |index|
+        commit.append(self[index])
+      end
+
+      yield commit
+
+      # Copy after
+      (range.end...items.size).each do |index|
+        commit.append(self[index])
+      end
+    end
   end
 end
 

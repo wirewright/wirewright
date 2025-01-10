@@ -567,6 +567,10 @@ module Ww
   end
 
   struct Term
+    def self.matches(pattern, matchee, *, engine : Engine.class = M1, env = Term[]) : Array(Term::Dict) forall Engine
+      engine.matches(Term.of(pattern), Term.of(matchee), env: env)
+    end
+
     def self.case(matchee, *, engine : Engine.class = M1, &) forall Engine
       context = CaseContext(Engine).new(Term.of(matchee)) 
 

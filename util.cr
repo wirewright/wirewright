@@ -219,6 +219,13 @@ module Enumerable(T)
   def view : MutView(T)
     to_a.view
   end
+
+  def first_of?(& : T -> U?) : U? forall U
+    each do |object0|
+      next unless object1 = yield object0
+      return object1
+    end
+  end
 end
 
 class DeepSet(T)

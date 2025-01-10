@@ -3,6 +3,60 @@
 # (multilevel) skips become even cheaper. Especially with stuff such as
 # cursor search in parsing/µsoma, we want deep searches to be cheap.
 
+class ::Pf::Core::Node(T)
+  # :nodoc:
+  record CheckoutItem(T), item : T 
+  # :nodoc:
+  record CheckoutNode(T), node : Node(T)
+
+  def each_randomized(& : T ->) : Nil
+    # To ensure fairness we must interleave items with nodes, which makes all
+    # of this a bit more involved. We must ensure fairness in all cases, even
+    # if performance is severely harmed -- the callers of this method usually
+    # deal with infinities and letting an infinity win would be an error.
+
+    # Scratch buffer that can hold up to 32 items + 32 children.
+    scratch = uninitialized UInt8[64]
+    commands = [CheckoutNode.new(self)] of CheckoutNode(T) | CheckoutItem(T)
+    
+    while command = commands.pop?
+      case command
+      in CheckoutItem(T)
+        yield command.item
+      in CheckoutNode(T)
+        node = command.node
+
+        midpoint = node.@items.size
+        indices = Slice(UInt8).new(scratch.to_unsafe, midpoint + node.@children.size)
+
+        # Shuffling will mix item and node indices so we have to mark
+        # them beforehand.
+
+        (0...midpoint).each do |index|
+          indices[index] = index.to_u8 << 1
+        end
+
+        (midpoint...indices.size).each_with_index do |index, ord|
+          indices[index] = (ord.to_u8 << 1) | 1u8
+        end
+
+        indices.shuffle!
+        indices.each do |index|
+          # We must insert the command at a random index for fairness. Otherwise
+          # upper values may block lower values forever.
+          target = (0..commands.size).sample
+
+          if (index & 1u8).zero?
+            commands.insert(target, CheckoutItem.new(node.@items.to_unsafe[index >> 1]))
+          else
+            commands.insert(target, CheckoutNode.new(node.@children.to_unsafe[index >> 1]))
+          end
+        end
+      end
+    end
+  end
+end
+
 module Ww
   # Represents a dictionary: an immutable, persistent collection of key-value
   # pairs supporting efficient, near-O(1) insert, delete, and lookup.
@@ -344,6 +398,17 @@ module Ww
     def each_entry(& : Term, Term ->) : Nil
       @items.each { |entry| yield Term.of(entry.index), entry.value }
       @pairs.each { |entry| yield entry.key, entry.value }
+    end
+
+    # Fair, randomized iteration over entries of this dict.
+    #
+    # This has fairly specific use cases, for instance in absolute rewriting
+    # (absr). In absr we would like to achieve progress even in the presence
+    # of potentially infinite rewrites. That is, an infinite rewrite should
+    # not block progress of other, potentially non-infinite rewrites.
+    def each_entry_randomized(& : Term, Term ->) : Nil
+      @items.each_randomized { |entry| yield Term.of(entry.index), entry.value }
+      @pairs.each_randomized { |entry| yield entry.key, entry.value }
     end
 
     # Yields each item from this dictionary followed by its index. **Items are yielded
