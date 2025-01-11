@@ -1,5 +1,9 @@
 # Wirewright
 
+**Warning**: you won't be able to run anything right now because of `StringLiteral#scan`, a method I've
+had to patch into the Crystal compiler. If I will get it into Crystal then you will be able to run the stuff.
+Besides, there is nothing to run yet except for tests :^)
+
 Wirewright is a rewrite environment for self-embodied programs.
 
 I am working hard to package the hundreds of thousands of lines of "all over the place" code I've written and about two years of ideas and exploration into something simple, usable, and practical. Please wait and wish me a lot of energy :)
