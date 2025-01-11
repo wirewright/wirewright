@@ -9,6 +9,7 @@ class ::Pf::Core::Node(T)
   # :nodoc:
   record CheckoutNode(T), node : Node(T)
 
+  # FIXME: uses sample & shuffle! which use rand which isn't thread safe ?!
   def each_randomized(& : T ->) : Nil
     # To ensure fairness we must interleave items with nodes, which makes all
     # of this a bit more involved. We must ensure fairness in all cases, even
@@ -311,6 +312,12 @@ module Ww
     # Returns `true` if this dictionary contains the given *key*.
     def includes?(key) : Bool
       !!self[key]?
+    end
+
+    def index?(term) : Term::Num?
+      return unless index = Term[term].as?(Term::Num)
+      return unless index.in?(Term[0]...Term[items.size])
+      index
     end
 
     # :nodoc:

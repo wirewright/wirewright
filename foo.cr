@@ -2,6 +2,27 @@ require "./wirewright"
 
 include Ww
 
+struct Applier(PostRewriter)
+  def initialize(@post : PostRewriter)
+  end
+
+  def call(up0, up1, down, my, matchee0, body)
+    app = Term::M1::DefaultApplier.new
+    up1, matchee1 = app.call(up0, up1, down, my, matchee0, body)
+
+    case offspring = @post.call(matchee1)
+    in Offspring::None
+      {up1, matchee1}
+    in Offspring::One
+      {up1, offspring.term}
+    in Offspring::Many
+      # TODO: we'd probably want to convert the backspec entry into a () entry
+      # somehow if it's not one already
+      {up1, Term.of(offspring.list)}
+    end
+  end
+end
+
 module Rule
   extend self
 
@@ -12,7 +33,11 @@ module Rule
   record BackmapOne, backspec : Term
   record BackmapMany, toplevel : Term, backspec : Term
 
-  def offspring(rule : Template, pr : Pr::One, matchee : Term) : Offspring::Any
+  def backmap(rs, pr : Pr::Pos, backspec : Term, matchee : Term) : Term
+    Term::M1.backmap(pr.envs, backspec, matchee, applier: rs.applier)
+  end
+
+  def offspring(rs, rule : Template, pr : Pr::One, matchee : Term) : Offspring::Any
     if dict = rule.body.as_d?
       Offspring::One.new(Term.of(dict.subst(pr.env)))
     elsif rule.body.type.symbol?
@@ -22,23 +47,21 @@ module Rule
     end
   end
   
-  def offspring(rule : BackmapOne, pr : Pr::One, matchee : Term) : Offspring::Any
+  def offspring(rs, rule : BackmapOne, pr : Pr::One, matchee : Term) : Offspring::Any
     if pr.env.includes?(:"(keypaths)")
-      offspring = Term::M1.backmap({pr.env}, rule.backspec, matchee)
+      offspring = backmap(rs, pr, rule.backspec, matchee)
     else
-      offspring = Term::M1.backmap?(pr.pattern.operator, rule.backspec, matchee)
-      offspring ||= raise "BUG: different match in keypath vs. non-keypath mode"
+      offspring = backmap(rs, pr.pattern.response(matchee, keypaths: true).as(Pr::One), rule.backspec, matchee)
     end
 
     Offspring::One.new(offspring)
   end
 
-  def offspring(rule : BackmapMany, pr : Pr::One, matchee : Term) : Offspring::Any
+  def offspring(rs, rule : BackmapMany, pr : Pr::One, matchee : Term) : Offspring::Any
     if pr.env.includes?(:"(keypaths)")
-      offspring = Term::M1.backmap({pr.env}, rule.backspec, matchee)
+      offspring = backmap(rs, pr, rule.backspec, matchee)
     else
-      offspring = Term::M1.backmap?(pr.pattern.operator, rule.backspec, matchee)
-      offspring ||= raise "BUG: different match in keypath vs. non-keypath mode"
+      offspring = backmap(rs, pr.pattern.response(matchee, keypaths: true).as(Pr::One), rule.backspec, matchee)
     end
 
     if rule.backspec.includes?({rule.toplevel}) && (list = offspring.as_d?)
@@ -48,10 +71,10 @@ module Rule
     end
   end
 
-  def offspring(rule : Template, pr : Pr::Many, matchee : Term) : Offspring::Any
+  def offspring(rs, rule : Template, pr : Pr::Many, matchee : Term) : Offspring::Any
     list = Term::Dict.build do |commit|
       pr.ones do |one|
-        case offspring = offspring(rule, one, matchee)
+        case offspring = offspring(rs, rule, one, matchee)
         in Offspring::One
           commit << offspring.term 
         in Offspring::Many
@@ -64,26 +87,24 @@ module Rule
     Offspring::Many.new(list)
   end
 
-  def offspring(rule : BackmapOne, pr : Pr::Many, matchee : Term) : Offspring::Any
+  def offspring(rs, rule : BackmapOne, pr : Pr::Many, matchee : Term) : Offspring::Any
     if pr.envs.all?(&.includes?(:"(keypaths)"))
-      offspring = Term::M1.backmap(pr.envs, rule.backspec, matchee)
+      offspring = backmap(rs, pr, rule.backspec, matchee)
     else
-      offspring = Term::M1.backmap?(pr.pattern.operator, rule.backspec, matchee)
-      offspring ||= raise "BUG: different match in keypath vs. non-keypath mode"
+      offspring = backmap(rs, pr.pattern.response(matchee, keypaths: true).as(Pr::Many), rule.backspec, matchee)
     end
 
     Offspring::One.new(offspring)
   end
 
-  def offspring(rule : BackmapMany, pr : Pr::Many, matchee : Term) : Offspring::Any
+  def offspring(rs, rule : BackmapMany, pr : Pr::Many, matchee : Term) : Offspring::Any
     unless pr.envs.all?(&.includes?(:"(keypaths)"))
-      pr = pr.pattern.response(matchee, keypaths: true).as?(Pr::Many)
-      pr ||= raise "BUG: different match in keypath vs. non-keypath mode"
+      pr = pr.pattern.response(matchee, keypaths: true).as(Pr::Many)
     end
 
     list = Term::Dict.build do |commit|
       pr.ones do |one|
-        case offspring = offspring(rule, one, matchee)
+        case offspring = offspring(rs, rule, one, matchee)
         in Offspring::One
           commit << offspring.term 
         in Offspring::Many
@@ -96,17 +117,19 @@ module Rule
     Offspring::Many.new(list)
   end
 
-  def offspring(rule : Barrier, pr, matchee)
+  def offspring(rs, rule : Barrier, pr, matchee)
     Offspring::Barrier.new
   end
 end
 
-struct Ruleset
+struct Ruleset(ApplierType)
+  getter applier : ApplierType
+
   # :nodoc:
-  def initialize(@pset : Pset, @rules : Slice(Rule::Any))
+  def initialize(@pset : Pset, @rules : Slice(Rule::Any), @applier : ApplierType)
   end
 
-  def self.select(selector, base)
+  def self.select(selector, base, applier)
     rules = [] of Rule::Any
 
     pset = Pset.select(selector, base) do |normp, env|
@@ -128,13 +151,13 @@ struct Ruleset
       true
     end
 
-    new(pset, rules.to_readonly_slice.dup)
+    new(pset, rules.to_readonly_slice.dup, applier)
   end
 
   def call(matchee : Term) : Offspring::Any
     case res = @pset.response(matchee)
     in Pr::Pos
-      Rule.offspring(@rules[res.pattern.index], res, matchee)
+      Rule.offspring(self, @rules[res.pattern.index], res, matchee)
     in Pr::Neg
       Offspring::None.new
     end
@@ -177,46 +200,165 @@ module Offspring
   end
 end
 
-# One step of absr. Depth-first search of a rewriteable term, followed by
-# a rewrite, followed by an immediate backjump to the root.
-private def absr1(callable, term : Term) : Offspring::NonBarrier
-  case offspring = callable.call(term)
-  in Offspring::Some
-    return offspring
-  in Offspring::Barrier
-    return Offspring::None.new
-  in Offspring::None
-  end
-
-  unless dict = term.as_d?
-    return Offspring::None.new
-  end
-
-  dict.each_entry_randomized do |key, value|
-    case offspring = absr1(callable, value)
-    in Offspring::One
-      if value == offspring.term
-        next
-      else
-        return Offspring::One.new(Term.of(dict.with(key, offspring.term)))
-      end
-    in Offspring::Many
-      if Term[{value}] == offspring.list
-        next
-      end
-      if (index = key.as_n?) && index.in?(Term[0]...Term[dict.items.size])
-        return Offspring::One.new(Term.of(dict.replace(Term[index]...Term[index + 1], &.concat(offspring.list.items))))
-      else
-        return Offspring::One.new(Term.of(dict.with(key, offspring.list)))
-      end
+# Imagine you're a writer who is currently fixing errors in their novel.
+# "Fixing an error" involves finding it and rewriting it (and maybe its context)
+# to a fixed version, whatever that is.
+#
+# - The `dfsr` (depth-first search rewrite) way would be to scan through the entire
+#   novel, chapter by chapter, paragraph by paragraph, sentence by sentence, word by
+#   word, letter by letter. When you encounter a typo, regardless of the level you're
+#   currently at, you'll fix it and move on without descending into a fix. For example,
+#   if you encountered a chapter-level error, let's say a typo in the chapter title,
+#   you'll fix the typo and *move on to the next chapter*. You can then choose to do
+#   a second pass, third pass, etc. over the entire book.
+# - The `bfsr` (breadth-first search rewrite) way would be to scan through the entire
+#   novel, first examining chapter-level errors; if none are found, paragraph-level,
+#   and so on. Similarly to dfsr, you won't descend into a fix.
+# - The `ubfsr` (upward breadth-first search rewrite) way would be to scan through
+#   the entire novel, first examining letter-level errors; if none are found, then word-
+#   level, then similarly sentence-level, paragraph-level, chapter-level. By definition
+#   you won't descend into a fix.
+# - The `absr` (absolute rewrite) way would be to scan through the entire novel, first
+#   examining chapter-level errors, then paragraph-level, and so on. Upon finding an error,
+#   you will fix it, and immediately go back to the beginning of the novel, and begin
+#   scanning from chapter-level down again ("you've backjumped to the root"). It is obvious
+#   to see how inefficient this approach -- when used raw -- can be.
+# - `relr` (relative rewrite) is a higher-order, parametric rewriter. It accepts a "focus"
+#   pattern and another rewriter R as arguments. `relr` expects R's associated ruleset to match
+#   *exclusively* terms that contain the focus. So it asks R's associated ruleset for the maximum
+#   height of the patterns in it. `relr` assumes the focus is contained somewhere within this
+#   height. Thus the `relr` way would be to determine common "focal points" for the kinds of errors
+#   you expect; see at which maximum depth they are expected to occur. Then you scan the entire
+#   novel, find all "foci", and climb up to maximum depth. Then you call R at that depth.
+module Rewriter
+  private def self.absr(successor, term : Term) : Offspring::NonBarrier
+    case offspring = successor.call(term)
+    in Offspring::Some
+      return offspring
+    in Offspring::Barrier
+      return Offspring::None.new
     in Offspring::None
+    end
+  
+    unless dict = term.as_d?
+      return Offspring::None.new
+    end
+  
+    dict.each_entry_randomized do |key, value|
+      case offspring = absr(successor, value)
+      in Offspring::One
+        if value == offspring.term
+          next
+        else
+          return Offspring::One.new(Term.of(dict.with(key, offspring.term)))
+        end
+      in Offspring::Many
+        if Term[{value}] == offspring.list
+          next
+        end
+        if (index = key.as_n?) && index.in?(Term[0]...Term[dict.items.size])
+          return Offspring::One.new(Term.of(dict.replace(Term[index]...Term[index + 1], &.concat(offspring.list.items))))
+        else
+          return Offspring::One.new(Term.of(dict.with(key, offspring.list)))
+        end
+      in Offspring::None
+      end
+    end
+  
+    Offspring::None.new
+  end
+
+  # Returns an *absolute rewriter*: a rewriter that performs an *absolute rewrite*
+  # (absr) of some root term. See `Rewriter` for an analogy explaining the different
+  # kinds of rewriters.
+  #
+  # *successor* must respond to `call(Term) : Offspring::Any`.
+  def self.absr(successor)
+    ->(term : Term) { absr(successor, term) }
+  end
+
+  # :nodoc:
+  module Relr
+    alias Any = Ready | Ascend | None
+
+    record Ready, offspring : Offspring::NonBarrier
+    record Ascend, ascent : UInt32
+    record None
+  end
+
+  private alias O = Term::M1::Operator
+
+  # TODO: use pattern's sketch to guide descent
+  private def self.relr0(focus, successor, term, ascent)
+    if O.probe?(Term[], focus, term)
+      return Relr::Ascend.new(ascent)
+    end
+
+    unless dict0 = term.as_d?
+      return Relr::None.new
+    end
+
+    splices = nil
+
+    dict1 = dict0
+    dict0.each_entry do |key, value|
+      case res = relr0(focus, successor, value, ascent)
+      in Relr::None
+        next
+      in Relr::Ascend
+        unless res.ascent.zero?
+          return res.copy_with(ascent: res.ascent - 1)
+        end
+        offspring = successor.call(value)
+      in Relr::Ready
+        offspring = res.offspring
+      end
+
+      case offspring
+      in Offspring::None
+      in Offspring::One
+        dict1 = dict1.with(key, offspring.term)
+      in Offspring::Many
+        if index = dict0.index?(key)
+          splices ||= [] of {Term::Num, Term::Dict}
+          splices << {index, offspring.list}
+        else
+          dict1 = dict1.with(key, offspring.list)
+        end
+      end
+    end
+
+    if splices
+      splices.unstable_sort_by! { |index, _| -index }
+      splices.each do |index, list|
+        dict1 = dict1.replace(index...index + 1, &.concat(list.items))
+      end
+    end
+
+    Relr::Ready.new(dict0 == dict1 ? Offspring::None.new : Offspring::One.new(Term.of(dict1)))
+  end
+
+  private def self.relr(focus, successor, root : Term, ascent : UInt32 = 0u32) : Offspring::NonBarrier
+    case response = relr0(focus, successor, root, ascent)
+    in Relr::None   then Offspring::None.new
+    in Relr::Ready  then response.offspring
+    in Relr::Ascend then successor.call(root)
     end
   end
 
-  Offspring::None.new
+  # Returns a *relative rewriter*: a rewriter that performs a *relative rewrite*
+  # (relr) of a root term by finding all instances of the focus pattern *focus*,
+  # then climbing *ascent* levels up to reach a so-called "ceiling", then using
+  # *successor* to rewrite the ceiling.
+  def self.relr(focus : Term, successor, *, ascent = 0u32)
+    ofocus = Term::M1.operator(focus)
+
+    ->(term : Term) { relr(ofocus, successor, term, ascent) }
+  end
 end
 
-# Makes successive absolute rewrites of *term* until no rewrites are found.
+# Makes successive rewrites of *term* until no rewrites are found using
+# the given *rewriter*.
 #
 # *callable* must respond to `call(Term) : Offspring::Any`.
 #
@@ -225,11 +367,11 @@ end
 # choice, from none (by accepting that some rewrites are infinite) to cheap
 # (capping the number of iterations) to expensive (maintaining a "seen" set) etc.;
 # or alternatively, by user's request.
-def absr(callable, term term0 : Term, & : Term ->) : Term
+def rewrite(rewriter, term term0 : Term, & : Term ->) : Term
   while true
     yield term0
 
-    case offspring = absr1(callable, term0)
+    case offspring = rewriter.call(term0)
     in Offspring::One
       term0 = offspring.term
     in Offspring::Many
@@ -250,10 +392,10 @@ class TimedOut < Exception
   end
 end
 
-# `absr` with a capped number of rewrites. Raises `TimedOut` with the latest term
+# `rewrite` with a capped number of rewrites. Raises `TimedOut` with the latest term
 # when the number of rewrites exceeds *cap*.
-def absr(callable, term, *, cap : UInt32 = 2u32**16) : Term
-  absr(callable, term) do |rewrite|
+def rewrite(callable, term, *, cap : UInt32 = 2u32**16) : Term
+  rewrite(callable, term) do |rewrite|
     if cap.zero?
       raise TimedOut.new(term, rewrite)
     end
@@ -261,50 +403,141 @@ def absr(callable, term, *, cap : UInt32 = 2u32**16) : Term
   end
 end
 
-base = ML.parse(<<-WWML
-;;(rule qux 0)
-;;(rule (into x_ (%item° (set x_ values_*))) values)
-;;(rule (+ a_ 0) a)
-;;(rule (+ 0 a_) a)
-;;(rule (+ a_ b_) (sum a b))
-;;(rule (sum a_ b_) (sum/over a b))
+base = ML.parse(File.read("#{__DIR__}/editor.soma.wwml"))
+# base = ML.parse(<<-WWML
+# ;;(rule qux 0)
+# ;;(rule (into x_ (%item° (set x_ values_*))) values)
+# ;;(rule (+ a_ 0) a)
+# ;;(rule (+ 0 a_) a)
+# ;;(rule (+ a_ b_) (sum a b))
+# ;;(rule (sum a_ b_) (sum/over a b))
 
-;; Disable evaluation of rule, backmap, and barrier itself.
-(barrier (rule _ _))
-(barrier (backmap _ _))
-(barrier (barrier _))
+# (barrier (rule _ _))
+# (barrier (backmap _ _))
+# (barrier (barrier _))
 
 
-;; TODO: allow barriers to accept a "pattern pattern" for matching
-;; rules that can be allowed in.
+# ;; TODO: allow barriers to accept a "pattern pattern" for matching
+# ;; rules that can be allowed in.
 
-;;(backmap (swap a_ b_) {a: ↓b, b: ↓a})
-;;(backmap X←(multiswap a_ b_) {(X): (↓b ↓a)})
-;;(backmap (delay n_number) {n: (- ↓n 1)})
-;;(backmap X←(delays (%item° n_number)) {(X): ((delay ↓n))})
+# ;;(backmap (swap a_ b_) {a: ↓b, b: ↓a})
+# ;;(backmap X←(multiswap a_ b_) {(X): (↓b ↓a)})
+# ;;(backmap (delay n_number) {n: (- ↓n 1)})
+# ;;(backmap X←(delays (%item° n_number)) {(X): ((delay ↓n))})
 
-(backmap (block (%all (%leaf° (cell n←(%number _ < 10000) @edge_))
-                      (%leaf° (step @edge_ m_number))))
-  {n: (+ ↓n ↓m)})
+# (backmap [_string | _string (M←_ _*) @_] {(M): ()})
 
-(block
-  ((cell 0 @x)
-   (cell 0 @y)
-   (cell 0 @z)
-   (step @x 1)
-   (step @y 10)
-   (step @z 100)))
-WWML
-)
+# ;; INTERPRET
+
+# ;; When the user types something, this means they want what they've typed to
+# ;; be appended to the left-hand side.
+# (backmap [_string | _string (M←(type text_string) _*) @_] {M: (input →text)})
+
+# ;; When the user types whitespace, we try to submit the left-hand side.
+# (backmap [(%string nonempty) | "" (M←(type " ") _*) @_] {M: lsubmit})
+
+# ;; When the user hits enter with nonempty left-hand side, we submit it;
+# ;; similarly for nonempty right-hand side. If both are nonempty, we try
+# ;; submitting both as if cutting in the middle.
+# (backmap [(%string nonempty) | "" (M←(key enter) _*) @_] {M: lsubmit})
+# (backmap ["" | (%string nonempty) (M←(key enter) _*) @_] {M: rsubmit})
+# (backmap [(%string nonempty) | (%string nonempty) (M←(key enter) _*) @_] {M: lrsubmit})
+
+# ;; MORPH
+
+# ;; Text input
+# (backmap [lhs_string | _string (M←(input text_string) _*) @_] {(M): (), lhs: (~ →lhs →text)})
+
+# ;; Submission
+# ;;
+# ;; Submission involves parsing left/right-hand sides (or both). If that's
+# ;; successful the term is expelled to the left or to the right of the cursor,
+# ;; and the corresponding side is cleared.
+# (backmap [lhs_string | _string (M←lsubmit _*) @_] {(M): ((ml →lhs) lsubmit/finalize)})
+# (backmap [_string | rhs_string (M←rsubmit _*) @_] {(M): ((ml →rhs) rsubmit/finalize)})
+
+# (backmap (_* ⭳pred [lhs_string | _string ((%group M (ml/ok term_) lsubmit/finalize) _*) @_] _*)
+#   {(M): (), lhs: "", pred: →term})
+
+# (backmap [_string | _string ((%group M (ml/err) lsubmit/finalize) _*) @_]
+#   {(M): ()})
+
+# (backmap (_* [_string | rhs_string ((%group M (ml/ok term_) rsubmit/finalize) _*) @_] ⭳succ _*)
+#   {(M): (), rhs: "", succ: →term})
+
+# (backmap [_string | _string ((%group M (ml/err) rsubmit/finalize) _*) @_]
+#   {(M): ()})
+
+# ;; Misc: cons
+# ;;(backmap [_string | _string ((head_ _*) (cons head_ ok_) _*)])
+
+# ;; (backmap [lhs_string | _string (M←(ml/valid) _*) @_] {M: (ml lhs)})
+
+# ;; (backmap C←["" | "" (M←(dup) _*) @_] {(M): (), (C): (↑C ↑C)})
+
+# ;;(backmap (block (%all (%leaf° (cell n←(%number _ < 10000) @edge_))
+# ;;                      (%leaf° (step @edge_ m_number))))
+# ;;  {n: (+ ↓n ↓m)})
+# ;;
+# ;;(block
+# ;;  ((cell 0 @x)
+# ;;   (cell 0 @y)
+# ;;   (cell 0 @z)
+# ;;   (step @x 1)
+# ;;   (step @y 10)
+# ;;   (step @z 100)))
+# WWML
+# )
 
 # `template` maps to a standard rule
 # `backspec` maps to a backmap rule
 selector = ML.parse1(%[(%any° (rule pattern_ template_) (backmap pattern_ backspec_) (barrier pattern←barrier←_))])
 
-rs = Ruleset.select(selector, base)
+def rec(term : Term) : Term
+  Term.case(term) do
+    matchpi %[(~ a_string b_string)] do
+      Term.of(a.stitch(b))
+    end
+
+    matchpi %[(ml ml_string)] do
+      begin
+        Term.of(:"ml/ok", ML.parse1(ml.to(String)))
+      rescue ML::SyntaxError
+        Term.of({:"ml/err"})
+      end
+    end
+
+    matchpi %[_dict] do
+      dict0 = dict1 = term.unsafe_as_d
+      dict0.each_entry do |k, v|
+        dict1 = dict1.with(k, rec(v))
+      end
+      Term.of(dict1)
+    end
+
+    otherwise { term }
+  end
+end
+
+rec = ->(term : Term) do
+  Offspring::One.new(rec(term))
+end
+
+rs = Ruleset.select(selector, base, applier: Applier.new(rec))
+pp rs
 
 # pp rs
 prog = ML.parse(<<-WWML
+("hello" | "" ((type " ")) @user)
+("" | "world" ((key enter)) @user)
+("hello" | "world" ((key enter)) @user)
+("hello" | "\\\"hello" ((key enter)) @user)
+;;("" | "" ((type "(") (type "button") (key enter) (type "0") (type " ") (type "@xs") (type ")")) @user)
+;;(+ 1 ("" | "" ((key left) (key left) (key left)) @user) 2)
+;;(+ 1 ("" | "" ((key left)) @user) 2)
+;;(+ 1 ("" | "" ((key left)) @user) 2)
+;;(+ 1 ("" | "" ((key left)) @user) 2)
+;;(+ 1 ("" | "" ((dup) (key left)) @user) 2)
 
 ;;(delay 1000)
 ;;(into foo ((set foo 1 2 3) (set foo qux qyx qix) (set bar 4 5 6)))
@@ -320,33 +553,36 @@ prog = ML.parse(<<-WWML
 WWML
 )
 
+# cc = ->(matchee : Term) do
+#   case offspring = rs.call(matchee)
+#   in Offspring::Some
+#     offspring
+#   in Offspring::Barrier
+#     offspring
+#   in Offspring::None
+#     Term.case(matchee) do
+#       matchpi %{(~ a_string b_string)} do
+#         Offspring::One.new(Term.of(a.stitch(b)))
+#       end
 
-require "benchmark"
+#       otherwise { Offspring::None.new }
+#     end
+#   end
+# end
 
-cc = ->(matchee : Term) do
-  case offspring = rs.call(matchee)
-  in Offspring::Some
-    offspring
-  in Offspring::Barrier
-    offspring
-  in Offspring::None
-    Term.case(matchee) do
-      matchpi %[(+ a_number b_number)] do
-        Offspring::One.new(Term.of(a + b))
-      end
-
-      matchpi %[(- a_number b_number)] do
-        Offspring::One.new(Term.of(a - b))
-      end
-
-      otherwise { Offspring::None.new }
-    end
-  end
+rewrite(Rewriter.relr(ML.parse1(%([_string | _string (_*) @_])), Rewriter.absr(rs), ascent: 1u32), prog) do |im|
+  puts ML.display(im)
+  sleep 1.second
 end
 
 require "benchmark"
 
-pp absr(cc, base)
+
+# rewriter = Rewriter.absr(cc)
+
+require "benchmark"
+
+# pp rewrite(rewriter, base)
 
 # Benchmark.ips do |x|
 #   x.report("eval") do

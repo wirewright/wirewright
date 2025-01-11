@@ -1207,6 +1207,16 @@ struct KeypathTip
     KeypathTip.new(@keypath.morph({@keypath.size - 1, 1, @keypath[@keypath.size - 1, 1] + n}))
   end
 
+  def up(n = 1)
+    unless n < @keypath.size
+      return KeypathTip.new
+    end
+
+    KeypathTip.new(@keypath.transaction do |commit|
+      n.times { commit.without(commit.size - 1) }
+    end)
+  end
+
   def range(b : Term, e : Term)
     KeypathTip.new(@keypath.append({:range, b, e}))
   end
@@ -2160,6 +2170,12 @@ module ::Ww::Term::M1::Operator
     in Fb::MatchMany then fb.envs
     in Fb::Mismatch  then [] of Env::Type
     end
+  end
+
+  # TODO: this should use some kind of flag to signal to match()s that they should relax?
+  # i.e. sources may emit only once etc.
+  def probe?(env : Env::Type, op : Any, matchee : Term) : Bool
+    feedback(env, op, matchee).is_a?(Fb::Match)
   end
 end
 
@@ -3302,6 +3318,14 @@ module ::Ww::Term::M1
         pattern
       end
 
+      # Expand (%string nonempty) into (%all (%not "") _string)
+      matchpi %[(%string nonempty)] do
+        normal(Term.of(:"%all", {:"%not", ""}, :_string))
+      end
+
+      # NOTE: you should insert new matchpis here. Below we have raw dict/literal
+      # treatment; if you put your matchpis below they won't be reached.
+
       match({:"%partition", Term[], Term[]}) do
         Term.of(:"%literal", Term[])
       end
@@ -3934,38 +3958,41 @@ module ::Ww::Term::M1
     ctx
   end
 
-  def self.apply(ctx0, bot, env, body)
-    Term.case(body) do
-      matchpi %[($my capture_)] do
-        env[capture]? || body
-      end
+  struct DefaultApplier
+    def apply(up0, down, my, body)
+      Term.case(body) do
+        matchpi %[($my capture_)] do
+          my[capture]? || body
+        end
 
-      matchpi %[($up capture_)] do
-        ctx0[capture]? || env[capture]? || body
-      end
+        matchpi %[($up capture_)] do
+          up0[capture]? || my[capture]? || body
+        end
 
-      matchpi %[($down capture_)] do
-        bot[capture]? || env[capture]? || body
-      end
+        matchpi %[($down capture_)] do
+          down[capture]? || my[capture]? || body
+        end
 
-      matchpi %[_dict] do
-        Term.of(body.unsafe_as_d.replace { |_, v| apply(ctx0, bot, env, v) })
-      end
+        matchpi %[_dict] do
+          Term.of(body.unsafe_as_d.replace { |_, v| apply(up0, down, my, v) })
+        end
 
-      otherwise do
-        body
+        otherwise do
+          body
+        end
       end
     end
-  end
 
-  def self.apply(ctx0, ctx1, bot, env, matchee, body)
-    Term.case(body) do
-      matchpi %[($tr pred_ succ_)] do
-        {ctx1.with(pred, matchee), apply(ctx0, bot, env, succ)}
-      end
+    # Applier must respond to `call(up0 : Term::Dict, up1 : Term::Dict, down : Term::Dict, my : Term::Dict, matchee0 : Term, body : Term) : {up1 : Term::Dict, matchee1 : Term}`
+    def call(up0, up1, down, my, matchee0, body)
+      Term.case(body) do
+        matchpi %[($tr pred_ succ_)] do
+          {up1.with(pred, matchee0), apply(up0, down, my, succ)}
+        end
 
-      otherwise do
-        {ctx1, apply(ctx0, bot, env, body)}
+        otherwise do
+          {up1, apply(up0, down, my, body)}
+        end
       end
     end
   end
@@ -3993,13 +4020,14 @@ module ::Ww::Term::M1
   #       are inevitably not going to be handled so well. But my rule is -- no test, no pest.
   #       If (or when?) our users hit edge case bugs with a reproducible example, then we're talking.
 
+
   # Layer-0 transform handles `self` props: applies transform and adds itself
   # to ctx1 (if requested).
-  def self.transform0(ctx0, ctx1, bot, node, matchee)
+  def self.transform0(ctx0, ctx1, bot, applier, node, matchee)
     return ctx1, matchee unless props = node[:endpoint]?
     return ctx1, matchee unless body = props[:transform]?
 
-    ctx1, matchee = apply(ctx0, ctx1, bot, props[:env].as_d, matchee, body)
+    ctx1, matchee = applier.call(ctx0, ctx1, bot, props[:env].as_d, matchee, body)
 
     return ctx1, matchee unless aliases = props[:aliases]?
 
@@ -4014,7 +4042,7 @@ module ::Ww::Term::M1
   # (of ranges, slots, etc.)
   #
   # That is, it serves `plural: true` for values and `(range ...)` labels.
-  def self.transform1(ctx0, ctx1, bot, node, matchee)
+  def self.transform1(ctx0, ctx1, bot, applier, node, matchee)
     matchee0 = matchee = matchee.as_d? || return ctx1, matchee
 
     insertions = nil
@@ -4027,7 +4055,7 @@ module ::Ww::Term::M1
         matchpi %[(residue keys_*)] do
           matchee = matchee.transaction do |commit|
             residue0 = matchee &- keys.items
-            ctx1, residue1 = transform0(ctx0, ctx1, bot, successor.as_d, residue0)
+            ctx1, residue1 = transform0(ctx0, ctx1, bot, applier, successor.as_d, residue0)
             residue1 &-= keys.items
             residue0.each_entry { |k, _| commit.without(k) }
             residue1.each_entry { |k, v| commit.with(k, v) }
@@ -4035,14 +4063,14 @@ module ::Ww::Term::M1
         end
 
         matchpi %[(ephemeral key_ default_)] do
-          ctx1, value1 = transform0(ctx0, ctx1, bot, successor.as_d, default)
+          ctx1, value1 = transform0(ctx0, ctx1, bot, applier, successor.as_d, default)
           matchee = matchee.with(key, value1)
         end
 
         matchpi %[(value key_)] do
           if ksucc = successor[:self]?
             key0, value0 = key, matchee[key]
-            ctx1, key1 = transform0(ctx0, ctx1, bot, ksucc, key0)
+            ctx1, key1 = transform0(ctx0, ctx1, bot, applier, ksucc, key0)
             matchee = matchee.without(key0).with(key1, value0)
             key = key1
           end
@@ -4052,7 +4080,7 @@ module ::Ww::Term::M1
           if (b = key.as_n?) && b.in?(matchee.items.bounds) && successor[:endpoint, :plural]?
             value0 = matchee[key]
 
-            ctx1, values1 = transform0(ctx0, ctx1, bot, successor.as_d, value0)
+            ctx1, values1 = transform0(ctx0, ctx1, bot, applier, successor.as_d, value0)
 
             insertions ||= [] of {Term::Num, Term::Num, Term::Num, Term::Dict}
             index = insertions.bsearch_index { |(c_b, _, c_ord, _)| {-b, Term[0]} <= {-c_b, -c_ord} }
@@ -4066,7 +4094,7 @@ module ::Ww::Term::M1
             unless value0
               raise KeypathError.new
             end
-            ctx1, value1 = transform0(ctx0, ctx1, bot, successor.as_d, value0)
+            ctx1, value1 = transform0(ctx0, ctx1, bot, applier, successor.as_d, value0)
           end
         end
 
@@ -4081,7 +4109,7 @@ module ::Ww::Term::M1
           end
 
           values0 = matchee.items(b, e)
-          ctx1, values1 = transform0(ctx0, ctx1, bot, successor.as_d, values0)
+          ctx1, values1 = transform0(ctx0, ctx1, bot, applier, successor.as_d, values0)
 
           insertions ||= [] of {Term::Num, Term::Num, Term::Num, Term::Dict}
           index = insertions.bsearch_index { |(c_b, _, c_ord, _)| {-b, Term[0]} <= {-c_b, -c_ord} }
@@ -4101,7 +4129,7 @@ module ::Ww::Term::M1
           end
 
           values0 = matchee.items(b, e)
-          ctx1, values1 = transform0(ctx0, ctx1, bot, successor.as_d, values0)
+          ctx1, values1 = transform0(ctx0, ctx1, bot, applier, successor.as_d, values0)
 
           if successor[:endpoint, :plural]?
             values1 = values1.as_d? || Term[{values1}]
@@ -4122,7 +4150,7 @@ module ::Ww::Term::M1
             raise KeypathError.new
           end
 
-          ctx1, values1 = transform0(ctx0, ctx1, bot, successor.as_d, value0)
+          ctx1, values1 = transform0(ctx0, ctx1, bot, applier, successor.as_d, value0)
 
           if successor[:endpoint, :plural]?
             values1 = values1.as_d? || Term[{values1}]
@@ -4151,14 +4179,14 @@ module ::Ww::Term::M1
     {ctx1, Term.of(matchee)}
   end
 
-  def self.transform(ctx0, ctx1, bot, node0 : Term::Dict, layer : UInt32, matchee : Term)
+  def self.transform(ctx0, ctx1, bot, applier, node0 : Term::Dict, layer : UInt32, matchee : Term)
     case layer
     when 0
-      ctx1, matchee = transform0(ctx0, ctx1, bot, node0, matchee)
+      ctx1, matchee = transform0(ctx0, ctx1, bot, applier, node0, matchee)
 
       {ctx1, node0, matchee}
     when 1
-      ctx1, matchee = transform1(ctx0, ctx1, bot, node0, matchee)
+      ctx1, matchee = transform1(ctx0, ctx1, bot, applier, node0, matchee)
 
       {ctx1, node0, matchee}
     else
@@ -4170,12 +4198,12 @@ module ::Ww::Term::M1
           matchpi %[(value key0_)] do
             # Read the key and transform it using the current version of
             # the successor.
-            ctx1, successor1, value1 = transform(ctx0, ctx1, bot, successor0.as_d, layer - 1, matchee[key0])
+            ctx1, successor1, value1 = transform(ctx0, ctx1, bot, applier, successor0.as_d, layer - 1, matchee[key0])
 
             # If there is `self` defined on the successor, this means that
             # the key should be modified as well.
             if ksucc0 = successor1[:self]?
-              ctx1, ksucc1, key1 = transform(ctx0, ctx1, bot, ksucc0.as_d, layer - 1, key0)
+              ctx1, ksucc1, key1 = transform(ctx0, ctx1, bot, applier, ksucc0.as_d, layer - 1, key0)
               matchee = matchee.without(key0).with(key1, value1)
               node1 = node1
                 .without(label0)
@@ -4187,7 +4215,7 @@ module ::Ww::Term::M1
           end
 
           matchpi %[(ephemeral _number _number value0_)] do
-            ctx1, successor1, value1 = transform(ctx0, ctx1, bot, successor0.as_d, layer - 1, value0)
+            ctx1, successor1, value1 = transform(ctx0, ctx1, bot, applier, successor0.as_d, layer - 1, value0)
             label1 = label0.with(3, value1)
             node1 = node1.without(label0).with(label1, successor1)
           end
@@ -4195,7 +4223,7 @@ module ::Ww::Term::M1
           matchpi %[(residue keys_*)] do
             matchee = matchee.transaction do |commit|
               residue0 = matchee &- keys.items
-              ctx1, successor1, residue1 = transform(ctx0, ctx1, bot, successor0.as_d, layer - 1, Term.of(residue0))
+              ctx1, successor1, residue1 = transform(ctx0, ctx1, bot, applier, successor0.as_d, layer - 1, Term.of(residue0))
               node1 = node1.with(label0, successor1)
               residue1 &-= keys.items
               residue0.each_entry { |k, _| commit.without(k) }
@@ -4211,7 +4239,8 @@ module ::Ww::Term::M1
     end
   end
 
-  def self.backmap(envs : Enumerable(Term::Dict), backspec : Term, matchee : Term) : Term
+  # Applier must respond to `call(up0 : Term::Dict, up1 : Term::Dict, down : Term::Dict, my : Term::Dict, matchee0 : Term, body : Term) : {up1 : Term::Dict, matchee1 : Term}`
+  def self.backmap(envs : Enumerable(Term::Dict), backspec : Term, matchee : Term, *, applier = DefaultApplier.new) : Term
     # Collapse all keypaths into a trie. Enhance the trie with metadata. Simultaneously,
     # figure out the depth of the trie by finding the maximum keypath size.
     trie = Term[]
@@ -4251,22 +4280,22 @@ module ::Ww::Term::M1
       # pp upper
       lower = ctx0.sub(upper)
       ctx0 |= upper
-      ctx0, trie, matchee = transform(ctx0, ctx0, lower, trie, layer, matchee)
+      ctx0, trie, matchee = transform(ctx0, ctx0, lower, applier, trie, layer, matchee)
     end
 
     matchee
   end
 
-  def self.backmap?(operator : Operator::Any, backspec : Term, matchee : Term, *, env = Term[]) : Term?
+  def self.backmap?(operator : Operator::Any, backspec : Term, matchee : Term, *, env = Term[], applier = DefaultApplier.new) : Term?
     case fb = Operator.feedback(env, operator, matchee, keypaths: true)
     in Operator::Fb::Match
-      backmap(fb.envs, backspec, matchee)
+      backmap(fb.envs, backspec, matchee, applier: applier)
     in Operator::Fb::Mismatch
     end
   end
 
-  def self.backmap?(pattern : Term, backspec : Term, matchee : Term, *, env = Term[]) : Term?
-    backmap?(operator(pattern), backspec, matchee, env: env)
+  def self.backmap?(pattern : Term, backspec : Term, matchee : Term, *, env = Term[], applier = DefaultApplier.new) : Term?
+    backmap?(operator(pattern), backspec, matchee, env: env, applier: applier)
   end
 end
 
@@ -4637,7 +4666,11 @@ module Pr
   alias Pos = One | Many
 
   # Positive response of *pattern* that resulted in one environment.
-  record One, pattern : Pattern, env : Term::Dict
+  record One, pattern : Pattern, env : Term::Dict do
+    def envs
+      {env}
+    end
+  end
 
   # Positive response of *pattern* that resulted in multiple environments.
   record Many, pattern : Pattern, envs : Array(Term::Dict) do
