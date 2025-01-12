@@ -10,6 +10,9 @@ version: 0.1.0
 dependencies:
   permafrost:
     github: homonoidian/permafrost
+  crsfml:
+    github: oprypin/crsfml
+    commit: e6f5102
 # dependencies:
 #   pg:
 #     github: will/crystal-pg

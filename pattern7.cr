@@ -3998,12 +3998,12 @@ module ::Ww::Term::M1
   end
 
   #      { 
-  #      { TODO: implement Ruleset.
-  #  1   { TODO: see if source-based absr/relr is needed *right now*. Especially if we can encode soma11 editor rewrite using Env + Source absr/relr, that'd be good
-  #      { TODO: use old absr, relr, start porting rules & making editor tests. improve specificity
-  #  w   {       if that's ever needed.
+  #      { 
+  #  1   { 
+  #      {
+  #  w   
   #  e   { 
-  #  e   { TODO: implement Source-based absr and relr for it
+  #  e   { 
   #  k   { TODO: implement the new Env
   #      { TODO: port editor interpret, eval ruleset
   #      { TODO: editor tests infra, automated editor "motion capture" with T?UI, replay

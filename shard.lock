@@ -1,5 +1,9 @@
 version: 2.0
 shards:
+  crsfml:
+    git: https://github.com/oprypin/crsfml.git
+    version: 2.6.0+git.commit.e6f5102f37a107ccadb55c1bae6ffe427ddfba95
+
   permafrost:
     git: https://github.com/homonoidian/permafrost.git
     version: 0.3.1

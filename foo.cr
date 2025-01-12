@@ -507,12 +507,20 @@ def rec(term : Term) : Term
       end
     end
 
+    matchpi %[(substring s_string b←(%number i32) e←(%number i32))] do
+      Term.of(s.to(String)[b.to(Int32)..e.to(Int32)]? || "")
+    end
+
     matchpi %[_dict] do
       dict0 = dict1 = term.unsafe_as_d
       dict0.each_entry do |k, v|
         dict1 = dict1.with(k, rec(v))
       end
-      Term.of(dict1)
+      if dict0 == dict1
+        Term.of(dict0)
+      else
+        rec(Term.of(dict1))
+      end
     end
 
     otherwise { term }
@@ -524,7 +532,113 @@ rec = ->(term : Term) do
 end
 
 rs = Ruleset.select(selector, base, applier: Applier.new(rec))
-pp rs
+
+CURSORP  = ML.parse1(%([_string | _string (_*) @_]))
+CURSORPE = Term::M1.operator(ML.parse1(%([_string | _string (_*) @edge_])))
+
+def subsume1(cursor, motion)
+  Term.of(cursor.morph({3, cursor[3].size, motion}))
+end
+
+def subsume(root, motion, edge)
+  if Term::M1::Operator.probe?(Term[edge: edge], CURSORPE, root)
+    return subsume1(root, motion)
+  end
+
+  unless dict0 = root.as_d?
+    return root
+  end
+
+  Term.of(dict0.replace { |_, v| subsume(v, motion, edge) })
+end
+
+def editr(ruleset)
+  Rewriter.relr(CURSORP, Rewriter.absr(ruleset), ascent: 1u32)
+end
+
+require "crsfml"
+
+FONT = SF::Font.from_file("#{__DIR__}/fonts/IBMPlexMono-Text.otf")
+
+NORD_BG = SF::Color.new(0x2e, 0x34, 0x40)
+NORD_FG = SF::Color.new(0xec, 0xef, 0xf4)
+NORD_FG_DIM = SF::Color.new(0xd8, 0xde, 0xe9)
+NORD_BLUE_DARK = SF::Color.new(0x5e, 0x81, 0xac)
+NORD_BLUE_LIGHT = SF::Color.new(0x81, 0xa1, 0xc1)
+
+window = SF::RenderWindow.new(SF::VideoMode.new(800, 500), title: "Hello World")
+window.framerate_limit = 60
+
+root = ML.parse(%[("" | "" () @user)])
+text = SF::Text.new(ML.display(root), FONT, 11)
+
+rewrite = editr(rs)
+
+while window.open?
+  root0 = root1 = root
+
+  while event = window.poll_event
+    case event
+    when SF::Event::Closed then window.close
+    when SF::Event::TextEntered
+      chr = event.unicode.chr
+      next unless chr.printable?
+      root1 = subsume(root, Term.of(:type, chr), Term.of(:edge, :user))
+    when SF::Event::KeyPressed
+      keyname = nil
+      case event.code
+      when .escape?    then keyname = "escape"
+      when .tab?       then keyname = "tab"
+      when .home?      then keyname = "home"
+      when .end?       then keyname = "end"
+      when .enter?     then keyname = "enter"
+      when .delete?    then keyname = "delete"
+      when .left?      then keyname = "left"
+      when .right?     then keyname = "right"
+      when .up?        then keyname = "up"
+      when .down?      then keyname = "down"
+      when .backspace? then keyname = "backspace"
+      when .numpad8?   then keyname = "np8"
+      when .numpad5?   then keyname = "np5"
+      when .numpad2?   then keyname = "np2"
+      end
+
+      if event.control
+        case event.code
+        when .c? then keyname = "c"
+        when .v? then keyname = "v"
+        end
+      end
+
+      next unless keyname
+
+      keyname = "S-#{keyname}" if event.shift
+      keyname = "C-#{keyname}" if event.control
+      key = Term::Sym.new(keyname)
+
+      root1 = subsume(root, Term.of(:key, key), Term.of(:edge, :user))
+    end
+  end
+
+  case offspring = rewrite.call(root1)
+  in Offspring::None
+  in Offspring::One   then root1 = offspring.term
+  in Offspring::Many  then root1 = Term.of(offspring.list)
+  end
+
+  unless root0.same?(root1)
+    text.string = ML.display(root1)
+  end
+
+  root = root1
+
+  window.clear(NORD_BG)
+  window.draw(text)
+  window.display
+end
+
+{% skip_file %}
+# pp rs
 
 # pp rs
 prog = ML.parse(<<-WWML

@@ -22,66 +22,103 @@
 ;;
 ;; The result of interpretation is motions that have a clear, context-independent
 ;; meaning. For instance, the overly generic (key enter) may be interpreted in some
-;; contexts precisely as `lexpel`. in others as `move-right` or `move-below`, etc.
+;; contexts precisely as `expel-left`. in others as `move-right` or `move-below`, etc.
 
-;; Handle user typing: (type ...)
-;;
-;; - The common case is to append to the left-hand side.
-;; - Whitespace should trigger submission.
-(backmap [_string | _string (M←(type text_string) _*) @_] {M: (lappend →text)})
-(backmap [(%string nonempty) | "" (M←(type " ") _*) @_] {M: lexpel})
+;; Interpret (type)
+(backmap [_string | _string (M←(type text_string) _*) @_]
+  {M: (append-left →text)})
 
-;; Handle (key enter).
-;;
-;; - When the user hits enter with nonempty left-hand side, we submit it.
-;; - Similarly for nonempty right-hand side.
-;; - If both are nonempty, we try submitting both as if cutting in the middle.
-(backmap [(%string nonempty) | "" (M←(key enter) _*) @_] {M: lexpel})
-(backmap ["" | (%string nonempty) (M←(key enter) _*) @_] {M: rexpel})
-(backmap [(%string nonempty) | (%string nonempty) (M←(key enter) _*) @_] {M: lrexpel})
+(backmap [(%string nonempty) | "" (M←(type " ") _*) @_]
+  {M: (expel-left)})
+
+;; Interpret (key left)
+(backmap [(%string nonempty) | _string (M←(key left) _*) @_]
+  {M: (move-left)})
+
+;; Interpret (key right)
+(backmap [_string | (%string nonempty) (M←(key right) _*) @_]
+  {M: (move-right)})
+
+;; Interpret (key enter).
+(backmap [(%string nonempty) | "" (M←(key enter) _*) @_]
+  {M: (expel-left)})
+
+(backmap ["" | (%string nonempty) (M←(key enter) _*) @_]
+  {M: (expel-right)})
+
+(backmap [(%string nonempty) | (%string nonempty) (M←(key enter) _*) @_]
+  {M: (expel-mid)})
+
+;; Interpret (key backspace).
+(backmap [(%string nonempty) | _string (M←(key backspace) _*) @_]
+  {M: (erase-left)})
+
+;; Interpret (key delete).
+(backmap [_string | (%string nonempty) (M←(key delete) _*) @_]
+  {M: (erase-right)})
 
 ;; MORPH
 
 ;; Text input
-(backmap [lhs_string | _string (M←(lappend text_string) _*) @_]
-  {(M): (), lhs: (~ →lhs →text)})
+
+(backmap [lhs_string | _string (M←(append-left text_string) _*) @_]
+  {(M): (),
+   lhs: (~ →lhs →text)})
+
+(backmap [lhs_string | rhs_string (M←(move-left) _*) @_]
+  {(M): (),
+   lhs: (substring →lhs 0 -2),
+   rhs: (~ (substring →lhs -1 -1) →rhs)})
+
+(backmap [lhs_string | rhs_string (M←(move-right) _*) @_]
+  {(M): (),
+   lhs: (~ →lhs (substring →rhs 0 0)),
+   rhs: (substring →rhs 1 -1)})
+
+(backmap [lhs_string | _string (M←(erase-left) _*) @_]
+  {(M): (),
+   lhs: (substring →lhs 0 -2)})
+
+(backmap [_string | rhs_string (M←(erase-right) _*) @_]
+  {(M): (),
+   rhs: (substring →rhs 1 -1)})
 
 ;; Expellation
 ;;
 ;; Expellation involves parsing left/right-hand sides (or both). If that's
 ;; successful the term is expelled to the left or to the right of the cursor,
 ;; and the corresponding side is cleared.
-(backmap [lhs_string | _string (M←lexpel _*) @_]
-  {(M): ((ml →lhs) lexpel/finalize)})
+(backmap [lhs_string | _string (M←(expel-left) _*) @_]
+  {(M): ((ml →lhs) (expel-left/finalize))})
 
-(backmap (_* ⭳pred [lhs_string | _string (M0←(ml/ok term_) M1←lexpel/finalize _*) @_] _*)
+(backmap [_* ⭳pred [lhs_string | _string (M0←(ml/ok term_) M1←(expel-left/finalize) _*) @_] _*]
   {(M0): (), (M1): (), lhs: "", pred: →term})
 
-(backmap [_string | _string (M0←(ml/err) M1←lexpel/finalize _*) @_]
+(backmap [_string | _string (M0←(ml/err) M1←(expel-left/finalize) _*) @_]
   {(M0): (), (M1): ()})
 
-(backmap [_string | rhs_string (M←rexpel _*) @_]
-  {(M): ((ml →rhs) rexpel/finalize)})
+(backmap [_string | rhs_string (M←(expel-right) _*) @_]
+  {(M): ((ml →rhs) expel-right/finalize)})
 
-(backmap (_* [_string | rhs_string (M0←(ml/ok term_) M1←rexpel/finalize _*) @_] ⭳succ _*)
+(backmap [_* [_string | rhs_string (M0←(ml/ok term_) M1←(expel-right/finalize) _*) @_] ⭳succ _*]
   {(M0): (), (M1): (), rhs: "", succ: →term})
 
-(backmap [_string | _string (M0←(ml/err) M1←rexpel/finalize _*) @_]
+(backmap [_string | _string (M0←(ml/err) M1←(expel-right/finalize) _*) @_]
   {(M0): (), (M1): ()})
 
-(backmap [lhs_string | _string (M←lrexpel _*) @_]
-  {(M): ((ml →lhs) lrexpel/r)})
+(backmap [lhs_string | _string (M←(expel-mid) _*) @_]
+  {(M): ((ml →lhs) expel-mid/r)})
 
-(backmap [_string | rhs_string ((ml/ok _) M←lrexpel/r _*) @_]
-  {(M): ((ml →rhs) lrexpel/finalize)})
+(backmap [_string | rhs_string ((ml/ok _) M←(expel-mid/r) _*) @_]
+  {(M): ((ml →rhs) expel-mid/finalize)})
 
-(backmap [_string | _string (M0←(ml/err) M1←lrexpel/r _*) @_]
+(backmap [_string | _string (M0←(ml/err) M1←(expel-mid/r) _*) @_]
   {(M0): (), (M1): ()})
 
-(backmap (_* ⭳pred [lhs_string | rhs_string (M0←(ml/ok lterm_) M1←(ml/ok rterm_) M2←lrexpel/finalize _*) @_] ⭳succ _*)
+(backmap [_* ⭳pred [lhs_string | rhs_string (M0←(ml/ok lterm_) M1←(ml/ok rterm_) M2←(expel-mid/finalize) _*) @_] ⭳succ _*]
   {(M0): (), (M1): (), (M2): (), lhs: "", rhs: "", pred: →lterm, succ: →rterm})
 
-(backmap [_string | _string (M0←(ml/ok _) M1←(ml/err) M2←lrexpel/finalize _*) @_]
+(backmap [_string | _string (M0←(ml/ok _) M1←(ml/err) M2←(expel-mid/finalize) _*) @_]
   {(M0): (), (M1): (), (M2): ()})
 
 
