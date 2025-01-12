@@ -66,8 +66,9 @@ while true
     puts
     next
   elsif command == ".u" && !motions.items.empty?
-    puts "Revert #{motions.items.last}"
-    motions = motions.items.end.move(-1).collect
+    puts "Revert #{motions.items.last}. Editor potentially out of sync."
+    motions = motions.items.grow(-1).collect
+    puts ML.display(motions)
     next
   elsif command == ".d"
     puts "Debug"
