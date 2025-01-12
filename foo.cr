@@ -26,9 +26,9 @@ end
 module Rule
   extend self
 
-  alias Any = Template | BackmapOne | BackmapMany | Barrier
+  alias Any = Template | BackmapOne | BackmapMany | Neg
 
-  record Barrier
+  record Neg
   record Template, body : Term
   record BackmapOne, backspec : Term
   record BackmapMany, toplevel : Term, backspec : Term
@@ -117,8 +117,8 @@ module Rule
     Offspring::Many.new(list)
   end
 
-  def offspring(rs, rule : Barrier, pr, matchee)
-    Offspring::Barrier.new
+  def offspring(rs, rule : Neg, pr, matchee)
+    Offspring::Neg.new
   end
 end
 
@@ -140,8 +140,8 @@ struct Ruleset(ApplierType)
           matchpi %[((%literal %let) (%capture toplevel_) _)] { Rule::BackmapMany.new(toplevel, backspec) }
           otherwise { Rule::BackmapOne.new(backspec) }
         end
-      elsif barrier = env[:barrier]?
-        rule = Rule::Barrier.new
+      elsif neg = env[:neg]?
+        rule = Rule::Neg.new
       else
         next
       end
@@ -165,15 +165,15 @@ struct Ruleset(ApplierType)
 end
 
 module Offspring
-  alias Any = Barrier | NonBarrier
-  alias NonBarrier = None | Some
+  alias Any = Neg | Pos
+  alias Pos = None | Some
   alias Some = One | Many
 
   record None
 
   # Similar to `None`, but indicates to the caller that the matchee
   # and the children must be avoided (never rewritten).
-  record Barrier
+  record Neg
 
   # Shorthand for `None`.
   def self.none : None
@@ -231,11 +231,11 @@ end
 #   you expect; see at which maximum depth they are expected to occur. Then you scan the entire
 #   novel, find all "foci", and climb up to maximum depth. Then you call R at that depth.
 module Rewriter
-  private def self.absr(successor, term : Term) : Offspring::NonBarrier
+  private def self.absr(successor, term : Term) : Offspring::Pos
     case offspring = successor.call(term)
     in Offspring::Some
       return offspring
-    in Offspring::Barrier
+    in Offspring::Neg
       return Offspring::None.new
     in Offspring::None
     end
@@ -281,7 +281,7 @@ module Rewriter
   module Relr
     alias Any = Ready | Ascend | None
 
-    record Ready, offspring : Offspring::NonBarrier
+    record Ready, offspring : Offspring::Pos
     record Ascend, ascent : UInt32
     record None
   end
@@ -338,7 +338,7 @@ module Rewriter
     Relr::Ready.new(dict0 == dict1 ? Offspring::None.new : Offspring::One.new(Term.of(dict1)))
   end
 
-  private def self.relr(focus, successor, root : Term, ascent : UInt32 = 0u32) : Offspring::NonBarrier
+  private def self.relr(focus, successor, root : Term, ascent : UInt32 = 0u32) : Offspring::Pos
     case response = relr0(focus, successor, root, ascent)
     in Relr::None   then Offspring::None.new
     in Relr::Ready  then response.offspring
@@ -360,14 +360,14 @@ end
 # Makes successive rewrites of *term* until no rewrites are found using
 # the given *rewriter*.
 #
-# *callable* must respond to `call(Term) : Offspring::Any`.
+# *rewriter* must respond to `call(Term) : Offspring::Any`.
 #
 # Yields latest version of *term* (including the initial term) along with control
 # to you on every rewrite. This lets you stop rewriting at the expense of your
 # choice, from none (by accepting that some rewrites are infinite) to cheap
 # (capping the number of iterations) to expensive (maintaining a "seen" set) etc.;
 # or alternatively, by user's request.
-def rewrite(rewriter, term term0 : Term, & : Term ->) : Term
+def rewrite(term term0 : Term, rewriter, & : Term ->) : Term
   while true
     yield term0
 
@@ -394,8 +394,8 @@ end
 
 # `rewrite` with a capped number of rewrites. Raises `TimedOut` with the latest term
 # when the number of rewrites exceeds *cap*.
-def rewrite(callable, term, *, cap : UInt32 = 2u32**16) : Term
-  rewrite(callable, term) do |rewrite|
+def rewrite(term : Term, rewriter, *, cap : UInt32 = 2u32**16) : Term
+  rewrite(term, rewriter) do |rewrite|
     if cap.zero?
       raise TimedOut.new(term, rewrite)
     end
@@ -403,7 +403,6 @@ def rewrite(callable, term, *, cap : UInt32 = 2u32**16) : Term
   end
 end
 
-base = ML.parse(File.read("#{__DIR__}/editor.soma.wwml"))
 # base = ML.parse(<<-WWML
 # ;;(rule qux 0)
 # ;;(rule (into x_ (%item° (set x_ values_*))) values)
@@ -412,12 +411,12 @@ base = ML.parse(File.read("#{__DIR__}/editor.soma.wwml"))
 # ;;(rule (+ a_ b_) (sum a b))
 # ;;(rule (sum a_ b_) (sum/over a b))
 
-# (barrier (rule _ _))
-# (barrier (backmap _ _))
-# (barrier (barrier _))
+# (-rule (rule _ _))
+# (-rule (backmap _ _))
+# (-rule (-rule _))
 
 
-# ;; TODO: allow barriers to accept a "pattern pattern" for matching
+# ;; TODO: allow -rule to accept a "pattern pattern" for matching
 # ;; rules that can be allowed in.
 
 # ;;(backmap (swap a_ b_) {a: ↓b, b: ↓a})
@@ -475,6 +474,7 @@ base = ML.parse(File.read("#{__DIR__}/editor.soma.wwml"))
 
 # ;; (backmap C←["" | "" (M←(dup) _*) @_] {(M): (), (C): (↑C ↑C)})
 
+# TODO: this should become a rewriter test
 # ;;(backmap (block (%all (%leaf° (cell n←(%number _ < 10000) @edge_))
 # ;;                      (%leaf° (step @edge_ m_number))))
 # ;;  {n: (+ ↓n ↓m)})
@@ -488,10 +488,6 @@ base = ML.parse(File.read("#{__DIR__}/editor.soma.wwml"))
 # ;;   (step @z 100)))
 # WWML
 # )
-
-# `template` maps to a standard rule
-# `backspec` maps to a backmap rule
-selector = ML.parse1(%[(%any° (rule pattern_ template_) (backmap pattern_ backspec_) (barrier pattern←barrier←_))])
 
 def rec(term : Term) : Term
   Term.case(term) do
@@ -511,6 +507,10 @@ def rec(term : Term) : Term
       Term.of(s.to(String)[b.to(Int32)..e.to(Int32)]? || "")
     end
 
+    matchpi %[(string arg_)] do
+      Term.of(ML.display(arg, endl: false))
+    end
+
     matchpi %[_dict] do
       dict0 = dict1 = term.unsafe_as_d
       dict0.each_entry do |k, v|
@@ -526,12 +526,6 @@ def rec(term : Term) : Term
     otherwise { term }
   end
 end
-
-rec = ->(term : Term) do
-  Offspring::One.new(rec(term))
-end
-
-rs = Ruleset.select(selector, base, applier: Applier.new(rec))
 
 CURSORP  = ML.parse1(%([_string | _string (_*) @_]))
 CURSORPE = Term::M1.operator(ML.parse1(%([_string | _string (_*) @edge_])))
@@ -553,124 +547,9 @@ def subsume(root, motion, edge)
 end
 
 def editr(ruleset)
-  Rewriter.relr(CURSORP, Rewriter.absr(ruleset), ascent: 1u32)
+  Rewriter.relr(CURSORP, Rewriter.absr(ruleset), ascent: 2u32)
 end
 
-require "crsfml"
-
-# TODO: replay root from file with test cases
-# TODO: on f1 append a test case -- record all motions after replay
-
-FONT = SF::Font.from_file("#{__DIR__}/fonts/IBMPlexMono-Text.otf")
-
-NORD_BG = SF::Color.new(0x2e, 0x34, 0x40)
-NORD_FG = SF::Color.new(0xec, 0xef, 0xf4)
-NORD_FG_DIM = SF::Color.new(0xd8, 0xde, 0xe9)
-NORD_BLUE_DARK = SF::Color.new(0x5e, 0x81, 0xac)
-NORD_BLUE_LIGHT = SF::Color.new(0x81, 0xa1, 0xc1)
-
-window = SF::RenderWindow.new(SF::VideoMode.new(800, 500), title: "Hello World")
-window.framerate_limit = 60
-
-root = ML.parse(%[("" | "" () @user)])
-text = SF::Text.new(ML.display(root), FONT, 11)
-
-rewrite = editr(rs)
-
-before = nil
-motions = [] of Term
-
-while window.open?
-  root0 = root1 = root
-
-  while event = window.poll_event
-    case event
-    when SF::Event::Closed then window.close
-    when SF::Event::TextEntered
-      chr = event.unicode.chr
-      next unless chr.printable?
-      motion = Term.of(:type, chr)
-      if before
-        motions << motion
-      end
-      root1 = subsume(root, motion, Term.of(:edge, :user))
-    when SF::Event::KeyPressed
-      if event.code.f1? && before.nil? # record
-        before = root0
-        next
-      elsif event.code.f2? && before # stop recording
-        puts "Recorded"
-        puts ML.display(before)
-        puts motions
-        puts ML.display(root0)
-        before = nil
-        motions.clear
-
-        next
-      end
-
-      keyname = nil
-      case event.code
-      when .escape?    then keyname = "escape"
-      when .tab?       then keyname = "tab"
-      when .home?      then keyname = "home"
-      when .end?       then keyname = "end"
-      when .enter?     then keyname = "enter"
-      when .delete?    then keyname = "delete"
-      when .left?      then keyname = "left"
-      when .right?     then keyname = "right"
-      when .up?        then keyname = "up"
-      when .down?      then keyname = "down"
-      when .backspace? then keyname = "backspace"
-      when .numpad8?   then keyname = "np8"
-      when .numpad5?   then keyname = "np5"
-      when .numpad2?   then keyname = "np2"
-      end
-
-      if event.control
-        case event.code
-        when .c? then keyname = "c"
-        when .v? then keyname = "v"
-        end
-      end
-
-      next unless keyname
-
-      keyname = "S-#{keyname}" if event.shift
-      keyname = "C-#{keyname}" if event.control
-      key = Term::Sym.new(keyname)
-
-      motion = Term.of(:key, key)
-
-      if before
-        motions << motion
-      end
-
-      root1 = subsume(root, motion, Term.of(:edge, :user))
-    end
-  end
-
-  case offspring = rewrite.call(root1)
-  in Offspring::None
-  in Offspring::One   then root1 = offspring.term
-  in Offspring::Many  then root1 = Term.of(offspring.list)
-  end
-
-  unless root0.same?(root1)
-    text.string = ML.display(root1)
-  end
-
-  root = root1
-
-  window.clear(NORD_BG)
-  window.draw(text)
-  window.display
-end
-
-{% skip_file %}
-# pp rs
-
-# pp rs
 prog = ML.parse(<<-WWML
 ("hello" | "" ((type " ")) @user)
 ("" | "world" ((key enter)) @user)
@@ -683,6 +562,7 @@ prog = ML.parse(<<-WWML
 ;;(+ 1 ("" | "" ((key left)) @user) 2)
 ;;(+ 1 ("" | "" ((dup) (key left)) @user) 2)
 
+;; TODO: These should somehow be formatted into rewriter tests:
 ;;(delay 1000)
 ;;(into foo ((set foo 1 2 3) (set foo qux qyx qix) (set bar 4 5 6)))
 ;;qux
@@ -701,7 +581,7 @@ WWML
 #   case offspring = rs.call(matchee)
 #   in Offspring::Some
 #     offspring
-#   in Offspring::Barrier
+#   in Offspring::Neg
 #     offspring
 #   in Offspring::None
 #     Term.case(matchee) do
@@ -714,17 +594,13 @@ WWML
 #   end
 # end
 
-rewrite(Rewriter.relr(ML.parse1(%([_string | _string (_*) @_])), Rewriter.absr(rs), ascent: 1u32), prog) do |im|
-  puts ML.display(im)
-  sleep 1.second
-end
-
-require "benchmark"
+# rewrite(Rewriter.relr(ML.parse1(%([_string | _string (_*) @_])), Rewriter.absr(rs), ascent: 1u32), prog) do |im|
+#   puts ML.display(im)
+#   sleep 1.second
+# end
 
 
 # rewriter = Rewriter.absr(cc)
-
-require "benchmark"
 
 # pp rewrite(rewriter, base)
 
@@ -741,9 +617,6 @@ require "benchmark"
 #   end
 # end
 
-
-require "benchmark"
-
 # Benchmark.ips do |x|
 #   x.report("parse") do
 #     Pset.parse(selector, rules)
@@ -754,16 +627,6 @@ require "benchmark"
   # pp ps.response(matchee)
 #   end
 # end
-
-# 3. Implement relr.
-# 4. Editor TUI
-#    subsumption (deliver motion to cursor mailboxes)
-#    interpret + morph (as a single step)
-#     E.g. interpret:
-#      ("" | "" (motion←(key escape) _* ⭳tail) ¦ _ -state_) <-> {(motion): (), tail: (submit), state: special}
-#      [_string | _string (motion←(key enter) _* ⭳tail)] <-> {(motion): (), tail: (submit)}
-#     -state_ is a shorthand for state: (%pair/absent state) which should be a variant of (%pair/absent) that mounts
-#     the keypath to the absent pair in keypath mode.
 
 # def rewrite(circuit, event, subject0)
 #   circuit.each_entry do |_, node|

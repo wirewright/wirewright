@@ -1805,19 +1805,19 @@
 
 ;; pair: absent
 (group
-  (pattern (a: (%absent))
+  (pattern (a: (%-pair))
     (+ {})
     (- {a: x} {b: x})) ;; etc...
 
-  (pattern (%layer _ a: (%absent))
+  (pattern (%layer _ a: (%-pair))
     (+ {b: x} {b: x, c: x})
     (- {a: x} {a: x, b: x})) ;; etc...
 
-  (pattern (a: (%absent _number))
+  (pattern (a: (%-pair _number))
     (+ {} {a: x} {a: "hello"})
     (- {a: 100} {a: 1/3} {b: x})) ;; etc...
 
-  (pattern (%layer _ a: (%absent _number))
+  (pattern (%layer _ a: (%-pair _number))
     (+ {} {a: x} {a: x, b: y} {a: "hello"} {b: x})
     (- {a: 100} {a: 100, b: y}))) ;; etc...
 
@@ -3029,6 +3029,10 @@
 (specificity
   (level [_string | _string (M←(type text_string) _*) @_])
   (level [(%string nonempty) | "" (M←(type " ") _*) @_]))
+
+(specificity
+  (level [_* ⭳back])
+  (level @edge_))
  
 ;; Head
 ;; Make sure pattern head is determined properly

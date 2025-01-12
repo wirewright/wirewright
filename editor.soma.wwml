@@ -1,8 +1,3 @@
-;; Disable evaluation of rule, backmap, and barrier itself.
-(barrier (rule _ _))
-(barrier (backmap _ _))
-(barrier (barrier _))
-
 ;; GENERAL
 
 ;; Get rid of anything that we do not understand.
@@ -28,16 +23,43 @@
 (backmap [_string | _string (M←(type text_string) _*) @_]
   {M: (append-left →text)})
 
-(backmap [(%string nonempty) | "" (M←(type " ") _*) @_]
-  {M: (expel-left)})
+(backmap [(%string nonempty) | "" (M←(type ch←(%any " " "\"" ")" "}" "]")) _*) @_]
+  {(M): ((append-left →ch) (expel-left))})
 
-;; Interpret (key left)
-(backmap [(%string nonempty) | _string (M←(key left) _*) @_]
-  {M: (move-left)})
+(backmap ["" | "" (M←(type "(") _*) @_]
+  {M: (surround-self)})
 
-;; Interpret (key right)
-(backmap [_string | (%string nonempty) (M←(key right) _*) @_]
-  {M: (move-right)})
+;; Interpret (key left) and (key right)
+(backmap [(%string nonempty) | _string (M←(key left) _*) @_] {M: (move-left)})
+(backmap [_string | (%string nonempty) (M←(key right) _*) @_] {M: (move-right)})
+(backmap ["" | (%string nonempty) (M←(key left) _*) @_] {M: (expel-right)})
+(backmap [(%string nonempty) | "" (M←(key right) _*) @_] {M: (expel-left)})
+
+(backmap ⧼_ ["" | "" (M←(key left) _*) @_]⧽ {M: (edit-behind)})
+(backmap ⧼["" | "" (M←(key right) _*) @_] _⧽ {M: (edit-ahead)})
+
+(backmap [["" | "" (M←(key left) _*) @_] _*] {M: (escape-above)})
+(backmap [_* ["" | "" (M←(key right) _*) @_]] {M: (escape-below)})
+
+;; Interpret (key up) and (key down)
+(backmap ⧼_ ["" | "" (M←(key up) _*) @_]⧽ {M: (move-behind)})
+(backmap ⧼["" | "" (M←(key down) _*) @_] _⧽ {M: (move-ahead)})
+
+;; Interpret (key home) and (key end)
+(backmap [(%string nonempty) | _string (M←(key home) _*) @_] {M: (move-front-left)})
+(backmap [_string | (%string nonempty) (M←(key end) _*) @_] {M: (move-back-right)})
+
+(backmap [_string | _string (M←(key C-home) _*) @_] {M: (surround-parent-front)})
+(backmap [_string | _string (M←(key C-end) _*) @_] {M: (surround-parent-back)})
+
+(backmap ["" | (%string nonempty) (M←(key home) _*) @_] {M: (expel-right)})
+(backmap [(%string nonempty) | "" (M←(key end) _*) @_] {M: (expel-left)})
+
+(backmap ⧼["" | "" (M←(key home) _*) @_]⧽ {M: (move-front-behind)})
+(backmap ⧼["" | "" (M←(key end) _*) @_]⧽ {M: (move-back-ahead)})
+
+(backmap [["" | "" (M←(key home) _*) @_] _*] {M: (escape-front-above)})
+(backmap [_* ["" | "" (M←(key end) _*) @_]] {M: (escape-back-below)})
 
 ;; Interpret (key enter).
 (backmap [(%string nonempty) | "" (M←(key enter) _*) @_]
@@ -49,13 +71,20 @@
 (backmap [(%string nonempty) | (%string nonempty) (M←(key enter) _*) @_]
   {M: (expel-mid)})
 
-;; Interpret (key backspace).
+;; Interpret (key backspace) and (key delete).
 (backmap [(%string nonempty) | _string (M←(key backspace) _*) @_]
-  {M: (erase-left)})
+  {M: (delete-left)})
 
-;; Interpret (key delete).
 (backmap [_string | (%string nonempty) (M←(key delete) _*) @_]
-  {M: (erase-right)})
+  {M: (delete-right)})
+
+(backmap ⧼_ ["" | "" (M←(key C-backspace) _*) @_]⧽ {M: (delete-behind)})
+(backmap ⧼["" | "" (M←(key C-delete) _*) @_] _⧽ {M: (delete-ahead)})
+
+;; (!) Careful: (key left) and (key right) must not map back to (key backspace)/(key delete)
+;; or we'll have occasional infinite rewriting.
+(backmap ["" | "" (M←(key backspace) _*) @_] {M: (key left)})
+(backmap ["" | "" (M←(key delete) _*) @_] {M: (key right)})
 
 ;; MORPH
 
@@ -75,13 +104,78 @@
    lhs: (~ →lhs (substring →rhs 0 0)),
    rhs: (substring →rhs 1 -1)})
 
-(backmap [lhs_string | _string (M←(erase-left) _*) @_]
+(backmap [lhs_string | _string (M←(delete-left) _*) @_]
   {(M): (),
    lhs: (substring →lhs 0 -2)})
 
-(backmap [_string | rhs_string (M←(erase-right) _*) @_]
+(backmap [_string | rhs_string (M←(delete-right) _*) @_]
   {(M): (),
    rhs: (substring →rhs 1 -1)})
+
+(backmap [lhs_string | rhs_string (M←(move-front-left) _*) @_]
+  {(M): (), lhs: "", rhs: (~ →lhs →rhs)})
+
+(backmap [lhs_string | rhs_string (M←(move-back-right) _*) @_]
+  {(M): (), lhs: (~ →lhs →rhs), rhs: ""})
+
+(backmap C←[_string | _string (M←(surround-self) _*) @_]
+  {(M): (), C: (↑C)})
+
+(backmap P←⧼C←[_string | _string (M←(surround-parent-front) _*) @_]⧽
+  {(M): (), (C): ($tr C0 ()), P: (↑C0 ↑P)})
+
+(backmap P←⧼C←[_string | _string (M←(surround-parent-back) _*) @_]⧽
+  {(M): (), (C): ($tr C0 ()), P: (↑P ↑C0)})
+
+(backmap ⧼behind_ [lhs←"" | "" (M←(edit-behind) _*) @_]⧽
+ {(M): (), (behind): (), lhs: (string →behind)})
+
+(backmap ⧼[_* ⭳back] C←[lhs←"" | "" (M←(edit-behind) _*) @_]⧽
+ {(M): (), (C): (), back: ↑C})
+
+(backmap ⧼["" | rhs←"" (M←(edit-ahead) _*) @_] ahead_⧽
+ {(M): (), rhs: (string →ahead), (ahead): ()})
+
+(backmap ⧼C←["" | "" (M←(edit-ahead) _*) @_] [⭳front _*]⧽
+ {(M): (), (C): (), front: ↑C})
+
+;; If the user attempts to edit an edge, show them the pretty-printed
+;; version of the edge rather than its underlying dict implementation.
+(backmap ⧼@edge_ C←[lhs←"" | "" (M←(edit-behind) _*) @_]⧽
+ {(M): (), (edge): (), lhs: (string →edge)})
+
+(backmap ⧼C←["" | rhs←"" (M←(edit-ahead) _*) @_] @edge_⧽
+ {(M): (), (edge): (), rhs: (string →edge)})
+
+(backmap ⧼behind_ C←[_string | _string (M←(move-behind) _*) @_]⧽
+  {(M): (), C: ↑behind, behind: ↑C})
+
+(backmap ⧼C←[_string | _string (M←(move-ahead) _*) @_] ahead_⧽
+  {(M): (), C: ↑ahead, ahead: ↑C})
+
+(backmap [⭳front _* C←[_string | _string (M←(move-front-behind) _*) @_] _*]
+  {(M): (), (C): (), front: ↑C})
+
+(backmap [_* C←[_string | _string (M←(move-back-ahead) _*) @_] _* ⭳back]
+  {(M): (), (C): (), back: ↑C})
+
+(backmap ⧼behind_ [_string | _string (M←(delete-behind) _*) @_]⧽
+  {(M): (), (behind): ()})
+
+(backmap ⧼[_string | _string (M←(delete-ahead) _*) @_] ahead_⧽
+  {(M): (), (ahead): ()})
+
+(backmap [_* ⭳above ⧼C←[_string | _string (M←(escape-above) _*) @_]⧽ _*]
+ {(M): (), above: ↑C0, (C): ($tr C0 ())})
+
+(backmap [_* ⧼C←[_string | _string (M←(escape-below) _*) @_]⧽ ⭳below _*]
+ {(M): (), below: ↑C0, (C): ($tr C0 ())})
+
+(backmap [⭳front _* ⧼C←[_string | _string (M←(escape-front-above) _*) @_]⧽ _*]
+ {(M): (), front: ↑C0, (C): ($tr C0 ())})
+
+(backmap [_* ⧼C←[_string | _string (M←(escape-back-below) _*) @_]⧽ _* ⭳below]
+ {(M): (), below: ↑C0, (C): ($tr C0 ())})
 
 ;; Expellation
 ;;
@@ -98,7 +192,7 @@
   {(M0): (), (M1): ()})
 
 (backmap [_string | rhs_string (M←(expel-right) _*) @_]
-  {(M): ((ml →rhs) expel-right/finalize)})
+  {(M): ((ml →rhs) (expel-right/finalize))})
 
 (backmap [_* [_string | rhs_string (M0←(ml/ok term_) M1←(expel-right/finalize) _*) @_] ⭳succ _*]
   {(M0): (), (M1): (), rhs: "", succ: →term})

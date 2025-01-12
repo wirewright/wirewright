@@ -2663,6 +2663,21 @@ end
 
 module ::Ww::Term::M1
   module Item
+    # NOTE: you should add any new normal heads here if you want them to be
+    # transparent for the specificity algorithm.
+    ANY_NORMAL_HEAD = ML.parse1(<<-WWML
+      (%any
+        %singular
+        %group
+        %many
+        %past
+        %optional
+        %plural %plural/min %plural/max
+        %gap %gap/min %gap/max
+        %slot)
+    WWML
+    )
+
     def self.normal(item : Term) : Term
       Term.of_case(item, engine: Term::M0) do
         match(:_symbol) do
@@ -2768,6 +2783,7 @@ module ::Ww::Term::M1
     # TODO: switch to using matchpis here and everywhere!
     def self.operator(item : Term, captures : Bag(Term)) : Operator::Item::Any
       Term.case(item, engine: Term::M0) do
+
         matchpi %[(%singular child_)], cue: :"%singular" do
           Operator::Item::Singular.new(M1.operator(child, captures))
         end
@@ -2936,11 +2952,11 @@ module ::Ww::Term::M1
           Term.of(:"%pair/optional", key, default, M1.normal(body))
         end
 
-        match({:"%absent"}, cue: :"%absent") do
+        match({:"%-pair"}, cue: :"%-pair") do
           Term.of(:"%pair/absent", key)
         end
 
-        match({:"%absent", :good_}, cue: :"%absent") do |good|
+        match({:"%-pair", :good_}, cue: :"%-pair") do |good|
           Term.of(:"%pair/absent", key, M1.normal(good))
         end
 
@@ -3836,11 +3852,10 @@ module ::Ww::Term::M1
         fn.call(node)
       end
 
-      match({:"%partition", {:head_symbol, :"_*"}, :_}) do |head|
-        unless node?(head.unsafe_as_sym)
-          return WalkDecision::Continue
-        end
-
+      # FIXME: Nasty. We should visit all dictionaries and let normal prevent us
+      # from doing so using (%barrier) or something like that like it already does
+      # for (%literal).
+      match({:"%layer", :below_, :side_dict}, cue: :"%layer") do |below, side|
         dict = node.unsafe_as_d
 
         case fn.call(node)
@@ -3849,6 +3864,31 @@ module ::Ww::Term::M1
         in .halt? then return WalkDecision::Halt
         end
 
+        walk(below, &fn)
+
+        side.each_entry do |_, value|
+          case walk(value, &fn)
+          in .continue?, .skip?
+          in .halt?
+            return WalkDecision::Halt
+          end
+        end
+
+        WalkDecision::Continue
+      end
+
+      match({:"%partition", {:head_symbol, :"_*"}, :_}) do |head|
+        unless node?(head.unsafe_as_sym)
+          return WalkDecision::Continue
+        end
+
+        case fn.call(node)
+        in .continue?
+        in .skip? then return WalkDecision::Continue
+        in .halt? then return WalkDecision::Halt
+        end
+
+        dict = node.unsafe_as_d
         dict.each_entry do |_, value|
           case walk(value, &fn)
           in .continue?, .skip?
@@ -4493,6 +4533,22 @@ module ::Ww::Term::M1
 
           WalkDecision::Continue
         end
+        
+        # (%edge _) makes an (edge ...), see the literal, `edge`? Thus we count a literal
+        # match. If edge's type is restricted we count that as a restriction. Otherwise
+        # we do not.
+        matchpi %[((%literal %edge) (%literal _))] do
+          literals += 1
+
+          WalkDecision::Skip
+        end
+
+        matchpi %[((%literal %edge) _)] do
+          literals += 1
+          restrictions += 1
+
+          WalkDecision::Skip
+        end
 
         # Count stuff such as (%number _ < 10) as two restrictions: one on the type
         # and one on the magnitude; and e.g. (%number (whole _) < 10) as three: one on
@@ -4536,6 +4592,11 @@ module ::Ww::Term::M1
           %[((%literal %not) _+)],
           %[((%literal %new) _)],
         ) { WalkDecision::Continue }
+
+        # None of the itemspart nodes affect specificity.
+        match({ Item::ANY_NORMAL_HEAD, :"_*"}) do
+          WalkDecision::Continue
+        end
 
         # %all takes max specificity of its offshoots.
         matchpi %[((%literal %all) offshoots_+)] do

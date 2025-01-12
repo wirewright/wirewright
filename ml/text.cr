@@ -35,6 +35,9 @@
 # This would cause a considerable performance hit though, but for performance sensitive
 # stuff (e.g. talking over the network) we'll have WwMR anyway (the machine-readable
 # representation of terms)
+#
+#     -state_ is a shorthand for state: (%pair/absent state) which should be a variant of (%pair/absent) that mounts
+#     the keypath to the absent pair in keypath mode.
 
 module Ww::ML::Text
   # An exclusive range, specifies the begin and end of the source substring that
@@ -644,7 +647,7 @@ module Ww::ML::Text
               elsif pairs.empty?
                 # ¦ pairs_ ...
                 # ¦ (x y z) ...
-                state = :"%pairs"
+                state = :"%layer"
                 reg = key
                 break
               end
@@ -684,10 +687,10 @@ module Ww::ML::Text
           if state == :closed
             list = Term[:"%partition", list, name ? {:"%let", name, body} : body]
           end
-        when :"%pairs"
+        when :"%layer"
           extra = reg.as(Term)
 
-          body = Term[:"%pairs", extra].transaction do |commit|
+          body = Term[:"%layer", extra].transaction do |commit|
             unless token = @lexer.thru?
               raise "unexpected end-of-input"
             end
@@ -696,13 +699,13 @@ module Ww::ML::Text
               key = slot(token)
 
               unless (op = @lexer.thru?) && op.type == :":"
-                raise "unexpected end-of-input after %pairs key, expected ':'"
+                raise "unexpected end-of-input after %layer key, expected ':'"
               end
 
               commit.with(key, slot)
 
               unless token = @lexer.thru?
-                raise "unexpected end-of-input after %pairs value, expected another key-value pair or ')'"
+                raise "unexpected end-of-input after %layer value, expected another key-value pair or ')'"
               end
 
               if token.type == :")"
