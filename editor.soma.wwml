@@ -107,10 +107,10 @@
   {(M0): (), (M1): ()})
 
 (backmap [lhs_string | _string (M←(expel-mid) _*) @_]
-  {(M): ((ml →lhs) expel-mid/r)})
+  {(M): ((ml →lhs) (expel-mid/r))})
 
 (backmap [_string | rhs_string ((ml/ok _) M←(expel-mid/r) _*) @_]
-  {(M): ((ml →rhs) expel-mid/finalize)})
+  {(M): ((ml →rhs) (expel-mid/finalize))})
 
 (backmap [_string | _string (M0←(ml/err) M1←(expel-mid/r) _*) @_]
   {(M0): (), (M1): ()})

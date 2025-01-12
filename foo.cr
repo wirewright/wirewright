@@ -558,6 +558,9 @@ end
 
 require "crsfml"
 
+# TODO: replay root from file with test cases
+# TODO: on f1 append a test case -- record all motions after replay
+
 FONT = SF::Font.from_file("#{__DIR__}/fonts/IBMPlexMono-Text.otf")
 
 NORD_BG = SF::Color.new(0x2e, 0x34, 0x40)
@@ -574,6 +577,9 @@ text = SF::Text.new(ML.display(root), FONT, 11)
 
 rewrite = editr(rs)
 
+before = nil
+motions = [] of Term
+
 while window.open?
   root0 = root1 = root
 
@@ -583,8 +589,26 @@ while window.open?
     when SF::Event::TextEntered
       chr = event.unicode.chr
       next unless chr.printable?
-      root1 = subsume(root, Term.of(:type, chr), Term.of(:edge, :user))
+      motion = Term.of(:type, chr)
+      if before
+        motions << motion
+      end
+      root1 = subsume(root, motion, Term.of(:edge, :user))
     when SF::Event::KeyPressed
+      if event.code.f1? && before.nil? # record
+        before = root0
+        next
+      elsif event.code.f2? && before # stop recording
+        puts "Recorded"
+        puts ML.display(before)
+        puts motions
+        puts ML.display(root0)
+        before = nil
+        motions.clear
+
+        next
+      end
+
       keyname = nil
       case event.code
       when .escape?    then keyname = "escape"
@@ -616,7 +640,13 @@ while window.open?
       keyname = "C-#{keyname}" if event.control
       key = Term::Sym.new(keyname)
 
-      root1 = subsume(root, Term.of(:key, key), Term.of(:edge, :user))
+      motion = Term.of(:key, key)
+
+      if before
+        motions << motion
+      end
+
+      root1 = subsume(root, motion, Term.of(:edge, :user))
     end
   end
 
