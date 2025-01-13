@@ -63,3 +63,5 @@ module Ww
     def_equals_and_hash @value
   end
 end
+
+require "./str/substring"

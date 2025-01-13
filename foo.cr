@@ -488,6 +488,7 @@ end
 # ;;   (step @z 100)))
 # WWML
 # )
+require "./bar"
 
 def rec(term : Term) : Term
   Term.case(term) do
@@ -503,9 +504,15 @@ def rec(term : Term) : Term
       end
     end
 
-    matchpi %[(substring s_string b←(%number i32) e←(%number i32))] do
-      Term.of(s.to(String)[b.to(Int32)..e.to(Int32)]? || "")
+    matchpi %[(substring s_string (rune b←(%number i32)) (rune e←(%number i32)))] do
+      Term.of(Term::Str::Substring.runes(s.unsafe_as_s, b.to(Int32), e.to(Int32)))
     end
+
+    matchpi %[(substring s_string (word b←(%number i32)) (word e←(%number i32)))] do
+      Term.of(Term::Str::Substring.words(s.unsafe_as_s, b.to(Int32), e.to(Int32)))
+    end
+
+    # TODO: support mixed?
 
     matchpi %[(string arg_)] do
       Term.of(ML.display(arg, endl: false))
