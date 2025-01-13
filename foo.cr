@@ -140,7 +140,7 @@ struct Ruleset(ApplierType)
           matchpi %[((%literal %let) (%capture toplevel_) _)] { Rule::BackmapMany.new(toplevel, backspec) }
           otherwise { Rule::BackmapOne.new(backspec) }
         end
-      elsif neg = env[:neg]?
+      elsif neg = env[:negative]?
         rule = Rule::Neg.new
       else
         next

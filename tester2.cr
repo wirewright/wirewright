@@ -4,7 +4,8 @@ require "./foo"
 
 # TODO: a tui
 
-SELECTOR = ML.parse1(%[(%any° (rule pattern_ template_) (backmap pattern_ backspec_) (barrier pattern←barrier←_))])
+# SELECTOR = ML.parse1(%[(%any° (rule pattern_ template_) (backmap pattern_ backspec_) (-rule pattern←negative_))])
+SELECTOR = ML.parse1(%[(%any° (rule pattern_ template_) (backmap pattern_ backspec_) (-rule pattern←negative_))])
 BASE = ML.parse(File.read("#{__DIR__}/editor.soma.wwml"))
 RULESET = Ruleset.select(SELECTOR, BASE, applier: Applier.new(->(term : Term) { Offspring::One.new(rec(term)) }))
 REWRITER = editr(RULESET)
@@ -18,31 +19,37 @@ end
 
 test = ML.parse1(File.read("./editor.test.wwml"))
 
+puts "Replay editor.test.wwml"
+
 root = ML.parse(%[("" | "" () @user)])
 Term.case(test) do
   matchpi %[(editor initial_dict edits_*)] do
     root = initial
-    edits.items.each do |edit|
-      Term.case(edit) do
-        matchpi %[(after (motions_+) snapshot_)] do
-          root0 = root
-          motions.items.each do |motion|
-            root = apply(root, motion)
-          end
-          unless root == snapshot
-            puts ML.display(edit)
-            puts ML.display(root0)
-            puts ML.display(root)
-            puts "Replay failed. Show step-by-step? y/".colorize.red
-            unless gets == "y"
+    dt = Time.measure do
+      edits.items.each do |edit|
+        Term.case(edit) do
+          matchpi %[(after (motions_+) snapshot_)] do
+            root0 = root
+            motions.items.each do |motion|
+              root = apply(root, motion)
+            end
+            unless root == snapshot
+              puts ML.display(edit)
+              puts ML.display(root0)
+              puts ML.display(root)
+              puts "Replay failed. Show step-by-step? y/".colorize.red
+              unless gets == "y"
+                abort
+              end
+              debug(root0, motions)
               abort
             end
-            debug(root0, motions)
-            abort
           end
         end
       end
     end
+
+    puts "Replay success in #{dt.total_milliseconds}ms".colorize.bold.green
   end
 end
 

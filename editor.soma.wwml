@@ -60,12 +60,21 @@
 (backmap ⧼_ ["" | "" (M←(key up) _*) @_]⧽ {M: (move-behind)})
 (backmap ⧼["" | "" (M←(key down) _*) @_] _⧽ {M: (move-ahead)})
 
+(backmap [_string | _string (M←(key (%any C-up C-left)) _*) @_] {M: (move-parent-behind)})
+(backmap [_string | _string (M←(key (%any C-down C-right)) _*) @_] {M: (move-parent-ahead)})
+
+(backmap [⧼[_string | _string (M←(key C-left) _*) @_]⧽ _*] {M: (move-parent-above)})
+(backmap [_* ⧼[_string | _string (M←(key C-right) _*) @_]⧽] {M: (move-parent-below)})
+
+(backmap ⧼_dict ⧼[_string | _string (M←(key C-left) _*) @_]⧽⧽ {M: (move-parent-into-behind)})
+(backmap ⧼⧼[_string | _string (M←(key C-right) _*) @_]⧽ _dict⧽ {M: (move-parent-into-ahead)})
+
 ;; Interpret (key home) and (key end)
 (backmap [(%string nonempty) | _string (M←(key home) _*) @_] {M: (move-front-left)})
 (backmap [_string | (%string nonempty) (M←(key end) _*) @_] {M: (move-back-right)})
 
-(backmap [_string | _string (M←(key C-home) _*) @_] {M: (nest-parent-front)})
-(backmap [_string | _string (M←(key C-end) _*) @_] {M: (nest-parent-back)})
+(backmap [_string | _string (M←(key C-S-home) _*) @_] {M: (nest-parent-front)})
+(backmap [_string | _string (M←(key C-S-end) _*) @_] {M: (nest-parent-back)})
 
 (backmap ["" | (%string nonempty) (M←(key home) _*) @_] {M: (expel-right)})
 (backmap [(%string nonempty) | "" (M←(key end) _*) @_] {M: (expel-left)})
@@ -75,6 +84,9 @@
 
 (backmap [["" | "" (M←(key home) _*) @_] _*] {M: (escape-front-above)})
 (backmap [_* ["" | "" (M←(key end) _*) @_]] {M: (escape-back-below)})
+
+(backmap [_string | _string (M←(key C-home) _*) @_] {M: (move-parent-front-behind)})
+(backmap [_string | _string (M←(key C-end) _*) @_] {M: (move-parent-back-ahead)})
 
 ;; Interpret (key enter).
 (backmap [(%string nonempty) | "" (M←(key enter) _*) @_]
@@ -166,16 +178,16 @@
   {(M): (), (P): ↑P})
 
 (backmap ⧼behind_ [lhs←"" | "" (M←(edit-behind) _*) @_]⧽
- {(M): (), (behind): (), lhs: (string →behind)})
+  {(M): (), (behind): (), lhs: (string →behind)})
 
 (backmap ⧼[_* ⭳back] C←[lhs←"" | "" (M←(edit-behind) _*) @_]⧽
- {(M): (), (C): (), back: ↑C})
+  {(M): (), (C): (), back: ↑C})
 
 (backmap ⧼["" | rhs←"" (M←(edit-ahead) _*) @_] ahead_⧽
- {(M): (), rhs: (string →ahead), (ahead): ()})
+  {(M): (), rhs: (string →ahead), (ahead): ()})
 
 (backmap ⧼C←["" | "" (M←(edit-ahead) _*) @_] [⭳front _*]⧽
- {(M): (), (C): (), front: ↑C})
+  {(M): (), (C): (), front: ↑C})
 
 ;; If the user attempts to edit an edge, show them the pretty-printed
 ;; version of the edge rather than its underlying dict implementation.
@@ -204,16 +216,16 @@
   {(M): (), (ahead): ()})
 
 (backmap [_* ⭳above ⧼C←[_string | _string (M←(escape-above) _*) @_]⧽ _*]
- {(M): (), above: ↑C0, (C): ($tr C0 ())})
+  {(M): (), above: ↑C0, (C): ($tr C0 ())})
 
 (backmap [_* ⧼C←[_string | _string (M←(escape-below) _*) @_]⧽ ⭳below _*]
- {(M): (), below: ↑C0, (C): ($tr C0 ())})
+  {(M): (), below: ↑C0, (C): ($tr C0 ())})
 
 (backmap [⭳front _* ⧼C←[_string | _string (M←(escape-front-above) _*) @_]⧽ _*]
- {(M): (), front: ↑C0, (C): ($tr C0 ())})
+  {(M): (), front: ↑C0, (C): ($tr C0 ())})
 
 (backmap [_* ⧼C←[_string | _string (M←(escape-back-below) _*) @_]⧽ _* ⭳below]
- {(M): (), below: ↑C0, (C): ($tr C0 ())})
+  {(M): (), below: ↑C0, (C): ($tr C0 ())})
 
 (backmap ⧼behind_ [_string | _string (M←(dup-behind) _*) @_]⧽
   {(M): (), (behind): (↑behind ↑behind)})
@@ -283,6 +295,31 @@
 
 (backmap ⧼P←[_* behind_ [_string | _string (M←(release-behind-below) _*) @_]]⧽
   {(M): (), (behind): ($tr behind0 ()), (P): (↑P ↑behind0)})
+
+(backmap ⧼behind_ P←⧼[_string | _string (M←(move-parent-behind) _*) @_]⧽⧽
+  {(M): (), behind: ↑P, P: ↑behind})
+
+(backmap ⧼P←⧼[_string | _string (M←(move-parent-ahead) _*) @_]⧽ ahead_⧽
+  {(M): (), ahead: ↑P, P: ↑ahead})
+
+(backmap [⭳target _* P←⧼[_string | _string (M←(move-parent-front-behind) _*) @_]⧽ _*]
+  {(M): (), target: ↑P, (P): ()})
+
+(backmap [_* P←⧼[_string | _string (M←(move-parent-back-ahead) _*) @_]⧽ _* ⭳target]
+  {(M): (), target: ↑P, (P): ()})
+
+;; GP is for "grandparent"
+(backmap GP←⧼P←⧼[_string | _string (M←(move-parent-below) _*) @_]⧽⧽
+  {(M): (), (P): ($tr P0 ()), (GP): (↑GP ↑P0)})
+
+(backmap GP←⧼P←⧼[_string | _string (M←(move-parent-above) _*) @_]⧽⧽
+  {(M): (), (P): ($tr P0 ()), (GP): (↑P0 ↑GP)})
+
+(backmap ⧼(_* ⭳target ¦ _) P←⧼[_string | _string (M←(move-parent-into-behind) _*) @_]⧽⧽
+  {(M): (), (P): (), target: ↑P})
+
+(backmap ⧼P←⧼[_string | _string (M←(move-parent-into-ahead) _*) @_]⧽ (⭳target _* ¦ _)⧽
+  {(M): (), (P): (), target: ↑P})
 
 ;; Expellation
 ;;

@@ -4484,6 +4484,9 @@ module ::Ww::Term::M1
   # or a top-level literal alternative, e.g. `(%any 0 1 2)`.
   LITERAL_SPECIFICITY = {UInt32::MAX, 0u32, 0u32}
 
+  # FIXME: it would make more sense if the specificity of (%any ...) was (just a bit)
+  # lower than LITERAL_SPECIFICITY. One would expect (qux a) to precede (qux (%any a b c)).
+
   # Returns the specificity of a normal pattern *normp*.
   #
   # In single-way rewriting (which basically means most of rewriting we are doing
