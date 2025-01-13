@@ -2665,6 +2665,11 @@ module ::Ww::Term::M1
   module Item
     # NOTE: you should add any new normal heads here if you want them to be
     # transparent for the specificity algorithm.
+    #
+    # FIXME: this is treatment of a symptom and not the problem; instead of doing
+    # this we should have a separate walk mode that goes through items nodes. It can
+    # do that based on the following: if inside %itemspart, then only go through %singular,
+    # and recurse on %many and %group. We should then use this walk mode in specificity.
     ANY_NORMAL_HEAD = ML.parse1(<<-WWML
       (%any
         %singular
@@ -4117,7 +4122,9 @@ module ::Ww::Term::M1
 
           next unless successor[:endpoint, :transform]?
 
-          if (b = key.as_n?) && b.in?(matchee.items.bounds) && successor[:endpoint, :plural]?
+          plural = !!successor[:endpoint, :plural]?
+
+          if plural && (b = key.as_n?) && b.in?(matchee.items.bounds)
             value0 = matchee[key]
 
             ctx1, values1 = transform0(ctx0, ctx1, bot, applier, successor.as_d, value0)
@@ -4135,6 +4142,7 @@ module ::Ww::Term::M1
               raise KeypathError.new
             end
             ctx1, value1 = transform0(ctx0, ctx1, bot, applier, successor.as_d, value0)
+            plural && value1.type.dict? && value1.empty? ? nil : value1
           end
         end
 

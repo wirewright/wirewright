@@ -1,3 +1,8 @@
+;; TODO: FIXME: currently it appears to be possible to do weird SQL injection like stuff
+;; with the cursor because we simply paste into backmap eval and what's
+;; most important, do backmap eval AFTER pasting -- terrible. The separation
+;; should be clearer! In general, backmap eval is currently undeveloped.
+
 ;; GENERAL
 
 ;; Get rid of anything that we do not understand.
@@ -20,14 +25,13 @@
 ;; contexts precisely as `expel-left`. in others as `move-right` or `move-below`, etc.
 
 ;; Interpret (type)
-(backmap [_string | _string (M←(type text_string) _*) @_]
-  {M: (append-left →text)})
+(backmap [_string | _string (M←(type text_string) _*) @_] {M: (append-left →text)})
 
+;; TODO: refine these
 (backmap [(%string nonempty) | "" (M←(type ch←(%any " " "\"" ")" "}" "]")) _*) @_]
   {(M): ((append-left →ch) (expel-left))})
 
-(backmap ["" | "" (M←(type "(") _*) @_]
-  {M: (surround-self)})
+(backmap ["" | "" (M←(type "(") _*) @_] {M: (nest-self)})
 
 ;; Interpret (key left) and (key right)
 (backmap [(%string nonempty) | _string (M←(key left) _*) @_] {M: (move-left)})
@@ -41,6 +45,17 @@
 (backmap [["" | "" (M←(key left) _*) @_] _*] {M: (escape-above)})
 (backmap [_* ["" | "" (M←(key right) _*) @_]] {M: (escape-below)})
 
+(backmap ["" | "" (M←(key S-left) _*) @_] {M: (group-behind-front)})
+(backmap ["" | "" (M←(key S-right) _*) @_] {M: (group-ahead-back)})
+
+(backmap [["" | "" (M←(key S-left) _*) @_] _*] {M: (capture-above-ahead)})
+(backmap ⧼[["" | "" (M←(key S-right) _*) @_] _ _+]⧽ {M: (release-ahead-above)})
+(backmap ⧼(["" | "" (M←(key S-right) _*) @_] _)⧽ {M: (ungroup-ahead-back)})
+
+(backmap [_* ["" | "" (M←(key S-right) _*) @_]] {M: (capture-below-behind)})
+(backmap ⧼[_+ _ ["" | "" (M←(key S-left) _*) @_]]⧽ {M: (release-behind-below)})
+(backmap ⧼(_ ["" | "" (M←(key S-left) _*) @_])⧽ {M: (ungroup-behind-front)})
+
 ;; Interpret (key up) and (key down)
 (backmap ⧼_ ["" | "" (M←(key up) _*) @_]⧽ {M: (move-behind)})
 (backmap ⧼["" | "" (M←(key down) _*) @_] _⧽ {M: (move-ahead)})
@@ -49,8 +64,8 @@
 (backmap [(%string nonempty) | _string (M←(key home) _*) @_] {M: (move-front-left)})
 (backmap [_string | (%string nonempty) (M←(key end) _*) @_] {M: (move-back-right)})
 
-(backmap [_string | _string (M←(key C-home) _*) @_] {M: (surround-parent-front)})
-(backmap [_string | _string (M←(key C-end) _*) @_] {M: (surround-parent-back)})
+(backmap [_string | _string (M←(key C-home) _*) @_] {M: (nest-parent-front)})
+(backmap [_string | _string (M←(key C-end) _*) @_] {M: (nest-parent-back)})
 
 (backmap ["" | (%string nonempty) (M←(key home) _*) @_] {M: (expel-right)})
 (backmap [(%string nonempty) | "" (M←(key end) _*) @_] {M: (expel-left)})
@@ -72,19 +87,36 @@
   {M: (expel-mid)})
 
 ;; Interpret (key backspace) and (key delete).
-(backmap [(%string nonempty) | _string (M←(key backspace) _*) @_]
-  {M: (delete-left)})
-
-(backmap [_string | (%string nonempty) (M←(key delete) _*) @_]
-  {M: (delete-right)})
+(backmap [(%string nonempty) | _string (M←(key backspace) _*) @_] {M: (delete-left)})
+(backmap [_string | (%string nonempty) (M←(key delete) _*) @_] {M: (delete-right)})
 
 (backmap ⧼_ ["" | "" (M←(key C-backspace) _*) @_]⧽ {M: (delete-behind)})
 (backmap ⧼["" | "" (M←(key C-delete) _*) @_] _⧽ {M: (delete-ahead)})
+
+(backmap (["" | "" (M←(key C-backspace) _*) @_] _*) {M: (unnest-parent)})
+(backmap (_* ["" | "" (M←(key C-delete) _*) @_]) {M: (unnest-parent)})
 
 ;; (!) Careful: (key left) and (key right) must not map back to (key backspace)/(key delete)
 ;; or we'll have occasional infinite rewriting.
 (backmap ["" | "" (M←(key backspace) _*) @_] {M: (key left)})
 (backmap ["" | "" (M←(key delete) _*) @_] {M: (key right)})
+
+;; For less common actions cursor commands are used instead of complicated
+;; and utterly meaningless key combos.
+(backmap [lhs←"." | "" (M←(type "(") _*) @_] {lhs: "", M: (nest-behind)})
+(backmap [lhs←"." | "" (M←(type "v") _*) @_] {lhs: "", M: (dup-behind)})
+(backmap [lhs←"." | "" (M←(type "V") _*) @_] {lhs: "", M: (dup-ahead)})
+(backmap [lhs←"." | "" (M←(type "s") _*) @_] {lhs: "", M: (swap-behind)})
+(backmap [lhs←"." | "" (M←(type "S") _*) @_] {lhs: "", M: (swap-ahead)})
+(backmap [lhs←"." | "" (M←(type "/") _*) @_] {lhs: "", M: (split)})
+(backmap [lhs←"." | "" (M←(type "+") _*) @_] {lhs: "", M: (join)})
+(backmap [lhs←"." | "" (M←(type "y") _*) @_] {lhs: "", M: (copy-behind)})
+(backmap [lhs←"." | "" (M←(type "Y") _*) @_] {lhs: "", M: (copy-ahead)})
+(backmap [lhs←"." | "" (M←(type "x") _*) @_] {lhs: "", M: (cut-behind)})
+(backmap [lhs←"." | "" (M←(type "X") _*) @_] {lhs: "", M: (cut-ahead)})
+(backmap (lhs←"." | "" (M←(type "p") _*) @_ ¦ _ clipboard: _) {lhs: "", M: (paste-behind)})
+(backmap (lhs←"." | "" (M←(type "P") _*) @_ ¦ _ clipboard: _) {lhs: "", M: (paste-ahead)})
+(backmap [lhs←".-" | "" (M←(type (%any "y" "Y")) _*) @_] {lhs: "", M: (clear-clipboard)})
 
 ;; MORPH
 
@@ -118,14 +150,20 @@
 (backmap [lhs_string | rhs_string (M←(move-back-right) _*) @_]
   {(M): (), lhs: (~ →lhs →rhs), rhs: ""})
 
-(backmap C←[_string | _string (M←(surround-self) _*) @_]
+(backmap C←[_string | _string (M←(nest-self) _*) @_]
   {(M): (), C: (↑C)})
 
-(backmap P←⧼C←[_string | _string (M←(surround-parent-front) _*) @_]⧽
+(backmap ⧼behind_ [_string | _string (M←(nest-behind) _*) @_]⧽
+  {(M): (), behind: (↑behind)})
+
+(backmap P←⧼C←[_string | _string (M←(nest-parent-front) _*) @_]⧽
   {(M): (), (C): ($tr C0 ()), P: (↑C0 ↑P)})
 
-(backmap P←⧼C←[_string | _string (M←(surround-parent-back) _*) @_]⧽
+(backmap P←⧼C←[_string | _string (M←(nest-parent-back) _*) @_]⧽
   {(M): (), (C): ($tr C0 ()), P: (↑P ↑C0)})
+
+(backmap P←⧼[_string | _string (M←(unnest-parent) _*) @_]⧽
+  {(M): (), (P): ↑P})
 
 (backmap ⧼behind_ [lhs←"" | "" (M←(edit-behind) _*) @_]⧽
  {(M): (), (behind): (), lhs: (string →behind)})
@@ -176,6 +214,75 @@
 
 (backmap [_* ⧼C←[_string | _string (M←(escape-back-below) _*) @_]⧽ _* ⭳below]
  {(M): (), below: ↑C0, (C): ($tr C0 ())})
+
+(backmap ⧼behind_ [_string | _string (M←(dup-behind) _*) @_]⧽
+  {(M): (), (behind): (↑behind ↑behind)})
+
+(backmap ⧼[_string | _string (M←(dup-ahead) _*) @_] ahead_⧽
+  {(M): (), (ahead): (↑ahead ↑ahead)})
+
+(backmap ⧼a_ b_ [_string | _string (M←(swap-behind) _*) @_]⧽
+  {(M): (), a: ↑b, b: ↑a})
+
+(backmap ⧼[_string | _string (M←(swap-ahead) _*) @_] a_ b_⧽
+  {(M): (), a: ↑b, b: ↑a})
+
+(backmap P←(behind_* C←[_string | _string (M←(split) _*) @_] ahead_*)
+  {(M): (), (P): (↑behind ↑C ↑ahead)})
+
+(backmap ⧼[_* ⭳mid ⭳rhs] C←[_string | _string (M←(join) _*) @_] ahead←(_*)⧽
+  {(M): (), mid: ↑C, (rhs): ↑ahead, (C): (), (ahead): ()})
+
+(backmap ⧼behind_ (_string | _string (M←(copy-behind) _*) @_ ¦ _ clipboard: (%optional () clipboard_))⧽
+  {(M): (), clipboard: (copy →behind)})
+
+(backmap ⧼behind_ (_string | _string (M←(cut-behind) _*) @_ ¦ _ clipboard: (%optional () clipboard_))⧽
+  {(M): (), (behind): (), clipboard: (cut →behind)})
+
+(backmap ⧼(_string | _string (M←(copy-ahead) _*) @_ ¦ _ clipboard: (%optional () clipboard_)) ahead_⧽
+  {(M): (), clipboard: (copy →ahead)})
+
+(backmap ⧼(_string | _string (M←(cut-ahead) _*) @_ ¦ _ clipboard: (%optional () clipboard_)) ahead_⧽
+  {(M): (), (ahead): (), clipboard: (cut →ahead)})
+
+(backmap C←(_string | _string (M←(paste-behind) _*) @_ ¦ _ clipboard: (copy term_))
+  {(M): (), (C): (↑term ↑C)})
+
+(backmap C←(_string | _string (M←(paste-ahead) _*) @_ ¦ _ clipboard: (copy term_))
+  {(M): (), (C): (↑C ↑term)})
+
+(backmap C←(_string | _string (M←(paste-behind) _*) @_ ¦ _ clipboard: clipboard←(cut term_))
+  {(M): (), (C): (↑term ↑C), (clipboard): ()})
+
+(backmap C←(_string | _string (M←(paste-ahead) _*) @_ ¦ _ clipboard: clipboard←(cut term_))
+  {(M): (), (C): (↑C ↑term), (clipboard): ()})
+
+(backmap (_string | _string (M←(clear-clipboard) _*) @_ ¦ _ clipboard: clipboard_)
+  {(M): (), (clipboard): ()})
+
+(backmap ⧼behind_ C←[_string | _string (M←(group-behind-front) _*) @_]⧽
+  {(M): (), (behind): (), C: (↑C ↑behind)})
+
+(backmap ⧼P←(behind_ C←[_string | _string (M←(ungroup-behind-front) _*) @_])⧽
+  {(M): (), behind: ↑C, C: ↑behind, (P): ↑P})
+
+(backmap ⧼C←[_string | _string (M←(group-ahead-back) _*) @_] ahead_⧽
+  {(M): (), (ahead): (), C: (↑ahead ↑C)})
+
+(backmap ⧼P←(C←[_string | _string (M←(ungroup-ahead-back) _*) @_] ahead_)⧽
+  {(M): (), ahead: ↑C, C: ↑ahead, (P): ↑P})
+
+(backmap ⧼above_ [C←[_string | _string (M←(capture-above-ahead) _*) @_] _*]⧽
+  {(M): (), (above): (), (C): (↑C ↑above)})
+
+(backmap ⧼[_* C←[_string | _string (M←(capture-below-behind) _*) @_]] below_⧽
+  {(M): (), (below): (), (C): (↑below ↑C)})
+
+(backmap ⧼P←[[_string | _string (M←(release-ahead-above) _*) @_] ahead_ _*]⧽
+  {(M): (), (ahead): ($tr ahead0 ()), (P): (↑ahead0 ↑P)})
+
+(backmap ⧼P←[_* behind_ [_string | _string (M←(release-behind-below) _*) @_]]⧽
+  {(M): (), (behind): ($tr behind0 ()), (P): (↑P ↑behind0)})
 
 ;; Expellation
 ;;

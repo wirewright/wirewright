@@ -2967,6 +2967,20 @@
      {xs: ({x: a, path: ((value 0))}
            {x: b, path: ((value 3))}
            {x: c, path: ((value 5))})}))
+
+;; We should be able to delete pairs in backmaps like we are able to
+;; get rid of items -- through (...): (). There is currently no support
+;; for (...): (k1: ... k2: ...) etc. since that would raise questions
+;; about order.
+(backmap ({x: x_ y: y_} {(x): ()}) 
+  (= (x: 100 y: 200) (y: 200)))
+
+(backmap ((_* ¦ _ x: x_) {(x): ()}) 
+  (= (x: 100) ())
+  (= (x: 100 y: 200) (y: 200))
+  (= (x: 100 y: 200 z: 300) (y: 200 z: 300))
+  (= (a x: 100 y: 200 z: 300) (a y: 200 z: 300))
+  (= (a b c x: 100 y: 200 z: 300) (a b c y: 200 z: 300)))
   
 ;; TODO: Bounds
 

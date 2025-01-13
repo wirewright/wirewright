@@ -33,10 +33,31 @@ Term.case(test) do
             puts ML.display(edit)
             puts ML.display(root0)
             puts ML.display(root)
-            raise "replay failed"
+            puts "Replay failed. Show step-by-step? y/".colorize.red
+            unless gets == "y"
+              abort
+            end
+            debug(root0, motions)
+            abort
           end
         end
       end
+    end
+  end
+end
+
+def debug(root0, motions)
+  puts "Debug"
+  puts ML.display(root0)
+  gets
+  dbgroot = root0
+  motions.items.each do |motion|
+    dbgroot = subsume(dbgroot, motion, Term.of(:edge, :user))
+    puts ML.display(dbgroot)
+    gets
+    dbgroot = rewrite(dbgroot, REWRITER) do |im|
+      puts ML.display(im)
+      gets
     end
   end
 end
@@ -71,19 +92,7 @@ while true
     puts ML.display(motions)
     next
   elsif command == ".d"
-    puts "Debug"
-    puts ML.display(root0)
-    gets
-    dbgroot = root0
-    motions.items.each do |motion|
-      dbgroot = subsume(dbgroot, motion, Term.of(:edge, :user))
-      puts ML.display(dbgroot)
-      gets
-      dbgroot = rewrite(dbgroot, REWRITER) do |im|
-        puts ML.display(im)
-        gets
-      end
-    end
+    debug(root0, motions)
     next
   end
 
