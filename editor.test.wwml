@@ -605,4 +605,257 @@
     (button "+ Increment" @actions)
     (button "- Decrement" @actions)
     (button "0 Reset" @actions)
-    ("" | "" () @user)))))
+    ("" | "" () @user))))
+ (after
+  ((type "hello")
+   (type "(")
+   (key C-backspace)
+   (type "hello")
+   (key left)
+   (key left)
+   (type "(")
+   (key C-backspace)
+   (type "\"Hello")
+   (type "(")
+   (key backspace)
+   (type " ")
+   (type "(")
+   (type "\""))
+  ((row
+    (button "+ Increment" @actions)
+    (button "- Decrement" @actions)
+    (button "0 Reset" @actions)
+    hello
+    hel
+    "Hello ("
+    ("" | "" () @user)
+    lo)))
+ (after
+  ((type "\"")
+   (key home)
+   (type "(")
+   (key end)
+   (type ")")
+   (type "\"")
+   (type ")"))
+  ((row
+    (button "+ Increment" @actions)
+    (button "- Decrement" @actions)
+    (button "0 Reset" @actions)
+    hello
+    hel
+    "Hello ("
+    (")")
+    ("" | "" () @user)
+    lo)))
+ (after
+  ((key C-delete)
+   (key C-backspace)
+   (key C-backspace)
+   (key C-backspace)
+   (key C-backspace))
+  ((row
+    (button "+ Increment" @actions)
+    (button "- Decrement" @actions)
+    (button "0 Reset" @actions)
+    ("" | "" () @user))))
+ (after
+  ((type "{")
+   (type "x: 10")
+   (type "}")
+   (type "x: 10")
+   (type "}")
+   (key home)
+   (type "{")
+   (key end)
+   (type "{")
+   (key C-backspace)
+   (key C-backspace)
+   (key C-backspace))
+  ((row
+    (button "+ Increment" @actions)
+    (button "- Decrement" @actions)
+    (button "0 Reset" @actions)
+    ("" | "" () @user))))
+ (after
+  ((key left) (type "style") (key enter))
+  ((row
+    (button "+ Increment" @actions)
+    (button "- Decrement" @actions)
+    (button "0 Reset" @actions style ("" | "" () @user)))))
+ (after
+  ((type ":") (type "\"") (type "text-sm") (type "\""))
+  ((row
+    (button "+ Increment" @actions)
+    (button "- Decrement" @actions)
+    (button
+     "0 Reset"
+     @actions
+     style: ("\"text-sm\"" | "" () @user)))))
+ (after
+  ((key escape))
+  ((row
+    (button "+ Increment" @actions)
+    (button "- Decrement" @actions)
+    (button
+     "0 Reset"
+     @actions
+     ("" | "" () @user)
+     style: "text-sm"))))
+ (after
+  ((key home)
+   (key left)
+   (key left)
+   (type "style")
+   (type ":")
+   (type "\"text-lg")
+   (key escape))
+  ((row
+    (button "+ Increment" @actions)
+    (button
+     "- Decrement"
+     @actions
+     style: ("\"text-lg" | "" () @user))
+    (button "0 Reset" @actions style: "text-sm"))))
+ (after
+  ((type "\"") (key home))
+  ((row
+    (button "+ Increment" @actions)
+    (button
+     "- Decrement"
+     @actions
+     style: ("" | "\"text-lg\"" () @user))
+    (button "0 Reset" @actions style: "text-sm"))))
+ (after
+  ((key escape))
+  ((row
+    (button "+ Increment" @actions)
+    (button
+     "- Decrement"
+     @actions
+     ("" | "" () @user)
+     style: "text-lg")
+    (button "0 Reset" @actions style: "text-sm"))))
+ (after
+  ((key home)
+   (key left)
+   (key left)
+   (type "style")
+   (type ":")
+   (type "\"text-xl\"")
+   (key left)
+   (key left)
+   (key left)
+   (key escape))
+  ((row
+    (button
+     "+ Increment"
+     @actions
+     ("" | "" () @user)
+     style: "text-xl")
+    (button "- Decrement" @actions style: "text-lg")
+    (button "0 Reset" @actions style: "text-sm"))))
+ (after
+  ((type "qux")
+   (type ":")
+   (type "\"hello")
+   (key left)
+   (key left)
+   (key escape))
+  ((row
+    (button
+     "+ Increment"
+     @actions
+     qux: ("\"hello" | "" () @user)
+     style: "text-xl")
+    (button "- Decrement" @actions style: "text-lg")
+    (button "0 Reset" @actions style: "text-sm"))))
+ (after
+  ((key C-backspace) (key C-backspace))
+  ((row
+    (button
+     "+ Increment"
+     @actions
+     qux: ("" | "" () @user)
+     style: "text-xl")
+    (button "- Decrement" @actions style: "text-lg")
+    (button "0 Reset" @actions style: "text-sm"))))
+ (after
+  ((key escape))
+  ((row
+    (button
+     "+ Increment"
+     @actions
+     ("" | "" () @user)
+     style: "text-xl")
+    (button "- Decrement" @actions style: "text-lg")
+    (button "0 Reset" @actions style: "text-sm"))))
+ (after
+  ((type "xyzzy")
+   (type ":")
+   (type "(")
+   (type "+")
+   (type " ")
+   (type "1")
+   (type " ")
+   (type "2")
+   (type " "))
+  ((row
+    (button
+     "+ Increment"
+     @actions
+     xyzzy: (+ 1 2 ("" | "" () @user))
+     style: "text-xl")
+    (button "- Decrement" @actions style: "text-lg")
+    (button "0 Reset" @actions style: "text-sm"))))
+ (after
+  ((key escape))
+  ((row
+    (button
+     "+ Increment"
+     @actions
+     ("" | "" () @user)
+     xyzzy: (+ 1 2)
+     style: "text-xl")
+    (button "- Decrement" @actions style: "text-lg")
+    (button "0 Reset" @actions style: "text-sm"))))
+ (after
+  ((type "xyzzy") (type ":"))
+  ((row
+    (button
+     "+ Increment"
+     @actions
+     xyzzy: (+ 1 2 ("" | "" () @user))
+     style: "text-xl")
+    (button "- Decrement" @actions style: "text-lg")
+    (button "0 Reset" @actions style: "text-sm"))))
+ (after
+  ((key up) (key escape))
+  ((row
+    (button
+     "+ Increment"
+     @actions
+     ("" | "" () @user)
+     xyzzy: (+ 1 2)
+     style: "text-xl")
+    (button "- Decrement" @actions style: "text-lg")
+    (button "0 Reset" @actions style: "text-sm"))))
+ (after
+  ((type "qux")
+   (type ":")
+   (type "@foo")
+   (key escape)
+   (type "qux")
+   (type ":")
+   (type "ze")
+   (key escape))
+  ((row
+    (button
+     "+ Increment"
+     @actions
+     ("" | "" () @user)
+     xyzzy: (+ 1 2)
+     qux: @fooze
+     style: "text-xl")
+    (button "- Decrement" @actions style: "text-lg")
+    (button "0 Reset" @actions style: "text-sm")))))

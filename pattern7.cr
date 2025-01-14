@@ -4609,17 +4609,9 @@ module ::Ww::Term::M1
           WalkDecision::Continue
         end
 
-        # %all takes max specificity of its offshoots.
+        # %all sums the specificity of its offshoots.
         matchpi %[((%literal %all) offshoots_+)] do
-          literals1, repeats1, restrictions1 = offshoots.items.max_of do |branch|
-            specificity(branch, toplevel: false)
-          end
-
-          literals += literals1
-          repeats += repeats1
-          restrictions += restrictions1
-
-          WalkDecision::Skip
+          WalkDecision::Continue
         end
 
         # %any° takes min specificity of its branches.

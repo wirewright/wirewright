@@ -3033,12 +3033,13 @@
          (%any° (%number 0 < _ < 10) 100)) ;; %number wins
   (level (%any° 100 200) (%any° (%any 0 1 2) (%any 3 4 5)))) ;; both win
 
-;; %all takes maximum specificity of its branches
+;; %all takes sum of specificity of its branches
 (specificity
-  (level (%all _ _) (%all x_ _) (%all _ y_) (%all x_ y_)) ;; both win
-  (level (%all x_number y_) (%all x_ y_number) (%all x_number y_number)) ;; _number wins
-  (level (%all x_number (%number _ < 0))) ;; %number wins
-  (level (%all 0 x_) (%all (%any 0 1 2) x_))) ;; 0/%any wins
+  (level (%all _ _) (%all x_ _) (%all _ y_) (%all x_ y_))
+  (level (%all x_number y_) (%all x_ y_number))
+  (level (%all x_number y_number))
+  (level (%all x_number (%number _ < 0)))
+  (level (%all 0 x_) (%all (%any 0 1 2) x_)))
 
 (specificity
   (level [_string | _string (M←(type text_string) _*) @_])
@@ -3047,7 +3048,8 @@
 (specificity
   (level [_* ⭳back])
   (level @edge_))
- 
+
+
 ;; Head
 ;; Make sure pattern head is determined properly
 ;;

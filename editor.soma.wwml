@@ -32,11 +32,30 @@
 ;; Interpret (type)
 (backmap [_string | _string (M←(type text_string) _*) @_] {M: (append-left →text)})
 
-;; TODO: refine these
 (backmap [(%string nonempty) | "" (M←(type ch←(%any " " "\"" ")" "}" "]")) _*) @_]
   {(M): ((append-left →ch) (expel-left))})
 
+(backmap [_string | _string (M←(type "(") _*) @_]
+  {M: (expel ((nest-self)) ((append-left "(")))})
+
+(backmap [_string | _string (M←(type ch←(%any "[" "{")) _*) @_]
+  {(M): ((expel) (append-left →ch))})
+
 (backmap ["" | "" (M←(type "(") _*) @_] {M: (nest-self)})
+
+(backmap [(%string nonempty) | "" (M←(type ":") _*) @_]
+  {M: (expel-left ((enter-key-behind)) ())})
+
+(backmap ["" | "" (M←(type ":") _*) @_]
+  {M: (enter-key-behind)})
+
+;; (key escape) should expel + leave from pair if editing at top-level
+(backmap (_* ¦ (%entries° _ [_string | _string (M←(key escape) _*) @_]))
+  {M: (leave-pair)})
+
+;; ... or if editing inside a top-level dict
+(backmap (_* ¦ (%entries° _ ⧼[_string | _string (M←(key escape) _*) @_]⧽))
+  {M: (leave-pair)})
 
 ;; Interpret (key left) and (key right)
 (backmap [(%string nonempty) | _string (M←(key left) _*) @_] {M: (move-left)})
@@ -100,9 +119,7 @@
 (backmap [_string | _string (M←(key C-end) _*) @_] {M: (move-parent-back-ahead)})
 
 ;; Interpret (key enter).
-(backmap [(%string nonempty) | "" (M←(key enter) _*) @_] {M: (expel-left)})
-(backmap ["" | (%string nonempty) (M←(key enter) _*) @_] {M: (expel-right)})
-(backmap [(%string nonempty) | (%string nonempty) (M←(key enter) _*) @_] {M: (expel-mid)})
+(backmap [_string | _string (M←(key enter) _*) @_] {M: (expel)})
 
 ;; Interpret (key backspace) and (key delete).
 (backmap [(%string nonempty) | _string (M←(key backspace) _*) @_] {M: (delete-left)})
@@ -202,6 +219,27 @@
 (backmap P←⧼[_string | _string (M←(unnest-parent) _*) @_]⧽
   {(M): (), (P): ↑P})
 
+;; (edit), (edit-behind), and (edit-ahead) 
+
+(backmap C←["" | "" ((m←edit [_* ⭳target]) _*) @_]
+  {m: edit/1, target: ↑C})
+
+(backmap C←["" | "" ((m←edit/1 [_* ["" | "" (M_ _*) @_]]) _*) @_]
+  {m: edit/2, (M): ()})
+
+(backmap C←["" | "" ((m←edit/2 D_dict) _*) @_]
+  {C: →D})
+
+(backmap [lhs←"" | "" (M←(edit @term_) _*) @_]
+  {(M): (), lhs: (string →term)})
+
+;; FIXME: why is this run before edit [] above?
+;; (backmap [lhs←"" | "" (M←(edit term_) _*) @_]
+;;   {(M): (), lhs: (string →term)})
+
+(backmap [lhs←"" | "" (M←(edit (%any° _boolean _symbol _string _number)) _*) @_]
+  {(M): (), lhs: (string →term)})
+
 (backmap ⧼behind_ [lhs←"" | "" (M←(edit-behind) _*) @_]⧽
   {(M): (), (behind): (), lhs: (string →behind)})
 
@@ -217,10 +255,10 @@
 ;; If the user attempts to edit an edge, show them the pretty-printed
 ;; version of the edge rather than its underlying dict implementation.
 (backmap ⧼@edge_ C←[lhs←"" | "" (M←(edit-behind) _*) @_]⧽
- {(M): (), (edge): (), lhs: (string →edge)})
+  {(M): (), (edge): (), lhs: (string →edge)})
 
 (backmap ⧼C←["" | rhs←"" (M←(edit-ahead) _*) @_] @edge_⧽
- {(M): (), (edge): (), rhs: (string →edge)})
+  {(M): (), (edge): (), rhs: (string →edge)})
 
 (backmap ⧼behind_ C←[_string | _string (M←(move-behind) _*) @_]⧽
   {(M): (), C: ↑behind, behind: ↑C})
@@ -346,42 +384,94 @@
 (backmap ⧼P←⧼[_string | _string (M←(move-parent-into-ahead) _*) @_]⧽ (⭳target _* ¦ _)⧽
   {(M): (), (P): (), target: ↑P})
 
+;; NOTE: we create two bindings to behind here so that %value doesn't hear us
+;; setting behind0 (the key) -- it is not our intent here to change the key.
+
+;; FIXME: this fails randomly !!! Probably backmap trie doesn't support multiple lets to the same thing
+(backmap (%all ⧼behind0←behind1_ C←["" | "" (M←(enter-key-behind) _*) @_]⧽
+               (%value behind1 v_))
+  {M: (edit →v), (C): (), (behind0): (), v: ↑C})
+
+;; TODO: currently there is no better way to do this other than with %new.
+;; I guess some sort of %-pair overload asks for itself very much! Because
+;; %new is really really expensive. I also don't like these %optional hacks.
+;; All this crap is trying to simulate what's simply (%-pair v) which we'll
+;; be able to abbreviate even more tersely as -v_ if in the pairspart.
+(backmap (%all ⧼behind_ C←["" | "" (M←(enter-key-behind) _*) @_]⧽
+               (%new (_* ¦ _ behind_: (%optional () v_))))
+  {(M): (), (behind): (), (C): (), v: ↑C})
+
 ;; Expellation
 ;;
 ;; Expellation involves parsing left/right-hand sides (or both). If that's
 ;; successful the term is expelled to the left or to the right of the cursor,
 ;; and the corresponding side is cleared.
-(backmap [lhs_string | _string (M←(expel-left) _*) @_]
-  {(M): ((ml →lhs) (expel-left/finalize))})
 
-(backmap [_* ⭳pred [lhs_string | _string (M0←(ml/ok term_) M1←(expel-left/finalize) _*) @_] _*]
-  {(M0): (), (M1): (), lhs: "", pred: →term})
+;; Leave-pair is a variant of expel. It refuses to leave if expellation fails.
+;; It also has just one variant, one similar to expel-left. The others all map
+;; to expel-left.
 
-(backmap [_string | _string (M0←(ml/err) M1←(expel-left/finalize) _*) @_]
-  {(M0): (), (M1): ()})
+;; Leave pair with empty cursor should remove the pair and leave.
+(backmap (_* ⭳target ¦ (%entries° _ C←["" | "" (M←(leave-pair) _*) @_]))
+  {(M): (), target: ↑C, (C): ()})
 
-(backmap [_string | rhs_string (M←(expel-right) _*) @_]
-  {(M): ((ml →rhs) (expel-right/finalize))})
+(backmap (_* ⭳target ¦ (%entries° _ ⧼C←["" | "" (M←(leave-pair) _*) @_]⧽))
+  {(M): (), target: ↑C0, (C): ($tr C0 ())})
 
-(backmap [_* [_string | rhs_string (M0←(ml/ok term_) M1←(expel-right/finalize) _*) @_] ⭳succ _*]
-  {(M0): (), (M1): (), rhs: "", succ: →term})
+(backmap ["" | (%string nonempty) (M←(leave-pair) _*) @_]
+  {(M): ((move-back-right) (leave-pair))})
 
-(backmap [_string | _string (M0←(ml/err) M1←(expel-right/finalize) _*) @_]
-  {(M0): (), (M1): ()})
+(backmap [(%string nonempty) | (%string nonempty) (M←(leave-pair) _*) @_]
+  {(M): ((move-back-right) (leave-pair))})
 
-(backmap [lhs_string | _string (M←(expel-mid) _*) @_]
-  {(M): ((ml →lhs) (expel-mid/r))})
+(backmap [lhs←(%string nonempty) | "" (M←(leave-pair) _*) @_]
+  {M: (leave-pair (ml →lhs))})
 
-(backmap [_string | rhs_string ((ml/ok _) M←(expel-mid/r) _*) @_]
-  {(M): ((ml →rhs) (expel-mid/finalize))})
+(backmap (_* ⭳target ¦ (%entries° _ C←[lhs_string | "" (M←(leave-pair (ml/ok term_)) _*) @_]))
+  {(M): (), lhs: "", target: ↑C, C: ↑term})
 
-(backmap [_string | _string (M0←(ml/err) M1←(expel-mid/r) _*) @_]
-  {(M0): (), (M1): ()})
+(backmap [_string | _string (M←(leave-pair (ml/err)) _*) @_]
+  {(M): ()})
 
-(backmap [_* ⭳pred [lhs_string | rhs_string (M0←(ml/ok lterm_) M1←(ml/ok rterm_) M2←(expel-mid/finalize) _*) @_] ⭳succ _*]
-  {(M0): (), (M1): (), (M2): (), lhs: "", rhs: "", pred: →lterm, succ: →rterm})
+;; Expand (expel) into (expel () ()), similarly for (expel-left), ...
+(backmap [_string | _string (M←(expel) _*) @_] {M: (expel () ())})
+(backmap [_string | _string (M←(expel-left) _*) @_] {M: (expel-left () ())})
+(backmap [_string | _string (M←(expel-right) _*) @_] {M: (expel-right () ())})
+(backmap [_string | _string (M←(expel-mid) _*) @_] {M: (expel-mid () ())})
 
-(backmap [_string | _string (M0←(ml/ok _) M1←(ml/err) M2←(expel-mid/finalize) _*) @_]
-  {(M0): (), (M1): (), (M2): ()})
+;; Resolve (expel _ _) into a more concrete expel.
+(backmap [(%string nonempty) | "" ((m←expel (_*) (_*)) _*) @_] {m: expel-left})
+(backmap ["" | (%string nonempty) ((m←expel (_*) (_*)) _*) @_] {m: expel-right})
+(backmap [(%string nonempty) | (%string nonempty) ((m←expel (_*) (_*)) _*) @_] {m: expel-mid})
+
+;; (expel-left)
+(backmap [lhs_string | _string (M←(expel-left (ok_*) (err_*)) _*) @_]
+  {M: (expel-left (ml →lhs) ↑ok ↑err)})
+
+(backmap [_* ⭳pred [lhs_string | _string (M←(expel-left (ml/ok term_) (ok_*) (_*)) _*) @_] _*]
+  {(M): ↑ok, lhs: "", pred: →term})
+
+(backmap [_string | _string (M←(expel-left (ml/err) (_*) (err_*)) _*) @_]
+  {(M): ↑err})
+
+;; (expel-right)
+(backmap [_string | rhs_string (M←(expel-right (ok_*) (err_*)) _*) @_]
+  {M: (expel-right (ml →rhs) ↑ok ↑err)})
+
+(backmap [_* [_string | rhs_string (M←(expel-right (ml/ok term_) (ok_*) (_*)) _*) @_] ⭳succ _*]
+  {(M): ↑ok, rhs: "", succ: →term})
+
+(backmap [_string | _string (M←(expel-right (ml/err) (_*) (err_*)) _*) @_]
+  {(M): ↑err})
+
+;; (expel-mid)
+(backmap [lhs_string | rhs_string (M←(expel-mid (ok_*) (err_*)) _*) @_]
+  {M: (expel-mid (ml →lhs) (ml →rhs) ↑ok ↑err)})
+
+(backmap [_* ⭳pred [lhs_string | rhs_string (M←(expel-mid (ml/ok lterm_) (ml/ok rterm_) (ok_*) (_*)) _*) @_] ⭳succ _*]
+  {(M): ↑ok, lhs: "", rhs: "", pred: →lterm, succ: →rterm})
+
+(backmap [_string | _string (M←(expel-mid _ _ (_*) (err_*)) _*) @_]
+  {(M): ↑err})
 
 
