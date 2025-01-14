@@ -2,19 +2,6 @@ require "./libtermbox2"
 require "./wirewright"
 require "./foo"
 
-# TODO: a tui
-
-SELECTOR = ML.parse1(%[(%any° (rule pattern_ template_) (backmap pattern_ backspec_) (-rule pattern←negative_))])
-BASE = ML.parse(File.read("#{__DIR__}/editor.soma.wwml"))
-RULESET = Ruleset.select(SELECTOR, BASE, applier: Applier.new(->(term : Term) { Offspring::One.new(rec(term)) }))
-REWRITER = editr(RULESET)
-
-def apply(root : Term, motion : Term) : Term
-  pipe(root,
-    subsume(motion, Term.of(:edge, :user)),
-    rewrite(REWRITER, cap: 64))
-end
-
 test = ML.parse1(File.read("./editor.test.wwml"))
 
 puts "Replay editor.test.wwml"

@@ -557,6 +557,19 @@ def editr(ruleset)
   Rewriter.relr(CURSORP, Rewriter.absr(ruleset), ascent: 2u32)
 end
 
+SELECTOR = ML.parse1(%[(%any° (rule pattern_ template_) (backmap pattern_ backspec_) (-rule pattern←negative_))])
+BASE = ML.parse(File.read("#{__DIR__}/editor.soma.wwml"))
+RULESET = Ruleset.select(SELECTOR, BASE, applier: Applier.new(->(term : Term) { Offspring::One.new(rec(term)) }))
+REWRITER = editr(RULESET)
+
+def apply(root : Term, motion : Term) : Term
+  pipe(root,
+    subsume(motion, Term.of(:edge, :user)),
+    rewrite(REWRITER, cap: 64))
+end
+
+
+
 prog = ML.parse(<<-WWML
 ("hello" | "" ((type " ")) @user)
 ("" | "world" ((key enter)) @user)
@@ -765,3 +778,6 @@ WWML
 # relr over a cursor:
 #
 # (relr [_string | _string (motions_+) @pin_])
+
+# Plan:
+# TODO: work on TUI for pattern6_test and editor test. An editor playground.

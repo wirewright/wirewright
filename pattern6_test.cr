@@ -1,6 +1,7 @@
 require "./wirewright"
+require "./foo"
 
-CASES  = File.read("#{__DIR__}/patterns.test.wwml")
+CASES  = File.read("#{__DIR__}/patterns.test.wwml") + "\n" + File.read("#{__DIR__}/editor.test.wwml")
 PEOPLE = Term.of(JSON.parse(File.read("#{__DIR__}/data/people.json")))
 
 class Statistics
@@ -32,7 +33,7 @@ class Statistics
   end
 end
 
-def catch(ctx, pattern)
+def track(ctx, pattern)
   failures0 = ctx.failures.size
 
   begin
@@ -79,7 +80,7 @@ def process(queue, testcase, ctx)
     end
 
     matchpi %[(backmap rule←(pattern_ backdict_) body_*)] do
-      catch(ctx, rule) do
+      track(ctx, rule) do
         first = true
         match = ->(matchee : Term) do
           begin
@@ -114,7 +115,7 @@ def process(queue, testcase, ctx)
     end
 
     matchpi %[(pattern pattern_ body_*)] do
-      catch(ctx, pattern) do
+      track(ctx, pattern) do
         first = true
         match = ->(matchee : Term) do
           begin
@@ -169,7 +170,7 @@ def process(queue, testcase, ctx)
     end
 
     matchpi %[(specificity levels_*)] do
-      catch(ctx, testcase) do
+      track(ctx, testcase) do
         patterns = {} of Term::M1::Specificity => Set(Term)
 
         specificity0 = nil
@@ -215,7 +216,7 @@ def process(queue, testcase, ctx)
           matchpi %[(- blacklist_*)] do
             ctx.stats.account
 
-            catch(ctx, exp) do
+            track(ctx, exp) do
               blacklist.items.each do |item|
                 normitem = Term::M1.normal(item)
                 next unless head = ctx.stats.run { Term::M1.head?(normitem) }
@@ -228,7 +229,7 @@ def process(queue, testcase, ctx)
           matchpi %[(of lhs_ rhs_)] do
             ctx.stats.account
 
-            catch(ctx, exp) do
+            track(ctx, exp) do
               normlhs = Term::M1.normal(lhs)
               head = ctx.stats.run { Term::M1.head?(normlhs) }
 
@@ -237,6 +238,29 @@ def process(queue, testcase, ctx)
               elsif head != rhs
                 ctx.failures << Term.of(:"mismatch/head", lhs, :==, rhs, :GOT, head)
               end
+            end
+          end
+        end
+      end
+    end
+
+    matchpi %[(editor initial_dict edits_*)] do
+      root = initial
+
+      edits.items.each do |edit|
+        Term.case(edit) do
+          matchpi %[(after (motions_+) snapshot_)] do
+            ctx.stats.account
+            track(ctx, edit) do
+              ctx.stats.run do
+                motions.items.each do |motion|
+                  root = apply(root, motion)
+                end
+              end
+            end
+            unless root == snapshot
+              ctx.failures << Term.of(:"mismatch/editor", root, :==, snapshot, :MOTIONS, motions)
+              return # The whole test case should fail.
             end
           end
         end

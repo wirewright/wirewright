@@ -903,7 +903,7 @@ end
 # Additionally, we must use u32 (or even u16) array indices for operator nodes rather
 # than a pointer. Thus an operator pool.
 module ::Ww::Term::M1::Operator
-  alias Any = Pass | Num | Sym | Boolean | Dict | Literal | Capture | Itemspart | Partition | EdgeUntyped | EdgeTyped | Choices | EitherSource | Keypool | Span | Tally | Bin | Both | Not | Layer | ScanFirst | ScanSource | ScanAll | ScanAllIsolated | DfsFirst | DfsSource | DfsAllIsolated | DfsAll | BfsFirst | BfsAllIsolated | BfsAll | PairRequired | PairOptional | PairAbsent | PairAbsentOrBad | PairValue | EntriesFirst | EntriesSource | EntriesAllIsolated | EntriesAll | Str | New | Keypath
+  alias Any = Pass | Num | Sym | Boolean | Dict | Literal | Capture | Itemspart | Partition | EdgeUntyped | EdgeTyped | Choices | EitherSource | Keypool | Span | Tally | Bin | Both | Not | Layer | ScanFirst | ScanSource | ScanAll | ScanAllIsolated | DfsFirst | DfsSource | DfsAllIsolated | DfsAll | BfsFirst | BfsAllIsolated | BfsAll | PairRequired | PairOptional | PairAbsent | PairAbsentKeypath | NegativePair | NegativePairKeypath | Value | NegativeValue | NegativeValueKeypath | EntriesFirst | EntriesSource | EntriesAllIsolated | EntriesAll | Str | New | Keypath
 
   alias Bin = Add | Sub | Mul | Div | Tdiv | Mod | Pow | Map
 
@@ -995,9 +995,16 @@ module ::Ww::Term::M1::Operator
 
   defcase PairRequired, key : Term, value : Any
   defcase PairOptional, key : Term, default : Term, value : Any
+
   defcase PairAbsent, key : Term
-  defcase PairAbsentOrBad, key : Term, good : Any
-  defcase PairValue, capture : Term, tail : Any
+  defcase PairAbsentKeypath, key : Term, name : Term
+
+  defcase NegativePair, key : Term, positive : Any
+  defcase NegativePairKeypath, key : Term, positive : Any, name : Term
+
+  defcase Value, capture : Term, tail : Any
+  defcase NegativeValue, capture : Term
+  defcase NegativeValueKeypath, capture : Term, name : Term
 
   alias Dfs = DfsFirst | DfsSource | DfsAllIsolated | DfsAll
 
@@ -1248,13 +1255,17 @@ struct KeypathTip
     KeypathTip.new(@keypath.append({:ephemeral, key, default}))
   end
 
+  def ephv(key)
+    KeypathTip.new(@keypath.append({:ephemeral, key}))
+  end
+
   def dict
     @keypath
   end
 end
 
 module ::Ww::Term::M1::Operator
-  record Behind, env : Env::Type, domains : Term::Dict, keypath : KeypathTip? do
+  record Behind, env : Env::Type, domains : Term::Dict, antidomains : Term::Dict, keypath : KeypathTip? do
     def []?(k : Term)
       env[k]?
     end
@@ -1262,6 +1273,10 @@ module ::Ww::Term::M1::Operator
     def propose?(k : Term, v : Term) : Behind?
       if domain = domains[k]?
         return unless v.in?(domain)
+      end
+
+      if antidomain = antidomains[k]?
+        return if v.in?(antidomain)
       end
 
       return unless env1 = env.unify?(k, v)
@@ -1331,11 +1346,21 @@ module ::Ww::Term::M1::Operator
       copy_with(keypath: nil)
     end
 
-    def restrict(k, vs) : Behind
+    # Domain restriction: *k* must be one of *vs* (the latter is treated as a dict set).
+    def one_of(k, vs) : Behind
       if domain = domains[k]?
         copy_with(domains: domains.with(k, domain.xsect(vs)))
       else
         copy_with(domains: domains.with(k, vs))
+      end
+    end
+
+    # Domain restriction: *k* must **not** be one of *vs* (the latter is treated as a dict set).
+    def not(k, vs) : Behind
+      if antidomain = antidomains[k]?
+        copy_with(antidomains: antidomains.with(k, antidomain | vs))
+      else
+        copy_with(antidomains: antidomains.with(k, vs))
       end
     end
 
@@ -1344,27 +1369,16 @@ module ::Ww::Term::M1::Operator
     end
 
     def partition(selector)
-      lhs_dom = Term[]
-      lhs_env = env.transaction do |lhs_env|
-        lhs_dom = domains.transaction do |lhs_dom|
-          selector.each do |key|
-            lhs_env.without(key)
-            lhs_dom.without(key)
-          end
-        end
-      end
+      lenv = env &- selector
+      ldomains = domains &- selector
+      lantidomains = antidomains &- selector
 
-      rhs_dom = Term[]
-      rhs_env = Term::Dict.build do |rhs_env|
-        domains.transaction do |rhs_dom|
-          selector.each do |key|
-            rhs_env.with(key, env[key])
-            rhs_dom.with(key, domains[key]?)
-          end
-        end
-      end
+      renv = env.pluck(selector)
+      rdomains = domains.pluck(selector)
+      rantidomains = antidomains.pluck(selector)
 
-      {copy_with(env: lhs_env, domains: lhs_dom), copy_with(env: rhs_env, domains: rhs_dom)}
+      {copy_with(env: lenv, domains: ldomains, antidomains: lantidomains),
+       copy_with(env: renv, domains: rdomains, antidomains: rantidomains)}
     end
   end
 
@@ -1797,29 +1811,48 @@ module ::Ww::Term::M1::Operator
     match(env.keypath(&.ephv(op.key, op.default)), op.value, op.default, Ahead::Goto.new(kp0, Ahead.stackptr(ahead)))
   end
 
-  def match(env, op : PairAbsent, matchee : Term, ahead)
-    return Fb::Mismatch.new(env.env) unless dict = matchee.as_d?
-    return Fb::Mismatch.new(env.env) if op.key.in?(dict)
+  def match(behind0, op : PairAbsent | PairAbsentKeypath, matchee : Term, ahead0)
+    unless dict = matchee.as_d?
+      return Fb::Mismatch.new(behind0.env) 
+    end
 
-    ahead.call(env)
+    if op.key.in?(dict)
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    case op
+    in PairAbsent
+      behind1 = behind0
+    in PairAbsentKeypath
+      behind1 = behind0.mount(op.name, &.ephv(op.key))
+    end
+
+    ahead0.call(behind1)
   end
 
-  def match(env, op : PairAbsentOrBad, matchee : Term, ahead)
-    return Fb::Mismatch.new(env.env) unless dict = matchee.as_d?
-
-    unless v = dict[op.key]?
-      return ahead.call(env)
+  def match(behind0, op : NegativePair | NegativePairKeypath, matchee : Term, ahead0)
+    unless dict = matchee.as_d?
+      return Fb::Mismatch.new(behind0.env) 
     end
 
-    
-    case fb = match(env, op.good, v, ahead)
-    in Fb::Match
-      return Fb::Mismatch.new(env.env)
-    in Fb::Mismatch
-      ahead.call(env)
-    in Fb::Request
-      return fb
+    if v = dict[op.key]?
+      case fb = match(behind0, op.positive, v, ahead0)
+      in Fb::Match # Positive matches, we don't have to do anything.
+        return Fb::Mismatch.new(behind0.env)
+      in Fb::Mismatch
+      in Fb::Request
+        return fb
+      end
     end
+
+    case op
+    in NegativePair
+      behind1 = behind0
+    in NegativePairKeypath
+      behind1 = behind0.mount(op.name, &.ephv(op.key)) 
+    end
+
+    ahead0.call(behind1)
   end
 
   def search_spec(op : Scan)
@@ -1963,7 +1996,7 @@ module ::Ww::Term::M1::Operator
 
     op.exterior.each do |capture|
       domain1 = Env.domain(envs, capture)
-      behind1 = behind1.restrict(capture, domain1)
+      behind1 = behind1.one_of(capture, domain1)
     end
 
     captures = Env.captures(envs, selector: op.selector)
@@ -2007,7 +2040,7 @@ module ::Ww::Term::M1::Operator
     end
   end
 
-  def match(env, op : PairValue, matchee : Term, ahead)
+  def match(env, op : Value, matchee : Term, ahead)
     unless dict = matchee.as_d?
       return Fb::Mismatch.new(env.env)
     end
@@ -2024,7 +2057,7 @@ module ::Ww::Term::M1::Operator
       # If we do not know the value yet it might be the case that it can be learned
       # from the future. We declare its domain to be that of all keys from the matchee
       # dict, and run ahead without the value known, hoping to learn it.
-      case fb = ahead.call(env.restrict(op.capture, dict))
+      case fb = ahead.call(env.one_of(op.capture, dict))
       in Fb::MatchOne, Fb::Mismatch
         if key = fb.env[op.capture]?
           candidates << key
@@ -2063,6 +2096,67 @@ module ::Ww::Term::M1::Operator
     end
 
     Env.feedback(envs, fallback: env.env)
+  end
+
+  def match(behind0, op : NegativeValue | NegativeValueKeypath, matchee : Term, ahead0)
+    unless dict = matchee.as_d?
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    # If we know the key already, that's our fast path.
+    if key = behind0[op.capture]?
+      if key.in?(dict)
+        return Fb::Mismatch.new(behind0.env)
+      end
+
+      case op
+      in NegativeValue
+        behind1 = behind0
+      in NegativeValueKeypath
+        behind1 = behind0.mount(op.name, &.ephv(key))
+      end
+
+      return ahead0.call(behind1)
+    end
+
+    # Restrict the future's choices of candidates for the captures. Make
+    # sure they're NOT from one of dict's keys.
+    behind1 = behind0.not(op.capture, dict)
+
+    # Now ask the future for candidates.
+    case fb = ahead0.call(behind1)
+    in Fb::MatchOne, Fb::Mismatch
+      unless key = fb.env[op.capture]?
+        return Fb::Mismatch.new(behind0.env) 
+      end
+      candidates = Set{key}
+    in Fb::MatchMany
+      candidates = fb.envs.to_compact_set { |env| env[op.capture]? }
+    in Fb::Request
+      return fb
+    end
+
+    # Now that we have a nonempty set of candidates for keys, we can pick
+    # each one and pass them to the future again.
+    envs = [] of Env::Type
+
+    candidates.each do |key|
+      case op
+      in NegativeValue
+        behind2 = behind1
+      in NegativeValueKeypath
+        behind2 = behind1.mount(op.name, &.ephv(key))
+      end
+
+      fb = ahead0.call(behind2)
+      unless fb.is_a?(Fb::Response)
+        return fb
+      end
+
+      Env.append(envs, feedback: fb)
+    end
+
+    Env.feedback(envs, fallback: behind0.env)
   end
 
   # TODO: cache New like we cache Term.cases
@@ -2148,7 +2242,7 @@ module ::Ww::Term::M1::Operator
   end
 
   def feedback(env : Env::Type, op : Any, matchee : Term, *, keypaths : Bool = false) : Fb::Response
-    behind0 = Behind.new(env, domains: Term[], keypath: keypaths ? KeypathTip.new : nil)
+    behind0 = Behind.new(env, domains: Term[], antidomains: Term[], keypath: keypaths ? KeypathTip.new : nil)
 
     case fb = match(behind0, op, matchee, Ahead::MatchOne.new)
     in Fb::Response
@@ -2963,12 +3057,12 @@ module ::Ww::Term::M1
           Term.of(:"%pair/optional", key, default, M1.normal(body))
         end
 
-        match({:"%-pair"}, cue: :"%-pair") do
-          Term.of(:"%pair/absent", key)
+        match({:"%-", :positive_}, cue: :"%-") do |positive|
+          Term.of(:"%pair/negative", key, M1.normal(positive))
         end
 
-        match({:"%-pair", :good_}, cue: :"%-pair") do |good|
-          Term.of(:"%pair/absent", key, M1.normal(good))
+        match({:"%-", :positive_, :name_}, cue: :"%-") do |positive, name|
+          Term.of(:"%pair/negative", key, M1.normal(positive), name)
         end
 
         otherwise do
@@ -3328,6 +3422,14 @@ module ::Ww::Term::M1
         Term.of(:"%value", {:"%capture", capture}, normal(body))
       end
 
+      match({:"%-value", :capture_}, cue: :"%-value") do |capture|
+        Term.of(:"%-value", {:"%capture", capture})
+      end
+
+      match({:"%-value", :capture_, :name_}, cue: :"%-value") do |capture, name|
+        Term.of(:"%-value", {:"%capture", capture}, name)
+      end
+
       # %leaf is normal when its body is normal
       match({:"%partition", {:"%leaf°", :body_}, :opts_}, cue: :"%leaf°") do |body, opts|
         continue unless opts = Schemas::LeafUnbounded.validated?(opts)
@@ -3454,16 +3556,32 @@ module ::Ww::Term::M1
         Operator::PairOptional.new(key, default, operator(value, captures))
       end
 
-      match({:"%pair/absent", :key_}, cue: :"%pair/absent") do |key|
+      match({:"%pair/negative", :key_, {:"%pass"}}, cue: :"%pair/negative") do |key|
         Operator::PairAbsent.new(key)
       end
 
-      match({:"%pair/absent", :key_, :good_}, cue: :"%pair/absent") do |key, good|
-        Operator::PairAbsentOrBad.new(key, operator(good, captures))
+      match({:"%pair/negative", :key_, {:"%pass"}, :name_}, cue: :"%pair/negative") do |key, name|
+        Operator::PairAbsentKeypath.new(key, name)
+      end
+
+      match({:"%pair/negative", :key_, :positive_}, cue: :"%pair/negative") do |key, positive|
+        Operator::NegativePair.new(key, operator(positive, captures))
+      end
+
+      match({:"%pair/negative", :key_, :positive_, :name_}, cue: :"%pair/negative") do |key, positive, name|
+        Operator::NegativePairKeypath.new(key, operator(positive, captures), name)
       end
 
       match({:"%value", {:"%capture", :capture_}, :value_}, cue: :"%value") do |capture, value|
-        Operator::PairValue.new(capture, operator(value, captures))
+        Operator::Value.new(capture, operator(value, captures))
+      end
+
+      match({:"%-value", {:"%capture", :capture_}}, cue: :"%-value") do |capture|
+        Operator::NegativeValue.new(capture)
+      end
+
+      match({:"%-value", {:"%capture", :capture_}, :name_}, cue: :"%-value") do |capture, name|
+        Operator::NegativeValueKeypath.new(capture, name)
       end
 
       match({:"%pipe", {:+, :n_number}, :successor_}, cue: {:"%pipe", :"+"}) do |n, successor|
@@ -4058,8 +4176,19 @@ module ::Ww::Term::M1
       end
     end
 
-    # Applier must respond to `call(up0 : Term::Dict, up1 : Term::Dict, down : Term::Dict, my : Term::Dict, matchee0 : Term, body : Term) : {up1 : Term::Dict, matchee1 : Term}`
-    def call(up0, up1, down, my, matchee0, body)
+    # Applier must respond to `call(up0 : Term::Dict, up1 : Term::Dict, down : Term::Dict, my : Term::Dict, matchee0 : Term?, body : Term) : {up1 : Term::Dict, matchee1 : Term}`
+    #
+    # `matchee0` is absent (`nil`) in ephemeral pairs with no default value,
+    # as in the following backmap:
+    # 
+    # ```wwml
+    # {x: (%- _ x), y: y_} <> {x: ↑y}
+    # ```
+    #
+    # Running this backmap, `x` would be mounted as an ephemeral pair-value with
+    # no default value, and thus with no corresponding matchee. The transform `↑y`'s
+    # applier is then run with `nil` *matchee0*.
+    def call(up0, up1, down, my, matchee0 : Term?, body)
       Term.case(body) do
         matchpi %[($tr pred_ succ_)] do
           {up1.with(pred, matchee0), apply(up0, down, my, succ)}
@@ -4098,7 +4227,7 @@ module ::Ww::Term::M1
 
   # Layer-0 transform handles `self` props: applies transform and adds itself
   # to ctx1 (if requested).
-  def self.transform0(ctx0, ctx1, bot, applier, node, matchee)
+  def self.transform0(ctx0, ctx1, bot, applier, node, matchee : Term?)
     return ctx1, matchee unless props = node[:endpoint]?
     return ctx1, matchee unless body = props[:transform]?
 
@@ -4130,11 +4259,16 @@ module ::Ww::Term::M1
         matchpi %[(residue keys_*)] do
           matchee = matchee.transaction do |commit|
             residue0 = matchee &- keys.items
-            ctx1, residue1 = transform0(ctx0, ctx1, bot, applier, successor.as_d, residue0)
+            ctx1, residue1 = transform0(ctx0, ctx1, bot, applier, successor.as_d, Term.of(residue0))
             residue1 &-= keys.items
             residue0.each_entry { |k, _| commit.without(k) }
             residue1.each_entry { |k, v| commit.with(k, v) }
           end
+        end
+
+        matchpi %[(ephemeral key_)] do
+          ctx1, value1 = transform0(ctx0, ctx1, bot, applier, successor.as_d, nil)
+          matchee = matchee.with(key, value1)
         end
 
         matchpi %[(ephemeral key_ default_)] do
@@ -4211,7 +4345,7 @@ module ::Ww::Term::M1
           end
 
           values0 = matchee.items(b, e)
-          ctx1, values1 = transform0(ctx0, ctx1, bot, applier, successor.as_d, values0)
+          ctx1, values1 = transform0(ctx0, ctx1, bot, applier, successor.as_d, Term.of(values0))
 
           insertions ||= [] of {Term::Num, Term::Num, Term::Num, Term::Dict}
           index = insertions.bsearch_index { |(c_b, _, c_ord, _)| {-b, Term[0]} <= {-c_b, -c_ord} }
@@ -4231,7 +4365,7 @@ module ::Ww::Term::M1
           end
 
           values0 = matchee.items(b, e)
-          ctx1, values1 = transform0(ctx0, ctx1, bot, applier, successor.as_d, values0)
+          ctx1, values1 = transform0(ctx0, ctx1, bot, applier, successor.as_d, Term.of(values0))
 
           if successor[:endpoint, :plural]?
             values1 = values1.as_d? || Term[{values1}]

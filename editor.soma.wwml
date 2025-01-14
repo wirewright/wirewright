@@ -396,22 +396,16 @@
 
 ;; NOTE: we create two bindings to behind here so that %value doesn't hear us
 ;; setting behind0 (the key) -- it is not our intent here to change the key.
-(backmap (%all ⧼behind0←behind1_ C←["" | "" (M←(enter-key-behind) _*) @_]⧽
-               (%value behind1 v_))
+(backmap (%all ⧼behind0←behind1_ C←["" | "" (M←(enter-key-behind) _*) @_]⧽ (%value behind1 v_))
   {M: (edit →v), (C): (), (behind0): (), v: ↑C})
 
-;; TODO: currently there is no better way to do this other than with %new.
-;; I guess some sort of %-pair overload asks for itself very much! Because
-;; %new is really really expensive. I also don't like these %optional hacks.
-;; All this crap is trying to simulate what's simply (%-pair v) which we'll
-;; be able to abbreviate even more tersely as -v_ if in the pairspart.
-(backmap (%all ⧼behind_ C←["" | "" (M←(enter-key-behind) _*) @_]⧽
-               (%new (_* ¦ _ behind_: (%optional () v_))))
-  {(M): (), (behind): (), (C): (), v: ↑C})
+(backmap (%all ⧼k_ C←["" | "" (M←(enter-key-behind) _*) @_]⧽ (%-value k v0))
+  {(M): (), (k): (), (C): (), v0: ↑C})
 
-(backmap (%all ⧼k_ C←["" | "" (M←(pair-around) _*) @_] v_⧽
-               (%new (_* ¦ _ k_: (%optional () v0_))))
-  {(M): (), (k): (), (v): (), v0: ↑v})
+;; Reasons for the alias here are the same.
+(backmap (%all ⧼K←k_ C←["" | "" (M←(pair-around) _*) @_] V_⧽
+               (%any° (%value k v_) (%-value k v)))
+  {(M): (), (K): (), (V): (), v: ↑V})
 
 (backmap (_* ⭳target ¦ (%entry k_ F←[_string | _string (M←(delete-pair-self) _*) @_]))
   {(M): (), (k): (), (F): (), target: ↑F})

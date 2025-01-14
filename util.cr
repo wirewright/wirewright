@@ -220,6 +220,15 @@ module Enumerable(T)
     to_a.view
   end
 
+  def to_compact_set(& : T -> U?) : Set(U) forall U
+    set = Set(U).new
+    each do |object0|
+      next unless object1 = yield object0
+      set << object1
+    end
+    set
+  end
+
   def first_of?(& : T -> U?) : U? forall U
     each do |object0|
       next unless object1 = yield object0

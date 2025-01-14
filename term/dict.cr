@@ -993,9 +993,7 @@ module Ww
 
     def &-(other : Enumerable(Term)) : Dict
       transaction do |commit|
-        other.each do |key|
-          commit.without(key)
-        end
+        other.each { |key| commit.without(key) }
       end
     end
     
@@ -1026,13 +1024,14 @@ module Ww
     end
 
     # Dict set intersection. Values are ignored; only key presence/absence is taken
-    # into account.
-    def xsect(other : Dict) : Dict
+    # into account. May mix keys/values from `self`/*other* for additional speedup
+    # (set *mix* to `false` to disallow).
+    def xsect(other : Dict, *, mix = true) : Dict
       if empty? || other.empty?
         return Term[]
       end
 
-      if size < other.size
+      if size < other.size || !mix
         transaction do |commit|
           each_entry do |k, _|
             next if k.in?(other)

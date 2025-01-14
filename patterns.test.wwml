@@ -1805,19 +1805,19 @@
 
 ;; pair: absent
 (group
-  (pattern (a: (%-pair))
+  (pattern (a: (%- _))
     (+ {})
     (- {a: x} {b: x})) ;; etc...
 
-  (pattern (%layer _ a: (%-pair))
+  (pattern (%layer _ a: (%- _))
     (+ {b: x} {b: x, c: x})
     (- {a: x} {a: x, b: x})) ;; etc...
 
-  (pattern (a: (%-pair _number))
+  (pattern (a: (%- _number))
     (+ {} {a: x} {a: "hello"})
     (- {a: 100} {a: 1/3} {b: x})) ;; etc...
 
-  (pattern (%layer _ a: (%-pair _number))
+  (pattern (%layer _ a: (%- _number))
     (+ {} {a: x} {a: x, b: y} {a: "hello"} {b: x})
     (- {a: 100} {a: 100, b: y}))) ;; etc...
 
@@ -2112,6 +2112,105 @@
 (backmap ((%layer (+ a_ b_) x: (%optional qux x_), y: y_) {a: ($down y), b: ($down x)})
   (= (+ a b y: bar) (+ bar qux x: qux y: bar))
   (= (+ a b x: foo y: bar) (+ bar foo x: foo y: bar)))
+
+;; Negative pair absent replacement
+(backmap ((qux ¦ _ x: (%- _ x) y: (%- _number y)) {x: 100, y: 200})
+  (= (qux) (qux x: 100 y: 200))
+  (= (qux y: a) (qux x: 100 y: 200))
+  (= (qux z: 300) (qux x: 100 y: 200 z: 300))
+  (= (qux y: a z: 300) (qux x: 100 y: 200 z: 300))
+  (- (qux x: 100) (qux y: 200) (qux x: 100 y: 200)))
+
+;; Negative value for learned keys
+(backmap ((plug k_ x_ (%-value k v)) {v: ↑x})
+  (= (plug z qux {}) (plug z qux {z: qux}))
+  (= (plug z qux {x: a, y: b}) (plug z qux {x: a, y: b, z: qux}))
+  (- (plug x qux {x: a, y: b})))
+
+;; For all Ns that are not in dict set, find the corresponding suffix of a list.
+(group
+  (pattern (((%gap n_) suffix_*) (%-value n) (%item° n_))
+    (= (() () (0))
+       {n: 0, suffix: ()})
+    (= ((a) () (0 1))
+       {n: 0, suffix: (a)}
+       {n: 1, suffix: ()})
+    (= ((a) (0: true) (0 1))
+       {n: 1, suffix: ()})
+    (= ((a) (1: true) (0 1))
+       {n: 0, suffix: (a)})
+    (= ((a b c d e f g) (1: true 5: true) (0 1 3 5))
+       {n: 0, suffix: (a b c d e f g)}
+       {n: 3, suffix: (d e f g)})
+    (- (() (0: true) (0))
+       ((a) (0: true 1: true) (0 1))))
+
+  ;; Push %gap forward
+  (pattern ((%-value n) ((%gap n_) suffix_*) (%item° n_))
+    (= (() () (0))
+       {n: 0, suffix: ()})
+    (= (() (a) (0 1))
+       {n: 0, suffix: (a)}
+       {n: 1, suffix: ()})
+    (= ((0: true) (a) (0 1))
+       {n: 1, suffix: ()})
+    (= ((1: true) (a) (0 1))
+       {n: 0, suffix: (a)})
+    (= ((1: true 5: true) (a b c d e f g) (0 1 3 5))
+       {n: 0, suffix: (a b c d e f g)}
+       {n: 3, suffix: (d e f g)})
+    (- ((0: true) () (0))
+       ((0: true 1: true) (a) (0 1))))
+
+  (pattern ((%-value n) (%item° n_) ((%gap n_) suffix_*))
+    (= (() (0) ())
+       {n: 0, suffix: ()})
+    (= (() (0 1) (a))
+       {n: 0, suffix: (a)}
+       {n: 1, suffix: ()})
+    (= ((0: true) (0 1) (a))
+       {n: 1, suffix: ()})
+    (= ((1: true) (0 1) (a))
+       {n: 0, suffix: (a)})
+    (= ((1: true 5: true) (0 1 3 5) (a b c d e f g))
+       {n: 0, suffix: (a b c d e f g)}
+       {n: 3, suffix: (d e f g)})
+    (- ((0: true) (0) ())
+       ((0: true 1: true) (0 1) (a))))
+
+  ;; Push %value forward
+  (pattern (((%gap n_) suffix_*) (%item° n_) (%-value n)) 
+    (= (() (0) ())
+       {n: 0, suffix: ()})
+    (= ((a) (0 1) ())
+       {n: 0, suffix: (a)}
+       {n: 1, suffix: ()})
+    (= ((a) (0 1) (0: true))
+       {n: 1, suffix: ()})
+    (= ((a) (0 1) (1: true))
+       {n: 0, suffix: (a)})
+    (= ((a b c d e f g) (0 1 3 5) (1: true 5: true))
+       {n: 0, suffix: (a b c d e f g)}
+       {n: 3, suffix: (d e f g)})
+    (- (() (0) (0: true))
+       ((a) (0 1) (0: true 1: true))))
+
+  ;; Push %item° back
+  (pattern ((%item° n_) ((%gap n_) suffix_*) (%-value n))
+    (= ((0) () ())
+       {n: 0, suffix: ()})
+    (= ((0 1) (a) ())
+       {n: 0, suffix: (a)}
+       {n: 1, suffix: ()})
+    (= ((0 1) (a) (0: true))
+       {n: 1, suffix: ()})
+    (= ((0 1) (a) (1: true))
+       {n: 0, suffix: (a)})
+    (= ((0 1 3 5) (a b c d e f g) (1: true 5: true))
+       {n: 0, suffix: (a b c d e f g)}
+       {n: 3, suffix: (d e f g)})
+    (- ((0) () (0: true))
+       ((0 1) (a) (0: true 1: true)))))
 
 ;; Slot replacement
 (group
@@ -3125,10 +3224,9 @@
   ;; Slot in nested group
   (- (⭳x) (⭳x ⭳y) (⭳x a_) (⭳x ⭳y (+ _ _) b c)))
 
-(isolate
-  (head
-    (of C←["" | "" ((m←edit [_* ⭳target]) _*) @_] "")
-    (of [lhs←"" | "" (M←(edit term_) _*) @_] "")))
+(head
+  (of C←["" | "" ((m←edit [_* ⭳target]) _*) @_] "")
+  (of [lhs←"" | "" (M←(edit term_) _*) @_] ""))
 
 ;; TODO: test empty %many, %group, %past
 
