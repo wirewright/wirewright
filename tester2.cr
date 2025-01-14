@@ -53,6 +53,10 @@ Term.case(test) do
   end
 end
 
+if "-r".in?(ARGV)
+  exit 0
+end
+
 def debug(root0, motions)
   puts "Debug"
   puts ML.display(root0)

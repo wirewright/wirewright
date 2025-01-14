@@ -2981,6 +2981,10 @@
   (= (x: 100 y: 200 z: 300) (y: 200 z: 300))
   (= (a x: 100 y: 200 z: 300) (a y: 200 z: 300))
   (= (a b c x: 100 y: 200 z: 300) (a b c y: 200 z: 300)))
+
+;; Make sure aliases work (do not stomp over each other).
+(backmap ((%all [k0←k1_ x_] (%value k1 v_)) {(k0): (), x: ↑v, v: ↑x})
+  (= (qux a qux: b) (b qux: a)))
   
 ;; TODO: Bounds
 
@@ -3048,7 +3052,6 @@
 (specificity
   (level [_* ⭳back])
   (level @edge_))
-
 
 ;; Head
 ;; Make sure pattern head is determined properly

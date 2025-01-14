@@ -237,7 +237,7 @@
 ;; (backmap [lhs←"" | "" (M←(edit term_) _*) @_]
 ;;   {(M): (), lhs: (string →term)})
 
-(backmap [lhs←"" | "" (M←(edit (%any° _boolean _symbol _string _number)) _*) @_]
+(backmap [lhs←"" | "" (M←(edit term←(%any° _boolean _symbol _string _number)) _*) @_]
   {(M): (), lhs: (string →term)})
 
 (backmap ⧼behind_ [lhs←"" | "" (M←(edit-behind) _*) @_]⧽
@@ -386,8 +386,6 @@
 
 ;; NOTE: we create two bindings to behind here so that %value doesn't hear us
 ;; setting behind0 (the key) -- it is not our intent here to change the key.
-
-;; FIXME: this fails randomly !!! Probably backmap trie doesn't support multiple lets to the same thing
 (backmap (%all ⧼behind0←behind1_ C←["" | "" (M←(enter-key-behind) _*) @_]⧽
                (%value behind1 v_))
   {M: (edit →v), (C): (), (behind0): (), v: ↑C})

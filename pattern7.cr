@@ -3959,8 +3959,8 @@ module ::Ww::Term::M1
 end
 
 module ::Ww::Term::M1
-  struct Metadata
-    def initialize(@capture : Term, @plural : Bool, @body : Term?, @env : Term::Dict)
+  struct AttachMetadata
+    def initialize(@capture : Term, @body : Term?, @env : Term::Dict, @plural : Bool)
     end
 
     def call(node)
@@ -3970,6 +3970,15 @@ module ::Ww::Term::M1
         {:env, @env},
         {:aliases, @capture, true},
       )
+    end
+  end
+
+  struct AttachAlias
+    def initialize(@capture : Term)
+    end
+
+    def call(node)
+      node.morph({:aliases, @capture, true})
     end
   end
 
@@ -4308,12 +4317,17 @@ module ::Ww::Term::M1
           plural = false
 
           if body = backspec[capture]?
+            action = AttachMetadata.new(capture, body, env, plural: false)
           elsif body = backspec[{capture}]?
-            plural = true
+            action = AttachMetadata.new(capture, body, env, plural: true)
+          else
+            # No body means it's an alias. We only must learn the alias's new value.
+            # No overrides, nothing. If both have bodies AND point to the same place
+            # their order would be determined by the hash function.
+            action = AttachAlias.new(capture)
           end
 
-          meta = Metadata.new(capture, plural, body, env)
-          trie = Term::Dict.enhance(trie, keypath.items, :endpoint, action: meta)
+          trie = Term::Dict.enhance(trie, keypath.items, :endpoint, action: action)
           depth = Math.max(keypath.size.to_u32, depth)
         end
       end
