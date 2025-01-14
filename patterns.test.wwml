@@ -2968,6 +2968,15 @@
            {x: b, path: ((value 3))}
            {x: c, path: ((value 5))})}))
 
+;; %entry
+(backmap ((_* ⭳x ¦ (%entry k_ X←(qux (a_ b_)))) {x: ↑X, (k): (), a: ↓b, b: ↓a})
+  (= (x: (qux (a b)) y: c z: d)
+     ((qux (b a)) y: c z: d))
+  (= (x: (qux (a b)) y: (qux (c d)) z: e)
+     ;; one of
+     ((qux (b a)) y: (qux (c d)) z: e)
+     ((qux (d c)) x: (qux (a b)) z: e)))
+  
 ;; We should be able to delete pairs in backmaps like we are able to
 ;; get rid of items -- through (...): (). There is currently no support
 ;; for (...): (k1: ... k2: ...) etc. since that would raise questions
@@ -2985,7 +2994,8 @@
 ;; Make sure aliases work (do not stomp over each other).
 (backmap ((%all [k0←k1_ x_] (%value k1 v_)) {(k0): (), x: ↑v, v: ↑x})
   (= (qux a qux: b) (b qux: a)))
-  
+
+
 ;; TODO: Bounds
 
 ;; TODO: depth

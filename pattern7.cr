@@ -903,11 +903,11 @@ end
 # Additionally, we must use u32 (or even u16) array indices for operator nodes rather
 # than a pointer. Thus an operator pool.
 module ::Ww::Term::M1::Operator
-  alias Any = Pass | Num | Sym | Boolean | Dict | Literal | Capture | Itemspart | Partition | EdgeUntyped | EdgeTyped | Choices | EitherSource | Keypool | Span | Tally | Bin | Both | Not | Layer | ScanFirst | ScanSource | ScanAll | ScanAllIsolated | DfsFirst | DfsSource | DfsAllIsolated | DfsAll | BfsFirst | BfsAllIsolated | BfsAll | PairRequired | PairOptional | PairAbsent | PairAbsentOrBad | PairValue | EntriesSource | EntriesAllIsolated | EntriesAll | Str | New | Keypath
+  alias Any = Pass | Num | Sym | Boolean | Dict | Literal | Capture | Itemspart | Partition | EdgeUntyped | EdgeTyped | Choices | EitherSource | Keypool | Span | Tally | Bin | Both | Not | Layer | ScanFirst | ScanSource | ScanAll | ScanAllIsolated | DfsFirst | DfsSource | DfsAllIsolated | DfsAll | BfsFirst | BfsAllIsolated | BfsAll | PairRequired | PairOptional | PairAbsent | PairAbsentOrBad | PairValue | EntriesFirst | EntriesSource | EntriesAllIsolated | EntriesAll | Str | New | Keypath
 
   alias Bin = Add | Sub | Mul | Div | Tdiv | Mod | Pow | Map
 
-  alias First = ScanFirst | DfsFirst | BfsFirst
+  alias First = ScanFirst | DfsFirst | BfsFirst | EntriesFirst
   alias Source = DfsSource | ScanSource | EntriesSource
   alias AllIsolated = ScanAllIsolated | DfsAllIsolated | BfsAllIsolated | EntriesAllIsolated
   alias All = ScanAll | DfsAll | BfsAll | EntriesAll
@@ -1012,7 +1012,13 @@ module ::Ww::Term::M1::Operator
   defcase BfsAllIsolated, capture : Term, needle : Any, part : Search::Part, min : UInt8, max : UInt8, depth0 : Bool
   defcase BfsAll, capture : Term, needle : Any, selector : Set(Term), exterior : Set(Term), part : Search::Part, min : UInt8, max : UInt8, depth0 : Bool
 
-  alias Entries = EntriesSource | EntriesAllIsolated | EntriesAll
+  alias Entries = EntriesFirst | EntriesSource | EntriesAllIsolated | EntriesAll
+
+  defcase EntriesFirst, kop : Any, vop : Any do
+    def needle
+      [kop, vop]
+    end
+  end
 
   defcase EntriesSource, kop : Any, vop : Any do
     def needle
@@ -3221,6 +3227,14 @@ module ::Ww::Term::M1
         end
       end
 
+      match({:"%entry", :k_, :v_}, cue: :"%entry") do |k, v|
+        pattern.transaction do |commit|
+          commit.with(0, :"%entries/first")
+          commit.with(1, normal(k))
+          commit.with(2, normal(v))
+        end
+      end
+
       match({:"%entries°", :k_, :v_}, cue: :"%entries°") do |k, v|
         pattern.transaction do |commit|
           commit.with(0, :"%entries/source")
@@ -3564,6 +3578,13 @@ module ::Ww::Term::M1
             max: max,
           )
         end
+      end
+
+      match({:"%entries/first", :k_, :v_}, cue: :"%entries/first") do |k, v|
+        Operator::EntriesFirst.new(
+          operator(k, captures),
+          operator(v, captures),
+        )
       end
 
       match({:"%entries/source", :k_, :v_}, cue: :"%entries/source") do |k, v|
@@ -4123,6 +4144,23 @@ module ::Ww::Term::M1
 
         matchpi %[(value key_)] do
           if ksucc = successor[:self]?
+            # One should be able to delete a key-value pair from a backmap with an empty
+            # plural **key** transform:
+            #   
+            #   ;; Removes K from dict. Note the semi-necessary alias that prevents
+            #   ;; us from erasing without's k arg.
+            #   (without (%value K _) K←k_) <> {(K): ()}
+            #
+            #   ;; With alias:
+            #   (without {x: 100, y: 200} x) ;; => (without {y: 200} x)
+            #   ;; Without alias:
+            #   (without {x: 100, y: 200} x) ;; => (without {y: 200})
+            #
+            if ksucc[:endpoint, :plural]? && (transform = ksucc[:endpoint, :transform]?) && transform.empty?
+              matchee = matchee.without(key)
+              next
+            end
+
             key0, value0 = key, matchee[key]
             ctx1, key1 = transform0(ctx0, ctx1, bot, applier, ksucc, key0)
             matchee = matchee.without(key0).with(key1, value0)
@@ -4150,7 +4188,14 @@ module ::Ww::Term::M1
             unless value0
               raise KeypathError.new
             end
+
             ctx1, value1 = transform0(ctx0, ctx1, bot, applier, successor.as_d, value0)
+            
+            # One should be able to delete a key-value pair from a backmap with an empty
+            # plural **value** transform:
+            #   
+            #   {x: x_, y: y_} <> {(x): ()} ;; Removes `x` pair
+            #
             plural && value1.type.dict? && value1.empty? ? nil : value1
           end
         end
@@ -4323,7 +4368,7 @@ module ::Ww::Term::M1
           else
             # No body means it's an alias. We only must learn the alias's new value.
             # No overrides, nothing. If both have bodies AND point to the same place
-            # their order would be determined by the hash function.
+            # the winner will be determined by the hash function.
             action = AttachAlias.new(capture)
           end
 
@@ -4475,6 +4520,7 @@ module ::Ww::Term::M1
           %[(%items/first _+)],
           %[(%items/source _+)],
           %[(%items/all (%capture _) _+)],
+          %[(%entries/first _ _)],
           %[(%entries/source _ _)],
           %[(%entries/all (%capture _) _ _)]
         ) do

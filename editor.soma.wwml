@@ -50,11 +50,11 @@
   {M: (enter-key-behind)})
 
 ;; (key escape) should expel + leave from pair if editing at top-level
-(backmap (_* ¦ (%entries° _ [_string | _string (M←(key escape) _*) @_]))
+(backmap (_* ¦ (%entry _ [_string | _string (M←(key escape) _*) @_]))
   {M: (leave-pair)})
 
 ;; ... or if editing inside a top-level dict
-(backmap (_* ¦ (%entries° _ ⧼[_string | _string (M←(key escape) _*) @_]⧽))
+(backmap (_* ¦ (%entry _ ⧼[_string | _string (M←(key escape) _*) @_]⧽))
   {M: (leave-pair)})
 
 ;; Interpret (key left) and (key right)
@@ -134,6 +134,20 @@
 (backmap (["" | "" (M←(key C-backspace) _*) @_] _*) {M: (unnest-parent)})
 (backmap (_* ["" | "" (M←(key C-delete) _*) @_]) {M: (unnest-parent)})
 
+;; C-backspace while editing at toplevel or in toplevel dict in pairs
+;; should delete the key and move the value out.
+(backmap (_* ¦ (%entry _ [[_string | _string (M←(key C-backspace) _*) @_] _*]))
+  {M: (delete-pair-parent)})
+
+(backmap (_* ¦ (%entry _ C←["" | _string (M←(key C-backspace) _*) @_]))
+  {M: (delete-pair-self)})
+
+(backmap (_* ¦ (%entry _ C←["" | _string (M←(key backspace) _*) @_]))
+  {M: (unpair-self)})
+
+(backmap (_* ¦ (%entry _ [[_string | _string (M←(key backspace) _*) @_] _*]))
+  {M: (unpair-parent)})
+
 ;; (!) Careful: (key left) and (key right) must not map back to (key backspace)/(key delete)
 ;; or we'll have occasional infinite rewriting.
 (backmap ["" | "" (M←(key backspace) _*) @_] {M: (key left)})
@@ -141,6 +155,7 @@
 
 ;; For less common actions cursor commands are used instead of complicated
 ;; and utterly meaningless key combos.
+(backmap [lhs←"." | "" (M←(type ":") _*) @_] {lhs: "", M: (pair-around)})
 (backmap [lhs←"." | "" (M←(type "(") _*) @_] {lhs: "", M: (nest-behind)})
 (backmap [lhs←"." | "" (M←(type "v") _*) @_] {lhs: "", M: (dup-behind)})
 (backmap [lhs←"." | "" (M←(type "V") _*) @_] {lhs: "", M: (dup-ahead)})
@@ -220,7 +235,6 @@
   {(M): (), (P): ↑P})
 
 ;; (edit), (edit-behind), and (edit-ahead) 
-
 (backmap C←["" | "" ((m←edit [_* ⭳target]) _*) @_]
   {m: edit/1, target: ↑C})
 
@@ -399,6 +413,22 @@
                (%new (_* ¦ _ behind_: (%optional () v_))))
   {(M): (), (behind): (), (C): (), v: ↑C})
 
+(backmap (%all ⧼k_ C←["" | "" (M←(pair-around) _*) @_] v_⧽
+               (%new (_* ¦ _ k_: (%optional () v0_))))
+  {(M): (), (k): (), (v): (), v0: ↑v})
+
+(backmap (_* ⭳target ¦ (%entry k_ F←[_string | _string (M←(delete-pair-self) _*) @_]))
+  {(M): (), (k): (), (F): (), target: ↑F})
+
+(backmap (_* ⭳target ¦ (%entry k_ F←[C←[_string | _string (M←(delete-pair-parent) _*) @_] _*]))
+  {(M): (), (k): (), (F): (), (C): ($tr C0 ()), (target): (↑C0 ↑F)})
+
+(backmap (_* ⭳target ¦ (%entry k_ F←[_string | _string (M←(unpair-self) _*) @_]))
+  {(M): (), (k): (), (F): (), (target): (↑k ↑F)})
+
+(backmap (_* ⭳target ¦ (%entry k_ F←[C←[_string | _string (M←(unpair-parent) _*) @_] _*]))
+  {(M): (), (k): (), (F): (), (C): ($tr C0 ()), (target): (↑k ↑C0 ↑F)})
+
 ;; Expellation
 ;;
 ;; Expellation involves parsing left/right-hand sides (or both). If that's
@@ -410,10 +440,10 @@
 ;; to expel-left.
 
 ;; Leave pair with empty cursor should remove the pair and leave.
-(backmap (_* ⭳target ¦ (%entries° _ C←["" | "" (M←(leave-pair) _*) @_]))
+(backmap (_* ⭳target ¦ (%entry _ C←["" | "" (M←(leave-pair) _*) @_]))
   {(M): (), target: ↑C, (C): ()})
 
-(backmap (_* ⭳target ¦ (%entries° _ ⧼C←["" | "" (M←(leave-pair) _*) @_]⧽))
+(backmap (_* ⭳target ¦ (%entry _ ⧼C←["" | "" (M←(leave-pair) _*) @_]⧽))
   {(M): (), target: ↑C0, (C): ($tr C0 ())})
 
 (backmap ["" | (%string nonempty) (M←(leave-pair) _*) @_]
@@ -425,7 +455,7 @@
 (backmap [lhs←(%string nonempty) | "" (M←(leave-pair) _*) @_]
   {M: (leave-pair (ml →lhs))})
 
-(backmap (_* ⭳target ¦ (%entries° _ C←[lhs_string | "" (M←(leave-pair (ml/ok term_)) _*) @_]))
+(backmap (_* ⭳target ¦ (%entry _ C←[lhs_string | "" (M←(leave-pair (ml/ok term_)) _*) @_]))
   {(M): (), lhs: "", target: ↑C, C: ↑term})
 
 (backmap [_string | _string (M←(leave-pair (ml/err)) _*) @_]
