@@ -247,11 +247,7 @@
 (backmap [lhs←"" | "" (M←(edit @term_) _*) @_]
   {(M): (), lhs: (string →term)})
 
-;; FIXME: why is this run before edit [] above?
-;; (backmap [lhs←"" | "" (M←(edit term_) _*) @_]
-;;   {(M): (), lhs: (string →term)})
-
-(backmap [lhs←"" | "" (M←(edit term←(%any° _boolean _symbol _string _number)) _*) @_]
+(backmap [lhs←"" | "" (M←(edit term_) _*) @_]
   {(M): (), lhs: (string →term)})
 
 (backmap ⧼behind_ [lhs←"" | "" (M←(edit-behind) _*) @_]⧽

@@ -3063,6 +3063,10 @@
   (level [_* ⭳back])
   (level @edge_))
 
+(specificity
+  (level [lhs←"" | "" (M←(edit term_) _*) @_])
+  (level C←["" | "" ((m←edit [_* ⭳target]) _*) @_]))
+
 ;; Head
 ;; Make sure pattern head is determined properly
 ;;
@@ -3120,6 +3124,11 @@
   (of ((%group xs ⭳x ⭳y (%group ys ⭳z (%group zs ⭳foo ⭳bar) a) b c) d e) a)
   ;; Slot in nested group
   (- (⭳x) (⭳x ⭳y) (⭳x a_) (⭳x ⭳y (+ _ _) b c)))
+
+(isolate
+  (head
+    (of C←["" | "" ((m←edit [_* ⭳target]) _*) @_] "")
+    (of [lhs←"" | "" (M←(edit term_) _*) @_] "")))
 
 ;; TODO: test empty %many, %group, %past
 

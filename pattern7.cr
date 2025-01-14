@@ -4751,6 +4751,7 @@ module ::Ww::Term::M1
         end
       end
       matchpi %[((%literal %partition) itemspart_ _)] { head?(itemspart) }
+      matchpi %[((%literal %let) _ successor_)] { head?(successor) }
       otherwise {}
     end
   end
