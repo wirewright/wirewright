@@ -351,7 +351,7 @@ height = manipulator(frame, Term.of(:"$<h>"))
 
 Termbox.init
 begin
-Termbox.input_mode = Termbox::InputMode::Esc
+Termbox.input_mode = Termbox::InputMode::Alt
 Termbox.output_mode = Termbox::OutputMode::Truecolor
 
 running = true

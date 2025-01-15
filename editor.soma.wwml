@@ -44,12 +44,12 @@
 (backmap ["" | "" (M←(type ":") _*) @_]
   {M: (enter-key-behind)})
 
-;; (key escape) should expel + leave from pair if editing at top-level
-(backmap (_* ¦ (%entry _ [_string | _string (M←(key escape) _*) @_]))
+;; (key tab) should expel + leave from pair if editing at top-level
+(backmap (_* ¦ (%entry _ [_string | _string (M←(key tab) _*) @_]))
   {M: (leave-pair)})
 
 ;; ... or if editing inside a top-level dict
-(backmap (_* ¦ (%entry _ ⧼[_string | _string (M←(key escape) _*) @_]⧽))
+(backmap (_* ¦ (%entry _ ⧼[_string | _string (M←(key tab) _*) @_]⧽))
   {M: (leave-pair)})
 
 ;; Interpret (key left) and (key right)
@@ -150,21 +150,52 @@
 
 ;; For less common actions cursor commands are used instead of complicated
 ;; and utterly meaningless key combos.
-(backmap [lhs←"." | "" (M←(type ":") _*) @_] {lhs: "", M: (pair-around)})
-(backmap [lhs←"." | "" (M←(type "(") _*) @_] {lhs: "", M: (nest-behind)})
-(backmap [lhs←"." | "" (M←(type "v") _*) @_] {lhs: "", M: (dup-behind)})
-(backmap [lhs←"." | "" (M←(type "V") _*) @_] {lhs: "", M: (dup-ahead)})
-(backmap [lhs←"." | "" (M←(type "s") _*) @_] {lhs: "", M: (swap-behind)})
-(backmap [lhs←"." | "" (M←(type "S") _*) @_] {lhs: "", M: (swap-ahead)})
-(backmap [lhs←"." | "" (M←(type "/") _*) @_] {lhs: "", M: (split)})
-(backmap [lhs←"." | "" (M←(type "+") _*) @_] {lhs: "", M: (join)})
-(backmap [lhs←"." | "" (M←(type "y") _*) @_] {lhs: "", M: (copy-behind)})
-(backmap [lhs←"." | "" (M←(type "Y") _*) @_] {lhs: "", M: (copy-ahead)})
-(backmap [lhs←"." | "" (M←(type "x") _*) @_] {lhs: "", M: (cut-behind)})
-(backmap [lhs←"." | "" (M←(type "X") _*) @_] {lhs: "", M: (cut-ahead)})
-(backmap (lhs←"." | "" (M←(type "p") _*) @_ ¦ _ clipboard: _) {lhs: "", M: (paste-behind)})
-(backmap (lhs←"." | "" (M←(type "P") _*) @_ ¦ _ clipboard: _) {lhs: "", M: (paste-ahead)})
-(backmap [lhs←".-" | "" (M←(type (%any "y" "Y")) _*) @_] {lhs: "", M: (clear-clipboard)})
+(backmap [lhs←"," | "" (M←(type ":") _*) @_] {lhs: "", M: (pair-around)})
+(backmap [lhs←"," | "" (M←(type "(") _*) @_] {lhs: "", M: (nest-behind)})
+(backmap [lhs←"," | "" (M←(type "v") _*) @_] {lhs: "", M: (dup-behind)})
+(backmap [lhs←"," | "" (M←(type "V") _*) @_] {lhs: "", M: (dup-ahead)})
+(backmap [lhs←"," | "" (M←(type "s") _*) @_] {lhs: "", M: (swap-behind)})
+(backmap [lhs←"," | "" (M←(type "S") _*) @_] {lhs: "", M: (swap-ahead)})
+(backmap [lhs←"," | "" (M←(type "/") _*) @_] {lhs: "", M: (split)})
+(backmap [lhs←"," | "" (M←(type "+") _*) @_] {lhs: "", M: (join)})
+(backmap [lhs←"," | "" (M←(type "y") _*) @_] {lhs: "", M: (copy-behind)})
+(backmap [lhs←"," | "" (M←(type "Y") _*) @_] {lhs: "", M: (copy-ahead)})
+(backmap [lhs←"," | "" (M←(type "x") _*) @_] {lhs: "", M: (cut-behind)})
+(backmap [lhs←"," | "" (M←(type "X") _*) @_] {lhs: "", M: (cut-ahead)})
+(backmap (lhs←"," | "" (M←(type "p") _*) @_ ¦ _ clipboard: _) {lhs: "", M: (paste-behind)})
+(backmap (lhs←"," | "" (M←(type "P") _*) @_ ¦ _ clipboard: _) {lhs: "", M: (paste-ahead)})
+(backmap [lhs←",-" | "" (M←(type (%any "y" "Y")) _*) @_] {lhs: "", M: (clear-clipboard)})
+
+;; HYBRID
+
+;; Expand ;; into (comment ...). We're not a parser so we have to improvise! Maybe just
+;; maybe whatever is interpreting the edited term will treat (comment ...) as a comment.
+;; If not, whatever.
+(backmap C←[lhs←";" | rhs←"" (M←(type ";") _*) @_]
+  {(M): (), lhs: "\"", rhs: "\"", C: (comment ↑C)})
+
+;; ESCAPE MODE
+
+;; Enter
+(backmap [_string c←| _string (M←(key escape) _*) @_] {(M): (), c: (| "")})
+;; Leave
+(backmap [_string c←(| _string) _string (M←(key escape) _*) @_] {(M): (), c: |})
+;; Ignore unknown 
+(backmap [_string (| _string) _string (M←_ _*) @_] {(M): ()})
+;; Append characters
+(backmap [_string (| seq_string) _string (M←(type text_string) _*) @_]
+  {(M): (), seq: ($ (~ →seq →text))})
+;; Emit arrows
+(backmap [lhs_string c←(| "<") _string (M←(type "-") _*) @_]
+  {(M): (), lhs: ($ (~ →lhs "←")), c: |})
+(backmap [lhs_string c←(| "-") _string (M←(type ">") _*) @_]
+  {(M): (), lhs: ($ (~ →lhs "→")), c: |})
+(backmap [lhs_string c←(| "^") _string (M←(type "-") _*) @_]
+  {(M): (), lhs: ($ (~ →lhs "↑")), c: |})
+(backmap [lhs_string c←(| "v") _string (M←(type "-") _*) @_]
+  {(M): (), lhs: ($ (~ →lhs "↓")), c: |})
+(backmap [lhs_string c←(| "o") _string (M←(type "o") _*) @_]
+  {(M): (), lhs: ($ (~ →lhs "°")), c: |})
 
 ;; MORPH
 

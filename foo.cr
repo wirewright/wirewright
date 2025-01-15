@@ -751,8 +751,8 @@ def selfr
 end
 
 
-CURSORP  = ML.parse1(%([_string | _string (_*) @_]))
-CURSORPE = Term::M1.operator(ML.parse1(%([_string | _string (_*) @edge_])))
+CURSORP  = ML.parse1(%([_string (%any° | (| _string)) _string (_*) @_]))
+CURSORPE = Term::M1.operator(ML.parse1(%([_string (%any° | (| _string)) _string (_*) @edge_])))
 
 def subsume1(cursor, motion)
   Term.of(cursor.morph({3, cursor[3].size, motion}))
