@@ -656,5 +656,17 @@ module Termbox
       end
     end
   end
+
+  def poll : Event
+    while true
+      result = LibTermbox2.tb_peek_event(out event, -1)
+      unless result == LibTermbox2::TB_ERR_POLL
+        return event
+      end
+      unless LibTermbox2.tb_last_errno.eintr?
+        raise "termbox error: poll error (errno != EINTR)"
+      end
+    end
+  end
 end
 

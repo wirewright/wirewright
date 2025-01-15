@@ -567,6 +567,35 @@ module Ww
   end
 
   struct Term
+    private def self.each_keypath_and_leaf?(node : Term::Dict, prefix : Stack(Term), fn : Stack(Term), Term -> Bool) : Bool
+      node.each_entry do |key, value|
+        prefix.push(key)
+
+        break unless each_keypath_and_leaf?(value.downcast, prefix, fn)
+
+        prefix.pop
+      end
+
+      true
+    end
+
+    private def self.each_keypath_and_leaf?(node, prefix : Stack(Term), fn : Stack(Term), Term -> Bool) : Bool
+      fn.call(prefix, node.upcast)
+    end
+
+    # Calls *fn* with non-dictionary values along with key paths to them (which
+    # keys to follow to get to the value), arbitrarily long.
+    #
+    # WARNING: key paths are contained within a mutable `Stack`s for memory
+    # efficiency; you do not the stack, for you the stack is read-only! Do not
+    # mutate the key path stack, instead, make a copy of it (`dup`) and mutate
+    # your copy instead.
+    def self.each_keypath_and_leaf(node : Term, &fn : Stack(Term), Term -> Bool) : Nil
+      each_keypath_and_leaf?(node: node.downcast, prefix: Stack(Term).new, fn: fn)
+    end
+  end
+
+  struct Term
     def self.matches(pattern, matchee, *, engine : Engine.class = M1, env = Term[]) : Array(Term::Dict) forall Engine
       engine.matches(Term.of(pattern), Term.of(matchee), env: env)
     end

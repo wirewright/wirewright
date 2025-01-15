@@ -552,6 +552,10 @@ module Ww
       Term.of(keys.reduce(self) { |dict, key| dict[key]? || return })
     end
 
+    def follow(keys : Enumerable(Term)) : Term
+      follow?(keys) || raise KeyError.new
+    end
+
     def where(key, eq value) : Dict
       self.with(key, value)
     end
