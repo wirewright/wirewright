@@ -4891,11 +4891,11 @@ module ::Ww::Term::M1
   end
 end 
 
-# Represents a pattern within a `Pset`. Has no expected use outside of `Pset`.
+# Represents a pattern within a `PatternSet`. Has no expected use outside of `PatternSet`.
 struct Pattern
   private alias O = Term::M1::Operator
 
-  # Returns the index of this pattern. You are free to treat it as `Pset`-unique
+  # Returns the index of this pattern. You are free to treat it as `PatternSet`-unique
   # identifier of this pattern.
   getter index : UInt32
 
@@ -4919,7 +4919,7 @@ struct Pattern
 end
 
 # Short for "pattern response". Groups the various types of responses produced
-# by `Pattern` and `Pset`.
+# by `Pattern` and `PatternSet`.
 module Pr
   alias Any = Pos | Neg
   alias Pos = One | Many
@@ -4945,7 +4945,7 @@ end
 # An object capable of parsing pattern terms into `Pattern`s (a thin wrapper
 # around `Term::M1::Operator`) and organizing them for efficient response
 # to matchees.
-class Pset
+class PatternSet
   # :nodoc:
   def initialize(@headed : Hash(Term, Slice(Pattern)), @headless : Slice(Pattern))
   end
@@ -4960,15 +4960,20 @@ class Pset
   # `true` if the pattern should be handled and finally added to the set; or
   # `false`/`nil` if the pattern should be ignored.
   #
+  # Yields patterns in their index order and **not** *base*-order. This means that
+  # the index of the current yield will correspond to `Pattern#index` that you can
+  # access from `Pr`. The index of the current iteration can thus be used as a
+  # reference to the current pattern.
+  #
   # ```
-  # pset = Pset.select(ML.parse1(%[(rule pattern_ body_)])) do |normp, env|
+  # pset = PatternSet.select(ML.parse1(%[(rule pattern_ body_)]), base) do |normp, env|
   #   # Do something with env[:body]
   #   # ...
   #  
   #   true # E.g. body is valid
   # end
   # ```
-  def self.select(selector : Term, base : Term, & : Term, Term::Dict -> Bool?) : Pset
+  def self.select(selector : Term, base : Term, & : Term, Term::Dict -> Bool?) : PatternSet
     seen = Set(Term).new
 
     headed = {} of Term => Array(Int32)
@@ -5020,6 +5025,11 @@ class Pset
     oheadless = headless.to_readonly_slice.map(read_only: true) { |index| patterns[index] }
 
     new(oheaded, oheadless)
+  end
+
+  # Block-less version of `select`.
+  def self.select(selector : Term, base : Term) : PatternSet
+    self.select(selector, base) { true }
   end
 
   private def response(neighbors : Slice(Pattern), matchee : Term) : Pr::Any

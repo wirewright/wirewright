@@ -1,8 +1,3 @@
-;; TODO: FIXME: currently it appears to be possible to do weird SQL injection like stuff
-;; with the cursor because we simply paste into backmap eval and what's
-;; most important, do backmap eval AFTER pasting -- terrible. The separation
-;; should be clearer! In general, backmap eval is currently undeveloped.
-
 ;; INFO: We use the following cursor-centric names for the three main dimensions:
 ;;
 ;;    (...above... (...behind... (left | right) ...ahead...) ...below...)
@@ -175,49 +170,49 @@
 
 (backmap [lhs_string | _string (M←(append-left text_string) _*) @_]
   {(M): (),
-   lhs: (~ →lhs →text)})
+   lhs: ($ (~ →lhs →text))})
 
 (backmap [lhs_string | rhs_string (M←(move-left) _*) @_]
   {(M): (),
-   lhs: (substring →lhs (rune 0) (rune -2)),
-   rhs: (~ (substring →lhs (rune -1) (rune -1)) →rhs)})
+   lhs: ($ (substring →lhs (rune 0) (rune -2))),
+   rhs: ($ (~ (substring →lhs (rune -1) (rune -1)) →rhs))})
 
 (backmap [lhs_string | rhs_string (M←(move-word-left) _*) @_]
   {(M): (),
-   lhs: (substring →lhs (word 0) (word -2)),
-   rhs: (~ (substring →lhs (word -1) (word -1)) →rhs)})
+   lhs: ($ (substring →lhs (word 0) (word -2))),
+   rhs: ($ (~ (substring →lhs (word -1) (word -1)) →rhs))})
 
 (backmap [lhs_string | rhs_string (M←(move-right) _*) @_]
   {(M): (),
-   lhs: (~ →lhs (substring →rhs (rune 0) (rune 0))),
-   rhs: (substring →rhs (rune 1) (rune -1))})
+   lhs: ($ (~ →lhs (substring →rhs (rune 0) (rune 0))),)
+   rhs: ($ (substring →rhs (rune 1) (rune -1)))})
 
 (backmap [lhs_string | rhs_string (M←(move-word-right) _*) @_]
   {(M): (),
-   lhs: (~ →lhs (substring →rhs (word 0) (word 0))),
-   rhs: (substring →rhs (word 1) (word -1))})
+   lhs: ($ (~ →lhs (substring →rhs (word 0) (word 0))),)
+   rhs: ($ (substring →rhs (word 1) (word -1)))})
 
 (backmap [lhs_string | _string (M←(delete-left) _*) @_]
   {(M): (),
-   lhs: (substring →lhs (rune 0) (rune -2))})
+   lhs: ($ (substring →lhs (rune 0) (rune -2)))})
 
 (backmap [lhs_string | _string (M←(delete-word-left) _*) @_]
   {(M): (),
-   lhs: (substring →lhs (word 0) (word -2))})
+   lhs: ($ (substring →lhs (word 0) (word -2)))})
 
 (backmap [_string | rhs_string (M←(delete-right) _*) @_]
   {(M): (),
-   rhs: (substring →rhs (rune 1) (rune -1))})
+   rhs: ($ (substring →rhs (rune 1) (rune -1)))})
 
 (backmap [_string | rhs_string (M←(delete-word-right) _*) @_]
   {(M): (),
-   rhs: (substring →rhs (word 1) (word -1))})
+   rhs: ($ (substring →rhs (word 1) (word -1)))})
 
 (backmap [lhs_string | rhs_string (M←(move-front-left) _*) @_]
-  {(M): (), lhs: "", rhs: (~ →lhs →rhs)})
+  {(M): (), lhs: "", rhs: ($ (~ →lhs →rhs))})
 
 (backmap [lhs_string | rhs_string (M←(move-back-right) _*) @_]
-  {(M): (), lhs: (~ →lhs →rhs), rhs: ""})
+  {(M): (), lhs: ($ (~ →lhs →rhs)), rhs: ""})
 
 (backmap C←[_string | _string (M←(nest-self) _*) @_]
   {(M): (), C: (↑C)})
@@ -245,19 +240,19 @@
   {C: →D})
 
 (backmap [lhs←"" | "" (M←(edit @term_) _*) @_]
-  {(M): (), lhs: (string →term)})
+  {(M): (), lhs: ($ (string →term))})
 
 (backmap [lhs←"" | "" (M←(edit term_) _*) @_]
-  {(M): (), lhs: (string →term)})
+  {(M): (), lhs: ($ (string →term))})
 
 (backmap ⧼behind_ [lhs←"" | "" (M←(edit-behind) _*) @_]⧽
-  {(M): (), (behind): (), lhs: (string →behind)})
+  {(M): (), (behind): (), lhs: ($ (string →behind))})
 
 (backmap ⧼[_* ⭳back] C←[lhs←"" | "" (M←(edit-behind) _*) @_]⧽
   {(M): (), (C): (), back: ↑C})
 
 (backmap ⧼["" | rhs←"" (M←(edit-ahead) _*) @_] ahead_⧽
-  {(M): (), rhs: (string →ahead), (ahead): ()})
+  {(M): (), rhs: ($ (string →ahead)), (ahead): ()})
 
 (backmap ⧼C←["" | "" (M←(edit-ahead) _*) @_] [⭳front _*]⧽
   {(M): (), (C): (), front: ↑C})
@@ -265,10 +260,10 @@
 ;; If the user attempts to edit an edge, show them the pretty-printed
 ;; version of the edge rather than its underlying dict implementation.
 (backmap ⧼@edge_ C←[lhs←"" | "" (M←(edit-behind) _*) @_]⧽
-  {(M): (), (edge): (), lhs: (string →edge)})
+  {(M): (), (edge): (), lhs: ($ (string →edge))})
 
 (backmap ⧼C←["" | rhs←"" (M←(edit-ahead) _*) @_] @edge_⧽
-  {(M): (), (edge): (), rhs: (string →edge)})
+  {(M): (), (edge): (), rhs: ($ (string →edge))})
 
 (backmap ⧼behind_ C←[_string | _string (M←(move-behind) _*) @_]⧽
   {(M): (), C: ↑behind, behind: ↑C})
@@ -443,7 +438,7 @@
   {(M): ((move-back-right) (leave-pair))})
 
 (backmap [lhs←(%string nonempty) | "" (M←(leave-pair) _*) @_]
-  {M: (leave-pair (ml →lhs))})
+  {M: (leave-pair ($ (ml →lhs)))})
 
 (backmap (_* ⭳target ¦ (%entry _ C←[lhs_string | "" (M←(leave-pair (ml/ok term_)) _*) @_]))
   {(M): (), lhs: "", target: ↑C, C: ↑term})
@@ -464,7 +459,7 @@
 
 ;; (expel-left)
 (backmap [lhs_string | _string (M←(expel-left (ok_*) (err_*)) _*) @_]
-  {M: (expel-left (ml →lhs) ↑ok ↑err)})
+  {M: (expel-left ($ (ml →lhs)) ↑ok ↑err)})
 
 (backmap [_* ⭳pred [lhs_string | _string (M←(expel-left (ml/ok term_) (ok_*) (_*)) _*) @_] _*]
   {(M): ↑ok, lhs: "", pred: →term})
@@ -474,7 +469,7 @@
 
 ;; (expel-right)
 (backmap [_string | rhs_string (M←(expel-right (ok_*) (err_*)) _*) @_]
-  {M: (expel-right (ml →rhs) ↑ok ↑err)})
+  {M: (expel-right ($ (ml →rhs)) ↑ok ↑err)})
 
 (backmap [_* [_string | rhs_string (M←(expel-right (ml/ok term_) (ok_*) (_*)) _*) @_] ⭳succ _*]
   {(M): ↑ok, rhs: "", succ: →term})
@@ -484,7 +479,7 @@
 
 ;; (expel-mid)
 (backmap [lhs_string | rhs_string (M←(expel-mid (ok_*) (err_*)) _*) @_]
-  {M: (expel-mid (ml →lhs) (ml →rhs) ↑ok ↑err)})
+  {M: (expel-mid ($ (ml →lhs)) ($ (ml →rhs)) ↑ok ↑err)})
 
 (backmap [_* ⭳pred [lhs_string | rhs_string (M←(expel-mid (ml/ok lterm_) (ml/ok rterm_) (ok_*) (_*)) _*) @_] ⭳succ _*]
   {(M): ↑ok, lhs: "", rhs: "", pred: →lterm, succ: →rterm})

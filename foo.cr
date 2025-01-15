@@ -2,15 +2,15 @@ require "./wirewright"
 
 include Ww
 
-struct Applier(PostRewriter)
-  def initialize(@post : PostRewriter)
+struct Applier(Successor)
+  def initialize(@successor : Successor)
   end
 
   def call(up0, up1, down, my, matchee0, body)
     app = Term::M1::DefaultApplier.new
     up1, matchee1 = app.call(up0, up1, down, my, matchee0, body)
 
-    case offspring = @post.call(matchee1)
+    case offspring = @successor.call(matchee1)
     in Offspring::None
       {up1, matchee1}
     in Offspring::One
@@ -34,7 +34,7 @@ module Rule
   record BackmapMany, toplevel : Term, backspec : Term
 
   def backmap(rs, pr : Pr::Pos, backspec : Term, matchee : Term) : Term
-    Term::M1.backmap(pr.envs, backspec, matchee, applier: rs.applier)
+    Term::M1.backmap(pr.envs, backspec, matchee, applier: Applier.new(rs.fanout[:backmap]))
   end
 
   def offspring(rs, rule : Template, pr : Pr::One, matchee : Term) : Offspring::Any
@@ -122,17 +122,17 @@ module Rule
   end
 end
 
-struct Ruleset(ApplierType)
-  getter applier : ApplierType
+struct Ruleset(SuccBackmap, SuccRule)
+  getter fanout : {backmap: SuccBackmap, rule: SuccRule}
 
   # :nodoc:
-  def initialize(@pset : Pset, @rules : Slice(Rule::Any), @applier : ApplierType)
+  def initialize(@pset : PatternSet, @rules : Slice(Rule::Any), @fanout)
   end
 
-  def self.select(selector, base, applier)
+  def self.select(selector, base, fanout)
     rules = [] of Rule::Any
 
-    pset = Pset.select(selector, base) do |normp, env|
+    pset = PatternSet.select(selector, base) do |normp, env|
       if template = env[:template]?
         rule = Rule::Template.new(template)
       elsif backspec = env[:backspec]?
@@ -151,7 +151,7 @@ struct Ruleset(ApplierType)
       true
     end
 
-    new(pset, rules.to_readonly_slice.dup, applier)
+    new(pset, rules.to_readonly_slice.dup, fanout)
   end
 
   def call(matchee : Term) : Offspring::Any
@@ -168,36 +168,19 @@ module Offspring
   alias Any = Neg | Pos
   alias Pos = None | Some
   alias Some = One | Many
-
+  
+  # TODO: this isn't really None, come up with a better name? We return None when
+  # the node 1) cannot/should not be rewritten into anything 2) when it rewrites into itself.
+  # Calling it None may lead to confusion. Calling it Zero will lead to confusion with One/Many,
+  # None != no offspring?
   record None
 
   # Similar to `None`, but indicates to the caller that the matchee
-  # and the children must be avoided (never rewritten).
+  # and the children must be avoided altogether (never rewritten).
   record Neg
 
-  # Shorthand for `None`.
-  def self.none : None
-    None.new
-  end
-
   record One, term : Term
-
-  # Shorthand for `One`.
-  def self.one(offspring) : One
-    One.new(Term.of(offspring))
-  end
-
   record Many, list : Term::Dict
-
-  # Shorthand for `Many`.
-  def self.many(offspring : Term::Dict) : Many
-    Many.new(offspring)
-  end
-
-  # :ditto:
-  def self.many(*offspring : Term) : Many
-    Many.new(Term[{*offspring}])
-  end
 end
 
 # Imagine you're a writer who is currently fixing errors in their novel.
@@ -231,41 +214,44 @@ end
 #   you expect; see at which maximum depth they are expected to occur. Then you scan the entire
 #   novel, find all "foci", and climb up to maximum depth. Then you call R at that depth.
 module Rewriter
-  private def self.absr(successor, term : Term) : Offspring::Pos
-    case offspring = successor.call(term)
-    in Offspring::Some
-      return offspring
-    in Offspring::Neg
-      return Offspring::None.new
-    in Offspring::None
-    end
-  
-    unless dict = term.as_d?
-      return Offspring::None.new
-    end
-  
-    dict.each_entry_randomized do |key, value|
-      case offspring = absr(successor, value)
-      in Offspring::One
-        if value == offspring.term
-          next
-        else
-          return Offspring::One.new(Term.of(dict.with(key, offspring.term)))
-        end
-      in Offspring::Many
-        if Term[{value}] == offspring.list
-          next
-        end
-        if (index = key.as_n?) && index.in?(Term[0]...Term[dict.items.size])
-          return Offspring::One.new(Term.of(dict.replace(Term[index]...Term[index + 1], &.concat(offspring.list.items))))
-        else
-          return Offspring::One.new(Term.of(dict.with(key, offspring.list)))
-        end
+  # :nodoc:
+  module Absr
+    def self.absr(successor, term : Term) : Offspring::Pos
+      case offspring = successor.call(term)
+      in Offspring::Some
+        return offspring
+      in Offspring::Neg
+        return Offspring::None.new
       in Offspring::None
       end
+    
+      unless dict = term.as_d?
+        return Offspring::None.new
+      end
+    
+      dict.each_entry_randomized do |key, value|
+        case offspring = absr(successor, value)
+        in Offspring::One
+          if value == offspring.term
+            next
+          else
+            return Offspring::One.new(Term.of(dict.with(key, offspring.term)))
+          end
+        in Offspring::Many
+          if Term[{value}] == offspring.list
+            next
+          end
+          if (index = key.as_n?) && index.in?(Term[0]...Term[dict.items.size])
+            return Offspring::One.new(Term.of(dict.replace(Term[index]...Term[index + 1], &.concat(offspring.list.items))))
+          else
+            return Offspring::One.new(Term.of(dict.with(key, offspring.list)))
+          end
+        in Offspring::None
+        end
+      end
+    
+      Offspring::None.new
     end
-  
-    Offspring::None.new
   end
 
   # Returns an *absolute rewriter*: a rewriter that performs an *absolute rewrite*
@@ -274,75 +260,78 @@ module Rewriter
   #
   # *successor* must respond to `call(Term) : Offspring::Any`.
   def self.absr(successor)
-    ->(term : Term) { absr(successor, term) }
+    # TODO: struct
+    ->(term : Term) { Absr.absr(successor, term) }
   end
 
   # :nodoc:
   module Relr
+    private alias O = Term::M1::Operator
+
     alias Any = Ready | Ascend | None
 
     record Ready, offspring : Offspring::Pos
     record Ascend, ascent : UInt32
     record None
-  end
 
-  private alias O = Term::M1::Operator
-
-  # TODO: use pattern's sketch to guide descent
-  private def self.relr0(focus, successor, term, ascent)
-    if O.probe?(Term[], focus, term)
-      return Relr::Ascend.new(ascent)
-    end
-
-    unless dict0 = term.as_d?
-      return Relr::None.new
-    end
-
-    splices = nil
-
-    dict1 = dict0
-    dict0.each_entry do |key, value|
-      case res = relr0(focus, successor, value, ascent)
-      in Relr::None
-        next
-      in Relr::Ascend
-        unless res.ascent.zero?
-          return res.copy_with(ascent: res.ascent - 1)
-        end
-        offspring = successor.call(value)
-      in Relr::Ready
-        offspring = res.offspring
+    # TODO: use pattern's sketch to guide descent
+    private def self.relr0(focus, successor, term, ascent)
+      if O.probe?(Term[], focus, term)
+        return Relr::Ascend.new(ascent)
       end
-
-      case offspring
-      in Offspring::None
-      in Offspring::One
-        dict1 = dict1.with(key, offspring.term)
-      in Offspring::Many
-        if index = dict0.index?(key)
-          splices ||= [] of {Term::Num, Term::Dict}
-          splices << {index, offspring.list}
-        else
-          dict1 = dict1.with(key, offspring.list)
+  
+      unless dict0 = term.as_d?
+        return Relr::None.new
+      end
+  
+      splices = nil
+  
+      dict1 = dict0
+      dict0.each_entry do |key, value|
+        case res = relr0(focus, successor, value, ascent)
+        in Relr::None
+          next
+        in Relr::Ascend
+          unless res.ascent.zero?
+            return res.copy_with(ascent: res.ascent - 1)
+          end
+          offspring = successor.call(value)
+        in Relr::Ready
+          offspring = res.offspring
+        end
+  
+        case offspring
+        in Offspring::None
+        in Offspring::One
+          dict1 = dict1.with(key, offspring.term)
+        in Offspring::Many
+          if index = dict0.index?(key)
+            splices ||= [] of {Term::Num, Term::Dict}
+            splices << {index, offspring.list}
+          else
+            dict1 = dict1.with(key, offspring.list)
+          end
         end
       end
-    end
-
-    if splices
-      splices.unstable_sort_by! { |index, _| -index }
-      splices.each do |index, list|
-        dict1 = dict1.replace(index...index + 1, &.concat(list.items))
+  
+      if splices
+        # TODO: we can come up with some kind of queue-like approach?
+        # Take last, copy up to, concat last, take last, copy up to, ...
+        splices.sort_by! { |index, _| -index }
+        splices.each do |index, list|
+          dict1 = dict1.replace(index...index + 1, &.concat(list.items))
+        end
       end
+  
+      Relr::Ready.new(dict0 == dict1 ? Offspring::None.new : Offspring::One.new(Term.of(dict1)))
     end
-
-    Relr::Ready.new(dict0 == dict1 ? Offspring::None.new : Offspring::One.new(Term.of(dict1)))
-  end
-
-  private def self.relr(focus, successor, root : Term, ascent : UInt32 = 0u32) : Offspring::Pos
-    case response = relr0(focus, successor, root, ascent)
-    in Relr::None   then Offspring::None.new
-    in Relr::Ready  then response.offspring
-    in Relr::Ascend then successor.call(root)
+  
+    def self.relr(focus, successor, root : Term, ascent : UInt32 = 0u32) : Offspring::Pos
+      case response = relr0(focus, successor, root, ascent)
+      in Relr::None   then Offspring::None.new
+      in Relr::Ready  then response.offspring
+      in Relr::Ascend then successor.call(root)
+      end
     end
   end
 
@@ -353,8 +342,42 @@ module Rewriter
   def self.relr(focus : Term, successor, *, ascent = 0u32)
     ofocus = Term::M1.operator(focus)
 
-    ->(term : Term) { relr(ofocus, successor, term, ascent) }
+    # TODO: struct
+    ->(term : Term) { Relr.relr(ofocus, successor, term, ascent) }
   end
+end
+
+class TimedOut < Exception
+  getter initial : Term
+  getter latest : Term
+
+  def initialize(@initial, @latest)
+  end
+end
+
+def repeatr(term term0, successor, *, limit : UInt32? = nil, raises : Bool = true) : Offspring::Any
+  term1 = term0
+
+  (0..limit).each do
+    case offspring = successor.call(term1)
+    in Offspring::One
+      term1 = offspring.term
+    in Offspring::Many
+      term1 = Term.of(offspring.list)
+    in Offspring::None
+      return term0 == term1 ? Offspring::None.new : Offspring::One.new(term1)
+    end
+  end
+
+  if raises
+    raise TimedOut.new(term0, term1)
+  end
+
+  term0 == term1 ? Offspring::None.new : Offspring::One.new(term1)
+end
+
+def repeatr(successor, **kwargs)
+  ->(term : Term) { repeatr(term, successor, **kwargs) }
 end
 
 # Makes successive rewrites of *term* until no rewrites are found using
@@ -367,40 +390,32 @@ end
 # choice, from none (by accepting that some rewrites are infinite) to cheap
 # (capping the number of iterations) to expensive (maintaining a "seen" set) etc.;
 # or alternatively, by user's request.
-def rewrite(term term0 : Term, rewriter, & : Term ->) : Term
-  while true
-    yield term0
+def rewrite(term0 : Term, rewriter, *, limit : UInt32? = nil, raises : Bool = true, & : Term ->) : Term
+  term1 = term0
 
-    case offspring = rewriter.call(term0)
+  (0..limit).each do
+    yield term1
+
+    case offspring = rewriter.call(term1)
     in Offspring::One
-      term0 = offspring.term
+      term1 = offspring.term
     in Offspring::Many
-      term0 = Term.of(offspring.list)
-    in Offspring::None
-      break
+      term1 = Term.of(offspring.list)
+    in Offspring::Neg, Offspring::None
+      return term1
     end
   end
 
-  term0
+  if raises
+    raise TimedOut.new(term0, term1)
+  end
+
+  term1
 end
 
-class TimedOut < Exception
-  getter initial : Term
-  getter latest : Term
-
-  def initialize(@initial, @latest)
-  end
-end
-
-# `rewrite` with a capped number of rewrites. Raises `TimedOut` with the latest term
-# when the number of rewrites exceeds *cap*.
-def rewrite(term : Term, rewriter, *, cap : UInt32 = 2u32**16) : Term
-  rewrite(term, rewriter) do |rewrite|
-    if cap.zero?
-      raise TimedOut.new(term, rewrite)
-    end
-    cap &-= 1
-  end
+# Block-less `rewrite`.
+def rewrite(*args, **kwargs) : Term
+  rewrite(*args, **kwargs) {}
 end
 
 # base = ML.parse(<<-WWML
@@ -488,51 +503,253 @@ end
 # ;;   (step @z 100)))
 # WWML
 # )
-require "./bar"
 
-def rec(term : Term) : Term
-  Term.case(term) do
-    matchpi %[(~ a_string b_string)] do
-      Term.of(a.stitch(b))
+struct ProcRuleset
+  alias ProcRule = Term::Dict -> Offspring::Any
+  alias ProcBackmap = Term::Dict -> Term::Dict
+
+  struct Builder
+    def initialize(@ruleary : Array({Term, ProcRule | ProcBackmap}))
     end
 
-    matchpi %[(ml ml_string)] do
-      begin
-        Term.of(:"ml/ok", ML.parse1(ml.to(String)))
-      rescue ML::SyntaxError
-        Term.of({:"ml/err"})
+    def rule(pattern : Term, &fn : ProcRule) : Nil
+      @ruleary << {pattern, fn}
+    end
+
+    def backmap(pattern : Term, &fn : ProcBackmap) : Nil
+      @ruleary << {pattern, fn}
+    end
+    
+    def rulep(ml : String, &fn : ProcRule) : Nil
+      rule(ML.parse1(ml), &fn)
+    end
+
+    def backmapp(ml : String, &fn : ProcBackmap) : Nil
+      backmap(ML.parse1(ml), &fn)
+    end
+
+    # :nodoc:
+    macro pi(methodp, ml, &block)
+      {% icaps = ml.scan(::Ww::Term::CaseContext::RE_CAPTURES).map { |match| (match[1] || match[2]).id }.uniq %}
+      {% location = "#{block.filename.id}:#{block.line_number}:#{block.column_number}" %}
+
+      {{methodp}}({{ml}}) do |%env|
+        {% for icap in icaps %}
+          {% unless block.args.any? { |arg| arg.id == icap.id } %}
+            {{icap.id}} = (%env[{{icap.id.symbolize}}]? || raise "case: #{ {{location}} }: missing capture '{{icap.id}}'")
+          {% end %}
+        {% end %}
+
+        pass(
+          {% for capture in block.args %}
+            (%env[{{capture.id.symbolize}}]? || raise "rulepi: #{ {{location}} }: missing capture '{{capture.id}}'"),
+          {% end %}
+        ) {{block}}
       end
     end
 
-    matchpi %[(substring s_string (rune b←(%number i32)) (rune e←(%number i32)))] do
-      Term.of(Term::Str::Substring.runes(s.unsafe_as_s, b.to(Int32), e.to(Int32)))
+    macro rulepi(ml, &block)
+      pi(rulep, {{ml}}) {{block}}
     end
 
-    matchpi %[(substring s_string (word b←(%number i32)) (word e←(%number i32)))] do
-      Term.of(Term::Str::Substring.words(s.unsafe_as_s, b.to(Int32), e.to(Int32)))
+    macro backmappi(ml, &block)
+      pi(backmapp, {{ml}}) {{block}}
     end
 
-    # TODO: support mixed?
+    macro rulepi1(ml, &block)
+      rulepi({{ml}}) do {% unless block.args.empty? %} |{{block.args.splat}}| {% end %}
+        %result = pass do
+          {{block.body}}
+        end
 
-    matchpi %[(string arg_)] do
-      Term.of(ML.display(arg, endl: false))
-    end
-
-    matchpi %[_dict] do
-      dict0 = dict1 = term.unsafe_as_d
-      dict0.each_entry do |k, v|
-        dict1 = dict1.with(k, rec(v))
+        Offspring::One.new(Term.of(%result))
       end
-      if dict0 == dict1
-        Term.of(dict0)
+    end
+  end
+
+  # :nodoc:
+  def initialize(
+    @pset : PatternSet,
+    @rules : Hash(UInt32, ProcRule)?,
+    @backmaps : Hash(UInt32, ProcBackmap)?,
+  )
+  end
+
+  def self.build(&)
+    ruleary = [] of {Term, ProcRule | ProcBackmap}
+
+    builder = Builder.new(ruleary)
+    with builder yield builder
+
+    decls = Term::Dict.build do |commit|
+      ruleary.each_with_index do |(pattern, proc), index|
+        case proc
+        in ProcRule    then commit << {:rule, index, pattern}
+        in ProcBackmap then commit << {:backmap, index, pattern}
+        end
+      end
+    end
+
+    # TODO: for signed types, add signs e.g. +i8, -i8 to only match the correspondingly signed range
+    # (and zero in both cases)
+
+    # todo: use +i32
+    selector = ML.parse1(%[(type←(%any rule backmap) index←(%number i32) pattern_)])
+
+    rules = backmaps = nil
+
+    index = 0u32
+    pset = PatternSet.select(selector, Term.of(decls)) do |_, env|
+      _, proc = ruleary[env[:index].to(Int32)]
+
+      case env[:type]
+      when Term.of(:rule)
+        rules ||= {} of UInt32 => ProcRule
+        rules[index] = proc.as(ProcRule)
+      when Term.of(:backmap)
+        backmaps ||= {} of UInt32 => ProcBackmap
+        backmaps[index] = proc.as(ProcBackmap)
       else
-        rec(Term.of(dict1))
+        unreachable
       end
+
+      index += 1
+
+      true
     end
 
-    otherwise { term }
+    new(pset, rules, backmaps)
+  end
+
+  private def rule?(index) : ProcRule?
+    @rules.try { |rules| rules[index]? }
+  end
+
+  private def backmap?(index) : ProcBackmap?
+    @backmaps.try { |backmaps| backmaps[index]? }
+  end
+
+  def call(matchee matchee0 : Term) : Offspring::Any
+    case pr = @pset.response(matchee0)
+    in Pr::One
+      if rule = rule?(pr.pattern.index)
+        offspring = rule.call(pr.env)
+      end
+
+      if backmap = backmap?(pr.pattern.index)
+        unless pr.env.includes?(:"(keypaths)")
+          pr = pr.pattern.response(matchee0, keypaths: true).as(Pr::One)
+        end
+        backspec = backmap.call(pr.env)
+        matchee1 = Term::M1.backmap(pr.envs, Term.of(backspec), matchee0)
+        offspring = Offspring::One.new(matchee1)
+      end
+
+      case offspring
+      in Nil
+        unreachable
+      in Offspring::One
+        different = matchee0 != offspring.term
+      in Offspring::Many
+        different = Term[{matchee0}] != offspring.list
+      in Offspring::None, Offspring::Neg
+        different = true
+      end
+
+      different ? offspring : Offspring::None.new
+    in Pr::Many
+      raise ""
+    in Pr::Neg
+      Offspring::None.new
+    end
   end
 end
+
+def dfsr(successor, term) : Offspring::Pos
+  case offspring = successor.call(term)
+  in Offspring::Some
+    return offspring
+  in Offspring::Neg
+    return Offspring::None.new
+  in Offspring::None
+  end
+
+  unless dict0 = term.as_d?
+    return Offspring::None.new
+  end
+
+  dictr(dict0, dfsr(successor))
+end
+
+def dfsr(successor)
+  # TODO: struct
+  ->(term : Term) { dfsr(successor, term) }
+end
+
+def dictr(dict dict0 : Term::Dict, successor)
+  splices = nil
+
+  dict1 = dict0
+  dict0.each_entry do |key, value|
+    case offspring = successor.call(value)
+    in Offspring::One
+      dict1 = dict1.with(key, offspring.term)
+    in Offspring::Many
+      if index = dict0.index?(key)
+        splices ||= [] of {Term::Num, Term::Dict}
+        splices << {index, offspring.list}
+      else
+        dict1 = dict1.with(key, offspring.list)
+      end
+    in Offspring::None
+    end
+  end
+  
+  if splices
+    # TODO: we can come up with some kind of queue-like approach?
+    # Take last, copy up to, concat last, take last, copy up to, ...
+    splices.sort_by! { |index, _| -index }
+    splices.each do |index, list|
+      dict1 = dict1.replace(index...index + 1, &.concat(list.items))
+    end
+  end
+
+  dict0 == dict1 ? Offspring::None.new : Offspring::One.new(Term.of(dict1))
+end
+
+private alias O = Term::M1::Operator
+
+def spotr(selector, successor, term)
+  if env = O.match?(Term[], selector, term)
+    if subject = env[:subject]?
+      return successor.call(subject)
+    end
+  end
+
+  unless dict = term.as_d?
+    return Offspring::None.new
+  end
+
+  dictr(dict, spotr(selector, successor))
+end
+
+def spotr(selector : O::Any, successor)
+  # TODO: struct
+  ->(term : Term) { spotr(selector, successor, term) }
+end
+
+def spotr(selector : Term, successor)
+  spotr(Term::M1.operator(selector), successor)
+end
+
+def spotrp(selector : String, successor)
+  spotr(ML.parse1(selector), successor)
+end
+
+def selfr
+  ->(term : Term) { Offspring::None.new }
+end
+
 
 CURSORP  = ML.parse1(%([_string | _string (_*) @_]))
 CURSORPE = Term::M1.operator(ML.parse1(%([_string | _string (_*) @edge_])))
@@ -559,13 +776,49 @@ end
 
 SELECTOR = ML.parse1(%[(%any° (rule pattern_ template_) (backmap pattern_ backspec_) (-rule pattern←negative_))])
 BASE = ML.parse(File.read("#{__DIR__}/editor.soma.wwml"))
-RULESET = Ruleset.select(SELECTOR, BASE, applier: Applier.new(->(term : Term) { Offspring::One.new(rec(term)) }))
+NATRS = ProcRuleset.build do
+  rulepi1 %[(+ a_number b_number)] { a + b }
+  rulepi1 %[(- a_number b_number)] { a - b }
+  rulepi1 %[(* a_number b_number)] { a * b }
+  rulepi1 %[(/ a_number (%all b_number (%not 0)))] { a / b }
+  rulepi1 %[(~ a_string b_string)] { a.stitch(b) }
+
+  # Converts term to a string.
+  rulepi1 %[(string term_)] { ML.display(term, endl: false) }
+
+  # Converts (parses) a string into a term.
+  rulepi1 %[(ml ml_string)] do
+    begin
+      {:"ml/ok", ML.parse1(ml.to(String))}
+    rescue ML::SyntaxError
+      # TODO: line col message
+      {:"ml/err"}
+    end
+  end
+
+  # TODO: support mixed substring?
+
+  # Take substring by runes (characters).
+  rulepi1 %[(substring s_string (rune b←(%number i32)) (rune e←(%number i32)))] do
+    Term::Str::Substring.runes(s.unsafe_as_s, b.to(Int32), e.to(Int32))
+  end
+
+  # Take substring by words (includes spaces).
+  rulepi1 %[(substring s_string (word b←(%number i32)) (word e←(%number i32)))] do
+    Term::Str::Substring.words(s.unsafe_as_s, b.to(Int32), e.to(Int32))
+  end
+
+  # TODO: take substring by lines.
+end
+
+RULESET = Ruleset.select(SELECTOR, BASE, fanout: {rule: selfr, backmap: spotrp(%[($ subject_)], repeatr(dfsr(NATRS)))})
+# RULESET = Ruleset.select(SELECTOR, BASE, applier: Applier.new(->(term : Term) { Offspring::One.new(rec(term)) }))
 REWRITER = editr(RULESET)
 
 def apply(root : Term, motion : Term) : Term
   pipe(root,
     subsume(motion, Term.of(:edge, :user)),
-    rewrite(REWRITER, cap: 64))
+    rewrite(REWRITER, limit: 64u32))
 end
 
 
@@ -639,7 +892,7 @@ WWML
 
 # Benchmark.ips do |x|
 #   x.report("parse") do
-#     Pset.parse(selector, rules)
+#     PatternSet.parse(selector, rules)
 #   end
 
   # matchee = Term.of(:+, 1, 2)
@@ -778,6 +1031,3 @@ WWML
 # relr over a cursor:
 #
 # (relr [_string | _string (motions_+) @pin_])
-
-# Plan:
-# TODO: work on TUI for pattern6_test and editor test. An editor playground.
