@@ -5033,7 +5033,7 @@ class PatternSet
   end
 
   private def response(neighbors : Slice(Pattern), matchee : Term) : Pr::Any
-    neighbors.first_of?(&.response(matchee).as?(Pr::Pos)) || Pr::Neg.new
+    neighbors.leftmost?(&.response(matchee).as?(Pr::Pos)) || Pr::Neg.new
   end
 
   private def responses(neighbors : Slice(Pattern), matchee : Term) : Array(Pr::Pos)
@@ -5094,6 +5094,10 @@ class ::Ww::Term::Dict
         commit.append(self[index])
       end
     end
+  end
+
+  def replace(index : Term::Num, &)
+    replace(index...index + 1) { |commit| yield commit }
   end
 end
 

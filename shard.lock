@@ -6,5 +6,5 @@ shards:
 
   permafrost:
     git: https://github.com/homonoidian/permafrost.git
-    version: 0.3.1
+    version: 0.4.0
 

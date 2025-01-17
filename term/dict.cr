@@ -59,6 +59,9 @@ class ::Pf::Core::Node(T)
 end
 
 module Ww
+  module Tail
+  end
+
   # Represents a dictionary: an immutable, persistent collection of key-value
   # pairs supporting efficient, near-O(1) insert, delete, and lookup.
   class Term::Dict
@@ -342,6 +345,20 @@ module Ww
       entry.value
     end
 
+    def nth(index : Int32)
+      if 0 <= index < @items.size
+        entry = @items.nth?(index) || raise IndexError.new
+
+        {Term.of(entry.index), entry.value}
+      elsif @items.size <= index < size
+        entry = @pairs.nth?(index - @items.size) || raise IndexError.new
+
+        {entry.key, entry.value}
+      else
+        raise IndexError.new
+      end
+    end
+
     # Returns the value associated with the given *key*, or nil if *key*
     # is not associated with any value.
     def at?(key) : Term?
@@ -554,6 +571,10 @@ module Ww
 
     def follow(keys : Enumerable(Term)) : Term
       follow?(keys) || raise KeyError.new
+    end
+
+    def where(key : Tail.class, eq value) : Dict
+      self.with(items.size, value)
     end
 
     def where(key, eq value) : Dict

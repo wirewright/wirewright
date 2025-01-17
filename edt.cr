@@ -1,5 +1,5 @@
 require "./wirewright"
-require "./foo"
+require "./baz4"
 require "./libtermbox2"
 
 # TODO: should we add these as official rewriters? Then we'll be able to use
@@ -386,27 +386,27 @@ while running
     if event.ch.zero? # Non-character key
       case event.key
       when .esc?
-        root1 = apply(root1, Term.of(:key, :escape))
+        root1 = edit(root1, Term.of(:key, :escape))
       when .tab?
-        root1 = apply(root1, Term.of(:key, :tab))
+        root1 = edit(root1, Term.of(:key, :tab))
       when .home?
-        root1 = apply(root1, Term.of(:key, :home))
+        root1 = edit(root1, Term.of(:key, :home))
       when .end?
-        root1 = apply(root1, Term.of(:key, :end))
+        root1 = edit(root1, Term.of(:key, :end))
       when .enter?
-        root1 = apply(root1, Term.of(:key, :enter))
+        root1 = edit(root1, Term.of(:key, :enter))
       when .backspace?, .backspace2?
-        root1 = apply(root1, Term.of(:key, :backspace))
+        root1 = edit(root1, Term.of(:key, :backspace))
       when .delete?
-        root1 = apply(root1, Term.of(:key, :delete))
+        root1 = edit(root1, Term.of(:key, :delete))
       when .arrow_left?
-        root1 = apply(root1, Term.of(:key, :left))
+        root1 = edit(root1, Term.of(:key, :left))
       when .arrow_right?
-        root1 = apply(root1, Term.of(:key, :right))
+        root1 = edit(root1, Term.of(:key, :right))
       when .arrow_up?
-        root1 = apply(root1, Term.of(:key, :up))
+        root1 = edit(root1, Term.of(:key, :up))
       when .arrow_down?
-        root1 = apply(root1, Term.of(:key, :down))
+        root1 = edit(root1, Term.of(:key, :down))
       when .ctrl_c?
         running = false
         break
@@ -417,7 +417,7 @@ while running
     else
       chr = event.ch.chr
       next unless chr.printable?
-      root1 = apply(root1, Term.of(:type, chr))
+      root1 = edit(root1, Term.of(:type, chr))
     end
   end
 

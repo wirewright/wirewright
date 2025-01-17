@@ -1,5 +1,5 @@
 require "./wirewright"
-require "./foo"
+require "./baz4"
 
 CASES  = File.read("#{__DIR__}/patterns.test.wwml") + "\n" + File.read("#{__DIR__}/editor.test.wwml")
 PEOPLE = Term.of(JSON.parse(File.read("#{__DIR__}/data/people.json")))
@@ -254,7 +254,7 @@ def process(queue, testcase, ctx)
             track(ctx, edit) do
               ctx.stats.run do
                 motions.items.each do |motion|
-                  root = apply(root, motion)
+                  root = edit(root, motion)
                 end
               end
             end

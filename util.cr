@@ -138,7 +138,7 @@ class Array(T)
     self
   end
 
-  def concat(other : Array(U), & : U -> T) forall U
+  def concat(other : Indexable(U), & : U -> T) forall U
     resize_if_cant_insert(other.size)
 
     other.each do |el|
@@ -229,11 +229,27 @@ module Enumerable(T)
     set
   end
 
-  def first_of?(& : T -> U?) : U? forall U
+  def leftmost?(& : T -> U?) : U? forall U
     each do |object0|
       next unless object1 = yield object0
       return object1
     end
+  end
+
+  def leftmost?(cls : T.class) : T?
+    each do |object|
+      return object if object.is_a?(T)
+    end
+  end
+
+  def rightmost?(cls : U.class) : U? forall U
+    reverse_each do |object|
+      return object if object.is_a?(U)
+    end
+  end
+
+  def rightmost?(cls, *classes)
+    rightmost?(cls) || rightmost?(*classes)
   end
 end
 
