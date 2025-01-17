@@ -3372,21 +3372,29 @@ module ::Ww::Term::M1
       # on the Crystal side to ensure we can safely e.g. to(Int32).
       match({:"%number", :type_symbol}, cue: :"%number") do |type|
         case type
-        when Term.of(:u8)   then cls = UInt8
-        when Term.of(:u16)  then cls = UInt16
-        when Term.of(:u32)  then cls = UInt32
-        when Term.of(:u64)  then cls = UInt64
-        when Term.of(:u128) then cls = UInt128
-        when Term.of(:i8)   then cls = Int8
-        when Term.of(:i16)  then cls = Int16
-        when Term.of(:i32)  then cls = Int32
-        when Term.of(:i64)  then cls = Int64
-        when Term.of(:i128) then cls = Int128
+        when Term.of(:u8)      then Term.of(:"%number", UInt8::MIN, :<=, {:whole, :_}, :<=, UInt8::MAX)
+        when Term.of(:u16)     then Term.of(:"%number", UInt16::MIN, :<=, {:whole, :_}, :<=, UInt16::MAX)
+        when Term.of(:u32)     then Term.of(:"%number", UInt32::MIN, :<=, {:whole, :_}, :<=, UInt32::MAX)
+        when Term.of(:u64)     then Term.of(:"%number", UInt64::MIN, :<=, {:whole, :_}, :<=, UInt64::MAX)
+        when Term.of(:u128)    then Term.of(:"%number", UInt128::MIN, :<=, {:whole, :_}, :<=, UInt128::MAX)
+        when Term.of(:i8)      then Term.of(:"%number", Int8::MIN, :<=, {:whole, :_}, :<=, Int8::MAX)
+        when Term.of(:"-i8")   then Term.of(:"%number", Int8::MIN, :<=, {:whole, :_}, :<, 0)
+        when Term.of(:"+i8")   then Term.of(:"%number", 0, :<=, {:whole, :_}, :<=, Int8::MAX)
+        when Term.of(:i16)     then Term.of(:"%number", Int16::MIN, :<=, {:whole, :_}, :<=, Int16::MAX)
+        when Term.of(:"-i16")  then Term.of(:"%number", Int16::MIN, :<=, {:whole, :_}, :<, 0)
+        when Term.of(:"+i16")  then Term.of(:"%number", 0, :<=, {:whole, :_}, :<=, Int16::MAX)
+        when Term.of(:i32)     then Term.of(:"%number", Int32::MIN, :<=, {:whole, :_}, :<=, Int32::MAX)
+        when Term.of(:"-i32")  then Term.of(:"%number", Int32::MIN, :<=, {:whole, :_}, :<, 0)
+        when Term.of(:"+i32")  then Term.of(:"%number", 0, :<=, {:whole, :_}, :<=, Int32::MAX)
+        when Term.of(:i64)     then Term.of(:"%number", Int64::MIN, :<=, {:whole, :_}, :<=, Int64::MAX)
+        when Term.of(:"-i64")  then Term.of(:"%number", Int64::MIN, :<=, {:whole, :_}, :<, 0)
+        when Term.of(:"+i64")  then Term.of(:"%number", 0, :<=, {:whole, :_}, :<=, Int64::MAX)
+        when Term.of(:i128)    then Term.of(:"%number", Int128::MIN, :<=, {:whole, :_}, :<=, Int128::MAX)
+        when Term.of(:"-i128") then Term.of(:"%number", Int128::MIN, :<=, {:whole, :_}, :<, 0)
+        when Term.of(:"+i128") then Term.of(:"%number", 0, :<=, {:whole, :_}, :<=, Int128::MAX)
         else
           continue
         end
-
-        Term.of(:"%number", cls.min, :<=, {:whole, :_}, :<=, cls.max)
       end
 
       # Binary %number, binary whole %number is normal if the op is valid.

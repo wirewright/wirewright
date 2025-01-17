@@ -162,11 +162,7 @@ struct ProcRuleset
       end
     end
 
-    # TODO: for signed types, add signs e.g. +i8, -i8 to only match the correspondingly signed range
-    # (and zero in both cases)
-
-    # todo: use +i32
-    selector = ML.parse1(%[(type←(%any rule backmap) index←(%number i32) pattern_)])
+    selector = ML.parse1(%[(type←(%any rule backmap) index←(%number +i32) pattern_)])
 
     rules = backmaps = nil
 
@@ -899,10 +895,6 @@ def ruler(ruleset, ruler, backmapr, elser)
     operand.reduce { |term| ruler(changes, term, ruleset, ruler, backmapr, elser) }
   end
 end
-
-# TODO: ???: reduce for Many must take into account the block returning all Nones.
-# TODO: rename changes to changefeed
-# TODO: pbr(<pattern set with ignored patterns>, nor, ruler(<ruleset with the rest of patterns>, ..., ...))
 
 term = Term.of(1, {3, {:"$", {:ml, "100"}}, 4}, { {:"$", {:+, {:+, {:"$", 1}, 2}, 3}} }, { {:"$", {:string, 100}} }, x: {:+, 4, 5}, y: 200)
 
