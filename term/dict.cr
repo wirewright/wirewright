@@ -577,6 +577,12 @@ module Ww
       self.with(items.size, value)
     end
 
+    def where(key, eq fn : Term -> Term) : Dict
+      return self unless v0 = self[key]?
+
+      self.with(key, fn.call(v0))
+    end
+
     def where(key, eq value) : Dict
       self.with(key, value)
     end
