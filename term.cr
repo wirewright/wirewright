@@ -600,8 +600,8 @@ module Ww
       engine.matches(Term.of(pattern), Term.of(matchee), env: env)
     end
 
-    def self.case(matchee, *, engine : Engine.class = M1, &) forall Engine
-      context = CaseContext(Engine).new(Term.of(matchee)) 
+    def self.case(matchee, *, engine : Engine.class = M1, **kwargs, &) forall Engine
+      context = CaseContext(Engine).new(Term.of(matchee), **kwargs)
 
       with context yield context
 
