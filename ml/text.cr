@@ -391,6 +391,15 @@ module Ww::ML::Text
           else
             return symbol
           end
+        when '<'
+          case ahead
+          when '>'
+            advance
+            advance
+            return Token.new(:"<>", pos - 2, pos)
+          else
+            return symbol
+          end
         when ';'
           comment # Skip comment
         when '1'..'9'
@@ -437,7 +446,7 @@ module Ww::ML::Text
         when '}'
           advance
           return Token.new(:"}", pos - 1, pos)
-        when '!', '$', '%', '&', '*', '.', '/', '<', '>', '?', '_', '~', 'λ', '|', '∞', '⏏', '°', '∈', '⊆', '⊂'
+        when '!', '$', '%', '&', '*', '.', '/', '>', '?', '_', '~', 'λ', '|', '∞', '⏏', '°', '∈', '⊆', '⊂'
           return symbol
         when '`'
           advance
@@ -882,22 +891,6 @@ module Ww::ML::Text
       slot(token)
     end
 
-    private def macro_backmap(lhs) : Term
-      backmap = Term[:"macro/backmap", lhs].transaction do |commit|
-        while operator = @lexer.ahead?
-          case operator.type
-          when :"<->"
-            @lexer.thru?
-            commit.append(slot)
-          else
-            break
-          end
-        end
-      end
-
-      backmap.upcast
-    end
-
     private def expression(commit, token)
       lhs = slot(token)
       unless operator = @lexer.ahead?
@@ -912,8 +905,9 @@ module Ww::ML::Text
       when :"=>" # "lhs_ => rhs_" -> (rule lhs rhs)
         @lexer.thru?
         commit.append({:rule, lhs, slot})
-      when :"<->" # "lhs_ <-> rhs_" -> (backmap lhs rhs)
-        commit.append(macro_backmap(lhs))
+      when :"<>" # "lhs_ <> rhs_" -> (backmap lhs rhs)
+        @lexer.thru?
+        commit.append({:backmap, lhs, slot})
       when :":"
         @lexer.thru?
         commit.with(lhs, slot)
