@@ -1,5 +1,3 @@
-# TODO: missing feature: explicit cue, cues support
-
 struct Ww::Term
   struct CaseContext(Engine)
     # See `continue`.
@@ -7,7 +5,7 @@ struct Ww::Term
     end
 
     # :nodoc:
-    def initialize(@matchee : Term)
+    def initialize(@matchee : Term, @stats : CaseStatistics? = nil)
     end
 
     # :nodoc:
@@ -20,13 +18,22 @@ struct Ww::Term
 
     # :nodoc:
     def match?(pid : UInt32, pattern : -> Term, cue cues = Tuple.new, default = nil, &)
-      term = PATTERN_TERM_CACHE.fetch(pid, &pattern)
-      if (dict = term.as_d?) && !cues.all? { |cue| dict.probably_includes?(Term[cue]) }
+      if (mdict = @matchee.as_d?) && !cues.all? { |cue| mdict.probably_includes?(Term[cue]) }
+        @stats.try &.rejected_by_cue
+
         return default
       end
-      unless env = Engine.match?(term, @matchee)
+
+      pterm = PATTERN_TERM_CACHE.fetch(pid, &pattern)
+
+      unless env = Engine.match?(pterm, @matchee)
+        @stats.try &.rejected(pterm)
+
         return default
       end
+
+      @stats.try &.accepted(pterm)
+
       yield env
     end
 
@@ -168,6 +175,100 @@ struct Ww::Term
       #     ...
       #   end
       break {{yield}}
+    end
+  end
+
+  # A lightweight object used to store statistics for Term.case calls. Very internal.
+  # Used to determine the best order of cases based on the accesses in practice for
+  # better performance (especially with M0 where rejections aren't as cheap as in M1).
+  class CaseStatistics
+    def initialize
+      @acceptions = {} of Term => UInt32
+      @rejections = {} of Term => UInt32
+      @rejections_by_cue = 0u32
+      @lock = Mutex.new
+    end
+
+    def accepted(pattern : Term) : Nil
+      @lock.synchronize do
+        @acceptions.update(pattern, 0) { |tally| tally + 1 }
+      end
+    end
+
+    def rejected(pattern : Term) : Nil
+      @lock.synchronize do
+        @rejections.update(pattern, 0) { |tally| tally + 1 }
+      end
+    end
+
+    def rejected_by_cue : Nil
+      @lock.synchronize do
+        @rejections_by_cue += 1
+      end
+    end
+
+    def show(io)
+      @lock.synchronize do
+        pos = @acceptions.to_a.sort_by! { |_, tally| -tally.to_i64 }
+        neg = @rejections.to_a.sort_by! { |_, tally| -tally.to_i64 }
+
+        # I'm bad at math. Is it?
+        io.puts "[OPTIMAL ORDERING]"
+
+        ratios = {} of Term => Float32
+
+        @acceptions.each do |pattern, p|
+          unless q = @rejections[pattern]?
+            ratios[pattern] = Float32::INFINITY
+            next
+          end
+          ratios[pattern] = p.to_f32 / (p + q)
+        end
+
+        @rejections.each do |pattern, _|
+          next if ratios.has_key?(pattern)
+          ratios[pattern] = -Float32::INFINITY
+        end
+
+        ratios_sorted = ratios.to_a.sort_by! { |_, ratio| -ratio }
+        ratios_sorted.each do |pattern, ratio|
+          io.puts "#{ratio} - #{pattern}"
+        end
+
+        io.puts
+        io.puts "[ACCEPTIONS, DESCENDING]"
+
+        pos.each do |pattern, tally|
+          tally.format(io)
+          io << " - " << pattern
+          io.puts
+        end
+
+        io.puts "[REJECTIONS, DESCENDING]"
+
+        neg.each do |pattern, tally|
+          tally.format(io)
+          io << " - " << pattern
+          io.puts
+        end
+
+        io.puts "[REJECTIONS BY CUE]"
+
+        @rejections_by_cue.format(io)
+        io.puts
+
+        io.puts "[TOTAL]"
+
+        total_pos = pos.sum { |_, tally| tally }
+        total_neg = neg.sum { |_, tally| tally } + @rejections_by_cue
+
+        io.puts "    Matches: #{total_pos + total_neg}"
+        io.puts " Acceptions: #{total_pos}"
+        io.puts " Rejections: #{total_neg}"
+        io.puts "Cue success: #{((@rejections_by_cue/total_neg) * 100).round(2)}%"
+
+        io.puts
+      end
     end
   end
 end
