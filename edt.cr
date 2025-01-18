@@ -418,7 +418,7 @@ while running
     else
       chr = event.ch.chr
       next unless chr.printable?
-      root1 = edit(root1, Term.of(:type, chr))
+      root1 = edit(root1, Term.of(:input, chr))
     end
   end
 

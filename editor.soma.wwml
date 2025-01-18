@@ -24,36 +24,36 @@
 ;; meaning. For instance, the overly generic (key enter) may be interpreted in some
 ;; contexts precisely as `expel-left`. in others as `move-right` or `move-below`, etc.
 
-;; Interpret (type)
-(backmap [_string | _string (M←(type text_string) _*) @_] {M: (append-left →text)})
+;; Interpret (input)
+(backmap [_string | _string (M←(input text_string) _*) @_] {M: (append-left →text)})
 
 ;; These append first, then try to expel
-(backmap [(%string nonempty) | "" (M←(type ch←(%any " " "\"")) _*) @_]
+(backmap [(%string nonempty) | "" (M←(input ch←(%any " " "\"")) _*) @_]
   {(M): ((append-left →ch) (expel-left))})
 
 ;; These try to expel first, then if that fails, append, then again try
 ;; to expel, and if even that fails, they give up.
-(backmap [(%string nonempty) | "" (M←(type ch←(%any ")" "}" "]")) _*) @_]
+(backmap [(%string nonempty) | "" (M←(input ch←(%any ")" "}" "]")) _*) @_]
   {M: (expel-left () ((append-left →ch) (expel-left)))})
 
-(backmap ["" | "" (M←(type " ") _*) @_]
+(backmap ["" | "" (M←(input " ") _*) @_]
   {M: (move-ahead)})
 
-(backmap [_* ["" | "" (M←(type " ") _*) @_]]
+(backmap [_* ["" | "" (M←(input " ") _*) @_]]
   {M: (move-out-ahead)})
 
-(backmap [_string | _string (M←(type "(") _*) @_]
+(backmap [_string | _string (M←(input "(") _*) @_]
   {M: (expel ((nest-self)) ((append-left "(")))})
 
-(backmap [_string | _string (M←(type ch←(%any "[" "{")) _*) @_]
+(backmap [_string | _string (M←(input ch←(%any "[" "{")) _*) @_]
   {(M): ((expel) (append-left →ch))})
 
-(backmap ["" | "" (M←(type "(") _*) @_] {M: (nest-self)})
+(backmap ["" | "" (M←(input "(") _*) @_] {M: (nest-self)})
 
-(backmap [(%string nonempty) | "" (M←(type ":") _*) @_]
+(backmap [(%string nonempty) | "" (M←(input ":") _*) @_]
   {M: (expel-left ((enter-key-behind)) ())})
 
-(backmap ["" | "" (M←(type ":") _*) @_]
+(backmap ["" | "" (M←(input ":") _*) @_]
   {M: (enter-key-behind)})
 
 ;; (key tab) should expel + leave from pair if editing at top-level
@@ -166,33 +166,33 @@
 
 ;; For less common actions cursor commands are used instead of complicated
 ;; and utterly meaningless key combos.
-(backmap [lhs←"," | "" (M←(type ":") _*) @_] {lhs: "", M: (pair-around)})
-(backmap [lhs←"," | "" (M←(type "(") _*) @_] {lhs: "", M: (nest-behind)})
-(backmap [lhs←"," | "" (M←(type "v") _*) @_] {lhs: "", M: (dup-behind)})
-(backmap [lhs←"," | "" (M←(type "V") _*) @_] {lhs: "", M: (dup-ahead)})
-(backmap [lhs←"," | "" (M←(type "s") _*) @_] {lhs: "", M: (swap-behind)})
-(backmap [lhs←"," | "" (M←(type "S") _*) @_] {lhs: "", M: (swap-ahead)})
-(backmap [lhs←"," | "" (M←(type "/") _*) @_] {lhs: "", M: (split)})
-(backmap [lhs←"," | "" (M←(type "+") _*) @_] {lhs: "", M: (join)})
-(backmap [lhs←"," | "" (M←(type "y") _*) @_] {lhs: "", M: (copy-behind)})
-(backmap [lhs←"," | "" (M←(type "Y") _*) @_] {lhs: "", M: (copy-ahead)})
-(backmap [lhs←"," | "" (M←(type "x") _*) @_] {lhs: "", M: (cut-behind)})
-(backmap [lhs←"," | "" (M←(type "X") _*) @_] {lhs: "", M: (cut-ahead)})
-(backmap (lhs←"," | "" (M←(type "p") _*) @_ ¦ _ clipboard: _) {lhs: "", M: (paste-behind)})
-(backmap (lhs←"," | "" (M←(type "P") _*) @_ ¦ _ clipboard: _) {lhs: "", M: (paste-ahead)})
-(backmap [lhs←",-" | "" (M←(type (%any "y" "Y")) _*) @_] {lhs: "", M: (clear-clipboard)})
+(backmap [lhs←"," | "" (M←(input ":") _*) @_] {lhs: "", M: (pair-around)})
+(backmap [lhs←"," | "" (M←(input "(") _*) @_] {lhs: "", M: (nest-behind)})
+(backmap [lhs←"," | "" (M←(input "v") _*) @_] {lhs: "", M: (dup-behind)})
+(backmap [lhs←"," | "" (M←(input "V") _*) @_] {lhs: "", M: (dup-ahead)})
+(backmap [lhs←"," | "" (M←(input "s") _*) @_] {lhs: "", M: (swap-behind)})
+(backmap [lhs←"," | "" (M←(input "S") _*) @_] {lhs: "", M: (swap-ahead)})
+(backmap [lhs←"," | "" (M←(input "/") _*) @_] {lhs: "", M: (split)})
+(backmap [lhs←"," | "" (M←(input "+") _*) @_] {lhs: "", M: (join)})
+(backmap [lhs←"," | "" (M←(input "y") _*) @_] {lhs: "", M: (copy-behind)})
+(backmap [lhs←"," | "" (M←(input "Y") _*) @_] {lhs: "", M: (copy-ahead)})
+(backmap [lhs←"," | "" (M←(input "x") _*) @_] {lhs: "", M: (cut-behind)})
+(backmap [lhs←"," | "" (M←(input "X") _*) @_] {lhs: "", M: (cut-ahead)})
+(backmap (lhs←"," | "" (M←(input "p") _*) @_ ¦ _ clipboard: _) {lhs: "", M: (paste-behind)})
+(backmap (lhs←"," | "" (M←(input "P") _*) @_ ¦ _ clipboard: _) {lhs: "", M: (paste-ahead)})
+(backmap [lhs←",-" | "" (M←(input (%any "y" "Y")) _*) @_] {lhs: "", M: (clear-clipboard)})
 
 ;; This one is the only one that starts with a period. But two periods
 ;; at the start of a symbol?! That's weird. So instead of allowing this
 ;; kind of weirdness we're reusing it for something a bit more meaningful.
-(backmap [lhs←"." | "" (M←(type ".") _*) @_] {lhs: "", M: (move-out-ahead)})
+(backmap [lhs←"." | "" (M←(input ".") _*) @_] {lhs: "", M: (move-out-ahead)})
 
 ;; HYBRID
 
 ;; Expand ;; into (comment ...). We're not a parser so we have to improvise! Maybe just
 ;; maybe whatever is interpreting the edited term will treat (comment ...) as a comment.
 ;; If not, whatever, humph.
-(backmap C←[lhs←";" | rhs←"" (M←(type ";") _*) @_]
+(backmap C←[lhs←";" | rhs←"" (M←(input ";") _*) @_]
   {(M): (), lhs: "\"", rhs: "\"", C: (comment ↑C)})
 
 ;; ESCAPE MODE
@@ -210,32 +210,32 @@
   {(M): ()})
 
 ;; Append characters
-(backmap [_string (| seq_string) _string (M←(type text_string) _*) @_]
+(backmap [_string (| seq_string) _string (M←(input text_string) _*) @_]
   {(M): (), seq: ($ (~ →seq →text))})
 
 ;; Arrows
-(backmap [lhs_string c←(| "<") _string (M←(type "-") _*) @_]
+(backmap [lhs_string c←(| "<") _string (M←(input "-") _*) @_]
   {(M): (), lhs: ($ (~ →lhs "←")), c: |})
 
-(backmap [lhs_string c←(| "-") _string (M←(type ">") _*) @_]
+(backmap [lhs_string c←(| "-") _string (M←(input ">") _*) @_]
   {(M): (), lhs: ($ (~ →lhs "→")), c: |})
 
-(backmap [lhs_string c←(| "^") _string (M←(type "|") _*) @_]
+(backmap [lhs_string c←(| "^") _string (M←(input "|") _*) @_]
   {(M): (), lhs: ($ (~ →lhs "↑")), c: |})
 
-(backmap [lhs_string c←(| "|") _string (M←(type "v") _*) @_]
+(backmap [lhs_string c←(| "|") _string (M←(input "v") _*) @_]
   {(M): (), lhs: ($ (~ →lhs "↓")), c: |})
 
 ;; We use the degrees symbol as a symbol for source
-(backmap [lhs_string c←(| "o") _string (M←(type "o") _*) @_]
+(backmap [lhs_string c←(| "o") _string (M←(input "o") _*) @_]
   {(M): (), lhs: ($ (~ →lhs "°")), c: |})
 
 ;; Partition pipe
-(backmap [lhs_string c←(| "|") _string (M←(type "|") _*) @_]
+(backmap [lhs_string c←(| "|") _string (M←(input "|") _*) @_]
   {(M): (), lhs: ($ (~ →lhs "¦")), c: |})
 
 ;; Escape hatch to avoid the auto dict open/close behavior on '('/')'.
-(backmap [lhs_string c←(| "") _string (M←(type ch←(%any "(" ")")) _*) @_]
+(backmap [lhs_string c←(| "") _string (M←(input ch←(%any "(" ")")) _*) @_]
   {(M): (), lhs: ($ (~ →lhs →ch)), c: |})
 
 ;; MORPH
