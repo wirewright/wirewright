@@ -286,8 +286,8 @@ RULESET = Ruleset.select(SELECTOR, BASE)
 
 module Changes
   alias Any = Preview | Accept
-  alias Preview = Term, Rewrite::Some -> Bool
-  alias Accept = -> Bool
+  alias Preview = Term, Rewrite::Some ->
+  alias Accept = ->
 end
 
 # TODO: merge itemsr and pairsr into a single entriesr with an optional
@@ -910,10 +910,8 @@ preview = Changes::Preview.new do |before, after|
   after.each do |term|
     puts ML.display(term)
   end
-
-  true
 end
-accept = Changes::Accept.new { true }
+accept = Changes::Accept.new { }
 
 # pp itemsr(successor).call(preview, Rewrite.one(term))
 # pp itemsr(successor).call(accept, Rewrite.one(term))
@@ -995,7 +993,7 @@ end
 
 def edit(root : Term, motion : Term, edge = Term.of(:edge, :user)) : Term
   root = subsume(root, motion, edge)
-  rewrite = EDITR.call(-> { true }, Rewrite.one(root))
+  rewrite = EDITR.call(-> {}, Rewrite.one(root))
 
   case rewrite
   in Rewrite::None then root
