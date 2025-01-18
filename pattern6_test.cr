@@ -245,6 +245,7 @@ def process(queue, testcase, ctx)
     end
 
     matchpi %[(editor initial_dict edits_*)] do
+      next if "-noed".in?(ARGV)
       root = initial
 
       edits.items.each do |edit|

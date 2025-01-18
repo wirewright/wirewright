@@ -2067,13 +2067,13 @@
      ({ks: ({k: b} {k: c}), sub: ({k: b, v: x} {k: c, v: y})})))
 
 ;; Find KV pairs where V is a symbol
-(pattern (%entries° k_ v_symbol)
+(pattern (%entry° k_ v_symbol)
   (= (xyzzy x: 100 y: 200 z: foo)
     {k: 0, v: xyzzy}
     {k: z, v: foo}))
 
 ;; Find even keys in dict set
-(pattern (%entries° k←(%pipe (mod 2) 0) _)
+(pattern (%entry° k←(%pipe (mod 2) 0) _)
   (= (0: true 1: true 2: true 3: true 4: true 5: true)
     {k: 0}
     {k: 2}
@@ -2863,22 +2863,22 @@
 ;; %entries source replacement
 (group
   ;; Only keys 1:1
-  (backmap ((%entries° k_ v_) {k: (seen ($down k))})
+  (backmap ((%entry° k_ v_) {k: (seen ($down k))})
     (= {x: a, y: b, z: c}
        {(seen x): a, (seen y): b, (seen z): c}))
 
   ;; Only values 1:1
-  (backmap ((%entries° k_ v_) {v: (seen ($down v))})
+  (backmap ((%entry° k_ v_) {v: (seen ($down v))})
     (= {x: a, y: b, z: c}
        {x: (seen a), y: (seen b), z: (seen c)}))
 
   ;; Both keys and values 1:1 : swap keys and values
-  (backmap ((%entries° k_ v_) {k: ($down v), v: ($down k)})
+  (backmap ((%entry° k_ v_) {k: ($down v), v: ($down k)})
     (= {x: a, y: b, z: c}
        {a: x, b: y, c: z}))
 
   ;; Filter on dict sets
-  (backmap ((%entries° (qux x_) _) {x: (seen ($down x))})
+  (backmap ((%entry° (qux x_) _) {x: (seen ($down x))})
     (= {(qux a): true, (qux b): true, (qix c): true, (qyx d): 1/3}
        {(qux (seen a)): true,
         (qux (seen b)): true,
@@ -2886,7 +2886,7 @@
         (qyx d): 1/3}))
 
   ;; Nesting: basic
-  (backmap ((%entries° (%entries° k_ v0_) v1_)
+  (backmap ((%entry° (%entry° k_ v0_) v1_)
             {k: (seen ($down k)), v0: (seen ($down v0)), v1: (seen ($down v1))})
     (= {{a: 1, b: 2}: 3, {c: 4}: 5, {d: 6, e: 7}: 8}
        {{(seen a): (seen 1), (seen b): (seen 2)}: (seen 3),
@@ -2894,15 +2894,15 @@
         {(seen d): (seen 6), (seen e): (seen 7)}: (seen 8)}))
 
   ;; Nesting: value equality across nesting boundary
-  (backmap ((%entries° (%entries° k_ v_) v_)
+  (backmap ((%entry° (%entry° k_ v_) v_)
             {k: (seen ($down k)), v: (seen ($down v))})
     (= {{a: 1, b: 2}: 2, {c: 4}: 5, {d: 8, e: 8}: 8}
        {{a: 1, (seen b): (seen 2)}: (seen 2),
         {c: 4}: 5,
         {(seen d): (seen 8), (seen e): (seen 8)}: (seen 8)}))
 
-  ;; Nesting: %item° inside %entries°
-  (backmap ((%entries° (%item° x_) x_) {x: (seen ($down x))})
+  ;; Nesting: %item° inside %entry°
+  (backmap ((%entry° (%item° x_) x_) {x: (seen ($down x))})
     (= {(): qux,
         (a): a,
         (b): a,
@@ -2925,7 +2925,7 @@
         (a b c 5): d}))
 
   ;; Collisions
-  (backmap ((%entries° k_ v_) {k: ($down v), v: ($down k)})
+  (backmap ((%entry° k_ v_) {k: ($down v), v: ($down k)})
     (= {a: x, b: x, c: y, d: z}
        ;; one of
        {x: a, y: c, z: d}
@@ -3150,11 +3150,13 @@
   (level (+ x_number y_number))
   (level (+ x←(%number _ < 5) y_number))
   (level (+ x←(%number _ < 5) y←(%number _ < 5)))
+  (level (+ (%any 0 1) _number))
   (level (+ 0 _) (+ _ 0))
-  (level (+ 0 _number) (+ (%any 0 1) _number))
+  (level (+ 0 _number))
   (level (+ 0 0 _))
   ;; Highest specificity -- most specific
-  (level 1/3 "hello" qux true (%any a b c) x←0))
+  (level (%any a b c))
+  (level 1/3 "hello" qux true x←0))
 
 ;; Having more literals wins (we use _ to prevent auto %literal inference)
 (specificity
@@ -3180,19 +3182,23 @@
 ;; %any° takes minimum specificity of its branches
 (specificity
   (level (%any° 0 x_) (%any° x_ y_)) ;; blank wins
-  (level (%any° _number 0) (%any° (+ a_ b_) _number) (%any° (%number _ < 10) _number)) ;; _number wins
+  (level (%any° _number 0)
+         (%any° (+ a_ b_) _number)
+         (%any° (%number _ < 10) _number)) ;; _number wins
   (level (%any° (%number _ < 10) 0)) ;; %number wins
   (level (%any° (%number 0 < _ < 10) (%number -10 < _ < 0)) ;; both win
          (%any° (%number 0 < _ < 10) 100)) ;; %number wins
-  (level (%any° 100 200) (%any° (%any 0 1 2) (%any 3 4 5)))) ;; both win
+  (level (%any° (%any 0 1 2) (%any 3 4 5)))
+  (level (%any° 100 200)))
 
-;; %all takes sum of specificity of its branches
+;; %all takes the sum of specificity of its branches
 (specificity
   (level (%all _ _) (%all x_ _) (%all _ y_) (%all x_ y_))
   (level (%all x_number y_) (%all x_ y_number))
   (level (%all x_number y_number))
   (level (%all x_number (%number _ < 0)))
-  (level (%all 0 x_) (%all (%any 0 1 2) x_)))
+  (level (%all (%any 0 1 2) x_))
+  (level (%all 0 x_)))
 
 (specificity
   (level [_string | _string (M←(type text_string) _*) @_])
@@ -3205,6 +3211,23 @@
 (specificity
   (level [lhs←"" | "" (M←(edit term_) _*) @_])
   (level C←["" | "" ((m←edit [_* ⭳target]) _*) @_]))
+
+;; Make sure we're able to walk into %layer.
+(specificity
+  (level (%layer _ (+ 1 2 x: x_number y: y_number)))
+  (level (%layer _ (+ 1 2 x: 1 y: 2))))
+
+;; Specificity of %any should be slightly less than that of a literal.
+(specificity
+  (level (%any a b c))
+  (level a b c))
+
+;; Specificity of a keypool with more keys is higher than that of a keypool
+;; with less keys.
+(specificity
+  (level (%keypool a))
+  (level (%keypool a b))
+  (level (%keypool a b c)))
 
 ;; Head
 ;; Make sure pattern head is determined properly
@@ -3270,64 +3293,21 @@
 
 ;; TODO: test empty %many, %group, %past
 
-;; TODO: the following tests do not belong here. They are editor tests
-;; and must test the entire editor "pipeline". Thus we first need to bring
-;; soma11 in and with it, all the editor rules (ported to the new pattern
-;; runtime)
+;; Here we implicitly test walk
+(group
+  (specificity (level _ (%new x_)))
+  (specificity (level x_dict (%pipe (map (x_ y_)) _)))
+  (specificity (level (a b (%any (%any 1 2) 3))
+                      (a b (%any 1 2 3))))
 
+  (specificity
+    (level
+      (%keypool (%all (%any 1 2)))
+      (%keypool (%all 1 2 3 4 5))))
 
+  (specificity 
+    (level (%-value x qux) (%-value x (%any 1 2))))
 
-;; Move parent behind
+  (specificity
+    (level ((%literal qux)) ((%literal (%any 1 2))))))
 
-;; Move parent ahead
-
-
-;; Move parent above
-;; (backmap (⧼⭳dst [_* [_* P←⧼(| (m←x _*))⧽]]⧽ {(m): (), ($real (P)): (), dst: ($up P)})
-;;   (=
-;;     (component name: "Counter"
-;;       (cell 0 @count)
-;;       (button "Increment" @msgs)
-;;       (button "Decrement" @msgs)
-;;       (transform (@msgs "Increment") to (@counts (+ state 1)) with @count)
-;;       (transform (@msgs "Decrement") to (@counts (- state 1)) with @count)
-;;       (latest @counts at @count))
-;;     (component name: "Counter"
-;;       (cell 0 @count)
-;;       (button (| (y z)) "Decrement" @msgs)
-;;       (button "Increment" @msgs)
-;;       (transform (@msgs "Increment") to (@counts (+ state 1)) with @count)
-;;       (transform (@msgs "Decrement") to (@counts (- state 1)) with @count)
-;;       (latest @counts at @count))))
-
-;; Cursor patterns
-;; We test simplified cursor patterns here since they are the main users of
-;; advanced backmap features.
-;;
-;; Sorry, but it seems that S-expressions break down at this kind of nesting :)
-;; There is simply no way around it that I can see. Additionally, the patterns
-;; become very tedious as well (we're talking 3+ dimension-patterns here, i.e.
-;; patterns like "find list where exists list where find list where exists list where P"),
-;; even human language breaks down. The fact that this can be expressed in just
-;; a few characters thanks to syntactic shorthands and shorthands for shorthands
-;; etc. is a miracle! (e.g. `⧼⭳dst [_* [_* P←⧼(| (m←x _*))⧽]]⧽`
-
-;; Surround parent front
-(backmap (⧼P←⧼C←(| (m←x _*))⧽⧽ {(m): (), (C): ($tr C0 ()), P: (↑C0 ↑P)})
-  (= (qux (a b (| (x y z)) c foo: 1) d)
-    (qux ((| (y z)) (a b c foo: 1)) d)))
-
-;; Surround parent back
-(backmap (⧼P←⧼C←(| (m←x _*))⧽⧽ {(m): (), (C): ($tr C0 ()), P: (↑P ↑C0)})
-  (= (qux (a b (| (x y z)) c foo: 1) d)
-    (qux ((a b c foo: 1) (| (y z))) d)))
-
-;; Append parent behind
-(backmap (⧼(_* ⭳dst ¦ _) P←⧼(| (m←x _*))⧽⧽ {(m): (), (P): (), dst: ↑P})
-  (= (xyzzy (qix foo: 1 bar: 2) (qux (| (x y z)) a: 1 b: 2) alpha: 1/3)
-     (xyzzy (qix (qux (| (y z)) a: 1 b: 2) foo: 1 bar: 2) alpha: 1/3)))
-
-;; Append parent ahead
-(backmap (⧼P←⧼(| (m←x _*))⧽ [⭳dst _*]⧽ {(m): (), (P): (), dst: ↑P})
-  (= (xyzzy (qux (| (x y z)) a: 1 b: 2) (qix foo: 1 bar: 2) alpha: 1/3)
-     (xyzzy ((qux (| (y z)) a: 1 b: 2) qix foo: 1 bar: 2) alpha: 1/3)))
