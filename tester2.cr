@@ -1,6 +1,6 @@
 require "./libtermbox2"
 require "./wirewright"
-require "./foo"
+require "./baz4"
 
 test = ML.parse1(File.read("./editor.test.wwml"))
 
@@ -11,12 +11,13 @@ Term.case(test) do
   matchpi %[(editor initial_dict edits_*)] do
     root = initial
     dt = Time.measure do
-      edits.items.each do |edit|
+      edits.items.each_with_index do |edit, index|
+        puts "Edit #{index} out of #{edits.items.size} edit(s)"
         Term.case(edit) do
           matchpi %[(after (motions_+) snapshot_)] do
             root0 = root
             motions.items.each do |motion|
-              root = apply(root, motion)
+              root = edit(root, motion)
             end
             unless root == snapshot
               puts ML.display(edit)
@@ -34,7 +35,7 @@ Term.case(test) do
       end
     end
 
-    puts "Replay success in #{dt.total_milliseconds}ms".colorize.bold.green
+    puts "Replay success in #{dt.humanize}".colorize.bold.green
   end
 end
 
@@ -43,19 +44,20 @@ if "-r".in?(ARGV)
 end
 
 def debug(root0, motions)
-  puts "Debug"
-  puts ML.display(root0)
-  gets
-  dbgroot = root0
-  motions.items.each do |motion|
-    dbgroot = subsume(dbgroot, motion, Term.of(:edge, :user))
-    puts ML.display(dbgroot)
-    gets
-    dbgroot = rewrite(dbgroot, REWRITER) do |im|
-      puts ML.display(im)
-      gets
-    end
-  end
+  raise "debug mode disabled"
+  # puts "Debug"
+  # puts ML.display(root0)
+  # gets
+  # dbgroot = root0
+  # motions.items.each do |motion|
+  #   dbgroot = subsume(dbgroot, motion, Term.of(:edge, :user))
+  #   puts ML.display(dbgroot)
+  #   gets
+  #   dbgroot = rewrite(dbgroot, EDITR) do |im|
+  #     puts ML.display(im)
+  #     gets
+  #   end
+  # end
 end
 
 root0 = root
@@ -93,6 +95,6 @@ while true
   end
 
   motion = ML.parse1(command)
-  root = apply(root, motion)
+  root = edit(root, motion)
   motions = motions.append(motion)
 end

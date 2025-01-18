@@ -30,6 +30,9 @@
 # │ %pipe: + - * / d m **    │   +   │   +     │   +   │            │    ·     │       │
 # │ %pipe: span tally        │   +   │   +     │   +   │            │    ·     │       │
 # │ %pipe: map               │   +   │   +     │   +   │            │    ·     │       │
+# │ %value                   │   ~   │   ~     │   ~   │            │    ~     │       │
+# │ %-value _                │   ~   │   ~     │   ~   │            │    ·     │       │
+# │ %-value _ _              │   ~   │   ~     │   ~   │            │    ~     │       │
 # │ %dict: %singular         │   ~   │   ~     │   ~   │            │    ~     │       │
 # │ %dict: %slot             │   ~   │   ~     │   ~   │            │    ~     │       │
 # │ %dict: %plural min max   │   +   │   +     │   +   │            │    ~     │       │
@@ -43,9 +46,8 @@
 # │ %dict: %gap min max      │   +   │   +     │   +   │            │    ·     │       │
 # │ %dict: %pair/required    │   +   │   +     │   +   │            │    ~     │       │
 # │ %dict: %pair k %optional │   +   │   +     │   +   │            │    ~     │       │
-# │ %dict: %pair k %absent   │   +   │   +     │   +   │            │    ·     │       │
-# │ %dict: %pair k %absent:v │   +   │   +     │   +   │            │    ·     │       │
-# │ %dict: %value            │   ~   │   ~     │   ~   │            │    ~     │       │
+# │ %dict: pair %- _         │   +   │   +     │   +   │            │    ·     │       │
+# │ %dict: pair %- _ keyp    │   +   │   +     │   +   │            │    ·     │       │
 # │ %dict: %entries          │   ~   │   ~     │   ~   │            │    ·     │       │
 # │ %dict: %entries source   │   ~   │   ~     │   ~   │            │    ~     │       │
 # │ item first               │   ~   │   ~     │   ~   │            │    ~     │       │
@@ -119,13 +121,6 @@
 #  since the latter offers so much)
 
 ###
-
-# At this point we should begin work on the Source-based rewriters. Later we should be able to integrate
-# them into soma11 to have managed/timeout-able rewriting.
-
-###
-
-# Hard part in rewriting etc.: ability to support (%locus ...) and multiple envs returned.
 
 # TODO: string patterns
 # We should be able to treat strings as bytestrings OR unicode under the hood. Thus string patterns (%string "...")
@@ -278,245 +273,6 @@ struct ::Ww::Term::M0::PairSchema
     good
   end
 end
-
-# module Keypath
-#   extend self
-
-#   def append(keypath : Term::Dict, key)
-#     keypath.append(key)
-#   end
-
-#   def append(keypath : Nil, key)
-#   end
-
-#   private def set(root : Term, keypath : Term::Dict::ItemsView, leaf)
-#     return leaf if keypath.empty?
-
-#     # If value is a non-dict, the keypath is invalid, so we back off without
-#     # change -- the least offsensive move.
-#     return root unless dict = root.as_d?
-
-#     set(dict, keypath, leaf)
-#   end
-
-#   private def set(root : Term::Dict, keypath : Term::Dict::ItemsView, leaf)
-#     return root unless step = keypath[0]?
-
-#     root.with(step) do |value|
-#       return root if value.nil?
-
-#       set(value, keypath + 1, leaf)
-#     end
-#   end
-
-#   def set(root : Term::Dict, keypath : Term::Dict, value)
-#     set(root, keypath.items, value)
-#   end
-
-#   def follow?(root : Term, keypath : Term::Dict)
-#     unless span = keypath[:span]?
-#       return Term.of(keypath.items.reduce(root) { |dict, key| dict[key]? || return })
-#     end
-
-#     return unless span.as_n? && span.whole? && (length = span.to?(Int32))
-#     return unless last = keypath.items.last?
-#     return unless last.as_n? && last.whole? && (b = last.to?(Int32))
-
-#     prior = keypath.items.grow(-1)
-#     dict = prior.reduce(root) { |dict, key| dict[key]? || return }
-
-#     Term::Dict.build do |commit|
-#       (b...b + length).each do |index|
-#         commit << (dict[index]? || return)
-#       end
-#     end
-#   end
-# end
-
-# (enter <key>)
-# (enter <key> span: <span>)
-# (set <value>)
-#
-# e.g. (enter x) (enter y) (set "Hello World!")
-#  on {x: {y: "Bye", z: 100}}
-#  gives {x: {y: "Hello World!", z: 100}}
-#
-# We also must support collation of plans, e.g.
-#
-# (enter x) (enter a) (set qux)
-# (enter x) (enter b) (set qix)
-#
-# is collated into
-#
-# (enter x) |- (enter a) - (set qux)
-#           |- (enter b) - (set qix)
-#
-# Most importantly, this allows us to support nested %entries°.
-#
-# How are we going to support %layer though?
-#
-# %layer stands for "everything except", so we can introduce
-#
-# (enter/without <...keys>)
-#
-# This would create plans such as:
-#
-# (enter x) - ...
-# (enter y) - ...
-# (enter/without x y) - ...
-
-# module Plan
-
-#   def self.run(plan : Term, term : Term) : Term
-#     Term.case(plan) do
-#       matchpi %[(value value_)] { value }
-
-#       # TODO: (value* value_ span: span←(%number i32))
-#       matchpi %[(value* value_ span: span_number)] do
-#         return term unless dict0 = term.as_d?
-#         return term unless span.whole? && span.positive?
-
-#         replace(dict0, )
-
-#         pp span.to(Int32)
-#       end
-
-#       matchpi %[(plan ¦ steps_)] do
-#         return term unless dict0 = term.as_d?
-
-#         dict1 = dict0.transaction do |commit|
-#           steps.each_entry do |step, succ|
-#             Term.case(step) do
-#               # Give successor the value of key. Replace with successor's value.
-#               matchpi %[(enter key_)] do
-#                 v0 = commit[key]? || Term.of
-#                 v1 = run(succ, v0)
-#                 commit.with(key, v1)
-#               end
-
-#               # Give successor a dictionary without *keys*. Replace all keys except
-#               # *keys* with the dictionary returned by the successor.
-#               matchpi %[(enter/without keys_*)] do
-#                 residue0 = dict0 &- keys.items
-#                 residue1 = run(succ, Term.of(residue0))
-#                 residue1 &-= keys.items
-
-#                 residue0.each_entry { |k, _| commit.without(k) }
-#                 residue1.each_entry { |k, v| commit.with(k, v) }
-#               end
-#             end
-#           end
-#         end
-
-#         Term.of(dict1)
-#       end
-#     end
-#   end
-# end
-
-# plan = ML.parse1(<<-SCHEME
-# (plan (enter/without x y): (value {a: 100, b: 200, x: BOO})
-#       (enter x): (value qux)
-#       (enter y): (value qix))
-# SCHEME
-# )
-
-# trie node:
-#   pairs:
-#     (value k1): ...
-#     (key k2): ...
-#   items:
-#     (index <index>): id ;; for simple item sets such as (x_ y_)
-#     (range <b> <e> <ord>): id ;; for groups, slots, %many
-#     (eph <index> <term>): trie node
-#   residue: ... ;; "without" the rest of keys
-
-# keypath format:
-#
-# To access pairs:
-#   pairs <key> ...
-#   pairs [residue] ...
-#
-# E.g. the following pattern {person: (%layer rest_ name: name_ age: age_)} :
-#
-# ... Produces these keypaths:
-#
-#   pairs (value person) pairs (value name)       = name
-#   pairs (value person) pairs (value age)        = age
-#   pairs (value person) residue                  = rest
-#
-# They in turn collate to:
-#
-#  {pairs: {person: {pairs: {name: name, age: age, [residue]: rest}}}}
-#
-# To access items:
-#   items (item 0)
-#   items (item 1)
-#   ...
-#   items (range 0 2 0)
-#   items (range 3 5 1)
-#   items (eph 0 {x: a}) pairs x
-
-# append pair value
-# append pair key
-# append item index
-# append item range
-# append eph item
-# append residue
-
-# record Plug, value : Term do
-#   def call(prev)
-#     value
-#   end
-# end
-
-# require "benchmark"
-
-# # Problem 1: we're emitting these in a flattened form.
-# # Problem 2: we don't know how to order them.
-# # Problem 3: we don't know how to follow flat keypaths (e.g. for $downs).
-
-# # Can we compile flat keypaths to nonflat ones? E.g.:
-# Term.of(:virtual, 1, 0, :self)
-# Term.of(:virtual, 2, 0, :self)
-# Term.of(:range, 1, 1)
-
-# # For e.g. virtuals, we need to know its ordinal. We can give the
-# # ordinal in the pattern matching engine; however, the ordinals won't
-# # be successive -- so we'll necessarily need a normalization step.
-
-# root = Term.of(:a, :b)
-# trie = Term[]
-#   .where({:virtual, 0}, eq: {1, 0, Term[].where(:self, eq: :qix)})
-#   .where({:virtual, 1}, eq: {2, 0, Term[].where(:self, eq: :qix)})
-#   .where({:range, 2}, eq: {1, 1, Term[{:q, :y}]})
-
-# pp Keypath2.apply(trie, root)
-
-# root = Term.of(foo: Term.set(:x, Term.set(1, 2, 3), :z))
-
-# path0 = Term[:value, :foo, :key, Term.set(1, 2, 3), :key, 1, :eq]
-# path1 = Term[:value, :foo, :key, Term.set(1, 2, 3), :key, 2, :eq]
-# path2 = Term[:value, :foo, :key, Term.set(1, 2, 3), :key, 3, :eq]
-
-# trie = Term[]
-#   .where(path0.items, eq: Term.of(:qux))
-#   .where(path1.items, eq: Term.of(:qix))
-#   .where(path2.items, eq: Term.of(:qyx))
-
-# pp Keypath2.apply(trie, Term.of(root))
-
-# puts ML.display(Keypath1.map(root.upcast, path0.items, Plug.new(Term.of(:qux))))
-# puts ML.display(Keypath1.map(root.upcast, path1.items, Plug.new(Term.of(:qix))))
-# puts ML.display(Keypath1.map(root.upcast, path2.items, Plug.new(Term.of(:qyx))))
-
-# 1. support nested entries source (enter key)
-
-# require "benchmark"
-
-# term = Term.of(x: 100, y: 200, z: 300)
-
-# pp Plan.run(plan, term)
 
 module Search::Result
   include Enumerable(Term)
@@ -755,143 +511,6 @@ module Search
       end
     end
   end
-
-  # def self.fill(form, dict : Term::Dict, spec : Spec::Scan, *, keypath bkp = nil)
-  #   feed = dict.items
-  #   index = 0
-
-  #   while spec.stride <= feed.size
-  #     window = feed.begin.grow(spec.stride)
-  #     cell = Result::ItemStrip.new(window, keypath: bkp ? bkp.value(Term.of(index)) : nil)
-  #     response = form.fill(cell)
-  #     return response unless response.is_a?(Form)
-
-  #     if form == response
-  #       # Same form returned => rejected
-  #       feed = feed.move(1)
-  #       index += 1
-  #     else
-  #       # Different form returned => accepted, give more
-  #       feed = feed.move(spec.stride)
-  #       index += spec.stride
-  #     end
-
-  #     form = response
-  #   end
-
-  #   form.close
-  # end
-
-  # private def self.dfs(dict, spec, form, bkp)
-  #   if spec.depth0
-  #     cell = Result::Item.new(Term.of(dict), keypath: bkp)
-  #     form = form.fill(cell)
-  #     return form unless form.is_a?(Form)
-  #   end
-
-  #   visit(dict, spec.part, keypath: bkp) do |item, keypath|
-  #     cell = Result::Item.new(item, keypath)
-  #     form = form.fill(cell)
-  #     return form unless form.is_a?(Form)
-
-  #     next if spec.maxdepth == 1
-  #     next unless child = item.as_d?
-
-  #     if spec.maxdepth.zero? # Unlimited
-  #       form = dfs(child, spec, form, keypath)
-  #     else
-  #       form = dfs(child, spec.copy_with(maxdepth: spec.maxdepth - 1), form, keypath)
-  #     end
-
-  #     return form unless form.is_a?(Form)
-  #   end
-
-  #   form
-  # end
-
-  # def self.fill(form, dict : Term::Dict, spec : Spec::Dfs, *, keypath bkp = nil)
-  #   form = dfs(dict, spec, form, bkp)
-  #   form.is_a?(Form) ? form.close : form
-  # end
-
-  # private def self.iddfs1(dict, spec, form, bkp, depth)
-  #   if depth.zero?
-  #     visit(dict, spec.part, keypath: bkp) do |item, keypath|
-  #       cell = Result::Item.new(item, keypath)
-  #       return :full, form unless form.is_a?(Form) # Crystal goes crazy if this is absent
-  #       form = form.fill(cell)
-  #       return :full, form unless form.is_a?(Form)
-  #     end
-  #     return :next, form
-  #   end
-
-  #   # Carry out a vote for/against reaching the bottom.
-  #   bottom = 0
-  #   total = 0
-
-  #   visit(dict, spec.part, keypath: bkp) do |item, keypath|
-  #     total += 1
-
-  #     unless child = item.as_d?
-  #       bottom += 1
-  #       next
-  #     end
-
-  #     signal, form = iddfs1(child, spec, form, keypath, depth - 1)
-
-  #     case signal
-  #     when :bot
-  #       bottom += 1
-  #     when :full
-  #       return :full, form
-  #     when :next
-  #     else
-  #       unreachable
-  #     end
-  #   end
-
-  #   # Unanimous vote for bottom means we're at the bottom. Otherwise continue.
-  #   bottom == total ? {:bot, form} : {:next, form}
-  # end
-
-  # private def self.iddfs(dict, spec, form, bkp)
-  #   if spec.depth0
-  #     cell = Result::Item.new(Term.of(dict), keypath: bkp)
-  #     form = form.fill(cell)
-  #     return form unless form.is_a?(Form)
-  #   end
-
-  #   maxdepth = spec.maxdepth.zero? ? nil : spec.maxdepth
-
-  #   (0...maxdepth).each do |depth|
-  #     signal, form = iddfs1(dict, spec, form, bkp, depth)
-
-  #     case signal
-  #     when :bot, :full
-  #       break
-  #     when :next
-  #     else
-  #       unreachable
-  #     end
-  #   end
-
-  #   form
-  # end
-
-  # def self.fill(form, dict : Term::Dict, spec : Spec::Bfs, *, keypath bkp = nil)
-  #   form = iddfs(dict, spec, form, bkp)
-  #   form.is_a?(Form) ? form.close : form
-  # end
-
-  # def self.fill(form, dict : Term::Dict, spec : Spec::Entries, *, keypath bkp = nil)
-  #   dict.each_entry do |key, value|
-  #     cell = Result::Pair.new(key, value, bkp ? {bkp.key(key), bkp.value(key)} : nil)
-  #     form = form.fill(cell)
-  #     return form unless form.is_a?(Form)
-  #   end
-
-  #   form.close
-  # end
 end
 
 # TODO: ???: break into a u8 type field followed by some sort of variable length payload
@@ -3371,6 +2990,7 @@ module ::Ww::Term::M1
       # actually have fixed-width numbers. These kinds of patterns are often used
       # on the Crystal side to ensure we can safely e.g. to(Int32).
       match({:"%number", :type_symbol}, cue: :"%number") do |type|
+        # TODO: store these in a hash table.
         case type
         when Term.of(:u8)      then Term.of(:"%number", UInt8::MIN, :<=, {:whole, :_}, :<=, UInt8::MAX)
         when Term.of(:u16)     then Term.of(:"%number", UInt16::MIN, :<=, {:whole, :_}, :<=, UInt16::MAX)

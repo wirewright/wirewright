@@ -98,6 +98,7 @@ def fit1(parent : Term::Dict, phase : Term, child : Term)
             break
           when '\n'
             reader.next_char?
+            x += 1 # Oopsie doopsie, we have to count newline as well orelse everything falls apart.
             h += 1
             break
           else

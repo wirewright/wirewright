@@ -27,8 +27,20 @@
 ;; Interpret (type)
 (backmap [_string | _string (M←(type text_string) _*) @_] {M: (append-left →text)})
 
-(backmap [(%string nonempty) | "" (M←(type ch←(%any " " "\"" ")" "}" "]")) _*) @_]
+;; These append first, then try to expel
+(backmap [(%string nonempty) | "" (M←(type ch←(%any " " "\"")) _*) @_]
   {(M): ((append-left →ch) (expel-left))})
+
+;; These try to expel first, then if that fails, append, then again try
+;; to expel, and if even that fails, they give up.
+(backmap [(%string nonempty) | "" (M←(type ch←(%any ")" "}" "]")) _*) @_]
+  {M: (expel-left () ((append-left →ch) (expel-left)))})
+
+(backmap ["" | "" (M←(type " ") _*) @_]
+  {M: (move-ahead)})
+
+(backmap [_* ["" | "" (M←(type " ") _*) @_]]
+  {M: (move-out-ahead)})
 
 (backmap [_string | _string (M←(type "(") _*) @_]
   {M: (expel ((nest-self)) ((append-left "(")))})
@@ -115,6 +127,7 @@
 
 ;; Interpret (key enter).
 (backmap [_string | _string (M←(key enter) _*) @_] {M: (expel)})
+(backmap ⧼_dict ["" | "" (M←(key enter) _*) @_]⧽ {M: (move-in-behind)})
 
 ;; Interpret (key backspace) and (key delete).
 (backmap [(%string nonempty) | _string (M←(key backspace) _*) @_] {M: (delete-left)})
@@ -125,6 +138,9 @@
 
 (backmap ⧼_ ["" | "" (M←(key C-backspace) _*) @_]⧽ {M: (delete-behind)})
 (backmap ⧼["" | "" (M←(key C-delete) _*) @_] _⧽ {M: (delete-ahead)})
+
+(backmap (["" | "" (M←(key backspace) _*) @_]) {M: (unnest-parent)})
+(backmap (["" | "" (M←(key delete) _*) @_]) {M: (unnest-parent)})
 
 (backmap (["" | "" (M←(key C-backspace) _*) @_] _*) {M: (unnest-parent)})
 (backmap (_* ["" | "" (M←(key C-delete) _*) @_]) {M: (unnest-parent)})
@@ -166,36 +182,61 @@
 (backmap (lhs←"," | "" (M←(type "P") _*) @_ ¦ _ clipboard: _) {lhs: "", M: (paste-ahead)})
 (backmap [lhs←",-" | "" (M←(type (%any "y" "Y")) _*) @_] {lhs: "", M: (clear-clipboard)})
 
+;; This one is the only one that starts with a period. But two periods
+;; at the start of a symbol?! That's weird. So instead of allowing this
+;; kind of weirdness we're reusing it for something a bit more meaningful.
+(backmap [lhs←"." | "" (M←(type ".") _*) @_] {lhs: "", M: (move-out-ahead)})
+
 ;; HYBRID
 
 ;; Expand ;; into (comment ...). We're not a parser so we have to improvise! Maybe just
 ;; maybe whatever is interpreting the edited term will treat (comment ...) as a comment.
-;; If not, whatever.
+;; If not, whatever, humph.
 (backmap C←[lhs←";" | rhs←"" (M←(type ";") _*) @_]
   {(M): (), lhs: "\"", rhs: "\"", C: (comment ↑C)})
 
 ;; ESCAPE MODE
 
 ;; Enter
-(backmap [_string c←| _string (M←(key escape) _*) @_] {(M): (), c: (| "")})
+(backmap [_string c←| _string (M←(key escape) _*) @_]
+  {(M): (), c: (| "")})
+
 ;; Leave
-(backmap [_string c←(| _string) _string (M←(key escape) _*) @_] {(M): (), c: |})
+(backmap [_string c←(| _string) _string (M←(key escape) _*) @_]
+  {(M): (), c: |})
+
 ;; Ignore unknown 
-(backmap [_string (| _string) _string (M←_ _*) @_] {(M): ()})
+(backmap [_string (| _string) _string (M←_ _*) @_]
+  {(M): ()})
+
 ;; Append characters
 (backmap [_string (| seq_string) _string (M←(type text_string) _*) @_]
   {(M): (), seq: ($ (~ →seq →text))})
-;; Emit arrows
+
+;; Arrows
 (backmap [lhs_string c←(| "<") _string (M←(type "-") _*) @_]
   {(M): (), lhs: ($ (~ →lhs "←")), c: |})
+
 (backmap [lhs_string c←(| "-") _string (M←(type ">") _*) @_]
   {(M): (), lhs: ($ (~ →lhs "→")), c: |})
-(backmap [lhs_string c←(| "^") _string (M←(type "-") _*) @_]
+
+(backmap [lhs_string c←(| "^") _string (M←(type "|") _*) @_]
   {(M): (), lhs: ($ (~ →lhs "↑")), c: |})
-(backmap [lhs_string c←(| "v") _string (M←(type "-") _*) @_]
+
+(backmap [lhs_string c←(| "|") _string (M←(type "v") _*) @_]
   {(M): (), lhs: ($ (~ →lhs "↓")), c: |})
+
+;; We use the degrees symbol as a symbol for source
 (backmap [lhs_string c←(| "o") _string (M←(type "o") _*) @_]
   {(M): (), lhs: ($ (~ →lhs "°")), c: |})
+
+;; Partition pipe
+(backmap [lhs_string c←(| "|") _string (M←(type "|") _*) @_]
+  {(M): (), lhs: ($ (~ →lhs "¦")), c: |})
+
+;; Escape hatch to avoid the auto dict open/close behavior on '('/')'.
+(backmap [lhs_string c←(| "") _string (M←(type ch←(%any "(" ")")) _*) @_]
+  {(M): (), lhs: ($ (~ →lhs →ch)), c: |})
 
 ;; MORPH
 
@@ -445,6 +486,12 @@
 (backmap (_* ⭳target ¦ (%entry k_ F←[C←[_string | _string (M←(unpair-parent) _*) @_] _*]))
   {(M): (), (k): (), (F): (), (C): ($tr C0 ()), (target): (↑k ↑C0 ↑F)})
 
+(backmap ⧼[_* ⭳target] C←[_string | _string (M←(move-in-behind) _*) @_]⧽
+  {(M): (), target: ↑C, (C): ()})
+
+(backmap (_* ⧼C←[_string | _string (M←(move-out-ahead) _*) @_]⧽ ⭳target _*)
+  {(M): (), target: ↑C0, (C): ($tr C0 ())})
+
 ;; Expellation
 ;;
 ;; Expellation involves parsing left/right-hand sides (or both). If that's
@@ -469,7 +516,7 @@
   {(M): ((move-back-right) (leave-pair))})
 
 (backmap [lhs←(%string nonempty) | "" (M←(leave-pair) _*) @_]
-  {M: (leave-pair ($ (ml →lhs)))})
+  {M: (leave-pair ($once (ml →lhs)))})
 
 (backmap (_* ⭳target ¦ (%entry _ C←[lhs_string | "" (M←(leave-pair (ml/ok term_)) _*) @_]))
   {(M): (), lhs: "", target: ↑C, C: ↑term})
@@ -490,7 +537,7 @@
 
 ;; (expel-left)
 (backmap [lhs_string | _string (M←(expel-left (ok_*) (err_*)) _*) @_]
-  {M: (expel-left ($ (ml →lhs)) ↑ok ↑err)})
+  {M: (expel-left ($once (ml →lhs)) ↑ok ↑err)})
 
 (backmap [_* ⭳pred [lhs_string | _string (M←(expel-left (ml/ok term_) (ok_*) (_*)) _*) @_] _*]
   {(M): ↑ok, lhs: "", pred: →term})
@@ -500,7 +547,7 @@
 
 ;; (expel-right)
 (backmap [_string | rhs_string (M←(expel-right (ok_*) (err_*)) _*) @_]
-  {M: (expel-right ($ (ml →rhs)) ↑ok ↑err)})
+  {M: (expel-right ($once (ml →rhs)) ↑ok ↑err)})
 
 (backmap [_* [_string | rhs_string (M←(expel-right (ml/ok term_) (ok_*) (_*)) _*) @_] ⭳succ _*]
   {(M): ↑ok, rhs: "", succ: →term})
@@ -510,7 +557,7 @@
 
 ;; (expel-mid)
 (backmap [lhs_string | rhs_string (M←(expel-mid (ok_*) (err_*)) _*) @_]
-  {M: (expel-mid ($ (ml →lhs)) ($ (ml →rhs)) ↑ok ↑err)})
+  {M: (expel-mid ($once (ml →lhs)) ($once (ml →rhs)) ↑ok ↑err)})
 
 (backmap [_* ⭳pred [lhs_string | rhs_string (M←(expel-mid (ml/ok lterm_) (ml/ok rterm_) (ok_*) (_*)) _*) @_] ⭳succ _*]
   {(M): ↑ok, lhs: "", rhs: "", pred: →lterm, succ: →rterm})

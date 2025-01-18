@@ -966,7 +966,12 @@ CURSORPE = Term::M1.operator(ML.parse1(%([_string (%any° | (| _string)) _string
 # see below is basically a tree, and it'd look almost the same in Sexps (and similarly unreadable).
 def editr
   dollarr = exhr(dfsr(callr(NATRS)))
-  backmapr = dfsr(selr(%[($ rewritee_)], dollarr))
+  backmapr = dfsr(
+    choicer(
+      selr(%[($ rewritee_)], dollarr),
+      selr(%[($once rewritee_)], callr(NATRS)),
+    ),
+  )
   exhr(relr(CURSORP, absr(ruler(RULESET, nor, backmapr, nor)), ascent: 2))
 end
 
