@@ -3222,6 +3222,10 @@
   (level (%any a b c))
   (level a b c))
 
+(specificity
+  (level [_string | _string (M←(input text_string) _*) @_])
+  (level [_string | _string (M←(input "(") _*) @_]))
+
 ;; Specificity of a keypool with more keys is higher than that of a keypool
 ;; with less keys.
 (specificity
@@ -3239,14 +3243,18 @@
 ;; leaning toward the latter though.
 (head
   ;; Toplevel
-  (- 1/3 qux "hello" true () a_ x←a (%literal (+ a b)))
+  (- 1/3 qux "hello" true () a_ x←a)
   ;; Singular
   (of (a) a)
   (of (a b c) a)
   (of (x (a) b c) x)
+  (of (%literal (+ a b)) +)
+  (of (%literal ((+ x y) a b)) (+ x y))
   (of ((%literal (+ a b))) (+ a b))
   (of ((%literal ())) ())
-  (- ((a) b c) ((a)) (_) (x_) (x_ a b c))
+  (of ((a)) (a))
+  (of ((a) b c) (a))
+  (- (_) (x_) (x_ a b c))
   ;; Make sure itemspart partition is followed
   (of (a x: qux) a)
   (of (a b c x: qux) a)
@@ -3309,5 +3317,6 @@
     (level (%-value x qux) (%-value x (%any 1 2))))
 
   (specificity
-    (level ((%literal qux)) ((%literal (%any 1 2))))))
+    (level ((%literal qux)))
+    (level ((%literal (%any 1 2))))))
 

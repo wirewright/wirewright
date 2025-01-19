@@ -1,7 +1,65 @@
-# TODO: probabilistic pattern trace (similar to sketch).
+# TODO: ???: probabilistic pattern trace (similar to sketch).
 # Patterns toggle their object id % 64 in a dictionary's bitmap. This means
 # (multilevel) skips become even cheaper. Especially with stuff such as
 # cursor search in parsing/µsoma, we want deep searches to be cheap.
+
+# TODO: our current dictionary implementation is very very bad. It has served
+# me for over a year with minor changes, but now it is becoming more and more
+# cumbersome to use and extend it. It isn't as simple as it should be, with a
+# lot of overcomplication; nor as fast as it should be. When I first wrote it
+# only a small portion of the system relied on Dicts. Now almost everything relies
+# on dicts.
+#    1. We need to have a dict implementation that is friendly towards caching. Any caching
+#       idea that comes to my mind, must be trivially implementable. Right now I stumble and
+#       fall every time I try to add something. I envision an event-like system where the dict
+#       has a part of itself that's consuming events (specifically, pair added, pair removed,
+#       item added, item removed). We can then have many such parts, each representing some kind
+#       of cache, such as sketch, population, max depth, bounds sketch.
+#    2. Perhaps instead, such an event-like system should be installed on item/pair nodes
+#       rather than dicts. This could give us a more predictable, mergeable, diffable cache.
+#    3. For the itemspart we must use finger trees.
+#    4. For the pairspart we should continue using HAMTs.
+#    5. The current dict impl is not aware of itself being a tree. Thus, we have an extremely
+#       inefficient, linear implementation of highly-depended upon `==`, `hash` (they are used
+#       by rewriters which treat them as very, very, very cheap functions to call -- but they are not)
+#    6. Similarly, we have inefficient, linear or worse, implementations of dict merging and
+#       diffing, which are depended on by Soma and the higher-level.
+#    7. The memory layout and general design of permafrost is OK for a general-purpose HAMT,
+#       but here we have a lot of packing/inlining opportunities; and we're a dict, whereas
+#       Pf::Core::Node assumes a set (roughly). We lose a lot of copy reduction opportunities
+#       by not storing keys and values separately. I also believe we should somehow use variably
+#       sized but fixed-bytesize nodes. I think we should fix the bytesize at 64 bytes, since this
+#       is a cache line size so we'll get the stuff around-ish for free. 
+#    8. The keys and values should be a special kind of array, a TermArray. The TermArray should somehow
+#       be able to manage the 64 bytes, trying to pack as many things in it as possible. We could have
+#       byte headers followed by payload. Something like a boolean is a byte header long; it does not
+#       need a payload. We can flatten small itemsonly dictionaries this way.
+#    9. The whole packing thing is an undeveloped, unnecessary idea right now. What is fairly clear is that
+#       again, we must have a finger tree itemspart and a HAMT pairspart with all copy reduction opportunities taken.
+#   10. It is in general hard to implement proper promotion/demotion for items to pairs and vice versa. The current
+#       algorithm is very bad and prevents us from saving time and space in several cases (mainly replace). Provided
+#       we have a fast itemspart split and merge functions (finger trees claim to have fast splits and merges)
+#       we could maintain a small, fixed-size toplevel array of "root nodes". Therefore our dict becomes a forest.
+#       When we delete in the middle of an itemspart, we split at that point (we'll have to split anyway), and if
+#       the rest is nonempty, we will add it to the toplevel root array. Only when the root array becomes full should
+#       we merge *the smallest* itemsroot into the HAMT pairspart; or alternatively, we can split work somehow among
+#       the calls to with()/without() so that the cost of many random itemspart deletes is amortized even further.
+#       Finally, we should keep the min index for the itemsarrays merged into the pairspart. Whenever an item is inserted,
+#       we should check if there are itemsnodes that succede the item's index, or if the pairspart contains a key that
+#       succedes the item's index. If so, we should "import" the split right-hand side back into the itemspart.
+#   11. ItemsView's #collect is a known performance pain point for the pattern matching engine. Polyblanks such as `xs_*`
+#       `collect` excessively almost by design, but never modify the collected itemsonly dict. A DictRef variant of Dict
+#       will solve this issue by being a Dict-side variant of ItemsView.
+#
+# A proper dictionary implementation would be very complex. Currently we are suffering a lot of performance issues
+# due to having an improper dict implementation. I would really like to have a dict impl that at least reduces
+# the copying overhead and has an event system for more robust caching; as well as one that has DictRef and that is
+# aware of its tree nature, implementing efficient deep/shallow diff, deep/shallow merge, equality, cached hash, etc.
+# This would be a good start even without finger trees and the other complexity. Trying to gradually ramp up complexity
+# is better than trying to tackle an extremely complex data structure like Dict should be head-on.
+#
+# ALSO: Gap promotion/demotion is opaque to any caching. Thus, I think it makes sense to install any caching on a level
+# lower than that of a Dict -- thus, on ItemNode and PairNode.
 
 class ::Pf::Core::Node(T)
   # :nodoc:
@@ -244,23 +302,20 @@ module Ww
     @hash : UInt64?
 
     def initialize
-      @nitems = 0
-      @npairs = 0
-
       @items = EMPTY_ITEM_NODE
       @pairs = EMPTY_PAIR_NODE
 
       @sketch = 0u64
     end
 
-    protected def initialize(@items, @pairs, @nitems, @npairs, @sketch)
+    protected def initialize(@items, @pairs, @sketch)
     end
 
     # Must be possible to do `initialize(*state)`. Must not include any cached
     # data: dictionaries constructed from `state` are expected be mutated without
     # notice -- and stale cache will make the dictionary dysfunctional.
     protected def state
-      {@items, @pairs, @nitems, @npairs, @sketch}
+      {@items, @pairs, @sketch}
     end
 
     # Yields a `Commit` object so that you can build a dictionary without having
@@ -289,17 +344,17 @@ module Ww
 
     # Returns `true` if this dictionary contains items only.
     def itemsonly? : Bool
-      @npairs.zero?
+      @pairs.size.zero?
     end
 
     # Returns `true` if this dictionary contains pairs only.
     def pairsonly? : Bool
-      @nitems.zero?
+      @items.size.zero?
     end
 
     # Returns the number of entries in this dictionary.
     def size : Int32
-      @nitems + @npairs
+      @items.size + @pairs.size
     end
 
     # Returns `true` if this dictionary contains no entries.
@@ -326,7 +381,7 @@ module Ww
     # :nodoc:
     def at?(key : Term::Num) : Term?
       return at_default?(key) unless key.whole? && key.positive?
-      return at_default?(key) unless key < Term[@nitems]
+      return at_default?(key) unless key < Term[@items.size]
       return at_default?(key) unless coat = @items.fetch?(Probes::FetchItem.new(key.to_i))
 
       entry, *_ = coat
@@ -509,23 +564,23 @@ module Ww
     # :nodoc:
     def with(key : Term::Num, value : Term) : Dict
       return with_default(key, value) unless key.whole? && key.positive?
-      return with_default(key, value) unless key <= Term[@nitems]
+      return with_default(key, value) unless key <= Term[@items.size]
 
       index = key.to_i
 
       added, items = @items.add(Probes::AssocItemImm.new(index, value))
       unless added # Overridden or completely unchanged
-        return @items.same?(items) ? self : Dict.new(items, @pairs, @nitems, @npairs, Dict.mix(@sketch, value))
+        return @items.same?(items) ? self : Dict.new(items, @pairs, Dict.mix(@sketch, value))
       end
 
-      state = Gap.promote(index + 1,
-        nitems: @nitems + 1,
-        npairs: @npairs,
+      items, pairs, _, _ = Gap.promote(index + 1,
+        nitems: @items.size + 1,
+        npairs: @pairs.size,
         items: items,
         pairs: @pairs,
       )
 
-      Dict.new(*state, Dict.mix(@sketch, value))
+      Dict.new(items, pairs, Dict.mix(@sketch, value))
     end
 
     # :nodoc:
@@ -559,10 +614,10 @@ module Ww
     private def with_default(key : ITerm, value : Term) : Dict
       added, pairs = @pairs.add(Probes::AssocPairImm.new(key.upcast, value))
       unless added # Overridden or completely unchanged
-        return @pairs.same?(pairs) ? self : Dict.new(@items, pairs, @nitems, @npairs, Dict.mix(@sketch, value))
+        return @pairs.same?(pairs) ? self : Dict.new(@items, pairs, Dict.mix(@sketch, value))
       end
 
-      Dict.new(@items, pairs, @nitems, @npairs + 1, Dict.mix(@sketch, value))
+      Dict.new(@items, pairs, Dict.mix(@sketch, value))
     end
 
     def follow?(keys : Enumerable(Term)) : Term?
@@ -654,18 +709,18 @@ module Ww
     # :nodoc:
     def without(key : Term::Num) : Dict
       return without_default(key) unless key.whole? && key.positive?
-      return without_default(key) unless key < Term[@nitems]
+      return without_default(key) unless key < Term[@items.size]
 
-      state = Gap.demote(
+      items, pairs, _, _ = Gap.demote(
         end_exclusive: key.to_i,
         rdrop: true, # < will remove the item
-        nitems: @nitems,
-        npairs: @npairs,
+        nitems: @items.size,
+        npairs: @pairs.size,
         items: @items,
         pairs: @pairs,
       )
 
-      Dict.new(*state, @sketch)
+      Dict.new(items, pairs, @sketch)
     end
 
     # :nodoc:
@@ -694,22 +749,22 @@ module Ww
 
     private def without_default(key : ITerm) : Dict
       removed, pairs = @pairs.delete(Probes::DissocPairImm.new(key.upcast))
-      removed ? Dict.new(@items, pairs, @nitems, @npairs - 1, @sketch) : self
+      removed ? Dict.new(@items, pairs, @sketch) : self
     end
 
     protected def with!(key : Term::Num, value : Term, author) : Dict
       return with_default!(key, value, author) unless key.whole? && key.positive?
-      return with_default!(key, value, author) unless key <= Term[@nitems]
+      return with_default!(key, value, author) unless key <= Term[@items.size]
 
       index = key.to_i
       added, @items = @items.add(Probes::AssocItemMut.new(index, value, author: author))
 
       if added # Try to promote successive (index + 1) pairs to items, if any.
-        @items, @pairs, @nitems, @npairs = Gap.promote(
+        @items, @pairs, _, _ = Gap.promote(
           end_exclusive: index + 1,
           author: author,
-          nitems: @nitems + 1, # < new item was added
-          npairs: @npairs,
+          nitems: @items.size + 1, # < new item was added
+          npairs: @pairs.size,
           items: @items,
           pairs: @pairs,
         )
@@ -727,10 +782,7 @@ module Ww
     end
 
     protected def with_default!(key : ITerm, value : Term, author) : Dict
-      added, @pairs = @pairs.add(Probes::AssocPairMut.new(key.upcast, value, author: author))
-      if added # Added a new pair
-        @npairs += 1
-      end
+      _, @pairs = @pairs.add(Probes::AssocPairMut.new(key.upcast, value, author: author))
 
       # If value is unchanged (e.g. with(0, :x) followed by with (0, :x)) nothing
       # will happen since the bit has already been set.
@@ -745,14 +797,14 @@ module Ww
 
     protected def without!(key : Term::Num, author) : Dict
       return without_default!(key, author) unless key.whole? && key.positive?
-      return without_default!(key, author) unless key < Term[@nitems]
+      return without_default!(key, author) unless key < Term[@items.size]
 
-      @items, @pairs, @nitems, @npairs = Gap.demote(
+      @items, @pairs, _, _ = Gap.demote(
         end_exclusive: key.to_i,
         author: author,
         rdrop: true, # < will remove the item
-        nitems: @nitems,
-        npairs: @npairs,
+        nitems: @items.size,
+        npairs: @pairs.size,
         items: @items,
         pairs: @pairs,
       )
@@ -765,10 +817,7 @@ module Ww
     end
 
     private def without_default!(key : ITerm, author) : Dict
-      removed, @pairs = @pairs.delete(Probes::DissocPairMut.new(key.upcast, hole: Pointer(Term).null, author: author))
-      if removed
-        @npairs -= 1
-      end
+      _, @pairs = @pairs.delete(Probes::DissocPairMut.new(key.upcast, hole: Pointer(Term).null, author: author))
 
       self
     end
@@ -1312,12 +1361,12 @@ module Ww
     # This method is more efficient than using `partition` and discarding
     # the pairs part.
     def items : Dict::ItemsView
-      ItemsView.new(@items, b: 0, e: @nitems, available: @nitems, sketch0: @sketch)
+      ItemsView.new(@items, b: 0, e: @items.size, sketch0: @sketch)
     end
 
     # Returns the pairs part of `partition` (see the latter for more info).
     def pairs : Dict
-      @pairsonly ||= Dict.new(EMPTY_ITEM_NODE, @pairs, 0, @npairs, @sketch)
+      @pairsonly ||= Dict.new(EMPTY_ITEM_NODE, @pairs, @sketch)
     end
 
     def hash(hasher)
@@ -1348,7 +1397,7 @@ module Ww
         return false
       end
 
-      return false unless @nitems == other.@nitems && @npairs == other.@npairs
+      return false unless @items.size == other.@items.size && @pairs.size == other.@pairs.size
       return false if (hx = @hash) && (hy = other.@hash) && hx != hy
 
       each_entry do |k, v1|

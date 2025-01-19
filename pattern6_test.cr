@@ -258,10 +258,10 @@ def process(queue, testcase, ctx)
                   root = edit(root, motion)
                 end
               end
-            end
-            unless root == snapshot
-              ctx.failures << Term.of(:"mismatch/editor", root, :==, snapshot, :MOTIONS, motions)
-              return # The whole test case should fail.
+              unless root == snapshot
+                ctx.failures << Term.of(:"mismatch/editor", root, :==, snapshot, :MOTIONS, motions)
+                return # The whole test case should fail.
+              end
             end
           end
         end

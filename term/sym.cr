@@ -257,11 +257,5 @@ module Ww
 
   # Frequently used symbols.
 
-  SYMBOL_BIND_AT = Term[:"bind@"]
-  SYMBOL_HELD_AT = Term[:"held@"]
-  SYMBOL_HOLD    = Term[:hold]
-  SYMBOL_PLACE   = Term[:place]
-  SYMBOL_PASTE   = Term[:paste]
-  SYMBOL_EMBED   = Term[:embed]
-  SYM_EDGE       = Term.of(:edge)
+  SYM_EDGE = Term[:edge]
 end

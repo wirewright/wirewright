@@ -233,7 +233,8 @@ module Ww
       Tag.new((@mem.address & 0b111).to_u8)
     end
 
-    # Returns the `TermType` corresponding to this term.
+    # Returns the `TermType` corresponding to this term. Guarantees to never
+    # return `TermType::Any`.
     def type : TermType
       case tag
       in .num_int?, .num_rat? then TermType::Number

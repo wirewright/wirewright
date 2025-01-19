@@ -34,7 +34,7 @@ module Ww::ML
   def edge?(term : Term::Dict, *, allowed = EDGE_ALLOWED_DEFAULT) : Bool
     return false unless term.itemsonly?
     return false unless term.size == 2
-    return false unless term.probably_includes?(SYM_EDGE.unsafe_as_sym)
+    return false unless term.probably_includes?(SYM_EDGE)
 
     term.ee.all? do |k, v|
       case k

@@ -29,13 +29,13 @@
   <> {M: (append-left →text)}
 
 ;; These append first, then try to expel
-[(%string nonempty) | "" (M←(input ch←(%any " " "\"")) _*) @_]
-  <> {(M): ((append-left →ch) (expel-left))}
+[_string | _string (M←(input ch←(%any " " "\"")) _*) @_]
+  <> {(M): ((append-left →ch) (expel))}
 
 ;; These try to expel first, then if that fails, append, then again try
 ;; to expel, and if even that fails, they give up.
-[(%string nonempty) | "" (M←(input ch←(%any ")" "}" "]")) _*) @_]
-  <> {M: (expel-left () ((append-left →ch) (expel-left)))}
+[_string | _string (M←(input ch←(%any ")" "}" "]")) _*) @_]
+  <> {M: (expel () ((append-left →ch) (expel)))}
 
 ["" | "" (M←(input " ") _*) @_]
   <> {M: (move-ahead)}

@@ -2,8 +2,8 @@ module Ww
   struct Term::Dict::ItemsView
     include Indexable(Term)
 
-    def initialize(@node : ItemNode, @b : Int32, @e : Int32, @available : Int32, @sketch0 : UInt64)
-      unless 0 <= @b <= @e <= @available # Sanity
+    def initialize(@node : ItemNode, @b : Int32, @e : Int32, @sketch0 : UInt64)
+      unless 0 <= @b <= @e <= @node.size # Sanity
         raise ArgumentError.new
       end
     end
@@ -82,22 +82,22 @@ module Ww
     end
 
     def grow(delta : Int32) : ItemsView
-      change(e: (@e + delta).clamp(@b..@available))
+      change(e: (@e + delta).clamp(@b..@node.size))
     end
 
     def remaining : ItemsView
-      change(b: @e, e: @available)
+      change(b: @e, e: @node.size)
     end
 
     # Expands the view range to enclose all dictionary items.
     def expand : ItemsView
-      change(b: 0, e: @available)
+      change(b: 0, e: @node.size)
     end
 
     # Builds and returns an itemsonly dictionary with items from this items view.
     def collect : Dict
-      if @b == 0 && @e == @available
-        return Dict.new(@node, PairNode.new, @available, 0, @sketch0)
+      if @b == 0 && @e == @node.size
+        return Dict.new(@node, PairNode.new, @sketch0)
       end
 
       Dict.build do |commit|
