@@ -131,21 +131,21 @@ struct Ww::Term
     end
 
     # Same as `matchp`, but *ml* is treated like a top-level dict (without parens).
-    macro givenp(ml, &block)
+    macro givenp(ml, **kwargs, &block)
       {% location = "#{ml.filename.id}:#{ml.line_number}:#{ml.column_number}" %}
 
-      match!(-> { ::Ww::ML.parse({{ml}}) }, location: {{location}}) {{block}}
+      match!(-> { ::Ww::ML.parse({{ml}}) }, location: {{location}}, {{kwargs.double_splat}}) {{block}}
     end
 
     # `givenp` that can infer basic captures (such as `x_`) from *ml* source
     # at compile-time.
     #
     # See `matchpi` for more info.
-    macro givenpi(ml, &block)
+    macro givenpi(ml, **kwargs, &block)
       {% captures = ml.scan(::Ww::Term::CaseContext::RE_CAPTURES).map { |match| (match[1] || match[2]).id }.uniq %}
       {% location = "#{ml.filename.id}:#{ml.line_number}:#{ml.column_number}" %}
 
-      match!(-> { ML.parse({{ml}}) }, icaps: [{{captures.splat}}] of ::NoReturn, location: {{location}}) {{block}}
+      match!(-> { ML.parse({{ml}}) }, icaps: [{{captures.splat}}] of ::NoReturn, location: {{location}}, {{kwargs.double_splat}}) {{block}}
     end
 
     {% for name in %w(match matchp matchpi given givenp givenpi) %}
