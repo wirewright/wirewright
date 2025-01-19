@@ -1028,3 +1028,45 @@ end
 # [x] entryr -> choicer(itemr, pairr)
 # [x] absr
 # [x] relr
+
+# TODO: make these into actual rewriters that fit with the rest.
+#       1. Either orthor (orthogonal rewriter) must classify rules in a ruleset in buckets
+#          by their size (aka depth) or we should be able to compose two orthors at the rewriter
+#          circuit level. I'm sort of leaning towards the former since it automates away a
+#          choice that is too boring to make.
+#       2. Note that orthor, like ruler, accepts a ruleset. Perhaps a modified/wrapped ruleset
+#          based on the above.
+
+def orthor1(parent0, phase, child0, callable)
+  while true
+    parent1, child1 = callable.call(parent0, phase, child0)
+    break if {parent0, child0} == {parent1, child1}
+    parent0, child0 = parent1, Term.of(child1)
+  end
+
+  {parent0, child0}
+end
+
+def orthor(dict0 : Term::Dict, callable)
+  dict1 = dict0
+  dict0.items.each_with_index do |v0, k|
+    dict1, v0 = orthor1(dict1, Term.of(:teach), Term.of(v0), callable)
+    if vd = v0.as_d?
+      v0 = orthor(vd, callable)
+    end
+    dict1, v1 = orthor1(dict1, Term.of(:learn), Term.of(v0), callable)
+    dict1 = dict1.with(k, v1)
+  end
+  (0..).each do |i|
+    pre = dict1
+    dict1.items.each_with_index do |v0, k|
+      dict1, v1 = orthor1(dict1, Term.of(:refine, i), Term.of(v0), callable)
+      dict1 = dict1.with(k, v1)
+    end
+    if pre == dict1
+      break
+    end
+  end
+  dict1
+end
+

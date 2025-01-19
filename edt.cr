@@ -39,50 +39,17 @@ require "./libtermbox2"
 # and access to memory is rare (currently it is not!) So lots of moderately "low-hanging fruits" before
 # trying to treat the underlying problem.
 
-def edger1(parent0, phase, child0, callable)
-  while true
-    parent1, child1 = callable.call(parent0, phase, child0)
-    break if {parent0, child0} == {parent1, child1}
-    parent0, child0 = parent1, Term.of(child1)
-  end
-
-  {parent0, child0}
-end
-
-def edger(dict0 : Term::Dict, callable)
-  dict1 = dict0
-  dict0.items.each_with_index do |v0, k|
-    dict1, v0 = edger1(dict1, Term.of(:enter), Term.of(v0), callable)
-    if vd = v0.as_d?
-      v0 = edger(vd, callable)
-    end
-    dict1, v1 = edger1(dict1, Term.of(:leave), Term.of(v0), callable)
-    dict1 = dict1.with(k, v1)
-  end
-  (0..).each do |i|
-    pre = dict1
-    dict1.items.each_with_index do |v0, k|
-      dict1, v1 = edger1(dict1, Term.of(:refine, i), Term.of(v0), callable)
-      dict1 = dict1.with(k, v1)
-    end
-    if pre == dict1
-      break
-    end
-  end
-  dict1
-end
-
 def fit1(parent : Term::Dict, phase : Term, child : Term)
   Term.case({parent, phase, child}) do
     # If I have max size, pass it down to children.
     # NOTE: this is a hack. We should have max-width and max-height separately! Because e.g.
     # (col) passes down max-width but not max-height.
-    givenpi %[(_+ ¦ _ max-size: bounds_) enter (_* ¦ _ max-size: (%- _))] do
+    givenpi %[(_+ ¦ _ max-size: bounds_) teach (_* ¦ _ max-size: (%- _))] do
       {parent, child.morph({:"max-size", bounds})}
     end
 
     # Compute size for text with size limitations.
-    givenpi %[_ enter (text caption_string ¦ _ max-size: (wlimit←(%number u16) hlimit←(%number u16)) size: hug pre: true)] do
+    givenpi %[_ teach (text caption_string ¦ _ max-size: (wlimit←(%number u16) hlimit←(%number u16)) size: hug pre: true)] do
       reader = Char::Reader.new(caption.to(String))
 
       x = w = h = 0
@@ -118,30 +85,30 @@ def fit1(parent : Term::Dict, phase : Term, child : Term)
     end
 
     # Inherit size from sized parent for single-child parents.
-    givenpi %[(_ _ ¦ _ size: (w←(%number u16) h←(%number u16))) enter (_* ¦ _ padding: (%optional 0 p_number) size: fill)] do
+    givenpi %[(_ _ ¦ _ size: (w←(%number u16) h←(%number u16))) teach (_* ¦ _ padding: (%optional 0 p_number) size: fill)] do
       {parent, child.morph({:size, {w + p*2, h + p*2}})}
     end
 
     # Pass down size as max size to hug children. Subtract padding.
-    givenpi %[(_ _ ¦ _ size: (w←(%number u16) h←(%number u16))) enter (_* ¦ _ padding: (%optional 0 p_number) size: hug)] do
+    givenpi %[(_ _ ¦ _ size: (w←(%number u16) h←(%number u16))) teach (_* ¦ _ padding: (%optional 0 p_number) size: hug)] do
       {parent, child.morph({:"max-size", {w - p*2, h - p*2}})}
     end
 
     # Each size: fill child of col will increment den (for "denominator").
     # Do not forget to mark the child; otherwise we'll increment forever.
-    givenpi %[(col _+ ¦ _ den: (%optional 0 den_number)) enter (_* ¦ _ in-den: (%- _) size: fill)] do
+    givenpi %[(col _+ ¦ _ den: (%optional 0 den_number)) teach (_* ¦ _ in-den: (%- _) size: fill)] do
       {parent.morph({:den, den + 1}), child.morph({:"in-den", true})}
     end
 
     # If col doesn't have avail on leave, assign it to its full height.
-    givenpi %[(col _+ ¦ _ size: (_ h←(%number u16)) avail: (%- _)) leave _] do
+    givenpi %[(col _+ ¦ _ size: (_ h←(%number u16)) avail: (%- _)) learn _] do
       {parent.morph({:avail, h}), child}
     end
 
     # On leave we'll make have each sized child subtract its height from avail.
     # Do not forget to mark the child; otherwise we'll have infinite rewriting
     # since we can subtract h from avail forever.
-    givenpi %[(col _+ ¦ _ avail: avail_number) leave (_* ¦ _ in-avail: (%- _) size: (_ h←(%number u16)))] do
+    givenpi %[(col _+ ¦ _ avail: avail_number) learn (_* ¦ _ in-avail: (%- _) size: (_ h←(%number u16)))] do
       {parent.morph({:avail, avail - h}), child.morph({:"in-avail", true})}
     end
 
@@ -151,7 +118,7 @@ def fit1(parent : Term::Dict, phase : Term, child : Term)
     end
 
     # Learn size from sized child for single-child parents.
-    givenpi %[(_ _ ¦ _ padding: (%optional 0 p_number) size: hug) leave (_* ¦ _ size: (w←(%number u16) h←(%number u16)))] do
+    givenpi %[(_ _ ¦ _ padding: (%optional 0 p_number) size: hug) learn (_* ¦ _ size: (w←(%number u16) h←(%number u16)))] do
       {parent.morph({:size, {w + p*2, h + p*2}}), child}
     end
 
@@ -165,7 +132,7 @@ def fix1(parent, phase, child)
     givenpi %[
       (col _* ¦ _ position: (left←(%number u16) top←(%number u16))
                   state: (%optional 0 state_number))
-      enter
+      teach
       (_* ¦ _ position: (%- _)
               size: (w←(%number u16) h←(%number u16)))
     ] do
@@ -174,12 +141,12 @@ def fix1(parent, phase, child)
     end
 
     # Learn position from single-child parent
-    givenpi %[(_ _ ¦ _ position: position_) enter (_* ¦ _ position: (%- _))] do
+    givenpi %[(_ _ ¦ _ position: position_) teach (_* ¦ _ position: (%- _))] do
       {parent, child.morph({:position, position})}
     end
 
     # Apply padding to child on leave.
-    givenpi %[(_ _ ¦ _ padding: p_number) leave (_* ¦ _ position: (left←(%number u16) top←(%number u16)))] do
+    givenpi %[(_ _ ¦ _ padding: p_number) learn (_* ¦ _ position: (left←(%number u16) top←(%number u16)))] do
       {parent.morph({:padding, nil}), child.morph({:position, {left + p, top + p}})}
     end
 
@@ -188,11 +155,11 @@ def fix1(parent, phase, child)
 end
 
 def fit(frame : Term::Dict) : Term::Dict
-  edger(frame, ->fit1(Term::Dict, Term, Term))
+  orthor(frame, ->fit1(Term::Dict, Term, Term))
 end
 
 def fix(frame : Term::Dict) : Term::Dict
-  edger(frame, ->fix1(Term::Dict, Term, Term))
+  orthor(frame, ->fix1(Term::Dict, Term, Term))
 end
 
 NORD_BG = Termbox::Color.new(0x2e3440)
