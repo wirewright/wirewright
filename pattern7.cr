@@ -2381,8 +2381,109 @@ module ::Ww::Term::M1::Operator::Item
 end
 
 module ::Ww::Term::M1
+  SYM_LT  = Term.of(:<)
+  SYM_GT  = Term.of(:>)
+  SYM_LTE = Term.of(:<=)
+  SYM_GTE = Term.of(:>=)
+  SYM_INF = Term.of(:∞)
+
+  # Contains methods that work together to implement `M1.normal`.
   module Normal
-    def self.typesym(blank : Term::Sym::Blank) : Term::Sym
+    extend self
+
+    # Schemas used to validate options passed to various pattern matching constructs.
+    module Schemas
+    end
+
+    Schemas::LeafUnbounded = Term::M0::PairSchema.build do
+      key :in, values: {:items, :keys, :values, :"pair/values"}, default: :items
+      key :order, values: {:dfs, :bfs}, default: :dfs
+      key :self, values: {true, false}, default: false
+    end
+  
+    Schemas::LeafBounded = Term::M0::PairSchema.build do
+      key :in, values: {:items, :keys, :values, :"pair/values"}, default: :items
+      key :order, values: {:dfs, :bfs}, default: :dfs
+      key :min, values: 0..UInt8::MAX, default: 0
+      key :max, values: 1..UInt8::MAX, default: SYM_INF
+      key :self, values: {true, false}, default: false
+      where { |min, max| min.as_n <= max.as_n }
+    end
+  
+    Schemas::Items = Term::M0::PairSchema.build do
+      key :min, values: 0..UInt8::MAX, default: 1
+      key :max, values: 1..UInt8::MAX, default: SYM_INF
+      where { |min, max| min.as_n <= max.as_n }
+    end
+  
+    Schemas::Entries = Term::M0::PairSchema.build do
+      key :min, values: 0..UInt8::MAX, default: 1
+      key :max, values: 1..UInt8::MAX, default: SYM_INF
+      where { |min, max| min.as_n <= max.as_n }
+    end
+  
+    Schemas::Plural = Term::M0::PairSchema.build do
+      key :min, values: 0..UInt8::MAX, default: 0
+      key :max, values: 1..UInt8::MAX, default: SYM_INF
+      key :type, values: {:_number, :_string, :_symbol, :_dict, :_}, default: :_
+      where { |min, max| min.as_n <= max.as_n }
+    end
+  
+    Schemas::Many = Term::M0::PairSchema.build do
+      key :min, values: 0..UInt8::MAX, default: 1
+      key :max, values: 1..UInt8::MAX, default: SYM_INF
+      where { |min, max| min.as_n <= max.as_n }
+    end
+  
+    Schemas::Past = Term::M0::PairSchema.build do
+      key :min, values: 0..UInt8::MAX, default: 0
+      key :max, values: 1..UInt8::MAX, default: SYM_INF
+      where { |min, max| min.as_n <= max.as_n }
+    end
+
+    SYM_BLANK_ANY = Term[:_]
+    SYM_BLANK_DICT = Term[:_dict]
+    SYM_BLANK_NUMBER = Term[:_number]
+    SYM_BLANK_SYMBOL = Term[:_symbol]
+    SYM_BLANK_STRING = Term[:_string]
+    SYM_BLANK_BOOLEAN = Term[:_boolean]
+
+    SYMS_CMP = {SYM_LT, SYM_GT, SYM_LTE, SYM_GTE}
+    SYMS_LTX = {SYM_LT, SYM_LTE}
+
+    NORMAL_PASS = Term.of({:"%pass"})
+
+    NORMAL_BLANK_DICT    = Term.of({:"%dict"})
+    NORMAL_BLANK_NUMBER  = Term.of({:"%number", :_})
+    NORMAL_BLANK_STRING  = Term.of({:"%string"})
+    NORMAL_BLANK_SYMBOL  = Term.of({:"%symbol"})
+    NORMAL_BLANK_BOOLEAN = Term.of({:"%boolean"})
+
+    # :nodoc:
+    NORMAL_INT = Term.of(
+      u8: {:"%number", UInt8::MIN, :<=, {:whole, :_}, :<=, UInt8::MAX},
+      u16: {:"%number", UInt16::MIN, :<=, {:whole, :_}, :<=, UInt16::MAX},
+      u32: {:"%number", UInt32::MIN, :<=, {:whole, :_}, :<=, UInt32::MAX},
+      u64: {:"%number", UInt64::MIN, :<=, {:whole, :_}, :<=, UInt64::MAX},
+      u128: {:"%number", UInt128::MIN, :<=, {:whole, :_}, :<=, UInt128::MAX},
+      i8: {:"%number", Int8::MIN, :<=, {:whole, :_}, :<=, Int8::MAX},
+      "-i8": {:"%number", Int8::MIN, :<=, {:whole, :_}, :<, 0},
+      "+i8": {:"%number", 0, :<=, {:whole, :_}, :<=, Int8::MAX},
+      i16: {:"%number", Int16::MIN, :<=, {:whole, :_}, :<=, Int16::MAX},
+      "-i16": {:"%number", Int16::MIN, :<=, {:whole, :_}, :<, 0},
+      "+i16": {:"%number", 0, :<=, {:whole, :_}, :<=, Int16::MAX},
+      i32: {:"%number", Int32::MIN, :<=, {:whole, :_}, :<=, Int32::MAX},
+      "-i32": {:"%number", Int32::MIN, :<=, {:whole, :_}, :<, 0},
+      "+i32": {:"%number", 0, :<=, {:whole, :_}, :<=, Int32::MAX},
+      i64: {:"%number", Int64::MIN, :<=, {:whole, :_}, :<=, Int64::MAX},
+      "-i64": {:"%number", Int64::MIN, :<=, {:whole, :_}, :<, 0},
+      "+i64": {:"%number", 0, :<=, {:whole, :_}, :<=, Int64::MAX},
+      i128: {:"%number", Int128::MIN, :<=, {:whole, :_}, :<=, Int128::MAX},
+      "-i128": {:"%number", Int128::MIN, :<=, {:whole, :_}, :<, 0},
+      "+i128": {:"%number", 0, :<=, {:whole, :_}, :<=, Int128::MAX},
+    )
+
+    private def typesym(blank : Term::Sym::Blank) : Term::Sym
       case blank.type
       in .any?     then SYM_BLANK_ANY
       in .number?  then SYM_BLANK_NUMBER
@@ -2394,7 +2495,7 @@ module ::Ww::Term::M1
     end
 
     # Returns the normal form of an itemspart *node*.
-    def self.item(node : Term) : Term
+    def item(node : Term) : Term
       Term.of_case(node, engine: Term::M0) do
         matchpi %[_symbol] do
           continue unless blank = node.blank?
@@ -2407,7 +2508,7 @@ module ::Ww::Term::M1
 
         # Fast path to %singular for literal terms.
         matchpi %[_number], %[_string], %[_boolean] do
-          {:"%singular", M1.normal(node)}
+          {:"%singular", pattern(node)}
         end
 
         matchpi(
@@ -2433,7 +2534,7 @@ module ::Ww::Term::M1
         end
 
         matchpi %[(%optional _ body_)], cue: :"%optional" do
-          node.morph({2, M1.normal(body)})
+          node.morph({2, pattern(body)})
         end
 
         matchpi %[(%group capture_ _ _*)], cue: :"%group" do
@@ -2478,7 +2579,7 @@ module ::Ww::Term::M1
           %[(%gap/max measurer_)],
           cues: {:"%gap", :"%gap/min", :"%gap/max"}
         ) do
-          node.morph({1, M1.normal(measurer)})
+          node.morph({1, pattern(measurer)})
         end
 
         # NOTE: Currently we do not register %slot as a capture. And I don't think
@@ -2487,27 +2588,27 @@ module ::Ww::Term::M1
           node
         end
 
-        otherwise { {:"%singular", M1.normal(node)} }
+        otherwise { {:"%singular", pattern(node)} }
       end
     end
 
     # Returns the normal form of a pairspart *key*-*value* pair.
-    def self.pair(key : Term, value : Term) : Term
+    def pair(key : Term, value : Term) : Term
       Term.of_case(value, engine: Term::M0) do
         matchpi %[(%optional default_ body_)], cue: :"%optional" do
-          {:"%pair/optional", key, default, M1.normal(body)}
+          {:"%pair/optional", key, default, pattern(body)}
         end
 
         matchpi %[(%- positive_)], cue: :"%-" do
-          {:"%pair/negative", key, M1.normal(positive)}
+          {:"%pair/negative", key, pattern(positive)}
         end
 
         matchpi %[(%- positive_ name_)], cue: :"%-" do
-          {:"%pair/negative", key, M1.normal(positive), name}
+          {:"%pair/negative", key, pattern(positive), name}
         end
 
         otherwise do
-          {:"%pair/required", key, M1.normal(value)}
+          {:"%pair/required", key, pattern(value)}
         end
       end
     end
@@ -2521,7 +2622,7 @@ module ::Ww::Term::M1
     # should not affect semantics but may affect performance. You are thus not
     # advised to prefix arbitrary symbols with `%` unless they are related to
     # pattern matching or pattern matching is inevitable regardless.
-    def self.literal?(dict : Term::Dict) : Bool
+    private def literal?(dict : Term::Dict) : Bool
       return true if dict.empty?
 
       dict.ee.all? do |k, v|
@@ -2536,7 +2637,7 @@ module ::Ww::Term::M1
     end
 
     # Returns the normal form of a dictionary term *dict*.
-    def self.dict(dict : Term::Dict) : Term
+    def dict(dict : Term::Dict) : Term
       if literal?(dict)
         return Term.of(:"%literal", dict)
       end
@@ -2552,10 +2653,336 @@ module ::Ww::Term::M1
 
       # E.g. {x: 100, y: 200} = (%layer () x: 100 y: 200)
       if dict.pairsonly?
-        return M1.normal(Term.of(:"%layer", Term[], dict))
+        return pattern(Term.of(:"%layer", Term[], dict))
       end
 
       Term.of(:"%partition", dict(dict.items.collect), dict(dict.pairs))
+    end
+
+    # Returns the normal form of *pattern*.
+    def pattern(pattern : Term) : Term
+      Term.of_case(pattern, engine: Term::M0) do
+        # NOTE: this is a fast path for itemsonly dictionaries. They'd otherwise be
+        # at the very bottom, which isn't exactly a good choice due to their frequency
+        # in practice. We do only the simplest, almost probabilistic checks here; if they
+        # fail, we will go with the longer but precise path.
+        #
+        # WARNING: if you want a pattern matching construct that's a dictionary and that
+        # doesn't start with %, you will have to be friends with this fast path.
+        matchpi %[_dict] do
+          pdict = pattern.unsafe_as_d
+
+          continue unless pdict.itemsonly?
+          continue unless head = pdict.items.first?
+          continue unless headsym = head.as_sym?
+          continue if M1.probably_node?(headsym) || headsym == SYM_EDGE
+
+          dict(pdict)
+        end
+
+        # Similarly, %let is very frequent (especially due to blanks such as x_)
+        # compiling to e.g. (%let x _).
+        matchpi %[((%literal %let) capture_ successor_)], cue: :"%let" do
+          {:"%let", {:"%capture", capture}, pattern(successor)}
+        end
+
+        # Blanks are also very frequent; as are symbols. We avoid using matchpis
+        # for type-only blanks _number, _string, etc. so that this _symbol matchpi
+        # is immediately reached.
+        #
+        # Named blanks are transformed into %let which we then recurse upon.
+        # The recursion is done to perform further reductions (since we're
+        # not rewriting here we must recurse explicitly).
+        matchpi %[_symbol] do
+          case pattern
+          when SYM_BLANK_ANY     then NORMAL_PASS 
+          when SYM_BLANK_NUMBER  then NORMAL_BLANK_NUMBER 
+          when SYM_BLANK_STRING  then NORMAL_BLANK_STRING 
+          when SYM_BLANK_SYMBOL  then NORMAL_BLANK_SYMBOL 
+          when SYM_BLANK_BOOLEAN then NORMAL_BLANK_BOOLEAN 
+          when SYM_BLANK_DICT    then NORMAL_BLANK_DICT 
+          else
+            continue unless blank = pattern.unsafe_as_sym.blank?
+            continue unless blank.single?
+            continue unless name = blank.name?
+
+            pattern(Term.of(:"%let", name, typesym(blank)))
+          end
+        end
+
+        # Literals are very frequent.
+        matchpi %[_symbol], %[_number], %[_string], %[_boolean] do
+          {:"%literal", pattern}
+        end
+
+        # Edges are somewhat frequent in Soma-land.
+        #
+        # (edge ...) is the only pattern matching construct not prefixed with a %.
+        # It is extremely abundant in Soma/delta7 patterns, and ML emits it on @...,
+        # e.g. @foo is (edge ...). We reuse @foo_ to match roughly ((%literal edge) _).
+        matchpi %[(edge arg_symbol)], cue: :edge do |arg|
+          arg = arg.unsafe_as_sym
+          continue unless blank = arg.blank?
+          continue unless blank.single?
+
+          case blank.type
+          when .symbol? then edge = Term.of(:"%edge", :_symbol)
+          when .string? then edge = Term.of(:"%edge", :_string)
+          when .number? then edge = Term.of(:"%edge", :_number)
+          when .any?    then edge = Term.of(:"%edge", :_)
+          else
+            continue
+          end
+
+          if name = blank.name?
+            edge = Term.of(:"%let", {:"%capture", name}, edge)
+          end
+
+          edge
+        end
+
+        # Partition is pretty frequent.
+        matchpi %[((%literal %partition) itemspart_ pairspart_)], cue: :"%partition" do
+          {:"%partition", pattern(itemspart), pattern(pairspart)}
+        end
+
+        matchpi %[(%layer below_ side_dict)], cue: :"%layer" do
+          pattern.transaction do |commit|
+            commit.with(1, pattern(below))
+
+            nside = side.transaction do |nside|
+              side.each_entry do |k, v|
+                nside.with(k, pair(k, v))
+              end
+            end
+
+            commit.with(2, nside)
+          end
+        end
+
+        # (%layer _ k1: v1 k2: v2 ...) is a shorthand for (%layer _ {k1: v1 k2: v2 ...}).
+        matchpi %[(%layer below_ ¦ pairs_)], cue: :"%layer" do
+          pattern(Term.of(:"%layer", below, pairs))
+        end
+
+        # %number should be %terminal.
+        matchpi(
+          %[(%number (%literal _))],
+          %[(%number (%literal (whole _)))],
+          cue: {:"%number", :_},
+          cues: {nil, :whole}
+        ) { {:"%terminal", pattern} }
+
+        # Compile fixed-width %number into the corresponding bounds check. We do not
+        # actually have fixed-width numbers. These kinds of patterns are often used
+        # on the Crystal side to ensure we can safely e.g. to(Int32).
+        matchpi %[(%number type_symbol)], cue: :"%number" do
+          continue unless normal = NORMAL_INT[type]?
+
+          {:"%terminal", normal}
+        end
+
+        matchpi(
+          %[(%number (%literal _) op_symbol _number)],
+          %[(%number (%literal (whole _)) op_symbol _number)],
+          cue: {:"%number", :_},
+          cues: {nil, :whole}
+        ) do |op|
+          continue unless op.in?(SYMS_CMP)
+
+          {:"%terminal", pattern}
+        end
+
+        matchpi(
+          %[(%number _number lop_symbol (%literal _) rop_symbol _number)],
+          %[(%number _number lop_symbol (%literal (whole _)) rop_symbol _number)],
+          cue: {:"%number", :_},
+          cues: {nil, :whole}
+        ) do |lop, rop|
+          continue unless lop.in?(SYMS_LTX)
+          continue unless rop.in?(SYMS_LTX)
+
+          {:"%terminal", pattern}
+        end
+
+        matchpi(
+          %[(%pipe (+ _number) successor_)],
+          %[(%pipe (- _number) successor_)],
+          %[(%pipe (* _number) successor_)],
+          %[(%pipe (/ _number) successor_)],
+          %[(%pipe (div _number) successor_)],
+          %[(%pipe (mod _number) successor_)],
+          %[(%pipe (** _number) successor_)],
+          %[(%pipe (map _dict) successor_)],
+          %[(%pipe span successor_)],
+          %[(%pipe tally successor_)],
+          cue: :"%pipe",
+          cues: {:+, :-, :*, :/, :div, :mod, :**, :map, :span, :tally}
+        ) do
+          pattern.morph(
+            {1, ->(term : Term) { Term.of(:"%barrier", term) }},
+            {2, pattern(successor)},
+          )
+        end
+
+        matchpi %[(%pipe head_ _*)], cue: :"%pipe" do
+          continue if pattern.size < 4 # %pipe + head_1 + head_2 + body
+
+          body = Term::Dict.build do |commit|
+            commit << :"%pipe"
+
+            rest = pattern.items.move(2)
+            rest.each { |item| commit << item }
+          end
+
+          pattern(Term.of(:"%pipe", head, body))
+        end
+
+        matchpi %[(%all _*)], cue: :"%all" do
+          pattern.transaction do |commit|
+            offshoots = pattern.items.move(1)
+            offshoots.each_with_index(offset: 1) do |offshoot, index|
+              commit.with(index, pattern(offshoot))
+            end
+          end
+        end
+
+        matchpi %[(%any _*)], cue: :"%any" do
+          {:"%terminal", pattern.morph({0, :"%any/literal"})}
+        end
+
+        matchpi %[(%any° _*)], cue: :"%any°" do
+          Term::Dict.build do |commit|
+            commit << :"%any/source"
+
+            branches = pattern.items.move(1)
+            branches.each { |branch| commit << pattern(branch) }
+          end
+        end
+
+        # Leave %literal as is.
+        matchpi %[((%literal %literal) _)], cue: :"%literal" do
+          pattern
+        end
+
+        # Mark %keypool and %not as %terminal so that walk doesn't walk inside them.
+        matchpi(
+          %[(%keypool _ _*)],
+          %[(%not _ _*)],
+          cues: {:"%keypool", :"%not"}
+        ) { {:"%terminal", pattern} }
+
+        matchpi %[(%keypath capture_)], cue: :"%keypath" do
+          {:"%keypath", {:"%capture", capture}}
+        end
+
+        matchpi(
+          %[(%edge (%literal _symbol))],
+          %[(%edge (%literal _string))],
+          %[(%edge (%literal _number))],
+          %[(%edge (%literal _))],
+          cue: :"%edge"
+        ) { pattern }
+
+        # %nonself is dissolved at normalization.
+        matchpi %[(%nonself arg_)], cue: :"%nonself" do
+          pattern(arg)
+        end
+
+        matchpi %[(%value capture_ body_)], cue: :"%value" do
+          {:"%value", {:"%capture", capture}, pattern(body)}
+        end
+
+        matchpi %[(%-value capture_)], cue: :"%-value" do
+          {:"%-value", {:"%capture", capture}}
+        end
+
+        matchpi %[(%-value capture_ name_)], cue: :"%-value" do
+          {:"%-value", {:"%capture", capture}, {:"%barrier", name}}
+        end
+
+        matchpi %[(%item _ _*)], cue: :"%item" do
+          Term::Dict.build do |commit|
+            commit << :"%items/first"
+            commit.concat(pattern.items.move(1)) { |item| pattern(item) }
+          end
+        end
+
+        matchpi %[(%item° _ _*)], cue: :"%item°" do
+          Term::Dict.build do |commit|
+            commit << :"%items/source"
+            commit.concat(pattern.items.move(1)) { |item| pattern(item) }
+          end
+        end
+
+        matchpi %[(%items capture_ _ _* ¦ opts_)], cue: :"%items" do |opts|
+          continue unless opts = Schemas::Items.validated?(opts)
+
+          opts.transaction do |commit|
+            commit << :"%items/all" << {:"%capture", capture}
+            commit.concat(pattern.items.move(2)) { |item| pattern(item) }
+          end
+        end
+
+        matchpi %[(%entry k_ v_)], cue: :"%entry" do
+          {:"%entries/first", pattern(k), pattern(v)}
+        end
+
+        matchpi %[(%entry° k_ v_)], cue: :"%entry°" do
+          {:"%entries/source", pattern(k), pattern(v)}
+        end
+
+        matchpi %[(%entries capture_ k_ v_ ¦ opts_)], cue: :"%entries" do |opts|
+          continue unless opts = Schemas::Entries.validated?(opts)
+
+          opts.morph(
+            {0, :"%entries/all"},
+            {1, {:"%capture", capture}},
+            {2, pattern(k)},
+            {3, pattern(v)},
+          )
+        end
+
+        matchpi %[(%leaf body_ ¦ opts_)], cue: :"%leaf" do |opts|
+          continue unless opts = Schemas::LeafUnbounded.validated?(opts)
+
+          opts.morph({0, :"%leaves/first"}, {1, pattern(body)})
+        end
+
+        matchpi %[(%leaf° body_ ¦ opts_)], cue: :"%leaf°" do |opts|
+          continue unless opts = Schemas::LeafUnbounded.validated?(opts)
+
+          opts.morph({0, :"%leaves/source"}, {1, pattern(body)})
+        end
+
+        matchpi %[(%leaves capture_ body_ ¦ opts_)], cue: :"%leaves" do |opts|
+          continue unless opts = Schemas::LeafBounded.validated?(opts)
+
+          opts.morph(
+            {0, :"%leaves/all"},
+            {1, {:"%capture", capture}},
+            {2, pattern(body)},
+          )
+        end
+
+        # Leave %new's as-is. They are normalized and compiled when their
+        # dependencies are known.
+        matchpi %[(%new _)], cue: :"%new" do
+          {:"%terminal", pattern}
+        end
+
+        # Expand (%string nonempty) into (%all (%not "") _string)
+        matchpi %[(%string nonempty)], cue: {:"%string", :nonempty} do
+          pattern(Term.of(:"%all", {:"%not", ""}, :_string))
+        end
+
+        # NOTE: you should insert new matchpis here, especially if they are infrequent.
+        # Below we have raw dict/literal treatment; if you put your matchpis below they
+        # will probably not be reached. If your matchpi does not start with a %, make sure
+        # to update the dict fast path above.
+
+        matchpi %[_dict] { dict(pattern.unsafe_as_d) }
+      end
     end
   end
 
@@ -2665,107 +3092,6 @@ module ::Ww::Term::M1
     end
   end
 
-  Schemas::LeafUnbounded = Term::M0::PairSchema.build do
-    key :in, values: {:items, :keys, :values, :"pair/values"}, default: :items
-    key :order, values: {:dfs, :bfs}, default: :dfs
-    key :self, values: {true, false}, default: false
-  end
-
-  Schemas::LeafBounded = Term::M0::PairSchema.build do
-    key :in, values: {:items, :keys, :values, :"pair/values"}, default: :items
-    key :order, values: {:dfs, :bfs}, default: :dfs
-    key :min, values: 0..UInt8::MAX, default: 0
-    key :max, values: 1..UInt8::MAX, default: SYM_INF
-    key :self, values: {true, false}, default: false
-    where { |min, max| min.as_n <= max.as_n }
-  end
-
-  Schemas::Items = Term::M0::PairSchema.build do
-    key :min, values: 0..UInt8::MAX, default: 1
-    key :max, values: 1..UInt8::MAX, default: SYM_INF
-    where { |min, max| min.as_n <= max.as_n }
-  end
-
-  Schemas::Entries = Term::M0::PairSchema.build do
-    key :min, values: 0..UInt8::MAX, default: 1
-    key :max, values: 1..UInt8::MAX, default: SYM_INF
-    where { |min, max| min.as_n <= max.as_n }
-  end
-
-  Schemas::Plural = Term::M0::PairSchema.build do
-    key :min, values: 0..UInt8::MAX, default: 0
-    key :max, values: 1..UInt8::MAX, default: SYM_INF
-    key :type, values: {:_number, :_string, :_symbol, :_dict, :_}, default: :_
-    where { |min, max| min.as_n <= max.as_n }
-  end
-
-  Schemas::Many = Term::M0::PairSchema.build do
-    key :min, values: 0..UInt8::MAX, default: 1
-    key :max, values: 1..UInt8::MAX, default: SYM_INF
-    where { |min, max| min.as_n <= max.as_n }
-  end
-
-  Schemas::Past = Term::M0::PairSchema.build do
-    key :min, values: 0..UInt8::MAX, default: 0
-    key :max, values: 1..UInt8::MAX, default: SYM_INF
-    where { |min, max| min.as_n <= max.as_n }
-  end
-
-  SYM_LT  = Term.of(:<)
-  SYM_GT  = Term.of(:>)
-  SYM_LTE = Term.of(:<=)
-  SYM_GTE = Term.of(:>=)
-
-  SYMS_CMP = {SYM_LT, SYM_GT, SYM_LTE, SYM_GTE}
-  SYMS_LTX = {SYM_LT, SYM_LTE}
-
-  SYM_INF = Term.of(:∞)
-
-  SYM_BLANK_ANY = Term[:_]
-  SYM_BLANK_DICT = Term[:_dict]
-  SYM_BLANK_NUMBER = Term[:_number]
-  SYM_BLANK_SYMBOL = Term[:_symbol]
-  SYM_BLANK_STRING = Term[:_string]
-  SYM_BLANK_BOOLEAN = Term[:_boolean]
-
-  # :nodoc:
-  module Nconst
-    PASS = Term.of({:"%pass"})
-
-    BLANK_DICT    = Term.of({:"%dict"})
-    BLANK_NUMBER  = Term.of({:"%number", :_})
-    BLANK_STRING  = Term.of({:"%string"})
-    BLANK_SYMBOL  = Term.of({:"%symbol"})
-    BLANK_BOOLEAN = Term.of({:"%boolean"})
-
-    INT = Term.of(
-      u8: {:"%number", UInt8::MIN, :<=, {:whole, :_}, :<=, UInt8::MAX},
-      u16: {:"%number", UInt16::MIN, :<=, {:whole, :_}, :<=, UInt16::MAX},
-      u32: {:"%number", UInt32::MIN, :<=, {:whole, :_}, :<=, UInt32::MAX},
-      u64: {:"%number", UInt64::MIN, :<=, {:whole, :_}, :<=, UInt64::MAX},
-      u128: {:"%number", UInt128::MIN, :<=, {:whole, :_}, :<=, UInt128::MAX},
-      i8: {:"%number", Int8::MIN, :<=, {:whole, :_}, :<=, Int8::MAX},
-      "-i8": {:"%number", Int8::MIN, :<=, {:whole, :_}, :<, 0},
-      "+i8": {:"%number", 0, :<=, {:whole, :_}, :<=, Int8::MAX},
-      i16: {:"%number", Int16::MIN, :<=, {:whole, :_}, :<=, Int16::MAX},
-      "-i16": {:"%number", Int16::MIN, :<=, {:whole, :_}, :<, 0},
-      "+i16": {:"%number", 0, :<=, {:whole, :_}, :<=, Int16::MAX},
-      i32: {:"%number", Int32::MIN, :<=, {:whole, :_}, :<=, Int32::MAX},
-      "-i32": {:"%number", Int32::MIN, :<=, {:whole, :_}, :<, 0},
-      "+i32": {:"%number", 0, :<=, {:whole, :_}, :<=, Int32::MAX},
-      i64: {:"%number", Int64::MIN, :<=, {:whole, :_}, :<=, Int64::MAX},
-      "-i64": {:"%number", Int64::MIN, :<=, {:whole, :_}, :<, 0},
-      "+i64": {:"%number", 0, :<=, {:whole, :_}, :<=, Int64::MAX},
-      i128: {:"%number", Int128::MIN, :<=, {:whole, :_}, :<=, Int128::MAX},
-      "-i128": {:"%number", Int128::MIN, :<=, {:whole, :_}, :<, 0},
-      "+i128": {:"%number", 0, :<=, {:whole, :_}, :<=, Int128::MAX},
-    )
-  end
-
-  # TODO: move normal into module Normal
-  #    M1.normal -> Normal.pattern
-  #      _dict   -> Normal.dict
-
   # If a person has trouble understanding a metaphor and grasping its intended meaning,
   # they do not "crash"; they change their perspective and interpret it more literally.
   # This is a spectrum: from close-to-the-intended meaning to letter-by-letter or sound-
@@ -2782,323 +3108,9 @@ module ::Ww::Term::M1
   # inevitable implementation errors). Diagnostics can help the programmer find potential
   # mistakes at their level of reasoning.
   def self.normal(pattern : Term) : Term
-    Term.of_case(pattern, engine: Term::M0) do
-      # NOTE: this is a fast path for itemsonly dictionaries. They'd otherwise be
-      # at the very bottom, which isn't exactly a good choice due to their frequency
-      # in practice. We do only the simplest, almost probabilistic checks here; if they
-      # fail, we will go with the longer but precise path.
-      #
-      # WARNING: if you want a pattern matching construct that's a dictionary and that
-      # doesn't start with %, you will have to be friends with this fast path.
-      matchpi %[_dict] do
-        pdict = pattern.unsafe_as_d
-
-        continue unless pdict.itemsonly?
-        continue unless head = pdict.items.first?
-        continue unless headsym = head.as_sym?
-        continue if probably_node?(headsym) || headsym == SYM_EDGE
-
-        Normal.dict(pdict)
-      end
-
-      # Similarly, %let is very frequent (especially due to blanks such as x_)
-      # compiling to e.g. (%let x _).
-      matchpi %[((%literal %let) capture_ successor_)], cue: :"%let" do
-        {:"%let", {:"%capture", capture}, normal(successor)}
-      end
-
-      # Blanks are also very frequent; as are symbols. We avoid using matchpis
-      # for type-only blanks _number, _string, etc. so that this _symbol matchpi
-      # is immediately reached.
-      #
-      # Named blanks are transformed into %let which we then recurse upon.
-      # The recursion is done to perform further reductions (since we're
-      # not rewriting here we must recurse explicitly).
-      matchpi %[_symbol] do
-        case pattern
-        when SYM_BLANK_ANY     then Nconst::PASS 
-        when SYM_BLANK_NUMBER  then Nconst::BLANK_NUMBER 
-        when SYM_BLANK_STRING  then Nconst::BLANK_STRING 
-        when SYM_BLANK_SYMBOL  then Nconst::BLANK_SYMBOL 
-        when SYM_BLANK_BOOLEAN then Nconst::BLANK_BOOLEAN 
-        when SYM_BLANK_DICT    then Nconst::BLANK_DICT 
-        else
-          continue unless blank = pattern.unsafe_as_sym.blank?
-          continue unless blank.single?
-          continue unless name = blank.name?
-
-          normal(Term.of(:"%let", name, Normal.typesym(blank)))
-        end
-      end
-
-      # Literals are very frequent.
-      matchpi %[_symbol], %[_number], %[_string], %[_boolean] do
-        {:"%literal", pattern}
-      end
-
-      # Edges are somewhat frequent in Soma-land.
-      #
-      # (edge ...) is the only pattern matching construct not prefixed with a %.
-      # It is extremely abundant in Soma/delta7 patterns, and ML emits it on @...,
-      # e.g. @foo is (edge ...). We reuse @foo_ to match roughly ((%literal edge) _).
-      matchpi %[(edge arg_symbol)], cue: :edge do |arg|
-        arg = arg.unsafe_as_sym
-        continue unless blank = arg.blank?
-        continue unless blank.single?
-
-        case blank.type
-        when .symbol? then edge = Term.of(:"%edge", :_symbol)
-        when .string? then edge = Term.of(:"%edge", :_string)
-        when .number? then edge = Term.of(:"%edge", :_number)
-        when .any?    then edge = Term.of(:"%edge", :_)
-        else
-          continue
-        end
-
-        if name = blank.name?
-          edge = Term.of(:"%let", {:"%capture", name}, edge)
-        end
-
-        edge
-      end
-
-      # Partition is pretty frequent.
-      matchpi %[((%literal %partition) itemspart_ pairspart_)], cue: :"%partition" do
-        {:"%partition", normal(itemspart), normal(pairspart)}
-      end
-
-      matchpi %[(%layer below_ side_dict)], cue: :"%layer" do
-        pattern.transaction do |commit|
-          commit.with(1, normal(below))
-
-          nside = side.transaction do |nside|
-            side.each_entry do |k, v|
-              nside.with(k, Normal.pair(k, v))
-            end
-          end
-
-          commit.with(2, nside)
-        end
-      end
-
-      # (%layer _ k1: v1 k2: v2 ...) is a shorthand for (%layer _ {k1: v1 k2: v2 ...}).
-      matchpi %[(%layer below_ ¦ pairs_)], cue: :"%layer" do
-        normal(Term.of(:"%layer", below, pairs))
-      end
-
-      # %number should be %terminal.
-      matchpi(
-        %[(%number (%literal _))],
-        %[(%number (%literal (whole _)))],
-        cue: {:"%number", :_},
-        cues: {nil, :whole}
-      ) { {:"%terminal", pattern} }
-
-      # Compile fixed-width %number into the corresponding bounds check. We do not
-      # actually have fixed-width numbers. These kinds of patterns are often used
-      # on the Crystal side to ensure we can safely e.g. to(Int32).
-      matchpi %[(%number type_symbol)], cue: :"%number" do
-        continue unless normal = Nconst::INT[type]?
-
-        {:"%terminal", normal}
-      end
-
-      matchpi(
-        %[(%number (%literal _) op_symbol _number)],
-        %[(%number (%literal (whole _)) op_symbol _number)],
-        cue: {:"%number", :_},
-        cues: {nil, :whole}
-      ) { |op| op.in?(SYMS_CMP) ? {:"%terminal", pattern} : continue }
-
-      matchpi(
-        %[(%number _number lop_symbol (%literal _) rop_symbol _number)],
-        %[(%number _number lop_symbol (%literal (whole _)) rop_symbol _number)],
-        cue: {:"%number", :_},
-        cues: {nil, :whole}
-      ) { |lop, rop| lop.in?(SYMS_LTX) && rop.in?(SYMS_LTX) ? {:"%terminal", pattern} : continue }
-
-      matchpi(
-        %[(%pipe (+ _number) successor_)],
-        %[(%pipe (- _number) successor_)],
-        %[(%pipe (* _number) successor_)],
-        %[(%pipe (/ _number) successor_)],
-        %[(%pipe (div _number) successor_)],
-        %[(%pipe (mod _number) successor_)],
-        %[(%pipe (** _number) successor_)],
-        %[(%pipe (map _dict) successor_)],
-        %[(%pipe span successor_)],
-        %[(%pipe tally successor_)],
-        cue: :"%pipe",
-        cues: {:+, :-, :*, :/, :div, :mod, :**, :map, :span, :tally}
-      ) do
-        pattern.morph(
-          {1, ->(term : Term) { Term.of(:"%barrier", term) }},
-          {2, normal(successor)},
-        )
-      end
-
-      matchpi %[(%pipe head_ _*)], cue: :"%pipe" do
-        continue if pattern.size < 4 # %pipe + head_1 + head_2 + body
-
-        body = Term::Dict.build do |commit|
-          commit << :"%pipe"
-
-          rest = pattern.items.move(2)
-          rest.each { |item| commit << item }
-        end
-
-        normal(Term.of(:"%pipe", head, body))
-      end
-
-      matchpi %[(%all _*)], cue: :"%all" do
-        pattern.transaction do |commit|
-          offshoots = pattern.items.move(1)
-          offshoots.each_with_index(offset: 1) do |offshoot, index|
-            commit.with(index, normal(offshoot))
-          end
-        end
-      end
-
-      matchpi %[(%any _*)], cue: :"%any" do
-        {:"%terminal", pattern.morph({0, :"%any/literal"})}
-      end
-
-      matchpi %[(%any° _*)], cue: :"%any°" do
-        Term::Dict.build do |commit|
-          commit << :"%any/source"
-
-          branches = pattern.items.move(1)
-          branches.each { |branch| commit << normal(branch) }
-        end
-      end
-
-      # Leave %literal as is.
-      matchpi %[((%literal %literal) _)], cue: :"%literal" do
-        pattern
-      end
-
-      # Mark %keypool and %not as %terminal so that walk doesn't walk inside them.
-      matchpi(
-        %[(%keypool _ _*)],
-        %[(%not _ _*)],
-        cues: {:"%keypool", :"%not"}
-      ) { {:"%terminal", pattern} }
-
-      matchpi %[(%keypath capture_)], cue: :"%keypath" do
-        {:"%keypath", {:"%capture", capture}}
-      end
-
-      matchpi(
-        %[(%edge (%literal _symbol))],
-        %[(%edge (%literal _string))],
-        %[(%edge (%literal _number))],
-        %[(%edge (%literal _))],
-        cue: :"%edge"
-      ) { pattern }
-
-      # %nonself is dissolved at normalization.
-      matchpi %[(%nonself arg_)], cue: :"%nonself" do
-        normal(arg)
-      end
-
-      matchpi %[(%value capture_ body_)], cue: :"%value" do
-        {:"%value", {:"%capture", capture}, normal(body)}
-      end
-
-      matchpi %[(%-value capture_)], cue: :"%-value" do
-        {:"%-value", {:"%capture", capture}}
-      end
-
-      matchpi %[(%-value capture_ name_)], cue: :"%-value" do
-        {:"%-value", {:"%capture", capture}, {:"%barrier", name}}
-      end
-
-      matchpi %[(%item _ _*)], cue: :"%item" do
-        Term::Dict.build do |commit|
-          commit << :"%items/first"
-          commit.concat(pattern.items.move(1)) { |item| normal(item) }
-        end
-      end
-
-      matchpi %[(%item° _ _*)], cue: :"%item°" do
-        Term::Dict.build do |commit|
-          commit << :"%items/source"
-          commit.concat(pattern.items.move(1)) { |item| normal(item) }
-        end
-      end
-
-      matchpi %[(%items capture_ _ _* ¦ opts_)], cue: :"%items" do |opts|
-        continue unless opts = Schemas::Items.validated?(opts)
-
-        opts.transaction do |commit|
-          commit << :"%items/all" << {:"%capture", capture}
-          commit.concat(pattern.items.move(2)) { |item| normal(item) }
-        end
-      end
-
-      matchpi %[(%entry k_ v_)], cue: :"%entry" do
-        {:"%entries/first", normal(k), normal(v)}
-      end
-
-      matchpi %[(%entry° k_ v_)], cue: :"%entry°" do
-        {:"%entries/source", normal(k), normal(v)}
-      end
-
-      matchpi %[(%entries capture_ k_ v_ ¦ opts_)], cue: :"%entries" do |opts|
-        continue unless opts = Schemas::Entries.validated?(opts)
-
-        opts.morph(
-          {0, :"%entries/all"},
-          {1, {:"%capture", capture}},
-          {2, normal(k)},
-          {3, normal(v)},
-        )
-      end
-
-      matchpi %[(%leaf body_ ¦ opts_)], cue: :"%leaf" do |opts|
-        continue unless opts = Schemas::LeafUnbounded.validated?(opts)
-
-        opts.morph({0, :"%leaves/first"}, {1, normal(body)})
-      end
-
-      matchpi %[(%leaf° body_ ¦ opts_)], cue: :"%leaf°" do |opts|
-        continue unless opts = Schemas::LeafUnbounded.validated?(opts)
-
-        opts.morph({0, :"%leaves/source"}, {1, normal(body)})
-      end
-
-      matchpi %[(%leaves capture_ body_ ¦ opts_)], cue: :"%leaves" do |opts|
-        continue unless opts = Schemas::LeafBounded.validated?(opts)
-
-        opts.morph(
-          {0, :"%leaves/all"},
-          {1, {:"%capture", capture}},
-          {2, normal(body)},
-        )
-      end
-
-      # Leave %new's as-is. They are normalized and compiled when their
-      # dependencies are known.
-      matchpi %[(%new _)], cue: :"%new" do
-        {:"%terminal", pattern}
-      end
-
-      # Expand (%string nonempty) into (%all (%not "") _string)
-      matchpi %[(%string nonempty)], cue: {:"%string", :nonempty} do
-        normal(Term.of(:"%all", {:"%not", ""}, :_string))
-      end
-
-      # NOTE: you should insert new matchpis here, especially if they are infrequent.
-      # Below we have raw dict/literal treatment; if you put your matchpis below they
-      # will probably not be reached. If your matchpi does not start with a %, make sure
-      # to update the dict fast path above.
-
-      matchpi %[_dict] do
-        Normal.dict(pattern.unsafe_as_d)
-      end
-    end
+    Normal.pattern(pattern)
   end
-
+  
   def self.search_part(term : Term) : Search::Part
     case term
     when Term.of(:items)         then Search::Part::ItemsOrdered
