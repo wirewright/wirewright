@@ -2303,3 +2303,27 @@ class Pf::Cache(K, V)
     proposal
   end
 end
+
+{% for width in %w(8 16 32 64 128) %}
+  struct UInt{{width.id}}
+    def self.width
+      {{width.id}}
+    end
+  end
+
+  struct Int{{width.id}}
+    def self.width
+      {{width.id}}
+    end
+  end
+{% end %}
+
+struct BigRational
+  def to_u128
+    if integer?
+      to_big_i.to_u128
+    else
+      raise ArgumentError.new # ?!
+    end
+  end
+end

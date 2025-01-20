@@ -301,11 +301,12 @@ module Ww
     # Cached hash code for this dict.
     @hash : UInt64?
 
+    alias Sketch = UInt128
+
     def initialize
       @items = EMPTY_ITEM_NODE
       @pairs = EMPTY_PAIR_NODE
-
-      @sketch = 0u64
+      @sketch = Sketch.new(0)
     end
 
     protected def initialize(@items, @pairs, @sketch)
@@ -536,7 +537,7 @@ module Ww
       (@sketch & other.@sketch) == other.@sketch
     end
 
-    def sketch_superset_of?(subset : UInt64) : Bool
+    def sketch_superset_of?(subset : Sketch) : Bool
       (@sketch & subset) == subset
     end
 
@@ -544,16 +545,16 @@ module Ww
       Dict.probably_includes?(@sketch, symbol)
     end
 
-    def self.probably_includes?(sketch : UInt64, symbol : Term::Sym) : Bool
-      bucket = symbol.hash % 64
+    def self.probably_includes?(sketch : Sketch, symbol : Term::Sym) : Bool
+      bucket = symbol.hash % Sketch.width
       sketch.bit(bucket) == 1
     end
 
-    def self.mix(sketch : UInt64, value : Term)
+    def self.mix(sketch : Sketch, value : Term)
       case value.type
       when .symbol?
-        bucket = value.unsafe_as_sym.hash % 64
-        sketch | (0b1u64 << bucket)
+        bucket = value.unsafe_as_sym.hash % Sketch.width
+        sketch | (Sketch.new(1) << bucket)
       when .dict?
         sketch | value.unsafe_as_d.@sketch
       else
@@ -626,6 +627,23 @@ module Ww
 
     def follow(keys : Enumerable(Term)) : Term
       follow?(keys) || raise KeyError.new
+    end
+
+    def follow?(keys : Indexable(Term), *, __cursor = 0, &fn : Term -> Term) : Term?
+      if __cursor == keys.size
+        return fn.call(Term.of(self))
+      end
+
+      key = keys[__cursor]
+      return unless value0 = self[key]?
+      return unless value0 = value0.as_d?
+      return unless value1 = value0.follow?(keys, __cursor: __cursor + 1, &fn)
+
+      Term.of(self.with(key, value1))
+    end
+
+    def follow(keys : Indexable(Term), &fn : Term -> Term) : Term
+      follow?(keys, &fn) || raise KeyError.new
     end
 
     def where(key : Tail.class, eq value) : Dict

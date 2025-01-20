@@ -2,7 +2,7 @@ module Ww
   struct Term::Dict::ItemsView
     include Indexable(Term)
 
-    def initialize(@node : ItemNode, @b : Int32, @e : Int32, @sketch0 : UInt64)
+    def initialize(@node : ItemNode, @b : Int32, @e : Int32, @sketch0 : Sketch)
       unless 0 <= @b <= @e <= @node.size # Sanity
         raise ArgumentError.new
       end
