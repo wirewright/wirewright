@@ -522,7 +522,7 @@ end
 # Additionally, we must use u32 (or even u16) array indices for operator nodes rather
 # than a pointer. Thus an operator pool.
 module ::Ww::Term::M1::Operator
-  alias Any = Pass | Num | Sym | Boolean | Dict | Literal | Capture | Itemspart | Partition | EdgeUntyped | EdgeTyped | Choices | EitherSource | Keypool | Span | Tally | Bin | Both | Not | Layer | ScanFirst | ScanSource | ScanAll | ScanAllIsolated | DfsFirst | DfsSource | DfsAllIsolated | DfsAll | BfsFirst | BfsAllIsolated | BfsAll | PairRequired | PairOptional | PairAbsent | PairAbsentKeypath | NegativePair | NegativePairKeypath | Value | NegativeValue | NegativeValueKeypath | EntriesFirst | EntriesSource | EntriesAllIsolated | EntriesAll | Str | New | Keypath
+  alias Any = Pass | Num | Sym | Boolean | Dict | SketchSubset | Literal | Capture | Itemspart | Partition | EdgeUntyped | EdgeTyped | Choices | EitherSource | Keypool | Span | Tally | Bin | Both | Not | Layer | ScanFirst | ScanSource | ScanAll | ScanAllIsolated | DfsFirst | DfsSource | DfsAllIsolated | DfsAll | BfsFirst | BfsAllIsolated | BfsAll | PairRequired | PairOptional | PairAbsent | PairAbsentKeypath | NegativePair | NegativePairKeypath | Value | NegativeValue | NegativeValueKeypath | EntriesFirst | EntriesSource | EntriesAllIsolated | EntriesAll | Str | New | Keypath
 
   alias Bin = Add | Sub | Mul | Div | Tdiv | Mod | Pow | Map
 
@@ -554,27 +554,30 @@ module ::Ww::Term::M1::Operator
   defcase Sym
   defcase Str
   defcase Boolean
+  defcase Dict
+
+  defcase SketchSubset, sketch : Term::Dict::Sketch, successor : Any
 
   # TODO: split into Entry, Itemsonly, Pairsonly, do not use `Kind`.
-  defcase Dict, min : Magnitude, max : Magnitude, sketch : UInt64, kind : Kind do
-    enum Kind : UInt8
-      Entry
-      Itemsonly
-      Pairsonly
-    end
+  # defcase Dict, min : Magnitude, max : Magnitude, sketch : UInt64, kind : Kind do
+  #   enum Kind : UInt8
+  #     Entry
+  #     Itemsonly
+  #     Pairsonly
+  #   end
 
-    def self.new : Dict
-      new(Magnitude::INFINITY, Magnitude::INFINITY, 0, :entry)
-    end
+  #   def self.new : Dict
+  #     new(Magnitude::INFINITY, Magnitude::INFINITY, 0, :entry)
+  #   end
 
-    def sizes : Range(Magnitude?, Magnitude?)
-      Range.new(
-        min == Magnitude::INFINITY ? nil : min,
-        max == Magnitude::INFINITY ? nil : max,
-        exclusive: false
-      )
-    end
-  end
+  #   def sizes : Range(Magnitude?, Magnitude?)
+  #     Range.new(
+  #       min == Magnitude::INFINITY ? nil : min,
+  #       max == Magnitude::INFINITY ? nil : max,
+  #       exclusive: false
+  #     )
+  #   end
+  # end
   defcase Literal, term : Term
   defcase Capture, capture : Term, successor : Any = Pass.new
   # TODO: have a variant for the extremely frequent Itemspart of Singulars. We waste 40 bytes
@@ -1077,28 +1080,44 @@ module ::Ww::Term::M1::Operator
     ahead.call(env)
   end
 
-  def match(env, op : Dict, matchee : Term, ahead)
-    unless dict = matchee.as_d?
-      return Fb::Mismatch.new(env.env)
+  def match(behind0, op : Dict, matchee : Term, ahead0)
+    unless matchee.type.dict?
+      return Fb::Mismatch.new(behind0.env)
     end
 
-    valid =
-      case op.kind
-      in .itemsonly? then dict.itemsonly?
-      in .pairsonly? then dict.pairsonly?
-      in .entry?
-        true
-      end
-
-    valid &&= dict.size.in?(op.sizes)
-    valid &&= dict.sketch_superset_of?(op.sketch)
-
-    unless valid
-      return Fb::Mismatch.new(env.env)
-    end
-
-    ahead.call(env)
+    ahead0.call(behind0)
   end
+
+  def match(behind0, op : SketchSubset, matchee : Term, ahead0)
+    unless (dict = matchee.as_d?) && dict.sketch_superset_of?(op.sketch)
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    match(behind0, op.successor, matchee, ahead0)
+  end
+
+  # def match(env, op : Dict, matchee : Term, ahead)
+  #   unless dict = matchee.as_d?
+  #     return Fb::Mismatch.new(env.env)
+  #   end
+
+  #   valid =
+  #     case op.kind
+  #     in .itemsonly? then dict.itemsonly?
+  #     in .pairsonly? then dict.pairsonly?
+  #     in .entry?
+  #       true
+  #     end
+
+  #   valid &&= dict.size.in?(op.sizes)
+  #   valid &&= dict.sketch_superset_of?(op.sketch)
+
+  #   unless valid
+  #     return Fb::Mismatch.new(env.env)
+  #   end
+
+  #   ahead.call(env)
+  # end
 
   def match(env, op : Literal, matchee : Term, ahead)
     unless matchee == op.term
@@ -3110,7 +3129,158 @@ module ::Ww::Term::M1
   def self.normal(pattern : Term) : Term
     Normal.pattern(pattern)
   end
+
+  alias OptLevel = O0.class | O1.class | O2.class
+
+  # No optimizations. Raw output of `M1.normal`.
+  module O0
+  end
+
+  module O1
+    # :nodoc:
+    #
+    # TODO: We should probably use O2-only here as engine; and in O2, we should use O1-only.
+    module Engine
+      extend self
   
+      def match?(pattern : Term, matchee : Term) : Term::Dict?
+        M1.match?(pattern, matchee, opt: O0)
+      end
+    end
+
+    def self.sketch(normp : Term) : Term::Dict::Sketch
+      sketch = Term::Dict::Sketch.new(0)
+
+      M1.walk(normp) do |node|
+        # Whitelist certain nodes. All other nodes we avoid. We are defensive because sketch
+        # won't work for all nodes. Thus we only calculate it for nodes where we're sure it's
+        # going to work.
+        Term.case(node, engine: Engine) do
+          matchpi %[((%literal %literal) term_)] do
+            sketch = Dict.mix(sketch, term)
+
+            WalkDecision::Continue
+          end
+
+          matchpi %[((%literal %sketch) _ sketch0_number)] do
+            sketch = sketch0.to(Term::Dict::Sketch)
+
+            # We've already computed the sketch for this part of the tree. Move on.
+            WalkDecision::Skip
+          end
+
+          matchpi(
+            %{[(%literal %entries/first) _ successor_]},
+            %{[(%literal %entries/source) _ successor_]},
+            %{[(%literal %entries/all) _ _ successor_]},
+            %{[(%literal %let) _ successor_]},
+          ) do
+            sketch |= sketch(successor)
+
+            WalkDecision::Skip
+          end
+
+          matchpi(
+            %{[(%literal %singular) _]},
+            %{[(%literal %group) _*]},
+            %{[(%literal %partition) _ _]},
+            %{[(%literal %itemspart) _*]},
+            %{[(%literal %items/first) _*]},
+            %{[(%literal %items/source) _*]},
+            %{[(%literal %items/all) _*]},
+            %{((%literal %leaves/first) _* ¦ _ in: (%not keys))},
+            %{((%literal %leaves/source) _* ¦ _ in: (%not keys))},
+            %{((%literal %leaves/all) _* ¦ _ in: (%not keys))},
+          ) do
+            WalkDecision::Continue
+          end
+
+          otherwise { WalkDecision::Skip }
+        end
+      end
+
+      sketch
+    end
+
+    def self.sketches(normp : Term) : Term
+      keypath = [] of Term
+      keypaths = [] of Array(Term)
+
+      # Making `walk` able to replace in-place is just too hard and increases complexity
+      # very much. Instead, we collect keypaths. This does have an unwell-ish performance/
+      # memory cost but whatever.
+      M1.walk(normp, keypath: keypath) do |node|
+        Term.case(node, engine: Engine) do
+          matchpi(%{
+            [(%any %partition
+                   %itemspart
+                   %items/first
+                   %items/source
+                   %items/all
+                   %entries/first
+                   %entries/source
+                   %entries/all)
+              _*]},
+            %{((%literal %leaves/first) _* ¦ _ in: (%not keys))},
+            %{((%literal %leaves/source) _* ¦ _ in: (%not keys))},
+            %{((%literal %leaves/all) _* ¦ _ in: (%not keys))},
+          ) do
+            keypaths << keypath.dup
+
+            WalkDecision::Continue
+          end
+
+          otherwise { WalkDecision::Continue }
+        end
+      end
+
+      # Modify deepest keypaths first. Since we're only going to replace at the keypath
+      # and do nothing else, no further sorting (e.g. by indices) is required.
+      keypaths.unstable_sort_by! { |keypath| -keypath.size }
+      keypaths.each do |keypath|
+        normp = normp.as_d.follow(keypath) do |node0|
+          sketch = sketch(node0)
+          sketch.zero? ? node0 : Term.of(:"%sketch", node0, sketch)
+        end
+      end
+
+      Term.of(normp)
+    end
+
+    def self.bounds(normp : Term) : Term
+      normp
+    end
+
+    def self.depth(normp : Term) : Term
+      normp
+    end
+
+    def self.population(normp : Term) : Term
+      normp
+    end
+  end
+
+  # O2-level optimizations involve a rewrite loop of the normal pattern. In a series
+  # of rewrites, the normal pattern is reduced to the minimum possible, most
+  # concrete operators at the cost of longer compilation.
+  module O2
+  end
+
+  # Applies optimizations of *level* and lower to *normp*. Returns the optimized *normp*.
+  def self.optimized(normp : Term, level : O0.class) : Term
+    normp
+  end
+
+  # :ditto:
+  def self.optimized(normp : Term, level : O1.class) : Term
+    pipe(normp, O1.sketches, O1.bounds, O1.depth, O1.population)
+  end
+
+  # :ditto:
+  def self.optimized(normp : Term, level : O2.class) : Term
+    pipe(normp, optimized(O1))
+  end
+
   def self.search_part(term : Term) : Search::Part
     case term
     when Term.of(:items)         then Search::Part::ItemsOrdered
@@ -3138,6 +3308,10 @@ module ::Ww::Term::M1
         Operator::Capture.new(capture, operator(successor, captures))
       end
 
+      matchpi %[(%sketch successor_ sketch_number)], cue: :"%sketch" do
+        Operator::SketchSubset.new(sketch.to(Term::Dict::Sketch), operator(successor, captures))
+      end
+
       match({:"%itemspart", :"_*"}, cue: :"%itemspart") do
         items = node.items
           .move(1)
@@ -3154,10 +3328,6 @@ module ::Ww::Term::M1
         keys = node.items.move(1)
 
         Operator::Keypool.new(keys.to_a)
-      end
-
-      match(Term[:"%dict", min: :min_number, max: :max_number, sketch: :sketch_number], cue: :"%dict") do |min, max, sketch|
-        Operator::Dict.new(min.to(Magnitude), max.to(Magnitude), sketch.to(UInt64), :entry)
       end
 
       match({:"%layer", :below_, :side_}, cue: :"%layer") do |below, side|
@@ -3624,7 +3794,7 @@ module ::Ww::Term::M1
   module WalkMode::NonItemspart
   end
 
-  def self.walk(root : Term, mode : WalkMode::Thorough.class, callable) : WalkDecision
+  def self.walk(root : Term, mode : WalkMode::Thorough.class, callable, *, keypath = nil) : WalkDecision
     Term.case(root, engine: Term::M0) do
       # Barrier is for higher-level nodes to protect their arguments.
       matchpi %[(%barrier _)], cue: :"%barrier" do
@@ -3667,12 +3837,16 @@ module ::Ww::Term::M1
       # Recurse into all dicts.
       matchpi %[_dict] do
         dict = root.unsafe_as_d
-        dict.each_entry do |_, value|
-          case walk(value, mode, callable)
+        dict.each_entry do |key, value|
+          keypath.try &.push(key)
+
+          case walk(value, mode, callable, keypath: keypath)
           in .continue?, .skip?
           in .halt?
             return WalkDecision::Halt
           end
+        ensure
+          keypath.try &.pop
         end
 
         WalkDecision::Continue
@@ -3682,8 +3856,8 @@ module ::Ww::Term::M1
     end
   end
 
-  def self.walk(root : Term, mode : WalkMode::NonItemspart.class, callable, *, itemspart : Bool = false) : WalkDecision
-    walk(root, mode: WalkMode::Thorough) do |node|
+  def self.walk(root : Term, mode : WalkMode::NonItemspart.class, callable, *, itemspart : Bool = false, keypath = nil) : WalkDecision
+    walk(root, mode: WalkMode::Thorough, keypath: keypath) do |node|
       Term.case(node, engine: Term::M0) do
         if itemspart
           # Recurse into M1 non-itemspart children with itemspart flag off.
@@ -3695,7 +3869,7 @@ module ::Ww::Term::M1
             %[(%optional _ child_)],
             cues: {:"%singular", :"%gap", :"%gap/min", :"%gap/max", :"%optional"},
           ) do
-            case walk(child, mode, callable, itemspart: false)
+            case walk(child, mode, callable, itemspart: false, keypath: keypath)
             in .continue?, .skip?
               WalkDecision::Skip
             in .halt?
@@ -3721,13 +3895,17 @@ module ::Ww::Term::M1
             decision = callable.call(node)
 
             if decision.continue?
-              node.each_item_unordered do |item|
-                case walk(item, mode, callable, itemspart: true)
+              node.each_item_with_index do |item, index|
+                keypath.try &.push(Term.of(index))
+
+                case walk(item, mode, callable, itemspart: true, keypath: keypath)
                 in .continue?, .skip?
                 in .halt?
                   decision = WalkDecision::Halt
                   break
                 end
+              ensure
+                keypath.try &.pop
               end
 
               unless decision.halt?
@@ -3744,8 +3922,8 @@ module ::Ww::Term::M1
     end
   end
 
-  def self.walk(root : Term, callable, *, mode = WalkMode::Thorough) : WalkDecision
-    walk(root, mode, callable)
+  def self.walk(root : Term, callable, *, mode = WalkMode::Thorough, **kwargs) : WalkDecision
+    walk(root, mode, callable, **kwargs)
   end
 
   def self.walk(root : Term, **kwargs, &fn : Term -> WalkDecision) : WalkDecision
@@ -3772,28 +3950,29 @@ module ::Ww::Term::M1
 
   PATTERN_CACHE = Pf::Cache(Void*, Operator::Any).new
 
-  def self.operator(pattern : Term, *, normalize = true, fresh = false) : Operator::Any
+  {% if flag?(:popt_0) %}
+    DEFAULT_OPT_LEVEL = O0
+  {% elsif flag?(:popt_1) %}
+    DEFAULT_OPT_LEVEL = O1
+  {% else %}
+    DEFAULT_OPT_LEVEL = O2
+  {% end %}
+
+  # TODO: overwrite in cache if higher opt level
+  def self.operator(pattern : Term, *, normalize = true, fresh = false, opt = DEFAULT_OPT_LEVEL) : Operator::Any
     PATTERN_CACHE.fetch(pattern.unsafe_repr, fresh: fresh) do
       normal = normalize ? normal(pattern) : pattern
       captures = captures(normal)
-      operator(normal, captures)
+      pipe(normal, optimized(opt), operator(captures))
     end
   end
 
-  private def self.matches0(op : Operator::Any, matchee : Term, *, env : Term::Dict = Term[], **kwargs) : Array(Term::Dict)
-    Operator.matches(env, op, matchee, **kwargs)
+  def self.matches(pattern : Term, matchee : Term, *, env : Term::Dict = Term[], opt = DEFAULT_OPT_LEVEL, **kwargs) : Array(Term::Dict)
+    Operator.matches(env, operator(pattern, opt: opt), matchee, **kwargs)
   end
 
-  private def self.match0?(op : Operator::Any, matchee : Term, *, env : Term::Dict = Term[], **kwargs) : Term::Dict?
-    Operator.match?(env, op, matchee, **kwargs)
-  end
-
-  def self.matches(pattern : Term, matchee : Term, **kwargs)
-    matches0(operator(pattern), matchee, **kwargs)
-  end
-
-  def self.match?(pattern, matchee, **kwargs)
-    match0?(operator(pattern), matchee, **kwargs)
+  def self.match?(pattern : Term, matchee : Term, *, env : Term::Dict = Term[], opt = DEFAULT_OPT_LEVEL, **kwargs)
+    Operator.match?(env, operator(pattern, opt: opt), matchee, **kwargs)
   end
 end
 
