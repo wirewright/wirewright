@@ -561,6 +561,10 @@ module Termbox
     end
 
     def self.rgb(r : UInt8, g : UInt8, b : UInt8)
+      if r == 0 && g == 0 && b == 0
+        return Black
+      end
+
       new((r.to_u64 << 16) | (g.to_u64 << 8) | b.to_u64)
     end
   end

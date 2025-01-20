@@ -211,6 +211,16 @@ end
 
 def fix1(parent, phase, child)
   Term.case({parent, phase, child}) do
+    # Center should center the child horizontally.
+    givenpi %[(center _ ¦ _ pl: (%optional 0 pl←(%number u8)) l: l←(%number u16) w: w←(%number u16)) teach (_* ¦ _ l: (%- _) w: chw←(%number u16))] do
+      {parent, child.morph({:l, l + pl + (w - chw)//2})}
+    end
+
+    # Center should center the child vertically.
+    givenpi %[(center _ ¦ _ pt: (%optional 0 pt←(%number u8)) t: t←(%number u16) h: h←(%number u16)) teach (_* ¦ _ t: (%- _) h: chh←(%number u16))] do
+      {parent, child.morph({:t, t + pt + (h - chh)//2})}
+    end
+
     # Teach learned left position from single-child parent.
     givenpi %[(_ _ ¦ _ pl: (%optional 0 pl←(%number u8)) l: l←(%number u16)) teach (_* ¦ _ l: (%- _))] do
       {parent, child.morph({:l, l + pl})}
@@ -281,7 +291,7 @@ NORD_BLUE_LIGHT = Termbox::Color.new(0x81a1c1)
 def draw(frame) : Nil
   Term.case(frame) do
     matchpi %[(box child_ ¦ _
-                   border: true
+                   border: border_boolean
                    l: l←(%number u16)
                    t: t←(%number u16)
                    w: w0←(%number u16)
@@ -295,21 +305,23 @@ def draw(frame) : Nil
       # Draw frame & fill background
       (y...y + h).each do |py|
         (x...x + w).each do |px|
-          case {py, px}
-          when {y, x}     # Top-left corner
-            ch = '╭'
-          when {y, x + w - 1} # Top-right corner
-            ch = '╮'
-          when {y + h - 1, x} # Bottom-left corner
-            ch = '╰'
-          when {y + h - 1, x + w - 1} # Bottom-right corner
-            ch = '╯'
-          when {y, _}, {y + h - 1, _} # Top, bottom strip
-            ch = '─'
-          when {_, x}, {_, x + w - 1} # Left, right strip
-            ch = '│'
-          else
-            ch = ' '
+          ch = ' '
+
+          if border.true?
+            case {py, px}
+            when {y, x}     # Top-left corner
+              ch = '╭'
+            when {y, x + w - 1} # Top-right corner
+              ch = '╮'
+            when {y + h - 1, x} # Bottom-left corner
+              ch = '╰'
+            when {y + h - 1, x + w - 1} # Bottom-right corner
+              ch = '╯'
+            when {y, _}, {y + h - 1, _} # Top, bottom strip
+              ch = '─'
+            when {_, x}, {_, x + w - 1} # Left, right strip
+              ch = '│'
+            end
           end
 
           Termbox.write(ch, x: px, y: py, fg: NORD_FG, bg: bg)
@@ -370,32 +382,22 @@ def draw(frame) : Nil
   end
 end
 
-def framesink : Channel(Term::Dict)
-  frames = Channel(Term::Dict).new
+def show(frame : Term::Dict)
+  fixed = pipe(frame, fit, fix)
   
-  spawn do
-    while frame = frames.receive?
-      frame = pipe(frame, fit, fix)
+  Term.case(fixed) do
+    matchpi %[(viewport child_ ¦ _ bg: (r0←(%number u8) g0←(%number u8) b0←(%number u8)))] do
+      r, g, b = {r0, g0, b0}.map(&.to(UInt8))
   
-      Term.case(frame) do
-        matchpi %[(viewport child_ ¦ _ bg: (r0←(%number u8) g0←(%number u8) b0←(%number u8)))] do
-          r, g, b = {r0, g0, b0}.map(&.to(UInt8))
+      bg = Termbox::Color.rgb(r, g, b)
   
-          bg = Termbox::Color.rgb(r, g, b)
-  
-          Termbox.clear(bg: bg, fg: NORD_FG)
-          draw(child)
-          Termbox.present
-        end
-  
-        otherwise {}
-      end
+      Termbox.clear(bg: bg, fg: NORD_FG)
+      draw(child)
+      Termbox.present
     end
-  rescue e
-    frames.close
+  
+    otherwise {}
   end
-
-  frames
 end
 
 def manipulate(frame, name)
@@ -416,6 +418,24 @@ def manipulate(frame, name)
   end
 end
 
+frame = ML.parse1(<<-WWML
+(viewport l: 0 t: 0 w: max h: max max-w: $<w> max-h: $<h> bg: (0 0 0)
+  (col w: max h: max
+    (box border: false bg: (255 255 255) w: max h: content pl: 1 pr: 1 pt: 1 pb: 1
+      (text w: content h: content fg: (0 0 0) bg: (255 255 255) pre: true
+        "Header"))
+    (box border: true bg: (0 0 0) w: max h: max pl: 1 pr: 1 pt: 1 pb: 1
+      (center w: max h: max
+        (text w: content max-w: 20 h: content fg: (255 255 255) bg: (0 0 0) pre: true
+          "Lorem ipsum dolor sit amet, qui minim labore adipisicing minim sint cillum sint consectetur cupidatat.")))
+    (box border: true bg: (0 0 0) w: max h: max pl: 1 pr: 1 pt: 1 pb: 1
+      (text w: content h: content fg: (255 255 255) bg: (0 0 0) pre: true
+        "Lorem ipsum dolor sit amet, qui minim labore adipisicing minim sint cillum sint consectetur cupidatat."))
+    (box border: true bg: (0 0 0) w: max h: content pl: 1 pr: 1 pt: 1 pb: 1
+      (text w: content h: content fg: (255 255 255) bg: (0 0 0) pre: true
+        "Footer"))))
+WWML
+).as_d
 
 Termbox.init
 
@@ -431,23 +451,7 @@ end
 Termbox.input_mode = Termbox::InputMode::Alt
 Termbox.output_mode = Termbox::OutputMode::Truecolor
 
-frame = ML.parse1(<<-WWML
-(viewport l: 0 t: 0 w: max h: max max-w: $<w> max-h: $<h> bg: (0 0 0)
-  (col w: max h: max
-    (box border: true bg: (0 0 0) w: max h: content pl: 1 pr: 1 pt: 1 pb: 1
-      (text w: content h: content fg: (255 255 255) bg: (0 0 0) pre: true
-        "Header"))
-    (box border: true bg: (0 0 0) w: max h: max pl: 1 pr: 1 pt: 1 pb: 1
-      (text w: content h: content fg: (255 255 255) bg: (0 0 0) pre: true
-        "Lorem ipsum dolor sit amet, qui minim labore adipisicing minim sint cillum sint consectetur cupidatat."))
-    (box border: true bg: (0 0 0) w: max h: max pl: 1 pr: 1 pt: 1 pb: 1
-      (text w: content h: content fg: (255 255 255) bg: (0 0 0) pre: true
-        "Lorem ipsum dolor sit amet, qui minim labore adipisicing minim sint cillum sint consectetur cupidatat."))
-    (box border: true bg: (0 0 0) w: max h: content pl: 1 pr: 1 pt: 1 pb: 1
-      (text w: content h: content fg: (255 255 255) bg: (0 0 0) pre: true
-        "Footer"))))
-WWML
-).as_d
+
 
 # body = manipulate(frame, Term.of(:"$<body>"))
 width = manipulate(frame, Term.of(:"$<w>"))
@@ -456,10 +460,8 @@ height = manipulate(frame, Term.of(:"$<h>"))
 frame = width.call(frame, ->(state : Term) { Term.of(Termbox.width - 2) })
 frame = height.call(frame, ->(state : Term) { Term.of(Termbox.height - 2) })
 
-frames = framesink
-
 while true
-  frames.send(frame)
+  show(frame)
 
   event = Termbox.poll
 
@@ -492,6 +494,4 @@ while true
       next unless chr.printable?
     end
   end
-
-  frames.send(frame)
 end
