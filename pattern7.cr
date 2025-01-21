@@ -3148,7 +3148,7 @@ module ::Ww::Term::M1
       end
     end
 
-    def self.sketch(normp : Term) : Term::Dict::Sketch
+    private def self.sketch(normp : Term) : Term::Dict::Sketch
       sketch = Term::Dict::Sketch.new(0)
 
       M1.walk(normp) do |node|
@@ -3169,11 +3169,12 @@ module ::Ww::Term::M1
             WalkDecision::Skip
           end
 
+          # These have key as their first argument and we don't want to include the key
+          # in the sketch.
           matchpi(
             %{[(%literal %entries/first) _ successor_]},
             %{[(%literal %entries/source) _ successor_]},
             %{[(%literal %entries/all) _ _ successor_]},
-            %{[(%literal %let) _ successor_]},
           ) do
             sketch |= sketch(successor)
 
@@ -3181,13 +3182,17 @@ module ::Ww::Term::M1
           end
 
           matchpi(
-            %{[(%literal %singular) _]},
-            %{[(%literal %group) _*]},
-            %{[(%literal %partition) _ _]},
-            %{[(%literal %itemspart) _*]},
-            %{[(%literal %items/first) _*]},
-            %{[(%literal %items/source) _*]},
-            %{[(%literal %items/all) _*]},
+            %{[(%any %layer
+                     %singular
+                     %group
+                     %partition
+                     %itemspart
+                     %items/first
+                     %items/source
+                     %items/all
+                     %let
+                     %all)
+                _*]},
             %{((%literal %leaves/first) _* ¦ _ in: (%not keys))},
             %{((%literal %leaves/source) _* ¦ _ in: (%not keys))},
             %{((%literal %leaves/all) _* ¦ _ in: (%not keys))},
@@ -3214,12 +3219,14 @@ module ::Ww::Term::M1
           matchpi(%{
             [(%any %partition
                    %itemspart
+                   %layer
                    %items/first
                    %items/source
                    %items/all
                    %entries/first
                    %entries/source
-                   %entries/all)
+                   %entries/all
+                   %all)
               _*]},
             %{((%literal %leaves/first) _* ¦ _ in: (%not keys))},
             %{((%literal %leaves/source) _* ¦ _ in: (%not keys))},
@@ -3294,17 +3301,7 @@ module ::Ww::Term::M1
 
   def self.operator(node : Term, captures : Bag(Term)) : Operator::Any
     Term.case(node, engine: Term::M0) do
-      match({:"%pass"}, cue: :"%pass") { Operator::Pass.new }
-      match({:"%string"}, cue: :"%string") { Operator::Str.new }
-      match({:"%symbol"}, cue: :"%symbol") { Operator::Sym.new }
-      match({:"%boolean"}, cue: :"%boolean") { Operator::Boolean.new }
-      match({:"%dict"}, cue: :"%dict") { Operator::Dict.new }
-
-      match({ {:"%literal", :"%literal"}, :term_ }, cue: :"%literal") do |term|
-        Operator::Literal.new(term)
-      end
-
-      match({:"%let", {:"%capture", :capture_}, :successor_}, cue: :"%let") do |capture, successor|
+      matchpi %[(%let (%capture capture_) successor_)], cue: :"%let" do
         Operator::Capture.new(capture, operator(successor, captures))
       end
 
@@ -3312,13 +3309,30 @@ module ::Ww::Term::M1
         Operator::SketchSubset.new(sketch.to(Term::Dict::Sketch), operator(successor, captures))
       end
 
-      match({:"%itemspart", :"_*"}, cue: :"%itemspart") do
+      matchpi %[(%itemspart _*)], cue: :"%itemspart" do
         items = node.items
           .move(1)
           .map { |item| Item.operator(item, captures).as(Operator::Item::Any) }
 
         Operator::Itemspart.new(items)
       end
+
+      matchpi %[(%pass)], cue: :"%pass" do
+        Operator::Pass.new
+      end
+
+      matchpi %[((%literal %literal) term_)], cue: :"%literal" do
+        Operator::Literal.new(term)
+      end
+
+      matchpi %[((%literal %partition) itemspart_ pairspart_)], cue: :"%partition" do
+        Operator::Partition.new(operator(itemspart, captures), operator(pairspart, captures))
+      end
+
+      match({:"%string"}, cue: :"%string") { Operator::Str.new }
+      match({:"%symbol"}, cue: :"%symbol") { Operator::Sym.new }
+      match({:"%boolean"}, cue: :"%boolean") { Operator::Boolean.new }
+      match({:"%dict"}, cue: :"%dict") { Operator::Dict.new }
 
       match({:"%keypath", {:"%capture", :capture_}}, cue: :"%keypath") do |capture|
         Operator::Keypath.new(capture)
@@ -3552,10 +3566,6 @@ module ::Ww::Term::M1
         else
           Operator::BfsAll.new(capture, operator(body, captures), inner.set, exterior.set, search_part(part), min, max, depth0.true?)
         end
-      end
-
-      match({ {:"%literal", :"%partition"}, :itemspart_, :pairspart_ }, cue: :"%partition") do |itemspart, pairspart|
-        Operator::Partition.new(operator(itemspart, captures), operator(pairspart, captures))
       end
 
       match({:"%all", :a_}, cue: :"%all") do |a|

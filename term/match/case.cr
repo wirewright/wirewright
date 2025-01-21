@@ -212,22 +212,19 @@ struct Ww::Term
         pos = @acceptions.to_a.sort_by! { |_, tally| -tally.to_i64 }
         neg = @rejections.to_a.sort_by! { |_, tally| -tally.to_i64 }
 
+        total_pos = pos.sum { |_, tally| tally }
+        total_neg = neg.sum { |_, tally| tally } + @rejections_by_cue
+        total = total_pos + total_neg
+
         # I'm bad at math. Is it?
         io.puts "[OPTIMAL ORDERING]"
 
         ratios = {} of Term => Float32
 
         @acceptions.each do |pattern, p|
-          unless q = @rejections[pattern]?
-            ratios[pattern] = Float32::INFINITY
-            next
-          end
-          ratios[pattern] = p.to_f32 / (p + q)
-        end
+          next unless q = @rejections[pattern]?
 
-        @rejections.each do |pattern, _|
-          next if ratios.has_key?(pattern)
-          ratios[pattern] = -Float32::INFINITY
+          ratios[pattern] = p.to_f32 / total
         end
 
         ratios_sorted = ratios.to_a.sort_by! { |_, ratio| -ratio }
@@ -258,9 +255,6 @@ struct Ww::Term
         io.puts
 
         io.puts "[TOTAL]"
-
-        total_pos = pos.sum { |_, tally| tally }
-        total_neg = neg.sum { |_, tally| tally } + @rejections_by_cue
 
         io.puts "    Matches: #{total_pos + total_neg}"
         io.puts " Acceptions: #{total_pos}"

@@ -49,6 +49,7 @@ end
 
 def fit1(parent, phase, child)
   Term.case({parent, phase, child}) do
+    # x
     # Calculate the intrinsic width of a text.
     givenpi %[_ teach (text caption_string ¦ _ w: content)] do
       w, _ = measure(caption.to(String))
@@ -56,6 +57,7 @@ def fit1(parent, phase, child)
       {parent, child.morph({:w, {:intrinsic, w}})}
     end
 
+    # x
     # Calculate the intrinsic height of a text.
     givenpi %[_ teach (text caption_string ¦ _ h: content)] do
       _, h = measure(caption.to(String))
@@ -63,14 +65,16 @@ def fit1(parent, phase, child)
       {parent, child.morph({:h, {:intrinsic, h}})}
     end
 
+    # x
     # Calculate padded width from intrinsic width.
     givenpi %[_ learn (_* ¦ _ w: (intrinsic w←(%number u16)) pl: (%optional 0 pl←(%number u8)) pr: (%optional 0 pr←(%number u8)))] do
-      {parent, child.morph({:w, {:"padded", w + pl + pr}})}
+      {parent, child.morph({:w, {:padded, w + pl + pr}})}
     end
 
+    # x
     # Calculate padded height from intrinsic height.
     givenpi %[_ learn (_* ¦ _ h: (intrinsic h←(%number u16)) pt: (%optional 0 pt←(%number u8)) pb: (%optional 0 pb←(%number u8)))] do
-      {parent, child.morph({:h, {:"padded", h + pt + pb}})}
+      {parent, child.morph({:h, {:padded, h + pt + pb}})}
     end
 
     # Clip the padded width of a text at max-width. This requires text wrapping
@@ -420,22 +424,35 @@ end
 
 frame = ML.parse1(<<-WWML
 (viewport l: 0 t: 0 w: max h: max max-w: $<w> max-h: $<h> bg: (0 0 0)
-  (col w: max h: max
-    (box border: false bg: (255 255 255) w: max h: content pl: 1 pr: 1 pt: 1 pb: 1
-      (text w: content h: content fg: (0 0 0) bg: (255 255 255) pre: true
-        "Header"))
-    (box border: true bg: (0 0 0) w: max h: max pl: 1 pr: 1 pt: 1 pb: 1
-      (center w: max h: max
-        (text w: content max-w: 20 h: content fg: (255 255 255) bg: (0 0 0) pre: true
-          "Lorem ipsum dolor sit amet, qui minim labore adipisicing minim sint cillum sint consectetur cupidatat.")))
-    (box border: true bg: (0 0 0) w: max h: max pl: 1 pr: 1 pt: 1 pb: 1
-      (text w: content h: content fg: (255 255 255) bg: (0 0 0) pre: true
-        "Lorem ipsum dolor sit amet, qui minim labore adipisicing minim sint cillum sint consectetur cupidatat."))
-    (box border: true bg: (0 0 0) w: max h: content pl: 1 pr: 1 pt: 1 pb: 1
-      (text w: content h: content fg: (255 255 255) bg: (0 0 0) pre: true
-        "Footer"))))
+  (center w: max h: max max-h: 10
+    (text max-w: 20 w: content h: content fg: (0 0 0) bg: (255 255 255) pre: true
+      "Lorem ipsum dolor sit amet, qui minim labore adipisicing minim sint cillum sint consectetur cupidatat.")))
+;;  (col w: max h: max
+;;    (box border: false bg: (255 255 255) w: max h: content pl: 1 pr: 1 pt: 1 pb: 1
+;;      (text w: content h: content fg: (0 0 0) bg: (255 255 255) pre: true
+;;        "Header"))
+;;    (box border: true bg: (0 0 0) w: max h: max pl: 1 pr: 1 pt: 1 pb: 1
+;;      (center w: max h: max
+;;        (text w: content max-w: 20 h: content fg: (255 255 255) bg: (0 0 0) pre: true
+;;          "Lorem ipsum dolor sit amet, qui minim labore adipisicing minim sint cillum sint consectetur cupidatat.")))
+;;    (box border: true bg: (0 0 0) w: max h: max pl: 1 pr: 1 pt: 1 pb: 1
+;;      (text w: content h: content fg: (255 255 255) bg: (0 0 0) pre: true
+;;        "Lorem ipsum dolor sit amet, qui minim labore adipisicing minim sint cillum sint consectetur cupidatat."))
+;;    (box border: true bg: (0 0 0) w: max h: content pl: 1 pr: 1 pt: 1 pb: 1
+;;      (text w: content h: content fg: (255 255 255) bg: (0 0 0) pre: true
+;;        "Footer"))))
 WWML
 ).as_d
+
+width = manipulate(frame, Term.of(:"$<w>"))
+height = manipulate(frame, Term.of(:"$<h>"))
+
+frame = width.call(frame, ->(state : Term) { Term.of(64) })
+frame = height.call(frame, ->(state : Term) { Term.of(32) })
+
+puts ML.display(pipe(frame, fit))
+
+{% skip_file %}
 
 Termbox.init
 
@@ -454,8 +471,7 @@ Termbox.output_mode = Termbox::OutputMode::Truecolor
 
 
 # body = manipulate(frame, Term.of(:"$<body>"))
-width = manipulate(frame, Term.of(:"$<w>"))
-height = manipulate(frame, Term.of(:"$<h>"))
+
 
 frame = width.call(frame, ->(state : Term) { Term.of(Termbox.width - 2) })
 frame = height.call(frame, ->(state : Term) { Term.of(Termbox.height - 2) })

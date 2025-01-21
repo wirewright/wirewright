@@ -829,7 +829,7 @@ struct RewriteApplier(T)
   end
 end
 
-def ruler(changes, term, ruleset, ruler, backmapr, elser)
+def rulesetr(changes, term, ruleset, ruler, backmapr, elser)
   unless row = ruleset.call(term)
     return elser.call(changes, Rewrite.one(term))
   end
@@ -890,9 +890,9 @@ def ruler(changes, term, ruleset, ruler, backmapr, elser)
   end
 end
 
-def ruler(ruleset, ruler, backmapr, elser)
+def rulesetr(ruleset, ruler, backmapr, elser)
   ->(changes : Changes::Any, operand : Rewrite::Any) do
-    operand.reduce { |term| ruler(changes, term, ruleset, ruler, backmapr, elser) }
+    operand.reduce { |term| rulesetr(changes, term, ruleset, ruler, backmapr, elser) }
   end
 end
 
@@ -970,7 +970,7 @@ def editr
       selr(%[($once rewritee_)], callr(NATRS)),
     ),
   )
-  exhr(relr(CURSORP, absr(ruler(RULESET, nor, backmapr, nor)), ascent: 2))
+  exhr(relr(CURSORP, absr(rulesetr(RULESET, nor, backmapr, nor)), ascent: 2))
 end
 
 EDITR = editr
@@ -1034,7 +1034,7 @@ end
 #          by their size (aka depth) or we should be able to compose two orthors at the rewriter
 #          circuit level. I'm sort of leaning towards the former since it automates away a
 #          choice that is too boring to make.
-#       2. Note that orthor, like ruler, accepts a ruleset. Perhaps a modified/wrapped ruleset
+#       2. Note that orthor, like rulesetr, accepts a ruleset. Perhaps a modified/wrapped ruleset
 #          based on the above.
 
 def orthor1(parent0, phase, child0, callable)
