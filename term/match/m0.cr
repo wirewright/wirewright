@@ -2,7 +2,7 @@
 # the main pattern matching engine `M1`.
 #
 # See `match?` for more details.
-module Ww::Term::M0
+module Ww::M0
   extend self
 
   # :nodoc:

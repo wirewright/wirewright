@@ -84,7 +84,7 @@ def process(queue, testcase, ctx)
         first = true
         match = ->(matchee : Term) do
           begin
-            ctx.stats.run { Term::M1.backmap?(pattern, backdict, matchee) }
+            ctx.stats.run { M1.backmap?(pattern, backdict, matchee) }
           ensure
             if first
               ctx.stats.account
@@ -119,7 +119,7 @@ def process(queue, testcase, ctx)
         first = true
         match = ->(matchee : Term) do
           begin
-            envs = ctx.stats.run { Term::M1.matches(pattern, matchee) }
+            envs = ctx.stats.run { M1.matches(pattern, matchee) }
             envs.map!(&.without(:"(keypaths)"))
           ensure
             if first
@@ -171,7 +171,7 @@ def process(queue, testcase, ctx)
 
     matchpi %[(specificity levels_*)] do
       track(ctx, testcase) do
-        patterns = {} of Term::M1::Specificity => Set(Term)
+        patterns = {} of M1::Specificity => Set(Term)
 
         specificity0 = nil
 
@@ -181,8 +181,8 @@ def process(queue, testcase, ctx)
               specificity1 = nil
 
               members.each_entry do |_, pattern|
-                normp = Term::M1.normal(pattern)
-                specificity2 = ctx.stats.run { Term::M1.specificity(normp, toplevel: true) }
+                normp = M1.normal(pattern)
+                specificity2 = ctx.stats.run { M1.specificity(normp, toplevel: true) }
                 specificity1 ||= specificity2
                 next if specificity1 == specificity2
 
@@ -218,8 +218,8 @@ def process(queue, testcase, ctx)
 
             track(ctx, exp) do
               blacklist.items.each do |item|
-                normitem = Term::M1.normal(item)
-                next unless head = ctx.stats.run { Term::M1.head?(normitem) }
+                normitem = M1.normal(item)
+                next unless head = ctx.stats.run { M1.head?(normitem) }
 
                 ctx.failures << Term.of(:"mismatch/head", item, :==, :nothing, :GOT, head)
               end
@@ -230,8 +230,8 @@ def process(queue, testcase, ctx)
             ctx.stats.account
 
             track(ctx, exp) do
-              normlhs = Term::M1.normal(lhs)
-              head = ctx.stats.run { Term::M1.head?(normlhs) }
+              normlhs = M1.normal(lhs)
+              head = ctx.stats.run { M1.head?(normlhs) }
 
               if head.nil?
                 ctx.failures << Term.of(:"mismatch/head", lhs, :==, rhs, :GOT, :nothing)
@@ -252,8 +252,8 @@ def process(queue, testcase, ctx)
 
             track(ctx, exp) do
               patterns.items.each do |pattern|
-                normp = Term::M1.normal(pattern)
-                bounds = ctx.stats.run { Term::M1.bounds(normp) }
+                normp = M1.normal(pattern)
+                bounds = ctx.stats.run { M1.bounds(normp) }
                 rhs = Term.of(
                   min: bounds[0] == Magnitude::INFINITY ? nil : bounds[0],
                   max: bounds[1] == Magnitude::INFINITY ? nil : bounds[1],
@@ -307,7 +307,7 @@ testcases = [] of Term
 
 spec = ML.parse(CASES)
 spec.items.each do |testcase|
-  Term.case(testcase, engine: Term::M0) do
+  Term.case(testcase) do
     match({:isolate, :"_*"}) do
       body = testcase.items.move(1)
       body.each { |item| testcases << item }

@@ -209,7 +209,7 @@ struct ProcRuleset
           pr = pr.pattern.response(matchee0, keypaths: true).as(Pr::One)
         end
         backspec = backmap.call(pr.env)
-        matchee1 = Term::M1.backmap(pr.envs, Term.of(backspec), matchee0)
+        matchee1 = M1.backmap(pr.envs, Term.of(backspec), matchee0)
         offspring = Rewrite::One.new(matchee1)
       end
 
@@ -578,7 +578,7 @@ end
 
 # :nodoc:
 def selr(changes : Changes::Any, term : Term, selector, successor)
-  if env = Term::M1::Operator.match?(Term[], selector, term)
+  if env = M1::Operator.match?(Term[], selector, term)
     if rewritee = env[:rewritee]?
       return successor.call(changes, Rewrite.one(rewritee))
     end
@@ -588,7 +588,7 @@ def selr(changes : Changes::Any, term : Term, selector, successor)
 end
 
 # :nodoc:
-def selr(selector : Term::M1::Operator::Any, successor)
+def selr(selector : M1::Operator::Any, successor)
   ->(changes : Changes::Any, operand : Rewrite::Any) do
     operand.reduce { |term| selr(changes, term, selector, successor) }
   end
@@ -599,7 +599,7 @@ end
 # *selector* pattern is used to match a term, and if a match is found, the capture
 # `rewritee` is passed to the *successor* rewriter.
 def selr(selector : Term, successor)
-  selr(Term::M1.operator(selector), successor)
+  selr(M1.operator(selector), successor)
 end
 
 # :ditto:
@@ -662,7 +662,7 @@ end
 
 # FIXME: crazy crazy shitcode
 def relr0(changes : Changes::Preview, floor, term, ascent, successor)
-  if Term::M1::Operator.probe?(Term[], floor, term)
+  if M1::Operator.probe?(Term[], floor, term)
     return Relr::Ascend.new(ascent)
   end
 
@@ -721,7 +721,7 @@ end
 
 # FIXME: crazy crazy shitcode
 def relr0(changes : Changes::Accept, floor, term, ascent, successor)
-  if Term::M1::Operator.probe?(Term[], floor, term)
+  if M1::Operator.probe?(Term[], floor, term)
     return Relr::Ascend.new(ascent)
   end
 
@@ -773,7 +773,7 @@ def relr0(changes : Changes::Accept, floor, term, ascent, successor)
   Relr::Ready.new(changed ? Rewrite.one(dict1) : Rewrite.none)
 end
 
-def relr(floor : Term::M1::Operator::Any, successor, *, ascent : Int32 = 0)
+def relr(floor : M1::Operator::Any, successor, *, ascent : Int32 = 0)
   ->(changes : Changes::Any, operand : Rewrite::Any) do
     operand.reduce do |term|
       case response = relr0(changes, floor, term, ascent, successor)
@@ -786,7 +786,7 @@ def relr(floor : Term::M1::Operator::Any, successor, *, ascent : Int32 = 0)
 end
 
 def relr(floor : Term, successor, **kwargs)
-  relr(Term::M1.operator(floor), successor, **kwargs)
+  relr(M1.operator(floor), successor, **kwargs)
 end
 
 def relr(floor : String, successor, **kwargs)
@@ -815,7 +815,7 @@ struct RewriteApplier(T)
   end
 
   def call(up0, up1, down, my, matchee0, body)
-    app = Term::M1::DefaultApplier.new
+    app = M1::DefaultApplier.new
     up1, matchee1 = app.call(up0, up1, down, my, matchee0, body)
 
     case rewrite = @rewriter.call(@changes, Rewrite.one(matchee1))
@@ -854,7 +854,7 @@ def rulesetr(changes, term, ruleset, ruler, backmapr, elser)
       subchanges = ->{ changes.call(term, Rewrite.one(term)) }
     end
 
-    result = Term::M1.backmap(pr.envs, rule.backspec, term, applier: RewriteApplier.new(subchanges, backmapr))
+    result = M1.backmap(pr.envs, rule.backspec, term, applier: RewriteApplier.new(subchanges, backmapr))
     result == term ? Rewrite.none : Rewrite.one(result)
   in Rule::BackmapMany
     unless pr.envs.all? &.includes?(:"(keypaths)")
@@ -871,7 +871,7 @@ def rulesetr(changes, term, ruleset, ruler, backmapr, elser)
 
     case pr
     in Pr::One
-      result = Term::M1.backmap(pr.envs, rule.backspec, term, applier: RewriteApplier.new(subchanges, backmapr))
+      result = M1.backmap(pr.envs, rule.backspec, term, applier: RewriteApplier.new(subchanges, backmapr))
 
       if rule.backspec.includes?({rule.toplevel}) && (list = result.as_d?)
         list == Term[{term}] ? Rewrite.none : Rewrite.many(list)
@@ -881,7 +881,7 @@ def rulesetr(changes, term, ruleset, ruler, backmapr, elser)
     in Pr::Many
       list = Term::Dict.build do |commit|
         pr.ones do |one|
-          commit << Term::M1.backmap(one.envs, rule.backspec, term, applier: RewriteApplier.new(subchanges, backmapr))
+          commit << M1.backmap(one.envs, rule.backspec, term, applier: RewriteApplier.new(subchanges, backmapr))
         end
       end
 
@@ -954,7 +954,7 @@ NATRS = ProcRuleset.build do
 end
 
 CURSORP = ML.parse1(%([_string (%any° | (| _string)) _string (_*) @_]))
-CURSORPE = Term::M1.operator(ML.parse1(%([_string (%any° | (| _string)) _string (_*) @edge_])))
+CURSORPE = M1.operator(ML.parse1(%([_string (%any° | (| _string)) _string (_*) @edge_])))
 
 # TODO: Currently reads&writes very obscurely. We'd want to be able to define these
 # more, how shall I say... "elegantly". These look like grammars or some kind
@@ -980,7 +980,7 @@ def subsume1(cursor, motion)
 end
 
 def subsume(root, motion, edge)
-  if Term::M1::Operator.probe?(Term[edge: edge], CURSORPE, root)
+  if M1::Operator.probe?(Term[edge: edge], CURSORPE, root)
     return subsume1(root, motion)
   end
 

@@ -1,2 +1,2 @@
-module Ww::Term::M1
+module Ww::M1
 end

@@ -173,7 +173,7 @@ require "./wirewright"
 
 include Ww
 
-struct ::Ww::Term::M0::PairSchema
+struct ::Ww::M0::PairSchema
   alias Rule = Required | Optional
   alias Check = MatchesAny | IntBounds
 
@@ -521,7 +521,7 @@ end
 #
 # Additionally, we must use u32 (or even u16) array indices for operator nodes rather
 # than a pointer. Thus an operator pool.
-module ::Ww::Term::M1::Operator
+module ::Ww::M1::Operator
   alias Any = Pass | Num | Sym | Boolean | Dict | SketchSubset | Bounds | Literal | Capture | Itemspart | Partition | EdgeUntyped | EdgeTyped | Choices | EitherSource | Keypool | Span | Tally | Bin | Both | Not | Layer | ScanFirst | ScanSource | ScanAll | ScanAllIsolated | DfsFirst | DfsSource | DfsAllIsolated | DfsAll | BfsFirst | BfsAllIsolated | BfsAll | Value | NegativeValue | NegativeValueKeypath | EntriesFirst | EntriesSource | EntriesAllIsolated | EntriesAll | Str | New | Keypath
 
   alias Bin = Add | Sub | Mul | Div | Tdiv | Mod | Pow | Map
@@ -645,7 +645,7 @@ end
 
 alias Magnitude = Float32
 
-module ::Ww::Term::M1::Operator::Item
+module ::Ww::M1::Operator::Item
   alias Any = Singular | Slot | Plural | Group | Gap | Optional | Many | Past
 
   record Singular, tail : Operator::Any
@@ -659,7 +659,7 @@ module ::Ww::Term::M1::Operator::Item
   record Past, children : Array(Any), min : UInt8, max : UInt8, greedy : Bool
 end
 
-module ::Ww::Term::M1::Operator::Entry
+module ::Ww::M1::Operator::Entry
   alias Any = Required | Optional | Absent | AbsentKeypath | Negative | NegativeKeypath
 
   record Required, key : Term, value : Operator::Any
@@ -670,7 +670,7 @@ module ::Ww::Term::M1::Operator::Entry
   record NegativeKeypath, key : Term, positive : Operator::Any, name : Term
 end
 
-module ::Ww::Term::M1::Operator::Env
+module ::Ww::M1::Operator::Env
   alias Type = Term::Dict
 
   def self.append(envs : Array(Type), feedback : Fb::MatchOne)
@@ -720,7 +720,7 @@ module ::Ww::Term::M1::Operator::Env
   end
 end
 
-module ::Ww::Term::M1::Operator::Fb
+module ::Ww::M1::Operator::Fb
   alias Any = Response | Request
   alias Response = Match | Mismatch
   alias Match = MatchOne | MatchMany
@@ -845,7 +845,7 @@ struct KeypathTip
   end
 end
 
-module ::Ww::Term::M1::Operator
+module ::Ww::M1::Operator
   record Behind, env : Env::Type, domains : Term::Dict, antidomains : Term::Dict, keypath : KeypathTip? do
     def []?(k : Term)
       env[k]?
@@ -1783,7 +1783,7 @@ module ::Ww::Term::M1::Operator
   end
 end
 
-module ::Ww::Term::M1::Operator
+module ::Ww::M1::Operator
   extend self
 
   def match(behind0, op : Any, cell : Search::Result::Item, ahead)
@@ -1858,7 +1858,7 @@ module ::Ww::Term::M1::Operator
   end
 end
 
-module ::Ww::Term::M1::Operator::Entry
+module ::Ww::M1::Operator::Entry
   extend self
 
   def match(env, op : Required, matchee : Term, ahead)
@@ -1938,7 +1938,7 @@ module ::Ww::Term::M1::Operator::Entry
   end
 end
 
-module ::Ww::Term::M1::Operator::Item
+module ::Ww::M1::Operator::Item
   alias Feed = Term::Dict::ItemsView
 
   record SuccessorsView, amount : Int32, neighbor : Item::Any?
@@ -2345,7 +2345,7 @@ module ::Ww::Term::M1::Operator::Item
   end
 end
 
-module ::Ww::Term::M1
+module ::Ww::M1
   SYM_LT  = Term.of(:<)
   SYM_GT  = Term.of(:>)
   SYM_LTE = Term.of(:<=)
@@ -2360,13 +2360,13 @@ module ::Ww::Term::M1
     module Schemas
     end
 
-    Schemas::LeafUnbounded = Term::M0::PairSchema.build do
+    Schemas::LeafUnbounded = M0::PairSchema.build do
       key :in, values: {:items, :keys, :values, :"pair/values"}, default: :items
       key :order, values: {:dfs, :bfs}, default: :dfs
       key :self, values: {true, false}, default: false
     end
 
-    Schemas::LeafBounded = Term::M0::PairSchema.build do
+    Schemas::LeafBounded = M0::PairSchema.build do
       key :in, values: {:items, :keys, :values, :"pair/values"}, default: :items
       key :order, values: {:dfs, :bfs}, default: :dfs
       key :min, values: 0..UInt8::MAX, default: 0
@@ -2375,32 +2375,32 @@ module ::Ww::Term::M1
       where { |min, max| min.as_n <= max.as_n }
     end
 
-    Schemas::Items = Term::M0::PairSchema.build do
+    Schemas::Items = M0::PairSchema.build do
       key :min, values: 0..UInt8::MAX, default: 1
       key :max, values: 1..UInt8::MAX, default: SYM_INF
       where { |min, max| min.as_n <= max.as_n }
     end
 
-    Schemas::Entries = Term::M0::PairSchema.build do
+    Schemas::Entries = M0::PairSchema.build do
       key :min, values: 0..UInt8::MAX, default: 1
       key :max, values: 1..UInt8::MAX, default: SYM_INF
       where { |min, max| min.as_n <= max.as_n }
     end
 
-    Schemas::Plural = Term::M0::PairSchema.build do
+    Schemas::Plural = M0::PairSchema.build do
       key :min, values: 0..UInt8::MAX, default: 0
       key :max, values: 1..UInt8::MAX, default: SYM_INF
       key :type, values: {:_number, :_string, :_symbol, :_dict, :_}, default: :_
       where { |min, max| min.as_n <= max.as_n }
     end
 
-    Schemas::Many = Term::M0::PairSchema.build do
+    Schemas::Many = M0::PairSchema.build do
       key :min, values: 0..UInt8::MAX, default: 1
       key :max, values: 1..UInt8::MAX, default: SYM_INF
       where { |min, max| min.as_n <= max.as_n }
     end
 
-    Schemas::Past = Term::M0::PairSchema.build do
+    Schemas::Past = M0::PairSchema.build do
       key :min, values: 0..UInt8::MAX, default: 0
       key :max, values: 1..UInt8::MAX, default: SYM_INF
       where { |min, max| min.as_n <= max.as_n }
@@ -2461,7 +2461,7 @@ module ::Ww::Term::M1
 
     # Returns the normal form of an itemspart *node*.
     def item(node : Term) : Term
-      Term.of_case(node, engine: Term::M0) do
+      Term.of_case(node, engine: M0) do
         matchpi %[_symbol] do
           continue unless blank = node.blank?
           continue unless blank.poly?
@@ -2559,7 +2559,7 @@ module ::Ww::Term::M1
 
     # Returns the normal form of a pairspart *key*-*value* pair.
     def pair(key : Term, value : Term) : Term
-      Term.of_case(value, engine: Term::M0) do
+      Term.of_case(value, engine: M0) do
         matchpi %[(%optional default_ body_)], cue: :"%optional" do
           {:"%entry/optional", default, pattern(body)}
         end
@@ -2626,7 +2626,7 @@ module ::Ww::Term::M1
 
     # Returns the normal form of *pattern*.
     def pattern(pattern : Term) : Term
-      Term.of_case(pattern, engine: Term::M0) do
+      Term.of_case(pattern, engine: M0) do
         # NOTE: this is a fast path for itemsonly dictionaries. They'd otherwise be
         # at the very bottom, which isn't exactly a good choice due to their frequency
         # in practice. We do only the simplest, almost probabilistic checks here; if they
@@ -2964,7 +2964,7 @@ module ::Ww::Term::M1
     # Computes the bounds of an itemspart *item*. Raises `ArgumentError` if *item*
     # is not one of the recognized itemspart item nodes.
     def item(item : Term) : {Magnitude, Magnitude}
-      Term.case(item, engine: Term::M0) do
+      Term.case(item, engine: M0) do
         matchpi %[(%singular _)], cue: :"%singular" do
           {Magnitude.new(1.0), Magnitude.new(1.0)}
         end
@@ -3018,7 +3018,7 @@ module ::Ww::Term::M1
     # Computes the bounds of a pairspart (`%layer`) entry *node*. *key* is the
     # key of the entry.
     def entry(key : Term, node : Term) : {Magnitude, Magnitude}
-      Term.case(node, engine: Term::M0) do
+      Term.case(node, engine: M0) do
         matchpi %[(%entry/required _)], cue: :"%entry/required" do
           {Magnitude.new(1.0), Magnitude.new(1.0)}
         end
@@ -3078,7 +3078,7 @@ module ::Ww::Term::M1
     #
     # *normp* must be one of the recognized patterns. Otherwise, raises `ArgumentError`.
     def pattern(normp : Term) : {Magnitude, Magnitude}
-      Term.case(normp, engine: Term::M0) do
+      Term.case(normp, engine: M0) do
         matchpi %[(%itemspart _*)], cue: :"%itemspart" do
           items(normp.items.move(1))
         end
@@ -3125,7 +3125,7 @@ module ::Ww::Term::M1
   module Item
     # TODO: switch to using matchpis here and everywhere!
     def self.operator(item : Term, captures : Bag(Term)) : Operator::Item::Any
-      Term.case(item, engine: Term::M0) do
+      Term.case(item, engine: M0) do
         matchpi %[(%singular child_)], cue: :"%singular" do
           Operator::Item::Singular.new(M1.operator(child, captures))
         end
@@ -3281,7 +3281,7 @@ module ::Ww::Term::M1
         # going to work.
         Term.case(node, engine: Engine) do
           matchpi %[((%literal %literal) term_)] do
-            sketch = Dict.mix(sketch, term)
+            sketch = Term::Dict.mix(sketch, term)
 
             WalkDecision::Continue
           end
@@ -3458,7 +3458,7 @@ module ::Ww::Term::M1
 
   module Pair
     def self.operator(key, value, captures)
-      Term.case(value, engine: Term::M0) do
+      Term.case(value, engine: M0) do
         match({:"%entry/required", :value_}, cue: :"%entry/required") do |value|
           Operator::Entry::Required.new(key, M1.operator(value, captures))
         end
@@ -3487,7 +3487,7 @@ module ::Ww::Term::M1
   end
 
   def self.operator(node : Term, captures : Bag(Term)) : Operator::Any
-    Term.case(node, engine: Term::M0) do
+    Term.case(node, engine: M0) do
       matchpi %[(%let (%capture capture_) successor_)], cue: :"%let" do
         Operator::Capture.new(capture, operator(successor, captures))
       end
@@ -3974,7 +3974,7 @@ module ::Ww::Term::M1
   end
 
   def self.walk(root : Term, mode : WalkMode::Thorough.class, callable, *, keypath = nil) : WalkDecision
-    Term.case(root, engine: Term::M0) do
+    Term.case(root, engine: M0) do
       # Barrier is for higher-level nodes to protect their arguments.
       matchpi %[(%barrier _)], cue: :"%barrier" do
         WalkDecision::Skip
@@ -4037,7 +4037,7 @@ module ::Ww::Term::M1
 
   def self.walk(root : Term, mode : WalkMode::NonItemspart.class, callable, *, itemspart : Bool = false, keypath = nil) : WalkDecision
     walk(root, mode: WalkMode::Thorough, keypath: keypath) do |node|
-      Term.case(node, engine: Term::M0) do
+      Term.case(node, engine: M0) do
         if itemspart
           # Recurse into M1 non-itemspart children with itemspart flag off.
           matchpi(
@@ -4111,7 +4111,7 @@ module ::Ww::Term::M1
 
   def self.captures(root : Term, *, storage = Bag(Term).new) : Bag(Term)
     walk(root) do |node|
-      Term.case(node, engine: Term::M0) do
+      Term.case(node, engine: M0) do
         match({:"%capture", :capture_}) do |capture|
           storage << capture
 
@@ -4155,10 +4155,7 @@ module ::Ww::Term::M1
   end
 end
 
-module ::Ww::Term::M1
-end
-
-module ::Ww::Term::M1
+module ::Ww::M1
   struct AttachMetadata
     def initialize(@capture : Term, @body : Term?, @env : Term::Dict, @plural : Bool)
     end
@@ -4644,7 +4641,7 @@ class ::Ww::Term::Dict
   end
 end
 
-module ::Ww::Term::M1
+module ::Ww::M1
   # Returns the minimum and maximum expected matchee depth for a normal pattern
   # *normp*. They participate in determining the specificity of a pattern.
   #
@@ -4963,7 +4960,7 @@ end
 
 # Represents a pattern within a `PatternSet`. Has no expected use outside of `PatternSet`.
 struct Pattern
-  private alias O = Term::M1::Operator
+  private alias O = M1::Operator
 
   # Returns the index of this pattern. You are free to treat it as `PatternSet`-unique
   # identifier of this pattern.
@@ -5013,7 +5010,7 @@ module Pr
 end
 
 # An object capable of parsing pattern terms into `Pattern`s (a thin wrapper
-# around `Term::M1::Operator`) and organizing them for efficient response
+# around `M1::Operator`) and organizing them for efficient response
 # to matchees.
 class PatternSet
   # :nodoc:
@@ -5025,7 +5022,7 @@ class PatternSet
   # Considers only matches of *selector* that contain a capture named `pattern`.
   # The contents of this capture are treated as a pattern and added to the pattern set.
   #
-  # Yields normal `pattern` (see `Term::M1.normal`), followed by match env of
+  # Yields normal `pattern` (see `M1.normal`), followed by match env of
   # *selector* for further handling by the block. Expects the block to return
   # `true` if the pattern should be handled and finally added to the set; or
   # `false`/`nil` if the pattern should be ignored.
@@ -5050,7 +5047,7 @@ class PatternSet
     headless = [] of Int32
 
     patterns = [] of Pattern
-    specificities = [] of Term::M1::Specificity
+    specificities = [] of M1::Specificity
 
     base.each_item_unordered do |item|
       envs = Term.matches(selector, item)
@@ -5060,19 +5057,19 @@ class PatternSet
 
         index = seen.size - 1
 
-        normp = Term::M1.normal(pattern)
+        normp = M1.normal(pattern)
 
-        specificity = Term::M1.specificity(normp, toplevel: true)
+        specificity = M1.specificity(normp, toplevel: true)
         specificities << specificity
 
-        operator = Term::M1.operator(normp, normalize: false)
+        operator = M1.operator(normp, normalize: false)
 
         pattern = Pattern.new(index.to_u32, operator)
         next unless yield normp, env
 
         patterns << pattern
 
-        if head = Term::M1.head?(normp)
+        if head = M1.head?(normp)
           neighbors = headed.put_if_absent(head) { [] of Int32 }
           neighbors << index
         else
