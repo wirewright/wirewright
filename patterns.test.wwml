@@ -3134,8 +3134,131 @@
 (backmap ((%all [k0←k1_ x_] (%value k1 v_)) {(k0): (), x: ↑v, v: ↑x})
   (= (qux a qux: b) (b qux: a)))
 
+;; %itemspart bounds
+;;
+;; Make sure itemspart bounds are computed properly for the various itemspart operators.
+(bounds
+  (of () min: 0 max: 0)
+  (of (+) min: 1 max: 1)
+  (of (+ a) min: 2 max: 2)
+  (of (+ a_ b_) min: 3 max: 3)
+  (of (+ a_ b_ _*) min: 3)
+  (of (+ _* a_ b_ _*) min: 3)
+  (of (+ _* a_ _* b_ _*) min: 3)
+  (of (_* a_ _* b_ _*) min: 2)
+  (of ((%gap n_) n_) ((%gap/min n_) n_) ((%gap/max n_) n_) min: 1)
+  (of ((%gap n_)) ((%gap/min n_)) ((%gap/max n_)) min: 0)
+  (of (xs_*) min: 0)
+  (of (xs_+) min: 1)
+  (of ((%plural xs min: 2))
+      ((%plural/min xs min: 2))
+      ((%plural/max xs min: 2))
+      ((%plural/min min: 2))
+      ((%plural/max min: 2))
+      min: 2)
+  (of ((%plural xs min: 3 max: 5)) ((%plural/min xs min: 3 max: 5)) ((%plural/max xs min: 3 max: 5)) min: 3 max: 5)
+  (of ((%plural xs min: 1 max: 3) (%plural ys min: 1 max: 3)) 
+      ((%plural/min xs min: 1 max: 3) (%plural/max min: 1 max: 3))
+      min: 2 max: 6)
+  (of ((%plural xs min: 1) (%plural min: 1 max: 3))
+      ((%plural/max xs min: 1) (%plural/min ys min: 1 max: 3))
+      min: 2)
+  (of ((%plural xs min: 1 max: 3) (%plural ys min: 1))
+      ((%plural/min min: 1 max: 3) (%plural/max ys min: 1))
+      min: 2)
+  (of ((%group xs a_ b_) (%group ys (%group zs c_) d_)) min: 4 max: 4)
+  (of ((%group xs a_ b_) (%group ys (%group zs c_) ds_*)) min: 3)
+  (of ((%group xs a_ b_) (%group ys (%group zs c_) ds_+)) min: 4)
+  (of ((%group xs a_ b_) and (%group ys (%group zs c_) ds_+)) min: 5)
+  (of ((%group xs a_ b_) and (%group ys (%group zs c_) d_ qux)) min: 6 max: 6)
+  (of ((%optional 0 x_)) min: 0 max: 1)
+  (of ((%optional 0 x_) (%optional 0 y_)) min: 0 max: 2)
+  (of ((%optional 0 x_) . (%optional 0 y_)) min: 1 max: 3)
+  (of (qux (%optional 0 x_) . (%optional 0 y_)) min: 2 max: 4)
+  (of (qux (%optional 0 x_) xs_* (%optional 0 y_)) min: 1)
+  (of (qux (%optional 0 x_) xs_+ (%optional 0 y_)) min: 2)
+  (of ((%many xs x_ y_)) min: 2)
+  (of ((%many xs x_ y_ min: 2)) min: 4)
+  (of ((%many xs x_ y_ min: 3)) min: 6)
+  (of ((%many xs x_ y_ min: 3 max: 5)) min: 6 max: 10)
+  (of ((%many xs x_ y_ zs_* min: 3 max: 5)) min: 6)
+  (of ((%many xs x_ y_ zs_* min: 3)) min: 6)
+  (of ((%many xs x_ y_ zs_+ min: 3)) min: 9)
+  (of ((%many xs x_ y_) (%many ys a_ b_)) min: 4)
+  (of ((%many xs x_ y_ max: 2) (%many ys a_ b_ max: 2)) min: 4 max: 8)
+  (of ((%many xs x_ y_ min: 0 max: 2) (%many ys a_ b_ min: 0 max: 2)) min: 0 max: 8)
+  (of ((%past _ _)) min: 0)
+  (of ((%past _ _ min: 2)) ((%past/max _ _ min: 2)) min: 4)
+  (of ((%past _ _ max: 3)) ((%past/max _ _ max: 3)) min: 0 max: 6)
+  (of ((%past _ _ min: 2 max: 3)) ((%past/max _ _ min: 2 max: 3)) min: 4 max: 6)
+  (of ((%past (%optional 0 _) _ max: 3))
+      ((%past/max (%optional 0 _) _ max: 3)) 
+      min: 0 max: 6)
+  (of ((%past (%optional 0 _) _ _ min: 1 max: 3))
+      ((%past/max (%optional 0 _) _ _ min: 1 max: 3))
+      min: 2 max: 9)
+  (of ((%past (%optional 0 _) _ _ min: 2 max: 4))
+      ((%past/max (%optional 0 _) _ _ min: 2 max: 4))
+      min: 4 max: 12)
+  (of (⭳x) min: 0 max: 0)
+  (of (⭳x ⭳y) min: 0 max: 0)
+  (of (⭳x ⭳y ⭳z) min: 0 max: 0)
+  (of (⭳x a_ ⭳y ⭳z) min: 1 max: 1)
+  (of (⭳x a_ ⭳y b ⭳z) min: 2 max: 2)
+  (of (⭳x a_ ⭳y b ⭳z c_+) min: 3))
 
-;; TODO: Bounds
+;; Make sure they all can work together.
+(bounds
+  (of (qux (%past ignore _)
+           ⭳x
+           (%gap n_)
+           (%many M (%optional 0 m0_) and (%optional 0 m1_))
+           (%group G n_ (%plural xs min: 2))
+           ⭳y
+           (%optional 0 p_)
+           n_number)
+    min: 6)
+  (of (qux (%past ignore _ max: 3)
+           ⭳x
+           (%many M (%optional 0 m0_) and (%optional 0 m1_) max: 3)
+           (%group G n_ (%plural xs min: 2 max: 5))
+           ⭳y
+           (%optional 0 p_)
+           n_number)
+    min: 6 max: 24))
+   
+(bounds
+  (of (%layer () ()) min: 0 max: 0)
+  (of {x: 0} min: 1 max: 1)
+  (of {x: 0, y: 0} min: 2 max: 2)
+  (of (%layer () (1 2 3)) min: 3 max: 3)
+  (of {x: (%optional 0 x_) y: 0} min: 1 max: 2)
+  (of {x: (%optional 0 x_) y: (%optional 0 y_)} min: 0 max: 2
+      (%layer () ((%optional 0 x_) (%optional 0 y_))))
+  (of {x: (%- _)} min: 0 max: 0)
+  (of (%layer () ((%optional 0 x_) (%- _))) min: 0 max: 1)
+  (of {x: (%- _), y: (%- _ y)} min: 0 max: 0)
+  (of {x: (%- _ x), y: (%- _ y)} min: 0 max: 0))
+
+;; Make sure they all can work together.
+(bounds
+  (of {x: x_
+       y: (%optional 0 y_number)
+       z: (%optional 0 z_number)
+       qux: (%- _)
+       qyx: (%- _ qyx)}
+    min: 1
+    max: 3)
+  (of (%layer
+        ()
+        (
+          x_
+          (%optional 0 y_number)
+          (%optional 0 z_number)
+          (%- _)
+          (%- _ qyx)))
+    min: 1
+    max: 3))
 
 ;; TODO: depth
 
@@ -3234,13 +3357,7 @@
   (level (%keypool a b c)))
 
 ;; Head
-;; Make sure pattern head is determined properly
-;;
-;; TODO: right now we carefully avoid testing things such as ((+ a b) x_ y_),
-;; that is, with a dictionary literal head. I have still not decided whether
-;; the upcoming automatic determining of whether a dictionary is a literal or
-;; not should remain an optimization [detail] or become a public feature. I'm
-;; leaning toward the latter though.
+;; Make sure pattern head is determined properly.
 (head
   ;; Toplevel
   (- 1/3 qux "hello" true () a_ x←a)
@@ -3254,6 +3371,8 @@
   (of ((%literal ())) ())
   (of ((a)) (a))
   (of ((a) b c) (a))
+  (of ((+ a b) x_ y_) (+ a b))
+  (of ((+ (a b) (c d))) (+ (a b) (c d)))
   (- (_) (x_) (x_ a b c))
   ;; Make sure itemspart partition is followed
   (of (a x: qux) a)
@@ -3301,7 +3420,8 @@
 
 ;; TODO: test empty %many, %group, %past
 
-;; Here we implicitly test walk
+;; Walk
+;; With these tests we implicitly test M1.walk
 (group
   (specificity (level _ (%new x_)))
   (specificity (level x_dict (%pipe (map (x_ y_)) _)))

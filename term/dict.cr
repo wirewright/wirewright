@@ -147,36 +147,6 @@ module Ww
       end
     end
 
-    # :nodoc:
-    #
-    # An enumerable over dictionary pairs.
-    struct EntryEnumerable
-      include Enumerable({Term, Term})
-
-      def initialize(@dict : Dict)
-      end
-
-      def each(& : {Term, Term} ->)
-        @dict.each_entry { |k, v| yield({k, v}) }
-      end
-    end
-
-    # :nodoc:
-    #
-    # An enumerable over dictionary items (keys 0 through n where n is the size
-    # of the dictionary).
-    struct ItemEnumerable
-      include Enumerable(Term)
-
-      def initialize(dict : Dict)
-        @items = dict.items
-      end
-
-      def each(& : Term ->)
-        @items.each { |item| yield item }
-      end
-    end
-
     # Commits allow you to compose multiple edits into one, big edit of a dict.
     # Thus you avoid having to create many useless intermediate copies.
     class Commit
@@ -506,9 +476,58 @@ module Ww
       @pairs.each { |entry| yield entry.key, entry.value }
     end
 
+    # :nodoc:
+    #
+    # An enumerable over dictionary entries.
+    struct EntryEnumerable
+      include Enumerable({Term, Term})
+
+      def initialize(@dict : Dict)
+      end
+
+      def each(& : {Term, Term} ->)
+        @dict.each_entry { |k, v| yield({k, v}) }
+      end
+    end
+
     # Returns an enumerable based on `each_entry`.
     def ee : Enumerable({Term, Term})
       EntryEnumerable.new(self)
+    end
+
+    # :nodoc:
+    #
+    # An enumerable over dictionary entry values.
+    struct ValueEnumberable
+      include Enumerable(Term)
+
+      def initialize(@dict : Dict)
+      end
+
+      def each(& : Term ->)
+        @dict.each_entry { |_, v| yield v }
+      end
+    end
+
+    # Returns an enumerable of values based on `each_entry`.
+    def ve : Enumerable(Term)
+      ValueEnumberable.new(self)
+    end
+
+    # :nodoc:
+    #
+    # An enumerable over dictionary items (keys 0 through n where n is the size
+    # of the dictionary).
+    struct ItemEnumerable
+      include Enumerable(Term)
+
+      def initialize(dict : Dict)
+        @items = dict.items
+      end
+
+      def each(& : Term ->)
+        @items.each { |item| yield item }
+      end
     end
 
     # Returns an enumerable for items found in this dictionary.

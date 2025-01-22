@@ -244,6 +244,31 @@ def process(queue, testcase, ctx)
       end
     end
 
+    matchpi %[(bounds exps_*)] do
+      exps.items.each do |exp|
+        Term.case(exp) do
+          matchpi %[(of patterns_+ ¦ lhs_)] do
+            ctx.stats.account
+
+            track(ctx, exp) do
+              patterns.items.each do |pattern|
+                normp = Term::M1.normal(pattern)
+                bounds = ctx.stats.run { Term::M1.bounds(normp) }
+                rhs = Term.of(
+                  min: bounds[0] == Magnitude::INFINITY ? nil : bounds[0],
+                  max: bounds[1] == Magnitude::INFINITY ? nil : bounds[1],
+                )
+
+                unless lhs == rhs
+                  ctx.failures << Term.of(:"mismatch/bounds", pattern, :==, lhs, :GOT, rhs)
+                end
+              end
+            end
+          end
+        end
+      end
+    end
+
     matchpi %[(editor initial_dict edits_*)] do
       next if "-noed".in?(ARGV)
       root = initial
