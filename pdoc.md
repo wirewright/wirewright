@@ -2,7 +2,7 @@
 
 The idea with the `%new` operator is to be able to create new patterns at match-
 time, through a process of "learn and replace". `%new` is opaque at pattern compile-
-time. `%new` is a fairly advanced operator; most likely, you do not and would not
+time. `%new` is a fairly advanced operator; most likely, you do not and will not
 need it.
 
 `%new` comes with some caveats and footguns, like anything advanced. Its simplest
