@@ -3061,7 +3061,40 @@
     (= (((a b) (c d)) b) {choice: b, $choices: (a b)})
     (= (((a b) (c d)) c) {choice: c, $choices: (c d)})
     (= (((a b) (c d)) d) {choice: d, $choices: (c d)})
-    (- (((a b) (c d)) e))))
+    (- (((a b) (c d)) e)))
+
+  ;; From docs: extended form explanation
+  (pattern (< (%new (%number _ < m_)) m_number)
+    (- (< 5 5) (< 100 5))
+    (= (< 5 100) {m: 100}))
+
+  (pattern (qux (%many xs x_) (%new v_) v_)
+    (= (qux a b c d x_) {x: d, v: x_, xs: ({x: a}, {x: b}, {x: c})}))
+
+  (pattern (qux (%many xs x_) (%new (x) v_) v_)
+    (= (qux d d d d x_) {x: d, v: x_, xs: ({}, {}, {})})
+    (- (qux a b c d x_)))
+
+  ;; From docs: the cursor backmap example.
+  (backmap (((%plural/min pre)
+             (%group l (%gap/max (%new (%number _ <= n_))))
+             (| n_)
+             (%group r (%gap/max (%new (%number _ <= n_))))
+             (%plural/min post))
+            {(l): (), (r): ()})
+    (= (a b c (| 1) d e f) (a b (| 1) e f))
+    (= (a b (| 1) e f) (a (| 1) f))
+    (= (a (| 1) f) ((| 1)))
+    (= (a b (| 1) c d e f) (a (| 1) d e f))
+    (= (a (| 1) d e f) ((| 1) e f))
+    (= ((| 1) e f) ((| 1) f))
+    (= ((| 1) f) ((| 1)))
+    (= ((| 1)) ((| 1)))
+    (= (a b c (| 2) d e f) (a (| 2) f))
+    (= (a (| 2) f) ((| 2)))
+    (= (a b (| 2) c d e f) ((| 2) e f))
+    (= ((| 2) e f) ((| 2)))
+    (= ((| 2)) ((| 2)))))
 
 ;; %keypath
 (pattern (%keypath x)

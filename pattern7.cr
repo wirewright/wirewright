@@ -60,7 +60,7 @@
 # │ dig first bfs            │   ~   │   ~     │   ~   │            │    ~     │       │
 # │ dig & store bfs          │   ~   │   ~     │   ~   │            │    ~     │       │
 # │ %keypath                 │   ~   │   ~     │   ~   │            │    ·     │       │
-# │ %new                     │   ~   │   ~     │   ~   │            │    ~     │       │
+# │ %new                     │   ~   │   ~     │   ~   │            │    ~     │       │   +
 # └──────────────────────────┴───────┴─────────┴───────┴────────────┴──────────┴───────┘
 # + confident
 # ~ will work
@@ -2947,6 +2947,11 @@ module ::Ww::M1
           {:"%terminal", pattern}
         end
 
+        # Extended %new with the exports dict.
+        matchpi %[(%new (_ _*) _)], cue: :"%new" do
+          {:"%terminal", pattern}
+        end
+
         # Expand (%string nonempty) into (%all (%not "") _string)
         matchpi %[(%string nonempty)], cue: {:"%string", :nonempty} do
           pattern(Term.of(:"%all", {:"%not", ""}, :_string))
@@ -3922,7 +3927,7 @@ module ::Ww::M1
         Operator::Num.new(min: a, max: b, options: options)
       end
 
-      match({:"%new", :pattern_}, cue: :"%new") do |pattern|
+      match({:"%new", :pattern_}, {:"%new", :_, :pattern_}, cue: :"%new") do |pattern|
         Operator::New.new((blanks(pattern) & captures).array, pattern)
       end
 
@@ -4170,16 +4175,20 @@ module ::Ww::M1
   def self.captures(root : Term, *, storage = Bag(Term).new) : Bag(Term)
     walk(root) do |node|
       Term.case(node, engine: M0) do
-        match({:"%capture", :capture_}) do |capture|
+        matchpi %[(%capture capture_)] do
           storage << capture
-
-          WalkDecision::Skip
         end
 
-        otherwise do
-          WalkDecision::Continue
+        matchpi %[(%new exports_dict _)] do
+          exports.items.each do |capture|
+            storage << capture
+          end
         end
+
+        otherwise {}
       end
+
+      WalkDecision::Continue
     end
 
     storage
@@ -4753,6 +4762,7 @@ module ::Ww::M1
         %[(%leaves/source _ in: keys order: _ self: _)],
         %[(%leaves/all _ _ in: keys min: _ max: _ order: _ self: _)],
         %[(%new _)],
+        %[(%new _ _)],
         cues: {:"%gap",
                :"%gap/min",
                :"%gap/max",
@@ -4761,6 +4771,7 @@ module ::Ww::M1
                :"%leaves/first",
                :"%leaves/source",
                :"%leaves/all",
+               :"%new",
                :"%new"},
       ) do
         {Magnitude.new(0), Magnitude::INFINITY}
@@ -5113,6 +5124,7 @@ module ::Ww::M1
           %[((%literal %let) _ _)],
           %[((%literal %not) _+)],
           %[((%literal %new) _)],
+          %[((%literal %new) _ _)],
         ) { WalkDecision::Continue }
 
         # %all sums the specificity of its offshoots.
