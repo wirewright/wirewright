@@ -3410,7 +3410,7 @@ module ::Ww::M1
 
       M1.walk(normp, keypath: keypath) do |node|
         Term.case(node, engine: Engine) do
-          matchpi %[((%any %partition %itemspart %layer %items/first %items/source %items/all) _*)] do
+          matchpi %{[(%any %partition %itemspart %layer %items/first %items/source %items/all) _*]} do
             min, max = M1.bounds(node)
             min = min == Magnitude::INFINITY ? SYM_INF : min
             max = max == Magnitude::INFINITY ? SYM_INF : max
@@ -3434,7 +3434,7 @@ module ::Ww::M1
 
       M1.walk(normp, keypath: keypath) do |node|
         Term.case(node, engine: Engine) do
-          matchpi %[((%any %itemspart %layer %items/first %items/source %items/all %leaves/first %leaves/source %leaves/all) _*)] do
+          matchpi %{[(%any %itemspart %layer %items/first %items/source %items/all %leaves/first %leaves/source %leaves/all) _*]} do
             min, max = M1.depth(node)
             min = min == Magnitude::INFINITY ? SYM_INF : min
             max = max == Magnitude::INFINITY ? SYM_INF : max
@@ -4038,7 +4038,7 @@ module ::Ww::M1
 
   def self.walk(root : Term, mode : WalkMode::Thorough.class, callable, *, keypath = nil) : WalkDecision
     Term.case(root, engine: M0) do
-      # Barrier is for higher-level nodes to protect their arguments.
+      # Barrier is for nodes to prevent walk from walking into their arguments.
       matchpi %[(%barrier _)], cue: :"%barrier" do
         WalkDecision::Skip
       end
@@ -4046,9 +4046,9 @@ module ::Ww::M1
       # Captures, slots, and literals are all terminal nodes. We do not require to
       # wrap them in %terminal because this is sort of evident.
       matchpi(
-        %[((%literal %literal) _)],
-        %[(%slot _)],
-        %[(%capture _)],
+        %{[(%literal %literal) _]},
+        %{[%slot _]},
+        %{[%capture _]},
         cues: {:"%literal", :"%slot", :"%capture"},
       ) do
         callable.call(root)
@@ -4104,11 +4104,11 @@ module ::Ww::M1
         if itemspart
           # Recurse into M1 non-itemspart children with itemspart flag off.
           matchpi(
-            %[(%singular child_)],
-            %[(%gap child_)],
-            %[(%gap/min child_)],
-            %[(%gap/max child_)],
-            %[(%optional _ child_)],
+            %{[%singular child_]},
+            %{[%gap child_]},
+            %{[%gap/min child_]},
+            %{[%gap/max child_]},
+            %{[%optional _ child_]},
             cues: {:"%singular", :"%gap", :"%gap/min", :"%gap/max", :"%optional"},
           ) do
             case walk(child, mode, callable, itemspart: false, keypath: keypath)
@@ -4133,7 +4133,7 @@ module ::Ww::M1
           # Avoid all other itemspart nodes.
           otherwise { WalkDecision::Skip }
         else
-          matchpi %[(%itemspart _*)], cue: :"%itemspart" do
+          matchpi %{[%itemspart _*]}, cue: :"%itemspart" do
             decision = callable.call(node)
 
             if decision.continue?
@@ -4175,11 +4175,11 @@ module ::Ww::M1
   def self.captures(root : Term, *, storage = Bag(Term).new) : Bag(Term)
     walk(root) do |node|
       Term.case(node, engine: M0) do
-        matchpi %[(%capture capture_)] do
+        matchpi %{[%capture capture_]} do
           storage << capture
         end
 
-        matchpi %[(%new exports_dict _)] do
+        matchpi %{[%new exports_dict _]} do
           exports.items.each do |capture|
             storage << capture
           end
@@ -4711,25 +4711,25 @@ end
 module ::Ww::M1
   def self.depth(normp : Term) : {Magnitude, Magnitude}
     Term.case(normp, engine: M0) do
-      matchpi %[(%pass)], %[(%dict)], cues: {:"%pass", :"%dict"} do
+      matchpi %{[%pass]}, %{[%dict]}, cues: {:"%pass", :"%dict"} do
         {Magnitude.new(0), Magnitude::INFINITY}
       end
 
-      matchpi %[((%literal %literal) x_dict)], cue: :"%literal" do
+      matchpi %{[(%literal %literal) x_dict]}, cue: :"%literal" do
         maxdepth = x.fresh_maxdepth
 
         {Magnitude.new(maxdepth), Magnitude.new(maxdepth)}
       end
 
       matchpi(
-        %[(%symbol)],
-        %[(%string)],
-        %[(%number (%literal _))],
-        %[(%boolean)],
-        %[((%literal %literal) _)],
-        %[(%slot _)],
-        %[(%entry/negative (%pass))],
-        %[(%entry/negative (%pass) _)],
+        %{[%symbol]},
+        %{[%string]},
+        %{[%number (%literal _)]},
+        %{[%boolean]},
+        %{[(%literal %literal) _]},
+        %{[%slot _]},
+        %{[%entry/negative [%pass]]},
+        %{[%entry/negative [%pass] _]},
         cues: {:"%symbol",
                :"%string",
                :"%number",
@@ -4743,26 +4743,26 @@ module ::Ww::M1
       end
 
       matchpi(
-        %[(%let _ successor_)],
-        %[(%singular successor_)],
-        %[(%entry/required successor_)],
-        %[(%terminal successor_)],
+        %{[%let _ successor_]},
+        %{[%singular successor_]},
+        %{[%entry/required successor_]},
+        %{[%terminal successor_]},
         cues: {:"%let", :"%singular", :"%entry/required", :"%terminal"}
       ) do
         depth(successor)
       end
 
       matchpi(
-        %[(%gap _)],
-        %[(%gap/min _)],
-        %[(%gap/max _)],
-        %[(%entry/negative _)],
-        %[(%entry/negative _ _)],
-        %[(%leaves/first _ in: keys order: _ self: _)],
-        %[(%leaves/source _ in: keys order: _ self: _)],
-        %[(%leaves/all _ _ in: keys min: _ max: _ order: _ self: _)],
-        %[(%new _)],
-        %[(%new _ _)],
+        %{[%gap _]},
+        %{[%gap/min _]},
+        %{[%gap/max _]},
+        %{[%entry/negative _]},
+        %{[%entry/negative _ _]},
+        %{(%leaves/first _ ¦ _ in: keys)},
+        %{(%leaves/source _ ¦ _ in: keys)},
+        %{(%leaves/all _ _ ¦ _ in: keys)},
+        %{[%new _]},
+        %{[%new _ _]},
         cues: {:"%gap",
                :"%gap/min",
                :"%gap/max",
@@ -4781,8 +4781,8 @@ module ::Ww::M1
       # With %optional, our min is when the optional is not matched (0)
       # and our max is when the optional is matched (successor).
       matchpi(
-        %[(%optional _ successor_)],
-        %[(%entry/optional _ successor_)],
+        %{[%optional _ successor_]},
+        %{[%entry/optional _ successor_]},
         cues: {:"%optional", :"%entry/optional"},
       ) do
         _, max = depth(successor)
@@ -4793,7 +4793,7 @@ module ::Ww::M1
       # With %all, the idea is to take the max of both min depths and max depths. %all is
       # different from e.g. %itemspart in that it does not introduce depth itself.
       matchpi(
-        %[(%all _*)],
+        %{[%all _*]},
         %{[%past _*]},
         %{[%past/max _*]},
         cues: {:"%all", :"%past", :"%past/max"}
@@ -4813,7 +4813,7 @@ module ::Ww::M1
 
       # With %any and %any°, the idea is to take the min of min depths and max of
       # max depths.
-      matchpi %[(%any/literal _ _*)], cue: :"%any/literal" do
+      matchpi %{[%any/literal _ _*]}, cue: :"%any/literal" do
         min = Magnitude::INFINITY
         max = Magnitude.new(0)
 
@@ -4832,7 +4832,7 @@ module ::Ww::M1
         {min, max}
       end
 
-      matchpi %[(%any/source _ _*)], cue: :"%any/source" do
+      matchpi %{[%any/source _ _*]}, cue: :"%any/source" do
         min = Magnitude::INFINITY
         max = Magnitude.new(0)
 
@@ -4846,25 +4846,25 @@ module ::Ww::M1
         {min, max}
       end
 
-      matchpi %[((%literal %partition) itemspart_ pairspart_)], cue: :"%partition" do
+      matchpi %{[(%literal %partition) itemspart_ pairspart_]}, cue: :"%partition" do
         min0, max0 = depth(itemspart)
         min1, max1 = depth(pairspart)
 
         {Math.max(min0, min1), Math.max(max0, max1)}
       end
 
-      matchpi %[(%edge _)], cue: :"%edge" do
+      matchpi %{[%edge _]}, cue: :"%edge" do
         {Magnitude.new(1), Magnitude.new(1)}
       end
 
       matchpi(
-        %[(%value _ successor_)],
-        %[(%entries/first _ successor_)],
-        %[(%entries/source _ successor_)],
+        %{[%value _ successor_]},
+        %{[%entries/first _ successor_]},
+        %{[%entries/source _ successor_]},
         %{[%entries/all _ _ successor_]},
-        %[(%leaves/first successor_ in: _ order: _ self: false)],
-        %[(%leaves/source successor_ in: _ order: _ self: false)],
-        %[(%leaves/all _ successor_ in: _ min: _ max: _ order: _ self: false)],
+        %{(%leaves/first successor_ ¦ _ self: false)},
+        %{(%leaves/source successor_ ¦ _ self: false)},
+        %{(%leaves/all _ successor_ ¦ _ self: false)},
         cues: {:"%value",
                :"%entries/first",
                :"%entries/source",
@@ -4879,9 +4879,9 @@ module ::Ww::M1
       end
 
       matchpi(
-        %[(%leaves/first successor_ in: _ order: _ self: true)],
-        %[(%leaves/source successor_ in: _ order: _ self: true)],
-        %[(%leaves/all _ successor_ in: _ min: _ max: _ order: _ self: true)],
+        %{(%leaves/first successor_ ¦ _ self: true)},
+        %{(%leaves/source successor_ ¦ _ self: true)},
+        %{(%leaves/all _ successor_ ¦ _ self: true)},
         cues: {:"%leaves/first", :"%leaves/source", :"%leaves/all"},
       ) do
         min, _ = depth(successor)
@@ -4889,14 +4889,14 @@ module ::Ww::M1
         {min, Magnitude::INFINITY}
       end
 
-      matchpi %[(%-value _)], %[(%-value _ _)], cue: :"%-value" do
+      matchpi %{[%-value _]}, %{[%-value _ _]}, cue: :"%-value" do
         {Magnitude.new(1), Magnitude::INFINITY}
       end
 
       matchpi(
-        %[(%itemspart _*)],
-        %[(%items/first _*)],
-        %[(%items/source _*)],
+        %{[%itemspart _*]},
+        %{[%items/first _*]},
+        %{[%items/source _*]},
         cues: {:"%itemspart", :"%items/first", :"%items/source"},
       ) do
         min = Magnitude.new(1)
@@ -4940,7 +4940,7 @@ module ::Ww::M1
         {min, max}
       end
 
-      matchpi %[((%literal %layer) below_ side_dict)], cue: :"%layer" do
+      matchpi %{[(%literal %layer) below_ side_dict]}, cue: :"%layer" do
         min, max = depth(below)
         # Do not waste time computing side if that won't change anything.
         if {min, max} == {Magnitude::INFINITY, Magnitude::INFINITY}
@@ -4957,12 +4957,12 @@ module ::Ww::M1
       end
 
       matchpi(
-        %[(%plural _ ¦ min: _ max: _ type: type_)],
-        %[(%plural/min _ ¦ min: _ max: _ type: type_)],
-        %[(%plural/max _ ¦ min: _ max: _ type: type_)],
-        %[(%plural ¦ min: _ max: _ type: type_)],
-        %[(%plural/min ¦ min: _ max: _ type: type_)],
-        %[(%plural/max ¦ min: _ max: _ type: type_)],
+        %{(%plural _ ¦ _ type: type_)},
+        %{(%plural/min _ ¦ _ type: type_)},
+        %{(%plural/max _ ¦ _ type: type_)},
+        %{(%plural ¦ _ type: type_)},
+        %{(%plural/min ¦ _ type: type_)},
+        %{(%plural/max ¦ _ type: type_)},
         cues: {:"%plural",
                :"%plural/min",
                :"%plural/max",
