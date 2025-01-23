@@ -251,11 +251,11 @@ struct Ruleset
   def self.select(selector, base)
     rules = [] of Rule::Any
 
-    pset = PatternSet.select(selector, base) do |normp, env|
+    pset = PatternSet.select(selector, base) do |noR, env|
       if template = env[:template]?
         rule = Rule::Template.new(template)
       elsif backspec = env[:backspec]?
-        rule = Term.case(normp) do
+        rule = Term.case(noR) do
           matchpi %[((%literal %let) (%capture toplevel_) _)] { Rule::BackmapMany.new(toplevel, backspec) }
           otherwise { Rule::BackmapOne.new(backspec) }
         end
@@ -290,15 +290,17 @@ module Changes
   alias Accept = ->
 end
 
-# TODO: merge itemsr and pairsr into a single entriesr with an optional
+alias Rewriter = Changes::Any, Rewrite::Any -> Rewrite::Any
+
+# TODO: merge itemsR and pairsR into a single entriesR with an optional
 # part arg. 
 # TODO: add a flag to use each_entry_randomized
 
 # FIXME: crazy crazy shitcode
 # :nodoc:
 #
-# Less efficient `itemsr` implementation for `Changes::Preview` procs.
-def itemsr(changes : Changes::Preview, term : Term, successor, *, limit) : Rewrite::Any?
+# Less efficient `itemsR` implementation for `Changes::Preview` procs.
+def itemsR(changes : Changes::Preview, term : Term, successor, *, limit) : Rewrite::Any?
   return Rewrite.none unless dict0 = term.as_d?
 
   dict1 = dict0
@@ -342,8 +344,8 @@ end
 # FIXME: crazy crazy shitcode
 # :nodoc:
 #
-# More efficient `itemsr` implementation for `Changes::Accept` procs.
-def itemsr(changes : Changes::Accept, term : Term, successor, *, limit) : Rewrite::Any?
+# More efficient `itemsR` implementation for `Changes::Accept` procs.
+def itemsR(changes : Changes::Accept, term : Term, successor, *, limit) : Rewrite::Any?
   return Rewrite.none unless dict0 = term.as_d?
 
   splices = nil
@@ -384,10 +386,10 @@ end
 
 # Makes up to *limit* rewrites of items from the itemspart of a dictionary
 # using *successor*.
-def itemsr(successor, *, limit = nil)
-  ->(changes : Changes::Any, operand : Rewrite::Any) do
+def itemsR(successor, *, limit = nil) : Rewriter
+  Rewriter.new do |changes, operand|
     operand.reduce do |term|
-      itemsr(changes, term, successor, limit: limit)
+      itemsR(changes, term, successor, limit: limit)
     end
   end
 end
@@ -395,8 +397,8 @@ end
 # FIXME: crazy crazy shitcode
 # :nodoc:
 #
-# Less efficient `pairsr` implementation for `Changes::Preview` procs.
-def pairsr(changes : Changes::Preview, term : Term, successor, *, limit) : Rewrite::Any?
+# Less efficient `pairsR` implementation for `Changes::Preview` procs.
+def pairsR(changes : Changes::Preview, term : Term, successor, *, limit) : Rewrite::Any?
   return Rewrite.none unless dict0 = term.as_d?
 
   dict1 = dict0
@@ -438,8 +440,8 @@ end
 # FIXME: crazy crazy shitcode
 # :nodoc:
 #
-# More efficient `pairsr` implementation for `Changes::Accept` procs.
-def pairsr(changes : Changes::Accept, term : Term, successor, *, limit) : Rewrite::Any?
+# More efficient `pairsR` implementation for `Changes::Accept` procs.
+def pairsR(changes : Changes::Accept, term : Term, successor, *, limit) : Rewrite::Any?
   return Rewrite.none unless dict0 = term.as_d?
 
   changed = false
@@ -468,40 +470,40 @@ end
 
 # Makes up to *limit* rewrites of pair values from the pairspart of a dictionary
 # using *successor*.
-def pairsr(successor, *, limit = nil)
-  ->(changes : Changes::Any, operand : Rewrite::Any) do
+def pairsR(successor, *, limit = nil) : Rewriter
+  Rewriter.new do |changes, operand|
     operand.reduce do |term|
-      pairsr(changes, term, successor, limit: limit)
+      pairsR(changes, term, successor, limit: limit)
     end
   end
 end
 
 # Rewrites one item of a dictionary.
 #
-# Shorthand for `itemsr(successor, limit: 1)`
-def itemr(successor)
-  itemsr(successor, limit: 1)
+# Shorthand for `itemsR(successor, limit: 1)`
+def itemR(successor) : Rewriter
+  itemsR(successor, limit: 1)
 end
 
 # Rewrites one pair value of a dictionary.
 #
-# Shorthand for `pairsr(successor, limit: 1)`
-def pairr(successor)
-  pairsr(successor, limit: 1)
+# Shorthand for `pairsR(successor, limit: 1)`
+def pairR(successor) : Rewriter
+  pairsR(successor, limit: 1)
 end
 
 # Rewrites one entry (an item or a pair value) of a dictionary.
-def entryr(successor)
-  choicer(itemr(successor), pairr(successor))
+def entryR(successor) : Rewriter
+  choiceR(itemR(successor), pairR(successor))
 end
 
 # A rewriter that does nothing.
-def nor
-  ->(changes : Changes::Any, operand : Rewrite::Any) { Rewrite.none }
+def noR : Rewriter
+  Rewriter.new { Rewrite.none }
 end
 
 # :nodoc:
-def callr(changes : Changes::Any, term : Term, callable)
+def callR(changes : Changes::Any, term : Term, callable)
   rewrite = callable.call(term).diff(term)
 
   if rewrite.is_a?(Rewrite::Some)
@@ -519,14 +521,14 @@ end
 # Rewrites a term using *callable*.
 #
 # *callable* must respond to `call(term : Term) : Rewrite::Any`
-def callr(callable)
-  ->(changes : Changes::Any, operand : Rewrite::Any) do
-    operand.reduce { |term| callr(changes, term, callable) }
+def callR(callable) : Rewriter
+  Rewriter.new do |changes, operand|
+    operand.reduce { |term| callR(changes, term, callable) }
   end
 end
 
 # :nodoc:
-def chainr(changes : Changes::Any, term : Term, a, b)
+def chainR(changes : Changes::Any, term : Term, a, b)
   lhs = a.call(changes, Rewrite.one(term))
   rhs = b.call(changes, lhs.as?(Rewrite::Some) || Rewrite.one(term))
 
@@ -534,50 +536,80 @@ def chainr(changes : Changes::Any, term : Term, a, b)
 end
 
 # Rewrites a term first using *a*, then the result of that using *b*, etc.
-def chainr(a, b)
-  ->(changes : Changes::Any, operand : Rewrite::Any) do
-    operand.reduce { |term| chainr(changes, term, a, b) }
+def chainR(a, b) : Rewriter
+  Rewriter.new do |changes, operand|
+    operand.reduce { |term| chainR(changes, term, a, b) }
   end
 end
 
 # :ditto:
-def chainr(a, b, *cs)
-  chainr(chainr(a, b), *cs)
+def chainR(a, b, *cs) : Rewriter
+  chainR(chainR(a, b), *cs)
 end
 
 # :nodoc:
-def choicer(changes : Changes::Any, term : Term, a, b)
+def choiceR(changes : Changes::Any, term : Term, a, b)
   lhs = a.call(changes, Rewrite.one(term))
   lhs.as?(Rewrite::Some) || b.call(changes, Rewrite.one(term))
 end
 
 # Picks the first successful rewriter out of *a*, *b*, etc.
-def choicer(a, b)
-  ->(changes : Changes::Any, operand : Rewrite::Any) do
-    operand.reduce { |term| choicer(changes, term, a, b) }
+def choiceR(a, b) : Rewriter
+  Rewriter.new do |changes, operand|
+    operand.reduce { |term| choiceR(changes, term, a, b) }
   end
 end
 
 # :ditto:
-def choicer(a, b, *cs)
-  choicer(choicer(a, b), *cs)
+def choiceR(a, b, *cs) : Rewriter
+  choiceR(choiceR(a, b), *cs)
 end
 
 # Rewrites the items and pair values of a dictionary term using *successor*.
-def entriesr(successor)
-  chainr(itemsr(successor), pairsr(successor))
+def entriesR(successor) : Rewriter
+  chainR(itemsR(successor), pairsR(successor))
+end
+
+# Allows you to set up a rewriter that can reference itself. Returns a pair
+# of procs: the first one is for setting the rewriter that will be used for
+# recursion, and the second one represents the recursive rewriter itself.
+#
+# Here is an example dfsR definition:
+#
+# ```
+# # successor = <some rewriter>
+#
+# set, rec = recR
+# set.call choiceR(successor, entriesR(rec))
+#
+# # You can use `rec` or the rewriter returned by `set` now. They're
+# # not identical (`rec` introduces one level of indirection); but
+# # they do the same thing.
+# ```
+def recR : {(Rewriter -> Rewriter), Rewriter}
+  slot = nil
+
+  set = ->(rewriter : Rewriter) { slot = rewriter }
+  rec = Rewriter.new do |changes, operand|
+    unless successor = slot
+      next Rewrite.none
+    end
+
+    successor.call(changes, operand)
+  end
+
+  {set, rec}
 end
 
 # Rewrites a term using successor; if that produces no change recurses on
 # the items and pair values of a dictionary term. Items are visited in reverse.
-def dfsr(successor)
-  ->(changes : Changes::Any, operand : Rewrite::Any) do
-    choicer(successor, entriesr(dfsr(successor))).call(changes, operand)
-  end
+def dfsR(successor) : Rewriter
+  set, rec = recR
+  set.call choiceR(successor, entriesR(rec))
 end
 
 # :nodoc:
-def selr(changes : Changes::Any, term : Term, selector, successor)
+def selR(changes : Changes::Any, term : Term, selector, successor)
   if env = M1::Operator.match?(Term[], selector, term)
     if rewritee = env[:rewritee]?
       return successor.call(changes, Rewrite.one(rewritee))
@@ -588,9 +620,9 @@ def selr(changes : Changes::Any, term : Term, selector, successor)
 end
 
 # :nodoc:
-def selr(selector : M1::Operator::Any, successor)
-  ->(changes : Changes::Any, operand : Rewrite::Any) do
-    operand.reduce { |term| selr(changes, term, selector, successor) }
+def selR(selector : M1::Operator::Any, successor) : Rewriter
+  Rewriter.new do |changes, operand|
+    operand.reduce { |term| selR(changes, term, selector, successor) }
   end
 end
 
@@ -598,17 +630,17 @@ end
 #
 # *selector* pattern is used to match a term, and if a match is found, the capture
 # `rewritee` is passed to the *successor* rewriter.
-def selr(selector : Term, successor)
-  selr(M1.operator(selector), successor)
+def selR(selector : Term, successor) : Rewriter
+  selR(M1.operator(selector), successor)
 end
 
 # :ditto:
-def selr(selector : String, successor)
-  selr(ML.parse1(selector), successor)
+def selR(selector : String, successor) : Rewriter
+  selR(ML.parse1(selector), successor)
 end
 
 # :nodoc:
-def exhr(changes : Changes::Any, term : Term, successor)
+def exhR(changes : Changes::Any, term : Term, successor)
   memo = Rewrite.one(term)
   changed = false
 
@@ -627,31 +659,30 @@ end
 #
 # *Exhaustive rewriting* is rewriting that stops only when there are no more rewrites
 # to do. The resulting term is therefore an exhaustively rewritten term.
-def exhr(successor)
-  ->(changes : Changes::Any, operand : Rewrite::Any) do
-    operand.reduce { |term| exhr(changes, term, successor) }
+def exhR(successor) : Rewriter
+  Rewriter.new do |changes, operand|
+    operand.reduce { |term| exhR(changes, term, successor) }
   end
 end
 
 # Absolute rewriter. Performs absolute rewriting of a term using *successor*.
 #
-# *Absolute rewriting* is similar to depth-first search rewriting `dfsr`;
-# the notable difference is that `absr` rewrites just one entry at any depth
-# (the first one it can reach); whereas `dfsr` rewrites all entries at any
+# *Absolute rewriting* is similar to depth-first search rewriting `dfsR`;
+# the notable difference is that `absR` rewrites just one entry at any depth
+# (the first one it can reach); whereas `dfsR` rewrites all entries at any
 # depth, minus those that are themselves results of previous rewriting.
 #
 # Absolute rewriting is useful when we want to prioritize context in rules.
-# That is, rules with most context must be tried first. With `absr`, any
+# That is, rules with most context must be tried first. With `absR`, any
 # rewrite can subsequently be assessed in context. 
 #
-# `absr` is an intrinsically inefficient way to rewrite, especially for very
-# deep terms (since for any smallest change `absr` will backjump to the root).
+# `absR` is an intrinsically inefficient way to rewrite, especially for very
+# deep terms (since for any smallest change `absR` will backjump to the root).
 # It is often used in combination with `relr`, which allows to set the "ceiling"
-# for `absr` to jump to based on some floor pattern.
-def absr(successor)
-  ->(changes : Changes::Any, operand : Rewrite::Any) do
-    choicer(successor, entryr(absr(successor))).call(changes, operand)
-  end
+# for `absR` to jump to based on some floor pattern.
+def absR(successor) : Rewriter
+  set, rec = recR
+  set.call choiceR(successor, entryR(rec))
 end
 
 module Relr
@@ -773,8 +804,8 @@ def relr0(changes : Changes::Accept, floor, term, ascent, successor)
   Relr::Ready.new(changed ? Rewrite.one(dict1) : Rewrite.none)
 end
 
-def relr(floor : M1::Operator::Any, successor, *, ascent : Int32 = 0)
-  ->(changes : Changes::Any, operand : Rewrite::Any) do
+def relR(floor : M1::Operator::Any, successor, *, ascent : Int32 = 0) : Rewriter
+  Rewriter.new do |changes, operand|
     operand.reduce do |term|
       case response = relr0(changes, floor, term, ascent, successor)
       in Relr::None   then Rewrite.none
@@ -785,16 +816,16 @@ def relr(floor : M1::Operator::Any, successor, *, ascent : Int32 = 0)
   end
 end
 
-def relr(floor : Term, successor, **kwargs)
-  relr(M1.operator(floor), successor, **kwargs)
+def relR(floor : Term, successor, **kwargs) : Rewriter
+  relR(M1.operator(floor), successor, **kwargs)
 end
 
-def relr(floor : String, successor, **kwargs)
-  relr(ML.parse1(floor), successor, **kwargs)
+def relR(floor : String, successor, **kwargs) : Rewriter
+  relR(ML.parse1(floor), successor, **kwargs)
 end
 
 # :nodoc:
-def pbr(changes, term, pset, a, b)
+def pbranchR(changes, term, pset, a, b)
   case pset.response(term)
   in Pr::Pos then a.call(changes, Rewrite.one(term))
   in Pr::Neg then b.call(changes, Rewrite.one(term))
@@ -803,9 +834,9 @@ end
 
 # Rewrites using *a* any term to which pattern set *pset* responds positively.
 # Rewrites using *b* any other term.
-def pbr(pset : PatternSet, a, b)
-  ->(changes : Changes::Any, operand : Rewrite::Any) do
-    operand.reduce { |term| pbr(changes, term, pset, a, b) }
+def pbranchR(pset : PatternSet, a, b) : Rewriter
+  Rewriter.new do |changes, operand|
+    operand.reduce { |term| pbranchR(changes, term, pset, a, b) }
   end
 end
 
@@ -829,7 +860,7 @@ struct RewriteApplier(T)
   end
 end
 
-def rulesetr(changes, term, ruleset, ruler, backmapr, elser)
+def rulesetR(changes, term, ruleset, ruler, backmapr, elser)
   unless row = ruleset.call(term)
     return elser.call(changes, Rewrite.one(term))
   end
@@ -890,9 +921,9 @@ def rulesetr(changes, term, ruleset, ruler, backmapr, elser)
   end
 end
 
-def rulesetr(ruleset, ruler, backmapr, elser)
-  ->(changes : Changes::Any, operand : Rewrite::Any) do
-    operand.reduce { |term| rulesetr(changes, term, ruleset, ruler, backmapr, elser) }
+def rulesetR(ruleset, ruler, backmapr, elser) : Rewriter
+  Rewriter.new do |changes, operand|
+    operand.reduce { |term| rulesetR(changes, term, ruleset, ruler, backmapr, elser) }
   end
 end
 
@@ -913,10 +944,10 @@ preview = Changes::Preview.new do |before, after|
 end
 accept = Changes::Accept.new { }
 
-# pp itemsr(successor).call(preview, Rewrite.one(term))
-# pp itemsr(successor).call(accept, Rewrite.one(term))
-# pp pairsr(successor).call(preview, Rewrite.one(term))
-# pp pairsr(successor).call(accept, Rewrite.one(term))
+# pp itemsR(successor).call(preview, Rewrite.one(term))
+# pp itemsR(successor).call(accept, Rewrite.one(term))
+# pp pairsR(successor).call(preview, Rewrite.one(term))
+# pp pairsR(successor).call(accept, Rewrite.one(term))
 
 NATRS = ProcRuleset.build do
   rulepi1 %[(+ a_number b_number)] { a + b }
@@ -962,18 +993,18 @@ CURSORPE = M1.operator(ML.parse1(%([_string (%any° | (| _string)) _string (_*) 
 # out there, we can take some inspiration. In my mind they form a kind of bottom-up
 # graph or more precisely, tree. But trees are unreadable as S-expressions, what you
 # see below is basically a tree, and it'd look almost the same in Sexps (and similarly unreadable).
-def editr
-  dollarr = exhr(dfsr(callr(NATRS)))
-  backmapr = dfsr(
-    choicer(
-      selr(%[($ rewritee_)], dollarr),
-      selr(%[($once rewritee_)], callr(NATRS)),
+def editR
+  dollarr = exhR(dfsR(callR(NATRS)))
+  backmapr = dfsR(
+    choiceR(
+      selR(%[($ rewritee_)], dollarr),
+      selR(%[($once rewritee_)], callR(NATRS)),
     ),
   )
-  exhr(relr(CURSORP, absr(rulesetr(RULESET, nor, backmapr, nor)), ascent: 2))
+  exhR(relR(CURSORP, absR(rulesetR(RULESET, noR, backmapr, noR)), ascent: 2))
 end
 
-EDITR = editr
+EDITR = editR
 
 def subsume1(cursor, motion)
   Term.of(cursor.morph({3, cursor[3].size, motion}))
@@ -1007,26 +1038,26 @@ end
 # WWML
 # ), Term.of(:key, :"C-delete")))
 
-# pp relr(%[($ _)], exhr(absr(selr(%[($ rewritee_)], callr(successor)))), ascent: 3).call(preview, Rewrite.one(term))
-# pp relr(%[($ _)], callr(successor), ascent: 1).call(preview, Rewrite.one(term))
+# pp relR(%[($ _)], exhR(absR(selR(%[($ rewritee_)], callR(successor)))), ascent: 3).call(preview, Rewrite.one(term))
+# pp relR(%[($ _)], callR(successor), ascent: 1).call(preview, Rewrite.one(term))
 
-# pp exhr(absr(selr(%[($ rewritee_)], exhr(dfsr(callr(successor)))))).call(preview, Rewrite.one(term))
-# pp itemsr(callr(successor)).call(preview, Rewrite.one(term))
+# pp exhR(absR(selR(%[($ rewritee_)], exhR(dfsR(callR(successor)))))).call(preview, Rewrite.one(term))
+# pp itemsR(callR(successor)).call(preview, Rewrite.one(term))
 
-# [x] itemsr
-# [x] pairsr
-# [x] chainr
-# [x] choicer
-# [x] entriesr
-# [x] dfsr
-# [x] callr
-# [x] selr
-# [x] exhr
-# [x] nor
-# [x] itemr -> itemsr(limit: 1)
-# [x] pairr -> pairsr(limit: 1)
-# [x] entryr -> choicer(itemr, pairr)
-# [x] absr
+# [x] itemsR
+# [x] pairsR
+# [x] chainR
+# [x] choiceR
+# [x] entriesR
+# [x] dfsR
+# [x] callR
+# [x] selR
+# [x] exhR
+# [x] noR
+# [x] itemR -> itemsR(limit: 1)
+# [x] pairR -> pairsR(limit: 1)
+# [x] entryR -> choiceR(itemR, pairR)
+# [x] absR
 # [x] relr
 
 # TODO: make these into actual rewriters that fit with the rest.
@@ -1034,7 +1065,7 @@ end
 #          by their size (aka depth) or we should be able to compose two orthors at the rewriter
 #          circuit level. I'm sort of leaning towards the former since it automates away a
 #          choice that is too boring to make.
-#       2. Note that orthor, like rulesetr, accepts a ruleset. Perhaps a modified/wrapped ruleset
+#       2. Note that orthor, like rulesetR, accepts a ruleset. Perhaps a modified/wrapped ruleset
 #          based on the above.
 
 def orthor1(parent0, phase, child0, callable)

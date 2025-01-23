@@ -331,14 +331,14 @@ def effectR(successor, &fn : Term ->)
   end
 end
 
-dollarr = exhr(dfsr(callr(primitives)))
-backmapr = dfsr(
-  choicer(
-    selr(%[($ rewritee_)], dollarr),
-    selr(%[($once rewritee_)], callr(primitives))
+dollarR = exhR(dfsR(callR(primitives)))
+backmapR = dfsR(
+  choiceR(
+    selR(%[($ rewritee_)], dollarR),
+    selR(%[($once rewritee_)], callR(primitives))
   ),
 )
-rules = exhr(eventR(effectR(rulesetr(Ruleset.select(SELECTOR, ML.parse(base)), nor, backmapr, nor)) do |term|
+rules = exhR(eventR(effectR(rulesetR(Ruleset.select(SELECTOR, ML.parse(base)), noR, backmapR, noR)) do |term|
   # Term.case(term) do
   #   matchpi %[(event _*)] do
   #     puts ML.display(term)
