@@ -3023,6 +3023,8 @@ module ::Ww::M1
         matchpi %[(%group _ _*)], cue: :"%group" do
           items(item.items.move(2))
         end
+
+        otherwise { {Magnitude::INFINITY, Magnitude::INFINITY} }
       end
     end
 
@@ -3046,15 +3048,7 @@ module ::Ww::M1
           {Magnitude.new(0.0), Magnitude.new(0.0)}
         end
 
-        # If there's something other than _ on %entry/negative, e.g. (%- _number), then we
-        # cannot figure out the minimum (0 or 1, who knows) nor the maximum (0 or 1, who knows).
-        matchpi(
-          %[(%entry/negative _)],
-          %[(%entry/negative _ _)],
-          cue: :"%entry/negative"
-        ) do
-          {Magnitude::INFINITY, Magnitude::INFINITY}
-        end
+        otherwise { {Magnitude::INFINITY, Magnitude::INFINITY} }
       end
     end
 
@@ -3086,16 +3080,14 @@ module ::Ww::M1
     end
 
     # Computes the bounds of a normal pattern *normp*.
-    #
-    # *normp* must be one of the recognized patterns. Otherwise, raises `ArgumentError`.
     def pattern(normp : Term) : {Magnitude, Magnitude}
       Term.case(normp, engine: M0) do
-        # matchpi %[((%literal %partition) itemspart_ pairspart_)], cue: :"%partition" do
-        #   min0, max0 = pattern(itemspart)
-        #   min1, max1 = pattern(pairspart)
+        matchpi %[((%literal %partition) itemspart_ pairspart_)], cue: :"%partition" do
+          min0, max0 = pattern(itemspart)
+          min1, max1 = pattern(pairspart)
 
-        #   {min0 + min1, max0 + max1}
-        # end
+          {min0 + min1, max0 + max1}
+        end
 
         matchpi %[(%itemspart _*)], cue: :"%itemspart" do
           items(normp.items.move(1))
@@ -3136,6 +3128,8 @@ module ::Ww::M1
 
           {min * needle.size, Magnitude::INFINITY}
         end
+
+        otherwise { {Magnitude::INFINITY, Magnitude::INFINITY} }
       end
     end
   end
@@ -3287,6 +3281,20 @@ module ::Ww::M1
       end
     end
 
+    # Precedence of an optimization, with higher levels being closer to zero, and lower
+    # levels being closer to 127. You can think of this as the order of optimizations
+    # relative to each other.
+    enum Precedence : Int8
+      # Highest
+
+      Sketch
+      Bounds
+      Depth
+
+      # Lowest
+    end
+
+    # TODO: cache
     # TODO: move to M1.sketch like we have M1.bounds
     # TODO: we should probably use M0 here like we do in M1.bounds. No need to worsen
     # the circularity
@@ -3358,13 +3366,9 @@ module ::Ww::M1
       sketch
     end
 
-    def self.sketches(normp : Term) : Term
+    def self.sketches(normp, templates) : Nil
       keypath = [] of Term
-      keypaths = [] of Slice(Term)
 
-      # Making `walk` able to replace in-place is just too hard and increases complexity
-      # very much. Instead, we collect keypaths. This does have an unwell-ish performance/
-      # memory cost but whatever.
       M1.walk(normp, keypath: keypath) do |node|
         Term.case(node, engine: Engine) do
           matchpi(
@@ -3383,9 +3387,10 @@ module ::Ww::M1
             %{((%literal %leaves/source) _* ¦ _ in: (%not keys))},
             %{((%literal %leaves/all) _* ¦ _ in: (%not keys))},
           ) do
-            # Strip Array junk with to_readonly_slice. We do not need to
-            # waste memory on it.
-            keypaths << keypath.to_readonly_slice.dup
+            sketch = sketch(node)
+            next if sketch.zero?
+
+            templates << {keypath.to_readonly_slice.dup, Term.of(:"%sketch", :_, sketch), Precedence::Sketch}
           end
 
           otherwise { }
@@ -3393,29 +3398,23 @@ module ::Ww::M1
 
         WalkDecision::Continue
       end
-
-      # Modify deepest keypaths first. Since we're only going to replace at the keypath
-      # and do nothing else, no further sorting (e.g. by indices) is necessary.
-      keypaths.unstable_sort_by! { |keypath| -keypath.size }
-      keypaths.each do |keypath|
-        normp = normp.as_d.follow(keypath) do |node0|
-          sketch = sketch(node0)
-          sketch.zero? ? node0 : Term.of(:"%sketch", node0, sketch)
-        end
-      end
-
-      Term.of(normp)
     end
 
-    def self.bounds(normp : Term) : Term
+    def self.bounds(normp, templates) : Nil
       keypath = [] of Term
-      keypaths = [] of Slice(Term)
 
       M1.walk(normp, keypath: keypath) do |node|
         Term.case(node, engine: Engine) do
-          # matchpi %[((%any %partition %itemspart %layer %items/first %items/source %items/all) _*)] do
-          matchpi %[((%any %itemspart %layer %items/first %items/source %items/all) _*)] do
-            keypaths << keypath.to_readonly_slice.dup
+          matchpi %[((%any %partition %itemspart %layer %items/first %items/source %items/all) _*)] do
+            min, max = M1.bounds(node)
+            min = min == Magnitude::INFINITY ? SYM_INF : min
+            max = max == Magnitude::INFINITY ? SYM_INF : max
+
+            # If `max` is unknown and `min` is unknown or 0, this amounts to not checking
+            # the bounds. In such cases it is pointless to emit %bounds.
+            next if min.in?(0, SYM_INF) && max == SYM_INF
+
+            templates << {keypath.to_readonly_slice.dup, Term.of(:"%bounds", :_, min: min, max: max), Precedence::Bounds}
           end
 
           otherwise { }
@@ -3423,33 +3422,21 @@ module ::Ww::M1
 
         WalkDecision::Continue
       end
-
-      keypaths.unstable_sort_by! { |keypath| -keypath.size }
-      keypaths.each do |keypath|
-        normp = normp.as_d.follow(keypath) do |node0|
-          min, max = M1.bounds(node0)
-          min = min == Magnitude::INFINITY ? SYM_INF : min
-          max = max == Magnitude::INFINITY ? SYM_INF : max
-
-          # `min` being infinity (i.e. unknown) is possible in theory but impossible
-          # in practice. Handle anyway. If `max` is unknown and `min` is unknown or 0,
-          # this amounts to not checking the bounds. In such cases it is pointless
-          # to emit %bounds.
-          min.in?(0, SYM_INF) && max == SYM_INF ? node0 : Term.of(:"%bounds", node0, min: min, max: max)
-        end
-      end
-
-      normp
     end
 
-    def self.depth(normp : Term) : Term
+    def self.depth(normp, templates) : Nil
       keypath = [] of Term
-      keypaths = [] of Slice(Term)
 
       M1.walk(normp, keypath: keypath) do |node|
         Term.case(node, engine: Engine) do
           matchpi %[((%any %itemspart %layer %items/first %items/source %items/all %leaves/first %leaves/source %leaves/all) _*)] do
-            keypaths << keypath.to_readonly_slice.dup
+            min, max = M1.depth(node)
+            min = min == Magnitude::INFINITY ? SYM_INF : min
+            max = max == Magnitude::INFINITY ? SYM_INF : max
+
+            next if min.in?(0, SYM_INF) && max == SYM_INF
+
+            templates << {keypath.to_readonly_slice.dup, Term.of(:"%depth", :_, min: min, max: max), Precedence::Depth}
           end
 
           otherwise { }
@@ -3457,23 +3444,32 @@ module ::Ww::M1
 
         WalkDecision::Continue
       end
+    end
 
-      keypaths.unstable_sort_by! { |keypath| -keypath.size }
-      keypaths.each do |keypath|
-        normp = normp.as_d.follow(keypath) do |node0|
-          min, max = M1.depth(node0)
-          min = min == Magnitude::INFINITY ? SYM_INF : min
-          max = max == Magnitude::INFINITY ? SYM_INF : max
+    def self.population(normp, templates) : Nil
+    end
 
-          min.in?(0, SYM_INF) && max == SYM_INF ? node0 : Term.of(:"%depth", node0, min: min, max: max)
+    def self.optimized(normp : Term) : Term
+      templates = [] of {Slice(Term), Term, Precedence}
+
+      O1.sketches(normp, templates)
+      O1.bounds(normp, templates)
+      O1.depth(normp, templates)
+      O1.population(normp, templates)
+
+      # Modify deepest keypaths first. Since we're only going to replace at the keypath
+      # and do nothing else, no further sorting (e.g. by indices) is necessary.
+      #
+      # Since we're wrapping, we'll sort descending on precedence. This way, highest
+      # precedence gets outermost position.
+      templates.unstable_sort_by! { |keypath, _, prec| {-keypath.size, -prec.value} }
+      templates.each do |keypath, template|
+        normp = normp.as_d.follow(keypath) do |node|
+          Term.of(template.subst(Term["_": node]))
         end
       end
 
-      normp
-    end
-
-    def self.population(normp : Term) : Term
-      normp
+      Term.of(normp)
     end
   end
 
@@ -3481,6 +3477,9 @@ module ::Ww::M1
   # of rewrites, the normal pattern is reduced to the minimum possible, most
   # concrete operators at the cost of compile time.
   module O2
+    def self.optimized(normp : Term) : Term
+      normp
+    end
   end
 
   # Applies optimizations of *level* and lower to *normp*. Returns the optimized *normp*.
@@ -3490,12 +3489,12 @@ module ::Ww::M1
 
   # :ditto:
   def self.optimized(normp : Term, level : O1.class) : Term
-    pipe(normp, O1.sketches, O1.bounds, O1.depth, O1.population)
+    level.optimized(normp)
   end
 
   # :ditto:
   def self.optimized(normp : Term, level : O2.class) : Term
-    pipe(normp, optimized(O1))
+    pipe(normp, optimized(O1), level.optimized)
   end
 
   def self.search_part(term : Term) : Search::Part
