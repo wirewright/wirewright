@@ -3280,6 +3280,15 @@ module ::Ww::M1
         # won't work for all nodes. Thus we only calculate it for nodes where we're sure it's
         # going to work.
         Term.case(node, engine: Engine) do
+          # The reason we need this matchpi right now is that term's sketch is dirty
+          # and contains remains of term's past. When we are going to be able
+          # to update sketch on deletion this matchpi should go away.
+          matchpi %[((%literal %literal) term_dict)] do
+            sketch |= term.resketch
+
+            WalkDecision::Continue
+          end
+
           matchpi %[((%literal %literal) term_)] do
             sketch = Term::Dict.mix(sketch, term)
 
@@ -3287,7 +3296,7 @@ module ::Ww::M1
           end
 
           matchpi %[((%literal %sketch) _ sketch0_number)] do
-            sketch = sketch0.to(Term::Dict::Sketch)
+            sketch |= sketch0.to(Term::Dict::Sketch)
 
             # We've already computed the sketch for this part of the tree. Move on.
             WalkDecision::Skip
@@ -3315,8 +3324,7 @@ module ::Ww::M1
                      %items/source
                      %items/all
                      %let
-                     %all
-                     %bounds)
+                     %all)
                 _*]},
             %{((%literal %leaves/first) _* ¦ _ in: (%not keys))},
             %{((%literal %leaves/source) _* ¦ _ in: (%not keys))},
@@ -3437,7 +3445,7 @@ module ::Ww::M1
 
   # :ditto:
   def self.optimized(normp : Term, level : O1.class) : Term
-    pipe(normp, O1.bounds, O1.sketches, O1.depth, O1.population)
+    pipe(normp, O1.sketches, O1.bounds, O1.depth, O1.population)
   end
 
   # :ditto:

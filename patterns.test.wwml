@@ -3356,6 +3356,10 @@
   (level (%keypool a b))
   (level (%keypool a b c)))
 
+(specificity
+  (level (_* ¦ _ max-h: mh_number content-h: ch_number h: h←content))
+  (level (text _ ¦ _ max-h: mh_number wrap-h: wh_number h: h←content)))
+
 ;; Head
 ;; Make sure pattern head is determined properly.
 (head

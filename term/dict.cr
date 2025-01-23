@@ -60,6 +60,14 @@
 #
 # ALSO: Gap promotion/demotion is opaque to any caching. Thus, I think it makes sense to install any caching on a level
 # lower than that of a Dict -- thus, on ItemNode and PairNode.
+#
+# - If we have sketches on each Pair/Item node, we'll be able to support "symbol-guided descent", and in the future
+# perhaps also value-guided descent, which is especially important for the optimization of %item nodes and %leaf nodes.
+# Support on the level of dictionary nodes means we'll only have to go through nodes that probably contain the symbol,
+# instead of forced thorough iteration. 
+#
+# - It appears that we can try to use linear probing for the items array on HAMT nodes instead of Sparse32.
+#   If the key cannot be found, we proceed as usual into the Sparse32 children array.
 
 class ::Pf::Core::Node(T)
   # :nodoc:
@@ -581,6 +589,19 @@ module Ww
       end
     end
 
+    def resketch
+      sketch = Sketch.new(0)
+      each_entry do |k, v|
+        case v.type
+        when .symbol?
+          sketch = Dict.mix(sketch, v)
+        when .dict?
+          sketch |= v.unsafe_as_d.resketch
+        end
+      end
+      sketch
+    end
+
     # :nodoc:
     def with(key : Term::Num, value : Term) : Dict
       return with_default(key, value) unless key.whole? && key.positive?
@@ -821,8 +842,6 @@ module Ww
     protected def with_default!(key : ITerm, value : Term, author) : Dict
       _, @pairs = @pairs.add(Probes::AssocPairMut.new(key.upcast, value, author: author))
 
-      # If value is unchanged (e.g. with(0, :x) followed by with (0, :x)) nothing
-      # will happen since the bit has already been set.
       @sketch = Dict.mix(@sketch, value)
 
       self
