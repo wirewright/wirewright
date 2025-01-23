@@ -23,13 +23,16 @@ module Ww::M0
   end
 
   # :nodoc:
-  SYMBOL_LITERAL = Term.of(:"%literal")
+  SYM_LITERAL = Term.of(:"%literal")
 
   # :nodoc:
-  SYMBOL_PARTITION = Term.of(:"%partition")
+  SYM_PARTITION = Term.of(:"%partition")
 
   # :nodoc:
-  SYMBOL_BLANK_STAR = Term.of(:"_*")
+  SYM_LAYER = Term.of(:"%layer")
+
+  # :nodoc:
+  SYM_BLANK_STAR = Term.of(:"_*")
 
   # :nodoc:
   def match?(commit, pattern : Term::Dict, matchee : ITerm) : Bool
@@ -37,7 +40,7 @@ module Ww::M0
       hi = pattern.size - 1
 
       case {pattern[0], hi}
-      when {SYMBOL_PARTITION, 2}
+      when {SYM_PARTITION, 2}
         return false unless matchee.is_a?(Term::Dict)
 
         items, pairs = matchee.partition
@@ -46,11 +49,20 @@ module Ww::M0
         pairspart = pattern[2].downcast
 
         return match?(commit, itemspart, items) && match?(commit, pairspart, pairs)
-      when {SYMBOL_LITERAL, 1}
+      when {SYM_LITERAL, 1}
         return pattern[1] == matchee
+      when {SYM_LAYER, 2}
+        if matchee.is_a?(Term::Dict) && pattern[1] == Term[:_] && (selector = pattern[2].as_d?)
+          selector.each_entry do |k, v0|
+            return false unless v1 = matchee[k]?
+            return false unless match?(commit, v0.downcast, v1.downcast)
+          end
+
+          return true
+        end
       end
 
-      if pattern[hi] == SYMBOL_BLANK_STAR
+      if pattern[hi] == SYM_BLANK_STAR
         return false unless matchee.is_a?(Term::Dict) && matchee.itemsonly?
         return false if matchee.size < hi
 
@@ -87,6 +99,7 @@ module Ww::M0
   #   example `(%partition itemspart_ pairspart_)`.
   # - Match p1-N on the first N items of an itemspart, correspondingly, for
   #   example `(a b c _*)`.
+  # - `(%layer _ {...})`: open dictionary entries match.
   # - `(%literal _)`: match literally, mainly for escaping the above and itself.
   # - Recursive application of all of the above and itself on dictionary items
   #   and pairs, for example: `(+ a_number 100 x: x_string)`.

@@ -697,9 +697,8 @@ module Ww::ML::Text
             list = Term[:"%partition", list, name ? {:"%let", name, body} : body]
           end
         when :"%layer"
-          extra = reg.as(Term)
-
-          body = Term[:"%layer", extra].transaction do |commit|
+          below = reg.as(Term)
+          side = Term::Dict.build do |commit|
             unless token = @lexer.thru?
               raise "unexpected end-of-input"
             end
@@ -725,7 +724,7 @@ module Ww::ML::Text
           end
 
           if state == :closed
-            list = Term[:"%partition", list, body]
+            list = Term[:"%partition", list, {:"%layer", below, side}]
           end
         when :closed
           return list.upcast

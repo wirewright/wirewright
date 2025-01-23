@@ -2722,7 +2722,7 @@ module ::Ww::M1
           {:"%partition", pattern(itemspart), pattern(pairspart)}
         end
 
-        matchpi %[(%layer below_ side_dict)], cue: :"%layer" do
+        matchpi %[((%literal %layer) below_ side_dict)], cue: :"%layer" do
           pattern.transaction do |commit|
             commit.with(1, pattern(below))
 
@@ -2737,7 +2737,7 @@ module ::Ww::M1
         end
 
         # (%layer _ k1: v1 k2: v2 ...) is a shorthand for (%layer _ {k1: v1 k2: v2 ...}).
-        matchpi %[(%layer below_ ¦ pairs_)], cue: :"%layer" do
+        matchpi %[((%literal %layer) below_ ¦ pairs_)], cue: :"%layer" do
           pattern(Term.of(:"%layer", below, pairs))
         end
 
@@ -2981,51 +2981,51 @@ module ::Ww::M1
     # is not one of the recognized itemspart item nodes.
     def item(item : Term) : {Magnitude, Magnitude}
       Term.case(item, engine: M0) do
-        matchpi %[(%singular _)], cue: :"%singular" do
+        matchpi %{[%singular _]}, cue: :"%singular" do
           {Magnitude.new(1.0), Magnitude.new(1.0)}
         end
 
-        matchpi %[(%slot _)], cue: :"%slot" do
+        matchpi %{[%slot _]}, cue: :"%slot" do
           {Magnitude.new(0.0), Magnitude.new(0.0)}
         end
 
-        matchpi %[(%optional _ _)], cue: :"%optional" do
+        matchpi %{[%optional _ _]}, cue: :"%optional" do
           {Magnitude.new(0.0), Magnitude.new(1.0)}
         end
 
         matchpi(
-          %[(%gap _)],
-          %[(%gap/min _)],
-          %[(%gap/max _)],
+          %{[%gap _]},
+          %{[%gap/min _]},
+          %{[%gap/max _]},
           cues: {:"%gap", :"%gap/min", :"%gap/max"}
         ) do
           {Magnitude.new(0.0), Magnitude::INFINITY}
         end
 
         matchpi(
-          %[(%plural _* ¦ min: minT_ max: maxT_ type: _)],
-          %[(%plural/min _* ¦ min: minT_ max: maxT_ type: _)],
-          %[(%plural/max _* ¦ min: minT_ max: maxT_ type: _)],
+          %[(%plural _* ¦ _ min: minT_ max: maxT_)],
+          %[(%plural/min _* ¦ _ min: minT_ max: maxT_)],
+          %[(%plural/max _* ¦ _ min: minT_ max: maxT_)],
           cues: {:"%plural", :"%plural/min", :"%plural/max"}
         ) do
           {minT.to(Magnitude), maxT == SYM_INF ? Magnitude::INFINITY : maxT.to(Magnitude)}
         end
 
-        matchpi %[(%many _ _* ¦ min: minT_ max: maxT_)], cue: :"%many" do
+        matchpi %[(%many _ _* ¦ _ min: minT_ max: maxT_)], cue: :"%many" do
           min0 = minT.to(Magnitude)
           max0 = maxT == SYM_INF ? Magnitude::INFINITY : maxT.to(Magnitude)
           min, max = items(item.items.move(2))
           {min0 * min, max0 * max}
         end
 
-        matchpi %[(%past _* ¦ min: minT_ max: maxT_ greedy: _)], cue: :"%past" do
+        matchpi %[(%past _* ¦ _ min: minT_ max: maxT_)], cue: :"%past" do
           min0 = minT.to(Magnitude)
           max0 = maxT == SYM_INF ? Magnitude::INFINITY : maxT.to(Magnitude)
           min, max = items(item.items.move(1))
           {min0 * min, max0 * max}
         end
 
-        matchpi %[(%group _ _*)], cue: :"%group" do
+        matchpi %{[%group _ _*]}, cue: :"%group" do
           items(item.items.move(2))
         end
 
@@ -3037,17 +3037,17 @@ module ::Ww::M1
     # key of the entry.
     def entry(key : Term, node : Term) : {Magnitude, Magnitude}
       Term.case(node, engine: M0) do
-        matchpi %[(%entry/required _)], cue: :"%entry/required" do
+        matchpi %{[%entry/required _]}, cue: :"%entry/required" do
           {Magnitude.new(1.0), Magnitude.new(1.0)}
         end
 
-        matchpi %[(%entry/optional _ _)], cue: :"%entry/optional" do
+        matchpi %{[%entry/optional _ _]}, cue: :"%entry/optional" do
           {Magnitude.new(0.0), Magnitude.new(1.0)}
         end
 
         matchpi(
-          %[(%entry/negative (%pass))],
-          %[(%entry/negative (%pass) _)],
+          %{[%entry/negative (%pass)]},
+          %{[%entry/negative (%pass) _]},
           cue: {:"%entry/negative", :"%pass"},
         ) do
           {Magnitude.new(0.0), Magnitude.new(0.0)}
@@ -3087,39 +3087,39 @@ module ::Ww::M1
     # Computes the bounds of a normal pattern *normp*.
     def pattern(normp : Term) : {Magnitude, Magnitude}
       Term.case(normp, engine: M0) do
-        matchpi %[((%literal %partition) itemspart_ pairspart_)], cue: :"%partition" do
+        matchpi %{[(%literal %partition) itemspart_ pairspart_]}, cue: :"%partition" do
           min0, max0 = pattern(itemspart)
           min1, max1 = pattern(pairspart)
 
           {min0 + min1, max0 + max1}
         end
 
-        matchpi %[(%itemspart _*)], cue: :"%itemspart" do
+        matchpi %{[%itemspart _*]}, cue: :"%itemspart" do
           items(normp.items.move(1))
         end
 
         # If the layer has an empty successor (closed layer) we're able to use
         # the max as well.
-        matchpi %[(%layer ((%literal %literal) ()) side_dict)], cue: {:"%layer", :"%literal"} do
+        matchpi %{[(%literal %layer) ((%literal %literal) ()) side_dict]}, cue: {:"%layer", :"%literal"} do
           # %layer is a trusted source here, its `side` dict only contains %entry/s,
           # and we already know how to compute bounds for those here in this method.
           entries(side.unsafe_as_d.ee)
         end
 
         # If the layer is open we've no choice but to drop the max.
-        matchpi %[(%layer _ side_dict _*)], cue: :"%layer" do
+        matchpi %{[(%literal %layer) _ side_dict _*]}, cue: :"%layer" do
           min, _ = entries(side.unsafe_as_d.ee)
 
           {min, Magnitude::INFINITY}
         end
 
-        matchpi %[((%literal %literal) d_dict)], cue: :"%literal" do
+        matchpi %{[(%literal %literal) d_dict]}, cue: :"%literal" do
           {Magnitude.new(d.size), Magnitude.new(d.size)}
         end
 
         matchpi(
-          %[(%items/first _*)],
-          %[(%items/source _*)],
+          %{[%items/first _*]},
+          %{[%items/source _*]},
           cues: {:"%items/first", :"%items/source"}
         ) do
           needle = normp.items.move(1)
@@ -3127,7 +3127,7 @@ module ::Ww::M1
           {Magnitude.new(needle.size), Magnitude::INFINITY}
         end
 
-        matchpi %[(%items/all _* ¦ min: minT_number max: _)], cue: :"%items/all" do
+        matchpi %[(%items/all _* ¦ _ min: minT_number max: _)], cue: :"%items/all" do
           min = minT.to(Magnitude)
           needle = normp.items.move(2)
 
@@ -3602,7 +3602,7 @@ module ::Ww::M1
         Operator::Keypool.new(keys.to_a)
       end
 
-      match({:"%layer", :below_, :side_}, cue: :"%layer") do |below, side|
+      match({ {:"%literal", :"%layer"}, :below_, :side_}, cue: :"%layer") do |below, side|
         entries = Array(Operator::Entry::Any).new(side.size)
 
         side.each_entry do |k, v|
@@ -4940,7 +4940,7 @@ module ::Ww::M1
         {min, max}
       end
 
-      matchpi %[(%layer below_ side_dict)], cue: :"%layer" do
+      matchpi %[((%literal %layer) below_ side_dict)], cue: :"%layer" do
         min, max = depth(below)
         # Do not waste time computing side if that won't change anything.
         if {min, max} == {Magnitude::INFINITY, Magnitude::INFINITY}
