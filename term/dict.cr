@@ -281,20 +281,30 @@ module Ww
 
     alias Sketch = UInt128
 
+    # Returns the maximum-ever depth of this dictionary.
+    #
+    # In other words, this method **does not** return the current maximum depth;
+    # it can be said to return the "maximum maximum depth", that is, the largest
+    # depth seen throughout the history of this dict.
+    def maxdepth : UInt32
+      @maxdepth + 1
+    end
+
     def initialize
       @items = EMPTY_ITEM_NODE
       @pairs = EMPTY_PAIR_NODE
       @sketch = Sketch.new(0)
+      @maxdepth = 0u32
     end
 
-    protected def initialize(@items, @pairs, @sketch)
+    protected def initialize(@items, @pairs, @sketch, @maxdepth)
     end
 
     # Must be possible to do `initialize(*state)`. Must not include any cached
     # data: dictionaries constructed from `state` are expected be mutated without
     # notice -- and stale cache will make the dictionary dysfunctional.
     protected def state
-      {@items, @pairs, @sketch}
+      {@items, @pairs, @sketch, @maxdepth}
     end
 
     # Yields a `Commit` object so that you can build a dictionary without having
@@ -589,14 +599,23 @@ module Ww
       end
     end
 
-    def resketch
+    def self.mixdepth(depth : UInt32, value : Term) : UInt32
+      case value.type
+      when .dict?
+        Math.max(depth, value.unsafe_as_d.maxdepth + 1)
+      else
+        depth
+      end
+    end
+
+    def fresh_sketch
       sketch = Sketch.new(0)
       each_entry do |k, v|
         case v.type
         when .symbol?
           sketch = Dict.mix(sketch, v)
         when .dict?
-          sketch |= v.unsafe_as_d.resketch
+          sketch |= v.unsafe_as_d.fresh_sketch
         end
       end
       sketch
@@ -611,7 +630,7 @@ module Ww
 
       added, items = @items.add(Probes::AssocItemImm.new(index, value))
       unless added # Overridden or completely unchanged
-        return @items.same?(items) ? self : Dict.new(items, @pairs, Dict.mix(@sketch, value))
+        return @items.same?(items) ? self : Dict.new(items, @pairs, Dict.mix(@sketch, value), Dict.mixdepth(@maxdepth, value))
       end
 
       items, pairs, _, _ = Gap.promote(index + 1,
@@ -621,7 +640,7 @@ module Ww
         pairs: @pairs,
       )
 
-      Dict.new(items, pairs, Dict.mix(@sketch, value))
+      Dict.new(items, pairs, Dict.mix(@sketch, value), Dict.mixdepth(@maxdepth, value))
     end
 
     # :nodoc:
@@ -655,10 +674,10 @@ module Ww
     private def with_default(key : ITerm, value : Term) : Dict
       added, pairs = @pairs.add(Probes::AssocPairImm.new(key.upcast, value))
       unless added # Overridden or completely unchanged
-        return @pairs.same?(pairs) ? self : Dict.new(@items, pairs, Dict.mix(@sketch, value))
+        return @pairs.same?(pairs) ? self : Dict.new(@items, pairs, Dict.mix(@sketch, value), Dict.mixdepth(@maxdepth, value))
       end
 
-      Dict.new(@items, pairs, Dict.mix(@sketch, value))
+      Dict.new(@items, pairs, Dict.mix(@sketch, value), Dict.mixdepth(@maxdepth, value))
     end
 
     def follow?(keys : Enumerable(Term)) : Term?
@@ -778,7 +797,7 @@ module Ww
         pairs: @pairs,
       )
 
-      Dict.new(items, pairs, @sketch)
+      Dict.new(items, pairs, @sketch, @maxdepth)
     end
 
     # :nodoc:
@@ -807,7 +826,7 @@ module Ww
 
     private def without_default(key : ITerm) : Dict
       removed, pairs = @pairs.delete(Probes::DissocPairImm.new(key.upcast))
-      removed ? Dict.new(@items, pairs, @sketch) : self
+      removed ? Dict.new(@items, pairs, @sketch, @maxdepth) : self
     end
 
     protected def with!(key : Term::Num, value : Term, author) : Dict
@@ -831,6 +850,7 @@ module Ww
       # If value is unchanged (e.g. with(0, :x) followed by with (0, :x)) nothing
       # will happen since the bit has already been set.
       @sketch = Dict.mix(@sketch, value)
+      @maxdepth = Dict.mixdepth(@maxdepth, value)
 
       self
     end
@@ -843,6 +863,7 @@ module Ww
       _, @pairs = @pairs.add(Probes::AssocPairMut.new(key.upcast, value, author: author))
 
       @sketch = Dict.mix(@sketch, value)
+      @maxdepth = Dict.mixdepth(@maxdepth, value)
 
       self
     end
@@ -1417,12 +1438,12 @@ module Ww
     # This method is more efficient than using `partition` and discarding
     # the pairs part.
     def items : Dict::ItemsView
-      ItemsView.new(@items, b: 0, e: @items.size, sketch0: @sketch)
+      ItemsView.new(@items, b: 0, e: @items.size, sketch0: @sketch, maxdepth0: @maxdepth)
     end
 
     # Returns the pairs part of `partition` (see the latter for more info).
     def pairs : Dict
-      @pairsonly ||= Dict.new(EMPTY_ITEM_NODE, @pairs, @sketch)
+      @pairsonly ||= Dict.new(EMPTY_ITEM_NODE, @pairs, @sketch, @maxdepth)
     end
 
     def hash(hasher)
@@ -1452,6 +1473,8 @@ module Ww
       if @sketch > 0 && other.@sketch > 0 && (@sketch & other.@sketch) == 0
         return false
       end
+      
+      # TODO: use @maxdepth somehow as well
 
       return false unless @items.size == other.@items.size && @pairs.size == other.@pairs.size
       return false if (hx = @hash) && (hy = other.@hash) && hx != hy

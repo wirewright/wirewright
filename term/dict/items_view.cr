@@ -2,7 +2,7 @@ module Ww
   struct Term::Dict::ItemsView
     include Indexable(Term)
 
-    def initialize(@node : ItemNode, @b : Int32, @e : Int32, @sketch0 : Sketch)
+    def initialize(@node : ItemNode, @b : Int32, @e : Int32, @sketch0 : Sketch, @maxdepth0 : UInt32)
       unless 0 <= @b <= @e <= @node.size # Sanity
         raise ArgumentError.new
       end
@@ -97,7 +97,7 @@ module Ww
     # Builds and returns an itemsonly dictionary with items from this items view.
     def collect : Dict
       if @b == 0 && @e == @node.size
-        return Dict.new(@node, PairNode.new, @sketch0)
+        return Dict.new(@node, PairNode.new, @sketch0, @maxdepth0)
       end
 
       Dict.build do |commit|

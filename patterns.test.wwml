@@ -3207,7 +3207,7 @@
   (of (⭳x a_ ⭳y b ⭳z) min: 2 max: 2)
   (of (⭳x a_ ⭳y b ⭳z c_+) min: 3))
 
-;; Make sure they all can work together.
+;; Make sure they work together.
 (bounds
   (of (qux (%past ignore _)
            ⭳x
@@ -3227,6 +3227,7 @@
            n_number)
     min: 6 max: 24))
    
+;; %layer bounds
 (bounds
   (of (%layer () ()) min: 0 max: 0)
   (of {x: 0} min: 1 max: 1)
@@ -3251,16 +3252,140 @@
     max: 3)
   (of (%layer
         ()
-        (
-          x_
-          (%optional 0 y_number)
-          (%optional 0 z_number)
-          (%- _)
-          (%- _ qyx)))
+        (x_
+         (%optional 0 y_number)
+         (%optional 0 z_number)
+         (%- _)
+         (%- _ qyx)))
     min: 1
     max: 3))
 
-;; TODO: depth
+;; Depth
+;;
+;; Test min, max depth calculation from pattern.
+(depth
+  (of x min: 0 max: 0)
+  (of x_ min: 0)
+  (of x_dict min: 0)
+  (of x_symbol min: 0 max: 0)
+  (of x_string min: 0 max: 0)
+  (of x_boolean min: 0 max: 0)
+  (of x_number min: 0 max: 0)
+  (of () min: 1 max: 1)
+  (of (x) min: 1 max: 1)
+  (of (()) min: 2 max: 2)
+  (of ((())) min: 3 max: 3)
+  (of ((a b) (c d)) min: 2 max: 2)
+  (of ((a_ b_) (c_ d_)) min: 2)
+  (of ((a_number b_symbol) (c_string d_boolean)) min: 2 max: 2)
+  (of (xs_*) ((%plural xs min: 2)) ((%plural/min max: 5)) ((%plural/max xs)) min: 1)
+  (of (xs_number*)
+      ((%plural xs min: 2 type: _number))
+      ((%plural/min xs min: 2 type: _number))
+      ((%plural/max min: 2 type: _number))
+      min: 1 max: 1)
+  ;; There can be anything under a %gap, so max is invalidated
+  (of ((%gap (((x_)))) y_ z_) ((%gap/min (((x_)))) y_ z_) ((%gap/max (((x_)))) y_ z_) min: 1)
+  (of ((%gap (((x_)))) y_number z_)  min: 1)
+  (of ((%gap (((x_)))) y_ z_number) min: 1)
+  (of ((%gap (((x_)))) y_number z_number)
+      ((%gap/min (((x_)))) y_number z_number)
+      ((%gap/max (((x_)))) y_number z_number)
+      min: 1)
+  (of (+ ⭳x ⭳(+ a b) x_) min: 1)
+  (of (+ ⭳x ⭳(+ a b) x_number) min: 1 max: 1)
+  (of ((%optional 0 x_number)) min: 1 max: 1)
+  (of ((%optional 0 x_)) min: 1)
+  (of ((%optional (0) (x_))) min: 1)
+  (of ((%optional (0) (x_number))) min: 1 max: 2)
+  (of (qux (%many xs (a_number b_number)))
+      (qux (%past (a_number b_number))) 
+      (qux (%past/max (a_number b_number))) 
+      min: 2 max: 2)
+  (of (qux (%many xs (a_ b_number)))
+      (qux (%past (a_ b_number))) 
+      (qux (%past/max (a_ b_number))) 
+      min: 2)
+  (of (qux (%many xs (a_number b_)))
+      (qux (%past (a_number b_)))
+      (qux (%past/max (a_number b_)))
+      min: 2)
+  (of (qux (%many xs (a_ b_)))
+      (qux (%past (a_ b_)))
+      (qux (%past/max (a_ b_)))
+      min: 2)
+  (of (qux a: x b: (+ y_ z_)) min: 2)
+  (of (qux a: x b: (+ y_symbol z_string)) min: 2 max: 2)
+  (of (qux a: x b: (+ y_dict z_string)) min: 2)
+  (of (qux (xyzzy) a: ((+ a b_) c_ d_) b: (foo_ bar_)) min: 3)
+  (of (qux (xyzzy) a: ((+ a b_number) c_symbol d_string) b: (foo_boolean bar_string)) min: 3 max: 3)
+  (of (%item x_) (%item° x_) (%items xs x_) min: 1)
+  (of (%item x_number) (%item° x_number) (%items xs x_number) min: 1 max: 1)
+  (of (%item (x_number) ((y_number))) min: 3 max: 3)
+  (of (%item (x_) ((y_number))) min: 3)
+  (of (%item (x_number) ((y_))) min: 3)
+  (of (%item (x_) ((y_))) min: 3)
+  (of (%item (+ a_ b_)) (%item° (+ a_ b_)) (%items xs (+ a_ b_)) min: 2)
+  (of (%item (+ a_number b_number))
+      (%item° (+ a_number b_number))
+      (%items xs (+ a_number b_number))
+      min: 2 max: 2)
+  (of @x @x_ @x_string @x_symbol @x_number min: 1 max: 1)
+  (of (qux a_ ¦ {z: (((z_number))), a: 1, b: ()} x: () y: (())) min: 4)
+  (of (qux a_number ¦ {z: (((z_number))), a: 1, b: ()} x: () y: (())) min: 4 max: 4)
+  ;; For open layers we never know the maximum depth
+  (of (qux a_number ¦ _ a: a_number b: ()) min: 2)
+  (of (%any x y () (()) ((()))) min: 0 max: 3)
+  (of (%any° x_number y_number (z_number) ((a_number)) (((b_number)))) min: 0 max: 3)
+  (of (%all (x_ _*) (_ (y_ _*)) (_ (_ (z_ _*)))) min: 3)
+  ;; %- _ is not accounted in pairs
+  (of (qux a_number a: (%- _) b: (%- _ b)) min: 1 max: 1)
+  ;; Otherwise %- invalidates max
+  (of (qux a_number a: (%- _number) b: (%- _ b)) min: 1)
+  (of (qux a_number a: (%- _) b: (%- _number b)) min: 1)
+  (of (qux a_number a: (%- _number) b: (%- _number b)) min: 1)
+  ;; Pair %optional is accounted
+  (of (qux a_number a: (%optional 0 x_number) b: (%optional (0 0) (x_number y_number))) min: 1 max: 2)
+  (of (qux a_number a: (%optional 0 x_) b: (%optional (0 0) (x_number y_number))) min: 1)
+  (of (qux a_number a: (%optional 0 x_number) b: (%optional (0 0) (x_ y_number))) min: 1)
+  (of (qux a_number a: (%optional 0 x_number) b: (%optional (0 0) (x_number y_))) min: 1)
+  (of (qux a_number a: (%optional 0 x_number) b: (%optional ((0) 0) ((x_number) y_number))) min: 1 max: 3)
+  (of (qux a_number a: (%optional (0) (x_number)) b: (%optional ((0) 0) ((x_number) y_number))) min: 1 max: 3)
+  (of (qux a_number a: (%optional ((((0)))) ((((x_number))))) b: (%optional ((0) 0) ((x_number) y_number))) min: 1 max: 5)
+  (of (qux (id_symbol) a: (%optional (0) (x_number)) b: (%optional ((0) 0) ((x_number) y_number))) min: 2 max: 3)
+  (of (qux ((id_symbol)) a: (%optional (0) (x_number)) b: (%optional ((0) 0) ((x_number) y_number))) min: 3 max: 3)
+  ;; For %value we never know maximum depth because %value is open
+  (of (%value k v_) (%-value k) (%-value k v) min: 1)
+  (of (%value k v_number) (%-value k) (%-value k v) min: 1)
+  ;; Similarly for %entry
+  (of (%entry k_ v_) (%entry° k_ v_) (%entries xs k_ v_) min: 1)
+  (of (%entry k_ (v_)) (%entry° k_ (v_)) (%entries xs k_ (v_)) min: 2)
+  (of (%entry k_ (qux (v_))) (%entry° k_ (qux (v_))) (%entries xs k_ (qux (v_))) min: 3)
+  ;; Key has no effect on depth
+  (of (%entry ((foo a_) b_) v_)
+      (%entry° ((foo a_) b_) v_)
+      (%entries xs ((foo a_) b_) v_)
+      min: 1)
+  ;; %leaf invalidates max depth
+  (of (%leaf a_) (%leaf° a_) (%leaves xs a_) min: 1)
+  (of (%leaf a_ in: keys) (%leaf° a_ in: keys) (%leaves xs a_ in: keys) min: 0)
+  (of (%leaf a_ self: true) (%leaf° a_ self: true) (%leaves xs a_ self: true) min: 0)
+  (of (%leaf a_number) (%leaf° a_number) (%leaves xs a_number) min: 1)
+  (of (%leaf (a_)) (%leaf° (a_)) (%leaves xs (a_)) min: 2)
+  (of (%leaf (a_) self: true) (%leaf° (a_) self: true) (%leaves xs (a_) self: true) min: 1)
+  (of (%leaf (((a_) _*) _*))
+      (%leaf° (((a_) _*) _*))
+      (%leaves xs (((a_) _*) _*))
+      min: 4)
+  (of (%leaf (((a_) _*) _*) self: true)
+      (%leaf° (((a_) _*) _*) self: true)
+      (%leaves xs (((a_) _*) _*) self: true)
+      min: 3)
+  ;; %new invalidates max depth
+  (of (%new a_) min: 0)
+  (of ((%new a_) a_) min: 1)
+  (of ((%new (a_)) a_) min: 1)
+  (of ((%new ((a_))) a_) min: 1))
 
 ;; Specificity (ascending, each dict is a level [i.e. same specificity])
 ;; Order/duplication in levels is irrelevant.

@@ -522,7 +522,7 @@ end
 # Additionally, we must use u32 (or even u16) array indices for operator nodes rather
 # than a pointer. Thus an operator pool.
 module ::Ww::M1::Operator
-  alias Any = Pass | Num | Sym | Boolean | Dict | SketchSubset | Bounds | Literal | Capture | Itemspart | Partition | EdgeUntyped | EdgeTyped | Choices | EitherSource | Keypool | Span | Tally | Bin | Both | Not | Layer | ScanFirst | ScanSource | ScanAll | ScanAllIsolated | DfsFirst | DfsSource | DfsAllIsolated | DfsAll | BfsFirst | BfsAllIsolated | BfsAll | Value | NegativeValue | NegativeValueKeypath | EntriesFirst | EntriesSource | EntriesAllIsolated | EntriesAll | Str | New | Keypath
+  alias Any = Pass | Num | Sym | Boolean | Dict | SketchSubset | Bounds | MaxDepth | Literal | Capture | Itemspart | Partition | EdgeUntyped | EdgeTyped | Choices | EitherSource | Keypool | Span | Tally | Bin | Both | Not | Layer | ScanFirst | ScanSource | ScanAll | ScanAllIsolated | DfsFirst | DfsSource | DfsAllIsolated | DfsAll | BfsFirst | BfsAllIsolated | BfsAll | Value | NegativeValue | NegativeValueKeypath | EntriesFirst | EntriesSource | EntriesAllIsolated | EntriesAll | Str | New | Keypath
 
   alias Bin = Add | Sub | Mul | Div | Tdiv | Mod | Pow | Map
 
@@ -558,6 +558,7 @@ module ::Ww::M1::Operator
 
   defcase SketchSubset, sketch : Term::Dict::Sketch, successor : Any
   defcase Bounds, min : Magnitude, max : Magnitude, successor : Any
+  defcase MaxDepth, min : Magnitude, max : Magnitude, successor : Any
 
   defcase Literal, term : Term
   defcase Capture, capture : Term, successor : Any = Pass.new
@@ -566,7 +567,7 @@ module ::Ww::M1::Operator
   # that it would take for a singular.
   defcase Itemspart, items : Array(Item::Any)
   defcase Partition, itemspart : Any, pairspart : Any
-  defcase Choices, choices : Array(Term)
+  defcase Choices, choices : Set(Term)
   defcase EitherSource, a : Any, b : Any
   defcase Both, a : Any, b : Any
   defcase Keypool, keys : Array(Term)
@@ -1057,6 +1058,16 @@ module ::Ww::M1::Operator
 
   def match(behind0, op : Bounds, matchee : Term, ahead0)
     unless (dict = matchee.as_d?) && dict.size.in?(op.min..op.max)
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    match(behind0, op.successor, matchee, ahead0)
+  end
+
+  def match(behind0, op : MaxDepth, matchee : Term, ahead0)
+    # FIXME: currently we're unable to use #max of MaxDepth, since Dict#maxdepth is maximum-ever
+    # depth rather than current maximum depth.
+    unless (dict = matchee.as_d?) && dict.maxdepth.in?(op.min..)
       return Fb::Mismatch.new(behind0.env)
     end
 
@@ -2352,6 +2363,13 @@ module ::Ww::M1
   SYM_GTE = Term.of(:>=)
   SYM_INF = Term.of(:∞)
 
+  SYM_BLANK_ANY     = Term[:_]
+  SYM_BLANK_DICT    = Term[:_dict]
+  SYM_BLANK_NUMBER  = Term[:_number]
+  SYM_BLANK_SYMBOL  = Term[:_symbol]
+  SYM_BLANK_STRING  = Term[:_string]
+  SYM_BLANK_BOOLEAN = Term[:_boolean]
+
   # Contains methods, constants, etc. that work together to implement `M1.normal`.
   module Normal
     extend self
@@ -2405,13 +2423,6 @@ module ::Ww::M1
       key :max, values: 1..UInt8::MAX, default: SYM_INF
       where { |min, max| min.as_n <= max.as_n }
     end
-
-    SYM_BLANK_ANY     = Term[:_]
-    SYM_BLANK_DICT    = Term[:_dict]
-    SYM_BLANK_NUMBER  = Term[:_number]
-    SYM_BLANK_SYMBOL  = Term[:_symbol]
-    SYM_BLANK_STRING  = Term[:_string]
-    SYM_BLANK_BOOLEAN = Term[:_boolean]
 
     SYMS_CMP = {SYM_LT, SYM_GT, SYM_LTE, SYM_GTE}
     SYMS_LTX = {SYM_LT, SYM_LTE}
@@ -3079,6 +3090,13 @@ module ::Ww::M1
     # *normp* must be one of the recognized patterns. Otherwise, raises `ArgumentError`.
     def pattern(normp : Term) : {Magnitude, Magnitude}
       Term.case(normp, engine: M0) do
+        # matchpi %[((%literal %partition) itemspart_ pairspart_)], cue: :"%partition" do
+        #   min0, max0 = pattern(itemspart)
+        #   min1, max1 = pattern(pairspart)
+
+        #   {min0 + min1, max0 + max1}
+        # end
+
         matchpi %[(%itemspart _*)], cue: :"%itemspart" do
           items(normp.items.move(1))
         end
@@ -3284,7 +3302,7 @@ module ::Ww::M1
           # and contains remains of term's past. When we are going to be able
           # to update sketch on deletion this matchpi should go away.
           matchpi %[((%literal %literal) term_dict)] do
-            sketch |= term.resketch
+            sketch |= term.fresh_sketch
 
             WalkDecision::Continue
           end
@@ -3368,12 +3386,12 @@ module ::Ww::M1
             # Strip Array junk with to_readonly_slice. We do not need to
             # waste memory on it.
             keypaths << keypath.to_readonly_slice.dup
-
-            WalkDecision::Continue
           end
 
-          otherwise { WalkDecision::Continue }
+          otherwise { }
         end
+
+        WalkDecision::Continue
       end
 
       # Modify deepest keypaths first. Since we're only going to replace at the keypath
@@ -3395,14 +3413,15 @@ module ::Ww::M1
 
       M1.walk(normp, keypath: keypath) do |node|
         Term.case(node, engine: Engine) do
+          # matchpi %[((%any %partition %itemspart %layer %items/first %items/source %items/all) _*)] do
           matchpi %[((%any %itemspart %layer %items/first %items/source %items/all) _*)] do
             keypaths << keypath.to_readonly_slice.dup
-
-            WalkDecision::Continue
           end
 
-          otherwise { WalkDecision::Continue }
+          otherwise { }
         end
+
+        WalkDecision::Continue
       end
 
       keypaths.unstable_sort_by! { |keypath| -keypath.size }
@@ -3424,6 +3443,32 @@ module ::Ww::M1
     end
 
     def self.depth(normp : Term) : Term
+      keypath = [] of Term
+      keypaths = [] of Slice(Term)
+
+      M1.walk(normp, keypath: keypath) do |node|
+        Term.case(node, engine: Engine) do
+          matchpi %[((%any %itemspart %layer %items/first %items/source %items/all %leaves/first %leaves/source %leaves/all) _*)] do
+            keypaths << keypath.to_readonly_slice.dup
+          end
+
+          otherwise { }
+        end
+
+        WalkDecision::Continue
+      end
+
+      keypaths.unstable_sort_by! { |keypath| -keypath.size }
+      keypaths.each do |keypath|
+        normp = normp.as_d.follow(keypath) do |node0|
+          min, max = M1.depth(node0)
+          min = min == Magnitude::INFINITY ? SYM_INF : min
+          max = max == Magnitude::INFINITY ? SYM_INF : max
+
+          min.in?(0, SYM_INF) && max == SYM_INF ? node0 : Term.of(:"%depth", node0, min: min, max: max)
+        end
+      end
+
       normp
     end
 
@@ -3509,6 +3554,13 @@ module ::Ww::M1
         max = maxT == SYM_INF ? Magnitude::INFINITY : maxT.to(Magnitude)
 
         Operator::Bounds.new(min, max, operator(successor, captures))
+      end
+
+      matchpi %[(%depth successor_ min: minT_ max: maxT_)], cue: :"%depth" do
+        min = minT == SYM_INF ? Magnitude::INFINITY : minT.to(Magnitude)
+        max = maxT == SYM_INF ? Magnitude::INFINITY : maxT.to(Magnitude)
+
+        Operator::MaxDepth.new(min, max, operator(successor, captures))
       end
 
       matchpi %[(%itemspart _*)], cue: :"%itemspart" do
@@ -3765,8 +3817,7 @@ module ::Ww::M1
       end
 
       matchpi %[(%any/literal _*)], cue: :"%any/literal" do
-        branches = node.items.move(1).to_a
-        branches.uniq!
+        branches = node.items.move(1).to_set
 
         Operator::Choices.new(branches)
       end
@@ -4650,79 +4701,280 @@ class ::Ww::Term::Dict
 end
 
 module ::Ww::M1
-  # Returns the minimum and maximum expected matchee depth for a normal pattern
-  # *normp*. They participate in determining the specificity of a pattern.
-  #
-  # Operators such as `%leaf` make it impossible to tell the *maximum* expected depth
-  # of the matchee; but leave the possibility of determining its *minimum required
-  # depth*. Additionally, `%leaf` and its variants introduce one level of depth
-  # themselves when their `self` option is turned off.
   def self.depth(normp : Term) : {Magnitude, Magnitude}
-    mindepth = Magnitude.new(0)
-    maxdepth = Magnitude.new(0)
+    Term.case(normp, engine: M0) do
+      matchpi %[(%pass)], %[(%dict)], cues: {:"%pass", :"%dict"} do
+        {Magnitude.new(0), Magnitude::INFINITY}
+      end
 
-    walk(normp) do |node|
-      Term.case(node) do
-        # - The two basic "boundaries" between dictionaries are %singular and %entry/required.
-        #   Each "crossing" of those boundaries results in re-evaluation of min-depth.
-        # - In non-self mode %leaf variants also act as such bondaries.
-        matchpi(
-          %[(%singular child_)],
-          %[(%entry/required _ child_)],
-          %[(%leaves/first child_ in: _ order: _ self: false)],
-          %[(%leaves/source child_ in: _ order: _ self: false)],
-          %[(%leaves/all (%capture _) child_ in: _ order: _ self: false min: _ max: _)],
-        ) do
-          child_min, child_max = depth(child)
+      matchpi %[((%literal %literal) x_dict)], cue: :"%literal" do
+        maxdepth = x.fresh_maxdepth
 
-          mindepth = Math.max(mindepth, child_min + Magnitude.new(1))
-          maxdepth = Math.max(maxdepth, child_max + Magnitude.new(1))
+        {Magnitude.new(maxdepth), Magnitude.new(maxdepth)}
+      end
 
-          WalkDecision::Skip
+      matchpi(
+        %[(%symbol)],
+        %[(%string)],
+        %[(%number (%literal _))],
+        %[(%boolean)],
+        %[((%literal %literal) _)],
+        %[(%slot _)],
+        %[(%entry/negative (%pass))],
+        %[(%entry/negative (%pass) _)],
+        cues: {:"%symbol",
+               :"%string",
+               :"%number",
+               :"%boolean",
+               :"%literal",
+               :"%slot",
+               :"%entry/negative",
+               :"%entry/negative"},
+      ) do
+        {Magnitude.new(0), Magnitude.new(0)}
+      end
+
+      matchpi(
+        %[(%let _ successor_)],
+        %[(%singular successor_)],
+        %[(%entry/required successor_)],
+        %[(%terminal successor_)],
+        cues: {:"%let", :"%singular", :"%entry/required", :"%terminal"}
+      ) do
+        depth(successor)
+      end
+
+      matchpi(
+        %[(%gap _)],
+        %[(%gap/min _)],
+        %[(%gap/max _)],
+        %[(%entry/negative _)],
+        %[(%entry/negative _ _)],
+        %[(%leaves/first _ in: keys order: _ self: _)],
+        %[(%leaves/source _ in: keys order: _ self: _)],
+        %[(%leaves/all _ _ in: keys min: _ max: _ order: _ self: _)],
+        %[(%new _)],
+        cues: {:"%gap",
+               :"%gap/min",
+               :"%gap/max",
+               :"%entry/negative",
+               :"%entry/negative",
+               :"%leaves/first",
+               :"%leaves/source",
+               :"%leaves/all",
+               :"%new"},
+      ) do
+        {Magnitude.new(0), Magnitude::INFINITY}
+      end
+
+
+      # With %optional, our min is when the optional is not matched (0)
+      # and our max is when the optional is matched (successor).
+      matchpi(
+        %[(%optional _ successor_)],
+        %[(%entry/optional _ successor_)],
+        cues: {:"%optional", :"%entry/optional"},
+      ) do
+        _, max = depth(successor)
+
+        {Magnitude.new(0), max}
+      end
+
+      # With %all, the idea is to take the max of both min depths and max depths. %all is
+      # different from e.g. %itemspart in that it does not introduce depth itself.
+      matchpi(
+        %[(%all _*)],
+        %{[%past _*]},
+        %{[%past/max _*]},
+        cues: {:"%all", :"%past", :"%past/max"}
+      ) do
+        min = Magnitude.new(0)
+        max = Magnitude.new(0)
+
+        offshoots = normp.items.move(1)
+        offshoots.each do |offshoot|
+          min1, max1 = depth(offshoot)
+          min = Math.max(min, min1)
+          max = Math.max(max, max1)
         end
 
-        # Take into account the depth of the literal dicts in the pattern.
-        matchpi %[(%literal value_dict)] do
-          value_depth = Magnitude.new(value.maxdepth)
+        {min, max}
+      end
 
-          mindepth = Math.max(mindepth, value_depth)
-          maxdepth = Math.max(maxdepth, value_depth)
+      # With %any and %any°, the idea is to take the min of min depths and max of
+      # max depths.
+      matchpi %[(%any/literal _ _*)], cue: :"%any/literal" do
+        min = Magnitude::INFINITY
+        max = Magnitude.new(0)
 
-          WalkDecision::Skip
+        choices = normp.items.move(1)
+        choices.each do |choice|
+          unless dict = choice.as_d?
+            min = Magnitude.new(0)
+            next
+          end
+
+          maxdepth = dict.fresh_maxdepth
+          min = Math.min(min, maxdepth)
+          max = Math.max(max, maxdepth)
         end
 
-        # Take into account keypool itself and depths of the keys listed in it.
-        matchpi %[(%keypool keys_+)] do
-          max_key_depth = keys.items.max_of { |key| Magnitude.new(key.type.dict? ? key.maxdepth : 0) }
+        {min, max}
+      end
 
-          mindepth = Math.max(mindepth, Magnitude.new(max_key_depth + 1))
-          maxdepth = Math.max(maxdepth, Magnitude.new(max_key_depth + 1))
+      matchpi %[(%any/source _ _*)], cue: :"%any/source" do
+        min = Magnitude::INFINITY
+        max = Magnitude.new(0)
 
-          WalkDecision::Skip
+        branches = normp.items.move(1)
+        branches.each do |branch|
+          min1, max1 = depth(branch)
+          min = Math.min(min, min1)
+          max = Math.max(max, max1)
         end
 
-        # These all introduce one level of nesting.
-        matchpi(
-          %[(%items/first _+)],
-          %[(%items/source _+)],
-          %[(%items/all (%capture _) _+)],
-          %[(%entries/first _ _)],
-          %[(%entries/source _ _)],
-          %[(%entries/all (%capture _) _ _)]
-        ) do
-          mindepth = Math.max(mindepth, Magnitude.new(1))
-          maxdepth = Math.max(maxdepth, Magnitude.new(1))
+        {min, max}
+      end
 
-          WalkDecision::Continue
+      matchpi %[((%literal %partition) itemspart_ pairspart_)], cue: :"%partition" do
+        min0, max0 = depth(itemspart)
+        min1, max1 = depth(pairspart)
+
+        {Math.max(min0, min1), Math.max(max0, max1)}
+      end
+
+      matchpi %[(%edge _)], cue: :"%edge" do
+        {Magnitude.new(1), Magnitude.new(1)}
+      end
+
+      matchpi(
+        %[(%value _ successor_)],
+        %[(%entries/first _ successor_)],
+        %[(%entries/source _ successor_)],
+        %{[%entries/all _ _ successor_]},
+        %[(%leaves/first successor_ in: _ order: _ self: false)],
+        %[(%leaves/source successor_ in: _ order: _ self: false)],
+        %[(%leaves/all _ successor_ in: _ min: _ max: _ order: _ self: false)],
+        cues: {:"%value",
+               :"%entries/first",
+               :"%entries/source",
+               :"%entries/all",
+               :"%leaves/first",
+               :"%leaves/source",
+               :"%leaves/all"},
+      ) do
+        min, _ = depth(successor)
+
+        {min + 1, Magnitude::INFINITY}
+      end
+
+      matchpi(
+        %[(%leaves/first successor_ in: _ order: _ self: true)],
+        %[(%leaves/source successor_ in: _ order: _ self: true)],
+        %[(%leaves/all _ successor_ in: _ min: _ max: _ order: _ self: true)],
+        cues: {:"%leaves/first", :"%leaves/source", :"%leaves/all"},
+      ) do
+        min, _ = depth(successor)
+
+        {min, Magnitude::INFINITY}
+      end
+
+      matchpi %[(%-value _)], %[(%-value _ _)], cue: :"%-value" do
+        {Magnitude.new(1), Magnitude::INFINITY}
+      end
+
+      matchpi(
+        %[(%itemspart _*)],
+        %[(%items/first _*)],
+        %[(%items/source _*)],
+        cues: {:"%itemspart", :"%items/first", :"%items/source"},
+      ) do
+        min = Magnitude.new(1)
+        max = Magnitude.new(1)
+
+        items = normp.items.move(1)
+        items.each do |item|
+          min1, max1 = depth(item)
+          min = Math.max(min, min1 + 1)
+          max = Math.max(max, max1 + 1)
         end
 
-        otherwise { WalkDecision::Continue }
+        {min, max}
+      end
+
+      matchpi %{[%group _*]}, %{[%many _*]}, cues: {:"%group", :"%many"} do
+        min = Magnitude.new(0)
+        max = Magnitude.new(0)
+
+        items = normp.items.move(2)
+        items.each do |item|
+          min1, max1 = depth(item)
+          min = Math.max(min, min1)
+          max = Math.max(max, max1)
+        end
+
+        {min, max}
+      end
+
+      matchpi %{[%items/all _*]}, cue: :"%items/all" do
+        min = Magnitude.new(1)
+        max = Magnitude.new(1)
+
+        items = normp.items.move(2)
+        items.each do |item|
+          min1, max1 = depth(item)
+          min = Math.max(min, min1 + 1)
+          max = Math.max(max, max1 + 1)
+        end
+
+        {min, max}
+      end
+
+      matchpi %[(%layer below_ side_dict)], cue: :"%layer" do
+        min, max = depth(below)
+        # Do not waste time computing side if that won't change anything.
+        if {min, max} == {Magnitude::INFINITY, Magnitude::INFINITY}
+          return min, max
+        end
+
+        side.each_entry do |_, v|
+          min1, max1 = depth(v)
+          min = Math.max(min, min1 + 1)
+          max = Math.max(max, max1 + 1)
+        end
+
+        {min, max}
+      end
+
+      matchpi(
+        %[(%plural _ ¦ min: _ max: _ type: type_)],
+        %[(%plural/min _ ¦ min: _ max: _ type: type_)],
+        %[(%plural/max _ ¦ min: _ max: _ type: type_)],
+        %[(%plural ¦ min: _ max: _ type: type_)],
+        %[(%plural/min ¦ min: _ max: _ type: type_)],
+        %[(%plural/max ¦ min: _ max: _ type: type_)],
+        cues: {:"%plural",
+               :"%plural/min",
+               :"%plural/max",
+               :"%plural",
+               :"%plural/min",
+               :"%plural/max"}
+      ) do
+        if type.in?(SYM_BLANK_ANY, SYM_BLANK_DICT)
+          {Magnitude.new(0), Magnitude::INFINITY}
+        else
+          {Magnitude.new(0), Magnitude.new(0)}
+        end
+      end
+
+      otherwise do
+        {Magnitude::INFINITY, Magnitude::INFINITY}
       end
     end
-
-    {mindepth, maxdepth}
   end
+end
 
+module ::Ww::M1
   # A summary of measurements concerning the specificity of a pattern.
   alias Specificity = {UInt32, UInt32, UInt32, UInt32}
 
@@ -5138,16 +5390,16 @@ class PatternSet
 end
 
 class ::Ww::Term::Dict
-  # Some day this will be cached in the tree; right now, it isn't.
-  #
-  # Recurses into both keys and values (the former to support dict sets).
+  # Recurses into entry values only.
   #
   # Counts itself too (smallest possible value is 1).
-  def maxdepth : UInt32
-    maxdepth = 1u32
+  def fresh_maxdepth : Magnitude
+    maxdepth = Magnitude.new(1)
 
     each_entry do |k, v|
-      maxdepth = {maxdepth, k.maxdepth, v.maxdepth}.max
+      if vdict = v.as_d?
+        maxdepth = Math.max(maxdepth, vdict.fresh_maxdepth + 1)
+      end
     end
 
     maxdepth
