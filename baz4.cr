@@ -251,11 +251,11 @@ struct Ruleset
   def self.select(selector, base)
     rules = [] of Rule::Any
 
-    pset = PatternSet.select(selector, base) do |noR, env|
+    pset = PatternSet.select(selector, base) do |normp, env|
       if template = env[:template]?
         rule = Rule::Template.new(template)
       elsif backspec = env[:backspec]?
-        rule = Term.case(noR) do
+        rule = Term.case(normp) do
           matchpi %[((%literal %let) (%capture toplevel_) _)] { Rule::BackmapMany.new(toplevel, backspec) }
           otherwise { Rule::BackmapOne.new(backspec) }
         end
