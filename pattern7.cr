@@ -3139,9 +3139,9 @@ module ::Ww::M1
   # Contains methods, constants, etc. that work together to implement `M1.bounds`.
   #
   # Bounds are represented as a pair of `Magnitude`s. The first Magnitude is the minimum
-  # bound, inclusive if known; the second os the maximum Bound, inclusive if known.
+  # bound, inclusive if known; the second is the maximum Bound, inclusive if known.
   # Either or both bounds may be unknown. An unknown bound is assigned the magnitude
-  # of infinity (`Magnitude::INFINITY`). This is because arithmetic with infinity is
+  # of infinity (`Magnitude::INFINITY`). This is because arithmetic with infinities is
   # close enough semantically to arithmetic with unknowns.
   module Bounds
     extend self
@@ -3524,7 +3524,8 @@ module ::Ww::M1
                      %items/source
                      %items/all
                      %let
-                     %all)
+                     %all
+                     %entry/required)
                 _*]},
             %{((%literal %leaves/first) _* ¦ _ in: (%not keys))},
             %{((%literal %leaves/source) _* ¦ _ in: (%not keys))},
@@ -3609,7 +3610,8 @@ module ::Ww::M1
             max = max == Magnitude::INFINITY ? SYM_INF : max
 
             # Drop {0, ∞}, {∞, ∞}, {1, ∞} depths. The first two are clearly useless, and
-            # the last one is almost always true.
+            # the last one is almost always true, being equivalent to an "is dict" check
+            # which we've already presumably done twice-ish with %sketch and %bounds.
             next if min.in?(0, 1, SYM_INF) && max == SYM_INF
 
             templates << {keypath.to_readonly_slice.dup, Term.of(:"%depth", :_, min: min, max: max), Precedence::Depth}
@@ -3655,8 +3657,22 @@ module ::Ww::M1
       end
     end
 
-    def self.optimized1(normp : Term, *, recurse = true) : Term
+    def self.optimized1(normp : Term, cycle : Int, *, recurse = true) : Term
       Term.of_case(normp, engine: Engine) do
+        # Fold %sketch -> %bounds -> %depth into a single operator, %dict-guard.
+        matchpi(
+          %[(%sketch
+              (%bounds
+                (%depth successor_
+                  min: min_d_
+                  max: max_d_)
+                min: min_b_
+                max: max_b_)
+              sketch_number)],
+        ) do
+          Term.of(:"%dict-guard", successor, sketch: sketch, bounds: {min_b, max_b}, depth: {min_d, max_d})
+        end
+
         # Fold (_*) into an itemsonly check (which is vastly cheaper!)
         matchpi %[(%itemspattern (%plural min: 0 max: ∞ type: (%literal _)))] do
           {:"%itemsonly"}
@@ -3684,7 +3700,7 @@ module ::Ww::M1
 
             singulars = normp.items.move(1)
             singulars.each do |(_, item)|
-              commit << optimized1(item)
+              commit << optimized1(item, cycle)
             end
           end
         end
@@ -3697,7 +3713,7 @@ module ::Ww::M1
 
             prefix = normp.items.move(1).grow(-1)
             prefix.each do |(_, item)|
-              commit << optimized1(item)
+              commit << optimized1(item, cycle)
             end
           end
         end
@@ -3710,7 +3726,7 @@ module ::Ww::M1
 
             prefix = normp.items.move(2)
             prefix.each do |(_, item)|
-              commit << optimized1(item)
+              commit << optimized1(item, cycle)
             end
           end
         end
@@ -3734,13 +3750,24 @@ module ::Ww::M1
           normp.morph({1, successors.prepend(:"%postfix")})
         end
 
-        # When we have (%let _ (%sketch ...)), that's rather inefficient since the sketch
-        # could have rejected and we've already had an allocation etc. In such situation it
-        # is wise to invert -- into (%sketch (%let _ ...)).
-        matchpi %[((%literal %let) capture_ (%sketch successor_ _number))] do
-          _, _, sketch = normp
+        # When we have (%let _ (%dict-guard ...)), that's rather awkward since the guard
+        # could have rejected and we've already had an allocation etc. In such situations
+        # it is wiser to invert -- into (%dict-guard (%let _ ...)).
+        matchpi %[((%literal %let) capture_ [%dict-guard successor_])] do
+          _, _, guard = normp
 
-          sketch.morph({1, {:"%let", capture, successor}})
+          guard.morph({1, {:"%let", capture, optimized1(successor, cycle)}})
+        end
+
+        # For less lucky dictionaries/other operators that do not have %dict-guard
+        # but do have a %sketch, we wait out for one cycle to see if this %sketch
+        # turns into a %dict-guard. If it does not we do the same as above.
+        matchpi %[((%literal %let) capture_ (%sketch successor_ _number))] do
+          continue if cycle.zero?
+
+          _, _, guard = normp
+
+          guard.morph({1, {:"%let", capture, optimized1(successor, cycle)}})
         end
 
         # Open %layer all entries of which are (%entry/required) should turn into
@@ -3753,20 +3780,20 @@ module ::Ww::M1
             commit << :"%all"
 
             required.each_item_unordered do |match|
-              commit << {:"%value", {:"%literal", match[:key]}, optimized1(match[:value])}
+              commit << {:"%value", {:"%literal", match[:key]}, optimized1(match[:value], cycle)}
             end
           end
         end
 
         # (%all X) should be rewritten into X.
         matchpi %[((%literal %all) successor_)] do
-          optimized1(successor)
+          optimized1(successor, cycle)
         end
 
         # (%bounds min: 1 max: ∞) around a single %value has low information content.
         # Remove it.
         matchpi %[(%bounds successor←((%literal %value) _ _) min: 1 max: ∞)] do
-          optimized1(successor)
+          optimized1(successor, cycle)
         end
 
         # (%partition (%itemsonly) (%pairsonly)) -> (%dict)
@@ -3793,23 +3820,23 @@ module ::Ww::M1
                                   _)
                           min: 1)))],
         ) do
-          optimized1(successor)
+          optimized1(successor, cycle)
         end
 
         # Omit inner itemspart bounds if they are the same as %partition's.
         matchpi %[(%bounds ((%literal %partition) (%bounds successor_ min: min_ max: max_) _) min: min_ max: max_)] do
-          normp.morph({1, 1, optimized1(successor)})
+          normp.morph({1, 1, optimized1(successor, cycle)})
         end
 
         # Omit inner pairspart bounds if they are the same as %partition's.
         matchpi %[(%bounds ((%literal %partition) _ (%bounds successor_ min: min_ max: max_)) min: min_ max: max_)] do
-          normp.morph({1, 2, optimized1(successor)})
+          normp.morph({1, 2, optimized1(successor, cycle)})
         end
 
         # These nodes are terminal nodes for `M1.walk` and for us.
         # TODO: more nodes here?
         matchpi %[(%terminal node_)] do
-          optimized1(node, recurse: false)
+          optimized1(node, cycle, recurse: false)
         end
 
         matchpi(
@@ -3827,7 +3854,7 @@ module ::Ww::M1
 
           normp1 = normp
           normp.each_entry do |k, v|
-            normp1 = normp1.with(k, optimized1(v))
+            normp1 = normp1.with(k, optimized1(v, cycle))
           end
 
           normp1
@@ -3838,8 +3865,8 @@ module ::Ww::M1
     end
 
     def self.optimized(normp normp0 : Term) : Term
-      while true
-        normp1 = optimized1(normp0)
+      (0..).each do |cycle|
+        normp1 = optimized1(normp0, cycle)
         if normp0 == normp1
           return normp0
         end
@@ -3910,18 +3937,7 @@ module ::Ww::M1
         Operator::Capture.new(capture, operator(successor, captures))
       end
 
-      # %sketch -> %bounds -> %depth is folded into a single operator, DictGuard.
-      matchpi(
-        %[(%sketch
-            (%bounds
-              (%depth successor_
-                min: min_d_
-                max: max_d_)
-              min: min_b_
-              max: max_b_)
-            sketch_number)],
-        cue: {:"%sketch", :"%bounds", :"%depth"}
-      ) do
+      matchpi %[(%dict-guard successor_ sketch: sketch_ bounds: (min_b_ max_b_) depth: (min_d_ max_d_))], cue: :"%dict-guard" do
         Operator::DictGuard.new(
           sketch: sketch.to(Term::Dict::Sketch),
           bounds: {
