@@ -1,4 +1,7 @@
 module Ww
+  # NOTE: we shouldn't be storing ItemNode here, we should be storing Term::Dict.
+  # We only store @node because it's less indirection; but that's buggy, and .collect
+  # with no changes has a cost (it must not!), making it a nasty burden on the caller.
   struct Term::Dict::ItemsView
     include Indexable(Term)
 

@@ -42,13 +42,9 @@ module Ww::M0
       case {pattern[0], hi}
       when {SYM_PARTITION, 2}
         return false unless matchee.is_a?(Term::Dict)
-
-        items, pairs = matchee.partition
-        items = items.collect
-        itemspart = pattern[1].downcast
-        pairspart = pattern[2].downcast
-
-        return match?(commit, itemspart, items) && match?(commit, pairspart, pairs)
+        return false unless match?(commit, pattern[1].downcast, matchee.itemspart)
+        return false unless match?(commit, pattern[2].downcast, matchee.pairspart)
+        return true
       when {SYM_LITERAL, 1}
         return pattern[1] == matchee
       when {SYM_LAYER, 2}

@@ -1056,7 +1056,7 @@ def cat(d, *ds)
       end
     end
     ds.each do |xs|
-      xs.pairs.each_entry { |k, v| commit.with(k, v) }
+      xs.pairspart.each_entry { |k, v| commit.with(k, v) }
     end
   end.upcast
 end
@@ -2324,6 +2324,14 @@ struct BigRational
       to_big_i.to_u128
     else
       raise ArgumentError.new # ?!
+    end
+  end
+end
+
+module Indexable(T)
+  def to_readonly_slice(& : T -> U) : Slice(U) forall U
+    Slice(U).new(size, read_only: true) do |index|
+      yield unsafe_fetch(index)
     end
   end
 end

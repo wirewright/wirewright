@@ -557,7 +557,7 @@ module Ww
 
     # Returns an enumerable based on `each_pair`.
     def pe : Enumerable({Term, Term})
-      pairs.ee
+      pairspart.ee
     end
 
     # Returns `true` if all entries of `self` are included in *other*.
@@ -1414,10 +1414,11 @@ module Ww
 
     # In practice `partition` and `pairs` are called very often. Therefore by
     # losing 8 bytes per existing dict, we gain a lot more -- because otherwise
-    # for each new dict created by `partition` we lose 32 bytes (if without @pairsonly).
+    # for each new dict created by `partition` we lose 32 bytes (if without @pairspart).
     # Thus despite having more to store on every dict, we get better memory
     # performance overall.
-    @pairsonly : Dict?
+    @itemspart : Dict?
+    @pairspart : Dict?
 
     # Splits this dictionary into *items* and *pairs*. Returns an `ItemsView`
     # over the items and a `pairsonly?` `Dict` with the pairs.
@@ -1429,8 +1430,8 @@ module Ww
     #   treated specially for efficiency, and are considered the best andmost efficient
     #   way to represent arrays in Term-land.
     # - *Pairs* are all other entries, i.e., all entries that are not items.
-    def partition : {Dict::ItemsView, Dict}
-      {items, pairs}
+    def partition : {Dict, Dict}
+      {itemspart, pairspart}
     end
 
     # Returns the items part of `partition` (see the latter for more info).
@@ -1441,9 +1442,22 @@ module Ww
       ItemsView.new(@items, b: 0, e: @items.size, sketch0: @sketch, maxdepth0: @maxdepth)
     end
 
+    # Returns the items part of `partition` (see the latter for more info).
+    def itemspart : Dict
+      if itemsonly?
+        self
+      else
+        @itemspart ||= items.collect
+      end
+    end
+
     # Returns the pairs part of `partition` (see the latter for more info).
-    def pairs : Dict
-      @pairsonly ||= Dict.new(EMPTY_ITEM_NODE, @pairs, @sketch, @maxdepth)
+    def pairspart : Dict
+      if pairsonly?
+        self
+      else
+        @pairspart ||= Dict.new(EMPTY_ITEM_NODE, @pairs, @sketch, @maxdepth)
+      end
     end
 
     def hash(hasher)
@@ -1493,9 +1507,7 @@ module Ww
         return
       end
 
-      items, entries = partition
-
-      if entries.empty?
+      if pairspart.empty?
         io << "["
         items.join(io, ", ") { |item| io << item }
         io << "]"

@@ -3167,9 +3167,9 @@
 (backmap ((%all [k0←k1_ x_] (%value k1 v_)) {(k0): (), x: ↑v, v: ↑x})
   (= (qux a qux: b) (b qux: a)))
 
-;; %itemspart bounds
+;; %itemspattern bounds
 ;;
-;; Make sure itemspart bounds are computed properly for the various itemspart operators.
+;; Make sure itemspattern bounds are computed properly for the various itemspattern operators.
 (bounds
   (of () min: 0 max: 0)
   (of (+) min: 1 max: 1)

@@ -404,7 +404,7 @@ def pairsR(changes : Changes::Preview, term : Term, successor, *, limit) : Rewri
   dict1 = dict0
   changed = false
 
-  dict0.pairs.each_entry do |key, value|
+  dict0.pairspart.each_entry do |key, value|
     break if limit && limit.zero?
 
     # Generate a preview proc that will fill the dict with the successor's
@@ -447,7 +447,7 @@ def pairsR(changes : Changes::Accept, term : Term, successor, *, limit) : Rewrit
   changed = false
 
   dict1 = dict0.transaction do |commit|
-    dict0.pairs.each_entry do |key, value|
+    dict0.pairspart.each_entry do |key, value|
       break if limit && limit.zero?
 
       # Ask the successor for rewrite, and incorporate it into the dict.

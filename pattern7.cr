@@ -91,20 +91,10 @@
 # Ideally Simple should be embeddable into the constraint system, perhaps via some sort of
 # a "bridge" node.
 #
-# - Required&easy optimizations: (_*), (xs_*), (¦ _), (¦ xs_), (_* ¦ _), (_* ¦ xs_). (xs_* x_), (x_ xs_*), (fst_ _* lst_), etc.
+# - Required&easy optimizations: (_* ¦ _), (_* ¦ xs_). (xs_* x_), (x_ xs_*), (fst_ _* lst_), etc.
 #
 # - Stuff like (_* ¦ _ x: (%optional 0 x_)) should result in a single PairRequired node. Nothing more.
 #   This would be a good sign the optimizer is doing what it should.
-#
-# - If we detect that no pattern-matching features are used in a dictionary, that dictionary
-#   should be compiled into a Literal().
-#
-#
-# - At this point we should be able to determine the following:
-#   sketch subset from pattern (dict)
-#   specificity of pattern
-#   max det&indet depth of pattern
-#   max det&indet breadth of pattern
 
 ###
 
@@ -364,7 +354,7 @@ module Search
         yield value, keypath.try(&.value(key))
       end
     in .pair_values?
-      dict.pairs.each_entry do |key, value|
+      dict.pairspart.each_entry do |key, value|
         yield value, keypath.try(&.value(key))
       end
     end
@@ -513,6 +503,9 @@ module Search
   end
 end
 
+# TODO: the names of operators should be nouns. Currently some of them are and others
+#   are not, fix that. In fact, Operator should probably be renamed to Subject or something
+#   like that. Not sure how large of a refactor that is, and how much point is there in it.
 # TODO: ???: break into a u8 type field followed by some sort of variable length payload
 # so that size is conserved (vs. `Any`). Avoid allocations for most-used operators/
 # configs by packing. Instead of being classes, these things should be structs that
@@ -522,7 +515,7 @@ end
 # Additionally, we must use u32 (or even u16) array indices for operator nodes rather
 # than a pointer. Thus an operator pool.
 module ::Ww::M1::Operator
-  alias Any = Pass | Num | Sym | Boolean | Dict | SketchSubset | Bounds | MaxDepth | Literal | Capture | Itemspart | Partition | EdgeUntyped | EdgeTyped | Choices | EitherSource | Keypool | Span | Tally | Bin | Both | Not | Layer | ScanFirst | ScanSource | ScanAll | ScanAllIsolated | DfsFirst | DfsSource | DfsAllIsolated | DfsAll | BfsFirst | BfsAllIsolated | BfsAll | Value | NegativeValue | NegativeValueKeypath | EntriesFirst | EntriesSource | EntriesAllIsolated | EntriesAll | Str | New | Keypath
+  alias Any = Pass | Num | Sym | Boolean | Dict | Itemsonly | Pairsonly | SketchSubset | Bounds | BoundsGuard | MaxDepth | DictGuard | Literal | Capture | Itemspattern | ItemFirst | ItemLast | ItemSequence | Itemspart | Pairspart | Partition | EdgeUntyped | EdgeTyped | Choices | EitherSource | KeyValue | Keypool | Span | Tally | Bin | Both | Not | Layer | ScanFirst | ScanSource | ScanAll | ScanAllIsolated | DfsFirst | DfsSource | DfsAllIsolated | DfsAll | BfsFirst | BfsAllIsolated | BfsAll | Value | NegativeValue | NegativeValueKeypath | EntriesFirst | EntriesSource | EntriesAllIsolated | EntriesAll | Str | New | Keypath
 
   alias Bin = Add | Sub | Mul | Div | Tdiv | Mod | Pow | Map
 
@@ -556,20 +549,31 @@ module ::Ww::M1::Operator
   defcase Boolean
   defcase Dict
 
+  defcase Itemsonly
+  defcase Pairsonly
   defcase SketchSubset, sketch : Term::Dict::Sketch, successor : Any
-  defcase Bounds, min : Magnitude, max : Magnitude, successor : Any
+  defcase Bounds, min : Magnitude, max : Magnitude
+  defcase BoundsGuard, min : Magnitude, max : Magnitude, successor : Any
   defcase MaxDepth, min : Magnitude, max : Magnitude, successor : Any
+  defcase DictGuard, sketch : Term::Dict::Sketch, bounds : {Magnitude, Magnitude}, depth : {Magnitude, Magnitude}, successor : Any
 
   defcase Literal, term : Term
   defcase Capture, capture : Term, successor : Any = Pass.new
-  # TODO: have a variant for the extremely frequent Itemspart of Singulars. We waste 40 bytes
-  # per item here for such very common arrays, which is extremely, extremely much vs. the 8 bytes
-  # that it would take for a singular.
-  defcase Itemspart, items : Array(Item::Any)
+
+  defcase Itemspattern, items : Array(Item::Any)
+  defcase ItemFirst, successor : Any
+  defcase ItemLast, successor : Any
+  defcase ItemSequence, items : Slice(Any), exhaustive : Bool, reverse : Bool
+
+  defcase Itemspart, successor : Any
+  defcase Pairspart, successor : Any
   defcase Partition, itemspart : Any, pairspart : Any
+
   defcase Choices, choices : Set(Term)
   defcase EitherSource, a : Any, b : Any
   defcase Both, a : Any, b : Any
+
+  defcase KeyValue, key : Term, successor : Any
   defcase Keypool, keys : Array(Term)
 
   defcase Span, successor : Any
@@ -592,10 +596,10 @@ module ::Ww::M1::Operator
 
   alias Scan = ScanFirst | ScanSource | ScanAllIsolated | ScanAll
 
-  defcase ScanFirst, needle : Array(Any)
-  defcase ScanSource, needle : Array(Any)
-  defcase ScanAllIsolated, capture : Term, needle : Array(Any), min : UInt8, max : UInt8
-  defcase ScanAll, capture : Term, needle : Array(Any), selector : Set(Term), exterior : Set(Term), min : UInt8, max : UInt8
+  defcase ScanFirst, needle : Slice(Any)
+  defcase ScanSource, needle : Slice(Any)
+  defcase ScanAllIsolated, capture : Term, needle : Slice(Any), min : UInt8, max : UInt8
+  defcase ScanAll, capture : Term, needle : Slice(Any), selector : Set(Term), exterior : Set(Term), min : UInt8, max : UInt8
 
   defcase Value, capture : Term, tail : Any
   defcase NegativeValue, capture : Term
@@ -800,6 +804,10 @@ struct KeypathTip
 
   def forward(n = 1)
     KeypathTip.new(@keypath.morph({@keypath.size - 1, 1, @keypath[@keypath.size - 1, 1] + n}))
+  end
+
+  def backward(n = 1)
+    forward(-n)
   end
 
   def up(n = 1)
@@ -1048,6 +1056,22 @@ module ::Ww::M1::Operator
     ahead0.call(behind0)
   end
 
+  def match(behind0, op : Itemsonly, matchee : Term, ahead0)
+    unless (dict = matchee.as_d?) && dict.itemsonly?
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    ahead0.call(behind0)
+  end
+
+  def match(behind0, op : Pairsonly, matchee : Term, ahead0)
+    unless (dict = matchee.as_d?) && dict.pairsonly?
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    ahead0.call(behind0)
+  end
+
   def match(behind0, op : SketchSubset, matchee : Term, ahead0)
     unless (dict = matchee.as_d?) && dict.sketch_superset_of?(op.sketch)
       return Fb::Mismatch.new(behind0.env)
@@ -1061,6 +1085,14 @@ module ::Ww::M1::Operator
       return Fb::Mismatch.new(behind0.env)
     end
 
+    ahead0.call(behind0)
+  end
+
+  def match(behind0, op : BoundsGuard, matchee : Term, ahead0)
+    unless (dict = matchee.as_d?) && dict.size.in?(op.min..op.max)
+      return Fb::Mismatch.new(behind0.env)
+    end
+
     match(behind0, op.successor, matchee, ahead0)
   end
 
@@ -1068,6 +1100,28 @@ module ::Ww::M1::Operator
     # FIXME: currently we're unable to use #max of MaxDepth, since Dict#maxdepth is maximum-ever
     # depth rather than current maximum depth.
     unless (dict = matchee.as_d?) && dict.maxdepth.in?(op.min..)
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    match(behind0, op.successor, matchee, ahead0)
+  end
+
+  def match(behind0, op : DictGuard, matchee : Term, ahead0)
+    unless dict = matchee.as_d?
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    unless dict.sketch_superset_of?(op.sketch)
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    unless dict.size.in?(op.bounds[0]..op.bounds[1])
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    # FIXME: currently we're unable to use op.depth[1], since Dict#maxdepth is maximum-ever
+    # depth rather than current maximum depth.
+    unless dict.maxdepth.in?(op.depth[0]..)
       return Fb::Mismatch.new(behind0.env)
     end
 
@@ -1092,12 +1146,96 @@ module ::Ww::M1::Operator
     match(env1, op.successor, matchee, ahead)
   end
 
-  def match(env, op : Itemspart, matchee : Term, ahead)
+  def match(env, op : Itemspattern, matchee : Term, ahead)
     unless (dict = matchee.as_d?) && dict.itemsonly?
       return Fb::Mismatch.new(env.env)
     end
 
     Item.match(env, op.items.to_readonly_slice, dict.items, ahead)
+  end
+
+  struct Ahead::Forward
+    include Ahead
+
+    def initialize(@delta : Int32, @ahead : Ahead*)
+    end
+
+    def call(behind0 : Behind) : Fb::Any
+      @ahead.value.call(behind0.keypath(&.forward(@delta)))
+    end
+  end
+
+  struct Ahead::ItemZip(L, R)
+    include Ahead
+
+    def initialize(@lhs : L, @rhs : R, @i : Int32, @j : Int32, @delta : Int8, @ahead : Ahead*)
+    end
+
+    def call(behind0 : Behind) : Fb::Any
+      if (@i + @delta).in?(0...@lhs.size) && (@j + @delta).in?(0...@rhs.size)
+        aheadptr = Ahead.stackptr(ItemZip.new(@lhs, @rhs, @i + @delta, @j + @delta, @delta, @ahead))
+      else
+        aheadptr = @ahead
+      end
+
+      Operator.match(behind0, @lhs[@i], @rhs[@j], Ahead::Forward.new(@delta, aheadptr))
+    end
+  end
+
+  def match(behind0, op : ItemSequence, matchee : Term, ahead0)
+    unless (dict = matchee.as_d?) && dict.itemsonly? && dict.size >= op.items.size
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    if op.exhaustive && dict.size != op.items.size
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    ahead1 = Ahead::Goto.new(behind0.keypath, Ahead.stackptr(ahead0))
+
+    if op.reverse
+      ahead2 = Ahead::ItemZip.new(
+        lhs: op.items,
+        rhs: dict.items,
+        i: op.items.size - 1,
+        j: dict.items.size - 1,
+        delta: -1,
+        ahead: Ahead.stackptr(ahead1),
+      )
+
+      ahead2.call(behind0.keypath(&.value(dict.size - 1)))
+    else
+      ahead2 = Ahead::ItemZip.new(
+        lhs: op.items,
+        rhs: dict.items,
+        i: 0,
+        j: 0,
+        delta: +1,
+        ahead: Ahead.stackptr(ahead1),
+      )
+
+      ahead2.call(behind0.keypath(&.value(0)))
+    end
+  end
+
+  def match(behind0, op : ItemFirst, matchee : Term, ahead0)
+    unless (dict = matchee.as_d?) && dict.itemsonly? && dict.size > 0
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    ahead1 = Ahead::Goto.new(behind0.keypath, Ahead.stackptr(ahead0))
+
+    match(behind0.keypath(&.value(0)), op.successor, dict[0], ahead1)
+  end
+
+  def match(behind0, op : ItemLast, matchee : Term, ahead0)
+    unless (dict = matchee.as_d?) && dict.itemsonly? && dict.size > 0
+      return Fb::Mismatch.new(behind0.env)
+    end
+    
+    ahead1 = Ahead::Goto.new(behind0.keypath, Ahead.stackptr(ahead0))
+
+    match(behind0.keypath(&.value(dict.size - 1)), op.successor, dict[dict.size - 1], ahead1)
   end
 
   module Ahead
@@ -1150,18 +1288,38 @@ module ::Ww::M1::Operator
     end
   end
 
+  # TODO: almost always in practice the pairspart is easier to compute than the itemspart;
+  # and it is "rarer", providing more rejections. Should we consider running the pairspart
+  # first? The proper treatment would be to evaluate the cost of the itemspart and pairspart,
+  # but that'd be an overkill right now.
   def match(env, op : Partition, matchee : Term, ahead)
     unless dict = matchee.as_d?
       return Fb::Mismatch.new(env.env)
     end
 
-    items, pairs = dict.partition
+    itemspart, pairspart = dict.partition
 
     # Note: the order here doesn't *really* matter since we're a solver.
     # Even then "heuristically" speaking it would, but nevermind!
     #
     # Visually it's e.g. (+ a_ b_ ¦ x: a_ y: b_) so we're sticking to that order here.
-    match(env, op.itemspart, Term.of(items.collect), Ahead::Match.new(op.pairspart, Term.of(pairs), Ahead.stackptr(ahead)))
+    match(env, op.itemspart, Term.of(itemspart), Ahead::Match.new(op.pairspart, Term.of(pairspart), Ahead.stackptr(ahead)))
+  end
+
+  def match(behind0, op : Itemspart, matchee : Term, ahead0)
+    unless dict = matchee.as_d?
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    match(behind0, op.successor, Term.of(dict.itemspart), ahead0)
+  end
+
+  def match(behind0, op : Pairspart, matchee : Term, ahead0)
+    unless dict = matchee.as_d?
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    match(behind0, op.successor, Term.of(dict.pairspart), ahead0)
   end
 
   def match(env, op : EdgeUntyped, matchee : Term, ahead)
@@ -1199,6 +1357,16 @@ module ::Ww::M1::Operator
 
   def match(env, op : Both, matchee : Term, ahead)
     match(env, op.a, matchee, Ahead::Match.new(op.b, matchee, Ahead.stackptr(ahead)))
+  end
+
+  def match(behind0, op : KeyValue, matchee : Term, ahead0)
+    unless (dict = matchee.as_d?) && (value = dict[op.key]?)
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    ahead1 = Ahead::Goto.new(behind0.keypath, Ahead.stackptr(ahead0))
+
+    match(behind0.keypath(&.value(op.key)), op.successor, value, ahead1)
   end
 
   def match(env, op : Keypool, matchee : Term, ahead)
@@ -1756,6 +1924,7 @@ module ::Ww::M1::Operator
     ahead0.call(behind1)
   end
 
+  M = Term.of(1, 2, 3)
   def feedback(env : Env::Type, op : Any, matchee : Term, *, keypaths : Bool = false) : Fb::Response
     behind0 = Behind.new(env, domains: Term[], antidomains: Term[], keypath: keypaths ? KeypathTip.new : nil)
 
@@ -2470,7 +2639,7 @@ module ::Ww::M1
       end
     end
 
-    # Returns the normal form of an itemspart *node*.
+    # Returns the normal form of an itemspattern *node*.
     def item(node : Term) : Term
       Term.of_case(node, engine: M0) do
         matchpi %[_symbol] do
@@ -2620,7 +2789,7 @@ module ::Ww::M1
 
       if dict.itemsonly?
         node = Term::Dict.build do |commit|
-          commit << :"%itemspart"
+          commit << :"%itemspattern"
           commit.concat(dict.items) { |itemnode| item(itemnode) }
         end
 
@@ -2632,7 +2801,7 @@ module ::Ww::M1
         return pattern(Term.of(:"%layer", Term[], dict))
       end
 
-      Term.of(:"%partition", dict(dict.items.collect), dict(dict.pairs))
+      Term.of(:"%partition", dict(dict.itemspart), dict(dict.pairspart))
     end
 
     # Returns the normal form of *pattern*.
@@ -2977,8 +3146,8 @@ module ::Ww::M1
   module Bounds
     extend self
 
-    # Computes the bounds of an itemspart *item*. Raises `ArgumentError` if *item*
-    # is not one of the recognized itemspart item nodes.
+    # Computes the bounds of an itemspattern *item*. Raises `ArgumentError` if *item*
+    # is not one of the recognized itemspattern item nodes.
     def item(item : Term) : {Magnitude, Magnitude}
       Term.case(item, engine: M0) do
         matchpi %{[%singular _]}, cue: :"%singular" do
@@ -3057,7 +3226,7 @@ module ::Ww::M1
       end
     end
 
-    # Computes the bounds of an enumerable of itemspart item nodes (see `item`).
+    # Computes the bounds of an enumerable of itemspattern item nodes (see `item`).
     def items(ie : Enumerable(Term)) : {Magnitude, Magnitude}
       min = max = Magnitude.new(0)
 
@@ -3094,7 +3263,7 @@ module ::Ww::M1
           {min0 + min1, max0 + max1}
         end
 
-        matchpi %{[%itemspart _*]}, cue: :"%itemspart" do
+        matchpi %{[%itemspattern _*]}, cue: :"%itemspattern" do
           items(normp.items.move(1))
         end
 
@@ -3350,7 +3519,7 @@ module ::Ww::M1
                      %singular
                      %group
                      %partition
-                     %itemspart
+                     %itemspattern
                      %items/first
                      %items/source
                      %items/all
@@ -3378,7 +3547,7 @@ module ::Ww::M1
         Term.case(node, engine: Engine) do
           matchpi(
             %{[(%any %partition
-                     %itemspart
+                     %itemspattern
                      %layer
                      %items/first
                      %items/source
@@ -3410,7 +3579,7 @@ module ::Ww::M1
 
       M1.walk(normp, keypath: keypath) do |node|
         Term.case(node, engine: Engine) do
-          matchpi %{[(%any %partition %itemspart %layer %items/first %items/source %items/all) _*]} do
+          matchpi %{[(%any %partition %itemspattern %layer %items/first %items/source %items/all) _*]} do
             min, max = M1.bounds(node)
             min = min == Magnitude::INFINITY ? SYM_INF : min
             max = max == Magnitude::INFINITY ? SYM_INF : max
@@ -3429,17 +3598,19 @@ module ::Ww::M1
       end
     end
 
-    def self.depth(normp, templates) : Nil
+    def self.depths(normp, templates) : Nil
       keypath = [] of Term
 
       M1.walk(normp, keypath: keypath) do |node|
         Term.case(node, engine: Engine) do
-          matchpi %{[(%any %itemspart %layer %items/first %items/source %items/all %leaves/first %leaves/source %leaves/all) _*]} do
+          matchpi %{[(%any %itemspattern %layer %items/first %items/source %items/all %leaves/first %leaves/source %leaves/all) _*]} do
             min, max = M1.depth(node)
             min = min == Magnitude::INFINITY ? SYM_INF : min
             max = max == Magnitude::INFINITY ? SYM_INF : max
 
-            next if min.in?(0, SYM_INF) && max == SYM_INF
+            # Drop {0, ∞}, {∞, ∞}, {1, ∞} depths. The first two are clearly useless, and
+            # the last one is almost always true.
+            next if min.in?(0, 1, SYM_INF) && max == SYM_INF
 
             templates << {keypath.to_readonly_slice.dup, Term.of(:"%depth", :_, min: min, max: max), Precedence::Depth}
           end
@@ -3451,16 +3622,12 @@ module ::Ww::M1
       end
     end
 
-    def self.population(normp, templates) : Nil
-    end
-
     def self.optimized(normp : Term) : Term
       templates = [] of {Slice(Term), Term, Precedence}
 
       O1.sketches(normp, templates)
       O1.bounds(normp, templates)
-      O1.depth(normp, templates)
-      O1.population(normp, templates)
+      O1.depths(normp, templates)
 
       # Modify deepest keypaths first. Since we're only going to replace at the keypath
       # and do nothing else, no further sorting (e.g. by indices) is necessary.
@@ -3482,8 +3649,153 @@ module ::Ww::M1
   # of rewrites, the normal pattern is reduced to the minimum possible, most
   # concrete operators at the cost of compile time.
   module O2
-    def self.optimized(normp : Term) : Term
-      normp
+    module Engine
+      def self.match?(pattern : Term, matchee : Term) : Term::Dict?
+        M1.match?(pattern, matchee, opt: O1)
+      end
+    end
+
+    def self.optimized1(normp : Term, *, recurse = true) : Term
+      Term.of_case(normp, engine: Engine) do
+        # Fold (_*) into an itemsonly check (which is vastly cheaper!)
+        matchpi %[(%itemspattern (%plural min: 0 max: ∞ type: (%literal _)))] do
+          {:"%itemsonly"}
+        end
+
+        # Rewrite (¦ _) = (%partition () _) into a pairsonly check (which is vastly cheaper!)
+        matchpi %[((%literal %partition) ((%literal %literal) ()) (%pass))] do
+          {:"%pairsonly"}
+        end
+
+        # Rewrite (¦ xs_) = (%partition () xs_) = (%partition () (%let xs _))
+        # into xs←(%partition () _).
+        matchpi %[((%literal %partition) ((%literal %literal) ()) ((%literal %let) capture_ (%pass)))] do
+          # (%let _ (%pass)) -> (%pass)
+          normp1 = normp.morph({2, normp[2, 2]})
+
+          {:"%let", capture, normp1}
+        end
+
+        # Fold e. g. (_ _ _) into a singular-only itemspart. This lets us render it as
+        # a more efficient Operator later on.
+        matchpi %[(%itemspattern (%past (%singular _) min: 1))] do
+          Term::Dict.build do |commit|
+            commit << :"%itemspattern/singular-only"
+
+            singulars = normp.items.move(1)
+            singulars.each do |(_, item)|
+              commit << optimized1(item)
+            end
+          end
+        end
+
+        # Fold e.g. (_ _ ... _ _*) into a %prefix operator that skips matching `_*`,
+        # a relatively expensive affair.
+        matchpi %[(%itemspattern (%past (%singular _) min: 1) (%plural min: 0 max: ∞ type: (%literal _)))] do
+          Term::Dict.build do |commit|
+            commit << :"%prefix"
+
+            prefix = normp.items.move(1).grow(-1)
+            prefix.each do |(_, item)|
+              commit << optimized1(item)
+            end
+          end
+        end
+
+        # Fold e.g. (_* _ ... _ _) into a %postfix operator that skips matching `_*`,
+        # a relatively expensive affair.
+        matchpi %[(%itemspattern (%plural min: 0 max: ∞ type: (%literal _)) (%past (%singular _) min: 1))] do
+          Term::Dict.build do |commit|
+            commit << :"%postfix"
+
+            prefix = normp.items.move(2)
+            prefix.each do |(_, item)|
+              commit << optimized1(item)
+            end
+          end
+        end
+
+        # When we have a %prefix or %postfix of (%pass)es, e.g. (_ _ _*), that's basically
+        # a bounds check and nothing more. So if we have a bounds check around it, we can
+        # replace the %prefix/%postfix with a (%pass).
+        matchpi %{[%bounds ((%any %prefix %postfix) (%past (%pass) min: 1))]} do
+          normp.morph({1, {:"%pass"}})
+        end
+
+        # When we have (%let _ (%sketch ...)), that's rather inefficient since the sketch
+        # could have rejected and we've already had an allocation etc. In such situation it
+        # is wise to invert -- into (%sketch (%let _ ...)).
+        matchpi %[((%literal %let) capture_ (%sketch successor_ _number))] do
+          _, _, sketch = normp
+
+          sketch.morph({1, {:"%let", capture, successor}})
+        end
+
+        # Open %layer all entries of which are (%entry/required) should turn into
+        # an %all of (%value (%literal key) value) which we render as lookups rather
+        # than letting allocation-heavy %layer logic manage them.
+        matchp %[((%literal %layer) (%pass) side←(%entries required key_ (%entry/required value_)))] do |side, required|
+          continue unless required.size == side.size
+
+          Term::Dict.build do |commit|
+            commit << :"%all"
+
+            required.each_item_unordered do |match|
+              commit << {:"%value", {:"%literal", match[:key]}, optimized1(match[:value])}
+            end
+          end
+        end
+
+        # (%all X) should be rewritten into X.
+        matchpi %[((%literal %all) successor_)] do
+          optimized1(successor)
+        end
+
+        # (%bounds min: 1 max: ∞) around a single %value has low information content.
+        # Remove it.
+        matchpi %[(%bounds successor←((%literal %value) _ _) min: 1 max: ∞)] do
+          optimized1(successor)
+        end
+
+        # These nodes are terminal nodes for `M1.walk` and for us.
+        # TODO: more nodes here?
+        matchpi %[(%terminal node_)] do
+          optimized1(node, recurse: false)
+        end
+
+        matchpi(
+          %[((%literal %literal) _)],
+          %[((%literal %slot) _)],
+          %[(%capture _)],
+          %[(%barrier _)], 
+        ) do
+          normp
+        end
+
+        # Otherwise we recurse.
+        matchpi %[_dict] do
+          continue unless recurse
+
+          normp1 = normp
+          normp.each_entry do |k, v|
+            normp1 = normp1.with(k, optimized1(v))
+          end
+
+          normp1
+        end
+
+        otherwise { normp }
+      end
+    end
+
+    def self.optimized(normp normp0 : Term) : Term
+      while true
+        normp1 = optimized1(normp0)
+        if normp0 == normp1
+          return normp0
+        end
+        normp0 = normp1
+      end
     end
   end
 
@@ -3549,30 +3861,97 @@ module ::Ww::M1
         Operator::Capture.new(capture, operator(successor, captures))
       end
 
+      # %sketch -> %bounds -> %depth is folded into a single operator, DictGuard.
+      matchpi(
+        %[(%sketch
+            (%bounds
+              (%depth successor_
+                min: min_d_
+                max: max_d_)
+              min: min_b_
+              max: max_b_)
+            sketch_number)],
+        cue: {:"%sketch", :"%bounds", :"%depth"}
+      ) do
+        Operator::DictGuard.new(
+          sketch: sketch.to(Term::Dict::Sketch),
+          bounds: {
+            min_b == SYM_INF ? Magnitude::INFINITY : min_b.to(Magnitude),
+            max_b == SYM_INF ? Magnitude::INFINITY : max_b.to(Magnitude),
+          },
+          depth: {
+            min_d == SYM_INF ? Magnitude::INFINITY : min_d.to(Magnitude),
+            max_d == SYM_INF ? Magnitude::INFINITY : max_d.to(Magnitude),
+          },
+          successor: operator(successor, captures)
+        )
+      end
+
       matchpi %[(%sketch successor_ sketch_number)], cue: :"%sketch" do
         Operator::SketchSubset.new(sketch.to(Term::Dict::Sketch), operator(successor, captures))
       end
 
-      matchpi %[(%bounds successor_ min: minT_ max: maxT_)], cue: :"%bounds" do
-        min = minT == SYM_INF ? Magnitude::INFINITY : minT.to(Magnitude)
-        max = maxT == SYM_INF ? Magnitude::INFINITY : maxT.to(Magnitude)
+      matchpi %[(%bounds (%pass) min: min_b_ max: max_b_)], cue: {:"%bounds", :"%pass"} do
+        min = min_b == SYM_INF ? Magnitude::INFINITY : min_b.to(Magnitude)
+        max = max_b == SYM_INF ? Magnitude::INFINITY : max_b.to(Magnitude)
 
-        Operator::Bounds.new(min, max, operator(successor, captures))
+        Operator::Bounds.new(min, max)
       end
 
-      matchpi %[(%depth successor_ min: minT_ max: maxT_)], cue: :"%depth" do
-        min = minT == SYM_INF ? Magnitude::INFINITY : minT.to(Magnitude)
-        max = maxT == SYM_INF ? Magnitude::INFINITY : maxT.to(Magnitude)
+      matchpi %[(%bounds successor_ min: min_b_ max: max_b_)], cue: :"%bounds" do
+        min = min_b == SYM_INF ? Magnitude::INFINITY : min_b.to(Magnitude)
+        max = max_b == SYM_INF ? Magnitude::INFINITY : max_b.to(Magnitude)
+
+        Operator::BoundsGuard.new(min, max, operator(successor, captures))
+      end
+
+      matchpi %[(%depth successor_ min: min_d_ max: max_d_)], cue: :"%depth" do
+        min = min_d == SYM_INF ? Magnitude::INFINITY : min_d.to(Magnitude)
+        max = max_d == SYM_INF ? Magnitude::INFINITY : max_d.to(Magnitude)
 
         Operator::MaxDepth.new(min, max, operator(successor, captures))
       end
 
-      matchpi %[(%itemspart _*)], cue: :"%itemspart" do
+      matchpi %[(%itemspattern/singular-only _ _*)], cue: :"%itemspattern/singular-only" do
+        items = node.items.move(1).to_readonly_slice { |item| operator(item, captures) }
+
+        Operator::ItemSequence.new(items, exhaustive: true, reverse: false)
+      end
+
+      matchpi %[(%prefix successor_)], cue: :"%prefix" do
+        Operator::ItemFirst.new(operator(successor, captures))
+      end
+
+      matchpi %[(%prefix _ _*)], cue: :"%prefix" do
+        items = node.items.move(1).to_readonly_slice { |item| operator(item, captures) }
+
+        Operator::ItemSequence.new(items, exhaustive: false, reverse: false)
+      end
+
+      matchpi %[(%postfix successor_)], cue: :"%postfix" do
+        Operator::ItemLast.new(operator(successor, captures))
+      end
+
+      matchpi %[(%postfix _ _*)], cue: :"%postfix" do
+        items = node.items.move(1).to_readonly_slice { |item| operator(item, captures) }
+
+        Operator::ItemSequence.new(items, exhaustive: false, reverse: true)
+      end
+
+      matchpi %[(%itemspattern _*)], cue: :"%itemspattern" do
         items = node.items
           .move(1)
           .map { |item| Item.operator(item, captures).as(Operator::Item::Any) }
 
-        Operator::Itemspart.new(items)
+        Operator::Itemspattern.new(items)
+      end
+
+      matchpi %[(%itemsonly)], cue: :"%itemsonly" do
+        Operator::Itemsonly.new
+      end
+
+      matchpi %[(%pairsonly)], cue: :"%pairsonly" do
+        Operator::Pairsonly.new
       end
 
       matchpi %[(%pass)], cue: :"%pass" do
@@ -3583,8 +3962,19 @@ module ::Ww::M1
         Operator::Literal.new(term)
       end
 
+      matchpi %[((%literal %partition) itemspart_ (%pass))], cue: {:"%partition", :"%pass"} do
+        Operator::Itemspart.new(operator(itemspart, captures))
+      end
+
+      matchpi %[((%literal %partition) (%pass) pairspart_)], cue: {:"%partition", :"%pass"} do
+        Operator::Pairspart.new(operator(pairspart, captures))
+      end
+
       matchpi %[((%literal %partition) itemspart_ pairspart_)], cue: :"%partition" do
-        Operator::Partition.new(operator(itemspart, captures), operator(pairspart, captures))
+        Operator::Partition.new(
+          operator(itemspart, captures),
+          operator(pairspart, captures),
+        )
       end
 
       match({:"%string"}, cue: :"%string") { Operator::Str.new }
@@ -3610,6 +4000,10 @@ module ::Ww::M1
         end
 
         Operator::Layer.new(operator(below, captures), entries)
+      end
+
+      matchpi %[(%value ((%literal %literal) key_) value_)], cue: {:"%value", :"%literal"} do
+        Operator::KeyValue.new(key, operator(value, captures))
       end
 
       match({:"%value", {:"%capture", :capture_}, :value_}, cue: :"%value") do |capture, value|
@@ -3667,13 +4061,13 @@ module ::Ww::M1
       match({:"%items/first", :_, :"_*"}, cue: :"%items/first") do
         sequence = node.items.move(1)
 
-        Operator::ScanFirst.new(sequence.map { |item| operator(item, captures).as(Operator::Any) })
+        Operator::ScanFirst.new(sequence.to_readonly_slice { |item| operator(item, captures).as(Operator::Any) })
       end
 
       match({:"%items/source", :_, :"_*"}, :"%items/source") do
         sequence = node.items.move(1)
 
-        Operator::ScanSource.new(sequence.map { |item| operator(item, captures).as(Operator::Any) })
+        Operator::ScanSource.new(sequence.to_readonly_slice { |item| operator(item, captures).as(Operator::Any) })
       end
 
       match(
@@ -3693,7 +4087,7 @@ module ::Ww::M1
 
         exterior = inner & (outer - inner)
 
-        needle = sequence.map { |item| operator(item, captures).as(Operator::Any) }
+        needle = sequence.to_readonly_slice { |item| operator(item, captures).as(Operator::Any) }
 
         if exterior.empty?
           Operator::ScanAllIsolated.new(capture, needle, min, max)
@@ -4006,7 +4400,7 @@ module ::Ww::M1
       end
 
       # ?! The fact that this can override keys isn't quite making me happy
-      dict0.pairs.each_entry do |key, value|
+      dict0.pairspart.each_entry do |key, value|
         dict1.with(bsubst(key, subt), bsubst(value, subt))
       end
     end
@@ -4026,14 +4420,14 @@ module ::Ww::M1
   end
 
   # Used as a constant to indicate that `walk` should walk thoroughly,
-  # that is, it should include all %-nodes, including itemspart nodes
+  # that is, it should include all %-nodes, including itemspattern nodes
   # such as %singular.
   module WalkMode::Thorough
   end
 
-  # Used as a constant to indicate that `walk` should continue into itemspart
+  # Used as a constant to indicate that `walk` should continue into itemspattern
   # nodes such as %singular without yielding them to the callback.
-  module WalkMode::NonItemspart
+  module WalkMode::NonItemspattern
   end
 
   def self.walk(root : Term, mode : WalkMode::Thorough.class, callable, *, keypath = nil) : WalkDecision
@@ -4098,11 +4492,11 @@ module ::Ww::M1
     end
   end
 
-  def self.walk(root : Term, mode : WalkMode::NonItemspart.class, callable, *, itemspart : Bool = false, keypath = nil) : WalkDecision
+  def self.walk(root : Term, mode : WalkMode::NonItemspattern.class, callable, *, itemspattern : Bool = false, keypath = nil) : WalkDecision
     walk(root, mode: WalkMode::Thorough, keypath: keypath) do |node|
       Term.case(node, engine: M0) do
-        if itemspart
-          # Recurse into M1 non-itemspart children with itemspart flag off.
+        if itemspattern
+          # Recurse into M1 non-itemspattern children with itemspattern flag off.
           matchpi(
             %{[%singular child_]},
             %{[%gap child_]},
@@ -4111,7 +4505,7 @@ module ::Ww::M1
             %{[%optional _ child_]},
             cues: {:"%singular", :"%gap", :"%gap/min", :"%gap/max", :"%optional"},
           ) do
-            case walk(child, mode, callable, itemspart: false, keypath: keypath)
+            case walk(child, mode, callable, itemspattern: false, keypath: keypath)
             in .continue?, .skip?
               WalkDecision::Skip
             in .halt?
@@ -4119,7 +4513,7 @@ module ::Ww::M1
             end
           end
 
-          # Recurse into %group and %many with itemspart flag on.
+          # Recurse into %group and %many with itemspattern flag on.
           matchpi(
             %{[%group _ _ _*]},
             %{[%many _ _ _*]},
@@ -4130,17 +4524,17 @@ module ::Ww::M1
             WalkDecision::Continue
           end
 
-          # Avoid all other itemspart nodes.
+          # Avoid all other itemspattern nodes.
           otherwise { WalkDecision::Skip }
         else
-          matchpi %{[%itemspart _*]}, cue: :"%itemspart" do
+          matchpi %{[%itemspattern _*]}, cue: :"%itemspattern" do
             decision = callable.call(node)
 
             if decision.continue?
               node.each_item_with_index do |item, index|
                 keypath.try &.push(Term.of(index))
 
-                case walk(item, mode, callable, itemspart: true, keypath: keypath)
+                case walk(item, mode, callable, itemspattern: true, keypath: keypath)
                 in .continue?, .skip?
                 in .halt?
                   decision = WalkDecision::Halt
@@ -4205,11 +4599,12 @@ module ::Ww::M1
   {% end %}
 
   # TODO: overwrite in cache if higher opt level
-  def self.operator(pattern : Term, *, normalize = true, fresh = false, opt = DEFAULT_OPT_LEVEL) : Operator::Any
+  def self.operator(pattern : Term, *, normalize = true, optimize = true, fresh = false, opt = DEFAULT_OPT_LEVEL) : Operator::Any
     PATTERN_CACHE.fetch(pattern.unsafe_repr, fresh: fresh) do
       normal = normalize ? normal(pattern) : pattern
+      optimal = optimize ? optimized(normal, opt) : normal
       captures = captures(normal)
-      pipe(normal, optimized(opt), operator(captures))
+      operator(optimal, captures)
     end
   end
 
@@ -4791,7 +5186,7 @@ module ::Ww::M1
       end
 
       # With %all, the idea is to take the max of both min depths and max depths. %all is
-      # different from e.g. %itemspart in that it does not introduce depth itself.
+      # different from e.g. %itemspattern in that it does not introduce depth itself.
       matchpi(
         %{[%all _*]},
         %{[%past _*]},
@@ -4894,10 +5289,10 @@ module ::Ww::M1
       end
 
       matchpi(
-        %{[%itemspart _*]},
+        %{[%itemspattern _*]},
         %{[%items/first _*]},
         %{[%items/source _*]},
-        cues: {:"%itemspart", :"%items/first", :"%items/source"},
+        cues: {:"%itemspattern", :"%items/first", :"%items/source"},
       ) do
         min = Magnitude.new(1)
         max = Magnitude.new(1)
@@ -5039,7 +5434,7 @@ module ::Ww::M1
     captures = Set(Term).new
     repeats = literals = restrictions = choices = 0u32
 
-    walk(normp, mode: WalkMode::NonItemspart) do |operator|
+    walk(normp, mode: WalkMode::NonItemspattern) do |operator|
       Term.case(operator) do
         matchpi %[(%capture _)] do
           unless captures.add?(operator)
@@ -5212,7 +5607,7 @@ module ::Ww::M1
   # `nil` is returned.
   def self.head?(normp : Term) : Term?
     Term.case(normp) do
-      matchpi %[(%itemspart items_+)] do
+      matchpi %[(%itemspattern items_+)] do
         case response = Head.item(items)
         in Head::Some then response.term
         in Head::None, Head::More
@@ -5228,6 +5623,37 @@ module ::Ww::M1
     end
   end
 end
+
+{% if flag?(:profile) %}
+module Profile
+  class_getter rtime : Hash(M1::Operator::Any, Time::Span) do
+    hash = Hash(M1::Operator::Any, Time::Span).new
+    hash.compare_by_identity
+    hash
+  end
+
+  class_getter optop : Hash(M1::Operator::Any, Term) do
+    hash = Hash(M1::Operator::Any, Term).new
+    hash.compare_by_identity
+    hash
+  end
+
+  class_getter hits : Hash(M1::Operator::Any, Int32) do
+    hash = Hash(M1::Operator::Any, Int32).new
+    hash.compare_by_identity
+    hash
+  end
+
+  at_exit do
+    rtime.to_a.sort_by { |op, span| span * hits[op] }.each do |op, span|
+      hitcount = hits[op]
+      puts "Pattern".colorize.bold
+      puts ML.display(optop[op])
+      puts "Took: #{span.total_microseconds}µs × #{hitcount}".colorize.bold
+    end
+  end
+end
+{% end %}
 
 # Represents a pattern within a `PatternSet`. Has no expected use outside of `PatternSet`.
 struct Pattern
@@ -5246,7 +5672,28 @@ struct Pattern
 
   # Returns the response of this pattern to *matchee* (may be positive or negative).
   def response(matchee : Term, *, env = Term[], keypaths = false) : Pr::Any
-    case fb = O.feedback(env, @operator, matchee, keypaths: keypaths)
+    fb = nil
+
+    {% if flag?(:profile) %}
+      if keypaths
+        fb = O.feedback(env, @operator, matchee, keypaths: keypaths)
+      else
+        took = Time.measure do
+          fb = O.feedback(env, @operator, matchee, keypaths: keypaths)
+        end
+        ca = Profile.rtime[@operator]? || 0.nanoseconds
+        hits = Profile.hits[@operator]? || 0
+
+        Profile.rtime[@operator] = ca + (took - ca)/(hits + 1)
+        Profile.hits[@operator] = hits + 1
+      end
+    {% else %}
+      fb = O.feedback(env, @operator, matchee, keypaths: keypaths)
+    {% end %}
+
+    fb = fb.not_nil!
+
+    case fb
     in O::Fb::MatchOne  then Pr::One.new(self, fb.env)
     in O::Fb::MatchMany then Pr::Many.new(self, fb.envs)
     in O::Fb::Mismatch  then Pr::Neg.new
@@ -5334,6 +5781,10 @@ class PatternSet
         specificities << specificity
 
         operator = M1.operator(normp, normalize: false)
+
+        {% if flag?(:profile) %}
+          Profile.optop[operator] = pattern
+        {% end %}
 
         pattern = Pattern.new(index.to_u32, operator)
         next unless yield normp, env
@@ -5465,7 +5916,7 @@ class ::Ww::Term::Dict
   # Lets the block replace items in the given *range* with zero or more items
   # by appending to the commit. Returns the modified copy of `self`.
   def replace(range : Range(Term::Num, Term::Num), & : Term::Dict::Commit ->) : Term::Dict
-    pairs.transaction do |commit|
+    pairspart.transaction do |commit|
       # Copy before
       (Term[0]...range.begin).each do |index|
         commit.append(self[index])
