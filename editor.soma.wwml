@@ -6,7 +6,7 @@
 ;; GENERAL
 
 ;; Get rid of anything that we do not understand.
-[_string | _string (M←_ _*) @_] <> {(M): ()}
+[_string | _string (M_ _*) @_] <> {(M): ()}
 
 ;; INTERPRET
 ;;
