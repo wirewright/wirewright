@@ -2741,7 +2741,7 @@ module ::Ww::M1
     def pair(key : Term, value : Term) : Term
       Term.of_case(value, engine: M0) do
         matchpi %[(%optional default_ body_)], cue: :"%optional" do
-          {:"%entry/optional", default, pattern(body)}
+          {:"%entry/optional", {:"%barrier", default}, pattern(body)}
         end
 
         matchpi %[(%- positive_)], cue: :"%-" do
@@ -2749,7 +2749,7 @@ module ::Ww::M1
         end
 
         matchpi %[(%- positive_ name_)], cue: :"%-" do
-          {:"%entry/negative", pattern(positive), name}
+          {:"%entry/negative", pattern(positive), {:"%barrier", name}}
         end
 
         otherwise do
@@ -3908,7 +3908,7 @@ module ::Ww::M1
           Operator::Entry::Required.new(key, M1.operator(value, captures))
         end
 
-        match({:"%entry/optional", :default_, :value_}, cue: :"%entry/optional") do |default, value|
+        match({:"%entry/optional", {:"%barrier", :default_}, :value_}, cue: :"%entry/optional") do |default, value|
           Operator::Entry::Optional.new(key, default, M1.operator(value, captures))
         end
 
@@ -3916,7 +3916,7 @@ module ::Ww::M1
           Operator::Entry::Absent.new(key)
         end
 
-        match({:"%entry/negative", {:"%pass"}, :name_}, cue: :"%entry/negative") do |name|
+        match({:"%entry/negative", {:"%pass"}, {:"%barrier", :name_}}, cue: :"%entry/negative") do |name|
           Operator::Entry::AbsentKeypath.new(key, name)
         end
 
@@ -3924,7 +3924,7 @@ module ::Ww::M1
           Operator::Entry::Negative.new(key, M1.operator(positive, captures))
         end
 
-        match({:"%entry/negative", :positive_, :name_}, cue: :"%entry/negative") do |positive, name|
+        match({:"%entry/negative", :positive_, {:"%barrier", :name_}}, cue: :"%entry/negative") do |positive, name|
           Operator::Entry::NegativeKeypath.new(key, M1.operator(positive, captures), name)
         end
       end
