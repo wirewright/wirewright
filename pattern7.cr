@@ -3722,6 +3722,18 @@ module ::Ww::M1
           normp.morph({1, {:"%pass"}})
         end
 
+        # A %prefix inside %bounds that ends with some number of %passes should have those
+        # passes omitted.
+        matchpi %{[%bounds ((%group successor %prefix (%plural/min min: 1)) (%past (%pass) min: 1))]} do |successor|
+          normp.morph({1, successor})
+        end
+
+        # A %postfix inside %bounds that ends with some number of %passes should have those
+        # passes omitted.
+        matchpi %{[%bounds (%postfix (%past (%pass) min: 1) (%plural/max successors min: 1))]} do |successors|
+          normp.morph({1, successors.prepend(:"%postfix")})
+        end
+
         # When we have (%let _ (%sketch ...)), that's rather inefficient since the sketch
         # could have rejected and we've already had an allocation etc. In such situation it
         # is wise to invert -- into (%sketch (%let _ ...)).
@@ -3755,6 +3767,43 @@ module ::Ww::M1
         # Remove it.
         matchpi %[(%bounds successor←((%literal %value) _ _) min: 1 max: ∞)] do
           optimized1(successor)
+        end
+
+        # (%partition (%itemsonly) (%pairsonly)) -> (%dict)
+        matchpi %[((%literal %partition) (%itemsonly) (%pairsonly))] do
+          {:"%dict"}
+        end
+
+        # (%partition (%itemsonly) (%value (%literal ...) ...)) -> (%value (%literal ...) ...)
+        #
+        # Similarly for %all of such %values. We cannot do that for %layer or generic %value
+        # etc. because that'd change what the pattern means. Note also how we match the type
+        # of the value. If one does e.g. (%partition (_*) (%value 0 x_)), unless this check is
+        # in place, one would get an assignment for x: ... which shouldn't be possible. If
+        # the key is numeric we resort to the slower path.
+        matchpi(
+          %[((%literal %partition) (%itemsonly)
+             successor←((%literal %value)
+                        ((%literal %literal) (%any° _string _symbol _boolean _dict))
+                        _))],
+          %[((%literal %partition) (%itemsonly)
+              successor←((%literal %all)
+                         (%past ((%literal %value)
+                                 ((%literal %literal) (%any° _string _symbol _boolean _dict))
+                                  _)
+                          min: 1)))],
+        ) do
+          optimized1(successor)
+        end
+
+        # Omit inner itemspart bounds if they are the same as %partition's.
+        matchpi %[(%bounds ((%literal %partition) (%bounds successor_ min: min_ max: max_) _) min: min_ max: max_)] do
+          normp.morph({1, 1, optimized1(successor)})
+        end
+
+        # Omit inner pairspart bounds if they are the same as %partition's.
+        matchpi %[(%bounds ((%literal %partition) _ (%bounds successor_ min: min_ max: max_)) min: min_ max: max_)] do
+          normp.morph({1, 2, optimized1(successor)})
         end
 
         # These nodes are terminal nodes for `M1.walk` and for us.

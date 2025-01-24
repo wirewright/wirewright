@@ -671,6 +671,14 @@ module Ww
       self.with(items.size, item)
     end
 
+    # FIXME: this MUST NOT be O(n), WTF?
+    def prepend(item)
+      pairspart.transaction do |commit|
+        commit.append(item)
+        commit.concat(items)
+      end
+    end
+
     private def with_default(key : ITerm, value : Term) : Dict
       added, pairs = @pairs.add(Probes::AssocPairImm.new(key.upcast, value))
       unless added # Overridden or completely unchanged
