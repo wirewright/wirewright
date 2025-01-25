@@ -191,7 +191,7 @@ module Ww::ML::Text
                '!', '$', '%', '&', '*', '+',
                '-', '.', '/', '<', '=', '>',
                '?', '@', '_', '~', 'λ', '|',
-               '∞', '⏏', '°', '∈', '⊆', '⊂'
+               '∞', '°', '∈', '⊆', '⊂'
             io << chr
             advance
           else
@@ -446,7 +446,7 @@ module Ww::ML::Text
         when '}'
           advance
           return Token.new(:"}", pos - 1, pos)
-        when '!', '$', '%', '&', '*', '.', '/', '>', '?', '_', '~', 'λ', '|', '∞', '⏏', '°', '∈', '⊆', '⊂'
+        when '!', '$', '%', '&', '*', '.', '/', '>', '?', '_', '~', 'λ', '|', '∞', '°', '∈', '⊆', '⊂'
           return symbol
         when '`'
           advance
@@ -484,9 +484,9 @@ module Ww::ML::Text
         when '⤳'
           advance
           return Token.new(:"⤳", pos - 3, pos)
-        when '⭳'
+        when '⏏'
           advance
-          return Token.new(:"⭳", pos - 3, pos)
+          return Token.new(:"⏏", pos - 3, pos)
         when '←'
           if behind?.try(&.whitespace?)
             raise "unexpected whitespace near `←`"
@@ -511,12 +511,12 @@ module Ww::ML::Text
         when '⟆'
           advance
           return Token.new(:"⟆", pos - 3, pos)
-        when '⧼'
+        when '⟨'
           advance
-          return Token.new(:"⧼", pos - 3, pos)
-        when '⧽'
+          return Token.new(:"⟨", pos - 3, pos)
+        when '⟩'
           advance
-          return Token.new(:"⧽", pos - 3, pos)
+          return Token.new(:"⟩", pos - 3, pos)
         when '≡'
           advance
           return Token.new(:"≡", pos - 3, pos)
@@ -835,7 +835,7 @@ module Ww::ML::Text
 
         while token = @lexer.thru?
           case token.type
-          when :"⧽"
+          when :"⟩"
             break
           end
 
@@ -851,7 +851,7 @@ module Ww::ML::Text
         case token.type
         when :term  then token.term
         when :"⟅"   then psomewhere
-        when :"⧼"   then pitem
+        when :"⟨"   then pitem
         when :"("   then plist
         when :"["   then litemspart
         when :"{"   then dict
@@ -866,7 +866,7 @@ module Ww::ML::Text
         when :"\\"  then Term.of(:place, slot)
         when :"\\:" then Term.of(:paste, {:"to-dict", slot})
         when :"⤳"   then Term.of(:"%dep", slot)
-        when :"⭳"   then Term.of(:"%slot", slot)
+        when :"⏏"   then Term.of(:"%slot", slot)
         when :"≡"   then Term.of(:"%nonself", slot)
         when :"@"
           unless name = term?(Term::Sym) || term?(Term::Str) || term?(Term::Num)

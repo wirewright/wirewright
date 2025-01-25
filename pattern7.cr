@@ -117,7 +117,7 @@
 
 # TODO: support
 # ;; Moves all (+ 1 2) etc. into additions field in context.
-# (context (_* ⭳s) `n←(+ a_number b_number)`)
+# (context (_* ⏏s) `n←(+ a_number b_number)`)
 #   <=> { s: (add lhs: →a rhs: →b), (n): ()}
 #
 # ;; ^^^ This one would require some sort of caching because it's all DfsFirst's,
@@ -127,7 +127,7 @@
 #
 # Note that we remove n, this may not be always appropriate! Instead you can mark:
 #
-# (context (_* ⭳s) `(+ a_number b_number)` ¦ _ -processed-adds)
+# (context (_* ⏏s) `(+ a_number b_number)` ¦ _ -processed-adds)
 #   <=>  { s: (add lhs: #a rhs: #b)} ;; Runs on loci
 #   <=>. { processed-adds: true} ;; Runs on the resulting context
 #
@@ -1213,7 +1213,7 @@ module ::Ww::M1::Operator
     unless (dict = matchee.as_d?) && dict.itemsonly? && dict.size > 0
       return Fb::Mismatch.new(behind0.env)
     end
-    
+
     ahead1 = Ahead::Goto.new(behind0.keypath, Ahead.stackptr(ahead0))
 
     match(behind0.keypath(&.value(dict.size - 1)), op.successor, dict[dict.size - 1], ahead1)
@@ -1906,6 +1906,7 @@ module ::Ww::M1::Operator
   end
 
   M = Term.of(1, 2, 3)
+
   def feedback(env : Env::Type, op : Any, matchee : Term, *, keypaths : Bool = false) : Fb::Response
     behind0 = Behind.new(env, domains: Term[], antidomains: Term[], keypath: keypaths ? KeypathTip.new : nil)
 
@@ -3900,7 +3901,7 @@ module ::Ww::M1
           %[((%literal %literal) _)],
           %[((%literal %slot) _)],
           %[(%capture _)],
-          %[(%barrier _)], 
+          %[(%barrier _)],
         ) do
           normp
         end
@@ -4114,7 +4115,7 @@ module ::Ww::M1
         Operator::Keypool.new(keys.to_a)
       end
 
-      match({ {:"%literal", :"%layer"}, :below_, :side_}, cue: :"%layer") do |below, side|
+      match({ {:"%literal", :"%layer"}, :below_, :side_ }, cue: :"%layer") do |below, side|
         entries = Array(Operator::Entry::Any).new(side.size)
 
         side.each_entry do |k, v|
@@ -4686,7 +4687,7 @@ module ::Ww::M1
           end
         end
 
-        otherwise {}
+        otherwise { }
       end
 
       WalkDecision::Continue
@@ -5256,7 +5257,6 @@ module ::Ww::M1
         {Magnitude.new(0), Magnitude::INFINITY}
       end
 
-
       # With %optional, our min is when the optional is not matched (0)
       # and our max is when the optional is matched (successor).
       matchpi(
@@ -5685,7 +5685,7 @@ module ::Ww::M1
   # Returns the "head" of a normal pattern *normp*.
   #
   # The head of a pattern is the first literal in an expected dictionary matchee.
-  # For example, in `(+ a_ b_)` that would be `+`; and in `(⭳a ⭳b x←qux x_ y_)` that
+  # For example, in `(+ a_ b_)` that would be `+`; and in `(⏏a ⏏b x←qux x_ y_)` that
   # would be `qux`. On the other hand, for `qux` or `(xs_* qux)` the head is
   # indeterminate (because we'd have to know how many `xs` there were), therefore,
   # `nil` is returned.
@@ -5709,34 +5709,34 @@ module ::Ww::M1
 end
 
 {% if flag?(:profile) %}
-module Profile
-  class_getter rtime : Hash(M1::Operator::Any, Time::Span) do
-    hash = Hash(M1::Operator::Any, Time::Span).new
-    hash.compare_by_identity
-    hash
-  end
+  module Profile
+    class_getter rtime : Hash(M1::Operator::Any, Time::Span) do
+      hash = Hash(M1::Operator::Any, Time::Span).new
+      hash.compare_by_identity
+      hash
+    end
 
-  class_getter optop : Hash(M1::Operator::Any, Term) do
-    hash = Hash(M1::Operator::Any, Term).new
-    hash.compare_by_identity
-    hash
-  end
+    class_getter optop : Hash(M1::Operator::Any, Term) do
+      hash = Hash(M1::Operator::Any, Term).new
+      hash.compare_by_identity
+      hash
+    end
 
-  class_getter hits : Hash(M1::Operator::Any, Int32) do
-    hash = Hash(M1::Operator::Any, Int32).new
-    hash.compare_by_identity
-    hash
-  end
+    class_getter hits : Hash(M1::Operator::Any, Int32) do
+      hash = Hash(M1::Operator::Any, Int32).new
+      hash.compare_by_identity
+      hash
+    end
 
-  at_exit do
-    rtime.to_a.sort_by { |op, span| span * hits[op] }.each do |op, span|
-      hitcount = hits[op]
-      puts "Pattern".colorize.bold
-      puts ML.display(optop[op])
-      puts "Took: #{span.total_microseconds}µs × #{hitcount}".colorize.bold
+    at_exit do
+      rtime.to_a.sort_by { |op, span| span * hits[op] }.each do |op, span|
+        hitcount = hits[op]
+        puts "Pattern".colorize.bold
+        puts ML.display(optop[op])
+        puts "Took: #{span.total_microseconds}µs × #{hitcount}".colorize.bold
+      end
     end
   end
-end
 {% end %}
 
 # Represents a pattern within a `PatternSet`. Has no expected use outside of `PatternSet`.
