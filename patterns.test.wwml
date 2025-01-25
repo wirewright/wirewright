@@ -2413,7 +2413,7 @@
     (= (1 and x y) (y x and))
     (= (1 2 and x y) (y x and 2))
     (= (1 2 3 and x y) (y x and 2))
-    (= (1 2 3 4 and x y) (y x and 3 4))
+    (= (1 2 3 4 and x y) (y x and 3))
     (= (1 2 3 4 5 and x y) (y x and 3 4))
     (= (1 2 3 4 5 6 and x y) (y x and 3 4)))
 
