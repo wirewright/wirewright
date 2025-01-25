@@ -294,8 +294,8 @@ module Search::Result
       view.each { |item| yield item }
     end
 
-    def +(offset : Int)
-      ItemStrip.new(view + offset, keypath.try(&.forward))
+    def [](index : Int)
+      view[index]
     end
   end
 end
@@ -966,22 +966,6 @@ module ::Ww::M1::Operator
 
       {copy_with(env: lenv, domains: ldomains, antidomains: lantidomains),
        copy_with(env: renv, domains: rdomains, antidomains: rantidomains)}
-    end
-  end
-
-  # TODO: ahead should be a struct. We do not need to allocate procs for this.
-
-  struct Ahead::Fn
-    include Ahead
-
-    def initialize(@fn : Behind -> Fb::Any)
-    end
-
-    def initialize(&@fn : Behind -> Fb::Any)
-    end
-
-    def call(behind0 : Behind) : Fb::Any
-      @fn.call(behind0)
     end
   end
 
@@ -1983,12 +1967,10 @@ module ::Ww::M1::Operator
     match(behind0, ops, cell.sequence, ahead)
   end
 
-  def match(behind0, ops : Indexable(Any), cell : Search::Result::Pair, ahead)
+  def match(behind0, ops : Indexable(Any), cell : Search::Result::Pair, ahead0)
     unless ops.size == 2
       return Fb::Mismatch.new(behind0.env)
     end
-
-    kp0 = behind0.keypath
 
     if row = cell.keypath
       kkp, vkp = row
@@ -1996,42 +1978,36 @@ module ::Ww::M1::Operator
       kkp = vkp = nil
     end
 
-    match(behind0.goto(kkp), ops[0], cell.k) do |in1|
-      match(in1.goto(vkp), ops[1], cell.v) do |in2|
-        ahead.call(in2.goto(kp0))
-      end
-    end
+    ahead1 = Ahead::Goto.new(behind0.keypath, Ahead.stackptr(ahead0))
+    ahead2 = Ahead::Match.new(ops[1], cell.v, Ahead.stackptr(ahead1))
+    ahead3 = Ahead::Goto.new(vkp, Ahead.stackptr(ahead2))
+    ahead4 = Ahead::Match.new(ops[0], cell.k, Ahead.stackptr(ahead3))
+    ahead5 = Ahead::Goto.new(kkp, Ahead.stackptr(ahead4))
+
+    ahead5.call(behind0)
   end
 
-  # FIXME: instead of relying on Slice() implement match() that uses two indices I and J
-  # over an indexable. This will allow us to not allocate arrays in several places and
-  # also reuse this match() in several places, plus no .@b crap
-  def match0(env, ops, matchees, ahead)
-    op, matchee = ops.first?, matchees.first?
-
-    if op.nil? && matchee.nil?
-      return ahead.call(env)
-    end
-
-    unless op && matchee
-      return Fb::Mismatch.new(env.env)
-    end
-
-    match(env.goto(matchees.keypath), op, matchee, Ahead::Fn.new { |candidate| match0(candidate, ops + 1, matchees + 1, ahead) })
-  end
-
-  def match(env, ops : Slice(Any), matchees : Search::Result::ItemStrip, ahead)
-    kp0 = env.keypath
-
-    match0(env, ops, matchees, Ahead::Goto.new(kp0, Ahead.stackptr(ahead)))
+  def match(behind0, ops : Slice(Any), matchees : Search::Result::ItemStrip, ahead0)
+    ahead1 = Ahead::Goto.new(behind0.keypath, Ahead.stackptr(ahead0))
+    ahead2 = Ahead::ItemZip.new(ops, matchees, 0, 0, +1, Ahead.stackptr(ahead1))
+    ahead2.call(behind0.goto(matchees.keypath))
   end
 
   def match(env, ops : Array(Any), matchee, ahead)
     match(env, ops.to_readonly_slice, matchee, ahead)
   end
+end
 
-  def match(env, op, matchee, &ahead : Behind -> Fb::Any)
-    match(env, op, matchee, Ahead::Fn.new(ahead))
+module ::Ww::M1::Operator
+  struct Ahead::ItemAdapter
+    include Ahead
+
+    def initialize(@ord : UInt32, @feed : Item::Feed, @ahead : Item::ItemAhead*)
+    end
+
+    def call(behind0 : Behind)
+      @ahead.value.call(@ord, @feed, behind0)
+    end
   end
 end
 
@@ -2335,7 +2311,18 @@ module ::Ww::M1::Operator::Item
     sequence(ord, env, item.children.to_readonly_slice, successors, feed, cont)
   end
 
-  def self.match(ord, env, item : Gap, successors, feed, ahead)
+  struct ItemAhead::Skip
+    include ItemAhead
+
+    def initialize(@n : Int32, @ahead : ItemAhead*)
+    end
+
+    def call(ord, feed, behind0)
+      @ahead.value.call(ord + @n, feed.move(@n), behind0.keypath(&.forward(@n)))
+    end
+  end
+
+  def self.match(ord, env, item : Gap, successors, feed, ahead0)
     strategy = item.strategy.auto? ? ExpandStrategy::Sway : item.strategy
 
     envs = [] of Env::Type
@@ -2343,8 +2330,11 @@ module ::Ww::M1::Operator::Item
     expand(feed, pivot: (feed.size / (successors.amount + 1)).ceil.to_i, strategy: strategy) do |prefix, suffix|
       matchee = Term.of(prefix.size)
 
-      kp0 = env.keypath
-      case fb = Operator.match(env.keypathless, item.measurer, matchee, Operator::Ahead::Fn.new { |in1| ahead.call(ord + prefix.size, suffix, in1.goto(kp0).keypath(&.forward(prefix.size))) })
+      ahead1 = Operator::Ahead::ItemAdapter.new(ord, suffix, ItemAhead.stackptr(ahead0))
+      ahead2 = Operator::Ahead::Forward.new(prefix.size, Operator::Ahead.stackptr(ahead1))
+      ahead3 = Operator::Ahead::Goto.new(env.keypath, Operator::Ahead.stackptr(ahead2))
+
+      case fb = Operator.match(env.keypathless, item.measurer, matchee, ahead3)
       in Fb::MatchOne
         envs << fb.env
         next if fb.more
@@ -2363,17 +2353,21 @@ module ::Ww::M1::Operator::Item
     Env.feedback(envs, fallback: env.env)
   end
 
-  def self.match(ord, env, item : Optional, successors, feed, ahead)
-    kp0 = env.keypath
-
+  def self.match(ord, env, item : Optional, successors, feed, ahead0)
     if matchee = feed.first?
-      fb = Operator.match(env, item.tail, matchee, Operator::Ahead::Fn.new { |in1| ahead.call(ord + 1, feed.move(1), in1.keypath(&.forward)) })
+      ahead1 = ItemAhead::Skip.new(1, ItemAhead.stackptr(ahead0))
+      ahead2 = Operator::Ahead::ItemAdapter.new(ord, feed, ItemAhead.stackptr(ahead1))
+
+      fb = Operator.match(env, item.tail, matchee, ahead2)
       if fb.is_a?(Fb::Match)
         return fb
       end
     end
 
-    Operator.match(env.keypath(&.ephk(item.default, ord)), item.tail, item.default, Operator::Ahead::Fn.new { |in1| ahead.call(ord, feed, in1.goto(kp0)) })
+    ahead1 = Operator::Ahead::ItemAdapter.new(ord, feed, ItemAhead.stackptr(ahead0))
+    ahead2 = Operator::Ahead::Goto.new(env.keypath, Ahead.stackptr(ahead1))
+
+    Operator.match(env.keypath(&.ephk(item.default, ord)), item.tail, item.default, ahead2)
   end
 
   def self.many(ord, env, item : Many, successors, feed, ahead, memo)
