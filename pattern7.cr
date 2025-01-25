@@ -91,10 +91,7 @@
 # Ideally Simple should be embeddable into the constraint system, perhaps via some sort of
 # a "bridge" node.
 #
-# - Required&easy optimizations: (_* ¦ _), (_* ¦ xs_). (xs_* x_), (x_ xs_*), (fst_ _* lst_), etc.
-#
-# - Stuff like (_* ¦ _ x: (%optional 0 x_)) should result in a single PairRequired node. Nothing more.
-#   This would be a good sign the optimizer is doing what it should.
+# - Required&easy optimizations: (fst_ _* lst_)
 
 ###
 
@@ -2983,13 +2980,25 @@ module ::Ww::M1
           pattern(Term.of(:"%pipe", head, body))
         end
 
-        matchpi %[(%all _*)], cue: :"%all" do
-          pattern.transaction do |commit|
-            offshoots = pattern.items.move(1)
-            offshoots.each_with_index(offset: 1) do |offshoot, index|
-              commit.with(index, pattern(offshoot))
-            end
+        matchpi %[(%all)], cue: :"%all" do
+          NORMAL_PASS
+        end
+
+        matchpi %[(%all a_)], cue: :"%all" do
+          pattern(a)
+        end
+
+        matchpi %[(%all a_ b_)], cue: :"%all" do
+          {:"%all", pattern(a), pattern(b)}
+        end
+
+        matchpi %[(%all a_ b_ _ _*)], cue: :"%all" do
+          rewritten = Term::Dict.build do |commit|
+            commit << :"%all" << {:"%all", a, b}
+            commit.concat(pattern.items.move(3))
           end
+
+          pattern(Term.of(rewritten))
         end
 
         matchpi %[(%any _*)], cue: :"%any" do
@@ -3659,6 +3668,37 @@ module ::Ww::M1
 
     def self.optimized1(normp : Term, cycle : Int, *, recurse = true) : Term
       Term.of_case(normp, engine: Engine) do
+        # (%all) should be rewritten into (%pass).
+        #
+        # These are internal rewrites, the user cannot reach this from the outside since during
+        # normalization such %alls are eliminated.
+        matchpi %[((%literal %all))] do
+          {:"%pass"}
+        end
+
+        # (%all X) should be rewritten into X.
+        #
+        # Ditto about reachability from the client-side.
+        matchpi %[((%literal %all) successor_)] do
+          optimized1(successor, cycle)
+        end
+
+        # (%all X X) should be rewritten into X.
+        matchpi %[((%literal %all) successor_ successor_)] do
+          optimized1(successor, cycle)
+        end
+
+        # (%all X Y Zs) should be rewritten into (%all (%all X Y) Zs)
+        #
+        # This is unreachable from the client-side, and only reachable via emission from optimized1
+        # itself. This is because client-side %alls are already normalized into binary %alls.
+        matchpi %[((%literal %all) x_ y_ zs_+)] do
+          Term::Dict.build do |commit|
+            commit << :"%all" << {:"%all", optimized1(x, cycle), optimized1(y, cycle)}
+            commit.concat(zs.items) { |z| optimized1(z, cycle) }
+          end
+        end
+
         # Fold %sketch -> %bounds -> %depth into a single operator, %dict-guard.
         matchpi(
           %[(%sketch
@@ -3731,6 +3771,27 @@ module ::Ww::M1
           end
         end
 
+        # Fold (%bounds (_ ... _ _* _ ... _) ...) (circumfix) into an %all of a %bounds %prefix
+        # and a same-%bounds %postfix.
+        matchp(
+          %{[%bounds
+              (%itemspattern (%group prefix (%past/max (%singular _) min: 1))
+                             (%plural min: 0 max: ∞ type: (%literal _))
+                             (%group postfix (%past/max (%singular _) min: 1)))]}
+        ) do |prefix, postfix|
+          op_prefix = Term::Dict.build do |commit|
+            commit << :"%prefix"
+            commit.concat(prefix.items) { |(_, item)| optimized1(item, cycle) }
+          end
+
+          op_postfix = Term::Dict.build do |commit|
+            commit << :"%postfix"
+            commit.concat(postfix.items) { |(_, item)| optimized1(item, cycle) }
+          end
+
+          {:"%all", normp.morph({1, op_prefix}), normp.morph({1, op_postfix})}
+        end
+
         # When we have a %prefix or %postfix of (%pass)es, e.g. (_ _ _*), that's basically
         # a bounds check and nothing more. So if we have a bounds check around it, we can
         # replace the %prefix/%postfix with a (%pass).
@@ -3783,11 +3844,6 @@ module ::Ww::M1
               commit << {:"%value", {:"%literal", match[:key]}, optimized1(match[:value], cycle)}
             end
           end
-        end
-
-        # (%all X) should be rewritten into X.
-        matchpi %[((%literal %all) successor_)] do
-          optimized1(successor, cycle)
         end
 
         # (%bounds min: 1 max: ∞) around a single %value has low information content.
@@ -4260,23 +4316,8 @@ module ::Ww::M1
         end
       end
 
-      match({:"%all", :a_}, cue: :"%all") do |a|
-        operator(a, captures)
-      end
-
       match({:"%all", :a_, :b_}, cue: :"%all") do |a, b|
         Operator::Both.new(operator(a, captures), operator(b, captures))
-      end
-
-      match({:"%all", :a_, :_, :"_*"}, cue: :"%all") do |a|
-        rest = Term::Dict.build do |commit|
-          commit << :"%all"
-
-          args = node.items.move(2)
-          args.each { |item| commit << item }
-        end
-
-        Operator::Both.new(operator(a, captures), operator(Term.of(rest), captures))
       end
 
       matchpi %[(%any/literal _*)], cue: :"%any/literal" do
