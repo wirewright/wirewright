@@ -455,10 +455,10 @@ GP←⧼P←⧼[_string | _string (M←(move-parent-below) _*) @_]⧽⧽
 GP←⧼P←⧼[_string | _string (M←(move-parent-above) _*) @_]⧽⧽
   <> {(M): (), (P): ($tr P0 ()), (GP): (↑P0 ↑GP)}
 
-⧼(_* ⭳target ¦ _) P←⧼[_string | _string (M←(move-parent-into-behind) _*) @_]⧽⧽
+⧼[_* ⭳target] P←⧼[_string | _string (M←(move-parent-into-behind) _*) @_]⧽⧽
   <> {(M): (), (P): (), target: ↑P}
 
-⧼P←⧼[_string | _string (M←(move-parent-into-ahead) _*) @_]⧽ (⭳target _* ¦ _)⧽
+⧼P←⧼[_string | _string (M←(move-parent-into-ahead) _*) @_]⧽ [⭳target _*]⧽
   <> {(M): (), (P): (), target: ↑P}
 
 ;; NOTE: we create two bindings to behind here so that %value doesn't hear us
