@@ -38,17 +38,6 @@ module Ww
       TermType::Any
     end
 
-    def check : Sparse::Unit::Base
-      case self
-      in .any?     then Sparse::Unit::IsAny.new
-      in .number?  then Sparse::Unit::IsNum.new
-      in .string?  then Sparse::Unit::IsStr.new
-      in .symbol?  then Sparse::Unit::IsSym.new
-      in .boolean? then Sparse::Unit::IsBoolean.new
-      in .dict?    then Sparse::Unit::IsDict.new
-      end
-    end
-
     def subtype?(other : TermType)
       other.any? || self == other
     end
