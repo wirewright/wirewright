@@ -1595,6 +1595,30 @@
   (= (foo 1 2 3 4 5 6 7 8 9)
     {x: 1, y: 2, zs: (3 4 5 6), xs: (7 8 9), args: (1 2 3 4 5 6)}))
 
+(pattern ((%group foo xs_* ys_* zs_*))
+  (= () {foo: (), xs: (), ys: (), zs: ()})
+  (= (a) {foo: (a), xs: (a), ys: (), zs: ()})
+  (= (a b) {foo: (a b), xs: (a), ys: (b), zs: ()})
+  (= (a b c) {foo: (a b c), xs: (a), ys: (b), zs: (c)})
+  (= (a b c d) {foo: (a b c d), xs: (a b), ys: (c), zs: (d)})
+  (= (a b c d e) {foo: (a b c d e), xs: (a b), ys: (c d), zs: (e)})
+  (= (a b c d e f) {foo: (a b c d e f), xs: (a b), ys: (c d), zs: (e f)})
+  (= (a b c d e f g) {foo: (a b c d e f g), xs: (a b c), ys: (d e), zs: (f g)})
+  (= (a b c d e f g h) {foo: (a b c d e f g h), xs: (a b c), ys: (d e f), zs: (g h)})
+  (= (a b c d e f g h i) {foo: (a b c d e f g h i), xs: (a b c), ys: (d e f), zs: (g h i)}))
+
+(pattern ((%group foo xs_* ys_* zs_*) and (%group bar as_* bs_* cs_*))
+  (= (and) {foo: (), bar: (), xs: (), ys: (), zs: (), as: (), bs: (), cs: ()})
+  (= (a and) {foo: (a), bar: (), xs: (a), ys: (), zs: (), as: (), bs: (), cs: ()})
+  (= (a and 1) {foo: (a), bar: (1), xs: (a), ys: (), zs: (), as: (1), bs: (), cs: ()})
+  (= (a b and 1) {foo: (a b), bar: (1), xs: (a), ys: (b), zs: (), as: (1), bs: (), cs: ()})
+  (= (a b and 1 2) {foo: (a b), bar: (1 2), xs: (a), ys: (b), zs: (), as: (1), bs: (2), cs: ()})
+  (= (a b c and 1 2) {foo: (a b c), bar: (1 2), xs: (a), ys: (b), zs: (c), as: (1), bs: (2), cs: ()})
+  (= (a b c and 1 2 3) {foo: (a b c), bar: (1 2 3), xs: (a), ys: (b), zs: (c), as: (1), bs: (2), cs: (3)})
+  (= (a b c d and 1 2 3) {foo: (a b c d), bar: (1 2 3), xs: (a b), ys: (c), zs: (d), as: (1), bs: (2), cs: (3)})
+  (= (a b c d and 1 2 3 4) {foo: (a b c d), bar: (1 2 3 4), xs: (a b), ys: (c), zs: (d), as: (1 2), bs: (3), cs: (4)}))
+  ;; ...
+
 ;; %optional
 (group
   (pattern (xs_* (%optional 10 x_) sep_ ys_* sep_)
@@ -2382,6 +2406,17 @@
     (= (a b c d e f) (b c d e))
     (= (b c d e) (c d)))
 
+  ;; Empty group capture
+  (backmap (((%group foo xs_* ys_* zs_*) and (%group bar a_ b_))
+            {(foo): (↑b ↑a), (bar): ↑ys})
+    (= (and x y) (y x and))
+    (= (1 and x y) (y x and))
+    (= (1 2 and x y) (y x and 2))
+    (= (1 2 3 and x y) (y x and 2))
+    (= (1 2 3 4 and x y) (y x and 3 4))
+    (= (1 2 3 4 5 and x y) (y x and 3 4))
+    (= (1 2 3 4 5 6 and x y) (y x and 3 4)))
+
   ;; Nesting of groups
   (backmap ((x_ (%group xs (%group ab a_ b_) (%group cd c_ d_)) y_)
             {(x): (($up a) ($up ab)),
@@ -2945,7 +2980,7 @@
   (= (1 2 3) (seen seen seen))
   (= (a b c) (seen seen seen)))
 
-(backmap (((%many xs x_ min: 0)) {xs: (qux qix qyx)})
+(backmap (((%many xs x_ min: 0)) {(xs): (qux qix qyx)})
   (= () (qux qix qyx))
   (= (1 2 3) (qux qix qyx))
   (= (a b c) (qux qix qyx)))
@@ -2958,7 +2993,7 @@
   (= (a a a) ((seen a) (seen a) (seen a)))
   (- ()))
 
-(backmap (((%many xs x_ min: 0) x_) {xs: (qux qyx qix), x: (seen ($down x))})
+(backmap (((%many xs x_ min: 0) x_) {(xs): (qux qyx qix), x: (seen ($down x))})
   (= (a) (qux qyx qix (seen a)))
   (= (1 1 1) (qux qyx qix (seen 1)))
   (= (a a a) (qux qyx qix (seen a)))

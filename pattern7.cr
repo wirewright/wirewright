@@ -2094,8 +2094,12 @@ end
 module ::Ww::M1::Operator::Item
   alias Feed = Term::Dict::ItemsView
 
+  # FIXME: this should be removed in favor of compile-time assessment. We should not do this
+  # at match time. Currently causes some tests to fail since we cannot look through "%group",
+  # it is opaque for us.
   record SuccessorsView, amount : Int32, neighbor : Item::Any?
 
+  # Ditto, neighbor? should go away. This is not at all something we should do at match-time.
   def self.neighbor?(item : Singular | Gap | Plural | Optional, rest) : Any?
     item
   end
@@ -2118,20 +2122,6 @@ module ::Ww::M1::Operator::Item
         %slot = {{var}}.as(ItemAhead)
         pointerof(%slot)
       end
-    end
-  end
-
-  struct ItemAhead::Fn
-    include ItemAhead
-
-    def initialize(@fn : UInt32, Feed, Behind -> Fb::Any)
-    end
-
-    def initialize(&@fn : UInt32, Feed, Behind -> Fb::Any)
-    end
-
-    def call(ord, feed, behind0)
-      @fn.call(ord, feed, behind0)
     end
   end
 
@@ -2294,21 +2284,37 @@ module ::Ww::M1::Operator::Item
     match(ord, env, item, SuccessorsView.new(successors.amount + items.size - 1, neighbor?(items[1..])), feed, cont)
   end
 
-  def self.match(ord, env, item : Group, successors, feed, ahead)
-    start = env.keypath
+  struct ItemAhead::CaptureGroup
+    include ItemAhead
 
-    cont = ItemAhead::Fn.new do |ord, outfeed, candidate|
-      group = feed.upto(outfeed)
-      captures = Term.of(group)
-
-      unless env1 = candidate.propose?(item.capture, captures)
-        next Fb::Mismatch.new(env.env.with(item.capture, captures))
-      end
-
-      ahead.call(ord, outfeed, env1.mount(item.capture) { start.not_nil!.span(group.size).ord(ord) })
+    # - *ord0* is the ordinal at the start of the group.
+    # - *feed0* is the feed at the start of the group.
+    # - *propose* specifies whether to propose the captured group to `Behind`. Otherwise,
+    #   the group is simply mounted and not proposed.
+    def initialize(@ord0 : UInt32, @feed0 : Feed, @capture : Term, @ahead : ItemAhead*, *, @propose : Bool)
     end
 
-    sequence(ord, env, item.children.to_readonly_slice, successors, feed, cont)
+    def call(ord, feed, behind0)
+      group = @feed0.upto(feed)
+
+      behind1 = behind0
+
+      if @propose
+        unless behind1 = behind0.propose?(@capture, proposal = Term.of(group))
+          return Fb::Mismatch.new(behind0.env.with(@capture, proposal))
+        end
+      end
+
+      behind1 = behind1.mount(@capture, &.backward(group.size).span(group.size).ord(ord))
+
+      @ahead.value.call(ord, feed, behind1)
+    end
+  end
+
+  def self.match(ord, env, item : Group, successors, feed, ahead0)
+    ahead1 = ItemAhead::CaptureGroup.new(ord, feed, item.capture, ItemAhead.stackptr(ahead0), propose: true)
+
+    sequence(ord, env, item.children.to_readonly_slice, successors, feed, ahead1)
   end
 
   struct ItemAhead::Skip
@@ -2370,7 +2376,27 @@ module ::Ww::M1::Operator::Item
     Operator.match(env.keypath(&.ephk(item.default, ord)), item.tail, item.default, ahead2)
   end
 
-  def self.many(ord, env, item : Many, successors, feed, ahead, memo)
+  struct ItemAhead::ManyStep
+    include ItemAhead
+
+    def initialize(@feed0 : Feed, @item : Many, @successors : SuccessorsView, @ahead : ItemAhead*, @memo : Term::Dict)
+    end
+
+    def call(ord, feed, behind0)
+      if @feed0 == feed
+        # This continuation is run after the ahead check. This means ahead refuses to
+        # consume feed. And we did not move while trying to consume feed. Thus this is
+        # a hard mismatch.
+        return Fb::Mismatch.new(behind0.env)
+      end
+
+      pruned, capture = behind0.partition(@item.interior)
+
+      Item.many(ord, pruned, @item, @successors, feed, @ahead.value, @memo.append(capture.env))
+    end
+  end
+
+  def self.many(ord, env, item : Many, successors, feed, ahead0, memo)
     unless env1 = env.propose?(item.capture, Term.of(memo))
       return Fb::Mismatch.new(env.env.with(item.capture, Term.of(memo)))
     end
@@ -2380,93 +2406,74 @@ module ::Ww::M1::Operator::Item
     end
 
     if memo.size >= item.min
-      case fb = ahead.call(ord, feed, env1)
+      case fb = ahead0.call(ord, feed, env1)
       in Fb::Match, Fb::Request
         return fb
       in Fb::Mismatch
       end
     end
 
-    cont = ItemAhead::Fn.new do |ord, ofeed, candidate|
-      if feed == ofeed
-        # This continuation is run after the ahead check. This means ahead refuses to
-        # consume feed. And we did not move while trying to consume feed. Thus this is
-        # a hard mismatch.
-        next Fb::Mismatch.new(candidate.env)
+    ahead1 = ItemAhead::ManyStep.new(feed, item, successors, ItemAhead.stackptr(ahead0), memo)
+
+    sequence(ord, env, item.children.to_readonly_slice, successors, feed, ahead1)
+  end
+
+  def self.match(ord, env, item : Many, successors, feed, ahead0)
+    ahead1 = ItemAhead::CaptureGroup.new(ord, feed, item.capture, ItemAhead.stackptr(ahead0), propose: false)
+
+    many(ord, env, item, successors, feed, ahead1, memo: Term[])
+  end
+
+  struct ItemAhead::PastStep
+    include ItemAhead
+
+    def initialize(@feed0 : Feed, @item : Past, @successors : SuccessorsView, @memo : Int32, @ahead : ItemAhead*)
+    end
+
+    def call(ord, feed, behind0)
+      if @feed0 == feed
+        return Fb::Mismatch.new(behind0.env)
       end
 
-      pruned, capture = candidate.partition(item.interior)
-
-      many(ord, pruned, item, successors, ofeed, ahead, memo.append(capture.env))
+      if @item.greedy
+        Item.past_greedy(ord, behind0, @item, @successors, feed, @ahead.value, @memo + 1)
+      else
+        Item.past_lazy(ord, behind0, @item, @successors, feed, @ahead.value, @memo + 1)
+      end
     end
-
-    sequence(ord, env, item.children.to_readonly_slice, successors, feed, cont)
   end
 
-  def self.match(ord, env, item : Many, successors, feed, ahead)
-    kp0 = env.keypath
-    cont = ItemAhead::Fn.new do |ord, ofeed, in1|
-      size = feed.upto(ofeed).size
-
-      kp1 = in1.keypath
-      in2 = in1
-        .goto(kp0)
-        .mount(item.capture, &.span(size))
-        .goto(kp1)
-
-      ahead.call(ord, ofeed, in2)
-    end
-
-    many(ord, env, item, successors, feed, cont, memo: Term[])
-  end
-
-  def self.past_lazy(ord, env, item : Past, successors, feed, ahead, memo)
+  def self.past_lazy(ord, env, item : Past, successors, feed, ahead0, memo)
     if memo > item.max > 0
       return Fb::Mismatch.new(env.env)
     end
 
     if memo >= item.min
-      case fb = ahead.call(ord, feed, env)
+      case fb = ahead0.call(ord, feed, env)
       in Fb::Match, Fb::Request
         return fb
       in Fb::Mismatch
       end
     end
 
-    cont = ItemAhead::Fn.new do |ord, ofeed, candidate|
-      if feed == ofeed
-        # This continuation is run after the ahead check. This means ahead refuses to
-        # consume feed. And we did not move while trying to consume feed. Thus this is
-        # a hard mismatch.
-        next Fb::Mismatch.new(candidate.env)
-      end
+    ahead1 = ItemAhead::PastStep.new(feed, item, successors, memo, ItemAhead.stackptr(ahead0))
 
-      past_lazy(ord, candidate, item, successors, ofeed, ahead, memo + 1)
-    end
-
-    sequence(ord, env, item.children.to_readonly_slice, successors, feed, cont)
+    sequence(ord, env, item.children.to_readonly_slice, successors, feed, ahead1)
   end
 
-  def self.past_greedy(ord, env, item : Past, successors, feed, ahead, memo)
+  def self.past_greedy(ord, env, item : Past, successors, feed, ahead0, memo)
     if memo > item.max > 0
       return Fb::Mismatch.new(env.env)
     end
 
-    cont = ItemAhead::Fn.new do |ord, ofeed, candidate|
-      if feed == ofeed
-        # Let the sequence() mismatch check do its job
-        next Fb::Mismatch.new(candidate.env)
-      end
+    ahead1 = ItemAhead::PastStep.new(feed, item, successors, memo, ItemAhead.stackptr(ahead0))
 
-      past_greedy(ord, candidate, item, successors, ofeed, ahead, memo + 1)
-    end
-
-    case fb = sequence(ord, env, item.children.to_readonly_slice, successors, feed, cont)
+    case fb = sequence(ord, env, item.children.to_readonly_slice, successors, feed, ahead1)
     in Fb::Match, Fb::Request
       fb
     in Fb::Mismatch
       if memo >= item.min
-        ahead.call(ord, feed, env)
+        ahead0.call(ord, feed, env)
       else
         fb
       end
@@ -4822,12 +4829,7 @@ module ::Ww::M1
   end
 
   # ~2 weeks:
-  #   TODO: bring back sketch, bounds range in an O1 optimization pass. depth range optimization.
-  #         dict population sketch (u16 #numbers, u16 #strings, u16 #dicts, u16 #symbols -> u64 popsketch),
-  #         u16::max means "infinity" or "a lot of them", if u16::max we cannot subtract anymore on without(),
-  #         otherwise we can.
-  #   TODO: O2 rewrite loop optimizer based on editor rules. editor is the main optimization client/benchmark!
-  #   TODO: finish refactoring of ahead into structs instead of procs. Remove Ahead/ItemAhead::Fn. KeypathTip optimization.
+  #   TODO: KeypathTip optimization.
   #   TODO: move from Operator classes to structs by introducing Operator::Ref, having an array of operators,
   #         Ref is an index into that array. at match() time resolve Ref into Operator::Any. Reduce indirections.
   #   TODO: look into optimizing backmaps. Is that possible?
@@ -4946,26 +4948,7 @@ module ::Ww::M1
           end
         end
 
-        matchpi %[(range bt_number et_number)] do
-          next unless successor[:endpoint, :transform]?
-
-          b = bt.unsafe_as_n
-          e = et.unsafe_as_n
-
-          unless (b...e).subrange_of?(matchee.items.bounds)
-            raise KeypathError.new
-          end
-
-          values0 = matchee.items(b, e)
-          ctx1, values1 = transform0(ctx0, ctx1, bot, applier, successor.as_d, Term.of(values0))
-
-          insertions ||= [] of {Term::Num, Term::Num, Term::Num, Term::Dict}
-          index = insertions.bsearch_index { |(c_b, _, c_ord, _)| {-b, Term[0]} <= {-c_b, -c_ord} }
-          index ||= insertions.size
-          insertions.insert(index, {b, e, Term[0], values1.as_d? || Term[{values1}]})
-        end
-
-        matchpi %[(range bt_number et_number ordt_number)] do
+        matchpi %[(range bt_number et_number (%optional 0 ordt_number))] do
           next unless successor[:endpoint, :transform]?
 
           b = bt.unsafe_as_n
@@ -4979,6 +4962,7 @@ module ::Ww::M1
           values0 = matchee.items(b, e)
           ctx1, values1 = transform0(ctx0, ctx1, bot, applier, successor.as_d, Term.of(values0))
 
+          # Not sure about this: should in e.g. (%group xs a_ b_ c), `xs` be implicitly plural?
           if successor[:endpoint, :plural]?
             values1 = values1.as_d? || Term[{values1}]
           else
