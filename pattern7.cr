@@ -503,16 +503,8 @@ end
 # TODO: the names of operators should be nouns. Currently some of them are and others
 #   are not, fix that. In fact, Operator should probably be renamed to Subject or something
 #   like that. Not sure how large of a refactor that is, and how much point is there in it.
-# TODO: ???: break into a u8 type field followed by some sort of variable length payload
-# so that size is conserved (vs. `Any`). Avoid allocations for most-used operators/
-# configs by packing. Instead of being classes, these things should be structs that
-# "look" at a variably sized payload and "interpret" it somehow. Not sure how to avoid a
-# match() "megamethod" though. Maybe through a macro?
-#
-# Additionally, we must use u32 (or even u16) array indices for operator nodes rather
-# than a pointer. Thus an operator pool.
 module ::Ww::M1::Operator
-  alias Any = Pass | Num | Sym | Boolean | Dict | Itemsonly | Pairsonly | SketchSubset | Bounds | BoundsGuard | MaxDepth | DictGuard | Literal | Capture | Itemspattern | ItemFirst | ItemLast | ItemSequence | Itemspart | Pairspart | Partition | EdgeUntyped | EdgeTyped | Choices | EitherSource | KeyValue | Keypool | Span | Tally | Bin | Both | Not | Layer | ScanFirst | ScanSource | ScanAll | ScanAllIsolated | DfsFirst | DfsSource | DfsAllIsolated | DfsAll | BfsFirst | BfsAllIsolated | BfsAll | Value | NegativeValue | NegativeValueKeypath | EntriesFirst | EntriesSource | EntriesAllIsolated | EntriesAll | Str | New | Keypath
+  alias Any = Pass | Num | Sym | Boolean | Dict | Itemsonly | Pairsonly | SketchSubset | Bounds | BoundsGuard | MaxDepth | DictGuard | Literal | Capture | Itemspattern | ItemFirst | ItemLast | ItemSequence | Itemspart | Pairspart | Partition | EdgeTyped | Choices | EitherSource | KeyValue | Keypool | Span | Tally | Bin | Both | Not | Layer | ScanFirst | ScanSource | ScanAll | ScanAllIsolated | DfsFirst | DfsSource | DfsAllIsolated | DfsAll | BfsFirst | BfsAllIsolated | BfsAll | Value | NegativeValue | NegativeValueKeypath | EntriesFirst | EntriesSource | EntriesAllIsolated | EntriesAll | Str | New | Keypath
 
   alias Bin = Add | Sub | Mul | Div | Tdiv | Mod | Pow | Map
 
@@ -521,7 +513,12 @@ module ::Ww::M1::Operator
   alias AllIsolated = ScanAllIsolated | DfsAllIsolated | BfsAllIsolated | EntriesAllIsolated
   alias All = ScanAll | DfsAll | BfsAll | EntriesAll
 
+  INSTANCE_PASS = Pass.new
+
   defcase Pass
+
+  INSTANCE_NUM       = Num.new(min: nil, max: nil, options: :none)
+  INSTANCE_NUM_WHOLE = Num.new(min: nil, max: nil, options: :whole)
 
   # TODO: split into different objects based on the presence of min, max (options)
   defcase Num, min : Term::Num?, max : Term::Num?, options : Options do
@@ -532,18 +529,25 @@ module ::Ww::M1::Operator
       Whole
     end
 
-    def self.new
-      new(min: nil, max: nil, options: :none)
-    end
-
     def self.new(min, max, options : Tuple)
       new(min: min, max: max, options: Options.new(options))
     end
   end
 
+  INSTANCE_SYM = Sym.new
+
   defcase Sym
+
+  INSTANCE_STR = Str.new
+
   defcase Str
+
+  INSTANCE_BOOLEAN = Boolean.new
+
   defcase Boolean
+
+  INSTANCE_DICT = Dict.new
+
   defcase Dict
 
   defcase Itemsonly
@@ -555,7 +559,7 @@ module ::Ww::M1::Operator
   defcase DictGuard, sketch : Term::Dict::Sketch, bounds : {Magnitude, Magnitude}, depth : {Magnitude, Magnitude}, successor : Any
 
   defcase Literal, term : Term
-  defcase Capture, capture : Term, successor : Any = Pass.new
+  defcase Capture, capture : Term, successor : Any
 
   defcase Itemspattern, items : Array(Item::Any)
   defcase ItemFirst, successor : Any
@@ -588,7 +592,6 @@ module ::Ww::M1::Operator
   defcase Not, blacklist : Term::Dict
   defcase Layer, below : Any, side : Array(Entry::Any)
 
-  defcase EdgeUntyped
   defcase EdgeTyped, type : TermType
 
   alias Scan = ScanFirst | ScanSource | ScanAllIsolated | ScanAll
@@ -1320,20 +1323,17 @@ module ::Ww::M1::Operator
     match(behind0, op.successor, Term.of(dict.pairspart), ahead0)
   end
 
-  def match(env, op : EdgeUntyped, matchee : Term, ahead)
-    unless ML.edge?(matchee)
-      return Fb::Mismatch.new(env.env)
+  def match(behind0, op : EdgeTyped, matchee : Term, ahead0)
+    case op.type
+    when .any?
+      valid = ML.edge?(matchee)
+    when .number?, .string?, .symbol?
+      valid = ML.edge?(matchee, allowed: {op.type})
+    else
+      raise ArgumentError.new("unexpected edge type after compilation: expected Any, Number, String, or Symbol")
     end
 
-    ahead.call(env)
-  end
-
-  def match(env, op : EdgeTyped, matchee : Term, ahead)
-    unless ML.edge?(matchee, allowed: {op.type})
-      return Fb::Mismatch.new(env.env)
-    end
-
-    ahead.call(env)
+    valid ? ahead0.call(behind0) : Fb::Mismatch.new(behind0.env)
   end
 
   def match(env, op : Choices, matchee : Term, ahead)
@@ -4167,7 +4167,7 @@ module ::Ww::M1
       end
 
       matchpi %[(%pass)], cue: :"%pass" do
-        Operator::Pass.new
+        Operator::INSTANCE_PASS
       end
 
       matchpi %[((%literal %literal) term_)], cue: :"%literal" do
@@ -4189,10 +4189,10 @@ module ::Ww::M1
         )
       end
 
-      match({:"%string"}, cue: :"%string") { Operator::Str.new }
-      match({:"%symbol"}, cue: :"%symbol") { Operator::Sym.new }
-      match({:"%boolean"}, cue: :"%boolean") { Operator::Boolean.new }
-      match({:"%dict"}, cue: :"%dict") { Operator::Dict.new }
+      match({:"%string"}, cue: :"%string") { Operator::INSTANCE_STR }
+      match({:"%symbol"}, cue: :"%symbol") { Operator::INSTANCE_SYM }
+      match({:"%boolean"}, cue: :"%boolean") { Operator::INSTANCE_BOOLEAN }
+      match({:"%dict"}, cue: :"%dict") { Operator::INSTANCE_DICT }
 
       match({:"%keypath", {:"%capture", :capture_}}, cue: :"%keypath") do |capture|
         Operator::Keypath.new(capture)
@@ -4437,7 +4437,7 @@ module ::Ww::M1
       end
 
       match({:"%edge", {:"%literal", :_}}, cue: :"%edge") do
-        Operator::EdgeUntyped.new
+        Operator::EdgeTyped.new(:any)
       end
 
       match({:"%edge", {:"%literal", :_symbol}}, cue: :"%edge") do
@@ -4459,11 +4459,11 @@ module ::Ww::M1
       end
 
       match({:"%number", {:"%literal", :_}}, cue: :"%number") do
-        Operator::Num.new
+        Operator::INSTANCE_NUM
       end
 
       match({:"%number", {:"%literal", {:whole, :_}}}, cue: {:"%number", :whole}) do
-        Operator::Num.new(min: nil, max: nil, options: :whole)
+        Operator::INSTANCE_NUM_WHOLE
       end
 
       match({:"%number", :x_, :op_symbol, :b_number}, cue: :"%number") do |x, op, b|

@@ -6,6 +6,8 @@ module Ww::Term::Str::Substring
   # :nodoc:
   #
   # Reads words and spaces between them.
+  #
+  # FIXME: we struggle with Unicode characters right now. Are they words? Nonwords? Fix that!!
   abstract struct WordReader
     # Moves to the next character.
     abstract def forward : Nil
