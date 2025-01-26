@@ -5046,7 +5046,6 @@ module ::Ww::M1
   end
 
   # ~2 weeks:
-  #   TODO: KeypathTip optimization.
   #   TODO: look into optimizing backmaps. Is that possible?
   #   TODO: refactors, split into files, etc. Done for the most part, although some edge cases
   #         are inevitably not going to be handled so well. But my rule is -- no test, no pest.
@@ -5259,6 +5258,12 @@ module ::Ww::M1
               matchee = matchee.with(key0, value1)
               node1 = node1.with(label0, successor1)
             end
+          end
+
+          matchpi %[(ephemeral _ value0_)] do
+            ctx1, successor1, value1 = transform(ctx0, ctx1, bot, applier, successor0.as_d, layer - 1, value0)
+            label1 = label0.with(2, value1)
+            node1 = node1.without(label0).with(label1, successor1)
           end
 
           matchpi %[(ephemeral _number _number value0_)] do

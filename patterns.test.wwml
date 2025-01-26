@@ -2185,6 +2185,12 @@
   (= {y: bar} {x: bar, y: qux})
   (= {x: foo, y: bar} {x: bar, y: foo}))
 
+(backmap ({x: (%optional (foo bar) (a_ b_)), y: (%optional (0) (y_ ⏏z))} {b: ↑y, y: ↑b, z: ↑a})
+  (= {} {x: (foo 0), y: (bar foo)})
+  (= {x: (a b)} {x: (a 0), y: (b a)})
+  (= {y: (100)} {x: (foo 100), y: (bar foo)})
+  (= {x: (a b), y: (100)} {x: (a 100), y: (b a)}))
+
 (backmap ((%layer (+ a_ b_) x: (%optional qux x_), y: y_) {a: ($down y), b: ($down x)})
   (= (+ a b y: bar) (+ bar qux x: qux y: bar))
   (= (+ a b x: foo y: bar) (+ bar foo x: foo y: bar)))
@@ -3647,5 +3653,12 @@
 
   (specificity
     (level ((%literal qux)))
-    (level ((%literal (%any 1 2))))))
+    (level ((%literal (%any 1 2)))))
+
+  (specificity
+    (level {x: (%- _ ((%all (%any 1 2))))} {x: (%- _ (%all 1 2 3 4 5))})
+    (level {x: (%- _number (%all (%any 1 2)))} {x: (%- _number (%all 1 2 3 4 5))}))
+
+  (specificity
+    (level {x: (%optional ((%all (%any 1 2))) _)} {x: (%optional (%all 1 2 3 4 5) _)})))
 
