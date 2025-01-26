@@ -1607,6 +1607,18 @@
   (= (a b c d e f g h) {foo: (a b c d e f g h), xs: (a b c), ys: (d e f), zs: (g h)})
   (= (a b c d e f g h i) {foo: (a b c d e f g h i), xs: (a b c), ys: (d e f), zs: (g h i)}))
 
+(pattern ((%group xs _*) (%group ys _*) (%group zs _*))
+  (= () {xs: (), ys: (), zs: ()})
+  (= (a) {xs: (a), ys: (), zs: ()})
+  (= (a b) {xs: (a), ys: (b), zs: ()})
+  (= (a b c) {xs: (a), ys: (b), zs: (c)})
+  (= (a b c d) {xs: (a b), ys: (c), zs: (d)})
+  (= (a b c d e) {xs: (a b), ys: (c d), zs: (e)})
+  (= (a b c d e f) {xs: (a b), ys: (c d), zs: (e f)})
+  (= (a b c d e f g) {xs: (a b c), ys: (d e), zs: (f g)})
+  (= (a b c d e f g h) {xs: (a b c), ys: (d e f), zs: (g h)})
+  (= (a b c d e f g h i) {xs: (a b c), ys: (d e f), zs: (g h i)}))
+
 (pattern ((%group foo xs_* ys_* zs_*) and (%group bar as_* bs_* cs_*))
   (= (and) {foo: (), bar: (), xs: (), ys: (), zs: (), as: (), bs: (), cs: ()})
   (= (a and) {foo: (a), bar: (), xs: (a), ys: (), zs: (), as: (), bs: (), cs: ()})
@@ -3202,9 +3214,9 @@
 (backmap ((%all [k0←k1_ x_] (%value k1 v_)) {(k0): (), x: ↑v, v: ↑x})
   (= (qux a qux: b) (b qux: a)))
 
-;; %itemspattern bounds
+;; %itemseq bounds
 ;;
-;; Make sure itemspattern bounds are computed properly for the various itemspattern operators.
+;; Make sure item sequence bounds are computed properly for the various item sequence operators.
 (bounds
   (of () min: 0 max: 0)
   (of (+) min: 1 max: 1)

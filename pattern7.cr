@@ -504,7 +504,7 @@ end
 #   are not, fix that. In fact, Operator should probably be renamed to Subject or something
 #   like that. Not sure how large of a refactor that is, and how much point is there in it.
 module ::Ww::M1::Operator
-  alias Any = Pass | Num | Sym | Boolean | Dict | Itemsonly | Pairsonly | SketchSubset | Bounds | BoundsGuard | MaxDepth | DictGuard | Literal | Capture | Itemspattern | ItemFirst | ItemLast | ItemSequence | Itemspart | Pairspart | Partition | EdgeTyped | Choices | EitherSource | KeyValue | Keypool | Span | Tally | Bin | Both | Not | Layer | ScanFirst | ScanSource | ScanAll | ScanAllIsolated | DfsFirst | DfsSource | DfsAllIsolated | DfsAll | BfsFirst | BfsAllIsolated | BfsAll | Value | NegativeValue | NegativeValueKeypath | EntriesFirst | EntriesSource | EntriesAllIsolated | EntriesAll | Str | New | Keypath
+  alias Any = Pass | Num | Sym | Boolean | Dict | Itemsonly | Pairsonly | SketchSubset | Bounds | BoundsGuard | MaxDepth | DictGuard | Literal | Capture | ItemSequence | ItemFirst | ItemLast | ItemBlock | Itemspart | Pairspart | Partition | Edge | LiteralChoices | EitherSource | KeyValue | Keypool | Span | Tally | Bin | Both | Not | Layer | ScanFirst | ScanSource | ScanAll | ScanAllIsolated | DfsFirst | DfsSource | DfsAllIsolated | DfsAll | BfsFirst | BfsAllIsolated | BfsAll | Value | NegativeValue | NegativeValueKeypath | EntriesFirst | EntriesSource | EntriesAllIsolated | EntriesAll | Str | New | Keypath
 
   alias Bin = Add | Sub | Mul | Div | Tdiv | Mod | Pow | Map
 
@@ -561,16 +561,16 @@ module ::Ww::M1::Operator
   defcase Literal, term : Term
   defcase Capture, capture : Term, successor : Any
 
-  defcase Itemspattern, items : Array(Item::Any)
+  defcase ItemSequence, items : Array(Item::Any)
   defcase ItemFirst, successor : Any
   defcase ItemLast, successor : Any
-  defcase ItemSequence, items : Slice(Any), exhaustive : Bool, reverse : Bool
+  defcase ItemBlock, items : Slice(Any), exhaustive : Bool, reverse : Bool
 
   defcase Itemspart, successor : Any
   defcase Pairspart, successor : Any
   defcase Partition, itemspart : Any, pairspart : Any
 
-  defcase Choices, choices : Set(Term)
+  defcase LiteralChoices, choices : Set(Term)
   defcase EitherSource, a : Any, b : Any
   defcase Both, a : Any, b : Any
 
@@ -592,7 +592,7 @@ module ::Ww::M1::Operator
   defcase Not, blacklist : Term::Dict
   defcase Layer, below : Any, side : Array(Entry::Any)
 
-  defcase EdgeTyped, type : TermType
+  defcase Edge, type : TermType
 
   alias Scan = ScanFirst | ScanSource | ScanAllIsolated | ScanAll
 
@@ -1043,190 +1043,42 @@ class KeypathQuery
 end
 
 module ::Ww::M1::Operator
-  record Behind, env : Env::Type, domains : Term::Dict, antidomains : Term::Dict, keypath : KeypathQuery? do
-    def []?(k : Term)
-      env[k]?
-    end
-
-    def propose?(k : Term, v : Term) : Behind?
-      if domain = domains[k]?
-        return unless v.in?(domain)
-      end
-
-      if antidomain = antidomains[k]?
-        return if v.in?(antidomain)
-      end
-
-      return unless env1 = env.unify?(k, v)
-
-      copy_with(env: env1)
-    end
-
-    def mount(capture : Term)
-      return self unless kp = keypath
-
-      copy_with(env: env.morph({:"(keypaths)", capture, kp.keypath, true}))
-    end
-
-    def mount(capture : Term, & : KeypathQuery -> KeypathQuery)
-      return self unless kp0 = keypath
-
-      kp1 = yield kp0
-
-      copy_with(env: env.morph({:"(keypaths)", capture, kp1.keypath, true}))
-    end
-
-    def keypath(& : KeypathQuery -> KeypathQuery)
-      return self unless kp = keypath
-
-      copy_with(keypath: yield kp)
-    end
-
-    # def descend(k : Term)
-    #   return self unless kp = keypath
-
-    #   copy_with(keypath: kp.append(k))
-    # end
-
-    # def forward(n = 1)
-    #   return self unless kp = keypath
-
-    #   unless last = kp.items.last?
-    #     raise "BUG: attempt to move within an empty keypath"
-    #   end
-
-    #   unless last = last.as_n?
-    #     raise "BUG: attempt to move within a pairspart keypath"
-    #   end
-
-    #   copy_with(keypath: kp.with(kp.size - 1, last + n))
-    # end
-
-    # def ascend
-    #   return self unless kp = keypath
-
-    #   copy_with(keypath: kp.without(kp.size - 1))
-    # end
-
-    def goto(dst : KeypathQuery?)
-      copy_with(keypath: dst)
-    end
-
-    # def goto(dst : Nil)
-    #   if keypath
-    #     raise "BUG: goto() nil keypath in keypath mode"
-    #   end
-
-    #   copy_with(keypath: dst)
-    # end
-
-    def keypathless
-      copy_with(keypath: nil)
-    end
-
-    # Domain restriction: *k* must be one of *vs* (the latter is treated as a dict set).
-    def one_of(k, vs) : Behind
-      if domain = domains[k]?
-        copy_with(domains: domains.with(k, domain.xsect(vs)))
-      else
-        copy_with(domains: domains.with(k, vs))
-      end
-    end
-
-    # Domain restriction: *k* must **not** be one of *vs* (the latter is treated as a dict set).
-    def not(k, vs) : Behind
-      if antidomain = antidomains[k]?
-        copy_with(antidomains: antidomains.with(k, antidomain | vs))
-      else
-        copy_with(antidomains: antidomains.with(k, vs))
-      end
-    end
-
-    def assign(k, v)
-      copy_with(env: env.with(k, v))
-    end
-
-    def partition(selector)
-      lenv = env &- selector
-      ldomains = domains &- selector
-      lantidomains = antidomains &- selector
-
-      renv = env.pluck(selector)
-      rdomains = domains.pluck(selector)
-      rantidomains = antidomains.pluck(selector)
-
-      {copy_with(env: lenv, domains: ldomains, antidomains: lantidomains),
-       copy_with(env: renv, domains: rdomains, antidomains: rantidomains)}
-    end
+  def match(behind0, op : Pass, matchee : Term, ahead0)
+    ahead0.call(behind0)
   end
 
-  def match(env, op : Pass, matchee : Term, ahead)
-    ahead.call(env)
-  end
-
-  private def compare?(a, op, b)
-    case op
-    when :lt  then a < b
-    when :lte then a <= b
-    else
-      unimplemented
-    end
-  end
-
-  def match(env, op : Num, matchee : Term, ahead)
+  def match(behind0, op : Num, matchee : Term, ahead0)
     unless n = matchee.as_n?
-      return Fb::Mismatch.new(env.env)
+      return Fb::Mismatch.new(behind0.env)
     end
 
     if op.options.whole? && !n.whole?
-      return Fb::Mismatch.new(env.env)
+      return Fb::Mismatch.new(behind0.env)
     end
 
     min = op.min
     max = op.max
 
     if min && !compare?(min, op.options.min_excluded? ? :lt : :lte, n)
-      return Fb::Mismatch.new(env.env)
+      return Fb::Mismatch.new(behind0.env)
     end
 
     if max && !compare?(n, op.options.max_excluded? ? :lt : :lte, max)
-      return Fb::Mismatch.new(env.env)
-    end
-
-    ahead.call(env)
-  end
-
-  def match(env, op : Str, matchee : Term, ahead)
-    unless matchee.type.string?
-      return Fb::Mismatch.new(env.env)
-    end
-
-    ahead.call(env)
-  end
-
-  def match(env, op : Sym, matchee : Term, ahead)
-    unless matchee.type.symbol?
-      return Fb::Mismatch.new(env.env)
-    end
-
-    ahead.call(env)
-  end
-
-  def match(env, op : Boolean, matchee : Term, ahead)
-    unless matchee.type.boolean?
-      return Fb::Mismatch.new(env.env)
-    end
-
-    ahead.call(env)
-  end
-
-  def match(behind0, op : Dict, matchee : Term, ahead0)
-    unless matchee.type.dict?
       return Fb::Mismatch.new(behind0.env)
     end
 
     ahead0.call(behind0)
   end
+
+  {% for opcls, type in { Str => :string, Sym => :symbol, Boolean => :boolean, Dict => :dict } %}
+    def match(behind0, op : {{opcls}}, matchee : Term, ahead0)
+      unless matchee.type.{{type.id}}?
+        return Fb::Mismatch.new(behind0.env)
+      end
+
+      ahead0.call(behind0)
+    end
+  {% end %}
 
   def match(behind0, op : Itemsonly, matchee : Term, ahead0)
     unless (dict = matchee.as_d?) && dict.itemsonly?
@@ -1300,182 +1152,42 @@ module ::Ww::M1::Operator
     match(behind0, op.successor, matchee, ahead0)
   end
 
-  def match(env, op : Literal, matchee : Term, ahead)
+  def match(behind0, op : Literal, matchee : Term, ahead0)
     unless matchee == op.term
-      return Fb::Mismatch.new(env.env)
-    end
-
-    ahead.call(env)
-  end
-
-  def match(env, op : Capture, matchee : Term, ahead)
-    unless env1 = env.propose?(op.capture, matchee)
-      return Fb::Mismatch.new(env.env.with(op.capture, matchee))
-    end
-
-    env1 = env1.mount(op.capture)
-
-    match(env1, op.successor, matchee, ahead)
-  end
-
-  def match(env, op : Itemspattern, matchee : Term, ahead)
-    unless (dict = matchee.as_d?) && dict.itemsonly?
-      return Fb::Mismatch.new(env.env)
-    end
-
-    Item.match(env, op.items.to_readonly_slice, dict.items, ahead)
-  end
-
-  struct Ahead::Forward
-    include Ahead
-
-    def initialize(@delta : Int32, @ahead : Ahead*)
-    end
-
-    def call(behind0 : Behind) : Fb::Any
-      @ahead.value.call(behind0.keypath(&.forward(@delta)))
-    end
-  end
-
-  struct Ahead::ItemZip(L, R)
-    include Ahead
-
-    def initialize(@lhs : L, @rhs : R, @i : Int32, @j : Int32, @delta : Int8, @ahead : Ahead*)
-    end
-
-    def call(behind0 : Behind) : Fb::Any
-      if (@i + @delta).in?(0...@lhs.size) && (@j + @delta).in?(0...@rhs.size)
-        aheadptr = Ahead.stackptr(ItemZip.new(@lhs, @rhs, @i + @delta, @j + @delta, @delta, @ahead))
-      else
-        aheadptr = @ahead
-      end
-
-      Operator.match(behind0, @lhs[@i], @rhs[@j], Ahead::Forward.new(@delta, aheadptr))
-    end
-  end
-
-  def match(behind0, op : ItemSequence, matchee : Term, ahead0)
-    unless (dict = matchee.as_d?) && dict.itemsonly? && dict.size >= op.items.size
       return Fb::Mismatch.new(behind0.env)
     end
 
-    if op.exhaustive && dict.size != op.items.size
-      return Fb::Mismatch.new(behind0.env)
-    end
-
-    ahead1 = Ahead::Goto.new(behind0.keypath, Ahead.stackptr(ahead0))
-
-    if op.reverse
-      ahead2 = Ahead::ItemZip.new(
-        lhs: op.items,
-        rhs: dict.items,
-        i: op.items.size - 1,
-        j: dict.items.size - 1,
-        delta: -1,
-        ahead: Ahead.stackptr(ahead1),
-      )
-
-      ahead2.call(behind0.keypath(&.update_value(dict.size - 1)))
-    else
-      ahead2 = Ahead::ItemZip.new(
-        lhs: op.items,
-        rhs: dict.items,
-        i: 0,
-        j: 0,
-        delta: +1,
-        ahead: Ahead.stackptr(ahead1),
-      )
-
-      ahead2.call(behind0.keypath(&.update_value(0)))
-    end
+    ahead0.call(behind0)
   end
 
-  def match(behind0, op : ItemFirst, matchee : Term, ahead0)
-    unless (dict = matchee.as_d?) && dict.itemsonly? && dict.size > 0
-      return Fb::Mismatch.new(behind0.env)
-    end
-
-    ahead1 = Ahead::Goto.new(behind0.keypath, Ahead.stackptr(ahead0))
-
-    match(behind0.keypath(&.update_value(0)), op.successor, dict[0], ahead1)
+  def match(behind0, op : LiteralChoices, matchee : Term, ahead0)
+    matchee.in?(op.choices) ? ahead0.call(behind0) : Fb::Mismatch.new(behind0.env)
   end
 
-  def match(behind0, op : ItemLast, matchee : Term, ahead0)
-    unless (dict = matchee.as_d?) && dict.itemsonly? && dict.size > 0
-      return Fb::Mismatch.new(behind0.env)
+  def match(behind0, op : Capture, matchee : Term, ahead0)
+    unless behind1 = behind0.propose?(op.capture, matchee)
+      return Fb::Mismatch.new(behind0.env.with(op.capture, matchee))
     end
 
-    ahead1 = Ahead::Goto.new(behind0.keypath, Ahead.stackptr(ahead0))
+    behind1 = behind1.mount(op.capture)
 
-    match(behind0.keypath(&.update_value(dict.size - 1)), op.successor, dict[dict.size - 1], ahead1)
-  end
-
-  module Ahead
-    macro stackptr(var)
-      begin
-        %slot = {{var}}.as(Ahead)
-        pointerof(%slot)
-      end
-    end
-  end
-
-  struct Ahead::MatchOne
-    include Ahead
-
-    def call(behind0 : Behind) : Fb::Any
-      Fb::MatchOne.new(behind0.env)
-    end
-  end
-
-  struct Ahead::Goto
-    include Ahead
-
-    def initialize(@keypath : KeypathQuery?, @ahead : Ahead*)
-    end
-
-    def call(behind0 : Behind)
-      @ahead.value.call(behind0.goto(@keypath))
-    end
-  end
-
-  struct Ahead::Match
-    include Ahead
-
-    def initialize(@op : Operator::Any, @matchee : Term, @ahead : Ahead*)
-    end
-
-    def call(behind0 : Behind) : Fb::Any
-      Operator.match(behind0, @op, @matchee, @ahead.value)
-    end
-  end
-
-  struct Ahead::ItemStep
-    include Ahead
-
-    def initialize(@ord : UInt32, @feed : Item::Feed, @ahead : Item::ItemAhead*)
-    end
-
-    def call(behind0 : Behind)
-      @ahead.value.call(@ord + 1, @feed.move(1), behind0.keypath(&.forward))
-    end
+    match(behind1, op.successor, matchee, ahead0)
   end
 
   # TODO: almost always in practice the pairspart is easier to compute than the itemspart;
   # and it is "rarer", providing more rejections. Should we consider running the pairspart
   # first? The proper treatment would be to evaluate the cost of the itemspart and pairspart,
   # but that'd be an overkill right now.
-  def match(env, op : Partition, matchee : Term, ahead)
+  def match(behind0, op : Partition, matchee : Term, ahead0)
     unless dict = matchee.as_d?
-      return Fb::Mismatch.new(env.env)
+      return Fb::Mismatch.new(behind0.env)
     end
 
     itemspart, pairspart = dict.partition
 
-    # Note: the order here doesn't *really* matter since we're a solver.
-    # Even then "heuristically" speaking it would, but nevermind!
-    #
-    # Visually it's e.g. (+ a_ b_ ¦ x: a_ y: b_) so we're sticking to that order here.
-    match(env, op.itemspart, Term.of(itemspart), Ahead::Match.new(op.pairspart, Term.of(pairspart), Ahead.stackptr(ahead)))
+    ahead1 = Ahead::Match.new(op.pairspart, Term.of(pairspart), Ahead.stackptr(ahead0))
+
+    match(behind0, op.itemspart, Term.of(itemspart), ahead1)
   end
 
   def match(behind0, op : Itemspart, matchee : Term, ahead0)
@@ -1494,7 +1206,7 @@ module ::Ww::M1::Operator
     match(behind0, op.successor, Term.of(dict.pairspart), ahead0)
   end
 
-  def match(behind0, op : EdgeTyped, matchee : Term, ahead0)
+  def match(behind0, op : Edge, matchee : Term, ahead0)
     case op.type
     when .any?
       valid = ML.edge?(matchee)
@@ -1507,16 +1219,61 @@ module ::Ww::M1::Operator
     valid ? ahead0.call(behind0) : Fb::Mismatch.new(behind0.env)
   end
 
-  def match(env, op : Choices, matchee : Term, ahead)
-    matchee.in?(op.choices) ? ahead.call(env) : Fb::Mismatch.new(env.env)
+  def match(behind0, op : ItemFirst, matchee : Term, ahead0)
+    unless (dict = matchee.as_d?) && dict.itemsonly? && dict.size > 0
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    ahead1 = Ahead::Goto.new(behind0.keypath?, Ahead.stackptr(ahead0))
+
+    match(behind0.keypath(&.update_value(0)), op.successor, dict[0], ahead1)
   end
 
-  def match(env, op : EitherSource, matchee : Term, ahead)
-    a = match(env, op.a, matchee, ahead)
+  def match(behind0, op : ItemLast, matchee : Term, ahead0)
+    unless (dict = matchee.as_d?) && dict.itemsonly? && dict.size > 0
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    ahead1 = Ahead::Goto.new(behind0.keypath?, Ahead.stackptr(ahead0))
+
+    match(behind0.keypath(&.update_value(dict.size - 1)), op.successor, dict[dict.size - 1], ahead1)
+  end
+
+  def match(behind0, op : ItemBlock, matchee : Term, ahead0)
+    unless (dict = matchee.as_d?) && dict.itemsonly? && dict.size >= op.items.size
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    if op.exhaustive && dict.size != op.items.size
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    ahead1 = Ahead::Goto.new(behind0.keypath?, Ahead.stackptr(ahead0))
+
+    if op.reverse
+      i, j, delta = op.items.size - 1, dict.items.size - 1, -1i8
+    else
+      i, j, delta = 0, 0, +1i8
+    end
+
+    ahead2 = Ahead::ItemZip.new(op.items, dict.items, i, j, delta, ahead: Ahead.stackptr(ahead1))
+    ahead2.call(behind0.keypath(&.update_value(j)))
+  end
+
+  def match(behind0, op : ItemSequence, matchee : Term, ahead0)
+    unless (dict = matchee.as_d?) && dict.itemsonly?
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    Item.match(behind0, op.items.to_readonly_slice, dict.items, ahead0)
+  end
+
+  def match(behind0, op : EitherSource, matchee : Term, ahead0)
+    a = match(behind0, op.a, matchee, ahead0)
     unless a.is_a?(Fb::Response)
       return a
     end
-    b = match(env, op.b, matchee, ahead)
+    b = match(behind0, op.b, matchee, ahead0)
     unless b.is_a?(Fb::Response)
       return b
     end
@@ -1524,8 +1281,10 @@ module ::Ww::M1::Operator
     Fb.lsum(a, b)
   end
 
-  def match(env, op : Both, matchee : Term, ahead)
-    match(env, op.a, matchee, Ahead::Match.new(op.b, matchee, Ahead.stackptr(ahead)))
+  def match(behind0, op : Both, matchee : Term, ahead0)
+    ahead1 = Ahead::Match.new(op.b, matchee, Ahead.stackptr(ahead0))
+
+    match(behind0, op.a, matchee, ahead1)
   end
 
   def match(behind0, op : KeyValue, matchee : Term, ahead0)
@@ -1533,146 +1292,134 @@ module ::Ww::M1::Operator
       return Fb::Mismatch.new(behind0.env)
     end
 
-    ahead1 = Ahead::Goto.new(behind0.keypath, Ahead.stackptr(ahead0))
+    ahead1 = Ahead::Goto.new(behind0.keypath?, Ahead.stackptr(ahead0))
 
     match(behind0.keypath(&.update_value(op.key)), op.successor, value, ahead1)
   end
 
-  def match(env, op : Keypool, matchee : Term, ahead)
+  def match(behind0, op : Keypool, matchee : Term, ahead0)
     unless dict = matchee.as_d?
-      return Fb::Mismatch.new(env.env)
+      return Fb::Mismatch.new(behind0.env)
     end
 
     pruned = op.keys.reduce(dict) { |memo, key| memo.without(key) }
     unless pruned.empty?
-      return Fb::Mismatch.new(env.env)
+      return Fb::Mismatch.new(behind0.env)
     end
 
-    ahead.call(env)
+    ahead0.call(behind0)
   end
 
-  def match(env, op : Span, matchee : Term, ahead)
+  def match(behind0, op : Span, matchee : Term, ahead0)
     unless a = matchee.as_s?
-      return Fb::Mismatch.new(env.env)
+      return Fb::Mismatch.new(behind0.env)
     end
 
-    match(env, op.successor, Term.of(a.charcount), ahead)
+    match(behind0, op.successor, Term.of(a.charcount), ahead0)
   end
 
-  def match(env, op : Tally, matchee : Term, ahead)
+  def match(behind0, op : Tally, matchee : Term, ahead0)
     unless a = matchee.as_d?
-      return Fb::Mismatch.new(env.env)
+      return Fb::Mismatch.new(behind0.env)
     end
 
-    match(env, op.successor, Term.of(a.size), ahead)
+    match(behind0, op.successor, Term.of(a.size), ahead0)
   end
 
-  def match(env, op : Add, matchee : Term, ahead)
+  def match(behind0, op : Add, matchee : Term, ahead0)
     unless a = matchee.as_n?
-      return Fb::Mismatch.new(env.env)
+      return Fb::Mismatch.new(behind0.env)
     end
 
-    match(env, op.successor, Term.of(a + op.arg), ahead)
+    match(behind0, op.successor, Term.of(a + op.arg), ahead0)
   end
 
-  def match(env, op : Sub, matchee : Term, ahead)
+  def match(behind0, op : Sub, matchee : Term, ahead0)
     unless a = matchee.as_n?
-      return Fb::Mismatch.new(env.env)
+      return Fb::Mismatch.new(behind0.env)
     end
 
-    match(env, op.successor, Term.of(a - op.arg), ahead)
+    match(behind0, op.successor, Term.of(a - op.arg), ahead0)
   end
 
-  def match(env, op : Mul, matchee : Term, ahead)
+  def match(behind0, op : Mul, matchee : Term, ahead0)
     unless a = matchee.as_n?
-      return Fb::Mismatch.new(env.env)
+      return Fb::Mismatch.new(behind0.env)
     end
 
-    match(env, op.successor, Term.of(a * op.arg), ahead)
+    match(behind0, op.successor, Term.of(a * op.arg), ahead0)
   end
 
-  def match(env, op : Div, matchee : Term, ahead)
+  def match(behind0, op : Div, matchee : Term, ahead0)
     unless a = matchee.as_n?
-      return Fb::Mismatch.new(env.env)
+      return Fb::Mismatch.new(behind0.env)
     end
 
     begin
       q = Term.of(a / op.arg)
     rescue DivisionByZeroError
-      return Fb::Mismatch.new(env.env)
+      return Fb::Mismatch.new(behind0.env)
     end
 
-    match(env, op.successor, q, ahead)
+    match(behind0, op.successor, q, ahead0)
   end
 
-  def match(env, op : Tdiv, matchee : Term, ahead)
+  def match(behind0, op : Tdiv, matchee : Term, ahead0)
     unless a = matchee.as_n?
-      return Fb::Mismatch.new(env.env)
+      return Fb::Mismatch.new(behind0.env)
     end
 
     begin
       q = Term.of(a // op.arg)
     rescue DivisionByZeroError
-      return Fb::Mismatch.new(env.env)
+      return Fb::Mismatch.new(behind0.env)
     end
 
-    match(env, op.successor, q, ahead)
+    match(behind0, op.successor, q, ahead0)
   end
 
-  def match(env, op : Mod, matchee : Term, ahead)
+  def match(behind0, op : Mod, matchee : Term, ahead0)
     unless a = matchee.as_n?
-      return Fb::Mismatch.new(env.env)
+      return Fb::Mismatch.new(behind0.env)
     end
 
     begin
       m = Term.of(a % op.arg)
     rescue DivisionByZeroError
-      return Fb::Mismatch.new(env.env)
+      return Fb::Mismatch.new(behind0.env)
     end
 
-    match(env, op.successor, m, ahead)
+    match(behind0, op.successor, m, ahead0)
   end
 
-  def match(env, op : Pow, matchee : Term, ahead)
+  def match(behind0, op : Pow, matchee : Term, ahead0)
     unless a = matchee.as_n?
-      return Fb::Mismatch.new(env.env)
+      return Fb::Mismatch.new(behind0.env)
     end
 
     begin
       c = Term.of(a ** op.arg)
     rescue DivisionByZeroError # e.g. 0^-2
-      return Fb::Mismatch.new(env.env)
+      return Fb::Mismatch.new(behind0.env)
     end
 
-    match(env, op.successor, c, ahead)
+    match(behind0, op.successor, c, ahead0)
   end
 
-  def match(env, op : Map, matchee : Term, ahead)
+  def match(behind0, op : Map, matchee : Term, ahead0)
     unless v = op.arg[matchee]?
-      return Fb::Mismatch.new(env.env)
+      return Fb::Mismatch.new(behind0.env)
     end
 
-    match(env, op.successor, v, ahead)
+    match(behind0, op.successor, v, ahead0)
   end
 
-  def match(env, op : Not, matchee : Term, ahead)
+  def match(behind0, op : Not, matchee : Term, ahead0)
     if matchee.in?(op.blacklist)
-      return Fb::Mismatch.new(env.env)
+      return Fb::Mismatch.new(behind0.env)
     end
 
-    ahead.call(env)
-  end
-
-  record Ahead::EntrySeq, matchee : Term, entries : Array(Entry::Any), cursor : UInt32, ahead : Ahead* do
-    include Ahead
-
-    def call(behind0)
-      unless entry = entries[cursor]?
-        return ahead.value.call(behind0)
-      end
-
-      Entry.match(behind0, entry, matchee, copy_with(cursor: cursor + 1))
-    end
+    ahead0.call(behind0)
   end
 
   def match(behind0, op : Layer, matchee : Term, ahead0)
@@ -1702,31 +1449,15 @@ module ::Ww::M1::Operator
     #
     # The exact order doesn't *really* matter here since we're a solver.
     ahead1 = Ahead::EntrySeq.new(Term.of(selection), op.side, 0, Ahead.stackptr(ahead0))
-    ahead2 = Ahead::Goto.new(behind0.keypath, Ahead.stackptr(ahead1))
+    ahead2 = Ahead::Goto.new(behind0.keypath?, Ahead.stackptr(ahead1))
 
     match(behind0.keypath(&.delete_keys(op.side, &.key)), op.below, Term.of(residue), ahead2)
-  end
-
-  def search_spec(op : Scan)
-    Search::Spec::Scan.new(op.needle.size.to_u16)
-  end
-
-  def search_spec(op : Dfs)
-    Search::Spec::Dfs.new(op.part, depth0: op.depth0)
-  end
-
-  def search_spec(op : Bfs)
-    Search::Spec::Bfs.new(op.part, depth0: op.depth0)
-  end
-
-  def search_spec(op : Entries)
-    Search::Spec::Entries.new
   end
 
   def match(behind0, op : First, matchee : Term, ahead0)
     memo = Fb::Mismatch.new(behind0.env)
 
-    Search.traverse(matchee, spec: search_spec(op), keypath: behind0.keypath) do |item|
+    Search.traverse(matchee, spec: search_spec(op), keypath: behind0.keypath?) do |item|
       case memo = Operator.match(behind0, op.needle, item, ahead0)
       in Fb::Match, Fb::Request
         Search::Stop
@@ -1742,7 +1473,7 @@ module ::Ww::M1::Operator
     envs = [] of Env::Type
     reqbox = nil
 
-    Search.traverse(matchee, spec: search_spec(op), keypath: behind0.keypath) do |item|
+    Search.traverse(matchee, spec: search_spec(op), keypath: behind0.keypath?) do |item|
       case fb = Operator.match(behind0, op.needle, item, ahead0)
       in Fb::Match
         Env.append(envs, fb)
@@ -1765,9 +1496,9 @@ module ::Ww::M1::Operator
   end
 
   def match(behind0, op : AllIsolated, matchee : Term, ahead0)
-    kp0 = behind0.keypath
+    kp0 = behind0.keypath?
 
-    keypaths = behind0.env[:"(keypaths)"]? || Term[]
+    behind1 = behind0
 
     captures = Term::Dict.build do |captures|
       reqbox = nil
@@ -1776,7 +1507,7 @@ module ::Ww::M1::Operator
         case fb = Operator.match(behind0, op.needle, item, Ahead::MatchOne.new)
         in Fb::Match
           fb.envs.each do |env|
-            keypaths &= env[:"(keypaths)"]? || Term[]
+            behind1 = behind1.import_keypaths(env)
 
             captures.append(env.without(:"(keypaths)"))
           end
@@ -1797,33 +1528,27 @@ module ::Ww::M1::Operator
     end
 
     if captures.size < op.min || captures.size > op.max > 0
-      return Fb::Mismatch.new(behind0.env)
+      return Fb::Mismatch.new(behind1.env)
     end
 
-    unless behind1 = behind0.propose?(op.capture, Term.of(captures))
-      return Fb::Mismatch.new(behind0.env.with(op.capture, Term.of(captures)))
+    unless behind2 = behind1.propose?(op.capture, Term.of(captures))
+      return Fb::Mismatch.new(behind1.env.with(op.capture, Term.of(captures)))
     end
 
-    behind1 = behind1
-      .copy_with(env: behind1.env.with(:"(keypaths)", keypaths))
-      .goto(kp0)
-
-    ahead0.call(behind1)
+    ahead0.call(behind2.goto(kp0))
   end
 
   def match(behind0, op : All, matchee : Term, ahead0)
-    kp0 = behind0.keypath
-
     envs = [] of Env::Type
     reqbox = nil
 
-    keypaths = behind0.env[:"(keypaths)"]? || Term[]
+    behind1 = behind0
 
-    Search.traverse(matchee, spec: search_spec(op), keypath: kp0) do |item|
+    Search.traverse(matchee, spec: search_spec(op), keypath: behind0.keypath?) do |item|
       case fb = Operator.match(behind0, op.needle, item, ahead0)
       in Fb::Match
         fb.envs.each do |env|
-          keypaths &= env[:"(keypaths)"]? || Term[]
+          behind1 = behind1.import_keypaths(env)
           envs << env
         end
 
@@ -1844,8 +1569,6 @@ module ::Ww::M1::Operator
     # Each feedback environment gives us candidate values for all exterior captures.
     # Thus by looking at all feedback environments at once we can determine (or reduce)
     # the domains of each exterior capture.
-    behind1 = behind0
-
     op.exterior.each do |capture|
       domain1 = Env.domain(envs, capture)
       behind1 = behind1.one_of(capture, domain1)
@@ -1853,13 +1576,11 @@ module ::Ww::M1::Operator
 
     captures = Env.captures(envs, selector: op.selector)
 
-    unless behind1 = behind1.propose?(op.capture, Term.of(captures))
+    unless behind2 = behind1.propose?(op.capture, Term.of(captures))
       return Fb::Mismatch.new(behind0.env.with(op.capture, Term.of(captures)))
     end
 
-    behind1 = behind1.copy_with(env: behind1.env.with(:"(keypaths)", keypaths))
-
-    fb = ahead0.call(behind1)
+    fb = ahead0.call(behind2)
 
     case fb
     in Fb::Match
@@ -1886,30 +1607,30 @@ module ::Ww::M1::Operator
         exterior.with(op.capture, pruned)
       end
 
-      Env.feedback(consistent, fallback: behind1.env)
+      Env.feedback(consistent, fallback: behind2.env)
     in Fb::Mismatch, Fb::Request
       fb
     end
   end
 
-  def match(env, op : Value, matchee : Term, ahead)
+  def match(behind0, op : Value, matchee : Term, ahead0)
     unless dict = matchee.as_d?
-      return Fb::Mismatch.new(env.env)
+      return Fb::Mismatch.new(behind0.env)
     end
 
     if dict.empty?
-      return Fb::Mismatch.new(env.env)
+      return Fb::Mismatch.new(behind0.env)
     end
 
     candidates = Set(Term).new
 
-    if key = env[op.capture]?
+    if key = behind0[op.capture]?
       candidates << key
     else
       # If we do not know the value yet it might be the case that it can be learned
       # from the future. We declare its domain to be that of all keys from the matchee
       # dict, and run ahead without the value known, hoping to learn it.
-      case fb = ahead.call(env.one_of(op.capture, dict))
+      case fb = ahead0.call(behind0.one_of(op.capture, dict))
       in Fb::MatchOne, Fb::Mismatch
         if key = fb.env[op.capture]?
           candidates << key
@@ -1925,21 +1646,23 @@ module ::Ww::M1::Operator
       end
     end
 
-    return Fb::Mismatch.new(env.env) if candidates.empty?
+    if candidates.empty?
+      return Fb::Mismatch.new(behind0.env)
+    end
 
     envs = [] of Env::Type
 
     candidates.each do |key|
       next unless value = dict[key]?
 
-      kp0 = env.keypath
+      kp0 = behind0.keypath?
 
-      env1 = env
+      behind1 = behind0
         .mount(op.capture, &.update_key(key))
         .assign(op.capture, key)
         .keypath(&.update_value(key))
 
-      fb = match(env1, op.tail, value, Ahead::Goto.new(kp0, Ahead.stackptr(ahead)))
+      fb = match(behind1, op.tail, value, Ahead::Goto.new(kp0, Ahead.stackptr(ahead0)))
       unless fb.is_a?(Fb::Response)
         return fb
       end
@@ -1947,7 +1670,7 @@ module ::Ww::M1::Operator
       Env.append(envs, feedback: fb)
     end
 
-    Env.feedback(envs, fallback: env.env)
+    Env.feedback(envs, fallback: behind0.env)
   end
 
   def match(behind0, op : NegativeValue | NegativeValueKeypath, matchee : Term, ahead0)
@@ -2011,10 +1734,9 @@ module ::Ww::M1::Operator
     Env.feedback(envs, fallback: behind0.env)
   end
 
-  # TODO: cache New like we cache Term.cases
   def match(behind0, op : New, matchee : Term, ahead0)
-    # If we already know all the subjects, this is the best case and
-    # an immediate fast path toward instantiation.
+    # If we already know all the subjects, this is the best case and an immediate
+    # fast path toward instantiation.
     if op.subjects.all?(&.in?(behind0.env))
       subt = behind0.env.pluck(op.subjects)
       successor = pipe(op.pattern, M1.bsubst(subt), M1.operator)
@@ -2073,7 +1795,7 @@ module ::Ww::M1::Operator
   end
 
   def match(behind0, op : Keypath, matchee : Term, ahead0)
-    unless keypath = behind0.keypath
+    unless keypath = behind0.keypath?
       # We're not running in keypath mode. Send a back-message all the way up
       # the call stack to where the match was initiated; ask them to rematch
       # with keypath mode enabled.
@@ -2092,11 +1814,245 @@ module ::Ww::M1::Operator
 
     ahead0.call(behind1)
   end
+end
 
-  M = Term.of(1, 2, 3)
+module ::Ww::M1::Operator
+  struct Behind
+    def initialize(
+      @captures = Term[],
+      @domains = Term[],
+      @antidomains = Term[],
+      @keypath : KeypathQuery? = nil,
+    )
+    end
+
+    private def_change
+
+    def env : Term::Dict
+      @captures
+    end
+
+    def []?(k : Term)
+      @captures[k]?
+    end
+
+    def propose?(k : Term, v1 : Term) : Behind?
+      if domain = @domains[k]?
+        return unless v1.in?(domain)
+      end
+
+      if antidomain = @antidomains[k]?
+        return if v1.in?(antidomain)
+      end
+
+      if (v0 = @captures[k]?) && v0 != v1
+        return
+      end
+
+      change(captures: @captures.with(k, v1))
+    end
+
+    def assign(k, v)
+      change(captures: @captures.with(k, v))
+    end
+
+    def mount(capture : Term, keypath : Term::Dict)
+      keypaths0 = @captures[:"(keypaths)"]? || Term[]
+      keypaths1 = keypaths0.morph({capture, keypath, true})
+
+      change(captures: @captures.with(:"(keypaths)", keypaths1))
+    end
+
+    def mount(capture : Term, kpq : KeypathQuery)
+      mount(capture, kpq.keypath)
+    end
+
+    def mount(capture : Term)
+      @keypath.try { |kpq| mount(capture, kpq) } || self
+    end
+
+    def mount(capture : Term, & : KeypathQuery -> KeypathQuery)
+      @keypath.try { |kpq| mount(capture, yield kpq) } || self
+    end
+
+    def import_keypaths(env : Term::Dict)
+      behind1 = self
+
+      kpsrc = env[:"(keypaths)"]? || Term[]
+      kpsrc.each_entry do |capture, kpset|
+        kpset.each_entry { |kp, _| behind1 = behind1.mount(capture, kp.as_d) }
+      end
+
+      behind1
+    end
+
+    def keypath? : KeypathQuery?
+      @keypath
+    end
+
+    def keypath(& : KeypathQuery -> KeypathQuery)
+      return self unless kp = @keypath
+
+      change(keypath: yield kp)
+    end
+
+    def goto(dst : KeypathQuery?)
+      change(keypath: dst)
+    end
+
+    def keypathless
+      change(keypath: nil)
+    end
+
+    # Domain restriction: *k* must be one of *vs* (the latter is treated as a dict set).
+    def one_of(k, vs) : Behind
+      if domain = @domains[k]?
+        change(domains: @domains.with(k, domain.xsect(vs)))
+      else
+        change(domains: @domains.with(k, vs))
+      end
+    end
+
+    # Domain restriction: *k* must **not** be one of *vs* (the latter is treated as a dict set).
+    def not(k, vs) : Behind
+      if antidomain = @antidomains[k]?
+        change(antidomains: @antidomains.with(k, antidomain | vs))
+      else
+        change(antidomains: @antidomains.with(k, vs))
+      end
+    end
+
+    def partition(selector)
+      lcaptures = @captures &- selector
+      ldomains = @domains &- selector
+      lantidomains = @antidomains &- selector
+
+      rcaptures = @captures.pluck(selector)
+      rdomains = @domains.pluck(selector)
+      rantidomains = @antidomains.pluck(selector)
+
+      {change(captures: lcaptures, domains: ldomains, antidomains: lantidomains),
+       change(captures: rcaptures, domains: rdomains, antidomains: rantidomains)}
+    end
+  end
+
+  private def compare?(a, op, b)
+    case op
+    when :lt  then a < b
+    when :lte then a <= b
+    else
+      unimplemented
+    end
+  end
+
+  struct Ahead::Forward
+    include Ahead
+
+    def initialize(@delta : Int32, @ahead : Ahead*)
+    end
+
+    def call(behind0 : Behind) : Fb::Any
+      @ahead.value.call(behind0.keypath(&.forward(@delta)))
+    end
+  end
+
+  struct Ahead::ItemZip(L, R)
+    include Ahead
+
+    def initialize(@lhs : L, @rhs : R, @i : Int32, @j : Int32, @delta : Int8, @ahead : Ahead*)
+    end
+
+    def call(behind0 : Behind) : Fb::Any
+      if (@i + @delta).in?(0...@lhs.size) && (@j + @delta).in?(0...@rhs.size)
+        aheadptr = Ahead.stackptr(ItemZip.new(@lhs, @rhs, @i + @delta, @j + @delta, @delta, @ahead))
+      else
+        aheadptr = @ahead
+      end
+
+      Operator.match(behind0, @lhs[@i], @rhs[@j], Ahead::Forward.new(@delta, aheadptr))
+    end
+  end
+
+  module Ahead
+    macro stackptr(var)
+      begin
+        %slot = {{var}}.as(Ahead)
+        pointerof(%slot)
+      end
+    end
+  end
+
+  struct Ahead::MatchOne
+    include Ahead
+
+    def call(behind0 : Behind) : Fb::Any
+      Fb::MatchOne.new(behind0.env)
+    end
+  end
+
+  struct Ahead::Goto
+    include Ahead
+
+    def initialize(@keypath : KeypathQuery?, @ahead : Ahead*)
+    end
+
+    def call(behind0 : Behind)
+      @ahead.value.call(behind0.goto(@keypath))
+    end
+  end
+
+  struct Ahead::Match
+    include Ahead
+
+    def initialize(@op : Operator::Any, @matchee : Term, @ahead : Ahead*)
+    end
+
+    def call(behind0 : Behind) : Fb::Any
+      Operator.match(behind0, @op, @matchee, @ahead.value)
+    end
+  end
+
+  struct Ahead::ItemStep
+    include Ahead
+
+    def initialize(@ord : UInt32, @feed : Item::Feed, @ahead : Item::ItemAhead*)
+    end
+
+    def call(behind0 : Behind)
+      @ahead.value.call(@ord + 1, @feed.move(1), behind0.keypath(&.forward))
+    end
+  end
+
+  record Ahead::EntrySeq, matchee : Term, entries : Array(Entry::Any), cursor : UInt32, ahead : Ahead* do
+    include Ahead
+
+    def call(behind0)
+      unless entry = entries[cursor]?
+        return ahead.value.call(behind0)
+      end
+
+      Entry.match(behind0, entry, matchee, copy_with(cursor: cursor + 1))
+    end
+  end
+
+  def search_spec(op : Scan)
+    Search::Spec::Scan.new(op.needle.size.to_u16)
+  end
+
+  def search_spec(op : Dfs)
+    Search::Spec::Dfs.new(op.part, depth0: op.depth0)
+  end
+
+  def search_spec(op : Bfs)
+    Search::Spec::Bfs.new(op.part, depth0: op.depth0)
+  end
+
+  def search_spec(op : Entries)
+    Search::Spec::Entries.new
+  end
 
   def feedback(env : Env::Type, op : Any, matchee : Term, *, keypaths : Bool = false) : Fb::Response
-    behind0 = Behind.new(env, domains: Term[], antidomains: Term[], keypath: keypaths ? KeypathQuery.new : nil)
+    behind0 = Behind.new(env, keypath: keypaths ? KeypathQuery.new : nil)
 
     case fb = match(behind0, op, matchee, Ahead::MatchOne.new)
     in Fb::Response
@@ -2137,7 +2093,7 @@ module ::Ww::M1::Operator
   extend self
 
   def match(behind0, op : Any, cell : Search::Result::Item, ahead)
-    kp0 = behind0.keypath
+    kp0 = behind0.keypath?
     kp1 = cell.keypath
     cont = Ahead::Goto.new(kp0, Ahead.stackptr(ahead))
 
@@ -2167,7 +2123,7 @@ module ::Ww::M1::Operator
       kkp = vkp = nil
     end
 
-    ahead1 = Ahead::Goto.new(behind0.keypath, Ahead.stackptr(ahead0))
+    ahead1 = Ahead::Goto.new(behind0.keypath?, Ahead.stackptr(ahead0))
     ahead2 = Ahead::Match.new(ops[1], cell.v, Ahead.stackptr(ahead1))
     ahead3 = Ahead::Goto.new(vkp, Ahead.stackptr(ahead2))
     ahead4 = Ahead::Match.new(ops[0], cell.k, Ahead.stackptr(ahead3))
@@ -2177,7 +2133,7 @@ module ::Ww::M1::Operator
   end
 
   def match(behind0, ops : Slice(Any), matchees : Search::Result::ItemStrip, ahead0)
-    ahead1 = Ahead::Goto.new(behind0.keypath, Ahead.stackptr(ahead0))
+    ahead1 = Ahead::Goto.new(behind0.keypath?, Ahead.stackptr(ahead0))
     ahead2 = Ahead::ItemZip.new(ops, matchees, 0, 0, +1, Ahead.stackptr(ahead1))
     ahead2.call(behind0.goto(matchees.keypath))
   end
@@ -2203,36 +2159,36 @@ end
 module ::Ww::M1::Operator::Entry
   extend self
 
-  def match(env, op : Required, matchee : Term, ahead)
+  def match(behind0, op : Required, matchee : Term, ahead0)
     unless dict = matchee.as_d?
-      return Fb::Mismatch.new(env.env)
+      return Fb::Mismatch.new(behind0.env)
     end
 
     unless v = dict[op.key]?
-      return Fb::Mismatch.new(env.env)
+      return Fb::Mismatch.new(behind0.env)
     end
 
-    kp0 = env.keypath
+    kp0 = behind0.keypath?
 
-    Operator.match(env.keypath(&.update_value(op.key)), op.value, v, Ahead::Goto.new(kp0, Ahead.stackptr(ahead)))
+    Operator.match(behind0.keypath(&.update_value(op.key)), op.value, v, Ahead::Goto.new(kp0, Ahead.stackptr(ahead0)))
   end
 
-  def match(env, op : Optional, matchee : Term, ahead)
+  def match(behind0, op : Optional, matchee : Term, ahead0)
     unless dict = matchee.as_d?
-      return Fb::Mismatch.new(env.env)
+      return Fb::Mismatch.new(behind0.env)
     end
 
-    kp0 = env.keypath
+    kp0 = behind0.keypath?
 
     if value = dict[op.key]?
-      case fb = Operator.match(env.keypath(&.update_value(op.key)), op.value, value, Ahead::Goto.new(kp0, Ahead.stackptr(ahead)))
+      case fb = Operator.match(behind0.keypath(&.update_value(op.key)), op.value, value, Ahead::Goto.new(kp0, Ahead.stackptr(ahead0)))
       in Fb::Match, Fb::Request
         return fb
       in Fb::Mismatch
       end
     end
 
-    Operator.match(env.keypath(&.create_pair(op.key, value: op.default)), op.value, op.default, Ahead::Goto.new(kp0, Ahead.stackptr(ahead)))
+    Operator.match(behind0.keypath(&.create_pair(op.key, value: op.default)), op.value, op.default, Ahead::Goto.new(kp0, Ahead.stackptr(ahead0)))
   end
 
   def match(behind0, op : Absent | AbsentKeypath, matchee : Term, ahead0)
@@ -2261,7 +2217,7 @@ module ::Ww::M1::Operator::Entry
 
     if v = dict[op.key]?
       case fb = Operator.match(behind0, op.positive, v, ahead0)
-      in Fb::Match # Positive matches, we don't have to do anything.
+      in Fb::Match # Positive example matches, nothing to do.
         return Fb::Mismatch.new(behind0.env)
       in Fb::Mismatch
       in Fb::Request
@@ -2503,7 +2459,7 @@ module ::Ww::M1::Operator::Item
 
       ahead1 = Operator::Ahead::ItemAdapter.new(ord, suffix, ItemAhead.stackptr(ahead0))
       ahead2 = Operator::Ahead::Forward.new(prefix.size, Operator::Ahead.stackptr(ahead1))
-      ahead3 = Operator::Ahead::Goto.new(env.keypath, Operator::Ahead.stackptr(ahead2))
+      ahead3 = Operator::Ahead::Goto.new(env.keypath?, Operator::Ahead.stackptr(ahead2))
 
       case fb = Operator.match(env.keypathless, item.measurer, matchee, ahead3)
       in Fb::MatchOne
@@ -2536,7 +2492,7 @@ module ::Ww::M1::Operator::Item
     end
 
     ahead1 = Operator::Ahead::ItemAdapter.new(ord, feed, ItemAhead.stackptr(ahead0))
-    ahead2 = Operator::Ahead::Goto.new(env.keypath, Ahead.stackptr(ahead1))
+    ahead2 = Operator::Ahead::Goto.new(env.keypath?, Ahead.stackptr(ahead1))
 
     Operator.match(env.keypath(&.insert_item(item.default, ord: ord)), item.tail, item.default, ahead2)
   end
@@ -2682,7 +2638,7 @@ module ::Ww::M1::Operator::Item
   end
 
   def self.match(env, items : Slice(Any), feed, ahead)
-    kp0 = env.keypath
+    kp0 = env.keypath?
 
     match(0u32, env.keypath(&.update_value(0)), items, feed, Operator::Ahead::Goto.new(kp0, Operator::Ahead.stackptr(ahead)))
   end
@@ -2802,7 +2758,7 @@ module ::Ww::M1
       end
     end
 
-    # Returns the normal form of an itemspattern *node*.
+    # Returns the normal form of an item sequence *node*.
     def item(node : Term) : Term
       Term.of_case(node, engine: M0) do
         matchpi %[_symbol] do
@@ -2952,7 +2908,7 @@ module ::Ww::M1
 
       if dict.itemsonly?
         node = Term::Dict.build do |commit|
-          commit << :"%itemspattern"
+          commit << :"%itemseq"
           commit.concat(dict.items) { |itemnode| item(itemnode) }
         end
 
@@ -3321,8 +3277,8 @@ module ::Ww::M1
   module Bounds
     extend self
 
-    # Computes the bounds of an itemspattern *item*. Raises `ArgumentError` if *item*
-    # is not one of the recognized itemspattern item nodes.
+    # Computes the bounds of an item sequence *item*. Raises `ArgumentError` if *item*
+    # is not one of the recognized item sequence items.
     def item(item : Term) : {Magnitude, Magnitude}
       Term.case(item, engine: M0) do
         matchpi %{[%singular _]}, cue: :"%singular" do
@@ -3401,7 +3357,7 @@ module ::Ww::M1
       end
     end
 
-    # Computes the bounds of an enumerable of itemspattern item nodes (see `item`).
+    # Computes the bounds of an enumerable of item sequence item nodes (see `item`).
     def items(ie : Enumerable(Term)) : {Magnitude, Magnitude}
       min = max = Magnitude.new(0)
 
@@ -3438,7 +3394,7 @@ module ::Ww::M1
           {min0 + min1, max0 + max1}
         end
 
-        matchpi %{[%itemspattern _*]}, cue: :"%itemspattern" do
+        matchpi %{[%itemseq _*]}, cue: :"%itemseq" do
           items(normp.items.move(1))
         end
 
@@ -3792,7 +3748,7 @@ module ::Ww::M1
                      %singular
                      %group
                      %partition
-                     %itemspattern
+                     %itemseq
                      %items/first
                      %items/source
                      %items/all
@@ -3821,7 +3777,7 @@ module ::Ww::M1
         Term.case(node, engine: Engine) do
           matchpi(
             %{[(%any %partition
-                     %itemspattern
+                     %itemseq
                      %layer
                      %items/first
                      %items/source
@@ -3853,7 +3809,7 @@ module ::Ww::M1
 
       M1.walk(normp, keypath: keypath) do |node|
         Term.case(node, engine: Engine) do
-          matchpi %{[(%any %partition %itemspattern %layer %items/first %items/source %items/all) _*]} do
+          matchpi %{[(%any %partition %itemseq %layer %items/first %items/source %items/all) _*]} do
             min, max = M1.bounds(node)
             min = min == Magnitude::INFINITY ? SYM_INF : min
             max = max == Magnitude::INFINITY ? SYM_INF : max
@@ -3877,7 +3833,7 @@ module ::Ww::M1
 
       M1.walk(normp, keypath: keypath) do |node|
         Term.case(node, engine: Engine) do
-          matchpi %{[(%any %itemspattern %layer %items/first %items/source %items/all %leaves/first %leaves/source %leaves/all) _*]} do
+          matchpi %{[(%any %itemseq %layer %items/first %items/source %items/all %leaves/first %leaves/source %leaves/all) _*]} do
             min, max = M1.depth(node)
             min = min == Magnitude::INFINITY ? SYM_INF : min
             max = max == Magnitude::INFINITY ? SYM_INF : max
@@ -3978,7 +3934,7 @@ module ::Ww::M1
         end
 
         # Fold (_*) into an itemsonly check (which is vastly cheaper!)
-        matchpi %[(%itemspattern (%plural min: 0 max: ∞ type: (%literal _)))] do
+        matchpi %[(%itemseq (%plural min: 0 max: ∞ type: (%literal _)))] do
           {:"%itemsonly"}
         end
 
@@ -3998,9 +3954,9 @@ module ::Ww::M1
 
         # Fold e. g. (_ _ _) into a singular-only itemspart. This lets us render it as
         # a more efficient Operator later on.
-        matchpi %[(%itemspattern (%past (%singular _) min: 1))] do
+        matchpi %[(%itemseq (%past (%singular _) min: 1))] do
           Term::Dict.build do |commit|
-            commit << :"%itemspattern/singular-only"
+            commit << :"%itemseq/singular-only"
 
             singulars = normp.items.move(1)
             singulars.each do |(_, item)|
@@ -4011,7 +3967,7 @@ module ::Ww::M1
 
         # Fold e.g. (_ _ ... _ _*) into a %prefix operator that skips matching `_*`,
         # a relatively expensive affair.
-        matchpi %[(%itemspattern (%past (%singular _) min: 1) (%plural min: 0 max: ∞ type: (%literal _)))] do
+        matchpi %[(%itemseq (%past (%singular _) min: 1) (%plural min: 0 max: ∞ type: (%literal _)))] do
           Term::Dict.build do |commit|
             commit << :"%prefix"
 
@@ -4024,7 +3980,7 @@ module ::Ww::M1
 
         # Fold e.g. (_* _ ... _ _) into a %postfix operator that skips matching `_*`,
         # a relatively expensive affair.
-        matchpi %[(%itemspattern (%plural min: 0 max: ∞ type: (%literal _)) (%past (%singular _) min: 1))] do
+        matchpi %[(%itemseq (%plural min: 0 max: ∞ type: (%literal _)) (%past (%singular _) min: 1))] do
           Term::Dict.build do |commit|
             commit << :"%postfix"
 
@@ -4039,9 +3995,9 @@ module ::Ww::M1
         # and a same-%bounds %postfix.
         matchp(
           %{[%bounds
-              (%itemspattern (%group prefix (%past/max (%singular _) min: 1))
-                             (%plural min: 0 max: ∞ type: (%literal _))
-                             (%group postfix (%past/max (%singular _) min: 1)))]}
+              (%itemseq (%group prefix (%past/max (%singular _) min: 1))
+                        (%plural min: 0 max: ∞ type: (%literal _))
+                        (%group postfix (%past/max (%singular _) min: 1)))]}
         ) do |prefix, postfix|
           op_prefix = Term::Dict.build do |commit|
             commit << :"%prefix"
@@ -4297,10 +4253,10 @@ module ::Ww::M1
         Operator::MaxDepth.new(min, max, operator(successor, captures))
       end
 
-      matchpi %[(%itemspattern/singular-only _ _*)], cue: :"%itemspattern/singular-only" do
+      matchpi %[(%itemseq/singular-only _ _*)], cue: :"%itemseq/singular-only" do
         items = node.items.move(1).to_readonly_slice { |item| operator(item, captures) }
 
-        Operator::ItemSequence.new(items, exhaustive: true, reverse: false)
+        Operator::ItemBlock.new(items, exhaustive: true, reverse: false)
       end
 
       matchpi %[(%prefix successor_)], cue: :"%prefix" do
@@ -4310,7 +4266,7 @@ module ::Ww::M1
       matchpi %[(%prefix _ _*)], cue: :"%prefix" do
         items = node.items.move(1).to_readonly_slice { |item| operator(item, captures) }
 
-        Operator::ItemSequence.new(items, exhaustive: false, reverse: false)
+        Operator::ItemBlock.new(items, exhaustive: false, reverse: false)
       end
 
       matchpi %[(%postfix successor_)], cue: :"%postfix" do
@@ -4320,13 +4276,13 @@ module ::Ww::M1
       matchpi %[(%postfix _ _*)], cue: :"%postfix" do
         items = node.items.move(1).to_readonly_slice { |item| operator(item, captures) }
 
-        Operator::ItemSequence.new(items, exhaustive: false, reverse: true)
+        Operator::ItemBlock.new(items, exhaustive: false, reverse: true)
       end
 
-      matchpi %[(%itemspattern _*)], cue: :"%itemspattern" do
+      matchpi %[(%itemseq _*)], cue: :"%itemseq" do
         items = Item.sequence(node.items.move(1), -> { nil.as(Item::Neighbor) }, captures)
 
-        Operator::Itemspattern.new(items)
+        Operator::ItemSequence.new(items)
       end
 
       matchpi %[(%itemsonly)], cue: :"%itemsonly" do
@@ -4585,7 +4541,7 @@ module ::Ww::M1
       matchpi %[(%any/literal _*)], cue: :"%any/literal" do
         branches = node.items.move(1).to_set
 
-        Operator::Choices.new(branches)
+        Operator::LiteralChoices.new(branches)
       end
 
       match({:"%any/source", :a_}, cue: :"%any/source") do |a|
@@ -4608,19 +4564,19 @@ module ::Ww::M1
       end
 
       match({:"%edge", {:"%literal", :_}}, cue: :"%edge") do
-        Operator::EdgeTyped.new(:any)
+        Operator::Edge.new(:any)
       end
 
       match({:"%edge", {:"%literal", :_symbol}}, cue: :"%edge") do
-        Operator::EdgeTyped.new(:symbol)
+        Operator::Edge.new(:symbol)
       end
 
       match({:"%edge", {:"%literal", :_string}}, cue: :"%edge") do
-        Operator::EdgeTyped.new(:string)
+        Operator::Edge.new(:string)
       end
 
       match({:"%edge", {:"%literal", :_number}}, cue: :"%edge") do
-        Operator::EdgeTyped.new(:number)
+        Operator::Edge.new(:number)
       end
 
       match({:"%not", :_, :"_*"}, cue: :"%not") do
@@ -4788,14 +4744,14 @@ module ::Ww::M1
   end
 
   # Used as a constant to indicate that `walk` should walk thoroughly,
-  # that is, it should include all %-nodes, including itemspattern nodes
+  # that is, it should include all %-nodes, including item sequence nodes
   # such as %singular.
   module WalkMode::Thorough
   end
 
-  # Used as a constant to indicate that `walk` should continue into itemspattern
+  # Used as a constant to indicate that `walk` should continue into item sequence
   # nodes such as %singular without yielding them to the callback.
-  module WalkMode::NonItemspattern
+  module WalkMode::NonItemSeq
   end
 
   def self.walk(root : Term, mode : WalkMode::Thorough.class, callable, *, keypath = nil) : WalkDecision
@@ -4860,11 +4816,11 @@ module ::Ww::M1
     end
   end
 
-  def self.walk(root : Term, mode : WalkMode::NonItemspattern.class, callable, *, itemspattern : Bool = false, keypath = nil) : WalkDecision
+  def self.walk(root : Term, mode : WalkMode::NonItemSeq.class, callable, *, itemseq : Bool = false, keypath = nil) : WalkDecision
     walk(root, mode: WalkMode::Thorough, keypath: keypath) do |node|
       Term.case(node, engine: M0) do
-        if itemspattern
-          # Recurse into M1 non-itemspattern children with itemspattern flag off.
+        if itemseq
+          # Recurse into M1 non-item sequence children with itemseq flag off.
           matchpi(
             %{[%singular child_]},
             %{[%gap child_]},
@@ -4873,7 +4829,7 @@ module ::Ww::M1
             %{[%optional _ child_]},
             cues: {:"%singular", :"%gap", :"%gap/min", :"%gap/max", :"%optional"},
           ) do
-            case walk(child, mode, callable, itemspattern: false, keypath: keypath)
+            case walk(child, mode, callable, itemseq: false, keypath: keypath)
             in .continue?, .skip?
               WalkDecision::Skip
             in .halt?
@@ -4881,7 +4837,7 @@ module ::Ww::M1
             end
           end
 
-          # Recurse into %group and %many with itemspattern flag on.
+          # Recurse into %group and %many with itemseq flag on.
           matchpi(
             %{[%group _ _ _*]},
             %{[%many _ _ _*]},
@@ -4892,17 +4848,17 @@ module ::Ww::M1
             WalkDecision::Continue
           end
 
-          # Avoid all other itemspattern nodes.
+          # Avoid all other item sequence nodes.
           otherwise { WalkDecision::Skip }
         else
-          matchpi %{[%itemspattern _*]}, cue: :"%itemspattern" do
+          matchpi %{[%itemseq _*]}, cue: :"%itemseq" do
             decision = callable.call(node)
 
             if decision.continue?
               node.each_item_with_index do |item, index|
                 keypath.try &.push(Term.of(index))
 
-                case walk(item, mode, callable, itemspattern: true, keypath: keypath)
+                case walk(item, mode, callable, itemseq: true, keypath: keypath)
                 in .continue?, .skip?
                 in .halt?
                   decision = WalkDecision::Halt
@@ -5528,7 +5484,7 @@ module ::Ww::M1
       end
 
       # With %all, the idea is to take the max of both min depths and max depths. %all is
-      # different from e.g. %itemspattern in that it does not introduce depth itself.
+      # different from e.g. %itemseq in that it does not introduce depth itself.
       matchpi(
         %{[%all _*]},
         %{[%past _*]},
@@ -5631,10 +5587,10 @@ module ::Ww::M1
       end
 
       matchpi(
-        %{[%itemspattern _*]},
+        %{[%itemseq _*]},
         %{[%items/first _*]},
         %{[%items/source _*]},
-        cues: {:"%itemspattern", :"%items/first", :"%items/source"},
+        cues: {:"%itemseq", :"%items/first", :"%items/source"},
       ) do
         min = Magnitude.new(1)
         max = Magnitude.new(1)
@@ -5776,7 +5732,7 @@ module ::Ww::M1
     captures = Set(Term).new
     repeats = literals = restrictions = choices = 0u32
 
-    walk(normp, mode: WalkMode::NonItemspattern) do |operator|
+    walk(normp, mode: WalkMode::NonItemSeq) do |operator|
       Term.case(operator) do
         matchpi %[(%capture _)] do
           unless captures.add?(operator)
@@ -5949,7 +5905,7 @@ module ::Ww::M1
   # `nil` is returned.
   def self.head?(normp : Term) : Term?
     Term.case(normp) do
-      matchpi %[(%itemspattern items_+)] do
+      matchpi %[(%itemseq items_+)] do
         case response = Head.item(items)
         in Head::Some then response.term
         in Head::None, Head::More
