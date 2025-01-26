@@ -159,7 +159,6 @@ module Ww
     # Thus you avoid having to create many useless intermediate copies.
     class Commit
       @@id : Atomic(Pf::Core::AuthorId) = Atomic(Pf::Core::AuthorId).new(Pf::Core::AUTHOR_FIRST)
-      class_getter id
 
       # :nodoc:
       def self.genid
