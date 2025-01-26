@@ -266,7 +266,7 @@ module Search::Result
 
   alias Any = Item | Pair | ItemStrip
 
-  record Item, term : Term, keypath : KeypathTip? do
+  record Item, term : Term, keypath : KeypathQuery? do
     include Result
 
     def each(& : Term ->) : Nil
@@ -278,7 +278,7 @@ module Search::Result
     end
   end
 
-  record Pair, k : Term, v : Term, keypath : {KeypathTip, KeypathTip}? do
+  record Pair, k : Term, v : Term, keypath : {KeypathQuery, KeypathQuery}? do
     include Result
 
     def each(& : Term ->) : Nil
@@ -287,7 +287,7 @@ module Search::Result
     end
   end
 
-  record ItemStrip, view : Term::Dict::ItemsView, keypath : KeypathTip? do
+  record ItemStrip, view : Term::Dict::ItemsView, keypath : KeypathQuery? do
     include Result
 
     def each(& : Term ->) : Nil
@@ -338,21 +338,21 @@ module Search
     case part
     in .items_ordered?
       dict.items.each_with_index do |item, index|
-        yield item, keypath.try &.value(index)
+        yield item, keypath.try &.update_value(index)
       end
     in .items_unordered?
       dict.each_item_with_index do |item, index|
-        yield item, keypath.try &.value(index)
+        yield item, keypath.try &.update_value(index)
       end
     in .keys?
-      dict.each_entry { |k, _| yield k, keypath.try &.key(k) }
+      dict.each_entry { |k, _| yield k, keypath.try &.update_key(k) }
     in .values?
       dict.each_entry do |key, value|
-        yield value, keypath.try(&.value(key))
+        yield value, keypath.try(&.update_value(key))
       end
     in .pair_values?
       dict.pairspart.each_entry do |key, value|
-        yield value, keypath.try(&.value(key))
+        yield value, keypath.try(&.update_value(key))
       end
     end
   end
@@ -365,7 +365,7 @@ module Search
 
     while spec.stride <= feed.size
       window = feed.begin.grow(spec.stride)
-      item = Result::ItemStrip.new(window, keypath: keypath0 ? keypath0.value(Term.of(index)) : nil)
+      item = Result::ItemStrip.new(window, keypath: keypath0 ? keypath0.update_value(index) : nil)
 
       case fn.call(item)
       in Accept.class
@@ -489,7 +489,7 @@ module Search
     return unless dict = term.as_d?
 
     dict.each_entry do |key, value|
-      item = Result::Pair.new(key, value, keypath0 ? {keypath0.key(key), keypath0.value(key)} : nil)
+      item = Result::Pair.new(key, value, keypath0 ? {keypath0.update_key(key), keypath0.update_value(key)} : nil)
 
       case fn.call(item)
       in Accept.class, Reject.class
@@ -787,92 +787,263 @@ module ::Ww::M1::Operator::Fb
   end
 end
 
-# FIXME: make sure to rename env in match to input (because it's input now)
+# A query-like, chainable API for incremental construction of keypaths.
+class KeypathQuery
+  # :nodoc:
+  module Tip
+    extend self
 
-# TODO: have an actual tip here. This object is intended for optimization!
-struct KeypathTip
-  def initialize(@keypath : Term::Dict)
-  end
+    alias Any = None | Some
+    alias Some = Terminal | Nonterminal
 
-  def initialize
-    initialize(Term[])
-  end
+    alias Terminal = Range | CreateLeaf
+    alias Nonterminal = UpdateKey | UpdateValue | Delete | Create | Insert
 
-  def key(key)
-    KeypathTip.new(@keypath.append({:value, key}).append(:self))
-  end
+    record None
 
-  def value(key)
-    KeypathTip.new(@keypath.append({:value, key}))
-  end
+    record Create, key : Term, initial : Term
+    record CreateLeaf, key : Term
 
-  def value?
-    @keypath.size >= 1 && @keypath[@keypath.size - 1, 0] == Term.of(:value)
-  end
+    record Insert, index : Term::Num, ord : UInt32, initial : Term
 
-  def residue(keys : Enumerable(Term))
-    command = Term::Dict.build do |commit|
-      commit << :residue
-      commit.concat(keys)
+    record UpdateKey, term : Term
+    record UpdateValue, key : Term
+
+    record Range, b : Int32, e : Int32, ord : UInt32
+
+    record Delete, keys : Term::Dict
+
+    def render(tip : Tip::Create)
+      {Term.of(:ephemeral, tip.key, tip.initial)}
     end
 
-    KeypathTip.new(@keypath.append(command))
+    def render(tip : Tip::CreateLeaf)
+      {Term.of(:ephemeral, tip.key)}
+    end
+
+    def render(tip : Tip::Insert)
+      {Term.of(:ephemeral, tip.index, tip.ord, tip.initial)}
+    end
+
+    def render(tip : Tip::UpdateKey)
+      {Term.of(:value, tip.term), Term.of(:self)}
+    end
+
+    def render(tip : Tip::UpdateValue)
+      {Term.of(:value, tip.key)}
+    end
+
+    def render(tip : Tip::Range)
+      {Term.of(:range, tip.b, tip.e, tip.ord)}
+    end
+
+    def render(tip : Tip::Delete)
+      {Term.of(:residue, tip.keys)}
+    end
+
+    # Raises `ArgumentError` if *tail* or *preds* are malformed.
+    def parse(preds : Term::Dict::ItemsView, tail : Term) : {Term::Dict::ItemsView, Tip::Some}
+      Term.case(tail, engine: M0) do
+        matchpi %[(value key_)] do
+          {preds, UpdateValue.new(key)}
+        end
+
+        matchpi %[self] do
+          unless pred = preds.last?
+            raise ArgumentError.new
+          end
+
+          Term.case(pred, engine: M0) do
+            matchpi %[(value key_)] do
+              {preds.grow(-1), UpdateKey.new(key)}
+            end
+          end
+        end
+
+        matchpi %[(residue keys_dict)] do
+          {preds, Delete.new(keys.itemspart)}
+        end
+
+        matchpi %[(range b_number e_number ord_number)] do
+          {preds, Range.new(b.to(Int32), e.to(Int32), ord.to(Int32))}
+        end
+
+        matchpi %[(ephemeral key_)] do
+          {preds, CreateLeaf.new(key)}
+        end
+
+        matchpi %[(ephemeral key_ initial_)] do
+          {preds, Create.new(key, initial)}
+        end
+
+        matchpi %[(ephemeral index_number ord_number initial_)] do
+          {preds, Insert.new(index.unsafe_as_n, ord.to(Int32), initial)}
+        end
+      end
+    end
   end
 
-  def forward(n = 1)
-    KeypathTip.new(@keypath.morph({@keypath.size - 1, 1, @keypath[@keypath.size - 1, 1] + n}))
+  # :nodoc:
+  def initialize(@preds : Term::Dict, @tip : Tip::Any)
   end
 
-  def backward(n = 1)
+  # :nodoc:
+  EMPTY = KeypathQuery.new(preds: Term[], tip: Tip::None.new)
+
+  # Constructs an empty keypath query object. 
+  def self.new : KeypathQuery
+    EMPTY
+  end
+
+  # Constructs a keypath query object by parsing *keypath*. Raises `ArgumentError`
+  # if *keypath* cannot be parsed.
+  def self.new(keypath : Term::Dict) : KeypathQuery
+    unless keypath.itemsonly?
+      raise ArgumentError.new
+    end
+
+    unless tail = keypath.items.last?
+      return new
+    end
+
+    preds, tip = Tip.parse(keypath.items.grow(-1), tail)
+
+    new(preds.collect, tip)
+  end
+  
+  private def push(tip1 : Tip::Some) : KeypathQuery
+    KeypathQuery.new(keypath, tip1)
+  end
+
+  private def replace(tip1 : Tip::Some) : KeypathQuery
+    KeypathQuery.new(@preds, tip1)
+  end
+
+  # The upcoming query will update the key *term* of an existing entry. Its value
+  # is preserved. If the updated key collides with some existing key, the updated
+  # key's value wins.
+  def update_key(term) : KeypathQuery
+    case @tip
+    in Tip::None, Tip::Nonterminal
+      push Tip::UpdateKey.new(Term.of(term))
+    in Tip::Terminal
+      raise KeypathError.new
+    end
+  end
+
+  # The upcoming query will update the value of an existing entry with the given *key*.
+  def update_value(key) : KeypathQuery
+    case @tip
+    in Tip::None, Tip::Nonterminal
+      push Tip::UpdateValue.new(Term.of(key))
+    in Tip::Terminal
+      raise KeypathError.new
+    end
+  end
+
+  # The upcoming query will modify entries left after removing keys from *ee*. Each
+  # element of *ee* is converted to a Term using the block.
+  def delete_keys(ee : Enumerable(T), & : T -> Term) : KeypathQuery forall T
+    case @tip
+    in Tip::None, Tip::Nonterminal
+      keys = Term[].transaction do |commit|
+        ee.each { |object| commit << yield object }
+      end
+
+      push Tip::Delete.new(keys)
+    in Tip::Terminal
+      raise KeypathError.new
+    end
+  end
+
+  # Block-less variant of `delete_keys`.
+  def delete_keys(keys : Enumerable(Term)) : KeypathQuery
+    delete_keys(keys, &.itself)
+  end
+
+  # Block-less variant of `delete_keys`.
+  def delete_keys(keys : Term::Dict) : KeypathQuery
+    delete_keys(keys.items)
+  end
+
+  # Rather than targeting a single item with `update`, targets a range of items.
+  # The size of the range is set by *size*. This is a **terminal** node: any upcoming
+  # query will be invalid.
+  def span(size, *, ord = 0u32) : KeypathQuery
+    case tip = @tip
+    when Tip::UpdateValue
+      b = tip.key.to(Int32)
+      e = b + size
+      replace Tip::Range.new(b, e, ord)
+    else
+      raise KeypathError.new
+    end
+  end
+
+  # Creates a pair with the given *key*. This is a **terminal** node: there is
+  # nothing to modify with the upcoming query, since the value to be modified in
+  # fact does not exist.
+  def create_pair(key) : KeypathQuery
+    case @tip
+    in Tip::None, Tip::Nonterminal
+      push Tip::CreateLeaf.new(Term.of(key))
+    in Tip::Terminal
+      raise KeypathError.new
+    end
+  end
+
+  # Creates a pair with the given *key* and *value*. The upcoming query will
+  # modify *value*.
+  def create_pair(key, *, value) : KeypathQuery
+    case @tip
+    in Tip::None, Tip::Nonterminal
+      push Tip::Create.new(Term.of(key), Term.of(value))
+    in Tip::Terminal
+      raise KeypathError.new
+    end
+  end
+
+  # Converts an `update_value` of a single item into an insert of *value* before that item.
+  # The upcoming query will modify *value*.
+  def insert_item(value, *, ord = 0) : KeypathQuery
+    case tip = @tip
+    when Tip::UpdateValue
+      replace Tip::Insert.new(tip.key.as_n, ord, Term.of(value))
+    else
+      raise KeypathError.new
+    end
+  end
+
+  # Moves a numeric `update_value` *n* times forward.
+  def forward(n = 1) : KeypathQuery
+    case tip = @tip
+    when Tip::UpdateValue
+      replace Tip::UpdateValue.new(Term.of(tip.key + n))
+    else
+      raise KeypathError.new
+    end
+  end
+
+  # Moves a numeric `update_value` *n* times backward.
+  def backward(n = 1) : KeypathQuery
     forward(-n)
   end
 
-  def up(n = 1)
-    unless n < @keypath.size
-      return KeypathTip.new
+  # Renders this query into a keypath.
+  def keypath : Term::Dict
+    case tip = @tip
+    in Tip::None
+      @preds
+    in Tip::Some
+      steps = Tip.render(tip)
+
+      @preds.transaction &.concat(steps)
     end
-
-    KeypathTip.new(@keypath.transaction do |commit|
-      n.times { commit.without(commit.size - 1) }
-    end)
-  end
-
-  def range(b : Term, e : Term)
-    KeypathTip.new(@keypath.append({:range, b, e}))
-  end
-
-  # Converts item value tip to range tip with size *size*.
-  def span(size)
-    b = @keypath[@keypath.size - 1, 1]
-
-    KeypathTip.new(@keypath.morph({@keypath.size - 1, 0, :range}, {@keypath.size - 1, 2, b + size}))
-  end
-
-  # Converts range tip to range tip with ordinal *ord*.
-  def ord(ord)
-    KeypathTip.new(@keypath.morph({@keypath.size - 1, 3, ord}))
-  end
-
-  # Converts item value tip to ephemeral tip.
-  def ephk(value, ord)
-    KeypathTip.new(@keypath.morph({@keypath.size - 1, 0, :ephemeral}, {@keypath.size - 1, 2, ord}, {@keypath.size - 1, 3, value}))
-  end
-
-  def ephv(key, default)
-    KeypathTip.new(@keypath.append({:ephemeral, key, default}))
-  end
-
-  def ephv(key)
-    KeypathTip.new(@keypath.append({:ephemeral, key}))
-  end
-
-  def dict
-    @keypath
   end
 end
 
 module ::Ww::M1::Operator
-  record Behind, env : Env::Type, domains : Term::Dict, antidomains : Term::Dict, keypath : KeypathTip? do
+  record Behind, env : Env::Type, domains : Term::Dict, antidomains : Term::Dict, keypath : KeypathQuery? do
     def []?(k : Term)
       env[k]?
     end
@@ -894,18 +1065,18 @@ module ::Ww::M1::Operator
     def mount(capture : Term)
       return self unless kp = keypath
 
-      copy_with(env: env.morph({:"(keypaths)", capture, kp.dict, true}))
+      copy_with(env: env.morph({:"(keypaths)", capture, kp.keypath, true}))
     end
 
-    def mount(capture : Term, & : KeypathTip -> KeypathTip)
+    def mount(capture : Term, & : KeypathQuery -> KeypathQuery)
       return self unless kp0 = keypath
 
       kp1 = yield kp0
 
-      copy_with(env: env.morph({:"(keypaths)", capture, kp1.dict, true}))
+      copy_with(env: env.morph({:"(keypaths)", capture, kp1.keypath, true}))
     end
 
-    def keypath(& : KeypathTip -> KeypathTip)
+    def keypath(& : KeypathQuery -> KeypathQuery)
       return self unless kp = keypath
 
       copy_with(keypath: yield kp)
@@ -937,7 +1108,7 @@ module ::Ww::M1::Operator
     #   copy_with(keypath: kp.without(kp.size - 1))
     # end
 
-    def goto(dst : KeypathTip?)
+    def goto(dst : KeypathQuery?)
       copy_with(keypath: dst)
     end
 
@@ -1204,7 +1375,7 @@ module ::Ww::M1::Operator
         ahead: Ahead.stackptr(ahead1),
       )
 
-      ahead2.call(behind0.keypath(&.value(dict.size - 1)))
+      ahead2.call(behind0.keypath(&.update_value(dict.size - 1)))
     else
       ahead2 = Ahead::ItemZip.new(
         lhs: op.items,
@@ -1215,7 +1386,7 @@ module ::Ww::M1::Operator
         ahead: Ahead.stackptr(ahead1),
       )
 
-      ahead2.call(behind0.keypath(&.value(0)))
+      ahead2.call(behind0.keypath(&.update_value(0)))
     end
   end
 
@@ -1226,7 +1397,7 @@ module ::Ww::M1::Operator
 
     ahead1 = Ahead::Goto.new(behind0.keypath, Ahead.stackptr(ahead0))
 
-    match(behind0.keypath(&.value(0)), op.successor, dict[0], ahead1)
+    match(behind0.keypath(&.update_value(0)), op.successor, dict[0], ahead1)
   end
 
   def match(behind0, op : ItemLast, matchee : Term, ahead0)
@@ -1236,7 +1407,7 @@ module ::Ww::M1::Operator
 
     ahead1 = Ahead::Goto.new(behind0.keypath, Ahead.stackptr(ahead0))
 
-    match(behind0.keypath(&.value(dict.size - 1)), op.successor, dict[dict.size - 1], ahead1)
+    match(behind0.keypath(&.update_value(dict.size - 1)), op.successor, dict[dict.size - 1], ahead1)
   end
 
   module Ahead
@@ -1259,7 +1430,7 @@ module ::Ww::M1::Operator
   struct Ahead::Goto
     include Ahead
 
-    def initialize(@keypath : KeypathTip?, @ahead : Ahead*)
+    def initialize(@keypath : KeypathQuery?, @ahead : Ahead*)
     end
 
     def call(behind0 : Behind)
@@ -1364,7 +1535,7 @@ module ::Ww::M1::Operator
 
     ahead1 = Ahead::Goto.new(behind0.keypath, Ahead.stackptr(ahead0))
 
-    match(behind0.keypath(&.value(op.key)), op.successor, value, ahead1)
+    match(behind0.keypath(&.update_value(op.key)), op.successor, value, ahead1)
   end
 
   def match(env, op : Keypool, matchee : Term, ahead)
@@ -1533,7 +1704,7 @@ module ::Ww::M1::Operator
     ahead1 = Ahead::EntrySeq.new(Term.of(selection), op.side, 0, Ahead.stackptr(ahead0))
     ahead2 = Ahead::Goto.new(behind0.keypath, Ahead.stackptr(ahead1))
 
-    match(behind0.keypath(&.residue(op.side.map { |entry| entry.key })), op.below, Term.of(residue), ahead2)
+    match(behind0.keypath(&.delete_keys(op.side, &.key)), op.below, Term.of(residue), ahead2)
   end
 
   def search_spec(op : Scan)
@@ -1764,9 +1935,9 @@ module ::Ww::M1::Operator
       kp0 = env.keypath
 
       env1 = env
-        .mount(op.capture, &.key(key))
+        .mount(op.capture, &.update_key(key))
         .assign(op.capture, key)
-        .keypath(&.value(key))
+        .keypath(&.update_value(key))
 
       fb = match(env1, op.tail, value, Ahead::Goto.new(kp0, Ahead.stackptr(ahead)))
       unless fb.is_a?(Fb::Response)
@@ -1794,7 +1965,7 @@ module ::Ww::M1::Operator
       in NegativeValue
         behind1 = behind0
       in NegativeValueKeypath
-        behind1 = behind0.mount(op.name, &.ephv(key))
+        behind1 = behind0.mount(op.name, &.create_pair(key))
       end
 
       return ahead0.call(behind1)
@@ -1826,7 +1997,7 @@ module ::Ww::M1::Operator
       in NegativeValue
         behind2 = behind1
       in NegativeValueKeypath
-        behind2 = behind1.mount(op.name, &.ephv(key))
+        behind2 = behind1.mount(op.name, &.create_pair(key))
       end
 
       fb = ahead0.call(behind2)
@@ -1913,7 +2084,7 @@ module ::Ww::M1::Operator
       return Fb::RequestKeypath.new
     end
 
-    kpdict = Term.of(keypath.dict)
+    kpdict = Term.of(keypath.keypath)
 
     unless behind1 = behind0.propose?(op.capture, kpdict)
       return Fb::Mismatch.new(behind0.env.with(op.capture, kpdict))
@@ -1925,7 +2096,7 @@ module ::Ww::M1::Operator
   M = Term.of(1, 2, 3)
 
   def feedback(env : Env::Type, op : Any, matchee : Term, *, keypaths : Bool = false) : Fb::Response
-    behind0 = Behind.new(env, domains: Term[], antidomains: Term[], keypath: keypaths ? KeypathTip.new : nil)
+    behind0 = Behind.new(env, domains: Term[], antidomains: Term[], keypath: keypaths ? KeypathQuery.new : nil)
 
     case fb = match(behind0, op, matchee, Ahead::MatchOne.new)
     in Fb::Response
@@ -2043,7 +2214,7 @@ module ::Ww::M1::Operator::Entry
 
     kp0 = env.keypath
 
-    Operator.match(env.keypath(&.value(op.key)), op.value, v, Ahead::Goto.new(kp0, Ahead.stackptr(ahead)))
+    Operator.match(env.keypath(&.update_value(op.key)), op.value, v, Ahead::Goto.new(kp0, Ahead.stackptr(ahead)))
   end
 
   def match(env, op : Optional, matchee : Term, ahead)
@@ -2054,14 +2225,14 @@ module ::Ww::M1::Operator::Entry
     kp0 = env.keypath
 
     if value = dict[op.key]?
-      case fb = Operator.match(env.keypath(&.value(op.key)), op.value, value, Ahead::Goto.new(kp0, Ahead.stackptr(ahead)))
+      case fb = Operator.match(env.keypath(&.update_value(op.key)), op.value, value, Ahead::Goto.new(kp0, Ahead.stackptr(ahead)))
       in Fb::Match, Fb::Request
         return fb
       in Fb::Mismatch
       end
     end
 
-    Operator.match(env.keypath(&.ephv(op.key, op.default)), op.value, op.default, Ahead::Goto.new(kp0, Ahead.stackptr(ahead)))
+    Operator.match(env.keypath(&.create_pair(op.key, value: op.default)), op.value, op.default, Ahead::Goto.new(kp0, Ahead.stackptr(ahead)))
   end
 
   def match(behind0, op : Absent | AbsentKeypath, matchee : Term, ahead0)
@@ -2077,7 +2248,7 @@ module ::Ww::M1::Operator::Entry
     in Absent
       behind1 = behind0
     in AbsentKeypath
-      behind1 = behind0.mount(op.name, &.ephv(op.key))
+      behind1 = behind0.mount(op.name, &.create_pair(op.key))
     end
 
     ahead0.call(behind1)
@@ -2102,7 +2273,7 @@ module ::Ww::M1::Operator::Entry
     in Negative
       behind1 = behind0
     in NegativeKeypath
-      behind1 = behind0.mount(op.name, &.ephv(op.key))
+      behind1 = behind0.mount(op.name, &.create_pair(op.key))
     end
 
     ahead0.call(behind1)
@@ -2132,7 +2303,7 @@ module ::Ww::M1::Operator::Item
   def self.match(ord, env, item : Slot, feed, ahead)
     # span: 0 is understood by the backmap engine as "pure insert", with no
     # "replace component".
-    ahead.call(ord + 1, feed, env.mount(item.capture, &.span(0).ord(ord)))
+    ahead.call(ord + 1, feed, env.mount(item.capture, &.span(0, ord: ord)))
   end
 
   enum ExpandStrategy : UInt8
@@ -2201,7 +2372,7 @@ module ::Ww::M1::Operator::Item
       candidate = env.propose?(capture, Term.of(prefix))
       return unless candidate
 
-      candidate = candidate.mount(capture, &.span(prefix.size).ord(ord))
+      candidate = candidate.mount(capture, &.span(prefix.size, ord: ord))
     else
       candidate = env
     end
@@ -2299,7 +2470,7 @@ module ::Ww::M1::Operator::Item
         end
       end
 
-      behind1 = behind1.mount(@capture, &.backward(group.size).span(group.size).ord(ord))
+      behind1 = behind1.mount(@capture, &.backward(group.size).span(group.size, ord: ord))
 
       @ahead.value.call(ord, feed, behind1)
     end
@@ -2367,7 +2538,7 @@ module ::Ww::M1::Operator::Item
     ahead1 = Operator::Ahead::ItemAdapter.new(ord, feed, ItemAhead.stackptr(ahead0))
     ahead2 = Operator::Ahead::Goto.new(env.keypath, Ahead.stackptr(ahead1))
 
-    Operator.match(env.keypath(&.ephk(item.default, ord)), item.tail, item.default, ahead2)
+    Operator.match(env.keypath(&.insert_item(item.default, ord: ord)), item.tail, item.default, ahead2)
   end
 
   struct ItemAhead::ManyStep
@@ -2513,7 +2684,7 @@ module ::Ww::M1::Operator::Item
   def self.match(env, items : Slice(Any), feed, ahead)
     kp0 = env.keypath
 
-    match(0u32, env.keypath(&.value(0)), items, feed, Operator::Ahead::Goto.new(kp0, Operator::Ahead.stackptr(ahead)))
+    match(0u32, env.keypath(&.update_value(0)), items, feed, Operator::Ahead::Goto.new(kp0, Operator::Ahead.stackptr(ahead)))
   end
 end
 
@@ -4857,7 +5028,7 @@ module ::Ww::M1
           ctx = reflect(ctx, successor.as_d, maxdepth - 1, matchee[key])
         end
 
-        matchpi %[(residue keys_*)] do
+        matchpi %[(residue keys←(_*))] do
           ctx = reflect(ctx, successor.as_d, maxdepth - 1, Term.of(matchee &- keys.items))
         end
 
@@ -4920,8 +5091,6 @@ module ::Ww::M1
 
   # ~2 weeks:
   #   TODO: KeypathTip optimization.
-  #   TODO: move from Operator classes to structs by introducing Operator::Ref, having an array of operators,
-  #         Ref is an index into that array. at match() time resolve Ref into Operator::Any. Reduce indirections.
   #   TODO: look into optimizing backmaps. Is that possible?
   #   TODO: refactors, split into files, etc. Done for the most part, although some edge cases
   #         are inevitably not going to be handled so well. But my rule is -- no test, no pest.
@@ -4960,7 +5129,7 @@ module ::Ww::M1
         matchpi %[self] { }
         matchpi %[endpoint] { }
 
-        matchpi %[(residue keys_*)] do
+        matchpi %[(residue keys←(_*))] do
           matchee = matchee.transaction do |commit|
             residue0 = matchee &- keys.items
             ctx1, residue1 = transform0(ctx0, ctx1, bot, applier, successor.as_d, Term.of(residue0))
@@ -5142,7 +5311,7 @@ module ::Ww::M1
             node1 = node1.without(label0).with(label1, successor1)
           end
 
-          matchpi %[(residue keys_*)] do
+          matchpi %[(residue keys←(_*))] do
             matchee = matchee.transaction do |commit|
               residue0 = matchee &- keys.items
               ctx1, successor1, residue1 = transform(ctx0, ctx1, bot, applier, successor0.as_d, layer - 1, Term.of(residue0))
