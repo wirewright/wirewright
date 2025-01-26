@@ -693,20 +693,18 @@ module ::Ww::M1::Operator::Entry
 end
 
 module ::Ww::M1::Operator::Env
-  alias Type = Term::Dict
-
-  def self.append(envs : Array(Type), feedback : Fb::MatchOne)
+  def self.append(envs : Array(Term::Dict), feedback : Fb::MatchOne)
     envs << feedback.env
   end
 
-  def self.append(envs : Array(Type), feedback : Fb::MatchMany)
+  def self.append(envs : Array(Term::Dict), feedback : Fb::MatchMany)
     envs.concat(feedback.envs)
   end
 
-  def self.append(envs : Array(Type), feedback : Fb::Mismatch)
+  def self.append(envs : Array(Term::Dict), feedback : Fb::Mismatch)
   end
 
-  def self.feedback(envs : Indexable(Type), fallback : Type, *, more : Bool = false) : Fb::Any
+  def self.feedback(envs : Indexable(Term::Dict), fallback : Term::Dict, *, more : Bool = false) : Fb::Any
     case envs.size
     when 0 then Fb::Mismatch.new(fallback)
     when 1 then Fb::MatchOne.new(envs[0], more: more)
@@ -723,7 +721,7 @@ module ::Ww::M1::Operator::Env
     end
   end
 
-  def self.captures(envs : Array(Type), selector : Set(Term)) : Term::Dict
+  def self.captures(envs : Array(Term::Dict), selector : Set(Term)) : Term::Dict
     Term::Dict.build do |captures|
       envs.each do |env|
         captures << (pluck?(env, selector) || next)
@@ -731,7 +729,7 @@ module ::Ww::M1::Operator::Env
     end
   end
 
-  def self.domain(envs : Array(Type), capture : Term) : Term::Dict
+  def self.domain(envs : Array(Term::Dict), capture : Term) : Term::Dict
     Term::Dict.build do |domain|
       envs.each do |env|
         next unless value = env[capture]?
@@ -748,14 +746,14 @@ module ::Ww::M1::Operator::Fb
   alias Match = MatchOne | MatchMany
   alias Request = RequestKeypath
 
-  record MatchOne, env : Env::Type, more : Bool = false do
+  record MatchOne, env : Term::Dict, more : Bool = false do
     def envs
       {env}
     end
   end
 
-  record MatchMany, envs : Array(Env::Type)
-  record Mismatch, env : Env::Type
+  record MatchMany, envs : Array(Term::Dict)
+  record Mismatch, env : Term::Dict
   record RequestKeypath
 
   def self.lsum(a : Mismatch, b : Mismatch)
@@ -1470,7 +1468,7 @@ module ::Ww::M1::Operator
   end
 
   def match(behind0, op : Source, matchee : Term, ahead0)
-    envs = [] of Env::Type
+    envs = [] of Term::Dict
     reqbox = nil
 
     Search.traverse(matchee, spec: search_spec(op), keypath: behind0.keypath?) do |item|
@@ -1539,7 +1537,7 @@ module ::Ww::M1::Operator
   end
 
   def match(behind0, op : All, matchee : Term, ahead0)
-    envs = [] of Env::Type
+    envs = [] of Term::Dict
     reqbox = nil
 
     behind1 = behind0
@@ -1650,7 +1648,7 @@ module ::Ww::M1::Operator
       return Fb::Mismatch.new(behind0.env)
     end
 
-    envs = [] of Env::Type
+    envs = [] of Term::Dict
 
     candidates.each do |key|
       next unless value = dict[key]?
@@ -1713,7 +1711,7 @@ module ::Ww::M1::Operator
 
     # Now that we have a nonempty set of candidates for keys, we can pick
     # each one and pass them to the future again.
-    envs = [] of Env::Type
+    envs = [] of Term::Dict
 
     candidates.each do |key|
       case op
@@ -1758,7 +1756,7 @@ module ::Ww::M1::Operator
       return fb
     end
 
-    envs = [] of Env::Type
+    envs = [] of Term::Dict
 
     learned.each do |env|
       behind1 = behind0
@@ -2051,7 +2049,7 @@ module ::Ww::M1::Operator
     Search::Spec::Entries.new
   end
 
-  def feedback(env : Env::Type, op : Any, matchee : Term, *, keypaths : Bool = false) : Fb::Response
+  def feedback(env : Term::Dict, op : Any, matchee : Term, *, keypaths : Bool = false) : Fb::Response
     behind0 = Behind.new(env, keypath: keypaths ? KeypathQuery.new : nil)
 
     case fb = match(behind0, op, matchee, Ahead::MatchOne.new)
@@ -2066,7 +2064,7 @@ module ::Ww::M1::Operator
     end
   end
 
-  def match?(env : Env::Type, op : Any, matchee : Term, **kwargs) : Env::Type?
+  def match?(env : Term::Dict, op : Any, matchee : Term, **kwargs) : Term::Dict?
     case fb = feedback(env, op, matchee, **kwargs)
     in Fb::MatchOne  then fb.env
     in Fb::MatchMany then fb.envs[0]
@@ -2074,17 +2072,17 @@ module ::Ww::M1::Operator
     end
   end
 
-  def matches(env : Env::Type, op : Any, matchee : Term, **kwargs) : Array(Env::Type)
+  def matches(env : Term::Dict, op : Any, matchee : Term, **kwargs) : Array(Term::Dict)
     case fb = feedback(env, op, matchee, **kwargs)
     in Fb::MatchOne  then [fb.env]
     in Fb::MatchMany then fb.envs
-    in Fb::Mismatch  then [] of Env::Type
+    in Fb::Mismatch  then [] of Term::Dict
     end
   end
 
   # TODO: this should use some kind of flag to signal to match()s that they should relax?
   # i.e. sources may emit only once etc.
-  def probe?(env : Env::Type, op : Any, matchee : Term) : Bool
+  def probe?(env : Term::Dict, op : Any, matchee : Term) : Bool
     feedback(env, op, matchee).is_a?(Fb::Match)
   end
 end
@@ -2452,7 +2450,7 @@ module ::Ww::M1::Operator::Item
   def self.match(ord, env, item : Gap, feed, ahead0)
     strategy = item.strategy.auto? ? ExpandStrategy::Sway : item.strategy
 
-    envs = [] of Env::Type
+    envs = [] of Term::Dict
 
     expand(feed, pivot: (feed.size / item.frac).ceil.to_i, strategy: strategy) do |prefix, suffix|
       matchee = Term.of(prefix.size)
