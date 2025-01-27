@@ -49,6 +49,10 @@ base = <<-WWML
 (node (_* ¦ _ pt: (%optional 0 pt_number) pb: (%optional 0 pb_number) py: (%- _ py)))
   <> {py: ($once (+ →pt →pb))}
 
+;; Expand w/h: _number into w/h: max max-w/h: _number
+(node (_* ¦ _ w: w_number max-w: (%- _ mw))) <> {mw: →w, w: max}
+(node (_* ¦ _ h: h_number max-h: (%- _ mh))) <> {mh: →h, h: max}
+
 ;; Calculate max-w/h for a single child.
 (edge (_ _ ¦ _ max-w: W_number px: px_number) (_* ¦ _ max-w: (%- _ w)))
   <> {w: ($once (- →W →px))}
@@ -125,7 +129,7 @@ frame = <<-WWML
 (viewport l: 0 t: 0 w: max h: max max-w: 64 max-h: 32 bg: (0 0 0)
   (scrollbox w: max h: max
     (col w: content h: max
-      (text pre: true w: content h: content "Lorem ipsum dolor sit amet.")
+      (text pre: true w: content h: 10 "Lorem ipsum dolor sit amet.")
       (text pre: true w: content fr: 1 h: max "Lorem ipsum dolor sit amet, qui minim labore adipisicing minim.")
       (text pre: true w: content h: content "Lorem ipsum dolor sit amet, qui minim labore adipisicing minim sint cillum sint consectetur cupidatat."))))
   ;; (center w: max h: max max-h: 10
