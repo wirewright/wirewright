@@ -804,81 +804,107 @@ class KeypathQuery
 
     record Insert, index : Term::Num, ord : UInt32, initial : Term
 
-    record UpdateKey, term : Term
+    record UpdateKey, key : Term
     record UpdateValue, key : Term
 
     record Range, b : Int32, e : Int32, ord : UInt32
 
     record Delete, keys : Term::Dict
 
-    def render(tip : Tip::Create)
-      {Term.of(:ephemeral, tip.key, tip.initial)}
+    def render(tip : Create)
+      {Term.of(:create, tip.key, tip.initial)}
     end
 
-    def render(tip : Tip::CreateLeaf)
-      {Term.of(:ephemeral, tip.key)}
+    def render(tip : CreateLeaf)
+      {Term.of(:"create-leaf", tip.key)}
     end
 
-    def render(tip : Tip::Insert)
-      {Term.of(:ephemeral, tip.index, tip.ord, tip.initial)}
+    def render(tip : Insert)
+      {Term.of(:insert, tip.index, tip.ord, tip.initial)}
     end
 
-    def render(tip : Tip::UpdateKey)
-      {Term.of(:value, tip.term), Term.of(:self)}
+    def render(tip : UpdateKey)
+      {Term.of(:pair, tip.key), Term.of(:key)}
     end
 
-    def render(tip : Tip::UpdateValue)
-      {Term.of(:value, tip.key)}
+    def render(tip : UpdateValue)
+      {Term.of(:pair, tip.key), Term.of(:value)}
     end
 
-    def render(tip : Tip::Range)
+    def render(tip : Range)
       {Term.of(:range, tip.b, tip.e, tip.ord)}
     end
 
-    def render(tip : Tip::Delete)
+    def render(tip : Delete)
       {Term.of(:residue, tip.keys)}
     end
 
-    # Raises `ArgumentError` if *tail* or *preds* are malformed.
-    def parse(preds : Term::Dict::ItemsView, tail : Term) : {Term::Dict::ItemsView, Tip::Some}
-      Term.case(tail, engine: M0) do
-        matchpi %[(value key_)] do
-          {preds, UpdateValue.new(key)}
-        end
+    # # If I am key, the ahead is either self or value. Otherwise Keypath is invalid.
+    # def parse(subject : Term) : Some
+    #   Term.case(subject, engine: M0) do
+    #     matchpi %[(key term_)] do
+    #       Key.new(term)
+    #     end
 
-        matchpi %[self] do
-          unless pred = preds.last?
-            raise ArgumentError.new
-          end
+    #     matchpi %[self] do
+    #       Self.new
+    #     end
 
-          Term.case(pred, engine: M0) do
-            matchpi %[(value key_)] do
-              {preds.grow(-1), UpdateKey.new(key)}
-            end
-          end
-        end
+    #     matchpi %[value] do
+    #       Value.new
+    #     end
 
-        matchpi %[(residue keys_dict)] do
-          {preds, Delete.new(keys.itemspart)}
-        end
+    #     matchpi %[(residue keys_dict)] do
+    #       Delete.new(keys.itemspart)
+    #     end
 
-        matchpi %[(range b_number e_number ord_number)] do
-          {preds, Range.new(b.to(Int32), e.to(Int32), ord.to(Int32))}
-        end
+    #     matchpi %[(range b_number e_number ord_number)] do
+    #       Range.new(b.to(Int32), e.to(Int32), ord.to(UInt32))
+    #     end
 
-        matchpi %[(ephemeral key_)] do
-          {preds, CreateLeaf.new(key)}
-        end
+    #     matchpi %[(ephemeral key_)] do
+    #       CreateLeaf.new(key)
+    #     end
 
-        matchpi %[(ephemeral key_ initial_)] do
-          {preds, Create.new(key, initial)}
-        end
+    #     matchpi %[(ephemeral key_ initial_)] do
+    #       Create.new(key, initial)
+    #     end
 
-        matchpi %[(ephemeral index_number ord_number initial_)] do
-          {preds, Insert.new(index.unsafe_as_n, ord.to(Int32), initial)}
-        end
-      end
-    end
+    #     matchpi %[(ephemeral index_number ord_number initial_)] do
+    #       Insert.new(index.unsafe_as_n, ord.to(UInt32), initial)
+    #     end
+
+    #     otherwise do
+    #       raise KeypathError.new
+    #     end
+    #   end
+    # end
+
+    # def substructure?(tip : Create, matchee : Term) : Term?
+    #   tip.initial
+    # end
+
+    # def substructure?(tip : CreateLeaf, matchee : Term) : Term?
+    # end
+
+    # def substructure?(tip : Insert, matchee : Term) : Term?
+    #   tip.initial
+    # end
+
+    # def substructure?(tip : UpdateKey, matchee : Term) : Term?
+    #   tip.term
+    # end
+
+    # def substructure?(tip : UpdateValue, matchee : Term) : Term?
+    #   matchee[tip.key]?
+    # end
+
+    # def substructure?(tip : Range, matchee : Term) : Term?
+    # end
+
+    # def substructure?(tip : Delete, matchee : Term) : Term?
+    #   Term.of(matchee &- tip.keys.items)
+    # end
   end
 
   # :nodoc:
@@ -893,11 +919,11 @@ class KeypathQuery
     EMPTY
   end
 
-  # Constructs a keypath query object by parsing *keypath*. Raises `ArgumentError`
+  # Constructs a keypath query object by parsing *keypath*. Raises `KeypathError`
   # if *keypath* cannot be parsed.
   def self.new(keypath : Term::Dict) : KeypathQuery
     unless keypath.itemsonly?
-      raise ArgumentError.new
+      raise KeypathError.new
     end
 
     unless tail = keypath.items.last?
@@ -5040,57 +5066,573 @@ module ::Ww::M1
 
   # Layer-0 transform handles `self` props: applies transform and adds itself
   # to ctx1 (if requested).
-  def self.transform0(ctx0, ctx1, bot, applier, node, matchee : Term?)
-    return ctx1, matchee unless props = node[:endpoint]?
-    return ctx1, matchee unless body = props[:transform]?
+  # def self.transform0(ctx0, ctx1, bot, applier, node, matchee : Term?)
+  #   return ctx1, matchee unless props = node[:endpoint]?
+  #   return ctx1, matchee unless body = props[:transform]?
 
-    ctx1, matchee = applier.call(ctx0, ctx1, bot, props[:env].as_d, matchee, body)
+  #   ctx1, matchee = applier.call(ctx0, ctx1, bot, props[:env].as_d, matchee, body)
 
-    return ctx1, matchee unless aliases = props[:aliases]?
+  #   return ctx1, matchee unless aliases = props[:aliases]?
 
-    aliases.each_entry do |capture, _|
-      ctx1 = ctx1.with(capture, matchee)
+  #   aliases.each_entry do |capture, _|
+  #     ctx1 = ctx1.with(capture, matchee)
+  #   end
+
+  #   {ctx1, matchee}
+  # end
+
+  # # Layer-1 transform handles insertions made in transform0 into the matchee
+  # # (of ranges, slots, etc.)
+  # #
+  # # That is, it serves `plural: true` for values and `(range ...)` labels.
+  # def self.transform1(ctx0, ctx1, bot, applier, node, matchee)
+  #   matchee0 = matchee = matchee.as_d? || return ctx1, matchee
+
+  #   insertions = nil
+
+  #   node.each_entry do |label, successor|
+  #     Term.case(label) do
+  #       matchpi %[self] { }
+  #       matchpi %[endpoint] { }
+
+  #       matchpi %[(residue keys←(_*))] do
+  #         matchee = matchee.transaction do |commit|
+  #           residue0 = matchee &- keys.items
+  #           ctx1, residue1 = transform0(ctx0, ctx1, bot, applier, successor.as_d, Term.of(residue0))
+  #           residue1 &-= keys.items
+  #           residue0.each_entry { |k, _| commit.without(k) }
+  #           residue1.each_entry { |k, v| commit.with(k, v) }
+  #         end
+  #       end
+
+  #       matchpi %[(ephemeral key_)] do
+  #         ctx1, value1 = transform0(ctx0, ctx1, bot, applier, successor.as_d, nil)
+  #         matchee = matchee.with(key, value1)
+  #       end
+
+  #       matchpi %[(ephemeral key_ default_)] do
+  #         ctx1, value1 = transform0(ctx0, ctx1, bot, applier, successor.as_d, default)
+  #         matchee = matchee.with(key, value1)
+  #       end
+
+  #       matchpi %[(value key_)] do
+  #         if ksucc = successor[:self]?
+  #           # One should be able to delete a key-value pair from a backmap with an empty
+  #           # plural **key** transform:
+  #           #
+  #           #   ;; Removes K from dict. Note the semi-necessary alias that prevents
+  #           #   ;; us from erasing without's k arg.
+  #           #   (without (%value K _) K←k_) <> {(K): ()}
+  #           #
+  #           #   ;; With alias:
+  #           #   (without {x: 100, y: 200} x) ;; => (without {y: 200} x)
+  #           #   ;; Without alias:
+  #           #   (without {x: 100, y: 200} x) ;; => (without {y: 200})
+  #           #
+  #           if ksucc[:endpoint, :plural]? && (transform = ksucc[:endpoint, :transform]?) && transform.empty?
+  #             matchee = matchee.without(key)
+  #             next
+  #           end
+
+  #           key0, value0 = key, matchee[key]
+  #           ctx1, key1 = transform0(ctx0, ctx1, bot, applier, ksucc, key0)
+  #           matchee = matchee.without(key0).with(key1, value0)
+  #           key = key1
+  #         end
+
+  #         next unless successor[:endpoint, :transform]?
+
+  #         plural = !!successor[:endpoint, :plural]?
+
+  #         if plural && (b = key.as_n?) && b.in?(matchee.items.bounds)
+  #           value0 = matchee[key]
+
+  #           ctx1, values1 = transform0(ctx0, ctx1, bot, applier, successor.as_d, value0)
+
+  #           insertions ||= [] of {Term::Num, Term::Num, Term::Num, Term::Dict}
+  #           index = insertions.bsearch_index { |(c_b, _, c_ord, _)| {-b, Term[0]} <= {-c_b, -c_ord} }
+  #           index ||= insertions.size
+  #           insertions.insert(index, {b, b + 1, Term[0], values1.as_d? || Term[{values1}]})
+
+  #           next
+  #         end
+
+  #         matchee = matchee.with(key) do |value0|
+  #           unless value0
+  #             raise KeypathError.new
+  #           end
+
+  #           ctx1, value1 = transform0(ctx0, ctx1, bot, applier, successor.as_d, value0)
+
+  #           # One should be able to delete a key-value pair from a backmap with an empty
+  #           # plural **value** transform:
+  #           #
+  #           #   {x: x_, y: y_} <> {(x): ()} ;; Removes `x` pair
+  #           #
+  #           plural && value1.type.dict? && value1.empty? ? nil : value1
+  #         end
+  #       end
+
+  #       matchpi %[(range bt_number et_number (%optional 0 ordt_number))] do
+  #         next unless successor[:endpoint, :transform]?
+
+  #         b = bt.unsafe_as_n
+  #         e = et.unsafe_as_n
+  #         ord = ordt.unsafe_as_n
+
+  #         unless (b...e).subrange_of?(matchee.items.bounds)
+  #           raise KeypathError.new
+  #         end
+
+  #         values0 = matchee.items(b, e)
+  #         ctx1, values1 = transform0(ctx0, ctx1, bot, applier, successor.as_d, Term.of(values0))
+
+  #         # Not sure about this: should in e.g. (%group xs a_ b_ c), `xs` be implicitly plural?
+  #         if successor[:endpoint, :plural]?
+  #           values1 = values1.as_d? || Term[{values1}]
+  #         else
+  #           values1 = Term[{values1}]
+  #         end
+
+  #         insertions ||= [] of {Term::Num, Term::Num, Term::Num, Term::Dict}
+  #         index = insertions.bsearch_index { |(c_b, _, c_ord, _)| {-b, -ord} <= {-c_b, -c_ord} }
+  #         index ||= insertions.size
+  #         insertions.insert(index, {b, e, ord, values1})
+  #       end
+
+  #       matchpi %[(ephemeral bt_number ordt_number value0_)] do
+  #         b = bt.unsafe_as_n
+  #         ord = ordt.unsafe_as_n
+  #         unless b.in?(matchee.items.bounds)
+  #           raise KeypathError.new
+  #         end
+
+  #         ctx1, values1 = transform0(ctx0, ctx1, bot, applier, successor.as_d, value0)
+
+  #         if successor[:endpoint, :plural]?
+  #           values1 = values1.as_d? || Term[{values1}]
+  #         else
+  #           values1 = Term[{values1}]
+  #         end
+
+  #         insertions ||= [] of {Term::Num, Term::Num, Term::Num, Term::Dict}
+  #         index = insertions.bsearch_index { |(c_b, _, c_ord, _)| {-b, -ord} <= {-c_b, -c_ord} }
+  #         index ||= insertions.size
+  #         insertions.insert(index, {b, b, ord, values1})
+  #       end
+
+  #       otherwise { raise ArgumentError.new("#{label}") }
+  #     end
+  #   end
+
+  #   # TODO: "fill in" ranges in insertions, this will allow us to apply all
+  #   # insertions in a single transaction
+  #   if insertions
+  #     insertions.each do |b, e, _, values|
+  #       matchee = matchee.replace(b...e, &.concat(values.items))
+  #     end
+  #   end
+
+  #   {ctx1, Term.of(matchee)}
+  # end
+
+  # def self.transform(ctx0, ctx1, bot, applier, node0 : Term::Dict, layer : UInt32, matchee : Term)
+  #   case layer
+  #   when 0
+  #     ctx1, matchee = transform0(ctx0, ctx1, bot, applier, node0, matchee)
+
+  #     {ctx1, node0, matchee}
+  #   when 1
+  #     ctx1, matchee = transform1(ctx0, ctx1, bot, applier, node0, matchee)
+
+  #     {ctx1, node0, matchee}
+  #   else
+  #     matchee = matchee.as_d? || return ctx1, node0, matchee
+
+  #     node1 = node0
+  #     node0.each_entry do |label0, successor0|
+  #       Term.case(label0) do
+  #         matchpi %[(value key0_)] do
+  #           # Read the key and transform it using the current version of
+  #           # the successor.
+  #           ctx1, successor1, value1 = transform(ctx0, ctx1, bot, applier, successor0.as_d, layer - 1, matchee[key0])
+
+  #           # If there is `self` defined on the successor, this means that
+  #           # the key should be modified as well.
+  #           if ksucc0 = successor1[:self]?
+  #             ctx1, ksucc1, key1 = transform(ctx0, ctx1, bot, applier, ksucc0.as_d, layer - 1, key0)
+  #             matchee = matchee.without(key0).with(key1, value1)
+  #             node1 = node1
+  #               .without(label0)
+  #               .with({:value, key1}, successor1.with(:self, ksucc1))
+  #           else
+  #             matchee = matchee.with(key0, value1)
+  #             node1 = node1.with(label0, successor1)
+  #           end
+  #         end
+
+  #         matchpi %[(ephemeral _ value0_)] do
+  #           ctx1, successor1, value1 = transform(ctx0, ctx1, bot, applier, successor0.as_d, layer - 1, value0)
+  #           label1 = label0.with(2, value1)
+  #           node1 = node1.without(label0).with(label1, successor1)
+  #         end
+
+  #         matchpi %[(ephemeral _number _number value0_)] do
+  #           ctx1, successor1, value1 = transform(ctx0, ctx1, bot, applier, successor0.as_d, layer - 1, value0)
+  #           label1 = label0.with(3, value1)
+  #           node1 = node1.without(label0).with(label1, successor1)
+  #         end
+
+  #         matchpi %[(residue keys←(_*))] do
+  #           matchee = matchee.transaction do |commit|
+  #             residue0 = matchee &- keys.items
+  #             ctx1, successor1, residue1 = transform(ctx0, ctx1, bot, applier, successor0.as_d, layer - 1, Term.of(residue0))
+  #             node1 = node1.with(label0, successor1)
+  #             residue1 &-= keys.items
+  #             residue0.each_entry { |k, _| commit.without(k) }
+  #             residue1.each_entry { |k, v| commit.with(k, v) }
+  #           end
+  #         end
+
+  #         otherwise { }
+  #       end
+  #     end
+
+  #     {ctx1, node1, Term.of(matchee)}
+  #   end
+  # end
+
+  # # Applier must respond to `call(up0 : Term::Dict, up1 : Term::Dict, down : Term::Dict, my : Term::Dict, matchee0 : Term, body : Term) : {up1 : Term::Dict, matchee1 : Term}`
+  # def self.backmap(envs : Enumerable(Term::Dict), backspec : Term, matchee : Term, *, applier = DefaultApplier.new) : Term
+  #   # Collapse all keypaths into a trie. Enhance the trie with metadata. Simultaneously,
+  #   # figure out the depth of the trie by finding the maximum keypath size.
+  #   trie = Term[]
+  #   depth = 0u32
+
+  #   envs.each do |env|
+  #     next unless keypaths = env[:"(keypaths)"]?
+
+  #     env = env.without(:"(keypaths)")
+
+  #     keypaths.each_entry do |capture, keypathset|
+  #       keypathset.each_entry do |keypath, _|
+  #         unless keypath = keypath.as_d?
+  #           raise KeypathError.new
+  #         end
+
+  #         plural = false
+
+  #         if body = backspec[capture]?
+  #           action = AttachMetadata.new(capture, body, env, plural: false)
+  #         elsif body = backspec[{capture}]?
+  #           action = AttachMetadata.new(capture, body, env, plural: true)
+  #         else
+  #           # No body means it's an alias. We only must learn the alias's new value.
+  #           # No overrides, nothing. If both have bodies AND point to the same place
+  #           # the winner will be determined by the hash function.
+  #           action = AttachAlias.new(capture)
+  #         end
+
+  #         trie = Term::Dict.enhance(trie, keypath.items, :endpoint, action: action)
+  #         depth = Math.max(keypath.size.to_u32, depth)
+  #       end
+  #     end
+  #   end
+
+  #   # puts ML.display(trie)
+
+  #   ctx0 = Term[]
+
+  #   (0..depth).reverse_each do |layer|
+  #     upper = reflect(Term[], trie, layer, matchee)
+  #     # pp upper
+  #     lower = ctx0.sub(upper)
+  #     ctx0 |= upper
+  #     ctx0, trie, matchee = transform(ctx0, ctx0, lower, applier, trie, layer, matchee)
+  #   end
+
+  #   matchee
+  # end
+
+  module Label
+    alias Any = NormalMode | PairMode
+
+    alias NormalMode = Create | CreateLeaf | Delete | Insert | Range | Pair
+
+    record Create, key : Term, initial : Term
+    record CreateLeaf, key : Term
+    record Insert, index : Term::Num, ord : UInt32, initial : Term
+    record Pair, key : Term
+    record Range, b : Int32, e : Int32, ord : UInt32
+    record Delete, keys : Term::Dict
+
+    alias PairMode = Key | Value
+
+    record Key
+    record Value
+
+    SYM_PAIR = Term.of(:pair)
+    SYM_RESIDUE = Term.of(:residue)
+    SYM_RANGE = Term.of(:range)
+    SYM_CREATE_LEAF = Term.of(:"create-leaf")
+    SYM_CREATE = Term.of(:create)
+    SYM_INSERT = Term.of(:insert)
+
+    def self.parse(subject : Term) : NormalMode
+      raise KeypathError.new unless dict = subject.as_itemsonly_d?
+      raise KeypathError.new if dict.empty?
+      
+      case {dict[0], dict.size - 1}
+      when {SYM_PAIR, 1}
+        _, key = dict
+
+        Pair.new(key)
+      when {SYM_RESIDUE, 1}
+        _, keys = dict
+
+        raise KeypathError.new unless keys = keys.as_d?
+
+        Delete.new(keys)
+      when {SYM_RANGE, 3}
+        _, b, e, ord = dict
+
+        raise KeypathError.new unless (b = b.as_n?) && (e = e.as_n?) && (ord = ord.as_n?)
+
+        Range.new(b.to(Int32), e.to(Int32), ord.to(UInt32))
+      when {SYM_CREATE_LEAF, 1}
+        _, key = dict
+
+        CreateLeaf.new(key)
+      when {SYM_CREATE, 2}
+        _, key, initial = dict
+
+        Create.new(key, initial)
+      when {SYM_INSERT, 3}
+        _, index, ord, initial = dict
+
+        raise KeypathError.new unless (index = index.as_n?) && (ord = ord.as_n?)
+
+        Insert.new(index, ord.to(UInt32), initial)
+      else
+        raise KeypathError.new
+      end
     end
 
-    {ctx1, matchee}
+    def self.substructure?(label : Create, matchee : Term) : Term?
+      label.initial
+    end
+
+    def self.substructure?(label : CreateLeaf, matchee : Term) : Term?
+    end
+
+    def self.substructure?(label : Insert, matchee : Term) : Term?
+      label.initial
+    end
+
+    def self.substructure?(label : Range, matchee : Term) : Term?
+    end
+
+    def self.substructure?(label : Delete, matchee : Term) : Term?
+      Term.of(matchee &- label.keys.items)
+    end
   end
 
-  # Layer-1 transform handles insertions made in transform0 into the matchee
-  # (of ranges, slots, etc.)
-  #
-  # That is, it serves `plural: true` for values and `(range ...)` labels.
-  def self.transform1(ctx0, ctx1, bot, applier, node, matchee)
-    matchee0 = matchee = matchee.as_d? || return ctx1, matchee
+  class BackmapTrie
+    # NOTE: @env, @body, @captures must only exist on a "tapped" BackmapTrie nodes.
+    # NOTE: @neighbors only exist on "fanout" BackmapTrie nodes.
+    # NOTE: The third type of backmaptrie node unifies both of them.
 
-    insertions = nil
+    @env : Term::Dict?
 
-    node.each_entry do |label, successor|
-      Term.case(label) do
-        matchpi %[self] { }
-        matchpi %[endpoint] { }
+    def initialize
+      @captures = [] of Term
+      @neighbors = {} of Label::NormalMode => BackmapTrie | BackmapPair
+    end
 
-        matchpi %[(residue keys←(_*))] do
+    def mount(keypath : Term::Dict::ItemsView, capture : Term, env : Term::Dict) : Nil
+      unless subject = keypath.first?
+        @env = env
+        @captures << capture
+        return
+      end
+
+      case label = Label.parse(subject)
+      when Label::Pair
+        neighbor = @neighbors.put_if_absent(label) { BackmapPair.new }.as(BackmapPair)
+        neighbor.mount(keypath.move(1), capture, env)
+      else
+        neighbor = @neighbors.put_if_absent(label) { BackmapTrie.new }
+        neighbor.mount(keypath.move(1), capture, env)
+      end
+    end
+
+    def mount(keypath : Term, capture : Term, env : Term::Dict) : Nil
+      mount(keypath.items, capture, env)
+    end
+
+    def reflect(layer : Int, matchee : Term)
+      Term::Dict.build { |commit| reflect(layer, commit, matchee) }
+    end
+
+    def reflect(layer : Int, ctx : Term::Dict::Commit, matchee : Term)
+      # Take a snapshot of what the matchee looks like at this level if we have any
+      # captures at this level.
+      @captures.each { |capture| ctx.with(capture, matchee) }
+
+      return if layer.zero?
+
+      @neighbors.each do |label, neighbor|
+        case label
+        when Label::Pair
+          next unless value = matchee[label.key]?
+
+          neighbor.as(BackmapPair).reflect(layer - 1, ctx, label.key, value)
+        else
+          next unless substructure = Label.substructure?(label, matchee)
+
+          neighbor.as(BackmapTrie).reflect(layer - 1, ctx, substructure)
+        end
+      end
+    end
+
+    def morph0(up0, up1, down, backspec, matchee, applier) : {Term::Dict, Rewrite::Any}
+      plural = false
+      body = nil
+
+      @captures.each do |capture|
+        if body = backspec[capture]? # Singular
+          break
+        elsif body = backspec[{capture}]? # Plural
+          plural = true
+          break
+        end
+      end
+
+      rewrite = Rewrite.none
+
+      if body
+        up1, matchee = applier.call(up0, up1, down, @env || Term[], matchee, body) # ?!
+        up1 = @captures.reduce(up1) { |up, capture| up.with(capture, matchee) }
+
+        if plural && (list = matchee.as_itemsonly_d?)
+          rewrite = Rewrite.many(list)
+        else
+          rewrite = Rewrite.one(matchee)
+        end
+      end
+
+      {up1, rewrite}
+    end
+
+    def morph(layer : Int, up0, up1, down, backspec, matchee : Term, applier) : {Term::Dict, Term}
+      if layer.zero?
+        return up1, matchee
+      end
+
+      relabel = nil
+      insertions = nil
+
+      @neighbors.each do |label, neighbor|
+        case label
+        in Label::Create
+          if layer == 1
+            up1, rewrite = neighbor.as(BackmapTrie).morph0(up0, up1, down, backspec, label.initial, applier)
+
+            case rewrite
+            in Rewrite::None then value = label.initial
+            in Rewrite::One  then value = rewrite.term
+            in Rewrite::Many then value = rewrite.list
+            end
+
+            matchee = matchee.with(label.key, value)
+          else
+            up1, value = neighbor.as(BackmapTrie).morph(layer - 1, up0, up1, down, backspec, label.initial, applier)
+            matchee = matchee.with(label.key, value)
+
+            relabel ||= [] of {Label::NormalMode, Label::NormalMode?}
+            relabel << {label, label.copy_with(initial: value)}
+          end
+        in Label::CreateLeaf
+          next unless layer == 1
+
+          up1, rewrite = neighbor.as(BackmapTrie).morph0(up0, up1, down, backspec, nil, applier)
+
+          case rewrite
+          in Rewrite::None
+          in Rewrite::One
+            matchee = matchee.with(label.key, rewrite.term)
+          in Rewrite::Many
+            matchee = matchee.with(label.key, rewrite.list)
+          end
+        in Label::Delete
+          residue0 = matchee &- label.keys.items
+          if layer == 1
+            up1, residue1r = neighbor.as(BackmapTrie).morph0(up0, up1, down, backspec, Term.of(residue0), applier)
+            residue1 = residue1r.term? || residue0
+          else
+            up1, residue1 = neighbor.as(BackmapTrie).morph(layer - 1, up0, up1, down, backspec, Term.of(residue0), applier)
+          end
           matchee = matchee.transaction do |commit|
-            residue0 = matchee &- keys.items
-            ctx1, residue1 = transform0(ctx0, ctx1, bot, applier, successor.as_d, Term.of(residue0))
-            residue1 &-= keys.items
+            residue1 &-= label.keys.items
             residue0.each_entry { |k, _| commit.without(k) }
             residue1.each_entry { |k, v| commit.with(k, v) }
           end
-        end
+        in Label::Insert
+          if layer == 1
+            up1, rewrite = neighbor.as(BackmapTrie).morph0(up0, up1, down, backspec, label.initial, applier)
 
-        matchpi %[(ephemeral key_)] do
-          ctx1, value1 = transform0(ctx0, ctx1, bot, applier, successor.as_d, nil)
-          matchee = matchee.with(key, value1)
-        end
+            case rewrite
+            in Rewrite::None then items1 = Term[{label.initial}]
+            in Rewrite::One  then items1 = Term[{rewrite.term}]
+            in Rewrite::Many then items1 = rewrite.list
+            end
 
-        matchpi %[(ephemeral key_ default_)] do
-          ctx1, value1 = transform0(ctx0, ctx1, bot, applier, successor.as_d, default)
-          matchee = matchee.with(key, value1)
-        end
+            insertions ||= [] of {Term::Num, Term::Num, Term::Num, Term::Dict}
+            insertions << {Term[label.index], Term[label.index], Term[label.ord], items1}
+          else
+            up1, value = neighbor.as(BackmapTrie).morph(layer - 1, up0, up1, down, backspec, label.initial, applier)
 
-        matchpi %[(value key_)] do
-          if ksucc = successor[:self]?
+            relabel ||= [] of {Label::NormalMode, Label::NormalMode?}
+            relabel << {label, label.copy_with(initial: value)}
+          end
+        in Label::Range
+          next unless layer == 1
+
+          unless (label.b...label.e).subrange_of?(matchee.items.bounds)
+            raise KeypathError.new
+          end
+
+          b = Term[label.b]
+          e = Term[label.e]
+          ord = Term[label.ord]
+
+          items0 = matchee.items(b, e)
+          up1, rewrite = neighbor.as(BackmapTrie).morph0(up0, up1, down, backspec, Term.of(items0), applier)
+
+          case rewrite
+          in Rewrite::None
+            next
+          in Rewrite::One
+            items1 = Term[{rewrite.term}]
+          in Rewrite::Many
+            items1 = rewrite.list
+          end
+
+          insertions ||= [] of {Term::Num, Term::Num, Term::Num, Term::Dict}
+          insertions << {b, e, ord, items1}
+        in Label::Pair
+          next unless value0 = matchee[key0 = label.key]?
+
+          up1, key1r, value1r = neighbor.as(BackmapPair).morph(layer - 1, up0, up1, down, backspec, key0, value0, applier)
+
+          value = matchee[key0]? || raise KeypathError.new
+
+          case key1r
+          in Rewrite::None
+            key1 = key0
+          in Rewrite::One
+            key1 = key1r.term
+          in Rewrite::Many
             # One should be able to delete a key-value pair from a backmap with an empty
             # plural **key** transform:
             #
@@ -5103,229 +5645,136 @@ module ::Ww::M1
             #   ;; Without alias:
             #   (without {x: 100, y: 200} x) ;; => (without {y: 200})
             #
-            if ksucc[:endpoint, :plural]? && (transform = ksucc[:endpoint, :transform]?) && transform.empty?
-              matchee = matchee.without(key)
+            if key1r.list.empty? && layer == 1
+              matchee = matchee.without(key0)
               next
             end
 
-            key0, value0 = key, matchee[key]
-            ctx1, key1 = transform0(ctx0, ctx1, bot, applier, ksucc, key0)
-            matchee = matchee.without(key0).with(key1, value0)
-            key = key1
+            key1 = Term.of(key1r.list)
           end
 
-          next unless successor[:endpoint, :transform]?
+          # NOTE: may collide
+          matchee = matchee.without(key0).with(key1, value)
 
-          plural = !!successor[:endpoint, :plural]?
-
-          if plural && (b = key.as_n?) && b.in?(matchee.items.bounds)
-            value0 = matchee[key]
-
-            ctx1, values1 = transform0(ctx0, ctx1, bot, applier, successor.as_d, value0)
-
-            insertions ||= [] of {Term::Num, Term::Num, Term::Num, Term::Dict}
-            index = insertions.bsearch_index { |(c_b, _, c_ord, _)| {-b, Term[0]} <= {-c_b, -c_ord} }
-            index ||= insertions.size
-            insertions.insert(index, {b, b + 1, Term[0], values1.as_d? || Term[{values1}]})
-
-            next
+          if layer > 1
+            relabel ||= [] of {Label::NormalMode, Label::NormalMode?}
+            relabel << {label, label.copy_with(key: key1)} # NOTE: may collide
           end
 
-          matchee = matchee.with(key) do |value0|
-            unless value0
-              raise KeypathError.new
-            end
-
-            ctx1, value1 = transform0(ctx0, ctx1, bot, applier, successor.as_d, value0)
-
-            # One should be able to delete a key-value pair from a backmap with an empty
-            # plural **value** transform:
-            #
-            #   {x: x_, y: y_} <> {(x): ()} ;; Removes `x` pair
-            #
-            plural && value1.type.dict? && value1.empty? ? nil : value1
-          end
-        end
-
-        matchpi %[(range bt_number et_number (%optional 0 ordt_number))] do
-          next unless successor[:endpoint, :transform]?
-
-          b = bt.unsafe_as_n
-          e = et.unsafe_as_n
-          ord = ordt.unsafe_as_n
-
-          unless (b...e).subrange_of?(matchee.items.bounds)
-            raise KeypathError.new
-          end
-
-          values0 = matchee.items(b, e)
-          ctx1, values1 = transform0(ctx0, ctx1, bot, applier, successor.as_d, Term.of(values0))
-
-          # Not sure about this: should in e.g. (%group xs a_ b_ c), `xs` be implicitly plural?
-          if successor[:endpoint, :plural]?
-            values1 = values1.as_d? || Term[{values1}]
-          else
-            values1 = Term[{values1}]
-          end
-
-          insertions ||= [] of {Term::Num, Term::Num, Term::Num, Term::Dict}
-          index = insertions.bsearch_index { |(c_b, _, c_ord, _)| {-b, -ord} <= {-c_b, -c_ord} }
-          index ||= insertions.size
-          insertions.insert(index, {b, e, ord, values1})
-        end
-
-        matchpi %[(ephemeral bt_number ordt_number value0_)] do
-          b = bt.unsafe_as_n
-          ord = ordt.unsafe_as_n
-          unless b.in?(matchee.items.bounds)
-            raise KeypathError.new
-          end
-
-          ctx1, values1 = transform0(ctx0, ctx1, bot, applier, successor.as_d, value0)
-
-          if successor[:endpoint, :plural]?
-            values1 = values1.as_d? || Term[{values1}]
-          else
-            values1 = Term[{values1}]
-          end
-
-          insertions ||= [] of {Term::Num, Term::Num, Term::Num, Term::Dict}
-          index = insertions.bsearch_index { |(c_b, _, c_ord, _)| {-b, -ord} <= {-c_b, -c_ord} }
-          index ||= insertions.size
-          insertions.insert(index, {b, b, ord, values1})
-        end
-
-        otherwise { raise ArgumentError.new("#{label}") }
-      end
-    end
-
-    # TODO: "fill in" ranges in insertions, this will allow us to apply all
-    # insertions in a single transaction
-    if insertions
-      insertions.each do |b, e, _, values|
-        matchee = matchee.replace(b...e, &.concat(values.items))
-      end
-    end
-
-    {ctx1, Term.of(matchee)}
-  end
-
-  def self.transform(ctx0, ctx1, bot, applier, node0 : Term::Dict, layer : UInt32, matchee : Term)
-    case layer
-    when 0
-      ctx1, matchee = transform0(ctx0, ctx1, bot, applier, node0, matchee)
-
-      {ctx1, node0, matchee}
-    when 1
-      ctx1, matchee = transform1(ctx0, ctx1, bot, applier, node0, matchee)
-
-      {ctx1, node0, matchee}
-    else
-      matchee = matchee.as_d? || return ctx1, node0, matchee
-
-      node1 = node0
-      node0.each_entry do |label0, successor0|
-        Term.case(label0) do
-          matchpi %[(value key0_)] do
-            # Read the key and transform it using the current version of
-            # the successor.
-            ctx1, successor1, value1 = transform(ctx0, ctx1, bot, applier, successor0.as_d, layer - 1, matchee[key0])
-
-            # If there is `self` defined on the successor, this means that
-            # the key should be modified as well.
-            if ksucc0 = successor1[:self]?
-              ctx1, ksucc1, key1 = transform(ctx0, ctx1, bot, applier, ksucc0.as_d, layer - 1, key0)
-              matchee = matchee.without(key0).with(key1, value1)
-              node1 = node1
-                .without(label0)
-                .with({:value, key1}, successor1.with(:self, ksucc1))
+          case value1r
+          in Rewrite::None
+          in Rewrite::One
+            matchee = matchee.with(key1, value1r.term)
+          in Rewrite::Many
+            if inspt = matchee.index?(key1)
+              insertions ||= [] of {Term::Num, Term::Num, Term::Num, Term::Dict}
+              insertions << {inspt, inspt + 1, Term[0], value1r.list}
+            elsif value1r.list.empty?
+              # One should be able to delete a key-value pair from a backmap with an empty
+              # plural **value** transform:
+              #
+              #   {x: x_, y: y_} <> {(x): ()} ;; Removes `x` pair
+              #
+              matchee = matchee.without(key1)
             else
-              matchee = matchee.with(key0, value1)
-              node1 = node1.with(label0, successor1)
+              # Otherwise act the same as One.
+              matchee = matchee.with(key1, value1r.list)
             end
           end
-
-          matchpi %[(ephemeral _ value0_)] do
-            ctx1, successor1, value1 = transform(ctx0, ctx1, bot, applier, successor0.as_d, layer - 1, value0)
-            label1 = label0.with(2, value1)
-            node1 = node1.without(label0).with(label1, successor1)
-          end
-
-          matchpi %[(ephemeral _number _number value0_)] do
-            ctx1, successor1, value1 = transform(ctx0, ctx1, bot, applier, successor0.as_d, layer - 1, value0)
-            label1 = label0.with(3, value1)
-            node1 = node1.without(label0).with(label1, successor1)
-          end
-
-          matchpi %[(residue keys←(_*))] do
-            matchee = matchee.transaction do |commit|
-              residue0 = matchee &- keys.items
-              ctx1, successor1, residue1 = transform(ctx0, ctx1, bot, applier, successor0.as_d, layer - 1, Term.of(residue0))
-              node1 = node1.with(label0, successor1)
-              residue1 &-= keys.items
-              residue0.each_entry { |k, _| commit.without(k) }
-              residue1.each_entry { |k, v| commit.with(k, v) }
-            end
-          end
-
-          otherwise { }
         end
       end
 
-      {ctx1, node1, Term.of(matchee)}
+      # It is unwise to delete/insert while we're iterating over @neighbors, so
+      # we have a separate "relabel" step. 
+      if relabel
+        relabel.each do |k0, k1|
+          v = @neighbors.delete(k0) || raise KeyError.new("attempt to relabel an absent label #{k0}")
+          next unless k1
+          @neighbors[k1] = v
+        end
+      end
+
+      if insertions
+        insertions.sort_by! { |b, _, ord, _| {-b, -ord} }
+        insertions.each do |b, e, _, replacement|
+          matchee = matchee.replace(b...e, &.concat(replacement.items))
+        end
+      end
+
+      {up1, Term.of(matchee)}
+    end
+  end
+  
+  class BackmapPair
+    @k : BackmapTrie?
+    @v : BackmapTrie?
+
+    def mount(keypath : Term::Dict::ItemsView, capture : Term, env : Term::Dict) : Nil
+      case subject = keypath.first?
+      when Term.of(:key)   then neighbor = @k ||= BackmapTrie.new
+      when Term.of(:value) then neighbor = @v ||= BackmapTrie.new
+      else
+        raise KeypathError.new
+      end
+
+      neighbor.mount(keypath.move(1), capture, env)
+    end
+
+    def reflect(layer : Int, ctx : Term::Dict::Commit, key : Term, value : Term)
+      @k.try &.reflect(layer, ctx, key)
+      @v.try &.reflect(layer, ctx, value)
+    end
+
+    def morph(layer, up0, up1, down, backspec, key0, value0, applier)
+      if layer == 0
+        up1, key1r = @k.try &.morph0(up0, up1, down, backspec, key0, applier) || {up1, Rewrite.one(key0)}
+        up1, value1r = @v.try &.morph0(up0, up1, down, backspec, value0, applier) || {up1, Rewrite.one(value0)}
+        {up1, key1r, value1r}
+      else
+        up1, key1 = @k.try &.morph(layer, up0, up1, down, backspec, key0, applier) || {up1, key0}
+        up1, value1 = @v.try &.morph(layer, up0, up1, down, backspec, value0, applier) || {up1, value0}
+        {up1, Rewrite.one(key1), Rewrite.one(value1)}
+      end
     end
   end
 
-  # Applier must respond to `call(up0 : Term::Dict, up1 : Term::Dict, down : Term::Dict, my : Term::Dict, matchee0 : Term, body : Term) : {up1 : Term::Dict, matchee1 : Term}`
-  def self.backmap(envs : Enumerable(Term::Dict), backspec : Term, matchee : Term, *, applier = DefaultApplier.new) : Term
-    # Collapse all keypaths into a trie. Enhance the trie with metadata. Simultaneously,
-    # figure out the depth of the trie by finding the maximum keypath size.
-    trie = Term[]
+  def self.backmap(envs : Enumerable(Term::Dict), backspec : Term, matchee : Term, *, applier = DefaultApplier.new)
+    trie = BackmapTrie.new
     depth = 0u32
 
     envs.each do |env|
       next unless keypaths = env[:"(keypaths)"]?
 
-      env = env.without(:"(keypaths)")
-
       keypaths.each_entry do |capture, keypathset|
         keypathset.each_entry do |keypath, _|
-          unless keypath = keypath.as_d?
-            raise KeypathError.new
-          end
+          trie.mount(keypath, capture, env)
 
-          plural = false
-
-          if body = backspec[capture]?
-            action = AttachMetadata.new(capture, body, env, plural: false)
-          elsif body = backspec[{capture}]?
-            action = AttachMetadata.new(capture, body, env, plural: true)
-          else
-            # No body means it's an alias. We only must learn the alias's new value.
-            # No overrides, nothing. If both have bodies AND point to the same place
-            # the winner will be determined by the hash function.
-            action = AttachAlias.new(capture)
-          end
-
-          trie = Term::Dict.enhance(trie, keypath.items, :endpoint, action: action)
-          depth = Math.max(keypath.size.to_u32, depth)
+          depth = Math.max(keypath.items.count { |x| !x.in?(Term.of(:key), Term.of(:value)) }.to_u32, depth)
         end
       end
     end
 
-    # puts ML.display(trie)
-
     ctx0 = Term[]
 
-    (0..depth).reverse_each do |layer|
-      upper = reflect(Term[], trie, layer, matchee)
-      # pp upper
+    # pp trie
+    # pp depth
+
+    (1..depth).reverse_each do |layer|
+      # pp layer
+      upper = trie.reflect(layer, matchee)
       lower = ctx0.sub(upper)
       ctx0 |= upper
-      ctx0, trie, matchee = transform(ctx0, ctx0, lower, applier, trie, layer, matchee)
+      ctx0, matchee = trie.morph(layer, ctx0, ctx0, lower, backspec, matchee, applier)
+      # pp matchee
     end
 
-    matchee
+    upper = trie.reflect(0, matchee)
+    lower = ctx0.sub(upper)
+    ctx0 |= upper
+    _, rewrite = trie.morph0(ctx0, ctx0, lower, backspec, matchee, applier)
+
+    # Should we give the Rewrite to clients?
+    rewrite.term? || matchee
   end
 
   def self.backmap?(operator : Operator::Any, backspec : Term, matchee : Term, *, env = Term[], applier = DefaultApplier.new) : Term?

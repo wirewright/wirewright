@@ -3159,38 +3159,38 @@
 
 (pattern ((%keypath x) (%keypath y) (%keypath z))
   (= (a b c)
-     {x: ((value 0)),
-      y: ((value 1)),
-      z: ((value 2))}))
+     {x: ((pair 0) value),
+      y: ((pair 1) value),
+      z: ((pair 2) value)}))
 
 (pattern (%leaf° (%all (%keypath x) _number) in: values)
   (= (a 0 b ((c 1) d 2 {e: 3}))
-    {x: ((value 1))}
-    {x: ((value 3) (value 0) (value 1))}
-    {x: ((value 3) (value 2))}
-    {x: ((value 3) (value 3) (value e))}))
+    {x: ((pair 1) value)}
+    {x: ((pair 3) value (pair 0) value (pair 1) value)}
+    {x: ((pair 3) value (pair 2) value)}
+    {x: ((pair 3) value (pair 3) value (pair e) value)}))
 
 ;; Basic follow itemspart keypath
 (pattern ((%leaf° x←(%keypath kp) self: true) kp_)
-  (= (a ((value 0))) {x: a, kp: ((value 0))})
-  (= ((a b c) ((value 0) (value 0))) {x: a, kp: ((value 0) (value 0))})
-  (= ((a b c) ((value 0) (value 1))) {x: b, kp: ((value 0) (value 1))})
-  (= ((a b c) ((value 0) (value 2))) {x: c, kp: ((value 0) (value 2))}))
+  (= (a ((pair 0) value)) {x: a, kp: ((pair 0) value)})
+  (= ((a b c) ((pair 0) value (pair 0) value)) {x: a, kp: ((pair 0) value (pair 0) value)})
+  (= ((a b c) ((pair 0) value (pair 1) value)) {x: b, kp: ((pair 0) value (pair 1) value)})
+  (= ((a b c) ((pair 0) value (pair 2) value)) {x: c, kp: ((pair 0) value (pair 2) value)}))
 
 ;; %keypath in %many
 (pattern ((%many xs (%keypath x) min: 0))
   (= () {xs: ()})
-  (= (a) {xs: ({x: ((value 0))})})
+  (= (a) {xs: ({x: ((pair 0) value)})})
   (= (a b c)
-     {xs: ({x: ((value 0))}
-           {x: ((value 1))}
-           {x: ((value 2))})}))
+     {xs: ({x: ((pair 0) value)}
+           {x: ((pair 1) value)}
+           {x: ((pair 2) value)})}))
 
 (pattern (%items xs (%all x_symbol (%keypath path)))
   (= (a 1 2 b 3 c)
-     {xs: ({x: a, path: ((value 0))}
-           {x: b, path: ((value 3))}
-           {x: c, path: ((value 5))})}))
+     {xs: ({x: a, path: ((pair 0) value)}
+           {x: b, path: ((pair 3) value)}
+           {x: c, path: ((pair 5) value)})}))
 
 ;; %entry
 (backmap ((_* ⏏x ¦ (%entry k_ X←(qux (a_ b_)))) {x: ↑X, (k): (), a: ↓b, b: ↓a})

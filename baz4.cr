@@ -12,6 +12,17 @@ module Rewrite
       self
     end
 
+    def map(default, &)
+      One.new(Term.of(yield default))
+    end
+
+    def term?
+    end
+
+    def map(&)
+      self
+    end
+
     def diff(orig : Term)
       self
     end
@@ -24,6 +35,18 @@ module Rewrite
 
     def reduce(& : Term -> Rewrite::Any)
       yield term
+    end
+
+    def map(default, &)
+      One.new(Term.of(yield term))
+    end
+
+    def map(&)
+      One.new(Term.of(yield term))
+    end
+
+    def term?
+      term
     end
 
     def diff(orig : Term)
@@ -55,6 +78,22 @@ module Rewrite
       end
 
       changed ? Many.new(newlist) : None.new
+    end
+
+    def map(default, &)
+      map { |item| yield item }
+    end
+
+    def map(&)
+      Many.new(list.transaction do |commit|
+        list.each_item_with_index do |item, index|
+          commit.with(index, yield item)
+        end
+      end)
+    end
+
+    def term?
+      Term.of(list)
     end
 
     def diff(orig : Term)
