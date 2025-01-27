@@ -42,113 +42,92 @@ def wrap(text : String, w : Int32?, h : Int32?, *, pre = false) : String
   end
 end
 
-
-# base = <<-WWML
-# ;; Utility: calculate px from pl, pr if absent; py from pt, pr if absent.
-# (_ (_* ¦ _ pl: (%optional 0 pl_number) pr: (%optional 0 pr_number) px: (%- _ px))) <> {px: ($once (+ →pl →pr))}
-# (_ (_* ¦ _ pt: (%optional 0 pt_number) pb: (%optional 0 pb_number) py: (%- _ py))) <> {py: ($once (+ →pt →pb))}
-
-# ;; Generic nodes pass down their width/height minus padding.
-# ((_* ¦ _ max-w: Pmw_number px: px_number) (_* ¦ _ max-w: (%- _ Cmw))) <> {Cmw: ($once (- →Pmw →px))}
-# ((_* ¦ _ max-h: Pmh_number py: py_number) (_* ¦ _ max-h: (%- _ Cmh))) <> {Cmh: ($once (- →Pmh →py))}
-
-# ;; Bordered box nodes override that and also subtract their border.
-# ((box _ ¦ _ border: true max-w: Pmw_number px: px_number) (_* ¦ _ max-w: (%- _ Cmw))) <> {Cmw: ($once (- →Pmw →px 2))}
-# ((box _ ¦ _ border: true max-h: Pmh_number py: py_number) (_* ¦ _ max-h: (%- _ Cmh))) <> {Cmh: ($once (- →Pmh →py 2))}
-
-# ;; Column nodes propagate even max-height constraints to children nodes.
-# ;; ???
-
-# ;; If width: max, set width = max w.
-# (_ (_* ¦ _ w: w←max max-w: mw_number)) <> {w: →mw}
-# (_ (_* ¦ _ h: h←max max-h: mh_number)) <> {h: →mh}
-
-# ;; Calculate width/height of a node from its content width/height.
-# (_ (_* ¦ _ w: W←(content w_number) px: px_number)) <> {W: ($once (+ →w →px))}
-# (_ (_* ¦ _ h: H←(content h_number) py: py_number)) <> {H: ($once (+ →h →py))}
-
-# ;; Bordered boxes add their borders to the content width/height.
-# (_ (box _ ¦ _ border: true w: W←(content w_number) px: px_number)) <> {W: ($once (+ →w →px 2))}
-# (_ (box _ ¦ _ border: true h: H←(content h_number) py: py_number)) <> {H: ($once (+ →h →py 2))}
-
-# ;; Learn w/h: content from single child.
-# ((_ _ ¦ _ w: W←content) (_* ¦ _ w: w_number)) <> {W: (content →w)}
-# ((_ _ ¦ _ h: H←content) (_* ¦ _ h: h_number)) <> {H: (content →h)}
-
-# ;; Calculate content width and height of a text node. The content width
-# ;; does not take wrapping into account; so we're fairly loose here on restrictions.
-# (_ (text caption_string ¦ _ max-w: mw_number max-h: mh_number measured: (%- _ measured))) <>
-#   {measured: ($once (measure →caption limit: (→mw →mh)))}
-
-# ;; Compute text w/h:content based on measured width/height.
-# (_ (text caption_string ¦ _ w: w←content measured: (xw_number _))) <> {w: →xw}
-# (_ (text caption_string ¦ _ h: h←content measured: (_ xh_number))) <> {h: →xh}
-# WWML
-
-# "Top-down flow of width" => max-w
-# "Bottom up flow of width" => content-w
-# THEN once both are known (if necessary) decide which one to use using w: ...
 base = <<-WWML
-;; Utility: calculate px from pl, pr if absent; py from pt, pr if absent.
-(node (_* ¦ _ pl: (%optional 0 pl_number) pr: (%optional 0 pr_number) px: (%- _ px))) <> {px: ($once (+ →pl →pr))}
-(node (_* ¦ _ pt: (%optional 0 pt_number) pb: (%optional 0 pb_number) py: (%- _ py))) <> {py: ($once (+ →pt →pb))}
+;; Calculate px from pl, pr if absent; py from pt, pr if absent.
+(node (_* ¦ _ pl: (%optional 0 pl_number) pr: (%optional 0 pr_number) px: (%- _ px)))
+  <> {px: ($once (+ →pl →pr))}
+(node (_* ¦ _ pt: (%optional 0 pt_number) pb: (%optional 0 pb_number) py: (%- _ py)))
+  <> {py: ($once (+ →pt →pb))}
 
-;; Parents teach max-w/h to their children.
-(edge (_* ¦ _ max-w: W_number px: px_number) (_* ¦ _ max-w: (%- _ w))) <> {w: ($once (- →W →px))}
-(edge (_* ¦ _ max-h: H_number py: py_number) (_* ¦ _ max-h: (%- _ h))) <> {h: ($once (- →H →py))}
+;; Calculate max-w/h for a single child.
+(edge (_ _ ¦ _ max-w: W_number px: px_number) (_* ¦ _ max-w: (%- _ w)))
+  <> {w: ($once (- →W →px))}
+(edge (_ _ ¦ _ max-h: H_number py: py_number) (_* ¦ _ max-h: (%- _ h)))
+  <> {h: ($once (- →H →py))}
 
-;; Parents learn content-w/h from their children.
-(edge (_ _ ¦ _ content-w: (%- _ W) px: px_number) (_* ¦ _ content-w: w_number)) <> {W: ($once (+ →w →px))}
-(edge (_ _ ¦ _ content-h: (%- _ H) py: py_number) (_* ¦ _ content-h: h_number)) <> {H: ($once (+ →h →py))}
+;; Calculate max-w/h for a bordered box child.
+(edge (box _ ¦ _ border: true max-w: W_number px: px_number) (_* ¦ _ max-w: (%- _ w)))
+  <> {w: ($once (- →W →px 1))}
+(edge (box _ ¦ _ border: true max-h: H_number py: py_number) (_* ¦ _ max-h: (%- _ h)))
+  <> {h: ($once (- →H →py 1))}
 
-;; Text node should measure its caption to obtain its content-w/h
-(node (text caption_string ¦ _ content-w: (%- _ w) content-h: (%- _ h)))
+;; Learn inner-w/h from a single child.
+(edge (_ _ ¦ _ inner-w: (%- _ W)) (_* ¦ _ outer-w: w_number)) <> {W: →w}
+(edge (_ _ ¦ _ inner-h: (%- _ H)) (_* ¦ _ outer-h: h_number)) <> {H: →h}
+
+;; Text measures its caption to compute inner-w/h.
+(node (text caption_string ¦ _ inner-w: (%- _ w) inner-h: (%- _ h)))
   <> {w: ($once (measure-width →caption)),
       h: ($once (measure-height →caption))}
 
-;; Each unaccounted child of column should compute max of itself and
-;; the column's content-w.
-(edge (col _+ ¦ _ content-w: (%optional 0 W_number)) (_* ¦ _ content-w: w_number state: state←in-h))
-  <> {W: ($once (max →W →w)), state: in-wh}
+;; Resolve w/h: content hint.
+(node (_* ¦ _  w: content inner-w: iw_number outer-w: (%- _ w) px: px_number))
+  <> {w: ($once (+ →px →iw))}
+(node (_* ¦ _  h: content inner-h: ih_number outer-h: (%- _ h) py: py_number))
+  <> {h: ($once (+ →py →ih))}
 
-;; Each unaccounted child of column should add itself to the column's content-h.
-(edge (col _+ ¦ _ content-h: (%optional 0 H_number)) (_* ¦ _ content-h: h_number state: (%- _ state)))
-  <> {H: ($once (+ →H →h)), state: in-h}
+;; Resolve w/h: max hint.
+(node (_* ¦ _ w: max max-w: mw_number outer-w: (%- _ w) inner-w: iw_number px: px_number))
+  <> {w: ($ (max (+ →px →iw) →mw))}
+(node (_* ¦ _ h: max max-h: mh_number outer-h: (%- _ h) inner-h: ih_number py: py_number))
+  <> {h: ($ (max (+ →py →ih) →mh))}
 
-;; Resolve w/h: content as content-w/h clipped at max-w/h. Note that we make h:
-;; depend on w: to have predictable ordering.
-(node (_* ¦ _ max-w: mw_number content-w: cw_number w: w←content))
-  <> {w: ($once (min →mw →cw))}
+;; Detect overflow.
+(node (_* ¦ _ max-w: mw_number outer-w: w_number overflows-x: (%- _ ox)))
+  <> {ox: ($once (> →w →mw))}
+(node (_* ¦ _ max-h: mh_number outer-h: h_number overflows-y: (%- _ oy)))
+  <> {oy: ($once (> →h →mh))}
 
-(node (_* ¦ _ max-h: mh_number content-h: ch_number w: _number h: h←content))
-  <> {h: ($once (min →mh →ch))}
+;; Scrollbox takes care of overflow, clips to max-w/h in that case.
+(node (scrollbox _ ¦ _ w: max overflows-x: ox←true max-w: mw_number outer-w: ow_number))
+  <> {ox: false, ow: →mw}
+(node (scrollbox _ ¦ _ h: max overflows-y: oy←true max-h: mh_number outer-h: oh_number))
+  <> {oy: false, oh: →mh}
 
-;; When a text learns its width, it should immediately wrap itself at that width.
-(event (text _ ¦ _ w: (%- _number)) (text caption_string ¦ _ w: w_number pre: pre_boolean wrap-w: (%- _ wrap-w)))
-  <> {caption: ($once (wrap →caption w: →w pre: →pre)), wrap-w: →w} 
+;; Calculate inner-w/h for col.
+(edge (col _* ¦ _ inner-w: (%optional 0 W_number)) (_* ¦ _ outer-w: w_number))
+  <> {W: ($once (max →W →w))}
+(edge (col _* ¦ _ inner-h: (%optional 0 H_number)) (_* ¦ _ outer-h: h_number state: (%- _ state)))
+  <> {H: ($once (+ →H →h)), state: member}
 
-;; When a text's wrapped width is known, the text should immediately compute
-;; its wrapped height.
-(event (text _ ¦ _ wrap-w: (%- _)) (text caption_string ¦ _ wrap-w: _number wrap-h: (%- _ wrap-h)))
-  <> {wrap-h: ($once (span →caption subject: line))}
+;; "Column can give you max-h if you specify fr: _number."
 
-;; For a text node, we use its wrapped height instead of content-h to determine h: content.
-(node (text _ ¦ _ max-h: mh_number wrap-h: wh_number h: h←content))
-  <> {h: ($once (min →mh →wh))}
+(node (%all (col _* ¦ _ nF: (%- _ n)) (%items Fch (_* ¦ _ fr: _number))))
+  <> {n: ($once (size →Fch))}
+
+(node (col _* ¦ _ max-h: mh_number inner-h: h_number overflows-y: (%- true) rem-h: (%- _ rh)))
+  <> {rh: ($once (- →mh →h))}
+
+(edge (col _* ¦ _ rem-h: _number frs: (%optional 0 frs_number) nF: n_number) (_* ¦ _ fr: fr_number state: (%- _ state)))
+  <> {frs: ($once (+ →frs →fr)), state: distrib, n: ($once (- →n 1))}
+
+(edge (col _* ¦ _ rem-h: H_number frs: frs_number nF: 0) (_* ¦ _ state: s←distrib fr: fr_number max-h: (%- _ h)))
+  <> {h: ($ (* →H (/ →fr →frs))), s: member}
+
+;; Calculate inner-w/h for row.
+(edge (row _* ¦ _ inner-w: (%optional 0 W_number)) (_* ¦ _ outer-w: w_number state: (%- _ state)))
+  <> {W: ($once (+ →W →w)), state: member}
+(edge (row _* ¦ _ inner-h: (%optional 0 H_number)) (_* ¦ _ outer-h: h_number))
+  <> {H: ($once (max →H →h))}
 WWML
-
-# base2 = <<-WWML
-# (node (h←qux n_ m_)) <> {n: ($once (+ 1 →n)), h: qyx}
-# (node (qyx n_ m_ seen: (%- _ m))) <> {m: true}
-# ;;(event (qux n0_ m_) M←(qyx n1_ m_)) <> {M: (qyyx →n0 →n1 →m)}
-# WWML
 
 frame = <<-WWML
 (viewport l: 0 t: 0 w: max h: max max-w: 64 max-h: 32 bg: (0 0 0)
-  (col w: content h: content
-    (text pre: true w: content h: content "Lorem ipsum dolor sit amet, qui minim labore adipisicing minim sint cillum sint consectetur cupidatat.")
-    (text pre: true w: content h: content "Lorem ipsum dolor sit amet, qui minim labore adipisicing minim sint cillum sint consectetur cupidatat.")
-    (text pre: true w: content h: content "Lorem ipsum dolor sit amet, qui minim labore adipisicing minim sint cillum sint consectetur cupidatat.")))
+  (scrollbox w: max h: max
+    (col w: content h: max
+      (text pre: true w: content h: content "Lorem ipsum dolor sit amet.")
+      (text pre: true w: content fr: 1 h: max "Lorem ipsum dolor sit amet, qui minim labore adipisicing minim.")
+      (text pre: true w: content h: content "Lorem ipsum dolor sit amet, qui minim labore adipisicing minim sint cillum sint consectetur cupidatat."))))
   ;; (center w: max h: max max-h: 10
   ;;   (box w: content h: content border: true
   ;;     (text max-w: 20 w: content h: content fg: (0 0 0) bg: (255 255 255) pre: true
@@ -165,21 +144,6 @@ def nodeR(changes, term term0, successor)
     raise "nodeR: Rewrite::Many not implemented"
   end
 end
-
-# def changeR(changes, term0, term1, successor)
-#   if term0 == term1
-#     return term0
-#   end
-
-#   subject = Term.of(:event, term0, term1)
-
-#   case rewrite = successor.call(changes, Rewrite.one(subject))
-#   in Rewrite::None then term1
-#   in Rewrite::One  then _, _, _term2 = rewrite.term # (event term0 term1) -> (event term0 term2)
-#   in Rewrite::Many
-#     raise "changeR: Rewrite::Many is not implemented"
-#   end
-# end
 
 def edgeR(changes, parent0, child0, successor)
   subject = Term.of(:edge, parent0, child0)
@@ -206,16 +170,10 @@ def outerR(changes, term : Term, successor)
     dict0.each_item_with_index do |v0, k|
       # Rewrite node
       v0 = nodeR(changes, v0, successor)
-      # # React to change
-      # v0 = changeR(changes, v0, v1, successor)
       # Rewrite edge
       dict1, v0 = edgeR(changes, dict1, v0, successor)
-      # # React to change
-      # v0 = changeR(changes, v0, v1, successor)
       # Rewrite recursively
       v0 = outerR(changes, v0, successor)
-      # # React to change
-      # v0 = changeR(changes, v0, v1, successor)
       # Add changed v0 to dict1
       if dict1.type.dict?
         dict1 = dict1.unsafe_as_d.with(k, v0)
@@ -230,20 +188,25 @@ def outerR(changes, term : Term, successor)
 end
 
 primitives = ProcRuleset.build do
-  rulepi %[(+ ns_number+)] do
-    Rewrite.one(ns.items.reduce { |s, n| s.unsafe_as_n + n.unsafe_as_n })
+  rulepi1 %[(+ a_number b_number)] { a + b }
+  rulepi1 %[(- a_number b_number)] { a - b }
+  rulepi1 %[(* a_number b_number)] { a * b }
+  rulepi1 %[(/ a_number (%all b_number (%not 0)))] { a / b }
+
+  rulepi1 %[(> a_number b_number)] do
+    a.unsafe_as_n > b.unsafe_as_n
   end
 
-  rulepi %[(- ns_number+)] do
-    Rewrite.one(ns.items.reduce { |s, n| s.unsafe_as_n - n.unsafe_as_n })
+  rulepi1 %[(size xs_dict)] do
+    xs.unsafe_as_d.size
   end
 
-  rulepi %[(min ns_number+)] do
-    Rewrite.one(ns.items.min_by(&.unsafe_as_n))
+  rulepi1 %[(min ns_number+)] do
+    ns.items.min_by(&.unsafe_as_n)
   end
 
-  rulepi %[(max ns_number+)] do
-    Rewrite.one(ns.items.max_by(&.unsafe_as_n))
+  rulepi1 %[(max ns_number+)] do
+    ns.items.max_by(&.unsafe_as_n)
   end
 
   # rulepi %[(measure text_string limit: (w←(%number +i32) h←(%number +i32)))] do
@@ -254,26 +217,24 @@ primitives = ProcRuleset.build do
   #   Rewrite.one({wrapped_w, wrapped_h})
   # end
 
-  rulepi %[(measure-width text_string)] do
+  rulepi1 %[(measure-width text_string)] do
     w, _ = measure(text.to(String))
-
-    Rewrite.one(w)
+    w
   end
 
-  rulepi %[(measure-height text_string)] do
+  rulepi1 %[(measure-height text_string)] do
     _, h = measure(text.to(String))
-
-    Rewrite.one(h)
+    h
   end
 
-  rulepi %[(wrap text_string w: w←(%number +i32) pre: pre_boolean)] do
-    Rewrite.one(wrap(text.to(String), w: w.to(Int32), h: nil, pre: pre.true?))
+  rulepi1 %[(wrap text_string w: w←(%number +i32) pre: pre_boolean)] do
+    wrap(text.to(String), w: w.to(Int32), h: nil, pre: pre.true?)
   end
 
   # TODO: subject: rune
   # TODO: subject: word
-  rulepi %[(span text_string subject: line)] do
-    Rewrite.one(text.to(String).each_line.size)
+  rulepi1 %[(span text_string subject: line)] do
+    text.to(String).each_line.size
   end
 end
 
