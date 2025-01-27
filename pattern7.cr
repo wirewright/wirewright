@@ -5653,12 +5653,14 @@ module ::Ww::M1
             key1 = Term.of(key1r.list)
           end
 
-          # NOTE: may collide
-          matchee = matchee.without(key0).with(key1, value)
+          unless key0 == key1
+            # NOTE: may collide
+            matchee = matchee.without(key0).with(key1, value)
 
-          if layer > 1
-            relabel ||= [] of {Label::NormalMode, Label::NormalMode?}
-            relabel << {label, label.copy_with(key: key1)} # NOTE: may collide
+            if layer > 1
+              relabel ||= [] of {Label::NormalMode, Label::NormalMode?}
+              relabel << {label, label.copy_with(key: key1)} # NOTE: may collide
+            end
           end
 
           case value1r
