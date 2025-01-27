@@ -94,7 +94,7 @@ module Ww
 
     # Returns `true` if this number is a natural number.
     def natural? : Bool
-      whole? && !negative?
+      whole? && positive?
     end
 
     # Returns `true` if this number is an integer.

@@ -372,9 +372,10 @@ module Ww
 
     # :nodoc:
     def at?(key : Term::Num) : Term?
-      return at_default?(key) unless key.whole? && key.positive?
-      return at_default?(key) unless key < Term[@items.size]
-      return at_default?(key) unless coat = @items.fetch?(Probes::FetchItem.new(key.to_i))
+      return at_default?(key) unless key.natural?
+      return at_default?(key) unless index = key.to?(Int32)
+      return at_default?(key) unless index < @items.size
+      return at_default?(key) unless coat = @items.fetch?(Probes::FetchItem.new(index))
 
       entry, *_ = coat
       entry.value
