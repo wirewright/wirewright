@@ -44,84 +44,67 @@ end
 
 base = <<-WWML
 ;; Calculate px from pl, pr if absent; py from pt, pr if absent.
-(node (_* ¦ _ pl: (%optional 0 pl_number) pr: (%optional 0 pr_number) px: (%- _ px)))
-  <> {px: ($once (+ →pl →pr))}
-(node (_* ¦ _ pt: (%optional 0 pt_number) pb: (%optional 0 pb_number) py: (%- _ py)))
-  <> {py: ($once (+ →pt →pb))}
+(node {_ pl⋮ 0 pr⋮ 0 -px_}) <> {px: ($once (+ →pl →pr))}
+(node {_ pt⋮ 0 pb⋮ 0 -py_}) <> {py: ($once (+ →pt →pb))}
 
 ;; Expand w/h: _number into w/h: max max-w/h: _number
-(node (_* ¦ _ w: w_number max-w: (%- _ mw))) <> {mw: →w, w: max}
-(node (_* ¦ _ h: h_number max-h: (%- _ mh))) <> {mh: →h, h: max}
+(node {_ w_number -max-w_}) <> {max-w: →w, w: max}
+(node {_ h_number -max-h_}) <> {max-h: →h, h: max}
 
 ;; Calculate max-w/h for a single child.
-(edge (_ _ ¦ _ max-w: W_number px: px_number) (_* ¦ _ max-w: (%- _ w)))
-  <> {w: ($once (- →W →px))}
-(edge (_ _ ¦ _ max-h: H_number py: py_number) (_* ¦ _ max-h: (%- _ h)))
-  <> {h: ($once (- →H →py))}
+(edge (_ _ ¦ _ max-w: W_number px_number) {_ -max-w_}) <> {max-w: ($once (- →W →px))}
+(edge (_ _ ¦ _ max-h: H_number py_number) {_ -max-h_}) <> {max-h: ($once (- →H →py))}
 
 ;; Calculate max-w/h for a bordered box child.
-(edge (box _ ¦ _ border: true max-w: W_number px: px_number) (_* ¦ _ max-w: (%- _ w)))
-  <> {w: ($once (- →W →px 1))}
-(edge (box _ ¦ _ border: true max-h: H_number py: py_number) (_* ¦ _ max-h: (%- _ h)))
-  <> {h: ($once (- →H →py 1))}
+(edge (box _ ¦ _ border: true max-w: W_number px_number) {_ -max-w_}) <> {max-w: ($once (- →W →px 1))}
+(edge (box _ ¦ _ border: true max-h: H_number py_number) {_ -max-h_}) <> {max-h: ($once (- →H →py 1))}
 
 ;; Learn inner-w/h from a single child.
-(edge (_ _ ¦ _ inner-w: (%- _ W)) (_* ¦ _ outer-w: w_number)) <> {W: →w}
-(edge (_ _ ¦ _ inner-h: (%- _ H)) (_* ¦ _ outer-h: h_number)) <> {H: →h}
+(edge (_ _ ¦ _ -inner-w_) {_ outer-w_number}) <> {inner-w: →outer-w}
+(edge (_ _ ¦ _ -inner-h_) {_ outer-h_number}) <> {inner-h: →outer-h}
 
 ;; Text measures its caption to compute inner-w/h.
-(node (text caption_string ¦ _ inner-w: (%- _ w) inner-h: (%- _ h)))
-  <> {w: ($once (measure-width →caption)),
-      h: ($once (measure-height →caption))}
+(node (text caption_string ¦ _ -inner-w_)) <> {inner-w: ($once (measure-width →caption))}
+(node (text caption_string ¦ _ -inner-h_)) <> {inner-h: ($once (measure-height →caption))}
 
 ;; Resolve w/h: content hint.
-(node (_* ¦ _  w: content inner-w: iw_number outer-w: (%- _ w) px: px_number))
-  <> {w: ($once (+ →px →iw))}
-(node (_* ¦ _  h: content inner-h: ih_number outer-h: (%- _ h) py: py_number))
-  <> {h: ($once (+ →py →ih))}
+(node {_ w: content inner-w_number -outer-w_ px_number}) <> {outer-w: ($once (+ →px →inner-w))}
+(node {_ h: content inner-h_number -outer-h_ py_number}) <> {outer-h: ($once (+ →py →inner-h))}
 
 ;; Resolve w/h: max hint.
-(node (_* ¦ _ w: max max-w: mw_number outer-w: (%- _ w) inner-w: iw_number px: px_number))
-  <> {w: ($ (max (+ →px →iw) →mw))}
-(node (_* ¦ _ h: max max-h: mh_number outer-h: (%- _ h) inner-h: ih_number py: py_number))
-  <> {h: ($ (max (+ →py →ih) →mh))}
+(node {_ w: max max-w_number inner-w_number -outer-w_ px_number}) <> {outer-w: ($ (max (+ →px →inner-w) →max-w))}
+(node {_ h: max max-h_number inner-h_number -outer-h_ py_number}) <> {outer-h: ($ (max (+ →py →inner-h) →max-h))}
 
 ;; Detect overflow.
-(node (_* ¦ _ max-w: mw_number outer-w: w_number overflows-x: (%- _ ox)))
-  <> {ox: ($once (> →w →mw))}
-(node (_* ¦ _ max-h: mh_number outer-h: h_number overflows-y: (%- _ oy)))
-  <> {oy: ($once (> →h →mh))}
+(node {_ max-w_number outer-w_number -overflows-x_}) <> {overflows-x: ($once (> →outer-w →max-w))}
+(node {_ max-h_number outer-h_number -overflows-y_}) <> {overflows-y: ($once (> →outer-h →max-h))}
 
 ;; Scrollbox takes care of overflow, clips to max-w/h in that case.
-(node (scrollbox _ ¦ _ w: max overflows-x: ox←true max-w: mw_number outer-w: ow_number))
-  <> {ox: false, ow: →mw}
-(node (scrollbox _ ¦ _ h: max overflows-y: oy←true max-h: mh_number outer-h: oh_number))
-  <> {oy: false, oh: →mh}
+(node (scrollbox _ ¦ _ w: max overflows-x_: true max-w_number outer-w_number)) <> {overflows-x: false, outer-w: →max-w}
+(node (scrollbox _ ¦ _ h: max overflows-y_: true max-h_number outer-h_number)) <> {overflows-y: false, outer-h: →max-h}
 
 ;; Calculate inner-w/h for col.
-(edge (col _* ¦ _ inner-w: (%optional 0 W_number)) (_* ¦ _ outer-w: w_number))
-  <> {W: ($once (max →W →w))}
-(edge (col _* ¦ _ inner-h: (%optional 0 H_number)) (_* ¦ _ outer-h: h_number state: (%- _ state)))
-  <> {H: ($once (+ →H →h)), state: member}
+(edge (col _* ¦ _ inner-w⋮ 0) {_ outer-w_number}) <> {inner-w: ($once (max →inner-w →outer-w))}
+(edge (col _* ¦ _ inner-h⋮ 0) {_ outer-h_number -state_}) <> {inner-h: ($once (+ →inner-h →outer-h)), state: member}
 
 ;; "Column can give you max-h if you specify fr: _number."
 
-(node (%all (col _* ¦ _ nF: (%- _ n)) (%items Fch (_* ¦ _ fr: _number))))
+(node (%all (col _* ¦ _ nF: (%- _ n)) (%items Fch {_ fr: _number})))
   <> {n: ($once (size →Fch))}
 
 (node (col _* ¦ _ max-h: mh_number inner-h: h_number overflows-y: (%- true) rem-h: (%- _ rh)))
   <> {rh: ($once (- →mh →h))}
 
-(edge (col _* ¦ _ rem-h: _number frs: (%optional 0 frs_number) nF: n_number) (_* ¦ _ fr: fr_number state: (%- _ state)))
+(edge (col _* ¦ _ rem-h: _number frs: (%optional 0 frs_number) nF: n_number) {_ fr_number -state_})
   <> {frs: ($once (+ →frs →fr)), state: distrib, n: ($once (- →n 1))}
 
-(edge (col _* ¦ _ rem-h: H_number frs: frs_number nF: 0) (_* ¦ _ state: s←distrib fr: fr_number max-h: (%- _ h)))
-  <> {h: ($ (* →H (/ →fr →frs))), s: member}
+(edge (col _* ¦ _ rem-h: H_number frs: frs_number nF: 0) {_ state_: distrib fr_number max-h: (%- _ h)})
+  <> {h: ($ (* →H (/ →fr →frs))), state: member}
 
 ;; Calculate inner-w/h for row.
-(edge (row _* ¦ _ inner-w: (%optional 0 W_number)) (_* ¦ _ outer-w: w_number state: (%- _ state)))
+(edge (row _* ¦ _ inner-w: (%optional 0 W_number)) {_ outer-w: w_number -state_})
   <> {W: ($once (+ →W →w)), state: member}
-(edge (row _* ¦ _ inner-h: (%optional 0 H_number)) (_* ¦ _ outer-h: h_number))
+(edge (row _* ¦ _ inner-h: (%optional 0 H_number)) {_ outer-h: h_number})
   <> {H: ($once (max →H →h))}
 WWML
 

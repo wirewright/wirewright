@@ -258,4 +258,11 @@ module Ww
   # Frequently used symbols.
 
   SYM_EDGE = Term[:edge]
+
+  SYM_BLANK_ANY     = Term[:_]
+  SYM_BLANK_DICT    = Term[:_dict]
+  SYM_BLANK_NUMBER  = Term[:_number]
+  SYM_BLANK_SYMBOL  = Term[:_symbol]
+  SYM_BLANK_STRING  = Term[:_string]
+  SYM_BLANK_BOOLEAN = Term[:_boolean]
 end

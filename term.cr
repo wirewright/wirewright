@@ -42,21 +42,15 @@ module Ww
       other.any? || self == other
     end
 
-    def blank(io : IO)
-      io << "_"
-
+    def blank : Term::Sym
       case self
-      in .any?
-      in .number?  then io << "number"
-      in .symbol?  then io << "symbol"
-      in .string?  then io << "string"
-      in .boolean? then io << "boolean"
-      in .dict?    then io << "dict"
+      in .any?     then SYM_BLANK_ANY
+      in .number?  then SYM_BLANK_NUMBER
+      in .symbol?  then SYM_BLANK_SYMBOL
+      in .string?  then SYM_BLANK_STRING
+      in .boolean? then SYM_BLANK_BOOLEAN
+      in .dict?    then SYM_BLANK_DICT
       end
-    end
-
-    def blank : ::String
-      ::String.build { |io| blank(io) }
     end
   end
 

@@ -385,16 +385,16 @@ P←(behind_* C←[_string | _string (M←(split) _*) @_] ahead_*)
 ⟨[_* ⏏mid ⏏rhs] C←[_string | _string (M←(join) _*) @_] ahead←(_*)⟩
   <> {(M): (), mid: ↑C, (rhs): ↑ahead, (C): (), (ahead): ()}
 
-⟨behind_ (_string | _string (M←(copy-behind) _*) @_ ¦ _ clipboard: (%optional () clipboard_))⟩
+⟨behind_ (_string | _string (M←(copy-behind) _*) @_ ¦ _ clipboard⋮ ())⟩
   <> {(M): (), clipboard: (copy →behind)}
 
-⟨behind_ (_string | _string (M←(cut-behind) _*) @_ ¦ _ clipboard: (%optional () clipboard_))⟩
+⟨behind_ (_string | _string (M←(cut-behind) _*) @_ ¦ _ clipboard⋮ ())⟩
   <> {(M): (), (behind): (), clipboard: (cut →behind)}
 
-⟨(_string | _string (M←(copy-ahead) _*) @_ ¦ _ clipboard: (%optional () clipboard_)) ahead_⟩
+⟨(_string | _string (M←(copy-ahead) _*) @_ ¦ _ clipboard⋮ ()) ahead_⟩
   <> {(M): (), clipboard: (copy →ahead)}
 
-⟨(_string | _string (M←(cut-ahead) _*) @_ ¦ _ clipboard: (%optional () clipboard_)) ahead_⟩
+⟨(_string | _string (M←(cut-ahead) _*) @_ ¦ _ clipboard⋮ ()) ahead_⟩
   <> {(M): (), (ahead): (), clipboard: (cut →ahead)}
 
 C←(_string | _string (M←(paste-behind) _*) @_ ¦ _ clipboard: (copy term_))
@@ -403,13 +403,13 @@ C←(_string | _string (M←(paste-behind) _*) @_ ¦ _ clipboard: (copy term_))
 C←(_string | _string (M←(paste-ahead) _*) @_ ¦ _ clipboard: (copy term_))
   <> {(M): (), (C): (↑C ↑term)}
 
-C←(_string | _string (M←(paste-behind) _*) @_ ¦ _ clipboard: clipboard←(cut term_))
+C←(_string | _string (M←(paste-behind) _*) @_ ¦ _ clipboard_: (cut term_))
   <> {(M): (), (C): (↑term ↑C), (clipboard): ()}
 
-C←(_string | _string (M←(paste-ahead) _*) @_ ¦ _ clipboard: clipboard←(cut term_))
+C←(_string | _string (M←(paste-ahead) _*) @_ ¦ _ clipboard_: (cut term_))
   <> {(M): (), (C): (↑C ↑term), (clipboard): ()}
 
-(_string | _string (M←(clear-clipboard) _*) @_ ¦ _ clipboard: clipboard_)
+(_string | _string (M←(clear-clipboard) _*) @_ ¦ _ clipboard_)
   <> {(M): (), (clipboard): ()}
 
 ⟨behind_ C←[_string | _string (M←(group-behind-front) _*) @_]⟩

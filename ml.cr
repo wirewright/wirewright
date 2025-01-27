@@ -7,6 +7,47 @@ module Ww::ML
 
     def initialize(@message : String, @byte_index : Int32)
     end
+
+    def line(source : String) : String
+      r = Char::Reader.new(source, pos: @byte_index)
+
+      String.build do |io|
+        while r.has_previous? && r.current_char != '\n'
+          r.previous_char
+        end
+        while r.has_next?
+          r.next_char
+          break if r.current_char == '\n'
+          io << r.current_char
+        end
+      end
+    end
+
+    def lineno(source : String) : Int32
+      r = Char::Reader.new(source, pos: @byte_index)
+      line = 0
+
+      while r.has_previous?
+        if r.current_char == '\n'
+          line += 1
+        end
+        r.previous_char
+      end
+
+      line
+    end
+
+    def column(source : String) : Int32
+      r = Char::Reader.new(source, pos: @byte_index)
+      column = 0
+
+      while r.has_previous? && r.current_char != '\n'
+        column += 1
+        r.previous_char
+      end
+
+      column
+    end
   end
 
   # Parses and returns multiple top-level WwML expressions from *source*,
@@ -17,6 +58,14 @@ module Ww::ML
     lexer = Text::Lexer.new(source)
     parser = Text::Parser.new(lexer)
     parser.expressions
+  rescue e : SyntaxError
+    {% if flag?(:mlerr) %}
+      col = e.column(source) 
+      STDERR.puts "SyntaxError: #{e.lineno(source) + 1}:#{col + 1}: #{e.message}"
+      STDERR.puts "  >>> #{e.line(source).insert(col, "‸")}"
+    {% end %}
+
+    raise e
   end
 
   # Parses and returns a single top-level WwML expression term from *source*.
@@ -26,6 +75,14 @@ module Ww::ML
     lexer = Text::Lexer.new(source)
     parser = Text::Parser.new(lexer)
     parser.expression
+  rescue e : SyntaxError
+    {% if flag?(:mlerr) %}
+      col = e.column(source) 
+      STDERR.puts "SyntaxError: #{e.lineno(source) + 1}:#{col + 1}: #{e.message}"
+      STDERR.puts "  >>> #{e.line(source).insert(col, "‸")}"
+    {% end %}
+
+    raise e
   end
 
   EDGE_ALLOWED_DEFAULT = {TermType::Number, TermType::String, TermType::Symbol}

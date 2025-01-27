@@ -384,10 +384,6 @@ module Ww::ML::Text
             advance
             advance
             return Token.new(:"=>", pos - 2, pos)
-          when '`'
-            advance
-            advance
-            return Token.new(:"=`", pos - 2, pos)
           else
             return symbol
           end
@@ -406,26 +402,6 @@ module Ww::ML::Text
           return number
         when '"'
           return string
-        when '^'
-          case ahead
-          when ':'
-            advance
-            advance
-            return Token.new(:"^:", pos - 2, pos)
-          else
-            advance
-            return Token.new(:"^", pos - 1, pos)
-          end
-        when '\\'
-          case ahead
-          when ':'
-            advance
-            advance
-            return Token.new(:"\\:", pos - 2, pos)
-          else
-            advance
-            return Token.new(:"\\", pos - 1, pos)
-          end
         when '0'
           case ahead
           when '.', 'e', 'E'
@@ -441,19 +417,32 @@ module Ww::ML::Text
           advance
           return Token.new(:"]", pos - 1, pos)
         when '{'
-          advance
-          return Token.new(:"{", pos - 1, pos)
+          case ahead
+          when '_'
+            advance
+            advance
+            return Token.new(:"{_", pos - 2, pos)
+          else
+            advance
+            return Token.new(:"{", pos - 1, pos)
+          end
         when '}'
           advance
           return Token.new(:"}", pos - 1, pos)
         when '!', '$', '%', '&', '*', '.', '/', '>', '?', '_', '~', 'λ', '|', '∞', '°', '∈', '⊆', '⊂'
           return symbol
-        when '`'
-          advance
-          return Token.new(:"`", pos - 1, pos)
         when ':'
           advance
           return Token.new(:":", pos - 3, pos)
+        when '←'
+          if behind?.try(&.whitespace?)
+            raise "unexpected whitespace near `←`"
+          end
+          advance
+          if chr.whitespace?
+            raise "unexpected whitespace near `←`"
+          end
+          return Token.new(:"←", pos - 3, pos)
         when '→'
           advance
           return Token.new(:"→", pos - 3, pos)
@@ -466,9 +455,6 @@ module Ww::ML::Text
         when '⇒'
           advance
           return Token.new(:"=>", pos - 3, pos)
-        when '⟷'
-          advance
-          return Token.new(:"<->", pos - 3, pos)
         when '\''
           advance
           return Token.new(:"'", pos - 1, pos)
@@ -481,36 +467,9 @@ module Ww::ML::Text
         when '⋮'
           advance
           return Token.new(:"⋮", pos - 3, pos)
-        when '⤳'
-          advance
-          return Token.new(:"⤳", pos - 3, pos)
         when '⏏'
           advance
           return Token.new(:"⏏", pos - 3, pos)
-        when '←'
-          if behind?.try(&.whitespace?)
-            raise "unexpected whitespace near `←`"
-          end
-          advance
-          if chr.whitespace?
-            raise "unexpected whitespace near `←`"
-          end
-          return Token.new(:"←", pos - 3, pos)
-        when '⥆'
-          if behind?.try(&.whitespace?)
-            raise "unexpected whitespace near `⥆`"
-          end
-          advance
-          if chr.whitespace?
-            raise "unexpected whitespace near `⥆`"
-          end
-          return Token.new(:"⥆", pos - 3, pos)
-        when '⟅'
-          advance
-          return Token.new(:"⟅", pos - 3, pos)
-        when '⟆'
-          advance
-          return Token.new(:"⟆", pos - 3, pos)
         when '⟨'
           advance
           return Token.new(:"⟨", pos - 3, pos)
@@ -560,178 +519,174 @@ module Ww::ML::Text
       raise SyntaxError.new(message, @lexer.pos - 1)
     end
 
-    # Parses a parenthesized list assuming `(‸<...>`.
-    private def plist : Term
-      state = :open
-      reg = nil
-      list = Term[]
+    # Parses an entry assuming `<key>‸<...>`.
+    private def ppentry(key)
+      unless token = @lexer.ahead?
+        raise "unexpected end-of-input in entry"
+      end
 
-      while true
-        case state0 = state
-        when :open
-          list = list.transaction do |commit|
-            while token = @lexer.thru?
-              case token.type
-              when :")"
-                state = :closed
-                break
-              when :"¦"
-                state = :partition
-                break
-              end
-              expression(commit, token)
-            end
-          end
-        when :partition
-          pairs = Term[]
+      case token.type
+      when :":"
+        @lexer.thru?
 
-          while token = @lexer.thru?
-            case token.type
-            when :")"
-              state = :closed
-              break
-            end
+        value = slot
 
-            key = slot(token)
+        # NOTE: we only do this blank thingy in partition, so you can still do (x_: 100)
+        # if you for some reason want the key to be `x_` itself.
 
-            unless op = @lexer.ahead?
-              raise "unexpected end-of-input after partition"
-            end
-
-            case op.type
-            when :")"
-              @lexer.thru?
-
-              unless pairs.empty?
-                raise "pairs partition override cannot be combined with pairs"
-              end
-              pairs = key
-              state = :closed
-              break
-            when :":"
-              @lexer.thru?
-
-              pairs = pairs.with(key, slot)
-            when :"⋮"
-              @lexer.thru?
-
-              value = slot
-
-              raise "I refuse to do anything circular"
-              # Yay we're using the parser inside itself!!
-              # Term.case(key) do
-              #   givenpi %((%literal %let) name_ body_) do
-              #     pairs = pairs.with(name, {:"%default", value, key})
-              #   end
-
-              #   matchp %(_symbol) do
-              #     key0 = key.unsafe_as_sym
-
-              #     # The client wants to specify the type themselves.
-              #     if blank = key0.blank?
-              #       name = blank.name? || raise "unnamed blank with a default makes no sense"
-              #       pairs = pairs.with(name, {:"%default", value, key0})
-              #       next
-              #     end
-
-              #     # Infer the type from value and synthesize a symbol.
-              #     key1 = String.build do |io|
-              #       io << key0
-              #       value.type.blank(io)
-              #     end
-
-              #     pairs = pairs.with(key0, {:"%default", value, Term::Sym.new(key1)})
-              #   end
-
-              #   otherwise do
-              #     pairs = pairs.with(key, {:"%default", value, {:"%let", key, Term::Sym.new(value.type.blank)}})
-              #   end
-              # end
-            else
-              if pairs.empty? && key.type.symbol? && (blank = key.blank?) && blank.poly?
-                # ¦ pairs_*
-                state = :"%value*"
-                reg = blank.name?
-                break
-              elsif pairs.empty?
-                # ¦ pairs_ ...
-                # ¦ (x y z) ...
-                state = :"%layer"
-                reg = key
-                break
-              end
-
-              raise "unexpected token, expected ':' or '⋮'"
-            end
-          end
-
-          if state == :closed
-            list = Term[:"%partition", list, pairs]
-          end
-        when :"%value*"
-          name = reg.as(Term::Sym?)
-
-          # TODO: support multiple %value* pairs with %mux
-          body = Term[{:"%value*"}].transaction do |commit|
-            unless token = @lexer.thru?
-              raise "unexpected end-of-input before %value* key"
-            end
-
-            key = slot(token)
-
-            unless (op = @lexer.thru?) && op.type == :":"
-              raise "unexpected end-of-input after %value* key, expected ':'"
-            end
-
-            commit.append(key)
-            commit.append(slot)
-
-            unless (token = @lexer.thru?) && token.type == :")"
-              raise "unexpected character after %value* value, expected ')'"
-            end
-
-            state = :closed
-          end
-
-          if state == :closed
-            list = Term[:"%partition", list, name ? {:"%let", name, body} : body]
-          end
-        when :"%layer"
-          below = reg.as(Term)
-          side = Term::Dict.build do |commit|
-            unless token = @lexer.thru?
-              raise "unexpected end-of-input"
-            end
-
-            while true
-              key = slot(token)
-
-              unless (op = @lexer.thru?) && op.type == :":"
-                raise "unexpected end-of-input after %layer key, expected ':'"
-              end
-
-              commit.with(key, slot)
-
-              unless token = @lexer.thru?
-                raise "unexpected end-of-input after %layer value, expected another key-value pair or ')'"
-              end
-
-              if token.type == :")"
-                state = :closed
-                break
-              end
-            end
-          end
-
-          if state == :closed
-            list = Term[:"%partition", list, {:"%layer", below, side}]
-          end
-        when :closed
-          return list.upcast
+        unless (keysym = key.as_sym?) && (blank = keysym.blank?)
+          return key, value
         end
 
-        if state0 == state # Expect the state to change.
-          raise "expected closing ')'"
+        unless blank.single? && (name = blank.name?)
+          raise "expected a single named blank"
+        end
+
+        {name, Term.of(:"%let", name, value)}
+      when :"⋮"
+        @lexer.thru?
+          
+        value = slot
+
+        unless (keysym = key.as_sym?) && (blank = keysym.blank?)
+          capture = Term::Sym.new(String.build { |io| io << key << value.type.blank })
+
+          return key, Term.of(:"%optional", value, capture)
+        end
+
+        unless blank.single? && (name = blank.name?)
+          raise "expected a single named blank"
+        end
+
+        unless value.type.subtype?(blank.type)
+          raise "type mismatch: key says #{key.type.blank}, but default value is #{value.type.blank}"
+        end
+
+        {name, Term.of(:"%optional", value, key)}
+      else
+        unless (keysym = key.as_sym?) && (blank = keysym.blank?) && blank.single? && (name = blank.name?)
+          raise "can only use blanks for the entry capture shorthand: `¦ ... x_ ...` or `¦ ... x_number ...` but not `¦ ... 100`"
+        end
+
+        fullname = name.to(String)
+
+        # E.g. -x_ -x_number but not -_number -_
+        if fullname.prefixed_by?('-')
+          clearname = fullname.lchop
+          clearsym = Term::Sym.new(clearname)
+
+          {clearsym, Term.of(:"%-", blank.type.blank, clearsym)}
+        else
+          {name, key}
+        end
+      end
+    end
+
+    # Parses an entry assuming `‸<key><...>`.
+    private def ppentry
+      ppentry(slot)
+    end
+
+    private def pentrylist(terminator, initial = Term[])
+      entries = initial.commit
+
+      while true
+        unless token = @lexer.ahead?
+          raise "unexpected end-of-input, expected an entry or '#{terminator}'"
+        end
+
+        case token.type
+        when terminator
+          @lexer.thru?
+          return entries.resolve
+        else
+          key, value = ppentry
+          if key.in?(entries)
+            raise "duplicate key in dict: #{key}"
+          end
+          entries.with(key, value)
+        end
+      end
+    end
+
+    # Parses a list's pairspart assuming `¦‸<...>`.
+    private def ppairspart : Term
+      unless token = @lexer.ahead?
+        raise "unexpected end-of-input after '¦'"
+      end
+
+      # If `¦ ‸)` then this is an empty pairspart.
+      if token.type == :")"
+        @lexer.thru?
+
+        return Term.of
+      end
+
+      head = slot
+
+      unless token = @lexer.ahead?
+        raise "unexpected end-of-input"
+      end
+
+      case token.type
+      when :")"
+        # If `¦ <head>‸)` then this is a pairspart override.
+        @lexer.thru?
+        head
+      when :":", :"⋮"
+        # If `¦ <head>‸: ...` or `¦ <head>‸⋮ ...` then this is a closed pairspart.
+        key, value = ppentry(head) 
+        Term.of(pentrylist(:")", initial: Term[].with(key, value)))
+      else
+        # Otherwise this is an open itemspart (%layer).
+        Term.of(:"%layer", head, pentrylist(:")"))
+      end
+    end
+
+    # Parses a parenthesized list assuming `(‸<...>`.
+    private def plist : Term
+      list = Term[].commit
+      prev = nil
+
+      while true
+        unless token = @lexer.ahead?
+          raise "unexpected end-of-input, expected item, '¦', or ')'"
+        end
+
+        case token.type
+        when :")"
+          @lexer.thru?
+
+          list.append(prev) if prev
+
+          return Term.of(list.resolve)
+        when :":"
+          @lexer.thru?
+
+          unless key = prev
+            raise "':' must be preceded by a key"
+          end
+
+          if key.in?(list)
+            raise "duplicate key in dict: #{key}"
+          end
+
+          list.with(key, slot)
+
+          prev = nil
+        when :"¦"
+          unless list.pairsize.zero?
+            raise "cannot combine '¦' with pairs, this leaves pairs in the itemspart"
+          end
+
+          @lexer.thru?
+
+          list.append(prev) if prev
+
+          return Term.of(:"%partition", list.resolve, ppairspart)
+        else
+          list.append(prev) if prev
+          prev = slot
         end
       end
     end
@@ -803,30 +758,7 @@ module Ww::ML::Text
         # that '←' becomes useful.
         @lexer.thru?
         Term.of(:"%let", lhs, slot)
-      when :"⥆" # "lhs_ ⥆ rhs_" -> (%let* lhs rhs)
-        @lexer.thru?
-        Term.of(:"%let*", lhs, slot)
       end
-    end
-
-    # "Find somewhere" pattern shorthand. ⟅...⟆ = (_* ... _* ¦ _) -> (%partition (_* ... _*) _)
-    private def psomewhere : Term
-      list = Term[].transaction do |commit|
-        commit.append(:"_*")
-
-        while token = @lexer.thru?
-          case token.type
-          when :"⟆"
-            break
-          end
-
-          expression(commit, token)
-        end
-
-        commit.append(:"_*")
-      end
-
-      Term.of(:"%partition", list, :_)
     end
 
     private def pitem : Term
@@ -850,22 +782,15 @@ module Ww::ML::Text
       term =
         case token.type
         when :term  then token.term
-        when :"⟅"   then psomewhere
         when :"⟨"   then pitem
         when :"("   then plist
         when :"["   then litemspart
         when :"{"   then dict
+        when :"{_"  then Term.of(:"%partition", :_, {:"%layer", :_, pentrylist(:"}")})
         when :"→"   then Term.of(:"$my", slot)
         when :"↑"   then Term.of(:"$up", slot)
         when :"↓"   then Term.of(:"$down", slot)
         when :"'"   then Term.of(:hold, slot)
-        when :"`"   then Term.of(:embed, slot)
-        when :"=`"  then Term.of(:eval, {:embed, slot})
-        when :"^"   then Term.of(:place, {:leaf, slot})
-        when :"^:"  then Term.of(:paste, {:leaf, slot})
-        when :"\\"  then Term.of(:place, slot)
-        when :"\\:" then Term.of(:paste, {:"to-dict", slot})
-        when :"⤳"   then Term.of(:"%dep", slot)
         when :"⏏"   then Term.of(:"%slot", slot)
         when :"≡"   then Term.of(:"%nonself", slot)
         when :"@"

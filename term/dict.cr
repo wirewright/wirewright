@@ -187,6 +187,10 @@ module Ww
         (@dict || @parent).items.size
       end
 
+      def pairsize : Int32
+        size - itemsize
+      end
+
       # Runs `Dict#[]?` on the dictionary built so far.
       def []?(key) : Term?
         (@dict || @parent)[key]?
@@ -931,9 +935,13 @@ module Ww
     # the dictionary was changed but then the changes were reverted, this method
     # will return a new dictionary.
     def transaction(& : Commit ->) : Dict
-      commit = Commit.new(self, Pf.fiber_id)
+      commit = self.commit
       yield commit
       commit.resolve
+    end
+
+    def commit : Commit
+      Commit.new(self, Pf.fiber_id)
     end
 
     def replace(& : Term, Term -> Term?) : Dict

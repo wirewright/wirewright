@@ -1732,6 +1732,7 @@ module ::Ww::M1::Operator
     Env.feedback(envs, fallback: behind0.env)
   end
 
+  # TODO: cache on {op.pattern, subt} level when that's going to be cheap enough
   def match(behind0, op : New, matchee : Term, ahead0)
     # If we already know all the subjects, this is the best case and an immediate
     # fast path toward instantiation.
@@ -2649,13 +2650,6 @@ module ::Ww::M1
   SYM_GTE = Term.of(:>=)
   SYM_INF = Term.of(:∞)
 
-  SYM_BLANK_ANY     = Term[:_]
-  SYM_BLANK_DICT    = Term[:_dict]
-  SYM_BLANK_NUMBER  = Term[:_number]
-  SYM_BLANK_SYMBOL  = Term[:_symbol]
-  SYM_BLANK_STRING  = Term[:_string]
-  SYM_BLANK_BOOLEAN = Term[:_boolean]
-
   # Contains methods, constants, etc. that work together to implement `M1.normal`.
   module Normal
     extend self
@@ -2746,14 +2740,7 @@ module ::Ww::M1
     )
 
     private def typesym(blank : Term::Sym::Blank) : Term::Sym
-      case blank.type
-      in .any?     then SYM_BLANK_ANY
-      in .number?  then SYM_BLANK_NUMBER
-      in .symbol?  then SYM_BLANK_SYMBOL
-      in .string?  then SYM_BLANK_STRING
-      in .boolean? then SYM_BLANK_BOOLEAN
-      in .dict?    then SYM_BLANK_DICT
-      end
+      blank.type.blank
     end
 
     # Returns the normal form of an item sequence *node*.
