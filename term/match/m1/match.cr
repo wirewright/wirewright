@@ -1,6 +1,6 @@
 module Ww::M1::Operator
   def match(behind0, op : Pass, matchee : Term, ahead0)
-    ahead0.call(behind0)
+    Ahead.tr(behind0, ahead0)
   end
 
   def match(behind0, op : Num, matchee : Term, ahead0)
@@ -23,7 +23,7 @@ module Ww::M1::Operator
       return Fb::Mismatch.new(behind0.env)
     end
 
-    ahead0.call(behind0)
+    Ahead.tr(behind0, ahead0)
   end
 
   {% for opcls, type in { Str => :string, Sym => :symbol, Boolean => :boolean, Dict => :dict } %}
@@ -32,7 +32,7 @@ module Ww::M1::Operator
         return Fb::Mismatch.new(behind0.env)
       end
 
-      ahead0.call(behind0)
+      Ahead.tr(behind0, ahead0)
     end
   {% end %}
 
@@ -41,7 +41,7 @@ module Ww::M1::Operator
       return Fb::Mismatch.new(behind0.env)
     end
 
-    ahead0.call(behind0)
+    Ahead.tr(behind0, ahead0)
   end
 
   def match(behind0, op : Pairsonly, matchee : Term, ahead0)
@@ -49,7 +49,7 @@ module Ww::M1::Operator
       return Fb::Mismatch.new(behind0.env)
     end
 
-    ahead0.call(behind0)
+    Ahead.tr(behind0, ahead0)
   end
 
   def match(behind0, op : SketchSubset, matchee : Term, ahead0)
@@ -65,7 +65,7 @@ module Ww::M1::Operator
       return Fb::Mismatch.new(behind0.env)
     end
 
-    ahead0.call(behind0)
+    Ahead.tr(behind0, ahead0)
   end
 
   def match(behind0, op : BoundsGuard, matchee : Term, ahead0)
@@ -113,7 +113,7 @@ module Ww::M1::Operator
       return Fb::Mismatch.new(behind0.env)
     end
 
-    ahead0.call(behind0)
+    Ahead.tr(behind0, ahead0)
   end
 
   def match(behind0, op : Capture, matchee : Term, ahead0)
