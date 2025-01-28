@@ -1,9 +1,9 @@
 module Ww::M0
   # An object that helps you validate dictionary pairsparts. Acts as an M0 alternative
   # for pairspart patterns. For example, while in M1 you can simply `(... ¦ x⋮ 100)`
-  # to create an optional pair, here in M0 without PairSchema the check would have to
+  # to create an optional pair, here in M0 without PairSchema the logic would have to
   # be encoded in Crystal. PairSchema helps to automate that, and is in a sense in
-  # between: you still encode the checks in Crystal, but yet, declaratively rather
+  # between: you still encode the constraints in Crystal, but yet, declaratively rather
   # than imperatively; once and in a reusable manner. The rest is automated away.
   struct PairSchema
     # :nodoc:
@@ -128,9 +128,7 @@ module Ww::M0
       good = dict0
       bad = dict0.transaction do |commit|
         @pairs.each do |pair|
-          unless good = pair.enriched?(good)
-            return # Validation failed
-          end
+          good = pair.enriched?(good) || return # Validation failed
   
           commit.without(pair.key)
         end

@@ -121,12 +121,12 @@ module Ww::M0
     end
   end
 
-  def matches(pattern : Term, matchee : Term, *, env env0 = Term[]) : Array(Term::Dict)
-    unless env1 = match?(pattern, matchee, env: env0)
-      return [] of Term::Dict
-    end
-
-    [env1]
+  # Exists for minor API compatibility with `M1`, simply wraps the result of
+  # `match?` in an array as if more than one match is possible (like in M1);
+  # even though only zero (mismatch) or one match is ever going to be returned.
+  def matches(pattern : Term, matchee : Term, *, env = Term[]) : Array(Term::Dict)
+    env = match?(pattern, matchee, env: env)
+    env ? [env] : [] of Term::Dict
   end
 end
 
