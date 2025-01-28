@@ -647,7 +647,7 @@ class ::Ww::Keypath::Appender
     Appender.new(@preds, tip1)
   end
 
-  # The upcoming appender will update the key *term* of an existing entry. Its value
+  # The returned appender will update the key *term* of an existing entry. Its value
   # is preserved. If the updated key collides with some existing key, the updated
   # key's value wins.
   def update_key(term) : Appender
@@ -659,7 +659,7 @@ class ::Ww::Keypath::Appender
     end
   end
 
-  # The upcoming appender will update the value of an existing entry with the given *key*.
+  # The returned appender will update the value of an existing entry with the given *key*.
   def update_value(key) : Appender
     case @tip
     in Word::None, Word::Nonterminal
@@ -669,7 +669,7 @@ class ::Ww::Keypath::Appender
     end
   end
 
-  # The upcoming appender will modify entries left after removing keys from *ee*. Each
+  # The returned appender will modify entries left after removing keys from *ee*. Each
   # element of *ee* is converted to a Term using the block.
   def delete_keys(ee : Enumerable(T), & : T -> Term) : Appender forall T
     case @tip
@@ -684,19 +684,19 @@ class ::Ww::Keypath::Appender
     end
   end
 
-  # Word-less variant of `delete_keys`.
+  # Block-less variant of `delete_keys`.
   def delete_keys(keys : Enumerable(Term)) : Appender
     delete_keys(keys, &.itself)
   end
 
-  # Word-less variant of `delete_keys`.
+  # Block-less variant of `delete_keys`.
   def delete_keys(keys : Term::Dict) : Appender
     delete_keys(keys.items)
   end
 
-  # Rather than targeting a single item with `update`, targets a range of items.
-  # The size of the range is set by *size*. This is a **terminal** node: any upcoming
-  # appender will be invalid.
+  # Converts an `update` targeting one item into an update targeting a range of items.
+  # The size of the range is set by *size*. The returned appender is a **terminal** one:
+  # appending anything to it will fail.
   def span(size, *, ord = 0u32) : Appender
     case tip = @tip
     when Word::UpdateValue
@@ -708,9 +708,9 @@ class ::Ww::Keypath::Appender
     end
   end
 
-  # Creates a pair with the given *key*. This is a **terminal** node: there is
-  # nothing to modify with the upcoming appender, since the value to be modified in
-  # fact does not exist.
+  # Creates a pair with the given *key*. The returned appender is a **terminal** one:
+  # there is nothing to modify with it, since the value to be modified in fact does
+  # not exist.
   def create_pair(key) : Appender
     case @tip
     in Word::None, Word::Nonterminal
@@ -720,8 +720,8 @@ class ::Ww::Keypath::Appender
     end
   end
 
-  # Creates a pair with the given *key* and *value*. The upcoming appender will
-  # modify *value*.
+  # Creates a pair with the given *key* and *value*. The returned appender will
+  # be modifying *value*.
   def create_pair(key, *, value) : Appender
     case @tip
     in Word::None, Word::Nonterminal
@@ -731,8 +731,8 @@ class ::Ww::Keypath::Appender
     end
   end
 
-  # Converts an `update_value` of a single item into an insert of *value* before that item.
-  # The upcoming appender will modify *value*.
+  # Converts an `update_value` of a single item into an insert of *value* before
+  # that item. The returned appender will be modifying *value*.
   def insert_item(value, *, ord = 0) : Appender
     case tip = @tip
     when Word::UpdateValue
@@ -742,7 +742,7 @@ class ::Ww::Keypath::Appender
     end
   end
 
-  # Moves a numeric `update_value` *n* times forward.
+  # Shifts a numeric `update_value` *n* items forward.
   def forward(n = 1) : Appender
     case tip = @tip
     when Word::UpdateValue
@@ -752,12 +752,12 @@ class ::Ww::Keypath::Appender
     end
   end
 
-  # Moves a numeric `update_value` *n* times backward.
+  # Shifts a numeric `update_value` *n* items backward.
   def backward(n = 1) : Appender
     forward(-n)
   end
 
-  # Returns the keypath dict built so far.
+  # Returns the keypath dict that this appender constructed so far.
   def keypath : Term::Dict
     case tip = @tip
     in Word::None then @preds
