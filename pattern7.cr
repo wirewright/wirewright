@@ -399,22 +399,6 @@ module ::Ww::M1::Operator
   alias AllIsolated = ScanAllIsolated | DfsAllIsolated | BfsAllIsolated | EntriesAllIsolated
   alias All = ScanAll | DfsAll | BfsAll | EntriesAll
 
-  INSTANCE_SYM = Sym.new
-
-  defcase Sym
-
-  INSTANCE_STR = Str.new
-
-  defcase Str
-
-  INSTANCE_BOOLEAN = Boolean.new
-
-  defcase Boolean
-
-  INSTANCE_DICT = Dict.new
-
-  defcase Dict
-
   defcase Itemsonly
   defcase Pairsonly
   defcase SketchSubset, sketch : Term::Dict::Sketch, successor : Any
@@ -932,16 +916,6 @@ class KeypathQuery
 end
 
 module ::Ww::M1::Operator
-  {% for opcls, type in { Str => :string, Sym => :symbol, Boolean => :boolean, Dict => :dict } %}
-    def match(behind0, op : {{opcls}}, matchee : Term, ahead0)
-      unless matchee.type.{{type.id}}?
-        return Fb::Mismatch.new(behind0.env)
-      end
-
-      ahead0.call(behind0)
-    end
-  {% end %}
-
   def match(behind0, op : Itemsonly, matchee : Term, ahead0)
     unless (dict = matchee.as_d?) && dict.itemsonly?
       return Fb::Mismatch.new(behind0.env)

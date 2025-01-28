@@ -18,4 +18,14 @@ module Ww::M1::Operator
       new(min: min, max: max, options: Options.new(options))
     end
   end
+
+  INSTANCE_SYM = Sym.new
+  INSTANCE_STR = Str.new
+  INSTANCE_BOOLEAN = Boolean.new
+  INSTANCE_DICT = Dict.new
+
+  defcase Sym
+  defcase Str
+  defcase Boolean
+  defcase Dict
 end

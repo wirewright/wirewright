@@ -25,4 +25,14 @@ module Ww::M1::Operator
 
     ahead0.call(behind0)
   end
+
+  {% for opcls, type in { Str => :string, Sym => :symbol, Boolean => :boolean, Dict => :dict } %}
+    def match(behind0, op : {{opcls}}, matchee : Term, ahead0)
+      unless matchee.type.{{type.id}}?
+        return Fb::Mismatch.new(behind0.env)
+      end
+
+      ahead0.call(behind0)
+    end
+  {% end %}
 end

@@ -1,6 +1,6 @@
 ## Matching anything
 
-If you need to match any term at all, you should use the pass operator. The pass operator
+If you need to match any term whatsoever, you should use the pass operator. The pass operator
 is invoked whenever you use a *nameless AND typeless blank*: `_`. The pass operator is
 also implicit in named but typeless blanks: `x_` is understood as `x←_` which is a shorthand
 for `(%let x _)`, which means "capture anything and call that x".
@@ -21,8 +21,9 @@ You can match numbers in several different ways, with more or less discretion.
 
 ### Matching any number
 
-If you only care that something is a number and that's all, use `_number`; it is a type check
-and nothing more. Similarly, `x_number` is understood as `x←_number` and so on.
+If you only care whether something is a number or not, use `_number`; `_number` is a type check
+and nothing more. Similarly, `x_number` is understood as `x←_number` and so on. `_number` here
+means "any number".
 
 An alternative and a "gateway" to more sophistication is `(%number _)`. It also matches any
 number whatsoever. In fact, `_number` is a shorthand for `(%number _)`.
@@ -75,7 +76,7 @@ Speaking of 8-bit integers, there is also a series of shorthands for matching th
 appearing fixed-width numeric types. The previous 8-bit number pattern is the expanded form
 of `(%number u8)`. There is also `(%number u16)`, u32, u64, and u128 for unsigned; and similarly
 `(%number i8)`, i16, i32, i64, and i128 for signed fixed-width types. If for some reason you only
-want to match the positive or negative ranges of the signed types, you can prepend as sign `+` or
+want to match the positive or negative ranges of the signed types, you can prepend a sign `+` or
 `-` to the type: `(%number -i8)` will only match the negative end and `(%number +i8)` will match
 the positive end **and zero** of the range for the signed type `i8`. Similarly for i16, i32, and
 so on:
@@ -95,6 +96,66 @@ so on:
 (side 0)     ;; => right
 (side 10)    ;; => right
 ```
+
+## Matching symbols
+
+Symbols specifically can be matched by `_symbol` or similarly `x_symbol` (understood as `x←_symbol`
+and so on). `_symbol` here stands for "any symbol".
+
+A symbol's only feature is its identity. Other than that there is nothing in it. No operators other
+than `_symbol` work with symbols specifically.
+
+```wwml
+(lamp on) => (ok "turned the lamp on")
+(lamp off) => (ok "turned the lamp off")
+(lamp _symbol) => (err "what?")
+```
+
+## Matching strings
+
+Strings specifically can be matched by `_string` or similarly `x_string`.
+
+The companion operator `%string` (like we have `%number`) is being developed. With `%string`, you
+will be able to pattern match inside strings (like regex, but tightly integrated into the pattern
+matching/backmap process).
+
+```wwml
+(known? "John Doe") => true
+(known? "Sarah Doe") => true
+(known? _string) => false
+
+;; Not implemented:
+;;
+;; (date (%string "d<4>:year '- d<2>:month '- d<2>:day")) => (ok (date year month day))
+;; (date _string) => (err "invalid date")
+```
+
+We've decided that in Wirewright, string patterns are going to be on the "outside"
+and literal content will have to be escaped. This is in opposition to e.g. PCRE, where
+literal content is on the outside and patterns have to be escaped.
+
+This simplifies working with literal content somewhat. For instance, the algorithm to
+convert an arbitrary string into a pattern is to surround it with `[]`, breaking at `[`
+and `]` inside the string and escaping them using the `'` single-character escape as in `'[`.
+
+Putting patterns on the "outside" also makes them a tiny bit more readable (although not by much).
+
+## Matching booleans
+
+To match any boolean, use `_boolean` or similarly `x_boolean`.
+
+```wwml
+(bool? _boolean) => true
+(bool? _) => false
+```
+
+## Matching dictionaries
+
+To match any dictionary, use `_dict` or similarly `x_dict`.
+
+There are many `%`-operators that match dictionaries. In fact, almost all `%`-operators
+match dictionaries. They are going to be described separately. In this section we will only
+describe non-`%`ones.
 
 ## `%new`
 
