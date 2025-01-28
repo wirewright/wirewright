@@ -152,7 +152,7 @@ module Search::Result
 
   alias Any = Item | Pair | ItemStrip
 
-  record Item, term : Term, keypath : KeypathQuery? do
+  record Item, term : Term, keypath : Keypath::Appender? do
     include Result
 
     def each(& : Term ->) : Nil
@@ -164,7 +164,7 @@ module Search::Result
     end
   end
 
-  record Pair, k : Term, v : Term, keypath : {KeypathQuery, KeypathQuery}? do
+  record Pair, k : Term, v : Term, keypath : {Keypath::Appender, Keypath::Appender}? do
     include Result
 
     def each(& : Term ->) : Nil
@@ -173,7 +173,7 @@ module Search::Result
     end
   end
 
-  record ItemStrip, view : Term::Dict::ItemsView, keypath : KeypathQuery? do
+  record ItemStrip, view : Term::Dict::ItemsView, keypath : Keypath::Appender? do
     include Result
 
     def each(& : Term ->) : Nil
@@ -390,7 +390,7 @@ end
 #   are not, fix that. In fact, Operator should probably be renamed to Subject or something
 #   like that. Not sure how large of a refactor that is, and how much point is there in it.
 module ::Ww::M1::Operator
-  alias Any = Pass | Num | Sym | Boolean | Dict | Itemsonly | Pairsonly | SketchSubset | Bounds | BoundsGuard | MaxDepth | DictGuard | Literal | Capture | ItemSequence | ItemFirst | ItemLast | ItemBlock | Itemspart | Pairspart | Partition | Edge | LiteralChoices | EitherSource | KeyValue | Keypool | Span | Tally | Bin | Both | Not | Layer | ScanFirst | ScanSource | ScanAll | ScanAllIsolated | DfsFirst | DfsSource | DfsAllIsolated | DfsAll | BfsFirst | BfsAllIsolated | BfsAll | Value | NegativeValue | NegativeValueKeypath | EntriesFirst | EntriesSource | EntriesAllIsolated | EntriesAll | Str | New | Keypath
+  alias Any = Pass | Num | Sym | Boolean | Dict | Itemsonly | Pairsonly | SketchSubset | Bounds | BoundsGuard | MaxDepth | DictGuard | Literal | Capture | ItemSequence | ItemFirst | ItemLast | ItemBlock | Itemspart | Pairspart | Partition | Edge | LiteralChoices | EitherSource | KeyValue | Keypool | Span | Tally | Bin | Both | Not | Layer | ScanFirst | ScanSource | ScanAll | ScanAllIsolated | DfsFirst | DfsSource | DfsAllIsolated | DfsAll | BfsFirst | BfsAllIsolated | BfsAll | Value | NegativeValue | NegativeValueKeypath | EntriesFirst | EntriesSource | EntriesAllIsolated | EntriesAll | Str | New | KeypathCapture
 
   alias Bin = Add | Sub | Mul | Div | Tdiv | Mod | Pow | Map
 
@@ -483,7 +483,7 @@ module ::Ww::M1::Operator
   end
 
   defcase New, subjects : Array(Term), pattern : Term
-  defcase Keypath, capture : Term
+  defcase KeypathCapture, capture : Term
 end
 
 alias Magnitude = Float32
@@ -623,283 +623,145 @@ module ::Ww::M1::Operator::Fb
   end
 end
 
-# A query-like, chainable API for incremental construction of keypaths.
-class KeypathQuery
+module ::Ww::Keypath
+end
+
+class ::Ww::Keypath::Appender
   # :nodoc:
-  module Tip
-    extend self
-
-    alias Any = None | Some
-    alias Some = Terminal | Nonterminal
-
-    alias Terminal = Range | CreateLeaf
-    alias Nonterminal = UpdateKey | UpdateValue | Delete | Create | Insert
-
-    record None
-
-    record Create, key : Term, initial : Term
-    record CreateLeaf, key : Term
-
-    record Insert, index : Term::Num, ord : UInt32, initial : Term
-
-    record UpdateKey, key : Term
-    record UpdateValue, key : Term
-
-    record Range, b : Int32, e : Int32, ord : UInt32
-
-    record Delete, keys : Term::Dict
-
-    def render(tip : Create)
-      {Term.of(:create, tip.key, tip.initial)}
-    end
-
-    def render(tip : CreateLeaf)
-      {Term.of(:"create-leaf", tip.key)}
-    end
-
-    def render(tip : Insert)
-      {Term.of(:insert, tip.index, tip.ord, tip.initial)}
-    end
-
-    def render(tip : UpdateKey)
-      {Term.of(:pair, tip.key), Term.of(:key)}
-    end
-
-    def render(tip : UpdateValue)
-      {Term.of(:pair, tip.key), Term.of(:value)}
-    end
-
-    def render(tip : Range)
-      {Term.of(:range, tip.b, tip.e, tip.ord)}
-    end
-
-    def render(tip : Delete)
-      {Term.of(:residue, tip.keys)}
-    end
-
-    # # If I am key, the ahead is either self or value. Otherwise Keypath is invalid.
-    # def parse(subject : Term) : Some
-    #   Term.case(subject, engine: M0) do
-    #     matchpi %[(key term_)] do
-    #       Key.new(term)
-    #     end
-
-    #     matchpi %[self] do
-    #       Self.new
-    #     end
-
-    #     matchpi %[value] do
-    #       Value.new
-    #     end
-
-    #     matchpi %[(residue keys_dict)] do
-    #       Delete.new(keys.itemspart)
-    #     end
-
-    #     matchpi %[(range b_number e_number ord_number)] do
-    #       Range.new(b.to(Int32), e.to(Int32), ord.to(UInt32))
-    #     end
-
-    #     matchpi %[(ephemeral key_)] do
-    #       CreateLeaf.new(key)
-    #     end
-
-    #     matchpi %[(ephemeral key_ initial_)] do
-    #       Create.new(key, initial)
-    #     end
-
-    #     matchpi %[(ephemeral index_number ord_number initial_)] do
-    #       Insert.new(index.unsafe_as_n, ord.to(UInt32), initial)
-    #     end
-
-    #     otherwise do
-    #       raise KeypathError.new
-    #     end
-    #   end
-    # end
-
-    # def substructure?(tip : Create, matchee : Term) : Term?
-    #   tip.initial
-    # end
-
-    # def substructure?(tip : CreateLeaf, matchee : Term) : Term?
-    # end
-
-    # def substructure?(tip : Insert, matchee : Term) : Term?
-    #   tip.initial
-    # end
-
-    # def substructure?(tip : UpdateKey, matchee : Term) : Term?
-    #   tip.term
-    # end
-
-    # def substructure?(tip : UpdateValue, matchee : Term) : Term?
-    #   matchee[tip.key]?
-    # end
-
-    # def substructure?(tip : Range, matchee : Term) : Term?
-    # end
-
-    # def substructure?(tip : Delete, matchee : Term) : Term?
-    #   Term.of(matchee &- tip.keys.items)
-    # end
+  def initialize(@preds : Term::Dict, @tip : Word::None | Word::Terminal | Word::Nonterminal)
   end
 
   # :nodoc:
-  def initialize(@preds : Term::Dict, @tip : Tip::Any)
-  end
+  EMPTY = Appender.new(preds: Term[], tip: Word::None.new)
 
-  # :nodoc:
-  EMPTY = KeypathQuery.new(preds: Term[], tip: Tip::None.new)
-
-  # Constructs an empty keypath query object.
-  def self.new : KeypathQuery
+  # Constructs an empty keypath appender.
+  def self.new : Appender
     EMPTY
   end
 
-  # Constructs a keypath query object by parsing *keypath*. Raises `KeypathError`
-  # if *keypath* cannot be parsed.
-  def self.new(keypath : Term::Dict) : KeypathQuery
-    unless keypath.itemsonly?
-      raise KeypathError.new
-    end
-
-    unless tail = keypath.items.last?
-      return new
-    end
-
-    preds, tip = Tip.parse(keypath.items.grow(-1), tail)
-
-    new(preds.collect, tip)
+  private def push(tip1 : Word::Some) : Appender
+    Appender.new(keypath, tip1)
   end
 
-  private def push(tip1 : Tip::Some) : KeypathQuery
-    KeypathQuery.new(keypath, tip1)
+  private def replace(tip1 : Word::Some) : Appender
+    Appender.new(@preds, tip1)
   end
 
-  private def replace(tip1 : Tip::Some) : KeypathQuery
-    KeypathQuery.new(@preds, tip1)
-  end
-
-  # The upcoming query will update the key *term* of an existing entry. Its value
+  # The upcoming appender will update the key *term* of an existing entry. Its value
   # is preserved. If the updated key collides with some existing key, the updated
   # key's value wins.
-  def update_key(term) : KeypathQuery
+  def update_key(term) : Appender
     case @tip
-    in Tip::None, Tip::Nonterminal
-      push Tip::UpdateKey.new(Term.of(term))
-    in Tip::Terminal
+    in Word::None, Word::Nonterminal
+      push Word::UpdateKey.new(Term.of(term))
+    in Word::Terminal
       raise KeypathError.new
     end
   end
 
-  # The upcoming query will update the value of an existing entry with the given *key*.
-  def update_value(key) : KeypathQuery
+  # The upcoming appender will update the value of an existing entry with the given *key*.
+  def update_value(key) : Appender
     case @tip
-    in Tip::None, Tip::Nonterminal
-      push Tip::UpdateValue.new(Term.of(key))
-    in Tip::Terminal
+    in Word::None, Word::Nonterminal
+      push Word::UpdateValue.new(Term.of(key))
+    in Word::Terminal
       raise KeypathError.new
     end
   end
 
-  # The upcoming query will modify entries left after removing keys from *ee*. Each
+  # The upcoming appender will modify entries left after removing keys from *ee*. Each
   # element of *ee* is converted to a Term using the block.
-  def delete_keys(ee : Enumerable(T), & : T -> Term) : KeypathQuery forall T
+  def delete_keys(ee : Enumerable(T), & : T -> Term) : Appender forall T
     case @tip
-    in Tip::None, Tip::Nonterminal
+    in Word::None, Word::Nonterminal
       keys = Term[].transaction do |commit|
         ee.each { |object| commit << yield object }
       end
 
-      push Tip::Delete.new(keys)
-    in Tip::Terminal
+      push Word::Delete.new(keys)
+    in Word::Terminal
       raise KeypathError.new
     end
   end
 
-  # Block-less variant of `delete_keys`.
-  def delete_keys(keys : Enumerable(Term)) : KeypathQuery
+  # Word-less variant of `delete_keys`.
+  def delete_keys(keys : Enumerable(Term)) : Appender
     delete_keys(keys, &.itself)
   end
 
-  # Block-less variant of `delete_keys`.
-  def delete_keys(keys : Term::Dict) : KeypathQuery
+  # Word-less variant of `delete_keys`.
+  def delete_keys(keys : Term::Dict) : Appender
     delete_keys(keys.items)
   end
 
   # Rather than targeting a single item with `update`, targets a range of items.
   # The size of the range is set by *size*. This is a **terminal** node: any upcoming
-  # query will be invalid.
-  def span(size, *, ord = 0u32) : KeypathQuery
+  # appender will be invalid.
+  def span(size, *, ord = 0u32) : Appender
     case tip = @tip
-    when Tip::UpdateValue
+    when Word::UpdateValue
       b = tip.key.to(Int32)
       e = b + size
-      replace Tip::Range.new(b, e, ord)
+      replace Word::Range.new(b, e, ord)
     else
       raise KeypathError.new
     end
   end
 
   # Creates a pair with the given *key*. This is a **terminal** node: there is
-  # nothing to modify with the upcoming query, since the value to be modified in
+  # nothing to modify with the upcoming appender, since the value to be modified in
   # fact does not exist.
-  def create_pair(key) : KeypathQuery
+  def create_pair(key) : Appender
     case @tip
-    in Tip::None, Tip::Nonterminal
-      push Tip::CreateLeaf.new(Term.of(key))
-    in Tip::Terminal
+    in Word::None, Word::Nonterminal
+      push Word::CreateLeaf.new(Term.of(key))
+    in Word::Terminal
       raise KeypathError.new
     end
   end
 
-  # Creates a pair with the given *key* and *value*. The upcoming query will
+  # Creates a pair with the given *key* and *value*. The upcoming appender will
   # modify *value*.
-  def create_pair(key, *, value) : KeypathQuery
+  def create_pair(key, *, value) : Appender
     case @tip
-    in Tip::None, Tip::Nonterminal
-      push Tip::Create.new(Term.of(key), Term.of(value))
-    in Tip::Terminal
+    in Word::None, Word::Nonterminal
+      push Word::Create.new(Term.of(key), Term.of(value))
+    in Word::Terminal
       raise KeypathError.new
     end
   end
 
   # Converts an `update_value` of a single item into an insert of *value* before that item.
-  # The upcoming query will modify *value*.
-  def insert_item(value, *, ord = 0) : KeypathQuery
+  # The upcoming appender will modify *value*.
+  def insert_item(value, *, ord = 0) : Appender
     case tip = @tip
-    when Tip::UpdateValue
-      replace Tip::Insert.new(tip.key.as_n, ord, Term.of(value))
+    when Word::UpdateValue
+      replace Word::Insert.new(tip.key.as_n, ord, Term.of(value))
     else
       raise KeypathError.new
     end
   end
 
   # Moves a numeric `update_value` *n* times forward.
-  def forward(n = 1) : KeypathQuery
+  def forward(n = 1) : Appender
     case tip = @tip
-    when Tip::UpdateValue
-      replace Tip::UpdateValue.new(Term.of(tip.key + n))
+    when Word::UpdateValue
+      replace Word::UpdateValue.new(Term.of(tip.key + n))
     else
       raise KeypathError.new
     end
   end
 
   # Moves a numeric `update_value` *n* times backward.
-  def backward(n = 1) : KeypathQuery
+  def backward(n = 1) : Appender
     forward(-n)
   end
 
-  # Renders this query into a keypath.
+  # Returns the keypath dict built so far.
   def keypath : Term::Dict
     case tip = @tip
-    in Tip::None
-      @preds
-    in Tip::Some
-      steps = Tip.render(tip)
-
-      @preds.transaction &.concat(steps)
+    in Word::None then @preds
+    in Word::Some then @preds.transaction &.concat(Word.terms(tip))
     end
   end
 end
@@ -1530,7 +1392,7 @@ module ::Ww::M1::Operator
     Env.feedback(envs, fallback: behind0.env)
   end
 
-  def match(behind0, op : Keypath, matchee : Term, ahead0)
+  def match(behind0, op : KeypathCapture, matchee : Term, ahead0)
     unless keypath = behind0.keypath?
       # We're not running in keypath mode. Send a back-message all the way up
       # the call stack to where the match was initiated; ask them to rematch
@@ -1558,7 +1420,7 @@ module ::Ww::M1::Operator
       @captures = Term[],
       @domains = Term[],
       @antidomains = Term[],
-      @keypath : KeypathQuery? = nil,
+      @keypath : Keypath::Appender? = nil,
     )
     end
 
@@ -1599,16 +1461,16 @@ module ::Ww::M1::Operator
       change(captures: @captures.with(:"(keypaths)", keypaths1))
     end
 
-    def mount(capture : Term, kpq : KeypathQuery)
-      mount(capture, kpq.keypath)
+    def mount(capture : Term, kpb : Keypath::Appender)
+      mount(capture, kpb.keypath)
     end
 
     def mount(capture : Term)
-      @keypath.try { |kpq| mount(capture, kpq) } || self
+      @keypath.try { |kpb| mount(capture, kpb) } || self
     end
 
-    def mount(capture : Term, & : KeypathQuery -> KeypathQuery)
-      @keypath.try { |kpq| mount(capture, yield kpq) } || self
+    def mount(capture : Term, & : Keypath::Appender -> Keypath::Appender)
+      @keypath.try { |kpb| mount(capture, yield kpb) } || self
     end
 
     def import_keypaths(env : Term::Dict)
@@ -1622,17 +1484,17 @@ module ::Ww::M1::Operator
       behind1
     end
 
-    def keypath? : KeypathQuery?
+    def keypath? : Keypath::Appender?
       @keypath
     end
 
-    def keypath(& : KeypathQuery -> KeypathQuery)
+    def keypath(& : Keypath::Appender -> Keypath::Appender)
       return self unless kp = @keypath
 
       change(keypath: yield kp)
     end
 
-    def goto(dst : KeypathQuery?)
+    def goto(dst : Keypath::Appender?)
       change(keypath: dst)
     end
 
@@ -1729,7 +1591,7 @@ module ::Ww::M1::Operator
   struct Ahead::Goto
     include Ahead
 
-    def initialize(@keypath : KeypathQuery?, @ahead : Ahead*)
+    def initialize(@keypath : Keypath::Appender?, @ahead : Ahead*)
     end
 
     def call(behind0 : Behind)
@@ -1788,7 +1650,7 @@ module ::Ww::M1::Operator
   end
 
   def feedback(env : Term::Dict, op : Any, matchee : Term, *, keypaths : Bool = false) : Fb::Response
-    behind0 = Behind.new(env, keypath: keypaths ? KeypathQuery.new : nil)
+    behind0 = Behind.new(env, keypath: keypaths ? Keypath::Appender.new : nil)
 
     case fb = match(behind0, op, matchee, Ahead::MatchOne.new)
     in Fb::Response
@@ -4050,7 +3912,7 @@ module ::Ww::M1
       match({:"%dict"}, cue: :"%dict") { Operator::INSTANCE_DICT }
 
       match({:"%keypath", {:"%capture", :capture_}}, cue: :"%keypath") do |capture|
-        Operator::Keypath.new(capture)
+        Operator::KeypathCapture.new(capture)
       end
 
       match({:"%keypool", :_, :"_*"}, cue: :"%keypool") do
@@ -4669,6 +4531,152 @@ module ::Ww::M1
   end
 end
 
+module ::Ww::Keypath::Word
+  extend self
+
+  alias Any = None | Some
+  alias Some = Atomic | Compound
+
+  # "Atomic" or "indivisible" words that actually exist in the trie.
+  alias Atomic = Create | CreateLeaf | Delete | Insert | Range | Pair
+
+  # "Compound words" are broken down into atomic words.
+  alias Compound = UpdateKey | UpdateValue
+
+  # Keypath words that do not have neighbors/successors in the trie (must stand at
+  # the end of a "sentence").
+  alias Terminal = CreateLeaf | Range
+
+  # Words that have neighbors/successors in the trie.
+  alias Nonterminal = Compound | Create | Delete | Insert
+
+  record UpdateKey, key : Term
+  record UpdateValue, key : Term
+
+  record None
+  record Create, key : Term, initial : Term
+  record CreateLeaf, key : Term
+  record Insert, index : Term::Num, ord : UInt32, initial : Term
+  record Pair, key : Term
+  record Range, b : Int32, e : Int32, ord : UInt32
+  record Delete, keys : Term::Dict
+
+  record Key
+  record Value
+
+  # :nodoc:
+  SYM_PAIR = Term.of(:pair)
+
+  # :nodoc:
+  SYM_RESIDUE = Term.of(:residue)
+
+  # :nodoc:
+  SYM_RANGE = Term.of(:range)
+
+  # :nodoc:
+  SYM_CREATE_LEAF = Term.of(:"create-leaf")
+
+  # :nodoc:
+  SYM_CREATE = Term.of(:create)
+
+  # :nodoc:
+  SYM_INSERT = Term.of(:insert)
+
+  # Parses a subject term *subject* into an `Atomic` keypath word.
+  #
+  # Raises `KeypathError` if that cannot be done.
+  def atomic(subject : Term) : Atomic
+    raise KeypathError.new unless dict = subject.as_itemsonly_d?
+    raise KeypathError.new if dict.empty?
+
+    case {dict[0], dict.size - 1}
+    when {SYM_PAIR, 1}
+      _, key = dict
+
+      Pair.new(key)
+    when {SYM_RESIDUE, 1}
+      _, keys = dict
+
+      raise KeypathError.new unless keys = keys.as_d?
+
+      Delete.new(keys)
+    when {SYM_RANGE, 3}
+      _, b, e, ord = dict
+
+      raise KeypathError.new unless (b = b.as_n?) && (e = e.as_n?) && (ord = ord.as_n?)
+
+      Range.new(b.to(Int32), e.to(Int32), ord.to(UInt32))
+    when {SYM_CREATE_LEAF, 1}
+      _, key = dict
+
+      CreateLeaf.new(key)
+    when {SYM_CREATE, 2}
+      _, key, initial = dict
+
+      Create.new(key, initial)
+    when {SYM_INSERT, 3}
+      _, index, ord, initial = dict
+
+      raise KeypathError.new unless (index = index.as_n?) && (ord = ord.as_n?)
+
+      Insert.new(index, ord.to(UInt32), initial)
+    else
+      raise KeypathError.new
+    end
+  end
+
+  # Yields substructure of *word* and/or *matchee* for the block to check out.
+  def checkout(word : Create, matchee : Term, &) : Nil
+    yield word.initial
+  end
+
+  # :ditto:
+  def checkout(word : CreateLeaf, matchee : Term, &) : Nil
+  end
+
+  # :ditto:
+  def checkout(word : Insert, matchee : Term, &) : Nil
+    yield word.initial
+  end
+
+  # :ditto:
+  def checkout(word : Range, matchee : Term, &) : Nil
+  end
+
+  # :ditto:
+  def checkout(word : Delete, matchee : Term, &) : Nil
+    yield Term.of(matchee &- word.keys.items)
+  end
+
+  def terms(word : Create) : Enumerable(Term)
+    {Term.of(:create, word.key, word.initial)}
+  end
+
+  def terms(word : CreateLeaf) : Enumerable(Term)
+    {Term.of(:"create-leaf", word.key)}
+  end
+
+  def terms(word : Insert) : Enumerable(Term)
+    {Term.of(:insert, word.index, word.ord, word.initial)}
+  end
+
+  def terms(word : UpdateKey) : Enumerable(Term)
+    {Term.of(:pair, word.key), Term.of(:key)}
+  end
+
+  def terms(word : UpdateValue) : Enumerable(Term)
+    {Term.of(:pair, word.key), Term.of(:value)}
+  end
+
+  def terms(word : Range) : Enumerable(Term)
+    {Term.of(:range, word.b, word.e, word.ord)}
+  end
+
+  def terms(word : Delete) : Enumerable(Term)
+    {Term.of(:residue, word.keys)}
+  end
+end
+
 module ::Ww::M1
   struct AttachMetadata
     def initialize(@capture : Term, @body : Term?, @env : Term::Dict, @plural : Bool)
@@ -4706,8 +4714,8 @@ module ::Ww::M1
 
     return ctx if maxdepth.zero?
 
-    node.each_entry do |label, successor|
-      Term.case(label) do
+    node.each_entry do |word, successor|
+      Term.case(word) do
         matchpi %[(value key_)] do
           ctx = reflect(ctx, successor.as_d, maxdepth - 1, matchee[key])
         end
@@ -5070,90 +5078,6 @@ module ::Ww::M1
 
   #   matchee
   # end
-
-  module Label
-    alias Any = NormalMode | PairMode
-
-    alias NormalMode = Create | CreateLeaf | Delete | Insert | Range | Pair
-
-    record Create, key : Term, initial : Term
-    record CreateLeaf, key : Term
-    record Insert, index : Term::Num, ord : UInt32, initial : Term
-    record Pair, key : Term
-    record Range, b : Int32, e : Int32, ord : UInt32
-    record Delete, keys : Term::Dict
-
-    alias PairMode = Key | Value
-
-    record Key
-    record Value
-
-    SYM_PAIR = Term.of(:pair)
-    SYM_RESIDUE = Term.of(:residue)
-    SYM_RANGE = Term.of(:range)
-    SYM_CREATE_LEAF = Term.of(:"create-leaf")
-    SYM_CREATE = Term.of(:create)
-    SYM_INSERT = Term.of(:insert)
-
-    def self.parse(subject : Term) : NormalMode
-      raise KeypathError.new unless dict = subject.as_itemsonly_d?
-      raise KeypathError.new if dict.empty?
-
-      case {dict[0], dict.size - 1}
-      when {SYM_PAIR, 1}
-        _, key = dict
-
-        Pair.new(key)
-      when {SYM_RESIDUE, 1}
-        _, keys = dict
-
-        raise KeypathError.new unless keys = keys.as_d?
-
-        Delete.new(keys)
-      when {SYM_RANGE, 3}
-        _, b, e, ord = dict
-
-        raise KeypathError.new unless (b = b.as_n?) && (e = e.as_n?) && (ord = ord.as_n?)
-
-        Range.new(b.to(Int32), e.to(Int32), ord.to(UInt32))
-      when {SYM_CREATE_LEAF, 1}
-        _, key = dict
-
-        CreateLeaf.new(key)
-      when {SYM_CREATE, 2}
-        _, key, initial = dict
-
-        Create.new(key, initial)
-      when {SYM_INSERT, 3}
-        _, index, ord, initial = dict
-
-        raise KeypathError.new unless (index = index.as_n?) && (ord = ord.as_n?)
-
-        Insert.new(index, ord.to(UInt32), initial)
-      else
-        raise KeypathError.new
-      end
-    end
-
-    def self.substructure?(label : Create, matchee : Term) : Term?
-      label.initial
-    end
-
-    def self.substructure?(label : CreateLeaf, matchee : Term) : Term?
-    end
-
-    def self.substructure?(label : Insert, matchee : Term) : Term?
-      label.initial
-    end
-
-    def self.substructure?(label : Range, matchee : Term) : Term?
-    end
-
-    def self.substructure?(label : Delete, matchee : Term) : Term?
-      Term.of(matchee &- label.keys.items)
-    end
-  end
-
   class BackmapTrie
     # NOTE: @env, @body, @captures must only exist on a "tapped" BackmapTrie nodes.
     # NOTE: @neighbors only exist on "fanout" BackmapTrie nodes.
@@ -5161,9 +5085,11 @@ module ::Ww::M1
 
     @env : Term::Dict?
 
+    alias Word = Keypath::Word
+
     def initialize
       @captures = [] of Term
-      @neighbors = {} of Label::NormalMode => BackmapTrie | BackmapPair
+      @neighbors = {} of Word::Atomic => BackmapTrie | BackmapPair
     end
 
     def mount(keypath : Term::Dict::ItemsView, capture : Term, env : Term::Dict) : Nil
@@ -5173,12 +5099,12 @@ module ::Ww::M1
         return
       end
 
-      case label = Label.parse(subject)
-      when Label::Pair
-        neighbor = @neighbors.put_if_absent(label) { BackmapPair.new }.as(BackmapPair)
+      case word = Word.atomic(subject)
+      when Word::Pair
+        neighbor = @neighbors.put_if_absent(word) { BackmapPair.new }.as(BackmapPair)
         neighbor.mount(keypath.move(1), capture, env)
       else
-        neighbor = @neighbors.put_if_absent(label) { BackmapTrie.new }
+        neighbor = @neighbors.put_if_absent(word) { BackmapTrie.new }
         neighbor.mount(keypath.move(1), capture, env)
       end
     end
@@ -5198,16 +5124,16 @@ module ::Ww::M1
 
       return if layer.zero?
 
-      @neighbors.each do |label, neighbor|
-        case label
-        when Label::Pair
-          next unless value = matchee[label.key]?
+      @neighbors.each do |word, neighbor|
+        case word
+        when Word::Pair
+          next unless value = matchee[word.key]?
 
-          neighbor.as(BackmapPair).reflect(layer - 1, ctx, label.key, value)
+          neighbor.as(BackmapPair).reflect(layer - 1, ctx, word.key, value)
         else
-          next unless substructure = Label.substructure?(label, matchee)
-
-          neighbor.as(BackmapTrie).reflect(layer - 1, ctx, substructure)
+          Word.checkout(word, matchee) do |substructure|
+            neighbor.as(BackmapTrie).reflect(layer - 1, ctx, substructure)
+          end
         end
       end
     end
@@ -5249,27 +5175,27 @@ module ::Ww::M1
       relabel = nil
       insertions = nil
 
-      @neighbors.each do |label, neighbor|
-        case label
-        in Label::Create
+      @neighbors.each do |word, neighbor|
+        case word
+        in Word::Create
           if layer == 1
-            up1, rewrite = neighbor.as(BackmapTrie).morph0(up0, up1, down, backspec, label.initial, applier)
+            up1, rewrite = neighbor.as(BackmapTrie).morph0(up0, up1, down, backspec, word.initial, applier)
 
             case rewrite
-            in Rewrite::None then value = label.initial
+            in Rewrite::None then value = word.initial
             in Rewrite::One  then value = rewrite.term
             in Rewrite::Many then value = rewrite.list
             end
 
-            matchee = matchee.with(label.key, value)
+            matchee = matchee.with(word.key, value)
           else
-            up1, value = neighbor.as(BackmapTrie).morph(layer - 1, up0, up1, down, backspec, label.initial, applier)
-            matchee = matchee.with(label.key, value)
+            up1, value = neighbor.as(BackmapTrie).morph(layer - 1, up0, up1, down, backspec, word.initial, applier)
+            matchee = matchee.with(word.key, value)
 
-            relabel ||= [] of {Label::NormalMode, Label::NormalMode?}
-            relabel << {label, label.copy_with(initial: value)}
+            relabel ||= [] of {Word::Atomic, Word::Atomic?}
+            relabel << {word, word.copy_with(initial: value)}
           end
-        in Label::CreateLeaf
+        in Word::CreateLeaf
           next unless layer == 1
 
           up1, rewrite = neighbor.as(BackmapTrie).morph0(up0, up1, down, backspec, nil, applier)
@@ -5277,12 +5203,12 @@ module ::Ww::M1
           case rewrite
           in Rewrite::None
           in Rewrite::One
-            matchee = matchee.with(label.key, rewrite.term)
+            matchee = matchee.with(word.key, rewrite.term)
           in Rewrite::Many
-            matchee = matchee.with(label.key, rewrite.list)
+            matchee = matchee.with(word.key, rewrite.list)
           end
-        in Label::Delete
-          residue0 = matchee &- label.keys.items
+        in Word::Delete
+          residue0 = matchee &- word.keys.items
           if layer == 1
             up1, residue1r = neighbor.as(BackmapTrie).morph0(up0, up1, down, backspec, Term.of(residue0), applier)
             residue1 = residue1r.term? || residue0
@@ -5290,38 +5216,38 @@ module ::Ww::M1
             up1, residue1 = neighbor.as(BackmapTrie).morph(layer - 1, up0, up1, down, backspec, Term.of(residue0), applier)
           end
           matchee = matchee.transaction do |commit|
-            residue1 &-= label.keys.items
+            residue1 &-= word.keys.items
             residue0.each_entry { |k, _| commit.without(k) }
             residue1.each_entry { |k, v| commit.with(k, v) }
           end
-        in Label::Insert
+        in Word::Insert
           if layer == 1
-            up1, rewrite = neighbor.as(BackmapTrie).morph0(up0, up1, down, backspec, label.initial, applier)
+            up1, rewrite = neighbor.as(BackmapTrie).morph0(up0, up1, down, backspec, word.initial, applier)
 
             case rewrite
-            in Rewrite::None then items1 = Term[{label.initial}]
+            in Rewrite::None then items1 = Term[{word.initial}]
             in Rewrite::One  then items1 = Term[{rewrite.term}]
             in Rewrite::Many then items1 = rewrite.list
             end
 
             insertions ||= [] of {Term::Num, Term::Num, Term::Num, Term::Dict}
-            insertions << {Term[label.index], Term[label.index], Term[label.ord], items1}
+            insertions << {Term[word.index], Term[word.index], Term[word.ord], items1}
           else
-            up1, value = neighbor.as(BackmapTrie).morph(layer - 1, up0, up1, down, backspec, label.initial, applier)
+            up1, value = neighbor.as(BackmapTrie).morph(layer - 1, up0, up1, down, backspec, word.initial, applier)
 
-            relabel ||= [] of {Label::NormalMode, Label::NormalMode?}
-            relabel << {label, label.copy_with(initial: value)}
+            relabel ||= [] of {Word::Atomic, Word::Atomic?}
+            relabel << {word, word.copy_with(initial: value)}
           end
-        in Label::Range
+        in Word::Range
           next unless layer == 1
 
-          unless (label.b...label.e).subrange_of?(matchee.items.bounds)
+          unless (word.b...word.e).subrange_of?(matchee.items.bounds)
             raise KeypathError.new
           end
 
-          b = Term[label.b]
-          e = Term[label.e]
-          ord = Term[label.ord]
+          b = Term[word.b]
+          e = Term[word.e]
+          ord = Term[word.ord]
 
           items0 = matchee.items(b, e)
           up1, rewrite = neighbor.as(BackmapTrie).morph0(up0, up1, down, backspec, Term.of(items0), applier)
@@ -5337,8 +5263,8 @@ module ::Ww::M1
 
           insertions ||= [] of {Term::Num, Term::Num, Term::Num, Term::Dict}
           insertions << {b, e, ord, items1}
-        in Label::Pair
-          next unless value0 = matchee[key0 = label.key]?
+        in Word::Pair
+          next unless value0 = matchee[key0 = word.key]?
 
           up1, key1r, value1r = neighbor.as(BackmapPair).morph(layer - 1, up0, up1, down, backspec, key0, value0, applier)
 
@@ -5375,8 +5301,8 @@ module ::Ww::M1
             matchee = matchee.without(key0).with(key1, value)
 
             if layer > 1
-              relabel ||= [] of {Label::NormalMode, Label::NormalMode?}
-              relabel << {label, label.copy_with(key: key1)} # NOTE: may collide
+              relabel ||= [] of {Word::Atomic, Word::Atomic?}
+              relabel << {word, word.copy_with(key: key1)} # NOTE: may collide
             end
           end
 
