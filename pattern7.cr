@@ -2,14 +2,14 @@
 # │            P             │ Norm  │ Compile │ Match │ Optimize   │ Backmap  │ Ubase │  docs
 # ├──────────────────────────┼───────┼─────────┼───────┼────────────┼──────────┼───────┤
 # │ type                     │   +   │   +     │   +   │            │    ·     │       │   ~
-# │ literal                  │   +   │   +     │   +   │            │    ·     │       │    
-# │ literal dict             │       │         │   ~   │            │    ·     │       │    
+# │ literal                  │   +   │   +     │   +   │            │    ·     │       │   +
+# │ literal dict             │       │         │   ~   │            │    ·     │       │   +
 # │ blank                    │   +   │   +     │   +   │            │    ~     │       │    
 # │ itemsonly                │   +   │   +     │   +   │            │    ·     │       │   ~
 # │ pairsonly                │   ~   │   ~     │   ~   │            │    ·     │       │   ~
 # │ bounds                   │       │         │   ~   │            │    ·     │       │   ·
 # │ sketch                   │       │         │   ~   │            │    ·     │       │   ·
-# │ %literal                 │   +   │   +     │   +   │            │    ·     │       │    
+# │ %literal                 │   +   │   +     │   +   │            │    ·     │       │   +  
 # │ %partition               │   +   │   +     │   +   │            │    ·     │       │   ~
 # │ %let                     │   +   │   +     │   +   │            │    ~     │       │
 # │ %edge                    │   +   │   +     │   +   │            │    ~     │       │
@@ -399,7 +399,6 @@ module ::Ww::M1::Operator
   alias AllIsolated = ScanAllIsolated | DfsAllIsolated | BfsAllIsolated | EntriesAllIsolated
   alias All = ScanAll | DfsAll | BfsAll | EntriesAll
 
-  defcase Literal, term : Term
   defcase Capture, capture : Term, successor : Any
 
   defcase ItemSequence, items : Array(Item::Any)
@@ -908,14 +907,6 @@ class KeypathQuery
 end
 
 module ::Ww::M1::Operator
-  def match(behind0, op : Literal, matchee : Term, ahead0)
-    unless matchee == op.term
-      return Fb::Mismatch.new(behind0.env)
-    end
-
-    ahead0.call(behind0)
-  end
-
   def match(behind0, op : LiteralChoices, matchee : Term, ahead0)
     matchee.in?(op.choices) ? ahead0.call(behind0) : Fb::Mismatch.new(behind0.env)
   end

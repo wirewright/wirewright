@@ -15,6 +15,43 @@ A pretty common occurrence is the use of `_` to represent "everything else" in r
 (square "Qux") ;; => (err "Oops. Cannot square it")
 ```
 
+## Matching a term exactly
+
+If you need to match a specific term and no other term, you can use the `%literal` operator.
+
+Number literals such as `100`, string literals (e.g. `"hello world"`), boolean literals
+(`true`, `false`), and symbol literals (e.g. `qux`) are already shorthands for `(%literal 100)`,
+`(%literal "hello world")`, `(%literal true)`, and so on, respectively; you are not required to
+surround them by `%literal` explicitly. 
+
+```wwml
+(xor false false) => false
+(xor false true) => true
+(xor true false) => true
+(xor false false) => false
+```
+
+Dictionary literals that consist *only* of the aforementioned literals or of other dictionary
+literals, and contain no `%`-symbols, are inferred to be `%literal`s. You do not need to surround
+by `%literal` e.g. the dictionaries `(+ 1 2)`, `(person name: "John Doe" age: 42)`, or `(% 1 2)`.
+However, you will have to use `%literal` for `(%qux 100)`, `(+ a_ b_)`, etc.
+
+`%literal`s (shorthand or full-form) are often used to "hard-code" values in rules, possibly
+as base cases for recursion or other kinds of rule interaction:
+
+```wwml
+(salary (person name: "John Doe" role: "Leader")) => "$1,000,000"
+(salary _) => "$1,000"
+```
+
+If you want to be absolutely sure that a dictionary is given literal treatment (such as when you
+are not aware of what the dictionary will contain ahead-of-time), then use `%literal`. Here in
+`(match-lit (%new x_) x_)`, we do not know what the user will pass ahead-of-time and whether `x_`
+will contain a pattern or not. So if we wanted to guarantee literal treatment, we would use
+`(match-lit (%new (%literal x_)) x_)`. Note that this pattern is just an example (and a pretty
+meaningless one since it is essentially `(match-lit x_ x_)`). Maybe you are creating patterns
+on the fly, from some kind of template; then `%literal` could be used as a kind of "interpolation barrier".
+
 ## Matching numbers
 
 You can match numbers in several different ways, with more or less discretion.
@@ -130,7 +167,7 @@ matching/backmap process).
 ;; (date _string) => (err "invalid date")
 ```
 
-We've decided that in Wirewright, string patterns are going to be on the "outside"
+We have decided that in Wirewright, string patterns are going to be on the "outside"
 and literal content will have to be escaped. This is in opposition to e.g. PCRE, where
 literal content is on the outside and patterns have to be escaped.
 
@@ -165,7 +202,7 @@ describe non-`%`ones.
 ### Matching an itemsonly dictionary
 
 The idiomatic way to match an itemsonly dictionary is `(_*)`. If you want to capture it
-use e.g. `xs←(_*)`. You can use `(xs_*)` too if you're OK with the difference in meaning
+use e.g. `xs←(_*)`. You can use `(xs_*)` too if you are OK with the difference in meaning
 (the former is capturing the "outside" and the latter is capturing the "inside"). This
 difference is important in backmaps `xs←(_*) <> {xs: (1 2 3)}` will result in `(1 2 3)`
 and `xs←(_*) <> {(xs): (1 2 3)}` will result in `1 2 3` if there is a surrounding dict.

@@ -107,4 +107,12 @@ module Ww::M1::Operator
 
     match(behind0, op.successor, matchee, ahead0)
   end
+
+  def match(behind0, op : Literal, matchee : Term, ahead0)
+    unless matchee == op.term
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    ahead0.call(behind0)
+  end
 end

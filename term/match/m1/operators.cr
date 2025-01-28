@@ -42,4 +42,5 @@ module Ww::M1::Operator
     depth : {Magnitude, Magnitude},
     successor : Any
 
+  defcase Literal, term : Term
 end
