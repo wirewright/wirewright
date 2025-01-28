@@ -579,10 +579,10 @@ module ::Ww::M1::Operator::Env
 end
 
 module ::Ww::M1::Operator::Fb
-  alias Any = Response | Request
+  alias Any = Response | Interrupt
   alias Response = Match | Mismatch
   alias Match = MatchOne | MatchMany
-  alias Request = RequestKeypath
+  alias Interrupt = RequestKeypath
 
   record MatchOne, env : Term::Dict, more : Bool = false do
     def envs
@@ -1194,7 +1194,7 @@ module ::Ww::M1::Operator
 
     Search.traverse(matchee, spec: search_spec(op), keypath: behind0.keypath?) do |item|
       case memo = Operator.match(behind0, op.needle, item, ahead0)
-      in Fb::Match, Fb::Request
+      in Fb::Match, Fb::Interrupt
         Search::Stop
       in Fb::Mismatch
         Search::Reject
@@ -1206,7 +1206,7 @@ module ::Ww::M1::Operator
 
   def match(behind0, op : Source, matchee : Term, ahead0)
     envs = [] of Term::Dict
-    reqbox = nil
+    interrupt = nil
 
     Search.traverse(matchee, spec: search_spec(op), keypath: behind0.keypath?) do |item|
       case fb = Operator.match(behind0, op.needle, item, ahead0)
@@ -1216,15 +1216,15 @@ module ::Ww::M1::Operator
         Search::Accept
       in Fb::Mismatch
         Search::Reject
-      in Fb::Request
-        reqbox = fb
+      in Fb::Interrupt
+        interrupt = fb
 
         Search::Stop
       end
     end
 
-    if request = reqbox
-      return request
+    if interrupt_ = interrupt
+      return interrupt_
     end
 
     Env.feedback(envs, fallback: behind0.env, more: true)
@@ -1236,7 +1236,7 @@ module ::Ww::M1::Operator
     behind1 = behind0
 
     captures = Term::Dict.build do |captures|
-      reqbox = nil
+      interrupt = nil
 
       Search.traverse(matchee, spec: search_spec(op), keypath: kp0) do |item|
         case fb = Operator.match(behind0, op.needle, item, Ahead::MatchOne.new)
@@ -1250,15 +1250,15 @@ module ::Ww::M1::Operator
           Search::Accept
         in Fb::Mismatch
           Search::Reject
-        in Fb::Request
-          reqbox = fb
+        in Fb::Interrupt
+          interrupt = fb
 
           Search::Stop
         end
       end
 
-      if request = reqbox
-        return request
+      if interrupt_ = interrupt
+        return interrupt_
       end
     end
 
@@ -1275,7 +1275,7 @@ module ::Ww::M1::Operator
 
   def match(behind0, op : All, matchee : Term, ahead0)
     envs = [] of Term::Dict
-    reqbox = nil
+    interrupt = nil
 
     behind1 = behind0
 
@@ -1290,15 +1290,15 @@ module ::Ww::M1::Operator
         Search::Accept
       in Fb::Mismatch
         Search::Reject
-      in Fb::Request
-        reqbox = fb
+      in Fb::Interrupt
+        interrupt = fb
 
         Search::Stop
       end
     end
 
-    if request = reqbox
-      return request
+    if interrupt_ = interrupt
+      return interrupt_
     end
 
     # Each feedback environment gives us candidate values for all exterior captures.
@@ -1343,7 +1343,7 @@ module ::Ww::M1::Operator
       end
 
       Env.feedback(consistent, fallback: behind2.env)
-    in Fb::Mismatch, Fb::Request
+    in Fb::Mismatch, Fb::Interrupt
       fb
     end
   end
@@ -1376,7 +1376,7 @@ module ::Ww::M1::Operator
 
           candidates << key
         end
-      in Fb::Request
+      in Fb::Interrupt
         return fb
       end
     end
@@ -1442,7 +1442,7 @@ module ::Ww::M1::Operator
       candidates = Set{key}
     in Fb::MatchMany
       candidates = fb.envs.to_compact_set { |env| env[op.capture]? }
-    in Fb::Request
+    in Fb::Interrupt
       return fb
     end
 
@@ -1490,7 +1490,7 @@ module ::Ww::M1::Operator
       learned = fb.envs
     in Fb::Mismatch
       learned = {fb.env}
-    in Fb::Request
+    in Fb::Interrupt
       return fb
     end
 
@@ -1918,7 +1918,7 @@ module ::Ww::M1::Operator::Entry
 
     if value = dict[op.key]?
       case fb = Operator.match(behind0.keypath(&.update_value(op.key)), op.value, value, Ahead::Goto.new(kp0, Ahead.stackptr(ahead0)))
-      in Fb::Match, Fb::Request
+      in Fb::Match, Fb::Interrupt
         return fb
       in Fb::Mismatch
       end
@@ -1956,7 +1956,7 @@ module ::Ww::M1::Operator::Entry
       in Fb::Match # Positive example matches, nothing to do.
         return Fb::Mismatch.new(behind0.env)
       in Fb::Mismatch
-      in Fb::Request
+      in Fb::Interrupt
         return fb
       end
     end
@@ -2206,7 +2206,7 @@ module ::Ww::M1::Operator::Item
         envs.concat(fb.envs)
         break
       in Fb::Mismatch
-      in Fb::Request
+      in Fb::Interrupt
         return fb
       end
 
@@ -2264,7 +2264,7 @@ module ::Ww::M1::Operator::Item
 
     if memo.size >= item.min
       case fb = ahead0.call(ord, feed, env1)
-      in Fb::Match, Fb::Request
+      in Fb::Match, Fb::Interrupt
         return fb
       in Fb::Mismatch
       end
@@ -2307,7 +2307,7 @@ module ::Ww::M1::Operator::Item
 
     if memo >= item.min
       case fb = ahead0.call(ord, feed, env)
-      in Fb::Match, Fb::Request
+      in Fb::Match, Fb::Interrupt
         return fb
       in Fb::Mismatch
       end
@@ -2326,7 +2326,7 @@ module ::Ww::M1::Operator::Item
     ahead1 = ItemAhead::PastStep.new(feed, item, memo, ItemAhead.stackptr(ahead0))
 
     case fb = sequence(ord, env, item.children.to_readonly_slice, feed, ahead1)
-    in Fb::Match, Fb::Request
+    in Fb::Match, Fb::Interrupt
       fb
     in Fb::Mismatch
       if memo >= item.min
