@@ -1610,17 +1610,6 @@ module ::Ww::M1::Operator
     end
   end
 
-  struct Ahead::ItemStep
-    include Ahead
-
-    def initialize(@ord : UInt32, @feed : Item::Feed, @ahead : Item::ItemAhead*)
-    end
-
-    def call(behind0 : Behind)
-      @ahead.value.call(@ord + 1, @feed.move(1), behind0.keypath(&.forward))
-    end
-  end
-
   record Ahead::EntrySeq, matchee : Term, entries : Array(Entry::Any), cursor : UInt32, ahead : Ahead* do
     include Ahead
 
@@ -1749,7 +1738,7 @@ module ::Ww::M1::Operator
     end
 
     def call(behind0 : Behind)
-      @ahead.value.call(@ord, @feed, behind0)
+      @ahead.value.call(Item::Progress.new(@ord, behind0), @feed)
     end
   end
 end
@@ -1835,6 +1824,26 @@ module ::Ww::M1::Operator::Entry
 end
 
 module ::Ww::M1::Operator::Item
+  def self.match(progress0, item : Singular, matchees, ahead0)
+    unless matchee = matchees.first?
+      return Fb::Mismatch.new(progress0.env)
+    end
+
+    ahead1 = ItemAhead::Advance.new(1, ItemAhead.stackptr(ahead0))
+    ahead2 = Ahead::ItemAdapter.new(progress0.ord, matchees, ItemAhead.stackptr(ahead1))
+
+    Operator.match(progress0.behind, item.tail, matchee, ahead2)
+  end
+
+  def self.match(progress0, item : Slot, matchees, ahead0)
+    # size: 0 is understood by the backmap engine as a "pure insert".
+    progress1 = progress0.after_span(item.capture, size: 0)
+
+    ahead0.call(progress1, matchees)
+  end
+end
+
+module ::Ww::M1::Operator::Item
   alias Feed = Term::Dict::ItemsView
 
   module ItemAhead
@@ -1846,18 +1855,16 @@ module ::Ww::M1::Operator::Item
     end
   end
 
-  def self.match(ord, env, item : Singular, feed, ahead)
-    unless matchee = feed.first?
-      return Fb::Mismatch.new(env.env)
+  record Progress, ord : UInt32, behind : Behind do
+    def env : Term::Dict
+      @behind.env
     end
 
-    Operator.match(env, item.tail, matchee, Operator::Ahead::ItemStep.new(ord, feed, ItemAhead.stackptr(ahead)))
-  end
-
-  def self.match(ord, env, item : Slot, feed, ahead)
-    # span: 0 is understood by the backmap engine as "pure insert", with no
-    # "replace component".
-    ahead.call(ord + 1, feed, env.mount(item.capture, &.span(0, ord: ord)))
+    # Returns a `Progress` object after a span of the given *size* was matched.
+    # The span is mounted at *capture* if in keypath mode.
+    def after_span(capture : Term, size : Int) : Progress
+      copy_with(ord: @ord + 1, behind: @behind.mount(capture, &.span(size, ord: @ord)))
+    end
   end
 
   enum ExpandStrategy : UInt8
@@ -1867,43 +1874,38 @@ module ::Ww::M1::Operator::Item
     Greedy
   end
 
-  def self.expand(feed : Feed, pivot : Int, strategy : ExpandStrategy = :sway, & : Feed, Feed ->)
+  def self.expand(matchees : Feed, pivot : Int, strategy : ExpandStrategy = :sway, & : Feed, Feed ->)
     case strategy
     in .auto?
       raise ArgumentError.new
     in .sway?
-      prefix, suffix = feed.begin.grow(pivot), feed.move(pivot)
+      prefix, suffix = matchees.begin.grow(pivot), matchees.move(pivot)
       yield prefix, suffix
 
       # We then sway like pivot - 1, pivot + 1, pivot - 2, pivot + 2, etc...
-      (1..feed.size).each do |offset|
+      (1..matchees.size).each do |offset|
         if pivot - offset >= 0
-          prefix, suffix = feed.begin.grow(pivot - offset), feed.move(pivot - offset)
+          prefix, suffix = matchees.begin.grow(pivot - offset), matchees.move(pivot - offset)
           yield prefix, suffix
         end
 
-        if pivot + offset <= feed.size
-          prefix, suffix = feed.begin.grow(pivot + offset), feed.move(pivot + offset)
+        if pivot + offset <= matchees.size
+          prefix, suffix = matchees.begin.grow(pivot + offset), matchees.move(pivot + offset)
           yield prefix, suffix
         end
       end
     in .lazy?
-      (0..feed.size).each do |size|
-        prefix, suffix = feed.begin.grow(size), feed.move(size)
+      (0..matchees.size).each do |size|
+        prefix, suffix = matchees.begin.grow(size), matchees.move(size)
         yield prefix, suffix
       end
     in .greedy?
-      (0..feed.size).reverse_each do |size|
-        prefix, suffix = feed.begin.grow(size), feed.move(size)
+      (0..matchees.size).reverse_each do |size|
+        prefix, suffix = matchees.begin.grow(size), matchees.move(size)
         yield prefix, suffix
       end
     end
   end
-
-  # sway(Term[1, 2, 3, 4].items, 2) do |prefix, suffix|
-  #   puts prefix
-  #   puts suffix
-  # end
 
   # Untyped `Plural`s should give way to typed successors: they should be lazy
   # relative to typed successors. This lets highly ambiguous patterns like
@@ -1921,21 +1923,21 @@ module ::Ww::M1::Operator::Item
 
   # TODO: refactor match() to take ItemBehind which is an extension of Behind with ord, feed
 
-  private def self.propose?(ord, env, item : Plural, prefix, suffix, ahead)
+  private def self.propose?(progress, item : Plural, prefix, suffix, ahead)
     if capture = item.capture
-      candidate = env.propose?(capture, Term.of(prefix))
+      candidate = progress.behind.propose?(capture, Term.of(prefix))
       return unless candidate
 
-      candidate = candidate.mount(capture, &.span(prefix.size, ord: ord))
+      candidate = candidate.mount(capture, &.span(prefix.size, ord: progress.ord))
     else
-      candidate = env
+      candidate = progress.behind
     end
 
-    ahead.call(ord + prefix.size, suffix, candidate.keypath(&.forward(prefix.size))).as?(Fb::Match)
+    ahead.call(progress.copy_with(ord: progress.ord + prefix.size, behind: candidate.keypath(&.forward(prefix.size))), suffix).as?(Fb::Match)
   end
 
-  def self.match(ord, env, item : Plural, feed, ahead)
-    pivot = (feed.size / item.frac).ceil.to_i
+  def self.match(progress : Progress, item : Plural, matchees, ahead)
+    pivot = (matchees.size / item.frac).ceil.to_i
 
     if item.strategy.auto?
       strategy = ExpandStrategy::Sway
@@ -1952,7 +1954,7 @@ module ::Ww::M1::Operator::Item
             size1 = size0 - 1
             # Make sure our future size is OK with our own constraints & the follower
             # can accept it.
-            break unless feed[size1].type.subtype?(item.follower.type)
+            break unless matchees[size1].type.subtype?(item.follower.type)
             break if size1 < item.min || size1 > item.max > 0
             size0 = size1
           end
@@ -1961,8 +1963,8 @@ module ::Ww::M1::Operator::Item
           # If this fails, we restart at the pivot with the usual algorithm. Which
           # will also go backwards (if sensible) but this time,  asking ahead on every
           # step rather than after subtype ends.
-          prefix, suffix = feed.begin.grow(size0), feed.move(size0)
-          if fb = propose?(ord, env, item, prefix, suffix, ahead)
+          prefix, suffix = matchees.begin.grow(size0), matchees.move(size0)
+          if fb = propose?(progress, item, prefix, suffix, ahead)
             return fb
           end
         end
@@ -1971,14 +1973,14 @@ module ::Ww::M1::Operator::Item
       strategy = item.strategy
     end
 
-    expand(feed, pivot: pivot, strategy: strategy) do |prefix, suffix|
+    expand(matchees, pivot: pivot, strategy: strategy) do |prefix, suffix|
       next if prefix.size < item.min || prefix.size > item.max > 0
       next unless item.type.any? || prefix.all?(&.type.subtype?(item.type))
-      next unless fb = propose?(ord, env, item, prefix, suffix, ahead)
+      next unless fb = propose?(progress, item, prefix, suffix, ahead)
       return fb
     end
 
-    Fb::Mismatch.new(env.env)
+    Fb::Mismatch.new(progress.env)
   end
 
   struct ItemAhead::SequenceRest
@@ -1987,79 +1989,79 @@ module ::Ww::M1::Operator::Item
     def initialize(@ord : UInt32, @items : Slice(Any), @ahead : ItemAhead*)
     end
 
-    def call(ord, outfeed, candidate)
-      Item.sequence(@ord + 1, candidate, @items[1..], outfeed, @ahead.value)
+    def call(progress, matchees)
+      Item.sequence(progress.copy_with(ord: progress.ord + 1), @items[1..], matchees, @ahead.value)
     end
   end
 
-  def self.sequence(ord, env, items : Slice(Any), feed, ahead)
+  def self.sequence(progress, items : Slice(Any), matchees, ahead)
     unless item = items.first?
-      return ahead.call(ord, feed, env)
+      return ahead.call(progress, matchees)
     end
 
     # Continuation for the item matching methods.
-    cont = ItemAhead::SequenceRest.new(ord, items, ItemAhead.stackptr(ahead))
+    cont = ItemAhead::SequenceRest.new(progress.ord, items, ItemAhead.stackptr(ahead))
 
-    match(ord, env, item, feed, cont)
+    match(progress, item, matchees, cont)
   end
 
   struct ItemAhead::CaptureGroup
     include ItemAhead
 
     # - *ord0* is the ordinal at the start of the group.
-    # - *feed0* is the feed at the start of the group.
+    # - *matchees* is the matchees at the start of the group.
     # - *propose* specifies whether to propose the captured group to `Behind`. Otherwise,
     #   the group is simply mounted and not proposed.
-    def initialize(@ord0 : UInt32, @feed0 : Feed, @capture : Term, @ahead : ItemAhead*, *, @propose : Bool)
+    def initialize(@ord0 : UInt32, @matchees : Feed, @capture : Term, @ahead : ItemAhead*, *, @propose : Bool)
     end
 
-    def call(ord, feed, behind0)
-      group = @feed0.upto(feed)
+    def call(progress, matchees)
+      group = @matchees.upto(matchees)
 
-      behind1 = behind0
+      behind1 = progress.behind
 
       if @propose
-        unless behind1 = behind0.propose?(@capture, proposal = Term.of(group))
-          return Fb::Mismatch.new(behind0.env.with(@capture, proposal))
+        unless behind1 = behind1.propose?(@capture, proposal = Term.of(group))
+          return Fb::Mismatch.new(progress.env.with(@capture, proposal))
         end
       end
 
-      behind1 = behind1.mount(@capture, &.backward(group.size).span(group.size, ord: ord))
+      behind1 = behind1.mount(@capture, &.backward(group.size).span(group.size, ord: progress.ord))
 
-      @ahead.value.call(ord, feed, behind1)
+      @ahead.value.call(progress.copy_with(behind: behind1), matchees)
     end
   end
 
-  def self.match(ord, env, item : Group, feed, ahead0)
-    ahead1 = ItemAhead::CaptureGroup.new(ord, feed, item.capture, ItemAhead.stackptr(ahead0), propose: true)
+  def self.match(progress : Progress, item : Group, matchees, ahead0)
+    ahead1 = ItemAhead::CaptureGroup.new(progress.ord, matchees, item.capture, ItemAhead.stackptr(ahead0), propose: true)
 
-    sequence(ord, env, item.children.to_readonly_slice, feed, ahead1)
+    sequence(progress, item.children.to_readonly_slice, matchees, ahead1)
   end
 
-  struct ItemAhead::Skip
+  struct ItemAhead::Advance
     include ItemAhead
 
     def initialize(@n : Int32, @ahead : ItemAhead*)
     end
 
-    def call(ord, feed, behind0)
-      @ahead.value.call(ord + @n, feed.move(@n), behind0.keypath(&.forward(@n)))
+    def call(progress, matchees)
+      @ahead.value.call(progress.copy_with(ord: progress.ord + @n, behind: progress.behind.keypath(&.forward(@n))), matchees.move(@n))
     end
   end
 
-  def self.match(ord, env, item : Gap, feed, ahead0)
+  def self.match(progress : Progress, item : Gap, matchees, ahead0)
     strategy = item.strategy.auto? ? ExpandStrategy::Sway : item.strategy
 
     envs = [] of Term::Dict
 
-    expand(feed, pivot: (feed.size / item.frac).ceil.to_i, strategy: strategy) do |prefix, suffix|
+    expand(matchees, pivot: (matchees.size / item.frac).ceil.to_i, strategy: strategy) do |prefix, suffix|
       matchee = Term.of(prefix.size)
 
-      ahead1 = Operator::Ahead::ItemAdapter.new(ord, suffix, ItemAhead.stackptr(ahead0))
+      ahead1 = Operator::Ahead::ItemAdapter.new(progress.ord, suffix, ItemAhead.stackptr(ahead0))
       ahead2 = Operator::Ahead::Forward.new(prefix.size, Operator::Ahead.stackptr(ahead1))
-      ahead3 = Operator::Ahead::Goto.new(env.keypath?, Operator::Ahead.stackptr(ahead2))
+      ahead3 = Operator::Ahead::Goto.new(progress.behind.keypath?, Operator::Ahead.stackptr(ahead2))
 
-      case fb = Operator.match(env.keypathless, item.measurer, matchee, ahead3)
+      case fb = Operator.match(progress.behind.keypathless, item.measurer, matchee, ahead3)
       in Fb::MatchOne
         envs << fb.env
         next if fb.more
@@ -2072,27 +2074,27 @@ module ::Ww::M1::Operator::Item
         return fb
       end
 
-      ord += 1
+      progress = progress.copy_with(ord: progress.ord + 1)
     end
 
-    Env.feedback(envs, fallback: env.env)
+    Env.feedback(envs, fallback: progress.env)
   end
 
-  def self.match(ord, env, item : Optional, feed, ahead0)
-    if matchee = feed.first?
-      ahead1 = ItemAhead::Skip.new(1, ItemAhead.stackptr(ahead0))
-      ahead2 = Operator::Ahead::ItemAdapter.new(ord, feed, ItemAhead.stackptr(ahead1))
+  def self.match(progress : Progress, item : Optional, matchees, ahead0)
+    if matchee = matchees.first?
+      ahead1 = ItemAhead::Advance.new(1, ItemAhead.stackptr(ahead0))
+      ahead2 = Operator::Ahead::ItemAdapter.new(progress.ord, matchees, ItemAhead.stackptr(ahead1))
 
-      fb = Operator.match(env, item.tail, matchee, ahead2)
+      fb = Operator.match(progress.behind, item.tail, matchee, ahead2)
       if fb.is_a?(Fb::Match)
         return fb
       end
     end
 
-    ahead1 = Operator::Ahead::ItemAdapter.new(ord, feed, ItemAhead.stackptr(ahead0))
-    ahead2 = Operator::Ahead::Goto.new(env.keypath?, Ahead.stackptr(ahead1))
+    ahead1 = Operator::Ahead::ItemAdapter.new(progress.ord, matchees, ItemAhead.stackptr(ahead0))
+    ahead2 = Operator::Ahead::Goto.new(progress.behind.keypath?, Ahead.stackptr(ahead1))
 
-    Operator.match(env.keypath(&.insert_item(item.default, ord: ord)), item.tail, item.default, ahead2)
+    Operator.match(progress.behind.keypath(&.insert_item(item.default, ord: progress.ord)), item.tail, item.default, ahead2)
   end
 
   struct ItemAhead::ManyStep
@@ -2101,46 +2103,46 @@ module ::Ww::M1::Operator::Item
     def initialize(@feed0 : Feed, @item : Many, @ahead : ItemAhead*, @memo : Term::Dict)
     end
 
-    def call(ord, feed, behind0)
-      if @feed0 == feed
+    def call(progress, matchees)
+      if @feed0 == matchees
         # This continuation is run after the ahead check. This means ahead refuses to
         # consume feed. And we did not move while trying to consume feed. Thus this is
         # a hard mismatch.
-        return Fb::Mismatch.new(behind0.env)
+        return Fb::Mismatch.new(progress.env)
       end
 
-      pruned, capture = behind0.partition(@item.interior)
+      pruned, capture = progress.behind.partition(@item.interior)
 
-      Item.many(ord, pruned, @item, feed, @ahead.value, @memo.append(capture.env))
+      Item.many(progress.copy_with(behind: pruned), @item, matchees, @ahead.value, @memo.append(capture.env))
     end
   end
 
-  def self.many(ord, env, item : Many, feed, ahead0, memo)
-    unless env1 = env.propose?(item.capture, Term.of(memo))
-      return Fb::Mismatch.new(env.env.with(item.capture, Term.of(memo)))
+  def self.many(progress : Progress, item : Many, matchees, ahead0, memo)
+    unless behind1 = progress.behind.propose?(item.capture, Term.of(memo))
+      return Fb::Mismatch.new(progress.env.with(item.capture, Term.of(memo)))
     end
 
     if memo.size > item.max > 0
-      return Fb::Mismatch.new(env.env)
+      return Fb::Mismatch.new(progress.env)
     end
 
     if memo.size >= item.min
-      case fb = ahead0.call(ord, feed, env1)
+      case fb = ahead0.call(progress.copy_with(behind: behind1), matchees)
       in Fb::Match, Fb::Interrupt
         return fb
       in Fb::Mismatch
       end
     end
 
-    ahead1 = ItemAhead::ManyStep.new(feed, item, ItemAhead.stackptr(ahead0), memo)
+    ahead1 = ItemAhead::ManyStep.new(matchees, item, ItemAhead.stackptr(ahead0), memo)
 
-    sequence(ord, env, item.children.to_readonly_slice, feed, ahead1)
+    sequence(progress, item.children.to_readonly_slice, matchees, ahead1)
   end
 
-  def self.match(ord, env, item : Many, feed, ahead0)
-    ahead1 = ItemAhead::CaptureGroup.new(ord, feed, item.capture, ItemAhead.stackptr(ahead0), propose: false)
+  def self.match(progress : Progress, item : Many, matchees, ahead0)
+    ahead1 = ItemAhead::CaptureGroup.new(progress.ord, matchees, item.capture, ItemAhead.stackptr(ahead0), propose: false)
 
-    many(ord, env, item, feed, ahead1, memo: Term[])
+    many(progress, item, matchees, ahead1, memo: Term[])
   end
 
   struct ItemAhead::PastStep
@@ -2149,61 +2151,61 @@ module ::Ww::M1::Operator::Item
     def initialize(@feed0 : Feed, @item : Past, @memo : Int32, @ahead : ItemAhead*)
     end
 
-    def call(ord, feed, behind0)
-      if @feed0 == feed
-        return Fb::Mismatch.new(behind0.env)
+    def call(progress, matchees)
+      if @feed0 == matchees
+        return Fb::Mismatch.new(progress.env)
       end
 
       if @item.greedy
-        Item.past_greedy(ord, behind0, @item, feed, @ahead.value, @memo + 1)
+        Item.past_greedy(progress, @item, matchees, @ahead.value, @memo + 1)
       else
-        Item.past_lazy(ord, behind0, @item, feed, @ahead.value, @memo + 1)
+        Item.past_lazy(progress, @item, matchees, @ahead.value, @memo + 1)
       end
     end
   end
 
-  def self.past_lazy(ord, env, item : Past, feed, ahead0, memo)
+  def self.past_lazy(progress : Progress, item : Past, matchees, ahead0, memo)
     if memo > item.max > 0
-      return Fb::Mismatch.new(env.env)
+      return Fb::Mismatch.new(progress.env)
     end
 
     if memo >= item.min
-      case fb = ahead0.call(ord, feed, env)
+      case fb = ahead0.call(progress, matchees)
       in Fb::Match, Fb::Interrupt
         return fb
       in Fb::Mismatch
       end
     end
 
-    ahead1 = ItemAhead::PastStep.new(feed, item, memo, ItemAhead.stackptr(ahead0))
+    ahead1 = ItemAhead::PastStep.new(matchees, item, memo, ItemAhead.stackptr(ahead0))
 
-    sequence(ord, env, item.children.to_readonly_slice, feed, ahead1)
+    sequence(progress, item.children.to_readonly_slice, matchees, ahead1)
   end
 
-  def self.past_greedy(ord, env, item : Past, feed, ahead0, memo)
+  def self.past_greedy(progress : Progress, item : Past, matchees, ahead0, memo)
     if memo > item.max > 0
-      return Fb::Mismatch.new(env.env)
+      return Fb::Mismatch.new(progress.env)
     end
 
-    ahead1 = ItemAhead::PastStep.new(feed, item, memo, ItemAhead.stackptr(ahead0))
+    ahead1 = ItemAhead::PastStep.new(matchees, item, memo, ItemAhead.stackptr(ahead0))
 
-    case fb = sequence(ord, env, item.children.to_readonly_slice, feed, ahead1)
+    case fb = sequence(progress, item.children.to_readonly_slice, matchees, ahead1)
     in Fb::Match, Fb::Interrupt
       fb
     in Fb::Mismatch
       if memo >= item.min
-        ahead0.call(ord, feed, env)
+        ahead0.call(progress, matchees)
       else
         fb
       end
     end
   end
 
-  def self.match(ord, env, item : Past, feed, ahead)
+  def self.match(progress : Progress, item : Past, matchees, ahead)
     if item.greedy
-      past_greedy(ord, env, item, feed, ahead, memo: 0)
+      past_greedy(progress, item, matchees, ahead, memo: 0)
     else
-      past_lazy(ord, env, item, feed, ahead, memo: 0)
+      past_lazy(progress, item, matchees, ahead, memo: 0)
     end
   end
 
@@ -2213,32 +2215,32 @@ module ::Ww::M1::Operator::Item
     def initialize(@items : Slice(Any), @ahead : Operator::Ahead*)
     end
 
-    def call(ord, outfeed, candidate)
-      Item.match(ord, candidate, @items[1..], outfeed, @ahead.value)
+    def call(progress, matchees)
+      Item.match(progress, @items[1..], matchees, @ahead.value)
     end
   end
 
-  def self.match(ord, env, items : Slice(Any), feed, ahead)
+  def self.match(progress : Progress, items : Slice(Any), matchees, ahead)
     item = items.first?
 
-    if item.nil? && feed.empty? # Matched all items.
-      return ahead.call(env)
+    if item.nil? && matchees.empty? # Matched all items.
+      return ahead.call(progress.behind)
     end
 
     if item.nil? # Ran out of items.
-      return Fb::Mismatch.new(env.env)
+      return Fb::Mismatch.new(progress.env)
     end
 
     # Continuation for the item matching methods.
     cont = ItemAhead::Rest.new(items, Operator::Ahead.stackptr(ahead))
 
-    match(ord, env, item, feed, cont)
+    match(progress, item, matchees, cont)
   end
 
-  def self.match(env, items : Slice(Any), feed, ahead)
-    kp0 = env.keypath?
+  def self.match(behind0 : Behind, items : Slice(Any), matchees, ahead0)
+    kp0 = behind0.keypath?
 
-    match(0u32, env.keypath(&.update_value(0)), items, feed, Operator::Ahead::Goto.new(kp0, Operator::Ahead.stackptr(ahead)))
+    match(Progress.new(0u32, behind0.keypath(&.update_value(0))), items, matchees, Operator::Ahead::Goto.new(kp0, Operator::Ahead.stackptr(ahead0)))
   end
 end
 
