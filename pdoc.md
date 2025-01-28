@@ -22,7 +22,7 @@ If you need to match a specific term and no other term, you can use the `%litera
 Number literals such as `100`, string literals (e.g. `"hello world"`), boolean literals
 (`true`, `false`), and symbol literals (e.g. `qux`) are already shorthands for `(%literal 100)`,
 `(%literal "hello world")`, `(%literal true)`, and so on, respectively; you are not required to
-surround them by `%literal` explicitly. 
+surround them by `%literal` explicitly.
 
 ```wwml
 (xor false false) => false
@@ -219,7 +219,7 @@ A nonempty itemsonly dictionary can be matched similarly using `(_+)`.
 
 (reaction ())
 ;; => "It's an itemsonly dict!"
-(reaction (1 2 3)) 
+(reaction (1 2 3))
 ;; => "It's a nonempty itemsonly dict!"
 (reaction (name: "John"))
 ;; => "It's a dict!"
@@ -227,6 +227,65 @@ A nonempty itemsonly dictionary can be matched similarly using `(_+)`.
 ;; => "It's a dict!"
 (reaction qux)
 ;; => "It's not a dict!"
+```
+
+### Matching a pairsonly dictionary
+
+The idiomatic way to match a pairsonly dictionary is `(¦ _)`, which is a shorthand for
+`(%partition () _)`. Capturing the pairspart would be `(¦ pp_)` and so on.
+
+## Captures and `%let`
+
+Captures are a way to save the matched term (most often it is called *matchee*) in a *capture
+environment*, which is more commonly referred to as *match environment* or simply *match env*
+or *env*. The "matched term" here means the term matched by (corresponding to, "underneath")
+the capture itself, rather than the term matched by the pattern itself.
+
+Captures are primarily made using `%let`: `(%let n (%number (whole _)))` captures a whole number
+as `n`. There is a shorthand syntax for `%let`, `←`: in this case that would be `n←(%number (whole _))`.
+Blanks `name_of-blank_` are a shorthand for `%let` with a type: `x_` is the same as `x←_number`
+which is the same as `(%let x _number)`.
+
+Other operators can make captures as well. But only `%let` is of interest to us in this description.
+
+The first argument of `%let` is the name of the capture. Any term will suffice: a number, a symbol,
+a dictionary, etc:
+
+- For `(x_ y_)` (and therefore `(x←_ y←_)`, which is the same as `((%let x _) (%let y _))`) and
+  `(1 2)` as the top matchee one will have the match env `{x: 1, y: 2}`.
+- For `(qux (%let 0 _) (%let 1 _))` and `(qux 1 2)` as the top matchee one will have
+  the match env `(1 2)`.
+
+Captures that have the same name are "equated" across the entire pattern:
+
+```wwml
+(equal? x_ x_) => true
+(equal? _ _) => false
+
+(equal 100 100) ;; => true
+(equal 100 200) ;; => false
+```
+
+This feature may lead one to neat patterns like the following:
+
+```wwml
+(value (%value k v_) k_) => (ok v)
+(value _ _) => (err "key not found")
+
+(value {x: 100, y: 200} x) ;; => (ok 100)
+(value {x: 100, y: 200} y) ;; => (ok 200)
+(value {x: 100, y: 200} z) ;; => (err "key not found")
+```
+
+... since as we have said, other operators make captures as well. The "equatability" of
+captures applies to them too:
+
+```wwml
+(first-common ⟨x_⟩ ⟨x_⟩) => (ok x)
+(first-common _ _) => (err "no common elements")
+
+(first-common (1 2 3) (a b 1 c 2)) ;; => (ok 1)
+(first-common (1 2 3) (4 5 6))     ;; => (err "no common elements")
 ```
 
 ## `%new`

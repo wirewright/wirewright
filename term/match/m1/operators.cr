@@ -33,9 +33,12 @@ module Ww::M1::Operator
   defcase Pairsonly
 
   defcase SketchSubset, sketch : Term::Dict::Sketch, successor : Any
+
   defcase Bounds, min : Magnitude, max : Magnitude
   defcase BoundsGuard, min : Magnitude, max : Magnitude, successor : Any
+
   defcase MaxDepth, min : Magnitude, max : Magnitude, successor : Any
+
   defcase DictGuard,
     sketch : Term::Dict::Sketch,
     bounds : {Magnitude, Magnitude},
@@ -43,4 +46,6 @@ module Ww::M1::Operator
     successor : Any
 
   defcase Literal, term : Term
+
+  defcase Capture, capture : Term, successor : Any
 end

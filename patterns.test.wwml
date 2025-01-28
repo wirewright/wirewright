@@ -1760,7 +1760,12 @@
 
   ;; Match first person whose age is >= 40
   (pattern (%item (%layer _ "name": name_string "age": (%number _ >= 40)))
-    (= $$PEOPLE {name: "Fay Mcmahon"})))
+    (= $$PEOPLE {name: "Fay Mcmahon"}))
+
+  ;; From doc
+  (pattern (first-common ⟨x_⟩ ⟨x_⟩)
+    (= (first-common (1 2 3) (a b 1 c 2)) {x: 1})
+    (- (first-common (1 2 3) (4 5 6)))))
 
 ;; %item: match source
 (group
@@ -3674,4 +3679,3 @@
 
   (specificity
     (level {x: (%optional ((%all (%any 1 2))) _)} {x: (%optional (%all 1 2 3 4 5) _)})))
-

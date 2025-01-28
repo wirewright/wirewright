@@ -115,4 +115,14 @@ module Ww::M1::Operator
 
     ahead0.call(behind0)
   end
+
+  def match(behind0, op : Capture, matchee : Term, ahead0)
+    unless behind1 = behind0.propose?(op.capture, matchee)
+      return Fb::Mismatch.new(behind0.env.with(op.capture, matchee))
+    end
+
+    behind1 = behind1.mount(op.capture)
+
+    match(behind1, op.successor, matchee, ahead0)
+  end
 end

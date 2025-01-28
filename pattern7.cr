@@ -4,12 +4,12 @@
 # │ type                     │   +   │   +     │   +   │            │    ·     │       │   ~
 # │ literal                  │   +   │   +     │   +   │            │    ·     │       │   +
 # │ literal dict             │       │         │   ~   │            │    ·     │       │   +
-# │ blank                    │   +   │   +     │   +   │            │    ~     │       │    
+# │ blank                    │   +   │   +     │   +   │            │    ~     │       │
 # │ itemsonly                │   +   │   +     │   +   │            │    ·     │       │   ~
 # │ pairsonly                │   ~   │   ~     │   ~   │            │    ·     │       │   ~
 # │ bounds                   │       │         │   ~   │            │    ·     │       │   ·
 # │ sketch                   │       │         │   ~   │            │    ·     │       │   ·
-# │ %literal                 │   +   │   +     │   +   │            │    ·     │       │   +  
+# │ %literal                 │   +   │   +     │   +   │            │    ·     │       │   +
 # │ %partition               │   +   │   +     │   +   │            │    ·     │       │   ~
 # │ %let                     │   +   │   +     │   +   │            │    ~     │       │
 # │ %edge                    │   +   │   +     │   +   │            │    ~     │       │
@@ -399,8 +399,6 @@ module ::Ww::M1::Operator
   alias AllIsolated = ScanAllIsolated | DfsAllIsolated | BfsAllIsolated | EntriesAllIsolated
   alias All = ScanAll | DfsAll | BfsAll | EntriesAll
 
-  defcase Capture, capture : Term, successor : Any
-
   defcase ItemSequence, items : Array(Item::Any)
   defcase ItemFirst, successor : Any
   defcase ItemLast, successor : Any
@@ -754,7 +752,7 @@ class KeypathQuery
   # :nodoc:
   EMPTY = KeypathQuery.new(preds: Term[], tip: Tip::None.new)
 
-  # Constructs an empty keypath query object. 
+  # Constructs an empty keypath query object.
   def self.new : KeypathQuery
     EMPTY
   end
@@ -774,7 +772,7 @@ class KeypathQuery
 
     new(preds.collect, tip)
   end
-  
+
   private def push(tip1 : Tip::Some) : KeypathQuery
     KeypathQuery.new(keypath, tip1)
   end
@@ -909,16 +907,6 @@ end
 module ::Ww::M1::Operator
   def match(behind0, op : LiteralChoices, matchee : Term, ahead0)
     matchee.in?(op.choices) ? ahead0.call(behind0) : Fb::Mismatch.new(behind0.env)
-  end
-
-  def match(behind0, op : Capture, matchee : Term, ahead0)
-    unless behind1 = behind0.propose?(op.capture, matchee)
-      return Fb::Mismatch.new(behind0.env.with(op.capture, matchee))
-    end
-
-    behind1 = behind1.mount(op.capture)
-
-    match(behind1, op.successor, matchee, ahead0)
   end
 
   # TODO: almost always in practice the pairspart is easier to compute than the itemspart;
@@ -3673,7 +3661,7 @@ module ::Ww::M1
         end
 
         # Rewrite bounds-checked plural such as (_+) similarly into an itemsonly check since
-        # the bounds check already checks what the plural would have. 
+        # the bounds check already checks what the plural would have.
         matchpi %{[%bounds (%itemseq (%plural min: _ max: _ type: (%literal _)))]} do
           normp.morph({1, {:"%itemsonly"}})
         end
@@ -5110,7 +5098,7 @@ module ::Ww::M1
     def self.parse(subject : Term) : NormalMode
       raise KeypathError.new unless dict = subject.as_itemsonly_d?
       raise KeypathError.new if dict.empty?
-      
+
       case {dict[0], dict.size - 1}
       when {SYM_PAIR, 1}
         _, key = dict
@@ -5416,7 +5404,7 @@ module ::Ww::M1
       end
 
       # It is unwise to delete/insert while we're iterating over @neighbors, so
-      # we have a separate "relabel" step. 
+      # we have a separate "relabel" step.
       if relabel
         relabel.each do |k0, k1|
           v = @neighbors.delete(k0) || raise KeyError.new("attempt to relabel an absent label #{k0}")
@@ -5435,7 +5423,7 @@ module ::Ww::M1
       {up1, Term.of(matchee)}
     end
   end
-  
+
   class BackmapPair
     @k : BackmapTrie?
     @v : BackmapTrie?
