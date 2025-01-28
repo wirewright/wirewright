@@ -1,3 +1,17 @@
+## Matching anything
+
+If you need to match any term at all, you should use the pass operator. The pass operator
+is invoked whenever you use a *nameless AND typeless blank*: `_`. The pass operator is
+also implicit in named but typeless blanks: `x_` is understood as `x←_` which is a shorthand
+for `(%let x _)`, which means "capture anything and call that x".
+
+A pretty common occurrence is the use of `_` to represent "everything else" in rules:
+
+```wwml
+(square a_number) => (ok (* a a))
+(square _) => (err "Oops. Cannot square it")
+```
+
 ## `%new`
 
 The idea with the `%new` operator is to be able to create new patterns at match-

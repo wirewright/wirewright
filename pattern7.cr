@@ -399,10 +399,6 @@ module ::Ww::M1::Operator
   alias AllIsolated = ScanAllIsolated | DfsAllIsolated | BfsAllIsolated | EntriesAllIsolated
   alias All = ScanAll | DfsAll | BfsAll | EntriesAll
 
-  INSTANCE_PASS = Pass.new
-
-  defcase Pass
-
   INSTANCE_NUM       = Num.new(min: nil, max: nil, options: :none)
   INSTANCE_NUM_WHOLE = Num.new(min: nil, max: nil, options: :whole)
 
@@ -953,10 +949,6 @@ class KeypathQuery
 end
 
 module ::Ww::M1::Operator
-  def match(behind0, op : Pass, matchee : Term, ahead0)
-    ahead0.call(behind0)
-  end
-
   def match(behind0, op : Num, matchee : Term, ahead0)
     unless n = matchee.as_n?
       return Fb::Mismatch.new(behind0.env)
