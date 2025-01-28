@@ -10,6 +10,90 @@ A pretty common occurrence is the use of `_` to represent "everything else" in r
 ```wwml
 (square a_number) => (ok (* a a))
 (square _) => (err "Oops. Cannot square it")
+
+(square 4)     ;; => (ok 16)
+(square "Qux") ;; => (err "Oops. Cannot square it")
+```
+
+## Matching numbers
+
+You can match numbers in several different ways, with more or less discretion.
+
+### Matching any number
+
+If you only care that something is a number and that's all, use `_number`; it is a type check
+and nothing more. Similarly, `x_number` is understood as `x←_number` and so on.
+
+An alternative and a "gateway" to more sophistication is `(%number _)`. It also matches any
+number whatsoever. In fact, `_number` is a shorthand for `(%number _)`.
+
+### `%number`
+
+`%number` lets you match numbers more precisely. The underscore `_` stands for "it", the term
+under question, presumably a number.
+
+`(whole _)` means that "it" -- the number -- must be whole. So if you only want to match whole
+numbers and nothing else, use `(%number (whole _))`.
+
+```wwml
+(square a←(%number (whole _))) => (ok (* a a))
+(square _number) => (err "Bad at math, sorry :(")
+(square _) => (err "Oops. Cannot square it")
+
+(square 4)   ;; => (ok 16)
+(square 1/3) ;; => (err "Bad at math, sorry :(")
+```
+
+To check whether a number is within a certain range there are two general ways.
+
+The first one is useful if you need to check whether a number is below (`_ < T`, `_ <= T`) or above
+(`_ > T`, `_ >= T`) a certain threshold T: `(%number _ < 100)`, `(%number _ > 1/3)`. The following
+pattern will match all natural numbers: `(%number (whole _) >= 0)`.
+
+The second one is useful if the number is bounded on both sides. In such cases you can
+use one of `B < _ < E` (both ends excluded), `B <= _ < E` (end excluded), `B < _ <= E`
+(begin excluded), or `B <= _ <= E` (both ends included). The following pattern will match
+all 8-bit integers: `(%number 0 <= (whole _) <= 255)`.
+
+```wwml
+(category (%number 0 <= (whole _) <= 12)) => (ok "child")
+(category (%number 13 <= (whole _) <= 19)) => (ok "teenager")
+(category (%number 20 <= (whole _) <= 64)) => (ok "adult")
+(category (%number (whole _) >= 65)) => (ok "senior")
+(category _) => (err "invalid age")
+
+(category 10)  ;; => (ok "child")
+(category 25)  ;; => (ok "adult")
+(category 13)  ;; => (ok "teenager")
+(category 75)  ;; => (ok "senior")
+(category -10) ;; => (err "invalid age")
+(category 1/3) ;; => (err "invalid age")
+;; etc...
+```
+
+Speaking of 8-bit integers, there is also a series of shorthands for matching the frequently
+appearing fixed-width numeric types. The previous 8-bit number pattern is the expanded form
+of `(%number u8)`. There is also `(%number u16)`, u32, u64, and u128 for unsigned; and similarly
+`(%number i8)`, i16, i32, i64, and i128 for signed fixed-width types. If for some reason you only
+want to match the positive or negative ranges of the signed types, you can prepend as sign `+` or
+`-` to the type: `(%number -i8)` will only match the negative end and `(%number +i8)` will match
+the positive end **and zero** of the range for the signed type `i8`. Similarly for i16, i32, and
+so on:
+
+```wwml
+(rgb? ((%number u8) (%number u8) (%number u8))) => true
+(rgb? _) => false
+
+(rgb? (0x33 0xfa 0xfa)) => ;; true
+(rgb? (1000 0xfa 0xfa)) => ;; false
+;; etc...
+
+(side (%number -i8)) => left
+(side (%number +i8)) => right
+
+(side -100)  ;; => left
+(side 0)     ;; => right
+(side 10)    ;; => right
 ```
 
 ## `%new`

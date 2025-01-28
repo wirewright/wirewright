@@ -19,7 +19,7 @@
 # │ %keypool                 │   +   │   +     │   +   │            │    ·     │       │
 # │ %not                     │   +   │   +     │   +   │            │    ·     │       │
 # │ %layer                   │   +   │   +     │   +   │            │    ~     │       │
-# │ %number                  │   +   │   +     │   +   │            │    ·     │       │
+# │ %number                  │   +   │   +     │   +   │            │    ·     │       │   +
 # │ %nonself                 │   +   │   ·     │   ·   │     ·      │    ·     │   ·   │
 # │ %string                  │       │         │       │            │          │       │
 # │ %string date             │       │         │       │            │          │       │
@@ -398,23 +398,6 @@ module ::Ww::M1::Operator
   alias Source = DfsSource | ScanSource | EntriesSource
   alias AllIsolated = ScanAllIsolated | DfsAllIsolated | BfsAllIsolated | EntriesAllIsolated
   alias All = ScanAll | DfsAll | BfsAll | EntriesAll
-
-  INSTANCE_NUM       = Num.new(min: nil, max: nil, options: :none)
-  INSTANCE_NUM_WHOLE = Num.new(min: nil, max: nil, options: :whole)
-
-  # TODO: split into different objects based on the presence of min, max (options)
-  defcase Num, min : Term::Num?, max : Term::Num?, options : Options do
-    @[Flags]
-    enum Options : UInt8
-      MinExcluded
-      MaxExcluded
-      Whole
-    end
-
-    def self.new(min, max, options : Tuple)
-      new(min: min, max: max, options: Options.new(options))
-    end
-  end
 
   INSTANCE_SYM = Sym.new
 
@@ -949,29 +932,6 @@ class KeypathQuery
 end
 
 module ::Ww::M1::Operator
-  def match(behind0, op : Num, matchee : Term, ahead0)
-    unless n = matchee.as_n?
-      return Fb::Mismatch.new(behind0.env)
-    end
-
-    if op.options.whole? && !n.whole?
-      return Fb::Mismatch.new(behind0.env)
-    end
-
-    min = op.min
-    max = op.max
-
-    if min && !compare?(min, op.options.min_excluded? ? :lt : :lte, n)
-      return Fb::Mismatch.new(behind0.env)
-    end
-
-    if max && !compare?(n, op.options.max_excluded? ? :lt : :lte, max)
-      return Fb::Mismatch.new(behind0.env)
-    end
-
-    ahead0.call(behind0)
-  end
-
   {% for opcls, type in { Str => :string, Sym => :symbol, Boolean => :boolean, Dict => :dict } %}
     def match(behind0, op : {{opcls}}, matchee : Term, ahead0)
       unless matchee.type.{{type.id}}?
