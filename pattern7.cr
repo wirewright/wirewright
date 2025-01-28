@@ -2,16 +2,16 @@
 # │            P             │ Norm  │ Compile │ Match │ Optimize   │ Backmap  │ Ubase │  docs
 # ├──────────────────────────┼───────┼─────────┼───────┼────────────┼──────────┼───────┤
 # │ type                     │   +   │   +     │   +   │            │    ·     │       │   ~
-# │ literal                  │   +   │   +     │   +   │            │    ·     │       │   +
-# │ literal dict             │       │         │   ~   │            │    ·     │       │   +
-# │ blank                    │   +   │   +     │   +   │            │    ~     │       │
+# │ literal                  │   +   │   +     │   +   │            │    ·     │       │   ~
+# │ literal dict             │       │         │   ~   │            │    ·     │       │   ~
+# │ blank                    │   +   │   +     │   +   │            │    ~     │       │   ~
 # │ itemsonly                │   +   │   +     │   +   │            │    ·     │       │   ~
 # │ pairsonly                │   ~   │   ~     │   ~   │            │    ·     │       │   ~
 # │ bounds                   │       │         │   ~   │            │    ·     │       │   ·
 # │ sketch                   │       │         │   ~   │            │    ·     │       │   ·
-# │ %literal                 │   +   │   +     │   +   │            │    ·     │       │   +
+# │ %literal                 │   +   │   +     │   +   │            │    ·     │       │   ~
 # │ %partition               │   +   │   +     │   +   │            │    ·     │       │   ~
-# │ %let                     │   +   │   +     │   +   │            │    ~     │       │
+# │ %let                     │   +   │   +     │   +   │            │    ~     │       │   ~
 # │ %edge                    │   +   │   +     │   +   │            │    ~     │       │
 # │ %any                     │   ~   │   ~     │   ~   │            │    ·     │       │
 # │ %any°                    │   ~   │   ~     │   ~   │            │    ~     │       │
@@ -63,7 +63,7 @@
 # │ %new                     │   ~   │   ~     │   ~   │            │    ~     │       │   +
 # └──────────────────────────┴───────┴─────────┴───────┴────────────┴──────────┴───────┘
 # + confident
-# ~ will work
+# ~ will do
 # · not needed
 
 # TODO: we're pure so our hash must be deterministic, regardless of threats! Use fnv1a or something similar & fast

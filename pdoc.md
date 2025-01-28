@@ -239,11 +239,20 @@ The idiomatic way to match a pairsonly dictionary is `(¦ _)`, which is a shorth
 Captures are a way to save the matched term (most often it is called *matchee*) in a *capture
 environment*, which is more commonly referred to as *match environment* or simply *match env*
 or *env*. The "matched term" here means the term matched by (corresponding to, "underneath")
-the capture itself, rather than the term matched by the pattern itself.
+the capture itself, rather than the term matched by the entire pattern.
+
+Why would one capture?
+
+1. To access and work with the captured terms after the pattern matching process.
+2. To refer to captured term within the pattern itself, but in other places. This is sometimes
+   seen as "learning", since some operators (e.g. `%value`) do not know how to create a capture
+   and only know how to read it (thus someone in front or ahead of them must write the capture first).
+3. To use backmaps: backmaps allow one to modify terms underneath captures. In a sense, captures
+   are "getters" and backmaps can turn them into "setters", for those familiar with the terms.
 
 Captures are primarily made using `%let`: `(%let n (%number (whole _)))` captures a whole number
 as `n`. There is a shorthand syntax for `%let`, `←`: in this case that would be `n←(%number (whole _))`.
-Blanks `name_of-blank_` are a shorthand for `%let` with a type: `x_` is the same as `x←_number`
+Blanks `name_of-blank_` are a shorthand for `%let` with a type: `x_number` is the same as `x←_number`
 which is the same as `(%let x _number)`.
 
 Other operators can make captures as well. But only `%let` is of interest to us in this description.
@@ -266,7 +275,7 @@ Captures that have the same name are "equated" across the entire pattern:
 (equal 100 200) ;; => false
 ```
 
-This feature may lead one to neat patterns like the following:
+This feature may lead one to neat patterns such as:
 
 ```wwml
 (value (%value k v_) k_) => (ok v)
@@ -277,8 +286,8 @@ This feature may lead one to neat patterns like the following:
 (value {x: 100, y: 200} z) ;; => (err "key not found")
 ```
 
-... since as we have said, other operators make captures as well. The "equatability" of
-captures applies to them too:
+As we have said, other operators make captures as well, so the "equatability" of
+captures applies to them too. This can be seen in the example above and in this one:
 
 ```wwml
 (first-common ⟨x_⟩ ⟨x_⟩) => (ok x)
