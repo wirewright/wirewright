@@ -71,14 +71,6 @@
 
 # --- After the above & tests are in place:
 
-# NOTE NOTE NOTE::: optimizations described below we should be able to turn off for testing. Tests
-#  should run with each combination of the optimizations. Since any of those, if forced, can obstruct
-#  some path to a buggy patch of code in the unoptimized portion.
-#
-# - Two main optimizations we're going to use is memoization (where possible, determined
-# at compile-time?) and backjumping to assignment owner on assignment conflict. These are
-# the optimizations on the "complex patterns part".
-
 # - At this point we should be able to implement %string stuff. It includes some advanced
 #   keypath communication & caching so that must be implemented along the way.
 # - At this point we should be able to detect and compile *recursively simple patterns*.
@@ -87,11 +79,6 @@
 # a simpler operator hierarchy (e.g. Simple or something like that) that skips feedback etc.
 # Simple patterns should be optimized down to nanoseconds. An example of a simple
 # pattern is (+ a_number b_number). It should match in perhaps ~30ns + 2 * dict with().
-#
-# Ideally Simple should be embeddable into the constraint system, perhaps via some sort of
-# a "bridge" node.
-#
-# - Required&easy optimizations: (fst_ _* lst_)
 
 ###
 
@@ -159,107 +146,6 @@
 require "./wirewright"
 
 include Ww
-
-struct ::Ww::M0::PairSchema
-  alias Rule = Required | Optional
-  alias Check = MatchesAny | IntBounds
-
-  record Required, key : Term, check : Check do
-    def validated?(dict : Term::Dict) : Term::Dict?
-      return unless value = dict[key]?
-      return unless check.sat?(value)
-      dict
-    end
-  end
-
-  record Optional, key : Term, check : Check, default : Term do
-    def validated?(dict : Term::Dict) : Term::Dict?
-      unless value = dict[key]?
-        return dict.with(key, default)
-      end
-
-      return unless check.sat?(value)
-
-      dict
-    end
-  end
-
-  record MatchesAny, options : Array(Term) do
-    def sat?(value : Term) : Bool
-      options.any? { |option| !!M0.match?(option, value) }
-    end
-  end
-
-  record IntBounds, min : Term::Num, max : Term::Num do
-    def sat?(value : Term) : Bool
-      return false unless n = value.as_n?
-
-      n.whole? && n.in?(min..max)
-    end
-  end
-
-  alias Predicate = Term::Dict -> Bool
-
-  def initialize
-    @rules = [] of Rule
-    @predicates = [] of Predicate
-  end
-
-  macro where(&block)
-    check do |%input|
-      {% for arg in block.args %}
-        {{arg.id}} = %input[{{arg.symbolize}}]? || next true
-      {% end %}
-
-      {{yield}}
-    end
-  end
-
-  def self.build(&) : PairSchema
-    with schema = new yield
-
-    schema
-  end
-
-  def check(range : Range)
-    IntBounds.new(Term[range.begin], Term[range.end])
-  end
-
-  def check(allowed : Tuple)
-    MatchesAny.new([*allowed.map { |value| Term.of(value) }])
-  end
-
-  def key(key, *, values)
-    @rules << Required.new(Term.of(key), check(values))
-  end
-
-  def key(key, *, values, default)
-    @rules << Optional.new(Term.of(key), check(values), Term.of(default))
-  end
-
-  def check(&fn : Predicate) : Nil
-    @predicates << fn
-  end
-
-  def validated?(term : Term) : Term::Dict?
-    return unless dict0 = term.as_d?
-    return unless dict0.pairsonly?
-
-    good = dict0
-    bad = dict0.transaction do |commit|
-      @rules.each do |rule|
-        return unless good = rule.validated?(good)
-
-        commit.without(rule.key)
-      end
-    end
-
-    return unless bad.empty?
-    return unless @predicates.all?(&.call(dict0))
-
-    good
-  end
-end
 
 module Search::Result
   include Enumerable(Term)
@@ -2792,7 +2678,7 @@ module ::Ww::M1
           %[(%plural/max ¦ opts_)],
           cues: {:"%plural", :"%plural/min", :"%plural/max"},
         ) do |opts|
-          continue unless opts = Schemas::Plural.validated?(opts)
+          continue unless opts = Schemas::Plural.enriched?(opts)
 
           opts.morph({0, node[0]})
         end
@@ -2803,7 +2689,7 @@ module ::Ww::M1
           %[(%plural/max capture_ ¦ opts_)],
           cues: {:"%plural", :"%plural/min", :"%plural/max"},
         ) do |opts|
-          continue unless opts = Schemas::Plural.validated?(opts)
+          continue unless opts = Schemas::Plural.enriched?(opts)
 
           opts.morph({0, node[0]}, {1, {:"%capture", capture}})
         end
@@ -2820,7 +2706,7 @@ module ::Ww::M1
         end
 
         matchpi %[(%many capture_ _ _* ¦ opts_)], cue: :"%many" do |opts|
-          continue unless opts = Schemas::Many.validated?(opts)
+          continue unless opts = Schemas::Many.enriched?(opts)
 
           opts.transaction do |commit|
             commit << :"%many" << {:"%capture", capture}
@@ -2829,7 +2715,7 @@ module ::Ww::M1
         end
 
         matchpi %[(%past _ _* ¦ opts_)], cue: :"%past" do |opts|
-          continue unless opts = Schemas::Past.validated?(opts)
+          continue unless opts = Schemas::Past.enriched?(opts)
 
           opts.transaction do |commit|
             commit << :"%past"
@@ -2839,7 +2725,7 @@ module ::Ww::M1
         end
 
         matchpi %[(%past/max _ _* ¦ opts_)], cue: :"%past/max" do |opts|
-          continue unless opts = Schemas::Past.validated?(opts)
+          continue unless opts = Schemas::Past.enriched?(opts)
 
           opts.transaction do |commit|
             commit << :"%past"
@@ -3203,7 +3089,7 @@ module ::Ww::M1
         end
 
         matchpi %[(%items capture_ _ _* ¦ opts_)], cue: :"%items" do |opts|
-          continue unless opts = Schemas::Items.validated?(opts)
+          continue unless opts = Schemas::Items.enriched?(opts)
 
           opts.transaction do |commit|
             commit << :"%items/all" << {:"%capture", capture}
@@ -3220,7 +3106,7 @@ module ::Ww::M1
         end
 
         matchpi %[(%entries capture_ k_ v_ ¦ opts_)], cue: :"%entries" do |opts|
-          continue unless opts = Schemas::Entries.validated?(opts)
+          continue unless opts = Schemas::Entries.enriched?(opts)
 
           opts.morph(
             {0, :"%entries/all"},
@@ -3231,19 +3117,19 @@ module ::Ww::M1
         end
 
         matchpi %[(%leaf body_ ¦ opts_)], cue: :"%leaf" do |opts|
-          continue unless opts = Schemas::LeafUnbounded.validated?(opts)
+          continue unless opts = Schemas::LeafUnbounded.enriched?(opts)
 
           opts.morph({0, :"%leaves/first"}, {1, pattern(body)})
         end
 
         matchpi %[(%leaf° body_ ¦ opts_)], cue: :"%leaf°" do |opts|
-          continue unless opts = Schemas::LeafUnbounded.validated?(opts)
+          continue unless opts = Schemas::LeafUnbounded.enriched?(opts)
 
           opts.morph({0, :"%leaves/source"}, {1, pattern(body)})
         end
 
         matchpi %[(%leaves capture_ body_ ¦ opts_)], cue: :"%leaves" do |opts|
-          continue unless opts = Schemas::LeafBounded.validated?(opts)
+          continue unless opts = Schemas::LeafBounded.enriched?(opts)
 
           opts.morph(
             {0, :"%leaves/all"},

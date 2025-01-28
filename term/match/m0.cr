@@ -129,3 +129,5 @@ module Ww::M0
     [env1]
   end
 end
+
+require "./m0/pair_schema"
