@@ -244,7 +244,7 @@ the capture itself, rather than the term matched by the entire pattern.
 Why would one capture?
 
 1. To access and work with the captured terms after the pattern matching process.
-2. To refer to captured term within the pattern itself, but in other places. This is sometimes
+2. To refer to the captured term within the pattern itself, but in other places. This is sometimes
    seen as "learning", since some operators (e.g. `%value`) do not know how to create a capture
    and only know how to read it (thus someone in front or ahead of them must write the capture first).
 3. To use backmaps: backmaps allow one to modify terms underneath captures. In a sense, captures
@@ -255,7 +255,7 @@ as `n`. There is a shorthand syntax for `%let`, `←`: in this case that would b
 Blanks `name_of-blank_` are a shorthand for `%let` with a type: `x_number` is the same as `x←_number`
 which is the same as `(%let x _number)`.
 
-Other operators can make captures as well. But only `%let` is of interest to us in this description.
+Other operators can make captures as well. But only `%let` is of interest to us in this section.
 
 The first argument of `%let` is the name of the capture. Any term will suffice: a number, a symbol,
 a dictionary, etc:
