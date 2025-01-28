@@ -1,16 +1,16 @@
 # ┌──────────────────────────┬───────┬─────────┬───────┬────────────┬──────────┬───────┐
 # │            P             │ Norm  │ Compile │ Match │ Optimize   │ Backmap  │ Ubase │  docs
 # ├──────────────────────────┼───────┼─────────┼───────┼────────────┼──────────┼───────┤
-# │ type                     │   +   │   +     │   +   │            │    ·     │       │   +
-# │ literal                  │   +   │   +     │   +   │            │    ·     │       │   +
-# │ literal dict             │       │         │   ~   │            │    ·     │       │   +
-# │ blank                    │   +   │   +     │   +   │            │    ~     │       │   +
-# │ itemsonly                │   +   │   +     │   +   │            │    ·     │       │
-# │ pairsonly                │   ~   │   ~     │   ~   │            │    ·     │       │
-# │ bounds                   │       │         │   ~   │            │    ·     │       │
-# │ sketch                   │       │         │   ~   │            │    ·     │       │
-# │ %literal                 │   +   │   +     │   +   │            │    ·     │       │   +
-# │ %partition               │   +   │   +     │   +   │            │    ·     │       │   +
+# │ type                     │   +   │   +     │   +   │            │    ·     │       │   ~
+# │ literal                  │   +   │   +     │   +   │            │    ·     │       │    
+# │ literal dict             │       │         │   ~   │            │    ·     │       │    
+# │ blank                    │   +   │   +     │   +   │            │    ~     │       │    
+# │ itemsonly                │   +   │   +     │   +   │            │    ·     │       │   ~
+# │ pairsonly                │   ~   │   ~     │   ~   │            │    ·     │       │   ~
+# │ bounds                   │       │         │   ~   │            │    ·     │       │   ·
+# │ sketch                   │       │         │   ~   │            │    ·     │       │   ·
+# │ %literal                 │   +   │   +     │   +   │            │    ·     │       │    
+# │ %partition               │   +   │   +     │   +   │            │    ·     │       │   ~
 # │ %let                     │   +   │   +     │   +   │            │    ~     │       │
 # │ %edge                    │   +   │   +     │   +   │            │    ~     │       │
 # │ %any                     │   ~   │   ~     │   ~   │            │    ·     │       │
@@ -19,7 +19,7 @@
 # │ %keypool                 │   +   │   +     │   +   │            │    ·     │       │
 # │ %not                     │   +   │   +     │   +   │            │    ·     │       │
 # │ %layer                   │   +   │   +     │   +   │            │    ~     │       │
-# │ %number                  │   +   │   +     │   +   │            │    ·     │       │   +
+# │ %number                  │   +   │   +     │   +   │            │    ·     │       │   ~
 # │ %nonself                 │   +   │   ·     │   ·   │     ·      │    ·     │   ·   │
 # │ %string                  │       │         │       │            │          │       │
 # │ %string date             │       │         │       │            │          │       │
@@ -398,12 +398,6 @@ module ::Ww::M1::Operator
   alias Source = DfsSource | ScanSource | EntriesSource
   alias AllIsolated = ScanAllIsolated | DfsAllIsolated | BfsAllIsolated | EntriesAllIsolated
   alias All = ScanAll | DfsAll | BfsAll | EntriesAll
-
-  defcase SketchSubset, sketch : Term::Dict::Sketch, successor : Any
-  defcase Bounds, min : Magnitude, max : Magnitude
-  defcase BoundsGuard, min : Magnitude, max : Magnitude, successor : Any
-  defcase MaxDepth, min : Magnitude, max : Magnitude, successor : Any
-  defcase DictGuard, sketch : Term::Dict::Sketch, bounds : {Magnitude, Magnitude}, depth : {Magnitude, Magnitude}, successor : Any
 
   defcase Literal, term : Term
   defcase Capture, capture : Term, successor : Any
@@ -914,62 +908,6 @@ class KeypathQuery
 end
 
 module ::Ww::M1::Operator
-  def match(behind0, op : SketchSubset, matchee : Term, ahead0)
-    unless (dict = matchee.as_d?) && dict.sketch_superset_of?(op.sketch)
-      return Fb::Mismatch.new(behind0.env)
-    end
-
-    match(behind0, op.successor, matchee, ahead0)
-  end
-
-  def match(behind0, op : Bounds, matchee : Term, ahead0)
-    unless (dict = matchee.as_d?) && dict.size.in?(op.min..op.max)
-      return Fb::Mismatch.new(behind0.env)
-    end
-
-    ahead0.call(behind0)
-  end
-
-  def match(behind0, op : BoundsGuard, matchee : Term, ahead0)
-    unless (dict = matchee.as_d?) && dict.size.in?(op.min..op.max)
-      return Fb::Mismatch.new(behind0.env)
-    end
-
-    match(behind0, op.successor, matchee, ahead0)
-  end
-
-  def match(behind0, op : MaxDepth, matchee : Term, ahead0)
-    # FIXME: currently we're unable to use #max of MaxDepth, since Dict#maxdepth is maximum-ever
-    # depth rather than current maximum depth.
-    unless (dict = matchee.as_d?) && dict.maxdepth.in?(op.min..)
-      return Fb::Mismatch.new(behind0.env)
-    end
-
-    match(behind0, op.successor, matchee, ahead0)
-  end
-
-  def match(behind0, op : DictGuard, matchee : Term, ahead0)
-    unless dict = matchee.as_d?
-      return Fb::Mismatch.new(behind0.env)
-    end
-
-    unless dict.sketch_superset_of?(op.sketch)
-      return Fb::Mismatch.new(behind0.env)
-    end
-
-    unless dict.size.in?(op.bounds[0]..op.bounds[1])
-      return Fb::Mismatch.new(behind0.env)
-    end
-
-    # FIXME: currently we're unable to use op.depth[1], since Dict#maxdepth is maximum-ever
-    # depth rather than current maximum depth.
-    unless dict.maxdepth.in?(op.depth[0]..)
-      return Fb::Mismatch.new(behind0.env)
-    end
-
-    match(behind0, op.successor, matchee, ahead0)
-  end
-
   def match(behind0, op : Literal, matchee : Term, ahead0)
     unless matchee == op.term
       return Fb::Mismatch.new(behind0.env)

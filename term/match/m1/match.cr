@@ -51,4 +51,60 @@ module Ww::M1::Operator
 
     ahead0.call(behind0)
   end
+
+  def match(behind0, op : SketchSubset, matchee : Term, ahead0)
+    unless (dict = matchee.as_d?) && dict.sketch_superset_of?(op.sketch)
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    match(behind0, op.successor, matchee, ahead0)
+  end
+
+  def match(behind0, op : Bounds, matchee : Term, ahead0)
+    unless (dict = matchee.as_d?) && dict.size.in?(op.min..op.max)
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    ahead0.call(behind0)
+  end
+
+  def match(behind0, op : BoundsGuard, matchee : Term, ahead0)
+    unless (dict = matchee.as_d?) && dict.size.in?(op.min..op.max)
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    match(behind0, op.successor, matchee, ahead0)
+  end
+
+  def match(behind0, op : MaxDepth, matchee : Term, ahead0)
+    # FIXME: currently we're unable to use #max of MaxDepth, since Dict#maxdepth is maximum-ever
+    # depth rather than current maximum depth.
+    unless (dict = matchee.as_d?) && dict.maxdepth.in?(op.min..)
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    match(behind0, op.successor, matchee, ahead0)
+  end
+
+  def match(behind0, op : DictGuard, matchee : Term, ahead0)
+    unless dict = matchee.as_d?
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    unless dict.sketch_superset_of?(op.sketch)
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    unless dict.size.in?(op.bounds[0]..op.bounds[1])
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    # FIXME: currently we're unable to use op.depth[1], since Dict#maxdepth is maximum-ever
+    # depth rather than current maximum depth.
+    unless dict.maxdepth.in?(op.depth[0]..)
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    match(behind0, op.successor, matchee, ahead0)
+  end
 end
