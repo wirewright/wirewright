@@ -399,8 +399,6 @@ module ::Ww::M1::Operator
   alias AllIsolated = ScanAllIsolated | DfsAllIsolated | BfsAllIsolated | EntriesAllIsolated
   alias All = ScanAll | DfsAll | BfsAll | EntriesAll
 
-  defcase Itemsonly
-  defcase Pairsonly
   defcase SketchSubset, sketch : Term::Dict::Sketch, successor : Any
   defcase Bounds, min : Magnitude, max : Magnitude
   defcase BoundsGuard, min : Magnitude, max : Magnitude, successor : Any
@@ -916,22 +914,6 @@ class KeypathQuery
 end
 
 module ::Ww::M1::Operator
-  def match(behind0, op : Itemsonly, matchee : Term, ahead0)
-    unless (dict = matchee.as_d?) && dict.itemsonly?
-      return Fb::Mismatch.new(behind0.env)
-    end
-
-    ahead0.call(behind0)
-  end
-
-  def match(behind0, op : Pairsonly, matchee : Term, ahead0)
-    unless (dict = matchee.as_d?) && dict.pairsonly?
-      return Fb::Mismatch.new(behind0.env)
-    end
-
-    ahead0.call(behind0)
-  end
-
   def match(behind0, op : SketchSubset, matchee : Term, ahead0)
     unless (dict = matchee.as_d?) && dict.sketch_superset_of?(op.sketch)
       return Fb::Mismatch.new(behind0.env)
@@ -3759,6 +3741,12 @@ module ::Ww::M1
         # Fold (_*) into an itemsonly check (which is vastly cheaper!)
         matchpi %[(%itemseq (%plural min: 0 max: ∞ type: (%literal _)))] do
           {:"%itemsonly"}
+        end
+
+        # Rewrite bounds-checked plural such as (_+) similarly into an itemsonly check since
+        # the bounds check already checks what the plural would have. 
+        matchpi %{[%bounds (%itemseq (%plural min: _ max: _ type: (%literal _)))]} do
+          normp.morph({1, {:"%itemsonly"}})
         end
 
         # Rewrite (¦ _) = (%partition () _) into a pairsonly check (which is vastly cheaper!)

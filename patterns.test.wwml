@@ -1001,9 +1001,23 @@
     (+ (1) (1 2 3))
     (- () (a 2 3) (1 a 3) (1 2 a)))
 
+  ;; Test %bounds implicitly if in optimize mode
+
   (pattern (_+)
     (+ (1) (1 2 3) (x) (x y z) ("foo" x 1 2))
-    (- ()))
+    (- () (x: 100) (+ 1 2 x: 100 y: 200)))
+
+  (pattern ((%plural min: 2))
+    (+ (1 2) (1 2 3) (x y z) ("foo" x 1 2 3) (1 2 3 4 5))
+    (- () (1) (x) (x: 100) (x: 100 y: 200) (+ 1 2 x: 100 y: 200)))
+
+  (pattern ((%plural max: 3))
+    (+ () (1) (1 2) (1 2 3) (x) (x y z))
+    (- (1 2 3 4) ("foo" x 1 2 3) (1 2 3 4 5) (x: 100) (x: 100 y: 200) (+ 1 2 x: 100 y: 200)))
+
+  (pattern ((%plural min: 2 max: 4))
+    (+ (1 2) (1 2 3) (x y z) (1 2 3 4))
+    (- () (1) (x) ("foo" x 1 2 3) (x: 100) (x: 100 y: 200) (+ 1 2 x: 100 y: 200) (1 2 3 4 5)))
 
   ;; Untyped-typed edge
   (pattern (xs_+ ys_string+)

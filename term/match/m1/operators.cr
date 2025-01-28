@@ -28,4 +28,7 @@ module Ww::M1::Operator
   defcase Str
   defcase Boolean
   defcase Dict
+
+  defcase Itemsonly
+  defcase Pairsonly
 end

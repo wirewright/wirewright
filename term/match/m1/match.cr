@@ -35,4 +35,20 @@ module Ww::M1::Operator
       ahead0.call(behind0)
     end
   {% end %}
+
+  def match(behind0, op : Itemsonly, matchee : Term, ahead0)
+    unless (dict = matchee.as_d?) && dict.itemsonly?
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    ahead0.call(behind0)
+  end
+
+  def match(behind0, op : Pairsonly, matchee : Term, ahead0)
+    unless (dict = matchee.as_d?) && dict.pairsonly?
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    ahead0.call(behind0)
+  end
 end

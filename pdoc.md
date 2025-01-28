@@ -157,6 +157,41 @@ There are many `%`-operators that match dictionaries. In fact, almost all `%`-op
 match dictionaries. They are going to be described separately. In this section we will only
 describe non-`%`ones.
 
+```wwml
+(reaction _dict) => "It's a dict!"
+(reaction _) => "It's not a dict!"
+```
+
+### Matching an itemsonly dictionary
+
+The idiomatic way to match an itemsonly dictionary is `(_*)`. If you want to capture it
+use e.g. `xs←(_*)`. You can use `(xs_*)` too if you're OK with the difference in meaning
+(the former is capturing the "outside" and the latter is capturing the "inside"). This
+difference is important in backmaps `xs←(_*) <> {xs: (1 2 3)}` will result in `(1 2 3)`
+and `xs←(_*) <> {(xs): (1 2 3)}` will result in `1 2 3` if there is a surrounding dict.
+On the other hand, `(xs_*) <> {xs: (1 2 3)}` will result in `((1 2 3))` and `(xs_*) <> {(xs): (1 2 3)}`
+will result in `(1 2 3)`.
+
+A nonempty itemsonly dictionary can be matched similarly using `(_+)`.
+
+```wwml
+(reaction (_*)) => "It's an itemsonly dict!"
+(reaction (_+)) => "It's a nonempty itemsonly dict!"
+(reaction _dict) => "It's a dict!"
+(reaction _) => "It's not a dict!"
+
+(reaction ())
+;; => "It's an itemsonly dict!"
+(reaction (1 2 3)) 
+;; => "It's a nonempty itemsonly dict!"
+(reaction (name: "John"))
+;; => "It's a dict!"
+(reaction (greet name: "John"))
+;; => "It's a dict!"
+(reaction qux)
+;; => "It's not a dict!"
+```
+
 ## `%new`
 
 The idea with the `%new` operator is to be able to create new patterns at match-
