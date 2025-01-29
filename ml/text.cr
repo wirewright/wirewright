@@ -542,10 +542,16 @@ module Ww::ML::Text
           raise "expected a single named blank"
         end
 
-        {name, Term.of(:"%let", name, value)}
+        if blank.typed?
+          # E.g. x_number: (%not 0) -> x: (%all x_number (%not 0))
+          {name, Term.of(:"%all", keysym, value)}
+        else
+          # E.g. x_: (%not 0) -> x: (%let x (%not 0))
+          {name, Term.of(:"%let", name, value)}
+        end
       when :"⋮"
         @lexer.thru?
-          
+
         value = slot
 
         unless (keysym = key.as_sym?) && (blank = keysym.blank?)
@@ -635,7 +641,7 @@ module Ww::ML::Text
         head
       when :":", :"⋮"
         # If `¦ <head>‸: ...` or `¦ <head>‸⋮ ...` then this is a closed pairspart.
-        key, value = ppentry(head) 
+        key, value = ppentry(head)
         Term.of(pentrylist(:")", initial: Term[].with(key, value)))
       else
         # Otherwise this is an open itemspart (%layer).
