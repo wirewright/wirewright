@@ -1446,15 +1446,6 @@ module ::Ww::M1::Operator
     end
   end
 
-  private def compare?(a, op, b)
-    case op
-    when :lt  then a < b
-    when :lte then a <= b
-    else
-      unimplemented
-    end
-  end
-
   def search_spec(op : Scan)
     Search::Spec::Scan.new(op.needle.size.to_u16)
   end

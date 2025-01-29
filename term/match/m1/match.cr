@@ -3,6 +3,15 @@ module Ww::M1::Operator
     Ahead.tr(behind0, ahead0)
   end
 
+  private def compare?(a, op, b)
+    case op
+    when :lt  then a < b
+    when :lte then a <= b
+    else
+      unimplemented
+    end
+  end
+
   def match(behind0, op : Num, matchee : Term, ahead0)
     unless n = matchee.as_n?
       return Fb::Mismatch.new(behind0.env)
