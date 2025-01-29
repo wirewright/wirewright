@@ -133,4 +133,21 @@ module Ww::M1::Operator
 
     Ahead.tr(behind0, ahead0)
   end
+
+  def match(behind0, op : Edge, matchee : Term, ahead0)
+    case op.type
+    when .any?
+      valid = ML.edge?(matchee)
+    when .number?, .string?, .symbol?
+      valid = ML.edge?(matchee, allowed: {op.type})
+    else
+      raise ArgumentError.new("unexpected edge type after compilation: expected Any, Number, String, or Symbol")
+    end
+
+    unless valid
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    Ahead.tr(behind0, ahead0)
+  end
 end

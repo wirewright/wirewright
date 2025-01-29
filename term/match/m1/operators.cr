@@ -49,4 +49,6 @@ module Ww::M1::Operator
   defcase LiteralChoices, choices : Set(Term)
 
   defcase Capture, capture : Term, successor : Any
+
+  defcase Edge, type : TermType
 end
