@@ -84,27 +84,16 @@ base = <<-WWML
 (node (scrollbox _ ¦ _ h: max overflows-y_: true max-h_number outer-h_number)) <> {overflows-y: false, outer-h: →max-h}
 
 ;; Calculate inner-w/h for col.
-;; FIXME: this whole trouble with "states" suggests we make at least a small move toward
-;; multirules (multiple rules applied to the same term simultaneously). If such an application
-;; produces no conflict, we should proceed with rewriting the term with all rules. Otherwise
-;; (stomping) we could either branch (as in multiway rewriting) or pick the most specific rule.
-;; Specificity by default is NOT AT ALL an intuitive approach here. Even I get really really
-;; confused by specificity-related behavior which isn't exactly a good sign since I am
-;; pretty biased, and even that bias does not help.
-;; NOTE: An alternative to multirules in this case is to see if the rule actually changed anything.
-;; If it did not then we proceed to lower-specificity rules and so on. If there was a change though,
-;; then we halt. This is an in-between solution that I think should work for now.
-(edge (col _* ¦ _ inner-w⋮ 0) {_ outer-w_number, -state_})
-  <> {inner-w: ($once (max →inner-w →outer-w)), state: in-w}
-
-(edge (col _* ¦ _ inner-h⋮ 0) {_ outer-h_number state_: in-w})
-  <> {inner-h: ($once (+ →inner-h →outer-h)), state: member}
+(edge (col _* ¦ _ inner-w⋮ 0) {_ outer-w_number -col/state_})
+  <> {inner-w: ($once (max →inner-w →outer-w)), col/state: half-member}
+(edge (col _* ¦ _ inner-h⋮ 0) {_ outer-h_number col/state_: half-member})
+  <> {inner-h: ($once (+ →inner-h →outer-h)), col/state: member}
 
 ;; Calculate inner-w/h for row.
-(edge (row _* ¦ _ inner-w: (%optional 0 W_number)) {_ outer-w: w_number -state_})
-  <> {W: ($once (+ →W →w)), state: member}
-(edge (row _* ¦ _ inner-h: (%optional 0 H_number)) {_ outer-h: h_number})
-  <> {H: ($once (max →H →h))}
+(edge (row _* ¦ _ inner-w: (%optional 0 W_number)) {_ outer-w: w_number, row/state_: half-member})
+  <> {W: ($once (+ →W →w)), row/state: member}
+(edge (row _* ¦ _ inner-h: (%optional 0 H_number)) {_ outer-h: h_number, -row/state_})
+  <> {H: ($once (max →H →h)), row/state: half-member}
 
 ;; The following rule system will calculate fr/max for fr-children of fr: true parents
 ;; with a defined fr/avail (the amount of free space left).
@@ -133,7 +122,7 @@ base = <<-WWML
 (node (col _* ¦ _ fr: true max-h_number inner-h_number overflows-y: (%- true) -fr/avail_))
   <> {fr/avail: ($once (- →max-h →inner-h))}
 
-(edge [col _*] {_ fr/max_number -max-h_ -col/state_})
+(edge [col _*] {_ fr/max_number -max-h_ col/state: (%- member col/state)})
   <> {max-h: →fr/max, col/state: member}
 
 ;; `row` interacts with this rule system by calculating fr/avail based on its
@@ -145,7 +134,7 @@ base = <<-WWML
 (node (row _* ¦ _ fr: true max-w_number inner-w_number overflows-x: (%- true) -fr/avail_))
   <> {fr/avail: ($once (- →max-w →inner-w))}
 
-(edge [row _*] {_ fr/max_number -max-w_ -row/state_})
+(edge [row _*] {_ fr/max_number -max-w_ row/state: (%- member row/state)})
   <> {max-w: →fr/max, row/state: member}
 WWML
 
@@ -355,7 +344,15 @@ end))
 #       end
 preview = ->{ true }
 
-puts ML.display(outerR(preview, Term.of(:root, ML.parse1(frame)), rules))
+require "benchmark"
+
+Benchmark.ips do |x|
+  intree = Term.of(:root, ML.parse1(frame))
+  x.report("rewrite") do
+   outerR(preview, intree, rules)
+  end
+end
+# puts ML.display()
 
 
 # puts rules.call(Term.of(100))

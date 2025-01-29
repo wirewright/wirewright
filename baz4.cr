@@ -130,7 +130,7 @@ struct ProcRuleset
     def backmap(pattern : Term, &fn : ProcBackmap) : Nil
       @ruleary << {pattern, fn}
     end
-    
+
     def rulep(ml : String, &fn : ProcRule) : Nil
       rule(ML.parse1(ml), &fn)
     end
@@ -310,6 +310,10 @@ struct Ruleset
     new(pset, rules.to_readonly_slice.dup)
   end
 
+  def responses(matchee : Term) : Iterator({Pr::Pos, Rule::Any})
+    @pset.responses(matchee).map { |response| {response, @rules[response.pattern.index]} }
+  end
+
   def call(matchee : Term) : {Pr::Pos, Rule::Any}?
     case res = @pset.response(matchee)
     in Pr::Pos
@@ -332,7 +336,7 @@ end
 alias Rewriter = Changes::Any, Rewrite::Any -> Rewrite::Any
 
 # TODO: merge itemsR and pairsR into a single entriesR with an optional
-# part arg. 
+# part arg.
 # TODO: add a flag to use each_entry_randomized
 
 # FIXME: crazy crazy shitcode
@@ -362,7 +366,7 @@ def itemsR(changes : Changes::Preview, term : Term, successor, *, limit) : Rewri
 
       changes.call(Term.of(dict1.with(index, original)), Rewrite.one(filled))
     end
-    
+
     # Ask the successor for rewrite, and incorporate it into the dict.
     case rewrite = successor.call(subchanges, Rewrite.one(item0))
     in Rewrite::One
@@ -415,7 +419,7 @@ def itemsR(changes : Changes::Accept, term : Term, successor, *, limit) : Rewrit
     return changed ? Rewrite.one(dict1) : Rewrite.none
   end
 
-  splices.unstable_sort_by! { |index, _| -index } 
+  splices.unstable_sort_by! { |index, _| -index }
   splices.each do |index, list|
     dict1 = dict1.replace(Term[index], &.concat(list.items))
   end
@@ -458,7 +462,7 @@ def pairsR(changes : Changes::Preview, term : Term, successor, *, limit) : Rewri
 
       changes.call(Term.of(dict1.with(key, original)), Rewrite.one(filled))
     end
-    
+
     # Ask the successor for rewrite, and incorporate it into the dict.
     case rewrite = successor.call(subchanges, Rewrite.one(value))
     in Rewrite::One
@@ -713,7 +717,7 @@ end
 #
 # Absolute rewriting is useful when we want to prioritize context in rules.
 # That is, rules with most context must be tried first. With `absR`, any
-# rewrite can subsequently be assessed in context. 
+# rewrite can subsequently be assessed in context.
 #
 # `absR` is an intrinsically inefficient way to rewrite, especially for very
 # deep terms (since for any smallest change `absR` will backjump to the root).
@@ -752,7 +756,7 @@ def relr0(changes : Changes::Preview, floor, term, ascent, successor)
         if dict1.index?(key)
           filled = dict1.replace(key.as_n, &.concat(rewrite.list.items))
         else
-          filled = dict1.with(key, rewrite.list) 
+          filled = dict1.with(key, rewrite.list)
         end
       end
 
@@ -770,7 +774,7 @@ def relr0(changes : Changes::Preview, floor, term, ascent, successor)
     in Relr::Ready
       rewrite = res.rewrite
     end
-  
+
     case rewrite
     in Rewrite::None
     in Rewrite::One
@@ -800,7 +804,7 @@ def relr0(changes : Changes::Accept, floor, term, ascent, successor)
   end
 
   splices = nil
-  
+
   dict1 = dict0
   changed = false
 
@@ -816,7 +820,7 @@ def relr0(changes : Changes::Accept, floor, term, ascent, successor)
     in Relr::Ready
       rewrite = res.rewrite
     end
-  
+
     case rewrite
     in Rewrite::None
     in Rewrite::One
@@ -832,14 +836,14 @@ def relr0(changes : Changes::Accept, floor, term, ascent, successor)
       changed = true
     end
   end
-  
+
   if splices
     splices.unstable_sort_by! { |index, _| -index }
     splices.each do |index, list|
       dict1 = dict1.replace(index...index + 1, &.concat(list.items))
     end
   end
-  
+
   Relr::Ready.new(changed ? Rewrite.one(dict1) : Rewrite.none)
 end
 
@@ -900,64 +904,72 @@ struct RewriteApplier(T)
 end
 
 def rulesetR(changes, term, ruleset, ruler, backmapr, elser)
-  unless row = ruleset.call(term)
-    return elser.call(changes, Rewrite.one(term))
-  end
+  apply = ->(pr : Pr::Pos, rule : Rule::Any) do
+    case rule
+    in Rule::Template
+      raise "template not implemented"
+    in Rule::BackmapOne
+      # Keeping track of keypaths is expensive, so we do pattern matching without
+      # keypaths; when we're sure we need keypaths we re-match with keypaths: true.
+      unless pr.envs.all? &.includes?(:"(keypaths)")
+        pr = pr.pattern.response(term, keypaths: true).as(Pr::Pos)
+      end
 
-  pr, rule = row
+      case changes
+      in Changes::Accept
+        subchanges = changes
+      in Changes::Preview
+        # TODO: support Changes::Preview
+        subchanges = ->{ changes.call(term, Rewrite.one(term)) }
+      end
 
-  case rule
-  in Rule::Template
-    raise "template not implemented"
-  in Rule::BackmapOne
-    # Keeping track of keypaths is expensive, so we do pattern matching without
-    # keypaths; when we're sure we need keypaths we re-match with keypaths: true.
-    unless pr.envs.all? &.includes?(:"(keypaths)")
-      pr = pr.pattern.response(term, keypaths: true).as(Pr::Pos)
-    end
-
-    case changes
-    in Changes::Accept
-      subchanges = changes
-    in Changes::Preview
-      # TODO: support Changes::Preview
-      subchanges = ->{ changes.call(term, Rewrite.one(term)) }
-    end
-
-    result = M1.backmap(pr.envs, rule.backspec, term, applier: RewriteApplier.new(subchanges, backmapr))
-    result == term ? Rewrite.none : Rewrite.one(result)
-  in Rule::BackmapMany
-    unless pr.envs.all? &.includes?(:"(keypaths)")
-      pr = pr.pattern.response(term, keypaths: true).as(Pr::Pos)
-    end
-
-    case changes
-    in Changes::Accept
-      subchanges = changes
-    in Changes::Preview
-      # TODO: support Changes::Preview
-      subchanges = ->{ changes.call(term, Rewrite.one(term)) }
-    end
-
-    case pr
-    in Pr::One
       result = M1.backmap(pr.envs, rule.backspec, term, applier: RewriteApplier.new(subchanges, backmapr))
-
-      if rule.backspec.includes?({rule.toplevel}) && (list = result.as_d?)
-        list == Term[{term}] ? Rewrite.none : Rewrite.many(list)
-      else
-        result == term ? Rewrite.none : Rewrite.one(result)
+      result == term ? Rewrite.none : Rewrite.one(result)
+    in Rule::BackmapMany
+      unless pr.envs.all? &.includes?(:"(keypaths)")
+        pr = pr.pattern.response(term, keypaths: true).as(Pr::Pos)
       end
-    in Pr::Many
-      list = Term::Dict.build do |commit|
-        pr.ones do |one|
-          commit << M1.backmap(one.envs, rule.backspec, term, applier: RewriteApplier.new(subchanges, backmapr))
+
+      case changes
+      in Changes::Accept
+        subchanges = changes
+      in Changes::Preview
+        # TODO: support Changes::Preview
+        subchanges = ->{ changes.call(term, Rewrite.one(term)) }
+      end
+
+      case pr
+      in Pr::One
+        result = M1.backmap(pr.envs, rule.backspec, term, applier: RewriteApplier.new(subchanges, backmapr))
+
+        if rule.backspec.includes?({rule.toplevel}) && (list = result.as_d?)
+          list == Term[{term}] ? Rewrite.none : Rewrite.many(list)
+        else
+          result == term ? Rewrite.none : Rewrite.one(result)
         end
-      end
+      in Pr::Many
+        list = Term::Dict.build do |commit|
+          pr.ones do |one|
+            commit << M1.backmap(one.envs, rule.backspec, term, applier: RewriteApplier.new(subchanges, backmapr))
+          end
+        end
 
-      list == Term[{term}] ? Rewrite.none : Rewrite::Many.new(list)
+        list == Term[{term}] ? Rewrite.none : Rewrite::Many.new(list)
+      end
     end
   end
+
+  needle = ruleset.responses(term).compact_map do |pr, rule|
+    rewrite = apply.call(pr, rule)
+
+    case rewrite.diff(term)
+    in Rewrite::None
+    in Rewrite::Some
+      rewrite
+    end
+  end
+
+  needle.first? || elser.call(changes, Rewrite.one(term))
 end
 
 def rulesetR(ruleset, ruler, backmapr, elser) : Rewriter
@@ -1139,4 +1151,3 @@ def orthor(dict0 : Term::Dict, callable)
   end
   dict1
 end
-

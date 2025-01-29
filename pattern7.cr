@@ -12,9 +12,9 @@
 # │ %literal                 │   +   │   +     │   +   │            │    ·     │       │   ~
 # │ %partition               │   +   │   +     │   +   │            │    ·     │       │   ~
 # │ %let                     │   +   │   +     │   +   │            │    ~     │       │   ~
-# │ %edge                    │   +   │   +     │   +   │            │    ~     │       │
+# │ %edge                    │   +   │   +     │   +   │            │    ~     │       │   ~
 # │ %any                     │   ~   │   ~     │   ~   │            │    ·     │       │   ~
-# │ %any°                    │   ~   │   ~     │   ~   │            │    ~     │       │
+# │ %any°                    │   ~   │   ~     │   ~   │            │    ~     │       │   ~
 # │ %all                     │   ~   │   ~     │   ~   │            │    ~     │       │
 # │ %keypool                 │   +   │   +     │   +   │            │    ·     │       │
 # │ %not                     │   +   │   +     │   +   │            │    ·     │       │
@@ -6133,15 +6133,20 @@ class PatternSet
       .orelse { response(@headless, matchee) }
   end
 
-  # Returns an array of all positive responses of this pattern set to *matchee*.
-  def responses(matchee : Term) : Array(Pr::Pos)
-    responses = [] of Pr::Pos
+  def responses(matchee : Term) : Iterator(Pr::Pos)
+    headed = {matchee}.each
+      .compact_map(&.as_d?)
+      .compact_map(&.items.first?)
+      .compact_map { |head| @headed[head]? }
+      .flat_map(&.each)
+      .map(&.response(matchee))
+      .select(Pr::Pos)
 
-    if (dict = matchee.as_d?) && (head = dict.items.first?) && (neighbors = @headed[head]?)
-      responses.concat(responses(neighbors, matchee))
-    end
+    headless = @headless.each
+      .map(&.response(matchee))
+      .select(Pr::Pos)
 
-    responses.concat(responses(@headless, matchee))
+    headed.chain(headless)
   end
 end
 
