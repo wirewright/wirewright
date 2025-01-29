@@ -29,7 +29,7 @@
 #       Pf::Core::Node assumes a set (roughly). We lose a lot of copy reduction opportunities
 #       by not storing keys and values separately. I also believe we should somehow use variably
 #       sized but fixed-bytesize nodes. I think we should fix the bytesize at 64 bytes, since this
-#       is a cache line size so we'll get the stuff around-ish for free. 
+#       is a cache line size so we'll get the stuff around-ish for free.
 #    8. The keys and values should be a special kind of array, a TermArray. The TermArray should somehow
 #       be able to manage the 64 bytes, trying to pack as many things in it as possible. We could have
 #       byte headers followed by payload. Something like a boolean is a byte header long; it does not
@@ -64,14 +64,14 @@
 # - If we have sketches on each Pair/Item node, we'll be able to support "symbol-guided descent", and in the future
 # perhaps also value-guided descent, which is especially important for the optimization of %item nodes and %leaf nodes.
 # Support on the level of dictionary nodes means we'll only have to go through nodes that probably contain the symbol,
-# instead of forced thorough iteration. 
+# instead of forced thorough iteration.
 #
 # - It appears that we can try to use linear probing for the items array on HAMT nodes instead of Sparse32.
 #   If the key cannot be found, we proceed as usual into the Sparse32 children array.
 
 class ::Pf::Core::Node(T)
   # :nodoc:
-  record CheckoutItem(T), item : T 
+  record CheckoutItem(T), item : T
   # :nodoc:
   record CheckoutNode(T), node : Node(T)
 
@@ -85,7 +85,7 @@ class ::Pf::Core::Node(T)
     # Scratch buffer that can hold up to 32 items + 32 children.
     scratch = uninitialized UInt8[64]
     commands = [CheckoutNode.new(self)] of CheckoutNode(T) | CheckoutItem(T)
-    
+
     while command = commands.pop?
       case command
       in CheckoutItem(T)
@@ -182,9 +182,9 @@ module Ww
         (@dict || @parent).size
       end
 
-      # Runs `Dict::ItemsView#size` on the dictionary built so far.
+      # Runs `Dict#itemsize` on the dictionary built so far.
       def itemsize : Int32
-        (@dict || @parent).items.size
+        (@dict || @parent).itemsize
       end
 
       def pairsize : Int32
@@ -347,6 +347,14 @@ module Ww
     # Returns the number of entries in this dictionary.
     def size : Int32
       @items.size + @pairs.size
+    end
+
+    def itemsize
+      @items.size
+    end
+
+    def hi
+      @items.size - 1
     end
 
     # Returns `true` if this dictionary contains no entries.
@@ -1169,12 +1177,12 @@ module Ww
         other.each { |key| commit.without(key) }
       end
     end
-    
+
     def items(b : Num, e : Num) : Dict
       return Term[] if b == e
       return items.collect if b == Term[0] && e == Term[size]
       return Term[] unless b < e <= size
-      
+
       Term::Dict.build do |commit|
         (b...e).each do |key|
           commit.append(self[key])
@@ -1503,7 +1511,7 @@ module Ww
       if @sketch > 0 && other.@sketch > 0 && (@sketch & other.@sketch) == 0
         return false
       end
-      
+
       # TODO: use @maxdepth somehow as well
 
       return false unless @items.size == other.@items.size && @pairs.size == other.@pairs.size

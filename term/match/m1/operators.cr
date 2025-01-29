@@ -51,4 +51,9 @@ module Ww::M1::Operator
   defcase Capture, capture : Term, successor : Any
 
   defcase Edge, type : TermType
+
+  defcase ItemSeq, items : Array(Item::Any)
+  defcase ItemFirst, successor : Any
+  defcase ItemLast, successor : Any
+  defcase SingularSeq, items : Slice(Any), exhaustive : Bool, reverse : Bool
 end

@@ -150,4 +150,54 @@ module Ww::M1::Operator
 
     Ahead.tr(behind0, ahead0)
   end
+
+  def match(behind0, op : ItemFirst, matchee : Term, ahead0)
+    unless (dict = matchee.as_itemsonly_d?) && dict.itemsize > 0
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    ahead1 = Ahead::Goto.new(behind0.keypath?, Ahead.stackptr(ahead0))
+
+    match(behind0.value(key: 0), op.successor, dict[0], ahead1)
+  end
+
+  def match(behind0, op : ItemLast, matchee : Term, ahead0)
+    unless (dict = matchee.as_itemsonly_d?) && dict.itemsize > 0
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    ahead1 = Ahead::Goto.new(behind0.keypath?, Ahead.stackptr(ahead0))
+
+    match(behind0.value(key: dict.hi), op.successor, dict[dict.hi], ahead1)
+  end
+
+  def match(behind0, op : SingularSeq, matchee : Term, ahead0)
+    unless (dict = matchee.as_itemsonly_d?) && dict.itemsize >= op.items.size
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    if op.exhaustive && dict.itemsize != op.items.size
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    ahead1 = Ahead::Goto.new(behind0.keypath?, Ahead.stackptr(ahead0))
+
+    if op.reverse
+      i, j, delta = op.items.size - 1, dict.itemsize - 1, -1i8
+    else
+      i, j, delta = 0, 0, +1i8
+    end
+
+    ahead2 = Ahead::ItemZip.new(op.items, dict.items, i, j, delta, Ahead.stackptr(ahead1))
+
+    Ahead.tr(behind0.value(key: j), ahead2)
+  end
+
+  def match(behind0, op : ItemSeq, matchee : Term, ahead0)
+    unless dict = matchee.as_itemsonly_d?
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    Item.match(behind0, op.items.to_readonly_slice, dict.items, ahead0)
+  end
 end

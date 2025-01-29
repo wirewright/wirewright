@@ -390,7 +390,7 @@ end
 #   are not, fix that. In fact, Operator should probably be renamed to Subject or something
 #   like that. Not sure how large of a refactor that is, and how much point is there in it.
 module ::Ww::M1::Operator
-  alias Any = Pass | Num | Sym | Boolean | Dict | Itemsonly | Pairsonly | SketchSubset | Bounds | BoundsGuard | MaxDepth | DictGuard | Literal | Capture | ItemSequence | ItemFirst | ItemLast | ItemBlock | Itemspart | Pairspart | Partition | Edge | LiteralChoices | EitherSource | KeyValue | Keypool | Span | Tally | Bin | Both | Not | Layer | ScanFirst | ScanSource | ScanAll | ScanAllIsolated | DfsFirst | DfsSource | DfsAllIsolated | DfsAll | BfsFirst | BfsAllIsolated | BfsAll | Value | NegativeValue | NegativeValueKeypath | EntriesFirst | EntriesSource | EntriesAllIsolated | EntriesAll | Str | New | KeypathCapture
+  alias Any = Pass | Num | Sym | Boolean | Dict | Itemsonly | Pairsonly | SketchSubset | Bounds | BoundsGuard | MaxDepth | DictGuard | Literal | Capture | ItemSeq | ItemFirst | ItemLast | SingularSeq | Partition | Edge | LiteralChoices | EitherSource | KeyValue | Keypool | Span | Tally | Bin | Both | Not | Layer | ScanFirst | ScanSource | ScanAll | ScanAllIsolated | DfsFirst | DfsSource | DfsAllIsolated | DfsAll | BfsFirst | BfsAllIsolated | BfsAll | Value | NegativeValue | NegativeValueKeypath | EntriesFirst | EntriesSource | EntriesAllIsolated | EntriesAll | Str | New | KeypathCapture
 
   alias Bin = Add | Sub | Mul | Div | Tdiv | Mod | Pow | Map
 
@@ -399,13 +399,6 @@ module ::Ww::M1::Operator
   alias AllIsolated = ScanAllIsolated | DfsAllIsolated | BfsAllIsolated | EntriesAllIsolated
   alias All = ScanAll | DfsAll | BfsAll | EntriesAll
 
-  defcase ItemSequence, items : Array(Item::Any)
-  defcase ItemFirst, successor : Any
-  defcase ItemLast, successor : Any
-  defcase ItemBlock, items : Slice(Any), exhaustive : Bool, reverse : Bool
-
-  defcase Itemspart, successor : Any
-  defcase Pairspart, successor : Any
   defcase Partition, itemspart : Any, pairspart : Any
 
   defcase EitherSource, a : Any, b : Any
@@ -778,72 +771,6 @@ module ::Ww::M1::Operator
     ahead1 = Ahead::Match.new(op.pairspart, Term.of(pairspart), Ahead.stackptr(ahead0))
 
     match(behind0, op.itemspart, Term.of(itemspart), ahead1)
-  end
-
-  def match(behind0, op : Itemspart, matchee : Term, ahead0)
-    unless dict = matchee.as_d?
-      return Fb::Mismatch.new(behind0.env)
-    end
-
-    match(behind0, op.successor, Term.of(dict.itemspart), ahead0)
-  end
-
-  def match(behind0, op : Pairspart, matchee : Term, ahead0)
-    unless dict = matchee.as_d?
-      return Fb::Mismatch.new(behind0.env)
-    end
-
-    match(behind0, op.successor, Term.of(dict.pairspart), ahead0)
-  end
-
-  def match(behind0, op : ItemFirst, matchee : Term, ahead0)
-    unless (dict = matchee.as_d?) && dict.itemsonly? && dict.size > 0
-      return Fb::Mismatch.new(behind0.env)
-    end
-
-    ahead1 = Ahead::Goto.new(behind0.keypath?, Ahead.stackptr(ahead0))
-
-    match(behind0.keypath(&.update_value(0)), op.successor, dict[0], ahead1)
-  end
-
-  def match(behind0, op : ItemLast, matchee : Term, ahead0)
-    unless (dict = matchee.as_d?) && dict.itemsonly? && dict.size > 0
-      return Fb::Mismatch.new(behind0.env)
-    end
-
-    ahead1 = Ahead::Goto.new(behind0.keypath?, Ahead.stackptr(ahead0))
-
-    match(behind0.keypath(&.update_value(dict.size - 1)), op.successor, dict[dict.size - 1], ahead1)
-  end
-
-  def match(behind0, op : ItemBlock, matchee : Term, ahead0)
-    unless (dict = matchee.as_d?) && dict.itemsonly? && dict.size >= op.items.size
-      return Fb::Mismatch.new(behind0.env)
-    end
-
-    if op.exhaustive && dict.size != op.items.size
-      return Fb::Mismatch.new(behind0.env)
-    end
-
-    ahead1 = Ahead::Goto.new(behind0.keypath?, Ahead.stackptr(ahead0))
-
-    if op.reverse
-      i, j, delta = op.items.size - 1, dict.items.size - 1, -1i8
-    else
-      i, j, delta = 0, 0, +1i8
-    end
-
-    ahead2 = Ahead::ItemZip.new(op.items, dict.items, i, j, delta, Ahead.stackptr(ahead1))
-
-    Ahead.tr(behind0.keypath(&.update_value(j)), ahead2)
-  end
-
-  def match(behind0, op : ItemSequence, matchee : Term, ahead0)
-    unless (dict = matchee.as_d?) && dict.itemsonly?
-      return Fb::Mismatch.new(behind0.env)
-    end
-
-    Item.match(behind0, op.items.to_readonly_slice, dict.items, ahead0)
   end
 
   def match(behind0, op : EitherSource, matchee : Term, ahead0)
@@ -1479,6 +1406,10 @@ module ::Ww::M1::Operator
       change(keypath: dst)
     end
 
+    def value(*, key)
+      keypath &.update_value(key)
+    end
+
     def keypathless
       change(keypath: nil)
     end
@@ -1650,7 +1581,7 @@ module ::Ww::M1::Operator::Entry
 
     kp0 = behind0.keypath?
 
-    Operator.match(behind0.keypath(&.update_value(op.key)), op.value, v, Ahead::Goto.new(kp0, Ahead.stackptr(ahead0)))
+    Operator.match(behind0.value(key: op.key), op.value, v, Ahead::Goto.new(kp0, Ahead.stackptr(ahead0)))
   end
 
   def match(behind0, op : Optional, matchee : Term, ahead0)
@@ -1661,7 +1592,7 @@ module ::Ww::M1::Operator::Entry
     kp0 = behind0.keypath?
 
     if value = dict[op.key]?
-      case fb = Operator.match(behind0.keypath(&.update_value(op.key)), op.value, value, Ahead::Goto.new(kp0, Ahead.stackptr(ahead0)))
+      case fb = Operator.match(behind0.value(key: op.key), op.value, value, Ahead::Goto.new(kp0, Ahead.stackptr(ahead0)))
       in Fb::Match, Fb::Interrupt
         return fb
       in Fb::Mismatch
@@ -1756,15 +1687,7 @@ module ::Ww::M1::Operator::Ahead
     end
   end
 
-  record ItemZip, lhs : Slice(Operator::Any), rhs : MatcheeFeed, i : Int32, j : Int32, delta : Int8, successor : Ahead::Any* do
-    def ith : Operator::Any
-      lhs[i]
-    end
-
-    def jth : Term
-      rhs[j]
-    end
-  end
+  record ItemZip, ops : Slice(Operator::Any), matchees : MatcheeFeed, i : Int32, j : Int32, delta : Int8, successor : Ahead::Any*
 
   record EntrySeq, matchee : Term, entries : Array(Entry::Any), cursor : UInt32, successor : Ahead::Any* do
     def entry?
@@ -1794,7 +1717,7 @@ module ::Ww::M1::Operator::Ahead
     i1 = node0.i + node0.delta
     j1 = node0.j + node0.delta
 
-    if i1.in?(0...node0.lhs.size) && j1.in?(0...node0.rhs.size)
+    if i1.in?(0...node0.ops.size) && j1.in?(0...node0.matchees.size)
       aheadptr = Ahead.stackptr(node0.copy_with(i: i1, j: j1))
     else
       aheadptr = node0.successor
@@ -1802,7 +1725,7 @@ module ::Ww::M1::Operator::Ahead
 
     ahead = Forward.new(node0.delta, aheadptr)
 
-    Operator.match(behind0, node0.ith, node0.jth, ahead)
+    Operator.match(behind0, node0.ops[node0.i], node0.matchees[node0.j], ahead)
   end
 
   def self.tr(behind0, node0 : EntrySeq)
@@ -3533,7 +3456,7 @@ module ::Ww::M1
           {:"%let", capture, normp1}
         end
 
-        # Fold e. g. (_ _ _) into a singular-only itemspart. This lets us render it as
+        # Fold e. g. (x_ y_ z_) into a singular-only itemspart. This lets us render it as
         # a more efficient Operator later on.
         matchpi %[(%itemseq (%past (%singular _) min: 1))] do
           Term::Dict.build do |commit|
@@ -3600,6 +3523,13 @@ module ::Ww::M1
           normp.morph({1, {:"%pass"}})
         end
 
+        # With %itemseq/singular-only that consists entirely of %passes it works similarly,
+        # although we must use %itemsonly rather than %pass to make sure the bounds are
+        # talking about the right part of the dict.
+        matchpi %{[%bounds (%itemseq/singular-only (%past (%pass) min: 1))]} do
+          normp.morph({1, {:"%itemsonly"}})
+        end
+
         # A %prefix inside %bounds that ends with some number of %passes should have those
         # passes omitted.
         matchpi %{[%bounds ((%group successor %prefix (%plural/min min: 1)) (%past (%pass) min: 1))]} do |successor|
@@ -3610,6 +3540,28 @@ module ::Ww::M1
         # passes omitted.
         matchpi %{[%bounds (%postfix (%past (%pass) min: 1) (%plural/max successors min: 1))]} do |successors|
           normp.morph({1, successors.prepend(:"%postfix")})
+        end
+
+        # An bounded %itemseq/singular-only that has 50% or more of %passes should be rewritten
+        # into an %all of %value fetches.
+        matchpi %{[%bounds (%itemseq/singular-only args_+)]} do
+          continue unless normp.probably_includes?(Term[:"%pass"])
+
+          passes = args.items.count(Normal::NORMAL_PASS)
+
+          continue unless passes/args.itemsize >= 0.5
+
+          successor = Term::Dict.build do |commit|
+            commit << :"%all"
+
+            args.items.each_with_index do |arg, index|
+              next if arg == Normal::NORMAL_PASS
+
+              commit << {:"%value", {:"%literal", index}, arg}
+            end
+          end
+
+          normp.morph({1, successor})
         end
 
         # When we have (%let _ (%dict-guard ...)), that's rather awkward since the guard
@@ -3837,7 +3789,7 @@ module ::Ww::M1
       matchpi %[(%itemseq/singular-only _ _*)], cue: :"%itemseq/singular-only" do
         items = node.items.move(1).to_readonly_slice { |item| operator(item, captures) }
 
-        Operator::ItemBlock.new(items, exhaustive: true, reverse: false)
+        Operator::SingularSeq.new(items, exhaustive: true, reverse: false)
       end
 
       matchpi %[(%prefix successor_)], cue: :"%prefix" do
@@ -3847,7 +3799,7 @@ module ::Ww::M1
       matchpi %[(%prefix _ _*)], cue: :"%prefix" do
         items = node.items.move(1).to_readonly_slice { |item| operator(item, captures) }
 
-        Operator::ItemBlock.new(items, exhaustive: false, reverse: false)
+        Operator::SingularSeq.new(items, exhaustive: false, reverse: false)
       end
 
       matchpi %[(%postfix successor_)], cue: :"%postfix" do
@@ -3857,13 +3809,13 @@ module ::Ww::M1
       matchpi %[(%postfix _ _*)], cue: :"%postfix" do
         items = node.items.move(1).to_readonly_slice { |item| operator(item, captures) }
 
-        Operator::ItemBlock.new(items, exhaustive: false, reverse: true)
+        Operator::SingularSeq.new(items, exhaustive: false, reverse: true)
       end
 
       matchpi %[(%itemseq _*)], cue: :"%itemseq" do
         items = Item.sequence(node.items.move(1), -> { nil.as(Item::Neighbor) }, captures)
 
-        Operator::ItemSequence.new(items)
+        Operator::ItemSeq.new(items)
       end
 
       matchpi %[(%itemsonly)], cue: :"%itemsonly" do
@@ -3880,14 +3832,6 @@ module ::Ww::M1
 
       matchpi %[((%literal %literal) term_)], cue: :"%literal" do
         Operator::Literal.new(term)
-      end
-
-      matchpi %[((%literal %partition) itemspart_ (%pass))], cue: {:"%partition", :"%pass"} do
-        Operator::Itemspart.new(operator(itemspart, captures))
-      end
-
-      matchpi %[((%literal %partition) (%pass) pairspart_)], cue: {:"%partition", :"%pass"} do
-        Operator::Pairspart.new(operator(pairspart, captures))
       end
 
       matchpi %[((%literal %partition) itemspart_ pairspart_)], cue: :"%partition" do
@@ -6298,7 +6242,7 @@ class ::Ww::Term::Dict
       yield commit
 
       # Copy after
-      (range.end...items.size).each do |index|
+      (range.end...itemsize).each do |index|
         commit.append(self[index])
       end
     end
