@@ -277,7 +277,7 @@ will be interpreted as a normal dictionary pattern.
 ```
 
 If you want to treat edges as "divisible" (that is, if you want them to receive normal,
-edge treatment), then you can either enclose `edge` in a `%literal`: `((%literal edge) x_)`,
+dict treatment), then you can either enclose `edge` in a `%literal`: `((%literal edge) x_)`,
 or use `%nonself` on the argument: `(edge (%nonself x_))`. `%nonself` has the shorthand
 prefix `≡` so the latter may be rewritten as `(edge ≡x_)`.
 
@@ -363,7 +363,7 @@ do not work across an `%any°` boundary. Instead of trying to "equate", the matc
 finds are simply concatenated into one big stream of matches.
 
 ```wwml
-(find (%any° ⟨(even x_)⟩° ⟨(odd x_)⟩°)) =>* x
+(find (%any° ⟨(even x_)⟩° ⟨(odd x_)⟩°)) =>° x
 
 (find (even 2) (even 4) (odd 1) (odd 3) (qux 10) (qyx 20))
 ;; => 2
