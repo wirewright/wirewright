@@ -55,9 +55,9 @@ base = <<-WWML
 (edge (_ _ ¦ _ max-w: W_number px_number) {_ -max-w_}) <> {max-w: ($once (- →W →px))}
 (edge (_ _ ¦ _ max-h: H_number py_number) {_ -max-h_}) <> {max-h: ($once (- →H →py))}
 
-;; Calculate max-w/h for a bordered box child.
-(edge (box _ ¦ _ border: true max-w: W_number px_number) {_ -max-w_}) <> {max-w: ($once (- →W →px 1))}
-(edge (box _ ¦ _ border: true max-h: H_number py_number) {_ -max-h_}) <> {max-h: ($once (- →H →py 1))}
+;; Calculate max-w/h for a bordered box child -- subtract borders on both sides.
+(edge (box _ ¦ _ border: true max-w: W_number px_number) {_ -max-w_}) <> {max-w: ($once (- →W →px 2))}
+(edge (box _ ¦ _ border: true max-h: H_number py_number) {_ -max-h_}) <> {max-h: ($once (- →H →py 2))}
 
 ;; Learn inner-w/h from a single child.
 (edge (_ _ ¦ _ -inner-w_) {_ outer-w_number}) <> {inner-w: →outer-w}
@@ -84,37 +84,82 @@ base = <<-WWML
 (node (scrollbox _ ¦ _ h: max overflows-y_: true max-h_number outer-h_number)) <> {overflows-y: false, outer-h: →max-h}
 
 ;; Calculate inner-w/h for col.
-(edge (col _* ¦ _ inner-w⋮ 0) {_ outer-w_number}) <> {inner-w: ($once (max →inner-w →outer-w))}
-(edge (col _* ¦ _ inner-h⋮ 0) {_ outer-h_number -state_}) <> {inner-h: ($once (+ →inner-h →outer-h)), state: member}
+;; FIXME: this whole trouble with "states" suggests we make at least a small move toward
+;; multirules (multiple rules applied to the same term simultaneously). If such an application
+;; produces no conflict, we should proceed with rewriting the term with all rules. Otherwise
+;; (stomping) we could either branch (as in multiway rewriting) or pick the most specific rule.
+;; Specificity by default is NOT AT ALL an intuitive approach here. Even I get really really
+;; confused by specificity-related behavior which isn't exactly a good sign since I am
+;; pretty biased, and even that bias does not help.
+;; NOTE: An alternative to multirules in this case is to see if the rule actually changed anything.
+;; If it did not then we proceed to lower-specificity rules and so on. If there was a change though,
+;; then we halt. This is an in-between solution that I think should work for now.
+(edge (col _* ¦ _ inner-w⋮ 0) {_ outer-w_number, -state_})
+  <> {inner-w: ($once (max →inner-w →outer-w)), state: in-w}
 
-;; "Column can give you max-h if you specify fr: _number."
-
-(node (%all (col _* ¦ _ nF: (%- _ n)) (%items Fch {_ fr: _number})))
-  <> {n: ($once (size →Fch))}
-
-(node (col _* ¦ _ max-h: mh_number inner-h: h_number overflows-y: (%- true) rem-h: (%- _ rh)))
-  <> {rh: ($once (- →mh →h))}
-
-(edge (col _* ¦ _ rem-h: _number frs: (%optional 0 frs_number) nF: n_number) {_ fr_number -state_})
-  <> {frs: ($once (+ →frs →fr)), state: distrib, n: ($once (- →n 1))}
-
-(edge (col _* ¦ _ rem-h: H_number frs: frs_number nF: 0) {_ state_: distrib fr_number max-h: (%- _ h)})
-  <> {h: ($ (* →H (/ →fr →frs))), state: member}
+(edge (col _* ¦ _ inner-h⋮ 0) {_ outer-h_number state_: in-w})
+  <> {inner-h: ($once (+ →inner-h →outer-h)), state: member}
 
 ;; Calculate inner-w/h for row.
 (edge (row _* ¦ _ inner-w: (%optional 0 W_number)) {_ outer-w: w_number -state_})
   <> {W: ($once (+ →W →w)), state: member}
 (edge (row _* ¦ _ inner-h: (%optional 0 H_number)) {_ outer-h: h_number})
   <> {H: ($once (max →H →h))}
+
+;; The following rule system will calculate fr/max for fr-children of fr: true parents
+;; with a defined fr/avail (the amount of free space left).
+
+(node (%all {_ fr: true -fr/n_} (%items F {_ fr: _number})))
+  <> {fr/n: ($once (size →F))}
+
+(node (%partition (%pipe tally (- 1) n_) {_ fr/n: n_ -fr/all_}))
+  <> {fr/all: true}
+
+(edge {_ fr/den⋮ 0 fr/n_number: (%not 0)} {_ fr_number -fr/state_})
+  <> {fr/den: ($once (+ →fr/den →fr)),
+      fr/state: in-den,
+      fr/n: ($once (- →fr/n 1))}
+
+(edge {_ fr/avail_number fr/den_number: (%not 0) fr/n: 0}
+      {_ fr/state: in-den fr_number -fr/max_})
+  <> {fr/max: ($ (* →fr/avail (/ →fr →fr/den)))}
+
+;; `col` interacts with this rule system by calculating fr/avail based on its
+;; height. Its children are going to take fr/max as max-h.
+
+(node (col _* ¦ _ fr: true max-h_number fr/all: true -fr/avail_))
+  <> {fr/avail: →max-h}
+
+(node (col _* ¦ _ fr: true max-h_number inner-h_number overflows-y: (%- true) -fr/avail_))
+  <> {fr/avail: ($once (- →max-h →inner-h))}
+
+(edge [col _*] {_ fr/max_number -max-h_ -col/state_})
+  <> {max-h: →fr/max, col/state: member}
+
+;; `row` interacts with this rule system by calculating fr/avail based on its
+;; width. Its children are going to take fr/max as max-w.
+
+(node (row _* ¦ _ fr: true max-w_number fr/all: true -fr/avail_))
+  <> {fr/avail: →max-w}
+
+(node (row _* ¦ _ fr: true max-w_number inner-w_number overflows-x: (%- true) -fr/avail_))
+  <> {fr/avail: ($once (- →max-w →inner-w))}
+
+(edge [row _*] {_ fr/max_number -max-w_ -row/state_})
+  <> {max-w: →fr/max, row/state: member}
 WWML
 
 frame = <<-WWML
-(viewport l: 0 t: 0 w: max h: max max-w: 64 max-h: 32 bg: (0 0 0)
-  (scrollbox w: max h: max
-    (col w: content h: max
-      (text pre: true w: content h: 10 "Lorem ipsum dolor sit amet.")
-      (text pre: true w: content fr: 1 h: max "Lorem ipsum dolor sit amet, qui minim labore adipisicing minim.")
-      (text pre: true w: content h: content "Lorem ipsum dolor sit amet, qui minim labore adipisicing minim sint cillum sint consectetur cupidatat."))))
+(scrollbox h: 10
+  (col fr: true fr/all: true w: content h: max fr/avail: 10
+    (text w: content h: max fr: 2 "Hello World")
+    (text w: content h: max fr: 1 "Bye World")))
+;;(viewport l: 0 t: 0 w: max h: max max-w: 64 max-h: 32 bg: (0 0 0)
+;;  (scrollbox w: max h: max
+;;    (col w: content h: max
+;;      (text pre: true w: content h: 10 "Lorem ipsum dolor sit amet.")
+;;      (text pre: true w: content fr: 1 h: max "Lorem ipsum dolor sit amet, qui minim labore adipisicing minim.")
+;;      (text pre: true w: content h: content "Lorem ipsum dolor sit amet, qui minim labore adipisicing minim sint cillum sint consectetur cupidatat."))))
   ;; (center w: max h: max max-h: 10
   ;;   (box w: content h: content border: true
   ;;     (text max-w: 20 w: content h: content fg: (0 0 0) bg: (255 255 255) pre: true
@@ -140,7 +185,7 @@ def edgeR(changes, parent0, child0, successor)
     {parent0, child0}
   in Rewrite::One
     # (edge parent0 child0) -> (edge parent1 child1)
-    _, parent1, child1 = rewrite.term 
+    _, parent1, child1 = rewrite.term
     {parent1, child1}
   in Rewrite::Many
     raise "edgeR: Rewrite::Many is not implemented"
@@ -316,4 +361,3 @@ puts ML.display(outerR(preview, Term.of(:root, ML.parse1(frame)), rules))
 # puts rules.call(Term.of(100))
 
 # puts ML.display(rewriter.call(preview, Rewrite.one(ML.parse1(frame))).as(Rewrite::One).term)
-
