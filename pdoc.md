@@ -350,6 +350,28 @@ captures applies to them too. This can be seen in the example above and in this 
 (first-common (1 2 3) (4 5 6))     ;; => (err "no common elements")
 ```
 
+## `%any°`
+
+`%any°` is a general-purpose alternation operator. It is much like `%any`, but allows to
+specify alternative *patterns* rather than *literals*. `%any°` outputs the results from all
+successful branches exhaustively (hence it is a *source*, as the source mark `°` indicates).
+In other words, `%any°` is not "find first pattern that matches", but rather, "find all patterns
+that match, allowing others to fail".
+
+Branches of `%any°` do not "see" each other. As a consequence, for example, equality constraints
+do not work across an `%any°` boundary. Instead of trying to "equate", the matches that `%any°`
+finds are simply concatenated into one big stream of matches.
+
+```wwml
+(find (%any° ⟨(even x_)⟩° ⟨(odd x_)⟩°)) =>* x
+
+(find (even 2) (even 4) (odd 1) (odd 3) (qux 10) (qyx 20))
+;; => 2
+;;    4
+;;    1
+;;    3
+```
+
 ## `%new`
 
 The idea with the `%new` operator is to be able to create new patterns at match-

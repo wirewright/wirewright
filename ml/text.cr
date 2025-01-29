@@ -474,8 +474,15 @@ module Ww::ML::Text
           advance
           return Token.new(:"⟨", pos - 3, pos)
         when '⟩'
-          advance
-          return Token.new(:"⟩", pos - 3, pos)
+          case ahead
+          when '°'
+            advance
+            advance
+            return Token.new(:"⟩°", pos - 5, pos)
+          else
+            advance
+            return Token.new(:"⟩", pos - 3, pos)
+          end
         when '≡'
           advance
           return Token.new(:"≡", pos - 3, pos)
@@ -774,6 +781,9 @@ module Ww::ML::Text
         while token = @lexer.thru?
           case token.type
           when :"⟩"
+            break
+          when :"⟩°"
+            commit.with(0, :"%item°")
             break
           end
 

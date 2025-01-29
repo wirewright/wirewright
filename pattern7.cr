@@ -390,7 +390,7 @@ end
 #   are not, fix that. In fact, Operator should probably be renamed to Subject or something
 #   like that. Not sure how large of a refactor that is, and how much point is there in it.
 module ::Ww::M1::Operator
-  alias Any = Pass | Num | Sym | Boolean | Dict | Itemsonly | Pairsonly | SketchSubset | Bounds | BoundsGuard | MaxDepth | DictGuard | Literal | Capture | ItemSeq | ItemFirst | ItemLast | SingularSeq | Partition | Edge | LiteralChoices | EitherSource | KeyValue | Keypool | Span | Tally | Bin | Both | Not | Layer | ScanFirst | ScanSource | ScanAll | ScanAllIsolated | DfsFirst | DfsSource | DfsAllIsolated | DfsAll | BfsFirst | BfsAllIsolated | BfsAll | Value | NegativeValue | NegativeValueKeypath | EntriesFirst | EntriesSource | EntriesAllIsolated | EntriesAll | Str | New | KeypathCapture
+  alias Any = Pass | Num | Sym | Boolean | Dict | Itemsonly | Pairsonly | SketchSubset | Bounds | BoundsGuard | MaxDepth | DictGuard | Literal | Capture | ItemSeq | ItemFirst | ItemLast | SingularSeq | Partition | Edge | LiteralChoices | SourceChoice | ValueLiteral | Keypool | Span | Tally | Bin | Both | Not | Layer | ScanFirst | ScanSource | ScanAll | ScanAllIsolated | DfsFirst | DfsSource | DfsAllIsolated | DfsAll | BfsFirst | BfsAllIsolated | BfsAll | Value | NegativeValue | NegativeValueKeypath | EntriesFirst | EntriesSource | EntriesAllIsolated | EntriesAll | Str | New | KeypathCapture
 
   alias Bin = Add | Sub | Mul | Div | Tdiv | Mod | Pow | Map
 
@@ -401,10 +401,9 @@ module ::Ww::M1::Operator
 
   defcase Partition, itemspart : Any, pairspart : Any
 
-  defcase EitherSource, a : Any, b : Any
   defcase Both, a : Any, b : Any
 
-  defcase KeyValue, key : Term, successor : Any
+  defcase ValueLiteral, key : Term, successor : Any
   defcase Keypool, keys : Array(Term)
 
   defcase Span, successor : Any
@@ -584,31 +583,31 @@ module ::Ww::M1::Operator::Fb
   record Mismatch, env : Term::Dict
   record RequestKeypath
 
-  def self.lsum(a : Mismatch, b : Mismatch)
+  def self.sum(a : Mismatch, b : Mismatch)
     a
   end
 
-  def self.lsum(a : Match, b : Mismatch)
+  def self.sum(a : Match, b : Mismatch)
     a
   end
 
-  def self.lsum(a : Mismatch, b : Match)
+  def self.sum(a : Mismatch, b : Match)
     b
   end
 
-  def self.lsum(a : MatchOne, b : MatchOne)
+  def self.sum(a : MatchOne, b : MatchOne)
     Fb::MatchMany.new([a.env, b.env])
   end
 
-  def self.lsum(a : MatchOne, b : MatchMany)
+  def self.sum(a : MatchOne, b : MatchMany)
     Fb::MatchMany.new([a.env].concat(b.envs))
   end
 
-  def self.lsum(a : MatchMany, b : MatchOne)
-    lsum(b, a)
+  def self.sum(a : MatchMany, b : MatchOne)
+    sum(b, a)
   end
 
-  def self.lsum(a : MatchMany, b : MatchMany)
+  def self.sum(a : MatchMany, b : MatchMany)
     Fb::MatchMany.new(a.envs + b.envs)
   end
 end
@@ -773,26 +772,13 @@ module ::Ww::M1::Operator
     match(behind0, op.itemspart, Term.of(itemspart), ahead1)
   end
 
-  def match(behind0, op : EitherSource, matchee : Term, ahead0)
-    a = match(behind0, op.a, matchee, ahead0)
-    unless a.is_a?(Fb::Response)
-      return a
-    end
-    b = match(behind0, op.b, matchee, ahead0)
-    unless b.is_a?(Fb::Response)
-      return b
-    end
-
-    Fb.lsum(a, b)
-  end
-
   def match(behind0, op : Both, matchee : Term, ahead0)
     ahead1 = Ahead::Match.new(op.b, matchee, Ahead.stackptr(ahead0))
 
     match(behind0, op.a, matchee, ahead1)
   end
 
-  def match(behind0, op : KeyValue, matchee : Term, ahead0)
+  def match(behind0, op : ValueLiteral, matchee : Term, ahead0)
     unless (dict = matchee.as_d?) && (value = dict[op.key]?)
       return Fb::Mismatch.new(behind0.env)
     end
@@ -3858,7 +3844,7 @@ module ::Ww::M1
       end
 
       matchpi %[(%value ((%literal %literal) key_) value_)], cue: {:"%value", :"%literal"} do
-        Operator::KeyValue.new(key, operator(value, captures))
+        Operator::ValueLiteral.new(key, operator(value, captures))
       end
 
       match({:"%value", {:"%capture", :capture_}, :value_}, cue: :"%value") do |capture, value|
@@ -4065,7 +4051,7 @@ module ::Ww::M1
       end
 
       match({:"%any/source", :a_, :b_}, cue: :"%any/source") do |a, b|
-        Operator::EitherSource.new(operator(a, captures), operator(b, captures))
+        Operator::SourceChoice.new(operator(a, captures), operator(b, captures))
       end
 
       match({:"%any/source", :a_, :_, :"_*"}, cue: :"%any/source") do |a|
@@ -4076,7 +4062,7 @@ module ::Ww::M1
           args.each { |item| commit << item }
         end
 
-        Operator::EitherSource.new(operator(a, captures), operator(Term.of(rest), captures))
+        Operator::SourceChoice.new(operator(a, captures), operator(Term.of(rest), captures))
       end
 
       match({:"%edge", {:"%literal", :_}}, cue: :"%edge") do

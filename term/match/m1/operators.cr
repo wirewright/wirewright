@@ -56,4 +56,6 @@ module Ww::M1::Operator
   defcase ItemFirst, successor : Any
   defcase ItemLast, successor : Any
   defcase SingularSeq, items : Slice(Any), exhaustive : Bool, reverse : Bool
+
+  defcase SourceChoice, a : Any, b : Any
 end

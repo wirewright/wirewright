@@ -209,4 +209,17 @@ module Ww::M1::Operator
 
     Item.match(behind0, op.items.to_readonly_slice, dict.items, ahead0)
   end
+
+  def match(behind0, op : SourceChoice, matchee : Term, ahead0)
+    a = match(behind0, op.a, matchee, ahead0)
+    unless a.is_a?(Fb::Response)
+      return a
+    end
+    b = match(behind0, op.b, matchee, ahead0)
+    unless b.is_a?(Fb::Response)
+      return b
+    end
+
+    Fb.sum(a, b)
+  end
 end

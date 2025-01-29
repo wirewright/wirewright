@@ -705,6 +705,17 @@
   (pattern (%any° a_ b_ c_)
     (= x {a: x} {b: x} {c: x}))
 
+  ;; From doc
+  (pattern (find (%any° ⟨(even x_)⟩° ⟨(odd x_)⟩°))
+    (= (find ((even 2))) {x: 2})
+    (= (find ((odd 1))) {x: 1})
+    (= (find ((even 2) (even 4) (odd 1) (odd 3) (qux 10) (qyx 20)))
+       {x: 2}
+       {x: 4}
+       {x: 1}
+       {x: 3})
+    (- (find ()) (find (qux 1)) (find ((qux 10) (qyx 20)))))
+
   (pattern ((%any° (%item° foo k_ v_)
                    (%item° bar k_ v_)
                    (%item° baz k_ (qux v_))) k_)
