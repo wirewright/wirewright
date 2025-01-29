@@ -28,7 +28,7 @@ surround them by `%literal` explicitly.
 (xor false false) => false
 (xor false true) => true
 (xor true false) => true
-(xor false false) => false
+(xor true true) => false
 ```
 
 Dictionary literals that consist *only* of the aforementioned literals or of other dictionary
@@ -51,6 +51,19 @@ will contain a pattern or not. So if we wanted to guarantee literal treatment, w
 `(match-lit (%new (%literal x_)) x_)`. Note that this pattern is just an example (and a pretty
 meaningless one since it is essentially `(match-lit x_ x_)`). Maybe you are creating patterns
 on the fly, from some kind of template; then `%literal` could be used as a kind of "interpolation barrier".
+
+### Matching several alternative terms
+
+If you need to match exactly one term from a set of alternatives, you can use the `%any` operator.
+
+```wwml
+(available? (%any Monday Wednesday Friday)) => true
+(available? _) => false
+
+(available? Monday) ;; => true
+(available? Friday) ;; => true
+(available? Sunday) ;; => false
+```
 
 ## Matching numbers
 

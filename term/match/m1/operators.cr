@@ -46,6 +46,7 @@ module Ww::M1::Operator
     successor : Any
 
   defcase Literal, term : Term
+  defcase LiteralChoices, choices : Set(Term)
 
   defcase Capture, capture : Term, successor : Any
 end

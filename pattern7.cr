@@ -13,7 +13,7 @@
 # │ %partition               │   +   │   +     │   +   │            │    ·     │       │   ~
 # │ %let                     │   +   │   +     │   +   │            │    ~     │       │   ~
 # │ %edge                    │   +   │   +     │   +   │            │    ~     │       │
-# │ %any                     │   ~   │   ~     │   ~   │            │    ·     │       │
+# │ %any                     │   ~   │   ~     │   ~   │            │    ·     │       │   ~
 # │ %any°                    │   ~   │   ~     │   ~   │            │    ~     │       │
 # │ %all                     │   ~   │   ~     │   ~   │            │    ~     │       │
 # │ %keypool                 │   +   │   +     │   +   │            │    ·     │       │
@@ -408,7 +408,6 @@ module ::Ww::M1::Operator
   defcase Pairspart, successor : Any
   defcase Partition, itemspart : Any, pairspart : Any
 
-  defcase LiteralChoices, choices : Set(Term)
   defcase EitherSource, a : Any, b : Any
   defcase Both, a : Any, b : Any
 
@@ -767,10 +766,6 @@ class ::Ww::Keypath::Appender
 end
 
 module ::Ww::M1::Operator
-  def match(behind0, op : LiteralChoices, matchee : Term, ahead0)
-    matchee.in?(op.choices) ? Ahead.tr(behind0, ahead0) : Fb::Mismatch.new(behind0.env)
-  end
-
   # TODO: almost always in practice the pairspart is easier to compute than the itemspart;
   # and it is "rarer", providing more rejections. Should we consider running the pairspart
   # first? The proper treatment would be to evaluate the cost of the itemspart and pairspart,

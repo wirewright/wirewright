@@ -125,4 +125,12 @@ module Ww::M1::Operator
 
     match(behind1, op.successor, matchee, ahead0)
   end
+
+  def match(behind0, op : LiteralChoices, matchee : Term, ahead0)
+    unless matchee.in?(op.choices)
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    Ahead.tr(behind0, ahead0)
+  end
 end
