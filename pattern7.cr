@@ -2463,7 +2463,7 @@ module ::Ww::M1
 
         # Similarly, %let is very frequent (especially due to blanks such as x_)
         # compiling to e.g. (%let x _).
-        matchpi %[((%literal %let) capture_ successor_)], cue: :"%let" do
+        matchpi %[(%'%let capture_ successor_)], cue: :"%let" do
           {:"%let", {:"%capture", capture}, pattern(successor)}
         end
 
@@ -2523,11 +2523,11 @@ module ::Ww::M1
         end
 
         # Partition is pretty frequent.
-        matchpi %[((%literal %partition) itemspart_ pairspart_)], cue: :"%partition" do
+        matchpi %[(%'%partition itemspart_ pairspart_)], cue: :"%partition" do
           {:"%partition", pattern(itemspart), pattern(pairspart)}
         end
 
-        matchpi %[((%literal %layer) below_ side_dict)], cue: :"%layer" do
+        matchpi %[(%'%layer below_ side_dict)], cue: :"%layer" do
           pattern.transaction do |commit|
             commit.with(1, pattern(below))
 
@@ -2542,17 +2542,14 @@ module ::Ww::M1
         end
 
         # (%layer _ k1: v1 k2: v2 ...) is a shorthand for (%layer _ {k1: v1 k2: v2 ...}).
-        matchpi %[((%literal %layer) below_ ¦ pairs_)], cue: :"%layer" do
+        matchpi %[(%'%layer below_ ¦ pairs_)], cue: :"%layer" do
           pattern(Term.of(:"%layer", below, pairs))
         end
 
         # %number should be %terminal.
-        matchpi(
-          %[(%number (%literal _))],
-          %[(%number (%literal (whole _)))],
-          cue: {:"%number", :_},
-          cues: {nil, :whole}
-        ) { {:"%terminal", pattern} }
+        matchpi %[(%number %'_)], %[(%number %'(whole _))], cue: {:"%number", :_}, cues: {nil, :whole} do
+          {:"%terminal", pattern}
+        end
 
         # Compile fixed-width %number into the corresponding bounds check. We do not
         # actually have fixed-width numbers. These kinds of patterns are often used
@@ -2564,8 +2561,8 @@ module ::Ww::M1
         end
 
         matchpi(
-          %[(%number (%literal _) op_symbol _number)],
-          %[(%number (%literal (whole _)) op_symbol _number)],
+          %[(%number %'_ op_symbol _number)],
+          %[(%number %'(whole _) op_symbol _number)],
           cue: {:"%number", :_},
           cues: {nil, :whole}
         ) do |op|
@@ -2575,8 +2572,8 @@ module ::Ww::M1
         end
 
         matchpi(
-          %[(%number _number lop_symbol (%literal _) rop_symbol _number)],
-          %[(%number _number lop_symbol (%literal (whole _)) rop_symbol _number)],
+          %[(%number _number lop_symbol %'_ rop_symbol _number)],
+          %[(%number _number lop_symbol %'(whole _) rop_symbol _number)],
           cue: {:"%number", :_},
           cues: {nil, :whole}
         ) do |lop, rop|
@@ -2654,7 +2651,7 @@ module ::Ww::M1
         end
 
         # Leave %literal as is.
-        matchpi %[((%literal %literal) _)], cue: :"%literal" do
+        matchpi %[(%'%literal _)], cue: :"%literal" do
           pattern
         end
 
@@ -2670,10 +2667,10 @@ module ::Ww::M1
         end
 
         matchpi(
-          %[(%edge (%literal _symbol))],
-          %[(%edge (%literal _string))],
-          %[(%edge (%literal _number))],
-          %[(%edge (%literal _))],
+          %[(%edge %'_symbol)],
+          %[(%edge %'_string)],
+          %[(%edge %'_number)],
+          %[(%edge %'_)],
           cue: :"%edge"
         ) { pattern }
 
@@ -2904,7 +2901,7 @@ module ::Ww::M1
     # Computes the bounds of a normal pattern *normp*.
     def pattern(normp : Term) : {Magnitude, Magnitude}
       Term.case(normp, engine: M0) do
-        matchpi %{[(%literal %partition) itemspart_ pairspart_]}, cue: :"%partition" do
+        matchpi %{[%'%partition itemspart_ pairspart_]}, cue: :"%partition" do
           min0, max0 = pattern(itemspart)
           min1, max1 = pattern(pairspart)
 
@@ -2917,20 +2914,20 @@ module ::Ww::M1
 
         # If the layer has an empty successor (closed layer) we're able to use
         # the max as well.
-        matchpi %{[(%literal %layer) ((%literal %literal) ()) side_dict]}, cue: {:"%layer", :"%literal"} do
+        matchpi %{[%'%layer (%'%literal ()) side_dict]}, cue: {:"%layer", :"%literal"} do
           # %layer is a trusted source here, its `side` dict only contains %entry/s,
           # and we already know how to compute bounds for those here in this method.
           entries(side.unsafe_as_d.ee)
         end
 
         # If the layer is open we've no choice but to drop the max.
-        matchpi %{[(%literal %layer) _ side_dict _*]}, cue: :"%layer" do
+        matchpi %{[%'%layer _ side_dict _*]}, cue: :"%layer" do
           min, _ = entries(side.unsafe_as_d.ee)
 
           {min, Magnitude::INFINITY}
         end
 
-        matchpi %{[(%literal %literal) d_dict]}, cue: :"%literal" do
+        matchpi %{[%'%literal d_dict]}, cue: :"%literal" do
           {Magnitude.new(d.size), Magnitude.new(d.size)}
         end
 
@@ -3229,19 +3226,19 @@ module ::Ww::M1
           # The reason we need this matchpi right now is that term's sketch is dirty
           # and contains remains of term's past. When we are going to be able
           # to update sketch on deletion this matchpi should go away.
-          matchpi %[((%literal %literal) term_dict)] do
+          matchpi %[(%'%literal term_dict)] do
             sketch |= term.fresh_sketch
 
             WalkDecision::Continue
           end
 
-          matchpi %[((%literal %literal) term_)] do
+          matchpi %[(%'%literal term_)] do
             sketch = Term::Dict.mix(sketch, term)
 
             WalkDecision::Continue
           end
 
-          matchpi %[((%literal %sketch) _ sketch0_number)] do
+          matchpi %[(%'%sketch _ sketch0_number)] do
             sketch |= sketch0.to(Term::Dict::Sketch)
 
             # We've already computed the sketch for this part of the tree. Move on.
@@ -3251,9 +3248,9 @@ module ::Ww::M1
           # These have key as their first argument and we don't want to include the key
           # in the sketch.
           matchpi(
-            %{[(%literal %entries/first) _ successor_]},
-            %{[(%literal %entries/source) _ successor_]},
-            %{[(%literal %entries/all) _ _ successor_]},
+            %{[%'%entries/first _ successor_]},
+            %{[%'%entries/source _ successor_]},
+            %{[%'%entries/all _ _ successor_]},
           ) do
             sketch |= sketch(successor)
 
@@ -3273,9 +3270,9 @@ module ::Ww::M1
                      %all
                      %entry/required)
                 _*]},
-            %{((%literal %leaves/first) _* ¦ _ in: (%not keys))},
-            %{((%literal %leaves/source) _* ¦ _ in: (%not keys))},
-            %{((%literal %leaves/all) _* ¦ _ in: (%not keys))},
+            %{(%'%leaves/first _* ¦ _ in: (%not keys))},
+            %{(%'%leaves/source _* ¦ _ in: (%not keys))},
+            %{(%'%leaves/all _* ¦ _ in: (%not keys))},
           ) do
             WalkDecision::Continue
           end
@@ -3304,9 +3301,9 @@ module ::Ww::M1
                      %entries/all
                      %all)
                 _*]},
-            %{((%literal %leaves/first) _* ¦ _ in: (%not keys))},
-            %{((%literal %leaves/source) _* ¦ _ in: (%not keys))},
-            %{((%literal %leaves/all) _* ¦ _ in: (%not keys))},
+            %{(%'%leaves/first _* ¦ _ in: (%not keys))},
+            %{(%'%leaves/source _* ¦ _ in: (%not keys))},
+            %{(%'%leaves/all _* ¦ _ in: (%not keys))},
           ) do
             sketch = sketch(node)
             next if sketch.zero?
@@ -3409,19 +3406,19 @@ module ::Ww::M1
         #
         # These are internal rewrites, the user cannot reach this from the outside since during
         # normalization such %alls are eliminated.
-        matchpi %[((%literal %all))] do
+        matchpi %[(%'%all)] do
           {:"%pass"}
         end
 
         # (%all X) should be rewritten into X.
         #
         # Ditto about reachability from the client-side.
-        matchpi %[((%literal %all) successor_)] do
+        matchpi %[(%'%all successor_)] do
           optimized1(successor, cycle)
         end
 
         # (%all X X) should be rewritten into X.
-        matchpi %[((%literal %all) successor_ successor_)] do
+        matchpi %[(%'%all successor_ successor_)] do
           optimized1(successor, cycle)
         end
 
@@ -3429,7 +3426,7 @@ module ::Ww::M1
         #
         # This is unreachable from the client-side, and only reachable via emission from optimized1
         # itself. This is because client-side %alls are already normalized into binary %alls.
-        matchpi %[((%literal %all) x_ y_ zs_+)] do
+        matchpi %[(%'%all x_ y_ zs_+)] do
           Term::Dict.build do |commit|
             commit << :"%all" << {:"%all", optimized1(x, cycle), optimized1(y, cycle)}
             commit.concat(zs.items) { |z| optimized1(z, cycle) }
@@ -3451,24 +3448,24 @@ module ::Ww::M1
         end
 
         # Fold (_*) into an itemsonly check (which is vastly cheaper!)
-        matchpi %[(%itemseq (%plural min: 0 max: ∞ type: (%literal _)))] do
+        matchpi %[(%itemseq (%plural min: 0 max: ∞ type: %'_))] do
           {:"%itemsonly"}
         end
 
         # Rewrite bounds-checked plural such as (_+) similarly into an itemsonly check since
         # the bounds check already checks what the plural would have.
-        matchpi %{[%bounds (%itemseq (%plural min: _ max: _ type: (%literal _)))]} do
+        matchpi %{[%bounds (%itemseq (%plural min: _ max: _ type: %'_))]} do
           normp.morph({1, {:"%itemsonly"}})
         end
 
         # Rewrite (¦ _) = (%partition () _) into a pairsonly check (which is vastly cheaper!)
-        matchpi %[((%literal %partition) ((%literal %literal) ()) (%pass))] do
+        matchpi %[(%'%partition (%'%literal ()) (%pass))] do
           {:"%pairsonly"}
         end
 
         # Rewrite (¦ xs_) = (%partition () xs_) = (%partition () (%let xs _))
         # into xs←(%partition () _).
-        matchpi %[((%literal %partition) ((%literal %literal) ()) ((%literal %let) capture_ (%pass)))] do
+        matchpi %[(%'%partition (%'%literal ()) (%'%let capture_ (%pass)))] do
           # (%let _ (%pass)) -> (%pass)
           normp1 = normp.morph({2, normp[2, 2]})
 
@@ -3490,7 +3487,7 @@ module ::Ww::M1
 
         # Fold e.g. (_ _ ... _ _*) into a %prefix operator that skips matching `_*`,
         # a relatively expensive affair.
-        matchpi %[(%itemseq (%past (%singular _) min: 1) (%plural min: 0 max: ∞ type: (%literal _)))] do
+        matchpi %[(%itemseq (%past (%singular _) min: 1) (%plural min: 0 max: ∞ type: %'_))] do
           Term::Dict.build do |commit|
             commit << :"%prefix"
 
@@ -3503,7 +3500,7 @@ module ::Ww::M1
 
         # Fold e.g. (_* _ ... _ _) into a %postfix operator that skips matching `_*`,
         # a relatively expensive affair.
-        matchpi %[(%itemseq (%plural min: 0 max: ∞ type: (%literal _)) (%past (%singular _) min: 1))] do
+        matchpi %[(%itemseq (%plural min: 0 max: ∞ type: %'_) (%past (%singular _) min: 1))] do
           Term::Dict.build do |commit|
             commit << :"%postfix"
 
@@ -3519,7 +3516,7 @@ module ::Ww::M1
         matchp(
           %{[%bounds
               (%itemseq (%group prefix (%past/max (%singular _) min: 1))
-                        (%plural min: 0 max: ∞ type: (%literal _))
+                        (%plural min: 0 max: ∞ type: %'_)
                         (%group postfix (%past/max (%singular _) min: 1)))]}
         ) do |prefix, postfix|
           op_prefix = Term::Dict.build do |commit|
@@ -3586,7 +3583,7 @@ module ::Ww::M1
         # When we have (%let _ (%dict-guard ...)), that's rather awkward since the guard
         # could have rejected and we've already had an allocation etc. In such situations
         # it is wiser to invert -- into (%dict-guard (%let _ ...)).
-        matchpi %[((%literal %let) capture_ [%dict-guard successor_])] do
+        matchpi %[(%'%let capture_ [%dict-guard successor_])] do
           _, _, guard = normp
 
           guard.morph({1, {:"%let", capture, optimized1(successor, cycle)}})
@@ -3595,7 +3592,7 @@ module ::Ww::M1
         # For less lucky dictionaries/other operators that do not have %dict-guard
         # but do have a %sketch, we wait out for one cycle to see if this %sketch
         # turns into a %dict-guard. If it does not we do the same as above.
-        matchpi %[((%literal %let) capture_ (%sketch successor_ _number))] do
+        matchpi %[(%'%let capture_ (%sketch successor_ _number))] do
           continue if cycle.zero?
 
           _, _, guard = normp
@@ -3606,7 +3603,7 @@ module ::Ww::M1
         # Open %layer all entries of which are (%entry/required) should turn into
         # an %all of (%value (%literal key) value) which we render as lookups rather
         # than letting allocation-heavy %layer logic manage them.
-        matchp %[((%literal %layer) (%pass) side←(%entries required key_ (%entry/required value_)))] do |side, required|
+        matchp %[(%'%layer (%pass) side←(%entries required key_ (%entry/required value_)))] do |side, required|
           continue unless required.size == side.size
 
           Term::Dict.build do |commit|
@@ -3620,12 +3617,12 @@ module ::Ww::M1
 
         # (%bounds min: 1 max: ∞) around a single %value has low information content.
         # Remove it.
-        matchpi %[(%bounds successor←((%literal %value) _ _) min: 1 max: ∞)] do
+        matchpi %[(%bounds successor←(%'%value _ _) min: 1 max: ∞)] do
           optimized1(successor, cycle)
         end
 
         # (%partition (%itemsonly) (%pairsonly)) -> (%dict)
-        matchpi %[((%literal %partition) (%itemsonly) (%pairsonly))] do
+        matchpi %[(%'%partition (%itemsonly) (%pairsonly))] do
           {:"%dict"}
         end
 
@@ -3637,27 +3634,20 @@ module ::Ww::M1
         # in place, one would get an assignment for x: ... which shouldn't be possible. If
         # the key is numeric we resort to the slower path.
         matchpi(
-          %[((%literal %partition) (%itemsonly)
-             successor←((%literal %value)
-                        ((%literal %literal) (%any° _string _symbol _boolean _dict))
-                        _))],
-          %[((%literal %partition) (%itemsonly)
-              successor←((%literal %all)
-                         (%past ((%literal %value)
-                                 ((%literal %literal) (%any° _string _symbol _boolean _dict))
-                                  _)
-                          min: 1)))],
+          %[(%'%partition (%itemsonly) successor←(%'%value (%'%literal (%any° _string _symbol _boolean _dict)) _))],
+          %[(%'%partition (%itemsonly)
+              successor←(%'%all (%past min: 1 (%'%value (%'%literal (%any° _string _symbol _boolean _dict)) _))))],
         ) do
           optimized1(successor, cycle)
         end
 
         # Omit inner itemspart bounds if they are the same as %partition's.
-        matchpi %[(%bounds ((%literal %partition) (%bounds successor_ min: min_ max: max_) _) min: min_ max: max_)] do
+        matchpi %[(%bounds (%'%partition (%bounds successor_ min: min_ max: max_) _) min: min_ max: max_)] do
           normp.morph({1, 1, optimized1(successor, cycle)})
         end
 
         # Omit inner pairspart bounds if they are the same as %partition's.
-        matchpi %[(%bounds ((%literal %partition) _ (%bounds successor_ min: min_ max: max_)) min: min_ max: max_)] do
+        matchpi %[(%bounds (%'%partition _ (%bounds successor_ min: min_ max: max_)) min: min_ max: max_)] do
           normp.morph({1, 2, optimized1(successor, cycle)})
         end
 
@@ -3667,12 +3657,7 @@ module ::Ww::M1
           optimized1(node, cycle, recurse: false)
         end
 
-        matchpi(
-          %[((%literal %literal) _)],
-          %[((%literal %slot) _)],
-          %[(%capture _)],
-          %[(%barrier _)],
-        ) do
+        matchpi %[(%'%literal _)], %[(%'%slot _)], %[(%capture _)], %[(%barrier _)] do
           normp
         end
 
@@ -3849,11 +3834,11 @@ module ::Ww::M1
         Operator::INSTANCE_PASS
       end
 
-      matchpi %[((%literal %literal) term_)], cue: :"%literal" do
+      matchpi %[(%'%literal term_)], cue: :"%literal" do
         Operator::Literal.new(term)
       end
 
-      matchpi %[((%literal %partition) itemspart_ pairspart_)], cue: :"%partition" do
+      matchpi %[(%'%partition itemspart_ pairspart_)], cue: :"%partition" do
         Operator::Partition.new(
           operator(itemspart, captures),
           operator(pairspart, captures),
@@ -3885,7 +3870,7 @@ module ::Ww::M1
         Operator::Layer.new(operator(below, captures), entries)
       end
 
-      matchpi %[(%value ((%literal %literal) key_) value_)], cue: {:"%value", :"%literal"} do
+      matchpi %[(%value (%'%literal key_) value_)], cue: {:"%value", :"%literal"} do
         Operator::ValueLiteral.new(key, operator(value, captures))
       end
 
@@ -4308,7 +4293,7 @@ module ::Ww::M1
       # Captures, slots, and literals are all terminal nodes. We do not require to
       # wrap them in %terminal because this is sort of evident.
       matchpi(
-        %{[(%literal %literal) _]},
+        %{[%'%literal _]},
         %{[%slot _]},
         %{[%capture _]},
         cues: {:"%literal", :"%slot", :"%capture"},
@@ -5447,7 +5432,7 @@ module ::Ww::M1
         {Magnitude.new(0), Magnitude::INFINITY}
       end
 
-      matchpi %{[(%literal %literal) x_dict]}, cue: :"%literal" do
+      matchpi %{[%'%literal x_dict]}, cue: :"%literal" do
         maxdepth = x.fresh_maxdepth
 
         {Magnitude.new(maxdepth), Magnitude.new(maxdepth)}
@@ -5456,9 +5441,9 @@ module ::Ww::M1
       matchpi(
         %{[%symbol]},
         %{[%string]},
-        %{[%number (%literal _)]},
+        %{[%number %'_]},
         %{[%boolean]},
-        %{[(%literal %literal) _]},
+        %{[%'%literal _]},
         %{[%slot _]},
         %{[%entry/negative [%pass]]},
         %{[%entry/negative [%pass] _]},
@@ -5577,7 +5562,7 @@ module ::Ww::M1
         {min, max}
       end
 
-      matchpi %{[(%literal %partition) itemspart_ pairspart_]}, cue: :"%partition" do
+      matchpi %{[%'%partition itemspart_ pairspart_]}, cue: :"%partition" do
         min0, max0 = depth(itemspart)
         min1, max1 = depth(pairspart)
 
@@ -5671,7 +5656,7 @@ module ::Ww::M1
         {min, max}
       end
 
-      matchpi %{[(%literal %layer) below_ side_dict]}, cue: :"%layer" do
+      matchpi %{[%'%layer below_ side_dict]}, cue: :"%layer" do
         min, max = depth(below)
         # Do not waste time computing side if that won't change anything.
         if {min, max} == {Magnitude::INFINITY, Magnitude::INFINITY}
@@ -5728,13 +5713,13 @@ module ::Ww::M1
   private def self.specificity0?(normp : Term)
     Term.case(normp) do
       # Recurse into top-level `%let`s and `%terminal`'s.
-      matchpi %[(%terminal successor_)], %[((%literal %let) _ successor_)] do
+      matchpi %[(%terminal successor_)], %[(%'%let _ successor_)] do
         specificity0?(successor)
       end
 
       # If we have a literal or %any at the top level, issue max specificity
       # and exit immediately.
-      matchpi %[((%literal %literal) _)] { SPECIFICITY_LITERAL }
+      matchpi %[(%'%literal _)] { SPECIFICITY_LITERAL }
       matchpi %[(%any/literal _+)] { SPECIFICITY_ANY }
 
       otherwise { }
@@ -5780,13 +5765,13 @@ module ::Ww::M1
           WalkDecision::Continue
         end
 
-        matchpi %[((%literal %literal) d_dict)] do
+        matchpi %[(%'%literal d_dict)] do
           literals += d.population.total
 
           WalkDecision::Continue
         end
 
-        matchpi %[((%literal %literal) _)] do
+        matchpi %[(%'%literal _)] do
           literals += 1
 
           WalkDecision::Continue
@@ -5801,13 +5786,13 @@ module ::Ww::M1
         # (%edge _) makes an (edge ...), see the literal, `edge`? Thus we count a literal
         # match. If edge's type is restricted we count that as a restriction. Otherwise
         # we do not.
-        matchpi %[((%literal %edge) (%literal _))] do
+        matchpi %[(%'%edge %'_)] do
           literals += 1
 
           WalkDecision::Skip
         end
 
-        matchpi %[((%literal %edge) _)] do
+        matchpi %[(%'%edge _)] do
           literals += 1
           restrictions += 1
 
@@ -5818,15 +5803,15 @@ module ::Ww::M1
         # and one on the magnitude; and e.g. (%number (whole _) < 10) as three: one on
         # the type, one on the magnitude, and one on the value.
         matchpi(
-          %[((%literal %number) (%literal _) _ _)],
-          %[((%literal %number) (%literal (whole _)))],
+          %[(%'%number %'_ _ _)],
+          %[(%'%number %'(whole _))],
         ) do
           restrictions += 2
 
           WalkDecision::Continue
         end
 
-        matchpi %[((%literal %number) (%literal (whole _)) _ _)] do
+        matchpi %[(%'%number %'(whole _) _ _)] do
           restrictions += 2
 
           WalkDecision::Continue
@@ -5834,7 +5819,7 @@ module ::Ww::M1
 
         # Count stuff such as (%number 0 < _ < 10) as three restrictions: one on the type
         # and two on the magnitude.
-        matchpi %[((%literal %number) _ _ (%literal _) _ _)] do
+        matchpi %[(%'%number _ _ %'_ _ _)] do
           restrictions += 3
 
           WalkDecision::Continue
@@ -5842,7 +5827,7 @@ module ::Ww::M1
 
         # Count stuff such as (%number 0 < (whole _) < 10) as four restrictions: one on
         # the type, two on the magnitude, and one on the value.
-        matchpi %[((%literal %number) _ _ (%literal (whole _)) _ _)] do
+        matchpi %[(%'%number _ _ %'(whole _) _ _)] do
           restrictions += 4
 
           WalkDecision::Continue
@@ -5851,15 +5836,15 @@ module ::Ww::M1
         # Rather than listing all operators that make restrictions, we list those that
         # *do not*. This is because most operators make restrictions.
         matchpi(
-          %[((%literal %pass))],
-          %[((%literal %let) _ _)],
-          %[((%literal %not) _+)],
-          %[((%literal %new) _)],
-          %[((%literal %new) _ _)],
+          %[(%'%pass)],
+          %[(%'%let _ _)],
+          %[(%'%not _+)],
+          %[(%'%new _)],
+          %[(%'%new _ _)],
         ) { WalkDecision::Continue }
 
         # %all sums the specificity of its offshoots.
-        matchpi %[((%literal %all) offshoots_+)] do
+        matchpi %[(%'%all offshoots_+)] do
           WalkDecision::Continue
         end
 
@@ -5877,7 +5862,7 @@ module ::Ww::M1
           WalkDecision::Skip
         end
 
-        matchpi %[((%literal %keypool) keys_+)] do
+        matchpi %[(%'%keypool keys_+)] do
           restrictions += keys.size
 
           WalkDecision::Continue
@@ -5905,8 +5890,8 @@ module ::Ww::M1
     def self.operator(candidate : Term) : Any
       Term.case(candidate) do
         matchpi %[(%terminal successor_)] { Head.operator(successor) }
-        matchpi %[((%literal %let) _ successor_)] { Head.operator(successor) }
-        matchpi %[((%literal %literal) term_)] { Some.new(term) }
+        matchpi %[(%'%let _ successor_)] { Head.operator(successor) }
+        matchpi %[(%'%literal term_)] { Some.new(term) }
         matchpi %[(%any° _number _symbol _string _boolean)] { Some.new(candidate) }
         otherwise { None.new }
       end
@@ -5922,8 +5907,8 @@ module ::Ww::M1
 
     def self.item(items : Term) : Any
       Term.case(items) do
-        matchpi %[((%past ((%literal %slot) _)))] { More.new }
-        matchpi %[((%past/max ((%literal %slot) _)) successor_ successors_*)] do
+        matchpi %[((%past (%'%slot _)))] { More.new }
+        matchpi %[((%past/max (%'%slot _)) successor_ successors_*)] do
           head = Head.singular(successor)
           head.is_a?(More) ? Head.item(successors) : head
         end
@@ -5951,9 +5936,9 @@ module ::Ww::M1
       end
 
       matchpi %[(%terminal successor_)] { head?(successor) }
-      matchpi %[((%literal %partition) itemspart_ _)] { head?(itemspart) }
-      matchpi %[((%literal %let) _ successor_)] { head?(successor) }
-      matchpi %[((%literal %literal) [head_ _*])] { head }
+      matchpi %[(%'%partition itemspart_ _)] { head?(itemspart) }
+      matchpi %[(%'%let _ successor_)] { head?(successor) }
+      matchpi %[(%'%literal [head_ _*])] { head }
 
       otherwise { }
     end

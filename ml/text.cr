@@ -429,7 +429,16 @@ module Ww::ML::Text
         when '}'
           advance
           return Token.new(:"}", pos - 1, pos)
-        when '!', '$', '%', '&', '*', '.', '/', '>', '?', '_', '~', 'λ', '|', '∞', '°', '∈', '⊆', '⊂'
+        when '%'
+          case ahead
+          when '\''
+            advance
+            advance
+            return Token.new(:"%'", pos - 2, pos)
+          else
+            return symbol
+          end
+        when '!', '$', '&', '*', '.', '/', '>', '?', '_', '~', 'λ', '|', '∞', '°', '∈', '⊆', '⊂'
           return symbol
         when ':'
           advance
@@ -809,6 +818,7 @@ module Ww::ML::Text
         when :"'"   then Term.of(:hold, slot)
         when :"⏏"   then Term.of(:"%slot", slot)
         when :"≡"   then Term.of(:"%nonself", slot)
+        when :"%'"  then Term.of(:"%literal", slot)
         when :"@"
           unless name = term?(Term::Sym) || term?(Term::Str) || term?(Term::Num)
             raise "expected symbol, string, or number as edge name"
