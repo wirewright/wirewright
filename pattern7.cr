@@ -401,8 +401,6 @@ module ::Ww::M1::Operator
 
   defcase Partition, itemspart : Any, pairspart : Any
 
-  defcase Both, a : Any, b : Any
-
   defcase ValueLiteral, key : Term, successor : Any
   defcase Keypool, keys : Array(Term)
 
@@ -772,12 +770,6 @@ module ::Ww::M1::Operator
     ahead1 = Ahead::Match.new(op.pairspart, Term.of(pairspart), Ahead.stackptr(ahead0))
 
     match(behind0, op.itemspart, Term.of(itemspart), ahead1)
-  end
-
-  def match(behind0, op : Both, matchee : Term, ahead0)
-    ahead1 = Ahead::Match.new(op.b, matchee, Ahead.stackptr(ahead0))
-
-    match(behind0, op.a, matchee, ahead1)
   end
 
   def match(behind0, op : ValueLiteral, matchee : Term, ahead0)
@@ -6143,6 +6135,11 @@ class PatternSet
   # Block-less version of `select`.
   def self.select(selector : Term, base : Term) : PatternSet
     self.select(selector, base) { true }
+  end
+
+  def includes?(term : Term) : Bool
+    # ?! Should we use .probe? here?
+    !responses(term).empty?
   end
 
   private def response(neighbors : Slice(Pattern), matchee : Term) : Pr::Any

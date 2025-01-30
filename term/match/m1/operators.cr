@@ -58,4 +58,6 @@ module Ww::M1::Operator
   defcase SingularSeq, items : Slice(Any), exhaustive : Bool, reverse : Bool
 
   defcase SourceChoice, a : Any, b : Any
+
+  defcase Both, a : Any, b : Any
 end

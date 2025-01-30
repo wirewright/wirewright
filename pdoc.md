@@ -372,6 +372,26 @@ finds are simply concatenated into one big stream of matches.
 ;;    3
 ```
 
+## `%all`
+
+`%all` allows to apply multiple patterns to the same term. All patterns must match. All
+branches of `%all` are visible to each other.
+
+```wwml
+(names (%all (people _*) ⟨(person name_string)⟩°)) =>° name
+
+(names
+  (people (person "John Doe")
+          (person "Samantha Doe")
+          (dog "Bobby")))
+
+;; => "John Doe"
+;;    "Samantha Doe"
+
+(names ((person "John Doe") (person "Samantha Doe")))
+;; => (names ((person "John Doe") (person "Samantha Doe")))
+```
+
 ## `%new`
 
 The idea with the `%new` operator is to be able to create new patterns at match-

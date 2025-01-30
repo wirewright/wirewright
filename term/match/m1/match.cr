@@ -215,11 +215,18 @@ module Ww::M1::Operator
     unless a.is_a?(Fb::Response)
       return a
     end
+
     b = match(behind0, op.b, matchee, ahead0)
     unless b.is_a?(Fb::Response)
       return b
     end
 
     Fb.sum(a, b)
+  end
+
+  def match(behind0, op : Both, matchee : Term, ahead0)
+    ahead1 = Ahead::Match.new(op.b, matchee, Ahead.stackptr(ahead0))
+
+    match(behind0, op.a, matchee, ahead1)
   end
 end
