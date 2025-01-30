@@ -3226,19 +3226,19 @@ module ::Ww::M1
           # The reason we need this matchpi right now is that term's sketch is dirty
           # and contains remains of term's past. When we are going to be able
           # to update sketch on deletion this matchpi should go away.
-          matchpi %[(%'%literal term_dict)] do
+          matchpi %[(%'%literal term_dict)], cue: :"%literal" do
             sketch |= term.fresh_sketch
 
             WalkDecision::Continue
           end
 
-          matchpi %[(%'%literal term_)] do
+          matchpi %[(%'%literal term_)], cue: :"%literal" do
             sketch = Term::Dict.mix(sketch, term)
 
             WalkDecision::Continue
           end
 
-          matchpi %[(%'%sketch _ sketch0_number)] do
+          matchpi %[(%'%sketch _ sketch0_number)], cue: :"%sketch" do
             sketch |= sketch0.to(Term::Dict::Sketch)
 
             # We've already computed the sketch for this part of the tree. Move on.
@@ -3251,6 +3251,7 @@ module ::Ww::M1
             %{[%'%entries/first _ successor_]},
             %{[%'%entries/source _ successor_]},
             %{[%'%entries/all _ _ successor_]},
+            cues: {:"%entries/first", :"%entries/source", :"%entries/all"}
           ) do
             sketch |= sketch(successor)
 
@@ -3273,6 +3274,7 @@ module ::Ww::M1
             %{(%'%leaves/first _* ¦ _ in: (%not keys))},
             %{(%'%leaves/source _* ¦ _ in: (%not keys))},
             %{(%'%leaves/all _* ¦ _ in: (%not keys))},
+            cues: {nil, :"%leaves/first", :"%leaves/source", :"%leaves/all"}
           ) do
             WalkDecision::Continue
           end
@@ -3304,6 +3306,7 @@ module ::Ww::M1
             %{(%'%leaves/first _* ¦ _ in: (%not keys))},
             %{(%'%leaves/source _* ¦ _ in: (%not keys))},
             %{(%'%leaves/all _* ¦ _ in: (%not keys))},
+            cues: {nil, :"%leaves/first", :"%leaves/source", :"%leaves/all"}
           ) do
             sketch = sketch(node)
             next if sketch.zero?
