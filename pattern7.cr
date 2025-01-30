@@ -571,7 +571,7 @@ module ::Ww::M1::Operator::Fb
   alias Any = Response | Interrupt
   alias Response = Match | Mismatch
   alias Match = MatchOne | MatchMany
-  alias Interrupt = RequestKeypath
+  alias Interrupt = RequestKeypath  | ProbeTrue
 
   record MatchOne, env : Term::Dict, more : Bool = false do
     def envs
@@ -581,7 +581,9 @@ module ::Ww::M1::Operator::Fb
 
   record MatchMany, envs : Array(Term::Dict)
   record Mismatch, env : Term::Dict
+
   record RequestKeypath
+  record ProbeTrue
 
   def self.sum(a : Mismatch, b : Mismatch)
     a
@@ -1310,11 +1312,15 @@ end
 
 module ::Ww::M1::Operator
   struct Behind
+    getter? probe : Bool
+
     def initialize(
       @captures = Term[],
       @domains = Term[],
       @antidomains = Term[],
       @keypath : Keypath::Appender? = nil,
+      *,
+      @probe : Bool = false,
     )
     end
 
@@ -1448,10 +1454,28 @@ module ::Ww::M1::Operator
     Search::Spec::Entries.new
   end
 
-  def feedback(env : Term::Dict, op : Any, matchee : Term, *, keypaths : Bool = false) : Fb::Response
-    behind0 = Behind.new(env, keypath: keypaths ? Keypath::Appender.new : nil)
+  enum FeedbackMode : UInt8
+    Normal
+    Probe
+    Keypath
+  end
 
-    case fb = match(behind0, op, matchee, Ahead::MatchOne.new)
+  # :nodoc:
+  def feedback0(env, op, matchee, mode : FeedbackMode) : Fb::Any
+    case mode
+    in .normal?
+      behind0 = Behind.new(env)
+    in .probe?
+      behind0 = Behind.new(env, probe: true)
+    in .keypath?
+      behind0 = Behind.new(env, keypath: Keypath::Appender.new)
+    end
+
+    match(behind0, op, matchee, Ahead::MatchEndpoint.new)
+  end
+
+  def feedback(env : Term::Dict, op : Any, matchee : Term, *, keypaths : Bool = false) : Fb::Response
+    case fb = feedback0(env, op, matchee, mode: keypaths ? FeedbackMode::Keypath : FeedbackMode::Normal)
     in Fb::Response
       fb
     in Fb::RequestKeypath
@@ -1460,6 +1484,8 @@ module ::Ww::M1::Operator
       end
 
       feedback(env, op, matchee, keypaths: true)
+    in Fb::ProbeTrue
+      raise "BUG: unexpected Fb::ProbeTrue response in normal/keypath mode"
     end
   end
 
@@ -1479,10 +1505,17 @@ module ::Ww::M1::Operator
     end
   end
 
-  # TODO: this should use some kind of flag to signal to match()s that they should relax?
-  # i.e. sources may emit only once etc.
   def probe?(env : Term::Dict, op : Any, matchee : Term) : Bool
-    feedback(env, op, matchee).is_a?(Fb::Match)
+    case feedback0(env, op, matchee, mode: FeedbackMode::Probe)
+    in Fb::Match, Fb::ProbeTrue
+      true
+    in Fb::Mismatch
+      false
+    in Fb::RequestKeypath
+      # If the pattern requests keypath, we switch to the slower feedback() version.
+      # Gains from using the probe mode are a speck compared to losses from keypath mode.
+      feedback(env, op, matchee, keypaths: true).is_a?(Fb::Match)
+    end
   end
 end
 
@@ -1645,7 +1678,7 @@ module ::Ww::M1::Operator::Item
 end
 
 module ::Ww::M1::Operator::Ahead
-  alias Any = MatchOne | Match | Forward | ItemZip | EntrySeq | ItemAdapter | Goto
+  alias Any = MatchOne | MatchEndpoint | Match | Forward | ItemZip | EntrySeq | ItemAdapter | Goto
 
   macro stackptr(var)
     begin
@@ -1655,6 +1688,7 @@ module ::Ww::M1::Operator::Ahead
   end
 
   record MatchOne
+  record MatchEndpoint
   record Match, op : Operator::Any, matchee : Term, successor : Ahead::Any*
   record Forward, delta : Int32, successor : Ahead::Any*
 
@@ -1675,6 +1709,14 @@ module ::Ww::M1::Operator::Ahead
   record ItemAdapter, ord : UInt32, matchees : MatcheeFeed, successor : Item*
 
   def self.tr(behind0, node0 : MatchOne)
+    Fb::MatchOne.new(behind0.env)
+  end
+
+  def self.tr(behind0, node0 : MatchEndpoint)
+    if behind0.probe?
+      return Fb::ProbeTrue.new
+    end
+
     Fb::MatchOne.new(behind0.env)
   end
 
