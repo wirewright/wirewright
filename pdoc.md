@@ -388,8 +388,46 @@ branches of `%all` are visible to each other.
 ;; => "John Doe"
 ;;    "Samantha Doe"
 
-(names ((person "John Doe") (person "Samantha Doe")))
-;; => (names ((person "John Doe") (person "Samantha Doe")))
+;; If we omit "people", required in the first branch of %all, we'll miss
+;; the rule:
+
+(names ((person "John Doe")
+        (person "Samantha Doe")))
+
+;; => (names ((person "John Doe")
+;;            (person "Samantha Doe")))
+```
+
+## `%keypool`
+
+`%keypool` matches dictionaries whose set of keys is a subset of the keys given
+to `%keypool`.
+
+For example, `(%keypool a b c)` matches:
+
+- an empty dictionary {}
+- a dictionary with only key a, b, or c: {a: ...}, {b: ...}, {c: ...}
+- a dictionary with keys a and b: {a: ..., b: ...}
+- a dictionary with keys a and c: {a: ..., c: ...}
+- a dictionary with keys b and c: {b: ..., c: ...}
+- a dictionary with all three keys a, b, and c: {a: ..., b: ..., c: ...}.
+
+In other words, `%keypool` lets you allow a set of keys to be present in the dict
+while denying the presence of all other keys.
+
+```wwml
+(user? (%keypool username email age)) => true
+(user? _) => false
+
+(user? {})
+(user? {username: "alice", email: "alice@example.com"})
+(user? {username: "alice", age: 25})
+(user? {username: "alice", email: "alice@example.com", age: 25})
+;; etc...
+;; => true
+
+(user? {username: "bob", password: "passw0rd"})
+;; => false, `password` is not in the set of allowed keys.
 ```
 
 ## `%new`

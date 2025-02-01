@@ -16,7 +16,7 @@
 # │ %any                     │   ~   │   ~     │   ~   │            │    ·     │       │   ~
 # │ %any°                    │   ~   │   ~     │   ~   │            │    ~     │       │   ~
 # │ %all                     │   ~   │   ~     │   ~   │            │    ~     │       │   ~
-# │ %keypool                 │   +   │   +     │   +   │            │    ·     │       │
+# │ %keypool                 │   +   │   +     │   +   │            │    ·     │       │   ~
 # │ %not                     │   +   │   +     │   +   │            │    ·     │       │
 # │ %layer                   │   +   │   +     │   +   │            │    ~     │       │
 # │ %number                  │   +   │   +     │   +   │            │    ·     │       │   ~
@@ -402,7 +402,6 @@ module ::Ww::M1::Operator
   defcase Partition, itemspart : Any, pairspart : Any
 
   defcase ValueLiteral, key : Term, successor : Any
-  defcase Keypool, keys : Array(Term)
 
   defcase Span, successor : Any
   defcase Tally, successor : Any
@@ -780,19 +779,6 @@ module ::Ww::M1::Operator
     ahead1 = Ahead::Goto.new(behind0.keypath?, Ahead.stackptr(ahead0))
 
     match(behind0.keypath(&.update_value(op.key)), op.successor, value, ahead1)
-  end
-
-  def match(behind0, op : Keypool, matchee : Term, ahead0)
-    unless dict = matchee.as_d?
-      return Fb::Mismatch.new(behind0.env)
-    end
-
-    pruned = op.keys.reduce(dict) { |memo, key| memo.without(key) }
-    unless pruned.empty?
-      return Fb::Mismatch.new(behind0.env)
-    end
-
-    Ahead.tr(behind0, ahead0)
   end
 
   def match(behind0, op : Span, matchee : Term, ahead0)
@@ -3814,7 +3800,7 @@ module ::Ww::M1
       matchpi %[(%itemseq _*)], cue: :"%itemseq" do
         items = Item.sequence(node.items.move(1), -> { nil.as(Item::Neighbor) }, captures)
 
-        Operator::ItemSeq.new(items)
+        Operator::ItemSeq.new(items.to_readonly_slice)
       end
 
       matchpi %[(%itemsonly)], cue: :"%itemsonly" do
@@ -3852,7 +3838,7 @@ module ::Ww::M1
       match({:"%keypool", :_, :"_*"}, cue: :"%keypool") do
         keys = node.items.move(1)
 
-        Operator::Keypool.new(keys.to_a)
+        Operator::Keypool.new(keys.to_readonly_slice(&.itself))
       end
 
       match({ {:"%literal", :"%layer"}, :below_, :side_ }, cue: :"%layer") do |below, side|

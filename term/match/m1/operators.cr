@@ -52,7 +52,7 @@ module Ww::M1::Operator
 
   defcase Edge, type : TermType
 
-  defcase ItemSeq, items : Array(Item::Any)
+  defcase ItemSeq, items : Slice(Item::Any)
   defcase ItemFirst, successor : Any
   defcase ItemLast, successor : Any
   defcase SingularSeq, items : Slice(Any), exhaustive : Bool, reverse : Bool
@@ -60,4 +60,6 @@ module Ww::M1::Operator
   defcase SourceChoice, a : Any, b : Any
 
   defcase Both, a : Any, b : Any
+
+  defcase Keypool, keys : Slice(Term)
 end

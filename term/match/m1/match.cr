@@ -207,7 +207,7 @@ module Ww::M1::Operator
       return Fb::Mismatch.new(behind0.env)
     end
 
-    Item.match(behind0, op.items.to_readonly_slice, dict.items, ahead0)
+    Item.match(behind0, op.items, dict.items, ahead0)
   end
 
   def match(behind0, op : SourceChoice, matchee : Term, ahead0)
@@ -228,5 +228,18 @@ module Ww::M1::Operator
     ahead1 = Ahead::Match.new(op.b, matchee, Ahead.stackptr(ahead0))
 
     match(behind0, op.a, matchee, ahead1)
+  end
+
+  def match(behind0, op : Keypool, matchee : Term, ahead0)
+    unless dict = matchee.as_d?
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    pruned = op.keys.reduce(dict) { |memo, key| memo.without(key) }
+    unless pruned.empty?
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    Ahead.tr(behind0, ahead0)
   end
 end
