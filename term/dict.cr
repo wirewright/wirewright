@@ -709,16 +709,21 @@ module Ww
     end
 
     def follow?(keys : Indexable(Term), *, __cursor = 0, &fn : Term -> Term) : Term?
-      if __cursor == keys.size
-        return fn.call(Term.of(self))
+      case __cursor
+      when keys.size
+        fn.call(Term.of(self))
+      when keys.size - 1
+        key = keys[__cursor]
+        return unless value0 = self[key]?
+        Term.of(self.with(key, fn.call(value0)))
+      else
+        key = keys[__cursor]
+        return unless value0 = self[key]?
+        return unless value0 = value0.as_d?
+        return unless value1 = value0.follow?(keys, __cursor: __cursor + 1, &fn)
+
+        Term.of(self.with(key, value1))
       end
-
-      key = keys[__cursor]
-      return unless value0 = self[key]?
-      return unless value0 = value0.as_d?
-      return unless value1 = value0.follow?(keys, __cursor: __cursor + 1, &fn)
-
-      Term.of(self.with(key, value1))
     end
 
     def follow(keys : Indexable(Term), &fn : Term -> Term) : Term

@@ -50,7 +50,7 @@ end
 def oneR(term term1 : Term) : Rewriter
   Rewriter.new do |ctx, staging|
     staging.reduce do |term0|
-      # NOTE: since this is a Rewrite introduction point we must fortify it with
+      # Since this is a Rewrite introduction point we must fortify it with
       # a diff(). Otherwise we risk rewriters to short-circuit if they cannot
       # determine when to stop due to a sneaky One(T) -> Many([T]) or something
       # like that.
@@ -63,7 +63,7 @@ end
 # in *list*.
 def manyR(list : Term::Dict) : Rewriter
   Rewriter.new do |ctx, staging|
-    # NOTE: just as above, we're defensive here.
+    # Just as above, we're defensive here.
     staging.reduce do |term0|
       ctx.observable(Rewrite.many(list).diff(term0)) { "unconditional replace with many" }
     end
@@ -131,7 +131,7 @@ def itemsR(ctx0 : RewriterContext, term : Term, successor : Rewriter) : Rewrite:
   splices = nil
 
   dict1 = dict0.transaction do |commit|
-    # NOTE: we **must** call successor in proper order due to observers which are only
+    # We **must** call successor in proper order due to observers which are only
     # capable of doing one keypath-insert at a time.
     (0...dict0.itemsize).reverse_each do |index|
       item = dict0[index]
@@ -150,7 +150,7 @@ def itemsR(ctx0 : RewriterContext, term : Term, successor : Rewriter) : Rewrite:
   end
 
   unless splices
-    # NOTE: Dict transactions only modify the underlying dict upon the first with()/
+    # Dict transactions only modify the underlying dict upon the first with()/
     # without()/etc. call. Since we only call with() on a Rewrite.one of the successor,
     # and since we trust the successor in that its Rewrite.one signals change unconditionally,
     # we thus consider a `same?` check sufficient to determine whether the dictionary
@@ -354,7 +354,7 @@ end
         in Rewrite::None
           Rewrite.none
         in Rewrite::One
-          # NOTE: entryR always returns a dictionary, but we're a little too loose
+          # entryR always returns a dictionary, but we're a little too loose
           # on the types so we have to error-cast. Whatever.
           Rewrite.one(rewrite.term.as_d | dict.{{rpart.id}}spart)
         in Rewrite::Many
@@ -537,7 +537,7 @@ module Relr
   record Ascend, ascent : Int32
   record None
 
-  # NOTE: just like in `itemsR`, here we must iterate in a keypath-friendly
+  # Just like in `itemsR`, here we must iterate in a keypath-friendly
   # way so that observers that rely solely on {keypath, rewrite} pairs can
   # reconstruct what we're doing here without messing up indices etc.
   private def self.each_entry_keypath_friendly(dict : Term::Dict, &)
@@ -593,7 +593,7 @@ module Relr
     end
 
     unless splices
-      # NOTE: See `itemsR` to learn why this `same?` check is sufficient here.
+      # See `itemsR` to learn why this `same?` check is sufficient here.
       return Ready.new(dict0.same?(dict1) ? Rewrite.none : Rewrite.one(dict1))
     end
 
@@ -613,7 +613,7 @@ end
 # it rewrites the term thus reached using *successor*.
 #
 # - If `relR` encounters the bottom pattern, it begins its ascent.
-# - Once it ascends *ascent* levels, it applies `successor` at that point.
+# - Once it ascends *ascent* levels, it applies *successor* at that point.
 # - If *ascent* is `0`, `relR` rewrites the bottom directly.
 # - If multiple *bottom* matches exist, `relR` processes them independently,
 #   meaning rewriting order can influence results.
@@ -669,12 +669,21 @@ def pbranchR(pset : PatternSet, a : Rewriter, b : Rewriter) : Rewriter
   end
 end
 
+# Lists the call edges supported by `effectR`. Combining them will result
+# in multiple calls to the callable at the corresponding points in time.
 @[Flags]
 enum EffectEdge : UInt8
+  # The callable is called with the rewrite before passing it to the successor.
   In
+  # The callable is called with the rewrite that the successor made.
   Out
 end
 
+# Passthrough to *successor* that calls *callable* on *edge*.
+#
+# *callable* must respond to `#call(Rewrite::Any)`.
+#
+# See `EffectEdge` about the available edges.
 def effectR(successor : Rewriter, callable, *, edge = EffectEdge::In) : Rewriter
   edge = EffectEdge.new(edge)
 
@@ -688,10 +697,12 @@ def effectR(successor : Rewriter, callable, *, edge = EffectEdge::In) : Rewriter
   end
 end
 
+# See the other overload.
 def effectR(successor : Rewriter, *, edge = EffectEdge::In, &effect : Rewrite::Any ->) : Rewriter
   effectR(successor, effect, edge: edge)
 end
 
+# :nodoc:
 struct RewriteApplier
   def initialize(@ctx : RewriterContext, @rewriter : Rewriter)
   end
@@ -725,7 +736,7 @@ def ruleR(ctx0, term, rule : Rule::Template, pr : Pr::One, templr, backmapr)
 
   ctx1 = ctx0.copy_with(envs: ctx0.envs.append(pr.env))
 
-  # NOTE: maybe the observer shows envs for debugging; we don't know it here.
+  # Maybe the observer shows envs for debugging; we don't know it here.
   # So show the rewrite to the latest context.
   ctx1.observable(rewrite) { "replace with rule template body" }
 
@@ -821,7 +832,7 @@ def metaR(ctx, term term0 : Term, primaryr, metar, successor)
       Rewrite.one(term2)
     end
 
-    # NOTE: even if the successor returns none, we still succeeded rewriting
+    # Even if the successor returns none, we still succeeded rewriting
     # into term1. Similarly, even if metar returns none.
 
     progress = metarw.as?(Rewrite::Some) || progress
@@ -830,10 +841,61 @@ def metaR(ctx, term term0 : Term, primaryr, metar, successor)
   end
 end
 
-def metaR(primaryr, metar, successor) : Rewriter
+def metaR(primaryr : Rewriter, metar : Rewriter, successor : Rewriter) : Rewriter
   Rewriter.new do |ctx, staging|
     staging.reduce { |term| metaR(ctx, term, primaryr, metar, successor) }
   end
+end
+
+# :nodoc:
+def wrapR(ctx, pbreakdown, reshape, punwrap, term0, successor)
+  unless tenv = M1::Operator.match?(Term[], pbreakdown, term0)
+    return Rewrite.none
+  end
+
+  filled0 = M1.bsubst(reshape, tenv)
+
+  rewrite = successor.call(ctx, Rewrite.one(filled0))
+  rewrite.reduce do |filled1|
+    next Rewrite.none unless outenv = M1::Operator.match?(Term[], punwrap, filled1)
+    next Rewrite.none unless term1 = outenv[:out]?
+
+    # This is a point of introduction, so we have to be careful about
+    # Rewrite.one right here, hence a defensive diff().
+    Rewrite.one(term1).diff(term0)
+  end
+end
+
+# Wrap rewriter: enables the breakdown - reshape - unwrap interaction between rewriters.
+#
+# - *pbreakdown* is a pattern that can break the input term down into its constituents.
+# - *reshape* is a template term. Blanks in it are substituted with captures from
+#   *pbreakdown*'s match env.
+# - The result of reshaping is fed to *successor*.
+# - The output of successor is matched using the given *punwrap* pattern; its capture
+#   `out` is used as the output of rewriting.
+#
+# TODO: *pbreakdown* and *punwrap* currently do not support sources (like `%item°`);
+# only the first match env will be considered, the rest are going to be discarded.
+def wrapR(pbreakdown : M1::Operator::Any, reshape : Term, successor : Rewriter, punwrap : M1::Operator::Any) : Rewriter
+  Rewriter.new do |ctx, staging|
+    staging.reduce { |term| wrapR(ctx, pbreakdown, reshape, punwrap, term, successor) }
+  end
+end
+
+# See the main overload.
+def wrapR(pbreakdown : Term, reshape : Term, successor : Rewriter, punwrap : Term) : Rewriter
+  wrapR(M1.operator(pbreakdown), reshape, successor, M1.operator(punwrap))
+end
+
+# See the main overload.
+def wrapR(pbreakdown : String, reshape : String, successor : Rewriter, punwrap : String) : Rewriter
+  wrapR(ML.parse1(pbreakdown), ML.parse1(reshape), successor, ML.parse1(punwrap))
+end
+
+# Same as `wrapR` but with hard-coded noop breakdown `in_`.
+def wrapR(reshape, successor : Rewriter, punwrap) : Rewriter
+  wrapR(%[in_], reshape, successor, punwrap)
 end
 
 def preview1(term, cursor : Term::Dict::ItemsView, leaf : Rewrite::Some)
@@ -894,9 +956,9 @@ end
 
 {% if flag?(:qux) %}
   mod = ProcRuleset.build do
-    rulepi1 %[(+ a_ b_)] { a + b }
-    rulepi1 %[(- a_ b_)] { a - b }
-    rulepi1 %[(* a_ b_)] { a * b }
+    rulepi1 %[(node (+ (literal a_number) (literal b_number)))] { {:node, {:literal, a + b}} }
+    rulepi1 %[(node (- a_ b_))] { {:node, a - b} }
+    rulepi1 %[(node (* a_ b_))] { {:node, a * b} }
   end
 
   changed = ProcRuleset.build do
@@ -909,10 +971,12 @@ end
     end
   end
 
-  puts rewrite(Term.of(:+, 4, 5), metaR(effectR(callR(mod), edge: {:in, :out}) { |re| pp re }, callR(changed), effectR(noR, edge: {:in, :out}) { |re| pp re }))
-  puts rewrite(Term.of(:-, 4, 5), metaR(effectR(callR(mod), edge: {:in, :out}) { |re| pp re }, callR(changed), effectR(noR, edge: {:in, :out}) { |re| pp re }))
-  puts rewrite(Term.of(:*, 4, 5), metaR(effectR(callR(mod), edge: {:in, :out}) { |re| pp re }, callR(changed), effectR(noR, edge: {:in, :out}) { |re| pp re }))
-  puts rewrite(Term.of(:/, 4, 5), metaR(effectR(callR(mod), edge: {:in, :out}) { |re| pp re }, callR(changed), effectR(noR, edge: {:in, :out}) { |re| pp re }))
+  # puts rewrite(Term.of(:+, 1, 2), wrapR(%[(+ a_ b_)], %[(node (+ (literal a_) (literal b_)))], %[(node (literal out_))], callR(mod)))
+  puts rewrite(Term.of(:*, 5, 3), wrapR(%[in_], %[(node in_)], callR(mod), %[(node out_)]))
+  # puts rewrite(Term.of(:+, 4, 5), metaR(effectR(callR(mod), edge: {:in, :out}) { |re| pp re }, callR(changed), effectR(noR, edge: {:in, :out}) { |re| pp re }))
+  # puts rewrite(Term.of(:-, 4, 5), metaR(effectR(callR(mod), edge: {:in, :out}) { |re| pp re }, callR(changed), effectR(noR, edge: {:in, :out}) { |re| pp re }))
+  # puts rewrite(Term.of(:*, 4, 5), metaR(effectR(callR(mod), edge: {:in, :out}) { |re| pp re }, callR(changed), effectR(noR, edge: {:in, :out}) { |re| pp re }))
+  # puts rewrite(Term.of(:/, 4, 5), metaR(effectR(callR(mod), edge: {:in, :out}) { |re| pp re }, callR(changed), effectR(noR, edge: {:in, :out}) { |re| pp re }))
 {% end %}
 
 # [x] itemsR
@@ -937,13 +1001,17 @@ end
 # [x] effectR
 # [x] rulesetR
 # [x] metaR "rewrite rewriter", detects modifications of successor1, passes to successor2, result is successor2
+# [x] wrapR "template rewriter", accepts a template, plugs in the input term, rewrites with successor, extracts back.
 # [ ] pathR
 #    - rewrites a path from root to some offspring,
 #    - using passable and impassable psets,
 #    - successor rewrites path,
 #    - allows to specify max path depth pattern (overall) and path view pattern (how much of path to give to successor)
+#    - we'd like to trace where we are; a cursor of some kind would be useful.
+# [ ] we should be able to combine pathR and metaR to trace changes across the hierarchy in "two dimensions"
+# [ ] how to combine pathR, metaR, and wrapR to run edt3 and related?
 # [ ] building rewriter circuits with Terms
-# [ ] improve debugging: instead of sending keypath/etc. to Observer, send Messages of some kind,
-#     including those with keypath/etc (as now). One of such messages would be PushRewritee, very very
+# [ ] improve debugging: instead of sending keypath/etc. to Observer, send Reports of some kind,
+#     including those with keypath/etc (as now). One of such messages would be NewRewritee, very very
 #     useful for debugging backmaps (since they, unlike rules, cannot be readily/easily embedded into
 #     the original term. It is possible but needlessly hard.

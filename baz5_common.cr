@@ -81,7 +81,15 @@ module Rewrite
         end
       end
 
-      changed ? Many.new(newlist) : None.new
+      unless changed
+        return None.new
+      end
+
+      if newlist.size == 1
+        return One.new(newlist[0])
+      end
+
+      Many.new(newlist)
     end
 
     def map(default, &)
