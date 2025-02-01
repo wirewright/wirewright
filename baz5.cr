@@ -35,6 +35,13 @@ record RewriterContext, rng : Random, keypath : Keypath::Appender?, envs = Term[
   end
 end
 
+# A rewriter that does not rewrite. The "zero" of rewriters.
+#
+# NOTE: noRs should be handled by the caller. noR itself does not know whether
+# what you give it is a rewrite or not vs. the original term (whatever it is).
+# The caller must keep track of its rewriting progress; if a rewriter like noR
+# refuses to rewrite, the caller must keep its rewriting progress unchanged. If
+# a rewriter agrees to rewrite, the caller must update its progress.
 def noR : Rewriter
   Rewriter.new { Rewrite.none }
 end
@@ -63,6 +70,7 @@ def manyR(list : Term::Dict) : Rewriter
   end
 end
 
+# :nodoc:
 def envR(ctx : RewriterContext, prefix : Enumerable(Term), term term0 : Term)
   ctx.envs.items.reverse_each do |env|
     next unless pterm = env.follow?(prefix)
@@ -75,24 +83,38 @@ def envR(ctx : RewriterContext, prefix : Enumerable(Term), term term0 : Term)
   Rewrite.none
 end
 
+# Rewrites a term by replacing it with a corresponding value from the environment.
+#
+# Follows keypath *prefix* into the environment, replaces the rewritten term with
+# its corresponding value from the dictionary thus reached. Noop if *prefix* cannot
+# be followed or there is no corresponding value there.
+#
+# The environment acts as a lookup table that certain rewriters (like `envR`) consult
+# to determine how a term should be transformed; in case of `envR`, what it should be
+# replaced with.
+#
+# The environment is mainly managed by `rulesetR`.
 def envR(prefix : Enumerable(Term)) : Rewriter
   Rewriter.new do |ctx, staging|
     staging.reduce { |term| envR(ctx, prefix, term) }
   end
 end
 
+# See `envR(prefix : Enumerable(Term))`.
 def envR(*prefix : Term) : Rewriter
   envR(prefix)
 end
 
+# :nodoc:
 EMPTY_PREFIX = [] of Term
 
+# Same as `envR(prefix : Enumerable(Term))`, but with an empty prefix.
 def envR : Rewriter
   envR(EMPTY_PREFIX)
 end
 
 # TODO: we should be able to implement this more efficiently in the future!
-def splice(dict : Term::Dict, splices : Array({Term::Num, Term::Dict}))
+private def splice(dict : Term::Dict, splices : Array({Term::Num, Term::Dict}))
   splices.each do |start, splice|
     dict = dict.replace(start, &.concat(splice.items))
   end
@@ -400,6 +422,7 @@ def selR(selector : String, successor : Rewriter) : Rewriter
   selR(ML.parse1(selector), successor)
 end
 
+# Generates a `choiceR` with more than two branches for you to reduce typing.
 def switchR(branches : Enumerable({Term, Rewriter})) : Rewriter
   choice = nil
 
@@ -411,14 +434,15 @@ def switchR(branches : Enumerable({Term, Rewriter})) : Rewriter
   choice || noR
 end
 
+# :ditto:
 def switchR(*branches : {Term, Rewriter})
   switchR(branches)
 end
 
+# :ditto:
 def switchR(*branches : {String, Rewriter})
   switchR(branches.map { |selector, rewriter| {ML.parse1(selector), rewriter} })
 end
-
 
 # Rewrites a term using *successor*; if that produces no change and the term is
 # a dictionary term, recurses on its items and pair values (`entriesR`).
@@ -483,6 +507,7 @@ def absR(successor) : Rewriter
   set.call choiceR(successor, entryR(rec))
 end
 
+# :nodoc:
 module ExhrId
   @@fresh = Atomic(UInt64).new(0u64)
 
@@ -644,17 +669,27 @@ def pbranchR(pset : PatternSet, a : Rewriter, b : Rewriter) : Rewriter
   end
 end
 
-def effectR(successor : Rewriter, callable) : Rewriter
+@[Flags]
+enum EffectEdge : UInt8
+  In
+  Out
+end
+
+def effectR(successor : Rewriter, callable, *, edge = EffectEdge::In) : Rewriter
+  edge = EffectEdge.new(edge)
+
   Rewriter.new do |ctx, staging|
     staging.reduce do |term|
-      callable.call(term)
-      successor.call(ctx, Rewrite.one(term))
+      callable.call(Rewrite.one(term)) if edge.in?
+      rewrite = successor.call(ctx, Rewrite.one(term))
+      callable.call(rewrite) if edge.out?
+      rewrite
     end
   end
 end
 
-def effectR(successor : Rewriter, &effect : Term ->) : Rewriter
-  effectR(successor, effect)
+def effectR(successor : Rewriter, *, edge = EffectEdge::In, &effect : Rewrite::Any ->) : Rewriter
+  effectR(successor, effect, edge: edge)
 end
 
 struct RewriteApplier
@@ -769,6 +804,38 @@ def rulesetR(ruleset, ruler, backmapr, elser) : Rewriter
   end
 end
 
+def metaR(ctx, term term0 : Term, primaryr, metar, successor)
+  progress = Rewrite.one(term0)
+
+  primaryr.call(ctx, progress).reduce do |term1|
+    progress = Rewrite.one(term1)
+
+    event0 = Term.of(term0, term1)
+
+    metarw = metar.call(ctx, Rewrite.one(event0)).reduce do |event1|
+      next Rewrite.none unless event1 = event1.as_itemsonly_d?
+      next Rewrite.none unless event1.size == 2
+
+      _, term2 = event1
+
+      Rewrite.one(term2)
+    end
+
+    # NOTE: even if the successor returns none, we still succeeded rewriting
+    # into term1. Similarly, even if metar returns none.
+
+    progress = metarw.as?(Rewrite::Some) || progress
+    progress = successor.call(ctx, progress).as?(Rewrite::Some) || progress
+    progress
+  end
+end
+
+def metaR(primaryr, metar, successor) : Rewriter
+  Rewriter.new do |ctx, staging|
+    staging.reduce { |term| metaR(ctx, term, primaryr, metar, successor) }
+  end
+end
+
 def preview1(term, cursor : Term::Dict::ItemsView, leaf : Rewrite::Some)
   unless word = cursor.first?
     return leaf
@@ -804,8 +871,12 @@ def preview1(term, keypath : Term::Dict, leaf)
   preview1(term, keypath.items, leaf)
 end
 
+REWRITE_SEEDER      = Random::PCG32.new
+REWRITE_SEEDER_LOCK = Mutex.new
+
 def rewrite(term : Term, rewriter : Rewriter) : Term
-  rng = Random::PCG32.new(rand(UInt64))
+  seed = REWRITE_SEEDER_LOCK.synchronize { REWRITE_SEEDER.rand(UInt64) }
+  rng = Random::PCG32.new(seed)
   ctx = RewriterContext.new(rng, keypath: nil)
 
   rewrite = rewriter.call(ctx, Rewrite.one(term))
@@ -813,12 +884,36 @@ def rewrite(term : Term, rewriter : Rewriter) : Term
 end
 
 def rewrite(term : Term, rewriter : Rewriter, &observer : Observer) : Term
-  rng = Random::PCG32.new(rand(UInt64))
+  seed = REWRITE_SEEDER_LOCK.synchronize { REWRITE_SEEDER.rand(UInt64) }
+  rng = Random::PCG32.new(seed)
   ctx = RewriterContext.new(rng, keypath: Keypath::Appender.new, observer: observer)
 
   rewrite = rewriter.call(ctx, Rewrite.one(term))
   rewrite.term? || term
 end
+
+{% if flag?(:qux) %}
+  mod = ProcRuleset.build do
+    rulepi1 %[(+ a_ b_)] { a + b }
+    rulepi1 %[(- a_ b_)] { a - b }
+    rulepi1 %[(* a_ b_)] { a * b }
+  end
+
+  changed = ProcRuleset.build do
+    rulepi1 %[(v0←(+ a_ b_) c_number)] do
+      {v0, {:result, {:+, a, b}, c}}
+    end
+
+    rulepi1 %[(v0←(- a_ b_) c_number)] do
+      {v0, {:result, {:-, a, b}, c}}
+    end
+  end
+
+  puts rewrite(Term.of(:+, 4, 5), metaR(effectR(callR(mod), edge: {:in, :out}) { |re| pp re }, callR(changed), effectR(noR, edge: {:in, :out}) { |re| pp re }))
+  puts rewrite(Term.of(:-, 4, 5), metaR(effectR(callR(mod), edge: {:in, :out}) { |re| pp re }, callR(changed), effectR(noR, edge: {:in, :out}) { |re| pp re }))
+  puts rewrite(Term.of(:*, 4, 5), metaR(effectR(callR(mod), edge: {:in, :out}) { |re| pp re }, callR(changed), effectR(noR, edge: {:in, :out}) { |re| pp re }))
+  puts rewrite(Term.of(:/, 4, 5), metaR(effectR(callR(mod), edge: {:in, :out}) { |re| pp re }, callR(changed), effectR(noR, edge: {:in, :out}) { |re| pp re }))
+{% end %}
 
 # [x] itemsR
 # [x] pairsR
@@ -841,9 +936,14 @@ end
 # [x] pbranchR
 # [x] effectR
 # [x] rulesetR
-# [ ] rewriteR "rewrite rewriter", detects modifications of successor1, passes to successor2, result is successor2
+# [x] metaR "rewrite rewriter", detects modifications of successor1, passes to successor2, result is successor2
 # [ ] pathR
 #    - rewrites a path from root to some offspring,
 #    - using passable and impassable psets,
 #    - successor rewrites path,
 #    - allows to specify max path depth pattern (overall) and path view pattern (how much of path to give to successor)
+# [ ] building rewriter circuits with Terms
+# [ ] improve debugging: instead of sending keypath/etc. to Observer, send Messages of some kind,
+#     including those with keypath/etc (as now). One of such messages would be PushRewritee, very very
+#     useful for debugging backmaps (since they, unlike rules, cannot be readily/easily embedded into
+#     the original term. It is possible but needlessly hard.
