@@ -53,7 +53,29 @@ macro defcase(cls, *typedecls, inherit = false, &)
     def initialize({{typedecls.map { |typedecl| "@#{typedecl}".id }.splat}})
     end
 
-    def_change
+    def copy_with({{
+                    typedecls.map do |property|
+                      if property.is_a?(Assign)
+                        "#{property.target.id} _#{property.target.id} = @#{property.target.id}".id
+                      elsif property.is_a?(TypeDeclaration)
+                        "#{property.var.id} _#{property.var.id} = @#{property.var.id}".id
+                      else
+                        "#{property.id} _#{property.id} = @#{property.id}".id
+                      end
+                    end.splat
+                  }})
+      self.class.new({{
+                       typedecls.map do |property|
+                         if property.is_a?(Assign)
+                           "_#{property.target.id}".id
+                         elsif property.is_a?(TypeDeclaration)
+                           "_#{property.var.id}".id
+                         else
+                           "_#{property.id}".id
+                         end
+                       end.splat
+                     }})
+    end
 
     {{yield}}
 
@@ -451,6 +473,15 @@ end
 # ^^^
 
 abstract struct Int
+  def each_bit(&)
+    if zero?
+      yield 0
+      return
+    end
+
+    each_bit_with_index { |bit, _| yield bit }
+  end
+
   def each_bit_with_index(&)
     (0...bit_length).each do |index|
       yield bit(index).to_u8, index.to_u8
@@ -2333,5 +2364,50 @@ module Indexable(T)
     Slice(U).new(size, read_only: true) do |index|
       yield unsafe_fetch(index)
     end
+  end
+end
+
+# No idea whether this works.
+#
+# Source: https://lemire.me/blog/2017/09/18/visiting-all-values-in-an-array-exactly-once-in-random-order/
+module Disorder
+  extend self
+
+  MAX_COUNT = 100_000
+
+  private def coprime(min, target, rng)
+    count = 0
+    selected = 0u32
+
+    (min...target).each do |val|
+      if coprime?(val, target)
+        count += 1
+        if count == 1 || rng.rand(count) < 1
+          selected = val
+        end
+      end
+
+      if count == MAX_COUNT
+        return val
+      end
+    end
+
+    selected
+  end
+
+  private def coprime?(a, b)
+    a.gcd(b) == 1
+  end
+
+  def state(n : UInt32, rng)
+    {rng.rand(n), coprime(n // 2, n, rng)}
+  end
+
+  def next(n, state, prime) : UInt32
+    state &+= prime
+    if state >= n
+      state &-= n
+    end
+    state
   end
 end

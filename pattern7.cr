@@ -4705,11 +4705,11 @@ module ::Ww::M1
     def call(up0, up1, down, my, matchee0 : Term?, body)
       Term.case(body) do
         matchpi %[($tr pred_ succ_)] do
-          {up1.with(pred, matchee0), apply(up0, down, my, succ)}
+          {up1.with(pred, matchee0), Rewrite.one(apply(up0, down, my, succ))}
         end
 
         otherwise do
-          {up1, apply(up0, down, my, body)}
+          {up1, Rewrite.one(apply(up0, down, my, body))}
         end
       end
     end
@@ -5088,13 +5088,27 @@ module ::Ww::M1
       rewrite = Rewrite.none
 
       if body
-        up1, matchee = applier.call(up0, up1, down, @env || Term[], matchee, body) # ?!
-        up1 = @captures.reduce(up1) { |up, capture| up.with(capture, matchee) }
+        up1, rewrite = applier.call(up0, up1, down, @env || Term[], matchee, body) # ?!
 
-        if plural && (list = matchee.as_itemsonly_d?)
-          rewrite = Rewrite.many(list)
-        else
-          rewrite = Rewrite.one(matchee)
+        case rewrite
+        in Rewrite::One
+          newvalue = rewrite.term
+
+          # Go to plural mode if the user wishes so.
+          if plural && (list = newvalue.as_itemsonly_d?)
+            rewrite = Rewrite.many(list)
+          end
+
+          up1 = @captures.reduce(up1) { |up, capture| up.with(capture, newvalue) }
+        in Rewrite::Many
+          newvalue = Term.of(rewrite.list)
+
+          # Snap back to singular if the user did not specify plural explicitly.
+          unless plural
+            rewrite = Rewrite.one(newvalue)
+          end
+
+          up1 = @captures.reduce(up1) { |up, capture| up.with(capture, newvalue) }
         end
       end
 
@@ -5317,7 +5331,7 @@ module ::Ww::M1
     end
   end
 
-  def self.backmap(envs : Enumerable(Term::Dict), backspec : Term, matchee : Term, *, applier = DefaultApplier.new)
+  def self.backmapr(envs : Enumerable(Term::Dict), backspec : Term, matchee : Term, *, applier = DefaultApplier.new) : Rewrite::Some
     trie = BackmapTrie.new
     depth = 0u32
 
@@ -5352,8 +5366,12 @@ module ::Ww::M1
     ctx0 |= upper
     _, rewrite = trie.morph0(ctx0, ctx0, lower, backspec, matchee, applier)
 
-    # Should we give the Rewrite to clients?
-    rewrite.term? || matchee
+    rewrite.as?(Rewrite::Some) || Rewrite.one(matchee)
+  end
+
+  def self.backmap(*args, **kwargs) : Term?
+    rewrite = backmapr(*args, **kwargs)
+    rewrite.term?
   end
 
   def self.backmap?(operator : Operator::Any, backspec : Term, matchee : Term, *, env = Term[], applier = DefaultApplier.new) : Term?

@@ -250,7 +250,7 @@ module Ww
 
       # Shorthand for a chain of `append`s for each element of the enumerable *ee*.
       # The block is given each item of *ee* and its result is appended to the transaction.
-      def concat(ee : Enumerable(Term), & : Term -> Term) : self
+      def concat(ee : Enumerable(T), & : T -> Term) : self forall T
         ee.each { |term0| append(yield term0) }
 
         self

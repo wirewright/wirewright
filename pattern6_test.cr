@@ -1,5 +1,5 @@
 require "./wirewright"
-require "./baz4"
+require "./baz5_editor"
 
 CASES  = File.read("#{__DIR__}/patterns.test.wwml") + "\n" + File.read("#{__DIR__}/editor.test.wwml")
 PEOPLE = Term.of(JSON.parse(File.read("#{__DIR__}/data/people.json")))

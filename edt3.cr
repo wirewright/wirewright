@@ -303,16 +303,6 @@ def eventR(successor)
   end
 end
 
-def effectR(successor, &fn : Term ->)
-  ->(changes : Changes::Any, operand : Rewrite::Any) do
-    operand.reduce do |term|
-      fn.call(term)
-
-      successor.call(changes, operand)
-    end
-  end
-end
-
 dollarR = exhR(dfsR(callR(primitives)))
 backmapR = dfsR(
   choiceR(

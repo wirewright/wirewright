@@ -1,6 +1,6 @@
 require "./libtermbox2"
 require "./wirewright"
-require "./baz4"
+require "./baz5_editor"
 
 test = ML.parse1(File.read("./editor.test.wwml"))
 
@@ -35,7 +35,7 @@ unless "-empty".in?(ARGV)
           end
         end
       end
-  
+
       puts "Replay success in #{dt.humanize}".colorize.bold.green
     end
   end
@@ -45,29 +45,29 @@ if "-r".in?(ARGV)
 end
 
 def debug(root0, motions)
-  # raise "debug mode disabled"
   puts "Debug"
   puts ML.display(root0)
   gets
+
   dbgroot = root0
   motions.items.each do |motion|
     dbgroot = subsume(dbgroot, motion, Term.of(:edge, :user))
     puts "Motion #{motion}".colorize.blue.bold
     puts ML.display(dbgroot)
     gets
-    dbgroot = EDITR.call(
-      Changes::Preview.new do |before, rewrite|
-        puts "- Rewrite ------"
-        puts ML.display(before)
-        rewrite.each do |term|
-          puts "->"
-          puts ML.display(before)
-        end
-        gets
-        nil
-      end,
-      Rewrite.one(dbgroot)
-    ).as(Rewrite::One).term
+
+    staging0 = dbgroot
+    dbgroot = rewrite(dbgroot, EDITR) do |kp, explanation, rewrite|
+      puts "- Rewrite ------"
+      puts "#{explanation}"
+
+      staging1 = preview1(staging0, kp.keypath, rewrite)
+      puts ML.display(staging0)
+      puts "->"
+      puts ML.display(staging1.term?)
+      staging0 = staging1.term?
+      gets
+    end
   end
 
   puts ML.display(dbgroot)
