@@ -683,7 +683,7 @@ end
 #
 # *callable* must respond to `#call(Rewrite::Any)`.
 #
-# See `EffectEdge` about the available edges.
+# See `EffectEdge` to learn about the available edges.
 def effectR(successor : Rewriter, callable, *, edge = EffectEdge::In) : Rewriter
   edge = EffectEdge.new(edge)
 
@@ -848,7 +848,7 @@ def metaR(primaryr : Rewriter, metar : Rewriter, successor : Rewriter) : Rewrite
 end
 
 # :nodoc:
-def wrapR(ctx, pbreakdown, reshape, punwrap, term0, successor)
+def wrapR(ctx, pbreakdown, reshape, punwrap, assemble, term0, successor)
   unless tenv = M1::Operator.match?(Term[], pbreakdown, term0)
     return Rewrite.none
   end
@@ -860,42 +860,47 @@ def wrapR(ctx, pbreakdown, reshape, punwrap, term0, successor)
     next Rewrite.none unless outenv = M1::Operator.match?(Term[], punwrap, filled1)
     next Rewrite.none unless term1 = outenv[:out]?
 
+    term2 = M1.bsubst(assemble, tenv | outenv)
+
     # This is a point of introduction, so we have to be careful about
     # Rewrite.one right here, hence a defensive diff().
-    Rewrite.one(term1).diff(term0)
+    Rewrite.one(term2).diff(term0)
   end
 end
 
-# Wrap rewriter: enables the breakdown - reshape - unwrap interaction between rewriters.
+# Wrap rewriter: enables the breakdown - reshape - unwrap - assemble interaction
+# between an outer and inner (*successor*) rewriters.
 #
 # - *pbreakdown* is a pattern that can break the input term down into its constituents.
 # - *reshape* is a template term. Blanks in it are substituted with captures from
 #   *pbreakdown*'s match env.
 # - The result of reshaping is fed to *successor*.
-# - The output of successor is matched using the given *punwrap* pattern; its capture
-#   `out` is used as the output of rewriting.
+# - The output of successor is matched using the given *punwrap* pattern;
+# - *punwrap*'s match env is merged with *pbreakdown*'s, giving way to *punwrap*'s.
+# - Blanks *assemble* are substituted with captures from the merged match env.
+# - The resulting term is output as the rewritten term.
 #
 # TODO: *pbreakdown* and *punwrap* currently do not support sources (like `%item°`);
 # only the first match env will be considered, the rest are going to be discarded.
-def wrapR(pbreakdown : M1::Operator::Any, reshape : Term, successor : Rewriter, punwrap : M1::Operator::Any) : Rewriter
+def wrapR(pbreakdown : M1::Operator::Any, reshape : Term, successor : Rewriter, punwrap : M1::Operator::Any, assemble : Term) : Rewriter
   Rewriter.new do |ctx, staging|
-    staging.reduce { |term| wrapR(ctx, pbreakdown, reshape, punwrap, term, successor) }
+    staging.reduce { |term| wrapR(ctx, pbreakdown, reshape, punwrap, assemble, term, successor) }
   end
 end
 
 # See the main overload.
-def wrapR(pbreakdown : Term, reshape : Term, successor : Rewriter, punwrap : Term) : Rewriter
-  wrapR(M1.operator(pbreakdown), reshape, successor, M1.operator(punwrap))
+def wrapR(pbreakdown : Term, reshape : Term, successor : Rewriter, punwrap : Term, assemble : Term) : Rewriter
+  wrapR(M1.operator(pbreakdown), reshape, successor, M1.operator(punwrap), assemble)
 end
 
 # See the main overload.
-def wrapR(pbreakdown : String, reshape : String, successor : Rewriter, punwrap : String) : Rewriter
-  wrapR(ML.parse1(pbreakdown), ML.parse1(reshape), successor, ML.parse1(punwrap))
+def wrapR(pbreakdown : String, reshape : String, successor : Rewriter, punwrap : String, assemble : String) : Rewriter
+  wrapR(ML.parse1(pbreakdown), ML.parse1(reshape), successor, ML.parse1(punwrap), ML.parse1(assemble))
 end
 
-# Same as `wrapR` but with hard-coded noop breakdown `in_`.
+# Same as `wrapR` but with hard-coded noop breakdown `in_` and assemble `out_`.
 def wrapR(reshape, successor : Rewriter, punwrap) : Rewriter
-  wrapR(%[in_], reshape, successor, punwrap)
+  wrapR(%[in_], reshape, successor, punwrap, %[out_])
 end
 
 def preview1(term, cursor : Term::Dict::ItemsView, leaf : Rewrite::Some)
@@ -972,7 +977,7 @@ end
   end
 
   # puts rewrite(Term.of(:+, 1, 2), wrapR(%[(+ a_ b_)], %[(node (+ (literal a_) (literal b_)))], %[(node (literal out_))], callR(mod)))
-  puts rewrite(Term.of(:*, 5, 3), wrapR(%[in_], %[(node in_)], callR(mod), %[(node out_)]))
+  puts rewrite(Term.of(:*, 5, 3), wrapR(%[(node in_)], callR(mod), %[(node out_)]))
   # puts rewrite(Term.of(:+, 4, 5), metaR(effectR(callR(mod), edge: {:in, :out}) { |re| pp re }, callR(changed), effectR(noR, edge: {:in, :out}) { |re| pp re }))
   # puts rewrite(Term.of(:-, 4, 5), metaR(effectR(callR(mod), edge: {:in, :out}) { |re| pp re }, callR(changed), effectR(noR, edge: {:in, :out}) { |re| pp re }))
   # puts rewrite(Term.of(:*, 4, 5), metaR(effectR(callR(mod), edge: {:in, :out}) { |re| pp re }, callR(changed), effectR(noR, edge: {:in, :out}) { |re| pp re }))
