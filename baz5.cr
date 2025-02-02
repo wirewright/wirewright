@@ -71,7 +71,7 @@ def manyR(list : Term::Dict) : Rewriter
 end
 
 # :nodoc:
-def envR(ctx : RewriterContext, prefix : Enumerable(Term), term term0 : Term)
+def envR(ctx, prefix, term term0)
   ctx.envs.items.reverse_each do |env|
     next unless pterm = env.follow?(prefix)
     next unless pdict = pterm.as_d?
@@ -123,7 +123,7 @@ private def splice(dict : Term::Dict, splices : Array({Term::Num, Term::Dict}))
 end
 
 # :nodoc:
-def itemsR(ctx0 : RewriterContext, term : Term, successor : Rewriter) : Rewrite::Any
+def itemsR(ctx0, term, successor) : Rewrite::Any
   unless dict0 = term.as_d?
     return Rewrite.none
   end
@@ -171,7 +171,7 @@ def itemsR(successor : Rewriter) : Rewriter
 end
 
 # :nodoc:
-def pairsR(ctx0 : RewriterContext, term : Term, successor : Rewriter) : Rewrite::Any
+def pairsR(ctx0, term, successor) : Rewrite::Any
   unless dict0 = term.as_d?
     return Rewrite.none
   end
@@ -188,7 +188,7 @@ def pairsR(ctx0 : RewriterContext, term : Term, successor : Rewriter) : Rewrite:
     end
   end
 
-  # See the NOTE in itemsR explaining why `same?` is sufficient here.
+  # See `itemsR` to learn why `same?` is sufficient here.
   dict0.same?(dict1) ? Rewrite.none : Rewrite.one(dict1)
 end
 
@@ -200,7 +200,7 @@ def pairsR(successor : Rewriter) : Rewriter
 end
 
 # :nodoc:
-def callR(ctx : RewriterContext, term : Term, callable)
+def callR(ctx, term, callable)
   # We do not trust *callable*, and perform an explicit diff to make sure the
   # Rewrite *callable* returns reflects whether or not there actually was
   # a rewrite.
@@ -224,7 +224,7 @@ def callR(&callable : Term -> Rewrite::Any) : Rewriter
 end
 
 # :nodoc:
-def chainR(ctx : RewriterContext, term : Term, a : Rewriter, b : Rewriter) : Rewrite::Any
+def chainR(ctx, term, a, b)
   lhs = a.call(ctx, Rewrite.one(term))
   rhs = b.call(ctx, lhs.as?(Rewrite::Some) || Rewrite.one(term))
 
@@ -244,7 +244,7 @@ def chainR(a : Rewriter, b : Rewriter, *cs) : Rewriter
 end
 
 # :nodoc:
-def choiceR(ctx : RewriterContext, term : Term, a : Rewriter, b : Rewriter) : Rewrite::Any
+def choiceR(ctx, term, a, b)
   lhs = a.call(ctx, Rewrite.one(term))
   lhs.as?(Rewrite::Some) || b.call(ctx, Rewrite.one(term))
 end
@@ -267,7 +267,7 @@ def entriesR(successor : Rewriter) : Rewriter
 end
 
 # :nodoc:
-def entryR1(ctx0 : RewriterContext, dict : Term::Dict, key : Term, value : Term, successor : Rewriter)
+def entryR1(ctx0, dict, key, value, successor)
   ctx1 = ctx0.keypath &.update_value(key)
 
   case rewrite = successor.call(ctx1, Rewrite.one(value))
@@ -285,7 +285,7 @@ def entryR1(ctx0 : RewriterContext, dict : Term::Dict, key : Term, value : Term,
 end
 
 # :nodoc:
-def entryR(ctx : RewriterContext, term : Term, successor : Rewriter) : Rewrite::Any
+def entryR(ctx, term, successor)
   unless dict = term.as_d?
     return Rewrite.none
   end
@@ -392,7 +392,7 @@ def recR : {(Rewriter -> Rewriter), Rewriter}
 end
 
 # :nodoc:
-def selR(ctx : RewriterContext, term : Term, selector, successor : Rewriter) : Rewrite::Any
+def selR(ctx, term, selector, successor)
   if env = M1::Operator.match?(Term[], selector, term)
     if rewritee = env[:rewritee]?
       return successor.call(ctx, Rewrite.one(rewritee))
@@ -403,7 +403,7 @@ def selR(ctx : RewriterContext, term : Term, selector, successor : Rewriter) : R
 end
 
 # :nodoc:
-def selR(selector : M1::Operator::Any, successor : Rewriter) : Rewriter
+def selR(selector, successor)
   Rewriter.new do |ctx, staging|
     staging.reduce { |term| selR(ctx, term, selector, successor) }
   end
@@ -452,7 +452,7 @@ def dfsR(successor : Rewriter) : Rewriter
 end
 
 # :nodoc:
-def exhR(ctx : RewriterContext, term : Term, successor : Rewriter) : Rewrite::Any
+def exhR(ctx, term, successor)
   state = Rewrite.one(term)
   changed = false
 
@@ -468,7 +468,7 @@ def exhR(ctx : RewriterContext, term : Term, successor : Rewriter) : Rewrite::An
 end
 
 # :nodoc:
-def exhR(ctx : RewriterContext, id : UInt64, term : Term, successor : Rewriter) : Rewrite::Any
+def exhR(ctx, id, term, successor)
   ctx.exhr(id, term) { exhR(ctx, term, successor) }
 end
 
@@ -654,7 +654,7 @@ def relR(bottom : String, successor : Rewriter, **kwargs) : Rewriter
 end
 
 # :nodoc:
-def pbranchR(ctx : RewriterContext, term : Term, pset : PatternSet, a : Rewriter, b : Rewriter) : Rewrite::Any
+def pbranchR(ctx, term, pset, a, b) : Rewrite::Any
   case pset.response(term)
   in Pr::Pos then a.call(ctx, Rewrite.one(term))
   in Pr::Neg then b.call(ctx, Rewrite.one(term))
@@ -848,19 +848,19 @@ def metaR(primaryr : Rewriter, metar : Rewriter, successor : Rewriter) : Rewrite
 end
 
 # :nodoc:
-def wrapR(ctx, pbreakdown, reshape, punwrap, assemble, term0, successor)
-  unless tenv = M1::Operator.match?(Term[], pbreakdown, term0)
+def wrapR(ctx, pdisasm, reshape, punwrap, assemble, term0, successor)
+  unless ienv = M1::Operator.match?(Term[], pdisasm, term0)
     return Rewrite.none
   end
 
-  filled0 = M1.bsubst(reshape, tenv)
+  filled0 = M1.bsubst(reshape, ienv)
 
   rewrite = successor.call(ctx, Rewrite.one(filled0))
   rewrite.reduce do |filled1|
-    next Rewrite.none unless outenv = M1::Operator.match?(Term[], punwrap, filled1)
-    next Rewrite.none unless term1 = outenv[:out]?
+    next Rewrite.none unless oenv = M1::Operator.match?(Term[], punwrap, filled1)
+    next Rewrite.none unless term1 = oenv[:out]?
 
-    term2 = M1.bsubst(assemble, tenv | outenv)
+    term2 = M1.bsubst(assemble, ienv | oenv)
 
     # This is a point of introduction, so we have to be careful about
     # Rewrite.one right here, hence a defensive diff().
@@ -868,39 +868,93 @@ def wrapR(ctx, pbreakdown, reshape, punwrap, assemble, term0, successor)
   end
 end
 
-# Wrap rewriter: enables the breakdown - reshape - unwrap - assemble interaction
+# Wrap rewriter enables the disassemble - reshape - unwrap - assemble interaction
 # between an outer and inner (*successor*) rewriters.
 #
-# - *pbreakdown* is a pattern that can break the input term down into its constituents.
+# - *pdisasm* is a pattern that can break the input term down into its constituents.
 # - *reshape* is a template term. Blanks in it are substituted with captures from
-#   *pbreakdown*'s match env.
+#   *pdisasm*'s match env.
 # - The result of reshaping is fed to *successor*.
 # - The output of successor is matched using the given *punwrap* pattern;
-# - *punwrap*'s match env is merged with *pbreakdown*'s, giving way to *punwrap*'s.
+# - *punwrap*'s match env is merged with *pdisasm*'s, giving way to *punwrap*'s.
 # - Blanks *assemble* are substituted with captures from the merged match env.
 # - The resulting term is output as the rewritten term.
 #
-# TODO: *pbreakdown* and *punwrap* currently do not support sources (like `%item°`);
+# TODO: *pdisasm* and *punwrap* currently do not support sources (like `%item°`);
 # only the first match env will be considered, the rest are going to be discarded.
-def wrapR(pbreakdown : M1::Operator::Any, reshape : Term, successor : Rewriter, punwrap : M1::Operator::Any, assemble : Term) : Rewriter
+def wrapR(pdisasm : M1::Operator::Any, reshape : Term, successor : Rewriter, punwrap : M1::Operator::Any, assemble : Term) : Rewriter
   Rewriter.new do |ctx, staging|
-    staging.reduce { |term| wrapR(ctx, pbreakdown, reshape, punwrap, assemble, term, successor) }
+    staging.reduce { |term| wrapR(ctx, pdisasm, reshape, punwrap, assemble, term, successor) }
   end
 end
 
 # See the main overload.
-def wrapR(pbreakdown : Term, reshape : Term, successor : Rewriter, punwrap : Term, assemble : Term) : Rewriter
-  wrapR(M1.operator(pbreakdown), reshape, successor, M1.operator(punwrap), assemble)
+def wrapR(pdisasm : Term, reshape : Term, successor : Rewriter, punwrap : Term, assemble : Term) : Rewriter
+  wrapR(M1.operator(pdisasm), reshape, successor, M1.operator(punwrap), assemble)
 end
 
 # See the main overload.
-def wrapR(pbreakdown : String, reshape : String, successor : Rewriter, punwrap : String, assemble : String) : Rewriter
-  wrapR(ML.parse1(pbreakdown), ML.parse1(reshape), successor, ML.parse1(punwrap), ML.parse1(assemble))
+def wrapR(pdisasm : String, reshape : String, successor : Rewriter, punwrap : String, assemble : String) : Rewriter
+  wrapR(ML.parse1(pdisasm), ML.parse1(reshape), successor, ML.parse1(punwrap), ML.parse1(assemble))
 end
 
-# Same as `wrapR` but with hard-coded noop breakdown `in_` and assemble `out_`.
+# Same as `wrapR` but with hard-coded noop disassemble `in_` and assemble `out_`.
 def wrapR(reshape, successor : Rewriter, punwrap) : Rewriter
   wrapR(%[in_], reshape, successor, punwrap, %[out_])
+end
+
+# :nodoc:
+def multipartR(ctx, term0, pdisasm, successors, assemble)
+  unless env = M1::Operator.match?(Term[], pdisasm, term0)
+    return Rewrite.none
+  end
+
+  successors.each do |capture, successor|
+    next unless value = env[capture]?
+
+    case rewrite = successor.call(ctx, Rewrite.one(value))
+    in Rewrite::None
+    in Rewrite::Some
+      env = env.with(capture, rewrite.term?)
+    end
+  end
+
+  term1 = M1.bsubst(assemble, env)
+
+  Rewrite.one(term1).diff(term0)
+end
+
+# Multipart rewriter enables the disassemble - process - assemble interaction
+# between one outer and many inner rewriters (*successors*).
+#
+# - Inner rewriters are labeled according to the capture of *pdisasm* pattern
+#   they process.
+# - *assemble* is a template that assembles the output term from captures made
+#   by *pdisasm* and possibly modified by *successors*.
+# - *successors* are not required to modify all captures. Some captures may
+#   be made simply to be able to reconstruct the shape of the input term
+#   in *assemble*.
+def multipartR(pdisasm : M1::Operator::Any, successors : Enumerable({Term, Rewriter}), assemble : Term) : Rewriter
+  Rewriter.new do |ctx, staging|
+    staging.reduce { |term| multipartR(ctx, term, pdisasm, successors, assemble) }
+  end
+end
+
+# See the main overload.
+def multipartR(pdisasm : Term, successors : Enumerable({Term, Rewriter}), assemble : Term) : Rewriter
+  multipartR(M1.operator(pdisasm), successors, assemble)
+end
+
+# See the main overload.
+def multipartR(pdisasm : String, successors : Enumerable({Term, Rewriter}), assemble : String) : Rewriter
+  multipartR(ML.parse1(pdisasm), successors, ML.parse1(assemble))
+end
+
+# Same as the main overload, where both *pdisasm* and *assemble* are set
+# to *schema*. This is useful in simple cases where the disassemble pattern
+# and the assemble template are the same.
+def multipartR(schema : Term | String, successors : Enumerable({Term, Rewriter})) : Rewriter
+  multipartR(schema, successors, schema)
 end
 
 def preview1(term, cursor : Term::Dict::ItemsView, leaf : Rewrite::Some)
@@ -960,10 +1014,18 @@ def rewrite(term : Term, rewriter : Rewriter, &observer : Observer) : Term
 end
 
 {% if flag?(:qux) %}
-  mod = ProcRuleset.build do
-    rulepi1 %[(node (+ (literal a_number) (literal b_number)))] { {:node, {:literal, a + b}} }
-    rulepi1 %[(node (- a_ b_))] { {:node, a - b} }
-    rulepi1 %[(node (* a_ b_))] { {:node, a * b} }
+  # mod = ProcRuleset.build do
+  #   rulepi1 %[(node (+ (literal a_number) (literal b_number)))] { {:node, {:literal, a + b}} }
+  #   rulepi1 %[(node (- a_ b_))] { {:node, a - b} }
+  #   rulepi1 %[(node (* a_ b_))] { {:node, a * b} }
+  # end
+
+  mod1 = ProcRuleset.build do
+    rulepi1 %[(+ a_number b_number)] { a + b }
+  end
+
+  mod2 = ProcRuleset.build do
+    rulepi1 %[(* a_number b_number)] { a * b }
   end
 
   changed = ProcRuleset.build do
@@ -976,8 +1038,10 @@ end
     end
   end
 
+  pp rewrite(Term.of(:qux, {:+, 1, 2}, {:*, 3, 4}), multipartR(%[(qux a_ b_)], { {Term.of(:a), callR(mod1)}, {Term.of(:b), callR(mod2)} }))
+
   # puts rewrite(Term.of(:+, 1, 2), wrapR(%[(+ a_ b_)], %[(node (+ (literal a_) (literal b_)))], %[(node (literal out_))], callR(mod)))
-  puts rewrite(Term.of(:*, 5, 3), wrapR(%[(node in_)], callR(mod), %[(node out_)]))
+  # puts rewrite(Term.of(:*, 5, 3), wrapR(%[(node in_)], callR(mod), %[(node out_)]))
   # puts rewrite(Term.of(:+, 4, 5), metaR(effectR(callR(mod), edge: {:in, :out}) { |re| pp re }, callR(changed), effectR(noR, edge: {:in, :out}) { |re| pp re }))
   # puts rewrite(Term.of(:-, 4, 5), metaR(effectR(callR(mod), edge: {:in, :out}) { |re| pp re }, callR(changed), effectR(noR, edge: {:in, :out}) { |re| pp re }))
   # puts rewrite(Term.of(:*, 4, 5), metaR(effectR(callR(mod), edge: {:in, :out}) { |re| pp re }, callR(changed), effectR(noR, edge: {:in, :out}) { |re| pp re }))
@@ -1011,9 +1075,17 @@ end
 #    - rewrites a path from root to some offspring,
 #    - using passable and impassable psets,
 #    - successor rewrites path,
-#    - allows to specify max path depth pattern (overall) and path view pattern (how much of path to give to successor)
-#    - we'd like to trace where we are; a cursor of some kind would be useful.
+#    - allows to specify max path depth (overall) and path view range (how much of path to give to successor)
+#    - we'd like to trace where we are; a cursor of some kind would be useful. the question is, how
+#      do we allow to ignore the cursor as well? if path elements can be (noncurrent <elem>) or (current <elem>),
+#      how can we NOT force it onto every pattern but only onto patterns that care about current/noncurrent?
+#         we can do this naively by sending both to the successor, but then this raises questions so as to
+#         what to do if both a cursor and a non-cursor versions are defined.
 # [ ] we should be able to combine pathR and metaR to trace changes across the hierarchy in "two dimensions"
+#      this can be done by the circuit pathR -> ??? -> multipartR(%[(parent_ child_)], parent: metaR(...), child: metaR(...), %[(parent_ child_)])
+# [x] multipartR
+#     - disassemble, map, assemble
+#     - disassemble = assemble, map
 # [ ] how to combine pathR, metaR, and wrapR to run edt3 and related?
 # [ ] building rewriter circuits with Terms
 # [ ] improve debugging: instead of sending keypath/etc. to Observer, send Reports of some kind,

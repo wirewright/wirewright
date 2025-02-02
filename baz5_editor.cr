@@ -38,6 +38,36 @@ def editR : Rewriter
   editor_base = ML.parse(File.read("#{__DIR__}/editor.soma.wwml"))
   editor_ruleset  = Ruleset.select(selector, editor_base)
 
+  # (ruleset editor) ;; Let Ww find editor rules
+  # ;; Rely on Ww's native code primitives
+  # (ruleset/native primitives
+  #   (+ - * / ~ string ml substring/runes substring/words))
+  #
+  # (rewriter (refR)
+  #   (switchR
+  #      ($my rewritee_) (envR $my)
+  #      ($up rewritee_) (choiceR (envR $up) (envR $my))
+  #      ($down rewritee_) (choiceR (envR $down) (envR $my))))
+  #
+  # (rewriter (dollarR)
+  #   (dfsR
+  #     (switchR
+  #       ($ rewritee_) (exhR (dfsR (callR primitives)))
+  #       ($once rewritee_) (callR primitives))))
+  #
+  # (rewriter (backmapR)
+  #   (chainR (refR) (dollarR)))
+  #
+  # (rewriter (editR)
+  #   (exhR
+  #     (relR cursor ascent: 2
+  #       (absR (rulesetR editor rule: (dfsR (envR))
+  #                              backmap: (backmapR)
+  #                              missing: noR)))))
+  #
+  # (master editR)
+
+
   updownmyr = dfsR(
     switchR(
       { %[($my rewritee_)], envR(Term.of(:"$my")) },
