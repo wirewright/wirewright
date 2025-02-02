@@ -390,7 +390,7 @@ end
 #   are not, fix that. In fact, Operator should probably be renamed to Subject or something
 #   like that. Not sure how large of a refactor that is, and how much point is there in it.
 module ::Ww::M1::Operator
-  alias Any = Pass | Num | Sym | Boolean | Dict | Itemsonly | Pairsonly | SketchSubset | Bounds | BoundsGuard | MaxDepth | DictGuard | Literal | Capture | ItemSeq | ItemFirst | ItemLast | SingularSeq | Partition | Edge | LiteralChoices | SourceChoice | ValueLiteral | Keypool | Span | Tally | Bin | Both | Not | Layer | ScanFirst | ScanSource | ScanAll | ScanAllIsolated | DfsFirst | DfsSource | DfsAllIsolated | DfsAll | BfsFirst | BfsAllIsolated | BfsAll | Value | NegativeValue | NegativeValueKeypath | EntriesFirst | EntriesSource | EntriesAllIsolated | EntriesAll | Str | New | KeypathCapture
+  alias Any = Pass | Num | Sym | Boolean | Dict | Itemsonly | Pairsonly | SketchSubset | Bounds | BoundsGuard | MaxDepth | DictGuard | Literal | Capture | CaptureItemsonly | ItemSeq | ItemFirst | ItemLast | SingularSeq | Partition | Edge | LiteralChoices | SourceChoice | ValueLiteral | Keypool | Span | Tally | Bin | Both | Not | Layer | ScanFirst | ScanSource | ScanAll | ScanAllIsolated | DfsFirst | DfsSource | DfsAllIsolated | DfsAll | BfsFirst | BfsAllIsolated | BfsAll | Value | NegativeValue | NegativeValueKeypath | EntriesFirst | EntriesSource | EntriesAllIsolated | EntriesAll | Str | New | KeypathCapture
 
   alias Bin = Add | Sub | Mul | Div | Tdiv | Mod | Pow | Map
 
@@ -398,6 +398,8 @@ module ::Ww::M1::Operator
   alias Source = DfsSource | ScanSource | EntriesSource
   alias AllIsolated = ScanAllIsolated | DfsAllIsolated | BfsAllIsolated | EntriesAllIsolated
   alias All = ScanAll | DfsAll | BfsAll | EntriesAll
+
+  defcase CaptureItemsonly, capture : Term
 
   defcase Partition, itemspart : Any, pairspart : Any
 
@@ -755,6 +757,20 @@ class ::Ww::Keypath::Appender
 end
 
 module ::Ww::M1::Operator
+  def match(behind0, op : CaptureItemsonly, matchee : Term, ahead0)
+    unless dict = matchee.as_itemsonly_d?
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    unless behind1 = behind0.propose?(op.capture, matchee)
+      return Fb::Mismatch.new(behind0.env.with(op.capture, matchee))
+    end
+
+    behind1 = behind1.mount(op.capture, &.update_value(0).span(dict.size))
+
+    Ahead.tr(behind1, ahead0)
+  end
+
   # TODO: almost always in practice the pairspart is easier to compute than the itemspart;
   # and it is "rarer", providing more rejections. Should we consider running the pairspart
   # first? The proper treatment would be to evaluate the cost of the itemspart and pairspart,
@@ -3427,10 +3443,20 @@ module ::Ww::M1
           {:"%itemsonly"}
         end
 
+        # Rewrite (xs_*) into %let/itemsonly (which is cheaper).
+        matchpi %[(%itemseq (%plural capture_ min: 0 max: ∞ type: %'_))] do
+          {:"%let/itemsonly", capture}
+        end
+
         # Rewrite bounds-checked plural such as (_+) similarly into an itemsonly check since
         # the bounds check already checks what the plural would have.
         matchpi %{[%bounds (%itemseq (%plural min: _ max: _ type: %'_))]} do
           normp.morph({1, {:"%itemsonly"}})
+        end
+
+        # Ditto but for named plurals.
+        matchpi %{[%bounds (%itemseq (%plural capture_ min: _ max: _ type: %'_))]} do
+          normp.morph({1, {:"%let/itemsonly", capture}})
         end
 
         # Rewrite (¦ _) = (%partition () _) into a pairsonly check (which is vastly cheaper!)
@@ -3445,6 +3471,12 @@ module ::Ww::M1
           normp1 = normp.morph({2, normp[2, 2]})
 
           {:"%let", capture, normp1}
+        end
+
+        # Rewrite (%partition (%pass) _) into (%partition (%itemsonly) _), enabling
+        # further rewrites if possible.
+        matchpi %[(%'%partition (%pass) _)] do
+          normp.morph({1, {:"%itemsonly"}})
         end
 
         # Fold e. g. (x_ y_ z_) into a singular-only itemspart. This lets us render it as
@@ -3803,6 +3835,10 @@ module ::Ww::M1
 
       matchpi %[(%pairsonly)], cue: :"%pairsonly" do
         Operator::Pairsonly.new
+      end
+
+      matchpi %[(%let/itemsonly (%capture capture_))], cue: :"%let/itemsonly" do
+        Operator::CaptureItemsonly.new(capture)
       end
 
       matchpi %[(%pass)], cue: :"%pass" do

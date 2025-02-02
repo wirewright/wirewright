@@ -879,11 +879,30 @@
 
 ;; %plural: min + max
 (group
+  (pattern ((%plural xs max: 3))
+    (= () {xs: ()})
+    (= (x) {xs: (x)})
+    (= (x y) {xs: (x y)})
+    (= (x y z) {xs: (x y z)})
+    (- (x y z a) {x: 100} (x y z: 1)))
+
+  (backmap (((%plural xs max: 3)) {(xs): (a b c)})
+    (= () (a b c))
+    (= (x) (a b c))
+    (= (x y) (a b c))
+    (= (x y z) (a b c)))
+
+  (backmap (((%plural xs max: 3) ¦ _) {(xs): (a b c)})
+    (= (k: v) (a b c k: v))
+    (= (x k: v) (a b c k: v))
+    (= (x y k: v) (a b c k: v))
+    (= (x y z k: v) (a b c k: v)))
+
   (pattern ((%plural xs min: 2 max: 4))
     (= (x y) {xs: (x y)})
     (= (x y a) {xs: (x y a)})
     (= (x y a b) {xs: (x y a b)})
-    (- () (x) (x y a b c) (x y a b c d))) ;; etc...
+    (- () (x) (x y a b c) (x y a b c d) {x: 1, y: 2})) ;; etc...
 
   (pattern ((%plural xs min: 2 max: 4) (%plural ys min: 1 max: 3))
     (= (x y z) {xs: (x y), ys: (z)})
