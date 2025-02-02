@@ -1,7 +1,7 @@
 require "./baz5"
 
-CURSORP  = ML.parse1(%([_string (%any° | (| _string)) _string (_*) @_]))
-CURSORPE = M1.operator(ML.parse1(%([_string (%any° | (| _string)) _string (_*) @edge_])))
+CURSORP  = ML.term(%([_string (%any° | (| _string)) _string (_*) @_]))
+CURSORPE = M1.operator(ML.term(%([_string (%any° | (| _string)) _string (_*) @edge_])))
 
 # Constructs an editor rewriter.
 def editR : Rewriter
@@ -14,7 +14,7 @@ def editR : Rewriter
     rulepi1 %[(string term_)] { ML.display(term, endl: false) }
     rulepi1 %[(ml ml_string)] do
       begin
-        {:"ml/ok", ML.parse1(ml.to(String))}
+        {:"ml/ok", ML.term(ml.to(String))}
       rescue ML::SyntaxError
         # TODO: line col message
         {:"ml/err"}
@@ -33,10 +33,10 @@ def editR : Rewriter
     # TODO: take substring by lines.
   end
 
-  selector = ML.parse1(%[(%any° (rule pattern_ template_) (backmap pattern_ backspec_))])
+  selector = ML.term(%[(%any° (rule pattern_ template_) (backmap pattern_ backspec_))])
 
-  editor_base = ML.parse(File.read("#{__DIR__}/editor.soma.wwml"))
-  editor_ruleset  = Ruleset.select(selector, editor_base)
+  editor_base = ML.terms(File.read("#{__DIR__}/editor.soma.wwml"))
+  editor_ruleset = Ruleset.select(selector, editor_base)
 
   # (ruleset editor) ;; Let Ww find editor rules
   # ;; Rely on Ww's native code primitives
@@ -66,7 +66,6 @@ def editR : Rewriter
   #                              missing: noR)))))
   #
   # (master editR)
-
 
   updownmyr = dfsR(
     switchR(
@@ -125,7 +124,6 @@ end
 # pp dfsR(selR(%[rewritee_number], callR { |term| Rewrite.one(term + 1) })).call(RewriterContext.new(Keypath::Appender.new, obs), Rewrite.one(orig))
 # re = exhR exhR exhR exhR exhR exhR exhR(exhR(exhR(itemsR(selR(%[rewritee_number], callR { |term| Rewrite.one(Term.of(:ready, term + 1)) })))))
 # re = exhR(absR(selR(%[rewritee_number], callR { |term| Rewrite.one(Term.of(term + 1)) })))
-
 
 # re = dfsR(rulesetR(rs, dfsR(envR), dfsR(backmapr), noR)) # relR(%[200], oneR(Term.of(123)), ascent: 1)
 # re = EDITR

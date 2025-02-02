@@ -1,9 +1,9 @@
 require "./wirewright"
 require "./baz5_common"
 
-SELECTOR = ML.parse1(%[(%any° (rule pattern_ template_) (backmap pattern_ backspec_))])
-BASE = ML.parse(File.read("#{__DIR__}/editor.soma.wwml"))
-RULESET = Ruleset.select(SELECTOR, BASE)
+SELECTOR = ML.term(%[(%any° (rule pattern_ template_) (backmap pattern_ backspec_))])
+BASE     = ML.terms(File.read("#{__DIR__}/editor.soma.wwml"))
+RULESET  = Ruleset.select(SELECTOR, BASE)
 
 module Changes
   alias Any = Preview | Accept
@@ -357,7 +357,7 @@ end
 
 # :ditto:
 def selR(selector : String, successor) : Rewriter
-  selR(ML.parse1(selector), successor)
+  selR(ML.term(selector), successor)
 end
 
 # :nodoc:
@@ -542,7 +542,7 @@ def relR(floor : Term, successor, **kwargs) : Rewriter
 end
 
 def relR(floor : String, successor, **kwargs) : Rewriter
-  relR(ML.parse1(floor), successor, **kwargs)
+  relR(ML.term(floor), successor, **kwargs)
 end
 
 # :nodoc:
@@ -691,7 +691,7 @@ NATRS = ProcRuleset.build do
   # Converts (parses) a string into a term.
   rulepi1 %[(ml ml_string)] do
     begin
-      {:"ml/ok", ML.parse1(ml.to(String))}
+      {:"ml/ok", ML.term(ml.to(String))}
     rescue ML::SyntaxError
       # TODO: line col message
       {:"ml/err"}
@@ -713,8 +713,8 @@ NATRS = ProcRuleset.build do
   # TODO: take substring by lines.
 end
 
-CURSORP = ML.parse1(%([_string (%any° | (| _string)) _string (_*) @_]))
-CURSORPE = M1.operator(ML.parse1(%([_string (%any° | (| _string)) _string (_*) @edge_])))
+CURSORP  = ML.term(%([_string (%any° | (| _string)) _string (_*) @_]))
+CURSORPE = M1.operator(ML.term(%([_string (%any° | (| _string)) _string (_*) @edge_])))
 
 # TODO: Currently reads&writes very obscurely. We'd want to be able to define these
 # more, how shall I say... "elegantly". These look like grammars or some kind
@@ -762,7 +762,7 @@ def edit(root : Term, motion : Term, edge = Term.of(:edge, :user)) : Term
   end
 end
 
-# pp(edit(ML.parse1(<<-WWML
+# pp(edit(ML.term(<<-WWML
 # ((button "+ Increment" @actions) (button "- Decrement" @actions) ("" | "" {} @user))
 # WWML
 # ), Term.of(:key, :"C-delete")))

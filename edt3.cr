@@ -1,5 +1,5 @@
 require "./wirewright"
-require "./baz4"
+require "./baz5"
 
 def measure(string : String) : {Int32, Int32}
   w = h = 0
@@ -138,6 +138,17 @@ base = <<-WWML
   <> {max-w: →fr/max, row/state: member}
 WWML
 
+# To connect to edt3_draw we're missing:
+#   - positioning
+#   - 'center' (to do anything meaningful, e.g. buttons)
+#   - compilation of scrollbox -> box > view with some coupled params
+#
+# - Then steal easy components from Semantic UI, look at the markup this results in.
+# - Try to simplify the markup in terms of positioning/styling/etc. using a Tailwind-esque `style: "text-gray-300 bg-blue-400 ..."` approach.
+#   - Group markup for e.g. button into a "button" component that compiles down to/expands into the markup.
+# - Icons (e.g. those supported by Cozette)
+# - Look into how we can draw e.g. text box.
+
 frame = <<-WWML
 (scrollbox h: 10
   (col fr: true fr/all: true w: content h: max fr/avail: 10
@@ -155,6 +166,7 @@ frame = <<-WWML
   ;;       "Lorem ipsum dolor sit amet, qui minim labore adipisicing minim sint cillum sint consectetur cupidatat."))))
 WWML
 
+# nodeR(successor) = wrapR(%[(node in_)], successor, %[(node out_)])
 def nodeR(changes, term term0, successor)
   subject = Term.of(:node, term0)
 
@@ -166,6 +178,7 @@ def nodeR(changes, term term0, successor)
   end
 end
 
+# edgeR(successor) = wrapR(%[(parent_ child_)], %[(edge parent_ child_)], successor, %[(edge (%group out _ _))])
 def edgeR(changes, parent0, child0, successor)
   subject = Term.of(:edge, parent0, child0)
 
@@ -181,6 +194,17 @@ def edgeR(changes, parent0, child0, successor)
   end
 end
 
+# outerR(successor) = pathR(
+#   chainR(
+#     wrapR(%[(edge parent_ child_)],
+#           %[(node child_)],
+#           successor,
+#           %[(node child_)],
+#           %[(edge parent_ child_)]),
+#     edgeR(successor)),
+#   view: -2..-1,
+#   maxdepth: nil,
+#   part: :itemspart)
 def outerR(changes, term : Term, successor)
   unless dict0 = term.as_d?
     return term
@@ -310,7 +334,8 @@ backmapR = dfsR(
     selR(%[($once rewritee_)], callR(primitives))
   ),
 )
-rules = exhR(eventR(effectR(rulesetR(Ruleset.select(SELECTOR, ML.parse(base)), noR, backmapR, noR)) do |term|
+selector = ML.term(%[(%any° (rule pattern_ template_) (backmap pattern_ backspec_))])
+rules = exhR(eventR(effectR(rulesetR(Ruleset.select(selector, ML.terms(base)), noR, backmapR, noR)) do |term|
   # Term.case(term) do
   #   matchpi %[(event _*)] do
   #     puts ML.display(term)
@@ -337,14 +362,13 @@ preview = ->{ true }
 require "benchmark"
 
 Benchmark.ips do |x|
-  intree = Term.of(:root, ML.parse1(frame))
+  intree = Term.of(:root, ML.term(frame))
   x.report("rewrite") do
-   outerR(preview, intree, rules)
+    outerR(preview, intree, rules)
   end
 end
 # puts ML.display()
 
-
 # puts rules.call(Term.of(100))
 
-# puts ML.display(rewriter.call(preview, Rewrite.one(ML.parse1(frame))).as(Rewrite::One).term)
+# puts ML.display(rewriter.call(preview, Rewrite.one(ML.term(frame))).as(Rewrite::One).term)

@@ -1,5 +1,5 @@
 require "./wirewright"
-require "./baz4"
+require "./baz5_editor"
 require "./libtermbox2"
 
 # TODO: should we add these as official rewriters? Then we'll be able to use
@@ -30,7 +30,7 @@ require "./libtermbox2"
 #
 # Again, it is very important to note that we're optimizing for rejection. During our search, vast
 # amounts of patterns/rules are rejected. Among hundreds of rules, only one is usually valid for a
-# given term. All patterns must be optimized for rejections; and the search process itself must be. 
+# given term. All patterns must be optimized for rejections; and the search process itself must be.
 #
 # That's battling with the symptoms, though, and I'm well aware of that. But I don't think it is possible
 # to optimize away the problem itself -- us iterating a lot over a lot of combinations.
@@ -112,7 +112,7 @@ def fit1(parent : Term::Dict, phase : Term, child : Term)
       {parent.morph({:avail, avail - h}), child.morph({:"in-avail", true})}
     end
 
-    # Use fractional height for fill children of col 
+    # Use fractional height for fill children of col
     givenpi %[(col _+ ¦ _ size: (w←(%number u16) _) avail: avail_number den: den_number) (refine 0) (_* ¦ _ in-den: true padding: (%optional 0 p_number) size: fill)] do
       {parent, child.morph({:size, {w + p*2, avail//den + p*2}})}
     end
@@ -162,10 +162,10 @@ def fix(frame : Term::Dict) : Term::Dict
   orthor(frame, ->fix1(Term::Dict, Term, Term))
 end
 
-NORD_BG = Termbox::Color.new(0x2e3440)
-NORD_FG = Termbox::Color.new(0xeceff4)
-NORD_FG_DIM = Termbox::Color.new(0xd8dee9)
-NORD_BLUE_DARK = Termbox::Color.new(0x5e81ac)
+NORD_BG         = Termbox::Color.new(0x2e3440)
+NORD_FG         = Termbox::Color.new(0xeceff4)
+NORD_FG_DIM     = Termbox::Color.new(0xd8dee9)
+NORD_BLUE_DARK  = Termbox::Color.new(0x5e81ac)
 NORD_BLUE_LIGHT = Termbox::Color.new(0x81a1c1)
 
 def draw(frame, bbg)
@@ -183,7 +183,7 @@ def draw(frame, bbg)
       (y...y + h).each do |py|
         (x...x + w).each do |px|
           case {py, px}
-          when {y, x}     # Top-left corner
+          when {y, x} # Top-left corner
             ch = '╭'
           when {y, x + w - 1} # Top-right corner
             ch = '╮'
@@ -218,7 +218,7 @@ def draw(frame, bbg)
       caption = caption0.to(String)
 
       fg = Termbox::Color.rgb(fr, fg, fb)
-      bg = Termbox::Color.rgb(br, bg, bb) 
+      bg = Termbox::Color.rgb(br, bg, bb)
 
       reader = Char::Reader.new(caption)
 
@@ -251,35 +251,29 @@ def draw(frame, bbg)
       frame.items.each { |child| draw(child, bbg) }
     end
 
-    otherwise {}
+    otherwise { }
   end
 end
 
-frames = Channel(Term::Dict).new
+def show(frame)
+  frame = pipe(frame, fit, fix)
 
-spawn do
-  while frame = frames.receive?
-    frame = pipe(frame, fit, fix)
+  Term.case(frame) do
+    matchpi %[(viewport child_ ¦ _ bg: (r0←(%number u8) g0←(%number u8) b0←(%number u8)))] do
+      r, g, b = {r0, g0, b0}.map(&.to(UInt8))
 
-    Term.case(frame) do
-      matchpi %[(viewport child_ ¦ _ bg: (r0←(%number u8) g0←(%number u8) b0←(%number u8)))] do
-        r, g, b = {r0, g0, b0}.map(&.to(UInt8))
+      bg = Termbox::Color.rgb(r, g, b)
 
-        bg = Termbox::Color.rgb(r, g, b)
-
-        Termbox.clear(bg: bg, fg: NORD_FG)
-        draw(child, bg)
-        Termbox.present
-      end
-
-      otherwise {}
+      Termbox.clear(bg: bg, fg: NORD_FG)
+      draw(child, bg)
+      Termbox.present
     end
+
+    otherwise { }
   end
-rescue e
-  frames.close
 end
 
-frame = ML.parse1(<<-WWML
+frame = ML.term(<<-WWML
 ;; TODO: Obviously we'd like to have width/height fill/hug separately.
 (viewport position: (0 0) size: ($<w> $<h>) max-size: ($<w> $<h>) bg: (0 0 0)
   (col size: fill
@@ -319,12 +313,12 @@ height = manipulator(frame, Term.of(:"$<h>"))
 
 Termbox.init
 begin
-Termbox.input_mode = Termbox::InputMode::Alt
-Termbox.output_mode = Termbox::OutputMode::Truecolor
+  Termbox.input_mode = Termbox::InputMode::Alt
+  Termbox.output_mode = Termbox::OutputMode::Truecolor
 
-running = true
+  running = true
 
-root0 = ML.parse(%[
+  root0 = ML.terms(%[
   (cell 0 @x)
   (cell 0 @y)
   (button "Increment" @actions ())
@@ -332,70 +326,105 @@ root0 = ML.parse(%[
   ("" | "" () @user)
 ])
 
-# Now why the f*** is it - 2?
-frame = body.call(frame, ->(state : Term) { Term.of(ML.display(root0, endl: false)) })
-frame = width.call(frame, ->(state : Term) { Term.of(Termbox.width - 2) })
-frame = height.call(frame, ->(state : Term) { Term.of(Termbox.height - 2) })
+  # Now why the f*** is it - 2?
+  frame = body.call(frame, ->(state : Term) { Term.of(ML.display(root0, endl: false)) })
+  frame = width.call(frame, ->(state : Term) { Term.of(Termbox.width - 2) })
+  frame = height.call(frame, ->(state : Term) { Term.of(Termbox.height - 2) })
 
-# raise ""
-while running
-  frames.send(frame)
+  # raise ""
+  while running
+    show(frame)
 
-  event = Termbox.poll
+    event = Termbox.poll
 
-  root1 = root0
+    root1 = root0
 
-  case event.type
-  when .resize?
-    frame = width.call(frame, ->(state : Term) { Term.of(event.resize_w - 2) })
-    frame = height.call(frame, ->(state : Term) { Term.of(event.resize_h - 2) })
-    frames.send(frame)
-  when .key?
-    if event.ch.zero? # Non-character key
-      case event.key
-      when .esc?
-        root1 = edit(root1, Term.of(:key, :escape))
-      when .tab?
-        root1 = edit(root1, Term.of(:key, :tab))
-      when .home?
-        root1 = edit(root1, Term.of(:key, :home))
-      when .end?
-        root1 = edit(root1, Term.of(:key, :end))
-      when .enter?
-        root1 = edit(root1, Term.of(:key, :enter))
-      when .backspace?, .backspace2?
-        root1 = edit(root1, Term.of(:key, :backspace))
-      when .delete?
-        root1 = edit(root1, Term.of(:key, :delete))
-      when .arrow_left?
-        root1 = edit(root1, Term.of(:key, :left))
-      when .arrow_right?
-        root1 = edit(root1, Term.of(:key, :right))
-      when .arrow_up?
-        root1 = edit(root1, Term.of(:key, :up))
-      when .arrow_down?
-        root1 = edit(root1, Term.of(:key, :down))
-      when .ctrl_c?
-        running = false
-        break
-      when .ctrl_v?
-      when .ctrl_a?
-      when .ctrl_q?
+    case event.type
+    when .resize?
+      frame = width.call(frame, ->(state : Term) { Term.of(event.resize_w - 2) })
+      frame = height.call(frame, ->(state : Term) { Term.of(event.resize_h - 2) })
+    when .key?
+      if event.ch.zero? # Non-character key
+        case event.key
+        when .esc?
+          root1 = edit(root1, Term.of(:key, :escape))
+        when .tab?
+          root1 = edit(root1, Term.of(:key, :tab))
+        when .home?
+          root1 = edit(root1, Term.of(:key, :home))
+        when .end?
+          root1 = edit(root1, Term.of(:key, :end))
+        when .enter?
+          root1 = edit(root1, Term.of(:key, :enter))
+        when .backspace?, .backspace2?
+          root1 = edit(root1, Term.of(:key, :backspace))
+        when .delete?
+          root1 = edit(root1, Term.of(:key, :delete))
+        when .arrow_left?
+          root1 = edit(root1, Term.of(:key, :left))
+        when .arrow_right?
+          root1 = edit(root1, Term.of(:key, :right))
+        when .arrow_up?
+          root1 = edit(root1, Term.of(:key, :up))
+        when .arrow_down?
+          root1 = edit(root1, Term.of(:key, :down))
+        when .ctrl_c?
+          running = false
+          break
+        when .ctrl_v?
+        when .ctrl_a?
+        when .ctrl_q?
+        end
+      else
+        chr = event.ch.chr
+        if chr.printable?
+          root1 = edit(root1, Term.of(:input, chr))
+        end
       end
-    else
-      chr = event.ch.chr
-      next unless chr.printable?
-      root1 = edit(root1, Term.of(:input, chr))
+    end
+
+    unless root0.same?(root1)
+      patterns = {} of Term => Term # pid => pattern
+      matchees = {} of Term => Term # pid => matchee
+      matchs = {} of Term => Int32  # pid => index
+
+      root1.each_item_with_index do |item, index|
+        Term.case(item) do
+          matchpi %[(pattern pid_ p_)] do
+            patterns[pid] = p
+          end
+
+          matchpi %[(matchee pid_ m_)] do
+            matchees[pid] = m
+          end
+
+          matchpi %[(%all (match pid_ _*) (%leaf (_string | _string (_*) @_)))] do
+          end
+
+          matchpi %[(match pid_ _*)] do
+            matchs[pid] = index
+          end
+
+          otherwise { }
+        end
+      end
+
+      patterns.each do |pid, pattern|
+        next unless matchee = matchees[pid]?
+        next unless matchidx = matchs[pid]?
+
+        matches = Term.matches(pattern, matchee)
+
+        root1 = root1.with(matchidx, {:match, pid, matches})
+      end
+
+      root0 = Term.of(root1)
+
+      tmp = root0
+      frame = body.call(frame, ->(state : Term) { Term.of(ML.display(tmp, endl: false)) })
     end
   end
-
-  unless root0.same?(root1)
-    frame = body.call(frame, ->(state : Term) { Term.of(ML.display(root1, endl: false)) })
-    frames.send(frame)
-    root0 = root1
-  end
-end
 ensure
-Termbox.shutdown
-# puts ML.display(pipe(frame, fit, fix))
+  Termbox.shutdown
+  # puts ML.display(pipe(frame, fit, fix))
 end

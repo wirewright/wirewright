@@ -141,11 +141,11 @@ struct ProcRuleset
     end
 
     def rulep(ml : String, &fn : ProcRule) : Nil
-      rule(ML.parse1(ml), &fn)
+      rule(ML.term(ml), &fn)
     end
 
     def backmapp(ml : String, &fn : ProcBackmap) : Nil
-      backmap(ML.parse1(ml), &fn)
+      backmap(ML.term(ml), &fn)
     end
 
     # :nodoc:
@@ -210,7 +210,7 @@ struct ProcRuleset
       end
     end
 
-    selector = ML.parse1(%[(type←(%any rule backmap) index←(%number +i32) pattern_)])
+    selector = ML.term(%[(type←(%any rule backmap) index←(%number +i32) pattern_)])
 
     rules = backmaps = nil
 

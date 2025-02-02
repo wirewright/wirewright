@@ -568,7 +568,7 @@ module ::Ww::M1::Operator::Fb
   alias Any = Response | Interrupt
   alias Response = Match | Mismatch
   alias Match = MatchOne | MatchMany
-  alias Interrupt = RequestKeypath  | ProbeTrue
+  alias Interrupt = RequestKeypath | ProbeTrue
 
   record MatchOne, env : Term::Dict, more : Bool = false do
     def envs
@@ -1751,108 +1751,104 @@ module ::Ww::M1::Operator::Ahead
       end
     end
 
-  struct SequenceRest
-    include Item
+    struct SequenceRest
+      include Item
 
-    def initialize(@ord : UInt32, @items : Slice(Operator::Item::Any), @ahead : Item*)
+      def initialize(@ord : UInt32, @items : Slice(Operator::Item::Any), @ahead : Item*)
+      end
+
+      def call(progress, matchees)
+        Operator::Item.sequence(progress.copy_with(ord: progress.ord + 1), @items[1..], matchees, @ahead.value)
+      end
     end
 
-    def call(progress, matchees)
-      Operator::Item.sequence(progress.copy_with(ord: progress.ord + 1), @items[1..], matchees, @ahead.value)
+    struct CaptureGroup
+      include Item
+
+      # - *ord0* is the ordinal at the start of the group.
+      # - *matchees* is the matchees at the start of the group.
+      # - *propose* specifies whether to propose the captured group to `Behind`. Otherwise,
+      #   the group is simply mounted and not proposed.
+      def initialize(@ord0 : UInt32, @matchees : MatcheeFeed, @capture : Term, @ahead : Item*, *, @propose : Bool)
+      end
+
+      def call(progress, matchees)
+        group = @matchees.upto(matchees)
+
+        behind1 = progress.behind
+
+        if @propose
+          unless behind1 = behind1.propose?(@capture, proposal = Term.of(group))
+            return Fb::Mismatch.new(progress.env.with(@capture, proposal))
+          end
+        end
+
+        behind1 = behind1.mount(@capture, &.backward(group.size).span(group.size, ord: progress.ord))
+
+        @ahead.value.call(progress.copy_with(behind: behind1), matchees)
+      end
     end
-  end
 
-  struct CaptureGroup
-    include Item
+    struct Advance
+      include Item
 
-    # - *ord0* is the ordinal at the start of the group.
-    # - *matchees* is the matchees at the start of the group.
-    # - *propose* specifies whether to propose the captured group to `Behind`. Otherwise,
-    #   the group is simply mounted and not proposed.
-    def initialize(@ord0 : UInt32, @matchees : MatcheeFeed, @capture : Term, @ahead : Item*, *, @propose : Bool)
+      def initialize(@n : Int32, @ahead : Item*)
+      end
+
+      def call(progress, matchees)
+        @ahead.value.call(progress.copy_with(ord: progress.ord + @n, behind: progress.behind.keypath(&.forward(@n))), matchees.move(@n))
+      end
     end
 
-    def call(progress, matchees)
-      group = @matchees.upto(matchees)
+    struct ManyStep
+      include Item
 
-      behind1 = progress.behind
+      def initialize(@feed0 : MatcheeFeed, @item : Operator::Item::Many, @ahead : Item*, @memo : Term::Dict)
+      end
 
-      if @propose
-        unless behind1 = behind1.propose?(@capture, proposal = Term.of(group))
-          return Fb::Mismatch.new(progress.env.with(@capture, proposal))
+      def call(progress, matchees)
+        if @feed0 == matchees
+          # This continuation is run after the ahead check. This means ahead refuses to
+          # consume feed. And we did not move while trying to consume feed. Thus this is
+          # a hard mismatch.
+          return Fb::Mismatch.new(progress.env)
+        end
+
+        pruned, capture = progress.behind.partition(@item.interior)
+
+        Operator::Item.many(progress.copy_with(behind: pruned), @item, matchees, @ahead.value, @memo.append(capture.env))
+      end
+    end
+
+    struct PastStep
+      include Item
+
+      def initialize(@feed0 : MatcheeFeed, @item : Operator::Item::Past, @memo : Int32, @ahead : Item*)
+      end
+
+      def call(progress, matchees)
+        if @feed0 == matchees
+          return Fb::Mismatch.new(progress.env)
+        end
+
+        if @item.greedy
+          Operator::Item.past_greedy(progress, @item, matchees, @ahead.value, @memo + 1)
+        else
+          Operator::Item.past_lazy(progress, @item, matchees, @ahead.value, @memo + 1)
         end
       end
-
-      behind1 = behind1.mount(@capture, &.backward(group.size).span(group.size, ord: progress.ord))
-
-      @ahead.value.call(progress.copy_with(behind: behind1), matchees)
-    end
-  end
-
-  struct Advance
-    include Item
-
-    def initialize(@n : Int32, @ahead : Item*)
     end
 
-    def call(progress, matchees)
-      @ahead.value.call(progress.copy_with(ord: progress.ord + @n, behind: progress.behind.keypath(&.forward(@n))), matchees.move(@n))
-    end
-  end
+    struct Rest
+      include Item
 
-  struct ManyStep
-    include Item
-
-    def initialize(@feed0 : MatcheeFeed, @item : Operator::Item::Many, @ahead : Item*, @memo : Term::Dict)
-    end
-
-    def call(progress, matchees)
-      if @feed0 == matchees
-        # This continuation is run after the ahead check. This means ahead refuses to
-        # consume feed. And we did not move while trying to consume feed. Thus this is
-        # a hard mismatch.
-        return Fb::Mismatch.new(progress.env)
+      def initialize(@items : Slice(Operator::Item::Any), @ahead : Ahead::Any*)
       end
 
-      pruned, capture = progress.behind.partition(@item.interior)
-
-      Operator::Item.many(progress.copy_with(behind: pruned), @item, matchees, @ahead.value, @memo.append(capture.env))
-    end
-  end
-
-  struct PastStep
-    include Item
-
-    def initialize(@feed0 : MatcheeFeed, @item : Operator::Item::Past, @memo : Int32, @ahead : Item*)
-    end
-
-    def call(progress, matchees)
-      if @feed0 == matchees
-        return Fb::Mismatch.new(progress.env)
-      end
-
-      if @item.greedy
-        Operator::Item.past_greedy(progress, @item, matchees, @ahead.value, @memo + 1)
-      else
-        Operator::Item.past_lazy(progress, @item, matchees, @ahead.value, @memo + 1)
+      def call(progress, matchees)
+        Operator::Item.match(progress, @items[1..], matchees, @ahead.value)
       end
     end
-  end
-
-  struct Rest
-    include Item
-
-    def initialize(@items : Slice(Operator::Item::Any), @ahead : Ahead::Any*)
-    end
-
-    def call(progress, matchees)
-      Operator::Item.match(progress, @items[1..], matchees, @ahead.value)
-    end
-  end
-
-
-
-
   end
 end
 
@@ -1861,7 +1857,6 @@ module ::Ww::M1::Operator
 end
 
 module ::Ww::M1::Operator::Item
-
   record Progress, ord : UInt32, behind : Behind do
     def env : Term::Dict
       @behind.env
@@ -2007,8 +2002,6 @@ module ::Ww::M1::Operator::Item
     sequence(progress, item.children.to_readonly_slice, matchees, ahead1)
   end
 
-
-
   def self.match(progress : Progress, item : Gap, matchees, ahead0)
     strategy = item.strategy.auto? ? ExpandStrategy::Sway : item.strategy
 
@@ -2129,6 +2122,7 @@ module ::Ww::M1::Operator::Item
       past_lazy(progress, item, matchees, ahead, memo: 0)
     end
   end
+
   def self.match(progress : Progress, items : Slice(Any), matchees, ahead)
     item = items.first?
 
@@ -6071,7 +6065,7 @@ class PatternSet
   # reference to the current pattern.
   #
   # ```
-  # pset = PatternSet.select(ML.parse1(%[(rule pattern_ body_)]), base) do |normp, env|
+  # pset = PatternSet.select(ML.term(%[(rule pattern_ body_)]), base) do |normp, env|
   #   # Do something with env[:body]
   #   # ...
   #

@@ -2,11 +2,11 @@ require "./libtermbox2"
 require "./wirewright"
 require "./baz5_editor"
 
-test = ML.parse1(File.read("./editor.test.wwml"))
+test = ML.term(File.read("./editor.test.wwml"))
 
 puts "Replay editor.test.wwml"
 
-root = ML.parse(%[("" | "" () @user)])
+root = ML.terms(%[("" | "" () @user)])
 unless "-empty".in?(ARGV)
   Term.case(test) do
     matchpi %[(editor initial_dict edits_*)] do
@@ -110,7 +110,7 @@ while true
     next
   end
 
-  motion = ML.parse1(command)
+  motion = ML.term(command)
   root = edit(root, motion)
   motions = motions.append(motion)
 end

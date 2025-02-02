@@ -46,7 +46,7 @@ module Rule
       Offspring::One.new(rule.body)
     end
   end
-  
+
   def offspring(rs, rule : BackmapOne, pr : Pr::One, matchee : Term) : Offspring::Any
     if pr.env.includes?(:"(keypaths)")
       offspring = backmap(rs, pr, rule.backspec, matchee)
@@ -76,7 +76,7 @@ module Rule
       pr.ones do |one|
         case offspring = offspring(rs, rule, one, matchee)
         in Offspring::One
-          commit << offspring.term 
+          commit << offspring.term
         in Offspring::Many
           commit.concat(offspring.list.items)
         in Offspring::None
@@ -106,7 +106,7 @@ module Rule
       pr.ones do |one|
         case offspring = offspring(rs, rule, one, matchee)
         in Offspring::One
-          commit << offspring.term 
+          commit << offspring.term
         in Offspring::Many
           commit.concat(offspring.list.items)
         in Offspring::None
@@ -168,7 +168,7 @@ module Offspring
   alias Any = Neg | Pos
   alias Pos = None | Some
   alias Some = One | Many
-  
+
   # TODO: this isn't really None, come up with a better name? We return None when
   # the node 1) cannot/should not be rewritten into anything 2) when it rewrites into itself.
   # Calling it None may lead to confusion. Calling it Zero will lead to confusion with One/Many,
@@ -224,11 +224,11 @@ module Rewriter
         return Offspring::None.new
       in Offspring::None
       end
-    
+
       unless dict = term.as_d?
         return Offspring::None.new
       end
-    
+
       dict.each_entry_randomized do |key, value|
         case offspring = absr(successor, value)
         in Offspring::One
@@ -249,7 +249,7 @@ module Rewriter
         in Offspring::None
         end
       end
-    
+
       Offspring::None.new
     end
   end
@@ -279,13 +279,13 @@ module Rewriter
       if O.probe?(Term[], focus, term)
         return Relr::Ascend.new(ascent)
       end
-  
+
       unless dict0 = term.as_d?
         return Relr::None.new
       end
-  
+
       splices = nil
-  
+
       dict1 = dict0
       dict0.each_entry do |key, value|
         case res = relr0(focus, successor, value, ascent)
@@ -299,7 +299,7 @@ module Rewriter
         in Relr::Ready
           offspring = res.offspring
         end
-  
+
         case offspring
         in Offspring::None
         in Offspring::One
@@ -313,7 +313,7 @@ module Rewriter
           end
         end
       end
-  
+
       if splices
         # TODO: we can come up with some kind of queue-like approach?
         # Take last, copy up to, concat last, take last, copy up to, ...
@@ -322,10 +322,10 @@ module Rewriter
           dict1 = dict1.replace(index...index + 1, &.concat(list.items))
         end
       end
-  
+
       Relr::Ready.new(dict0 == dict1 ? Offspring::None.new : Offspring::One.new(Term.of(dict1)))
     end
-  
+
     def self.relr(focus, successor, root : Term, ascent : UInt32 = 0u32) : Offspring::Pos
       case response = relr0(focus, successor, root, ascent)
       in Relr::None   then Offspring::None.new
@@ -415,10 +415,10 @@ end
 
 # Block-less `rewrite`.
 def rewrite(*args, **kwargs) : Term
-  rewrite(*args, **kwargs) {}
+  rewrite(*args, **kwargs) { }
 end
 
-# base = ML.parse(<<-WWML
+# base = ML.terms(<<-WWML
 # ;;(rule qux 0)
 # ;;(rule (into x_ (%item° (set x_ values_*))) values)
 # ;;(rule (+ a_ 0) a)
@@ -429,7 +429,6 @@ end
 # (-rule (rule _ _))
 # (-rule (backmap _ _))
 # (-rule (-rule _))
-
 
 # ;; TODO: allow -rule to accept a "pattern pattern" for matching
 # ;; rules that can be allowed in.
@@ -519,13 +518,13 @@ struct ProcRuleset
     def backmap(pattern : Term, &fn : ProcBackmap) : Nil
       @ruleary << {pattern, fn}
     end
-    
+
     def rulep(ml : String, &fn : ProcRule) : Nil
-      rule(ML.parse1(ml), &fn)
+      rule(ML.term(ml), &fn)
     end
 
     def backmapp(ml : String, &fn : ProcBackmap) : Nil
-      backmap(ML.parse1(ml), &fn)
+      backmap(ML.term(ml), &fn)
     end
 
     # :nodoc:
@@ -594,7 +593,7 @@ struct ProcRuleset
     # (and zero in both cases)
 
     # todo: use +i32
-    selector = ML.parse1(%[(type←(%any rule backmap) index←(%number i32) pattern_)])
+    selector = ML.term(%[(type←(%any rule backmap) index←(%number i32) pattern_)])
 
     rules = backmaps = nil
 
@@ -704,7 +703,7 @@ def dictr(dict dict0 : Term::Dict, successor)
     in Offspring::None
     end
   end
-  
+
   if splices
     # TODO: we can come up with some kind of queue-like approach?
     # Take last, copy up to, concat last, take last, copy up to, ...
@@ -743,16 +742,15 @@ def spotr(selector : Term, successor)
 end
 
 def spotrp(selector : String, successor)
-  spotr(ML.parse1(selector), successor)
+  spotr(ML.term(selector), successor)
 end
 
 def selfr
   ->(term : Term) { Offspring::None.new }
 end
 
-
-CURSORP  = ML.parse1(%([_string (%any° | (| _string)) _string (_*) @_]))
-CURSORPE = Term::M1.operator(ML.parse1(%([_string (%any° | (| _string)) _string (_*) @edge_])))
+CURSORP  = ML.term(%([_string (%any° | (| _string)) _string (_*) @_]))
+CURSORPE = Term::M1.operator(ML.term(%([_string (%any° | (| _string)) _string (_*) @edge_])))
 
 def subsume1(cursor, motion)
   Term.of(cursor.morph({3, cursor[3].size, motion}))
@@ -774,9 +772,9 @@ def editr(ruleset)
   Rewriter.relr(CURSORP, Rewriter.absr(ruleset), ascent: 2u32)
 end
 
-SELECTOR = ML.parse1(%[(%any° (rule pattern_ template_) (backmap pattern_ backspec_) (-rule pattern←negative_))])
-BASE = ML.parse(File.read("#{__DIR__}/editor.soma.wwml"))
-NATRS = ProcRuleset.build do
+SELECTOR = ML.term(%[(%any° (rule pattern_ template_) (backmap pattern_ backspec_) (-rule pattern←negative_))])
+BASE     = ML.terms(File.read("#{__DIR__}/editor.soma.wwml"))
+NATRS    = ProcRuleset.build do
   rulepi1 %[(+ a_number b_number)] { a + b }
   rulepi1 %[(- a_number b_number)] { a - b }
   rulepi1 %[(* a_number b_number)] { a * b }
@@ -789,7 +787,7 @@ NATRS = ProcRuleset.build do
   # Converts (parses) a string into a term.
   rulepi1 %[(ml ml_string)] do
     begin
-      {:"ml/ok", ML.parse1(ml.to(String))}
+      {:"ml/ok", ML.term(ml.to(String))}
     rescue ML::SyntaxError
       # TODO: line col message
       {:"ml/err"}
@@ -821,13 +819,11 @@ def apply(root : Term, motion : Term) : Term
     rewrite(REWRITER, limit: 64u32))
 end
 
-
-
-prog = ML.parse(<<-WWML
+prog = ML.terms(<<-WWML
 ("hello" | "" ((type " ")) @user)
 ("" | "world" ((key enter)) @user)
 ("hello" | "world" ((key enter)) @user)
-("hello" | "\\\"hello" ((key enter)) @user)
+("hello" | "\\"hello" ((key enter)) @user)
 ;;("" | "" ((type "(") (type "button") (key enter) (type "0") (type " ") (type "@xs") (type ")")) @user)
 ;;(+ 1 ("" | "" ((key left) (key left) (key left)) @user) 2)
 ;;(+ 1 ("" | "" ((key left)) @user) 2)
@@ -867,11 +863,10 @@ WWML
 #   end
 # end
 
-# rewrite(Rewriter.relr(ML.parse1(%([_string | _string (_*) @_])), Rewriter.absr(rs), ascent: 1u32), prog) do |im|
+# rewrite(Rewriter.relr(ML.term(%([_string | _string (_*) @_])), Rewriter.absr(rs), ascent: 1u32), prog) do |im|
 #   puts ML.display(im)
 #   sleep 1.second
 # end
-
 
 # rewriter = Rewriter.absr(cc)
 
@@ -886,7 +881,7 @@ WWML
 #   # end
 #   puts ML.display(im)
 #   sleep 1.second
-# end) 
+# end)
 #   end
 # end
 
@@ -895,9 +890,9 @@ WWML
 #     PatternSet.parse(selector, rules)
 #   end
 
-  # matchee = Term.of(:+, 1, 2)
-  # # x.report("response") do
-  # pp ps.response(matchee)
+# matchee = Term.of(:+, 1, 2)
+# # x.report("response") do
+# pp ps.response(matchee)
 #   end
 # end
 
@@ -930,7 +925,7 @@ WWML
 #   subject0
 # end
 
-# circuit = ML.parse(<<-WWML
+# circuit = ML.terms(<<-WWML
 # (dfsr @in @out)
 # (pipe @in @out)
 # WWML
@@ -963,13 +958,12 @@ WWML
 # pp pipe(Term.of(:+, :_number, :_), Term::M1.normal, Term::M1.specificity).ord
 # pp pipe(Term.of(:+, :"xs_*", :_), Term::M1.normal, Term::M1.specificity).ord
 
-
 # todo: fix `walk` walking where it shouldn't (into literals, captures, etc.)
-#      
+#
 # todo: bounds is wrong right now, we'll have to fix it too.
 
 # rs = Ruleset.parse(
-#   ML.parse1(<<-WWML
+#   ML.term(<<-WWML
 #   (ruleset
 #     (rule qux 0)
 #     (rule (+ a_ 0) a)
@@ -995,7 +989,7 @@ WWML
 # ...
 #
 # Rulesets can also be defined in native code. Maybe we can
-# import them using (ruleset @foo)? 
+# import them using (ruleset @foo)?
 #
 # A rule in a ruleset contains pattern (left-hand side) and body (right-hand side).
 # Body is uninterpreted by rule (i.e. no distinction between backmap/etc.)
@@ -1015,7 +1009,7 @@ WWML
 #   (ruleset @choices-1 @in @envs)
 #   (ruleset @choices-2 @in @envs)
 #   (gsub @spot @envs @out) ;; (gsub) or (backmap) match dicts
-# 
+#
 # Here is a simple cicuit that does a dfsr without changing anything:
 #
 #   (dfsr @in @out)

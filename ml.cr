@@ -54,13 +54,13 @@ module Ww::ML
   # wrapping them in an itemsonly dictionary.
   #
   # Raises `SyntaxError` in case *source* contains a syntax error.
-  def parse(source : String) : Term
+  def terms(source : String) : Term
     lexer = Text::Lexer.new(source)
     parser = Text::Parser.new(lexer)
     parser.expressions
   rescue e : SyntaxError
     {% if flag?(:mlerr) %}
-      col = e.column(source) 
+      col = e.column(source)
       STDERR.puts "SyntaxError: #{e.lineno(source) + 1}:#{col + 1}: #{e.message}"
       STDERR.puts "  >>> #{e.line(source).insert(col, "‸")}"
     {% end %}
@@ -71,13 +71,13 @@ module Ww::ML
   # Parses and returns a single top-level WwML expression term from *source*.
   #
   # Raises `SyntaxError` in case *source* contains a syntax error.
-  def parse1(source : String) : Term
+  def term(source : String) : Term
     lexer = Text::Lexer.new(source)
     parser = Text::Parser.new(lexer)
     parser.expression
   rescue e : SyntaxError
     {% if flag?(:mlerr) %}
-      col = e.column(source) 
+      col = e.column(source)
       STDERR.puts "SyntaxError: #{e.lineno(source) + 1}:#{col + 1}: #{e.message}"
       STDERR.puts "  >>> #{e.line(source).insert(col, "‸")}"
     {% end %}

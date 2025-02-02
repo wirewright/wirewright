@@ -4,7 +4,7 @@ require "./baz5_common"
 alias Rewriter = RewriterContext, Rewrite::Any -> Rewrite::Any
 alias Observer = Keypath::Appender, String, Rewrite::Some ->
 
-record RewriterContext, rng : Random, keypath : Keypath::Appender?, envs = Term[], observer : Observer = (Observer.new {}), exhr = {} of {UInt64, Term} => Rewrite::Any do
+record RewriterContext, rng : Random, keypath : Keypath::Appender?, envs = Term[], observer : Observer = (Observer.new { }), exhr = {} of {UInt64, Term} => Rewrite::Any do
   # If available, returns memoized exhaustive rewrite of *term* for an exhR rewriter
   # with the given *id*.
   #
@@ -419,7 +419,7 @@ end
 
 # See the main overload (`Term`) for more info.
 def selR(selector : String, successor : Rewriter) : Rewriter
-  selR(ML.parse1(selector), successor)
+  selR(ML.term(selector), successor)
 end
 
 # Generates a `choiceR` with more than two branches for you to reduce typing.
@@ -441,7 +441,7 @@ end
 
 # :ditto:
 def switchR(*branches : {String, Rewriter})
-  switchR(branches.map { |selector, rewriter| {ML.parse1(selector), rewriter} })
+  switchR(branches.map { |selector, rewriter| {ML.term(selector), rewriter} })
 end
 
 # Rewrites a term using *successor*; if that produces no change and the term is
@@ -650,7 +650,7 @@ end
 
 # Check out the main `relR` overload (one for `M1::Operator::Any`) to learn more.
 def relR(bottom : String, successor : Rewriter, **kwargs) : Rewriter
-  relR(ML.parse1(bottom), successor, **kwargs)
+  relR(ML.term(bottom), successor, **kwargs)
 end
 
 # :nodoc:
@@ -895,7 +895,7 @@ end
 
 # See the main overload.
 def wrapR(pdisasm : String, reshape : String, successor : Rewriter, punwrap : String, assemble : String) : Rewriter
-  wrapR(ML.parse1(pdisasm), ML.parse1(reshape), successor, ML.parse1(punwrap), ML.parse1(assemble))
+  wrapR(ML.term(pdisasm), ML.term(reshape), successor, ML.term(punwrap), ML.term(assemble))
 end
 
 # Same as `wrapR` but with hard-coded noop disassemble `in_` and assemble `out_`.
@@ -947,7 +947,7 @@ end
 
 # See the main overload.
 def multipartR(pdisasm : String, successors : Enumerable({Term, Rewriter}), assemble : String) : Rewriter
-  multipartR(ML.parse1(pdisasm), successors, ML.parse1(assemble))
+  multipartR(ML.term(pdisasm), successors, ML.term(assemble))
 end
 
 # Same as the main overload, where both *pdisasm* and *assemble* are set

@@ -9,7 +9,7 @@ struct Ww::Term
     end
 
     # :nodoc:
-    # 
+    #
     # WARNING: only access at macro time! Otherwise the world will explode! ¯\_(ツ)_/¯
     PATTERN_TERM_ID = [0u32]
 
@@ -78,7 +78,7 @@ struct Ww::Term
 
       unless %result.is_a?(::Ww::Term::CaseContext::Continue.class)
         # This macro is expanded with a .case, as in:
-        # 
+        #
         #   X.case(...) do
         #     ...
         #     ⏏ match(...) { ... }
@@ -106,7 +106,7 @@ struct Ww::Term
     macro matchp(ml, **kwargs, &block)
       {% location = "#{ml.filename.id}:#{ml.line_number}:#{ml.column_number}" %}
 
-      match!(->{ ::Ww::ML.parse1({{ml}}) }, location: {{location}}, {{kwargs.double_splat}}) {{block}}
+      match!(->{ ::Ww::ML.term({{ml}}) }, location: {{location}}, {{kwargs.double_splat}}) {{block}}
     end
 
     RE_CAPTURES = /([a-zA-Z_]\w*?)(?:_(?:any|number|symbol|string|boolean|dict)?[+*⋮]?\b|←|⋮)|\((?:%let)\s+([a-zA-Z]\w*)/
@@ -119,7 +119,7 @@ struct Ww::Term
       {% captures = ml.scan(::Ww::Term::CaseContext::RE_CAPTURES).map { |match| (match[1] || match[2]).id }.uniq %}
       {% location = "#{ml.filename.id}:#{ml.line_number}:#{ml.column_number}" %}
 
-      match!(-> { ::Ww::ML.parse1({{ml}}) }, icaps: [{{captures.splat}}] of ::NoReturn, location: {{location}}, {{kwargs.double_splat}}) {{block}}
+      match!(-> { ::Ww::ML.term({{ml}}) }, icaps: [{{captures.splat}}] of ::NoReturn, location: {{location}}, {{kwargs.double_splat}}) {{block}}
     end
 
     # Same as `match`, but guarantees to constructs a dictionary with the given
@@ -134,7 +134,7 @@ struct Ww::Term
     macro givenp(ml, **kwargs, &block)
       {% location = "#{ml.filename.id}:#{ml.line_number}:#{ml.column_number}" %}
 
-      match!(-> { ::Ww::ML.parse({{ml}}) }, location: {{location}}, {{kwargs.double_splat}}) {{block}}
+      match!(-> { ::Ww::ML.terms({{ml}}) }, location: {{location}}, {{kwargs.double_splat}}) {{block}}
     end
 
     # `givenp` that can infer basic captures (such as `x_`) from *ml* source
@@ -145,7 +145,7 @@ struct Ww::Term
       {% captures = ml.scan(::Ww::Term::CaseContext::RE_CAPTURES).map { |match| (match[1] || match[2]).id }.uniq %}
       {% location = "#{ml.filename.id}:#{ml.line_number}:#{ml.column_number}" %}
 
-      match!(-> { ML.parse({{ml}}) }, icaps: [{{captures.splat}}] of ::NoReturn, location: {{location}}, {{kwargs.double_splat}}) {{block}}
+      match!(-> { ML.terms({{ml}}) }, icaps: [{{captures.splat}}] of ::NoReturn, location: {{location}}, {{kwargs.double_splat}}) {{block}}
     end
 
     {% for name in %w(match matchp matchpi given givenp givenpi) %}
@@ -160,7 +160,7 @@ struct Ww::Term
     # Catch-all case.
     macro otherwise(&)
       # This macro is expanded with a .case, as in:
-      # 
+      #
       #   X.case(...) do
       #     ...
       #     ⏏ otherwise { ... }
@@ -266,4 +266,3 @@ struct Ww::Term
     end
   end
 end
-

@@ -307,7 +307,7 @@ record TestContext,
 
 testcases = [] of Term
 
-spec = ML.parse(CASES)
+spec = ML.terms(CASES)
 spec.items.each do |testcase|
   Term.case(testcase) do
     match({:isolate, :"_*"}) do

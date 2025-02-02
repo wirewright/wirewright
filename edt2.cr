@@ -262,7 +262,7 @@ def fix(frame : Term::Dict) : Term::Dict
   orthor(frame, ->fix1(Term::Dict, Term, Term))
 end
 
-# frame = ML.parse1(<<-WWML
+# frame = ML.term(<<-WWML
 # (viewport l: 0 t: 0 w: 64 h: 32 max-w: 64 max-h: 32 bg: (0 0 0)
 #   (col w: max h: max
 #     (box border: true bg: (0 0 0) w: content h: content pl: 1 pr: 1 pt: 1 pb: 1
@@ -286,10 +286,10 @@ end
 
 require "./libtermbox2"
 
-NORD_BG = Termbox::Color.new(0x2e3440)
-NORD_FG = Termbox::Color.new(0xeceff4)
-NORD_FG_DIM = Termbox::Color.new(0xd8dee9)
-NORD_BLUE_DARK = Termbox::Color.new(0x5e81ac)
+NORD_BG         = Termbox::Color.new(0x2e3440)
+NORD_FG         = Termbox::Color.new(0xeceff4)
+NORD_FG_DIM     = Termbox::Color.new(0xd8dee9)
+NORD_BLUE_DARK  = Termbox::Color.new(0x5e81ac)
 NORD_BLUE_LIGHT = Termbox::Color.new(0x81a1c1)
 
 def draw(frame) : Nil
@@ -313,7 +313,7 @@ def draw(frame) : Nil
 
           if border.true?
             case {py, px}
-            when {y, x}     # Top-left corner
+            when {y, x} # Top-left corner
               ch = '╭'
             when {y, x + w - 1} # Top-right corner
               ch = '╮'
@@ -349,7 +349,7 @@ def draw(frame) : Nil
       caption = caption0.to(String)
 
       fg = Termbox::Color.rgb(fr, fg, fb)
-      bg = Termbox::Color.rgb(br, bg, bb) 
+      bg = Termbox::Color.rgb(br, bg, bb)
 
       reader = Char::Reader.new(caption)
 
@@ -382,25 +382,25 @@ def draw(frame) : Nil
       frame.items.each { |child| draw(child) }
     end
 
-    otherwise {}
+    otherwise { }
   end
 end
 
 def show(frame : Term::Dict)
   fixed = pipe(frame, fit, fix)
-  
+
   Term.case(fixed) do
     matchpi %[(viewport child_ ¦ _ bg: (r0←(%number u8) g0←(%number u8) b0←(%number u8)))] do
       r, g, b = {r0, g0, b0}.map(&.to(UInt8))
-  
+
       bg = Termbox::Color.rgb(r, g, b)
-  
+
       Termbox.clear(bg: bg, fg: NORD_FG)
       draw(child)
       Termbox.present
     end
-  
-    otherwise {}
+
+    otherwise { }
   end
 end
 
@@ -422,7 +422,7 @@ def manipulate(frame, name)
   end
 end
 
-frame = ML.parse1(<<-WWML
+frame = ML.term(<<-WWML
 (viewport l: 0 t: 0 w: max h: max max-w: $<w> max-h: $<h> bg: (0 0 0)
   (center w: max h: max max-h: 10
     (text max-w: 20 w: content h: content fg: (0 0 0) bg: (255 255 255) pre: true
@@ -468,10 +468,7 @@ end
 Termbox.input_mode = Termbox::InputMode::Alt
 Termbox.output_mode = Termbox::OutputMode::Truecolor
 
-
-
 # body = manipulate(frame, Term.of(:"$<body>"))
-
 
 frame = width.call(frame, ->(state : Term) { Term.of(Termbox.width - 2) })
 frame = height.call(frame, ->(state : Term) { Term.of(Termbox.height - 2) })
