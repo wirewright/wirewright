@@ -430,6 +430,20 @@ while denying the presence of all other keys.
 ;; => false, `password` is not in the set of allowed keys.
 ```
 
+## `%not`
+
+`%not` allows you to prevent select terms from matching. The terms are treated literally.
+`%not` accepts one or more term: `(%not a)`, `(%not a b c)`, etc.
+
+```wwwl
+(grant-access? _) => true
+(grant-access? (%not "admin" "owner")) => false
+
+(grant-access? "admin")    ;; => true
+(grant-access? "owner")    ;; => true
+(grant-access? "john_doe") ;; => false
+```
+
 ## `%new`
 
 The idea with the `%new` operator is to be able to create new patterns at match-

@@ -242,4 +242,12 @@ module Ww::M1::Operator
 
     Ahead.tr(behind0, ahead0)
   end
+
+  def match(behind0, op : Not, matchee : Term, ahead0)
+    if matchee.in?(op.blacklist)
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    Ahead.tr(behind0, ahead0)
+  end
 end

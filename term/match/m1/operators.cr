@@ -62,4 +62,6 @@ module Ww::M1::Operator
   defcase Both, a : Any, b : Any
 
   defcase Keypool, keys : Slice(Term)
+
+  defcase Not, blacklist : Term::Dict
 end

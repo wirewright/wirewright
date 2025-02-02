@@ -17,7 +17,7 @@
 # │ %any°                    │   ~   │   ~     │   ~   │            │    ~     │       │   ~
 # │ %all                     │   ~   │   ~     │   ~   │            │    ~     │       │   ~
 # │ %keypool                 │   +   │   +     │   +   │            │    ·     │       │   ~
-# │ %not                     │   +   │   +     │   +   │            │    ·     │       │
+# │ %not                     │   +   │   +     │   +   │            │    ·     │       │   ~
 # │ %layer                   │   +   │   +     │   +   │            │    ~     │       │
 # │ %number                  │   +   │   +     │   +   │            │    ·     │       │   ~
 # │ %nonself                 │   +   │   ·     │   ·   │     ·      │    ·     │   ·   │
@@ -417,7 +417,6 @@ module ::Ww::M1::Operator
   defcase Pow, arg : Term::Num, successor : Any
   defcase Map, arg : Term::Dict, successor : Any
 
-  defcase Not, blacklist : Term::Dict
   defcase Layer, below : Any, side : Array(Entry::Any)
 
   alias Scan = ScanFirst | ScanSource | ScanAllIsolated | ScanAll
@@ -899,14 +898,6 @@ module ::Ww::M1::Operator
     end
 
     match(behind0, op.successor, v, ahead0)
-  end
-
-  def match(behind0, op : Not, matchee : Term, ahead0)
-    if matchee.in?(op.blacklist)
-      return Fb::Mismatch.new(behind0.env)
-    end
-
-    Ahead.tr(behind0, ahead0)
   end
 
   def match(behind0, op : Layer, matchee : Term, ahead0)
