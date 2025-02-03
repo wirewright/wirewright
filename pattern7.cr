@@ -20,7 +20,7 @@
 # │ %not                     │   +   │   +     │   +   │            │    ·     │       │   ~
 # │ %layer                   │   +   │   +     │   +   │            │    ~     │       │
 # │ %number                  │   +   │   +     │   +   │            │    ·     │       │   ~
-# │ %nonself                 │   +   │   ·     │   ·   │     ·      │    ·     │   ·   │
+# │ %nonself                 │   +   │   ·     │   ·   │     ·      │    ·     │   ·   │   ·
 # │ %string                  │       │         │       │            │          │       │
 # │ %string date             │       │         │       │            │          │       │
 # │ %string decimal          │       │         │       │            │          │       │
@@ -60,7 +60,7 @@
 # │ dig first bfs            │   ~   │   ~     │   ~   │            │    ~     │       │
 # │ dig & store bfs          │   ~   │   ~     │   ~   │            │    ~     │       │
 # │ %keypath                 │   ~   │   ~     │   ~   │            │    ·     │       │
-# │ %new                     │   ~   │   ~     │   ~   │            │    ~     │       │   +
+# │ %new                     │   ~   │   ~     │   ~   │            │    ~     │       │   ~
 # └──────────────────────────┴───────┴─────────┴───────┴────────────┴──────────┴───────┘
 # + confident
 # ~ will do
@@ -714,7 +714,7 @@ class ::Ww::Keypath::Appender
   def create_pair(key, *, value) : Appender
     case @tip
     in Word::None, Word::Nonterminal
-      push Word::Create.new(Term.of(key), Term.of(value))
+      push Word::Create.new(Term.of(key), Term.of(value), Term.of(value))
     in Word::Terminal
       raise KeypathError.new
     end
@@ -1942,7 +1942,7 @@ module ::Ww::M1::Operator::Item
       candidate = progress.behind
     end
 
-    ahead.call(progress.copy_with(ord: progress.ord + prefix.size, behind: candidate.keypath(&.forward(prefix.size))), suffix).as?(Fb::Match)
+    ahead.call(progress.copy_with(ord: progress.ord + 1, behind: candidate.keypath(&.forward(prefix.size))), suffix).as?(Fb::Match)
   end
 
   def self.match(progress : Progress, item : Plural, matchees, ahead)
@@ -4495,7 +4495,7 @@ module ::Ww::Keypath::Word
   record UpdateValue, key : Term
 
   record None
-  record Create, key : Term, initial : Term
+  record Create, key : Term, initial : Term, value : Term
   record CreateLeaf, key : Term
   record Insert, index : Term::Num, ord : UInt32, initial : Term
   record Pair, key : Term
@@ -4554,7 +4554,7 @@ module ::Ww::Keypath::Word
     when {SYM_CREATE, 2}
       _, key, initial = dict
 
-      Create.new(key, initial)
+      Create.new(key, initial, value: initial)
     when {SYM_INSERT, 3}
       _, index, ord, initial = dict
 
@@ -4568,7 +4568,7 @@ module ::Ww::Keypath::Word
 
   # Yields substructure of *word* and/or *matchee* for the block to check out.
   def checkout(word : Create, matchee : Term, &) : Nil
-    yield word.initial
+    yield word.value
   end
 
   # :ditto:
@@ -4590,7 +4590,7 @@ module ::Ww::Keypath::Word
   end
 
   def terms(word : Create) : Enumerable(Term)
-    {Term.of(:create, word.key, word.initial)}
+    {Term.of(:create, word.key, word.value)}
   end
 
   def terms(word : CreateLeaf) : Enumerable(Term)
@@ -5033,6 +5033,10 @@ module ::Ww::M1
       @neighbors = {} of Word::Atomic => BackmapTrie | BackmapPair
     end
 
+    def mentioned_in?(backspec)
+      @captures.any? { |capture| capture.in?(backspec) || Term.dict(capture).in?(backspec) }
+    end
+
     def mount(keypath : Term::Dict::ItemsView, capture : Term, env : Term::Dict) : Nil
       unless subject = keypath.first?
         @env = env
@@ -5134,21 +5138,26 @@ module ::Ww::M1
         case word
         in Word::Create
           if layer == 1
-            up1, rewrite = neighbor.as(BackmapTrie).morph0(up0, up1, down, backspec, word.initial, applier)
+            up1, rewrite = neighbor.as(BackmapTrie).morph0(up0, up1, down, backspec, word.value, applier)
 
             case rewrite
-            in Rewrite::None then value = word.initial
+            in Rewrite::None then value = word.value
             in Rewrite::One  then value = rewrite.term
             in Rewrite::Many then value = rewrite.list
             end
 
+            # If there were no changes vs. the default, we do not output the optional.
+            #
+            # ?! This should be done, but whether or not this should depend on changes
+            #    is questionable.
+            next if word.initial == value
+
             matchee = matchee.with(word.key, value)
           else
-            up1, value = neighbor.as(BackmapTrie).morph(layer - 1, up0, up1, down, backspec, word.initial, applier)
-            matchee = matchee.with(word.key, value)
+            up1, value = neighbor.as(BackmapTrie).morph(layer - 1, up0, up1, down, backspec, word.value, applier)
 
             relabel ||= [] of {Word::Atomic, Word::Atomic?}
-            relabel << {word, word.copy_with(initial: value)}
+            relabel << {word, word.copy_with(value: value)}
           end
         in Word::CreateLeaf
           next unless layer == 1

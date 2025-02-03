@@ -23,6 +23,10 @@ module Rewrite
       self
     end
 
+    def +(other : Any)
+      other
+    end
+
     def diff(orig : Term)
       self
     end
@@ -47,6 +51,26 @@ module Rewrite
 
     def map(&)
       One.new(Term.of(yield term))
+    end
+
+    def +(other : One)
+      if term == other.term
+        self
+      else
+        Many.new(Term[term, other.term])
+      end
+    end
+
+    def +(other : Many)
+      if other.list.itemsize == 1 && other[0] == term
+        self
+      else
+        Many.new(other.prepend(term))
+      end
+    end
+
+    def +(other : None)
+      self
     end
 
     def diff(orig : Term)
@@ -102,6 +126,24 @@ module Rewrite
           commit.with(index, yield item)
         end
       end)
+    end
+
+    def +(other : One)
+      if list.empty? || (list.itemsize == 1 && list[0] == other.term)
+        other
+      else
+        Many.new(list.append(other.term))
+      end
+    end
+
+    def +(other : Many)
+      if list.empty?
+        other
+      elsif other.list.empty?
+        self
+      else
+        Many.new(list.transaction &.concat(other.list.items))
+      end
     end
 
     def diff(orig : Term)

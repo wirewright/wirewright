@@ -2240,7 +2240,7 @@
   (= {x: (a b), y: (100)} {x: (a 100), y: (b a)}))
 
 (backmap ((%layer (+ a_ b_) x: (%optional qux x_), y: y_) {a: ($down y), b: ($down x)})
-  (= (+ a b y: bar) (+ bar qux x: qux y: bar))
+  (= (+ a b y: bar) (+ bar qux y: bar))
   (= (+ a b x: foo y: bar) (+ bar foo x: foo y: bar)))
 
 ;; Negative pair absent replacement
@@ -3267,6 +3267,17 @@
 ;; Make sure aliases work (do not stomp over each other).
 (backmap ((%all [k0←k1_ x_] (%value k1 v_)) {(k0): (), x: ↑v, v: ↑x})
   (= (qux a qux: b) (b qux: a)))
+
+(backmap (((log (preds_* ⏏tip)) x_) {(preds): (), tip: →x})
+  (= ((log ()) a) ((log (a)) a))
+  (= ((log (a)) b) ((log (b)) b))
+  (= ((log (a b c)) d) ((log (d)) d)))
+
+;; Backmap should not create optionals if they're not accessed in the backmap
+(backmap ((focus (¦ limit: (%optional 10 limit_)) ¦ _ inbox: (event←(pulse @pin_ term_) _*))
+          {})
+  (= (focus () inbox: ((pulse @xs qux)))
+     (focus () inbox: ((pulse @xs qux)))))
 
 ;; %itemseq bounds
 ;;

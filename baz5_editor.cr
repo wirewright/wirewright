@@ -1,8 +1,5 @@
 require "./baz5"
 
-CURSORP  = ML.term(%([_string (%any° | (| _string)) _string (_*) @_]))
-CURSORPE = M1.operator(ML.term(%([_string (%any° | (| _string)) _string (_*) @edge_])))
-
 # Constructs an editor rewriter.
 def editR : Rewriter
   primitives = ProcRuleset.build do
@@ -88,6 +85,9 @@ def editR : Rewriter
 end
 
 EDITR = editR
+
+CURSORP  = ML.term(%([_string (%any° | (| _string)) _string (_*) @_]))
+CURSORPE = M1.operator(ML.term(%([_string (%any° | (| _string)) _string (_*) @edge_])))
 
 def subsume1(cursor, motion)
   Term.of(cursor.morph({3, cursor[3].size, motion}))

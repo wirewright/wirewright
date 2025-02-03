@@ -195,6 +195,13 @@
 C←[lhs←";" | rhs←"" (M←(input ";") _*) @_]
   <> {(M): (), lhs: "\"", rhs: "\"", C: (comment ↑C)}
 
+;; Interact with what appears to be a button.
+(button _ to @_ ⟨C←("" | "" (M←(key enter) _*) @_)⟩)
+  <> {(M): (), (C): ((press) ↑C)}
+
+(button _ (_ to @_) ⟨C←("" | "" (M←(key enter) _*) @_)⟩)
+  <> {(M): (), (C): ((press) ↑C)}
+
 ;; ESCAPE MODE
 
 ;; Enter
@@ -564,5 +571,3 @@ GP←⟨P←⟨[_string | _string (M←(move-parent-above) _*) @_]⟩⟩
 
 [_string | _string (M←(expel-mid _ _ (_*) (err_*)) _*) @_]
   <> {(M): ↑err}
-
-
