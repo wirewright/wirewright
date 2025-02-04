@@ -1942,7 +1942,11 @@ module ::Ww::M1::Operator::Item
       candidate = progress.behind
     end
 
-    ahead.call(progress.copy_with(ord: progress.ord + 1, behind: candidate.keypath(&.forward(prefix.size))), suffix).as?(Fb::Match)
+    case fb = ahead.call(progress.copy_with(ord: progress.ord + 1, behind: candidate.keypath(&.forward(prefix.size))), suffix)
+    in Fb::Match, Fb::Interrupt
+      fb
+    in Fb::Mismatch
+    end
   end
 
   def self.match(progress : Progress, item : Plural, matchees, ahead)
@@ -4470,6 +4474,10 @@ module ::Ww::M1
   def self.match?(pattern : Term, matchee : Term, *, env : Term::Dict = Term[], opt = DEFAULT_OPT_LEVEL, **kwargs)
     Operator.match?(env, operator(pattern, opt: opt), matchee, **kwargs)
   end
+
+  def self.probe?(pattern : Term, matchee : Term, *, env : Term::Dict = Term[], opt = DEFAULT_OPT_LEVEL, **kwargs)
+    Operator.probe?(env, operator(pattern, opt: opt), matchee, **kwargs)
+  end
 end
 
 module ::Ww::Keypath::Word
@@ -5385,22 +5393,35 @@ module ::Ww::M1
     rewrite.as?(Rewrite::Some) || Rewrite.one(matchee)
   end
 
-  def self.backmap(*args, **kwargs) : Term?
+  def self.backmapr(operator : Operator::Any, backspec : Term, matchee : Term, *, env = Term[], **kwargs) : Rewrite::Any
+    case fb = Operator.feedback(env, operator, matchee, keypaths: true)
+    in Operator::Fb::Match
+      backmapr(fb.envs, backspec, matchee, **kwargs)
+    in Operator::Fb::Mismatch
+      Rewrite.none
+    end
+  end
+
+  def self.backmapr(pattern : Term, backspec : Term, matchee : Term, **kwargs) : Rewrite::Any
+    backmapr(operator(pattern), backspec, matchee, **kwargs)
+  end
+
+  def self.backmap(*args, **kwargs)
     rewrite = backmapr(*args, **kwargs)
     rewrite.term?
   end
 
-  def self.backmap?(operator : Operator::Any, backspec : Term, matchee : Term, *, env = Term[], applier = DefaultApplier.new) : Term?
-    case fb = Operator.feedback(env, operator, matchee, keypaths: true)
-    in Operator::Fb::Match
-      backmap(fb.envs, backspec, matchee, applier: applier)
-    in Operator::Fb::Mismatch
-    end
-  end
+  # def self.backmap?(operator : Operator::Any, backspec : Term, matchee : Term, *, env = Term[], applier = DefaultApplier.new) : Term?
+  #   case fb = Operator.feedback(env, operator, matchee, keypaths: true)
+  #   in Operator::Fb::Match
+  #     backmap(fb.envs, backspec, matchee, applier: applier)
+  #   in Operator::Fb::Mismatch
+  #   end
+  # end
 
-  def self.backmap?(pattern : Term, backspec : Term, matchee : Term, *, env = Term[], applier = DefaultApplier.new) : Term?
-    backmap?(operator(pattern), backspec, matchee, env: env, applier: applier)
-  end
+  # def self.backmap?(pattern : Term, backspec : Term, matchee : Term, *, env = Term[], applier = DefaultApplier.new) : Term?
+  #   backmap?(operator(pattern), backspec, matchee, env: env, applier: applier)
+  # end
 end
 
 class ::Ww::KeypathError < Exception
@@ -6024,6 +6045,7 @@ struct Pattern
   def response(matchee : Term, *, env = Term[], keypaths = false) : Pr::Any
     fb = nil
 
+    # TODO: remove this or somehow make this "official"
     {% if flag?(:profile) %}
       if keypaths
         fb = O.feedback(env, @operator, matchee, keypaths: keypaths)
@@ -6048,6 +6070,10 @@ struct Pattern
     in O::Fb::MatchMany then Pr::Many.new(self, fb.envs)
     in O::Fb::Mismatch  then Pr::Neg.new
     end
+  end
+
+  def probe?(matchee : Term, *, env = Term[]) : Bool
+    O.probe?(env, @operator, matchee)
   end
 
   def_equals_and_hash @index
@@ -6171,6 +6197,11 @@ class PatternSet
     self.select(selector, base) { true }
   end
 
+  # Same as `select`, but parses *selector* and *base* for you.
+  def self.selectp(selector : String, base : String) : PatternSet
+    self.select(ML.term(selector), ML.terms(base))
+  end
+
   def includes?(term : Term) : Bool
     # ?! Should we use .probe? here?
     !responses(term).empty?
@@ -6194,20 +6225,20 @@ class PatternSet
       .orelse { response(@headless, matchee) }
   end
 
-  def responses(matchee : Term) : Iterator(Pr::Pos)
+  def candidates(matchee : Term) : Iterator(Pattern)
     headed = {matchee}.each
       .compact_map(&.as_d?)
       .compact_map(&.items.first?)
       .compact_map { |head| @headed[head]? }
       .flat_map(&.each)
-      .map(&.response(matchee))
-      .select(Pr::Pos)
 
     headless = @headless.each
-      .map(&.response(matchee))
-      .select(Pr::Pos)
 
     headed.chain(headless)
+  end
+
+  def responses(matchee : Term) : Iterator(Pr::Pos)
+    candidates(matchee).map(&.response(matchee)).select(Pr::Pos)
   end
 end
 

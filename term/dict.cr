@@ -128,6 +128,9 @@ module Ww
   module Tail
   end
 
+  module Hi
+  end
+
   # Represents a dictionary: an immutable, persistent collection of key-value
   # pairs supporting efficient, near-O(1) insert, delete, and lookup.
   class Term::Dict
@@ -732,6 +735,10 @@ module Ww
 
     def where(key : Tail.class, eq value) : Dict
       self.with(items.size, value)
+    end
+
+    def where(key : Hi.class, eq value) : Dict
+      self.with(hi, value)
     end
 
     def where(key, eq fn : Term -> Term) : Dict

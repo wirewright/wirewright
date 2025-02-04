@@ -855,8 +855,9 @@ def wrapR(ctx, pdisasm, reshape, punwrap, assemble, term0, successor)
 
   filled0 = M1.bsubst(reshape, ienv)
 
-  rewrite = successor.call(ctx, Rewrite.one(filled0))
-  rewrite.reduce do |filled1|
+  progress = Rewrite.one(filled0)
+  progress = successor.call(ctx, progress).as?(Rewrite::Some) || progress
+  progress.reduce do |filled1|
     next Rewrite.none unless oenv = M1::Operator.match?(Term[], punwrap, filled1)
     next Rewrite.none unless term1 = oenv[:out]?
 
@@ -880,8 +881,8 @@ end
 # - Blanks *assemble* are substituted with captures from the merged match env.
 # - The resulting term is output as the rewritten term.
 #
-# TODO: *pdisasm* and *punwrap* currently do not support sources (like `%item°`);
-# only the first match env will be considered, the rest are going to be discarded.
+# TODO: *pdisasm* and *punwrap* currently do not support sources (such as `%item°`);
+# only the first match env will be considered, and remaining ones discarded.
 def wrapR(pdisasm : M1::Operator::Any, reshape : Term, successor : Rewriter, punwrap : M1::Operator::Any, assemble : Term) : Rewriter
   Rewriter.new do |ctx, staging|
     staging.reduce { |term| wrapR(ctx, pdisasm, reshape, punwrap, assemble, term, successor) }
@@ -934,6 +935,9 @@ end
 # - *successors* are not required to modify all captures. Some captures may
 #   be made simply to be able to reconstruct the shape of the input term
 #   in *assemble*.
+#
+# TODO: *pdisasm* currently does not support sources (such as `%item°`); only
+# the first match env will be considered, and remaining ones discarded.
 def multipartR(pdisasm : M1::Operator::Any, successors : Enumerable({Term, Rewriter}), assemble : Term) : Rewriter
   Rewriter.new do |ctx, staging|
     staging.reduce { |term| multipartR(ctx, term, pdisasm, successors, assemble) }
@@ -955,6 +959,14 @@ end
 # and the assemble template are the same.
 def multipartR(schema : Term | String, successors : Enumerable({Term, Rewriter})) : Rewriter
   multipartR(schema, successors, schema)
+end
+
+# Pushes *env* for *successor*. Pops once *successor* is done.
+def using(env : Term::Dict, successor : Rewriter)
+  Rewriter.new do |ctx, staging|
+    # NOTE: we actually do not pop since ctx is immutable. An illusion!
+    successor.call(ctx.copy_with(envs: ctx.envs.append(env)), staging)
+  end
 end
 
 def preview1(term, cursor : Term::Dict::ItemsView, leaf : Rewrite::Some)
@@ -995,12 +1007,15 @@ end
 REWRITE_SEEDER      = Random::PCG32.new
 REWRITE_SEEDER_LOCK = Mutex.new
 
-def rewrite(term : Term, rewriter : Rewriter) : Term
+def rewrite0(term : Term, rewriter : Rewriter) : Rewrite::Any
   seed = REWRITE_SEEDER_LOCK.synchronize { REWRITE_SEEDER.rand(UInt64) }
   rng = Random::PCG32.new(seed)
   ctx = RewriterContext.new(rng, keypath: nil)
+  rewriter.call(ctx, Rewrite.one(term))
+end
 
-  rewrite = rewriter.call(ctx, Rewrite.one(term))
+def rewrite(term : Term, rewriter : Rewriter) : Term
+  rewrite = rewrite0(term, rewriter)
   rewrite.term? || term
 end
 
@@ -1038,7 +1053,22 @@ end
     end
   end
 
-  pp rewrite(Term.of(:qux, {:+, 1, 2}, {:*, 3, 4}), multipartR(%[(qux a_ b_)], { {Term.of(:a), callR(mod1)}, {Term.of(:b), callR(mod2)} }))
+  passable = PatternSet.select(ML.term(%[pattern_]), ML.terms(<<-WWML
+  (passage_* ¦ _)
+  {_ qux: passage_}
+  WWML
+  ))
+
+  impassable = PatternSet.select(ML.term(%[pattern_]), ML.terms(<<-WWML
+  WWML
+  ))
+
+  # (<pred> child)
+  # ((<pred> parent) child)
+  # (((<pred> grandparent) parent) child)
+  # ... etc -- edge rewrite
+
+  pp rewrite(Term.of(:qux, {:+, 1, 2}, {:*, 3, 4}, a: 100, b: 200, qux: 300),  chainR(wrapR(%[in_], %[in_], noR, %[out_], %[(out_)]), edgeR(effectR(noR) { |re| pp re})))
 
   # puts rewrite(Term.of(:+, 1, 2), wrapR(%[(+ a_ b_)], %[(node (+ (literal a_) (literal b_)))], %[(node (literal out_))], callR(mod)))
   # puts rewrite(Term.of(:*, 5, 3), wrapR(%[(node in_)], callR(mod), %[(node out_)]))
@@ -1091,4 +1121,10 @@ end
 # [ ] improve debugging: instead of sending keypath/etc. to Observer, send Reports of some kind,
 #     including those with keypath/etc (as now). One of such messages would be NewRewritee, very very
 #     useful for debugging backmaps (since they, unlike rules, cannot be readily/easily embedded into
-#     the original term. It is possible but needlessly hard.
+#     the original term. It is possible but needlessly hard. BUT THEN, maybe it is possible to embed
+#     backmaps into the original term? That'd be much more visual! We need backmaps to give us keypath
+#     into the original term in BackmapApplier for that to work.
+#    - in the simplest version, to highlight rewrites we'd need the parser to cooperate: the parser
+#      can give us kp => b...e map; we take a term, ML.string it, ML.term_with_keypaths the resulting
+#      string, and then lookup the rewrite's keypath in ML.term_with_keypaths; this will give us b...e
+#      which we can highlight in the string by e.g. surrounding b...e with highlighting escape sequences.

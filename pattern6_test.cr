@@ -84,7 +84,7 @@ def process(queue, testcase, ctx)
         first = true
         match = ->(matchee : Term) do
           begin
-            ctx.stats.run { M1.backmap?(pattern, backdict, matchee) }
+            ctx.stats.run { M1.backmapr(pattern, backdict, matchee).term? }
           ensure
             if first
               ctx.stats.account

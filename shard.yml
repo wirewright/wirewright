@@ -13,6 +13,9 @@ dependencies:
   crsfml:
     github: oprypin/crsfml
     commit: e6f5102
+  execution_context:
+    github: ysbaddaden/execution_context
+    branch: main
 # dependencies:
 #   pg:
 #     github: will/crystal-pg
