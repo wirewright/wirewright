@@ -694,6 +694,13 @@ module Ww
       end
     end
 
+    # SAME
+    def lshift
+      pairspart.transaction do |commit|
+        commit.concat(1...itemsize) { |index| self[index] }
+      end
+    end
+
     private def with_default(key : ITerm, value : Term) : Dict
       added, pairs = @pairs.add(Probes::AssocPairImm.new(key.upcast, value))
       unless added # Overridden or completely unchanged

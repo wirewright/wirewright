@@ -11,114 +11,45 @@ require "./wirewright"
 require "execution_context"
 require "./baz5"
 
-# Functions related to the µsoma document queue.
-# TODO: maybe we should get rid of this, for simplicity? It's just a prepend()/append()
-# And we're going to optimize the former some day in the future...
-module Q
-  extend self
-
-  # The empty queue.
-  ZERO = Term[:queue, Term[], lo: -1, hi: -1]
-
-  # Returns `true` if *dict* appears to be a queue.
-  def queue?(dict : Term::Dict) : Bool
-    Term.case(dict) do
-      givenp %(queue _dict lo: _number hi: _number) { true }
-      otherwise { false }
-    end
-  end
-
-  # Returns `true` if *queue* is empty.
-  def empty?(queue : Term::Dict) : Bool
-    first?(queue).nil?
-  end
-
-  # Returns `true` if *queue* consists of a single item and that single item is *term*.
-  def singleton?(queue : Term::Dict, term : Term) : Bool
-    Term.case(queue) do
-      givenpi %(queue q_dict lo: lo_number hi: _number) { q.size == 1 && q[lo] == term }
-    end
-  end
-
-  # Returns the amount of items in *queue*.
-  def size(queue : Term::Dict) : Int32
-    Term.case(queue) do
-      givenpi %(queue q_dict lo: _number hi: _number) { q.size }
-    end
-  end
-
-  # Returns the first item in the queue. Returns `nil` if there are no items in
-  # the queue. Raises `ArgumentError` if the queue is malformed.
-  def first?(queue : Term::Dict) : Term?
-    Term.case(queue) do
-      givenpi %(queue _dict lo: lo_number hi: _number) { queue[1, lo]? }
-    end
-  end
-
-  # Rewrites *queue0* according to the given *command*. Returns the rewritten queue.
-  # Raises `ArgumentError` if *queue0* or *command* are malformed.
-  #
-  # Supported *command*s:
-  #
-  # - `(dequeue)`: remove the first item from the queue. See `first?` if you want
-  #   to retrieve it first.
-  # - `(enqueue t_)`: add `t_` to the back of the queue.
-  # - `(interject t_)`: add `t_` to the front of the queue.
-  def next(queue0 : Term::Dict, command : Term) : Term::Dict
-    Term.case({queue0, command}) do
-      givenpi %[(queue () lo: _number hi: _number) (dequeue)] do
-        queue0
-      end
-
-      givenpi %[(queue q_dict lo: lo_number hi: _number) (dequeue)] do
-        queue0.morph({1, q.without(lo)}, {:lo, lo + 1})
-      end
-
-      givenpi %[(queue _dict lo: _number hi: hi_number) (enqueue t_)] do
-        queue0.morph({1, hi, t}, {:hi, hi + 1})
-      end
-
-      givenpi %[(queue _dict lo: lo_number hi: _number) (interject t_)] do
-        queue0.morph({1, lo - 1, t}, {:lo, lo - 1})
-      end
-    end
-  end
-end
-
 module D
   extend self
 
-  Queue = Term.of(:"(queue)")
+  struct Q
+    def initialize(@data : Term::Dict)
+      unless @data.itemsonly?
+        raise ArgumentError.new("expected an itemsonly data dict for Q")
+      end
+    end
 
-  # Returns *document*'s queue (`Q`).
-  def queue(document : Term::Dict) : Term::Dict
-    return Q::ZERO unless queue = document[Queue]?
-    return Q::ZERO unless queue = queue.as_d?
-    return Q::ZERO unless Q.queue?(queue)
+    # TODO: remove in favor of (root, path) : Q (aka more granularity,
+    # queue does not necessarily belong to a document)
+    def self.of(document : Term::Dict)
+      new(document[:events]?.try(&.as_itemsonly_d?) || Term[])
+    end
 
-    queue
-  end
+    def empty?
+      @data.empty?
+    end
 
-  # Sets the *document*'s queue to *queue*.
-  def set(document : Term::Dict, *, queue : Term::Dict)
-    document.with(Queue, queue)
-  end
+    def first? : Term?
+      @data[0]?
+    end
 
-  # Constructs an "interject" command for the control queue.
-  def interject(*args, **kwargs) : Term
-    Term.of(:interject, Term.of(*args, **kwargs))
-  end
+    def enqueue(*args, **kwargs) : Q
+      Q.new(@data.append(Term.of(*args, **kwargs)))
+    end
 
-  # Constructs an "enqueue" command for the control queue.
-  def enqueue(*args, **kwargs) : Term
-    Term.of(:enqueue, Term.of(*args, **kwargs))
-  end
+    def interject(*args, **kwargs) : Q
+      Q.new(@data.prepend(Term.of(*args, **kwargs)))
+    end
 
-  def exeq(document, command : Term)
-    queue0 = queue(document)
-    queue1 = Q.next(queue0, command)
+    def dequeue : Q
+      Q.new(@data.lshift)
+    end
 
-    set(document, queue: queue1)
+    def commit(document : Term::Dict) : Term::Dict
+      document.with(:events, @data)
+    end
   end
 
   def passable_range?(node : Term) : Range(Int32, Int32)?
@@ -252,6 +183,7 @@ module D
   end
 
   # Returns a path to the nearest enclosing document.
+  # TODO: remove in favor of more granularity.
   def docpath(root : Term, nodepath : Term::Dict) : Term::Dict
     path = nodepath.items.grow(-1)
 
@@ -332,17 +264,17 @@ module D
     document1 = document0
 
     builder.events.each do |event|
-      document1 = exeq(document1, enqueue(event))
+      document1 = Q.of(document1).enqueue(event).commit(document1)
     end
 
     builder.locals.each do |scope, k, v|
-      document1 = document1.morph({:"(locals)", scope, k, v})
+      document1 = document1.morph({:locals, scope, k, v})
     end
 
     # Disappear allows the node to remove itself as if it didn't exist. This
     # lets us prevent expulsion.
     if builder.disappear? && (identity = identity?(node))
-      document1 = document1.morph({:"(population)", identity, nil})
+      document1 = document1.morph({:population, identity, nil})
     end
 
     # Replace document with its new version.
@@ -356,7 +288,7 @@ module D
     end
 
     builder.jobs.each do |job|
-      root = root.morph({:"(jobs)", job, true})
+      root = root.morph({:jobs, job, true})
     end
 
     Term.of(root)
@@ -437,7 +369,7 @@ module D
           document = follow(root1, docpath)
 
           root1 = effect(root1, nodepath, node0) do
-            if msg = document[:"(locals)", :cells, cin]?
+            if msg = document[:locals, :cells, cin]?
               event :pulse, pout, msg
             end
             backmap %[(button _ as _ to @_ (action_ _*))], %[{(action): ()}]
@@ -461,7 +393,7 @@ module D
           document = follow(root1, docpath)
 
           root1 = effect(root1, nodepath, node0) do
-            if msg = document[:"(locals)", :cells, cin]?
+            if msg = document[:locals, :cells, cin]?
               event :pulse, pout, msg
             end
             backmap %[(button _ to _ (action_ _*))], %[{(action): ()}]
@@ -551,7 +483,7 @@ module D
         docpath = docpath(root1, nodepath)
         document = follow(root1, docpath)
 
-        if state = document[:"(locals)", :cells, cin]?
+        if state = document[:locals, :cells, cin]?
           root1 = effect(root1, nodepath, node0) do
             change job: {program: body, env: {"_": input, state: state}}
           end
@@ -601,7 +533,7 @@ module D
           docpath = docpath(root1, nodepath)
           document = follow(root1, docpath).as_d
 
-          if partner.in?(document[:"(population)"]? || Term[])
+          if partner.in?(document[:population]? || Term[])
             change state: :paired
           else
             event :pulse, pout, msg
@@ -667,15 +599,15 @@ module D
     Term.case(identity) do
       matchpi %[(cell @cout_)] do
         document = follow(root1, docpath).as_d
-        document = document.morph({:"(locals)", :cells, cout, nil})
+        document = document.morph({:locals, :cells, cout, nil})
 
-        assign(root1, docpath, exeq(document, enqueue(:"cell/removed", cout)))
+        assign(root1, docpath, Q.of(document).enqueue(:"cell/removed", cout).commit(document))
       end
 
       matchpi %[(transform @pin_ _)] do
         document = follow(root1, docpath).as_d
 
-        assign(root1, docpath, exeq(document, enqueue(:feedback, :cancelled, pin)))
+        assign(root1, docpath, Q.of(document).enqueue(:feedback, :cancelled, pin).commit(document))
       end
 
       otherwise { root1 }
@@ -696,10 +628,9 @@ module D
     return root1 unless document0 = follow?(root1, docpath)
     return root1 unless document0 = document0.as_d?
 
-    queue0 = queue(document0)
-    if event = Q.first?(queue0)
-      queue1 = Q.next(queue0, Term.of({:dequeue}))
-      document1 = set(document0, queue: queue1)
+    queue = Q.of(document0)
+    if event = queue.first?
+      document1 = queue.dequeue.commit(document0)
     else
       event = Term.of(:cycle)
       document1 = document0
@@ -723,7 +654,7 @@ module D
   def transition(root0 : Term, docpath : Term::Dict)
     document0 = follow(root0, docpath)
 
-    population0 = document0[:"(population)"]? || Term[]
+    population0 = document0[:population]? || Term[]
     population1 = Term[]
 
     nodepath = successor?(root0, docpath)
@@ -759,29 +690,24 @@ module D
       root1 = expel(root0, root1, docpath, identity)
     end
 
-    document1 = follow(root1, docpath).morph({:"(population)", population1})
+    document1 = follow(root1, docpath).morph({:population, population1})
 
     assign(root1, docpath, document1)
   end
 
   def publish(root : Term::Dict)
-    if results = root[:"(results)"]?
+    if results = root[:results]?
       results.each_entry do |job, value|
-        root = exeq(root, enqueue(:"job/completed", job, value))
+        root = Q.of(root).enqueue(:"job/completed", job, value).commit(root)
       end
-      root = root.without(:"(results)")
+      root = root.without(:results)
     end
 
     root
   end
 
   def unchanged?(root0 : Term::Dict, root1 : Term::Dict) : Bool
-    return false unless pipe(root0, queue, Q.empty?)
-    return false unless pipe(root1, queue, Q.empty?)
-
-    # We remove Queue because two empty Queues may contain different hi/lo,
-    # messing up the raw equality check that we're doing here.
-    root0.without(Queue) == root1.without(Queue)
+    Q.of(root1).empty? && root0 == root1
   end
 
   def run(root0 : Term::Dict, & : Term::Dict -> Term::Dict)
@@ -979,11 +905,11 @@ while true
 
     running1 = Set(Term).new
 
-    (im[:"(jobs)"]? || Term[]).each_entry do |job, _|
+    (im[:jobs]? || Term[]).each_entry do |job, _|
       running1 << job
     end
 
-    im = im.without(:"(jobs)")
+    im = im.without(:jobs)
 
     lock.synchronize do
       (running1 - running0).each do |job|
@@ -1013,7 +939,7 @@ while true
 
       # Import job results
       results.each do |job, value|
-        im = im.morph({:"(results)", job, value})
+        im = im.morph({:results, job, value})
         running0.delete(job)
       end
       results.clear
