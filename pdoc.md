@@ -459,7 +459,7 @@ transformations are supported:
 - `(/ n_number)`: divides a number matchee by `n`: e.g. `(%pipe (/ 2) n_)`. Turns into
   a nevermatch if `n` is zero: `(%pipe (/ 0) this_will_never_match_)`.
 - `(div n_number)`: integer division of a number matchee by `n`: e.g. `(%pipe (div 10) x_)`
-  will match `42` with `{x: 40}`. Live `/`, it is a nevermatch if `n=0`
+  will match `42` with `{x: 40}`. Like `/`, it is a nevermatch if `n=0`
 - `(mod n_number)`: remainder after integer division of a number matchee by `n`:
   e.g. `(%pipe (mod 10) x_)` will match `42` with `{x: 2}`. Like `/`, it is a nevermatch
   if `n=0`.
