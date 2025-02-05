@@ -8,11 +8,16 @@
 # hopefully it turns into something nicer one day.
 
 require "./wirewright"
-require "execution_context"
+# require "execution_context"
 require "./baz5"
 
 module D
   extend self
+
+  Cells         = Term[:".cells"]
+  Population    = Term[:".population"]
+  JobsPending   = Term[:".jobs/pending"]
+  JobsCompleted = Term[:".jobs/completed"]
 
   struct Q
     def initialize(@data : Term::Dict)
@@ -48,7 +53,11 @@ module D
     end
 
     def commit(document : Term::Dict) : Term::Dict
-      document.with(:events, @data)
+      if @data.empty?
+        document.without(:events)
+      else
+        document.with(:events, @data)
+      end
     end
   end
 
@@ -150,7 +159,7 @@ module D
     return unless focus = follow?(root, rangepath)
 
     # We're doing a DFS here so first check if there is an opportunity to descend.
-    if root_dict = root.as_d?
+    if (root_dict = root.as_d?) && root_dict.itemsize > 0
       range = root.same?(focus) ? (0...root_dict.itemsize) : passable_range?(focus)
 
       if range
@@ -201,7 +210,7 @@ module D
   class EffectBuilder
     getter events = [] of Term
     getter rewrite : Rewrite::Any = Rewrite.none
-    getter locals = [] of {Term, Term, Term}
+    getter cells = [] of {Term, Term}
     getter jobs = [] of Term
     getter? disappear = false
 
@@ -212,8 +221,8 @@ module D
       @disappear = true
     end
 
-    def local(scope, k, v)
-      locals << {Term.of(scope), Term.of(k), Term.of(v)}
+    def cell(k, v)
+      cells << {Term.of(k), Term.of(v)}
     end
 
     def schedule(job)
@@ -267,14 +276,14 @@ module D
       document1 = Q.of(document1).enqueue(event).commit(document1)
     end
 
-    builder.locals.each do |scope, k, v|
-      document1 = document1.morph({:locals, scope, k, v})
+    builder.cells.each do |k, v|
+      document1 = document1.morph({Cells, k, v})
     end
 
     # Disappear allows the node to remove itself as if it didn't exist. This
     # lets us prevent expulsion.
     if builder.disappear? && (identity = identity?(node))
-      document1 = document1.morph({:population, identity, nil})
+      document1 = document1.morph({Population, identity, nil})
     end
 
     # Replace document with its new version.
@@ -288,14 +297,11 @@ module D
     end
 
     builder.jobs.each do |job|
-      root = root.morph({:jobs, job, true})
+      root = root.morph({JobsPending, job, true})
     end
 
     Term.of(root)
   end
-
-  # - log to cell limit
-  # - tests (p6_test) support, move examples to tests
 
   # TODO: this does not belong here
   private def rightmost(xs, n)
@@ -317,7 +323,7 @@ module D
       givenpi %[(cell v_ @cout_ _*) invited] do
         root1 = effect(root1, nodepath, node0) do
           event :"cell/created", cout, v
-          local :cells, cout, v
+          cell cout, v
         end
 
         {root1, successor?(root1, nodepath)}
@@ -330,7 +336,7 @@ module D
       givenpi %[(cell v0_ @cout_) (assign @cout_ v1_)] do
         root1 = effect(root1, nodepath, node0) do
           event :"cell/updated", cout, v0, v1
-          local :cells, cout, v1
+          cell cout, v1
           backmap %[(cell v_ @_)], v: v1
         end
 
@@ -341,7 +347,7 @@ module D
         if M1.probe?(pattern, v1)
           root1 = effect(root1, nodepath, node0) do
             event :"cell/updated", cout, v0, v1
-            local :cells, cout, v1
+            cell cout, v1
             backmap %[(cell v_ @_ _*)], v: v1
           end
         end
@@ -349,12 +355,15 @@ module D
         {root1, successor?(root1, nodepath)}
       end
 
-      givenpi %[(cell vs0←(_*) @cout_) (assign/log @cout_ v_)] do
-        vs1 = vs0.append(v)
+      # TODO: instead of (%number (whole _) > 0) we should have (%number i32 > 0). All +-variants must
+      # allow the exclusion of zero this way.
+
+      givenpi %[(cell vs0←(_*) @cout_) (assign/log @cout_ v_ limit←(%number (whole _) > 0))] do
+        vs1 = rightmost(vs0, limit.to(Int32) - 1).append(v)
 
         root1 = effect(root1, nodepath, node0) do
           event :"cell/updated", cout, vs0, vs1
-          local :cells, cout, vs1
+          cell cout, vs1
           backmap %[(cell v_ @_)], v: vs1
         end
 
@@ -369,7 +378,7 @@ module D
           document = follow(root1, docpath)
 
           root1 = effect(root1, nodepath, node0) do
-            if msg = document[:locals, :cells, cin]?
+            if msg = document[Cells, cin]?
               event :pulse, pout, msg
             end
             backmap %[(button _ as _ to @_ (action_ _*))], %[{(action): ()}]
@@ -393,7 +402,7 @@ module D
           document = follow(root1, docpath)
 
           root1 = effect(root1, nodepath, node0) do
-            if msg = document[:locals, :cells, cin]?
+            if msg = document[Cells, cin]?
               event :pulse, pout, msg
             end
             backmap %[(button _ to _ (action_ _*))], %[{(action): ()}]
@@ -477,47 +486,90 @@ module D
         {root1, successor?(root1, nodepath)}
       end
 
-      # Schedule job
-      givenpi %[(transform @pin_ to @pout_ with @cin_ body_) (pulse @pin_ input_)] do
-        # FIXME: how to get rid of this
-        docpath = docpath(root1, nodepath)
-        document = follow(root1, docpath)
+      # TODO: feedback [sleeping] queue with 3PC-ish
 
-        if state = document[:locals, :cells, cin]?
-          root1 = effect(root1, nodepath, node0) do
-            change job: {program: body, env: {"_": input, state: state}}
+      # Stateful transform
+      begin
+        # Schedule job
+        givenpi %[(transform @pin_ to @pout_ with @cin_ body_) (pulse @pin_ input_)] do
+          # FIXME: how to get rid of this
+          docpath = docpath(root1, nodepath)
+          document = follow(root1, docpath)
+
+          if state = document[Cells, cin]?
+            root1 = effect(root1, nodepath, node0) do
+              change job: {program: body, env: {"_": input, state: state}}
+            end
           end
+
+          {root1, successor?(root1, nodepath)}
         end
 
-        {root1, successor?(root1, nodepath)}
+        # Send feedback wait
+        givenpi %[(transform @pin_ to @_ with @_ _ ¦ () job_) invited] do
+          root1 = effect(root1, nodepath, node0) do
+            event :feedback, :wait, pin
+            schedule job
+          end
+
+          {root1, successor?(root1, nodepath)}
+        end
+
+        # Wait for the job to complete
+        givenpi %[(transform @pin_ to @pout_ with @cin_ body_ job: job_) (job/completed job_ v_)] do
+          root1 = effect(root1, nodepath, node0) do
+            event :feedback, :ready, pin
+            event :pulse, pout, v
+            clear :job
+            disappear
+          end
+
+          {root1, successor?(root1, nodepath)}
+        end
       end
 
-      # Send feedback wait
-      givenpi %[(transform @pin_ to @_ with @_ _ ¦ () job_) invited] do
-        root1 = effect(root1, nodepath, node0) do
-          event :feedback, :wait, pin
-          schedule job
+      # Stateless transform
+      begin
+        # Schedule job
+        givenpi %[(transform @pin_ to @pout_ body_) (pulse @pin_ input_)] do
+          # FIXME: how to get rid of this
+          docpath = docpath(root1, nodepath)
+          document = follow(root1, docpath)
+
+          root1 = effect(root1, nodepath, node0) do
+            change job: {program: body, env: {"_": input}}
+          end
+
+          {root1, successor?(root1, nodepath)}
         end
 
-        {root1, successor?(root1, nodepath)}
-      end
+        # Send feedback wait
+        givenpi %[(transform @pin_ to @_ _ ¦ () job_) invited] do
+          root1 = effect(root1, nodepath, node0) do
+            event :feedback, :wait, pin
+            schedule job
+          end
 
-      # Wait for the job to complete
-      givenpi %[(transform @pin_ to @pout_ with @cin_ body_ job: job_) (job/completed job_ v_)] do
-        root1 = effect(root1, nodepath, node0) do
-          event :feedback, :ready, pin
-          event :pulse, pout, v
-          clear :job
-          disappear
+          {root1, successor?(root1, nodepath)}
         end
 
-        {root1, successor?(root1, nodepath)}
+        # Wait for the job to complete
+        givenpi %[(transform @pin_ to @pout_ body_ job: job_) (job/completed job_ v_)] do
+          root1 = effect(root1, nodepath, node0) do
+            event :feedback, :ready, pin
+            event :pulse, pout, v
+            clear :job
+            disappear
+          end
+
+          {root1, successor?(root1, nodepath)}
+        end
       end
 
       # Initialize `absence` to newborn state.
       givenpi %[(absence @_ as _ to @_) cycle] do
         root1 = effect(root1, nodepath, node0) do
-          change state: :newborn
+          change ".state": :newborn
         end
 
         {root1, successor?(root1, nodepath)}
@@ -525,7 +577,7 @@ module D
 
       # Whenever we're in newborn state, on cycle, look around to see if the cell's
       # identity is in the population.
-      givenpi %[(absence @cin_ as msg_ to @pout_ state: newborn) cycle] do
+      givenpi %[(absence @cin_ as msg_ to @pout_ .state: newborn) cycle] do
         root1 = effect(root1, nodepath, node0) do
           partner = Term.of(:cell, cin)
 
@@ -533,29 +585,29 @@ module D
           docpath = docpath(root1, nodepath)
           document = follow(root1, docpath).as_d
 
-          if partner.in?(document[:population]? || Term[])
-            change state: :paired
+          if partner.in?(document[Population]? || Term[])
+            change ".state": :paired
           else
             event :pulse, pout, msg
-            change state: :unpaired
+            change ".state": :unpaired
           end
         end
 
         {root1, successor?(root1, nodepath)}
       end
 
-      givenpi %[(absence @cin_ as msg_ to @pout_ state: paired) (cell/removed @cin_)] do
+      givenpi %[(absence @cin_ as msg_ to @pout_ .state: paired) (cell/removed @cin_)] do
         root1 = effect(root1, nodepath, node0) do
           event :pulse, pout, msg
-          change state: :unpaired
+          change ".state": :unpaired
         end
 
         {root1, successor?(root1, nodepath)}
       end
 
-      givenpi %[(absence @cin_ as _ to @_ state: unpaired) (cell/created @cin_ _)] do
+      givenpi %[(absence @cin_ as _ to @_ .state: unpaired) (cell/created @cin_ _)] do
         root1 = effect(root1, nodepath, node0) do
-          change state: :paired
+          change ".state": :paired
         end
 
         {root1, successor?(root1, nodepath)}
@@ -599,7 +651,7 @@ module D
     Term.case(identity) do
       matchpi %[(cell @cout_)] do
         document = follow(root1, docpath).as_d
-        document = document.morph({:locals, :cells, cout, nil})
+        document = document.morph({Cells, cout, nil})
 
         assign(root1, docpath, Q.of(document).enqueue(:"cell/removed", cout).commit(document))
       end
@@ -644,8 +696,16 @@ module D
 
   def identity?(node : Term)
     Term.case(node) do
-      matchpi %{(cell _ @cout_ _*)} { Term.of(:cell, cout) }
-      matchpi %{(transform @pin_ to @_ with _ _ ¦ () job_)} { Term.of(:transform, pin, job) }
+      matchpi %{(cell _ @cout_ _*)} do
+        Term.of(:cell, cout)
+      end
+
+      matchpi(
+        %{(transform @pin_ to @_ with _ _ ¦ () job_)},
+        %{(transform @pin_ to @_ _ ¦ () job_)},
+      ) do
+        Term.of(:transform, pin, job)
+      end
 
       otherwise {}
     end
@@ -654,7 +714,7 @@ module D
   def transition(root0 : Term, docpath : Term::Dict)
     document0 = follow(root0, docpath)
 
-    population0 = document0[:population]? || Term[]
+    population0 = document0[Population]? || Term[]
     population1 = Term[]
 
     nodepath = successor?(root0, docpath)
@@ -690,17 +750,17 @@ module D
       root1 = expel(root0, root1, docpath, identity)
     end
 
-    document1 = follow(root1, docpath).morph({:population, population1})
+    document1 = follow(root1, docpath).morph({Population, population1})
 
     assign(root1, docpath, document1)
   end
 
   def publish(root : Term::Dict)
-    if results = root[:results]?
+    if results = root[JobsCompleted]?
       results.each_entry do |job, value|
         root = Q.of(root).enqueue(:"job/completed", job, value).commit(root)
       end
-      root = root.without(:results)
+      root = root.without(JobsCompleted)
     end
 
     root
@@ -727,231 +787,208 @@ module D
   end
 end
 
-# test cell invited/expelled, changes node, absence node
-root = ML.terms(<<-WWML
-(decay 10 (cell 0 @count))
-(delay 15 (cell "Hello World" @count))
-(changes @count to @counts)
-(absence @count as "Missing" to @counts)
-(log @counts in ())
-WWML
-).as_d
-
-# Test button long form raw value
-root = ML.terms(<<-WWML
-(button "Increment" as +1 to @deltas ((press) (press) (press)))
-(log @deltas in ())
-WWML
-).as_d
-
-# Test button short form raw value
-root = ML.terms(<<-WWML
-(button "Increment" to @deltas ((press) (press) (press)))
-(log @deltas in ())
-WWML
-).as_d
-
-# Test button long form edge value
-root = ML.terms(<<-WWML
-(cell "Hello World" @msg)
-(button "Do it" as @msg to @deltas ((press) (press) (press)))
-(log @deltas in ())
-WWML
-).as_d
-
-# Test button short form edge value
-root = ML.terms(<<-WWML
-(cell "Hello World" @msg)
-(button @msg to @deltas ((press) (press) (press)))
-(log @deltas in ())
-WWML
-).as_d
-
-# Test latest
-root = ML.terms(<<-WWML
-(cell "Hello World" @msg)
-(button "Change msg" as "Changed!" to @msgs ((press)))
-(latest @msgs @msg)
-(changes @msg to @msg-changes)
-(log @msg-changes in ())
-WWML
-).as_d
-
-# Test log to cell
-
-root = ML.terms(<<-WWML
-(cell () @log)
-(button "Hello World" to @msgs ((press) (press) (press)))
-(log @msgs in @log)
-WWML
-).as_d
-
-# Basic stateful transform
-
-root = ML.terms(<<-WWML
-(cell 0 @count)
-(button "Increment" as +1 to @deltas ((press)))
-(transform @deltas to @counts with @count (+ 1 2))
-(latest @counts @count)
-WWML
-).as_d
-
-# Counter single step
-
-root = ML.terms(<<-WWML
-(cell 5 @count)
-(button "Increment" as +1 to @deltas ((press)))
-(button "Decrement" as -1 to @deltas ())
-(transform @deltas to @counts with @count (+ state _))
-(latest @counts @count)
-WWML
-).as_d
-
-root = ML.terms(<<-WWML
-(cell 5 @count)
-(button "Increment" as +1 to @deltas ())
-(button "Decrement" as -1 to @deltas ((press)))
-(transform @deltas to @counts with @count (+ state _))
-(latest @counts @count)
-WWML
-).as_d
-
-# Counter multi step, testing how button reacts to transform feedback
-
-root = ML.terms(<<-WWML
-(cell 5 @count)
-(button "Increment" as +1 to @deltas ((press) (press) (press)))
-(button "Decrement" as -1 to @deltas ())
-(transform @deltas to @counts with @count (+ state _))
-(latest @counts @count)
-WWML
-).as_d
-
-# Test cancellation (NOTE: this depends on how fast we handle jobs, modify for predictability!)
-root = ML.terms(<<-WWML
-(cell 5 @count)
-(button "Increment" as +1 to @deltas ((press) (press) (press) (press) (press)))
-(decay 1 (transform @deltas to @counts with @count (+ state _)))
-(latest @counts @count)
-WWML
-).as_d
-
-# Button listens to multiple feedbacks
-root = ML.terms(<<-WWML
-(cell 0 @count)
-
-(button "Increment" as +1 to @deltas ((press) (press) (press) (press) (press)))
-
-;; This one should cancel
-(decay 1 (transform @deltas to @counts with @count (+ state _)))
-
-;; This one should go on, a "Backup" of sorts
-(decay 5 (transform @deltas to @counts with @count (- state _)))
-
-(latest @counts @count)
-WWML
-).as_d
-
-# Test transforms not eating each other if cancelled, same tasks
-root = ML.terms(<<-WWML
-(cell 0 @count)
-
-(button "Increment" as +1 to @deltas ((press) (press) (press) (press) (press)))
-
-;; This one should cancel
-(decay 1 (transform @deltas to @counts with @count (+ state _)))
-
-;; This one should go on, a "Backup" of sorts
-(decay 5 (transform @deltas to @counts with @count (+ state _)))
-
-(latest @counts @count)
-WWML
-).as_d
-
-# Log limit
-root = ML.terms(<<-WWML
-(cell 10 @count for (%number (whole _) > 0))
-
-;; This is a feedback loop
-(changes @count to @deltas as -1)
-(transform @deltas to @counts with @count (+ state _))
-(latest @counts @count)
-
-;; Observe (scoping is an issue right now)
-(changes @count to @counts/1)
-(log @counts/1 in () limit: 5)
-WWML
-).as_d
-
-
-running0 = Set(Term).new
-results = Deque({Term, Term}).new
-lock = Mutex.new
-
-class JobInterrupted < Exception
-end
-
-ctx = ExecutionContext::MultiThreaded.new("mt", 4)
-primitives = ProcRuleset.build do
-  rulepi1 %[(+ a_number b_number)] { a + b }
-end
-
-while true
-  root = D.run(root) do |im|
-    puts ML.display(im, maxwidth: 80)
-    sleep 100.milliseconds
-
-    # Schedule/un-schedule jobs
-
-    running1 = Set(Term).new
-
-    (im[:jobs]? || Term[]).each_entry do |job, _|
-      running1 << job
+module D7
+  def self.stateful?(node) : Bool
+    Term.case(node) do
+      matchpi %{[absence _*]} { true }
+      otherwise { false }
     end
+  end
 
-    im = im.without(:jobs)
+  private def self.stateless1(dict : Term::Dict) : Term::Dict
+    dict.transaction do |commit|
+      dict.each_pair do |key, _|
+        next unless symbol = key.as_sym?
+        next unless symbol.to(String).prefixed_by?('.')
 
-    lock.synchronize do
-      (running1 - running0).each do |job|
-        ctx.spawn do
-          # # Artificial delay
-          # chan = Channel(Nil).new
-          # ctx.spawn do
-          #   sleep 3.seconds
-          #   chan.send(nil)
-          # end
-          # chan.receive
-          result = rewrite(job[:program], chainR(using(job[:env].as_d, dfsR(envR)), callR(primitives))) do
-            unless lock.synchronize { job.in?(running0) }
-              raise JobInterrupted.new
-            end
-          end
+        commit.without(key)
+      end
+    end
+  end
 
-          lock.synchronize do
-            results << {job, result}
-          end
-        rescue JobInterrupted
-          puts "Job interrupted"
+  # Clears state info assigned during evaluation from a *stateful* root.
+  #
+  # NOTE: in D7, we rely on a convention that all state resides in the pairspart
+  # and is prefixed with a dot `.`.
+  def self.stateless(stateful root : Term) : Term
+    rangepath = Term[]
+
+    while rangepath
+      dict0 = D.follow(root, rangepath).as_d?
+
+      if dict0 && (rangepath.itemsize.zero? || stateful?(dict0))
+        dict1 = stateless1(dict0)
+        unless dict0.same?(dict1)
+          root = D.assign(root, rangepath, dict1)
         end
       end
 
-      running0.concat(running1)
-
-      # Import job results
-      results.each do |job, value|
-        im = im.morph({:results, job, value})
-        running0.delete(job)
-      end
-      results.clear
+      rangepath = D.successor?(root, rangepath)
     end
 
-    im
+    root
   end
 
-  break if lock.synchronize { running0.empty? }
+  def self.run(root0 : Term) : Term
+    root0 = root0.as_d? || return root0
+    root1 = D.run(root0) do |root|
+      if jobs_pending = root[D::JobsPending]?
+        execute = ->(program : Term, env : Term::Dict) do
+          rewrite(program, Nitrene.rewriter, env: env)
+        end
+
+        jobs_pending.each_entry do |job, _|
+          Term.case(job) do
+            matchpi %[(¦ () program_ env_dict)] do
+              root = root.morph({D::JobsCompleted, job, execute.call(program, env.unsafe_as_d)})
+            end
+          end
+        end
+
+        root = root.without(D::JobsPending)
+      end
+
+      root
+    end
+
+    Term.of(root1)
+  end
 end
 
-puts ML.display(root, maxwidth: 120)
+module Nitrene
+  PRIMITIVES = ProcRuleset.build do
+    rulepi1 %[(+ a_number b_number)] { a + b }
+    rulepi1 %[(* a_number b_number)] { a * b }
+  end
+
+  REWRITER = chainR(using(plug(:env), dfsR(envR)), callR(PRIMITIVES))
+
+  def self.rewriter : Rewriter
+    REWRITER
+  end
+end
+
+# # Counter multi step, testing how button reacts to transform feedback
+
+# root = ML.terms(<<-WWML
+# (cell 5 @count)
+# (button "Increment" as +1 to @deltas ((press) (press) (press)))
+# (button "Decrement" as -1 to @deltas ())
+# (transform @deltas to @counts with @count (+ state _))
+# (latest @counts @count)
+# WWML
+# ).as_d
+
+# # Test cancellation (NOTE: this depends on how fast we handle jobs, modify for predictability!)
+# root = ML.terms(<<-WWML
+# (cell 5 @count)
+# (button "Increment" as +1 to @deltas ((press) (press) (press) (press) (press)))
+# (decay 1 (transform @deltas to @counts with @count (+ state _)))
+# (latest @counts @count)
+# WWML
+# ).as_d
+
+# # Button listens to multiple feedbacks
+# root = ML.terms(<<-WWML
+# (cell 0 @count)
+
+# (button "Increment" as +1 to @deltas ((press) (press) (press) (press) (press)))
+
+# ;; This one should cancel
+# (decay 1 (transform @deltas to @counts with @count (+ state _)))
+
+# ;; This one should go on, a "Backup" of sorts
+# (decay 5 (transform @deltas to @counts with @count (- state _)))
+
+# (latest @counts @count)
+# WWML
+# ).as_d
+
+# # Test transforms not eating each other if cancelled, same tasks
+# root = ML.terms(<<-WWML
+# (cell 0 @count)
+
+# (button "Increment" as +1 to @deltas ((press) (press) (press) (press) (press)))
+
+# ;; This one should cancel
+# (decay 1 (transform @deltas to @counts with @count (+ state _)))
+
+# ;; This one should go on, a "Backup" of sorts
+# (decay 5 (transform @deltas to @counts with @count (+ state _)))
+
+# (latest @counts @count)
+# WWML
+# ).as_d
+
+
+# running0 = Set(Term).new
+# results = Deque({Term, Term}).new
+# lock = Mutex.new
+
+# class JobInterrupted < Exception
+# end
+
+# ctx = ExecutionContext::MultiThreaded.new("mt", 4)
+# primitives = ProcRuleset.build do
+#   rulepi1 %[(+ a_number b_number)] { a + b }
+# end
+
+# while true
+#   root = D.run(root) do |im|
+#     puts ML.display(im, maxwidth: 80)
+#     sleep 100.milliseconds
+
+#     # Schedule/un-schedule jobs
+
+#     running1 = Set(Term).new
+
+#     (im[JobsPending]? || Term[]).each_entry do |job, _|
+#       running1 << job
+#     end
+
+#     im = im.without(JobsPending)
+
+#     lock.synchronize do
+#       (running1 - running0).each do |job|
+#         ctx.spawn do
+#           # # Artificial delay
+#           # chan = Channel(Nil).new
+#           # ctx.spawn do
+#           #   sleep 3.seconds
+#           #   chan.send(nil)
+#           # end
+#           # chan.receive
+#           result = rewrite(job[:program], chainR(using(job[:env].as_d, dfsR(envR)), callR(primitives))) do
+#             unless lock.synchronize { job.in?(running0) }
+#               raise JobInterrupted.new
+#             end
+#           end
+
+#           lock.synchronize do
+#             results << {job, result}
+#           end
+#         rescue JobInterrupted
+#           puts "Job interrupted"
+#         end
+#       end
+
+#       running0.concat(running1)
+
+#       # Import job results
+#       results.each do |job, value|
+#         im = im.morph({:results, job, value})
+#         running0.delete(job)
+#       end
+#       results.clear
+#     end
+
+#     im
+#   end
+
+#   break if lock.synchronize { running0.empty? }
+# end
+
+# puts ML.display(root, maxwidth: 120)
 # kp = Term[]
 # while succ = D.successor?(root, kp)
 #   pp kp

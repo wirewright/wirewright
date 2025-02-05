@@ -4,7 +4,7 @@ require "./baz5_common"
 alias Rewriter = RewriterContext, Rewrite::Any -> Rewrite::Any
 alias Observer = Keypath::Appender, String, Rewrite::Some ->
 
-record RewriterContext, rng : Random, keypath : Keypath::Appender?, envs = Term[], observer : Observer = (Observer.new { }), exhr = {} of {UInt64, Term} => Rewrite::Any do
+record RewriterContext, rng : Random, keypath : Keypath::Appender?, envs = Term[], observer : Observer = (Observer.new { }), exhr = {} of {UInt64, Term} => Rewrite::Any, options = Term[] do
   # If available, returns memoized exhaustive rewrite of *term* for an exhR rewriter
   # with the given *id*.
   #
@@ -969,6 +969,18 @@ def using(env : Term::Dict, successor : Rewriter)
   end
 end
 
+def using(env : RewriterContext -> Term, successor : Rewriter)
+  Rewriter.new do |ctx, staging|
+    successor.call(ctx.copy_with(envs: ctx.envs.append(env.call(ctx))), staging)
+  end
+end
+
+def plug(key)
+  key = Term.of(key)
+
+  ->(ctx : RewriterContext) { ctx.options[key] }
+end
+
 def preview1(term, cursor : Term::Dict::ItemsView, leaf : Rewrite::Some)
   unless word = cursor.first?
     return leaf
@@ -1007,22 +1019,24 @@ end
 REWRITE_SEEDER      = Random::PCG32.new
 REWRITE_SEEDER_LOCK = Mutex.new
 
-def rewrite0(term : Term, rewriter : Rewriter) : Rewrite::Any
+def rewrite0(term : Term, rewriter : Rewriter, **options) : Rewrite::Any
   seed = REWRITE_SEEDER_LOCK.synchronize { REWRITE_SEEDER.rand(UInt64) }
   rng = Random::PCG32.new(seed)
-  ctx = RewriterContext.new(rng, keypath: nil)
+  ctx = RewriterContext.new(rng, keypath: nil, options: Term[options])
   rewriter.call(ctx, Rewrite.one(term))
 end
 
-def rewrite(term : Term, rewriter : Rewriter) : Term
-  rewrite = rewrite0(term, rewriter)
+def rewrite(term : Term, rewriter : Rewriter, **options) : Term
+  rewrite = rewrite0(term, rewriter, **options)
   rewrite.term? || term
 end
 
-def rewrite(term : Term, rewriter : Rewriter, &observer : Observer) : Term
+# TODO: make it possible to provide observer but NOT do the whole slow keypath thing.
+# Observer that doesn't observe, that is; a way to terminate rewriting.
+def rewrite(term : Term, rewriter : Rewriter, **options, &observer : Observer) : Term
   seed = REWRITE_SEEDER_LOCK.synchronize { REWRITE_SEEDER.rand(UInt64) }
   rng = Random::PCG32.new(seed)
-  ctx = RewriterContext.new(rng, keypath: Keypath::Appender.new, observer: observer)
+  ctx = RewriterContext.new(rng, keypath: Keypath::Appender.new, observer: observer, options: Term[options])
 
   rewrite = rewriter.call(ctx, Rewrite.one(term))
   rewrite.term? || term

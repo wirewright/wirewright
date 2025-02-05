@@ -1,7 +1,12 @@
 require "./wirewright"
 require "./baz5_editor"
+require "./soma2"
 
-CASES  = File.read("#{__DIR__}/patterns.test.wwml") + "\n" + File.read("#{__DIR__}/editor.test.wwml")
+CASES  = [
+  File.read("#{__DIR__}/patterns.test.wwml"),
+  File.read("#{__DIR__}/editor.test.wwml"),
+  File.read("#{__DIR__}/delta7.test.wwml"),
+].join("\n")
 PEOPLE = Term.of(JSON.parse(File.read("#{__DIR__}/data/people.json")))
 
 class Statistics
@@ -272,7 +277,7 @@ def process(queue, testcase, ctx)
     {% end %}
 
     matchpi %[(editor initial_dict edits_*)] do
-      next if "-noed".in?(ARGV)
+      next if "-no-editor".in?(ARGV)
       root = initial
 
       edits.items.each do |edit|
@@ -291,6 +296,23 @@ def process(queue, testcase, ctx)
               end
             end
           end
+        end
+      end
+    end
+
+    matchpi %[(d7 initial_ expected_)] do
+      next if "-no-d7".in?(ARGV)
+
+      ctx.stats.account
+
+      track(ctx, testcase) do
+        # This obviously doesn't account for infinite feedback loops in the program,
+        # but hey, probably they won't happen in tests.
+        actual = ctx.stats.run { D7.run(initial) }
+        actual = D7.stateless(actual)
+
+        unless actual == expected
+          ctx.failures << Term.of(:"mismatch/d7", actual, :==, expected)
         end
       end
     end
