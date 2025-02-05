@@ -424,7 +424,7 @@ module D
         # are a bit loose but I guess it's fine. It's too much of a button to
         # not work.
 
-        givenpi %[(button _* to @pout_ (_*) ¦ waiting⋮ 0) (feedback wait @pout_)] do
+        givenpi %[(button _* to @pout_ (_*) ¦ waiting⋮ 0) (feedback busy @pout_)] do
           root1 = effect(root1, nodepath, node0) do
             change waiting: waiting + 1
           end
@@ -432,7 +432,7 @@ module D
           {root1, successor?(root1, nodepath)}
         end
 
-        givenpi %[(button _* to @pout_ (_*) ¦ waiting: 1) (feedback (%any ready cancelled) @pout_)] do
+        givenpi %[(button _* to @pout_ (_*) ¦ waiting: 1) (feedback (%any done cancelled) @pout_)] do
           root1 = effect(root1, nodepath, node0) do
             clear :waiting
           end
@@ -440,7 +440,7 @@ module D
           {root1, successor?(root1, nodepath)}
         end
 
-        givenpi %[(button _* to @pout_ (_*) ¦ waiting_: (%number (whole _) > 0)) (feedback (%any ready cancelled) @pout_)] do
+        givenpi %[(button _* to @pout_ (_*) ¦ waiting_: (%number (whole _) > 0)) (feedback (%any done cancelled) @pout_)] do
           root1 = effect(root1, nodepath, node0) do
             change waiting: waiting - 1
           end
@@ -486,6 +486,23 @@ module D
         {root1, successor?(root1, nodepath)}
       end
 
+      givenpi %[(echo @pin_) (pulse @pin_ e_)] do
+        root1 = effect(root1, nodepath, node0) do
+          event e
+        end
+
+        {root1, successor?(root1, nodepath)}
+      end
+
+      givenpi %[(event e_) cycle] do
+        root1 = effect(root1, nodepath, node0) do
+          event e
+          backmap %[N_], %[{(N): ()}]
+        end
+
+        {root1, successor?(root1, nodepath)}
+      end
+
       # TODO: feedback [sleeping] queue with 3PC-ish
 
       # Stateful transform
@@ -505,10 +522,10 @@ module D
           {root1, successor?(root1, nodepath)}
         end
 
-        # Send feedback wait
+        # Send feedback busy
         givenpi %[(transform @pin_ to @_ with @_ _ ¦ () job_) invited] do
           root1 = effect(root1, nodepath, node0) do
-            event :feedback, :wait, pin
+            event :feedback, :busy, pin
             schedule job
           end
 
@@ -518,7 +535,7 @@ module D
         # Wait for the job to complete
         givenpi %[(transform @pin_ to @pout_ with @cin_ body_ job: job_) (job/completed job_ v_)] do
           root1 = effect(root1, nodepath, node0) do
-            event :feedback, :ready, pin
+            event :feedback, :done, pin
             event :pulse, pout, v
             clear :job
             disappear
@@ -543,10 +560,10 @@ module D
           {root1, successor?(root1, nodepath)}
         end
 
-        # Send feedback wait
+        # Send feedback busy
         givenpi %[(transform @pin_ to @_ _ ¦ () job_) invited] do
           root1 = effect(root1, nodepath, node0) do
-            event :feedback, :wait, pin
+            event :feedback, :busy, pin
             schedule job
           end
 
@@ -556,7 +573,7 @@ module D
         # Wait for the job to complete
         givenpi %[(transform @pin_ to @pout_ body_ job: job_) (job/completed job_ v_)] do
           root1 = effect(root1, nodepath, node0) do
-            event :feedback, :ready, pin
+            event :feedback, :done, pin
             event :pulse, pout, v
             clear :job
             disappear

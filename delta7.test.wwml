@@ -41,11 +41,64 @@
      (log @deltas in ()))
     ((cell "Hello World" @msg)
      (button @msg to @deltas ())
-     (log @deltas in ("Hello World" "Hello World" "Hello World")))))
+     (log @deltas in ("Hello World" "Hello World" "Hello World"))))
 
-;; TODO:
-;; - Add a node that will allow to fabricate feedback.
-;; - Use it to test button behavior with feedback.
+  ;; Button feedback behavior
+  (d7
+    ((button (feedback busy @xs) to @xs ((press) (press) (press)))
+     (echo @xs))
+    ((button (feedback busy @xs) to @xs ((press) (press)) waiting: 1)
+     (echo @xs)))
+
+  (d7
+    ((button (feedback busy @xs) to @xs ((press)))
+     (echo @xs)
+     (delay 3 (event (feedback done @xs))))
+    ((button (feedback busy @xs) to @xs ())
+     (echo @xs)))
+
+  (d7
+    ((button (feedback busy @xs) to @xs ((press) (press) (press)))
+     (echo @xs)
+     (delay 3 (event (feedback done @xs))))
+    ((button (feedback busy @xs) to @xs ((press)) waiting: 1)
+     (echo @xs)))
+
+  (d7
+    ((button (feedback busy @xs) to @xs ((press)))
+     (echo @xs)
+     (echo @xs)
+     (echo @xs))
+    ((button (feedback busy @xs) to @xs () waiting: 3)
+     (echo @xs)
+     (echo @xs)
+     (echo @xs)))
+
+  (d7
+    ((button (feedback busy @xs) to @xs ((press)))
+     (echo @xs)
+     (echo @xs)
+     (echo @xs)
+     (delay 3 (event (feedback done @xs)))
+     (delay 4 (event (feedback done @xs)))
+     (delay 5 (event (feedback done @xs))))
+    ((button (feedback busy @xs) to @xs ())
+     (echo @xs)
+     (echo @xs)
+     (echo @xs)))
+
+  (d7
+    ((button (feedback busy @xs) to @xs ((press) (press) (press)))
+     (echo @xs)
+     (echo @xs)
+     (echo @xs)
+     (delay 3 (event (feedback done @xs)))
+     (delay 4 (event (feedback done @xs)))
+     (delay 5 (event (feedback done @xs))))
+    ((button (feedback busy @xs) to @xs ((press)) waiting: 3)
+     (echo @xs)
+     (echo @xs)
+     (echo @xs))))
 
 ;; Basic behavior of `latest`
 (d7
