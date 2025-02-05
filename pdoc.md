@@ -444,6 +444,43 @@ while denying the presence of all other keys.
 (grant-access? "john_doe") ;; => false
 ```
 
+## `%pipe`
+
+`%pipe` lets you "pipe" the matchee through a chain of transformations. The following
+transformations are supported:
+
+- `span`: transforms a string matchee into the number of characters in it: e.g., `(%pipe span 1)`
+  matches strings that contain just one character.
+- `tally`: transforms a dictionary matchee into the number of entries in it: e.g., `(%pipe tally 3)`
+  matches dictionaries with three entries (items, pairs, or both).
+- `(+ n_number)`: adds `n` to a number matchee: e.g. `(%pipe (+ 100) x_)`.
+- `(- n_number)`: subtracts `n` from a number matchee: e.g. `(%pipe (- 100) x_)`.
+- `(* n_number)`: multiplies a number matchee by `n`: e.g. `(%pipe (* 2) double_)`.
+- `(/ n_number)`: divides a number matchee by `n`: e.g. `(%pipe (/ 2) n_)`. Turns into
+  a nevermatch if `n` is zero: `(%pipe (/ 0) this_will_never_match_)`.
+- `(div n_number)`: integer division of a number matchee by `n`: e.g. `(%pipe (div 10) x_)`
+  will match `42` with `{x: 40}`. Live `/`, it is a nevermatch if `n=0`
+- `(mod n_number)`: remainder after integer division of a number matchee by `n`:
+  e.g. `(%pipe (mod 10) x_)` will match `42` with `{x: 2}`. Like `/`, it is a nevermatch
+  if `n=0`.
+- `(** n_number)`: raises a number matchee to the power `n`: e.g. `(%pipe (** 2) n_)` will
+  match `4` with `{x: 16}`. It is a nevermatch if the matchee is zero and `n` is negative.
+- `(map mapper_dict)`: retrieves the value (if any) associated with a matchee term
+  in `mapper`.
+
+You can chain `%pipe` transformations: e.g., `(%pipe (+ 1) (** 3) (mod 2) (map (10 20)) x_)`
+matches `42` with `{x: 20}` because `(42 + 1)**3 mod 2 = 1`, which, according to the mapper
+dict `{0: 10, 1: 20}` is equal `20`, and is subsequently captured by `x_`.
+
+```wwml
+(parity (%pipe (mod 2) (map (even odd)) p_)) => p
+
+(parity 0)  ;; => even
+(parity 2)  ;; => even
+(parity 1)  ;; => odd
+(parity -5) ;; => odd
+```
+
 ## `%new`
 
 The idea with the `%new` operator is to be able to create new patterns at match-

@@ -392,7 +392,7 @@ end
 module ::Ww::M1::Operator
   alias Any = Pass | Num | Sym | Boolean | Dict | Itemsonly | Pairsonly | SketchSubset | Bounds | BoundsGuard | MaxDepth | DictGuard | Literal | Capture | CaptureItemsonly | ItemSeq | ItemFirst | ItemLast | SingularSeq | Partition | Edge | LiteralChoices | SourceChoice | ValueLiteral | Keypool | Span | Tally | Bin | Both | Not | Layer | ScanFirst | ScanSource | ScanAll | ScanAllIsolated | DfsFirst | DfsSource | DfsAllIsolated | DfsAll | BfsFirst | BfsAllIsolated | BfsAll | Value | NegativeValue | NegativeValueKeypath | EntriesFirst | EntriesSource | EntriesAllIsolated | EntriesAll | Str | New | KeypathCapture
 
-  alias Bin = Add | Sub | Mul | Div | Tdiv | Mod | Pow | Map
+  alias Bin = Add | Sub | Mul | Div | Idiv | Mod | Pow | Map
 
   alias First = ScanFirst | DfsFirst | BfsFirst | EntriesFirst
   alias Source = DfsSource | ScanSource | EntriesSource
@@ -404,18 +404,6 @@ module ::Ww::M1::Operator
   defcase Partition, itemspart : Any, pairspart : Any
 
   defcase ValueLiteral, key : Term, successor : Any
-
-  defcase Span, successor : Any
-  defcase Tally, successor : Any
-
-  defcase Add, arg : Term::Num, successor : Any
-  defcase Sub, arg : Term::Num, successor : Any
-  defcase Mul, arg : Term::Num, successor : Any
-  defcase Div, arg : Term::Num, successor : Any
-  defcase Tdiv, arg : Term::Num, successor : Any
-  defcase Mod, arg : Term::Num, successor : Any
-  defcase Pow, arg : Term::Num, successor : Any
-  defcase Map, arg : Term::Dict, successor : Any
 
   defcase Layer, below : Any, side : Array(Entry::Any)
 
@@ -794,110 +782,6 @@ module ::Ww::M1::Operator
     ahead1 = Ahead::Goto.new(behind0.keypath?, Ahead.stackptr(ahead0))
 
     match(behind0.keypath(&.update_value(op.key)), op.successor, value, ahead1)
-  end
-
-  def match(behind0, op : Span, matchee : Term, ahead0)
-    unless a = matchee.as_s?
-      return Fb::Mismatch.new(behind0.env)
-    end
-
-    match(behind0, op.successor, Term.of(a.charcount), ahead0)
-  end
-
-  def match(behind0, op : Tally, matchee : Term, ahead0)
-    unless a = matchee.as_d?
-      return Fb::Mismatch.new(behind0.env)
-    end
-
-    match(behind0, op.successor, Term.of(a.size), ahead0)
-  end
-
-  def match(behind0, op : Add, matchee : Term, ahead0)
-    unless a = matchee.as_n?
-      return Fb::Mismatch.new(behind0.env)
-    end
-
-    match(behind0, op.successor, Term.of(a + op.arg), ahead0)
-  end
-
-  def match(behind0, op : Sub, matchee : Term, ahead0)
-    unless a = matchee.as_n?
-      return Fb::Mismatch.new(behind0.env)
-    end
-
-    match(behind0, op.successor, Term.of(a - op.arg), ahead0)
-  end
-
-  def match(behind0, op : Mul, matchee : Term, ahead0)
-    unless a = matchee.as_n?
-      return Fb::Mismatch.new(behind0.env)
-    end
-
-    match(behind0, op.successor, Term.of(a * op.arg), ahead0)
-  end
-
-  def match(behind0, op : Div, matchee : Term, ahead0)
-    unless a = matchee.as_n?
-      return Fb::Mismatch.new(behind0.env)
-    end
-
-    begin
-      q = Term.of(a / op.arg)
-    rescue DivisionByZeroError
-      return Fb::Mismatch.new(behind0.env)
-    end
-
-    match(behind0, op.successor, q, ahead0)
-  end
-
-  def match(behind0, op : Tdiv, matchee : Term, ahead0)
-    unless a = matchee.as_n?
-      return Fb::Mismatch.new(behind0.env)
-    end
-
-    begin
-      q = Term.of(a // op.arg)
-    rescue DivisionByZeroError
-      return Fb::Mismatch.new(behind0.env)
-    end
-
-    match(behind0, op.successor, q, ahead0)
-  end
-
-  def match(behind0, op : Mod, matchee : Term, ahead0)
-    unless a = matchee.as_n?
-      return Fb::Mismatch.new(behind0.env)
-    end
-
-    begin
-      m = Term.of(a % op.arg)
-    rescue DivisionByZeroError
-      return Fb::Mismatch.new(behind0.env)
-    end
-
-    match(behind0, op.successor, m, ahead0)
-  end
-
-  def match(behind0, op : Pow, matchee : Term, ahead0)
-    unless a = matchee.as_n?
-      return Fb::Mismatch.new(behind0.env)
-    end
-
-    begin
-      c = Term.of(a ** op.arg)
-    rescue DivisionByZeroError # e.g. 0^-2
-      return Fb::Mismatch.new(behind0.env)
-    end
-
-    match(behind0, op.successor, c, ahead0)
-  end
-
-  def match(behind0, op : Map, matchee : Term, ahead0)
-    unless v = op.arg[matchee]?
-      return Fb::Mismatch.new(behind0.env)
-    end
-
-    match(behind0, op.successor, v, ahead0)
   end
 
   def match(behind0, op : Layer, matchee : Term, ahead0)
@@ -3909,7 +3793,7 @@ module ::Ww::M1
       end
 
       matchpi %[(%pipe (%barrier (div n_number)) successor_)], cue: {:"%pipe", :div} do
-        Operator::Tdiv.new(n.unsafe_as_n, operator(successor, captures))
+        Operator::Idiv.new(n.unsafe_as_n, operator(successor, captures))
       end
 
       matchpi %[(%pipe (%barrier (mod n_number)) successor_)], cue: {:"%pipe", :mod} do

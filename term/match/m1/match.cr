@@ -250,4 +250,108 @@ module Ww::M1::Operator
 
     Ahead.tr(behind0, ahead0)
   end
+
+  def match(behind0, op : Span, matchee : Term, ahead0)
+    unless a = matchee.as_s?
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    match(behind0, op.successor, Term.of(a.charcount), ahead0)
+  end
+
+  def match(behind0, op : Tally, matchee : Term, ahead0)
+    unless a = matchee.as_d?
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    match(behind0, op.successor, Term.of(a.size), ahead0)
+  end
+
+  def match(behind0, op : Add, matchee : Term, ahead0)
+    unless a = matchee.as_n?
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    match(behind0, op.successor, Term.of(a + op.arg), ahead0)
+  end
+
+  def match(behind0, op : Sub, matchee : Term, ahead0)
+    unless a = matchee.as_n?
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    match(behind0, op.successor, Term.of(a - op.arg), ahead0)
+  end
+
+  def match(behind0, op : Mul, matchee : Term, ahead0)
+    unless a = matchee.as_n?
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    match(behind0, op.successor, Term.of(a * op.arg), ahead0)
+  end
+
+  def match(behind0, op : Div, matchee : Term, ahead0)
+    unless a = matchee.as_n?
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    begin
+      q = Term.of(a / op.arg)
+    rescue DivisionByZeroError
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    match(behind0, op.successor, q, ahead0)
+  end
+
+  def match(behind0, op : Idiv, matchee : Term, ahead0)
+    unless a = matchee.as_n?
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    begin
+      q = Term.of(a // op.arg)
+    rescue DivisionByZeroError
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    match(behind0, op.successor, q, ahead0)
+  end
+
+  def match(behind0, op : Mod, matchee : Term, ahead0)
+    unless a = matchee.as_n?
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    begin
+      m = Term.of(a % op.arg)
+    rescue DivisionByZeroError
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    match(behind0, op.successor, m, ahead0)
+  end
+
+  def match(behind0, op : Pow, matchee : Term, ahead0)
+    unless a = matchee.as_n?
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    begin
+      c = Term.of(a ** op.arg)
+    rescue DivisionByZeroError # e.g. 0^-2
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    match(behind0, op.successor, c, ahead0)
+  end
+
+  def match(behind0, op : Map, matchee : Term, ahead0)
+    unless v = op.arg[matchee]?
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    match(behind0, op.successor, v, ahead0)
+  end
 end

@@ -64,4 +64,16 @@ module Ww::M1::Operator
   defcase Keypool, keys : Slice(Term)
 
   defcase Not, blacklist : Term::Dict
+
+  defcase Span, successor : Any
+  defcase Tally, successor : Any
+
+  defcase Add, arg : Term::Num, successor : Any
+  defcase Sub, arg : Term::Num, successor : Any
+  defcase Mul, arg : Term::Num, successor : Any
+  defcase Div, arg : Term::Num, successor : Any
+  defcase Idiv, arg : Term::Num, successor : Any
+  defcase Mod, arg : Term::Num, successor : Any
+  defcase Pow, arg : Term::Num, successor : Any
+  defcase Map, arg : Term::Dict, successor : Any
 end
