@@ -309,7 +309,7 @@ def process(queue, testcase, ctx)
         # This obviously doesn't account for infinite feedback loops in the program,
         # but hey, probably they won't happen in tests.
         actual = ctx.stats.run { D7.run(initial) }
-        actual = D7.stateless(actual)
+        actual = D7.visible(actual)
 
         unless actual == expected
           ctx.failures << Term.of(:"mismatch/d7", actual, :==, expected)

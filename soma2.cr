@@ -14,10 +14,10 @@ require "./baz5"
 module D
   extend self
 
-  Cells         = Term[:".cells"]
-  Population    = Term[:".population"]
-  JobsPending   = Term[:".jobs/pending"]
-  JobsCompleted = Term[:".jobs/completed"]
+  Cells         = Term[:"#cells"]
+  Population    = Term[:"#population"]
+  JobsPending   = Term[:"#jobs/pending"]
+  JobsCompleted = Term[:"#jobs/completed"]
 
   struct Q
     def initialize(@data : Term::Dict)
@@ -586,7 +586,7 @@ module D
       # Initialize `absence` to newborn state.
       givenpi %[(absence @_ as _ to @_) cycle] do
         root1 = effect(root1, nodepath, node0) do
-          change ".state": :newborn
+          change "#state": :newborn
         end
 
         {root1, successor?(root1, nodepath)}
@@ -594,7 +594,7 @@ module D
 
       # Whenever we're in newborn state, on cycle, look around to see if the cell's
       # identity is in the population.
-      givenpi %[(absence @cin_ as msg_ to @pout_ .state: newborn) cycle] do
+      givenpi %[(absence @cin_ as msg_ to @pout_ #state: newborn) cycle] do
         root1 = effect(root1, nodepath, node0) do
           partner = Term.of(:cell, cin)
 
@@ -603,28 +603,28 @@ module D
           document = follow(root1, docpath).as_d
 
           if partner.in?(document[Population]? || Term[])
-            change ".state": :paired
+            change "#state": :paired
           else
             event :pulse, pout, msg
-            change ".state": :unpaired
+            change "#state": :unpaired
           end
         end
 
         {root1, successor?(root1, nodepath)}
       end
 
-      givenpi %[(absence @cin_ as msg_ to @pout_ .state: paired) (cell/removed @cin_)] do
+      givenpi %[(absence @cin_ as msg_ to @pout_ #state: paired) (cell/removed @cin_)] do
         root1 = effect(root1, nodepath, node0) do
           event :pulse, pout, msg
-          change ".state": :unpaired
+          change "#state": :unpaired
         end
 
         {root1, successor?(root1, nodepath)}
       end
 
-      givenpi %[(absence @cin_ as _ to @_ .state: unpaired) (cell/created @cin_ _)] do
+      givenpi %[(absence @cin_ as _ to @_ #state: unpaired) (cell/created @cin_ _)] do
         root1 = effect(root1, nodepath, node0) do
-          change ".state": :paired
+          change "#state": :paired
         end
 
         {root1, successor?(root1, nodepath)}
@@ -805,45 +805,27 @@ module D
 end
 
 module D7
-  def self.stateful?(node) : Bool
-    Term.case(node) do
-      matchpi %{[absence _*]} { true }
-      otherwise { false }
-    end
-  end
+  # Strips hidden pairs from *root*.
+  #
+  # NOTE: in D7, we rely on a convention that all hidden pairs have a key that
+  # is prefixed with '#'.
+  def self.visible(root : Term) : Term
+    root = root.as_d? || return root
 
-  private def self.stateless1(dict : Term::Dict) : Term::Dict
-    dict.transaction do |commit|
-      dict.each_pair do |key, _|
+    root = root.transaction do |commit|
+      root.each_item_with_index do |item, index|
+        commit.with(index, visible(item))
+      end
+
+      root.each_pair do |key, value|
         next unless symbol = key.as_sym?
-        next unless symbol.to(String).prefixed_by?('.')
+        next unless symbol.to(String).prefixed_by?('#')
 
         commit.without(key)
       end
     end
-  end
 
-  # Clears state info assigned during evaluation from a *stateful* root.
-  #
-  # NOTE: in D7, we rely on a convention that all state resides in the pairspart
-  # and is prefixed with a dot `.`.
-  def self.stateless(stateful root : Term) : Term
-    rangepath = Term[]
-
-    while rangepath
-      dict0 = D.follow(root, rangepath).as_d?
-
-      if dict0 && (rangepath.itemsize.zero? || stateful?(dict0))
-        dict1 = stateless1(dict0)
-        unless dict0.same?(dict1)
-          root = D.assign(root, rangepath, dict1)
-        end
-      end
-
-      rangepath = D.successor?(root, rangepath)
-    end
-
-    root
+    Term.of(root)
   end
 
   def self.run(root0 : Term) : Term
