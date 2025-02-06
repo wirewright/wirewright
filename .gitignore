@@ -7,6 +7,11 @@
 # Unignore all dirs
 !*/
 
+# Ignore files that start with _
+_*
+
+!PLAN
+
 ### Above combination will ignore all files without extension ###
 /docs/
 /lib/

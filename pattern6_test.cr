@@ -1,6 +1,6 @@
 require "./wirewright"
 require "./baz5_editor"
-require "./soma2"
+require "./delta7_proto"
 
 CASES  = [
   File.read("#{__DIR__}/patterns.test.wwml"),
