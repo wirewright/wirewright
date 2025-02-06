@@ -565,8 +565,27 @@ module D
         {root1, successor?(root1, nodepath)}
       end
 
+      # TODO: note how these transforms are almost exact copies of each other. There must
+      # be a way to "protocolize" the "behavior" of a transform while allowing for individual
+      # variations to reduce redundancy.
+
       # Stateful transform
       begin
+        # Signal that we're ready for a job
+        givenpi %[(transform @pin_ to @pout_ with @cin_ _) cycle] do
+          # FIXME: how to get rid of this
+          docpath = docpath(root1, nodepath)
+          document = follow(root1, docpath)
+
+          if document[Cells, cin]?
+            root1 = effect(root1, nodepath, node0) do
+              event :pull, pin
+            end
+          end
+
+          {root1, successor?(root1, nodepath)}
+        end
+
         # Schedule job
         givenpi %[(transform @pin_ to @pout_ with @cin_ body_) (pulse @pin_ input_)] do
           # FIXME: how to get rid of this
@@ -618,10 +637,6 @@ module D
 
         # Schedule job
         givenpi %[(transform @pin_ to @pout_ body_) (pulse @pin_ input_)] do
-          # FIXME: how to get rid of this
-          docpath = docpath(root1, nodepath)
-          document = follow(root1, docpath)
-
           root1 = effect(root1, nodepath, node0) do
             change job: {program: body, env: {"_": input}}
           end
@@ -641,6 +656,51 @@ module D
 
         # Wait for the job to complete
         givenpi %[(transform @pin_ to @pout_ body_ job: job_) (job/completed job_ v_)] do
+          root1 = effect(root1, nodepath, node0) do
+            event :feedback, :done, pin
+            event :pulse, pout, v
+            clear :job
+            disappear
+          end
+
+          {root1, successor?(root1, nodepath)}
+        end
+      end
+
+      # Stateless filter transform
+      begin
+        # Signal that we're ready for a job
+        givenpi %[(transform (@pin_ pattern_) to @pout_ body_) cycle] do
+          root1 = effect(root1, nodepath, node0) do
+            event :pull, pin
+          end
+
+          {root1, successor?(root1, nodepath)}
+        end
+
+        # Schedule job
+        givenpi %[(transform (@pin_ pattern_) to @pout_ body_) (pulse @pin_ input_)] do
+          if env = M1.match?(pattern, input)
+            root1 = effect(root1, nodepath, node0) do
+              change job: {program: body, env: env}
+            end
+          end
+
+          {root1, successor?(root1, nodepath)}
+        end
+
+        # Send feedback busy
+        givenpi %[(transform (@pin_ _) to @_ _ ¦ () job_) invited] do
+          root1 = effect(root1, nodepath, node0) do
+            event :feedback, :busy, pin
+            schedule job
+          end
+
+          {root1, successor?(root1, nodepath)}
+        end
+
+        # Wait for the job to complete
+        givenpi %[(transform (@pin_ _) to @pout_ body_ job: job_) (job/completed job_ v_)] do
           root1 = effect(root1, nodepath, node0) do
             event :feedback, :done, pin
             event :pulse, pout, v
@@ -789,6 +849,7 @@ module D
       matchpi(
         %{(transform @pin_ to @_ with _ _ ¦ () job_)},
         %{(transform @pin_ to @_ _ ¦ () job_)},
+        %{(transform (@pin_ _) to @_ _ ¦ () job_)},
       ) do
         Term.of(:transform, pin, job)
       end

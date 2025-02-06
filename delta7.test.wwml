@@ -167,6 +167,23 @@
    (transform @inputs to @outputs (* _ _))
    (log @outputs in (16))))
 
+;; Stateless filter transform
+(d7
+  ((cell 0 @value for (%number (whole _) < 10))
+   (changes @value to @values)
+   (transform (@values n←(%pipe (mod 2) 0)) to @parities (even n))
+   (transform (@values n←(%pipe (mod 2) 1)) to @parities (odd n))
+   (transform @values to @successors (+ _ 1))
+   (latest @successors @value)
+   (log @parities in () limit: 7))
+  ((cell 9 @value for (%number (whole _) < 10))
+   (changes @value to @values)
+   (transform (@values n←(%pipe (mod 2) 0)) to @parities (even n))
+   (transform (@values n←(%pipe (mod 2) 1)) to @parities (odd n))
+   (transform @values to @successors (+ _ 1))
+   (latest @successors @value)
+   (log @parities in ((odd 3) (even 4) (odd 5) (even 6) (odd 7) (even 8) (odd 9)) limit: 7)))
+
 ;; Basic stateful transform: counter
 (d7
   ((cell 5 @count)
