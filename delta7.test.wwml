@@ -199,12 +199,40 @@
    (delay 2 (button "Send 3" as 3 to @inputs ((press))))
    (delay 3 (button "Send 4" as 4 to @inputs ((press))))
    (queue @inputs to @bases in ())
-   (transform @bases to @outputs (* _ _))
+   (assistant @bases for @bases/assisted)
+   (transform @bases/assisted to @outputs (* _ _))
    (log @outputs in ()))
   ((button "Send 1" as 1 to @inputs ())
    (button "Send 2" as 2 to @inputs ())
    (button "Send 3" as 3 to @inputs ())
    (button "Send 4" as 4 to @inputs ())
    (queue @inputs to @bases in ())
-   (transform @bases to @outputs (* _ _))
+   (assistant @bases for @bases/assisted)
+   (transform @bases/assisted to @outputs (* _ _))
    (log @outputs in (1 4 9 16))))
+
+;; Counter multi step
+(d7
+  ((cell 5 @count)
+   (button "Increment" as +1 to @deltas ((press) (press) (press)))
+   (button "Decrement" as -1 to @deltas ())
+   (transform @deltas to @counts with @count (+ state _))
+   (latest @counts @count))
+  ((cell 8 @count)
+   (button "Increment" as +1 to @deltas ())
+   (button "Decrement" as -1 to @deltas ())
+   (transform @deltas to @counts with @count (+ state _))
+   (latest @counts @count)))
+
+;; Multiple transforms on the same button
+(d7
+  ((cell 0 @count)
+   (button "Increment" as +1 to @deltas ((press) (press) (press) (press) (press)))
+   ;; This one should cancel
+   (decay 1 (transform @deltas to @counts with @count (+ state _)))
+   ;; This one should go on, a "Backup" of sorts
+   (decay 5 (transform @deltas to @counts with @count (+ state _)))
+   (latest @counts @count))
+  ((cell 5 @count)
+   (button "Increment" as +1 to @deltas ())
+   (latest @counts @count)))

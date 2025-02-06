@@ -14,6 +14,7 @@ require "./baz5"
 module D
   extend self
 
+  Events        = Term[:"#events"]
   Cells         = Term[:"#cells"]
   Population    = Term[:"#population"]
   JobsPending   = Term[:"#jobs/pending"]
@@ -29,7 +30,7 @@ module D
     # TODO: remove in favor of (root, path) : Q (aka more granularity,
     # queue does not necessarily belong to a document)
     def self.of(document : Term::Dict)
-      new(document[:events]?.try(&.as_itemsonly_d?) || Term[])
+      new(document[Events]?.try(&.as_itemsonly_d?) || Term[])
     end
 
     def empty?
@@ -54,9 +55,9 @@ module D
 
     def commit(document : Term::Dict) : Term::Dict
       if @data.empty?
-        document.without(:events)
+        document.without(Events)
       else
-        document.with(:events, @data)
+        document.with(Events, @data)
       end
     end
   end
@@ -253,12 +254,12 @@ module D
       @rewrite = Rewrite.one(@node.itemspart | @node.pairspart | Term.of(**kwargs))
     end
 
-    def clear(key)
+    def clear(*keys)
       unless @rewrite.is_a?(Rewrite::None)
         raise "cannot use multiple different rewrite methods, please use only one"
       end
 
-      @rewrite = Rewrite.one(@node.without(key))
+      @rewrite = Rewrite.one(@node.without(*keys))
     end
   end
 
@@ -503,7 +504,66 @@ module D
         {root1, successor?(root1, nodepath)}
       end
 
-      # TODO: feedback [sleeping] queue with 3PC-ish
+      givenpi %[(queue @pin_ to @_ in (_*)) (pulse @pin_ value_)] do
+        root1 = effect(root1, nodepath, node0) do
+          backmap %[(_ _ to _ in (_* ⏏head))], head: value
+        end
+
+        {root1, successor?(root1, nodepath)}
+      end
+
+      givenpi %[(queue @pin_ to @pout_ in (head_ _*)) (pull @pout_)] do
+        root1 = effect(root1, nodepath, node0) do
+          event :pulse, pout, head
+        end
+
+        {root1, successor?(root1, nodepath)}
+      end
+
+      # Dequeue
+      givenpi %[(queue @pin_ to @pout_ in (head_ _*)) (feedback completed @pout_ head_)] do
+        root1 = effect(root1, nodepath, node0) do
+          backmap %[(_ _ to _ in (head_ _*))], %[{(head): ()}]
+        end
+
+        {root1, successor?(root1, nodepath)}
+      end
+
+      givenpi %[(assistant @pin_ for @pout_) (pull @pout_)] do
+        root1 = effect(root1, nodepath, node0) do
+          event :pull, pin
+        end
+
+        {root1, successor?(root1, nodepath)}
+      end
+
+      givenpi %[(assistant @pin_ for @pout_) (pulse @pin_ value_)] do
+        root1 = effect(root1, nodepath, node0) do
+          change current: value
+        end
+
+        {root1, successor?(root1, nodepath)}
+      end
+
+      givenpi(
+        %[(assistant @pin_ for @pout_ current: value_) (pull @pout_)],
+      ) do
+        root1 = effect(root1, nodepath, node0) do
+          event :pulse, pout, value
+          change state: :busy
+        end
+
+        {root1, successor?(root1, nodepath)}
+      end
+
+      givenpi %[(assistant @pin_ for @pout_ current: value_ state: busy) (feedback (%any done cancelled) @pout_)] do
+        root1 = effect(root1, nodepath, node0) do
+          event :feedback, :completed, pin, value
+          clear :state, :current
+        end
+
+        {root1, successor?(root1, nodepath)}
+      end
 
       # Stateful transform
       begin
@@ -547,6 +607,15 @@ module D
 
       # Stateless transform
       begin
+        # Signal that we're ready for a job
+        givenpi %[(transform @pin_ to @pout_ body_) cycle] do
+          root1 = effect(root1, nodepath, node0) do
+            event :pull, pin
+          end
+
+          {root1, successor?(root1, nodepath)}
+        end
+
         # Schedule job
         givenpi %[(transform @pin_ to @pout_ body_) (pulse @pin_ input_)] do
           # FIXME: how to get rid of this
@@ -783,11 +852,13 @@ module D
     root
   end
 
-  def unchanged?(root0 : Term::Dict, root1 : Term::Dict) : Bool
-    Q.of(root1).empty? && root0 == root1
-  end
-
   def run(root0 : Term::Dict, & : Term::Dict -> Term::Dict)
+    # FIXME: this is a hack. Maybe there are more efficient termination conditions
+    # than this. This will leak memory forever if nonperiodic or infinitely nesting.
+    # We don't have any problem with nonperiodic or infinitely nesting -- we can rewrite
+    # forever, that's fine. But the fact that this leaks memory is not.
+    history = Set(Term).new
+
     root0 = transition(Term.of(root0), docpath: Term[]).as_d
 
     while true
@@ -795,7 +866,7 @@ module D
       root0 = publish(root0)
       root1 = advance(Term.of(root0), Term.of(root0), docpath: Term[]).as_d
 
-      if unchanged?(root0, root1)
+      unless history.add?(Term.of(root1))
         return root1
       end
 
@@ -807,7 +878,7 @@ end
 module D7
   # Strips hidden pairs from *root*.
   #
-  # NOTE: in D7, we rely on a convention that all hidden pairs have a key that
+  # NOTE: in D7, we rely on the convention that all hidden pairs have a key that
   # is prefixed with '#'.
   def self.visible(root : Term) : Term
     root = root.as_d? || return root
@@ -828,9 +899,11 @@ module D7
     Term.of(root)
   end
 
-  def self.run(root0 : Term) : Term
+  def self.run(root0 : Term, &) : Term
     root0 = root0.as_d? || return root0
     root1 = D.run(root0) do |root|
+      yield root
+
       if jobs_pending = root[D::JobsPending]?
         execute = ->(program : Term, env : Term::Dict) do
           rewrite(program, Nitrene.rewriter, env: env)
@@ -852,11 +925,16 @@ module D7
 
     Term.of(root1)
   end
+
+  def self.run(root0 : Term)
+    run(root0) { }
+  end
 end
 
 module Nitrene
   PRIMITIVES = ProcRuleset.build do
     rulepi1 %[(+ a_number b_number)] { a + b }
+    rulepi1 %[(- a_number b_number)] { a - b }
     rulepi1 %[(* a_number b_number)] { a * b }
   end
 
@@ -866,59 +944,6 @@ module Nitrene
     REWRITER
   end
 end
-
-# # Counter multi step, testing how button reacts to transform feedback
-
-# root = ML.terms(<<-WWML
-# (cell 5 @count)
-# (button "Increment" as +1 to @deltas ((press) (press) (press)))
-# (button "Decrement" as -1 to @deltas ())
-# (transform @deltas to @counts with @count (+ state _))
-# (latest @counts @count)
-# WWML
-# ).as_d
-
-# # Test cancellation (NOTE: this depends on how fast we handle jobs, modify for predictability!)
-# root = ML.terms(<<-WWML
-# (cell 5 @count)
-# (button "Increment" as +1 to @deltas ((press) (press) (press) (press) (press)))
-# (decay 1 (transform @deltas to @counts with @count (+ state _)))
-# (latest @counts @count)
-# WWML
-# ).as_d
-
-# # Button listens to multiple feedbacks
-# root = ML.terms(<<-WWML
-# (cell 0 @count)
-
-# (button "Increment" as +1 to @deltas ((press) (press) (press) (press) (press)))
-
-# ;; This one should cancel
-# (decay 1 (transform @deltas to @counts with @count (+ state _)))
-
-# ;; This one should go on, a "Backup" of sorts
-# (decay 5 (transform @deltas to @counts with @count (- state _)))
-
-# (latest @counts @count)
-# WWML
-# ).as_d
-
-# # Test transforms not eating each other if cancelled, same tasks
-# root = ML.terms(<<-WWML
-# (cell 0 @count)
-
-# (button "Increment" as +1 to @deltas ((press) (press) (press) (press) (press)))
-
-# ;; This one should cancel
-# (decay 1 (transform @deltas to @counts with @count (+ state _)))
-
-# ;; This one should go on, a "Backup" of sorts
-# (decay 5 (transform @deltas to @counts with @count (+ state _)))
-
-# (latest @counts @count)
-# WWML
-# ).as_d
-
 
 # running0 = Set(Term).new
 # results = Deque({Term, Term}).new
