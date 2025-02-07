@@ -632,13 +632,13 @@ module Ww::ML::Text
     end
 
     # Parses a list's pairspart assuming `¦‸<...>`.
-    private def ppairspart : Term
+    private def ppairspart(*, stopper = :")") : Term
       unless token = @lexer.ahead?
         raise "unexpected end-of-input after '¦'"
       end
 
       # If `¦ ‸)` then this is an empty pairspart.
-      if token.type == :")"
+      if token.type == stopper
         @lexer.thru?
 
         return Term.of
@@ -651,17 +651,17 @@ module Ww::ML::Text
       end
 
       case token.type
-      when :")"
+      when stopper
         # If `¦ <head>‸)` then this is a pairspart override.
         @lexer.thru?
         head
       when :":", :"⋮"
         # If `¦ <head>‸: ...` or `¦ <head>‸⋮ ...` then this is a closed pairspart.
         key, value = ppentry(head)
-        Term.of(pentrylist(:")", initial: Term[].with(key, value)))
+        Term.of(pentrylist(stopper, initial: Term[].with(key, value)))
       else
         # Otherwise this is an open itemspart (%layer).
-        Term.of(:"%layer", head, pentrylist(:")"))
+        Term.of(:"%layer", head, pentrylist(stopper))
       end
     end
 
@@ -784,11 +784,16 @@ module Ww::ML::Text
     end
 
     private def pitem : Term
+      pairspart = nil
+
       list = Term[].transaction do |commit|
         commit.append(:"%item")
 
         while token = @lexer.thru?
           case token.type
+          when :"¦"
+            pairspart = ppairspart(stopper: :"⟩")
+            break
           when :"⟩"
             break
           when :"⟩°"
@@ -800,7 +805,7 @@ module Ww::ML::Text
         end
       end
 
-      Term.of(list)
+      pairspart ? Term.of(:"%partition", list, pairspart) : Term.of(list)
     end
 
     private def slot(token : Token) : Term
