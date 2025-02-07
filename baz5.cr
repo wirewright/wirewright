@@ -224,7 +224,7 @@ def callR(&callable : Term -> Rewrite::Any) : Rewriter
 end
 
 # :nodoc:
-def chainR(ctx, term, a, b)
+def chainR(ctx : RewriterContext, term : Term, a : Rewriter, b : Rewriter)
   lhs = a.call(ctx, Rewrite.one(term))
   rhs = b.call(ctx, lhs.as?(Rewrite::Some) || Rewrite.one(term))
 
@@ -239,12 +239,12 @@ def chainR(a : Rewriter, b : Rewriter) : Rewriter
 end
 
 # :ditto:
-def chainR(a : Rewriter, b : Rewriter, *cs) : Rewriter
+def chainR(a : Rewriter, b : Rewriter, *cs : Rewriter) : Rewriter
   chainR(chainR(a, b), *cs)
 end
 
 # :nodoc:
-def choiceR(ctx, term, a, b)
+def choiceR(ctx : RewriterContext, term : Term, a : Rewriter, b : Rewriter)
   lhs = a.call(ctx, Rewrite.one(term))
   lhs.as?(Rewrite::Some) || b.call(ctx, Rewrite.one(term))
 end
