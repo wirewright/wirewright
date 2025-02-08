@@ -354,4 +354,88 @@ module Ww::M1::Operator
 
     match(behind0, op.successor, v, ahead0)
   end
+
+  module Entry
+    extend self
+
+    def match(behind0, op : Required, matchee : Term, ahead0)
+      unless dict = matchee.as_d?
+        return Fb::Mismatch.new(behind0.env)
+      end
+
+      unless v = dict[op.key]?
+        return Fb::Mismatch.new(behind0.env)
+      end
+
+      ahead1 = Ahead::Goto.new(behind0.keypath?, Ahead.stackptr(ahead0))
+
+      Operator.match(behind0.value(key: op.key), op.value, v, ahead1)
+    end
+
+    def match(behind0, op : Optional, matchee : Term, ahead0)
+      unless dict = matchee.as_d?
+        return Fb::Mismatch.new(behind0.env)
+      end
+
+      ahead1 = Ahead::Goto.new(behind0.keypath?, Ahead.stackptr(ahead0))
+
+      if value = dict[op.key]?
+        behind1 = behind0.value(key: op.key)
+
+        case fb = Operator.match(behind1, op.value, value, ahead1)
+        in Fb::Match, Fb::Interrupt
+          return fb
+        in Fb::Mismatch
+        end
+      end
+
+      behind1 = behind0.keypath(&.create_pair(op.key, value: op.default))
+
+      Operator.match(behind1, op.value, op.default, ahead1)
+    end
+
+    def match(behind0, op : Absent | AbsentKeypath, matchee : Term, ahead0)
+      unless dict = matchee.as_d?
+        return Fb::Mismatch.new(behind0.env)
+      end
+
+      if op.key.in?(dict)
+        return Fb::Mismatch.new(behind0.env)
+      end
+
+      case op
+      in Absent
+        behind1 = behind0
+      in AbsentKeypath
+        behind1 = behind0.mount(op.name, &.create_pair(op.key))
+      end
+
+      Ahead.tr(behind1, ahead0)
+    end
+
+    def match(behind0, op : Negative | NegativeKeypath, matchee : Term, ahead0)
+      unless dict = matchee.as_d?
+        return Fb::Mismatch.new(behind0.env)
+      end
+
+      if v = dict[op.key]?
+        case fb = Operator.match(behind0, op.positive, v, ahead0)
+        in Fb::Match # Positive example matches, nothing to do.
+          return Fb::Mismatch.new(behind0.env)
+        in Fb::Mismatch
+        in Fb::Interrupt
+          return fb
+        end
+      end
+
+      case op
+      in Negative
+        behind1 = behind0
+      in NegativeKeypath
+        behind1 = behind0.mount(op.name, &.create_pair(op.key))
+      end
+
+      Ahead.tr(behind1, ahead0)
+    end
+  end
 end

@@ -287,6 +287,127 @@ prefix `≡` so the latter may be rewritten as `(edge ≡x_)`.
 (appender () @foo) ;; => (appender (foo) (edge))
 ```
 
+### Matching pairs
+
+Wirewright supports several pattern matching constructs for matching dictionary pairs. Most of
+them have neat, composable shorthands, all grouped under the *dict pairspart partition* syntax
+(see e.g. `%partition`).
+
+#### Required pairs
+
+The simplest construct and one that is implicit is the *required pair* construct: for example,
+in `(point x: x_ y: y_)`, `x` and `y` are both *required pairs*: both keys must exist within
+the matchee dict and both values must match their corresponding pattern (in this case, `x_` and `y_`).
+
+```wwml
+(age (user name: name_string age: age←(%number 1 <= (whole _) <= 24)))
+  => age
+
+(age (user name: "Alice" age: 21)) ;; => 21
+```
+
+Required pairs whose intended capture name is the same as the key have a shorthand form in the dict
+pairspart partition: `(point ¦ x: x_ y: y_)`, which is the same as the previously mentioned pattern,
+can be rewritten more succinctly as `(point ¦ () x_ y_)`. Note the use of `()` to "plug" the hole for
+`%layer` (see `%layer` docs to learn more).
+
+Explained differently, in the dict pairspart partition, `x_` is the same as `x: x_` which is a shorthand
+for `x: x←_` (expanded to `x: (%let x _)`.
+
+In this shorthand syntax, it is not necessary for the right-hand side to be a blank; it can be any pattern.
+So `x_: (%number (whole _))`, for example, expands to `x: x←(%number (whole _))` and so on.
+
+```wwml
+(age (user ¦ () name_string age_: (%number 1 <= (whole _) <= 24)))
+  => age
+
+(age (user name: "Alice" age: 21)) ;; => 21
+```
+
+There is a similar typed blank shorthand: `x_number` in the pairspart pattern expands into `x: x_number`
+and so on. Although it makes little sense, `x_number: ...` (e.g. `x_number: (%number (whole _))`) is expanded
+into `x: (%all x_number (%number (whole _)))` and so on.
+
+```wwml
+(translated (point ¦ () x_number y_number) n_number) =>
+  (point x: (+ x n) y: (+ y n))
+
+(translated (point x: 100 y: 200) 5) ;; => (point x: 105 y: 205)
+```
+
+#### Optional pairs
+
+If you want to allow a pair to be absent or its value pattern to mismatch, you can use
+the `%optional` construct, e.g.: `(point x: (%optional 0 x_number) y: (%optional 0 y_number))`.
+In this case, if `x`, `y`, or both are absent, `0` will be passed to the value pattern; similarly,
+if `x`, `y`, or both are present but their value does not match the value pattern, `0` will
+be passed to the value pattern. In effect, `0` works as a fallback term in case something
+goes wrong with the user-provided value: `(%optional <fallback term> <value pattern>)`.
+
+Obviously, if the fallback term too does not match the value pattern, then this is a mismatch of
+the dictionary pattern overall.
+
+There is a shorthand for `%optional` in the pairspart partition: `<key>⋮ <fallback>` expands
+into `<key>: (%optional <fallback term> <key>_<type of fallback term>)`. So e.g. `x⋮ 0` will expand
+into `x: (%optional 0 x_number)` and `y⋮ 0` into `y: (%optional 0 y_number)`.
+
+If you want to disable type inference for fallback term, you can use the `<key>_⋮ <fallback>` shorthand,
+which expands into `<key>: (%optional <fallback term> <key>_)`. For example, `x_⋮ 0` will expand into
+`x: (%optional 0 x_)`, matching not only number term values, but values of any type (and content).
+
+If your pattern is more complex than a typed or untyped blank, you will have to use the full
+form of `%optional`: `(point ¦ x: (%optional 0 (%number 0 <= (whole _) <= 100)))`.
+
+There are two common pitfalls with `%optional`:
+
+- Captures should be made *inside*, not outside of `%optional`: it's `x: (%optional 0 qux←...)`, NOT
+  `x: qux←(%optional 0 ...)`. The latter is invalid in this context; and will be treated one layer of
+  meaning below by the pattern matching engine: as a dictionary pattern whose first item is `%optional`,
+  second item is `0`, and so on; all captured under `qux`.
+
+- Remember that `%optional` is not only about the absence of the value in the matchee, but also
+  about the presence of a value that does not match the value pattern.
+
+#### Matching the absence of a pair with a known key
+
+Also known as *negative pairs* or *pair negation*.
+
+The absence of a pair with a certain value can be matched using the `(%- <pattern for the value whose absence is expected>)`.
+For example, `x: (%- _number)` means "key x with a number value must be absent from the matchee dict".
+Said positively, this means "key x must be absent, or its value must not be a number".
+
+The absence of a pair in general can be matched using the `(%- _)` construct. Note how `(%- _)` reads
+as "key x with any value must be absent from the matchee dict". In other words, e.g. `x: (%- _)` means
+"key x must be absent in the matchee dict".
+
+#### Matching the absence of a pair with a known key, with keypath
+
+The same as the above, except a second argument is appended to `%-`: `(%- <pattern for value whose absence is expected> <keypath capture>)`.
+
+Has a shorthand in the dict pairspart partition: e.g., `(point ¦ -x_ -y_)` expands to `(point ¦ x: (%- _ x) y: (%- _ y))`,
+and `-<key>_<type>` expands similarly to `(%- _<type> <key>)`, e.g. `-qux_number` in the dict pairspart
+will expand to `qux: (%- _number qux)`, which reads as "match the absence of a numeric value of `qux`".
+
+The intended use of this construct is in backmap patterns. Indeed, this is a very common
+construct in "enhancement"-based rule systems. Different rules match "absences" in the matchee
+and "enhance" it via the backspec. For instance, some rules may know how to compute the size
+of a text:
+
+```wwml
+;; Rule Alice> I know how to compute the size of a text if it's missing both width and height.
+;;             I'll ignore the rest of pairs.
+(text caption_string ¦ _ -w_ -h_)
+  <> {w: (measure-width →caption), h: (measure-height →caption)}
+
+;; Rule Bob> I know how to compute the size of a text if it has a set width but is
+;;           missing the height! I'll ignore the rest of pairs.
+(text caption_string ¦ _ w_number -h_)
+  <> {h: (measure-wrapped-height →caption →w)}
+```
+
+Thus they can "enhance" text nodes with size information, which can trigger a "chain reaction"
+of further transformations (e.g. sizing of a content-sized parent).
+
 ## Captures and `%let`
 
 Captures are a way to save the matched term (most often it is called *matchee*) in a *capture

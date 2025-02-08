@@ -44,10 +44,10 @@
 # │ %dict: %past/max         │   ~   │   ~     │   ~   │            │    ~     │       │
 # │ %dict: %group            │   ~   │   ~     │   ~   │            │    ~     │       │
 # │ %dict: %gap min max      │   +   │   +     │   +   │            │    ·     │       │
-# │ %dict: %entry/required   │   +   │   +     │   +   │            │    ~     │       │
-# │ %dict: %entry k %optiona │   +   │   +     │   +   │            │    ~     │       │
-# │ %dict: pair %- _         │   +   │   +     │   +   │            │    ·     │       │
-# │ %dict: pair %- _ keyp    │   +   │   +     │   +   │            │    ·     │       │
+# │ %dict: %entry/required   │   +   │   +     │   +   │            │    ~     │       │   ~
+# │ %dict: %entry k %optiona │   +   │   +     │   +   │            │    ~     │       │   ~
+# │ %dict: pair %- _         │   +   │   +     │   +   │            │    ·     │       │   ~
+# │ %dict: pair %- _ keyp    │   +   │   +     │   +   │            │    ·     │       │   ~
 # │ %entry                   │   ~   │   ~     │   ~   │            │    ~     │       │
 # │ %entry°                  │   ~   │   ~     │   ~   │            │    ~     │       │
 # │ %entries                 │   ~   │   ~     │   ~   │            │    ·     │       │
@@ -492,17 +492,6 @@ module ::Ww::M1::Operator::Item
   record Optional, default : Term, tail : Operator::Any
   record Many, capture : Term, children : Array(Any), interior : Set(Term), min : UInt8, max : UInt8
   record Past, children : Array(Any), min : UInt8, max : UInt8, greedy : Bool
-end
-
-module ::Ww::M1::Operator::Entry
-  alias Any = Required | Optional | Absent | AbsentKeypath | Negative | NegativeKeypath
-
-  record Required, key : Term, value : Operator::Any
-  record Optional, key : Term, default : Term, value : Operator::Any
-  record Absent, key : Term
-  record AbsentKeypath, key : Term, name : Term
-  record Negative, key : Term, positive : Operator::Any
-  record NegativeKeypath, key : Term, positive : Operator::Any, name : Term
 end
 
 module ::Ww::M1::Operator::Env
@@ -1444,86 +1433,6 @@ module ::Ww::M1::Operator
 end
 
 module ::Ww::M1::Operator
-end
-
-module ::Ww::M1::Operator::Entry
-  extend self
-
-  def match(behind0, op : Required, matchee : Term, ahead0)
-    unless dict = matchee.as_d?
-      return Fb::Mismatch.new(behind0.env)
-    end
-
-    unless v = dict[op.key]?
-      return Fb::Mismatch.new(behind0.env)
-    end
-
-    kp0 = behind0.keypath?
-
-    Operator.match(behind0.value(key: op.key), op.value, v, Ahead::Goto.new(kp0, Ahead.stackptr(ahead0)))
-  end
-
-  def match(behind0, op : Optional, matchee : Term, ahead0)
-    unless dict = matchee.as_d?
-      return Fb::Mismatch.new(behind0.env)
-    end
-
-    kp0 = behind0.keypath?
-
-    if value = dict[op.key]?
-      case fb = Operator.match(behind0.value(key: op.key), op.value, value, Ahead::Goto.new(kp0, Ahead.stackptr(ahead0)))
-      in Fb::Match, Fb::Interrupt
-        return fb
-      in Fb::Mismatch
-      end
-    end
-
-    Operator.match(behind0.keypath(&.create_pair(op.key, value: op.default)), op.value, op.default, Ahead::Goto.new(kp0, Ahead.stackptr(ahead0)))
-  end
-
-  def match(behind0, op : Absent | AbsentKeypath, matchee : Term, ahead0)
-    unless dict = matchee.as_d?
-      return Fb::Mismatch.new(behind0.env)
-    end
-
-    if op.key.in?(dict)
-      return Fb::Mismatch.new(behind0.env)
-    end
-
-    case op
-    in Absent
-      behind1 = behind0
-    in AbsentKeypath
-      behind1 = behind0.mount(op.name, &.create_pair(op.key))
-    end
-
-    Ahead.tr(behind1, ahead0)
-  end
-
-  def match(behind0, op : Negative | NegativeKeypath, matchee : Term, ahead0)
-    unless dict = matchee.as_d?
-      return Fb::Mismatch.new(behind0.env)
-    end
-
-    if v = dict[op.key]?
-      case fb = Operator.match(behind0, op.positive, v, ahead0)
-      in Fb::Match # Positive example matches, nothing to do.
-        return Fb::Mismatch.new(behind0.env)
-      in Fb::Mismatch
-      in Fb::Interrupt
-        return fb
-      end
-    end
-
-    case op
-    in Negative
-      behind1 = behind0
-    in NegativeKeypath
-      behind1 = behind0.mount(op.name, &.create_pair(op.key))
-    end
-
-    Ahead.tr(behind1, ahead0)
-  end
 end
 
 module ::Ww::M1::Operator::Item

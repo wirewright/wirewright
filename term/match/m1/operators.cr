@@ -76,4 +76,15 @@ module Ww::M1::Operator
   defcase Mod, arg : Term::Num, successor : Any
   defcase Pow, arg : Term::Num, successor : Any
   defcase Map, arg : Term::Dict, successor : Any
+
+  module Entry
+    alias Any = Required | Optional | Absent | AbsentKeypath | Negative | NegativeKeypath
+
+    record Required, key : Term, value : Operator::Any
+    record Optional, key : Term, default : Term, value : Operator::Any
+    record Absent, key : Term
+    record AbsentKeypath, key : Term, name : Term
+    record Negative, key : Term, positive : Operator::Any
+    record NegativeKeypath, key : Term, positive : Operator::Any, name : Term
+  end
 end
