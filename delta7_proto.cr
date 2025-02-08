@@ -568,7 +568,7 @@ module D
         {root1, successor?(root1, nodepath)}
       end
 
-      givenpi %[(assistant @pin_ for @pout_) (pull @pout_) -1] do
+      givenpi %[(pull @pout_ from @pin_) (pull @pout_) -1] do
         root1 = effect(root1, nodepath, node0) do
           event :pull, pin
         end
@@ -576,16 +576,16 @@ module D
         {root1, successor?(root1, nodepath)}
       end
 
-      givenpi %[(assistant @pin_ for @pout_) (pulse @pin_ value_) -1] do
+      givenpi %[(pull @pout_ from @pin_) (pulse @pin_ value_) -1] do
         root1 = effect(root1, nodepath, node0) do
-          change current: value
+          change pending: value
         end
 
         {root1, successor?(root1, nodepath)}
       end
 
       givenpi(
-        %[(assistant @pin_ for @pout_ current: value_) (pull @pout_) -1],
+        %[(pull @pout_ from @pin_ pending: value_) (pull @pout_) -1],
       ) do
         root1 = effect(root1, nodepath, node0) do
           event :pulse, pout, value
@@ -595,10 +595,10 @@ module D
         {root1, successor?(root1, nodepath)}
       end
 
-      givenpi %[(assistant @pin_ for @pout_ current: value_ state: busy) (feedback (%any done cancelled) @pout_) -1] do
+      givenpi %[(pull @pout_ from @pin_ pending: value_ state: busy) (feedback (%any done cancelled) @pout_) -1] do
         root1 = effect(root1, nodepath, node0) do
           event :feedback, :completed, pin, value
-          clear :state, :current
+          clear :state, :pending
         end
 
         {root1, successor?(root1, nodepath)}
