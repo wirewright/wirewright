@@ -301,9 +301,9 @@ def process(queue, testcase, ctx)
     end
 
     # The limit is set low by default to have faster failure. Tests should increase it if
-    # they expect themselves to run longer for success. In an ideal world, perhaps instead
-    # of a limit we'd perhaps have some kind of "divergence" calculation but hey; we're not
-    # in an ideal world are we?
+    # they expect themselves to run longer for success. In an ideal world, instead of a limit,
+    # we'd perhaps have some kind of "divergence" limit but hey; we're not in an ideal
+    # world are we?
     matchpi %[(d7 initial_ expected_ ¦ limit: (%optional 128 limit←(%number +i32)))] do
       next if "-no-d7".in?(ARGV)
 
