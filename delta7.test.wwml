@@ -412,3 +412,14 @@
    (pull @items/latest from @items/queued)
    (transform @items/latest to @items/squared (* _ _))
    (log @items/squared in (1 4 9 16 25))))
+
+;; latest filter
+(d7
+  ((cell 0 @count)
+   (changes @count to @counts)
+   (transform @counts to @counts/future (+ _ 1))
+   (latest (@counts/future n←(%number (whole _) < 10)) (@count n_)))
+  ((cell 9 @count)
+   (changes @count to @counts)
+   (transform @counts to @counts/future (+ _ 1))
+   (latest (@counts/future n←(%number (whole _) < 10)) (@count n_))))

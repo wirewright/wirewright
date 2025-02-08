@@ -502,6 +502,16 @@ module D
         {root1, successor?(root1, nodepath)}
       end
 
+      givenpi %[(latest (@pin_ pattern_) (@cout_ form_)) (pulse @pin_ v_) -1] do
+        if env = M1.match?(pattern, v)
+          root1 = effect(root1, nodepath, node0) do
+            event :assign, cout, M1.bsubst(form, env)
+          end
+        end
+
+        {root1, successor?(root1, nodepath)}
+      end
+
       givenpi(
         %[(changes @cin_ to @pout_) (cell/created @cin_ v_) -1],
         %[(changes @cin_ to @pout_) (cell/updated @cin_ _ v_) -1],
