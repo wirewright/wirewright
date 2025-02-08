@@ -1056,28 +1056,8 @@ module D
     Term.of(root)
   end
 
-  def run1(root0 : Term) : Term
+  def next(root0 : Term) : Term
     pipe(root0, transition(docpath: Term[]), publish, advance(docpath: Term[]))
-  end
-
-  def run(root0 : Term, & : Term::Dict -> Term::Dict)
-    # FIXME: this is a hack. Maybe there are more efficient termination conditions
-    # than this. This will leak memory forever if nonperiodic or infinitely nesting.
-    # We don't have any problem with nonperiodic or infinitely nesting -- we can rewrite
-    # forever, that's fine. But the fact that this leaks memory is not.
-    history = Set(Term).new
-
-    root0 = root0.as_d
-
-    while true
-      root0 = yield root0
-      root1 = run1(Term.of(root0))
-      unless history.add?(root1)
-        return root1
-      end
-
-      root0 = root1.as_d
-    end
   end
 end
 
@@ -1131,16 +1111,43 @@ module D7
     Term.of(root1)
   end
 
-  def self.run1(root0 : Term) : Term
-    pipe(root0, D.run1, handle)
+  def self.next(root0 : Term) : Term
+    pipe(root0, D.next, handle)
   end
 
-  def self.run(root0 : Term, & : Term::Dict ->) : Term
-    D.run(root0) { |root1| doc = handle(Term.of(root1)).as_d; yield doc; doc }
+  class Interrupted < Exception
+    getter initial : Term
+    getter last : Term
+
+    def initialize(@initial, @last)
+      @message = "could not reach goal state"
+    end
   end
 
-  def self.run(root0 : Term)
-    run(root0) { }
+  # Advances *root* through a fixed or unlimited number of cycles, set by *max_cycles*.
+  # Yields intermediate roots and expects the block to return `true` whenever the yielded
+  # root is a terminal root. Returns the terminal root. Raises `Interrupted` when *max_cycles*
+  # is exceeded.
+  def self.run(initial : Term, *, max_cycles : Int32? = nil, & : Term -> Bool) : Term
+    root0 = initial
+
+    while max_cycles.nil? || max_cycles > 0
+      root1 = D7.next(root0)
+      if yield root1
+        return root1
+      end
+
+      # At this point we assume equality is cheap, even on large dicts. Thus have
+      # a cheap way to bail out without exceeding the limit through pointless
+      # computation.
+      break if root0 == root1
+
+      root0 = root1
+
+      max_cycles -= 1 if max_cycles
+    end
+
+    raise Interrupted.new(initial, root0)
   end
 end
 

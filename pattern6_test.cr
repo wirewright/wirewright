@@ -300,19 +300,24 @@ def process(queue, testcase, ctx)
       end
     end
 
-    matchpi %[(d7 initial_ expected_)] do
+    # The limit is set low by default to have faster failure. Tests should increase it if
+    # they expect themselves to run longer for success. In an ideal world, perhaps instead
+    # of a limit we'd perhaps have some kind of "divergence" calculation but hey; we're not
+    # in an ideal world are we?
+    matchpi %[(d7 initial_ expected_ ¦ limit: (%optional 128 limit←(%number +i32)))] do
       next if "-no-d7".in?(ARGV)
 
       ctx.stats.account
 
       track(ctx, testcase) do
-        # This obviously doesn't account for infinite feedback loops in the program,
-        # but hey, probably they won't happen in tests.
-        actual = ctx.stats.run { D7.run(initial) }
-        actual = D7.visible(actual)
-
-        unless actual == expected
-          ctx.failures << Term.of(:"mismatch/d7", actual, :==, expected)
+        ctx.stats.run do
+          begin
+            D7.run(initial, max_cycles: limit.to(Int32)) do |im|
+              D7.visible(im) == expected
+            end
+          rescue e : D7::Interrupted
+            ctx.failures << Term.of(:"d7/interrupted", D7.visible(e.last), :==, expected, :LIMIT, limit)
+          end
         end
       end
     end
