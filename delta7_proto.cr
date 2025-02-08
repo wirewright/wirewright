@@ -814,6 +814,15 @@ module D
         {root1, successor?(root1, nodepath)}
       end
 
+      # Convert pulse signal to edit broadcast.
+      givenpi %[(edit-cast @pin_ to @bout_) (pulse @pin_ motion_) -1] do
+        root1 = effect(root1, nodepath, node0) do
+          event :edit, bout, motion
+        end
+
+        {root1, successor?(root1, nodepath)}
+      end
+
       otherwise do
         {root1, successor?(root1, nodepath)}
       end
@@ -862,6 +871,19 @@ module D
     end
 
     root1 = assign(root1, docpath, document1)
+
+    if docpath.empty? # Root
+      Term.case(event) do
+        # Edit-events are potentially destructive so we start from scratch after
+        # them, using recursion in this case.
+        matchpi %[(edit @edge_ motion_)] do
+          return advance(edit(root1, motion, edge), Term[])
+        end
+
+        otherwise { }
+      end
+    end
+
     root1, _ = advance(root0, root1, docpath, event)
 
     transition(root1, docpath)

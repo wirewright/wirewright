@@ -253,3 +253,54 @@
   ((cell 5 @count)
    (button "Increment" as +1 to @deltas ())
    (latest @counts @count)))
+
+;; Basic self-edit
+(d7
+  (("" | "" () @cursor)
+   (delay 0 (event (edit @cursor (input "("))))
+   (delay 1 (event (edit @cursor (input "cell"))))
+   (delay 2 (event (edit @cursor (input " "))))
+   (delay 3 (event (edit @cursor (input "0"))))
+   (delay 4 (event (edit @cursor (input " "))))
+   (delay 5 (event (edit @cursor (input "@x"))))
+   (delay 6 (event (edit @cursor (key enter))))
+   (delay 7 (event (edit @cursor (key right))))
+   (changes @x to @xs)
+   (log @xs in ()))
+  ((cell 0 @x)
+   ("" | "" () @cursor)
+   (changes @x to @xs)
+   (log @xs in (0))))
+
+;; Motion self-edit
+(d7
+  ((group
+     ("" | "" () @cursor)
+     (transform (@commands up) to @edits (move-parent-behind))
+     (transform (@commands down) to @edits (move-parent-ahead))
+     (edit-cast @edits to @cursor))
+   (button "Move up" as up to @commands ())
+   (button "Move down" as down to @commands ((press) (press))))
+  ((button "Move up" as up to @commands ())
+   (button "Move down" as down to @commands ())
+   (group
+     ("" | "" () @cursor)
+     (transform (@commands up) to @edits (move-parent-behind))
+     (transform (@commands down) to @edits (move-parent-ahead))
+     (edit-cast @edits to @cursor))))
+
+(d7
+  ((button "Move up" as up to @commands ((press)))
+   (button "Move down" as down to @commands ())
+   (group
+     ("" | "" () @cursor)
+     (transform (@commands up) to @edits (move-parent-behind))
+     (transform (@commands down) to @edits (move-parent-ahead))
+     (edit-cast @edits to @cursor)))
+  ((button "Move up" as up to @commands ())
+   (group
+     ("" | "" () @cursor)
+     (transform (@commands up) to @edits (move-parent-behind))
+     (transform (@commands down) to @edits (move-parent-ahead))
+     (edit-cast @edits to @cursor))
+   (button "Move down" as down to @commands ())))
