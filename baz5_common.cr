@@ -361,8 +361,10 @@ struct Ruleset
     new(pset, rules.to_readonly_slice.dup)
   end
 
-  def responses(matchee : Term) : Iterator({Pr::Pos, Rule::Any})
-    @pset.responses(matchee).map { |response| {response, @rules[response.pattern.index]} }
+  def responses(matchee : Term, *, env : Term::Dict = Term[]) : Iterator({Pr::Pos, Rule::Any})
+    @pset
+      .responses(matchee, env: env)
+      .map { |response| {response, @rules[response.pattern.index]} }
   end
 
   def call(matchee : Term) : {Pr::Pos, Rule::Any}?

@@ -6,7 +6,7 @@
 ;; GENERAL
 
 ;; Get rid of anything that we do not understand.
-[_string | _string (M_ _*) @_] <> {(M): ()}
+[_string | _string (M_ _*) @EDGE_] <> {(M): ()}
 
 ;; INTERPRET
 ;;
@@ -25,478 +25,478 @@
 ;; contexts precisely as `expel-left`. in others as `move-right` or `move-below`, etc.
 
 ;; Interpret (input)
-[_string | _string (M←(input text_string) _*) @_]
+[_string | _string (M←(input text_string) _*) @EDGE_]
   <> {M: (append-left →text)}
 
 ;; These append first, then try to expel
-[_string | _string (M←(input ch←(%any " " "\"")) _*) @_]
+[_string | _string (M←(input ch←(%any " " "\"")) _*) @EDGE_]
   <> {(M): ((append-left →ch) (expel))}
 
 ;; These try to expel first, then if that fails, append, then again try
 ;; to expel, and if even that fails, they give up.
-[_string | _string (M←(input ch←(%any ")" "}" "]")) _*) @_]
+[_string | _string (M←(input ch←(%any ")" "}" "]")) _*) @EDGE_]
   <> {M: (expel () ((append-left →ch) (expel)))}
 
-["" | "" (M←(input " ") _*) @_]
+["" | "" (M←(input " ") _*) @EDGE_]
   <> {M: (move-ahead)}
 
-[_* ["" | "" (M←(input " ") _*) @_]]
+[_* ["" | "" (M←(input " ") _*) @EDGE_]]
   <> {M: (move-out-ahead)}
 
-[_string | _string (M←(input "(") _*) @_]
+[_string | _string (M←(input "(") _*) @EDGE_]
   <> {M: (expel ((nest-self)) ((append-left "(")))}
 
-[_string | _string (M←(input ch←(%any "[" "{")) _*) @_]
+[_string | _string (M←(input ch←(%any "[" "{")) _*) @EDGE_]
   <> {(M): ((expel) (append-left →ch))}
 
-["" | "" (M←(input "(") _*) @_] <> {M: (nest-self)}
+["" | "" (M←(input "(") _*) @EDGE_] <> {M: (nest-self)}
 
-[(%string nonempty) | "" (M←(input ":") _*) @_]
+[(%string nonempty) | "" (M←(input ":") _*) @EDGE_]
   <> {M: (expel-left ((enter-key-behind)) ())}
 
-["" | "" (M←(input ":") _*) @_] <> {M: (enter-key-behind)}
+["" | "" (M←(input ":") _*) @EDGE_] <> {M: (enter-key-behind)}
 
 ;; (key tab) should expel + leave from pair if editing at top-level
-(_* ¦ (%entry _ [_string | _string (M←(key tab) _*) @_]))
+(_* ¦ (%entry _ [_string | _string (M←(key tab) _*) @EDGE_]))
   <> {M: (leave-pair)}
 
 ;; ... or if editing inside a top-level dict
-(_* ¦ (%entry _ ⟨[_string | _string (M←(key tab) _*) @_]⟩))
+(_* ¦ (%entry _ ⟨[_string | _string (M←(key tab) _*) @EDGE_]⟩))
   <> {M: (leave-pair)}
 
 ;; Interpret (key left) and (key right)
-[(%string nonempty) | _string (M←(key left) _*) @_] <> {M: (move-left)}
-[_string | (%string nonempty) (M←(key right) _*) @_] <> {M: (move-right)}
-["" | (%string nonempty) (M←(key left) _*) @_] <> {M: (expel-right)}
-[(%string nonempty) | "" (M←(key right) _*) @_] <> {M: (expel-left)}
+[(%string nonempty) | _string (M←(key left) _*) @EDGE_] <> {M: (move-left)}
+[_string | (%string nonempty) (M←(key right) _*) @EDGE_] <> {M: (move-right)}
+["" | (%string nonempty) (M←(key left) _*) @EDGE_] <> {M: (expel-right)}
+[(%string nonempty) | "" (M←(key right) _*) @EDGE_] <> {M: (expel-left)}
 
-⟨_ ["" | "" (M←(key left) _*) @_]⟩ <> {M: (edit-behind)}
-⟨["" | "" (M←(key right) _*) @_] _⟩ <> {M: (edit-ahead)}
+⟨_ ["" | "" (M←(key left) _*) @EDGE_]⟩ <> {M: (edit-behind)}
+⟨["" | "" (M←(key right) _*) @EDGE_] _⟩ <> {M: (edit-ahead)}
 
-[["" | "" (M←(key left) _*) @_] _*] <> {M: (escape-above)}
-[_* ["" | "" (M←(key right) _*) @_]] <> {M: (escape-below)}
+[["" | "" (M←(key left) _*) @EDGE_] _*] <> {M: (escape-above)}
+[_* ["" | "" (M←(key right) _*) @EDGE_]] <> {M: (escape-below)}
 
-[(%string nonempty) | _string (M←(key C-left) _*) @_] <> {M: (move-word-left)}
-[_string | (%string nonempty) (M←(key C-right) _*) @_] <> {M: (move-word-right)}
+[(%string nonempty) | _string (M←(key C-left) _*) @EDGE_] <> {M: (move-word-left)}
+[_string | (%string nonempty) (M←(key C-right) _*) @EDGE_] <> {M: (move-word-right)}
 
-["" | "" (M←(key (%any S-up S-left)) _*) @_] <> {M: (group-behind-front)}
-["" | "" (M←(key (%any S-down S-right)) _*) @_] <> {M: (group-ahead-back)}
+["" | "" (M←(key (%any S-up S-left)) _*) @EDGE_] <> {M: (group-behind-front)}
+["" | "" (M←(key (%any S-down S-right)) _*) @EDGE_] <> {M: (group-ahead-back)}
 
-[["" | "" (M←(key (%any S-up S-left)) _*) @_] _*] <> {M: (capture-above-ahead)}
-⟨[["" | "" (M←(key S-right) _*) @_] _ _+]⟩ <> {M: (release-ahead-above)}
-⟨(["" | "" (M←(key S-right) _*) @_] _)⟩ <> {M: (ungroup-ahead-back)}
+[["" | "" (M←(key (%any S-up S-left)) _*) @EDGE_] _*] <> {M: (capture-above-ahead)}
+⟨[["" | "" (M←(key S-right) _*) @EDGE_] _ _+]⟩ <> {M: (release-ahead-above)}
+⟨(["" | "" (M←(key S-right) _*) @EDGE_] _)⟩ <> {M: (ungroup-ahead-back)}
 
-[_* ["" | "" (M←(key (%any S-down S-right)) _*) @_]] <> {M: (capture-below-behind)}
-⟨[_+ _ ["" | "" (M←(key S-left) _*) @_]]⟩ <> {M: (release-behind-below)}
-⟨(_ ["" | "" (M←(key S-left) _*) @_])⟩ <> {M: (ungroup-behind-front)}
+[_* ["" | "" (M←(key (%any S-down S-right)) _*) @EDGE_]] <> {M: (capture-below-behind)}
+⟨[_+ _ ["" | "" (M←(key S-left) _*) @EDGE_]]⟩ <> {M: (release-behind-below)}
+⟨(_ ["" | "" (M←(key S-left) _*) @EDGE_])⟩ <> {M: (ungroup-behind-front)}
 
 ;; Interpret (key up) and (key down)
-⟨_ ["" | "" (M←(key up) _*) @_]⟩ <> {M: (move-behind)}
-⟨["" | "" (M←(key down) _*) @_] _⟩ <> {M: (move-ahead)}
+⟨_ ["" | "" (M←(key up) _*) @EDGE_]⟩ <> {M: (move-behind)}
+⟨["" | "" (M←(key down) _*) @EDGE_] _⟩ <> {M: (move-ahead)}
 
-["" | "" (M←(key C-left) _*) @_] <> {M: (move-parent-behind)}
-["" | "" (M←(key C-right) _*) @_] <> {M: (move-parent-ahead)}
+["" | "" (M←(key C-left) _*) @EDGE_] <> {M: (move-parent-behind)}
+["" | "" (M←(key C-right) _*) @EDGE_] <> {M: (move-parent-ahead)}
 
-[_string | _string (M←(key C-up) _*) @_] <> {M: (move-parent-behind)}
-[_string | _string (M←(key C-down) _*) @_] <> {M: (move-parent-ahead)}
+[_string | _string (M←(key C-up) _*) @EDGE_] <> {M: (move-parent-behind)}
+[_string | _string (M←(key C-down) _*) @EDGE_] <> {M: (move-parent-ahead)}
 
-[⟨["" | "" (M←(key C-left) _*) @_]⟩ _*] <> {M: (move-parent-above)}
-[_* ⟨["" | "" (M←(key C-right) _*) @_]⟩] <> {M: (move-parent-below)}
+[⟨["" | "" (M←(key C-left) _*) @EDGE_]⟩ _*] <> {M: (move-parent-above)}
+[_* ⟨["" | "" (M←(key C-right) _*) @EDGE_]⟩] <> {M: (move-parent-below)}
 
-⟨_dict ⟨["" | "" (M←(key C-left) _*) @_]⟩⟩ <> {M: (move-parent-into-behind)}
-⟨⟨["" | "" (M←(key C-right) _*) @_]⟩ _dict⟩ <> {M: (move-parent-into-ahead)}
+⟨_dict ⟨["" | "" (M←(key C-left) _*) @EDGE_]⟩⟩ <> {M: (move-parent-into-behind)}
+⟨⟨["" | "" (M←(key C-right) _*) @EDGE_]⟩ _dict⟩ <> {M: (move-parent-into-ahead)}
 
 ;; Interpret (key home) and (key end)
-[(%string nonempty) | _string (M←(key home) _*) @_] <> {M: (move-front-left)}
-[_string | (%string nonempty) (M←(key end) _*) @_] <> {M: (move-back-right)}
+[(%string nonempty) | _string (M←(key home) _*) @EDGE_] <> {M: (move-front-left)}
+[_string | (%string nonempty) (M←(key end) _*) @EDGE_] <> {M: (move-back-right)}
 
-[_string | _string (M←(key C-S-home) _*) @_] <> {M: (nest-parent-front)}
-[_string | _string (M←(key C-S-end) _*) @_] <> {M: (nest-parent-back)}
+[_string | _string (M←(key C-S-home) _*) @EDGE_] <> {M: (nest-parent-front)}
+[_string | _string (M←(key C-S-end) _*) @EDGE_] <> {M: (nest-parent-back)}
 
-["" | (%string nonempty) (M←(key home) _*) @_] <> {M: (expel-right)}
-[(%string nonempty) | "" (M←(key end) _*) @_] <> {M: (expel-left)}
+["" | (%string nonempty) (M←(key home) _*) @EDGE_] <> {M: (expel-right)}
+[(%string nonempty) | "" (M←(key end) _*) @EDGE_] <> {M: (expel-left)}
 
-⟨["" | "" (M←(key home) _*) @_]⟩ <> {M: (move-front-behind)}
-⟨["" | "" (M←(key end) _*) @_]⟩ <> {M: (move-back-ahead)}
+⟨["" | "" (M←(key home) _*) @EDGE_]⟩ <> {M: (move-front-behind)}
+⟨["" | "" (M←(key end) _*) @EDGE_]⟩ <> {M: (move-back-ahead)}
 
-[["" | "" (M←(key home) _*) @_] _*] <> {M: (escape-front-above)}
-[_* ["" | "" (M←(key end) _*) @_]] <> {M: (escape-back-below)}
+[["" | "" (M←(key home) _*) @EDGE_] _*] <> {M: (escape-front-above)}
+[_* ["" | "" (M←(key end) _*) @EDGE_]] <> {M: (escape-back-below)}
 
-[_string | _string (M←(key C-home) _*) @_] <> {M: (move-parent-front-behind)}
-[_string | _string (M←(key C-end) _*) @_] <> {M: (move-parent-back-ahead)}
+[_string | _string (M←(key C-home) _*) @EDGE_] <> {M: (move-parent-front-behind)}
+[_string | _string (M←(key C-end) _*) @EDGE_] <> {M: (move-parent-back-ahead)}
 
 ;; Interpret (key enter).
-[_string | _string (M←(key enter) _*) @_] <> {M: (expel)}
-⟨_dict ["" | "" (M←(key enter) _*) @_]⟩ <> {M: (move-in-behind)}
+[_string | _string (M←(key enter) _*) @EDGE_] <> {M: (expel)}
+⟨_dict ["" | "" (M←(key enter) _*) @EDGE_]⟩ <> {M: (move-in-behind)}
 
 ;; Interpret (key backspace) and (key delete).
-[(%string nonempty) | _string (M←(key backspace) _*) @_] <> {M: (delete-left)}
-[_string | (%string nonempty) (M←(key delete) _*) @_] <> {M: (delete-right)}
+[(%string nonempty) | _string (M←(key backspace) _*) @EDGE_] <> {M: (delete-left)}
+[_string | (%string nonempty) (M←(key delete) _*) @EDGE_] <> {M: (delete-right)}
 
-[(%string nonempty) | _string (M←(key C-backspace) _*) @_] <> {M: (delete-word-left)}
-[_string | (%string nonempty) (M←(key C-delete) _*) @_] <> {M: (delete-word-right)}
+[(%string nonempty) | _string (M←(key C-backspace) _*) @EDGE_] <> {M: (delete-word-left)}
+[_string | (%string nonempty) (M←(key C-delete) _*) @EDGE_] <> {M: (delete-word-right)}
 
-⟨_ ["" | "" (M←(key C-backspace) _*) @_]⟩ <> {M: (delete-behind)}
-⟨["" | "" (M←(key C-delete) _*) @_] _⟩ <> {M: (delete-ahead)}
+⟨_ ["" | "" (M←(key C-backspace) _*) @EDGE_]⟩ <> {M: (delete-behind)}
+⟨["" | "" (M←(key C-delete) _*) @EDGE_] _⟩ <> {M: (delete-ahead)}
 
-(["" | "" (M←(key backspace) _*) @_]) <> {M: (unnest-parent)}
-(["" | "" (M←(key delete) _*) @_]) <> {M: (unnest-parent)}
+(["" | "" (M←(key backspace) _*) @EDGE_]) <> {M: (unnest-parent)}
+(["" | "" (M←(key delete) _*) @EDGE_]) <> {M: (unnest-parent)}
 
-(["" | "" (M←(key C-backspace) _*) @_] _*) <> {M: (unnest-parent)}
-(_* ["" | "" (M←(key C-delete) _*) @_]) <> {M: (unnest-parent)}
+(["" | "" (M←(key C-backspace) _*) @EDGE_] _*) <> {M: (unnest-parent)}
+(_* ["" | "" (M←(key C-delete) _*) @EDGE_]) <> {M: (unnest-parent)}
 
 ;; C-backspace while editing at toplevel or in toplevel dict in pairs
 ;; should delete the key and move the value out.
-(_* ¦ (%entry _ [[_string | _string (M←(key C-backspace) _*) @_] _*]))
+(_* ¦ (%entry _ [[_string | _string (M←(key C-backspace) _*) @EDGE_] _*]))
   <> {M: (delete-pair-parent)}
 
-(_* ¦ (%entry _ C←["" | _string (M←(key C-backspace) _*) @_]))
+(_* ¦ (%entry _ C←["" | _string (M←(key C-backspace) _*) @EDGE_]))
   <> {M: (delete-pair-self)}
 
-(_* ¦ (%entry _ C←["" | _string (M←(key backspace) _*) @_]))
+(_* ¦ (%entry _ C←["" | _string (M←(key backspace) _*) @EDGE_]))
   <> {M: (unpair-self)}
 
-(_* ¦ (%entry _ [[_string | _string (M←(key backspace) _*) @_] _*]))
+(_* ¦ (%entry _ [[_string | _string (M←(key backspace) _*) @EDGE_] _*]))
   <> {M: (unpair-parent)}
 
 ;; (!) Careful: (key left) and (key right) must not map back to (key backspace)/(key delete)
 ;; or we'll have occasional infinite rewriting.
-["" | "" (M←(key backspace) _*) @_] <> {M: (key left)}
-["" | "" (M←(key delete) _*) @_] <> {M: (key right)}
+["" | "" (M←(key backspace) _*) @EDGE_] <> {M: (key left)}
+["" | "" (M←(key delete) _*) @EDGE_] <> {M: (key right)}
 
 ;; For less common actions cursor commands are used instead of complicated
 ;; and utterly meaningless key combos.
-[lhs←"," | "" (M←(input ":") _*) @_] <> {lhs: "", M: (pair-around)}
-[lhs←"," | "" (M←(input "(") _*) @_] <> {lhs: "", M: (nest-behind)}
-[lhs←"," | "" (M←(input "v") _*) @_] <> {lhs: "", M: (dup-behind)}
-[lhs←"," | "" (M←(input "V") _*) @_] <> {lhs: "", M: (dup-ahead)}
-[lhs←"," | "" (M←(input "s") _*) @_] <> {lhs: "", M: (swap-behind)}
-[lhs←"," | "" (M←(input "S") _*) @_] <> {lhs: "", M: (swap-ahead)}
-[lhs←"," | "" (M←(input "/") _*) @_] <> {lhs: "", M: (split)}
-[lhs←"," | "" (M←(input "+") _*) @_] <> {lhs: "", M: (join)}
-[lhs←"," | "" (M←(input "y") _*) @_] <> {lhs: "", M: (copy-behind)}
-[lhs←"," | "" (M←(input "Y") _*) @_] <> {lhs: "", M: (copy-ahead)}
-[lhs←"," | "" (M←(input "x") _*) @_] <> {lhs: "", M: (cut-behind)}
-[lhs←"," | "" (M←(input "X") _*) @_] <> {lhs: "", M: (cut-ahead)}
-(lhs←"," | "" (M←(input "p") _*) @_ ¦ _ clipboard: _) <> {lhs: "", M: (paste-behind)}
-(lhs←"," | "" (M←(input "P") _*) @_ ¦ _ clipboard: _) <> {lhs: "", M: (paste-ahead)}
-[lhs←",-" | "" (M←(input (%any "y" "Y")) _*) @_] <> {lhs: "", M: (clear-clipboard)}
+[lhs←"," | "" (M←(input ":") _*) @EDGE_] <> {lhs: "", M: (pair-around)}
+[lhs←"," | "" (M←(input "(") _*) @EDGE_] <> {lhs: "", M: (nest-behind)}
+[lhs←"," | "" (M←(input "v") _*) @EDGE_] <> {lhs: "", M: (dup-behind)}
+[lhs←"," | "" (M←(input "V") _*) @EDGE_] <> {lhs: "", M: (dup-ahead)}
+[lhs←"," | "" (M←(input "s") _*) @EDGE_] <> {lhs: "", M: (swap-behind)}
+[lhs←"," | "" (M←(input "S") _*) @EDGE_] <> {lhs: "", M: (swap-ahead)}
+[lhs←"," | "" (M←(input "/") _*) @EDGE_] <> {lhs: "", M: (split)}
+[lhs←"," | "" (M←(input "+") _*) @EDGE_] <> {lhs: "", M: (join)}
+[lhs←"," | "" (M←(input "y") _*) @EDGE_] <> {lhs: "", M: (copy-behind)}
+[lhs←"," | "" (M←(input "Y") _*) @EDGE_] <> {lhs: "", M: (copy-ahead)}
+[lhs←"," | "" (M←(input "x") _*) @EDGE_] <> {lhs: "", M: (cut-behind)}
+[lhs←"," | "" (M←(input "X") _*) @EDGE_] <> {lhs: "", M: (cut-ahead)}
+(lhs←"," | "" (M←(input "p") _*) @EDGE_ ¦ _ clipboard: _) <> {lhs: "", M: (paste-behind)}
+(lhs←"," | "" (M←(input "P") _*) @EDGE_ ¦ _ clipboard: _) <> {lhs: "", M: (paste-ahead)}
+[lhs←",-" | "" (M←(input (%any "y" "Y")) _*) @EDGE_] <> {lhs: "", M: (clear-clipboard)}
 
 ;; This one is the only one that starts with a period. But two periods
 ;; at the start of a symbol?! That's weird. So instead of allowing this
 ;; kind of weirdness we're reusing it for something a bit more meaningful.
-[lhs←"." | "" (M←(input ".") _*) @_] <> {lhs: "", M: (move-out-ahead)}
+[lhs←"." | "" (M←(input ".") _*) @EDGE_] <> {lhs: "", M: (move-out-ahead)}
 
 ;; HYBRID
 
 ;; Expand ;; into (comment ...). We're not a parser so we have to improvise! Maybe just
 ;; maybe whatever is interpreting the edited term will treat (comment ...) as a comment.
 ;; If not, whatever, humph.
-C←[lhs←";" | rhs←"" (M←(input ";") _*) @_]
+C←[lhs←";" | rhs←"" (M←(input ";") _*) @EDGE_]
   <> {(M): (), lhs: "\"", rhs: "\"", C: (comment ↑C)}
 
 ;; Interact with what appears to be a button.
-(button _ to @_ ⟨C←("" | "" (M←(key enter) _*) @_)⟩)
+(button _ to @_ ⟨C←("" | "" (M←(key enter) _*) @EDGE_)⟩)
   <> {(M): (), (C): ((press) ↑C)}
 
-(button _ (_ to @_) ⟨C←("" | "" (M←(key enter) _*) @_)⟩)
+(button _ as _ to @_ ⟨C←("" | "" (M←(key enter) _*) @EDGE_)⟩)
   <> {(M): (), (C): ((press) ↑C)}
 
 ;; ESCAPE MODE
 
 ;; Enter
-[_string c←| _string (M←(key escape) _*) @_]
+[_string c←| _string (M←(key escape) _*) @EDGE_]
   <> {(M): (), c: (| "")}
 
 ;; Leave
-[_string c←(| _string) _string (M←(key escape) _*) @_]
+[_string c←(| _string) _string (M←(key escape) _*) @EDGE_]
   <> {(M): (), c: |}
 
 ;; Ignore unknown
-[_string (| _string) _string (M←_ _*) @_]
+[_string (| _string) _string (M←_ _*) @EDGE_]
   <> {(M): ()}
 
 ;; Append characters
-[_string (| seq_string) _string (M←(input text_string) _*) @_]
+[_string (| seq_string) _string (M←(input text_string) _*) @EDGE_]
   <> {(M): (), seq: ($ (~ →seq →text))}
 
 ;; Arrows
-[lhs_string c←(| "<") _string (M←(input "-") _*) @_]
+[lhs_string c←(| "<") _string (M←(input "-") _*) @EDGE_]
   <> {(M): (), lhs: ($ (~ →lhs "←")), c: |}
 
-[lhs_string c←(| "-") _string (M←(input ">") _*) @_]
+[lhs_string c←(| "-") _string (M←(input ">") _*) @EDGE_]
   <> {(M): (), lhs: ($ (~ →lhs "→")), c: |}
 
-[lhs_string c←(| "^") _string (M←(input "|") _*) @_]
+[lhs_string c←(| "^") _string (M←(input "|") _*) @EDGE_]
   <> {(M): (), lhs: ($ (~ →lhs "↑")), c: |}
 
-[lhs_string c←(| "|") _string (M←(input "v") _*) @_]
+[lhs_string c←(| "|") _string (M←(input "v") _*) @EDGE_]
   <> {(M): (), lhs: ($ (~ →lhs "↓")), c: |}
 
 ;; We use the degrees symbol as a symbol for source
-[lhs_string c←(| "o") _string (M←(input "o") _*) @_]
+[lhs_string c←(| "o") _string (M←(input "o") _*) @EDGE_]
   <> {(M): (), lhs: ($ (~ →lhs "°")), c: |}
 
 ;; Partition pipe
-[lhs_string c←(| "|") _string (M←(input "|") _*) @_]
+[lhs_string c←(| "|") _string (M←(input "|") _*) @EDGE_]
   <> {(M): (), lhs: ($ (~ →lhs "¦")), c: |}
 
 ;; Escape hatch to avoid the auto dict open/close behavior on '('/')'.
-[lhs_string c←(| "") _string (M←(input ch←(%any "(" ")")) _*) @_]
+[lhs_string c←(| "") _string (M←(input ch←(%any "(" ")")) _*) @EDGE_]
   <> {(M): (), lhs: ($ (~ →lhs →ch)), c: |}
 
 ;; MORPH
 
-[lhs_string | _string (M←(append-left text_string) _*) @_]
+[lhs_string | _string (M←(append-left text_string) _*) @EDGE_]
   <> {(M): (),
       lhs: ($ (~ →lhs →text))}
 
-[lhs_string | rhs_string (M←(move-left) _*) @_]
+[lhs_string | rhs_string (M←(move-left) _*) @EDGE_]
   <> {(M): (),
       lhs: ($ (substring →lhs (rune 0) (rune -2))),
       rhs: ($ (~ (substring →lhs (rune -1) (rune -1)) →rhs))}
 
-[lhs_string | rhs_string (M←(move-word-left) _*) @_]
+[lhs_string | rhs_string (M←(move-word-left) _*) @EDGE_]
   <> {(M): (),
       lhs: ($ (substring →lhs (word 0) (word -2))),
       rhs: ($ (~ (substring →lhs (word -1) (word -1)) →rhs))}
 
-[lhs_string | rhs_string (M←(move-right) _*) @_]
+[lhs_string | rhs_string (M←(move-right) _*) @EDGE_]
   <> {(M): (),
       lhs: ($ (~ →lhs (substring →rhs (rune 0) (rune 0)))),
       rhs: ($ (substring →rhs (rune 1) (rune -1)))}
 
-[lhs_string | rhs_string (M←(move-word-right) _*) @_]
+[lhs_string | rhs_string (M←(move-word-right) _*) @EDGE_]
   <> {(M): (),
       lhs: ($ (~ →lhs (substring →rhs (word 0) (word 0)))),
       rhs: ($ (substring →rhs (word 1) (word -1)))}
 
-[lhs_string | _string (M←(delete-left) _*) @_]
+[lhs_string | _string (M←(delete-left) _*) @EDGE_]
   <> {(M): (),
       lhs: ($ (substring →lhs (rune 0) (rune -2)))}
 
-[lhs_string | _string (M←(delete-word-left) _*) @_]
+[lhs_string | _string (M←(delete-word-left) _*) @EDGE_]
   <> {(M): (),
       lhs: ($ (substring →lhs (word 0) (word -2)))}
 
-[_string | rhs_string (M←(delete-right) _*) @_]
+[_string | rhs_string (M←(delete-right) _*) @EDGE_]
   <> {(M): (),
       rhs: ($ (substring →rhs (rune 1) (rune -1)))}
 
-[_string | rhs_string (M←(delete-word-right) _*) @_]
+[_string | rhs_string (M←(delete-word-right) _*) @EDGE_]
   <> {(M): (),
       rhs: ($ (substring →rhs (word 1) (word -1)))}
 
-[lhs_string | rhs_string (M←(move-front-left) _*) @_]
+[lhs_string | rhs_string (M←(move-front-left) _*) @EDGE_]
   <> {(M): (), lhs: "", rhs: ($ (~ →lhs →rhs))}
 
-[lhs_string | rhs_string (M←(move-back-right) _*) @_]
+[lhs_string | rhs_string (M←(move-back-right) _*) @EDGE_]
   <> {(M): (), lhs: ($ (~ →lhs →rhs)), rhs: ""}
 
-C←[_string | _string (M←(nest-self) _*) @_]
+C←[_string | _string (M←(nest-self) _*) @EDGE_]
   <> {(M): (), C: (↑C)}
 
-⟨behind_ [_string | _string (M←(nest-behind) _*) @_]⟩
+⟨behind_ [_string | _string (M←(nest-behind) _*) @EDGE_]⟩
   <> {(M): (), behind: (↑behind)}
 
-P←⟨C←[_string | _string (M←(nest-parent-front) _*) @_]⟩
+P←⟨C←[_string | _string (M←(nest-parent-front) _*) @EDGE_]⟩
   <> {(M): (), (C): ($tr C0 ()), P: (↑C0 ↑P)}
 
-P←⟨C←[_string | _string (M←(nest-parent-back) _*) @_]⟩
+P←⟨C←[_string | _string (M←(nest-parent-back) _*) @EDGE_]⟩
   <> {(M): (), (C): ($tr C0 ()), P: (↑P ↑C0)}
 
-P←⟨[_string | _string (M←(unnest-parent) _*) @_]⟩
+P←⟨[_string | _string (M←(unnest-parent) _*) @EDGE_]⟩
   <> {(M): (), (P): ↑P}
 
 ;; (edit), (edit-behind), and (edit-ahead)
-C←["" | "" ((m←edit [_* ⏏target]) _*) @_]
+C←["" | "" ((m←edit [_* ⏏target]) _*) @EDGE_]
   <> {m: edit/1, target: ↑C}
 
-C←["" | "" ((m←edit/1 [_* ["" | "" (M_ _*) @_]]) _*) @_]
+C←["" | "" ((m←edit/1 [_* ["" | "" (M_ _*) @EDGE_]]) _*) @EDGE_]
   <> {m: edit/2, (M): ()}
 
-C←["" | "" ((m←edit/2 D_dict) _*) @_]
+C←["" | "" ((m←edit/2 D_dict) _*) @EDGE_]
   <> {C: →D}
 
-[lhs←"" | "" (M←(edit @term_) _*) @_]
+[lhs←"" | "" (M←(edit @term_) _*) @EDGE_]
   <> {(M): (), lhs: ($ (string →term))}
 
-[lhs←"" | "" (M←(edit term_) _*) @_]
+[lhs←"" | "" (M←(edit term_) _*) @EDGE_]
   <> {(M): (), lhs: ($ (string →term))}
 
-⟨behind_ [lhs←"" | "" (M←(edit-behind) _*) @_]⟩
+⟨behind_ [lhs←"" | "" (M←(edit-behind) _*) @EDGE_]⟩
   <> {(M): (), (behind): (), lhs: ($ (string →behind))}
 
-⟨[_* ⏏back] C←[lhs←"" | "" (M←(edit-behind) _*) @_]⟩
+⟨[_* ⏏back] C←[lhs←"" | "" (M←(edit-behind) _*) @EDGE_]⟩
   <> {(M): (), (C): (), back: ↑C}
 
-⟨["" | rhs←"" (M←(edit-ahead) _*) @_] ahead_⟩
+⟨["" | rhs←"" (M←(edit-ahead) _*) @EDGE_] ahead_⟩
   <> {(M): (), rhs: ($ (string →ahead)), (ahead): ()}
 
-⟨C←["" | "" (M←(edit-ahead) _*) @_] [⏏front _*]⟩
+⟨C←["" | "" (M←(edit-ahead) _*) @EDGE_] [⏏front _*]⟩
   <> {(M): (), (C): (), front: ↑C}
 
 ;; If the user attempts to edit an edge, show them the pretty-printed
 ;; version of the edge rather than its underlying dict implementation.
-⟨@edge_ C←[lhs←"" | "" (M←(edit-behind) _*) @_]⟩
+⟨@edge_ C←[lhs←"" | "" (M←(edit-behind) _*) @EDGE_]⟩
   <> {(M): (), (edge): (), lhs: ($ (string →edge))}
 
-⟨C←["" | rhs←"" (M←(edit-ahead) _*) @_] @edge_⟩
+⟨C←["" | rhs←"" (M←(edit-ahead) _*) @EDGE_] @edge_⟩
   <> {(M): (), (edge): (), rhs: ($ (string →edge))}
 
-⟨behind_ C←[_string | _string (M←(move-behind) _*) @_]⟩
+⟨behind_ C←[_string | _string (M←(move-behind) _*) @EDGE_]⟩
   <> {(M): (), C: ↑behind, behind: ↑C}
 
-⟨C←[_string | _string (M←(move-ahead) _*) @_] ahead_⟩
+⟨C←[_string | _string (M←(move-ahead) _*) @EDGE_] ahead_⟩
   <> {(M): (), C: ↑ahead, ahead: ↑C}
 
-[⏏front _* C←[_string | _string (M←(move-front-behind) _*) @_] _*]
+[⏏front _* C←[_string | _string (M←(move-front-behind) _*) @EDGE_] _*]
   <> {(M): (), (C): (), front: ↑C}
 
-[_* C←[_string | _string (M←(move-back-ahead) _*) @_] _* ⏏back]
+[_* C←[_string | _string (M←(move-back-ahead) _*) @EDGE_] _* ⏏back]
   <> {(M): (), (C): (), back: ↑C}
 
-⟨behind_ [_string | _string (M←(delete-behind) _*) @_]⟩
+⟨behind_ [_string | _string (M←(delete-behind) _*) @EDGE_]⟩
   <> {(M): (), (behind): ()}
 
-⟨[_string | _string (M←(delete-ahead) _*) @_] ahead_⟩
+⟨[_string | _string (M←(delete-ahead) _*) @EDGE_] ahead_⟩
   <> {(M): (), (ahead): ()}
 
-[_* ⏏above ⟨C←[_string | _string (M←(escape-above) _*) @_]⟩ _*]
+[_* ⏏above ⟨C←[_string | _string (M←(escape-above) _*) @EDGE_]⟩ _*]
   <> {(M): (), above: ↑C0, (C): ($tr C0 ())}
 
-[_* ⟨C←[_string | _string (M←(escape-below) _*) @_]⟩ ⏏below _*]
+[_* ⟨C←[_string | _string (M←(escape-below) _*) @EDGE_]⟩ ⏏below _*]
   <> {(M): (), below: ↑C0, (C): ($tr C0 ())}
 
-[⏏front _* ⟨C←[_string | _string (M←(escape-front-above) _*) @_]⟩ _*]
+[⏏front _* ⟨C←[_string | _string (M←(escape-front-above) _*) @EDGE_]⟩ _*]
   <> {(M): (), front: ↑C0, (C): ($tr C0 ())}
 
-[_* ⟨C←[_string | _string (M←(escape-back-below) _*) @_]⟩ _* ⏏below]
+[_* ⟨C←[_string | _string (M←(escape-back-below) _*) @EDGE_]⟩ _* ⏏below]
   <> {(M): (), below: ↑C0, (C): ($tr C0 ())}
 
-⟨behind_ [_string | _string (M←(dup-behind) _*) @_]⟩
+⟨behind_ [_string | _string (M←(dup-behind) _*) @EDGE_]⟩
   <> {(M): (), (behind): (↑behind ↑behind)}
 
-⟨[_string | _string (M←(dup-ahead) _*) @_] ahead_⟩
+⟨[_string | _string (M←(dup-ahead) _*) @EDGE_] ahead_⟩
   <> {(M): (), (ahead): (↑ahead ↑ahead)}
 
-⟨a_ b_ [_string | _string (M←(swap-behind) _*) @_]⟩
+⟨a_ b_ [_string | _string (M←(swap-behind) _*) @EDGE_]⟩
   <> {(M): (), a: ↑b, b: ↑a}
 
-⟨[_string | _string (M←(swap-ahead) _*) @_] a_ b_⟩
+⟨[_string | _string (M←(swap-ahead) _*) @EDGE_] a_ b_⟩
   <> {(M): (), a: ↑b, b: ↑a}
 
-P←(behind_* C←[_string | _string (M←(split) _*) @_] ahead_*)
+P←(behind_* C←[_string | _string (M←(split) _*) @EDGE_] ahead_*)
   <> {(M): (), (P): (↑behind ↑C ↑ahead)}
 
-⟨[_* ⏏mid ⏏rhs] C←[_string | _string (M←(join) _*) @_] ahead←(_*)⟩
+⟨[_* ⏏mid ⏏rhs] C←[_string | _string (M←(join) _*) @EDGE_] ahead←(_*)⟩
   <> {(M): (), mid: ↑C, (rhs): ↑ahead, (C): (), (ahead): ()}
 
-⟨behind_ (_string | _string (M←(copy-behind) _*) @_ ¦ _ clipboard⋮ ())⟩
+⟨behind_ (_string | _string (M←(copy-behind) _*) @EDGE_ ¦ _ clipboard⋮ ())⟩
   <> {(M): (), clipboard: (copy →behind)}
 
-⟨behind_ (_string | _string (M←(cut-behind) _*) @_ ¦ _ clipboard⋮ ())⟩
+⟨behind_ (_string | _string (M←(cut-behind) _*) @EDGE_ ¦ _ clipboard⋮ ())⟩
   <> {(M): (), (behind): (), clipboard: (cut →behind)}
 
-⟨(_string | _string (M←(copy-ahead) _*) @_ ¦ _ clipboard⋮ ()) ahead_⟩
+⟨(_string | _string (M←(copy-ahead) _*) @EDGE_ ¦ _ clipboard⋮ ()) ahead_⟩
   <> {(M): (), clipboard: (copy →ahead)}
 
-⟨(_string | _string (M←(cut-ahead) _*) @_ ¦ _ clipboard⋮ ()) ahead_⟩
+⟨(_string | _string (M←(cut-ahead) _*) @EDGE_ ¦ _ clipboard⋮ ()) ahead_⟩
   <> {(M): (), (ahead): (), clipboard: (cut →ahead)}
 
-C←(_string | _string (M←(paste-behind) _*) @_ ¦ _ clipboard: (copy term_))
+C←(_string | _string (M←(paste-behind) _*) @EDGE_ ¦ _ clipboard: (copy term_))
   <> {(M): (), (C): (↑term ↑C)}
 
-C←(_string | _string (M←(paste-ahead) _*) @_ ¦ _ clipboard: (copy term_))
+C←(_string | _string (M←(paste-ahead) _*) @EDGE_ ¦ _ clipboard: (copy term_))
   <> {(M): (), (C): (↑C ↑term)}
 
-C←(_string | _string (M←(paste-behind) _*) @_ ¦ _ clipboard_: (cut term_))
+C←(_string | _string (M←(paste-behind) _*) @EDGE_ ¦ _ clipboard_: (cut term_))
   <> {(M): (), (C): (↑term ↑C), (clipboard): ()}
 
-C←(_string | _string (M←(paste-ahead) _*) @_ ¦ _ clipboard_: (cut term_))
+C←(_string | _string (M←(paste-ahead) _*) @EDGE_ ¦ _ clipboard_: (cut term_))
   <> {(M): (), (C): (↑C ↑term), (clipboard): ()}
 
-(_string | _string (M←(clear-clipboard) _*) @_ ¦ _ clipboard_)
+(_string | _string (M←(clear-clipboard) _*) @EDGE_ ¦ _ clipboard_)
   <> {(M): (), (clipboard): ()}
 
-⟨behind_ C←[_string | _string (M←(group-behind-front) _*) @_]⟩
+⟨behind_ C←[_string | _string (M←(group-behind-front) _*) @EDGE_]⟩
   <> {(M): (), (behind): (), C: (↑C ↑behind)}
 
-⟨P←(behind_ C←[_string | _string (M←(ungroup-behind-front) _*) @_])⟩
+⟨P←(behind_ C←[_string | _string (M←(ungroup-behind-front) _*) @EDGE_])⟩
   <> {(M): (), behind: ↑C, C: ↑behind, (P): ↑P}
 
-⟨C←[_string | _string (M←(group-ahead-back) _*) @_] ahead_⟩
+⟨C←[_string | _string (M←(group-ahead-back) _*) @EDGE_] ahead_⟩
   <> {(M): (), (ahead): (), C: (↑ahead ↑C)}
 
-⟨P←(C←[_string | _string (M←(ungroup-ahead-back) _*) @_] ahead_)⟩
+⟨P←(C←[_string | _string (M←(ungroup-ahead-back) _*) @EDGE_] ahead_)⟩
   <> {(M): (), ahead: ↑C, C: ↑ahead, (P): ↑P}
 
-⟨above_ [C←[_string | _string (M←(capture-above-ahead) _*) @_] _*]⟩
+⟨above_ [C←[_string | _string (M←(capture-above-ahead) _*) @EDGE_] _*]⟩
   <> {(M): (), (above): (), (C): (↑C ↑above)}
 
-⟨[_* C←[_string | _string (M←(capture-below-behind) _*) @_]] below_⟩
+⟨[_* C←[_string | _string (M←(capture-below-behind) _*) @EDGE_]] below_⟩
   <> {(M): (), (below): (), (C): (↑below ↑C)}
 
-⟨P←[[_string | _string (M←(release-ahead-above) _*) @_] ahead_ _*]⟩
+⟨P←[[_string | _string (M←(release-ahead-above) _*) @EDGE_] ahead_ _*]⟩
   <> {(M): (), (ahead): ($tr ahead0 ()), (P): (↑ahead0 ↑P)}
 
-⟨P←[_* behind_ [_string | _string (M←(release-behind-below) _*) @_]]⟩
+⟨P←[_* behind_ [_string | _string (M←(release-behind-below) _*) @EDGE_]]⟩
   <> {(M): (), (behind): ($tr behind0 ()), (P): (↑P ↑behind0)}
 
-⟨behind_ P←⟨[_string | _string (M←(move-parent-behind) _*) @_]⟩⟩
+⟨behind_ P←⟨[_string | _string (M←(move-parent-behind) _*) @EDGE_]⟩⟩
   <> {(M): (), behind: ↑P, P: ↑behind}
 
-⟨P←⟨[_string | _string (M←(move-parent-ahead) _*) @_]⟩ ahead_⟩
+⟨P←⟨[_string | _string (M←(move-parent-ahead) _*) @EDGE_]⟩ ahead_⟩
   <> {(M): (), ahead: ↑P, P: ↑ahead}
 
-[⏏target _* P←⟨[_string | _string (M←(move-parent-front-behind) _*) @_]⟩ _*]
+[⏏target _* P←⟨[_string | _string (M←(move-parent-front-behind) _*) @EDGE_]⟩ _*]
   <> {(M): (), target: ↑P, (P): ()}
 
-[_* P←⟨[_string | _string (M←(move-parent-back-ahead) _*) @_]⟩ _* ⏏target]
+[_* P←⟨[_string | _string (M←(move-parent-back-ahead) _*) @EDGE_]⟩ _* ⏏target]
   <> {(M): (), target: ↑P, (P): ()}
 
 ;; GP is for "grandparent"
-GP←⟨P←⟨[_string | _string (M←(move-parent-below) _*) @_]⟩⟩
+GP←⟨P←⟨[_string | _string (M←(move-parent-below) _*) @EDGE_]⟩⟩
   <> {(M): (), (P): ($tr P0 ()), (GP): (↑GP ↑P0)}
 
-GP←⟨P←⟨[_string | _string (M←(move-parent-above) _*) @_]⟩⟩
+GP←⟨P←⟨[_string | _string (M←(move-parent-above) _*) @EDGE_]⟩⟩
   <> {(M): (), (P): ($tr P0 ()), (GP): (↑P0 ↑GP)}
 
-⟨[_* ⏏target] P←⟨[_string | _string (M←(move-parent-into-behind) _*) @_]⟩⟩
+⟨[_* ⏏target] P←⟨[_string | _string (M←(move-parent-into-behind) _*) @EDGE_]⟩⟩
   <> {(M): (), (P): (), target: ↑P}
 
-⟨P←⟨[_string | _string (M←(move-parent-into-ahead) _*) @_]⟩ [⏏target _*]⟩
+⟨P←⟨[_string | _string (M←(move-parent-into-ahead) _*) @EDGE_]⟩ [⏏target _*]⟩
   <> {(M): (), (P): (), target: ↑P}
 
 ;; NOTE: we create two bindings to behind here so that %value doesn't hear us
 ;; setting behind0 (the key) -- it is not our intent here to change the key.
-(%all ⟨behind0←behind1_ C←["" | "" (M←(enter-key-behind) _*) @_]⟩ (%value behind1 v_))
+(%all ⟨behind0←behind1_ C←["" | "" (M←(enter-key-behind) _*) @EDGE_]⟩ (%value behind1 v_))
   <> {M: (edit →v), (C): (), (behind0): (), v: ↑C}
 
-(%all ⟨k_ C←["" | "" (M←(enter-key-behind) _*) @_]⟩ (%-value k v0))
+(%all ⟨k_ C←["" | "" (M←(enter-key-behind) _*) @EDGE_]⟩ (%-value k v0))
   <> {(M): (), (k): (), (C): (), v0: ↑C}
 
 ;; Reasons for the alias here are the same.
-(%all ⟨K←k_ C←["" | "" (M←(pair-around) _*) @_] V_⟩
+(%all ⟨K←k_ C←["" | "" (M←(pair-around) _*) @EDGE_] V_⟩
       (%any° (%value k v_) (%-value k v)))
   <> {(M): (), (K): (), (V): (), v: ↑V}
 
-(_* ⏏target ¦ (%entry k_ F←[_string | _string (M←(delete-pair-self) _*) @_]))
+(_* ⏏target ¦ (%entry k_ F←[_string | _string (M←(delete-pair-self) _*) @EDGE_]))
   <> {(M): (), (k): (), (F): (), target: ↑F}
 
-(_* ⏏target ¦ (%entry k_ F←[C←[_string | _string (M←(delete-pair-parent) _*) @_] _*]))
+(_* ⏏target ¦ (%entry k_ F←[C←[_string | _string (M←(delete-pair-parent) _*) @EDGE_] _*]))
   <> {(M): (), (k): (), (F): (), (C): ($tr C0 ()), (target): (↑C0 ↑F)}
 
-(_* ⏏target ¦ (%entry k_ F←[_string | _string (M←(unpair-self) _*) @_]))
+(_* ⏏target ¦ (%entry k_ F←[_string | _string (M←(unpair-self) _*) @EDGE_]))
   <> {(M): (), (k): (), (F): (), (target): (↑k ↑F)}
 
-(_* ⏏target ¦ (%entry k_ F←[C←[_string | _string (M←(unpair-parent) _*) @_] _*]))
+(_* ⏏target ¦ (%entry k_ F←[C←[_string | _string (M←(unpair-parent) _*) @EDGE_] _*]))
   <> {(M): (), (k): (), (F): (), (C): ($tr C0 ()), (target): (↑k ↑C0 ↑F)}
 
-⟨[_* ⏏target] C←[_string | _string (M←(move-in-behind) _*) @_]⟩
+⟨[_* ⏏target] C←[_string | _string (M←(move-in-behind) _*) @EDGE_]⟩
   <> {(M): (), target: ↑C, (C): ()}
 
-(_* ⟨C←[_string | _string (M←(move-out-ahead) _*) @_]⟩ ⏏target _*)
+(_* ⟨C←[_string | _string (M←(move-out-ahead) _*) @EDGE_]⟩ ⏏target _*)
   <> {(M): (), target: ↑C0, (C): ($tr C0 ())}
 
 ;; Expellation
@@ -510,64 +510,64 @@ GP←⟨P←⟨[_string | _string (M←(move-parent-above) _*) @_]⟩⟩
 ;; to expel-left.
 
 ;; Leave pair with empty cursor should remove the pair and leave.
-(_* ⏏target ¦ (%entry _ C←["" | "" (M←(leave-pair) _*) @_]))
+(_* ⏏target ¦ (%entry _ C←["" | "" (M←(leave-pair) _*) @EDGE_]))
   <> {(M): (), target: ↑C, (C): ()}
 
-(_* ⏏target ¦ (%entry _ ⟨C←["" | "" (M←(leave-pair) _*) @_]⟩))
+(_* ⏏target ¦ (%entry _ ⟨C←["" | "" (M←(leave-pair) _*) @EDGE_]⟩))
   <> {(M): (), target: ↑C0, (C): ($tr C0 ())}
 
-["" | (%string nonempty) (M←(leave-pair) _*) @_]
+["" | (%string nonempty) (M←(leave-pair) _*) @EDGE_]
   <> {(M): ((move-back-right) (leave-pair))}
 
-[(%string nonempty) | (%string nonempty) (M←(leave-pair) _*) @_]
+[(%string nonempty) | (%string nonempty) (M←(leave-pair) _*) @EDGE_]
   <> {(M): ((move-back-right) (leave-pair))}
 
-[lhs←(%string nonempty) | "" (M←(leave-pair) _*) @_]
+[lhs←(%string nonempty) | "" (M←(leave-pair) _*) @EDGE_]
   <> {M: (leave-pair ($once (ml →lhs)))}
 
-(_* ⏏target ¦ (%entry _ C←[lhs_string | "" (M←(leave-pair (ml/ok term_)) _*) @_]))
+(_* ⏏target ¦ (%entry _ C←[lhs_string | "" (M←(leave-pair (ml/ok term_)) _*) @EDGE_]))
   <> {(M): (), lhs: "", target: ↑C, C: ↑term}
 
-[_string | _string (M←(leave-pair (ml/err)) _*) @_]
+[_string | _string (M←(leave-pair (ml/err)) _*) @EDGE_]
   <> {(M): ()}
 
 ;; Expand (expel) into (expel () ()), similarly for (expel-left), ...
-[_string | _string (M←(expel) _*) @_] <> {M: (expel () ())}
-[_string | _string (M←(expel-left) _*) @_] <> {M: (expel-left () ())}
-[_string | _string (M←(expel-right) _*) @_] <> {M: (expel-right () ())}
-[_string | _string (M←(expel-mid) _*) @_] <> {M: (expel-mid () ())}
+[_string | _string (M←(expel) _*) @EDGE_] <> {M: (expel () ())}
+[_string | _string (M←(expel-left) _*) @EDGE_] <> {M: (expel-left () ())}
+[_string | _string (M←(expel-right) _*) @EDGE_] <> {M: (expel-right () ())}
+[_string | _string (M←(expel-mid) _*) @EDGE_] <> {M: (expel-mid () ())}
 
 ;; Resolve (expel _ _) into a more concrete expel.
-[(%string nonempty) | "" ((m←expel (_*) (_*)) _*) @_] <> {m: expel-left}
-["" | (%string nonempty) ((m←expel (_*) (_*)) _*) @_] <> {m: expel-right}
-[(%string nonempty) | (%string nonempty) ((m←expel (_*) (_*)) _*) @_] <> {m: expel-mid}
+[(%string nonempty) | "" ((m←expel (_*) (_*)) _*) @EDGE_] <> {m: expel-left}
+["" | (%string nonempty) ((m←expel (_*) (_*)) _*) @EDGE_] <> {m: expel-right}
+[(%string nonempty) | (%string nonempty) ((m←expel (_*) (_*)) _*) @EDGE_] <> {m: expel-mid}
 
 ;; (expel-left)
-[lhs_string | _string (M←(expel-left (ok_*) (err_*)) _*) @_]
+[lhs_string | _string (M←(expel-left (ok_*) (err_*)) _*) @EDGE_]
   <> {M: (expel-left ($once (ml →lhs)) ↑ok ↑err)}
 
-[_* ⏏pred [lhs_string | _string (M←(expel-left (ml/ok term_) (ok_*) (_*)) _*) @_] _*]
+[_* ⏏pred [lhs_string | _string (M←(expel-left (ml/ok term_) (ok_*) (_*)) _*) @EDGE_] _*]
   <> {(M): ↑ok, lhs: "", pred: →term}
 
-[_string | _string (M←(expel-left (ml/err) (_*) (err_*)) _*) @_]
+[_string | _string (M←(expel-left (ml/err) (_*) (err_*)) _*) @EDGE_]
   <> {(M): ↑err}
 
 ;; (expel-right)
-[_string | rhs_string (M←(expel-right (ok_*) (err_*)) _*) @_]
+[_string | rhs_string (M←(expel-right (ok_*) (err_*)) _*) @EDGE_]
   <> {M: (expel-right ($once (ml →rhs)) ↑ok ↑err)}
 
-[_* [_string | rhs_string (M←(expel-right (ml/ok term_) (ok_*) (_*)) _*) @_] ⏏succ _*]
+[_* [_string | rhs_string (M←(expel-right (ml/ok term_) (ok_*) (_*)) _*) @EDGE_] ⏏succ _*]
   <> {(M): ↑ok, rhs: "", succ: →term}
 
-[_string | _string (M←(expel-right (ml/err) (_*) (err_*)) _*) @_]
+[_string | _string (M←(expel-right (ml/err) (_*) (err_*)) _*) @EDGE_]
   <> {(M): ↑err}
 
 ;; (expel-mid)
-[lhs_string | rhs_string (M←(expel-mid (ok_*) (err_*)) _*) @_]
+[lhs_string | rhs_string (M←(expel-mid (ok_*) (err_*)) _*) @EDGE_]
   <> {M: (expel-mid ($once (ml →lhs)) ($once (ml →rhs)) ↑ok ↑err)}
 
-[_* ⏏pred [lhs_string | rhs_string (M←(expel-mid (ml/ok lterm_) (ml/ok rterm_) (ok_*) (_*)) _*) @_] ⏏succ _*]
+[_* ⏏pred [lhs_string | rhs_string (M←(expel-mid (ml/ok lterm_) (ml/ok rterm_) (ok_*) (_*)) _*) @EDGE_] ⏏succ _*]
   <> {(M): ↑ok, lhs: "", rhs: "", pred: →lterm, succ: →rterm}
 
-[_string | _string (M←(expel-mid _ _ (_*) (err_*)) _*) @_]
+[_string | _string (M←(expel-mid _ _ (_*) (err_*)) _*) @EDGE_]
   <> {(M): ↑err}

@@ -27,9 +27,9 @@
 # │ %string json             │       │         │       │            │          │       │
 # │ %string csv              │       │         │       │            │          │       │
 # │ %string uri              │       │         │       │            │          │       │
-# │ %pipe: + - * / d m **    │   +   │   +     │   +   │            │    ·     │       │
-# │ %pipe: span tally        │   +   │   +     │   +   │            │    ·     │       │
-# │ %pipe: map               │   +   │   +     │   +   │            │    ·     │       │
+# │ %pipe: + - * / d m **    │   +   │   +     │   +   │            │    ·     │       │   ~
+# │ %pipe: span tally        │   +   │   +     │   +   │            │    ·     │       │   ~
+# │ %pipe: map               │   +   │   +     │   +   │            │    ·     │       │   ~
 # │ %value                   │   ~   │   ~     │   ~   │            │    ~     │       │
 # │ %-value _                │   ~   │   ~     │   ~   │            │    ·     │       │
 # │ %-value _ keyp           │   ~   │   ~     │   ~   │            │    ~     │       │
@@ -6121,8 +6121,8 @@ class PatternSet
     headed.chain(headless)
   end
 
-  def responses(matchee : Term) : Iterator(Pr::Pos)
-    candidates(matchee).map(&.response(matchee)).select(Pr::Pos)
+  def responses(matchee : Term, *, env = Term[]) : Iterator(Pr::Pos)
+    candidates(matchee).map(&.response(matchee, env: env)).select(Pr::Pos)
   end
 end
 

@@ -1,6 +1,24 @@
 require "./baz5"
 
-# Constructs an editor rewriter.
+CURSORP  = ML.term(%([_string (%any° | (| _string)) _string (_*) @_]))
+CURSORPE = M1.operator(ML.term(%([_string (%any° | (| _string)) _string (_*) @EDGE_])))
+
+def subsume1(cursor, motion)
+  Term.of(cursor.morph({3, cursor[3].size, motion}))
+end
+
+def subsume(root, motion, edge)
+  if M1::Operator.probe?(Term["EDGE": edge], CURSORPE, root)
+    return subsume1(root, motion)
+  end
+
+  unless dict0 = root.as_d?
+    return root
+  end
+
+  Term.of(dict0.replace { |_, v| subsume(v, motion, edge) })
+end
+
 def editR : Rewriter
   primitives = ProcRuleset.build do
     rulepi1 %[(+ a_number b_number)] { a + b }
@@ -81,32 +99,18 @@ def editR : Rewriter
 
   backmapr = chainR(updownmyr, dollarr)
 
-  exhR(relR(CURSORP, absR(rulesetR(editor_ruleset, dfsR(envR), backmapr, noR)), ascent: 2))
+  exhR(relR(CURSORPE, absR(rulesetR(editor_ruleset, dfsR(envR), backmapr, noR, envopt: Term.of(:env))), ascent: 2, envopt: Term.of(:env)))
 end
 
 EDITR = editR
 
-CURSORP  = ML.term(%([_string (%any° | (| _string)) _string (_*) @_]))
-CURSORPE = M1.operator(ML.term(%([_string (%any° | (| _string)) _string (_*) @edge_])))
-
-def subsume1(cursor, motion)
-  Term.of(cursor.morph({3, cursor[3].size, motion}))
-end
-
-def subsume(root, motion, edge)
-  if M1::Operator.probe?(Term[edge: edge], CURSORPE, root)
-    return subsume1(root, motion)
+def edit(root root0 : Term, motion : Term, edge = Term.of(:edge, :user)) : Term
+  root1 = pipe(root0, subsume(motion, edge))
+  if root0.same?(root1)
+    return root1
   end
 
-  unless dict0 = root.as_d?
-    return root
-  end
-
-  Term.of(dict0.replace { |_, v| subsume(v, motion, edge) })
-end
-
-def edit(root : Term, motion : Term, edge = Term.of(:edge, :user)) : Term
-  pipe(root, subsume(motion, edge), rewrite(EDITR))
+  rewrite(root1, EDITR, env: Term["EDGE": edge])
 end
 
 # staging0 = orig = Term.of(:qux, { { {"", :|, "", Term[], {:edge, :user} } } }, 2)

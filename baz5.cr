@@ -550,8 +550,8 @@ module Relr
     end
   end
 
-  def self.relr(ctx0, bottom, term, ascent, successor)
-    if M1::Operator.probe?(Term[], bottom, term)
+  def self.relr(ctx0, bottom, term, ascent, env, successor)
+    if M1::Operator.probe?(env, bottom, term)
       return Ascend.new(ascent)
     end
 
@@ -565,7 +565,7 @@ module Relr
       each_entry_keypath_friendly(dict0) do |key, value|
         ctx1 = ctx0.keypath &.update_value(key)
 
-        case response = relr(ctx1, bottom, value, ascent, successor)
+        case response = relr(ctx1, bottom, value, ascent, env, successor)
         in None
           next
         in Ascend
@@ -627,14 +627,16 @@ end
 # `absR` to backjump to.
 #
 # NOTE: partially written by ChatGPT because I'm terrible at explaining things.
-def relR(bottom : M1::Operator::Any, successor : Rewriter, *, ascent : Int32 = 0) : Rewriter
+def relR(bottom : M1::Operator::Any, successor : Rewriter, *, ascent : Int32 = 0, envopt : Term? = nil) : Rewriter
   if ascent.negative?
     raise ArgumentError.new("ascent must be positive or 0")
   end
 
   Rewriter.new do |ctx, staging|
+    env = envopt.try { |key| ctx.options[key]? }.try(&.as_d?) || Term[]
+
     staging.reduce do |term|
-      case response = Relr.relr(ctx, bottom, term, ascent, successor)
+      case response = Relr.relr(ctx, bottom, term, ascent, env, successor)
       in Relr::None   then Rewrite.none
       in Relr::Ready  then response.rewrite
       in Relr::Ascend then successor.call(ctx, Rewrite.one(term))
@@ -800,8 +802,8 @@ def ruleR(ctx, term, rule : Rule::BackmapMany, pr : Pr::Pos, templr, backmapr)
   ctx.observable(rewrite.diff(term)) { "replace with backmapped (many)" }
 end
 
-def rulesetR(ctx, term, ruleset, templr, backmapr, elser)
-  needle = ruleset.responses(term).compact_map do |pr, rule|
+def rulesetR(ctx, term, ruleset, templr, backmapr, elser, env : Term::Dict)
+  needle = ruleset.responses(term, env: env).compact_map do |pr, rule|
     rewrite = ruleR(ctx, term, rule, pr, templr, backmapr)
     rewrite.diff(term).as?(Rewrite::Some)
   end
@@ -809,9 +811,13 @@ def rulesetR(ctx, term, ruleset, templr, backmapr, elser)
   needle.first? || elser.call(ctx, Rewrite.one(term))
 end
 
-def rulesetR(ruleset, ruler, backmapr, elser) : Rewriter
+def rulesetR(ruleset, ruler, backmapr, elser, *, envopt : Term? = nil) : Rewriter
   Rewriter.new do |ctx, staging|
-    staging.reduce { |term| rulesetR(ctx, term, ruleset, ruler, backmapr, elser) }
+    env = envopt.try { |key| ctx.options[key]? }.try(&.as_d?) || Term[]
+
+    staging.reduce do |term|
+      rulesetR(ctx, term, ruleset, ruler, backmapr, elser, env)
+    end
   end
 end
 
