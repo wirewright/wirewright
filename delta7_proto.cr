@@ -317,11 +317,38 @@ module D
         end
   end
 
+  private def cursordepth0(node : Term, depth : Int32) : Int32
+    Term.case(node) do
+      matchp %[(_string | _string (_*) ≡@_)] { depth }
+      matchp %(_dict) do
+        dict = node.unsafe_as_d
+        return Int32::MAX unless dict.probably_includes?(Term[:|])
+        return Int32::MAX if dict.empty?
+
+        dict.ee.min_of do |k, v|
+          Math.min(cursordepth0(k, depth + 1), cursordepth0(v, depth + 1))
+        end
+      end
+
+      otherwise { Int32::MAX }
+    end
+  end
+
+  # Returns the depth at which the cursor is found in *node*. If *node* is
+  # the cursor returns `0`. If the cursor is contained in one of *node*'s
+  # entries returns `1` and so on. If there are multiple cursors in *node*
+  # returns the depth of the closest cursor (i.e. minimum depth). If there
+  # are no cursors in *node* returns `-1`.
+  def cursordepth(node : Term) : Int32
+    depth = cursordepth0(node, 0)
+    depth == Int32::MAX ? -1 : depth
+  end
+
   def nodestep(root0 : Term, root1 : Term, nodepath, event)
     node0 = follow(root1, nodepath)
 
-    Term.case({node0, event}) do
-      givenpi %[(cell v_ @cout_ _*) invited] do
+    Term.case({node0, event, cursordepth(node0)}) do
+      givenpi %[(cell v_ @cout_ _*) invited -1] do
         root1 = effect(root1, nodepath, node0) do
           event :"cell/created", cout, v
           cell cout, v
@@ -330,11 +357,11 @@ module D
         {root1, successor?(root1, nodepath)}
       end
 
-      givenpi %[(cell v_ @cout_ _*) (assign @cout_ v_)] do
+      givenpi %[(cell v_ @cout_ _*) (assign @cout_ v_) -1] do
         {root1, successor?(root1, nodepath)}
       end
 
-      givenpi %[(cell v0_ @cout_) (assign @cout_ v1_)] do
+      givenpi %[(cell v0_ @cout_) (assign @cout_ v1_) -1] do
         root1 = effect(root1, nodepath, node0) do
           event :"cell/updated", cout, v0, v1
           cell cout, v1
@@ -344,7 +371,7 @@ module D
         {root1, successor?(root1, nodepath)}
       end
 
-      givenpi %[(cell v0_ @cout_ for pattern_) (assign @cout_ v1_)] do
+      givenpi %[(cell v0_ @cout_ for pattern_) (assign @cout_ v1_) -1] do
         if M1.probe?(pattern, v1)
           root1 = effect(root1, nodepath, node0) do
             event :"cell/updated", cout, v0, v1
@@ -359,7 +386,7 @@ module D
       # TODO: instead of (%number (whole _) > 0) we should have (%number i32 > 0). All +-variants must
       # allow the exclusion of zero this way.
 
-      givenpi %[(cell vs0←(_*) @cout_) (assign/log @cout_ v_ limit←(%number (whole _) > 0))] do
+      givenpi %[(cell vs0←(_*) @cout_) (assign/log @cout_ v_ limit←(%number (whole _) > 0)) -1] do
         vs1 = rightmost(vs0, limit.to(Int32) - 1).append(v)
 
         root1 = effect(root1, nodepath, node0) do
@@ -373,7 +400,7 @@ module D
 
       # Button
       begin
-        givenpi %[(button _ as @cin_ to @pout_ ((press) _*)) cycle] do
+        givenpi %[(button _ as @cin_ to @pout_ ((press) _*)) cycle _] do
           # FIXME: how to get rid of this
           docpath = docpath(root1, nodepath)
           document = follow(root1, docpath)
@@ -388,7 +415,7 @@ module D
           {root1, successor?(root1, nodepath)}
         end
 
-        givenpi %[(button _ as msg_ to @pout_ ((press) _*)) cycle] do
+        givenpi %[(button _ as msg_ to @pout_ ((press) _*)) cycle _] do
           root1 = effect(root1, nodepath, node0) do
             event :pulse, pout, msg
             backmap %[(button _ as _ to @_ (action_ _*))], %[{(action): ()}]
@@ -397,7 +424,7 @@ module D
           {root1, successor?(root1, nodepath)}
         end
 
-        givenpi %[(button @cin_ to @pout_ ((press) _*)) cycle] do
+        givenpi %[(button @cin_ to @pout_ ((press) _*)) cycle _] do
           # FIXME: how to get rid of this
           docpath = docpath(root1, nodepath)
           document = follow(root1, docpath)
@@ -412,7 +439,7 @@ module D
           {root1, successor?(root1, nodepath)}
         end
 
-        givenpi %[(button msg_ to @pout_ ((press) _*)) cycle] do
+        givenpi %[(button msg_ to @pout_ ((press) _*)) cycle _] do
           root1 = effect(root1, nodepath, node0) do
             event :pulse, pout, msg
             backmap %[(button _ to _ (action_ _*))], %[{(action): ()}]
@@ -425,7 +452,7 @@ module D
         # are a bit loose but I guess it's fine. It's too much of a button to
         # not work.
 
-        givenpi %[(button _* to @pout_ (_*) ¦ waiting⋮ 0) (feedback busy @pout_)] do
+        givenpi %[(button _* to @pout_ (_*) ¦ waiting⋮ 0) (feedback busy @pout_) _] do
           root1 = effect(root1, nodepath, node0) do
             change waiting: waiting + 1
           end
@@ -433,7 +460,7 @@ module D
           {root1, successor?(root1, nodepath)}
         end
 
-        givenpi %[(button _* to @pout_ (_*) ¦ waiting: 1) (feedback (%any done cancelled) @pout_)] do
+        givenpi %[(button _* to @pout_ (_*) ¦ waiting: 1) (feedback (%any done cancelled) @pout_) _] do
           root1 = effect(root1, nodepath, node0) do
             clear :waiting
           end
@@ -441,7 +468,7 @@ module D
           {root1, successor?(root1, nodepath)}
         end
 
-        givenpi %[(button _* to @pout_ (_*) ¦ waiting_: (%number (whole _) > 0)) (feedback (%any done cancelled) @pout_)] do
+        givenpi %[(button _* to @pout_ (_*) ¦ waiting_: (%number (whole _) > 0)) (feedback (%any done cancelled) @pout_) _] do
           root1 = effect(root1, nodepath, node0) do
             change waiting: waiting - 1
           end
@@ -450,7 +477,7 @@ module D
         end
       end
 
-      givenpi %[(log @pin_ in @cout_ ¦ limit⋮ 10) (pulse @pin_ term_)] do
+      givenpi %[(log @pin_ in @cout_ ¦ limit⋮ 10) (pulse @pin_ term_) -1] do
         root1 = effect(root1, nodepath, node0) do
           event :"assign/log", cout, term, limit
         end
@@ -458,7 +485,7 @@ module D
         {root1, successor?(root1, nodepath)}
       end
 
-      givenpi %[(log @pin_ in (entries_*) ¦ limit: (%optional 10 limit←(%number (whole _) > 0))) (pulse @pin_ term_)] do
+      givenpi %[(log @pin_ in (entries_*) ¦ limit: (%optional 10 limit←(%number (whole _) > 0))) (pulse @pin_ term_) -1] do
         root1 = effect(root1, nodepath, node0) do
           backmap ML.term(%[(log _ in (entries_*) ¦ _)]), Term.of(Term[].with({:entries}, rightmost(entries, limit.to(Int32) - 1).append(term)))
         end
@@ -466,7 +493,7 @@ module D
         {root1, successor?(root1, nodepath)}
       end
 
-      givenpi %[(latest @pin_ @cout_) (pulse @pin_ v_)] do
+      givenpi %[(latest @pin_ @cout_) (pulse @pin_ v_) -1] do
         root1 = effect(root1, nodepath, node0) do
           event :assign, cout, v
         end
@@ -475,10 +502,10 @@ module D
       end
 
       givenpi(
-        %[(changes @cin_ to @pout_) (cell/created @cin_ v_)],
-        %[(changes @cin_ to @pout_) (cell/updated @cin_ _ v_)],
-        %[(changes @cin_ to @pout_ as v_) (cell/created @cin_ _)],
-        %[(changes @cin_ to @pout_ as v_) (cell/updated @cin_ _ _)],
+        %[(changes @cin_ to @pout_) (cell/created @cin_ v_) -1],
+        %[(changes @cin_ to @pout_) (cell/updated @cin_ _ v_) -1],
+        %[(changes @cin_ to @pout_ as v_) (cell/created @cin_ _) -1],
+        %[(changes @cin_ to @pout_ as v_) (cell/updated @cin_ _ _) -1],
       ) do
         root1 = effect(root1, nodepath, node0) do
           event :pulse, pout, v
@@ -487,7 +514,7 @@ module D
         {root1, successor?(root1, nodepath)}
       end
 
-      givenpi %[(echo @pin_) (pulse @pin_ e_)] do
+      givenpi %[(echo @pin_) (pulse @pin_ e_) -1] do
         root1 = effect(root1, nodepath, node0) do
           event e
         end
@@ -495,7 +522,7 @@ module D
         {root1, successor?(root1, nodepath)}
       end
 
-      givenpi %[(event e_) cycle] do
+      givenpi %[(event e_) cycle -1] do
         root1 = effect(root1, nodepath, node0) do
           event e
           backmap %[N_], %[{(N): ()}]
@@ -504,7 +531,7 @@ module D
         {root1, successor?(root1, nodepath)}
       end
 
-      givenpi %[(queue @pin_ to @_ in (_*)) (pulse @pin_ value_)] do
+      givenpi %[(queue @pin_ to @_ in (_*)) (pulse @pin_ value_) -1] do
         root1 = effect(root1, nodepath, node0) do
           backmap %[(_ _ to _ in (_* ⏏head))], head: value
         end
@@ -512,7 +539,7 @@ module D
         {root1, successor?(root1, nodepath)}
       end
 
-      givenpi %[(queue @pin_ to @pout_ in (head_ _*)) (pull @pout_)] do
+      givenpi %[(queue @pin_ to @pout_ in (head_ _*)) (pull @pout_) -1] do
         root1 = effect(root1, nodepath, node0) do
           event :pulse, pout, head
         end
@@ -521,7 +548,7 @@ module D
       end
 
       # Dequeue
-      givenpi %[(queue @pin_ to @pout_ in (head_ _*)) (feedback completed @pout_ head_)] do
+      givenpi %[(queue @pin_ to @pout_ in (head_ _*)) (feedback completed @pout_ head_) -1] do
         root1 = effect(root1, nodepath, node0) do
           backmap %[(_ _ to _ in (head_ _*))], %[{(head): ()}]
         end
@@ -529,7 +556,7 @@ module D
         {root1, successor?(root1, nodepath)}
       end
 
-      givenpi %[(assistant @pin_ for @pout_) (pull @pout_)] do
+      givenpi %[(assistant @pin_ for @pout_) (pull @pout_) -1] do
         root1 = effect(root1, nodepath, node0) do
           event :pull, pin
         end
@@ -537,7 +564,7 @@ module D
         {root1, successor?(root1, nodepath)}
       end
 
-      givenpi %[(assistant @pin_ for @pout_) (pulse @pin_ value_)] do
+      givenpi %[(assistant @pin_ for @pout_) (pulse @pin_ value_) -1] do
         root1 = effect(root1, nodepath, node0) do
           change current: value
         end
@@ -546,7 +573,7 @@ module D
       end
 
       givenpi(
-        %[(assistant @pin_ for @pout_ current: value_) (pull @pout_)],
+        %[(assistant @pin_ for @pout_ current: value_) (pull @pout_) -1],
       ) do
         root1 = effect(root1, nodepath, node0) do
           event :pulse, pout, value
@@ -556,7 +583,7 @@ module D
         {root1, successor?(root1, nodepath)}
       end
 
-      givenpi %[(assistant @pin_ for @pout_ current: value_ state: busy) (feedback (%any done cancelled) @pout_)] do
+      givenpi %[(assistant @pin_ for @pout_ current: value_ state: busy) (feedback (%any done cancelled) @pout_) -1] do
         root1 = effect(root1, nodepath, node0) do
           event :feedback, :completed, pin, value
           clear :state, :current
@@ -572,7 +599,7 @@ module D
       # Stateful transform
       begin
         # Signal that we're ready for a job
-        givenpi %[(transform @pin_ to @pout_ with @cin_ _) cycle] do
+        givenpi %[(transform @pin_ to @pout_ with @cin_ _) cycle -1] do
           # FIXME: how to get rid of this
           docpath = docpath(root1, nodepath)
           document = follow(root1, docpath)
@@ -587,7 +614,7 @@ module D
         end
 
         # Schedule job
-        givenpi %[(transform @pin_ to @pout_ with @cin_ body_) (pulse @pin_ input_)] do
+        givenpi %[(transform @pin_ to @pout_ with @cin_ body_) (pulse @pin_ input_) -1] do
           # FIXME: how to get rid of this
           docpath = docpath(root1, nodepath)
           document = follow(root1, docpath)
@@ -602,7 +629,7 @@ module D
         end
 
         # Send feedback busy
-        givenpi %[(transform @pin_ to @_ with @_ _ ¦ () job_) invited] do
+        givenpi %[(transform @pin_ to @_ with @_ _ ¦ () job_) invited -1] do
           root1 = effect(root1, nodepath, node0) do
             event :feedback, :busy, pin
             schedule job
@@ -612,7 +639,7 @@ module D
         end
 
         # Wait for the job to complete
-        givenpi %[(transform @pin_ to @pout_ with @cin_ body_ job: job_) (job/completed job_ v_)] do
+        givenpi %[(transform @pin_ to @pout_ with @cin_ body_ job: job_) (job/completed job_ v_) -1] do
           root1 = effect(root1, nodepath, node0) do
             event :feedback, :done, pin
             event :pulse, pout, v
@@ -627,7 +654,7 @@ module D
       # Stateless transform
       begin
         # Signal that we're ready for a job
-        givenpi %[(transform @pin_ to @pout_ body_) cycle] do
+        givenpi %[(transform @pin_ to @pout_ body_) cycle -1] do
           root1 = effect(root1, nodepath, node0) do
             event :pull, pin
           end
@@ -636,7 +663,7 @@ module D
         end
 
         # Schedule job
-        givenpi %[(transform @pin_ to @pout_ body_) (pulse @pin_ input_)] do
+        givenpi %[(transform @pin_ to @pout_ body_) (pulse @pin_ input_) -1] do
           root1 = effect(root1, nodepath, node0) do
             change job: {program: body, env: {"_": input}}
           end
@@ -645,7 +672,7 @@ module D
         end
 
         # Send feedback busy
-        givenpi %[(transform @pin_ to @_ _ ¦ () job_) invited] do
+        givenpi %[(transform @pin_ to @_ _ ¦ () job_) invited -1] do
           root1 = effect(root1, nodepath, node0) do
             event :feedback, :busy, pin
             schedule job
@@ -655,7 +682,7 @@ module D
         end
 
         # Wait for the job to complete
-        givenpi %[(transform @pin_ to @pout_ body_ job: job_) (job/completed job_ v_)] do
+        givenpi %[(transform @pin_ to @pout_ body_ job: job_) (job/completed job_ v_) -1] do
           root1 = effect(root1, nodepath, node0) do
             event :feedback, :done, pin
             event :pulse, pout, v
@@ -670,7 +697,7 @@ module D
       # Stateless filter transform
       begin
         # Signal that we're ready for a job
-        givenpi %[(transform (@pin_ pattern_) to @pout_ body_) cycle] do
+        givenpi %[(transform (@pin_ pattern_) to @pout_ body_) cycle -1] do
           root1 = effect(root1, nodepath, node0) do
             event :pull, pin
           end
@@ -679,7 +706,7 @@ module D
         end
 
         # Schedule job
-        givenpi %[(transform (@pin_ pattern_) to @pout_ body_) (pulse @pin_ input_)] do
+        givenpi %[(transform (@pin_ pattern_) to @pout_ body_) (pulse @pin_ input_) -1] do
           if env = M1.match?(pattern, input)
             root1 = effect(root1, nodepath, node0) do
               change job: {program: body, env: env}
@@ -690,7 +717,7 @@ module D
         end
 
         # Send feedback busy
-        givenpi %[(transform (@pin_ _) to @_ _ ¦ () job_) invited] do
+        givenpi %[(transform (@pin_ _) to @_ _ ¦ () job_) invited -1] do
           root1 = effect(root1, nodepath, node0) do
             event :feedback, :busy, pin
             schedule job
@@ -700,7 +727,7 @@ module D
         end
 
         # Wait for the job to complete
-        givenpi %[(transform (@pin_ _) to @pout_ body_ job: job_) (job/completed job_ v_)] do
+        givenpi %[(transform (@pin_ _) to @pout_ body_ job: job_) (job/completed job_ v_) -1] do
           root1 = effect(root1, nodepath, node0) do
             event :feedback, :done, pin
             event :pulse, pout, v
@@ -713,7 +740,7 @@ module D
       end
 
       # Initialize `absence` to newborn state.
-      givenpi %[(absence @_ as _ to @_) cycle] do
+      givenpi %[(absence @_ as _ to @_) cycle -1] do
         root1 = effect(root1, nodepath, node0) do
           change "#state": :newborn
         end
@@ -723,7 +750,7 @@ module D
 
       # Whenever we're in newborn state, on cycle, look around to see if the cell's
       # identity is in the population.
-      givenpi %[(absence @cin_ as msg_ to @pout_ #state: newborn) cycle] do
+      givenpi %[(absence @cin_ as msg_ to @pout_ #state: newborn) cycle -1] do
         root1 = effect(root1, nodepath, node0) do
           partner = Term.of(:cell, cin)
 
@@ -742,7 +769,7 @@ module D
         {root1, successor?(root1, nodepath)}
       end
 
-      givenpi %[(absence @cin_ as msg_ to @pout_ #state: paired) (cell/removed @cin_)] do
+      givenpi %[(absence @cin_ as msg_ to @pout_ #state: paired) (cell/removed @cin_) -1] do
         root1 = effect(root1, nodepath, node0) do
           event :pulse, pout, msg
           change "#state": :unpaired
@@ -751,7 +778,7 @@ module D
         {root1, successor?(root1, nodepath)}
       end
 
-      givenpi %[(absence @cin_ as _ to @_ #state: unpaired) (cell/created @cin_ _)] do
+      givenpi %[(absence @cin_ as _ to @_ #state: unpaired) (cell/created @cin_ _) -1] do
         root1 = effect(root1, nodepath, node0) do
           change "#state": :paired
         end
@@ -759,13 +786,13 @@ module D
         {root1, successor?(root1, nodepath)}
       end
 
-      givenpi %[(delay 0 children_*) cycle] do
+      givenpi %[(delay 0 children_*) cycle _] do
         root1 = rewrite(root1, nodepath, Rewrite.many(children.unsafe_as_d))
 
         {root1, successor?(root1, nodepath)}
       end
 
-      givenpi %[(delay n←(%number +i32) _*) cycle] do
+      givenpi %[(delay n←(%number +i32) _*) cycle _] do
         root1 = effect(root1, nodepath, node0) do
           backmap %[(delay n_ _*)], n: n - 1
         end
@@ -773,13 +800,13 @@ module D
         {root1, successor?(root1, nodepath)}
       end
 
-      givenpi %[(decay 0 _*) cycle] do
+      givenpi %[(decay 0 _*) cycle _] do
         root1 = rewrite(root1, nodepath, Rewrite.many(Term[]))
 
         {root1, successor?(root1, nodepath)}
       end
 
-      givenpi %[(decay n←(%number +i32) _*) cycle] do
+      givenpi %[(decay n←(%number +i32) _*) cycle _] do
         root1 = effect(root1, nodepath, node0) do
           backmap %[(decay n_ _*)], n: n - 1
         end
@@ -840,16 +867,20 @@ module D
     transition(root1, docpath)
   end
 
+  def advance(root0 : Term, docpath : Term::Dict)
+    advance(root0, root0, docpath)
+  end
+
   def identity?(node : Term)
-    Term.case(node) do
-      matchpi %{(cell _ @cout_ _*)} do
+    Term.case({node, cursordepth(node)}) do
+      givenpi %{(cell _ @cout_ _*) -1} do
         Term.of(:cell, cout)
       end
 
-      matchpi(
-        %{(transform @pin_ to @_ with _ _ ¦ () job_)},
-        %{(transform @pin_ to @_ _ ¦ () job_)},
-        %{(transform (@pin_ _) to @_ _ ¦ () job_)},
+      givenpi(
+        %{(transform @pin_ to @_ with _ _ ¦ () job_) -1},
+        %{(transform @pin_ to @_ _ ¦ () job_) -1},
+        %{(transform (@pin_ _) to @_ _ ¦ () job_) -1},
       ) do
         Term.of(:transform, pin, job)
       end
@@ -902,7 +933,8 @@ module D
     assign(root1, docpath, document1)
   end
 
-  def publish(root : Term::Dict)
+  def publish(root : Term)
+    root = root.as_d
     if results = root[JobsCompleted]?
       results.each_entry do |job, value|
         root = Q.of(root).enqueue(:"job/completed", job, value).commit(root)
@@ -910,33 +942,39 @@ module D
       root = root.without(JobsCompleted)
     end
 
-    root
+    Term.of(root)
   end
 
-  def run(root0 : Term::Dict, & : Term::Dict -> Term::Dict)
+  def run1(root0 : Term) : Term
+    pipe(root0, transition(docpath: Term[]), publish, advance(docpath: Term[]))
+  end
+
+  def run(root0 : Term, & : Term::Dict -> Term::Dict)
     # FIXME: this is a hack. Maybe there are more efficient termination conditions
     # than this. This will leak memory forever if nonperiodic or infinitely nesting.
     # We don't have any problem with nonperiodic or infinitely nesting -- we can rewrite
     # forever, that's fine. But the fact that this leaks memory is not.
     history = Set(Term).new
 
-    root0 = transition(Term.of(root0), docpath: Term[]).as_d
+    root0 = root0.as_d
 
     while true
       root0 = yield root0
-      root0 = publish(root0)
-      root1 = advance(Term.of(root0), Term.of(root0), docpath: Term[]).as_d
-
-      unless history.add?(Term.of(root1))
+      root1 = run1(Term.of(root0))
+      unless history.add?(root1)
         return root1
       end
 
-      root0 = root1
+      root0 = root1.as_d
     end
   end
 end
 
 module D7
+  def self.hidden?(symbol : Term::Sym)
+    symbol.to(String).prefixed_by?('#')
+  end
+
   # Strips hidden pairs from *root*.
   #
   # NOTE: in D7, we rely on the convention that all hidden pairs have a key that
@@ -951,7 +989,7 @@ module D7
 
       root.each_pair do |key, value|
         next unless symbol = key.as_sym?
-        next unless symbol.to(String).prefixed_by?('#')
+        next unless hidden?(symbol)
 
         commit.without(key)
       end
@@ -960,31 +998,34 @@ module D7
     Term.of(root)
   end
 
-  def self.run(root0 : Term, &) : Term
-    root0 = root0.as_d? || return root0
-    root1 = D.run(root0) do |root|
-      yield root
+  def self.handle(root0 : Term) : Term
+    root1 = root0
 
-      if jobs_pending = root[D::JobsPending]?
-        execute = ->(program : Term, env : Term::Dict) do
-          rewrite(program, Nitrene.rewriter, env: env)
-        end
-
-        jobs_pending.each_entry do |job, _|
-          Term.case(job) do
-            matchpi %[(¦ () program_ env_dict)] do
-              root = root.morph({D::JobsCompleted, job, execute.call(program, env.unsafe_as_d)})
-            end
-          end
-        end
-
-        root = root.without(D::JobsPending)
+    if jobs_pending = root0[D::JobsPending]?
+      execute = ->(program : Term, env : Term::Dict) do
+        rewrite(program, Nitrene.rewriter, env: env)
       end
 
-      root
+      jobs_pending.each_entry do |job, _|
+        Term.case(job) do
+          matchpi %[(¦ () program_ env_dict)] do
+            root1 = root1.morph({D::JobsCompleted, job, execute.call(program, env.unsafe_as_d)})
+          end
+        end
+      end
+
+      root1 = root1.without(D::JobsPending)
     end
 
     Term.of(root1)
+  end
+
+  def self.run1(root0 : Term) : Term
+    pipe(root0, D.run1, handle)
+  end
+
+  def self.run(root0 : Term, & : Term::Dict ->) : Term
+    D.run(root0) { |root1| doc = handle(Term.of(root1)).as_d; yield doc; doc }
   end
 
   def self.run(root0 : Term)
