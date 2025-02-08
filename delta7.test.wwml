@@ -397,3 +397,18 @@
        ("" | "" () @edits)
        (transform (@commands up) to @edits (move-parent-behind))
        (transform (@commands down) to @edits (move-parent-ahead))))))
+
+;; blast
+(d7
+  ((button (1 2 3 4 5) to @lists ((press)))
+   (blast @lists to @items)
+   (queue @items to @items/queued in ())
+   (assistant @items/queued for @items/assisted)
+   (transform @items/assisted to @items/squared (* _ _))
+   (log @items/squared in ()))
+  ((button (1 2 3 4 5) to @lists ())
+   (blast @lists to @items)
+   (queue @items to @items/queued in ())
+   (assistant @items/queued for @items/assisted)
+   (transform @items/assisted to @items/squared (* _ _))
+   (log @items/squared in (1 4 9 16 25))))

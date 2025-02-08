@@ -515,6 +515,17 @@ module D
         {root1, successor?(root1, nodepath)}
       end
 
+      # `blast`: inorder emission of items from lists received on `pin`.
+      givenpi %[(blast @pin_ to @pout_) (pulse @pin_ list_dict) -1] do
+        root1 = effect(root1, nodepath, node0) do
+          list.items.each do |item|
+            event :pulse, pout, item
+          end
+        end
+
+        {root1, successor?(root1, nodepath)}
+      end
+
       givenpi %[(echo @pin_) (pulse @pin_ e_) -1] do
         root1 = effect(root1, nodepath, node0) do
           event e
