@@ -740,6 +740,63 @@ module D
         end
       end
 
+      # Stateful filter transform
+      begin
+        # Signal that we're ready for a job
+        givenpi %[(transform (@pin_ pattern_) to @pout_ with @cin_ body_) cycle -1] do
+          # FIXME: how to get rid of this
+          docpath = docpath(root1, nodepath)
+          document = follow(root1, docpath)
+
+          if document[Cells, cin]?
+            root1 = effect(root1, nodepath, node0) do
+              event :pull, pin
+            end
+          end
+
+          {root1, successor?(root1, nodepath)}
+        end
+
+        # Schedule job
+        givenpi %[(transform (@pin_ pattern_) to @pout_ with @cin_ body_) (pulse @pin_ input_) -1] do
+          # FIXME: how to get rid of this
+          docpath = docpath(root1, nodepath)
+          document = follow(root1, docpath)
+
+          if state = document[Cells, cin]?
+            if env = M1.match?(pattern, input)
+              root1 = effect(root1, nodepath, node0) do
+                change job: {program: body, env: env.with(:state, state)}
+              end
+            end
+          end
+
+          {root1, successor?(root1, nodepath)}
+        end
+
+        # Send feedback busy
+        givenpi %[(transform (@pin_ _) to @_ with @_ _ ¦ () job_) invited -1] do
+          root1 = effect(root1, nodepath, node0) do
+            event :feedback, :busy, pin
+            schedule job
+          end
+
+          {root1, successor?(root1, nodepath)}
+        end
+
+        # Wait for the job to complete
+        givenpi %[(transform (@pin_ _) to @pout_ with @_ body_ job: job_) (job/completed job_ v_) -1] do
+          root1 = effect(root1, nodepath, node0) do
+            event :feedback, :done, pin
+            event :pulse, pout, v
+            clear :job
+            disappear
+          end
+
+          {root1, successor?(root1, nodepath)}
+        end
+      end
+
       # Initialize `absence` to newborn state.
       givenpi %[(absence @_ as _ to @_) cycle -1] do
         root1 = effect(root1, nodepath, node0) do
@@ -910,9 +967,10 @@ module D
       end
 
       givenpi(
-        %{(transform @pin_ to @_ with _ _ ¦ () job_) -1},
+        %{(transform @pin_ to @_ with @_ _ ¦ () job_) -1},
         %{(transform @pin_ to @_ _ ¦ () job_) -1},
         %{(transform (@pin_ _) to @_ _ ¦ () job_) -1},
+        %{(transform (@pin_ _) to @_ with @_ _ ¦ () job_) -1},
       ) do
         Term.of(:transform, pin, job)
       end

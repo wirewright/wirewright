@@ -184,6 +184,45 @@
    (latest @successors @value)
    (log @parities in ((odd 3) (even 4) (odd 5) (even 6) (odd 7) (even 8) (odd 9)) limit: 7)))
 
+;; Stateful filter transform
+(d7
+  ((cell 5 @count)
+   (button "Increment" to @actions ((press) (press) (press)))
+   (button "Decrement" to @actions ())
+   (transform (@actions "Increment") to @counts with @count (+ state 1))
+   (transform (@actions "Decrement") to @counts with @count (- state 1))
+   (latest @counts @count))
+  ((cell 8 @count)
+   (button "Increment" to @actions ())
+   (button "Decrement" to @actions ())
+   (transform (@actions "Increment") to @counts with @count (+ state 1))
+   (transform (@actions "Decrement") to @counts with @count (- state 1))
+   (latest @counts @count)))
+
+(d7
+  ((cell 8 @count)
+   (button "Increment" to @actions ())
+   (button "Decrement" to @actions ((press) (press) (press)))
+   (transform (@actions "Increment") to @counts with @count (+ state 1))
+   (transform (@actions "Decrement") to @counts with @count (- state 1))
+   (latest @counts @count))
+  ((cell 5 @count)
+   (button "Increment" to @actions ())
+   (button "Decrement" to @actions ())
+   (transform (@actions "Increment") to @counts with @count (+ state 1))
+   (transform (@actions "Decrement") to @counts with @count (- state 1))
+   (latest @counts @count)))
+
+(d7
+  ((cell 123 @x)
+   (button "Hello World" to @xs ((press)))
+   (transform (@xs msg_) to @msgs with @x (state msg))
+   (log @msgs in ()))
+  ((cell 123 @x)
+   (button "Hello World" to @xs ())
+   (transform (@xs msg_) to @msgs with @x (state msg))
+   (log @msgs in ((123 "Hello World")))))
+
 ;; Basic stateful transform: counter
 (d7
   ((cell 5 @count)
