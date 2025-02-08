@@ -304,3 +304,57 @@
      (transform (@commands down) to @edits (move-parent-ahead))
      (edit-cast @edits to @cursor))
    (button "Move down" as down to @commands ())))
+
+;; Edit-cage external signaling
+(d7
+  ((edit-cage for @cursor
+     ("" | "" () @cursor))
+   (delay 0 (event (pulse @cursor (input "hello"))))
+   (delay 1 (event (pulse @cursor (key enter))))
+   (delay 2 (event (pulse @cursor (key home))))
+   ;; If cage didn't work, this would cause the cursor to jump out of the cage.
+   (delay 3 (event (pulse @cursor (key home)))))
+  ((edit-cage for @cursor
+     ("" | "" () @cursor)
+     hello)))
+
+;; Edit-cage internal signaling
+(d7
+  ((button "Move up" as up to @commands ((press) (press) (press)))
+   (button "Move down" as down to @commands ())
+   (edit-cage for @edits
+     A
+     (group
+       ("" | "" () @edits)
+       (transform (@commands up) to @edits (move-parent-behind))
+       (transform (@commands down) to @edits (move-parent-ahead)))
+     B))
+  ((button "Move up" as up to @commands ())
+   (button "Move down" as down to @commands ())
+   (edit-cage for @edits
+     (group
+       ("" | "" () @edits)
+       (transform (@commands up) to @edits (move-parent-behind))
+       (transform (@commands down) to @edits (move-parent-ahead)))
+     A
+     B)))
+
+(d7
+  ((button "Move up" as up to @commands ())
+   (button "Move down" as down to @commands ((press) (press) (press) (press)))
+   (edit-cage for @edits
+     (group
+       ("" | "" () @edits)
+       (transform (@commands up) to @edits (move-parent-behind))
+       (transform (@commands down) to @edits (move-parent-ahead)))
+     A
+     B))
+  ((button "Move up" as up to @commands ())
+   (button "Move down" as down to @commands ())
+   (edit-cage for @edits
+     A
+     B
+     (group
+       ("" | "" () @edits)
+       (transform (@commands up) to @edits (move-parent-behind))
+       (transform (@commands down) to @edits (move-parent-ahead))))))

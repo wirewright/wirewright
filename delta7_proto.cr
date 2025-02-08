@@ -65,6 +65,7 @@ module D
   def passable_range?(node : Term) : Range(Int32, Int32)?
     Term.case(node) do
       matchpi %[(group _*)] { 1...node.itemsize }
+      matchpi %[(edit-cage for @_ _*)] { 3...node.itemsize }
       matchpi %[(decay (%number +i32) _*)] { 2...node.itemsize }
 
       otherwise {}
@@ -814,10 +815,19 @@ module D
         {root1, successor?(root1, nodepath)}
       end
 
-      # Convert pulse signal to edit broadcast.
+      # `edit-cast`: converts pulse signal to root-centric edit broadcast.
       givenpi %[(edit-cast @pin_ to @bout_) (pulse @pin_ motion_) -1] do
         root1 = effect(root1, nodepath, node0) do
           event :edit, bout, motion
+        end
+
+        {root1, successor?(root1, nodepath)}
+      end
+
+      # `edit-cage`: converts pulse signal to children-centric non-broadcast (private) edit.
+      givenpi %[(edit-cage for @pin_ children_*) (pulse @pin_ motion_) _] do
+        root1 = effect(root1, nodepath, node0) do
+          backmap ML.term(%[(_ _ _ children_*)]), Term[].with({:children}, edit(children, motion, edge: pin)).upcast
         end
 
         {root1, successor?(root1, nodepath)}
