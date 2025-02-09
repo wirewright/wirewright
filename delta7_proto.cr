@@ -20,6 +20,9 @@ module D
   JobsPending   = Term[:"#jobs/pending"]
   JobsCompleted = Term[:"#jobs/completed"]
 
+  # TODO: Delete in favor of more granularity
+  DocumentMarker = Term[:"#document"]
+
   struct Q
     def initialize(@data : Term::Dict)
       unless @data.itemsonly?
@@ -193,20 +196,55 @@ module D
     end
   end
 
+  private def enclosing0?(node, rangepath, predicate) : Term::Dict?
+    return if rangepath.empty?
+    return unless neighbor = follow?(node, rangepath.begin.grow(1))
+
+    tail = rangepath.move(1)
+
+    unless result = enclosing0?(neighbor, tail, predicate)
+      if predicate.call(neighbor)
+        result = rangepath.expand.upto(tail.begin).collect
+      end
+    end
+
+    result
+  end
+
+  # Removes one range at a time from the end of *rangepath* until *predicate*
+  # is `true` for the targeted node. Returns the resulting rangepath.
+  #
+  # In other words, returns the nearest node enclosing the node *rangepath* points
+  # to, for which the predicate returns `true`.
+  def enclosing?(root : Term, rangepath : Term::Dict::ItemsView, &predicate : Term -> Bool) : Term::Dict?
+    unless needle = enclosing0?(root, rangepath, predicate)
+      if predicate.call(root)
+        needle = Term[]
+      end
+    end
+
+    needle
+  end
+
+  # :ditto:
+  def enclosing?(root, rangepath : Term::Dict, &predicate : Term -> Bool) : Term::Dict?
+    enclosing?(root, rangepath.items, &predicate)
+  end
+
+  # Same as `enclosing?`, but raises `KeypathError` if *predicate* returns `false`
+  # for all nodes targeted by *rangepath*.
+  def enclosing(root, rangepath, &predicate : Term -> Bool) : Term::Dict?
+    enclosing?(root, rangepath, &predicate) || raise KeypathError.new
+  end
+
   # Returns a path to the nearest enclosing document.
   # TODO: remove in favor of more granularity.
   def docpath(root : Term, nodepath : Term::Dict) : Term::Dict
-    path = nodepath.items.grow(-1)
-
-    until path.empty?
-      candidate = follow(root, path)
-      if candidate[:"(document)"]?
-        return path.collect
-      end
-      path = path.grow(-1)
+    enclosing(root, nodepath.items.grow(-1)) do |step|
+      next false unless dict = step.as_d?
+      next false unless dict.includes?(DocumentMarker)
+      true
     end
-
-    Term[]
   end
 
   class EffectBuilder
@@ -1057,7 +1095,8 @@ module D
   end
 
   def next(root0 : Term) : Term
-    pipe(root0, transition(docpath: Term[]), publish, advance(docpath: Term[]))
+    # TODO: remove DocumentMarker in favor of more granularity
+    pipe(root0.morph({DocumentMarker, true}).upcast, transition(docpath: Term[]), publish, advance(docpath: Term[]))
   end
 end
 
