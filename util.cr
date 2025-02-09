@@ -2217,6 +2217,10 @@ struct Bag(T)
     @storage[object]?
   end
 
+  def tally(object : T) : UInt16
+    @storage[object]
+  end
+
   def add(object : T) : Nil
     @storage[object] = (@storage[object]? || 0u16) + 1
   end

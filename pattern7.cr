@@ -468,7 +468,20 @@ module ::Ww::M1::Operator::Item
 
   record Singular, tail : Operator::Any
   record Slot, capture : Term
-  record Plural, capture : Term?, min : UInt8, max : UInt8, type : TermType, follower : Follower, frac : UInt32, strategy : ExpandStrategy do
+
+  record Plural, contenders : Slice(Term?), min1 : Magnitude, max1 : Magnitude, type : TermType, follower : Follower, frac : UInt32, strategy : ExpandStrategy do
+    def self.new(contender : Term?, min1, max1, type : TermType, follower : Follower, frac, strategy : ExpandStrategy)
+      new(Slice[contender.as(Term?)], min1, max1, type, follower, frac, strategy)
+    end
+
+    def min : Magnitude
+      min1 * contenders.size
+    end
+
+    def max : Magnitude
+      max1 * contenders.size
+    end
+
     enum Follower : UInt8
       {% for member in ::Ww::TermType.constants %}
         {{member}}
@@ -1731,16 +1744,18 @@ module ::Ww::M1::Operator::Item
   # TODO: refactor match() to take ItemBehind which is an extension of Behind with ord, feed
 
   private def self.propose?(progress, item : Plural, prefix, suffix, ahead)
-    if capture = item.capture
-      candidate = progress.behind.propose?(capture, Term.of(prefix))
-      return unless candidate
+    candidate = progress.behind
 
-      candidate = candidate.mount(capture, &.span(prefix.size, ord: progress.ord))
-    else
-      candidate = progress.behind
+    prefix.split(item.contenders.size, empty: item.min.zero?) do |subview, index|
+      if capture = item.contenders[index]
+        candidate = candidate.propose?(capture, Term.of(subview))
+        return unless candidate
+        candidate = candidate.mount(capture, &.span(subview.size, ord: progress.ord))
+      end
+      candidate = candidate.keypath(&.forward(subview.size))
     end
 
-    case fb = ahead.call(progress.copy_with(ord: progress.ord + 1, behind: candidate.keypath(&.forward(prefix.size))), suffix)
+    case fb = ahead.call(progress.copy_with(ord: progress.ord + 1, behind: candidate), suffix)
     in Fb::Match, Fb::Interrupt
       fb
     in Fb::Mismatch
@@ -2759,11 +2774,14 @@ module ::Ww::M1
     end
 
     def self.sequence(items : Term::Dict::ItemsView, neighbor : NeighborFn, captures : Bag(Term)) : Array(Operator::Item::Any)
-      items.map_with_index do |item, index|
-        outside = -> { Item.neighbor?(items.move(index + 1), neighbor).as(Neighbor) }
+      operators = Array(Operator::Item::Any).new(items.size)
 
-        Item.operator(item, outside, captures)
+      until items.empty?
+        operator, items = Item.operator(items, neighbor, captures)
+        operators << operator
       end
+
+      operators
     end
 
     # TODO: rename
@@ -2810,16 +2828,20 @@ module ::Ww::M1
     end
 
     # TODO: switch to using matchpis here and everywhere!
-    def self.operator(item : Term, neighbor : NeighborFn, captures : Bag(Term)) : Operator::Item::Any
+    def self.operator(feed : Term::Dict::ItemsView, outside : NeighborFn, captures : Bag(Term)) : {Operator::Item::Any, Term::Dict::ItemsView}
+      item = feed.first
+
       Term.case(item, engine: M0) do
         matchpi %[(%singular child_)], cue: :"%singular" do
-          Operator::Item::Singular.new(M1.operator(child, captures))
+          {Operator::Item::Singular.new(M1.operator(child, captures)), feed.move(1)}
         end
 
         match({:"%group", {:"%capture", :capture_}, :_, :"_*"}, cue: :"%group") do |capture|
+          neighbor = -> { Item.neighbor?(feed.move(1), outside).as(Neighbor) }
+
           members = sequence(item.items.move(2), neighbor, captures)
 
-          Operator::Item::Group.new(capture, members)
+          {Operator::Item::Group.new(capture, members), feed.move(1)}
         end
 
         match({:"%partition", {:"%many", {:"%capture", :capture_}, :_, :"_*"}, {min: :min0_, max: :max0_}}, cue: :"%many") do |capture, min0, max0|
@@ -2837,7 +2859,7 @@ module ::Ww::M1
 
           members = sequence(item.items.move(2), -> { nil.as(Neighbor) }, captures)
 
-          Operator::Item::Many.new(capture, members, interior.set, min, max)
+          {Operator::Item::Many.new(capture, members, interior.set, min, max), feed.move(1)}
         end
 
         match({:"%partition", {:"%past", :_, :"_*"}, {min: :min0_, max: :max0_, greedy: :greedy_boolean}}, cue: :"%past") do |min0, max0, greedy|
@@ -2846,93 +2868,126 @@ module ::Ww::M1
 
           members = sequence(item.items.move(1), -> { nil.as(Neighbor) }, captures)
 
-          Operator::Item::Past.new(members, min, max, greedy: greedy.true?)
+          {Operator::Item::Past.new(members, min, max, greedy: greedy.true?), feed.move(1)}
         end
 
         match({:"%optional", :default_, :body_}, cue: :"%optional") do |default, body|
-          Operator::Item::Optional.new(default, M1.operator(body, captures))
+          {Operator::Item::Optional.new(default, M1.operator(body, captures)), feed.move(1)}
         end
 
-        match(Term[:"%plural", {:"%capture", :capture_}, min: :min0_, max: :max0_, type: :type0_symbol], cue: {:"%plural", :"%capture"}) do |capture, min0, max0, type0|
-          min = min0.to(UInt8)
-          max = max0 == SYM_INF ? 0u8 : max0.to(UInt8)
-          type = type0.unsafe_as_sym.blank.type
+        matchpi %[(%plural (%capture _) min: min0_ max: max0_ type: type0_)] do
+          min = min0.to(Magnitude)
+          max = max0 == SYM_INF ? Magnitude::INFINITY : max0.to(Magnitude)
+          type = type0.as_sym.blank.type
 
+          contenders = [] of Term?
+
+          # Note: types, min, and max values of all contenders are all equal.
+          # Note: cases such as `xs_ xs_* ys_*` ARE NOT instances of contention (whereas
+          # e.g. `xs_* ys_*` is). xs_* and ys_*  in such scenarios must be treated
+          # as separate polyblanks!
+          while (contender = feed.first?) && contender.without(1) == item.without(1)
+            capture = contender[1, 1]?
+
+            if capture.nil? || captures.tally(capture) == 1
+              feed = feed.move(1)
+              contenders << capture
+              next
+            end
+
+            if contenders.empty?
+              feed = feed.move(1)
+              contenders << capture
+            end
+
+            break
+          end
+
+          neighbor = -> { Item.neighbor?(feed, outside).as(Neighbor) }
           follower, frac = follower(neighbor), frac(neighbor)
 
-          Operator::Item::Plural.new(capture, min, max, type, follower, frac, strategy: :auto)
+          {Operator::Item::Plural.new(contenders.to_readonly_slice, min, max, type, follower, frac, strategy: :auto), feed}
         end
 
         match(Term[:"%plural/min", {:"%capture", :capture_}, min: :min0_, max: :max0_, type: :type0_symbol], cue: {:"%plural/min", :"%capture"}) do |capture, min0, max0, type0|
-          min = min0.to(UInt8)
-          max = max0 == SYM_INF ? 0u8 : max0.to(UInt8)
+          min = min0.to(Magnitude)
+          max = max0 == SYM_INF ? Magnitude::INFINITY : max0.to(Magnitude)
           type = type0.unsafe_as_sym.blank.type
 
+          neighbor = -> { Item.neighbor?(feed.move(1), outside).as(Neighbor) }
           follower, frac = follower(neighbor), frac(neighbor)
 
-          Operator::Item::Plural.new(capture, min, max, type, follower, frac, strategy: :lazy)
+          {Operator::Item::Plural.new(capture, min, max, type, follower, frac, strategy: :lazy), feed.move(1)}
         end
 
         match(Term[:"%plural/max", {:"%capture", :capture_}, min: :min0_, max: :max0_, type: :type0_symbol], cue: {:"%plural/max", :"%capture"}) do |capture, min0, max0, type0|
-          min = min0.to(UInt8)
-          max = max0 == SYM_INF ? 0u8 : max0.to(UInt8)
+          min = min0.to(Magnitude)
+          max = max0 == SYM_INF ? Magnitude::INFINITY : max0.to(Magnitude)
           type = type0.unsafe_as_sym.blank.type
 
+          neighbor = -> { Item.neighbor?(feed.move(1), outside).as(Neighbor) }
           follower, frac = follower(neighbor), frac(neighbor)
 
-          Operator::Item::Plural.new(capture, min, max, type, follower, frac, strategy: :greedy)
+          {Operator::Item::Plural.new(capture, min, max, type, follower, frac, strategy: :greedy), feed.move(1)}
         end
 
+        # FIXME: unify with %capture %plural case, tests
         match(Term[:"%plural", min: :min0_, max: :max0_, type: :type0_symbol], cue: :"%plural") do |min0, max0, type0|
-          min = min0.to(UInt8)
-          max = max0 == SYM_INF ? 0u8 : max0.to(UInt8)
+          min = min0.to(Magnitude)
+          max = max0 == SYM_INF ? Magnitude::INFINITY : max0.to(Magnitude)
           type = type0.unsafe_as_sym.blank.type
 
+          neighbor = -> { Item.neighbor?(feed.move(1), outside).as(Neighbor) }
           follower, frac = follower(neighbor), frac(neighbor)
 
-          Operator::Item::Plural.new(nil, min, max, type, follower, frac, strategy: :auto)
+          {Operator::Item::Plural.new(nil, min, max, type, follower, frac, strategy: :auto), feed.move(1)}
         end
 
         match(Term[:"%plural/min", min: :min0_, max: :max0_, type: :type0_symbol], cue: :"%plural/min") do |min0, max0, type0|
-          min = min0.to(UInt8)
-          max = max0 == SYM_INF ? 0u8 : max0.to(UInt8)
+          min = min0.to(Magnitude)
+          max = max0 == SYM_INF ? Magnitude::INFINITY : max0.to(Magnitude)
           type = type0.unsafe_as_sym.blank.type
 
+          neighbor = -> { Item.neighbor?(feed.move(1), outside).as(Neighbor) }
           follower, frac = follower(neighbor), frac(neighbor)
 
-          Operator::Item::Plural.new(nil, min, max, type, follower, frac, strategy: :lazy)
+          {Operator::Item::Plural.new(nil, min, max, type, follower, frac, strategy: :lazy), feed.move(1)}
         end
 
         match(Term[:"%plural/max", min: :min0_, max: :max0_, type: :type0_symbol], cue: :"%plural/max") do |min0, max0, type0|
-          min = min0.to(UInt8)
-          max = max0 == SYM_INF ? 0u8 : max0.to(UInt8)
+          min = min0.to(Magnitude)
+          max = max0 == SYM_INF ? Magnitude::INFINITY : max0.to(Magnitude)
           type = type0.unsafe_as_sym.blank.type
 
+          neighbor = -> { Item.neighbor?(feed.move(1), outside).as(Neighbor) }
           follower, frac = follower(neighbor), frac(neighbor)
 
-          Operator::Item::Plural.new(nil, min, max, type, follower, frac, strategy: :greedy)
+          {Operator::Item::Plural.new(nil, min, max, type, follower, frac, strategy: :greedy), feed.move(1)}
         end
 
         match({:"%gap", :measurer_}, cue: :"%gap") do |measurer|
+          neighbor = -> { Item.neighbor?(feed.move(1), outside).as(Neighbor) }
           frac = frac(neighbor)
 
-          Operator::Item::Gap.new(M1.operator(measurer, captures), frac, strategy: :sway)
+          {Operator::Item::Gap.new(M1.operator(measurer, captures), frac, strategy: :sway), feed.move(1)}
         end
 
         match({:"%gap/min", :measurer_}, cue: :"%gap/max") do |measurer|
+          neighbor = -> { Item.neighbor?(feed.move(1), outside).as(Neighbor) }
           frac = frac(neighbor)
 
-          Operator::Item::Gap.new(M1.operator(measurer, captures), frac, strategy: :lazy)
+          {Operator::Item::Gap.new(M1.operator(measurer, captures), frac, strategy: :lazy), feed.move(1)}
         end
 
         match({:"%gap/max", :measurer_}, cue: :"%gap/max") do |measurer|
+          neighbor = -> { Item.neighbor?(feed.move(1), outside).as(Neighbor) }
           frac = frac(neighbor)
 
-          Operator::Item::Gap.new(M1.operator(measurer, captures), frac, strategy: :greedy)
+          {Operator::Item::Gap.new(M1.operator(measurer, captures), frac, strategy: :greedy), feed.move(1)}
         end
 
         match({:"%slot", :capture_}, cue: :"%slot") do |capture|
-          Operator::Item::Slot.new(capture)
+          {Operator::Item::Slot.new(capture), feed.move(1)}
         end
       end
     end

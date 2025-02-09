@@ -1128,8 +1128,8 @@
     (= (1 2 a b c "b" "c") {xs: (1 2), ys: (a b c), zs: ("b" "c")}))
 
   (pattern (xs_+ ys_+ zs_+ as_string+)
-    (= (1 2 a b "c" "d" "e") {xs: (1 2), ys: (a b), zs: ("c"), as: ("d" "e")})
-    (= (1 2 a b "c" "d" "e" "f") {xs: (1 2), ys: (a b), zs: ("c"), as: ("d" "e" "f")})
+    (= (1 2 a b "c" "d" "e") {xs: (1 2), ys: (a), zs: (b), as: ("c" "d" "e")})
+    (= (1 2 a b "c" "d" "e" "f") {xs: (1 2), ys: (a), zs: (b), as: ("c" "d" "e" "f")})
     (= (1 2 a b "c" "d" x "e" "f") {xs: (1 2 a), ys: (b "c"), zs: ("d" x), as: ("e" "f")})))
 
 ;; Polyblank in nested list
@@ -1668,6 +1668,59 @@
   (= (a b c d e f g h) {xs: (a b c), ys: (d e f), zs: (g h)})
   (= (a b c d e f g h i) {xs: (a b c), ys: (d e f), zs: (g h i)}))
 
+(pattern (xs_* ys_* zs_* and as_* bs_* cs_*)
+  (= (and) {xs: (), ys: (), zs: (), as: (), bs: (), cs: ()})
+  (= (a and) {xs: (a), ys: (), zs: (), as: (), bs: (), cs: ()})
+  (= (a and 1) {xs: (a), ys: (), zs: (), as: (1), bs: (), cs: ()})
+  (= (a b and 1) {xs: (a), ys: (b), zs: (), as: (1), bs: (), cs: ()})
+  (= (a b and 1 2) {xs: (a), ys: (b), zs: (), as: (1), bs: (2), cs: ()})
+  (= (a b c and 1 2) {xs: (a), ys: (b), zs: (c), as: (1), bs: (2), cs: ()})
+  (= (a b c and 1 2 3) {xs: (a), ys: (b), zs: (c), as: (1), bs: (2), cs: (3)})
+  (= (a b c d and 1 2 3) {xs: (a b), ys: (c), zs: (d), as: (1), bs: (2), cs: (3)})
+  (= (a b c d and 1 2 3 4) {xs: (a b), ys: (c), zs: (d), as: (1 2), bs: (3), cs: (4)})
+  (= (a b c d e and 1 2 3 4) {xs: (a b), ys: (c d), zs: (e), as: (1 2), bs: (3), cs: (4)})
+  (= (a b c d e and 1 2 3 4 5) {xs: (a b), ys: (c d), zs: (e), as: (1 2), bs: (3 4), cs: (5)})
+  (= (a b c d e f and 1 2 3 4 5) {xs: (a b), ys: (c d), zs: (e f), as: (1 2), bs: (3 4), cs: (5)})
+  (= (a b c d e f and 1 2 3 4 5 6) {xs: (a b), ys: (c d), zs: (e f), as: (1 2), bs: (3 4), cs: (5 6)}))
+
+(pattern (xs_+ ys_+ zs_+ and as_+ bs_+ cs_+)
+  (- (and) (a and) (a and 1) (a b and 1) (a b and 1 2) (a b c and 1 2))
+  (= (a b c and 1 2 3) {xs: (a), ys: (b), zs: (c), as: (1), bs: (2), cs: (3)})
+  (= (a b c d and 1 2 3) {xs: (a b), ys: (c), zs: (d), as: (1), bs: (2), cs: (3)})
+  (= (a b c d and 1 2 3 4) {xs: (a b), ys: (c), zs: (d), as: (1 2), bs: (3), cs: (4)})
+  (= (a b c d e and 1 2 3 4) {xs: (a b), ys: (c d), zs: (e), as: (1 2), bs: (3), cs: (4)})
+  (= (a b c d e and 1 2 3 4 5) {xs: (a b), ys: (c d), zs: (e), as: (1 2), bs: (3 4), cs: (5)})
+  (= (a b c d e f and 1 2 3 4 5) {xs: (a b), ys: (c d), zs: (e f), as: (1 2), bs: (3 4), cs: (5)})
+  (= (a b c d e f and 1 2 3 4 5 6) {xs: (a b), ys: (c d), zs: (e f), as: (1 2), bs: (3 4), cs: (5 6)}))
+
+(pattern ((%plural xs max: 2) (%plural ys max: 2) (%plural zs max: 2))
+  (= () {xs: (), ys: (), zs: ()})
+  (= (a) {xs: (a), ys: (), zs: ()})
+  (= (a b) {xs: (a), ys: (b), zs: ()})
+  (= (a b c) {xs: (a), ys: (b), zs: (c)})
+  (= (a b c d) {xs: (a b), ys: (c), zs: (d)})
+  (= (a b c d e) {xs: (a b), ys: (c d), zs: (e)})
+  (= (a b c d e f) {xs: (a b), ys: (c d), zs: (e f)})
+  (- (a b c d e f g) (a b c d e f g h) (a b c d e f g h i)))
+
+(pattern ((%plural xs min: 1 max: 2) (%plural ys min: 1 max: 2) (%plural zs min: 1 max: 2))
+  (- () (a) (a b))
+  (= (a b c) {xs: (a), ys: (b), zs: (c)})
+  (= (a b c d) {xs: (a b), ys: (c), zs: (d)})
+  (= (a b c d e) {xs: (a b), ys: (c d), zs: (e)})
+  (= (a b c d e f) {xs: (a b), ys: (c d), zs: (e f)})
+  (- (a b c d e f g) (a b c d e f g h) (a b c d e f g h i)))
+
+(pattern ((%plural xs min: 1 max: 2 type: _symbol)
+          (%plural ys min: 1 max: 2 type: _symbol)
+          (%plural zs min: 1 max: 2 type: _symbol))
+  (- () (a) (a b) (1 b c) (a 2 c) (a b 3) (a b c 1) (a b c d 2) (a b c d e 3)) ;; etc...
+  (= (a b c) {xs: (a), ys: (b), zs: (c)})
+  (= (a b c d) {xs: (a b), ys: (c), zs: (d)})
+  (= (a b c d e) {xs: (a b), ys: (c d), zs: (e)})
+  (= (a b c d e f) {xs: (a b), ys: (c d), zs: (e f)})
+  (- (a b c d e f g) (a b c d e f g h) (a b c d e f g h i)))
+
 (pattern ((%group foo xs_* ys_* zs_*) and (%group bar as_* bs_* cs_*))
   (= (and) {foo: (), bar: (), xs: (), ys: (), zs: (), as: (), bs: (), cs: ()})
   (= (a and) {foo: (a), bar: (), xs: (a), ys: (), zs: (), as: (), bs: (), cs: ()})
@@ -1678,6 +1731,18 @@
   (= (a b c and 1 2 3) {foo: (a b c), bar: (1 2 3), xs: (a), ys: (b), zs: (c), as: (1), bs: (2), cs: (3)})
   (= (a b c d and 1 2 3) {foo: (a b c d), bar: (1 2 3), xs: (a b), ys: (c), zs: (d), as: (1), bs: (2), cs: (3)})
   (= (a b c d and 1 2 3 4) {foo: (a b c d), bar: (1 2 3 4), xs: (a b), ys: (c), zs: (d), as: (1 2), bs: (3), cs: (4)}))
+  ;; ...
+
+(pattern ((%group foo xs_* _* _*) and (%group bar _* _* cs_*))
+  (= (and) {foo: (), bar: (), xs: (), cs: ()})
+  (= (a and) {foo: (a), bar: (), xs: (a), cs: ()})
+  (= (a and 1) {foo: (a), bar: (1), xs: (a), cs: ()})
+  (= (a b and 1) {foo: (a b), bar: (1), xs: (a), cs: ()})
+  (= (a b and 1 2) {foo: (a b), bar: (1 2), xs: (a), cs: ()})
+  (= (a b c and 1 2) {foo: (a b c), bar: (1 2), xs: (a), cs: ()})
+  (= (a b c and 1 2 3) {foo: (a b c), bar: (1 2 3), xs: (a), cs: (3)})
+  (= (a b c d and 1 2 3) {foo: (a b c d), bar: (1 2 3), xs: (a b), cs: (3)})
+  (= (a b c d and 1 2 3 4) {foo: (a b c d), bar: (1 2 3 4), xs: (a b), cs: (4)}))
   ;; ...
 
 ;; %optional
