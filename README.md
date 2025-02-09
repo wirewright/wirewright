@@ -1,8 +1,11 @@
 # Wirewright
 
-**Warning**: you won't be able to run anything right now because of `StringLiteral#scan`, a method I've
+**Warning**: ~~you won't be able to run anything right now because of `StringLiteral#scan`, a method I've
 had to patch into the Crystal compiler. If I will get it into Crystal then you will be able to run the stuff.
-Besides, there is nothing to run yet except for tests :^)
+Besides, there is nothing to run yet except for tests :^)~~ UPD: my `StringLiteral#scan` PR was merged into
+the master branch of Crystal and will be available in Crystal 1.16. There is still nothing interesting to run though!
+Except for tests! Running them is straightforward: `crystal run pattern6_test.cr`. Don't ask me why pattern6.
+Don't ask me why it's testing pattern7. baz5? No idea.
 
 Wirewright is a rewrite environment for self-embodied programs.
 
