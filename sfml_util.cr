@@ -239,3 +239,60 @@ module SF::Keyboard
     key_pressed?(Scan::Scancode::LShift) || key_pressed?(Scan::Scancode::RShift)
   end
 end
+
+module SF::Rectangular
+end
+
+class SF::RectangleShape
+  include Rectangular
+end
+
+class SF::RoundedRectangleShape < SF::Shape
+  include Rectangular
+
+  getter size : SF::Vector2i = SF.vector2i(0, 0)
+  @border_radius : Float64 = 0.0f64
+
+  def initialize
+    super()
+
+    @corner_point_count = 64
+  end
+
+  def size=(@size : Vector2i)
+  end
+
+  def border_radius=(@border_radius : Float64)
+  end
+
+  def point_count : Int32
+    @corner_point_count * 4
+  end
+
+  def get_point(index : Int) : SF::Vector2f
+    if index >= point_count
+      return SF.vector2f(0, 0)
+    end
+
+    border_radius = @border_radius.clamp(0.0..@size.x/2).to_f
+
+    delta_angle = 90 / (@corner_point_count - 1)
+    center_index = index//@corner_point_count
+    center = SF.vector2f(0, 0)
+
+    case center_index
+    when 0
+      center = SF.vector2f(@size.x - border_radius, border_radius)
+    when 1
+      center = SF.vector2f(border_radius, border_radius)
+    when 2
+      center = SF.vector2f(border_radius, @size.y - border_radius)
+    when 3
+      center = SF.vector2f(@size.x - border_radius, @size.y - border_radius)
+    end
+
+    SF.vector2f(
+      border_radius*Math.cos(delta_angle*(index - center_index)*Math::PI/180) + center.x,
+      -border_radius*Math.sin(delta_angle*(index - center_index)*Math::PI/180) + center.y)
+  end
+end

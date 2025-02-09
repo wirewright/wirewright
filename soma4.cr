@@ -58,9 +58,16 @@ N←(button.secondary caption_string ¦ () w_ h_) <>
 WWML
 
 base1 = <<-WWML
-(text caption_string ¦ _ -content-w_ -content-h_ font_string weight_: (%any 100 200 300 400 450 500 600 700 800 900) size_: (%number u8))
+(text caption_string ¦ _ w: content h: content -content-w_ -content-h_ font_string weight_: (%any 100 200 300 400 450 500 600 700 800 900) size_: (%number u8))
   <> {content-w: ($once (measure-width →caption →font →weight →size)),
       content-h: ($once (measure-height →caption →font →weight →size))}
+
+;; TODO: text: handle the different configurations of w, h to obtain content-w and content-h,
+;; employing wrapping if necessary:
+;;   - [x] w: content h: content
+;;   - [ ] w: content h: max
+;;   - [ ] w: max h: content
+;;   - [ ] w: max h: max
 
 (padding {_ content-w: w_number} ¦ _ content-w: (%- _ W) pl_number pr_number)
   <> {W: ($once (+ →pl →w →pr))}
