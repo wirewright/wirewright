@@ -10,6 +10,133 @@
    (absence @count as "Missing" to @counts)
    (log @counts in (0 "Missing" "Hello World"))))
 
+;; Uninitialized cell
+(d7
+  ((cell @x)
+   (button "Initialize cell" as 0 to @xs ((press)))
+   (latest @xs @x))
+  ((cell 0 @x)
+   (button "Initialize cell" as 0 to @xs ())
+   (latest @xs @x)))
+
+;; Initialized cell pattern mismatch degenerates into an uninitialized cell
+;; without effects.
+(d7
+  ((cell @x)
+   (changes @x to @xs)
+   (absence @x as "Missing" to @xs)
+   (log @xs in ()))
+  ((cell @x)
+   (changes @x to @xs)
+   (absence @x as "Missing" to @xs)
+   (log @xs in ("Missing"))))
+(d7
+  ((cell "Hello World" @x for _number)
+   (changes @x to @xs)
+   (absence @x as "Missing" to @xs)
+   (log @xs in ()))
+  ((cell @x for _number)
+   (changes @x to @xs)
+   (absence @x as "Missing" to @xs)
+   (log @xs in ("Missing"))))
+
+;; (cell @_ for _) init with OK value
+(d7
+  ((cell @count for _number)
+   (changes @count to @log)
+   (absence @count as "Missing" to @log)
+   (log @log in ())
+   (delay 1 (event (assign @count 100))))
+  ((cell 100 @count for _number)
+   (changes @count to @log)
+   (absence @count as "Missing" to @log)
+   (log @log in ("Missing" 100))))
+
+;; (cell @_ for _) init with OK value, no cycle means absence() won't see it missing!
+(d7
+  ((cell @count for _number)
+   (changes @count to @log)
+   (absence @count as "Missing" to @log)
+   (log @log in ())
+   (event (assign @count 100)))
+  ((cell 100 @count for _number)
+   (changes @count to @log)
+   (absence @count as "Missing" to @log)
+   (log @log in (100))))
+
+;; (cell @_ for _) init with BAD value
+(d7
+  ((cell @count for _number)
+   (changes @count to @log)
+   (absence @count as "Missing" to @log)
+   (log @log in ())
+   (event (assign @count "Hello World")))
+  ((cell @count for _number)
+   (changes @count to @log)
+   (absence @count as "Missing" to @log)
+   (log @log in ("Missing"))))
+
+;; (cell @_ for _) init with BAD value then OK value after a delay
+(d7
+  ((cell @count for _number)
+   (changes @count to @log)
+   (absence @count as "Missing" to @log)
+   (log @log in ())
+   (event (assign @count "Hello World"))
+   (delay 5 (event (assign @count 100))))
+  ((cell 100 @count for _number)
+   (changes @count to @log)
+   (absence @count as "Missing" to @log)
+   (log @log in ("Missing" 100))))
+
+;; (cell <bad value> @_ for _) init with OK value
+(d7
+  ((cell "Hello World" @count for _number)
+   (changes @count to @log)
+   (absence @count as "Missing" to @log)
+   (log @log in ())
+   (delay 5 (event (assign @count 100))))
+  ((cell 100 @count for _number)
+   (changes @count to @log)
+   (absence @count as "Missing" to @log)
+   (log @log in ("Missing" 100))))
+
+;; (cell <bad value> @x for _) init with BAD value
+(d7
+  ((cell "Hello World" @count for _number)
+   (changes @count to @log)
+   (absence @count as "Missing" to @log)
+   (log @log in ())
+   (delay 5 (event (assign @count "Hell World"))))
+  ((cell @count for _number)
+   (changes @count to @log)
+   (absence @count as "Missing" to @log)
+   (log @log in ("Missing"))))
+
+;; (cell <ok value> @x for _) init with OK value
+(d7
+  ((cell 100 @count for _number)
+   (changes @count to @log)
+   (absence @count as "Missing" to @log)
+   (log @log in ())
+   (delay 5 (event (assign @count 200))))
+  ((cell 200 @count for _number)
+   (changes @count to @log)
+   (absence @count as "Missing" to @log)
+   (log @log in (100 200))))
+
+;; (cell <ok value> @x for _) init with BAD value
+(d7
+  ((cell 100 @count for _number)
+   (changes @count to @log)
+   (absence @count as "Missing" to @log)
+   (log @log in ())
+   (delay 5 (event (assign @count "Hello World"))))
+  ((cell 100 @count for _number)
+   (changes @count to @log)
+   (absence @count as "Missing" to @log)
+   (log @log in (100))))
+
 (group
   ;; Button long form, raw value
   (d7
@@ -423,3 +550,35 @@
    (changes @count to @counts)
    (transform @counts to @counts/future (+ _ 1))
    (latest (@counts/future n←(%number (whole _) < 10)) (@count n_))))
+
+;; lookaround node
+
+;;(d7
+;;  (foo
+;;   bar
+;;   (group
+;;     a
+;;     b
+;;     (lookaround @behind @ahead @refresh
+;;       (cell @behind)
+;;       (cell @ahead)
+;;       (button "Refresh lookaround" to @refresh ((press))))
+;;     c
+;;     (+ 1 2)
+;;     d)
+;;    baz
+;;    qux)
+;;  (foo
+;;   bar
+;;   (group
+;;     a
+;;     b
+;;     (lookaround @behind @ahead @refresh
+;;       (cell (a b) @behind)
+;;       (cell (c (+ 1 2) d)@ahead)
+;;       (button "Refresh lookaround" to @refresh ()))
+;;     c
+;;     (+ 1 2)
+;;     d)
+;;   baz
+;;   qux))

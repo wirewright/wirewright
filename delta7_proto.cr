@@ -387,10 +387,23 @@ module D
     node0 = follow(root1, nodepath)
 
     Term.case({node0, event, cursordepth(node0)}) do
-      givenpi %[(cell v_ @cout_ _*) invited -1] do
+      givenpi %[(cell v_ @cout_) invited -1] do
         root1 = effect(root1, nodepath, node0) do
           event :"cell/created", cout, v
           cell cout, v
+        end
+
+        {root1, successor?(root1, nodepath)}
+      end
+
+      givenpi %[(cell v_ @cout_ for pattern_) invited -1] do
+        root1 = effect(root1, nodepath, node0) do
+          if M1.probe?(pattern, v)
+            event :"cell/created", cout, v
+            cell cout, v
+          else
+            backmap ML.term(%[(cell v_ _ for _)]), Term.of(Term[].with({:v}, Term[]))
+          end
         end
 
         {root1, successor?(root1, nodepath)}
@@ -405,6 +418,22 @@ module D
           event :"cell/updated", cout, v0, v1
           cell cout, v1
           backmap %[(cell v_ @_)], v: v1
+        end
+
+        {root1, successor?(root1, nodepath)}
+      end
+
+      givenpi %[(cell @cout_) (assign @cout_ v0_) -1] do
+        root1 = effect(root1, nodepath, node0) do
+          backmap %[(cell ⏏v @_)], v: v0
+        end
+
+        {root1, successor?(root1, nodepath)}
+      end
+
+      givenpi %[(cell @cout_ for _) (assign @cout_ v0_) -1] do
+        root1 = effect(root1, nodepath, node0) do
+          backmap %[(cell ⏏v @_ for _)], v: v0
         end
 
         {root1, successor?(root1, nodepath)}
