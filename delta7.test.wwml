@@ -553,32 +553,170 @@
 
 ;; lookaround node
 
-;;(d7
-;;  (foo
-;;   bar
-;;   (group
-;;     a
-;;     b
-;;     (lookaround @behind @ahead @refresh
-;;       (cell @behind)
-;;       (cell @ahead)
-;;       (button "Refresh lookaround" to @refresh ((press))))
-;;     c
-;;     (+ 1 2)
-;;     d)
-;;    baz
-;;    qux)
-;;  (foo
-;;   bar
-;;   (group
-;;     a
-;;     b
-;;     (lookaround @behind @ahead @refresh
-;;       (cell (a b) @behind)
-;;       (cell (c (+ 1 2) d)@ahead)
-;;       (button "Refresh lookaround" to @refresh ()))
-;;     c
-;;     (+ 1 2)
-;;     d)
-;;   baz
-;;   qux))
+(d7
+  (foo
+   bar
+   (group
+     a
+     b
+     (lookaround @behind @ahead @refresh
+       (cell @behind)
+       (cell @ahead)
+       (latest @behind @behind)
+       (latest @ahead @ahead)
+       (button "Refresh lookaround" to @refresh ((press))))
+     c
+     (+ 1 2)
+     d)
+    baz
+    qux)
+  (foo
+   bar
+   (group
+     a
+     b
+     (lookaround @behind @ahead @refresh
+       (cell (a b) @behind)
+       (cell (c (+ 1 2) d) @ahead)
+       (latest @behind @behind)
+       (latest @ahead @ahead)
+       (button "Refresh lookaround" to @refresh ()))
+     c
+     (+ 1 2)
+     d)
+   baz
+   qux))
+
+;; lookaround movement
+
+;; target above
+(d7
+  (a
+   b
+   c
+   target
+   d
+   e
+   f
+   (lookaround @views-behind @views-ahead @relook
+     ("" | "" () @cursor)
+     (periodic (pulse @relook true))
+     (transform (@views-behind view_) to @stimuli (rear view))
+     (transform (@views-ahead view_) to @stimuli (front view))
+     (map @stimuli to @decisions
+       ((rear (_* target)) eat-behind)
+       ((rear ⟨target⟩) go-behind)
+       ((front (target _*)) eat-ahead)
+       ((front ⟨target⟩) go-ahead))
+     (transform
+       (@decisions eat-behind)
+       to
+       @sequences ((key home) (key left) (key C-backspace) (key right) (key down) (key down) (key down) (key down)))
+     (transform
+       (@decisions eat-ahead)
+       to
+       @sequences ((key end) (key right) (key C-delete) (key left) (key home) (key down) (key down) (key down) (key down)))
+     (transform (@decisions go-behind) to @cursor-commands (move-parent-behind))
+     (transform (@decisions go-ahead) to @cursor-commands (move-parent-ahead))
+     (blast @sequences to @cursor-commands)
+     (edit-cast @cursor-commands to @cursor))
+   foo
+   bar
+   baz)
+  (a
+   b
+   c
+   (lookaround @views-behind @views-ahead @relook
+     ("" | "" () @cursor)
+     (periodic (pulse @relook true))
+     (transform (@views-behind view_) to @stimuli (rear view))
+     (transform (@views-ahead view_) to @stimuli (front view))
+     (map @stimuli to @decisions
+       ((rear (_* target)) eat-behind)
+       ((rear ⟨target⟩) go-behind)
+       ((front (target _*)) eat-ahead)
+       ((front ⟨target⟩) go-ahead))
+     (transform
+       (@decisions eat-behind)
+       to
+       @sequences ((key home) (key left) (key C-backspace) (key right) (key down) (key down) (key down) (key down)))
+     (transform
+       (@decisions eat-ahead)
+       to
+       @sequences ((key end) (key right) (key C-delete) (key left) (key home) (key down) (key down) (key down) (key down)))
+     (transform (@decisions go-behind) to @cursor-commands (move-parent-behind))
+     (transform (@decisions go-ahead) to @cursor-commands (move-parent-ahead))
+     (blast @sequences to @cursor-commands)
+     (edit-cast @cursor-commands to @cursor))
+   d
+   e
+   f
+   foo
+   bar
+   baz))
+
+;; target below
+(d7
+  (a
+   b
+   c
+   d
+   e
+   f
+   (lookaround @views-behind @views-ahead @relook
+     ("" | "" () @cursor)
+     (periodic (pulse @relook true))
+     (transform (@views-behind view_) to @stimuli (rear view))
+     (transform (@views-ahead view_) to @stimuli (front view))
+     (map @stimuli to @decisions
+       ((rear (_* target)) eat-behind)
+       ((rear ⟨target⟩) go-behind)
+       ((front (target _*)) eat-ahead)
+       ((front ⟨target⟩) go-ahead))
+     (transform
+       (@decisions eat-behind)
+       to
+       @sequences ((key home) (key left) (key C-backspace) (key right) (key down) (key down) (key down) (key down)))
+     (transform
+       (@decisions eat-ahead)
+       to
+       @sequences ((key end) (key right) (key C-delete) (key left) (key home) (key down) (key down) (key down) (key down)))
+     (transform (@decisions go-behind) to @cursor-commands (move-parent-behind))
+     (transform (@decisions go-ahead) to @cursor-commands (move-parent-ahead))
+     (blast @sequences to @cursor-commands)
+     (edit-cast @cursor-commands to @cursor))
+   foo
+   bar
+   baz
+   target)
+  (a
+   b
+   c
+   d
+   e
+   f
+   foo
+   bar
+   baz
+   (lookaround @views-behind @views-ahead @relook
+     ("" | "" () @cursor)
+     (periodic (pulse @relook true))
+     (transform (@views-behind view_) to @stimuli (rear view))
+     (transform (@views-ahead view_) to @stimuli (front view))
+     (map @stimuli to @decisions
+       ((rear (_* target)) eat-behind)
+       ((rear ⟨target⟩) go-behind)
+       ((front (target _*)) eat-ahead)
+       ((front ⟨target⟩) go-ahead))
+     (transform
+       (@decisions eat-behind)
+       to
+       @sequences ((key home) (key left) (key C-backspace) (key right) (key down) (key down) (key down) (key down)))
+     (transform
+       (@decisions eat-ahead)
+       to
+       @sequences ((key end) (key right) (key C-delete) (key left) (key home) (key down) (key down) (key down) (key down)))
+     (transform (@decisions go-behind) to @cursor-commands (move-parent-behind))
+     (transform (@decisions go-ahead) to @cursor-commands (move-parent-ahead))
+     (blast @sequences to @cursor-commands)
+     (edit-cast @cursor-commands to @cursor))))

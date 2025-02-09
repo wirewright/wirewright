@@ -70,6 +70,7 @@ module D
       matchpi %[(group _*)] { 1...node.itemsize }
       matchpi %[(edit-cage for @_ _*)] { 3...node.itemsize }
       matchpi %[(decay (%number +i32) _*)] { 2...node.itemsize }
+      matchpi %[(lookaround @_ @_ @_ _*)] { 4...node.itemsize }
 
       otherwise {}
     end
@@ -973,6 +974,63 @@ module D
       givenpi %[(edit-cage for @pin_ children_*) (pulse @pin_ motion_) _] do
         root1 = effect(root1, nodepath, node0) do
           backmap ML.term(%[(_ _ _ children_*)]), Term[].with({:children}, edit(children, motion, edge: pin)).upcast
+        end
+
+        {root1, successor?(root1, nodepath)}
+      end
+
+      givenpi %[(map @pin_ to @pout_ (%group conds (%past (_ _) min: 1))) (pulse @pin_ input_) -1] do |conds|
+        conds.items.each do |(pattern, template)|
+          next unless env = M1.match?(pattern, input)
+
+          output = M1.bsubst(template, env)
+
+          root1 = effect(root1, nodepath, node0) do
+            event :pulse, pout, output
+          end
+
+          break
+        end
+
+        {root1, successor?(root1, nodepath)}
+      end
+
+      # Lookaround can look behind and ahead on demand. It can also contain children.
+      # On the children part, there is no isolation; it works just like `group`.
+      #
+      # FIXME: I don't think the latter is OK behavior but will do for now.
+      givenpi %[(lookaround @behind_out_ @ahead_out_ @pin_ children_*) (pulse @pin_ _) _] do
+        range = nodepath.items.last
+
+        cursor_b, cursor_e = range
+        behind_b = cursor_b.as_n
+        behind_e = cursor_e.as_n - 1
+
+        parent = follow(root1, nodepath.items.grow(-1)).as_d
+
+        if nodepath.size == 1
+          predrange = 0...root1.itemsize
+        else
+          predrange = passable_range?(Term.of(parent)) || raise ""
+        end
+
+        ahead_b = cursor_e.as_n
+        ahead_e = Term[predrange.end]
+
+        behind = parent.items(behind_b, behind_e)
+        ahead = parent.items(ahead_b, ahead_e)
+
+        root1 = effect(root1, nodepath, node0) do
+          event :pulse, behind_out, behind
+          event :pulse, ahead_out, ahead
+        end
+
+        {root1, successor?(root1, nodepath)}
+      end
+
+      givenpi %[(periodic e_) cycle -1] do
+        root1 = effect(root1, nodepath, node0) do
+          event e
         end
 
         {root1, successor?(root1, nodepath)}
