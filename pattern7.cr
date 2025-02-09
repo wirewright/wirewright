@@ -782,13 +782,18 @@ module ::Ww::M1::Operator
     # to operators on the side of the layer; and "residue" to the operator below it.
     #
     # Assume "residue" is larger than side.
-    residue = dict
-    selection = Term::Dict.build do |selection|
+    #
+    # Note: but in fact, entry patterns do not care about the dict that we give to them;
+    # they only care about their respective key in that dict. So we do not need to make a
+    # "selection" dict; we just give the matchee dict to entry patterns.
+    case op.below
+    when Pass, Pairsonly
+      # Fast path. The first one especially is very frequently met in practice.
+      residue = Term[]
+    else
       residue = dict.transaction do |residue|
         op.side.each do |entry|
           next unless v = dict[entry.key]?
-
-          selection.with(entry.key, v)
           residue.without(entry.key)
         end
       end
@@ -799,7 +804,7 @@ module ::Ww::M1::Operator
     # after 'below', one entry after another in a chain of Aheads.
     #
     # The exact order doesn't *really* matter here since we're a solver.
-    ahead1 = Ahead::EntrySeq.new(Term.of(selection), op.side, 0, Ahead.stackptr(ahead0))
+    ahead1 = Ahead::EntrySeq.new(matchee, op.side, 0, Ahead.stackptr(ahead0))
     ahead2 = Ahead::Goto.new(behind0.keypath?, Ahead.stackptr(ahead1))
 
     match(behind0.keypath(&.delete_keys(op.side, &.key)), op.below, Term.of(residue), ahead2)
