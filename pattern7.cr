@@ -3029,8 +3029,8 @@ module ::Ww::M1
     module Engine
       extend self
 
-      def match?(pattern : Term, matchee : Term) : Term::Dict?
-        M1.match?(pattern, matchee, opt: O0)
+      def match?(pattern : Term, matchee : Term, *, env = Term[]) : Term::Dict?
+        M1.match?(pattern, matchee, opt: O0, env: env)
       end
     end
 
@@ -3234,8 +3234,8 @@ module ::Ww::M1
   # concrete operators at the cost of compile time.
   module O2
     module Engine
-      def self.match?(pattern : Term, matchee : Term) : Term::Dict?
-        M1.match?(pattern, matchee, opt: O1)
+      def self.match?(pattern : Term, matchee : Term, *, env = Term[]) : Term::Dict?
+        M1.match?(pattern, matchee, opt: O1, env: env)
       end
     end
 

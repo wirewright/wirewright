@@ -5,7 +5,7 @@ struct Ww::Term
     end
 
     # :nodoc:
-    def initialize(@matchee : Term, @stats : CaseStatistics? = nil)
+    def initialize(@matchee : Term, @env = Term[], @stats : CaseStatistics? = nil)
     end
 
     # :nodoc:
@@ -26,7 +26,7 @@ struct Ww::Term
 
       pterm = PATTERN_TERM_CACHE.fetch(pid, &pattern)
 
-      unless env = Engine.match?(pterm, @matchee)
+      unless env = Engine.match?(pterm, @matchee, env: @env)
         @stats.try &.rejected(pterm)
 
         return default
