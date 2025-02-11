@@ -191,7 +191,7 @@ module Ww
       end
 
       def pairsize : Int32
-        size - itemsize
+        (@dict || @parent).pairsize
       end
 
       # Runs `Dict#[]?` on the dictionary built so far.
@@ -349,15 +349,22 @@ module Ww
 
     # Returns the number of entries in this dictionary.
     def size : Int32
-      @items.size + @pairs.size
+      itemsize + pairsize
     end
 
+    @[AlwaysInline]
     def itemsize
       @items.size
     end
 
+    @[AlwaysInline]
+    def pairsize
+      @pairs.size
+    end
+
+    @[AlwaysInline]
     def hi
-      @items.size - 1
+      itemsize - 1
     end
 
     # Returns `true` if this dictionary contains no entries.
@@ -404,18 +411,39 @@ module Ww
       entry.value
     end
 
-    def nth(index : Int32)
-      if 0 <= index < @items.size
-        entry = @items.nth?(index) || raise IndexError.new
+    # O(1) Nth entry in `each_entry`-order (items unordered, pairs unordered).
+    def nth?(index : Int32) : {Term, Term}?
+      if 0 <= index < itemsize
+        entry = @items.nth?(index) || return
 
         {Term.of(entry.index), entry.value}
-      elsif @items.size <= index < size
-        entry = @pairs.nth?(index - @items.size) || raise IndexError.new
+      elsif itemsize <= index < size
+        entry = @pairs.nth?(index - itemsize) || return
 
         {entry.key, entry.value}
-      else
-        raise IndexError.new
       end
+    end
+
+    def nth(index : Int32)
+      nth?(index) || raise IndexError.new
+    end
+
+    # O(1) Nth entry in `items` followed by `each_pair`-order (items ordered,
+    # pairs unordered).
+    def ordnth?(index : Int32) : {Term, Term}?
+      if 0 <= index < itemsize
+        item = self[index]? || return
+
+        {Term.of(index), item}
+      elsif itemsize <= index < size
+        entry = @pairs.nth?(index - itemsize) || return
+
+        {entry.key, entry.value}
+      end
+    end
+
+    def ordnth(index : Int32) : {Term, Term}
+      ordnth?(index) || raise IndexError.new
     end
 
     # Returns the value associated with the given *key*, or nil if *key*
