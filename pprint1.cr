@@ -225,9 +225,9 @@ enum DictStyles : UInt16
   #  z: 300}
   # ```
   MapMultiline
-
-  Inline = MapInline | DictInline
 end
+
+Inline = DictStyles::MapInline | DictStyles::DictInline
 
 def thunk(subject : Term, myself : DictStyles, children : DictStyles, postfix : String)
   Term.of(:thunk, subject, postfix, myself.value, children.value)
@@ -263,9 +263,9 @@ def render_dict_inline(ctx, dict, styles, postfix)
   Term::Dict.build do |inner|
     inner << :row
     inner.concat(0...dict.size - 1) do |index|
-      render_entry(ctx, dict, *entries[index], styles & DictStyles::Inline, "")
+      render_entry(ctx, dict, *entries[index], styles & Inline, "")
     end
-    inner << render_entry(ctx, dict, *entries[dict.size - 1], styles & DictStyles::Inline, postfix)
+    inner << render_entry(ctx, dict, *entries[dict.size - 1], styles & Inline, postfix)
     inner.with(:gap, 1)
   end
 end
@@ -282,12 +282,12 @@ def render_call_column?(ctx, dict, styles, postfix)
   item_column = Term::Dict.build do |commit|
     commit << :col
     commit.concat(1...dict.itemsize - 1) do |index|
-      render_entry(ctx, dict, *entries[index], styles & DictStyles::Inline, "")
+      render_entry(ctx, dict, *entries[index], styles & Inline, "")
     end
-    commit << render_entry(ctx, dict, *entries[dict.hi], styles & DictStyles::Inline, postfix)
+    commit << render_entry(ctx, dict, *entries[dict.hi], styles & Inline, postfix)
   end
 
-  Term[:row, render_entry(ctx, dict, *entries[0], styles & DictStyles::Inline, ""), item_column, gap: 1]
+  Term[:row, render_entry(ctx, dict, *entries[0], styles & Inline, ""), item_column, gap: 1]
 end
 
 # TODO: if head does not fit inline, maybe we should force unpadded?
@@ -338,9 +338,9 @@ def render_call_keywords_inline?(ctx, dict, styles, postfix)
 
   head = Term::Dict.build do |commit|
     commit << :row
-    commit << render_entry(ctx, dict, *entries[0], styles & DictStyles::Inline, "")
+    commit << render_entry(ctx, dict, *entries[0], styles & Inline, "")
     commit.concat(dict.itemsize...dict.size) do |pair_index|
-      render_entry(ctx, dict, *entries[pair_index], styles & DictStyles::Inline, "")
+      render_entry(ctx, dict, *entries[pair_index], styles & Inline, "")
     end
     commit.with(:gap, 1)
   end
@@ -366,7 +366,7 @@ def render_call_keywords_column?(ctx, dict, styles, postfix)
     entries = OrdDict.unsorted(dict)
   end
 
-  head = render_entry(ctx, dict, *entries[0], styles & DictStyles::Inline, "")
+  head = render_entry(ctx, dict, *entries[0], styles & Inline, "")
 
   pairs_column = Term::Dict.build do |commit|
     commit << :col
@@ -396,8 +396,8 @@ def render_keyword_block_call?(ctx, dict, styles, postfix)
     entries = OrdDict.unsorted(dict)
   end
 
-  item0 = render_entry(ctx, dict, *entries[0], styles & DictStyles::Inline, "")
-  item1 = render_entry(ctx, dict, *entries[1], styles & DictStyles::Inline, "")
+  item0 = render_entry(ctx, dict, *entries[0], styles & Inline, "")
+  item1 = render_entry(ctx, dict, *entries[1], styles & Inline, "")
 
   pairs = Term::Dict.build do |commit|
     commit << :col
@@ -423,9 +423,9 @@ def render_map_inline?(ctx, dict, styles, postfix)
     commit << :row
     entries.each_with_index do |(k, v), index|
       if index == dict.size - 1
-        commit << render_pair(ctx, k, v, styles & DictStyles::Inline, postfix)
+        commit << render_pair(ctx, k, v, styles & Inline, postfix)
       else
-        commit << render_pair(ctx, k, v, styles & DictStyles::Inline, ",")
+        commit << render_pair(ctx, k, v, styles & Inline, ",")
       end
     end
     commit.with(:gap, 1)
@@ -659,9 +659,9 @@ def render_pp_call_inline(ctx, dict, styles, postfix)
     commit << :row
     entries.each_with_index do |(k, v), index|
       if index == dict.size - 1
-        commit << render_pp_pair(ctx, k, v, styles & DictStyles::Inline, postfix)
+        commit << render_pp_pair(ctx, k, v, styles & Inline, postfix)
       else
-        commit << render_pp_pair(ctx, k, v, styles & DictStyles::Inline, "")
+        commit << render_pp_pair(ctx, k, v, styles & Inline, "")
       end
     end
     commit.with(:gap, 1)
@@ -724,20 +724,20 @@ def render(ctx, term : Term, style = DictStyles::All, postfix : String = "")
     if ctx.features.toplevel_backmap?
       matchpi %[(backmap pattern_ backspec_)] do
         choice_a = Term[:row,
-          Term[:info, render(ctx, pattern, style & DictStyles::Inline, ""), tag: :"backmap-pattern"],
+          render(ctx, pattern, style & Inline, ""),
           Term[:frag, "<>", width: 2, height: 1],
-          render(ctx, backspec, style & DictStyles::Inline, postfix),
+          render(ctx, backspec, style & Inline, postfix),
           gap: 1]
 
         choice_b = Term[:col,
-          Term[:info, render(ctx, pattern, style & DictStyles::Inline, ""), tag: :"backmap-pattern"],
+          Term[:info, render(ctx, pattern, style & Inline, ""), tag: :"backmap-pattern"],
           Term[:padding,
             Term[:row,
               Term[:frag, "<>", width: 2, height: 1],
               render(ctx, backspec, style, postfix),
               gap: 1], pl: 2]]
 
-        myself = DictStyles::Inline | DictStyles::CallColumn | DictStyles::CallIndented | DictStyles::CallAligned
+        myself = Inline | DictStyles::CallColumn | DictStyles::CallIndented | DictStyles::CallAligned
 
         choice_c = Term.of(:row, Term[:frag, "(", width: 1, height: 1], thunk(term, style & myself, style, ")" + postfix))
         Term.of(:choice, choice_a, choice_b, choice_c)
@@ -748,20 +748,20 @@ def render(ctx, term : Term, style = DictStyles::All, postfix : String = "")
     if ctx.features.toplevel_rule?
       matchpi %[(rule pattern_ body_)] do
         choice_a = Term[:row,
-          render(ctx, pattern, style & DictStyles::Inline, ""),
+          render(ctx, pattern, style & Inline, ""),
           Term[:frag, "=>", width: 2, height: 1],
-          render(ctx, body, style & DictStyles::Inline, postfix),
+          render(ctx, body, style & Inline, postfix),
           gap: 1]
 
         choice_b = Term[:col,
-          render(ctx, pattern, style & DictStyles::Inline, ""),
+          render(ctx, pattern, style & Inline, ""),
           Term[:padding,
             Term[:row,
               Term[:frag, "=>", width: 2, height: 1],
               render(ctx, body, style, postfix),
               gap: 1], pl: 2]]
 
-        myself = DictStyles::Inline | DictStyles::CallColumn | DictStyles::CallIndented | DictStyles::CallAligned
+        myself = Inline | DictStyles::CallColumn | DictStyles::CallIndented | DictStyles::CallAligned
 
         choice_c = Term.of(:row, Term[:frag, "(", width: 1, height: 1], thunk(term, style & myself, style, ")" + postfix))
         Term.of(:choice, choice_a, choice_b, choice_c)
@@ -808,7 +808,7 @@ def render(ctx, term : Term, style = DictStyles::All, postfix : String = "")
       end
 
       matchpi %[(%'%partition (itemspart_+) %'_)] do
-        myself = DictStyles::Inline | DictStyles::CallAligned
+        myself = Inline | DictStyles::CallAligned
 
         Term.of(:row, Term[:frag, "[", width: 1, height: 1], thunk(itemspart, style & myself, style, "]" + postfix))
       end
@@ -816,7 +816,7 @@ def render(ctx, term : Term, style = DictStyles::All, postfix : String = "")
 
     if ctx.features.just_open_pairspart_brackets?
       matchpi %[(%'%partition %'_ (%layer %'_ pp_dict))] do
-        myself = DictStyles::Inline | DictStyles::CallColumn | DictStyles::CallIndented | DictStyles::CallAligned
+        myself = Inline | DictStyles::CallColumn | DictStyles::CallIndented | DictStyles::CallAligned
 
         Term.of(:choice,
           Term.of(:row, Term[:frag, "{_", width: 2, height: 1], Term[:padding, render_pp_dict(ctx, pp.unsafe_as_d, style, "}" + postfix), pl: 1]),
@@ -826,14 +826,14 @@ def render(ctx, term : Term, style = DictStyles::All, postfix : String = "")
 
     if ctx.features.pairspart_split?
       matchpi %[(%'%partition (itemspart_+) pairspattern_)] do
-        myself = DictStyles::Inline | DictStyles::CallColumn | DictStyles::CallIndented | DictStyles::CallAligned
+        myself = Inline | DictStyles::CallColumn | DictStyles::CallIndented | DictStyles::CallAligned
 
         Term.of(:choice,
           Term.of(:row, Term[:frag, "(", width: 1, height: 1],
             Term.of(:row,
-              thunk(itemspart, style & DictStyles::Inline, style, ""),
+              thunk(itemspart, style & Inline, style, ""),
               Term[:frag, "¦", width: 1, height: 1],
-              render_pp(ctx, pairspattern, style & DictStyles::Inline, ")" + postfix),
+              render_pp(ctx, pairspattern, style & Inline, ")" + postfix),
               gap: 1)),
           Term.of(:row, Term[:frag, "(", width: 1, height: 1], thunk(term, style & myself, style, ")" + postfix)))
       end
@@ -841,7 +841,7 @@ def render(ctx, term : Term, style = DictStyles::All, postfix : String = "")
 
     if ctx.features.item_first_brackets?
       matchpi %[(%'%item needles_+)] do
-        myself = DictStyles::Inline | DictStyles::CallAligned
+        myself = Inline | DictStyles::CallAligned
 
         Term.of(:row, Term[:frag, "⟨", width: 1, height: 1], thunk(needles, style & myself, style, "⟩" + postfix))
       end
@@ -849,7 +849,7 @@ def render(ctx, term : Term, style = DictStyles::All, postfix : String = "")
 
     if ctx.features.item_source_brackets?
       matchpi %[(%'%item° needles_+)] do
-        myself = DictStyles::Inline | DictStyles::CallAligned
+        myself = Inline | DictStyles::CallAligned
 
         Term.of(:row, Term[:frag, "⟨", width: 1, height: 1], thunk(needles, style & myself, style, "⟩°" + postfix))
       end
@@ -896,7 +896,7 @@ def render(ctx, term : Term, style = DictStyles::All, postfix : String = "")
     matchpi %[(head_symbol _ ¦ (%not ()))] do
       continue if head.blank?
 
-      myself = DictStyles::Inline | DictStyles::BlockCallKeywordsInline | DictStyles::BlockCallKeywordsColumn | DictStyles::KeywordBlockCall | DictStyles::CallIndented | DictStyles::CallAligned
+      myself = Inline | DictStyles::BlockCallKeywordsInline | DictStyles::BlockCallKeywordsColumn | DictStyles::KeywordBlockCall | DictStyles::CallIndented | DictStyles::CallAligned
 
       Term.of(:row, Term[:frag, "(", width: 1, height: 1], thunk(term, style & myself, style, ")" + postfix))
     end
@@ -904,7 +904,7 @@ def render(ctx, term : Term, style = DictStyles::All, postfix : String = "")
     matchpi %[(head_symbol _+)] do
       continue if head.blank?
 
-      myself = DictStyles::Inline | DictStyles::CallColumn | DictStyles::CallIndented | DictStyles::CallAligned
+      myself = Inline | DictStyles::CallColumn | DictStyles::CallIndented | DictStyles::CallAligned
 
       Term.of(:row, Term[:frag, "(", width: 1, height: 1], thunk(term, style & myself, style, ")" + postfix))
     end
@@ -912,7 +912,7 @@ def render(ctx, term : Term, style = DictStyles::All, postfix : String = "")
     matchpi %{(head_symbol _+ ¦ (%not {}))} do
       continue if head.blank?
 
-      myself = DictStyles::Inline | DictStyles::BlockCallKeywordsInline | DictStyles::BlockCallKeywordsColumn | DictStyles::CallIndented | DictStyles::CallAligned
+      myself = Inline | DictStyles::BlockCallKeywordsInline | DictStyles::BlockCallKeywordsColumn | DictStyles::CallIndented | DictStyles::CallAligned
 
       Term.of(:row, Term[:frag, "(", width: 1, height: 1], thunk(term, style & myself, style, ")" + postfix))
     end
@@ -920,13 +920,13 @@ def render(ctx, term : Term, style = DictStyles::All, postfix : String = "")
     matchpi %{[head_symbol _*]} do
       continue if head.blank?
 
-      myself = DictStyles::Inline | DictStyles::CallIndented | DictStyles::CallAligned
+      myself = Inline | DictStyles::CallIndented | DictStyles::CallAligned
 
       Term.of(:row, Term[:frag, "(", width: 1, height: 1], thunk(term, style & myself, style, ")" + postfix))
     end
 
     matchpi %{_dict} do
-      myself = DictStyles::Inline | DictStyles::CallAligned
+      myself = Inline | DictStyles::CallAligned
 
       Term.of(:row, Term[:frag, "(", width: 1, height: 1], thunk(term, style & myself, style, ")" + postfix))
     end
@@ -1056,7 +1056,8 @@ def flatten(ctx, node : Term, maxwidth : Int32, styles : DictStyles) : {Term, In
     end
 
     matchpi %{(info child_ tag: backmap-pattern)} do
-      flat, excess = flatten(ctx, child, maxwidth + (ctx.backmap_pattern_maxwidth - ctx.normal_maxwidth), styles)
+      inp = maxwidth + (ctx.backmap_pattern_maxwidth - ctx.normal_maxwidth)
+      flat, excess = flatten(ctx, child, inp, styles)
 
       # Here we only care about magnitude, the fact that it's in another coordinate
       # system doesn't matter.
@@ -1068,7 +1069,7 @@ def flatten(ctx, node : Term, maxwidth : Int32, styles : DictStyles) : {Term, In
       # into normal (maxwidth) coordinates.
       #
       # NOTE: This all feels extremely extremely edgy, but appears to work.
-      {flat, (ctx.normal_maxwidth * (excess/ctx.backmap_pattern_maxwidth)).to_i}
+      {flat, (ctx.normal_maxwidth * (excess/inp)).to_i}
     end
 
     matchpi %[(padding child_ ¦ pl_: (%number +i32))] do
