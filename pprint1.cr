@@ -491,9 +491,6 @@ module Display
     # and `PairspartClosed`.
     PairspartSplit
 
-    PairspartMember = PairspartLet | PairspartOptional | PairspartNegation | PairspartBlank
-    Pairspart = PairspartSplit | PairspartOpen | PairspartClosed | PairspartMember
-
     # Render `(%partition (...) _)` as `[...]`.
     JustItemspartBrackets
 
@@ -545,7 +542,35 @@ module Display
     # Separate thousands in integers using `_`: renders `100000` as `100_000` etc.
     GroupThousands
   end
+
+  # Groups features related to backreferences.
+  BackrefFeatures = Features::BackrefMy \
+                  | Features::BackrefUp \
+                  | Features::BackrefDown
+
+  # Groups members of the dict pairspart syntax (e.g. `x⋮ 0`).
+  PairspartMemberFeatures = Features::PairspartLet \
+                          | Features::PairspartOptional \
+                          | Features::PairspartNegation \
+                          | Features::PairspartBlank
+
+  # Groups features related to the dict pairspart syntax (`(... ¦ <pairspart>)`).
+  PairspartFeatures = Features::PairspartSplit \
+                    | Features::PairspartOpen \
+                    | Features::PairspartClosed \
+                    | Features::PairspartMember
+
+  # Groups features related to patterns.
+  PatternFeatures = Features::Pairspart \
+                  | Features::JustItemspartBrackets \
+                  | Features::JustOpenPairspartBrackets \
+                  | Features::LetArrow \
+                  | Features::ItemFirstBrackets \
+                  | Features::ItemSourceBrackets \
+                  | Features::Literal \
+                  | Features::Nonself
 end
+
 
 def render_pp_pair(ctx, k, v, styles, postfix)
   Term.of_case(v, env: Term[k: k]) do
