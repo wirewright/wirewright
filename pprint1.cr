@@ -1,4 +1,5 @@
 require "./wirewright"
+require "./baz5"
 
 module OrdDict
   # :nodoc:
@@ -56,6 +57,10 @@ module OrdDict
       return Unsorted.new(dict.itemspart)
     end
 
+    if dict.pairsonly? && dict.size == 1
+      return Unsorted.new(dict)
+    end
+
     # Split pairs into sortable and unsortable ones.
     pairs_sortable = [] of {Term, Term}
     pairs_trailing = nil
@@ -93,143 +98,7 @@ module OrdDict
   end
 end
 
-# TODO: these should probably be or have corresponding structs. We're using
-# this enum as a dirt cheap alternative to a Set so it should probably remain
-# the way it is. it must probably contain auto-generated members from structs and
-# aliases. and must be able to translate them back and forth (from enum meber
-# to struct and vice versa). Each "Style" struct, in turn, will have the corresponding
-# render() method defined on it.
-@[Flags]
-enum DictStyles : UInt16
-  # Renders the entries of a dict *inline*. One of the general-purpose styles
-  # (can present any dict nicely).
-  #
-  # ```wwml
-  # (text "Hello World 1" "Hello World 2" "Hello World 3" x: 100 y: 200)
-  # ```
-  DictInline
-
-  # Renders the first item and pairs of a dict inline, then follows with the remaning
-  # items padded, multiline.
-  #
-  # Requirements:
-  #
-  # - the dict has pairs,
-  # - the dict has two or more items,
-  # - the dict's first item is a symbol.
-  #
-  # ```wwml
-  # (text x: 100 y: 200
-  #   "Hello World 1"
-  #   "Hello World 2"
-  #   "Hello World 3")
-  # ```
-  BlockCallKeywordsInline
-
-  # Renders the first item inline followed by a column of pairs, then all remaning
-  # items padded, multiline.
-  #
-  # Requirements:
-  #
-  # - the dict has pairs,
-  # - the dict has two or more items,
-  # - the dict's first item is a symbol.
-  #
-  # ```wwml
-  # (text x: 100
-  #       y: 200
-  #   "Hello World 1"
-  #   "Hello World 2"
-  #   "Hello World 3")
-  # ```
-  BlockCallKeywordsColumn
-
-  # Renders the first and second items inline, then all pairs padded, multiline.
-  #
-  # Requirements:
-  #
-  # - the dict has pairs,
-  # - the dict has exactly two items,
-  # - the dict's first item is a symbol.
-  #
-  # ```wwml
-  # (text "Hello World 1"
-  #   x: 100
-  #   y: 200)
-  # ```
-  KeywordBlockCall
-
-  # Renders the first item inline followed by a column of all remaining items, each
-  # item inline.
-  #
-  # Requirements:
-  #
-  # - the dict does not have pairs,
-  # - the dict has two or more items,
-  # - the dict's first item is a symbol.
-  #
-  # ```wwml
-  # (text "Hello World 1"
-  #       "Hello World 2"
-  #       "Hello World 3")
-  # ```
-  CallColumn
-
-  # Renders the entries of a dict on multiple lines. Items following the first one
-  # are padded once. Only used when the first item of the dict is a symbol.
-  #
-  # ```wwml
-  # (text
-  #    "Hello World 1"
-  #    "Hello World 2"
-  #    "Hello World 3"
-  #    x: 100
-  #    y: 200)
-  # ```
-  CallIndented
-
-  # Renders the entries of a dict on multiple lines. All items are lined up.
-  #
-  # ```wwml
-  # (text
-  #  "Hello World 1"
-  #  "Hello World 2"
-  #  "Hello World 3"
-  #  x: 100
-  #  y: 200)
-  # ```
-  CallAligned
-
-  # Renders the entries of a pairsonly dict inline.
-  #
-  # Requirements:
-  #
-  # - the dict must be pairsonly,
-  # - the dict must have at least one pair.
-  #
-  # ```wwml
-  # {x: 100, y: 200, z: 300}
-  # ```
-  MapInline
-
-  # Renders the entries of a pairsonly dict, each on a separate line.
-  #
-  # Requirements:
-  #
-  # - the dict must be pairsonly,
-  # - the dict must have at least one pair.
-  #
-  # ```wwml
-  # {x: 100,
-  #  y: 200,
-  #  z: 300}
-  # ```
-  MapMultiline
-end
-
-Inline = DictStyles::MapInline | DictStyles::DictInline
-
-def thunk(subject : Term, myself : DictStyles, children : DictStyles, postfix : String)
+def thunk(subject : Term, myself : StyleSet, children : StyleSet, postfix : String)
   Term.of(:thunk, subject, postfix, myself.value, children.value)
 end
 
@@ -253,203 +122,439 @@ def render_entry(ctx, dict, k, v, styles, postfix)
   end
 end
 
-def render_dict_inline(ctx, dict, styles, postfix)
-  if ctx.features.sorted_pairs?
-    entries = OrdDict.sorted(dict)
-  else
-    entries = OrdDict.unsorted(dict)
-  end
-
-  Term::Dict.build do |inner|
-    inner << :row
-    inner.concat(0...dict.size - 1) do |index|
-      render_entry(ctx, dict, *entries[index], styles & Inline, "")
-    end
-    inner << render_entry(ctx, dict, *entries[dict.size - 1], styles & Inline, postfix)
-    inner.with(:gap, 1)
-  end
+@[Flags]
+enum StyleSet : UInt16
+  DictInline
+  BlockCallKeywordsInline
+  BlockCallKeywordsColumn
+  KeywordBlockCall
+  CallColumn
+  MapInline
+  MapMultiline
+  CallIndented
+  DictAligned
 end
 
-def render_call_column?(ctx, dict, styles, postfix)
-  return unless dict.itemsonly? && dict.size >= 2
+InlineStyles = StyleSet::MapInline | StyleSet::DictInline
 
-  if ctx.features.sorted_pairs?
-    entries = OrdDict.sorted(dict)
-  else
-    entries = OrdDict.unsorted(dict)
-  end
+module Style
+  extend self
 
-  item_column = Term::Dict.build do |commit|
-    commit << :col
-    commit.concat(1...dict.itemsize - 1) do |index|
-      render_entry(ctx, dict, *entries[index], styles & Inline, "")
+  # Renders the entries of a dict *inline*. One of the general-purpose styles
+  # (can present any dict without problems).
+  #
+  # ```wwml
+  # (text "Hello World 1" "Hello World 2" "Hello World 3" x: 100 y: 200)
+  # ```
+  record DictInline do
+    BLUEPRINT = Blueprint.build do
+      template %{(row ⏏entries ⏏tail gap: 1)}
+      slot :entries, :entries, 0, -2, InlineStyles, postfix: :none
+      slot :tail, :entries, -2, -1, InlineStyles, postfix: :sink
     end
-    commit << render_entry(ctx, dict, *entries[dict.hi], styles & Inline, postfix)
+
+    def blueprint : Blueprint
+      BLUEPRINT
+    end
+
+    def applicable_to?(dict : Term::Dict) : Bool
+      true
+    end
   end
 
-  Term[:row, render_entry(ctx, dict, *entries[0], styles & Inline, ""), item_column, gap: 1]
-end
+  # Renders the entries of a dict on multiple lines. All items are lined up.
+  # One of the general-purpose styles (can present any dict without problems).
+  #
+  # ```wwml
+  # (text
+  #  "Hello World 1"
+  #  "Hello World 2"
+  #  "Hello World 3"
+  #  x: 100
+  #  y: 200)
+  # ```
+  record DictAligned do
+    BLUEPRINT = Blueprint.build do
+      template %{(col ⏏head ⏏body ⏏tail)}
+      slot :head, :entries, 0, 1, StyleSet::All, postfix: :none
+      slot :body, :entries, 1, -2, StyleSet::All, postfix: :none
+      slot :tail, :entries, -2, -1, StyleSet::All, postfix: :sink
+    end
 
-# TODO: if head does not fit inline, maybe we should force unpadded?
-def render_multiline(ctx, dict, styles, postfix, *, padded = true)
-  case dict.size
-  when 0
+    def blueprint : Blueprint
+      BLUEPRINT
+    end
+
+    def applicable_to?(dict : Term::Dict) : Bool
+      true
+    end
+  end
+
+  # Renders the entries of a dict on multiple lines. Items following the first one
+  # are padded once. Only used when the first item of the dict is a symbol.
+  #
+  # ```wwml
+  # (text
+  #   "Hello World 1"
+  #   "Hello World 2"
+  #   "Hello World 3"
+  #   x: 100
+  #   y: 200)
+  # ```
+  record CallIndented do
+    BLUEPRINT = Blueprint.build do
+      template %{(col ⏏head (padding (col ⏏body ⏏tail) pl: 1))}
+      slot :head, :entries, 0, 1, InlineStyles, postfix: :none
+      slot :body, :entries, 1, -2, StyleSet::All, postfix: :none
+      slot :tail, :entries, -2, -1, StyleSet::All, postfix: :sink
+    end
+
+    def blueprint : Blueprint
+      BLUEPRINT
+    end
+
+    def applicable_to?(dict : Term::Dict) : Bool
+      dict.itemsize > 0 && dict.size >= 2 && dict[0].type.symbol?
+    end
+  end
+
+  # Renders the first item inline followed by a column of all remaining items, each
+  # item inline.
+  #
+  # Requirements:
+  #
+  # - the dict does not have pairs,
+  # - the dict has two or more items,
+  # - the dict's first item is a symbol.
+  #
+  # ```wwml
+  # (text "Hello World 1"
+  #       "Hello World 2"
+  #       "Hello World 3")
+  # ```
+  record CallColumn do
+    BLUEPRINT = Blueprint.build do
+      template %{(row ⏏head (col ⏏body ⏏tail) gap: 1)}
+      slot :head, :items, 0, 1, InlineStyles, postfix: :none
+      slot :body, :items, 1, -2, InlineStyles, postfix: :none
+      slot :tail, :items, -2, -1, InlineStyles, postfix: :sink
+    end
+
+    def blueprint : Blueprint
+      BLUEPRINT
+    end
+
+    def applicable_to?(dict : Term::Dict) : Bool
+      dict.itemsonly? && dict.size >= 2 && dict[0].type.symbol?
+    end
+  end
+
+  # Renders the first item and pairs of a dict inline, then follows with the remaning
+  # items padded, multiline.
+  #
+  # Requirements:
+  #
+  # - the dict has pairs,
+  # - the dict has two or more items,
+  # - the dict's first item is a symbol.
+  #
+  # ```wwml
+  # (text x: 100 y: 200
+  #   "Hello World 1"
+  #   "Hello World 2"
+  #   "Hello World 3")
+  # ```
+  record BlockCallKeywordsInline do
+    BLUEPRINT = Blueprint.build do
+      template %{(col (row ⏏head (col ⏏pairs) gap: 1) (padding (col ⏏body ⏏tail) pl: 1))}
+      slot :head, :items, 0, 1, InlineStyles, postfix: :none
+      slot :pairs, :pairs, 0, -1, InlineStyles, postfix: :none
+      slot :body, :items, 1, -2, StyleSet::All, postfix: :none
+      slot :tail, :items, -2, -1, StyleSet::All, postfix: :sink
+    end
+
+    def blueprint : Blueprint
+      BLUEPRINT
+    end
+
+    def applicable_to?(dict : Term::Dict) : Bool
+      dict.itemsize >= 2 && dict.pairsize > 0 && dict[0].type.symbol?
+    end
+  end
+
+  # Renders the first item inline followed by a column of pairs, then all remaning
+  # items padded, multiline.
+  #
+  # Requirements:
+  #
+  # - the dict has pairs,
+  # - the dict has two or more items,
+  # - the dict's first item is a symbol.
+  #
+  # ```wwml
+  # (text x: 100
+  #       y: 200
+  #   "Hello World 1"
+  #   "Hello World 2"
+  #   "Hello World 3")
+  # ```
+  record BlockCallKeywordsColumn do
+    BLUEPRINT = Blueprint.build do
+      template %{(col (row ⏏head (col ⏏pairs) gap: 1) (padding (col ⏏body ⏏tail) pl: 1))}
+      slot :head, :items, 0, 1, InlineStyles, postfix: :none
+      slot :pairs, :pairs, 0, -1, StyleSet::All, postfix: :none
+      slot :body, :items, 1, -2, StyleSet::All, postfix: :none
+      slot :tail, :items, -2, -1, StyleSet::All, postfix: :sink
+    end
+
+    def blueprint : Blueprint
+      BLUEPRINT
+    end
+
+    def applicable_to?(dict : Term::Dict) : Bool
+      dict.itemsize >= 2 && dict.pairsize > 0 && dict[0].type.symbol?
+    end
+  end
+
+  # Renders the first and second items inline, then all pairs padded, multiline.
+  #
+  # Requirements:
+  #
+  # - the dict has pairs,
+  # - the dict has exactly two items,
+  # - the dict's first item is a symbol.
+  #
+  # ```wwml
+  # (text "Hello World 1"
+  #   x: 100
+  #   y: 200)
+  # ```
+  record KeywordBlockCall do
+    BLUEPRINT = Blueprint.build do
+      template %{(col (row ⏏item0 ⏏item1 gap: 1) (padding (col ⏏pairs ⏏tail) pl: 1))}
+      slot :item0, :items, 0, 1, InlineStyles, postfix: :none
+      slot :item1, :items, 1, 2, InlineStyles, postfix: :none
+      slot :pairs, :pairs, 0, -2, StyleSet::All, postfix: :none
+      slot :tail, :pairs, -2, -1, StyleSet::All, postfix: :sink
+    end
+
+    def blueprint : Blueprint
+      BLUEPRINT
+    end
+
+    def applicable_to?(dict : Term::Dict) : Bool
+      dict.itemsize == 2 && dict.pairsize > 0 && dict[0].type.symbol?
+    end
+  end
+
+  # Renders the entries of a pairsonly dict inline.
+  #
+  # Requirements:
+  #
+  # - the dict must be pairsonly,
+  # - the dict must have at least one pair.
+  #
+  # ```wwml
+  # {x: 100, y: 200, z: 300}
+  # ```
+  record MapInline do
+    BLUEPRINT = Blueprint.build do
+      template %{(row ⏏pairs ⏏tail gap: 1)}
+      slot :pairs, :pairs, 0, -2, InlineStyles, postfix: :comma
+      slot :tail, :pairs, -2, -1, InlineStyles, postfix: :sink
+    end
+
+    def blueprint : Blueprint
+      BLUEPRINT
+    end
+
+    def applicable_to?(dict : Term::Dict) : Bool
+      dict.pairsonly? && dict.pairsize > 0
+    end
+  end
+
+  # Renders the entries of a pairsonly dict, each on a separate line.
+  #
+  # Requirements:
+  #
+  # - the dict must be pairsonly,
+  # - the dict must have at least one pair.
+  #
+  # ```wwml
+  # {x: 100,
+  #  y: 200,
+  #  z: 300}
+  # ```
+  record MapMultiline do
+    BLUEPRINT = Blueprint.build do
+      template %{(col ⏏pairs ⏏tail)}
+      slot :pairs, :pairs, 0, -2, StyleSet::All, postfix: :comma
+      slot :tail, :pairs, -2, -1, StyleSet::All, postfix: :sink
+    end
+
+    def blueprint : Blueprint
+      BLUEPRINT
+    end
+
+    def applicable_to?(dict : Term::Dict) : Bool
+      dict.pairsonly? && dict.pairsize > 0
+    end
+  end
+
+  # Converts a single-element *styleset* into the corresponding `Style` object.
+  # Raises `ArgumentError` if *styleset* is not a single-element set.
+  def one(styleset : StyleSet)
+    {% for style in StyleSet.constants %}
+      {% unless {:None, :All}.includes?(style.id.symbolize) %}
+        if styleset == StyleSet::{{style}}
+          return {{style}}.new
+        end
+      {% end %}
+    {% end %}
+
     raise ArgumentError.new
-  when 1
-    render_entry(ctx, dict, *dict.ordnth(0), styles, postfix)
-  else
-    cursor = 0
+  end
+end
 
-    if ctx.features.sorted_pairs?
-      entries = OrdDict.sorted(dict)
-    else
-      entries = OrdDict.unsorted(dict)
-    end
-
-    head = render_entry(ctx, dict, *entries[cursor], styles, "")
-    cursor += 1
-
-    body = Term::Dict.build do |outer|
-      outer << :col
-      outer.concat(cursor...dict.size - 1) do |index|
-        render_entry(ctx, dict, *entries[index], styles, "")
+module Style
+  # Blueprints are a standardized and declarative way to define dict styles.
+  #
+  # - Blueprints consist of templates and slot specs (`Slot`).
+  # - Templates contain slots (e.g. `⏏qux` which is short for `(%slot qux)`).
+  record Blueprint, template : Term, slots : Slice(Slot) do
+    # Defines how a slot should be rewritten.
+    #
+    # - *id* is the name of the slot in the template.
+    # - *region* is the part of the dictionary which the range *b*...*e* describes.
+    # - *b*...*e* is the selected range, defined relatively (negative numbers count
+    #   from the end of the region).
+    # - *allowed* is the style set allowed for entries in the region.
+    # - *postfix* specifies what postfix this slot passes to entries in the region.
+    record Slot, id : Term::Sym, region : Region, b : Int8, e : Int8, allowed : StyleSet, postfix : Postfix do
+      enum Region : UInt8
+        Items
+        Pairs
+        Entries
       end
-      cursor = Math.max(cursor, dict.size - 1)
+
+      enum Postfix : UInt8
+        None
+        Comma
+        Sink
+      end
     end
 
-    tail = render_entry(ctx, dict, *entries[cursor], styles, postfix)
+    class Builder
+      # :nodoc:
+      getter slots = [] of Slot
 
-    if padded
-      Term[:col, head, Term[:padding, Term[:col, body, tail], pl: 1]]
-    else
-      Term[:col, head, body, tail]
+      # :nodoc:
+      getter template = Term.of
+
+      # Sets the template of the resulting blueprint.
+      def template(ml : String) : Nil
+        @template = ML.term(ml)
+      end
+
+      # Adds a slot spec to the blueprint.
+      def slot(id, region : Slot::Region, b : Int8, e : Int8, allowed : StyleSet, *, postfix : Slot::Postfix) : Nil
+        @slots << Slot.new(Term[id], region, b, e, allowed, postfix)
+      end
     end
-  end
-end
 
-def render_call_keywords_inline?(ctx, dict, styles, postfix)
-  return unless dict.itemsize >= 2 && dict.pairsize > 0
+    # Yields with `Builder` that allows you to construct a `Blueprint` less clumsily.
+    def self.build(&) : Blueprint
+      with builder = Builder.new yield
 
-  if ctx.features.sorted_pairs?
-    entries = OrdDict.sorted(dict)
-  else
-    entries = OrdDict.unsorted(dict)
-  end
-
-  head = Term::Dict.build do |commit|
-    commit << :row
-    commit << render_entry(ctx, dict, *entries[0], styles & Inline, "")
-    commit.concat(dict.itemsize...dict.size) do |pair_index|
-      render_entry(ctx, dict, *entries[pair_index], styles & Inline, "")
-    end
-    commit.with(:gap, 1)
-  end
-
-  body = Term::Dict.build do |commit|
-    commit << :col
-    commit.concat(1...dict.itemsize - 1) do |item_index|
-      render_entry(ctx, dict, *entries[item_index], styles, "")
+      new(builder.template, builder.slots.to_readonly_slice)
     end
   end
 
-  tail = render_entry(ctx, dict, *entries[dict.hi], styles, postfix)
-
-  Term[:col, head, Term[:padding, Term[:col, body, tail], pl: 1]]
-end
-
-def render_call_keywords_column?(ctx, dict, styles, postfix)
-  return unless dict.itemsize >= 2 && dict.pairsize > 0
-
-  if ctx.features.sorted_pairs?
-    entries = OrdDict.sorted(dict)
-  else
-    entries = OrdDict.unsorted(dict)
-  end
-
-  head = render_entry(ctx, dict, *entries[0], styles & Inline, "")
-
-  pairs_column = Term::Dict.build do |commit|
-    commit << :col
-    commit.concat(dict.itemsize...dict.size) do |pair_index|
-      render_entry(ctx, dict, *entries[pair_index], styles, "")
+  # :nodoc:
+  struct RenderRewriter
+    def initialize(@ctx : DisplayContext, @bp : Blueprint, @dict : Term::Dict, @styleset : StyleSet, @postfix : String)
     end
-  end
 
-  body = Term::Dict.build do |commit|
-    commit << :col
-    commit.concat(1...dict.itemsize - 1) do |item_index|
-      render_entry(ctx, dict, *entries[item_index], styles, "")
-    end
-  end
+    private def translate(range, size : Int32)
+      return 0, 0 if size.zero?
 
-  tail = render_entry(ctx, dict, *entries[dict.hi], styles, postfix)
-
-  Term[:col, Term[:row, head, pairs_column, gap: 1], Term[:padding, Term[:col, body, tail], pl: 1]]
-end
-
-def render_keyword_block_call?(ctx, dict, styles, postfix)
-  return unless dict.itemsize == 2 && dict.pairsize > 0
-
-  if ctx.features.sorted_pairs?
-    entries = OrdDict.sorted(dict)
-  else
-    entries = OrdDict.unsorted(dict)
-  end
-
-  item0 = render_entry(ctx, dict, *entries[0], styles & Inline, "")
-  item1 = render_entry(ctx, dict, *entries[1], styles & Inline, "")
-
-  pairs = Term::Dict.build do |commit|
-    commit << :col
-    commit.concat(dict.itemsize...dict.size - 1) do |pair_index|
-      render_entry(ctx, dict, *entries[pair_index], styles, "")
-    end
-    commit << render_entry(ctx, dict, *entries[dict.size - 1], styles, postfix)
-  end
-
-  Term[:col, Term[:row, item0, item1, gap: 1], Term[:padding, pairs, pl: 1]]
-end
-
-def render_map_inline?(ctx, dict, styles, postfix)
-  return unless dict.pairsonly? && dict.pairsize > 0
-
-  if ctx.features.sorted_pairs?
-    entries = OrdDict.sorted(dict)
-  else
-    entries = OrdDict.unsorted(dict)
-  end
-
-  Term::Dict.build do |commit|
-    commit << :row
-    entries.each_with_index do |(k, v), index|
-      if index == dict.size - 1
-        commit << render_pair(ctx, k, v, styles & Inline, postfix)
+      if range.begin.negative?
+        b = range.begin + size + 1
       else
-        commit << render_pair(ctx, k, v, styles & Inline, ",")
+        b = range.begin
       end
-    end
-    commit.with(:gap, 1)
-  end
-end
 
-def render_map_multiline?(ctx, dict, styles, postfix)
-  return unless dict.pairsonly? && dict.pairsize > 0
-
-  if ctx.features.sorted_pairs?
-    entries = OrdDict.sorted(dict)
-  else
-    entries = OrdDict.unsorted(dict)
-  end
-
-  Term::Dict.build do |commit|
-    commit << :col
-    entries.each_with_index do |(k, v), index|
-      if index == dict.size - 1
-        commit << render_pair(ctx, k, v, styles, postfix)
+      if range.end.negative?
+        e = range.end + size + 1
       else
-        commit << render_pair(ctx, k, v, styles, ",")
+        e = range.end
+      end
+
+      {b, e - b}
+    end
+
+    private def translate(range, dict : Term::Dict, region)
+      case region
+      in .items?   then translate(range, @dict.itemsize)
+      in .entries? then translate(range, @dict.size)
+      in .pairs?
+        start, count = translate(range, @dict.pairsize)
+
+        {start + @dict.itemsize, count}
       end
     end
+
+    def call(term : Term) : Rewrite::Any
+      Term.case(term) do
+        matchpi %[(%'%slot id_)] do
+          slot = @bp.slots.find! { |slot| slot.id == id }
+          start, count = translate(slot.b.to_i...slot.e.to_i, @dict, slot.region)
+
+          if count.zero?
+            if slot.postfix.sink?
+              raise "BUG: empty postfix sink, loss of postfix"
+            end
+
+            return Rewrite.many(Term[])
+          end
+
+          case slot.postfix
+          in .none?  then subpostfix = ""
+          in .comma? then subpostfix = ","
+          in .sink?  then subpostfix = @postfix
+          end
+
+          if @ctx.features.sorted_pairs?
+            entries = OrdDict.sorted(@dict)
+          else
+            entries = OrdDict.unsorted(@dict)
+          end
+
+          case count
+          when 1
+            entry = render_entry(@ctx, @dict, *entries[start], @styleset & slot.allowed, subpostfix)
+
+            Rewrite.one(entry)
+          else
+            offspring = Term::Dict.build do |commit|
+              count.times do |offset|
+                entry = render_entry(@ctx, @dict, *entries[start + offset], @styleset & slot.allowed, subpostfix)
+                commit << entry
+              end
+            end
+
+            Rewrite.many(offspring)
+          end
+        end
+
+        otherwise { Rewrite.none }
+      end
+    end
+  end
+
+  # Renders *dict* using the given blueprint *bp*.
+  def render(ctx, bp : Blueprint, dict : Term::Dict, styleset, postfix)
+    rewrite(bp.template, itemdfsR(callR(RenderRewriter.new(ctx, bp, dict, styleset, postfix))))
   end
 end
 
@@ -571,7 +676,6 @@ module Display
                   | Features::Nonself
 end
 
-
 def render_pp_pair(ctx, k, v, styles, postfix)
   Term.of_case(v, env: Term[k: k]) do
     if ctx.features.pairspart_let?
@@ -659,9 +763,9 @@ def render_pp_call_inline(ctx, dict, styles, postfix)
     commit << :row
     entries.each_with_index do |(k, v), index|
       if index == dict.size - 1
-        commit << render_pp_pair(ctx, k, v, styles & Inline, postfix)
+        commit << render_pp_pair(ctx, k, v, styles & InlineStyles, postfix)
       else
-        commit << render_pp_pair(ctx, k, v, styles & Inline, "")
+        commit << render_pp_pair(ctx, k, v, styles & InlineStyles, "")
       end
     end
     commit.with(:gap, 1)
@@ -718,26 +822,26 @@ end
 # TODO: instead of myself = ... children = ... we should have a chain and a choice. choice a
 # is our first preferred style, b second, etc., AS A THUNK. Then as the last choice we have
 # chain.next.
-def render(ctx, term : Term, style = DictStyles::All, postfix : String = "")
+def render(ctx, term : Term, style = StyleSet::All, postfix : String = "")
   Term.of_case(term) do
     # Humph?! This should actually be TOPLEVEL!
     if ctx.features.toplevel_backmap?
       matchpi %[(backmap pattern_ backspec_)] do
         choice_a = Term[:row,
-          render(ctx, pattern, style & Inline, ""),
+          render(ctx, pattern, style & InlineStyles, ""),
           Term[:frag, "<>", width: 2, height: 1],
-          render(ctx, backspec, style & Inline, postfix),
+          render(ctx, backspec, style & InlineStyles, postfix),
           gap: 1]
 
         choice_b = Term[:col,
-          Term[:info, render(ctx, pattern, style & Inline, ""), tag: :"backmap-pattern"],
+          Term[:info, render(ctx, pattern, style & InlineStyles, ""), tag: :"backmap-pattern"],
           Term[:padding,
             Term[:row,
               Term[:frag, "<>", width: 2, height: 1],
               render(ctx, backspec, style, postfix),
               gap: 1], pl: 2]]
 
-        myself = Inline | DictStyles::CallColumn | DictStyles::CallIndented | DictStyles::CallAligned
+        myself = InlineStyles | StyleSet::CallColumn | StyleSet::CallIndented | StyleSet::DictAligned
 
         choice_c = Term.of(:row, Term[:frag, "(", width: 1, height: 1], thunk(term, style & myself, style, ")" + postfix))
         Term.of(:choice, choice_a, choice_b, choice_c)
@@ -748,20 +852,20 @@ def render(ctx, term : Term, style = DictStyles::All, postfix : String = "")
     if ctx.features.toplevel_rule?
       matchpi %[(rule pattern_ body_)] do
         choice_a = Term[:row,
-          render(ctx, pattern, style & Inline, ""),
+          render(ctx, pattern, style & InlineStyles, ""),
           Term[:frag, "=>", width: 2, height: 1],
-          render(ctx, body, style & Inline, postfix),
+          render(ctx, body, style & InlineStyles, postfix),
           gap: 1]
 
         choice_b = Term[:col,
-          render(ctx, pattern, style & Inline, ""),
+          render(ctx, pattern, style & InlineStyles, ""),
           Term[:padding,
             Term[:row,
               Term[:frag, "=>", width: 2, height: 1],
               render(ctx, body, style, postfix),
               gap: 1], pl: 2]]
 
-        myself = Inline | DictStyles::CallColumn | DictStyles::CallIndented | DictStyles::CallAligned
+        myself = InlineStyles | StyleSet::CallColumn | StyleSet::CallIndented | StyleSet::DictAligned
 
         choice_c = Term.of(:row, Term[:frag, "(", width: 1, height: 1], thunk(term, style & myself, style, ")" + postfix))
         Term.of(:choice, choice_a, choice_b, choice_c)
@@ -808,7 +912,7 @@ def render(ctx, term : Term, style = DictStyles::All, postfix : String = "")
       end
 
       matchpi %[(%'%partition (itemspart_+) %'_)] do
-        myself = Inline | DictStyles::CallAligned
+        myself = InlineStyles | StyleSet::DictAligned
 
         Term.of(:row, Term[:frag, "[", width: 1, height: 1], thunk(itemspart, style & myself, style, "]" + postfix))
       end
@@ -816,7 +920,7 @@ def render(ctx, term : Term, style = DictStyles::All, postfix : String = "")
 
     if ctx.features.just_open_pairspart_brackets?
       matchpi %[(%'%partition %'_ (%layer %'_ pp_dict))] do
-        myself = Inline | DictStyles::CallColumn | DictStyles::CallIndented | DictStyles::CallAligned
+        myself = InlineStyles | StyleSet::CallColumn | StyleSet::CallIndented | StyleSet::DictAligned
 
         Term.of(:choice,
           Term.of(:row, Term[:frag, "{_", width: 2, height: 1], Term[:padding, render_pp_dict(ctx, pp.unsafe_as_d, style, "}" + postfix), pl: 1]),
@@ -826,14 +930,14 @@ def render(ctx, term : Term, style = DictStyles::All, postfix : String = "")
 
     if ctx.features.pairspart_split?
       matchpi %[(%'%partition (itemspart_+) pairspattern_)] do
-        myself = Inline | DictStyles::CallColumn | DictStyles::CallIndented | DictStyles::CallAligned
+        myself = InlineStyles | StyleSet::CallColumn | StyleSet::CallIndented | StyleSet::DictAligned
 
         Term.of(:choice,
           Term.of(:row, Term[:frag, "(", width: 1, height: 1],
             Term.of(:row,
-              thunk(itemspart, style & Inline, style, ""),
+              thunk(itemspart, style & InlineStyles, style, ""),
               Term[:frag, "¦", width: 1, height: 1],
-              render_pp(ctx, pairspattern, style & Inline, ")" + postfix),
+              render_pp(ctx, pairspattern, style & InlineStyles, ")" + postfix),
               gap: 1)),
           Term.of(:row, Term[:frag, "(", width: 1, height: 1], thunk(term, style & myself, style, ")" + postfix)))
       end
@@ -841,7 +945,7 @@ def render(ctx, term : Term, style = DictStyles::All, postfix : String = "")
 
     if ctx.features.item_first_brackets?
       matchpi %[(%'%item needles_+)] do
-        myself = Inline | DictStyles::CallAligned
+        myself = InlineStyles | StyleSet::DictAligned
 
         Term.of(:row, Term[:frag, "⟨", width: 1, height: 1], thunk(needles, style & myself, style, "⟩" + postfix))
       end
@@ -849,7 +953,7 @@ def render(ctx, term : Term, style = DictStyles::All, postfix : String = "")
 
     if ctx.features.item_source_brackets?
       matchpi %[(%'%item° needles_+)] do
-        myself = Inline | DictStyles::CallAligned
+        myself = InlineStyles | StyleSet::DictAligned
 
         Term.of(:row, Term[:frag, "⟨", width: 1, height: 1], thunk(needles, style & myself, style, "⟩°" + postfix))
       end
@@ -887,7 +991,7 @@ def render(ctx, term : Term, style = DictStyles::All, postfix : String = "")
 
     if ctx.features.pairsonly_brackets?
       matchpi %[(¦ pairspart_)] do
-        myself = DictStyles::MapInline | DictStyles::MapMultiline
+        myself = StyleSet::MapInline | StyleSet::MapMultiline
 
         Term.of(:row, Term[:frag, "{", width: 1, height: 1], thunk(term, style & myself, style, "}" + postfix))
       end
@@ -896,7 +1000,7 @@ def render(ctx, term : Term, style = DictStyles::All, postfix : String = "")
     matchpi %[(head_symbol _ ¦ (%not ()))] do
       continue if head.blank?
 
-      myself = Inline | DictStyles::BlockCallKeywordsInline | DictStyles::BlockCallKeywordsColumn | DictStyles::KeywordBlockCall | DictStyles::CallIndented | DictStyles::CallAligned
+      myself = InlineStyles | StyleSet::BlockCallKeywordsInline | StyleSet::BlockCallKeywordsColumn | StyleSet::KeywordBlockCall | StyleSet::CallIndented | StyleSet::DictAligned
 
       Term.of(:row, Term[:frag, "(", width: 1, height: 1], thunk(term, style & myself, style, ")" + postfix))
     end
@@ -904,7 +1008,7 @@ def render(ctx, term : Term, style = DictStyles::All, postfix : String = "")
     matchpi %[(head_symbol _+)] do
       continue if head.blank?
 
-      myself = Inline | DictStyles::CallColumn | DictStyles::CallIndented | DictStyles::CallAligned
+      myself = InlineStyles | StyleSet::CallColumn | StyleSet::CallIndented | StyleSet::DictAligned
 
       Term.of(:row, Term[:frag, "(", width: 1, height: 1], thunk(term, style & myself, style, ")" + postfix))
     end
@@ -912,7 +1016,7 @@ def render(ctx, term : Term, style = DictStyles::All, postfix : String = "")
     matchpi %{(head_symbol _+ ¦ (%not {}))} do
       continue if head.blank?
 
-      myself = Inline | DictStyles::BlockCallKeywordsInline | DictStyles::BlockCallKeywordsColumn | DictStyles::CallIndented | DictStyles::CallAligned
+      myself = InlineStyles | StyleSet::BlockCallKeywordsInline | StyleSet::BlockCallKeywordsColumn | StyleSet::CallIndented | StyleSet::DictAligned
 
       Term.of(:row, Term[:frag, "(", width: 1, height: 1], thunk(term, style & myself, style, ")" + postfix))
     end
@@ -920,13 +1024,13 @@ def render(ctx, term : Term, style = DictStyles::All, postfix : String = "")
     matchpi %{[head_symbol _*]} do
       continue if head.blank?
 
-      myself = Inline | DictStyles::CallIndented | DictStyles::CallAligned
+      myself = InlineStyles | StyleSet::CallIndented | StyleSet::DictAligned
 
       Term.of(:row, Term[:frag, "(", width: 1, height: 1], thunk(term, style & myself, style, ")" + postfix))
     end
 
     matchpi %{_dict} do
-      myself = Inline | DictStyles::CallAligned
+      myself = InlineStyles | StyleSet::DictAligned
 
       Term.of(:row, Term[:frag, "(", width: 1, height: 1], thunk(term, style & myself, style, ")" + postfix))
     end
@@ -952,31 +1056,6 @@ def render(ctx, term : Term, style = DictStyles::All, postfix : String = "")
 
       Term.of(:frag, string, width: string.size, height: 1)
     end
-  end
-end
-
-def render_style?(ctx, subject : Term::Dict, style : DictStyles, styles : DictStyles, postfix : String)
-  case style
-  when .dict_inline?
-    Term.of(render_dict_inline(ctx, subject, styles, postfix))
-  when .call_column?
-    Term.of(render_call_column?(ctx, subject, styles, postfix) || return)
-  when .block_call_keywords_inline?
-    Term.of(render_call_keywords_inline?(ctx, subject, styles, postfix) || return)
-  when .block_call_keywords_column?
-    Term.of(render_call_keywords_column?(ctx, subject, styles, postfix) || return)
-  when .keyword_block_call?
-    Term.of(render_keyword_block_call?(ctx, subject, styles, postfix) || return)
-  when .call_indented?
-    Term.of(render_multiline(ctx, subject, styles, postfix, padded: true))
-  when .call_aligned?
-    Term.of(render_multiline(ctx, subject, styles, postfix, padded: false))
-  when .map_inline?
-    Term.of(render_map_inline?(ctx, subject, styles, postfix) || return)
-  when .map_multiline?
-    Term.of(render_map_multiline?(ctx, subject, styles, postfix) || return)
-  else
-    raise ArgumentError.new
   end
 end
 
@@ -1039,13 +1118,9 @@ def measure(ctx : DisplayContext, node : Term) : {Int32, Int32}
   end
 end
 
-record DisplayContext, normal_maxwidth : Int32, backmap_pattern_maxwidth : Int32, features : Display::Features, measurements = {} of Term => {Int32, Int32} do
-  def shrink(amount : Int32) : DisplayContext
-    copy_with(normal_maxwidth: normal_maxwidth - amount, backmap_pattern_maxwidth: backmap_pattern_maxwidth - amount)
-  end
-end
+record DisplayContext, normal_maxwidth : Int32, backmap_pattern_maxwidth : Int32, features : Display::Features, measurements = {} of Term => {Int32, Int32}
 
-def flatten(ctx, node : Term, maxwidth : Int32, styles : DictStyles) : {Term, Int32}
+def flatten(ctx, node : Term, maxwidth : Int32, styles : StyleSet) : {Term, Int32}
   Term.case(node) do
     matchpi %{(frag _ ¦ _ width_: (%number +i32))} do
       {node, maxwidth - width.to(Int32)}
@@ -1056,20 +1131,7 @@ def flatten(ctx, node : Term, maxwidth : Int32, styles : DictStyles) : {Term, In
     end
 
     matchpi %{(info child_ tag: backmap-pattern)} do
-      inp = maxwidth + (ctx.backmap_pattern_maxwidth - ctx.normal_maxwidth)
-      flat, excess = flatten(ctx, child, inp, styles)
-
-      # Here we only care about magnitude, the fact that it's in another coordinate
-      # system doesn't matter.
-      if excess < 0
-        return flat, excess
-      end
-
-      # Excess (remaining maxwidth) is in backmap coordinates.  We have to translate it
-      # into normal (maxwidth) coordinates.
-      #
-      # NOTE: This all feels extremely extremely edgy, but appears to work.
-      {flat, (ctx.normal_maxwidth * (excess/inp)).to_i}
+      flatten(ctx, child, maxwidth + (ctx.backmap_pattern_maxwidth - ctx.normal_maxwidth), styles)
     end
 
     matchpi %[(padding child_ ¦ pl_: (%number +i32))] do
@@ -1106,15 +1168,19 @@ def flatten(ctx, node : Term, maxwidth : Int32, styles : DictStyles) : {Term, In
       {Term.of(col), min_rem}
     end
 
-    matchpi %[(thunk subject_dict postfix_string myself0←(%number u16) children0←(%number u16))] do
-      myself = styles & DictStyles.from_value(myself0.to(UInt16))
-      children = styles & DictStyles.from_value(children0.to(UInt16))
+    matchpi %[(thunk subject_dict postfix_string myself0←(%number u16) children0←(%number u16))] do |subject|
+      subject = subject.unsafe_as_d
+      myself = styles & StyleSet.from_value(myself0.to(UInt16))
+      children = styles & StyleSet.from_value(children0.to(UInt16))
 
       max_rem = Int32::MIN
       max_flat = Term.of
 
-      myself.each do |style|
-        next unless rendered = render_style?(ctx, subject.unsafe_as_d, style, children, postfix.to(String))
+      myself.each do |option|
+        style = Style.one(option)
+        next unless style.applicable_to?(subject)
+
+        rendered = Style.render(ctx, style.blueprint, subject, children, postfix.to(String))
 
         flat, rem = flatten(ctx, rendered, maxwidth, styles)
         if rem > 0
@@ -1159,7 +1225,7 @@ def flatten(ctx, node : Term, maxwidth : Int32, styles : DictStyles) : {Term, In
   end
 end
 
-def flatten(ctx, node : Term, styles : DictStyles = DictStyles::All) : {Term, Int32}
+def flatten(ctx, node : Term, styles : StyleSet = StyleSet::All) : {Term, Int32}
   flatten(ctx, node, maxwidth: ctx.normal_maxwidth, styles: styles)
 end
 
@@ -1247,6 +1313,7 @@ end
 #   27. Refactor render() to use templates.
 #   14. Dict set syntax && pretty printing
 #   20. Line breaking in long strings (and the syntax that this requires!).
+#   28. Have a way to incorporate syntax highlighting and in general "hooking into" the renderer.
 #   22. Have a mode for pretty printing where we remember where newlines and comments
 #       were put by the user in the input string between **toplevel** terms; put them back
 #       when pretty printing. Handle comments as well -- somehow ?! This will pave the way to using
@@ -1254,7 +1321,7 @@ end
 #
 #   TESTS??????!
 ed = ML.terms(File.read("./editor.soma.wwml"))# Term.of(:+, {:*, 3, 4}, {2})
-# ed = ML.terms(%{(+ 1 2 a: 100 b: 200 (A): 100 (+ 1 2): 3 (+ 4 5): 6)})
+# ed = ML.terms(%{(text x: 100 y: 200 z: 300 a: 1 b: 2 c: 3 "Hello World 1" "Hello World 2")})
 
 str = String.build do |io|
   screen = Screen.new
