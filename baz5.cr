@@ -451,6 +451,13 @@ def dfsR(successor : Rewriter) : Rewriter
   set.call choiceR(successor, entriesR(rec))
 end
 
+# Rewrites a term using *successor*; if that produces no change and the term is
+# a dictionary term, recurses on its items (`itemsR`).
+def itemdfsR(successor : Rewriter) : Rewriter
+  set, rec = recR
+  set.call choiceR(successor, itemsR(rec))
+end
+
 # :nodoc:
 def exhR(ctx, term, successor)
   state = Rewrite.one(term)
