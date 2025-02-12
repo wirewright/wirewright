@@ -114,11 +114,155 @@ end
 
 InlineStyles = StyleSet::MapInline | StyleSet::DictInline
 
-struct StyleRenderer
+module Style
+  extend self
+
+  # ```wwml
+  # (text "Hello World 1" "Hello World 2" "Hello World 3" x: 100 y: 200)
+  # ```
+  DictInline = Spec.parse <<-WWML
+    (style min-entries: 1
+      (row gap: 1
+        ($slot entries 0 -2 inline "")
+        ($slot entries -2 -1 inline postfix)))
+  WWML
+
+  # ```wwml
+  # (text
+  #  "Hello World 1"
+  #  "Hello World 2"
+  #  "Hello World 3"
+  #  x: 100
+  #  y: 200)
+  # ```
+  DictAligned = Spec.parse <<-WWML
+    (style min-entries: 1
+      (col ($slot entries 0 1 * "")
+           ($slot entries 1 -2 * "")
+           ($slot entries -2 -1 * postfix)))
+  WWML
+
+  # ```wwml
+  # (text
+  #   "Hello World 1"
+  #   "Hello World 2"
+  #   "Hello World 3"
+  #   x: 100
+  #   y: 200)
+  # ```
+  CallIndented = Spec.parse <<-WWML
+    (style min-entries: 2
+      (col ($slot entries 0 1 inline "")
+           (indented
+             (col ($slot entries 1 -2 * "")
+                  ($slot entries -2 -1 * postfix)))))
+  WWML
+
+  # ```wwml
+  # (text "Hello World 1"
+  #       "Hello World 2"
+  #       "Hello World 3")
+  # ```
+  CallColumn = Spec.parse <<-WWML
+    (style itemsonly: true min-items: 2
+      (row gap: 1
+        ($slot items 0 1 inline "")
+        (col ($slot items 1 -2 inline "")
+             ($slot items -2 -1 inline postfix))))
+  WWML
+
+  # ```wwml
+  # (text x: 100 y: 200
+  #   "Hello World 1"
+  #   "Hello World 2"
+  #   "Hello World 3")
+  # ```
+  BlockCallKeywordsInline = Spec.parse <<-WWML
+    (style min-items: 2 min-pairs: 1
+      (col (row gap: 1
+             ($slot items 0 1 inline "")
+             (col ($slot pairs 0 -1 inline "")))
+           (indented
+             (col ($slot items 1 -2 * "")
+                  ($slot items -2 -1 * postfix)))))
+  WWML
+
+  # ```wwml
+  # (text x: 100
+  #       y: 200
+  #   "Hello World 1"
+  #   "Hello World 2"
+  #   "Hello World 3")
+  # ```
+  BlockCallKeywordsColumn = Spec.parse <<-WWML
+    (style min-items: 2 min-pairs: 1
+      (col (row gap: 1
+             ($slot items 0 1 inline "")
+             (col ($slot pairs 0 -1 * "")))
+           (indented
+             (col ($slot items 1 -2 * "")
+                  ($slot items -2 -1 * postfix)))))
+  WWML
+
+  # ```wwml
+  # (text "Hello World 1"
+  #   x: 100
+  #   y: 200)
+  # ```
+  KeywordBlockCall = Spec.parse <<-WWML
+    (style min-items: 3 min-pairs: 1
+      (col (row gap: 1
+             ($slot items 0 1 inline "")
+             ($slot items 1 2 inline ""))
+           (indented
+             (col ($slot pairs 0 -2 * "")
+                  ($slot pairs -2 -1 * postfix)))))
+  WWML
+
+  # ```wwml
+  # {x: 100, y: 200, z: 300}
+  # ```
+  MapInline = Spec.parse <<-WWML
+    (style pairsonly: true min-pairs: 1
+      (row gap: 1
+        ($slot pairs 0 -2 inline ",")
+        ($slot pairs -2 -1 inline postfix)))
+  WWML
+
+  # ```wwml
+  # {x: 100,
+  #  y: 200,
+  #  z: 300}
+  # ```
+  MapMultiline = Spec.parse <<-WWML
+    (style pairsonly: trie min-pairs: 1
+      (col ($slot pairs 0 -2 * ",")
+           ($slot pairs -2 -1 * postfix)))
+  WWML
+
+  # Converts a single-element *styleset* into the corresponding `Style` object.
+  # Raises `ArgumentError` if *styleset* is not a single-element set.
+  def one(styleset : StyleSet)
+    {% for style in StyleSet.constants %}
+      {% unless {:None, :All}.includes?(style.id.symbolize) %}
+        if styleset == StyleSet::{{style}}
+          return {{style}}
+        end
+      {% end %}
+    {% end %}
+
+    raise ArgumentError.new
+  end
+end
+
+# Style specs are a declarative way to describe dict styles.
+struct Style::Spec
+  # :nodoc:
   def initialize(@template : Term, @min_items : Int32, @min_pairs : Int32, @min_entries : Int32, @itemsonly : Bool, @pairsonly : Bool)
   end
 
-  def self.new(spec : Term) : StyleRenderer
+  # Constructs a style spec from the given spec term *spec*.
+  def self.new(spec : Term) : Spec
     Term.case(spec) do
       matchpi %[(style template_ ¦ min-pairs⋮ 0 min-items⋮ 0 min-entries⋮ 0 itemsonly⋮ false pairsonly⋮ false)] do
         new(template, min_items.to(Int32), min_pairs.to(Int32), min_entries.to(Int32), itemsonly.to(Bool), pairsonly.to(Bool))
@@ -126,11 +270,12 @@ struct StyleRenderer
     end
   end
 
-  def self.parse(ml : String) : StyleRenderer
+  # Parses spec WwML.
+  def self.parse(ml : String) : Spec
     new(ML.term(ml))
   end
 
-  # Returns `true` if *dict* satisfies all constraints set by this style.
+  # Returns `true` if *dict* satisfies all constraints set by this spec.
   private def applicable_to?(dict : Term::Dict) : Bool
     return false if @itemsonly && !dict.itemsonly?
     return false if @pairsonly && !dict.pairsonly?
@@ -228,147 +373,6 @@ struct StyleRenderer
     end
 
     rewrite(@template, itemdfsR(callR(handler)))
-  end
-end
-
-module Style
-  extend self
-
-  # ```wwml
-  # (text "Hello World 1" "Hello World 2" "Hello World 3" x: 100 y: 200)
-  # ```
-  DictInline = StyleRenderer.parse <<-WWML
-    (style min-entries: 1
-      (row gap: 1
-        ($slot entries 0 -2 inline "")
-        ($slot entries -2 -1 inline postfix)))
-  WWML
-
-  # ```wwml
-  # (text
-  #  "Hello World 1"
-  #  "Hello World 2"
-  #  "Hello World 3"
-  #  x: 100
-  #  y: 200)
-  # ```
-  DictAligned = StyleRenderer.parse <<-WWML
-    (style min-entries: 1
-      (col ($slot entries 0 1 * "")
-           ($slot entries 1 -2 * "")
-           ($slot entries -2 -1 * postfix)))
-  WWML
-
-  # ```wwml
-  # (text
-  #   "Hello World 1"
-  #   "Hello World 2"
-  #   "Hello World 3"
-  #   x: 100
-  #   y: 200)
-  # ```
-  CallIndented = StyleRenderer.parse <<-WWML
-    (style min-entries: 2
-      (col ($slot entries 0 1 inline "")
-           (padding pl: 1
-             (col ($slot entries 1 -2 * "")
-                  ($slot entries -2 -1 * postfix)))))
-  WWML
-
-  # ```wwml
-  # (text "Hello World 1"
-  #       "Hello World 2"
-  #       "Hello World 3")
-  # ```
-  CallColumn = StyleRenderer.parse <<-WWML
-    (style itemsonly: true min-items: 2
-      (row gap: 1
-        ($slot items 0 1 inline "")
-        (col ($slot items 1 -2 inline "")
-             ($slot items -2 -1 inline postfix))))
-  WWML
-
-  # ```wwml
-  # (text x: 100 y: 200
-  #   "Hello World 1"
-  #   "Hello World 2"
-  #   "Hello World 3")
-  # ```
-  BlockCallKeywordsInline = StyleRenderer.parse <<-WWML
-    (style min-items: 2 min-pairs: 1
-      (col (row gap: 1
-             ($slot items 0 1 inline "")
-             (col ($slot pairs 0 -1 inline "")))
-           (padding pl: 1
-             (col ($slot items 1 -2 * "")
-                  ($slot items -2 -1 * postfix)))))
-  WWML
-
-  # ```wwml
-  # (text x: 100
-  #       y: 200
-  #   "Hello World 1"
-  #   "Hello World 2"
-  #   "Hello World 3")
-  # ```
-  BlockCallKeywordsColumn = StyleRenderer.parse <<-WWML
-    (style min-items: 2 min-pairs: 1
-      (col (row gap: 1
-             ($slot items 0 1 inline "")
-             (col ($slot pairs 0 -1 * "")))
-           (padding pl: 1
-             (col ($slot items 1 -2 * "")
-                  ($slot items -2 -1 * postfix)))))
-  WWML
-
-  # ```wwml
-  # (text "Hello World 1"
-  #   x: 100
-  #   y: 200)
-  # ```
-  KeywordBlockCall = StyleRenderer.parse <<-WWML
-    (style min-items: 3 min-pairs: 1
-      (col (row gap: 1
-             ($slot items 0 1 inline "")
-             ($slot items 1 2 inline ""))
-           (padding pl: 1
-             (col ($slot pairs 0 -2 * "")
-                  ($slot pairs -2 -1 * postfix)))))
-  WWML
-
-  # ```wwml
-  # {x: 100, y: 200, z: 300}
-  # ```
-  MapInline = StyleRenderer.parse <<-WWML
-    (style pairsonly: true min-pairs: 1
-      (row gap: 1
-        ($slot pairs 0 -2 inline ",")
-        ($slot pairs -2 -1 inline postfix)))
-  WWML
-
-  # ```wwml
-  # {x: 100,
-  #  y: 200,
-  #  z: 300}
-  # ```
-  MapMultiline = StyleRenderer.parse <<-WWML
-    (style pairsonly: trie min-pairs: 1
-      (col ($slot pairs 0 -2 * ",")
-           ($slot pairs -2 -1 * postfix)))
-  WWML
-
-  # Converts a single-element *styleset* into the corresponding `Style` object.
-  # Raises `ArgumentError` if *styleset* is not a single-element set.
-  def one(styleset : StyleSet)
-    {% for style in StyleSet.constants %}
-      {% unless {:None, :All}.includes?(style.id.symbolize) %}
-        if styleset == StyleSet::{{style}}
-          return {{style}}
-        end
-      {% end %}
-    {% end %}
-
-    raise ArgumentError.new
   end
 end
 
@@ -530,52 +534,52 @@ macro fillable(ml)
 end
 
 module Templates
-  MY = fillable(%{(row (frag "→" width: 1 height: 1) capture_)})
-  UP = fillable(%{(row (frag "↑" width: 1 height: 1) capture_)})
-  DOWN = fillable(%{(row (frag "↓" width: 1 height: 1) capture_)})
+  MY = fillable(%{(row (frag "→") capture_)})
+  UP = fillable(%{(row (frag "↑") capture_)})
+  DOWN = fillable(%{(row (frag "↓") capture_)})
 
   BACKMAP = fillable <<-WWML
   (choice
     (row gap: 1
-      pattern_short_ (frag "<>" width: 2 height: 1) backspec_short_)
+      pattern_short_ (frag "<>") backspec_short_)
     (col (longer pattern_long_)
-      (padding pl: 2
+      (indented by: 2
         (row gap: 1
-          (frag "<>" width: 2 height: 1) backspec_long_)))
+          (frag "<>") backspec_long_)))
     fallback_)
   WWML
 
   RULE = fillable <<-WWML
   (choice
     (row gap: 1
-      pattern_short_ (frag "=>" width: 2 height: 1) body_short_)
+      pattern_short_ (frag "=>") body_short_)
     (col (longer pattern_long_)
-      (padding pl: 2
+      (indented by: 2
         (row gap: 1
-          (frag "=>" width: 2 height: 1) body_long_)))
+          (frag "=>") body_long_)))
     fallback_)
   WWML
 
-  LET_ARROW = fillable(%{(row capture_ (frag "←" width: 1 height: 1) pattern_)})
+  LET_ARROW = fillable(%{(row capture_ (frag "←") pattern_)})
 
-  JUST_ITEMSPART_LBRACKET = fillable(%{(row (frag "[" width: 1 height: 1) rest_)})
+  JUST_ITEMSPART_LBRACKET = fillable(%{(row (frag "[") rest_)})
 
-  ITEM_LBRACKET = fillable(%{(row (frag "⟨" width: 1 height: 1) rest_)})
+  ITEM_LBRACKET = fillable(%{(row (frag "⟨") rest_)})
 
-  PAIRSONLY_LBRACKET = fillable(%[(row (frag "{" width: 1 height: 1) rest_)])
-  LPAREN = fillable(%{(row (frag "(" width: 1 height: 1) rest_)})
+  PAIRSONLY_LBRACKET = fillable(%[(row (frag "{") rest_)])
+  LPAREN = fillable(%{(row (frag "(") rest_)})
 
-  SLOT = fillable(%{(row (frag "⏏" width: 1 height: 1) rest_)})
-  HOLD = fillable(%{(row (frag "'" width: 1 height: 1) rest_)})
-  NONSELF = fillable(%{(row (frag "≡" width: 1 height: 1) rest_)})
-  LITERAL = fillable(%{(row (frag "%'" width: 2 height: 1) rest_)})
+  SLOT = fillable(%{(row (frag "⏏") rest_)})
+  HOLD = fillable(%{(row (frag "'") rest_)})
+  NONSELF = fillable(%{(row (frag "≡") rest_)})
+  LITERAL = fillable(%{(row (frag "%'") rest_)})
 
-  PAIRSPART_LET = fillable(%{(row k_ (frag "_:" width: 2 height: 1) (padding v_ pl: 1))})
+  PAIRSPART_LET = fillable(%{(row k_ (frag "_:") (indented v_))})
 
-  PAIRSPART_OPTIONAL_INFER = fillable(%{(row k_ (frag "⋮" width: 1 height: 1) (padding v_ pl: 1))})
-  PAIRSPART_OPTIONAL_ANY = fillable(%{(row k_ (frag "_⋮" width: 2 height: 1) (padding v_ pl: 1))})
+  PAIRSPART_OPTIONAL_INFER = fillable(%{(row k_ (frag "⋮") (indented v_))})
+  PAIRSPART_OPTIONAL_ANY = fillable(%{(row k_ (frag "_⋮") (indented v_))})
 
-  PAIRSPART_NEGATION = fillable(%{(row (frag "-" width: 1 height: 1) k_)})
+  PAIRSPART_NEGATION = fillable(%{(row (frag "-") k_)})
 end
 
 def thunk(subject : Term, myself : StyleSet, children : StyleSet, postfix : String)
@@ -590,8 +594,8 @@ end
 def render_pair(ctx, k, v, styles, postfix)
   Term.of(:row,
     render(ctx, k, styles, ""),
-    Term[:frag, ":", width: 1, height: 1],
-    Term[:padding, render(ctx, v, styles, postfix), pl: 1])
+    Term[:frag, ":"],
+    Term[:indented, render(ctx, v, styles, postfix)])
 end
 
 def render_entry(ctx, dict, k, v, styles, postfix)
@@ -746,6 +750,18 @@ def render(ctx, term : Term, style = StyleSet::All, postfix : String = "")
   Term.of_case(term) do
     # Humph?! This should actually be TOPLEVEL!
     if ctx.features.toplevel_backmap?
+      # (feature (backmap pattern_ backspec_)
+      #   (choice
+      #     (row gap: 1
+      #       ($embed pattern inline "")
+      #       (atom "<>")
+      #       ($embed backspec inline postfix))
+      #     (col (longer ($embed pattern inline ""))
+      #       (indented by: 2
+      #         (row gap: 1
+      #           (atom "<>")
+      #           ($embed backspec * postfix))))
+      #     $next))
       matchpi %[(backmap pattern_ backspec_)] do
         myself = InlineStyles | StyleSet::CallColumn | StyleSet::CallIndented | StyleSet::DictAligned
         fallback = Templates::LPAREN.call(thunk(term, style & myself, style, ")" + postfix))
@@ -764,6 +780,18 @@ def render(ctx, term : Term, style = StyleSet::All, postfix : String = "")
 
     # Humph?! This should actually be TOPLEVEL!
     if ctx.features.toplevel_rule?
+      # (feature (rule pattern_ body_)
+      #   (choice
+      #     (row gap: 1
+      #       ($embed pattern inline "")
+      #       (atom "=>")
+      #       ($embed body inline postfix))
+      #     (col (longer ($embed pattern inline ""))
+      #       (indented by: 2
+      #         (row gap: 1
+      #           (atom "=>")
+      #           ($embed body * postfix))))
+      #     $next))
       matchpi %[(rule pattern_ body_)] do
         myself = InlineStyles | StyleSet::CallColumn | StyleSet::CallIndented | StyleSet::DictAligned
         fallback = Templates::LPAREN.call(thunk(term, style & myself, style, ")" + postfix))
@@ -781,44 +809,58 @@ def render(ctx, term : Term, style = StyleSet::All, postfix : String = "")
     end
 
     if ctx.features.edge?
+      # (feature (edge id←(%any° _symbol _number _string))
+      #   (row (atom "@") (atom ($string id)) $postfix))
       matchpi %[(edge id←(%any° _symbol _number _string))] do
         string = "@#{id.inspect}#{postfix}"
 
-        Term.of(:frag, string, width: string.size, height: 1)
+        Term.of(:frag, string)
       end
     end
 
     if ctx.features.backref_my?
+      # (feature ($my capture_)
+      #   (row (atom "→") ($embed capture * postfix)))
       matchpi %[($my capture_)] do
         Templates::MY.call(render(ctx, capture, style, postfix))
       end
     end
 
     if ctx.features.backref_up?
+      # (feature ($up capture_)
+      #   (row (atom "↑") ($embed capture * postfix)))
       matchpi %[($up capture_)] do
         Templates::UP.call(render(ctx, capture, style, postfix))
       end
     end
 
     if ctx.features.backref_down?
+      # (feature ($down capture_)
+      #   (row (atom "↓") ($embed capture * postfix)))
       matchpi %[($down capture_)] do
         Templates::DOWN.call(render(ctx, capture, style, postfix))
       end
     end
 
     if ctx.features.let_arrow?
+      # (feature (%'%let capture_ pattern_)
+      #   (row ($embed capture inline "") (atom "←") ($embed pattern * postfix)))
       matchpi %[(%'%let capture_ pattern_)] do
         Templates::LET_ARROW.call(render(ctx, capture, style, ""), render(ctx, pattern, style, postfix))
       end
     end
 
     if ctx.features.just_itemspart_brackets?
+      # (feature (%'%partition () %'_)
+      #   (row (atom "[]") $postfix))
       matchpi %[(%'%partition () %'_)] do
         string = "[]#{postfix}"
 
-        Term.of(:frag, string, width: string.size, height: 1)
+        Term.of(:frag, string)
       end
 
+      # (feature (%'%partition (itemspart_+) %'_)
+      #   (row (atom "[") ($thunk itemspart (inline dict-aligned) "]" postfix)))
       matchpi %[(%'%partition (itemspart_+) %'_)] do
         myself = InlineStyles | StyleSet::DictAligned
 
@@ -827,31 +869,35 @@ def render(ctx, term : Term, style = StyleSet::All, postfix : String = "")
     end
 
     if ctx.features.just_open_pairspart_brackets?
+      # TODO: ???
       matchpi %[(%'%partition %'_ (%layer %'_ pp_dict))] do
         myself = InlineStyles | StyleSet::CallColumn | StyleSet::CallIndented | StyleSet::DictAligned
 
         Term.of(:choice,
-          Term.of(:row, Term[:frag, "{_", width: 2, height: 1], Term[:padding, render_pp_dict(ctx, pp.unsafe_as_d, style, "}" + postfix), pl: 1]),
-          Term.of(:row, Term[:frag, "(", width: 1, height: 1], thunk(term, style & myself, style, ")" + postfix)))
+          Term.of(:row, Term[:frag, "{_"], Term[:indented, render_pp_dict(ctx, pp.unsafe_as_d, style, "}" + postfix), pl: 2]),
+          Term.of(:row, Term[:frag, "("], thunk(term, style & myself, style, ")" + postfix)))
       end
     end
 
     if ctx.features.pairspart_split?
+      # TODO: ???
       matchpi %[(%'%partition (itemspart_+) pairspattern_)] do
         myself = InlineStyles | StyleSet::CallColumn | StyleSet::CallIndented | StyleSet::DictAligned
 
         Term.of(:choice,
-          Term.of(:row, Term[:frag, "(", width: 1, height: 1],
+          Term.of(:row, Term[:frag, "("],
             Term.of(:row,
               thunk(itemspart, style & InlineStyles, style, ""),
-              Term[:frag, "¦", width: 1, height: 1],
+              Term[:frag, "¦"],
               render_pp(ctx, pairspattern, style & InlineStyles, ")" + postfix),
               gap: 1)),
-          Term.of(:row, Term[:frag, "(", width: 1, height: 1], thunk(term, style & myself, style, ")" + postfix)))
+          Term.of(:row, Term[:frag, "("], thunk(term, style & myself, style, ")" + postfix)))
       end
     end
 
     if ctx.features.item_first_brackets?
+      # (feature (%'%item needles_+)
+      #   (row (atom "⟨") ($thunk needles (inline dict-aligned) "⟩" postfix)))
       matchpi %[(%'%item needles_+)] do
         myself = InlineStyles | StyleSet::DictAligned
 
@@ -860,6 +906,8 @@ def render(ctx, term : Term, style = StyleSet::All, postfix : String = "")
     end
 
     if ctx.features.item_source_brackets?
+      # (feature (%'%item° needles_+)
+      #   (row (atom "⟨") ($thunk needles (inline dict-aligned) "⟩°" postfix)))
       matchpi %[(%'%item° needles_+)] do
         myself = InlineStyles | StyleSet::DictAligned
 
@@ -868,36 +916,48 @@ def render(ctx, term : Term, style = StyleSet::All, postfix : String = "")
     end
 
     if ctx.features.slot?
+      # (feature (%'%slot capture_)
+      #   (row (atom "⏏") ($embed capture * postfix)))
       matchpi %[(%'%slot capture_)] do
         Templates::SLOT.call(render(ctx, capture, style, postfix))
       end
     end
 
     if ctx.features.hold?
+      # (feature 'value_
+      #   (row (atom "'") ($embed value * postfix)))
       matchpi %['value_] do
         Templates::HOLD.call(render(ctx, value, style, postfix))
       end
     end
 
     if ctx.features.nonself?
+      # (feature (%'%nonself value_)
+      #   (row (atom "≡") ($embed value * postfix)))
       matchpi %[(%'%nonself value_)] do
         Templates::NONSELF.call(render(ctx, value, style, postfix))
       end
     end
 
     if ctx.features.literal?
+      # (feature (%'%literal value_)
+      #   (row (atom "%'") ($embed value * postfix)))
       matchpi %[(%'%literal value_)] do
         Templates::LITERAL.call(render(ctx, value, style, postfix))
       end
     end
 
+    # (feature ()
+    #   (row (atom "()") $postfix))
     matchpi %[()] do
       string = "()#{postfix}"
 
-      Term.of(:frag, string, width: string.size, height: 1)
+      Term.of(:frag, string)
     end
 
     if ctx.features.pairsonly_brackets?
+      # (feature T←(¦ _)
+      #   (row (atom "{") ($thunk T (map-inline map-multiline) "}" postfix)))
       matchpi %[(¦ pairspart_)] do
         myself = StyleSet::MapInline | StyleSet::MapMultiline
 
@@ -906,6 +966,8 @@ def render(ctx, term : Term, style = StyleSet::All, postfix : String = "")
     end
 
     if ctx.features.call?
+      # (feature T←((%symbol nonblank) _ ¦ (%not ()))
+      #   (row (atom "(") ($thunk T (inline block-call-keywords-inline block-call-keywords-column keyword-block-call call-indented dict-aligned) ")" postfix)))
       matchpi %[(head_symbol _ ¦ (%not ()))] do
         continue if head.blank?
 
@@ -914,6 +976,8 @@ def render(ctx, term : Term, style = StyleSet::All, postfix : String = "")
         Templates::LPAREN.call(thunk(term, style & myself, style, ")" + postfix))
       end
 
+      # (feature T←((%symbol nonblank) _+)
+      #   (row (atom "(") ($thunk T (inline call-column call-indented dict-aligned) ")" postfix)))
       matchpi %[(head_symbol _+)] do
         continue if head.blank?
 
@@ -922,6 +986,8 @@ def render(ctx, term : Term, style = StyleSet::All, postfix : String = "")
         Templates::LPAREN.call(thunk(term, style & myself, style, ")" + postfix))
       end
 
+      # (feature T←((%symbol nonblank) _+)
+      #   (row (atom "(") ($thunk T (inline call-column call-indented dict-aligned) ")" postfix)))
       matchpi %{(head_symbol _+ ¦ (%not {}))} do
         continue if head.blank?
 
@@ -930,6 +996,8 @@ def render(ctx, term : Term, style = StyleSet::All, postfix : String = "")
         Templates::LPAREN.call(thunk(term, style & myself, style, ")" + postfix))
       end
 
+      # (feature T←[(%symbol nonblank) _*]
+      #   (row (atom "(") ($thunk T (inline call-indented dict-aligned) ")" postfix)))
       matchpi %{[head_symbol _*]} do
         continue if head.blank?
 
@@ -939,32 +1007,38 @@ def render(ctx, term : Term, style = StyleSet::All, postfix : String = "")
       end
     end
 
+    # (feature T_dict
+    #   (row (atom "(") ($thunk T (inline dict-aligned) ")" postfix)))
     matchpi %{_dict} do
       myself = InlineStyles | StyleSet::DictAligned
 
       Templates::LPAREN.call(thunk(term, style & myself, style, ")" + postfix))
     end
 
+    # TODO: these should be native-code features. We cannot do what they do
+    # using (feature ...) specs.
     if ctx.features.group_thousands?
       # The conversion for this one is cheap so we handle it separately.
       matchpi %[(%number i32)] do
         string = "#{term.to(Int32).format(delimiter: '_')}#{postfix}"
 
-        Term.of(:frag, string, width: string.size, height: 1)
+        Term.of(:frag, string)
       end
 
       # The conversion for this one is expensive since we're going through BigInt.
       matchpi %[(%number (whole _))] do
         string = "#{term.to(BigInt).format(delimiter: '_')}#{postfix}"
 
-        Term.of(:frag, string, width: string.size, height: 1)
+        Term.of(:frag, string)
       end
     end
 
+    # (feature T←(%any° _number _symbol _string _boolean)
+    #   (row (atom ($string T)) $postfix))
     matchpi %[_number], %[_symbol], %[_string], %[_boolean] do
       string = "#{term.inspect}#{postfix}"
 
-      Term.of(:frag, string, width: string.size, height: 1)
+      Term.of(:frag, string)
     end
   end
 end
@@ -972,21 +1046,22 @@ end
 def measure(ctx : DisplayContext, node : Term) : {Int32, Int32}
   ctx.measurements.put_if_absent(node) do
     Term.case(node) do
-      matchpi(
-        %{(frag _ ¦ _ width_: (%number +i32) height_: (%number +i32))},
-        %{(block _ ¦ _ width_: (%number +i32) height_: (%number +i32))}
-      ) do
-        {width.to(Int32), height.to(Int32)}
+      matchpi %{[frag content_string]} do
+        {content.charcount, 1}
       end
 
-      matchpi %{[info child_]} do
+      matchpi %{(block {_ w_: (%number +i32), h_: (%number +i32)})} do
+        {w.to(Int32), h.to(Int32)}
+      end
+
+      matchpi %{[longer child_]} do
         measure(ctx, child)
       end
 
-      matchpi %{(padding child_ ¦ pl_: (%number +i32))} do
+      matchpi %{(indented child_ ¦ by: n←(%number +i32))} do
         child_width, child_height = measure(ctx, child)
 
-        {child_width + pl.to(Int32), child_height}
+        {child_width + n.to(Int32), child_height}
       end
 
       matchpi %{[row]} do
@@ -1031,11 +1106,11 @@ end
 # TODO: It's not normal vs. backmap. It's "normal" vs. "longer" now.
 record DisplayContext, normal_maxwidth : Int32, backmap_pattern_maxwidth : Int32, features : Display::Features, measurements = {} of Term => {Int32, Int32}
 
-# TODO: loosen up the rewriting.
 def flatten(ctx, node : Term, maxwidth : Int32, styles : StyleSet) : {Term, Int32}
   Term.case(node) do
-    matchpi %{(frag _ ¦ _ width_: (%number +i32))} do
-      {node, maxwidth - width.to(Int32)}
+    matchpi %{[frag _]} do
+      width, _ = measure(ctx, node)
+      {node, maxwidth - width}
     end
 
     matchpi %{[block _]} do
@@ -1046,10 +1121,10 @@ def flatten(ctx, node : Term, maxwidth : Int32, styles : StyleSet) : {Term, Int3
       flatten(ctx, child, maxwidth + (ctx.backmap_pattern_maxwidth - ctx.normal_maxwidth), styles)
     end
 
-    matchpi %[(padding child_ ¦ pl_: (%number +i32))] do
-      flattened, maxwidth = flatten(ctx, child, maxwidth - pl.to(Int32), styles)
+    matchpi %[(indented child_ ¦ by: (%optional 1 n←(%number +i32)))] do
+      flattened, maxwidth = flatten(ctx, child, maxwidth - n.to(Int32), styles)
 
-      {Term.of(:padding, flattened, pl: pl), maxwidth}
+      {Term.of(:indented, flattened, by: n), maxwidth}
     end
 
     matchpi %{(row children_* ¦ gap: (%optional 0 gap←(%number +i32)))} do
@@ -1172,8 +1247,8 @@ def draw(ctx, screen, node : Term, x, y)
       end
     end
 
-    matchpi %[(padding child_ ¦ _ pl_: (%number +i32))] do
-      draw(ctx, screen, child, x + pl.to(Int32), y)
+    matchpi %[(indented child_ ¦ _ by: (%optional 1 n←(%number +i32)))] do
+      draw(ctx, screen, child, x + n.to(Int32), y)
     end
   end
 end
