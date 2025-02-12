@@ -65,7 +65,7 @@ struct Ww::Term
       %result = match?({{pid}}, {{pattern}}, cue: { {{cue}} }.flatten.compact, default: ::Ww::Term::CaseContext::Continue) do |%env|
         {% for icap in icaps %}
           {% unless block.args.any? { |arg| arg.id == icap.id } %}
-            {{icap.id}} = (%env[{{icap.id.symbolize}}]? || raise "case: #{ {{location}} }: missing capture '{{icap.id}}'")
+            {{icap.id.gsub(/-/, "_")}} = (%env[{{icap.id.symbolize}}]? || raise "case: #{ {{location}} }: missing capture '{{icap.id}}'")
           {% end %}
         {% end %}
 
@@ -109,14 +109,14 @@ struct Ww::Term
       match!(->{ ::Ww::ML.term({{ml}}) }, location: {{location}}, {{kwargs.double_splat}}) {{block}}
     end
 
-    RE_CAPTURES = /([a-zA-Z_]\w*?)(?:_(?:any|number|symbol|string|boolean|dict)?[+*⋮]?\b|←|⋮)|\((?:%let)\s+([a-zA-Z]\w*)/
+    RE_CAPTURES = /([a-zA-Z_][\w-]*?)(?:_(?:any|number|symbol|string|boolean|dict)?[+*⋮]?\b|←|⋮)|\((?:%let)\s+([a-zA-Z][\w-]*)/
 
     # `matchp` that can infer basic captures (such as `x_`) from *ml* source
     # at compile-time.
     #
     # The supported kinds of captures are described by `RE_CAPTURES`.
     macro matchpi(ml, **kwargs, &block)
-      {% captures = ml.scan(::Ww::Term::CaseContext::RE_CAPTURES).map { |match| (match[1] || match[2]).id }.uniq %}
+      {% captures = ml.scan(::Ww::Term::CaseContext::RE_CAPTURES).map { |match| (match[1] || match[2]).id.symbolize }.uniq %}
       {% location = "#{ml.filename.id}:#{ml.line_number}:#{ml.column_number}" %}
 
       match!(-> { ::Ww::ML.term({{ml}}) }, icaps: [{{captures.splat}}] of ::NoReturn, location: {{location}}, {{kwargs.double_splat}}) {{block}}
@@ -142,7 +142,7 @@ struct Ww::Term
     #
     # See `matchpi` for more info.
     macro givenpi(ml, **kwargs, &block)
-      {% captures = ml.scan(::Ww::Term::CaseContext::RE_CAPTURES).map { |match| (match[1] || match[2]).id }.uniq %}
+      {% captures = ml.scan(::Ww::Term::CaseContext::RE_CAPTURES).map { |match| (match[1] || match[2]).id.symbolize }.uniq %}
       {% location = "#{ml.filename.id}:#{ml.line_number}:#{ml.column_number}" %}
 
       match!(-> { ML.terms({{ml}}) }, icaps: [{{captures.splat}}] of ::NoReturn, location: {{location}}, {{kwargs.double_splat}}) {{block}}
