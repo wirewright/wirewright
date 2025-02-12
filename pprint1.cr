@@ -114,417 +114,107 @@ end
 
 InlineStyles = StyleSet::MapInline | StyleSet::DictInline
 
-module Style
-  extend self
-
-  # Renders the entries of a dict *inline*.
-  #
-  # Requirements:
-  #
-  # - The dict must have at least one entry.
-  #
-  # ```wwml
-  # (text "Hello World 1" "Hello World 2" "Hello World 3" x: 100 y: 200)
-  # ```
-  record DictInline do
-    BLUEPRINT = Blueprint.build do
-      template %{(row ⏏entries ⏏tail gap: 1)}
-      slot :entries, :entries, 0, -2, InlineStyles, postfix: :none
-      slot :tail, :entries, -2, -1, InlineStyles, postfix: :sink
-    end
-
-    def blueprint : Blueprint
-      BLUEPRINT
-    end
-
-    def applicable_to?(dict : Term::Dict) : Bool
-      dict.size > 0
-    end
+struct StyleRenderer
+  def initialize(@template : Term, @min_items : Int32, @min_pairs : Int32, @min_entries : Int32, @itemsonly : Bool, @pairsonly : Bool)
   end
 
-  # Renders the entries of a dict on multiple lines. All items are lined up.
-  #
-  # Requirements:
-  #
-  # - The dict must have at least **two** entries.
-  #
-  # ```wwml
-  # (text
-  #  "Hello World 1"
-  #  "Hello World 2"
-  #  "Hello World 3"
-  #  x: 100
-  #  y: 200)
-  # ```
-  record DictAligned do
-    BLUEPRINT = Blueprint.build do
-      template %{(col ⏏head ⏏body ⏏tail)}
-      slot :head, :entries, 0, 1, StyleSet::All, postfix: :none
-      slot :body, :entries, 1, -2, StyleSet::All, postfix: :none
-      slot :tail, :entries, -2, -1, StyleSet::All, postfix: :sink
-    end
-
-    def blueprint : Blueprint
-      BLUEPRINT
-    end
-
-    def applicable_to?(dict : Term::Dict) : Bool
-      dict.size >= 2
-    end
-  end
-
-  # Renders the entries of a dict on multiple lines. Items following the first one
-  # are padded once. Only used when the first item of the dict is a symbol.
-  #
-  # ```wwml
-  # (text
-  #   "Hello World 1"
-  #   "Hello World 2"
-  #   "Hello World 3"
-  #   x: 100
-  #   y: 200)
-  # ```
-  record CallIndented do
-    BLUEPRINT = Blueprint.build do
-      template %{(col ⏏head (padding (col ⏏body ⏏tail) pl: 1))}
-      slot :head, :entries, 0, 1, InlineStyles, postfix: :none
-      slot :body, :entries, 1, -2, StyleSet::All, postfix: :none
-      slot :tail, :entries, -2, -1, StyleSet::All, postfix: :sink
-    end
-
-    def blueprint : Blueprint
-      BLUEPRINT
-    end
-
-    def applicable_to?(dict : Term::Dict) : Bool
-      dict.itemsize > 0 && dict.size >= 2 && dict[0].type.symbol?
-    end
-  end
-
-  # Renders the first item inline followed by a column of all remaining items, each
-  # item inline.
-  #
-  # Requirements:
-  #
-  # - the dict does not have pairs,
-  # - the dict has two or more items,
-  # - the dict's first item is a symbol.
-  #
-  # ```wwml
-  # (text "Hello World 1"
-  #       "Hello World 2"
-  #       "Hello World 3")
-  # ```
-  record CallColumn do
-    BLUEPRINT = Blueprint.build do
-      template %{(row ⏏head (col ⏏body ⏏tail) gap: 1)}
-      slot :head, :items, 0, 1, InlineStyles, postfix: :none
-      slot :body, :items, 1, -2, InlineStyles, postfix: :none
-      slot :tail, :items, -2, -1, InlineStyles, postfix: :sink
-    end
-
-    def blueprint : Blueprint
-      BLUEPRINT
-    end
-
-    def applicable_to?(dict : Term::Dict) : Bool
-      dict.itemsonly? && dict.size >= 2 && dict[0].type.symbol?
-    end
-  end
-
-  # Renders the first item and pairs of a dict inline, then follows with the remaning
-  # items padded, multiline.
-  #
-  # Requirements:
-  #
-  # - the dict has pairs,
-  # - the dict has two or more items,
-  # - the dict's first item is a symbol.
-  #
-  # ```wwml
-  # (text x: 100 y: 200
-  #   "Hello World 1"
-  #   "Hello World 2"
-  #   "Hello World 3")
-  # ```
-  record BlockCallKeywordsInline do
-    BLUEPRINT = Blueprint.build do
-      template %{(col (row ⏏head (col ⏏pairs) gap: 1) (padding (col ⏏body ⏏tail) pl: 1))}
-      slot :head, :items, 0, 1, InlineStyles, postfix: :none
-      slot :pairs, :pairs, 0, -1, InlineStyles, postfix: :none
-      slot :body, :items, 1, -2, StyleSet::All, postfix: :none
-      slot :tail, :items, -2, -1, StyleSet::All, postfix: :sink
-    end
-
-    def blueprint : Blueprint
-      BLUEPRINT
-    end
-
-    def applicable_to?(dict : Term::Dict) : Bool
-      dict.itemsize >= 2 && dict.pairsize >= 1 && dict[0].type.symbol?
-    end
-  end
-
-  # Renders the first item inline followed by a column of pairs, then all remaning
-  # items padded, multiline.
-  #
-  # Requirements:
-  #
-  # - the dict has pairs,
-  # - the dict has two or more items,
-  # - the dict's first item is a symbol.
-  #
-  # ```wwml
-  # (text x: 100
-  #       y: 200
-  #   "Hello World 1"
-  #   "Hello World 2"
-  #   "Hello World 3")
-  # ```
-  record BlockCallKeywordsColumn do
-    BLUEPRINT = Blueprint.build do
-      template %{(col (row ⏏head (col ⏏pairs) gap: 1) (padding (col ⏏body ⏏tail) pl: 1))}
-      slot :head, :items, 0, 1, InlineStyles, postfix: :none
-      slot :pairs, :pairs, 0, -1, StyleSet::All, postfix: :none
-      slot :body, :items, 1, -2, StyleSet::All, postfix: :none
-      slot :tail, :items, -2, -1, StyleSet::All, postfix: :sink
-    end
-
-    def blueprint : Blueprint
-      BLUEPRINT
-    end
-
-    def applicable_to?(dict : Term::Dict) : Bool
-      dict.itemsize >= 2 && dict.pairsize >= 1 && dict[0].type.symbol?
-    end
-  end
-
-  # Renders the first and second items inline, then all pairs padded, multiline.
-  #
-  # Requirements:
-  #
-  # - the dict has pairs,
-  # - the dict has exactly two items,
-  # - the dict's first item is a symbol.
-  #
-  # ```wwml
-  # (text "Hello World 1"
-  #   x: 100
-  #   y: 200)
-  # ```
-  record KeywordBlockCall do
-    BLUEPRINT = Blueprint.build do
-      template %{(col (row ⏏item0 ⏏item1 gap: 1) (padding (col ⏏pairs ⏏tail) pl: 1))}
-      slot :item0, :items, 0, 1, InlineStyles, postfix: :none
-      slot :item1, :items, 1, 2, InlineStyles, postfix: :none
-      slot :pairs, :pairs, 0, -2, StyleSet::All, postfix: :none
-      slot :tail, :pairs, -2, -1, StyleSet::All, postfix: :sink
-    end
-
-    def blueprint : Blueprint
-      BLUEPRINT
-    end
-
-    def applicable_to?(dict : Term::Dict) : Bool
-      dict.itemsize == 2 && dict.pairsize >= 1 && dict[0].type.symbol?
-    end
-  end
-
-  # Renders the entries of a pairsonly dict inline.
-  #
-  # Requirements:
-  #
-  # - the dict must be pairsonly,
-  # - the dict must have at least one pair.
-  #
-  # ```wwml
-  # {x: 100, y: 200, z: 300}
-  # ```
-  record MapInline do
-    BLUEPRINT = Blueprint.build do
-      template %{(row ⏏pairs ⏏tail gap: 1)}
-      slot :pairs, :pairs, 0, -2, InlineStyles, postfix: :comma
-      slot :tail, :pairs, -2, -1, InlineStyles, postfix: :sink
-    end
-
-    def blueprint : Blueprint
-      BLUEPRINT
-    end
-
-    def applicable_to?(dict : Term::Dict) : Bool
-      dict.pairsonly? && dict.pairsize >= 1
-    end
-  end
-
-  # Renders the entries of a pairsonly dict, each on a separate line.
-  #
-  # Requirements:
-  #
-  # - the dict must be pairsonly,
-  # - the dict must have at least one pair.
-  #
-  # ```wwml
-  # {x: 100,
-  #  y: 200,
-  #  z: 300}
-  # ```
-  record MapMultiline do
-    BLUEPRINT = Blueprint.build do
-      template %{(col ⏏pairs ⏏tail)}
-      slot :pairs, :pairs, 0, -2, StyleSet::All, postfix: :comma
-      slot :tail, :pairs, -2, -1, StyleSet::All, postfix: :sink
-    end
-
-    def blueprint : Blueprint
-      BLUEPRINT
-    end
-
-    def applicable_to?(dict : Term::Dict) : Bool
-      dict.pairsonly? && dict.pairsize >= 1
-    end
-  end
-
-  # Converts a single-element *styleset* into the corresponding `Style` object.
-  # Raises `ArgumentError` if *styleset* is not a single-element set.
-  def one(styleset : StyleSet)
-    {% for style in StyleSet.constants %}
-      {% unless {:None, :All}.includes?(style.id.symbolize) %}
-        if styleset == StyleSet::{{style}}
-          return {{style}}.new
-        end
-      {% end %}
-    {% end %}
-
-    raise ArgumentError.new
-  end
-end
-
-module Style
-  # Blueprints are a standardized and declarative way to define dict styles.
-  #
-  # - Blueprints consist of templates and slot specs (`Slot`).
-  # - Templates contain slots (e.g. `⏏qux` which is short for `(%slot qux)`).
-  record Blueprint, template : Term, slots : Slice(Slot) do
-    # Defines how a slot should be rewritten.
-    #
-    # - *id* is the name of the slot in the template.
-    # - *region* is the part of the dictionary which the range *b*...*e* describes.
-    # - *b*...*e* is the selected range, defined relatively (negative numbers count
-    #   from the end of the region).
-    # - *allowed* is the style set allowed for entries in the region.
-    # - *postfix* specifies what postfix this slot passes to entries in the region.
-    record Slot, id : Term::Sym, region : Region, b : Int8, e : Int8, allowed : StyleSet, postfix : Postfix do
-      enum Region : UInt8
-        Items
-        Pairs
-        Entries
-      end
-
-      enum Postfix : UInt8
-        None
-        Comma
-        Sink
+  def self.new(spec : Term) : StyleRenderer
+    Term.case(spec) do
+      matchpi %[(style template_ ¦ min-pairs⋮ 0 min-items⋮ 0 min-entries⋮ 0 itemsonly⋮ false pairsonly⋮ false)] do
+        new(template, min_items.to(Int32), min_pairs.to(Int32), min_entries.to(Int32), itemsonly.to(Bool), pairsonly.to(Bool))
       end
     end
-
-    class Builder
-      # :nodoc:
-      getter slots = [] of Slot
-
-      # :nodoc:
-      getter template = Term.of
-
-      # Sets the template of the resulting blueprint.
-      def template(ml : String) : Nil
-        @template = ML.term(ml)
-      end
-
-      # Adds a slot spec to the blueprint.
-      def slot(id, region : Slot::Region, b : Int8, e : Int8, allowed : StyleSet, *, postfix : Slot::Postfix) : Nil
-        @slots << Slot.new(Term[id], region, b, e, allowed, postfix)
-      end
-    end
-
-    # Yields with `Builder` that allows you to construct a `Blueprint` less clumsily.
-    def self.build(&) : Blueprint
-      with builder = Builder.new yield
-
-      new(builder.template, builder.slots.to_readonly_slice)
-    end
   end
 
-  # :nodoc:
-  #
+  def self.parse(ml : String) : StyleRenderer
+    new(ML.term(ml))
+  end
+
+  # Returns `true` if *dict* satisfies all constraints set by this style.
+  private def applicable_to?(dict : Term::Dict) : Bool
+    return false if @itemsonly && !dict.itemsonly?
+    return false if @pairsonly && !dict.pairsonly?
+
+    dict.itemsize >= @min_items && dict.pairsize >= @min_pairs && (dict.size - @min_items - @min_pairs) >= @min_entries
+  end
+
   # FIXME: when multiple slots have overlapping ranges since the underlying dict
   # is too small, what should we do?
-  struct RenderRewriter
-    def initialize(@ctx : DisplayContext, @bp : Blueprint, @dict : Term::Dict, @styleset : StyleSet, @postfix : String)
+  private def translate(range, size : Int32)
+    return 0, 0 if size.zero?
+
+    if range.begin.negative?
+      b = range.begin + size + 1
+    else
+      b = range.begin
     end
 
-    private def translate(range, size : Int32)
-      return 0, 0 if size.zero?
-
-      if range.begin.negative?
-        b = range.begin + size + 1
-      else
-        b = range.begin
-      end
-
-      if range.end.negative?
-        e = range.end + size + 1
-      else
-        e = range.end
-      end
-
-      {b, e - b}
+    if range.end.negative?
+      e = range.end + size + 1
+    else
+      e = range.end
     end
 
-    private def translate(range, dict : Term::Dict, region)
-      case region
-      in .items?   then translate(range, @dict.itemsize)
-      in .entries? then translate(range, @dict.size)
-      in .pairs?
-        start, count = translate(range, @dict.pairsize)
+    {b, e - b}
+  end
 
-        {start + @dict.itemsize, count}
-      end
+  # Renders *dict* using this style. Returns `nil` if one of the constraints of this
+  # style was not satisfied; in other words, if this style is not applicable to *dict*.
+  def render?(ctx, dict : Term::Dict, styleset, postfix) : Term?
+    return unless applicable_to?(dict)
+
+    if ctx.features.sorted_pairs?
+      entries = OrdDict.sorted(dict)
+    else
+      entries = OrdDict.unsorted(dict)
     end
 
-    def call(term : Term) : Rewrite::Any
+    handler = ->(term : Term) do
       Term.case(term) do
-        matchpi %[(%'%slot id_)] do
-          slot = @bp.slots.find! { |slot| slot.id == id }
-          start, count = translate(slot.b.to_i...slot.e.to_i, @dict, slot.region)
-
-          if count.zero?
-            if slot.postfix.sink?
-              raise "BUG: empty postfix sink, loss of postfix"
-            end
-
-            return Rewrite.many(Term[])
-          end
-
-          case slot.postfix
-          in .none?  then subpostfix = ""
-          in .comma? then subpostfix = ","
-          in .sink?  then subpostfix = @postfix
-          end
-
-          if @ctx.features.sorted_pairs?
-            entries = OrdDict.sorted(@dict)
+        matchpi(
+          %{($slot region←(%any items pairs entries)
+                        b←(%number i8)
+                        e←(%number i8)
+                  allowed←(%any * inline)
+                     sink←(%any° _string postfix))}
+        ) do
+          # Go from relative to concrete start index and count into the dictionary
+          # we have.
+          case region
+          when Term.of(:items)
+            start, count = translate(b.to(Int32)...e.to(Int32), dict.itemsize)
+          when Term.of(:pairs)
+            start, count = translate(b.to(Int32)...e.to(Int32), dict.pairsize)
+            start += dict.itemsize
+          when Term.of(:entries)
+            start, count = translate(b.to(Int32)...e.to(Int32), dict.size)
           else
-            entries = OrdDict.unsorted(@dict)
+            unreachable
           end
+
+          # Intersect with allowed style(s).
+          case allowed
+          when Term.of(:*)
+          when Term.of(:inline)
+            styleset &= InlineStyles
+          else
+            unreachable
+          end
+
+          # Determine whether to propagate postfix or use a hard-coded one.
+          subpostfix = sink.type.string? ? sink.to(String) : postfix
 
           case count
+          when 0
+            Rewrite.many(Term[])
           when 1
-            entry = render_entry(@ctx, @dict, *entries[start], @styleset & slot.allowed, subpostfix)
+            entry = render_entry(ctx, dict, *entries[start], styleset, subpostfix)
 
             Rewrite.one(entry)
           else
             offspring = Term::Dict.build do |commit|
               count.times do |offset|
-                entry = render_entry(@ctx, @dict, *entries[start + offset], @styleset & slot.allowed, subpostfix)
+                entry = render_entry(ctx, dict, *entries[start + offset], styleset, subpostfix)
                 commit << entry
               end
             end
@@ -536,11 +226,149 @@ module Style
         otherwise { Rewrite.none }
       end
     end
-  end
 
-  # Renders *dict* using the given blueprint *bp*.
-  def render(ctx, bp : Blueprint, dict : Term::Dict, styleset, postfix)
-    rewrite(bp.template, itemdfsR(callR(RenderRewriter.new(ctx, bp, dict, styleset, postfix))))
+    rewrite(@template, itemdfsR(callR(handler)))
+  end
+end
+
+module Style
+  extend self
+
+  # ```wwml
+  # (text "Hello World 1" "Hello World 2" "Hello World 3" x: 100 y: 200)
+  # ```
+  DictInline = StyleRenderer.parse <<-WWML
+    (style min-entries: 1
+      (row gap: 1
+        ($slot entries 0 -2 inline "")
+        ($slot entries -2 -1 inline postfix)))
+  WWML
+
+  # ```wwml
+  # (text
+  #  "Hello World 1"
+  #  "Hello World 2"
+  #  "Hello World 3"
+  #  x: 100
+  #  y: 200)
+  # ```
+  DictAligned = StyleRenderer.parse <<-WWML
+    (style min-entries: 1
+      (col ($slot entries 0 1 * "")
+           ($slot entries 1 -2 * "")
+           ($slot entries -2 -1 * postfix)))
+  WWML
+
+  # ```wwml
+  # (text
+  #   "Hello World 1"
+  #   "Hello World 2"
+  #   "Hello World 3"
+  #   x: 100
+  #   y: 200)
+  # ```
+  CallIndented = StyleRenderer.parse <<-WWML
+    (style min-entries: 2
+      (col ($slot entries 0 1 inline "")
+           (padding pl: 1
+             (col ($slot entries 1 -2 * "")
+                  ($slot entries -2 -1 * postfix)))))
+  WWML
+
+  # ```wwml
+  # (text "Hello World 1"
+  #       "Hello World 2"
+  #       "Hello World 3")
+  # ```
+  CallColumn = StyleRenderer.parse <<-WWML
+    (style itemsonly: true min-items: 2
+      (row gap: 1
+        ($slot items 0 1 inline "")
+        (col ($slot items 1 -2 inline "")
+             ($slot items -2 -1 inline postfix))))
+  WWML
+
+  # ```wwml
+  # (text x: 100 y: 200
+  #   "Hello World 1"
+  #   "Hello World 2"
+  #   "Hello World 3")
+  # ```
+  BlockCallKeywordsInline = StyleRenderer.parse <<-WWML
+    (style min-items: 2 min-pairs: 1
+      (col (row gap: 1
+             ($slot items 0 1 inline "")
+             (col ($slot pairs 0 -1 inline "")))
+           (padding pl: 1
+             (col ($slot items 1 -2 * "")
+                  ($slot items -2 -1 * postfix)))))
+  WWML
+
+  # ```wwml
+  # (text x: 100
+  #       y: 200
+  #   "Hello World 1"
+  #   "Hello World 2"
+  #   "Hello World 3")
+  # ```
+  BlockCallKeywordsColumn = StyleRenderer.parse <<-WWML
+    (style min-items: 2 min-pairs: 1
+      (col (row gap: 1
+             ($slot items 0 1 inline "")
+             (col ($slot pairs 0 -1 * "")))
+           (padding pl: 1
+             (col ($slot items 1 -2 * "")
+                  ($slot items -2 -1 * postfix)))))
+  WWML
+
+  # ```wwml
+  # (text "Hello World 1"
+  #   x: 100
+  #   y: 200)
+  # ```
+  KeywordBlockCall = StyleRenderer.parse <<-WWML
+    (style min-items: 3 min-pairs: 1
+      (col (row gap: 1
+             ($slot items 0 1 inline "")
+             ($slot items 1 2 inline ""))
+           (padding pl: 1
+             (col ($slot pairs 0 -2 * "")
+                  ($slot pairs -2 -1 * postfix)))))
+  WWML
+
+  # ```wwml
+  # {x: 100, y: 200, z: 300}
+  # ```
+  MapInline = StyleRenderer.parse <<-WWML
+    (style pairsonly: true min-pairs: 1
+      (row gap: 1
+        ($slot pairs 0 -2 inline ",")
+        ($slot pairs -2 -1 inline postfix)))
+  WWML
+
+  # ```wwml
+  # {x: 100,
+  #  y: 200,
+  #  z: 300}
+  # ```
+  MapMultiline = StyleRenderer.parse <<-WWML
+    (style pairsonly: trie min-pairs: 1
+      (col ($slot pairs 0 -2 * ",")
+           ($slot pairs -2 -1 * postfix)))
+  WWML
+
+  # Converts a single-element *styleset* into the corresponding `Style` object.
+  # Raises `ArgumentError` if *styleset* is not a single-element set.
+  def one(styleset : StyleSet)
+    {% for style in StyleSet.constants %}
+      {% unless {:None, :All}.includes?(style.id.symbolize) %}
+        if styleset == StyleSet::{{style}}
+          return {{style}}
+        end
+      {% end %}
+    {% end %}
+
+    raise ArgumentError.new
   end
 end
 
@@ -1261,12 +1089,9 @@ def flatten(ctx, node : Term, maxwidth : Int32, styles : StyleSet) : {Term, Int3
       max_flat = Term.of
 
       myself.each do |option|
-        style = Style.one(option)
-        next unless style.applicable_to?(subject)
+        next unless rendered = Style.one(option).render?(ctx, subject, children, postfix.to(String))
 
-        rendered = Style.render(ctx, style.blueprint, subject, children, postfix.to(String))
-
-        flat, rem = flatten(ctx, rendered, maxwidth, styles)
+        flat, rem = flatten(ctx, rendered, maxwidth, children)
         if rem > 0
           return flat, rem
         end
@@ -1374,6 +1199,7 @@ class Screen
 
   def write(io : IO)
     (0..@max_y).each do |y|
+      # FIXME: this ends up inserting a bunch of spaces at the end of the string up to @max_x
       (0..@max_x).each do |x|
         char = @cells[{x, y}]? || ' '
         io << char
@@ -1383,7 +1209,7 @@ class Screen
   end
 
   def string : String
-    String.build(@max_x * @max_y) do |io|
+    String.build do |io|
       write(io)
     end
   end
@@ -1404,7 +1230,7 @@ end
 #
 #   TESTS??????!
 ed = ML.terms(File.read("./editor.soma.wwml"))# Term.of(:+, {:*, 3, 4}, {2})
-# ed = ML.terms(%{(text x: 100 y: 200 z: 300 a: 1 b: 2 c: 3 "Hello World 1" "Hello World 2")})
+# ed = ML.terms(%{(x: 100, y: (+ 1 2 3 4 5 6 7 a: 100 b: 200 c: 300 d: 400), z: 300)})
 
 str = String.build do |io|
   screen = Screen.new
@@ -1423,6 +1249,7 @@ str = String.build do |io|
 end
 
 puts str
+puts str == File.read("./pprint1.out.1")
 pp ed == ML.terms(str)
 
 # [x] x_: 100 => x: (%let x 100)
