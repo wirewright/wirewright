@@ -108,11 +108,13 @@ enum StyleSet : UInt16
   CallColumn
   MapInline
   MapMultiline
+  DictSetInline
+  DictSetMultiline
   CallIndented
   DictAligned
 end
 
-InlineStyles = StyleSet::MapInline | StyleSet::DictInline
+InlineStyles = StyleSet::MapInline | StyleSet::DictSetInline | StyleSet::DictInline
 
 module Style
   extend self
@@ -240,6 +242,28 @@ module Style
            ($slot pairs -2 -1 * postfix)))
   WWML
 
+  # ```wwml
+  # {, x y z}
+  # ```
+  DictSetInline = Spec.parse <<-WWML
+    (style min-entries: 1 set: true
+      (row gap: 1
+        ($slot keys 0 -2 inline "")
+        ($slot keys -2 -1 inline postfix)))
+  WWML
+
+  # ```wwml
+  # {, x
+  #    y
+  #    z}
+  # ```
+  DictSetMultiline = Spec.parse <<-WWML
+    (style min-entries: 1 set: true
+      (col
+        ($slot keys 0 -2 * "")
+        ($slot keys -2 -1 * postfix)))
+  WWML
+
   # Converts a single-element *styleset* into the corresponding `Style` object.
   # Raises `ArgumentError` if *styleset* is not a single-element set.
   def one(styleset : StyleSet)
@@ -258,14 +282,14 @@ end
 # Style specs are a declarative way to describe dict styles.
 struct Style::Spec
   # :nodoc:
-  def initialize(@template : Term, @min_items : Int32, @min_pairs : Int32, @min_entries : Int32, @itemsonly : Bool, @pairsonly : Bool)
+  def initialize(@template : Term, @min_items : Int32, @min_pairs : Int32, @min_entries : Int32, @itemsonly : Bool, @pairsonly : Bool, @set : Bool)
   end
 
   # Constructs a style spec from the given spec term *spec*.
   def self.new(spec : Term) : Spec
     Term.case(spec) do
-      matchpi %[(style template_ ¦ min-pairs⋮ 0 min-items⋮ 0 min-entries⋮ 0 itemsonly⋮ false pairsonly⋮ false)] do
-        new(template, min_items.to(Int32), min_pairs.to(Int32), min_entries.to(Int32), itemsonly.to(Bool), pairsonly.to(Bool))
+      matchpi %[(style template_ ¦ min-pairs⋮ 0 min-items⋮ 0 min-entries⋮ 0 itemsonly⋮ false pairsonly⋮ false set⋮ false)] do
+        new(template, min_items.to(Int32), min_pairs.to(Int32), min_entries.to(Int32), itemsonly.to(Bool), pairsonly.to(Bool), set.to(Bool))
       end
     end
   end
@@ -279,6 +303,7 @@ struct Style::Spec
   private def applicable_to?(dict : Term::Dict) : Bool
     return false if @itemsonly && !dict.itemsonly?
     return false if @pairsonly && !dict.pairsonly?
+    return false if @set && !dict.set?
 
     dict.itemsize >= @min_items && dict.pairsize >= @min_pairs && (dict.size - @min_items - @min_pairs) >= @min_entries
   end
@@ -303,6 +328,14 @@ struct Style::Spec
     {b, e - b}
   end
 
+  SYM_ITEMS   = Term.of(:items)
+  SYM_PAIRS   = Term.of(:pairs)
+  SYM_ENTRIES = Term.of(:entries)
+  SYM_KEYS    = Term.of(:keys)
+
+  SYM_STAR   = Term.of(:*)
+  SYM_INLINE = Term.of(:inline)
+
   # Renders *dict* using this style. Returns `nil` if one of the constraints of this
   # style was not satisfied; in other words, if this style is not applicable to *dict*.
   def render?(ctx, dict : Term::Dict, styleset, postfix) : Term?
@@ -317,7 +350,7 @@ struct Style::Spec
     handler = ->(term : Term) do
       Term.case(term) do
         matchpi(
-          %{($slot region←(%any items pairs entries)
+          %{($slot region←(%any items pairs keys entries)
                         b←(%number i8)
                         e←(%number i8)
                   allowed←(%any * inline)
@@ -326,12 +359,12 @@ struct Style::Spec
           # Go from relative to concrete start index and count into the dictionary
           # we have.
           case region
-          when Term.of(:items)
+          when SYM_ITEMS
             start, count = translate(b.to(Int32)...e.to(Int32), dict.itemsize)
-          when Term.of(:pairs)
+          when SYM_PAIRS
             start, count = translate(b.to(Int32)...e.to(Int32), dict.pairsize)
             start += dict.itemsize
-          when Term.of(:entries)
+          when SYM_ENTRIES, SYM_KEYS
             start, count = translate(b.to(Int32)...e.to(Int32), dict.size)
           else
             unreachable
@@ -339,8 +372,8 @@ struct Style::Spec
 
           # Intersect with allowed style(s).
           case allowed
-          when Term.of(:*)
-          when Term.of(:inline)
+          when SYM_STAR
+          when SYM_INLINE
             styleset &= InlineStyles
           else
             unreachable
@@ -353,13 +386,26 @@ struct Style::Spec
           when 0
             Rewrite.many(Term[])
           when 1
-            entry = render_entry(ctx, dict, *entries[start], styleset, subpostfix)
+            k, v = entries[start]
+
+            if region == SYM_KEYS
+              entry = render(ctx, k, styleset, subpostfix)
+            else
+              entry = render_entry(ctx, dict, k, v, styleset, subpostfix)
+            end
 
             Rewrite.one(entry)
           else
             offspring = Term::Dict.build do |commit|
               count.times do |offset|
-                entry = render_entry(ctx, dict, *entries[start + offset], styleset, subpostfix)
+                k, v = entries[start + offset]
+
+                if region == SYM_KEYS
+                  entry = render(ctx, k, styleset, subpostfix)
+                else
+                  entry = render_entry(ctx, dict, k, v, styleset, subpostfix)
+                end
+
                 commit << entry
               end
             end
@@ -533,6 +579,7 @@ macro fillable(ml)
   end
 end
 
+# TODO: this is not how it should work/look like.
 module Templates
   MY = fillable(%{(row (frag "→") capture_)})
   UP = fillable(%{(row (frag "↑") capture_)})
@@ -580,6 +627,8 @@ module Templates
   PAIRSPART_OPTIONAL_ANY = fillable(%{(row k_ (frag "_⋮") (indented v_))})
 
   PAIRSPART_NEGATION = fillable(%{(row (frag "-") k_)})
+
+  SET_LBRACKET = fillable(%[(row (frag "{,") rest_ gap: 1)])
 end
 
 def thunk(subject : Term, myself : StyleSet, children : StyleSet, postfix : String)
@@ -593,7 +642,7 @@ end
 # TODO: multiline variant
 def render_pair(ctx, k, v, styles, postfix)
   Term.of(:row,
-    render(ctx, k, styles, ""),
+    render(ctx, k, styles & InlineStyles, ""),
     Term[:frag, ":"],
     Term[:indented, render(ctx, v, styles, postfix)])
 end
@@ -955,6 +1004,14 @@ def render(ctx, term : Term, style = StyleSet::All, postfix : String = "")
       Term.of(:frag, string)
     end
 
+    matchpi %[_dict] do
+      continue unless term.set?
+
+      myself = StyleSet::DictSetInline | StyleSet::DictSetMultiline
+
+      Templates::SET_LBRACKET.call(thunk(term, style & myself, style, "}" + postfix))
+    end
+
     if ctx.features.pairsonly_brackets?
       # (feature T←(¦ _)
       #   (row (atom "{") ($thunk T (map-inline map-multiline) "}" postfix)))
@@ -1295,7 +1352,6 @@ end
 #       I haven't figured out how to write these myself so that's going to be hard!
 #   16. Refactor render(): backmap and rule formatting must be toplevel.
 #   25. Refactor render() to use chains of Features.
-#   14. Dict set syntax && pretty printing
 #   20. Line breaking in long strings (and the syntax that this requires!).
 #   28. Have a way to incorporate syntax highlighting and in general "hooking into" the renderer.
 #   22. Have a mode for pretty printing where we remember where newlines and comments
@@ -1305,7 +1361,7 @@ end
 #
 #   TESTS??????!
 ed = ML.terms(File.read("./editor.soma.wwml"))# Term.of(:+, {:*, 3, 4}, {2})
-# ed = ML.terms(%{(x: 100, y: (+ 1 2 3 4 5 6 7 a: 100 b: 200 c: 300 d: 400), z: 300)})
+# ed = ML.terms(%{((+ 1 2): true (+ 3 4 5): true (+ 6 7 x: 100 y: 200): true)})
 
 str = String.build do |io|
   screen = Screen.new

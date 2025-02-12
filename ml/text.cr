@@ -422,6 +422,10 @@ module Ww::ML::Text
             advance
             advance
             return Token.new(:"{_", pos - 2, pos)
+          when ','
+            advance
+            advance
+            return Token.new(:"{,", pos - 2, pos)
           else
             advance
             return Token.new(:"{", pos - 1, pos)
@@ -730,7 +734,8 @@ module Ww::ML::Text
     end
 
     # Parses a dictionary assuming `{‸<...>`.
-    private def dict : Term
+    # FIXME: this should parse kvpairs only, not items!!
+    private def kvdict : Term
       Term::Dict.build do |commit|
         closed = false
         while token = @lexer.thru?
@@ -746,13 +751,21 @@ module Ww::ML::Text
       end.upcast
     end
 
-    private def term?(cls : Term::Dict.class) : Term?
-      return unless token = @lexer.ahead?
-      return unless token.type == :"{"
-
-      @lexer.thru?
-
-      dict
+    # Parses a dictionary set assuming `{,‸<...>`.
+    private def dictset : Term
+      Term::Dict.build do |commit|
+        closed = false
+        while token = @lexer.thru?
+          if token.type == :"}"
+            closed = true
+            break
+          end
+          commit.with(slot(token), true)
+        end
+        unless closed
+          raise "expected closing '}'"
+        end
+      end.upcast
     end
 
     private def term?(cls : T.class) : Term? forall T
@@ -815,7 +828,8 @@ module Ww::ML::Text
         when :"⟨"   then pitem
         when :"("   then plist
         when :"["   then litemspart
-        when :"{"   then dict
+        when :"{"   then kvdict
+        when :"{,"  then dictset
         when :"{_"  then Term.of(:"%partition", :_, {:"%layer", :_, pentrylist(:"}")})
         when :"→"   then Term.of(:"$my", slot)
         when :"↑"   then Term.of(:"$up", slot)

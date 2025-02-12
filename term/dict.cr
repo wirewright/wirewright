@@ -603,6 +603,12 @@ module Ww
       pairspart.ee
     end
 
+    # Returns `true` if this dict appears to be a *dict set*: it is nonempty,
+    # and all entry values are `true`.
+    def set? : Bool
+      !empty? && ee.all? { |_, v| v.type.boolean? && v.unsafe_as_b.true? }
+    end
+
     # Returns `true` if all entries of `self` are included in *other*.
     def subset_of?(other : Dict) : Bool
       other.size >= size && ee.all? { |k, v| other[k]? == v }
