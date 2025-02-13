@@ -628,6 +628,104 @@ module Feature
 end
 
 module Feature
+  # Renders `(backmap <pattern> <backspec>)` as `<pattern> <> <backspec>`.
+  struct Backmap
+    include Feature
+
+    INLINE = ML.term <<-WWML
+    (row gap: 1
+      ($slot 0) (frag "<>") ($slot 1))
+    WWML
+
+    MULTILINE = ML.term <<-WWML
+    (col (longer ($slot 0))
+      (indented by: 2
+        (row gap: 1
+          (frag "<>") ($slot 1))))
+    WWML
+
+    def call(ctx, term, postfix, head, rest) : Term
+      Term.matchpi(term, %{(backmap pattern_ backspec_)}) do
+        inline = fill(INLINE) do |slot, commit|
+          case slot
+          when 0 then commit << head.call(ctx.inline, pattern, "")
+          when 1 then commit << head.call(ctx.inline, backspec, postfix)
+          else
+            unreachable
+          end
+        end
+
+        if ctx.inline_only?
+          return inline
+        end
+
+        multiline = fill(MULTILINE) do |slot, commit|
+          case slot
+          when 0 then commit << head.call(ctx.inline, pattern, "")
+          when 1 then commit << head.call(ctx, backspec, postfix)
+          else
+            unreachable
+          end
+        end
+
+        fallback = rest.call(ctx, term, postfix)
+
+        return Term.of(:choice, inline, multiline, fallback)
+      end
+
+      rest.call(ctx, term, postfix)
+    end
+  end
+
+  # Renders `(rule <pattern> <body>)` as `<pattern> => <body>`.
+  struct Rule
+    include Feature
+
+    INLINE = ML.term <<-WWML
+    (row gap: 1
+      ($slot 0) (frag "=>") ($slot 1))
+    WWML
+
+    MULTILINE = ML.term <<-WWML
+    (col (longer ($slot 0))
+      (indented by: 2
+        (row gap: 1
+          (frag "=>") ($slot 1))))
+    WWML
+
+    def call(ctx, term, postfix, head, rest) : Term
+      Term.matchpi(term, %{(rule pattern_ body_)}) do
+        inline = fill(INLINE) do |slot, commit|
+          case slot
+          when 0 then commit << head.call(ctx.inline, pattern, "")
+          when 1 then commit << head.call(ctx.inline, body, postfix)
+          else
+            unreachable
+          end
+        end
+
+        if ctx.inline_only?
+          return inline
+        end
+
+        multiline = fill(MULTILINE) do |slot, commit|
+          case slot
+          when 0 then commit << head.call(ctx.inline, pattern, "")
+          when 1 then commit << head.call(ctx, body, postfix)
+          else
+            unreachable
+          end
+        end
+
+        fallback = rest.call(ctx, term, postfix)
+
+        return Term.of(:choice, inline, multiline, fallback)
+      end
+
+      rest.call(ctx, term, postfix)
+    end
+  end
+
   # Renders `(edge x)` as `@x`.
   def_prefix Edge, %{(edge suffix←(%any° _symbol _number _string))}, "@"
   # Renders `(%slot x)` as `⏏x`.
@@ -1368,6 +1466,8 @@ ppairs_chain = Chain(Feature).new(
 )
 
 feature_chain = Chain(Feature).new(
+  Feature::Backmap.new,
+  Feature::Rule.new,
   Feature::Edge.new,
   Feature::BackrefMy.new,
   Feature::BackrefUp.new,
@@ -1421,7 +1521,7 @@ str = String.build do |io|
 end
 
 puts str
-# puts str == File.read("./pprint1.out.1")
+puts str == File.read("./pprint1.out.1")
 pp ed == ML.terms(str)
 
 # [x] x_: 100 => x: (%let x 100)
