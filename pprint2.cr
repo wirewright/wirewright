@@ -1,6 +1,26 @@
 require "./wirewright"
 require "./baz5"
 
+def fill(template : Term, &fn : Int32, Term::Dict::Commit ->)
+  handler = ->(term : Term) do
+    Term.case(term) do
+      matchpi %{($slot n←(%number +i32))} do
+        list = Term::Dict.build do |commit|
+          fn.call(n.to(Int32), commit)
+        end
+
+        Rewrite.many(list)
+      end
+
+      otherwise do
+        Rewrite.none
+      end
+    end
+  end
+
+  rewrite(template, itemdfsR(callR(handler)))
+end
+
 module OrdDict
   # :nodoc:
   struct Unsorted
@@ -89,7 +109,7 @@ module OrdDict
     )
   end
 
-# Returns an unsorted indexable of *dict*'s entries.
+  # Returns an unsorted indexable of *dict*'s entries.
   #
   # - Items are ordered by their index.
   # - Pairs are ordered by their hash.
@@ -101,8 +121,8 @@ end
 record DisplayContext,
   normal_width : Int32,
   longer_width : Int32,
-  features : Chain(Feature::Any),
-  layouts : Chain(Layout::Any),
+  features : Chain(Feature),
+  layouts : Chain(Layout),
   layouts_allowed = LayoutSet::All,
   measurements = {} of Term => {Int32, Int32}
 
@@ -112,75 +132,13 @@ struct DisplayContext
   end
 end
 
-def fill(template : Term, &fn : Int32, Term::Dict::Commit ->)
-  handler = ->(term : Term) do
-    Term.case(term) do
-      matchpi %{($slot n←(%number +i32))} do
-        list = Term::Dict.build do |commit|
-          fn.call(n.to(Int32), commit)
-        end
-
-        Rewrite.many(list)
-      end
-
-      otherwise do
-        Rewrite.none
-      end
-    end
-  end
-
-  rewrite(template, itemdfsR(callR(handler)))
-end
-
-# FIXME: order matters right now. Make so it doesn't. Then auto-generate
-# from Layout::
-@[Flags]
-enum LayoutSet : UInt16
-  DictInline
-
-  CallColumn
-
-  CallKwargsInlineWithBlock
-  CallArgIndentedKwargs
-  CallKwargsColumnWithBlock
-
-  CallIndented
-
-  MapInline
-  MapMultiline
-  MapMultilineIndented
-
-  DictAligned
-
-  def thunk(term : Term, postfix : String, myself) : Term
-    Term.of(:thunk, term, postfix, self & LayoutSet.new(myself), self)
-  end
-
-  def layout
-    case self
-    when .dict_inline? then Layout::DictInline
-    when .call_column? then Layout::CallColumn
-    when .call_kwargs_inline_with_block? then Layout::CallKwargsInlineWithBlock
-    when .call_arg_indented_kwargs? then Layout::CallArgIndentedKwargs
-    when .call_kwargs_column_with_block? then Layout::CallKwargsColumnWithBlock
-    when .call_indented? then Layout::CallIndented
-    when .map_inline? then Layout::MapInline
-    when .map_multiline? then Layout::MapMultiline
-    when .map_multiline_indented? then Layout::MapMultilineIndented
-    when .dict_aligned? then Layout::DictAligned
-    else
-      raise ArgumentError.new
-    end
-  end
-end
-
 module Layout
-  alias Any = DictInline | CallColumn | CallKwargsInlineWithBlock | CallArgIndentedKwargs | CallKwargsColumnWithBlock | CallIndented | MapInline | MapMultiline | MapMultilineIndented | DictAligned
-
   # ```wwml
   # (text "Hello World 1" "Hello World 2" "Hello World 3" x: 100 y: 200)
   # ```
   struct DictInline
+    include Layout
+
     def call(ctx, term, postfix, head, rest) : Term
       unless ctx.layouts_allowed.dict_inline? && (dict = term.as_d?) && dict.size > 0
         return rest.call(ctx, term, postfix)
@@ -217,6 +175,8 @@ module Layout
   #  y: 200)
   # ```
   struct DictAligned
+    include Layout
+
     def call(ctx, term, postfix, head, rest) : Term
       unless ctx.layouts_allowed.dict_aligned? && (dict = term.as_d?) && dict.size > 0
         return rest.call(ctx, term, postfix)
@@ -247,6 +207,8 @@ module Layout
   # {x: 100, y: 200, z: 300}
   # ```
   struct MapInline
+    include Layout
+
     def call(ctx, term, postfix, head, rest) : Term
       unless ctx.layouts_allowed.map_inline? && (dict = term.as_d?) && dict.pairsonly? && dict.size > 0
         return rest.call(ctx, term, postfix)
@@ -276,6 +238,8 @@ module Layout
   #  z: 300}
   # ```
   struct MapMultiline
+    include Layout
+
     def call(ctx, term, postfix, head, rest) : Term
       unless ctx.layouts_allowed.map_multiline? && (dict = term.as_d?) && dict.pairsonly? && dict.size > 0
         return rest.call(ctx, term, postfix)
@@ -307,6 +271,8 @@ module Layout
   #    300}
   # ```
   struct MapMultilineIndented
+    include Layout
+
     def call(ctx, term, postfix, head, rest) : Term
       unless ctx.layouts_allowed.map_multiline_indented? && (dict = term.as_d?) && dict.pairsonly? && dict.size > 0
         return rest.call(ctx, term, postfix)
@@ -336,6 +302,8 @@ module Layout
   #   y: 200)
   # ```
   struct CallIndented
+    include Layout
+
     def call(ctx, term, postfix, head, rest) : Term
       unless ctx.layouts_allowed.call_indented? && (dict = term.as_d?) && dict.size >= 2
         return rest.call(ctx, term, postfix)
@@ -386,6 +354,8 @@ module Layout
   #       "Hello World 3")
   # ```
   struct CallColumn
+    include Layout
+
     def call(ctx, term, postfix, head, rest) : Term
       unless ctx.layouts_allowed.call_column? && (dict = term.as_d?) && dict.itemsonly? && dict.size >= 2
         return rest.call(ctx, term, postfix)
@@ -417,6 +387,8 @@ module Layout
   #   "Hello World 3")
   # ```
   struct CallKwargsInlineWithBlock
+    include Layout
+
     TEMPLATE = ML.term <<-WWML
     (col (row gap: 1
            ($slot 0)
@@ -470,6 +442,8 @@ module Layout
   #   "Hello World 3")
   # ```
   struct CallKwargsColumnWithBlock
+    include Layout
+
     TEMPLATE = ML.term <<-WWML
     (col (row gap: 1
            ($slot 0)
@@ -521,6 +495,8 @@ module Layout
   #   y: 200)
   # ```
   struct CallArgIndentedKwargs
+    include Layout
+
     TEMPLATE = ML.term <<-WWML
     (col (row gap: 1
            ($slot 0)
@@ -566,63 +542,76 @@ module Layout
   end
 end
 
+# A dirt cheap, Enum-based set of `Layout` includer types.
+@[Flags]
+enum LayoutSet : UInt16
+  {% for includer in Layout.includers %}
+    {{ includer.name.split("::")[-1].id }}
+  {% end %}
+
+  # Returns a flatten-thunk layout types in this layout set.
+  def thunk(term : Term, postfix : String, myself) : Term
+    Term.of(:thunk, term, postfix, self & LayoutSet.new(myself), self)
+  end
+
+  # Returns the `Layout` includer that corresponds to a single-element layout set.
+  #
+  # Raises `ArgumentError` if this set contains more than one element.
+  def layout
+    {% begin %}
+      case self
+      {% for includer in Layout.includers %}
+      when {{ includer.name.split("::")[-1].id }}
+        {{includer}}
+      {% end %}
+      else
+        raise ArgumentError.new
+      end
+    {% end %}
+  end
+end
+
 module Feature
-  extend self
+  macro def_prefix(cls, pattern, prefix)
+    struct {{cls}}
+      include Feature
 
-  alias Any = Edge | PatternSlot | PatternNonself | PatternLiteral | PatternLet | PatternItemFirst | PatternItemSource | Literal | IntegerGroupThousands | BackrefMy | BackrefUp | BackrefDown | Hold | EmptyDict | Call | DataMap | DataDict
+      # :nodoc:
+      FRAG_PREFIX = Term.of(:frag, {{prefix}})
 
+      def call(ctx, term, postfix, head, rest)
+        Term.matchpi(term, {{pattern}}) do
+          return Term.of(:row, FRAG_PREFIX, head.call(ctx, suffix, postfix))
+        end
+
+        rest.call(ctx, term, postfix)
+      end
+    end
+  end
+end
+
+module Feature
   # Renders `(edge x)` as `@x`.
-  struct Edge
-    def call(ctx, term, postfix, head, rest) : Term
-      Term.matchpi(term, %{(edge id←(%any° _symbol _number _string))}) do
-        return Term.of(:frag, "@#{id.inspect}#{postfix}")
-      end
-
-      rest.call(ctx, term, postfix)
-    end
-  end
-
+  def_prefix Edge, %{(edge suffix←(%any° _symbol _number _string))}, "@"
   # Renders `(%slot x)` as `⏏x`.
-  struct PatternSlot
-    FRAG_SLOT = ML.term %{(frag "⏏")}
-
-    def call(ctx, term, postfix, head, rest) : Term
-      Term.matchpi(term, %{(%'%slot capture_)}) do
-        return Term.of(:row, FRAG_SLOT, head.call(ctx, capture, postfix))
-      end
-
-      rest.call(ctx, term, postfix)
-    end
-  end
-
+  def_prefix PatternSlot, %{(%'%slot suffix_)}, "⏏"
   # Renders `(%nonself x)` as `=x`
-  struct PatternNonself
-    FRAG_NONSELF = ML.term %{(frag "≡")}
-
-    def call(ctx, term, postfix, head, rest) : Term
-      Term.matchpi(term, %{(%'%nonself value_)}) do
-        return Term.of(:row, FRAG_NONSELF, head.call(ctx, value, postfix))
-      end
-
-      rest.call(ctx, term, postfix)
-    end
-  end
-
+  def_prefix PatternNonself, %{(%'%nonself suffix_)}, "≡"
   # Renders `(%literal x)` as `%'x`
-  struct PatternLiteral
-    FRAG_LITERAL = ML.term %{(frag "%'")}
-
-    def call(ctx, term, postfix, head, rest) : Term
-      Term.matchpi(term, %{(%'%literal value_)}) do
-        return Term.of(:row, FRAG_LITERAL, head.call(ctx, value, postfix))
-      end
-
-      rest.call(ctx, term, postfix)
-    end
-  end
+  def_prefix PatternLiteral, %{(%'%literal suffix_)}, "%'"
+  # Renders `($my x)` as `→x`
+  def_prefix BackrefMy, %{($my suffix_)}, "→"
+  # Renders `($up x)` as `↑x`
+  def_prefix BackrefUp, %{($up suffix_)}, "↑"
+  # Renders `($down x)` as `↓x`
+  def_prefix BackrefDown, %{($down suffix_)}, "↓"
+  # Renders `(hold x)` as `'x`
+  def_prefix Hold, %{(hold suffix_)}, "'"
 
   # Renders `(%let x ...)` as `x←...`
   struct PatternLet
+    include Feature
+
     FRAG_LARROW = ML.term %{(frag "←")}
 
     def call(ctx, term, postfix, head, rest) : Term
@@ -636,6 +625,8 @@ module Feature
 
   # Renders `(%item ...)` as `⟨...⟩`
   struct PatternItemFirst
+    include Feature
+
     FRAG_LBRACKET = ML.term %{(frag "⟨")}
 
     def call(ctx, term, postfix, head, rest) : Term
@@ -651,6 +642,8 @@ module Feature
 
   # Renders `(%item° ...)` as `⟨...⟩°`
   struct PatternItemSource
+    include Feature
+
     FRAG_LBRACKET = ML.term %{(frag "⟨")}
 
     def call(ctx, term, postfix, head, rest) : Term
@@ -666,6 +659,8 @@ module Feature
 
   # Renders literals such as `100`, qux, `"Hello World"`, `true`, etc.
   struct Literal
+    include Feature
+
     def call(ctx, term, postfix, head, rest) : Term
       Term.matchpi(term, %{(%any° _symbol _number _string _boolean)}) do
         return Term.of(:frag, "#{term.inspect}#{postfix}")
@@ -678,6 +673,8 @@ module Feature
   # Renders thousands in integers with underscore, e.g. `1000000` is rendered
   # as `1_000_000`.
   struct IntegerGroupThousands
+    include Feature
+
     def call(ctx, term, postfix, head, rest) : Term
       Term.case(term) do
         # The conversion for this one is cheap so we handle it separately.
@@ -697,60 +694,10 @@ module Feature
     end
   end
 
-  # Renders `($my x)` as `→x`
-  struct BackrefMy
-    FRAG_RARROW = ML.term %{(frag "→")}
-
-    def call(ctx, term, postfix, head, rest) : Term
-      Term.matchpi(term, %{($my capture_)}) do
-        return Term.of(:row, FRAG_RARROW, head.call(ctx, capture, postfix))
-      end
-
-      rest.call(ctx, term, postfix)
-    end
-  end
-
-  # Renders `($up x)` as `↑x`
-  struct BackrefUp
-    FRAG_UARROW = ML.term %{(frag "↑")}
-
-    def call(ctx, term, postfix, head, rest) : Term
-      Term.matchpi(term, %{($up capture_)}) do
-        return Term.of(:row, FRAG_UARROW, head.call(ctx, capture, postfix))
-      end
-
-      rest.call(ctx, term, postfix)
-    end
-  end
-
-  # Renders `($down x)` as `↓x`
-  struct BackrefDown
-    FRAG_DARROW = ML.term %{(frag "↓")}
-
-    def call(ctx, term, postfix, head, rest) : Term
-      Term.matchpi(term, %{($down capture_)}) do
-        return Term.of(:row, FRAG_DARROW, head.call(ctx, capture, postfix))
-      end
-
-      rest.call(ctx, term, postfix)
-    end
-  end
-
-  # Renders `(hold x)` as `'x`
-  struct Hold
-    FRAG_TICK = ML.term %{(frag "'")}
-
-    def call(ctx, term, postfix, head, rest) : Term
-      Term.matchpi(term, %{(hold value_)}) do
-        return Term.of(:row, FRAG_TICK, head.call(ctx, value, postfix))
-      end
-
-      rest.call(ctx, term, postfix)
-    end
-  end
-
   # Renders `()`.
   struct EmptyDict
+    include Feature
+
     def call(ctx, term, postfix, head, rest) : Term
       Term.matchpi(term, %{()}) do
         return Term.of(:frag, "()#{postfix}")
@@ -760,8 +707,10 @@ module Feature
     end
   end
 
-  # Renders any call-like dict using the `CallIndented` layout.
-  struct Call
+  # Renders any call-like dict using one of the call layouts (see `Layout`).
+  struct CallLike
+    include Feature
+
     FRAG_LPAREN = ML.term %[(frag "(")]
 
     def call(ctx, term, postfix, head, rest) : Term
@@ -790,12 +739,10 @@ module Feature
     end
   end
 
-  # Renders any nonempty pairsonly dict using one of the following layouts:
-  #
-  # - `Layout::MapInline`
-  # - `Layout::MapMultiline`.
-  # - `Layout::MapMultilineIndented`.
-  struct DataMap
+  # Renders any nonempty pairsonly dict using one of the map layouts (see `Layout`).
+  struct MapLike
+    include Feature
+
     FRAG_LCURLY = ML.term %[(frag "{")]
 
     def call(ctx, term, postfix, head, rest) : Term
@@ -811,7 +758,9 @@ module Feature
 
   # Renders any nonempty dict using one of two layouts: `Layout::DictInline`
   # or `Layout::DictAligned`.
-  struct DataDict
+  struct DictLiteral
+    include Feature
+
     FRAG_LPAREN = ML.term %{(frag "(")}
 
     def call(ctx, term, postfix, head, rest) : Term
@@ -946,11 +895,14 @@ def flatten(ctx, node : Term, maxwidth : Int32, layouts : LayoutSet) : {Term, In
       max_rem = Int32::MIN
       max_flat = Term.of
 
+      candidates = [] of Chain::Thunk(Layout)
       myself.each do |option|
-        callable = ctx.layouts.find(option.layout)
-
+        candidates << ctx.layouts.find(option.layout)
+      end
+      candidates.sort_by!(&.preference)
+      candidates.each do |candidate|
         begin
-          rendered = callable.call(ctx.copy_with(layouts_allowed: children), subject, postfix.to(String))
+          rendered = candidate.call(ctx.copy_with(layouts_allowed: children), subject, postfix.to(String))
         rescue TermPassthrough
           next
         end
@@ -1084,13 +1036,17 @@ struct Chain(T)
   end
 
   # Constructs a chain of *callables*.
-  def self.new(*callables : *T) : Chain(Union(*T)) forall T
-    Chain.new(callables.to_readonly_slice(&.itself))
+  def self.new(*callables : T)
+    Chain(T).new(callables.to_readonly_slice(&.as(T)))
   end
 
   # :nodoc:
   struct Thunk(T)
     def initialize(@chain : Chain(T), @index : Int32)
+    end
+
+    def preference : Int32
+      @index
     end
 
     def call(ctx : DisplayContext, term : Term, postfix : String)
@@ -1127,7 +1083,7 @@ struct Chain(T)
   end
 end
 
-layout_chain = Chain(Layout::Any).new(
+layout_chain = Chain(Layout).new(
   Layout::DictInline.new,
   Layout::CallColumn.new,
   Layout::CallKwargsInlineWithBlock.new,
@@ -1140,7 +1096,7 @@ layout_chain = Chain(Layout::Any).new(
   Layout::DictAligned.new,
 )
 
-feature_chain = Chain(Feature::Any).new(
+feature_chain = Chain(Feature).new(
   Feature::Edge.new,
   Feature::BackrefMy.new,
   Feature::BackrefUp.new,
@@ -1155,30 +1111,10 @@ feature_chain = Chain(Feature::Any).new(
   Feature::IntegerGroupThousands.new,
   Feature::Literal.new,
   Feature::EmptyDict.new,
-  Feature::Call.new,
-  Feature::DataMap.new,
-  Feature::DataDict.new
+  Feature::CallLike.new,
+  Feature::MapLike.new,
+  Feature::DictLiteral.new,
 )
-
-# feature_chain = Feature.chain(
-#   Feature::Edge.new,
-#   Feature::BackrefMy.new,
-#   Feature::BackrefUp.new,
-#   Feature::BackrefDown.new,
-#   Feature::Hold.new,
-#   Feature::PatternSlot.new,
-#   Feature::PatternNonself.new,
-#   Feature::PatternLiteral.new,
-#   Feature::PatternLet.new,
-#   Feature::PatternItemFirst.new,
-#   Feature::PatternItemSource.new,
-#   Feature::IntegerGroupThousands.new,
-#   Feature::Literal.new,
-#   Feature::EmptyDict.new,
-#   Feature::Call.new,
-#   Feature::DataMap.new,
-#   Feature::DataDict.new
-# )
 
 # pp flatten(ctx, feature_chain.call(ctx, Term.of(:"%item°", 100, 200, 300), ""))
 
