@@ -98,14 +98,11 @@ module OrdDict
   end
 end
 
-alias FeatureChain = DisplayContext, Term, String -> Term
-alias LayoutChain = DisplayContext, LayoutSet, Term, String -> Term
-
 record DisplayContext,
   normal_width : Int32,
   longer_width : Int32,
-  features : FeatureChain,
-  layouts : LayoutChain,
+  features : Chain(Feature::Any),
+  layouts : Chain(Layout::Any),
   layouts_allowed = LayoutSet::All,
   measurements = {} of Term => {Int32, Int32}
 
@@ -158,16 +155,35 @@ enum LayoutSet : UInt16
   def thunk(term : Term, postfix : String, myself) : Term
     Term.of(:thunk, term, postfix, self & LayoutSet.new(myself), self)
   end
+
+  def layout
+    case self
+    when .dict_inline? then Layout::DictInline
+    when .call_column? then Layout::CallColumn
+    when .call_kwargs_inline_with_block? then Layout::CallKwargsInlineWithBlock
+    when .call_arg_indented_kwargs? then Layout::CallArgIndentedKwargs
+    when .call_kwargs_column_with_block? then Layout::CallKwargsColumnWithBlock
+    when .call_indented? then Layout::CallIndented
+    when .map_inline? then Layout::MapInline
+    when .map_multiline? then Layout::MapMultiline
+    when .map_multiline_indented? then Layout::MapMultilineIndented
+    when .dict_aligned? then Layout::DictAligned
+    else
+      raise ArgumentError.new
+    end
+  end
 end
 
 module Layout
+  alias Any = DictInline | CallColumn | CallKwargsInlineWithBlock | CallArgIndentedKwargs | CallKwargsColumnWithBlock | CallIndented | MapInline | MapMultiline | MapMultilineIndented | DictAligned
+
   # ```wwml
   # (text "Hello World 1" "Hello World 2" "Hello World 3" x: 100 y: 200)
   # ```
   struct DictInline
-    def call(ctx, selector, term, postfix, head, rest) : Term
-      unless selector.dict_inline? && ctx.layouts_allowed.dict_inline? && (dict = term.as_d?) && dict.size > 0
-        return rest.call(ctx, selector, term, postfix)
+    def call(ctx, term, postfix, head, rest) : Term
+      unless ctx.layouts_allowed.dict_inline? && (dict = term.as_d?) && dict.size > 0
+        return rest.call(ctx, term, postfix)
       end
 
       entries = OrdDict.sorted(dict)
@@ -201,9 +217,9 @@ module Layout
   #  y: 200)
   # ```
   struct DictAligned
-    def call(ctx, selector, term, postfix, head, rest) : Term
-      unless selector.dict_aligned? && ctx.layouts_allowed.dict_aligned? && (dict = term.as_d?) && dict.size > 0
-        return rest.call(ctx, selector, term, postfix)
+    def call(ctx, term, postfix, head, rest) : Term
+      unless ctx.layouts_allowed.dict_aligned? && (dict = term.as_d?) && dict.size > 0
+        return rest.call(ctx, term, postfix)
       end
 
       entries = OrdDict.sorted(dict)
@@ -231,9 +247,9 @@ module Layout
   # {x: 100, y: 200, z: 300}
   # ```
   struct MapInline
-    def call(ctx, selector, term, postfix, head, rest) : Term
-      unless selector.map_inline? && ctx.layouts_allowed.map_inline? && (dict = term.as_d?) && dict.pairsonly? && dict.size > 0
-        return rest.call(ctx, selector, term, postfix)
+    def call(ctx, term, postfix, head, rest) : Term
+      unless ctx.layouts_allowed.map_inline? && (dict = term.as_d?) && dict.pairsonly? && dict.size > 0
+        return rest.call(ctx, term, postfix)
       end
 
       entries = OrdDict.sorted(dict)
@@ -260,9 +276,9 @@ module Layout
   #  z: 300}
   # ```
   struct MapMultiline
-    def call(ctx, selector, term, postfix, head, rest) : Term
-      unless selector.map_multiline? && ctx.layouts_allowed.map_multiline? && (dict = term.as_d?) && dict.pairsonly? && dict.size > 0
-        return rest.call(ctx, selector, term, postfix)
+    def call(ctx, term, postfix, head, rest) : Term
+      unless ctx.layouts_allowed.map_multiline? && (dict = term.as_d?) && dict.pairsonly? && dict.size > 0
+        return rest.call(ctx, term, postfix)
       end
 
       entries = OrdDict.sorted(dict)
@@ -291,9 +307,9 @@ module Layout
   #    300}
   # ```
   struct MapMultilineIndented
-    def call(ctx, selector, term, postfix, head, rest) : Term
-      unless selector.map_multiline_indented? && ctx.layouts_allowed.map_multiline_indented? && (dict = term.as_d?) && dict.pairsonly? && dict.size > 0
-        return rest.call(ctx, selector, term, postfix)
+    def call(ctx, term, postfix, head, rest) : Term
+      unless ctx.layouts_allowed.map_multiline_indented? && (dict = term.as_d?) && dict.pairsonly? && dict.size > 0
+        return rest.call(ctx, term, postfix)
       end
 
       entries = OrdDict.sorted(dict)
@@ -320,9 +336,9 @@ module Layout
   #   y: 200)
   # ```
   struct CallIndented
-    def call(ctx, selector, term, postfix, head, rest) : Term
-      unless selector.call_indented? && ctx.layouts_allowed.call_indented? && (dict = term.as_d?) && dict.size >= 2
-        return rest.call(ctx, selector, term, postfix)
+    def call(ctx, term, postfix, head, rest) : Term
+      unless ctx.layouts_allowed.call_indented? && (dict = term.as_d?) && dict.size >= 2
+        return rest.call(ctx, term, postfix)
       end
 
       entries = OrdDict.sorted(dict)
@@ -370,9 +386,9 @@ module Layout
   #       "Hello World 3")
   # ```
   struct CallColumn
-    def call(ctx, selector, term, postfix, head, rest) : Term
-      unless selector.call_column? && ctx.layouts_allowed.call_column? && (dict = term.as_d?) && dict.itemsonly? && dict.size >= 2
-        return rest.call(ctx, selector, term, postfix)
+    def call(ctx, term, postfix, head, rest) : Term
+      unless ctx.layouts_allowed.call_column? && (dict = term.as_d?) && dict.itemsonly? && dict.size >= 2
+        return rest.call(ctx, term, postfix)
       end
 
       rendered = Term::Dict.build do |commit|
@@ -385,7 +401,7 @@ module Layout
           inner << :col
 
           dict.items.move(1).each_with_last do |item, last|
-            inner << ctx.features.call(ctx, item, last ? postfix : "")
+            inner << ctx.features.call(ctx.inline, item, last ? postfix : "")
           end
         end
       end
@@ -410,9 +426,9 @@ module Layout
                 ($slot 3))))
     WWML
 
-    def call(ctx, selector, term, postfix, head, rest) : Term
-      unless selector.call_kwargs_inline_with_block? && ctx.layouts_allowed.call_kwargs_inline_with_block? && (dict = term.as_d?) && dict.itemsize >= 2 && dict.pairsize >= 1
-        return rest.call(ctx, selector, term, postfix)
+    def call(ctx, term, postfix, head, rest) : Term
+      unless ctx.layouts_allowed.call_kwargs_inline_with_block? && (dict = term.as_d?) && dict.itemsize >= 2 && dict.pairsize >= 1
+        return rest.call(ctx, term, postfix)
       end
 
       entries = OrdDict.sorted(dict)
@@ -463,9 +479,9 @@ module Layout
                 ($slot 3))))
     WWML
 
-    def call(ctx, selector, term, postfix, head, rest) : Term
-      unless selector.call_kwargs_column_with_block? && ctx.layouts_allowed.call_kwargs_column_with_block? && (dict = term.as_d?) && dict.itemsize >= 2 && dict.pairsize >= 1
-        return rest.call(ctx, selector, term, postfix)
+    def call(ctx, term, postfix, head, rest) : Term
+      unless ctx.layouts_allowed.call_kwargs_column_with_block? && (dict = term.as_d?) && dict.itemsize >= 2 && dict.pairsize >= 1
+        return rest.call(ctx, term, postfix)
       end
 
       entries = OrdDict.sorted(dict)
@@ -514,9 +530,9 @@ module Layout
                 ($slot 3))))
     WWML
 
-    def call(ctx, selector, term, postfix, head, rest) : Term
-      unless selector.call_arg_indented_kwargs? && ctx.layouts_allowed.call_arg_indented_kwargs? && (dict = term.as_d?) && dict.itemsize == 2 && dict.pairsize >= 1
-        return rest.call(ctx, selector, term, postfix)
+    def call(ctx, term, postfix, head, rest) : Term
+      unless ctx.layouts_allowed.call_arg_indented_kwargs? && (dict = term.as_d?) && dict.itemsize == 2 && dict.pairsize >= 1
+        return rest.call(ctx, term, postfix)
       end
 
       entries = OrdDict.sorted(dict)
@@ -548,38 +564,12 @@ module Layout
       end
     end
   end
-
-  private def self.chain0(head, layout) : LayoutChain
-    ->(ctx : DisplayContext, selector : LayoutSet, term : Term, postfix : String) do
-      rest = ->(ctx : DisplayContext, selector : LayoutSet, term : Term, postfix : String) do
-        raise TermPassthrough.new
-      end
-
-      layout.call(ctx, selector, term, postfix, head, rest)
-    end
-  end
-
-  private def self.chain0(head, layout, *layouts) : LayoutChain
-    ->(ctx : DisplayContext, selector : LayoutSet, term : Term, postfix : String) do
-      rest = ->(ctx : DisplayContext, selector : LayoutSet, term : Term, postfix : String) do
-        chain0(head, *layouts).call(ctx, selector, term, postfix)
-      end
-      layout.call(ctx, selector, term, postfix, head, rest)
-    end
-  end
-
-  # Creates a chain of *layouts*.
-  def self.chain(layout, *layouts) : LayoutChain
-    head = nil
-    head = ->(ctx : DisplayContext, selector : LayoutSet,  term : Term, postfix : String) do
-      rest = chain0(head.not_nil!("cannot call head during chain initialization"), layout, *layouts)
-      rest.call(ctx, selector, term, postfix)
-    end
-  end
 end
 
 module Feature
   extend self
+
+  alias Any = Edge | PatternSlot | PatternNonself | PatternLiteral | PatternLet | PatternItemFirst | PatternItemSource | Literal | IntegerGroupThousands | BackrefMy | BackrefUp | BackrefDown | Hold | EmptyDict | Call | DataMap | DataDict
 
   # Renders `(edge x)` as `@x`.
   struct Edge
@@ -834,40 +824,11 @@ module Feature
       rest.call(ctx, term, postfix)
     end
   end
-
-  private def self.chain0(head, feature) : FeatureChain
-    ->(ctx : DisplayContext, term : Term, postfix : String) do
-      rest = ->(ctx : DisplayContext, term : Term, postfix : String) do
-        raise TermPassthrough.new
-      end
-
-      feature.call(ctx, term, postfix, head, rest)
-    end
-  end
-
-  private def self.chain0(head, feature, *features) : FeatureChain
-    ->(ctx : DisplayContext, term : Term, postfix : String) do
-      rest = ->(ctx : DisplayContext, term : Term, postfix : String) do
-        chain0(head, *features).call(ctx, term, postfix)
-      end
-      feature.call(ctx, term, postfix, head, rest)
-    end
-  end
-
-  # Creates a chain of *features*.
-  def self.chain(feature, *features) : FeatureChain
-    head = nil
-    head = ->(ctx : DisplayContext, term : Term, postfix : String) do
-      rest = chain0(head.not_nil!("cannot call head during chain initialization"), feature, *features)
-      rest.call(ctx, term, postfix)
-    end
-  end
 end
 
 class TermPassthrough < Exception
   @callstack = CallStack.empty
 end
-
 
 def measure(ctx : DisplayContext, node : Term) : {Int32, Int32}
   ctx.measurements.put_if_absent(node) do
@@ -986,8 +947,10 @@ def flatten(ctx, node : Term, maxwidth : Int32, layouts : LayoutSet) : {Term, In
       max_flat = Term.of
 
       myself.each do |option|
+        callable = ctx.layouts.find(option.layout)
+
         begin
-          rendered = ctx.layouts.call(ctx.copy_with(layouts_allowed: children), option, subject, postfix.to(String))
+          rendered = callable.call(ctx.copy_with(layouts_allowed: children), subject, postfix.to(String))
         rescue TermPassthrough
           next
         end
@@ -1116,8 +1079,55 @@ class Screen
   end
 end
 
+struct Chain(T)
+  def initialize(@callables : Slice(T))
+  end
 
-layout_chain = Layout.chain(
+  # Constructs a chain of *callables*.
+  def self.new(*callables : *T) : Chain(Union(*T)) forall T
+    Chain.new(callables.to_readonly_slice(&.itself))
+  end
+
+  # :nodoc:
+  struct Thunk(T)
+    def initialize(@chain : Chain(T), @index : Int32)
+    end
+
+    def call(ctx : DisplayContext, term : Term, postfix : String)
+      @chain.call(ctx, term, postfix, index: @index)
+    end
+  end
+
+  def call(ctx : DisplayContext, term : Term, postfix : String, *, index : Int32)
+    unless index >= 0
+      raise ArgumentError.new
+    end
+
+    if index >= @callables.size
+      raise TermPassthrough.new
+    end
+
+    head = Thunk.new(self, 0)
+    rest = Thunk.new(self, index + 1)
+
+    @callables[index].call(ctx, term, postfix, head, rest)
+  end
+
+  def call(ctx : DisplayContext, term : Term, postfix : String)
+    call(ctx, term, postfix, index: 0)
+  end
+
+  def find(needle)
+    @callables.each_with_index do |callable, index|
+      next unless needle === callable
+      return Thunk(T).new(self, index)
+    end
+
+    raise ArgumentError.new("find: needle #{needle} not in the chain")
+  end
+end
+
+layout_chain = Chain(Layout::Any).new(
   Layout::DictInline.new,
   Layout::CallColumn.new,
   Layout::CallKwargsInlineWithBlock.new,
@@ -1130,7 +1140,7 @@ layout_chain = Layout.chain(
   Layout::DictAligned.new,
 )
 
-feature_chain = Feature.chain(
+feature_chain = Chain(Feature::Any).new(
   Feature::Edge.new,
   Feature::BackrefMy.new,
   Feature::BackrefUp.new,
@@ -1150,6 +1160,26 @@ feature_chain = Feature.chain(
   Feature::DataDict.new
 )
 
+# feature_chain = Feature.chain(
+#   Feature::Edge.new,
+#   Feature::BackrefMy.new,
+#   Feature::BackrefUp.new,
+#   Feature::BackrefDown.new,
+#   Feature::Hold.new,
+#   Feature::PatternSlot.new,
+#   Feature::PatternNonself.new,
+#   Feature::PatternLiteral.new,
+#   Feature::PatternLet.new,
+#   Feature::PatternItemFirst.new,
+#   Feature::PatternItemSource.new,
+#   Feature::IntegerGroupThousands.new,
+#   Feature::Literal.new,
+#   Feature::EmptyDict.new,
+#   Feature::Call.new,
+#   Feature::DataMap.new,
+#   Feature::DataDict.new
+# )
+
 # pp flatten(ctx, feature_chain.call(ctx, Term.of(:"%item°", 100, 200, 300), ""))
 
 # pp Feature::Edge.call(ctx, Term.of(:edge, 100), "))", ->(ctx : DisplayContext, term : Term, postfix : String) do
@@ -1165,7 +1195,7 @@ str = String.build do |io|
 
   ed.items.each do |sexp|
     screen.clear
-    ctx = DisplayContext.new(40, 120, feature_chain, layout_chain)
+    ctx = DisplayContext.new(60, 120, feature_chain, layout_chain)
     tree = feature_chain.call(ctx, sexp, "")
     flat, excess = flatten(ctx, tree)
     # puts excess
