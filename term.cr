@@ -580,6 +580,28 @@ module Ww
   end
 
   struct Term
+    private def self.each_keypath_and_item?(node : Term::Dict, prefix : Stack(Term), fn : Stack(Term), Term -> Bool) : Bool
+      node.items.each_with_index do |item, index|
+        prefix.push(Term.of(index))
+
+        break unless each_keypath_and_item?(item.downcast, prefix, fn)
+
+        prefix.pop
+      end
+
+      true
+    end
+
+    private def self.each_keypath_and_item?(node, prefix : Stack(Term), fn : Stack(Term), Term -> Bool) : Bool
+      fn.call(prefix, node.upcast)
+    end
+
+    def self.each_keypath_and_item(node : Term, &fn : Stack(Term), Term -> Bool) : Nil
+      each_keypath_and_item?(node: node.downcast, prefix: Stack(Term).new, fn: fn)
+    end
+  end
+
+  struct Term
     def self.matches(pattern, matchee, *, engine : Engine.class = M1, env = Term[]) : Array(Term::Dict) forall Engine
       engine.matches(Term.of(pattern), Term.of(matchee), env: env)
     end
@@ -594,6 +616,27 @@ module Ww
 
     macro of_case(*args, **kwargs, &block)
       ::Ww::Term.of(::Ww::Term.case({{args.splat}}, {{kwargs.double_splat}}) {{block}})
+    end
+
+    # Shorthand for a single-`matchpi` call to `Term.case`:
+    #
+    # ```
+    # Term.case(term) do
+    #   matchpi pattern do
+    #     # Block
+    #   end
+    #
+    #   otherwise { }
+    # end
+    # ```
+    macro matchpi(term, pattern, &)
+      Term.case({{term}}) do
+        matchpi {{pattern}} do
+          {{yield}}
+        end
+
+        otherwise { }
+      end
     end
   end
 end
