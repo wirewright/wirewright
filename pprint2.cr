@@ -1,6 +1,10 @@
 require "./wirewright"
 require "./baz5"
 
+# NOTE: the existence of LayoutSet should be re-evaluated. It appears to be an overkill.
+# We *really* only check of Inline/Multiline. "Layouts" are more or less a hard-coded/thunked
+# "choices". Can we perhaps separate LayoutSet from Layouts (turning it into a flag, inline or not)?
+
 def fill(template : Term, &fn : Int32, Term::Dict::Commit ->)
   handler = ->(term : Term) do
     Term.case(term) do
@@ -130,6 +134,10 @@ record DisplayContext,
 struct DisplayContext
   def inline : DisplayContext
     copy_with(layouts_allowed: layouts_allowed & (LayoutSet::DictInline | LayoutSet::MapInline))
+  end
+
+  def inline_only?
+    (layouts_allowed & ~(LayoutSet::DictInline | LayoutSet::MapInline)).none?
   end
 end
 
@@ -550,7 +558,7 @@ enum LayoutSet : UInt16
     {{ includer.name.split("::")[-1].id }}
   {% end %}
 
-  # Returns a flatten-thunk layout types in this layout set.
+  # Returns a flatten-thunk for layout types in this layout set.
   def thunk(term : Term, postfix : String, myself) : Term
     Term.of(:thunk, term, postfix, self & LayoutSet.new(myself), self)
   end
@@ -569,6 +577,20 @@ enum LayoutSet : UInt16
         raise ArgumentError.new
       end
     {% end %}
+  end
+end
+
+module Templates
+  extend self
+
+  def pair(ctx, key, colon, value, postfix)
+    r_key = ctx.features.call(ctx.inline, key, colon)
+    r_value = ctx.features.call(ctx, value, postfix)
+
+    Term.of(:choice,
+      Term.of(:row, r_key, r_value, gap: 1),
+      Term[:col, r_key,
+        Term[:indented, r_value, by: 2]])
   end
 end
 
@@ -682,35 +704,81 @@ module Feature
     FRAG_LPAREN = ML.term %{(frag "(")}
     FRAG_LBRACKET = ML.term %{(frag "[")}
 
+    TEMPLATE_INLINE = ML.term <<-WWML
+      (row gap: 1 ($slot 0) (frag "¦") ($slot 1) ($slot 2))
+    WWML
+
+    TEMPLATE_MULTILINE = ML.term <<-WWML
+      (col
+        (longer
+          (row gap: 1 ($slot 0) (frag "¦") ($slot 1)))
+        (indented
+          (col ($slot 2))))
+    WWML
+
     def call(ctx, term, postfix, head, rest) : Term
       Term.case(term) do
-        # FIXME: add multiline variant
-        matchpi %{(%'%partition (itemspart_+) (%'%layer below_ (%all pp_dict (%not ()))))} do
-          inline = Term::Dict.build do |commit|
-            commit << :row
-            commit.with(:gap, 1)
-
-            commit << ctx.layouts_allowed.thunk(itemspart, "", {:dict_inline})
-            commit << {:frag, "¦"} << ctx.features.call(ctx.inline, below, "")
-
-            ppentries = OrdDict.sorted(pp.unsafe_as_d)
-            ppentries.each_with_last do |(key, value), last|
-              commit << ctx.ppairs.call(ctx.inline, Term.of(key, value), last ? ")" + postfix : "")
+        # - Inline pairspatterns are easy:
+        #  ```wwml
+        #  (text caption_string ¦ _ bold: true x_number y_number)
+        #  ```
+        # - If the layer's side does not fit inline, we will format it differently:
+        #  ```wwml
+        #  (text caption_string ¦ _
+        #    bold: true
+        #    x_number
+        #    y_number)
+        #  ```
+        matchpi %{(%'%partition (itemspart_+) pairspart←(%'%layer below_ (%all side_dict (%not ()))))} do
+          inline = fill(TEMPLATE_INLINE) do |slot, commit|
+            case slot
+            when 0
+              commit << ctx.layouts_allowed.thunk(itemspart, "", {:dict_inline})
+            when 1
+              commit << ctx.features.call(ctx.inline, below, "")
+            when 2
+              ppentries = OrdDict.sorted(side.unsafe_as_d)
+              ppentries.each_with_last do |(key, value), last|
+                commit << ctx.ppairs.call(ctx.inline, Term.of(key, value), last ? ")" + postfix : "")
+              end
+            else
+              unreachable
             end
           end
 
-          Term.of(:row, FRAG_LPAREN, inline)
+          multiline = fill(TEMPLATE_MULTILINE) do |slot, commit|
+            case slot
+            when 0
+              commit << ctx.layouts_allowed.thunk(itemspart, "", {:dict_inline})
+            when 1
+              commit << ctx.features.call(ctx.inline, below, "")
+            when 2
+              ppentries = OrdDict.sorted(side.unsafe_as_d)
+              ppentries.each_with_last do |(key, value), last|
+                commit << ctx.ppairs.call(ctx, Term.of(key, value), last ? ")" + postfix : "")
+              end
+            else
+              unreachable
+            end
+          end
+
+          if ctx.inline_only?
+            Term.of(:row, FRAG_LPAREN, inline)
+          else
+            Term.of(:row, FRAG_LPAREN, Term.of(:choice, inline, multiline))
+          end
         end
 
+        # Render pairspart-ignored partition shorthand using dict-inline and dict-
+        # aligned layouts.
         matchpi %{(%'%partition (itemspart_+) %'_)} do
           thunk = ctx.layouts_allowed.thunk(itemspart, "]" + postfix, {:dict_inline, :dict_aligned})
 
           Term.of(:row, FRAG_LBRACKET, thunk)
         end
 
-        # FIXME: add multiline variant
         matchpi %{(%'%partition %'_ (%'%layer %'_ (%all pp_dict (%not ()))))} do
-          Term::Dict.build do |commit|
+          inline = Term::Dict.build do |commit|
             commit << :row
             commit.with(:gap, 1)
 
@@ -720,10 +788,34 @@ module Feature
             ppentries.each_with_last do |(key, value), last|
               commit << ctx.ppairs.call(ctx.inline, Term.of(key, value), last ? "}" + postfix : "")
             end
-          end.upcast
+          end
+
+          multiline = Term::Dict.build do |commit|
+            commit << :row
+            commit.with(:gap, 1)
+
+            commit << {:frag, "{_"}
+            commit << Term::Dict.build do |column|
+              column << :col
+
+              ppentries = OrdDict.sorted(pp.unsafe_as_d)
+              ppentries.each_with_last do |(key, value), last|
+                column << ctx.ppairs.call(ctx, Term.of(key, value), last ? "}" + postfix : "")
+              end
+            end
+          end
+
+          if ctx.inline_only?
+            Term.of(inline)
+          else
+            Term.of(:choice, inline, multiline)
+          end
         end
 
-        # FIXME: add multiline variant
+        # Render other kinds of (%partition)s, e.g. `(+ a_ b_ ¦ {a: 1, b: 2})`:
+        #
+        # - Inline: `(+ a_ b_ ¦ {a: 1, b: 2})`
+        # - Multiline: fallback to `(%partition (+ a_ b_) {a: 1, b: 2})`.
         matchpi %{(%'%partition (itemspart_+) pp_)} do
           inline = Term::Dict.build do |commit|
             commit << :row
@@ -734,7 +826,11 @@ module Feature
             commit << ctx.features.call(ctx.inline, pp, ")" + postfix)
            end
 
-          Term.of(:row, FRAG_LPAREN, inline)
+          if ctx.inline_only?
+            Term.of(:row, FRAG_LPAREN, inline)
+          else
+            Term.of(:choice, Term.of(:row, FRAG_LPAREN, inline), rest.call(ctx, term, postfix))
+          end
         end
 
         otherwise do
@@ -750,10 +846,7 @@ module Feature
 
     def call(ctx, term, postfix, head, rest) : Term
       Term.matchpi(term, %{(key_symbol (%'%let key_symbol value_))}) do
-        return Term.of(:row,
-          ctx.features.call(ctx.inline, key, "_:"),
-          ctx.features.call(ctx, value, postfix),
-          gap: 1)
+        return Templates.pair(ctx, key, "_:", value, postfix)
       end
 
       rest.call(ctx, term, postfix)
@@ -772,15 +865,9 @@ module Feature
         continue unless key == blank.name?
 
         if fallback.type == blank.type
-          return Term.of(:row,
-            ctx.features.call(ctx.inline, key, "⋮"),
-            ctx.features.call(ctx, fallback, postfix),
-            gap: 1)
+          return Templates.pair(ctx, key, "⋮", fallback, postfix)
         elsif blank.type.any?
-          return Term.of(:row,
-            ctx.features.call(ctx.inline, key, "_⋮"),
-            ctx.features.call(ctx, fallback, postfix),
-            gap: 1)
+          return Templates.pair(ctx, key, "_⋮", fallback, postfix)
         end
       end
 
@@ -830,10 +917,7 @@ module Feature
 
     def call(ctx, term, postfix, head, rest) : Term
       Term.matchpi(term, %{(key_ value_)}) do
-        return Term.of(:row,
-          ctx.features.call(ctx.inline, key, ":"),
-          ctx.features.call(ctx, value, postfix),
-          gap: 1)
+        return Templates.pair(ctx, key, ":", value, postfix)
       end
 
       rest.call(ctx, term, postfix)
@@ -1315,7 +1399,10 @@ feature_chain = Chain(Feature).new(
 
 # ed = Term.of(JSON.parse(File.read("./data/people.json")))
 ed = ML.terms(File.read("./editor.soma.wwml"))# Term.of(:+, {:*, 3, 4}, {2})
-# ed = ML.terms %{{_ x: 100 y: 200}}
+# ed = ML.terms <<-WWML
+# (_string | _string (M←(clear-clipboard) _*) @EDGE_ ¦ _ clipboard_)
+#   <> {(M): (), (clipboard): ()}
+# WWML
 
 str = String.build do |io|
   screen = Screen.new
