@@ -123,6 +123,7 @@ record DisplayContext,
   longer_width : Int32,
   features : Chain(Feature),
   layouts : Chain(Layout),
+  ppairs : Chain(Feature),
   layouts_allowed = LayoutSet::All,
   measurements = {} of Term => {Int32, Int32}
 
@@ -671,6 +672,174 @@ module Feature
     end
   end
 
+  # - Renders `(%partition (...) pp_)` as `(... ¦ pp_)`.
+  # - Renders `(%layer _ ...)` pp as `_ ...` in the pairspart partition (after `¦`).
+  # - Renders `(%partition (...) _)` as `[...]`.
+  # - Renders `(%partition _ (%layer _ {...}))` as `{_ ...}`.
+  struct PatternPairspart
+    include Feature
+
+    FRAG_LPAREN = ML.term %{(frag "(")}
+    FRAG_LBRACKET = ML.term %{(frag "[")}
+
+    def call(ctx, term, postfix, head, rest) : Term
+      Term.case(term) do
+        # FIXME: add multiline variant
+        matchpi %{(%'%partition (itemspart_+) (%'%layer below_ (%all pp_dict (%not ()))))} do
+          inline = Term::Dict.build do |commit|
+            commit << :row
+            commit.with(:gap, 1)
+
+            commit << ctx.layouts_allowed.thunk(itemspart, "", {:dict_inline})
+            commit << {:frag, "¦"} << ctx.features.call(ctx.inline, below, "")
+
+            ppentries = OrdDict.sorted(pp.unsafe_as_d)
+            ppentries.each_with_last do |(key, value), last|
+              commit << ctx.ppairs.call(ctx.inline, Term.of(key, value), last ? ")" + postfix : "")
+            end
+          end
+
+          Term.of(:row, FRAG_LPAREN, inline)
+        end
+
+        matchpi %{(%'%partition (itemspart_+) %'_)} do
+          thunk = ctx.layouts_allowed.thunk(itemspart, "]" + postfix, {:dict_inline, :dict_aligned})
+
+          Term.of(:row, FRAG_LBRACKET, thunk)
+        end
+
+        # FIXME: add multiline variant
+        matchpi %{(%'%partition %'_ (%'%layer %'_ (%all pp_dict (%not ()))))} do
+          Term::Dict.build do |commit|
+            commit << :row
+            commit.with(:gap, 1)
+
+            commit << {:frag, "{_"}
+
+            ppentries = OrdDict.sorted(pp.unsafe_as_d)
+            ppentries.each_with_last do |(key, value), last|
+              commit << ctx.ppairs.call(ctx.inline, Term.of(key, value), last ? "}" + postfix : "")
+            end
+          end.upcast
+        end
+
+        # FIXME: add multiline variant
+        matchpi %{(%'%partition (itemspart_+) pp_)} do
+          inline = Term::Dict.build do |commit|
+            commit << :row
+            commit.with(:gap, 1)
+
+            commit << ctx.layouts_allowed.thunk(itemspart, "", {:dict_inline})
+            commit << {:frag, "¦"}
+            commit << ctx.features.call(ctx.inline, pp, ")" + postfix)
+           end
+
+          Term.of(:row, FRAG_LPAREN, inline)
+        end
+
+        otherwise do
+          rest.call(ctx, term, postfix)
+        end
+      end
+    end
+  end
+
+  # Renders `x: (%let x ...)` as `x_: ...` in the pairspart partition.
+  struct PairspartLet
+    include Feature
+
+    def call(ctx, term, postfix, head, rest) : Term
+      Term.matchpi(term, %{(key_symbol (%'%let key_symbol value_))}) do
+        return Term.of(:row,
+          ctx.features.call(ctx.inline, key, "_:"),
+          ctx.features.call(ctx, value, postfix),
+          gap: 1)
+      end
+
+      rest.call(ctx, term, postfix)
+    end
+  end
+
+  # Renders `x: (%optional 100 x_)` as `x_⋮ 100`, `x: (%optional 100 x_number)` as
+  # `x⋮ 0` in the pairspart partition.
+  struct PairspartOptional
+    include Feature
+
+    def call(ctx, term, postfix, head, rest) : Term
+      # TODO: (key_ (%'%optional value←(%pipe type vT_) (%symbol blank key_ vT_)))
+      Term.matchpi(term, %{(key_ (%'%optional fallback_ capture_symbol))}) do
+        continue unless blank = capture.blank?
+        continue unless key == blank.name?
+
+        if fallback.type == blank.type
+          return Term.of(:row,
+            ctx.features.call(ctx.inline, key, "⋮"),
+            ctx.features.call(ctx, fallback, postfix),
+            gap: 1)
+        elsif blank.type.any?
+          return Term.of(:row,
+            ctx.features.call(ctx.inline, key, "_⋮"),
+            ctx.features.call(ctx, fallback, postfix),
+            gap: 1)
+        end
+      end
+
+      rest.call(ctx, term, postfix)
+    end
+  end
+
+  # Renders `x: (%- _ x)` as `-x_`, `x: (%- _number x)` as `-x_number` (and so on
+  # for other types) in the pairspart partition.
+  struct PairspartNegation
+    include Feature
+
+    def call(ctx, term, postfix, head, rest) : Term
+      Term.case(term) do
+        {% for type in %w(_ _number _string _symbol _boolean _dict) %}
+          matchpi %{(key_symbol (%'%- %'{{type.id}} key_))} do
+            Term.of(:row, {:frag, "-"}, ctx.features.call(ctx.inline, key, {{type}} + postfix))
+          end
+        {% end %}
+
+        otherwise do
+          rest.call(ctx, term, postfix)
+        end
+      end
+    end
+  end
+
+  # Renders `x: x_` as `x_`, `x: x_number` as `x_number` in the pairspart partition.
+  struct PairspartBlank
+    include Feature
+
+    def call(ctx, term, postfix, head, rest) : Term
+      # TODO: (key_symbol value←(%symbol blank key_ type_))
+      Term.matchpi(term, %{(key_symbol value_symbol)}) do
+        continue unless blank = value.blank?
+        continue unless key == blank.name?
+
+        return ctx.features.call(ctx, value, postfix)
+      end
+
+      rest.call(ctx, term, postfix)
+    end
+  end
+
+  struct PairspartPair
+    include Feature
+
+    def call(ctx, term, postfix, head, rest) : Term
+      Term.matchpi(term, %{(key_ value_)}) do
+        return Term.of(:row,
+          ctx.features.call(ctx.inline, key, ":"),
+          ctx.features.call(ctx, value, postfix),
+          gap: 1)
+      end
+
+      rest.call(ctx, term, postfix)
+    end
+  end
+
   # Renders symbol literals.
   def_literal SymbolLiteral, %{_symbol}
   # Renders number literals.
@@ -1106,6 +1275,14 @@ layout_chain = Chain(Layout).new(
   Layout::DictAligned.new,
 )
 
+ppairs_chain = Chain(Feature).new(
+  Feature::PairspartLet.new,
+  Feature::PairspartOptional.new,
+  Feature::PairspartNegation.new,
+  Feature::PairspartBlank.new,
+  Feature::PairspartPair.new
+)
+
 feature_chain = Chain(Feature).new(
   Feature::Edge.new,
   Feature::BackrefMy.new,
@@ -1118,6 +1295,7 @@ feature_chain = Chain(Feature).new(
   Feature::PatternLet.new,
   Feature::PatternItemFirst.new,
   Feature::PatternItemSource.new,
+  Feature::PatternPairspart.new,
   Feature::IntegerGroupThousands.new,
   Feature::SymbolLiteral.new,
   Feature::NumberLiteral.new,
@@ -1137,14 +1315,14 @@ feature_chain = Chain(Feature).new(
 
 # ed = Term.of(JSON.parse(File.read("./data/people.json")))
 ed = ML.terms(File.read("./editor.soma.wwml"))# Term.of(:+, {:*, 3, 4}, {2})
-# ed = ML.terms %{(text x: 100 y: 200 z: 300 a: 100 b: 200 c: 300 "Hello World 1" "Hello World 2")}
+# ed = ML.terms %{{_ x: 100 y: 200}}
 
 str = String.build do |io|
   screen = Screen.new
 
   ed.items.each do |sexp|
     screen.clear
-    ctx = DisplayContext.new(60, 120, feature_chain, layout_chain)
+    ctx = DisplayContext.new(60, 120, feature_chain, layout_chain, ppairs_chain)
     tree = feature_chain.call(ctx, sexp, "")
     flat, excess = flatten(ctx, tree)
     # puts excess
@@ -1158,3 +1336,12 @@ end
 puts str
 # puts str == File.read("./pprint1.out.1")
 pp ed == ML.terms(str)
+
+# [x] x_: 100 => x: (%let x 100)
+# [x] x⋮ 100 => x: (%optional 100 x_number) ;; infers type
+# [x] x_⋮ 100 => x: (%optional 100 x_) ;; does not infer type
+# [x] x_string⋮ 100 ;; invalid. Either infer or any-blank
+# [x] ¦ ... w_ ... => ... w: w_ ...
+# [x] ¦ ... w_number ... => ... w: w_number ...
+# [x] -x_ => (%- _ x)
+# [x] -x_number => (%- _number x)
