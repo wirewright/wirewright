@@ -588,6 +588,20 @@ module Feature
       end
     end
   end
+
+  macro def_literal(cls, typeblank)
+    struct {{cls}}
+      include Feature
+
+      def call(ctx, term, postfix, head, rest) : Term
+        Term.matchpi(term, {{typeblank}}) do
+          return Term.of(:frag, "#{term.inspect}#{postfix}")
+        end
+
+        rest.call(ctx, term, postfix)
+      end
+    end
+  end
 end
 
 module Feature
@@ -657,18 +671,14 @@ module Feature
     end
   end
 
-  # Renders literals such as `100`, qux, `"Hello World"`, `true`, etc.
-  struct Literal
-    include Feature
-
-    def call(ctx, term, postfix, head, rest) : Term
-      Term.matchpi(term, %{(%any° _symbol _number _string _boolean)}) do
-        return Term.of(:frag, "#{term.inspect}#{postfix}")
-      end
-
-      rest.call(ctx, term, postfix)
-    end
-  end
+  # Renders symbol literals.
+  def_literal SymbolLiteral, %{_symbol}
+  # Renders number literals.
+  def_literal NumberLiteral, %{_number}
+  # Renders string literals.
+  def_literal StringLiteral, %{_string}
+  # Renders boolean literals.
+  def_literal BooleanLiteral, %{_boolean}
 
   # Renders thousands in integers with underscore, e.g. `1000000` is rendered
   # as `1_000_000`.
@@ -1109,7 +1119,10 @@ feature_chain = Chain(Feature).new(
   Feature::PatternItemFirst.new,
   Feature::PatternItemSource.new,
   Feature::IntegerGroupThousands.new,
-  Feature::Literal.new,
+  Feature::SymbolLiteral.new,
+  Feature::NumberLiteral.new,
+  Feature::StringLiteral.new,
+  Feature::BooleanLiteral.new,
   Feature::EmptyDict.new,
   Feature::CallLike.new,
   Feature::MapLike.new,
