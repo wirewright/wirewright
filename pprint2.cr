@@ -1,4 +1,5 @@
 require "./wirewright"
+require "./baz5"
 
 module OrdDict
   # :nodoc:
@@ -88,7 +89,7 @@ module OrdDict
     )
   end
 
-  # Returns an unsorted indexable of *dict*'s entries.
+# Returns an unsorted indexable of *dict*'s entries.
   #
   # - Items are ordered by their index.
   # - Pairs are ordered by their hash.
@@ -114,9 +115,37 @@ struct DisplayContext
   end
 end
 
+def fill(template : Term, &fn : Int32, Term::Dict::Commit ->)
+  handler = ->(term : Term) do
+    Term.case(term) do
+      matchpi %{($slot n←(%number +i32))} do
+        list = Term::Dict.build do |commit|
+          fn.call(n.to(Int32), commit)
+        end
+
+        Rewrite.many(list)
+      end
+
+      otherwise do
+        Rewrite.none
+      end
+    end
+  end
+
+  rewrite(template, itemdfsR(callR(handler)))
+end
+
+# FIXME: order matters right now. Make so it doesn't. Then auto-generate
+# from Layout::
 @[Flags]
 enum LayoutSet : UInt16
   DictInline
+
+  CallColumn
+
+  CallKwargsInlineWithBlock
+  CallArgIndentedKwargs
+  CallKwargsColumnWithBlock
 
   CallIndented
 
@@ -332,6 +361,191 @@ module Layout
       end
 
       Term.of(rendered)
+    end
+  end
+
+  # ```wwml
+  # (text "Hello World 1"
+  #       "Hello World 2"
+  #       "Hello World 3")
+  # ```
+  struct CallColumn
+    def call(ctx, selector, term, postfix, head, rest) : Term
+      unless selector.call_column? && ctx.layouts_allowed.call_column? && (dict = term.as_d?) && dict.itemsonly? && dict.size >= 2
+        return rest.call(ctx, selector, term, postfix)
+      end
+
+      rendered = Term::Dict.build do |commit|
+        commit << :row
+        commit.with(:gap, 1)
+
+        commit << ctx.features.call(ctx.inline, dict[0], "")
+
+        commit << Term::Dict.build do |inner|
+          inner << :col
+
+          dict.items.move(1).each_with_last do |item, last|
+            inner << ctx.features.call(ctx, item, last ? postfix : "")
+          end
+        end
+      end
+
+      Term.of(rendered)
+    end
+  end
+
+  # ```wwml
+  # (text x: 100 y: 200
+  #   "Hello World 1"
+  #   "Hello World 2"
+  #   "Hello World 3")
+  # ```
+  struct CallKwargsInlineWithBlock
+    TEMPLATE = ML.term <<-WWML
+    (col (row gap: 1
+           ($slot 0)
+           (row ($slot 1) gap: 1))
+         (indented
+           (col ($slot 2)
+                ($slot 3))))
+    WWML
+
+    def call(ctx, selector, term, postfix, head, rest) : Term
+      unless selector.call_kwargs_inline_with_block? && ctx.layouts_allowed.call_kwargs_inline_with_block? && (dict = term.as_d?) && dict.itemsize >= 2 && dict.pairsize >= 1
+        return rest.call(ctx, selector, term, postfix)
+      end
+
+      entries = OrdDict.sorted(dict)
+
+      fill(TEMPLATE) do |slot, commit|
+        case slot
+        when 0
+          _, item = entries[0]
+          commit << ctx.features.call(ctx.inline, item, "")
+        when 1
+          (dict.itemsize...dict.size).each do |index|
+            key, value = entries[index]
+
+            commit << Term[:row,
+              ctx.features.call(ctx.inline, key, ":"),
+              ctx.features.call(ctx.inline, value, ""),
+              gap: 1]
+          end
+        when 2
+          (1...dict.itemsize - 1).each do |index|
+            _, item = entries[index]
+            commit << ctx.features.call(ctx, item, "")
+          end
+        when 3
+          _, item = entries[dict.itemsize - 1]
+          commit << ctx.features.call(ctx, item, postfix)
+        else
+          unreachable
+        end
+      end
+    end
+  end
+
+  # ```wwml
+  # (text x: 100
+  #       y: 200
+  #   "Hello World 1"
+  #   "Hello World 2"
+  #   "Hello World 3")
+  # ```
+  struct CallKwargsColumnWithBlock
+    TEMPLATE = ML.term <<-WWML
+    (col (row gap: 1
+           ($slot 0)
+           (col ($slot 1)))
+         (indented
+           (col ($slot 2)
+                ($slot 3))))
+    WWML
+
+    def call(ctx, selector, term, postfix, head, rest) : Term
+      unless selector.call_kwargs_column_with_block? && ctx.layouts_allowed.call_kwargs_column_with_block? && (dict = term.as_d?) && dict.itemsize >= 2 && dict.pairsize >= 1
+        return rest.call(ctx, selector, term, postfix)
+      end
+
+      entries = OrdDict.sorted(dict)
+
+      fill(TEMPLATE) do |slot, commit|
+        case slot
+        when 0
+          _, item = entries[0]
+          commit << ctx.features.call(ctx.inline, item, "")
+        when 1
+          (dict.itemsize...dict.size).each do |index|
+            key, value = entries[index]
+
+            commit << Term[:row,
+              ctx.features.call(ctx.inline, key, ":"),
+              ctx.features.call(ctx.inline, value, ""),
+              gap: 1]
+          end
+        when 2
+          (1...dict.itemsize - 1).each do |index|
+            _, item = entries[index]
+            commit << ctx.features.call(ctx, item, "")
+          end
+        when 3
+          _, item = entries[dict.itemsize - 1]
+          commit << ctx.features.call(ctx, item, postfix)
+        else
+          unreachable
+        end
+      end
+    end
+  end
+
+  # ```wwml
+  # (text "Hello World 1"
+  #   x: 100
+  #   y: 200)
+  # ```
+  struct CallArgIndentedKwargs
+    TEMPLATE = ML.term <<-WWML
+    (col (row gap: 1
+           ($slot 0)
+           ($slot 1))
+         (indented
+           (col ($slot 2)
+                ($slot 3))))
+    WWML
+
+    def call(ctx, selector, term, postfix, head, rest) : Term
+      unless selector.call_arg_indented_kwargs? && ctx.layouts_allowed.call_arg_indented_kwargs? && (dict = term.as_d?) && dict.itemsize == 2 && dict.pairsize >= 1
+        return rest.call(ctx, selector, term, postfix)
+      end
+
+      entries = OrdDict.sorted(dict)
+
+      fill(TEMPLATE) do |slot, commit|
+        case slot
+        when 0, 1
+          _, item = entries[slot]
+          commit << ctx.features.call(ctx.inline, item, "")
+        when 2
+          (2...entries.size - 1).each do |index|
+            key, value = entries[index]
+
+            commit << Term[:row,
+              ctx.features.call(ctx.inline, key, ":"),
+              ctx.features.call(ctx, value, ""),
+              gap: 1]
+          end
+        when 3
+          key, value = entries[entries.size - 1]
+
+          commit << Term[:row,
+            ctx.features.call(ctx.inline, key, ":"),
+            ctx.features.call(ctx, value, postfix),
+            gap: 1]
+        else
+          unreachable
+        end
+      end
     end
   end
 
@@ -561,15 +775,28 @@ module Feature
     FRAG_LPAREN = ML.term %[(frag "(")]
 
     def call(ctx, term, postfix, head, rest) : Term
-      Term.matchpi(term, %{[head_symbol _*]}) do
-        continue if head.blank?
+      # TODO: (%symbol nonblank)
+      Term.case(term) do
+        matchpi %{(head_symbol _*)} do
+          continue if head.blank?
 
-        thunk = ctx.layouts_allowed.thunk(term, ")" + postfix, {:dict_inline, :call_indented, :dict_aligned})
+          thunk = ctx.layouts_allowed.thunk(term, ")" + postfix, {:dict_inline, :call_column, :call_indented, :dict_aligned})
 
-        return Term.of(:row, FRAG_LPAREN, thunk)
+          Term.of(:row, FRAG_LPAREN, thunk)
+        end
+
+        matchpi %{[head_symbol _*]} do
+          continue if head.blank?
+
+          thunk = ctx.layouts_allowed.thunk(term, ")" + postfix, {:dict_inline, :call_kwargs_inline_with_block, :call_kwargs_column_with_block, :call_arg_indented_kwargs, :call_indented, :dict_aligned})
+
+          Term.of(:row, FRAG_LPAREN, thunk)
+        end
+
+        otherwise do
+          rest.call(ctx, term, postfix)
+        end
       end
-
-      rest.call(ctx, term, postfix)
     end
   end
 
@@ -892,6 +1119,10 @@ end
 
 layout_chain = Layout.chain(
   Layout::DictInline.new,
+  Layout::CallColumn.new,
+  Layout::CallKwargsInlineWithBlock.new,
+  Layout::CallArgIndentedKwargs.new,
+  Layout::CallKwargsColumnWithBlock.new,
   Layout::CallIndented.new,
   Layout::MapInline.new,
   Layout::MapMultiline.new,
@@ -927,14 +1158,14 @@ feature_chain = Feature.chain(
 
 # ed = Term.of(JSON.parse(File.read("./data/people.json")))
 ed = ML.terms(File.read("./editor.soma.wwml"))# Term.of(:+, {:*, 3, 4}, {2})
-# ed = ML.terms %{(+ 1 2 3 4 5 x: 100 y: 200)}
+# ed = ML.terms %{(text x: 100 y: 200 z: 300 a: 100 b: 200 c: 300 "Hello World 1" "Hello World 2")}
 
 str = String.build do |io|
   screen = Screen.new
 
   ed.items.each do |sexp|
     screen.clear
-    ctx = DisplayContext.new(60, 120, feature_chain, layout_chain)
+    ctx = DisplayContext.new(40, 120, feature_chain, layout_chain)
     tree = feature_chain.call(ctx, sexp, "")
     flat, excess = flatten(ctx, tree)
     # puts excess
