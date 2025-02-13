@@ -2364,6 +2364,14 @@ struct BigRational
 end
 
 module Indexable(T)
+  def each_with_last(& : T, Bool ->) : Nil
+    return if empty?
+    (0...size - 1).each do |index|
+      yield unsafe_fetch(index), false
+    end
+    yield unsafe_fetch(size - 1), true
+  end
+
   def to_readonly_slice(& : T -> U) : Slice(U) forall U
     Slice(U).new(size, read_only: true) do |index|
       yield unsafe_fetch(index)
