@@ -67,7 +67,7 @@ module D
 
   def passable_range?(node : Term) : Range(Int32, Int32)?
     Term.case(node) do
-      matchpi %[(group _*)] { 1...node.itemsize }
+      matchpi %[(group _*)], %{[row _*]}, %{[col _*]} { 1...node.itemsize }
       matchpi %[(edit-cage for @_ _*)] { 3...node.itemsize }
       matchpi %[(decay (%number +i32) _*)] { 2...node.itemsize }
       matchpi %[(lookaround @_ @_ @_ _*)] { 4...node.itemsize }
@@ -554,7 +554,7 @@ module D
         {root1, successor?(root1, nodepath)}
       end
 
-      givenpi %[(log @pin_ in (entries_*) ¦ limit: (%optional 10 limit←(%number (whole _) > 0))) (pulse @pin_ term_) -1] do
+      givenpi %[(log @pin_ in (entries_*) ¦ limit: (%optional 10 limit←(%number (whole _) > 0))) (pulse @pin_ term_) (%not 1 2)] do
         root1 = effect(root1, nodepath, node0) do
           backmap ML.term(%[(log _ in (entries_*) ¦ _)]), Term.of(Term[].with({:entries}, rightmost(entries, limit.to(Int32) - 1).append(term)))
         end
@@ -711,7 +711,7 @@ module D
 
           if state = document[Cells, cin]?
             root1 = effect(root1, nodepath, node0) do
-              change job: {program: body, env: {"_": input, state: state}}
+              change "#job": {program: body, env: {"_": input, state: state}}
             end
           end
 
@@ -719,7 +719,7 @@ module D
         end
 
         # Send feedback busy
-        givenpi %[(transform @pin_ to @_ with @_ _ ¦ () job_) invited -1] do
+        givenpi %[(transform @pin_ to @_ with @_ _ ¦ () #job: job_) invited -1] do
           root1 = effect(root1, nodepath, node0) do
             event :feedback, :busy, pin
             schedule job
@@ -729,11 +729,11 @@ module D
         end
 
         # Wait for the job to complete
-        givenpi %[(transform @pin_ to @pout_ with @cin_ body_ job: job_) (job/completed job_ v_) -1] do
+        givenpi %[(transform @pin_ to @pout_ with @cin_ body_ #job: job_) (job/completed job_ v_) -1] do
           root1 = effect(root1, nodepath, node0) do
             event :feedback, :done, pin
             event :pulse, pout, v
-            clear :job
+            clear :"#job"
             disappear
           end
 
@@ -755,14 +755,14 @@ module D
         # Schedule job
         givenpi %[(transform @pin_ to @pout_ body_) (pulse @pin_ input_) -1] do
           root1 = effect(root1, nodepath, node0) do
-            change job: {program: body, env: {"_": input}}
+            change "#job": {program: body, env: {"_": input}}
           end
 
           {root1, successor?(root1, nodepath)}
         end
 
         # Send feedback busy
-        givenpi %[(transform @pin_ to @_ _ ¦ () job_) invited -1] do
+        givenpi %[(transform @pin_ to @_ _ ¦ () #job: job_) invited -1] do
           root1 = effect(root1, nodepath, node0) do
             event :feedback, :busy, pin
             schedule job
@@ -772,11 +772,11 @@ module D
         end
 
         # Wait for the job to complete
-        givenpi %[(transform @pin_ to @pout_ body_ job: job_) (job/completed job_ v_) -1] do
+        givenpi %[(transform @pin_ to @pout_ body_ #job: job_) (job/completed job_ v_) -1] do
           root1 = effect(root1, nodepath, node0) do
             event :feedback, :done, pin
             event :pulse, pout, v
-            clear :job
+            clear :"#job"
             disappear
           end
 
@@ -799,7 +799,7 @@ module D
         givenpi %[(transform (@pin_ pattern_) to @pout_ body_) (pulse @pin_ input_) -1] do
           if env = M1.match?(pattern, input)
             root1 = effect(root1, nodepath, node0) do
-              change job: {program: body, env: env}
+              change "#job": {program: body, env: env}
             end
           end
 
@@ -807,7 +807,7 @@ module D
         end
 
         # Send feedback busy
-        givenpi %[(transform (@pin_ _) to @_ _ ¦ () job_) invited -1] do
+        givenpi %[(transform (@pin_ _) to @_ _ ¦ () #job: job_) invited -1] do
           root1 = effect(root1, nodepath, node0) do
             event :feedback, :busy, pin
             schedule job
@@ -817,11 +817,11 @@ module D
         end
 
         # Wait for the job to complete
-        givenpi %[(transform (@pin_ _) to @pout_ body_ job: job_) (job/completed job_ v_) -1] do
+        givenpi %[(transform (@pin_ _) to @pout_ body_ #job: job_) (job/completed job_ v_) -1] do
           root1 = effect(root1, nodepath, node0) do
             event :feedback, :done, pin
             event :pulse, pout, v
-            clear :job
+            clear :"#job"
             disappear
           end
 
@@ -855,7 +855,7 @@ module D
           if state = document[Cells, cin]?
             if env = M1.match?(pattern, input)
               root1 = effect(root1, nodepath, node0) do
-                change job: {program: body, env: env.with(:state, state)}
+                change "#job": {program: body, env: env.with(:state, state)}
               end
             end
           end
@@ -864,7 +864,7 @@ module D
         end
 
         # Send feedback busy
-        givenpi %[(transform (@pin_ _) to @_ with @_ _ ¦ () job_) invited -1] do
+        givenpi %[(transform (@pin_ _) to @_ with @_ _ ¦ () #job: job_) invited -1] do
           root1 = effect(root1, nodepath, node0) do
             event :feedback, :busy, pin
             schedule job
@@ -874,11 +874,11 @@ module D
         end
 
         # Wait for the job to complete
-        givenpi %[(transform (@pin_ _) to @pout_ with @_ body_ job: job_) (job/completed job_ v_) -1] do
+        givenpi %[(transform (@pin_ _) to @pout_ with @_ body_ #job: job_) (job/completed job_ v_) -1] do
           root1 = effect(root1, nodepath, node0) do
             event :feedback, :done, pin
             event :pulse, pout, v
-            clear :job
+            clear :"#job"
             disappear
           end
 
@@ -973,7 +973,7 @@ module D
       # `edit-cage`: converts pulse signal to children-centric non-broadcast (private) edit.
       givenpi %[(edit-cage for @pin_ children_*) (pulse @pin_ motion_) _] do
         root1 = effect(root1, nodepath, node0) do
-          backmap ML.term(%[(_ _ _ children_*)]), Term[].with({:children}, edit(children, motion, edge: pin)).upcast
+          backmap ML.term(%[(_ _ _ children_*)]), Term[].with({:children}, edit(children, motion, edge: pin, smart: true)).upcast
         end
 
         {root1, successor?(root1, nodepath)}
@@ -1090,7 +1090,7 @@ module D
         # Edit-events are potentially destructive so we start from scratch after
         # them, using recursion in this case.
         matchpi %[(edit @edge_ motion_)] do
-          return advance(edit(root1, motion, edge), Term[])
+          return advance(edit(root1, motion, edge, smart: true), Term[])
         end
 
         otherwise { }
@@ -1113,10 +1113,10 @@ module D
       end
 
       givenpi(
-        %{(transform @pin_ to @_ with @_ _ ¦ () job_) -1},
-        %{(transform @pin_ to @_ _ ¦ () job_) -1},
-        %{(transform (@pin_ _) to @_ _ ¦ () job_) -1},
-        %{(transform (@pin_ _) to @_ with @_ _ ¦ () job_) -1},
+        %{(transform @pin_ to @_ with @_ _ ¦ () #job: job_) -1},
+        %{(transform @pin_ to @_ _ ¦ () #job: job_) -1},
+        %{(transform (@pin_ _) to @_ _ ¦ () #job: job_) -1},
+        %{(transform (@pin_ _) to @_ with @_ _ ¦ () #job: job_) -1},
       ) do
         Term.of(:transform, pin, job)
       end
@@ -1197,6 +1197,7 @@ module D7
   # NOTE: in D7, we rely on the convention that all hidden pairs have a key that
   # is prefixed with '#'.
   def self.visible(root : Term) : Term
+    # TODO: we should probably use D.successor? here
     root = root.as_d? || return root
 
     root = root.transaction do |commit|
