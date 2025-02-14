@@ -1,7 +1,7 @@
 require "./baz5"
 
-CURSORP  = ML.term(%([_string (%any° | (| _string)) _string (_*) @_]))
-CURSORPE = M1.operator(ML.term(%([_string (%any° | (| _string)) _string (_*) @EDGE_])))
+CURSORP  = ML.term(%([_string (%any° | [| _string]) _string (_*) @_]))
+CURSORPE = M1.operator(ML.term(%([_string (%any° | [| _string]) _string (_*) @EDGE_])))
 
 def subsume1(cursor, motion)
   Term.of(cursor.morph({3, cursor[3].size, motion}))

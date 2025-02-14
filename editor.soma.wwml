@@ -209,89 +209,106 @@ C←[lhs←";" | rhs←"" (M←(input ";") _*) @EDGE_]
   <> {(M): (), c: (| "")}
 
 ;; Leave
-[_string c←(| _string) _string (M←(key escape) _*) @EDGE_]
+[_string c←[| _string] _string (M←(key escape) _*) @EDGE_]
   <> {(M): (), c: |}
 
 ;; Ignore unknown
-[_string (| _string) _string (M←_ _*) @EDGE_]
+[_string [| _string] _string (M←_ _*) @EDGE_]
   <> {(M): ()}
 
 ;; Append characters
-[_string (| seq_string) _string (M←(input text_string) _*) @EDGE_]
-  <> {(M): (), seq: ($ (~ →seq →text))}
+[_string [| seq_string] _string (M←(input text_string) _*) @EDGE_]
+  <> {(M): (), seq: ($once (~ →seq →text))}
+;; Remove characters
+[_string [| seq_string] _string (M←(key backspace) _*) @EDGE_]
+  <> {(M): (), seq: ($once (substring →seq (rune 0) (rune -2)))}
 
 ;; Arrows
 [lhs_string c←(| "<") _string (M←(input "-") _*) @EDGE_]
-  <> {(M): (), lhs: ($ (~ →lhs "←")), c: |}
+  <> {(M): (), lhs: ($once (~ →lhs "←")), c: |}
 
 [lhs_string c←(| "-") _string (M←(input ">") _*) @EDGE_]
-  <> {(M): (), lhs: ($ (~ →lhs "→")), c: |}
+  <> {(M): (), lhs: ($once (~ →lhs "→")), c: |}
 
 [lhs_string c←(| "^") _string (M←(input "|") _*) @EDGE_]
-  <> {(M): (), lhs: ($ (~ →lhs "↑")), c: |}
+  <> {(M): (), lhs: ($once (~ →lhs "↑")), c: |}
 
 [lhs_string c←(| "|") _string (M←(input "v") _*) @EDGE_]
-  <> {(M): (), lhs: ($ (~ →lhs "↓")), c: |}
+  <> {(M): (), lhs: ($once (~ →lhs "↓")), c: |}
 
 ;; We use the degrees symbol as a symbol for source
 [lhs_string c←(| "o") _string (M←(input "o") _*) @EDGE_]
-  <> {(M): (), lhs: ($ (~ →lhs "°")), c: |}
+  <> {(M): (), lhs: ($once (~ →lhs "°")), c: |}
 
 ;; Partition pipe
 [lhs_string c←(| "|") _string (M←(input "|") _*) @EDGE_]
-  <> {(M): (), lhs: ($ (~ →lhs "¦")), c: |}
+  <> {(M): (), lhs: ($once (~ →lhs "¦")), c: |}
 
 ;; Escape hatch to avoid the auto dict open/close behavior on '('/')'.
 [lhs_string c←(| "") _string (M←(input ch←(%any "(" ")")) _*) @EDGE_]
-  <> {(M): (), lhs: ($ (~ →lhs →ch)), c: |}
+  <> {(M): (), lhs: ($once (~ →lhs →ch)), c: |}
+
+;; Switch to motion input mode
+[_string (| "" ¦ _ -motion_) _string (M←(key enter) _*) @EDGE_]
+  <> {(M): (), motion: true}
+
+;; Convert to motion
+[_string c←(| motion←(%string nonempty) ¦ motion: true) _string (M←(key enter) _*) @EDGE_]
+  <> {M: (motion ($once (ml →motion))), c: |}
+
+;; Parse motion
+[_string | _string (M←(motion (ml/ok term_)) _*) @EDGE_]
+  <> {M: →term}
+[_string | _string (M←(motion (ml/err)) _*) @EDGE_]
+  <> {(M): ()}
 
 ;; MORPH
 
 [lhs_string | _string (M←(append-left text_string) _*) @EDGE_]
   <> {(M): (),
-      lhs: ($ (~ →lhs →text))}
+      lhs: ($once (~ →lhs →text))}
 
 [lhs_string | rhs_string (M←(move-left) _*) @EDGE_]
   <> {(M): (),
-      lhs: ($ (substring →lhs (rune 0) (rune -2))),
+      lhs: ($once (substring →lhs (rune 0) (rune -2))),
       rhs: ($ (~ (substring →lhs (rune -1) (rune -1)) →rhs))}
 
 [lhs_string | rhs_string (M←(move-word-left) _*) @EDGE_]
   <> {(M): (),
-      lhs: ($ (substring →lhs (word 0) (word -2))),
+      lhs: ($once (substring →lhs (word 0) (word -2))),
       rhs: ($ (~ (substring →lhs (word -1) (word -1)) →rhs))}
 
 [lhs_string | rhs_string (M←(move-right) _*) @EDGE_]
   <> {(M): (),
       lhs: ($ (~ →lhs (substring →rhs (rune 0) (rune 0)))),
-      rhs: ($ (substring →rhs (rune 1) (rune -1)))}
+      rhs: ($once (substring →rhs (rune 1) (rune -1)))}
 
 [lhs_string | rhs_string (M←(move-word-right) _*) @EDGE_]
   <> {(M): (),
       lhs: ($ (~ →lhs (substring →rhs (word 0) (word 0)))),
-      rhs: ($ (substring →rhs (word 1) (word -1)))}
+      rhs: ($once (substring →rhs (word 1) (word -1)))}
 
 [lhs_string | _string (M←(delete-left) _*) @EDGE_]
   <> {(M): (),
-      lhs: ($ (substring →lhs (rune 0) (rune -2)))}
+      lhs: ($once (substring →lhs (rune 0) (rune -2)))}
 
 [lhs_string | _string (M←(delete-word-left) _*) @EDGE_]
   <> {(M): (),
-      lhs: ($ (substring →lhs (word 0) (word -2)))}
+      lhs: ($once (substring →lhs (word 0) (word -2)))}
 
 [_string | rhs_string (M←(delete-right) _*) @EDGE_]
   <> {(M): (),
-      rhs: ($ (substring →rhs (rune 1) (rune -1)))}
+      rhs: ($once (substring →rhs (rune 1) (rune -1)))}
 
 [_string | rhs_string (M←(delete-word-right) _*) @EDGE_]
   <> {(M): (),
-      rhs: ($ (substring →rhs (word 1) (word -1)))}
+      rhs: ($once (substring →rhs (word 1) (word -1)))}
 
 [lhs_string | rhs_string (M←(move-front-left) _*) @EDGE_]
-  <> {(M): (), lhs: "", rhs: ($ (~ →lhs →rhs))}
+  <> {(M): (), lhs: "", rhs: ($once (~ →lhs →rhs))}
 
 [lhs_string | rhs_string (M←(move-back-right) _*) @EDGE_]
-  <> {(M): (), lhs: ($ (~ →lhs →rhs)), rhs: ""}
+  <> {(M): (), lhs: ($once (~ →lhs →rhs)), rhs: ""}
 
 C←[_string | _string (M←(nest-self) _*) @EDGE_]
   <> {(M): (), C: (↑C)}
@@ -319,19 +336,19 @@ C←["" | "" ((m←edit/2 D_dict) _*) @EDGE_]
   <> {C: →D}
 
 [lhs←"" | "" (M←(edit @term_) _*) @EDGE_]
-  <> {(M): (), lhs: ($ (string →term))}
+  <> {(M): (), lhs: ($once (string →term))}
 
 [lhs←"" | "" (M←(edit term_) _*) @EDGE_]
-  <> {(M): (), lhs: ($ (string →term))}
+  <> {(M): (), lhs: ($once (string →term))}
 
 ⟨behind_ [lhs←"" | "" (M←(edit-behind) _*) @EDGE_]⟩
-  <> {(M): (), (behind): (), lhs: ($ (string →behind))}
+  <> {(M): (), (behind): (), lhs: ($once (string →behind))}
 
 ⟨[_* ⏏back] C←[lhs←"" | "" (M←(edit-behind) _*) @EDGE_]⟩
   <> {(M): (), (C): (), back: ↑C}
 
 ⟨["" | rhs←"" (M←(edit-ahead) _*) @EDGE_] ahead_⟩
-  <> {(M): (), rhs: ($ (string →ahead)), (ahead): ()}
+  <> {(M): (), rhs: ($once (string →ahead)), (ahead): ()}
 
 ⟨C←["" | "" (M←(edit-ahead) _*) @EDGE_] [⏏front _*]⟩
   <> {(M): (), (C): (), front: ↑C}
@@ -339,10 +356,10 @@ C←["" | "" ((m←edit/2 D_dict) _*) @EDGE_]
 ;; If the user attempts to edit an edge, show them the pretty-printed
 ;; version of the edge rather than its underlying dict implementation.
 ⟨@edge_ C←[lhs←"" | "" (M←(edit-behind) _*) @EDGE_]⟩
-  <> {(M): (), (edge): (), lhs: ($ (string →edge))}
+  <> {(M): (), (edge): (), lhs: ($once (string →edge))}
 
 ⟨C←["" | rhs←"" (M←(edit-ahead) _*) @EDGE_] @edge_⟩
-  <> {(M): (), (edge): (), rhs: ($ (string →edge))}
+  <> {(M): (), (edge): (), rhs: ($once (string →edge))}
 
 ⟨behind_ C←[_string | _string (M←(move-behind) _*) @EDGE_]⟩
   <> {(M): (), C: ↑behind, behind: ↑C}

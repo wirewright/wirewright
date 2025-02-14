@@ -284,7 +284,11 @@
     clipboard: (copy (button "+++ Increment" @actions)))
    (button "+++ Increment" @actions)))
  (after
-  ((input ",") (input "y") (key down) (input ",") (input "p"))
+  ((input ",")
+   (input "y")
+   (key down)
+   (input ",")
+   (input "p"))
   (((button "+++ Increment" @actions)
     (button "+ Increment" @actions)
     (button))
@@ -404,7 +408,11 @@
    (button "+ Increment" @actions)
    (button "- Decrement" @actions)))
  (after
-  ((key end) (input ",") (input "y") (input ",") (input "p"))
+  ((key end)
+   (input ",")
+   (input "y")
+   (input ",")
+   (input "p"))
   ((button "+ Increment" @actions)
    (button "- Decrement" @actions)
    (button "- Decrement" @actions)
@@ -1272,4 +1280,41 @@
     (button "0 Reset" @actions style: "text-sm"))
    (comment "Hello World")
    (+ 1 2)
+   ("" | "" () @user)))
+ (after
+  ((key escape)
+   (key enter)
+   (input "C-backspace")
+   (key backspace)
+   (input "e")
+   (key enter))
+  ((row
+    (button
+     "+ Increment"
+     @actions
+     qux: (+ 1 2)
+     style: "text-xs")
+    (button "- Decrement" @actions style: "text-lg")
+    (button "0 Reset" @actions style: "text-sm"))
+   (comment "Hello World")
+   (+ 1 2)
+   ("" | "" () @user)))
+ (after
+  ((key escape)
+   (key enter)
+   (input "(")
+   (input "key")
+   (input " ")
+   (input "C-backspace")
+   (input ")")
+   (key enter))
+  ((row
+    (button
+     "+ Increment"
+     @actions
+     qux: (+ 1 2)
+     style: "text-xs")
+    (button "- Decrement" @actions style: "text-lg")
+    (button "0 Reset" @actions style: "text-sm"))
+   (comment "Hello World")
    ("" | "" () @user))))
