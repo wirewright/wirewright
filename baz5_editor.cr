@@ -19,6 +19,51 @@ def subsume(root, motion, edge)
   Term.of(dict0.replace { |_, v| subsume(v, motion, edge) })
 end
 
+def smart_subsume(root, motion, edge)
+  keypaths = [] of {Term::Dict, Bool}
+  smart_subsume(root, motion, edge, Term[], keypaths, true)
+
+  if keypaths.any? { |_, good_choice| good_choice }
+    keypaths.each do |kp, good_choice|
+      next unless good_choice
+      root = root.as_d.follow(kp.items) { |cursor| subsume1(cursor, motion) }
+    end
+  else
+    keypaths.each do |kp, _|
+      root = root.as_d.follow(kp.items) { |cursor| subsume1(cursor, motion) }
+    end
+  end
+
+  Term.of(root)
+end
+
+# TODO: this must have more patterns (and be "smarter"!!)
+def smart_subsume(root, motion, edge, keypath, keypaths, good_choice)
+  if M1::Operator.probe?(Term["EDGE": edge], CURSORPE, root)
+    keypaths << {keypath, good_choice}
+    return
+  end
+
+  return unless dict0 = root.as_d?
+
+  Term.case(dict0) do
+    matchpi %{(log @_ in (entries_*))} do
+      smart_subsume(entries, motion, edge, keypath.append(3), keypaths, good_choice: false)
+    end
+
+    matchpi %{(cell value_dict @_)} do
+      smart_subsume(value, motion, edge, keypath.append(1), keypaths, good_choice: false)
+    end
+
+    otherwise do
+      dict0.each_entry do |k, v|
+        smart_subsume(v, motion, edge, keypath.append(k), keypaths, good_choice)
+      end
+    end
+  end
+
+end
+
 def editR : Rewriter
   primitives = ProcRuleset.build do
     rulepi1 %[(+ a_number b_number)] { a + b }
@@ -104,8 +149,13 @@ end
 
 EDITR = editR
 
-def edit(root root0 : Term, motion : Term, edge = Term.of(:edge, :user)) : Term
-  root1 = pipe(root0, subsume(motion, edge))
+def edit(root root0 : Term, motion : Term, edge = Term.of(:edge, :user), *, smart = false) : Term
+  if smart
+    root1 = smart_subsume(root0, motion, edge)
+  else
+    root1 = subsume(root0, motion, edge)
+  end
+
   if root0.same?(root1)
     return root1
   end
