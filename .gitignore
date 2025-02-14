@@ -13,6 +13,7 @@ _*
 !PLAN
 
 ### Above combination will ignore all files without extension ###
+/junk/
 /docs/
 /lib/
 /bin/
