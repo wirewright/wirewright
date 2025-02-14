@@ -612,13 +612,13 @@ module Feature
     end
   end
 
-  macro def_literal(cls, typeblank)
+  macro def_literal(cls, tag, typeblank)
     struct {{cls}}
       include Feature
 
       def call(ctx, term, postfix, head, rest) : Term
         Term.matchpi(term, {{typeblank}}) do
-          return Term.of(:frag, "#{term.inspect}#{postfix}")
+          return Term.of(:row, Term.of(:frag, term.inspect, tag: {{tag}}), Term.of(:frag, postfix))
         end
 
         rest.call(ctx, term, postfix)
@@ -629,6 +629,7 @@ end
 
 module Feature
   # Renders `(backmap <pattern> <backspec>)` as `<pattern> <> <backspec>`.
+  # FIXME: we should somehow only enable these at the top level.
   struct Backmap
     include Feature
 
@@ -678,6 +679,7 @@ module Feature
   end
 
   # Renders `(rule <pattern> <body>)` as `<pattern> => <body>`.
+  # FIXME: we should somehow only enable these at the top level.
   struct Rule
     include Feature
 
@@ -727,7 +729,18 @@ module Feature
   end
 
   # Renders `(edge x)` as `@x`.
-  def_prefix Edge, %{(edge suffix←(%any° _symbol _number _string))}, "@"
+  struct Edge
+    include Feature
+
+    def call(ctx, term, postfix, head, rest)
+      Term.matchpi(term, %{(edge suffix←(%any° _symbol _number _string))}) do
+        return Term.of(:row, Term.of(:frag, "@#{suffix.inspect}", tag: :edge), Term.of(:frag, postfix))
+      end
+
+      rest.call(ctx, term, postfix)
+    end
+  end
+
   # Renders `(%slot x)` as `⏏x`.
   def_prefix PatternSlot, %{(%'%slot suffix_)}, "⏏"
   # Renders `(%nonself x)` as `=x`
@@ -1023,29 +1036,33 @@ module Feature
   end
 
   # Renders symbol literals.
-  def_literal SymbolLiteral, %{_symbol}
-  # Renders number literals.
-  def_literal NumberLiteral, %{_number}
-  # Renders string literals.
-  def_literal StringLiteral, %{_string}
-  # Renders boolean literals.
-  def_literal BooleanLiteral, %{_boolean}
+  def_literal SymbolLiteral, :symbol, %{_symbol}
 
-  # Renders thousands in integers with underscore, e.g. `1000000` is rendered
-  # as `1_000_000`.
-  struct IntegerGroupThousands
+  # Renders number literals.
+  struct NumberLiteral
     include Feature
+
+    # Optionally renders thousands in integers with underscore, e.g. `1000000` is rendered
+    # as `1_000_000`.
+    def initialize(@underscore_thousands = true)
+    end
 
     def call(ctx, term, postfix, head, rest) : Term
       Term.case(term) do
-        # The conversion for this one is cheap so we handle it separately.
-        matchpi %{(%number i32)} do
-          Term.of(:frag, "#{term.to(Int32).format(delimiter: '_')}#{postfix}")
+        if @underscore_thousands
+          # The conversion for this one is cheap so we handle it separately.
+          matchpi %{(%number i32)} do
+            Term.of(:row, Term.of(:frag, "#{term.to(Int32).format(delimiter: '_')}", tag: :number), Term.of(:frag, postfix))
+          end
+
+          # The conversion for this one is expensive since we're going through BigInt.
+          matchpi %{(%number (whole _))} do
+            Term.of(:row, Term.of(:frag, "#{term.to(BigInt).format(delimiter: '_')}", tag: :number), Term.of(:frag, postfix))
+          end
         end
 
-        # The conversion for this one is expensive since we're going through BigInt.
-        matchpi %{(%number (whole _))} do
-          Term.of(:frag, "#{term.to(BigInt).format(delimiter: '_')}#{postfix}")
+        matchpi %{_number} do
+          Term.of(:row, Term.of(:frag, term.inspect, tag: :number), Term.of(:frag, postfix))
         end
 
         otherwise do
@@ -1054,6 +1071,12 @@ module Feature
       end
     end
   end
+
+  # Renders string literals.
+  def_literal StringLiteral, :string, %{_string}
+
+  # Renders boolean literals.
+  def_literal BooleanLiteral, :boolean, %{_boolean}
 
   # Renders `()`.
   struct EmptyDict
@@ -1202,13 +1225,9 @@ end
 
 def flatten(ctx, node : Term, maxwidth : Int32, layouts : LayoutSet) : {Term, Int32}
   Term.case(node) do
-    matchpi %{[frag _]} do
+    matchpi %{[frag _]}, %{[block _]} do
       width, _ = measure(ctx, node)
       {node, maxwidth - width}
-    end
-
-    matchpi %{[block _]} do
-      {node, maxwidth}
     end
 
     matchpi %{(longer child_)} do
@@ -1315,83 +1334,6 @@ def flatten(ctx, node : Term, layouts : LayoutSet = LayoutSet::All) : {Term, Int
   flatten(ctx, node, maxwidth: ctx.normal_width, layouts: layouts)
 end
 
-def draw(ctx, screen, node : Term, x, y)
-  Term.case(node) do
-    matchpi %{[frag chars_string]} do
-      chars.to(String).each_char do |char|
-        screen.put(x, y, char)
-        x += 1
-      end
-    end
-
-    matchpi %{[block term_]} do
-      term.inspect.each_char do |char|
-        screen.put(x, y, char)
-        x += 1
-      end
-    end
-
-    matchpi %[(row children_* ¦ _ gap: (%optional 0 gap←(%number +i32)))] do
-      children.items.each_with_index do |child, index|
-        x += gap.to(Int32) if index > 0
-        draw(ctx, screen, child, x, y)
-        child_width, _ = measure(ctx, child)
-        x += child_width
-      end
-    end
-
-    matchpi %[(col children_* ¦ _ gap: (%optional 0 gap←(%number +i32)))] do
-      children.items.each_with_index do |child, index|
-        y += gap.to(Int32) if index > 0
-        draw(ctx, screen, child, x, y)
-        _, child_height = measure(ctx, child)
-        y += child_height
-      end
-    end
-
-    matchpi %[(indented child_ ¦ _ by: (%optional 1 n←(%number +i32)))] do
-      draw(ctx, screen, child, x + n.to(Int32), y)
-    end
-  end
-end
-
-# ?!?!?!?!?!
-class Screen
-  def initialize
-    @cells = Hash({Int32, Int32}, Char).new
-    @max_x = 0
-    @max_y = 0
-  end
-
-  def clear : Nil
-    @max_x = @max_y = 0
-    @cells.clear
-  end
-
-  def put(x, y, ch : Char) : Nil
-    @cells[{x, y}] = ch
-    @max_x = Math.max(@max_x, x)
-    @max_y = Math.max(@max_y, y)
-  end
-
-  def write(io : IO)
-    (0..@max_y).each do |y|
-      # FIXME: this ends up inserting a bunch of spaces at the end of the string up to @max_x
-      (0..@max_x).each do |x|
-        char = @cells[{x, y}]? || ' '
-        io << char
-      end
-      io.puts
-    end
-  end
-
-  def string : String
-    String.build do |io|
-      write(io)
-    end
-  end
-end
-
 struct Chain(T)
   def initialize(@callables : Slice(T))
   end
@@ -1443,92 +1385,3 @@ struct Chain(T)
     raise ArgumentError.new("find: needle #{needle} not in the chain")
   end
 end
-
-layout_chain = Chain(Layout).new(
-  Layout::DictInline.new,
-  Layout::CallColumn.new,
-  Layout::CallKwargsInlineWithBlock.new,
-  Layout::CallArgIndentedKwargs.new,
-  Layout::CallKwargsColumnWithBlock.new,
-  Layout::CallIndented.new,
-  Layout::MapInline.new,
-  Layout::MapMultiline.new,
-  Layout::MapMultilineIndented.new,
-  Layout::DictAligned.new,
-)
-
-ppairs_chain = Chain(Feature).new(
-  Feature::PairspartLet.new,
-  Feature::PairspartOptional.new,
-  Feature::PairspartNegation.new,
-  Feature::PairspartBlank.new,
-  Feature::PairspartPair.new
-)
-
-feature_chain = Chain(Feature).new(
-  Feature::Backmap.new,
-  Feature::Rule.new,
-  Feature::Edge.new,
-  Feature::BackrefMy.new,
-  Feature::BackrefUp.new,
-  Feature::BackrefDown.new,
-  Feature::Hold.new,
-  Feature::PatternSlot.new,
-  Feature::PatternNonself.new,
-  Feature::PatternLiteral.new,
-  Feature::PatternLet.new,
-  Feature::PatternItemFirst.new,
-  Feature::PatternItemSource.new,
-  Feature::PatternPairspart.new,
-  Feature::IntegerGroupThousands.new,
-  Feature::SymbolLiteral.new,
-  Feature::NumberLiteral.new,
-  Feature::StringLiteral.new,
-  Feature::BooleanLiteral.new,
-  Feature::EmptyDict.new,
-  Feature::CallLike.new,
-  Feature::MapLike.new,
-  Feature::DictLiteral.new,
-)
-
-# pp flatten(ctx, feature_chain.call(ctx, Term.of(:"%item°", 100, 200, 300), ""))
-
-# pp Feature::Edge.call(ctx, Term.of(:edge, 100), "))", ->(ctx : DisplayContext, term : Term, postfix : String) do
-#                         raise "end of chain!!"
-#                       end)
-
-# ed = Term.of(JSON.parse(File.read("./data/people.json")))
-ed = ML.terms(File.read("./editor.soma.wwml"))# Term.of(:+, {:*, 3, 4}, {2})
-# ed = ML.terms <<-WWML
-# (_string | _string (M←(clear-clipboard) _*) @EDGE_ ¦ _ clipboard_)
-#   <> {(M): (), (clipboard): ()}
-# WWML
-
-str = String.build do |io|
-  screen = Screen.new
-
-  ed.items.each do |sexp|
-    screen.clear
-    ctx = DisplayContext.new(60, 120, feature_chain, layout_chain, ppairs_chain)
-    tree = feature_chain.call(ctx, sexp, "")
-    flat, excess = flatten(ctx, tree)
-    # puts excess
-    # puts ML.display(flat)
-    draw(ctx, screen, flat, 0, 0)
-    screen.write(io)
-    io.puts
-  end
-end
-
-puts str
-puts str == File.read("./pprint1.out.1")
-pp ed == ML.terms(str)
-
-# [x] x_: 100 => x: (%let x 100)
-# [x] x⋮ 100 => x: (%optional 100 x_number) ;; infers type
-# [x] x_⋮ 100 => x: (%optional 100 x_) ;; does not infer type
-# [x] x_string⋮ 100 ;; invalid. Either infer or any-blank
-# [x] ¦ ... w_ ... => ... w: w_ ...
-# [x] ¦ ... w_number ... => ... w: w_number ...
-# [x] -x_ => (%- _ x)
-# [x] -x_number => (%- _number x)
