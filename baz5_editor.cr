@@ -120,7 +120,7 @@ def editR : Rewriter
   #
   # (rewriter (editR)
   #   (exhR
-  #     (relR cursor ascent: 2
+  #     (relR cursor ascent: 3
   #       (absR (rulesetR editor rule: (dfsR (envR))
   #                              backmap: (backmapR)
   #                              missing: noR)))))
@@ -144,7 +144,7 @@ def editR : Rewriter
 
   backmapr = chainR(updownmyr, dollarr)
 
-  exhR(relR(CURSORPE, absR(rulesetR(editor_ruleset, dfsR(envR), backmapr, noR, envopt: Term.of(:env))), ascent: 2, envopt: Term.of(:env)))
+  exhR(relR(CURSORPE, absR(rulesetR(editor_ruleset, dfsR(envR), backmapr, noR, envopt: Term.of(:env))), ascent: 3, envopt: Term.of(:env)))
 end
 
 EDITR = editR
