@@ -248,6 +248,14 @@
   (= (a b c) {v: 1/3})
   (- (1/3 "baz" a true (x y z))))
 
+;; %pipe type
+(pattern (%pipe type type_)
+  (= 0 {type: _number})
+  (= "hello" {type: _string})
+  (= qux {type: _symbol})
+  (= true {type: _boolean})
+  (= {} {type: _dict}))
+
 ;; %edge
 (group
   (pattern @qux

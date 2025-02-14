@@ -574,6 +574,8 @@ transformations are supported:
   matches strings that contain just one character.
 - `tally`: transforms a dictionary matchee into the number of entries in it: e.g., `(%pipe tally 3)`
   matches dictionaries with three entries (items, pairs, or both).
+- `type`: transforms any term into an unnamed, typed blank: e.g. `(%pipe type T_)` will match
+  `42` with `{T: _number}`, `"hello"` with `{T: _string}`, etc.
 - `(+ n_number)`: adds `n` to a number matchee: e.g. `(%pipe (+ 100) x_)`.
 - `(- n_number)`: subtracts `n` from a number matchee: e.g. `(%pipe (- 100) x_)`.
 - `(* n_number)`: multiplies a number matchee by `n`: e.g. `(%pipe (* 2) double_)`.

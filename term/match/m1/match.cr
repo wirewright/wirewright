@@ -267,6 +267,10 @@ module Ww::M1::Operator
     match(behind0, op.successor, Term.of(a.size), ahead0)
   end
 
+  def match(behind0, op : Type, matchee : Term, ahead0)
+    match(behind0, op.successor, Term.of(matchee.type.blank), ahead0)
+  end
+
   def match(behind0, op : Add, matchee : Term, ahead0)
     unless a = matchee.as_n?
       return Fb::Mismatch.new(behind0.env)
