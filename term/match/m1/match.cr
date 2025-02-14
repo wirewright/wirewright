@@ -45,6 +45,18 @@ module Ww::M1::Operator
     end
   {% end %}
 
+  def match(behind0, op : SymNonblank, matchee : Term, ahead0)
+    unless symbol = matchee.as_sym?
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    if symbol.blank?
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    Ahead.tr(behind0, ahead0)
+  end
+
   def match(behind0, op : Itemsonly, matchee : Term, ahead0)
     unless (dict = matchee.as_d?) && dict.itemsonly?
       return Fb::Mismatch.new(behind0.env)

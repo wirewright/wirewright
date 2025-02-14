@@ -25,6 +25,9 @@ module Ww::M1::Operator
   INSTANCE_DICT = Dict.new
 
   defcase Sym
+
+  defcase SymNonblank
+
   defcase Str
   defcase Boolean
   defcase Dict

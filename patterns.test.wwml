@@ -27,6 +27,12 @@
     (+ () (1) {x: "John Doe"} (qux 1 x: "John Doe"))
     (- 1 "John Doe" qux true)))
 
+;; %symbol nonblank
+(pattern (%symbol nonblank)
+  (+ qux john_doe)
+  (- _ _number _symbol qux_ qux_string qux_dict qux_boolean)
+  (- 100 "hello world" true {} (1) {x: "John Doe"} (qux x: "John Doe")))
+
 ;; Blanks: basic & unify
 (group
   (pattern (x_ y_)

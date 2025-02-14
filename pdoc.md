@@ -152,13 +152,27 @@ so on:
 Symbols specifically can be matched by `_symbol` or similarly `x_symbol` (understood as `x←_symbol`
 and so on). `_symbol` here stands for "any symbol".
 
-A symbol's only feature is its identity. Other than that there is nothing in it. No operators other
-than `_symbol` work with symbols specifically.
+```wwml
+(lamp on)      ;; => (ok "turned the lamp on")
+(lamp off)     ;; => (ok "turned the lamp off")
+(lamp _symbol) ;; => (err "what?")
+```
+
+### Matching nonblank symbols
+
+It is sometimes useful to match nonblank symbols, especially when doing higher-order patterns
+(patterns that match patterns). To address this Wirewright has `(%symbol nonblank)`:
 
 ```wwml
-(lamp on) => (ok "turned the lamp on")
-(lamp off) => (ok "turned the lamp off")
-(lamp _symbol) => (err "what?")
+(literal-symbol? (%symbol nonblank)) => true
+(literal-symbol? _symbol) => false
+
+(literal-symbol? qux)        ;; => true
+(literal-symbol? _)          ;; => false
+(literal-symbol? _number)    ;; => false
+(literal-symbol? qux_)       ;; => false
+(literal-symbol? qux_number) ;; => false
+;; etc...
 ```
 
 ## Matching strings

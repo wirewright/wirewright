@@ -21,6 +21,7 @@
 # │ %layer                   │   +   │   +     │   +   │            │    ~     │       │
 # │ %number                  │   +   │   +     │   +   │            │    ·     │       │   ~
 # │ %nonself                 │   +   │   ·     │   ·   │     ·      │    ·     │   ·   │   ·
+# │ %symbol nonblank blank   │       │         │       │            │          │       │
 # │ %string                  │       │         │       │            │          │       │
 # │ %string date             │       │         │       │            │          │       │
 # │ %string decimal          │       │         │       │            │          │       │
@@ -390,7 +391,7 @@ end
 #   are not, fix that. In fact, Operator should probably be renamed to Subject or something
 #   like that. Not sure how large of a refactor that is, and how much point is there in it.
 module ::Ww::M1::Operator
-  alias Any = Pass | Num | Sym | Boolean | Dict | Itemsonly | Pairsonly | SketchSubset | Bounds | BoundsGuard | MaxDepth | DictGuard | Literal | Capture | CaptureItemsonly | ItemSeq | ItemFirst | ItemLast | SingularSeq | Partition | Edge | LiteralChoices | SourceChoice | ValueLiteral | Keypool | Span | Tally | Type | Bin | Both | Not | Layer | ScanFirst | ScanSource | ScanAll | ScanAllIsolated | DfsFirst | DfsSource | DfsAllIsolated | DfsAll | BfsFirst | BfsAllIsolated | BfsAll | Value | NegativeValue | NegativeValueKeypath | EntriesFirst | EntriesSource | EntriesAllIsolated | EntriesAll | Str | New | KeypathCapture
+  alias Any = Pass | Num | Sym | SymNonblank | Boolean | Dict | Itemsonly | Pairsonly | SketchSubset | Bounds | BoundsGuard | MaxDepth | DictGuard | Literal | Capture | CaptureItemsonly | ItemSeq | ItemFirst | ItemLast | SingularSeq | Partition | Edge | LiteralChoices | SourceChoice | ValueLiteral | Keypool | Span | Tally | Type | Bin | Both | Not | Layer | ScanFirst | ScanSource | ScanAll | ScanAllIsolated | DfsFirst | DfsSource | DfsAllIsolated | DfsAll | BfsFirst | BfsAllIsolated | BfsAll | Value | NegativeValue | NegativeValueKeypath | EntriesFirst | EntriesSource | EntriesAllIsolated | EntriesAll | Str | New | KeypathCapture
 
   alias Bin = Add | Sub | Mul | Div | Idiv | Mod | Pow | Map
 
@@ -1473,6 +1474,8 @@ module ::Ww::M1::Operator::Item
   end
 end
 
+# TODO: we probably should rename `Ahead.tr` to `Ahead.bridge` since the latter is
+# **just a bit** less cryptic.
 module ::Ww::M1::Operator::Ahead
   alias Any = MatchOne | MatchEndpoint | Match | Forward | ItemZip | EntrySeq | ItemAdapter | Goto
 
@@ -2566,6 +2569,10 @@ module ::Ww::M1
         # Expand (%string nonempty) into (%all (%not "") _string)
         matchpi %[(%string nonempty)], cue: {:"%string", :nonempty} do
           pattern(Term.of(:"%all", {:"%not", ""}, :_string))
+        end
+
+        matchpi %[(%symbol nonblank)], cue: {:"%symbol", :nonblank} do
+          {:"%terminal", pattern}
         end
 
         # NOTE: you should insert new matchpis here, especially if they are infrequent.
@@ -4040,6 +4047,10 @@ module ::Ww::M1
 
       match({:"%new", :pattern_}, {:"%new", :_, :pattern_}, cue: :"%new") do |pattern|
         Operator::New.new((blanks(pattern) & captures).array, pattern)
+      end
+
+      matchpi %[(%symbol nonblank)], cue: {:"%symbol", :"nonblank"} do
+        Operator::SymNonblank.new
       end
 
       # %terminal is used to mark terminal nodes for walk
