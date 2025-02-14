@@ -33,6 +33,36 @@
   (- _ _number _symbol qux_ qux_string qux_dict qux_boolean)
   (- 100 "hello world" true {} (1) {x: "John Doe"} (qux x: "John Doe")))
 
+;; %symbol blank
+(group
+  (pattern (%symbol blank name_ type_)
+    (= x_ {name: x, type: _})
+    (= x___ {name: x__, type: _})
+    (= x_number {name: x, type: _number})
+    (= x__symbol {name: x_, type: _symbol})
+    (= full_name_string {name: full_name, type: _string})
+    (= ok_boolean {name: ok, type: _boolean})
+    (= names-of-people?_dict {name: names-of-people?, type: _dict})
+    (= +∞_number {name: +∞, type: _number})
+    (- _ _number _symbol qux 100 "hello" true ()))
+
+  (pattern ((%pipe type t_) (%symbol blank name_ t_))
+    (= (x qux_symbol) {name: qux, t: _symbol})
+    (= (100 foo_number) {name: foo, t: _number})
+    (- ("hello" bar_) (123 x_string) (123 _number)))
+
+  (pattern (%any° ((%pipe type T_) (%symbol blank name_ T_))
+                  (_ (%symbol blank name_ T←%'_)))
+    (= (x qux_symbol) {name: qux, T: _symbol})
+    (= (100 foo_number) {name: foo, T: _number})
+    (= ("hello" bar_) {name: bar, T: _})
+    (- (123 x_string) (123 _number)))
+
+  ;; TODO: we have to actually support this!!
+  (backmap ((%symbol blank name_ type_) {name: qux, type: _number})
+    (= abc_ abc_)
+    (= abc_number abc_number)))
+
 ;; Blanks: basic & unify
 (group
   (pattern (x_ y_)

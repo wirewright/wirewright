@@ -45,6 +45,17 @@ module Ww::M1::Operator
     end
   {% end %}
 
+  def match(behind0, op : SymBlank, matchee : Term, ahead0)
+    unless (symbol = matchee.as_sym?) && (blank = symbol.blank?) && (name = blank.name?)
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    ahead1 = Ahead::Goto.new(behind0.keypath?, Ahead.stackptr(ahead0))
+    ahead2 = Ahead::Match.new(op.type, Term.of(blank.type.blank), Ahead.stackptr(ahead1))
+
+    match(behind0.keypathless, op.name, Term.of(name), ahead2)
+  end
+
   def match(behind0, op : SymNonblank, matchee : Term, ahead0)
     unless symbol = matchee.as_sym?
       return Fb::Mismatch.new(behind0.env)

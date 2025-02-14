@@ -26,6 +26,7 @@ module Ww::M1::Operator
 
   defcase Sym
 
+  defcase SymBlank, name : Any, type : Any
   defcase SymNonblank
 
   defcase Str

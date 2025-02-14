@@ -52,6 +52,8 @@ will contain a pattern or not. So if we wanted to guarantee literal treatment, w
 meaningless one since it is essentially `(match-lit x_ x_)`). Maybe you are creating patterns
 on the fly, from some kind of template; then `%literal` could be used as a kind of "interpolation barrier".
 
+There is a shorthand syntax for `%literal`: `%'`. For example, `%'(+ x_ y_)` is the same as `(%literal (+ x_ y_))`.
+
 ### Matching several alternative terms
 
 If you need to match exactly one term from a set of alternatives, you can use the `%any` operator.
@@ -173,6 +175,40 @@ It is sometimes useful to match nonblank symbols, especially when doing higher-o
 (literal-symbol? qux_)       ;; => false
 (literal-symbol? qux_number) ;; => false
 ;; etc...
+```
+
+### Matching blank symbols
+
+Likewise, for matching blanks, Wirewright has `(%symbol blank <name> <type>)`. This operator
+matches a *named* blank symbol. It splits it into two parts: name and type. Type is an unnamed,
+typed blank, similar to the one emitted by `(%pipe type)`.
+
+```wwml
+(type-matches (%pipe type T_) (%symbol blank name_ T_)) => (T name)
+
+(type-matches 100 x_number)       ;; => (_number 100)
+(type-matches "hello" qux_string) ;; => (_string "hello")
+
+(type-matches 100 foo_symbol) ;; => (type-matches 100 foo_symbol) [mismatch]
+;; etc...
+```
+
+Note that there is no subtyping behavior: `T`s are compared using equality, not subtype,
+so `(type-matches 100 foo_)` will mismatch in the example above: `foo_`s type, matched by
+`(%symbol blank)`, is `_`; whereas `100`'s, matched by `(%pipe type)` is `_number`. The simplest
+way to avoid this is to introduce a separate rule that handles `_`, simulating subtyping behavior:
+
+```wwml
+(type-matches (%pipe type T_) (%symbol blank name_ T_)) => (T name)
+(type-matches _ (%symbol blank name_ %'_)) => (_ name)
+```
+
+Another way is to use a toplevel `%any°`, in case you cannot define multiple rules:
+
+```wwml
+(%any° (type-matches (%pipe type T_) (%symbol blank name_ T_))
+       (type-matches _ (%symbol blank name_ T←%'_)))
+  => (T name)
 ```
 
 ## Matching strings

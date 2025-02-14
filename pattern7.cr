@@ -21,7 +21,7 @@
 # │ %layer                   │   +   │   +     │   +   │            │    ~     │       │
 # │ %number                  │   +   │   +     │   +   │            │    ·     │       │   ~
 # │ %nonself                 │   +   │   ·     │   ·   │     ·      │    ·     │   ·   │   ·
-# │ %symbol nonblank blank   │       │         │       │            │          │       │
+# │ %symbol nonblank blank   │   ~   │   ~     │   ~   │            │          │       │   ~
 # │ %string                  │       │         │       │            │          │       │
 # │ %string date             │       │         │       │            │          │       │
 # │ %string decimal          │       │         │       │            │          │       │
@@ -391,7 +391,7 @@ end
 #   are not, fix that. In fact, Operator should probably be renamed to Subject or something
 #   like that. Not sure how large of a refactor that is, and how much point is there in it.
 module ::Ww::M1::Operator
-  alias Any = Pass | Num | Sym | SymNonblank | Boolean | Dict | Itemsonly | Pairsonly | SketchSubset | Bounds | BoundsGuard | MaxDepth | DictGuard | Literal | Capture | CaptureItemsonly | ItemSeq | ItemFirst | ItemLast | SingularSeq | Partition | Edge | LiteralChoices | SourceChoice | ValueLiteral | Keypool | Span | Tally | Type | Bin | Both | Not | Layer | ScanFirst | ScanSource | ScanAll | ScanAllIsolated | DfsFirst | DfsSource | DfsAllIsolated | DfsAll | BfsFirst | BfsAllIsolated | BfsAll | Value | NegativeValue | NegativeValueKeypath | EntriesFirst | EntriesSource | EntriesAllIsolated | EntriesAll | Str | New | KeypathCapture
+  alias Any = Pass | Num | Sym | SymBlank | SymNonblank | Boolean | Dict | Itemsonly | Pairsonly | SketchSubset | Bounds | BoundsGuard | MaxDepth | DictGuard | Literal | Capture | CaptureItemsonly | ItemSeq | ItemFirst | ItemLast | SingularSeq | Partition | Edge | LiteralChoices | SourceChoice | ValueLiteral | Keypool | Span | Tally | Type | Bin | Both | Not | Layer | ScanFirst | ScanSource | ScanAll | ScanAllIsolated | DfsFirst | DfsSource | DfsAllIsolated | DfsAll | BfsFirst | BfsAllIsolated | BfsAll | Value | NegativeValue | NegativeValueKeypath | EntriesFirst | EntriesSource | EntriesAllIsolated | EntriesAll | Str | New | KeypathCapture
 
   alias Bin = Add | Sub | Mul | Div | Idiv | Mod | Pow | Map
 
@@ -2575,6 +2575,10 @@ module ::Ww::M1
           {:"%terminal", pattern}
         end
 
+        matchpi %[(%symbol blank name_ type_)], cue: {:"%symbol", :blank} do
+          {:"%symbol", :blank, pattern(name), pattern(type)}
+        end
+
         # NOTE: you should insert new matchpis here, especially if they are infrequent.
         # Below we have raw dict/literal treatment; if you put your matchpis below they
         # will probably not be reached. If your matchpi does not start with a %, make sure
@@ -4051,6 +4055,10 @@ module ::Ww::M1
 
       matchpi %[(%symbol nonblank)], cue: {:"%symbol", :"nonblank"} do
         Operator::SymNonblank.new
+      end
+
+      matchpi %[(%symbol blank name_ type_)], cue: {:"%symbol", :"blank"} do
+        Operator::SymBlank.new(operator(name, captures), operator(type, captures))
       end
 
       # %terminal is used to mark terminal nodes for walk
