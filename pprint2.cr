@@ -970,19 +970,17 @@ module Feature
     include Feature
 
     def call(ctx, term, postfix, head, rest) : Term
-      # TODO: (key_ (%'%optional value←(%pipe type vT_) (%symbol blank key_ vT_)))
-      Term.matchpi(term, %{(key_ (%'%optional fallback_ capture_symbol))}) do
-        continue unless blank = capture.blank?
-        continue unless key == blank.name?
-
-        if fallback.type == blank.type
-          return Templates.pair(ctx, key, "⋮", fallback, postfix)
-        elsif blank.type.any?
-          return Templates.pair(ctx, key, "_⋮", fallback, postfix)
+      Term.case(term) do
+        matchpi %{(key_ (%'%optional fallback←(%pipe type t_) (%symbol blank key_ t_)))} do
+          Templates.pair(ctx, key, "⋮", fallback, postfix)
         end
-      end
 
-      rest.call(ctx, term, postfix)
+        matchpi %{(key_ (%'%optional fallback_ (%symbol blank key_ %'_)))} do
+          Templates.pair(ctx, key, "_⋮", fallback, postfix)
+        end
+
+        otherwise { rest.call(ctx, term, postfix) }
+      end
     end
   end
 
@@ -1011,11 +1009,7 @@ module Feature
     include Feature
 
     def call(ctx, term, postfix, head, rest) : Term
-      # TODO: (key_symbol value←(%symbol blank key_ type_))
-      Term.matchpi(term, %{(key_symbol value_symbol)}) do
-        continue unless blank = value.blank?
-        continue unless key == blank.name?
-
+      Term.matchpi(term, %{(key_symbol value←(%symbol blank key_ _))}) do
         return ctx.features.call(ctx, value, postfix)
       end
 
@@ -1098,19 +1092,14 @@ module Feature
     FRAG_LPAREN = ML.term %[(frag "(")]
 
     def call(ctx, term, postfix, head, rest) : Term
-      # TODO: (%symbol nonblank)
       Term.case(term) do
-        matchpi %{(head_symbol _*)} do
-          continue if head.blank?
-
+        matchpi %{((%symbol nonblank) _*)} do
           thunk = ctx.layouts_allowed.thunk(term, ")" + postfix, {:dict_inline, :call_column, :call_indented, :dict_aligned})
 
           Term.of(:row, FRAG_LPAREN, thunk)
         end
 
-        matchpi %{[head_symbol _*]} do
-          continue if head.blank?
-
+        matchpi %{[(%symbol nonblank) _*]} do
           thunk = ctx.layouts_allowed.thunk(term, ")" + postfix, {:dict_inline, :call_kwargs_inline_with_block, :call_kwargs_column_with_block, :call_arg_indented_kwargs, :call_indented, :dict_aligned})
 
           Term.of(:row, FRAG_LPAREN, thunk)
