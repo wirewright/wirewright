@@ -68,29 +68,57 @@ module Ww
     @@lock = Mutex.new
 
     # :nodoc:
-    def self.encode(bytes : Bytes) : UInt32
+    def self.encode(bytes : Bytes, *, blank : Bool) : UInt32
       @@lock.synchronize do
         @@encode.put_if_absent(bytes) do
           @@decode << bytes
-          @@decode.size.to_u32 - 1
+
+          ref = @@decode.size.to_u32 - 1
+          ref <<= 1
+
+          # Ambiguity matters only when we're a blank. Thus, force the caller to say
+          # whether the symbol is a blank or not; and use that to prevent an O(n) pass
+          # over the bytestring for the vast majority of calls.
+          if blank
+            ambiguous = bytes.any?({{'_'.ord}})
+            ref |= ambiguous ? 1u32 : 0u32
+          end
+
+          ref
         end
       end
     end
 
     # :nodoc:
     def self.decode(ref : UInt32) : Bytes
-      @@lock.synchronize { @@decode[ref] }
+      @@lock.synchronize { @@decode[ref >> 1] }
+    end
+
+    # Returns `true` if *ref* was deemed "ambiguous" during encoding.
+    #
+    # We flag a ref as "ambiguous" when it is a blank and we want to force a reparse
+    # of ref on `name?`.
+    #
+    # E.g. `x_number_number` is ambiguous, and simply omitting `_number` wouldn't yield
+    # a valid name symbol; the name symbol must also be a blank and so on on. A hard
+    # reparse is required for such "nested blanks" to be properly handled.
+    #
+    # User-land recommendation would be to not use underscores in symbols. Reparsing
+    # wouldn't be cheap (a few nanoseconds cheap, that is).
+    def self.ambiguous?(ref : UInt32) : Bool
+      ref & 0b1 == 1
     end
 
     # :nodoc:
     #
-    #                    at least one?      blank?
-    #                               v       v
-    #   ... 0   0   0   0   0   0   0   0   0   0 < named?
-    # <--------------   ---------       ^ poly?
-    #    symbol ref     term type
+    #          ambiguous?  at least one?      blank?
+    #                  v              v       v
+    #   ... 0   0   0  0  0   0   0   0   0   0   0 < named?
+    # <-----------------  ---------       ^ poly?
+    #    symbol ref       term type
     #     (25 bits)
     #
+
     # TODO: use bit 0 as blank?, if 0, store symbol ref (25 bits) at 1..; if 1,
     #       interpret further bits 1, 2, 3, etc. as currently. this will make most
     #       non-blanks e.g. x fit into u8 or u16 range which will help with
@@ -123,98 +151,98 @@ module Ww
       if source.ends_with?('+')
         if source.ends_with?("r+")
           if source.ends_with?("_number+")
-            ref = encode(source.unsafe_byte_slice(0, source.bytesize - 8))
+            ref = encode(source.unsafe_byte_slice(0, source.bytesize - 8), blank: true)
             return new(ref, type: TermType::Number, blank: true, poly: true, named: source.size > 8)
           end
         elsif source.ends_with?("l+")
           if source.ends_with?("_symbol+")
-            ref = encode(source.unsafe_byte_slice(0, source.bytesize - 8))
+            ref = encode(source.unsafe_byte_slice(0, source.bytesize - 8), blank: true)
             return new(ref, type: TermType::Symbol, blank: true, poly: true, named: source.size > 8)
           end
         elsif source.ends_with?("g+")
           if source.ends_with?("_string+")
-            ref = encode(source.unsafe_byte_slice(0, source.bytesize - 8))
+            ref = encode(source.unsafe_byte_slice(0, source.bytesize - 8), blank: true)
             return new(ref, type: TermType::String, blank: true, poly: true, named: source.size > 8)
           end
         elsif source.ends_with?("n+")
           if source.ends_with?("_boolean+")
-            ref = encode(source.unsafe_byte_slice(0, source.bytesize - 9))
+            ref = encode(source.unsafe_byte_slice(0, source.bytesize - 9), blank: true)
             return new(ref, type: TermType::Boolean, blank: true, poly: true, named: source.size > 9)
           end
         elsif source.ends_with?("t+")
           if source.ends_with?("_dict+")
-            ref = encode(source.unsafe_byte_slice(0, source.bytesize - 6))
+            ref = encode(source.unsafe_byte_slice(0, source.bytesize - 6), blank: true)
             return new(ref, type: TermType::Dict, blank: true, poly: true, named: source.size > 6)
           end
         elsif source.ends_with?("_+")
-          ref = encode(source.unsafe_byte_slice(0, source.bytesize - 2))
+          ref = encode(source.unsafe_byte_slice(0, source.bytesize - 2), blank: true)
           return new(ref, type: TermType::Any, blank: true, poly: true, named: source.size > 2)
         end
       elsif source.ends_with?('*')
         if source.ends_with?("r*")
           if source.ends_with?("_number*")
-            ref = encode(source.unsafe_byte_slice(0, source.bytesize - 8))
+            ref = encode(source.unsafe_byte_slice(0, source.bytesize - 8), blank: true)
             return new(ref, type: TermType::Number, blank: true, one: false, poly: true, named: source.size > 8)
           end
         elsif source.ends_with?("l*")
           if source.ends_with?("_symbol*")
-            ref = encode(source.unsafe_byte_slice(0, source.bytesize - 8))
+            ref = encode(source.unsafe_byte_slice(0, source.bytesize - 8), blank: true)
             return new(ref, type: TermType::Symbol, blank: true, one: false, poly: true, named: source.size > 8)
           end
         elsif source.ends_with?("g*")
           if source.ends_with?("_string*")
-            ref = encode(source.unsafe_byte_slice(0, source.bytesize - 8))
+            ref = encode(source.unsafe_byte_slice(0, source.bytesize - 8), blank: true)
             return new(ref, type: TermType::String, blank: true, one: false, poly: true, named: source.size > 8)
           end
         elsif source.ends_with?("n*")
           if source.ends_with?("_boolean*")
-            ref = encode(source.unsafe_byte_slice(0, source.bytesize - 9))
+            ref = encode(source.unsafe_byte_slice(0, source.bytesize - 9), blank: true)
             return new(ref, type: TermType::Boolean, blank: true, one: false, poly: true, named: source.size > 9)
           end
         elsif source.ends_with?("t*")
           if source.ends_with?("_dict*")
-            ref = encode(source.unsafe_byte_slice(0, source.bytesize - 6))
+            ref = encode(source.unsafe_byte_slice(0, source.bytesize - 6), blank: true)
             return new(ref, type: TermType::Dict, blank: true, one: false, poly: true, named: source.size > 6)
           end
         elsif source.ends_with?("_*")
-          ref = encode(source.unsafe_byte_slice(0, source.bytesize - 2))
+          ref = encode(source.unsafe_byte_slice(0, source.bytesize - 2), blank: true)
           return new(ref, type: TermType::Any, blank: true, one: false, poly: true, named: source.size > 2)
         end
       else
         if source.ends_with?('r')
           if source.ends_with?("_number")
-            ref = encode(source.unsafe_byte_slice(0, source.bytesize - 7))
+            ref = encode(source.unsafe_byte_slice(0, source.bytesize - 7), blank: true)
             return new(ref, type: TermType::Number, blank: true, poly: false, named: source.size > 7)
           end
         elsif source.ends_with?('l')
           if source.ends_with?("_symbol")
-            ref = encode(source.unsafe_byte_slice(0, source.bytesize - 7))
+            ref = encode(source.unsafe_byte_slice(0, source.bytesize - 7), blank: true)
             return new(ref, type: TermType::Symbol, blank: true, poly: false, named: source.size > 7)
           end
         elsif source.ends_with?('g')
           if source.ends_with?("_string")
-            ref = encode(source.unsafe_byte_slice(0, source.bytesize - 7))
+            ref = encode(source.unsafe_byte_slice(0, source.bytesize - 7), blank: true)
             return new(ref, type: TermType::String, blank: true, poly: false, named: source.size > 7)
           end
         elsif source.ends_with?('n')
           if source.ends_with?("_boolean")
-            ref = encode(source.unsafe_byte_slice(0, source.bytesize - 8))
+            ref = encode(source.unsafe_byte_slice(0, source.bytesize - 8), blank: true)
             return new(ref, type: TermType::Boolean, blank: true, poly: false, named: source.size > 8)
           end
         elsif source.ends_with?('t')
           if source.ends_with?("_dict")
-            ref = encode(source.unsafe_byte_slice(0, source.bytesize - 5))
+            ref = encode(source.unsafe_byte_slice(0, source.bytesize - 5), blank: true)
             return new(ref, type: TermType::Dict, blank: true, poly: false, named: source.size > 5)
           end
         elsif source.ends_with?('_')
-          ref = encode(source.unsafe_byte_slice(0, source.bytesize - 1))
+          ref = encode(source.unsafe_byte_slice(0, source.bytesize - 1), blank: true)
           return new(ref, type: TermType::Any, blank: true, poly: false, named: source.size > 1)
         end
       end
 
       # Scary ain't it?
 
-      new(encode(source.to_slice), type: TermType::Any, blank: false, poly: false, named: true)
+      new(encode(source.to_slice, blank: false), type: TermType::Any, blank: false, poly: false, named: true)
     end
 
     private def ref : UInt32
@@ -223,6 +251,10 @@ module Ww
 
     private def name? : Sym?
       return unless @spec.bit(0) == 1
+
+      if Sym.ambiguous?(ref)
+        return Sym.new(String.new(Sym.decode(ref)))
+      end
 
       Sym.new(ref, type: TermType::Any, poly: false, blank: false, named: true)
     end
