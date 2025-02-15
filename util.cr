@@ -671,7 +671,7 @@ def wrap(io : IO, text : String, maxwidth = 60) : Nil
   text.each_line do |line|
     line.split(' ') do |word|
       while width + word.size >= maxwidth
-        # Insert sort breaks.
+        # Insert soft breaks.
         if width > 0
           io.puts
         end

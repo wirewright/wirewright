@@ -1152,6 +1152,15 @@ class TermPassthrough < Exception
   @callstack = CallStack.empty
 end
 
+# Returns `true` if *node* is a P-tree node that does not participate in
+# normal positioning or sizing -- we call such nodes *floating*.
+def floating?(node : Term) : Bool
+  Term.case(node) do
+    matchpi %{[block/floating _]} { true }
+    otherwise { false }
+  end
+end
+
 def measure(ctx : DisplayContext, node : Term) : {Int32, Int32}
   ctx.measurements.put_if_absent(node) do
     Term.case(node) do
@@ -1161,6 +1170,10 @@ def measure(ctx : DisplayContext, node : Term) : {Int32, Int32}
 
       matchpi %{(block {_ w_: (%number +i32), h_: (%number +i32)})} do
         {w.to(Int32), h.to(Int32)}
+      end
+
+      matchpi %{(block/floating _)} do
+        {0, 0}
       end
 
       matchpi %{[longer child_]} do
@@ -1179,11 +1192,13 @@ def measure(ctx : DisplayContext, node : Term) : {Int32, Int32}
 
       matchpi %[(row children_* ¦ gap: (%optional 0 gap←(%number +i32)))] do
         width = height = 0
+        prev_floating = nil
 
         children.items.each_with_index do |child, index|
           child_width, child_height = measure(ctx, child)
-
-          width += gap.to(Int32) if index > 0
+          floating = floating?(child)
+          width += gap.to(Int32) if index > 0 && !(prev_floating || floating)
+          prev_floating = floating
           width += child_width
           height = Math.max(height, child_height)
         end
@@ -1197,11 +1212,13 @@ def measure(ctx : DisplayContext, node : Term) : {Int32, Int32}
 
       matchpi %[(col children_* ¦ gap: (%optional 0 gap←(%number +i32)))] do
         width = height = 0
+        prev_floating = nil
 
         children.items.each_with_index do |child, index|
           child_width, child_height = measure(ctx, child)
-
-          height += gap.to(Int32) if index > 0
+          floating = floating?(child)
+          height += gap.to(Int32) if index > 0 && !(prev_floating || floating)
+          prev_floating = floating
           height += child_height
           width = Math.max(width, child_width)
         end
@@ -1217,6 +1234,11 @@ def flatten(ctx, node : Term, maxwidth : Int32, layouts : LayoutSet) : {Term, In
     matchpi %{[frag _]}, %{[block _]} do
       width, _ = measure(ctx, node)
       {node, maxwidth - width}
+    end
+
+    # Floating blocks are exempt from sizing
+    matchpi %{[block/floating _]} do
+      {node, maxwidth}
     end
 
     matchpi %{(longer child_)} do

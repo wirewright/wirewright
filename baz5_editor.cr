@@ -64,35 +64,35 @@ def smart_subsume(root, motion, edge, keypath, keypaths, good_choice)
 
 end
 
-def editR : Rewriter
-  primitives = ProcRuleset.build do
-    rulepi1 %[(+ a_number b_number)] { a + b }
-    rulepi1 %[(- a_number b_number)] { a - b }
-    rulepi1 %[(* a_number b_number)] { a * b }
-    rulepi1 %[(/ a_number (%all b_number (%not 0)))] { a / b }
-    rulepi1 %[(~ a_string b_string)] { a.stitch(b) }
-    rulepi1 %[(string term_)] { ML.display(term, endl: false) }
-    rulepi1 %[(ml ml_string)] do
-      begin
-        {:"ml/ok", ML.term(ml.to(String))}
-      rescue ML::SyntaxError
-        # TODO: line col message
-        {:"ml/err"}
-      end
+PRIMITIVES = ProcRuleset.build do
+  rulepi1 %[(+ a_number b_number)] { a + b }
+  rulepi1 %[(- a_number b_number)] { a - b }
+  rulepi1 %[(* a_number b_number)] { a * b }
+  rulepi1 %[(/ a_number (%all b_number (%not 0)))] { a / b }
+  rulepi1 %[(~ a_string b_string)] { a.stitch(b) }
+  rulepi1 %[(string term_)] { ML.display(term, endl: false) }
+  rulepi1 %[(ml ml_string)] do
+    begin
+      {:"ml/ok", ML.term(ml.to(String))}
+    rescue ML::SyntaxError
+      # TODO: line col message
+      {:"ml/err"}
     end
-
-    # TODO: support mixed substring?
-    rulepi1 %[(substring s_string (rune b←(%number i32)) (rune e←(%number i32)))] do
-      Term::Str::Substring.runes(s.unsafe_as_s, b.to(Int32), e.to(Int32))
-    end
-
-    rulepi1 %[(substring s_string (word b←(%number i32)) (word e←(%number i32)))] do
-      Term::Str::Substring.words(s.unsafe_as_s, b.to(Int32), e.to(Int32))
-    end
-
-    # TODO: take substring by lines.
   end
 
+  # TODO: support mixed substring?
+  rulepi1 %[(substring s_string (rune b←(%number i32)) (rune e←(%number i32)))] do
+    Term::Str::Substring.runes(s.unsafe_as_s, b.to(Int32), e.to(Int32))
+  end
+
+  rulepi1 %[(substring s_string (word b←(%number i32)) (word e←(%number i32)))] do
+    Term::Str::Substring.words(s.unsafe_as_s, b.to(Int32), e.to(Int32))
+  end
+
+  # TODO: take substring by lines.
+end
+
+def editR : Rewriter
   selector = ML.term(%[(%any° (rule pattern_ template_) (backmap pattern_ backspec_))])
 
   editor_base = ML.terms(File.read("#{__DIR__}/editor.soma.wwml"))
@@ -137,8 +137,8 @@ def editR : Rewriter
 
   dollarr = dfsR(
     switchR(
-      { %[($ rewritee_)], exhR(dfsR(callR(primitives))) },
-      { %[($once rewritee_)], callR(primitives) },
+      { %[($ rewritee_)], exhR(dfsR(callR(PRIMITIVES))) },
+      { %[($once rewritee_)], callR(PRIMITIVES) },
     )
   )
 
