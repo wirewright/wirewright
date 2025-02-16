@@ -1,7 +1,13 @@
-# TODO: ???: probabilistic pattern trace (similar to sketch).
-# Patterns toggle their object id % 64 in a dictionary's bitmap. This means
-# (multilevel) skips become even cheaper. Especially with stuff such as
-# cursor search in parsing/µsoma, we want deep searches to be cheap.
+# Dictionaries should have small (8/16-element) short-term memory for which
+# patterns they were matched by. However this would require some integration
+# on the pattern matching/PatternSet side. Doable though. PatternSet can assign
+# patterns application-unique ids, and so on. In some places we have redundant
+# pattern matching. This should eliminate that. Especially useful would be rejection.
+# E.g. to optimize FindFirst/FindSource, which are used extensively in the editor.
+# If every dictionary EntryNode remembers a tiny bit which patterns matched and which
+# did not in itself, that could help. Although a huge balance game, and I'm unsure
+# about how the communication would go between the two -- the pattern matching engine
+# and the dict impl.
 
 # TODO: our current dictionary implementation is very very bad. It has served
 # me for over a year with minor changes, but now it is becoming more and more
