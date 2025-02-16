@@ -1,0 +1,181 @@
+;; TODO: each one should have one example since params will not capture everything.
+;; (e.g. where/whether/how to pass children or for e.g. `map` how the conditions look like)
+
+(node absence "Senses the absence of a cell"
+  (const cin "cell whose absence should be detected")
+  (comma as)
+  (literal msg "message to send")
+  (comma to)
+  (pulse pout "sink for the message"))
+
+(node blast "Emits the items of lists received inorder"
+  (pulse pin "source of lists")
+  (comma to)
+  (pulse pout "sink for items"))
+
+(group button "Triggers a pulse when clicked")
+
+(variant button
+  (literal msg "used both as caption and message sent to sink on click")
+  (comma to)
+  (pulse pout "sink for messages")
+  (literal mailbox "mailbox dict through which µsoma will communicate with the button"))
+
+(variant button
+  (literal caption "string term that is going to be written on top of the button")
+  (comma as)
+  (literal msg "message sent to sink on click")
+  (comma to)
+  (pulse pout "sink for messages")
+  (literal mailbox "mailbox dict through which µsoma will communicate with the button"))
+
+(group cell "Stores a term inside itself. Acts as a source of const signal")
+
+(variant cell
+  (const cout "sink for const signal"))
+
+(variant cell
+  (const cout "sink for const signal")
+  (comma for)
+  (literal guard "pattern that each assignment to this cell must satisfy"))
+
+(variant cell
+  (literal v "current value")
+  (const cout "sink for const signal"))
+
+(variant cell
+  (literal v "current value")
+  (const cout "sink for const signal")
+  (comma for)
+  (literal guard "pattern that each assignment to this cell must satisfy"))
+
+(group changes "Converts a const signal into a pulse whenever the former changes")
+
+(variant changes
+  (const cin "source of const signal")
+  (comma to)
+  (pulse pout "sink for values of const on change"))
+
+(variant changes
+  (const cin "source of const signal")
+  (comma to)
+  (pulse pout "sink for values of const on change")
+  (comma as)
+  (literal v "value to send on change instead of const's"))
+
+(node col "Arranges its children in a vertical stack, with an optional gap")
+
+(node decay "Counts down until destroying itself and its children"
+  (literal n "counter that you should initialize to a nonzero natural number"))
+
+(node delay "Counts down until replacing itself with its children"
+  (literal n "counter that you should initialize to a nonzero natural number"))
+
+(node echo "Emits as event the pulses it receives"
+  (pulse pin "source of pulses"))
+
+(node edit-cage "Converts pulse signals to children-centric non-broadcast (private) edits"
+  (comma for)
+  (pulse pin "source of pulse signals"))
+
+(node edit-cast "Converts pulse signal to root-centric edit broadcast"
+  (pulse pin "source of pulse signals")
+  (comma to)
+  (broadcast bout  "sink for edit broadcast signals"))
+
+(node event "Emits an event and destroys itself"
+  (literal e "term that should be emitted as an event"))
+
+(node group "Groups nodes together without any logical/UI effect")
+
+(group latest "Converts incoming pulse signals to const")
+
+(variant latest
+  (pulse pin "source of pulse signals")
+  (const cout "sink for const signals"))
+
+(variant latest
+  (nested
+    (pulse pin "source of pulse signals")
+    (literal pattern "pattern which the pulse should match"))
+  (nested
+    (const cout "sink for const signals")
+    (literal template "template to fill using captures made by the pattern")))
+
+(group log "Shows last N pulses received")
+
+(variant log
+  (pulse pin "source of pulse signals")
+  (comma in)
+  (literal storage "dict to store the logged terms in")
+  (prop? limit "how many latest terms to show (default: 10)"))
+
+(variant log
+  (pulse pin "source of pulse signals")
+  (comma in)
+  (const cout "cell to append to")
+  (prop? limit "how many latest terms to show (default: 10)"))
+
+(node lookaround "Makes a snapshot of the document behind and ahead of itself while hosting some children"
+  (pulse behind-out "sink for snapshots of nodes behind")
+  (pulse ahead-out "sink for snapshots of nodes ahead")
+  (pulse capture "source for triggers to capture a snapshot"))
+
+(node map "Converts an incoming pulse to one of templated outputs using pattern-matching"
+  (pulse pin "source of terms to match")
+  (comma to)
+  (pulse pout "sink for instantiated templates"))
+
+(node periodic "Emits an event on every cycle"
+  (literal e "term that should be emitted as an event"))
+
+(node pull "Asks for more values on every cycle until getting something. Sends that to @pout and waits until @pout completes"
+  (pulse pout "source of pulled values")
+  (comma from)
+  (pulse pin "sink for pulled values"))
+
+(node queue "Holds an unbounded number of terms. Guarantees dequeue only after the front was handled by the other side (successfully or not)"
+  (pulse pin "source of values to enqueue")
+  (comma to)
+  (pulse pout "sink for dequeued values")
+  (comma in)
+  (literal storage "dict for storing enqueued values"))
+
+(node row "Arranges its children in a horizontal stack, with an optional gap")
+
+(group transform "Transforms incoming pulse into outgoing pulse using Nitrene")
+
+(variant transform
+  (pulse pin "source of terms to transform")
+  (comma to)
+  (pulse pout "sink for transformed terms")
+  (literal body "Nitrene program that will do the transformation"))
+
+(variant transform
+  (pulse pin "source of terms to transform")
+  (comma to)
+  (pulse pout "sink for transformed terms")
+  (comma with)
+  (const state "const signal that the transform node will read and pass to Nitrene under `state`")
+  (literal body "Nitrene program that will do the transformation"))
+
+(variant transform
+  (nested
+    (pulse pin "source of terms to transform")
+    (literal pattern "pattern that terms to transform must match"))
+  (comma to)
+  (pulse pout "sink for transformed terms")
+  (literal body "Nitrene program that will do the transformation; has access to captures made by pattern"))
+
+(variant transform
+  (nested
+    (pulse pin "source of terms to transform")
+    (literal pattern "pattern that terms to transform must match; has access to state"))
+  (comma to)
+  (pulse pout "sink for transformed terms")
+  (comma with)
+  (const state "const signal that the transform node will read and pass to Nitrene under `state`")
+  (literal body "Nitrene program that will do the transformation; has access to captures made by pattern"))
+
+(node comment "Grayed out text that is explaining something"
+  (literal text "content of the comment"))

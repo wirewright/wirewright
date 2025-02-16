@@ -8,12 +8,6 @@
 ;; Get rid of anything that we do not understand.
 [_string | _string (M_ _*) @EDGE_] <> {(M): ()}
 
-;; Invalidate suggestions on every motion, even on invalid ones. If we're wrong,
-;; then whoever put them on the cursor will put them back. Otherwise they died!
-;; Or the suggestions are bogus. So we will have to remove them anyway.
-(_string | _string (_*) @EDGE_ ¦ _ suggestions_: (_*))
-  <> {(suggestions): ()}
-
 ;; INTERPRET
 ;;
 ;; *Interpretation* occurs immediately after *subsumption*.

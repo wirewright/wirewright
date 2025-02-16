@@ -163,6 +163,36 @@ def draw_block(screen, block, x, y)
       end
     end
 
+    matchpi %{[comment desc_string]} do
+      fg = oklch(0.707, 0.022, 261.325) # text-gray-400
+      bg = screen.bg0
+
+      ox = x
+
+      screen.set(';', x, y, fg, bg)
+      x += 1
+      screen.set(';', x, y, fg, bg)
+      x += 2
+
+      desc.to(String).each_char do |char|
+        if char == '\n'
+          x = ox
+          y += 1
+          screen.set(';', x, y, fg, bg)
+          x += 1
+          screen.set(';', x, y, fg, bg)
+          x += 2
+          next
+        end
+        screen.set(char, x, y, fg, bg)
+        x += 1
+      end
+
+      y += 1
+
+      {x, y}
+    end
+
     # TODO: ideally we'd want to show only the first few of them but right now
     # we won't be able to scroll. After we can scroll through suggestions (some cursor
     # coop needed here), we can show only top N suggestions.
@@ -447,59 +477,97 @@ end
 struct Cursor
   include Feature
 
-  private def suggest?(user_string : String, candidate_string : String)
-    return true if user_string.empty?
-
-    candidate_string.downcase.starts_with?(user_string.downcase)
+  private def cursor_block(lhs : Term, rhs : Term)
+    Term.of(:block,
+      Term[:cursor, lhs, rhs,
+        w: lhs.charcount + rhs.charcount,
+        h: 1])
   end
 
   def call(ctx, term, postfix, head, rest)
-    Term.matchpi(term, %{(lhs_string | rhs_string (_*) @user ¦ _ suggestions⋮ ())}) do
-      fullstring = lhs.to(String) + rhs.to(String)
-
-      candidates = suggestions.items.select do |suggestion|
-        Term.case(suggestion) do
-          matchpi %{(name_string _string)} do
-            suggest?(fullstring, name.to(String))
-          end
-
-          otherwise do
-            false
-          end
-        end
-      end
-
-      if candidates.size > 1
-        # (suggestions suggestions_string*)
-        sugg = Term::Dict.build do |commit|
-          commit << :suggestions
-          commit.with(:shl, rhs.charcount)
-          commit.concat(candidates) { |(name, _)| name }
-        end
-      elsif candidates.size == 1
-        # (suggestion node_string desc_string)
-        sugg = Term::Dict.build do |commit|
+    Term.case(term) do
+      # One general suggestion. Show it and its intro.
+      matchpi %{(lhs_string | rhs_string (_*) @user ¦ _ suggestions: (suggestions/list () ((name_string intro_string)) ()))} do
+        suggestions_node = Term::Dict.build do |commit|
           commit << :suggestion
           commit.with(:shl, rhs.charcount)
-          name, desc = candidates[0]
-          commit << name << desc
+          commit << name << intro
         end
+
+        Term.of(:row,
+          cursor_block(lhs, rhs),
+          Term.of(:"block/floating", suggestions_node),
+          Term.of(:frag, postfix))
       end
 
-      cursor_block = Term.of(:block,
-        Term[:cursor, lhs, rhs,
-          w: lhs.charcount + rhs.charcount,
-          h: 1])
+      # More than one general suggestion. Show all of them.
+      matchpi %{(lhs_string | rhs_string (_*) @user ¦ _ suggestions: (suggestions/list above←(_*) visible←((%past (_string _string) min: 1)) below←(_*)))} do
+        suggestions_node = Term::Dict.build do |commit|
+          commit << :suggestions
+          commit.with(:shl, rhs.charcount)
 
-      # Do not emit empty suggestions.
-      if sugg
-        return Term.of(:row, cursor_block, Term.of(:"block/floating", sugg), Term.of(:frag, postfix))
-      else
-        return Term.of(:row, cursor_block, Term.of(:frag, postfix))
+          max = above.itemsize + visible.itemsize + below.itemsize
+          if max > 5
+            commit << String.build do |io|
+              if above.itemsize > 0
+                io << "▴"
+              end
+              io << above.itemsize << ".." << max - visible.itemsize
+              if above.itemsize + visible.itemsize + 1 <= max
+                io << "▾"
+              end
+            end
+          end
+
+          visible.items.each do |(name, _)|
+            commit << name
+          end
+        end
+
+        Term.of(:row,
+          cursor_block(lhs, rhs),
+          Term.of(:"block/floating", suggestions_node),
+          Term.of(:frag, postfix))
+      end
+
+      # Group suggestion
+      matchpi %{(lhs_string | rhs_string (_*) @user ¦ _ suggestions_: (suggestions/group prefix←(_*) suffix←((head_string body_string) _*)))} do
+        suggestions_node = Term::Dict.build do |commit|
+          commit << :suggestion
+          commit.with(:shl, rhs.charcount)
+
+          commit << String.build do |io|
+            if prefix.size + suffix.size > 1
+              io << "["
+              io << "▴" if prefix.size > 0
+              io << prefix.size + 1 # Count from 1
+              io << ".."
+              io << prefix.size + suffix.size
+              io << "▾" if suffix.size > 1
+              io << "]"
+            end
+            io << head.to(String)
+          end
+
+          commit << body
+        end
+
+        Term.of(:row,
+          cursor_block(lhs, rhs),
+          Term.of(:"block/floating", suggestions_node),
+          Term.of(:frag, postfix))
+      end
+
+      matchpi %{[lhs_string | rhs_string (_*) @user]} do
+        Term.of(:row,
+          cursor_block(lhs, rhs),
+          Term.of(:frag, postfix))
+      end
+
+      otherwise do
+        rest.call(ctx, term, postfix)
       end
     end
-
-    rest.call(ctx, term, postfix)
   end
 end
 
@@ -550,23 +618,55 @@ end
 struct Button
   include Feature
 
-  private def button(term, caption)
+  private def button(term, caption : Term)
+    if caption.type.string?
+      caption_string = caption.to(String)
+    else
+      # TODO: use pretty print with forced inline
+      caption_string = ML.display(caption, endl: false).gsub(/\s+/, ' ')
+    end
+
     Term.of(:block,
-      Term[:button, caption, w: caption.charcount + 2, h: 1, enabled: !term[:waiting]?, mailbox: term[:mailbox]?])
+      Term[:button, caption_string,
+        w: caption_string.size + 2,
+        h: 1,
+        enabled: !term[:waiting]?,
+        mailbox: term[:mailbox]?])
   end
 
   def call(ctx, term, postfix, head, rest)
     Term.case(term) do
-      matchpi %{[button caption_string to @_ (_*)]} do
+      matchpi %{[button caption_ to @_ (_*)]} do
         continue unless D.cursordepth(term) == -1
 
         Term.of(:row, button(term, caption), Term.of(:frag, postfix))
       end
 
-      matchpi %{[button caption_string as msg_ to @_ (_*)]} do
+      matchpi %{[button caption_ as msg_ to @_ (_*)]} do
         continue unless D.cursordepth(term) == -1
 
         Term.of(:row, button(term, caption), Term.of(:frag, postfix))
+      end
+
+      otherwise do
+        rest.call(ctx, term, postfix)
+      end
+    end
+  end
+end
+
+struct Comment
+  include Feature
+
+  def call(ctx, term, postfix, head, rest)
+    Term.case(term) do
+      matchpi %{(comment desc_string)} do
+        wrapped_desc = wrap(desc.to(String), 60).strip
+
+        w = wrapped_desc.each_line.max_of? { |line| line.size + 3 } || 3 # Do not forget ";; "
+        h = Math.max(wrapped_desc.each_line.size, 1)
+
+        Term.of(:row, Term.of(:block, Term[:comment, wrapped_desc, w: w, h: h]), Term.of(:frag, postfix))
       end
 
       otherwise do
@@ -598,10 +698,11 @@ ppairs_chain = Chain(Feature).new(
 )
 
 feature_chain = Chain(Feature).new(
-  Cursor.new, # << Custom features
-  Button.new, # <<
-  Col.new,    # <<
-  Row.new,    # <<
+  Cursor.new,  # << Custom features
+  Button.new,  # <<
+  Col.new,     # <<
+  Row.new,     # <<
+  Comment.new, # <<
   Feature::Backmap.new,
   Feature::Rule.new,
   Feature::Edge.new,
@@ -629,36 +730,63 @@ feature_chain = Chain(Feature).new(
 require "./libtermbox2"
 require "./rolling_set"
 
-document = ML.terms <<-WWML
-(cell 0 @count)
-(button "Increment" as 1 to @deltas ())
-(button "Decrement" as -1 to @deltas ())
-(transform (@deltas delta_number) to @counts with @count (+ state delta))
-(latest @counts @count)
+document = Term.of
 
-(log @actions in ())
-(col
-  (row
-    (button "1" as 1 to @actions ())
-    (button "2" as 2 to @actions ())
-    (button "3" as 3 to @actions ()))
-  (row
-    (button "4" as 4 to @actions ())
-    (button "5" as 5 to @actions ())
-    (button "6" as 6 to @actions ()))
-  (row
-    (button "7" as 7 to @actions ())
-    (button "8" as 8 to @actions ())
-    (button "9" as 9 to @actions ()))
-  (row
-    (button "←" as erase to @actions ())
-    (button "0" as erase to @actions ())
-    (button "→" as enter to @actions ())))
+{% if flag?(:release) %}
+  document = ML.terms <<-WWML
+  (comment "Welcome to µsoma, a GUI for Wirewright")
+  (comment "")
+  (comment "µsoma to Wirewright is what a web browser is to the Internet")
+  (comment "")
+  (comment "You're looking at a *self-embodied program*. But it only contains comments right now. Hit left/right arrow to see for yourself. Or hit `;;` and write your own!")
+  (comment "")
+  (comment "Try typing the following:")
+  (comment "")
+  (comment ">>> (cell 0 @count)")
+  (comment ">>> (button \\"Increment\\" as 1 to @deltas ())")
+  (comment ">>> (button \\"Decrement\\" as -1 to @deltas ())")
+  (comment ">>> (transform @deltas to @counts with @count (+ state _))")
+  (comment ">>> (latest @counts @count)")
+  (comment "")
+  (comment "Click on each buttons and see what happens! :^)")
+  (comment "")
+  (comment "- Use Ctrl-C to quit")
+  (comment "- Use Page Up/Page Down to scroll if out of screen space")
 
-(transform (@actions digit_number) to @counts digit)
+  ("" | "" () @user)
+  WWML
+{% else %}
+  document = ML.terms <<-WWML
+  (cell 0 @count)
+  (button "Increment" as 1 to @deltas ())
+  (button "Decrement" as -1 to @deltas ())
+  (transform (@deltas delta_number) to @counts with @count (+ state delta))
+  (latest @counts @count)
 
-("" | "" () @user)
-WWML
+  (log @actions in ())
+  (col
+    (row
+      (button "1" as 1 to @actions ())
+      (button "2" as 2 to @actions ())
+      (button "3" as 3 to @actions ()))
+    (row
+      (button "4" as 4 to @actions ())
+      (button "5" as 5 to @actions ())
+      (button "6" as 6 to @actions ()))
+    (row
+      (button "7" as 7 to @actions ())
+      (button "8" as 8 to @actions ())
+      (button "9" as 9 to @actions ()))
+    (row
+      (button "←" as erase to @actions ())
+      (button "0" as erase to @actions ())
+      (button "→" as enter to @actions ())))
+
+  (transform (@actions digit_number) to @counts digit)
+
+  ("" | "" () @user)
+  WWML
+{% end %}
 
 short_term_memory = RollingSet(Term, 8).new
 

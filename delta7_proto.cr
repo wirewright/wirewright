@@ -10,6 +10,7 @@
 require "./wirewright"
 # require "execution_context"
 require "./baz5"
+require "./suggestion_synthesis"
 
 module D
   extend self
@@ -358,19 +359,16 @@ module D
   end
 
   private def cursordepth0(node : Term, depth : Int32) : Int32
-    Term.case(node) do
-      matchp %[(_string | _string (_*) ≡@_)] { depth }
-      matchp %(_dict) do
-        dict = node.unsafe_as_d
-        return Int32::MAX unless dict.probably_includes?(Term[:|])
-        return Int32::MAX if dict.empty?
+    if M1::Operator.probe?(Term[], CURSORP, node)
+      return depth
+    end
 
-        dict.ee.min_of do |k, v|
-          Math.min(cursordepth0(k, depth + 1), cursordepth0(v, depth + 1))
-        end
-      end
+    return Int32::MAX unless dict = node.as_d?
+    return Int32::MAX if dict.empty?
+    return Int32::MAX unless dict.probably_includes?(Term[:|])
 
-      otherwise { Int32::MAX }
+    dict.ee.min_of do |k, v|
+      Math.min(cursordepth0(k, depth + 1), cursordepth0(v, depth + 1))
     end
   end
 
@@ -384,36 +382,21 @@ module D
     depth == Int32::MAX ? -1 : depth
   end
 
-  INITIAL_SUGGESTIONS = Term.of(
-    {"absence", "Senses the absence of a cell"},
-    {"blast", "Outputs the items of lists received at @pin, in order, at @pout"},
-    {"button", "An element bridging UI and logic. Clicks will trigger a pulse on @pout"},
-    {"cell", "Stores a term inside itself. Acts as a source of const signal"},
-    {"changes", "Converts a const signal into a pulse whenever the former changes"},
-    {"col", "Arranges its children in a vertical stack, with an optional gap"},
-    {"decay", "Counts down until destroying itself and its children"},
-    {"delay", "Counts down until replacing itself with its children"},
-    {"echo", "Emits as event whatever pulse it received on @pin"},
-    {"edit-cage", "Makes sure a cursor cannot escape"},
-    {"edit-cast", "Converts a pulse to an edit command to the cursor"},
-    {"event", "Emits an event and destroys itself"},
-    {"group", "Groups nodes together without any logical/UI effect"},
-    {"latest", "Converts incoming pulse signals to const"},
-    {"log", "Shows last N pulses it received on @pin"},
-    {"lookaround", "Can get a snapshot of the document behind and ahead of itself while hosting some children"},
-    {"map", "Converts an incoming pulse to one of templated outputs using pattern-matching"},
-    {"periodic", "Emits an event on every cycle"},
-    {"pull", "Asks for more on @pin for every cycle until it gets something. Sends to @pout and waits while @pout completes"},
-    {"queue", "Holds an unbounded number of terms. Guarantees dequeue only after the front was handled by the other side (successfully or not)"},
-    {"row", "Arranges its children in a horizontal stack, with an optional gap"},
-    {"transform", "Transforms incoming pulse into outgoing pulse using Nitrene"},
-  )
+  COMPLETION_MANAGER = begin
+    suggestions = File.read("#{__DIR__}/suggestions.soma.wwml")
+    spec = ML.terms(suggestions).as_d
+    NodeCompletion::CompletionManager.new(spec)
+  end
 
-  # periodic lookaround map edit-cage edit-cast decay delay absence transform pull queue event echo blast changes latest log button cell group row col
   def nodestep(root0 : Term, root1 : Term, nodepath, event)
     node0 = follow(root1, nodepath)
 
-    Term.case({node0, event, cursordepth(node0)}) do
+    matchee = Term.of(node0, event, cursordepth(node0))
+
+    Term.case(matchee) do
+      # TODO: these are very similar and should be refactored into
+      # something single, with variations.
+
       givenpi %[(cell v_ @cout_) invited -1] do
         root1 = effect(root1, nodepath, node0) do
           event :"cell/created", cout, v
@@ -480,6 +463,8 @@ module D
 
       # TODO: instead of (%number (whole _) > 0) we should have (%number i32 > 0). All +-variants must
       # allow the exclusion of zero this way.
+
+      # TODO: this should support for ... guard as well!!
 
       givenpi %[(cell vs0←(_*) @cout_) (assign/log @cout_ v_ limit←(%number (whole _) > 0)) -1] do
         vs1 = rightmost(vs0, limit.to(Int32) - 1).append(v)
@@ -823,79 +808,6 @@ module D
 
       # Absence node
       begin
-        # Suggestions
-        # TODO: it would be nice if we are able to auto-generate these !! Me
-        # copy pasting this way won't scale!
-        begin
-          givenpi %[(absence (_string | _string () @user ¦ _ suggestions: (%- _))) cycle _] do
-            suggestion = Term.of("(absence *@cin_* as msg_ to @pout_)", <<-SUGG
-            *cin* - const whose absence should be detected
-            msg - message to send
-            pout - sink for the message
-            SUGG
-            )
-
-            node1 = node0.morph({1, :suggestions, {suggestion}})
-            root1 = assign(root1, nodepath, node1)
-
-            {root1, successor?(root1, nodepath)}
-          end
-
-          givenpi %[(absence @_ (_string | _string () @user ¦ _ suggestions: (%- _))) cycle _] do
-            suggestion = Term.of("(absence @cin_ *as* msg_ to @pout_)", <<-SUGG
-            cin - const whose absence should be detected
-            msg - message to send
-            pout - sink for the message
-            SUGG
-            )
-            node1 = node0.morph({2, :suggestions, {suggestion}})
-            root1 = assign(root1, nodepath, node1)
-
-            {root1, successor?(root1, nodepath)}
-          end
-
-          givenpi %[(absence @_ as (_string | _string () @user ¦ _ suggestions: (%- _))) cycle _] do
-            suggestion = Term.of("(absence @cin_ as *msg_* to @pout_)", <<-SUGG
-            cin - const whose absence should be detected
-            *msg* - message to send
-            pout - sink for the message
-            SUGG
-            )
-            node1 = node0.morph({3, :suggestions, {suggestion}})
-            root1 = assign(root1, nodepath, node1)
-
-            {root1, successor?(root1, nodepath)}
-          end
-
-          givenpi %[(absence @_ as _ (_string | _string () @user ¦ _ suggestions: (%- _))) cycle _] do
-            suggestion = Term.of("(absence @cin_ as msg_ *to* @pout_)", <<-SUGG
-            cin - const whose absence should be detected
-            msg - message to send
-            pout - sink for the message
-            SUGG
-            )
-
-            node1 = node0.morph({4, :suggestions, {suggestion}})
-            root1 = assign(root1, nodepath, node1)
-
-            {root1, successor?(root1, nodepath)}
-          end
-
-          givenpi %[(absence @_ as _ to (_string | _string () @user ¦ _ suggestions: (%- _))) cycle _] do
-            suggestion = Term.of("(absence @cin_ as msg_ to *@pout_*)", <<-SUGG
-            cin - const whose absence should be detected
-            msg - message to send
-            *pout* - sink for the message
-            SUGG
-            )
-
-            node1 = node0.morph({5, :suggestions, {suggestion}})
-            root1 = assign(root1, nodepath, node1)
-
-            {root1, successor?(root1, nodepath)}
-          end
-        end
-
         # Initialize `absence` to newborn state.
         givenpi %[(absence @_ as _ to @_) cycle -1] do
           root1 = effect(root1, nodepath, node0) do
@@ -1010,7 +922,7 @@ module D
       # On the children part, there is no isolation; it works just like `group`.
       #
       # FIXME: I don't think the latter is OK behavior but will do for now.
-      givenpi %[(lookaround @behind_out_ @ahead_out_ @pin_ children_*) (pulse @pin_ _) _] do
+      givenpi %[(lookaround @behind-out_ @ahead-out_ @capture_ children_*) (pulse @capture_ _) _] do
         range = nodepath.items.last
 
         cursor_b, cursor_e = range
@@ -1051,10 +963,11 @@ module D
       #
       # When we see a cursor in a suitable position, we populate it with a list
       # of suggestions. What the cursor/UI does with them is not of our interest.
-      begin
-        givenpi %{((_string | _string () @user ¦ _ suggestions: (%- _))) cycle _} do
-          node1 = node0.morph({0, :suggestions, INITIAL_SUGGESTIONS})
+      givenpi %{_ cycle _} do
+        if node1 = COMPLETION_MANAGER.complete?(node0)
           root1 = assign(root1, nodepath, node1)
+          {root1, successor?(root1, nodepath)}
+        else
           {root1, successor?(root1, nodepath)}
         end
       end

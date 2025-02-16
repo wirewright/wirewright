@@ -1,6 +1,6 @@
 require "./baz5"
 
-CURSORP  = ML.term(%([_string (%any° | [| _string]) _string (_*) @_]))
+CURSORP  = M1.operator(ML.term(%([_string (%any° | [| _string]) _string (_*) @_])))
 CURSORPE = M1.operator(ML.term(%([_string (%any° | [| _string]) _string (_*) @EDGE_])))
 
 def subsume1(cursor, motion)
@@ -98,6 +98,9 @@ def editR : Rewriter
   editor_base = ML.terms(File.read("#{__DIR__}/editor.soma.wwml"))
   editor_ruleset = Ruleset.select(selector, editor_base)
 
+  suggestions_base = ML.terms(File.read("#{__DIR__}/editor-suggestions.soma.wwml"))
+  suggestion_ruleset = Ruleset.select(selector, suggestions_base)
+
   # (ruleset editor) ;; Let Ww find editor rules
   # ;; Rely on Ww's native code primitives
   # (ruleset/native primitives
@@ -127,7 +130,7 @@ def editR : Rewriter
   #
   # (master editR)
 
-  updownmyr = dfsR(
+  refR = dfsR(
     switchR(
       { %[($my rewritee_)], envR(Term.of(:"$my")) },
       { %[($up rewritee_)], choiceR(envR(Term.of(:"$up")), envR(Term.of(:"$my"))) },
@@ -135,16 +138,21 @@ def editR : Rewriter
     )
   )
 
-  dollarr = dfsR(
+  evalR = dfsR(
     switchR(
       { %[($ rewritee_)], exhR(dfsR(callR(PRIMITIVES))) },
       { %[($once rewritee_)], callR(PRIMITIVES) },
     )
   )
 
-  backmapr = chainR(updownmyr, dollarr)
+  backmapR = chainR(refR, evalR)
 
-  exhR(relR(CURSORPE, absR(rulesetR(editor_ruleset, dfsR(envR), backmapr, noR, envopt: Term.of(:env))), ascent: 3, envopt: Term.of(:env)))
+  multiphaseR = chainR(
+    absR(rulesetR(suggestion_ruleset, dfsR(envR), backmapR, noR, envopt: Term.of(:env))),
+    absR(rulesetR(editor_ruleset, dfsR(envR), backmapR, noR, envopt: Term.of(:env))),
+  )
+
+  exhR(relR(CURSORPE, multiphaseR, ascent: 3, envopt: Term.of(:env)))
 end
 
 EDITR = editR
