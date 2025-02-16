@@ -122,7 +122,7 @@ struct Ww::Term
       match!(-> { ::Ww::ML.term({{ml}}) }, icaps: [{{captures.splat}}] of ::NoReturn, location: {{location}}, {{kwargs.double_splat}}) {{block}}
     end
 
-    # Same as `match`, but guarantees to constructs a dictionary with the given
+    # Same as `match`, but guarantees to construct a dictionary with the given
     # *items* and *pairs*.
     macro given(*items, **pairs, &block)
       {% location = "#{block.filename.id}:#{block.line_number}:#{block.column_number}" %}
