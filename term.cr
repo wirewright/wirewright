@@ -359,7 +359,7 @@ module Ww
 
     # :ditto:
     def same?(other : ITerm) : Bool
-      @mem == other.upcast
+      same?(other.upcast)
     end
 
     # Returns `true` if this and *other* terms are equal.
