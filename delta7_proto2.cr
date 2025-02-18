@@ -1248,7 +1248,7 @@ module D7
   # - *transition* lets you observe and contribute to transitions between successive
   #   documents, say, D0 (current document) and D1 (document at the next time step).
   # - *step* lets you advance the current document D0 by one step to obtain D1.
-  # - *goal* defines the goal of rewriting: it is usually `find` or `spin`.
+  # - *goal* defines the goal of rewriting: it is usually `equal`, `match`, or `none`.
   def run(document document1 : Term::Dict, log : Log, transition : Transition, step : Step, goal : Goal::Fn) : Term::Dict
     log.append { Term.of(:original, document1) }
 
@@ -1266,20 +1266,26 @@ module D7
     end
   end
 
-  def run(document : Term::Dict, *, log : Log = Log::None.new, goal : Goal::Fn = spin) : Term::Dict
+  def run(document : Term::Dict, *, log : Log = Log::None.new, goal : Goal::Fn = Goal.none) : Term::Dict
     run(document, log, Rhodium.transition, steps(Rhodium.step, Nitrene.step), goal)
   end
 
-  def run?(source : Term::Dict, target : Term::Dict, *, log : Log = Log::None.new, hidden = false, limit = nil) : {Bool, Term::Dict}
-    goal = Goal.find(target, hidden: hidden)
-
+  def run?(document : Term::Dict, goal : Goal::Fn, *, log : Log = Log::None.new, limit = nil) : {Bool, Term::Dict}
     if limit
       goal = Goal.limited(goal, limit: limit)
     end
 
-    {true, run(source, log: log, goal: goal)}
+    {true, run(document, log: log, goal: goal)}
   rescue e : Goal::Interrupted
     {false, e.latest}
+  end
+
+  def run_until_equal?(document : Term::Dict, target : Term::Dict, *, only_visible : Bool = true, **kwargs) : {Bool, Term::Dict}
+    run?(document, Goal.visible(Goal.equal(target), enabled: only_visible), **kwargs)
+  end
+
+  def run_until_matches?(document : Term::Dict, pattern : Term, *, only_visible : Bool = true, **kwargs) : {Bool, Term::Dict}
+    run?(document, Goal.visible(Goal.matches(pattern), enabled: only_visible), **kwargs)
   end
 
   # Strips internal pairs off of *document* and the nodes in it.
@@ -1324,23 +1330,32 @@ module D7::Goal
 
   alias Fn = Term::Dict -> Bool
 
-  # Constructs a `Goal::Fn` that waits until the document being rewritten
-  # becomes *document*.
+  # Restricts *goal* to the visible part of the document if *enabled*.
   #
-  # *hidden* allows you to show (`true`) or hide (`false`) internal pairs on
-  # of nodes and the document itself. Hiding them is an opt in but recommended
+  # Allows you to show (`true`) or hide (`false`) internal pairs on nodes and
+  # the document itself to *goal*. Hiding them is an opt in but recommended
   # since the pairs are internal for a reason; and may burden the user visually
-  # if seen. See also: `D7.visible`.
-  def find(document : Term::Dict, *, hidden = true) : Fn
-    if hidden
-      Fn.new { |current| current == document }
-    else
-      Fn.new { |current| D7.visible(current) == document }
-    end
+  # if seen.
+  #
+  # See also: `D7.visible`.
+  def visible(goal : Fn, *, enabled : Bool) : Fn
+    Fn.new { |document| goal.call(enabled ? D7.visible(document) : document) }
+  end
+
+  # Constructs a `Goal::Fn` that waits until the document being rewritten
+  # is equal to *expected*.
+  def equal(expected : Term::Dict) : Fn
+    Fn.new { |document| document == expected }
+  end
+
+  # Constructs a `Goal::Fn` that waits until the document being rewritten
+  # matches *pattern*.
+  def matches(pattern : Term) : Fn
+    Fn.new { |document| M1.probe?(pattern, Term.of(document)) }
   end
 
   # Constructs a `Goal::Fn` that communicates to the rewriting engine
-  # that there is no goal, and the document must be rewritten forever.
+  # that there is no goal, and the document may be rewritten forever.
   #
   # Short term memory is provided by default, allowing detection and early
   # termination for short cycles instead of spinning. How short its term is
@@ -1357,7 +1372,7 @@ module D7::Goal
   # recommended ot use `STM` for efficienty if N is small; but you also may
   # use `Set` for infinite lookback (leaking memory but able to detect very
   # large cycles); since the latter also responds to `add?`.
-  def spin(*, lookback = STM(Term::Dict, 8).new) : Fn
+  def none(*, lookback = STM(Term::Dict, 8).new) : Fn
     if lookback
       Fn.new { |document| !lookback.add?(document) }
     else

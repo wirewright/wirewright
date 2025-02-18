@@ -737,4 +737,136 @@
    (delay 7 (event (edit @user (key backspace)))))
   (("" | "" () @user)))
 
-;; TODO: test suggestions
+;; General suggestions
+
+(d7
+  ((("" | "" () @user)))
+  matches
+  ((("" | "" () @user suggestions: (suggestions/list () ((%past (_string _string) min: 5 max: 5)) ((%past (_string _string) min: 16)))))))
+
+;; TODO: this couples tests with suggestions which is very bad. If new nodes
+;; are added these will break. When we have string patterns we should be able
+;; to do an "all start with" for these.
+(group
+  (d7
+    ((("l" | "" () @user)))
+    matches
+    ((("l" | "" () @user suggestions: (suggestions/list () (("latest" _string) ("log" _string) ("lookaround" _string)) ())))))
+
+  (d7
+    ((("" | "lates" () @user)))
+    matches
+    ((("" | "lates" () @user suggestions: (suggestions/list () (("latest" _string)) ())))))
+
+  (d7
+    ((("late" | "st" () @user)))
+    matches
+    ((("late" | "st" () @user suggestions: (suggestions/list () (("latest" _string)) ()))))))
+
+;; Suggestion for single variant nodes
+
+(group
+  (d7
+    ((absence ("" | "" () @user)))
+    matches
+    ((absence ("" | "" () @user suggestions: (suggestions/group () (("(absence *@cin_* as msg_ to @pout_)" _string)))))))
+  (d7
+    ((absence @qux ("" | "" () @user)))
+    matches
+    ((absence @qux ("" | "" () @user suggestions: (suggestions/group () (("(absence @cin_ *as* msg_ to @pout_)" _string)))))))
+  (d7
+    ((absence @qux as ("" | "" () @user)))
+    matches
+    ((absence @qux as ("" | "" () @user suggestions: (suggestions/group () (("(absence @cin_ as *msg_* to @pout_)" _string)))))))
+  (d7
+    ((absence @qux as foo ("" | "" () @user)))
+    matches
+    ((absence @qux as foo ("" | "" () @user suggestions: (suggestions/group () (("(absence @cin_ as msg_ *to* @pout_)" _string)))))))
+  (d7
+    ((absence @qux as foo to ("" | "" () @user)))
+    matches
+    ((absence @qux as foo to ("" | "" () @user suggestions: (suggestions/group () (("(absence @cin_ as msg_ to *@pout_*)" _string)))))))
+  (d7
+    ((absence @qux as foo to @-quxes ("" | "" () @user)))
+    ((absence @qux as foo to @-quxes ("" | "" () @user)))))
+
+;; Suggestion for multi-variant nodes
+(group
+  (d7
+    ((latest ("" | "" () @user)))
+    matches
+    ((latest
+      ("" | "" () @user
+        suggestions:
+          (suggestions/group () (("(latest *@pin_* @cout_)" _string)
+                                 ("(latest *(*@pin_ pattern_*)* (@cout_ template_))" _string)))))))
+  ;; Branch 1
+  (d7
+    ((latest @quxes ("" | "" () @user)))
+    matches
+    ((latest
+      @quxes
+      ("" | "" () @user
+        suggestions:
+          (suggestions/group () (("(latest @pin_ *@cout_*)" _string)))))))
+  (d7
+    ((latest @quxes @qux ("" | "" () @user)))
+    matches
+    ((latest @quxes @qux ("" | "" () @user))))
+  ;; Branch 2
+  (d7
+    ((latest (("" | "" () @user))))
+    matches
+    ((latest
+      (("" | "" () @user
+        suggestions:
+          (suggestions/group () (("(latest (*@pin_* pattern_) (@cout_ template_))" _string))))))))
+  (d7
+    ((latest (@quxes ("" | "" () @user))))
+    matches
+    ((latest
+      (@quxes
+       ("" | "" () @user
+         suggestions:
+           (suggestions/group () (("(latest (@pin_ *pattern_*) (@cout_ template_))" _string))))))))
+
+  (d7
+    ((latest (@quxes qux) ("" | "" () @user)))
+    matches
+    ((latest (@quxes qux)
+       ("" | "" () @user
+         suggestions:
+           (suggestions/group () (("(latest (@pin_ pattern_) *(*@cout_ template_*)*)" _string)))))))
+  ;; Make sure that the suggestion disappears if we do something wrong.
+  (d7
+    ((latest (@quxes qux) foobar ("" | "" () @user)))
+    ((latest (@quxes qux) foobar ("" | "" () @user))))
+  ;; Continue with branch 2
+  (d7
+    ((latest (@quxes qux) (("" | "" () @user))))
+    matches
+    ((latest (@quxes qux)
+       (("" | "" () @user
+         suggestions:
+           (suggestions/group () (("(latest (@pin_ pattern_) (*@cout_* template_))" _string))))))))
+  (d7
+    ((latest (@quxes qux) (qux ("" | "" () @user))))
+    ((latest (@quxes qux) (qux ("" | "" () @user)))))
+  (d7
+    ((latest (@quxes qux) (@qux ("" | "" () @user))))
+    matches
+    ((latest (@quxes qux)
+       (@qux
+        ("" | "" () @user
+          suggestions:
+            (suggestions/group () (("(latest (@pin_ pattern_) (@cout_ *template_*))" _string))))))))
+  (d7
+    ((latest (@quxes qux) (@qux foo ("" | "" () @user))))
+    ((latest (@quxes qux) (@qux foo ("" | "" () @user))))))
+
+;; TODO: suggestions with cursor at the end of valid node/nested should suggest (suggestion/key right)
+;; TODO: scrolling up in suggestions/list
+;; TODO: scrolling down in suggestions/list
+;; TODO: scrolling up at the top in suggestions/list
+;; TODO: scrolling down at the bottom in suggestions/list
+;; TODO: autocomplete selected item in suggestions/list
