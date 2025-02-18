@@ -124,8 +124,22 @@ def process(queue, testcase, ctx)
         first = true
         match = ->(matchee : Term) do
           begin
-            envs = ctx.stats.run { M1.matches(pattern, matchee) }
+            envs = ctx.stats.run do
+              M1.matches(pattern, matchee, opt: M1::O2)
+            end
             envs.map!(&.without(:"(keypaths)"))
+
+            # Make sure that the pattern evaluates to the same stuff on all different
+            # optimization levels. Lower opt levels expose deep rejection paths (and
+            # possibly bugs down there!) that would otherwise never be visited due
+            # to e.g. sketch opt that can reject at the very beginning of matching.
+            {M1::O1, M1::O0}.each do |opt|
+              next if envs == M1.matches(pattern, matchee, opt: opt).map!(&.without(:"(keypaths)"))
+
+              raise "optimization level #{opt} does not match like O2"
+            end
+
+            envs
           ensure
             if first
               ctx.stats.account
