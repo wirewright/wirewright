@@ -285,6 +285,10 @@
    (button 7 to @msgs ())
    (log @msgs in @log limit: 4)))
 
+;; TODO: log to uninitialized cell
+;; TODO: log to guarded cell
+;; TODO: log to guarded uninitialized cell
+
 ;; Stateless transform
 (d7
   ((button "Send 4" as 4 to @inputs ((press)))
@@ -590,7 +594,7 @@
 ;; lookaround movement
 
 ;; target above
-(d7
+(d7 limit: 256
   (a
    b
    c
@@ -656,7 +660,7 @@
    baz))
 
 ;; target below
-(d7
+(d7 limit: 256
   (a
    b
    c

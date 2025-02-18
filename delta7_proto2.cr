@@ -1,23 +1,7 @@
 require "./wirewright"
 require "./baz5"
 require "./baz5_editor"
-
-# + Rhodium.passable_range?
-# + Rhodium.successor?
-# + Rhodium.passable?
-# + Rhodium.follow? follow
-# + Rhodium.rewrite? rewrite
-# + Rhodium.enclosing? enclosing
-# + Rhodium.cursordepth
-# + Q
-# - Rhodium.next(d0, d1)
-# -  d2 = Rhodium.transition(d0, d1)
-# -     * dismissed
-# -     * summoned
-# -     cleanup of #-fields based on itemspart and #identity
-# -  Rhodium.step(d2)
-# - Rhodium.step
-# - Rhodium.handle -- nodestep
+require "./suggestion_synthesis"
 
 module Rhodium
   extend self
@@ -459,6 +443,13 @@ module Rhodium
     document1
   end
 
+  COMPLETION_MANAGER = begin
+    suggestions = File.read("#{__DIR__}/suggestions.soma.wwml")
+    spec = ML.terms(suggestions).as_d
+
+    NodeCompletion::CompletionManager.new(spec)
+  end
+
   # TODO: rename root0 -> document0
   # TODO: rename root1 -> document1
   # TODO: this thing is MADNESS! In an ideal world these would be backmaps,
@@ -894,34 +885,29 @@ module Rhodium
 
       # Lookaround can look behind and ahead on demand. It can also contain children.
       # On the children part, there is no isolation; it works just like `group`.
-      #
-      # FIXME: I don't think the latter is OK behavior but will do for now.
       givenpi %[(lookaround @behind-out_ @ahead-out_ @capture_ children_*) (pulse @capture_ _) _] do
-        raise "lookaround not implemented"
-        # range = nodepath.items.last
+        expect nodepath.size > 0
 
-        # cursor_b, cursor_e = range
-        # behind_b = cursor_b.as_n
-        # behind_e = cursor_e.as_n - 1
+        pivot = nodepath.last
+        parent = nodepath.pop { follow(root0, nodepath) }.as_d
 
-        # parent = follow(root1, nodepath.items.grow(-1)).as_d
+        if parent.same?(root0)
+          range = 0...parent.itemsize
+        else
+          range = passable_range?(Term.of(parent))
 
-        # if nodepath.size == 1
-        #   predrange = 0...root1.itemsize
-        # else
-        #   predrange = passable_range?(Term.of(parent)) || raise ""
-        # end
+          # We've arrived here somehow. Assume we did that by `successor?` -- which
+          # guarantees adherence to passability.
+          expect range
+        end
 
-        # ahead_b = cursor_e.as_n
-        # ahead_e = Term[predrange.end]
+        behind = parent.items(Term[range.begin], Term[pivot])
+        ahead = parent.items(Term[pivot + 1], Term[range.end])
 
-        # behind = parent.items(behind_b, behind_e)
-        # ahead = parent.items(ahead_b, ahead_e)
-
-        # effect(root1, nodepath, node0) do
-        #   event :pulse, behind_out, behind
-        #   event :pulse, ahead_out, ahead
-        # end
+        effect(root1, nodepath, node0) do
+          event :pulse, behind_out, behind
+          event :pulse, ahead_out, ahead
+        end
       end
 
       givenpi %[(periodic e_) cycle -1] do
@@ -934,13 +920,13 @@ module Rhodium
       #
       # When we see a cursor in a suitable position, we populate it with a list
       # of suggestions. What the cursor/UI does with them is not of our interest.
-      # givenpi %{_ cycle _} do
-      #   if node1 = COMPLETION_MANAGER.complete?(node0)
-      #     assign(root1, nodepath, node1)
-      #   else
-      #     root1
-      #   end
-      # end
+      givenpi %{_ cycle _} do
+        if node1 = COMPLETION_MANAGER.complete?(node0)
+          assign(root1, nodepath, node1)
+        else
+          root1
+        end
+      end
 
       otherwise do
         root1
@@ -1426,23 +1412,22 @@ observe = ->(entry : Term) do
 end
 
 # doc0 = ML.terms <<-WWML
-# (group
-#      ("" | "" () @cursor)
-#      (transform (@commands up) to @edits (move-parent-behind))
-#      (transform (@commands down) to @edits (move-parent-ahead))
-#      (edit-cast @edits to @cursor))
-#    (button "Move up" as up to @commands ())
-#    (button "Move down" as down to @commands ((press) (press)))
+# 1
+# 2
+# 3
+# (lookaround @behinds @aheads @relook
+#   (cell @behind)
+#   (cell @ahead)
+#   (latest @behinds @behind #hello: 100 #world: 200)
+#   (latest @aheads @ahead)
+#   (button "Relook" to @relook ((press))))
+# 4
+# 5
+# 6
 # WWML
 
 # doc1 = ML.terms <<-WWML
-# (button "Move up" as up to @commands ())
-#    (button "Move down" as down to @commands ())
-#    (group
-#      ("" | "" () @cursor)
-#      (transform (@commands up) to @edits (move-parent-behind))
-#      (transform (@commands down) to @edits (move-parent-ahead))
-#      (edit-cast @edits to @cursor))
+
 # WWML
 
 # puts D7.run?(doc0.as_d, doc1.as_d, log: D7::Log::Fn.new(observe), limit: 128)
