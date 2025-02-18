@@ -5423,10 +5423,14 @@ module ::Ww::M1
 
       # With %optional, our min is when the optional is not matched (0)
       # and our max is when the optional is matched (successor).
+      #
+      # Throw away minimum bound if %past, %past/max can match nothing.
       matchpi(
         %{[%optional _ successor_]},
         %{[%entry/optional _ successor_]},
-        cues: {:"%optional", :"%entry/optional"},
+        %{(%past successor_ ¦ _ min: 0)},
+        %{(%past/max successor_ ¦ _ min: 0)},
+        cues: {:"%optional", :"%entry/optional", :"%past", :"%past/max"},
       ) do
         _, max = depth(successor)
 
@@ -5553,6 +5557,19 @@ module ::Ww::M1
         end
 
         {min, max}
+      end
+
+      # Throw away minimum bound if %many can match nothing.
+      matchpi %{(%many _* ¦ _ min: 0)}, cue: :"%many" do
+        max = Magnitude.new(0)
+
+        items = normp.items.move(2)
+        items.each do |item|
+          _, max1 = depth(item)
+          max = Math.max(max, max1)
+        end
+
+        {Magnitude.new(0), max}
       end
 
       matchpi %{[%group _*]}, %{[%many _*]}, cues: {:"%group", :"%many"} do
