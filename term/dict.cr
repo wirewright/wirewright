@@ -741,6 +741,16 @@ module Ww
       end
     end
 
+    def rightmost(n : Int)
+      return self unless 0 < n < itemsize
+
+      Term::Dict.build do |commit|
+        (itemsize - n...itemsize).each do |index|
+          commit << self[index]
+        end
+      end
+    end
+
     private def with_default(key : ITerm, value : Term) : Dict
       added, pairs = @pairs.add(Probes::AssocPairImm.new(key.upcast, value))
       unless added # Overridden or completely unchanged

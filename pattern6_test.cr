@@ -1,6 +1,6 @@
 require "./wirewright"
 require "./baz5_editor"
-require "./delta7_proto"
+require "./delta7_proto2"
 
 CASES  = [
   File.read("#{__DIR__}/patterns.test.wwml"),
@@ -304,19 +304,16 @@ def process(queue, testcase, ctx)
     # they expect themselves to run longer for success. In an ideal world, instead of a limit,
     # we'd perhaps have some kind of "divergence" limit but hey; we're not in an ideal
     # world are we?
-    matchpi %[(d7 initial_ expected_ ¦ limit: (%optional 128 limit←(%number +i32)))] do
+    matchpi %[(d7 initial_dict expected_dict ¦ limit: (%optional 128 limit←(%number +i32)))] do
       next if "-no-d7".in?(ARGV)
 
       ctx.stats.account
 
       track(ctx, testcase) do
         ctx.stats.run do
-          begin
-            D7.run(initial, max_cycles: limit.to(Int32)) do |im|
-              D7.visible(im) == expected
-            end
-          rescue e : D7::Interrupted
-            ctx.failures << Term.of(:"d7/interrupted", D7.visible(e.last), :==, expected, :LIMIT, limit)
+          ok, latest = D7.run?(initial.unsafe_as_d, expected.unsafe_as_d, hidden: false, limit: limit.to(Int32))
+          unless ok
+            ctx.failures << Term.of(:"d7/interrupted", D7.visible(latest), :==, expected, :LIMIT, limit)
           end
         end
       end

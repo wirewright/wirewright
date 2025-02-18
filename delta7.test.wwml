@@ -295,7 +295,7 @@
    (log @outputs in (16))))
 
 ;; Stateless filter transform
-(d7
+(d7 limit: 256
   ((cell 0 @value for (%number (whole _) < 10))
    (changes @value to @values)
    (transform (@values n←(%pipe (mod 2) 0)) to @parities (even n))
@@ -720,3 +720,17 @@
      (transform (@decisions go-ahead) to @cursor-commands (move-parent-ahead))
      (blast @sequences to @cursor-commands)
      (edit-cast @cursor-commands to @cursor))))
+
+(d7
+  ((transform @deltas to @counts (* _ 2))
+   ("" | "" () @user)
+   (delay 1 (event (edit @user (key left))))
+   (delay 2 (event (edit @user (key C-backspace))))
+   (delay 3 (event (edit @user (key C-backspace))))
+   (delay 4 (event (edit @user (key C-backspace))))
+   (delay 5 (event (edit @user (key C-backspace))))
+   (delay 6 (event (edit @user (key C-backspace))))
+   (delay 7 (event (edit @user (key backspace)))))
+  (("" | "" () @user)))
+
+;; TODO: test suggestions
