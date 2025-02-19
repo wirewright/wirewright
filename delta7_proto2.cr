@@ -9,9 +9,9 @@ require "execution_context"
 module Rhodium
   extend self
 
-  Initialize = Term.of(:initialize)
-
+  Initialize = Term[:"#initialize"]
   Events      = Term[:"#events"]
+
   Shadow      = Term.of(:"#shadow")
   Cells       = Term.of(:"#cells")
   JobsPending = Term.of(:"#jobs/pending")
@@ -297,8 +297,8 @@ module Rhodium
 
     # Constructs with the given *carrier* term. If *carrier* is not
     # a dict, initializes to an empty queue.
-    def self.of(container : Term::Dict)
-      return new(Term[]) unless carrier = container[Events]?
+    def self.of(container : Term::Dict, key : Term::Sym)
+      return new(Term[]) unless carrier = container[key]?
       return new(Term[]) unless carrier = carrier.as_itemsonly_d?
 
       new(carrier)
@@ -341,8 +341,8 @@ module Rhodium
     # It is assumed that this queue was constructed using `Q.of` with
     # the same *container*. Violating this assumption is not an error,
     # but you should think hard before doing that.
-    def commit(container : Term::Dict) : Term::Dict
-      @carrier.empty? ? container.without(Events) : container.with(Events, @carrier)
+    def commit(container : Term::Dict, key : Term::Sym) : Term::Dict
+      @carrier.empty? ? container.without(key) : container.with(key, @carrier)
     end
   end
 
@@ -428,7 +428,7 @@ module Rhodium
     document0 = document1
 
     builder.events.each do |event|
-      document1 = Q.of(document1).enqueue(event).commit(document1)
+      document1 = Q.of(document1, Events).enqueue(event).commit(document1, Events)
     end
 
     builder.cells.each do |k, v|
@@ -1125,13 +1125,13 @@ module Rhodium
       matchpi %{(cell @cout_)}, %{(fragment @cout_)} do
         document1 = document1.morph({Cells, cout, nil})
 
-        Q.of(document1).enqueue(:"cell/removed", cout).commit(document1)
+        Q.of(document1, Events).enqueue(:"cell/removed", cout).commit(document1, Events)
       end
 
       matchpi %{(transform @pin_ job_)} do
         document1 = document1.morph({JobsPending, job, nil})
 
-        Q.of(document1).enqueue(:feedback, :cancelled, pin).commit(document1)
+        Q.of(document1, Events).enqueue(:feedback, :cancelled, pin).commit(document1, Events)
       end
 
       otherwise { document1 }
@@ -1166,9 +1166,33 @@ module Rhodium
   # Steps forward in time the document *document0*. Returns the resulting
   # document *document1* (the *successor* of *document0*).
   def step(document0 : Term::Dict) : {Term::Dict, Bool}
-    queue = Q.of(document0)
+    # First we have to exhaust all initialize events.
+    initialize_queue = Q.of(document0, Initialize)
+
+    while head = initialize_queue.first?
+      initialize_queue = initialize_queue.dequeue
+
+      Term.case(head) do
+        matchpi %{(steps_number+)} do
+          next unless keypath = keypath?(document0, steps.items)
+
+          document1 = initialize_queue.commit(document0, Initialize)
+
+          return handle(document0, document1, keypath, Term.of(:initialize))
+        end
+
+        otherwise { }
+      end
+    end
+
+    # There may have been some bogus initialize events; commit the queue that
+    # is empty of them. If there were no initialize events, this will be
+    # a noop.
+    document0 = initialize_queue.commit(document0, Initialize)
+
+    queue = Q.of(document0, Events)
     if event = queue.first?
-      document1 = queue.dequeue.commit(document0)
+      document1 = queue.dequeue.commit(document0, Events)
     else
       event = Term.of(:cycle)
       document1 = document0
@@ -1181,14 +1205,6 @@ module Rhodium
         # Edit is potentially destructive and not under our control; therefore it
         # will always force a transition.
         {edited.as_d? || raise("toplevel edit must produce a dict"), true}
-      end
-
-      # FIXME: we should use a separate initialize queue so that initializes
-      # have sane order. interject() makes the order insane.
-      matchpi %{(initialize (steps_number+))} do
-        continue unless keypath = keypath?(document0, steps.items)
-
-        handle(document0, document1, keypath, Initialize)
       end
 
       otherwise do
@@ -1243,9 +1259,7 @@ module Rhodium
         population1 = population1.with(identity, true)
       elsif !identity.in?(population1)
         # Initialize
-        # FIXME: we should use a separate initialize queue so that initializes
-        # have sane order. interject() makes the order insane.
-        document2 = Q.of(document2).interject(:initialize, nodepath).commit(document2)
+        document2 = Q.of(document2, Initialize).enqueue(nodepath).commit(document2, Initialize)
         population1 = population1.with(identity, true)
       end
     end
@@ -1380,9 +1394,9 @@ module Nitrene
 
         commit.without(job)
 
-        document1 = Rhodium::Q.of(document1)
+        document1 = Rhodium::Q.of(document1, Rhodium::Events)
           .enqueue(:"job/completed", job, result)
-          .commit(document1)
+          .commit(document1, Rhodium::Events)
       end
     end
 

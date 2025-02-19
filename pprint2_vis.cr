@@ -1040,9 +1040,9 @@ class Soma
       end
 
       if motion
-        document1 = Rhodium::Q.of(document1)
+        document1 = Rhodium::Q.of(document1, Rhodium::Events)
           .enqueue(:edit, {:edge, :user}, motion)
-          .commit(document1)
+          .commit(document1, Rhodium::Events)
       end
     end
 
@@ -1108,7 +1108,7 @@ class Soma
 
   private def check_should_draw
     D7::Step.new do |document|
-      events = Rhodium::Q.of(document)
+      events = Rhodium::Q.of(document, Rhodium::Events)
 
       if event = events.first?
         Term.case(event) do
