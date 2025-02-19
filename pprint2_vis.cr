@@ -512,18 +512,12 @@ class Soma
     end
   end
 
-  private def compose_suggestion_box(sections : Enumerable(String), &)
-    sections = sections.map do |section|
-      wrap(section, maxwidth: 60).chomp # ?!
-    end
-
-    content_px = 1
-
+  private def measure_suggestion_box(wrapped_sections : Enumerable(String), *, px = 0, py = 0) : {Int32, Int32}
     # Compute width and height.
     w = w1 = 0
     h = 0
 
-    sections.each_with_index do |section, index|
+    wrapped_sections.each_with_index do |section, index|
       h += 1 if index > 0 # Have a gap
 
       section.each_char do |char|
@@ -551,8 +545,13 @@ class Soma
     h += 2
 
     # Add space for padding.
-    w += content_px*2
+    w += px*2
+    h += py*2
 
+    {w, h}
+  end
+
+  private def compose_suggestion_box(wrapped_sections : Enumerable(String), w, h, *, px = 1, py = 0, &)
     borderset = BORDERSETS[:rounded]
 
     # Draw border
@@ -583,10 +582,10 @@ class Soma
     end
 
     # Now put text into the box. Do not forget we have borders! And padding!
-    i = oi = 1 + content_px
-    j = 1
+    i = oi = 1 + px
+    j = 1 + py
     em = false
-    sections.each_with_index do |section, index|
+    wrapped_sections.each_with_index do |section, index|
       if index > 0
         # Draw horizontal separator instead of whitespace gap
         (1...w - 1).each do |k|
@@ -678,20 +677,26 @@ class Soma
 
         ox = x - shl.to(Int32)
 
-        # Go below the cursor (well, assuming the cursor is the source of this node!)
-        x = ox
-        y += 1
+        sections = {suggestions.items.join('\n', &.to(String))}
+        suggestions_w, suggestions_h = measure_suggestion_box(sections, px: 1, py: 0)
 
-        # TODO: here we should try to find (iteratively?) where we'd want to place this
-        # node. Currently we're stupid and rely on clipping so if the hint is positioned
-        # too much to the right/bottom it's clipped. The user has then to scroll to see
-        # the hint. compose_suggestion_box's width/height computation will then have to
-        # be moved here.
+        offset_x = (screen.vw - SCREEN_PX*2 - 1) - (ox + suggestions_w)
 
-        fg_em = Colors[:"blue-200"]
+        if ox <= (screen.vw - SCREEN_PX*2 - 1) && offset_x < 0
+          ox += offset_x
+        end
 
-        compose_suggestion_box({suggestions.items.join('\n', &.to(String))}) do |char, i, j, em|
-          screen.set(char, x + i, y + j, em ? fg_em : screen.fg0, screen.bg0, 9)
+        # Overflows, flip
+        if y + 1 + suggestions_h >= (screen.vh - SCREEN_PY*2 - 1)
+          y -= suggestions_h
+        else
+          y += 1
+        end
+
+        fg_em = Colors[:"blue-400"]
+
+        compose_suggestion_box(sections, suggestions_w, suggestions_h) do |char, i, j, em|
+          screen.set(char, ox + i, y + j, em ? fg_em : screen.fg0, screen.bg0, 9)
         end
 
         x = x0
@@ -705,25 +710,32 @@ class Soma
 
         ox = x - shl.to(Int32)
 
-        # Go below the cursor (well assuming the cursor is the source of this node!)
-        x = ox
-        y += 1
-
-        # TODO: here we should try to find (iteratively?) where we'd want to place this
-        # node. Currently we're stupid and rely on clipping so if the hint is positioned
-        # too much to the right/bottom it's clipped. The user has then to scroll to see
-        # the hint. compose_suggestion_box's width/height computation will then have to
-        # be moved here.
-
-        fg_em = Colors[:"blue-200"]
+        fg_em = Colors[:"blue-400"]
 
         desc_punct = desc.to(String)
-        if desc_punct[-1].letter?
+        if desc_punct[-1]?.try(&.letter?)
           desc_punct += '.'
         end
 
-        compose_suggestion_box({name.to(String), desc_punct}) do |char, i, j, em|
-          screen.set(char, x + i, y + j, em ? fg_em : screen.fg0, screen.bg0, 9)
+        sections = {name.to(String), desc_punct}
+        wrapped_sections = sections.map { |section| wrap(section, maxwidth: (screen.vw - SCREEN_PX*2 - 1).clamp(24..60)).chomp } # ?!
+        suggestions_w, suggestions_h = measure_suggestion_box(wrapped_sections, px: 1, py: 0)
+
+        offset_x = (screen.vw - SCREEN_PX*2 - 1) - (ox + suggestions_w)
+
+        if ox <= (screen.vw - SCREEN_PX*2 - 1) && offset_x < 0
+          ox += offset_x
+        end
+
+        # If overflows, flip
+        if y + 1 + suggestions_h >= (screen.vh - SCREEN_PY*2 - 1) && (y - suggestions_h) > 0
+          y -= suggestions_h
+        else
+          y += 1
+        end
+
+        compose_suggestion_box(wrapped_sections, suggestions_w, suggestions_h) do |char, i, j, em|
+          screen.set(char, ox + i, y + j, em ? fg_em : screen.fg0, screen.bg0, 9)
         end
 
         x = x0
