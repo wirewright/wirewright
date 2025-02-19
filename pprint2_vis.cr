@@ -148,10 +148,7 @@ struct Cursor
   include Feature
 
   private def cursor_block(lhs : Term, rhs : Term)
-    Term.of(:block,
-      Term[:cursor, lhs, rhs,
-        w: lhs.charcount + rhs.charcount,
-        h: 1])
+    Term.of(:block, Term[:cursor, lhs, rhs], w: lhs.charcount + rhs.charcount, h: 1)
   end
 
   def call(ctx, term, postfix, head, rest)
@@ -298,10 +295,10 @@ struct Button
 
     Term.of(:block,
       Term[:button, caption_string,
-        w: caption_string.size + 2,
-        h: 1,
         enabled: !term[:waiting]?,
-        mailbox: term[:mailbox]?])
+        mailbox: term[:mailbox]?],
+      w: caption_string.size + 2,
+      h: 1)
   end
 
   def call(ctx, term, postfix, head, rest)
@@ -336,7 +333,7 @@ struct Comment
         w = wrapped_desc.each_line.max_of? { |line| line.size + 3 } || 3 # Do not forget ";; "
         h = Math.max(wrapped_desc.each_line.size, 1)
 
-        Term.of(:row, Term.of(:block, Term[:comment, wrapped_desc, w: w, h: h]), Term.of(:frag, postfix))
+        Term.of(:row, Term.of(:block, Term[:comment, wrapped_desc], w: w, h: h), Term.of(:frag, postfix))
       end
 
       otherwise do

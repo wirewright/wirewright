@@ -1168,7 +1168,7 @@ def measure(ctx : DisplayContext, node : Term) : {Int32, Int32}
         {content.charcount, 1}
       end
 
-      matchpi %{(block {_ w_: (%number +i32), h_: (%number +i32)})} do
+      matchpi %{(block _ ¦ _ w_: (%number +i32) h_: (%number +i32))} do
         {w.to(Int32), h.to(Int32)}
       end
 
