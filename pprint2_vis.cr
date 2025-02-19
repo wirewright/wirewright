@@ -353,13 +353,13 @@ def annotate(document : Term::Dict)
     node = Rhodium.follow(document, nodepath)
 
     Term.case(node) do
-      matchpi %{[button _ to @_ (_*)]} do
+      matchpi %{(button _ to @_ (_*) ¦ _ waiting: (%- _))} do
         continue unless Rhodium.cursordepth(node) == -1
 
         document = Rhodium.assign(document, nodepath, Term.of(node.with(:mailbox, Term[nodepath].append(4))))
       end
 
-      matchpi %{[button _ as _ to @_ (_*)]} do
+      matchpi %{(button _ as _ to @_ (_*) ¦ _ waiting: (%- _))} do
         continue unless Rhodium.cursordepth(node) == -1
 
         document = Rhodium.assign(document, nodepath, Term.of(node.with(:mailbox, Term[nodepath].append(6))))
@@ -441,6 +441,9 @@ SCREEN_PY = 1
 class Soma
   def initialize
     @running = true
+
+    @nitrene = Nitrene::JobContext.new
+    @mt = ExecutionContext::MultiThreaded.new("Soma", 4)
 
     # TODO: these chains are basically pprint defaults. They do not
     # belong here. for custom features, implement Chain#prepend.
@@ -1040,12 +1043,30 @@ class Soma
     document1
   end
 
-  # Wait until an event occurs that modifies *document*. Returns
+  # Waits until an event occurs that modifies *document*. Returns
   # the modified document.
   private def wait(screen : Screen, document document0 : Term::Dict) : Term::Dict
+    chan = Channel(Termbox::Event | Bool).new
+
     while true
+      # Wait for a Termbox event.
+      @mt.spawn do
+        chan.send(Termbox.poll)
+      end
+
+      # Wait for Nitrene job completion.
+      @mt.spawn do
+        next unless @nitrene.wait?
+
+        chan.send(true)
+      end
+
+      unless event = chan.receive.as?(Termbox::Event)
+        return document0
+      end
+
       # Assume implicitly that we're settled if we're wait()ing.
-      document1 = handle(screen, document0, Termbox.poll, settled: true)
+      document1 = handle(screen, document0, event, settled: true)
       unless document0.same?(document1)
         return document1
       end
@@ -1102,6 +1123,8 @@ class Soma
       initial = true
       settled = false
 
+      i = 0
+
       while true
         # Force initial redraw and redraw before settling. On the latter,
         # since run() will only redraw periodically, it may happen that
@@ -1119,7 +1142,7 @@ class Soma
         seed = D7.run(seed,
           log: D7::Log::None.new,
           transition: Rhodium.transition,
-          step: D7.steps(check_should_draw, Rhodium.step, Nitrene.step, step(screen)),
+          step: D7.steps(check_should_draw, Rhodium.step, Nitrene.step(@nitrene), step(screen)),
           goal: D7::Goal.none,
           initial: initial,
         )

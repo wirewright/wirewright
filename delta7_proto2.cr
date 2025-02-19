@@ -2,6 +2,7 @@ require "./wirewright"
 require "./baz5"
 require "./baz5_editor"
 require "./suggestion_synthesis"
+require "execution_context"
 
 # TODO: "arbitrary keypath" Stack(Int32) must be called "docpath" (as in "path into a document")
 # TODO: nodepath Stack(Int32) is emitted by successor? and is "path into a document that is proven to point to a node"
@@ -1022,7 +1023,9 @@ module Rhodium
         Q.of(document1).enqueue(:"cell/removed", cout).commit(document1)
       end
 
-      matchpi %{(transform @pin_ _)} do
+      matchpi %{(transform @pin_ job_)} do
+        document1 = document1.morph({JobsPending, job, nil})
+
         Q.of(document1).enqueue(:feedback, :cancelled, pin).commit(document1)
       end
 
@@ -1178,36 +1181,109 @@ end
 module Nitrene
   extend self
 
-  REWRITER = chainR(using(plug(:env), dfsR(envR)), callR(PRIMITIVES))
+  JOB_REWRITER = chainR(using(plug(:env), dfsR(envR)), callR(PRIMITIVES))
 
-  def step(document document0 : Term::Dict) : Term::Dict
-    document1 = document0
-
-    if jobs_pending = document0[Rhodium::JobsPending]?
-      execute = ->(program : Term, env : Term::Dict) do
-        rewrite(program, REWRITER, env: env)
-      end
-
-      jobs_pending.each_entry do |job, _|
-        Term.case(job) do
-          matchpi %[(¦ () program_ env_dict)] do
-            result = execute.call(program, env.unsafe_as_d)
-            document1 = Rhodium::Q.of(document1).enqueue(:"job/completed", job, result).commit(document1)
-          end
-        end
-      end
-
-      document1 = document1.without(Rhodium::JobsPending)
+  class JobContext
+    def initialize
+      @mt = ExecutionContext::MultiThreaded.new("Nitrene", 4)
+      @running = Atomic(Term::Dict).new(Term[])
+      @completed = Atomic(Term::Dict).new(Term[])
+      @notify = Channel(Bool).new
     end
 
-    document1
+    class JobInterrupted < Exception
+    end
+
+    private def spawn(job : Term, program : Term, env : Term::Dict) : Nil
+      @mt.spawn do
+        # sleep 3.seconds
+
+        result = rewrite(program, JOB_REWRITER, env: env) do
+          running = @running.get(:acquire)
+          unless job.in?(running)
+            raise JobInterrupted.new
+          end
+        end
+
+        completed0 = @completed.get(:acquire)
+        while true
+          completed1 = completed0.with(job, result)
+          completed0, ok = @completed.compare_and_set(completed0, completed1, :release, :acquire)
+          break if ok
+        end
+
+        select
+        when @notify.send(true)
+        else
+        end
+      rescue JobInterrupted
+      end
+    end
+
+    # Takes off and returns all completed jobs.
+    def completed : Term::Dict
+      @completed.swap(Term[], :release)
+    end
+
+    # Synchronizes running jobs with *jobs*: spawns new ones and cancels ones
+    # not in *jobs*.
+    def sync(jobs running1 : Term::Dict) : Nil
+      running0 = @running.swap(running1, :release)
+      running1.each_entry do |job, _|
+        next if job.in?(running0)
+
+        Term.case(job) do
+          matchpi %{(¦ () program_ env_dict)} { spawn(job, program, env.unsafe_as_d) }
+          otherwise {}
+        end
+      end
+    end
+
+    def wait? : Bool
+      running = @running.get(:acquire)
+      if running.empty?
+        return false
+      end
+
+      @notify.receive
+
+      true
+    end
+  end
+
+  def step(ctx : JobContext, document document0 : Term::Dict) : Term::Dict
+    document1 = document0
+
+    jobs_pending = document0[Rhodium::JobsPending]?.try(&.as_d?) || Term[]
+    jobs_pending = jobs_pending.transaction do |commit|
+      jobs_completed = ctx.completed
+      jobs_completed.each_entry do |job, result|
+        # Skip completed jobs that are not in the pending list.
+        next unless job.in?(jobs_pending)
+
+        commit.without(job)
+
+        document1 = Rhodium::Q.of(document1)
+          .enqueue(:"job/completed", job, result)
+          .commit(document1)
+      end
+    end
+
+    # Swap running jobs with pending jobs.
+    ctx.sync(jobs_pending)
+
+    document1.with(Rhodium::JobsPending, jobs_pending)
   end
 
   # Returns the step function for `Nitrene`.
-  def step : D7::Step
+  #
+  # - *ctx* provides the job context. Nitrene is serving the jobs asynchronously
+  #   and this context keeps info about the currently running jobs etc, along with
+  #   `ExecutionContext` and so on.
+  def step(ctx = JobContext.new) : D7::Step
     D7::Step.new do |document0, log|
       log.append { Term.of(:input, :nitrene, :step, document0) }
-      document1 = step(document0)
+      document1 = step(ctx, document0)
       log.append { Term.of(:output, :nitrene, :step, document1) }
       document1
     end
@@ -1480,21 +1556,26 @@ observe = ->(entry : Term) do
 end
 
 # doc0 = ML.terms <<-WWML
-# (cell 0 @x)
-# (changes @x to @xs)
-# (log @xs in ())
-# ("" | "" () @user)
-
-# (delay 1 (event (edit @user (input "h"))))
-# (delay 2 (event (edit @user (input "e"))))
-# (delay 3 (event (edit @user (input "l"))))
-# (delay 4 (event (edit @user (input "l"))))
-# (delay 5 (event (edit @user (input "o"))))
+# (button 4 to @xs ((press)))
+# (transform (@xs x_number) to @ys (* x x))
+# (log @ys in ())
 # WWML
 
-# doc1 = ML.terms <<-WWML
+# nctx = Nitrene::JobContext.new
+# initial = true
 
-# WWML
+# while true
+#   doc0 = D7.run(doc0.as_d,
+#     log: D7::Log::Fn.new(observe),
+#     transition: Rhodium.transition,
+#     step: D7.steps(Rhodium.step, Nitrene.step(nctx)),
+#     goal: D7::Goal.none,
+#     initial: initial,
+#   )
+#   initial = false
+
+#   break unless nctx.wait?
+# end
 
 # puts D7.run_until_equal?(doc0.as_d, doc1.as_d, log: D7::Log::Fn.new(observe), limit: 128)
 
