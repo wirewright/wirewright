@@ -51,17 +51,18 @@ def smart_subsume(root, motion, edge, keypath, keypaths, good_choice)
       smart_subsume(entries, motion, edge, keypath.append(3), keypaths, good_choice: false)
     end
 
-    matchpi %{(cell value_dict @_)} do
+    matchpi %{(cell value_dict @_)}, %{(fragment value_dict @_)} do
       smart_subsume(value, motion, edge, keypath.append(1), keypaths, good_choice: false)
     end
 
     otherwise do
       dict0.each_entry do |k, v|
+        next if Rhodium.internal_key?(k)
+
         smart_subsume(v, motion, edge, keypath.append(k), keypaths, good_choice)
       end
     end
   end
-
 end
 
 PRIMITIVES = ProcRuleset.build do

@@ -3,6 +3,8 @@ require "./baz5"
 require "./baz5_editor"
 require "./suggestion_synthesis"
 
+# TODO: "arbitrary keypath" Stack(Int32) must be called "docpath" (as in "path into a document")
+# TODO: nodepath Stack(Int32) is emitted by successor? and is "path into a document that is proven to point to a node"
 module Rhodium
   extend self
 
@@ -43,6 +45,7 @@ module Rhodium
       matchpi %[(edit-cage for @_ _*)] { 3...node.itemsize }
       matchpi %[(decay (%number +i32) _*)] { 2...node.itemsize }
       matchpi %[(lookaround @_ @_ @_ _*)] { 4...node.itemsize }
+      matchpi %[(fragment _ @_)] { 1...2 }
       otherwise {}
     end
   end
@@ -544,6 +547,37 @@ module Rhodium
         end
       end
 
+      # Fragment
+      #
+      # Fragments behave like cells except they're passable. And don't have
+      # a guard variant.
+      begin
+        givenpi %[(fragment v_ @cout_) initialize _] do
+          effect(root1, nodepath, node0) do
+            event :"cell/created", cout, v
+            cell cout, v
+          end
+        end
+
+        givenpi %[(fragment v_ @cout_) (assign @cout_ v_) _] do
+          root1
+        end
+
+        givenpi %[(fragment v0_ @cout_) (assign @cout_ v1_) _] do
+          effect(root1, nodepath, node0) do
+            event :"cell/updated", cout, v0, v1
+            cell cout, v1
+            backmap %[(fragment v_ @_)], v: v1
+          end
+        end
+
+        givenpi %[(fragment @cout_) (assign @cout_ v0_) _] do
+          effect(root1, nodepath, node0) do
+            backmap %[(fragment ⏏v @_)], v: v0
+          end
+        end
+      end
+
       # Button
       begin
         givenpi %[(button _ as @cin_ to @pout_ ((press) _*)) cycle _] do
@@ -943,8 +977,13 @@ module Rhodium
   # Returns the identity of *node*. Returns `nil` if *node* has no identity.
   def identity?(node : Term) : Term?
     Term.case({node, cursordepth(node)}) do
+      # ?!?!!?!  FIXME: What is this _* doing here?!
       givenpi %{(cell _ @cout_ _*) -1} do
         Term.of(:cell, cout)
+      end
+
+      givenpi %{(fragment _ @cout_) _} do
+        Term.of(:fragment, cout)
       end
 
       givenpi %{(transform _* ¦ #shadow: _ #spec: {_ in: @pin_} #job: job_) -1} do
@@ -977,13 +1016,13 @@ module Rhodium
   # *document1* is write-only.
   def expel(document0 : Term::Dict, document1 : Term::Dict, identity : Term) : Term::Dict
     Term.case(identity) do
-      matchpi %[(cell @cout_)] do
+      matchpi %{(cell @cout_)}, %{(fragment @cout_)} do
         document1 = document1.morph({Cells, cout, nil})
 
         Q.of(document1).enqueue(:"cell/removed", cout).commit(document1)
       end
 
-      matchpi %[(transform @pin_ _)] do
+      matchpi %{(transform @pin_ _)} do
         Q.of(document1).enqueue(:feedback, :cancelled, pin).commit(document1)
       end
 
@@ -1255,13 +1294,21 @@ module D7
   #   documents, say, D0 (current document) and D1 (document at the next time step).
   # - *step* lets you advance the current document D0 by one step to obtain D1.
   # - *goal* defines the goal of rewriting: it is usually `equal`, `match`, or `none`.
-  def run(document document1 : Term::Dict, log : Log, transition : Transition, step : Step, goal : Goal::Fn) : Term::Dict
-    log.append { Term.of(:original, document1) }
+  # - *initial* enables or disables the initial transition from an empty document
+  #   to *document1*. This triggers such things as cell creation events, for example.
+  def run(document document1 : Term::Dict, log : Log, transition : Transition, step : Step, goal : Goal::Fn, *, initial : Bool) : Term::Dict
+    if initial
+      log.append { Term.of(:original, document1) }
 
-    document0 = Term[]
+      document0 = Term[]
+    else
+      document0 = document1
+    end
 
     while true
-      document1 = transition.call(document0, document1, log)
+      unless document0.same?(document1)
+        document1 = transition.call(document0, document1, log)
+      end
       document2 = step.call(document1, log)
       if goal.call(document2)
         return document2
@@ -1272,8 +1319,8 @@ module D7
     end
   end
 
-  def run(document : Term::Dict, *, log : Log = Log::None.new, goal : Goal::Fn = Goal.none) : Term::Dict
-    run(document, log, Rhodium.transition, steps(Rhodium.step, Nitrene.step), goal)
+  def run(document : Term::Dict, *, log : Log = Log::None.new, goal : Goal::Fn = Goal.none, initial : Bool = true) : Term::Dict
+    run(document, log, Rhodium.transition, steps(Rhodium.step, Nitrene.step), goal, initial: initial)
   end
 
   def run?(document : Term::Dict, goal : Goal::Fn, *, log : Log = Log::None.new, limit = nil) : {Bool, Term::Dict}
@@ -1433,25 +1480,23 @@ observe = ->(entry : Term) do
 end
 
 # doc0 = ML.terms <<-WWML
-# 1
-# 2
-# 3
-# (lookaround @behinds @aheads @relook
-#   (cell @behind)
-#   (cell @ahead)
-#   (latest @behinds @behind #hello: 100 #world: 200)
-#   (latest @aheads @ahead)
-#   (button "Relook" to @relook ((press))))
-# 4
-# 5
-# 6
+# (cell 0 @x)
+# (changes @x to @xs)
+# (log @xs in ())
+# ("" | "" () @user)
+
+# (delay 1 (event (edit @user (input "h"))))
+# (delay 2 (event (edit @user (input "e"))))
+# (delay 3 (event (edit @user (input "l"))))
+# (delay 4 (event (edit @user (input "l"))))
+# (delay 5 (event (edit @user (input "o"))))
 # WWML
 
 # doc1 = ML.terms <<-WWML
 
 # WWML
 
-# puts D7.run?(doc0.as_d, doc1.as_d, log: D7::Log::Fn.new(observe), limit: 128)
+# puts D7.run_until_equal?(doc0.as_d, doc1.as_d, log: D7::Log::Fn.new(observe), limit: 128)
 
 # D7.run(doc0.as_d, D7::Log::Fn.new(observe), Rhodium.transition, D7.steps(Rhodium.step, Nitrene.step), D7::Goal.limited(D7::Goal.find(doc1.as_d, hidden: false), limit: 128))
 

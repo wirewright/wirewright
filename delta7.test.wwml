@@ -870,3 +870,34 @@
 ;; TODO: scrolling up at the top in suggestions/list
 ;; TODO: scrolling down at the bottom in suggestions/list
 ;; TODO: autocomplete selected item in suggestions/list
+;; TODO: scrolling up in suggestions/group
+;; TODO: scrolling down in suggestions/group
+;; TODO: scrolling up at the top in suggestions/group
+;; TODO: scrolling down at the top in suggestions/group
+
+;; fragment
+(group
+  (d7
+    ((fragment @qux)
+     (changes @qux to @quxes)
+     (absence @quxes as "Qux is absent!!" to @-quxes)
+     (log @quxes in ())
+     (log @-quxes in ())
+     (delay 1 (event (assign @qux (delay 1 (event (assign @qux "Hello World")))))))
+    ((fragment "Hello World" @qux)
+     (changes @qux to @quxes)
+     (absence @quxes as "Qux is absent!!" to @-quxes)
+     (log @quxes in ((delay 1 (event (assign @qux "Hello World"))) "Hello World"))
+     (log @-quxes in ("Qux is absent!!"))))
+  ;; Smart subsume should try to away from fragment
+  (d7
+    ((fragment ("" | "" () @user) @qux)
+     ("" | "" () @user)
+     (event (edit @user (input "Hi"))))
+    ((fragment ("" | "" () @user) @qux)
+     ("Hi" | "" () @user)))
+  ;; But if there is no choice, it must enter
+  (d7
+    ((fragment ("" | "" () @user) @qux)
+     (event (edit @user (input "Hi"))))
+    ((fragment ("Hi" | "" () @user) @qux))))

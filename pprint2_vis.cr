@@ -1099,6 +1099,7 @@ class Soma
 
   def run(seed : Term::Dict) : Nil
     screen do |screen|
+      initial = true
       settled = false
 
       while true
@@ -1119,9 +1120,11 @@ class Soma
           log: D7::Log::None.new,
           transition: Rhodium.transition,
           step: D7.steps(check_should_draw, Rhodium.step, Nitrene.step, step(screen)),
-          goal: D7::Goal.none
+          goal: D7::Goal.none,
+          initial: initial,
         )
 
+        initial = false
         settled = true
       end
     rescue KeyboardInterrupt
@@ -1150,7 +1153,7 @@ seed = Term.of
   (comment "Click on each buttons and see what happens! :^)")
   (comment "")
   (comment "- Use Ctrl-C to quit")
-  (comment "- Use Page Up/Page Down to scroll if out of screen space")
+  (comment "- Use Page Up/Page Down or scroll if out of screen space")
 
   ("" | "" () @user)
   WWML

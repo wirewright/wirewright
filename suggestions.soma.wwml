@@ -81,10 +81,19 @@
 (node edit-cast "Converts pulse signal to root-centric edit broadcast"
   (pulse pin "source of pulse signals")
   (comma to)
-  (broadcast bout  "sink for edit broadcast signals"))
+  (broadcast bout "sink for edit broadcast signals"))
 
 (node event "Emits an event and destroys itself"
   (literal e "term that should be emitted as an event"))
+
+(group fragment "Works exactly like cell but its value is passable -- meaning whatever is in there (buttons, delays, cells, etc.) gets executed")
+
+(variant fragment
+  (const cout "sink for const signal"))
+
+(variant fragment
+  (literal v "current value")
+  (const cout "sink for const signal"))
 
 (node group "Groups nodes together without any logical/UI effect")
 
