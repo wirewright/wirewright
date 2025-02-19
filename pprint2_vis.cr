@@ -625,9 +625,8 @@ class Soma
   private def draw_block(screen, block, x, y)
     Term.case(block) do
       matchpi %{[cursor lhs_string rhs_string]} do
-        # text-gray-200 text-gray-700
-        fg = oklch(0.928, 0.006, 264.531)
-        bg = oklch(0.373, 0.034, 259.733)
+        fg = Colors[:"gray-200"]
+        bg = Colors[:"gray-700"]
 
         lhs.to(String).each_char do |char|
           screen.set(char, x, y, fg, bg)
@@ -643,7 +642,7 @@ class Soma
       end
 
       matchpi %{[comment desc_string]} do
-        fg = oklch(0.707, 0.022, 261.325) # text-gray-400
+        fg = Colors[:"gray-400"]
         bg = screen.bg0
 
         ox = x
@@ -675,9 +674,6 @@ class Soma
         {x, y}
       end
 
-      # TODO: ideally we'd want to show only the first few of them but right now
-      # we won't be able to scroll. After we can scroll through suggestions (some cursor
-      # coop needed here), we can show only top N suggestions.
       matchpi %{(suggestions suggestions_string+ ¦ () shl_: (%number +i32))} do
         # Save. Suggestions "float". We'll restore later.
         x0 = x
@@ -695,8 +691,7 @@ class Soma
         # the hint. compose_suggestion_box's width/height computation will then have to
         # be moved here.
 
-        # text-blue-200
-        fg_em = oklch(0.809, 0.105, 251.813)
+        fg_em = Colors[:"blue-200"]
 
         compose_suggestion_box({suggestions.items.join('\n', &.to(String))}) do |char, i, j, em|
           screen.set(char, x + i, y + j, em ? fg_em : screen.fg0, screen.bg0, 9)
@@ -723,8 +718,7 @@ class Soma
         # the hint. compose_suggestion_box's width/height computation will then have to
         # be moved here.
 
-        # text-blue-200
-        fg_em = oklch(0.809, 0.105, 251.813)
+        fg_em = Colors[:"blue-200"]
 
         desc_punct = desc.to(String)
         if desc_punct[-1].letter?
@@ -741,13 +735,11 @@ class Soma
 
       matchpi %{(button caption_string ¦ _ enabled⋮ true)} do
         if enabled.true?
-          # text-gray-200 text-gray-600
-          fg = oklch(0.928, 0.006, 264.531)
-          bg = oklch(0.446, 0.03, 256.802)
+          fg = Colors[:"gray-200"]
+          bg = Colors[:"gray-600"]
         else
-          # text-gray-300 text-gray-800
-          fg = oklch(0.872, 0.01, 258.338)
-          bg = oklch(0.278, 0.033, 256.848)
+          fg = Colors[:"gray-300"]
+          bg = Colors[:"gray-800"]
         end
 
         button = " " + caption.to(String) + " "
@@ -767,35 +759,35 @@ class Soma
     Term.case(node) do
       matchpi %{(frag chars_string ¦ _ tag: number)} do
         chars.to(String).each_char do |char|
-          screen.set(char, x, y, fg: oklch(0.702, 0.183, 293.541)) # text-violet-400
+          screen.set(char, x, y, fg: Colors[:"violet-400"])
           x += 1
         end
       end
 
       matchpi %{(frag chars_string ¦ _ tag: string)} do
         chars.to(String).each_char do |char|
-          screen.set(char, x, y, fg: oklch(0.681, 0.162, 75.834)) # text-yellow-600
+          screen.set(char, x, y, fg: Colors[:"yellow-600"])
           x += 1
         end
       end
 
       matchpi %{(frag chars_string ¦ _ tag: symbol)} do
         chars.to(String).each_char do |char|
-          screen.set(char, x, y, fg: oklch(0.928, 0.006, 264.531)) # text-gray-200
+          screen.set(char, x, y, fg: Colors[:"gray-200"])
           x += 1
         end
       end
 
       matchpi %{(frag chars_string ¦ _ tag: boolean)} do
         chars.to(String).each_char do |char|
-          screen.set(char, x, y, fg: oklch(0.646, 0.222, 41.116)) # text-orange-600
+          screen.set(char, x, y, fg: Colors[:"orange-600"])
           x += 1
         end
       end
 
       matchpi %{(frag chars_string ¦ _ tag: edge)} do
         chars.to(String).each_char do |char|
-          screen.set(char, x, y, fg: oklch(0.792, 0.209, 151.711)) # text-green-400
+          screen.set(char, x, y, fg: Colors[:"green-400"])
           x += 1
         end
       end
@@ -803,7 +795,7 @@ class Soma
       matchpi %{[frag chars_string]} do
         chars.to(String).each_char do |char|
           if char.in?('(', ')', '{', '}', '[', ']', '¦')
-            screen.set(char, x, y, fg: oklch(0.707, 0.022, 261.325)) # text-gray-400
+            screen.set(char, x, y, fg: Colors[:"gray-400"])
           else
             screen.set(char, x, y)
           end
@@ -1130,7 +1122,7 @@ end
 
 seed = Term.of
 
-{% if true || flag?(:release) %}
+{% if flag?(:release) %}
   seed = ML.terms <<-WWML
   (comment "Welcome to µsoma, a GUI for Wirewright")
   (comment "")
@@ -1188,51 +1180,3 @@ seed = Term.of
 
 soma = Soma.new
 soma.run(seed.as_d)
-
-# short_term_memory = RollingSet(Term, 8).new
-
-# # document = ML.terms File.read("./editor.soma.wwml")
-# prev_draw_at = 0.milliseconds
-
-
-# Termbox.init do
-#   Termbox.input_mode = Termbox::InputMode::Alt
-#   Termbox.output_mode = Termbox::OutputMode::Truecolor
-
-#   # text-gray-900 text-gray-300
-#   screen = Screen.new(bg0: oklch(0.21, 0.034, 264.665), fg0: oklch(0.872, 0.01, 258.338), vw: Termbox.width, vh: Termbox.height)
-
-#   draw.call(screen, DrawReason::DocumentChanged)
-
-
-
-#   settled = true
-
-#   while true
-#     document0 = document1 = document
-
-#     if settled
-#       event = Termbox.poll
-#     else
-#       unless event = Termbox.peek?
-#         document1 = D7.next(document0)
-#         settled = !short_term_memory.add?(document1)
-#         document = document1
-#         # If settled is true, this means there was false -> true settled edge and
-#         # we need to force redraw. If settled false -> false, we only redraw periodically.
-#         draw.call(screen, settled ? DrawReason::Forced : DrawReason::CanDraw)
-#         next
-#       end
-#     end
-
-#     motion = nil
-
-
-#     next if settled && document0.same?(document1)
-
-#     document1 = D7.next(document1)
-#     settled = !short_term_memory.add?(document1)
-#     document = document1
-#     draw.call(screen, DrawReason::DocumentChanged)
-#   end
-# end
