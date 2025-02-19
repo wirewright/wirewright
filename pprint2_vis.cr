@@ -930,7 +930,13 @@ class Soma
   end
 
   private def step(screen : Screen)
-    D7::Step.new { |document| step(screen, document) }
+    D7::Step.new do |document|
+      document = step(screen, document)
+
+      # We do not modify the document and therefore we never trigger
+      # a transition.
+      {document, false}
+    end
   end
 
   class KeyboardInterrupt < Exception
@@ -1114,7 +1120,9 @@ class Soma
         @seen_edit = false
       end
 
-      document
+      # We do not modify the document and therefore we never trigger
+      # a transition.
+      {document, false}
     end
   end
 
@@ -1173,7 +1181,7 @@ seed = Term.of
   (comment "\\t(transform @deltas to @counts with @count (+ state _))")
   (comment "\\t(latest @counts @count)")
   (comment "")
-  (comment "Click on each buttons and see what happens! :^)")
+  (comment "Click on the buttons and see what happens! :^)")
   (comment "")
   (comment "- Use Ctrl-C to quit")
   (comment "- Use Page Up/Page Down or scroll if out of screen space")
