@@ -1,11 +1,8 @@
 require "./pprint2"
-require "./oklch"
-require "./delta7_proto"
+require "./colors"
+require "./delta7_proto2"
 require "./baz5_editor"
-
-def oklch(l, c, h)
-  Oklch.to_rgb(l*100, c, h)
-end
+require "./libtermbox2"
 
 BORDERSETS = {
   rounded: {
@@ -36,346 +33,19 @@ BORDERSETS = {
   }
 }
 
-def compose_suggestion_box(sections : Enumerable(String), &)
-  sections = sections.map do |section|
-    wrap(section, maxwidth: 60).chomp # ?!
-  end
-
-  content_px = 1
-
-  # Compute width and height.
-  w = w1 = 0
-  h = 0
-
-  sections.each_with_index do |section, index|
-    h += 1 if index > 0 # Have a gap
-
-    section.each_char do |char|
-      case char
-      when '\n'
-        w = Math.max(w, w1)
-        w1 = 0
-        h += 1
-      when '*'
-        # We use asterisks for emphasis. Do not count them in width.
-        next
-      else
-        w1 += 1
-      end
-    end
-
-    w = Math.max(w, w1)
-    w1 = 0
-    h += 1
-  end
-
-  # Add space for borders on each side. I cannot reason about it
-  # if it's not border-box :)
-  w += 2
-  h += 2
-
-  # Add space for padding.
-  w += content_px*2
-
-  borderset = BORDERSETS[:rounded]
-
-  # Draw border
-
-  # Draw corners.
-  yield borderset[:tl], 0, 0, false
-  yield borderset[:tr], w - 1, 0, false
-  yield borderset[:bl], 0, h - 1, false
-  yield borderset[:br], w - 1, h - 1, false
-
-  # Top, bottom
-  (1...w - 1).each do |i|
-    yield borderset[:t], i, 0, false
-    yield borderset[:b], i, h - 1, false
-  end
-
-  # Left, right
-  (1...h - 1).each do |j|
-    yield borderset[:l], 0, j, false
-    yield borderset[:r], w - 1, j, false
-  end
-
-  # Fill with empty space.
-  (1...h - 1).each do |j|
-    (1...w - 1).each do |i|
-      yield ' ', i, j, false
-    end
-  end
-
-  # Now put text into the box. Do not forget we have borders! And padding!
-  i = oi = 1 + content_px
-  j = 1
-  em = false
-  sections.each_with_index do |section, index|
-    if index > 0
-      # Draw horizontal separator instead of whitespace gap
-      (1...w - 1).each do |k|
-        yield borderset[:hr], k, j, false
-      end
-      # Stomp over the border we've drawn before with lhr, rhr
-      yield borderset[:lhr], 0, j, false
-      yield borderset[:rhr], w - 1, j, false
-
-      j += 1
-    end
-
-    section.each_char do |char|
-      case char
-      when '\n'
-        i = oi
-        j += 1
-      when ' '
-        i += 1
-      when '*'
-        em = !em
-      else
-        yield char, i, j, em
-        i += 1
-      end
-    end
-
-    i = oi
-    j += 1
-  end
-end
-
-def draw_block(screen, block, x, y)
-  Term.case(block) do
-    matchpi %{[cursor lhs_string rhs_string]} do
-      # text-gray-200 text-gray-700
-      fg = oklch(0.928, 0.006, 264.531)
-      bg = oklch(0.373, 0.034, 259.733)
-
-      lhs.to(String).each_char do |char|
-        screen.set(char, x, y, fg, bg)
-        x += 1
-      end
-
-      screen.overlay(x, y, bg, fg)
-
-      rhs.to(String).each_char_with_index do |char, index|
-        screen.set(char, x, y, fg, bg)
-        x += 1
-      end
-    end
-
-    matchpi %{[comment desc_string]} do
-      fg = oklch(0.707, 0.022, 261.325) # text-gray-400
-      bg = screen.bg0
-
-      ox = x
-
-      screen.set(';', x, y, fg, bg)
-      x += 1
-      screen.set(';', x, y, fg, bg)
-      x += 2
-
-      desc.to(String).each_char do |char|
-        if char == '\n'
-          x = ox
-          y += 1
-          screen.set(';', x, y, fg, bg)
-          x += 1
-          screen.set(';', x, y, fg, bg)
-          x += 2
-          next
-        end
-        screen.set(char, x, y, fg, bg)
-        x += 1
-      end
-
-      y += 1
-
-      {x, y}
-    end
-
-    # TODO: ideally we'd want to show only the first few of them but right now
-    # we won't be able to scroll. After we can scroll through suggestions (some cursor
-    # coop needed here), we can show only top N suggestions.
-    matchpi %{(suggestions suggestions_string+ ¦ () shl_: (%number +i32))} do
-      # Save. Suggestions "float". We'll restore later.
-      x0 = x
-      y0 = y
-
-      ox = x - shl.to(Int32)
-
-      # Go below the cursor (well, assuming the cursor is the source of this node!)
-      x = ox
-      y += 1
-
-      # TODO: here we should try to find (iteratively?) where we'd want to place this
-      # node. Currently we're stupid and rely on clipping so if the hint is positioned
-      # too much to the right/bottom it's clipped. The user has then to scroll to see
-      # the hint. compose_suggestion_box's width/height computation will then have to
-      # be moved here.
-
-      # text-blue-200
-      fg_em = oklch(0.809, 0.105, 251.813)
-
-      compose_suggestion_box({suggestions.items.join('\n', &.to(String))}) do |char, i, j, em|
-        screen.set(char, x + i, y + j, em ? fg_em : screen.fg0, screen.bg0, 9)
-      end
-
-      x = x0
-      y = y0
-    end
-
-    matchpi %{(suggestion name_string desc_string ¦ () shl_: (%number +i32))} do
-      # Save. Suggestions "float". We'll restore later.
-      x0 = x
-      y0 = y
-
-      ox = x - shl.to(Int32)
-
-      # Go below the cursor (well assuming the cursor is the source of this node!)
-      x = ox
-      y += 1
-
-      # TODO: here we should try to find (iteratively?) where we'd want to place this
-      # node. Currently we're stupid and rely on clipping so if the hint is positioned
-      # too much to the right/bottom it's clipped. The user has then to scroll to see
-      # the hint. compose_suggestion_box's width/height computation will then have to
-      # be moved here.
-
-      # text-blue-200
-      fg_em = oklch(0.809, 0.105, 251.813)
-
-      desc_punct = desc.to(String)
-      if desc_punct[-1].letter?
-        desc_punct += '.'
-      end
-
-      compose_suggestion_box({name.to(String), desc_punct}) do |char, i, j, em|
-        screen.set(char, x + i, y + j, em ? fg_em : screen.fg0, screen.bg0, 9)
-      end
-
-      x = x0
-      y = y0
-    end
-
-    matchpi %{(button caption_string ¦ _ enabled⋮ true)} do
-      if enabled.true?
-        # text-gray-200 text-gray-600
-        fg = oklch(0.928, 0.006, 264.531)
-        bg = oklch(0.446, 0.03, 256.802)
-      else
-        # text-gray-300 text-gray-800
-        fg = oklch(0.872, 0.01, 258.338)
-        bg = oklch(0.278, 0.033, 256.848)
-      end
-
-      button = " " + caption.to(String) + " "
-      button.each_char do |char|
-        screen.set(char, x, y, fg, bg)
-        x += 1
-      end
-    end
-
-    otherwise {}
-  end
-
-  {x, y}
-end
-
-def draw(ctx, screen, node : Term, x, y)
-  Term.case(node) do
-    matchpi %{(frag chars_string ¦ _ tag: number)} do
-      chars.to(String).each_char do |char|
-        screen.set(char, x, y, fg: oklch(0.702, 0.183, 293.541)) # text-violet-400
-        x += 1
-      end
-    end
-
-    matchpi %{(frag chars_string ¦ _ tag: string)} do
-      chars.to(String).each_char do |char|
-        screen.set(char, x, y, fg: oklch(0.681, 0.162, 75.834)) # text-yellow-600
-        x += 1
-      end
-    end
-
-    matchpi %{(frag chars_string ¦ _ tag: symbol)} do
-      chars.to(String).each_char do |char|
-        screen.set(char, x, y, fg: oklch(0.928, 0.006, 264.531)) # text-gray-200
-        x += 1
-      end
-    end
-
-    matchpi %{(frag chars_string ¦ _ tag: boolean)} do
-      chars.to(String).each_char do |char|
-        screen.set(char, x, y, fg: oklch(0.646, 0.222, 41.116)) # text-orange-600
-        x += 1
-      end
-    end
-
-    matchpi %{(frag chars_string ¦ _ tag: edge)} do
-      chars.to(String).each_char do |char|
-        screen.set(char, x, y, fg: oklch(0.792, 0.209, 151.711)) # text-green-400
-        x += 1
-      end
-    end
-
-    matchpi %{[frag chars_string]} do
-      chars.to(String).each_char do |char|
-        if char.in?('(', ')', '{', '}', '[', ']', '¦')
-          screen.set(char, x, y, fg: oklch(0.707, 0.022, 261.325)) # text-gray-400
-        else
-          screen.set(char, x, y)
-        end
-        x += 1
-      end
-    end
-
-    matchpi %{[block term_]}, %{[block/floating term_]} do
-      x, y = draw_block(screen, term, x, y)
-    end
-
-    matchpi %[(row children_* ¦ _ gap: (%optional 0 gap←(%number +i32)))] do
-      prev_floating = nil
-      children.items.each_with_index do |child, index|
-        floating = floating?(child)
-        x += gap.to(Int32) if index > 0 && !(prev_floating || floating)
-        prev_floating = floating
-        draw(ctx, screen, child, x, y)
-        child_width, _ = measure(ctx, child)
-        x += child_width
-      end
-    end
-
-    matchpi %[(col children_* ¦ _ gap: (%optional 0 gap←(%number +i32)))] do
-      prev_floating = nil
-      children.items.each_with_index do |child, index|
-        floating = floating?(child)
-        y += gap.to(Int32) if index > 0 && !(prev_floating || floating)
-        prev_floating = floating
-        draw(ctx, screen, child, x, y)
-        _, child_height = measure(ctx, child)
-        y += child_height
-      end
-    end
-
-    matchpi %[(indented child_ ¦ _ by: (%optional 1 n←(%number +i32)))] do
-      draw(ctx, screen, child, x + n.to(Int32), y)
-    end
-  end
-end
-
 class Screen
   @bg : Termbox::Color
   @fg : Termbox::Color
 
-  getter viewport_w : Int32
-  getter viewport_h : Int32
+  getter vw : Int32
+  getter vh : Int32
 
   alias Layer = Hash({Int32, Int32}, {Char, Termbox::Color, Termbox::Color})
 
   getter fg0
   getter bg0
 
-  def initialize(@bg0 : {UInt8, UInt8, UInt8}, @fg0 : {UInt8, UInt8, UInt8}, @viewport_w, @viewport_h)
+  def initialize(@bg0 : {UInt8, UInt8, UInt8}, @fg0 : {UInt8, UInt8, UInt8}, @vw, @vh)
     @bg = Termbox::Color.rgb(*bg0)
     @fg = Termbox::Color.rgb(*fg0)
 
@@ -386,7 +56,7 @@ class Screen
     @max_y = 0
   end
 
-  def resize(@viewport_w, @viewport_h)
+  def resize(@vw, @vh)
   end
 
   def clear : Nil
@@ -428,16 +98,16 @@ class Screen
   end
 
   def max_scroll_x : Int32
-    @max_x < @viewport_w ? 0 : (@max_x - @viewport_w) + 1 + SCREEN_PX*2
+    @max_x < @vw ? 0 : (@max_x - @vw) + 1 + SCREEN_PX*2
   end
 
   def max_scroll_y : Int32
-    @max_y < @viewport_h ? 0 : (@max_y - @viewport_h) + 1 + SCREEN_PY*2
+    @max_y < @vh ? 0 : (@max_y - @vh) + 1 + SCREEN_PY*2
   end
 
   def present(px = 0, py = 0, scroll_x = 0, scroll_y = 0)
-    clip_w = @viewport_w
-    clip_h = @viewport_h
+    clip_w = @vw
+    clip_h = @vh
 
     clip_w -= px*2
     clip_h -= py*2
@@ -577,7 +247,7 @@ struct Col
   def call(ctx, term, postfix, head, rest)
     Term.of_case(term) do
       matchpi %{(col (%plural children min: 2) ¦ gap⋮ 0)} do |children|
-        continue if D.cursordepth(term) == 1 # Allow cursor inside children.
+        continue if Rhodium.cursordepth(term) == 1 # Allow cursor inside children.
 
         Term::Dict.build do |commit|
           commit << :col
@@ -600,7 +270,7 @@ struct Row
 
   def call(ctx, term, postfix, head, rest)
     Term.matchpi(term, %{(row children_* ¦ gap⋮ 0)}) do
-      continue if D.cursordepth(term) == 1 # Allow cursor inside children.
+      continue if Rhodium.cursordepth(term) == 1 # Allow cursor inside children.
 
       return Term.of(Term::Dict.build do |commit|
         commit << :row
@@ -637,13 +307,13 @@ struct Button
   def call(ctx, term, postfix, head, rest)
     Term.case(term) do
       matchpi %{[button caption_ to @_ (_*)]} do
-        continue unless D.cursordepth(term) == -1
+        continue unless Rhodium.cursordepth(term) == -1
 
         Term.of(:row, button(term, caption), Term.of(:frag, postfix))
       end
 
       matchpi %{[button caption_ as msg_ to @_ (_*)]} do
-        continue unless D.cursordepth(term) == -1
+        continue unless Rhodium.cursordepth(term) == -1
 
         Term.of(:row, button(term, caption), Term.of(:frag, postfix))
       end
@@ -661,7 +331,7 @@ struct Comment
   def call(ctx, term, postfix, head, rest)
     Term.case(term) do
       matchpi %{(comment desc_string)} do
-        wrapped_desc = wrap(desc.to(String), 60).strip
+        wrapped_desc = wrap(desc.to(String), 60).chomp
 
         w = wrapped_desc.each_line.max_of? { |line| line.size + 3 } || 3 # Do not forget ";; "
         h = Math.max(wrapped_desc.each_line.size, 1)
@@ -676,216 +346,33 @@ struct Comment
   end
 end
 
-layout_chain = Chain(Layout).new(
-  Layout::DictInline.new,
-  Layout::CallColumn.new,
-  Layout::CallKwargsInlineWithBlock.new,
-  Layout::CallArgIndentedKwargs.new,
-  Layout::CallKwargsColumnWithBlock.new,
-  Layout::CallIndented.new,
-  Layout::MapInline.new,
-  Layout::MapMultiline.new,
-  Layout::MapMultilineIndented.new,
-  Layout::DictAligned.new,
-)
-
-ppairs_chain = Chain(Feature).new(
-  Feature::PairspartLet.new,
-  Feature::PairspartOptional.new,
-  Feature::PairspartNegation.new,
-  Feature::PairspartBlank.new,
-  Feature::PairspartPair.new
-)
-
-feature_chain = Chain(Feature).new(
-  Cursor.new,  # << Custom features
-  Button.new,  # <<
-  Col.new,     # <<
-  Row.new,     # <<
-  Comment.new, # <<
-  Feature::Backmap.new,
-  Feature::Rule.new,
-  Feature::Edge.new,
-  Feature::BackrefMy.new,
-  Feature::BackrefUp.new,
-  Feature::BackrefDown.new,
-  Feature::Hold.new,
-  Feature::PatternSlot.new,
-  Feature::PatternNonself.new,
-  Feature::PatternLiteral.new,
-  Feature::PatternLet.new,
-  Feature::PatternItemFirst.new,
-  Feature::PatternItemSource.new,
-  Feature::PatternPairspart.new,
-  Feature::SymbolLiteral.new,
-  Feature::NumberLiteral.new,
-  Feature::StringLiteral.new,
-  Feature::BooleanLiteral.new,
-  Feature::EmptyDict.new,
-  Feature::CallLike.new,
-  Feature::MapLike.new,
-  Feature::DictLiteral.new,
-)
-
-require "./libtermbox2"
-require "./rolling_set"
-
-document = Term.of
-
-{% if flag?(:release) %}
-  document = ML.terms <<-WWML
-  (comment "Welcome to µsoma, a GUI for Wirewright")
-  (comment "")
-  (comment "µsoma to Wirewright is what a web browser is to the Internet")
-  (comment "")
-  (comment "You're looking at a *self-embodied program*. But it only contains comments right now. Hit left/right arrow to see for yourself. Or hit `;;` and write your own!")
-  (comment "")
-  (comment "Try typing the following:")
-  (comment "")
-  (comment ">>> (cell 0 @count)")
-  (comment ">>> (button \\"Increment\\" as 1 to @deltas ())")
-  (comment ">>> (button \\"Decrement\\" as -1 to @deltas ())")
-  (comment ">>> (transform @deltas to @counts with @count (+ state _))")
-  (comment ">>> (latest @counts @count)")
-  (comment "")
-  (comment "Click on each buttons and see what happens! :^)")
-  (comment "")
-  (comment "- Use Ctrl-C to quit")
-  (comment "- Use Page Up/Page Down to scroll if out of screen space")
-
-  ("" | "" () @user)
-  WWML
-{% else %}
-  document = ML.terms <<-WWML
-  (cell 0 @count)
-  (button "Increment" as 1 to @deltas ())
-  (button "Decrement" as -1 to @deltas ())
-  (transform (@deltas delta_number) to @counts with @count (+ state delta))
-  (latest @counts @count)
-
-  (log @actions in ())
-  (col
-    (row
-      (button "1" as 1 to @actions ())
-      (button "2" as 2 to @actions ())
-      (button "3" as 3 to @actions ()))
-    (row
-      (button "4" as 4 to @actions ())
-      (button "5" as 5 to @actions ())
-      (button "6" as 6 to @actions ()))
-    (row
-      (button "7" as 7 to @actions ())
-      (button "8" as 8 to @actions ())
-      (button "9" as 9 to @actions ()))
-    (row
-      (button "←" as erase to @actions ())
-      (button "0" as erase to @actions ())
-      (button "→" as enter to @actions ())))
-
-  (transform (@actions digit_number) to @counts digit)
-
-  ("" | "" () @user)
-  WWML
-{% end %}
-
-short_term_memory = RollingSet(Term, 8).new
-
-# document = ML.terms File.read("./editor.soma.wwml")
-prev_draw_at = 0.milliseconds
-currently_visible_document = nil
-
-visible_ui_tree = Term.of
-ctx = nil
-scroll_x = scroll_y = 0
-
-# In order to draw a screen, you first have to explain to the draw function
-# why it is that you want to draw.
-enum DrawReason : UInt8
-  DocumentChanged
-  Resize
-  Scroll
-  Forced
-  DrawChance
-end
-
-SCREEN_PX = 2
-SCREEN_PY = 1
-
-draw = ->(screen : Screen, reason : DrawReason) do
-  current_draw_time = Time.monotonic
-
-  # Handle DrawChance
-  if reason.draw_chance? && current_draw_time - prev_draw_at < 30.milliseconds
-    return # Skip drawing, it's not the time.
-  end
-
-  prev_draw_at = current_draw_time
-
-  # Handle Scroll
-  if reason.scroll?
-    Termbox.clear # ?!
-    screen.present(px: SCREEN_PX, py: SCREEN_PY, scroll_x: scroll_x, scroll_y: scroll_y)
-    return
-  end
-
-  next_visible_document = D7.visible(document)
-
-  # Handle Resize
-  if !reason.resize? && currently_visible_document == next_visible_document
-    return # Skip drawing, visible document did not change.
-  end
-
-  currently_visible_document = next_visible_document
-
-  # Forced and DocumentChanged are handled implicitly here.
-
-  screen.clear
-
-  maxchars = (screen.viewport_w * 0.8).floor.to_i
-
-  annotated = annotate(next_visible_document)
-  ctx_ = ctx = DisplayContext.new(maxchars, maxchars*2, feature_chain, layout_chain, ppairs_chain)
-
-  # TODO: can we somehow standardize this in the pretty printer?
-
-  # Allow only DictAligned for the document itself.
-  tree = LayoutSet::All.thunk(annotated, "", LayoutSet::DictAligned)
-  flat, _ = flatten(ctx_, tree)
-
-  visible_ui_tree = flat
-
-  draw(ctx_, screen, flat, 0, 0)
-
-  screen.present(px: SCREEN_PX, py: SCREEN_PY, scroll_x: scroll_x, scroll_y: scroll_y)
-end
-
 # *Annotation* involves writing down the keypaths of things, etc., so that we can
 # in the future, point back from a UI-tree to the S-expression that produced it
 # in the D7 document.
-def annotate(root : Term)
-  rangepath = Term[]
+def annotate(document : Term::Dict)
+  nodepath = Stack(Int32).new
 
-  while rangepath = D.successor?(root, rangepath)
-    node = D.follow(root, rangepath)
+  while Rhodium.successor?(document, nodepath)
+    node = Rhodium.follow(document, nodepath)
 
     Term.case(node) do
       matchpi %{[button _ to @_ (_*)]} do
-        continue unless D.cursordepth(node) == -1
+        continue unless Rhodium.cursordepth(node) == -1
 
-        root = D.assign(root, rangepath, node.with(:mailbox, rangepath.append({4, 5})))
+        document = Rhodium.assign(document, nodepath, Term.of(node.with(:mailbox, Term[nodepath].append(4))))
       end
 
       matchpi %{[button _ as _ to @_ (_*)]} do
-        continue unless D.cursordepth(node) == -1
+        continue unless Rhodium.cursordepth(node) == -1
 
-        root = D.assign(root, rangepath, node.with(:mailbox, rangepath.append({6, 7})))
+        document = Rhodium.assign(document, nodepath, Term.of(node.with(:mailbox, Term[nodepath].append(6))))
       end
 
       otherwise { }
     end
   end
 
-  root
+  document
 end
 
 def in_bounds?(ctx, unode, x, y)
@@ -951,63 +438,532 @@ def probe(ctx, unode, x, y, &fn : Term ->)
   probe(ctx, unode, x, y, fn)
 end
 
-Termbox.init do
-  Termbox.input_mode = Termbox::InputMode::Alt
-  Termbox.output_mode = Termbox::OutputMode::Truecolor
+SCREEN_PX = 2
+SCREEN_PY = 1
 
-  # text-gray-900 text-gray-300
-  screen = Screen.new(bg0: oklch(0.21, 0.034, 264.665), fg0: oklch(0.872, 0.01, 258.338), viewport_w: Termbox.width, viewport_h: Termbox.height)
+class Soma
+  def initialize
+    @running = true
 
-  draw.call(screen, DrawReason::DocumentChanged)
+    # TODO: these chains are basically pprint defaults. They do not
+    # belong here. for custom features, implement Chain#prepend.
+    @layout_chain = Chain(Layout).new(
+      Layout::DictInline.new,
+      Layout::CallColumn.new,
+      Layout::CallKwargsInlineWithBlock.new,
+      Layout::CallArgIndentedKwargs.new,
+      Layout::CallKwargsColumnWithBlock.new,
+      Layout::CallIndented.new,
+      Layout::MapInline.new,
+      Layout::MapMultiline.new,
+      Layout::MapMultilineIndented.new,
+      Layout::DictAligned.new,
+    )
 
-  settled = true
+    @ppairs_chain = Chain(Feature).new(
+      Feature::PairspartLet.new,
+      Feature::PairspartOptional.new,
+      Feature::PairspartNegation.new,
+      Feature::PairspartBlank.new,
+      Feature::PairspartPair.new
+    )
 
-  while true
-    document0 = document1 = document
+    @feature_chain = Chain(Feature).new(
+      Cursor.new,  # << Custom features
+      Button.new,  # <<
+      Col.new,     # <<
+      Row.new,     # <<
+      Comment.new, # <<
+      Feature::Backmap.new,
+      Feature::Rule.new,
+      Feature::Edge.new,
+      Feature::BackrefMy.new,
+      Feature::BackrefUp.new,
+      Feature::BackrefDown.new,
+      Feature::Hold.new,
+      Feature::PatternSlot.new,
+      Feature::PatternNonself.new,
+      Feature::PatternLiteral.new,
+      Feature::PatternLet.new,
+      Feature::PatternItemFirst.new,
+      Feature::PatternItemSource.new,
+      Feature::PatternPairspart.new,
+      Feature::SymbolLiteral.new,
+      Feature::NumberLiteral.new,
+      Feature::StringLiteral.new,
+      Feature::BooleanLiteral.new,
+      Feature::EmptyDict.new,
+      Feature::CallLike.new,
+      Feature::MapLike.new,
+      Feature::DictLiteral.new,
+    )
+  end
 
-    if settled
-      event = Termbox.poll
-    else
-      unless event = Termbox.peek?
-        document1 = D7.next(document0)
-        settled = !short_term_memory.add?(document1)
-        document = document1
-        # If settled is true, this means there was false -> true settled edge and
-        # we need to force redraw. If settled false -> false, we only redraw periodically.
-        draw.call(screen, settled ? DrawReason::Forced : DrawReason::DrawChance)
-        next
+  private def screen(& : Screen ->) : Nil
+    Termbox.init do
+      Termbox.input_mode = Termbox::InputMode::Alt
+      Termbox.output_mode = Termbox::OutputMode::Truecolor
+
+      screen = Screen.new(
+        bg0: Colors[:"gray-900"],
+        fg0: Colors[:"gray-300"],
+        vw: Termbox.width,
+        vh: Termbox.height,
+      )
+
+      yield screen
+    end
+  end
+
+  private def compose_suggestion_box(sections : Enumerable(String), &)
+    sections = sections.map do |section|
+      wrap(section, maxwidth: 60).chomp # ?!
+    end
+
+    content_px = 1
+
+    # Compute width and height.
+    w = w1 = 0
+    h = 0
+
+    sections.each_with_index do |section, index|
+      h += 1 if index > 0 # Have a gap
+
+      section.each_char do |char|
+        case char
+        when '\n'
+          w = Math.max(w, w1)
+          w1 = 0
+          h += 1
+        when '*'
+          # We use asterisks for emphasis. Do not count them in width.
+          next
+        else
+          w1 += 1
+        end
+      end
+
+      w = Math.max(w, w1)
+      w1 = 0
+      h += 1
+    end
+
+    # Add space for borders on each side. I cannot reason about it
+    # if it's not border-box :)
+    w += 2
+    h += 2
+
+    # Add space for padding.
+    w += content_px*2
+
+    borderset = BORDERSETS[:rounded]
+
+    # Draw border
+
+    # Draw corners.
+    yield borderset[:tl], 0, 0, false
+    yield borderset[:tr], w - 1, 0, false
+    yield borderset[:bl], 0, h - 1, false
+    yield borderset[:br], w - 1, h - 1, false
+
+    # Top, bottom
+    (1...w - 1).each do |i|
+      yield borderset[:t], i, 0, false
+      yield borderset[:b], i, h - 1, false
+    end
+
+    # Left, right
+    (1...h - 1).each do |j|
+      yield borderset[:l], 0, j, false
+      yield borderset[:r], w - 1, j, false
+    end
+
+    # Fill with empty space.
+    (1...h - 1).each do |j|
+      (1...w - 1).each do |i|
+        yield ' ', i, j, false
       end
     end
 
-    motion = nil
+    # Now put text into the box. Do not forget we have borders! And padding!
+    i = oi = 1 + content_px
+    j = 1
+    em = false
+    sections.each_with_index do |section, index|
+      if index > 0
+        # Draw horizontal separator instead of whitespace gap
+        (1...w - 1).each do |k|
+          yield borderset[:hr], k, j, false
+        end
+        # Stomp over the border we've drawn before with lhr, rhr
+        yield borderset[:lhr], 0, j, false
+        yield borderset[:rhr], w - 1, j, false
+
+        j += 1
+      end
+
+      section.each_char do |char|
+        case char
+        when '\n'
+          i = oi
+          j += 1
+        when ' '
+          i += 1
+        when '*'
+          em = !em
+        else
+          yield char, i, j, em
+          i += 1
+        end
+      end
+
+      i = oi
+      j += 1
+    end
+  end
+
+  private def draw_block(screen, block, x, y)
+    Term.case(block) do
+      matchpi %{[cursor lhs_string rhs_string]} do
+        # text-gray-200 text-gray-700
+        fg = oklch(0.928, 0.006, 264.531)
+        bg = oklch(0.373, 0.034, 259.733)
+
+        lhs.to(String).each_char do |char|
+          screen.set(char, x, y, fg, bg)
+          x += 1
+        end
+
+        screen.overlay(x, y, bg, fg)
+
+        rhs.to(String).each_char_with_index do |char, index|
+          screen.set(char, x, y, fg, bg)
+          x += 1
+        end
+      end
+
+      matchpi %{[comment desc_string]} do
+        fg = oklch(0.707, 0.022, 261.325) # text-gray-400
+        bg = screen.bg0
+
+        ox = x
+
+        screen.set(';', x, y, fg, bg)
+        x += 1
+        screen.set(';', x, y, fg, bg)
+        x += 2
+
+        desc.to(String).each_char do |char|
+          if char == '\n'
+            x = ox
+            y += 1
+            screen.set(';', x, y, fg, bg)
+            x += 1
+            screen.set(';', x, y, fg, bg)
+            x += 2
+            next
+          elsif char == '\t'
+            x += 2
+            next
+          end
+          screen.set(char, x, y, fg, bg)
+          x += 1
+        end
+
+        y += 1
+
+        {x, y}
+      end
+
+      # TODO: ideally we'd want to show only the first few of them but right now
+      # we won't be able to scroll. After we can scroll through suggestions (some cursor
+      # coop needed here), we can show only top N suggestions.
+      matchpi %{(suggestions suggestions_string+ ¦ () shl_: (%number +i32))} do
+        # Save. Suggestions "float". We'll restore later.
+        x0 = x
+        y0 = y
+
+        ox = x - shl.to(Int32)
+
+        # Go below the cursor (well, assuming the cursor is the source of this node!)
+        x = ox
+        y += 1
+
+        # TODO: here we should try to find (iteratively?) where we'd want to place this
+        # node. Currently we're stupid and rely on clipping so if the hint is positioned
+        # too much to the right/bottom it's clipped. The user has then to scroll to see
+        # the hint. compose_suggestion_box's width/height computation will then have to
+        # be moved here.
+
+        # text-blue-200
+        fg_em = oklch(0.809, 0.105, 251.813)
+
+        compose_suggestion_box({suggestions.items.join('\n', &.to(String))}) do |char, i, j, em|
+          screen.set(char, x + i, y + j, em ? fg_em : screen.fg0, screen.bg0, 9)
+        end
+
+        x = x0
+        y = y0
+      end
+
+      matchpi %{(suggestion name_string desc_string ¦ () shl_: (%number +i32))} do
+        # Save. Suggestions "float". We'll restore later.
+        x0 = x
+        y0 = y
+
+        ox = x - shl.to(Int32)
+
+        # Go below the cursor (well assuming the cursor is the source of this node!)
+        x = ox
+        y += 1
+
+        # TODO: here we should try to find (iteratively?) where we'd want to place this
+        # node. Currently we're stupid and rely on clipping so if the hint is positioned
+        # too much to the right/bottom it's clipped. The user has then to scroll to see
+        # the hint. compose_suggestion_box's width/height computation will then have to
+        # be moved here.
+
+        # text-blue-200
+        fg_em = oklch(0.809, 0.105, 251.813)
+
+        desc_punct = desc.to(String)
+        if desc_punct[-1].letter?
+          desc_punct += '.'
+        end
+
+        compose_suggestion_box({name.to(String), desc_punct}) do |char, i, j, em|
+          screen.set(char, x + i, y + j, em ? fg_em : screen.fg0, screen.bg0, 9)
+        end
+
+        x = x0
+        y = y0
+      end
+
+      matchpi %{(button caption_string ¦ _ enabled⋮ true)} do
+        if enabled.true?
+          # text-gray-200 text-gray-600
+          fg = oklch(0.928, 0.006, 264.531)
+          bg = oklch(0.446, 0.03, 256.802)
+        else
+          # text-gray-300 text-gray-800
+          fg = oklch(0.872, 0.01, 258.338)
+          bg = oklch(0.278, 0.033, 256.848)
+        end
+
+        button = " " + caption.to(String) + " "
+        button.each_char do |char|
+          screen.set(char, x, y, fg, bg)
+          x += 1
+        end
+      end
+
+      otherwise {}
+    end
+
+    {x, y}
+  end
+
+  private def draw(screen : Screen, ctx : DisplayContext, node : Term, x, y)
+    Term.case(node) do
+      matchpi %{(frag chars_string ¦ _ tag: number)} do
+        chars.to(String).each_char do |char|
+          screen.set(char, x, y, fg: oklch(0.702, 0.183, 293.541)) # text-violet-400
+          x += 1
+        end
+      end
+
+      matchpi %{(frag chars_string ¦ _ tag: string)} do
+        chars.to(String).each_char do |char|
+          screen.set(char, x, y, fg: oklch(0.681, 0.162, 75.834)) # text-yellow-600
+          x += 1
+        end
+      end
+
+      matchpi %{(frag chars_string ¦ _ tag: symbol)} do
+        chars.to(String).each_char do |char|
+          screen.set(char, x, y, fg: oklch(0.928, 0.006, 264.531)) # text-gray-200
+          x += 1
+        end
+      end
+
+      matchpi %{(frag chars_string ¦ _ tag: boolean)} do
+        chars.to(String).each_char do |char|
+          screen.set(char, x, y, fg: oklch(0.646, 0.222, 41.116)) # text-orange-600
+          x += 1
+        end
+      end
+
+      matchpi %{(frag chars_string ¦ _ tag: edge)} do
+        chars.to(String).each_char do |char|
+          screen.set(char, x, y, fg: oklch(0.792, 0.209, 151.711)) # text-green-400
+          x += 1
+        end
+      end
+
+      matchpi %{[frag chars_string]} do
+        chars.to(String).each_char do |char|
+          if char.in?('(', ')', '{', '}', '[', ']', '¦')
+            screen.set(char, x, y, fg: oklch(0.707, 0.022, 261.325)) # text-gray-400
+          else
+            screen.set(char, x, y)
+          end
+          x += 1
+        end
+      end
+
+      matchpi %{[block term_]}, %{[block/floating term_]} do
+        x, y = draw_block(screen, term, x, y)
+      end
+
+      matchpi %[(row children_* ¦ _ gap: (%optional 0 gap←(%number +i32)))] do
+        prev_floating = nil
+        children.items.each_with_index do |child, index|
+          floating = floating?(child)
+          x += gap.to(Int32) if index > 0 && !(prev_floating || floating)
+          prev_floating = floating
+          draw(screen, ctx, child, x, y)
+          child_width, _ = measure(ctx, child)
+          x += child_width
+        end
+      end
+
+      matchpi %[(col children_* ¦ _ gap: (%optional 0 gap←(%number +i32)))] do
+        prev_floating = nil
+        children.items.each_with_index do |child, index|
+          floating = floating?(child)
+          y += gap.to(Int32) if index > 0 && !(prev_floating || floating)
+          prev_floating = floating
+          draw(screen, ctx, child, x, y)
+          _, child_height = measure(ctx, child)
+          y += child_height
+        end
+      end
+
+      matchpi %[(indented child_ ¦ _ by: (%optional 1 n←(%number +i32)))] do
+        draw(screen, ctx, child, x + n.to(Int32), y)
+      end
+    end
+  end
+
+  # In order to draw a document on the screen, you first have to explain
+  # to the draw method why do you want to draw, so that it chooses the appropriate
+  # (and appropriately expensive) way to draw.
+  enum DrawReason : UInt8
+    Resize
+    Scroll
+    Forced
+    CanDraw
+  end
+
+  @prev_draw_at = 0.milliseconds
+  @currently_visible_document : Term::Dict? = nil
+  @scroll_x = 0
+  @scroll_y = 0
+
+  # TODO: we should pretty print into an intermediate tree that contains
+  # widths and heights and positions of everything! This way we won't need
+  # display context and visible ui tree here!
+  @ctx : DisplayContext?
+  @visible_ui_tree = Term.of
+
+  private def draw(screen : Screen, document : Term::Dict, reason : DrawReason) : Nil
+    current_draw_time = Time.monotonic
+
+    # Handle CanDraw
+    if reason.can_draw? && current_draw_time - @prev_draw_at < 30.milliseconds
+      return # Skip drawing, it's not the time.
+    end
+
+    @prev_draw_at = current_draw_time
+
+    # Handle Scroll
+    if reason.scroll?
+      Termbox.clear # ?!
+      screen.present(px: SCREEN_PX, py: SCREEN_PY, scroll_x: @scroll_x, scroll_y: @scroll_y)
+      return
+    end
+
+    next_visible_document = D7.visible(document)
+
+    # Handle Resize
+    if !reason.resize? && @currently_visible_document == next_visible_document
+      return # Skip drawing, visible document did not change.
+    end
+
+    @currently_visible_document = next_visible_document
+
+    # Handle Forced
+    screen.clear
+
+    maxchars = (screen.vw * 0.8).floor.to_i
+
+    annotated = annotate(next_visible_document)
+
+    @ctx = ctx = DisplayContext.new(maxchars, maxchars*2, @feature_chain, @layout_chain, @ppairs_chain)
+
+    # TODO: can we somehow standardize this in the pretty printer?
+
+    # Allow only DictAligned for the document itself.
+    tree = LayoutSet::All.thunk(Term.of(annotated), "", LayoutSet::DictAligned)
+    flat, _ = flatten(ctx, tree)
+
+    @visible_ui_tree = flat
+
+    draw(screen, ctx, flat, 0, 0)
+
+    screen.present(px: SCREEN_PX, py: SCREEN_PY, scroll_x: @scroll_x, scroll_y: @scroll_y)
+  end
+
+  private def step(screen : Screen, document document0 : Term::Dict) : Term::Dict
+    document1 = peek(screen, document0)
+
+    if @should_draw
+      draw(screen, document1, :can_draw)
+      @should_draw = false
+    end
+
+    document1
+  end
+
+  private def step(screen : Screen)
+    D7::Step.new { |document| step(screen, document) }
+  end
+
+  class KeyboardInterrupt < Exception
+  end
+
+  private def handle(screen : Screen, document document0 : Term::Dict, event : Termbox::Event, *, settled : Bool) : Term::Dict
+    document1 = document0
 
     case event.type
     when .resize?
-      screen.not_nil!.resize(event.resize_w, event.resize_h)
-      scroll_x = Math.min(screen.not_nil!.max_scroll_x, scroll_x)
-      scroll_y = Math.min(screen.not_nil!.max_scroll_y, scroll_y)
-      if settled # Force redraw if we're not doing so periodically
-        draw.call(screen, DrawReason::Resize)
-      end
+      screen.resize(event.resize_w, event.resize_h)
+
+      @scroll_x = Math.min(screen.max_scroll_x, @scroll_x)
+      @scroll_y = Math.min(screen.max_scroll_y, @scroll_y)
+
+      draw(screen, document0, :resize) if settled
     when .mouse?
       case event.key
       when .mouse_wheel_up?
-        scroll_y = Math.max(0, scroll_y - 1)
-        if settled
-          draw.call(screen, DrawReason::Scroll)
-        end
+        @scroll_y = Math.max(0, @scroll_y - 1)
+
+        draw(screen, document0, :scroll) if settled
       when .mouse_wheel_down?
-        scroll_y = Math.min(screen.not_nil!.max_scroll_y, scroll_y + 1)
-        if settled
-          draw.call(screen, DrawReason::Scroll)
-        end
+        @scroll_y = Math.min(screen.max_scroll_y, @scroll_y + 1)
+
+        draw(screen, document0, :scroll) if settled
       when .mouse_release?
-        probe(ctx.not_nil!, visible_ui_tree, event.mouse_x - SCREEN_PX + scroll_x, event.mouse_y - SCREEN_PY + scroll_y) do |node|
+        # TODO: we should pretty print into an intermediate tree that contains
+        # widths and heights and positions of everything! This way we won't need
+        # display context and visible ui tree here!
+        probe(@ctx.not_nil!, @visible_ui_tree, event.mouse_x - SCREEN_PX + @scroll_x, event.mouse_y - SCREEN_PY + @scroll_y) do |node|
           Term.case(node) do
+            # Dispatch click event to mailbox
             matchpi %{[block {_ mailbox: mailbox-path_dict}]} do
-              mailbox = D.follow(document1, mailbox_path.unsafe_as_d)
-              # Dispatch click event to mailbox
-              document1 = D.assign(document1, mailbox_path.unsafe_as_d, mailbox.append({:press}))
+              keypath = Rhodium.keypath(document1, mailbox_path.unsafe_as_d.items)
+              mailbox = Rhodium.follow(document1, keypath)
+              document1 = Rhodium.assign(document1, keypath, Term.of(mailbox.append({:press})))
             end
 
             otherwise {}
@@ -1048,29 +1004,23 @@ Termbox.init do
         when .arrow_down?
           motion = Term.of(:key, :down)
         when .ctrl_c?
-          running = false
-          break
+          raise KeyboardInterrupt.new
         when .pgup?
           if event.mod.shift?
-            scroll_x = Math.max(0, scroll_x - 1)
+            @scroll_x = Math.max(0, @scroll_x - 1)
           else
-            scroll_y = Math.max(0, scroll_y - 1)
+            @scroll_y = Math.max(0, @scroll_y - 1)
           end
-          if settled
-            draw.call(screen, DrawReason::Scroll)
-          end
+
+          draw(screen, document0, :scroll) if settled
         when .pgdn?
           if event.mod.shift?
-            scroll_x = Math.min(screen.not_nil!.max_scroll_x, scroll_x + 1)
+            @scroll_x = Math.min(screen.max_scroll_x, @scroll_x + 1)
           else
-            scroll_y = Math.min(screen.not_nil!.max_scroll_y, scroll_y + 1)
+            @scroll_y = Math.min(screen.max_scroll_y, @scroll_y + 1)
           end
-          if settled
-            draw.call(screen, DrawReason::Scroll)
-          end
-        when .ctrl_v?
-        when .ctrl_a?
-        when .ctrl_q?
+
+          draw(screen, document0, :scroll) if settled
         end
       else
         chr = event.ch.chr
@@ -1078,59 +1028,211 @@ Termbox.init do
           motion = Term.of(:input, chr)
         end
       end
+
+      if motion
+        document1 = Rhodium::Q.of(document1)
+          .enqueue(:edit, {:edge, :user}, motion)
+          .commit(document1)
+      end
     end
 
-    if motion
-      document1 = D::Q.of(document1.as_d)
-        .enqueue(:edit, {:edge, :user}, motion)
-        .commit(document1.as_d)
-        .upcast
+    document1
+  end
+
+  # Wait until an event occurs that modifies *document*. Returns
+  # the modified document.
+  private def wait(screen : Screen, document document0 : Term::Dict) : Term::Dict
+    while true
+      # Assume implicitly that we're settled if we're wait()ing.
+      document1 = handle(screen, document0, Termbox.poll, settled: true)
+      unless document0.same?(document1)
+        return document1
+      end
     end
+  end
 
-    next if settled && document0.same?(document1)
+  # Checks if an event is available and if it is, possibly modifies
+  # *document* appropriately. Otherwise, returns the document unchanged.
+  private def peek(screen : Screen, document : Term::Dict) : Term::Dict
+    return document unless event = Termbox.peek?
 
-    document1 = D7.next(document1)
-    settled = !short_term_memory.add?(document1)
-    document = document1
-    draw.call(screen, DrawReason::DocumentChanged)
+    # Assume implicitly that we're not settled if we're peek()ing.
+    handle(screen, document, event, settled: false)
+  end
+
+  # TODO: HACK. Before we had different granularity of draws. Now we
+  # have very fine grain granularity of draws. This means we see and
+  # are able to draw both the removal of suggestions by the cursor, and
+  # the insertion of new (or re-insertion of old!) ones. Unfortunately,
+  # this causes flickering of suggestions -- old ones disappear before new
+  # (or the same) ones appear one frame later. To fix this we draw only
+  # if edits were fully handled; that is, if there were no edits in
+  # the previous cycle -- since we show suggestions on cycle only. This
+  # solves flickering but may introduce unwanted delay. A better solution
+  # is required.
+  #
+  # This is fine BUT, I have still not done the analysis of whether or not
+  # feedback circuits are possible that do not trigger the cycle event. That
+  # is, if it is possible to create a circuit that emits events forever,
+  # without dependence on cycle.
+  @should_draw = true
+  @seen_edit = false
+
+  private def check_should_draw
+    D7::Step.new do |document|
+      events = Rhodium::Q.of(document)
+
+      if event = events.first?
+        Term.case(event) do
+          matchpi %{(edit @_ _)} { @seen_edit = true }
+          otherwise { }
+        end
+      else
+        @should_draw = !@seen_edit
+        @seen_edit = false
+      end
+
+      document
+    end
+  end
+
+  def run(seed : Term::Dict) : Nil
+    screen do |screen|
+      settled = false
+
+      while true
+        # Force initial redraw and redraw before settling. On the latter,
+        # since run() will only redraw periodically, it may happen that
+        # we loose a frame due to it settling before it can draw. Forcing
+        # a redraw after settling solves this.
+        draw(screen, seed, :forced)
+
+        @should_draw = false
+
+        if settled
+          seed = wait(screen, seed)
+          settled = false
+        end
+
+        seed = D7.run(seed,
+          log: D7::Log::None.new,
+          transition: Rhodium.transition,
+          step: D7.steps(check_should_draw, Rhodium.step, Nitrene.step, step(screen)),
+          goal: D7::Goal.none
+        )
+
+        settled = true
+      end
+    rescue KeyboardInterrupt
+    end
   end
 end
 
-# pp flatten(ctx, feature_chain.call(ctx, Term.of(:"%item°", 100, 200, 300), ""))
+seed = Term.of
 
-# pp Feature::Edge.call(ctx, Term.of(:edge, 100), "))", ->(ctx : DisplayContext, term : Term, postfix : String) do
-#                         raise "end of chain!!"
-#                       end)
+{% if true || flag?(:release) %}
+  seed = ML.terms <<-WWML
+  (comment "Welcome to µsoma, a GUI for Wirewright")
+  (comment "")
+  (comment "µsoma to Wirewright is what a web browser is to the Internet")
+  (comment "")
+  (comment "You're looking at a *self-embodied program*. But it only contains comments right now. Hit left/right arrow to see for yourself. Or type `;;` and write your own!")
+  (comment "")
+  (comment "Try typing the following:")
+  (comment "")
+  (comment "\\t(cell 0 @count)")
+  (comment "\\t(button \\"Increment\\" as 1 to @deltas ())")
+  (comment "\\t(button \\"Decrement\\" as -1 to @deltas ())")
+  (comment "\\t(transform @deltas to @counts with @count (+ state _))")
+  (comment "\\t(latest @counts @count)")
+  (comment "")
+  (comment "Click on each buttons and see what happens! :^)")
+  (comment "")
+  (comment "- Use Ctrl-C to quit")
+  (comment "- Use Page Up/Page Down to scroll if out of screen space")
 
-# ed = Term.of(JSON.parse(File.read("./data/people.json")))
-# ed = ML.terms(File.read("./editor.soma.wwml"))# Term.of(:+, {:*, 3, 4}, {2})
-# require "./"
+  ("" | "" () @user)
+  WWML
+{% else %}
+  seed = ML.terms <<-WWML
+  (cell 0 @count)
+  (button "Increment" as 1 to @deltas ())
+  (button "Decrement" as -1 to @deltas ())
+  (transform (@deltas delta_number) to @counts with @count (+ state delta))
+  (latest @counts @count)
 
-# # str = String.build do |io|
-# #   screen = Screen.new
+  (log @actions in ())
+  (col
+    (row
+      (button "1" as 1 to @actions ())
+      (button "2" as 2 to @actions ())
+      (button "3" as 3 to @actions ()))
+    (row
+      (button "4" as 4 to @actions ())
+      (button "5" as 5 to @actions ())
+      (button "6" as 6 to @actions ()))
+    (row
+      (button "7" as 7 to @actions ())
+      (button "8" as 8 to @actions ())
+      (button "9" as 9 to @actions ()))
+    (row
+      (button "←" as erase to @actions ())
+      (button "0" as 0 to @actions ())
+      (button "→" as enter to @actions ())))
 
-#   ed.items.each do |sexp|
-#     # screen.clear
-#     ctx = DisplayContext.new(60, 120, feature_chain, layout_chain, ppairs_chain)
-#     tree = feature_chain.call(ctx, sexp, "")
-#     flat, excess = flatten(ctx, tree)
-#     # puts excess
-#     puts ML.display(flat)
-#     # draw(ctx, screen, flat, 0, 0)
-#     # screen.write(io)
-#     # io.puts
+  (transform (@actions digit_number) to @counts digit)
+
+  ("" | "" () @user)
+  WWML
+{% end %}
+
+soma = Soma.new
+soma.run(seed.as_d)
+
+# short_term_memory = RollingSet(Term, 8).new
+
+# # document = ML.terms File.read("./editor.soma.wwml")
+# prev_draw_at = 0.milliseconds
+
+
+# Termbox.init do
+#   Termbox.input_mode = Termbox::InputMode::Alt
+#   Termbox.output_mode = Termbox::OutputMode::Truecolor
+
+#   # text-gray-900 text-gray-300
+#   screen = Screen.new(bg0: oklch(0.21, 0.034, 264.665), fg0: oklch(0.872, 0.01, 258.338), vw: Termbox.width, vh: Termbox.height)
+
+#   draw.call(screen, DrawReason::DocumentChanged)
+
+
+
+#   settled = true
+
+#   while true
+#     document0 = document1 = document
+
+#     if settled
+#       event = Termbox.poll
+#     else
+#       unless event = Termbox.peek?
+#         document1 = D7.next(document0)
+#         settled = !short_term_memory.add?(document1)
+#         document = document1
+#         # If settled is true, this means there was false -> true settled edge and
+#         # we need to force redraw. If settled false -> false, we only redraw periodically.
+#         draw.call(screen, settled ? DrawReason::Forced : DrawReason::CanDraw)
+#         next
+#       end
+#     end
+
+#     motion = nil
+
+
+#     next if settled && document0.same?(document1)
+
+#     document1 = D7.next(document1)
+#     settled = !short_term_memory.add?(document1)
+#     document = document1
+#     draw.call(screen, DrawReason::DocumentChanged)
 #   end
-# # end
-
-# puts str
-# puts str == File.read("./pprint1.out.1")
-# pp ed == ML.terms(str)
-
-# [x] x_: 100 => x: (%let x 100)
-# [x] x⋮ 100 => x: (%optional 100 x_number) ;; infers type
-# [x] x_⋮ 100 => x: (%optional 100 x_) ;; does not infer type
-# [x] x_string⋮ 100 ;; invalid. Either infer or any-blank
-# [x] ¦ ... w_ ... => ... w: w_ ...
-# [x] ¦ ... w_number ... => ... w: w_number ...
-# [x] -x_ => (%- _ x)
-# [x] -x_number => (%- _number x)
+# end

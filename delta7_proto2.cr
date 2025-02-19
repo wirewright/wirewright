@@ -276,6 +276,12 @@ module Rhodium
     keypath
   end
 
+  # Same as `keypath?`, but raises `KeypathError` if the resulting keypath
+  # is invalid.
+  def keypath(document : Term::Dict, steps : Indexable(Term)) : Stack(Int32)
+    keypath?(document, steps) || raise KeypathError.new
+  end
+
   # A thin queue-like wrapper around an itemsonly carrier dict, used
   # to access the document event queue.
   struct Q

@@ -1,6 +1,10 @@
 require "./wirewright"
 require "./oklch"
 
+def oklch(l, c, h)
+  Oklch.to_rgb(l*100, c, h)
+end
+
 module Colors
   @@table = {} of Term => {UInt8, UInt8, UInt8}
   @@lock = Mutex.new
@@ -12,7 +16,7 @@ module Colors
       Term.case(spec) do
         matchpi %{(oklch l←(%number 0 <= _ <= 1) c←(%number 0 <= _ <= 1) h←(%number 0 <= _ <= 360))} do
           # 'colors' is a dict, there will be no duplication.
-          @@table[color] = Oklch.to_rgb((l.to(Float64)*100).clamp(0.0..100.0), c.to(Float64), h.to(Float64))
+          @@table[color] = oklch(l.to(Float64), c.to(Float64), h.to(Float64))
         end
 
         otherwise do
@@ -22,7 +26,11 @@ module Colors
     end
   end
 
-  def self.rgb?(name : Term) : {UInt8, UInt8, UInt8}?
-    @@lock.synchronize { @@table[name]? }
+  def self.rgb?(name) : {UInt8, UInt8, UInt8}?
+    @@lock.synchronize { @@table[Term.of(name)]? }
+  end
+
+  def self.[](name) : {UInt8, UInt8, UInt8}
+    rgb?(name) || raise KeyError.new
   end
 end
