@@ -889,7 +889,7 @@ module Rhodium
       # Initialize stateful transform
       givenpi %[(transform @pin_ to @pout_ with state_ body_) initialize -1] do
         effect(root1, nodepath, node0) do
-          change "#shadow": node0.itemspart, "#spec": {in: pin, out: pout, state: state, body: body}
+          change "#shadow": {:"%literal", node0.itemspart}, "#spec": {in: pin, out: pout, state: state, body: body}
 
           true
         end
@@ -898,7 +898,7 @@ module Rhodium
       # Stateless transform
       givenpi %[(transform @pin_ to @pout_ body_) initialize -1] do
         effect(root1, nodepath, node0) do
-          change "#shadow": node0.itemspart, "#spec": {in: pin, out: pout, body: body}
+          change "#shadow": {:"%literal", node0.itemspart}, "#spec": {in: pin, out: pout, body: body}
 
           true
         end
@@ -907,7 +907,7 @@ module Rhodium
       # Stateless filter transform
       givenpi %[(transform (@pin_ pattern_) to @pout_ body_) initialize -1] do
         effect(root1, nodepath, node0) do
-          change "#shadow": node0.itemspart, "#spec": {in: pin, out: pout, filter: pattern, body: body}
+          change "#shadow": {:"%literal", node0.itemspart}, "#spec": {in: pin, out: pout, filter: pattern, body: body}
 
           true
         end
@@ -916,7 +916,7 @@ module Rhodium
       # Stateful filter transform
       givenpi %[(transform (@pin_ pattern_) to @pout_ with state_ body_) initialize -1] do
         effect(root1, nodepath, node0) do
-          change "#shadow": node0.itemspart, "#spec": {in: pin, out: pout, filter: pattern, state: state, body: body}
+          change "#shadow": {:"%literal", node0.itemspart}, "#spec": {in: pin, out: pout, filter: pattern, state: state, body: body}
 
           true
         end
@@ -1227,7 +1227,7 @@ module Rhodium
       document1 = rewrite(document1, nodepath) do |node|
         next Rewrite.none unless node0 = node.as_d?
         next Rewrite.none unless shadow = node0[Shadow]?
-        next Rewrite.none if node0.itemspart == shadow
+        next Rewrite.none if M1.probe?(shadow, Term.of(node0.itemspart))
 
         node1 = node0.transaction do |commit|
           node0.each_pair do |key, _|
