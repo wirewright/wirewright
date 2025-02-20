@@ -174,7 +174,7 @@
   (d7
     ((button (feedback busy @xs) to @xs ((press) (press) (press)))
      (echo @xs))
-    ((button (feedback busy @xs) to @xs ((press) (press)) waiting: 1)
+    ((button (feedback busy @xs) to @xs ((press) (press)))
      (echo @xs)))
 
   (d7
@@ -188,7 +188,7 @@
     ((button (feedback busy @xs) to @xs ((press) (press) (press)))
      (echo @xs)
      (delay 3 (event (feedback done @xs))))
-    ((button (feedback busy @xs) to @xs ((press)) waiting: 1)
+    ((button (feedback busy @xs) to @xs ((press)))
      (echo @xs)))
 
   (d7
@@ -196,7 +196,7 @@
      (echo @xs)
      (echo @xs)
      (echo @xs))
-    ((button (feedback busy @xs) to @xs () waiting: 3)
+    ((button (feedback busy @xs) to @xs ())
      (echo @xs)
      (echo @xs)
      (echo @xs)))
@@ -222,7 +222,7 @@
      (delay 3 (event (feedback done @xs)))
      (delay 4 (event (feedback done @xs)))
      (delay 5 (event (feedback done @xs))))
-    ((button (feedback busy @xs) to @xs ((press)) waiting: 3)
+    ((button (feedback busy @xs) to @xs ((press)))
      (echo @xs)
      (echo @xs)
      (echo @xs))))
@@ -901,3 +901,18 @@
     ((fragment ("" | "" () @user) @qux)
      (event (edit @user (input "Hi"))))
     ((fragment ("Hi" | "" () @user) @qux))))
+
+;; Button #shadow behavior
+(d7
+  ((button (feedback busy @foos) to @foos ((press)))
+   ("" | "" () @user)
+   (delay 1 (event (edit @user (key left))))
+   (delay 2 (event (edit @user (key C-backspace))))
+   (delay 3 (event (edit @user (key C-backspace))))
+   (delay 4 (event (edit @user (key C-backspace))))
+   (delay 5 (event (edit @user (key C-backspace))))
+   (delay 6 (event (edit @user (key C-backspace))))
+   (delay 7 (event (edit @user (key C-backspace))))
+   (echo @foos))
+  (("" | "" () @user)
+   (echo @foos)))

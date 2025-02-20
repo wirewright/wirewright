@@ -649,25 +649,48 @@ module Rhodium
         # are a bit loose but I guess it's fine. It's too much of a button to
         # not work.
 
-        givenpi %[(button _* to @pout_ (_*) ¦ waiting⋮ 0) (feedback busy @pout_) _] do
+        givenpi %[(button caption_ to @pout_ (_*)) (feedback busy @pout_) _] do
           effect(root1, nodepath, node0) do
-            change waiting: waiting + 1
+            backmap %[{_ #shadow: (%- _ shadow) #waiting: (%- _ waiting)}],
+              shadow: Term.of(:button, {:"%literal", caption}, :to, {:"%literal", pout}, {:"_*"}),
+              waiting: 1
 
             false
           end
         end
 
-        givenpi %[(button _* to @pout_ (_*) ¦ waiting: 1) (feedback (%any done cancelled) @pout_) _] do
+        givenpi %[(button caption_ as msg_ to @pout_ (_*)) (feedback busy @pout_) _] do
           effect(root1, nodepath, node0) do
-            clear :waiting
+            backmap %[{_ #shadow: (%- _ shadow) #waiting: (%- _ waiting)}],
+              shadow: Term.of(:button, {:"%literal", caption}, :as, {:"%literal", msg}, :to, {:"%literal", pout}, {:"_*"}),
+              waiting: 1
 
             false
           end
         end
 
-        givenpi %[(button _* to @pout_ (_*) ¦ waiting_: (%number (whole _) > 0)) (feedback (%any done cancelled) @pout_) _] do
+        # ?!?!?!?! _* must not be there!!
+        givenpi %[(button _* to @pout_ (_*) ¦ #shadow: _ #waiting: waiting←(%number (whole _) > 0)) (feedback busy @pout_) _] do
           effect(root1, nodepath, node0) do
-            change waiting: waiting - 1
+            change "#waiting": waiting + 1
+
+            false
+          end
+        end
+
+        # ?!?!?!?! _* must not be there!!
+        givenpi %[(button _* to @pout_ (_*) ¦ #shadow: _ #waiting: 1) (feedback (%any done cancelled) @pout_) _] do
+          effect(root1, nodepath, node0) do
+            clear :"#waiting", :"#shadow"
+
+            false
+          end
+        end
+
+        # ?!?!?!?! _* must not be there!!
+        givenpi %[(button _* to @pout_ (_*) ¦ #shadow: _ #waiting: waiting←(%number (whole _) > 0)) (feedback (%any done cancelled) @pout_) _] do
+          effect(root1, nodepath, node0) do
+            change "#waiting": waiting - 1
 
             false
           end
@@ -1304,7 +1327,8 @@ module Rhodium
   end
 end
 
-# Nitrene serves ephemeral rewrite jobs asynchronously (TODO) for Rhodium.
+# Nitrene serves ephemeral rewrite jobs asynchronously for Rhodium.
+#
 # `transform` nodes publish their jobs at the root document and Nitrene
 # picks them up. When the job is complete, it publishes an appropriate
 # event -- which the `transform` that started the job (or a transform with
@@ -1327,7 +1351,7 @@ module Nitrene
 
     private def spawn(job : Term, program : Term, env : Term::Dict) : Nil
       @mt.spawn do
-        # sleep 3.seconds
+        sleep 3.seconds
 
         result = rewrite(program, JOB_REWRITER, env: env) do
           running = @running.get(:acquire)
@@ -1559,12 +1583,13 @@ module D7
   # Strips internal pairs off of *document* and the nodes in it.
   #
   # See also: `Rhodium#internal_key?`.
-  def visible(document document0 : Term::Dict) : Term::Dict
+  def visible(document document0 : Term::Dict, *, except = Tuple.new) : Term::Dict
     nodepath = Stack(Int32).new
 
     # Strip document.
     document1 = document0.transaction do |commit|
       document0.each_pair do |key, _|
+        next if key.in?(except)
         next unless Rhodium.internal_key?(key)
 
         commit.without(key)
@@ -1579,6 +1604,7 @@ module D7
 
         dict1 = dict0.transaction do |commit|
           dict0.each_pair do |key, _|
+            next if key.in?(except)
             next unless Rhodium.internal_key?(key)
 
             commit.without(key)
@@ -1694,11 +1720,15 @@ observe = ->(entry : Term) do
   end
 end
 
-# doc0 = ML.terms <<-WWML
-# (button 4 to @xs ((press)))
-# (transform (@xs x_number) to @ys (* x x))
-# (log @ys in ())
-# WWML
+doc0 = ML.terms <<-WWML
+(button (feedback busy @xs) to @xs ((press) (press) (press)) #waiting: 1)
+     (echo @xs)
+     (echo @xs)
+     (echo @xs)
+     (delay 3 (event (feedback done @xs)))
+     (delay 4 (event (feedback done @xs)))
+     (delay 5 (event (feedback done @xs)))
+WWML
 
 # nctx = Nitrene::JobContext.new
 # initial = true

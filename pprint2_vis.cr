@@ -295,7 +295,7 @@ struct Button
 
     Term.of(:block,
       Term[:button, caption_string,
-        enabled: !term[:waiting]?,
+        enabled: !term[:"#waiting"]?,
         mailbox: term[:mailbox]?],
       w: caption_string.size + 2,
       h: 1)
@@ -353,13 +353,13 @@ def annotate(document : Term::Dict)
     node = Rhodium.follow(document, nodepath)
 
     Term.case(node) do
-      matchpi %{(button _ to @_ (_*) ¦ _ waiting: (%- _))} do
+      matchpi %{(button _ to @_ (_*) ¦ _ #waiting: (%- _))} do
         continue unless Rhodium.cursordepth(node) == -1
 
         document = Rhodium.assign(document, nodepath, Term.of(node.with(:mailbox, Term[nodepath].append(4))))
       end
 
-      matchpi %{(button _ as _ to @_ (_*) ¦ _ waiting: (%- _))} do
+      matchpi %{(button _ as _ to @_ (_*) ¦ _ #waiting: (%- _))} do
         continue unless Rhodium.cursordepth(node) == -1
 
         document = Rhodium.assign(document, nodepath, Term.of(node.with(:mailbox, Term[nodepath].append(6))))
@@ -442,8 +442,9 @@ class Soma
   def initialize
     @running = true
 
+    @tb = ExecutionContext::MultiThreaded.new("Termbox", 1)
+    @mt = ExecutionContext::MultiThreaded.new("Soma", 1)
     @nitrene = Nitrene::JobContext.new
-    @mt = ExecutionContext::MultiThreaded.new("Soma", 4)
 
     # TODO: these chains are basically pprint defaults. They do not
     # belong here. for custom features, implement Chain#prepend.
@@ -887,7 +888,7 @@ class Soma
       return
     end
 
-    next_visible_document = D7.visible(document)
+    next_visible_document = D7.visible(document, except: {Term.of(:"#waiting")})
 
     # Handle Resize
     if !reason.resize? && @currently_visible_document == next_visible_document
@@ -1052,22 +1053,31 @@ class Soma
   # Waits until an event occurs that modifies *document*. Returns
   # the modified document.
   private def wait(screen : Screen, document document0 : Term::Dict) : Term::Dict
-    chan = Channel(Termbox::Event | Bool).new
-
     while true
+      events = Channel(Termbox::Event).new
+      completions = Channel(Bool).new
+
       # Wait for a Termbox event.
-      @mt.spawn do
-        chan.send(Termbox.poll)
+      # FIXME: this does not work. We cannot cancel a poll!! Thus we lose
+      # an event inevitably!
+      @tb.spawn do
+        events.send(Termbox.poll)
+      rescue Channel::ClosedError
       end
 
       # Wait for Nitrene job completion.
       @mt.spawn do
         next unless @nitrene.wait?
 
-        chan.send(true)
+        completions.send(true)
+      rescue Channel::ClosedError
       end
 
-      unless event = chan.receive.as?(Termbox::Event)
+      select
+      when event = events.receive
+        completions.close
+      when completions.receive
+        events.close
         return document0
       end
 
