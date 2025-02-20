@@ -253,13 +253,13 @@
 (d7
   ((cell 10 @count for (%number (whole _) > 0))
    (changes @count to @deltas as -1)
-   (transform @deltas to @counts with @count (+ state _))
+   (transform @deltas to @counts with @count (+ count _))
    (latest @counts @count)
    (changes @count to @counts~)
    (log @counts~ in () limit: 5))
   ((cell 1 @count for (%number (whole _) > 0))
    (changes @count to @deltas as -1)
-   (transform @deltas to @counts with @count (+ state _))
+   (transform @deltas to @counts with @count (+ count _))
    (latest @counts @count)
    (changes @count to @counts~)
    (log @counts~ in (5 4 3 2 1) limit: 5)))
@@ -288,6 +288,38 @@
 ;; TODO: log to uninitialized cell
 ;; TODO: log to guarded cell
 ;; TODO: log to guarded uninitialized cell
+
+;; See how transform behaves with symbolic/non-symblic state edge
+(group
+  ;; transform with symbol edge
+  (d7
+    ((cell 100 @x)
+     (transform @deltas to @xs with @x (+ x _))
+     (event (pulse @deltas 1))
+     (latest @xs @x))
+    ((cell 101 @x)
+     (transform @deltas to @xs with @x (+ x _))
+     (latest @xs @x)))
+
+  ;; transform with numeric state edge
+  (d7
+    ((cell 100 @0)
+     (transform @deltas to @xs with @0 (+ state _))
+     (event (pulse @deltas 1))
+     (latest @xs @0))
+    ((cell 101 @0)
+     (transform @deltas to @xs with @0 (+ state _))
+     (latest @xs @0)))
+
+  ;; transform with string state edge
+  (d7
+    ((cell 100 @"John Doe")
+     (transform @deltas to @xs with @"John Doe" (+ state _))
+     (event (pulse @deltas 1))
+     (latest @xs @"John Doe"))
+    ((cell 101 @"John Doe")
+     (transform @deltas to @xs with @"John Doe" (+ state _))
+     (latest @xs @"John Doe"))))
 
 ;; Stateless transform
 (d7
@@ -320,38 +352,38 @@
   ((cell 5 @count)
    (button "Increment" to @actions ((press) (press) (press)))
    (button "Decrement" to @actions ())
-   (transform (@actions "Increment") to @counts with @count (+ state 1))
-   (transform (@actions "Decrement") to @counts with @count (- state 1))
+   (transform (@actions "Increment") to @counts with @count (+ count 1))
+   (transform (@actions "Decrement") to @counts with @count (- count 1))
    (latest @counts @count))
   ((cell 8 @count)
    (button "Increment" to @actions ())
    (button "Decrement" to @actions ())
-   (transform (@actions "Increment") to @counts with @count (+ state 1))
-   (transform (@actions "Decrement") to @counts with @count (- state 1))
+   (transform (@actions "Increment") to @counts with @count (+ count 1))
+   (transform (@actions "Decrement") to @counts with @count (- count 1))
    (latest @counts @count)))
 
 (d7
   ((cell 8 @count)
    (button "Increment" to @actions ())
    (button "Decrement" to @actions ((press) (press) (press)))
-   (transform (@actions "Increment") to @counts with @count (+ state 1))
-   (transform (@actions "Decrement") to @counts with @count (- state 1))
+   (transform (@actions "Increment") to @counts with @count (+ count 1))
+   (transform (@actions "Decrement") to @counts with @count (- count 1))
    (latest @counts @count))
   ((cell 5 @count)
    (button "Increment" to @actions ())
    (button "Decrement" to @actions ())
-   (transform (@actions "Increment") to @counts with @count (+ state 1))
-   (transform (@actions "Decrement") to @counts with @count (- state 1))
+   (transform (@actions "Increment") to @counts with @count (+ count 1))
+   (transform (@actions "Decrement") to @counts with @count (- count 1))
    (latest @counts @count)))
 
 (d7
   ((cell 123 @x)
    (button "Hello World" to @xs ((press)))
-   (transform (@xs msg_) to @msgs with @x (state msg))
+   (transform (@xs msg_) to @msgs with @x (x msg))
    (log @msgs in ()))
   ((cell 123 @x)
    (button "Hello World" to @xs ())
-   (transform (@xs msg_) to @msgs with @x (state msg))
+   (transform (@xs msg_) to @msgs with @x (x msg))
    (log @msgs in ((123 "Hello World")))))
 
 ;; Basic stateful transform: counter
@@ -359,24 +391,24 @@
   ((cell 5 @count)
    (button "Increment" as +1 to @deltas ((press)))
    (button "Decrement" as -1 to @deltas ())
-   (transform @deltas to @counts with @count (+ state _))
+   (transform @deltas to @counts with @count (+ count _))
    (latest @counts @count))
   ((cell 6 @count)
    (button "Increment" as +1 to @deltas ())
    (button "Decrement" as -1 to @deltas ())
-   (transform @deltas to @counts with @count (+ state _))
+   (transform @deltas to @counts with @count (+ count _))
    (latest @counts @count)))
 
 (d7
   ((cell 5 @count)
    (button "Increment" as +1 to @deltas ())
    (button "Decrement" as -1 to @deltas ((press)))
-   (transform @deltas to @counts with @count (+ state _))
+   (transform @deltas to @counts with @count (+ count _))
    (latest @counts @count))
   ((cell 4 @count)
    (button "Increment" as +1 to @deltas ())
    (button "Decrement" as -1 to @deltas ())
-   (transform @deltas to @counts with @count (+ state _))
+   (transform @deltas to @counts with @count (+ count _))
    (latest @counts @count)))
 
 ;; Transform + queue
@@ -403,12 +435,12 @@
   ((cell 5 @count)
    (button "Increment" as +1 to @deltas ((press) (press) (press)))
    (button "Decrement" as -1 to @deltas ())
-   (transform @deltas to @counts with @count (+ state _))
+   (transform @deltas to @counts with @count (+ count _))
    (latest @counts @count))
   ((cell 8 @count)
    (button "Increment" as +1 to @deltas ())
    (button "Decrement" as -1 to @deltas ())
-   (transform @deltas to @counts with @count (+ state _))
+   (transform @deltas to @counts with @count (+ count _))
    (latest @counts @count)))
 
 ;; Multiple transforms on the same button
@@ -416,9 +448,9 @@
   ((cell 0 @count)
    (button "Increment" as +1 to @deltas ((press) (press) (press) (press) (press)))
    ;; This one should cancel
-   (decay 1 (transform @deltas to @counts with @count (+ state _)))
+   (decay 1 (transform @deltas to @counts with @count (+ count _)))
    ;; This one should go on, a "Backup" of sorts
-   (decay 5 (transform @deltas to @counts with @count (+ state _)))
+   (decay 5 (transform @deltas to @counts with @count (+ count _)))
    (latest @counts @count))
   ((cell 5 @count)
    (button "Increment" as +1 to @deltas ())

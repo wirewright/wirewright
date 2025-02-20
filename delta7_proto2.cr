@@ -861,13 +861,21 @@ module Rhodium
 
         # Schedule job.
         givenpi %[(transform _* ¦ #shadow: _ #spec: spec←{_ in: @pin_, body_}) (pulse @pin_ input_) -1] do
-          if (state = spec[:state]?) && ML.edge?(state)
-            unless state = root0[Cells, state]?
+          env0 = Term[]
+
+          if (state_edge = spec[:state]?) && ML.edge?(state_edge)
+            unless state = root0[Cells, state_edge]?
               return root1, false
             end
-          end
 
-          env0 = Term[state: state]
+            # If state is a symbolic edge e.g. @qux, use qux to refer to its value.
+            # Otherwise, use the generic `state`.
+            unless state_id = state_edge[1].as_sym?
+              state_id = Term[:state]
+            end
+
+            env0 = env0.with(state_id, state)
+          end
 
           # If a filter pattern is defined, make sure it matches.
           if filter = spec[:filter]?

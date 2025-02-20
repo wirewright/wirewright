@@ -1215,7 +1215,7 @@ seed = Term.of
   (comment "\\t(cell 0 @count)")
   (comment "\\t(button \\"Increment\\" as 1 to @deltas ())")
   (comment "\\t(button \\"Decrement\\" as -1 to @deltas ())")
-  (comment "\\t(transform @deltas to @counts with @count (+ state _))")
+  (comment "\\t(transform @deltas to @counts with @count (+ count _))")
   (comment "\\t(latest @counts @count)")
   (comment "")
   (comment "Click on the buttons and see what happens! :^)")
