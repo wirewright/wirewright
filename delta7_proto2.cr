@@ -1339,11 +1339,13 @@ module Nitrene
   JOB_REWRITER = chainR(using(plug(:env), dfsR(envR)), callR(PRIMITIVES))
 
   class JobContext
+    getter alarm : Channel(Bool)
+
     def initialize
       @mt = ExecutionContext::MultiThreaded.new("Nitrene", 4)
       @running = Atomic(Term::Dict).new(Term[])
       @completed = Atomic(Term::Dict).new(Term[])
-      @notify = Channel(Bool).new
+      @alarm = Channel(Bool).new
     end
 
     class JobInterrupted < Exception
@@ -1351,7 +1353,7 @@ module Nitrene
 
     private def spawn(job : Term, program : Term, env : Term::Dict) : Nil
       @mt.spawn do
-        sleep 3.seconds
+        # sleep 3.seconds
 
         result = rewrite(program, JOB_REWRITER, env: env) do
           running = @running.get(:acquire)
@@ -1368,7 +1370,7 @@ module Nitrene
         end
 
         select
-        when @notify.send(true)
+        when @alarm.send(true)
         else
         end
       rescue JobInterrupted

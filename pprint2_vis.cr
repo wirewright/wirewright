@@ -1,3 +1,7 @@
+# TODO: in the future, µsoma will be a system that takes events as input and produces
+# draw commands as output. Both are Terms. However, right now, nothing works this way;
+# everything is mixed and tightly coupled to Termbox.
+
 require "./pprint2"
 require "./colors"
 require "./delta7_proto2"
@@ -442,8 +446,7 @@ class Soma
   def initialize
     @running = true
 
-    @tb = ExecutionContext::MultiThreaded.new("Termbox", 1)
-    @mt = ExecutionContext::MultiThreaded.new("Soma", 1)
+    @mt = ExecutionContext::MultiThreaded.new("Soma", 2)
     @nitrene = Nitrene::JobContext.new
 
     # TODO: these chains are basically pprint defaults. They do not
@@ -1054,35 +1057,13 @@ class Soma
   # the modified document.
   private def wait(screen : Screen, document document0 : Term::Dict) : Term::Dict
     while true
-      events = Channel(Termbox::Event).new
-      completions = Channel(Bool).new
-
-      # Wait for a Termbox event.
-      # FIXME: this does not work. We cannot cancel a poll!! Thus we lose
-      # an event inevitably!
-      @tb.spawn do
-        events.send(Termbox.poll)
-      rescue Channel::ClosedError
-      end
-
-      # Wait for Nitrene job completion.
-      @mt.spawn do
-        next unless @nitrene.wait?
-
-        completions.send(true)
-      rescue Channel::ClosedError
-      end
-
-      select
-      when event = events.receive
-        completions.close
-      when completions.receive
-        events.close
+      event = @events.receive
+      if event.is_a?(Alarm)
         return document0
       end
 
       # Assume implicitly that we're settled if we're wait()ing.
-      document1 = handle(screen, document0, event, settled: true)
+      document1 = handle(screen, document0, event.tb, settled: true)
       unless document0.same?(document1)
         return document1
       end
@@ -1092,10 +1073,17 @@ class Soma
   # Checks if an event is available and if it is, possibly modifies
   # *document* appropriately. Otherwise, returns the document unchanged.
   private def peek(screen : Screen, document : Term::Dict) : Term::Dict
-    return document unless event = Termbox.peek?
+    while true
+      select
+      when event = @events.receive
+        next if event.is_a?(Alarm)
 
-    # Assume implicitly that we're not settled if we're peek()ing.
-    handle(screen, document, event, settled: false)
+        # Assume implicitly that we're not settled if we're peek()ing.
+        return handle(screen, document, event.tb, settled: false)
+      else
+        return document
+      end
+    end
   end
 
   # TODO: HACK. Before we had different granularity of draws. Now we
@@ -1136,12 +1124,49 @@ class Soma
     end
   end
 
+  alias Event = UserEvent | Alarm
+
+  record UserEvent, tb : Termbox::Event
+  record Alarm
+
+  @events = Channel(Event).new(128)
+
   def run(seed : Term::Dict) : Nil
+    if @events.closed?
+      raise "Can only call Soma#run once. This instance is expended. Please create another instance"
+    end
+
     screen do |screen|
       initial = true
       settled = false
 
-      i = 0
+      @mt.spawn do
+        while true
+          event = Termbox.poll
+
+          @events.send(UserEvent.new(event))
+
+          # Since we cannot interrupt a poll, we must detect Ctrl-C ourselves
+          # also and terminate the fiber.
+          case event.type
+          when .key?
+            if event.key.ctrl_c?
+              break
+            end
+          end
+        end
+      rescue Channel::ClosedError
+        # Noop. We just stop polling.
+      end
+
+      @mt.spawn do
+        while true
+          @nitrene.alarm.receive
+          @events.send(Alarm.new)
+        end
+      rescue Channel::ClosedError
+        # Noop. We just stop polling.
+      end
 
       while true
         # Force initial redraw and redraw before settling. On the latter,
@@ -1169,6 +1194,8 @@ class Soma
         settled = true
       end
     rescue KeyboardInterrupt
+      @nitrene.alarm.close
+      @events.close
     end
   end
 end
