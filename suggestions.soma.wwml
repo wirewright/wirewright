@@ -126,8 +126,7 @@
   (prop? limit "how many latest terms to show (default: 10)"))
 
 (node lookaround "Makes a snapshot of the document behind and ahead of itself while hosting some children"
-  (pulse behind-out "sink for snapshots of nodes behind")
-  (pulse ahead-out "sink for snapshots of nodes ahead")
+  (pulse snapshots "sink for snapshots of nodes behind and ahead (tuple)")
   (pulse capture "source for triggers to capture a snapshot"))
 
 (node map "Converts an incoming pulse to one of templated outputs using pattern-matching"

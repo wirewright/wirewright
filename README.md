@@ -7,13 +7,24 @@ the master branch of Crystal and will be available in Crystal 1.16. There is sti
 Except for tests! Running them is straightforward: `crystal run pattern6_test.cr`. Don't ask me why pattern6.
 Don't ask me why it's testing pattern7. baz5? No idea.
 
-UPD UPD: now there is something more interesting to run, `crystal run pprint2_vis.cr`:
-
-![Demo of a TUI D7 visualizer](./img/pprint2_vis_demo.gif)
+UPD UPD: now there is something more interesting to run, `crystal run pprint2_vis.cr`. A gallery
+of interesting examples made using it is found below.
 
 Wirewright is a rewrite environment for self-embodied programs.
 
 I am working hard to package the hundreds of thousands of lines of "all over the place" code I've written and about two years of ideas and exploration into something simple, usable, and practical. Please wait and wish me a lot of energy :)
+
+## Gallery
+
+NOTE: stuff is much snappier in reality, GIFs compress a lot of that snappiness.
+
+**Interactivity in µsoma**
+
+![Interactive experience in µsoma](img/interactivity.gif)
+
+**A jumping self-embodied program ("ping-pong")**
+
+![A jumping program](img/jumping_program.gif)
 
 ## Upcoming "selling points"
 

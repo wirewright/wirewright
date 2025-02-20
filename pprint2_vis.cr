@@ -891,7 +891,11 @@ class Soma
       return
     end
 
-    next_visible_document = D7.visible(document, except: {Term.of(:"#waiting")})
+    if @debug
+      next_visible_document = document
+    else
+      next_visible_document = D7.visible(document, except: {Term.of(:"#waiting")})
+    end
 
     # Handle Resize
     if !reason.resize? && @currently_visible_document == next_visible_document
@@ -945,6 +949,8 @@ class Soma
 
   class KeyboardInterrupt < Exception
   end
+
+  @debug = false
 
   private def handle(screen : Screen, document document0 : Term::Dict, event : Termbox::Event, *, settled : Bool) : Term::Dict
     document1 = document0
@@ -1019,6 +1025,14 @@ class Soma
           motion = Term.of(:key, :down)
         when .ctrl_c?
           raise KeyboardInterrupt.new
+        when .f1?
+          @debug = true
+
+          draw(screen, document0, :forced) if settled
+        when .f2?
+          @debug = false
+
+          draw(screen, document0, :forced) if settled
         when .pgup?
           if event.mod.shift?
             @scroll_x = Math.max(0, @scroll_x - 1)
@@ -1227,32 +1241,27 @@ seed = Term.of
   WWML
 {% else %}
   seed = ML.terms <<-WWML
-  (cell 0 @count)
-  (button "Increment" as 1 to @deltas ())
-  (button "Decrement" as -1 to @deltas ())
-  (transform (@deltas delta_number) to @counts with @count (+ state delta))
-  (latest @counts @count)
-
-  (log @actions in ())
-  (col
-    (row
-      (button "1" as 1 to @actions ())
-      (button "2" as 2 to @actions ())
-      (button "3" as 3 to @actions ()))
-    (row
-      (button "4" as 4 to @actions ())
-      (button "5" as 5 to @actions ())
-      (button "6" as 6 to @actions ()))
-    (row
-      (button "7" as 7 to @actions ())
-      (button "8" as 8 to @actions ())
-      (button "9" as 9 to @actions ()))
-    (row
-      (button "←" as erase to @actions ())
-      (button "0" as 0 to @actions ())
-      (button "→" as enter to @actions ())))
-
-  (transform (@actions digit_number) to @counts digit)
+  o
+  .
+  (lookaround @snapshots @relook
+    ("" | "" () @rod)
+    (button "Kickstart" to @relook ())
+    (edit-cast @rod-commands to @rod)
+    (transform @rod-commands to @relook true)
+    (cell up @dir)
+    (transform (@snapshots (behind_ ahead_)) to @stimuli with @dir (dir behind ahead))
+    (map @stimuli to @actions
+      ((up (_* o) (. _*)) dir-down)
+      ((down (_* .) (o _*)) dir-up)
+      ((up (_* .) _) keep-moving)
+      ((down _ (. _*)) keep-moving))
+    (transform (@actions dir-down) to @dirs down)
+    (transform (@actions dir-up) to @dirs up)
+    (transform (@actions keep-moving) to @dirs with @dir dir)
+    (latest @dirs @dir)
+    (map @dirs to @rod-commands (up (move-parent-behind)) (down (move-parent-ahead))))
+  .
+  o
 
   ("" | "" () @user)
   WWML

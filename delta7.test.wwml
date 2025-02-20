@@ -595,7 +595,9 @@
    (group
      a
      b
-     (lookaround @behind @ahead @refresh
+     (lookaround @views @refresh
+       (transform (@views (view_ _)) to @behind view)
+       (transform (@views (_ view_)) to @ahead view)
        (cell @behind)
        (cell @ahead)
        (latest @behind @behind)
@@ -611,7 +613,9 @@
    (group
      a
      b
-     (lookaround @behind @ahead @refresh
+     (lookaround @views @refresh
+       (transform (@views (view_ _)) to @behind view)
+       (transform (@views (_ view_)) to @ahead view)
        (cell (a b) @behind)
        (cell (c (+ 1 2) d) @ahead)
        (latest @behind @behind)
@@ -634,16 +638,14 @@
    d
    e
    f
-   (lookaround @views-behind @views-ahead @relook
+   (lookaround @views @relook
      ("" | "" () @cursor)
      (periodic (pulse @relook true))
-     (transform (@views-behind view_) to @stimuli (rear view))
-     (transform (@views-ahead view_) to @stimuli (front view))
-     (map @stimuli to @decisions
-       ((rear (_* target)) eat-behind)
-       ((rear ⟨target⟩) go-behind)
-       ((front (target _*)) eat-ahead)
-       ((front ⟨target⟩) go-ahead))
+     (map @views to @decisions
+       (((_* target) _) eat-behind)
+       ((⟨target⟩ _) go-behind)
+       ((_ (target _*)) eat-ahead)
+       ((_ ⟨target⟩) go-ahead))
      (transform
        (@decisions eat-behind)
        to
@@ -662,16 +664,14 @@
   (a
    b
    c
-   (lookaround @views-behind @views-ahead @relook
+   (lookaround @views @relook
      ("" | "" () @cursor)
      (periodic (pulse @relook true))
-     (transform (@views-behind view_) to @stimuli (rear view))
-     (transform (@views-ahead view_) to @stimuli (front view))
-     (map @stimuli to @decisions
-       ((rear (_* target)) eat-behind)
-       ((rear ⟨target⟩) go-behind)
-       ((front (target _*)) eat-ahead)
-       ((front ⟨target⟩) go-ahead))
+     (map @views to @decisions
+       (((_* target) _) eat-behind)
+       ((⟨target⟩ _) go-behind)
+       ((_ (target _*)) eat-ahead)
+       ((_ ⟨target⟩) go-ahead))
      (transform
        (@decisions eat-behind)
        to
@@ -699,16 +699,14 @@
    d
    e
    f
-   (lookaround @views-behind @views-ahead @relook
+   (lookaround @views @relook
      ("" | "" () @cursor)
      (periodic (pulse @relook true))
-     (transform (@views-behind view_) to @stimuli (rear view))
-     (transform (@views-ahead view_) to @stimuli (front view))
-     (map @stimuli to @decisions
-       ((rear (_* target)) eat-behind)
-       ((rear ⟨target⟩) go-behind)
-       ((front (target _*)) eat-ahead)
-       ((front ⟨target⟩) go-ahead))
+     (map @views to @decisions
+       (((_* target) _) eat-behind)
+       ((⟨target⟩ _) go-behind)
+       ((_ (target _*)) eat-ahead)
+       ((_ ⟨target⟩) go-ahead))
      (transform
        (@decisions eat-behind)
        to
@@ -734,16 +732,14 @@
    foo
    bar
    baz
-   (lookaround @views-behind @views-ahead @relook
+   (lookaround @views @relook
      ("" | "" () @cursor)
      (periodic (pulse @relook true))
-     (transform (@views-behind view_) to @stimuli (rear view))
-     (transform (@views-ahead view_) to @stimuli (front view))
-     (map @stimuli to @decisions
-       ((rear (_* target)) eat-behind)
-       ((rear ⟨target⟩) go-behind)
-       ((front (target _*)) eat-ahead)
-       ((front ⟨target⟩) go-ahead))
+     (map @views to @decisions
+       (((_* target) _) eat-behind)
+       ((⟨target⟩ _) go-behind)
+       ((_ (target _*)) eat-ahead)
+       ((_ ⟨target⟩) go-ahead))
      (transform
        (@decisions eat-behind)
        to

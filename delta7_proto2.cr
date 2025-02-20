@@ -45,7 +45,7 @@ module Rhodium
       matchpi %[(group _*)], %{[row _*]}, %{[col _*]} { 1...node.itemsize }
       matchpi %[(edit-cage for @_ _*)] { 3...node.itemsize }
       matchpi %[(decay (%number +i32) _*)] { 2...node.itemsize }
-      matchpi %[(lookaround @_ @_ @_ _*)] { 4...node.itemsize }
+      matchpi %[(lookaround @_ @_ _*)] { 3...node.itemsize }
       matchpi %[(fragment _ @_)] { 1...2 }
       otherwise {}
     end
@@ -240,12 +240,20 @@ module Rhodium
     end
 
     return Int32::MAX unless dict = node.as_d?
-    return Int32::MAX if dict.empty?
+    return Int32::MAX if dict.itemspart.empty?
     return Int32::MAX unless dict.probably_includes?(Term[:|])
 
-    dict.ee.min_of do |k, v|
-      Math.min(cursordepth0(k, depth + 1), cursordepth0(v, depth + 1))
+    mindepth = Int32::MAX
+
+    dict.each_item_unordered do |item|
+      subdepth = cursordepth0(item, depth + 1)
+
+      if subdepth < mindepth
+        mindepth = subdepth
+      end
     end
+
+    mindepth
   end
 
   # Returns the depth at which the cursor is found in *node*.
@@ -473,7 +481,13 @@ module Rhodium
   def handle(root0 : Term::Dict, root1 : Term::Dict, nodepath : Stack(Int32), event : Term) : {Term::Dict, Bool}
     node0 = follow(root0, nodepath)
 
-    Term.case({node0, event, cursordepth(node0)}) do
+    if node0.type.dict?
+      cursordepth = cursordepth(Term.of(node0.unsafe_as_d))
+    else
+      cursordepth = -1
+    end
+
+    Term.case({node0, event, cursordepth}) do
       # TODO: these are very similar and should be refactored into
       # something single, with variations.
 
@@ -1059,7 +1073,7 @@ module Rhodium
 
       # Lookaround can look behind and ahead on demand. It can also contain children.
       # On the children part, there is no isolation; it works just like `group`.
-      givenpi %[(lookaround @behind-out_ @ahead-out_ @capture_ children_*) (pulse @capture_ _) _] do
+      givenpi %[(lookaround @views_ @capture_ children_*) (pulse @capture_ _) _] do
         expect nodepath.size > 0
 
         pivot = nodepath.last
@@ -1079,8 +1093,7 @@ module Rhodium
         ahead = parent.items(Term[pivot + 1], Term[range.end])
 
         effect(root1, nodepath, node0) do
-          event :pulse, behind_out, behind
-          event :pulse, ahead_out, ahead
+          event :pulse, views, {behind, ahead}
 
           false
         end
@@ -1374,10 +1387,7 @@ module Nitrene
           break if ok
         end
 
-        select
-        when @alarm.send(true)
-        else
-        end
+        @alarm.send(true)
       rescue JobInterrupted
       end
     end
