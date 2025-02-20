@@ -1,0 +1,217 @@
+(("" | "" () @user)
+ o
+ .
+ .
+ .
+ .
+ .
+ .
+ .
+ .
+ .
+ .
+ .
+ (lookaround
+  @snapshots
+  @relook
+  ("" | "" () @rod)
+  (button "Kickstart" to @relook ())
+  (edit-cast @rod-commands to @rod)
+  (transform
+   @rod-commands
+   to
+   @relook
+   true
+   #job: {env: { _: (move-parent-ahead)}, program: true}
+   #shadow:
+    (%literal (transform @rod-commands to @relook true))
+   #spec: {out: @relook, body: true, in: @rod-commands})
+  (cell down @dir)
+  (transform
+   (@snapshots (behind_ ahead_))
+   to
+   @stimuli
+   with
+   @dir
+   (dir behind ahead)
+   #shadow:
+    (%literal
+     (transform
+      (@snapshots (behind_ ahead_))
+      to
+      @stimuli
+      with
+      @dir
+      (dir behind ahead)))
+   #spec:
+    {state: @dir,
+     out: @stimuli,
+     filter: (behind_ ahead_),
+     body: (dir behind ahead),
+     in: @snapshots})
+  (map
+   @stimuli
+   to
+   @actions
+   ((up (_* o) (. _*)) dir-down)
+   ((down (_* .) (o _*)) dir-up)
+   ((up (_* .) _) keep-moving)
+   ((down _ (. _*)) keep-moving)
+   ((up (_* x) _) eat-up)
+   ((down _ (x _*)) eat-down))
+  (transform
+   (@actions dir-down)
+   to
+   @dirs
+   down
+   #shadow:
+    (%literal (transform (@actions dir-down) to @dirs down))
+   #spec:
+    {out: @dirs,
+     filter: dir-down,
+     body: down,
+     in: @actions})
+  (transform
+   (@actions dir-up)
+   to
+   @dirs
+   up
+   #shadow:
+    (%literal (transform (@actions dir-up) to @dirs up))
+   #spec:
+    {out: @dirs, filter: dir-up, body: up, in: @actions})
+  (transform
+   (@actions eat-up)
+   to
+   @rod-command-sequences
+   ((key home)
+    (key left)
+    (key C-backspace)
+    (key right)
+    (key down)
+    (key down)
+    (key down))
+   #shadow:
+    (%literal
+     (transform
+      (@actions eat-up)
+      to
+      @rod-command-sequences
+      ((key home)
+       (key left)
+       (key C-backspace)
+       (key right)
+       (key down)
+       (key down)
+       (key down))))
+   #spec:
+    {out: @rod-command-sequences,
+     filter: eat-up,
+     body:
+      ((key home)
+       (key left)
+       (key C-backspace)
+       (key right)
+       (key down)
+       (key down)
+       (key down)),
+     in: @actions})
+  (transform
+   (@actions eat-down)
+   to
+   @rod-command-sequences
+   ((key end)
+    (key right)
+    (key C-delete)
+    (key left)
+    (key home)
+    (key down)
+    (key down)
+    (key down))
+   #shadow:
+    (%literal
+     (transform
+      (@actions eat-down)
+      to
+      @rod-command-sequences
+      ((key end)
+       (key right)
+       (key C-delete)
+       (key left)
+       (key home)
+       (key down)
+       (key down)
+       (key down))))
+   #spec:
+    {out: @rod-command-sequences,
+     filter: eat-down,
+     body:
+      ((key end)
+       (key right)
+       (key C-delete)
+       (key left)
+       (key home)
+       (key down)
+       (key down)
+       (key down)),
+     in: @actions})
+  (blast @rod-command-sequences to @rod-commands)
+  (transform
+   (@actions keep-moving)
+   to
+   @dirs
+   with
+   @dir
+   dir
+   #shadow:
+    (%literal
+     (transform
+      (@actions keep-moving)
+      to
+      @dirs
+      with
+      @dir
+      dir))
+   #spec:
+    {state: @dir,
+     out: @dirs,
+     filter: keep-moving,
+     body: dir,
+     in: @actions})
+  (latest @dirs @dir)
+  (map
+   @dirs
+   to
+   @rod-commands
+   (up (move-parent-behind))
+   (down (move-parent-ahead))))
+ .
+ .
+ .
+ .
+ .
+ .
+ .
+ .
+ .
+ .
+ .
+ .
+ .
+ .
+ .
+ .
+ .
+ o
+ #jobs/pending: ()
+ #cells: {@dir: down}
+ #population:
+  {(cell @dir): true,
+   (transform
+    @rod-commands
+    {env: { _: (move-parent-ahead)}, program: true}): true}
+ #events:
+  ((feedback busy @rod-commands)
+   (job/completed
+    {env: { _: (move-parent-ahead)}, program: true}
+    true)))

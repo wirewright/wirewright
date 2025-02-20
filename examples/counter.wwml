@@ -1,0 +1,27 @@
+(("" | "" () @user)
+ (col
+  (cell 8 @count)
+  (row
+   (button "Increment" as 1 to @deltas ())
+   (button "Decrement" as -1 to @deltas ())
+   gap: 1)
+  gap: 1)
+ (transform
+  @deltas
+  to
+  @counts
+  with
+  @count
+  (+ count _)
+  #spec:
+   {state: @count,
+    in: @deltas,
+    body: (+ count _),
+    out: @counts}
+  #shadow:
+   (%literal
+    (transform @deltas to @counts with @count (+ count _))))
+ (latest @counts @count)
+ #population: {(cell @count): true}
+ #jobs/pending: ()
+ #cells: {@count: 8})

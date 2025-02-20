@@ -23,6 +23,9 @@ module Ww::ML::Formatter
           term.ee.each do |k, v|
             next if style.hidden_meta? && ML.meta?(k)
             pp.comma if index > 0
+            if k == Term[:_] && index == 0 # Avoid {_:}. Do { _:} instead
+              pp.text(" ")
+            end
             format(pp, k, style)
             pp.text(":")
             pp.group(1) do

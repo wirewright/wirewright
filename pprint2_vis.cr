@@ -993,6 +993,11 @@ class Soma
     when .key?
       if event.ch.zero? # Non-character key
         case event.key
+        when .ctrl_s?
+          # TODO: we should use pprint for this
+          File.open("document#{Time.utc.to_s("%F-%H%M%S")}.wwml", "w") do |io|
+            ML.display(io, document0)
+          end
         when .esc?
           motion = Term.of(:key, :escape)
         when .tab?
@@ -1145,13 +1150,12 @@ class Soma
 
   @events = Channel(Event).new(128)
 
-  def run(seed : Term::Dict) : Nil
+  def run(seed : Term::Dict, *, initial : Bool) : Nil
     if @events.closed?
       raise "Can only call Soma#run once. This instance is expended. Please create another instance"
     end
 
     screen do |screen|
-      initial = true
       settled = false
 
       @mt.spawn do
@@ -1215,57 +1219,63 @@ class Soma
 end
 
 seed = Term.of
+initial = true
 
-{% if flag?(:release) %}
-  seed = ML.terms <<-WWML
-  (comment "Welcome to µsoma, a GUI for Wirewright")
-  (comment "")
-  (comment "µsoma to Wirewright is what a web browser is to the Internet")
-  (comment "")
-  (comment "You're looking at a *self-embodied program*. But it only contains comments right now. Hit left/right arrow to see for yourself. Or type `;;` and write your own!")
-  (comment "")
-  (comment "Try typing the following:")
-  (comment "")
-  (comment "\\t(cell 0 @count)")
-  (comment "\\t(button \\"Increment\\" as 1 to @deltas ())")
-  (comment "\\t(button \\"Decrement\\" as -1 to @deltas ())")
-  (comment "\\t(transform @deltas to @counts with @count (+ count _))")
-  (comment "\\t(latest @counts @count)")
-  (comment "")
-  (comment "Click on the buttons and see what happens! :^)")
-  (comment "")
-  (comment "- Use Ctrl-C to quit")
-  (comment "- Use Page Up/Page Down or scroll if out of screen space")
+if filename = ARGV[0]?
+  seed = ML.term(File.read(filename))
+  initial = false
+else
+  {% if flag?(:release) %}
+    seed = ML.terms <<-WWML
+    (comment "Welcome to µsoma, a GUI for Wirewright")
+    (comment "")
+    (comment "µsoma to Wirewright is what a web browser is to the Internet")
+    (comment "")
+    (comment "You're looking at a *self-embodied program*. But it only contains comments right now. Hit left/right arrow to see for yourself. Or type `;;` and write your own!")
+    (comment "")
+    (comment "Try typing the following:")
+    (comment "")
+    (comment "\\t(cell 0 @count)")
+    (comment "\\t(button \\"Increment\\" as 1 to @deltas ())")
+    (comment "\\t(button \\"Decrement\\" as -1 to @deltas ())")
+    (comment "\\t(transform @deltas to @counts with @count (+ count _))")
+    (comment "\\t(latest @counts @count)")
+    (comment "")
+    (comment "Click on the buttons and see what happens! :^)")
+    (comment "")
+    (comment "- Use Ctrl-C to quit")
+    (comment "- Use Page Up/Page Down or scroll if out of screen space")
 
-  ("" | "" () @user)
-  WWML
-{% else %}
-  seed = ML.terms <<-WWML
-  o
-  .
-  (lookaround @snapshots @relook
-    ("" | "" () @rod)
-    (button "Kickstart" to @relook ())
-    (edit-cast @rod-commands to @rod)
-    (transform @rod-commands to @relook true)
-    (cell up @dir)
-    (transform (@snapshots (behind_ ahead_)) to @stimuli with @dir (dir behind ahead))
-    (map @stimuli to @actions
-      ((up (_* o) (. _*)) dir-down)
-      ((down (_* .) (o _*)) dir-up)
-      ((up (_* .) _) keep-moving)
-      ((down _ (. _*)) keep-moving))
-    (transform (@actions dir-down) to @dirs down)
-    (transform (@actions dir-up) to @dirs up)
-    (transform (@actions keep-moving) to @dirs with @dir dir)
-    (latest @dirs @dir)
-    (map @dirs to @rod-commands (up (move-parent-behind)) (down (move-parent-ahead))))
-  .
-  o
+    ("" | "" () @user)
+    WWML
+  {% else %}
+    seed = ML.terms <<-WWML
+    o
+    .
+    (lookaround @snapshots @relook
+      ("" | "" () @rod)
+      (button "Kickstart" to @relook ())
+      (edit-cast @rod-commands to @rod)
+      (transform @rod-commands to @relook true)
+      (cell up @dir)
+      (transform (@snapshots (behind_ ahead_)) to @stimuli with @dir (dir behind ahead))
+      (map @stimuli to @actions
+        ((up (_* o) (. _*)) dir-down)
+        ((down (_* .) (o _*)) dir-up)
+        ((up (_* .) _) keep-moving)
+        ((down _ (. _*)) keep-moving))
+      (transform (@actions dir-down) to @dirs down)
+      (transform (@actions dir-up) to @dirs up)
+      (transform (@actions keep-moving) to @dirs with @dir dir)
+      (latest @dirs @dir)
+      (map @dirs to @rod-commands (up (move-parent-behind)) (down (move-parent-ahead))))
+    .
+    o
 
-  ("" | "" () @user)
-  WWML
-{% end %}
+    ("" | "" () @user)
+    WWML
+  {% end %}
+end
 
 soma = Soma.new
-soma.run(seed.as_d)
+soma.run(seed.as_d, initial: initial)
