@@ -954,13 +954,11 @@ module Rhodium
       end
 
       # Absence node
-      # FIXME: this implementation is incorrect. It must use initialize etc.
-      # to initialize.
       begin
         # Initialize `absence` to newborn state.
-        givenpi %[(absence @_ as _ to @_) cycle -1] do
+        givenpi %{(absence @_ as _ to @_) initialize -1} do
           effect(root1, nodepath, node0) do
-            change "#state": :newborn
+            change "#shadow": {:"%literal", node0.itemspart}, "#state": :newborn
 
             true
           end
@@ -968,35 +966,34 @@ module Rhodium
 
         # Whenever we're in newborn state, on cycle, look around to see if the cell's
         # identity is in the population.
-        givenpi %[(absence @cin_ as msg_ to @pout_ #state: newborn) cycle -1] do
+        givenpi %{(absence @cin_ as msg_ to @pout_ ¦ #shadow: _ #state: newborn) cycle -1} do
           effect(root1, nodepath, node0) do
-            partner = Term.of(:cell, cin)
 
-            if partner.in?(root0[Population]? || Term[])
+            if root0[Cells, cin]?
               change "#state": :paired
             else
               event :pulse, pout, msg
               change "#state": :unpaired
             end
 
-            true
+            false
           end
         end
 
-        givenpi %[(absence @cin_ as msg_ to @pout_ #state: paired) (cell/removed @cin_) -1] do
+        givenpi %{(absence @cin_ as msg_ to @pout_ ¦ #shadow: _ #state: paired) (cell/removed @cin_) -1} do
           effect(root1, nodepath, node0) do
             event :pulse, pout, msg
             change "#state": :unpaired
 
-            true
+            false
           end
         end
 
-        givenpi %[(absence @cin_ as _ to @_ #state: unpaired) (cell/created @cin_ _) -1] do
+        givenpi %{(absence @cin_ as _ to @_ ¦ #shadow: _ #state: unpaired) (cell/created @cin_ _) -1} do
           effect(root1, nodepath, node0) do
             change "#state": :paired
 
-            true
+            false
           end
         end
       end
@@ -1127,14 +1124,14 @@ module Rhodium
         Term.of(:transform, pin, job)
       end
 
+      # Nodes interested in receiving initialize events.
       givenpi(
         %{(transform @_ to @_ with _ _) -1},
         %{(transform @_ to @_ _) -1},
         %{(transform (@_ _) to @_ _) -1},
         %{(transform (@_ _) to @_ with _ _) -1},
-      ) do
-        node
-      end
+        %{(absence @_ as _ to @_) -1},
+      ) { node }
 
       otherwise {}
     end
@@ -1410,7 +1407,7 @@ module Nitrene
         return false
       end
 
-      @notify.receive
+      @alarm.receive
 
       true
     end
@@ -1730,15 +1727,13 @@ observe = ->(entry : Term) do
   end
 end
 
-doc0 = ML.terms <<-WWML
-(button (feedback busy @xs) to @xs ((press) (press) (press)) #waiting: 1)
-     (echo @xs)
-     (echo @xs)
-     (echo @xs)
-     (delay 3 (event (feedback done @xs)))
-     (delay 4 (event (feedback done @xs)))
-     (delay 5 (event (feedback done @xs)))
-WWML
+# doc0 = ML.terms <<-WWML
+# (cell @count for _number)
+#    (changes @count to @log)
+#    (absence @count as "Missing" to @log)
+#    (log @log in ())
+#    (event (assign @count 100))
+# WWML
 
 # nctx = Nitrene::JobContext.new
 # initial = true

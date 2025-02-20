@@ -52,7 +52,7 @@
    (absence @count as "Missing" to @log)
    (log @log in ("Missing" 100))))
 
-;; (cell @_ for _) init with OK value, no cycle means absence() won't see it missing!
+;; (cell @_ for _) init with OK value no cycle
 (d7
   ((cell @count for _number)
    (changes @count to @log)
@@ -62,7 +62,7 @@
   ((cell 100 @count for _number)
    (changes @count to @log)
    (absence @count as "Missing" to @log)
-   (log @log in (100))))
+   (log @log in ("Missing" 100))))
 
 ;; (cell @_ for _) init with BAD value
 (d7
