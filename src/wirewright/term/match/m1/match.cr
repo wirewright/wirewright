@@ -479,4 +479,16 @@ module Ww::M1::Operator
 
     Ahead.tr(behind1, ahead0)
   end
+
+  def match(behind0, op : Partition, matchee : Term, ahead0)
+    unless dict = matchee.as_d?
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    itemspart, pairspart = dict.partition
+
+    ahead1 = Ahead::Match.new(op.pairspart, Term.of(pairspart), Ahead.stackptr(ahead0))
+
+    match(behind0, op.itemspart, Term.of(itemspart), ahead1)
+  end
 end

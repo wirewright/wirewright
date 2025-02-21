@@ -400,8 +400,6 @@ module ::Ww::M1::Operator
   alias AllIsolated = ScanAllIsolated | DfsAllIsolated | BfsAllIsolated | EntriesAllIsolated
   alias All = ScanAll | DfsAll | BfsAll | EntriesAll
 
-  defcase Partition, itemspart : Any, pairspart : Any
-
   defcase ValueLiteral, key : Term, successor : Any
 
   defcase Layer, below : Any, side : Array(Entry::Any)
@@ -745,22 +743,6 @@ class ::Ww::Keypath::Appender
 end
 
 module ::Ww::M1::Operator
-  # TODO: almost always in practice the pairspart is easier to compute than the itemspart;
-  # and it is "rarer", providing more rejections. Should we consider running the pairspart
-  # first? The proper treatment would be to evaluate the cost of the itemspart and pairspart,
-  # but that'd be an overkill right now.
-  def match(behind0, op : Partition, matchee : Term, ahead0)
-    unless dict = matchee.as_d?
-      return Fb::Mismatch.new(behind0.env)
-    end
-
-    itemspart, pairspart = dict.partition
-
-    ahead1 = Ahead::Match.new(op.pairspart, Term.of(pairspart), Ahead.stackptr(ahead0))
-
-    match(behind0, op.itemspart, Term.of(itemspart), ahead1)
-  end
-
   def match(behind0, op : ValueLiteral, matchee : Term, ahead0)
     unless (dict = matchee.as_d?) && (value = dict[op.key]?)
       return Fb::Mismatch.new(behind0.env)

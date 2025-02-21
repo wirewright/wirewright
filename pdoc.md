@@ -521,6 +521,39 @@ captures applies to them too. This can be seen in the example above and in this 
 (first-common (1 2 3) (4 5 6))     ;; => (err "no common elements")
 ```
 
+## `%partition`
+
+All dictionaries in Wirewright can be divided into an *itemspart* and a *pairspart*.
+
+An item is an entry with the key `0` or an entry with a natural number key that
+has a predecessor item. E.g. `1` in `{0: foo, 1: bar}` is an item because it is
+preceded by `0`, an item, and is a natural number.
+
+A pair is any other entry. For example, in the dictionary `{0: foo, 1: bar, 3: baz}`,
+the entries `0` and `1` are items; whereas `3` is a pair, since despite having a natural
+number key, it does not have a predecessor item.
+
+`%partition` lets you match the itemspart and the pairspart separately.
+
+The itemspart is normally used for list/array functionality and the pairspart is used
+for storing key-value pairs (e.g. configuration). However, they are only a way of looking
+at a dictionary. Looking at a dictionary differently, you would simply get a hash map
+with entries.
+
+`%partition` has the shorthand syntax `(<item patterns...> ¦ <pairspart pattern>)`.
+The `¦` symbol is known as the "partition pipe". WwML uses such Unicode symbols to leave
+ASCII ones to you, and also, for simplicity. It is reasonably straightforward to set up
+one's system to be able to enter them (e.g. using the Compose key).
+
+```wwml
+(split (items_* ¦ pairs_)) => (items pairs)
+
+(split ()) ;; => (() ())
+(split (100 200 300)) ;; => ((100 200 300) ())
+(split (x: 100, y: 200, z: 300)) ;; => (() (x: 100 y: 200 z: 300))
+(split (100 200 300 x: 100 y: 200 z: 300)) ;; => ((100 200 300) (x: 100 y: 200 z: 300))
+```
+
 ## `%any°`
 
 `%any°` is a general-purpose alternation operator. It is much like `%any`, but allows to

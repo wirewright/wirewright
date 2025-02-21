@@ -84,6 +84,8 @@ module Ww::M1::Operator
 
   defcase CaptureItemsonly, capture : Term
 
+  defcase Partition, itemspart : Any, pairspart : Any
+
   module Entry
     alias Any = Required | Optional | Absent | AbsentKeypath | Negative | NegativeKeypath
 
