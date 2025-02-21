@@ -1,4 +1,4 @@
-require "./wirewright"
+require "./src/wirewright"
 
 module Rewrite
   alias Any = Some | None

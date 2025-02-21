@@ -1,4 +1,4 @@
-require "./wirewright"
+require "./src/wirewright"
 
 module NodeCompletion
   extend self

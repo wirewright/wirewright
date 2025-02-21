@@ -1,4 +1,4 @@
-require "./wirewright"
+require "./src/wirewright"
 require "./oklch"
 
 def oklch(l, c, h)

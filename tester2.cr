@@ -1,5 +1,5 @@
 require "./libtermbox2"
-require "./wirewright"
+require "./src/wirewright"
 require "./baz5_editor"
 
 test = ML.term(File.read("./editor.test.wwml"))

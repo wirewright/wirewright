@@ -1,4 +1,4 @@
-require "./wirewright"
+require "./src/wirewright"
 require "./baz5_common"
 
 alias Rewriter = RewriterContext, Rewrite::Any -> Rewrite::Any

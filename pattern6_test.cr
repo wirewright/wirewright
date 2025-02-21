@@ -1,4 +1,4 @@
-require "./wirewright"
+require "./src/wirewright"
 require "./baz5_editor"
 require "./delta7_proto2"
 

@@ -1,4 +1,4 @@
-require "./wirewright"
+require "./src/wirewright"
 require "./baz5"
 
 # NOTE: the existence of LayoutSet should be re-evaluated. It appears to be an overkill.

@@ -144,7 +144,7 @@
 #      (== (span x) (span y))
 #      (== (span x) (* (span z) 2)))
 
-require "./wirewright"
+require "./src/wirewright"
 
 include Ww
 

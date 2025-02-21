@@ -1,4 +1,4 @@
-require "./wirewright"
+require "./src/wirewright"
 require "./baz5"
 require "./baz5_editor"
 require "./suggestion_synthesis"

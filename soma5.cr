@@ -1,5 +1,5 @@
 require "crsfml"
-require "./wirewright"
+require "./src/wirewright"
 require "./baz5"
 require "./sfml_util"
 require "./colors"
