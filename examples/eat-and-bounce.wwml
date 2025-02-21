@@ -22,7 +22,7 @@
    to
    @relook
    true
-   #job: {env: { _: (move-parent-ahead)}, program: true}
+   #job: {env: {_: (move-parent-ahead)}, program: true}
    #shadow:
     (%literal (transform @rod-commands to @relook true))
    #spec: {out: @relook, body: true, in: @rod-commands})
@@ -209,9 +209,9 @@
   {(cell @dir): true,
    (transform
     @rod-commands
-    {env: { _: (move-parent-ahead)}, program: true}): true}
+    {env: {_: (move-parent-ahead)}, program: true}): true}
  #events:
   ((feedback busy @rod-commands)
    (job/completed
-    {env: { _: (move-parent-ahead)}, program: true}
+    {env: {_: (move-parent-ahead)}, program: true}
     true)))

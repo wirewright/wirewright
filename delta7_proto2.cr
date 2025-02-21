@@ -665,7 +665,7 @@ module Rhodium
 
         givenpi %[(button caption_ to @pout_ (_*)) (feedback busy @pout_) _] do
           effect(root1, nodepath, node0) do
-            backmap %[{_ #shadow: (%- _ shadow) #waiting: (%- _ waiting)}],
+            backmap %[{¦ #shadow: (%- _ shadow) #waiting: (%- _ waiting)}],
               shadow: Term.of(:button, {:"%literal", caption}, :to, {:"%literal", pout}, {:"_*"}),
               waiting: 1
 
@@ -675,7 +675,7 @@ module Rhodium
 
         givenpi %[(button caption_ as msg_ to @pout_ (_*)) (feedback busy @pout_) _] do
           effect(root1, nodepath, node0) do
-            backmap %[{_ #shadow: (%- _ shadow) #waiting: (%- _ waiting)}],
+            backmap %[{¦ #shadow: (%- _ shadow) #waiting: (%- _ waiting)}],
               shadow: Term.of(:button, {:"%literal", caption}, :as, {:"%literal", msg}, :to, {:"%literal", pout}, {:"_*"}),
               waiting: 1
 
@@ -855,7 +855,7 @@ module Rhodium
         # is a hard-coded const or a cell with a known value.
         #
         # For stateless transforms, signal that we're ready unconditionally.
-        givenpi %[(transform _* ¦ #shadow: _ #spec: spec←{_ in: @pin_}) cycle -1] do
+        givenpi %[(transform _* ¦ #shadow: _ #spec: spec←{¦ in: @pin_}) cycle -1] do
           ready = true
 
           if (state = spec[:state]?) && ML.edge?(state)
@@ -874,7 +874,7 @@ module Rhodium
         end
 
         # Schedule job.
-        givenpi %[(transform _* ¦ #shadow: _ #spec: spec←{_ in: @pin_, body_}) (pulse @pin_ input_) -1] do
+        givenpi %[(transform _* ¦ #shadow: _ #spec: spec←{¦ in: @pin_, body_}) (pulse @pin_ input_) -1] do
           env0 = Term[]
 
           if (state_edge = spec[:state]?) && ML.edge?(state_edge)
@@ -909,7 +909,7 @@ module Rhodium
         end
 
         # Send feedback busy. Schedule job.
-        givenpi %[(transform _* ¦ #shadow: _ #spec: {_ in: @pin_} #job: job_) initialize -1] do
+        givenpi %[(transform _* ¦ #shadow: _ #spec: {¦ in: @pin_} #job: job_) initialize -1] do
           effect(root1, nodepath, node0) do
             event :feedback, :busy, pin
             schedule job
@@ -919,7 +919,7 @@ module Rhodium
         end
 
         # Wait for the job to complete.
-        givenpi %[(transform _* ¦ #shadow: _ #spec: {_ in: @pin_, out: @pout_} #job: job_) (job/completed job_ result_) -1] do
+        givenpi %[(transform _* ¦ #shadow: _ #spec: {¦ in: @pin_, out: @pout_} #job: job_) (job/completed job_ result_) -1] do
           effect(root1, nodepath, node0) do
             event :feedback, :done, pin
             event :pulse, pout, result
@@ -1099,6 +1099,9 @@ module Rhodium
         end
       end
 
+      # FIXME: this node will lead to cryptic bugs in user land. it should be removed.
+      # if users want periodicity they can construct feedback circuits. those are user-
+      # content centric rather than related to D7 internals.
       givenpi %[(periodic e_) cycle -1] do
         effect(root1, nodepath, node0) do
           event e
@@ -1133,7 +1136,7 @@ module Rhodium
         Term.of(:cell, cout)
       end
 
-      givenpi %{(transform _* ¦ #shadow: _ #spec: {_ in: @pin_} #job: job_) -1} do
+      givenpi %{(transform _* ¦ #shadow: _ #spec: {¦ in: @pin_} #job: job_) -1} do
         Term.of(:transform, pin, job)
       end
 

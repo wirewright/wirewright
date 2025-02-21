@@ -808,7 +808,7 @@ module Feature
   # - Renders `(%partition (...) pp_)` as `(... ¦ pp_)`.
   # - Renders `(%layer _ ...)` pp as `_ ...` in the pairspart partition (after `¦`).
   # - Renders `(%partition (...) _)` as `[...]`.
-  # - Renders `(%partition _ (%layer _ {...}))` as `{_ ...}`.
+  # - Renders `(%partition _ (%layer _ {...}))` as `{¦ ...}`.
   struct PatternPairspart
     include Feature
 
@@ -893,7 +893,7 @@ module Feature
             commit << :row
             commit.with(:gap, 1)
 
-            commit << {:frag, "{_"}
+            commit << {:frag, "{¦"}
 
             ppentries = OrdDict.sorted(pp.unsafe_as_d)
             ppentries.each_with_last do |(key, value), last|
@@ -905,7 +905,7 @@ module Feature
             commit << :row
             commit.with(:gap, 1)
 
-            commit << {:frag, "{_"}
+            commit << {:frag, "{¦"}
             commit << Term::Dict.build do |column|
               column << :col
 

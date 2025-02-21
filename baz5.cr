@@ -1082,7 +1082,7 @@ end
 
   passable = PatternSet.select(ML.term(%[pattern_]), ML.terms(<<-WWML
   (passage_* ¦ _)
-  {_ qux: passage_}
+  {¦ qux: passage_}
   WWML
   ))
 

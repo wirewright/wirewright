@@ -15,12 +15,12 @@ require "./colors"
 
 preprocess = <<-WWML
 ;; Cascade width/height to single children.
-(_ {_ -w_} ¦ _ w: W_) <> {w: →W}
-(_ {_ -h_} ¦ _ h: H_) <> {h: →H}
+(_ {¦ -w_} ¦ _ w: W_) <> {w: →W}
+(_ {¦ -h_} ¦ _ h: H_) <> {h: →H}
 
 ;; Map w/h: N to w/h: max max-w/h: N
-{_ w_number -max-w_} <> {w: max, max-w: →w}
-{_ h_number -max-h_} <> {h: max, max-h: →h}
+{¦ w_number -max-w_} <> {w: max, max-w: →w}
+{¦ h_number -max-h_} <> {h: max, max-h: →h}
 
 N←(box child_ ¦ () w_ h_ bg_ border-radius_)
   <> {N: (z-stack w: →w h: →h
@@ -61,80 +61,80 @@ base1 = <<-WWML
 ;;   - [ ] w: max h: content
 ;;   - [ ] w: max h: max
 
-(padding {_ content-w: w_number} ¦ _ content-w: (%- _ W) pl_number pr_number)
+(padding {¦ content-w: w_number} ¦ _ content-w: (%- _ W) pl_number pr_number)
   <> {W: ($once (+ →pl →w →pr))}
-(padding {_ content-h: h_number} ¦ _ content-h: (%- _ H) pt_number pb_number)
+(padding {¦ content-h: h_number} ¦ _ content-h: (%- _ H) pt_number pb_number)
   <> {H: ($once (+ →pt →h →pb))}
 
 ;; Learn the content width/height from a single child.
-(_ {_ content-w: w_number} ¦ _ content-w: (%- _ W)) <> {W: →w}
-(_ {_ content-h: h_number} ¦ _ content-h: (%- _ H)) <> {H: →h}
+(_ {¦ content-w: w_number} ¦ _ content-w: (%- _ W)) <> {W: →w}
+(_ {¦ content-h: h_number} ¦ _ content-h: (%- _ H)) <> {H: →h}
 
 ;; Propagate max-w/h if I know my max-w/h and I am w/h: max.
-(_ {_ max-w: (%- _ w)} ¦ _ w: max max-w: W_number) <> {w: →W}
-(_ {_ max-h: (%- _ h)} ¦ _ h: max max-h: H_number) <> {h: →H}
+(_ {¦ max-w: (%- _ w)} ¦ _ w: max max-w: W_number) <> {w: →W}
+(_ {¦ max-h: (%- _ h)} ¦ _ h: max max-h: H_number) <> {h: →H}
 
 ;; Propagate my content-w/h as max-w/h of children if I am w/h: content.
-(_ {_ max-w: (%- _ w)} ¦ _ w: content content-w: W_number) <> {w: →W}
-(_ {_ max-h: (%- _ h)} ¦ _ h: content content-h: H_number) <> {h: →H}
+(_ {¦ max-w: (%- _ w)} ¦ _ w: content content-w: W_number) <> {w: →W}
+(_ {¦ max-h: (%- _ h)} ¦ _ h: content content-h: H_number) <> {h: →H}
 
-(padding {_ max-w: (%- _ w)} ¦ _ w: max max-w: W_number pl_number pr_number)
+(padding {¦ max-w: (%- _ w)} ¦ _ w: max max-w: W_number pl_number pr_number)
   <> {w: ($once (- →W →pl →pr))}
-(padding {_ max-h: (%- _ h)} ¦ _ h: max max-h: H_number pt_number pb_number)
+(padding {¦ max-h: (%- _ h)} ¦ _ h: max max-h: H_number pt_number pb_number)
   <> {h: ($once (- →H →pt →pb))}
 
 ;; Set final-w/h based on w/h property.
-{_ w: content content-w_number -final-w_} <> {final-w: →content-w}
-{_ h: content content-h_number -final-h_} <> {final-h: →content-h}
+{¦ w: content content-w_number -final-w_} <> {final-w: →content-w}
+{¦ h: content content-h_number -final-h_} <> {final-h: →content-h}
 
-{_ w: max max-w_number -final-w_} <> {final-w: →max-w}
-{_ h: max max-h_number -final-h_} <> {final-h: →max-h}
+{¦ w: max max-w_number -final-w_} <> {final-w: →max-w}
+{¦ h: max max-h_number -final-h_} <> {final-h: →max-h}
 
-(padding {_ -l_} ¦ _ l: L_number pl_number) <> {l: ($once (+ →L →pl))}
-(padding {_ -t_} ¦ _ t: T_number pt_number) <> {t: ($once (+ →T →pt))}
+(padding {¦ -l_} ¦ _ l: L_number pl_number) <> {l: ($once (+ →L →pl))}
+(padding {¦ -t_} ¦ _ t: T_number pt_number) <> {t: ($once (+ →T →pt))}
 
 ;; FIXME: The moment you do something like this (%not) in a rule system, is exactly
 ;; the moment when the rule system becomes a COMPLETE AND UTTER PILE OF POO !
-((%not x-center x-right offset) {_ -l_} ¦ _ l: L_number) <> {l: →L}
-((%not y-center offset) {_ -t_} ¦ _ t: T_number) <> {t: →T}
+((%not x-center x-right offset) {¦ -l_} ¦ _ l: L_number) <> {l: →L}
+((%not y-center offset) {¦ -t_} ¦ _ t: T_number) <> {t: →T}
 
-(x-center {_ -l_ final-w: w_number} ¦ _ l: L_number final-w: W_number)
+(x-center {¦ -l_ final-w: w_number} ¦ _ l: L_number final-w: W_number)
   <> {l: ($ (+ →L (// (- →W →w) 2)))}
-(y-center {_ -t_ final-h: h_number} ¦ _ t: T_number final-h: H_number)
+(y-center {¦ -t_ final-h: h_number} ¦ _ t: T_number final-h: H_number)
   <> {t: ($ (+ →T (// (- →H →h) 2)))}
 
-(x-right {_ -l_ final-w: w_number} ¦ _ l: L_number final-w: W_number)
+(x-right {¦ -l_ final-w: w_number} ¦ _ l: L_number final-w: W_number)
   <> {l: ($ (- (+ →L →W) →w))}
 
-(offset {_ -l_} ¦ _ l: L_number shl: dx_number) <> {l: ($once (+ →L →dx))}
-(offset {_ -t_} ¦ _ t: T_number sht: dy_number) <> {t: ($once (+ →T →dy))}
+(offset {¦ -l_} ¦ _ l: L_number shl: dx_number) <> {l: ($once (+ →L →dx))}
+(offset {¦ -t_} ¦ _ t: T_number sht: dy_number) <> {t: ($once (+ →T →dy))}
 
 ;; Compute the content-w of x-stack.
-(x-stack (%many Cws {_ content-w: (%let 0 _number)}) ¦ _ content-w: (%- _ W) gap⋮ 0)
+(x-stack (%many Cws {¦ content-w: (%let 0 _number)}) ¦ _ content-w: (%- _ W) gap⋮ 0)
   <> {W: ($ (+ (sum (flatten →Cws)) (* →gap (- (tally →Cws) 1))))}
 
 ;; Compute the content-h of x-stack.
-(x-stack (%many Chs {_ content-h: (%let 0 _number)}) ¦ _ content-h: (%- _ H))
+(x-stack (%many Chs {¦ content-h: (%let 0 _number)}) ¦ _ content-h: (%- _ H))
   <> {H: ($ (max (flatten →Chs)))}
 
 ;; If x-stack is set to h: content then setting h: max in a child
 ;; would mean that the child's max-h is content-h of the x-stack
 ;; (i.e., maximum sibling height).
-(%all (x-stack _+ ¦ _ h: content content-h: H_number) ⟨{_ h: max max-h: (%- _ h)}⟩°)
+(%all (x-stack _+ ¦ _ h: content content-h: H_number) ⟨{¦ h: max max-h: (%- _ h)}⟩°)
   <> {h: →H}
 
 ;; If x-stack is set to h: max then setting h: max in a child would
 ;; mean that the child's max-h is max-h of the x-stack.
-(%all (x-stack _+ ¦ _ h: max max-h: H_number) ⟨{_ h: max max-h: (%- _ h)}⟩°)
+(%all (x-stack _+ ¦ _ h: max max-h: H_number) ⟨{¦ h: max max-h: (%- _ h)}⟩°)
   <> {h: →H}
 
 ;; In case of a x-stack, all children tops are shared and are exactly
 ;; x-stack's top.
-(%all (x-stack _+ ¦ _ t: T_number) ⟨{_ -t_}⟩°)
+(%all (x-stack _+ ¦ _ t: T_number) ⟨{¦ -t_}⟩°)
   <> {t: →T}
 
 ;; The first child of x-stack has the same left position as the x-stack itself.
-(x-stack {_ -l_} _* ¦ _ l: L_number)
+(x-stack {¦ -l_} _* ¦ _ l: L_number)
   <> {l: →L}
 
 ;; Any consecutive child learns its left position from the previous child
@@ -145,35 +145,35 @@ base1 = <<-WWML
 ;; This simplifies the job of the rule engine, making sure that it doesn't
 ;; have to go through all children every time before seeing that there is
 ;; no change, with regards to this particular rule.
-(%all (x-stack _* {_ l: (%- _)} ¦ _ gap⋮ 0) ⟨{_ l: l0_number final-w: w0_number} {_ l: (%- _ l1)}⟩)
+(%all (x-stack _* {¦ l: (%- _)} ¦ _ gap⋮ 0) ⟨{¦ l: l0_number final-w: w0_number} {¦ l: (%- _ l1)}⟩)
   <> {l1: ($once (+ →l0 →w0 →gap))}
 
 ;; Compute the content-w of y-stack.
-(y-stack (%many Cws {_ content-w: (%let 0 _number)}) ¦ _ content-w: (%- _ W))
+(y-stack (%many Cws {¦ content-w: (%let 0 _number)}) ¦ _ content-w: (%- _ W))
   <> {W: ($ (max (flatten →Cws)))}
 
 ;; Compute the content-h of y-stack.
-(y-stack (%many Chs {_ content-h: (%let 0 _number)}) ¦ _ content-h: (%- _ H) gap⋮ 0)
+(y-stack (%many Chs {¦ content-h: (%let 0 _number)}) ¦ _ content-h: (%- _ H) gap⋮ 0)
   <> {H: ($ (+ (sum (flatten →Chs)) (* →gap (- (tally →Chs) 1))))}
 
 ;; If y-stack is set to w: content then setting w: max in a child
 ;; would mean that the child's max-w is content-w of the y-stack
 ;; (i.e., maximum sibling width).
-(%all (y-stack _+ ¦ _ w: content content-w: W_number) ⟨{_ w: max max-w: (%- _ w)}⟩°)
+(%all (y-stack _+ ¦ _ w: content content-w: W_number) ⟨{¦ w: max max-w: (%- _ w)}⟩°)
   <> {w: →W}
 
 ;; If y-stack is set to w: max then setting w: max in a child would
 ;; mean that the child's max-w is max-w of the y-stack.
-(%all (y-stack _+ ¦ _ w: max max-w: W_number) ⟨{_ w: max max-w: (%- _ w)}⟩°)
+(%all (y-stack _+ ¦ _ w: max max-w: W_number) ⟨{¦ w: max max-w: (%- _ w)}⟩°)
   <> {w: →W}
 
 ;; In case of a y-stack, all children lefts are shared and are exactly
 ;; y-stack's left.
-(%all (y-stack _+ ¦ _ l: L_number) ⟨{_ -l_ }⟩°)
+(%all (y-stack _+ ¦ _ l: L_number) ⟨{¦ -l_ }⟩°)
   <> {l: →L}
 
 ;; The first child of y-stack has the same top position as the y-stack itself.
-(y-stack {_ -t_} _* ¦ _ t: T_number)
+(y-stack {¦ -t_} _* ¦ _ t: T_number)
   <> {t: →T}
 
 ;; Any consecutive child learns its top position from the previous child
@@ -184,38 +184,38 @@ base1 = <<-WWML
 ;; This simplifies the job of the rule engine, making sure that it doesn't
 ;; have to go through all children every time before seeing that there is
 ;; no change, with regards to this particular rule.
-(%all (y-stack _* {_ t: (%- _)} ¦ _ gap⋮ 0) ⟨{_ t: t0_number final-h: h0_number} {_ t: (%- _ t1)}⟩)
+(%all (y-stack _* {¦ t: (%- _)} ¦ _ gap⋮ 0) ⟨{¦ t: t0_number final-h: h0_number} {¦ t: (%- _ t1)}⟩)
   <> {t1: ($once (+ →t0 →h0 →gap))}
 
 ;; Compute the content-w of z-stack.
-(z-stack (%many Cws {_ content-w: (%let 0 _number)}) ¦ _ content-w: (%- _ W))
+(z-stack (%many Cws {¦ content-w: (%let 0 _number)}) ¦ _ content-w: (%- _ W))
   <> {W: ($ (max (flatten →Cws)))}
 
 ;; Compute the content-h of z-stack.
-(z-stack (%many Chs {_ content-h: (%let 0 _number)}) ¦ _ content-h: (%- _ H))
+(z-stack (%many Chs {¦ content-h: (%let 0 _number)}) ¦ _ content-h: (%- _ H))
   <> {H: ($ (max (flatten →Chs)))}
 
 ;; If z-stack is set to w/h: content, this means the children receive z-stack's
 ;; content-w/h as max-w/h.
-(%all (z-stack _+ ¦ _ w: content content-w: W_number) ⟨{_ max-w: (%- _ w)}⟩°) <> {w: →W}
-(%all (z-stack _+ ¦ _ h: content content-h: H_number) ⟨{_ max-h: (%- _ h)}⟩°) <> {h: →H}
+(%all (z-stack _+ ¦ _ w: content content-w: W_number) ⟨{¦ max-w: (%- _ w)}⟩°) <> {w: →W}
+(%all (z-stack _+ ¦ _ h: content content-h: H_number) ⟨{¦ max-h: (%- _ h)}⟩°) <> {h: →H}
 
 ;; If z-stack is set to w/h: max, this means the children receive z-stack's
 ;; max-w/h as max-w/h.
-(%all (z-stack _+ ¦ _ w: max max-w: W_number) ⟨{_ max-w: (%- _ w)}⟩°) <> {w: →W}
-(%all (z-stack _+ ¦ _ h: max max-h: H_number) ⟨{_ max-h: (%- _ h)}⟩°) <> {h: →H}
+(%all (z-stack _+ ¦ _ w: max max-w: W_number) ⟨{¦ max-w: (%- _ w)}⟩°) <> {w: →W}
+(%all (z-stack _+ ¦ _ h: max max-h: H_number) ⟨{¦ max-h: (%- _ h)}⟩°) <> {h: →H}
 
 ;; The children of z-stack all receive left/top of the z-stack.
-(%all (z-stack _+ ¦ _ l: L_number) ⟨{_ -l_}⟩°) <> {l: →L}
-(%all (z-stack _+ ¦ _ t: T_number) ⟨{_ -t_}⟩°) <> {t: →T}
+(%all (z-stack _+ ¦ _ l: L_number) ⟨{¦ -l_}⟩°) <> {l: →L}
+(%all (z-stack _+ ¦ _ t: T_number) ⟨{¦ -t_}⟩°) <> {t: →T}
 
 ;; `rect` does not have content. Hard-code its content-w/h to 0.
 (rect ¦ _ -content-w_) <> {content-w: 0}
 (rect ¦ _ -content-h_) <> {content-h: 0}
 
-(expander {_ content-w: w_number} ¦ _ min-w_number content-w: (%- _ W))
+(expander {¦ content-w: w_number} ¦ _ min-w_number content-w: (%- _ W))
   <> {W: ($once (max →min-w →w))}
-(expander {_ content-h: h_number} ¦ _ min-h_number content-h: (%- _ H))
+(expander {¦ content-h: h_number} ¦ _ min-h_number content-h: (%- _ H))
   <> {H: ($once (max →min-h →h))}
 WWML
 
@@ -377,7 +377,7 @@ end
 record TextInfo, font : SF::Font, size : Int32 do
   def self.from?(term : Term)
     Term.case(term) do
-      matchpi %[{_ font_string weight_: (%any 100 200 300 400 450 500 600 700 800 900) size_: (%number u8)}] do
+      matchpi %[{¦ font_string weight_: (%any 100 200 300 400 450 500 600 700 800 900) size_: (%number u8)}] do
         next unless path = FontManager.path?(font.to(String), weight.to(Int32))
 
         new(FontManager.font_at(path), size.to(Int32))

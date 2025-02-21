@@ -980,7 +980,7 @@ class Soma
         probe(@ctx.not_nil!, @visible_ui_tree, event.mouse_x - SCREEN_PX + @scroll_x, event.mouse_y - SCREEN_PY + @scroll_y) do |node|
           Term.case(node) do
             # Dispatch click event to mailbox
-            matchpi %{[block {_ mailbox: mailbox-path_dict}]} do
+            matchpi %{[block {¦ mailbox: mailbox-path_dict}]} do
               keypath = Rhodium.keypath(document1, mailbox_path.unsafe_as_d.items)
               mailbox = Rhodium.follow(document1, keypath)
               document1 = Rhodium.assign(document1, keypath, Term.of(mailbox.append({:press})))

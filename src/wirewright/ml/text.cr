@@ -418,10 +418,11 @@ module Ww::ML::Text
           return Token.new(:"]", pos - 1, pos)
         when '{'
           case ahead
-          when '_'
+          when '¦'
             advance
             advance
-            return Token.new(:"{_", pos - 2, pos)
+            # 1 byte '{' + 2 byte '¦'
+            return Token.new(:"{¦", pos - 3, pos)
           when ','
             advance
             advance
@@ -830,7 +831,7 @@ module Ww::ML::Text
         when :"["   then litemspart
         when :"{"   then kvdict
         when :"{,"  then dictset
-        when :"{_"  then Term.of(:"%partition", :_, {:"%layer", :_, pentrylist(:"}")})
+        when :"{¦"  then Term.of(:"%partition", :_, {:"%layer", :_, pentrylist(:"}")})
         when :"→"   then Term.of(:"$my", slot)
         when :"↑"   then Term.of(:"$up", slot)
         when :"↓"   then Term.of(:"$down", slot)
