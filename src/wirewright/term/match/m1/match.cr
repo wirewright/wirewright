@@ -465,4 +465,18 @@ module Ww::M1::Operator
       Ahead.tr(behind1, ahead0)
     end
   end
+
+  def match(behind0, op : CaptureItemsonly, matchee : Term, ahead0)
+    unless dict = matchee.as_itemsonly_d?
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    unless behind1 = behind0.propose?(op.capture, matchee)
+      return Fb::Mismatch.new(behind0.env.with(op.capture, matchee))
+    end
+
+    behind1 = behind1.mount(op.capture, &.update_value(0).span(dict.size))
+
+    Ahead.tr(behind1, ahead0)
+  end
 end

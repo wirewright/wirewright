@@ -82,6 +82,8 @@ module Ww::M1::Operator
   defcase Pow, arg : Term::Num, successor : Any
   defcase Map, arg : Term::Dict, successor : Any
 
+  defcase CaptureItemsonly, capture : Term
+
   module Entry
     alias Any = Required | Optional | Absent | AbsentKeypath | Negative | NegativeKeypath
 

@@ -400,8 +400,6 @@ module ::Ww::M1::Operator
   alias AllIsolated = ScanAllIsolated | DfsAllIsolated | BfsAllIsolated | EntriesAllIsolated
   alias All = ScanAll | DfsAll | BfsAll | EntriesAll
 
-  defcase CaptureItemsonly, capture : Term
-
   defcase Partition, itemspart : Any, pairspart : Any
 
   defcase ValueLiteral, key : Term, successor : Any
@@ -747,20 +745,6 @@ class ::Ww::Keypath::Appender
 end
 
 module ::Ww::M1::Operator
-  def match(behind0, op : CaptureItemsonly, matchee : Term, ahead0)
-    unless dict = matchee.as_itemsonly_d?
-      return Fb::Mismatch.new(behind0.env)
-    end
-
-    unless behind1 = behind0.propose?(op.capture, matchee)
-      return Fb::Mismatch.new(behind0.env.with(op.capture, matchee))
-    end
-
-    behind1 = behind1.mount(op.capture, &.update_value(0).span(dict.size))
-
-    Ahead.tr(behind1, ahead0)
-  end
-
   # TODO: almost always in practice the pairspart is easier to compute than the itemspart;
   # and it is "rarer", providing more rejections. Should we consider running the pairspart
   # first? The proper treatment would be to evaluate the cost of the itemspart and pairspart,
