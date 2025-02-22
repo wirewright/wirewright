@@ -445,62 +445,8 @@ SCREEN_PY = 1
 class Soma
   def initialize
     @running = true
-
     @mt = ExecutionContext::MultiThreaded.new("Soma", 2)
     @nitrene = Nitrene::JobContext.new
-
-    # TODO: these chains are basically pprint defaults. They do not
-    # belong here. for custom features, implement Chain#prepend.
-    @layout_chain = Chain(Layout).new(
-      Layout::DictInline.new,
-      Layout::CallColumn.new,
-      Layout::CallKwargsInlineWithBlock.new,
-      Layout::CallArgIndentedKwargs.new,
-      Layout::CallKwargsColumnWithBlock.new,
-      Layout::CallIndented.new,
-      Layout::MapInline.new,
-      Layout::MapMultiline.new,
-      Layout::MapMultilineIndented.new,
-      Layout::DictAligned.new,
-    )
-
-    @ppairs_chain = Chain(Feature).new(
-      Feature::PairspartLet.new,
-      Feature::PairspartOptional.new,
-      Feature::PairspartNegation.new,
-      Feature::PairspartBlank.new,
-      Feature::PairspartPair.new
-    )
-
-    @feature_chain = Chain(Feature).new(
-      Cursor.new,  # << Custom features
-      Button.new,  # <<
-      Col.new,     # <<
-      Row.new,     # <<
-      Comment.new, # <<
-      Feature::Backmap.new,
-      Feature::Rule.new,
-      Feature::Edge.new,
-      Feature::BackrefMy.new,
-      Feature::BackrefUp.new,
-      Feature::BackrefDown.new,
-      Feature::Hold.new,
-      Feature::PatternSlot.new,
-      Feature::PatternNonself.new,
-      Feature::PatternLiteral.new,
-      Feature::PatternLet.new,
-      Feature::PatternItemFirst.new,
-      Feature::PatternItemSource.new,
-      Feature::PatternPairspart.new,
-      Feature::SymbolLiteral.new,
-      Feature::NumberLiteral.new,
-      Feature::StringLiteral.new,
-      Feature::BooleanLiteral.new,
-      Feature::EmptyDict.new,
-      Feature::CallLike.new,
-      Feature::MapLike.new,
-      Feature::DictLiteral.new,
-    )
   end
 
   private def screen(& : Screen ->) : Nil
@@ -874,6 +820,8 @@ class Soma
   @ctx : DisplayContext?
   @visible_ui_tree = Term.of
 
+  MAIN_CHAIN = ML::Display::MAIN_CHAIN.prepend(Cursor.new, Button.new, Col.new, Row.new, Comment.new)
+
   private def draw(screen : Screen, document : Term::Dict, reason : DrawReason) : Nil
     current_draw_time = Time.monotonic
 
@@ -911,7 +859,7 @@ class Soma
 
     annotated = annotate(next_visible_document)
 
-    @ctx = ctx = DisplayContext.new(maxchars, maxchars*2, @feature_chain, @layout_chain, @ppairs_chain)
+    @ctx = ctx = DisplayContext.new(maxchars, maxchars*2, MAIN_CHAIN)
 
     # TODO: can we somehow standardize this in the pretty printer?
 

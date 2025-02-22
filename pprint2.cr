@@ -123,11 +123,11 @@ module OrdDict
 end
 
 record DisplayContext,
-  normal_width : Int32,
-  longer_width : Int32,
-  features : Chain(Feature),
-  layouts : Chain(Layout),
-  ppairs : Chain(Feature),
+  normal_width = 60,
+  longer_width = 120,
+  features = ML::Display::MAIN_CHAIN,
+  layouts = ML::Display::LAYOUT_CHAIN,
+  ppairs = ML::Display::PAIRSPART_CHAIN,
   layouts_allowed = LayoutSet::All,
   measurements = {} of Term => {Int32, Int32}
 
@@ -1354,11 +1354,19 @@ struct Chain(T)
     Chain(T).new(callables.to_readonly_slice(&.as(T)))
   end
 
-  # :nodoc:
+  # Prepends *callables* to this chain.
+  def prepend(*callables : T) : Chain(T)
+    Chain(T).new(Slice(T).join({callables.to_readonly_slice(&.as(T)),  @callables}))
+  end
+
+  # Delayed `Chain#call` at a specific index.
   struct Thunk(T)
     def initialize(@chain : Chain(T), @index : Int32)
     end
 
+    # Returns the *preference* of this call -- a number indicating how early
+    # this call should be considered versus others in the same chain. `0` means
+    # very preferred; preference decreases with magnitude.
     def preference : Int32
       @index
     end
@@ -1368,6 +1376,10 @@ struct Chain(T)
     end
   end
 
+  # Invokes the callable at *index* with the given display context *ctx*,
+  # *term*, and *postfix* string.
+  #
+  # Raises `TermPassthrough` if no callable handled *term*.
   def call(ctx : DisplayContext, term : Term, postfix : String, *, index : Int32)
     unless index >= 0
       raise ArgumentError.new
@@ -1383,11 +1395,18 @@ struct Chain(T)
     @callables[index].call(ctx, term, postfix, head, rest)
   end
 
+  # Invokes the front callable in the chain to handle *term* with the given
+  # display context *ctx* and *postfix* string.
+  #
+  # Raises `TermPassthrough` if no callable handled *term*.
   def call(ctx : DisplayContext, term : Term, postfix : String)
     call(ctx, term, postfix, index: 0)
   end
 
-  def find(needle)
+  # Finds a callable that matches *needle* according to `Object#===`.
+  #
+  # Returns the delayed call `Thunk`.
+  def find(needle) : Thunk(T)
     @callables.each_with_index do |callable, index|
       next unless needle === callable
       return Thunk(T).new(self, index)
@@ -1395,4 +1414,55 @@ struct Chain(T)
 
     raise ArgumentError.new("find: needle #{needle} not in the chain")
   end
+end
+
+module ::Ww::ML::Display
+  # Default feature chain for displaying WwML.
+  MAIN_CHAIN = Chain(Feature).new(
+    Feature::Backmap.new,
+    Feature::Rule.new,
+    Feature::Edge.new,
+    Feature::BackrefMy.new,
+    Feature::BackrefUp.new,
+    Feature::BackrefDown.new,
+    Feature::Hold.new,
+    Feature::PatternSlot.new,
+    Feature::PatternNonself.new,
+    Feature::PatternLiteral.new,
+    Feature::PatternLet.new,
+    Feature::PatternItemFirst.new,
+    Feature::PatternItemSource.new,
+    Feature::PatternPairspart.new,
+    Feature::SymbolLiteral.new,
+    Feature::NumberLiteral.new,
+    Feature::StringLiteral.new,
+    Feature::BooleanLiteral.new,
+    Feature::EmptyDict.new,
+    Feature::CallLike.new,
+    Feature::MapLike.new,
+    Feature::DictLiteral.new,
+  )
+
+  # Default pairspart chain for displaying WwML `%partition` pairspart patterns.
+  PAIRSPART_CHAIN = Chain(Feature).new(
+    Feature::PairspartLet.new,
+    Feature::PairspartOptional.new,
+    Feature::PairspartNegation.new,
+    Feature::PairspartBlank.new,
+    Feature::PairspartPair.new
+  )
+
+  # Default layout chain for displaying WwML.
+  LAYOUT_CHAIN = Chain(Layout).new(
+    Layout::DictInline.new,
+    Layout::CallColumn.new,
+    Layout::CallKwargsInlineWithBlock.new,
+    Layout::CallArgIndentedKwargs.new,
+    Layout::CallKwargsColumnWithBlock.new,
+    Layout::CallIndented.new,
+    Layout::MapInline.new,
+    Layout::MapMultiline.new,
+    Layout::MapMultilineIndented.new,
+    Layout::DictAligned.new,
+  )
 end
