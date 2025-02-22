@@ -22,6 +22,10 @@ preprocess = <<-WWML
 {¦ w_number -max-w_} <> {w: max, max-w: →w}
 {¦ h_number -max-h_} <> {h: max, max-h: →h}
 
+;; Map w/h: (fr N) to w/h: max fr: N
+{¦ w_: (fr n_number) -fr_} <> {w: max, fr: →n}
+{¦ h_: (fr n_number) -fr_} <> {h: max, fr: →n}
+
 N←(box child_ ¦ () w_ h_ bg_ border-radius_)
   <> {N: (z-stack w: →w h: →h
            (rect w: max h: max bg: →bg border-radius: →border-radius)
@@ -187,6 +191,25 @@ base1 = <<-WWML
 (%all (y-stack _* {¦ t: (%- _)} ¦ _ gap⋮ 0) ⟨{¦ t: t0_number final-h: h0_number} {¦ t: (%- _ t1)}⟩)
   <> {t1: ($once (+ →t0 →h0 →gap))}
 
+(%all {¦ -fr/sum_ frx: true} (%items Frs {¦ fr: 0←(%number (whole _) > 0)}))
+  <> {fr/sum: ($ (sum (flatten →Frs)))}
+
+;; Sum content-h's of y-stack. Subtract from final-h of y-stack to get leftover-h.
+(%all (y-stack _* ¦ _ frx: true -leftover-h_ final-h: H_number) (%items Hs {¦ final-h: 0←_number} min: 0))
+  <> {leftover-h: ($ (- →H (sum (flatten →Hs))))}
+
+;; Distribute leftover-h across h: max children.
+(%all (y-stack _* ¦ _ frx: true leftover-h: H_number fr/sum_number) ⟨{¦ h: max fr_: (%number (whole _) > 0) max-h: (%- _ h)}⟩°)
+  <> {h: ($ (// (* →H →fr) →fr/sum))}
+
+;; Sum content-w's of x-stack. Subtract from final-w of x-stack to get leftover-w.
+(%all (x-stack _* ¦ _ frx: true -leftover-w_ final-w: W_number) (%items Ws {¦ final-w: 0←_number} min: 0))
+  <> {leftover-w: ($ (- →W (sum (flatten →Ws))))}
+
+;; Distribute leftover-w across w: max children.
+(%all (x-stack _* ¦ _ frx: true leftover-w: W_number fr/sum_number) ⟨{¦ w: max fr_: (%number (whole _) > 0) max-w: (%- _ w)}⟩°)
+  <> {w: ($ (// (* →W →fr) →fr/sum))}
+
 ;; Compute the content-w of z-stack.
 (z-stack (%many Cws {¦ content-w: (%let 0 _number)}) ¦ _ content-w: (%- _ W))
   <> {W: ($ (max (flatten →Cws)))}
@@ -260,6 +283,7 @@ primitives = ProcRuleset.build do
     xs.unsafe_as_d.size
   end
 
+  rulepi1 %[(sum ())] { 0 }
   rulepi1 %[(sum (ns_number+))] { ns.items.reduce { |a, b| a.unsafe_as_n + b.unsafe_as_n } }
 
   rulepi1 %[(min ns_number+)] { ns.items.min_by(&.unsafe_as_n) }
@@ -463,36 +487,42 @@ top_line = 0
 
 # Major TODOs:
 #   - design cursor[x] & tooltip separately using the framework
-#   - fractionals (fr) for x-stack and y-stack primary axis, taking care of <primary axis>: max on children
 #   - experiment with capsize
 
 frame = ML.term(<<-WWML
+;;(viewport w: content h: content max-w: 500 max-h: 400 l: 200 t: 0
+;;  (z-stack w: 100 h: 100
+;;    (rect w: max h: max bg: gray-200 border-radius: 0)
+;;    (x-stack w: max h: max frx: true
+;;      (rect w: max h: (fr 2) bg: red-500 border-radius: 0)
+;;      (rect w: max h: (fr 1) bg: blue-500 border-radius: 0)
+;;      (rect w: max h: (fr 2) bg: red-500 border-radius: 0))))
 (viewport w: content h: content max-w: 500 max-h: 400 l: 200 t: 0
-  (box w: content h: content bg: gray-800 border-radius: 3 border-width: 1 border-color: gray-600
-    (y-stack w: content h: content
-      (padding w: max h: content pl: 10 pr: 10 pt: 7 pb: 7
-        (x-stack w: content h: content
-          (text w: content h: content fg: gray-300 font: "IBM Plex Sans" size: 14 weight: 450
-            "1-5 out of 20")
-          ;; TODO: w: max so that it pushes the content right
-          (x-right w: content h: content
-            (x-stack gap: 5
-              (text "↑" w: content h: content fg: gray-400 font: "IBM Plex Sans" size: 14 weight: 450)
-              (text "↓" w: content h: content fg: blue-400 font: "IBM Plex Sans" size: 14 weight: 700)))))
-      (rect w: max h: 1 bg: gray-600 border-radius: 0)
-      (expander min-w: 150
-        (padding w: max h: content pl: 10 pr: 10 pt: 10 pb: 10
-          (y-stack w: content h: content gap: 10
-            (text w: content h: content fg: gray-200 font: "IBM Plex Mono" size: 14 weight: 450
-              "absence")
-            (text w: content h: content fg: gray-200 font: "IBM Plex Mono" size: 14 weight: 450
-              "blast")
-            (text w: content h: content fg: gray-200 font: "IBM Plex Mono" size: 14 weight: 450
-              "button")
-            (text w: content h: content fg: gray-200 font: "IBM Plex Mono" size: 14 weight: 450
-              "cell")
-            (text w: content h: content fg: gray-200 font: "IBM Plex Mono" size: 14 weight: 450
-              "changes")))))))
+  (padding pl: 10 pr: 10 pt: 10 pb: 10
+    (box w: content h: content bg: gray-800 border-radius: 3 border-width: 1 border-color: gray-600
+      (y-stack w: content h: content
+        (padding w: max h: content pl: 10 pr: 10 pt: 7 pb: 7
+          (x-stack w: max h: content frx: true
+            (text w: content h: content fg: gray-300 font: "IBM Plex Sans" size: 14 weight: 450
+              "1-5 out of 20")
+            (x-right w: (fr 1) h: content
+              (x-stack w: content gap: 5
+                (text "↑" w: content h: content fg: gray-400 font: "IBM Plex Sans" size: 14 weight: 450)
+                (text "↓" w: content h: content fg: blue-400 font: "IBM Plex Sans" size: 14 weight: 700)))))
+        (rect w: max h: 1 bg: gray-600 border-radius: 0)
+        (expander min-w: 150
+          (padding w: max h: content pl: 10 pr: 10 pt: 10 pb: 10
+            (y-stack w: content h: content gap: 10
+              (text w: content h: content fg: gray-200 font: "IBM Plex Mono" size: 14 weight: 450
+                "absence")
+              (text w: content h: content fg: gray-200 font: "IBM Plex Mono" size: 14 weight: 450
+                "blast")
+              (text w: content h: content fg: gray-200 font: "IBM Plex Mono" size: 14 weight: 450
+                "button")
+              (text w: content h: content fg: gray-200 font: "IBM Plex Mono" size: 14 weight: 450
+                "cell")
+              (text w: content h: content fg: gray-200 font: "IBM Plex Mono" size: 14 weight: 450
+                "changes"))))))))
 
 ;; Cursor
 ;;(viewport w: content h: content max-w: 500 max-h: 400 l: 200 t: 0
@@ -543,7 +573,7 @@ while window.open?
     end
   end
 
-  window.clear(color?(Term.of(:"gray-900")).not_nil!)
+  window.clear(color?(Term.of(:"gray-50")).not_nil!)
 
   showable = Term.of
 
