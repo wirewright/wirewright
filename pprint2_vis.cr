@@ -248,7 +248,7 @@ struct Col
   def call(ctx, term, postfix, head, rest)
     Term.of_case(term) do
       matchpi %{(col (%plural children min: 2) ¦ gap⋮ 0)} do |children|
-        continue if Rhodium.cursordepth(term) == 1 # Allow cursor inside children.
+        continue if Rhodium.cursordepth(term, pairspart: true) == 1 # Allow cursor inside children.
 
         Term::Dict.build do |commit|
           commit << :col
@@ -270,19 +270,23 @@ struct Row
   include Feature
 
   def call(ctx, term, postfix, head, rest)
-    Term.matchpi(term, %{(row children_* ¦ gap⋮ 0)}) do
-      continue if Rhodium.cursordepth(term) == 1 # Allow cursor inside children.
+    Term.of_case(term) do
+      matchpi %{(row (%plural children min: 2) ¦ gap⋮ 0)} do |children|
+        continue if Rhodium.cursordepth(term, pairspart: true) == 1 # Allow cursor inside children.
 
-      return Term.of(Term::Dict.build do |commit|
-        commit << :row
-        commit.with(:gap, gap)
-        children.items.each_with_last do |child, last|
-          commit << head.call(ctx, child, last ? postfix : "")
+        Term::Dict.build do |commit|
+          commit << :row
+          commit.with(:gap, gap)
+          children.items.each_with_last do |child, last|
+            commit << head.call(ctx, child, last ? postfix : "")
+          end
         end
-      end)
-    end
+      end
 
-    rest.call(ctx, term, postfix)
+      otherwise do
+        rest.call(ctx, term, postfix)
+      end
+    end
   end
 end
 
@@ -308,13 +312,13 @@ struct Button
   def call(ctx, term, postfix, head, rest)
     Term.case(term) do
       matchpi %{[button caption_ to @_ (_*)]} do
-        continue unless Rhodium.cursordepth(term) == -1
+        continue unless Rhodium.cursordepth(term, pairspart: true) == -1
 
         Term.of(:row, button(term, caption), Term.of(:frag, postfix))
       end
 
       matchpi %{[button caption_ as msg_ to @_ (_*)]} do
-        continue unless Rhodium.cursordepth(term) == -1
+        continue unless Rhodium.cursordepth(term, pairspart: true) == -1
 
         Term.of(:row, button(term, caption), Term.of(:frag, postfix))
       end
@@ -358,13 +362,13 @@ def annotate(document : Term::Dict)
 
     Term.case(node) do
       matchpi %{(button _ to @_ (_*) ¦ _ #waiting: (%- _))} do
-        continue unless Rhodium.cursordepth(node) == -1
+        continue unless Rhodium.cursordepth(node, pairspart: true) == -1
 
         document = Rhodium.assign(document, nodepath, Term.of(node.with(:mailbox, Term[nodepath].append(4))))
       end
 
       matchpi %{(button _ as _ to @_ (_*) ¦ _ #waiting: (%- _))} do
-        continue unless Rhodium.cursordepth(node) == -1
+        continue unless Rhodium.cursordepth(node, pairspart: true) == -1
 
         document = Rhodium.assign(document, nodepath, Term.of(node.with(:mailbox, Term[nodepath].append(6))))
       end
@@ -1173,7 +1177,7 @@ if filename = ARGV[0]?
   seed = ML.term(File.read(filename))
   initial = false
 else
-  {% if flag?(:release) %}
+  {% if true || flag?(:release) %}
     seed = ML.terms <<-WWML
     (comment "Welcome to µsoma, a GUI for Wirewright")
     (comment "")

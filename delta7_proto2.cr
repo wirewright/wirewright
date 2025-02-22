@@ -234,22 +234,25 @@ module Rhodium
     enclosing?(document, keypath) { |parent| yield parent } || raise KeypathError.new
   end
 
-  private def cursordepth0(node : Term, depth : Int32) : Int32
+  private def cursordepth0(node : Term, depth : Int32, pairspart : Bool) : Int32
     if M1::Operator.probe?(Term[], CURSORP, node)
       return depth
     end
 
     return Int32::MAX unless dict = node.as_d?
-    return Int32::MAX if dict.itemspart.empty?
     return Int32::MAX unless dict.probably_includes?(Term[:|])
 
     mindepth = Int32::MAX
 
-    dict.each_item_unordered do |item|
-      subdepth = cursordepth0(item, depth + 1)
-
-      if subdepth < mindepth
-        mindepth = subdepth
+    if pairspart
+      dict.each_entry do |_, value|
+        subdepth = cursordepth0(value, depth + 1, pairspart)
+        mindepth = subdepth if subdepth < mindepth
+      end
+    else
+      dict.each_item_unordered do |item|
+        subdepth = cursordepth0(item, depth + 1, pairspart)
+        mindepth = subdepth if subdepth < mindepth
       end
     end
 
@@ -263,10 +266,13 @@ module Rhodium
   #   if in one of *node*'s entry entries, `2`, and so on.
   # - If there are no cursors in *node* returns `-1`.
   #
-  # If there are multiple cursors in *node* returns the depth of the closest
-  # cursor (i.e. minimum depth).
-  def cursordepth(node : Term) : Int32
-    depth = cursordepth0(node, 0)
+  # By default, only the itemspart of *node* is inspected. If *pairspart* is set
+  # to `true`, its pairspart is going to be inspected as well.
+  #
+  # If there are multiple cursors in *node*, returns the depth of the closest
+  # cursor (i.e., minimum depth).
+  def cursordepth(node : Term, *, pairspart : Bool = false) : Int32
+    depth = cursordepth0(node, 0, pairspart)
     depth == Int32::MAX ? -1 : depth
   end
 
