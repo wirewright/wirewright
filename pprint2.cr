@@ -857,6 +857,10 @@ module Feature
             end
           end
 
+          if ctx.inline_only?
+            return Term.of(:row, FRAG_LPAREN, inline)
+          end
+
           multiline = fill(TEMPLATE_MULTILINE) do |slot, commit|
             case slot
             when 0
@@ -873,11 +877,7 @@ module Feature
             end
           end
 
-          if ctx.inline_only?
-            Term.of(:row, FRAG_LPAREN, inline)
-          else
-            Term.of(:row, FRAG_LPAREN, Term.of(:choice, inline, multiline))
-          end
+          Term.of(:row, FRAG_LPAREN, Term.of(:choice, inline, multiline))
         end
 
         # Render pairspart-ignored partition shorthand using dict-inline and dict-
@@ -901,6 +901,10 @@ module Feature
             end
           end
 
+          if ctx.inline_only?
+            return Term.of(inline)
+          end
+
           multiline = Term::Dict.build do |commit|
             commit << :row
             commit.with(:gap, 1)
@@ -916,11 +920,7 @@ module Feature
             end
           end
 
-          if ctx.inline_only?
-            Term.of(inline)
-          else
-            Term.of(:choice, inline, multiline)
-          end
+          Term.of(:choice, inline, multiline)
         end
 
         # Render other kinds of (%partition)s, e.g. `(+ a_ b_ ¦ {a: 1, b: 2})`:
