@@ -265,7 +265,7 @@ module Ww
       Blank.new(TermType.new(@spec.bits(4...7).to_u8), name?, one: @spec.bit(3) == 1, poly: @spec.bit(2) == 1)
     end
 
-    def blank : Blank
+    def blank
       blank? || raise "expected symbol to be a blank"
     end
 
