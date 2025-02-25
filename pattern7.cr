@@ -153,7 +153,7 @@ module Search::Result
 
   alias Any = Item | Pair | ItemStrip
 
-  record Item, term : Term, keypath : Keypath::Appender? do
+  record Item, term : Term, backpath : Backpath::Appender? do
     include Result
 
     def each(& : Term ->) : Nil
@@ -161,11 +161,11 @@ module Search::Result
     end
 
     def sequence
-      ItemStrip.new(Term[{term}].items, keypath)
+      ItemStrip.new(Term[{term}].items, backpath)
     end
   end
 
-  record Pair, k : Term, v : Term, keypath : {Keypath::Appender, Keypath::Appender}? do
+  record Pair, k : Term, v : Term, backpath : {Backpath::Appender, Backpath::Appender}? do
     include Result
 
     def each(& : Term ->) : Nil
@@ -174,7 +174,7 @@ module Search::Result
     end
   end
 
-  record ItemStrip, view : Term::Dict::ItemsView, keypath : Keypath::Appender? do
+  record ItemStrip, view : Term::Dict::ItemsView, backpath : Backpath::Appender? do
     include Result
 
     def each(& : Term ->) : Nil
@@ -221,30 +221,30 @@ module Search
   module Stop
   end
 
-  def self.visit(dict, part : Part, *, keypath = nil, &)
+  def self.visit(dict, part : Part, *, backpath = nil, &)
     case part
     in .items_ordered?
       dict.items.each_with_index do |item, index|
-        yield item, keypath.try &.update_value(index)
+        yield item, backpath.try &.update_value(index)
       end
     in .items_unordered?
       dict.each_item_with_index do |item, index|
-        yield item, keypath.try &.update_value(index)
+        yield item, backpath.try &.update_value(index)
       end
     in .keys?
-      dict.each_entry { |k, _| yield k, keypath.try &.update_key(k) }
+      dict.each_entry { |k, _| yield k, backpath.try &.update_key(k) }
     in .values?
       dict.each_entry do |key, value|
-        yield value, keypath.try(&.update_value(key))
+        yield value, backpath.try(&.update_value(key))
       end
     in .pair_values?
       dict.pairspart.each_entry do |key, value|
-        yield value, keypath.try(&.update_value(key))
+        yield value, backpath.try(&.update_value(key))
       end
     end
   end
 
-  def self.traverse(term : Term, spec : Spec::Scan, *, keypath keypath0 = nil, &fn : Result::Any -> Response) : Nil
+  def self.traverse(term : Term, spec : Spec::Scan, *, backpath backpath0 = nil, &fn : Result::Any -> Response) : Nil
     return unless dict = term.as_d?
 
     feed = dict.items
@@ -252,7 +252,7 @@ module Search
 
     while spec.stride <= feed.size
       window = feed.begin.grow(spec.stride)
-      item = Result::ItemStrip.new(window, keypath: keypath0 ? keypath0.update_value(index) : nil)
+      item = Result::ItemStrip.new(window, backpath: backpath0 ? backpath0.update_value(index) : nil)
 
       case fn.call(item)
       in Accept.class
@@ -267,9 +267,9 @@ module Search
     end
   end
 
-  private def self.dfs?(dict, spec, keypath0, fn) : Bool?
-    visit(dict, spec.part, keypath: keypath0) do |value, keypath1|
-      item = Result::Item.new(value, keypath1)
+  private def self.dfs?(dict, spec, backpath0, fn) : Bool?
+    visit(dict, spec.part, backpath: backpath0) do |value, backpath1|
+      item = Result::Item.new(value, backpath1)
 
       case fn.call(item)
       in Accept.class
@@ -281,13 +281,13 @@ module Search
       next if spec.maxdepth == 1
       next unless child = value.as_d?
 
-      return true if dfs?(child, Spec.deeper(spec), keypath1, fn)
+      return true if dfs?(child, Spec.deeper(spec), backpath1, fn)
     end
   end
 
-  def self.traverse(term : Term, spec : Spec::Dfs, *, keypath keypath0 = nil, &fn : Result::Any -> Response) : Nil
+  def self.traverse(term : Term, spec : Spec::Dfs, *, backpath backpath0 = nil, &fn : Result::Any -> Response) : Nil
     if spec.depth0
-      item = Result::Item.new(term, keypath: keypath0)
+      item = Result::Item.new(term, backpath: backpath0)
 
       case fn.call(item)
       in Accept.class, Reject.class
@@ -298,13 +298,13 @@ module Search
 
     return unless dict = term.as_d?
 
-    dfs?(dict, spec, keypath0, fn)
+    dfs?(dict, spec, backpath0, fn)
   end
 
-  private def self.iddfs1(dict, spec, keypath0, fn, depth)
+  private def self.iddfs1(dict, spec, backpath0, fn, depth)
     if depth.zero?
-      visit(dict, spec.part, keypath: keypath0) do |term, keypath1|
-        item = Result::Item.new(term, keypath1)
+      visit(dict, spec.part, backpath: backpath0) do |term, backpath1|
+        item = Result::Item.new(term, backpath1)
 
         case fn.call(item)
         in Accept.class, Reject.class
@@ -319,7 +319,7 @@ module Search
     # Carry out a vote for/against reaching the bottom.
     bottom = total = 0
 
-    visit(dict, spec.part, keypath: keypath0) do |term, keypath1|
+    visit(dict, spec.part, backpath: backpath0) do |term, backpath1|
       total += 1
 
       unless child = term.as_d?
@@ -327,7 +327,7 @@ module Search
         next
       end
 
-      case iddfs1(child, spec, keypath1, fn, depth - 1)
+      case iddfs1(child, spec, backpath1, fn, depth - 1)
       when :bot
         bottom += 1
       when :stop
@@ -342,11 +342,11 @@ module Search
     bottom == total ? :bot : :next
   end
 
-  private def self.iddfs0(dict, spec, keypath0, fn)
+  private def self.iddfs0(dict, spec, backpath0, fn)
     maxdepth = spec.maxdepth.zero? ? nil : spec.maxdepth
 
     (0...maxdepth).each do |depth|
-      case iddfs1(dict, spec, keypath0, fn, depth)
+      case iddfs1(dict, spec, backpath0, fn, depth)
       when :bot, :stop
         break
       when :next
@@ -356,9 +356,9 @@ module Search
     end
   end
 
-  def self.traverse(term : Term, spec : Spec::Bfs, *, keypath keypath0 = nil, &fn : Result::Any -> Response) : Nil
+  def self.traverse(term : Term, spec : Spec::Bfs, *, backpath backpath0 = nil, &fn : Result::Any -> Response) : Nil
     if spec.depth0
-      item = Result::Item.new(term, keypath: keypath0)
+      item = Result::Item.new(term, backpath: backpath0)
 
       case fn.call(item)
       in Accept.class, Reject.class
@@ -369,14 +369,14 @@ module Search
 
     return unless dict = term.as_d?
 
-    iddfs0(dict, spec, keypath0, fn)
+    iddfs0(dict, spec, backpath0, fn)
   end
 
-  def self.traverse(term : Term, spec : Spec::Entries, *, keypath keypath0 = nil, &fn : Result::Any -> Response) : Nil
+  def self.traverse(term : Term, spec : Spec::Entries, *, backpath backpath0 = nil, &fn : Result::Any -> Response) : Nil
     return unless dict = term.as_d?
 
     dict.each_entry do |key, value|
-      item = Result::Pair.new(key, value, keypath0 ? {keypath0.update_key(key), keypath0.update_value(key)} : nil)
+      item = Result::Pair.new(key, value, backpath0 ? {backpath0.update_key(key), backpath0.update_value(key)} : nil)
 
       case fn.call(item)
       in Accept.class, Reject.class
@@ -556,7 +556,7 @@ module ::Ww::M1::Operator::Fb
   alias Any = Response | Interrupt
   alias Response = Match | Mismatch
   alias Match = MatchOne | MatchMany
-  alias Interrupt = RequestKeypath | ProbeTrue
+  alias Interrupt = RequestBackpath | ProbeTrue
 
   record MatchOne, env : Term::Dict, more : Bool = false do
     def envs
@@ -567,7 +567,7 @@ module ::Ww::M1::Operator::Fb
   record MatchMany, envs : Array(Term::Dict)
   record Mismatch, env : Term::Dict
 
-  record RequestKeypath
+  record RequestBackpath
   record ProbeTrue
 
   def self.sum(a : Mismatch, b : Mismatch)
@@ -599,10 +599,10 @@ module ::Ww::M1::Operator::Fb
   end
 end
 
-module ::Ww::Keypath
+module ::Ww::Backpath
 end
 
-class ::Ww::Keypath::Appender
+class ::Ww::Backpath::Appender
   # :nodoc:
   def initialize(@preds : Term::Dict, @tip : Word::None | Word::Terminal | Word::Nonterminal)
   end
@@ -610,13 +610,13 @@ class ::Ww::Keypath::Appender
   # :nodoc:
   EMPTY = Appender.new(preds: Term[], tip: Word::None.new)
 
-  # Constructs an empty keypath appender.
+  # Constructs an empty backpath appender.
   def self.new : Appender
     EMPTY
   end
 
   private def push(tip1 : Word::Some) : Appender
-    Appender.new(keypath, tip1)
+    Appender.new(backpath, tip1)
   end
 
   private def replace(tip1 : Word::Some) : Appender
@@ -733,8 +733,8 @@ class ::Ww::Keypath::Appender
     forward(-n)
   end
 
-  # Returns the keypath dict that this appender constructed so far.
-  def keypath : Term::Dict
+  # Returns the backpath dict that this appender constructed so far.
+  def backpath : Term::Dict
     case tip = @tip
     in Word::None then @preds
     in Word::Some then @preds.transaction &.concat(Word.terms(tip))
@@ -748,9 +748,9 @@ module ::Ww::M1::Operator
       return Fb::Mismatch.new(behind0.env)
     end
 
-    ahead1 = Ahead::Goto.new(behind0.keypath?, Ahead.stackptr(ahead0))
+    ahead1 = Ahead::Goto.new(behind0.backpath?, Ahead.stackptr(ahead0))
 
-    match(behind0.keypath(&.update_value(op.key)), op.successor, value, ahead1)
+    match(behind0.backpath(&.update_value(op.key)), op.successor, value, ahead1)
   end
 
   def match(behind0, op : Layer, matchee : Term, ahead0)
@@ -785,15 +785,15 @@ module ::Ww::M1::Operator
     #
     # The exact order doesn't *really* matter here since we're a solver.
     ahead1 = Ahead::EntrySeq.new(matchee, op.side, 0, Ahead.stackptr(ahead0))
-    ahead2 = Ahead::Goto.new(behind0.keypath?, Ahead.stackptr(ahead1))
+    ahead2 = Ahead::Goto.new(behind0.backpath?, Ahead.stackptr(ahead1))
 
-    match(behind0.keypath(&.delete_keys(op.side, &.key)), op.below, Term.of(residue), ahead2)
+    match(behind0.backpath(&.delete_keys(op.side, &.key)), op.below, Term.of(residue), ahead2)
   end
 
   def match(behind0, op : First, matchee : Term, ahead0)
     memo = Fb::Mismatch.new(behind0.env)
 
-    Search.traverse(matchee, spec: search_spec(op), keypath: behind0.keypath?) do |item|
+    Search.traverse(matchee, spec: search_spec(op), backpath: behind0.backpath?) do |item|
       case memo = Operator.match(behind0, op.needle, item, ahead0)
       in Fb::Match, Fb::Interrupt
         Search::Stop
@@ -809,7 +809,7 @@ module ::Ww::M1::Operator
     envs = [] of Term::Dict
     interrupt = nil
 
-    Search.traverse(matchee, spec: search_spec(op), keypath: behind0.keypath?) do |item|
+    Search.traverse(matchee, spec: search_spec(op), backpath: behind0.backpath?) do |item|
       case fb = Operator.match(behind0, op.needle, item, ahead0)
       in Fb::Match
         Env.append(envs, fb)
@@ -832,20 +832,20 @@ module ::Ww::M1::Operator
   end
 
   def match(behind0, op : AllIsolated, matchee : Term, ahead0)
-    kp0 = behind0.keypath?
+    kp0 = behind0.backpath?
 
     behind1 = behind0
 
     captures = Term::Dict.build do |captures|
       interrupt = nil
 
-      Search.traverse(matchee, spec: search_spec(op), keypath: kp0) do |item|
+      Search.traverse(matchee, spec: search_spec(op), backpath: kp0) do |item|
         case fb = Operator.match(behind0, op.needle, item, Ahead::MatchOne.new)
         in Fb::Match
           fb.envs.each do |env|
-            behind1 = behind1.import_keypaths(env)
+            behind1 = behind1.import_backpaths(env)
 
-            captures.append(env.without(:"(keypaths)"))
+            captures.append(env.without(:"(backpaths)"))
           end
 
           Search::Accept
@@ -880,11 +880,11 @@ module ::Ww::M1::Operator
 
     behind1 = behind0
 
-    Search.traverse(matchee, spec: search_spec(op), keypath: behind0.keypath?) do |item|
+    Search.traverse(matchee, spec: search_spec(op), backpath: behind0.backpath?) do |item|
       case fb = Operator.match(behind0, op.needle, item, ahead0)
       in Fb::Match
         fb.envs.each do |env|
-          behind1 = behind1.import_keypaths(env)
+          behind1 = behind1.import_backpaths(env)
           envs << env
         end
 
@@ -991,12 +991,12 @@ module ::Ww::M1::Operator
     candidates.each do |key|
       next unless value = dict[key]?
 
-      kp0 = behind0.keypath?
+      kp0 = behind0.backpath?
 
       behind1 = behind0
         .mount(op.capture, &.update_key(key))
         .assign(op.capture, key)
-        .keypath(&.update_value(key))
+        .backpath(&.update_value(key))
 
       fb = match(behind1, op.tail, value, Ahead::Goto.new(kp0, Ahead.stackptr(ahead0)))
       unless fb.is_a?(Fb::Response)
@@ -1132,18 +1132,18 @@ module ::Ww::M1::Operator
   end
 
   def match(behind0, op : KeypathCapture, matchee : Term, ahead0)
-    unless keypath = behind0.keypath?
-      # We're not running in keypath mode. Send a back-message all the way up
+    unless backpath = behind0.backpath?
+      # We're not running in backpath mode. Send a back-message all the way up
       # the call stack to where the match was initiated; ask them to rematch
-      # with keypath mode enabled.
+      # with backpath mode enabled.
       #
       # I don't think there is any optimization we can do here regarding
-      # the preservation of progress. During progress keypaths are modified,
+      # the preservation of progress. During progress backpaths are modified,
       # so we'll have to retry anyway most of the cases.
-      return Fb::RequestKeypath.new
+      return Fb::RequestBackpath.new
     end
 
-    kpdict = Term.of(keypath.keypath)
+    kpdict = Term.of(backpath.backpath)
 
     unless behind1 = behind0.propose?(op.capture, kpdict)
       return Fb::Mismatch.new(behind0.env.with(op.capture, kpdict))
@@ -1161,7 +1161,7 @@ module ::Ww::M1::Operator
       @captures = Term[],
       @domains = Term[],
       @antidomains = Term[],
-      @keypath : Keypath::Appender? = nil,
+      @backpath : Backpath::Appender? = nil,
       *,
       @probe : Bool = false,
     )
@@ -1197,29 +1197,29 @@ module ::Ww::M1::Operator
       change(captures: @captures.with(k, v))
     end
 
-    def mount(capture : Term, keypath : Term::Dict)
-      keypaths0 = @captures[:"(keypaths)"]? || Term[]
-      keypaths1 = keypaths0.morph({capture, keypath, true})
+    def mount(capture : Term, backpath : Term::Dict)
+      backpaths0 = @captures[:"(backpaths)"]? || Term[]
+      backpaths1 = backpaths0.morph({capture, backpath, true})
 
-      change(captures: @captures.with(:"(keypaths)", keypaths1))
+      change(captures: @captures.with(:"(backpaths)", backpaths1))
     end
 
-    def mount(capture : Term, kpb : Keypath::Appender)
-      mount(capture, kpb.keypath)
+    def mount(capture : Term, kpb : Backpath::Appender)
+      mount(capture, kpb.backpath)
     end
 
     def mount(capture : Term)
-      @keypath.try { |kpb| mount(capture, kpb) } || self
+      @backpath.try { |kpb| mount(capture, kpb) } || self
     end
 
-    def mount(capture : Term, & : Keypath::Appender -> Keypath::Appender)
-      @keypath.try { |kpb| mount(capture, yield kpb) } || self
+    def mount(capture : Term, & : Backpath::Appender -> Backpath::Appender)
+      @backpath.try { |kpb| mount(capture, yield kpb) } || self
     end
 
-    def import_keypaths(env : Term::Dict)
+    def import_backpaths(env : Term::Dict)
       behind1 = self
 
-      kpsrc = env[:"(keypaths)"]? || Term[]
+      kpsrc = env[:"(backpaths)"]? || Term[]
       kpsrc.each_entry do |capture, kpset|
         kpset.each_entry { |kp, _| behind1 = behind1.mount(capture, kp.as_d) }
       end
@@ -1227,26 +1227,26 @@ module ::Ww::M1::Operator
       behind1
     end
 
-    def keypath? : Keypath::Appender?
-      @keypath
+    def backpath? : Backpath::Appender?
+      @backpath
     end
 
-    def keypath(& : Keypath::Appender -> Keypath::Appender)
-      return self unless kp = @keypath
+    def backpath(& : Backpath::Appender -> Backpath::Appender)
+      return self unless kp = @backpath
 
-      change(keypath: yield kp)
+      change(backpath: yield kp)
     end
 
-    def goto(dst : Keypath::Appender?)
-      change(keypath: dst)
+    def goto(dst : Backpath::Appender?)
+      change(backpath: dst)
     end
 
     def value(*, key)
-      keypath &.update_value(key)
+      backpath &.update_value(key)
     end
 
-    def keypathless
-      change(keypath: nil)
+    def backpathless
+      change(backpath: nil)
     end
 
     # Domain restriction: *k* must be one of *vs* (the latter is treated as a dict set).
@@ -1300,7 +1300,7 @@ module ::Ww::M1::Operator
   enum FeedbackMode : UInt8
     Normal
     Probe
-    Keypath
+    Backpath
   end
 
   # :nodoc:
@@ -1310,25 +1310,25 @@ module ::Ww::M1::Operator
       behind0 = Behind.new(env)
     in .probe?
       behind0 = Behind.new(env, probe: true)
-    in .keypath?
-      behind0 = Behind.new(env, keypath: Keypath::Appender.new)
+    in .backpath?
+      behind0 = Behind.new(env, backpath: Backpath::Appender.new)
     end
 
     match(behind0, op, matchee, Ahead::MatchEndpoint.new)
   end
 
-  def feedback(env : Term::Dict, op : Any, matchee : Term, *, keypaths : Bool = false) : Fb::Response
-    case fb = feedback0(env, op, matchee, mode: keypaths ? FeedbackMode::Keypath : FeedbackMode::Normal)
+  def feedback(env : Term::Dict, op : Any, matchee : Term, *, backpaths : Bool = false) : Fb::Response
+    case fb = feedback0(env, op, matchee, mode: backpaths ? FeedbackMode::Backpath : FeedbackMode::Normal)
     in Fb::Response
       fb
-    in Fb::RequestKeypath
-      if keypaths
+    in Fb::RequestBackpath
+      if backpaths
         return Fb::Mismatch.new(env)
       end
 
-      feedback(env, op, matchee, keypaths: true)
+      feedback(env, op, matchee, backpaths: true)
     in Fb::ProbeTrue
-      raise "BUG: unexpected Fb::ProbeTrue response in normal/keypath mode"
+      raise "BUG: unexpected Fb::ProbeTrue response in normal/backpath mode"
     end
   end
 
@@ -1354,10 +1354,10 @@ module ::Ww::M1::Operator
       true
     in Fb::Mismatch
       false
-    in Fb::RequestKeypath
-      # If the pattern requests keypath, we switch to the slower feedback() version.
-      # Gains from using the probe mode are a speck compared to losses from keypath mode.
-      feedback(env, op, matchee, keypaths: true).is_a?(Fb::Match)
+    in Fb::RequestBackpath
+      # If the pattern requests backpath, we switch to the slower feedback() version.
+      # Gains from using the probe mode are a speck compared to losses from backpath mode.
+      feedback(env, op, matchee, backpaths: true).is_a?(Fb::Match)
     end
   end
 end
@@ -1366,8 +1366,8 @@ module ::Ww::M1::Operator
   extend self
 
   def match(behind0, op : Any, cell : Search::Result::Item, ahead)
-    kp0 = behind0.keypath?
-    kp1 = cell.keypath
+    kp0 = behind0.backpath?
+    kp1 = cell.backpath
     cont = Ahead::Goto.new(kp0, Ahead.stackptr(ahead))
 
     match(behind0.goto(kp1), op, cell.term, cont)
@@ -1390,13 +1390,13 @@ module ::Ww::M1::Operator
       return Fb::Mismatch.new(behind0.env)
     end
 
-    if row = cell.keypath
+    if row = cell.backpath
       kkp, vkp = row
     else
       kkp = vkp = nil
     end
 
-    ahead1 = Ahead::Goto.new(behind0.keypath?, Ahead.stackptr(ahead0))
+    ahead1 = Ahead::Goto.new(behind0.backpath?, Ahead.stackptr(ahead0))
     ahead2 = Ahead::Match.new(ops[1], cell.v, Ahead.stackptr(ahead1))
     ahead3 = Ahead::Goto.new(vkp, Ahead.stackptr(ahead2))
     ahead4 = Ahead::Match.new(ops[0], cell.k, Ahead.stackptr(ahead3))
@@ -1406,10 +1406,10 @@ module ::Ww::M1::Operator
   end
 
   def match(behind0, ops : Slice(Any), matchees : Search::Result::ItemStrip, ahead0)
-    ahead1 = Ahead::Goto.new(behind0.keypath?, Ahead.stackptr(ahead0))
+    ahead1 = Ahead::Goto.new(behind0.backpath?, Ahead.stackptr(ahead0))
     ahead2 = Ahead::ItemZip.new(ops, matchees.view, 0, 0, +1, Ahead.stackptr(ahead1))
 
-    Ahead.tr(behind0.goto(matchees.keypath), ahead2)
+    Ahead.tr(behind0.goto(matchees.backpath), ahead2)
   end
 
   def match(env, ops : Array(Any), matchee, ahead)
@@ -1457,8 +1457,8 @@ module ::Ww::M1::Operator::Ahead
   record Match, op : Operator::Any, matchee : Term, successor : Ahead::Any*
   record Forward, delta : Int32, successor : Ahead::Any*
 
-  record Goto, keypath : Keypath::Appender, successor : Ahead::Any* do
-    def self.new(keypath : Nil, successor : Ahead::Any*)
+  record Goto, backpath : Backpath::Appender, successor : Ahead::Any* do
+    def self.new(backpath : Nil, successor : Ahead::Any*)
       successor.value
     end
   end
@@ -1490,11 +1490,11 @@ module ::Ww::M1::Operator::Ahead
   end
 
   def self.tr(behind0, node0 : Forward)
-    tr(behind0.keypath(&.forward(node0.delta)), node0.successor)
+    tr(behind0.backpath(&.forward(node0.delta)), node0.successor)
   end
 
   def self.tr(behind0, node0 : Goto)
-    tr(behind0.goto(node0.keypath), node0.successor)
+    tr(behind0.goto(node0.backpath), node0.successor)
   end
 
   def self.tr(behind0, node0 : ItemZip)
@@ -1583,7 +1583,7 @@ module ::Ww::M1::Operator::Ahead
       end
 
       def call(progress, matchees)
-        @ahead.value.call(progress.copy_with(ord: progress.ord + @n, behind: progress.behind.keypath(&.forward(@n))), matchees.move(@n))
+        @ahead.value.call(progress.copy_with(ord: progress.ord + @n, behind: progress.behind.backpath(&.forward(@n))), matchees.move(@n))
       end
     end
 
@@ -1650,7 +1650,7 @@ module ::Ww::M1::Operator::Item
     end
 
     # Returns a `Progress` object after a span of the given *size* was matched.
-    # The span is mounted at *capture* if in keypath mode.
+    # The span is mounted at *capture* if in backpath mode.
     def after_span(capture : Term, size : Int) : Progress
       copy_with(ord: @ord + 1, behind: @behind.mount(capture, &.span(size, ord: @ord)))
     end
@@ -1721,7 +1721,7 @@ module ::Ww::M1::Operator::Item
         return unless candidate
         candidate = candidate.mount(capture, &.span(subview.size, ord: progress.ord))
       end
-      candidate = candidate.keypath(&.forward(subview.size))
+      candidate = candidate.backpath(&.forward(subview.size))
     end
 
     case fb = ahead.call(progress.copy_with(ord: progress.ord + 1, behind: candidate), suffix)
@@ -1805,9 +1805,9 @@ module ::Ww::M1::Operator::Item
 
       ahead1 = Ahead::ItemAdapter.new(progress.ord, suffix, Ahead::Item.stackptr(ahead0))
       ahead2 = Ahead::Forward.new(prefix.size, Ahead.stackptr(ahead1))
-      ahead3 = Ahead::Goto.new(progress.behind.keypath?, Ahead.stackptr(ahead2))
+      ahead3 = Ahead::Goto.new(progress.behind.backpath?, Ahead.stackptr(ahead2))
 
-      case fb = Operator.match(progress.behind.keypathless, item.measurer, matchee, ahead3)
+      case fb = Operator.match(progress.behind.backpathless, item.measurer, matchee, ahead3)
       in Fb::MatchOne
         envs << fb.env
         next if fb.more
@@ -1838,9 +1838,9 @@ module ::Ww::M1::Operator::Item
     end
 
     ahead1 = Ahead::ItemAdapter.new(progress.ord, matchees, Ahead::Item.stackptr(ahead0))
-    ahead2 = Ahead::Goto.new(progress.behind.keypath?, Ahead.stackptr(ahead1))
+    ahead2 = Ahead::Goto.new(progress.behind.backpath?, Ahead.stackptr(ahead1))
 
-    Operator.match(progress.behind.keypath(&.insert_item(item.default, ord: progress.ord)), item.tail, item.default, ahead2)
+    Operator.match(progress.behind.backpath(&.insert_item(item.default, ord: progress.ord)), item.tail, item.default, ahead2)
   end
 
   def self.many(progress : Progress, item : Many, matchees, ahead0, memo)
@@ -1934,9 +1934,9 @@ module ::Ww::M1::Operator::Item
   end
 
   def self.match(behind0 : Behind, items : Slice(Any), matchees, ahead0)
-    kp0 = behind0.keypath?
+    kp0 = behind0.backpath?
 
-    match(Progress.new(0u32, behind0.keypath(&.update_value(0))), items, matchees, Ahead::Goto.new(kp0, Ahead.stackptr(ahead0)))
+    match(Progress.new(0u32, behind0.backpath(&.update_value(0))), items, matchees, Ahead::Goto.new(kp0, Ahead.stackptr(ahead0)))
   end
 end
 
@@ -4323,7 +4323,7 @@ module ::Ww::M1
   end
 end
 
-module ::Ww::Keypath::Word
+module ::Ww::Backpath::Word
   extend self
 
   alias Any = None | Some
@@ -4335,7 +4335,7 @@ module ::Ww::Keypath::Word
   # "Compound words" are broken down into atomic words.
   alias Compound = UpdateKey | UpdateValue
 
-  # Keypath words that do not have neighbors/successors in the trie (must stand at
+  # Backpath words that do not have neighbors/successors in the trie (must stand at
   # the end of a "sentence").
   alias Terminal = CreateLeaf | Range
 
@@ -4374,7 +4374,7 @@ module ::Ww::Keypath::Word
   # :nodoc:
   SYM_INSERT = Term.of(:insert)
 
-  # Parses a subject term *subject* into an `Atomic` keypath word.
+  # Parses a subject term *subject* into an `Atomic` backpath word.
   #
   # Raises `KeypathError` if that cannot be done.
   def atomic(subject : Term) : Atomic
@@ -4573,303 +4573,6 @@ module ::Ww::M1
     end
   end
 
-  # ~2 weeks:
-  #   TODO: look into optimizing backmaps. Is that possible?
-  #   TODO: refactors, split into files, etc. Done for the most part, although some edge cases
-  #         are inevitably not going to be handled so well. But my rule is -- no test, no pest.
-  #         If (or when?) our users hit edge case bugs with a reproducible example, then we're talking.
-  # --- Sometime
-  # TODO: replay editor tests with multiple cursors
-
-  # Layer-0 transform handles `self` props: applies transform and adds itself
-  # to ctx1 (if requested).
-  # def self.transform0(ctx0, ctx1, bot, applier, node, matchee : Term?)
-  #   return ctx1, matchee unless props = node[:endpoint]?
-  #   return ctx1, matchee unless body = props[:transform]?
-
-  #   ctx1, matchee = applier.call(ctx0, ctx1, bot, props[:env].as_d, matchee, body)
-
-  #   return ctx1, matchee unless aliases = props[:aliases]?
-
-  #   aliases.each_entry do |capture, _|
-  #     ctx1 = ctx1.with(capture, matchee)
-  #   end
-
-  #   {ctx1, matchee}
-  # end
-
-  # # Layer-1 transform handles insertions made in transform0 into the matchee
-  # # (of ranges, slots, etc.)
-  # #
-  # # That is, it serves `plural: true` for values and `(range ...)` labels.
-  # def self.transform1(ctx0, ctx1, bot, applier, node, matchee)
-  #   matchee0 = matchee = matchee.as_d? || return ctx1, matchee
-
-  #   insertions = nil
-
-  #   node.each_entry do |label, successor|
-  #     Term.case(label) do
-  #       matchpi %[self] { }
-  #       matchpi %[endpoint] { }
-
-  #       matchpi %[(residue keys←(_*))] do
-  #         matchee = matchee.transaction do |commit|
-  #           residue0 = matchee &- keys.items
-  #           ctx1, residue1 = transform0(ctx0, ctx1, bot, applier, successor.as_d, Term.of(residue0))
-  #           residue1 &-= keys.items
-  #           residue0.each_entry { |k, _| commit.without(k) }
-  #           residue1.each_entry { |k, v| commit.with(k, v) }
-  #         end
-  #       end
-
-  #       matchpi %[(ephemeral key_)] do
-  #         ctx1, value1 = transform0(ctx0, ctx1, bot, applier, successor.as_d, nil)
-  #         matchee = matchee.with(key, value1)
-  #       end
-
-  #       matchpi %[(ephemeral key_ default_)] do
-  #         ctx1, value1 = transform0(ctx0, ctx1, bot, applier, successor.as_d, default)
-  #         matchee = matchee.with(key, value1)
-  #       end
-
-  #       matchpi %[(value key_)] do
-  #         if ksucc = successor[:self]?
-  #           # One should be able to delete a key-value pair from a backmap with an empty
-  #           # plural **key** transform:
-  #           #
-  #           #   ;; Removes K from dict. Note the semi-necessary alias that prevents
-  #           #   ;; us from erasing without's k arg.
-  #           #   (without (%value K _) K←k_) <> {(K): ()}
-  #           #
-  #           #   ;; With alias:
-  #           #   (without {x: 100, y: 200} x) ;; => (without {y: 200} x)
-  #           #   ;; Without alias:
-  #           #   (without {x: 100, y: 200} x) ;; => (without {y: 200})
-  #           #
-  #           if ksucc[:endpoint, :plural]? && (transform = ksucc[:endpoint, :transform]?) && transform.empty?
-  #             matchee = matchee.without(key)
-  #             next
-  #           end
-
-  #           key0, value0 = key, matchee[key]
-  #           ctx1, key1 = transform0(ctx0, ctx1, bot, applier, ksucc, key0)
-  #           matchee = matchee.without(key0).with(key1, value0)
-  #           key = key1
-  #         end
-
-  #         next unless successor[:endpoint, :transform]?
-
-  #         plural = !!successor[:endpoint, :plural]?
-
-  #         if plural && (b = key.as_n?) && b.in?(matchee.items.bounds)
-  #           value0 = matchee[key]
-
-  #           ctx1, values1 = transform0(ctx0, ctx1, bot, applier, successor.as_d, value0)
-
-  #           insertions ||= [] of {Term::Num, Term::Num, Term::Num, Term::Dict}
-  #           index = insertions.bsearch_index { |(c_b, _, c_ord, _)| {-b, Term[0]} <= {-c_b, -c_ord} }
-  #           index ||= insertions.size
-  #           insertions.insert(index, {b, b + 1, Term[0], values1.as_d? || Term[{values1}]})
-
-  #           next
-  #         end
-
-  #         matchee = matchee.with(key) do |value0|
-  #           unless value0
-  #             raise KeypathError.new
-  #           end
-
-  #           ctx1, value1 = transform0(ctx0, ctx1, bot, applier, successor.as_d, value0)
-
-  #           # One should be able to delete a key-value pair from a backmap with an empty
-  #           # plural **value** transform:
-  #           #
-  #           #   {x: x_, y: y_} <> {(x): ()} ;; Removes `x` pair
-  #           #
-  #           plural && value1.type.dict? && value1.empty? ? nil : value1
-  #         end
-  #       end
-
-  #       matchpi %[(range bt_number et_number (%optional 0 ordt_number))] do
-  #         next unless successor[:endpoint, :transform]?
-
-  #         b = bt.unsafe_as_n
-  #         e = et.unsafe_as_n
-  #         ord = ordt.unsafe_as_n
-
-  #         unless (b...e).subrange_of?(matchee.items.bounds)
-  #           raise KeypathError.new
-  #         end
-
-  #         values0 = matchee.items(b, e)
-  #         ctx1, values1 = transform0(ctx0, ctx1, bot, applier, successor.as_d, Term.of(values0))
-
-  #         # Not sure about this: should in e.g. (%group xs a_ b_ c), `xs` be implicitly plural?
-  #         if successor[:endpoint, :plural]?
-  #           values1 = values1.as_d? || Term[{values1}]
-  #         else
-  #           values1 = Term[{values1}]
-  #         end
-
-  #         insertions ||= [] of {Term::Num, Term::Num, Term::Num, Term::Dict}
-  #         index = insertions.bsearch_index { |(c_b, _, c_ord, _)| {-b, -ord} <= {-c_b, -c_ord} }
-  #         index ||= insertions.size
-  #         insertions.insert(index, {b, e, ord, values1})
-  #       end
-
-  #       matchpi %[(ephemeral bt_number ordt_number value0_)] do
-  #         b = bt.unsafe_as_n
-  #         ord = ordt.unsafe_as_n
-  #         unless b.in?(matchee.items.bounds)
-  #           raise KeypathError.new
-  #         end
-
-  #         ctx1, values1 = transform0(ctx0, ctx1, bot, applier, successor.as_d, value0)
-
-  #         if successor[:endpoint, :plural]?
-  #           values1 = values1.as_d? || Term[{values1}]
-  #         else
-  #           values1 = Term[{values1}]
-  #         end
-
-  #         insertions ||= [] of {Term::Num, Term::Num, Term::Num, Term::Dict}
-  #         index = insertions.bsearch_index { |(c_b, _, c_ord, _)| {-b, -ord} <= {-c_b, -c_ord} }
-  #         index ||= insertions.size
-  #         insertions.insert(index, {b, b, ord, values1})
-  #       end
-
-  #       otherwise { raise ArgumentError.new("#{label}") }
-  #     end
-  #   end
-
-  #   # TODO: "fill in" ranges in insertions, this will allow us to apply all
-  #   # insertions in a single transaction
-  #   if insertions
-  #     insertions.each do |b, e, _, values|
-  #       matchee = matchee.replace(b...e, &.concat(values.items))
-  #     end
-  #   end
-
-  #   {ctx1, Term.of(matchee)}
-  # end
-
-  # def self.transform(ctx0, ctx1, bot, applier, node0 : Term::Dict, layer : UInt32, matchee : Term)
-  #   case layer
-  #   when 0
-  #     ctx1, matchee = transform0(ctx0, ctx1, bot, applier, node0, matchee)
-
-  #     {ctx1, node0, matchee}
-  #   when 1
-  #     ctx1, matchee = transform1(ctx0, ctx1, bot, applier, node0, matchee)
-
-  #     {ctx1, node0, matchee}
-  #   else
-  #     matchee = matchee.as_d? || return ctx1, node0, matchee
-
-  #     node1 = node0
-  #     node0.each_entry do |label0, successor0|
-  #       Term.case(label0) do
-  #         matchpi %[(value key0_)] do
-  #           # Read the key and transform it using the current version of
-  #           # the successor.
-  #           ctx1, successor1, value1 = transform(ctx0, ctx1, bot, applier, successor0.as_d, layer - 1, matchee[key0])
-
-  #           # If there is `self` defined on the successor, this means that
-  #           # the key should be modified as well.
-  #           if ksucc0 = successor1[:self]?
-  #             ctx1, ksucc1, key1 = transform(ctx0, ctx1, bot, applier, ksucc0.as_d, layer - 1, key0)
-  #             matchee = matchee.without(key0).with(key1, value1)
-  #             node1 = node1
-  #               .without(label0)
-  #               .with({:value, key1}, successor1.with(:self, ksucc1))
-  #           else
-  #             matchee = matchee.with(key0, value1)
-  #             node1 = node1.with(label0, successor1)
-  #           end
-  #         end
-
-  #         matchpi %[(ephemeral _ value0_)] do
-  #           ctx1, successor1, value1 = transform(ctx0, ctx1, bot, applier, successor0.as_d, layer - 1, value0)
-  #           label1 = label0.with(2, value1)
-  #           node1 = node1.without(label0).with(label1, successor1)
-  #         end
-
-  #         matchpi %[(ephemeral _number _number value0_)] do
-  #           ctx1, successor1, value1 = transform(ctx0, ctx1, bot, applier, successor0.as_d, layer - 1, value0)
-  #           label1 = label0.with(3, value1)
-  #           node1 = node1.without(label0).with(label1, successor1)
-  #         end
-
-  #         matchpi %[(residue keys←(_*))] do
-  #           matchee = matchee.transaction do |commit|
-  #             residue0 = matchee &- keys.items
-  #             ctx1, successor1, residue1 = transform(ctx0, ctx1, bot, applier, successor0.as_d, layer - 1, Term.of(residue0))
-  #             node1 = node1.with(label0, successor1)
-  #             residue1 &-= keys.items
-  #             residue0.each_entry { |k, _| commit.without(k) }
-  #             residue1.each_entry { |k, v| commit.with(k, v) }
-  #           end
-  #         end
-
-  #         otherwise { }
-  #       end
-  #     end
-
-  #     {ctx1, node1, Term.of(matchee)}
-  #   end
-  # end
-
-  # # Applier must respond to `call(up0 : Term::Dict, up1 : Term::Dict, down : Term::Dict, my : Term::Dict, matchee0 : Term, body : Term) : {up1 : Term::Dict, matchee1 : Term}`
-  # def self.backmap(envs : Enumerable(Term::Dict), backspec : Term, matchee : Term, *, applier = DefaultApplier.new) : Term
-  #   # Collapse all keypaths into a trie. Enhance the trie with metadata. Simultaneously,
-  #   # figure out the depth of the trie by finding the maximum keypath size.
-  #   trie = Term[]
-  #   depth = 0u32
-
-  #   envs.each do |env|
-  #     next unless keypaths = env[:"(keypaths)"]?
-
-  #     env = env.without(:"(keypaths)")
-
-  #     keypaths.each_entry do |capture, keypathset|
-  #       keypathset.each_entry do |keypath, _|
-  #         unless keypath = keypath.as_d?
-  #           raise KeypathError.new
-  #         end
-
-  #         plural = false
-
-  #         if body = backspec[capture]?
-  #           action = AttachMetadata.new(capture, body, env, plural: false)
-  #         elsif body = backspec[{capture}]?
-  #           action = AttachMetadata.new(capture, body, env, plural: true)
-  #         else
-  #           # No body means it's an alias. We only must learn the alias's new value.
-  #           # No overrides, nothing. If both have bodies AND point to the same place
-  #           # the winner will be determined by the hash function.
-  #           action = AttachAlias.new(capture)
-  #         end
-
-  #         trie = Term::Dict.enhance(trie, keypath.items, :endpoint, action: action)
-  #         depth = Math.max(keypath.size.to_u32, depth)
-  #       end
-  #     end
-  #   end
-
-  #   # puts ML.display(trie)
-
-  #   ctx0 = Term[]
-
-  #   (0..depth).reverse_each do |layer|
-  #     upper = reflect(Term[], trie, layer, matchee)
-  #     # pp upper
-  #     lower = ctx0.sub(upper)
-  #     ctx0 |= upper
-  #     ctx0, trie, matchee = transform(ctx0, ctx0, lower, applier, trie, layer, matchee)
-  #   end
-
-  #   matchee
-  # end
   class BackmapTrie
     # NOTE: @env, @body, @captures must only exist on a "tapped" BackmapTrie nodes.
     # NOTE: @neighbors only exist on "fanout" BackmapTrie nodes.
@@ -4877,7 +4580,7 @@ module ::Ww::M1
 
     @env : Term::Dict?
 
-    alias Word = Keypath::Word
+    alias Word = Backpath::Word
 
     def initialize
       @captures = [] of Term
@@ -4888,8 +4591,8 @@ module ::Ww::M1
       @captures.any? { |capture| capture.in?(backspec) || Term.dict(capture).in?(backspec) }
     end
 
-    def mount(keypath : Term::Dict::ItemsView, capture : Term, env : Term::Dict) : Nil
-      unless subject = keypath.first?
+    def mount(backpath : Term::Dict::ItemsView, capture : Term, env : Term::Dict) : Nil
+      unless subject = backpath.first?
         @env = env
         @captures << capture
         return
@@ -4898,15 +4601,15 @@ module ::Ww::M1
       case word = Word.atomic(subject)
       when Word::Pair
         neighbor = @neighbors.put_if_absent(word) { BackmapPair.new }.as(BackmapPair)
-        neighbor.mount(keypath.move(1), capture, env)
+        neighbor.mount(backpath.move(1), capture, env)
       else
         neighbor = @neighbors.put_if_absent(word) { BackmapTrie.new }
-        neighbor.mount(keypath.move(1), capture, env)
+        neighbor.mount(backpath.move(1), capture, env)
       end
     end
 
-    def mount(keypath : Term, capture : Term, env : Term::Dict) : Nil
-      mount(keypath.items, capture, env)
+    def mount(backpath : Term, capture : Term, env : Term::Dict) : Nil
+      mount(backpath.items, capture, env)
     end
 
     def reflect(layer : Int, matchee : Term)
@@ -5169,15 +4872,15 @@ module ::Ww::M1
     @k : BackmapTrie?
     @v : BackmapTrie?
 
-    def mount(keypath : Term::Dict::ItemsView, capture : Term, env : Term::Dict) : Nil
-      case subject = keypath.first?
+    def mount(backpath : Term::Dict::ItemsView, capture : Term, env : Term::Dict) : Nil
+      case subject = backpath.first?
       when Term.of(:key)   then neighbor = @k ||= BackmapTrie.new
       when Term.of(:value) then neighbor = @v ||= BackmapTrie.new
       else
         raise KeypathError.new
       end
 
-      neighbor.mount(keypath.move(1), capture, env)
+      neighbor.mount(backpath.move(1), capture, env)
     end
 
     def reflect(layer : Int, ctx : Term::Dict::Commit, key : Term, value : Term)
@@ -5203,13 +4906,13 @@ module ::Ww::M1
     depth = 0u32
 
     envs.each do |env|
-      next unless keypaths = env[:"(keypaths)"]?
+      next unless backpaths = env[:"(backpaths)"]?
 
-      keypaths.each_entry do |capture, keypathset|
-        keypathset.each_entry do |keypath, _|
-          trie.mount(keypath, capture, env)
+      backpaths.each_entry do |capture, backpathset|
+        backpathset.each_entry do |backpath, _|
+          trie.mount(backpath, capture, env)
 
-          depth = Math.max(keypath.items.count { |x| !x.in?(Term.of(:key), Term.of(:value)) }.to_u32, depth)
+          depth = Math.max(backpath.items.count { |x| !x.in?(Term.of(:key), Term.of(:value)) }.to_u32, depth)
         end
       end
     end
@@ -5237,7 +4940,7 @@ module ::Ww::M1
   end
 
   def self.backmapr(operator : Operator::Any, backspec : Term, matchee : Term, *, env = Term[], **kwargs) : Rewrite::Any
-    case fb = Operator.feedback(env, operator, matchee, keypaths: true)
+    case fb = Operator.feedback(env, operator, matchee, backpaths: true)
     in Operator::Fb::Match
       backmapr(fb.envs, backspec, matchee, **kwargs)
     in Operator::Fb::Mismatch
@@ -5255,7 +4958,7 @@ module ::Ww::M1
   end
 
   # def self.backmap?(operator : Operator::Any, backspec : Term, matchee : Term, *, env = Term[], applier = DefaultApplier.new) : Term?
-  #   case fb = Operator.feedback(env, operator, matchee, keypaths: true)
+  #   case fb = Operator.feedback(env, operator, matchee, backpaths: true)
   #   in Operator::Fb::Match
   #     backmap(fb.envs, backspec, matchee, applier: applier)
   #   in Operator::Fb::Mismatch
@@ -5902,16 +5605,16 @@ struct Pattern
   end
 
   # Returns the response of this pattern to *matchee* (may be positive or negative).
-  def response(matchee : Term, *, env = Term[], keypaths = false) : Pr::Any
+  def response(matchee : Term, *, env = Term[], backpaths = false) : Pr::Any
     fb = nil
 
     # TODO: remove this or somehow make this "official"
     {% if flag?(:profile) %}
-      if keypaths
-        fb = O.feedback(env, @operator, matchee, keypaths: keypaths)
+      if backpaths
+        fb = O.feedback(env, @operator, matchee, backpaths: backpaths)
       else
         took = Time.measure do
-          fb = O.feedback(env, @operator, matchee, keypaths: keypaths)
+          fb = O.feedback(env, @operator, matchee, backpaths: backpaths)
         end
         ca = Profile.rtime[@operator]? || 0.nanoseconds
         hits = Profile.hits[@operator]? || 0
@@ -5920,7 +5623,7 @@ struct Pattern
         Profile.hits[@operator] = hits + 1
       end
     {% else %}
-      fb = O.feedback(env, @operator, matchee, keypaths: keypaths)
+      fb = O.feedback(env, @operator, matchee, backpaths: backpaths)
     {% end %}
 
     fb = fb.not_nil!

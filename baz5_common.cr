@@ -295,8 +295,8 @@ struct ProcRuleset
       end
 
       if backmap = backmap?(pr.pattern.index)
-        unless pr.env.includes?(:"(keypaths)")
-          pr = pr.pattern.response(matchee0, keypaths: true).as(Pr::One)
+        unless pr.env.includes?(:"(backpaths)")
+          pr = pr.pattern.response(matchee0, backpaths: true).as(Pr::One)
         end
         backspec = backmap.call(pr.env)
         matchee1 = M1.backmap(pr.envs, Term.of(backspec), matchee0)

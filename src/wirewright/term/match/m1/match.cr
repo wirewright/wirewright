@@ -50,10 +50,10 @@ module Ww::M1::Operator
       return Fb::Mismatch.new(behind0.env)
     end
 
-    ahead1 = Ahead::Goto.new(behind0.keypath?, Ahead.stackptr(ahead0))
+    ahead1 = Ahead::Goto.new(behind0.backpath?, Ahead.stackptr(ahead0))
     ahead2 = Ahead::Match.new(op.type, Term.of(blank.type.blank), Ahead.stackptr(ahead1))
 
-    match(behind0.keypathless, op.name, Term.of(name), ahead2)
+    match(behind0.backpathless, op.name, Term.of(name), ahead2)
   end
 
   def match(behind0, op : SymNonblank, matchee : Term, ahead0)
@@ -188,7 +188,7 @@ module Ww::M1::Operator
       return Fb::Mismatch.new(behind0.env)
     end
 
-    ahead1 = Ahead::Goto.new(behind0.keypath?, Ahead.stackptr(ahead0))
+    ahead1 = Ahead::Goto.new(behind0.backpath?, Ahead.stackptr(ahead0))
 
     match(behind0.value(key: 0), op.successor, dict[0], ahead1)
   end
@@ -198,7 +198,7 @@ module Ww::M1::Operator
       return Fb::Mismatch.new(behind0.env)
     end
 
-    ahead1 = Ahead::Goto.new(behind0.keypath?, Ahead.stackptr(ahead0))
+    ahead1 = Ahead::Goto.new(behind0.backpath?, Ahead.stackptr(ahead0))
 
     match(behind0.value(key: dict.hi), op.successor, dict[dict.hi], ahead1)
   end
@@ -212,7 +212,7 @@ module Ww::M1::Operator
       return Fb::Mismatch.new(behind0.env)
     end
 
-    ahead1 = Ahead::Goto.new(behind0.keypath?, Ahead.stackptr(ahead0))
+    ahead1 = Ahead::Goto.new(behind0.backpath?, Ahead.stackptr(ahead0))
 
     if op.reverse
       i, j, delta = op.items.size - 1, dict.itemsize - 1, -1i8
@@ -394,7 +394,7 @@ module Ww::M1::Operator
         return Fb::Mismatch.new(behind0.env)
       end
 
-      ahead1 = Ahead::Goto.new(behind0.keypath?, Ahead.stackptr(ahead0))
+      ahead1 = Ahead::Goto.new(behind0.backpath?, Ahead.stackptr(ahead0))
 
       Operator.match(behind0.value(key: op.key), op.value, v, ahead1)
     end
@@ -404,7 +404,7 @@ module Ww::M1::Operator
         return Fb::Mismatch.new(behind0.env)
       end
 
-      ahead1 = Ahead::Goto.new(behind0.keypath?, Ahead.stackptr(ahead0))
+      ahead1 = Ahead::Goto.new(behind0.backpath?, Ahead.stackptr(ahead0))
 
       if value = dict[op.key]?
         behind1 = behind0.value(key: op.key)
@@ -416,7 +416,7 @@ module Ww::M1::Operator
         end
       end
 
-      behind1 = behind0.keypath(&.create_pair(op.key, value: op.default))
+      behind1 = behind0.backpath(&.create_pair(op.key, value: op.default))
 
       Operator.match(behind1, op.value, op.default, ahead1)
     end

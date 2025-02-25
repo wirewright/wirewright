@@ -184,11 +184,11 @@ end
 #   staging0 = staging1.term?
 # end
 
-# pp dfsR(selR(%[rewritee_number], callR { |term| Rewrite.one(term + 1) })).call(RewriterContext.new(Keypath::Appender.new, obs), Rewrite.one(orig))
+# pp dfsR(selR(%[rewritee_number], callR { |term| Rewrite.one(term + 1) })).call(RewriterContext.new(Backpath::Appender.new, obs), Rewrite.one(orig))
 # re = exhR exhR exhR exhR exhR exhR exhR(exhR(exhR(itemsR(selR(%[rewritee_number], callR { |term| Rewrite.one(Term.of(:ready, term + 1)) })))))
 # re = exhR(absR(selR(%[rewritee_number], callR { |term| Rewrite.one(Term.of(term + 1)) })))
 
 # re = dfsR(rulesetR(rs, dfsR(envR), dfsR(backmapr), noR)) # relR(%[200], oneR(Term.of(123)), ascent: 1)
 # re = EDITR
 
-# pp re.call(RewriterContext.new(Random::PCG32.new(rand(UInt64)), Keypath::Appender.new, Term[], obs), Rewrite.one(orig))
+# pp re.call(RewriterContext.new(Random::PCG32.new(rand(UInt64)), Backpath::Appender.new, Term[], obs), Rewrite.one(orig))

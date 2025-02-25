@@ -2,9 +2,10 @@ require "./src/wirewright"
 require "./baz5_common"
 
 alias Rewriter = RewriterContext, Rewrite::Any -> Rewrite::Any
-alias Observer = Keypath::Appender, String, Rewrite::Some ->
+alias Observer = Backpath::Appender, String, Rewrite::Some ->
+alias Tick = ->
 
-record RewriterContext, rng : Random, keypath : Keypath::Appender?, envs = Term[], observer : Observer = (Observer.new { }), exhr = {} of {UInt64, Term} => Rewrite::Any, options = Term[] do
+record RewriterContext, rng : Random, backpath : Backpath::Appender?, envs = Term[], observer : Observer | Tick = (Tick.new {}), exhr = {} of {UInt64, Term} => Rewrite::Any, options = Term[] do
   # If available, returns memoized exhaustive rewrite of *term* for an exhR rewriter
   # with the given *id*.
   #
@@ -15,20 +16,25 @@ record RewriterContext, rng : Random, keypath : Keypath::Appender?, envs = Term[
     @exhr.put_if_absent({id, term}) { yield }
   end
 
-  def keypath(& : Keypath::Appender -> Keypath::Appender)
-    return self unless kp0 = @keypath
+  def backpath(& : Backpath::Appender -> Backpath::Appender)
+    return self unless kp0 = @backpath
 
-    copy_with(keypath: yield kp0)
+    copy_with(backpath: yield kp0)
   end
 
   # Passthrough that notifies the observer (if any) of a *leaf rewrite*: rewrite that
   # does not have a successor.
   #
-  # "The observer" here means some kind of function that reacts to rewrites at keypaths.
+  # "The observer" here means some kind of function that reacts to rewrites at backpaths.
   # See `observer`.
   def observable(leaf : Rewrite::Any, &explanation : -> String) : Rewrite::Any
     if leaf.is_a?(Rewrite::Some)
-      @keypath.try { |keypath| @observer.call(keypath, yield, leaf) }
+      case observer = @observer
+      in Observer
+        @backpath.try { |backpath| observer.call(backpath, yield, leaf) }
+      in Tick
+        observer.call
+      end
     end
 
     leaf
@@ -132,11 +138,11 @@ def itemsR(ctx0, term, successor) : Rewrite::Any
 
   dict1 = dict0.transaction do |commit|
     # We **must** call successor in proper order due to observers which are only
-    # capable of doing one keypath-insert at a time.
+    # capable of doing one backpath-insert at a time.
     (0...dict0.itemsize).reverse_each do |index|
       item = dict0[index]
 
-      ctx1 = ctx0.keypath &.update_value(index)
+      ctx1 = ctx0.backpath &.update_value(index)
 
       case rewrite = successor.call(ctx1, Rewrite.one(item))
       in Rewrite::None
@@ -178,7 +184,7 @@ def pairsR(ctx0, term, successor) : Rewrite::Any
 
   dict1 = dict0.transaction do |commit|
     dict0.pairspart.each_entry do |key, value0|
-      ctx1 = ctx0.keypath &.update_value(key)
+      ctx1 = ctx0.backpath &.update_value(key)
 
       case rewrite = successor.call(ctx1, Rewrite.one(value0))
       in Rewrite::None
@@ -268,7 +274,7 @@ end
 
 # :nodoc:
 def entryR1(ctx0, dict, key, value, successor)
-  ctx1 = ctx0.keypath &.update_value(key)
+  ctx1 = ctx0.backpath &.update_value(key)
 
   case rewrite = successor.call(ctx1, Rewrite.one(value))
   in Rewrite::None
@@ -570,7 +576,7 @@ module Relr
 
     dict1 = dict0.transaction do |commit|
       each_entry_keypath_friendly(dict0) do |key, value|
-        ctx1 = ctx0.keypath &.update_value(key)
+        ctx1 = ctx0.backpath &.update_value(key)
 
         case response = relr(ctx1, bottom, value, ascent, env, successor)
         in None
@@ -717,7 +723,7 @@ struct RewriteApplier
   end
 
   def apply(up, down, my, body)
-    subctx = @ctx.copy_with(keypath: nil, envs: @ctx.envs.append(Term["$up": up, "$down": down, "$my": my]))
+    subctx = @ctx.copy_with(backpath: nil, envs: @ctx.envs.append(Term["$up": up, "$down": down, "$my": my]))
     rewrite = @rewriter.call(subctx, Rewrite.one(body))
     rewrite.as?(Rewrite::Some) || Rewrite.one(body)
   end
@@ -759,12 +765,12 @@ def ruleR(ctx0, term, rule : Rule::Template, pr : Pr::Many, templr, backmapr)
 end
 
 def ruleR(ctx, term, rule : Rule::BackmapOne, pr : Pr::Pos, templr, backmapr)
-  # Keeping track of keypaths is expensive, so we do pattern matching without
-  # keypaths; when we're sure we need keypaths we re-match with keypaths: true.
+  # Keeping track of backpaths is expensive, so we do pattern matching without
+  # backpaths; when we're sure we need backpaths we re-match with backpaths: true.
   #
   # TODO: we should probably use .probe? for this in the pattern set.
-  unless pr.envs.all? &.includes?(:"(keypaths)")
-    pr = pr.pattern.response(term, keypaths: true).as(Pr::Pos)
+  unless pr.envs.all? &.includes?(:"(backpaths)")
+    pr = pr.pattern.response(term, backpaths: true).as(Pr::Pos)
   end
 
   rewrite = M1.backmapr(pr.envs, rule.backspec, term, applier: RewriteApplier.new(ctx, backmapr))
@@ -776,8 +782,8 @@ end
 
 def ruleR(ctx, term, rule : Rule::BackmapMany, pr : Pr::Pos, templr, backmapr)
   # TODO: we should probably use .probe? for this in the pattern set.
-  unless pr.envs.all? &.includes?(:"(keypaths)")
-    pr = pr.pattern.response(term, keypaths: true).as(Pr::Pos)
+  unless pr.envs.all? &.includes?(:"(backpaths)")
+    pr = pr.pattern.response(term, backpaths: true).as(Pr::Pos)
   end
 
   case pr
@@ -1025,8 +1031,8 @@ def preview1(term, cursor : Term::Dict::ItemsView, leaf : Rewrite::Some)
   end
 end
 
-def preview1(term, keypath : Term::Dict, leaf)
-  preview1(term, keypath.items, leaf)
+def preview1(term, backpath : Term::Dict, leaf)
+  preview1(term, backpath.items, leaf)
 end
 
 REWRITE_SEEDER      = Random::PCG32.new
@@ -1035,7 +1041,7 @@ REWRITE_SEEDER_LOCK = Mutex.new
 def rewrite0(term : Term, rewriter : Rewriter, **options) : Rewrite::Any
   seed = REWRITE_SEEDER_LOCK.synchronize { REWRITE_SEEDER.rand(UInt64) }
   rng = Random::PCG32.new(seed)
-  ctx = RewriterContext.new(rng, keypath: nil, options: Term[options])
+  ctx = RewriterContext.new(rng, backpath: nil, options: Term[options])
   rewriter.call(ctx, Rewrite.one(term))
 end
 
@@ -1044,12 +1050,19 @@ def rewrite(term : Term, rewriter : Rewriter, **options) : Term
   rewrite.term? || term
 end
 
-# TODO: make it possible to provide observer but NOT do the whole slow keypath thing.
-# Observer that doesn't observe, that is; a way to terminate rewriting.
-def rewrite(term : Term, rewriter : Rewriter, **options, &observer : Observer) : Term
+def rewrite(term : Term, rewriter : Rewriter, observer : Observer, **options) : Term
   seed = REWRITE_SEEDER_LOCK.synchronize { REWRITE_SEEDER.rand(UInt64) }
   rng = Random::PCG32.new(seed)
-  ctx = RewriterContext.new(rng, keypath: Keypath::Appender.new, observer: observer, options: Term[options])
+  ctx = RewriterContext.new(rng, backpath: Backpath::Appender.new, observer: observer, options: Term[options])
+
+  rewrite = rewriter.call(ctx, Rewrite.one(term))
+  rewrite.term? || term
+end
+
+def rewrite(term : Term, rewriter : Rewriter, observer : Tick, **options) : Term
+  seed = REWRITE_SEEDER_LOCK.synchronize { REWRITE_SEEDER.rand(UInt64) }
+  rng = Random::PCG32.new(seed)
+  ctx = RewriterContext.new(rng, backpath: nil, observer: observer, options: Term[options])
 
   rewrite = rewriter.call(ctx, Rewrite.one(term))
   rewrite.term? || term

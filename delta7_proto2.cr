@@ -1382,12 +1382,14 @@ module Nitrene
       @mt.spawn do
         # sleep 3.seconds
 
-        result = rewrite(program, JOB_REWRITER, env: env) do
+        tick = -> do
           running = @running.get(:acquire)
           unless job.in?(running)
             raise JobInterrupted.new
           end
         end
+
+        result = rewrite(program, JOB_REWRITER, tick, env: env)
 
         completed0 = @completed.get(:acquire)
         while true
