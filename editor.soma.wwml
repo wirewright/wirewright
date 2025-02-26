@@ -145,6 +145,13 @@
 (["" | "" (M←(key C-backspace) _*) @EDGE_] _*) <> {M: (unnest-parent)}
 (_* ["" | "" (M←(key C-delete) _*) @EDGE_]) <> {M: (unnest-parent)}
 
+;; NOTE: we require a shift to make the removal more deliberate; it is very easy to
+;; overshoot with C-backspace/delete.
+(["" | "" (M←(key C-S-backspace) _*) @EDGE_] ¦ (%not ()))
+  <> {M: (replace-parent-with-self)}
+(["" | "" (M←(key C-S-delete) _*) @EDGE_] ¦ (%not ()))
+  <> {M: (replace-parent-with-self)}
+
 ;; C-backspace while editing at toplevel or in toplevel dict in pairs
 ;; should delete the key and move the value out.
 (_* ¦ (%entry _ [[_string | _string (M←(key C-backspace) _*) @EDGE_] _*]))
@@ -324,6 +331,9 @@ P←⟨C←[_string | _string (M←(nest-parent-back) _*) @EDGE_]⟩
 
 P←⟨[_string | _string (M←(unnest-parent) _*) @EDGE_]⟩
   <> {(M): (), (P): ↑P}
+
+P←⟨C←[_string | _string (M←(replace-parent-with-self) _*) @EDGE_]⟩
+  <> {(M): (), P: ↑C}
 
 ;; (edit), (edit-behind), and (edit-ahead)
 C←["" | "" ((m←edit [_* ⏏target]) _*) @EDGE_]

@@ -57,17 +57,19 @@ def debug(root0, motions)
     gets
 
     staging0 = dbgroot
-    dbgroot = rewrite(dbgroot, EDITR) do |kp, explanation, rewrite|
+    obs = Observer.new do |kp, explanation, rewrite|
       puts "- Rewrite ------"
       puts "#{explanation}"
 
-      staging1 = preview1(staging0, kp.keypath, rewrite)
+      staging1 = preview1(staging0, kp.backpath, rewrite)
       puts ML.display(staging0)
       puts "->"
       puts ML.display(staging1.term?)
       staging0 = staging1.term?
       gets
     end
+
+    dbgroot = rewrite(dbgroot, EDITR, obs)
   end
 
   puts ML.display(dbgroot)
