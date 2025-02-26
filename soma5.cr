@@ -354,7 +354,7 @@ module FontManager
   def self.path?(font : String, weight : Int32) : Path?
     return unless postfix = WEIGHTS[weight]?
 
-    Path[__DIR__] / "fonts" / "#{font.delete(' ')}-#{postfix}.otf"
+    Path["fonts"] / "#{font.delete(' ')}-#{postfix}.otf"
   end
 
   @@cache = {} of Path => SF::Font

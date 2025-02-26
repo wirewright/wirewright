@@ -11,7 +11,7 @@ module Colors
 
   # Parse and initialize the colors table on boot.
   @@lock.synchronize do
-    colors = ML.terms File.read("#{__DIR__}/colors.wwml")
+    colors = ML.terms File.read("colors.wwml")
     colors.each_entry do |color, spec|
       Term.case(spec) do
         matchpi %{(oklch l←(%number 0 <= _ <= 1) c←(%number 0 <= _ <= 1) h←(%number 0 <= _ <= 360))} do

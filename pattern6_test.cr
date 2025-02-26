@@ -3,11 +3,11 @@ require "./baz5_editor"
 require "./delta7_proto2"
 
 CASES  = [
-  File.read("#{__DIR__}/patterns.test.wwml"),
-  File.read("#{__DIR__}/editor.test.wwml"),
-  File.read("#{__DIR__}/delta7.test.wwml"),
+  File.read("patterns.test.wwml"),
+  File.read("editor.test.wwml"),
+  File.read("delta7.test.wwml"),
 ].join("\n")
-PEOPLE = Term.of(JSON.parse(File.read("#{__DIR__}/data/people.json")))
+PEOPLE = Term.of(JSON.parse(File.read("data/people.json")))
 
 class Statistics
   getter ncases : Int32
