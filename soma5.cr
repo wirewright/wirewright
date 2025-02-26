@@ -258,40 +258,6 @@ def measure(string : String, font : String, weight : Int32, character_size) : {I
 end
 
 primitives = ProcRuleset.build do
-  rulepi1 %[(+ ns_number+)] { ns.items.reduce { |a, b| a + b } }
-  rulepi1 %[(- ns_number+)] { ns.items.reduce { |a, b| a - b } }
-  rulepi1 %[(* a_number b_number)] { a * b }
-  rulepi1 %[(/ a_number (%all b_number (%not 0)))] { a / b }
-  rulepi1 %[(// a_number (%all b_number (%not 0)))] { a // b }
-
-  rulepi1 %[(> a_number b_number)] do
-    a.unsafe_as_n > b.unsafe_as_n
-  end
-
-  # Flattens itemspart of *xs*, its items and so on, recursively.
-  rulepi1 %[(flatten xs_)] do
-    Term::Dict.build do |commit|
-      Term.each_keypath_and_item(xs) do |_, leaf|
-        commit << leaf
-
-        true # Continue
-      end
-    end
-  end
-
-  rulepi1 %[(tally xs_dict)] do
-    xs.unsafe_as_d.size
-  end
-
-  rulepi1 %[(sum ())] { 0 }
-  rulepi1 %[(sum (ns_number+))] { ns.items.reduce { |a, b| a.unsafe_as_n + b.unsafe_as_n } }
-
-  rulepi1 %[(min ns_number+)] { ns.items.min_by(&.unsafe_as_n) }
-  rulepi1 %[(min (ns_number+))] { ns.items.min_by(&.unsafe_as_n) }
-
-  rulepi1 %[(max ns_number+)] { ns.items.max_by(&.unsafe_as_n) }
-  rulepi1 %[(max (ns_number+))] { ns.items.max_by(&.unsafe_as_n) }
-
   # rulepi %[(measure text_string limit: (w←(%number +i32) h←(%number +i32)))] do
   #   wrapped = wrap(text.to(String), w.to(Int32), h.to(Int32))
   #   wrapped_w = wrapped.each_line(chomp: true).max_of(&.size)
@@ -319,10 +285,12 @@ refR = dfsR(
   )
 )
 
+onceR = choiceR(callR(primitives), callR(PRIMITIVES))
+
 evalR = dfsR(
   switchR(
-    { %[($ rewritee_)], exhR(dfsR(callR(primitives))) },
-    { %[($once rewritee_)], callR(primitives) },
+    { %[($ rewritee_)], exhR(dfsR(onceR)) },
+    { %[($once rewritee_)], onceR },
   )
 )
 
