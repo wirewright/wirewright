@@ -742,7 +742,7 @@ module Ww
     end
 
     def rightmost(n : Int)
-      return self unless 0 < n < itemsize
+      return self unless 0 <= n <= itemsize
 
       Term::Dict.build do |commit|
         (itemsize - n...itemsize).each do |index|

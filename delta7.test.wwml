@@ -264,6 +264,13 @@
    (changes @count to @counts~)
    (log @counts~ in (5 4 3 2 1) limit: 5)))
 
+(d7
+  ((log @xs in () limit: 1)
+   (event (pulse @xs 100))
+   (delay 1 (event (pulse @xs 200)))
+   (delay 2 (event (pulse @xs 300))))
+  ((log @xs in (300) limit: 1)))
+
 ;; Log to cell limit
 (d7
   ((cell () @log)
