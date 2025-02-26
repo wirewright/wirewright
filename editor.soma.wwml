@@ -255,6 +255,18 @@ C←[lhs←";" | rhs←"" (M←(input ";") _*) @EDGE_]
 [lhs_string c←(| "") _string (M←(input ch←(%any "(" ")")) _*) @EDGE_]
   <> {(M): (), lhs: ($once (~ →lhs →ch)), c: |}
 
+;; Alias for C-backspace/delete.
+[_string c←(| "c") _string (M←(key backspace) _*) @EDGE_]
+  <> {M: (key C-backspace), c: |}
+[_string c←(| "c") _string (M←(key delete) _*) @EDGE_]
+  <> {M: (key C-delete), c: |}
+
+;; Alias for C-S-backspace/delete.
+[_string c←(| "C") _string (M←(key backspace) _*) @EDGE_]
+  <> {M: (key C-S-backspace), c: |}
+[_string c←(| "C") _string (M←(key delete) _*) @EDGE_]
+  <> {M: (key C-S-delete), c: |}
+
 ;; Switch to motion input mode
 [_string (| "" ¦ _ -motion_) _string (M←(key enter) _*) @EDGE_]
   <> {(M): (), motion: true}

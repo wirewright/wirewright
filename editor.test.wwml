@@ -812,8 +812,8 @@
     (button
      "+ Increment"
      @actions
-     style: "text-xl"
-     xyzzy: (+ 1 2 ("" | "" () @user)))
+     xyzzy: (+ 1 2 ("" | "" () @user))
+     style: "text-xl")
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))))
  (after
@@ -823,8 +823,8 @@
      "+ Increment"
      @actions
      ("" | "" () @user)
-     style: "text-xl"
-     xyzzy: (+ 1 2))
+     xyzzy: (+ 1 2)
+     style: "text-xl")
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))))
  (after
@@ -833,8 +833,8 @@
     (button
      "+ Increment"
      @actions
-     style: "text-xl"
-     xyzzy: (+ 1 2 ("" | "" () @user)))
+     xyzzy: (+ 1 2 ("" | "" () @user))
+     style: "text-xl")
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))))
  (after
@@ -844,8 +844,8 @@
      "+ Increment"
      @actions
      ("" | "" () @user)
-     style: "text-xl"
-     xyzzy: (+ 1 2))
+     xyzzy: (+ 1 2)
+     style: "text-xl")
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))))
  (after
@@ -862,9 +862,9 @@
      "+ Increment"
      @actions
      ("" | "" () @user)
+     xyzzy: (+ 1 2)
      qux: @fooze
-     style: "text-xl"
-     xyzzy: (+ 1 2))
+     style: "text-xl")
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))))
  (after
@@ -879,9 +879,9 @@
      "+ Increment"
      @actions
      ("" | "" () @user)
+     xyzzy: (+ 1 2)
      qux: @fooze
-     style: "text-xs"
-     xyzzy: (+ 1 2))
+     style: "text-xs")
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))))
  (after
@@ -892,8 +892,8 @@
      @actions
      style
      ("" | "\"text-xs\"" () @user)
-     qux: @fooze
-     xyzzy: (+ 1 2))
+     xyzzy: (+ 1 2)
+     qux: @fooze)
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))))
  (after
@@ -905,8 +905,8 @@
      style
      ("" | "" () @user)
      "text-xs"
-     qux: @fooze
-     xyzzy: (+ 1 2))
+     xyzzy: (+ 1 2)
+     qux: @fooze)
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))))
  (after
@@ -916,9 +916,9 @@
      "+ Increment"
      @actions
      ("" | "" () @user)
+     xyzzy: (+ 1 2)
      qux: @fooze
-     style: "text-xs"
-     xyzzy: (+ 1 2))
+     style: "text-xs")
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))))
  (after
@@ -928,8 +928,8 @@
      "+ Increment"
      @actions
      ("" | "\"text-xs\"" () @user)
-     qux: @fooze
-     xyzzy: (+ 1 2))
+     xyzzy: (+ 1 2)
+     qux: @fooze)
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))))
  (after
@@ -943,9 +943,9 @@
      "+ Increment"
      @actions
      ("" | "" () @user)
+     xyzzy: (+ 1 2)
      qux: @fooze
-     style: "text-xs"
-     xyzzy: (+ 1 2))
+     style: "text-xs")
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))))
  (after
@@ -954,9 +954,9 @@
     (button
      "+ Increment"
      @actions
+     xyzzy: (("" | "" () @user) + 1 2)
      qux: @fooze
-     style: "text-xs"
-     xyzzy: (("" | "" () @user) + 1 2))
+     style: "text-xs")
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))))
  (after
@@ -982,9 +982,9 @@
     (button
      "+ Increment"
      @actions
+     xyzzy: (("" | "" () @user) + 1 2)
      qux: @fooze
-     style: "text-xs"
-     xyzzy: (("" | "" () @user) + 1 2))
+     style: "text-xs")
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))))
  (after
@@ -1364,6 +1364,69 @@
    (input "100")
    (key tab)
    (key C-S-delete))
+  (("" | "" () @user)
+   (row
+    (button
+     "+ Increment"
+     @actions
+     qux: (+ 1 2)
+     style: "text-xs")
+    (button "- Decrement" @actions style: "text-lg")
+    (button "0 Reset" @actions style: "text-sm"))))
+ (after
+  ((input "(")
+   (input "hello")
+   (key escape)
+   (input "c")
+   (key backspace)
+   (input "\"")
+   (input "World")
+   (key home)
+   (key right)
+   (key escape)
+   (input "c")
+   (key delete))
+  ((("\"" | "" () @user))
+   (row
+    (button
+     "+ Increment"
+     @actions
+     qux: (+ 1 2)
+     style: "text-xs")
+    (button "- Decrement" @actions style: "text-lg")
+    (button "0 Reset" @actions style: "text-sm"))))
+ (after
+  ((key C-backspace)
+   (input "foo")
+   (input ":")
+   (input "100")
+   (key tab)
+   (key escape)
+   (input "c")
+   (key backspace)
+   (input "C")
+   (key backspace)
+   (key escape)
+   (input "C")
+   (key backspace))
+  (("" | "" () @user)
+   (row
+    (button
+     "+ Increment"
+     @actions
+     qux: (+ 1 2)
+     style: "text-xs")
+    (button "- Decrement" @actions style: "text-lg")
+    (button "0 Reset" @actions style: "text-sm"))))
+ (after
+  ((input "(")
+   (input "foo")
+   (input ":")
+   (input "100")
+   (key tab)
+   (key escape)
+   (input "C")
+   (key delete))
   (("" | "" () @user)
    (row
     (button
