@@ -616,6 +616,26 @@ module Relr
   end
 end
 
+module RelrEnv
+  extend self
+
+  alias Any = Literal | Option
+
+  record Literal, dict : Term::Dict
+  record Option, key : Term
+
+  def resolve(ctx, env : Literal) : Term::Dict
+    env.dict
+  end
+
+  def resolve(ctx, env : Option) : Term::Dict
+    return Term[] unless candidate = ctx.options[env.key]?
+    return Term[] unless dict = candidate.as_d?
+
+    dict
+  end
+end
+
 # Relative rewriter. Performs relative rewriting of a term using *successor*,
 # with a *bottom* pattern that determines a stopping point and an *ascent* that
 # controls backjumping.
@@ -640,16 +660,16 @@ end
 # `absR` to backjump to.
 #
 # NOTE: partially written by ChatGPT because I'm terrible at explaining things.
-def relR(bottom : M1::Operator::Any, successor : Rewriter, *, ascent : Int32 = 0, envopt : Term? = nil) : Rewriter
+def relR(bottom : M1::Operator::Any, successor : Rewriter, *, ascent : Int32 = 0, env : RelrEnv::Any = RelrEnv::Literal.new(Term[])) : Rewriter
   if ascent.negative?
     raise ArgumentError.new("ascent must be positive or 0")
   end
 
   Rewriter.new do |ctx, staging|
-    env = envopt.try { |key| ctx.options[key]? }.try(&.as_d?) || Term[]
+    env_dict = RelrEnv.resolve(ctx, env)
 
     staging.reduce do |term|
-      case response = Relr.relr(ctx, bottom, term, ascent, env, successor)
+      case response = Relr.relr(ctx, bottom, term, ascent, env_dict, successor)
       in Relr::None   then Rewrite.none
       in Relr::Ready  then response.rewrite
       in Relr::Ascend then successor.call(ctx, Rewrite.one(term))

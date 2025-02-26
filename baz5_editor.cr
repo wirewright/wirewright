@@ -125,7 +125,7 @@ def editR : Rewriter
     absR(rulesetR(editor_ruleset, dfsR(envR), backmapR, noR, envopt: Term.of(:env))),
   )
 
-  exhR(relR(CURSORPE, multiphaseR, ascent: 3, envopt: Term.of(:env)))
+  exhR(relR(CURSORPE, multiphaseR, ascent: 3, env: RelrEnv::Option.new(Term.of(:env))))
 end
 
 EDITR = editR
