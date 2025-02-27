@@ -35,7 +35,7 @@ macro defrecord(cls, *typedecls, inherit = false, &)
   end
 end
 
-macro defcase(cls, *typedecls, inherit = false, &)
+macro defcase(cls, *typedecls, inherit = false, equality = true, &)
   {% header = "".id %}
   {% if inherit && @type.module? %}
     {% header = "include #{@type.id}".id %}
@@ -79,7 +79,9 @@ macro defcase(cls, *typedecls, inherit = false, &)
 
     {{yield}}
 
-    def_equals_and_hash {{typedecls.map { |typedecl| "@#{typedecl.var}".id }.splat}}
+    {% if equality %}
+      def_equals_and_hash {{typedecls.map { |typedecl| "@#{typedecl.var}".id }.splat}}
+    {% end %}
   end
 end
 
