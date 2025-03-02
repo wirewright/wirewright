@@ -479,7 +479,7 @@ struct Utrie
   end
 
   def mount(strand : Enumerable(Ubase::Any), fresh) : {Vertex, Bool}
-    mount(strand, &.itself)
+    mount(strand, fresh, &.itself)
   end
 
   # NOTE: the caller guarantees that *base* was mounted with *pred* before.
@@ -994,7 +994,7 @@ class Tbase
     # Returns a Tspace-unique id of this sensor, that was obtained from
     # a monotonically increasing source.
     abstract def id : Vertex
-    abstract def branch : Term
+    abstract def strands : Slice(Slice(Ubase::Any))
   end
 
   module Appearance
@@ -1040,8 +1040,8 @@ class Tbase
 
     conj = Deque(Vertex).new
 
-    strands(subject.branch) do |strand|
-      strand_vertex, added = utrie.mount(strand.items, @fresh) { |base| Ubase.parse(base) }
+    subject.strands.each do |strand|
+      strand_vertex, added = utrie.mount(strand, @fresh)
       if added
         @strands.add(strand_vertex)
       end
@@ -1076,8 +1076,8 @@ class Tbase
 
     conj = Deque(Vertex).new
 
-    strands(subject.branch) do |strand|
-      strand_vertex, removed = utrie.unmount(strand.items) { |base| Ubase.parse(base) }
+    subject.strands.each do |strand|
+      strand_vertex, removed = utrie.unmount(strand)
       if removed
         @strands.delete(strand_vertex)
       end
@@ -1162,8 +1162,8 @@ class Tbase
 
     sets = [] of Set(Vertex)
 
-    strands(subject.branch) do |strand|
-      next unless edge = ttrie.query?(strand.items.map { |base| Ubase.parse(base) })
+    subject.strands.each do |strand|
+      next unless edge = ttrie.query?(strand)
 
       hits = Set(Vertex).new
       sets << hits
@@ -1236,14 +1236,20 @@ end
 # normp = M1.normal(pattern)
 # skeleton = Skeleton.pattern(normp)
 
-record Sensor, id : Vertex, branch : Term do
+record Sensor, id : Vertex, strands : Slice(Slice(Ubase::Any)) do
   include Tbase::Sensor
 
   def self.parse(id : Vertex, pattern : Term)
     normp = M1.normal(pattern, dict_literals_allowed: false)
     skeleton = Skeleton.pattern(normp)
 
-    new(id, skeleton)
+    strands = [] of Slice(Ubase::Any)
+
+    strands(skeleton) do |strand|
+      strands << strand.items.to_readonly_slice { |base| Ubase.parse(base) }
+    end
+
+    new(id, strands.to_readonly_slice(&.itself))
   end
 
   def self.parse(id : Vertex, ml : String)
