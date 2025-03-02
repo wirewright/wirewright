@@ -447,15 +447,16 @@ module ExtrinsicSet(T)
   abstract def delete(object : T)
 end
 
-alias Vertex = UInt32
+alias Label = UInt64
+alias Refcount = UInt32
 
-VERTEX_NONE = Vertex.new(0)
+VERTEX_NONE = Label.new(0)
 VERTEX_ROOT = VERTEX_NONE + 1
 VERTEX_ZERO = VERTEX_ROOT + 1
 
 struct Utrie
-  record Node, pred : Vertex, base : Ubase::Any
-  record Props, refcount : UInt32, successor : Vertex do
+  record Node, pred : Label, base : Ubase::Any
+  record Props, refcount : Refcount, successor : Label do
     def incref : Props
       copy_with(refcount: refcount + 1)
     end
@@ -468,13 +469,13 @@ struct Utrie
   def initialize(@storage : ExtrinsicMap(Node, Props))
   end
 
-  def mount(pred : Vertex, base : Ubase::Any, fresh) : {Vertex, Bool}
+  def mount(pred : Label, base : Ubase::Any, fresh) : {Label, Bool}
     props = @storage.ref(Node.new(pred, base)) { Props.new(0u32, fresh.call) }
 
     {props.successor, props.refcount == 1}
   end
 
-  def mount(strand : Enumerable(T), fresh, & : T -> Ubase::Any) : {Vertex, Bool} forall T
+  def mount(strand : Enumerable(T), fresh, & : T -> Ubase::Any) : {Label, Bool} forall T
     added = false
     vertex = strand.reduce(VERTEX_ROOT) do |pred, base|
       # After the first added = true, all remaining mounts will also be
@@ -486,18 +487,18 @@ struct Utrie
     {vertex, added}
   end
 
-  def mount(strand : Enumerable(Ubase::Any), fresh) : {Vertex, Bool}
+  def mount(strand : Enumerable(Ubase::Any), fresh) : {Label, Bool}
     mount(strand, fresh, &.itself)
   end
 
   # NOTE: the caller guarantees that *base* was mounted with *pred* before.
-  def unmount(pred : Vertex, base : Ubase::Any) : {Vertex, Bool}
+  def unmount(pred : Label, base : Ubase::Any) : {Label, Bool}
     props = @storage.unref(Node.new(pred, base))
 
     {props.successor, props.refcount.zero?}
   end
 
-  def unmount(strand : Enumerable(T), & : T -> Ubase::Any) : {Vertex, Bool} forall T
+  def unmount(strand : Enumerable(T), & : T -> Ubase::Any) : {Label, Bool} forall T
     removed0 = false
     vertex = strand.reduce(VERTEX_ROOT) do |pred, base|
       succ, removed = unmount(pred, yield base)
@@ -510,17 +511,17 @@ struct Utrie
     {vertex, removed0}
   end
 
-  def unmount(strand : Enumerable(Ubase::Any)) : {Vertex, Bool}
+  def unmount(strand : Enumerable(Ubase::Any)) : {Label, Bool}
     unmount(strand, &.itself)
   end
 
-  private def successor?(node : Node) : Vertex?
+  private def successor?(node : Node) : Label?
     props = @storage.get?(node)
     props ? props.successor : nil
   end
 
   {% for type, base in {Term::Num => Ubase::IsNum, Term::Str => Ubase::IsStr, Term::Sym => Ubase::IsSym, Term::Boolean => Ubase::IsBool} %}
-    private def query(pred : Vertex, term : {{type}}, sink : Vertex ->) : Nil
+    private def query(pred : Label, term : {{type}}, sink : Label ->) : Nil
       return unless successor0 = successor?(Node.new(pred, {{base}}.new))
 
       sink.call(successor0)
@@ -533,7 +534,7 @@ struct Utrie
 
   # NOTE: dictionaries must be normalized into IsDict - At(), even literal ones.
   # We do not handle Literal(dict).
-  private def query(pred : Vertex, term : Term::Dict, sink : Vertex ->) : Nil
+  private def query(pred : Label, term : Term::Dict, sink : Label ->) : Nil
     return unless successor0 = successor?(Node.new(pred, Ubase::IsDict.new))
 
     sink.call(successor0)
@@ -547,18 +548,18 @@ struct Utrie
     end
   end
 
-  private def query(term : Term, sink : Vertex ->) : Nil
+  private def query(term : Term, sink : Label ->) : Nil
     query(VERTEX_ROOT, term.downcast, sink)
   end
 
-  def query(term : Term, &sink : Vertex ->) : Nil
+  def query(term : Term, &sink : Label ->) : Nil
     query(term, sink)
   end
 end
 
 struct Xgraph
-  record Node, a : Vertex, b : Vertex
-  record Props, refcount : UInt32, successor : Vertex do
+  record Node, a : Label, b : Label
+  record Props, refcount : Refcount, successor : Label do
     def incref : Props
       copy_with(refcount: refcount + 1)
     end
@@ -577,7 +578,7 @@ struct Xgraph
   #
   # NOTE: *xrule* must be pre-sorted ascending. You lose ownership of *xrule*
   # by passing it to this method.
-  def mount(xrule : Deque(Vertex), fresh)
+  def mount(xrule : Deque(Label), fresh)
     if xrule.empty?
       raise ArgumentError.new
     end
@@ -603,7 +604,7 @@ struct Xgraph
   # by passing it to this method.
   #
   # WARNING: the caller guarantees that *xrule* was mounted.
-  def unmount(xrule : Deque(Vertex)) : Vertex
+  def unmount(xrule : Deque(Label)) : Label
     if xrule.empty?
       raise ArgumentError.new
     end
@@ -621,7 +622,7 @@ struct Xgraph
   end
 
   # :nodoc:
-  def conjs(vertices : Deque(Vertex), sink : Vertex ->)
+  def conjs(vertices : Deque(Label), sink : Label ->)
     while a = vertices.shift?
       sink.call(a)
 
@@ -638,14 +639,14 @@ struct Xgraph
   #
   # NOTE: *vertices* must be pre-sorted ascending. You lose ownership of *vertices*
   # by passing it to this method.
-  def conjs(vertices : Deque(Vertex), &sink : Vertex ->)
+  def conjs(vertices : Deque(Label), &sink : Label ->)
     conjs(vertices, sink)
   end
 end
 
 struct Ttrie
-  record Node, pred : Vertex, base : Ubase::Any
-  record Props, refcount : UInt32, successor : Vertex do
+  record Node, pred : Label, base : Ubase::Any
+  record Props, refcount : Refcount, successor : Label do
     def incref : Props
       copy_with(refcount: refcount + 1)
     end
@@ -658,13 +659,13 @@ struct Ttrie
   def initialize(@data : ExtrinsicMap(Node, Props))
   end
 
-  def mount(pred : Vertex, base : Ubase::Any, fresh) : Vertex
+  def mount(pred : Label, base : Ubase::Any, fresh) : Label
     props = @data.ref(Node.new(pred, base)) { Props.new(0u32, fresh.call) }
     props.successor
   end
 
   # NOTE: the caller guarantees that *base* was mounted with *pred* before.
-  def unmount(pred : Vertex, base : Ubase::Any) : Vertex
+  def unmount(pred : Label, base : Ubase::Any) : Label
     props = @data.unref(Node.new(pred, base))
     props.successor
   end
@@ -672,7 +673,7 @@ struct Ttrie
   # Mounts *strand*.
   #
   # Returns the new *fresh* vertex.
-  def mount(strand : Enumerable(Term), endpoint : Vertex, fresh) : Slice(Vertex)
+  def mount(strand : Enumerable(Term), endpoint : Label, fresh) : Slice(Label)
     tip = nil
 
     path = [VERTEX_ROOT]
@@ -698,7 +699,7 @@ struct Ttrie
   # Unmounts *strand*.
   #
   # Returns the path to its endpoint.
-  def unmount(strand : Enumerable(Term), endpoint : Vertex) : Slice(Vertex)
+  def unmount(strand : Enumerable(Term), endpoint : Label) : Slice(Label)
     tip = nil
 
     path = [VERTEX_ROOT]
@@ -722,7 +723,7 @@ struct Ttrie
   end
 
   # Calls *fn* with the set of endpoints at the end of *strand*.
-  def query?(strand : Enumerable(Ubase::Any)) : {Vertex, Vertex}?
+  def query?(strand : Enumerable(Ubase::Any)) : {Label, Label}?
     pred0 = VERTEX_ROOT
     pred1 = VERTEX_ROOT
 
@@ -740,21 +741,23 @@ end
 
 struct Etrace
   alias Key = Node | SuccessorCount | SuccessorList | Successor
-  alias Value = Props | UInt32 | Presence
+  alias Value = Props | Count | Ref | Presence
 
-  record Node, pred : Vertex, vertex : Vertex
-  record Props, refcount : UInt32, oid : UInt32
+  record Node, pred : Label, vertex : Label
+  record Props, refcount : Refcount, oid : Label
 
-  record SuccessorCount, oid : UInt32
-  record SuccessorList, oid : UInt32, index : UInt32
+  record SuccessorCount, oid : Label
+  record SuccessorList, oid : Label, index : Label
 
-  record Successor, oid : UInt32, vertex : Vertex
+  record Successor, oid : Label, vertex : Label
   record Presence
+  record Count, value : Refcount
+  record Ref, vertex : Label
 
   def initialize(@data : ExtrinsicMap(Key, Value))
   end
 
-  def mount(path : Slice(Vertex), fresh)
+  def mount(path : Slice(Label), fresh)
     if path.size < 2
       raise ArgumentError.new
     end
@@ -786,16 +789,17 @@ struct Etrace
 
       @data.transaction(successor) { Presence.new }
 
+      # TODO: @data.ref
       _, count1 = @data.transaction(SuccessorCount.new(oid)) do |count0|
-        count0 = count0.as(UInt32?)
-        count0 ? count0 + 1 : 1u32
+        count0 = count0.as(Count?)
+        count0 ? count0.copy_with(value: count0.value + 1) : Count.new(1u32)
       end
 
-      @data.transaction(SuccessorList.new(oid, count1 - 1)) { w }
+      @data.transaction(SuccessorList.new(oid, count1.value - 1)) { Ref.new(w) }
     end
   end
 
-  def unmount(path : Slice(Vertex))
+  def unmount(path : Slice(Label))
     if path.size < 2
       raise ArgumentError.new
     end
@@ -822,17 +826,17 @@ struct Etrace
     oids.each do |oid|
       # Successor list may not necessarily exist for endpoint vertices.
       # Deletion may fail, and we're fine with that.
-      next unless count = @data.delete?(SuccessorCount.new(oid)).as(UInt32?)
+      next unless count = @data.delete?(SuccessorCount.new(oid)).as(Count?)
 
-      (0u32...count).each do |index|
-        successor = @data.delete(SuccessorList.new(oid, index)).as(UInt32)
+      (0u32...count.value).each do |index|
+        successor = @data.delete(SuccessorList.new(oid, index)).as(Ref)
 
-        @data.delete(Successor.new(oid, successor))
+        @data.delete(Successor.new(oid, successor.vertex))
       end
     end
   end
 
-  def walk(u : Vertex, v : Vertex, &fn : Vertex ->)
+  def walk(u : Label, v : Label, &fn : Label ->)
     fn.call(v)
 
     return unless props = @data.get?(Node.new(u, v)).as(Props?)
@@ -841,14 +845,14 @@ struct Etrace
     # be in the process of being deleted. So at any point where we're reading
     # from the map, we must handle the absence-case, even if it seems like it
     # is impossible.
-    return unless count = @data.get?(SuccessorCount.new(props.oid)).as(UInt32?)
+    return unless count = @data.get?(SuccessorCount.new(props.oid)).as(Count?)
 
-    (0u32...count).each do |index|
+    (0u32...count.value).each do |index|
       # We're fine with gaps. They could happen under some successor count
       # increment + successor list insert orderings. We're bounded anyway.
-      next unless w = @data.get?(SuccessorList.new(props.oid, index)).as(UInt32?)
+      next unless w = @data.get?(SuccessorList.new(props.oid, index)).as(Ref?)
 
-      walk(v, w, &fn)
+      walk(v, w.vertex, &fn)
     end
   end
 end
@@ -987,44 +991,139 @@ class AtomicSet(T)
   end
 end
 
-class Tbase
-  class VertexGenerator
-    def initialize
-      @counter = Atomic(Vertex).new(VERTEX_ZERO)
-    end
+class LockMap(K, V)
+  include ExtrinsicMap(K, V)
 
-    def call : Vertex
-      @counter.add(1, :relaxed)
+  def initialize
+    @map = {} of K => V
+    @lock = Mutex.new
+  end
+
+  def get?(key : K) : V?
+    @lock.synchronize { @map[key]? }
+  end
+
+  def transaction(key : K, & : V? -> T) : {V?, T} forall T
+    @lock.synchronize do
+      value0 = @map[key]?
+      value1 = yield value0
+
+      case {value0, value1}
+      in {nil, nil}
+        raise KeyError.new("value absent and not set during transaction: invalid state")
+      in {V, nil}
+        @map.delete(key)
+      in {nil, V}, {V, V}
+        @map[key] = value1
+      end
+
+      {value0, value1}
     end
   end
 
+  def delete(key : K) : V
+    delete?(key) || raise KeyError.new
+  end
+
+  def delete?(key : K) : V?
+    @lock.synchronize do
+      @map.delete(key)
+    end
+  end
+
+  def assign(key : K, value : V)
+    @lock.synchronize do
+      @map[key] = value
+    end
+  end
+
+  # Increments the refcount of *key* in a single, atomic transaction,
+  # creating the pair using the block, if necessary.
+  #
+  # `V` instances must respond to `incref`.
+  def ref(key : K, & : -> V) : V
+    @lock.synchronize do
+      value0 = @map[key]? || yield
+      value1 = value0.incref
+      @map[key] = value1
+    end
+  end
+
+  # Decrements the refcount of *key* in a single, atomic transaction,
+  # creating the pair using the block, if necessary.
+  #
+  # `V` instances must respond to `decref?`.
+  def unref(key : K) : V
+    @lock.synchronize do
+      value0 = @map[key]?
+      value1, zero = value0.decref?
+      if zero
+        @map.delete(key)
+      else
+        @map[key] = value1
+      end
+      value1
+    end
+  end
+end
+
+class BucketizedLockMap(K, V, N)
+  include ExtrinsicMap(K, V)
+
+  def initialize
+    @buckets = StaticArray(LockMap(K, V), N).new { LockMap(K, V).new }
+  end
+
+  private def bucket(key : K)
+    @buckets.unsafe_fetch(key.hash % N)
+  end
+
+  def transaction(key : K, &)
+    bucket(key).transaction(key) { |v| yield v }
+  end
+
+  def get?(key : K) : V?
+    bucket(key).get?(key)
+  end
+
+  def ref(key : K, & : -> V)
+    bucket(key).ref(key) { yield }
+  end
+
+  def unref(key : K) : V
+    bucket(key).unref(key)
+  end
+end
+
+class Tbase
   module Sensor
     # Returns a Tspace-unique id of this sensor, that was obtained from
     # a monotonically increasing source.
-    abstract def id : Vertex
+    abstract def id : Label
     abstract def strands : Slice(Slice(Ubase::Any))
   end
 
   module Appearance
     # Returns a Tspace-unique id of this appearance, that was obtained from
     # a monotonically increasing source.
-    abstract def id : Vertex
+    abstract def id : Label
     abstract def value : Term
   end
 
-  def initialize
-    @fresh = VertexGenerator.new
+  def initialize(@fresh : LabelGenerator)
+    # TODO: bundle these into a single map, take that map as an input ExtrinsicMap!
 
     @udata = AtomicMap(Utrie::Node, Utrie::Props).new
     @xdata = AtomicMap(Xgraph::Node, Xgraph::Props).new
     @tdata = AtomicMap(Ttrie::Node, Ttrie::Props).new
     @edata = AtomicMap(Etrace::Key, Etrace::Value).new
 
-    @strands = AtomicSet(Vertex).new
+    @strands = AtomicSet(Label).new
 
-    @sensor_encode = AtomicMap(Vertex, Vertex).new
-    @sensor_decode = AtomicMap(Vertex, Vertex).new
-    @appearances = AtomicSet(Vertex).new
+    @sensor_encode = AtomicMap(Label, Label).new
+    # FIXME: flatten
+    @sensor_decode = AtomicMap(Label, Pf::Set(Label)).new
+    @appearances = AtomicSet(Label).new
   end
 
   # Adds a sensor *subject* to this Tbase. The instant this method returns,
@@ -1046,7 +1145,7 @@ class Tbase
     utrie = Utrie.new(@udata)
     xgraph = Xgraph.new(@xdata)
 
-    conj = Deque(Vertex).new
+    conj = Deque(Label).new
 
     subject.strands.each do |strand|
       strand_vertex, added = utrie.mount(strand, @fresh)
@@ -1061,11 +1160,14 @@ class Tbase
 
     # "Publish" the sensor.
     #
-    # NOTE: decode assignment MUST be done last because it's the indication
-    # of commitment. After the decode assignment is in place, the sensor becomes
+    # NOTE: decode assignment MUST be done last because it serves as THE indication
+    # of commitment. After the decode transaction finishes, the sensor becomes
     # reachable via querying.
     @sensor_encode.assign(subject.id, conjv)
-    @sensor_decode.assign(conjv, subject.id)
+    @sensor_decode.transaction(conjv) do |bucket0|
+      bucket0 ||= Pf::Set(Label).new
+      bucket0.add(subject.id)
+    end
   end
 
   # Deletes a sensor *subject* from this Tbase.
@@ -1077,12 +1179,19 @@ class Tbase
 
     # "Unpublish" the sensor. We will need to know its conjunction vertex
     # first though.
-    @sensor_decode.delete(conjv)
+    @sensor_decode.transaction(conjv) do |bucket0|
+      bucket0 = bucket0 || raise KeyError.new
+      bucket1 = bucket0.delete(subject.id)
+      if bucket0.same?(bucket1)
+        raise KeyError.new
+      end
+      bucket1.empty? ? nil : bucket1
+    end
 
     utrie = Utrie.new(@udata)
     xgraph = Xgraph.new(@xdata)
 
-    conj = Deque(Vertex).new
+    conj = Deque(Label).new
 
     subject.strands.each do |strand|
       strand_vertex, removed = utrie.unmount(strand)
@@ -1153,8 +1262,10 @@ class Tbase
     end
   end
 
-  # Calls *fn* with appearance subject ids that the *subject* sensor matches,
-  # that are older than *subject* (that existed before *subject* was created).
+  # Calls *fn* with appearance subject ids that the *subject* sensor matches.
+  #
+  # If *only_preds* is set to `true`, emits only subject ids that are older
+  # than *subject* (that existed before *subject* was created).
   #
   # NOTE: the caller guarantees the following:
   #
@@ -1164,16 +1275,16 @@ class Tbase
   # - that it considers appearance subject ids given to *fn* immediately outdated.
   #   The caller must ensure that all actions taken upon them first check (or only
   #   proceed provided) the existence of the corresponding appearance.
-  def predecessors(subject : Sensor, &fn : Vertex ->) : Nil
+  def query(subject : Sensor, *, only_preds = true, &fn : Label ->) : Nil
     ttrie = Ttrie.new(@tdata)
     etrace = Etrace.new(@edata)
 
-    sets = [] of Set(Vertex)
+    sets = [] of Set(Label)
 
     subject.strands.each do |strand|
       next unless edge = ttrie.query?(strand)
 
-      hits = Set(Vertex).new
+      hits = Set(Label).new
       sets << hits
 
       # NOTE: This walk is done asynchronously -- etrace is not driven by
@@ -1181,10 +1292,7 @@ class Tbase
       etrace.walk(*edge) do |candidate|
         # Ensure candidate is a fuly added appearance.
         next unless candidate.in?(@appearances)
-
-        # Candidate must have been created before subject for subject to
-        # see it.
-        next unless candidate <= subject.id
+        next if only_preds && subject.id <= candidate
 
         hits << candidate
       end
@@ -1200,8 +1308,10 @@ class Tbase
     end
   end
 
-  # Calls *fn* with appearance subject ids that the *subject* sensor matches,
-  # that are older than *subject* (that existed before *subject* was created).
+  # Calls *fn* with sensor subject ids that the *subject* sensor matches.
+  #
+  # If *only_preds* is set to `true`, emits only subject ids that are older
+  # than *subject* (that existed before *subject* was created).
   #
   # NOTE: the caller guarantees the following:
   #
@@ -1211,11 +1321,11 @@ class Tbase
   # - that it considers sensor subject ids given to *fn* immediately outdated.
   #   The caller must ensure that all actions taken upon them first check (or only
   #   proceed provided) the existence of the corresponding sensor.
-  def predecessors(subject : Appearance, &fn : Vertex ->) : Nil
+  def query(subject : Appearance, *, only_preds = true, &fn : Label ->) : Nil
     utrie = Utrie.new(@udata)
     xgraph = Xgraph.new(@xdata)
 
-    hits = Deque(Vertex).new
+    hits = Deque(Label).new
 
     utrie.query(subject.value) do |hit|
       # Ensure the vertex hit is a fully added strand.
@@ -1229,14 +1339,283 @@ class Tbase
     xgraph.conjs(hits) do |candidate|
       # Ensure the vertex hit is a fully added sensor whose subject
       # id we know.
-      next unless candidate_subject_id = @sensor_decode.get?(candidate)
+      next unless bucket = @sensor_decode.get?(candidate)
 
-      # Candidate must have been created before subject for subject to
-      # see it.
-      next unless candidate_subject_id <= subject.id
+      bucket.each do |candidate_subject_id|
+        next if only_preds && subject.id <= candidate_subject_id
 
-      fn.call(candidate_subject_id)
+        fn.call(candidate_subject_id)
+      end
     end
+  end
+end
+
+class Tspace
+  def initialize(@fresh : LabelGenerator, @tbase : Tbase)
+    @senders = AtomicMap(Label, {Label, Label, Term?, Term}).new
+    @receivers = AtomicMap(Label, {Label, Term?, (Activation ->)}).new
+  end
+
+  def bind(outbox, subject : Sensor, identity identity0 : Label, selector selector0 : Term?, callback : Activation ->)
+    @receivers.assign(subject.id, {identity0, selector0, callback})
+
+    @tbase.mount(subject)
+    @tbase.query(subject) do |pred|
+      next unless sender = @senders.get?(pred)
+
+      trigger, identity1, selector1, value = sender
+
+      next unless selector0 == selector1
+
+      outbox << {subject.id, callback.partial(StimulusPresence.new(identity0, trigger, identity1, VERTEX_NONE, pred, value))}
+    end
+
+    outbox
+  end
+
+  def unbind(subject : Sensor)
+    @receivers.delete(subject.id)
+    @tbase.unmount(subject)
+  end
+
+  def bind(outbox, prev_subject_id, subject : Appearance, trigger : Label, identity : Label, selector selector0 : Term?)
+    @senders.assign(subject.id, {trigger, identity, selector0, subject.value})
+
+    @tbase.mount(subject)
+    @tbase.query(subject) do |pred|
+      next unless receiver = @receivers.get?(pred)
+
+      sensor, selector1, callback = receiver
+
+      next unless selector0 == selector1
+
+      outbox << {pred, callback.partial(StimulusPresence.new(sensor, trigger, identity, prev_subject_id, subject.id, subject.value))}
+    end
+
+    outbox
+  end
+
+  def unbind(subject : Appearance)
+    @senders.delete(subject.id)
+    @tbase.unmount(subject)
+  end
+
+  def depart(outbox, subject : Appearance, message : Term?, selector selector0 : Term?, trigger : Label, identity : Label)
+    @tbase.query(subject, only_preds: false) do |pred|
+      next unless receiver = @receivers.get?(pred)
+
+      sensor, selector1, callback = receiver
+
+      next unless selector0 == selector1
+
+      outbox << {pred, callback.partial(StimulusAbsence.new(sensor, trigger, identity, subject.id, message))}
+    end
+
+    outbox
+  end
+end
+
+# NOTE: If instant = `VERTEX_NONE`, this means *value* is the corresponding
+# appearance's tombstone.
+alias Activation = StimulusPresence | StimulusAbsence
+
+record StimulusPresence, sensor : Label, trigger : Label, identity : Label, pred : Label, instant : Label, value : Term
+
+# NOTE: in `StimulusDeparture`, the *farewell* term does not necessarily
+# match the receiver sensor's pattern. They are given for reference. If the receiver
+# can handle it, they should. Otherwise they may handle the absence itself.
+record StimulusAbsence, sensor : Label, trigger : Label, identity : Label, instant : Label, farewell : Term?
+
+alias Strand = Slice(Ubase::Any)
+alias StrandList = Slice(Strand)
+alias BranchList = Slice(StrandList)
+
+class Tconn
+  alias SurfaceData = SensorData | AppearanceData
+
+  record SensorData, identity : Label, instant : Label, pattern : StrandList, selector : Term?
+  record AppearanceData, identity : Label, instant : Label, value : Term, selector : Term?, tombstone : Term?
+
+  record SensorMemberData, instant : Label, pattern : StrandList
+  record SensorGroupData, identity : Label, members : Slice(SensorMemberData), selector : Term?
+
+  def initialize(@fresh : LabelGenerator, @tspace : Tspace, @callback : Activation ->)
+    @conid = @fresh.call
+
+    @sensors = {} of Label => SensorGroupData
+    @appearances = {} of Label => AppearanceData
+  end
+
+  def initialize(fresh, tspace, &callback : Activation ->)
+    initialize(fresh, tspace, callback)
+  end
+
+  private def summon(outbox, surface : SensorData)
+    @tspace.bind(outbox,
+      subject: Sensor.new(surface.instant, surface.pattern),
+      selector: surface.selector,
+      identity: surface.identity,
+      callback: @callback,
+    )
+  end
+
+  private def summon(outbox, data : SensorGroupData)
+    data.members.each do |member|
+      summon(outbox, SensorData.new(data.identity, member.instant, member.pattern, data.selector))
+    end
+  end
+
+  private def dismiss(data : SensorData)
+    @tspace.unbind(Sensor.new(data.instant, data.pattern))
+  end
+
+  private def dismiss(data : SensorGroupData)
+    data.members.each do |member|
+      dismiss(SensorData.new(data.identity, member.instant, member.pattern, data.selector))
+    end
+  end
+
+  private def summon(outbox, prev_subject_id, data : AppearanceData)
+    @tspace.bind(outbox,
+      prev_subject_id: prev_subject_id,
+      subject: Appearance.new(data.instant, data.value),
+      selector: data.selector,
+      trigger: @conid,
+      identity: data.identity,
+    )
+  end
+
+  private def dismiss(outbox, data : AppearanceData)
+    subject = Appearance.new(data.instant, data.value)
+
+    @tspace.unbind(subject)
+    @tspace.depart(outbox,
+      subject: subject,
+      message: data.tombstone,
+      selector: data.selector,
+      trigger: @conid,
+      identity: data.identity,
+    )
+  end
+
+  private def changes?(data : AppearanceData, value : Term, selector : Term?, tombstone : Term?)
+    {data.value, data.selector, data.tombstone} != {value, selector, tombstone}
+  end
+
+  private def changes?(data : SensorGroupData, pattern : BranchList, selector : Term?)
+    return true unless data.members.size == pattern.size
+    return true unless data.selector == selector
+
+    # - Members in data and branches in pattern are unordered.
+    # - Most often when this code is reached, both will have size=1.
+    pattern.all? do |branch|
+      data.members.any? { |member| member.pattern == branch }
+    end
+  end
+
+  # :nodoc:
+  #
+  # Replaces the surface at *identity* with a sensor group matching the given
+  # *pattern* branch list.
+  def sensor(identity : Label, *, pattern : BranchList, selector : Term?) : Nil
+    outbox = [] of {Label, ->}
+
+    if surface0 = @appearances[identity]?
+      dismiss(outbox, surface0)
+    elsif surface0 = @sensors[identity]?
+      return unless changes?(surface0, pattern, selector)
+
+      dismiss(surface0)
+    end
+
+    members = pattern.to_readonly_slice do |branch|
+      SensorMemberData.new(@fresh.call, branch)
+    end
+
+    surface1 = SensorGroupData.new(identity, members, selector)
+
+    @sensors[identity] = surface1
+
+    summon(outbox, surface1)
+
+    # Implicit assumptions:
+    #   - We never notify the same vertex more than one time in summon() nor dismiss().
+    #   - Crystal hash tables are ordered.
+    outbox.to_h.each { |_, act| act.call }
+  end
+
+  def sensor(identity : Label, *, pattern : Term, selector : Term?) : Nil
+    skeleton = pipe(pattern, M1.normal, Skeleton.pattern)
+
+    strands = [] of Strand
+    branches = [] of StrandList
+
+    branches(skeleton) do |branch|
+      strands(branch) do |strand|
+        strands << strand.items.to_readonly_slice { |base| Ubase.parse(base) }
+      end
+      branches << strands.to_readonly_slice(&.itself)
+      strands.clear
+    end
+
+    # Arrays may over-allocate so we make an additional copy with to_readonly_slice
+    # to possibly free the over-allocation.
+    sensor(identity, pattern: branches.to_readonly_slice(&.itself), selector: selector)
+  end
+
+  def appearance(identity : Label, *, value : Term, selector : Term?, tombstone : Term?) : Nil
+    outbox = [] of {Label, ->}
+
+    if surface0 = @sensors[identity]?
+      dismiss(surface0)
+    elsif surface0 = @appearances[identity]?
+      return unless changes?(surface0, value, selector, tombstone)
+
+      prev_subject_id = surface0.instant
+
+      dismiss(outbox, surface0)
+    end
+
+    surface1 = AppearanceData.new(identity, @fresh.call, value, selector, tombstone)
+
+    @appearances[identity] = surface1
+
+    summon(outbox, prev_subject_id || VERTEX_NONE, surface1)
+
+    # Implicit assumptions:
+    #   - We never notify the same vertex more than one time in summon() nor dismiss().
+    #   - Crystal hash tables are ordered.
+    outbox.to_h.each { |_, act| act.call }
+  end
+
+  def delete(identity : Label) : Nil
+    if data = @sensors.delete(identity)
+      dismiss(data)
+      return
+    end
+
+    unless data = @appearances.delete(identity)
+      raise ArgumentError.new
+    end
+
+    outbox = [] of {Label, ->}
+
+    dismiss(outbox, data)
+
+    # Implicit assumptions:
+    #   - We never notify the same vertex more than one time in summon() nor dismiss().
+    #   - Crystal hash tables are ordered.
+    outbox.to_h.each { |_, act| act.call }
+  end
+end
+
+class LabelGenerator
+  def initialize
+    @counter = Atomic(Label).new(VERTEX_ZERO)
+  end
+
+  def call : Label
+    @counter.add(1, :relaxed)
   end
 end
 
@@ -1244,12 +1623,12 @@ end
 # normp = M1.normal(pattern)
 # skeleton = Skeleton.pattern(normp)
 
-record Sensor, id : Vertex, strands : Slice(Slice(Ubase::Any)) do
+record Sensor, id : Label, strands : Slice(Slice(Ubase::Any)) do
   include Tbase::Sensor
 
   # TODO: remove, here we have improper (and cannot have proper) handling of branches!!!!
   # Parsing should be done at a higher (sensor group) level!!!
-  def self.parse(id : Vertex, pattern : Term)
+  def self.parse(id : Label, pattern : Term)
     normp = M1.normal(pattern)
     skeleton = Skeleton.pattern(normp)
 
@@ -1262,19 +1641,119 @@ record Sensor, id : Vertex, strands : Slice(Slice(Ubase::Any)) do
     new(id, strands.to_readonly_slice(&.itself))
   end
 
-  def self.parse(id : Vertex, ml : String)
+  def self.parse(id : Label, ml : String)
     parse(id, ML.term(ml))
   end
 end
 
-record Appearance, id : Vertex, value : Term do
+record Appearance, id : Label, value : Term do
   include Tbase::Appearance
 end
 
 # TODO: remember to test: %any of dicts, %literal dict!!!!
 
-tbase = Tbase.new
+fresh = LabelGenerator.new
+tbase = Tbase.new(fresh)
+tspace = Tspace.new(fresh, tbase)
 
+view = Term[]
+
+# TODO: in reality, the callback is potentially called from another thread,
+# a sleepy queue is needed instead of doing things right away.
+#
+# TODO: in reality we will send activations, not views. It is upto the client
+# to merge them into view / handle farewells / cleanup absent appearances.
+#
+# TODO: in reality, the sensor at client will have to match the full pattern.
+# act only provides pattern skeleton matches, whereas client sensors may be
+# much more tighter & include match envs.
+#
+# FIXME: in reality, sensors may contain %any°, which matches multiple appearances
+# simultaneously. We have to handle this somehow. Possibly by making view values
+# be lists of values rather than single values. This can be handled by labeling
+# StimulusPresence with pred=<instant>, and removing it in view.morph. Similarly
+# StimulusAbsence will have to get labeled like that and will have to be triggered
+# on sensor group members.
+conn = Tconn.new(fresh, tspace) do |act|
+  case act
+  in StimulusPresence
+    if act.pred != VERTEX_NONE
+      view = view.morph({ {act.trigger, act.identity}, act.pred, nil})
+    end
+
+    view = view.morph({ {act.trigger, act.identity}, act.instant, act.value})
+  in StimulusAbsence
+    view = view.morph({ {act.trigger, act.identity}, nil})
+  end
+  pp view
+end
+
+conn.appearance 1, value: ML.term(%{1}), selector: nil, tombstone: Term.of("bye bye")
+conn.sensor 0, pattern: ML.term(%{_number}), selector: nil
+conn.sensor 3, pattern: ML.term(%{(%any° _number "bye bye")}), selector: nil
+conn.sensor 2, pattern: ML.term(%{(%any 2 4 6 8 9)}), selector: Term.of(:qux)
+1000.times do |i|
+  if i == 300
+    conn.sensor 4, pattern: ML.term(%{_number}), selector: Term.of(:qux)
+  elsif i == 500
+    conn.delete 4
+  elsif i == 900
+    conn.sensor 4, pattern: ML.term(%{_number}), selector: Term.of(:qux)
+  end
+  conn.appearance 1, value: Term.of(i), selector: Term.of(:qux), tombstone: nil
+end
+conn.delete 1
+
+{% skip_file %}
+
+# ctx = ExecutionContext::MultiThreaded.new("MT", 4)
+
+# counter = Atomic(Int32).new(0)
+
+# # Note how each client has some parts overlapping with others (type: "pixel")
+# # over which we have contention-by-content (irresolvable). On the other hand
+# # the Xs and Ys are all independent.
+# client = ->(ord : Int32) do
+#   (10*ord...10*(ord + 1)).each do |i|
+#     (10*ord...10*(ord + 1)).each do |j|
+#       app = Appearance.new(fresh.call, Term.of(type: "pixel", x: i, y: j, ord: ord))
+#       tbase.mount(app)
+#       sleep 100.milliseconds
+#     end
+#   end
+
+#   counter.add(1)
+# end
+
+# 1000.times do |i|
+#   ctx.spawn { client.call(i) }
+# end
+
+# ctx.spawn do
+#   start = Time.monotonic
+
+#   until counter.get == 1000
+#     puts counter.get
+#     puts "-- in #{(Time.monotonic - start).seconds}s"
+#     sleep 500.milliseconds
+#   end
+
+#   puts "All 1000 done!"
+# end
+
+# puts "Here"
+
+# while input = gets
+#   s = Sensor.parse(fresh.call, ML.term(input))
+#   dt = Time.measure do
+#     tbase.query(s) do |hit|
+#       puts "Hit: #{hit}!"
+#     end
+#   end
+#   puts "Took ~#{dt.total_milliseconds}ms"
+# end
+
+# {% skip_file %}
 s0 = Sensor.parse(5000, %[{x: _, y: _}])
 s1 = Sensor.parse(1001, %[{x: 100}])
 s2 = Sensor.parse(1000, %[{y: _}])
@@ -1296,57 +1775,57 @@ tbase.mount(s2)
 puts "Population: 1234 1235 1236 1237"
 
 puts "Query #{s0}"
-tbase.predecessors(s0) { |hit| pp hit }
+tbase.query(s0) { |hit| pp hit }
 puts "Query #{s1}"
-tbase.predecessors(s1) { |hit| pp hit }
+tbase.query(s1) { |hit| pp hit }
 puts "Query #{s2}"
-tbase.predecessors(s2) { |hit| pp hit }
+tbase.query(s2) { |hit| pp hit }
 
 puts "Query #{a0}"
-tbase.predecessors(a0) { |hit| pp hit }
+tbase.query(a0) { |hit| pp hit }
 puts "Query #{a1}"
-tbase.predecessors(a1) { |hit| pp hit }
+tbase.query(a1) { |hit| pp hit }
 puts "Query #{a2}"
-tbase.predecessors(a2) { |hit| pp hit }
+tbase.query(a2) { |hit| pp hit }
 puts "Query #{a3}"
-tbase.predecessors(a3) { |hit| pp hit }
+tbase.query(a3) { |hit| pp hit }
 
 tbase.unmount(a0)
 
 puts "Population: 1235 1236 1237"
-tbase.predecessors(s0) do |hit|
+tbase.query(s0) do |hit|
   pp hit
 end
 
 tbase.unmount(a3)
 
 puts "Population: 1235 1236"
-tbase.predecessors(s0) do |hit|
+tbase.query(s0) do |hit|
   pp hit
 end
 
 tbase.unmount(a2)
 
 puts "Population: 1235"
-tbase.predecessors(s0) do |hit|
+tbase.query(s0) do |hit|
   pp hit
 end
 
 tbase.unmount(a1)
 
 puts "Population: "
-tbase.predecessors(s0) do |hit|
+tbase.query(s0) do |hit|
   pp hit
 end
 
 puts "Query #{a0} without s1"
 tbase.unmount(s1)
-tbase.predecessors(a0) do |hit|
+tbase.query(a0) do |hit|
   pp hit
 end
 
 puts "Query #{a0} without s2"
 tbase.unmount(s2)
-tbase.predecessors(a0) do |hit|
+tbase.query(a0) do |hit|
   pp hit
 end
