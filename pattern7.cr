@@ -2040,7 +2040,8 @@ module ::Ww::M1
       blank.type.blank
     end
 
-    record Context, dict_literals_allowed = true
+    # Context for `Normal` calls. Left for future use.
+    record Context
 
     # Returns the normal form of an item sequence *node*.
     def item(ctx : Context, node : Term) : Term
@@ -2186,7 +2187,7 @@ module ::Ww::M1
 
     # Returns the normal form of a dictionary term *dict*.
     def dict(ctx : Context, dict : Term::Dict) : Term
-      if ctx.dict_literals_allowed && literal?(dict)
+      if literal?(dict)
         return Term.of(:"%literal", dict)
       end
 
@@ -2990,6 +2991,22 @@ module ::Ww::M1
   # mistakes at their level of reasoning.
   def self.normal(pattern : Term, **kwargs) : Term
     Normal.pattern(Normal::Context.new(**kwargs), pattern)
+  end
+
+  def self.normal_escaped(pattern : Term, **kwargs) : Term
+    Term.of_case(pattern) do
+      matchpi %{_dict}  do
+        side = Term::Dict.build do |commit|
+          pattern.each_entry do |key, value|
+            commit.with(key, {:"%entry/required", normal_escaped(value)})
+          end
+        end
+
+        {:"%layer", Term[], side}
+      end
+
+      otherwise { {:"%literal", pattern} }
+    end
   end
 
   def self.bounds(normp : Term) : {Magnitude, Magnitude}

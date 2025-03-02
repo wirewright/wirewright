@@ -191,6 +191,10 @@ module Skeleton
 
   # Returns the skeleton of *entries*.
   def entries(entries : Term::Dict) : Term
+    if entries.empty?
+      return Term.of({:"%dict"})
+    end
+
     ahead = ->(prefix : Term::Dict) { all2(prefix) }
 
     entries(Term.dict(:"%all"), 0, entries, ahead)
@@ -205,6 +209,8 @@ module Skeleton
       matchpi %{%'(%number _)} { normp }
       matchpi %{(%'%boolean)} { normp }
       matchpi %{(%'%dict)} { normp }
+
+      matchpi %{(%'%literal x_dict)} { pattern(M1.normal_escaped(x)) }
       matchpi %{(%'%literal _)}  { normp }
 
       matchpi %{(%'%let _ successor_)} do
@@ -219,15 +225,18 @@ module Skeleton
         all2(Term.of(:"%all", pattern(itemspart), pattern(pairspart)))
       end
 
-      # In pattern skeleton, all layers are always open. So we cannot handle
-      # literal belows.
-      matchpi %{(%'%layer (%'%literal _dict) side_dict)} do
-        entries(side.unsafe_as_d)
-      end
+      # In pattern skeleton, all layers are always open. So we cannot make
+      # literal belows closed. However we still account them during matching
+      # for precision.
+      begin
+        # Do not emit useless %dict checks for below.
+        matchpi %{(%'%layer (%'%literal ()) side_dict)} do
+          entries(side.unsafe_as_d)
+        end
 
-      # If it is a pattern we use %all.
-      matchpi %{(%'%layer below_ side_dict)} do
-        all2(Term.of(:"%all", pattern(below), entries(side.unsafe_as_d)))
+        matchpi %{(%'%layer below_ side_dict)} do
+          all2(Term.of(:"%all", pattern(below), entries(side.unsafe_as_d)))
+        end
       end
 
       matchpi %{(%'%any/source successors_+)} do
@@ -245,7 +254,7 @@ module Skeleton
           commit << :"%any/source"
 
           options.each_item_unordered do |item|
-            commit << {:"%literal", item}
+            commit << pattern(M1.normal_escaped(item))
           end
         end
       end
@@ -338,10 +347,9 @@ private def strands(prefix : Term::Dict, branch : Term, sink) : Nil
   Term.case(branch) do
     matchpi %{(%'%pass)} { sink.call(prefix) }
 
-    matchpi %{%'(%number _)} { sink.call(prefix.append(branch)) }
-    matchpi %{%'(%string)} { sink.call(prefix.append(branch)) }
-    matchpi %{%'(%symbol)} { sink.call(prefix.append(branch)) }
-    matchpi %{%'(%boolean)} { sink.call(prefix.append(branch)) }
+    matchpi %{%'(%number _)}, %{%'(%string)}, %{%'(%symbol)}, %{%'(%boolean)}, %{%'(%dict)} do
+      sink.call(prefix.append(branch))
+    end
 
     matchpi %{(%'%literal _number)} do
       sink.call(prefix.append(M1::Normal::NORMAL_BLANK_NUMBER).append(branch))
@@ -1239,8 +1247,10 @@ end
 record Sensor, id : Vertex, strands : Slice(Slice(Ubase::Any)) do
   include Tbase::Sensor
 
+  # TODO: remove, here we have improper (and cannot have proper) handling of branches!!!!
+  # Parsing should be done at a higher (sensor group) level!!!
   def self.parse(id : Vertex, pattern : Term)
-    normp = M1.normal(pattern, dict_literals_allowed: false)
+    normp = M1.normal(pattern)
     skeleton = Skeleton.pattern(normp)
 
     strands = [] of Slice(Ubase::Any)
@@ -1260,6 +1270,8 @@ end
 record Appearance, id : Vertex, value : Term do
   include Tbase::Appearance
 end
+
+# TODO: remember to test: %any of dicts, %literal dict!!!!
 
 tbase = Tbase.new
 
