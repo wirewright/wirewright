@@ -2040,8 +2040,10 @@ module ::Ww::M1
       blank.type.blank
     end
 
+    record Context, dict_literals_allowed = true
+
     # Returns the normal form of an item sequence *node*.
-    def item(node : Term) : Term
+    def item(ctx : Context, node : Term) : Term
       Term.of_case(node, engine: M0) do
         matchpi %[_symbol] do
           continue unless blank = node.blank?
@@ -2054,7 +2056,7 @@ module ::Ww::M1
 
         # Fast path to %singular for literal terms.
         matchpi %[_number], %[_string], %[_boolean] do
-          {:"%singular", pattern(node)}
+          {:"%singular", pattern(ctx, node)}
         end
 
         matchpi(
@@ -2080,13 +2082,13 @@ module ::Ww::M1
         end
 
         matchpi %[(%optional _ body_)], cue: :"%optional" do
-          node.morph({2, pattern(body)})
+          node.morph({2, pattern(ctx, body)})
         end
 
         matchpi %[(%group capture_ _ _*)], cue: :"%group" do
           Term::Dict.build do |commit|
             commit << :"%group" << {:"%capture", capture}
-            commit.concat(node.items.move(2)) { |member| item(member) }
+            commit.concat(node.items.move(2)) { |member| item(ctx, member) }
           end
         end
 
@@ -2095,7 +2097,7 @@ module ::Ww::M1
 
           opts.transaction do |commit|
             commit << :"%many" << {:"%capture", capture}
-            commit.concat(node.items.move(2)) { |member| item(member) }
+            commit.concat(node.items.move(2)) { |member| item(ctx, member) }
           end
         end
 
@@ -2104,7 +2106,7 @@ module ::Ww::M1
 
           opts.transaction do |commit|
             commit << :"%past"
-            commit.concat(node.items.move(1)) { |member| item(member) }
+            commit.concat(node.items.move(1)) { |member| item(ctx, member) }
             commit.with(:greedy, false)
           end
         end
@@ -2114,7 +2116,7 @@ module ::Ww::M1
 
           opts.transaction do |commit|
             commit << :"%past"
-            commit.concat(node.items.move(1)) { |member| item(member) }
+            commit.concat(node.items.move(1)) { |member| item(ctx, member) }
             commit.with(:greedy, true)
           end
         end
@@ -2125,7 +2127,7 @@ module ::Ww::M1
           %[(%gap/max measurer_)],
           cues: {:"%gap", :"%gap/min", :"%gap/max"}
         ) do
-          node.morph({1, pattern(measurer)})
+          node.morph({1, pattern(ctx, measurer)})
         end
 
         # NOTE: Currently we do not register %slot as a capture. And I don't think
@@ -2134,27 +2136,27 @@ module ::Ww::M1
           node
         end
 
-        otherwise { {:"%singular", pattern(node)} }
+        otherwise { {:"%singular", pattern(ctx, node)} }
       end
     end
 
     # Returns the normal form of a pairspart *key*-*value* pair.
-    def pair(key : Term, value : Term) : Term
+    def pair(ctx : Context, key : Term, value : Term) : Term
       Term.of_case(value, engine: M0) do
         matchpi %[(%optional default_ body_)], cue: :"%optional" do
-          {:"%entry/optional", {:"%barrier", default}, pattern(body)}
+          {:"%entry/optional", {:"%barrier", default}, pattern(ctx, body)}
         end
 
         matchpi %[(%- positive_)], cue: :"%-" do
-          {:"%entry/negative", pattern(positive)}
+          {:"%entry/negative", pattern(ctx, positive)}
         end
 
         matchpi %[(%- positive_ name_)], cue: :"%-" do
-          {:"%entry/negative", pattern(positive), {:"%barrier", name}}
+          {:"%entry/negative", pattern(ctx, positive), {:"%barrier", name}}
         end
 
         otherwise do
-          {:"%entry/required", pattern(value)}
+          {:"%entry/required", pattern(ctx, value)}
         end
       end
     end
@@ -2183,15 +2185,15 @@ module ::Ww::M1
     end
 
     # Returns the normal form of a dictionary term *dict*.
-    def dict(dict : Term::Dict) : Term
-      if literal?(dict)
+    def dict(ctx : Context, dict : Term::Dict) : Term
+      if ctx.dict_literals_allowed && literal?(dict)
         return Term.of(:"%literal", dict)
       end
 
       if dict.itemsonly?
         node = Term::Dict.build do |commit|
           commit << :"%itemseq"
-          commit.concat(dict.items) { |itemnode| item(itemnode) }
+          commit.concat(dict.items) { |itemnode| item(ctx, itemnode) }
         end
 
         return Term.of(node)
@@ -2199,14 +2201,14 @@ module ::Ww::M1
 
       # E.g. {x: 100, y: 200} = (%layer () x: 100 y: 200)
       if dict.pairsonly?
-        return pattern(Term.of(:"%layer", Term[], dict))
+        return pattern(ctx, Term.of(:"%layer", Term[], dict))
       end
 
-      Term.of(:"%partition", dict(dict.itemspart), dict(dict.pairspart))
+      Term.of(:"%partition", dict(ctx, dict.itemspart), dict(ctx, dict.pairspart))
     end
 
     # Returns the normal form of *pattern*.
-    def pattern(pattern : Term) : Term
+    def pattern(ctx : Context, pattern : Term) : Term
       Term.of_case(pattern, engine: M0) do
         # NOTE: this is a fast path for itemsonly dictionaries. They'd otherwise be
         # at the very bottom, which isn't exactly a good choice due to their frequency
@@ -2223,13 +2225,13 @@ module ::Ww::M1
           continue unless headsym = head.as_sym?
           continue if M1.probably_node?(headsym) || headsym == SYM_EDGE
 
-          dict(pdict)
+          dict(ctx, pdict)
         end
 
         # Similarly, %let is very frequent (especially due to blanks such as x_)
         # compiling to e.g. (%let x _).
         matchpi %[(%'%let capture_ successor_)], cue: :"%let" do
-          {:"%let", {:"%capture", capture}, pattern(successor)}
+          {:"%let", {:"%capture", capture}, pattern(ctx, successor)}
         end
 
         # Blanks are also very frequent; as are symbols. We avoid using matchpis
@@ -2252,7 +2254,7 @@ module ::Ww::M1
             continue unless blank.single?
             continue unless name = blank.name?
 
-            pattern(Term.of(:"%let", name, typesym(blank)))
+            pattern(ctx, Term.of(:"%let", name, typesym(blank)))
           end
         end
 
@@ -2289,16 +2291,16 @@ module ::Ww::M1
 
         # Partition is pretty frequent.
         matchpi %[(%'%partition itemspart_ pairspart_)], cue: :"%partition" do
-          {:"%partition", pattern(itemspart), pattern(pairspart)}
+          {:"%partition", pattern(ctx, itemspart), pattern(ctx, pairspart)}
         end
 
         matchpi %[(%'%layer below_ side_dict)], cue: :"%layer" do
           pattern.transaction do |commit|
-            commit.with(1, pattern(below))
+            commit.with(1, pattern(ctx, below))
 
             nside = side.transaction do |nside|
               side.each_entry do |k, v|
-                nside.with(k, pair(k, v))
+                nside.with(k, pair(ctx, k, v))
               end
             end
 
@@ -2308,7 +2310,7 @@ module ::Ww::M1
 
         # (%layer _ k1: v1 k2: v2 ...) is a shorthand for (%layer _ {k1: v1 k2: v2 ...}).
         matchpi %[(%'%layer below_ ¦ pairs_)], cue: :"%layer" do
-          pattern(Term.of(:"%layer", below, pairs))
+          pattern(ctx, Term.of(:"%layer", below, pairs))
         end
 
         # %number should be %terminal.
@@ -2365,7 +2367,7 @@ module ::Ww::M1
         ) do
           pattern.morph(
             {1, ->(term : Term) { Term.of(:"%barrier", term) }},
-            {2, pattern(successor)},
+            {2, pattern(ctx, successor)},
           )
         end
 
@@ -2379,7 +2381,7 @@ module ::Ww::M1
             rest.each { |item| commit << item }
           end
 
-          pattern(Term.of(:"%pipe", head, body))
+          pattern(ctx, Term.of(:"%pipe", head, body))
         end
 
         matchpi %[(%all)], cue: :"%all" do
@@ -2387,11 +2389,11 @@ module ::Ww::M1
         end
 
         matchpi %[(%all a_)], cue: :"%all" do
-          pattern(a)
+          pattern(ctx, a)
         end
 
         matchpi %[(%all a_ b_)], cue: :"%all" do
-          {:"%all", pattern(a), pattern(b)}
+          {:"%all", pattern(ctx, a), pattern(ctx, b)}
         end
 
         matchpi %[(%all a_ b_ _ _*)], cue: :"%all" do
@@ -2400,7 +2402,7 @@ module ::Ww::M1
             commit.concat(pattern.items.move(3))
           end
 
-          pattern(Term.of(rewritten))
+          pattern(ctx, Term.of(rewritten))
         end
 
         matchpi %[(%any _*)], cue: :"%any" do
@@ -2412,7 +2414,7 @@ module ::Ww::M1
             commit << :"%any/source"
 
             branches = pattern.items.move(1)
-            branches.each { |branch| commit << pattern(branch) }
+            branches.each { |branch| commit << pattern(ctx, branch) }
           end
         end
 
@@ -2442,11 +2444,11 @@ module ::Ww::M1
 
         # %nonself is dissolved at normalization.
         matchpi %[(%nonself arg_)], cue: :"%nonself" do
-          pattern(arg)
+          pattern(ctx, arg)
         end
 
         matchpi %[(%value capture_ body_)], cue: :"%value" do
-          {:"%value", {:"%capture", capture}, pattern(body)}
+          {:"%value", {:"%capture", capture}, pattern(ctx, body)}
         end
 
         matchpi %[(%-value capture_)], cue: :"%-value" do
@@ -2460,14 +2462,14 @@ module ::Ww::M1
         matchpi %[(%item _ _*)], cue: :"%item" do
           Term::Dict.build do |commit|
             commit << :"%items/first"
-            commit.concat(pattern.items.move(1)) { |item| pattern(item) }
+            commit.concat(pattern.items.move(1)) { |item| pattern(ctx, item) }
           end
         end
 
         matchpi %[(%item° _ _*)], cue: :"%item°" do
           Term::Dict.build do |commit|
             commit << :"%items/source"
-            commit.concat(pattern.items.move(1)) { |item| pattern(item) }
+            commit.concat(pattern.items.move(1)) { |item| pattern(ctx, item) }
           end
         end
 
@@ -2476,16 +2478,16 @@ module ::Ww::M1
 
           opts.transaction do |commit|
             commit << :"%items/all" << {:"%capture", capture}
-            commit.concat(pattern.items.move(2)) { |item| pattern(item) }
+            commit.concat(pattern.items.move(2)) { |item| pattern(ctx, item) }
           end
         end
 
         matchpi %[(%entry k_ v_)], cue: :"%entry" do
-          {:"%entries/first", pattern(k), pattern(v)}
+          {:"%entries/first", pattern(ctx, k), pattern(ctx, v)}
         end
 
         matchpi %[(%entry° k_ v_)], cue: :"%entry°" do
-          {:"%entries/source", pattern(k), pattern(v)}
+          {:"%entries/source", pattern(ctx, k), pattern(ctx, v)}
         end
 
         matchpi %[(%entries capture_ k_ v_ ¦ opts_)], cue: :"%entries" do |opts|
@@ -2494,21 +2496,21 @@ module ::Ww::M1
           opts.morph(
             {0, :"%entries/all"},
             {1, {:"%capture", capture}},
-            {2, pattern(k)},
-            {3, pattern(v)},
+            {2, pattern(ctx, k)},
+            {3, pattern(ctx, v)},
           )
         end
 
         matchpi %[(%leaf body_ ¦ opts_)], cue: :"%leaf" do |opts|
           continue unless opts = Schemas::LeafUnbounded.enriched?(opts)
 
-          opts.morph({0, :"%leaves/first"}, {1, pattern(body)})
+          opts.morph({0, :"%leaves/first"}, {1, pattern(ctx, body)})
         end
 
         matchpi %[(%leaf° body_ ¦ opts_)], cue: :"%leaf°" do |opts|
           continue unless opts = Schemas::LeafUnbounded.enriched?(opts)
 
-          opts.morph({0, :"%leaves/source"}, {1, pattern(body)})
+          opts.morph({0, :"%leaves/source"}, {1, pattern(ctx, body)})
         end
 
         matchpi %[(%leaves capture_ body_ ¦ opts_)], cue: :"%leaves" do |opts|
@@ -2517,7 +2519,7 @@ module ::Ww::M1
           opts.morph(
             {0, :"%leaves/all"},
             {1, {:"%capture", capture}},
-            {2, pattern(body)},
+            {2, pattern(ctx, body)},
           )
         end
 
@@ -2534,7 +2536,7 @@ module ::Ww::M1
 
         # Expand (%string nonempty) into (%all (%not "") _string)
         matchpi %[(%string nonempty)], cue: {:"%string", :nonempty} do
-          pattern(Term.of(:"%all", {:"%not", ""}, :_string))
+          pattern(ctx, Term.of(:"%all", {:"%not", ""}, :_string))
         end
 
         matchpi %[(%symbol nonblank)], cue: {:"%symbol", :nonblank} do
@@ -2542,7 +2544,7 @@ module ::Ww::M1
         end
 
         matchpi %[(%symbol blank name_ type_)], cue: {:"%symbol", :blank} do
-          {:"%symbol", :blank, pattern(name), pattern(type)}
+          {:"%symbol", :blank, pattern(ctx, name), pattern(ctx, type)}
         end
 
         # NOTE: you should insert new matchpis here, especially if they are infrequent.
@@ -2550,7 +2552,7 @@ module ::Ww::M1
         # will probably not be reached. If your matchpi does not start with a %, make sure
         # to update the dict fast path above.
 
-        matchpi %[_dict] { dict(pattern.unsafe_as_d) }
+        matchpi %[_dict] { dict(ctx, pattern.unsafe_as_d) }
       end
     end
   end
@@ -2986,8 +2988,8 @@ module ::Ww::M1
   # a hard rule. There must be no such thing as a "pattern matching engine crash" (minus the
   # inevitable implementation errors). Diagnostics can help the programmer find potential
   # mistakes at their level of reasoning.
-  def self.normal(pattern : Term) : Term
-    Normal.pattern(pattern)
+  def self.normal(pattern : Term, **kwargs) : Term
+    Normal.pattern(Normal::Context.new(**kwargs), pattern)
   end
 
   def self.bounds(normp : Term) : {Magnitude, Magnitude}

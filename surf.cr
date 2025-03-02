@@ -14,8 +14,8 @@ require "./src/wirewright"
   Term.case(node) do
     matchpi %{(%'%all)} { M1::Normal::NORMAL_PASS }
     matchpi %{(%'%all a_)} { a }
-    matchpi %{(%'%all %'(%pass) b_)} { b }
     matchpi %{(%'%all a_ %'(%pass))} { a }
+    matchpi %{(%'%all %'(%pass) b_)} { b }
     matchpi %{(%'%all _ _)} { Term.of(node) }
     matchpi %{(%'%all a_ b_ rest_+)} do
       a1 = Term.of(:"%all", a, b)
@@ -41,7 +41,7 @@ end
 # - `%'(%boolean)`
 # - `%'(%dict)`
 # - `%'(%number _)`
-# - `(%'%literal _)`
+# - `(%'%literal X_)` with non-dict X
 module Skeleton
   extend self
 
@@ -336,8 +336,27 @@ end
 
 private def strands(prefix : Term::Dict, branch : Term, sink) : Nil
   Term.case(branch) do
-    matchpi %{(%'%pass)} do
-      sink.call(prefix)
+    matchpi %{(%'%pass)} { sink.call(prefix) }
+
+    matchpi %{%'(%number _)} { sink.call(prefix.append(branch)) }
+    matchpi %{%'(%string)} { sink.call(prefix.append(branch)) }
+    matchpi %{%'(%symbol)} { sink.call(prefix.append(branch)) }
+    matchpi %{%'(%boolean)} { sink.call(prefix.append(branch)) }
+
+    matchpi %{(%'%literal _number)} do
+      sink.call(prefix.append(M1::Normal::NORMAL_BLANK_NUMBER).append(branch))
+    end
+
+    matchpi %{(%'%literal _string)} do
+      sink.call(prefix.append(M1::Normal::NORMAL_BLANK_STRING).append(branch))
+    end
+
+    matchpi %{(%'%literal _symbol)} do
+      sink.call(prefix.append(M1::Normal::NORMAL_BLANK_SYMBOL).append(branch))
+    end
+
+    matchpi %{(%'%literal _boolean)} do
+      sink.call(prefix.append(M1::Normal::NORMAL_BLANK_BOOLEAN).append(branch))
     end
 
     matchpi %{(%'%all a_ b_)} do
@@ -351,10 +370,6 @@ private def strands(prefix : Term::Dict, branch : Term, sink) : Nil
         .append(branch.without(2))
 
       strands(prefix, successor, sink)
-    end
-
-    otherwise do
-      sink.call(prefix.append(branch))
     end
   end
 end
@@ -447,6 +462,7 @@ struct Utrie
 
   def mount(pred : Vertex, base : Ubase::Any, fresh) : {Vertex, Bool}
     props = @storage.ref(Node.new(pred, base)) { Props.new(0u32, fresh.call) }
+
     {props.successor, props.refcount == 1}
   end
 
@@ -597,15 +613,15 @@ struct Xgraph
   end
 
   # :nodoc:
-  def conjunctions(vertices : Deque(Vertex), sink : Vertex ->)
+  def conjs(vertices : Deque(Vertex), sink : Vertex ->)
     while a = vertices.shift?
       sink.call(a)
 
       (0...vertices.size).each do |i|
         b = vertices.unsafe_fetch(i)
-        next unless successor = @successors.get?(Node.new(a, b))
+        next unless props = @data.get?(Node.new(a, b))
 
-        vertices << successor
+        vertices << props.successor
       end
     end
   end
@@ -614,16 +630,9 @@ struct Xgraph
   #
   # NOTE: *vertices* must be pre-sorted ascending. You lose ownership of *vertices*
   # by passing it to this method.
-  def conjunctions(vertices : Deque(Vertex), &sink : Vertex ->)
-    conjunctions(vertices, sink)
+  def conjs(vertices : Deque(Vertex), &sink : Vertex ->)
+    conjs(vertices, sink)
   end
-end
-
-struct StrandSet
-  def initialize(@data : ExtrinsicSet(Vertex))
-  end
-
-  delegate :includes?, :add, :delete, to: @data
 end
 
 struct Ttrie
@@ -655,7 +664,7 @@ struct Ttrie
   # Mounts *strand*.
   #
   # Returns the new *fresh* vertex.
-  def mount(strand : Enumerable(Term), fresh) : Slice(Vertex)
+  def mount(strand : Enumerable(Term), endpoint : Vertex, fresh) : Slice(Vertex)
     tip = nil
 
     path = [VERTEX_ROOT]
@@ -674,13 +683,14 @@ struct Ttrie
       path << mount(path.last, Ubase::Literal.new(tip), fresh)
     end
 
+    path << endpoint
     path.to_readonly_slice
   end
 
   # Unmounts *strand*.
   #
   # Returns the path to its endpoint.
-  def unmount(strand : Enumerable(Term)) : Slice(Vertex)
+  def unmount(strand : Enumerable(Term), endpoint : Vertex) : Slice(Vertex)
     tip = nil
 
     path = [VERTEX_ROOT]
@@ -699,233 +709,139 @@ struct Ttrie
       path << unmount(path.last, Ubase::Literal.new(tip))
     end
 
+    path << endpoint
     path.to_readonly_slice
   end
 
   # Calls *fn* with the set of endpoints at the end of *strand*.
-  def query(strand : Enumerable(Ubase::Any), &fn : SetSum ->) : Nil
-    pred = VERTEX_ROOT
+  def query?(strand : Enumerable(Ubase::Any)) : {Vertex, Vertex}?
+    pred0 = VERTEX_ROOT
+    pred1 = VERTEX_ROOT
 
     strand.each do |base|
-      unless pred = @successors.get?(Node.new(pred, base))
-        return
+      # The strand embedded in @data must be >= the query strand.
+      return unless props = @data.get?(Node.new(pred1, base))
+
+      pred0 = pred1
+      pred1 = props.successor
+    end
+
+    {pred0, pred1}
+  end
+end
+
+struct Etrace
+  alias Key = Node | SuccessorCount | SuccessorList | Successor
+  alias Value = Props | UInt32 | Presence
+
+  record Node, pred : Vertex, vertex : Vertex
+  record Props, refcount : UInt32, oid : UInt32
+
+  record SuccessorCount, oid : UInt32
+  record SuccessorList, oid : UInt32, index : UInt32
+
+  record Successor, oid : UInt32, vertex : Vertex
+  record Presence
+
+  def initialize(@data : ExtrinsicMap(Key, Value))
+  end
+
+  def mount(path : Slice(Vertex), fresh)
+    if path.size < 2
+      raise ArgumentError.new
+    end
+
+    if path[0] == VERTEX_ROOT
+      path = path[1..]
+    end
+
+    pred = VERTEX_ROOT
+
+    # Create nodes for each step and incref. This way we'll make sure they're
+    # not removed by someone else while we're working at them later on.
+    oids = path.map do |step|
+      _, node1 = @data.transaction(Node.new(pred, step)) do |node0|
+        node0 = node0.as(Props?)
+        node0 ? node0.copy_with(refcount: node0.refcount + 1) : Props.new(1u32, fresh.call)
+      end
+      pred = step
+      node1.oid
+    end
+
+    # If we succeed in adding a Successor, then we're responsible for
+    # incrementing successor count and inserting into the SuccessorList.
+    (0...path.size - 1).each do |index|
+      oid = oids[index]
+
+      successor = Successor.new(oid, w = path[index + 1])
+      next if @data.get?(successor)
+
+      @data.transaction(successor) { Presence.new }
+
+      _, count1 = @data.transaction(SuccessorCount.new(oid)) do |count0|
+        count0 = count0.as(UInt32?)
+        count0 ? count0 + 1 : 1u32
+      end
+
+      @data.transaction(SuccessorList.new(oid, count1 - 1)) { w }
+    end
+  end
+
+  def unmount(path : Slice(Vertex))
+    if path.size < 2
+      raise ArgumentError.new
+    end
+
+    if path[0] == VERTEX_ROOT
+      path = path[1..]
+    end
+
+    pred = VERTEX_ROOT
+
+    oids = path.compact_map do |step|
+      node0, node1 = @data.transaction(Node.new(pred, step)) do |current|
+        current = current.as(Props)
+        current.refcount == 1 ? nil : current.copy_with(refcount: current.refcount - 1)
+      end
+
+      pred = step
+
+      # Keep only oids which we've removed. We're responsible for their
+      # cleanup then.
+      node1 ? nil : node0.as(Props).oid
+    end
+
+    oids.each do |oid|
+      # Successor list may not necessarily exist for endpoint vertices.
+      # Deletion may fail, and we're fine with that.
+      next unless count = @data.delete?(SuccessorCount.new(oid)).as(UInt32?)
+
+      (0u32...count).each do |index|
+        successor = @data.delete(SuccessorList.new(oid, index)).as(UInt32)
+
+        @data.delete(Successor.new(oid, successor))
       end
     end
-
-    return unless endpoints = @endpoints.get?(pred)
-
-    fn.call(endpoints)
   end
 
-  # Calls *fn* with the sets of endpoints at the end of each *strand*.
-  def query(strands : Enumerable(Enumerable(Ubase::Any)), &fn : SetSum ->) : Nil
-    strands.each { |strand| query(strand, &fn) }
-  end
-end
+  def walk(u : Vertex, v : Vertex, &fn : Vertex ->)
+    fn.call(v)
 
-# :nodoc:
-abstract class SetSum
-end
+    return unless props = @data.get?(Node.new(u, v)).as(Props?)
 
-# :nodoc:
-defcase SetLeaf < SetSum, id : UInt32, population : Int32, hashcode : UInt64, vertices : Pf::Set(Vertex), equality: false do
-  def self.new(id : UInt32)
-    new(id, 0u32, 0u64, Pf::Set(Vertex).new)
-  end
+    # NOTE: while walking, the node along with its attributes could get deleted/
+    # be in the process of being deleted. So at any point where we're reading
+    # from the map, we must handle the absence-case, even if it seems like it
+    # is impossible.
+    return unless count = @data.get?(SuccessorCount.new(props.oid)).as(UInt32?)
 
-  def self.[](id : UInt32, *vertices : Vertex)
-    vertices.reduce(new(id)) { |leaf, vertex| leaf.add(vertex) }
-  end
+    (0u32...count).each do |index|
+      # We're fine with gaps. They could happen under some successor count
+      # increment + successor list insert orderings. We're bounded anyway.
+      next unless w = @data.get?(SuccessorList.new(props.oid, index)).as(UInt32?)
 
-  def includes?(vertex : Vertex)
-    @vertices.includes?(vertex)
-  end
-
-  def add(vertex : Vertex)
-    vertices0 = @vertices
-    vertices1 = @vertices.add(vertex)
-    if vertices0.same?(vertices1)
-      return self
+      walk(v, w, &fn)
     end
-
-    copy_with(population: population + 1, hashcode: {id, vertices1}.hash, vertices: vertices1)
-  end
-
-  def delete(vertex : Vertex)
-    vertices0 = @vertices
-    vertices1 = @vertices.delete(vertex)
-    if vertices0.same?(vertices1)
-      return self
-    end
-
-    copy_with(population: population - 1, hashcode: {id, vertices1}.hash, vertices: vertices1)
-  end
-
-  def each(&fn : Vertex ->)
-    vertices.each(&fn)
-  end
-
-  def inspect(io)
-    io << "{" << population << "@" << id << "| "
-    vertices.join(io, " ")
-    io << "}"
-  end
-
-  def hash(hasher)
-    @hashcode.hash(hasher)
-  end
-
-  def_equals @id, @vertices
-end
-
-# :nodoc:
-defcase SetNode < SetSum, population : Int32, hashcode : UInt64, members : Pf::Set(SetSum), equality: false do
-  def self.new
-    new(0u32, 0u64, Pf::Set(SetSum).new)
-  end
-
-  def self.[](*members : SetSum)
-    members.reduce(new) { |node, vertex| node.add(vertex) }
-  end
-
-  def includes?(vertex : Vertex)
-    @members.any?(&.includes?(vertex))
-  end
-
-  def add(member : SetSum)
-    members0 = @members
-    members1 = members0.add(member)
-    if members0.same?(members1)
-      return self
-    end
-
-    copy_with(members: members1, hashcode: members1.hash, population: population + member.population)
-  end
-
-  def delete(member : SetSum)
-    members0 = @members
-    members1 = members0.delete(member)
-    if members0.same?(members1)
-      return self
-    end
-
-    copy_with(members: members1, hashcode: members1.hash, population: population - member.population)
-  end
-
-  def each(&fn : Vertex ->)
-    members.each(&.each(&fn))
-  end
-
-  def inspect(io)
-    io << "{" << population << "| "
-    members.join(io, " ") do |member|
-      member.inspect(io)
-    end
-    io << "}"
-  end
-
-  def hash(hasher)
-    @hashcode.hash(hasher)
-  end
-
-  def_equals @members
-end
-
-# struct Etrace
-#   alias Node = Vertex
-#   alias Props = SetSum
-
-#   def initialize(@data : ExtrinsicMap(Vertex, SetSum))
-#   end
-
-#   # Adds *endpoint* as one of the endpoints of each step in *path*.
-#   def mount(path : Slice(Vertex), endpoint : Vertex, fresh) : Vertex
-#     if path.empty?
-#       raise ArgumentError.new
-#     end
-
-#     # Add endpoint.
-#     node1 = @endpoints.modify(path.last) do |sum|
-#       sum ? sum.as(SetLeaf).add(endpoint) : SetLeaf[fresh.call, endpoint]
-#     end
-
-#     # Propagate endpoint backwards through path.
-#     path[...-1].reverse_each do |pred|
-#       if parent0 = @endpoints.get?(pred)
-#         parent0 = parent0.as(SetNode)
-#         node1 = (node0 ? parent0.delete(node0) : parent0).add(node1)
-#         node0 = parent0
-#       else
-#         node1 = SetNode[node1.as(SetSum)]
-#         node0 = nil
-#       end
-
-#       @endpoints.assign(pred, node1)
-#     end
-
-#     fresh
-#   end
-
-#   # Removes *endpoint* from the set of endpoints of each step in *path*.
-#   def unmount(path : Slice(Vertex), endpoint : Vertex) : Nil
-#     if path.empty?
-#       raise ArgumentError.new
-#     end
-
-#     # Remove endpoint
-#     node0 = @endpoints.get?(path.last).as(SetLeaf)
-#     node1 = node0.delete(endpoint)
-
-#     if node1.population.zero?
-#       @endpoints.unload(path.last)
-#     else
-#       @endpoints.assign(path.last, node1)
-#     end
-
-#     # Remove path (except for last step which we've already handled).
-#     path[...-1].reverse_each do |pred|
-#       parent0 = @endpoints.get?(pred).as(SetNode)
-
-#       if node1.population.zero?
-#         node1 = parent0.delete(node0)
-#       else
-#         node1 = parent0.delete(node0).add(node1)
-#       end
-
-#       node0 = parent0
-
-#       if node1.population.zero?
-#         @endpoints.unload(pred)
-#       else
-#         @endpoints.assign(pred, node1)
-#       end
-#     end
-#   end
-# end
-
-def mount(ttrie : Ttrie, term : Term, endpoint : Vertex, fresh : Vertex) : Vertex
-  Term.each_keypath_and_leaf(term) do |keypath, leaf|
-    keypath.push(leaf)
-    path, fresh = ttrie.mount(keypath, fresh)
-    keypath.pop
-
-    fresh = ttrie.mount_endpoint(path, endpoint, fresh)
-
-    true # Continue
-  end
-
-  fresh
-end
-
-def unmount(ttrie : Ttrie, term : Term, endpoint : Vertex) : Nil
-  Term.each_keypath_and_leaf(term) do |keypath, leaf|
-    keypath.push(leaf)
-    path = ttrie.unmount(keypath)
-    keypath.pop
-
-    ttrie.unmount_endpoint(path, endpoint)
-
-    true # Continue
   end
 end
 
@@ -940,6 +856,57 @@ class AtomicMap(K, V)
     @map.get(:relaxed)[key]?
   end
 
+  def transaction(key : K, & : V? -> T) : {V?, T} forall T
+    map0 = @map.get(:relaxed)
+
+    while true
+      value0 = map0[key]?
+      value1 = yield value0
+
+      case {value0, value1}
+      in {nil, nil}
+        raise KeyError.new("value absent and not set during transaction: invalid state")
+      in {V, nil}
+        map1 = map0.dissoc(key)
+      in {nil, V}, {V, V}
+        map1 = map0.assoc(key, value1)
+      end
+
+      map0, ok = @map.compare_and_set(map0, map1, :relaxed, :relaxed)
+      if ok
+        return value0, value1
+      end
+    end
+  end
+
+  def delete(key : K) : V
+    delete?(key) || raise KeyError.new
+  end
+
+  def delete?(key : K) : V?
+    map0 = @map.get(:relaxed)
+
+    while true
+      value = map0[key]?
+      return unless value
+
+      map1 = map0.dissoc(key)
+      map0, ok = @map.compare_and_set(map0, map1, :relaxed, :relaxed)
+
+      return value if ok
+    end
+  end
+
+  def assign(key : K, value : V)
+    map0 = @map.get(:relaxed)
+
+    while true
+      map1 = map0.assoc(key, value)
+      map0, ok = @map.compare_and_set(map0, map1, :relaxed, :relaxed)
+      break if ok
+    end
+  end
+
   # Increments the refcount of *key* in a single, atomic transaction,
   # creating the pair using the block, if necessary.
   #
@@ -949,10 +916,11 @@ class AtomicMap(K, V)
     default = nil
 
     while true
-      value = map0[key]? || (default ||= yield)
-      map1 = map0.assoc(key, value.incref)
+      value0 = map0[key]? || (default ||= yield)
+      value1 = value0.incref
+      map1 = map0.assoc(key, value1)
       map0, ok = @map.compare_and_set(map0, map1, :relaxed, :relaxed)
-      return value if ok
+      return value1 if ok
     end
   end
 
@@ -1014,7 +982,7 @@ end
 class Tbase
   class VertexGenerator
     def initialize
-      @counter = Atomic(Vertex).new(Vertex.new(0))
+      @counter = Atomic(Vertex).new(VERTEX_ZERO)
     end
 
     def call : Vertex
@@ -1023,16 +991,18 @@ class Tbase
   end
 
   module Sensor
-    abstract def skeleton : Term
+    # Returns a Tspace-unique id of this sensor, that was obtained from
+    # a monotonically increasing source.
+    abstract def id : Vertex
+    abstract def branch : Term
   end
 
   module Appearance
-    # Returns a Tspace-unique id of this appearance.
+    # Returns a Tspace-unique id of this appearance, that was obtained from
+    # a monotonically increasing source.
     abstract def id : Vertex
     abstract def value : Term
   end
-
-  record SensorGroup, members : Slice(Vertex)
 
   def initialize
     @fresh = VertexGenerator.new
@@ -1040,99 +1010,245 @@ class Tbase
     @udata = AtomicMap(Utrie::Node, Utrie::Props).new
     @xdata = AtomicMap(Xgraph::Node, Xgraph::Props).new
     @tdata = AtomicMap(Ttrie::Node, Ttrie::Props).new
+    @edata = AtomicMap(Etrace::Key, Etrace::Value).new
+
     @strands = AtomicSet(Vertex).new
-    # @edata = AtomicMap(Etrace::Node, Etrace::Props).new
+
+    @sensor_encode = AtomicMap(Vertex, Vertex).new
+    @sensor_decode = AtomicMap(Vertex, Vertex).new
+    @appearances = AtomicSet(Vertex).new
   end
 
-  # Adds a sensor *subject* to this Tbase. Returns a handle to the resulting
-  # *sensor group*.
+  # Adds a sensor *subject* to this Tbase. The instant this method returns,
+  # the caller must be capable of reacting to queries resulting in *subject*
+  # coming from other threads. This is usually achieved through registering
+  # a queue for *subject* before calling this method, which helps to preserve
+  # the messages for further reading.
   #
-  # NOTE: reference counting is used for duplicate *subjects*. The same number of
-  # duplicate *subjects* you've mounted, you'll have to unmount.
-  def mount(subject : Sensor) : SensorGroup
+  # NOTE: the caller guarantees the following:
+  #
+  # - that it owns *subject*;
+  # - that *subject*'s id is Tspace-unique, and was obtained from a monotonically
+  #   increasing source;
+  # - that *subject*'s id was never in use before.
+  #
+  # Behavior is undefined if these guarantees are broken. Breaking of these
+  # guarantees must be handled at a higher level.
+  def mount(subject : Sensor) : Nil
     utrie = Utrie.new(@udata)
-    strands = StrandSet.new(@strands)
     xgraph = Xgraph.new(@xdata)
 
-    members = [] of Vertex
+    conj = Deque(Vertex).new
 
-    branches(subject.skeleton) do |branch|
-      conjunction = Deque(Vertex).new
-
-      strands(branch) do |strand|
-        strand_vertex, added = utrie.mount(strand.items, @fresh) { |base| Ubase.parse(base) }
-        if added
-          strands.add(strand_vertex)
-        end
-        conjunction << strand_vertex
+    strands(subject.branch) do |strand|
+      strand_vertex, added = utrie.mount(strand.items, @fresh) { |base| Ubase.parse(base) }
+      if added
+        @strands.add(strand_vertex)
       end
-
-      conjunction.unstable_sort!
-      conjunction_vertex = xgraph.mount(conjunction, @fresh)
-
-      members << conjunction_vertex
-
-      # TODO: register sensor in registry under conjunction_vertex, current instant
+      conj << strand_vertex
     end
 
-    SensorGroup.new(members.to_readonly_slice)
+    conj.unstable_sort!
+    conjv = xgraph.mount(conj, @fresh)
+
+    # "Publish" the sensor.
+    #
+    # NOTE: decode assignment MUST be done last because it's the indication
+    # of commitment. After the decode assignment is in place, the sensor becomes
+    # reachable via querying.
+    @sensor_encode.assign(subject.id, conjv)
+    @sensor_decode.assign(conjv, subject.id)
   end
 
   # Deletes a sensor *subject* from this Tbase.
   #
-  # NOTE: the caller guarantees its ownership of *subject* and that *subject*
-  # is currently mounted.
+  # NOTE: the caller guarantees that it mounted *subject* under the guarantees
+  # given in `mount`. Behavior is undefined otherwise.
   def unmount(subject : Sensor) : Nil
+    conjv = @sensor_encode.delete(subject.id)
+
+    # "Unpublish" the sensor. We will need to know its conjunction vertex
+    # first though.
+    @sensor_decode.delete(conjv)
+
     utrie = Utrie.new(@udata)
-    strands = StrandSet.new(@strands)
     xgraph = Xgraph.new(@xdata)
 
-    branches(subject.skeleton) do |branch|
-      conjunction = Deque(Vertex).new
+    conj = Deque(Vertex).new
 
-      strands(branch) do |strand|
-        strand_vertex, removed = utrie.unmount(strand.items) { |base| Ubase.parse(base) }
-        if removed
-          strands.delete(strand_vertex)
-        end
-        conjunction << strand_vertex
+    strands(subject.branch) do |strand|
+      strand_vertex, removed = utrie.unmount(strand.items) { |base| Ubase.parse(base) }
+      if removed
+        @strands.delete(strand_vertex)
       end
-
-      conjunction.unstable_sort!
-      conjunction_vertex = xgraph.unmount(conjunction)
-
-      # TODO: unregister sensor in registry under conjunction_vertex
+      conj << strand_vertex
     end
+
+    conj.unstable_sort!
+
+    expect xgraph.unmount(conj) == conjv
   end
 
-  def mount(subject : Appearance)
+  # Adds an appearance *subject* to this Tbase. The instant this method returns,
+  # the caller must be capable of reacting to queries resulting in *subject*
+  # coming from other threads. This is usually achieved through registering
+  # a queue for *subject* before calling this method, which helps to preserve
+  # the messages for further reading.
+  #
+  # NOTE: the caller guarantees the following:
+  #
+  # - that it owns *subject*;
+  # - that *subject*'s id is Tspace-unique, and was obtained from a monotonically
+  #   increasing source;
+  # - that *subject*'s id was never in use before.
+  #
+  # Behavior is undefined if these guarantees are broken. Breaking of these
+  # guarantees must be handled at a higher level.
+  def mount(subject : Appearance) : Nil
     ttrie = Ttrie.new(@tdata)
-    # endpoints = Etrace.new(@edata)
+    etrace = Etrace.new(@edata)
 
     Term.each_keypath_and_leaf(subject.value) do |keypath, leaf|
       keypath.push(leaf)
-      path = ttrie.mount(keypath, @fresh)
+      path = ttrie.mount(keypath, subject.id, @fresh)
       keypath.pop
 
-      # Mount etrace
+      etrace.mount(path, @fresh)
 
-      pp path
-      pp subject.id
-      # endpoints.mount(path, subject.id, @fresh)
+      true # Continue
+    end
+
+    # "Publish" the appearance
+    @appearances.add(subject.id)
+  end
+
+  # Deletes an appearance *subject* from this Tbase.
+  #
+  # NOTE: the caller guarantees that it mounted *subject* under the guarantees
+  # given in `mount`. Behavior is undefined otherwise.
+  def unmount(subject : Appearance) : Nil
+    # "Unpublish" the appearance. Since we're using subject ids we can do
+    # that immediately.
+    @appearances.delete(subject.id)
+
+    ttrie = Ttrie.new(@tdata)
+    etrace = Etrace.new(@edata)
+
+    Term.each_keypath_and_leaf(subject.value) do |keypath, leaf|
+      keypath.push(leaf)
+      path = ttrie.unmount(keypath, subject.id)
+      keypath.pop
+
+      etrace.unmount(path)
 
       true # Continue
     end
   end
 
-  # TODO: unmount(subject : Appearance)
+  # Calls *fn* with appearance subject ids that the *subject* sensor matches,
+  # that are older than *subject* (that existed before *subject* was created).
+  #
+  # NOTE: the caller guarantees the following:
+  #
+  # - that it owns *subject*;
+  # - that *subject*'s id is Tspace-unique, and was obtained from a monotonically
+  #   increasing source;
+  # - that it considers appearance subject ids given to *fn* immediately outdated.
+  #   The caller must ensure that all actions taken upon them first check (or only
+  #   proceed provided) the existence of the corresponding appearance.
+  def predecessors(subject : Sensor, &fn : Vertex ->) : Nil
+    ttrie = Ttrie.new(@tdata)
+    etrace = Etrace.new(@edata)
+
+    sets = [] of Set(Vertex)
+
+    strands(subject.branch) do |strand|
+      next unless edge = ttrie.query?(strand.items.map { |base| Ubase.parse(base) })
+
+      hits = Set(Vertex).new
+      sets << hits
+
+      # NOTE: This walk is done asynchronously -- etrace is not driven by
+      # a unified clock.
+      etrace.walk(*edge) do |candidate|
+        # Ensure candidate is a fuly added appearance.
+        next unless candidate.in?(@appearances)
+
+        # Candidate must have been created before subject for subject to
+        # see it.
+        next unless candidate <= subject.id
+
+        hits << candidate
+      end
+    end
+
+    return if sets.empty?
+
+    sets.unstable_sort_by!(&.size)
+    sets[0].each do |subject_id|
+      next unless (1...sets.size).all? { |index| subject_id.in?(sets[index]) }
+
+      fn.call(subject_id)
+    end
+  end
+
+  # Calls *fn* with appearance subject ids that the *subject* sensor matches,
+  # that are older than *subject* (that existed before *subject* was created).
+  #
+  # NOTE: the caller guarantees the following:
+  #
+  # - that it owns *subject*;
+  # - that *subject*'s id is Tspace-unique, and was obtained from a monotonically
+  #   increasing source;
+  # - that it considers sensor subject ids given to *fn* immediately outdated.
+  #   The caller must ensure that all actions taken upon them first check (or only
+  #   proceed provided) the existence of the corresponding sensor.
+  def predecessors(subject : Appearance, &fn : Vertex ->) : Nil
+    utrie = Utrie.new(@udata)
+    xgraph = Xgraph.new(@xdata)
+
+    hits = Deque(Vertex).new
+
+    utrie.query(subject.value) do |hit|
+      # Ensure the vertex hit is a fully added strand.
+      next unless hit.in?(@strands)
+
+      hits << hit
+    end
+
+    hits.unstable_sort!
+
+    xgraph.conjs(hits) do |candidate|
+      # Ensure the vertex hit is a fully added sensor whose subject
+      # id we know.
+      next unless candidate_subject_id = @sensor_decode.get?(candidate)
+
+      # Candidate must have been created before subject for subject to
+      # see it.
+      next unless candidate_subject_id <= subject.id
+
+      fn.call(candidate_subject_id)
+    end
+  end
 end
 
-pattern = ML.term %{((%any div mod) a_ (%all b_number (%not 0)) ¦ precision⋮ 3)}
-normp = M1.normal(pattern)
-skeleton = Skeleton.pattern(normp)
+# pattern = ML.term %{((%any div mod) a_ (%all b_number (%not 0)) ¦ precision⋮ 3)}
+# normp = M1.normal(pattern)
+# skeleton = Skeleton.pattern(normp)
 
-record Sensor, skeleton : Term do
+record Sensor, id : Vertex, branch : Term do
   include Tbase::Sensor
+
+  def self.parse(id : Vertex, pattern : Term)
+    normp = M1.normal(pattern, dict_literals_allowed: false)
+    skeleton = Skeleton.pattern(normp)
+
+    new(id, skeleton)
+  end
+
+  def self.parse(id : Vertex, ml : String)
+    parse(id, ML.term(ml))
+  end
 end
 
 record Appearance, id : Vertex, value : Term do
@@ -1140,387 +1256,79 @@ record Appearance, id : Vertex, value : Term do
 end
 
 tbase = Tbase.new
-s1 = tbase.mount(Sensor.new(skeleton))
-pp s1
-s2 = tbase.mount(Sensor.new(skeleton))
-pp s2
 
-pp tbase
+s0 = Sensor.parse(5000, %[{x: _, y: _}])
+s1 = Sensor.parse(1001, %[{x: 100}])
+s2 = Sensor.parse(1000, %[{y: _}])
 
-tbase.unmount(Sensor.new(skeleton))
+a0 = Appearance.new(1234, Term.of(x: 100, y: 200))
+a1 = Appearance.new(1235, Term.of(x: 100, y: 201))
+a2 = Appearance.new(1236, Term.of(x: 101, y: 200))
+a3 = Appearance.new(1237, Term.of(x: 101, y: 201))
 
-pp tbase
+tbase.mount(a0)
+tbase.mount(a1)
+tbase.mount(a2)
+tbase.mount(a3)
 
-tbase.unmount(Sensor.new(skeleton))
+tbase.mount(s0)
+tbase.mount(s1)
+tbase.mount(s2)
 
-pp tbase
-# tbase.unmount(Sensor.new(skeleton))
-# a1 = tbase.mount(Appearance.new(1234, Term.of(x: 100, y: 200)))
-# pp a1
-# pp tbase
+puts "Population: 1234 1235 1236 1237"
 
-struct Etrace
-  alias Node = Member | Successor | SuccessorCount
+puts "Query #{s0}"
+tbase.predecessors(s0) { |hit| pp hit }
+puts "Query #{s1}"
+tbase.predecessors(s1) { |hit| pp hit }
+puts "Query #{s2}"
+tbase.predecessors(s2) { |hit| pp hit }
 
-  record Member, step : Vertex, member : Vertex
-  record Successor, step : Vertex, index : UInt32
-  record SuccessorCount, step : Vertex
+puts "Query #{a0}"
+tbase.predecessors(a0) { |hit| pp hit }
+puts "Query #{a1}"
+tbase.predecessors(a1) { |hit| pp hit }
+puts "Query #{a2}"
+tbase.predecessors(a2) { |hit| pp hit }
+puts "Query #{a3}"
+tbase.predecessors(a3) { |hit| pp hit }
 
-  def initialize
-    @data = {} of Node => UInt32
-  end
+tbase.unmount(a0)
 
-  def mount(path : Slice(Vertex))
-    path.each_cons_pair do |curr, succ|
-      membership = Member.new(curr, succ)
-
-      # transaction {
-      if refcount = @data[membership]?
-        @data[membership] = refcount + 1
-        next
-      end
-
-      @data[membership] = 1u32
-
-      # Append to successors list
-      successors = SuccessorCount.new(curr)
-
-      size = @data[successors]? || 0u32
-
-      @data[Successor.new(curr, size)] = succ
-      @data[successors] = size + 1
-      # }
-    end
-  end
-
-  def unmount(path : Slice(Vertex))
-    path.each_cons_pair do |curr, succ|
-      membership = Member.new(curr, succ)
-
-      unless refcount = @data[membership]?
-        raise ArgumentError.new
-      end
-
-      if refcount > 1
-        @data[membership] = refcount - 1
-        next
-      end
-
-      @data.delete(membership)
-
-      successors = SuccessorCount.new(curr)
-      size = @data.delete(successors)
-      unless size
-        raise ArgumentError.new
-      end
-
-      (0u32...size).each do |index|
-        @data.delete(Successor.new(curr, index))
-      end
-    end
-  end
+puts "Population: 1235 1236 1237"
+tbase.predecessors(s0) do |hit|
+  pp hit
 end
 
-trace = Etrace.new
-trace.mount(Slice[0u32, 17u32, 18u32, 19u32, 20u32, 1234u32])
-trace.mount(Slice[0u32, 17u32, 21u32, 22u32, 23u32, 1234u32])
-trace.mount(Slice[0u32, 17u32, 24u32, 25u32, 26u32, 4567u32])
-trace.unmount(Slice[0u32, 17u32, 24u32, 25u32, 26u32, 4567u32])
-# trace.each_child(0u32) do |ep|
-#   pp ep
-# end
+tbase.unmount(a3)
 
-pp trace
-# trace.subscribe(path, subject.id)
-
-# -> Sensor groups, appearances == model
-# <- view
-
-# each sensor has a scope and a query
-# each appearance has a scope, a value, and a tombstone
-
-{% skip_file %}
-
-tally_v = ExtrinsicTally(Ttrie::Node).new
-fresh = VERTEX_ZERO
-ttrie = Ttrie.new(tally_v, ExtrinsicMap(Ttrie::Node, Vertex).new, ExtrinsicMap(Vertex, SetSum).new)
-puts "Add"
-endpoints = ExtrinsicMap(Term, UInt32).new
-(0...2).each do |i|
-  (0...2).each do |j|
-    endpoint = fresh
-    t = Term.of(x: i, y: j)
-    endpoints.assign(t, endpoint)
-    fresh += 1
-    fresh = mount(ttrie, t, endpoint, fresh)
-  end
+puts "Population: 1235 1236"
+tbase.predecessors(s0) do |hit|
+  pp hit
 end
 
-puts "Query"
-pp ttrie
+tbase.unmount(a2)
 
-sets = [] of SetSum
-ttrie.query({Ubase::IsDict.new, Ubase::At.new(Term.of(:x)), Ubase::IsNum.new, Ubase::Literal.new(Term.of(1))}) do |set|
-  sets << set
-end
-ttrie.query({Ubase::IsDict.new, Ubase::At.new(Term.of(:y)), Ubase::IsNum.new, Ubase::Literal.new(Term.of(1))}) do |set|
-  sets << set
-end
-hits = [] of Vertex
-unless sets.empty?
-  sets.unstable_sort_by!(&.population)
-
-  pivot = sets.first
-  pivot.each do |endpoint|
-    next unless (1...sets.size).all? { |index| endpoint.in?(sets[index]) }
-
-    hits << endpoint
-  end
-end
-pp hits
-
-puts "Delete"
-(1...2).each do |i|
-  (1...2).each do |j|
-    t = Term.of(x: i, y: j)
-    endpoint = endpoints.get?(t) || raise ""
-    unmount(ttrie, t, endpoint)
-    endpoints.unload(t)
-  end
-end
-pp ttrie
-
-# require "benchmark"
-
-# Benchmark.ips do |x|
-#   x.report("intersect") do
-
-#   end
-# end
-{% skip_file %}
-
-# id1, f = xg.mount([1, 2, 3] of Vertex, f)
-# id2, f = xg.mount([1, 2, 5] of Vertex, f)
-# id3, f = xg.mount([2, 3, 5] of Vertex, f)
-# rules << id0
-# rules << id1
-# rules << id2
-# rules << id3
-
-# xg.unmount([1, 2, 3, 4] of Vertex)
-# rules.delete(id0)
-
-# xg.unmount([2, 3, 5] of Vertex)
-# rules.delete(id3)
-
-# xg.unmount([1, 2, 3] of Vertex)
-# rules.delete(id1)
-
-# xg.unmount([1, 2, 5] of Vertex)
-# rules.delete(id2)
-
-# pp xg
-
-# xg.conjunctions(Deque(Vertex){1, 2, 3, 4, 5}) do |v|
-#   next unless v.in?(rules)
-#   pp v
-# end
-
-# {% skip_file %}
-
-tally_xg = ExtrinsicTally(Xgraph::Node).new
-tally_v = ExtrinsicTally(Utrie::Node).new
-fresh = VERTEX_ZERO
-utrie = Utrie.new(tally_v, ExtrinsicMap(Utrie::Node, Vertex).new)
-strands = Pf::Set(UInt32).new
-xg = Xgraph.new(tally_xg, ExtrinsicMap(Xgraph::Node, Vertex).new)
-rules = Set(Vertex).new
-
-# pattern = ML.term(%{((%any + -) (%any° a_number a_string) b_number ¦ () x_number)})
-pattern = ML.term %{((%any div mod) a_ (%all b_number (%not 0)) ¦ precision⋮ 3)}
-normp = M1.normal(pattern)
-skeleton = Skeleton.pattern(normp)
-
-# Add
-
-puts "Add"
-
-branches(skeleton) do |branch|
-  puts "Sensor"
-
-  conj = Deque(Vertex).new
-
-  strands(branch) do |strand|
-    id, fresh = utrie.mount(strand.items, fresh)
-    strands = strands.add(id)
-    puts "+  #{strand} #{id}"
-    conj << id
-  end
-
-  conj.unstable_sort!
-
-  id, fresh = xg.mount(conj, fresh)
-  rules << id
-
-  puts "Sensor #{branch} = #{id}"
+puts "Population: 1235"
+tbase.predecessors(s0) do |hit|
+  pp hit
 end
 
-# tally_t = ExtrinsicTally(Ttrie::Node).new
-# ttrie = Ttrie.new(tally_t, ExtrinsicMap(Ttrie::Node, Vertex).new)
+tbase.unmount(a1)
 
-# sets = {} of Vertex => Set(Vertex)
-# rsets = {} of Set(Vertex) => Vertex
+puts "Population: "
+tbase.predecessors(s0) do |hit|
+  pp hit
+end
 
-# members, fresh = ttrie.mount(Term.of(:div, 100, 200, precision: 3), fresh)
-# unless id = rsets[members]?
-#   id = fresh
-#   fresh += 1
-# end
-# sets.put_if_absent(id) { members }
+puts "Query #{a0} without s1"
+tbase.unmount(s1)
+tbase.predecessors(a0) do |hit|
+  pp hit
+end
 
-# members, fresh = ttrie.mount(Term.of(:div, 200, 300, precision: 3), fresh)
-# unless id = rsets[members]?
-#   id = fresh
-#   fresh += 1
-# end
-# sets.put_if_absent(id) { members }
-
-# members, fresh = ttrie.mount(Term.of(:div, 300, 400, precision: 3), fresh)
-# unless id = rsets[members]?
-#   id = fresh
-#   fresh += 1
-# end
-# sets.put_if_absent(id) { members }
-
-# subordinates = Set(Vertex).new
-# ttrie.query([Ubase::IsDict.new] of Ubase::Any) do |sub|
-#   if subordinates.empty?
-#     subordinates = sets[sub]
-#   else
-#     subordinates &= sets[sub]
-#   end
-# end
-# pp subordinates
-
-# --------------------------------
-
-# puts "Delete"
-# # Delete
-
-# branches(skeleton) do |branch|
-#   puts "Sensor"
-
-#   conj = Deque(Vertex).new
-
-#   strands(branch) do |strand|
-#     pred = VERTEX_ROOT
-
-#     strand.items.each do |base|
-#       pred = utrie.unmount(pred, Ubase.parse(base))
-#     end
-
-#     strands = strands.delete(pred)
-#     conj << pred
-#   end
-
-#   conj.unstable_sort!
-
-#   id = xg.unmount(conj)
-#   rules.delete(id)
-
-#   puts "-  Sensor #{branch} = #{id}"
-# end
-
-# pp utrie
-# pp xg
-
-# hit = Deque(UInt32).new
-
-# utrie.query(Term.of(:div, 100, 200, precision: 3)) do |id|
-#   next unless id.in?(strands)
-#   hit << id
-# end
-
-# hit.unstable_sort!
-
-# pp hit
-# xg.conjunctions(hit) do |id|
-#   next unless id.in?(rules)
-#   pp id
-# end
-
-# hit = Deque(UInt32).new
-
-# utrie.query(Term.of(:mod, 100, 200, precision: 3)) do |id|
-#   next unless id.in?(strands)
-#   hit << id
-# end
-
-# hit.unstable_sort!
-
-# pp hit
-# xg.conjunctions(hit) do |id|
-#   next unless id.in?(rules)
-#   pp id
-# end
-
-# + %[(%let (%capture capture_) successor_)]
-# + %[(%itemseq _*)]
-# + %[(%pass)]
-# + %[(%'%literal term_)]
-# + %[(%'%partition itemspart_ pairspart_)]
-# + {:"%string"}
-# + {:"%symbol"}
-# + {:"%boolean"}
-# + {:"%dict"}
-# * :"%keypath", {:"%capture", :capture_}}
-# {:"%keypool", :_, :"_*"}
-# { {:"%literal", :"%layer"}, :below_, :side_ }
-# {:"%value", {:"%capture", :capture_}, :value_}
-# {:"%-value", {:"%capture", :capture_}}
-# {:"%-value", {:"%capture", :capture_}, {:"%barrier", :name_}
-# + %[(%pipe (%barrier (+ n_number)) successor_)]
-# + %[(%pipe (%barrier (- n_number)) successor_)]
-# + %[(%pipe (%barrier (* n_number)) successor_)]
-# + %[(%pipe (%barrier (/ n_number)) successor_)]
-# + %[(%pipe (%barrier (div n_number)) successor_)]
-# + %[(%pipe (%barrier (mod n_number)) successor_)]
-# + %[(%pipe (%barrier (** n_number)) successor_)]
-# + %[(%pipe (%barrier (map arg_dict)) successor_)]
-# + %[(%pipe (%barrier span) successor_)]
-# + %[(%pipe (%barrier tally) successor_)]
-# + %[(%pipe (%barrier type) successor_)]
-# {:"%items/first", :_, :"_*"}
-# {:"%items/source", :_, :"_*"}
-# {:"%partition",
-#  {:"%items/all", {:"%capture", :capture_}, :_, :"_*"},
-#  {min: :min0_, max: :max0_}},
-
-# {:"%partition",
-#  {:"%entries/all", {:"%capture", :capture_}, :k_, :v_},
-#  {min: :min0_, max: :max0_}},
-
-# {:"%entries/first", :k_, :v_}
-# {:"%entries/source", :k_, :v_}
-# Term[:"%leaves/first", :body_, in: :part_, order: :dfs, self: :depth0_boolean]
-# Term[:"%leaves/first", :body_, in: :part_, order: :bfs, self: :depth0_boolean]
-# Term[:"%leaves/source", :body_, in: :part_, order: :dfs, self: :depth0_boolean]
-# Term[:"%leaves/all", {:"%capture", :capture_}, :body_, in: :part_, min: :min_, max: :max_, order: :dfs, self: :depth0_boolean]
-# Term[:"%leaves/all", {:"%capture", :capture_}, :body_, in: :part_, min: :min_, max: :max_, order: :bfs, self: :depth0_boolean]
-# + {:"%all", :a_, :b_}
-# + %[(%any/literal _*)]
-# + {:"%any/source", :a_}
-# + {:"%any/source", :a_, :b_}
-# + {:"%any/source", :a_, :_, :"_*"}
-# {:"%edge", {:"%literal", :_}
-# {:"%edge", {:"%literal", :_symbol}
-# {:"%edge", {:"%literal", :_string}
-# {:"%edge", {:"%literal", :_number}
-# * {:"%not", :_, :"_*"}
-# + {:"%number", {:"%literal", :_}
-# + {:"%number", {:"%literal", {:whole, :_}}}
-# + {:"%number", :x_, :op_symbol, :b_number}
-# + {:"%number", :a_number, :lop_symbol, :x_, :rop_symbol, :b_number}
-# * {:"%new", :pattern_}, {:"%new", :_, :pattern_}
-# + %[(%symbol nonblank)]
-# + %[(%symbol blank name_ type_)]
+puts "Query #{a0} without s2"
+tbase.unmount(s2)
+tbase.predecessors(a0) do |hit|
+  pp hit
+end
