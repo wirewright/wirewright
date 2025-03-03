@@ -1110,6 +1110,16 @@ class Tbase
     abstract def value : Term
   end
 
+  record ConjvRef, refcount : Refcount do
+    def incref : ConjvRef
+      copy_with(refcount: refcount + 1)
+    end
+
+    def decref? : {ConjvRef, Bool}
+      {copy_with(refcount: refcount - 1), refcount == 1}
+    end
+  end
+
   def initialize(@fresh : LabelGenerator)
     # TODO: bundle these into a single map, take that map as an input ExtrinsicMap!
 
@@ -1120,9 +1130,11 @@ class Tbase
 
     @strands = AtomicSet(Label).new
 
+    @conjvrefs = AtomicMap(Label, ConjvRef).new
+
     @sensor_encode = AtomicMap(Label, Label).new
-    # FIXME: flatten
-    @sensor_decode = AtomicMap(Label, Pf::Set(Label)).new
+    @sensor_decode = AtomicMap(SensorDecoder::Node, SensorDecoder::Props).new
+
     @appearances = AtomicSet(Label).new
   end
 
@@ -1164,29 +1176,29 @@ class Tbase
     # of commitment. After the decode transaction finishes, the sensor becomes
     # reachable via querying.
     @sensor_encode.assign(subject.id, conjv)
-    @sensor_decode.transaction(conjv) do |bucket0|
-      bucket0 ||= Pf::Set(Label).new
-      bucket0.add(subject.id)
-    end
+
+    @conjvrefs.ref(conjv) { ConjvRef.new(0) }
+
+    sensor_decoder = SensorDecoder.new(@fresh, @sensor_decode)
+    sensor_decoder.bind(conjv, subject.id)
   end
 
   # Deletes a sensor *subject* from this Tbase.
   #
   # NOTE: the caller guarantees that it mounted *subject* under the guarantees
   # given in `mount`. Behavior is undefined otherwise.
+  #
+  # NOTE: the caller must expect the visibility of *subject* to peers until this
+  # method returns. Therefore, the caller is expected to somehow "blacklist"
+  # *subject* on its end before calling this method, to ensure that *subject* is
+  # unreachable through queries while this method is doing its work.
   def unmount(subject : Sensor) : Nil
-    conjv = @sensor_encode.delete(subject.id)
-
     # "Unpublish" the sensor. We will need to know its conjunction vertex
     # first though.
-    @sensor_decode.transaction(conjv) do |bucket0|
-      bucket0 = bucket0 || raise KeyError.new
-      bucket1 = bucket0.delete(subject.id)
-      if bucket0.same?(bucket1)
-        raise KeyError.new
-      end
-      bucket1.empty? ? nil : bucket1
-    end
+    conjv = @sensor_encode.delete(subject.id)
+
+    sensor_decoder = SensorDecoder.new(@fresh, @sensor_decode)
+    sensor_decoder.unbind(conjv, subject.id)
 
     utrie = Utrie.new(@udata)
     xgraph = Xgraph.new(@xdata)
@@ -1204,6 +1216,15 @@ class Tbase
     conj.unstable_sort!
 
     expect xgraph.unmount(conj) == conjv
+
+    conjvref = @conjvrefs.unref(conjv)
+
+    return unless conjvref.refcount.zero?
+
+    # If we've reached this point, `conjv` will never be used again. Thus we burn
+    # the associated sensor encodings to avoid leaking memory.
+    sensor_decoder = SensorDecoder.new(@fresh, @sensor_decode)
+    sensor_decoder.burn(conjv)
   end
 
   # Adds an appearance *subject* to this Tbase. The instant this method returns,
@@ -1339,9 +1360,8 @@ class Tbase
     xgraph.conjs(hits) do |candidate|
       # Ensure the vertex hit is a fully added sensor whose subject
       # id we know.
-      next unless bucket = @sensor_decode.get?(candidate)
-
-      bucket.each do |candidate_subject_id|
+      sensor_decode = SensorDecoder.new(@fresh, @sensor_decode)
+      sensor_decode.decode(candidate) do |candidate_subject_id|
         next if only_preds && subject.id <= candidate_subject_id
 
         fn.call(candidate_subject_id)
@@ -1415,13 +1435,11 @@ class Tspace
   end
 end
 
-# NOTE: If instant = `VERTEX_NONE`, this means *value* is the corresponding
-# appearance's tombstone.
 alias Activation = StimulusPresence | StimulusAbsence
 
 record StimulusPresence, sensor : Label, trigger : Label, identity : Label, pred : Label, instant : Label, value : Term
 
-# NOTE: in `StimulusDeparture`, the *farewell* term does not necessarily
+# NOTE: in `StimulusAbsence`, the *farewell* term does not necessarily
 # match the receiver sensor's pattern. They are given for reference. If the receiver
 # can handle it, they should. Otherwise they may handle the absence itself.
 record StimulusAbsence, sensor : Label, trigger : Label, identity : Label, instant : Label, farewell : Term?
@@ -1619,6 +1637,170 @@ class LabelGenerator
   end
 end
 
+# One-to-many map for decoding a conjunction vertex into the sensors that
+# were bound to it.
+struct SensorDecoder
+  record Node, conjv : Label, id : Label
+  record Props, sensor : Label, succ : Label, active : Bool
+
+  def initialize(@fresh : LabelGenerator, @data : ExtrinsicMap(Node, Props))
+  end
+
+  # Registers *sensor* as one of decodings of *conjv*.
+  #
+  # Worst-case O(N) relative to the highest-ever number of decodings of *conjv*.
+  #
+  # NOTE: binds and unbinds leave "tombstones" for *conjv*-*sensor* combos.
+  # Make sure to `burn` *conjv* when you're sure it's never going to be used
+  # again to not leak memory.
+  #
+  # NOTE: the caller guarantees *conjv* was never bound to *sensor* before.
+  def bind(conjv : Label, sensor : Label) : Nil
+    id = VERTEX_NONE
+
+    running = true
+
+    while running
+      @data.transaction(Node.new(conjv, id)) do |props0|
+        if props0.nil?
+          # If head is free we insert immediately and finish. Note how
+          # we have to allocate the successor here.
+          running = false
+
+          Props.new(sensor, @fresh.call, active: true)
+        elsif !props0.active
+          # If head is inactive we replace its now-defunct sensor with
+          # the bound sensor, activate, and finish.
+          running = false
+
+          props0.copy_with(sensor: sensor, active: true)
+        else
+          # Otherwise we proceed to the successor node.
+          id = props0.succ
+
+          props0
+        end
+      end
+    end
+  end
+
+  # Unregisters *sensor* from being one of the decodings of *conjv*.
+  #
+  # Worst-case O(N) relative to the highest-ever number of decodings of *conjv*.
+  #
+  # NOTE: binds and unbinds leave "tombstones" for *conjv*-*sensor* combos.
+  # Make sure to `burn` *conjv* when you're sure it's never going to be used
+  # again to not leak memory.
+  #
+  # NOTE: the caller guarantees *conjv* was bound to *sensor* before (`bind`).
+  def unbind(conjv : Label, sensor : Label) : Nil
+    id = VERTEX_NONE
+
+    running = true
+
+    while running
+      @data.transaction(Node.new(conjv, id)) do |props0|
+        if props0.nil?
+          raise KeyError.new
+        end
+
+        if props0.sensor == sensor
+          # Deactivate the sensor if we've found a match.
+          running = false
+
+          props0.copy_with(active: false)
+        else
+          # Otherwise we proceed to the successor node.
+          id = props0.succ
+
+          props0
+        end
+      end
+    end
+  end
+
+  # NOTE: this method "burns" *conjv*; the caller guarantees that *conjv*
+  # will never be passed to `bind` or `unbind` again.
+  def burn(conjv : Label) : Nil
+    id = VERTEX_NONE
+
+    keys = [] of Node
+
+    while props0 = @data.get?(Node.new(conjv, id))
+      keys << Node.new(conjv, id)
+      id = props0.succ
+    end
+
+    keys.each { |key| @data.delete(key) }
+  end
+
+  # Yields all decodings associated with *conjv*.
+  def decode(conjv : Label, & : Label ->) : Nil
+    id = VERTEX_NONE
+
+    while props0 = @data.get?(Node.new(conjv, id))
+      if props0.active
+        yield props0.sensor
+      end
+      id = props0.succ
+    end
+  end
+end
+
+# fresh = LabelGenerator.new
+# data = AtomicMap(SensorDecoder::Node, SensorDecoder::Props).new
+
+# dec = SensorDecoder.new(fresh, data)
+
+# dec.bind(Label.new(10), Label.new(100))
+# dec.bind(Label.new(10), Label.new(200))
+# dec.bind(Label.new(10), Label.new(300))
+
+# dec.decode(Label.new(10)) do |sensor|
+#   pp sensor
+# end
+
+# dec.unbind(Label.new(10), Label.new(200))
+# pp dec
+# dec.bind(Label.new(10), Label.new(400))
+# pp dec
+
+# # pp dec
+
+# # dec.unbind(Label.new(10), Label.new(200))
+# # pp dec
+# dec.unbind(Label.new(10), Label.new(300))
+# pp dec
+# dec.bind(Label.new(20), Label.new(123))
+# pp dec
+# dec.bind(Label.new(20), Label.new(456))
+# pp dec
+# dec.decode(Label.new(10)) do |sensor|
+#   pp sensor
+# end
+# dec.unbind(Label.new(10), Label.new(100))
+# dec.decode(Label.new(20)) do |sensor|
+#   pp sensor
+# end
+# pp dec
+
+# dec.unbind(Label.new(20), Label.new(123))
+# dec.unbind(Label.new(20), Label.new(456))
+# dec.unbind(Label.new(10), Label.new(400))
+
+# pp dec
+
+# dec.bind(Label.new(10), Label.new(123))
+
+# pp dec
+
+# dec.burn(Label.new(10))
+# dec.burn(Label.new(20))
+
+# pp dec
+
+# pp dec
+
 # pattern = ML.term %{((%any div mod) a_ (%all b_number (%not 0)) ¦ precision⋮ 3)}
 # normp = M1.normal(pattern)
 # skeleton = Skeleton.pattern(normp)
@@ -1688,6 +1870,17 @@ conn = Tconn.new(fresh, tspace) do |act|
   pp view
 end
 
+# conn.sensor 0, pattern: ML.term(%{_number}), selector: nil
+# conn.sensor 1, pattern: ML.term(%{_number}), selector: nil
+
+# pp tbase
+
+# conn.delete 0
+# conn.delete 1
+
+# pp tbase
+# {% skip_file %}
+
 conn.appearance 1, value: ML.term(%{1}), selector: nil, tombstone: Term.of("bye bye")
 conn.sensor 0, pattern: ML.term(%{_number}), selector: nil
 conn.sensor 3, pattern: ML.term(%{(%any° _number "bye bye")}), selector: nil
@@ -1703,6 +1896,11 @@ conn.sensor 2, pattern: ML.term(%{(%any 2 4 6 8 9)}), selector: Term.of(:qux)
   conn.appearance 1, value: Term.of(i), selector: Term.of(:qux), tombstone: nil
 end
 conn.delete 1
+conn.delete 0
+conn.delete 2
+conn.delete 3
+conn.delete 4
+pp tbase
 
 {% skip_file %}
 
