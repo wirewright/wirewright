@@ -400,6 +400,14 @@ def strands(branch : Term, &sink : Term::Dict ->)
   strands(Term[], branch, sink)
 end
 
+class Tbase
+  module Key
+  end
+
+  module Value
+  end
+end
+
 module Ubase
   alias Any = At | IsSym | IsStr | IsNum | IsBool | IsDict | Literal
 
@@ -443,8 +451,13 @@ VERTEX_ROOT = VERTEX_NONE + 1
 VERTEX_ZERO = VERTEX_ROOT + 1
 
 struct Utrie
-  record Node, pred : Label, base : Ubase::Any
+  record Node, pred : Label, base : Ubase::Any do
+    include Tbase::Key
+  end
+
   record Props, refcount : Refcount, successor : Label do
+    include Tbase::Value
+
     def incref : Props
       copy_with(refcount: refcount + 1)
     end
@@ -546,8 +559,13 @@ struct Utrie
 end
 
 struct Xgraph
-  record Node, a : Label, b : Label
+  record Node, a : Label, b : Label do
+    include Tbase::Key
+  end
+
   record Props, refcount : Refcount, successor : Label do
+    include Tbase::Value
+
     def incref : Props
       copy_with(refcount: refcount + 1)
     end
@@ -633,8 +651,13 @@ struct Xgraph
 end
 
 struct Ttrie
-  record Node, pred : Label, base : Ubase::Any
+  record Node, pred : Label, base : Ubase::Any do
+    include Tbase::Key
+  end
+
   record Props, refcount : Refcount, successor : Label do
+    include Tbase::Value
+
     def incref : Props
       copy_with(refcount: refcount + 1)
     end
@@ -728,22 +751,51 @@ struct Ttrie
 end
 
 struct Etrace
-  alias Key = Node | SuccessorCount | SuccessorList | Successor
-  alias Value = Props | Count | Ref | Presence
+  module Key
+    include Tbase::Key
+  end
 
-  record Node, pred : Label, vertex : Label
-  record Props, refcount : Refcount, oid : Label
+  module Value
+    include Tbase::Value
+  end
 
-  record SuccessorCount, oid : Label
-  record SuccessorList, oid : Label, index : Label
+  record Node, pred : Label, vertex : Label do
+    include Key
+  end
 
-  record Successor, oid : Label, vertex : Label
-  record Presence
-  record Count, value : Refcount
-  record Ref, vertex : Label
+  record Props, refcount : Refcount, oid : Label do
+    include Value
+  end
+
+  record SuccessorCount, oid : Label do
+    include Key
+  end
+
+  record SuccessorList, oid : Label, index : Label do
+    include Key
+  end
+
+  record Successor, oid : Label, vertex : Label do
+    include Key
+  end
+
+  # TODO: Identity
+  record Presence do
+    include Value
+  end
+
+  record Count, value : Refcount do
+    include Value
+  end
+
+  record Ref, vertex : Label do
+    include Value
+  end
 
   def initialize(@data : ExtrinsicMap(Key, Value))
   end
+
+  # TODO: use submaps
 
   def mount(path : Slice(Label), fresh)
     if path.size < 2
@@ -857,7 +909,7 @@ end
 
 module ExtrinsicMap(K, V)
   class Transaction(V)
-    getter! value : V?
+    property! value : V?
 
     def initialize(@value)
     end
@@ -912,6 +964,30 @@ module ExtrinsicMap(K, V)
   end
 end
 
+struct HashMap(K, V)
+  include ExtrinsicMap(K, V)
+
+  def initialize
+    @map = {} of K => V
+  end
+
+  def get?(key : K) : V?
+    @map[key]?
+  end
+
+  def transaction(key : K, & : Transaction(V) -> T) : T forall T
+    value0 = @map[key]?
+    tx = Transaction(V).new(value0)
+    result = yield tx
+    if value1 = tx.value?
+      @map[key] = value1
+    else
+      @map.delete(key)
+    end
+    result
+  end
+end
+
 class AtomicMap(K, V)
   include ExtrinsicMap(K, V)
 
@@ -947,6 +1023,26 @@ class AtomicMap(K, V)
   end
 end
 
+struct Submap(K, V, Ks, Vs)
+  include ExtrinsicMap(K, V)
+
+  def initialize(@map : ExtrinsicMap(Ks, Vs))
+  end
+
+  def get?(key : K) : V?
+    @map.get?(key.as(Ks)).as(V?)
+  end
+
+  def transaction(key : K, & : Transaction(V) -> T) : T forall T
+    @map.transaction(key.as(Ks)) do |tx0|
+      tx1 = Transaction(V).new(tx0.value?.as(V?))
+      result = yield tx1
+      tx0.value = tx1.value?.as(Vs?)
+      result
+    end
+  end
+end
+
 class Tbase
   module Sensor
     # Returns a Tspace-unique id of this sensor, that was obtained from
@@ -962,9 +1058,13 @@ class Tbase
     abstract def value : Term
   end
 
-  record ConjvRef::Node, vertex : Label
+  record ConjvRef::Node, vertex : Label do
+    include Key
+  end
 
   record ConjvRef::Props, refcount : Refcount do
+    include Value
+
     def incref : Props
       copy_with(refcount: refcount + 1)
     end
@@ -974,29 +1074,63 @@ class Tbase
     end
   end
 
-  record Identity
-  record StrandVertex, vertex : Label
-  record AppearanceVertex, vertex : Label
+  record Identity do
+    include Value
+  end
 
-  record SensorEncoder::Node, sensor : Label
-  record SensorEncoder::Props, conjv : Label
+  record StrandVertex, vertex : Label do
+    include Key
+  end
 
-  def initialize(@fresh : LabelGenerator)
-    # TODO: bundle these into a single map, take that map as an input ExtrinsicMap!
+  record AppearanceVertex, vertex : Label do
+    include Key
+  end
 
-    @udata = AtomicMap(Utrie::Node, Utrie::Props).new
-    @xdata = AtomicMap(Xgraph::Node, Xgraph::Props).new
-    @tdata = AtomicMap(Ttrie::Node, Ttrie::Props).new
-    @edata = AtomicMap(Etrace::Key, Etrace::Value).new
+  record SensorEncoder::Node, sensor : Label do
+    include Key
+  end
 
-    @strands = AtomicMap(StrandVertex, Identity).new
+  record SensorEncoder::Props, conjv : Label do
+    include Value
+  end
 
-    @conjvrefs = AtomicMap(ConjvRef::Node, ConjvRef::Props).new
+  def initialize(@fresh : LabelGenerator, @data : ExtrinsicMap(Key, Value))
+  end
 
-    @sensor_encode = AtomicMap(SensorEncoder::Node, SensorEncoder::Props).new
-    @sensor_decode = AtomicMap(SensorDecoder::Node, SensorDecoder::Props).new
+  private def udata
+    Submap(Utrie::Node, Utrie::Props, Key, Value).new(@data)
+  end
 
-    @appearances = AtomicMap(AppearanceVertex, Identity).new
+  private def xdata
+    Submap(Xgraph::Node, Xgraph::Props, Key, Value).new(@data)
+  end
+
+  private def tdata
+    Submap(Ttrie::Node, Ttrie::Props, Key, Value).new(@data)
+  end
+
+  private def edata
+    Submap(Etrace::Key, Etrace::Value, Key, Value).new(@data)
+  end
+
+  private def strands
+    Submap(StrandVertex, Identity, Key, Value).new(@data)
+  end
+
+  private def conjvrefs
+    Submap(ConjvRef::Node, ConjvRef::Props, Key, Value).new(@data)
+  end
+
+  private def sensor_encode
+    Submap(SensorEncoder::Node, SensorEncoder::Props, Key, Value).new(@data)
+  end
+
+  private def sensor_decode
+    Submap(SensorDecoder::Node, SensorDecoder::Props, Key, Value).new(@data)
+  end
+
+  private def appearances
+    Submap(AppearanceVertex, Identity, Key, Value).new(@data)
   end
 
   # Adds a sensor *subject* to this Tbase. The instant this method returns,
@@ -1015,8 +1149,8 @@ class Tbase
   # Behavior is undefined if these guarantees are broken. Breaking of these
   # guarantees must be handled at a higher level.
   def mount(subject : Sensor) : Nil
-    utrie = Utrie.new(@udata)
-    xgraph = Xgraph.new(@xdata)
+    utrie = Utrie.new(udata)
+    xgraph = Xgraph.new(xdata)
 
     conj = Deque(Label).new
 
@@ -1024,7 +1158,7 @@ class Tbase
       uvertex, added = utrie.mount(strand, @fresh)
 
       if added
-        @strands.set(StrandVertex.new(uvertex), Identity.new)
+        strands.set(StrandVertex.new(uvertex), Identity.new)
       end
 
       conj << uvertex
@@ -1038,14 +1172,14 @@ class Tbase
     # NOTE: decode assignment MUST be done last because it serves as THE indication
     # of commitment. After the decode transaction finishes, the sensor becomes
     # reachable via querying.
-    @sensor_encode.set(
+    sensor_encode.set(
       SensorEncoder::Node.new(subject.id),
       SensorEncoder::Props.new(conjv),
     )
 
-    @conjvrefs.ref(ConjvRef::Node.new(conjv)) { ConjvRef::Props.new(0) }
+    conjvrefs.ref(ConjvRef::Node.new(conjv)) { ConjvRef::Props.new(0) }
 
-    sensor_decoder = SensorDecoder.new(@fresh, @sensor_decode)
+    sensor_decoder = SensorDecoder.new(@fresh, sensor_decode)
     sensor_decoder.bind(conjv, subject.id)
   end
 
@@ -1061,20 +1195,20 @@ class Tbase
   def unmount(subject : Sensor) : Nil
     # "Unpublish" the sensor. We will need to know its conjunction vertex
     # first though.
-    conjv = @sensor_encode.del(SensorEncoder::Node.new(subject.id)).conjv
+    conjv = sensor_encode.del(SensorEncoder::Node.new(subject.id)).conjv
 
-    sensor_decoder = SensorDecoder.new(@fresh, @sensor_decode)
+    sensor_decoder = SensorDecoder.new(@fresh, sensor_decode)
     sensor_decoder.unbind(conjv, subject.id)
 
-    utrie = Utrie.new(@udata)
-    xgraph = Xgraph.new(@xdata)
+    utrie = Utrie.new(udata)
+    xgraph = Xgraph.new(xdata)
 
     conj = Deque(Label).new
 
     subject.strands.each do |strand|
       strand_vertex, removed = utrie.unmount(strand)
       if removed
-        @strands.del(StrandVertex.new(strand_vertex))
+        strands.del(StrandVertex.new(strand_vertex))
       end
       conj << strand_vertex
     end
@@ -1083,13 +1217,13 @@ class Tbase
 
     expect xgraph.unmount(conj) == conjv
 
-    conjvref = @conjvrefs.unref(ConjvRef::Node.new(conjv))
+    conjvref = conjvrefs.unref(ConjvRef::Node.new(conjv))
 
     return unless conjvref.refcount.zero?
 
     # If we've reached this point, `conjv` will never be used again. Thus we burn
     # the associated sensor encodings to avoid leaking memory.
-    sensor_decoder = SensorDecoder.new(@fresh, @sensor_decode)
+    sensor_decoder = SensorDecoder.new(@fresh, sensor_decode)
     sensor_decoder.burn(conjv)
   end
 
@@ -1109,8 +1243,8 @@ class Tbase
   # Behavior is undefined if these guarantees are broken. Breaking of these
   # guarantees must be handled at a higher level.
   def mount(subject : Appearance) : Nil
-    ttrie = Ttrie.new(@tdata)
-    etrace = Etrace.new(@edata)
+    ttrie = Ttrie.new(tdata)
+    etrace = Etrace.new(edata)
 
     Term.each_keypath_and_leaf(subject.value) do |keypath, leaf|
       keypath.push(leaf)
@@ -1123,7 +1257,7 @@ class Tbase
     end
 
     # "Publish" the appearance
-    @appearances.set(AppearanceVertex.new(subject.id), Identity.new)
+    appearances.set(AppearanceVertex.new(subject.id), Identity.new)
   end
 
   # Deletes an appearance *subject* from this Tbase.
@@ -1133,10 +1267,10 @@ class Tbase
   def unmount(subject : Appearance) : Nil
     # "Unpublish" the appearance. Since we're using subject ids we can do
     # that immediately.
-    @appearances.del(AppearanceVertex.new(subject.id))
+    appearances.del(AppearanceVertex.new(subject.id))
 
-    ttrie = Ttrie.new(@tdata)
-    etrace = Etrace.new(@edata)
+    ttrie = Ttrie.new(tdata)
+    etrace = Etrace.new(edata)
 
     Term.each_keypath_and_leaf(subject.value) do |keypath, leaf|
       keypath.push(leaf)
@@ -1163,8 +1297,8 @@ class Tbase
   #   The caller must ensure that all actions taken upon them first check (or only
   #   proceed provided) the existence of the corresponding appearance.
   def query(subject : Sensor, *, only_preds = true, &fn : Label ->) : Nil
-    ttrie = Ttrie.new(@tdata)
-    etrace = Etrace.new(@edata)
+    ttrie = Ttrie.new(tdata)
+    etrace = Etrace.new(edata)
 
     sets = [] of Set(Label)
 
@@ -1178,7 +1312,7 @@ class Tbase
       # a unified clock.
       etrace.walk(*edge) do |candidate|
         # Ensure candidate is a fuly added appearance.
-        next unless @appearances.get?(AppearanceVertex.new(candidate))
+        next unless appearances.get?(AppearanceVertex.new(candidate))
         next if only_preds && subject.id <= candidate
 
         hits << candidate
@@ -1209,14 +1343,14 @@ class Tbase
   #   The caller must ensure that all actions taken upon them first check (or only
   #   proceed provided) the existence of the corresponding sensor.
   def query(subject : Appearance, *, only_preds = true, &fn : Label ->) : Nil
-    utrie = Utrie.new(@udata)
-    xgraph = Xgraph.new(@xdata)
+    utrie = Utrie.new(udata)
+    xgraph = Xgraph.new(xdata)
 
     hits = Deque(Label).new
 
     utrie.query(subject.value) do |hit|
       # Ensure the vertex hit is a fully added strand.
-      next unless @strands.get?(StrandVertex.new(hit))
+      next unless strands.get?(StrandVertex.new(hit))
 
       hits << hit
     end
@@ -1226,8 +1360,8 @@ class Tbase
     xgraph.conjs(hits) do |candidate|
       # Ensure the vertex hit is a fully added sensor whose subject
       # id we know.
-      sensor_decode = SensorDecoder.new(@fresh, @sensor_decode)
-      sensor_decode.decode(candidate) do |candidate_subject_id|
+      sensor_decoder = SensorDecoder.new(@fresh, sensor_decode)
+      sensor_decoder.decode(candidate) do |candidate_subject_id|
         next if only_preds && subject.id <= candidate_subject_id
 
         fn.call(candidate_subject_id)
@@ -1401,7 +1535,7 @@ class Tconn
   #
   # Replaces the surface at *identity* with a sensor group matching the given
   # *pattern* branch list.
-  def sensor(identity : Label, *, pattern : BranchList, selector : Term?) : Nil
+  def add_sensor(identity : Label, *, pattern : BranchList, selector : Term?) : Nil
     outbox = [] of {Label, ->}
 
     if surface0 = @appearances[identity]?
@@ -1428,7 +1562,7 @@ class Tconn
     outbox.to_h.each { |_, act| act.call }
   end
 
-  def sensor(identity : Label, *, pattern : Term, selector : Term?) : Nil
+  def add_sensor(identity : Label, *, pattern : Term, selector : Term?) : Nil
     skeleton = pipe(pattern, M1.normal, Skeleton.pattern)
 
     strands = [] of Strand
@@ -1444,10 +1578,10 @@ class Tconn
 
     # Arrays may over-allocate so we make an additional copy with to_readonly_slice
     # to possibly free the over-allocation.
-    sensor(identity, pattern: branches.to_readonly_slice(&.itself), selector: selector)
+    add_sensor(identity, pattern: branches.to_readonly_slice(&.itself), selector: selector)
   end
 
-  def appearance(identity : Label, *, value : Term, selector : Term?, tombstone : Term?) : Nil
+  def add_appearance(identity : Label, *, value : Term, selector : Term?, tombstone : Term?) : Nil
     outbox = [] of {Label, ->}
 
     if surface0 = @sensors[identity]?
@@ -1506,8 +1640,13 @@ end
 # One-to-many map for decoding a conjunction vertex into the sensors that
 # were bound to it.
 struct SensorDecoder
-  record Node, conjv : Label, id : Label
-  record Props, sensor : Label, succ : Label, active : Bool
+  record Node, conjv : Label, id : Label do
+    include Tbase::Key
+  end
+
+  record Props, sensor : Label, succ : Label, active : Bool do
+    include Tbase::Value
+  end
 
   def initialize(@fresh : LabelGenerator, @data : ExtrinsicMap(Node, Props))
   end
@@ -1697,7 +1836,8 @@ end
 # TODO: remember to test: %any of dicts, %literal dict!!!!
 
 fresh = LabelGenerator.new
-tbase = Tbase.new(fresh)
+data = HashMap(Tbase::Key, Tbase::Value).new
+tbase = Tbase.new(fresh, data)
 tspace = Tspace.new(fresh, tbase)
 
 view = Term[]
@@ -1743,19 +1883,20 @@ end
 # pp tbase
 # {% skip_file %}
 
-conn.appearance 1, value: ML.term(%{1}), selector: nil, tombstone: Term.of("bye bye")
-conn.sensor 0, pattern: ML.term(%{_number}), selector: nil
-conn.sensor 3, pattern: ML.term(%{(%any° _number "bye bye")}), selector: nil
-conn.sensor 2, pattern: ML.term(%{(%any 2 4 6 8 9)}), selector: Term.of(:qux)
+conn.add_appearance 1, value: ML.term(%{1}), selector: nil, tombstone: Term.of("bye bye")
+conn.add_sensor 0, pattern: ML.term(%{_number}), selector: nil
+conn.add_sensor 3, pattern: ML.term(%{(%any° _number "bye bye")}), selector: nil
+conn.add_sensor 2, pattern: ML.term(%{(%any 2 4 6 8 9)}), selector: Term.of(:qux)
+
 1000.times do |i|
   if i == 300
-    conn.sensor 4, pattern: ML.term(%{_number}), selector: Term.of(:qux)
+    conn.add_sensor 4, pattern: ML.term(%{_number}), selector: Term.of(:qux)
   elsif i == 500
     conn.delete 4
   elsif i == 900
-    conn.sensor 4, pattern: ML.term(%{_number}), selector: Term.of(:qux)
+    conn.add_sensor 4, pattern: ML.term(%{_number}), selector: Term.of(:qux)
   end
-  conn.appearance 1, value: Term.of(i), selector: Term.of(:qux), tombstone: nil
+  conn.add_appearance 1, value: Term.of(i), selector: Term.of(:qux), tombstone: nil
 end
 conn.delete 1
 conn.delete 0
