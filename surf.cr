@@ -435,12 +435,6 @@ module Ubase
   end
 end
 
-module ExtrinsicMap(K, V)
-  abstract def get?(key : K)
-  abstract def ref(key : K, & : -> V)
-  abstract def unref(key : K) : V
-end
-
 alias Label = UInt64
 alias Refcount = UInt32
 
@@ -765,12 +759,14 @@ struct Etrace
     # Create nodes for each step and incref. This way we'll make sure they're
     # not removed by someone else while we're working at them later on.
     oids = path.map do |step|
-      _, node1 = @data.transaction(Node.new(pred, step)) do |node0|
-        node0 = node0.as(Props?)
-        node0 ? node0.copy_with(refcount: node0.refcount + 1) : Props.new(1u32, fresh.call)
+      oid = @data.transaction(Node.new(pred, step)) do |tx|
+        node0 = tx.value?.as(Props?)
+        node1 = node0 ? node0.copy_with(refcount: node0.refcount + 1) : Props.new(1u32, fresh.call)
+        tx.set(node1)
+        node1.oid
       end
       pred = step
-      node1.oid
+      oid
     end
 
     # If we succeed in adding a Successor, then we're responsible for
@@ -781,15 +777,17 @@ struct Etrace
       successor = Successor.new(oid, w = path[index + 1])
       next if @data.get?(successor)
 
-      @data.transaction(successor) { Presence.new }
+      @data.set(successor, Presence.new)
 
       # TODO: @data.ref
-      _, count1 = @data.transaction(SuccessorCount.new(oid)) do |count0|
-        count0 = count0.as(Count?)
-        count0 ? count0.copy_with(value: count0.value + 1) : Count.new(1u32)
+      count11 = @data.transaction(SuccessorCount.new(oid)) do |tx|
+        count0 = tx.value?.as(Count?)
+        count1 = count0 ? count0.copy_with(value: count0.value + 1) : Count.new(1u32)
+        tx.set(count1)
+        count1
       end
 
-      @data.transaction(SuccessorList.new(oid, count1.value - 1)) { Ref.new(w) }
+      @data.set(SuccessorList.new(oid, count11.value - 1), Ref.new(w))
     end
   end
 
@@ -805,27 +803,33 @@ struct Etrace
     pred = VERTEX_ROOT
 
     oids = path.compact_map do |step|
-      node0, node1 = @data.transaction(Node.new(pred, step)) do |current|
-        current = current.as(Props)
-        current.refcount == 1 ? nil : current.copy_with(refcount: current.refcount - 1)
+      oid, removed = @data.transaction(Node.new(pred, step)) do |tx|
+        current = tx.value.as(Props)
+        if current.refcount == 1
+          tx.del
+          {current.oid, true}
+        else
+          tx.set current.copy_with(refcount: current.refcount - 1)
+          {current.oid, false}
+        end
       end
 
       pred = step
 
       # Keep only oids which we've removed. We're responsible for their
       # cleanup then.
-      node1 ? nil : node0.as(Props).oid
+      removed ? oid : nil
     end
 
     oids.each do |oid|
       # Successor list may not necessarily exist for endpoint vertices.
       # Deletion may fail, and we're fine with that.
-      next unless count = @data.delete?(SuccessorCount.new(oid)).as(Count?)
+      next unless count = @data.del?(SuccessorCount.new(oid)).as(Count?)
 
       (0u32...count.value).each do |index|
-        successor = @data.delete(SuccessorList.new(oid, index)).as(Ref)
+        successor = @data.del(SuccessorList.new(oid, index)).as(Ref)
 
-        @data.delete(Successor.new(oid, successor.vertex))
+        @data.del(Successor.new(oid, successor.vertex))
       end
     end
   end
@@ -851,6 +855,63 @@ struct Etrace
   end
 end
 
+module ExtrinsicMap(K, V)
+  class Transaction(V)
+    getter! value : V?
+
+    def initialize(@value)
+    end
+
+    def set(value : V) : Nil
+      @value = value
+    end
+
+    def del? : V?
+      value0, @value = @value, nil
+      value0
+    end
+
+    def del : V
+      del? || raise KeyError.new
+    end
+  end
+
+  abstract def get?(key : K) : V?
+  abstract def transaction(key : K, & : Transaction(V) -> T) forall T
+
+  def set(key : K, value : V)
+    transaction(key, &.set(value))
+  end
+
+  def del?(key : K) : V?
+    transaction(key, &.del?)
+  end
+
+  def del(key : K) : V
+    del?(key) || raise KeyError.new
+  end
+
+  def ref(key : K, &zero : -> V) : V
+    zerov = nil
+
+    transaction(key) do |tx|
+      value0 = tx.value?
+      value1 = value0 ? value0 : (zerov ||= yield)
+      value1 = value1.incref
+      tx.set(value1)
+      value1
+    end
+  end
+
+  def unref(key : K) : V
+    transaction(key) do |tx|
+      value1, zero = tx.value.decref?
+      zero ? tx.del : tx.set(value1)
+      value1
+    end
+  end
+end
+
 class AtomicMap(K, V)
   include ExtrinsicMap(K, V)
 
@@ -862,198 +923,27 @@ class AtomicMap(K, V)
     @map.get(:relaxed)[key]?
   end
 
-  def transaction(key : K, & : V? -> T) : {V?, T} forall T
+  def transaction(key : K, & : Transaction(V) -> T) : T forall T
     map0 = @map.get(:relaxed)
 
     while true
       value0 = map0[key]?
-      value1 = yield value0
 
-      case {value0, value1}
-      in {nil, nil}
-        raise KeyError.new("value absent and not set during transaction: invalid state")
-      in {V, nil}
-        map1 = map0.dissoc(key)
-      in {nil, V}, {V, V}
+      tx = Transaction(V).new(value0)
+
+      result = yield tx
+
+      if value1 = tx.value?
         map1 = map0.assoc(key, value1)
+      else
+        map1 = map0.dissoc(key)
       end
 
       map0, ok = @map.compare_and_set(map0, map1, :relaxed, :relaxed)
       if ok
-        return value0, value1
+        return result
       end
     end
-  end
-
-  def delete(key : K) : V
-    delete?(key) || raise KeyError.new
-  end
-
-  def delete?(key : K) : V?
-    map0 = @map.get(:relaxed)
-
-    while true
-      value = map0[key]?
-      return unless value
-
-      map1 = map0.dissoc(key)
-      map0, ok = @map.compare_and_set(map0, map1, :relaxed, :relaxed)
-
-      return value if ok
-    end
-  end
-
-  def assign(key : K, value : V)
-    map0 = @map.get(:relaxed)
-
-    while true
-      map1 = map0.assoc(key, value)
-      map0, ok = @map.compare_and_set(map0, map1, :relaxed, :relaxed)
-      break if ok
-    end
-  end
-
-  # Increments the refcount of *key* in a single, atomic transaction,
-  # creating the pair using the block, if necessary.
-  #
-  # `V` instances must respond to `incref`.
-  def ref(key : K, & : -> V) : V
-    map0 = @map.get(:relaxed)
-    default = nil
-
-    while true
-      value0 = map0[key]? || (default ||= yield)
-      value1 = value0.incref
-      map1 = map0.assoc(key, value1)
-      map0, ok = @map.compare_and_set(map0, map1, :relaxed, :relaxed)
-      return value1 if ok
-    end
-  end
-
-  # Decrements the refcount of *key* in a single, atomic transaction,
-  # creating the pair using the block, if necessary.
-  #
-  # `V` instances must respond to `decref?`.
-  def unref(key : K) : V
-    map0 = @map.get(:relaxed)
-
-    while true
-      unless value0 = map0[key]?
-        raise KeyError.new
-      end
-      value1, zero = value0.decref?
-      if zero
-        map1 = map0.dissoc(key)
-      else
-        map1 = map0.assoc(key, value1)
-      end
-      map0, ok = @map.compare_and_set(map0, map1, :relaxed, :relaxed)
-      return value1 if ok
-    end
-  end
-end
-
-class LockMap(K, V)
-  include ExtrinsicMap(K, V)
-
-  def initialize
-    @map = {} of K => V
-    @lock = Mutex.new
-  end
-
-  def get?(key : K) : V?
-    @lock.synchronize { @map[key]? }
-  end
-
-  def transaction(key : K, & : V? -> T) : {V?, T} forall T
-    @lock.synchronize do
-      value0 = @map[key]?
-      value1 = yield value0
-
-      case {value0, value1}
-      in {nil, nil}
-        raise KeyError.new("value absent and not set during transaction: invalid state")
-      in {V, nil}
-        @map.delete(key)
-      in {nil, V}, {V, V}
-        @map[key] = value1
-      end
-
-      {value0, value1}
-    end
-  end
-
-  def delete(key : K) : V
-    delete?(key) || raise KeyError.new
-  end
-
-  def delete?(key : K) : V?
-    @lock.synchronize do
-      @map.delete(key)
-    end
-  end
-
-  def assign(key : K, value : V)
-    @lock.synchronize do
-      @map[key] = value
-    end
-  end
-
-  # Increments the refcount of *key* in a single, atomic transaction,
-  # creating the pair using the block, if necessary.
-  #
-  # `V` instances must respond to `incref`.
-  def ref(key : K, & : -> V) : V
-    @lock.synchronize do
-      value0 = @map[key]? || yield
-      value1 = value0.incref
-      @map[key] = value1
-    end
-  end
-
-  # Decrements the refcount of *key* in a single, atomic transaction,
-  # creating the pair using the block, if necessary.
-  #
-  # `V` instances must respond to `decref?`.
-  def unref(key : K) : V
-    @lock.synchronize do
-      value0 = @map[key]?
-      value1, zero = value0.decref?
-      if zero
-        @map.delete(key)
-      else
-        @map[key] = value1
-      end
-      value1
-    end
-  end
-end
-
-class BucketizedLockMap(K, V, N)
-  include ExtrinsicMap(K, V)
-
-  def initialize
-    @buckets = StaticArray(LockMap(K, V), N).new { LockMap(K, V).new }
-  end
-
-  private def bucket(key : K)
-    @buckets.unsafe_fetch(key.hash % N)
-  end
-
-  def transaction(key : K, &)
-    bucket(key).transaction(key) { |v| yield v }
-  end
-
-  def get?(key : K) : V?
-    bucket(key).get?(key)
-  end
-
-  def ref(key : K, & : -> V)
-    bucket(key).ref(key) { yield }
-  end
-
-  def unref(key : K) : V
-    bucket(key).unref(key)
   end
 end
 
@@ -1134,7 +1024,7 @@ class Tbase
       uvertex, added = utrie.mount(strand, @fresh)
 
       if added
-        @strands.assign(StrandVertex.new(uvertex), Identity.new)
+        @strands.set(StrandVertex.new(uvertex), Identity.new)
       end
 
       conj << uvertex
@@ -1148,7 +1038,7 @@ class Tbase
     # NOTE: decode assignment MUST be done last because it serves as THE indication
     # of commitment. After the decode transaction finishes, the sensor becomes
     # reachable via querying.
-    @sensor_encode.assign(
+    @sensor_encode.set(
       SensorEncoder::Node.new(subject.id),
       SensorEncoder::Props.new(conjv),
     )
@@ -1171,7 +1061,7 @@ class Tbase
   def unmount(subject : Sensor) : Nil
     # "Unpublish" the sensor. We will need to know its conjunction vertex
     # first though.
-    conjv = @sensor_encode.delete(SensorEncoder::Node.new(subject.id)).conjv
+    conjv = @sensor_encode.del(SensorEncoder::Node.new(subject.id)).conjv
 
     sensor_decoder = SensorDecoder.new(@fresh, @sensor_decode)
     sensor_decoder.unbind(conjv, subject.id)
@@ -1184,7 +1074,7 @@ class Tbase
     subject.strands.each do |strand|
       strand_vertex, removed = utrie.unmount(strand)
       if removed
-        @strands.delete(StrandVertex.new(strand_vertex))
+        @strands.del(StrandVertex.new(strand_vertex))
       end
       conj << strand_vertex
     end
@@ -1233,7 +1123,7 @@ class Tbase
     end
 
     # "Publish" the appearance
-    @appearances.assign(AppearanceVertex.new(subject.id), Identity.new)
+    @appearances.set(AppearanceVertex.new(subject.id), Identity.new)
   end
 
   # Deletes an appearance *subject* from this Tbase.
@@ -1243,7 +1133,7 @@ class Tbase
   def unmount(subject : Appearance) : Nil
     # "Unpublish" the appearance. Since we're using subject ids we can do
     # that immediately.
-    @appearances.delete(AppearanceVertex.new(subject.id))
+    @appearances.del(AppearanceVertex.new(subject.id))
 
     ttrie = Ttrie.new(@tdata)
     etrace = Etrace.new(@edata)
@@ -1353,7 +1243,7 @@ class Tspace
   end
 
   def bind(outbox, subject : Sensor, identity identity0 : Label, selector selector0 : Term?, callback : Activation ->)
-    @receivers.assign(subject.id, {identity0, selector0, callback})
+    @receivers.set(subject.id, {identity0, selector0, callback})
 
     @tbase.mount(subject)
     @tbase.query(subject) do |pred|
@@ -1370,12 +1260,12 @@ class Tspace
   end
 
   def unbind(subject : Sensor)
-    @receivers.delete(subject.id)
+    @receivers.del(subject.id)
     @tbase.unmount(subject)
   end
 
   def bind(outbox, prev_subject_id, subject : Appearance, trigger : Label, identity : Label, selector selector0 : Term?)
-    @senders.assign(subject.id, {trigger, identity, selector0, subject.value})
+    @senders.set(subject.id, {trigger, identity, selector0, subject.value})
 
     @tbase.mount(subject)
     @tbase.query(subject) do |pred|
@@ -1392,7 +1282,7 @@ class Tspace
   end
 
   def unbind(subject : Appearance)
-    @senders.delete(subject.id)
+    @senders.del(subject.id)
     @tbase.unmount(subject)
   end
 
@@ -1637,24 +1527,24 @@ struct SensorDecoder
     running = true
 
     while running
-      @data.transaction(Node.new(conjv, id)) do |props0|
+      @data.transaction(Node.new(conjv, id)) do |tx|
+        props0 = tx.value?
+
         if props0.nil?
           # If head is free we insert immediately and finish. Note how
           # we have to allocate the successor here.
           running = false
 
-          Props.new(sensor, @fresh.call, active: true)
+          tx.set Props.new(sensor, @fresh.call, active: true)
         elsif !props0.active
           # If head is inactive we replace its now-defunct sensor with
           # the bound sensor, activate, and finish.
           running = false
 
-          props0.copy_with(sensor: sensor, active: true)
+          tx.set props0.copy_with(sensor: sensor, active: true)
         else
           # Otherwise we proceed to the successor node.
           id = props0.succ
-
-          props0
         end
       end
     end
@@ -1675,22 +1565,18 @@ struct SensorDecoder
     running = true
 
     while running
-      @data.transaction(Node.new(conjv, id)) do |props0|
-        if props0.nil?
-          raise KeyError.new
-        end
+      @data.transaction(Node.new(conjv, id)) do |tx|
+        props0 = tx.value
 
         if props0.sensor == sensor
           # Deactivate the sensor if we've found a match.
           running = false
-
-          props0.copy_with(active: false)
-        else
-          # Otherwise we proceed to the successor node.
-          id = props0.succ
-
-          props0
+          tx.set(props0.copy_with(active: false))
+          next
         end
+
+        # Otherwise we proceed to the successor node.
+        id = props0.succ
       end
     end
   end
@@ -1707,7 +1593,7 @@ struct SensorDecoder
       id = props0.succ
     end
 
-    keys.each { |key| @data.delete(key) }
+    keys.each { |key| @data.del(key) }
   end
 
   # Yields all decodings associated with *conjv*.
