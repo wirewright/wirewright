@@ -1,16 +1,7 @@
 require "./src/wirewright"
 
-# Sensors:
-#   pattern
-#   -> normal
-#   -> pattern skeleton
-#   -> dnf (array of patterns)
-#   -> pattern strands for each skeleton (dnf)
-#   -> add to utrie
-#   -> mount in to xgraph
-
 # Binarizes and simplifies nested/long `%all` *node*.
- def all2(node) : Term
+def all2(node) : Term
   Term.case(node) do
     matchpi %{(%'%all)} { M1::Normal::NORMAL_PASS }
     matchpi %{(%'%all a_)} { a }
@@ -211,7 +202,7 @@ module Skeleton
       matchpi %{(%'%dict)} { normp }
 
       matchpi %{(%'%literal x_dict)} { pattern(M1.normal_escaped(x)) }
-      matchpi %{(%'%literal _)}  { normp }
+      matchpi %{(%'%literal _)} { normp }
 
       matchpi %{(%'%let _ successor_)} do
         pattern(successor)
@@ -408,6 +399,28 @@ class Tbase
   end
 end
 
+macro def_incref_and_decref(field = refcount)
+  def incref
+    copy_with({{field.id}}: {{field.id}} + 1)
+  end
+
+  def decref?
+    {copy_with({{field.id}}: {{field.id}} - 1), {{field.id}} == 1}
+  end
+end
+
+macro def_unit(kind, *args, refcounting = nil)
+  record {{args.splat}} do
+    include {{kind}}
+
+    {% if refcounting == true %}
+      def_incref_and_decref
+    {% elsif refcounting %}
+      def_incref_and_decref {{refcounting}}
+    {% end %}
+  end
+end
+
 module Ubase
   alias Any = At | IsSym | IsStr | IsNum | IsBool | IsDict | Literal
 
@@ -451,50 +464,37 @@ VERTEX_ROOT = VERTEX_NONE + 1
 VERTEX_ZERO = VERTEX_ROOT + 1
 
 struct Utrie
-  record Node, pred : Label, base : Ubase::Any do
-    include Tbase::Key
+  def_unit Tbase::Key, Node, pred : Label, base : Ubase::Any
+  def_unit Tbase::Value, Props, refcount : Refcount, successor : Label, refcounting: true
+
+  def initialize(@fresh : LabelGenerator, @data : ExtrinsicMap(Node, Props))
   end
 
-  record Props, refcount : Refcount, successor : Label do
-    include Tbase::Value
-
-    def incref : Props
-      copy_with(refcount: refcount + 1)
-    end
-
-    def decref? : {Props, Bool}
-      {copy_with(refcount: refcount - 1), refcount == 1}
-    end
-  end
-
-  def initialize(@storage : ExtrinsicMap(Node, Props))
-  end
-
-  def mount(pred : Label, base : Ubase::Any, fresh) : {Label, Bool}
-    props = @storage.ref(Node.new(pred, base)) { Props.new(0u32, fresh.call) }
+  def mount(pred : Label, base : Ubase::Any) : {Label, Bool}
+    props = @data.ref(Node.new(pred, base)) { Props.new(0u32, @fresh.call) }
 
     {props.successor, props.refcount == 1}
   end
 
-  def mount(strand : Enumerable(T), fresh, & : T -> Ubase::Any) : {Label, Bool} forall T
+  def mount(strand : Enumerable(T), & : T -> Ubase::Any) : {Label, Bool} forall T
     added = false
     vertex = strand.reduce(VERTEX_ROOT) do |pred, base|
       # After the first added = true, all remaining mounts will also be
       # added = true.
-      succ, added = mount(pred, (yield base), fresh)
+      succ, added = mount(pred, yield base)
       succ
     end
 
     {vertex, added}
   end
 
-  def mount(strand : Enumerable(Ubase::Any), fresh) : {Label, Bool}
-    mount(strand, fresh, &.itself)
+  def mount(strand : Enumerable(Ubase::Any)) : {Label, Bool}
+    mount(strand, &.itself)
   end
 
   # NOTE: the caller guarantees that *base* was mounted with *pred* before.
   def unmount(pred : Label, base : Ubase::Any) : {Label, Bool}
-    props = @storage.unref(Node.new(pred, base))
+    props = @data.unref(Node.new(pred, base))
 
     {props.successor, props.refcount.zero?}
   end
@@ -517,7 +517,7 @@ struct Utrie
   end
 
   private def successor?(node : Node) : Label?
-    props = @storage.get?(node)
+    props = @data.get?(node)
     props ? props.successor : nil
   end
 
@@ -559,32 +559,17 @@ struct Utrie
 end
 
 struct Xgraph
-  record Node, a : Label, b : Label do
-    include Tbase::Key
-  end
+  def_unit Tbase::Key, Node, a : Label, b : Label
+  def_unit Tbase::Value, Props, refcount : Refcount, successor : Label, refcounting: true
 
-  record Props, refcount : Refcount, successor : Label do
-    include Tbase::Value
-
-    def incref : Props
-      copy_with(refcount: refcount + 1)
-    end
-
-    def decref? : {Props, Bool}
-      {copy_with(refcount: refcount - 1), refcount == 1}
-    end
-  end
-
-  def initialize(@data : ExtrinsicMap(Node, Props))
+  def initialize(@fresh : LabelGenerator, @data : ExtrinsicMap(Node, Props))
   end
 
   # Mounts an Xgraph rule *xrule*.
   #
-  # *fresh* is a callable that generates fresh (Tspace-unique) Vertices.
-  #
   # NOTE: *xrule* must be pre-sorted ascending. You lose ownership of *xrule*
   # by passing it to this method.
-  def mount(xrule : Deque(Label), fresh)
+  def mount(xrule : Deque(Label))
     if xrule.empty?
       raise ArgumentError.new
     end
@@ -593,7 +578,7 @@ struct Xgraph
       a = xrule.shift
       b = xrule.shift
 
-      props = @data.ref(Node.new(a, b)) { Props.new(0u32, fresh.call) }
+      props = @data.ref(Node.new(a, b)) { Props.new(0u32, @fresh.call) }
 
       xrule << props.successor
     end
@@ -651,27 +636,14 @@ struct Xgraph
 end
 
 struct Ttrie
-  record Node, pred : Label, base : Ubase::Any do
-    include Tbase::Key
+  def_unit Tbase::Key, Node, pred : Label, base : Ubase::Any
+  def_unit Tbase::Value, Props, refcount : Refcount, successor : Label, refcounting: true
+
+  def initialize(@fresh : LabelGenerator, @data : ExtrinsicMap(Node, Props))
   end
 
-  record Props, refcount : Refcount, successor : Label do
-    include Tbase::Value
-
-    def incref : Props
-      copy_with(refcount: refcount + 1)
-    end
-
-    def decref? : {Props, Bool}
-      {copy_with(refcount: refcount - 1), refcount == 1}
-    end
-  end
-
-  def initialize(@data : ExtrinsicMap(Node, Props))
-  end
-
-  def mount(pred : Label, base : Ubase::Any, fresh) : Label
-    props = @data.ref(Node.new(pred, base)) { Props.new(0u32, fresh.call) }
+  def mount(pred : Label, base : Ubase::Any) : Label
+    props = @data.ref(Node.new(pred, base)) { Props.new(0u32, @fresh.call) }
     props.successor
   end
 
@@ -682,25 +654,23 @@ struct Ttrie
   end
 
   # Mounts *strand*.
-  #
-  # Returns the new *fresh* vertex.
-  def mount(strand : Enumerable(Term), endpoint : Label, fresh) : Slice(Label)
+  def mount(strand : Enumerable(Term), endpoint : Label) : Slice(Label)
     tip = nil
 
     path = [VERTEX_ROOT]
 
     strand.each do |term|
       if tip
-        path << mount(path.last, Ubase::IsDict.new, fresh)
-        path << mount(path.last, Ubase::At.new(tip), fresh)
+        path << mount(path.last, Ubase::IsDict.new)
+        path << mount(path.last, Ubase::At.new(tip))
       end
 
       tip = term
     end
 
     if tip
-      path << mount(path.last, Ubase.from(tip.type), fresh)
-      path << mount(path.last, Ubase::Literal.new(tip), fresh)
+      path << mount(path.last, Ubase.from(tip.type))
+      path << mount(path.last, Ubase::Literal.new(tip))
     end
 
     path << endpoint
@@ -759,45 +729,35 @@ struct Etrace
     include Tbase::Value
   end
 
-  record Node, pred : Label, vertex : Label do
-    include Key
+  def_unit Key, Node, pred : Label, vertex : Label
+  def_unit Value, Props, refcount : Refcount, oid : Label, refcounting: true
+  def_unit Key, Size, oid : Label
+  def_unit Key, Item, oid : Label, index : Label
+  def_unit Key, Membership, oid : Label, vertex : Label
+  def_unit Value, Identity
+  def_unit Value, SizeValue, value : Refcount, refcounting: value
+  def_unit Value, ItemValue, vertex : Label
+
+  def initialize(@fresh : LabelGenerator, @data : ExtrinsicMap(Key, Value))
   end
 
-  record Props, refcount : Refcount, oid : Label do
-    include Value
+  private def oidmap
+    Submap(Node, Props, Key, Value).new(@data)
   end
 
-  record SuccessorCount, oid : Label do
-    include Key
+  private def sizes
+    Submap(Size, SizeValue, Key, Value).new(@data)
   end
 
-  record SuccessorList, oid : Label, index : Label do
-    include Key
+  private def items
+    Submap(Item, ItemValue, Key, Value).new(@data)
   end
 
-  record Successor, oid : Label, vertex : Label do
-    include Key
+  private def members
+    Submap(Membership, Identity, Key, Value).new(@data)
   end
 
-  # TODO: Identity
-  record Presence do
-    include Value
-  end
-
-  record Count, value : Refcount do
-    include Value
-  end
-
-  record Ref, vertex : Label do
-    include Value
-  end
-
-  def initialize(@data : ExtrinsicMap(Key, Value))
-  end
-
-  # TODO: use submaps
-
-  def mount(path : Slice(Label), fresh)
+  def mount(path : Slice(Label))
     if path.size < 2
       raise ArgumentError.new
     end
@@ -811,35 +771,25 @@ struct Etrace
     # Create nodes for each step and incref. This way we'll make sure they're
     # not removed by someone else while we're working at them later on.
     oids = path.map do |step|
-      oid = @data.transaction(Node.new(pred, step)) do |tx|
-        node0 = tx.value?.as(Props?)
-        node1 = node0 ? node0.copy_with(refcount: node0.refcount + 1) : Props.new(1u32, fresh.call)
-        tx.set(node1)
-        node1.oid
-      end
+      node = Node.new(pred, step)
       pred = step
-      oid
+      props = oidmap.ref(node) { Props.new(0u32, @fresh.call) }
+      props.oid
     end
 
-    # If we succeed in adding a Successor, then we're responsible for
-    # incrementing successor count and inserting into the SuccessorList.
+    # If we succeed in adding a Membership, then we're responsible for
+    # incrementing successor count and inserting into the Item.
     (0...path.size - 1).each do |index|
       oid = oids[index]
 
-      successor = Successor.new(oid, w = path[index + 1])
+      successor = Membership.new(oid, w = path[index + 1])
       next if @data.get?(successor)
 
-      @data.set(successor, Presence.new)
+      @data.set(successor, Identity.new)
 
-      # TODO: @data.ref
-      count11 = @data.transaction(SuccessorCount.new(oid)) do |tx|
-        count0 = tx.value?.as(Count?)
-        count1 = count0 ? count0.copy_with(value: count0.value + 1) : Count.new(1u32)
-        tx.set(count1)
-        count1
-      end
+      count1 = sizes.ref(Size.new(oid)) { SizeValue.new(0u32) }
 
-      @data.set(SuccessorList.new(oid, count11.value - 1), Ref.new(w))
+      @data.set(Item.new(oid, count1.value - 1), ItemValue.new(w))
     end
   end
 
@@ -855,33 +805,22 @@ struct Etrace
     pred = VERTEX_ROOT
 
     oids = path.compact_map do |step|
-      oid, removed = @data.transaction(Node.new(pred, step)) do |tx|
-        current = tx.value.as(Props)
-        if current.refcount == 1
-          tx.del
-          {current.oid, true}
-        else
-          tx.set current.copy_with(refcount: current.refcount - 1)
-          {current.oid, false}
-        end
-      end
-
+      props = oidmap.unref(Node.new(pred, step))
       pred = step
 
       # Keep only oids which we've removed. We're responsible for their
       # cleanup then.
-      removed ? oid : nil
+      props.refcount.zero? ? props.oid : nil
     end
 
     oids.each do |oid|
       # Successor list may not necessarily exist for endpoint vertices.
       # Deletion may fail, and we're fine with that.
-      next unless count = @data.del?(SuccessorCount.new(oid)).as(Count?)
+      next unless count = sizes.del?(Size.new(oid))
 
       (0u32...count.value).each do |index|
-        successor = @data.del(SuccessorList.new(oid, index)).as(Ref)
-
-        @data.del(Successor.new(oid, successor.vertex))
+        successor = items.del(Item.new(oid, index))
+        members.del(Membership.new(oid, successor.vertex))
       end
     end
   end
@@ -889,18 +828,18 @@ struct Etrace
   def walk(u : Label, v : Label, &fn : Label ->)
     fn.call(v)
 
-    return unless props = @data.get?(Node.new(u, v)).as(Props?)
+    return unless props = oidmap.get?(Node.new(u, v))
 
     # NOTE: while walking, the node along with its attributes could get deleted/
     # be in the process of being deleted. So at any point where we're reading
     # from the map, we must handle the absence-case, even if it seems like it
     # is impossible.
-    return unless count = @data.get?(SuccessorCount.new(props.oid)).as(Count?)
+    return unless count = sizes.get?(Size.new(props.oid))
 
     (0u32...count.value).each do |index|
       # We're fine with gaps. They could happen under some successor count
       # increment + successor list insert orderings. We're bounded anyway.
-      next unless w = @data.get?(SuccessorList.new(props.oid, index)).as(Ref?)
+      next unless w = items.get?(Item.new(props.oid, index))
 
       walk(v, w.vertex, &fn)
     end
@@ -1058,40 +997,18 @@ class Tbase
     abstract def value : Term
   end
 
-  record ConjvRef::Node, vertex : Label do
-    include Key
+  module ConjvRef
+    def_unit Key, Node, vertex : Label
+    def_unit Value, Props, refcount : Refcount, refcounting: true
   end
 
-  record ConjvRef::Props, refcount : Refcount do
-    include Value
+  def_unit Key, StrandVertex, vertex : Label
+  def_unit Key, AppearanceVertex, vertex : Label
+  def_unit Value, Identity
 
-    def incref : Props
-      copy_with(refcount: refcount + 1)
-    end
-
-    def decref? : {Props, Bool}
-      {copy_with(refcount: refcount - 1), refcount == 1}
-    end
-  end
-
-  record Identity do
-    include Value
-  end
-
-  record StrandVertex, vertex : Label do
-    include Key
-  end
-
-  record AppearanceVertex, vertex : Label do
-    include Key
-  end
-
-  record SensorEncoder::Node, sensor : Label do
-    include Key
-  end
-
-  record SensorEncoder::Props, conjv : Label do
-    include Value
+  module SensorEncoder
+    def_unit Key, Node, sensor : Label
+    def_unit Value, Props, conjv : Label
   end
 
   def initialize(@fresh : LabelGenerator, @data : ExtrinsicMap(Key, Value))
@@ -1149,13 +1066,13 @@ class Tbase
   # Behavior is undefined if these guarantees are broken. Breaking of these
   # guarantees must be handled at a higher level.
   def mount(subject : Sensor) : Nil
-    utrie = Utrie.new(udata)
-    xgraph = Xgraph.new(xdata)
+    utrie = Utrie.new(@fresh, udata)
+    xgraph = Xgraph.new(@fresh, xdata)
 
     conj = Deque(Label).new
 
     subject.strands.each do |strand|
-      uvertex, added = utrie.mount(strand, @fresh)
+      uvertex, added = utrie.mount(strand)
 
       if added
         strands.set(StrandVertex.new(uvertex), Identity.new)
@@ -1165,7 +1082,7 @@ class Tbase
     end
 
     conj.unstable_sort!
-    conjv = xgraph.mount(conj, @fresh)
+    conjv = xgraph.mount(conj)
 
     # "Publish" the sensor.
     #
@@ -1200,8 +1117,8 @@ class Tbase
     sensor_decoder = SensorDecoder.new(@fresh, sensor_decode)
     sensor_decoder.unbind(conjv, subject.id)
 
-    utrie = Utrie.new(udata)
-    xgraph = Xgraph.new(xdata)
+    utrie = Utrie.new(@fresh, udata)
+    xgraph = Xgraph.new(@fresh, xdata)
 
     conj = Deque(Label).new
 
@@ -1243,15 +1160,15 @@ class Tbase
   # Behavior is undefined if these guarantees are broken. Breaking of these
   # guarantees must be handled at a higher level.
   def mount(subject : Appearance) : Nil
-    ttrie = Ttrie.new(tdata)
-    etrace = Etrace.new(edata)
+    ttrie = Ttrie.new(@fresh, tdata)
+    etrace = Etrace.new(@fresh, edata)
 
     Term.each_keypath_and_leaf(subject.value) do |keypath, leaf|
       keypath.push(leaf)
-      path = ttrie.mount(keypath, subject.id, @fresh)
+      path = ttrie.mount(keypath, subject.id)
       keypath.pop
 
-      etrace.mount(path, @fresh)
+      etrace.mount(path)
 
       true # Continue
     end
@@ -1269,8 +1186,8 @@ class Tbase
     # that immediately.
     appearances.del(AppearanceVertex.new(subject.id))
 
-    ttrie = Ttrie.new(tdata)
-    etrace = Etrace.new(edata)
+    ttrie = Ttrie.new(@fresh, tdata)
+    etrace = Etrace.new(@fresh, edata)
 
     Term.each_keypath_and_leaf(subject.value) do |keypath, leaf|
       keypath.push(leaf)
@@ -1297,8 +1214,8 @@ class Tbase
   #   The caller must ensure that all actions taken upon them first check (or only
   #   proceed provided) the existence of the corresponding appearance.
   def query(subject : Sensor, *, only_preds = true, &fn : Label ->) : Nil
-    ttrie = Ttrie.new(tdata)
-    etrace = Etrace.new(edata)
+    ttrie = Ttrie.new(@fresh, tdata)
+    etrace = Etrace.new(@fresh, edata)
 
     sets = [] of Set(Label)
 
@@ -1343,8 +1260,8 @@ class Tbase
   #   The caller must ensure that all actions taken upon them first check (or only
   #   proceed provided) the existence of the corresponding sensor.
   def query(subject : Appearance, *, only_preds = true, &fn : Label ->) : Nil
-    utrie = Utrie.new(udata)
-    xgraph = Xgraph.new(xdata)
+    utrie = Utrie.new(@fresh, udata)
+    xgraph = Xgraph.new(@fresh, xdata)
 
     hits = Deque(Label).new
 
@@ -1640,13 +1557,8 @@ end
 # One-to-many map for decoding a conjunction vertex into the sensors that
 # were bound to it.
 struct SensorDecoder
-  record Node, conjv : Label, id : Label do
-    include Tbase::Key
-  end
-
-  record Props, sensor : Label, succ : Label, active : Bool do
-    include Tbase::Value
-  end
+  def_unit Tbase::Key, Node, conjv : Label, id : Label
+  def_unit Tbase::Value, Props, sensor : Label, succ : Label, active : Bool
 
   def initialize(@fresh : LabelGenerator, @data : ExtrinsicMap(Node, Props))
   end
@@ -1862,12 +1774,12 @@ conn = Tconn.new(fresh, tspace) do |act|
   case act
   in StimulusPresence
     if act.pred != VERTEX_NONE
-      view = view.morph({ {act.trigger, act.identity}, act.pred, nil})
+      view = view.morph({ {act.trigger, act.identity}, act.pred, nil })
     end
 
-    view = view.morph({ {act.trigger, act.identity}, act.instant, act.value})
+    view = view.morph({ {act.trigger, act.identity}, act.instant, act.value })
   in StimulusAbsence
-    view = view.morph({ {act.trigger, act.identity}, nil})
+    view = view.morph({ {act.trigger, act.identity}, nil })
   end
   pp view
 end
