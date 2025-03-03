@@ -441,12 +441,6 @@ module ExtrinsicMap(K, V)
   abstract def unref(key : K) : V
 end
 
-module ExtrinsicSet(T)
-  abstract def includes?(object : T)
-  abstract def add(object : T)
-  abstract def delete(object : T)
-end
-
 alias Label = UInt64
 alias Refcount = UInt32
 
@@ -959,38 +953,6 @@ class AtomicMap(K, V)
   end
 end
 
-class AtomicSet(T)
-  include ExtrinsicSet(T)
-
-  def initialize
-    @set = Atomic(Pf::SetBox(T)).new(Pf::SetBox(T).new)
-  end
-
-  def includes?(object : T) : Bool
-    @set.get(:relaxed).includes?(object)
-  end
-
-  def add(object : T)
-    set0 = @set.get(:relaxed)
-
-    while true
-      set1 = set0.add(object)
-      set0, ok = @set.compare_and_set(set0, set1, :relaxed, :relaxed)
-      break if ok
-    end
-  end
-
-  def delete(object : T)
-    set0 = @set.get(:relaxed)
-
-    while true
-      set1 = set0.delete(object)
-      set0, ok = @set.compare_and_set(set0, set1, :relaxed, :relaxed)
-      break if ok
-    end
-  end
-end
-
 class LockMap(K, V)
   include ExtrinsicMap(K, V)
 
@@ -1120,6 +1082,8 @@ class Tbase
     end
   end
 
+  record Identity
+
   def initialize(@fresh : LabelGenerator)
     # TODO: bundle these into a single map, take that map as an input ExtrinsicMap!
 
@@ -1128,14 +1092,14 @@ class Tbase
     @tdata = AtomicMap(Ttrie::Node, Ttrie::Props).new
     @edata = AtomicMap(Etrace::Key, Etrace::Value).new
 
-    @strands = AtomicSet(Label).new
+    @strands = AtomicMap(Label, Identity).new
 
     @conjvrefs = AtomicMap(Label, ConjvRef).new
 
     @sensor_encode = AtomicMap(Label, Label).new
     @sensor_decode = AtomicMap(SensorDecoder::Node, SensorDecoder::Props).new
 
-    @appearances = AtomicSet(Label).new
+    @appearances = AtomicMap(Label, Identity).new
   end
 
   # Adds a sensor *subject* to this Tbase. The instant this method returns,
@@ -1162,7 +1126,7 @@ class Tbase
     subject.strands.each do |strand|
       strand_vertex, added = utrie.mount(strand, @fresh)
       if added
-        @strands.add(strand_vertex)
+        @strands.assign(strand_vertex, Identity.new)
       end
       conj << strand_vertex
     end
@@ -1257,7 +1221,7 @@ class Tbase
     end
 
     # "Publish" the appearance
-    @appearances.add(subject.id)
+    @appearances.assign(subject.id, Identity.new)
   end
 
   # Deletes an appearance *subject* from this Tbase.
@@ -1312,7 +1276,7 @@ class Tbase
       # a unified clock.
       etrace.walk(*edge) do |candidate|
         # Ensure candidate is a fuly added appearance.
-        next unless candidate.in?(@appearances)
+        next unless @appearances.get?(candidate)
         next if only_preds && subject.id <= candidate
 
         hits << candidate
@@ -1350,7 +1314,7 @@ class Tbase
 
     utrie.query(subject.value) do |hit|
       # Ensure the vertex hit is a fully added strand.
-      next unless hit.in?(@strands)
+      next unless @strands.get?(hit)
 
       hits << hit
     end
