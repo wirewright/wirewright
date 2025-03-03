@@ -1072,17 +1072,24 @@ class Tbase
     abstract def value : Term
   end
 
-  record ConjvRef, refcount : Refcount do
-    def incref : ConjvRef
+  record ConjvRef::Node, vertex : Label
+
+  record ConjvRef::Props, refcount : Refcount do
+    def incref : Props
       copy_with(refcount: refcount + 1)
     end
 
-    def decref? : {ConjvRef, Bool}
+    def decref? : {Props, Bool}
       {copy_with(refcount: refcount - 1), refcount == 1}
     end
   end
 
   record Identity
+  record StrandVertex, vertex : Label
+  record AppearanceVertex, vertex : Label
+
+  record SensorEncoder::Node, sensor : Label
+  record SensorEncoder::Props, conjv : Label
 
   def initialize(@fresh : LabelGenerator)
     # TODO: bundle these into a single map, take that map as an input ExtrinsicMap!
@@ -1092,14 +1099,14 @@ class Tbase
     @tdata = AtomicMap(Ttrie::Node, Ttrie::Props).new
     @edata = AtomicMap(Etrace::Key, Etrace::Value).new
 
-    @strands = AtomicMap(Label, Identity).new
+    @strands = AtomicMap(StrandVertex, Identity).new
 
-    @conjvrefs = AtomicMap(Label, ConjvRef).new
+    @conjvrefs = AtomicMap(ConjvRef::Node, ConjvRef::Props).new
 
-    @sensor_encode = AtomicMap(Label, Label).new
+    @sensor_encode = AtomicMap(SensorEncoder::Node, SensorEncoder::Props).new
     @sensor_decode = AtomicMap(SensorDecoder::Node, SensorDecoder::Props).new
 
-    @appearances = AtomicMap(Label, Identity).new
+    @appearances = AtomicMap(AppearanceVertex, Identity).new
   end
 
   # Adds a sensor *subject* to this Tbase. The instant this method returns,
@@ -1124,11 +1131,13 @@ class Tbase
     conj = Deque(Label).new
 
     subject.strands.each do |strand|
-      strand_vertex, added = utrie.mount(strand, @fresh)
+      uvertex, added = utrie.mount(strand, @fresh)
+
       if added
-        @strands.assign(strand_vertex, Identity.new)
+        @strands.assign(StrandVertex.new(uvertex), Identity.new)
       end
-      conj << strand_vertex
+
+      conj << uvertex
     end
 
     conj.unstable_sort!
@@ -1139,9 +1148,12 @@ class Tbase
     # NOTE: decode assignment MUST be done last because it serves as THE indication
     # of commitment. After the decode transaction finishes, the sensor becomes
     # reachable via querying.
-    @sensor_encode.assign(subject.id, conjv)
+    @sensor_encode.assign(
+      SensorEncoder::Node.new(subject.id),
+      SensorEncoder::Props.new(conjv),
+    )
 
-    @conjvrefs.ref(conjv) { ConjvRef.new(0) }
+    @conjvrefs.ref(ConjvRef::Node.new(conjv)) { ConjvRef::Props.new(0) }
 
     sensor_decoder = SensorDecoder.new(@fresh, @sensor_decode)
     sensor_decoder.bind(conjv, subject.id)
@@ -1159,7 +1171,7 @@ class Tbase
   def unmount(subject : Sensor) : Nil
     # "Unpublish" the sensor. We will need to know its conjunction vertex
     # first though.
-    conjv = @sensor_encode.delete(subject.id)
+    conjv = @sensor_encode.delete(SensorEncoder::Node.new(subject.id)).conjv
 
     sensor_decoder = SensorDecoder.new(@fresh, @sensor_decode)
     sensor_decoder.unbind(conjv, subject.id)
@@ -1172,7 +1184,7 @@ class Tbase
     subject.strands.each do |strand|
       strand_vertex, removed = utrie.unmount(strand)
       if removed
-        @strands.delete(strand_vertex)
+        @strands.delete(StrandVertex.new(strand_vertex))
       end
       conj << strand_vertex
     end
@@ -1181,7 +1193,7 @@ class Tbase
 
     expect xgraph.unmount(conj) == conjv
 
-    conjvref = @conjvrefs.unref(conjv)
+    conjvref = @conjvrefs.unref(ConjvRef::Node.new(conjv))
 
     return unless conjvref.refcount.zero?
 
@@ -1221,7 +1233,7 @@ class Tbase
     end
 
     # "Publish" the appearance
-    @appearances.assign(subject.id, Identity.new)
+    @appearances.assign(AppearanceVertex.new(subject.id), Identity.new)
   end
 
   # Deletes an appearance *subject* from this Tbase.
@@ -1231,7 +1243,7 @@ class Tbase
   def unmount(subject : Appearance) : Nil
     # "Unpublish" the appearance. Since we're using subject ids we can do
     # that immediately.
-    @appearances.delete(subject.id)
+    @appearances.delete(AppearanceVertex.new(subject.id))
 
     ttrie = Ttrie.new(@tdata)
     etrace = Etrace.new(@edata)
@@ -1276,7 +1288,7 @@ class Tbase
       # a unified clock.
       etrace.walk(*edge) do |candidate|
         # Ensure candidate is a fuly added appearance.
-        next unless @appearances.get?(candidate)
+        next unless @appearances.get?(AppearanceVertex.new(candidate))
         next if only_preds && subject.id <= candidate
 
         hits << candidate
@@ -1314,7 +1326,7 @@ class Tbase
 
     utrie.query(subject.value) do |hit|
       # Ensure the vertex hit is a fully added strand.
-      next unless @strands.get?(hit)
+      next unless @strands.get?(StrandVertex.new(hit))
 
       hits << hit
     end
