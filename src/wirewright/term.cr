@@ -532,12 +532,14 @@ module Ww
       end
     end
 
-    def self.set(*args) : Dict
+    def self.set(ee : Enumerable(Term))
       Dict.build do |commit|
-        args.each do |arg|
-          commit.with(arg, true)
-        end
+        ee.each { |arg| commit.with(arg, true) }
       end
+    end
+
+    def self.set(*args) : Dict
+      set(args)
     end
 
     # :nodoc:

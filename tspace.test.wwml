@@ -1,0 +1,45 @@
+;; Basics: binary order does not matter
+(group
+  (tspace
+    (conn A
+      (after added sensor Sa foo_)
+      (after added appearance Aa 100)
+      (view {Sa: {, ({foo: 100})}})))
+
+  (tspace
+    (conn A
+      (after added appearance Aa 100)
+      (after added sensor Sa foo_)
+      (view {Sa: {, ({foo: 100})}})))
+
+  (tspace
+    (conn A
+      (after added sensor Sa foo_))
+    (conn B
+      (after added appearance Aa 100))
+    (conn A
+      (view {Sa: {, ({foo: 100})}})))
+
+  (tspace
+    (conn B
+      (after added appearance Aa 100))
+    (conn A
+      (after added sensor Sa foo_))
+    (conn A
+      (view {Sa: {, ({foo: 100})}}))))
+
+(tspace
+  (conn A
+    (after added sensor a n_number)
+    (view {})
+    (after added appearance x 100)
+    (view {a: {, ({n: 100})}})
+    (after added appearance y 200)
+    (view {a: {, ({n: 100}) ({n: 200})}})
+    (after removed x)
+    (view {a: {, ({n: 200})}})
+    (after removed y)
+    (view {})))
+
+;; TODO: remember to test: %any of dicts, %literal dict!!!!
+;; TODO: empty dict

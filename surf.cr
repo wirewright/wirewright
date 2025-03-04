@@ -381,6 +381,7 @@ end
 # of bases:
 #
 # - `(%'%value (%'%literal _))`
+# - `%'(%any)`
 # - `%'(%symbol)`
 # - `%'(%string)`
 # - `%'(%number _)`
@@ -388,13 +389,155 @@ end
 # - `%'(%dict)`
 # - `(%'%literal _)`
 def strands(branch : Term, &sink : Term::Dict ->)
-  strands(Term[], branch, sink)
+  strands(Term.dict({:"%any"}), branch, sink)
 end
 
-class Tbase
+alias Strand = Slice(Ubase::Any)
+alias StrandList = Slice(Strand)
+alias BranchList = Slice(StrandList)
+
+module ExtrinsicMap(K, V)
+  class Transaction(V)
+    property! value : V?
+
+    def initialize(@value)
+    end
+
+    def set(value : V) : Nil
+      @value = value
+    end
+
+    def del? : V?
+      value0, @value = @value, nil
+      value0
+    end
+
+    def del : V
+      del? || raise KeyError.new
+    end
+  end
+
+  abstract def get?(key : K) : V?
+  abstract def transaction(key : K, & : Transaction(V) -> T) forall T
+
+  def set(key : K, value : V)
+    transaction(key, &.set(value))
+  end
+
+  def del?(key : K) : V?
+    transaction(key, &.del?)
+  end
+
+  def del(key : K) : V
+    del?(key) || raise KeyError.new
+  end
+
+  def ref(key : K, &zero : -> V) : V
+    zerov = nil
+
+    transaction(key) do |tx|
+      value0 = tx.value?
+      value1 = value0 ? value0 : (zerov ||= yield)
+      value1 = value1.incref
+      tx.set(value1)
+      value1
+    end
+  end
+
+  def unref(key : K) : V
+    transaction(key) do |tx|
+      value1, zero = tx.value.decref?
+      zero ? tx.del : tx.set(value1)
+      value1
+    end
+  end
+end
+
+struct HashMap(K, V)
+  include ExtrinsicMap(K, V)
+
+  def initialize
+    @map = {} of K => V
+  end
+
+  def get?(key : K) : V?
+    @map[key]?
+  end
+
+  def transaction(key : K, & : Transaction(V) -> T) : T forall T
+    value0 = @map[key]?
+    tx = Transaction(V).new(value0)
+    result = yield tx
+    if value1 = tx.value?
+      @map[key] = value1
+    else
+      @map.delete(key)
+    end
+    result
+  end
+end
+
+class AtomicMap(K, V)
+  include ExtrinsicMap(K, V)
+
+  def initialize
+    @map = Atomic(Pf::MapBox(K, V)).new(Pf::MapBox(K, V).new)
+  end
+
+  def get?(key : K) : V?
+    @map.get(:relaxed)[key]?
+  end
+
+  def transaction(key : K, & : Transaction(V) -> T) : T forall T
+    map0 = @map.get(:relaxed)
+
+    while true
+      value0 = map0[key]?
+
+      tx = Transaction(V).new(value0)
+
+      result = yield tx
+
+      if value1 = tx.value?
+        map1 = map0.assoc(key, value1)
+      else
+        map1 = map0.dissoc(key)
+      end
+
+      map0, ok = @map.compare_and_set(map0, map1, :relaxed, :relaxed)
+      if ok
+        return result
+      end
+    end
+  end
+end
+
+struct Submap(K, V, Ks, Vs)
+  include ExtrinsicMap(K, V)
+
+  def initialize(@map : ExtrinsicMap(Ks, Vs))
+  end
+
+  def get?(key : K) : V?
+    @map.get?(key.as(Ks)).as(V?)
+  end
+
+  def transaction(key : K, & : Transaction(V) -> T) : T forall T
+    @map.transaction(key.as(Ks)) do |tx0|
+      tx1 = Transaction(V).new(tx0.value?.as(V?))
+      result = yield tx1
+      tx0.value = tx1.value?.as(Vs?)
+      result
+    end
+  end
+end
+
+struct Tbase
+  # Union type for all keys that a Tbase might store in the data map.
   module Key
   end
 
+  # Union type for all values that a Tbase might store in the data map.
   module Value
   end
 end
@@ -422,9 +565,11 @@ macro def_unit(kind, *args, refcounting = nil)
 end
 
 module Ubase
-  alias Any = At | IsSym | IsStr | IsNum | IsBool | IsDict | Literal
+  alias Any = At | IsAny | IsSym | IsStr | IsNum | IsBool | IsDict | Literal
 
   record At, key : Term
+  # FIXME: better name. to reflect it's only the root!!
+  record IsAny
   record IsSym
   record IsStr
   record IsNum
@@ -432,9 +577,10 @@ module Ubase
   record IsDict
   record Literal, value : Term
 
-  def self.parse(base : Term)
+  def self.parse(base : Term) : Ubase::Any
     Term.case(base) do
       matchpi %{(%'%value (%'%literal key_))} { At.new(key) }
+      matchpi %{%'(%any)} { IsAny.new }
       matchpi %{%'(%symbol)} { IsSym.new }
       matchpi %{%'(%string)} { IsStr.new }
       matchpi %{%'(%number _)} { IsNum.new }
@@ -550,7 +696,11 @@ struct Utrie
   end
 
   private def query(term : Term, sink : Label ->) : Nil
-    query(VERTEX_ROOT, term.downcast, sink)
+    return unless successor = successor?(Node.new(VERTEX_ROOT, Ubase::IsAny.new))
+
+    sink.call(successor)
+
+    query(successor, term.downcast, sink)
   end
 
   def query(term : Term, &sink : Label ->) : Nil
@@ -656,8 +806,7 @@ struct Ttrie
   # Mounts *strand*.
   def mount(strand : Enumerable(Term), endpoint : Label) : Slice(Label)
     tip = nil
-
-    path = [VERTEX_ROOT]
+    path = [VERTEX_ROOT, mount(VERTEX_ROOT, Ubase::IsAny.new)]
 
     strand.each do |term|
       if tip
@@ -683,7 +832,7 @@ struct Ttrie
   def unmount(strand : Enumerable(Term), endpoint : Label) : Slice(Label)
     tip = nil
 
-    path = [VERTEX_ROOT]
+    path = [VERTEX_ROOT, unmount(VERTEX_ROOT, Ubase::IsAny.new)]
 
     strand.each do |term|
       if tip
@@ -846,166 +995,173 @@ struct Etrace
   end
 end
 
-module ExtrinsicMap(K, V)
-  class Transaction(V)
-    property! value : V?
+# One-to-many map for decoding a conjunction vertex into the sensors that
+# were bound to it.
+struct SensorDecoder
+  def_unit Tbase::Key, Node, conjv : Label, id : Label
+  def_unit Tbase::Value, Props, sensor : Label, succ : Label, active : Bool
 
-    def initialize(@value)
-    end
-
-    def set(value : V) : Nil
-      @value = value
-    end
-
-    def del? : V?
-      value0, @value = @value, nil
-      value0
-    end
-
-    def del : V
-      del? || raise KeyError.new
-    end
+  def initialize(@fresh : LabelGenerator, @data : ExtrinsicMap(Node, Props))
   end
 
-  abstract def get?(key : K) : V?
-  abstract def transaction(key : K, & : Transaction(V) -> T) forall T
+  # Registers *sensor* as one of decodings of *conjv*.
+  #
+  # Worst-case O(N) relative to the highest-ever number of decodings of *conjv*.
+  #
+  # NOTE: binds and unbinds leave "tombstones" for *conjv*-*sensor* combos.
+  # Make sure to `burn` *conjv* when you're sure it's never going to be used
+  # again to not leak memory.
+  #
+  # NOTE: the caller guarantees *conjv* was never bound to *sensor* before.
+  def bind(conjv : Label, sensor : Label) : Nil
+    id = VERTEX_NONE
 
-  def set(key : K, value : V)
-    transaction(key, &.set(value))
-  end
+    running = true
 
-  def del?(key : K) : V?
-    transaction(key, &.del?)
-  end
+    while running
+      @data.transaction(Node.new(conjv, id)) do |tx|
+        props0 = tx.value?
 
-  def del(key : K) : V
-    del?(key) || raise KeyError.new
-  end
+        if props0.nil?
+          # If head is free we insert immediately and finish. Note how
+          # we have to allocate the successor here.
+          running = false
 
-  def ref(key : K, &zero : -> V) : V
-    zerov = nil
+          tx.set Props.new(sensor, @fresh.call, active: true)
+        elsif !props0.active
+          # If head is inactive we replace its now-defunct sensor with
+          # the bound sensor, activate, and finish.
+          running = false
 
-    transaction(key) do |tx|
-      value0 = tx.value?
-      value1 = value0 ? value0 : (zerov ||= yield)
-      value1 = value1.incref
-      tx.set(value1)
-      value1
-    end
-  end
-
-  def unref(key : K) : V
-    transaction(key) do |tx|
-      value1, zero = tx.value.decref?
-      zero ? tx.del : tx.set(value1)
-      value1
-    end
-  end
-end
-
-struct HashMap(K, V)
-  include ExtrinsicMap(K, V)
-
-  def initialize
-    @map = {} of K => V
-  end
-
-  def get?(key : K) : V?
-    @map[key]?
-  end
-
-  def transaction(key : K, & : Transaction(V) -> T) : T forall T
-    value0 = @map[key]?
-    tx = Transaction(V).new(value0)
-    result = yield tx
-    if value1 = tx.value?
-      @map[key] = value1
-    else
-      @map.delete(key)
-    end
-    result
-  end
-end
-
-class AtomicMap(K, V)
-  include ExtrinsicMap(K, V)
-
-  def initialize
-    @map = Atomic(Pf::MapBox(K, V)).new(Pf::MapBox(K, V).new)
-  end
-
-  def get?(key : K) : V?
-    @map.get(:relaxed)[key]?
-  end
-
-  def transaction(key : K, & : Transaction(V) -> T) : T forall T
-    map0 = @map.get(:relaxed)
-
-    while true
-      value0 = map0[key]?
-
-      tx = Transaction(V).new(value0)
-
-      result = yield tx
-
-      if value1 = tx.value?
-        map1 = map0.assoc(key, value1)
-      else
-        map1 = map0.dissoc(key)
-      end
-
-      map0, ok = @map.compare_and_set(map0, map1, :relaxed, :relaxed)
-      if ok
-        return result
+          tx.set props0.copy_with(sensor: sensor, active: true)
+        else
+          # Otherwise we proceed to the successor node.
+          id = props0.succ
+        end
       end
     end
   end
-end
 
-struct Submap(K, V, Ks, Vs)
-  include ExtrinsicMap(K, V)
+  # Unregisters *sensor* from being one of the decodings of *conjv*.
+  #
+  # Worst-case O(N) relative to the highest-ever number of decodings of *conjv*.
+  #
+  # NOTE: binds and unbinds leave "tombstones" for *conjv*-*sensor* combos.
+  # Make sure to `burn` *conjv* when you're sure it's never going to be used
+  # again to not leak memory.
+  #
+  # NOTE: the caller guarantees *conjv* was bound to *sensor* before (`bind`).
+  def unbind(conjv : Label, sensor : Label) : Nil
+    id = VERTEX_NONE
 
-  def initialize(@map : ExtrinsicMap(Ks, Vs))
+    running = true
+
+    while running
+      @data.transaction(Node.new(conjv, id)) do |tx|
+        props0 = tx.value
+
+        if props0.sensor == sensor
+          # Deactivate the sensor if we've found a match.
+          running = false
+          tx.set(props0.copy_with(active: false))
+          next
+        end
+
+        # Otherwise we proceed to the successor node.
+        id = props0.succ
+      end
+    end
   end
 
-  def get?(key : K) : V?
-    @map.get?(key.as(Ks)).as(V?)
+  # NOTE: this method "burns" *conjv*; the caller guarantees that *conjv*
+  # will never be passed to `bind` or `unbind` again.
+  def burn(conjv : Label) : Nil
+    id = VERTEX_NONE
+
+    keys = [] of Node
+
+    while props0 = @data.get?(Node.new(conjv, id))
+      keys << Node.new(conjv, id)
+      id = props0.succ
+    end
+
+    keys.each { |key| @data.del(key) }
   end
 
-  def transaction(key : K, & : Transaction(V) -> T) : T forall T
-    @map.transaction(key.as(Ks)) do |tx0|
-      tx1 = Transaction(V).new(tx0.value?.as(V?))
-      result = yield tx1
-      tx0.value = tx1.value?.as(Vs?)
-      result
+  # Yields all decodings associated with *conjv*.
+  def decode(conjv : Label, & : Label ->) : Nil
+    id = VERTEX_NONE
+
+    while props0 = @data.get?(Node.new(conjv, id))
+      if props0.active
+        yield props0.sensor
+      end
+      id = props0.succ
     end
   end
 end
 
-class Tbase
+# Tbase (short for *termbase*, whatever that is supposed to mean) is an internal
+# object responsible for orchestrating objects that are even more internal; such
+# as `Utrie`, `Xgraph`, `Ttrie`, and so on.
+#
+# This "orchestration" results in the emergence of *sensors* and *appearances*,
+# conceptually grouped into *surfaces*; but througout the operation of Tbase
+# referred to as *subjects*. With the help of Tbase, you can manipulate them;
+# but be prepared to make *a ton* of guarantees -- breakage thereof risks
+# the scary undefined behavior!
+#
+# `Tspace` wraps `Tbase` and exists to ensure all guarantees are satisfied (along
+# with some other things).
+#
+# The notable thing about `Tbase` is that it only needs a single hash map (or,
+# rather, an implementor of `ExtrinsicMap`). It is designed this way to defer
+# synchronicity and distrubition to the map; and therefore make their presence
+# user-configurable. Tbase simply does not care. As long as the map is thread-safe,
+# Tbase is thread-safe; as long as the map is distributed, Tbase is distributed.
+#
+# NOTE: sometimes we mention that the caller must provide a certain "ownership"
+# guarantee. What this means is that the caller must uniquely own the subject
+# it provides to the method it calls. No other process in the world must be able
+# to do anything with that subject, and by giving the subject to the callee, the caller
+# is temporarily transfering the ownership. This can generally be achieved through
+# the use of unique ids -- either GUIDs (e.g. Snowflake, since we require ordering
+# guarantees) or a simple Tspace-bound `LabelGenerator`.
+struct Tbase
+  # Defines the requirements that a Tbase has to a "sensor" object.
   module Sensor
     # Returns a Tspace-unique id of this sensor, that was obtained from
-    # a monotonically increasing source.
+    # a time-ordered source.
     abstract def id : Label
-    abstract def strands : Slice(Slice(Ubase::Any))
+
+    # Returns the list of strands that this sensor is comprised of.
+    abstract def strands : StrandList
   end
 
+  # Defines the requirements that a Tbase has to an "appearance" object.
   module Appearance
     # Returns a Tspace-unique id of this appearance, that was obtained from
-    # a monotonically increasing source.
+    # an increasing source.
     abstract def id : Label
+
+    # Returns the term that is this appearance's value.
     abstract def value : Term
   end
 
+  # :nodoc:
   module ConjvRef
     def_unit Key, Node, vertex : Label
     def_unit Value, Props, refcount : Refcount, refcounting: true
   end
 
+  # :nodoc:
   def_unit Key, StrandVertex, vertex : Label
+  # :nodoc:
   def_unit Key, AppearanceVertex, vertex : Label
+  # :nodoc:
   def_unit Value, Identity
 
+  # :nodoc:
   module SensorEncoder
     def_unit Key, Node, sensor : Label
     def_unit Value, Props, conjv : Label
@@ -1059,8 +1215,7 @@ class Tbase
   # NOTE: the caller guarantees the following:
   #
   # - that it owns *subject*;
-  # - that *subject*'s id is Tspace-unique, and was obtained from a monotonically
-  #   increasing source;
+  # - that *subject*'s id is Tspace-unique, and was obtained from a time-ordered source;
   # - that *subject*'s id was never in use before.
   #
   # Behavior is undefined if these guarantees are broken. Breaking of these
@@ -1153,8 +1308,7 @@ class Tbase
   # NOTE: the caller guarantees the following:
   #
   # - that it owns *subject*;
-  # - that *subject*'s id is Tspace-unique, and was obtained from a monotonically
-  #   increasing source;
+  # - that *subject*'s id is Tspace-unique, and was obtained from a time-ordered source;
   # - that *subject*'s id was never in use before.
   #
   # Behavior is undefined if these guarantees are broken. Breaking of these
@@ -1208,8 +1362,7 @@ class Tbase
   # NOTE: the caller guarantees the following:
   #
   # - that it owns *subject*;
-  # - that *subject*'s id is Tspace-unique, and was obtained from a monotonically
-  #   increasing source;
+  # - that *subject*'s id is Tspace-unique, and was obtained from a time-ordered source;
   # - that it considers appearance subject ids given to *fn* immediately outdated.
   #   The caller must ensure that all actions taken upon them first check (or only
   #   proceed provided) the existence of the corresponding appearance.
@@ -1254,8 +1407,7 @@ class Tbase
   # NOTE: the caller guarantees the following:
   #
   # - that it owns *subject*;
-  # - that *subject*'s id is Tspace-unique, and was obtained from a monotonically
-  #   increasing source;
+  # - that *subject*'s id is Tspace-unique, and was obtained from a time-ordered source;
   # - that it considers sensor subject ids given to *fn* immediately outdated.
   #   The caller must ensure that all actions taken upon them first check (or only
   #   proceed provided) the existence of the corresponding sensor.
@@ -1361,10 +1513,6 @@ record StimulusPresence, sensor : Label, trigger : Label, identity : Label, pred
 # can handle it, they should. Otherwise they may handle the absence itself.
 record StimulusAbsence, sensor : Label, trigger : Label, identity : Label, instant : Label, farewell : Term?
 
-alias Strand = Slice(Ubase::Any)
-alias StrandList = Slice(Strand)
-alias BranchList = Slice(StrandList)
-
 class Tconn
   alias SurfaceData = SensorData | AppearanceData
 
@@ -1374,9 +1522,10 @@ class Tconn
   record SensorMemberData, instant : Label, pattern : StrandList
   record SensorGroupData, identity : Label, members : Slice(SensorMemberData), selector : Term?
 
+  @conid : Label
+
   def initialize(@fresh : LabelGenerator, @tspace : Tspace, @callback : Activation ->)
     @conid = @fresh.call
-
     @sensors = {} of Label => SensorGroupData
     @appearances = {} of Label => AppearanceData
   end
@@ -1544,181 +1693,20 @@ class Tconn
   end
 end
 
-class LabelGenerator
-  def initialize
-    @counter = Atomic(Label).new(VERTEX_ZERO)
-  end
+# A time-ordered Tspace-unique label generator. If the underlying Tbase
+# is distributed, this means the generator must be globally unique.
+alias LabelGenerator = Proc(Label) | ILabelGenerator
 
-  def call : Label
-    @counter.add(1, :relaxed)
-  end
+# :ditto:
+module ILabelGenerator
+  abstract def call : Label
 end
-
-# One-to-many map for decoding a conjunction vertex into the sensors that
-# were bound to it.
-struct SensorDecoder
-  def_unit Tbase::Key, Node, conjv : Label, id : Label
-  def_unit Tbase::Value, Props, sensor : Label, succ : Label, active : Bool
-
-  def initialize(@fresh : LabelGenerator, @data : ExtrinsicMap(Node, Props))
-  end
-
-  # Registers *sensor* as one of decodings of *conjv*.
-  #
-  # Worst-case O(N) relative to the highest-ever number of decodings of *conjv*.
-  #
-  # NOTE: binds and unbinds leave "tombstones" for *conjv*-*sensor* combos.
-  # Make sure to `burn` *conjv* when you're sure it's never going to be used
-  # again to not leak memory.
-  #
-  # NOTE: the caller guarantees *conjv* was never bound to *sensor* before.
-  def bind(conjv : Label, sensor : Label) : Nil
-    id = VERTEX_NONE
-
-    running = true
-
-    while running
-      @data.transaction(Node.new(conjv, id)) do |tx|
-        props0 = tx.value?
-
-        if props0.nil?
-          # If head is free we insert immediately and finish. Note how
-          # we have to allocate the successor here.
-          running = false
-
-          tx.set Props.new(sensor, @fresh.call, active: true)
-        elsif !props0.active
-          # If head is inactive we replace its now-defunct sensor with
-          # the bound sensor, activate, and finish.
-          running = false
-
-          tx.set props0.copy_with(sensor: sensor, active: true)
-        else
-          # Otherwise we proceed to the successor node.
-          id = props0.succ
-        end
-      end
-    end
-  end
-
-  # Unregisters *sensor* from being one of the decodings of *conjv*.
-  #
-  # Worst-case O(N) relative to the highest-ever number of decodings of *conjv*.
-  #
-  # NOTE: binds and unbinds leave "tombstones" for *conjv*-*sensor* combos.
-  # Make sure to `burn` *conjv* when you're sure it's never going to be used
-  # again to not leak memory.
-  #
-  # NOTE: the caller guarantees *conjv* was bound to *sensor* before (`bind`).
-  def unbind(conjv : Label, sensor : Label) : Nil
-    id = VERTEX_NONE
-
-    running = true
-
-    while running
-      @data.transaction(Node.new(conjv, id)) do |tx|
-        props0 = tx.value
-
-        if props0.sensor == sensor
-          # Deactivate the sensor if we've found a match.
-          running = false
-          tx.set(props0.copy_with(active: false))
-          next
-        end
-
-        # Otherwise we proceed to the successor node.
-        id = props0.succ
-      end
-    end
-  end
-
-  # NOTE: this method "burns" *conjv*; the caller guarantees that *conjv*
-  # will never be passed to `bind` or `unbind` again.
-  def burn(conjv : Label) : Nil
-    id = VERTEX_NONE
-
-    keys = [] of Node
-
-    while props0 = @data.get?(Node.new(conjv, id))
-      keys << Node.new(conjv, id)
-      id = props0.succ
-    end
-
-    keys.each { |key| @data.del(key) }
-  end
-
-  # Yields all decodings associated with *conjv*.
-  def decode(conjv : Label, & : Label ->) : Nil
-    id = VERTEX_NONE
-
-    while props0 = @data.get?(Node.new(conjv, id))
-      if props0.active
-        yield props0.sensor
-      end
-      id = props0.succ
-    end
-  end
-end
-
-# fresh = LabelGenerator.new
-# data = AtomicMap(SensorDecoder::Node, SensorDecoder::Props).new
-
-# dec = SensorDecoder.new(fresh, data)
-
-# dec.bind(Label.new(10), Label.new(100))
-# dec.bind(Label.new(10), Label.new(200))
-# dec.bind(Label.new(10), Label.new(300))
-
-# dec.decode(Label.new(10)) do |sensor|
-#   pp sensor
-# end
-
-# dec.unbind(Label.new(10), Label.new(200))
-# pp dec
-# dec.bind(Label.new(10), Label.new(400))
-# pp dec
-
-# # pp dec
-
-# # dec.unbind(Label.new(10), Label.new(200))
-# # pp dec
-# dec.unbind(Label.new(10), Label.new(300))
-# pp dec
-# dec.bind(Label.new(20), Label.new(123))
-# pp dec
-# dec.bind(Label.new(20), Label.new(456))
-# pp dec
-# dec.decode(Label.new(10)) do |sensor|
-#   pp sensor
-# end
-# dec.unbind(Label.new(10), Label.new(100))
-# dec.decode(Label.new(20)) do |sensor|
-#   pp sensor
-# end
-# pp dec
-
-# dec.unbind(Label.new(20), Label.new(123))
-# dec.unbind(Label.new(20), Label.new(456))
-# dec.unbind(Label.new(10), Label.new(400))
-
-# pp dec
-
-# dec.bind(Label.new(10), Label.new(123))
-
-# pp dec
-
-# dec.burn(Label.new(10))
-# dec.burn(Label.new(20))
-
-# pp dec
-
-# pp dec
 
 # pattern = ML.term %{((%any div mod) a_ (%all b_number (%not 0)) ¦ precision⋮ 3)}
 # normp = M1.normal(pattern)
 # skeleton = Skeleton.pattern(normp)
 
-record Sensor, id : Label, strands : Slice(Slice(Ubase::Any)) do
+record Sensor, id : Label, strands : StrandList do
   include Tbase::Sensor
 
   # TODO: remove, here we have improper (and cannot have proper) handling of branches!!!!
@@ -1745,14 +1733,27 @@ record Appearance, id : Label, value : Term do
   include Tbase::Appearance
 end
 
-# TODO: remember to test: %any of dicts, %literal dict!!!!
+{% skip_file %}
 
-fresh = LabelGenerator.new
+class Counter
+  include ILabelGenerator
+
+  def initialize
+    @counter = Atomic(Label).new(VERTEX_ZERO)
+  end
+
+  def call : Label
+    @counter.add(1, :relaxed)
+  end
+end
+
+
+fresh = Counter.new
 data = HashMap(Tbase::Key, Tbase::Value).new
 tbase = Tbase.new(fresh, data)
 tspace = Tspace.new(fresh, tbase)
 
-view = Term[]
+identity_view = Term[]
 
 # TODO: in reality, the callback is potentially called from another thread,
 # a sleepy queue is needed instead of doing things right away.
@@ -1763,26 +1764,21 @@ view = Term[]
 # TODO: in reality, the sensor at client will have to match the full pattern.
 # act only provides pattern skeleton matches, whereas client sensors may be
 # much more tighter & include match envs.
-#
-# FIXME: in reality, sensors may contain %any°, which matches multiple appearances
-# simultaneously. We have to handle this somehow. Possibly by making view values
-# be lists of values rather than single values. This can be handled by labeling
-# StimulusPresence with pred=<instant>, and removing it in view.morph. Similarly
-# StimulusAbsence will have to get labeled like that and will have to be triggered
-# on sensor group members.
+smap = {0 => "A", 2 => "B", 3 => "C", 4 => "D"}
 conn = Tconn.new(fresh, tspace) do |act|
   case act
   in StimulusPresence
     if act.pred != VERTEX_NONE
-      view = view.morph({ {act.trigger, act.identity}, act.pred, nil })
+      identity_view = identity_view.morph({ act.sensor, {act.trigger, act.identity}, act.pred, nil })
     end
 
-    view = view.morph({ {act.trigger, act.identity}, act.instant, act.value })
+    identity_view = identity_view.morph({ act.sensor, {act.trigger, act.identity}, act.instant, act.value })
   in StimulusAbsence
-    view = view.morph({ {act.trigger, act.identity}, nil })
+    identity_view = identity_view.morph({ act.sensor, {act.trigger, act.identity}, nil })
   end
-  pp view
+  pp render_view(identity_view, smap)
 end
+
 
 # conn.sensor 0, pattern: ML.term(%{_number}), selector: nil
 # conn.sensor 1, pattern: ML.term(%{_number}), selector: nil

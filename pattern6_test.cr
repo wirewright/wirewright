@@ -6,6 +6,7 @@ CASES  = [
   File.read("patterns.test.wwml"),
   File.read("editor.test.wwml"),
   File.read("delta7.test.wwml"),
+  File.read("tspace.test.wwml"),
 ].join("\n")
 PEOPLE = Term.of(JSON.parse(File.read("data/people.json")))
 
@@ -85,6 +86,8 @@ def process(queue, testcase, ctx)
     end
 
     matchpi %[(backmap rule←(pattern_ backdict_) body_*)] do
+      next if "-no-pattern".in?(ARGV)
+
       track(ctx, rule) do
         first = true
         match = ->(matchee : Term) do
@@ -120,6 +123,8 @@ def process(queue, testcase, ctx)
     end
 
     matchpi %[(pattern pattern_ body_*)] do
+      next if "-no-pattern".in?(ARGV)
+
       track(ctx, pattern) do
         first = true
         match = ->(matchee : Term) do
@@ -189,6 +194,8 @@ def process(queue, testcase, ctx)
     end
 
     matchpi %[(specificity levels_*)] do
+      next if "-no-pattern".in?(ARGV)
+
       track(ctx, testcase) do
         patterns = {} of M1::Specificity => Set(Term)
 
@@ -230,6 +237,8 @@ def process(queue, testcase, ctx)
     end
 
     matchpi %[(head exps_*)] do
+      next if "-no-pattern".in?(ARGV)
+
       exps.items.each do |exp|
         Term.case(exp) do
           matchpi %[(- blacklist_*)] do
@@ -265,6 +274,8 @@ def process(queue, testcase, ctx)
 
     {% for method in %w[bounds depth] %}
       matchpi %[({{method.id}} exps_*)] do
+        next if "-no-pattern".in?(ARGV)
+
         exps.items.each do |exp|
           Term.case(exp) do
             matchpi %[(of patterns_+ ¦ lhs_)] do
@@ -292,6 +303,7 @@ def process(queue, testcase, ctx)
 
     matchpi %[(editor initial_dict edits_*)] do
       next if "-no-editor".in?(ARGV)
+
       root = initial
 
       edits.items.each do |edit|
@@ -346,6 +358,128 @@ def process(queue, testcase, ctx)
           end
         end
       end
+    end
+
+    matchpi %[(tspace flow_*)] do
+      next if "-no-tspace".in?(ARGV)
+
+      ctx.stats.account
+
+      track(ctx, testcase) do
+        ctx.stats.run do
+          tspace(flow.unsafe_as_d) do |seeing, expected|
+            next if seeing == expected
+            ctx.failures << Term.of(:"mismatch/tspace", testcase, :GOT, seeing, :EXPECTED, expected)
+            break
+          end
+        end
+      end
+    end
+  end
+end
+
+def tspace(flow : Term::Dict, & : Term, Term ->)
+  counter = VERTEX_ZERO
+  fresh = ->{ counter, _ = counter + 1, counter }
+
+  tbase = Tbase.new(fresh, HashMap(Tbase::Key, Tbase::Value).new)
+  tspace = Tspace.new(fresh, tbase)
+
+  conns = {} of Term => Tconn
+  iviews = {} of Term => Term::Dict
+
+  identities = {} of {Term, Term} => Label
+  ridentities = {} of Label => Term
+
+  patterns = {} of Label => Term
+
+  flow.items.each do |step|
+    Term.case(step) do
+      matchpi %{(conn conn-name_symbol children_*)} do
+        # Create a connection object if it does not exist.
+        conns.put_if_absent(conn_name) do
+          Tconn.new(fresh, tspace) do |act|
+            # Whenever we receive an activation, we update the corresponding conn's
+            # iview (short for *identity view*, where identities are still discernible).
+            iview = iviews[conn_name]? || Term[]
+
+            case act
+            in StimulusPresence
+              pattern = patterns[act.sensor]
+              matches = M1.matches(pattern, act.value)
+              iview = iview.morph({ act.sensor, {act.trigger, act.identity}, matches})
+            in StimulusAbsence
+              iview = iview.morph({ act.sensor, {act.trigger, act.identity}, nil })
+            end
+
+            iviews[conn_name] = iview
+          end
+        end
+
+        # Find surface additions and generate fresh ids for them.
+        children.each_item_unordered do |child|
+          Term.case(child) do
+            matchpi %{[after added (%any sensor appearance) surface-name_symbol pattern_]} do
+              identity = identities.put_if_absent({conn_name, surface_name}) { fresh.call }
+              ridentities.put_if_absent(identity) { surface_name }
+              patterns.put_if_absent(identity, pattern)
+            end
+
+            otherwise { }
+          end
+        end
+
+        otherwise { }
+      end
+    end
+  end
+
+  flow.items.each do |step|
+    Term.case(step) do
+      matchpi %{(conn conn-name_symbol children_*)} do
+        conn = conns[conn_name]
+
+        children.items.each do |child|
+          Term.case(child) do
+            matchpi %{[after added sensor surface-name_symbol pattern_]} do
+              conn.add_sensor(
+                identity: identities[{conn_name, surface_name}],
+                pattern: pattern,
+                selector: child[:selector]?,
+              )
+            end
+
+            matchpi %{[after added appearance surface-name_symbol value_]} do
+              conn.add_appearance(
+                identity: identities[{conn_name, surface_name}],
+                value: value,
+                selector: child[:selector]?,
+                tombstone: child[:tombstone]?,
+              )
+            end
+
+            matchpi %{[after removed surface-name_symbol]} do
+              conn.delete(identities[{conn_name, surface_name}])
+            end
+
+            matchpi %{(view expected_)} do
+              iview = iviews[conn_name]? || Term[]
+
+              seeing = Term::Dict.build do |commit|
+                iview.each_entry do |sensor, appearances|
+                  commit.with(ridentities[sensor.to(Int32)], Term.set(appearances.ve))
+                end
+              end
+
+              yield Term.of(seeing), expected
+            end
+
+            otherwise { }
+          end
+        end
+      end
+
+      otherwise { }
     end
   end
 end
