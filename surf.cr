@@ -616,25 +616,16 @@ struct Utrie
   def initialize(@fresh : LabelGenerator, @data : ExtrinsicMap(Node, Props))
   end
 
-  def mount(pred : Label, base : Ubase::Any) : {Label, Bool}
+  def mount(pred : Label, base : Ubase::Any) : Label
     props = @data.ref(Node.new(pred, base)) { Props.new(0u32, @fresh.call) }
-
-    {props.successor, props.refcount == 1}
+    props.successor
   end
 
-  def mount(strand : Enumerable(T), & : T -> Ubase::Any) : {Label, Bool} forall T
-    added = false
-    vertex = strand.reduce(VERTEX_ROOT) do |pred, base|
-      # After the first added = true, all remaining mounts will also be
-      # added = true.
-      succ, added = mount(pred, yield base)
-      succ
-    end
-
-    {vertex, added}
+  def mount(strand : Enumerable(T), & : T -> Ubase::Any) : Label forall T
+    strand.reduce(VERTEX_ROOT) { |pred, base| mount(pred, yield base) }
   end
 
-  def mount(strand : Enumerable(Ubase::Any)) : {Label, Bool}
+  def mount(strand : Enumerable(Ubase::Any)) : Label
     mount(strand, &.itself)
   end
 
@@ -1227,12 +1218,8 @@ struct Tbase
     conj = Deque(Label).new
 
     subject.strands.each do |strand|
-      uvertex, added = utrie.mount(strand)
-
-      if added
-        strands.set(StrandVertex.new(uvertex), Identity.new)
-      end
-
+      uvertex = utrie.mount(strand)
+      strands.set(StrandVertex.new(uvertex), Identity.new)
       conj << uvertex
     end
 

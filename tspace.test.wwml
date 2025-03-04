@@ -28,6 +28,49 @@
     (conn A
       (view {Sa: {, ({foo: 100})}}))))
 
+;; Basic literal disjunction
+(group
+  (tspace
+    (conn A
+      (after added appearance Aa 100)
+      (after added appearance Ab 200)
+      (after added appearance Ac 300)
+      (after added sensor Sa n←(%any 100 300))
+      (view {Sa: {, ({n: 100}) ({n: 300})}})
+      (after added appearance Ac 400)
+      (view {Sa: {, ({n: 100})}})))
+  (tspace
+    (conn A
+      (after added sensor Sa n←(%any 100 300))
+      (view {})
+      (after added appearance Aa 100)
+      (after added appearance Ab 200)
+      (after added appearance Ac 300)
+      (view {Sa: {, ({n: 100}) ({n: 300})}})
+      (after added appearance Ac 400)
+      (view {Sa: {, ({n: 100})}}))))
+
+;; Basic conjunctions
+(tspace
+  (conn A
+    (after added sensor Sa (pixel x_ 0))
+    (after added sensor Sb (pixel 0 y_))
+    (view {})
+    (after added appearance Aa (qux 0 0))
+    (view {})
+    (after added appearance Ab (pixel 0 0))
+    (view {Sa: {, ({x: 0})}, Sb: {, ({y: 0})}})
+    (after added appearance Aa (pixel 100 0))
+    (view {Sa: {, ({x: 0}) ({x: 100})}, Sb: {, ({y: 0})}})
+    (after added appearance Aa (pixel 0 200))
+    (view {Sa: {, ({x: 0})}, Sb: {, ({y: 0}) ({y: 200})}})
+    (after added appearance Ab (pixel 100 0))
+    (view {Sa: {, ({x: 100})}, Sb: {, ({y: 200})}})
+    (after removed Aa)
+    (view {Sa: {, ({x: 100})}})
+    (after removed Ab)
+    (view {})))
+
 (tspace
   (conn A
     (after added sensor a n_number)
