@@ -1443,10 +1443,8 @@ class Tspace
 
       next unless selector0 == selector1
 
-      outbox << {pred, callback.partial(StimulusPresence.new(identity0, trigger, identity1, pred, value))}
+      outbox[pred] = callback.partial(StimulusPresence.new(identity0, trigger, identity1, pred, value))
     end
-
-    outbox
   end
 
   def unbind(subject : Sensor)
@@ -1465,10 +1463,8 @@ class Tspace
 
       next unless selector0 == selector1
 
-      outbox << {pred, callback.partial(StimulusPresence.new(sensor, trigger, identity, subject.id, subject.value))}
+      outbox[pred] = callback.partial(StimulusPresence.new(sensor, trigger, identity, subject.id, subject.value))
     end
-
-    outbox
   end
 
   def unbind(subject : Appearance)
@@ -1484,10 +1480,8 @@ class Tspace
 
       next unless selector0 == selector1
 
-      outbox << {pred, callback.partial(StimulusAbsence.new(sensor, trigger, identity, subject.id, message))}
+      outbox[pred] = callback.partial(StimulusAbsence.new(sensor, trigger, identity, subject.id, message))
     end
-
-    outbox
   end
 end
 
@@ -1590,7 +1584,10 @@ class Tconn
   # Replaces the surface at *identity* with a sensor group matching the given
   # *pattern* branch list.
   def add_sensor(identity : Label, *, pattern : BranchList, selector : Term?) : Nil
-    outbox = [] of {Label, ->}
+    # Implicit assumptions:
+    #   - We never notify the same vertex more than one time in summon() nor dismiss().
+    #   - Crystal hash tables are ordered.
+    outbox = {} of Label => ->
 
     if surface0 = @appearances[identity]?
       dismiss(outbox, surface0)
@@ -1610,10 +1607,7 @@ class Tconn
 
     summon(outbox, surface1)
 
-    # Implicit assumptions:
-    #   - We never notify the same vertex more than one time in summon() nor dismiss().
-    #   - Crystal hash tables are ordered.
-    outbox.to_h.each { |_, act| act.call }
+    outbox.each { |_, act| act.call }
   end
 
   def add_sensor(identity : Label, *, pattern : Term, selector : Term?) : Nil
@@ -1636,7 +1630,10 @@ class Tconn
   end
 
   def add_appearance(identity : Label, *, value : Term, selector : Term?, tombstone : Term?) : Nil
-    outbox = [] of {Label, ->}
+    # Implicit assumptions:
+    #   - We never notify the same vertex more than one time in summon() nor dismiss().
+    #   - Crystal hash tables are ordered.
+    outbox = {} of Label => ->
 
     if surface0 = @sensors[identity]?
       dismiss(surface0)
@@ -1652,10 +1649,7 @@ class Tconn
 
     summon(outbox, surface1)
 
-    # Implicit assumptions:
-    #   - We never notify the same vertex more than one time in summon() nor dismiss().
-    #   - Crystal hash tables are ordered.
-    outbox.to_h.each { |_, act| act.call }
+    outbox.each { |_, act| act.call }
   end
 
   def delete(identity : Label) : Nil
@@ -1671,14 +1665,14 @@ class Tconn
       raise ArgumentError.new
     end
 
-    outbox = [] of {Label, ->}
-
-    dismiss(outbox, data)
-
     # Implicit assumptions:
     #   - We never notify the same vertex more than one time in summon() nor dismiss().
     #   - Crystal hash tables are ordered.
-    outbox.to_h.each { |_, act| act.call }
+    outbox = {} of Label => ->
+
+    dismiss(outbox, data)
+
+    outbox.each { |_, act| act.call }
   end
 end
 
