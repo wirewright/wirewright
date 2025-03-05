@@ -554,6 +554,11 @@ module Ww
 
   struct Term
     private def self.each_keypath_and_leaf?(node : Term::Dict, prefix : Stack(Term), fn : Stack(Term), Term -> Bool) : Bool
+      # Empty dict literal `{}` is a (leaf).
+      if node.empty?
+        return fn.call(prefix, node.upcast)
+      end
+
       node.each_entry do |key, value|
         prefix.push(key)
 

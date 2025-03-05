@@ -1368,7 +1368,7 @@ struct Tbase
       # NOTE: This walk is done asynchronously -- etrace is not driven by
       # a unified clock.
       etrace.walk(*edge) do |candidate|
-        # Ensure candidate is a fuly added appearance.
+        # Ensure candidate is a fully added appearance.
         next unless appearances.get?(AppearanceVertex.new(candidate))
         next if only_preds && subject.id <= candidate
 
@@ -1443,7 +1443,7 @@ class Tspace
 
       next unless selector0 == selector1
 
-      outbox << {subject.id, callback.partial(StimulusPresence.new(identity0, trigger, identity1, VERTEX_NONE, pred, value))}
+      outbox << {pred, callback.partial(StimulusPresence.new(identity0, trigger, identity1, pred, value))}
     end
 
     outbox
@@ -1454,7 +1454,7 @@ class Tspace
     @tbase.unmount(subject)
   end
 
-  def bind(outbox, prev_subject_id, subject : Appearance, trigger : Label, identity : Label, selector selector0 : Term?)
+  def bind(outbox, subject : Appearance, trigger : Label, identity : Label, selector selector0 : Term?)
     @senders.set(subject.id, {trigger, identity, selector0, subject.value})
 
     @tbase.mount(subject)
@@ -1465,7 +1465,7 @@ class Tspace
 
       next unless selector0 == selector1
 
-      outbox << {pred, callback.partial(StimulusPresence.new(sensor, trigger, identity, prev_subject_id, subject.id, subject.value))}
+      outbox << {pred, callback.partial(StimulusPresence.new(sensor, trigger, identity, subject.id, subject.value))}
     end
 
     outbox
@@ -1491,14 +1491,16 @@ class Tspace
   end
 end
 
-alias Activation = StimulusPresence | StimulusAbsence
+alias Activation = StimulusPresence | StimulusAbsence | SensorAbsence
 
-record StimulusPresence, sensor : Label, trigger : Label, identity : Label, pred : Label, instant : Label, value : Term
+record StimulusPresence, sensor : Label, trigger : Label, identity : Label, instant : Label, value : Term
 
 # NOTE: in `StimulusAbsence`, the *farewell* term does not necessarily
 # match the receiver sensor's pattern. They are given for reference. If the receiver
 # can handle it, they should. Otherwise they may handle the absence itself.
 record StimulusAbsence, sensor : Label, trigger : Label, identity : Label, instant : Label, farewell : Term?
+
+record SensorAbsence, sensor : Label
 
 class Tconn
   alias SurfaceData = SensorData | AppearanceData
@@ -1546,9 +1548,8 @@ class Tconn
     end
   end
 
-  private def summon(outbox, prev_subject_id, data : AppearanceData)
+  private def summon(outbox, data : AppearanceData)
     @tspace.bind(outbox,
-      prev_subject_id: prev_subject_id,
       subject: Appearance.new(data.instant, data.value),
       selector: data.selector,
       trigger: @conid,
@@ -1642,8 +1643,6 @@ class Tconn
     elsif surface0 = @appearances[identity]?
       return unless changes?(surface0, value, selector, tombstone)
 
-      prev_subject_id = surface0.instant
-
       dismiss(outbox, surface0)
     end
 
@@ -1651,7 +1650,7 @@ class Tconn
 
     @appearances[identity] = surface1
 
-    summon(outbox, prev_subject_id || VERTEX_NONE, surface1)
+    summon(outbox, surface1)
 
     # Implicit assumptions:
     #   - We never notify the same vertex more than one time in summon() nor dismiss().
@@ -1662,6 +1661,9 @@ class Tconn
   def delete(identity : Label) : Nil
     if data = @sensors.delete(identity)
       dismiss(data)
+
+      @callback.call(SensorAbsence.new(identity))
+
       return
     end
 
@@ -1695,25 +1697,6 @@ end
 
 record Sensor, id : Label, strands : StrandList do
   include Tbase::Sensor
-
-  # TODO: remove, here we have improper (and cannot have proper) handling of branches!!!!
-  # Parsing should be done at a higher (sensor group) level!!!
-  def self.parse(id : Label, pattern : Term)
-    normp = M1.normal(pattern)
-    skeleton = Skeleton.pattern(normp)
-
-    strands = [] of Slice(Ubase::Any)
-
-    strands(skeleton) do |strand|
-      strands << strand.items.to_readonly_slice { |base| Ubase.parse(base) }
-    end
-
-    new(id, strands.to_readonly_slice(&.itself))
-  end
-
-  def self.parse(id : Label, ml : String)
-    parse(id, ML.term(ml))
-  end
 end
 
 record Appearance, id : Label, value : Term do

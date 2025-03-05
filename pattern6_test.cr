@@ -407,9 +407,15 @@ def tspace(flow : Term::Dict, & : Term, Term ->)
             in StimulusPresence
               pattern = patterns[act.sensor]
               matches = M1.matches(pattern, act.value)
-              iview = iview.morph({ act.sensor, {act.trigger, act.identity}, matches})
+              if matches.empty?
+                iview = iview.morph({ act.sensor, {act.trigger, act.identity}, nil})
+              else
+                iview = iview.morph({ act.sensor, {act.trigger, act.identity}, matches})
+              end
             in StimulusAbsence
               iview = iview.morph({ act.sensor, {act.trigger, act.identity}, nil })
+            in SensorAbsence
+              iview = iview.morph({ act.sensor, nil })
             end
 
             iviews[conn_name] = iview
