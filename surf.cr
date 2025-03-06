@@ -760,7 +760,7 @@ struct Xgraph
 
       (0...vertices.size).each do |i|
         b = vertices.unsafe_fetch(i)
-        next unless props = @data.get?(Node.new(a, b))
+        next unless props = @data.get?(Node.new(a, b)) || @data.get?(Node.new(b, a))
 
         vertices << props.successor
       end
