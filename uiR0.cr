@@ -264,6 +264,20 @@ module Style
         next unless n = codeword[4..].to_i?
 
         commit.with(:gap, n * 0.25 * settings.rem)
+      when "rounded-xs"
+        commit.with(:"border-radius", 0.125 * settings.rem)
+      when "rounded-sm"
+        commit.with(:"border-radius", 0.25 * settings.rem)
+      when "rounded-md"
+        commit.with(:"border-radius", 0.375 * settings.rem)
+      when "rounded-lg"
+        commit.with(:"border-radius", 0.5 * settings.rem)
+      when "rounded-xl"
+        commit.with(:"border-radius", 0.75 * settings.rem)
+      when "rounded-2xl"
+        commit.with(:"border-radius", 1 * settings.rem)
+      when "rounded-3xl"
+        commit.with(:"border-radius", 1.5 * settings.rem)
       when "max"
         commit.with(:w, :max)
         commit.with(:h, :max)
@@ -323,8 +337,26 @@ module Style
         commit.with(:font, settings.sans)
       when "font-mono"
         commit.with(:font, settings.mono)
+      when "font-thin"
+        commit.with(:"weight", 100)
+      when "font-extralight"
+        commit.with(:"weight", 200)
+      when "font-light"
+        commit.with(:"weight", 300)
       when "font-normal"
-        commit.with(:weight, 400)
+        commit.with(:"weight", 400)
+      when "font-text"
+        commit.with(:"weight", 450)
+      when "font-medium"
+        commit.with(:"weight", 500)
+      when "font-semibold"
+        commit.with(:"weight", 600)
+      when "font-bold"
+        commit.with(:"weight", 700)
+      when "font-extrabold"
+        commit.with(:"weight", 800)
+      when "font-black"
+        commit.with(:"weight", 900)
       when "text-xs"
         commit.with(:size, 0.75 * settings.rem)
         commit.with(:leading, 1 / 0.75)
@@ -383,7 +415,7 @@ end
 def uitree(styletree : Term, settings : Style::Settings)
   Term.of_case(styletree) do
     matchpi %{(ml child_ ¦ _ toplevel_boolean only-visible_boolean)} do
-      chain = ML::Display::MAIN_CHAIN.prepend(Cursor.new)
+      chain = ML::Display::MAIN_CHAIN.prepend(Cursor.new).prepend(Button.new)
       ctx = DisplayContext.new(60, 120, chain)
 
       if only_visible.true? && child.type.dict?
@@ -583,6 +615,16 @@ def texture(tree : Term) : SF::Texture
   end
 end
 
+def block(markup)
+  drawable = pipe(markup, uitree(SETTINGS), rewrite(UIR.rewriter))
+
+  Term.case(drawable) do
+    matchpi %[{¦ final-w: w←(%number +i32) final-h: h←(%number +i32)}] do
+      Term.of(:block, drawable, w: w//SETTINGS.rem, h: h//SETTINGS.rem)
+    end
+  end
+end
+
 struct Cursor
   include Feature
 
@@ -636,24 +678,61 @@ struct Cursor
       case slot
       when 0 then commit << lhs
       when 1 then commit << rhs
-      else
-        unreachable
       end
     end
 
-    markup = pipe(markup, uitree(SETTINGS), rewrite(UIR.rewriter))
-
-    Term.case(markup) do
-      matchpi %[{¦ final-w: w←(%number +i32) final-h: h←(%number +i32)}] do
-        Term.of(:block, markup, w: w//SETTINGS.rem, h: h//SETTINGS.rem)
-      end
-    end
+    block(markup)
   end
 
   def call(ctx, term, postfix, head, rest)
     Term.case(term) do
       matchpi %{[lhs_string | rhs_string (_*) @user]} do
         postfixed(cursor(lhs, rhs), postfix)
+      end
+
+      otherwise do
+        rest.call(ctx, term, postfix)
+      end
+    end
+  end
+end
+
+struct Button
+  include Feature
+
+  MARKUP = ML.term <<-WWML
+  (z-stack
+    (rect style: "max bg-blue-500 rounded-sm")
+    (padding style: "px-4 py-2"
+      (text ($slot 0) style: "text-sm text-white font-medium")))
+  WWML
+
+  private def button(term, caption : Term)
+    if caption.type.string?
+      caption_s = caption.to(String)
+    else
+      # TODO: use pretty print with forced inline
+      caption_s = ML.display(caption, endl: false).gsub(/\s+/, ' ')
+    end
+
+    markup = fill(MARKUP) do |slot, commit|
+      case slot
+      when 0 then commit << caption_s
+      end
+    end
+
+    block(markup)
+  end
+
+  def call(ctx, term, postfix, head, rest)
+    Term.case(term) do
+      matchpi(
+        %{[button caption_ to @_ (_*)]},
+        %{[button caption_ as _ to @_ (_*)]}
+      ) do
+        continue unless Rhodium.cursordepth(term, pairspart: true) == -1
+
+        postfixed(button(term, caption), postfix)
       end
 
       otherwise do
@@ -702,7 +781,7 @@ frame = ML.term <<-WWML
           (text "Wirewright µsoma" style: "text-xs text-neutral-400")))
       (padding style: "pl-32 pt-16 h-max" fr: 1
         (ml id: document toplevel: true only-visible: true
-          ((+ 1 2 ("" | "" () @user) "hello" true x: 100 y: 200)))))))
+          ((button "Increment" as -1 to @actions) ("" | "" () @user)))))))
 WWML
 
 SETTINGS = Style::Settings.new("IBM Plex Sans", "IBM Plex Mono")
