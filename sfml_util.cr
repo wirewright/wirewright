@@ -52,7 +52,7 @@ class SF::Text
 
   # Returns the height of this text.
   def height : Int
-    (global_bounds.height + local_bounds.top).to_i
+    Math.max(global_bounds.height + local_bounds.top, character_size).to_i
   end
 
   # Returns the full width and height of this text.

@@ -23,6 +23,23 @@ PRIMITIVES = ProcRuleset.build do
     a.unsafe_as_n > b.unsafe_as_n
   end
 
+  # E.g. (join {x: 1, y: 2} (entry z 3))
+  rulepi1 %[(entry k_ v_)] do
+    Term[].with(k, v)
+  end
+
+  rulepi1 %[(join xs_dict ys_dict)] do
+    xs | ys
+  end
+
+  rulepi1 %[(merge xs_dict ys_dict)] do
+    xs & ys
+  end
+
+  rulepi1 %[(value xs_dict key_)] do
+    xs[key]? || Term.of(:value, xs, key)
+  end
+
   # Flattens itemspart of *xs*, its items and so on, recursively.
   rulepi1 %[(flatten xs_)] do
     Term::Dict.build do |commit|
