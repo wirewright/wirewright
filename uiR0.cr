@@ -448,14 +448,14 @@ def uitree(styletree : Term, settings : Style::Settings)
   Term.of_case(styletree) do
     matchpi %{(ml child_ ¦ _ toplevel_boolean only-visible_boolean)} do
       chain = ML::Display::MAIN_CHAIN.prepend(Cursor.new).prepend(Button.new).prepend(Comment.new)
-      ctx = DisplayContext.new(60, 120, chain)
-
-      if only_visible.true? && child.type.dict?
-        ppinput = Term.of(D7.visible(child.unsafe_as_d))
+      if only_visible.true?
+        pair_chain = ML::Display::PAIR_CHAIN.prepend(HiddenPairs.new)
       else
-        ppinput = Term.of(child)
+        pair_chain = ML::Display::PAIR_CHAIN
       end
+      ctx = DisplayContext.new(60, 120, chain, pair: pair_chain)
 
+      ppinput = Term.of(child)
       # Allow only DictAligned for the document itself.
       tree = LayoutSet::All.thunk(ppinput, "", toplevel.true? ? LayoutSet::DictAligned : LayoutSet::All)
       flat, _ = flatten(ctx, tree)
@@ -798,6 +798,22 @@ struct Comment
   end
 end
 
+struct HiddenPairs
+  include Feature
+
+  def call(ctx, term, postfix, head, rest)
+    Term.case(term) do
+      matchpi %{(key_ _)}, %{(indented key_ _)} do
+        continue unless Rhodium.internal_key?(key)
+
+        Term.of(:frag, postfix)
+      end
+
+      otherwise { rest.call(ctx, term, postfix) }
+    end
+  end
+end
+
 def frame_texture(frame)
   pipe(frame, uitree(SETTINGS), rewrite(UIR.rewriter), texture)
 end
@@ -825,11 +841,8 @@ end
 frame = ML.term <<-WWML
 (window w: $<vw> h: $<vh> l: 0 t: 0 style: "bg-neutral-900"
   (z-stack style: "w-max"
-    ;;(layer w: 20 h: 20 z-index: 11
-    ;;  (translate style: "max" x: 5 y: 5
-    ;;    (rect style: "max bg-red-500")))
-    ;;(layer w: 10 h: 10 z-index: 10
-    ;;  (rect style: "max bg-blue-500"))
+    ;;(layer z-index: 999
+    ;;  (text "Hello World" id: printed style: "text-red-300 text-xs"))
     (y-stack style: "w-max" fractions: true
       (z-stack style: "w-max"
         (rect style: "w-max h-max bg-neutral-800")
@@ -837,7 +850,10 @@ frame = ML.term <<-WWML
           (text "Wirewright µsoma" style: "text-xs text-neutral-400")))
       (padding style: "pl-32 pt-16 h-max" fr: 1
         (ml id: document toplevel: true only-visible: true
-          ((button "Increment" as -1 to @actions) ("" | "" () @user)))))))
+          ((comment "Welcome to Wirewright µsoma!")
+           (button "Increment" as 1 to @actions ())
+           (button "Decrement" as -1 to @actions ())
+           ("" | "" () @user)))))))
 WWML
 
 SETTINGS = Style::Settings.new("IBM Plex Sans", "IBM Plex Mono")
@@ -917,6 +933,8 @@ while window.open?
       goal: D7::Goal.none,
       initial: true,
     )
+
+    # frame = Keypath.assign(Term.of(ML.display(Term.of(document1))), frame, get_by_id(frame, Term.of(:printed)).append(1))
 
     frame = Keypath.assign(Term.of(document1), frame, docpath)
 

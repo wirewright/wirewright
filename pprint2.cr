@@ -133,7 +133,8 @@ record DisplayContext,
   longer_width = 120,
   features = ML::Display::MAIN_CHAIN,
   layouts = ML::Display::LAYOUT_CHAIN,
-  ppairs = ML::Display::PAIRSPART_CHAIN,
+  pair = ML::Display::PAIR_CHAIN,
+  pairspart = ML::Display::PAIRSPART_CHAIN,
   layouts_allowed = LayoutSet::All,
   measurements = {} of Term => {Int32, Int32}
 
@@ -169,11 +170,9 @@ module Layout
           if dict.index?(key)
             commit << ctx.features.call(ctx.inline, value, last ? postfix : "")
           else
-            commit << Term[:row,
-              ctx.features.call(ctx.inline, key, ":"),
-              ctx.features.call(ctx.inline, value, last ? postfix : ""),
-              gap: 1]
+            commit << ctx.pair.call(ctx.inline, Term.of(key, value), last ? postfix : "")
           end
+
         end
       end
 
@@ -206,10 +205,7 @@ module Layout
           if dict.index?(key)
             commit << ctx.features.call(ctx, value, last ? postfix : "")
           else
-            commit << Term[:row,
-              ctx.features.call(ctx.inline, key, ":"),
-              ctx.features.call(ctx, value, last ? postfix : ""),
-              gap: 1]
+            commit << ctx.pair.call(ctx, Term.of(key, value), last ? postfix : "")
           end
         end
       end
@@ -236,10 +232,7 @@ module Layout
         commit.with(:gap, 1)
 
         entries.each_with_last do |(key, value), last|
-          commit << Term[:row,
-            ctx.features.call(ctx.inline, key, ":"),
-            ctx.features.call(ctx.inline, value, last ? postfix : ","),
-            gap: 1]
+          commit << ctx.pair.call(ctx.inline, Term.of(key, value), last ? postfix : ",")
         end
       end
 
@@ -266,10 +259,7 @@ module Layout
         commit << :col
 
         entries.each_with_last do |(key, value), last|
-          commit << Term[:row,
-            ctx.features.call(ctx.inline, key, ":"),
-            ctx.features.call(ctx, value, last ? postfix : ","),
-            gap: 1]
+          commit << ctx.pair.call(ctx, Term.of(key, value), last ? postfix : ",")
         end
       end
 
@@ -299,8 +289,7 @@ module Layout
         commit << :col
 
         entries.each_with_last do |(key, value), last|
-          commit << ctx.features.call(ctx.inline, key, ":")
-          commit << Term[:indented, ctx.features.call(ctx, value, last ? postfix : ","), by: 2]
+          commit << ctx.pair.call(ctx, Term.of(:vertical, key, value), last ? postfix : ",")
         end
       end
 
@@ -334,10 +323,7 @@ module Layout
         if dict.index?(key0)
           commit << ctx.features.call(ctx.inline, value0, "")
         else
-          commit << Term[:row,
-            ctx.features.call(ctx.inline, key0, ":"),
-            ctx.features.call(ctx.inline, value0, ""),
-            gap: 1]
+          commit << ctx.pair.call(ctx.inline, Term.of(key0, value0), "")
         end
 
         commit << Term[:indented, Term::Dict.build do |inner|
@@ -350,10 +336,7 @@ module Layout
             if dict.index?(key)
               inner << ctx.features.call(ctx, value, last ? postfix : "")
             else
-              inner << Term[:row,
-                ctx.features.call(ctx, key, ":"),
-                ctx.features.call(ctx, value, last ? postfix : ""),
-                gap: 1]
+              inner << ctx.pair.call(ctx, Term.of(key, value), last ? postfix : "")
             end
           end
         end]
@@ -428,11 +411,7 @@ module Layout
         when 1
           (dict.itemsize...dict.size).each do |index|
             key, value = entries[index]
-
-            commit << Term[:row,
-              ctx.features.call(ctx.inline, key, ":"),
-              ctx.features.call(ctx.inline, value, ""),
-              gap: 1]
+            commit << ctx.pair.call(ctx.inline, Term.of(key, value), "")
           end
         when 2
           (1...dict.itemsize - 1).each do |index|
@@ -483,11 +462,7 @@ module Layout
         when 1
           (dict.itemsize...dict.size).each do |index|
             key, value = entries[index]
-
-            commit << Term[:row,
-              ctx.features.call(ctx.inline, key, ":"),
-              ctx.features.call(ctx.inline, value, ""),
-              gap: 1]
+            commit << ctx.pair.call(ctx.inline, Term.of(key, value), "")
           end
         when 2
           (1...dict.itemsize - 1).each do |index|
@@ -536,19 +511,11 @@ module Layout
         when 2
           (2...entries.size - 1).each do |index|
             key, value = entries[index]
-
-            commit << Term[:row,
-              ctx.features.call(ctx.inline, key, ":"),
-              ctx.features.call(ctx, value, ""),
-              gap: 1]
+            commit << ctx.pair.call(ctx, Term.of(key, value), "")
           end
         when 3
           key, value = entries[entries.size - 1]
-
-          commit << Term[:row,
-            ctx.features.call(ctx.inline, key, ":"),
-            ctx.features.call(ctx, value, postfix),
-            gap: 1]
+          commit << ctx.pair.call(ctx, Term.of(key, value), postfix)
         else
           unreachable
         end
@@ -583,20 +550,6 @@ enum LayoutSet : UInt16
         raise ArgumentError.new
       end
     {% end %}
-  end
-end
-
-module Templates
-  extend self
-
-  def pair(ctx, key, colon, value, postfix)
-    r_key = ctx.features.call(ctx.inline, key, colon)
-    r_value = ctx.features.call(ctx, value, postfix)
-
-    Term.of(:choice,
-      Term.of(:row, r_key, r_value, gap: 1),
-      Term[:col, r_key,
-        Term[:indented, r_value, by: 2]])
   end
 end
 
@@ -639,6 +592,27 @@ module Feature
 end
 
 module Feature
+  struct Pair
+    include Feature
+
+    def call(ctx, term, postfix, head, rest) : Term
+      Term.case(term) do
+        matchpi %{(key_ value_)} do
+          Term.of(:row,
+            ctx.features.call(ctx.inline, key, ":"),
+            ctx.features.call(ctx, value, postfix),
+            gap: 1)
+        end
+
+        matchpi %{(vertical key_ value_)} do
+          Term.of(:col,
+            ctx.features.call(ctx.inline, key, ":"),
+            Term[:indented, ctx.features.call(ctx, value, postfix), by: 2])
+        end
+      end
+    end
+  end
+
   # Renders `(backmap <pattern> <backspec>)` as `<pattern> <> <backspec>`.
   # FIXME: we should somehow only enable these at the top level.
   struct Backmap
@@ -861,7 +835,7 @@ module Feature
             when 2
               ppentries = OrdDict.sorted(side.unsafe_as_d)
               ppentries.each_with_last do |(key, value), last|
-                commit << ctx.ppairs.call(ctx.inline, Term.of(key, value), last ? ")" + postfix : "")
+                commit << ctx.pairspart.call(ctx.inline, Term.of(key, value), last ? ")" + postfix : "")
               end
             else
               unreachable
@@ -881,7 +855,7 @@ module Feature
             when 2
               ppentries = OrdDict.sorted(side.unsafe_as_d)
               ppentries.each_with_last do |(key, value), last|
-                commit << ctx.ppairs.call(ctx, Term.of(key, value), last ? ")" + postfix : "")
+                commit << ctx.pairspart.call(ctx, Term.of(key, value), last ? ")" + postfix : "")
               end
             else
               unreachable
@@ -908,7 +882,7 @@ module Feature
 
             ppentries = OrdDict.sorted(pp.unsafe_as_d)
             ppentries.each_with_last do |(key, value), last|
-              commit << ctx.ppairs.call(ctx.inline, Term.of(key, value), last ? "}" + postfix : "")
+              commit << ctx.pairspart.call(ctx.inline, Term.of(key, value), last ? "}" + postfix : "")
             end
           end
 
@@ -926,7 +900,7 @@ module Feature
 
               ppentries = OrdDict.sorted(pp.unsafe_as_d)
               ppentries.each_with_last do |(key, value), last|
-                column << ctx.ppairs.call(ctx, Term.of(key, value), last ? "}" + postfix : "")
+                column << ctx.pairspart.call(ctx, Term.of(key, value), last ? "}" + postfix : "")
               end
             end
           end
@@ -968,8 +942,14 @@ module Feature
 
     def call(ctx, term, postfix, head, rest) : Term
       Term.matchpi(term, %{(key_symbol (%'%let key_symbol value_))}) do
-        return Templates.pair(ctx, key, "_:", value, postfix)
+        rk = ctx.features.call(ctx.inline, key, ":")
+        rv = ctx.features.call(ctx, value, postfix)
+
+        return Term.of(:choice,
+          Term.of(:row, rk, rv, gap: 1),
+          Term.of(:col, rk, Term.of(:indented, rv, by: 2)))
       end
+
 
       rest.call(ctx, term, postfix)
     end
@@ -983,11 +963,21 @@ module Feature
     def call(ctx, term, postfix, head, rest) : Term
       Term.case(term) do
         matchpi %{(key_ (%'%optional fallback←(%pipe type t_) (%symbol blank key_ t_)))} do
-          Templates.pair(ctx, key, "⋮", fallback, postfix)
+          rk = ctx.features.call(ctx.inline, key, "⋮")
+          rv = ctx.features.call(ctx, fallback, postfix)
+
+          Term.of(:choice,
+            Term.of(:row, rk, rv, gap: 1),
+            Term.of(:col, rk, Term.of(:indented, rv, by: 2)))
         end
 
         matchpi %{(key_ (%'%optional fallback_ (%symbol blank key_ %'_)))} do
-          Templates.pair(ctx, key, "_⋮", fallback, postfix)
+          rk = ctx.features.call(ctx.inline, key, "_⋮")
+          rv = ctx.features.call(ctx, fallback, postfix)
+
+          Term.of(:choice,
+            Term.of(:row, rk, rv, gap: 1),
+            Term.of(:col, rk, Term.of(:indented, rv, by: 2)))
         end
 
         otherwise { rest.call(ctx, term, postfix) }
@@ -1033,7 +1023,7 @@ module Feature
 
     def call(ctx, term, postfix, head, rest) : Term
       Term.matchpi(term, %{(key_ value_)}) do
-        return Templates.pair(ctx, key, ":", value, postfix)
+        return ctx.pair.call(ctx, Term.of(key, value), postfix)
       end
 
       rest.call(ctx, term, postfix)
@@ -1452,6 +1442,10 @@ module ::Ww::ML::Display
     Feature::CallLike.new,
     Feature::MapLike.new,
     Feature::DictLiteral.new,
+  )
+
+  PAIR_CHAIN = Chain(Feature).new(
+    Feature::Pair.new,
   )
 
   # Default pairspart chain for displaying WwML `%partition` pairspart patterns.
