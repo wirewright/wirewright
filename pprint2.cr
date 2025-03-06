@@ -618,12 +618,17 @@ module Feature
 
       def call(ctx, term, postfix, head, rest) : Term
         Term.matchpi(term, {{typeblank}}) do
-          return Term.of(:row, Term.of(:frag, term.inspect, tag: {{tag}}), Term.of(:frag, postfix))
+          return postfixed(Term.of(:frag, term.inspect, tag: {{tag}}), postfix)
         end
 
         rest.call(ctx, term, postfix)
       end
     end
+  end
+
+  # :nodoc:
+  def postfixed(markup, postfix)
+    postfix.empty? ? markup : Term.of(:row, markup, {:frag, postfix})
   end
 end
 
@@ -734,7 +739,7 @@ module Feature
 
     def call(ctx, term, postfix, head, rest)
       Term.matchpi(term, %{(edge suffix←(%any° _symbol _number _string))}) do
-        return Term.of(:row, Term.of(:frag, "@#{suffix.inspect}", tag: :edge), Term.of(:frag, postfix))
+        return postfixed(Term.of(:frag, "@#{suffix.inspect}", tag: :edge), postfix)
       end
 
       rest.call(ctx, term, postfix)
@@ -1046,17 +1051,17 @@ module Feature
         if @underscore_thousands
           # The conversion for this one is cheap so we handle it separately.
           matchpi %{(%number i32)} do
-            Term.of(:row, Term.of(:frag, "#{term.to(Int32).format(delimiter: '_')}", tag: :number), Term.of(:frag, postfix))
+            postfixed(Term.of(:frag, "#{term.to(Int32).format(delimiter: '_')}", tag: :number), postfix)
           end
 
           # The conversion for this one is expensive since we're going through BigInt.
           matchpi %{(%number (whole _))} do
-            Term.of(:row, Term.of(:frag, "#{term.to(BigInt).format(delimiter: '_')}", tag: :number), Term.of(:frag, postfix))
+            postfixed(Term.of(:frag, "#{term.to(BigInt).format(delimiter: '_')}", tag: :number), postfix)
           end
         end
 
         matchpi %{_number} do
-          Term.of(:row, Term.of(:frag, term.inspect, tag: :number), Term.of(:frag, postfix))
+          postfixed(Term.of(:frag, term.inspect, tag: :number), postfix)
         end
 
         otherwise do
