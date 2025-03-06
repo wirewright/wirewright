@@ -430,7 +430,7 @@ def color?(term)
   end
 end
 
-def present(target, frame : Term)
+def present(layers, layer, frame : Term)
   Term.case(frame) do
     matchpi %[(text caption_string ¦ rest_ color_ l_: (%number i32) t_: (%number i32))] do
       next unless info = TextKit::Info.from?(rest)
@@ -441,10 +441,21 @@ def present(target, frame : Term)
       sf.color = color?(color) || SF::Color::Black
       sf.letter_spacing = 1
 
-      target.draw(sf)
+      layers.draw(layer, sf)
     end
 
-    matchpi %[(rect ¦ _ bg_ l_: (%number i32) t_: (%number i32) final-w: w←(%number +i32) final-h: h←(%number +i32) border-radius: (%optional 0 border_radius←(%number (whole _) >= 0)))] do |bg|
+    matchpi(
+      %[(rect ¦ _ bg_
+                  l_: (%number i32)
+                  t_: (%number i32)
+                  final-w: w←(%number +i32)
+                  final-h: h←(%number +i32)
+                  border-radius: (%optional 0 border_radius←(%number (whole _) >= 0))
+                  ring-l: (%optional 0 ring-l←(%number (whole _) >= 0))
+                  ring-r: (%optional 0 ring-r←(%number (whole _) >= 0))
+                  ring-t: (%optional 0 ring-t←(%number (whole _) >= 0))
+                  ring-b: (%optional 0 ring-b←(%number (whole _) >= 0)))]
+    ) do |bg|
       if border_radius.unsafe_as_n > 0
         sf = SF::RoundedRectangleShape.new
         sf.border_radius = border_radius.to(Float64)
@@ -457,16 +468,22 @@ def present(target, frame : Term)
       sf.position = SF.vector2i(l.to(Int32), t.to(Int32))
       sf.size = SF.vector2i(w.to(Int32), h.to(Int32))
 
+      # Ring works like padding but it's intrinsic to the rect, and not accounted
+      # during sizing.
+      sf.position -= SF.vector2i(ring_l.to(Int32), ring_t.to(Int32))
+      sf.size = sf.size.to_i + SF.vector2i(ring_l.to(Int32)+ring_r.to(Int32), ring_t.to(Int32)+ring_b.to(Int32))
+
       sf.update
 
-      target.draw(sf)
+      layers.draw(layer, sf)
     end
 
     matchpi %[(circle ¦ _ bg_ l_: (%number i32) t_: (%number i32) radius_: (%number +i32))] do |bg|
       sf = SF::CircleShape.new(radius.to(Int32))
       sf.fill_color = color?(bg) || SF::Color::Transparent
       sf.position = SF.vector2i(l.to(Int32), t.to(Int32))
-      target.draw(sf)
+
+      layers.draw(layer, sf)
     end
 
     matchpi %[(triangle ¦ _ bg_ l_: (%number i32) t_: (%number i32) final-w: w←(%number +i32) final-h: h←(%number +i32) pointing: left)] do |bg|
@@ -477,25 +494,91 @@ def present(target, frame : Term)
       sf[2] = SF.vector2i(w.to(Int32), h.to(Int32))
       sf.fill_color = color?(bg) || SF::Color::Transparent
       sf.position = SF.vector2i(l.to(Int32), t.to(Int32))
-      target.draw(sf)
+
+      layers.draw(layer, sf)
+    end
+
+    matchpi %{(layer child_ ¦ _ l_: (%number +i32) t_: (%number +i32) final-w: w←(%number +i32) final-h: h←(%number +i32) z-index: n←(%number +i32))} do
+      return if w.zero? || h.zero?
+
+      layers.create(n.to(Int32), x: l.to(Int32), y: t.to(Int32), w: w.to(Int32), h: h.to(Int32))
+
+      present(layers, n.to(Int32), child)
     end
 
     matchpi %[_dict] do
-      frame.items.each { |child| present(target, child) }
+      frame.items.each { |child| present(layers, layer, child) }
     end
 
     otherwise { }
   end
 end
 
-def texture(tree : Term)
+struct LayerManager
+  record LayerData, x : Int32, y : Int32, z : Int32, target : SF::RenderTexture
+
+  def initialize
+    @layers = [] of LayerData
+  end
+
+  # Allocates an absolutely positioned (*x*, *y*), *z*-th layer of width *w* and
+  # height *H* if absent. If the layer already exists, does nothing.
+  #
+  # Layers with higher *z* are drawn on top of those with a lower *z*.
+  def create(z : Int32, *, x : Int32, y : Int32, w : Int32, h : Int32, bg = SF::Color::Transparent) : Nil
+    index = @layers.bsearch_index { |other| other.z >= z }
+
+    if index && (other = @layers[index]?)
+      return if z == other.z # Already exists
+    end
+
+    index ||= @layers.size
+
+    target = SF::RenderTexture.new(w, h)
+    target.clear(bg)
+    target.view = SF::View.new(SF.float_rect(x, y, w, h))
+
+    @layers.insert(index, LayerData.new(x, y, z, target))
+  end
+
+  def draw(z : Int32, sf : SF::Drawable) : Nil
+    layer = @layers.bsearch { |layer| layer.z >= z }
+
+    unless layer && layer.z == z
+      raise ArgumentError.new("layer #{z} was not create()'d")
+    end
+
+    layer.target.draw(sf)
+  end
+
+  def collapse(primary : Int32) : SF::Texture
+    base = @layers[primary].target
+
+    @layers.each do |layer|
+      next if layer.z == primary
+
+
+      layer.target.display
+
+      sprite = SF::Sprite.new(layer.target.texture)
+      sprite.position = SF.vector2i(layer.x, layer.y)
+      base.draw(sprite)
+    end
+
+    base.display
+    base.texture
+  end
+end
+
+def texture(tree : Term) : SF::Texture
   Term.case(tree) do
     matchpi %{(viewport child_ ¦ _ bg_ final-w: w←(%number +i32) final-h: h←(%number +i32))} do
-      target = SF::RenderTexture.new(w.to(Int32), h.to(Int32))
-      target.clear(color?(bg) || SF::Color::Black)
-      present(target, child)
-      target.display
-      target.texture
+      layers = LayerManager.new
+      layers.create(0, x: 0, y: 0, w: w.to(Int32), h: h.to(Int32), bg: color?(bg) || SF::Color::White)
+
+      present(layers, 0, child)
+
+      layers.collapse(0)
     end
   end
 end
@@ -505,42 +588,36 @@ struct Cursor
 
   MARKUP_EMPTY = ML.term <<-WWML
   (x-stack
-    (z-stack
-      (rect style: "max bg-neutral-700")
-      (padding style: "py-1"
-        (text "" style: "font-mono")))
-    (rect w: 1 style: "h-max bg-blue-500"))
+    (text "" style: "font-mono")
+    (rect w: 1 ring-t: 5 ring-b: 5 style: "h-max bg-blue-500"))
   WWML
 
   MARKUP_LHS = ML.term <<-WWML
   (x-stack
     (z-stack
-      (rect style: "max bg-neutral-700")
-      (padding style: "py-1 pl-1"
-        (text ($slot 0) style: "font-mono text-neutral-400")))
-    (rect w: 1 style: "h-max bg-blue-500"))
+      (rect ring-l: 1 ring-r: 1 ring-t: 5 ring-b: 5 style: "max bg-neutral-700")
+      (text ($slot 0) style: "font-mono text-neutral-400"))
+    (rect w: 1 ring-t: 5 ring-b: 5 style: "h-max bg-blue-500"))
   WWML
 
   MARKUP_RHS = ML.term <<-WWML
   (x-stack
-    (rect w: 1 style: "h-max bg-blue-500")
+    (layer w: 1 style: "h-max" z-index: 10
+      (rect ring-t: 5 ring-b: 5 style: "max bg-blue-500"))
     (z-stack
-      (rect style: "max bg-neutral-700")
-      (padding style: "py-1 pr-1"
-        (text ($slot 1) style: "font-mono text-neutral-400"))))
+      (rect ring-l: 1 ring-r: 1 ring-t: 5 ring-b: 5 style: "max bg-neutral-700")
+      (text ($slot 1) style: "font-mono text-neutral-400")))
   WWML
 
   MARKUP_FULL = ML.term <<-WWML
   (x-stack
     (z-stack
-      (rect style: "max bg-neutral-700")
-      (padding style: "py-1 pl-1"
-        (text ($slot 0) style: "font-mono text-neutral-400")))
-    (rect w: 1 style: "h-max bg-blue-500")
+      (rect ring-l: 1 ring-r: 1 ring-t: 5 ring-b: 5 style: "max bg-neutral-700")
+      (text ($slot 0) style: "font-mono text-neutral-400"))
+    (rect w: 1 ring-t: 5 ring-b: 5 style: "h-max bg-blue-500")
     (z-stack
-      (rect style: "max bg-neutral-700")
-      (padding style: "py-1 pr-1"
-        (text ($slot 1) style: "font-mono text-neutral-400"))))
+      (rect ring-l: 0 ring-r: 1 ring-t: 5 ring-b: 5 style: "max bg-neutral-700")
+      (text ($slot 1) style: "font-mono text-neutral-400")))
   WWML
 
   private def cursor(lhs, rhs)
@@ -612,14 +689,20 @@ end
 
 frame = ML.term <<-WWML
 (viewport w: $<vw> h: $<vh> l: 0 t: 0 style: "bg-neutral-900"
-  (y-stack style: "w-max" fractions: true
-    (z-stack style: "w-max"
-      (rect style: "w-max h-max bg-neutral-800")
-      (padding style: "p-1"
-        (text "Wirewright µsoma" style: "text-xs text-neutral-400")))
-    (padding style: "pl-32 pt-16 h-max" fr: 1
-      (ml id: document toplevel: true only-visible: true
-        ((+ 1 2 ("" | "" () @user) "hello" true x: 100 y: 200))))))
+  (z-stack style: "w-max"
+    ;;(layer w: 20 h: 20 z-index: 11
+    ;;  (translate style: "max" x: 5 y: 5
+    ;;    (rect style: "max bg-red-500")))
+    ;;(layer w: 10 h: 10 z-index: 10
+    ;;  (rect style: "max bg-blue-500"))
+    (y-stack style: "w-max" fractions: true
+      (z-stack style: "w-max"
+        (rect style: "w-max h-max bg-neutral-800")
+        (padding style: "p-1"
+          (text "Wirewright µsoma" style: "text-xs text-neutral-400")))
+      (padding style: "pl-32 pt-16 h-max" fr: 1
+        (ml id: document toplevel: true only-visible: true
+          ((+ 1 2 ("" | "" () @user) "hello" true x: 100 y: 200)))))))
 WWML
 
 SETTINGS = Style::Settings.new("IBM Plex Sans", "IBM Plex Mono")
