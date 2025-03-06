@@ -25,6 +25,12 @@ def fill(template : Term, &fn : Int32, Term::Dict::Commit ->)
   rewrite(template, itemdfsR(callR(handler)))
 end
 
+def fill(template, *values)
+  fill(template) do |slot, commit|
+    commit << values[slot]
+  end
+end
+
 module OrdDict
   # :nodoc:
   struct Unsorted

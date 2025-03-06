@@ -44,22 +44,54 @@ module TextKit
   # main thread.
   module FontManager
     WEIGHTS = {
-      100 => "Thin",
-      200 => "ExtraLight",
-      300 => "Light",
-      400 => "Regular",
-      450 => "Text",
-      500 => "Medium",
-      600 => "SemiBold",
-      700 => "Bold",
-      800 => "ExtraBold",
-      900 => "Black"
+      {100, "Thin"},
+      {200, "ExtraLight"},
+      {300, "Light"},
+      {400, "Regular"},
+      {450, "Text"},
+      {500, "Medium"},
+      {600, "SemiBold"},
+      {700, "Bold"},
+      {800, "ExtraBold"},
+      {900, "Black"},
     }
 
-    def self.path?(font : String, weight : Int32) : Path?
-      return unless postfix = WEIGHTS[weight]?
+    def self.refs(font : String, postfix : String) : Indexable(Path)
+      {Path["fonts"] / "#{font.delete(' ')}-#{postfix}.ttf",
+       Path["fonts"] / "#{font.delete(' ')}-#{postfix}.otf"}
+    end
 
-      Path["fonts"] / "#{font.delete(' ')}-#{postfix}.otf"
+    # :nodoc:
+    def self.path0?(font : String, weight pivot : Int32) : Path?
+      WEIGHTS.reverse_each do |weight, postfix|
+        next unless weight <= pivot
+
+        refs(font, postfix).each do |ref|
+          next unless File.exists?(ref)
+          return ref
+        end
+      end
+
+      WEIGHTS.each do |weight, postfix|
+        break if weight <= pivot
+
+        refs(font, postfix).each do |ref|
+          next unless File.exists?(ref)
+          return ref
+        end
+      end
+    end
+
+    @@paths = {} of {String, Int32} => Path?
+
+    # Returns the path to *font* with the given *weight*.
+    #
+    # - If *weight* does not exist for *font* tries to fall back to lower values
+    #   of *weight*.
+    # - If still nothing, tries to fall back on higher values of *weight*.
+    # - If still nothing, returns `nil`.
+    def self.path?(font : String, weight : Int32) : Path?
+      @@paths.put_if_absent({font, weight}) { path0?(font, weight) }
     end
 
     @@cache = {} of Path => SF::Font
@@ -249,7 +281,7 @@ module Style
   def defaults(node : Term) : String
     Term.case(node) do
       matchpi %{text} do
-        "content font-sans text-base text-black font-normal"
+        "content font-sans text-base text-black font-text"
       end
 
       otherwise { "content" }
@@ -415,7 +447,7 @@ end
 def uitree(styletree : Term, settings : Style::Settings)
   Term.of_case(styletree) do
     matchpi %{(ml child_ ¦ _ toplevel_boolean only-visible_boolean)} do
-      chain = ML::Display::MAIN_CHAIN.prepend(Cursor.new).prepend(Button.new)
+      chain = ML::Display::MAIN_CHAIN.prepend(Cursor.new).prepend(Button.new).prepend(Comment.new)
       ctx = DisplayContext.new(60, 120, chain)
 
       if only_visible.true? && child.type.dict?
@@ -604,7 +636,7 @@ end
 
 def texture(tree : Term) : SF::Texture
   Term.case(tree) do
-    matchpi %{(viewport child_ ¦ _ bg_ final-w: w←(%number +i32) final-h: h←(%number +i32))} do
+    matchpi %{(window child_ ¦ _ bg_ final-w: w←(%number +i32) final-h: h←(%number +i32))} do
       layers = LayerManager.new
       layers.create(0, x: 0, y: 0, w: w.to(Int32), h: h.to(Int32), bg: color?(bg) || SF::Color::White)
 
@@ -653,11 +685,11 @@ struct Cursor
 
   MARKUP_FULL = ML.term <<-WWML
   (x-stack
-    (z-stack
+    (z-stack style: "h-max"
       (rect ring-l: 1 ring-r: 1 ring-t: 5 ring-b: 5 style: "max bg-neutral-700")
       (text ($slot 0) style: "font-mono text-neutral-400"))
     (rect w: 1 ring-t: 5 ring-b: 5 style: "h-max bg-blue-500")
-    (z-stack
+    (z-stack style: "h-max"
       (rect ring-l: 0 ring-r: 1 ring-t: 5 ring-b: 5 style: "max bg-neutral-700")
       (text ($slot 1) style: "font-mono text-neutral-400")))
   WWML
@@ -742,6 +774,30 @@ struct Button
   end
 end
 
+struct Comment
+  include Feature
+
+  MARKUP = ML.term <<-WWML
+  (x-stack
+    (text ";; " style: "font-mono text-sm text-neutral-500")
+    (text ($slot 0) style: "font-mono text-sm text-neutral-500"))
+  WWML
+
+  def call(ctx, term, postfix, head, rest)
+    Term.case(term) do
+      matchpi %{(comment desc_string)} do
+        wrapped_desc = wrap(desc.to(String), 60).chomp
+
+        postfixed(block(fill(MARKUP, wrapped_desc)), postfix)
+      end
+
+      otherwise do
+        rest.call(ctx, term, postfix)
+      end
+    end
+  end
+end
+
 def frame_texture(frame)
   pipe(frame, uitree(SETTINGS), rewrite(UIR.rewriter), texture)
 end
@@ -767,7 +823,7 @@ def get_by_id(frame, id)
 end
 
 frame = ML.term <<-WWML
-(viewport w: $<vw> h: $<vh> l: 0 t: 0 style: "bg-neutral-900"
+(window w: $<vw> h: $<vh> l: 0 t: 0 style: "bg-neutral-900"
   (z-stack style: "w-max"
     ;;(layer w: 20 h: 20 z-index: 11
     ;;  (translate style: "max" x: 5 y: 5
