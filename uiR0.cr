@@ -1,4 +1,7 @@
-# TODO: how to support wrapping? items that do not fit into w: max should be able to wrap
+# TODO: once we have a templating engine we'll be able to extract
+# markup for e.g. button or comment etc. into separate .wwml files
+# (into e.g. frags/) folder! Right now they're hard-coded. But in
+# theory should be user-modifiable (even per project!)
 
 require "./src/wirewright"
 require "./pprint2"
@@ -135,23 +138,6 @@ module TextKit
 end
 
 module UIR
-  # TODO: Q: where to put this?
-  #       A: in the uiR.soma file. After we have precedence for <> ->. Inside
-  #          a (stage preprocess ...). The rewriter should be there as well!
-  PREPROCESS = <<-WWML
-  ;; Cascade width/height to single children.
-  (_ {¦ -w_} ¦ _ w: W_) <> {w: →W}
-  (_ {¦ -h_} ¦ _ h: H_) <> {h: →H}
-
-  ;; Map w/h: N to w/h: max max-w/h: N
-  {¦ w_number -max-w_} <> {w: max, max-w: →w}
-  {¦ h_number -max-h_} <> {h: max, max-h: →h}
-
-  ;; Map w/h: (fr N) to w/h: max fr: N
-  {¦ w_: (fr n_number) -fr_} <> {w: max, fr: →n}
-  {¦ h_: (fr n_number) -fr_} <> {h: max, fr: →n}
-  WWML
-
   class_getter rewriter : Rewriter do
     staging = File.read("./uiR.soma.wwml")
 
@@ -207,7 +193,7 @@ module UIR
       )
     end
 
-    chainR(baseR.call(PREPROCESS), baseR.call(staging))
+    baseR.call(staging)
   end
 end
 
@@ -272,7 +258,19 @@ def styletree(pptree : Term)
   end
 end
 
-
+# TODO: the style engine should be smarter! E.g. p-... utilities are only available
+# on `padding`. If not run on padding the style engine should wrap in padding, and
+# inherit sizing props.
+#
+#   E.g.  (rect style: "p-3 bg-neutral-500 z-10")
+#   >>>
+#         (layer w: max h: max z-index: 10
+#           (padding pl: 3rem pr: 3rem pt: 3rem pb: 3rem w: max h: max
+#             (rect bg: (rgb ...) w: max h: max) ;; ...
+#
+# In other words, it is obvious in the code below some properties "belong" to certain
+# nodes and to no other nodes. If the style engine detects the property is not being
+# applied on the expected node, it should create that node with proper "ascendancy".
 module Style
   extend self
 
@@ -282,6 +280,10 @@ module Style
     Term.case(node) do
       matchpi %{text} do
         "content font-sans text-base text-black font-text"
+      end
+
+      matchpi %{rect} do
+        "max"
       end
 
       otherwise { "content" }
@@ -300,7 +302,7 @@ module Style
         commit.with(:"border-radius", 0.125 * settings.rem)
       when "rounded-sm"
         commit.with(:"border-radius", 0.25 * settings.rem)
-      when "rounded-md"
+      when "rounded-md", "rounded"
         commit.with(:"border-radius", 0.375 * settings.rem)
       when "rounded-lg"
         commit.with(:"border-radius", 0.5 * settings.rem)
@@ -324,6 +326,24 @@ module Style
         commit.with(:w, :content)
       when "h-content"
         commit.with(:h, :content)
+      when "h-fr"
+        commit.with(:h, :max)
+        commit.with(:fr, 1)
+      when "w-px"
+        commit.with(:w, :max)
+        commit.with(:"max-w", 1)
+      when "h-px"
+        commit.with(:h, :max)
+        commit.with(:"max-h", 1)
+      when "fr"
+        commit.with(:fractions, true)
+      when "min-sm"
+        commit.with(:"min-w", 24 * settings.rem)
+        commit.with(:"min-h", 24 * settings.rem)
+      when "min-w-sm"
+        commit.with(:"min-w", 24 * settings.rem)
+      when "min-h-sm"
+        commit.with(:"min-h", 24 * settings.rem)
       when .starts_with?("w-")
         next unless n = codeword[2..].to_i?
 
@@ -365,6 +385,19 @@ module Style
         commit.with(:pr, n * 0.25 * settings.rem)
         commit.with(:pt, n * 0.25 * settings.rem)
         commit.with(:pb, n * 0.25 * settings.rem)
+      when .starts_with?("dx-")
+        next unless n = codeword[3..].to_i?
+
+        commit.with(:x, n * 0.25 * settings.rem)
+      when .starts_with?("dy-")
+        next unless n = codeword[3..].to_i?
+
+        commit.with(:y, n * 0.25 * settings.rem)
+      when .starts_with?("d-")
+        next unless n = codeword[2..].to_i?
+
+        commit.with(:x, n * 0.25 * settings.rem)
+        commit.with(:y, n * 0.25 * settings.rem)
       when "font-sans"
         commit.with(:font, settings.sans)
       when "font-mono"
@@ -652,7 +685,7 @@ def block(markup)
 
   Term.case(drawable) do
     matchpi %[{¦ final-w: w←(%number +i32) final-h: h←(%number +i32)}] do
-      Term.of(:block, drawable, w: w//SETTINGS.rem, h: h//SETTINGS.rem)
+      Term.of(:block, markup, w: w//SETTINGS.rem, h: h//SETTINGS.rem)
     end
   end
 end
@@ -663,34 +696,34 @@ struct Cursor
   MARKUP_EMPTY = ML.term <<-WWML
   (x-stack
     (text "" style: "font-mono")
-    (rect w: 1 ring-t: 5 ring-b: 5 style: "h-max bg-blue-500"))
+    (rect ring-t: 5 ring-b: 5 style: "w-px bg-blue-500"))
   WWML
 
   MARKUP_LHS = ML.term <<-WWML
   (x-stack
     (z-stack
-      (rect ring-l: 1 ring-r: 1 ring-t: 5 ring-b: 5 style: "max bg-neutral-700")
+      (rect ring-l: 1 ring-r: 1 ring-t: 5 ring-b: 5 style: "bg-neutral-700")
       (text ($slot 0) style: "font-mono text-neutral-400"))
-    (rect w: 1 ring-t: 5 ring-b: 5 style: "h-max bg-blue-500"))
+    (rect ring-t: 5 ring-b: 5 style: "w-px bg-blue-500"))
   WWML
 
   MARKUP_RHS = ML.term <<-WWML
   (x-stack
-    (layer w: 1 style: "h-max" z-index: 10
-      (rect ring-t: 5 ring-b: 5 style: "max bg-blue-500"))
+    (layer style: "w-px h-max" z-index: 10
+      (rect ring-t: 5 ring-b: 5 style: "bg-blue-500"))
     (z-stack
-      (rect ring-l: 1 ring-r: 1 ring-t: 5 ring-b: 5 style: "max bg-neutral-700")
+      (rect ring-l: 1 ring-r: 1 ring-t: 5 ring-b: 5 style: "bg-neutral-700")
       (text ($slot 1) style: "font-mono text-neutral-400")))
   WWML
 
   MARKUP_FULL = ML.term <<-WWML
   (x-stack
     (z-stack style: "h-max"
-      (rect ring-l: 1 ring-r: 1 ring-t: 5 ring-b: 5 style: "max bg-neutral-700")
+      (rect ring-l: 1 ring-r: 1 ring-t: 5 ring-b: 5 style: "bg-neutral-700")
       (text ($slot 0) style: "font-mono text-neutral-400"))
-    (rect w: 1 ring-t: 5 ring-b: 5 style: "h-max bg-blue-500")
+    (rect ring-t: 5 ring-b: 5 style: "w-px bg-blue-500")
     (z-stack style: "h-max"
-      (rect ring-l: 0 ring-r: 1 ring-t: 5 ring-b: 5 style: "max bg-neutral-700")
+      (rect ring-l: 0 ring-r: 1 ring-t: 5 ring-b: 5 style: "bg-neutral-700")
       (text ($slot 1) style: "font-mono text-neutral-400")))
   WWML
 
@@ -706,20 +739,41 @@ struct Cursor
       template = MARKUP_EMPTY
     end
 
-    markup = fill(template) do |slot, commit|
-      case slot
-      when 0 then commit << lhs
-      when 1 then commit << rhs
-      end
-    end
+    fill(template, lhs, rhs)
+  end
 
-    block(markup)
+  # FIXME: text for caption & hint must be w-max and x-expand mut be max-w-lg or something !!!!!
+  #  After we can wrap text of course!
+  MARKUP_SUGGESTION1 = ML.term <<-WWML
+  (floating
+    (layer z-index: 10
+      (padding style: "p-1 pt-7"
+        (z-stack
+          (rect ring-t: 1 ring-b: 1 ring-l: 1 ring-r: 1 style: "bg-neutral-600 rounded")
+          (rect style: "bg-neutral-800 rounded")
+          (x-expand style: "min-w-sm"
+            (y-stack style: "w-max"
+              (padding style: "p-3"
+                (text ($slot 0) style: "font-mono text-neutral-200 font-medium"))
+              (rect style: "h-px bg-neutral-600")
+              (padding style: "p-3"
+                (text ($slot 1) style: "text-sm text-neutral-300"))))))))
+  WWML
+
+  private def suggestion1(name, intro)
+    block(fill(MARKUP_SUGGESTION1, name, intro))
   end
 
   def call(ctx, term, postfix, head, rest)
     Term.case(term) do
+      # One general suggestion.
+      matchpi %{(lhs_string | rhs_string (_*) @user ¦ _ suggestions: (suggestions/list () ((name_string intro_string)) ()))} do
+        b = block(Term.of(:"z-stack", suggestion1(name, intro), cursor(lhs, rhs)))
+        postfixed(b, postfix)
+      end
+
       matchpi %{[lhs_string | rhs_string (_*) @user]} do
-        postfixed(cursor(lhs, rhs), postfix)
+        postfixed(block(cursor(lhs, rhs)), postfix)
       end
 
       otherwise do
@@ -734,7 +788,7 @@ struct Button
 
   MARKUP = ML.term <<-WWML
   (z-stack
-    (rect style: "max bg-blue-500 rounded-sm")
+    (rect style: "bg-blue-500 rounded-sm")
     (padding style: "px-4 py-2"
       (text ($slot 0) style: "text-sm text-white font-medium")))
   WWML
@@ -815,7 +869,9 @@ struct HiddenPairs
 end
 
 def frame_texture(frame)
-  pipe(frame, uitree(SETTINGS), rewrite(UIR.rewriter), texture)
+  x = pipe(frame, uitree(SETTINGS), rewrite(UIR.rewriter))
+  # puts ML.display(x)
+  texture(x)
 end
 
 def get_by_id?(frame, id, keypath = Term[])
@@ -839,16 +895,16 @@ def get_by_id(frame, id)
 end
 
 frame = ML.term <<-WWML
-(window w: $<vw> h: $<vh> l: 0 t: 0 style: "bg-neutral-900"
+(window max-w: $<vw> max-h: $<vh> l: 0 t: 0 style: "max bg-neutral-900"
   (z-stack style: "w-max"
     ;;(layer z-index: 999
     ;;  (text "Hello World" id: printed style: "text-red-300 text-xs"))
-    (y-stack style: "w-max" fractions: true
+    (y-stack style: "w-max fr"
       (z-stack style: "w-max"
-        (rect style: "w-max h-max bg-neutral-800")
+        (rect style: "bg-neutral-800")
         (padding style: "p-1"
           (text "Wirewright µsoma" style: "text-xs text-neutral-400")))
-      (padding style: "pl-32 pt-16 h-max" fr: 1
+      (padding style: "pl-32 pt-16 h-fr"
         (ml id: document toplevel: true only-visible: true
           ((comment "Welcome to Wirewright µsoma!")
            (button "Increment" as 1 to @actions ())

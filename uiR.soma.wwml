@@ -6,8 +6,8 @@
 ;; GENERAL
 
 ;; Learn the content width/height from a single child.
-(_ {¦ content-w: w_number} ¦ _ content-w: (%- _ W)) <> {W: →w}
-(_ {¦ content-h: h_number} ¦ _ content-h: (%- _ H)) <> {H: →h}
+((%not x-expand) {¦ content-w: w_number} ¦ _ content-w: (%- _ W)) <> {W: →w}
+((%not y-expand) {¦ content-h: h_number} ¦ _ content-h: (%- _ H)) <> {H: →h}
 
 ;; Propagate max-w/h if I know my max-w/h and I am w/h: max.
 (_ {¦ max-w: (%- _ w)} ¦ _ w: max max-w: W_number) <> {w: →W}
@@ -66,12 +66,17 @@
 (rect ¦ _ -content-w_) <> {content-w: 0}
 (rect ¦ _ -content-h_) <> {content-h: 0}
 
-;; NODE: expander
+;; NODE: x-expand
 
-(expander {¦ content-w: w_number} ¦ _ min-w_number content-w: (%- _ W))
-  <> {W: ($once (max →min-w →w))}
-(expander {¦ content-h: h_number} ¦ _ min-h_number content-h: (%- _ H))
-  <> {H: ($once (max →min-h →h))}
+(x-expand {¦ max-w: w_number} ¦ _ content-w: (%- _ W)) <> {W: →w}
+(x-expand {¦ -max-w_ content-w: w_number} ¦ _ min-w_number)
+  <> {max-w: ($once (max →min-w →w))}
+
+;; NODE: y-expand
+
+(y-expand {¦ max-h: h_number} ¦ _ content-h: (%- _ H)) <> {H: →h}
+(y-expand {¦ -max-h_ content-h: h_number} ¦ _ min-h_number)
+  <> {max-h: ($once (max →min-h →h))}
 
 ;; NODE: translate
 
@@ -86,6 +91,14 @@
   <> {l: ($ (- (+ →L →W) →w))}
 (translate {¦ -t_ final-h: h_number} ¦ _ y: bottom t: T_number final-h: H_number)
   <> {t: ($ (- (+ →T →H) →h))}
+
+;; NODE: floating
+;;
+;; Floating node is exempt from sizing. It reports its content-w/h as 0. In effect,
+;; it's protecting ("coating") its child from inward sizing whereas outward sizing
+;; is preserved.
+
+(floating _ ¦ _ -content-w_ -content-h_) <> {content-w: 0, content-h: 0}
 
 ;; NODE: x-stack
 
