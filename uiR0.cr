@@ -674,8 +674,15 @@ def color?(term)
   end
 end
 
-def present(layers, layer, frame : Term)
+def present(vote_cursor, layers, layer, frame : Term)
   Term.case(frame) do
+    # Any node can specify the cursor.
+    matchpi %[{¦ cursor: pointer}] do
+      vote_cursor.call(HAND)
+
+      continue
+    end
+
     matchpi %[(text caption_string ¦ rest_ color_ l_: (%number i32) t_: (%number i32))] do
       TextKit::Info.from(rest) do |info|
         sf = SF::Text.new(caption.to(String), info.font, info.size)
@@ -747,11 +754,11 @@ def present(layers, layer, frame : Term)
 
       layers.create(n.to(Int32), x: l.to(Int32), y: t.to(Int32), w: w.to(Int32), h: h.to(Int32))
 
-      present(layers, n.to(Int32), child)
+      present(vote_cursor, layers, n.to(Int32), child)
     end
 
     matchpi %[_dict] do
-      frame.items.each { |child| present(layers, layer, child) }
+      frame.items.each { |child| present(vote_cursor, layers, layer, child) }
     end
 
     otherwise { }
@@ -814,15 +821,25 @@ struct LayerManager
   end
 end
 
-def texture(tree : Term) : SF::Texture
+ARROW = SF::Cursor.from_system(SF::Cursor::Type::Arrow)
+HAND  = SF::Cursor.from_system(SF::Cursor::Type::Hand)
+
+def cursor_and_texture(tree : Term) : {SF::Cursor, SF::Texture}
   Term.case(tree) do
     matchpi %{(window child_ ¦ _ bg_ final-w: w←(%number +i32) final-h: h←(%number +i32))} do
       layers = LayerManager.new
       layers.create(0, x: 0, y: 0, w: w.to(Int32), h: h.to(Int32), bg: color?(bg) || SF::Color::White)
 
-      present(layers, 0, child)
+      cursor = ARROW
+      vote_cursor = ->(proposal : SF::Cursor) do
+        return if cursor != ARROW && proposal == ARROW
 
-      layers.collapse(0)
+        cursor = proposal
+      end
+
+      present(vote_cursor, layers, 0, child)
+
+      {cursor, layers.collapse(0)}
     end
   end
 end
@@ -941,7 +958,7 @@ struct Button
   WWML
 
   MARKUP_HOVERED = ML.term <<-WWML
-  (z-stack events-to: ($slot 0) hover-id: ($slot 1)
+  (z-stack events-to: ($slot 0) hover-id: ($slot 1) cursor: pointer
     (rect style: "bg-blue-500 rounded-sm")
     (padding style: "px-4 py-2"
       (text ($slot 2) style: "text-sm text-white font-medium")))
@@ -1306,7 +1323,9 @@ module Soma
     window.framerate_limit = 60
 
     # Hard-wait for the initial drawable.
-    texture = texture(drawables.receive)
+    cursor, texture = cursor_and_texture(drawables.receive)
+
+    window.mouse_cursor = cursor
 
     while window.open?
       while event = window.poll_event
@@ -1372,7 +1391,8 @@ module Soma
 
       select
       when drawable = drawables.receive
-        texture = texture(drawable)
+        cursor, texture = cursor_and_texture(drawable)
+        window.mouse_cursor = cursor
       else
       end
 
