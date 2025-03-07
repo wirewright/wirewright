@@ -42,10 +42,7 @@ module ::Ww::Keypath
 end
 
 module TextKit
-  # NOTE: methods of this module read and sometimes mutate global caches. They are
-  # intentially not thread-safe. Interaction with SFML should be limited to the
-  # main thread.
-  module FontManager
+  module FontLoader
     WEIGHTS = {
       {100, "Thin"},
       {200, "ExtraLight"},
@@ -59,6 +56,7 @@ module TextKit
       {900, "Black"},
     }
 
+    # :nodoc:
     def self.refs(font : String, postfix : String) : Indexable(Path)
       {Path["fonts"] / "#{font.delete(' ')}-#{postfix}.ttf",
        Path["fonts"] / "#{font.delete(' ')}-#{postfix}.otf"}
@@ -86,6 +84,7 @@ module TextKit
     end
 
     @@paths = {} of {String, Int32} => Path?
+    @@paths_lock = Mutex.new
 
     # Returns the path to *font* with the given *weight*.
     #
@@ -94,25 +93,110 @@ module TextKit
     # - If still nothing, tries to fall back on higher values of *weight*.
     # - If still nothing, returns `nil`.
     def self.path?(font : String, weight : Int32) : Path?
-      @@paths.put_if_absent({font, weight}) { path0?(font, weight) }
+      @@paths_lock.synchronize do
+        @@paths.put_if_absent({font, weight}) { path0?(font, weight) }
+      end
     end
 
-    @@cache = {} of Path => SF::Font
+    @@cache = {} of Path => {SF::Font, Mutex}
+    @@cache_lock = Mutex.new
 
-    def self.font_at(path : Path) : SF::Font
-      @@cache.put_if_absent(path) do
-        SF::Font.from_file(path.to_s)
+    def self.font_at(path : Path, &)
+      font, lock = @@cache_lock.synchronize do
+        @@cache.put_if_absent(path) do
+          {SF::Font.from_file(path.to_s), Mutex.new}
+        end
+      end
+
+      lock.synchronize do
+        yield font
       end
     end
   end
 
+  record Measurer, font : SF::Font, size : Int32, leading : Float32, tracking : Float32 do
+    def self.new(font, size)
+      new(font, size, leading: 1.0, tracking: 1.0)
+    end
+
+    def glyph(char : Char)
+      @font.get_glyph(char.ord, @size, bold: false)
+    end
+
+    def kerning(c1 : Char, c2 : Char)
+      @font.get_kerning(c1.ord, c2.ord, @size, bold: false)
+    end
+
+    def line_spacing : Float32
+      @font.get_line_spacing(@size)
+    end
+
+    def texture
+      @font.get_texture(@size)
+    end
+
+    def wswidth0
+      glyph(' ').advance
+    end
+
+    def wswidth
+      wswidth0 + letter_spacing
+    end
+
+    def letter_spacing
+      (wswidth0 / 3) * (tracking - 1)
+    end
+
+    def line_height
+      (size * leading).ceil.to_i
+    end
+
+    def zoom(n : Int32)
+      change(size: @size + n)
+    end
+
+    def measure(string : String, *, window = 0...string.size)
+      reader = Char::Reader.new(string, pos: string.char_index_to_byte_index(window.begin) || raise IndexError.new)
+
+      width = 0
+      state = '\0'
+
+      window.each do
+        current = reader.current_char
+
+        width += kerning(state, current)
+        state = current
+
+        case current
+        when ' ', '\n'
+          width += wswidth
+        when '\t'
+          width += 4 * wswidth
+        else
+          glyph = glyph(current)
+          width += glyph.advance + letter_spacing
+        end
+
+        break unless reader.has_next?
+
+        reader.next_char
+      end
+
+      width.ceil.to_i
+    end
+
+    def_equals_and_hash @sf, @size, @leading, @tracking
+  end
+
   record Info, font : SF::Font, size : Int32, leading : Float32 do
-    def self.from?(term : Term)
+    def self.from(term : Term, &)
       Term.case(term) do
         matchpi %[{¦ font_string weight_: (%any 100 200 300 400 450 500 600 700 800 900) size_: (%number u8) leading_number}] do
-          next unless path = FontManager.path?(font.to(String), weight.to(Int32))
+          next unless path = FontLoader.path?(font.to(String), weight.to(Int32))
 
-          new(FontManager.font_at(path), size.to(Int32), leading.to(Float32))
+          FontLoader.font_at(path) do |font|
+            yield new(font, size.to(Int32), leading.to(Float32))
+          end
         end
 
         otherwise { }
@@ -120,19 +204,27 @@ module TextKit
     end
   end
 
-  def self.measure(content : String, font : String, weight : Int32, points : Int32, leading : Float64) : {Int32, Int32}
-    unless path = FontManager.path?(font, weight)
+  def self.measure(content : String, font : String, weight : Int32, size : Int32, leading : Float32) : {Int32, Int32}
+    unless path = FontLoader.path?(font, weight)
       return 0, 0
     end
 
-    if content.empty?
-      text = SF::Text.new(" ", FontManager.font_at(path), points)
-      size = text.size
-      {0, size.y}
-    else
-      text = SF::Text.new(content, FontManager.font_at(path), points)
-      size = text.size
-      {size.x, size.y}
+    FontLoader.font_at(path) do |font|
+      measurer = Measurer.new(font, size, leading, tracking: 1.0f32)
+
+      if content.empty?
+        return 0, measurer.line_height
+      end
+
+      width = 0
+      height = 0
+
+      content.each_line(chomp: true) do |line|
+        width = Math.max(width, measurer.measure(line))
+        height += measurer.line_height
+      end
+
+      {width, height}
     end
   end
 end
@@ -162,7 +254,7 @@ module UIR
           font.to(String),
           weight.to(Int32),
           size.to(Int32),
-          leading.to(Float64),
+          leading.to(Float32),
         )
 
         {width: w, height: h}
@@ -206,6 +298,9 @@ def stack(head, children, **kwargs)
 end
 
 # Renders a pretty-print tree into a style-tree.
+# TODO: this produces a very shitty, nested tree. As an optimization we should simplify it.
+# For example, this will produce a lot of nested x-stack's. We should have an additional
+# simplify pass for *pptree*. That resolves nested rows, cols, etc.
 def styletree(pptree : Term)
   Term.of_case(pptree) do
     matchpi %{(frag content_string)} do
@@ -530,15 +625,15 @@ end
 def present(layers, layer, frame : Term)
   Term.case(frame) do
     matchpi %[(text caption_string ¦ rest_ color_ l_: (%number i32) t_: (%number i32))] do
-      next unless info = TextKit::Info.from?(rest)
+      TextKit::Info.from(rest) do |info|
+        sf = SF::Text.new(caption.to(String), info.font, info.size)
+        sf.line_spacing = info.leading
+        sf.position = SF.vector2i(l.to(Int32), t.to(Int32))
+        sf.color = color?(color) || SF::Color::Black
+        sf.letter_spacing = 1
 
-      sf = SF::Text.new(caption.to(String), info.font, info.size)
-      sf.line_spacing = info.leading
-      sf.position = SF.vector2i(l.to(Int32), t.to(Int32))
-      sf.color = color?(color) || SF::Color::Black
-      sf.letter_spacing = 1
-
-      layers.draw(layer, sf)
+        layers.draw(layer, sf)
+      end
     end
 
     matchpi(
@@ -681,11 +776,11 @@ def texture(tree : Term) : SF::Texture
 end
 
 def block(markup)
-  drawable = pipe(markup, uitree(SETTINGS), rewrite(UIR.rewriter))
+  drawable = drawable(markup)
 
   Term.case(drawable) do
     matchpi %[{¦ final-w: w←(%number +i32) final-h: h←(%number +i32)}] do
-      Term.of(:block, markup, w: w//SETTINGS.rem, h: h//SETTINGS.rem)
+      Term.of(:block, drawable, w: w//SETTINGS.rem, h: h//SETTINGS.rem)
     end
   end
 end
@@ -868,10 +963,10 @@ struct HiddenPairs
   end
 end
 
-def frame_texture(frame)
+def drawable(frame) : Term
   x = pipe(frame, uitree(SETTINGS), rewrite(UIR.rewriter))
   # puts ML.display(x)
-  texture(x)
+  x
 end
 
 def get_by_id?(frame, id, keypath = Term[])
@@ -894,115 +989,303 @@ def get_by_id(frame, id)
   get_by_id?(frame, id) || raise KeyError.new
 end
 
-frame = ML.term <<-WWML
-(window max-w: $<vw> max-h: $<vh> l: 0 t: 0 style: "max bg-neutral-900"
-  (z-stack style: "w-max"
-    ;;(layer z-index: 999
-    ;;  (text "Hello World" id: printed style: "text-red-300 text-xs"))
-    (y-stack style: "w-max fr"
-      (z-stack style: "w-max"
-        (rect style: "bg-neutral-800")
-        (padding style: "p-1"
-          (text "Wirewright µsoma" style: "text-xs text-neutral-400")))
-      (padding style: "pl-32 pt-16 h-fr"
-        (ml id: document toplevel: true only-visible: true
-          ((comment "Welcome to Wirewright µsoma!")
-           (button "Increment" as 1 to @actions ())
-           (button "Decrement" as -1 to @actions ())
-           ("" | "" () @user)))))))
-WWML
-
+# FIXME:  this should not be a global!!
 SETTINGS = Style::Settings.new("IBM Plex Sans", "IBM Plex Mono")
 
-window = SF::RenderWindow.new(SF::VideoMode.new(800, 600), title: "Hello World")
-window.framerate_limit = 60
+module Soma
+  extend self
 
-frame1 = Keypath.plug(Term.of(window.size.x), Term.of(:"$<vw>"), frame)
-frame1 = Keypath.plug(Term.of(window.size.y), Term.of(:"$<vh>"), frame1)
-texture0 = frame_texture(frame1)
+  WINDOW_WIDTH0  = 1000
+  WINDOW_HEIGHT0 = 800
 
-while window.open?
-  docpath = get_by_id(frame, Term.of(:document)).append(1)
-  document0 = document1 = Keypath.follow(docpath, frame).as_d
-  force_redraw = false
+  class AppInterrupt < Exception
+  end
 
-  while event = window.poll_event
-    motion = nil
+  def frame0 : Term
+    ML.term <<-WWML
+    (window max-w: vw_ max-h: vh_ l: 0 t: 0 style: "max bg-neutral-900"
+      (y-stack style: "w-max fr"
+        (z-stack style: "w-max"
+          (rect style: "bg-neutral-800")
+          (padding style: "p-1"
+            (text "Wirewright µsoma" style: "text-xs text-neutral-400")))
+        (padding style: "pl-32 pt-16 h-fr"
+          (ml toplevel: true only-visible: true
+            document_))))
+    WWML
+  end
 
-    case event
-    when SF::Event::Closed then window.close
-    when SF::Event::Resized
-      force_redraw = true
-      visible_area = SF.float_rect(0, 0, event.width, event.height)
-      window.view = SF::View.new(visible_area)
-    when SF::Event::TextEntered
-      chr = event.unicode.chr
-      next unless chr.printable?
-      motion = Term.of(:input, chr)
-    when SF::Event::KeyPressed
-      keyname = nil
-      case event.code
-      when .escape?    then keyname = "escape"
-      when .tab?       then keyname = "tab"
-      when .home?      then keyname = "home"
-      when .end?       then keyname = "end"
-      when .enter?     then keyname = "enter"
-      when .delete?    then keyname = "delete"
-      when .left?      then keyname = "left"
-      when .right?     then keyname = "right"
-      when .up?        then keyname = "up"
-      when .down?      then keyname = "down"
-      when .backspace? then keyname = "backspace"
-      when .numpad8?   then keyname = "np8"
-      when .numpad5?   then keyname = "np5"
-      when .numpad2?   then keyname = "np2"
+  def instance(frame : Term, framectx : Term::Dict)
+    M1.bsubst(frame, framectx)
+  end
+
+  def handle(prompt : Term, framectx : Term::Dict)
+    Term.case(prompt) do
+      # Reflect size change in the frame context.
+      matchpi %{(size w←(%number u16) h←(%number u16))} do
+        continue if {w, h} == {framectx[:vw], framectx[:vh]}
+
+        framectx.morph({:vw, w}, {:vh, h})
       end
 
-      if event.control
-        case event.code
-        when .c? then keyname = "c"
-        when .v? then keyname = "v"
+      matchpi %{(key _)}, %{(input _)} do
+        document0 = framectx[:document].as_d
+        document1 = Rhodium::Q.of(document0, Rhodium::Events)
+          .enqueue(Term.of(:edit, {:edge, :user}, prompt))
+          .commit(document0, Rhodium::Events)
+
+        framectx.morph({:document, document1})
+      end
+
+      matchpi %{job-completed} do
+        framectx.morph({:generation, framectx[:generation] + 1})
+      end
+
+      matchpi %{exit} do
+        raise AppInterrupt.new
+      end
+
+      otherwise { framectx }
+    end
+  end
+
+  def peek(prompts : Channel(Term), framectx : Term::Dict)
+    select
+    when prompt = prompts.receive
+      handle(prompt, framectx)
+    else
+      framectx
+    end
+  end
+
+  def wait(prompts : Channel(Term), framectx : Term::Dict)
+    handle(prompts.receive, framectx)
+  end
+
+  # The primary thread is reacting to UI *prompts* and responding with *drawables*.
+  # The primary thread also serves as the bridge between UI and delta7.
+  def primary(prompts : Channel(Term), drawables : Channel(Term), nitrene : Nitrene::JobContext, seed : Term::Dict) : Nil
+    frame = frame0
+
+    framectx0 = Term[generation: 0, vw: WINDOW_WIDTH0, vh: WINDOW_HEIGHT0, document: seed]
+
+    should_draw = false
+
+    show = -> do
+      return unless should_draw
+
+      dw = pipe(frame, instance(framectx0), drawable)
+      drawables.send(dw)
+    end
+
+    rendezvous = D7::Step.new do |document|
+      framectx1 = peek(prompts, framectx0.morph({:document, document}))
+      unless framectx0 == framectx1
+        redraw = false
+
+        if framectx0.without(:document) == framectx1.without(:document)
+          # NOTE: currently, drawing is very slow compared to D7 (duh...). So we check
+          # if the visible part of the document changed and if it did not (e.g. some events),
+          # then we skip reporting the document. If it did change then we block until
+          # the user has the chance to see the document.
+          redraw = D7.visible(framectx0[:document].as_d) != D7.visible(framectx1[:document].as_d)
+        else
+          redraw = true
+        end
+
+        framectx0 = framectx1
+        if redraw
+          show.call
         end
       end
 
-      next unless keyname
-
-      keyname = "S-#{keyname}" if event.shift
-      keyname = "C-#{keyname}" if event.control
-      key = Term::Sym.new(keyname)
-
-      motion = Term.of(:key, key)
+      # We do not modify the document and therefore never need to trigger
+      # a transition.
+      {framectx1[:document].as_d, false}
     end
 
-    if motion
-      document1 = Rhodium::Q.of(document1, Rhodium::Events)
-        .enqueue(:edit, {:edge, :user}, motion)
-        .commit(document1, Rhodium::Events)
+    initial = true
+    settled = false
+
+    edited = false
+
+    check_should_draw = D7::Step.new do |document|
+      events = Rhodium::Q.of(document, Rhodium::Events)
+
+      if event = events.first?
+        Term.case(event) do
+          matchpi %{(edit @_ _)} { edited = true }
+          otherwise { }
+        end
+      else
+        should_draw = !edited
+        edited = false
+      end
+
+      # We do not modify the document and therefore we never trigger
+      # a transition.
+      {document, false}
+    end
+
+    while true
+      should_draw = true
+
+      # Force initial redraw; and redraw before settling. On the latter,
+      # since rendezvous will only redraw periodically, it may happen that
+      # we loose a frame due to it settling before it can draw. Forcing
+      # a redraw after settling solves this.
+      show.call
+
+      should_draw = false
+
+      while settled
+        framectx1 = wait(prompts, framectx0)
+        next if framectx0 == framectx1
+
+        framectx0 = framectx1
+        show.call
+
+        settled = false
+      end
+
+      seed0 = framectx0[:document].as_d
+      seed1 = D7.run(seed0,
+        log: D7::Log::None.new,
+        transition: Rhodium.transition,
+        step: D7.steps(check_should_draw, Rhodium.step, Nitrene.step(nitrene), rendezvous),
+        goal: D7::Goal.none,
+        initial: initial,
+      )
+
+      framectx0 = framectx0.morph({:document, seed1})
+
+      initial = false
+      settled = true
+    end
+  rescue AppInterrupt
+  end
+
+  # The main thread is doing the majority of SFML stuff.
+  #
+  # - It's showing the window.
+  # - It's receiving drawable frames from the primary thread (the one doing Soma).
+  # - It's sending events to the primary thread via a channel (*prompts*).
+  #
+  # NOTE: we call SFML/UI events *prompts* to distinguish them from document events,
+  # which are simply called *events*.
+  def main(prompts : Channel(Term), drawables : Channel(Term)) : Nil
+    window = SF::RenderWindow.new(SF::VideoMode.new(1000, 800), title: "Wirewright µsoma")
+    window.vertical_sync_enabled = true
+
+    # Hard-wait for the initial drawable.
+    texture = texture(drawables.receive)
+
+    while window.open?
+      while event = window.poll_event
+        transcribed = nil
+
+        case event
+        when SF::Event::Closed
+          window.close
+
+          transcribed = Term.of(:exit)
+        when SF::Event::Resized
+          window.view = SF::View.new(SF.float_rect(0, 0, event.width, event.height))
+
+          transcribed = Term.of(:size, event.width, event.height)
+        when SF::Event::TextEntered
+          chr = event.unicode.chr
+          next unless chr.printable?
+
+          transcribed = Term.of(:input, chr)
+        when SF::Event::KeyPressed
+          keyname = nil
+          case event.code
+          when .escape?    then keyname = "escape"
+          when .tab?       then keyname = "tab"
+          when .home?      then keyname = "home"
+          when .end?       then keyname = "end"
+          when .enter?     then keyname = "enter"
+          when .delete?    then keyname = "delete"
+          when .left?      then keyname = "left"
+          when .right?     then keyname = "right"
+          when .up?        then keyname = "up"
+          when .down?      then keyname = "down"
+          when .backspace? then keyname = "backspace"
+          when .numpad8?   then keyname = "np8"
+          when .numpad5?   then keyname = "np5"
+          when .numpad2?   then keyname = "np2"
+          end
+
+          if event.control
+            case event.code
+            when .c? then keyname = "c"
+            when .v? then keyname = "v"
+            end
+          end
+
+          next unless keyname
+
+          keyname = "S-#{keyname}" if event.shift
+          keyname = "C-#{keyname}" if event.control
+          key = Term::Sym.new(keyname)
+
+          transcribed = Term.of(:key, key)
+        end
+
+        if transcribed
+          prompts.send(transcribed)
+        end
+      end
+
+      select
+      when drawable = drawables.receive
+        texture = texture(drawable)
+      else
+      end
+
+      window.clear(SF::Color::White)
+      sprite = SF::Sprite.new(texture)
+      window.draw(sprite)
+      window.display
     end
   end
 
-  if force_redraw || !document0.same?(document1)
-    document1 = D7.run(document1,
-      log: D7::Log::None.new,
-      transition: Rhodium.transition,
-      step: Rhodium.step,
-      goal: D7::Goal.none,
-      initial: true,
-    )
+  def seed : Term::Dict
+    seed = ML.terms <<-WWML
+      (comment "Welcome to Wirewright µsoma!")
+      (button "Increment" as 1 to @actions ())
+      (button "Decrement" as -1 to @actions ())
+      ("" | "" () @user)
+    WWML
 
-    # frame = Keypath.assign(Term.of(ML.display(Term.of(document1))), frame, get_by_id(frame, Term.of(:printed)).append(1))
-
-    frame = Keypath.assign(Term.of(document1), frame, docpath)
-
-    frame1 = Keypath.plug(Term.of(window.size.x), Term.of(:"$<vw>"), frame)
-    frame1 = Keypath.plug(Term.of(window.size.y), Term.of(:"$<vh>"), frame1)
-    texture0 = frame_texture(frame1)
+    seed.as_d
   end
 
-  window.clear(SF::Color::White)
-  sprite = SF::Sprite.new(texture0)
-  window.draw(sprite)
-  window.display
+  def launch : Nil
+    prompts = Channel(Term).new(1024)
+    drawables = Channel(Term).new
+
+    nitrene = Nitrene::JobContext.new
+
+    ctx0 = ExecutionContext::MultiThreaded.new("Nitrene Alarm", 1)
+    ctx0.spawn do
+      while true
+        nitrene.alarm.receive
+        prompts.send(Term.of(:"job-completed"))
+      end
+    rescue Channel::ClosedError
+      # Noop. We just stop polling.
+    end
+
+    ctx1 = ExecutionContext::MultiThreaded.new("Soma: Primary", 1)
+    ctx1.spawn do
+      primary(prompts, drawables, nitrene, seed)
+      nitrene.alarm.close
+    end
+
+    main(prompts, drawables)
+  end
 end
-# res = rewrite(tree, UIR.rewriter)
-# puts ML.display(layers(res, 0))
+
+Soma.launch
