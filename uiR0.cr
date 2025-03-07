@@ -603,16 +603,15 @@ def uitree(framectx, styletree : Term, settings : Style::Settings)
   Term.of_case(styletree) do
     matchpi %{(ml child_ ¦ _ toplevel_boolean only-visible_boolean)} do
       chain = ML::Display::MAIN_CHAIN.prepend(Cursor.new).prepend(Button.new).prepend(Comment.new)
-      if only_visible.true?
-        pair_chain = ML::Display::PAIR_CHAIN.prepend(HiddenPairs.new)
-      else
-        pair_chain = ML::Display::PAIR_CHAIN
-      end
-      ctx = DisplayContext.new(60, 120, chain, pair: pair_chain, data: Term.of(framectx: framectx))
+      ctx = DisplayContext.new(60, 120, chain, data: Term.of(framectx: framectx))
 
-      ppinput = Term.of(child)
+      if child.type.dict?
+        ppinput = D7.visible(child.unsafe_as_d)
+      else
+        ppinput = child
+      end
       # Allow only DictAligned for the document itself.
-      tree = LayoutSet::All.thunk(ppinput, "", toplevel.true? ? LayoutSet::DictAligned : LayoutSet::All)
+      tree = LayoutSet::All.thunk(Term.of(ppinput), "", toplevel.true? ? LayoutSet::DictAligned : LayoutSet::All)
       flat, _ = flatten(ctx, tree)
 
       uitree(framectx, styletree(flat), SETTINGS)
@@ -980,8 +979,8 @@ struct Button
   def call(ctx, term, postfix, head, rest)
     Term.case(term) do
       matchpi(
-        %{(button caption_ to @_ (_*) ¦ _ #mailpath: mp_ #id: id_)},
-        %{(button caption_ as _ to @_ (_*) ¦ _ #mailpath: mp_ #id: id_)}
+        %{(button caption_ to @_ (_*) ¦ _ mailpath: mp_ id: id_)},
+        %{(button caption_ as _ to @_ (_*) ¦ _ mailpath: mp_ id: id_)}
       ) do
         continue unless Rhodium.cursordepth(term, pairspart: true) == -1
 
@@ -1015,22 +1014,6 @@ struct Comment
       otherwise do
         rest.call(ctx, term, postfix)
       end
-    end
-  end
-end
-
-struct HiddenPairs
-  include Feature
-
-  def call(ctx, term, postfix, head, rest)
-    Term.case(term) do
-      matchpi %{(key_ _)}, %{(indented key_ _)} do
-        continue unless Rhodium.internal_key?(key)
-
-        Term.of(:frag, postfix)
-      end
-
-      otherwise { rest.call(ctx, term, postfix) }
     end
   end
 end
@@ -1071,12 +1054,12 @@ def annotated(document : Term::Dict) : Term::Dict
 
     Term.case(node0) do
       matchpi %{[button caption_ to @_ (_*)]} do
-        node1 = Term.of(node0.morph({:"#mailpath", Term.of(nodepath).append(4)}, {:"#id", counter}))
+        node1 = Term.of(node0.morph({:"mailpath", Term.of(nodepath).append(4)}, {:"id", counter}))
         counter += 1
       end
 
       matchpi %{[button caption_ as _ to @_ (_*)]} do
-        node1 = Term.of(node0.morph({:"#mailpath", Term.of(nodepath).append(6)}, {:"#id", counter}))
+        node1 = Term.of(node0.morph({:"mailpath", Term.of(nodepath).append(6)}, {:"id", counter}))
         counter += 1
       end
 
