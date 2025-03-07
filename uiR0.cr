@@ -230,6 +230,8 @@ module TextKit
 end
 
 module UIR
+  @@cache = SyncMemo.new(capacity: 16_384, preallocate: true)
+
   class_getter rewriter : Rewriter do
     staging = File.read("./uiR.soma.wwml")
 
@@ -278,9 +280,11 @@ module UIR
       set, rec = recR
 
       exhR(
-        set.call choiceR(
-          rulesetR(Ruleset.select(selector, ML.terms(base)), noR, backmapR, noR),
-          itemsR(rec),
+        set.call memoR(@@cache,
+          choiceR(
+            rulesetR(Ruleset.select(selector, ML.terms(base)), noR, backmapR, noR),
+            itemsR(rec),
+          ),
         ),
       )
     end
@@ -1175,7 +1179,7 @@ module Soma
   # which are simply called *events*.
   def main(prompts : Channel(Term), drawables : Channel(Term)) : Nil
     window = SF::RenderWindow.new(SF::VideoMode.new(1000, 800), title: "Wirewright µsoma")
-    window.vertical_sync_enabled = true
+    window.framerate_limit = 60
 
     # Hard-wait for the initial drawable.
     texture = texture(drawables.receive)

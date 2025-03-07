@@ -1000,6 +1000,61 @@ def multipartR(schema : Term | String, successors : Enumerable({Term, Rewriter})
   multipartR(schema, successors, schema)
 end
 
+# Includers can be used as memoization tables for `memoR`.
+module IMemo
+  # Returns the rewrite for *key*, and a boolean indicating whether the rewrite
+  # was loaded from cache. Uses the block to perform the rewrite if missing.
+  abstract def fetch(key : Term, & : -> Rewrite::Any) : {Bool, Rewrite::Any}
+end
+
+# Default implementation of `IMemo`. Synchronous. Uses a reentrant lock to
+# protect the cache.
+struct SyncMemo
+  include IMemo
+
+  def initialize(@capacity : Int32, *, preallocate : Bool)
+    if preallocate
+      @data = Hash(Term, Rewrite::Any).new(initial_capacity: @capacity)
+    else
+      @data = {} of Term => Rewrite::Any
+    end
+    @lock = Mutex.new(:reentrant)
+  end
+
+  def fetch(key : Term, & : -> Rewrite::Any) : {Bool, Rewrite::Any}
+    @lock.synchronize do
+      existed = true
+      value = @data.put_if_absent(key) do
+        existed = false
+        yield
+      end
+
+      if @data.size > @capacity
+        @data.delete(@data.first_key)
+      end
+
+      {existed, value}
+    end
+  end
+end
+
+# A very simple memoizer for the *successor* rewriter.
+#
+# Must be put in "strategic" and, more importantly, *context-independent* places.
+# This usually means some kind of "master recursive step" somewhere in the rewriter
+# circuit.
+def memoR(memo : IMemo, successor : Rewriter)
+  Rewriter.new do |ctx, staging|
+    staging.reduce do |term|
+      existed, rewrite = memo.fetch(term) { successor.call(ctx, Rewrite.one(term)) }
+      if existed
+        ctx.observable(rewrite) { "loaded from cache" }
+      end
+      rewrite
+    end
+  end
+end
+
 # Pushes *env* for *successor*. Pops once *successor* is done.
 def using(env : Term::Dict, successor : Rewriter)
   Rewriter.new do |ctx, staging|

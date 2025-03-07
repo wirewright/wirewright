@@ -1875,56 +1875,6 @@ struct Symbol
   end
 end
 
-class Memo(K, V)
-  def initialize(@table = Pf::Map(K, V).new)
-  end
-
-  private def_change
-
-  def []?(k : K)
-    @table[k]?
-  end
-
-  def size
-    @table.size
-  end
-
-  def assoc(k : K, v : V)
-    change(table: @table.assoc(k, v))
-  end
-
-  def dissoc(k : K)
-    change(table: @table.dissoc(k))
-  end
-end
-
-macro memoized(method)
-  {% itypes = method.args.map(&.restriction) %}
-  {% otype = method.return_type %}
-
-  @@%memo = Atomic(Memo({ {{itypes.splat}} }, {{otype}})).new(Memo({ {{itypes.splat}} }, {{otype}}).new)
-
-  def {{ method.receiver ? "#{method.receiver}.".id : "".id }}__{{method.name}}({{method.args.splat}}) : {{method.return_type}}
-    {{method.body}}
-  end
-
-  def {{ method.receiver ? "#{method.receiver}.".id : "".id }}{{method.name}}(*args) : {{method.return_type}}
-    memo0 = @@%memo.get(:acquire)
-    if value = memo0[args]?
-      return value
-    end
-    if memo0.size > 128
-      memo1 = Memo({ {{itypes.splat}} }, {{otype}}).new
-    else
-      memo1 = memo0
-    end
-    value = __{{method.name}}(*args)
-    memo1 = memo1.assoc(args, value)
-    _, _= @@%memo.compare_and_set(memo0, memo1, :relaxed, :relaxed)
-    value
-  end
-end
-
 def parse(dict : Term::Dict, spec : T) forall T
   {% begin %}
     { {% for key, spec in T %}
