@@ -646,12 +646,23 @@ class Stack(T)
     pop? || raise IndexError.new
   end
 
+  def push(element : T, & : -> U) : U forall U
+    push(element)
+    begin
+      yield
+    ensure
+      pop
+    end
+  end
+
   # Pops for the duration of the block.
   def pop(& : -> U) : U forall U
     object = pop
-    result = yield
-    push(object)
-    result
+    begin
+      yield
+    ensure
+      push(object)
+    end
   end
 
   def pretty_print(pp)

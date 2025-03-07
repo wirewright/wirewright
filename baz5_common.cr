@@ -147,7 +147,13 @@ module Rewrite
     end
 
     def diff(orig : Term)
-      list == Term[{orig}] ? Rewrite.none : self
+      if list == Term[{orig}]
+        return Rewrite.none
+      end
+      if list.itemsize == 1
+        return Rewrite.one(list[0])
+      end
+      self
     end
   end
 

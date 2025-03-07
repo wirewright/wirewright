@@ -10,6 +10,29 @@ require "crsfml"
 require "./sfml_util"
 
 module ::Ww::Keypath
+  # TODO: while loop with D7#successor?-like impl.
+  def self.each_item_impl(term, fn, keypath)
+    result = fn.call(keypath, term)
+    if result == false
+      return false
+    end
+
+    return unless dict = term.as_d?
+
+    dict.each_item_with_index do |item, index|
+      keypath.push(Term.of(index))
+      if each_item_impl(item, fn, keypath) == false
+        return false
+      end
+    ensure
+      keypath.pop
+    end
+  end
+
+  def self.each_item(term : Term, &fn : Stack(Term), Term -> Bool?)
+    each_item_impl(term, fn, keypath: Stack(Term).new)
+  end
+
   def self.find(needle : Term, haystack : Term) : Array(Term::Dict)
     keypaths = [] of Term::Dict
 
@@ -576,7 +599,7 @@ module Style
 end
 
 # Renders a style-tree into a UI-tree.
-def uitree(styletree : Term, settings : Style::Settings)
+def uitree(framectx, styletree : Term, settings : Style::Settings)
   Term.of_case(styletree) do
     matchpi %{(ml child_ ¦ _ toplevel_boolean only-visible_boolean)} do
       chain = ML::Display::MAIN_CHAIN.prepend(Cursor.new).prepend(Button.new).prepend(Comment.new)
@@ -585,14 +608,14 @@ def uitree(styletree : Term, settings : Style::Settings)
       else
         pair_chain = ML::Display::PAIR_CHAIN
       end
-      ctx = DisplayContext.new(60, 120, chain, pair: pair_chain)
+      ctx = DisplayContext.new(60, 120, chain, pair: pair_chain, data: Term.of(framectx: framectx))
 
       ppinput = Term.of(child)
       # Allow only DictAligned for the document itself.
       tree = LayoutSet::All.thunk(ppinput, "", toplevel.true? ? LayoutSet::DictAligned : LayoutSet::All)
       flat, _ = flatten(ctx, tree)
 
-      uitree(styletree(flat), SETTINGS)
+      uitree(framectx, styletree(flat), SETTINGS)
     end
 
     matchpi %{(node_ _* ¦ _ style⋮ "")} do
@@ -605,7 +628,7 @@ def uitree(styletree : Term, settings : Style::Settings)
         commit.without(:style)
 
         styletree.items.each_with_index do |item, index|
-          commit.with(index, uitree(item, settings))
+          commit.with(index, uitree(framectx, item, settings))
         end
       end
 
@@ -613,6 +636,31 @@ def uitree(styletree : Term, settings : Style::Settings)
     end
 
     otherwise { styletree }
+  end
+end
+
+def hit(drawable, x : Term::Num, y : Term::Num, sink)
+  Keypath.each_item(drawable) do |keypath, node|
+    Term.case(node) do
+      matchpi %[{¦ l_number t_number final-w: w_number final-h: h_number}] do |l, t, w, h|
+        l, t, w, h = {l, t, w, h}.map(&.unsafe_as_n)
+
+        continue unless x.in?(l...l + w)
+        continue unless y.in?(t...t + h)
+
+        sink.call(keypath)
+      end
+
+      otherwise { }
+    end
+
+    true # continue
+  end
+end
+
+def hit(drawable, x, y)
+  Term::Dict.build do |commit|
+    hit(drawable, x, y, ->commit.append(Stack(Term)))
   end
 end
 
@@ -779,8 +827,8 @@ def texture(tree : Term) : SF::Texture
   end
 end
 
-def block(markup)
-  drawable = drawable(markup)
+def block(framectx, markup)
+  drawable = drawable(framectx, markup)
 
   Term.case(drawable) do
     matchpi %[{¦ final-w: w←(%number +i32) final-h: h←(%number +i32)}] do
@@ -859,20 +907,20 @@ struct Cursor
                 (text ($slot 1) style: "text-sm text-neutral-300"))))))))
   WWML
 
-  private def suggestion1(name, intro)
-    block(fill(MARKUP_SUGGESTION1, name, intro))
+  private def suggestion1(framectx, name, intro)
+    block(framectx, fill(MARKUP_SUGGESTION1, name, intro))
   end
 
   def call(ctx, term, postfix, head, rest)
     Term.case(term) do
       # One general suggestion.
       matchpi %{(lhs_string | rhs_string (_*) @user ¦ _ suggestions: (suggestions/list () ((name_string intro_string)) ()))} do
-        b = block(Term.of(:"z-stack", suggestion1(name, intro), cursor(lhs, rhs)))
+        b = block(ctx.data[:framectx], Term.of(:"z-stack", suggestion1(ctx.data[:framectx], name, intro), cursor(lhs, rhs)))
         postfixed(b, postfix)
       end
 
       matchpi %{[lhs_string | rhs_string (_*) @user]} do
-        postfixed(block(cursor(lhs, rhs)), postfix)
+        postfixed(block(ctx.data[:framectx], cursor(lhs, rhs)), postfix)
       end
 
       otherwise do
@@ -885,14 +933,21 @@ end
 struct Button
   include Feature
 
-  MARKUP = ML.term <<-WWML
-  (z-stack
-    (rect style: "bg-blue-500 rounded-sm")
+  MARKUP_NORMAL = ML.term <<-WWML
+  (z-stack events-to: ($slot 0) hover-id: ($slot 1)
+    (rect style: "bg-neutral-700 rounded-sm")
     (padding style: "px-4 py-2"
-      (text ($slot 0) style: "text-sm text-white font-medium")))
+      (text ($slot 2) style: "text-sm text-neutral-100 font-medium")))
   WWML
 
-  private def button(term, caption : Term)
+  MARKUP_HOVERED = ML.term <<-WWML
+  (z-stack events-to: ($slot 0) hover-id: ($slot 1)
+    (rect style: "bg-blue-500 rounded-sm")
+    (padding style: "px-4 py-2"
+      (text ($slot 2) style: "text-sm text-white font-medium")))
+  WWML
+
+  private def button(framectx, mailpath, term, caption : Term, id, hovered : Bool)
     if caption.type.string?
       caption_s = caption.to(String)
     else
@@ -900,24 +955,20 @@ struct Button
       caption_s = ML.display(caption, endl: false).gsub(/\s+/, ' ')
     end
 
-    markup = fill(MARKUP) do |slot, commit|
-      case slot
-      when 0 then commit << caption_s
-      end
-    end
+    markup = fill(hovered ? MARKUP_HOVERED : MARKUP_NORMAL, mailpath, id, caption_s)
 
-    block(markup)
+    block(framectx, markup)
   end
 
   def call(ctx, term, postfix, head, rest)
     Term.case(term) do
       matchpi(
-        %{[button caption_ to @_ (_*)]},
-        %{[button caption_ as _ to @_ (_*)]}
+        %{(button caption_ to @_ (_*) ¦ _ #mailpath: mp_ #id: id_)},
+        %{(button caption_ as _ to @_ (_*) ¦ _ #mailpath: mp_ #id: id_)}
       ) do
         continue unless Rhodium.cursordepth(term, pairspart: true) == -1
 
-        postfixed(button(term, caption), postfix)
+        postfixed(button(ctx.data[:framectx], mp, term, caption, id, hovered: ctx.data[:framectx, :hovered]? == id), postfix)
       end
 
       otherwise do
@@ -941,7 +992,7 @@ struct Comment
       matchpi %{(comment desc_string)} do
         wrapped_desc = wrap(desc.to(String), 60).chomp
 
-        postfixed(block(fill(MARKUP, wrapped_desc)), postfix)
+        postfixed(block(ctx.data[:framectx], fill(MARKUP, wrapped_desc)), postfix)
       end
 
       otherwise do
@@ -967,8 +1018,8 @@ struct HiddenPairs
   end
 end
 
-def drawable(frame) : Term
-  x = pipe(frame, uitree(SETTINGS), rewrite(UIR.rewriter))
+def drawable(framectx, frame) : Term
+  x = rewrite(uitree(framectx, frame, SETTINGS), UIR.rewriter)
   # puts ML.display(x)
   x
 end
@@ -991,6 +1042,36 @@ end
 
 def get_by_id(frame, id)
   get_by_id?(frame, id) || raise KeyError.new
+end
+
+def annotated(document : Term::Dict) : Term::Dict
+  counter = 0
+  nodepath = Stack(Int32).new
+
+  while Rhodium.successor?(document, nodepath)
+    node0 = Rhodium.follow(document, nodepath)
+    node1 = node0
+
+    Term.case(node0) do
+      matchpi %{[button caption_ to @_ (_*)]} do
+        node1 = Term.of(node0.morph({:"#mailpath", Term.of(nodepath).append(4)}, {:"#id", counter}))
+        counter += 1
+      end
+
+      matchpi %{[button caption_ as _ to @_ (_*)]} do
+        node1 = Term.of(node0.morph({:"#mailpath", Term.of(nodepath).append(6)}, {:"#id", counter}))
+        counter += 1
+      end
+
+      otherwise { }
+    end
+
+    next if node0.same?(node1)
+
+    document = Rhodium.assign(document, nodepath, node1)
+  end
+
+  document
 end
 
 # FIXME:  this should not be a global!!
@@ -1020,7 +1101,7 @@ module Soma
   end
 
   def instance(frame : Term, framectx : Term::Dict)
-    M1.bsubst(frame, framectx)
+    M1.bsubst(frame, framectx.morph({:document, annotated(framectx[:document].as_d)}))
   end
 
   def handle(prompt : Term, framectx : Term::Dict)
@@ -1042,7 +1123,46 @@ module Soma
       end
 
       matchpi %{job-completed} do
+        # Bump up generation to trigger a re-run of the document.
         framectx.morph({:generation, framectx[:generation] + 1})
+      end
+
+      matchpi %{(click x_number y_number)} do
+        keypaths = hit(framectx[:drawable], x.unsafe_as_n, y.unsafe_as_n)
+        keypaths.items.each do |kp|
+          target = framectx[:drawable].follow(kp.items)
+          next unless mbp = target[:"events-to"]?
+          next unless mbp = mbp.as_d?
+
+          document0 = framectx[:document].as_d
+
+          next unless mailbox0 = document0.follow?(mbp.items)
+          next unless mailbox0 = mailbox0.as_d?
+
+          mailbox1 = mailbox0.append({:press})
+          document1 = document0.follow(mbp.items) { Term.of(mailbox1) }
+          framectx = framectx.morph({:document, document1})
+        end
+
+        framectx
+      end
+
+      matchpi %{(motion x_number y_number)} do
+        keypaths = hit(framectx[:drawable], x.unsafe_as_n, y.unsafe_as_n)
+        framectx0 = framectx
+        seen = false
+        keypaths.items.each do |kp|
+          target0 = framectx[:drawable].as_d.follow(kp.items)
+          next unless id = target0[:"hover-id"]?
+
+          seen = true
+          framectx = framectx.morph({:hovered, id})
+        end
+        unless seen
+          framectx = framectx.morph({:hovered, nil})
+        end
+
+        framectx
       end
 
       matchpi %{exit} do
@@ -1066,19 +1186,23 @@ module Soma
     handle(prompts.receive, framectx)
   end
 
+  # TODO: this is obviously too bloated & hacky. Improve. We also want to support
+  #       multiple parallel documents!!!
+  #
   # The primary thread is reacting to UI *prompts* and responding with *drawables*.
   # The primary thread also serves as the bridge between UI and delta7.
   def primary(prompts : Channel(Term), drawables : Channel(Term), nitrene : Nitrene::JobContext, seed : Term::Dict) : Nil
     frame = frame0
 
-    framectx0 = Term[generation: 0, vw: WINDOW_WIDTH0, vh: WINDOW_HEIGHT0, document: seed]
+    framectx0 = Term[generation: 0, vw: WINDOW_WIDTH0, vh: WINDOW_HEIGHT0, document: seed, drawable: Term[]]
 
     should_draw = false
 
     show = -> do
       return unless should_draw
 
-      dw = pipe(frame, instance(framectx0), drawable)
+      dw = drawable(framectx0, instance(frame, framectx0))
+      framectx0 = framectx0.morph({:drawable, dw})
       drawables.send(dw)
     end
 
@@ -1178,7 +1302,7 @@ module Soma
   # NOTE: we call SFML/UI events *prompts* to distinguish them from document events,
   # which are simply called *events*.
   def main(prompts : Channel(Term), drawables : Channel(Term)) : Nil
-    window = SF::RenderWindow.new(SF::VideoMode.new(1000, 800), title: "Wirewright µsoma")
+    window = SF::RenderWindow.new(SF::VideoMode.new(WINDOW_WIDTH0, WINDOW_HEIGHT0), title: "Wirewright µsoma", settings: SF::ContextSettings.new(depth: 24, antialiasing: 8))
     window.framerate_limit = 60
 
     # Hard-wait for the initial drawable.
@@ -1202,6 +1326,10 @@ module Soma
           next unless chr.printable?
 
           transcribed = Term.of(:input, chr)
+        when SF::Event::MouseButtonReleased
+          transcribed = Term.of(:click, event.x, event.y)
+        when SF::Event::MouseMoved
+          transcribed = Term.of(:motion, event.x, event.y)
         when SF::Event::KeyPressed
           keyname = nil
           case event.code
@@ -1258,8 +1386,11 @@ module Soma
   def seed : Term::Dict
     seed = ML.terms <<-WWML
       (comment "Welcome to Wirewright µsoma!")
-      (button "Increment" as 1 to @actions ())
-      (button "Decrement" as -1 to @actions ())
+      (cell 0 @count)
+      (button "Increment" as 1 to @deltas ())
+      (button "Decrement" as -1 to @deltas ())
+      (transform (@deltas delta_number) to @counts with @count (+ count delta))
+      (latest @counts @count)
       ("" | "" () @user)
     WWML
 

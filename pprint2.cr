@@ -22,7 +22,7 @@ def fill(template : Term, &fn : Int32, Term::Dict::Commit ->)
     end
   end
 
-  rewrite(template, itemdfsR(callR(handler)))
+  rewrite(template, dfsR(callR(handler)))
 end
 
 def fill(template, *values)
@@ -136,7 +136,8 @@ record DisplayContext,
   pair = ML::Display::PAIR_CHAIN,
   pairspart = ML::Display::PAIRSPART_CHAIN,
   layouts_allowed = LayoutSet::All,
-  measurements = {} of Term => {Int32, Int32}
+  measurements = {} of Term => {Int32, Int32},
+  data : Term = Term.of
 
 struct DisplayContext
   def inline : DisplayContext
