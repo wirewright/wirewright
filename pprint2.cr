@@ -173,7 +173,6 @@ module Layout
           else
             commit << ctx.pair.call(ctx.inline, Term.of(key, value), last ? postfix : "")
           end
-
         end
       end
 

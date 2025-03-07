@@ -429,7 +429,7 @@ def selR(selector : String, successor : Rewriter) : Rewriter
 end
 
 # Generates a `choiceR` with more than two branches for you to reduce typing.
-def switchR(branches : Enumerable({Term, Rewriter})) : Rewriter
+def switchR(branches : Enumerable({Term, Rewriter}) | Enumerable({M1::Operator::Any, Rewriter})) : Rewriter
   choice = nil
 
   branches.each do |selector, successor|
@@ -441,7 +441,7 @@ def switchR(branches : Enumerable({Term, Rewriter})) : Rewriter
 end
 
 # :ditto:
-def switchR(*branches : {Term, Rewriter})
+def switchR(*branches : {Term, Rewriter} | {M1::Operator::Any, Rewriter})
   switchR(branches)
 end
 
