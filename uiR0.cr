@@ -452,6 +452,45 @@ module Style
         commit.with(:"border-radius", 1 * settings.rem)
       when "rounded-3xl"
         commit.with(:"border-radius", 1.5 * settings.rem)
+      when "ring-px"
+        commit.with(:"ring-l", 1)
+        commit.with(:"ring-r", 1)
+        commit.with(:"ring-t", 1)
+        commit.with(:"ring-b", 1)
+      when "ring-x-px"
+        commit.with(:"ring-l", 1)
+        commit.with(:"ring-r", 1)
+      when "ring-y-px"
+        commit.with(:"ring-t", 1)
+        commit.with(:"ring-b", 1)
+      when "ring-l-px"
+        commit.with(:"ring-l", 1)
+      when "ring-r-px"
+        commit.with(:"ring-r", 1)
+      when "ring-t-px"
+        commit.with(:"ring-t", 1)
+      when "ring-b-px"
+        commit.with(:"ring-b", 1)
+      when .starts_with?("ring-l-")
+        next unless n = codeword[7..].to_i?
+
+        commit.with(:"ring-l", n * 0.25 * settings.rem)
+      when .starts_with?("ring-r-")
+        next unless n = codeword[7..].to_i?
+
+        commit.with(:"ring-r", n * 0.25 * settings.rem)
+      when .starts_with?("ring-t-")
+        next unless n = codeword[7..].to_i?
+
+        commit.with(:"ring-t", n * 0.25 * settings.rem)
+      when .starts_with?("ring-b-")
+        next unless n = codeword[7..].to_i?
+
+        commit.with(:"ring-b", n * 0.25 * settings.rem)
+      when .starts_with?("ring-")
+        next unless n = codeword[5..].to_i?
+
+        commit.with(:"ring", n * 0.25 * settings.rem)
       when "max"
         commit.with(:w, :max)
         commit.with(:h, :max)
@@ -926,34 +965,34 @@ struct Cursor
   MARKUP_EMPTY = ML.term <<-WWML
   (x-stack
     (text "" style: "font-mono")
-    (rect ring-t: 5 ring-b: 5 style: "w-px bg-blue-500"))
+    (rect style: "w-px ring-y-1 bg-blue-500"))
   WWML
 
   MARKUP_LHS = ML.term <<-WWML
   (x-stack
     (z-stack
-      (rect ring-l: 1 ring-r: 1 ring-t: 5 ring-b: 5 style: "bg-neutral-700")
+      (rect style: "ring-x-px ring-y-1 bg-neutral-700")
       (text ($slot 0) style: "font-mono text-neutral-400"))
-    (rect ring-t: 5 ring-b: 5 style: "w-px bg-blue-500"))
+    (rect style: "ring-y-1 w-px bg-blue-500"))
   WWML
 
   MARKUP_RHS = ML.term <<-WWML
   (x-stack
     (layer style: "w-px h-max" z-index: 10
-      (rect ring-t: 5 ring-b: 5 style: "bg-blue-500"))
+      (rect style: "ring-y-1 bg-blue-500"))
     (z-stack
-      (rect ring-l: 1 ring-r: 1 ring-t: 5 ring-b: 5 style: "bg-neutral-700")
+      (rect style: "ring-x-px ring-y-1 bg-neutral-700")
       (text ($slot 1) style: "font-mono text-neutral-400")))
   WWML
 
   MARKUP_FULL = ML.term <<-WWML
   (x-stack
     (z-stack style: "h-max"
-      (rect ring-l: 1 ring-r: 1 ring-t: 5 ring-b: 5 style: "bg-neutral-700")
+      (rect style: "ring-x-px ring-y-1 bg-neutral-700")
       (text ($slot 0) style: "font-mono text-neutral-400"))
-    (rect ring-t: 5 ring-b: 5 style: "w-px bg-blue-500")
+    (rect style: "ring-y-1 w-px bg-blue-500")
     (z-stack style: "h-max"
-      (rect ring-l: 0 ring-r: 1 ring-t: 5 ring-b: 5 style: "bg-neutral-700")
+      (rect style: "ring-r-px ring-y-1 bg-neutral-700")
       (text ($slot 1) style: "font-mono text-neutral-400")))
   WWML
 
@@ -979,7 +1018,7 @@ struct Cursor
     (layer z-index: 10
       (padding style: "p-1 pt-7"
         (z-stack
-          (rect ring-t: 1 ring-b: 1 ring-l: 1 ring-r: 1 style: "bg-neutral-600 rounded")
+          (rect style: "ring-px bg-neutral-600 rounded")
           (rect style: "bg-neutral-800 rounded")
           (x-expand style: "min-w-sm"
             (y-stack style: "w-max"
