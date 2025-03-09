@@ -661,7 +661,7 @@ def offset(drawable, keypath) : {Term::Num, Term::Num}
 
   Keypath.ascend(drawable, keypath) do |node|
     Term.case(node) do
-      matchpi %{(scroll _ ¦ _ x: dx_number y: dy_number)} do
+      matchpi %{(viewport _ ¦ _ x: dx_number y: dy_number)} do
         ox += dx
         oy += dy
       end
@@ -788,8 +788,8 @@ def present(vote_cursor, layers, layer, frame : Term, dl, dt)
     end
 
     matchpi(
-      %{(scroll child←{¦ final-w: full-w←(%number +i32)
-                         final-h: full-h←(%number +i32)}
+      %{(viewport child←{¦ final-w: full-w←(%number +i32)
+                           final-h: full-h←(%number +i32)}
          ¦ _ bg_
              l_: (%number +i32)
              t_: (%number +i32)
@@ -1161,7 +1161,7 @@ module Soma
           (rect style: "bg-neutral-800")
           (padding style: "p-1"
             (text "Wirewright µsoma" style: "text-xs text-neutral-400")))
-        (scroll style: "w-max h-fr bg-neutral-900" x: scrollX_ y: scrollY_
+        (viewport style: "w-max h-fr bg-neutral-900" x: viewX_ y: viewY_
           (padding style: "pt-16 pl-32"
             (ml toplevel: true only-visible: true
               document_)))))
@@ -1182,35 +1182,35 @@ module Soma
       end
 
       matchpi %{(key np8)} do
-        framectx.morph({:scrollY, framectx[:scrollY] - 1})
+        framectx.morph({:viewY, framectx[:viewY] - 1})
       end
 
       matchpi %{(key S-np8)} do
-        framectx.morph({:scrollY, framectx[:scrollY] - 10})
+        framectx.morph({:viewY, framectx[:viewY] - 10})
       end
 
       matchpi %{(key np4)} do
-        framectx.morph({:scrollX, framectx[:scrollX] - 1})
+        framectx.morph({:viewX, framectx[:viewX] - 1})
       end
 
       matchpi %{(key S-np4)} do
-        framectx.morph({:scrollX, framectx[:scrollX] - 10})
+        framectx.morph({:viewX, framectx[:viewX] - 10})
       end
 
       matchpi %{(key np2)} do
-        framectx.morph({:scrollY, framectx[:scrollY] + 1})
+        framectx.morph({:viewY, framectx[:viewY] + 1})
       end
 
       matchpi %{(key S-np2)} do
-        framectx.morph({:scrollY, framectx[:scrollY] + 10})
+        framectx.morph({:viewY, framectx[:viewY] + 10})
       end
 
       matchpi %{(key np6)} do
-        framectx.morph({:scrollX, framectx[:scrollX] + 1})
+        framectx.morph({:viewX, framectx[:viewX] + 1})
       end
 
       matchpi %{(key S-np6)} do
-        framectx.morph({:scrollX, framectx[:scrollX] + 10})
+        framectx.morph({:viewX, framectx[:viewX] + 10})
       end
 
       matchpi %{(key _)}, %{(input _)} do
@@ -1280,8 +1280,8 @@ module Soma
         if pivot = framectx[:pivot]?
           px, py = pivot
           return framectx.morph(
-            {:scrollX, framectx[:scrollX] + (px - x)},
-            {:scrollY, framectx[:scrollY] + (py - y)},
+            {:viewX, framectx[:viewX] + (px - x)},
+            {:viewY, framectx[:viewY] + (py - y)},
             {:pivot, {x, y}},
           )
         end
@@ -1333,7 +1333,7 @@ module Soma
   def primary(prompts : Channel(Term), drawables : Channel(Term), nitrene : Nitrene::JobContext, seed : Term::Dict) : Nil
     frame = frame0
 
-    framectx0 = Term[generation: 0, vw: WINDOW_WIDTH0, vh: WINDOW_HEIGHT0, scrollX: 0, scrollY: 0, document: seed, drawable: Term[]]
+    framectx0 = Term[generation: 0, vw: WINDOW_WIDTH0, vh: WINDOW_HEIGHT0, viewX: 0, viewY: 0, document: seed, drawable: Term[]]
 
     should_draw = false
 

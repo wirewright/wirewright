@@ -6,8 +6,8 @@
 ;; GENERAL
 
 ;; Learn the content width/height from a single child.
-((%not x-expand scroll) {¦ content-w: w_number} ¦ _ content-w: (%- _ W)) <> {W: →w}
-((%not y-expand scroll) {¦ content-h: h_number} ¦ _ content-h: (%- _ H)) <> {H: →h}
+((%not x-expand viewport) {¦ content-w: w_number} ¦ _ content-w: (%- _ W)) <> {W: →w}
+((%not y-expand viewport) {¦ content-h: h_number} ¦ _ content-h: (%- _ H)) <> {H: →h}
 
 ;; Propagate max-w/h if I know my max-w/h and I am w/h: max.
 (_ {¦ max-w: (%- _ w)} ¦ _ w: max max-w: W_number) <> {w: →W}
@@ -73,10 +73,10 @@
 (y-expand {¦ -max-h_ content-h: h_number} ¦ _ min-h_number)
   <> {max-h: ($once (max →min-h →h))}
 
-;; NODE: scroll
+;; NODE: viewport
 
-(scroll _ ¦ _ max-w_number -content-w_) <> {content-w: →max-w}
-(scroll _ ¦ _ max-h_number -content-h_) <> {content-h: →max-h}
+(viewport _ ¦ _ max-w_number -content-w_) <> {content-w: →max-w}
+(viewport _ ¦ _ max-h_number -content-h_) <> {content-h: →max-h}
 
 ;; NODE: translate
 
