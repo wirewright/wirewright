@@ -619,25 +619,25 @@ module Style
       when "text-2xl"
         commit.with(:size, 1.5 * settings.rem)
         commit.with(:leading, 1.75 / 1.5)
-	    when "text-3xl"
+      when "text-3xl"
         commit.with(:size, 1.5 * settings.rem)
         commit.with(:leading, 2.25 / 1.875)
-	    when "text-4xl"
+      when "text-4xl"
         commit.with(:size, 2.25 * settings.rem)
         commit.with(:leading, 2.5 / 2.25)
-	    when "text-5xl"
+      when "text-5xl"
         commit.with(:size, 3 * settings.rem)
         commit.with(:leading, 1)
-	    when "text-6xl"
+      when "text-6xl"
         commit.with(:size, 3.75 * settings.rem)
         commit.with(:leading, 1)
-	    when "text-7xl"
+      when "text-7xl"
         commit.with(:size, 4.5 * settings.rem)
         commit.with(:leading, 1)
-	    when "text-8xl"
+      when "text-8xl"
         commit.with(:size, 6 * settings.rem)
         commit.with(:leading, 1)
-	    when "text-9xl"
+      when "text-9xl"
         commit.with(:size, 8 * settings.rem)
         commit.with(:leading, 1)
       when .starts_with?("text-")
@@ -799,7 +799,7 @@ def present(vote_cursor, layers, layer, frame : Term, dl, dt)
       # Ring works like padding but it's intrinsic to the rect, and not accounted
       # during sizing.
       sf.position -= SF.vector2i(ring_l.to(Int32), ring_t.to(Int32))
-      sf.size = sf.size.to_i + SF.vector2i(ring_l.to(Int32)+ring_r.to(Int32), ring_t.to(Int32)+ring_b.to(Int32))
+      sf.size = sf.size.to_i + SF.vector2i(ring_l.to(Int32) + ring_r.to(Int32), ring_t.to(Int32) + ring_b.to(Int32))
 
       sf.update
 
@@ -814,7 +814,14 @@ def present(vote_cursor, layers, layer, frame : Term, dl, dt)
       layers.draw(layer, sf)
     end
 
-    matchpi %[(triangle ¦ _ bg_ l_: (%number i32) t_: (%number i32) final-w: w←(%number +i32) final-h: h←(%number +i32) pointing: left)] do |bg|
+    matchpi(
+      %[(triangle ¦ _ bg_
+                      l_: (%number i32)
+                      t_: (%number i32)
+                      final-w: w←(%number +i32)
+                      final-h: h←(%number +i32)
+                      pointing: left)]
+    ) do |bg|
       sf = SF::ConvexShape.new
       sf.point_count = 3
       sf[0] = SF.vector2i(0, h.to(Int32) // 2)
@@ -838,7 +845,14 @@ def present(vote_cursor, layers, layer, frame : Term, dl, dt)
              y_: (%number i32))}
     ) do
       manager = LayerManager.new
-      manager.create(0, x: l.to(Int32) + dl, y: t.to(Int32) + dt, w: Math.max(full_w.to(Int32), w.to(Int32)), h: Math.max(full_h.to(Int32), h.to(Int32)), bg: color?(bg) || SF::Color::White, clip: SF.float_rect(x.to(Int32), y.to(Int32), w.to(Int32), h.to(Int32)))
+      manager.create(0,
+        x: l.to(Int32) + dl,
+        y: t.to(Int32) + dt,
+        w: Math.max(full_w.to(Int32), w.to(Int32)),
+        h: Math.max(full_h.to(Int32), h.to(Int32)),
+        bg: color?(bg) || SF::Color::White,
+        clip: SF.float_rect(x.to(Int32), y.to(Int32), w.to(Int32), h.to(Int32)),
+      )
 
       present(vote_cursor, manager, 0, child, -l.to(Int32), -t.to(Int32))
 
@@ -850,7 +864,13 @@ def present(vote_cursor, layers, layer, frame : Term, dl, dt)
       layers.draw(layer, sf)
     end
 
-    matchpi %{(layer child_ ¦ _ l_: (%number +i32) t_: (%number +i32) final-w: w←(%number +i32) final-h: h←(%number +i32) z-index: n←(%number +i32))} do
+    matchpi(
+      %{(layer child_ ¦ _ l_: (%number +i32)
+                          t_: (%number +i32)
+                          final-w: w←(%number +i32)
+                          final-h: h←(%number +i32)
+                          z-index: n←(%number +i32))}
+    ) do
       return if w.zero? || h.zero?
 
       layers.create(n.to(Int32), x: l.to(Int32) + dl, y: t.to(Int32) + dt, w: w.to(Int32), h: h.to(Int32))
@@ -919,7 +939,6 @@ struct LayerManager
       sprite.position = SF.vector2i(layer.x, layer.y)
       base.draw(sprite)
     end
-
 
     base.display
     base.texture
@@ -1187,7 +1206,7 @@ module Soma
   extend self
 
   WINDOW_WIDTH0  = 1000
-  WINDOW_HEIGHT0 = 800
+  WINDOW_HEIGHT0 =  800
 
   class AppInterrupt < Exception
   end
