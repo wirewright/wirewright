@@ -6,8 +6,8 @@
 ;; GENERAL
 
 ;; Learn the content width/height from a single child.
-((%not x-expand) {¦ content-w: w_number} ¦ _ content-w: (%- _ W)) <> {W: →w}
-((%not y-expand) {¦ content-h: h_number} ¦ _ content-h: (%- _ H)) <> {H: →h}
+((%not x-expand scroll) {¦ content-w: w_number} ¦ _ content-w: (%- _ W)) <> {W: →w}
+((%not y-expand scroll) {¦ content-h: h_number} ¦ _ content-h: (%- _ H)) <> {H: →h}
 
 ;; Propagate max-w/h if I know my max-w/h and I am w/h: max.
 (_ {¦ max-w: (%- _ w)} ¦ _ w: max max-w: W_number) <> {w: →W}
@@ -24,12 +24,7 @@
 {¦ w: max max-w_number -final-w_} <> {final-w: →max-w}
 {¦ h: max max-h_number -final-h_} <> {final-h: →max-h}
 
-;; Propagate l/t if not translate, which controls them differently.
-;;
-;; NOTE: We have to use %not here because `translate` relies on final-w/h,
-;; which is computed a lot later than this rule becomes applicable. Therefore
-;; this rule is "forced by content" -- even though in case of transform, we
-;; actually want to wait until final-w/h are available.
+;; Propagate l/t.
 ((%not translate) {¦ -l_} ¦ _ l: L_number) <> {l: →L}
 ((%not translate) {¦ -t_} ¦ _ t: T_number) <> {t: →T}
 
@@ -77,6 +72,11 @@
 (y-expand {¦ max-h: h_number} ¦ _ content-h: (%- _ H)) <> {H: →h}
 (y-expand {¦ -max-h_ content-h: h_number} ¦ _ min-h_number)
   <> {max-h: ($once (max →min-h →h))}
+
+;; NODE: scroll
+
+(scroll _ ¦ _ max-w_number -content-w_) <> {content-w: →max-w}
+(scroll _ ¦ _ max-h_number -content-h_) <> {content-h: →max-h}
 
 ;; NODE: translate
 

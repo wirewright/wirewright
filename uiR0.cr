@@ -33,6 +33,24 @@ module ::Ww::Keypath
     each_item_impl(term, fn, keypath: Stack(Term).new)
   end
 
+  def self.ascend(root : Term, keypath : Stack(Term), &)
+    stack = Stack(Term::Dict).new
+    tip = root
+
+    keypath.each do |step|
+      return unless node0 = tip.as_d?
+      return unless node1 = node0[step]?
+
+      stack << node0
+      tip = node1
+    end
+
+    stack.reverse_each do |parent|
+      next unless yield parent
+      return parent
+    end
+  end
+
   def self.find(needle : Term, haystack : Term) : Array(Term::Dict)
     keypaths = [] of Term::Dict
 
@@ -638,11 +656,32 @@ def uitree(framectx, styletree : Term, settings : Style::Settings)
   end
 end
 
+def offset(drawable, keypath) : {Term::Num, Term::Num}
+  ox = oy = Term[0]
+
+  Keypath.ascend(drawable, keypath) do |node|
+    Term.case(node) do
+      matchpi %{(scroll _ ¦ _ x: dx_number y: dy_number)} do
+        ox += dx
+        oy += dy
+      end
+
+      otherwise { }
+    end
+  end
+
+  {ox, oy}
+end
+
 def hit(drawable, x : Term::Num, y : Term::Num, sink)
   Keypath.each_item(drawable) do |keypath, node|
     Term.case(node) do
       matchpi %[{¦ l_number t_number final-w: w_number final-h: h_number}] do |l, t, w, h|
         l, t, w, h = {l, t, w, h}.map(&.unsafe_as_n)
+
+        dx, dy = offset(drawable, keypath)
+        l -= dx
+        t -= dy
 
         continue unless x.in?(l...l + w)
         continue unless y.in?(t...t + h)
@@ -673,7 +712,7 @@ def color?(term)
   end
 end
 
-def present(vote_cursor, layers, layer, frame : Term)
+def present(vote_cursor, layers, layer, frame : Term, dl, dt)
   Term.case(frame) do
     # Any node can specify the cursor.
     matchpi %[{¦ cursor: pointer}] do
@@ -686,7 +725,7 @@ def present(vote_cursor, layers, layer, frame : Term)
       TextKit::Info.from(rest) do |info|
         sf = SF::Text.new(caption.to(String), info.font, info.size)
         sf.line_spacing = info.leading
-        sf.position = SF.vector2i(l.to(Int32), t.to(Int32))
+        sf.position = SF.vector2i(l.to(Int32) + dl, t.to(Int32) + dt)
         sf.color = color?(color) || SF::Color::Black
         sf.letter_spacing = 1
 
@@ -715,7 +754,7 @@ def present(vote_cursor, layers, layer, frame : Term)
       end
 
       sf.fill_color = color?(bg) || SF::Color::Transparent
-      sf.position = SF.vector2i(l.to(Int32), t.to(Int32))
+      sf.position = SF.vector2i(l.to(Int32) + dl, t.to(Int32) + dt)
       sf.size = SF.vector2i(w.to(Int32), h.to(Int32))
 
       # Ring works like padding but it's intrinsic to the rect, and not accounted
@@ -731,7 +770,7 @@ def present(vote_cursor, layers, layer, frame : Term)
     matchpi %[(circle ¦ _ bg_ l_: (%number i32) t_: (%number i32) radius_: (%number +i32))] do |bg|
       sf = SF::CircleShape.new(radius.to(Int32))
       sf.fill_color = color?(bg) || SF::Color::Transparent
-      sf.position = SF.vector2i(l.to(Int32), t.to(Int32))
+      sf.position = SF.vector2i(l.to(Int32) + dl, t.to(Int32) + dt)
 
       layers.draw(layer, sf)
     end
@@ -743,7 +782,31 @@ def present(vote_cursor, layers, layer, frame : Term)
       sf[1] = SF.vector2i(w.to(Int32), 0)
       sf[2] = SF.vector2i(w.to(Int32), h.to(Int32))
       sf.fill_color = color?(bg) || SF::Color::Transparent
-      sf.position = SF.vector2i(l.to(Int32), t.to(Int32))
+      sf.position = SF.vector2i(l.to(Int32) + dl, t.to(Int32) + dt)
+
+      layers.draw(layer, sf)
+    end
+
+    matchpi(
+      %{(scroll child←{¦ final-w: full-w←(%number +i32)
+                         final-h: full-h←(%number +i32)}
+         ¦ _ bg_
+             l_: (%number +i32)
+             t_: (%number +i32)
+             final-w: w←(%number +i32)
+             final-h: h←(%number +i32)
+             x_: (%number i32)
+             y_: (%number i32))}
+    ) do
+      manager = LayerManager.new
+      manager.create(0, x: l.to(Int32) + dl, y: t.to(Int32) + dt, w: Math.max(full_w.to(Int32), w.to(Int32)), h: Math.max(full_h.to(Int32), h.to(Int32)), bg: color?(bg) || SF::Color::White, clip: SF.float_rect(x.to(Int32), y.to(Int32), w.to(Int32), h.to(Int32)))
+
+      present(vote_cursor, manager, 0, child, -l.to(Int32), -t.to(Int32))
+
+      texture = manager.collapse(0)
+
+      sf = SF::Sprite.new(texture)
+      sf.position = SF.vector2i(l.to(Int32) + dl, t.to(Int32) + dt)
 
       layers.draw(layer, sf)
     end
@@ -751,13 +814,13 @@ def present(vote_cursor, layers, layer, frame : Term)
     matchpi %{(layer child_ ¦ _ l_: (%number +i32) t_: (%number +i32) final-w: w←(%number +i32) final-h: h←(%number +i32) z-index: n←(%number +i32))} do
       return if w.zero? || h.zero?
 
-      layers.create(n.to(Int32), x: l.to(Int32), y: t.to(Int32), w: w.to(Int32), h: h.to(Int32))
+      layers.create(n.to(Int32), x: l.to(Int32) + dl, y: t.to(Int32) + dt, w: w.to(Int32), h: h.to(Int32))
 
-      present(vote_cursor, layers, n.to(Int32), child)
+      present(vote_cursor, layers, n.to(Int32), child, dl: -l.to(Int32), dt: -t.to(Int32))
     end
 
     matchpi %[_dict] do
-      frame.items.each { |child| present(vote_cursor, layers, layer, child) }
+      frame.items.each { |child| present(vote_cursor, layers, layer, child, dl, dt) }
     end
 
     otherwise { }
@@ -771,11 +834,11 @@ struct LayerManager
     @layers = [] of LayerData
   end
 
-  # Allocates an absolutely positioned (*x*, *y*), *z*-th layer of width *w* and
-  # height *H* if absent. If the layer already exists, does nothing.
+  # If absent, allocates an absolutely positioned (*x*, *y*), *z*-th layer of width *w* and
+  # height *h*. If the layer already exists, does nothing.
   #
   # Layers with higher *z* are drawn on top of those with a lower *z*.
-  def create(z : Int32, *, x : Int32, y : Int32, w : Int32, h : Int32, bg = SF::Color::Transparent) : Nil
+  def create(z : Int32, *, x : Int32, y : Int32, w : Int32, h : Int32, bg = SF::Color::Transparent, clip : SF::FloatRect? = nil) : Nil
     index = @layers.bsearch_index { |other| other.z >= z }
 
     if index && (other = @layers[index]?)
@@ -785,8 +848,12 @@ struct LayerManager
     index ||= @layers.size
 
     target = SF::RenderTexture.new(w, h)
+
+    if clip
+      target.view = SF::View.new(clip)
+    end
+
     target.clear(bg)
-    target.view = SF::View.new(SF.float_rect(x, y, w, h))
 
     @layers.insert(index, LayerData.new(x, y, z, target))
   end
@@ -807,13 +874,13 @@ struct LayerManager
     @layers.each do |layer|
       next if layer.z == primary
 
-
       layer.target.display
 
       sprite = SF::Sprite.new(layer.target.texture)
       sprite.position = SF.vector2i(layer.x, layer.y)
       base.draw(sprite)
     end
+
 
     base.display
     base.texture
@@ -836,7 +903,7 @@ def cursor_and_texture(tree : Term) : {SF::Cursor, SF::Texture}
         cursor = proposal
       end
 
-      present(vote_cursor, layers, 0, child)
+      present(vote_cursor, layers, 0, child, 0, 0)
 
       {cursor, layers.collapse(0)}
     end
@@ -1089,14 +1156,15 @@ module Soma
   def frame0 : Term
     ML.term <<-WWML
     (window max-w: vw_ max-h: vh_ l: 0 t: 0 style: "max bg-neutral-900"
-      (y-stack style: "w-max fr"
+      (y-stack style: "max fr"
         (z-stack style: "w-max"
           (rect style: "bg-neutral-800")
           (padding style: "p-1"
             (text "Wirewright µsoma" style: "text-xs text-neutral-400")))
-        (padding style: "pl-32 pt-16 h-fr"
-          (ml toplevel: true only-visible: true
-            document_))))
+        (scroll style: "w-max h-fr bg-neutral-900" x: scrollX_ y: scrollY_
+          (padding style: "pt-16 pl-32"
+            (ml toplevel: true only-visible: true
+              document_)))))
     WWML
   end
 
@@ -1113,6 +1181,38 @@ module Soma
         framectx.morph({:vw, w}, {:vh, h})
       end
 
+      matchpi %{(key np8)} do
+        framectx.morph({:scrollY, framectx[:scrollY] - 1})
+      end
+
+      matchpi %{(key S-np8)} do
+        framectx.morph({:scrollY, framectx[:scrollY] - 10})
+      end
+
+      matchpi %{(key np4)} do
+        framectx.morph({:scrollX, framectx[:scrollX] - 1})
+      end
+
+      matchpi %{(key S-np4)} do
+        framectx.morph({:scrollX, framectx[:scrollX] - 10})
+      end
+
+      matchpi %{(key np2)} do
+        framectx.morph({:scrollY, framectx[:scrollY] + 1})
+      end
+
+      matchpi %{(key S-np2)} do
+        framectx.morph({:scrollY, framectx[:scrollY] + 10})
+      end
+
+      matchpi %{(key np6)} do
+        framectx.morph({:scrollX, framectx[:scrollX] + 1})
+      end
+
+      matchpi %{(key S-np6)} do
+        framectx.morph({:scrollX, framectx[:scrollX] + 10})
+      end
+
       matchpi %{(key _)}, %{(input _)} do
         document0 = framectx[:document].as_d
         document1 = Rhodium::Q.of(document0, Rhodium::Events)
@@ -1127,7 +1227,36 @@ module Soma
         framectx.morph({:generation, framectx[:generation] + 1})
       end
 
-      matchpi %{(click x_number y_number)} do
+      matchpi %{(mouse-press x_number y_number)} do
+        handled = false
+
+        # TODO: better ways to detect whether handled or not !!!
+        keypaths = hit(framectx[:drawable], x.unsafe_as_n, y.unsafe_as_n)
+        keypaths.items.each do |kp|
+          target = framectx[:drawable].follow(kp.items)
+          next unless mbp = target[:"events-to"]?
+          next unless mbp = mbp.as_d?
+
+          document0 = framectx[:document].as_d
+
+          next unless mailbox0 = document0.follow?(mbp.items)
+          next unless mailbox0 = mailbox0.as_d?
+
+          handled = true
+        end
+
+        unless handled
+          return framectx.morph({:pivot, {x, y}})
+        end
+
+        framectx
+      end
+
+      matchpi %{(mouse-release x_number y_number)} do
+        if framectx[:pivot]?
+          return framectx.without(:pivot)
+        end
+
         keypaths = hit(framectx[:drawable], x.unsafe_as_n, y.unsafe_as_n)
         keypaths.items.each do |kp|
           target = framectx[:drawable].follow(kp.items)
@@ -1148,17 +1277,27 @@ module Soma
       end
 
       matchpi %{(motion x_number y_number)} do
+        if pivot = framectx[:pivot]?
+          px, py = pivot
+          return framectx.morph(
+            {:scrollX, framectx[:scrollX] + (px - x)},
+            {:scrollY, framectx[:scrollY] + (py - y)},
+            {:pivot, {x, y}},
+          )
+        end
+
         keypaths = hit(framectx[:drawable], x.unsafe_as_n, y.unsafe_as_n)
         framectx0 = framectx
-        seen = false
+        handled = false
         keypaths.items.each do |kp|
           target0 = framectx[:drawable].as_d.follow(kp.items)
           next unless id = target0[:"hover-id"]?
 
-          seen = true
+          handled = true
           framectx = framectx.morph({:hovered, id})
         end
-        unless seen
+
+        unless handled
           framectx = framectx.morph({:hovered, nil})
         end
 
@@ -1194,7 +1333,7 @@ module Soma
   def primary(prompts : Channel(Term), drawables : Channel(Term), nitrene : Nitrene::JobContext, seed : Term::Dict) : Nil
     frame = frame0
 
-    framectx0 = Term[generation: 0, vw: WINDOW_WIDTH0, vh: WINDOW_HEIGHT0, document: seed, drawable: Term[]]
+    framectx0 = Term[generation: 0, vw: WINDOW_WIDTH0, vh: WINDOW_HEIGHT0, scrollX: 0, scrollY: 0, document: seed, drawable: Term[]]
 
     should_draw = false
 
@@ -1328,8 +1467,10 @@ module Soma
           next unless chr.printable?
 
           transcribed = Term.of(:input, chr)
+        when SF::Event::MouseButtonPressed
+          transcribed = Term.of(:"mouse-press", event.x, event.y)
         when SF::Event::MouseButtonReleased
-          transcribed = Term.of(:click, event.x, event.y)
+          transcribed = Term.of(:"mouse-release", event.x, event.y)
         when SF::Event::MouseMoved
           transcribed = Term.of(:motion, event.x, event.y)
         when SF::Event::KeyPressed
@@ -1346,9 +1487,11 @@ module Soma
           when .up?        then keyname = "up"
           when .down?      then keyname = "down"
           when .backspace? then keyname = "backspace"
-          when .numpad8?   then keyname = "np8"
-          when .numpad5?   then keyname = "np5"
           when .numpad2?   then keyname = "np2"
+          when .numpad4?   then keyname = "np4"
+          when .numpad5?   then keyname = "np5"
+          when .numpad6?   then keyname = "np6"
+          when .numpad8?   then keyname = "np8"
           end
 
           if event.control
