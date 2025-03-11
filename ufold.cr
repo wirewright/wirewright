@@ -1,5 +1,4 @@
 # TODO: toplevel h-fr, fr-N, etc.
-# TODO: handle invalid arguments to props, esp. subphrases. Currently we infinitely recurse (?!)
 
 require "./src/wirewright"
 require "./colors"
@@ -59,7 +58,8 @@ module Microfold
     spec : Term::Dict,
     sheet : Term::Dict::Commit,
     colors : Term::Dict,
-    rem : Term::Num
+    rem : Term::Num,
+    blacklist = Pf::Set(Term).new
 
   private def word?(r : Char::Reader, leader : String) : String?
     return unless r = consume?(r, leader)
@@ -132,6 +132,8 @@ module Microfold
   end
 
   private def apply?(ctx : SheetContext, rule : Term, phrase : Term::Str) : Bool
+    return false if rule.in?(ctx.blacklist)
+
     Term.case(rule) do
       matchpi %{(_symbol _string _ _dict)} do
         type, leader, var, body = rule
@@ -143,7 +145,7 @@ module Microfold
         type, leader, sum = rule
         subphrases = sum.items.move(1)
 
-        subphrases?(ctx, type.unsafe_as_sym, leader.to(String), subphrases, phrase.to(String))
+        subphrases?(ctx.copy_with(blacklist: ctx.blacklist.add(rule)), type.unsafe_as_sym, leader.to(String), subphrases, phrase.to(String))
       end
     end
   end
@@ -463,4 +465,4 @@ module Microfold
   end
 end
 
-puts ML.display(Microfold.uir(SPEC.as_d, Term.of(:p, "A", "B", "C", style: "ring ring-t-2 max border border-l-2 border-blue-500 rounded bg-neutral-500 p-3 pr-px flow-col z-10 gap-5 d-5 min-sm")))
+puts ML.display(Microfold.uir(SPEC.as_d, Term.of(:p, "A", "B", "C", style: "ring ringfoo ring-foo ring-t-2 max border border-l-2 border-blue-500 rounded bg-neutral-500 p-3 pr-px flow-col z-10 gap-5 d-5 min-sm")))
