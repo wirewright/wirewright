@@ -1,8 +1,14 @@
 require "./src/wirewright"
 require "./colors"
 
-SPEC = ML.terms File.read("ufold.spec.wwml")
-
+# Microfold (µfold) is the engine that handles styles. It's the Tailwind
+# of Wirewright, except it also emits nodes since the underlying rule system,
+# UIR, is much simpler than HTML/CSS.
+#
+# For instance, via µfold, we can emulate a basic box model. Imagine if Tailwind
+# automatically surrounded with nodes based on the presence of certain classes
+# (`bg` creates a background box, `p` creates a padding box, etc.) That is exactly
+# what µfold does.
 module Microfold
   extend self
 
@@ -219,7 +225,12 @@ module Microfold
   # (also called "phrases") from *style* are resolved.
   #
   # *rem* specifies the root font size on which the majority of size calculations
-  # will be based.
+  # are based.
+  #
+  # *attrs* are the attributes that are going to be accessible from *style* using
+  # the `[]` syntax: e.g. `p-[padding]` will read the value of *padding* (a number,
+  # string, or symbol) from *attrs*, normalize that as a string, and use that. E.g.
+  # `p-[padding]` with attrs `{padding: 3}` will resolve to `p-3`.
   #
   # Sheets serve as sources of styles for units (see `uir`).
   def sheet(spec : Term::Dict, attrs : Term::Dict, style : String, *, rem = Term[16]) : Term::Dict
@@ -461,12 +472,24 @@ module Microfold
     uir(ctx.spec, unit, rem: ctx.rem, inherited: ctx.sheet.pluck(:font, :"font-weight"))
   end
 
+  # TODO: remove this in favor of a centralized observer "file manager".
+  # So that we have "hot reload" of the spec.
+  SPEC = ML.terms File.read("ufold.spec.wwml")
+
   # Returns the UIR tree corresponding to *unit*.
   #
   # *Units* are represented as a series of nested boxes. Each box is instantiated
   # on demand to consume certain style properties if those properties are present.
   # For example, a padding box is instantiated if padding properties are present.
   # Units can be nested.
+  #
+  # ```
+  # node = ML.term <<-WWML
+  # (p "Hello World" style: "p-3 text-neutral-200 bg-neutral-900")
+  # WWML
+  #
+  # Microfold.uir(Microfold::SPEC, node) # => UIR...
+  # ```
   def uir(spec : Term::Dict, unit : Term, *, rem = Term[16], inherited = Term[])
     Term.case(unit) do
       matchpi %{(node_symbol children_+ ¦ attrs_ style⋮ "")} do |style|
@@ -493,4 +516,3 @@ module Microfold
   end
 end
 
-puts ML.display(Microfold.uir(SPEC.as_d, Term.of(:x, Term.of(:p, "A"), Term.of(:p, "B"), Term.of(:p, "C"), style: "font-mono font-bold")))
