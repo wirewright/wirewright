@@ -1,5 +1,3 @@
-# TODO: toplevel h-fr, fr-N, etc.
-
 require "./src/wirewright"
 require "./colors"
 
@@ -480,7 +478,15 @@ module Microfold
 
         sheet = sheet(spec, attrs.unsafe_as_d, style.to(String), rem: rem)
 
-        translate_box(UnitContext.new(spec, sheet, rem), children)
+        box = translate_box(UnitContext.new(spec, sheet, rem), children)
+
+        # Attach toplevel props to the box.
+        box = box.morph(
+          {:fr, sheet[:fr]?},
+          {:fractions, sheet[:fractions]?},
+        )
+
+        Term.of(box)
       end
     end
   end

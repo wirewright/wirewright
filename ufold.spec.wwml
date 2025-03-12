@@ -51,6 +51,8 @@
 "w-fr": (+ "w-max" "fr-1")
 "h-fr": (+ "h-max" "fr-1")
 
+(nat "fr" N {fr: N_})
+
 "w-px": {w: max, max-w: 1}
 "h-px": {h: max, max-h: 1}
 
