@@ -35,8 +35,6 @@ module UIR::Platform::SFML::FontLoader
     end
 
     WEIGHTS.each do |weight, postfix|
-      break if weight <= pivot
-
       refs(font, postfix).each do |ref|
         next unless File.exists?(ref)
         return ref
@@ -202,7 +200,8 @@ module UIR::Platform::SFML
     end
   end
 
-  # Manages and allows to `collapse` layers, each represented by SFML render textures.
+  # Manages and allows to `collapse` layers, each represented by an SFML
+  # render texture.
   struct LayerManager
     # :nodoc:
     record LayerData, x : Int32, y : Int32, z : Int32, target : SF::RenderTexture
