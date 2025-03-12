@@ -457,10 +457,8 @@ module Microfold
   end
 
   # Handles the unit-unit boundary.
-  #
-  # TODO: inherit text color, text size, font, font weight.
   private def unit_box(ctx : UnitContext, unit : Term)
-    uir(ctx.spec, unit, rem: ctx.rem)
+    uir(ctx.spec, unit, rem: ctx.rem, inherited: ctx.sheet.pluck(:font, :"font-weight"))
   end
 
   # Returns the UIR tree corresponding to *unit*.
@@ -469,14 +467,17 @@ module Microfold
   # on demand to consume certain style properties if those properties are present.
   # For example, a padding box is instantiated if padding properties are present.
   # Units can be nested.
-  def uir(spec : Term::Dict, unit : Term, *, rem = Term[16])
+  def uir(spec : Term::Dict, unit : Term, *, rem = Term[16], inherited = Term[])
     Term.case(unit) do
       matchpi %{(node_symbol children_+ ¦ attrs_ style⋮ "")} do |style|
+        # Based on the node we can have certain "default" styles, we call them
+        # "nodal" (per-node, node-specific) styles.
+        nodal = Term[]
         if (defaults = spec[:defaults, node]?) && (defaults = defaults.as_s?)
-          style = defaults.stitch(" ").stitch(style)
+          nodal = sheet(spec, attrs.unsafe_as_d, defaults.to(String), rem: rem)
         end
 
-        sheet = sheet(spec, attrs.unsafe_as_d, style.to(String), rem: rem)
+        sheet = nodal | inherited | sheet(spec, attrs.unsafe_as_d, style.to(String), rem: rem)
 
         box = translate_box(UnitContext.new(spec, sheet, rem), children)
 
@@ -492,4 +493,4 @@ module Microfold
   end
 end
 
-puts ML.display(Microfold.uir(SPEC.as_d, Term.of(:p, "A", "B", "C", a: 5, style: "ring ringfoo ring-foo ring-t-2 max border border-l-2 border-blue-500 rounded bg-neutral-500 p-3 pr-px flow-col z-10 gap-5 d-[a] min-sm")))
+puts ML.display(Microfold.uir(SPEC.as_d, Term.of(:x, Term.of(:p, "A"), Term.of(:p, "B"), Term.of(:p, "C"), style: "font-mono font-bold")))
