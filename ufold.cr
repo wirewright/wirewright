@@ -57,14 +57,34 @@ module Microfold
   record SheetContext,
     spec : Term::Dict,
     sheet : Term::Dict::Commit,
+    attrs : Term::Dict,
     colors : Term::Dict,
     rem : Term::Num,
     blacklist = Pf::Set(Term).new
 
-  private def word?(r : Char::Reader, leader : String) : String?
+  private def word?(ctx : SheetContext, r : Char::Reader, leader : String) : String?
     return unless r = consume?(r, leader)
     return unless r = consume?(r, '-')
     return unless word = remainder?(r)
+
+    if word.prefixed_by?('[') && word.postfixed_by?(']')
+      begin
+        key = ML.term(word[1...-1])
+      rescue ML::SyntaxError
+        return
+      end
+
+      return unless value = ctx.attrs[key]?
+
+      case value.type
+      when .number?
+        return value.inspect
+      when .string?, .symbol?
+        return value.to(String)
+      else
+        return
+      end
+    end
 
     word
   end
@@ -75,14 +95,14 @@ module Microfold
 
     case type
     when SYM_COLOR
-      return false unless color = word?(r, leader)
+      return false unless color = word?(ctx, r, leader)
       return false unless subst = ctx.colors[color]?
     when SYM_WORD
-      return false unless word = word?(r, leader)
+      return false unless word = word?(ctx, r, leader)
 
       subst = Term::Str.new(word)
     when SYM_NAT
-      return false unless word = word?(r, leader)
+      return false unless word = word?(ctx, r, leader)
       return false unless nat = word.to_u32?
 
       subst = Term::Num.new(nat)
@@ -93,7 +113,7 @@ module Microfold
         r = r1
       end
 
-      return false unless word = word?(r, leader)
+      return false unless word = word?(ctx, r, leader)
       return false unless nat = word.to_i?
 
       subst = Term::Num.new(negative ? -nat : nat)
@@ -114,14 +134,14 @@ module Microfold
     # was passed.
     case type
     when SYM_WORD, SYM_NAT
-      return false unless postfix = word?(r, leader)
+      return false unless postfix = word?(ctx, r, leader)
     when SYM_INT
       if r1 = consume?(r, '-')
         prefix = Term["-"]
         r = r1
       end
 
-      return false unless postfix = word?(r, leader)
+      return false unless postfix = word?(ctx, r, leader)
     end
 
     subphrases.all? do |subphrase|
@@ -204,9 +224,9 @@ module Microfold
   # will be based.
   #
   # Sheets serve as sources of styles for units (see `uir`).
-  def sheet(spec : Term::Dict, style : String, *, rem = Term[16]) : Term::Dict
+  def sheet(spec : Term::Dict, attrs : Term::Dict, style : String, *, rem = Term[16]) : Term::Dict
     Term::Dict.build do |sheet|
-      ctx = SheetContext.new(spec, sheet, spec[:colors]?.try(&.as_d?).default(Term[]), rem)
+      ctx = SheetContext.new(spec, sheet, attrs, spec[:colors]?.try(&.as_d?).default(Term[]), rem)
 
       style.split(' ', remove_empty: true) do |phrase|
         sheet1?(ctx, Term::Str.new(phrase))
@@ -229,6 +249,7 @@ module Microfold
       weight: ctx.sheet[:"font-weight"]?,
       size: ctx.sheet[:"text-size"]?,
       leading: ctx.sheet[:leading]?,
+      color: ctx.sheet[:"text-color"]?
     )
   end
 
@@ -452,12 +473,12 @@ module Microfold
   # Units can be nested.
   def uir(spec : Term::Dict, unit : Term, *, rem = Term[16])
     Term.case(unit) do
-      matchpi %{(node_symbol children_+ ¦ _ style⋮ "")} do |style|
+      matchpi %{(node_symbol children_+ ¦ attrs_ style⋮ "")} do |style|
         if (defaults = spec[:defaults, node]?) && (defaults = defaults.as_s?)
           style = defaults.stitch(" ").stitch(style)
         end
 
-        sheet = sheet(spec, style.to(String), rem: rem)
+        sheet = sheet(spec, attrs.unsafe_as_d, style.to(String), rem: rem)
 
         translate_box(UnitContext.new(spec, sheet, rem), children)
       end
@@ -465,4 +486,4 @@ module Microfold
   end
 end
 
-puts ML.display(Microfold.uir(SPEC.as_d, Term.of(:p, "A", "B", "C", style: "ring ringfoo ring-foo ring-t-2 max border border-l-2 border-blue-500 rounded bg-neutral-500 p-3 pr-px flow-col z-10 gap-5 d-5 min-sm")))
+puts ML.display(Microfold.uir(SPEC.as_d, Term.of(:p, "A", "B", "C", a: 5, style: "ring ringfoo ring-foo ring-t-2 max border border-l-2 border-blue-500 rounded bg-neutral-500 p-3 pr-px flow-col z-10 gap-5 d-[a] min-sm")))
