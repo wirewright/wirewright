@@ -28,6 +28,10 @@
 ((%not translate) {¦ -l_} ¦ _ l: L_number) <> {l: →L}
 ((%not translate) {¦ -t_} ¦ _ t: T_number) <> {t: →T}
 
+;; Nodes without children have 0 content-w/h.
+(_ ¦ _ -content-w_) <> {content-w: 0}
+(_ ¦ _ -content-h_) <> {content-h: 0}
+
 ;; NODE: text
 
 (backmap
@@ -54,12 +58,6 @@
 (padding {¦ max-h: (%- _ h)} ¦ _ h: max max-h: H_number py_number) <> {h: ($once (- →H →py))}
 (padding {¦ -l_} ¦ _ l: L_number pl_number) <> {l: ($once (+ →L →pl))}
 (padding {¦ -t_} ¦ _ t: T_number pt_number) <> {t: ($once (+ →T →pt))}
-
-;; NODE: rect
-
-;; `rect` does not have content. Hard-code its content-w/h to 0.
-(rect ¦ _ -content-w_) <> {content-w: 0}
-(rect ¦ _ -content-h_) <> {content-h: 0}
 
 ;; NODE: x-expand
 

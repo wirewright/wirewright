@@ -105,6 +105,17 @@
 
 (nat "p" (+ "px" "py"))
 
+"origin": (+ "l-0" "t-0")
+
+(int "l" N {l: N_})
+(int "t" N {t: N_})
+
+"d-center": (+ "dl-center" "dt-center")
+"dl-center": {dl: center}
+"dl-right": {dl: right}
+"dt-center": {dt: center}
+"dt-bottom": {dt: bottom}
+
 (int "dl" N {dl: (spacing N_)})
 (int "dt" N {dt: (spacing N_)})
 
@@ -115,23 +126,11 @@
 
 (nat "z" N {z: N_})
 
-"border": (+ "border-x" "border-y")
-"border-x": (+ "border-l" "border-r")
-"border-y": (+ "border-t" "border-b")
+"border": {border-width: 1}
 
-"border-l": {border-l: 1}
-"border-r": {border-r: 1}
-"border-t": {border-t: 1}
-"border-b": {border-b: 1}
+(nat "border" N {border-width: N_})
 
-(nat "border-l" N {border-l: N_})
-(nat "border-r" N {border-r: N_})
-(nat "border-t" N {border-t: N_})
-(nat "border-b" N {border-b: N_})
-
-(nat "border-x" (+ "border-l" "border-r"))
-(nat "border-y" (+ "border-t" "border-b"))
-(nat "border" (+ "border-x" "border-y"))
+"cursor-pointer": {cursor: pointer}
 
 (word "min" (+ "min-w" "min-h"))
 

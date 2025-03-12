@@ -238,6 +238,18 @@ module Microfold
       ctx = SheetContext.new(spec, sheet, attrs, spec[:colors]?.try(&.as_d?).default(Term[]), rem)
 
       style.split(' ', remove_empty: true) do |phrase|
+        parts = phrase.split(':', limit: 2)
+
+        case parts.size
+        when 0 # ?!
+        when 1
+          phrase = parts[0]
+        when 2
+          group, phrase = parts
+          next if phrase.empty? # ?!
+          next unless Term::Sym.new(group).in?(attrs)
+        end
+
         sheet1?(ctx, Term::Str.new(phrase))
       end
     end
@@ -271,8 +283,12 @@ module Microfold
       end
 
       # Note how we recurse here.
-      otherwise do
+      matchpi %{_dict} do
         unit_box(ctx, child)
+      end
+
+      otherwise do
+        text_box(ctx, Term[child.inspect])
       end
     end
   end
@@ -286,6 +302,8 @@ module Microfold
 
     flow = Term::Dict.build do |commit|
       commit.with(:gap, ctx.sheet[:gap]?)
+      commit.with(:w, ctx.sheet[:w]?)
+      commit.with(:h, ctx.sheet[:h]?)
 
       case ctx.sheet[:flow]?
       when Term.of(:col)
@@ -361,50 +379,32 @@ module Microfold
     )
   end
 
-  # Appears if at least one border prop (such as `bt`, `bl`, etc.) and border
-  # color prop are present. Handles the ring. Contains the background box.
+  # Appears if the border-width prop and border color prop are present.
+  # Contains the background box.
   private def border_box(ctx : UnitContext, children : Term)
-    bl = ctx.sheet[:"border-l"]?
-    br = ctx.sheet[:"border-r"]?
-    bt = ctx.sheet[:"border-t"]?
-    bb = ctx.sheet[:"border-b"]?
+    border_width = ctx.sheet[:"border-width"]?
     border_color = ctx.sheet[:"border-color"]?
 
-    unless {bl, br, bt, bb}.any? && border_color
+    unless border_width && border_color
       return background_box(ctx, children)
     end
 
-    rl = ctx.sheet[:"ring-l"]?
-    rr = ctx.sheet[:"ring-r"]?
-    rt = ctx.sheet[:"ring-t"]?
-    rb = ctx.sheet[:"ring-b"]?
-
-    if {rl, rr, rt, rb}.any?
-      r0 = 0
-      ctx = ctx.copy_with(
-        sheet: ctx.sheet.without(:"ring-l", :"ring-r", :"ring-t", :"ring-b")
-      )
-    end
-
     Term.of(:"z-stack",
-      Term.of(:rect,
+      Term.of(:"rect/outline",
         w: :max,
         h: :max,
         bg: border_color,
+        "border-width": border_width,
         "border-radius": ctx.sheet[:"border-radius"]?,
-        "ring-l": rl || r0,
-        "ring-r": rr || r0,
-        "ring-t": rt || r0,
-        "ring-b": rb || r0,
       ),
       Term.of(:padding,
         background_box(ctx, children),
         w: :max,
         h: :max,
-        pl: bl || 0,
-        pr: br || 0,
-        pt: bt || 0,
-        pb: bb || 0,
+        pl: border_width,
+        pr: border_width,
+        pt: border_width,
+        pb: border_width,
       ),
       w: ctx.sheet[:w]?,
       h: ctx.sheet[:h]?,
@@ -459,7 +459,17 @@ module Microfold
       return layer_box(ctx, children)
     end
 
-    Term.of(:translate, layer_box(ctx, children),
+    subctx = ctx
+
+    if dl && !dl.type.number?
+      subctx = subctx.copy_with(sheet: subctx.sheet.with(:w, :content))
+    end
+
+    if dt && !dt.type.number?
+      subctx = subctx.copy_with(sheet: subctx.sheet.with(:h, :content))
+    end
+
+    Term.of(:translate, layer_box(subctx, children),
       w: ctx.sheet[:w]?,
       h: ctx.sheet[:h]?,
       x: dl,
@@ -474,7 +484,7 @@ module Microfold
 
   # TODO: remove this in favor of a centralized observer "file manager".
   # So that we have "hot reload" of the spec.
-  SPEC = ML.terms File.read("ufold.spec.wwml")
+  SPEC = ML.terms(File.read("ufold.spec.wwml")).as_d
 
   # Returns the UIR tree corresponding to *unit*.
   #
@@ -492,7 +502,20 @@ module Microfold
   # ```
   def uir(spec : Term::Dict, unit : Term, *, rem = Term[16], inherited = Term[])
     Term.case(unit) do
-      matchpi %{(node_symbol children_+ ¦ attrs_ style⋮ "")} do |style|
+      matchpi %{((self node_symbol) ¦ attrs_ style⋮ "")} do
+        sheet = sheet(spec, attrs.unsafe_as_d, style.to(String), rem: rem)
+
+        Term.of(unit.morph({0, node}, {:style, nil}) | sheet)
+      end
+
+      matchpi %{((self node_symbol) child_ ¦ attrs_ style⋮ "")} do
+        sheet = sheet(spec, attrs.unsafe_as_d, style.to(String), rem: rem)
+        inner = uir(spec, child, rem: rem)
+
+        Term.of(unit.morph({0, node}, {1, inner}, {:style, nil}) | sheet)
+      end
+
+      matchpi %{(node_symbol children_+ ¦ attrs_ style⋮ "")} do
         # Based on the node we can have certain "default" styles, we call them
         # "nodal" (per-node, node-specific) styles.
         nodal = Term[]
@@ -508,7 +531,11 @@ module Microfold
         box = box.morph(
           {:fr, sheet[:fr]?},
           {:fractions, sheet[:fractions]?},
+          {:cursor, sheet[:cursor]?},
         )
+
+        # Attach the rest of attrs.
+        box |= attrs
 
         Term.of(box)
       end
