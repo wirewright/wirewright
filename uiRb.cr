@@ -83,6 +83,14 @@ module UIR
 
         {width: w, height: h}
       end
+
+      rulepi1 %[(wrap caption_string font_string weight←(%any 100 200 300 400 450 500 600 700 800 900) size←(%number u8) leading_number ¦ max-w_: (%number +i32))] do
+        Platform::Current.wrap(caption.to(String), font.to(String), weight.to(Int32), size.to(Int32), leading.to(Float32), w: max_w.to(Int32))
+      end
+
+      rulepi1 %[(wrap caption_string font_string weight←(%any 100 200 300 400 450 500 600 700 800 900) size←(%number u8) leading_number ¦ max-w_: (%number +i32) max-h_: (%number +i32))] do
+        Platform::Current.wrap(caption.to(String), font.to(String), weight.to(Int32), size.to(Int32), leading.to(Float32), w: max_w.to(Int32), h: max_h.to(Int32))
+      end
     end
 
     onceR = chainR(callR(primitives), callR(PRIMITIVES))

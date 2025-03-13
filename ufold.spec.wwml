@@ -58,6 +58,8 @@
 
 "fr": {fractions: true}
 
+"bg-none": {bg: (unset)}
+
 (color "bg" C {bg: C_})
 (color "text" C {text-color: C_})
 (color "border" C {border-color: C_})
@@ -110,11 +112,12 @@
 (int "l" N {l: N_})
 (int "t" N {t: N_})
 
-"d-center": (+ "dl-center" "dt-center")
-"dl-center": {dl: center}
-"dl-right": {dl: right}
-"dt-center": {dt: center}
-"dt-bottom": {dt: bottom}
+"center": (+ "center-x" "center-y")
+"center-x": {content-dl: center}
+"center-y": {content-dt: center}
+
+"right": {content-dl: right}
+"bottom": {content-dt: bottom}
 
 (int "dl" N {dl: (spacing N_)})
 (int "dt" N {dt: (spacing N_)})
@@ -410,5 +413,6 @@ colors: {
 }
 
 defaults: {
-  p: "content font-sans text-base text-black font-text"
+  p: "content font-sans text-base text-black font-text",
+  button: "bg-neutral-700 hover:bg-blue-500 hover:cursor-pointer rounded-sm px-4 py-2 center text-sm text-neutral-50 content font-sans font-medium",
 }

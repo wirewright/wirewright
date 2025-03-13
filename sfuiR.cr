@@ -71,13 +71,18 @@ module UIR::Platform::SFML::FontLoader
   end
 end
 
-record UIR::Platform::SFML::TextMeasurer, font : SF::Font, size : Int32, leading : Float32, tracking : Float32 do
-  def self.new(font, size)
-    new(font, size, leading: 1.0, tracking: 1.0)
+class UIR::Platform::SFML::TextData
+  getter size
+
+  def initialize(@font : SF::Font, @size : Int32, @leading = 1.0f32, @tracking = 1.0f32)
   end
 
-  def glyph(char : Char)
-    @font.get_glyph(char.ord, @size, bold: false)
+  def glyph(chr : Char)
+    @font.get_glyph(chr.ord, @size, bold: false)
+  end
+
+  def advance(chr : Char)
+    glyph(chr).advance
   end
 
   def kerning(c1 : Char, c2 : Char)
@@ -92,23 +97,183 @@ record UIR::Platform::SFML::TextMeasurer, font : SF::Font, size : Int32, leading
     @font.get_texture(@size)
   end
 
-  def wswidth0
+  private def wswidth0
     glyph(' ').advance
   end
 
-  def wswidth
-    wswidth0 + letter_spacing
+  def wswidth : Int32
+    (wswidth0 + letter_spacing).to_i
   end
 
   def letter_spacing
-    (wswidth0 / 3) * (tracking - 1)
+    (wswidth0 / 3) * (@tracking - 1)
   end
 
   def line_height
-    (size * leading).ceil.to_i
+    (@size * @leading).ceil.to_i
   end
 
-  def measure(string : String, *, window = 0...string.size)
+  def wsstep : SF::Vector2i
+    SF.vector2i(wswidth, 0)
+  end
+
+  def tabstep : SF::Vector2i
+    wsstep * 4
+  end
+
+  def nlstep
+    SF.vector2i(0, line_height)
+  end
+
+  def glyphstep(state : Char, chr : Char)
+    SF.vector2i((kerning(state, chr) + advance(chr) + letter_spacing).to_i, 0)
+  end
+end
+
+# Allows to specify bounds for text wrapping.
+record UIR::Platform::SFML::WrapBounds, position : SF::Vector2i, width : Int32?, height : Int32? do
+  def includes?(rect : SF::IntRect) : Bool
+    right = @width.try { |width| @position.x + width }
+
+    return false unless rect.left.in?(@position.x...right)
+    return false unless rect.right.in?(@position.x...right)
+
+    bottom = @height.try { |height| @position.y + height }
+
+    return false unless rect.top.in?(@position.y...bottom)
+    return false unless rect.bottom.in?(@position.y...bottom)
+
+    true
+  end
+end
+
+# An immutable "cursor" appears to me a great analogy when implementing text
+# wrapping. It greatly simplifies the code.
+struct UIR::Platform::SFML::TextCursor
+  # Returns the position of the top-left corner of this cursor.
+  getter position : SF::Vector2i
+
+  def initialize(@text : TextData, @left : Int32, @position : SF::Vector2i, @state : Char)
+  end
+
+  record WrapContext, bounds : WrapBounds, ellipsis : String
+
+  private def self.commit?(ctx : WrapContext, cursor : self) : self?
+    ctx.bounds.includes?(cursor.after(ctx.ellipsis).bounds) ? cursor : nil
+  end
+
+  private def self.commit?(ctx : WrapContext, cursor cursor0 : self, *args : String | Char) : self?
+    commit?(ctx, args.reduce(cursor0) { |cursor, arg| cursor.after(arg) })
+  end
+
+  private def self.wrap?(ctx : WrapContext, io, cursor0 : self, word : String, ws : String) : self?
+    # Path 1: Type the entire word.
+    if cursor1 = commit?(ctx, cursor0, ws, word)
+      io << ws << word
+      return cursor1
+    end
+
+    # Path 2: The entire word cannot be committed. See if soft break can
+    # be committed followed by the entire word (i.e. on its own line).
+    if cursor0.position.y > 0 && (cursor1 = commit?(ctx, cursor0, '\n', word))
+      io << '\n' << word
+      return cursor1
+    end
+
+    # Path 3: Try typing the word letter-by-letter.
+    word.each_char_with_index do |letter, index|
+      # Path 3.1: the letter can be committed to the current line.
+      if cursor1 = commit?(ctx, cursor0, index.zero? ? ws : "", letter)
+        io << ws if index.zero?
+        io << letter
+        cursor0 = cursor1
+        next
+      end
+
+      # Path 3.2: the letter can be committed after a soft break.
+      if cursor1 = commit?(ctx, cursor0, '\n', letter)
+        io << '\n' << letter
+        cursor0 = cursor1
+        next
+      end
+
+      # Path 3.3: the letter cannot be committed. Type ellipsis.
+      io << ctx.ellipsis
+
+      return # Returning nil signals that we're done.
+    end
+
+    cursor0
+  end
+
+  # Wraps *string* to fit in *bounds* according to text data *text*. Returns
+  # wrapped *string* (i.e. with appropriately placed newlines).
+  def self.wrap(text : TextData, string : String, bounds : WrapBounds, ellipsis = "...") : String
+    String.build do |io|
+      ctx = WrapContext.new(bounds, ellipsis)
+      index = 0
+      cursor = new(text, bounds.position.x, bounds.position, state: '\0')
+
+      string.split(' ', remove_empty: true) do |word|
+        ws = index > 0 && cursor.position.x > 0 ? " " : ""
+        cursor = wrap?(ctx, io, cursor, word, ws)
+        index += 1
+
+        break unless cursor
+      end
+    end
+  end
+
+  # Returns the bounding box of this cursor.
+  def bounds : SF::IntRect
+    SF.int_rect(@position.x, @position.y, 1, @text.line_height)
+  end
+
+  private def_change
+
+  # Returns a copy of this cursor after typing *chr*.
+  def after(chr : Char) : self
+    case chr
+    when '\r'
+      self
+    when ' '
+      change(position: @position + @text.wsstep, state: chr)
+    when '\t'
+      change(position: @position + @text.wsstep*4, state: chr)
+    when '\n'
+      change(position: SF.vector2i(@left, @position.y) + @text.nlstep, state: chr)
+    else
+      change(position: @position + @text.glyphstep(@state, chr), state: chr)
+    end
+  end
+
+  # Returns a copy of this cursor after typing *string*.
+  def after(string : String) : self
+    cursor = self
+    string.each_char do |chr|
+      cursor = cursor.after(chr)
+    end
+    cursor
+  end
+end
+
+module UIR::Platform::SFML
+  extend self
+  extend IPlatform
+
+  def wrap(content : String, font : String, weight : Int32, size : Int32, leading : Float32, *, w : Int32? = nil, h : Int32? = nil) : String
+    unless path = FontLoader.path?(font, weight)
+      return ""
+    end
+
+    FontLoader.font_at(path) do |font|
+      text = TextData.new(font, size, leading, tracking: 1.0f32)
+
+      TextCursor.wrap(text, content, WrapBounds.new(SF.vector2i(0, 0), w, h))
+    end
+  end
+
+  def measure(text : TextData, string : String, *, window = 0...string.size) : Int32
     reader = Char::Reader.new(string, pos: string.char_index_to_byte_index(window.begin) || raise IndexError.new)
 
     width = 0
@@ -117,18 +282,17 @@ record UIR::Platform::SFML::TextMeasurer, font : SF::Font, size : Int32, leading
     window.each do
       current = reader.current_char
 
-      width += kerning(state, current)
-      state = current
-
       case current
+      when '\r'
       when ' ', '\n'
-        width += wswidth
+        width += text.wsstep.x
       when '\t'
-        width += 4 * wswidth
+        width += text.tabstep.x
       else
-        glyph = glyph(current)
-        width += glyph.advance + letter_spacing
+        width += text.glyphstep(state, current).x
       end
+
+      state = current
 
       break unless reader.has_next?
 
@@ -138,47 +302,24 @@ record UIR::Platform::SFML::TextMeasurer, font : SF::Font, size : Int32, leading
     width.ceil.to_i
   end
 
-  def_equals_and_hash @sf, @size, @leading, @tracking
-end
-
-record UIR::Platform::SFML::TextInfo, font : SF::Font, size : Int32, leading : Float32 do
-  def self.from(term : Term, &)
-    Term.case(term) do
-      matchpi %[{¦ font_string weight_: (%any 100 200 300 400 450 500 600 700 800 900) size_: (%number u8) leading_number}] do
-        next unless path = FontLoader.path?(font.to(String), weight.to(Int32))
-
-        FontLoader.font_at(path) do |font|
-          yield new(font, size.to(Int32), leading.to(Float32))
-        end
-      end
-
-      otherwise { }
-    end
-  end
-end
-
-module UIR::Platform::SFML
-  extend self
-  extend IPlatform
-
   def measure(content : String, font : String, weight : Int32, size : Int32, leading : Float32) : {Int32, Int32}
     unless path = FontLoader.path?(font, weight)
       return 0, 0
     end
 
     FontLoader.font_at(path) do |font|
-      measurer = TextMeasurer.new(font, size, leading, tracking: 1.0f32)
+      text = TextData.new(font, size, leading, tracking: 1.0f32)
 
       if content.empty?
-        return 0, measurer.line_height
+        return 0, text.line_height
       end
 
       width = 0
       height = 0
 
       content.each_line(chomp: true) do |line|
-        width = Math.max(width, measurer.measure(line))
-        height += measurer.line_height
+        width = Math.max(width, measure(text, line))
+        height += text.line_height
       end
 
       {width, height}
@@ -235,14 +376,18 @@ module UIR::Platform::SFML
     # Draws an SFML drawable *sf* on *z*-th layer.
     #
     # Raises `ArgumentError` if *z*-th layer was not `create`d.
-    def draw(z : Int32, sf : SF::Drawable) : Nil
+    def draw(z : Int32, sf : SF::Drawable, *, states = nil) : Nil
       layer = @layers.bsearch { |layer| layer.z >= z }
 
       unless layer && layer.z == z
         raise ArgumentError.new("layer #{z} was not create()'d")
       end
 
-      layer.target.draw(sf)
+      if states
+        layer.target.draw(sf, states)
+      else
+        layer.target.draw(sf)
+      end
     end
 
     # Draws all layers on the *primary* layer and returns the resulting texture.
@@ -264,6 +409,45 @@ module UIR::Platform::SFML
     end
   end
 
+  def render_text(text : TextData, string : String, target : SF::VertexArray, offset offset0 = SF.vector2i(0, 0), color = SF::Color::Black)
+    state = '\0'
+
+    offset = offset0
+    voffset = SF.vector2i(0, text.size)
+
+    string.each_char_with_index do |chr|
+      glyph = text.glyph(chr)
+
+      case chr
+      when '\r'
+        next
+      when ' '
+        offset += text.wsstep
+      when '\t'
+        offset += text.wsstep*4
+      when '\n'
+        offset = SF.vector2i(offset0.x, offset.y) + text.nlstep
+      else
+        offset += SF.vector2(text.kerning(state, chr), 0).to_i
+
+        target.append SF::Vertex.new(offset + voffset + glyph.bounds.top_left, color, glyph.texture_rect.top_left)
+        target.append SF::Vertex.new(offset + voffset + glyph.bounds.top_right, color, glyph.texture_rect.top_right)
+        target.append SF::Vertex.new(offset + voffset + glyph.bounds.bottom_right, color, glyph.texture_rect.bottom_right)
+        target.append SF::Vertex.new(offset + voffset + glyph.bounds.bottom_left, color, glyph.texture_rect.bottom_left)
+
+        offset += SF.vector2f(glyph.advance + text.letter_spacing, 0).to_i
+      end
+    ensure
+      state = chr
+    end
+  end
+
+  def render_text(text : TextData, string : String, **kwargs)
+    va = SF::VertexArray.new(SF::Quads)
+    render_text(text, string, va, **kwargs)
+    va
+  end
+
   def render(vote_cursor, layers, layer, frame : Term, dl, dt)
     Term.case(frame) do
       # Any node can specify the cursor.
@@ -273,15 +457,22 @@ module UIR::Platform::SFML
         continue
       end
 
-      matchpi %[(text caption_string ¦ rest_ color_ l_: (%number i32) t_: (%number i32))] do
-        TextInfo.from(rest) do |info|
-          sf = SF::Text.new(caption.to(String), info.font, info.size)
-          sf.line_spacing = info.leading
-          sf.position = SF.vector2i(l.to(Int32) + dl, t.to(Int32) + dt)
-          sf.color = color?(color) || SF::Color::Black
-          sf.letter_spacing = 1
+      matchpi(
+        %[(text caption_string ¦ rest_ color_ font_string leading_number
+                                 weight_: (%any 100 200 300 400 450 500 600 700 800 900)
+                                 size_: (%number u8)
+                                 final-w: w←(%number +i32)
+                                 final-h: h←(%number i32)
+                                 l_: (%number i32)
+                                 t_: (%number i32))]
+      ) do
+        continue unless path = FontLoader.path?(font.to(String), weight.to(Int32))
 
-          layers.draw(layer, sf)
+        FontLoader.font_at(path) do |font|
+          text = TextData.new(font, size.to(Int32), leading.to(Float32), tracking: 1.0f32)
+
+          sf = render_text(text, caption.to(String), offset: SF.vector2i(l.to(Int32) + dl, t.to(Int32) + dt), color: color?(color) || SF::Color::Black)
+          layers.draw(layer, sf, states: SF::RenderStates.new(text.texture))
         end
       end
 

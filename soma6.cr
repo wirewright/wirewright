@@ -12,16 +12,17 @@ state0 = ML.term <<-WWML
     (g style: "bg-neutral-800 w-max h-content px-2 py-1 rounded-sm"
       (p "Wirewright µsoma" style: "text-neutral-400 text-xs"))
     (g style: "w-max h-content border border-neutral-700 rounded flow-col"
-      (p "Buttons" style: "text-lg text-neutral-300 d-center w-max h-content py-2")
+      (p "Buttons" style: "text-lg text-neutral-300 center w-max h-content py-2")
       ((self rect) style: "w-max h-px bg-neutral-700")
       (g style: "w-max h-content p-2 gap-2"
-        (button style: "bg-neutral-700 hover:bg-blue-500 hover:cursor-pointer rounded-sm px-4 py-2 text-sm text-neutral-50 content font-sans font-medium" id: btn1
-          "Button 1")
-        (button style: "hover:bg-blue-500 hover:cursor-pointer px-2 py-1 text-sm rounded-xs text-neutral-50 border border-neutral-500 hover:border-blue-500 content font-mono font-medium" id: btn2
+        (button "Button 1" id: btn1)
+        (button style: "bg-none hover:bg-blue-500 hover:cursor-pointer px-2 py-1 text-sm rounded-xs text-neutral-50 border border-neutral-500 hover:border-blue-500 content font-mono font-medium" id: btn2
           "Button 2")))))
 WWML
 
 ui = UIR::Reducers.microfold(state0) do |state, drawable, event|
+  # puts ML.display(drawable)
+
   Term.case(event) do
     matchpi %{(motion x_number y_number)} do
       if prev = state[:hovered]?

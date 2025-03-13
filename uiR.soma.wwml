@@ -47,6 +47,32 @@
   {content-w: ($ (value (measure →caption →font →weight →size →leading) width)),
    content-h: ($ (value (measure →caption →font →weight →size →leading) height))})
 
+(backmap
+  (text caption_string ¦ _
+    w_: max
+    h: content
+    max-w_
+    font_string
+    leading_number
+    weight_: (%any 100 200 300 400 450 500 600 700 800 900)
+    size_: (%number u8))
+  {w: content,
+   caption: ($once (wrap →caption →font →weight →size →leading max-w: →max-w))})
+
+(backmap
+  (text caption_string ¦ _
+    w_: max
+    h_: max
+    max-w_
+    max-h_
+    font_string
+    leading_number
+    weight_: (%any 100 200 300 400 450 500 600 700 800 900)
+    size_: (%number u8))
+  {w: content,
+   h: content,
+   caption: ($once (wrap →caption →font →weight →size →leading max-w: →max-w max-h: →max-h))})
+
 ;; NODE: padding
 
 (padding _ ¦ _ -px_ pl⋮ 0 pr⋮ 0) <> {px: ($once (+ →pl →pr))}

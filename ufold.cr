@@ -192,6 +192,10 @@ module Microfold
         ctx.sheet.with(key, a / b)
       end
 
+      matchpi %{(unset)} do
+        ctx.sheet.without(key)
+      end
+
       matchpi %{_symbol}, %{_string}, %{_number}, %{_boolean} do
         ctx.sheet.with(key, value)
       end
@@ -233,8 +237,8 @@ module Microfold
   # `p-[padding]` with attrs `{padding: 3}` will resolve to `p-3`.
   #
   # Sheets serve as sources of styles for units (see `uir`).
-  def sheet(spec : Term::Dict, attrs : Term::Dict, style : String, *, rem = Term[16]) : Term::Dict
-    Term::Dict.build do |sheet|
+  def sheet(spec : Term::Dict, attrs : Term::Dict, style : String, *, rem = Term[16], base = Term[]) : Term::Dict
+    base.transaction do |sheet|
       ctx = SheetContext.new(spec, sheet, attrs, spec[:colors]?.try(&.as_d?).default(Term[]), rem)
 
       style.split(' ', remove_empty: true) do |phrase|
@@ -324,8 +328,26 @@ module Microfold
     Term.of(flow)
   end
 
-  # Appears if at least one of the padding props (such as `pl`, `pt`) is present.
+  # Appears if at least one content delta (`content-dt`, `content-dl`) prop is present.
   # Contains the flow box.
+  private def content_translate_box(ctx : UnitContext, children : Term)
+    dl = ctx.sheet[:"content-dl"]?
+    dt = ctx.sheet[:"content-dt"]?
+
+    if {dl, dt}.none?
+      return flow_box(ctx, children)
+    end
+
+    Term.of(:translate, flow_box(ctx, children),
+      w: ctx.sheet[:w]?,
+      h: ctx.sheet[:h]?,
+      x: dl,
+      y: dt,
+    )
+  end
+
+  # Appears if at least one of the padding props (such as `pl`, `pt`) is present.
+  # Contains the content-translate box.
   private def padding_box(ctx : UnitContext, children : Term)
     pl = ctx.sheet[:pl]?
     pr = ctx.sheet[:pr]?
@@ -333,10 +355,10 @@ module Microfold
     pb = ctx.sheet[:pb]?
 
     if {pl, pr, pt, pb}.none?
-      return flow_box(ctx, children)
+      return content_translate_box(ctx, children)
     end
 
-    Term.of(:padding, flow_box(ctx, children),
+    Term.of(:padding, content_translate_box(ctx, children),
       w: ctx.sheet[:w]?,
       h: ctx.sheet[:h]?,
       pl: pl || 0,
@@ -459,17 +481,7 @@ module Microfold
       return layer_box(ctx, children)
     end
 
-    subctx = ctx
-
-    if dl && !dl.type.number?
-      subctx = subctx.copy_with(sheet: subctx.sheet.with(:w, :content))
-    end
-
-    if dt && !dt.type.number?
-      subctx = subctx.copy_with(sheet: subctx.sheet.with(:h, :content))
-    end
-
-    Term.of(:translate, layer_box(subctx, children),
+    Term.of(:translate, layer_box(ctx, children),
       w: ctx.sheet[:w]?,
       h: ctx.sheet[:h]?,
       x: dl,
@@ -523,7 +535,7 @@ module Microfold
           nodal = sheet(spec, attrs.unsafe_as_d, defaults.to(String), rem: rem)
         end
 
-        sheet = nodal | inherited | sheet(spec, attrs.unsafe_as_d, style.to(String), rem: rem)
+        sheet = sheet(spec, attrs.unsafe_as_d, style.to(String), rem: rem, base: nodal | inherited)
 
         box = translate_box(UnitContext.new(spec, sheet, rem), children)
 
@@ -532,6 +544,8 @@ module Microfold
           {:fr, sheet[:fr]?},
           {:fractions, sheet[:fractions]?},
           {:cursor, sheet[:cursor]?},
+          {:"max-w", sheet[:"max-w"]?},
+          {:"max-h", sheet[:"max-h"]?},
         )
 
         # Attach the rest of attrs.
