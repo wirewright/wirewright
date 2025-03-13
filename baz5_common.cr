@@ -204,7 +204,7 @@ struct ProcRuleset
       {{methodp}}({{ml}}) do |%env|
         {% for icap in icaps %}
           {% unless block.args.any? { |arg| arg.id == icap.id } %}
-            {{icap.id}} = (%env[{{icap.id.symbolize}}]? || raise "case: #{ {{location}} }: missing capture '{{icap.id}}'")
+            {{icap.id.gsub(/-/, "_")}} = (%env[{{icap.id.symbolize}}]? || raise "case: #{ {{location}} }: missing capture '{{icap.id}}'")
           {% end %}
         {% end %}
 
