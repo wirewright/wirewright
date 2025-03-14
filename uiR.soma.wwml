@@ -166,8 +166,10 @@
   <> {l1: ($once (+ →l0 →w0 →gap))}
 
 ;; Sum content-w's of x-stack. Subtract from final-w of x-stack to get leftover-w.
-(%all (x-stack _* ¦ _ fractions: true -leftover-w_ final-w: W_number) (%items Ws {¦ final-w: 0←_number} min: 0))
-  <> {leftover-w: ($ (- →W (sum (flatten →Ws))))}
+(%all (x-stack children_* ¦ _ fractions: true -leftover-w_ gap⋮ 0 final-w: W_number)
+      (%items () {¦ w: content final-w: (%- _)} min: 0)
+      (%items Ws_ {¦ final-w: 0←_number} min: 0))
+  <> {leftover-w: ($ (- →W (sum (flatten →Ws)) (* →gap (- (tally →children) 1))))}
 
 ;; Distribute leftover-w across w: max children.
 (%all (x-stack _* ¦ _ fractions: true leftover-w: W_number fr/sum_number)
@@ -188,14 +190,18 @@
 (y-stack {¦ -t_} _* ¦ _ t: T_number) <> {t: →T}
 (%all (y-stack _* {¦ t: (%- _)} ¦ _ gap⋮ 0) ⟨{¦ t: t0_number final-h: h0_number} {¦ t: (%- _ t1)}⟩)
   <> {t1: ($once (+ →t0 →h0 →gap))}
-(%all (y-stack _* ¦ _ fractions: true -leftover-h_ final-h: H_number) (%items Hs {¦ final-h: 0←_number} min: 0))
-  <> {leftover-h: ($ (- →H (sum (flatten →Hs))))}
+
+(%all (y-stack children_* ¦ _ fractions: true -leftover-h_ gap⋮ 0 final-h: H_number)
+      (%items () {¦ h: content final-h: (%- _)} min: 0)
+      (%items Hs_ {¦ final-h: 0←_number} min: 0))
+  <> {leftover-h: ($ (- →H (sum (flatten →Hs)) (* →gap (- (tally →children) 1))))}
+
 (%all (y-stack _* ¦ _ fractions: true leftover-h: H_number fr/sum_number)
       ⟨{¦ h: max fr_: (%number (whole _) > 0) max-h: (%- _ h)}⟩°)
   <> {h: ($ (// (* →H →fr) →fr/sum))}
 
 ;; Helper for both x-stack and y-stack.
-(%all {¦ -fr/sum_ fractions: true} (%items Frs {¦ fr: 0←(%number (whole _) > 0)}))
+(%all {¦ -fr/sum_ fractions: true} (%items Frs_ {¦ fr: 0←(%number (whole _) > 0)}))
   <> {fr/sum: ($ (sum (flatten →Frs)))}
 
 ;; NODE: z-stack
