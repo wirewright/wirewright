@@ -251,7 +251,7 @@ module Microfold
         when 2
           group, phrase = parts
           next if phrase.empty? # ?!
-          next unless Term::Sym.new(group).in?(attrs)
+          next if attrs[Term::Sym.new(group)]?.in?(nil, Term[false])
         end
 
         sheet1?(ctx, Term::Str.new(phrase))
