@@ -12,6 +12,13 @@
 
 "rounded": "rounded-md"
 
+"leading-none": {leading: 1}
+"leading-tight": {leading: 1.25}
+"leading-snug": {leading: 1.375}
+"leading-normal": {leading: 1.5}
+"leading-relaxed": {leading: 1.625}
+"leading-loose": {leading: 2}
+
 "text-xs": {text-size: (rem 0.75), leading: (/ 1 0.75)}
 "text-sm": {text-size: (rem 0.875), leading: (/ 1.25 0.875)}
 "text-base": {text-size: (rem 1), leading: (/ 1.5 1)}
@@ -164,6 +171,36 @@
 "min-h-5xl": { min-h: (rem 64) }
 "min-h-6xl": { min-h: (rem 72) }
 "min-h-7xl": { min-h: (rem 80) }
+
+(word "max" (+ "max-w" "max-h"))
+
+"max-w-3xs": { max-w: (rem 16) }
+"max-w-2xs": { max-w: (rem 18) }
+"max-w-xs": { max-w: (rem 20) }
+"max-w-sm": { max-w: (rem 24) }
+"max-w-md": { max-w: (rem 28) }
+"max-w-lg": { max-w: (rem 32) }
+"max-w-xl": { max-w: (rem 36) }
+"max-w-2xl": { max-w: (rem 42) }
+"max-w-3xl": { max-w: (rem 48) }
+"max-w-4xl": { max-w: (rem 56) }
+"max-w-5xl": { max-w: (rem 64) }
+"max-w-6xl": { max-w: (rem 72) }
+"max-w-7xl": { max-w: (rem 80) }
+
+"max-h-3xs": { max-h: (rem 16) }
+"max-h-2xs": { max-h: (rem 18) }
+"max-h-xs": { max-h: (rem 20) }
+"max-h-sm": { max-h: (rem 24) }
+"max-h-md": { max-h: (rem 28) }
+"max-h-lg": { max-h: (rem 32) }
+"max-h-xl": { max-h: (rem 36) }
+"max-h-2xl": { max-h: (rem 42) }
+"max-h-3xl": { max-h: (rem 48) }
+"max-h-4xl": { max-h: (rem 56) }
+"max-h-5xl": { max-h: (rem 64) }
+"max-h-6xl": { max-h: (rem 72) }
+"max-h-7xl": { max-h: (rem 80) }
 
 colors: {
   "red-50": (oklch 0.971 0.013 17.38),
@@ -414,6 +451,6 @@ colors: {
 
 defaults: {
   p: "content font-sans text-base text-black font-text",
-  code: "content font-mono text-base text-black font-normal",
+  code: "content font-mono text-base text-black font-text",
   button: "bg-neutral-700 hover:bg-blue-500 hover:cursor-pointer rounded-sm px-4 py-2 center text-sm text-neutral-50 content font-sans font-medium",
 }
