@@ -175,7 +175,7 @@ struct UIR::Platform::SFML::TextCursor
 
     # Path 2: The entire word cannot be committed. See if soft break can
     # be committed followed by the entire word (i.e. on its own line).
-    if cursor0.position.y > 0 && (cursor1 = commit?(ctx, cursor0, '\n', word))
+    if (cursor0.position.x > 0 || cursor0.position.y > 0) && (cursor1 = commit?(ctx, cursor0, '\n', word))
       io << '\n' << word
       return cursor1
     end
