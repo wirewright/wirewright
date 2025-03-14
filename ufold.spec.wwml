@@ -414,5 +414,6 @@ colors: {
 
 defaults: {
   p: "content font-sans text-base text-black font-text",
+  code: "content font-mono text-base text-black font-normal",
   button: "bg-neutral-700 hover:bg-blue-500 hover:cursor-pointer rounded-sm px-4 py-2 center text-sm text-neutral-50 content font-sans font-medium",
 }
