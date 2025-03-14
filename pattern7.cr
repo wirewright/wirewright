@@ -408,8 +408,8 @@ module ::Ww::M1::Operator
 
   defcase ScanFirst, needle : Slice(Any)
   defcase ScanSource, needle : Slice(Any)
-  defcase ScanAllIsolated, capture : Term, needle : Slice(Any), min : UInt8, max : UInt8
-  defcase ScanAll, capture : Term, needle : Slice(Any), selector : Set(Term), exterior : Set(Term), min : UInt8, max : UInt8
+  defcase ScanAllIsolated, successor : Any, needle : Slice(Any), min : UInt8, max : UInt8
+  defcase ScanAll, successor : Any, needle : Slice(Any), selector : Set(Term), exterior : Set(Term), min : UInt8, max : UInt8
 
   defcase Value, capture : Term, tail : Any
   defcase NegativeValue, capture : Term
@@ -419,14 +419,14 @@ module ::Ww::M1::Operator
 
   defcase DfsFirst, needle : Any, part : Search::Part, depth0 : Bool
   defcase DfsSource, needle : Any, part : Search::Part, depth0 : Bool
-  defcase DfsAllIsolated, capture : Term, needle : Any, part : Search::Part, min : UInt8, max : UInt8, depth0 : Bool
-  defcase DfsAll, capture : Term, needle : Any, selector : Set(Term), exterior : Set(Term), part : Search::Part, min : UInt8, max : UInt8, depth0 : Bool
+  defcase DfsAllIsolated, successor : Any, needle : Any, part : Search::Part, min : UInt8, max : UInt8, depth0 : Bool
+  defcase DfsAll, successor : Any, needle : Any, selector : Set(Term), exterior : Set(Term), part : Search::Part, min : UInt8, max : UInt8, depth0 : Bool
 
   alias Bfs = BfsFirst | BfsAllIsolated | BfsAll
 
   defcase BfsFirst, needle : Any, part : Search::Part, depth0 : Bool
-  defcase BfsAllIsolated, capture : Term, needle : Any, part : Search::Part, min : UInt8, max : UInt8, depth0 : Bool
-  defcase BfsAll, capture : Term, needle : Any, selector : Set(Term), exterior : Set(Term), part : Search::Part, min : UInt8, max : UInt8, depth0 : Bool
+  defcase BfsAllIsolated, successor : Any, needle : Any, part : Search::Part, min : UInt8, max : UInt8, depth0 : Bool
+  defcase BfsAll, successor : Any, needle : Any, selector : Set(Term), exterior : Set(Term), part : Search::Part, min : UInt8, max : UInt8, depth0 : Bool
 
   alias Entries = EntriesFirst | EntriesSource | EntriesAllIsolated | EntriesAll
 
@@ -442,13 +442,13 @@ module ::Ww::M1::Operator
     end
   end
 
-  defcase EntriesAllIsolated, capture : Term, kop : Any, vop : Any, min : UInt8, max : UInt8 do
+  defcase EntriesAllIsolated, successor : Any, kop : Any, vop : Any, min : UInt8, max : UInt8 do
     def needle
       [kop, vop]
     end
   end
 
-  defcase EntriesAll, capture : Term, kop : Any, vop : Any, exterior : Set(Term), selector : Set(Term), min : UInt8, max : UInt8 do
+  defcase EntriesAll, successor : Any, kop : Any, vop : Any, exterior : Set(Term), selector : Set(Term), min : UInt8, max : UInt8 do
     def needle
       [kop, vop]
     end
@@ -867,11 +867,9 @@ module ::Ww::M1::Operator
       return Fb::Mismatch.new(behind1.env)
     end
 
-    unless behind2 = behind1.propose?(op.capture, Term.of(captures))
-      return Fb::Mismatch.new(behind1.env.with(op.capture, Term.of(captures)))
-    end
+    ahead1 = Ahead::Goto.new(kp0, Ahead.stackptr(ahead0))
 
-    Ahead.tr(behind2.goto(kp0), ahead0)
+    match(behind1.backpathless, op.successor, Term.of(captures), ahead1)
   end
 
   def match(behind0, op : All, matchee : Term, ahead0)
@@ -907,22 +905,25 @@ module ::Ww::M1::Operator
     # the domains of each exterior capture.
     op.exterior.each do |capture|
       domain1 = Env.domain(envs, capture)
+
+      # Do not restrict domain if min=0, otherwise we'd have restricted it
+      # to nevermatch (the empty domain).
+      next if domain1.empty? && op.min.zero?
+
       behind1 = behind1.one_of(capture, domain1)
     end
 
     captures = Env.captures(envs, selector: op.selector)
 
-    unless behind2 = behind1.propose?(op.capture, Term.of(captures))
-      return Fb::Mismatch.new(behind0.env.with(op.capture, Term.of(captures)))
-    end
-
-    fb = Ahead.tr(behind2, ahead0)
+    fb = Ahead.tr(behind1, ahead0)
 
     case fb
     in Fb::Match
       # Prune all captures that are inconsistent with exterior assignments
       # in each env.
-      consistent = fb.envs.compact_map do |exterior|
+      consistent = [] of Term::Dict
+
+      fb.envs.each do |exterior|
         pruned = Term::Dict.build do |commit|
           # Let's not violate captures order!
           captures.items.each do |interior|
@@ -937,13 +938,10 @@ module ::Ww::M1::Operator
         next if pruned.empty? && !captures.empty?
         next if pruned.size < op.min || pruned.size > op.max > 0
 
-        # We were under control of op.capture, noone should've overridden it
-        # due to unification (even if they did, they've overridden it to the same
-        # value so that wouldn't matter)
-        exterior.with(op.capture, pruned)
+        Env.append(consistent, feedback(exterior, op.successor, Term.of(pruned)))
       end
 
-      Env.feedback(consistent, fallback: behind2.env)
+      Env.feedback(consistent, fallback: behind1.env)
     in Fb::Mismatch, Fb::Interrupt
       fb
     end
@@ -2474,11 +2472,11 @@ module ::Ww::M1
           end
         end
 
-        matchpi %[(%items capture_ _ _* ¦ opts_)], cue: :"%items" do |opts|
+        matchpi %[(%items successor_ _ _* ¦ opts_)], cue: :"%items" do |opts|
           continue unless opts = Schemas::Items.enriched?(opts)
 
           opts.transaction do |commit|
-            commit << :"%items/all" << {:"%capture", capture}
+            commit << :"%items/all" << pattern(ctx, successor)
             commit.concat(pattern.items.move(2)) { |item| pattern(ctx, item) }
           end
         end
@@ -2491,12 +2489,12 @@ module ::Ww::M1
           {:"%entries/source", pattern(ctx, k), pattern(ctx, v)}
         end
 
-        matchpi %[(%entries capture_ k_ v_ ¦ opts_)], cue: :"%entries" do |opts|
+        matchpi %[(%entries successor_ k_ v_ ¦ opts_)], cue: :"%entries" do |opts|
           continue unless opts = Schemas::Entries.enriched?(opts)
 
           opts.morph(
             {0, :"%entries/all"},
-            {1, {:"%capture", capture}},
+            {1, pattern(ctx, successor)},
             {2, pattern(ctx, k)},
             {3, pattern(ctx, v)},
           )
@@ -2514,12 +2512,12 @@ module ::Ww::M1
           opts.morph({0, :"%leaves/source"}, {1, pattern(ctx, body)})
         end
 
-        matchpi %[(%leaves capture_ body_ ¦ opts_)], cue: :"%leaves" do |opts|
+        matchpi %[(%leaves successor_ body_ ¦ opts_)], cue: :"%leaves" do |opts|
           continue unless opts = Schemas::LeafBounded.enriched?(opts)
 
           opts.morph(
             {0, :"%leaves/all"},
-            {1, {:"%capture", capture}},
+            {1, pattern(ctx, successor)},
             {2, pattern(ctx, body)},
           )
         end
@@ -3798,12 +3796,7 @@ module ::Ww::M1
         Operator::ScanSource.new(sequence.to_readonly_slice { |item| operator(item, captures).as(Operator::Any) })
       end
 
-      match(
-        {:"%partition",
-         {:"%items/all", {:"%capture", :capture_}, :_, :"_*"},
-         {min: :min0_, max: :max0_}},
-        cue: {:"%items/all", :"%capture"}
-      ) do |capture, min0, max0|
+      matchpi %{(%items/all successor_ _ _* ¦ min: min0_ max: max0_)}, cue: :"%items/all" do
         min = min0.to(UInt8)
         max = max0 == SYM_INF ? 0u8 : max0.to(UInt8)
 
@@ -3818,18 +3811,13 @@ module ::Ww::M1
         needle = sequence.to_readonly_slice { |item| operator(item, captures).as(Operator::Any) }
 
         if exterior.empty?
-          Operator::ScanAllIsolated.new(capture, needle, min, max)
+          Operator::ScanAllIsolated.new(operator(successor, captures), needle, min, max)
         else
-          Operator::ScanAll.new(capture, needle, inner.set, exterior.set, min, max)
+          Operator::ScanAll.new(operator(successor, captures), needle, inner.set, exterior.set, min, max)
         end
       end
 
-      match(
-        {:"%partition",
-         {:"%entries/all", {:"%capture", :capture_}, :k_, :v_},
-         {min: :min0_, max: :max0_}},
-        cue: {:"%entries/all", :"%capture"}
-      ) do |capture, k, v, min0, max0|
+      matchpi %{(%entries/all successor_ k_ v_ ¦ min: min0_ max: max0_)}, cue: :"%entries/all" do
         min = min0.to(UInt8)
         max = max0 == SYM_INF ? 0u8 : max0.to(UInt8)
 
@@ -3842,13 +3830,13 @@ module ::Ww::M1
         exterior = inner & (outer - inner)
 
         if exterior.empty?
-          Operator::EntriesAllIsolated.new(capture,
+          Operator::EntriesAllIsolated.new(operator(successor, captures),
             kop: operator(k, captures),
             vop: operator(v, captures),
             min: min,
             max: max)
         else
-          Operator::EntriesAll.new(capture,
+          Operator::EntriesAll.new(operator(successor, captures),
             kop: operator(k, captures),
             vop: operator(v, captures),
             exterior: exterior.set,
@@ -3885,7 +3873,7 @@ module ::Ww::M1
         Operator::DfsSource.new(operator(body, captures), part: search_part(part), depth0: depth0.true?)
       end
 
-      match(Term[:"%leaves/all", {:"%capture", :capture_}, :body_, in: :part_, min: :min_, max: :max_, order: :dfs, self: :depth0_boolean], cue: :"%leaves/all") do |capture, body, part, min, max, depth0|
+      matchpi %{(%leaves/all successor_ body_ ¦ in: part_ min: min_ max: max_ order: dfs self: depth0_boolean)}, cue: {:"%leaves/all", :dfs} do |min, max|
         outer = captures
         inner = Bag(Term).new
 
@@ -3898,13 +3886,13 @@ module ::Ww::M1
         max = max == SYM_INF ? 0u8 : max.to(UInt8)
 
         if exterior.empty?
-          Operator::DfsAllIsolated.new(capture, operator(body, captures), search_part(part), min, max, depth0.true?)
+          Operator::DfsAllIsolated.new(operator(successor, captures), operator(body, captures), search_part(part), min, max, depth0.true?)
         else
-          Operator::DfsAll.new(capture, operator(body, captures), inner.set, exterior.set, search_part(part), min, max, depth0.true?)
+          Operator::DfsAll.new(operator(successor, captures), operator(body, captures), inner.set, exterior.set, search_part(part), min, max, depth0.true?)
         end
       end
 
-      match(Term[:"%leaves/all", {:"%capture", :capture_}, :body_, in: :part_, min: :min_, max: :max_, order: :bfs, self: :depth0_boolean], cue: :"%leaves/all") do |capture, body, part, min, max, depth0|
+      matchpi %{(%leaves/all successor_ body_ in: part_ min: min_ max: max_ order: bfs self: depth0_boolean)}, cue: {:"%leaves/all", :bfs} do |min, max|
         outer = captures
         inner = Bag(Term).new
 
@@ -3917,9 +3905,9 @@ module ::Ww::M1
         max = max == SYM_INF ? 0u8 : max.to(UInt8)
 
         if exterior.empty?
-          Operator::BfsAllIsolated.new(capture, operator(body, captures), search_part(part), min, max, depth0.true?)
+          Operator::BfsAllIsolated.new(operator(successor, captures), operator(body, captures), search_part(part), min, max, depth0.true?)
         else
-          Operator::BfsAll.new(capture, operator(body, captures), inner.set, exterior.set, search_part(part), min, max, depth0.true?)
+          Operator::BfsAll.new(operator(successor, captures), operator(body, captures), inner.set, exterior.set, search_part(part), min, max, depth0.true?)
         end
       end
 

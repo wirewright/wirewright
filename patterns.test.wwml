@@ -572,7 +572,7 @@
        {x: c, xs: (a b c)})
     (- ()))
 
-  (pattern (%all (%items xs x_) ys_)
+  (pattern (%all (%items xs_ x_) ys_)
     (= (a) {xs: ({x: a}), ys: (a)})
     (= (a b c) {xs: ({x: a} {x: b} {x: c}), ys: (a b c)})
     (- ()))
@@ -628,9 +628,9 @@
        {k: b, v: 3}
        {k: b, v: 4}))
 
-  (pattern (%all (%items decls decl k_)
-                 (%items sets set k_ v_)
-                 (%items gets get k_))
+  (pattern (%all (%items decls_ decl k_)
+                 (%items sets_ set k_ v_)
+                 (%items gets_ get k_))
     (= (decl a
         decl b
         set a 1
@@ -643,7 +643,7 @@
        sets: ({k: a, v: 1} {k: a, v: 2} {k: a, v: 5})
        gets: ({k: a})}))
 
-  (pattern (%all (%item° decl k_) (%items stmts set k_ v_))
+  (pattern (%all (%item° decl k_) (%items stmts_ set k_ v_))
     (= (decl a
         decl b
         set a 1
@@ -653,7 +653,7 @@
        {k: a, stmts: ({k: a, v: 1} {k: a, v: 3})}
        {k: b, stmts: ({k: b, v: 2})}))
 
-  (pattern (%all (%item° decl k_) (%items stmts set k_ v_ min: 2))
+  (pattern (%all (%item° decl k_) (%items stmts_ set k_ v_ min: 2))
     (= (decl a
         decl b
         set a 1
@@ -663,7 +663,7 @@
        {k: a, stmts: ({k: a, v: 1} {k: a, v: 3})}))
 
   ;; Order must not matter!
-  (pattern (%all (%items stmts set k_ v_) (%item° decl k_))
+  (pattern (%all (%items stmts_ set k_ v_) (%item° decl k_))
     (= (decl a
         decl b
         set a 1
@@ -673,7 +673,7 @@
        {k: a, stmts: ({k: a, v: 1} {k: a, v: 3})}
        {k: b, stmts: ({k: b, v: 2})}))
 
-  (pattern (%all (%items stmts set k_ v_ min: 2) (%item° decl k_))
+  (pattern (%all (%items stmts_ set k_ v_ min: 2) (%item° decl k_))
     (= (decl a
         decl b
         set a 1
@@ -843,9 +843,9 @@
   ;; this is expected or not, and anyway, I don't think this will influence
   ;; what it matches and does not; but will influence **how** it does that,
   ;; and to answer in two words, *very* slowly.
-  (pattern ((%any° (%items xs foo k_ v_)
-                   (%items xs bar k_ v_)
-                   (%items xs baz k_ (qux v_))) (%items ks k_))
+  (pattern ((%any° (%items xs_ foo k_ v_)
+                   (%items xs_ bar k_ v_)
+                   (%items xs_ baz k_ (qux v_))) (%items ks_ k_))
     (= ((foo a 1
          bar b 2
          baz c (qux 3)) (a b c))
@@ -1967,23 +1967,23 @@
 ;; %items
 (group
   ;; %items: unconstrained
-  (pattern (%items xs x_number)
+  (pattern (%items xs_ x_number)
     (= (x 1 2 y 3 4 5) {xs: ({x: 1} {x: 2} {x: 3} {x: 4} {x: 5})}))
 
-  (pattern (%items xs x_ y_)
+  (pattern (%items xs_ x_ y_)
     (= (a b) {xs: ({x: a, y: b})})
     (= (1 2 3 4 5) {xs: ({x: 1, y: 2} {x: 3, y: 4})})
     (= (1 2 3 4 5 6) {xs: ({x: 1, y: 2} {x: 3, y: 4} {x: 5, y: 6})})
     (- () (1)))
 
-  (pattern (%items xs x_ y_ min: 0)
+  (pattern (%items xs_ x_ y_ min: 0)
     (= () {xs: ()})
     (= (1) {xs: ()})
     (= (a b) {xs: ({x: a, y: b})})
     (= (1 2 3 4 5) {xs: ({x: 1, y: 2} {x: 3, y: 4})})
     (= (1 2 3 4 5 6) {xs: ({x: 1, y: 2} {x: 3, y: 4} {x: 5, y: 6})}))
 
-  (pattern (%items xs x_ y_ min: 0 max: 2)
+  (pattern (%items xs_ x_ y_ min: 0 max: 2)
     (= () {xs: ()})
     (= (1) {xs: ()})
     (= (a b) {xs: ({x: a, y: b})})
@@ -1993,23 +1993,71 @@
   ;; %items: constrained
   ;;
   ;; %items must restrict each other regardless of the order
-  (pattern ((%items xs x_symbol) (%items ys x_ y_number))
+  (pattern ((%items xs_ x_symbol) (%items ys_ x_ y_number))
     (= ((a 1 b) (c 3 a 100 b "hello" b 200 a 300))
       {xs: ({x: a} {x: b})
         ys: ({x: a, y: 100} {x: b, y: 200} {x: a, y: 300})}))
 
-  (pattern ((%items ys x_ y_number) (%items xs x_symbol))
+  (pattern ((%items ys_ x_ y_number) (%items xs_ x_symbol))
     (= ((c 3 a 100 b "hello" b 200 a 300) (a 1 b))
       {xs: ({x: a} {x: b})
         ys: ({x: a, y: 100} {x: b, y: 200} {x: a, y: 300})}))
 
   ;; %items: "all swaps" example
-  (pattern ((%items xs x_ y_) (%items ys y_ x_))
+  (pattern ((%items xs_ x_ y_) (%items ys_ y_ x_))
     (= ((1 2) (2 1)) {xs: ({x: 1, y: 2}), ys: ({x: 1, y: 2})})
     (= ((1 2 3 4 5) (6 7 2 1 5 3 4 3))
        {xs: ({x: 1, y: 2} {x: 3, y: 4})
         ys: ({x: 1, y: 2} {x: 3, y: 4})})
-    (- (() ()) ((1 2) (3 4)))))
+    (- (() ()) ((1 2) (3 4))))
+
+  (pattern ((%items () n_ min: 0) n_)
+    (- ((1 2 3 2 4) 1) ((1 2 3 2 4) 2) ((1 2 3 2 4) 3) ((1 2 3 2 4) 4))
+    (= ((1 2 3 2 4) 5) {n: 5})
+    (= ((1 2 3 2 4) x) {n: x}))
+
+  (pattern (%items () _ min: 0)
+    (= () {})
+    (= (x: 100) {})
+    (= (x: 100 y: 200) {})
+    (- (a) (a b c) (a x: 100) (a b c d)))
+
+  (pattern ((%items Bs_ {¦ a_ b_}) b_)
+    (= (({a: 100, b: 200} a b {a: 123, b: 456} c {a: 100, b: 200}) 200)
+       {Bs: ({a: 100, b: 200} {a: 100, b: 200}), b: 200}))
+
+  (pattern ((%items ({¦ a_} {¦ a_}) {¦ a_ b_}) b_)
+    (= (({a: 100, b: 200} a b {a: 123, b: 456} c {a: 100, b: 200}) 200)
+       {a: 100, b: 200})
+    ;; A mismatch
+    (- (({a: 100, b: 200} a b {a: 123, b: 456} c {a: 456, b: 200}) 200))
+    ;; B mismatch
+    (- (({a: 100, b: 200} a b {a: 123, b: 456} c {a: 100, b: 200}) absent))
+    ;; Less than two matches
+    (- (({a: 100, b: 200} a b {a: 123, b: 456} c {a: 100, b: 300}) 200))
+    ;; More than two matches
+    (- (({a: 100, b: 200} a b {a: 123, b: 456} c {a: 100, b: 200} {a: 100, b: 200}) 200)))
+
+  (pattern ((%items Q←((%past {¦ a: b_})) (¦ rest_ a_)) b_)
+    (= (({a: 100, qux: 1} {b: 200} qux) 100)
+       {Q: ({a: 100, rest: {qux: 1}}), b: 100})
+    (= (({a: 100, qux: 1} {b: 200} qux {a: 100, qyx: 2}) 100)
+       {Q: ({a: 100, rest: {qux: 1}} {a: 100, rest: {qyx: 2}}), b: 100})
+    (= (({a: 100, qux: 1} {b: 200} qux {a: 100, qyx: 2} {a: 100, quz: 3}) 100)
+       {Q: ({a: 100, rest: {qux: 1}} {a: 100, rest: {qyx: 2}} {a: 100, rest: {quz: 3}}), b: 100})
+    (- (() 100)
+       (({b: 200} qux) 100)
+       (({a: 100, qux: 1} {b: 200} qux {a: 200, qyx: 2}) 100)))
+
+  (pattern ((%items Q←((%past {¦ a: b_})) (¦ rest_ a_) max: 2) b_)
+    (= (({a: 100, qux: 1} {b: 200} qux) 100)
+       {Q: ({a: 100, rest: {qux: 1}}), b: 100})
+    (= (({a: 100, qux: 1} {b: 200} qux {a: 100, qyx: 2}) 100)
+       {Q: ({a: 100, rest: {qux: 1}} {a: 100, rest: {qyx: 2}}), b: 100})
+    (- (() 100)
+       (({b: 200} qux) 100)
+       (({a: 100, qux: 1} {b: 200} qux {a: 200, qyx: 2}) 100)
+       (({a: 100, qux: 1} {b: 200} qux {a: 100, qyx: 2} {a: 100, quz: 3}) 100))))
 
 ;; pair: required
 (group
@@ -2222,14 +2270,14 @@
 ;; %leaf all
 (group
   ;; %leaf all dfs
-  (pattern (%leaves xs x_symbol)
+  (pattern (%leaves xs_ x_symbol)
     (= (((1 2) a (4 5) b (quux)) ((foo 7) bar (8) (baz)) (boo) a ((9) (10 11) ((12))))
        {xs: ({x: a} {x: b}
              {x: quux} {x: foo} {x: bar}
              {x: baz} {x: boo} {x: a})}))
 
   ;; ditto
-  (pattern (%leaves xs x_symbol order: dfs)
+  (pattern (%leaves xs_ x_symbol order: dfs)
     (= (((1 2) a (4 5) b (quux)) ((foo 7) bar (8) (baz)) (boo) a ((9) (10 11) ((12))))
        {xs: ({x: a}
              {x: b}
@@ -2241,7 +2289,7 @@
              {x: a})}))
 
   ;; %leaves all bfs
-  (pattern (%leaves xs x_symbol order: bfs)
+  (pattern (%leaves xs_ x_symbol order: bfs)
     (= (((1 2) a (4 5) b (quux)) ((foo 7) bar (8) (baz)) (boo) a ((9) (10 11) ((12))))
        {xs: ({x: a}
              {x: a}
@@ -2253,20 +2301,20 @@
              {x: baz})})))
 
 ;; %entries
-(pattern (%entries xs k_ v_symbol min: 0)
+(pattern (%entries xs_ k_ v_symbol min: 0)
   (= () {xs: ()})
   (= (1 2 3) {xs: ()})
   (= (1 2 x: 3 y : 4) {xs: ()})
   (= (+ 1 x: 100 y: 200 z: xyzzy)
      {xs: ({k: 0, v: +} {k: z, v: xyzzy})}))
 
-(pattern (%entries xs k_ v_symbol)
+(pattern (%entries xs_ k_ v_symbol)
   (= (+ 1 x: 100 y: 200 z: xyzzy)
      {xs: ({k: 0, v: +} {k: z, v: xyzzy})})
   (- () (1 2 3) (1 2 x: 3 y: 4)))
 
 ;; Match all ks in arg0 for which a kv pair exists in arg1 whose v is a symbol
-(pattern ((%items ks k_) (%entries sub k_ v_symbol))
+(pattern ((%items ks_ k_) (%entries sub_ k_ v_symbol))
   ;; We have to use subset here since the order is unspecified. It is deterministic
   ;; but unspecified, in other words, an implementation detail; and it is not a good
   ;; idea (as I've learned) to test implementation details, because they tend to change.
@@ -3192,19 +3240,19 @@
 ;; Similarly with %items, %leaves, etc.
 
 ;; It makes no sense to set %items accumulator
-(backmap ((%items xs x_) {xs: (1 2 3)})
+(backmap ((%items xs_ x_) {xs: (1 2 3)})
   (= (a) (a))
   (= (a b c) (a b c)))
   ;; etc...
 
 ;; Items interior is visited but cannot be referred to
-(backmap ((%items xs x_) {x: seen})
+(backmap ((%items xs_ x_) {x: seen})
   (= (a) (seen))
   (= (a b c) (seen seen seen)))
   ;; etc...
 
   ;; Items exterior is visited & settable
-(backmap (((%items xs x_) x_) {x: (seen ↓x)})
+(backmap (((%items xs_ x_) x_) {x: (seen ↓x)})
   (= ((a) a) (((seen a)) (seen a)))
   (= ((a a a) a) (((seen a) (seen a) (seen a)) (seen a))))
   ;; etc...
@@ -3359,7 +3407,7 @@
            {x: ((pair 1) value)}
            {x: ((pair 2) value)})}))
 
-(pattern (%items xs (%all x_symbol (%keypath path)))
+(pattern (%items xs_ (%all x_symbol (%keypath path)))
   (= (a 1 2 b 3 c)
      {xs: ({x: a, path: ((pair 0) value)}
            {x: b, path: ((pair 3) value)}
@@ -3604,16 +3652,16 @@
   (of (qux a: x b: (+ y_dict z_string)) min: 2)
   (of (qux (xyzzy) a: ((+ a b_) c_ d_) b: (foo_ bar_)) min: 3)
   (of (qux (xyzzy) a: ((+ a b_number) c_symbol d_string) b: (foo_boolean bar_string)) min: 3 max: 3)
-  (of (%item x_) (%item° x_) (%items xs x_) min: 1)
-  (of (%item x_number) (%item° x_number) (%items xs x_number) min: 1 max: 1)
+  (of (%item x_) (%item° x_) (%items xs_ x_) min: 1)
+  (of (%item x_number) (%item° x_number) (%items xs_ x_number) min: 1 max: 1)
   (of (%item (x_number) ((y_number))) min: 3 max: 3)
   (of (%item (x_) ((y_number))) min: 3)
   (of (%item (x_number) ((y_))) min: 3)
   (of (%item (x_) ((y_))) min: 3)
-  (of (%item (+ a_ b_)) (%item° (+ a_ b_)) (%items xs (+ a_ b_)) min: 2)
+  (of (%item (+ a_ b_)) (%item° (+ a_ b_)) (%items xs_ (+ a_ b_)) min: 2)
   (of (%item (+ a_number b_number))
       (%item° (+ a_number b_number))
-      (%items xs (+ a_number b_number))
+      (%items xs_ (+ a_number b_number))
       min: 2 max: 2)
   (of @x @x_ @x_string @x_symbol @x_number min: 1 max: 1)
   (of (qux a_ ¦ {z: (((z_number))), a: 1, b: ()} x: () y: (())) min: 4)
@@ -3643,28 +3691,28 @@
   (of (%value k v_) (%-value k) (%-value k v) min: 1)
   (of (%value k v_number) (%-value k) (%-value k v) min: 1)
   ;; Similarly for %entry
-  (of (%entry k_ v_) (%entry° k_ v_) (%entries xs k_ v_) min: 1)
-  (of (%entry k_ (v_)) (%entry° k_ (v_)) (%entries xs k_ (v_)) min: 2)
-  (of (%entry k_ (qux (v_))) (%entry° k_ (qux (v_))) (%entries xs k_ (qux (v_))) min: 3)
+  (of (%entry k_ v_) (%entry° k_ v_) (%entries xs_ k_ v_) min: 1)
+  (of (%entry k_ (v_)) (%entry° k_ (v_)) (%entries xs_ k_ (v_)) min: 2)
+  (of (%entry k_ (qux (v_))) (%entry° k_ (qux (v_))) (%entries xs_ k_ (qux (v_))) min: 3)
   ;; Key has no effect on depth
   (of (%entry ((foo a_) b_) v_)
       (%entry° ((foo a_) b_) v_)
-      (%entries xs ((foo a_) b_) v_)
+      (%entries xs_ ((foo a_) b_) v_)
       min: 1)
   ;; %leaf invalidates max depth
-  (of (%leaf a_) (%leaf° a_) (%leaves xs a_) min: 1)
-  (of (%leaf a_ in: keys) (%leaf° a_ in: keys) (%leaves xs a_ in: keys) min: 0)
-  (of (%leaf a_ self: true) (%leaf° a_ self: true) (%leaves xs a_ self: true) min: 0)
-  (of (%leaf a_number) (%leaf° a_number) (%leaves xs a_number) min: 1)
-  (of (%leaf (a_)) (%leaf° (a_)) (%leaves xs (a_)) min: 2)
-  (of (%leaf (a_) self: true) (%leaf° (a_) self: true) (%leaves xs (a_) self: true) min: 1)
+  (of (%leaf a_) (%leaf° a_) (%leaves xs_ a_) min: 1)
+  (of (%leaf a_ in: keys) (%leaf° a_ in: keys) (%leaves xs_ a_ in: keys) min: 0)
+  (of (%leaf a_ self: true) (%leaf° a_ self: true) (%leaves xs_ a_ self: true) min: 0)
+  (of (%leaf a_number) (%leaf° a_number) (%leaves xs_ a_number) min: 1)
+  (of (%leaf (a_)) (%leaf° (a_)) (%leaves xs_ (a_)) min: 2)
+  (of (%leaf (a_) self: true) (%leaf° (a_) self: true) (%leaves xs_ (a_) self: true) min: 1)
   (of (%leaf (((a_) _*) _*))
       (%leaf° (((a_) _*) _*))
-      (%leaves xs (((a_) _*) _*))
+      (%leaves xs_ (((a_) _*) _*))
       min: 4)
   (of (%leaf (((a_) _*) _*) self: true)
       (%leaf° (((a_) _*) _*) self: true)
-      (%leaves xs (((a_) _*) _*) self: true)
+      (%leaves xs_ (((a_) _*) _*) self: true)
       min: 3)
   ;; %new invalidates max depth
   (of (%new a_) min: 0)
