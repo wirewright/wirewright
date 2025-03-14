@@ -308,6 +308,7 @@ module Microfold
       commit.with(:gap, ctx.sheet[:gap]?)
       commit.with(:w, ctx.sheet[:w]?)
       commit.with(:h, ctx.sheet[:h]?)
+      commit.with(:fractions, ctx.sheet[:fractions]?)
 
       case ctx.sheet[:flow]?
       when Term.of(:col)
@@ -542,7 +543,6 @@ module Microfold
         # Attach toplevel props to the box.
         box = box.morph(
           {:fr, sheet[:fr]?},
-          {:fractions, sheet[:fractions]?},
           {:cursor, sheet[:cursor]?},
           {:"max-w", sheet[:"max-w"]?},
           {:"max-h", sheet[:"max-h"]?},
