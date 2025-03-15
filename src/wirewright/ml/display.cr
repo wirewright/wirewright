@@ -1,6 +1,11 @@
 @[Flags]
 enum Ww::ML::Style : UInt8
   HiddenMeta
+  Indent2
+
+  def indent
+    indent2? ? 2 : 1
+  end
 end
 
 module Ww::ML::Formatter
@@ -18,14 +23,14 @@ module Ww::ML::Formatter
       end
 
       matchpi %[(¦ _)] do
-        pp.group(1, "{", "}") do
+        pp.group(style.indent, "{", "}") do
           index = 0
           term.ee.each do |k, v|
             next if style.hidden_meta? && ML.meta?(k)
             pp.comma if index > 0
             format(pp, k, style)
             pp.text(":")
-            pp.group(1) do
+            pp.group(style.indent) do
               pp.breakable
               format(pp, v, style)
             end
@@ -35,7 +40,7 @@ module Ww::ML::Formatter
       end
 
       matchpi %[(_* ¦)] do
-        pp.group(1, "(", ")") do
+        pp.group(style.indent, "(", ")") do
           term.ie.each_with_index do |item, index|
             pp.breakable if index > 0
             format(pp, item, style)
@@ -44,7 +49,7 @@ module Ww::ML::Formatter
       end
 
       matchpi %[_dict] do
-        pp.group(1, "(", ")") do
+        pp.group(style.indent, "(", ")") do
           term.ie.each_with_index do |item, index|
             pp.breakable if index > 0
             format(pp, item, style)
@@ -54,7 +59,7 @@ module Ww::ML::Formatter
             pp.breakable
             format(pp, k, style)
             pp.text(":")
-            pp.group(1) do
+            pp.group(style.indent) do
               pp.breakable
               format(pp, v, style)
             end
