@@ -180,6 +180,12 @@
       ⟨{¦ w: max fr_: (%number (whole _) > 0) max-w: (%- _ w)}⟩°)
   <> {w: ($ (// (* →W →fr) →fr/sum))}
 
+;; If x-stack child has w: max but x-stack does not have fractions: true, we
+;; force the child to become w: content. Otherwise we risk not drawing the child
+;; at all, which is worse than drawing innaccurately.
+(%all (x-stack _* ¦ _ fractions: (%- _)) ⟨{¦ w_: max max-w: (%- _)}⟩°)
+  <> {w: content}
+
 ;; NODE: y-stack
 ;;
 ;; The same as x-stack minus the occasional W<->H or L<->T swap. This can
@@ -203,6 +209,9 @@
 (%all (y-stack _* ¦ _ fractions: true leftover-h: H_number fr/sum_number)
       ⟨{¦ h: max fr_: (%number (whole _) > 0) max-h: (%- _ h)}⟩°)
   <> {h: ($ (// (* →H →fr) →fr/sum))}
+
+(%all (y-stack _* ¦ _ fractions: (%- _)) ⟨{¦ h_: max max-h: (%- _)}⟩°)
+  <> {h: content}
 
 ;; Helper for both x-stack and y-stack.
 (%all {¦ -fr/sum_ fractions: true} (%items Frs_ {¦ fr: 0←(%number (whole _) > 0)}))
