@@ -104,6 +104,10 @@
 
 ;; NODE: translate
 
+;; Propagate l/t if we do not have x/y defined.
+(translate {¦ -l_} ¦ _ x: (%- _) l: L_number) <> {l: →L}
+(translate {¦ -t_} ¦ _ y: (%- _) t: T_number) <> {t: →T}
+
 (translate {¦ -l_} ¦ _ l: L_number x_number) <> {l: ($once (+ →L →x))}
 (translate {¦ -t_} ¦ _ t: T_number y_number) <> {t: ($once (+ →T →y))}
 
