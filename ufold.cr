@@ -499,6 +499,12 @@ module Microfold
   # So that we have "hot reload" of the spec.
   SPEC = ML.terms(File.read("ufold.spec.wwml")).as_d
 
+  # Raised if a unit is malformed.
+  #
+  # See also: `uir`.
+  class UnitError < Exception
+  end
+
   # Returns the UIR tree corresponding to *unit*.
   #
   # *Units* are represented as a series of nested boxes. Each box is instantiated
@@ -513,6 +519,9 @@ module Microfold
   #
   # Microfold.uir(Microfold::SPEC, node) # => UIR...
   # ```
+  #
+  # Raises `UnitError` if *unit* is malformed (cannot be treated as a unit; e.g.
+  # a number literal, or the list `(1 2 3)`, etc.).
   def uir(spec : Term::Dict, unit : Term, *, rem = Term[16], inherited = Term[])
     Term.case(unit) do
       matchpi %{((self node_symbol) ¦ attrs_ style⋮ "")} do
@@ -552,6 +561,10 @@ module Microfold
         box |= attrs
 
         Term.of(box)
+      end
+
+      otherwise do
+        raise UnitError.new
       end
     end
   end
