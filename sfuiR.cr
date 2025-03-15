@@ -330,6 +330,8 @@ module UIR::Platform::SFML
   HAND = SF::Cursor.from_system(SF::Cursor::Type::Hand)
   # :nodoc:
   ARROW = SF::Cursor.from_system(SF::Cursor::Type::Arrow)
+  # :nodoc:
+  SIZEALL = SF::Cursor.from_system(SF::Cursor::Type::SizeAll)
 
   private def color?(term : Term) : SF::Color?
     Term.case(term) do
@@ -451,8 +453,8 @@ module UIR::Platform::SFML
   def render(vote_cursor, layers, layer, frame : Term, dl, dt)
     Term.case(frame) do
       # Any node can specify the cursor.
-      matchpi %[{¦ cursor: pointer}] do
-        vote_cursor.call(HAND)
+      matchpi %[{¦ cursor_symbol}] do
+        vote_cursor.call(cursor.unsafe_as_sym)
 
         continue
       end
@@ -624,20 +626,26 @@ module UIR::Platform::SFML
 
   def render?(tree : Term) : {SF::Cursor, SF::Texture}?
     Term.case(tree) do
-      matchpi %{(window child_ ¦ _ bg_ final-w: w←(%number +i32) final-h: h←(%number +i32))} do
+      matchpi %{(window child_ ¦ _ bg_ final-w: w←(%number +i32) final-h: h←(%number +i32) cursor⋮ arrow)} do
         layers = LayerManager.new
         layers.create(0, x: 0, y: 0, w: w.to(Int32), h: h.to(Int32), bg: color?(bg) || SF::Color::White)
 
-        cursor = ARROW
-        vote_cursor = ->(proposal : SF::Cursor) do
-          return if cursor != ARROW && proposal == ARROW
+        selected_cursor = ARROW
+        vote_cursor = ->(proposal : Term::Sym) do
+          return unless selected_cursor == ARROW
 
-          cursor = proposal
+          case proposal
+          when Term[:pointer]
+            selected_cursor = HAND
+          when Term[:grabbing]
+            selected_cursor = SIZEALL
+          end
         end
+        vote_cursor.call(cursor.unsafe_as_sym)
 
         render(vote_cursor, layers, 0, child, 0, 0)
 
-        {cursor, layers.collapse(0)}
+        {selected_cursor, layers.collapse(0)}
       end
 
       otherwise { }
@@ -654,31 +662,32 @@ module UIR::Platform::SFML
 
         while window.open?
           while event = window.poll_event
-            transcribed = nil
+            transcribed = [] of Term
 
             case event
             when SF::Event::Closed
               window.close
 
-              transcribed = Term.of(:exit)
+              transcribed << Term.of(:exit)
             when SF::Event::Resized
               window.view = SF::View.new(SF.float_rect(0, 0, event.width, event.height))
 
-              transcribed = Term.of(:size, event.width, event.height)
+              transcribed << Term.of(:size, event.width, event.height)
             when SF::Event::TextEntered
               chr = event.unicode.chr
               next unless chr.printable?
 
-              transcribed = Term.of(:input, chr)
+              transcribed << Term.of(:input, chr)
             when SF::Event::MouseButtonPressed
-              transcribed = Term.of(:"mouse-press", event.x, event.y)
+              transcribed << Term.of(:mouse, :motion, event.x, event.y) << Term.of(:mouse, :press)
             when SF::Event::MouseButtonReleased
-              transcribed = Term.of(:"mouse-release", event.x, event.y)
+              transcribed << Term.of(:mouse, :motion, event.x, event.y) << Term.of(:mouse, :release)
             when SF::Event::MouseMoved
-              transcribed = Term.of(:motion, event.x, event.y)
+              transcribed << Term.of(:mouse, :motion, event.x, event.y)
             when SF::Event::KeyPressed
               keyname = nil
               case event.code
+              when .f1?        then keyname = "f1"
               when .escape?    then keyname = "escape"
               when .tab?       then keyname = "tab"
               when .home?      then keyname = "home"
@@ -710,11 +719,11 @@ module UIR::Platform::SFML
               keyname = "C-#{keyname}" if event.control
               key = Term::Sym.new(keyname)
 
-              transcribed = Term.of(:key, key)
+              transcribed << Term.of(:key, key)
             end
 
-            if transcribed
-              drawable = reducer.call(drawable, transcribed)
+            transcribed.each do |term|
+              drawable = reducer.call(drawable, term)
             end
           end
 
