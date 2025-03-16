@@ -16,6 +16,12 @@ I am working hard to package the hundreds of thousands of lines of "all over the
 
 ## Gallery
 
+### Frontend: soma6
+
+https://github.com/user-attachments/assets/20107e02-a23b-43ed-9b57-591e2ea49f71
+
+### Frontend: pprint2_vis
+
 NOTE: stuff is much snappier in reality, GIFs compress a lot of that snappiness.
 
 **Interactivity in µsoma**
