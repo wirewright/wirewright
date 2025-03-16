@@ -22,6 +22,10 @@ https://github.com/user-attachments/assets/20107e02-a23b-43ed-9b57-591e2ea49f71
 
 ### Frontend: pprint2_vis
 
+A 45-minute video where I try to explain (and fail, I guess, given it's 45 minutes?) what some of this is.
+
+[Wirewright as an alternative to compilation and interpretation: building a counter ­— YouTube](https://youtu.be/SQP96xtfLvc)
+
 NOTE: stuff is much snappier in reality, GIFs compress a lot of that snappiness.
 
 **Interactivity in µsoma**
