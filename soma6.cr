@@ -21,8 +21,8 @@ module DocR
 
     def call(ctx, term, postfix, head, rest)
       Term.case(term) do
-        matchpi %{(comment desc_string)} do
-          unit = Alloy.render(Term[desc: desc], TEMPLATE)
+        matchpi %{(comment lines_string+)} do
+          unit = Alloy.render(Term[desc: lines.items.join('\n') { |line| line.to(String) }], TEMPLATE)
 
           continue unless block = DocR.block?(unit)
 
@@ -501,9 +501,12 @@ WWML
 view = Atomic(Term::Dict).new(blank.as_d)
 events = Channel(Term).new(128)
 
+class LoadExample < Exception
+end
+
 d7ctx = ExecutionContext::MultiThreaded.new("D7", 1)
 d7ctx.spawn do
-  document = ML.terms <<-WWML
+  demo = ML.terms <<-WWML
   (unit group style: "content flow-col gap-5 bg-neutral-800 p-5"
     (unit group style: "w-max h-content center-x"
       (view @count-envs as (p ^count style: "text-7xl font-bold text-neutral-100")))
@@ -519,11 +522,39 @@ d7ctx.spawn do
   (transform (@deltas delta_number) to @counts with @count (+ count delta))
   (latest @counts @count)
   ("" | "" () @user)
+  WWML
+
+  document = ML.terms <<-WWML
+  (comment
+    "Welcome to µsoma, a GUI for Wirewright"
+    ""
+    "µsoma to Wirewright is roughly what a web browser is to the Internet."
+    ""
+    "You're looking at a *self-embodied program*. Well, sort of — it only contains one comment right now. Hit left/right arrow to see for yourself. Or type `;;` and write your own!"
+    ""
+    "Try typing the following:"
+    ""
+    "  (cell 0 @count)"
+    "  (button \\"Increment\\" as 1 to @deltas ())"
+    "  (button \\"Decrement\\" as -1 to @deltas ())"
+    "  (transform @deltas to @counts with @count (+ count _))"
+    "  (latest @counts @count)"
+    ""
+    "Click on the buttons and see what happens! :^)"
+    ""
+    "- Drag on empty/non-clickable space to pan around if something overflows."
+    "- Hit Enter to escape from a pair."
+    "- Hit F2 to replace this document with a more sophisticated demo."
+    "- Hit Ctrl-Backspace to remove this comment (and any *node* before the cursor in general)."
+    "- Play! The sem-readable implementation of this editor is in `editor.soma.wwml`; check it out for key bindings & what they do"
+    "- Take a look at D7 tests: `delta7.test.wwml`. Plenty of examples there.")
+
+  ("" | "" () @user)
 
   WWML
 
   # TODO: figure out what's going on here (esp. with should_draw) and refactor
-  # into something comprehendable. This is madness.
+  # into something comprehendible. This is madness.
   #
   # the idea with should_draw is to draw here:
   #
@@ -570,6 +601,10 @@ d7ctx.spawn do
 
   handle = ->(event : Term) do
     Term.case(event) do
+      matchpi %{(key f2)} do
+        raise LoadExample.new # duh...
+      end
+
       matchpi %{(key _)}, %{(input _string)} do
         document0 = docframe0[:document].as_d
         document1 = Rhodium::Q.of(document0, Rhodium::Events)
@@ -656,31 +691,38 @@ d7ctx.spawn do
   end
 
   while true
-    should_draw = true
+    begin
+      should_draw = true
 
-    show.call
+      show.call
 
-    should_draw = false
+      should_draw = false
 
-    while settled
-      wait.call
+      while settled
+        wait.call
 
+        settled = false
+      end
+
+      seed0 = docframe0[:document].as_d
+      seed1 = D7.run(seed0,
+        log: D7::Log::None.new,
+        transition: Rhodium.transition,
+        step: D7.steps(check_should_draw, Rhodium.step, Nitrene.step(nitrene), cycle),
+        goal: D7::Goal.none,
+        initial: initial,
+      )
+
+      docframe0 = docframe0.morph({:document, seed1})
+
+      initial = false
+      settled = true
+    rescue LoadExample
+      # reset
+      initial = true
       settled = false
+      docframe0 = docframe0.morph({:document, demo})
     end
-
-    seed0 = docframe0[:document].as_d
-    seed1 = D7.run(seed0,
-      log: D7::Log::None.new,
-      transition: Rhodium.transition,
-      step: D7.steps(check_should_draw, Rhodium.step, Nitrene.step(nitrene), cycle),
-      goal: D7::Goal.none,
-      initial: initial,
-    )
-
-    docframe0 = docframe0.morph({:document, seed1})
-
-    initial = false
-    settled = true
   end
 end
 
