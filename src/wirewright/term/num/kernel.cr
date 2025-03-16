@@ -227,6 +227,10 @@ module Ww
       from(a.v.floor)
     end
 
+    def self.ceil(a : Kernel)
+      from(a.v.ceil)
+    end
+
     def self.divisible_by?(a : Kernel, b : Kernel)
       return false if zero?(b) || !integer?(b)
       return true if zero?(a)

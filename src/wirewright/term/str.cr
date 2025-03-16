@@ -9,6 +9,14 @@ module Ww
     # :nodoc:
     delegate :inspect, to: @value
 
+    def single_byte? : Bool
+      @value.bytesize == 1
+    end
+
+    def unsafe_byte : UInt8
+      @value.to_unsafe[0]
+    end
+
     def to?(type : String.class) : String
       @value
     end

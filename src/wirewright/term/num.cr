@@ -75,6 +75,20 @@ module Ww
       type.from_value?(to_i)
     end
 
+    # Converts this number to an `Int32` if this can be done fast (and obviously
+    # if the conversion is possible at all). Otherwise returns `nil`.
+    #
+    # Prefer to use `to?(Int32)` unless it's a *very* internal and performance-
+    # sensitive place.
+    def fast_to_i32? : Int32?
+      @k.int? ? @k.unsafe_as_i : nil
+    end
+
+    # :nodoc:
+    def unsafe_as_i : Int32
+      @k.unsafe_as_i
+    end
+
     # Returns `true` if this number is zero.
     def zero? : Bool
       Kernel.zero?(@k)
@@ -218,6 +232,10 @@ module Ww
 
     def floor
       Num.new(Kernel.floor(@k))
+    end
+
+    def ceil
+      Num.new(Kernel.ceil(@k))
     end
 
     def uszpair(other : Num)
