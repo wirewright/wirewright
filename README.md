@@ -46,6 +46,15 @@ NOTE: stuff is much snappier in reality, GIFs compress a lot of that snappiness.
 4. **µsoma** is a unified graphical user interface to Wirewright.
 5. Wirewright acts simultaneously as an *observer* and an abstract kind of *physics* for the "functional core" ­— a self-embodied program. It reacts to changes in the latter and provides feedback through rewriting (but not necessarily; for instance, UI is simply a way to view the self-embodied program, like some weird "glasses" that show `(button "Increment" @actions)` as a rectangle with centered text).
 
+## Building
+
+Building the frontends is harder than it should be, but currently, the best bet is to:
+
+1. Build Crystal at commit `0cc0264f423f136db5baa190118b722dade09681`. I don't think nightlies work due to my use of `ExecutionContext`.
+   This is the hard part.
+3. Then as usual. `shards install`.
+4. Then `crystal build pprint2_vis.cr --release -Dpreview_mt` or `crystal build soma6.cr --release -Dpreview_mt`. Do not forget to hope really really hard that it succeeds.
+
 ## Want to learn more?
 
 ### More of my ramblings
