@@ -701,7 +701,7 @@
      @actions
      style: ("\"text-sm\"" | "" () @user)))))
  (after
-  ((key tab))
+  ((key enter))
   ((row
     (button "+ Increment" @actions)
     (button "- Decrement" @actions)
@@ -717,7 +717,7 @@
    (input "style")
    (input ":")
    (input "\"text-lg")
-   (key tab))
+   (key enter))
   ((row
     (button "+ Increment" @actions)
     (button
@@ -735,7 +735,7 @@
      style: ("" | "\"text-lg\"" () @user))
     (button "0 Reset" @actions style: "text-sm"))))
  (after
-  ((key tab))
+  ((key enter))
   ((row
     (button "+ Increment" @actions)
     (button
@@ -754,7 +754,7 @@
    (key left)
    (key left)
    (key left)
-   (key tab))
+   (key enter))
   ((row
     (button
      "+ Increment"
@@ -769,7 +769,7 @@
    (input "\"hello")
    (key left)
    (key left)
-   (key tab))
+   (key enter))
   ((row
     (button
      "+ Increment"
@@ -789,7 +789,7 @@
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))))
  (after
-  ((key tab))
+  ((key enter))
   ((row
     (button
      "+ Increment"
@@ -817,7 +817,7 @@
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))))
  (after
-  ((key tab))
+  ((key enter))
   ((row
     (button
      "+ Increment"
@@ -838,7 +838,7 @@
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))))
  (after
-  ((key up) (key tab))
+  ((key up) (key enter))
   ((row
     (button
      "+ Increment"
@@ -852,11 +852,11 @@
   ((input "qux")
    (input ":")
    (input "@foo")
-   (key tab)
+   (key enter)
    (input "qux")
    (input ":")
    (input "ze")
-   (key tab))
+   (key enter))
   ((row
     (button
      "+ Increment"
@@ -873,7 +873,7 @@
    (key left)
    (key C-backspace)
    (input "text-xs")
-   (key tab))
+   (key enter))
   ((row
     (button
      "+ Increment"
@@ -1344,7 +1344,7 @@
   ((input "foo")
    (input ":")
    (input "100")
-   (key tab)
+   (key enter)
    (key C-backspace)
    (key C-backspace)
    (key C-S-backspace))
@@ -1362,7 +1362,7 @@
    (input "qux")
    (input ":")
    (input "100")
-   (key tab)
+   (key enter)
    (key C-S-delete))
   (("" | "" () @user)
    (row
@@ -1400,7 +1400,7 @@
    (input "foo")
    (input ":")
    (input "100")
-   (key tab)
+   (key enter)
    (key escape)
    (input "c")
    (key backspace)
@@ -1423,7 +1423,7 @@
    (input "foo")
    (input ":")
    (input "100")
-   (key tab)
+   (key enter)
    (key escape)
    (input "C")
    (key delete))

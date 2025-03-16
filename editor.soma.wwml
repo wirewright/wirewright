@@ -56,12 +56,12 @@
 
 ["" | "" (M←(input ":") _*) @EDGE_] <> {M: (enter-key-behind)}
 
-;; (key tab) should expel + leave from pair if editing at top-level
-(_* ¦ (%entry _ [_string | _string (M←(key tab) _*) @EDGE_]))
+;; (key enter) should expel + leave from pair if editing at top-level
+(_* ¦ (%entry _ [_string | _string (M←(key enter) _*) @EDGE_]))
   <> {M: (leave-pair)}
 
 ;; ... or if editing inside a top-level dict
-(_* ¦ (%entry _ ⟨[_string | _string (M←(key tab) _*) @EDGE_]⟩))
+(_* ¦ (%entry _ ⟨[_string | _string (M←(key enter) _*) @EDGE_]⟩))
   <> {M: (leave-pair)}
 
 ;; Interpret (key left) and (key right)
