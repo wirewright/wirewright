@@ -129,10 +129,22 @@ module DocR
         (p ^intro style: "w-max px-2 pb-1 text-sm text-neutral-300")))
     WWML
 
+    # TODO: use a template `if`
     SUGGESTION_MEMBER_TEMPLATE = ML.term <<-WWML
     (box style: "floating z-10 dt-8 border border-neutral-600 bg-neutral-800 rounded p-2"
       (group style: "content min-w-sm max-w-sm flow-col gap-2"
         (box ^head style: "w-max h-content px-2 py-1 font-mono bg-neutral-700 text-neutral-200 font-medium rounded-sm")
+        (box ^body style: "content px-2 pb-1 text-sm text-neutral-300")))
+    WWML
+
+    SUGGESTION_MEMBER_ONEOF_TEMPLATE = ML.term <<-WWML
+    (box style: "floating z-10 dt-8 border border-neutral-600 bg-neutral-800 rounded p-2"
+      (group style: "content min-w-sm max-w-sm flow-col gap-2"
+        (group style: "w-max fr h-content flow-row gap-2 px-2 py-1 bg-neutral-700 rounded-sm"
+          ;; FIXME: why can't we center vertically here?
+          (p style: "text-xs text-neutral-200"
+            "↑" ^current "/" ^total "↓")
+          (box ^head style: "w-fr h-content font-mono text-neutral-200 font-medium"))
         (box ^body style: "content px-2 pb-1 text-sm text-neutral-300")))
     WWML
 
@@ -244,7 +256,20 @@ module DocR
 
         matchpi %{(lhs_string | rhs_string (_*) @user ¦ _ suggestions_: (suggestions/group prefix←(_*) suffix←((head_string body_string) _*)))} do
           cursor_unit = Alloy.render(Term[lhs: lhs, rhs: rhs], CURSOR_TEMPLATE)
-          suggestion_unit = Alloy.render(Term[head: Cursor.highlighted(head.to(String)), body: Cursor.highlighted(body.to(String))], SUGGESTION_MEMBER_TEMPLATE)
+
+          if prefix.empty? && suffix.size == 1
+            suggestion_unit = Alloy.render(Term[
+              head: Cursor.highlighted(head.to(String)),
+              body: Cursor.highlighted(body.to(String)),
+            ], SUGGESTION_MEMBER_TEMPLATE)
+          else
+            suggestion_unit = Alloy.render(Term[
+              head: Cursor.highlighted(head.to(String)),
+              body: Cursor.highlighted(body.to(String)),
+              current: prefix.size + 1, # start from one
+              total: prefix.size + suffix.size,
+            ], SUGGESTION_MEMBER_ONEOF_TEMPLATE)
+          end
 
           unit = Term.of(:group, cursor_unit, suggestion_unit, style: "content flow-none")
 
