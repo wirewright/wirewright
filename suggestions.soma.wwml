@@ -187,3 +187,25 @@
 
 (node comment "Grayed out text that is explaining something"
   (literal text "content of the comment"))
+
+(node unit "A microfold node with zero or more D7 children"
+  (literal node "name of the node (e.g. p, button)"))
+
+(node view "Instantiates an Alloy template to be rendered using Microfold"
+  (pulse updates "environments for the template (dicts)")
+  (comma as)
+  (literal template "Alloy template to be rendered using Microfold"))
+
+(group initial "Companion of `absence`, outputs the first-ever value of a const")
+
+(variant initial
+  (const cin "const signal to watch for")
+  (comma to)
+  (pulse pout "sink for first-ever values"))
+
+(variant initial
+  (const cin "const signal to watch for")
+  (comma to)
+  (pulse pout "sink for value")
+  (comma as)
+  (pulse v "value"))

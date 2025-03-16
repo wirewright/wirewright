@@ -43,6 +43,8 @@ module Rhodium
   def passable_range?(node : Term) : Range(Int32, Int32)?
     Term.case(node) do
       matchpi %[(group _*)], %{[row _*]}, %{[col _*]} { 1...node.itemsize }
+      matchpi %{[unit _ _*]} { 2...node.itemsize }
+      matchpi %{(view @_ as _ _)} { 4...5 }
       matchpi %[(edit-cage for @_ _*)] { 3...node.itemsize }
       matchpi %[(decay (%number +i32) _*)] { 2...node.itemsize }
       matchpi %[(lookaround @_ @_ _*)] { 3...node.itemsize }
@@ -753,11 +755,42 @@ module Rhodium
         end
       end
 
+      givenpi %[(view @updates_ as template_) (pulse @updates_ update_dict) -1] do
+        effect(root1, nodepath, node0) do
+          instance = Alloy.render(update.unsafe_as_d, template, strict: false)
+
+          backmap %[(_ _ as _ ⏏instance)], instance: instance
+
+          false
+        end
+      end
+
+      givenpi %[(view @updates_ as template_ _) (pulse @updates_ update_dict) -1] do
+        effect(root1, nodepath, node0) do
+          instance = Alloy.render(update.unsafe_as_d, template, strict: false)
+
+          backmap %[(_ _ as _ instance_)], instance: instance
+
+          false
+        end
+      end
+
       givenpi(
         %[(changes @cin_ to @pout_) (cell/created @cin_ v_) -1],
         %[(changes @cin_ to @pout_) (cell/updated @cin_ _ v_) -1],
         %[(changes @cin_ to @pout_ as v_) (cell/created @cin_ _) -1],
         %[(changes @cin_ to @pout_ as v_) (cell/updated @cin_ _ _) -1],
+      ) do
+        effect(root1, nodepath, node0) do
+          event :pulse, pout, v
+
+          false
+        end
+      end
+
+      givenpi(
+        %[(initial @cin_ to @pout_) (cell/created @cin_ v_) -1],
+        %[(initial @cin_ to @pout_ as v_) (cell/created @cin_ _) -1],
       ) do
         effect(root1, nodepath, node0) do
           event :pulse, pout, v
