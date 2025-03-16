@@ -64,8 +64,10 @@ struct Ww::Term
 
       %result = match?({{pid}}, {{pattern}}, cue: { {{cue}} }.flatten.compact, default: ::Ww::Term::CaseContext::Continue) do |%env|
         {% for icap in icaps %}
-          {% unless block.args.any? { |arg| arg.id == icap.id } %}
-            {{icap.id.gsub(/-/, "_")}} = (%env[{{icap.id.symbolize}}]? || raise "case: #{ {{location}} }: missing capture '{{icap.id}}'")
+          {% icap_id = icap.id.gsub(/-/, "_") %}
+
+          {% unless block.args.any? { |arg| arg.id == icap_id } %}
+            {{icap_id}} = (%env[{{icap.id.symbolize}}]? || raise "case: #{ {{location}} }: missing capture '{{icap.id}}'")
           {% end %}
         {% end %}
 
