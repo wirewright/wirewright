@@ -1537,7 +1537,7 @@ module D7
   end
 
   # Chains steps *a* and *b*.
-  def steps(a : Step, b : Step)
+  def steps(a : Step, b : Step) : Step
     Step.new do |document, log|
       document, transition_vote0 = a.call(document, log)
       document, transition_vote1 = b.call(document, log)
@@ -1546,9 +1546,23 @@ module D7
     end
   end
 
-  # Chains steps *a* and *b* and so on.
-  def steps(a : Step, b : Step, *cs)
+  # Chains steps *a*, *b* and so on.
+  def steps(a : Step, b : Step, *cs : Step) : Step
     steps(steps(a, b), *cs)
+  end
+
+  # Chains transitions *a* and *b*.
+  def transitions(a : Transition, b : Transition) : Transition
+    Transition.new do |document0, document1, log|
+      document2 = a.call(document0, document1, log)
+      document3 = b.call(document1, document2, log)
+      document3
+    end
+  end
+
+  # Chains transitions *a*, *b*, and so on.
+  def transitions(a : Transition, b : Transition, *cs : Transition) : Transition
+    transitions(transitions(a, b), *cs)
   end
 
   # D7 mainloop. It's like a game loop except it's not.
