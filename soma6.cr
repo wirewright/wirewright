@@ -115,17 +115,146 @@ module DocR
   struct Cursor
     include Feature
 
-    TEMPLATE = ML.term <<-WWML
+    CURSOR_TEMPLATE = ML.term <<-WWML
     (group style: "content"
-      (code ^lhs style: "text-neutral-400 bg-neutral-700 ring-1")
+      (code ^lhs style: "text-neutral-400 bg-neutral-700 ring")
       ((self rect) style: "w-px h-max bg-blue-500")
-      (code ^rhs style: "text-neutral-400 bg-neutral-700 ring-1"))
+      (code ^rhs style: "text-neutral-400 bg-neutral-700 ring"))
     WWML
 
+    SUGGESTION_TEMPLATE = ML.term <<-WWML
+    (box style: "floating z-10 dt-8 border border-neutral-600 bg-neutral-800 rounded p-2"
+      (group style: "w-max h-content min-w-sm max-w-sm flow-col gap-2"
+        (p ^name style: "w-max px-2 py-1 font-mono bg-neutral-700 text-neutral-200 font-medium rounded-sm")
+        (p ^intro style: "w-max px-2 pb-1 text-sm text-neutral-300")))
+    WWML
+
+    SUGGESTION_MEMBER_TEMPLATE = ML.term <<-WWML
+    (box style: "floating z-10 dt-8 border border-neutral-600 bg-neutral-800 rounded p-2"
+      (group style: "content min-w-sm max-w-sm flow-col gap-2"
+        (box ^head style: "w-max h-content px-2 py-1 font-mono bg-neutral-700 text-neutral-200 font-medium rounded-sm")
+        (box ^body style: "content px-2 pb-1 text-sm text-neutral-300")))
+    WWML
+
+    # TODO: use a template `if`
+    SUGGESTION_LIST_NOSCROLL_TEMPLATE = ML.term <<-WWML
+    (box style: "floating z-10 dt-8 border border-neutral-600 bg-neutral-800 rounded p-3"
+      (main style: "w-max h-content min-w-sm max-w-sm flow-col gap-3"
+        (header style: "w-max h-content flow-row font-sans font-normal text-xs text-neutral-300"
+          "Showing " ^begin ".." ^end " out of " ^total)
+        (list style: "w-max h-content flow-col text-sm font-mono font-text text-neutral-200 gap-2"
+          (^*part names 0 ..= -1))))
+    WWML
+
+    SUGGESTION_LIST_TEMPLATE = ML.term <<-WWML
+    (box style: "floating z-10 dt-8 border border-neutral-600 bg-neutral-800 rounded p-3"
+      (main style: "w-max h-content min-w-sm max-w-sm flow-col gap-3"
+        (header style: "w-max h-content flow-row font-sans font-normal text-xs text-neutral-300"
+          "Showing " ^begin ".." ^end " out of " ^total)
+        (group style: "w-max h-content flow-row fr"
+          (list style: "w-fr h-content flow-col text-sm font-mono font-text text-neutral-200 gap-2"
+            (^*part names 0 ..= -1))
+          (scroll style: "w-3 h-max pr-1"
+            ((self translate) y: (* ^scroll-offset) style: "max"
+              ((self rect/outline) style: "max border bg-neutral-600 rounded-sm" max-h: (* ^scroll-height)))))))
+    WWML
+
+    # FIXME: this does not belong here
+    # TODO: ideally we should render markdown here, not this.
+    # TODO: text wrapping, w-max
+    def self.highlighted(string : String)
+      Term::Dict.build do |col|
+        col << :group
+        col.with(:style, "content flow-col")
+
+        string.each_line(chomp: true) do |line|
+          bold = false
+
+          row = Term::Dict.build do |commit|
+            commit << :line
+            commit.with(:style, "content flow-row")
+
+            line.split('*') do |frag|
+              next if frag.empty?
+
+              if bold
+                commit << Term.of(:p, frag, style: "text-sm font-bold text-blue-500")
+              else
+                commit << Term.of(:p, frag, style: "text-sm text-neutral-300")
+              end
+            ensure
+              bold = !bold
+            end
+
+            # Empty line
+            if commit.itemsize == 1
+              # Insert something to have some height
+              commit << Term.of(:p, "", style: "text-xs")
+            end
+          end
+
+          col << row
+        end
+      end
+    end
+
+    # TODO: gosh gosh gosh refactor this!!!
     def call(ctx, term, postfix, head, rest)
       Term.case(term) do
+        matchpi %{(lhs_string | rhs_string (_*) @user ¦ _ suggestions: (suggestions/list () ((name_string intro_string)) ()))} do
+          cursor_unit = Alloy.render(Term[lhs: lhs, rhs: rhs], CURSOR_TEMPLATE)
+          suggestion_unit = Alloy.render(Term[name: name, intro: intro], SUGGESTION_TEMPLATE)
+
+          unit = Term.of(:group, cursor_unit, suggestion_unit, style: "content flow-none")
+
+          continue unless block = DocR.block?(unit)
+
+          postfixed(block, postfix)
+        end
+
+        matchpi %{(lhs_string | rhs_string (_*) @user ¦ _ suggestions: (suggestions/list above←(_*) visible←((%past (_string _string) min: 1)) below←(_*)))} do
+          cursor_unit = Alloy.render(Term[lhs: lhs, rhs: rhs], CURSOR_TEMPLATE)
+
+          b = above.size
+          e = b + visible.size
+          total = above.size + visible.size + below.size
+          names = visible.items.map { |(name, _)| name }
+
+          if total == visible.size
+            suggestion_vars = Term[begin: b, end: e, total: total, names: names]
+            suggestion_unit = Alloy.render(suggestion_vars, SUGGESTION_LIST_NOSCROLL_TEMPLATE)
+          else
+            suggestion_vars = Term[
+              begin: b,
+              end: e,
+              total: total,
+              names: names,
+              "scroll-offset": b / total,
+              "scroll-height": visible.size / total,
+            ]
+            suggestion_unit = Alloy.render(suggestion_vars, SUGGESTION_LIST_TEMPLATE)
+          end
+
+          unit = Term.of(:group, cursor_unit, suggestion_unit, style: "content flow-none")
+
+          continue unless block = DocR.block?(unit)
+
+          postfixed(block, postfix)
+        end
+
+        matchpi %{(lhs_string | rhs_string (_*) @user ¦ _ suggestions_: (suggestions/group prefix←(_*) suffix←((head_string body_string) _*)))} do
+          cursor_unit = Alloy.render(Term[lhs: lhs, rhs: rhs], CURSOR_TEMPLATE)
+          suggestion_unit = Alloy.render(Term[head: Cursor.highlighted(head.to(String)), body: Cursor.highlighted(body.to(String))], SUGGESTION_MEMBER_TEMPLATE)
+
+          unit = Term.of(:group, cursor_unit, suggestion_unit, style: "content flow-none")
+
+          continue unless block = DocR.block?(unit)
+
+          postfixed(block, postfix)
+        end
+
         matchpi %{[lhs_string | rhs_string (_*) @user]} do
-          unit = Alloy.render(Term[lhs: lhs, rhs: rhs], TEMPLATE)
+          unit = Alloy.render(Term[lhs: lhs, rhs: rhs], CURSOR_TEMPLATE)
 
           continue unless block = DocR.block?(unit)
 
@@ -140,7 +269,7 @@ module DocR
   end
 
   def visible(document : Term::Dict) : Term::Dict
-    D7.visible(document)
+    D7.visible(document, except: {:"#waiting"}) # ?!
   end
 
   def annotated(document document0 : Term::Dict) : Term::Dict
@@ -368,11 +497,51 @@ d7ctx.spawn do
 
   WWML
 
+  # TODO: figure out what's going on here (esp. with should_draw) and refactor
+  # into something comprehendable. This is madness.
+  #
+  # the idea with should_draw is to draw here:
+  #
+  #  <BEGIN OF CYCLE> E1 E2 E3 ... <END OF CYCLE>
+  #                                -------------
+  #                                        draw
+  #
+  # but then:
+  #                                                   provide suggestions (maybe)
+  #                                                     vvvv
+  #  <BEGIN OF CYCLE> E1 E2 (edit @user ...) E3 ... <END OF CYCLE> <BEGIN OF CYCLE> E1 E2 E3 ... <END OF CYCLE>
+  #                                                                                              -------------
+  #                                                                                                   draw
+  # => then we have no flickering of suggestions.
+  #
+  # or obviously before polling we force a draw!
+
   initial = true
   settled = false
 
   docframe0 = DocR.unit(DocR.pptree(document))
   docframe0 = docframe0.morph({:document, document})
+
+  should_draw = false
+  previously_drawn_doc = nil
+  show = ->do
+    return unless should_draw
+
+    doc = docframe0[:document].as_d
+
+    # Do not overdraw
+    doc_to_draw = DocR.visible(doc)
+    if previously_drawn_doc == doc_to_draw
+      return
+    end
+
+    docframe0 = DocR.unit(DocR.pptree(Term.of(doc)))
+    docframe0 = docframe0.morph({:document, doc})
+
+    previously_drawn_doc = doc_to_draw
+
+    view.set(docframe0.without(:document), :relaxed)
+  end
 
   handle = ->(event : Term) do
     Term.case(event) do
@@ -414,22 +583,35 @@ d7ctx.spawn do
 
   wait = ->do
     handle.call(events.receive)
+    show.call
+  end
 
-    docframe0 = DocR.unit(DocR.pptree(doc = docframe0[:document]))
-    docframe0 = docframe0.morph({:document, doc})
+  edited = false
 
-    view.set(docframe0.without(:document), :relaxed)
+  check_should_draw = D7::Step.new do |document|
+    queue = Rhodium::Q.of(document, Rhodium::Events)
+
+    if e = queue.first?
+      Term.case(e) do
+        matchpi %{(edit @user _)} { edited = true }
+        otherwise { }
+      end
+    else
+      # cycle
+      should_draw = !edited
+      edited = false
+    end
+
+    # We do not modify the document and therefore we never trigger
+    # a transition.
+    {document, false}
   end
 
   cycle = D7::Step.new do |document|
     docframe0 = docframe0.morph({:document, document})
 
     peek.call
-
-    docframe0 = DocR.unit(DocR.pptree(doc = docframe0[:document]))
-    docframe0 = docframe0.morph({:document, doc})
-
-    view.set(docframe0.without(:document), :relaxed)
+    show.call
 
     # We do not modify the document and therefore never need to trigger
     # a transition.
@@ -449,6 +631,12 @@ d7ctx.spawn do
   end
 
   while true
+    should_draw = true
+
+    show.call
+
+    should_draw = false
+
     while settled
       wait.call
 
@@ -459,7 +647,7 @@ d7ctx.spawn do
     seed1 = D7.run(seed0,
       log: D7::Log::None.new,
       transition: Rhodium.transition,
-      step: D7.steps(Rhodium.step, Nitrene.step(nitrene), cycle),
+      step: D7.steps(check_should_draw, Rhodium.step, Nitrene.step(nitrene), cycle),
       goal: D7::Goal.none,
       initial: initial,
     )

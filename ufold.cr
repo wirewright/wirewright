@@ -311,6 +311,11 @@ module Microfold
       commit.with(:fractions, ctx.sheet[:fractions]?)
 
       case ctx.sheet[:flow]?
+      when Term.of(:none)
+        commit << Term.of(:"z-stack")
+        commit.concat(children.items) do |child|
+          child_box(ctx, child)
+        end
       when Term.of(:col)
         commit << Term.of(:"y-stack")
         commit.concat(children.items) do |child|
@@ -440,7 +445,9 @@ module Microfold
       return border_box(ctx, children)
     end
 
-    Term.of(:"x-expand", border_box(ctx, children),
+    subctx = ctx.copy_with(sheet: ctx.sheet.with(:w, :max))
+
+    Term.of(:"x-expand", border_box(subctx, children),
       w: ctx.sheet[:w]?,
       h: ctx.sheet[:h]?,
       "min-w": minw,
@@ -453,7 +460,9 @@ module Microfold
       return minw_box(ctx, children)
     end
 
-    Term.of(:"y-expand", minw_box(ctx, children),
+    subctx = ctx.copy_with(sheet: ctx.sheet.with(:h, :max))
+
+    Term.of(:"y-expand", minw_box(subctx, children),
       w: ctx.sheet[:w]?,
       h: ctx.sheet[:h]?,
       "min-h": minh,
@@ -488,6 +497,17 @@ module Microfold
       x: dl,
       y: dt,
     )
+  end
+
+  private def floating_box(ctx : UnitContext, children : Term)
+    if (floating = ctx.sheet[:floating]?) && floating != Term[false]
+      Term.of(:floating, translate_box(ctx, children),
+        w: :content,
+        h: :content,
+      )
+    else
+      translate_box(ctx, children)
+    end
   end
 
   # Handles the unit-unit boundary.
@@ -547,7 +567,7 @@ module Microfold
 
         sheet = sheet(spec, attrs.unsafe_as_d, style.to(String), rem: rem, base: nodal | inherited)
 
-        box = translate_box(UnitContext.new(spec, sheet, rem), children)
+        box = floating_box(UnitContext.new(spec, sheet, rem), children)
 
         # Attach toplevel props to the box.
         box = box.morph(

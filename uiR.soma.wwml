@@ -13,6 +13,12 @@
 (_ {¦ max-w: (%- _ w)} ¦ _ w: max max-w: W_number) <> {w: →W}
 (_ {¦ max-h: (%- _ h)} ¦ _ h: max max-h: H_number) <> {h: →H}
 
+;; Propagate fractional max-w/h
+(_ {¦ max-w_: (* frac←(%number 0 < _ < 1))} ¦ _ w: max max-w: W_number)
+  <> {max-w: ($ (ceil (* →W →frac)))}
+(_ {¦ max-h_: (* frac←(%number 0 < _ < 1))} ¦ _ h: max max-h: H_number)
+  <> {max-h: ($ (ceil (* →H →frac)))}
+
 ;; Propagate my content-w/h as max-w/h of children if I am w/h: content.
 (_ {¦ max-w: (%- _ w)} ¦ _ w: content content-w: W_number) <> {w: →W}
 (_ {¦ max-h: (%- _ h)} ¦ _ h: content content-h: H_number) <> {h: →H}
@@ -110,6 +116,12 @@
 
 (translate {¦ -l_} ¦ _ l: L_number x_number) <> {l: ($once (+ →L →x))}
 (translate {¦ -t_} ¦ _ t: T_number y_number) <> {t: ($once (+ →T →y))}
+
+;; Support fractional offset (fraction of child's final width).
+(translate {¦ final-w: w_number} ¦ _ final-w: W_number x_: (* frac←(%number 0 <= _ <= 1)))
+  <> {x: ($ (ceil (* →W →frac)))}
+(translate {¦ final-h: h_number} ¦ _ final-h: H_number y_: (* frac←(%number 0 <= _ <= 1)))
+  <> {y: ($ (ceil (* →H →frac)))}
 
 (translate {¦ -l_ final-w: w_number} ¦ _ x: center l: L_number final-w: W_number)
   <> {l: ($ (+ →L (// (- →W →w) 2)))}

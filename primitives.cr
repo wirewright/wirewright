@@ -64,6 +64,8 @@ PRIMITIVES = ProcRuleset.build do
   rulepi1 %[(max args_number+)] { args.items.max_by(&.unsafe_as_n) }
   rulepi1 %[(max (args_number+))] { args.items.max_by(&.unsafe_as_n) }
 
+  rulepi1 %[(ceil arg_number)] { arg.ceil }
+
   # TODO: support mixed substring?
   rulepi1 %[(substring s_string (rune b←(%number i32)) (rune e←(%number i32)))] do
     Term::Str::Substring.runes(s.unsafe_as_s, b.to(Int32), e.to(Int32))

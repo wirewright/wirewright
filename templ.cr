@@ -97,6 +97,20 @@ module Alloy
         Rewrite.many(dict.items.move(b.to(Int32)).grow(e.to(Int32)).collect)
       end
 
+      matchpi %{(^*part var_symbol b←(%number i32) ..= e←(%number -i32))} do
+        unless value = ctx.vars[var]?
+          ctx.error { "variable '#{var}' does not exist" }
+          continue
+        end
+
+        unless dict = value.as_d?
+          ctx.error { "'#{var}' is not a dict: '#{value}'" }
+          continue
+        end
+
+        Rewrite.many(dict.items.move(b.to(Int32)).grow(e.to(Int32) + 1).collect)
+      end
+
       matchpi %{(^case var_symbol ¦ branches_)} do
         unless value = ctx.vars[var]?
           ctx.error { "variable '#{var}' does not exist" }

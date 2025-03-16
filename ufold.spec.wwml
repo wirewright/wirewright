@@ -133,6 +133,9 @@
 
 "flow-row": {flow: row}
 "flow-col": {flow: col}
+"flow-none": {flow: none}
+
+"floating": {floating: true, w: content, h: content}
 
 (nat "z" N {z: N_})
 
