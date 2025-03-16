@@ -148,50 +148,63 @@ module UIR
     abstract def show(reducer : Reducer) : Nil
   end
 
-  private def offset(drawable : Term, keypath : Stack(Term)) : {Term::Num, Term::Num}
-    ox = oy = Term[0]
+  # :nodoc:
+  def hit(drawable : Term, x : Term::Num, y : Term::Num, sink, keypath : Stack(Term)) : Nil
+    inbounds = false
 
-    Keypath.ascend(drawable, keypath) do |node|
-      Term.case(node) do
-        matchpi %{(viewport _ ¦ _ x: dx_number y: dy_number)} do
-          ox += dx
-          oy += dy
+    Term.case(drawable) do
+      matchpi %[{¦ l_number t_number final-w: w_number final-h: h_number}] do |l, t, w, h|
+        l, t, w, h = {l, t, w, h}.map(&.unsafe_as_n)
+
+        continue unless x.in?(l...l + w)
+        continue unless y.in?(t...t + h)
+
+        inbounds = true
+
+        sink.call(keypath)
+
+        # Fall through
+        continue
+      end
+
+      matchpi %{(viewport child_ ¦ _ x: dx_number y: dy_number)} do
+        # Fall through if viewport does not contain the point
+        continue unless inbounds
+
+        begin
+          keypath.push(Term.of(1))
+
+          # Yeeaah this reads strange...
+          hit(child, x + dx, y + dy, sink, keypath)
+        ensure
+          keypath.pop
         end
 
-        otherwise { }
+        # Terminate
       end
-    end
 
-    {ox, oy}
+      matchpi %{_dict} do
+        # Fall through if drawable does not contain the point
+        continue unless inbounds
+
+        dict = drawable.unsafe_as_d
+        dict.items.each_with_index do |child, index|
+          keypath.push(Term.of(index))
+
+          # Gosh
+          hit(child, x, y, sink, keypath)
+        ensure
+          keypath.pop
+        end
+      end
+
+      otherwise {}
+    end
   end
 
   # Calls *sink* with keypaths (`Stack(Term)` *which you do not own*) of nodes
   # that include the point *x*, *y*.
-  def hit(drawable : Term, x : Term::Num, y : Term::Num, sink) : Nil
-    Keypath.each_item(drawable) do |keypath, node|
-      Term.case(node) do
-        matchpi %[{¦ l_number t_number final-w: w_number final-h: h_number}] do |l, t, w, h|
-          l, t, w, h = {l, t, w, h}.map(&.unsafe_as_n)
-
-          dx, dy = offset(drawable, keypath)
-          l -= dx
-          t -= dy
-
-          continue unless x.in?(l...l + w)
-          continue unless y.in?(t...t + h)
-
-          sink.call(keypath)
-        end
-
-        otherwise { }
-      end
-
-      true # continue
-    end
-  end
-
-  # :ditto:
   def hit(*args, **kwargs, &fn : Stack(Term) ->) : Nil
-    hit(*args, **kwargs, sink: fn)
+    hit(*args, **kwargs, sink: fn, keypath: Stack(Term).new)
   end
 end
