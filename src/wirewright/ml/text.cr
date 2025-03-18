@@ -556,7 +556,20 @@ module Ww::ML::Text
         # NOTE: we only do this blank thingy in partition, so you can still do (x_: 100)
         # if you for some reason want the key to be `x_` itself.
 
-        unless (keysym = key.as_sym?) && (blank = keysym.blank?)
+        unless keysym = key.as_sym?
+          return key, value
+        end
+
+        unless blank = keysym.blank?
+          name = keysym.to(String)
+
+          if name.prefixed_by?('-')
+            # E.g. -x: a -> x: (%- _ a)
+            clearsym = Term::Sym.new(name.lchop)
+
+            return clearsym, Term.of(:"%-", :_, value)
+          end
+
           return key, value
         end
 
@@ -592,7 +605,24 @@ module Ww::ML::Text
 
         {name, Term.of(:"%optional", value, key)}
       else
-        unless (keysym = key.as_sym?) && (blank = keysym.blank?) && blank.single? && (name = blank.name?)
+        unless keysym = key.as_sym?
+          raise "expected a symbol for entry capture (e.g. `¦ ... x_ ...`) or pair negation (e.g. `¦ ... -x ...`) shorthand"
+        end
+
+        fullname = keysym.to(String)
+
+        unless blank = keysym.blank?
+          # E.g. ... -x ... -> ... x: (%- _) ...
+          if fullname.prefixed_by?('-')
+            clearsym = Term::Sym.new(fullname.lchop)
+
+            return clearsym, Term.of(:"%-", :_)
+          end
+
+          raise "can only use blanks for the entry capture shorthand: `¦ ... x_ ...` or `¦ ... x_number ...` but not `¦ ... 100`"
+        end
+
+        unless blank.single? && (name = blank.name?)
           raise "can only use blanks for the entry capture shorthand: `¦ ... x_ ...` or `¦ ... x_number ...` but not `¦ ... 100`"
         end
 
@@ -600,8 +630,7 @@ module Ww::ML::Text
 
         # E.g. -x_ -x_number but not -_number -_
         if fullname.prefixed_by?('-')
-          clearname = fullname.lchop
-          clearsym = Term::Sym.new(clearname)
+          clearsym = Term::Sym.new(fullname.lchop)
 
           {clearsym, Term.of(:"%-", blank.type.blank, clearsym)}
         else

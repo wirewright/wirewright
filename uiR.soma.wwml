@@ -6,12 +6,12 @@
 ;; GENERAL
 
 ;; Learn the content width/height from a single child.
-((%not x-expand viewport) {¦ content-w: w_number} ¦ _ content-w: (%- _ W)) <> {W: →w}
-((%not y-expand viewport) {¦ content-h: h_number} ¦ _ content-h: (%- _ H)) <> {H: →h}
+((%not x-expand viewport) {¦ content-w: w_number} ¦ _ -content-w: W) <> {W: →w}
+((%not y-expand viewport) {¦ content-h: h_number} ¦ _ -content-h: H) <> {H: →h}
 
 ;; Propagate max-w/h if I know my max-w/h and I am w/h: max.
-(_ {¦ max-w: (%- _ w)} ¦ _ w: max max-w: W_number) <> {w: →W}
-(_ {¦ max-h: (%- _ h)} ¦ _ h: max max-h: H_number) <> {h: →H}
+(_ {¦ -max-w: w} ¦ _ w: max max-w: W_number) <> {w: →W}
+(_ {¦ -max-h: h} ¦ _ h: max max-h: H_number) <> {h: →H}
 
 ;; Propagate fractional max-w/h
 (_ {¦ max-w_: (* frac←(%number 0 < _ < 1))} ¦ _ w: max max-w: W_number)
@@ -20,8 +20,8 @@
   <> {max-h: ($ (ceil (* →H →frac)))}
 
 ;; Propagate my content-w/h as max-w/h of children if I am w/h: content.
-(_ {¦ max-w: (%- _ w)} ¦ _ w: content content-w: W_number) <> {w: →W}
-(_ {¦ max-h: (%- _ h)} ¦ _ h: content content-h: H_number) <> {h: →H}
+(_ {¦ -max-w: w} ¦ _ w: content content-w: W_number) <> {w: →W}
+(_ {¦ -max-h: h} ¦ _ h: content content-h: H_number) <> {h: →H}
 
 ;; Set final-w/h according to w/h.
 {¦ w: content content-w_number -final-w_} <> {final-w: →content-w}
@@ -84,22 +84,22 @@
 (padding _ ¦ _ -px_ pl⋮ 0 pr⋮ 0) <> {px: ($once (+ →pl →pr))}
 (padding _ ¦ _ -py_ pt⋮ 0 pb⋮ 0) <> {py: ($once (+ →pt →pb))}
 
-(padding {¦ content-w: w_number} ¦ _ content-w: (%- _ W) px_number) <> {W: ($once (+ →w →px))}
-(padding {¦ content-h: h_number} ¦ _ content-h: (%- _ H) py_number) <> {H: ($once (+ →h →py))}
-(padding {¦ max-w: (%- _ w)} ¦ _ w: max max-w: W_number px_number) <> {w: ($once (- →W →px))}
-(padding {¦ max-h: (%- _ h)} ¦ _ h: max max-h: H_number py_number) <> {h: ($once (- →H →py))}
+(padding {¦ content-w: w_number} ¦ _ -content-w: W px_number) <> {W: ($once (+ →w →px))}
+(padding {¦ content-h: h_number} ¦ _ -content-h: H py_number) <> {H: ($once (+ →h →py))}
+(padding {¦ -max-w: w} ¦ _ w: max max-w: W_number px_number) <> {w: ($once (- →W →px))}
+(padding {¦ -max-h: h} ¦ _ h: max max-h: H_number py_number) <> {h: ($once (- →H →py))}
 (padding {¦ -l_} ¦ _ l: L_number pl_number) <> {l: ($once (+ →L →pl))}
 (padding {¦ -t_} ¦ _ t: T_number pt_number) <> {t: ($once (+ →T →pt))}
 
 ;; NODE: x-expand
 
-(x-expand {¦ max-w: w_number} ¦ _ content-w: (%- _ W)) <> {W: →w}
+(x-expand {¦ max-w: w_number} ¦ _ -content-w: W) <> {W: →w}
 (x-expand {¦ -max-w_ content-w: w_number} ¦ _ min-w_number)
   <> {max-w: ($once (max →min-w →w))}
 
 ;; NODE: y-expand
 
-(y-expand {¦ max-h: h_number} ¦ _ content-h: (%- _ H)) <> {H: →h}
+(y-expand {¦ max-h: h_number} ¦ _ -content-h: H) <> {H: →h}
 (y-expand {¦ -max-h_ content-h: h_number} ¦ _ min-h_number)
   <> {max-h: ($once (max →min-h →h))}
 
@@ -111,8 +111,8 @@
 ;; NODE: translate
 
 ;; Propagate l/t if we do not have x/y defined.
-(translate {¦ -l_} ¦ _ x: (%- _) l: L_number) <> {l: →L}
-(translate {¦ -t_} ¦ _ y: (%- _) t: T_number) <> {t: →T}
+(translate {¦ -l_} ¦ _ -x l: L_number) <> {l: →L}
+(translate {¦ -t_} ¦ _ -y t: T_number) <> {t: →T}
 
 (translate {¦ -l_} ¦ _ l: L_number x_number) <> {l: ($once (+ →L →x))}
 (translate {¦ -t_} ¦ _ t: T_number y_number) <> {t: ($once (+ →T →y))}
@@ -143,32 +143,28 @@
 ;; NODE: x-stack
 
 ;; Compute the content-w of x-stack.
-(x-stack (%many Cws {¦ content-w: (%let 0 _number)}) ¦ _ content-w: (%- _ W) gap⋮ 0)
+(x-stack (%many Cws {¦ content-w: (%let 0 _number)}) ¦ _ -content-w: W gap⋮ 0)
   <> {W: ($ (+ (sum (flatten →Cws)) (* →gap (- (tally →Cws) 1))))}
 
 ;; Compute the content-h of x-stack.
-(x-stack (%many Chs {¦ content-h: (%let 0 _number)}) ¦ _ content-h: (%- _ H))
+(x-stack (%many Chs {¦ content-h: (%let 0 _number)}) ¦ _ -content-h: H)
   <> {H: ($ (max (flatten →Chs)))}
 
 ;; If x-stack is set to h: content then setting h: max in a child
 ;; would mean that the child's max-h is content-h of the x-stack
 ;; (i.e., maximum sibling height).
-(%all (x-stack _+ ¦ _ h: content content-h: H_number) ⟨{¦ h: max max-h: (%- _ h)}⟩°)
-  <> {h: →H}
+(%all (x-stack _+ ¦ _ h: content content-h: H_number) ⟨{¦ h: max -max-h: h}⟩°) <> {h: →H}
 
 ;; If x-stack is set to h: max then setting h: max in a child would
 ;; mean that the child's max-h is max-h of the x-stack.
-(%all (x-stack _+ ¦ _ h: max max-h: H_number) ⟨{¦ h: max max-h: (%- _ h)}⟩°)
-  <> {h: →H}
+(%all (x-stack _+ ¦ _ h: max max-h: H_number) ⟨{¦ h: max -max-h: h}⟩°) <> {h: →H}
 
 ;; In case of a x-stack, all children tops are shared and are exactly
 ;; x-stack's top.
-(%all (x-stack _+ ¦ _ t: T_number) ⟨{¦ -t_}⟩°)
-  <> {t: →T}
+(%all (x-stack _+ ¦ _ t: T_number) ⟨{¦ -t_}⟩°) <> {t: →T}
 
 ;; The first child of x-stack has the same left position as the x-stack itself.
-(x-stack {¦ -l_} _* ¦ _ l: L_number)
-  <> {l: →L}
+(x-stack {¦ -l_} _* ¦ _ l: L_number) <> {l: →L}
 
 ;; Any consecutive child learns its left position from the previous child
 ;; plus the previous child's final-w.
@@ -178,52 +174,50 @@
 ;; This simplifies the job of the rule engine, making sure that it doesn't
 ;; have to go through all children every time before seeing that there is
 ;; no change, with regards to this particular rule.
-(%all (x-stack _* {¦ l: (%- _)} ¦ _ gap⋮ 0) ⟨{¦ l: l0_number final-w: w0_number} {¦ l: (%- _ l1)}⟩)
+(%all (x-stack _* {¦ -l} ¦ _ gap⋮ 0) ⟨{¦ l: l0_number final-w: w0_number} {¦ -l: l1}⟩)
   <> {l1: ($once (+ →l0 →w0 →gap))}
 
 ;; Sum content-w's of x-stack. Subtract from final-w of x-stack to get leftover-w.
 (%all (x-stack children_* ¦ _ fractions: true -leftover-w_ gap⋮ 0 final-w: W_number)
-      (%items () {¦ w: content final-w: (%- _)} min: 0)
+      (%items () {¦ w: content -final-w} min: 0)
       (%items Ws_ {¦ final-w: 0←_number} min: 0))
   <> {leftover-w: ($ (- →W (sum (flatten →Ws)) (* →gap (- (tally →children) 1))))}
 
 ;; Distribute leftover-w across w: max children.
 (%all (x-stack _* ¦ _ fractions: true leftover-w: W_number fr/sum_number)
-      ⟨{¦ w: max fr_: (%number (whole _) > 0) max-w: (%- _ w)}⟩°)
+      ⟨{¦ w: max fr_: (%number (whole _) > 0) -max-w: w}⟩°)
   <> {w: ($ (// (* →W →fr) →fr/sum))}
 
 ;; If x-stack child has w: max but x-stack does not have fractions: true, we
 ;; force the child to become w: content. Otherwise we risk not drawing the child
 ;; at all, which is worse than drawing innaccurately.
-(%all (x-stack _* ¦ _ fractions: (%- _)) ⟨{¦ w_: max max-w: (%- _)}⟩°)
-  <> {w: content}
+(%all (x-stack _* ¦ _ -fractions) ⟨{¦ w_: max -max-w}⟩°) <> {w: content}
 
 ;; NODE: y-stack
 ;;
 ;; The same as x-stack minus the occasional W<->H or L<->T swap. This can
 ;; be generalized, but will lead to unreadable, overly generic mess -- I tried.
 
-(y-stack (%many Cws {¦ content-w: (%let 0 _number)}) ¦ _ content-w: (%- _ W)) <> {W: ($ (max (flatten →Cws)))}
-(y-stack (%many Chs {¦ content-h: (%let 0 _number)}) ¦ _ content-h: (%- _ H) gap⋮ 0)
+(y-stack (%many Cws {¦ content-w: (%let 0 _number)}) ¦ _ -content-w: W) <> {W: ($ (max (flatten →Cws)))}
+(y-stack (%many Chs {¦ content-h: (%let 0 _number)}) ¦ _ -content-h: H gap⋮ 0)
   <> {H: ($ (+ (sum (flatten →Chs)) (* →gap (- (tally →Chs) 1))))}
-(%all (y-stack _+ ¦ _ w: content content-w: W_number) ⟨{¦ w: max max-w: (%- _ w)}⟩°) <> {w: →W}
-(%all (y-stack _+ ¦ _ w: max max-w: W_number) ⟨{¦ w: max max-w: (%- _ w)}⟩°) <> {w: →W}
+(%all (y-stack _+ ¦ _ w: content content-w: W_number) ⟨{¦ w: max -max-w: w}⟩°) <> {w: →W}
+(%all (y-stack _+ ¦ _ w: max max-w: W_number) ⟨{¦ w: max -max-w: w}⟩°) <> {w: →W}
 (%all (y-stack _+ ¦ _ l: L_number) ⟨{¦ -l_ }⟩°) <> {l: →L}
 (y-stack {¦ -t_} _* ¦ _ t: T_number) <> {t: →T}
-(%all (y-stack _* {¦ t: (%- _)} ¦ _ gap⋮ 0) ⟨{¦ t: t0_number final-h: h0_number} {¦ t: (%- _ t1)}⟩)
+(%all (y-stack _* {¦ -t} ¦ _ gap⋮ 0) ⟨{¦ t: t0_number final-h: h0_number} {¦ -t: t1}⟩)
   <> {t1: ($once (+ →t0 →h0 →gap))}
 
 (%all (y-stack children_* ¦ _ fractions: true -leftover-h_ gap⋮ 0 final-h: H_number)
-      (%items () {¦ h: content final-h: (%- _)} min: 0)
+      (%items () {¦ h: content -final-h} min: 0)
       (%items Hs_ {¦ final-h: 0←_number} min: 0))
   <> {leftover-h: ($ (- →H (sum (flatten →Hs)) (* →gap (- (tally →children) 1))))}
 
 (%all (y-stack _* ¦ _ fractions: true leftover-h: H_number fr/sum_number)
-      ⟨{¦ h: max fr_: (%number (whole _) > 0) max-h: (%- _ h)}⟩°)
+      ⟨{¦ h: max fr_: (%number (whole _) > 0) -max-h: h}⟩°)
   <> {h: ($ (// (* →H →fr) →fr/sum))}
 
-(%all (y-stack _* ¦ _ fractions: (%- _)) ⟨{¦ h_: max max-h: (%- _)}⟩°)
-  <> {h: content}
+(%all (y-stack _* ¦ _ -fractions) ⟨{¦ h_: max -max-h}⟩°) <> {h: content}
 
 ;; Helper for both x-stack and y-stack.
 (%all {¦ -fr/sum_ fractions: true} (%items Frs_ {¦ fr: 0←(%number (whole _) > 0)}))
@@ -231,20 +225,20 @@
 
 ;; NODE: z-stack
 
-(z-stack (%many Cws {¦ content-w: 0←_number}) ¦ _ content-w: (%- _ W))
+(z-stack (%many Cws {¦ content-w: 0←_number}) ¦ _ -content-w: W)
   <> {W: ($ (max (flatten →Cws)))}
-(z-stack (%many Chs {¦ content-h: 0←_number}) ¦ _ content-h: (%- _ H))
+(z-stack (%many Chs {¦ content-h: 0←_number}) ¦ _ -content-h: H)
   <> {H: ($ (max (flatten →Chs)))}
 
 ;; If z-stack is set to w/h: content, this means the children receive z-stack's
 ;; content-w/h as max-w/h.
-(%all (z-stack _+ ¦ _ w: content content-w: W_number) ⟨{¦ max-w: (%- _ w)}⟩°) <> {w: →W}
-(%all (z-stack _+ ¦ _ h: content content-h: H_number) ⟨{¦ max-h: (%- _ h)}⟩°) <> {h: →H}
+(%all (z-stack _+ ¦ _ w: content content-w: W_number) ⟨{¦ -max-w: w}⟩°) <> {w: →W}
+(%all (z-stack _+ ¦ _ h: content content-h: H_number) ⟨{¦ -max-h: h}⟩°) <> {h: →H}
 
 ;; If z-stack is set to w/h: max, this means the children receive z-stack's
 ;; max-w/h as max-w/h.
-(%all (z-stack _+ ¦ _ w: max max-w: W_number) ⟨{¦ max-w: (%- _ w)}⟩°) <> {w: →W}
-(%all (z-stack _+ ¦ _ h: max max-h: H_number) ⟨{¦ max-h: (%- _ h)}⟩°) <> {h: →H}
+(%all (z-stack _+ ¦ _ w: max max-w: W_number) ⟨{¦ -max-w: w}⟩°) <> {w: →W}
+(%all (z-stack _+ ¦ _ h: max max-h: H_number) ⟨{¦ -max-h: h}⟩°) <> {h: →H}
 
 ;; The children of z-stack all receive left/top of the z-stack.
 (%all (z-stack _+ ¦ _ l: L_number) ⟨{¦ -l_}⟩°) <> {l: →L}
