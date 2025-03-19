@@ -836,12 +836,18 @@ def ruleR(ctx, term, rule : Rule::BackmapMany, pr : Pr::Pos, templr, backmapr)
 end
 
 def rulesetR(ctx, term, ruleset, templr, backmapr, elser, env : Term::Dict)
-  needle = ruleset.responses(term, env: env).compact_map do |pr, rule|
-    rewrite = ruleR(ctx, term, rule, pr, templr, backmapr)
-    rewrite.diff(term).as?(Rewrite::Some)
+  cursor = ruleset.responses(term, env: env)
+  cursor.each do |pr, rule|
+    rewrite = ruleR(ctx, term, rule, pr, templr, backmapr).diff(term)
+
+    case rewrite
+    in Rewrite::Some
+      return rewrite
+    in Rewrite::None
+    end
   end
 
-  needle.first? || elser.call(ctx, Rewrite.one(term))
+  elser.call(ctx, Rewrite.one(term))
 end
 
 def rulesetR(ruleset, ruler, backmapr, elser, *, envopt : Term? = nil) : Rewriter

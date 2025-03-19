@@ -368,10 +368,27 @@ struct Ruleset
     new(pset, rules.to_readonly_slice.dup)
   end
 
-  def responses(matchee : Term, *, env : Term::Dict = Term[]) : Iterator({Pr::Pos, Rule::Any})
-    @pset
-      .responses(matchee, env: env)
-      .map { |response| {response, @rules[response.pattern.index]} }
+  struct Responses
+    include ICursor
+
+    def initialize(@responses : PatternSet::Responses, @rules : Slice(Rule::Any))
+    end
+
+    def current? : {Pr::Pos, Rule::Any}?
+      if response = @responses.current?
+        {response, @rules[response.pattern.index]}
+      end
+    end
+
+    def next? : Responses?
+      if successor = @responses.next?
+        Responses.new(successor, @rules)
+      end
+    end
+  end
+
+  def responses(matchee : Term, *, env : Term::Dict = Term[]) : Responses
+    Responses.new(@pset.responses(matchee, env: env), @rules)
   end
 
   def call(matchee : Term) : {Pr::Pos, Rule::Any}?

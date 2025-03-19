@@ -5673,6 +5673,41 @@ module Pr
   record Neg
 end
 
+module ICursor
+  abstract def current?
+  abstract def next?
+
+  def first?
+    each do |element|
+      return element
+    end
+  end
+
+  def each(&)
+    cursor = self
+
+    while element = cursor.current?
+      yield element
+
+      cursor = cursor.next? || break
+    end
+  end
+
+  def find(&)
+    cursor = self
+
+    while element = cursor.current?
+      if result = yield element
+        return cursor, result
+      end
+
+      cursor = cursor.next? || break
+    end
+
+    {cursor, nil}
+  end
+end
+
 # An object capable of parsing pattern terms into `Pattern`s (a thin wrapper
 # around `M1::Operator`) and organizing them for efficient response
 # to matchees.
@@ -5772,43 +5807,67 @@ class PatternSet
     self.select(ML.term(selector), ML.terms(base))
   end
 
-  def includes?(term : Term) : Bool
-    # ?! Should we use .probe? here?
-    !responses(term).empty?
+  struct Candidates
+    include ICursor
+
+    def initialize(@headed : Slice(Pattern), @headless : Slice(Pattern), @index = 0)
+    end
+
+    def current? : Pattern?
+      if 0 <= @index < @headed.size
+        @headed[@index]
+      elsif 0 <= @headed.size <= @index < @headed.size + @headless.size
+        @headless[@index - @headed.size]
+      end
+    end
+
+    def next? : Candidates?
+      if @index + 1 < @headed.size + @headless.size
+        Candidates.new(@headed, @headless, @index + 1)
+      end
+    end
   end
 
-  private def response(neighbors : Slice(Pattern), matchee : Term) : Pr::Any
-    neighbors.leftmost?(&.response(matchee).as?(Pr::Pos)) || Pr::Neg.new
+  struct Responses
+    include ICursor
+
+    @candidates : Candidates
+    @response : Pr::Pos?
+
+    def initialize(candidates : Candidates, @matchee : Term, @env : Term::Dict)
+      @candidates, @response = candidates.find &.response(matchee, env: env).as?(Pr::Pos)
+    end
+
+    def current? : Pr::Pos?
+      @response
+    end
+
+    def next? : Responses?
+      # Current @candidates points to the first valid Pr::Pos (if any; otherwise
+      # it points after the end of the candidates list). Thus we advance once,
+      # then the initialize code does its job of finding the next Pr::Pos.
+      if successor = @candidates.next?
+        Responses.new(successor, @matchee, @env)
+      end
+    end
   end
 
-  private def responses(neighbors : Slice(Pattern), matchee : Term) : Array(Pr::Pos)
-    neighbors.compact_map(&.response(matchee).as?(Pr::Pos))
-  end
-
-  # Returns the first response of this pattern set to *matchee*. If none, returns
-  # a negative response.
-  def response(matchee : Term) : Pr::Any
-    matchee.as_d?
+  def candidates(matchee : Term) : Candidates
+    bucket = matchee.as_d?
       .try { |dict| dict.items.first? }
       .try { |head| @headed[head]? }
-      .try { |neighbors| response(neighbors, matchee).as?(Pr::Pos) }
-      .orelse { response(@headless, matchee) }
+
+    bucket ||= Slice(Pattern).empty
+
+    Candidates.new(bucket, @headless, index: 0)
   end
 
-  def candidates(matchee : Term) : Iterator(Pattern)
-    headed = {matchee}.each
-      .compact_map(&.as_d?)
-      .compact_map(&.items.first?)
-      .compact_map { |head| @headed[head]? }
-      .flat_map(&.each)
-
-    headless = @headless.each
-
-    headed.chain(headless)
+  def responses(matchee : Term, *, env = Term[]) : Responses
+    Responses.new(candidates(matchee), matchee, env)
   end
 
-  def responses(matchee : Term, *, env = Term[]) : Iterator(Pr::Pos)
-    candidates(matchee).map(&.response(matchee, env: env)).select(Pr::Pos)
+  def response(matchee : Term, *, env = Term[]) : Pr::Any
+    responses(matchee, env: env).first? || Pr::Neg.new
   end
 end
 
