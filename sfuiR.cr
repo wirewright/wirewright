@@ -387,13 +387,22 @@ module UIR::Platform::SFML
       end
     end
 
-    # Draws all layers on the *primary* layer and returns the resulting texture.
     def collapse(primary : Int32, clip : SF::IntRect? = nil) : SF::Texture
-      base = @layers[primary].target
+      l = r = t = b = 0
 
       @layers.each do |layer|
-        next if layer.z == primary
+        w = layer.target.size.x
+        h = layer.target.size.y
 
+        l = Math.min(l, layer.x)
+        r = Math.max(r, layer.x + w)
+        t = Math.min(t, layer.y)
+        b = Math.max(b, layer.y + h)
+      end
+
+      base = SF::RenderTexture.new(r - l, b - t)
+
+      @layers.each do |layer|
         layer.target.display
 
         sprite = SF::Sprite.new(layer.target.texture)
@@ -403,16 +412,14 @@ module UIR::Platform::SFML
 
       base.display
 
-      if clip
-        clipped = SF::RenderTexture.new(clip.width, clip.height)
-        sprite = SF::Sprite.new(base.texture)
-        sprite.position = -clip.position
-        clipped.draw(sprite)
-        clipped.display
-        clipped.texture
-      else
-        base.texture
-      end
+      clip ||= SF.int_rect(SF.vector2i(0, 0), @layers[primary].target.size)
+
+      clipped = SF::RenderTexture.new(clip.width, clip.height)
+      sprite = SF::Sprite.new(base.texture)
+      sprite.position = -clip.position
+      clipped.draw(sprite)
+      clipped.display
+      clipped.texture
     end
   end
 
@@ -589,8 +596,8 @@ module UIR::Platform::SFML
       ) do
         manager = LayerManager.new
         manager.create(0,
-          x: l.to(Int32) + dl,
-          y: t.to(Int32) + dt,
+          x: 0,
+          y: 0,
           w: Math.max(full_w.to(Int32), w.to(Int32)),
           h: Math.max(full_h.to(Int32), h.to(Int32)),
           bg: color?(bg) || SF::Color::White,
