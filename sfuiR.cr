@@ -355,7 +355,7 @@ module UIR::Platform::SFML
     # height *h*. If the layer already exists, does nothing.
     #
     # Layers with higher *z* are drawn on top of those with a lower *z*.
-    def create(z : Int32, *, x : Int32, y : Int32, w : Int32, h : Int32, bg = SF::Color::Transparent, clip : SF::FloatRect? = nil) : Nil
+    def create(z : Int32, *, x : Int32, y : Int32, w : Int32, h : Int32, bg = SF::Color::Transparent) : Nil
       index = @layers.bsearch_index { |other| other.z >= z }
 
       if index && (other = @layers[index]?)
@@ -365,11 +365,6 @@ module UIR::Platform::SFML
       index ||= @layers.size
 
       target = SF::RenderTexture.new(w, h)
-
-      if clip
-        target.view = SF::View.new(clip)
-      end
-
       target.clear(bg)
 
       @layers.insert(index, LayerData.new(x, y, z, target))
@@ -393,7 +388,7 @@ module UIR::Platform::SFML
     end
 
     # Draws all layers on the *primary* layer and returns the resulting texture.
-    def collapse(primary : Int32) : SF::Texture
+    def collapse(primary : Int32, clip : SF::IntRect? = nil) : SF::Texture
       base = @layers[primary].target
 
       @layers.each do |layer|
@@ -407,7 +402,17 @@ module UIR::Platform::SFML
       end
 
       base.display
-      base.texture
+
+      if clip
+        clipped = SF::RenderTexture.new(clip.width, clip.height)
+        sprite = SF::Sprite.new(base.texture)
+        sprite.position = -clip.position
+        clipped.draw(sprite)
+        clipped.display
+        clipped.texture
+      else
+        base.texture
+      end
     end
   end
 
@@ -589,12 +594,11 @@ module UIR::Platform::SFML
           w: Math.max(full_w.to(Int32), w.to(Int32)),
           h: Math.max(full_h.to(Int32), h.to(Int32)),
           bg: color?(bg) || SF::Color::White,
-          clip: SF.float_rect(x.to(Int32), y.to(Int32), w.to(Int32), h.to(Int32)),
         )
 
         render(vote_cursor, manager, 0, child, -l.to(Int32), -t.to(Int32))
 
-        texture = manager.collapse(0)
+        texture = manager.collapse(0, clip: SF.int_rect(x.to(Int32), y.to(Int32), w.to(Int32), h.to(Int32)))
 
         sf = SF::Sprite.new(texture)
         sf.position = SF.vector2i(l.to(Int32) + dl, t.to(Int32) + dt)
