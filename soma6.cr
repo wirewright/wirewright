@@ -88,8 +88,10 @@ module DocR
     def call(ctx, term, postfix, head, rest)
       Term.case(term) do
         matchpi(
-          %{(button caption_ to @_ (_*) ¦ _ id_)},
-          %{(button caption_ as _ to @_ (_*) ¦ _ id_)}
+          %{(button caption_ to @_ (_*) ¦ () id_)},
+          %{(button caption_ as _ to @_ (_*) ¦ () id_)},
+          %{(button caption_ to @_ (_*) waiting @_ ¦ () id_)},
+          %{(button caption_ as _ to @_ (_*) waiting @_ ¦ () id_)},
         ) do |caption|
           continue unless Rhodium.cursordepth(term, pairspart: true) == -1
 
@@ -294,7 +296,7 @@ module DocR
   end
 
   def visible(document : Term::Dict) : Term::Dict
-    D7.visible(document, except: {:"#waiting"}) # ?!
+    D7.visible(document)
   end
 
   def annotated(document document0 : Term::Dict) : Term::Dict
@@ -308,13 +310,19 @@ module DocR
 
       # TODO: extract into identity
       Term.case(node0) do
-        matchpi %{[button caption_ to @edge_ (_*)]} do
+        matchpi(
+          %{[button caption_ to @edge_ (_*)]},
+          %{[button caption_ to @edge_ (_*) waiting @_]},
+        ) do
           continue unless Rhodium.cursordepth(node0, pairspart: true) == -1
 
           node1 = Term.of(node0.morph({:id, {caption.hash, caption.hash, edge.hash}.hash}))
         end
 
-        matchpi %{[button caption_ as value_ to @edge_ (_*)]} do
+        matchpi(
+          %{[button caption_ as value_ to @edge_ (_*)]},
+          %{[button caption_ as value_ to @edge_ (_*) waiting @_]},
+        ) do
           continue unless Rhodium.cursordepth(node0, pairspart: true) == -1
 
           node1 = Term.of(node0.morph({:id, {caption.hash, value.hash, edge.hash}.hash}))
@@ -342,13 +350,19 @@ module DocR
 
       # TODO: extract into identity
       Term.case(node0) do
-        matchpi %{[button caption_ to @edge_ (_*)]} do
+        matchpi(
+          %{[button caption_ to @edge_ (_*)]},
+          %{[button caption_ to @edge_ (_*) waiting @_]},
+        ) do
           next unless Term.of({caption.hash, caption.hash, edge.hash}.hash) == id
 
           node1 = yield node0
         end
 
-        matchpi %{[button caption_ as value_ to @edge_ (_*)]} do
+        matchpi(
+          %{[button caption_ as value_ to @edge_ (_*)]},
+          %{[button caption_ as value_ to @edge_ (_*) waiting @_]},
+        ) do
           next unless Term.of({caption.hash, value.hash, edge.hash}.hash) == id
 
           node1 = yield node0
@@ -617,11 +631,17 @@ d7ctx.spawn do
       matchpi %{(click id_)} do
         document1 = DocR.ref(docframe0[:document].as_d, id) do |node|
           Term.case(node) do
-            matchpi %{[button _ to @_ (_*)]} do
+            matchpi(
+              %{[button _ to @_ (_*)]},
+              %{[button _ to @_ (_*) waiting @_]},
+            ) do
               Term.of(node.morph({4, Tail, {:press}}))
             end
 
-            matchpi %{[button caption_ as value_ to @edge_ (_*)]} do
+            matchpi(
+              %{[button caption_ as value_ to @edge_ (_*)]},
+              %{[button caption_ as value_ to @edge_ (_*) waiting @_]},
+            ) do
               Term.of(node.morph({6, Tail, {:press}}))
             end
           end

@@ -624,101 +624,102 @@ module Rhodium
 
       # Button
       begin
-        givenpi %[(button _ as @cin_ to @pout_ ((press) _*)) cycle _] do
+        # 1 phase button
+
+        givenpi %[(button _ as msg_ to @pout_ ((press) _*)) cycle _] do |msg|
           effect(document1, nodepath, node0) do
-            if msg = document0[Cells, cin]?
-              event :pulse, pout, msg
+            if ML.edge?(msg.not_nil!)
+              msg = document0[Cells, msg]?
             end
-            backmap %[(button _ as _ to @_ (action_ _*))], %[{(action): ()}]
-
-            false
-          end
-        end
-
-        givenpi %[(button _ as msg_ to @pout_ ((press) _*)) cycle _] do
-          effect(document1, nodepath, node0) do
-            event :pulse, pout, msg
-            backmap %[(button _ as _ to @_ (action_ _*))], %[{(action): ()}]
-
-            false
-          end
-        end
-
-        givenpi %[(button @cin_ to @pout_ ((press) _*)) cycle _] do
-          effect(document1, nodepath, node0) do
-            if msg = document0[Cells, cin]?
+            if msg
               event :pulse, pout, msg
+              backmap %[(button _ as _ to @_ (state_ _*))], %[{(state): ()}]
             end
-            backmap %[(button _ to _ (action_ _*))], %[{(action): ()}]
+            false
+          end
+        end
+
+        givenpi %[(button msg_ to @pout_ ((press) _*)) cycle _] do |msg|
+          effect(document1, nodepath, node0) do
+            if ML.edge?(msg.not_nil!)
+              msg = document0[Cells, msg]?
+            end
+            if msg
+              event :pulse, pout, msg
+              backmap %[(button _ to _ (action_ _*))], %[{(action): ()}]
+            end
+            false
+          end
+        end
+
+        # 2 phase button
+
+        # Down
+        givenpi %[(button _ as msg_ to @pout_ ((press) _*) waiting @_) cycle _] do |msg|
+          effect(document1, nodepath, node0) do
+            if ML.edge?(msg.not_nil!)
+              msg = document0[Cells, msg]?
+            end
+            if msg
+              event :pulse, pout, msg
+              backmap %[(button _ as _ to @_ ((state_) _*) waiting _)], %[{state: pressed}]
+            end
+            false
+          end
+        end
+
+        # Up
+        givenpi %[(button _ as _ to @_ ((pressed) _*) waiting @acks_) (pulse @acks_ _) _] do
+          effect(document1, nodepath, node0) do
+            backmap %[(button _ as _ to @_ (state_ _*) waiting _)], %[{(state): ()}]
 
             false
           end
         end
 
-        givenpi %[(button msg_ to @pout_ ((press) _*)) cycle _] do
+        # Down
+        givenpi %[(button msg_ to @pout_ ((press) _*) waiting @_) cycle _] do |msg|
           effect(document1, nodepath, node0) do
-            event :pulse, pout, msg
-            backmap %[(button _ to _ (action_ _*))], %[{(action): ()}]
+            if ML.edge?(msg.not_nil!)
+              msg = document0[Cells, msg]?
+            end
+            if msg
+              event :pulse, pout, msg
+              backmap %[(button _ to _ ((state_) _*) waiting _)], %[{state: pressed}]
+            end
 
             false
           end
         end
 
-        # The different kinds of buttons we have all support feedback. The patterns
-        # are a bit loose but I guess it's fine. It's too much of a button to
-        # not work.
-
-        givenpi %[(button caption_ to @pout_ (_*)) (feedback busy @pout_) _] do
+        # Up
+        givenpi %[(button _ to @_ ((pressed) _*) waiting @acks_) (pulse @acks_ _) _] do
           effect(document1, nodepath, node0) do
-            backmap %[{¦ #shadow: (%- _ shadow) #waiting: (%- _ waiting)}],
-              shadow: Term.of(:button, {:"%literal", caption}, :to, {:"%literal", pout}, {:"_*"}),
-              waiting: 1
+            backmap %[(button _ to @_ (state_ _*) waiting _)], %[{(state): ()}]
 
             false
           end
         end
+      end
 
-        givenpi %[(button caption_ as msg_ to @pout_ (_*)) (feedback busy @pout_) _] do
-          effect(document1, nodepath, node0) do
-            backmap %[{¦ #shadow: (%- _ shadow) #waiting: (%- _ waiting)}],
-              shadow: Term.of(:button, {:"%literal", caption}, :as, {:"%literal", msg}, :to, {:"%literal", pout}, {:"_*"}),
-              waiting: 1
+      givenpi %[(combined pins←⟨@pin_⟩ in storage_dict to @pout_) (pulse @pin_ value_) -1] do
+        storage1 = storage
 
-            false
-          end
+        pins.items.each_with_index do |current, index|
+          next unless current == pin
+
+          storage1 = storage1.with(index, value)
         end
 
-        givenpi(
-          %[(button _ to @pout_ (_*) ¦ #shadow: _ #waiting: waiting←(%number (whole _) > 0)) (feedback busy @pout_) _],
-          %[(button _ as _ to @pout_ (_*) ¦ #shadow: _ #waiting: waiting←(%number (whole _) > 0)) (feedback busy @pout_) _]
-        ) do
-          effect(document1, nodepath, node0) do
-            change "#waiting": waiting + 1
-
-            false
+        effect(document1, nodepath, node0) do
+          if storage1.size == pins.size
+            event :pulse, pout, storage1
+            storage1 = Term[]
           end
-        end
 
-        givenpi(
-          %[(button _ to @pout_ (_*) ¦ #shadow: _ #waiting: 1) (feedback (%any done cancelled) @pout_) _],
-          %[(button _ as _ to @pout_ (_*) ¦ #shadow: _ #waiting: 1) (feedback (%any done cancelled) @pout_) _],
-        ) do
-          effect(document1, nodepath, node0) do
-            clear :"#waiting", :"#shadow"
+          backmap %[(combined _ in storage_ to @_)], storage: storage1
 
-            false
-          end
-        end
-
-        givenpi(
-          %[(button _ to @pout_ (_*) ¦ #shadow: _ #waiting: waiting←(%number (whole _) > 0)) (feedback (%any done cancelled) @pout_) _],
-          %[(button _ as _ to @pout_ (_*) ¦ #shadow: _ #waiting: waiting←(%number (whole _) > 0)) (feedback (%any done cancelled) @pout_) _],
-        ) do
-          effect(document1, nodepath, node0) do
-            change "#waiting": waiting - 1
-
-            false
-          end
+          false
         end
       end
 
@@ -832,62 +833,26 @@ module Rhodium
         end
       end
 
-      givenpi %[(queue @pin_ to @_ in (_*)) (pulse @pin_ value_) -1] do
+      givenpi %[(queue @pin_ to @_ in (_*) waiting @_) (pulse @pin_ value_) -1] do
         effect(document1, nodepath, node0) do
-          backmap %[(_ _ to _ in (_* ⏏head))], head: value
+          backmap %[(_ _ to _ in (_* ⏏back) waiting _)], back: {:new, value}
 
           false
         end
       end
 
-      givenpi %[(queue @pin_ to @pout_ in (head_ _*)) (pull @pout_) -1] do
-        effect(document1, nodepath, node0) do
-          event :pulse, pout, head
-
-          false
-        end
-      end
-
-      # Dequeue
-      givenpi %[(queue @pin_ to @pout_ in (head_ _*)) (feedback completed @pout_ head_) -1] do
-        effect(document1, nodepath, node0) do
-          backmap %[(_ _ to _ in (head_ _*))], %[{(head): ()}]
-
-          false
-        end
-      end
-
-      givenpi %[(pull @pout_ from @pin_) (pull @pout_) -1] do
-        effect(document1, nodepath, node0) do
-          event :pull, pin
-
-          false
-        end
-      end
-
-      givenpi %[(pull @pout_ from @pin_) (pulse @pin_ value_) -1] do
-        effect(document1, nodepath, node0) do
-          change pending: value
-
-          false
-        end
-      end
-
-      givenpi(
-        %[(pull @pout_ from @pin_ pending: value_) (pull @pout_) -1],
-      ) do
+      givenpi %[(queue @_ to @pout_ in ((new value_) _*) waiting @_) cycle -1] do
         effect(document1, nodepath, node0) do
           event :pulse, pout, value
-          change state: :busy
+          backmap %[(_ _ to _ in ((state_ _) _*) waiting _)], state: :pending
 
           false
         end
       end
 
-      givenpi %[(pull @pout_ from @pin_ pending: value_ state: busy) (feedback (%any done cancelled) @pout_) -1] do
+      givenpi %[(queue @_ to @_ in ((pending _) _*) waiting @acks_) (pulse @acks_ _) -1] do
         effect(document1, nodepath, node0) do
-          event :feedback, :completed, pin, value
-          clear :state, :pending
+          backmap %[(_ _ to _ in (state_ _*) waiting _)], %[{(state): ()}]
 
           false
         end
@@ -955,7 +920,6 @@ module Rhodium
         # Send feedback busy. Schedule job.
         givenpi %[(transform _* ¦ #shadow: _ #spec: {¦ in: @pin_} #job: job_) initialize -1] do
           effect(document1, nodepath, node0) do
-            event :feedback, :busy, pin
             schedule job
 
             false
@@ -965,7 +929,6 @@ module Rhodium
         # Wait for the job to complete.
         givenpi %[(transform _* ¦ #shadow: _ #spec: {¦ in: @pin_, out: @pout_} #job: job_) (job/completed job_ result_) -1] do
           effect(document1, nodepath, node0) do
-            event :feedback, :done, pin
             event :pulse, pout, result
             clear :"#job"
             disappear
@@ -1220,9 +1183,7 @@ module Rhodium
       end
 
       matchpi %{(transform @pin_ job_)} do
-        document1 = document1.morph({JobsPending, job, nil})
-
-        Q.of(document1, Events).enqueue(:feedback, :cancelled, pin).commit(document1, Events)
+        document1.morph({JobsPending, job, nil})
       end
 
       otherwise { document1 }

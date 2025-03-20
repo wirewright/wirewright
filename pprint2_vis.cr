@@ -303,7 +303,7 @@ struct Button
 
     Term.of(:block,
       Term[:button, caption_string,
-        enabled: !term[:"#waiting"]?,
+        enabled: true,
         mailbox: term[:mailbox]?],
       w: caption_string.size + 2,
       h: 1)
@@ -311,13 +311,19 @@ struct Button
 
   def call(ctx, term, postfix, head, rest)
     Term.case(term) do
-      matchpi %{[button caption_ to @_ (_*)]} do
+      matchpi(
+        %{[button caption_ to @_ (_*)]},
+        %{[button caption_ to @_ (_*) waiting @_]},
+      ) do
         continue unless Rhodium.cursordepth(term, pairspart: true) == -1
 
         Term.of(:row, button(term, caption), Term.of(:frag, postfix))
       end
 
-      matchpi %{[button caption_ as msg_ to @_ (_*)]} do
+      matchpi(
+        %{[button caption_ as _ to @_ (_*)]},
+        %{[button caption_ as _ to @_ (_*) waiting @_]},
+      ) do
         continue unless Rhodium.cursordepth(term, pairspart: true) == -1
 
         Term.of(:row, button(term, caption), Term.of(:frag, postfix))
@@ -361,13 +367,19 @@ def annotate(document : Term::Dict)
     node = Rhodium.follow(document, nodepath)
 
     Term.case(node) do
-      matchpi %{(button _ to @_ (_*) ¦ _ #waiting: (%- _))} do
+      matchpi(
+        %{[button _ to @_ (_*)]},
+        %{[button _ to @_ (_*) waiting @_]},
+      ) do
         continue unless Rhodium.cursordepth(node, pairspart: true) == -1
 
         document = Rhodium.assign(document, nodepath, Term.of(node.with(:mailbox, Term[nodepath].append(4))))
       end
 
-      matchpi %{(button _ as _ to @_ (_*) ¦ _ #waiting: (%- _))} do
+      matchpi(
+        %{[button _ as _ to @_ (_*)]},
+        %{[button _ as _ to @_ (_*) waiting @_]},
+      ) do
         continue unless Rhodium.cursordepth(node, pairspart: true) == -1
 
         document = Rhodium.assign(document, nodepath, Term.of(node.with(:mailbox, Term[nodepath].append(6))))
@@ -846,7 +858,7 @@ class Soma
     if @debug
       next_visible_document = document
     else
-      next_visible_document = D7.visible(document, except: {Term.of(:"#waiting")})
+      next_visible_document = D7.visible(document)
     end
 
     # Handle Resize

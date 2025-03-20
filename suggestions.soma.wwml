@@ -22,12 +22,30 @@
   (literal mailbox "mailbox dict through which µsoma will communicate with the button"))
 
 (variant button
+  (literal msg "used both as caption and message sent to sink on click")
+  (comma to)
+  (pulse pout "sink for messages")
+  (literal mailbox "mailbox dict through which µsoma will communicate with the button")
+  (comma waiting)
+  (pulse acks "source of message acknowledgements"))
+
+(variant button
   (literal caption "string term that is going to be written on top of the button")
   (comma as)
   (literal msg "message sent to sink on click")
   (comma to)
   (pulse pout "sink for messages")
   (literal mailbox "mailbox dict through which µsoma will communicate with the button"))
+
+(variant button
+  (literal caption "string term that is going to be written on top of the button")
+  (comma as)
+  (literal msg "message sent to sink on click")
+  (comma to)
+  (pulse pout "sink for messages")
+  (literal mailbox "mailbox dict through which µsoma will communicate with the button")
+  (comma waiting)
+  (pulse acks "source of message acknowledgements"))
 
 (group cell "Stores a term inside itself. Acts as a source of const signal")
 
@@ -137,17 +155,14 @@
 (node periodic "Emits an event on every cycle"
   (literal e "term that should be emitted as an event"))
 
-(node pull "Asks for more values on every cycle until getting something. Sends that to @pout and waits until @pout completes"
-  (pulse pout "source of pulled values")
-  (comma from)
-  (pulse pin "sink for pulled values"))
-
-(node queue "Holds an unbounded number of terms. Guarantees dequeue only after the front was handled by the other side (successfully or not)"
+(node queue "Holds an unbounded number of terms. Two-phase: dequeues on cycle + waits for confirmation"
   (pulse pin "source of values to enqueue")
   (comma to)
   (pulse pout "sink for dequeued values")
   (comma in)
-  (literal storage "dict for storing enqueued values"))
+  (literal storage "dict for storing enqueued values")
+  (comma waiting)
+  (pulse acks "source of dequeue confirmations (any term)"))
 
 (node row "Arranges its children in a horizontal stack, with an optional gap")
 
@@ -209,3 +224,10 @@
   (pulse pout "sink for value")
   (comma as)
   (pulse v "value"))
+
+(node combined "Gathers latest values for all pulses and flushes them"
+  (literal pins "list of pulse edges to wait for")
+  (comma in)
+  (literal storage "temporary storage for their values")
+  (comma to)
+  (pulse pout "sink for full storages"))
