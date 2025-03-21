@@ -379,10 +379,6 @@ module DocR
     document1
   end
 
-  # Returns the pretty-print tree for *document* of a fragment thereof.
-  #
-  # *toplevel* specifies whether *term* is the toplevel document.
-  #
   # FIXME: only accept Term::Dict!!
   def pptree(document : Term, *, toplevel : Bool = true) : Term
     ppin = document
@@ -486,6 +482,19 @@ module DocR
     # cause an explosion higher up -- the unit is malformed, period; we will show
     # it as code instead.
   end
+end
+
+def find_by_id(tree : Term::Dict, id)
+  id = Term.of(id)
+  needle = nil
+
+  Keypath.each_item(tree.upcast) do |keypath, item0|
+    next unless id == item0[:id]?
+    needle = item0
+    false # break
+  end
+
+  needle || raise KeyError.new
 end
 
 def find_by_id(tree : Term::Dict, id, &fn : Term -> Term)
@@ -743,7 +752,7 @@ d7ctx.spawn do
 end
 
 frame0 = ML.term <<-WWML
-((self window) style: "bg-neutral-900 max origin" max-w: 1000 max-h: 800
+((self window) style: "bg-neutral-900 max origin" max-w: 1000 max-h: 800 mouse: (0 0)
   (group style: "max flow-col gap-3 p-3 fr"
     (group style: "bg-neutral-800 w-max h-content px-2 py-1 rounded-sm"
       (p "Wirewright µsoma" style: "text-neutral-400 text-xs"))
@@ -751,15 +760,8 @@ frame0 = ML.term <<-WWML
       (group style: "max" id: view))))
 WWML
 
-# TODO: remove in favor of frame.getById(view)
-visible = Term[]
-
-# TODO: move to frame.mouseX, frame.mouseY
-mouse_x = Term[0]
-mouse_y = Term[0]
-
 ui = UIR::Reducers.microfold(frame0) do |frame, drawable, event|
-  changed = false
+  handled = true
 
   Term.case(event) do
     matchpi %{(key f1)} do
@@ -770,9 +772,14 @@ ui = UIR::Reducers.microfold(frame0) do |frame, drawable, event|
       events.send(event)
     end
 
+    matchpi %{cycle} do
+      view0 = find_by_id(frame.as_d, :view)
+      view1 = view.get(:relaxed)
+      handled = !view0.same?(view1)
+    end
+
     matchpi %{(mouse motion x_number y_number)} do
-      mouse_x = x.unsafe_as_n
-      mouse_y = y.unsafe_as_n
+      frame = Term.of(frame.morph({:mouse, {x, y}}))
 
       if grip = frame[:grip]?
         gx, gy = grip
@@ -784,20 +791,16 @@ ui = UIR::Reducers.microfold(frame0) do |frame, drawable, event|
             {:y, viewport[:y] + dy},
           ))
         end)
-        frame = Term.of(frame.morph({:grip, {mouse_x, mouse_y}}))
+        frame = Term.of(frame.morph({:grip, frame[:mouse]}))
       end
-
-      changed = true
     end
 
     matchpi %{(mouse press)} do
       if hovered = frame[:hovered]?
         frame = Term.of(frame.morph({:active, hovered}))
       else
-        frame = Term.of(frame.morph({:grip, {mouse_x, mouse_y}}, {:cursor, :grabbing}))
+        frame = Term.of(frame.morph({:grip, frame[:mouse]}, {:cursor, :grabbing}))
       end
-
-      changed = true
     end
 
     matchpi %{(mouse release)} do
@@ -808,51 +811,50 @@ ui = UIR::Reducers.microfold(frame0) do |frame, drawable, event|
       end
 
       frame = Term.of(frame.morph({:active, nil}))
-      changed = true
     end
 
     matchpi %{(size w_number h_number)} do
       frame = Term.of(frame.morph({:"max-w", w}, {:"max-h", h}))
-      changed = true
     end
 
-    otherwise { }
+    otherwise do
+      handled = false
+    end
   end
 
+  next frame unless handled
+
   view1 = view.get(:relaxed)
-  changed ||= !visible.same?(view1)
-  if changed
-    visible = view1
-    frame = Term.of(find_by_id(frame.as_d, :view) { |g| Term.of(g.morph({1, view1})) })
-    if prev = frame[:hovered]?
-      Keypath.each_item(frame) do |keypath, item|
-        next unless item = item.as_d?
-        next unless item[:hover]?
-        next unless prev == item[:id]?
 
-        frame = Term.of(frame.as_d.follow(keypath) { item.morph({:hover, false}).upcast })
+  frame = Term.of(find_by_id(frame.as_d, :view) { |g| Term.of(g.morph({1, view1})) })
+  if prev = frame[:hovered]?
+    Keypath.each_item(frame) do |keypath, item|
+      next unless item = item.as_d?
+      next unless item[:hover]?
+      next unless prev == item[:id]?
 
-        true # continue
-      end
+      frame = Term.of(frame.as_d.follow(keypath) { item.morph({:hover, false}).upcast })
+
+      true # continue
     end
+  end
 
-    frame = Term.of(frame.morph({:hovered, nil}))
+  frame = Term.of(frame.morph({:hovered, nil}))
 
-    UIR.hit(drawable, mouse_x, mouse_y) do |kp|
-      target = drawable.follow(kp)
-      next unless target[:hover]?
-      next unless id = target[:id]?
+  UIR.hit(drawable, frame[:mouse, 0].as_n, frame[:mouse, 1].as_n) do |kp|
+    target = drawable.follow(kp)
+    next unless target[:hover]?
+    next unless id = target[:id]?
 
-      frame = Term.of(frame.morph({:hovered, id}))
+    frame = Term.of(frame.morph({:hovered, id}))
 
-      Keypath.each_item(frame) do |keypath, item|
-        next unless item = item.as_d?
-        next unless id == item[:id]?
+    Keypath.each_item(frame) do |keypath, item|
+      next unless item = item.as_d?
+      next unless id == item[:id]?
 
-        frame = Term.of(frame.as_d.follow(keypath) { item.morph({:hover, true}).upcast })
+      frame = Term.of(frame.as_d.follow(keypath) { item.morph({:hover, true}).upcast })
 
-        true # continue
-      end
+      true # continue
     end
   end
 
