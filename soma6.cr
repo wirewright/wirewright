@@ -501,7 +501,7 @@ class Document
     @nitrene = Nitrene::JobContext.new
     @document = Term[]
     @initial = true
-    @dirty = false
+    @state = State::Clean
 
     # Finally, spin up the document thread.
     mt = ExecutionContext::MultiThreaded.new("Document #{@@counter.add(1, :relaxed)}", 1)
@@ -558,16 +558,20 @@ class Document
 
       peek
 
-      case draw_state
-      in .clean?
-      in .dirty?
-        @dirty = true
-      in .drawable?
-        unless @dirty
-          draw
-        end
-        @dirty = false
+      state0 = @state
+      state1 = state
+
+      case {state0, state1}
+      when {State::Clean, State::Drawable}
+        draw
+        state1 = State::Clean
+      when {State::Dirty, State::Drawable}
+        state1 = State::Clean
+      when {State::Dirty, _}
+        state1 = state0
       end
+
+      @state = state1
 
       # Trigger a transition if the itemsparts are different. Peek may
       # override the document (perhaps even entirely!)
@@ -576,25 +580,21 @@ class Document
   end
 
   # :nodoc:
-  enum DrawState : UInt8
+  enum State : UInt8
     Clean
     Dirty
     Drawable
   end
 
-  private def draw_state : DrawState
+  # Returns the current state of the document (based on the front event or its absence).
+  private def state : State
     unless event = Rhodium::Q.of(@document, Rhodium::Events).first?
-      return DrawState::Drawable
+      return State::Drawable
     end
 
     Term.case(event) do
-      matchpi %{(edit @user _)} do
-        DrawState::Dirty
-      end
-
-      otherwise do
-        DrawState::Clean
-      end
+      matchpi %{(edit @user _)} { State::Dirty }
+      otherwise { State::Clean }
     end
   end
 
