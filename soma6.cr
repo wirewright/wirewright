@@ -82,16 +82,16 @@ module DocR
     include Feature
 
     TEMPLATE = ML.term <<-WWML
-    (button ^caption id: ^id hover: false)
+    (button ^caption id: ^id style: ^style hover: false)
     WWML
 
     def call(ctx, term, postfix, head, rest)
       Term.case(term) do
         matchpi(
-          %{(button caption_ to @_ (_*) ¦ () id_)},
-          %{(button caption_ as _ to @_ (_*) ¦ () id_)},
-          %{(button caption_ to @_ (_*) waiting @_ ¦ () id_)},
-          %{(button caption_ as _ to @_ (_*) waiting @_ ¦ () id_)},
+          %{(button caption_ to @_ (_*) ¦ _ style⋮ "" id_)},
+          %{(button caption_ as _ to @_ (_*) ¦ _ style⋮ "" id_)},
+          %{(button caption_ to @_ (_*) waiting @_ ¦ _ style⋮ "" id_)},
+          %{(button caption_ as _ to @_ (_*) waiting @_ ¦ _ style⋮ "" id_)},
         ) do |caption|
           continue unless Rhodium.cursordepth(term, pairspart: true) == -1
 
@@ -100,7 +100,7 @@ module DocR
             caption = Term.of(ML.display(caption, endl: false).gsub(/\s+/, ' '))
           end
 
-          unit = Alloy.render(Term[id: id, caption: caption], TEMPLATE)
+          unit = Alloy.render(Term[id: id, caption: caption, style: style], TEMPLATE)
 
           continue unless block = DocR.block?(unit)
 
@@ -391,11 +391,7 @@ module DocR
       ppin = pipe(document, visible, annotated)
     end
 
-    chain = ML::Display::MAIN_CHAIN
-      .prepend(Button.new)
-      .prepend(Comment.new)
-      .prepend(Cursor.new)
-      .prepend(Unit.new)
+    chain = ML::Display::MAIN_CHAIN.prepend(Button.new, Comment.new, Cursor.new, Unit.new)
 
     ctx = DisplayContext.new(60, 120, features: chain)
     if toplevel

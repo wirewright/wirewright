@@ -626,27 +626,27 @@ module Rhodium
       begin
         # 1 phase button
 
-        givenpi %[(button _ as msg_ to @pout_ ((press) _*)) cycle _] do |msg|
+        givenpi %[[button _ as msg_ to @pout_ ((press) _*)] cycle _] do |msg|
           effect(document1, nodepath, node0) do
             if ML.edge?(msg.not_nil!)
               msg = document0[Cells, msg]?
             end
             if msg
               event :pulse, pout, msg
-              backmap %[(button _ as _ to @_ (state_ _*))], %[{(state): ()}]
+              backmap %[[button _ as _ to @_ (state_ _*)]], %[{(state): ()}]
             end
             false
           end
         end
 
-        givenpi %[(button msg_ to @pout_ ((press) _*)) cycle _] do |msg|
+        givenpi %[[button msg_ to @pout_ ((press) _*)] cycle _] do |msg|
           effect(document1, nodepath, node0) do
             if ML.edge?(msg.not_nil!)
               msg = document0[Cells, msg]?
             end
             if msg
               event :pulse, pout, msg
-              backmap %[(button _ to _ (action_ _*))], %[{(action): ()}]
+              backmap %[[button _ to _ (action_ _*)]], %[{(action): ()}]
             end
             false
           end
@@ -655,37 +655,37 @@ module Rhodium
         # 2 phase button
 
         # Down
-        givenpi %[(button _ as msg_ to @pout_ ((press) _*) waiting @_) cycle _] do |msg|
+        givenpi %[[button _ as msg_ to @pout_ ((press) _*) waiting @_] cycle _] do |msg|
           effect(document1, nodepath, node0) do
             if ML.edge?(msg.not_nil!)
               msg = document0[Cells, msg]?
             end
             if msg
               event :pulse, pout, msg
-              backmap %[(button _ as _ to @_ ((state_) _*) waiting _)], %[{state: pressed}]
+              backmap %[[button _ as _ to @_ ((state_) _*) waiting _]], %[{state: pressed}]
             end
             false
           end
         end
 
         # Up
-        givenpi %[(button _ as _ to @_ ((pressed) _*) waiting @acks_) (pulse @acks_ _) _] do
+        givenpi %[[button _ as _ to @_ ((pressed) _*) waiting @acks_] (pulse @acks_ _) _] do
           effect(document1, nodepath, node0) do
-            backmap %[(button _ as _ to @_ (state_ _*) waiting _)], %[{(state): ()}]
+            backmap %[[button _ as _ to @_ (state_ _*) waiting _]], %[{(state): ()}]
 
             false
           end
         end
 
         # Down
-        givenpi %[(button msg_ to @pout_ ((press) _*) waiting @_) cycle _] do |msg|
+        givenpi %[[button msg_ to @pout_ ((press) _*) waiting @_] cycle _] do |msg|
           effect(document1, nodepath, node0) do
             if ML.edge?(msg.not_nil!)
               msg = document0[Cells, msg]?
             end
             if msg
               event :pulse, pout, msg
-              backmap %[(button _ to _ ((state_) _*) waiting _)], %[{state: pressed}]
+              backmap %[[button _ to _ ((state_) _*) waiting _]], %[{state: pressed}]
             end
 
             false
@@ -693,9 +693,9 @@ module Rhodium
         end
 
         # Up
-        givenpi %[(button _ to @_ ((pressed) _*) waiting @acks_) (pulse @acks_ _) _] do
+        givenpi %[[button _ to @_ ((pressed) _*) waiting @acks_] (pulse @acks_ _) _] do
           effect(document1, nodepath, node0) do
-            backmap %[(button _ to @_ (state_ _*) waiting _)], %[{(state): ()}]
+            backmap %[[button _ to @_ (state_ _*) waiting _]], %[{(state): ()}]
 
             false
           end
