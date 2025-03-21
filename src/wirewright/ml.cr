@@ -68,6 +68,11 @@ module Ww::ML
     raise e
   end
 
+  # Same as `terms`, but downcasts the resulting term to the dictionary type.
+  def dict(source : String) : Term::Dict
+    terms(source).as_d
+  end
+
   # Parses and returns a single top-level WwML expression term from *source*.
   #
   # Raises `SyntaxError` in case *source* contains a syntax error.

@@ -44,6 +44,26 @@ module ::Ww::Keypath
       return parent
     end
   end
+
+  def follow(root : Term, keypath : Stack(Term)) : Term
+    if keypath.empty?
+      return root
+    end
+
+    root0 = root.as_d? || raise KeypathError.new
+    root0.follow(keypath)
+  end
+
+  def assign(root : Term, keypath : Stack(Term), value : Term) : Term
+    if keypath.empty?
+      return value
+    end
+
+    root0 = root.as_d? || raise KeypathError.new
+    root1 = root0.follow(keypath) { value }
+
+    Term.of(root1)
+  end
 end
 
 module UIR

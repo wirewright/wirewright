@@ -50,7 +50,7 @@ module DocR
             commit.concat(children.items) do |child|
               Term.case(child) do
                 matchpi %{_dict} do
-                  DocR.unit(DocR.pptree(Term.of(child), toplevel: false))
+                  DocR.unit(DocR.pptree(child.unsafe_as_d, toplevel: false))
                 end
 
                 otherwise { child }
@@ -379,18 +379,13 @@ module DocR
     document1
   end
 
-  # FIXME: only accept Term::Dict!!
-  def pptree(document : Term, *, toplevel : Bool = true) : Term
-    ppin = document
-
-    if document = document.as_d?
-      ppin = pipe(document, visible, annotated)
-    end
+  def pptree(document : Term::Dict, *, toplevel : Bool = true) : Term
+    ppin = pipe(document, visible, annotated)
 
     chain = ML::Display::MAIN_CHAIN.prepend(Button.new, Comment.new, Cursor.new, Unit.new)
 
     ctx = DisplayContext.new(60, 120, features: chain)
-    if toplevel
+    if toplevel && !ppin.empty?
       tree = LayoutSet::All.thunk(Term.of(ppin), "", toplevel ? LayoutSet::DictAligned : LayoutSet::All)
     else
       tree = chain.call(ctx, Term.of(ppin), "")
@@ -482,274 +477,288 @@ module DocR
     # cause an explosion higher up -- the unit is malformed, period; we will show
     # it as code instead.
   end
-end
 
-def find_by_id(tree : Term::Dict, id)
-  id = Term.of(id)
-  needle = nil
-
-  Keypath.each_item(tree.upcast) do |keypath, item0|
-    next unless id == item0[:id]?
-    needle = item0
-    false # break
+  def view(document : Term::Dict) : Term
+    pipe(document, DocR.pptree, DocR.unit)
   end
-
-  needle || raise KeyError.new
 end
 
-def find_by_id(tree : Term::Dict, id, &fn : Term -> Term)
-  id = Term.of(id)
-
-  Keypath.each_item(tree.upcast) do |keypath, item0|
-    next unless id == item0[:id]?
-
-    item1 = fn.call(item0)
-
-    tree = tree.follow(keypath) { item1 }.as_d
-
-    false # break
-  end
-
-  tree
-end
-
-blank = ML.term <<-WWML
-(group (p "Loading..." style: "text-neutral-300") style: "max center bg-neutral-800")
-WWML
-
-view = Atomic(Term::Dict).new(blank.as_d)
-events = Channel(Term).new(128)
-
-class LoadExample < Exception
-end
-
-d7ctx = ExecutionContext::MultiThreaded.new("D7", 1)
-d7ctx.spawn do
-  demo = ML.terms <<-WWML
-  (unit group style: "content flow-col gap-5 bg-neutral-800 p-5"
-    (unit group style: "w-max h-content center-x"
-      (view @count-envs as (p ^count style: "text-7xl font-bold text-neutral-100")))
-    (unit group style: "content flow-row gap-5"
-      (button "Increment" as 1 to @deltas ())
-      (button "Decrement" as -1 to @deltas ())))
-
-  (transform @counts to @count-envs {count: _})
-  (initial @count to @counts)
-
-  (comment "Lorem ipsum dolor sit amet, officia excepteur ex fugiat reprehenderit enim labore culpa sint ad nisi Lorem pariatur mollit ex esse exercitation amet. Nisi anim cupidatat excepteur officia. Reprehenderit nostrud nostrud ipsum Lorem est aliquip amet voluptate voluptate dolor minim nulla est proident. Nostrud officia pariatur ut officia. Sit irure elit esse ea nulla sunt ex occaecat reprehenderit commodo officia dolor Lorem duis laboris cupidatat officia voluptate. Culpa proident adipisicing id nulla nisi laboris ex in Lorem sunt duis officia eiusmod. Aliqua reprehenderit commodo ex non excepteur duis sunt velit enim. Voluptate laboris sint cupidatat ullamco ut ea consectetur et est culpa et culpa duis.")
-  (cell 0 @count)
-  (transform (@deltas delta_number) to @counts with @count (+ count delta))
-  (latest @counts @count)
-  ("" | "" () @user)
+class Document
+  BLANK = DocR.view ML.dict <<-WWML
+  (group style: "max center bg-neutral-800"
+    (p "The view of the document is loading..." style: "text-neutral-300"))
   WWML
 
-  document = ML.terms <<-WWML
-  (comment
-    "Welcome to µsoma, a GUI for Wirewright"
-    ""
-    "µsoma to Wirewright is roughly what a web browser is to the Internet."
-    ""
-    "You're looking at a *self-embodied program*. Well, sort of — it only contains one comment right now. Hit left/right arrow to see for yourself. Or type `;;` and write your own!"
-    ""
-    "Try typing the following:"
-    ""
-    "  (cell 0 @count)"
-    "  (button \\"Increment\\" as 1 to @deltas ())"
-    "  (button \\"Decrement\\" as -1 to @deltas ())"
-    "  (transform @deltas to @counts with @count (+ count _))"
-    "  (latest @counts @count)"
-    ""
-    "Click on the buttons and see what happens! :^)"
-    ""
-    "- Drag on empty/non-clickable space to pan around if something overflows."
-    "- Hit Enter to escape from a pair."
-    "- Hit F2 to replace this document with a more sophisticated demo."
-    "- Hit Ctrl-Backspace to remove this comment (and any *node* before the cursor in general)."
-    "- Play! The sem-readable implementation of this editor is in `editor.soma.wwml`; check it out for key bindings & what they do"
-    "- Take a look at D7 tests: `delta7.test.wwml`. Plenty of examples there.")
+  # Used to generate document ids.
+  @@counter = Atomic(UInt32).new(0u32)
 
-  ("" | "" () @user)
+  def initialize
+    @view = Atomic(Term::Dict).new(BLANK.as_d)
+    @mailbox = Channel(Term).new(128)
 
-  WWML
+    # The following instance variables are owned exclusively by the document
+    # thread. No one else must know they exist.
+    @nitrene = Nitrene::JobContext.new
+    @document = Term[]
+    @initial = true
+    @dirty = false
 
-  # TODO: figure out what's going on here (esp. with should_draw) and refactor
-  # into something comprehendible. This is madness.
+    # Finally, spin up the document thread.
+    mt = ExecutionContext::MultiThreaded.new("Document #{@@counter.add(1, :relaxed)}", 1)
+    mt.spawn { mainloop }
+  end
+
+  # Returns the latest view of this document.
+  def view : Term::Dict
+    @view.get(:relaxed)
+  end
+
+  # Adds *prompt* to this document's mailbox.
+  def send(prompt : Term) : Nil
+    @mailbox.send(prompt)
+  end
+
+  # Hosts the main loop run by the document thread.
   #
-  # the idea with should_draw is to draw here:
+  # The main loop "runs the physics": advances the document step-by-step.
+  # These advancements are interleaved with `rendezvous`.
   #
-  #  <BEGIN OF CYCLE> E1 E2 E3 ... <END OF CYCLE>
-  #                                -------------
-  #                                        draw
-  #
-  # but then:
-  #                                                   provide suggestions (maybe)
-  #                                                     vvvv
-  #  <BEGIN OF CYCLE> E1 E2 (edit @user ...) E3 ... <END OF CYCLE> <BEGIN OF CYCLE> E1 E2 E3 ... <END OF CYCLE>
-  #                                                                                              -------------
-  #                                                                                                   draw
-  # => then we have no flickering of suggestions.
-  #
-  # or obviously before polling we force a draw!
+  # Once the document has settled the mainloop waits (`wait`) for further prompts.
+  private def mainloop : Nil
+    settled = false
 
-  initial = true
-  settled = false
-
-  docframe0 = DocR.unit(DocR.pptree(document))
-  docframe0 = docframe0.morph({:document, document})
-
-  should_draw = false
-  previously_drawn_doc = nil
-  show = ->do
-    return unless should_draw
-
-    doc = docframe0[:document].as_d
-
-    # Do not overdraw
-    doc_to_draw = DocR.visible(doc)
-    if previously_drawn_doc == doc_to_draw
-      return
-    end
-
-    docframe0 = DocR.unit(DocR.pptree(Term.of(doc)))
-    docframe0 = docframe0.morph({:document, doc})
-
-    previously_drawn_doc = doc_to_draw
-
-    view.set(docframe0.without(:document), :relaxed)
-  end
-
-  handle = ->(event : Term) do
-    Term.case(event) do
-      matchpi %{(key f2)} do
-        raise LoadExample.new # duh...
-      end
-
-      matchpi %{(key _)}, %{(input _string)} do
-        document0 = docframe0[:document].as_d
-        document1 = Rhodium::Q.of(document0, Rhodium::Events)
-          .enqueue(Term.of(:edit, {:edge, :user}, event))
-          .commit(document0, Rhodium::Events)
-
-        docframe0 = docframe0.morph({:document, document1})
-      end
-
-      matchpi %{(click id_)} do
-        document1 = DocR.ref(docframe0[:document].as_d, id) do |node|
-          Term.case(node) do
-            matchpi(
-              %{[button _ to @_ (_*)]},
-              %{[button _ to @_ (_*) waiting @_]},
-            ) do
-              Term.of(node.morph({4, Tail, {:press}}))
-            end
-
-            matchpi(
-              %{[button caption_ as value_ to @edge_ (_*)]},
-              %{[button caption_ as value_ to @edge_ (_*) waiting @_]},
-            ) do
-              Term.of(node.morph({6, Tail, {:press}}))
-            end
-          end
-        end
-        docframe0 = docframe0.morph({:document, document1})
-      end
-
-      otherwise { }
-    end
-  end
-
-  peek = ->do
-    select
-    when event = events.receive
-      handle.call(event)
-    else
-    end
-  end
-
-  wait = ->do
-    handle.call(events.receive)
-    show.call
-  end
-
-  edited = false
-
-  check_should_draw = D7::Step.new do |document|
-    queue = Rhodium::Q.of(document, Rhodium::Events)
-
-    if e = queue.first?
-      Term.case(e) do
-        matchpi %{(edit @user _)} { edited = true }
-        otherwise { }
-      end
-    else
-      # cycle
-      should_draw = !edited
-      edited = false
-    end
-
-    # We do not modify the document and therefore we never trigger
-    # a transition.
-    {document, false}
-  end
-
-  cycle = D7::Step.new do |document|
-    docframe0 = docframe0.morph({:document, document})
-
-    peek.call
-    show.call
-
-    # We do not modify the document and therefore never need to trigger
-    # a transition.
-    {docframe0[:document].as_d, false}
-  end
-
-  nitrene = Nitrene::JobContext.new
-
-  ctx0 = ExecutionContext::MultiThreaded.new("Nitrene Alarm", 1)
-  ctx0.spawn do
     while true
-      nitrene.alarm.receive
-      events.send(Term.of(:"job-completed"))
-    end
-  rescue Channel::ClosedError
-    # Noop. We just stop polling.
-  end
+      draw
 
-  while true
-    begin
-      should_draw = true
-
-      show.call
-
-      should_draw = false
-
-      while settled
-        wait.call
+      if settled
+        wait
 
         settled = false
       end
 
-      seed0 = docframe0[:document].as_d
-      seed1 = D7.run(seed0,
+      @document = D7.run(@document,
         log: D7::Log::None.new,
         transition: Rhodium.transition,
-        step: D7.steps(check_should_draw, Rhodium.step, Nitrene.step(nitrene), cycle),
+        step: D7.steps(rendezvous, Rhodium.step, Nitrene.step(@nitrene)),
         goal: D7::Goal.none,
-        initial: initial,
+        initial: @initial,
       )
 
-      docframe0 = docframe0.morph({:document, seed1})
-
-      initial = false
+      @initial = false
       settled = true
-    rescue LoadExample
-      # reset
-      initial = true
-      settled = false
-      docframe0 = docframe0.morph({:document, demo})
+    end
+  end
+
+  # Rendezvous step assesses and modifies the state of the document. It enhances
+  # the document based on prompts (`peek`), and decides whether the document should
+  # be drawn.
+  private def rendezvous : D7::Step
+    D7::Step.new do |document|
+      @document = document
+
+      peek
+
+      case draw_state
+      in .clean?
+      in .dirty?
+        @dirty = true
+      in .drawable?
+        unless @dirty
+          draw
+        end
+        @dirty = false
+      end
+
+      # Trigger a transition if the itemsparts are different. Peek may
+      # override the document (perhaps even entirely!)
+      {@document, @document.itemspart != document.itemspart}
+    end
+  end
+
+  # :nodoc:
+  enum DrawState : UInt8
+    Clean
+    Dirty
+    Drawable
+  end
+
+  private def draw_state : DrawState
+    unless event = Rhodium::Q.of(@document, Rhodium::Events).first?
+      return DrawState::Drawable
+    end
+
+    Term.case(event) do
+      matchpi %{(edit @user _)} do
+        DrawState::Dirty
+      end
+
+      otherwise do
+        DrawState::Clean
+      end
+    end
+  end
+
+  # Draws the document.
+  private def draw : Nil
+    drawable = DocR.view(@document)
+
+    @view.set(drawable.as_d, :relaxed)
+  end
+
+  # Blocks until a prompt arrives to this document's mailbox. Handles that prompt.
+  #
+  # Raises `Channel::ClosedError` if the mailbox is closed while waiting.
+  private def wait : Nil
+    select
+    when prompt = @mailbox.receive
+    when @nitrene.alarm.receive
+      prompt = Term.of(:"job-completed")
+    end
+
+    handle(prompt)
+  end
+
+  # Checks the mailbox for new prompts. If none, returns immediately. If some,
+  # handles the front prompt.
+  #
+  # Raises `Channel::ClosedError` if the mailbox is closed while waiting.
+  private def peek : Nil
+    select
+    when prompt = @mailbox.receive
+      handle(prompt)
+    else
+    end
+  end
+
+  # Handles the given *prompt*. We call events directed toward the document *prompts*
+  # to avoid confusion (e.g. relative to UI events in general). This method is the main
+  # dispatch point for prompts.
+  private def handle(prompt : Term) : Nil
+    Term.case(prompt) do
+      matchpi %{(open seed_dict)} { open(seed.unsafe_as_d) }
+      matchpi %{(key _)}, %{(input _string)} { edit(prompt) }
+      matchpi %{(click id_)} { click(id) }
+      otherwise { }
+    end
+  end
+
+  # Replaces the document with a new *seed*.
+  private def open(seed : Term::Dict) : Nil
+    @document = seed
+    # This is needed if we're currently `wait`ing. If `peek` is the caller
+    # it doesn't care about initial/not because it'll trigger a transition
+    # anyway -- due to document change. With wait it's another story.
+    @initial = true
+  end
+
+  # Enqueues `(edit @user motion_)` event onto the document's queue.
+  private def edit(motion : Term) : Nil
+    @document = Rhodium::Q.of(@document, Rhodium::Events)
+      .enqueue(Term.of(:edit, {:edge, :user}, motion))
+      .commit(@document, Rhodium::Events)
+  end
+
+  # Clicks on an element with the given *id*.
+  #
+  # *id* is usually a big number, the hash of the relevant pieces of identity
+  # of the target element.
+  #
+  # See also: `DocR.ref`.
+  private def click(id : Term) : Nil
+    @document = DocR.ref(@document, id) do |target|
+      Term.of_case(target) do
+        matchpi(
+          %{[button _ to @_ (_*)]},
+          %{[button _ to @_ (_*) waiting @_]},
+        ) { target.morph({4, Tail, {:press}}) }
+
+        matchpi(
+          %{[button caption_ as value_ to @edge_ (_*)]},
+          %{[button caption_ as value_ to @edge_ (_*) waiting @_]},
+        ) { target.morph({6, Tail, {:press}}) }
+      end
     end
   end
 end
+
+module Frame
+  extend self
+
+  def set(frame : Term::Dict, id, attr, value) : Term::Dict
+    map(frame, id, &.with(attr, value))
+  end
+
+  def setchild(frame : Term::Dict, id, child) : Term::Dict
+    set(frame, id, 1, child)
+  end
+
+  def map(frame : Term::Dict, id : Term, &fn : Term::Dict -> Term::Dict) : Term::Dict
+    Keypath.each_item(Term.of(frame)) do |keypath, item|
+      next unless item = item.as_d?
+      next unless id == item[:id]?
+
+      frame = Keypath.assign(Term.of(frame), keypath, Term.of(fn.call(item))).as_d
+
+      true # continue
+    end
+
+    frame
+  end
+
+  def map(frame : Term::Dict, id, &fn : Term::Dict -> Term::Dict) : Term::Dict
+    map(frame, Term.of(id), &fn)
+  end
+end
+
+demo = ML.dict <<-WWML
+(unit group style: "content flow-col gap-5 bg-neutral-800 p-5"
+  (unit group style: "w-max h-content center-x"
+    (view @count-envs as (p ^count style: "text-7xl font-bold text-neutral-100")))
+  (unit group style: "content flow-row gap-5"
+    (button "Increment" as 1 to @deltas ())
+    (button "Decrement" as -1 to @deltas ())))
+
+(transform @counts to @count-envs {count: _})
+(initial @count to @counts)
+
+(comment "Lorem ipsum dolor sit amet, officia excepteur ex fugiat reprehenderit enim labore culpa sint ad nisi Lorem pariatur mollit ex esse exercitation amet. Nisi anim cupidatat excepteur officia. Reprehenderit nostrud nostrud ipsum Lorem est aliquip amet voluptate voluptate dolor minim nulla est proident. Nostrud officia pariatur ut officia. Sit irure elit esse ea nulla sunt ex occaecat reprehenderit commodo officia dolor Lorem duis laboris cupidatat officia voluptate. Culpa proident adipisicing id nulla nisi laboris ex in Lorem sunt duis officia eiusmod. Aliqua reprehenderit commodo ex non excepteur duis sunt velit enim. Voluptate laboris sint cupidatat ullamco ut ea consectetur et est culpa et culpa duis.")
+(cell 0 @count)
+(transform (@deltas delta_number) to @counts with @count (+ count delta))
+(latest @counts @count)
+("" | "" () @user)
+WWML
+
+seed = ML.dict <<-WWML
+(comment
+  "Welcome to µsoma, a GUI for Wirewright"
+  ""
+  "µsoma to Wirewright is roughly what a web browser is to the Internet."
+  ""
+  "You're looking at a *self-embodied program*. Well, sort of — it only contains one comment right now. Hit left/right arrow to see for yourself. Or type `;;` and write your own!"
+  ""
+  "Try typing the following:"
+  ""
+  "  (cell 0 @count)"
+  "  (button \\"Increment\\" as 1 to @deltas ())"
+  "  (button \\"Decrement\\" as -1 to @deltas ())"
+  "  (transform @deltas to @counts with @count (+ count _))"
+  "  (latest @counts @count)"
+  ""
+  "Click on the buttons and see what happens! :^)"
+  ""
+  "- Drag on empty/non-clickable space to pan around if something overflows."
+  "- Hit Enter to escape from a pair."
+  "- Hit F2 to replace this document with a more sophisticated demo."
+  "- Hit Ctrl-Backspace to remove this comment (and any *node* before the cursor in general)."
+  "- Play! The sem-readable implementation of this editor is in `editor.soma.wwml`; check it out for key bindings & what they do"
+  "- Take a look at D7 tests: `delta7.test.wwml`. Plenty of examples there.")
+
+("" | "" () @user)
+
+WWML
+
+doc = Document.new
+doc.send(Term.of(:open, seed))
 
 frame0 = ML.term <<-WWML
 ((self window) style: "bg-neutral-900 max origin" max-w: 1000 max-h: 800 mouse: (0 0)
@@ -760,105 +769,84 @@ frame0 = ML.term <<-WWML
       (group style: "max" id: view))))
 WWML
 
-ui = UIR::Reducers.microfold(frame0) do |frame, drawable, event|
-  handled = true
+frame0 = Frame.setchild(frame0.as_d, :view, doc.view)
+
+ui = UIR::Reducers.microfold(Term.of(frame0)) do |inframe, drawable, event|
+  frame = inframe.as_d
 
   Term.case(event) do
     matchpi %{(key f1)} do
       puts ML.display(drawable, style: ML::Style::Indent2)
     end
 
-    matchpi %{open}, %{(key _)}, %{(input _string)} do
-      events.send(event)
+    matchpi %{(key f2)} do
+      doc.send(Term.of(:open, demo))
     end
 
-    matchpi %{cycle} do
-      view0 = find_by_id(frame.as_d, :view)
-      view1 = view.get(:relaxed)
-      handled = !view0.same?(view1)
+    matchpi %{(key _symbol)}, %{(input _string)} do
+      doc.send(event)
     end
 
     matchpi %{(mouse motion x_number y_number)} do
-      frame = Term.of(frame.morph({:mouse, {x, y}}))
+      frame = frame.morph({:mouse, {x, y}})
 
       if grip = frame[:grip]?
         gx, gy = grip
         dx = gx - x
         dy = gy - y
-        frame = Term.of(find_by_id(frame.as_d, :viewport) do |viewport|
-          Term.of(viewport.morph(
-            {:x, viewport[:x] + dx},
-            {:y, viewport[:y] + dy},
-          ))
-        end)
-        frame = Term.of(frame.morph({:grip, frame[:mouse]}))
+
+        frame = Frame.map(frame, :viewport) do |viewport|
+          viewport.morph({:x, viewport[:x] + dx}, {:y, viewport[:y] + dy})
+        end
+
+        frame = frame.morph({:grip, frame[:mouse]})
       end
     end
 
     matchpi %{(mouse press)} do
       if hovered = frame[:hovered]?
-        frame = Term.of(frame.morph({:active, hovered}))
+        frame = frame.morph({:active, hovered})
       else
-        frame = Term.of(frame.morph({:grip, frame[:mouse]}, {:cursor, :grabbing}))
+        frame = frame.morph({:grip, frame[:mouse]}, {:cursor, :grabbing})
       end
     end
 
     matchpi %{(mouse release)} do
       if (active = frame[:active]?) && (frame[:active]? == frame[:hovered]?)
-        events.send(Term.of(:click, active))
+        doc.send(Term.of(:click, active))
       elsif grip = frame[:grip]?
-        frame = Term.of(frame.morph({:grip, nil}, {:cursor, nil}))
+        frame = frame.morph({:grip, nil}, {:cursor, nil})
       end
-
-      frame = Term.of(frame.morph({:active, nil}))
     end
 
     matchpi %{(size w_number h_number)} do
-      frame = Term.of(frame.morph({:"max-w", w}, {:"max-h", h}))
+      frame = frame.morph({:"max-w", w}, {:"max-h", h})
     end
 
-    otherwise do
-      handled = false
+    matchpi %{cycle} do
+      frame = Frame.setchild(frame, :view, doc.view)
     end
+
+    otherwise { }
   end
 
-  next frame unless handled
-
-  view1 = view.get(:relaxed)
-
-  frame = Term.of(find_by_id(frame.as_d, :view) { |g| Term.of(g.morph({1, view1})) })
-  if prev = frame[:hovered]?
-    Keypath.each_item(frame) do |keypath, item|
-      next unless item = item.as_d?
-      next unless item[:hover]?
-      next unless prev == item[:id]?
-
-      frame = Term.of(frame.as_d.follow(keypath) { item.morph({:hover, false}).upcast })
-
-      true # continue
-    end
+  # Unhover
+  if hovered = frame[:hovered]?
+    frame = Frame.map(frame, hovered, &.morph({:hover, false}))
+    frame = frame.morph({:hovered, nil})
   end
 
-  frame = Term.of(frame.morph({:hovered, nil}))
-
-  UIR.hit(drawable, frame[:mouse, 0].as_n, frame[:mouse, 1].as_n) do |kp|
-    target = drawable.follow(kp)
+  # Hover
+  UIR.hit(drawable, frame[:mouse, 0].as_n, frame[:mouse, 1].as_n) do |keypath|
+    target = Keypath.follow(drawable, keypath)
     next unless target[:hover]?
     next unless id = target[:id]?
 
-    frame = Term.of(frame.morph({:hovered, id}))
-
-    Keypath.each_item(frame) do |keypath, item|
-      next unless item = item.as_d?
-      next unless id == item[:id]?
-
-      frame = Term.of(frame.as_d.follow(keypath) { item.morph({:hover, true}).upcast })
-
-      true # continue
-    end
+    frame = Frame.map(frame, id, &.morph({:hover, true}))
+    frame = frame.morph({:hovered, id})
   end
 
-  frame
+  Term.of(frame)
 end
 
 UIR::Platform::Current.show(ui)
