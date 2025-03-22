@@ -49,10 +49,7 @@ module DocR
             commit << node
             commit.concat(children.items) do |child|
               Term.case(child) do
-                matchpi %{_dict} do
-                  DocR.unit(DocR.pptree(child.unsafe_as_d, toplevel: false))
-                end
-
+                matchpi %{_dict} { DocR.view(child.unsafe_as_d, aligned: false) }
                 otherwise { child }
               end
             end
@@ -379,14 +376,15 @@ module DocR
     document1
   end
 
-  def pptree(document : Term::Dict, *, toplevel : Bool = true) : Term
+  def pptree(document : Term::Dict, *, aligned : Bool = true) : Term
     ppin = pipe(document, visible, annotated)
 
     chain = ML::Display::MAIN_CHAIN.prepend(Button.new, Comment.new, Cursor.new, Unit.new)
 
     ctx = DisplayContext.new(60, 120, features: chain)
-    if toplevel && !ppin.empty?
-      tree = LayoutSet::All.thunk(Term.of(ppin), "", toplevel ? LayoutSet::DictAligned : LayoutSet::All)
+    # FIXME: handle empty document
+    if aligned && !ppin.empty?
+      tree = LayoutSet::All.thunk(Term.of(ppin), "", aligned ? LayoutSet::DictAligned : LayoutSet::All)
     else
       tree = chain.call(ctx, Term.of(ppin), "")
     end
@@ -478,8 +476,8 @@ module DocR
     # it as code instead.
   end
 
-  def view(document : Term::Dict) : Term
-    pipe(document, DocR.pptree, DocR.unit)
+  def view(document : Term::Dict, *, aligned : Bool = true) : Term
+    pipe(document, DocR.pptree(aligned: aligned), DocR.unit)
   end
 end
 
@@ -762,12 +760,35 @@ doc.send(Term.of(:open, seed))
 
 frame0 = ML.term <<-WWML
 ((self window) style: "bg-neutral-900 max origin" max-w: 1000 max-h: 800 mouse: (0 0)
-  (group style: "max flow-col gap-3 p-3 fr"
-    (group style: "bg-neutral-800 w-max h-content px-2 py-1 rounded-sm"
-      (p "Wirewright µsoma" style: "text-neutral-400 text-xs"))
-    ((self viewport) style: "w-max h-fr bg-neutral-900" x: 0 y: 0 id: viewport
-      (group style: "max" id: view))))
+  (group style: "max flow-none"
+    (group style: "max flow-col gap-3 p-3 fr"
+      (group style: "bg-neutral-800 w-max h-content px-2 py-1 rounded-sm"
+        (p "Wirewright µsoma" style: "text-neutral-400 text-xs"))
+      ((self viewport) style: "w-max h-fr bg-neutral-900" x: 0 y: 0 id: viewport
+        (group style: "max" id: view)))))
+;;    ;; Template for command palette
+;;    (group style: "max center-x py-20 z-100 bg-neutral-950 opacity-80"
+;;      (group style: "content min-w-lg flow-col gap-5"
+;;        (group style: "w-max h-content p-5 bg-neutral-800 rounded-lg border border-blue-400"
+;;          (p "Start typing to search..." style: "text-neutral-500 font-normal text-lg"))
+;;        (group style: "w-max h-content p-5 bg-neutral-900 rounded-lg flow-col gap-5"
+;;          (group style: "w-max h-content p-3 focused:bg-neutral-800 rounded-md flow-row fr gap-3" focused: true
+;;            (group style: "w-content h-max center-y"
+;;              (icon "\\u00e161" style: "text-neutral-300 text-xl")) ;; save
+;;            (group style: "w-fr h-max flow-col gap-1"
+;;              (p "Save" style: "text-sm font-bold text-neutral-300")
+;;              (p "Saves this document on the disk." style: "text-xs text-neutral-400")))
+;;          (group style: "w-max h-content p-3 focused:bg-neutral-800 rounded-md flow-row fr gap-3"
+;;            (group style: "w-content h-max center-y"
+;;              (icon "\\u00e89e" style: "text-neutral-300 text-xl")) ;; open_in_new
+;;            (group style: "w-fr h-max flow-col gap-1"
+;;              (p "Load" style: "text-sm font-bold text-neutral-300")
+;;              (p "Loads a document from disk." style: "text-xs text-neutral-400"))))))))
 WWML
+
+# List, search: Save, Load
+# When press save, pick directory and file. Option to create file. Option to go back.
+# When press load, pick directory and file. Option to go back.
 
 frame0 = Frame.setchild(frame0.as_d, :view, doc.view)
 

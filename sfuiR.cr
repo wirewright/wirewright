@@ -333,10 +333,10 @@ module UIR::Platform::SFML
   # :nodoc:
   SIZEALL = SF::Cursor.from_system(SF::Cursor::Type::SizeAll)
 
-  private def color?(term : Term) : SF::Color?
-    Term.case(term) do
-      matchpi %{(r←(%number u8) g←(%number u8) b←(%number u8))} do
-        SF::Color.new(r.to(UInt8), g.to(UInt8), b.to(UInt8))
+  private def color?(term : Term, alpha = Term[255]) : SF::Color?
+    Term.case({term, alpha}) do
+      givenpi %{(r←(%number u8) g←(%number u8) b←(%number u8)) a←(%number u8)} do
+        SF::Color.new(r.to(UInt8), g.to(UInt8), b.to(UInt8), a.to(UInt8))
       end
 
       otherwise { }
@@ -492,11 +492,12 @@ module UIR::Platform::SFML
 
       matchpi(
         %[(rect ¦ _ bg_
+                    alpha: (%optional 255 alpha←(%number u8))
                     l_: (%number i32)
                     t_: (%number i32)
                     final-w: w←(%number +i32)
                     final-h: h←(%number +i32)
-                    border-radius: (%optional 0 border_radius←(%number (whole _) >= 0))
+                    border-radius: (%optional 0 border-radius←(%number (whole _) >= 0))
                     ring-l: (%optional 0 ring-l←(%number (whole _) >= 0))
                     ring-r: (%optional 0 ring-r←(%number (whole _) >= 0))
                     ring-t: (%optional 0 ring-t←(%number (whole _) >= 0))
@@ -510,7 +511,7 @@ module UIR::Platform::SFML
           sf = SF::RectangleShape.new.as(SF::Rectangular)
         end
 
-        sf.fill_color = color?(bg) || SF::Color::Transparent
+        sf.fill_color = color?(bg, alpha) || SF::Color::Transparent
         sf.position = SF.vector2i(l.to(Int32) + dl, t.to(Int32) + dt)
         sf.size = SF.vector2i(w.to(Int32), h.to(Int32))
 
@@ -531,7 +532,7 @@ module UIR::Platform::SFML
                             final-w: w←(%number +i32)
                             final-h: h←(%number +i32)
                             border-width: thickness←(%number +i32)
-                            border-radius: (%optional 0 border_radius←(%number (whole _) >= 0)))]
+                            border-radius: (%optional 0 border-radius←(%number (whole _) >= 0)))]
       ) do |thickness|
         thickness = thickness.to(Int32)
 

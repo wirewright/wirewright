@@ -2,6 +2,10 @@
 ;;
 ;; https://tailwindcss.com
 
+"font-icons": {font: "Material Icons Outlined"}
+"font-sans": {font: "IBM Plex Sans"}
+"font-mono": {font: "IBM Plex Mono"}
+
 "rounded-xs": {border-radius: (rem 0.125)}
 "rounded-sm": {border-radius: (rem 0.25)}
 "rounded-md": {border-radius: (rem 0.375)}
@@ -32,9 +36,6 @@
 "text-7xl": {text-size: (rem 4.5), leading: 1}
 "text-8xl": {text-size: (rem 6), leading: 1}
 "text-9xl": {text-size: (rem 8), leading: 1}
-
-"font-sans": {font: "IBM Plex Sans"}
-"font-mono": {font: "IBM Plex Mono"}
 
 "font-thin": {font-weight: 100}
 "font-extralight": {font-weight: 200}
@@ -144,6 +145,9 @@
 (nat "border" N {border-width: N_})
 
 "cursor-pointer": {cursor: pointer}
+"cursor-grabbing": {cursor: grabbing}
+
+(nat "opacity" N {opacity: N_})
 
 (word "min" (+ "min-w" "min-h"))
 
@@ -454,6 +458,7 @@ colors: {
 
 defaults: {
   p: "content font-sans text-base text-black font-text",
+  icon: "content font-icons text-base text-black font-normal",
   code: "content font-mono text-base text-black font-text",
   button: "bg-neutral-700 hover:bg-blue-500 hover:cursor-pointer rounded-sm px-4 py-2 center text-sm text-neutral-50 content font-sans font-medium",
 }

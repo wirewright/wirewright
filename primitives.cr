@@ -55,6 +55,10 @@ PRIMITIVES = ProcRuleset.build do
     xs.unsafe_as_d.size
   end
 
+  rulepi1 %[(charcount xs_string)] do
+    xs.unsafe_as_s.charcount
+  end
+
   rulepi1 %[(sum ())] { 0 }
   rulepi1 %[(sum (args_number+))] { args.items.reduce { |a, b| a.unsafe_as_n + b.unsafe_as_n } }
 
@@ -75,5 +79,7 @@ PRIMITIVES = ProcRuleset.build do
     Term::Str::Substring.words(s.unsafe_as_s, b.to(Int32), e.to(Int32))
   end
 
-  # TODO: take substring by lines.
+  rulepi1 %[(substring s_string (line b←(%number i32)) (line e←(%number i32)))] do
+    Term::Str::Substring.lines(s.unsafe_as_s, b.to(Int32), e.to(Int32))
+  end
 end

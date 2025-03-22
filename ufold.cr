@@ -390,11 +390,18 @@ module Microfold
       r0 = 0
     end
 
+    if (opacity = ctx.sheet[:opacity]?) && (opacity = opacity.as_n?) && opacity.natural? && opacity <= Term[100]
+      alpha = (opacity/100 * Term[255]).floor
+    else
+      alpha = Term[255]
+    end
+
     Term.of(:"z-stack",
       Term.of(:rect,
         w: :max,
         h: :max,
         bg: bg,
+        alpha: alpha,
         "border-radius": ctx.sheet[:"border-radius"]?,
         rl: rl || r0,
         rr: rr || r0,

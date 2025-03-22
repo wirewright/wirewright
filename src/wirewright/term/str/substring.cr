@@ -51,7 +51,7 @@ module Ww::Term::Str::Substring
       end
     end
   end
-  
+
   # Left-to-right word reader.
   struct WordReader::LtoR < WordReader
     def initialize(string : String)
@@ -61,12 +61,12 @@ module Ww::Term::Str::Substring
     def forward : Nil
       @reader.next_char
     end
-  
+
     def end? : Bool
       @reader.current_char == '\0'
     end
   end
-  
+
   # Right-to-left word reader.
   struct WordReader::RtoL < WordReader
     def initialize(string : String)
@@ -74,7 +74,7 @@ module Ww::Term::Str::Substring
       @reader = Char::Reader.new(at_end: string)
       @reader.next_char # Move to EOI '\0'
     end
-  
+
     def forward : Nil
       if @reader.pos.zero?
         @boi = true
@@ -82,7 +82,7 @@ module Ww::Term::Str::Substring
         @reader.previous_char
       end
     end
-  
+
     def end? : Bool
       @boi
     end
@@ -97,13 +97,13 @@ module Ww::Term::Str::Substring
     string = string.to(String)
 
     r = WordReader::LtoR.new(string)
-  
+
     nwords.times do
       break if r.end?
       r.word
       r.spaces
     end
-  
+
     Term[string.byte_slice(r.pos..)]
   end
 
@@ -112,13 +112,13 @@ module Ww::Term::Str::Substring
     string = string.to(String)
 
     r = WordReader::LtoR.new(string)
-  
+
     nwords.times do
       break if r.end?
       r.word
       r.spaces
     end
-  
+
     Term[string.byte_slice(0...r.pos)]
   end
 
@@ -127,13 +127,13 @@ module Ww::Term::Str::Substring
     string = string.to(String)
 
     r = WordReader::RtoL.new(string)
-  
+
     nwords.times do
       break if r.end?
       r.spaces
       r.word
     end
-  
+
     Term[r.end? ? "" : string.byte_slice(0..r.pos)]
   end
 
@@ -142,21 +142,40 @@ module Ww::Term::Str::Substring
     string = string.to(String)
 
     r = WordReader::RtoL.new(string)
-  
+
     nwords.times do
       break if r.end?
       r.spaces
       r.word
     end
-  
+
     Term[r.end? ? string : string.byte_slice(r.pos + 1..)]
+  end
+
+  # FIXME: bounds errors, optimize
+
+  def lltake(string : Term::Str, nlines : Int32)
+    Term[string.to(String).lines[...nlines].join('\n')]
+  end
+
+  def lldrop(string : Term::Str, nlines : Int32)
+    Term[string.to(String).lines[nlines..].join('\n')]
+  end
+
+  def rltake(string : Term::Str, nlines : Int32)
+    Term[string.to(String).lines[-nlines..].join('\n')]
+  end
+
+  def rldrop(string : Term::Str, nlines : Int32)
+    pp(nlines + 1)
+    Term[string.to(String).lines[...-nlines + 1].join('\n')]
   end
 
   # Takes a word substring, both ends included. `0` means the first word.
   # Negative numbers count from the last word. `-1` means the last word.
   def words(string : Term::Str, b0 : Int32, e0 : Int32) : Term::Str
-    string = b0.negative? ? Substring.rwtake(string, b0.abs) : Substring.lwdrop(string, b0)
-    string = e0.negative? ? Substring.rwdrop(string, e0.abs - 1) : Substring.lwtake(string, e0 - b0 + 1)
+    string = b0.negative? ? rwtake(string, b0.abs) : lwdrop(string, b0)
+    string = e0.negative? ? rwdrop(string, e0.abs - 1) : lwtake(string, e0 - b0 + 1)
     string
   end
 
@@ -164,5 +183,11 @@ module Ww::Term::Str::Substring
   # Negative numbers count from the last rune. `-1` means the last rune.
   def runes(string : Term::Str, b0 : Int32, e0 : Int32) : Term::Str
     Term[string.to(String)[b0..e0]? || ""]
+  end
+
+  # Takes a line substring, both ends included. `0` means the first line.
+  # Negative numbers count from the last line. `-1` means the last line.
+  def lines(string : Term::Str, b0 : Int32, e0 : Int32) : Term::Str
+    Term[string.to(String).lines(chomp: false)[b0..e0].join]
   end
 end
