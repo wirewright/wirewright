@@ -127,15 +127,22 @@ module Ww::ML::Text
             when 'r'  then io << '\r'
             when 't'  then io << '\t'
             when 'u'
-              u1 = advance
-              u2 = advance
-              u3 = advance
-              u4 = advance
-              u5 = advance
+              advance
+              u1 = chr
+              advance
+              u2 = chr
+              advance
+              u3 = chr
+              advance
+              u4 = chr
+              advance
+              u5 = chr
+              advance
               u6 = chr
               io << {u1, u2, u3, u4, u5, u6}.join.to_i(16).chr # FIXME: to_i raise
             when 'x'
-              b1 = advance
+              advance
+              b1 = chr
               b2 = chr
               io.write_byte({b1, b2}.join.to_i(16).to_u8) # FIXME: to_i raise
             when '\0'
