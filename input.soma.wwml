@@ -1,0 +1,182 @@
+;; General purpose string editor for µsoma (the logic).
+;;
+;; Used in search fields, input fields, in the command palette, etc. Anywhere
+;; where single- or multiline text input is needed.
+
+[_string _ _string (E_ _*)]
+  <> {(E): ()}
+
+;; Insert characters
+[l_string | _string (E←(input ch_string) _*)]
+  <> {(E): (), l: ($once (~ →l →ch))}
+
+;; Map enter to input newline
+[l_string | _string (E←(key enter) _*)]
+  <> {E: (input "\n")}
+
+;; Move left
+[l_string | r_string (E←(key left) _*)]
+  <> {(E): (),
+      l: ($once (substring →l (rune 0) (rune -2))),
+      r: ($ (~ (substring →l (rune -1) (rune -1)) →r))}
+
+;; Move word left
+[l_string | r_string (E←(key C-left) _*)]
+  <> {(E): (),
+      l: ($once (substring →l (word 0) (word -2))),
+      r: ($ (~ (substring →l (word -1) (word -1)) →r))}
+
+;; Move right
+[l_string | r_string (E←(key right) _*)]
+  <> {(E): (),
+      l: ($ (~ →l (substring →r (rune 0) (rune 0)))),
+      r: ($once (substring →r (rune 1) (rune -1)))}
+
+;; Move word right
+[l_string | r_string (E←(key C-right) _*)]
+  <> {(E): (),
+      l: ($ (~ →l (substring →r (word 0) (word 0)))),
+      r: ($once (substring →r (word 1) (word -1)))}
+
+;; Move line up
+[l_string | _string (E←(key up) _*)]
+  <> {(E): ((key home)
+            (key left)
+            (key home)
+            (seek ($ (charcount (substring →l (line -1) (line -1))))))}
+
+;; Move line down
+[l_string | _string (E←(key down) _*)]
+  <> {(E): ((key end)
+            (key right)
+            (seek ($ (charcount (substring →r (line 0) (line 0))))))}
+
+;; Move to line start
+[l_string | r_string (E←(key home) _*)]
+  <> {(E): (),
+      l: ($once (substring →l (line 0) (line -2))),
+      r: ($ (~ (substring →l (line -1) (line -1)) →r))}
+
+;; Move to line end
+[l_string | r_string (E←(key end) _*)]
+  <> {(E): (),
+      l: ($ (~ →l (substring →r (line 0) (line 0)))),
+      r: ($once (substring →r (line 1) (line -1)))}
+
+;; Move to start
+[l_string | r_string (E←(key C-home) _*)]
+  <> {(E): (), l: "", r: ($once (~ →l →r))}
+
+;; Move to end
+[l_string | r_string (E←(key C-end) _*)]
+  <> {(E): (), l: ($once (~ →l →r)), r: ""}
+
+;; Delete left
+[l_string | _string (E←(key backspace) _*)]
+  <> {(E): (), l: ($once (substring →l (rune 0) (rune -2)))}
+
+;; Delete word left
+[l_string | _string (E←(key C-backspace) _*)]
+  <> {(E): (), l: ($once (substring →l (word 0) (word -2)))}
+
+;; Delete right
+[_string | r_string (E←(key delete) _*)]
+  <> {(E): (), r: ($once (substring →r (rune 1) (rune -1)))}
+
+;; Delete word right
+[_string | r_string (E←(key C-delete) _*)]
+  <> {(E): (), r: ($once (substring →r (word 1) (word -1)))}
+
+;; Cut
+
+;; Copy
+
+;; Paste
+
+;; Enhance seek with maximum supported n.
+[_string | r←(%string nonempty) (E←(seek n_number) _*)]
+  <> {E: (seek →n ($ (- (charcount (substring →r (line 0) (line 0))) 1)))}
+
+;; Pick the smallest among them.
+[_string | r←(%string nonempty) (E←(seek n_number m_number) _*)]
+  <> {E: (seek! ($once (min →n →m)))}
+
+;; Actually seek there.
+[l_string | r←(%string nonempty) (E←(seek! n←(%number (whole _) > 0)) _*)]
+  <> {(E): (),
+      l: ($ (~ →l (substring →r (rune 0) (rune (- →n 1))))),
+      r: ($once (substring →r (rune →n) (rune -1)))}
+
+;; Go to selection mode: Select all
+[l_string C←| r_string (E←(key C-a) _*)]
+  <> {(E): (),
+      C: (|> ($once (~ →l →r))),
+      l: "",
+      r: ""}
+
+;; Go to selection mode: Select leftwards
+[l_string C←| _string (E←(key S-left) _*)]
+  <> {(E): (),
+      l: ($once (substring →l (rune 0) (rune -2))),
+      C: (<| ($once (substring →l (rune -1) (rune -1))))}
+
+;; Go to selection mode: Select word leftwards
+
+;; Go to selection mode: Select rightwards
+[_string C←| r_string (E←(key S-right) _*)]
+  <> {(E): (),
+      r: ($once (substring →r (rune 1) (rune -1))),
+      C: (|> ($once (substring →r (rune 0) (rune 0))))}
+
+;; Go to selection mode: Select word rightwards
+
+;; Go to selection mode: Select from line start to here
+
+;; Go to selection mode: Select from here to line end
+
+;; Escape selection mode when selection is empty.
+[_string C←((%any <| |>) "") _string (_*)]
+  <> {C: |}
+
+;; Consume in front of left-leaning selection
+[l_string (<| S_string) _string (E←(key S-left) _*)]
+  <> {(E): (),
+      l: ($once (substring →l (rune 0) (rune -2))),
+      S: ($ (~ (substring →l (rune -1) (rune -1)) →S))}
+
+;; Expel in front of left-leaning selection
+[l_string (<| S_string) _string (E←(key S-right) _*)]
+  <> {(E): (),
+      S: ($once (substring →S (rune 1) (rune -1))),
+      l: ($ (~ →l (substring →S (rune 0) (rune 0))))}
+
+;; Consume at the back of right-leaning selection
+[_string (|> S_string) r_string (E←(key S-right) _*)]
+  <> {(E): (),
+      S: ($ (~ →S (substring →r (rune 0) (rune 0))))
+      r: ($once (substring →r (rune 1) (rune -1)))}
+
+;; Expel at the back of right-leaning selection
+[_string (|> S_string) r_string (E←(key S-left) _*)]
+  <> {(E): (),
+      r: ($ (~ (substring →S (rune -1) (rune -1) →r)))
+      S: ($once (substring →S (rune 0) (rune -2)))}
+
+;; Expel any selection leftward
+[l_string ((%any <| |>) S←(%string nonempty)) _string (E←(key right) _*)]
+  <> {(E): (), S: "", l: ($once (~ →l →S))}
+
+;; Expel any selection rightward
+[_string ((%any <| |>) S←(%string nonempty)) r_string (E←(key left) _*)]
+  <> {(E): (), S: "", r: ($once (~ →S →r))}
+
+;; Replace any selection with input
+;;
+;; We do not actually handle input here, we simply clear the selection.
+[_string ((%any <| |>) S←(%string nonempty)) _string ((input _string) _*)]
+  <> {(E): (), S: ""}
+
+;; Clear any selection
+[_string ((%any <| |>) S←(%string nonempty)) _string (E←(key (%any delete backspace C-delete C-backspace)) _*)]
+  <> {(E): (), S: ""}
+
