@@ -124,6 +124,10 @@ struct Number
 end
 
 struct SF::Rect(T)
+  def to_f
+    SF.float_rect(left, top, width, height)
+  end
+
   def position
     SF.vector2(left, top)
   end
