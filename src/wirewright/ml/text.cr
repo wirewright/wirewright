@@ -451,11 +451,24 @@ module Ww::ML::Text
           else
             return symbol
           end
-        when '!', '$', '&', '*', '.', '/', '>', '?', '_', '~', 'λ', '|', '∞', '°', '∈', '⊆', '⊂', '#', '^'
+        when '!', '&', '*', '.', '/', '>', '?', '_', '~', 'λ', '|', '∞', '°', '∈', '⊆', '⊂', '#', '^'
           return symbol
         when ':'
           advance
           return Token.new(:":", pos - 3, pos)
+        when '$'
+          case ahead
+          when '('
+            advance
+            # Do not advance through paren, it'll be consumed by slot.
+            return Token.new(:"$", pos - 1, pos)
+          when '\''
+            advance
+            advance
+            return Token.new(:"$'", pos - 2, pos)
+          else
+            return symbol
+          end
         when '←'
           if behind?.try(&.whitespace?)
             raise "unexpected whitespace near `←`"
@@ -872,6 +885,8 @@ module Ww::ML::Text
         when :"→"   then Term.of(:"$my", slot)
         when :"↑"   then Term.of(:"$up", slot)
         when :"↓"   then Term.of(:"$down", slot)
+        when :"$"   then Term.of(:"$", slot)
+        when :"$'"  then Term.of(:"$once", slot)
         when :"'"   then Term.of(:hold, slot)
         when :"⏏"   then Term.of(:"%slot", slot)
         when :"≡"   then Term.of(:"%nonself", slot)

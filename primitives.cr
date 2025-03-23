@@ -28,6 +28,20 @@ PRIMITIVES = ProcRuleset.build do
     Term[].with(k, v)
   end
 
+  rulepi1 %[(cat xs_dict+)] do
+    Term::Dict.build do |commit|
+      xs.items.each do |x|
+        x = x.unsafe_as_d
+
+        commit.concat(x.items)
+
+        x.each_pair do |k, v|
+          commit.with(k, v)
+        end
+      end
+    end
+  end
+
   rulepi1 %[(join xs_dict ys_dict)] do
     xs | ys
   end
@@ -70,16 +84,45 @@ PRIMITIVES = ProcRuleset.build do
 
   rulepi1 %[(ceil arg_number)] { arg.ceil }
 
-  # TODO: support mixed substring?
-  rulepi1 %[(substring s_string (rune b←(%number i32)) (rune e←(%number i32)))] do
+  rulepi1 %[(runes s_string b←(%number i32) to e←(%number i32))] do
     Term::Str::Substring.runes(s.unsafe_as_s, b.to(Int32), e.to(Int32))
   end
 
-  rulepi1 %[(substring s_string (word b←(%number i32)) (word e←(%number i32)))] do
+  rulepi1 %[(rune s_string b←e←(%number i32))] do
+    Term::Str::Substring.runes(s.unsafe_as_s, b.to(Int32), e.to(Int32))
+  end
+
+  rulepi1 %[(words s_string b←(%number i32) to e←(%number i32))] do
     Term::Str::Substring.words(s.unsafe_as_s, b.to(Int32), e.to(Int32))
   end
 
-  rulepi1 %[(substring s_string (line b←(%number i32)) (line e←(%number i32)))] do
+  rulepi1 %[(word s_string b←e←(%number i32))] do
+    Term::Str::Substring.words(s.unsafe_as_s, b.to(Int32), e.to(Int32))
+  end
+
+  rulepi1 %[(lines s_string b←(%number i32) to e←(%number i32))] do
     Term::Str::Substring.lines(s.unsafe_as_s, b.to(Int32), e.to(Int32))
+  end
+
+  rulepi1 %[(line s_string b←e←(%number i32))] do
+    Term::Str::Substring.lines(s.unsafe_as_s, b.to(Int32), e.to(Int32))
+  end
+
+  # S₁S₂S₃S₄
+  # M₁M₂
+  # == S₁S₂
+  #
+  # S₁S₂S₃S₄
+  # M₁M₂M₃M₄M₅M₆
+  # == S₁S₂S₃S₄
+  rulepi1 %[(prefix s_string m_string)] do
+    Term::Str::Substring.runes(s.unsafe_as_s, 0, m.charcount - 1)
+  end
+  rulepi1 %[(prefix s_string "")] do
+    ""
+  end
+
+  rulepi1 %[(suffix s_string m_string)] do
+    Term::Str::Substring.runes(s.unsafe_as_s, m.charcount, -1)
   end
 end
