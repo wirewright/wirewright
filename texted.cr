@@ -35,34 +35,22 @@ step = exhR(
   )
 )
 
-model = Term.of("", :|, File.read("editor-suggestions.soma.wwml"), Term[])
+# src = <<-SRC
+# Lorem ipsum dolor sit amet, officia excepteur ex fugiat reprehenderit enim labore culpa sint ad nisi
+# Lorem pariatur mollit ex esse exercitation amet. Nisi anim cupidatat excepteur officia. Reprehenderit
+# nostrud nostrud ipsum Lorem est aliquip amet voluptate voluptate dolor minim nulla est proident. Nostrud
+# officia pariatur ut officia. Sit irure elit esse ea nulla sunt ex occaecat reprehenderit commodo officia
+# dolor Lorem duis laboris cupidatat officia voluptate. Culpa proident adipisicing id nulla nisi laboris
+# ex in Lorem sunt duis officia eiusmod. Aliqua reprehenderit commodo ex non excepteur duis sunt velit enim.
+# Voluptate laboris sint cupidatat ullamco ut ea consectetur et est culpa et culpa duis.
+# SRC
+
+model = Term.of(Term[], "", :|, "", Term[], Term[])
 
 def input(model : Term)
-  Term.case(model) do
-    matchpi %{[l_string | r_string (_*)]} do
-      Term::Dict.build do |commit|
-        commit << :group
-        commit.with(:style, "content flow-col gap-2")
+  Term.of(:p, ML.display(model), style: "text-neutral-300 font-mono text-xs")
 
-        (l.to(String).lines(chomp: false)[...-1]? || [] of String).each do |line|
-          commit << Term.of(:p, line, style: "text-neutral-300")
-        end
-
-        commit << Term.of(:group,
-          Term.of(:p, l.to(String).lines(chomp: false)[-1]? || "", style: "text-neutral-300"),
-          Term.of({:self, :rect}, style: "bg-blue-500 w-px h-max"),
-          Term.of(:p, r.to(String).lines(chomp: false)[0]? || "", style: "text-neutral-300"),
-          style: "content flow-row"
-        )
-
-        (r.to(String).lines(chomp: false)[1..]? || [] of String).each do |line|
-          commit << Term.of(:p, line, style: "text-neutral-300")
-        end
-      end
-    end
-
-    otherwise { }
-  end
+  # Term.of(:group, l, Term.of({:self, :rect}, style: "w-px h-max"), r, style: "content text-neutral-300 flow-block")
 end
 
 require "./uiRb"
@@ -84,8 +72,8 @@ ui = UIR::Reducers.microfold(Term.of(frame0)) do |frame, drawable, event|
   end
 
   Term.case(model) do
-    matchpi %{[_ _ _ events←(_*)]} do
-      model = Term.of(model.morph({3, events.append(event)}))
+    matchpi %{[_ _ _ _ _ events←(_*)]} do
+      model = Term.of(model.morph({5, events.append(event)}))
       model = rewrite(model, step)
     end
 

@@ -721,6 +721,7 @@ module UIR::Platform::SFML
 
               if event.control
                 case event.code
+                when .a? then keyname = "a"
                 when .c? then keyname = "c"
                 when .v? then keyname = "v"
                 end
