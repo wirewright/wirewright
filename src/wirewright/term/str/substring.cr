@@ -152,25 +152,6 @@ module Ww::Term::Str::Substring
     Term[r.end? ? string : string.byte_slice(r.pos + 1..)]
   end
 
-  # FIXME: bounds errors, optimize
-
-  def lltake(string : Term::Str, nlines : Int32)
-    Term[string.to(String).lines[...nlines].join('\n')]
-  end
-
-  def lldrop(string : Term::Str, nlines : Int32)
-    Term[string.to(String).lines[nlines..].join('\n')]
-  end
-
-  def rltake(string : Term::Str, nlines : Int32)
-    Term[string.to(String).lines[-nlines..].join('\n')]
-  end
-
-  def rldrop(string : Term::Str, nlines : Int32)
-    pp(nlines + 1)
-    Term[string.to(String).lines[...-nlines + 1].join('\n')]
-  end
-
   # Takes a word substring, both ends included. `0` means the first word.
   # Negative numbers count from the last word. `-1` means the last word.
   def words(string : Term::Str, b0 : Int32, e0 : Int32) : Term::Str
@@ -188,6 +169,6 @@ module Ww::Term::Str::Substring
   # Takes a line substring, both ends included. `0` means the first line.
   # Negative numbers count from the last line. `-1` means the last line.
   def lines(string : Term::Str, b0 : Int32, e0 : Int32) : Term::Str
-    Term[string.to(String).lines(chomp: false)[b0..e0].join]
+    Term[(string.to(String).lines(chomp: false)[b0..e0]? || [] of String).join]
   end
 end
