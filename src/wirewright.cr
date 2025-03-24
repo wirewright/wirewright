@@ -10,5 +10,7 @@ require "../pattern7"
 require "../baz5"
 require "../delta7_proto2"
 require "../primitives"
+{% unless flag?(:surf2) %}
 require "../surf"
+{% end %}
 require "../templ"
