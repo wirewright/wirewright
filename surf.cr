@@ -1178,13 +1178,13 @@ class Tconn
   end
 
   def add_sensor(identity : Label, *, pattern : Term, selector : Term?) : Nil
-    skeleton = pipe(pattern, M1.normal, Skeleton.pattern)
+    skeleton = pipe(pattern, M1.normal, M1.skeleton)
 
     strands = [] of Strand
     branches = [] of StrandList
 
-    branches(skeleton) do |branch|
-      strands(branch) do |strand|
+    M1.branches(skeleton) do |branch|
+      M1.strands(branch) do |strand|
         strands << strand.items.to_readonly_slice { |base| Ubase.parse(base) }
       end
       branches << strands.to_readonly_slice(&.itself)
@@ -1251,10 +1251,6 @@ alias LabelGenerator = Proc(Label) | ILabelGenerator
 module ILabelGenerator
   abstract def call : Label
 end
-
-# pattern = ML.term %{((%any div mod) a_ (%all b_number (%not 0)) ¦ precision⋮ 3)}
-# normp = M1.normal(pattern)
-# skeleton = Skeleton.pattern(normp)
 
 record Sensor, id : Label, strands : StrandList do
   include Tbase::Sensor

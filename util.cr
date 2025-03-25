@@ -2179,6 +2179,10 @@ struct Bag(T)
     @storage.size.to_u32
   end
 
+  def ntotal
+    @storage.sum(0u32) { |_, tally| tally }
+  end
+
   # Returns the number of objects of which there is more than one occurrence in this bag.
   def nrepeats : UInt32
     @storage.count { |_, tally| tally > 1 }.to_u32
@@ -2198,6 +2202,28 @@ struct Bag(T)
 
   def <<(object : T)
     add(object)
+  end
+
+  def delete?(object : T) : Bool
+    return false unless refcount = @storage[object]?
+
+    if refcount == 1
+      @storage.delete(object)
+
+      true
+    else
+      @storage[object] = refcount - 1
+
+      false
+    end
+  end
+
+  def each(& : T ->)
+    @storage.each do |object, tally|
+      tally.times do
+        yield object
+      end
+    end
   end
 
   def empty? : Bool
@@ -2257,6 +2283,17 @@ struct Bag(T)
       array << object
     end
     array
+  end
+
+  def inspect(io)
+    io << "{"
+    @storage.join(io, ", ") do |(object, tally)|
+      if tally > 1
+        io << tally << " x "
+      end
+      object.inspect(io)
+    end
+    io << "}"
   end
 end
 

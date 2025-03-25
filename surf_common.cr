@@ -31,7 +31,7 @@ end
 # - `%'(%dict)`
 # - `%'(%number _)`
 # - `(%'%literal X_)` with non-dict X
-module Skeleton
+module ::Ww::M1::Skeleton
   extend self
 
   # Generates a sequence of *subject* itemseq calls repeated *n* times.
@@ -288,106 +288,112 @@ module Skeleton
   end
 end
 
-private def branches(skeleton : Term, ahead0 : Term ->) : Nil
-  Term.case(skeleton) do
-    matchpi %{(%'%value (%'%literal _) value_)} do
-      ahead1 = ->(branch : Term) do
-        ahead0.call(Term.of(skeleton.with(2, branch)))
-      end
+module ::Ww::M1
+  def self.skeleton(normp : Term)
+    Skeleton.pattern(normp)
+  end
 
-      branches(value, ahead1)
-    end
-
-    matchpi %{(%'%all a_ b_)} do
-      ahead2 = ->(branch0 : Term) do
-        ahead1 = ->(branch1 : Term) do
-          ahead0.call(all2(Term.of(:"%all", branch0, branch1)))
+  private def self.branches(skeleton : Term, ahead0 : Term ->) : Nil
+    Term.case(skeleton) do
+      matchpi %{(%'%value (%'%literal _) value_)} do
+        ahead1 = ->(branch : Term) do
+          ahead0.call(Term.of(skeleton.with(2, branch)))
         end
 
-        branches(b, ahead1)
+        branches(value, ahead1)
       end
 
-      branches(a, ahead2)
-    end
+      matchpi %{(%'%all a_ b_)} do
+        ahead2 = ->(branch0 : Term) do
+          ahead1 = ->(branch1 : Term) do
+            ahead0.call(all2(Term.of(:"%all", branch0, branch1)))
+          end
 
-    matchpi %{(%'%any/source children_+)} do
-      children.items.each do |child|
-        branches(child, ahead0)
+          branches(b, ahead1)
+        end
+
+        branches(a, ahead2)
+      end
+
+      matchpi %{(%'%any/source children_+)} do
+        children.items.each do |child|
+          branches(child, ahead0)
+        end
+      end
+
+      otherwise do
+        ahead0.call(skeleton)
       end
     end
+  end
 
-    otherwise do
-      ahead0.call(skeleton)
+  # Normalizes pattern skeleton to DNF. Calls *sink* with each toplevel branch.
+  #
+  # As long as *skeleton* is a pattern skeleton, branches given to *sink* are guaranteed
+  # to be pattern skeletons without `%any/source`.
+  #
+  # Non-skeleton nodes are unexpected and will not be processed.
+  def self.branches(skeleton : Term, &sink : Term ->) : Nil
+    branches(skeleton, sink)
+  end
+
+  private def self.strands(prefix : Term::Dict, branch : Term, sink) : Nil
+    Term.case(branch) do
+      matchpi %{(%'%pass)} { sink.call(prefix) }
+
+      matchpi %{%'(%number _)}, %{%'(%string)}, %{%'(%symbol)}, %{%'(%boolean)}, %{%'(%dict)} do
+        sink.call(prefix.append(branch))
+      end
+
+      matchpi %{(%'%literal _number)} do
+        sink.call(prefix.append(M1::Normal::NORMAL_BLANK_NUMBER).append(branch))
+      end
+
+      matchpi %{(%'%literal _string)} do
+        sink.call(prefix.append(M1::Normal::NORMAL_BLANK_STRING).append(branch))
+      end
+
+      matchpi %{(%'%literal _symbol)} do
+        sink.call(prefix.append(M1::Normal::NORMAL_BLANK_SYMBOL).append(branch))
+      end
+
+      matchpi %{(%'%literal _boolean)} do
+        sink.call(prefix.append(M1::Normal::NORMAL_BLANK_BOOLEAN).append(branch))
+      end
+
+      matchpi %{(%'%all a_ b_)} do
+        strands(prefix, a, sink)
+        strands(prefix, b, sink)
+      end
+
+      matchpi %{(%'%value (%'%literal _) successor_)} do
+        prefix = prefix
+          .append(M1::Normal::NORMAL_BLANK_DICT)
+          .append(branch.without(2))
+
+        strands(prefix, successor, sink)
+      end
     end
   end
-end
 
-# Normalizes pattern skeleton to DNF. Calls *sink* with each toplevel branch.
-#
-# As long as *skeleton* is a pattern skeleton, branches given to *sink* are guaranteed
-# to be pattern skeletons without `%any/source`.
-#
-# Non-skeleton nodes are unexpected and will not be processed.
-def branches(skeleton : Term, &sink : Term ->) : Nil
-  branches(skeleton, sink)
-end
-
-private def strands(prefix : Term::Dict, branch : Term, sink) : Nil
-  Term.case(branch) do
-    matchpi %{(%'%pass)} { sink.call(prefix) }
-
-    matchpi %{%'(%number _)}, %{%'(%string)}, %{%'(%symbol)}, %{%'(%boolean)}, %{%'(%dict)} do
-      sink.call(prefix.append(branch))
-    end
-
-    matchpi %{(%'%literal _number)} do
-      sink.call(prefix.append(M1::Normal::NORMAL_BLANK_NUMBER).append(branch))
-    end
-
-    matchpi %{(%'%literal _string)} do
-      sink.call(prefix.append(M1::Normal::NORMAL_BLANK_STRING).append(branch))
-    end
-
-    matchpi %{(%'%literal _symbol)} do
-      sink.call(prefix.append(M1::Normal::NORMAL_BLANK_SYMBOL).append(branch))
-    end
-
-    matchpi %{(%'%literal _boolean)} do
-      sink.call(prefix.append(M1::Normal::NORMAL_BLANK_BOOLEAN).append(branch))
-    end
-
-    matchpi %{(%'%all a_ b_)} do
-      strands(prefix, a, sink)
-      strands(prefix, b, sink)
-    end
-
-    matchpi %{(%'%value (%'%literal _) successor_)} do
-      prefix = prefix
-        .append(M1::Normal::NORMAL_BLANK_DICT)
-        .append(branch.without(2))
-
-      strands(prefix, successor, sink)
-    end
+  # Calls *sink* with each strand (represented as an itemsonly dict) of *branch*.
+  #
+  # A strand is an exhaustive path through `%all` nodes in *branch*.
+  #
+  # Each strand consists of *bases*. The following list is an exhaustive list
+  # of bases:
+  #
+  # - `(%'%value (%'%literal _))`
+  # - `%'(%any)`
+  # - `%'(%symbol)`
+  # - `%'(%string)`
+  # - `%'(%number _)`
+  # - `%'(%boolean)`
+  # - `%'(%dict)`
+  # - `(%'%literal _)`
+  def self.strands(branch : Term, &sink : Term::Dict ->)
+    strands(Term.dict({:"%any"}), branch, sink)
   end
-end
-
-# Calls *sink* with each strand (represented as an itemsonly dict) of *branch*.
-#
-# A strand is an exhaustive path through `%all` nodes in *branch*.
-#
-# Each strand consists of *bases*. The following list is an exhaustive list
-# of bases:
-#
-# - `(%'%value (%'%literal _))`
-# - `%'(%any)`
-# - `%'(%symbol)`
-# - `%'(%string)`
-# - `%'(%number _)`
-# - `%'(%boolean)`
-# - `%'(%dict)`
-# - `(%'%literal _)`
-def strands(branch : Term, &sink : Term::Dict ->)
-  strands(Term.dict({:"%any"}), branch, sink)
 end
 
 alias Strand = Slice(Ubase::Any)
