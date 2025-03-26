@@ -111,4 +111,8 @@ module Ww::ML
   def self.compact(io : IO, term : Term)
     compact(io, term.downcast)
   end
+
+  def self.compact(term : Term) : String
+    String.build { |io| compact(io, term) }
+  end
 end
