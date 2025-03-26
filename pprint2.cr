@@ -562,7 +562,7 @@ module Feature
       FRAG_PREFIX = Term.of(:frag, {{prefix}})
 
       def call(ctx, term, postfix, head, rest)
-        Term.matchpi(term, {{pattern}}) do
+        Term.matchpi?(term, {{pattern}}) do
           return Term.of(:row, FRAG_PREFIX, head.call(ctx, suffix, postfix))
         end
 
@@ -576,7 +576,7 @@ module Feature
       include Feature
 
       def call(ctx, term, postfix, head, rest) : Term
-        Term.matchpi(term, {{typeblank}}) do
+        Term.matchpi?(term, {{typeblank}}) do
           return postfixed(Term.of(:frag, term.inspect, tag: {{tag}}), postfix)
         end
 
@@ -631,7 +631,7 @@ module Feature
     WWML
 
     def call(ctx, term, postfix, head, rest) : Term
-      Term.matchpi(term, %{(backmap pattern_ backspec_)}) do
+      Term.matchpi?(term, %{(backmap pattern_ backspec_)}) do
         inline = fill(INLINE) do |slot, commit|
           case slot
           when 0 then commit << head.call(ctx.inline, pattern, "")
@@ -681,7 +681,7 @@ module Feature
     WWML
 
     def call(ctx, term, postfix, head, rest) : Term
-      Term.matchpi(term, %{(rule pattern_ body_)}) do
+      Term.matchpi?(term, %{(rule pattern_ body_)}) do
         inline = fill(INLINE) do |slot, commit|
           case slot
           when 0 then commit << head.call(ctx.inline, pattern, "")
@@ -718,7 +718,7 @@ module Feature
     include Feature
 
     def call(ctx, term, postfix, head, rest)
-      Term.matchpi(term, %{(edge suffix←(%any° _symbol _number _string))}) do
+      Term.matchpi?(term, %{(edge suffix←(%any° _symbol _number _string))}) do
         return postfixed(Term.of(:frag, "@#{suffix.inspect}", tag: :edge), postfix)
       end
 
@@ -748,7 +748,7 @@ module Feature
     FRAG_LARROW = ML.term %{(frag "←")}
 
     def call(ctx, term, postfix, head, rest) : Term
-      Term.matchpi(term, %{(%'%let capture_ pattern_)}) do
+      Term.matchpi?(term, %{(%'%let capture_ pattern_)}) do
         return Term.of(:row, head.call(ctx, capture, ""), FRAG_LARROW, head.call(ctx, pattern, postfix))
       end
 
@@ -763,7 +763,7 @@ module Feature
     FRAG_LBRACKET = ML.term %{(frag "⟨")}
 
     def call(ctx, term, postfix, head, rest) : Term
-      Term.matchpi(term, %{(%'%item needles_+)}) do
+      Term.matchpi?(term, %{(%'%item needles_+)}) do
         thunk = ctx.layouts_allowed.thunk(needles, "⟩" + postfix, {:dict_inline, :dict_aligned})
 
         return Term.of(:row, FRAG_LBRACKET, thunk)
@@ -780,7 +780,7 @@ module Feature
     FRAG_LBRACKET = ML.term %{(frag "⟨")}
 
     def call(ctx, term, postfix, head, rest) : Term
-      Term.matchpi(term, %{(%'%item° needles_+)}) do
+      Term.matchpi?(term, %{(%'%item° needles_+)}) do
         thunk = ctx.layouts_allowed.thunk(needles, "⟩°" + postfix, {:dict_inline, :dict_aligned})
 
         return Term.of(:row, FRAG_LBRACKET, thunk)
@@ -941,7 +941,7 @@ module Feature
     include Feature
 
     def call(ctx, term, postfix, head, rest) : Term
-      Term.matchpi(term, %{(key_symbol (%'%let key_symbol value_))}) do
+      Term.matchpi?(term, %{(key_symbol (%'%let key_symbol value_))}) do
         rk = ctx.features.call(ctx.inline, key, ":")
         rv = ctx.features.call(ctx, value, postfix)
 
@@ -1010,7 +1010,7 @@ module Feature
     include Feature
 
     def call(ctx, term, postfix, head, rest) : Term
-      Term.matchpi(term, %{(key_symbol value←(%symbol blank key_ _))}) do
+      Term.matchpi?(term, %{(key_symbol value←(%symbol blank key_ _))}) do
         return ctx.features.call(ctx, value, postfix)
       end
 
@@ -1022,7 +1022,7 @@ module Feature
     include Feature
 
     def call(ctx, term, postfix, head, rest) : Term
-      Term.matchpi(term, %{(key_ value_)}) do
+      Term.matchpi?(term, %{(key_ value_)}) do
         return ctx.pair.call(ctx, Term.of(key, value), postfix)
       end
 
@@ -1078,7 +1078,7 @@ module Feature
     include Feature
 
     def call(ctx, term, postfix, head, rest) : Term
-      Term.matchpi(term, %{()}) do
+      Term.matchpi?(term, %{()}) do
         return Term.of(:frag, "()#{postfix}")
       end
 
@@ -1120,7 +1120,7 @@ module Feature
     FRAG_LCURLY = ML.term %[(frag "{")]
 
     def call(ctx, term, postfix, head, rest) : Term
-      Term.matchpi(term, %{(¦ pairspart_)}) do
+      Term.matchpi?(term, %{(¦ pairspart_)}) do
         thunk = ctx.layouts_allowed.thunk(term, "}" + postfix, {:map_inline, :map_multiline, :map_multiline_indented})
 
         return Term.of(:row, FRAG_LCURLY, thunk)
@@ -1138,7 +1138,7 @@ module Feature
     FRAG_LPAREN = ML.term %{(frag "(")}
 
     def call(ctx, term, postfix, head, rest) : Term
-      Term.matchpi(term, %{_dict}) do
+      Term.matchpi?(term, %{_dict}) do
         thunk = ctx.layouts_allowed.thunk(term, ")" + postfix, {:dict_inline, :dict_aligned})
 
         return Term.of(:row, FRAG_LPAREN, thunk)

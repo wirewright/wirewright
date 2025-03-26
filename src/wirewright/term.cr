@@ -636,7 +636,7 @@ module Ww
     #   otherwise { }
     # end
     # ```
-    macro matchpi(term, pattern, &)
+    macro matchpi?(term, pattern, &)
       Term.case({{term}}) do
         matchpi {{pattern}} do
           {{yield}}
