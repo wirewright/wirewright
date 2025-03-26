@@ -107,14 +107,17 @@ module IMap(K, V)
   abstract def size : Int32
 
   # Atomically registers a reference of *referrer* to *key*. If *key* is absent,
-  # creates it and sets its value to *default*. Returns the cell value read
-  # at the time of assignment.
+  # creates it and sets its value to *default*. Returns the value read at
+  # the time of assignment. This is an INCREF. Each call will increment the reference
+  # count of *key* by *referrer*.
   abstract def inc(referrer : Label, key : K, default : V) : V
 
   # Atomically removes *referrer*'s reference to *key*, removing the underlying
-  # key-value pair if necessary.
+  # key-value pair if necessary. This is a DECREF; i.e., if you called `inc`
+  # N times you'd have to call `dec` N times.
   abstract def dec(referrer : Label, key : K) : Nil
 
+  # Constructs a submap (see `SubMap`).
   def submap(k : Sk.class, v : Sv.class) forall Sk, Sv
     SubMap(K, V, Sk, Sv).new(self)
   end
@@ -594,12 +597,12 @@ class ConcurrentStringMap(N)
   include IMap(String, String)
 
   def initialize(ctx : ExecutionContext, min_lifespan = 30.seconds, max_lifespan = 1.minute)
+    min_lifespan_ms = min_lifespan.total_milliseconds
+    max_lifespan_ms = max_lifespan.total_milliseconds
+
     @running = Channel(Bool).new
     @buckets = StaticArray(ConcurrentStringBucket, N).new do
-      min_lifespan_ms = min_lifespan.total_milliseconds
-      max_lifespan_ms = max_lifespan.total_milliseconds
       lifespan = (min_lifespan_ms..max_lifespan_ms).sample.milliseconds
-
       bucket, _ = ConcurrentStringBucket.spawn(ctx, lifespan: lifespan, running: @running)
       bucket
     end
@@ -655,8 +658,7 @@ end
 
 # A remote `IMap(String, String)` client using RPC for communication.
 #
-# `RemoteStringMap` connects to a remote string map service via `StringMapRPC::Client`,
-# using a connection pool with up to 50 connections and a 1-second timeout.
+# `RemoteStringMap` connects to a remote string map service via `StringMapRPC::Client`.
 class RemoteStringMap
   include IMap(String, String)
 
@@ -1227,8 +1229,6 @@ struct Tbase
     # Returns the value of this appearance.
     abstract def value : Term
   end
-
-  alias Subject = Sensor | Appearance
 
   def initialize(@fresh : LabelGenerator, @map : IMap(Key, Value))
   end
@@ -1962,6 +1962,8 @@ end
 #   adata directed at the current instant. What I am worried about is IMap#dec. When we
 #   remove we DECREF, so if different surfaces reuse the same part, we'd could get decref
 #   wrong?! or could we? assuming it's on the same bucket?
+#     I think part of this could be fixed by using surface instant id instead of client id
+#     as referrer. Since we're reinserting surfaces it's going to be all or nothing.
 
 {% skip_file %}
 
