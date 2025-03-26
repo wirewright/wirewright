@@ -1079,6 +1079,17 @@ class String
 
     {to_slice, nil}
   end
+
+  def digest(algorithm, *, base = 16) : String
+    case base
+    when 16
+      algorithm.hexdigest(self)
+    when 64
+      algorithm.base64digest(self)
+    else
+      raise ArgumentError.new("base not supported: #{base}")
+    end
+  end
 end
 
 struct BigInt < Int
@@ -1730,6 +1741,10 @@ class Pf::MapBox(K, V)
   end
 
   private def_change
+
+  def size
+    @map.size
+  end
 
   def includes?(k : K) : Bool
     @map.includes?(k)

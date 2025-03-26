@@ -403,15 +403,54 @@ alias BranchList = Slice(StrandList)
 module Ubase
   alias Any = At | IsAny | IsSym | IsStr | IsNum | IsBool | IsDict | Literal
 
-  record At, key : Term
+  record At, key : Term do
+    def term : Term
+      Term.of(:"%value", {:"%literal", key})
+    end
+  end
+
   # FIXME: better name. to reflect it's only the root!!
-  record IsAny
-  record IsSym
-  record IsStr
-  record IsNum
-  record IsBool
-  record IsDict
-  record Literal, value : Term
+  record IsAny do
+    def term : Term
+      Term.of({:"%any"})
+    end
+  end
+
+  record IsSym do
+    def term : Term
+      Term.of({:"%symbol"})
+    end
+  end
+
+  record IsStr do
+    def term : Term
+      Term.of({:"%string"})
+    end
+  end
+
+  record IsNum do
+    def term : Term
+      Term.of({:"%number"})
+    end
+  end
+
+  record IsBool do
+    def term : Term
+      Term.of({:"%boolean"})
+    end
+  end
+
+  record IsDict do
+    def term : Term
+      Term.of({:"%dict"})
+    end
+  end
+
+  record Literal, value : Term do
+    def term : Term
+      Term.of(:"%literal", value)
+    end
+  end
 
   def self.parse(base : Term) : Ubase::Any
     Term.case(base) do

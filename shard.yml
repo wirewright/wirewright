@@ -16,6 +16,8 @@ dependencies:
   execution_context:
     github: ysbaddaden/execution_context
     branch: main
+  simple_rpc:
+    github: kostya/simple_rpc
 # dependencies:
 #   pg:
 #     github: will/crystal-pg

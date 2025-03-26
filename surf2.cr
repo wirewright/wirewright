@@ -1,6 +1,11 @@
+require "log"
+require "simple_rpc"
 require "digest/sha256"
+require "json"
 require "./src/wirewright"
 require "./surf_common"
+
+Log.setup_from_env(default_level: :debug)
 
 record Label, value : UInt128 do
   include Comparable(Label)
@@ -9,6 +14,14 @@ record Label, value : UInt128 do
 
   def <=>(other : Label)
     value <=> other.value
+  end
+
+  def encode(otype : Term.class) : Term
+    Term.of(value)
+  end
+
+  def self.decode(value : Term)
+    new(value.as_n.to(UInt128))
   end
 
   def complete(digit, *, base, index)
@@ -80,175 +93,654 @@ struct WWID
   end
 end
 
-module IStorage(K, V)
+module IMap(K, V)
   # Returns the latest value of *key*, or `nil` if absent.
   #
   # "Latest" means "at the time of fetch". At the same time as the result of
   # the fetch (e.g. `nil`) is being returned to the caller, *key* might have
   # been added.
-  abstract def latest?(key : K) : V?
+  abstract def latest?(referrer : Label, key : K) : V?
 
-  # Calls *fn* with the latest value of *key*, or `nil` if absent.
-  #
-  # This method is assumed to be the "promise" companion of `latest?`. That is,
-  # as opposed to `latest?`, this method returns immediately, and *fn* is called
-  # whenever the response is available, by another fiber.
-  #
-  # Whether this assumption holds depends on the implementation of `IStorage`,
-  # but callers must use `latest` as if it always did.
-  abstract def latest(key : K, &fn : V? ->) : Nil
+  # Returns an approximate number of entries in this map. Implementations
+  # are allowed to return `0` unconditionally if they cannot determine
+  # the size (e.g. in a distributed, decentralized setting).
+  abstract def size : Int32
 
-  # Atomically registers a reference of *client* to *key*. If *key* is absent,
+  # Atomically registers a reference of *referrer* to *key*. If *key* is absent,
   # creates it and sets its value to *default*. Returns the cell value read
   # at the time of assignment.
-  abstract def inc(client : Label, key : K, default : V) : V
+  abstract def inc(referrer : Label, key : K, default : V) : V
 
-  # Atomically removes *client*'s reference to *key*, removing the underlying
+  # Atomically removes *referrer*'s reference to *key*, removing the underlying
   # key-value pair if necessary.
-  abstract def dec(client : Label, key : K) : Nil
+  abstract def dec(referrer : Label, key : K) : Nil
 
   def submap(k : Sk.class, v : Sv.class) forall Sk, Sv
-    Submap(K, V, Sk, Sv).new(self)
+    SubMap(K, V, Sk, Sv).new(self)
   end
 end
 
-struct Submap(K, V, Sk, Sv)
-  include IStorage(Sk, Sv)
+# A view of an `IMap(Pk, Pv)` with a narrowed key-value type `(K, V)`,
+# assuming `K` and `V` are safely castable to `Pk` and `Pv`, respectively.
+#
+# `SubMap` delegates all operations to the underlying map, performing
+# type conversions as needed.
+struct SubMap(Pk, Pv, K, V)
+  include IMap(K, V)
 
-  def initialize(@map : IStorage(K, V))
+  def initialize(@map : IMap(Pk, Pv))
   end
 
-  def latest?(key : Sk) : Sv?
-    @map.latest?(key.as(K)).as?(Sv)
+  def latest?(referrer : Label, key : K) : V?
+    @map.latest?(referrer, key.as(Pk)).as?(V)
   end
 
-  def latest(key : Sk, &fn : Sv? ->) : Nil
-    @map.latest(key.as(K)) do |value|
-      fn.call(value.as?(Sv?))
-    end
+  def size : Int32
+    @map.size
   end
 
-  def inc(client : Label, key : Sk, default : Sv) : Sv
-    @map.inc(client, key.as(K), default.as(V)).as(Sv)
+  def inc(referrer : Label, key : K, default : V) : V
+    @map.inc(referrer, key.as(Pk), default.as(Pv)).as(V)
   end
 
-  def dec(client : Label, key : Sk) : Nil
-    @map.dec(client, key.as(K))
+  def dec(referrer : Label, key : K) : Nil
+    @map.dec(referrer, key.as(Pk))
   end
 end
 
-class MapStorage(K, V)
-  include IStorage(K, V)
+# A synchronous in-memory implementation of `IMap(K, V)`. Uses a lock for
+# thread-safety.
+class SyncInMemoryMap(K, V)
+  include IMap(K, V)
 
   record Cell(T), refs : Bag(Label), value : T
 
   @data = {} of K => Cell(V)
+  @lock = Mutex.new
 
-  def latest?(key : K) : V?
-    return unless cell = @data[key]?
+  def latest?(referrer : Label, key : K) : V?
+    return unless cell = @lock.synchronize { @data[key]? }
 
     cell.value
   end
 
-  def latest(key : K, &fn : V? ->) : Nil
-    fn.call(latest?(key))
+  def size : Int32
+    @data.size
   end
 
-  def inc(client : Label, key : K, default : V) : V
-    if cell = @data[key]?
-      cell.refs.add(client)
-      cell.value
-    else
-      @data[key] = Cell.new(Bag{client}, default)
+  def inc(referrer : Label, key : K, default : V) : V
+    @lock.synchronize do
+      if cell = @data[key]?
+        cell.refs.add(referrer)
+        cell.value
+      else
+        @data[key] = Cell.new(Bag{referrer}, default)
 
-      default
+        default
+      end
     end
   end
 
-  def dec(client : Label, key : K) : Nil
-    return unless cell = @data[key]?
-    return unless cell.refs.delete?(client)
-    return unless cell.refs.empty?
+  def dec(referrer : Label, key : K) : Nil
+    @lock.synchronize do
+      return unless cell = @data[key]?
+      return unless cell.refs.delete?(referrer)
+      return unless cell.refs.empty?
 
-    @data.delete(key)
+      @data.delete(key)
+    end
   end
 
   def pretty_print(pp)
-    pp.list("{", @data, "}") do |key, cell|
-      pp.group do
-        key.pretty_print(pp)
-        pp.text ": "
-        pp.nest do
-          pp.breakable
-          cell.value.pretty_print(pp)
+    @lock.synchronize do
+      pp.list("{", @data, "}") do |key, cell|
+        pp.group do
+          key.pretty_print(pp)
+          pp.text ": "
+          pp.nest do
+            pp.breakable
+            cell.value.pretty_print(pp)
+          end
         end
       end
     end
   end
 end
 
-# Forwards `K`'s digest as key to the underlying map.
-class DigestedKey(K, V)
-  include IStorage(K, V)
+# Raised by `TermMap` if it cannot decode a term into a `V` type. This means
+# `V`'s `decode?` was not able to decode the term; or if `V` is a union, none
+# of its members were able to `decode?` the term.
+class TermDecodeError < Exception
+end
 
-  def initialize(@map : IStorage(String, V))
+# An `IMap(K, V)` backed by an `IMap(Term, Term)`, encoding keys and values
+# as `Term`s.
+#
+# Used primarily as an intermediate step for (de)serialization (since `Term`s are
+# the lingua franca of Wirewright).
+#
+# `TermMap` ensures that stored values can be decoded back into `V`, raising
+# `TermDecodeError` if decoding fails.
+class TermMap(K, V)
+  include IMap(K, V)
+
+  def initialize(@map : IMap(Term, Term))
   end
 
-  def latest?(key : K) : V?
-    @map.latest?(key.digest).as?(V)
+  private def decode(term : Term) : V
+    {% for type in V.union_types %}
+      if object = {{type}}.decode?(term)
+        return object.as(V)
+      end
+    {% end %}
+
+    raise TermDecodeError.new
   end
 
-  def latest(key : K, &fn : V? ->) : Nil
-    @map.latest(key.digest) do |value|
-      fn.call(value.as?(V?))
+  def latest?(referrer : Label, key : K) : V?
+    return unless value = @map.latest?(referrer, key.encode(Term))
+
+    decode(value)
+  end
+
+  def size : Int32
+    @map.size
+  end
+
+  def inc(referrer : Label, key : K, default : V) : V
+    value = @map.inc(referrer, key.encode(Term), default.encode(Term))
+
+    decode(value)
+  end
+
+  def dec(referrer : Label, key : K) : Nil
+    @map.dec(referrer, key.encode(Term))
+  end
+end
+
+# An `IMap(Term, Term)` backed by an `IMap(String, String)`, using CompactML for storage.
+#
+# CompactML is a human-readable, space-efficient subset of WwML, designed to
+# represent `Term`s in a compact string format.
+#
+# `CompactMLMap` serializes terms into their CompactML string representation for
+# efficient storage and retrieval, and deserializes them back to `Term`s on access.
+class CompactMLMap
+  include IMap(Term, Term)
+
+  def initialize(@map : IMap(String, String))
+  end
+
+  def latest?(referrer : Label, key : Term) : Term?
+    return unless value = @map.latest?(referrer, ML.compact(key))
+
+    ML.term(value)
+  end
+
+  def size : Int32
+    @map.size
+  end
+
+  def inc(referrer : Label, key : Term, default : Term) : Term
+    value = @map.inc(referrer, ML.compact(key), ML.compact(default))
+
+    ML.term(value)
+  end
+
+  def dec(referrer : Label, key : K) : Nil
+    @map.dec(referrer, ML.compact(key))
+  end
+end
+
+# An `IMap(K, V)` backed by an `IMap(String, V)`, storing keys as their digests.
+#
+# `DigestedKeyMap` hashes keys using the specified digest algorithm
+# (default: SHA-256) and uses the resulting string as the storage key.
+class DigestedKeyMap(K, V)
+  include IMap(K, V)
+
+  def initialize(@map : IMap(String, V), @algorithm : Digest::ClassMethods = Digest::SHA256)
+  end
+
+  private def digest(key : K) : String
+    key.digest(@algorithm, base: 64)
+  end
+
+  def latest?(referrer : Label, key : K) : V?
+    @map.latest?(referrer, digest(key))
+  end
+
+  def size : Int32
+    @map.size
+  end
+
+  def inc(referrer : Label, key : K, default : V) : V
+    @map.inc(referrer, digest(key), default)
+  end
+
+  def dec(referrer : Label, key : K) : Nil
+    @map.dec(referrer, digest(key))
+  end
+end
+
+# Represents a single, immutable map bucket.
+class StringBucket
+  # :nodoc:
+  alias Refcount = UInt32
+
+  # :nodoc:
+  record Cell, refs : Pf::Map(Label, Refcount), value : String
+
+  def initialize
+    initialize(entries: Pf::Map(String, Cell).new, seen: Pf::Map(Label, Time).new)
+  end
+
+  # :nodoc:
+  def initialize(@entries : Pf::Map(String, Cell), @seen : Pf::Map(Label, Time))
+  end
+
+  private def_change
+
+  protected def renew(referrer : Label) : StringBucket
+    change(seen: @seen.assoc(referrer, Time.utc))
+  end
+
+  # Returns the amount of entries in the bucket.
+  #
+  # Complexity: O(1).
+  def size : Int32
+    @entries.size
+  end
+
+  # Returns the latest value of *key* in the bucket, or `nil` if *key* is absent.
+  # Records the activity of *referrer* (thus delaying its decay).
+  #
+  # Rough complexity: O(1).
+  def latest?(referrer : Label, key : String) : {StringBucket, String?}
+    {renew(referrer), @entries[key]?.try(&.value)}
+  end
+
+  protected def inc0(referrer : Label, key : String, default : String) : {StringBucket, String}
+    if cell0 = @entries[key]?
+      refs0 = cell0.refs
+      refs1 = refs0.assoc(referrer, (refs0[referrer]? || Refcount.new(0)) + 1)
+      cell1 = cell0.copy_with(refs: refs1)
+    else
+      cell1 = Cell.new(Pf::Map.assoc(referrer, Refcount.new(1)), default)
+    end
+
+    {change(entries: @entries.assoc(key, cell1)), cell1.value}
+  end
+
+  # Increments *referrer*'s reference count for *key*. If *key* is absent, a new entry
+  # is created and assigned the given *default* value. Returns a tuple containing
+  # the updated bucket and the current value of *key*.
+  #
+  # Records the activity of *referrer* (thus delaying its decay).
+  #
+  # Rough complexity: O(1).
+  def inc(referrer : Label, key : String, default : String) : {StringBucket, String}
+    renew(referrer).inc0(referrer, key, default)
+  end
+
+  protected def dec0(referrer : Label, key : String) : StringBucket
+    return self unless cell0 = @entries[key]?
+
+    refs0 = cell0.refs
+
+    return self unless refcount = refs0[referrer]?
+
+    if refcount == 1
+      refs1 = refs0.dissoc(referrer)
+    else
+      refs1 = refs0.assoc(referrer, refcount - 1)
+    end
+
+    if refs1.empty?
+      return change(entries: @entries.dissoc(key))
+    end
+
+    cell1 = cell0.copy_with(refs: refs1)
+
+    change(entries: @entries.assoc(key, cell1))
+  end
+
+  # Decrements *referrer*'s reference count for *key*. Returns the updated bucket.
+  #
+  # Records the activity of *referrer* (thus delaying its decay).
+  #
+  # Rough complexity: O(1).
+  def dec(referrer : Label, key : String) : StringBucket
+    renew(referrer).dec0(referrer, key)
+  end
+
+  # Decays the bucket by removing inactive referrers and their associated entries.
+  #
+  # A referrer is considered inactive if the time since its last recorded activity
+  # exceeds the specified *lifespan*.
+  #
+  # Returns the updated bucket.
+  #
+  # Rough complexity: O(S + E*R), where S - number of referrers in the seen map,
+  # E - number of entries in the bucket, R - average number of referrers per entry.
+  def decay(*, lifespan = 30.seconds, now = Time.utc) : StringBucket
+    bucket = self
+    expired = Set(Label).new
+
+    seen1 = @seen
+
+    @seen.each do |referrer, accessed|
+      next unless now - accessed >= lifespan
+
+      seen1 = seen1.dissoc(referrer)
+      expired << referrer
+    end
+
+    entries1 = @entries
+
+    @entries.each do |key, cell0|
+      refs0 = cell0.refs
+      refs1 = refs0.reject { |referrer, _| referrer.in?(expired) }
+      next if refs0.same?(refs1)
+
+      if refs1.empty?
+        entries1 = entries1.dissoc(key)
+      else
+        cell1 = cell0.copy_with(refs: refs1)
+        entries1 = entries1.assoc(key, cell1)
+      end
+    end
+
+    change(entries: entries1, seen: seen1)
+  end
+end
+
+# Thread-safe, mutable wrapper around `StringBucket` (powered by Atomics).
+class ConcurrentStringBucket
+  include IMap(String, String)
+
+  def initialize
+    @bucket = Atomic(StringBucket).new(StringBucket.new)
+    @state = Atomic(Int32).new(0)
+  end
+
+  def self.spawn(ctx : ExecutionContext, *, lifespan = 30.seconds, running = Channel(Bool).new) : {ConcurrentStringBucket, Channel(Bool)}
+    bucket = new
+
+    ctx.spawn do
+      while true
+        select
+        when running.receive? # nil
+          break
+        when timeout(lifespan)
+          bucket.decay(lifespan: lifespan)
+        end
+      end
+    end
+
+    {bucket, running}
+  end
+
+  # Makes sure `decay` doesn't run during the block.
+  private def nodecay(&)
+    state0 = @state.get(:acquire)
+
+    # If state is -1, busy-wait until it is not, and increment.
+    while true
+      if state0 == -1
+        state0 = @state.get(:acquire)
+
+        Intrinsics.pause
+
+        next
+      end
+
+      state1 = state0 + 1
+      state0, ok = @state.compare_and_set(state0, state1, :release, :acquire)
+      break if ok
+
+      Intrinsics.pause
+    end
+
+    begin
+      yield
+    ensure
+      @state.sub(1, :release)
     end
   end
 
-  def inc(client : Label, key : K, default : V) : V
-    @map.inc(client, key.digest, default)
+  # Locks `@bucket` for decay during the block.
+  private def decay(&)
+    state0 = @state.get(:acquire)
+    if state0 == -1
+      raise "invalid state: expected just one decay fiber"
+    end
+
+    # If state is nonzero, busy-wait until it zero, and decrement.
+    while true
+      _, ok = @state.compare_and_set(0, -1, :release, :acquire)
+      break if ok
+
+      Intrinsics.pause
+    end
+
+    begin
+      yield
+    ensure
+      @state.add(1, :release)
+    end
   end
 
-  def dec(client : Label, key : K) : Nil
-    @map.dec(client, key.digest)
+  private def assign(& : StringBucket -> T) forall T
+    nodecay do
+      bucket0 = @bucket.get(:acquire)
+
+      while true
+        bucket1 = bucket0
+        result = nil
+
+        {% if T.has_method?(:[]) %}
+          bucket1, result = yield bucket0
+        {% else %}
+          bucket1 = yield bucket0
+        {% end %}
+
+        bucket0, ok = @bucket.compare_and_set(bucket0, bucket1, :release, :acquire)
+
+        return result if ok
+
+        Intrinsics.pause
+      end
+    end
   end
+
+  def size : Int32
+    bucket = @bucket.get(:acquire)
+    bucket.size
+  end
+
+  def latest?(referrer : Label, key : String) : String?
+    assign &.latest?(referrer, key)
+  end
+
+  def inc(referrer : Label, key : String, default : String) : String
+    assign &.inc(referrer, key, default)
+  end
+
+  def dec(referrer : Label, key : String) : Nil
+    assign &.dec(referrer, key)
+  end
+
+  def decay(*, lifespan = 30.seconds, now = Time.utc) : Nil
+    decay do
+      bucket0 = @bucket.get(:acquire)
+
+      while true
+        bucket1 = bucket0.decay(lifespan: lifespan, now: now)
+        bucket0, ok = @bucket.compare_and_set(bucket0, bucket1, :release, :acquire)
+        return if ok
+      end
+    end
+  end
+end
+
+# A concurrent `IMap(String, String)` with entry storage distributed across `N` buckets.
+#
+# `ConcurrentStringMap` partitions keys across `N` independent `ConcurrentStringBucket`s
+# based on their hash. Each bucket is assigned a fiber that performs decay for that bucket
+# (see also: `ConcurrentStringBucket#decay`). The sleep times and referrer lifespans are
+# randomized for each bucket.
+class ConcurrentStringMap(N)
+  include IMap(String, String)
+
+  def initialize(ctx : ExecutionContext, min_lifespan = 30.seconds, max_lifespan = 1.minute)
+    @running = Channel(Bool).new
+    @buckets = StaticArray(ConcurrentStringBucket, N).new do
+      min_lifespan_ms = min_lifespan.total_milliseconds
+      max_lifespan_ms = max_lifespan.total_milliseconds
+      lifespan = (min_lifespan_ms..max_lifespan_ms).sample.milliseconds
+
+      bucket, _ = ConcurrentStringBucket.spawn(ctx, lifespan: lifespan, running: @running)
+      bucket
+    end
+  end
+
+  # Stops all decay fibers. Can only be called once.
+  def nodecay : Nil
+    @running.close
+  end
+
+  def size : Int32
+    @buckets.sum(&.size)
+  end
+
+  def latest?(referrer : Label, key : String) : String?
+    bucket = @buckets[key.hash % N]
+    bucket.latest?(referrer, key)
+  end
+
+  def inc(referrer : Label, key : String, default : String) : String
+    bucket = @buckets[key.hash % N]
+    bucket.inc(referrer, key, default)
+  end
+
+  def dec(referrer : Label, key : String) : Nil
+    bucket = @buckets[key.hash % N]
+    bucket.dec(referrer, key)
+  end
+end
+
+struct StringMapRPC
+  include SimpleRpc::Proto
+
+  @@ctx = ExecutionContext::MultiThreaded.new("bucket decay", System.cpu_count.to_i)
+  @@map = ConcurrentStringMap(128).new(@@ctx)
+
+  def latest(referrer : String, key : String) : String?
+    @@map.latest?(Label.new(referrer.to_u128), key)
+  end
+
+  def size : Int32
+    @@map.size
+  end
+
+  def inc(referrer : String, key : String, default : String) : String
+    @@map.inc(Label.new(referrer.to_u128), key, default)
+  end
+
+  def dec(referrer : String, key : String) : Nil
+    @@map.dec(Label.new(referrer.to_u128), key)
+  end
+end
+
+# A remote `IMap(String, String)` client using RPC for communication.
+#
+# `RemoteStringMap` connects to a remote string map service via `StringMapRPC::Client`,
+# using a connection pool with up to 50 connections and a 1-second timeout.
+class RemoteStringMap
+  include IMap(String, String)
+
+  def initialize(host : String, port : Int32, *, pool_size = 50, pool_timeout = 1)
+    @client = StringMapRPC::Client.new(host, port, mode: :pool, pool_size: pool_size, pool_timeout: pool_timeout)
+  end
+
+  def latest?(referrer : Label, key : String) : String?
+    @client.latest!(referrer.value.to_s, key)
+  end
+
+  def size : Int32
+    @client.size!
+  end
+
+  def inc(referrer : Label, key : String, default : String) : String
+    @client.inc!(referrer.value.to_s, key, default)
+  end
+
+  def dec(referrer : Label, key : String) : Nil
+    @client.dec!(referrer.value.to_s, key)
+  end
+end
+
+if ARGV[0]? == "serve"
+  port = (ARGV[1]? || 9000).to_i
+  puts "Server listen on #{port} port"
+  StringMapRPC::Server.new("127.0.0.1", port).run
 end
 
 struct Utrie
   alias Key = Origin | Step
 
   record Origin, base : Ubase::Any do
-    def digest : String
-      Digest::SHA256.base64digest do |ctx|
-        ctx.update "utrie origin #{base}"
+    def encode(otype : Term.class) : Term
+      Term.of("utrie origin key", base.term)
+    end
+
+    def self.decode?(term : Term) : Key?
+      Term.matchpi?(term, %{("utrie origin key" base_)}) do
+        new(Ubase.parse(base))
       end
     end
   end
 
   record Step, pred : Label, base : Ubase::Any do
-    def digest : String
-      Digest::SHA256.base64digest do |ctx|
-        ctx.update "utrie step #{pred} #{base}"
+    def encode(otype : Term.class) : Term
+      Term.of("utrie step key", pred.encode(Term), base.term)
+    end
+
+    def self.decode?(term : Term) : Key?
+      Term.matchpi?(term, %{("utrie step key" pred_number base_)}) do
+        new(Label.decode(pred), Ubase.parse(base))
       end
     end
   end
 
-  record Value, succ : Label
+  record Value, succ : Label do
+    def encode(otype : Term.class) : Term
+      Term.of("utrie value", succ.encode(Term))
+    end
 
-  def initialize(@fresh : LabelGenerator, @storage : IStorage(Key, Value))
+    def self.decode?(term : Term) : Value?
+      Term.matchpi?(term, %{("utrie value" succ_number)}) do
+        new(Label.decode(succ))
+      end
+    end
   end
 
-  # Mounts a *strand* of `Ubase`s for *client*. Returns a set of seen pairs
+  def initialize(@fresh : LabelGenerator, @map : IMap(Key, Value))
+  end
+
+  # Mounts a *strand* of `Ubase`s for *referrer*. Returns a set of seen pairs
   # (called *dependencies*; used for removal or maintenance) and the id of
   # the endpoint thus reached.
-  def mount(client : Label, strand : Strand, *, deps = Bag({Key, Value}).new)
+  def mount(referrer : Label, strand : Strand, *, deps = Bag({Key, Value}).new)
     key = Origin.new(strand[0])
-    origin = @storage.inc(client, key, Value.new(@fresh.call))
+    origin = @map.inc(referrer, key, Value.new(@fresh.call))
     pred = origin.succ
     deps << {key, origin}
 
     strand[1..].each do |base|
       key = Step.new(pred, base)
-      step = @storage.inc(client, key, Value.new(@fresh.call))
+      step = @map.inc(referrer, key, Value.new(@fresh.call))
       pred = step.succ
       deps << {key, step}
     end
@@ -256,17 +748,17 @@ struct Utrie
     {deps, pred}
   end
 
-  private def successor?(key : Key) : Label?
-    @storage.latest?(key).try(&.succ)
+  private def successor?(referrer : Label, key : Key) : Label?
+    @map.latest?(referrer, key).try(&.succ)
   end
 
   {% for type, base in {Term::Num => Ubase::IsNum, Term::Str => Ubase::IsStr, Term::Sym => Ubase::IsSym, Term::Boolean => Ubase::IsBool} %}
-    private def query(pred : Label, term : {{type}}, sink : Label ->) : Nil
-      return unless succ0 = successor?(Step.new(pred, {{base}}.new))
+    private def query(referrer : Label, pred : Label, term : {{type}}, sink : Label ->) : Nil
+      return unless succ0 = successor?(referrer, Step.new(pred, {{base}}.new))
 
       sink.call(succ0)
 
-      if succ1 = successor?(Step.new(succ0, Ubase::Literal.new(Term.of(term))))
+      if succ1 = successor?(referrer, Step.new(succ0, Ubase::Literal.new(Term.of(term))))
         sink.call(succ1)
       end
     end
@@ -274,26 +766,26 @@ struct Utrie
 
   # NOTE: dictionaries must be normalized into IsDict - At(), even literal ones.
   # We do not handle Literal(dict).
-  private def query(pred : Label, term : Term::Dict, sink : Label ->) : Nil
-    return unless succ0 = successor?(Step.new(pred, Ubase::IsDict.new))
+  private def query(referrer : Label, pred : Label, term : Term::Dict, sink : Label ->) : Nil
+    return unless succ0 = successor?(referrer, Step.new(pred, Ubase::IsDict.new))
 
     sink.call(succ0)
 
     term.each_entry do |key, value|
-      next unless succ1 = successor?(Step.new(succ0, Ubase::At.new(key)))
+      next unless succ1 = successor?(referrer, Step.new(succ0, Ubase::At.new(key)))
 
       sink.call(succ1)
 
-      query(succ1, value.downcast, sink)
+      query(referrer, succ1, value.downcast, sink)
     end
   end
 
-  private def query(term : Term, sink) : Nil
-    return unless succ = successor?(Origin.new(Ubase::IsAny.new))
+  private def query(referrer : Label, term : Term, sink) : Nil
+    return unless succ = successor?(referrer, Origin.new(Ubase::IsAny.new))
 
     sink.call(succ)
 
-    query(succ, term.downcast, sink)
+    query(referrer, succ, term.downcast, sink)
   end
 
   # Calls *sink* with all ids activated by *term*.
@@ -308,26 +800,40 @@ struct Utrie
   # Introducing replication at the underlying map level should help in practice, however.
   # Instead of storing trie Origin on one node, store it on three, or ten; so there's
   # always someone to fall back on instead of immediate absence report.
-  def query(term : Term, &sink : Label ->) : Nil
-    query(term, sink)
+  def query(referrer : Label, term : Term, &sink : Label ->) : Nil
+    query(referrer, term, sink)
   end
 end
 
 struct Xgraph
   record Key, a : Label, b : Label do
-    def digest : String
-      Digest::SHA256.base64digest do |ctx|
-        ctx.update "xgraph key #{a} #{b}"
+    def encode(otype : Term.class) : Term
+      Term.of("xgraph key", a.encode(Term), b.encode(Term))
+    end
+
+    def self.decode?(term : Term) : Key?
+      Term.matchpi?(term, %{("xgraph key" a_number b_number)}) do
+        new(Label.decode(a), Label.decode(b))
       end
     end
   end
 
-  record Value, succ : Label
+  record Value, succ : Label do
+    def encode(otype : Term.class) : Term
+      Term.of("xgraph value", succ.encode(Term))
+    end
 
-  def initialize(@fresh : LabelGenerator, @storage : IStorage(Key, Value))
+    def self.decode?(term : Term) : Value?
+      Term.matchpi?(term, %{("xgraph value" succ_number)}) do
+        new(Label.decode(succ))
+      end
+    end
   end
 
-  def mount(client : Label, xrule : Deque(Label), *, deps = Bag({Key, Value}).new)
+  def initialize(@fresh : LabelGenerator, @map : IMap(Key, Value))
+  end
+
+  def mount(referrer : Label, xrule : Deque(Label), *, deps = Bag({Key, Value}).new)
     if xrule.empty?
       raise ArgumentError.new
     end
@@ -337,7 +843,7 @@ struct Xgraph
       b = xrule.shift
 
       key = Key.new(a, b)
-      value = @storage.inc(client, key, Value.new(@fresh.call))
+      value = @map.inc(referrer, key, Value.new(@fresh.call))
       deps << {key, value}
 
       xrule << value.succ
@@ -346,13 +852,13 @@ struct Xgraph
     {deps, xrule[0]}
   end
 
-  private def conjs(vertices : Deque(Label), sink : Label ->)
+  private def conjs(referrer : Label, vertices : Deque(Label), sink : Label ->)
     while a = vertices.shift?
       sink.call(a)
 
       (0...vertices.size).each do |i|
         b = vertices.unsafe_fetch(i)
-        next unless value = @storage.latest?(Key.new(a, b))
+        next unless value = @map.latest?(referrer, Key.new(a, b))
 
         vertices << value.succ
       end
@@ -367,8 +873,8 @@ struct Xgraph
   # Similarly to `Utrie#query`, this method may call *sink* with partial or even
   # no results even if the underlying map contains them in some form, due to map
   # degeneration. See `Utrie#query` to learn more.
-  def conjs(vertices : Deque(Label), &sink : Label ->)
-    conjs(vertices, sink)
+  def conjs(referrer : Label, vertices : Deque(Label), &sink : Label ->)
+    conjs(referrer, vertices, sink)
   end
 end
 
@@ -376,32 +882,50 @@ struct Ttrie
   alias Key = Origin | Step
 
   record Origin do
-    def digest : String
-      Digest::SHA256.base64digest do |ctx|
-        ctx.update "ttrie origin"
+    def encode(otype : Term.class) : Term
+      Term.of({"ttrie origin key"})
+    end
+
+    def self.decode?(term : Term) : Key?
+      Term.matchpi?(term, %{("ttrie origin key")}) do
+        new
       end
     end
   end
 
   record Step, pred : Label, base : Ubase::Any do
-    def digest : String
-      Digest::SHA256.base64digest do |ctx|
-        ctx.update "ttrie step #{pred} #{base}"
+    def encode(otype : Term.class) : Term
+      Term.of("ttrie step key", pred.encode(Term), base.term)
+    end
+
+    def self.decode?(term : Term) : Key?
+      Term.matchpi?(term, %{("ttrie step key" pred_number base_)}) do
+        new(Label.decode(pred), Ubase.parse(base))
       end
     end
   end
 
-  record Value, succ : Label
+  record Value, succ : Label do
+    def encode(otype : Term.class) : Term
+      Term.of("ttrie value", succ.encode(Term))
+    end
 
-  def initialize(@fresh : LabelGenerator, @storage : IStorage(Key, Value))
+    def self.decode?(term : Term) : Value?
+      Term.matchpi?(term, %{("ttrie value" succ_number)}) do
+        new(Label.decode(succ))
+      end
+    end
   end
 
-  def mount(client : Label, strand : Enumerable(Term), endpoint : Label, *, deps = Bag({Key, Value}).new)
+  def initialize(@fresh : LabelGenerator, @map : IMap(Key, Value))
+  end
+
+  def mount(referrer : Label, strand : Enumerable(Term), endpoint : Label, *, deps = Bag({Key, Value}).new)
     tip = nil
     path = [] of Label
 
     mount = ->(key : Key) do
-      value = @storage.inc(client, key, Value.new(@fresh.call))
+      value = @map.inc(referrer, key, Value.new(@fresh.call))
       deps << {key, value}
       path << value.succ
     end
@@ -428,14 +952,14 @@ struct Ttrie
     {deps, path}
   end
 
-  def query?(strand : Enumerable(Ubase::Any)) : Label?
-    return unless origin = @storage.latest?(Origin.new)
+  def query?(referrer : Label, strand : Enumerable(Ubase::Any)) : Label?
+    return unless origin = @map.latest?(referrer, Origin.new)
 
     pred = origin.succ
 
     strand.each do |base|
-      # The strand embedded in @storage must be >= the query strand.
-      return unless value = @storage.latest?(Step.new(pred, base))
+      # The strand embedded in @map must be >= the query strand.
+      return unless value = @map.latest?(referrer, Step.new(pred, base))
 
       pred = value.succ
     end
@@ -464,38 +988,50 @@ struct Etrace
   BASE_LENGTH_U128 = 64u8
 
   record Key, scope : Label, state : Label, digitno : UInt8 do
-    def digest : String
-      Digest::SHA256.base64digest do |ctx|
-        ctx.update "etrace key #{scope} #{state} #{digitno}"
+    def encode(otype : Term.class) : Term
+      Term.of("etrace key", scope.encode(Term), state.encode(Term), digitno)
+    end
+
+    def self.decode?(term : Term) : Key?
+      Term.matchpi?(term, %{("etrace key" scope_number state_number digitno_number)}) do
+        new(Label.decode(scope), Label.decode(state), digitno.to(UInt8))
       end
     end
   end
 
-  record Value
+  record Value do
+    def encode(otype : Term.class) : Term
+      Term.of({"etrace value"})
+    end
 
-  def initialize(@fresh : LabelGenerator, @storage : IStorage(Key, Value))
+    def self.decode?(term : Term) : Value?
+      Term.matchpi?(term, %{("etrace value")}) { new }
+    end
   end
 
-  def mount(client : Label, scope : Label, succ : Label, *, deps = Bag({Key, Value}).new)
+  def initialize(@fresh : LabelGenerator, @map : IMap(Key, Value))
+  end
+
+  def mount(referrer : Label, scope : Label, succ : Label, *, deps = Bag({Key, Value}).new)
     succ.each_prefix_with_index(base: BASE, max: BASE_LENGTH_U128) do |prefix, index|
       key = Key.new(scope, prefix, index)
-      value = @storage.inc(client, key, Value.new)
+      value = @map.inc(referrer, key, Value.new)
       deps << {key, value}
     end
 
     deps
   end
 
-  def mount(client : Label, path : Array(Label), *, deps = Bag({Key, Value}).new)
+  def mount(referrer : Label, path : Array(Label), *, deps = Bag({Key, Value}).new)
     path.each_cons_pair do |u, v|
-      _ = mount(client, u, v, deps: deps)
+      _ = mount(referrer, u, v, deps: deps)
     end
 
     deps
   end
 
   # TODO: what this method is doing appears to be "embarassingly parallel". Parallelize!
-  def each_successor(scope : Label, &sink : Label ->) : Nil
+  def each_successor(referrer : Label, scope : Label, &sink : Label ->) : Nil
     queue = Deque{ {Label.zero, BASE_LENGTH_U128 - 1} }
 
     while entry = queue.shift?
@@ -504,7 +1040,7 @@ struct Etrace
       BASE_DIGITS.each do |choice|
         completion = state.complete(choice, base: BASE, index: digitno)
 
-        next unless @storage.latest?(Key.new(scope, completion, digitno))
+        next unless @map.latest?(referrer, Key.new(scope, completion, digitno))
 
         if digitno == 0
           sink.call(completion)
@@ -515,73 +1051,88 @@ struct Etrace
     end
   end
 
-  def walk(origin : Label, &sink : Label ->) : Nil
+  def walk(referrer : Label, origin : Label, &sink : Label ->) : Nil
     sink.call(origin)
 
-    each_successor(origin) { |successor| walk(successor, &sink) }
+    each_successor(referrer, origin) do |successor|
+      walk(referrer, successor, &sink)
+    end
   end
 end
 
-# etrace = Etrace.new(WWID, MapStorage(Etrace::Key, Etrace::Value).new)
-# etrace.mount(100u128, 1000u128, 123u128)
-# etrace.mount(100u128, 1000u128, 456u128)
-# etrace.mount(100u128, 3000u128, 789u128)
-
-# etrace.each_successor(3000u128) do |succ|
-#   pp succ
-# end
-
-# {% skip_file %}
-
 struct StrandSet
   record Key, vertex : Label do
-    def digest : String
-      Digest::SHA256.base64digest do |ctx|
-        ctx.update "strand set key #{vertex}"
+    def encode(otype : Term.class) : Term
+      Term.of("strand set key", vertex.encode(Term))
+    end
+
+    def self.decode?(term : Term) : Key?
+      Term.matchpi?(term, %{("strand set key" vertex_number)}) do
+        new(Label.decode(vertex))
       end
     end
   end
 
-  record Value
+  record Value do
+    def encode(otype : Term.class) : Term
+      Term.of({"strand set value"})
+    end
 
-  def initialize(@storage : IStorage(Key, Value))
+    def self.decode?(term : Term) : Value?
+      Term.matchpi?(term, %{("strand set value")}) { new }
+    end
   end
 
-  def mount(client : Label, vertex : Label, *, deps = Bag({Key, Value}).new)
+  def initialize(@map : IMap(Key, Value))
+  end
+
+  def mount(referrer : Label, vertex : Label, *, deps = Bag({Key, Value}).new)
     key = Key.new(vertex)
-    value = @storage.inc(client, key, Value.new)
+    value = @map.inc(referrer, key, Value.new)
     deps << {key, value}
     deps
   end
 
-  def strand?(vertex : Label) : Bool
-    !!@storage.latest?(Key.new(vertex))
+  def strand?(referrer : Label, vertex : Label) : Bool
+    !!@map.latest?(referrer, Key.new(vertex))
   end
 end
 
 struct AppearanceSet
   record Key, vertex : Label do
-    def digest : String
-      Digest::SHA256.base64digest do |ctx|
-        ctx.update "appearance set key #{vertex}"
+    def encode(otype : Term.class) : Term
+      Term.of("appearance set key", vertex.encode(Term))
+    end
+
+    def self.decode?(term : Term) : Key?
+      Term.matchpi?(term, %{("appearance set key" vertex_number)}) do
+        new(Label.decode(vertex))
       end
     end
   end
 
-  record Value
+  record Value do
+    def encode(otype : Term.class) : Term
+      Term.of({"appearance set value"})
+    end
 
-  def initialize(@storage : IStorage(Key, Value))
+    def self.decode?(term : Term) : Value?
+      Term.matchpi?(term, %{("appearance set value")}) { new }
+    end
   end
 
-  def mount(client : Label, vertex : Label, *, deps = Bag({Key, Value}).new)
+  def initialize(@map : IMap(Key, Value))
+  end
+
+  def mount(referrer : Label, vertex : Label, *, deps = Bag({Key, Value}).new)
     key = Key.new(vertex)
-    value = @storage.inc(client, key, Value.new)
+    value = @map.inc(referrer, key, Value.new)
     deps << {key, value}
     deps
   end
 
-  def appearance?(vertex : Label) : Bool
-    !!@storage.latest?(Key.new(vertex))
+  def appearance?(referrer : Label, vertex : Label) : Bool
+    !!@map.latest?(referrer, Key.new(vertex))
   end
 end
 
@@ -596,22 +1147,34 @@ struct SensorDecoder
   BASE_LENGTH_U128 = 64u8
 
   record Key, scope : Label, state : Label, digitno : UInt8 do
-    def digest : String
-      Digest::SHA256.base64digest do |ctx|
-        ctx.update "sensor decoder vertex #{scope} #{state} #{digitno}"
+    def encode(otype : Term.class) : Term
+      Term.of("sensor decoder key", scope.encode(Term), state.encode(Term), digitno)
+    end
+
+    def self.decode?(term : Term) : Key?
+      Term.matchpi?(term, %{("sensor decoder key" scope_number state_number digitno_number)}) do
+        new(Label.decode(scope), Label.decode(state), digitno.to(UInt8))
       end
     end
   end
 
-  record Value
+  record Value do
+    def encode(otype : Term.class) : Term
+      Term.of({"sensor decoder value"})
+    end
 
-  def initialize(@fresh : LabelGenerator, @storage : IStorage(Key, Value))
+    def self.decode?(term : Term) : Value?
+      Term.matchpi?(term, %{("sensor decoder value")}) { new }
+    end
   end
 
-  def mount(client : Label, scope : Label, succ : Label, *, deps = Bag({Key, Value}).new)
+  def initialize(@fresh : LabelGenerator, @map : IMap(Key, Value))
+  end
+
+  def mount(referrer : Label, scope : Label, succ : Label, *, deps = Bag({Key, Value}).new)
     succ.each_prefix_with_index(base: BASE, max: BASE_LENGTH_U128) do |prefix, index|
       key = Key.new(scope, prefix, index)
-      value = @storage.inc(client, key, Value.new)
+      value = @map.inc(referrer, key, Value.new)
       deps << {key, value}
     end
 
@@ -619,7 +1182,7 @@ struct SensorDecoder
   end
 
   # TODO: what this method is doing appears to be "embarassingly parallel". Parallelize!
-  def each_successor(scope : Label, &sink : Label ->) : Nil
+  def each_successor(referrer : Label, scope : Label, &sink : Label ->) : Nil
     queue = Deque{ {Label.zero, BASE_LENGTH_U128 - 1} }
 
     while entry = queue.shift?
@@ -628,7 +1191,7 @@ struct SensorDecoder
       BASE_DIGITS.each do |choice|
         completion = state.complete(choice, base: BASE, index: digitno)
 
-        next unless @storage.latest?(Key.new(scope, completion, digitno))
+        next unless @map.latest?(referrer, Key.new(scope, completion, digitno))
 
         if digitno == 0
           sink.call(completion)
@@ -639,8 +1202,8 @@ struct SensorDecoder
     end
   end
 
-  def decode(sensor : Label, &sink : Label ->)
-    each_successor(sensor, &sink)
+  def decode(referrer : Label, sensor : Label, &sink : Label ->)
+    each_successor(referrer, sensor, &sink)
   end
 end
 
@@ -667,46 +1230,46 @@ struct Tbase
 
   alias Subject = Sensor | Appearance
 
-  def initialize(@fresh : LabelGenerator, @storage : IStorage(Key, Value))
+  def initialize(@fresh : LabelGenerator, @map : IMap(Key, Value))
   end
 
   def utrie : Utrie
-    Utrie.new(@fresh, @storage.submap(Utrie::Key, Utrie::Value))
+    Utrie.new(@fresh, @map.submap(Utrie::Key, Utrie::Value))
   end
 
   def ttrie : Ttrie
-    Ttrie.new(@fresh, @storage.submap(Ttrie::Key, Ttrie::Value))
+    Ttrie.new(@fresh, @map.submap(Ttrie::Key, Ttrie::Value))
   end
 
   def etrace : Etrace
-    Etrace.new(@fresh, @storage.submap(Etrace::Key, Etrace::Value))
+    Etrace.new(@fresh, @map.submap(Etrace::Key, Etrace::Value))
   end
 
   def strands : StrandSet
-    StrandSet.new(@storage.submap(StrandSet::Key, StrandSet::Value))
+    StrandSet.new(@map.submap(StrandSet::Key, StrandSet::Value))
   end
 
   def xgraph : Xgraph
-    Xgraph.new(@fresh, @storage.submap(Xgraph::Key, Xgraph::Value))
+    Xgraph.new(@fresh, @map.submap(Xgraph::Key, Xgraph::Value))
   end
 
   def sensors : SensorDecoder
-    SensorDecoder.new(@fresh, @storage.submap(SensorDecoder::Key, SensorDecoder::Value))
+    SensorDecoder.new(@fresh, @map.submap(SensorDecoder::Key, SensorDecoder::Value))
   end
 
   def appearances : AppearanceSet
-    AppearanceSet.new(@storage.submap(AppearanceSet::Key, AppearanceSet::Value))
+    AppearanceSet.new(@map.submap(AppearanceSet::Key, AppearanceSet::Value))
   end
 
-  def mount(client : Label, subject : Sensor, *, deps = Bag({Key, Value}).new)
+  def mount(referrer : Label, subject : Sensor, *, deps = Bag({Key, Value}).new)
     rule = Deque(Label).new
 
     subject.strands.each do |strand|
-      _, endpoint = utrie.mount(client, strand, deps: deps)
+      _, endpoint = utrie.mount(referrer, strand, deps: deps)
 
       # Endpoint points to the end of the utrie strand. We need to register
       # endpoint as a strand.
-      _ = strands.mount(client, endpoint, deps: deps)
+      _ = strands.mount(referrer, endpoint, deps: deps)
 
       rule << endpoint
     end
@@ -715,48 +1278,48 @@ struct Tbase
     rule.unstable_sort!
 
     # Mount the rule in the Xgraph.
-    _, conjv = xgraph.mount(client, rule, deps: deps)
+    _, conjv = xgraph.mount(referrer, rule, deps: deps)
 
     # Subscribe the id to the conjunction vertex. This acts as a point-of-commitment,
     # the instant registration finishes the sensor is public.
-    _ = sensors.mount(client, conjv, subject.id, deps: deps)
+    _ = sensors.mount(referrer, conjv, subject.id, deps: deps)
 
     deps
   end
 
-  def mount(client : Label, subject : Appearance, *, deps = Bag({Key, Value}).new)
+  def mount(referrer : Label, subject : Appearance, *, deps = Bag({Key, Value}).new)
     Term.each_keypath_and_leaf(subject.value) do |keypath, leaf|
       keypath.push(leaf)
 
       # Mount the appearance into the Ttrie, saving the path to `subject.id`
       # (ids of nodes which lie along the path).
-      _, path = ttrie.mount(client, keypath, subject.id, deps: deps)
+      _, path = ttrie.mount(referrer, keypath, subject.id, deps: deps)
 
       keypath.pop
 
       # Mount `path` in Etrace for iteration at query-time.
-      _ = etrace.mount(client, path, deps: deps)
+      _ = etrace.mount(referrer, path, deps: deps)
 
       true # continue
     end
 
     # Register `subject.id` as that of an appearance. This acts as a point-of-
     # commitment, the instant registration finishes the sensor is public.
-    _ = appearances.mount(client, subject.id, deps: deps)
+    _ = appearances.mount(referrer, subject.id, deps: deps)
 
     deps
   end
 
-  def each_complement(subject : Sensor, *, successors : Bool, &sink : Label ->) : Nil
+  def each_complement(client : Label, subject : Sensor, *, successors : Bool, &sink : Label ->) : Nil
     sets = [] of Set(Label)
 
     subject.strands.each do |strand|
-      next unless endpoint = ttrie.query?(strand)
+      return unless endpoint = ttrie.query?(client, strand)
 
       hits = Set(Label).new
 
-      etrace.walk(endpoint) do |candidate|
-        next unless appearances.appearance?(candidate)
+      etrace.walk(client, endpoint) do |candidate|
+        next unless appearances.appearance?(client, candidate)
         next if !successors && candidate > subject.id
 
         hits << candidate
@@ -767,7 +1330,7 @@ struct Tbase
       sets << hits
     end
 
-    return if sets.empty?
+    return unless subject.strands.size == sets.size
 
     sets.unstable_sort_by!(&.size)
     sets[0].each do |candidate|
@@ -779,13 +1342,13 @@ struct Tbase
     end
   end
 
-  def each_complement(subject : Appearance, *, successors : Bool, &sink : Label ->) : Nil
+  def each_complement(client : Label, subject : Appearance, *, successors : Bool, &sink : Label ->) : Nil
     hits = Deque(Label).new
 
     # Find out which Utrie vertices are activated by the subject.
-    utrie.query(subject.value) do |hit|
+    utrie.query(client, subject.value) do |hit|
       # Keep only strand vertices.
-      next unless strands.strand?(hit)
+      next unless strands.strand?(client, hit)
 
       hits << hit
     end
@@ -794,9 +1357,9 @@ struct Tbase
     hits.unstable_sort!
 
     # Find out which conjunctions are activated by the subject.
-    xgraph.conjs(hits) do |conjv|
+    xgraph.conjs(client, hits) do |conjv|
       # Filter proper (decodable) sensor vertices.
-      sensors.decode(conjv) do |candidate|
+      sensors.decode(client, conjv) do |candidate|
         next if !successors && candidate > subject.id
 
         # Send matching candidates to sink.
@@ -806,14 +1369,14 @@ struct Tbase
   end
 end
 
-record Sensor, id : Label, strands : StrandList do
+record SensorSubject, id : Label, strands : StrandList do
   include Tbase::Sensor
 
   # Calls *fn* with each sensor in *pattern*.
   #
   # An arbitrary M1 *pattern* can contain branches (e.g. `%any`) so it is considered
   # to contain multiple sensors.
-  def self.each(fresh : LabelGenerator, pattern : Term, &fn : Sensor ->) : Nil
+  def self.each(fresh : LabelGenerator, pattern : Term, &fn : SensorSubject ->) : Nil
     skeleton = pipe(pattern, M1.normal, M1.skeleton)
 
     strands = [] of Strand
@@ -832,36 +1395,103 @@ record Sensor, id : Label, strands : StrandList do
   end
 end
 
-record Appearance, id : Label, value : Term do
+record AppearanceSubject, id : Label, value : Term do
   include Tbase::Appearance
 end
 
 record SensorData,
   client : Label,
   instant : Label,
-  identity : UInt32,
+  identity : Identity,
   address : String,
   selector : Term?
+
+struct SensorData
+  def encode(otype : Term.class) : Term
+    Term.of(
+      client: client.encode(Term),
+      instant: instant.encode(Term),
+      identity: identity,
+      address: address,
+      selector: selector,
+    )
+  end
+
+  def self.decode(object : Term) : SensorData
+    new(
+      Label.decode(object[:client]),
+      Label.decode(object[:instant]),
+      object[:identity].to(Identity),
+      object[:address].to(String),
+      object[:selector]?,
+    )
+  end
+end
 
 record AppearanceData,
   client : Label,
   instant : Label,
-  identity : UInt32,
+  identity : Identity,
   value : Term,
   selector : Term?,
   tombstone : Term?
 
-struct SensorBase
-  record Key, instant : Label
-  record Value, data : SensorData
-
-  def initialize(@storage : IStorage(Key, Value))
+struct AppearanceData
+  def encode(otype : Term.class) : Term
+    Term.of(
+      client: client.encode(Term),
+      instant: instant.encode(Term),
+      identity: identity,
+      value: value,
+      selector: selector,
+      tombstone: tombstone,
+    )
   end
 
-  def mount(client : Label, instant : Label, data : SensorData, *, deps = Bag({Key, Value}).new)
+  def self.decode(object : Term) : AppearanceData
+    new(
+      Label.decode(object[:client]),
+      Label.decode(object[:instant]),
+      object[:identity].to(Identity),
+      object[:value],
+      object[:selector]?,
+      object[:tombstone]?,
+    )
+  end
+end
+
+struct SensorBase
+  record Key, instant : Label do
+    def encode(otype : Term.class) : Term
+      Term.of("sensor base key", instant.encode(Term))
+    end
+
+    def self.decode?(term : Term) : Key?
+      Term.matchpi?(term, %{("sensor base key" instant_number)}) do
+        new(Label.decode(scope))
+      end
+    end
+  end
+
+  record Value, data : SensorData do
+    def encode(otype : Term.class) : Term
+      Term.of("sensor base value", data.encode(Term))
+    end
+
+    def self.decode?(term : Term) : Value?
+      Term.matchpi?(term, %{("sensor base value" data_)}) do
+        new(SensorData.decode(data))
+      end
+    end
+  end
+
+  def initialize(@map : IMap(Key, Value))
+  end
+
+  def mount(referrer : Label, instant : Label, data : SensorData, *, deps = Bag({Key, Value}).new)
     key = Key.new(instant)
     value0 = Value.new(data)
-    value1 = @storage.inc(client, key, value0)
+    value1 = @map.inc(referrer, key, value0)
     unless value0 == value1
       raise ArgumentError.new("instant is not unique")
     end
@@ -870,24 +1500,45 @@ struct SensorBase
     deps
   end
 
-  def query?(instant : Label) : SensorData?
-    return unless value = @storage.latest?(Key.new(instant))
+  def query?(referrer : Label, instant : Label) : SensorData?
+    return unless value = @map.latest?(referrer, Key.new(instant))
 
     value.data
   end
 end
 
 struct AppearanceBase
-  record Key, instant : Label
-  record Value, data : AppearanceData
+  record Key, instant : Label do
+    def encode(otype : Term.class) : Term
+      Term.of("appearance base key", instant.encode(Term))
+    end
 
-  def initialize(@storage : IStorage(Key, Value))
+    def self.decode?(term : Term) : Key?
+      Term.matchpi?(term, %{("appearance base key" instant_number)}) do
+        new(Label.decode(instant))
+      end
+    end
   end
 
-  def mount(client : Label, instant : Label, data : AppearanceData, *, deps = Bag({Key, Value}).new)
+  record Value, data : AppearanceData do
+    def encode(otype : Term.class) : Term
+      Term.of("appearance base value", data.encode(Term))
+    end
+
+    def self.decode?(term : Term) : Value?
+      Term.matchpi?(term, %{("appearance base value" data_)}) do
+        new(AppearanceData.decode(data))
+      end
+    end
+  end
+
+  def initialize(@map : IMap(Key, Value))
+  end
+
+  def mount(referrer : Label, instant : Label, data : AppearanceData, *, deps = Bag({Key, Value}).new)
     key = Key.new(instant)
     value0 = Value.new(data)
-    value1 = @storage.inc(client, key, value0)
+    value1 = @map.inc(referrer, key, value0)
     unless value0 == value1
       raise ArgumentError.new("instant is not unique")
     end
@@ -896,20 +1547,18 @@ struct AppearanceBase
     deps
   end
 
-  def query?(instant : Label) : AppearanceData?
-    return unless value = @storage.latest?(Key.new(instant))
+  def query?(referrer : Label, instant : Label) : AppearanceData?
+    return unless value = @map.latest?(referrer, Key.new(instant))
 
     value.data
   end
 end
 
-alias Activation = StimulusPresence | StimulusAbsence | SensorAbsence
+alias Identity = UInt32
+alias Activation = StimulusPresence | StimulusAbsence
 
-record StimulusPresence, recv_client : Label, recv_instant : Label, instant : Label, identity : UInt32, value : Term
-# FIXME: how are we going to send these in a distributed/decentralized setting ?! Who will be sending these?!
-record StimulusAbsence, instant : Label, client : Label, identity : UInt32, tombstone : Term?
-# FIXME: how are we going to send these in a distributed/decentralized setting ?! Who will be sending these?!
-record SensorAbsence, instant : Label
+record StimulusPresence, recv_client : Label, recv_instant : Label, instant : Label, identity : Identity, value : Term
+record StimulusAbsence, instant : Label, client : Label, identity : Identity, tombstone : Term?
 
 struct Tspace
   alias Address = String
@@ -917,211 +1566,445 @@ struct Tspace
   alias Key = Tbase::Key | SensorBase::Key | AppearanceBase::Key
   alias Value = Tbase::Value | SensorBase::Value | AppearanceBase::Value
 
-  # TODO: this is clearly misplaced!
-  class Surface
-    @mounted = true
+  alias Dismiss = ->
 
-    # :nodoc:
-    def initialize(
-      @fresh : LabelGenerator,
-      @storage : IStorage(Key, Value),
-      @client : Label,
-      @subject : Tbase::Subject,
-      @deps : Bag({Key, Value}),
-    )
-    end
-
-    # Calls *sink* with surfaces complementary to `self`. That is, if `self`
-    # is a sensor, calls *sink* with ids of appearances that `self` is excited
-    # by; and if `self` is an appearance, calls *sink* with ids of sensors that
-    # `self` excites.
-    #
-    # If *successors* is true, *sink* is called with surfaces that succeed `self`
-    # in time. That is, a sensor will be able to be excited by appearances from
-    # the future, and appearances from the past will be able to excite sensors
-    # in the future.
-    #
-    # This is normally not desired: we prefer surfaces to only excite or be excited
-    # by their predecessors.
-    def each_complement(*, successors = false, &sink : Label ->) : Nil
-      unless @mounted
-        raise SurfaceNotMountedError.new
-      end
-
-      tbase = Tbase.new(@fresh, @storage.submap(Tbase::Key, Tbase::Value))
-      tbase.each_complement(@subject, successors: successors, &sink)
-    end
-
-    # Collects the results of `each_complement` into an array.
-    def complement(**kwargs) : Array(Label)
-      complement = [] of Label
-      each_complement(**kwargs) do |label|
-        complement << label
-      end
-      complement
-    end
-
-    # Tears down the surface. You will no longer be able to call `unmount`
-    # and `refresh`. This is the graceful way to unmount; the underlying map
-    # does not depend on clients unmounting gracefully.
-    def unmount : Nil
-      unless @mounted
-        raise SurfaceNotMountedError.new
-      end
-
-      @mounted = false
-      @deps.each { |(key, _)| @storage.dec(@client, key) }
-    end
-
-    # Remounts the surface with randomization, blocking for *duration*.
-    #
-    # Remounting is a solution to deformations of the underlying map (random pairs
-    # will get removed at random times in practice if we consider a distributed,
-    # decentralized map). We also assume the underlying map implements timed deletion
-    # (pairs "evaporate" after a certain amount of time). Thus remounting becomes not
-    # only a way to ensure the surface is fully in the map throughout deformations;
-    # but also as a way to prolong the lifetime of the surface (prevent deletion
-    # of its constituent pairs).
-    def remount(duration = 1.minute) : Nil
-      unless @mounted
-        raise SurfaceNotMountedError.new
-      end
-
-      raise "not implemented"
-    end
-
-    def inspect(io)
-      case @subject
-      in Tbase::Sensor
-        io << "Sensor"
-      in Tbase::Appearance
-        io << "Appearance"
-      end
-
-      io << "("
-      io << "id=" << @subject.id
-      io << ", client=" << @client
-      io << ", popcount=" << @deps.ntotal
-      io << ", mounted=" << @mounted
-      io << ")"
-    end
-  end
-
-  def initialize(@fresh : LabelGenerator, @storage : IStorage(Key, Value))
+  def initialize(@fresh : LabelGenerator, @map : IMap(Key, Value))
   end
 
   def tbase : Tbase
-    Tbase.new(@fresh, @storage.submap(Tbase::Key, Tbase::Value))
+    Tbase.new(@fresh, @map.submap(Tbase::Key, Tbase::Value))
   end
 
   def sensors : SensorBase
-    SensorBase.new(@storage.submap(SensorBase::Key, SensorBase::Value))
+    SensorBase.new(@map.submap(SensorBase::Key, SensorBase::Value))
   end
 
   def appearances : AppearanceBase
-    AppearanceBase.new(@storage.submap(AppearanceBase::Key, AppearanceBase::Value))
+    AppearanceBase.new(@map.submap(AppearanceBase::Key, AppearanceBase::Value))
   end
 
   def summon(
     client : Label,
-    subject : Sensor,
-    identity : UInt32,
+    subject : SensorSubject,
+    identity : Identity,
     address : Address,
     selector : Term? = nil,
-    &sink : Address, Activation ->
-  ) : Surface
+    &sink : AppearanceData ->
+  ) : Dismiss
     sdata = SensorData.new(client, subject.id, identity, address, selector)
     deps = Bag({Key, Value}).new
 
     _ = sensors.mount(client, subject.id, sdata, deps: deps)
     _ = tbase.mount(client, subject, deps: deps)
 
-    surface = Surface.new(@fresh, @storage, client, subject, deps)
-    surface.each_complement do |appearance|
-      next unless adata = appearances.query?(appearance)
+    tbase.each_complement(client, subject, successors: false) do |appearance|
+      next unless adata = appearances.query?(client, appearance)
       next unless sdata.selector == adata.selector
 
-      act = StimulusPresence.new(sdata.client, sdata.instant, adata.instant, adata.identity, adata.value)
-
-      sink.call(sdata.address, act)
+      sink.call(adata)
     end
 
-    surface
+    mounted = true
+
+    Dismiss.new do
+      unless mounted
+        raise SurfaceNotMountedError.new
+      end
+
+      mounted = false
+
+      deps.each { |(key, _)| @map.dec(client, key) }
+    end
   end
 
   def summon(
     client : Label,
-    subject : Appearance,
-    identity : UInt32,
+    subject : AppearanceSubject,
+    identity : Identity,
     selector : Term? = nil,
     tombstone : Term? = nil,
-    &sink : Address, Activation ->
-  ) : Surface
+    &sink : Address, Label, AppearanceData ->
+  ) : ->
     adata = AppearanceData.new(client, subject.id, identity, subject.value, selector, tombstone)
     deps = Bag({Key, Value}).new
 
     _ = appearances.mount(client, subject.id, adata, deps: deps)
     _ = tbase.mount(client, subject, deps: deps)
 
-    surface = Surface.new(@fresh, @storage, client, subject, deps)
-    surface.each_complement do |sensor|
-      next unless sdata = sensors.query?(sensor)
+    tbase.each_complement(client, subject, successors: false) do |sensor|
+      next unless sdata = sensors.query?(client, sensor)
       next unless sdata.selector == adata.selector
 
-      act = StimulusPresence.new(sdata.client, sdata.instant, adata.instant, adata.identity, adata.value)
-
-      sink.call(sdata.address, act)
+      sink.call(sdata.address, sdata.instant, adata)
     end
 
-    surface
-  end
+    mounted = true
 
-  # TODO: dismiss
+    Dismiss.new do
+      unless mounted
+        raise SurfaceNotMountedError.new
+      end
+
+      mounted = false
+
+      deps.each { |(key, _)| @map.dec(client, key) }
+    end
+  end
 end
 
-# TODO: analyze whether healing with Bag of deps actually works in a distributed setting!!!
-# I'm getting the feeling it doesn't but I need to check! Important to remember that refcounts
-# are stored on buckets so it's all or none (buckets don't DECREF randomly but can disappear
-# and reappear randomly! the latter is probably the most problematic!)
-# TODO: implement serialization for all Values
-# TODO: use something RPC like to test out on a remote map. Or maybe use Redis
-# or something like that!
+# Tconn maintains the illusion of persistence of sensors and appearances
+# throughout periodic keepalive reinsertion.
+class Tconn
+  Log = ::Log.for("Tconn")
+
+  record Sensor, pattern : Term, selector : Term? = nil do
+    def self.new(pattern : String, **kwargs) : Sensor
+      new(ML.term(pattern), **kwargs)
+    end
+  end
+
+  record Appearance, value : Term, selector : Term? = nil, tombstone : Term? = nil do
+    def self.new(value : String, **kwargs) : Appearance
+      new(ML.term(value), **kwargs)
+    end
+  end
+
+  record SurfaceData, destructors : Array(Tspace::Dismiss), version : UInt32
+
+  record Task, start : Time, fn : -> do
+    def ready?(now : Time) : Bool
+      now >= start
+    end
+
+    def execute : Nil
+      fn.call
+    end
+  end
+
+  @client : Label
+
+  def initialize(
+    @fresh : LabelGenerator,
+    @map : IMap(Tspace::Key, Tspace::Value),
+    @sink : Activation ->,
+    *,
+    scheduler_rate = 1.second,
+    @reinsert_min = 10.seconds,
+    @reinsert_max = 1.minute,
+  )
+    @client = @fresh.call
+    @address = "address of #{@client}" # FIXME: ?!
+
+    @surfaces = {} of Identity => SurfaceData
+    @surfaces_lock = Mutex.new
+
+    ctx = ExecutionContext::MultiThreaded.new("Tconn refresher", 1)
+
+    @tasks = [] of Task
+    @tasks_lock = Mutex.new
+
+    @running = Channel(Bool).new
+
+    ctx.spawn do
+      taskq = Deque(Task).new
+
+      while true
+        select
+        when @running.receive? # nil
+          break
+        when timeout(scheduler_rate)
+          now = Time.utc
+
+          @tasks_lock.synchronize do
+            # Copy ready tasks outside of the lock. Leave nonready tasks.
+            @tasks.reject! do |task|
+              if ready = task.ready?(now)
+                taskq << task
+              end
+
+              ready
+            end
+          end
+
+          while task = taskq.shift?
+            task.execute
+          end
+        end
+      end
+    end
+  end
+
+  def self.open(*args, **kwargs, &)
+    conn = new(*args, **kwargs)
+
+    begin
+      yield conn
+    ensure
+      conn.close
+    end
+  end
+
+  def tspace : Tspace
+    Tspace.new(@fresh, @map)
+  end
+
+  def close
+    # Terminate reinsert fiber.
+    @running.close
+
+    # Call destructors for all surfaces -- gracefully leave the termspace.
+    @surfaces_lock.synchronize do
+      @surfaces.each do |_, data|
+        data.destructors.each(&.call)
+      end
+    end
+  end
+
+  alias AfterRec = AfterRec ->
+
+  private def after(span : Time::Span, &fn : AfterRec ->)
+    task = Task.new(start: Time.utc + span, fn: ->{ fn.call(fn) })
+
+    @tasks_lock.synchronize { @tasks << task }
+  end
+
+  def []=(identity : Identity, surface : Sensor) : Nil
+    version = 0u32
+
+    sink = ->(adata : AppearanceData) do
+      Log.debug { "#{@client}: update view of #{surface} at #{identity} based on #{adata}!!" }
+    end
+
+    @surfaces_lock.synchronize do
+      if data = @surfaces[identity]?
+        data.destructors.each(&.call)
+        data.destructors.clear
+        data = data.copy_with(version: data.version + 1)
+      else
+        data = SurfaceData.new(destructors: [] of Tspace::Dismiss, version: 0u32)
+      end
+
+      # Save current version in the closure.
+      version = data.version
+
+      # Perform initial insert.
+      SensorSubject.each(@fresh, surface.pattern) do |subject|
+        destructor = tspace.summon(@client, subject, identity, @address, surface.selector, &sink)
+
+        data.destructors << destructor
+      end
+
+      @surfaces[identity] = data
+    end
+
+    Log.info { "#{@client}: inserted sensor #{surface} at #{identity}" }
+
+    reinsert_min_ms = @reinsert_min.total_milliseconds
+    reinsert_max_ms = @reinsert_max.total_milliseconds
+
+    after((reinsert_min_ms...reinsert_max_ms).sample.milliseconds) do |rec|
+      @surfaces_lock.lock
+
+      # First of all we should check whether our local state of identity
+      # is consistent with the current state of identity.
+      unless data = @surfaces[identity]?
+        @surfaces_lock.unlock
+        next
+      end
+
+      # If version numbers do not match we simply quit. Identity was modified
+      # and another reinsert fiber is now responsible for reinsertion.
+      unless version == data.version
+        @surfaces_lock.unlock
+        next
+      end
+
+      begin
+        data.destructors.each(&.call)
+        data.destructors.clear
+
+        # Perform reinsert.
+        SensorSubject.each(@fresh, surface.pattern) do |subject|
+          destructor = tspace.summon(@client, subject, identity, @address, surface.selector, &sink)
+
+          data.destructors << destructor
+        end
+
+        @surfaces[identity] = data
+      ensure
+        @surfaces_lock.unlock
+      end
+
+      Log.info { "#{@client}: keep alive sensor #{surface} at #{identity}" }
+
+      # Recursively reschedule again.
+      after((reinsert_min_ms...reinsert_max_ms).sample.milliseconds) { rec.call(rec) }
+    end
+  end
+
+  def []=(identity : Identity, surface : Appearance) : Nil
+    version = 0u32
+
+    sink = ->(raddr : Tspace::Address, rsensor : Label, adata : AppearanceData) do
+      Log.debug { "#{@client}: send #{adata} to #{raddr}'s sensor #{rsensor}" }
+    end
+
+    @surfaces_lock.synchronize do
+      if data = @surfaces[identity]?
+        data.destructors.each(&.call)
+        data.destructors.clear
+        data = data.copy_with(version: data.version + 1)
+      else
+        data = SurfaceData.new(destructors: [] of Tspace::Dismiss, version: 0u32)
+      end
+
+      # Save current version in the closure.
+      version = data.version
+
+      # Perform initial insert.
+      subject = AppearanceSubject.new(@fresh.call, surface.value)
+      destructor = tspace.summon(@client, subject, identity, surface.selector, surface.tombstone, &sink)
+      data.destructors << destructor
+
+      @surfaces[identity] = data
+    end
+
+    Log.info { "#{@client}: inserted appearance #{surface} at #{identity}" }
+
+    reinsert_min_ms = @reinsert_min.total_milliseconds
+    reinsert_max_ms = @reinsert_max.total_milliseconds
+
+    after((reinsert_min_ms...reinsert_max_ms).sample.milliseconds) do |rec|
+      @surfaces_lock.lock
+
+      # First of all we should check whether our local state of identity
+      # is consistent with the current state of identity.
+      unless data = @surfaces[identity]?
+        @surfaces_lock.unlock
+        next
+      end
+
+      # If version numbers do not match we simply quit. Identity was modified
+      # and another reinsert fiber is now responsible for reinsertion.
+      unless version == data.version
+        @surfaces_lock.unlock
+        next
+      end
+
+      begin
+        data.destructors.each(&.call)
+        data.destructors.clear
+
+        # Perform reinsert.
+        subject = AppearanceSubject.new(@fresh.call, surface.value)
+        destructor = tspace.summon(@client, subject, identity, surface.selector, surface.tombstone, &sink)
+        data.destructors << destructor
+
+        @surfaces[identity] = data
+      ensure
+        @surfaces_lock.unlock
+      end
+
+      Log.info { "#{@client}: keep alive appearance #{surface} at #{identity}" }
+
+      # Recursively reschedule again.
+      after((reinsert_min_ms...reinsert_max_ms).sample.milliseconds) { rec.call(rec) }
+    end
+  end
+
+  def delete(identity : Identity) : Nil
+    @surfaces_lock.synchronize do
+      return unless data = @surfaces.delete(identity)
+
+      data.destructors.each(&.call)
+    end
+
+    Log.info { "#{@client}: removed surface #{identity}" }
+  end
+end
+
+# map = SyncInMemoryMap(Tspace::Key, Tspace::Value).new
+map = TermMap(Tspace::Key, Tspace::Value).new(CompactMLMap.new(DigestedKeyMap(String, String).new(RemoteStringMap.new("127.0.0.1", 9000))))
+
+sink = ->(act : Activation) do
+  pp act
+end
+
+Tconn.open(WWID, map, sink) do |conn|
+  conn[0] = Tconn::Sensor.new(%{((%any div mod) a_number (%all b_number (%not 0)))})
+  conn[1] = Tconn::Appearance.new(Term.of(:div, 100, 200))
+  conn[2] = Tconn::Appearance.new(Term.of(:mod, 300, 400))
+  conn[2] = Tconn::Appearance.new(Term.of(:qux, 123))
+  conn[1] = Tconn::Sensor.new(%{(qux x_)})
+
+# conn.delete(0)
+# conn.delete(2)
+# conn.delete(1)
+
+  sleep
+end
+
+
+# sleep
+
+# TODO: StimulusAbsence is sent by Tconn to itself (simulated). Tconn will have to
+# periodically reinsert to keep itself alive. Reinsert must create completely new
+# sensors/appearances (instants) rather than reusing old ones, to ensure buckets'
+# reappearance does not disrupt anything (so that we do not end up with copies of
+# the same entries in the scenario where A holds B's pairs, A disappears, B reinserts,
+# A appears with B's old pairs). When the same sensor identity across two consecutive
+# instants (I and I+1 after keepalive reinsert) detects dismissal of an appearance,
+# it sends StimulusAbsence.
+# TODO: what are addresses going to be?
+# TODO: I'm still completely unsure!!! about whether reinsertion works. It kind of
+#   does, but then, does it? Besides duplication, we must do heavy filtering on
+#   the basis of instants in sensor sink callback. That is, we must only accept from
+#   adata directed at the current instant. What I am worried about is IMap#dec. When we
+#   remove we DECREF, so if different surfaces reuse the same part, we'd could get decref
+#   wrong?! or could we? assuming it's on the same bucket?
+
+{% skip_file %}
 
 notify = ->(address : Tspace::Address, act : Activation) do
   puts "Send #{act} to #{address}"
 end
 fresh = WWID
-storage = MapStorage(Tspace::Key, Tspace::Value).new
+storage = TermMap(Tspace::Key, Tspace::Value).new(CompactMLMap.new(DigestedKeyMap(String, String).new(RemoteStringMap.new("127.0.0.1", 9000))))
 tspace = Tspace.new(fresh, storage)
 
 client0 = fresh.call
 client1 = fresh.call
 client2 = fresh.call
 
+dismiss = [] of ->
+
 n = 0
 Sensor.each(fresh, ML.term %{(div a_number b_number)}) do |sensor|
   s = tspace.summon(client0, sensor, 0u32, "address(sensor-#{n})", &notify)
   n += 1
-  pp s
+  dismiss << s
 end
 
 ap1 = tspace.summon(client1, Appearance.new(fresh.call, Term.of(:div, 100, 200)), 0u32, &notify)
+dismiss << ap1
 ap2 = tspace.summon(client2, Appearance.new(fresh.call, Term.of(:mod, 100, 200)), 0u32, &notify)
-pp ap1
-pp ap2
+dismiss << ap2
 
 Sensor.each(fresh, ML.term %{(mod a_number b_number)}) do |sensor|
   s = tspace.summon(client0, sensor, 0u32, "address(sensor-#{n})", &notify)
+  dismiss << s
   n += 1
-  pp s
 end
+
+# puts "Dismissing!!!"
+dismiss.each &.call
 
 {% skip_file %}
 
 fresh = WWID
-# storage = SerializedValue(Tbase::Key, Tbase::Value).new(DigestedKey(Tbase::Key, String).new(MapStorage(String, String).new))
-# storage = DigestedKey(Tbase::Key, Tbase::Value).new(MapStorage(String, Tbase::Value).new)
-storage = MapStorage(Tbase::Key | Tspace::Key, Tbase::Value | Tspace::Value).new
+# storage = SerializedValue(Tbase::Key, Tbase::Value).new(DigestedKey(Tbase::Key, String).new(SyncInMemoryMap(String, String).new))
+# storage = DigestedKey(Tbase::Key, Tbase::Value).new(SyncInMemoryMap(String, Tbase::Value).new)
+storage = SyncInMemoryMap(Tbase::Key | Tspace::Key, Tbase::Value | Tspace::Value).new
 tbase = Tbase.new(fresh, storage.submap(Tbase::Key, Tbase::Value))
 tspace = Tspace.new(fresh, storage.submap(Tspace::Key, Tspace::Value))
 
@@ -1217,7 +2100,7 @@ fresh = -> { WWID.call }
 client0 = fresh.call
 client1 = fresh.call
 
-storage = MapStorage(Utrie::Key | Xgraph::Key | Ttrie::Key | Etrace::Key | StrandSet::Key | AppearanceSet::Key | SensorDecoder::Key, Utrie::Value | Xgraph::Value | Ttrie::Value | Etrace::Value | StrandSet::Value | AppearanceSet::Value | SensorDecoder::Value).new
+storage = SyncInMemoryMap(Utrie::Key | Xgraph::Key | Ttrie::Key | Etrace::Key | StrandSet::Key | AppearanceSet::Key | SensorDecoder::Key, Utrie::Value | Xgraph::Value | Ttrie::Value | Etrace::Value | StrandSet::Value | AppearanceSet::Value | SensorDecoder::Value).new
 
 utrie = Utrie.new(fresh, storage.submap(Utrie::Key, Utrie::Value))
 strandset = StrandSet.new(storage.submap(StrandSet::Key, StrandSet::Value))
