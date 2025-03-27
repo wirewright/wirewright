@@ -57,6 +57,26 @@ Building the frontends is harder than it should be, but currently, the best bet 
 
 ## Want to learn more?
 
+### What is Wirewright?
+
+I find the question “What is Wirewright?” surprisingly hard to answer.
+
+One attempt could be to say that Wirewright is everything I’ve been working on and thinking about for roughly two years already, more or less full-time.
+
+Wirewright is a bunch of ideas about ways to exchange messages in a truly distributed, decentralized, amorphous setting (that is, in a setting where no peer knows about “the whole” it’s part of; but rather, each peer is exploring the whole, “feeling it out”). In fact, that's the source of the project's name.
+
+Wirewright is also a bunch of ideas about term rewriting, pattern matching, rule systems, rewriter circuits, and so on, taking inspiration from (among many other things) the work of Stephen Wolfram on physics and computation, and on his company’s Mathematica. Linked to that is my work in trying to bootstrap modern-looking UI using rule systems and a thin layer of native code for drawing. I’m still in the very beginning on this one. Naive me thought modern UIs are simple 😣 And in all honesty, I’m surprised it is running at all!
+
+Wirewright is also an effort to prove that rule systems, which are, in my opinion, one level of abstraction above traditional programming (whatever that means), can run at least as fast as modern interpreters (e.g. Python). This performance effort — quite sadly! — is at zero percent progress right now. But hopefully there will be some progress on it in the future. I truly believe one can make immutability, persistence, rewriter circuits, and rule systems as fast as modern interpreters. Modern interpreters (pure interpreters, that is; no JIT) are obviously much worse (sometimes thousands of times worse) than native code. That’s still a very ambitious goal when talking about rule systems, though; seeing how they plough through hundreds if not thousands of complex patterns for even the smallest things, sometimes recursively, sometimes exhaustively, but most of the time, both — and more!
+
+The second answer is, Wirewright is about self-embodied programs. That’s a fairly cryptic term, and, I must confess — one that I’m not able to define as clearly as they do in textbooks yet. But, more visually, I can define self-embodied programs as moving programs, or even go so far as to say self-embodied programs are living programs — programs that can modify themselves in reaction to stimuli.
+
+Wirewright is an attempt to craft an environment for such programs — which means, for example, the “laws of physics” that these programs will follow. In this regard Wirewright takes inspiration from Conway’s Game of Life and from cellular automata in general.
+
+Wirewright’s approach to programming is, let’s create a world. Some laws of physics here, some “basic building blocks” there, then let’s build a program out of those building blocks (a self-embodied program); and then sit back, relax, and enjoy the show. Obviously not the most safety-critical kind of programming; you won’t program an autopilot or an MRI machine this way (please don’t!) Nor would Wirewright make you a billion dollars.
+
+Instead, Wirewright is attempting to be a novel, “alien” way to program; importing ideas from lesser known parts of computer science and hopefully introducing some novel ones as well; and “mixing” them until just the right consistency is achieved. Wirewright is intended mainly as an inspiration; as a source of ideas, and a proof that they work.
+
 ### More of my ramblings
 
 See the ramblings/ directory to read more of my ramblings. None of those are of publishing quality and most are probably going to read like pseudo-scientific nonsense. Sorry.
