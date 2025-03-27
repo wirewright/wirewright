@@ -5,7 +5,7 @@ require "json"
 require "./src/wirewright"
 require "./surf_common"
 
-Log.setup_from_env(default_level: :debug)
+Log.setup_from_env(default_level: :trace)
 
 record Label, value : UInt128 do
   include Comparable(Label)
@@ -683,6 +683,49 @@ class RemoteStringMap
   end
 end
 
+module IChat(A, M)
+  alias Unsubscribe = ->
+
+  abstract def subscribe(address : A, &recv : M ->) : Unsubscribe
+  abstract def send(to receiver : A, message : M) : Nil
+end
+
+class SyncInMemoryChat(A, M)
+  include IChat(A, M)
+
+  @subscribers = {} of A => Set(M ->)
+  @lock = Mutex.new
+
+  def subscribe(address : A, &recv : M ->) : Unsubscribe
+    @lock.synchronize do
+      recvs = @subscribers.put_if_absent(address) { Set(M ->).new }
+      recvs << recv
+    end
+
+    Unsubscribe.new do
+      @lock.synchronize do
+        next unless recvs = @subscribers[address]?
+        next unless recvs.delete(recv)
+        next unless recvs.empty?
+
+        @subscribers.delete(address)
+      end
+    end
+  end
+
+  def send(to receiver : A, message : M) : Nil
+    recvs = @lock.synchronize do
+      # Copy receiver procs (if any) so that we can call them outside of the lock,
+      # and so that they're "frozen in time".
+      @subscribers[receiver]?.try(&.dup)
+    end
+
+    return unless recvs
+
+    recvs.each &.call(message)
+  end
+end
+
 if ARGV[0]? == "serve"
   port = (ARGV[1]? || 9000).to_i
   puts "Server listen on #{port} port"
@@ -1138,7 +1181,8 @@ struct AppearanceSet
   end
 end
 
-struct SensorDecoder
+# TODO: extract common with `Etrace`
+struct SensorMultimap
   # :nodoc:
   BASE = 4u128
 
@@ -1209,118 +1253,141 @@ struct SensorDecoder
   end
 end
 
-class SurfaceNotMountedError < Exception
-end
-
 struct Tbase
-  alias Key = Utrie::Key | Xgraph::Key | Ttrie::Key | Etrace::Key | StrandSet::Key | AppearanceSet::Key | SensorDecoder::Key
-  alias Value = Utrie::Value | Xgraph::Value | Ttrie::Value | Etrace::Value | StrandSet::Value | AppearanceSet::Value | SensorDecoder::Value
+  alias Key = Utrie::Key | Xgraph::Key | Ttrie::Key | Etrace::Key | StrandSet::Key | AppearanceSet::Key | SensorMultimap::Key
+  alias Value = Utrie::Value | Xgraph::Value | Ttrie::Value | Etrace::Value | StrandSet::Value | AppearanceSet::Value | SensorMultimap::Value
 
-  # Sensor surface requirements of `Tbase`.
-  module Sensor
-    abstract def id : Label
-    abstract def strands : StrandList
+  # Data that `Tbase` needs to know about a sensor.
+  record Sensor, id : Label, strands : StrandList do
+    # Calls *fn* with each sensor in *pattern*.
+    #
+    # An arbitrary M1 *pattern* can contain branches (e.g. `%any`) so it is considered
+    # to contain multiple sensors.
+    def self.each(fresh : LabelGenerator, pattern : Term, &fn : Sensor ->) : Nil
+      skeleton = pipe(pattern, M1.normal, M1.skeleton)
+
+      strands = [] of Strand
+
+      M1.branches(skeleton) do |branch|
+        M1.strands(branch) do |strand|
+          strands << strand.items.to_readonly_slice { |base| Ubase.parse(base) }
+        end
+
+        sensor = new(fresh.call, strands.to_readonly_slice(&.itself))
+
+        fn.call(sensor)
+
+        strands.clear
+      end
+    end
   end
 
-  # Appearance surface requirements of `Tbase`.
-  module Appearance
-    abstract def id : Label
+  # Data that `Tbase` needs to know about an appearance.
+  record Appearance, id : Label, value : Term
 
-    # Returns the value of this appearance.
-    abstract def value : Term
-  end
+  alias Subject = Sensor | Appearance
 
   def initialize(@fresh : LabelGenerator, @map : IMap(Key, Value))
   end
 
+  # Constructs a `Utrie` view of this termbase's underlying map.
   def utrie : Utrie
     Utrie.new(@fresh, @map.submap(Utrie::Key, Utrie::Value))
   end
 
+  # Constructs a `Ttrie` view of this termbase's underlying map.
   def ttrie : Ttrie
     Ttrie.new(@fresh, @map.submap(Ttrie::Key, Ttrie::Value))
   end
 
+  # Constructs an `Etrace` view of this termbase's underlying map.
   def etrace : Etrace
     Etrace.new(@fresh, @map.submap(Etrace::Key, Etrace::Value))
   end
 
+  # Constructs a `StrandSet` view of this termbase's underlying map.
   def strands : StrandSet
     StrandSet.new(@map.submap(StrandSet::Key, StrandSet::Value))
   end
 
+  # Constructs an `Xgraph` view of this termbase's underlying map.
   def xgraph : Xgraph
     Xgraph.new(@fresh, @map.submap(Xgraph::Key, Xgraph::Value))
   end
 
-  def sensors : SensorDecoder
-    SensorDecoder.new(@fresh, @map.submap(SensorDecoder::Key, SensorDecoder::Value))
+  # Constructs a `SensorMultimap` view of this termbase's underlying map.
+  def sensors : SensorMultimap
+    SensorMultimap.new(@fresh, @map.submap(SensorMultimap::Key, SensorMultimap::Value))
   end
 
+  # Constructs an `AppearanceSet` view of this termbase's underlying map.
   def appearances : AppearanceSet
     AppearanceSet.new(@map.submap(AppearanceSet::Key, AppearanceSet::Value))
   end
 
-  def mount(referrer : Label, subject : Sensor, *, deps = Bag({Key, Value}).new)
+  # Inserts a sensor *subject* into this termbase. Returns *deps*.
+  #
+  # *deps* acts as a sink for all key-value pairs inserted by this method into
+  # the underlying map. It must respond to `<<`. Its main purpose is to allow you
+  # to unmount *subject* later on; to unmount *subject* you will simply have to
+  # delete all key-value pairs contained in *deps* from the underlying map
+  # (see `IMap#dec`).
+  def mount(subject : Sensor, *, deps : D = Bag({Key, Value}).new) : D forall D
     rule = Deque(Label).new
 
     subject.strands.each do |strand|
-      _, endpoint = utrie.mount(referrer, strand, deps: deps)
-
-      # Endpoint points to the end of the utrie strand. We need to register
-      # endpoint as a strand.
-      _ = strands.mount(referrer, endpoint, deps: deps)
+      _, endpoint = utrie.mount(subject.id, strand, deps: deps)
+      _ = strands.mount(subject.id, endpoint, deps: deps)
 
       rule << endpoint
     end
 
-    # Pre-sort ascending as the Xgraph requires.
     rule.unstable_sort!
 
-    # Mount the rule in the Xgraph.
-    _, conjv = xgraph.mount(referrer, rule, deps: deps)
-
-    # Subscribe the id to the conjunction vertex. This acts as a point-of-commitment,
-    # the instant registration finishes the sensor is public.
-    _ = sensors.mount(referrer, conjv, subject.id, deps: deps)
+    _, conjv = xgraph.mount(subject.id, rule, deps: deps)
+    _ = sensors.mount(subject.id, conjv, subject.id, deps: deps)
 
     deps
   end
 
-  def mount(referrer : Label, subject : Appearance, *, deps = Bag({Key, Value}).new)
+  # Inserts an appearance *subject* into this termbase. Returns *deps*.
+  #
+  # *deps* acts as a sink for all key-value pairs inserted by this method into
+  # the underlying map. It must respond to `<<`. Its main purpose is to allow you
+  # to unmount *subject* later on; to unmount *subject* you will simply have to
+  # delete all key-value pairs contained in *deps* from the underlying map
+  # (see `IMap#dec`).
+  def mount(subject : Appearance, *, deps : D = Bag({Key, Value}).new) : D forall D
     Term.each_keypath_and_leaf(subject.value) do |keypath, leaf|
       keypath.push(leaf)
 
-      # Mount the appearance into the Ttrie, saving the path to `subject.id`
-      # (ids of nodes which lie along the path).
-      _, path = ttrie.mount(referrer, keypath, subject.id, deps: deps)
+      _, path = ttrie.mount(subject.id, keypath, subject.id, deps: deps)
+      _ = etrace.mount(subject.id, path, deps: deps)
 
       keypath.pop
-
-      # Mount `path` in Etrace for iteration at query-time.
-      _ = etrace.mount(referrer, path, deps: deps)
 
       true # continue
     end
 
-    # Register `subject.id` as that of an appearance. This acts as a point-of-
-    # commitment, the instant registration finishes the sensor is public.
-    _ = appearances.mount(referrer, subject.id, deps: deps)
+    _ = appearances.mount(subject.id, subject.id, deps: deps)
 
     deps
   end
 
-  def each_complement(client : Label, subject : Sensor, *, successors : Bool, &sink : Label ->) : Nil
+  # Calls *sink* with each appearance complement of *subject*.
+  #
+  # For a sensor, its appearance complements are appearances that the sensor
+  # is excited by.
+  def each_complement(subject : Sensor, &sink : Label ->) : Nil
     sets = [] of Set(Label)
 
     subject.strands.each do |strand|
-      return unless endpoint = ttrie.query?(client, strand)
+      return unless endpoint = ttrie.query?(subject.id, strand)
 
       hits = Set(Label).new
 
-      etrace.walk(client, endpoint) do |candidate|
-        next unless appearances.appearance?(client, candidate)
-        next if !successors && candidate > subject.id
+      etrace.walk(subject.id, endpoint) do |candidate|
+        next unless appearances.appearance?(subject.id, candidate)
 
         hits << candidate
       end
@@ -1334,104 +1401,59 @@ struct Tbase
 
     sets.unstable_sort_by!(&.size)
     sets[0].each do |candidate|
+      # Make sure the candidate is in all sets (matches all strands of the sensor).
       next unless (1...sets.size).all? { |index| candidate.in?(sets[index]) }
 
-      # Send candidates that are in all sets (match all strands of the sensor)
-      # to the sink.
       sink.call(candidate)
     end
   end
 
-  def each_complement(client : Label, subject : Appearance, *, successors : Bool, &sink : Label ->) : Nil
+  # Calls *sink* with each sensor complement of *subject*.
+  #
+  # For an appearance, its sensor complements are sensors that the appearance excites.
+  def each_complement(subject : Appearance, &sink : Label ->) : Nil
     hits = Deque(Label).new
 
-    # Find out which Utrie vertices are activated by the subject.
-    utrie.query(client, subject.value) do |hit|
-      # Keep only strand vertices.
-      next unless strands.strand?(client, hit)
+    utrie.query(subject.id, subject.value) do |hit|
+      next unless strands.strand?(subject.id, hit)
 
       hits << hit
     end
 
-    # Pre-sort ascending as the Xgraph requires.
     hits.unstable_sort!
 
-    # Find out which conjunctions are activated by the subject.
-    xgraph.conjs(client, hits) do |conjv|
-      # Filter proper (decodable) sensor vertices.
-      sensors.decode(client, conjv) do |candidate|
-        next if !successors && candidate > subject.id
-
-        # Send matching candidates to sink.
-        sink.call(candidate)
-      end
+    xgraph.conjs(subject.id, hits) do |conjv|
+      sensors.decode(subject.id, conjv, &sink)
     end
   end
 end
 
-record SensorSubject, id : Label, strands : StrandList do
-  include Tbase::Sensor
-
-  # Calls *fn* with each sensor in *pattern*.
-  #
-  # An arbitrary M1 *pattern* can contain branches (e.g. `%any`) so it is considered
-  # to contain multiple sensors.
-  def self.each(fresh : LabelGenerator, pattern : Term, &fn : SensorSubject ->) : Nil
-    skeleton = pipe(pattern, M1.normal, M1.skeleton)
-
-    strands = [] of Strand
-
-    M1.branches(skeleton) do |branch|
-      M1.strands(branch) do |strand|
-        strands << strand.items.to_readonly_slice { |base| Ubase.parse(base) }
-      end
-
-      sensor = new(fresh.call, strands.to_readonly_slice(&.itself))
-
-      fn.call(sensor)
-
-      strands.clear
-    end
-  end
-end
-
-record AppearanceSubject, id : Label, value : Term do
-  include Tbase::Appearance
-end
-
-record SensorData,
-  client : Label,
-  instant : Label,
-  identity : Identity,
-  address : String,
-  selector : Term?
-
-struct SensorData
+record SensorData, conid : Label, groupid : Label, identity : Identity, instant : Label, selector : Term? do
   def encode(otype : Term.class) : Term
     Term.of(
-      client: client.encode(Term),
-      instant: instant.encode(Term),
+      conid: conid.encode(Term),
+      groupid: groupid.encode(Term),
       identity: identity,
-      address: address,
+      instant: instant.encode(Term),
       selector: selector,
     )
   end
 
   def self.decode(object : Term) : SensorData
     new(
-      Label.decode(object[:client]),
-      Label.decode(object[:instant]),
-      object[:identity].to(Identity),
-      object[:address].to(String),
-      object[:selector]?,
+      conid: Label.decode(object[:conid]),
+      groupid: Label.decode(object[:groupid]),
+      identity: object[:identity].to(Identity),
+      instant: Label.decode(object[:instant]),
+      selector: object[:selector]?,
     )
   end
 end
 
 record AppearanceData,
-  client : Label,
-  instant : Label,
+  conid : Label,
   identity : Identity,
+  instant : Label,
   value : Term,
   selector : Term?,
   tombstone : Term?
@@ -1439,9 +1461,9 @@ record AppearanceData,
 struct AppearanceData
   def encode(otype : Term.class) : Term
     Term.of(
-      client: client.encode(Term),
-      instant: instant.encode(Term),
+      conid: conid.encode(Term),
       identity: identity,
+      instant: instant.encode(Term),
       value: value,
       selector: selector,
       tombstone: tombstone,
@@ -1450,9 +1472,9 @@ struct AppearanceData
 
   def self.decode(object : Term) : AppearanceData
     new(
-      Label.decode(object[:client]),
-      Label.decode(object[:instant]),
+      Label.decode(object[:conid]),
       object[:identity].to(Identity),
+      Label.decode(object[:instant]),
       object[:value],
       object[:selector]?,
       object[:tombstone]?,
@@ -1460,7 +1482,7 @@ struct AppearanceData
   end
 end
 
-struct SensorBase
+struct SensorDataMap
   record Key, instant : Label do
     def encode(otype : Term.class) : Term
       Term.of("sensor base key", instant.encode(Term))
@@ -1488,10 +1510,10 @@ struct SensorBase
   def initialize(@map : IMap(Key, Value))
   end
 
-  def mount(referrer : Label, instant : Label, data : SensorData, *, deps = Bag({Key, Value}).new)
+  def mount(instant : Label, data : SensorData, *, deps = Bag({Key, Value}).new)
     key = Key.new(instant)
     value0 = Value.new(data)
-    value1 = @map.inc(referrer, key, value0)
+    value1 = @map.inc(instant, key, value0)
     unless value0 == value1
       raise ArgumentError.new("instant is not unique")
     end
@@ -1500,14 +1522,14 @@ struct SensorBase
     deps
   end
 
-  def query?(referrer : Label, instant : Label) : SensorData?
-    return unless value = @map.latest?(referrer, Key.new(instant))
+  def query?(instant : Label) : SensorData?
+    return unless value = @map.latest?(instant, Key.new(instant))
 
     value.data
   end
 end
 
-struct AppearanceBase
+struct AppearanceDataMap
   record Key, instant : Label do
     def encode(otype : Term.class) : Term
       Term.of("appearance base key", instant.encode(Term))
@@ -1535,10 +1557,10 @@ struct AppearanceBase
   def initialize(@map : IMap(Key, Value))
   end
 
-  def mount(referrer : Label, instant : Label, data : AppearanceData, *, deps = Bag({Key, Value}).new)
+  def mount(instant : Label, data : AppearanceData, *, deps = Bag({Key, Value}).new)
     key = Key.new(instant)
     value0 = Value.new(data)
-    value1 = @map.inc(referrer, key, value0)
+    value1 = @map.inc(instant, key, value0)
     unless value0 == value1
       raise ArgumentError.new("instant is not unique")
     end
@@ -1547,24 +1569,28 @@ struct AppearanceBase
     deps
   end
 
-  def query?(referrer : Label, instant : Label) : AppearanceData?
-    return unless value = @map.latest?(referrer, Key.new(instant))
+  def query?(instant : Label) : AppearanceData?
+    return unless value = @map.latest?(instant, Key.new(instant))
 
     value.data
   end
 end
 
 alias Identity = UInt32
-alias Activation = StimulusPresence | StimulusAbsence
 
-record StimulusPresence, recv_client : Label, recv_instant : Label, instant : Label, identity : Identity, value : Term
-record StimulusAbsence, instant : Label, client : Label, identity : Identity, tombstone : Term?
+record Activation, kind : Kind, sdata : SensorData, adata : AppearanceData do
+  enum Kind : UInt8
+    StimulusPresence
+    StimulusAbsence
+  end
+end
+
+class SurfaceNotMountedError < Exception
+end
 
 struct Tspace
-  alias Address = String
-
-  alias Key = Tbase::Key | SensorBase::Key | AppearanceBase::Key
-  alias Value = Tbase::Value | SensorBase::Value | AppearanceBase::Value
+  alias Key = Tbase::Key | SensorDataMap::Key | AppearanceDataMap::Key
+  alias Value = Tbase::Value | SensorDataMap::Value | AppearanceDataMap::Value
 
   alias Dismiss = ->
 
@@ -1575,79 +1601,188 @@ struct Tspace
     Tbase.new(@fresh, @map.submap(Tbase::Key, Tbase::Value))
   end
 
-  def sensors : SensorBase
-    SensorBase.new(@map.submap(SensorBase::Key, SensorBase::Value))
+  def sensors : SensorDataMap
+    SensorDataMap.new(@map.submap(SensorDataMap::Key, SensorDataMap::Value))
   end
 
-  def appearances : AppearanceBase
-    AppearanceBase.new(@map.submap(AppearanceBase::Key, AppearanceBase::Value))
+  def appearances : AppearanceDataMap
+    AppearanceDataMap.new(@map.submap(AppearanceDataMap::Key, AppearanceDataMap::Value))
   end
 
-  def summon(
-    client : Label,
-    subject : SensorSubject,
-    identity : Identity,
-    address : Address,
-    selector : Term? = nil,
-    &sink : AppearanceData ->
-  ) : Dismiss
-    sdata = SensorData.new(client, subject.id, identity, address, selector)
+  def summon(sdata : SensorData, subject : Tbase::Sensor, *, seen : S = [] of AppearanceData) : {S, Dismiss} forall S
     deps = Bag({Key, Value}).new
 
-    _ = sensors.mount(client, subject.id, sdata, deps: deps)
-    _ = tbase.mount(client, subject, deps: deps)
+    _ = sensors.mount(subject.id, sdata, deps: deps)
+    _ = tbase.mount(subject, deps: deps)
 
-    tbase.each_complement(client, subject, successors: false) do |appearance|
-      next unless adata = appearances.query?(client, appearance)
-      next unless sdata.selector == adata.selector
+    each_complement(subject, &->seen.<<(AppearanceData))
+
+    mounted = true
+
+    dismiss = Dismiss.new do
+      unless mounted
+        raise SurfaceNotMountedError.new
+      end
+
+      mounted = false
+
+      deps.each { |(key, _)| @map.dec(subject.id, key) }
+    end
+
+    {seen, dismiss}
+  end
+
+  def summon(adata : AppearanceData, subject : Tbase::Appearance, &sink : SensorData ->) : Dismiss
+    deps = Bag({Key, Value}).new
+
+    _ = appearances.mount(subject.id, adata, deps: deps)
+    _ = tbase.mount(subject, deps: deps)
+
+    each_complement(subject, &sink)
+
+    mounted = true
+
+    Dismiss.new do
+      unless mounted
+        raise SurfaceNotMountedError.new
+      end
+
+      mounted = false
+
+      deps.each { |(key, _)| @map.dec(subject.id, key) }
+    end
+  end
+
+  def each_complement(subject : Tbase::Sensor, selector : Term? = nil, &sink : AppearanceData ->)
+    tbase.each_complement(subject) do |appearance|
+      next unless adata = appearances.query?(appearance)
+      next unless selector == adata.selector
 
       sink.call(adata)
     end
+  end
 
-    mounted = true
+  def each_complement(subject : Tbase::Appearance, selector : Term? = nil, &sink : SensorData ->)
+    tbase.each_complement(subject) do |sensor|
+      next unless sdata = sensors.query?(sensor)
+      next unless sdata.selector == selector
 
-    Dismiss.new do
-      unless mounted
-        raise SurfaceNotMountedError.new
+      sink.call(sdata)
+    end
+  end
+end
+
+class Tconn
+end
+
+struct Tconn::Keepalive
+  alias Task = Task ->
+
+  def initialize(@ctx : ExecutionContext, @period = 30.seconds..1.minute)
+    @running = Channel(Bool).new
+  end
+
+  def min_period : Time::Span
+    @period.begin
+  end
+
+  def max_period : Time::Span
+    @period.end
+  end
+
+  def stop : Nil
+    @running.close
+  end
+
+  def schedule(task : Task) : Nil
+    tmin = min_period.total_milliseconds
+    tmax = max_period.total_milliseconds
+    t = (tmin..tmax).sample.milliseconds
+
+    @ctx.spawn do
+      select
+      when @running.receive? # nil
+      when timeout(t)
+        task.call(task)
       end
-
-      mounted = false
-
-      deps.each { |(key, _)| @map.dec(client, key) }
     end
   end
 
-  def summon(
-    client : Label,
-    subject : AppearanceSubject,
-    identity : Identity,
-    selector : Term? = nil,
-    tombstone : Term? = nil,
-    &sink : Address, Label, AppearanceData ->
-  ) : ->
-    adata = AppearanceData.new(client, subject.id, identity, subject.value, selector, tombstone)
-    deps = Bag({Key, Value}).new
+  def schedule(&task : Task ->) : Nil
+    schedule(task)
+  end
+end
 
-    _ = appearances.mount(client, subject.id, adata, deps: deps)
-    _ = tbase.mount(client, subject, deps: deps)
+class Tview
+  record Stimulus, instant : Label, matches : Array(Term::Dict)
 
-    tbase.each_complement(client, subject, successors: false) do |sensor|
-      next unless sdata = sensors.query?(client, sensor)
-      next unless sdata.selector == adata.selector
+  getter groupid : Label
+  getter pattern : Term
 
-      sink.call(sdata.address, sdata.instant, adata)
+  def initialize(@groupid : Label, @pattern, @stimuli = Pf::Map({Label, Identity}, Stimulus).new)
+  end
+
+  private def_change
+
+  def self.build(instant : Label, pattern : Term, adatas : Array(AppearanceData)) : Tview
+    adatas.reduce(new(instant, pattern)) { |view, adata| view.present(adata) }
+  end
+
+  def empty? : Bool
+    @stimuli.empty?
+  end
+
+  protected def present(adata : AppearanceData) : Tview
+    pid = {adata.conid, adata.identity}
+
+    if stimulus = @stimuli[pid]?
+      # Make sure the activation is about a newer version of the appearance
+      # than the one we're observing.
+      return self if stimulus.instant > adata.instant
     end
 
-    mounted = true
+    stimuli1 = @stimuli
 
-    Dismiss.new do
-      unless mounted
-        raise SurfaceNotMountedError.new
+    matches = M1.matches(@pattern, adata.value)
+    if matches.empty?
+      # Consider the activation removed if it does not match the pattern, regardless
+      # of whether we were observing it before.
+      stimuli1 = stimuli1.dissoc(pid)
+    end
+
+    stimuli1 = stimuli1.assoc(pid, Stimulus.new(adata.instant, matches))
+
+    change(stimuli: stimuli1)
+  end
+
+  # FIXME: what should we do with the tombstone ?!?!
+  protected def absent(adata : AppearanceData) : Tview
+    pid = {adata.conid, adata.identity}
+
+    return self unless stimulus = @stimuli[pid]?
+
+    # Make sure the activation is about a newer or the same version of
+    # the appearance that we're observing.
+    return self unless stimulus.instant <= adata.instant
+
+    change(stimuli: @stimuli.dissoc(pid))
+  end
+
+  def advance(act : Activation) : Tview
+    case act.kind
+    in .stimulus_presence? then present(act.adata)
+    in .stimulus_absence?  then absent(act.adata)
+    end
+  end
+
+  # Returns a dict set of match envs in this view.
+  def dict_set : Term::Dict
+    Term::Dict.build do |commit|
+      @stimuli.each do |_, stimulus|
+        stimulus.matches.each do |env|
+          commit.with(env, true)
+        end
       end
-
-      mounted = false
-
-      deps.each { |(key, _)| @map.dec(client, key) }
     end
   end
 end
@@ -1656,6 +1791,9 @@ end
 # throughout periodic keepalive reinsertion.
 class Tconn
   Log = ::Log.for("Tconn")
+
+  alias Map = IMap(Tspace::Key, Tspace::Value)
+  alias Chat = IChat(Label, Activation)
 
   record Sensor, pattern : Term, selector : Term? = nil do
     def self.new(pattern : String, **kwargs) : Sensor
@@ -1669,67 +1807,48 @@ class Tconn
     end
   end
 
-  record SurfaceData, destructors : Array(Tspace::Dismiss), version : UInt32
+  alias Surface = Sensor | Appearance
 
-  record Task, start : Time, fn : -> do
-    def ready?(now : Time) : Bool
-      now >= start
-    end
+  alias Overview = Pf::Map(Identity, Tview)
 
-    def execute : Nil
-      fn.call
-    end
-  end
+  alias Sink = Overview ->
+  alias Destructor = Bool ->
 
-  @client : Label
+  record SurfaceData, instant : Label, destructors : Array(Destructor)
 
-  def initialize(
-    @fresh : LabelGenerator,
-    @map : IMap(Tspace::Key, Tspace::Value),
-    @sink : Activation ->,
-    *,
-    scheduler_rate = 1.second,
-    @reinsert_min = 10.seconds,
-    @reinsert_max = 1.minute,
-  )
-    @client = @fresh.call
-    @address = "address of #{@client}" # FIXME: ?!
+  @conid : Label
 
+  @unsubscribe : IChat::Unsubscribe
+
+  def initialize(@map : Map,
+                 @chat : Chat,
+                 @sink : Sink,
+                 @fresh : LabelGenerator = WWID,
+                 @keepalive : Keepalive? = nil)
+    @conid = @fresh.call
+
+    @overview = Overview.new
     @surfaces = {} of Identity => SurfaceData
-    @surfaces_lock = Mutex.new
+    @last_alive_at = {} of Label => Time::Span
+    @surfaces_lock = Mutex.new(:reentrant) # FIXME: ?!
 
-    ctx = ExecutionContext::MultiThreaded.new("Tconn refresher", 1)
+    @unsubscribe = @chat.subscribe(@conid) do |act|
+      @surfaces_lock.synchronize do
+        # If we can fetch view for act's sensor identity, then we know it's still
+        # a sensor.
+        next unless view0 = @overview[act.sdata.identity]?
+        next unless act.sdata.groupid == view0.groupid
 
-    @tasks = [] of Task
-    @tasks_lock = Mutex.new
+        # Record activity. If someone was able to reach us via the termspace, this
+        # means we're alive and keepalive can be postponed.
+        @last_alive_at[act.sdata.groupid] = Time.monotonic
 
-    @running = Channel(Bool).new
+        view1 = view0.advance(act)
 
-    ctx.spawn do
-      taskq = Deque(Task).new
+        # Update the view.
+        @overview = @overview.assoc(act.sdata.identity, view1)
 
-      while true
-        select
-        when @running.receive? # nil
-          break
-        when timeout(scheduler_rate)
-          now = Time.utc
-
-          @tasks_lock.synchronize do
-            # Copy ready tasks outside of the lock. Leave nonready tasks.
-            @tasks.reject! do |task|
-              if ready = task.ready?(now)
-                taskq << task
-              end
-
-              ready
-            end
-          end
-
-          while task = taskq.shift?
-            task.execute
-          end
-        end
+        @sink.call(@overview)
       end
     end
   end
@@ -1749,188 +1868,183 @@ class Tconn
   end
 
   def close
-    # Terminate reinsert fiber.
-    @running.close
+    # Terminate keepalive fibers.
+    @keepalive.try(&.stop)
+
+    # Unsubscribe from network messages.
+    @unsubscribe.call
 
     # Call destructors for all surfaces -- gracefully leave the termspace.
     @surfaces_lock.synchronize do
       @surfaces.each do |_, data|
-        data.destructors.each(&.call)
+        data.destructors.each &.call(true) # final
       end
     end
   end
 
-  alias AfterRec = AfterRec ->
-
-  private def after(span : Time::Span, &fn : AfterRec ->)
-    task = Task.new(start: Time.utc + span, fn: ->{ fn.call(fn) })
-
-    @tasks_lock.synchronize { @tasks << task }
+  private def present(sdata : SensorData, adata : AppearanceData) : Nil
+    @chat.send(to: sdata.conid, message: Activation.new(:stimulus_presence, sdata, adata))
   end
 
-  def []=(identity : Identity, surface : Sensor) : Nil
-    version = 0u32
+  private def absent(sdata : SensorData, adata : AppearanceData) : Nil
+    @chat.send(to: sdata.conid, message: Activation.new(:stimulus_absence, sdata, adata))
+  end
 
-    sink = ->(adata : AppearanceData) do
-      Log.debug { "#{@client}: update view of #{surface} at #{identity} based on #{adata}!!" }
+  # Queries which sensors the appearance excites, and sends them an absence message.
+  #
+  # This is only true for graceful appearance exits; if the appearance did not
+  # exit gracefully the sensors are expected to find out themselves (after
+  # some period of time).
+  private def absence(identity : Identity, adata : AppearanceData, subject : Tbase::Appearance)
+    tspace.each_complement(subject, adata.selector) do |sdata|
+      absent(sdata, adata)
     end
+  end
+
+  private def destructor(identity : Identity, sdata : SensorData, subject : Tbase::Sensor, dismiss : Tspace::Dismiss)
+    Destructor.new { |_final| dismiss.call }
+  end
+
+  private def destructor(identity : Identity, adata : AppearanceData, subject : Tbase::Appearance, dismiss : Tspace::Dismiss)
+    Destructor.new do |final|
+      if final
+        absence(identity, adata, subject)
+      end
+
+      dismiss.call
+    end
+  end
+
+  # WARNING: Assumes the surfaces lock is taken.
+  private def insert(identity : Identity, surface : Sensor, groupid : Label) : Nil
+    Log.trace { "#{@conid}: begin insert of sensor group #{groupid} (surface: #{surface}) at #{identity}" }
+
+    data = SurfaceData.new(instant: groupid, destructors: [] of Destructor)
+    seen = [] of AppearanceData
+
+    # NOTE: a `Tconn::Sensor` surface can be broken down (and is broken down here)
+    # into multiple `Tbase::Sensor`s. See `Tbase::Sensor.each`.
+    Tbase::Sensor.each(@fresh, surface.pattern) do |subject|
+      sdata = SensorData.new(@conid, groupid, identity, subject.id, surface.selector)
+      _, dismiss = tspace.summon(sdata, subject, seen: seen)
+      data.destructors << destructor(identity, sdata, subject, dismiss)
+    end
+
+    view = Tview.build(groupid, surface.pattern, seen)
+
+    @surfaces[identity] = data
+    @overview = @overview.assoc(identity, view)
+    @sink.call(@overview)
+
+    Log.debug { "#{@conid}: inserted sensor group #{groupid}" }
+  end
+
+  # WARNING: Assumes the surfaces lock is taken.
+  private def insert(identity : Identity, surface : Appearance, groupid : Label) : Nil
+    Log.trace { "#{@conid}: begin insert of appearance #{groupid} (surface: #{surface}) at #{identity}" }
+
+    data = SurfaceData.new(instant: groupid, destructors: [] of Destructor)
+
+    subject = Tbase::Appearance.new(groupid, surface.value)
+    adata = AppearanceData.new(@conid, identity, subject.id, subject.value, surface.selector, surface.tombstone)
+
+    dismiss = tspace.summon(adata, subject) do |sdata|
+      present(sdata, adata)
+    end
+
+    data.destructors << destructor(identity, adata, subject, dismiss)
+
+    @surfaces[identity] = data
+
+    Log.debug { "#{@conid}: inserted appearance #{groupid} (surface: #{surface}) at #{identity}" }
+  end
+
+  def []=(identity : Identity, surface : Surface) : Nil
+    groupid = @fresh.call
 
     @surfaces_lock.synchronize do
-      if data = @surfaces[identity]?
-        data.destructors.each(&.call)
-        data.destructors.clear
-        data = data.copy_with(version: data.version + 1)
-      else
-        data = SurfaceData.new(destructors: [] of Tspace::Dismiss, version: 0u32)
-      end
-
-      # Save current version in the closure.
-      version = data.version
-
-      # Perform initial insert.
-      SensorSubject.each(@fresh, surface.pattern) do |subject|
-        destructor = tspace.summon(@client, subject, identity, @address, surface.selector, &sink)
-
-        data.destructors << destructor
-      end
-
-      @surfaces[identity] = data
+      delete(identity, final: true)
+      insert(identity, surface, groupid)
     end
 
-    Log.info { "#{@client}: inserted sensor #{surface} at #{identity}" }
+    return unless keepalive = @keepalive
 
-    reinsert_min_ms = @reinsert_min.total_milliseconds
-    reinsert_max_ms = @reinsert_max.total_milliseconds
+    keepalive.schedule do |this|
+      Log.debug { "#{@conid}: run keepalive of #{identity}" }
 
-    after((reinsert_min_ms...reinsert_max_ms).sample.milliseconds) do |rec|
-      @surfaces_lock.lock
-
-      # First of all we should check whether our local state of identity
-      # is consistent with the current state of identity.
-      unless data = @surfaces[identity]?
-        @surfaces_lock.unlock
-        next
-      end
-
-      # If version numbers do not match we simply quit. Identity was modified
-      # and another reinsert fiber is now responsible for reinsertion.
-      unless version == data.version
-        @surfaces_lock.unlock
-        next
-      end
-
-      begin
-        data.destructors.each(&.call)
-        data.destructors.clear
-
-        # Perform reinsert.
-        SensorSubject.each(@fresh, surface.pattern) do |subject|
-          destructor = tspace.summon(@client, subject, identity, @address, surface.selector, &sink)
-
-          data.destructors << destructor
+      @surfaces_lock.synchronize do
+        # Make sure identity did not change in the meantime. If it did,
+        # then someone else is now responsible for keeping it alive.
+        unless data = @surfaces[identity]?
+          Log.trace { "#{@conid}: keepalive of #{identity}: exit noreschedule: identity absent" }
+          next
         end
 
-        @surfaces[identity] = data
-      ensure
-        @surfaces_lock.unlock
+        unless groupid == data.instant
+          Log.trace { "#{@conid}: keepalive of #{identity}: exit noreschedule: identity changed: #{groupid} != #{data.instant}" }
+          next
+        end
+
+        # If surface is a sensor that was interacted with in the last N seconds,
+        # early exit BUT reschedule.
+        if last_alive_at = @last_alive_at.delete(groupid)
+          activity = Time.monotonic - last_alive_at
+
+          if activity < keepalive.min_period # ago
+            Log.trace { "#{@conid}: keepalive of #{identity}: exit reschedule postpone keepalive: sensor was alive #{activity.total_seconds}s ago" }
+            keepalive.schedule(this)
+            next
+          end
+        end
+
+        groupid = @fresh.call
+
+        delete(identity, final: false)
+        insert(identity, surface, groupid)
+
+        keepalive.schedule(this)
       end
-
-      Log.info { "#{@client}: keep alive sensor #{surface} at #{identity}" }
-
-      # Recursively reschedule again.
-      after((reinsert_min_ms...reinsert_max_ms).sample.milliseconds) { rec.call(rec) }
     end
   end
 
-  def []=(identity : Identity, surface : Appearance) : Nil
-    version = 0u32
-
-    sink = ->(raddr : Tspace::Address, rsensor : Label, adata : AppearanceData) do
-      Log.debug { "#{@client}: send #{adata} to #{raddr}'s sensor #{rsensor}" }
-    end
+  private def delete(identity : Identity, *, final : Bool) : Nil
+    Log.trace { "#{@conid}: begin delete of surface #{identity}" }
 
     @surfaces_lock.synchronize do
-      if data = @surfaces[identity]?
-        data.destructors.each(&.call)
-        data.destructors.clear
-        data = data.copy_with(version: data.version + 1)
-      else
-        data = SurfaceData.new(destructors: [] of Tspace::Dismiss, version: 0u32)
+      unless data = @surfaces.delete(identity)
+        Log.trace { "#{@conid}: delete early exit: surface #{identity} does not exist" }
+        return
       end
 
-      # Save current version in the closure.
-      version = data.version
-
-      # Perform initial insert.
-      subject = AppearanceSubject.new(@fresh.call, surface.value)
-      destructor = tspace.summon(@client, subject, identity, surface.selector, surface.tombstone, &sink)
-      data.destructors << destructor
-
-      @surfaces[identity] = data
+      data.destructors.each &.call(final)
     end
 
-    Log.info { "#{@client}: inserted appearance #{surface} at #{identity}" }
-
-    reinsert_min_ms = @reinsert_min.total_milliseconds
-    reinsert_max_ms = @reinsert_max.total_milliseconds
-
-    after((reinsert_min_ms...reinsert_max_ms).sample.milliseconds) do |rec|
-      @surfaces_lock.lock
-
-      # First of all we should check whether our local state of identity
-      # is consistent with the current state of identity.
-      unless data = @surfaces[identity]?
-        @surfaces_lock.unlock
-        next
-      end
-
-      # If version numbers do not match we simply quit. Identity was modified
-      # and another reinsert fiber is now responsible for reinsertion.
-      unless version == data.version
-        @surfaces_lock.unlock
-        next
-      end
-
-      begin
-        data.destructors.each(&.call)
-        data.destructors.clear
-
-        # Perform reinsert.
-        subject = AppearanceSubject.new(@fresh.call, surface.value)
-        destructor = tspace.summon(@client, subject, identity, surface.selector, surface.tombstone, &sink)
-        data.destructors << destructor
-
-        @surfaces[identity] = data
-      ensure
-        @surfaces_lock.unlock
-      end
-
-      Log.info { "#{@client}: keep alive appearance #{surface} at #{identity}" }
-
-      # Recursively reschedule again.
-      after((reinsert_min_ms...reinsert_max_ms).sample.milliseconds) { rec.call(rec) }
-    end
+    Log.debug { "#{@conid}: removed surface #{identity}" }
   end
 
   def delete(identity : Identity) : Nil
-    @surfaces_lock.synchronize do
-      return unless data = @surfaces.delete(identity)
-
-      data.destructors.each(&.call)
-    end
-
-    Log.info { "#{@client}: removed surface #{identity}" }
+    delete(identity, final: true)
   end
 end
 
-# map = SyncInMemoryMap(Tspace::Key, Tspace::Value).new
-map = TermMap(Tspace::Key, Tspace::Value).new(CompactMLMap.new(DigestedKeyMap(String, String).new(RemoteStringMap.new("127.0.0.1", 9000))))
+map = SyncInMemoryMap(Tspace::Key, Tspace::Value).new
+# map = TermMap(Tspace::Key, Tspace::Value).new(CompactMLMap.new(DigestedKeyMap(String, String).new(RemoteStringMap.new("127.0.0.1", 9000))))
+chat = SyncInMemoryChat(Label, Activation).new
 
-sink = ->(act : Activation) do
-  pp act
+sink = ->(overview : Tconn::Overview) do
+  rendered = Term::Dict.build do |commit|
+    overview.each do |key, view|
+      next if view.empty?
+
+      commit.with(key, view.dict_set)
+    end
+  end
+
+  Tconn::Log.debug { ML.display(rendered) }
 end
 
-Tconn.open(WWID, map, sink) do |conn|
+ctx = ExecutionContext::MultiThreaded.new("Tconn keepalive", 1)
+Tconn.open(map, chat, sink, keepalive: Tconn::Keepalive.new(ctx)) do |conn|
   conn[0] = Tconn::Sensor.new(%{((%any div mod) a_number (%all b_number (%not 0)))})
   conn[1] = Tconn::Appearance.new(Term.of(:div, 100, 200))
   conn[2] = Tconn::Appearance.new(Term.of(:mod, 300, 400))
@@ -1944,238 +2058,12 @@ Tconn.open(WWID, map, sink) do |conn|
   sleep
 end
 
+# - TermChat
+# - CompactMLChat
+# - RemoteChat
+# - chat server
 
-# sleep
-
-# TODO: StimulusAbsence is sent by Tconn to itself (simulated). Tconn will have to
-# periodically reinsert to keep itself alive. Reinsert must create completely new
-# sensors/appearances (instants) rather than reusing old ones, to ensure buckets'
-# reappearance does not disrupt anything (so that we do not end up with copies of
-# the same entries in the scenario where A holds B's pairs, A disappears, B reinserts,
-# A appears with B's old pairs). When the same sensor identity across two consecutive
-# instants (I and I+1 after keepalive reinsert) detects dismissal of an appearance,
-# it sends StimulusAbsence.
-# TODO: what are addresses going to be?
-# TODO: I'm still completely unsure!!! about whether reinsertion works. It kind of
-#   does, but then, does it? Besides duplication, we must do heavy filtering on
-#   the basis of instants in sensor sink callback. That is, we must only accept from
-#   adata directed at the current instant. What I am worried about is IMap#dec. When we
-#   remove we DECREF, so if different surfaces reuse the same part, we'd could get decref
-#   wrong?! or could we? assuming it's on the same bucket?
-#     I think part of this could be fixed by using surface instant id instead of client id
-#     as referrer. Since we're reinserting surfaces it's going to be all or nothing.
-
-{% skip_file %}
-
-notify = ->(address : Tspace::Address, act : Activation) do
-  puts "Send #{act} to #{address}"
-end
-fresh = WWID
-storage = TermMap(Tspace::Key, Tspace::Value).new(CompactMLMap.new(DigestedKeyMap(String, String).new(RemoteStringMap.new("127.0.0.1", 9000))))
-tspace = Tspace.new(fresh, storage)
-
-client0 = fresh.call
-client1 = fresh.call
-client2 = fresh.call
-
-dismiss = [] of ->
-
-n = 0
-Sensor.each(fresh, ML.term %{(div a_number b_number)}) do |sensor|
-  s = tspace.summon(client0, sensor, 0u32, "address(sensor-#{n})", &notify)
-  n += 1
-  dismiss << s
-end
-
-ap1 = tspace.summon(client1, Appearance.new(fresh.call, Term.of(:div, 100, 200)), 0u32, &notify)
-dismiss << ap1
-ap2 = tspace.summon(client2, Appearance.new(fresh.call, Term.of(:mod, 100, 200)), 0u32, &notify)
-dismiss << ap2
-
-Sensor.each(fresh, ML.term %{(mod a_number b_number)}) do |sensor|
-  s = tspace.summon(client0, sensor, 0u32, "address(sensor-#{n})", &notify)
-  dismiss << s
-  n += 1
-end
-
-# puts "Dismissing!!!"
-dismiss.each &.call
-
-{% skip_file %}
-
-fresh = WWID
-# storage = SerializedValue(Tbase::Key, Tbase::Value).new(DigestedKey(Tbase::Key, String).new(SyncInMemoryMap(String, String).new))
-# storage = DigestedKey(Tbase::Key, Tbase::Value).new(SyncInMemoryMap(String, Tbase::Value).new)
-storage = SyncInMemoryMap(Tbase::Key | Tspace::Key, Tbase::Value | Tspace::Value).new
-tbase = Tbase.new(fresh, storage.submap(Tbase::Key, Tbase::Value))
-tspace = Tspace.new(fresh, storage.submap(Tspace::Key, Tspace::Value))
-
-client0 = fresh.call
-client1 = fresh.call
-client2 = fresh.call
-sensors = [] of {Tbase::Surface, SensorData}
-Sensor.each(fresh, Term.of({:"%any", :div, :mod}, :a_number, :b_number)) do |sensor|
-  surf = tbase.mount(client0, sensor)
-  data = SensorData.new(client0, 0u32, nil, "IP address of sensor 0 owner")
-  tspace.sensors.mount(client0, surf.subject.id, data)
-
-  sensors << {surf, data}
-end
-
-ap1_value = Term.of(:mod, 100, 200)
-ap1 = tbase.mount(client1, Appearance.new(fresh.call, ap1_value))
-ap1_data = AppearanceData.new(client1, 0u32, ap1_value, nil, nil)
-tspace.appearances.mount(client1, ap1.subject.id, ap1_data)
-ap2_value = Term.of(:div, 100, 200)
-ap2 = tbase.mount(client2, Appearance.new(fresh.call, ap2_value))
-ap2_data = AppearanceData.new(client2, 0u32, ap2_value, nil, nil)
-tspace.appearances.mount(client2, ap2.subject.id, ap2_data)
-
-ap1.each_complementary do |sensor|
-  next unless sdata = tspace.sensors.query?(sensor)
-  next unless sdata.selector == ap1_data.selector
-
-  puts "Send #{StimulusPresence.new(ap1.subject.id, ap1_data.client, ap1_data.identity, ap1_data.value)} to #{sdata.address}"
-end
-
-pp! ap2.complement
-
-sensors.each do |surface, data|
-  surface.each_complementary(successors: true) do |appearance|
-    next unless adata = tspace.appearances.query?(appearance)
-    next unless adata.selector == data.selector
-
-    puts "Send #{StimulusPresence.new(appearance, adata.client, adata.identity, adata.value)} to #{data.address}"
-  end
-end
-
-# etrace = Etrace.new(fresh, storage)
-
-# client0 = fresh.call
-# foo = fresh.call
-# bar = fresh.call
-# a = fresh.call
-# b = fresh.call
-# c = fresh.call
-# d = fresh.call
-# e = fresh.call
-
-# etrace.mount(client0, [foo, bar, a, b, c])
-# etrace.mount(client0, [foo, bar, a, b, d])
-# etrace.mount(client0, [foo, bar, a, e])
-
-# etrace.walk(foo) do |label|
-#   pp({foo => "foo", bar => "bar", a => "a", b => "b", c => "c", d => "d", e => "e"}[label])
-# end
-
-# lst.mount(client0, foo, a)
-# lst.mount(client0, foo, b)
-# lst.mount(client0, bar, c)
-# pp storage.@data.size
-
-# lst.query(bar) do |succ|
-#   pp ({a => "a", b => "b", c => "c"})[succ]
-# end
-
-{% skip_file %}
-
-pattern = ML.term %{((%any div mod) a_ (%all b_number (%not 0)) ¦ precision⋮ 3)}
-normp = M1.normal(pattern)
-skeleton = Skeleton.pattern(normp)
-strands = [] of Strand
-branches = [] of StrandList
-
-branches(skeleton) do |branch|
-  strands(branch) do |strand|
-    strands << strand.items.to_readonly_slice { |base| Ubase.parse(base) }
-  end
-  branches << strands.to_readonly_slice(&.itself)
-  strands.clear
-end
-sensor = branches.to_readonly_slice(&.itself)
-
-
-# ---
-
-fresh = -> { WWID.call }
-
-client0 = fresh.call
-client1 = fresh.call
-
-storage = SyncInMemoryMap(Utrie::Key | Xgraph::Key | Ttrie::Key | Etrace::Key | StrandSet::Key | AppearanceSet::Key | SensorDecoder::Key, Utrie::Value | Xgraph::Value | Ttrie::Value | Etrace::Value | StrandSet::Value | AppearanceSet::Value | SensorDecoder::Value).new
-
-utrie = Utrie.new(fresh, storage.submap(Utrie::Key, Utrie::Value))
-strandset = StrandSet.new(storage.submap(StrandSet::Key, StrandSet::Value))
-sensor_decoder = SensorDecoder.new(fresh, storage.submap(SensorDecoder::Key, SensorDecoder::Value))
-
-pp sensor[0]
-
-rule = Deque(Label).new
-deps = Set({Utrie::Key | Xgraph::Key | Ttrie::Key | Etrace::Key | StrandSet::Key | AppearanceSet::Key | SensorDecoder::Key, Utrie::Value | Xgraph::Value | Ttrie::Value | Etrace::Value | StrandSet::Value | AppearanceSet::Value | SensorDecoder::Value}).new
-
-sensor[0].each do |strand|
-  subdeps, endpoint = utrie.mount(client0, strand)
-  deps.concat(strandset.mount(client0, endpoint))
-  rule << endpoint
-  deps.concat(subdeps)
-end
-
-xgraph = Xgraph.new(fresh, storage.submap(Xgraph::Key, Xgraph::Value))
-
-rule.unstable_sort!
-
-subdeps, rulepoint = xgraph.mount(client0, rule)
-deps.concat(subdeps)
-
-sensor_id = fresh.call
-
-deps.concat(sensor_decoder.mount(client0, rulepoint, sensor_id))
-
-puts "Sensor is #{sensor_id.to_s(32, precision: 26)}"
-
-# ---
-found = Deque(Label).new
-utrie.query(Term.of(:mod, 100, 200)) do |label|
-  next unless strandset.strand?(label)
-  found << label
-end
-found.unstable_sort!
-xgraph.conjs(found) do |conj|
-  sensor_decoder.decode(conj) do |sensor_id_decoded|
-    puts "Hit sensor #{sensor_id_decoded.to_s(32, precision: 26)}"
-  end
-end
-
-# ----
-
-ttrie = Ttrie.new(fresh, storage.submap(Ttrie::Key, Ttrie::Value))
-etrace = Etrace.new(fresh, storage.submap(Etrace::Key, Etrace::Value))
-appearance_set = AppearanceSet.new(storage.submap(AppearanceSet::Key, AppearanceSet::Value))
-
-x = Term.of(:mod, 100, 200)
-id = fresh.call
-Term.each_keypath_and_leaf(x) do |keypath, leaf|
-  keypath.push(leaf)
-  subdeps, path = ttrie.mount(client0, keypath, id)
-  deps.concat(subdeps)
-  keypath.pop
-
-  deps.concat(etrace.mount(client0, path))
-
-  true # Continue
-end
-deps.concat(appearance_set.mount(client0, id))
-puts "Appearance is #{id.to_s(32, precision: 26)}"
-
-pp storage.@data.size
-
-# pp ttrie.query?({Ubase::IsAny.new})
-endpoint = ttrie.query?({Ubase::IsAny.new, Ubase::IsDict.new, Ubase::At.new(Term.of(0)), Ubase::IsSym.new, Ubase::Literal.new(Term.of(:mod))})
-
-if endpoint
-  etrace.walk(endpoint) do |hit|
-    next unless appearance_set.appearance?(hit)
-    puts "Hit #{hit.to_s(32, precision: 26)}"
-  end
-end
+# - hash & compare selector using crypto secure hash (argon2id)
+# - do not call sink with duplicate overviews (due to keepalive)
+# - run tspace tests using new Tconn
 
