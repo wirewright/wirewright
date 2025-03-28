@@ -17,6 +17,10 @@ module Ww
       @value.to_unsafe[0]
     end
 
+    def each_byte(& : UInt8 ->) : Nil
+      @value.each_byte { |byte| yield byte }
+    end
+
     def to?(type : String.class) : String
       @value
     end
@@ -68,7 +72,7 @@ module Ww
       Term[@value[-1]? || ""]
     end
 
-    def_equals_and_hash @value
+    def_equals @value
   end
 end
 

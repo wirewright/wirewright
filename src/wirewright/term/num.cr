@@ -271,10 +271,6 @@ module Ww
     def inspect(io)
       Kernel.inspect(io, @k)
     end
-
-    def hash(hasher)
-      to_f64.hash(hasher)
-    end
   end
 end
 

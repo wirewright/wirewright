@@ -284,7 +284,7 @@ module Ww
       blank.inspect(io, name)
     end
 
-    def_equals_and_hash @spec
+    def_equals @spec
   end
 
   # Frequently used symbols.

@@ -108,6 +108,18 @@ module Ww
       inspect(io)
     end
 
+    # Support for hashing terms on the Crystal side.
+    #
+    # Delegates actual hashing to `Term.hashcode` to obtain a globally stable hash.
+    #
+    # WARNING: the stable hash is then hashed using the default Crystal hasher, which
+    # is seeded randomly on startup. This means that this method will produce different
+    # hashes across runs despite the same `Term.hashcode`. Use `Term.hashcode` directly
+    # to avoid this.
+    def hash(hasher)
+      Term.hashcode(self).hash(hasher)
+    end
+
     # Automatically upcasts `self` to `Term` and tries to run *call* on it.
     macro method_missing(call)
       {% unless Term.has_method?(call.name) %}
@@ -552,6 +564,203 @@ module Ww
     end
   end
 
+  # Hashing
+
+  struct Term
+    # Term hasher object, similar in purpose to `Crystal::Hasher`.
+    #
+    # Currently implements 64-bit Fowler–Noll–Vo hash function.
+    #
+    # Wirewright is assumed to run on x86 only. This means system-endian is
+    # little-endian. Under this assumption we say that the hash is *globally
+    # stable*, meaning it stays the same across runs and machines for
+    # equal values.
+    #
+    # Global stability is explicitly implemented despite susceptibility to
+    # HashDoS etc. This is because Wirewright's Terms are for use in a purely
+    # functional setting; randomly seeded hash functions lead to different dict
+    # entry order per run/machine => different return result of e.g. `(entries ...)`
+    # per run/machine, which we would consider as an implementation error.
+    #
+    # WARNING: `Hasher` is a mutable struct. Pass it around carefully.
+    struct Hasher
+      # Reference: https://softwareengineering.stackexchange.com/a/145633
+
+      # :nodoc:
+      FNV_OFFSET_BASIS = 14695981039346656037u64
+      # :nodoc:
+      FNV_PRIME        = 1099511628211u64
+
+      def initialize
+        @state = FNV_OFFSET_BASIS
+      end
+
+      # Breaks up *object* into constituent bytes.
+      def blast(object : UInt8, & : UInt8 ->) : Nil
+        yield object
+      end
+
+      # :ditto:
+      def blast(object : UInt32, & : UInt8 ->) : Nil
+        bytes = object.unsafe_as(StaticArray(UInt8, 4))
+        bytes.each { |byte| yield byte }
+      end
+
+      # :ditto:
+      def blast(object : UInt64, & : UInt8 ->) : Nil
+        bytes = object.unsafe_as(StaticArray(UInt8, 8))
+        bytes.each { |byte| yield byte }
+      end
+
+      # :ditto:
+      def blast(object : Float64, & : UInt8 ->) : Nil
+        blast(object.unsafe_as(UInt64)) { |byte| yield byte }
+      end
+
+      # :ditto:
+      def blast(object : Enum, & : UInt8 ->) : Nil
+        blast(object.value) { |byte| yield byte }
+      end
+
+      # Returns the hashcode built so far.
+      def result : UInt64
+        @state
+      end
+
+      # Incorporates *object* into the hash. See `blast` for a list of
+      # supported types.
+      def append(object) : Nil
+        blast(object) do |byte|
+          @state ^= byte
+          @state &*= FNV_PRIME
+        end
+      end
+    end
+
+    # Returns the hashcode of *object*. See `hashcode(hasher, object)` variants
+    # to learn about supported types of *object*s.
+    def self.hashcode(object) : UInt64
+      hasher = hashcode(Hasher.new, object)
+      hasher.result
+    end
+
+    # Fast path for itemspart keys (indices).
+    def self.hashcode(hasher : Hasher, object : Int32) : Hasher
+      hasher.append(object)
+      hasher
+    end
+
+    # Appends the hash of a symbol term *object* to *hasher*.
+    def self.hashcode(hasher : Hasher, object : Term::Sym) : Hasher
+      hasher.append(TermType::Symbol)
+      hasher.append(object.@spec)
+      hasher
+    end
+
+    # Appends the hash of a string term *object* to *hasher*.
+    def self.hashcode(hasher : Hasher, object : Term::Str) : Hasher
+      hasher.append(TermType::String)
+      object.each_byte do |byte|
+        hasher.append(byte)
+      end
+      hasher
+    end
+
+    # Appends the hash of a number term *object* to *hasher*.
+    def self.hashcode(hasher : Hasher, object : Term::Num) : Hasher
+      hasher.append(TermType::Number)
+      hasher.append(object.to_f64)
+      hasher
+    end
+
+    # Appends the hash of a boolean term *object* to *hasher*.
+    def self.hashcode(hasher : Hasher, object : Term::Boolean) : Hasher
+      if object.true?
+        hasher.append(TermType::Boolean)
+        hasher.append(1u8)
+      else
+        hasher.append(TermType::Boolean)
+        hasher.append(0u8)
+      end
+
+      hasher
+    end
+
+    # :nodoc:
+    HASHCODE_DICT_TYPE = begin
+      hasher = Hasher.new
+      hasher.append(TermType::Dict)
+      hasher.result
+    end
+
+    # Appends the hash of a dict term *object* to *hasher*.
+    def self.hashcode(hasher : Hasher, object : Term::Dict) : Hasher
+      hashcode = object.hashcode do
+        memo = HASHCODE_DICT_TYPE
+
+        object.each_entry do |key, value|
+          pair_hasher = Hasher.new
+          pair_hasher = hashcode(pair_hasher, key)
+          pair_hasher = hashcode(pair_hasher, value)
+          memo &+= pair_hasher.result
+        end
+
+        memo
+      end
+
+      hasher.append(hashcode)
+      hasher
+    end
+
+    # Appends the hash of a term *object* to *hasher*.
+    def self.hashcode(hasher : Hasher, object : Term) : Hasher
+      hashcode(hasher, object.downcast)
+    end
+  end
+
+  # Pattern matching entrypoints
+
+  struct Term
+    def self.matches(pattern, matchee, *, engine : Engine.class = M1, env = Term[]) : Array(Term::Dict) forall Engine
+      engine.matches(Term.of(pattern), Term.of(matchee), env: env)
+    end
+
+    def self.case(matchee, *, engine : Engine.class = M1, **kwargs, &) forall Engine
+      context = CaseContext(Engine).new(Term.of(matchee), **kwargs)
+
+      with context yield context
+
+      raise ArgumentError.new("no match found for #{matchee}")
+    end
+
+    macro of_case(*args, **kwargs, &block)
+      ::Ww::Term.of(::Ww::Term.case({{args.splat}}, {{kwargs.double_splat}}) {{block}})
+    end
+
+    # Shorthand for a single-`matchpi` call to `Term.case`:
+    #
+    # ```
+    # Term.case(term) do
+    #   matchpi pattern do
+    #     # Block
+    #   end
+    #
+    #   otherwise { }
+    # end
+    # ```
+    macro matchpi?(term, pattern, &)
+      Term.case({{term}}) do
+        matchpi {{pattern}} do
+          {{yield}}
+        end
+
+        otherwise { }
+      end
+    end
+  end
+
+  # Misc
+
   struct Term
     private def self.each_keypath_and_leaf?(node : Term::Dict, prefix : Stack(Term), fn : Stack(Term), Term -> Bool) : Bool
       # Empty dict literal `{}` is a (leaf).
@@ -605,45 +814,6 @@ module Ww
 
     def self.each_keypath_and_item(node : Term, &fn : Stack(Term), Term -> Bool) : Nil
       each_keypath_and_item?(node: node.downcast, prefix: Stack(Term).new, fn: fn)
-    end
-  end
-
-  struct Term
-    def self.matches(pattern, matchee, *, engine : Engine.class = M1, env = Term[]) : Array(Term::Dict) forall Engine
-      engine.matches(Term.of(pattern), Term.of(matchee), env: env)
-    end
-
-    def self.case(matchee, *, engine : Engine.class = M1, **kwargs, &) forall Engine
-      context = CaseContext(Engine).new(Term.of(matchee), **kwargs)
-
-      with context yield context
-
-      raise ArgumentError.new("no match found for #{matchee}")
-    end
-
-    macro of_case(*args, **kwargs, &block)
-      ::Ww::Term.of(::Ww::Term.case({{args.splat}}, {{kwargs.double_splat}}) {{block}})
-    end
-
-    # Shorthand for a single-`matchpi` call to `Term.case`:
-    #
-    # ```
-    # Term.case(term) do
-    #   matchpi pattern do
-    #     # Block
-    #   end
-    #
-    #   otherwise { }
-    # end
-    # ```
-    macro matchpi?(term, pattern, &)
-      Term.case({{term}}) do
-        matchpi {{pattern}} do
-          {{yield}}
-        end
-
-        otherwise { }
-      end
     end
   end
 end

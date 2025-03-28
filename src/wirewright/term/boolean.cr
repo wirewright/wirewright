@@ -19,6 +19,6 @@ module Ww
       @value
     end
 
-    def_equals_and_hash @value
+    def_equals @value
   end
 end

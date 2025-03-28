@@ -638,14 +638,14 @@ module Ww
     end
 
     def self.probably_includes?(sketch : Sketch, symbol : Term::Sym) : Bool
-      bucket = symbol.hash % Sketch.width
+      bucket = Term.hashcode(symbol) % Sketch.width
       sketch.bit(bucket) == 1
     end
 
     def self.mix(sketch : Sketch, value : Term)
       case value.type
       when .symbol?
-        bucket = value.unsafe_as_sym.hash % Sketch.width
+        bucket = Term.hashcode(value.unsafe_as_sym) % Sketch.width
         sketch | (Sketch.new(1) << bucket)
       when .dict?
         sketch | value.unsafe_as_d.@sketch
@@ -1553,21 +1553,9 @@ module Ww
       end
     end
 
-    def hash(hasher)
-      unless result = @hash
-        result = self.class.hash
-
-        each_entry do |key, value|
-          copy = Crystal::Hasher.new
-          copy = key.hash(copy)
-          copy = value.hash(copy)
-          result &+= copy.result
-        end
-
-        @hash = result
-      end
-
-      result.hash(hasher)
+    # :nodoc:
+    def hashcode(& : -> UInt64) : UInt64
+      @hash ||= yield
     end
 
     # Returns `true` if this and *other* dictionaries are equal. Returns `false` otherwise.
@@ -1744,7 +1732,7 @@ module Ww
       abstract def keyof(stored : E) : K
 
       def path : UInt64
-        Pf.hash64(@key)
+        Term.hashcode(@key)
       end
 
       def match?(stored : E) : Bool
@@ -1820,13 +1808,13 @@ module Ww
 
     module KVInitialize
       def initialize(@key, @value)
-        @path = Pf.hash64(@key)
+        @path = Term.hashcode(@key)
       end
     end
 
     module KInitialize
       def initialize(@key)
-        @path = Pf.hash64(@key)
+        @path = Term.hashcode(@key)
       end
     end
 
