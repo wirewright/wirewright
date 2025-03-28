@@ -4946,6 +4946,11 @@ module ::Ww::M1
     rewrite.as?(Rewrite::Some) || Rewrite.one(matchee)
   end
 
+  def self.backmap(envs : Enumerable(Term::Dict), backspec : Term, matchee : Term, **kwargs) : Term
+    rewrite = backmapr(envs, backspec, matchee, **kwargs)
+    rewrite.term?
+  end
+
   def self.backmapr(operator : Operator::Any, backspec : Term, matchee : Term, *, env = Term[], **kwargs) : Rewrite::Any
     case fb = Operator.feedback(env, operator, matchee, backpaths: true)
     in Operator::Fb::Match
@@ -4959,22 +4964,10 @@ module ::Ww::M1
     backmapr(operator(pattern), backspec, matchee, **kwargs)
   end
 
-  def self.backmap(*args, **kwargs)
-    rewrite = backmapr(*args, **kwargs)
+  def self.backmap?(pattern : Term | Operator::Any, backspec : Term, matchee : Term, **kwargs) : Term?
+    rewrite = backmapr(pattern, backspec, matchee, **kwargs)
     rewrite.term?
   end
-
-  # def self.backmap?(operator : Operator::Any, backspec : Term, matchee : Term, *, env = Term[], applier = DefaultApplier.new) : Term?
-  #   case fb = Operator.feedback(env, operator, matchee, backpaths: true)
-  #   in Operator::Fb::Match
-  #     backmap(fb.envs, backspec, matchee, applier: applier)
-  #   in Operator::Fb::Mismatch
-  #   end
-  # end
-
-  # def self.backmap?(pattern : Term, backspec : Term, matchee : Term, *, env = Term[], applier = DefaultApplier.new) : Term?
-  #   backmap?(operator(pattern), backspec, matchee, env: env, applier: applier)
-  # end
 end
 
 class ::Ww::KeypathError < Exception

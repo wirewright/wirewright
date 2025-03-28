@@ -228,6 +228,11 @@
 (node combined "Gathers latest values for all pulses and flushes them"
   (literal pins "list of pulse edges to wait for")
   (comma in)
-  (literal storage "temporary storage for their values")
+  (literal storage "temporary storage for latest values received on pulse edges")
   (comma to)
   (pulse pout "sink for full storages"))
+
+(node mutator "Mutator allows to morph a passable child using a backmap. What it does is expressible with circuitry, transform nodes, etc., but for common use cases, a separate, simple node is most convenient."
+  (pulse pin "source of (pattern_ backspec_) backmaps; pattern captures things of interest in the child, backspec defines what to replace them with")
+  (literal value "passable child susceptible to mutation"))
+

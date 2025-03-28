@@ -954,3 +954,10 @@
      (absence @count as "Missing" to @messages)
      (latest @counts @count)
      (log @messages in ("Missing" 0)))))
+
+;; mutator
+(d7
+  ((mutator @commands (group (delay 2: (event (pulse @commands (it_ {it: "Bye World"}))))))
+   ;; "group where the first child is missing key 1"
+   (event (pulse @commands ((group {¦ 1: (%- _ t) }) {t: 1}))))
+  ((mutator @commands "Bye World")))

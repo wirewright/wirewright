@@ -768,7 +768,7 @@ module Ww
       follow?(keys) || raise KeyError.new
     end
 
-    def follow?(keys : Indexable(Term), *, __cursor = 0, &fn : Term -> Term) : Term?
+    def follow?(keys : Indexable(Term), *, __cursor = 0, &fn : Term -> Term?) : Term?
       case __cursor
       when keys.size
         fn.call(Term.of(self))

@@ -49,6 +49,7 @@ module Rhodium
       matchpi %[(decay (%number +i32) _*)] { 2...node.itemsize }
       matchpi %[(lookaround @_ @_ _*)] { 3...node.itemsize }
       matchpi %[(fragment _ @_)] { 1...2 }
+      matchpi %[(mutator @_ _)] { 2...3 }
       otherwise {}
     end
   end
@@ -1104,6 +1105,15 @@ module Rhodium
 
           false
         end
+      end
+
+      givenpi %{(mutator @pin_ value0_) (pulse @pin_ (pattern_ backspec_)) _} do
+        value1 = M1.backmap?(pattern, backspec, value0) || value0
+        node1 = Term.of(node0.morph({2, value1}))
+
+        # Always trigger transition because we don't know what was edited. Maybe
+        # it needs a transition and maybe not!
+        {assign(document1, nodepath, node1), true}
       end
 
       # FIXME: this node will lead to cryptic bugs in user land. it should be removed.
