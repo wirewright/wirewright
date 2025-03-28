@@ -726,10 +726,38 @@ class SyncInMemoryChat(A, M)
   end
 end
 
-if ARGV[0]? == "serve"
-  port = (ARGV[1]? || 9000).to_i
-  puts "Server listen on #{port} port"
-  StringMapRPC::Server.new("127.0.0.1", port).run
+class TermChat(A, M)
+  include IChat(A, M)
+
+  def initialize(@chat : IChat(Term, Term))
+  end
+
+  def subscribe(address : A, &recv : M ->) : Unsubscribe
+    @chat.subscribe(address.encode(Term)) do |message|
+      recv.call(M.decode?(message) || raise TermDecodeError.new)
+    end
+  end
+
+  def send(to receiver : A, message : M) : Nil
+    @chat.send(receiver.encode(Term), message.encode(Term))
+  end
+end
+
+class CompactMLChat
+  include IChat(Term, Term)
+
+  def initialize(@chat : IChat(String, String))
+  end
+
+  def subscribe(address : Term, &recv : Term ->) : Unsubscribe
+    @chat.subscribe(ML.compact(address)) do |message|
+      recv.call(ML.term(message))
+    end
+  end
+
+  def send(to receiver : Term, message : Term) : Nil
+    @chat.send(ML.compact(receiver), ML.compact(message))
+  end
 end
 
 struct Utrie
@@ -1583,6 +1611,16 @@ record Activation, kind : Kind, sdata : SensorData, adata : AppearanceData do
     StimulusPresence
     StimulusAbsence
   end
+
+  def encode(otype : Term.class) : Term
+    Term.of("activation", kind, sdata.encode(Term), adata.encode(Term))
+  end
+
+  def self.decode?(term : Term) : Activation?
+    Term.matchpi?(term, %{("activation" kind_number sdata_ adata_)}) do
+      new(kind.to(Kind), SensorData.decode(sdata), AppearanceData.decode(adata))
+    end
+  end
 end
 
 class SurfaceNotMountedError < Exception
@@ -1615,7 +1653,7 @@ struct Tspace
     _ = sensors.mount(subject.id, sdata, deps: deps)
     _ = tbase.mount(subject, deps: deps)
 
-    each_complement(subject, &->seen.<<(AppearanceData))
+    each_complement(subject, sdata.selector, &->seen.<<(AppearanceData))
 
     mounted = true
 
@@ -1638,7 +1676,7 @@ struct Tspace
     _ = appearances.mount(subject.id, adata, deps: deps)
     _ = tbase.mount(subject, deps: deps)
 
-    each_complement(subject, &sink)
+    each_complement(subject, adata.selector, &sink)
 
     mounted = true
 
@@ -1653,7 +1691,7 @@ struct Tspace
     end
   end
 
-  def each_complement(subject : Tbase::Sensor, selector : Term? = nil, &sink : AppearanceData ->)
+  def each_complement(subject : Tbase::Sensor, selector : Term?, &sink : AppearanceData ->)
     tbase.each_complement(subject) do |appearance|
       next unless adata = appearances.query?(appearance)
       next unless selector == adata.selector
@@ -1662,7 +1700,7 @@ struct Tspace
     end
   end
 
-  def each_complement(subject : Tbase::Appearance, selector : Term? = nil, &sink : SensorData ->)
+  def each_complement(subject : Tbase::Appearance, selector : Term?, &sink : SensorData ->)
     tbase.each_complement(subject) do |sensor|
       next unless sdata = sensors.query?(sensor)
       next unless sdata.selector == selector
@@ -1833,6 +1871,8 @@ class Tconn
     @surfaces_lock = Mutex.new(:reentrant) # FIXME: ?!
 
     @unsubscribe = @chat.subscribe(@conid) do |act|
+      Log.debug { "#{@conid}: receive from chat: #{act}" }
+
       @surfaces_lock.synchronize do
         # If we can fetch view for act's sensor identity, then we know it's still
         # a sensor.
@@ -1883,10 +1923,14 @@ class Tconn
   end
 
   private def present(sdata : SensorData, adata : AppearanceData) : Nil
+    Log.debug { "#{@conid}: send stimulus presence #{adata} to #{sdata.conid}" }
+
     @chat.send(to: sdata.conid, message: Activation.new(:stimulus_presence, sdata, adata))
   end
 
   private def absent(sdata : SensorData, adata : AppearanceData) : Nil
+    Log.debug { "#{@conid}: send stimulus absence #{adata} to #{sdata.conid}" }
+
     @chat.send(to: sdata.conid, message: Activation.new(:stimulus_absence, sdata, adata))
   end
 
@@ -2027,43 +2071,231 @@ class Tconn
   end
 end
 
-map = SyncInMemoryMap(Tspace::Key, Tspace::Value).new
-# map = TermMap(Tspace::Key, Tspace::Value).new(CompactMLMap.new(DigestedKeyMap(String, String).new(RemoteStringMap.new("127.0.0.1", 9000))))
-chat = SyncInMemoryChat(Label, Activation).new
+class RemoteStringChat
+  include IChat(String, String)
 
-sink = ->(overview : Tconn::Overview) do
-  rendered = Term::Dict.build do |commit|
-    overview.each do |key, view|
-      next if view.empty?
+  def initialize(host : String, port : Int32, ctx = ExecutionContext::MultiThreaded.new("remote chat", 1))
+    @socket = TCPSocket.new(host, port)
+    @chat = SyncInMemoryChat(String, String).new
 
-      commit.with(key, view.dict_set)
+    @inbound = Channel(String).new
+
+    ctx.spawn do
+      while message = @socket.gets
+        message = message.chomp
+        if rest = message.lchop?("MSG ")
+          topic, body = rest.split(" ", limit: 2)
+          ctx.spawn { @chat.send(topic, body) }
+        else
+          @inbound.send(message)
+        end
+      end
     end
   end
 
-  Tconn::Log.debug { ML.display(rendered) }
+  def close : Nil
+    @socket.close
+  end
+
+  def subscribe(address : String, &recv : String ->) : Unsubscribe
+    unsub = @chat.subscribe(address, &recv)
+    @socket.puts "+SUB #{address}"
+    unless @inbound.receive == "OK"
+      raise "oh noes, something wrong happened on the chat server!!! i didnt get an OK"
+    end
+    Unsubscribe.new do
+      unsub.call
+      @socket.puts "-SUB #{address}"
+      unless @inbound.receive == "OK"
+        raise "oh noes, something wrong happened on the chat server!!! i didnt get an OK"
+      end
+    end
+  end
+
+  def send(to receiver : String, message : String) : Nil
+    @socket.puts "SEND #{receiver} #{message}"
+    unless @inbound.receive == "OK"
+      raise "oh noes, something wrong happened on the chat server!!! i didnt get an OK"
+    end
+  end
 end
 
+# TODO: For whatever reason this works:
 ctx = ExecutionContext::MultiThreaded.new("Tconn keepalive", 1)
-Tconn.open(map, chat, sink, keepalive: Tconn::Keepalive.new(ctx)) do |conn|
-  conn[0] = Tconn::Sensor.new(%{((%any div mod) a_number (%all b_number (%not 0)))})
-  conn[1] = Tconn::Appearance.new(Term.of(:div, 100, 200))
-  conn[2] = Tconn::Appearance.new(Term.of(:mod, 300, 400))
-  conn[2] = Tconn::Appearance.new(Term.of(:qux, 123))
-  conn[1] = Tconn::Sensor.new(%{(qux x_)})
+sink = ->(overview : Tconn::Overview) do
+    rendered = Term::Dict.build do |commit|
+      overview.each do |key, view|
+        next if view.empty?
 
-# conn.delete(0)
-# conn.delete(2)
-# conn.delete(1)
+        commit.with(key, view.dict_set)
+      end
+    end
 
-  sleep
+    Tconn::Log.debug { ML.display(rendered) }
+end
+ctx.spawn do
+map = TermMap(Tspace::Key, Tspace::Value).new(CompactMLMap.new(DigestedKeyMap(String, String).new(RemoteStringMap.new("127.0.0.1", 9810))))
+chat = TermChat(Label, Activation).new(CompactMLChat.new(RemoteStringChat.new("127.0.0.1", 9811)))
+  Tconn.open(map, chat, sink, keepalive: Tconn::Keepalive.new(ctx, period: 5.seconds..10.seconds)) do |conn|
+    conn[0] = Tconn::Sensor.new(%{x_number})
+    sleep
+  end
+end
+sleep 2.seconds
+ctx.spawn do
+map = TermMap(Tspace::Key, Tspace::Value).new(CompactMLMap.new(DigestedKeyMap(String, String).new(RemoteStringMap.new("127.0.0.1", 9810))))
+chat = TermChat(Label, Activation).new(CompactMLChat.new(RemoteStringChat.new("127.0.0.1", 9811)))
+  Tconn.open(map, chat, sink, keepalive: Tconn::Keepalive.new(ctx, period: 5.seconds..10.seconds)) do |conn|
+    conn[0] = Tconn::Appearance.new(%{100})
+    gets
+    conn[1] = Tconn::Appearance.new(%{200})
+    sleep
+  end
+end
+sleep
+
+# TODO: But if run from command line on actually different things it doesn't.
+{% skip_file %}
+ServerLog = ::Log.for("Server")
+
+def handle(chat, unsubs, unsubs_lock, socket)
+  while message = socket.gets
+
+    message = message.chomp
+    ServerLog.debug { "#{socket}: #{message}" }
+    if topic = message.lchop?("+SUB ")
+      topic_ = topic
+      socket.puts "OK" # assume subscribe cannot fail
+      unsub = chat.subscribe(topic) do |message|
+        socket.puts("MSG #{topic_} #{message}")
+      end
+      unsubs_lock.synchronize do
+        unsubs[{topic, socket}] = unsub
+      end
+    elsif topic = message.lchop?("-SUB ")
+      socket.puts "OK" # assume unsubscribe cannot fail
+      if unsub = unsubs_lock.synchronize { unsubs.delete({topic, socket}) }
+        unsub.call
+      end
+    elsif send = message.lchop?("SEND ")
+      socket.puts "OK" # assume send cannot fail
+      topic, message = send.split(" ", limit: 2)
+      chat.send(topic, message)
+    elsif message == "LIST"
+      socket.puts "LISTING"
+      topics = Set(String).new
+      unsubs_lock.synchronize do
+        unsubs.each do |(topic, _), _|
+          topics << topic
+        end
+      end
+      topics.each do |topic|
+        socket.puts "TOPIC #{topic}"
+      end
+      socket.puts "OK"
+    else
+      socket.puts "ERR"
+    end
+  end
+ensure
+  puts "cleanup after #{socket}"
+  unsubs_lock.synchronize do
+    unsubs.reject! do |(topic, its_socket), unsub|
+      if reject = its_socket == socket
+        unsub.call
+      end
+      reject
+    end
+  end
 end
 
-# - TermChat
-# - CompactMLChat
-# - RemoteChat
-# - chat server
+def serve_chat(host, port)
+  chat = SyncInMemoryChat(String, String).new
+  unsubs = {} of {String, TCPSocket} => IChat::Unsubscribe
+  unsubs_lock = Mutex.new
+
+  ctx = ExecutionContext::MultiThreaded.new("server", 4)
+  server = TCPServer.new("127.0.0.1", 9811)
+  while client = server.accept?
+    ctx.spawn { handle(chat, unsubs, unsubs_lock, client) }
+  end
+end
+
+if ARGV[0]? == "serve"
+  ctx = ExecutionContext::MultiThreaded.new("Serve Threads", 2)
+  ctx.spawn { StringMapRPC::Server.new("127.0.0.1", 9810).run }
+  ctx.spawn { serve_chat("127.0.0.1", 9811) }
+
+  puts "Map on port 9810"
+  puts "Chat on port 9811"
+  sleep
+
+elsif ARGV[0]? == "join"
+  # map = SyncInMemoryMap(Tspace::Key, Tspace::Value).new
+  map = TermMap(Tspace::Key, Tspace::Value).new(CompactMLMap.new(DigestedKeyMap(String, String).new(RemoteStringMap.new("127.0.0.1", 9810))))
+  # chat = SyncInMemoryChat(Label, Activation).new
+  chat = TermChat(Label, Activation).new(CompactMLChat.new(RemoteStringChat.new("127.0.0.1", 9811)))
+
+  sink = ->(overview : Tconn::Overview) do
+    rendered = Term::Dict.build do |commit|
+      overview.each do |key, view|
+        next if view.empty?
+
+        commit.with(key, view.dict_set)
+      end
+    end
+
+    Tconn::Log.debug { ML.display(rendered) }
+  end
+  ctx = ExecutionContext::MultiThreaded.new("Tconn keepalive", 1)
+  Tconn.open(map, chat, sink, keepalive: Tconn::Keepalive.new(ctx, period: 5.seconds..10.seconds)) do |conn|
+    while input = (print "> "; gets)
+      case input.strip
+      when /^sensor\s+(\d+)\s+(.+)$/
+        begin
+          surface = Tconn::Sensor.new($2)
+        rescue e : ML::SyntaxError
+          puts "syntax error"
+          next
+        end
+        conn[$1.to_u32] = surface
+      when /^appearance\s+(\d+)\s+(.+)$/
+        begin
+          surface = Tconn::Appearance.new($2)
+        rescue e : ML::SyntaxError
+          puts "syntax error"
+          next
+        end
+        conn[$1.to_u32] = surface
+      when /^delete\s+(\d+)$/
+        conn.delete($1.to_u32)
+      else
+        puts "invalid command: #{input}"
+      end
+    end
+
+    # conn[0] = Tconn::Sensor.new(%{((%any div mod) a_number (%all b_number (%not 0)))})
+    # conn[1] = Tconn::Appearance.new(Term.of(:div, 100, 200))
+    # conn[2] = Tconn::Appearance.new(Term.of(:mod, 300, 400))
+    # conn[2] = Tconn::Appearance.new(Term.of(:qux, 123))
+    # conn[1] = Tconn::Sensor.new(%{(qux x_)})
+
+  # conn.delete(0)
+  # conn.delete(2)
+  # conn.delete(1)
+  end
+end
+# + TermChat
+# + CompactMLChat
+# + RemoteStringChat
+# + chat server
 
 # - hash & compare selector using crypto secure hash (argon2id)
 # - do not call sink with duplicate overviews (due to keepalive)
 # - run tspace tests using new Tconn
-
+# - stricter decode patterns
+# - separate keepalive period for sensor and appearances. appearances should be faster
+#   to trigger keepalive postpone (query sensor by appearance is much faster than vice versa)
+# - add some kind of batch-dec mechanism to IMap, so that we can
+# send dec() all at once, e.g. gzipped, if the map impl supports that
+# (e.g. centralized)
