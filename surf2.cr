@@ -50,8 +50,8 @@ record Label, value : UInt128 do
     inspect(io)
   end
 
-  # Inspired by: https://crypto.stackexchange.com/questions/109848/what-is-the-fastest-stable-128-bit-non-cryptographic-hash-function#comment235778_109848
-  # Inspired by: https://crypto.stackexchange.com/questions/109848/what-is-the-fastest-stable-128-bit-non-cryptographic-hash-function#comment235789_109848
+  # Reference: https://crypto.stackexchange.com/questions/109848/what-is-the-fastest-stable-128-bit-non-cryptographic-hash-function#comment235778_109848
+  # Reference: https://crypto.stackexchange.com/questions/109848/what-is-the-fastest-stable-128-bit-non-cryptographic-hash-function#comment235789_109848
   def hash(hasher)
     a = (@value >> 64).to_u64
     b = (@value << 64 >> 64).to_u64
@@ -2120,42 +2120,6 @@ class RemoteStringChat
   end
 end
 
-# TODO: For whatever reason this works:
-ctx = ExecutionContext::MultiThreaded.new("Tconn keepalive", 1)
-sink = ->(overview : Tconn::Overview) do
-    rendered = Term::Dict.build do |commit|
-      overview.each do |key, view|
-        next if view.empty?
-
-        commit.with(key, view.dict_set)
-      end
-    end
-
-    Tconn::Log.debug { ML.display(rendered) }
-end
-ctx.spawn do
-map = TermMap(Tspace::Key, Tspace::Value).new(CompactMLMap.new(DigestedKeyMap(String, String).new(RemoteStringMap.new("127.0.0.1", 9810))))
-chat = TermChat(Label, Activation).new(CompactMLChat.new(RemoteStringChat.new("127.0.0.1", 9811)))
-  Tconn.open(map, chat, sink, keepalive: Tconn::Keepalive.new(ctx, period: 5.seconds..10.seconds)) do |conn|
-    conn[0] = Tconn::Sensor.new(%{x_number})
-    sleep
-  end
-end
-sleep 2.seconds
-ctx.spawn do
-map = TermMap(Tspace::Key, Tspace::Value).new(CompactMLMap.new(DigestedKeyMap(String, String).new(RemoteStringMap.new("127.0.0.1", 9810))))
-chat = TermChat(Label, Activation).new(CompactMLChat.new(RemoteStringChat.new("127.0.0.1", 9811)))
-  Tconn.open(map, chat, sink, keepalive: Tconn::Keepalive.new(ctx, period: 5.seconds..10.seconds)) do |conn|
-    conn[0] = Tconn::Appearance.new(%{100})
-    gets
-    conn[1] = Tconn::Appearance.new(%{200})
-    sleep
-  end
-end
-sleep
-
-# TODO: But if run from command line on actually different things it doesn't.
-{% skip_file %}
 ServerLog = ::Log.for("Server")
 
 def handle(chat, unsubs, unsubs_lock, socket)
@@ -2285,12 +2249,9 @@ elsif ARGV[0]? == "join"
   # conn.delete(1)
   end
 end
-# + TermChat
-# + CompactMLChat
-# + RemoteStringChat
-# + chat server
 
 # - hash & compare selector using crypto secure hash (argon2id)
+# - use bag instead of set for env arrays
 # - do not call sink with duplicate overviews (due to keepalive)
 # - run tspace tests using new Tconn
 # - stricter decode patterns
