@@ -1,15 +1,5 @@
 # Wirewright
 
-**Warning**: ~~you won't be able to run anything right now because of `StringLiteral#scan`, a method I've
-had to patch into the Crystal compiler. If I will get it into Crystal then you will be able to run the stuff.
-Besides, there is nothing to run yet except for tests :^)~~ UPD: my `StringLiteral#scan` PR was merged into
-the master branch of Crystal and will be available in Crystal 1.16. There is still nothing interesting to run though!
-Except for tests! Running them is straightforward: `crystal run pattern6_test.cr`. Don't ask me why pattern6.
-Don't ask me why it's testing pattern7. baz5? No idea.
-
-UPD UPD: now there is something more interesting to run, `crystal run pprint2_vis.cr`. A gallery
-of interesting examples made using it is found below.
-
 Wirewright is a rewrite environment for self-embodied programs.
 
 I am working hard to package the hundreds of thousands of lines of "all over the place" code I've written and about two years of ideas and exploration into something simple, usable, and practical. Please wait and wish me a lot of energy :)
@@ -45,6 +35,12 @@ NOTE: stuff is much snappier in reality, GIFs compress a lot of that snappiness.
 3. Wirewright is remotely related to the general programming approach named "functional core, imperative shell". As such an “imperative shell”, Wirewright integrates all communication and interaction with the outside world into a coherent whole that the self-embodied program can interact with. Communication over the network, access to database, storage, graphics, and more — all by interacting with Wirewright.
 4. **µsoma** is a unified graphical user interface to Wirewright.
 5. Wirewright acts simultaneously as an *observer* and an abstract kind of *physics* for the "functional core" ­— a self-embodied program. It reacts to changes in the latter and provides feedback through rewriting (but not necessarily; for instance, UI is simply a way to view the self-embodied program, like some weird "glasses" that show `(button "Increment" @actions)` as a rectangle with centered text).
+
+## Running
+
+There's an AppImage build in the releases section. No idea whether it'll work on your machine, I'm a complete noob when it comes to software distribution. The AppImage only contains SFML shared objects, so when you run it, you may get some dependency-related errors. Try to google them and install the corresponding dependencies, I guess. I think it is too early to bother about properly distributing the thing, but I still wanted a way for people to try out µsoma without compiling anything. The AppImage may succeed in this on your machine, or it maybe it won't :^)
+
+Link so you don't have to scroll: https://github.com/wirewright/wirewright/releases/latest
 
 ## Building
 
