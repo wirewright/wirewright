@@ -75,7 +75,7 @@ module UIR
   #
   # TODO: move to `uiR.soma.wwml` once the rewriter DSL is available.
   class_getter rewriter : Rewriter do
-    base = File.read("./uiR.soma.wwml")
+    base = File.read(RESOURCES / "uiR.soma.wwml")
 
     refR = dfsR(
       switchR(

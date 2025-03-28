@@ -3,6 +3,7 @@ require "json"
 require "big"
 require "permafrost"
 
+require "../oklch"
 require "../util"
 require "./wirewright/term"
 require "./wirewright/ml"
@@ -14,3 +15,5 @@ require "../primitives"
 require "../surf"
 {% end %}
 require "../templ"
+
+RESOURCES = Path[ENV["SOMA_RESOURCES_DIR"]? || Dir.current]

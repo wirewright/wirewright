@@ -2446,3 +2446,7 @@ module Disorder
     state
   end
 end
+
+def oklch(l : Float64, c : Float64, h : Float64)
+  Oklch.to_rgb(l*100, c, h)
+end

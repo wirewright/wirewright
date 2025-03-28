@@ -469,7 +469,7 @@ module Rhodium
   end
 
   COMPLETION_MANAGER = begin
-    suggestions = File.read("suggestions.soma.wwml")
+    suggestions = File.read(RESOURCES / "suggestions.soma.wwml")
     spec = ML.terms(suggestions).as_d
 
     NodeCompletion::CompletionManager.new(spec)

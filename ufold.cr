@@ -1,5 +1,4 @@
 require "./src/wirewright"
-require "./colors"
 
 # Microfold (µfold) is the engine that handles styles. It's the Tailwind
 # of Wirewright, except it also emits nodes since the underlying rule system,
@@ -524,7 +523,7 @@ module Microfold
 
   # TODO: remove this in favor of a centralized observer "file manager".
   # So that we have "hot reload" of the spec.
-  SPEC = ML.terms(File.read("ufold.spec.wwml")).as_d
+  SPEC = ML.terms(File.read(RESOURCES / "ufold.spec.wwml")).as_d
 
   # Raised if a unit is malformed.
   #

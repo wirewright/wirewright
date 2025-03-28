@@ -1,5 +1,3 @@
-require "./oklch"
-
 record Point, x : Int32, y : Int32
 record Rect, origin : Point, extent : Point
 
@@ -14,10 +12,6 @@ record Ring, l : UInt8, r : UInt8, t : UInt8, b : UInt8 do
 end
 
 record RGB, r : UInt8, g : UInt8, b : UInt8 do
-  private def self.oklch(l : Float64, c : Float64, h : Float64)
-    Oklch.to_rgb(l*100, c, h)
-  end
-
   def self.parse(term : Term) : RGB
     Term.case(term) do
       matchpi(
@@ -383,12 +377,14 @@ module UIR::Platform::SFML
   extend IPlatform
   extend self
 
+  MAX_ANTIALIASING = SF::RenderTexture.maximum_antialiasing_level
+
   # FIXME: how to support nested viewports?
   class Scratchpad
     getter surface : SF::RenderTexture
 
     def initialize(*, w = 1024, h = 1024)
-      @surface = SF::RenderTexture.new(w, h, SF::ContextSettings.new(depth: 24, antialiasing: 8))
+      @surface = SF::RenderTexture.new(w, h, SF::ContextSettings.new(depth: 24, antialiasing: MAX_ANTIALIASING))
       @locked = false
     end
 
@@ -419,8 +415,8 @@ module UIR::Platform::SFML
 
     # :nodoc:
     def refs(font : String, postfix : String) : Indexable(Path)
-      {Path["fonts"] / "#{font.delete(' ')}-#{postfix}.ttf",
-       Path["fonts"] / "#{font.delete(' ')}-#{postfix}.otf"}
+      {RESOURCES / "fonts" / "#{font.delete(' ')}-#{postfix}.ttf",
+       RESOURCES / "fonts" / "#{font.delete(' ')}-#{postfix}.otf"}
     end
 
     # :nodoc:
@@ -985,7 +981,7 @@ module UIR::Platform::SFML
       matchpi %[(window _ ¦ _ title⋮ "Untitled" final-w: w←(%number +i32) final-h: h←(%number +i32))] do
         Lock.lock
 
-        window = SF::RenderWindow.new(SF::VideoMode.new(w.to(Int32), h.to(Int32)), title: title.to(String), settings: SF::ContextSettings.new(depth: 24, antialiasing: 8))
+        window = SF::RenderWindow.new(SF::VideoMode.new(w.to(Int32), h.to(Int32)), title: title.to(String), settings: SF::ContextSettings.new(depth: 24, antialiasing: MAX_ANTIALIASING))
         window.framerate_limit = 60
 
         Lock.unlock

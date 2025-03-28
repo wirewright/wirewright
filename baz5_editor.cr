@@ -68,10 +68,10 @@ end
 def editR : Rewriter
   selector = ML.term(%[(%any° (rule pattern_ template_) (backmap pattern_ backspec_))])
 
-  editor_base = ML.terms(File.read("editor.soma.wwml"))
+  editor_base = ML.terms(File.read(RESOURCES / "editor.soma.wwml"))
   editor_ruleset = Ruleset.select(selector, editor_base)
 
-  suggestions_base = ML.terms(File.read("editor-suggestions.soma.wwml"))
+  suggestions_base = ML.terms(File.read(RESOURCES / "editor-suggestions.soma.wwml"))
   suggestion_ruleset = Ruleset.select(selector, suggestions_base)
 
   # (ruleset editor) ;; Let Ww find editor rules

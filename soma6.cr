@@ -748,12 +748,32 @@ seed = ML.dict <<-WWML
   "- Hit Enter to escape from a pair."
   "- Hit F2 to replace this document with a more sophisticated demo."
   "- Hit Ctrl-Backspace to remove this comment (and any *node* before the cursor in general)."
-  "- Play! The sem-readable implementation of this editor is in `editor.soma.wwml`; check it out for key bindings & what they do"
+  "- Play! The semi-readable implementation of this editor is in `editor.soma.wwml`; check it out for key bindings & what they do"
   "- Take a look at D7 tests: `delta7.test.wwml`. Plenty of examples there.")
 
 ("" | "" () @user)
 
 WWML
+
+# libsfml
+# gmp
+# pcre2
+# freetype
+#   harfbuzz
+#   graphite2
+#   brotli
+# x11
+# xrandr
+# xcursor
+# xi
+# udev
+# opengl
+# flac
+# ogg
+# vorbis
+# vorbisenc
+# vorbisfile
+# pthread
 
 doc = Document.new
 doc.send(Term.of(:open, seed))
