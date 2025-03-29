@@ -38,6 +38,11 @@
 (_ ¦ _ -content-w_) <> {content-w: 0}
 (_ ¦ _ -content-h_) <> {content-h: 0}
 
+;; Rectangles will have content-w/h equal to their max-w/h if the latter
+;; are specified manually.
+(rect ¦ _ w: max max-w_number -content-w_) <> {content-w: →max-w}
+(rect ¦ _ h: max max-h_number -content-h_) <> {content-h: →max-h}
+
 ;; NODE: text
 
 (backmap
