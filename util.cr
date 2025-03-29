@@ -2182,6 +2182,8 @@ struct Time::Span
 end
 
 struct Bag(T)
+  include Enumerable(T)
+
   def initialize
     @storage = {} of T => UInt16
   end

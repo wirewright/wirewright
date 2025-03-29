@@ -1,6 +1,7 @@
 require "log"
 require "simple_rpc"
 require "digest/sha256"
+require "compress/gzip"
 require "json"
 require "./src/wirewright"
 require "./surf_common"
@@ -20,8 +21,10 @@ record Label, value : UInt128 do
     Term.of(value)
   end
 
-  def self.decode(value : Term)
-    new(value.as_n.to(UInt128))
+  def self.decode?(value : Term) : Label?
+    Term.matchpi?(value, %{(%number u128)}) do
+      new(value.to(UInt128))
+    end
   end
 
   def complete(digit, *, base, index)
@@ -117,6 +120,16 @@ module IMap(K, V)
   # N times you'd have to call `dec` N times.
   abstract def dec(referrer : Label, key : K) : Nil
 
+  # Conceptually the same as calling `dec` with each key from *keys* and *referrer*.
+  # In fact, some implementations will do just that, if they cannot delegate to
+  # an underlying map.
+  #
+  # This method exists to allow map client implementations that talk to a centralized
+  # map server to send one big `decall` request instead of thousands of small `dec`
+  # requests. This is beneficial for compression since the majority of `dec` calls
+  # are very similar to each other; and is in general a good practice.
+  abstract def decall(referrer : Label, keys : Array(K)) : Nil
+
   # Constructs a submap (see `SubMap`).
   def submap(k : Sk.class, v : Sv.class) forall Sk, Sv
     SubMap(K, V, Sk, Sv).new(self)
@@ -148,6 +161,10 @@ struct SubMap(Pk, Pv, K, V)
 
   def dec(referrer : Label, key : K) : Nil
     @map.dec(referrer, key.as(Pk))
+  end
+
+  def decall(referrer : Label, keys : Array(K)) : Nil
+    @map.decall(referrer, keys.map &.as(Pk))
   end
 end
 
@@ -194,6 +211,10 @@ class SyncInMemoryMap(K, V)
     end
   end
 
+  def decall(referrer : Label, keys : Array(K)) : Nil
+    keys.each { |key| dec(referrer, key) }
+  end
+
   def pretty_print(pp)
     @lock.synchronize do
       pp.list("{", @data, "}") do |key, cell|
@@ -237,7 +258,7 @@ class TermMap(K, V)
       end
     {% end %}
 
-    raise TermDecodeError.new
+    raise TermDecodeError.new("#{term}")
   end
 
   def latest?(referrer : Label, key : K) : V?
@@ -258,6 +279,10 @@ class TermMap(K, V)
 
   def dec(referrer : Label, key : K) : Nil
     @map.dec(referrer, key.encode(Term))
+  end
+
+  def decall(referrer : Label, keys : Array(K)) : Nil
+    @map.decall(referrer, keys.map &.encode(Term))
   end
 end
 
@@ -293,6 +318,10 @@ class CompactMLMap
   def dec(referrer : Label, key : K) : Nil
     @map.dec(referrer, ML.compact(key))
   end
+
+  def decall(referrer : Label, keys : Array(K)) : Nil
+    @map.decall(referrer, keys.map { |key| ML.compact(key) })
+  end
 end
 
 # An `IMap(K, V)` backed by an `IMap(String, V)`, storing keys as their digests.
@@ -323,6 +352,10 @@ class DigestedKeyMap(K, V)
 
   def dec(referrer : Label, key : K) : Nil
     @map.dec(referrer, digest(key))
+  end
+
+  def decall(referrer : Label, keys : Array(K)) : Nil
+    @map.decall(referrer, keys.map { |key| digest(key) })
   end
 end
 
@@ -460,8 +493,6 @@ end
 
 # Thread-safe, mutable wrapper around `StringBucket` (powered by Atomics).
 class ConcurrentStringBucket
-  include IMap(String, String)
-
   def initialize
     @bucket = Atomic(StringBucket).new(StringBucket.new)
     @state = Atomic(Int32).new(0)
@@ -587,6 +618,8 @@ class ConcurrentStringBucket
   end
 end
 
+# TODO: rewrite using locks, should end up being simpler...
+
 # A concurrent `IMap(String, String)` with entry storage distributed across `N` buckets.
 #
 # `ConcurrentStringMap` partitions keys across `N` independent `ConcurrentStringBucket`s
@@ -631,6 +664,10 @@ class ConcurrentStringMap(N)
     bucket = @buckets[key.hash % N]
     bucket.dec(referrer, key)
   end
+
+  def decall(referrer : Label, keys : Array(String)) : Nil
+    keys.each { |key| dec(referrer, key) }
+  end
 end
 
 struct StringMapRPC
@@ -653,6 +690,23 @@ struct StringMapRPC
 
   def dec(referrer : String, key : String) : Nil
     @@map.dec(Label.new(referrer.to_u128), key)
+  end
+
+  def decall(referrer : String, keys : Array(String)) : Nil
+    @@map.decall(Label.new(referrer.to_u128), keys)
+  end
+
+  def gzdecall(referrer : String, zipped : String) : Nil
+    io = IO::Memory.new(zipped)
+
+    unzipped = Compress::Gzip::Reader.open(io) do |gzip|
+      gzip.gets_to_end
+    end
+
+    # FIXME: something more reliable than newline separation
+    keys = unzipped.split('\n')
+
+    @@map.decall(Label.new(referrer.to_u128), keys)
   end
 end
 
@@ -680,6 +734,18 @@ class RemoteStringMap
 
   def dec(referrer : Label, key : String) : Nil
     @client.dec!(referrer.value.to_s, key)
+  end
+
+  def decall(referrer : Label, keys : Array(String)) : Nil
+    # FIXME: something more reliable than newline separation
+    unzipped = keys.join('\n')
+    zipped = String.build do |io|
+      Compress::Gzip::Writer.open(io) do |gzip|
+        gzip << unzipped
+      end
+    end
+
+    @client.gzdecall!(referrer.value.to_s, zipped)
   end
 end
 
@@ -765,11 +831,11 @@ struct Utrie
 
   record Origin, base : Ubase::Any do
     def encode(otype : Term.class) : Term
-      Term.of("utrie origin key", base.term)
+      Term.of(:utrie, :key, :origin, base.term)
     end
 
     def self.decode?(term : Term) : Key?
-      Term.matchpi?(term, %{("utrie origin key" base_)}) do
+      Term.matchpi?(term, %{(utrie key origin base_)}) do
         new(Ubase.parse(base))
       end
     end
@@ -777,24 +843,24 @@ struct Utrie
 
   record Step, pred : Label, base : Ubase::Any do
     def encode(otype : Term.class) : Term
-      Term.of("utrie step key", pred.encode(Term), base.term)
+      Term.of(:utrie, :key, :step, pred.encode(Term), base.term)
     end
 
     def self.decode?(term : Term) : Key?
-      Term.matchpi?(term, %{("utrie step key" pred_number base_)}) do
-        new(Label.decode(pred), Ubase.parse(base))
+      Term.matchpi?(term, %{(utrie key step pred_ base_)}) do
+        new(Label.decode?(pred) || return, Ubase.parse(base))
       end
     end
   end
 
   record Value, succ : Label do
     def encode(otype : Term.class) : Term
-      Term.of("utrie value", succ.encode(Term))
+      Term.of(:utrie, :value, :primary, succ.encode(Term))
     end
 
     def self.decode?(term : Term) : Value?
-      Term.matchpi?(term, %{("utrie value" succ_number)}) do
-        new(Label.decode(succ))
+      Term.matchpi?(term, %{(utrie value primary succ_)}) do
+        new(Label.decode?(succ) || return)
       end
     end
   end
@@ -881,24 +947,24 @@ end
 struct Xgraph
   record Key, a : Label, b : Label do
     def encode(otype : Term.class) : Term
-      Term.of("xgraph key", a.encode(Term), b.encode(Term))
+      Term.of(:xgraph, :key, :primary, a.encode(Term), b.encode(Term))
     end
 
     def self.decode?(term : Term) : Key?
-      Term.matchpi?(term, %{("xgraph key" a_number b_number)}) do
-        new(Label.decode(a), Label.decode(b))
+      Term.matchpi?(term, %{(xgraph key primary a_ b_)}) do
+        new(Label.decode?(a) || return, Label.decode?(b) || return)
       end
     end
   end
 
   record Value, succ : Label do
     def encode(otype : Term.class) : Term
-      Term.of("xgraph value", succ.encode(Term))
+      Term.of(:xgraph, :value, :primary, succ.encode(Term))
     end
 
     def self.decode?(term : Term) : Value?
-      Term.matchpi?(term, %{("xgraph value" succ_number)}) do
-        new(Label.decode(succ))
+      Term.matchpi?(term, %{(xgraph value primary succ_)}) do
+        new(Label.decode?(succ) || return)
       end
     end
   end
@@ -956,11 +1022,11 @@ struct Ttrie
 
   record Origin do
     def encode(otype : Term.class) : Term
-      Term.of({"ttrie origin key"})
+      Term.of(:ttrie, :key, :origin)
     end
 
     def self.decode?(term : Term) : Key?
-      Term.matchpi?(term, %{("ttrie origin key")}) do
+      Term.matchpi?(term, %{(ttrie key origin)}) do
         new
       end
     end
@@ -968,24 +1034,24 @@ struct Ttrie
 
   record Step, pred : Label, base : Ubase::Any do
     def encode(otype : Term.class) : Term
-      Term.of("ttrie step key", pred.encode(Term), base.term)
+      Term.of(:ttrie, :key, :step, pred.encode(Term), base.term)
     end
 
     def self.decode?(term : Term) : Key?
-      Term.matchpi?(term, %{("ttrie step key" pred_number base_)}) do
-        new(Label.decode(pred), Ubase.parse(base))
+      Term.matchpi?(term, %{(ttrie key step pred_ base_)}) do
+        new(Label.decode?(pred) || return, Ubase.parse(base))
       end
     end
   end
 
   record Value, succ : Label do
     def encode(otype : Term.class) : Term
-      Term.of("ttrie value", succ.encode(Term))
+      Term.of(:ttrie, :value, :primary, succ.encode(Term))
     end
 
     def self.decode?(term : Term) : Value?
-      Term.matchpi?(term, %{("ttrie value" succ_number)}) do
-        new(Label.decode(succ))
+      Term.matchpi?(term, %{(ttrie value primary succ_)}) do
+        new(Label.decode?(succ) || return)
       end
     end
   end
@@ -1062,23 +1128,23 @@ struct Etrace
 
   record Key, scope : Label, state : Label, digitno : UInt8 do
     def encode(otype : Term.class) : Term
-      Term.of("etrace key", scope.encode(Term), state.encode(Term), digitno)
+      Term.of(:etrace, :key, :primary, scope.encode(Term), state.encode(Term), digitno)
     end
 
     def self.decode?(term : Term) : Key?
-      Term.matchpi?(term, %{("etrace key" scope_number state_number digitno_number)}) do
-        new(Label.decode(scope), Label.decode(state), digitno.to(UInt8))
+      Term.matchpi?(term, %{(etrace key primary scope_ state_ digitno←(%number u8))}) do
+        new(Label.decode?(scope) || return, Label.decode?(state) || return, digitno.to(UInt8))
       end
     end
   end
 
   record Value do
     def encode(otype : Term.class) : Term
-      Term.of({"etrace value"})
+      Term.of(:etrace, :value, :primary)
     end
 
     def self.decode?(term : Term) : Value?
-      Term.matchpi?(term, %{("etrace value")}) { new }
+      Term.matchpi?(term, %{(etrace value primary)}) { new }
     end
   end
 
@@ -1136,23 +1202,23 @@ end
 struct StrandSet
   record Key, vertex : Label do
     def encode(otype : Term.class) : Term
-      Term.of("strand set key", vertex.encode(Term))
+      Term.of(:"strand-set", :key, :primary, vertex.encode(Term))
     end
 
     def self.decode?(term : Term) : Key?
-      Term.matchpi?(term, %{("strand set key" vertex_number)}) do
-        new(Label.decode(vertex))
+      Term.matchpi?(term, %{(strand-set key primary vertex_)}) do
+        new(Label.decode?(vertex) || return)
       end
     end
   end
 
   record Value do
     def encode(otype : Term.class) : Term
-      Term.of({"strand set value"})
+      Term.of(:"strand-set", :value, :primary)
     end
 
     def self.decode?(term : Term) : Value?
-      Term.matchpi?(term, %{("strand set value")}) { new }
+      Term.matchpi?(term, %{(strand-set value primary)}) { new }
     end
   end
 
@@ -1174,23 +1240,23 @@ end
 struct AppearanceSet
   record Key, vertex : Label do
     def encode(otype : Term.class) : Term
-      Term.of("appearance set key", vertex.encode(Term))
+      Term.of(:"appearance-set", :key, :primary, vertex.encode(Term))
     end
 
     def self.decode?(term : Term) : Key?
-      Term.matchpi?(term, %{("appearance set key" vertex_number)}) do
-        new(Label.decode(vertex))
+      Term.matchpi?(term, %{(appearance-set key primary vertex_)}) do
+        new(Label.decode?(vertex) || return)
       end
     end
   end
 
   record Value do
     def encode(otype : Term.class) : Term
-      Term.of({"appearance set value"})
+      Term.of(:"appearance-set", :value, :primary)
     end
 
     def self.decode?(term : Term) : Value?
-      Term.matchpi?(term, %{("appearance set value")}) { new }
+      Term.matchpi?(term, %{(appearance-set value primary)}) { new }
     end
   end
 
@@ -1222,23 +1288,23 @@ struct SensorMultimap
 
   record Key, scope : Label, state : Label, digitno : UInt8 do
     def encode(otype : Term.class) : Term
-      Term.of("sensor decoder key", scope.encode(Term), state.encode(Term), digitno)
+      Term.of(:"sensor-decoder", :key, :primary, scope.encode(Term), state.encode(Term), digitno)
     end
 
     def self.decode?(term : Term) : Key?
-      Term.matchpi?(term, %{("sensor decoder key" scope_number state_number digitno_number)}) do
-        new(Label.decode(scope), Label.decode(state), digitno.to(UInt8))
+      Term.matchpi?(term, %{(sensor-decoder key primary scope_ state_ digitno←(%number u8))}) do
+        new(Label.decode?(scope), Label.decode?(state), digitno.to(UInt8))
       end
     end
   end
 
   record Value do
     def encode(otype : Term.class) : Term
-      Term.of({"sensor decoder value"})
+      Term.of(:"sensor-decoder", :value, :primary)
     end
 
     def self.decode?(term : Term) : Value?
-      Term.matchpi?(term, %{("sensor decoder value")}) { new }
+      Term.matchpi?(term, %{(sensor-decoder value primary)}) { new }
     end
   end
 
@@ -1458,23 +1524,19 @@ end
 
 record SensorData, conid : Label, groupid : Label, identity : Identity, instant : Label, selector : Term? do
   def encode(otype : Term.class) : Term
-    Term.of(
-      conid: conid.encode(Term),
-      groupid: groupid.encode(Term),
-      identity: identity,
-      instant: instant.encode(Term),
-      selector: selector,
-    )
+    Term.of(:"sensor-data", conid.encode(Term), groupid.encode(Term), identity, instant.encode(Term), selector: selector)
   end
 
-  def self.decode(object : Term) : SensorData
-    new(
-      conid: Label.decode(object[:conid]),
-      groupid: Label.decode(object[:groupid]),
-      identity: object[:identity].to(Identity),
-      instant: Label.decode(object[:instant]),
-      selector: object[:selector]?,
-    )
+  def self.decode?(object : Term) : SensorData?
+    Term.matchpi?(object, %{(sensor-data conid_ groupid_ identity←(%number u32) instant_ ¦ (%keypool selector))}) do
+      new(
+        Label.decode?(conid) || return,
+        Label.decode?(groupid) || return,
+        identity.to(Identity),
+        Label.decode?(instant) || return,
+        object[:selector]?,
+      )
+    end
   end
 end
 
@@ -1488,49 +1550,44 @@ record AppearanceData,
 
 struct AppearanceData
   def encode(otype : Term.class) : Term
-    Term.of(
-      conid: conid.encode(Term),
-      identity: identity,
-      instant: instant.encode(Term),
-      value: value,
-      selector: selector,
-      tombstone: tombstone,
-    )
+    Term.of(:"appearance-data", conid.encode(Term), identity, instant.encode(Term), value, selector: selector, tombstone: tombstone)
   end
 
-  def self.decode(object : Term) : AppearanceData
-    new(
-      Label.decode(object[:conid]),
-      object[:identity].to(Identity),
-      Label.decode(object[:instant]),
-      object[:value],
-      object[:selector]?,
-      object[:tombstone]?,
-    )
+  def self.decode?(object : Term) : AppearanceData?
+    Term.matchpi?(object, %{(appearance-data conid_ identity←(%number u32) instant_ value_ ¦ (%keypool selector tombstone))}) do
+      new(
+        Label.decode?(conid) || return,
+        identity.to(Identity),
+        Label.decode?(instant) || return,
+        value,
+        object[:selector]?,
+        object[:tombstone]?,
+      )
+    end
   end
 end
 
 struct SensorDataMap
   record Key, instant : Label do
     def encode(otype : Term.class) : Term
-      Term.of("sensor base key", instant.encode(Term))
+      Term.of(:"sensor-base", :key, :primary, instant.encode(Term))
     end
 
     def self.decode?(term : Term) : Key?
-      Term.matchpi?(term, %{("sensor base key" instant_number)}) do
-        new(Label.decode(scope))
+      Term.matchpi?(term, %{(sensor-base key instant_)}) do
+        new(Label.decode?(scope) || return)
       end
     end
   end
 
   record Value, data : SensorData do
     def encode(otype : Term.class) : Term
-      Term.of("sensor base value", data.encode(Term))
+      Term.of(:"sensor-base", :value, :primary, data.encode(Term))
     end
 
     def self.decode?(term : Term) : Value?
-      Term.matchpi?(term, %{("sensor base value" data_)}) do
-        new(SensorData.decode(data))
+      Term.matchpi?(term, %{(sensor-base value primary data_)}) do
+        new(SensorData.decode?(data) || return)
       end
     end
   end
@@ -1560,24 +1617,24 @@ end
 struct AppearanceDataMap
   record Key, instant : Label do
     def encode(otype : Term.class) : Term
-      Term.of("appearance base key", instant.encode(Term))
+      Term.of(:"appearance-base", :key, :primary, instant.encode(Term))
     end
 
     def self.decode?(term : Term) : Key?
-      Term.matchpi?(term, %{("appearance base key" instant_number)}) do
-        new(Label.decode(instant))
+      Term.matchpi?(term, %{(appearance-base key instant_)}) do
+        new(Label.decode?(instant) || return)
       end
     end
   end
 
   record Value, data : AppearanceData do
     def encode(otype : Term.class) : Term
-      Term.of("appearance base value", data.encode(Term))
+      Term.of(:"appearance-base", :value, :primary, data.encode(Term))
     end
 
     def self.decode?(term : Term) : Value?
-      Term.matchpi?(term, %{("appearance base value" data_)}) do
-        new(AppearanceData.decode(data))
+      Term.matchpi?(term, %{(appearance-base value primary data_)}) do
+        new(AppearanceData.decode?(data) || return)
       end
     end
   end
@@ -1613,12 +1670,12 @@ record Activation, kind : Kind, sdata : SensorData, adata : AppearanceData do
   end
 
   def encode(otype : Term.class) : Term
-    Term.of("activation", kind, sdata.encode(Term), adata.encode(Term))
+    Term.of(:activation, kind, sdata.encode(Term), adata.encode(Term))
   end
 
   def self.decode?(term : Term) : Activation?
-    Term.matchpi?(term, %{("activation" kind_number sdata_ adata_)}) do
-      new(kind.to(Kind), SensorData.decode(sdata), AppearanceData.decode(adata))
+    Term.matchpi?(term, %{(activation kind←(%number u8) sdata_ adata_)}) do
+      new(kind.to(Kind), SensorData.decode?(sdata) || return, AppearanceData.decode?(adata) || return)
     end
   end
 end
@@ -1664,7 +1721,7 @@ struct Tspace
 
       mounted = false
 
-      deps.each { |(key, _)| @map.dec(subject.id, key) }
+      @map.decall(subject.id, deps.to_a { |(key, _)| key })
     end
 
     {seen, dismiss}
@@ -1687,7 +1744,7 @@ struct Tspace
 
       mounted = false
 
-      deps.each { |(key, _)| @map.dec(subject.id, key) }
+      @map.decall(subject.id, deps.to_a { |(key, _)| key })
     end
   end
 
@@ -1813,12 +1870,12 @@ class Tview
     end
   end
 
-  # Returns a dict set of match envs in this view.
-  def dict_set : Term::Dict
+  # Returns a dict multiset of match envs in this view.
+  def dict_multiset : Term::Dict
     Term::Dict.build do |commit|
       @stimuli.each do |_, stimulus|
         stimulus.matches.each do |env|
-          commit.with(env, true)
+          commit.with(env, (commit[env]? || 0) + 1)
         end
       end
     end
@@ -1890,6 +1947,28 @@ class Tconn
 
         @sink.call(@overview)
       end
+    end
+  end
+
+  def self.multisets(&sink : Term::Dict ->) : Sink
+    multisets0 = Term[]
+
+    Sink.new do |overview|
+      multisets1 = Term::Dict.build do |commit|
+        overview.each do |key, view|
+          next if view.empty?
+
+          commit.with(key, view.dict_multiset)
+        end
+      end
+
+      # TODO: check equality of overviews instead! And optimize Tview equality
+      # (e.g. have a dirty flag?)
+      next if multisets0 == multisets1
+
+      multisets0 = multisets1
+
+      sink.call(multisets0)
     end
   end
 
@@ -2061,6 +2140,9 @@ class Tconn
       end
 
       data.destructors.each &.call(final)
+
+      @overview = @overview.dissoc(identity)
+      @sink.call(@overview)
     end
 
     Log.debug { "#{@conid}: removed surface #{identity}" }
@@ -2193,26 +2275,17 @@ if ARGV[0]? == "serve"
   puts "Map on port 9810"
   puts "Chat on port 9811"
   sleep
-
 elsif ARGV[0]? == "join"
   # map = SyncInMemoryMap(Tspace::Key, Tspace::Value).new
   map = TermMap(Tspace::Key, Tspace::Value).new(CompactMLMap.new(DigestedKeyMap(String, String).new(RemoteStringMap.new("127.0.0.1", 9810))))
   # chat = SyncInMemoryChat(Label, Activation).new
   chat = TermChat(Label, Activation).new(CompactMLChat.new(RemoteStringChat.new("127.0.0.1", 9811)))
 
-  sink = ->(overview : Tconn::Overview) do
-    rendered = Term::Dict.build do |commit|
-      overview.each do |key, view|
-        next if view.empty?
-
-        commit.with(key, view.dict_set)
-      end
-    end
-
-    Tconn::Log.debug { ML.display(rendered) }
+  sink = ->(multisets : Term::Dict) do
+    Tconn::Log.debug { ML.display(multisets) }
   end
   ctx = ExecutionContext::MultiThreaded.new("Tconn keepalive", 1)
-  Tconn.open(map, chat, sink, keepalive: Tconn::Keepalive.new(ctx, period: 5.seconds..10.seconds)) do |conn|
+  Tconn.open(map, chat, Tconn.multisets(&sink), keepalive: Tconn::Keepalive.new(ctx, period: 5.seconds..10.seconds)) do |conn|
     while input = (print "> "; gets)
       case input.strip
       when /^sensor\s+(\d+)\s+(.+)$/
@@ -2250,13 +2323,10 @@ elsif ARGV[0]? == "join"
   end
 end
 
-# - hash & compare selector using crypto secure hash (argon2id)
-# - use bag instead of set for env arrays
-# - do not call sink with duplicate overviews (due to keepalive)
-# - run tspace tests using new Tconn
-# - stricter decode patterns
 # - separate keepalive period for sensor and appearances. appearances should be faster
 #   to trigger keepalive postpone (query sensor by appearance is much faster than vice versa)
-# - add some kind of batch-dec mechanism to IMap, so that we can
+# - hash & compare selector using crypto secure hash (argon2id)
+# + add some kind of batch-dec mechanism to IMap, so that we can
 # send dec() all at once, e.g. gzipped, if the map impl supports that
 # (e.g. centralized)
+# - run tspace tests using new Tconn
