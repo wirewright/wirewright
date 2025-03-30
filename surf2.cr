@@ -2326,7 +2326,4 @@ end
 # - separate keepalive period for sensor and appearances. appearances should be faster
 #   to trigger keepalive postpone (query sensor by appearance is much faster than vice versa)
 # - hash & compare selector using crypto secure hash (argon2id)
-# + add some kind of batch-dec mechanism to IMap, so that we can
-# send dec() all at once, e.g. gzipped, if the map impl supports that
-# (e.g. centralized)
 # - run tspace tests using new Tconn
