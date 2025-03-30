@@ -619,23 +619,23 @@ class Stack(T)
     @stack[index] = value
   end
 
-  # Pushes *element* onto the stack. If the stack is full, increases the capacity
+  # Pushes *value* onto the stack. If the stack is full, increases the capacity
   # by a factor of 1.5.
-  def push(element : T) : self
+  def push(value : T) : self
     if @size == @capacity
       @capacity = Math.max(2, @capacity * 1.5).ceil.to_i
       @stack = @stack.realloc(@capacity)
     end
-    @stack[@size] = element
+    @stack[@size] = value
     @size += 1
     self
   end
 
-  def <<(element : T)
-    push(element)
+  def <<(value : T)
+    push(value)
   end
 
-  # Pops an element from the top of the stack. Returns `nil` if the stack is empty.
+  # Pops n value from the top of the stack. Returns `nil` if the stack is empty.
   def pop? : T?
     return if @size == 0
     @size -= 1
@@ -646,8 +646,8 @@ class Stack(T)
     pop? || raise IndexError.new
   end
 
-  def push(element : T, & : -> U) : U forall U
-    push(element)
+  def push(value : T, & : -> U) : U forall U
+    push(value)
     begin
       yield
     ensure
@@ -657,11 +657,11 @@ class Stack(T)
 
   # Pops for the duration of the block.
   def pop(& : -> U) : U forall U
-    object = pop
+    value = pop
     begin
       yield
     ensure
-      push(object)
+      push(value)
     end
   end
 
@@ -2511,7 +2511,7 @@ end
 
 module IStack(T)
   abstract def empty? : Bool
-  abstract def push(object : T)
+  abstract def push(value : T)
   abstract def pop : T
 end
 
