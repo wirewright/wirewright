@@ -1,6 +1,6 @@
 require "./src/wirewright"
 require "./uiRb"
-require "./sfuiR"
+require "./sfpaint"
 require "./pprint2"
 
 module UIR::Platform

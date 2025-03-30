@@ -195,7 +195,7 @@ def input(model : Term, style = "font-mono text-neutral-300")
 end
 
 require "./uiRb"
-require "./sfuiR"
+require "./sfpaint"
 
 module UIR::Platform
   alias Current = SFML
