@@ -27,6 +27,23 @@ PRIMITIVES = ProcRuleset.build do
     a.unsafe_as_n > b.unsafe_as_n
   end
 
+  rulepi1 %[(= a_ bs_+)] do
+    bs.unsafe_as_d.items.all? { |b| a == b }
+  end
+
+  # FIXME: remove this flag
+  {% if flag?(:soma6) %}
+    # Converts an arbitrary term into its D7VR (Microfold unit) -> UIR (thus D7UIR)
+    # code-only representation.
+    #
+    # D7VR is what you convert a term into, to then feed that to Microfold, then UIR,
+    # then draw it, then paint the resulting draw commands using some kind of painting
+    # backend (e.g. sfpaint).
+    rulepi1 %[(d7uir term_ ¦ () rem_: (%number +i32) code-only: true)] do
+      pipe(D7VR.of_term(term), D7VR.to_uir(rem: rem.unsafe_as_n))
+    end
+  {% end %}
+
   # E.g. (join {x: 1, y: 2} (entry z 3))
   rulepi1 %[(entry k_ v_)] do
     Term[].with(k, v)

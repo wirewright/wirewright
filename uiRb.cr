@@ -69,7 +69,8 @@ end
 module UIR
   extend self
 
-  @@cache = SyncMemo.new(capacity: 16_384, preallocate: true)
+  @@base_cache = SyncCache(Term, Rewrite::Any).new(capacity: 2**14, preallocate: true)
+  @@control_cache = SyncCache(Term, Rewrite::Any).new(capacity: 2048, preallocate: true)
 
   # Returns the UIR rewriter.
   #
@@ -146,7 +147,7 @@ module UIR
     set_main, rec_main = recR
 
     mainR = exhR(
-      set_main.call memoR(@@cache,
+      set_main.call memoR(@@base_cache,
         choiceR(
           rulesetR(Ruleset.select(selector, ML.terms(base_main)), noR, backmapR, noR),
           itemsR(rec_main),
@@ -156,12 +157,12 @@ module UIR
 
     set_control, rec_control = recR
 
-    # TODO: cueR, memoR
+    # TODO: memoR
     controlR = exhR(
-      set_control.call choiceR(
+      set_control.call cueR({Term[:fallback]}, memoR(@@control_cache, choiceR(
           rulesetR(Ruleset.select(selector, ML.terms(base_control)), noR, backmapR, noR),
           itemsR(rec_control),
-      )
+      )))
     )
 
     exhR(chainR(mainR, controlR))

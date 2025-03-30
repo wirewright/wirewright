@@ -399,20 +399,9 @@ module Microfold
       end
 
       ictx, minh = response
+      octx, inner = subbox.call(ictx.override(:h, :max).copy_with(nested: true), subject)
 
-      # Generate a h-content branch.
-      octx0, a = subbox.call(ictx.override(:h, :content), subject)
-
-      # Generate a h-max branch.
-      octx1, b = subbox.call(ictx.override(:h, :max), subject)
-
-      # Wrap the max-h branch in a box that defines max-h: min-h.
-      b = Term.of(:box, b, w: ctx.sheet[:w]?, h: :max, "max-h": minh)
-
-      # Use h-compare to select the branch.
-      cmp = Term.of(:"h-compare", a, pivot: minh, gt: b, w: ctx.sheet[:w]?, h: ctx.sheet[:h]?)
-
-      {UnitContext.octx(ictx, {octx0, octx1}), cmp}
+      {octx, Term.of(:"y-expand", inner, "min-h": minh, w: ctx.sheet[:w]?, h: ctx.sheet[:h]?)}
     end
   end
 
@@ -426,20 +415,9 @@ module Microfold
       end
 
       ictx, minw = response
+      octx, inner = subbox.call(ictx.override(:w, :max).copy_with(nested: true), subject)
 
-      # Generate a w-content branch.
-      octx0, a = subbox.call(ictx.override(:w, :content), subject)
-
-      # Generate a w-max branch.
-      octx1, b = subbox.call(ictx.override(:w, :max), subject)
-
-      # Wrap the max-w branch in a box that defines max-w: min-w.
-      b = Term.of(:box, b, w: :max, h: ctx.sheet[:h]?, "max-w": minw)
-
-      # Use w-compare to select the branch.
-      cmp = Term.of(:"w-compare", a, pivot: minw, gt: b, w: ctx.sheet[:w]?, h: ctx.sheet[:h]?)
-
-      {UnitContext.octx(ictx, {octx0, octx1}), cmp}
+      {octx, Term.of(:"x-expand", inner, "min-w": minw, w: ctx.sheet[:w]?, h: ctx.sheet[:h]?)}
     end
   end
 
@@ -553,6 +531,8 @@ module Microfold
       end
 
       ictx, dl, dt = response
+      ictx = ictx.override(:w, :content) if dl
+      ictx = ictx.override(:h, :content) if dt
       octx, inner = subbox.call(ictx.copy_with(nested: true), subject)
 
       {octx, Term.of(:translate, inner, w: ctx.sheet[:w]?, h: ctx.sheet[:h]?, x: dl, y: dt)}
@@ -652,9 +632,9 @@ module Microfold
 
     # Handles the unit-unit boundary.
     private def unit(ctx : UnitContext, unit : Term)
-      octx, font, weight = ctx.consume(:font, :"font-weight")
+      octx, font, weight, color = ctx.consume(:font, :"font-weight", :"text-color")
 
-      {octx, Microfold.uir(ctx.spec, unit, rem: ctx.rem, inherited: Term[font: font, "font-weight": weight])}
+      {octx, Microfold.uir(ctx.spec, unit, rem: ctx.rem, inherited: Term[font: font, "font-weight": weight, "text-color": color])}
     end
 
     def call(ctx : UnitContext, child : Term) : {UnitContext, Term}
@@ -675,7 +655,7 @@ module Microfold
       octx, inner = subbox.call(ictx, subject)
       inner = inner.morph({:fr, fr}, {:cursor, cursor}, {:"max-w", maxw}, {:"max-h", maxh})
 
-      {octx, Term.of(inner)}
+      {octx.override(:w, nil).override(:h, nil), Term.of(inner)}
     end
   end
 
@@ -738,30 +718,7 @@ module Microfold
   # So that we have "hot reload" of the spec.
   SPEC = ML.terms(File.read(RESOURCES / "ufold.spec.wwml")).as_d
 
-  # Raised if a unit is malformed.
-  #
-  # See also: `uir`.
-  class UnitError < Exception
-  end
-
-  # Returns the UIR tree corresponding to *unit*.
-  #
-  # *Units* are represented as a series of nested boxes. Each box is instantiated
-  # on demand to consume certain style properties if those properties are present.
-  # For example, a padding box is instantiated if padding properties are present.
-  # Units can be nested.
-  #
-  # ```
-  # node = ML.term <<-WWML
-  # (p "Hello World" style: "p-3 text-neutral-200 bg-neutral-900")
-  # WWML
-  #
-  # Microfold.uir(Microfold::SPEC, node) # => UIR...
-  # ```
-  #
-  # Raises `UnitError` if *unit* is malformed (cannot be treated as a unit; e.g.
-  # a number literal, or the list `(1 2 3)`, etc.).
-  def uir(spec : Term::Dict, unit : Term, *, rem = Term[16], inherited = Term[])
+  def uir0(spec : Term::Dict, unit : Term, rem : Term::Num, inherited : Term::Dict) : Term
     Term.case(unit) do
       matchpi %{((self node_symbol) ¦ attrs_ style⋮ "")} do
         # Read node defaults.
@@ -809,11 +766,34 @@ module Microfold
       end
     end
   end
+
+  UIR_CACHE = SyncCache({Term::Dict, Term, Term::Num, Term::Dict}, Term).new(2048, preallocate: true)
+
+  # Returns the UIR tree corresponding to *unit*.
+  #
+  # *Units* are represented as a series of nested boxes. Each box is instantiated
+  # on demand to consume certain style properties if those properties are present.
+  # For example, a padding box is instantiated if padding properties are present.
+  # Units can be nested.
+  #
+  # ```
+  # node = ML.term <<-WWML
+  # (p "Hello World" style: "p-3 text-neutral-200 bg-neutral-900")
+  # WWML
+  #
+  # Microfold.uir(Microfold::SPEC, node) # => UIR...
+  # ```
+  def uir(spec : Term::Dict, unit : Term, *, rem = Term[16], inherited = Term[]) : Term
+    UIR_CACHE.fetch({spec, unit, rem, inherited}) do
+      uir0(spec, unit, rem, inherited)
+    end
+  end
 end
 
 # stuff = ML.term <<-WWML
-# ((self window) style: "bg-neutral-900 max origin" max-w: 1000 max-h: 800
-#   (p "hello world" style: "p-3 bg-red-500 min-sm"))
+# (group style: "min-w-sm max-w-lg content flow-col gap-2"
+#   (p "hello" style: "w-max px-2 py-1 font-mono bg-neutral-700 text-neutral-200 font-medium rounded-sm")
+#   (p "Hello World" style: "w-max px-2 pb-1 text-sm text-neutral-300"))
 # WWML
 
 # puts ML.display(Microfold.uir(Microfold::SPEC, stuff))

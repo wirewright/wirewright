@@ -7,7 +7,7 @@ module UIR::Platform
   alias Current = SFML
 end
 
-module DocR
+module D7VR
   extend self
 
   struct Comment
@@ -24,7 +24,7 @@ module DocR
         matchpi %{(comment lines_string+)} do
           unit = Alloy.render(Term[desc: lines.items.join('\n') { |line| line.to(String) }], TEMPLATE)
 
-          continue unless block = DocR.block?(unit)
+          continue unless block = D7VR.block?(unit, term)
 
           postfixed(block, postfix)
         end
@@ -39,6 +39,9 @@ module DocR
   struct Unit
     include Feature
 
+    def initialize(@document : Term::Dict)
+    end
+
     def call(ctx, term, postfix, head, rest)
       Term.case(term) do
         matchpi %{[unit node_ children_+]} do
@@ -49,13 +52,13 @@ module DocR
             commit << node
             commit.concat(children.items) do |child|
               Term.case(child) do
-                matchpi %{_dict} { DocR.view(child.unsafe_as_d, aligned: false) }
+                matchpi %{_dict} { D7VR.of_document_node(@document, child) }
                 otherwise { child }
               end
             end
           end
 
-          continue unless block = DocR.block?(Term.of(unit))
+          continue unless block = D7VR.block?(Term.of(unit), term)
 
           postfixed(block, postfix)
         end
@@ -63,7 +66,7 @@ module DocR
         matchpi %{[view @_ as _ instance_]} do
           # TODO: relax this a little bit
           continue unless Rhodium.cursordepth(term, pairspart: true) == -1
-          continue unless block = DocR.block?(instance)
+          continue unless block = D7VR.block?(instance, term)
 
           postfixed(block, postfix)
         end
@@ -99,7 +102,7 @@ module DocR
 
           unit = Alloy.render(Term[id: id, caption: caption, style: style], TEMPLATE)
 
-          continue unless block = DocR.block?(unit)
+          continue unless block = D7VR.block?(unit, term)
 
           postfixed(block, postfix)
         end
@@ -116,58 +119,50 @@ module DocR
 
     CURSOR_TEMPLATE = ML.term <<-WWML
     (group style: "content"
-      (code ^lhs style: "text-neutral-400 bg-neutral-700 ring")
-      ((self rect) style: "w-px h-max bg-blue-500")
-      (code ^rhs style: "text-neutral-400 bg-neutral-700 ring"))
+      (code ^lhs style: "text-neutral-400 bg-neutral-700")
+      ;; If both are empty w-0 won't work so we have to create a rectangle
+      ;; that is explicitly w-px. Also, if lhs is empty, use ring-r, because
+      ;; if we're using ring-l, it may overflow outside of the viewport
+      ;; if the cursor is located at origin.
+      ((self rect) style: "h-max z-10 bg-blue-500 w-0 ring-l lempty:ring-l-0 lempty:ring-r empty:w-px empty:ring-0"
+        empty: (^expr (= lhs rhs ""))
+        lempty: (^expr (= lhs "")))
+      (code ^rhs style: "text-neutral-400 bg-neutral-700"))
     WWML
 
     SUGGESTION_TEMPLATE = ML.term <<-WWML
     (box style: "floating z-10 dt-8 border border-neutral-600 bg-neutral-800 rounded p-2"
-      (group style: "min-w-sm h-content flow-col gap-2"
-        (p ^name style: "w-inherit px-2 py-1 font-mono bg-neutral-700 text-neutral-200 font-medium rounded-sm")
-        (p ^intro style: "w-inherit px-2 pb-1 text-sm text-neutral-300")))
+      (group style: "content min-w-xs max-w-md flow-col gap-2"
+        (p ^name style: "w-max px-2 py-1 font-mono bg-neutral-700 text-neutral-200 font-medium rounded-sm")
+        (p ^intro style: "w-max px-2 pb-1 text-sm text-neutral-300")))
     WWML
 
-    # TODO: use a template `if`
-    SUGGESTION_MEMBER_TEMPLATE = ML.term <<-WWML
-    (box style: "floating z-10 dt-8 border border-neutral-600 bg-neutral-800 rounded p-2"
-      (group style: "min-w-sm h-content flow-col gap-2"
-        (box ^head style: "w-max h-content px-2 py-1 font-mono bg-neutral-700 text-neutral-200 font-medium rounded-sm")
-        (box ^body style: "w-inherit h-content px-2 pb-1 text-sm text-neutral-300")))
-    WWML
-
-    SUGGESTION_MEMBER_ONEOF_TEMPLATE = ML.term <<-WWML
+    SUGGESTION_GROUP_TEMPLATE = ML.term <<-WWML
     (box style: "floating z-10 dt-8 border border-neutral-600 bg-neutral-800 rounded p-2"
       (group style: "content flow-col gap-2"
-        (group style: "w-max fr h-content flow-row gap-2 px-2 py-1 bg-neutral-700 rounded-sm"
-          ;; FIXME: why can't we center vertically here?
-          (p style: "text-sm text-neutral-200"
-            "↑" ^current "/" ^total "↓")
-          (box ^head style: "w-fr h-content font-mono text-neutral-200 font-medium"))
+        (^match (> total 1)
+          (when true
+            (group style: "w-max fr h-content flow-row gap-2 px-2 py-1 bg-neutral-700 rounded-sm"
+              (p style: "text-sm center-y text-neutral-200"
+                "↑" ^current "/" ^total "↓")
+              (box ^head style: "w-fr h-content font-mono text-neutral-200 font-medium")))
+          (when false
+            (box ^head style: "w-max h-content px-2 py-1 font-mono bg-neutral-700 text-neutral-200 font-medium rounded-sm")))
         (box ^body style: "content px-2 pb-1 text-sm text-neutral-300")))
-    WWML
-
-    # TODO: use a template `if`
-    SUGGESTION_LIST_NOSCROLL_TEMPLATE = ML.term <<-WWML
-    (box style: "floating z-10 dt-8 border border-neutral-600 bg-neutral-800 rounded p-3"
-      (main style: "min-w-sm h-content flow-col gap-3"
-        (header style: "w-inherit h-content flow-row font-sans font-normal text-xs text-neutral-300"
-          "Showing " ^begin ".." ^end " out of " ^total)
-        (list style: "w-inherit h-content flow-col text-sm font-mono font-text text-neutral-200 gap-2"
-          (^*part names 0 ..= -1))))
     WWML
 
     SUGGESTION_LIST_TEMPLATE = ML.term <<-WWML
     (box style: "floating z-10 dt-8 border border-neutral-600 bg-neutral-800 rounded p-3"
-      (main style: "min-w-sm h-content flow-col gap-3"
-        (header style: "w-inherit h-content flow-row font-sans font-normal text-xs text-neutral-300"
+      (main style: "content min-w-xs max-w-md flow-col gap-3"
+        (header style: "w-max h-content flow-row font-sans font-normal text-xs text-neutral-300"
           "Showing " ^begin ".." ^end " out of " ^total)
-        (group style: "w-inherit h-content flow-row fr"
+        (group style: "w-max h-content flow-row fr"
           (list style: "w-fr h-content flow-col text-sm font-mono font-text text-neutral-200 gap-2"
-            (^*part names 0 ..= -1))
-          (scroll style: "w-2 h-max pr-1"
-            ((self translate) y: (* ^scroll-offset) style: "max"
-              ((self rect/outline) style: "max border bg-neutral-600 rounded-sm" max-h: (* ^scroll-height)))))))
+            (^*paste names 0 ..= -1))
+          (^if (< scroll-offset 1)
+            (scroll style: "w-2 h-max pr-1"
+              ((self translate) y: (* ^scroll-offset) style: "max"
+                ((self rect/outline) style: "max border bg-neutral-600 rounded-sm" max-h: (* ^scroll-height))))))))
     WWML
 
     # FIXME: this does not belong here
@@ -218,7 +213,7 @@ module DocR
 
           unit = Term.of(:group, cursor_unit, suggestion_unit, style: "content flow-none")
 
-          continue unless block = DocR.block?(unit)
+          continue unless block = D7VR.block?(unit, term)
 
           postfixed(block, postfix)
         end
@@ -231,24 +226,18 @@ module DocR
           total = above.size + visible.size + below.size
           names = visible.items.map { |(name, _)| name }
 
-          if total == visible.size
-            suggestion_vars = Term[begin: b, end: e, total: total, names: names]
-            suggestion_unit = Alloy.render(suggestion_vars, SUGGESTION_LIST_NOSCROLL_TEMPLATE)
-          else
-            suggestion_vars = Term[
+          suggestion_vars = Term[
               begin: b,
               end: e,
               total: total,
               names: names,
               "scroll-offset": b / total,
               "scroll-height": visible.size / total,
-            ]
-            suggestion_unit = Alloy.render(suggestion_vars, SUGGESTION_LIST_TEMPLATE)
-          end
-
+           ]
+          suggestion_unit = Alloy.render(suggestion_vars, SUGGESTION_LIST_TEMPLATE)
           unit = Term.of(:group, cursor_unit, suggestion_unit, style: "content flow-none")
 
-          continue unless block = DocR.block?(unit)
+          continue unless block = D7VR.block?(unit, term)
 
           postfixed(block, postfix)
         end
@@ -256,23 +245,16 @@ module DocR
         matchpi %{(lhs_string | rhs_string (_*) @user ¦ _ suggestions_: (suggestions/group prefix←(_*) suffix←((head_string body_string) _*)))} do
           cursor_unit = Alloy.render(Term[lhs: lhs, rhs: rhs], CURSOR_TEMPLATE)
 
-          if prefix.empty? && suffix.size == 1
-            suggestion_unit = Alloy.render(Term[
-              head: Cursor.highlighted(head.to(String)),
-              body: Cursor.highlighted(body.to(String)),
-            ], SUGGESTION_MEMBER_TEMPLATE)
-          else
-            suggestion_unit = Alloy.render(Term[
-              head: Cursor.highlighted(head.to(String)),
-              body: Cursor.highlighted(body.to(String)),
-              current: prefix.size + 1, # start from one
-              total: prefix.size + suffix.size,
-            ], SUGGESTION_MEMBER_ONEOF_TEMPLATE)
-          end
+          suggestion_unit = Alloy.render(Term[
+            head: Cursor.highlighted(head.to(String)),
+            body: Cursor.highlighted(body.to(String)),
+            current: prefix.size + 1, # start from one
+            total: prefix.size + suffix.size,
+          ], SUGGESTION_GROUP_TEMPLATE)
 
           unit = Term.of(:group, cursor_unit, suggestion_unit, style: "content flow-none")
 
-          continue unless block = DocR.block?(unit)
+          continue unless block = D7VR.block?(unit, term)
 
           postfixed(block, postfix)
         end
@@ -280,7 +262,7 @@ module DocR
         matchpi %{[lhs_string | rhs_string (_*) @user]} do
           unit = Alloy.render(Term[lhs: lhs, rhs: rhs], CURSOR_TEMPLATE)
 
-          continue unless block = DocR.block?(unit)
+          continue unless block = D7VR.block?(unit, term)
 
           postfixed(block, postfix)
         end
@@ -326,7 +308,7 @@ module DocR
           # If content is not a string Microfold will take care of it and
           # convert it to string!
 
-          continue unless block = DocR.block?(node)
+          continue unless block = D7VR.block?(node, term)
 
           postfixed(block, postfix)
         end
@@ -341,7 +323,7 @@ module DocR
             )
           )
 
-          continue unless block = DocR.block?(node)
+          continue unless block = D7VR.block?(node, term)
 
           postfixed(block, postfix)
         end
@@ -437,15 +419,28 @@ module DocR
     document1
   end
 
-  def pptree(document : Term::Dict, *, aligned : Bool = true) : Term
+  def ppcode(term : Term) : Term
+    ctx = DisplayContext.new(60, 120)
+    tree = ctx.features.call(ctx, term, "")
+    flat, _ = flatten(ctx, tree)
+    flat
+  end
+
+  def ppnode(node : Term, document : Term::Dict) : Term
+    chain = ML::Display::MAIN_CHAIN.prepend(Button.new, Comment.new, Cursor.new, Unit.new(document), TextNode.new(document))
+    ctx = DisplayContext.new(60, 120, features: chain)
+    tree = ctx.features.call(ctx, node, "")
+    flat, _ = flatten(ctx, tree)
+    flat
+  end
+
+  def ppdoc(document : Term::Dict) : Term
     ppin = pipe(document, visible, annotated)
-
-    chain = ML::Display::MAIN_CHAIN.prepend(Button.new, Comment.new, Cursor.new, Unit.new, TextNode.new(document))
-
+    chain = ML::Display::MAIN_CHAIN.prepend(Button.new, Comment.new, Cursor.new, Unit.new(document), TextNode.new(document))
     ctx = DisplayContext.new(60, 120, features: chain)
     # FIXME: handle empty document
-    if aligned && !ppin.empty?
-      tree = LayoutSet::All.thunk(Term.of(ppin), "", aligned ? LayoutSet::DictAligned : LayoutSet::All)
+    if !ppin.empty?
+      tree = LayoutSet::All.thunk(Term.of(ppin), "", LayoutSet::DictAligned)
     else
       tree = chain.call(ctx, Term.of(ppin), "")
     end
@@ -462,6 +457,8 @@ module DocR
 
     Term.of(ugroup)
   end
+
+  # TODO: memoize
 
   # Converts the given pretty-print tree *pptree* into a Microfold unit.
   def unit(pptree : Term, style = "") : Term
@@ -516,7 +513,7 @@ module DocR
     end
   end
 
-  def block?(unit : Term) : Term?
+  def block?(unit : Term, source : Term) : Term?
     rem = Term[16] # ?!
 
     uir = Microfold.uir(Microfold::SPEC, unit, rem: rem)
@@ -533,19 +530,35 @@ module DocR
         end
       end
 
-      # If we do not know its size, leave it to the UI context.
-      #
-      # TODO: UI breaks if we do not know the size within the UI context as well,
-      # we must have some kind of backtracking to return to this decision point
-      # in that case!!!
+      # If we do not know its size, leave it to the UI context. Note how we wrap
+      # the unit in a fallback node.
       otherwise do
-        Term.of(:"block/floating", unit)
+        Term.of(:"block/floating", Term.of({:self, :fallback}, unit, source: source, rem: rem))
       end
     end
   end
 
-  def view(document : Term::Dict, *, aligned : Bool = true) : Term
-    pipe(document, DocR.pptree(aligned: aligned), DocR.unit)
+  # Renders an arbitrary *term* as D7VR by showing it in its code form
+  # (i.e. no fancy visuals such as buttons, cursor, etc.)
+  def of_term(term : Term) : Term
+    pipe(term, D7VR.ppcode, D7VR.unit)
+  end
+
+  # Renders the given *node* that belongs to *document* as D7VR.
+  def of_document_node(document : Term::Dict, node : Term) : Term
+    pipe(node, D7VR.ppnode(document), D7VR.unit)
+  end
+
+  # Renders the given *document* as D7VR.
+  def of_document(document : Term::Dict) : Term
+    pipe(document, D7VR.ppdoc, D7VR.unit)
+  end
+
+  # Converts *d7vr* into UIR using `Microfold`.
+  #
+  # You can obtain *d7vr* using `code`, `node`, or `document`.
+  def to_uir(d7vr : Term, *, rem : Term::Num) : Term
+    Microfold.uir(Microfold::SPEC, d7vr, rem: rem)
   end
 end
 
@@ -666,7 +679,7 @@ class Document
 
   # Draws the document.
   private def draw : Nil
-    drawable = DocR.view(@document)
+    drawable = D7VR.of_document(@document)
 
     @view.set(drawable.as_d, :relaxed)
   end
@@ -729,9 +742,9 @@ class Document
   # *id* is usually a big number, the hash of the relevant pieces of identity
   # of the target element.
   #
-  # See also: `DocR.ref`.
+  # See also: `D7VR.ref`.
   private def click(id : Term) : Nil
-    @document = DocR.ref(@document, id) do |target|
+    @document = D7VR.ref(@document, id) do |target|
       Term.of_case(target) do
         matchpi(
           %{[button _ to @_ (_*)]},
@@ -784,11 +797,16 @@ demo = ML.dict <<-WWML
 (h5 "Heading 5")
 (h6 "Heading 6")
 (text "Simple text")
-(hr style: "min-w-lg")
+(hr)
 (text "Show counter using text:")
-(hr style: "min-w-lg")
+(hr)
 (text @count style: "text-xl font-bold text-green-500")
-(hr style: "min-w-lg")
+(hr)
+
+(unit group style: "content bg-neutral-800 gap-5 p-5 flow-col"
+  (h1 @count)
+  (button "Increment" as 1 to @deltas ())
+  (button "Decrement" as -1 to @deltas ()))
 
 (unit group style: "content flow-col gap-5 bg-neutral-800 p-5"
   (unit group style: "w-max h-content center-x"
@@ -808,53 +826,32 @@ demo = ML.dict <<-WWML
 WWML
 
 seed = ML.dict <<-WWML
-;; (comment
-;;   "Welcome to µsoma, a GUI for Wirewright"
-;;   ""
-;;   "µsoma to Wirewright is roughly what a web browser is to the Internet."
-;;   ""
-;;   "You're looking at a *self-embodied program*. Well, sort of — it only contains one comment right now. Hit left/right arrow to see for yourself. Or type `;;` and write your own!"
-;;   ""
-;;   "Try typing the following:"
-;;   ""
-;;   "  (cell 0 @count)"
-;;   "  (button \\"Increment\\" as 1 to @deltas ())"
-;;   "  (button \\"Decrement\\" as -1 to @deltas ())"
-;;   "  (transform @deltas to @counts with @count (+ count _))"
-;;   "  (latest @counts @count)"
-;;   ""
-;;   "Click on the buttons and see what happens! :^)"
-;;   ""
-;;   "- Drag on empty/non-clickable space to pan around if something overflows."
-;;   "- Hit Enter to escape from a pair."
-;;   "- Hit F2 to replace this document with a more sophisticated demo."
-;;   "- Hit Ctrl-Backspace to remove this comment (and any *node* before the cursor in general)."
-;;   "- Play! The semi-readable implementation of this editor is in `editor.soma.wwml`; check it out for key bindings & what they do"
-;;   "- Take a look at D7 tests: `delta7.test.wwml`. Plenty of examples there.")
+(unit group style: "w-max h-content flow-col gap-3 max-w-3xl"
+  (h1 "Welcome to µsoma, a GUI for Wirewright!")
+  (hr style: "bg-neutral-600")
+  (unit group style: "w-max h-content flow-col gap-3 text-neutral-300"
+    (text "µsoma to Wirewright is roughly what a web browser is to the Internet." style: "w-max text-sm")
+    (text "You're looking at a *self-embodied program*. Well, sort of — it only contains some text nodes right now. Hit left/right arrow to see for yourself." style: "w-max text-sm")
+    (text "Try typing the following:" style: "w-max text-sm")
+    (codebox style: "w-max text-sm rounded"
+      "(h1 @count)
+       (cell 0 @count)
+       (button \\"Increment\\" as 1 to @deltas ())
+       (button \\"Decrement\\" as -1 to @deltas ())
+       (transform @deltas to @counts with @count (+ count _))
+       (latest @counts @count)")
+    (text "Click on the buttons and see what happens! :^)" style: "w-max text-sm")
+    (unit ul style: "w-max h-content flow-col gap-1 pl-3"
+      (text "- Drag on empty/non-clickable space to pan around if something overflows." style: "w-max text-sm")
+      (text "- Hit Enter to escape from a pair." style: "w-max text-sm")
+      (text "- Hit F2 to replace this document with a more sophisticated demo." style: "w-max text-sm")
+      (text "- Hit Ctrl-Backspace to remove this comment (and any *node* before the cursor in general)." style: "w-max text-sm")
+      (text "- Play! The semi-readable implementation of this editor is in `editor.soma.wwml`; check it out for key bindings & what they do" style: "w-max text-sm")
+      (text "- Take a look at D7 tests: `delta7.test.wwml`. Plenty of examples there." style: "w-max text-sm"))))
 
 ("" | "" () @user)
 
 WWML
-
-# libsfml
-# gmp
-# pcre2
-# freetype
-#   harfbuzz
-#   graphite2
-#   brotli
-# x11
-# xrandr
-# xcursor
-# xi
-# udev
-# opengl
-# flac
-# ogg
-# vorbis
-# vorbisenc
-# vorbisfile
-# pthread
 
 doc = Document.new
 doc.send(Term.of(:open, seed))

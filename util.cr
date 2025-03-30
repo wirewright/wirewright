@@ -1050,6 +1050,13 @@ struct Queue(T)
 end
 
 class String
+  def li(*, bullet = "*", indent = 0, ws = ' ') : String
+    String.build(indent * ws.bytesize + bullet.bytesize + ' '.bytesize + bytesize) do |io|
+      indent.times { io << ws }
+      io << bullet << ' ' << self
+    end
+  end
+
   def present? : Bool
     !empty?
   end
@@ -2455,6 +2462,51 @@ end
 
 def oklch(l : Float64, c : Float64, h : Float64)
   Oklch.to_rgb(l*100, c, h)
+end
+
+# FIFO fixed-capacity cache.
+#
+# TODO: this will obviously "leak" memory, in the sense that it keeps
+# pointers to K/V, and thus very large caches will keep in memory something
+# that may have been collected by the GC already. We need a WeakRef impl
+# of this, but as far as I understand, Hash based stuff is very clumsy with
+# WeakRef; so we'll probably have to consider a hand-written HAMT based solution.
+# But then finding the node to delete would be clumsy. We can do it as HAMT to
+# map key to index + Binary Tree but this requires balancing in any case if we
+# want some kind of order -- which is tough...
+struct SyncCache(K, V)
+  def initialize(@capacity : Int32, *, preallocate : Bool, byref : Bool = false)
+    if preallocate
+      @data = Hash(K, V).new(initial_capacity: @capacity)
+    else
+      @data = {} of K => V
+    end
+    @data.compare_by_identity if byref
+    @lock = Mutex.new
+  end
+
+  def fetch?(key : K, &) : {Bool, V}
+    if value = @lock.synchronize { @data[key]? }
+      return true, value
+    end
+
+    value = yield
+
+    @lock.synchronize do
+      if @data.size > @capacity
+        @data.delete(@data.first_key)
+      end
+      @data[key] = value
+    end
+
+    {false, value}
+  end
+
+  def fetch(key : K, &) : V
+    _, value = fetch?(key) { yield }
+
+    value
+  end
 end
 
 module IStack(T)

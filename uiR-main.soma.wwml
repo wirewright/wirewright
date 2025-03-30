@@ -6,12 +6,16 @@
 ;; GENERAL
 
 ;; Learn the content width/height from a single child.
-((%not w-compare viewport) {¦ content-w: w_number} ¦ _ -content-w: W) <> {W: →w}
-((%not h-compare viewport) {¦ content-h: h_number} ¦ _ -content-h: H) <> {H: →h}
+((%not x-expand viewport) {¦ content-w: w_number} ¦ _ -content-w: W) <> {W: →w}
+((%not y-expand viewport) {¦ content-h: h_number} ¦ _ -content-h: H) <> {H: →h}
 
 ;; Propagate max-w/h if I know my max-w/h and I am w/h: max.
 (_ {¦ -max-w: w} ¦ _ w: max max-w: W_number) <> {w: →W}
 (_ {¦ -max-h: h} ¦ _ h: max max-h: H_number) <> {h: →H}
+
+;; Fallback nodes adopt their w/h from their children.
+(fallback {¦ w_} ¦ _ -w: W) <> {W: →w}
+(fallback {¦ h_} ¦ _ -h: H) <> {H: →h}
 
 ;; Propagate fractional max-w/h
 (_ {¦ max-w_: (* frac←(%number 0 < _ < 1))} ¦ _ w: max max-w: W_number)
@@ -20,8 +24,8 @@
   <> {max-h: $(ceil (* →H →frac))}
 
 ;; Propagate my content-w/h as max-w/h of children if I am w/h: content.
-(_ {¦ -max-w: w} ¦ _ w: content content-w: W_number) <> {w: →W}
-(_ {¦ -max-h: h} ¦ _ h: content content-h: H_number) <> {h: →H}
+(_ {¦ w: max -max-w: w} ¦ _ w: content content-w: W_number) <> {w: →W}
+(_ {¦ h: max -max-h: h} ¦ _ h: content content-h: H_number) <> {h: →H}
 
 ;; Set final-w/h according to w/h.
 {¦ w: content content-w_number -final-w_} <> {final-w: →content-w}
@@ -44,49 +48,70 @@
 (rect ¦ _ h: max max-h_number -content-h_) <> {content-h: →max-h}
 
 ;; Inherit w/h
-(%all ⟨{¦ w_: inherit}⟩° {¦ w: W←(%any content max)}) <> {w: →W}
-(%all ⟨{¦ h_: inherit}⟩° {¦ h: H←(%any content max)}) <> {h: →H}
+;; (%all ⟨{¦ w_: inherit}⟩° {¦ w: W←(%any content max)}) <> {w: →W}
+;; (%all ⟨{¦ h_: inherit}⟩° {¦ h: H←(%any content max)}) <> {h: →H}
 
 ;; NODE: text
 
-(backmap
-  (text caption_string ¦ _
-    w: content
-    h: (%any max content)
-    -content-w_
-    -content-h_
-    font_string
-    leading_number
-    weight_: (%any 100 200 300 400 450 500 600 700 800 900)
-    size_: (%number u8))
-  {content-w: $(value (measure →caption →font →weight →size →leading) width),
-   content-h: $(value (measure →caption →font →weight →size →leading) height)})
+(text _string ¦ _ font: _string weight: (%any 100 200 300 400 450 500 600 700 800 900) size: (%number u8) leading: _number -state_)
+  <> {state: width-unknown}
 
-(backmap
-  (text caption_string ¦ _
-    w_: max
-    h: content
-    max-w_
-    font_string
-    leading_number
-    weight_: (%any 100 200 300 400 450 500 600 700 800 900)
-    size_: (%number u8))
-  {w: content,
-   caption: $'(wrap →caption →font →weight →size →leading max-w: →max-w)})
+(text caption_ ¦ _ font_ weight_ size_ leading_ state_: width-unknown -content-w_)
+  <> {content-w: $(value (measure →caption →font →weight →size →leading) width),
+      state: height-unknown}
 
-(backmap
-  (text caption_string ¦ _
-    w_: max
-    h_: max
-    max-w_
-    max-h_
-    font_string
-    leading_number
-    weight_: (%any 100 200 300 400 450 500 600 700 800 900)
-    size_: (%number u8))
-  {w: content,
-   h: content,
-   caption: $'(wrap →caption →font →weight →size →leading max-w: →max-w max-h: →max-h)})
+(text _ ¦ _ w: content state_: height-unknown)
+  <> {state: height-measurable}
+
+;; Wrap caption at max-w if w: max once max-w is known, and transition
+;; to measurable.
+(text caption_ ¦ _ font_ weight_ size_ leading_ state_: height-unknown w: max max-w_number)
+  <> {caption: $'(wrap →caption →font →weight →size →leading max-w: →max-w),
+      state: height-measurable}
+
+;; Compute content-h once in state: height-measurable.
+(text caption_ ¦ _ font_ weight_ size_ leading_ state_: height-measurable -content-h_)
+  <> {content-h: $(value (measure →caption →font →weight →size →leading) height),
+      state: fully-measured}
+
+;; (backmap
+;;   (text caption_string ¦ _
+;;     w: content
+;;     h: (%any max content)
+;;     -content-w_
+;;     -content-h_
+;;     font_string
+;;     leading_number
+;;     weight_: (%any 100 200 300 400 450 500 600 700 800 900)
+;;     size_: (%number u8))
+;;   {content-w: $(value (measure →caption →font →weight →size →leading) width),
+;;    content-h: $(value (measure →caption →font →weight →size →leading) height)})
+;;
+;; (backmap
+;;   (text caption_string ¦ _
+;;     w_: max
+;;     h: content
+;;     max-w_
+;;     font_string
+;;     leading_number
+;;     weight_: (%any 100 200 300 400 450 500 600 700 800 900)
+;;     size_: (%number u8))
+;;   {w: content,
+;;    caption: $'(wrap →caption →font →weight →size →leading max-w: →max-w)})
+;;
+;; (backmap
+;;   (text caption_string ¦ _
+;;     w_: max
+;;     h_: max
+;;     max-w_
+;;     max-h_
+;;     font_string
+;;     leading_number
+;;     weight_: (%any 100 200 300 400 450 500 600 700 800 900)
+;;     size_: (%number u8))
+;;   {w: content,
+;;    h: content,
+;;    caption: $'(wrap →caption →font →weight →size →leading max-w: →max-w max-h: →max-h)})
 
 ;; NODE: padding
 
@@ -136,6 +161,38 @@
 ;; is preserved.
 
 (floating _ ¦ _ -content-w_ -content-h_) <> {content-w: 0, content-h: 0}
+
+;; NODE: x-expand
+
+;; If w: max then x-expand shouldn't be the one to define max-w, but rather, it
+;; should be the passing-down rule (i.e. x-expand's child will inherit max-w from
+;; w: max x-expand which in turn will inherit its max-w from its parent).
+(x-expand {¦ content-w_number -max-w_} ¦ _ w: content min-w_number)
+  <> {max-w: $'(max →content-w →min-w)}
+
+;; If x-expand knows max-w but it's w: content then make use of max-w to have an
+;; upper bound on the width of the child.
+(x-expand {¦ content-w_number -max-w_} ¦ _ w: content min-w_number max-w_number)
+  <> {max-w: $(min (max →content-w →min-w) →max-w)}
+
+;; Compute content-w of x-expand based on the determined max-w of the child.
+(x-expand {¦ max-w_number} ¦ _ -content-w: W) <> {W: →max-w}
+
+;; NODE: y-expand
+
+;; If h: max then y-expand shouldn't be the one to define max-h, but rather, it
+;; should be the passing-down rule (i.e. y-expand's child will inherit max-h from
+;; h: max y-expand which in turn will inherit its max-h from its parent).
+(y-expand {¦ content-h_number -max-h_} ¦ _ h: content min-h_number)
+  <> {max-h: $'(max →content-h →min-h)}
+
+;; If y-expand knows max-h but it's h: content then make use of max-h to have an
+;; upper bound on the height of the child.
+(y-expand {¦ content-h_number -max-h_} ¦ _ h: content min-h_number max-h_number)
+  <> {max-h: $(min (max →content-h →min-h) →max-h)}
+
+;; Compute content-h of y-expand based on the determined max-h of the child.
+(y-expand {¦ max-h_number} ¦ _ -content-h: H) <> {H: →max-h}
 
 ;; NODE: x-stack
 

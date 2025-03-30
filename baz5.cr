@@ -129,7 +129,7 @@ private def splice(dict : Term::Dict, splices : Array({Term::Num, Term::Dict}))
 end
 
 # :nodoc:
-def itemsR(ctx0, term, successor) : Rewrite::Any
+def itemsR(ctx0, term, successor, start : Int32) : Rewrite::Any
   unless dict0 = term.as_d?
     return Rewrite.none
   end
@@ -139,7 +139,7 @@ def itemsR(ctx0, term, successor) : Rewrite::Any
   dict1 = dict0.transaction do |commit|
     # We **must** call successor in proper order due to observers which are only
     # capable of doing one backpath-insert at a time.
-    (0...dict0.itemsize).reverse_each do |index|
+    (start...dict0.itemsize).reverse_each do |index|
       item = dict0[index]
 
       ctx1 = ctx0.backpath &.update_value(index)
@@ -170,9 +170,12 @@ def itemsR(ctx0, term, successor) : Rewrite::Any
 end
 
 # Rewrites the itemspart of a dictionary using *successor*.
-def itemsR(successor : Rewriter) : Rewriter
+#
+# *start* specifies which item should be considered the first. If the
+# dictionary contains less items than that, it won't be rewritten.
+def itemsR(successor : Rewriter, *, start : Int32 = 0) : Rewriter
   Rewriter.new do |ctx, staging|
-    staging.reduce { |term| itemsR(ctx, term, successor) }
+    staging.reduce { |term| itemsR(ctx, term, successor, start) }
   end
 end
 
@@ -450,13 +453,15 @@ def selR(selector : Term, successor : Rewriter) : Rewriter
   selR(M1.operator(selector), successor)
 end
 
+SELR_SELECTOR_CACHE = SyncCache(String, Term).new(1024, preallocate: true, byref: true)
+
 # See the main overload (`Term`) for more info.
 def selR(selector : String, successor : Rewriter) : Rewriter
-  selR(ML.term(selector), successor)
+  selR(SELR_SELECTOR_CACHE.fetch(selector) { ML.term(selector) }, successor)
 end
 
 # Generates a `choiceR` with more than two branches for you to reduce typing.
-def switchR(branches : Enumerable({Term, Rewriter}) | Enumerable({M1::Operator::Any, Rewriter})) : Rewriter
+def switchR(branches : Enumerable({String, Rewriter}) | Enumerable({Term, Rewriter}) | Enumerable({M1::Operator::Any, Rewriter})) : Rewriter
   choice = nil
 
   branches.each do |selector, successor|
@@ -468,13 +473,8 @@ def switchR(branches : Enumerable({Term, Rewriter}) | Enumerable({M1::Operator::
 end
 
 # :ditto:
-def switchR(*branches : {Term, Rewriter} | {M1::Operator::Any, Rewriter})
+def switchR(*branches : {String, Rewriter} | {Term, Rewriter} | {M1::Operator::Any, Rewriter})
   switchR(branches)
-end
-
-# :ditto:
-def switchR(*branches : {String, Rewriter})
-  switchR(branches.map { |selector, rewriter| {ML.term(selector), rewriter} })
 end
 
 # Rewrites a term using *successor*; if that produces no change and the term is
@@ -1033,53 +1033,53 @@ def multipartR(schema : Term | String, successors : Enumerable({Term, Rewriter})
   multipartR(schema, successors, schema)
 end
 
-# Includers can be used as memoization tables for `memoR`.
-module IMemo
-  # Returns the rewrite for *key*, and a boolean indicating whether the rewrite
-  # was loaded from cache. Uses the block to perform the rewrite if missing.
-  abstract def fetch(key : Term, & : -> Rewrite::Any) : {Bool, Rewrite::Any}
-end
+# # Includers can be used as memoization tables for `memoR`.
+# module IMemo
+#   # Returns the rewrite for *key*, and a boolean indicating whether the rewrite
+#   # was loaded from cache. Uses the block to perform the rewrite if missing.
+#   abstract def fetch(key : Term, & : -> Rewrite::Any) : {Bool, Rewrite::Any}
+# end
 
-# Default implementation of `IMemo`. Synchronous. Uses a reentrant lock to
-# protect the cache.
-struct SyncMemo
-  include IMemo
+# # Default implementation of `IMemo`. Synchronous. Uses a reentrant lock to
+# # protect the cache.
+# struct SyncMemo
+#   include IMemo
 
-  def initialize(@capacity : Int32, *, preallocate : Bool)
-    if preallocate
-      @data = Hash(Term, Rewrite::Any).new(initial_capacity: @capacity)
-    else
-      @data = {} of Term => Rewrite::Any
-    end
-    @lock = Mutex.new(:reentrant)
-  end
+#   def initialize(@capacity : Int32, *, preallocate : Bool)
+#     if preallocate
+#       @data = Hash(Term, Rewrite::Any).new(initial_capacity: @capacity)
+#     else
+#       @data = {} of Term => Rewrite::Any
+#     end
+#     @lock = Mutex.new(:reentrant)
+#   end
 
-  def fetch(key : Term, & : -> Rewrite::Any) : {Bool, Rewrite::Any}
-    @lock.synchronize do
-      existed = true
-      value = @data.put_if_absent(key) do
-        existed = false
-        yield
-      end
+#   def fetch(key : Term, & : -> Rewrite::Any) : {Bool, Rewrite::Any}
+#     @lock.synchronize do
+#       existed = true
+#       value = @data.put_if_absent(key) do
+#         existed = false
+#         yield
+#       end
 
-      if @data.size > @capacity
-        @data.delete(@data.first_key)
-      end
+#       if @data.size > @capacity
+#         @data.delete(@data.first_key)
+#       end
 
-      {existed, value}
-    end
-  end
-end
+#       {existed, value}
+#     end
+#   end
+# end
 
 # A very simple memoizer for the *successor* rewriter.
 #
 # Must be put in "strategic" and, more importantly, *context-independent* places.
 # This usually means some kind of "master recursive step" somewhere in the rewriter
 # circuit.
-def memoR(memo : IMemo, successor : Rewriter) : Rewriter
+def memoR(memo : SyncCache(Term, Rewrite::Any), successor : Rewriter) : Rewriter
   Rewriter.new do |ctx, staging|
     staging.reduce do |term|
-      existed, rewrite = memo.fetch(term) { successor.call(ctx, Rewrite.one(term)) }
+      existed, rewrite = memo.fetch?(term) { successor.call(ctx, Rewrite.one(term)) }
       if existed
         ctx.observable(rewrite) { "loaded from cache" }
       end
