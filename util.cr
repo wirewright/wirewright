@@ -642,7 +642,7 @@ class Stack(T)
     @stack[@size]
   end
 
-  def pop
+  def pop : T
     pop? || raise IndexError.new
   end
 
@@ -2455,4 +2455,18 @@ end
 
 def oklch(l : Float64, c : Float64, h : Float64)
   Oklch.to_rgb(l*100, c, h)
+end
+
+module IStack(T)
+  abstract def empty? : Bool
+  abstract def push(object : T)
+  abstract def pop : T
+end
+
+class Array(T)
+  include IStack(T)
+end
+
+class Stack(T)
+  include IStack(T)
 end

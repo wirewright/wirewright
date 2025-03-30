@@ -5,7 +5,12 @@ struct Ww::Term
     end
 
     # :nodoc:
-    def initialize(@matchee : Term, @env = Term[], @stats : CaseStatistics? = nil)
+    def initialize(
+      @matchee : Term,
+      @env = Term[],
+      @stats : CaseStatistics? = nil,
+      @patterns : IStack(String)? = nil,
+    )
     end
 
     # :nodoc:
@@ -15,6 +20,11 @@ struct Ww::Term
 
     # :nodoc:
     PATTERN_TERM_CACHE = Pf::Cache(UInt32, Term).new
+
+    # :nodoc:
+    def reflect(ml : String) : Nil
+      @patterns.try &.push(ml)
+    end
 
     # :nodoc:
     def match?(pid : UInt32, pattern : -> Term, cue cues = Tuple.new, default = nil, &)
@@ -108,6 +118,7 @@ struct Ww::Term
     macro matchp(ml, **kwargs, &block)
       {% location = "#{ml.filename.id}:#{ml.line_number}:#{ml.column_number}" %}
 
+      reflect({{ml}})
       match!(->{ ::Ww::ML.term({{ml}}) }, location: {{location}}, {{kwargs.double_splat}}) {{block}}
     end
 
@@ -121,6 +132,7 @@ struct Ww::Term
       {% captures = ml.scan(::Ww::Term::CaseContext::RE_CAPTURES).map { |match| (match[1] || match[2]).id.symbolize }.uniq %}
       {% location = "#{ml.filename.id}:#{ml.line_number}:#{ml.column_number}" %}
 
+      reflect({{ml}})
       match!(-> { ::Ww::ML.term({{ml}}) }, icaps: [{{captures.splat}}] of ::NoReturn, location: {{location}}, {{kwargs.double_splat}}) {{block}}
     end
 
@@ -136,6 +148,7 @@ struct Ww::Term
     macro givenp(ml, **kwargs, &block)
       {% location = "#{ml.filename.id}:#{ml.line_number}:#{ml.column_number}" %}
 
+      reflect({{ml}})
       match!(-> { ::Ww::ML.terms({{ml}}) }, location: {{location}}, {{kwargs.double_splat}}) {{block}}
     end
 
@@ -147,6 +160,7 @@ struct Ww::Term
       {% captures = ml.scan(::Ww::Term::CaseContext::RE_CAPTURES).map { |match| (match[1] || match[2]).id.symbolize }.uniq %}
       {% location = "#{ml.filename.id}:#{ml.line_number}:#{ml.column_number}" %}
 
+      reflect({{ml}})
       match!(-> { ML.terms({{ml}}) }, icaps: [{{captures.splat}}] of ::NoReturn, location: {{location}}, {{kwargs.double_splat}}) {{block}}
     end
 
