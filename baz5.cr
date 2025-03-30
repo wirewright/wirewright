@@ -250,6 +250,28 @@ def chainR(a : Rewriter, b : Rewriter, *cs : Rewriter) : Rewriter
 end
 
 # :nodoc:
+def allR(ctx : RewriterContext, term : Term, a : Rewriter, b : Rewriter)
+  unless lhs = a.call(ctx, Rewrite.one(term)).as?(Rewrite::Some)
+    return Rewrite.none
+  end
+
+  b.call(ctx, lhs)
+end
+
+# Similar to `chainR`, but rewrites to the last successful rewrite
+# (i.e. skipping all rewriters past the one that failed, if any).
+def allR(a : Rewriter, b : Rewriter) : Rewriter
+  Rewriter.new do |ctx, staging|
+    staging.reduce { |term| allR(ctx, term, a, b) }
+  end
+end
+
+# :ditto:
+def allR(a : Rewriter, b : Rewriter, *cs : Rewriter) : Rewriter
+  allR(allR(a, b), *cs)
+end
+
+# :nodoc:
 def choiceR(ctx : RewriterContext, term : Term, a : Rewriter, b : Rewriter)
   lhs = a.call(ctx, Rewrite.one(term))
   lhs.as?(Rewrite::Some) || b.call(ctx, Rewrite.one(term))
@@ -265,6 +287,11 @@ end
 # :ditto:
 def choiceR(a : Rewriter, b : Rewriter, *cs) : Rewriter
   choiceR(choiceR(a, b), *cs)
+end
+
+# :ditto:
+def choiceR(a : Rewriter) : Rewriter
+  a
 end
 
 # Rewrites entries of a dictionary (items and pairs) using *successor*.
@@ -401,7 +428,7 @@ end
 def selR(ctx, term, selector, successor)
   if env = M1::Operator.match?(Term[], selector, term)
     if rewritee = env[:rewritee]?
-      return successor.call(ctx, Rewrite.one(rewritee))
+      return successor.call(ctx, Rewrite.one(rewritee)).as?(Rewrite::Some) || Rewrite.one(rewritee)
     end
   end
 
@@ -1049,7 +1076,7 @@ end
 # Must be put in "strategic" and, more importantly, *context-independent* places.
 # This usually means some kind of "master recursive step" somewhere in the rewriter
 # circuit.
-def memoR(memo : IMemo, successor : Rewriter)
+def memoR(memo : IMemo, successor : Rewriter) : Rewriter
   Rewriter.new do |ctx, staging|
     staging.reduce do |term|
       existed, rewrite = memo.fetch(term) { successor.call(ctx, Rewrite.one(term)) }
@@ -1057,6 +1084,17 @@ def memoR(memo : IMemo, successor : Rewriter)
         ctx.observable(rewrite) { "loaded from cache" }
       end
       rewrite
+    end
+  end
+end
+
+def cueR(cues : Enumerable(Term::Sym), successor : Rewriter) : Rewriter
+  Rewriter.new do |ctx, staging|
+    staging.reduce do |term|
+      next Rewrite.none unless dict = term.as_d?
+      next Rewrite.none unless cues.any? { |cue| dict.probably_includes?(cue) }
+
+      successor.call(ctx, Rewrite.one(term))
     end
   end
 end

@@ -19,6 +19,10 @@ PRIMITIVES = ProcRuleset.build do
     end
   end
 
+  rulepi1 %[(< a_number b_number)] do
+    a.unsafe_as_n < b.unsafe_as_n
+  end
+
   rulepi1 %[(> a_number b_number)] do
     a.unsafe_as_n > b.unsafe_as_n
   end

@@ -111,6 +111,10 @@ module Ww
       whole? && positive?
     end
 
+    def natural_nonzero? : Bool
+      natural? && !zero?
+    end
+
     # Returns `true` if this number is an integer.
     def whole? : Bool
       Kernel.integer?(@k)

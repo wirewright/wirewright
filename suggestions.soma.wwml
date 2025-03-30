@@ -236,3 +236,44 @@
   (pulse pin "source of (pattern_ backspec_) backmaps; pattern captures things of interest in the child, backspec defines what to replace them with")
   (literal value "passable child susceptible to mutation"))
 
+(group h1 "A purely visual node that displays as a massive header")
+
+(variant h1 (literal caption "text to show in the header (preferably a string)"))
+(variant h1 (const caption "cell from which to take the header's content"))
+
+(group h2 "A purely visual node that displays as a huge header")
+
+(variant h2 (literal caption "text to show in the header (preferably a string)"))
+(variant h2 (const caption "cell from which to take the header's content"))
+
+(group h3 "A purely visual node that displays as a large header")
+
+(variant h3 (literal caption "text to show in the header (preferably a string)"))
+(variant h3 (const caption "cell from which to take the header's content"))
+
+(group h4 "A purely visual node that displays as a medium header")
+
+(variant h4 (literal caption "text to show in the header (preferably a string)"))
+(variant h4 (const caption "cell from which to take the header's content"))
+
+(group h5 "A purely visual node that displays as a small header")
+
+(variant h5 (literal caption "text to show in the header (preferably a string)"))
+(variant h5 (const caption "cell from which to take the header's content"))
+
+(group h6 "A purely visual node that displays as a tiny header")
+
+(variant h6 (literal caption "text to show in the header (preferably a string)"))
+(variant h6 (const caption "cell from which to take the header's content"))
+
+(group text "A purely visual node that displays as plain text")
+
+(variant text (literal caption "text to show (preferably a string)"))
+(variant text (const caption "cell from which to take the text's content"))
+
+(node hr "A purely visual node that displays as a horizontal separator")
+
+(group codebox "A purely visual node that displays as a block of code")
+
+(variant codebox (literal code "code to show (preferably a string)"))
+(variant codebox (const code "cell from which to take the code to show"))

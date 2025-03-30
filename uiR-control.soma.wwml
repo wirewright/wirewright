@@ -1,0 +1,5 @@
+N←(w-compare A←{¦ final-w: w_number} ¦ _ pivot_number gt: B_)
+  <> {N: →$(if (< →w →pivot) B A)}
+
+N←(h-compare A←{¦ final-h: h_number} ¦ _ pivot_number gt: B_)
+  <> {N: →$(if (< →h →pivot) B A)}

@@ -56,13 +56,14 @@
 "h-content": {h: content}
 "content": (+ "w-content" "h-content")
 
+"w-inherit": {w: inherit}
+"h-inherit": {h: inherit}
+"inherit": (+ "w-inherit" "h-inherit")
+
 "w-fr": (+ "w-max" "fr-1")
 "h-fr": (+ "h-max" "fr-1")
 
 (nat "fr" N {fr: N_})
-
-"w-px": {w: max, max-w: 1}
-"h-px": {h: max, max-h: 1}
 
 "fr": {fractions: true}
 
@@ -93,8 +94,17 @@
 
 (nat "ring" (+ "ring-x" "ring-y"))
 
-(nat "w" N {w: max, max-w: (spacing N_)})
-(nat "h" N {h: max, max-h: (spacing N_)})
+"w-px": {w: content, content-w: 1}
+"h-px": {h: content, content-h: 1}
+
+(nat "w" N {w: content, content-w: (spacing N_)})
+(nat "h" N {h: content, content-h: (spacing N_)})
+
+"max-w-px": {w: max, max-w: 1}
+"max-h-px": {h: max, max-h: 1}
+
+(nat "max-w" N {w: max, max-w: (spacing N_)})
+(nat "max-h" N {h: max, max-h: (spacing N_)})
 
 "p-px": (+ "px-px" "py-px")
 "px-px": (+ "pl-px" "pr-px")
@@ -457,8 +467,17 @@ colors: {
 }
 
 defaults: {
-  p: "content font-sans text-base text-black font-text",
-  icon: "content font-icons text-base text-black font-normal",
-  code: "content font-mono text-base text-black font-text",
+  p: "content font-sans text-base text-neutral-400 font-text",
+  h1: "content font-sans text-5xl text-neutral-300 font-bold",
+  h2: "content font-sans text-3xl text-neutral-300 font-semibold",
+  h3: "content font-sans text-2xl text-neutral-300 font-medium",
+  h4: "content font-sans text-xl text-neutral-400 font-medium",
+  h5: "content font-sans text-sm text-neutral-400 font-medium",
+  h6: "content font-sans text-xs text-neutral-400 font-medium",
+  hr: "w-max h-content h-px py-1 bg-neutral-500",
+  icon: "content font-icons text-base text-neutral-400 font-normal",
+  code: "content font-mono text-base text-neutral-400 font-text",
+  codebox: "content font-mono text-base text-neutral-400 bg-neutral-950 p-2 font-text min-w-sm",
   button: "bg-neutral-700 hover:bg-blue-500 hover:cursor-pointer rounded-sm px-4 py-2 center text-sm text-neutral-50 content font-sans font-medium",
+  rect: "max bg-white",
 }

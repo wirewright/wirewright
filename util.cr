@@ -2021,6 +2021,10 @@ class Channel
 end
 
 struct Slice(T)
+  def self.with(*objects)
+    Slice(T).new(objects.size, read_only: true) { |index| objects[index].as(T) }
+  end
+
   def starts_with?(other : Slice(T)) : Bool
     size >= other.size && self[0...other.size] == other
   end

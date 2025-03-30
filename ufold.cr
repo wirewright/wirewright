@@ -259,267 +259,480 @@ module Microfold
   end
 
   # :nodoc:
-  record UnitContext,
-    spec : Term::Dict,
-    sheet : Term::Dict,
-    rem : Term::Num
+  record UnitContext, spec : Term::Dict, sheet : Term::Dict, rem : Term::Num, collapse : Bool, nested : Bool do
+    # Merges child output contexts *coctxs* into parent's output context
+    # originating from *ictx*.
+    #
+    # The principle is, if at least one child consumed a prop, it is removed
+    # from parent's octx.
+    def self.octx(ictx : UnitContext, coctxs : Enumerable(UnitContext)) : UnitContext
+      octx = ictx
 
-  # String and other non-dict children of units are displayed as text.
-  private def text_box(ctx : UnitContext, caption : Term::Str)
-    Term.of(:text, caption,
-      w: ctx.sheet[:w]?,
-      h: ctx.sheet[:h]?,
-      font: ctx.sheet[:font]?,
-      weight: ctx.sheet[:"font-weight"]?,
-      size: ctx.sheet[:"text-size"]?,
-      leading: ctx.sheet[:leading]?,
-      color: ctx.sheet[:"text-color"]?
-    )
+      ictx.sheet.each_entry do |key, value|
+        if coctxs.any? { |coctx| !key.in?(coctx.sheet) } # consumed
+          octx = octx.override(key, value: nil)
+        end
+      end
+
+      octx
+    end
+
+    def override(prop, value)
+      copy_with(sheet: sheet.with(prop, value))
+    end
+
+    def consume_some?(*props)
+      subctx = self
+      values = props.map do |prop|
+        value = subctx.sheet[prop]?
+        subctx = subctx.override(prop, value: nil)
+        value
+      end
+
+      return if values.none?
+
+      {subctx, *values}
+    end
+
+    def consume_all?(*props)
+      subctx = self
+      values = props.map do |prop|
+        return unless value = subctx.sheet[prop]?
+        subctx = subctx.override(prop, value: nil)
+        value
+      end
+
+      return if values.none?
+
+      {subctx, *values}
+    end
+
+    def consume(*props)
+      subctx = self
+      values = props.map do |prop|
+        value = subctx.sheet[prop]?
+        subctx = subctx.override(prop, value: nil)
+        value
+      end
+
+      {subctx, *values}
+    end
   end
 
-  # Interprets the children of a unit. A child can be a text box or another
-  # (nested) unit.
-  private def child_box(ctx : UnitContext, child : Term)
-    Term.case(child) do
-      matchpi %{_string} do
-        text_box(ctx, child.unsafe_as_s)
+  # Sits at the beginning/in the middle of a hierarchy, has a subbox.
+  module NodeBox
+    abstract def call(ctx : UnitContext, subject : Term, subbox : Hierarchy) : {UnitContext, Term}
+  end
+
+  # Sits at the bottom of a hierarchy, does not have a subbox.
+  module LeafBox
+    abstract def call(ctx : UnitContext, subject : Term) : {UnitContext, Term}
+  end
+
+  # Sits at the edge between the bottom of one hierarchy and the beginning
+  # of another, nested one (or some other kind of content; in fact, it is
+  # precisely the purpose of `BoxEdges` to determine whether to e.g. recurse
+  # or handle content otherwise).
+  module BoxEdge
+    abstract def call(ctx : UnitContext, child : Term) : {UnitContext, Term}
+  end
+
+  struct FloatingBox
+    include NodeBox
+
+    def call(ctx : UnitContext, subject : Term, subbox : Hierarchy) : {UnitContext, Term}
+      unless response = ctx.consume_some?(:floating)
+        return subbox.call(ctx, subject)
       end
 
-      # Note how we recurse here.
-      matchpi %{_dict} do
-        unit_box(ctx, child)
+      ictx, floating = response
+
+      if floating == Term[false]
+        return subbox.call(ictx, subject)
       end
 
-      otherwise do
-        text_box(ctx, Term[child.inspect])
+      octx, inner = subbox.call(ictx.copy_with(nested: true), subject)
+
+      {octx, Term.of(:floating, inner, w: :content, h: :content)}
+    end
+  end
+
+  # Appears if at least one delta (`dt`, `dl`) prop is present.
+  struct TranslateBox
+    include NodeBox
+
+    def call(ctx : UnitContext, subject : Term, subbox : Hierarchy) : {UnitContext, Term}
+      unless response = ctx.consume_some?(:dl, :dt)
+        return subbox.call(ctx, subject)
       end
+
+      ictx, dl, dt = response
+      octx, inner = subbox.call(ictx.copy_with(nested: true), subject)
+
+      {octx, Term.of(:translate, inner, w: ctx.sheet[:w]?, h: ctx.sheet[:h]?, x: dl, y: dt)}
+    end
+  end
+
+  # Appears if the z-index (`z`) prop is present.
+  struct LayerBox
+    include NodeBox
+
+    def call(ctx : UnitContext, subject : Term, subbox : Hierarchy) : {UnitContext, Term}
+      unless response = ctx.consume_some?(:z)
+        return subbox.call(ctx, subject)
+      end
+
+      ictx, z = response
+      octx, inner = subbox.call(ictx.copy_with(nested: true), subject)
+
+      {octx, Term.of(:layer, inner, w: ctx.sheet[:w]?, h: ctx.sheet[:h]?, "z-index": z)}
+    end
+  end
+
+  # Appears if the min-height (`min-h`) prop is present.
+  struct MinHeightBox
+    include NodeBox
+
+    def call(ctx : UnitContext, subject : Term, subbox : Hierarchy) : {UnitContext, Term}
+      unless response = ctx.consume_some?(:"min-h")
+        return subbox.call(ctx, subject)
+      end
+
+      ictx, minh = response
+
+      # Generate a h-content branch.
+      octx0, a = subbox.call(ictx.override(:h, :content), subject)
+
+      # Generate a h-max branch.
+      octx1, b = subbox.call(ictx.override(:h, :max), subject)
+
+      # Wrap the max-h branch in a box that defines max-h: min-h.
+      b = Term.of(:box, b, w: ctx.sheet[:w]?, h: :max, "max-h": minh)
+
+      # Use h-compare to select the branch.
+      cmp = Term.of(:"h-compare", a, pivot: minh, gt: b, w: ctx.sheet[:w]?, h: ctx.sheet[:h]?)
+
+      {UnitContext.octx(ictx, {octx0, octx1}), cmp}
+    end
+  end
+
+  # Appears if the min-width (`min-w`) prop is present.
+  struct MinWidthBox
+    include NodeBox
+
+    def call(ctx : UnitContext, subject : Term, subbox : Hierarchy) : {UnitContext, Term}
+      unless response = ctx.consume_some?(:"min-w")
+        return subbox.call(ctx, subject)
+      end
+
+      ictx, minw = response
+
+      # Generate a w-content branch.
+      octx0, a = subbox.call(ictx.override(:w, :content), subject)
+
+      # Generate a w-max branch.
+      octx1, b = subbox.call(ictx.override(:w, :max), subject)
+
+      # Wrap the max-w branch in a box that defines max-w: min-w.
+      b = Term.of(:box, b, w: :max, h: ctx.sheet[:h]?, "max-w": minw)
+
+      # Use w-compare to select the branch.
+      cmp = Term.of(:"w-compare", a, pivot: minw, gt: b, w: ctx.sheet[:w]?, h: ctx.sheet[:h]?)
+
+      {UnitContext.octx(ictx, {octx0, octx1}), cmp}
+    end
+  end
+
+  # Appears if the border-width prop and border color prop are present.
+  struct BorderBox
+    include NodeBox
+
+    def call(ctx : UnitContext, subject : Term, subbox : Hierarchy) : {UnitContext, Term}
+      unless response = ctx.consume_all?(:"border-width", :"border-color")
+        return subbox.call(ctx, subject)
+      end
+
+      ictx, border_width, border_color = response
+      octx, inner = subbox.call(ictx.copy_with(nested: true), subject)
+
+      {octx, Term.of(:"z-stack",
+        Term.of(:"rect/outline",
+          w: :max,
+          h: :max,
+          bg: border_color,
+          "border-width": border_width,
+          "border-radius": ctx.sheet[:"border-radius"]?,
+        ),
+        Term.of(:padding, inner,
+          w: :max,
+          h: :max,
+          pl: border_width,
+          pr: border_width,
+          pt: border_width,
+          pb: border_width,
+        ),
+        w: ctx.sheet[:w]?,
+        h: ctx.sheet[:h]?,
+      )}
+    end
+  end
+
+  # Appears if the background prop (`bg`) is present. Handles the ring and opacity.
+  struct BackgroundBox
+    include NodeBox
+
+    def call(ctx : UnitContext, subject : Term, subbox : Hierarchy) : {UnitContext, Term}
+      unless response = ctx.consume_some?(:bg)
+        return subbox.call(ctx, subject)
+      end
+
+      ictx, bg = response
+      ictx, rl, rr, rt, rb, opacity = ictx.consume(:"ring-l", :"ring-r", :"ring-t", :"ring-b", :opacity)
+      octx, inner = subbox.call(ictx.copy_with(nested: true), subject)
+
+      if {rl, rr, rt, rb}.any?
+        r0 = 0
+      end
+
+      if opacity && (opacity = opacity.as_n?) && opacity.natural? && opacity <= Term[100]
+        alpha = (opacity/100 * Term[255]).floor
+      else
+        alpha = Term[255]
+      end
+
+      {octx, Term.of(:"z-stack",
+        Term.of(:rect,
+          w: :max,
+          h: :max,
+          bg: bg,
+          alpha: alpha,
+          "border-radius": ctx.sheet[:"border-radius"]?,
+          rl: rl || r0,
+          rr: rr || r0,
+          rt: rt || r0,
+          rb: rb || r0,
+        ),
+        inner,
+        w: ctx.sheet[:w]?,
+        h: ctx.sheet[:h]?,
+      )}
+    end
+  end
+
+  # Appears if at least one of the padding props (such as `pl`, `pt`) is present.
+  struct PaddingBox
+    include NodeBox
+
+    def call(ctx : UnitContext, subject : Term, subbox : Hierarchy) : {UnitContext, Term}
+      unless response = ctx.consume_some?(:pl, :pr, :pb, :pt)
+        return subbox.call(ctx, subject)
+      end
+
+      ictx, pl, pr, pt, pb = response
+      octx, inner = subbox.call(ictx.copy_with(nested: true), subject)
+
+      {octx, Term.of(:padding, inner,
+        w: ctx.sheet[:w]?,
+        h: ctx.sheet[:h]?,
+        pl: pl || 0,
+        pr: pr || 0,
+        pt: pt || 0,
+        pb: pb || 0,
+      )}
+    end
+  end
+
+  # Appears if at least one content delta (`content-dt`, `content-dl`) prop
+  # is present.
+  struct ContentTranslateBox
+    include NodeBox
+
+    def call(ctx : UnitContext, subject : Term, subbox : Hierarchy) : {UnitContext, Term}
+      unless response = ctx.consume_some?(:"content-dl", :"content-dt")
+        return subbox.call(ctx, subject)
+      end
+
+      ictx, dl, dt = response
+      octx, inner = subbox.call(ictx.copy_with(nested: true), subject)
+
+      {octx, Term.of(:translate, inner, w: ctx.sheet[:w]?, h: ctx.sheet[:h]?, x: dl, y: dt)}
     end
   end
 
   # Appears if there are more than one children. Handles `flow-row`/`flow-col`
   # prop as well as the `gap` prop.
-  private def flow_box(ctx : UnitContext, children : Term)
-    if children.size == 1
-      return child_box(ctx, children[0])
+  struct FlowBox
+    include LeafBox
+
+    def initialize(@edge : BoxEdge)
     end
 
-    flow = Term::Dict.build do |commit|
-      commit.with(:gap, ctx.sheet[:gap]?)
-      commit.with(:w, ctx.sheet[:w]?)
-      commit.with(:h, ctx.sheet[:h]?)
-      commit.with(:fractions, ctx.sheet[:fractions]?)
+    def call(ctx : UnitContext, subject : Term) : {UnitContext, Term}
+      ictx, flow, gap, fractions = ctx.consume(:flow, :gap, :fractions)
 
-      case ctx.sheet[:flow]?
-      when Term.of(:none)
-        commit << Term.of(:"z-stack")
-        commit.concat(children.items) do |child|
-          child_box(ctx, child)
+      unless children = subject.as_itemsonly_d?
+        return @edge.call(ictx, subject)
+      end
+
+      w = ctx.sheet[:w]?
+      h = ctx.sheet[:h]?
+
+      if children.size == 1
+        octx, inner = @edge.call(ictx, children[0])
+
+        # Assume somebody served w/h if nested; otherwise collapse only if allowed
+        # and w/h are the same as child's (i.e. collapse won't break sizing).
+        if ctx.nested || {inner[:w]?, inner[:h]?, ctx.collapse} == {w, h, true}
+          return octx, inner
         end
-      when Term.of(:col)
-        commit << Term.of(:"y-stack")
-        commit.concat(children.items) do |child|
-          child_box(ctx.copy_with(sheet: ctx.sheet.with(:h, :content)), child)
-        end
-      else
-        # In case of row as well as anything else (e.g. absence) we use row
-        # flow (x-stack).
-        commit << Term.of(:"x-stack")
-        commit.concat(children.items) do |child|
-          child_box(ctx.copy_with(sheet: ctx.sheet.with(:w, :content)), child)
+
+        return octx, Term.of(:box, inner, w: w, h: h)
+      end
+
+      coctxs = [] of UnitContext # child octxs
+
+      flow = Term::Dict.build do |commit|
+        commit.with(:gap, gap)
+        commit.with(:fractions, fractions)
+        commit.with(:w, w)
+        commit.with(:h, h)
+
+        case flow
+        when Term.of(:none)
+          commit << Term.of(:"z-stack")
+          commit.concat(children.items) do |child|
+            coctx, uir = @edge.call(ictx, child)
+            coctxs << coctx
+            uir
+          end
+        when Term.of(:col)
+          commit << Term.of(:"y-stack")
+          commit.concat(children.items) do |child|
+            coctx, uir = @edge.call(ictx.override(:h, :content), child)
+            coctxs << coctx
+            uir
+          end
+        else
+          # In case of row as well as anything else (e.g. absence) we use row
+          # flow (x-stack).
+          commit << Term.of(:"x-stack")
+          commit.concat(children.items) do |child|
+            coctx, uir = @edge.call(ictx.override(:w, :content), child)
+            coctxs << coctx
+            uir
+          end
         end
       end
-    end
 
-    Term.of(flow)
-  end
-
-  # Appears if at least one content delta (`content-dt`, `content-dl`) prop is present.
-  # Contains the flow box.
-  private def content_translate_box(ctx : UnitContext, children : Term)
-    dl = ctx.sheet[:"content-dl"]?
-    dt = ctx.sheet[:"content-dt"]?
-
-    if {dl, dt}.none?
-      return flow_box(ctx, children)
-    end
-
-    Term.of(:translate, flow_box(ctx, children),
-      w: ctx.sheet[:w]?,
-      h: ctx.sheet[:h]?,
-      x: dl,
-      y: dt,
-    )
-  end
-
-  # Appears if at least one of the padding props (such as `pl`, `pt`) is present.
-  # Contains the content-translate box.
-  private def padding_box(ctx : UnitContext, children : Term)
-    pl = ctx.sheet[:pl]?
-    pr = ctx.sheet[:pr]?
-    pt = ctx.sheet[:pt]?
-    pb = ctx.sheet[:pb]?
-
-    if {pl, pr, pt, pb}.none?
-      return content_translate_box(ctx, children)
-    end
-
-    Term.of(:padding, content_translate_box(ctx, children),
-      w: ctx.sheet[:w]?,
-      h: ctx.sheet[:h]?,
-      pl: pl || 0,
-      pr: pr || 0,
-      pt: pt || 0,
-      pb: pb || 0,
-    )
-  end
-
-  # Appears if the background prop (`bg`) is present. Handles the ring. Contains
-  # the padding box.
-  private def background_box(ctx : UnitContext, children : Term)
-    unless bg = ctx.sheet[:bg]?
-      return padding_box(ctx, children)
-    end
-
-    rl = ctx.sheet[:"ring-l"]?
-    rr = ctx.sheet[:"ring-r"]?
-    rt = ctx.sheet[:"ring-t"]?
-    rb = ctx.sheet[:"ring-b"]?
-
-    if {rl, rr, rt, rb}.any?
-      r0 = 0
-    end
-
-    if (opacity = ctx.sheet[:opacity]?) && (opacity = opacity.as_n?) && opacity.natural? && opacity <= Term[100]
-      alpha = (opacity/100 * Term[255]).floor
-    else
-      alpha = Term[255]
-    end
-
-    Term.of(:"z-stack",
-      Term.of(:rect,
-        w: :max,
-        h: :max,
-        bg: bg,
-        alpha: alpha,
-        "border-radius": ctx.sheet[:"border-radius"]?,
-        rl: rl || r0,
-        rr: rr || r0,
-        rt: rt || r0,
-        rb: rb || r0,
-      ),
-      padding_box(ctx, children),
-      w: ctx.sheet[:w]?,
-      h: ctx.sheet[:h]?,
-    )
-  end
-
-  # Appears if the border-width prop and border color prop are present.
-  # Contains the background box.
-  private def border_box(ctx : UnitContext, children : Term)
-    border_width = ctx.sheet[:"border-width"]?
-    border_color = ctx.sheet[:"border-color"]?
-
-    unless border_width && border_color
-      return background_box(ctx, children)
-    end
-
-    Term.of(:"z-stack",
-      Term.of(:"rect/outline",
-        w: :max,
-        h: :max,
-        bg: border_color,
-        "border-width": border_width,
-        "border-radius": ctx.sheet[:"border-radius"]?,
-      ),
-      Term.of(:padding,
-        background_box(ctx, children),
-        w: :max,
-        h: :max,
-        pl: border_width,
-        pr: border_width,
-        pt: border_width,
-        pb: border_width,
-      ),
-      w: ctx.sheet[:w]?,
-      h: ctx.sheet[:h]?,
-    )
-  end
-
-  # Appears if the min-width (`min-w`) prop is present. Contains the border box.
-  private def minw_box(ctx : UnitContext, children : Term)
-    unless minw = ctx.sheet[:"min-w"]?
-      return border_box(ctx, children)
-    end
-
-    subctx = ctx.copy_with(sheet: ctx.sheet.with(:w, :max))
-
-    Term.of(:"x-expand", border_box(subctx, children),
-      w: ctx.sheet[:w]?,
-      h: ctx.sheet[:h]?,
-      "min-w": minw,
-    )
-  end
-
-  # Appears if the min-height (`min-h`) prop is present. Contains the min-width box.
-  private def minh_box(ctx : UnitContext, children : Term)
-    unless minh = ctx.sheet[:"min-h"]?
-      return minw_box(ctx, children)
-    end
-
-    subctx = ctx.copy_with(sheet: ctx.sheet.with(:h, :max))
-
-    Term.of(:"y-expand", minw_box(subctx, children),
-      w: ctx.sheet[:w]?,
-      h: ctx.sheet[:h]?,
-      "min-h": minh,
-    )
-  end
-
-  # Appears if the z-index (`z`) prop is present. Contains the min-height box.
-  private def layer_box(ctx : UnitContext, children : Term)
-    unless z = ctx.sheet[:z]?
-      return minh_box(ctx, children)
-    end
-
-    Term.of(:layer, minh_box(ctx, children),
-      w: ctx.sheet[:w]?,
-      h: ctx.sheet[:h]?,
-      "z-index": z,
-    )
-  end
-
-  # Appears if at least one delta (`dt`, `dl`) prop is present. Contains the layer box.
-  private def translate_box(ctx : UnitContext, children : Term)
-    dl = ctx.sheet[:dl]?
-    dt = ctx.sheet[:dt]?
-
-    if {dl, dt}.none?
-      return layer_box(ctx, children)
-    end
-
-    Term.of(:translate, layer_box(ctx, children),
-      w: ctx.sheet[:w]?,
-      h: ctx.sheet[:h]?,
-      x: dl,
-      y: dt,
-    )
-  end
-
-  private def floating_box(ctx : UnitContext, children : Term)
-    if (floating = ctx.sheet[:floating]?) && floating != Term[false]
-      Term.of(:floating, translate_box(ctx, children),
-        w: :content,
-        h: :content,
-      )
-    else
-      translate_box(ctx, children)
+      {UnitContext.octx(ictx, coctxs), Term.of(flow)}
     end
   end
 
-  # Handles the unit-unit boundary.
-  private def unit_box(ctx : UnitContext, unit : Term)
-    uir(ctx.spec, unit, rem: ctx.rem, inherited: ctx.sheet.pluck(:font, :"font-weight"))
+  # Produces implicit text nodes from strings, normalizes non-dict terms to
+  # strings and so on likewise; and recursively calls `uir` on dict terms.
+  #
+  # See also: `BoxEdge`.
+  struct FlowEdge
+    include BoxEdge
+
+    # String and other non-dict children of units are displayed as text.
+    private def text(ctx : UnitContext, caption : Term::Str)
+      octx, font, weight, size, leading, color = ctx.consume(:font, :"font-weight", :"text-size", :leading, :"text-color")
+
+      {octx, Term.of(:text, caption,
+        w: ctx.sheet[:w]?,
+        h: ctx.sheet[:h]?,
+        font: font,
+        weight: weight,
+        size: size,
+        leading: leading,
+        color: color,
+      )}
+    end
+
+    # Handles the unit-unit boundary.
+    private def unit(ctx : UnitContext, unit : Term)
+      octx, font, weight = ctx.consume(:font, :"font-weight")
+
+      {octx, Microfold.uir(ctx.spec, unit, rem: ctx.rem, inherited: Term[font: font, "font-weight": weight])}
+    end
+
+    def call(ctx : UnitContext, child : Term) : {UnitContext, Term}
+      Term.case(child) do
+        matchpi %{_dict} { unit(ctx, child) }
+        matchpi %{_string} { text(ctx, child.unsafe_as_s) }
+        otherwise { text(ctx, Term[child.inspect]) }
+      end
+    end
   end
+
+  struct Toplevel
+    include NodeBox
+
+    def call(ctx : UnitContext, subject : Term, subbox : Hierarchy) : {UnitContext, Term}
+      ictx, cursor, maxw, maxh, fr = ctx.consume(:cursor, :"max-w", :"max-h", :fr)
+
+      octx, inner = subbox.call(ictx, subject)
+      inner = inner.morph({:fr, fr}, {:cursor, cursor}, {:"max-w", maxw}, {:"max-h", maxh})
+
+      {octx, Term.of(inner)}
+    end
+  end
+
+  struct Itself
+    include LeafBox
+
+    def call(ctx : UnitContext, subject : Term) : {UnitContext, Term}
+      # Consume entire sheet.
+      {ctx.copy_with(sheet: Term[]), Term.of(subject | ctx.sheet)}
+    end
+  end
+
+  # Represents a hierarchy of boxes.
+  #
+  # See also: `NodeBox`, `LeafBox`, `BoxEdge`.
+  struct Hierarchy
+    def initialize(@members : Slice(NodeBox), @leaf : LeafBox)
+    end
+
+    # Calls the head of the hierarchy and so on with *subject*.
+    def call(ctx : UnitContext, subject : Term) : {UnitContext, Term}
+      unless head = @members[0]?
+        return @leaf.call(ctx, subject)
+      end
+
+      head.call(ctx, subject, Hierarchy.new(@members[1..], @leaf))
+    end
+  end
+
+  HIERARCHY_NORMAL = Hierarchy.new(
+    members: Slice(NodeBox).with(
+      Toplevel.new,
+      FloatingBox.new,
+      TranslateBox.new,
+      LayerBox.new,
+      MinHeightBox.new,
+      MinWidthBox.new,
+      BorderBox.new,
+      BackgroundBox.new,
+      PaddingBox.new,
+      ContentTranslateBox.new,
+    ),
+    leaf: FlowBox.new(FlowEdge.new),
+  )
+
+  HIERARCHY_SELF = Hierarchy.new(
+    members: Slice(NodeBox).with(
+      Toplevel.new,
+      FloatingBox.new,
+      TranslateBox.new,
+      LayerBox.new,
+      MinHeightBox.new,
+      MinWidthBox.new,
+      PaddingBox.new,
+    ),
+    leaf: Itself.new,
+  )
 
   # TODO: remove this in favor of a centralized observer "file manager".
   # So that we have "hot reload" of the spec.
@@ -551,48 +764,56 @@ module Microfold
   def uir(spec : Term::Dict, unit : Term, *, rem = Term[16], inherited = Term[])
     Term.case(unit) do
       matchpi %{((self node_symbol) ¦ attrs_ style⋮ "")} do
-        sheet = sheet(spec, attrs.unsafe_as_d, style.to(String), rem: rem)
-
-        Term.of(unit.morph({0, node}, {:style, nil}) | sheet)
-      end
-
-      matchpi %{((self node_symbol) child_ ¦ attrs_ style⋮ "")} do
-        sheet = sheet(spec, attrs.unsafe_as_d, style.to(String), rem: rem)
-        inner = uir(spec, child, rem: rem)
-
-        Term.of(unit.morph({0, node}, {1, inner}, {:style, nil}) | sheet)
-      end
-
-      matchpi %{(node_symbol children_+ ¦ attrs_ style⋮ "")} do
-        # Based on the node we can have certain "default" styles, we call them
-        # "nodal" (per-node, node-specific) styles.
+        # Read node defaults.
         nodal = Term[]
         if (defaults = spec[:defaults, node]?) && (defaults = defaults.as_s?)
           nodal = sheet(spec, attrs.unsafe_as_d, defaults.to(String), rem: rem)
         end
 
         sheet = sheet(spec, attrs.unsafe_as_d, style.to(String), rem: rem, base: nodal | inherited)
+        ctx, box = HIERARCHY_SELF.call(UnitContext.new(spec, sheet, rem, collapse: true, nested: false), Term.of({node}))
 
-        box = floating_box(UnitContext.new(spec, sheet, rem), children)
+        Term.of(box | ctx.sheet | attrs)
+      end
 
-        # Attach toplevel props to the box.
-        box = box.morph(
-          {:fr, sheet[:fr]?},
-          {:cursor, sheet[:cursor]?},
-          {:"max-w", sheet[:"max-w"]?},
-          {:"max-h", sheet[:"max-h"]?},
-        )
+      matchpi %{((self node_symbol) child_ ¦ attrs_ style⋮ "")} do
+        # Read node defaults.
+        nodal = Term[]
+        if (defaults = spec[:defaults, node]?) && (defaults = defaults.as_s?)
+          nodal = sheet(spec, attrs.unsafe_as_d, defaults.to(String), rem: rem)
+        end
 
-        # Attach the rest of attrs.
-        box |= attrs
+        sheet = sheet(spec, attrs.unsafe_as_d, style.to(String), rem: rem, base: nodal | inherited)
+        inner = uir(spec, child, rem: rem, inherited: inherited)
+        ctx, box = HIERARCHY_SELF.call(UnitContext.new(spec, sheet, rem, collapse: attrs.empty?, nested: false), Term.of(node, inner))
 
-        Term.of(box)
+        Term.of(box | ctx.sheet | attrs)
+      end
+
+      matchpi %{(node_symbol children_+ ¦ attrs_ style⋮ "")} do
+        # Read node defaults.
+        nodal = Term[]
+        if (defaults = spec[:defaults, node]?) && (defaults = defaults.as_s?)
+          nodal = sheet(spec, attrs.unsafe_as_d, defaults.to(String), rem: rem)
+        end
+
+        sheet = sheet(spec, attrs.unsafe_as_d, style.to(String), rem: rem, base: nodal | inherited)
+        ctx, box = HIERARCHY_NORMAL.call(UnitContext.new(spec, sheet, rem, collapse: attrs.empty?, nested: false), children)
+
+        Term.of(box | ctx.sheet | attrs)
       end
 
       otherwise do
-        raise UnitError.new
+        # TODO: pretty print inline
+        Term.of(:invalid, unit.inspect)
       end
     end
   end
 end
 
+# stuff = ML.term <<-WWML
+# ((self window) style: "bg-neutral-900 max origin" max-w: 1000 max-h: 800
+#   (p "hello world" style: "p-3 bg-red-500 min-sm"))
+# WWML
+
+# puts ML.display(Microfold.uir(Microfold::SPEC, stuff))

@@ -123,25 +123,25 @@ module DocR
 
     SUGGESTION_TEMPLATE = ML.term <<-WWML
     (box style: "floating z-10 dt-8 border border-neutral-600 bg-neutral-800 rounded p-2"
-      (group style: "w-max h-content min-w-sm max-w-sm flow-col gap-2"
-        (p ^name style: "w-max px-2 py-1 font-mono bg-neutral-700 text-neutral-200 font-medium rounded-sm")
-        (p ^intro style: "w-max px-2 pb-1 text-sm text-neutral-300")))
+      (group style: "min-w-sm h-content flow-col gap-2"
+        (p ^name style: "w-inherit px-2 py-1 font-mono bg-neutral-700 text-neutral-200 font-medium rounded-sm")
+        (p ^intro style: "w-inherit px-2 pb-1 text-sm text-neutral-300")))
     WWML
 
     # TODO: use a template `if`
     SUGGESTION_MEMBER_TEMPLATE = ML.term <<-WWML
     (box style: "floating z-10 dt-8 border border-neutral-600 bg-neutral-800 rounded p-2"
-      (group style: "content min-w-sm max-w-sm flow-col gap-2"
+      (group style: "min-w-sm h-content flow-col gap-2"
         (box ^head style: "w-max h-content px-2 py-1 font-mono bg-neutral-700 text-neutral-200 font-medium rounded-sm")
-        (box ^body style: "content px-2 pb-1 text-sm text-neutral-300")))
+        (box ^body style: "w-inherit h-content px-2 pb-1 text-sm text-neutral-300")))
     WWML
 
     SUGGESTION_MEMBER_ONEOF_TEMPLATE = ML.term <<-WWML
     (box style: "floating z-10 dt-8 border border-neutral-600 bg-neutral-800 rounded p-2"
-      (group style: "content min-w-sm max-w-sm flow-col gap-2"
+      (group style: "content flow-col gap-2"
         (group style: "w-max fr h-content flow-row gap-2 px-2 py-1 bg-neutral-700 rounded-sm"
           ;; FIXME: why can't we center vertically here?
-          (p style: "text-xs text-neutral-200"
+          (p style: "text-sm text-neutral-200"
             "↑" ^current "/" ^total "↓")
           (box ^head style: "w-fr h-content font-mono text-neutral-200 font-medium"))
         (box ^body style: "content px-2 pb-1 text-sm text-neutral-300")))
@@ -150,22 +150,22 @@ module DocR
     # TODO: use a template `if`
     SUGGESTION_LIST_NOSCROLL_TEMPLATE = ML.term <<-WWML
     (box style: "floating z-10 dt-8 border border-neutral-600 bg-neutral-800 rounded p-3"
-      (main style: "w-max h-content min-w-sm max-w-sm flow-col gap-3"
-        (header style: "w-max h-content flow-row font-sans font-normal text-xs text-neutral-300"
+      (main style: "min-w-sm h-content flow-col gap-3"
+        (header style: "w-inherit h-content flow-row font-sans font-normal text-xs text-neutral-300"
           "Showing " ^begin ".." ^end " out of " ^total)
-        (list style: "w-max h-content flow-col text-sm font-mono font-text text-neutral-200 gap-2"
+        (list style: "w-inherit h-content flow-col text-sm font-mono font-text text-neutral-200 gap-2"
           (^*part names 0 ..= -1))))
     WWML
 
     SUGGESTION_LIST_TEMPLATE = ML.term <<-WWML
     (box style: "floating z-10 dt-8 border border-neutral-600 bg-neutral-800 rounded p-3"
-      (main style: "w-max h-content min-w-sm max-w-sm flow-col gap-3"
-        (header style: "w-max h-content flow-row font-sans font-normal text-xs text-neutral-300"
+      (main style: "min-w-sm h-content flow-col gap-3"
+        (header style: "w-inherit h-content flow-row font-sans font-normal text-xs text-neutral-300"
           "Showing " ^begin ".." ^end " out of " ^total)
-        (group style: "w-max h-content flow-row fr"
+        (group style: "w-inherit h-content flow-row fr"
           (list style: "w-fr h-content flow-col text-sm font-mono font-text text-neutral-200 gap-2"
             (^*part names 0 ..= -1))
-          (scroll style: "w-3 h-max pr-1"
+          (scroll style: "w-2 h-max pr-1"
             ((self translate) y: (* ^scroll-offset) style: "max"
               ((self rect/outline) style: "max border bg-neutral-600 rounded-sm" max-h: (* ^scroll-height)))))))
     WWML
@@ -292,6 +292,67 @@ module DocR
     end
   end
 
+  # Renders H1-H6 and P text nodes.
+  struct TextNode
+    include Feature
+
+    def initialize(@document : Term::Dict)
+    end
+
+    def call(ctx, term, postfix, head, rest)
+      Term.case(term) do
+        matchpi %{[name←(%any h1 h2 h3 h4 h5 h6 text codebox) content_]} do
+          continue unless Rhodium.cursordepth(term, pairspart: true) == -1
+
+          node = term
+
+          # TODO: Remove and make text -> p once we have smarter keypath-based rendering.
+          # Currently using p messes up the UI sometimes (e.g. interpreted as P when
+          # it must be interpreted as code).
+          if name == Term[:text]
+            node = Term.of(node.morph({0, :p}))
+          end
+
+          if ML.edge?(content)
+            # If a cell changes, the visible part of the document inevitably changes
+            # as well, since the cell primarily stores the data there; and Rhodium::Cells
+            # is only used for caching/secondary access, like we do here. Thus a rerender
+            # of associated h1-6/p will inevitably be triggered.
+            continue unless value = @document[Rhodium::Cells, content]?
+
+            node = Term.of(node.morph({1, value}))
+          end
+
+          # If content is not a string Microfold will take care of it and
+          # convert it to string!
+
+          continue unless block = DocR.block?(node)
+
+          postfixed(block, postfix)
+        end
+
+        matchpi %{(hr ¦ pairspart_ style⋮ "")} do
+          continue unless Rhodium.cursordepth(term, pairspart: true) == -1
+
+          node = Term.of(
+            pairspart.morph(
+              {0, {:self, :rect}},
+              {:style, Term[Microfold::SPEC[:defaults, :hr]?.try(&.as_s?) || ""].stitch(" ").stitch(style)},
+            )
+          )
+
+          continue unless block = DocR.block?(node)
+
+          postfixed(block, postfix)
+        end
+
+        otherwise do
+          rest.call(ctx, term, postfix)
+        end
+      end
+    end
+  end
+
   def visible(document : Term::Dict) : Term::Dict
     D7.visible(document)
   end
@@ -379,7 +440,7 @@ module DocR
   def pptree(document : Term::Dict, *, aligned : Bool = true) : Term
     ppin = pipe(document, visible, annotated)
 
-    chain = ML::Display::MAIN_CHAIN.prepend(Button.new, Comment.new, Cursor.new, Unit.new)
+    chain = ML::Display::MAIN_CHAIN.prepend(Button.new, Comment.new, Cursor.new, Unit.new, TextNode.new(document))
 
     ctx = DisplayContext.new(60, 120, features: chain)
     # FIXME: handle empty document
@@ -462,18 +523,25 @@ module DocR
     drawable = rewrite(uir, UIR.rewriter)
 
     Term.case(drawable) do
-      matchpi %[{¦ final-w: w←(%number +i32) final-h: h←(%number +i32)}] do
-        Term.of(:block, unit, w: w//rem, h: h//rem)
+      # If we know its size outside of UI context
+      matchpi %[{¦ final-w: w←(%number i32) final-h: h←(%number i32)}] do
+        if w.natural_nonzero? && h.natural_nonzero?
+          # If both are valid
+          Term.of(:block, unit, w: w//rem, h: h//rem)
+        else
+          # If they're invalid then we fall back to code.
+        end
       end
 
+      # If we do not know its size, leave it to the UI context.
+      #
+      # TODO: UI breaks if we do not know the size within the UI context as well,
+      # we must have some kind of backtracking to return to this decision point
+      # in that case!!!
       otherwise do
         Term.of(:"block/floating", unit)
       end
     end
-  rescue Microfold::UnitError
-    # Note how we do not provide the floating backup here. Doing so would simply
-    # cause an explosion higher up -- the unit is malformed, period; we will show
-    # it as code instead.
   end
 
   def view(document : Term::Dict, *, aligned : Bool = true) : Term
@@ -482,7 +550,7 @@ module DocR
 end
 
 class Document
-  BLANK = DocR.view ML.dict <<-WWML
+  BLANK = ML.term <<-WWML
   (group style: "max center bg-neutral-800"
     (p "The view of the document is loading..." style: "text-neutral-300"))
   WWML
@@ -709,6 +777,19 @@ module Frame
 end
 
 demo = ML.dict <<-WWML
+(h1 "Heading 1")
+(h2 "Heading 2")
+(h3 "Heading 3")
+(h4 "Heading 4")
+(h5 "Heading 5")
+(h6 "Heading 6")
+(text "Simple text")
+(hr style: "min-w-lg")
+(text "Show counter using text:")
+(hr style: "min-w-lg")
+(text @count style: "text-xl font-bold text-green-500")
+(hr style: "min-w-lg")
+
 (unit group style: "content flow-col gap-5 bg-neutral-800 p-5"
   (unit group style: "w-max h-content center-x"
     (view @count-envs as (p ^count style: "text-7xl font-bold text-neutral-100")))
@@ -727,29 +808,29 @@ demo = ML.dict <<-WWML
 WWML
 
 seed = ML.dict <<-WWML
-(comment
-  "Welcome to µsoma, a GUI for Wirewright"
-  ""
-  "µsoma to Wirewright is roughly what a web browser is to the Internet."
-  ""
-  "You're looking at a *self-embodied program*. Well, sort of — it only contains one comment right now. Hit left/right arrow to see for yourself. Or type `;;` and write your own!"
-  ""
-  "Try typing the following:"
-  ""
-  "  (cell 0 @count)"
-  "  (button \\"Increment\\" as 1 to @deltas ())"
-  "  (button \\"Decrement\\" as -1 to @deltas ())"
-  "  (transform @deltas to @counts with @count (+ count _))"
-  "  (latest @counts @count)"
-  ""
-  "Click on the buttons and see what happens! :^)"
-  ""
-  "- Drag on empty/non-clickable space to pan around if something overflows."
-  "- Hit Enter to escape from a pair."
-  "- Hit F2 to replace this document with a more sophisticated demo."
-  "- Hit Ctrl-Backspace to remove this comment (and any *node* before the cursor in general)."
-  "- Play! The semi-readable implementation of this editor is in `editor.soma.wwml`; check it out for key bindings & what they do"
-  "- Take a look at D7 tests: `delta7.test.wwml`. Plenty of examples there.")
+;; (comment
+;;   "Welcome to µsoma, a GUI for Wirewright"
+;;   ""
+;;   "µsoma to Wirewright is roughly what a web browser is to the Internet."
+;;   ""
+;;   "You're looking at a *self-embodied program*. Well, sort of — it only contains one comment right now. Hit left/right arrow to see for yourself. Or type `;;` and write your own!"
+;;   ""
+;;   "Try typing the following:"
+;;   ""
+;;   "  (cell 0 @count)"
+;;   "  (button \\"Increment\\" as 1 to @deltas ())"
+;;   "  (button \\"Decrement\\" as -1 to @deltas ())"
+;;   "  (transform @deltas to @counts with @count (+ count _))"
+;;   "  (latest @counts @count)"
+;;   ""
+;;   "Click on the buttons and see what happens! :^)"
+;;   ""
+;;   "- Drag on empty/non-clickable space to pan around if something overflows."
+;;   "- Hit Enter to escape from a pair."
+;;   "- Hit F2 to replace this document with a more sophisticated demo."
+;;   "- Hit Ctrl-Backspace to remove this comment (and any *node* before the cursor in general)."
+;;   "- Play! The semi-readable implementation of this editor is in `editor.soma.wwml`; check it out for key bindings & what they do"
+;;   "- Take a look at D7 tests: `delta7.test.wwml`. Plenty of examples there.")
 
 ("" | "" () @user)
 
@@ -817,6 +898,7 @@ ui = UIR::Reducers.microfold(Term.of(frame0)) do |inframe, drawable, event|
 
   Term.case(event) do
     matchpi %{(key f1)} do
+      puts ML.display(doc.view, style: ML::Style::Indent2)
       puts ML.display(drawable, style: ML::Style::Indent2)
     end
 

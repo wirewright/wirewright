@@ -75,15 +75,8 @@ module UIR
   #
   # TODO: move to `uiR.soma.wwml` once the rewriter DSL is available.
   class_getter rewriter : Rewriter do
-    base = File.read(RESOURCES / "uiR.soma.wwml")
-
-    refR = dfsR(
-      switchR(
-        { %[($my rewritee_)], envR(Term.of(:"$my")) },
-        { %[($up rewritee_)], choiceR(envR(Term.of(:"$up")), envR(Term.of(:"$my"))) },
-        { %[($down rewritee_)], choiceR(envR(Term.of(:"$down")), envR(Term.of(:"$my"))) },
-      )
-    )
+    base_main = File.read(RESOURCES / "uiR-main.soma.wwml")
+    base_control = File.read(RESOURCES / "uiR-control.soma.wwml")
 
     primitives = ProcRuleset.build do
       rulepi1(
@@ -113,29 +106,65 @@ module UIR
       end
     end
 
-    onceR = chainR(callR(primitives), callR(PRIMITIVES))
+    set_exhevalr, rec_exhevalr = recR
+
+    flowR = choiceR(
+      allR(
+        wrapR(%{(if in_ a_ b_)}, %{in_}, rec_exhevalr, %{out_}, %{(if out_ a_ b_)}),
+        switchR(
+          { %{(if false _ rewritee_)}, rec_exhevalr},
+          { %{(if _ rewritee_ _)}, rec_exhevalr},
+        )
+      )
+    )
+    primR = chainR(callR(primitives), callR(PRIMITIVES))
+    onceR = choiceR(flowR, primR)
+    exhevalR = set_exhevalr.call exhR(dfsR(onceR))
 
     evalR = dfsR(
       switchR(
-        { %[($ rewritee_)], exhR(dfsR(onceR)) },
+        { %[($ rewritee_)], exhevalR },
         { %[($once rewritee_)], onceR },
       )
     )
 
-    backmapR = chainR(refR, evalR)
+    set_backmapr, rec_backmapr = recR
+
+    refR = dfsR(
+      switchR(
+        { %[($my rewritee←($ _))], chainR(rec_backmapr, envR(Term.of(:"$my"))) },
+        { %[($my rewritee_)], envR(Term.of(:"$my")) },
+        { %[($up rewritee_)], choiceR(envR(Term.of(:"$up")), envR(Term.of(:"$my"))) },
+        { %[($down rewritee_)], choiceR(envR(Term.of(:"$down")), envR(Term.of(:"$my"))) },
+      )
+    )
+
+    backmapR = set_backmapr.call chainR(refR, evalR)
 
     selector = ML.term(%[(%any° (rule pattern_ template_) (backmap pattern_ backspec_))])
 
-    set, rec = recR
+    set_main, rec_main = recR
 
-    exhR(
-      set.call memoR(@@cache,
+    mainR = exhR(
+      set_main.call memoR(@@cache,
         choiceR(
-          rulesetR(Ruleset.select(selector, ML.terms(base)), noR, backmapR, noR),
-          itemsR(rec),
+          rulesetR(Ruleset.select(selector, ML.terms(base_main)), noR, backmapR, noR),
+          itemsR(rec_main),
         )
       )
     )
+
+    set_control, rec_control = recR
+
+    # TODO: cueR, memoR
+    controlR = exhR(
+      set_control.call choiceR(
+          rulesetR(Ruleset.select(selector, ML.terms(base_control)), noR, backmapR, noR),
+          itemsR(rec_control),
+      )
+    )
+
+    exhR(chainR(mainR, controlR))
   end
 
   # Reducers produce a drawable given the previous drawable and an event.

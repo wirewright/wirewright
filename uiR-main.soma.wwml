@@ -6,8 +6,8 @@
 ;; GENERAL
 
 ;; Learn the content width/height from a single child.
-((%not x-expand viewport) {¦ content-w: w_number} ¦ _ -content-w: W) <> {W: →w}
-((%not y-expand viewport) {¦ content-h: h_number} ¦ _ -content-h: H) <> {H: →h}
+((%not w-compare viewport) {¦ content-w: w_number} ¦ _ -content-w: W) <> {W: →w}
+((%not h-compare viewport) {¦ content-h: h_number} ¦ _ -content-h: H) <> {H: →h}
 
 ;; Propagate max-w/h if I know my max-w/h and I am w/h: max.
 (_ {¦ -max-w: w} ¦ _ w: max max-w: W_number) <> {w: →W}
@@ -43,12 +43,16 @@
 (rect ¦ _ w: max max-w_number -content-w_) <> {content-w: →max-w}
 (rect ¦ _ h: max max-h_number -content-h_) <> {content-h: →max-h}
 
+;; Inherit w/h
+(%all ⟨{¦ w_: inherit}⟩° {¦ w: W←(%any content max)}) <> {w: →W}
+(%all ⟨{¦ h_: inherit}⟩° {¦ h: H←(%any content max)}) <> {h: →H}
+
 ;; NODE: text
 
 (backmap
   (text caption_string ¦ _
     w: content
-    h: content
+    h: (%any max content)
     -content-w_
     -content-h_
     font_string
@@ -96,18 +100,6 @@
 (padding {¦ -l_} ¦ _ l: L_number pl_number) <> {l: $'(+ →L →pl)}
 (padding {¦ -t_} ¦ _ t: T_number pt_number) <> {t: $'(+ →T →pt)}
 
-;; NODE: x-expand
-
-(x-expand {¦ max-w: w_number} ¦ _ -content-w: W) <> {W: →w}
-(x-expand {¦ -max-w_ content-w: w_number} ¦ _ min-w_number)
-  <> {max-w: $'(max →min-w →w)}
-
-;; NODE: y-expand
-
-(y-expand {¦ max-h: h_number} ¦ _ -content-h: H) <> {H: →h}
-(y-expand {¦ -max-h_ content-h: h_number} ¦ _ min-h_number)
-  <> {max-h: $'(max →min-h →h)}
-
 ;; NODE: viewport
 
 (viewport _ ¦ _ max-w_number -content-w_) <> {content-w: →max-w}
@@ -148,11 +140,11 @@
 ;; NODE: x-stack
 
 ;; Compute the content-w of x-stack.
-(x-stack (%many Cws {¦ content-w: (%let 0 _number)}) ¦ _ -content-w: W gap⋮ 0)
+(x-stack (%many Cws {¦ content-w: 0←_number}) ¦ _ -content-w: W gap⋮ 0)
   <> {W: $(+ (sum (flatten →Cws)) (* →gap (- (tally →Cws) 1)))}
 
 ;; Compute the content-h of x-stack.
-(x-stack (%many Chs {¦ content-h: (%let 0 _number)}) ¦ _ -content-h: H)
+(x-stack (%many Chs {¦ content-h: 0←_number}) ¦ _ -content-h: H)
   <> {H: $(max (flatten →Chs))}
 
 ;; If x-stack is set to h: content then setting h: max in a child
@@ -203,8 +195,8 @@
 ;; The same as x-stack minus the occasional W<->H or L<->T swap. This can
 ;; be generalized, but will lead to unreadable, overly generic mess -- I tried.
 
-(y-stack (%many Cws {¦ content-w: (%let 0 _number)}) ¦ _ -content-w: W) <> {W: $(max (flatten →Cws))}
-(y-stack (%many Chs {¦ content-h: (%let 0 _number)}) ¦ _ -content-h: H gap⋮ 0)
+(y-stack (%many Cws {¦ content-w: 0←_number}) ¦ _ -content-w: W) <> {W: $(max (flatten →Cws))}
+(y-stack (%many Chs {¦ content-h: 0←_number}) ¦ _ -content-h: H gap⋮ 0)
   <> {H: $(+ (sum (flatten →Chs)) (* →gap (- (tally →Chs) 1)))}
 (%all (y-stack _+ ¦ _ w: content content-w: W_number) ⟨{¦ w: max -max-w: w}⟩°) <> {w: →W}
 (%all (y-stack _+ ¦ _ w: max max-w: W_number) ⟨{¦ w: max -max-w: w}⟩°) <> {w: →W}
