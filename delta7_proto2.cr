@@ -879,28 +879,6 @@ module Rhodium
 
       # Transform logic
       begin
-        # For stateful transforms, signal it's ready to take a job if the state
-        # is a hard-coded const or a cell with a known value.
-        #
-        # For stateless transforms, signal that we're ready unconditionally.
-        givenpi %[(transform _* ¦ #shadow: _ #spec: spec←{¦ in: @pin_}) cycle -1] do
-          ready = true
-
-          if (state = spec[:state]?) && ML.edge?(state)
-            ready = !!document0[Cells, state]?
-          end
-
-          if ready
-            effect(document1, nodepath, node0) do
-              event :pull, pin
-
-              false
-            end
-          else
-            {document1, false}
-          end
-        end
-
         # Schedule job.
         givenpi %[(transform _* ¦ #shadow: _ #spec: spec←{¦ in: @pin_, body_}) (pulse @pin_ input_) -1] do
           env0 = Term[]
