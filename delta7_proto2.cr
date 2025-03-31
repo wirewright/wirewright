@@ -9,14 +9,32 @@ require "execution_context"
 module Rhodium
   extend self
 
+  # Symbol used to identify the initialize queue of a document.
   Initialize = Term[:"#initialize"]
-  Events      = Term[:"#events"]
 
-  Shadow      = Term.of(:"#shadow")
-  Cells       = Term.of(:"#cells")
+  # Symbol used to identify the event queue of a document.
+  Events = Term[:"#events"]
+
+  # :nodoc:
+  Shadow = Term.of(:"#shadow")
+
+  # :nodoc:
+  Cells = Term.of(:"#cells")
+
+  # :nodoc:
   JobsPending = Term.of(:"#jobs/pending")
+
+  # :nodoc:
   JobsCompleted = Term.of(:"#jobs/completed")
-  Population  = Term.of(:"#population")
+
+  # :nodoc:
+  Population = Term.of(:"#population")
+
+  # :nodoc:
+  Cycle = Term.of(:cycle)
+
+  # :nodoc:
+  PostCycle = Term.of(:"#post-cycle")
 
   # Follows an arbitrary *keypath* into *document*. Returns the pointed-to
   # node or `nil` if the keypath is invalid. This does not take into account
@@ -50,7 +68,7 @@ module Rhodium
       matchpi %[(lookaround @_ @_ _*)] { 3...node.itemsize }
       matchpi %[(fragment _ @_)] { 1...2 }
       matchpi %[(mutator @_ _)] { 2...3 }
-      otherwise {}
+      otherwise { }
     end
   end
 
@@ -990,7 +1008,6 @@ module Rhodium
         # identity is in the population.
         givenpi %{(absence @cin_ as msg_ to @pout_ ¦ #shadow: _ #state: newborn) cycle -1} do
           effect(document1, nodepath, node0) do
-
             if document0[Cells, cin]?
               change "#state": :paired
             else
@@ -1169,7 +1186,7 @@ module Rhodium
         %{(absence @_ as _ to @_) -1},
       ) { node }
 
-      otherwise {}
+      otherwise { }
     end
   end
 
@@ -1255,7 +1272,7 @@ module Rhodium
     queue = Q.of(document0, Events)
 
     unless event = queue.first?
-      document1 = queue.enqueue(Term.of(:cycle)).commit(document0, Events)
+      document1 = queue.enqueue(Cycle).commit(document0, Events)
 
       return document1, false
     end
@@ -1264,7 +1281,7 @@ module Rhodium
 
     # Any event other than cycle => remove #post-cycle. It's post-that
     # event now.
-    document1 = document1.morph({:"#post-cycle", nil})
+    document1 = document1.morph({PostCycle, nil})
 
     Term.case(event) do
       matchpi %{(edit @edge_ motion_)} do
@@ -1276,7 +1293,7 @@ module Rhodium
       end
 
       matchpi %{cycle} do
-        document1 = document1.morph({:"#post-cycle", true})
+        document1 = document1.morph({PostCycle, true})
 
         continue
       end
@@ -1285,6 +1302,21 @@ module Rhodium
         step(document0, document1, event)
       end
     end
+  end
+
+  # Returns `true` if *document* is marked as post-cycle. Returns `false` otherwise.
+  def post_cycle?(document : Term::Dict) : Bool
+    document.includes?(PostCycle)
+  end
+
+  # Returns `true` if *document* is in a "settled" state: it needs external
+  # events to be "unsettled"; and will otherwise remain stable forever.
+  def settled?(document : Term::Dict) : Bool
+    return false unless Q.of(document, Events).empty?
+    return false unless Q.of(document, Initialize).empty?
+    return false unless post_cycle?(document)
+
+    true
   end
 
   # Performs the transition from *document0* to its successor *document1*.
@@ -1387,13 +1419,12 @@ end
 module Nitrene
   extend self
 
-  JOB_REWRITER = chainR(using(plug(:env), dfsR(envR)), callR(PRIMITIVES))
-
   class JobContext
     getter alarm : Channel(Bool)
 
     def initialize
       @mt = ExecutionContext::MultiThreaded.new("Nitrene", 4)
+      @active = Atomic(UInt32).new(0u32)
       @running = Atomic(Term::Dict).new(Term[])
       @completed = Atomic(Term::Dict).new(Term[])
       @alarm = Channel(Bool).new
@@ -1404,6 +1435,7 @@ module Nitrene
 
     private def spawn(job : Term, program : Term, env : Term::Dict) : Nil
       @mt.spawn do
+        @active.add(1, :release)
         # sleep 3.seconds
 
         tick = -> do
@@ -1413,7 +1445,7 @@ module Nitrene
           end
         end
 
-        result = rewrite(program, JOB_REWRITER, tick, env: env)
+        result = Nitrene.run(program, env, observer: tick)
 
         completed0 = @completed.get(:acquire)
         while true
@@ -1422,6 +1454,7 @@ module Nitrene
           break if ok
         end
 
+        @active.sub(1, :release)
         @alarm.send(true)
       rescue JobInterrupted
       end
@@ -1441,29 +1474,45 @@ module Nitrene
 
         Term.case(job) do
           matchpi %{(¦ () program_ env_dict)} { spawn(job, program, env.unsafe_as_d) }
-          otherwise {}
+          otherwise { }
         end
       end
     end
 
-    def wait? : Bool
+    # WARNING: the caller guarantees that `sync` will never be called and is not
+    # being called right now while this method runs.
+    def jobless? : Bool
       running = @running.get(:acquire)
-      if running.empty?
-        return false
-      end
+      completed = @completed.get(:acquire)
+      active = @active.get(:acquire)
 
-      @alarm.receive
-
-      true
+      running.empty? && completed.empty? && active.zero?
     end
   end
 
-  def step(ctx : JobContext, document document0 : Term::Dict) : Term::Dict
+  # TODO: this isn't it!!!!
+  JOB_REWRITER = chainR(using(plug(:env), dfsR(envR)), callR(PRIMITIVES))
+
+  # Runs a Nitrene *program* within the given *env*.
+  #
+  # See `rewrite` to learn about *observer*.
+  def run(program : Term, env : Term::Dict, *, observer = nil) : Term
+    if observer
+      rewrite(program, JOB_REWRITER, observer, env: env)
+    else
+      rewrite(program, JOB_REWRITER, env: env)
+    end
+  end
+
+  # :nodoc:
+  #
+  # Asynchronous step implementation.
+  def step(nictx : JobContext, document document0 : Term::Dict) : Term::Dict
     document1 = document0
 
     jobs_pending = document0[Rhodium::JobsPending]?.try(&.as_d?) || Term[]
     jobs_pending = jobs_pending.transaction do |commit|
-      jobs_completed = ctx.completed
+      jobs_completed = nictx.completed
       jobs_completed.each_entry do |job, result|
         # Skip completed jobs that are not in the pending list.
         next unless job.in?(jobs_pending)
@@ -1477,20 +1526,61 @@ module Nitrene
     end
 
     # Swap running jobs with pending jobs.
-    ctx.sync(jobs_pending)
+    nictx.sync(jobs_pending)
 
     document1.with(Rhodium::JobsPending, jobs_pending)
   end
 
-  # Returns the step function for `Nitrene`.
+  # :nodoc:
   #
-  # - *ctx* provides the job context. Nitrene is serving the jobs asynchronously
-  #   and this context keeps info about the currently running jobs etc, along with
-  #   `ExecutionContext` and so on.
-  def step(ctx = JobContext.new) : D7::Step
+  # Synchronous step implementation.
+  def step(document document0 : Term::Dict) : Term::Dict
+    document1 = document0
+
+    jobs_pending = document0[Rhodium::JobsPending]?.try(&.as_d?) || Term[]
+    jobs_pending.each_entry do |job, _|
+      Term.matchpi?(job, %{(¦ () program_ env_dict)}) do
+        result = run(program, env.unsafe_as_d)
+
+        document1 = Rhodium::Q.of(document1, Rhodium::Events)
+          .enqueue(:"job/completed", job, result)
+          .commit(document1, Rhodium::Events)
+      end
+    end
+
+    document1.with(Rhodium::JobsPending, nil)
+  end
+
+  # Constructs an **asynchronous** step function for `Nitrene`.
+  #
+  # *nictx* is the job context. Nitrene will serve jobs asynchronously; the
+  # context will keep info about the currently running jobs etc. between
+  # steps (along with `ExecutionContext` and so on).
+  #
+  # NOTE: you will have to restart the run loop if it terminates before some
+  # jobs complete. See also: `JobContext#alarm`, `Goal.jobless`.
+  def step(nictx : JobContext) : D7::Step
     D7::Step.new do |document0, log|
       log.append { Term.of(:input, :nitrene, :step, document0) }
-      document1 = step(ctx, document0)
+      document1 = step(nictx, document0)
+      log.append { Term.of(:output, :nitrene, :step, document1) }
+
+      # Nitrene will never trigger a transition since it does not modify
+      # the document; it only emits events and takes pending jobs off.
+      {document1, false}
+    end
+  end
+
+  # Constructs a **synchronous** step function for `Nitrene`.
+  #
+  # All Nitrene jobs are guaranteed to complete at the end of each step.
+  #
+  # Can be used for localizing bugs to asynchronous `step`. Otherwise prefer
+  # asynchronous `step(nictx : JobContext)` since that's what Nitrene is about.
+  def step : D7::Step
+    D7::Step.new do |document0, log|
+      log.append { Term.of(:input, :nitrene, :step, document0) }
+      document1 = step(document0)
       log.append { Term.of(:output, :nitrene, :step, document1) }
 
       # Nitrene will never trigger a transition since it does not modify
@@ -1624,26 +1714,72 @@ module D7
     end
   end
 
-  def run(document : Term::Dict, *, log : Log = Log::None.new, goal : Goal::Fn = Goal.none, initial : Bool = true) : Term::Dict
-    run(document, log, Rhodium.transition, steps(Rhodium.step, Nitrene.step), goal, initial: initial)
-  end
+  # Spec for an *equality* termination condition for document rewriting.
+  #
+  # The rewriting process continues until the document becomes equal to *target*.
+  #
+  # - *target* specifies the expected final state of the document.
+  # - If *only_visible* is set to `true`, ignores internal pairs on nodes
+  #   and the document itself when checking for equality.
+  # - *limit* sets an optional limit on the number of rewriting steps before
+  #   forced termination.
+  #
+  # See also: `run?`, `Goal.equal`, `Goal.visible`, `Goal.limited`.
+  record Equal, target : Term::Dict, only_visible : Bool = true, limit : Int32? = nil do
+    # :nodoc:
+    def goal : Goal::Fn
+      goal = Goal.equal(target)
+      goal = Goal.visible(goal) if only_visible
+      if limit_ = limit
+        goal = Goal.limited(goal, limit: limit_)
+      end
 
-  def run?(document : Term::Dict, goal : Goal::Fn, *, log : Log = Log::None.new, limit = nil) : {Bool, Term::Dict}
-    if limit
-      goal = Goal.limited(goal, limit: limit)
+      goal
     end
-
-    {true, run(document, log: log, goal: goal)}
-  rescue e : Goal::Interrupted
-    {false, e.latest}
   end
 
-  def run_until_equal?(document : Term::Dict, target : Term::Dict, *, only_visible : Bool = true, **kwargs) : {Bool, Term::Dict}
-    run?(document, Goal.visible(Goal.equal(target), enabled: only_visible), **kwargs)
+  # Spec for a *pattern match* termination condition for document rewriting.
+  #
+  # The rewriting process continues until the document matches *pattern*.
+  #
+  # - *pattern* is the pattern that must be matched for rewriting to stop.
+  # - If *only_visible* is set to `true`, ignores internal pairs on nodes
+  #   and the document itself when checking for equality.
+  # - *limit* sets an optional limit on the number of rewriting steps before
+  #   forced termination.
+  #
+  # See also: `run?`, `Goal.matches`, `Goal.visible`, `Goal.limited`.
+  record Matches, pattern : Term, only_visible : Bool = true, limit : Int32? = nil do
+    # :nodoc:
+    def goal : Goal::Fn
+      goal = Goal.matches(pattern)
+      goal = Goal.visible(goal) if only_visible
+      if limit_ = limit
+        goal = Goal.limited(goal, limit: limit_)
+      end
+
+      goal
+    end
   end
 
-  def run_until_matches?(document : Term::Dict, pattern : Term, *, only_visible : Bool = true, **kwargs) : {Bool, Term::Dict}
-    run?(document, Goal.visible(Goal.matches(pattern), enabled: only_visible), **kwargs)
+  # Executes a rewriting process for *document* which is terminated according
+  # to the given termination condition *cond*. Returns `{true, final document}`
+  # if rewriting completed successfully (according to *cond*); returns
+  # `{false, latest document}` otherwise.
+  #
+  # See `run` for info on other arguments.
+  def run?(document : Term::Dict, cond : Equal | Matches, *, log : Log = Log::None.new) : {Bool, Term::Dict}
+    nictx = Nitrene::JobContext.new
+
+    goal = Goal.jobless(cond.goal, nictx)
+    transition = Rhodium.transition
+    step = steps(Rhodium.step, Nitrene.step)
+
+    begin
+      {true, run(document, log, transition, step, goal, initial: true)}
+    rescue e : Goal::Interrupted
+      {false, e.latest}
+    end
   end
 
   # Strips internal pairs off of *document* and the nodes in it.
@@ -1685,21 +1821,20 @@ module D7
   end
 end
 
+# Provides a set of functions that define stopping conditions for
+# document rewriting.
 module D7::Goal
   extend self
 
   alias Fn = Term::Dict -> Bool
 
-  # Restricts *goal* to the visible part of the document if *enabled*.
+  # Restricts *goal* to the visible part of the document.
   #
-  # Allows you to show (`true`) or hide (`false`) internal pairs on nodes and
-  # the document itself to *goal*. Hiding them is an opt in but recommended
-  # since the pairs are internal for a reason; and may burden the user visually
-  # if seen.
+  # Allows you to hide internal pairs on nodes and the document itself to *goal*.
   #
   # See also: `D7.visible`.
-  def visible(goal : Fn, *, enabled : Bool) : Fn
-    Fn.new { |document| goal.call(enabled ? D7.visible(document) : document) }
+  def visible(goal : Fn) : Fn
+    Fn.new { |document| goal.call(D7.visible(document)) }
   end
 
   # Constructs a `Goal::Fn` that waits until the document being rewritten
@@ -1712,6 +1847,12 @@ module D7::Goal
   # matches *pattern*.
   def matches(pattern : Term) : Fn
     Fn.new { |document| M1.probe?(pattern, Term.of(document)) }
+  end
+
+  # Restricts *goal* to documents that have no running jobs in Nitrene
+  # context *nictx*.
+  def jobless(goal : Fn, nictx : Nitrene::JobContext) : Fn
+    Fn.new { |document| nictx.jobless? ? goal.call(document) : false }
   end
 
   # Constructs a `Goal::Fn` that communicates to the rewriting engine
@@ -1732,7 +1873,7 @@ module D7::Goal
   # recommended to use `STM` for efficiency if N is small.
   def none(*, lookback = STM(Term::Dict, 8).new) : Fn
     if lookback
-      Fn.new { |document| !lookback.add?(document) }
+      Fn.new { |document| Rhodium.settled?(document) && !lookback.add?(document) }
     else
       Fn.new { false }
     end
@@ -1751,7 +1892,7 @@ module D7::Goal
 
   # Wraps around another *goal* function; raises `Interrupted` if the goal
   # cannot be reached within *limit* steps.
-  def limited(goal : Fn, *, limit budget = 128) : Fn
+  def limited(goal : Fn, *, limit budget : Int32 = 128) : Fn
     Fn.new do |document|
       fulfilled = goal.call(document)
 
@@ -1780,7 +1921,7 @@ observe = ->(entry : Term) do
       last_doc = doc
     end
 
-    otherwise {}
+    otherwise { }
   end
 end
 

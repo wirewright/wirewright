@@ -608,7 +608,7 @@
 ;; lookaround movement
 
 ;; target above
-(d7 limit: 512
+(d7 limit: 256
   (a
    b
    c
@@ -670,7 +670,7 @@
    baz))
 
 ;; target below
-(d7 limit: 512
+(d7 limit: 256
   (a
    b
    c

@@ -337,7 +337,7 @@ def process(queue, testcase, ctx)
 
       track(ctx, testcase) do
         ctx.stats.run do
-          ok, latest = D7.run_until_equal?(initial.unsafe_as_d, expected.unsafe_as_d, only_visible: true, limit: limit.to(Int32))
+          ok, latest = D7.run?(initial.unsafe_as_d, cond: D7::Equal.new(expected.unsafe_as_d, only_visible: true, limit: limit.to(Int32)))
           unless ok
             ctx.failures << Term.of(:"d7/interrupted", D7.visible(latest), :==, expected, :LIMIT, limit)
           end
@@ -352,7 +352,7 @@ def process(queue, testcase, ctx)
 
       track(ctx, testcase) do
         ctx.stats.run do
-          ok, latest = D7.run_until_matches?(initial.unsafe_as_d, pattern, only_visible: true, limit: limit.to(Int32))
+          ok, latest = D7.run?(initial.unsafe_as_d, cond: D7::Matches.new(pattern, only_visible: true, limit: limit.to(Int32)))
           unless ok
             ctx.failures << Term.of(:"d7/interrupted", D7.visible(latest), :MISMATCH, pattern, :LIMIT, limit)
           end
