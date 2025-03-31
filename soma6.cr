@@ -571,9 +571,80 @@ class Document
   # Used to generate document ids.
   @@counter = Atomic(UInt32).new(0u32)
 
+  class Mailbox
+    @state = Atomic(State).new(State.new)
+
+    def enqueue(prompt : Term, & : ->) : Nil
+      state0 = @state.get(:relaxed)
+      while true
+        state1 = state0.enqueue(prompt)
+        state0, ok = @state.compare_and_set(state0, state1, :relaxed, :relaxed)
+        break if ok
+      end
+
+      return unless state0.settled?
+
+      yield
+    end
+
+    def dequeue? : Term?
+      state0 = @state.get(:relaxed)
+      while true
+        state1, prompt = state0.dequeue
+        state0, ok = @state.compare_and_set(state0, state1, :relaxed, :relaxed)
+        break if ok
+      end
+      prompt
+    end
+
+    def settle? : Bool
+      state0 = @state.get(:relaxed)
+
+      while true
+        state1 = state0.settled
+        state0, ok = @state.compare_and_set(state0, state1, :relaxed, :relaxed)
+        break if ok
+      end
+
+      # If we've settled on a nonempty queue we'll have to restart
+      # the mainloop (disallow caller to settle)!
+      state1.empty?
+    end
+  end
+
+  class Mailbox::State
+    getter? settled : Bool
+
+    def initialize(@queue = BiList(Term).new, @settled = true)
+    end
+
+    delegate :empty?, to: @queue
+
+    def enqueue(prompt : Term) : State
+      State.new(@queue.append(prompt), settled: false)
+    end
+
+    def dequeue : {State, Term?}
+      case @queue
+      when .empty? then {State.new(@queue, @settled), nil}
+      when .one?   then {State.new(@queue.rest, @settled), @queue.first}
+      else
+        {State.new(@queue.rest, @settled), @queue.first}
+      end
+    end
+
+    def settled : State
+      State.new(@queue, settled: true)
+    end
+  end
+
   def initialize
+    id = @@counter.add(1, :relaxed)
+
+    @document_thread = ExecutionContext::MultiThreaded.new("Document #{id}", 1)
+
     @view = Atomic(Term::Dict).new(BLANK.as_d)
-    @mailbox = Channel(Term).new(128)
+    @mailbox = Mailbox.new
 
     # The following instance variables are owned exclusively by the document
     # thread. No one else must know they exist.
@@ -582,9 +653,18 @@ class Document
     @initial = true
     @state = State::Clean
 
-    # Finally, spin up the document thread.
-    mt = ExecutionContext::MultiThreaded.new("Document #{@@counter.add(1, :relaxed)}", 1)
-    mt.spawn { mainloop }
+    @nitrene_watch_thread = ExecutionContext::MultiThreaded.new("Nitrene Watch #{id}", 1)
+    @nitrene_watch_thread.spawn do
+      while true
+        select
+        when @nitrene.alarm.receive
+          # Wake document thread up. The event doesn't matter. Nitrene.step
+          # will do the rest.
+          send(Term.of(:alarm))
+        end
+      end
+    rescue Channel::ClosedError
+    end
   end
 
   # Returns the latest view of this document.
@@ -594,7 +674,12 @@ class Document
 
   # Adds *prompt* to this document's mailbox.
   def send(prompt : Term) : Nil
-    @mailbox.send(prompt)
+    @mailbox.enqueue(prompt) do
+      @document_thread.spawn do
+        while mainloop?
+        end
+      end
+    end
   end
 
   # Hosts the main loop run by the document thread.
@@ -602,30 +687,24 @@ class Document
   # The main loop "runs the physics": advances the document step-by-step.
   # These advancements are interleaved with `rendezvous`.
   #
-  # Once the document has settled the mainloop waits (`wait`) for further prompts.
-  private def mainloop : Nil
-    settled = false
+  # Once the document has settled the mainloop ends. Returns `true` if
+  # the mainloop needs to be restarted; `false` otherwise.
+  private def mainloop? : Bool
+    draw
 
-    while true
-      draw
+    @document = D7.run(@document,
+      log: D7::Log::None.new,
+      transition: Rhodium.transition,
+      step: D7.steps(rendezvous, Rhodium.step, Nitrene.step(@nitrene)),
+      goal: D7::Goal.none,
+      initial: @initial,
+    )
 
-      if settled
-        wait
+    @initial = false
 
-        settled = false
-      end
+    draw
 
-      @document = D7.run(@document,
-        log: D7::Log::None.new,
-        transition: Rhodium.transition,
-        step: D7.steps(rendezvous, Rhodium.step, Nitrene.step(@nitrene)),
-        goal: D7::Goal.none,
-        initial: @initial,
-      )
-
-      @initial = false
-      settled = true
-    end
+    !@mailbox.settle?
   end
 
   # Rendezvous step assesses and modifies the state of the document. It enhances
@@ -684,28 +763,11 @@ class Document
     @view.set(drawable.as_d, :relaxed)
   end
 
-  # Blocks until a prompt arrives to this document's mailbox. Handles that prompt.
-  #
-  # Raises `Channel::ClosedError` if the mailbox is closed while waiting.
-  private def wait : Nil
-    select
-    when prompt = @mailbox.receive
-    when @nitrene.alarm.receive
-      prompt = Term.of(:"job-completed")
-    end
-
-    handle(prompt)
-  end
-
   # Checks the mailbox for new prompts. If none, returns immediately. If some,
   # handles the front prompt.
-  #
-  # Raises `Channel::ClosedError` if the mailbox is closed while waiting.
   private def peek : Nil
-    select
-    when prompt = @mailbox.receive
+    if prompt = @mailbox.dequeue?
       handle(prompt)
-    else
     end
   end
 
@@ -724,10 +786,6 @@ class Document
   # Replaces the document with a new *seed*.
   private def open(seed : Term::Dict) : Nil
     @document = seed
-    # This is needed if we're currently `wait`ing. If `peek` is the caller
-    # it doesn't care about initial/not because it'll trigger a transition
-    # anyway -- due to document change. With wait it's another story.
-    @initial = true
   end
 
   # Enqueues `(edit @user motion_)` event onto the document's queue.

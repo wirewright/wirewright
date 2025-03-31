@@ -1253,12 +1253,18 @@ module Rhodium
     document0 = initialize_queue.commit(document0, Initialize)
 
     queue = Q.of(document0, Events)
-    if event = queue.first?
-      document1 = queue.dequeue.commit(document0, Events)
-    else
-      event = Term.of(:cycle)
-      document1 = document0
+
+    unless event = queue.first?
+      document1 = queue.enqueue(Term.of(:cycle)).commit(document0, Events)
+
+      return document1, false
     end
+
+    document1 = queue.dequeue.commit(document0, Events)
+
+    # Any event other than cycle => remove #post-cycle. It's post-that
+    # event now.
+    document1 = document1.morph({:"#post-cycle", nil})
 
     Term.case(event) do
       matchpi %{(edit @edge_ motion_)} do
@@ -1267,6 +1273,12 @@ module Rhodium
         # Edit is potentially destructive and not under our control; therefore it
         # will always force a transition.
         {edited.as_d? || raise("toplevel edit must produce a dict"), true}
+      end
+
+      matchpi %{cycle} do
+        document1 = document1.morph({:"#post-cycle", true})
+
+        continue
       end
 
       otherwise do
@@ -1502,7 +1514,7 @@ class STM(T, N)
     end
     return false if @ring.any?(element)
     @ring[@cursor] = element
-    @cursor &+= 1
+    @cursor += 1
     true
   end
 end
@@ -1717,9 +1729,7 @@ module D7::Goal
   # you would want control over.
   #
   # NOTE: the only requirement is that *lookback* responds to `add?`. You are
-  # recommended ot use `STM` for efficienty if N is small; but you also may
-  # use `Set` for infinite lookback (leaking memory but able to detect very
-  # large cycles); since the latter also responds to `add?`.
+  # recommended to use `STM` for efficiency if N is small.
   def none(*, lookback = STM(Term::Dict, 8).new) : Fn
     if lookback
       Fn.new { |document| !lookback.add?(document) }
