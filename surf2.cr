@@ -6,7 +6,7 @@ require "json"
 require "./src/wirewright"
 require "./surf_common"
 
-Log.setup_from_env(default_level: :trace)
+Log.setup_from_env(default_level: :error)
 
 record Label, value : UInt128 do
   include Comparable(Label)
@@ -1904,9 +1904,9 @@ class Tview
       # Consider the activation removed if it does not match the pattern, regardless
       # of whether we were observing it before.
       stimuli1 = stimuli1.dissoc(pid)
+    else
+      stimuli1 = stimuli1.assoc(pid, Stimulus.new(adata.instant, matches))
     end
-
-    stimuli1 = stimuli1.assoc(pid, Stimulus.new(adata.instant, matches))
 
     change(stimuli: stimuli1)
   end
@@ -2270,11 +2270,14 @@ class RemoteStringChat
   end
 end
 
+{% skip_file unless flag?(:surf2) %}
+
+Log.setup_from_env(default_level: :trace)
+
 ServerLog = ::Log.for("Server")
 
 def handle(chat, unsubs, unsubs_lock, socket)
   while message = socket.gets
-
     message = message.chomp
     ServerLog.debug { "#{socket}: #{message}" }
     if topic = message.lchop?("+SUB ")
@@ -2384,14 +2387,17 @@ elsif ARGV[0]? == "join"
     # conn[2] = Tconn::Appearance.new(Term.of(:qux, 123))
     # conn[1] = Tconn::Sensor.new(%{(qux x_)})
 
-  # conn.delete(0)
-  # conn.delete(2)
-  # conn.delete(1)
+    # conn.delete(0)
+    # conn.delete(2)
+    # conn.delete(1)
   end
 end
 
-# - hash & compare selector using crypto secure hash (argon2id)
-# - run tspace tests using new Tconn
+# - send & compare selector as hash, never send plaintext selector
+#   - at difficulty: easy selector is sent as (32-bit salt; sha256)
+#   - at difficulty: medium selector is sent as (64-bit salt; sha512)
+#   - at difficulty: hard selector is sent as argon2id (crypto secure hash)
 # - use 64-bit Snowflake-like instead of WWID
 # - if map or chat connection is lost the Tconn must retire. Wrapping code should re-create
 #   it with new id etc. for each attempt to reconnect. This should be invisible to clients.
+# - tombstone handling ?!

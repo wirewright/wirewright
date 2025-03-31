@@ -379,113 +379,74 @@ def process(queue, testcase, ctx)
 end
 
 def tspace(flow : Term::Dict, & : Term, Term ->)
-  counter = VERTEX_ZERO
-  fresh = ->{ counter, _ = counter + 1, counter }
+  counter = Identity.new(0)
 
-  tbase = Tbase.new(fresh, HashMap(Tbase::Key, Tbase::Value).new)
-  tspace = Tspace.new(fresh, tbase)
+  map = SyncInMemoryMap(Tspace::Key, Tspace::Value).new
+  chat = SyncInMemoryChat(Label, Activation).new
 
   conns = {} of Term => Tconn
-  iviews = {} of Term => Term::Dict
-
-  identities = {} of {Term, Term} => Label
-  ridentities = {} of Label => Term
-
-  patterns = {} of Label => Term
+  lidentities = {} of {Term, Term} => Identity
+  ridentities = {} of Identity => Term
+  view = Term[]
 
   flow.items.each do |step|
-    Term.case(step) do
-      matchpi %{(conn conn-name_symbol children_*)} do
-        # Create a connection object if it does not exist.
-        conns.put_if_absent(conn_name) do
-          Tconn.new(fresh, tspace) do |act|
-            # Whenever we receive an activation, we update the corresponding conn's
-            # iview (short for *identity view*, where identities are still discernible).
-            iview = iviews[conn_name]? || Term[]
+    Term.matchpi?(step, %{(conn conn-name_symbol children_*)}) do
+      next if conns.has_key?(conn_name)
 
-            case act
-            in StimulusPresence
-              pattern = patterns[act.sensor]
-              matches = M1.matches(pattern, act.value)
-              if matches.empty?
-                iview = iview.morph({ act.sensor, {act.trigger, act.identity}, nil})
-              else
-                iview = iview.morph({ act.sensor, {act.trigger, act.identity}, matches})
-              end
-            in StimulusAbsence
-              iview = iview.morph({ act.sensor, {act.trigger, act.identity}, nil })
-            in SensorAbsence
-              iview = iview.morph({ act.sensor, nil })
-            end
+      conns[conn_name] = Tconn.new(map, chat, Tconn.multisets { |multiset| view = multiset })
 
-            iviews[conn_name] = iview
-          end
+      children.each_item_unordered do |child|
+        Term.matchpi?(child, %{[after added (%any sensor appearance) surface-name_symbol _]}) do
+          key = {conn_name, surface_name}
+          next if lidentities.has_key?(key)
+
+          identity = counter += 1
+
+          lidentities[key] = identity
+          ridentities[identity] = surface_name
         end
-
-        # Find surface additions and generate fresh ids for them.
-        children.each_item_unordered do |child|
-          Term.case(child) do
-            matchpi %{[after added (%any sensor appearance) surface-name_symbol pattern_]} do
-              identity = identities.put_if_absent({conn_name, surface_name}) { fresh.call }
-              ridentities.put_if_absent(identity) { surface_name }
-              patterns.put_if_absent(identity, pattern)
-            end
-
-            otherwise { }
-          end
-        end
-
-        otherwise { }
       end
     end
   end
 
   flow.items.each do |step|
-    Term.case(step) do
-      matchpi %{(conn conn-name_symbol children_*)} do
-        conn = conns[conn_name]
+    Term.matchpi?(step, %{(conn conn-name_symbol children_*)}) do
+      conn = conns[conn_name]
 
-        children.items.each do |child|
-          Term.case(child) do
-            matchpi %{[after added sensor surface-name_symbol pattern_]} do
-              conn.add_sensor(
-                identity: identities[{conn_name, surface_name}],
-                pattern: pattern,
-                selector: child[:selector]?,
-              )
-            end
+      children.items.each do |child|
+        Term.case(child) do
+          matchpi %{[after added sensor surface-name_symbol pattern_]} do
+            identity = lidentities[{conn_name, surface_name}]
 
-            matchpi %{[after added appearance surface-name_symbol value_]} do
-              conn.add_appearance(
-                identity: identities[{conn_name, surface_name}],
-                value: value,
-                selector: child[:selector]?,
-                tombstone: child[:tombstone]?,
-              )
-            end
-
-            matchpi %{[after removed surface-name_symbol]} do
-              conn.delete(identities[{conn_name, surface_name}])
-            end
-
-            matchpi %{(view expected_)} do
-              iview = iviews[conn_name]? || Term[]
-
-              seeing = Term::Dict.build do |commit|
-                iview.each_entry do |sensor, appearances|
-                  commit.with(ridentities[sensor.to(Int32)], Term.set(appearances.ve))
-                end
-              end
-
-              yield Term.of(seeing), expected
-            end
-
-            otherwise { }
+            conn[identity] = Tconn::Sensor.new(pattern, selector: child[:selector]?)
           end
+
+          matchpi %{[after added appearance surface-name_symbol value_]} do
+            identity = lidentities[{conn_name, surface_name}]
+
+            conn[identity] = Tconn::Appearance.new(value, selector: child[:selector]?, tombstone: child[:tombstone]?)
+          end
+
+          matchpi %{[after removed surface-name_symbol]} do
+            identity = lidentities[{conn_name, surface_name}]
+
+            conn.delete(identity)
+          end
+
+          matchpi %{(view expected_)} do
+            seeing = Term::Dict.build do |commit|
+              view.each_entry do |identity, multiset|
+                # Map numeric identities to original surface names (symbols).
+                commit.with(ridentities[identity.to(Identity)], multiset)
+              end
+            end
+
+            yield Term.of(seeing), expected
+          end
+
+          otherwise { }
         end
       end
-
-      otherwise { }
     end
   end
 end

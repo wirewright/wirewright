@@ -20,12 +20,12 @@
       (after added appearance Adict (+ 1 2 x: 100 y: 200)))
     (conn A
       (view
-        {Sany: {, ({x: 100}) ({x: "hello world"}) ({x: qux}) ({x: true}) ({x: false}) ({x: {}}) ({x: (+ a b)}) ({x: {x: 100, y: 200}}) ({x: (+ 1 2 x: 100 y: 200)})}
-         Snum: {, ({x: 100})}
-         Sstr: {, ({x: "hello world"})}
-         Ssym: {, ({x: qux})}
-         Sbool: {, ({x: true}) ({x: false})}
-         Sdict: {, ({x: {}}) ({x: (+ a b)}) ({x: {x: 100, y: 200}}) ({x: (+ 1 2 x: 100 y: 200)})}})))
+        {Sany: {# {x: 100} {x: "hello world"} {x: qux} {x: true} {x: false} {x: {}} {x: (+ a b)} {x: {x: 100, y: 200}} {x: (+ 1 2 x: 100 y: 200)}}
+         Snum: {# {x: 100}}
+         Sstr: {# {x: "hello world"}}
+         Ssym: {# {x: qux}}
+         Sbool: {# {x: true} {x: false}}
+         Sdict: {# {x: {}} {x: (+ a b)} {x: {x: 100, y: 200}} {x: (+ 1 2 x: 100 y: 200)}}})))
   (tspace
     (conn B
       (after added appearance Anum 100)
@@ -46,12 +46,12 @@
       (after added sensor Sdict x_dict))
     (conn A
       (view
-        {Sany: {, ({x: 100}) ({x: "hello world"}) ({x: qux}) ({x: true}) ({x: false}) ({x: {}}) ({x: (+ a b)}) ({x: {x: 100, y: 200}}) ({x: (+ 1 2 x: 100 y: 200)})}
-         Snum: {, ({x: 100})}
-         Sstr: {, ({x: "hello world"})}
-         Ssym: {, ({x: qux})}
-         Sbool: {, ({x: true}) ({x: false})}
-         Sdict: {, ({x: {}}) ({x: (+ a b)}) ({x: {x: 100, y: 200}}) ({x: (+ 1 2 x: 100 y: 200)})}}))))
+        {Sany: {# {x: 100} {x: "hello world"} {x: qux} {x: true} {x: false} {x: {}} {x: (+ a b)} {x: {x: 100, y: 200}} {x: (+ 1 2 x: 100 y: 200)}}
+         Snum: {# {x: 100}}
+         Sstr: {# {x: "hello world"}}
+         Ssym: {# {x: qux}}
+         Sbool: {# {x: true} {x: false}}
+         Sdict: {# {x: {}} {x: (+ a b)} {x: {x: 100, y: 200}} {x: (+ 1 2 x: 100 y: 200)}}}))))
 
 ;; TODO: %any of dicts, %literal dict!!!!
 
@@ -61,13 +61,13 @@
     (conn A
       (after added sensor Sa foo_)
       (after added appearance Aa 100)
-      (view {Sa: {, ({foo: 100})}})))
+      (view {Sa: {# {foo: 100}}})))
 
   (tspace
     (conn A
       (after added appearance Aa 100)
       (after added sensor Sa foo_)
-      (view {Sa: {, ({foo: 100})}})))
+      (view {Sa: {# {foo: 100}}})))
 
   (tspace
     (conn A
@@ -75,7 +75,7 @@
     (conn B
       (after added appearance Aa 100))
     (conn A
-      (view {Sa: {, ({foo: 100})}})))
+      (view {Sa: {# {foo: 100}}})))
 
   (tspace
     (conn B
@@ -83,7 +83,7 @@
     (conn A
       (after added sensor Sa foo_))
     (conn A
-      (view {Sa: {, ({foo: 100})}}))))
+      (view {Sa: {# {foo: 100}}}))))
 
 ;; Basic literal disjunction
 (group
@@ -93,9 +93,9 @@
       (after added appearance Ab 200)
       (after added appearance Ac 300)
       (after added sensor Sa n←(%any 100 300))
-      (view {Sa: {, ({n: 100}) ({n: 300})}})
+      (view {Sa: {# {n: 100} {n: 300}}})
       (after added appearance Ac 400)
-      (view {Sa: {, ({n: 100})}})))
+      (view {Sa: {# {n: 100}}})))
   (tspace
     (conn A
       (after added sensor Sa n←(%any 100 300))
@@ -103,9 +103,9 @@
       (after added appearance Aa 100)
       (after added appearance Ab 200)
       (after added appearance Ac 300)
-      (view {Sa: {, ({n: 100}) ({n: 300})}})
+      (view {Sa: {# {n: 100} {n: 300}}})
       (after added appearance Ac 400)
-      (view {Sa: {, ({n: 100})}}))))
+      (view {Sa: {# {n: 100}}}))))
 
 ;; Basic conjunctions
 (tspace
@@ -116,15 +116,15 @@
     (after added appearance Aa (qux 0 0))
     (view {})
     (after added appearance Ab (pixel 0 0))
-    (view {Sa: {, ({x: 0})}, Sb: {, ({y: 0})}})
+    (view {Sa: {# {x: 0}}, Sb: {# {y: 0}}})
     (after added appearance Aa (pixel 100 0))
-    (view {Sa: {, ({x: 0}) ({x: 100})}, Sb: {, ({y: 0})}})
+    (view {Sa: {# {x: 0} {x: 100}}, Sb: {# {y: 0}}})
     (after added appearance Aa (pixel 0 200))
-    (view {Sa: {, ({x: 0})}, Sb: {, ({y: 0}) ({y: 200})}})
+    (view {Sa: {# {x: 0}}, Sb: {# {y: 0} {y: 200}}})
     (after added appearance Ab (pixel 100 0))
-    (view {Sa: {, ({x: 100})}, Sb: {, ({y: 200})}})
+    (view {Sa: {# {x: 100}}, Sb: {# {y: 200}}})
     (after removed Aa)
-    (view {Sa: {, ({x: 100})}})
+    (view {Sa: {# {x: 100}}})
     (after removed Ab)
     (view {})))
 
@@ -141,14 +141,14 @@
     (conn B
       (view {})
       (after added sensor Sa {¦ x: x_})
-      (view {Sa: {, ({x: 1}) ({x: a}) ({x: "qux"})}})
+      (view {Sa: {# {x: 1} {x: a} {x: "qux"}}})
       (after added sensor Sb {¦ x: x_, y: y_})
-      (view {Sa: {, ({x: 1}) ({x: a}) ({x: "qux"})}
-             Sb: {, ({x: a, y: b}) ({x: "qux", y: 100})}})
+      (view {Sa: {# {x: 1} {x: a} {x: "qux"}}
+             Sb: {# {x: a, y: b} {x: "qux", y: 100}}})
       (after added sensor Sc {¦ x: x_, y: y_, z: z_})
-      (view {Sa: {, ({x: 1}) ({x: a}) ({x: "qux"})}
-             Sb: {, ({x: a, y: b}) ({x: "qux", y: 100})}
-             Sc: {, ({x: "qux", y: 100, z: true})}})))
+      (view {Sa: {# {x: 1} {x: a} {x: "qux"}}
+             Sb: {# {x: a, y: b} {x: "qux", y: 100}}
+             Sc: {# {x: "qux", y: 100, z: true}}})))
 
   ;; Sensors first
   (tspace
@@ -163,9 +163,9 @@
       (after added appearance Ad {})
       (after added appearance Ae {qux: 100}))
     (conn B
-      (view {Sa: {, ({x: 1}) ({x: a}) ({x: "qux"})}
-             Sb: {, ({x: a, y: b}) ({x: "qux", y: 100})}
-             Sc: {, ({x: "qux", y: 100, z: true})}})))
+      (view {Sa: {# {x: 1} {x: a} {x: "qux"}}
+             Sb: {# {x: a, y: b} {x: "qux", y: 100}}
+             Sc: {# {x: "qux", y: 100, z: true}}})))
 
   ;; Remove sensors, loosest to tightest
   (tspace
@@ -181,10 +181,10 @@
       (after added appearance Ae {qux: 100}))
     (conn B
       (after removed Sa)
-      (view {Sb: {, ({x: a, y: b}) ({x: "qux", y: 100})}
-             Sc: {, ({x: "qux", y: 100, z: true})}})
+      (view {Sb: {# {x: a, y: b} {x: "qux", y: 100}}
+             Sc: {# {x: "qux", y: 100, z: true}}})
       (after removed Sb)
-      (view {Sc: {, ({x: "qux", y: 100, z: true})}})
+      (view {Sc: {# {x: "qux", y: 100, z: true}}})
       (after removed Sc)
       (view {})))
 
@@ -202,10 +202,10 @@
       (after added appearance Ae {qux: 100}))
     (conn B
       (after removed Sc)
-      (view {Sa: {, ({x: 1}) ({x: a}) ({x: "qux"})}
-             Sb: {, ({x: a, y: b}) ({x: "qux", y: 100})}})
+      (view {Sa: {# {x: 1} {x: a} {x: "qux"}}
+             Sb: {# {x: a, y: b} {x: "qux", y: 100}}})
       (after removed Sb)
-      (view {Sa: {, ({x: 1}) ({x: a}) ({x: "qux"})}})
+      (view {Sa: {# {x: 1} {x: a} {x: "qux"}}})
       (after removed Sa)
       (view {})))
 
@@ -223,10 +223,10 @@
       (after added appearance Ae {qux: 100}))
     (conn B
       (after removed Sc)
-      (view {Sa: {, ({x: 1}) ({x: a}) ({x: "qux"})}
-             Sb: {, ({x: a, y: b}) ({x: "qux", y: 100})}})
+      (view {Sa: {# {x: 1} {x: a} {x: "qux"}}
+             Sb: {# {x: a, y: b} {x: "qux", y: 100}}})
       (after removed Sa)
-      (view {Sb: {, ({x: a, y: b}) ({x: "qux", y: 100})}})
+      (view {Sb: {# {x: a, y: b} {x: "qux", y: 100}}})
       (after removed Sb)
       (view {})))
 
@@ -246,19 +246,19 @@
       (after removed Ad)
       (after removed Ae))
     (conn B
-      (view {Sa: {, ({x: 1}) ({x: a}) ({x: "qux"})}
-             Sb: {, ({x: a, y: b}) ({x: "qux", y: 100})}
-             Sc: {, ({x: "qux", y: 100, z: true})}}))
+      (view {Sa: {# {x: 1} {x: a} {x: "qux"}}
+             Sb: {# {x: a, y: b} {x: "qux", y: 100}}
+             Sc: {# {x: "qux", y: 100, z: true}}}))
     (conn A (after removed Aa))
     (conn B
-      (view {Sa: {, ({x: a}) ({x: "qux"})}
-             Sb: {, ({x: a, y: b}) ({x: "qux", y: 100})}
-             Sc: {, ({x: "qux", y: 100, z: true})}}))
+      (view {Sa: {# {x: a} {x: "qux"}}
+             Sb: {# {x: a, y: b} {x: "qux", y: 100}}
+             Sc: {# {x: "qux", y: 100, z: true}}}))
     (conn A (after removed Ab))
     (conn B
-      (view {Sa: {, ({x: "qux"})}
-             Sb: {, ({x: "qux", y: 100})}
-             Sc: {, ({x: "qux", y: 100, z: true})}}))
+      (view {Sa: {# {x: "qux"}}
+             Sb: {# {x: "qux", y: 100}}
+             Sc: {# {x: "qux", y: 100, z: true}}}))
     (conn A (after removed Ac))
     (conn B
       (view {})))
@@ -277,16 +277,16 @@
       (after added appearance Ae {qux: 100}))
     (conn A (after removed Ac))
     (conn B
-      (view {Sa: {, ({x: 1}) ({x: a})}
-             Sb: {, ({x: a, y: b})}}))
+      (view {Sa: {# {x: 1} {x: a}}
+             Sb: {# {x: a, y: b}}}))
     (conn A (after removed Ab))
     (conn B
-      (view {Sa: {, ({x: 1})}}))
+      (view {Sa: {# {x: 1}}}))
     (conn A
       (after removed Ae)
       (after removed Ad))
     (conn B
-      (view {Sa: {, ({x: 1})}}))
+      (view {Sa: {# {x: 1}}}))
     (conn A
       (after removed Aa))
     (conn B
@@ -306,21 +306,21 @@
       (after added appearance Ae {qux: 100}))
     (conn A (after removed Ad))
     (conn B
-      (view {Sa: {, ({x: 1}) ({x: a}) ({x: "qux"})}
-             Sb: {, ({x: a, y: b}) ({x: "qux", y: 100})}
-             Sc: {, ({x: "qux", y: 100, z: true})}}))
+      (view {Sa: {# {x: 1} {x: a} {x: "qux"}}
+             Sb: {# {x: a, y: b} {x: "qux", y: 100}}
+             Sc: {# {x: "qux", y: 100, z: true}}}))
     (conn A (after removed Ac))
     (conn B
-      (view {Sa: {, ({x: 1}) ({x: a})}
-             Sb: {, ({x: a, y: b})}}))
+      (view {Sa: {# {x: 1} {x: a}}
+             Sb: {# {x: a, y: b}}}))
     (conn A (after removed Ae))
     (conn B
-      (view {Sa: {, ({x: 1}) ({x: a})}
-             Sb: {, ({x: a, y: b})}}))
+      (view {Sa: {# {x: 1} {x: a}}
+             Sb: {# {x: a, y: b}}}))
     (conn A (after removed Aa))
     (conn B
-      (view {Sa: {, ({x: a})}
-             Sb: {, ({x: a, y: b})}}))
+      (view {Sa: {# {x: a}}
+             Sb: {# {x: a, y: b}}}))
     (conn A (after removed Ab))
     (conn B
       (view {}))))
@@ -338,14 +338,14 @@
     (conn B
       (view {})
       (after added sensor Sa {x: x_})
-      (view {Sa: {, ({x: 1})}})
+      (view {Sa: {# {x: 1}}})
       (after added sensor Sb {x: x_, y: y_})
-      (view {Sa: {, ({x: 1})}
-             Sb: {, ({x: a, y: b})}})
+      (view {Sa: {# {x: 1}}
+             Sb: {# {x: a, y: b}}})
       (after added sensor Sc {x: x_, y: y_, z: z_})
-      (view {Sa: {, ({x: 1})}
-             Sb: {, ({x: a, y: b})}
-             Sc: {, ({x: "qux", y: 100, z: true})}})))
+      (view {Sa: {# {x: 1}}
+             Sb: {# {x: a, y: b}}
+             Sc: {# {x: "qux", y: 100, z: true}}})))
 
   ;; Sensors first
   (tspace
@@ -360,9 +360,9 @@
       (after added appearance Ad {})
       (after added appearance Ae {qux: 100}))
     (conn B
-      (view {Sa: {, ({x: 1})}
-             Sb: {, ({x: a, y: b})}
-             Sc: {, ({x: "qux", y: 100, z: true})}}))))
+      (view {Sa: {# {x: 1}}
+             Sb: {# {x: a, y: b}}
+             Sc: {# {x: "qux", y: 100, z: true}}}))))
 
 ;; Empty dict handling
 (group
@@ -377,14 +377,14 @@
       (after added appearance Ad (+ 1 2 x: 100, y: 200))
       (after added appearance Ae 100))
     (conn A
-      (view {Sa: {, ({D: {}})}}))
+      (view {Sa: {# {D: {}}}}))
     (conn B
       (after removed Ae)
       (after removed Ad)
       (after removed Ac)
       (after removed Ab))
     (conn A
-      (view {Sa: {, ({D: {}})}}))
+      (view {Sa: {# {D: {}}}}))
     (conn B
       (after removed Aa))
     (conn A
@@ -401,28 +401,28 @@
       (after added appearance Ad (+ 1 2 x: 100, y: 200))
       (after added appearance Ae 100))
     (conn A
-      (view {Sa: {, ({D: {}})
-                    ({D: {x: 100}})
-                    ({D: {x: 100, y: 200}})
-                    ({D: (+ 1 2 x: 100 y: 200)})}}))
+      (view {Sa: {# {D: {}}
+                    {D: {x: 100}}
+                    {D: {x: 100, y: 200}}
+                    {D: (+ 1 2 x: 100 y: 200)}}}))
     (conn B (after removed Ae))
     (conn A
-      (view {Sa: {, ({D: {}})
-                    ({D: {x: 100}})
-                    ({D: {x: 100, y: 200}})
-                    ({D: (+ 1 2 x: 100 y: 200)})}}))
+      (view {Sa: {# {D: {}}
+                    {D: {x: 100}}
+                    {D: {x: 100, y: 200}}
+                    {D: (+ 1 2 x: 100 y: 200)}}}))
     (conn B (after removed Ad))
     (conn A
-      (view {Sa: {, ({D: {}})
-                    ({D: {x: 100}})
-                    ({D: {x: 100, y: 200}})}}))
+      (view {Sa: {# {D: {}}
+                    {D: {x: 100}}
+                    {D: {x: 100, y: 200}}}}))
     (conn B (after removed Ac))
     (conn A
-      (view {Sa: {, ({D: {}})
-                    ({D: {x: 100}})}}))
+      (view {Sa: {# {D: {}}
+                    {D: {x: 100}}}}))
     (conn B (after removed Ab))
     (conn A
-      (view {Sa: {, ({D: {}})}}))
+      (view {Sa: {# {D: {}}}}))
     (conn B (after removed Aa))
     (conn A
       (view {})))
@@ -440,33 +440,33 @@
       (after added appearance Ac ({} {y: 200}))
       (after added appearance Ad ({x: a} {y: b})))
     (conn A
-      (view {Sa: {, ({})}
-             Sb: {, ({a: {}}) ({a: {x: 100}})}
-             Sc: {, ({b: {}}) ({b: {y: 200}})}
-             Sd: {, ({a: {}, b: {}})
-                    ({a: {x: 100}, b: {}})
-                    ({a: {}, b: {y: 200}})
-                    ({a: {x: a}, b: {y: b}})}}))
+      (view {Sa: {# {}}
+             Sb: {# {a: {}} {a: {x: 100}}}
+             Sc: {# {b: {}} {b: {y: 200}}}
+             Sd: {# {a: {}, b: {}}
+                    {a: {x: 100}, b: {}}
+                    {a: {}, b: {y: 200}}
+                    {a: {x: a}, b: {y: b}}}}))
     (conn B
       (after removed Aa))
     (conn A
-      (view {Sb: {, ({a: {x: 100}})}
-             Sc: {, ({b: {y: 200}})}
-             Sd: {, ({a: {x: 100}, b: {}})
-                    ({a: {}, b: {y: 200}})
-                    ({a: {x: a}, b: {y: b}})}}))
+      (view {Sb: {# {a: {x: 100}}}
+             Sc: {# {b: {y: 200}}}
+             Sd: {# {a: {x: 100}, b: {}}
+                    {a: {}, b: {y: 200}}
+                    {a: {x: a}, b: {y: b}}}}))
     (conn B
       (after removed Ad))
     (conn A
-      (view {Sb: {, ({a: {x: 100}})}
-             Sc: {, ({b: {y: 200}})}
-             Sd: {, ({a: {x: 100}, b: {}})
-                    ({a: {}, b: {y: 200}})}}))
+      (view {Sb: {# {a: {x: 100}}}
+             Sc: {# {b: {y: 200}}}
+             Sd: {# {a: {x: 100}, b: {}}
+                    {a: {}, b: {y: 200}}}}))
     (conn B
       (after removed Ac))
     (conn A
-      (view {Sb: {, ({a: {x: 100}})}
-             Sd: {, ({a: {x: 100}, b: {}})}}))
+      (view {Sb: {# {a: {x: 100}}}
+             Sd: {# {a: {x: 100}, b: {}}}}))
     (conn B
       (after removed Ab))
     (conn A
@@ -479,10 +479,42 @@
     (after added sensor a n_number)
     (view {})
     (after added appearance x 100)
-    (view {a: {, ({n: 100})}})
+    (view {a: {# {n: 100}}})
     (after added appearance y 200)
-    (view {a: {, ({n: 100}) ({n: 200})}})
+    (view {a: {# {n: 100} {n: 200}}})
     (after removed x)
-    (view {a: {, ({n: 200})}})
+    (view {a: {# {n: 200}}})
     (after removed y)
     (view {})))
+
+;; Multiple distinct appearances with the same value
+(tspace
+  (conn A
+    (after added sensor a n_number)
+    (view {})
+    (after added appearance x 100)
+    (view {a: {# {n: 100}}})
+    (after added appearance y 100)
+    (view {a: {# {n: 100} {n: 100}}}))
+  (conn B
+    (after added appearance foo 200)
+    (after added appearance bar 200))
+  (conn A (view {a: {# {n: 100} {n: 100} {n: 200} {n: 200}}}))
+  (conn B (after removed foo))
+  (conn A (view {a: {# {n: 100} {n: 100} {n: 200}}}))
+  (conn A
+    (after removed y)
+    (view {a: {# {n: 100} {n: 200}}}))
+  (conn B (after removed bar))
+  (conn A
+    (view {a: {# {n: 100}}})
+    (after removed a)
+    (view {}))
+  (conn B
+    (after added sensor foo x_number)
+    (view {foo: {# {x: 100}}}))
+  (conn A (after removed x))
+  (conn B (view {})))
+
+;; TODO: test appearance tombstone
+;; TODO: test sensor, appearance selector
