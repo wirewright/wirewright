@@ -435,6 +435,10 @@ module Ww::ML::Text
             advance
             advance
             return Token.new(:"{,", pos - 2, pos)
+          when '#'
+            advance
+            advance
+            return Token.new(:"{#", pos - 2, pos)
           else
             advance
             return Token.new(:"{", pos - 1, pos)
@@ -819,6 +823,24 @@ module Ww::ML::Text
       end.upcast
     end
 
+    # Parses a dictionary multiset assuming `{#‸<...>`.
+    private def dictmultiset : Term
+      Term::Dict.build do |commit|
+        closed = false
+        while token = @lexer.thru?
+          if token.type == :"}"
+            closed = true
+            break
+          end
+          element = slot(token)
+          commit.with(element, (commit[element]? || 0) + 1)
+        end
+        unless closed
+          raise "expected closing '}'"
+        end
+      end.upcast
+    end
+
     private def term?(cls : T.class) : Term? forall T
       return unless token = @lexer.ahead?
       return unless token.type == :term
@@ -881,6 +903,7 @@ module Ww::ML::Text
         when :"["   then litemspart
         when :"{"   then kvdict
         when :"{,"  then dictset
+        when :"{#"  then dictmultiset
         when :"{¦"  then Term.of(:"%partition", :_, {:"%layer", :_, pentrylist(:"}")})
         when :"→"   then Term.of(:"$my", slot)
         when :"↑"   then Term.of(:"$up", slot)
