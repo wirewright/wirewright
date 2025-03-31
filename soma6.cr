@@ -641,7 +641,7 @@ class Document
   def initialize
     id = @@counter.add(1, :relaxed)
 
-    @document_thread = ExecutionContext::MultiThreaded.new("Document #{id}", 1)
+    @document_thread = ExecutionContext::SingleThreaded.new("Document #{id}")
 
     @view = Atomic(Term::Dict).new(BLANK.as_d)
     @mailbox = Mailbox.new
@@ -653,7 +653,7 @@ class Document
     @initial = true
     @state = State::Clean
 
-    @nitrene_watch_thread = ExecutionContext::MultiThreaded.new("Nitrene Watch #{id}", 1)
+    @nitrene_watch_thread = ExecutionContext::SingleThreaded.new("Nitrene watch #{id}")
     @nitrene_watch_thread.spawn do
       while true
         select
