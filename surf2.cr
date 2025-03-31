@@ -69,6 +69,32 @@ module ILabelGenerator
   abstract def call : Label
 end
 
+# 64 bits
+#
+# <TIMESTAMP> <HUB> <CONN> <SEQ>
+#     32       6      16    10
+#
+# What this means?
+#
+#  - Timestamp, seconds since WW_EPOCH (1 Jan 2025); overflows on Feb 7, 2161
+#  - At max 64 id sources (hubs)
+#  - At max 65536 connection IDs per second
+#  - At max 1025 sequence IDs per connection per second
+#     ==> max 1025 IDs emitted for a given Tconn in one second => ~1 id per 1ms
+#
+# generate(timestamp0, id hub, id conn)
+#   timestamp1 = get seconds since WW_EPOCH
+#   if timestamp0 = timestamp1 and seq = 1024
+#     sleep until timestamp0 + 1 second
+#     timestamp1 = get seconds since WW_EPOCH
+#   if timestamp0 != timestamp1
+#     -- Reset sequence number
+#     seq = 0
+#   id timestamp = timestamp1
+#   id seq = seq
+#   seq += 1
+#   (timestamp1; new id(id timestamp, id hub, id conn, id seq))
+
 # An extremely simple globally unique id source.
 #
 # - The first 64 bits are used for nanoseconds since the Unix epoch.
@@ -749,6 +775,7 @@ class RemoteStringMap
   end
 end
 
+# TODO: have just one M, A is always Label
 module IChat(A, M)
   alias Unsubscribe = ->
 
@@ -1275,6 +1302,8 @@ struct AppearanceSet
   end
 end
 
+# One-to-many map for decoding a conjunction vertex into the sensors that
+# were bound to it.
 # TODO: extract common with `Etrace`
 struct SensorMultimap
   # :nodoc:
@@ -1347,6 +1376,26 @@ struct SensorMultimap
   end
 end
 
+# Tbase (short for *termbase*, whatever that is supposed to mean...) is
+# an internal object responsible for orchestrating objects that are even
+# more internal (such as `Utrie`, `Xgraph`, `Ttrie`, and so on).
+#
+# This "orchestration" results in the emergence of *sensors* and *appearances*,
+# conceptually grouped into *surfaces*; but througout the operation of Tbase
+# referred to as *subjects* as well. With the help of Tbase, you can talk about
+# them without having to remember they're just a ton of key-value pairs.
+#
+# It's like atoms and chairs -- Tbase creates the illusion of "chairs" while
+# they are just atoms; and there's something else even more internal (e.g. `Xgraph`)
+# that creates a similar illusion of atoms for `Tbase` itself, while what
+# they really are is collections of quarks and electrons etc., and so on.
+#
+# The notable thing about `Tbase` is that it only needs a single hash map (or,
+# rather, an implementor of `IMap`). It is designed this way to defer synchronicity,
+# distrubition, and connectivity to the map implementation; and therefore make
+# their presence irrelevant to the algorithm & user-configurable. Tbase simply
+# does not care. As long as the map is thread-safe, Tbase is thread-safe; as long
+# as the map is distributed, Tbase is distributed, and so on.
 struct Tbase
   alias Key = Utrie::Key | Xgraph::Key | Ttrie::Key | Etrace::Key | StrandSet::Key | AppearanceSet::Key | SensorMultimap::Key
   alias Value = Utrie::Value | Xgraph::Value | Ttrie::Value | Etrace::Value | StrandSet::Value | AppearanceSet::Value | SensorMultimap::Value
