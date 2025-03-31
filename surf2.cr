@@ -1770,29 +1770,89 @@ end
 class Tconn
 end
 
+# An object that manages keepalive & keepalive periods for `Tconn`.
 struct Tconn::Keepalive
   alias Task = Task ->
 
-  def initialize(@ctx : ExecutionContext, @period = 30.seconds..1.minute)
+  Log = ::Log.for("Tconn keepalive")
+
+  # Period range used for sensors by default.
+  DEFAULT_SENSOR_PERIOD = 40.seconds..2.minutes
+
+  # Period range used for appearances by default.
+  DEFAULT_APPEARANCE_PERIOD = 20.seconds..50.seconds
+
+  # Used to specify which of the periods one wants to address in e.g.
+  # `min_for`, `max_for`, `schedule`.
+  enum Period : UInt8
+    # Use the sensor period bounds.
+    Sensor
+
+    # Use the appearance period bounds.
+    Appearance
+  end
+
+  # Constructs a Tconn keepalive object.
+  #
+  # - Keepalive fibers are spawned in *ctx*.
+  # - *sensor period* specifies minimum and maximum waiting time before
+  #   running sensor keepalive.
+  # - *appearance period* specifies minimum and maximum waiting time before
+  #   running appearance keepalive.
+  def initialize(@ctx : ExecutionContext = ExecutionContext::SingleThreaded.new("Tconn keepalive"),
+                 @sensor_period = DEFAULT_SENSOR_PERIOD,
+                 @appearance_period = DEFAULT_APPEARANCE_PERIOD)
+    if @sensor_period.exclusive?
+      raise ArgumentError.new("sensor period range must be inclusive")
+    end
+
+    if @appearance_period.exclusive?
+      raise ArgumentError.new("appearance period range must be inclusive")
+    end
+
     @running = Channel(Bool).new
+
+    @prng = Random::PCG32.new
+    @prng_lock = Mutex.new
   end
 
-  def min_period : Time::Span
-    @period.begin
+  # Initializes both sensor period and appearance period to *period*.
+  def initialize(*args, period : Range(Time::Span, Time::Span), **kwargs)
+    initialize(*args, **kwargs, sensor_period: period, appearance_period: period)
   end
 
-  def max_period : Time::Span
-    @period.end
+  # Returns the minimum waiting time for *period*.
+  def min_for(period : Period) : Time::Span
+    case period
+    in .sensor?     then @sensor_period.begin
+    in .appearance? then @appearance_period.begin
+    end
   end
 
+  # Returns the maximum waiting time for *period*.
+  def max_for(period : Period) : Time::Span
+    case period
+    in .sensor?     then @sensor_period.end
+    in .appearance? then @appearance_period.end
+    end
+  end
+
+  # Terminates all scheduled tasks.
+  #
+  # Can only be called once. `schedule` will not work after calling this method.
   def stop : Nil
+    Log.debug { "stop" }
+
     @running.close
   end
 
-  def schedule(task : Task) : Nil
-    tmin = min_period.total_milliseconds
-    tmax = max_period.total_milliseconds
-    t = (tmin..tmax).sample.milliseconds
+  # Schedules *task* using minimum/maximum waiting time for *period*.
+  def schedule(task : Task, period : Period) : Nil
+    tmin = min_for(period).total_milliseconds
+    tmax = max_for(period).total_milliseconds
+    t = @prng_lock.synchronize { (tmin..tmax).sample(random: @prng) }.milliseconds
+
+    Log.debug { "schedule task #{task} after #{t.total_seconds}s" }
 
     @ctx.spawn do
       select
@@ -1803,8 +1863,9 @@ struct Tconn::Keepalive
     end
   end
 
-  def schedule(&task : Task ->) : Nil
-    schedule(task)
+  # :ditto:
+  def schedule(period : Period, &task : Task ->) : Nil
+    schedule(task, period)
   end
 end
 
@@ -2092,7 +2153,14 @@ class Tconn
 
     return unless keepalive = @keepalive
 
-    keepalive.schedule do |this|
+    case surface
+    in Sensor
+      period = Keepalive::Period::Sensor
+    in Appearance
+      period = Keepalive::Period::Appearance
+    end
+
+    keepalive.schedule(period) do |this|
       Log.debug { "#{@conid}: run keepalive of #{identity}" }
 
       @surfaces_lock.synchronize do
@@ -2113,9 +2181,9 @@ class Tconn
         if last_alive_at = @last_alive_at.delete(groupid)
           activity = Time.monotonic - last_alive_at
 
-          if activity < keepalive.min_period # ago
+          if activity < keepalive.min_for(:sensor) # ago
             Log.trace { "#{@conid}: keepalive of #{identity}: exit reschedule postpone keepalive: sensor was alive #{activity.total_seconds}s ago" }
-            keepalive.schedule(this)
+            keepalive.schedule(this, period)
             next
           end
         end
@@ -2125,7 +2193,7 @@ class Tconn
         delete(identity, final: false)
         insert(identity, surface, groupid)
 
-        keepalive.schedule(this)
+        keepalive.schedule(this, period)
       end
     end
   end
@@ -2156,7 +2224,7 @@ end
 class RemoteStringChat
   include IChat(String, String)
 
-  def initialize(host : String, port : Int32, ctx = ExecutionContext::MultiThreaded.new("remote chat", 1))
+  def initialize(host : String, port : Int32, ctx = ExecutionContext::SingleThreaded.new("remote chat"))
     @socket = TCPSocket.new(host, port)
     @chat = SyncInMemoryChat(String, String).new
 
@@ -2284,8 +2352,7 @@ elsif ARGV[0]? == "join"
   sink = ->(multisets : Term::Dict) do
     Tconn::Log.debug { ML.display(multisets) }
   end
-  ctx = ExecutionContext::MultiThreaded.new("Tconn keepalive", 1)
-  Tconn.open(map, chat, Tconn.multisets(&sink), keepalive: Tconn::Keepalive.new(ctx, period: 5.seconds..10.seconds)) do |conn|
+  Tconn.open(map, chat, Tconn.multisets(&sink), keepalive: Tconn::Keepalive.new(period: 5.seconds..10.seconds)) do |conn|
     while input = (print "> "; gets)
       case input.strip
       when /^sensor\s+(\d+)\s+(.+)$/
@@ -2323,7 +2390,8 @@ elsif ARGV[0]? == "join"
   end
 end
 
-# - separate keepalive period for sensor and appearances. appearances should be faster
-#   to trigger keepalive postpone (query sensor by appearance is much faster than vice versa)
 # - hash & compare selector using crypto secure hash (argon2id)
 # - run tspace tests using new Tconn
+# - use 64-bit Snowflake-like instead of WWID
+# - if map or chat connection is lost the Tconn must retire. Wrapping code should re-create
+#   it with new id etc. for each attempt to reconnect. This should be invisible to clients.
