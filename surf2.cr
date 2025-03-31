@@ -775,21 +775,20 @@ class RemoteStringMap
   end
 end
 
-# TODO: have just one M, A is always Label
-module IChat(A, M)
+module IChat(M)
   alias Unsubscribe = ->
 
-  abstract def subscribe(address : A, &recv : M ->) : Unsubscribe
-  abstract def send(to receiver : A, message : M) : Nil
+  abstract def subscribe(address : Label, &recv : M ->) : Unsubscribe
+  abstract def send(to receiver : Label, message : M) : Nil
 end
 
-class SyncInMemoryChat(A, M)
-  include IChat(A, M)
+class SyncInMemoryChat(M)
+  include IChat(M)
 
-  @subscribers = {} of A => Set(M ->)
+  @subscribers = {} of Label => Set(M ->)
   @lock = Mutex.new
 
-  def subscribe(address : A, &recv : M ->) : Unsubscribe
+  def subscribe(address : Label, &recv : M ->) : Unsubscribe
     @lock.synchronize do
       recvs = @subscribers.put_if_absent(address) { Set(M ->).new }
       recvs << recv
@@ -806,7 +805,7 @@ class SyncInMemoryChat(A, M)
     end
   end
 
-  def send(to receiver : A, message : M) : Nil
+  def send(to receiver : Label, message : M) : Nil
     recvs = @lock.synchronize do
       # Copy receiver procs (if any) so that we can call them outside of the lock,
       # and so that they're "frozen in time".
@@ -819,37 +818,37 @@ class SyncInMemoryChat(A, M)
   end
 end
 
-class TermChat(A, M)
-  include IChat(A, M)
+class TermChat(M)
+  include IChat(M)
 
-  def initialize(@chat : IChat(Term, Term))
+  def initialize(@chat : IChat(Term))
   end
 
-  def subscribe(address : A, &recv : M ->) : Unsubscribe
-    @chat.subscribe(address.encode(Term)) do |message|
+  def subscribe(address : Label, &recv : M ->) : Unsubscribe
+    @chat.subscribe(address) do |message|
       recv.call(M.decode?(message) || raise TermDecodeError.new)
     end
   end
 
-  def send(to receiver : A, message : M) : Nil
-    @chat.send(receiver.encode(Term), message.encode(Term))
+  def send(to receiver : Label, message : M) : Nil
+    @chat.send(receiver, message.encode(Term))
   end
 end
 
 class CompactMLChat
-  include IChat(Term, Term)
+  include IChat(Term)
 
-  def initialize(@chat : IChat(String, String))
+  def initialize(@chat : IChat(String))
   end
 
-  def subscribe(address : Term, &recv : Term ->) : Unsubscribe
-    @chat.subscribe(ML.compact(address)) do |message|
+  def subscribe(address : Label, &recv : Term ->) : Unsubscribe
+    @chat.subscribe(address) do |message|
       recv.call(ML.term(message))
     end
   end
 
-  def send(to receiver : Term, message : Term) : Nil
-    @chat.send(ML.compact(receiver), ML.compact(message))
+  def send(to receiver : Label, message : Term) : Nil
+    @chat.send(receiver, ML.compact(message))
   end
 end
 
@@ -1998,7 +1997,7 @@ class Tconn
   Log = ::Log.for("Tconn")
 
   alias Map = IMap(Tspace::Key, Tspace::Value)
-  alias Chat = IChat(Label, Activation)
+  alias Chat = IChat(Activation)
 
   record Sensor, pattern : Term, selector : Term? = nil do
     def self.new(pattern : String, **kwargs) : Sensor
@@ -2271,11 +2270,11 @@ class Tconn
 end
 
 class RemoteStringChat
-  include IChat(String, String)
+  include IChat(String)
 
   def initialize(host : String, port : Int32, ctx = ExecutionContext::SingleThreaded.new("remote chat"))
     @socket = TCPSocket.new(host, port)
-    @chat = SyncInMemoryChat(String, String).new
+    @chat = SyncInMemoryChat(String).new
 
     @inbound = Channel(String).new
 
@@ -2284,7 +2283,7 @@ class RemoteStringChat
         message = message.chomp
         if rest = message.lchop?("MSG ")
           topic, body = rest.split(" ", limit: 2)
-          ctx.spawn { @chat.send(topic, body) }
+          ctx.spawn { @chat.send(Label.new(topic.to_u128), body) }
         else
           @inbound.send(message)
         end
@@ -2296,23 +2295,23 @@ class RemoteStringChat
     @socket.close
   end
 
-  def subscribe(address : String, &recv : String ->) : Unsubscribe
+  def subscribe(address : Label, &recv : String ->) : Unsubscribe
     unsub = @chat.subscribe(address, &recv)
-    @socket.puts "+SUB #{address}"
+    @socket.puts "+SUB #{address.value}"
     unless @inbound.receive == "OK"
       raise "oh noes, something wrong happened on the chat server!!! i didnt get an OK"
     end
     Unsubscribe.new do
       unsub.call
-      @socket.puts "-SUB #{address}"
+      @socket.puts "-SUB #{address.value}"
       unless @inbound.receive == "OK"
         raise "oh noes, something wrong happened on the chat server!!! i didnt get an OK"
       end
     end
   end
 
-  def send(to receiver : String, message : String) : Nil
-    @socket.puts "SEND #{receiver} #{message}"
+  def send(to receiver : Label, message : String) : Nil
+    @socket.puts "SEND #{receiver.value} #{message}"
     unless @inbound.receive == "OK"
       raise "oh noes, something wrong happened on the chat server!!! i didnt get an OK"
     end
@@ -2332,7 +2331,7 @@ def handle(chat, unsubs, unsubs_lock, socket)
     if topic = message.lchop?("+SUB ")
       topic_ = topic
       socket.puts "OK" # assume subscribe cannot fail
-      unsub = chat.subscribe(topic) do |message|
+      unsub = chat.subscribe(Label.new(topic.to_u128)) do |message|
         socket.puts("MSG #{topic_} #{message}")
       end
       unsubs_lock.synchronize do
@@ -2346,7 +2345,7 @@ def handle(chat, unsubs, unsubs_lock, socket)
     elsif send = message.lchop?("SEND ")
       socket.puts "OK" # assume send cannot fail
       topic, message = send.split(" ", limit: 2)
-      chat.send(topic, message)
+      chat.send(Label.new(topic.to_u128), message)
     elsif message == "LIST"
       socket.puts "LISTING"
       topics = Set(String).new
@@ -2364,7 +2363,7 @@ def handle(chat, unsubs, unsubs_lock, socket)
     end
   end
 ensure
-  puts "cleanup after #{socket}"
+  ServerLog.info { "cleanup after #{socket}" }
   unsubs_lock.synchronize do
     unsubs.reject! do |(topic, its_socket), unsub|
       if reject = its_socket == socket
@@ -2376,7 +2375,7 @@ ensure
 end
 
 def serve_chat(host, port)
-  chat = SyncInMemoryChat(String, String).new
+  chat = SyncInMemoryChat(String).new
   unsubs = {} of {String, TCPSocket} => IChat::Unsubscribe
   unsubs_lock = Mutex.new
 
@@ -2398,8 +2397,8 @@ if ARGV[0]? == "serve"
 elsif ARGV[0]? == "join"
   # map = SyncInMemoryMap(Tspace::Key, Tspace::Value).new
   map = TermMap(Tspace::Key, Tspace::Value).new(CompactMLMap.new(DigestedKeyMap(String, String).new(RemoteStringMap.new("127.0.0.1", 9810))))
-  # chat = SyncInMemoryChat(Label, Activation).new
-  chat = TermChat(Label, Activation).new(CompactMLChat.new(RemoteStringChat.new("127.0.0.1", 9811)))
+  # chat = SyncInMemoryChat(Activation).new
+  chat = TermChat(Activation).new(CompactMLChat.new(RemoteStringChat.new("127.0.0.1", 9811)))
 
   sink = ->(multisets : Term::Dict) do
     Tconn::Log.debug { ML.display(multisets) }
@@ -2450,3 +2449,5 @@ end
 # - if map or chat connection is lost the Tconn must retire. Wrapping code should re-create
 #   it with new id etc. for each attempt to reconnect. This should be invisible to clients.
 # - tombstone handling ?!
+# - rewrite the horrible horrible servers&clients. Have one server instead of two,
+# either ditch my thing or the RPC. Preferably my thing but still.
