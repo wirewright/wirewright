@@ -494,6 +494,7 @@ puts
 
 if ctx.failures.empty?
   puts "Ran #{ctx.stats.ncases} test case(s) in #{ctx.stats.duration.humanize}.".colorize.green
+  exit 0
 else
   puts
   ctx.failures.each_with_index do |detail, index|
@@ -516,4 +517,5 @@ else
   puts
   puts "Ran #{ctx.stats.ncases} test case(s) in #{ctx.stats.duration.humanize}.".colorize.red
   puts "Registered #{ctx.failures.size} unexpected result(s)."
+  exit 1
 end
