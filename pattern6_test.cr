@@ -381,8 +381,9 @@ end
 def tspace(flow : Term::Dict, & : Term, Term ->)
   counter = Identity.new(0)
 
-  map = SyncInMemoryMap(Tspace::Key, Tspace::Value).new
-  chat = SyncInMemoryChat(Label, Activation).new
+  # Use as many maps out of the ones used in practice as possible when testing.
+  map = TermMap(Tspace::Key, Tspace::Value).new(CompactMLMap.new(DigestedKeyMap(String, String).new(SyncInMemoryMap(String, String).new)))
+  chat = TermChat(Label, Activation).new(CompactMLChat.new(SyncInMemoryChat(String, String).new))
 
   conns = {} of Term => Tconn
   lidentities = {} of {Term, Term} => Identity
