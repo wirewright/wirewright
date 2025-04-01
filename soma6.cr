@@ -162,7 +162,7 @@ module D7VR
             (^*paste names 0 ..= -1))
           (^if (< scroll-offset 1)
             (scroll style: "w-2 h-max pr-1"
-              ((self translate) y: (* ^scroll-offset) style: "max"
+              ((self y-translate) offset: (* ^scroll-offset) style: "max"
                 ((self rect/outline) style: "max border bg-neutral-600 rounded-sm" max-h: (* ^scroll-height))))))))
     WWML
 
@@ -534,7 +534,7 @@ module D7VR
       # If we do not know its size, leave it to the UI context. Note how we wrap
       # the unit in a fallback node.
       otherwise do
-        Term.of(:"block/floating", Term.of({:self, :fallback}, unit, source: source, rem: rem))
+        Term.of(:"block/floating", unit.morph({:fallback, :source, source}, {:fallback, :rem, rem}))
       end
     end
   end
@@ -868,6 +868,18 @@ module Frame
 end
 
 demo = ML.dict <<-WWML
+(unit group style: "max max-sm bg-neutral-800 flow-col gap-5 fr"
+  (view @color-envs as ((self rect) color: ^color style: "w-max h-fr bg-[color] rounded"))
+  (unit group style: "w-max h-content flow-row gap-5"
+    (button "Make red" as red-500 to @colors ())
+    (button "Make green" as green-500 to @colors ())
+    (button "Make blue" as blue-500 to @colors ())))
+
+(transform @colors to @color-envs {color: _})
+(event (pulse @colors red-500))
+
+(hr)
+
 (h1 "Heading 1")
 (h2 "Heading 2")
 (h3 "Heading 3")
@@ -953,7 +965,7 @@ doc = Document.new
 doc.send(Term.of(:open, seed))
 
 frame0 = ML.term <<-WWML
-((self window) style: "bg-neutral-900 max origin" max-w: 1000 max-h: 800 mouse: (0 0)
+((self window) style: "bg-neutral-900 max origin" max-w: 1000 max-h: 800 #model: {mouse: (0 0)}
   (group style: "max flow-none"
     (group style: "max flow-col gap-3 p-3 fr"
       (group style: "bg-neutral-800 w-max h-content px-2 py-1 rounded-sm"
@@ -1008,35 +1020,36 @@ ui = UIR::Reducers.microfold(Term.of(frame0)) do |inframe, drawable, event|
     end
 
     matchpi %{(mouse motion x_number y_number)} do
-      frame = frame.morph({:mouse, {x, y}})
+      frame = frame.morph({:"#model", :mouse, {x, y}})
 
-      if grip = frame[:grip]?
+      if grip = frame[:"#model", :grip]?
         gx, gy = grip
-        dx = gx - x
-        dy = gy - y
+        dx = x - gx
+        dy = y - gy
 
         frame = Frame.map(frame, :viewport) do |viewport|
           viewport.morph({:x, viewport[:x] + dx}, {:y, viewport[:y] + dy})
         end
 
-        frame = frame.morph({:grip, frame[:mouse]})
+        frame = frame.morph({:"#model", :grip, frame[:"#model", :mouse]})
       end
     end
 
     matchpi %{(mouse press)} do
-      if hovered = frame[:hovered]?
-        frame = frame.morph({:active, hovered})
+      if hovered = frame[:"#model", :hovered]?
+        frame = frame.morph({:"#model", :active, hovered})
       else
-        frame = frame.morph({:grip, frame[:mouse]}, {:cursor, :grabbing})
+        frame = frame.morph({:"#model", :grip, frame[:"#model", :mouse]}, {:cursor, :grabbing})
       end
     end
 
     matchpi %{(mouse release)} do
-      if (active = frame[:active]?) && (frame[:active]? == frame[:hovered]?)
+      if (active = frame[:"#model", :active]?) && (frame[:"#model", :active]? == frame[:"#model", :hovered]?)
         doc.send(Term.of(:click, active))
-      elsif grip = frame[:grip]?
-        frame = frame.morph({:grip, nil}, {:cursor, nil})
+      elsif grip = frame[:"#model", :grip]?
+        frame = frame.morph({:"#model", :grip, nil}, {:cursor, nil})
       end
+      frame = frame.morph({:"#model", :active, nil})
     end
 
     matchpi %{(size w_number h_number)} do
@@ -1051,19 +1064,19 @@ ui = UIR::Reducers.microfold(Term.of(frame0)) do |inframe, drawable, event|
   end
 
   # Unhover
-  if hovered = frame[:hovered]?
+  if hovered = frame[:"#model", :hovered]?
     frame = Frame.map(frame, hovered, &.morph({:hover, false}))
-    frame = frame.morph({:hovered, nil})
+    frame = frame.morph({:"#model", :hovered, nil})
   end
 
   # Hover
-  UIR.hit(drawable, frame[:mouse, 0].as_n, frame[:mouse, 1].as_n) do |keypath|
+  UIR.hit(drawable, frame[:"#model", :mouse, 0].as_n, frame[:"#model", :mouse, 1].as_n) do |keypath|
     target = Keypath.follow(drawable, keypath)
     next unless target[:hover]?
     next unless id = target[:id]?
 
     frame = Frame.map(frame, id, &.morph({:hover, true}))
-    frame = frame.morph({:hovered, id})
+    frame = frame.morph({:"#model", :hovered, id})
   end
 
   Term.of(frame)

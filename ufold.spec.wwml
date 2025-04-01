@@ -56,10 +56,6 @@
 "h-content": {h: content}
 "content": (+ "w-content" "h-content")
 
-"w-inherit": {w: inherit}
-"h-inherit": {h: inherit}
-"inherit": (+ "w-inherit" "h-inherit")
-
 "w-fr": (+ "w-max" "fr-1")
 "h-fr": (+ "h-max" "fr-1")
 
@@ -125,22 +121,18 @@
 
 (nat "p" (+ "px" "py"))
 
-"origin": (+ "l-0" "t-0")
-
-(int "l" N {l: N_})
-(int "t" N {t: N_})
-
-"center": (+ "center-x" "center-y")
-"center-x": {content-dl: center}
-"center-y": {content-dt: center}
-
-"right": {content-dl: right}
-"bottom": {content-dt: bottom}
+"origin": (+ "dl-0" "dt-0")
 
 (int "dl" N {dl: (spacing N_)})
 (int "dt" N {dt: (spacing N_)})
-
 (int "d" (+ "dl" "dt"))
+
+"center": (+ "center-x" "center-y")
+"center-x": {align-x: center}
+"center-y": {align-y: center}
+
+"right": {align-x: right}
+"bottom": {align-y: bottom}
 
 "flow-row": {flow: row}
 "flow-col": {flow: col}

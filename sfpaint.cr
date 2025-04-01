@@ -192,10 +192,8 @@ record DrawContext, commands : Array(DrawCommand), setcursor : (Cursor ->)
 #
 # Appends draw commands associated with *node* to *ctx*.
 #
-# - *dl* is the left offset for *node*'s top left coordinate.
-# - *dt* is the top offset for *node*'s top left coordinate.
 # - *z* is the z-index of *node*.
-def draw(ctx : DrawContext, node : Term, dl : Int32, dt : Int32, z : Int32) : Nil
+def draw(ctx : DrawContext, node : Term, x : Int32, y : Int32, z : Int32) : Nil
   Term.case(node) do
     # Any node can specify the cursor.
     matchpi %[{¦ cursor_symbol}] do
@@ -208,11 +206,11 @@ def draw(ctx : DrawContext, node : Term, dl : Int32, dt : Int32, z : Int32) : Ni
       %[(text caption_string ¦ _ color_ font_string leading_number
                                weight_: (%any 100 200 300 400 450 500 600 700 800 900)
                                size_: (%number u16)
-                               l_: (%number i32)
-                               t_: (%number i32))]
+                               dl_: (%number i32)
+                               dt_: (%number i32))]
     ) do
       ctx.commands << FillText.new(z,
-        origin: Point.new(l.to(Int32) + dl, t.to(Int32) + dt),
+        origin: Point.new(x + dl.to(Int32), y + dt.to(Int32)),
         caption: caption.to(String),
         font: font.to(String),
         size: size.to(UInt16),
@@ -226,8 +224,8 @@ def draw(ctx : DrawContext, node : Term, dl : Int32, dt : Int32, z : Int32) : Ni
     matchpi(
       %[(rect ¦ _ bg_
                   alpha: (%optional 255 alpha←(%number u8))
-                  l_: (%number i32)
-                  t_: (%number i32)
+                  dl_: (%number i32)
+                  dt_: (%number i32)
                   final-w: w←(%number +i32)
                   final-h: h←(%number +i32)
                   border-radius: (%optional 0 radius←(%number u16))
@@ -238,7 +236,7 @@ def draw(ctx : DrawContext, node : Term, dl : Int32, dt : Int32, z : Int32) : Ni
     ) do
       ctx.commands << FillRect.new(z,
         box: Rect.new(
-          origin: Point.new(l.to(Int32) + dl, t.to(Int32) + dt),
+          origin: Point.new(x + dl.to(Int32), y + dt.to(Int32)),
           extent: Point.new(w.to(Int32), h.to(Int32)),
         ),
         color: RGB.parse(bg),
@@ -250,8 +248,8 @@ def draw(ctx : DrawContext, node : Term, dl : Int32, dt : Int32, z : Int32) : Ni
 
     matchpi(
       %[(rect/outline ¦ _ bg_
-                          l_: (%number i32)
-                          t_: (%number i32)
+                          dl_: (%number i32)
+                          dt_: (%number i32)
                           final-w: w←(%number +i32)
                           final-h: h←(%number +i32)
                           border-width: thickness←(%number u8)
@@ -261,7 +259,7 @@ def draw(ctx : DrawContext, node : Term, dl : Int32, dt : Int32, z : Int32) : Ni
 
       ctx.commands << OutlineRect.new(z,
         box: Rect.new(
-          origin: Point.new(l.to(Int32) + dl + inset, t.to(Int32) + dt + inset),
+          origin: Point.new(x + dl.to(Int32) + inset, y + dt.to(Int32) + inset),
           extent: Point.new(w.to(Int32) - inset*2, h.to(Int32) - inset*2),
         ),
         color: RGB.parse(bg),
@@ -270,9 +268,14 @@ def draw(ctx : DrawContext, node : Term, dl : Int32, dt : Int32, z : Int32) : Ni
       )
     end
 
-    matchpi %[(circle ¦ _ bg_ l_: (%number i32) t_: (%number i32) radius_: (%number u16))] do |bg|
+    matchpi(
+      %[(circle ¦ _ bg_
+                    dl_: (%number i32)
+                    dt_: (%number i32)
+                    radius_: (%number u16))]
+    ) do
       ctx.commands << FillCircle.new(z,
-        origin: Point.new(l.to(Int32) + dl, t.to(Int32) + dt),
+        origin: Point.new(x + dl.to(Int32), y + dt.to(Int32)),
         radius: radius.to(UInt16),
         color: RGB.parse(bg),
       )
@@ -280,15 +283,15 @@ def draw(ctx : DrawContext, node : Term, dl : Int32, dt : Int32, z : Int32) : Ni
 
     matchpi(
       %[(triangle ¦ _ bg_
-                      l_: (%number i32)
-                      t_: (%number i32)
+                      dl_: (%number i32)
+                      dt_: (%number i32)
                       final-w: w←(%number +i32)
                       final-h: h←(%number +i32)
                       pointing_: (%any left right up down))]
     ) do
       ctx.commands << FillTriangle.new(z,
         box: Rect.new(
-          origin: Point.new(l.to(Int32) + dl, t.to(Int32) + dt),
+          origin: Point.new(x + dl.to(Int32), y + dt.to(Int32)),
           extent: Point.new(w.to(Int32), h.to(Int32)),
         ),
         heading: Heading.parse(pointing),
@@ -299,16 +302,16 @@ def draw(ctx : DrawContext, node : Term, dl : Int32, dt : Int32, z : Int32) : Ni
     matchpi(
       %[(viewport child←{¦ final-w: cw←(%number +i32) final-h: ch←(%number +i32)}
          ¦ _ bg_
-             l_: (%number +i32)
-             t_: (%number +i32)
+             dl_: (%number +i32)
+             dt_: (%number +i32)
              final-w: w←(%number +i32)
              final-h: h←(%number +i32)
-             x_: (%number i32)
-             y_: (%number i32))]
+             x: vx←(%number i32)
+             y: vy←(%number i32))]
     ) do
       children = [] of DrawCommand
 
-      draw(ctx.copy_with(commands: children), child, -l.to(Int32) - x.to(Int32), -t.to(Int32) - y.to(Int32), z)
+      draw(ctx.copy_with(commands: children), child, vx.to(Int32), vy.to(Int32), z)
 
       # Sort children by layer (z-index) now that we know they're complete.
       #
@@ -318,19 +321,23 @@ def draw(ctx : DrawContext, node : Term, dl : Int32, dt : Int32, z : Int32) : Ni
       ctx.commands << View.new(z,
         children: children,
         box: Rect.new(
-          origin: Point.new(l.to(Int32) + dl, t.to(Int32) + dt),
+          origin: Point.new(x + dl.to(Int32), y + dt.to(Int32)),
           extent: Point.new(w.to(Int32), h.to(Int32)),
         ),
         color: RGB.parse(bg),
       )
     end
 
-    matchpi %[(layer child_ ¦ _ z-index: n←(%number +i32))] do
-      draw(ctx, child, dl, dt, z: n.to(Int32))
+    matchpi(
+      %[(layer child_ ¦ _ dl_: (%number i32)
+                          dt_: (%number i32)
+                          z-index: n←(%number +i32))]
+    ) do
+      draw(ctx, child, x + dl.to(Int32), y + dt.to(Int32), z: n.to(Int32))
     end
 
-    matchpi %[_dict] do
-      node.items.each { |child| draw(ctx, child, dl, dt, z) }
+    matchpi %[{¦ dl_: (%number i32) dt_: (%number i32)}] do
+      node.items.each { |child| draw(ctx, child, x + dl.to(Int32), y + dt.to(Int32), z) }
     end
 
     otherwise { }
@@ -354,7 +361,7 @@ def draw(markup : Term) : Window
         end
       end
 
-      draw(DrawContext.new(children, setcursor), child, dl: 0, dt: 0, z: 0)
+      draw(DrawContext.new(children, setcursor), child, x: 0, y: 0, z: 0)
 
       # Sort children by layer (z-index) now that we know they're complete.
       #

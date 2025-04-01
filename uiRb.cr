@@ -157,7 +157,6 @@ module UIR
 
     set_control, rec_control = recR
 
-    # TODO: memoR
     controlR = exhR(
       set_control.call cueR({Term[:fallback]}, memoR(@@control_cache, choiceR(
           rulesetR(Ruleset.select(selector, ML.terms(base_control)), noR, backmapR, noR),
@@ -166,6 +165,10 @@ module UIR
     )
 
     exhR(chainR(mainR, controlR))
+  end
+
+  def drawable(uir : Term) : Term
+    rewrite(uir, UIR.rewriter)
   end
 
   # Reducers produce a drawable given the previous drawable and an event.
@@ -181,13 +184,23 @@ module UIR
     # - The second argument to *fn* is the drawable produced from that unit.
     #   It can be used for hit-testing (see `UIR.hit`).
     # - The third argument to *fn* is the event.
-    def microfold(initial unit0 = Term.of, &fn : Term, Term, Term -> Term) : Reducer
+    #
+    # TODO: document `#model` behavior.
+    def microfold(initial = Term.of, &fn : Term, Term, Term -> Term) : Reducer
+      unit0 = initial
+
       Reducer.new do |drawable0, event|
         unit1 = fn.call(unit0, drawable0, event)
-        unit0 = unit1
-        uir = Microfold.uir(Microfold::SPEC, unit1)
 
-        rewrite(uir, UIR.rewriter)
+        if unit0.type.dict? && unit1.type.dict? && !unit0.same?(initial) && unit0.without(:"#model") == unit1.without(:"#model")
+          unit0 = unit1
+
+          drawable0
+        else
+          unit0 = unit1
+          uir = Microfold.uir(Microfold::SPEC, unit0)
+          UIR.drawable(uir)
+        end
       end
     end
   end
@@ -200,44 +213,39 @@ module UIR
   end
 
   # :nodoc:
+  # FIXME: this implementation does not appear to be valid
   def hit(drawable : Term, x : Term::Num, y : Term::Num, sink, keypath : Stack(Term)) : Nil
-    inbounds = false
-
     Term.case(drawable) do
-      matchpi %[{¦ l_number t_number final-w: w_number final-h: h_number}] do |l, t, w, h|
-        l, t, w, h = {l, t, w, h}.map(&.unsafe_as_n)
+      matchpi %[{¦ dl_number dt_number final-w: w_number final-h: h_number}] do |dl, dt, w, h|
+        dl, dt, w, h = {dl, dt, w, h}.map(&.unsafe_as_n)
 
-        continue unless x.in?(l...l + w)
-        continue unless y.in?(t...t + h)
+        x -= dl
+        y -= dt
 
-        inbounds = true
+        return unless x.in?(Term[0]...w)
+        return unless y.in?(Term[0]...h)
 
         sink.call(keypath)
 
-        # Fall through
+        # Fallthrough
         continue
       end
 
-      matchpi %{(viewport child_ ¦ _ x: dx_number y: dy_number)} do
-        # Fall through if viewport does not contain the point
-        continue unless inbounds
+      matchpi %{(viewport child_ ¦ _ x: vx_number y: vy_number)} do
+        keypath.push(Term.of(1))
 
-        begin
-          keypath.push(Term.of(1))
+        x -= vx
+        y -= vy
 
-          # Yeeaah this reads strange...
-          hit(child, x + dx, y + dy, sink, keypath)
-        ensure
-          keypath.pop
-        end
+        # Yeeaah this reads strange...
+        hit(child, x, y, sink, keypath)
 
         # Terminate
+      ensure
+        keypath.pop
       end
 
       matchpi %{_dict} do
-        # Fall through if drawable does not contain the point
-        continue unless inbounds
-
         dict = drawable.unsafe_as_d
         dict.items.each_with_index do |child, index|
           keypath.push(Term.of(index))

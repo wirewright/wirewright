@@ -13,10 +13,6 @@
 (_ {¦ -max-w: w} ¦ _ w: max max-w: W_number) <> {w: →W}
 (_ {¦ -max-h: h} ¦ _ h: max max-h: H_number) <> {h: →H}
 
-;; Fallback nodes adopt their w/h from their children.
-(fallback {¦ w_} ¦ _ -w: W) <> {W: →w}
-(fallback {¦ h_} ¦ _ -h: H) <> {H: →h}
-
 ;; Propagate fractional max-w/h
 (_ {¦ max-w_: (* frac←(%number 0 < _ < 1))} ¦ _ w: max max-w: W_number)
   <> {max-w: $(ceil (* →W →frac))}
@@ -34,9 +30,13 @@
 {¦ w: max max-w_number -final-w_} <> {final-w: →max-w}
 {¦ h: max max-h_number -final-h_} <> {final-h: →max-h}
 
-;; Propagate l/t.
-((%not translate) {¦ -l_} ¦ _ l: L_number) <> {l: →L}
-((%not translate) {¦ -t_} ¦ _ t: T_number) <> {t: →T}
+;; A parent whose dl/dt is known, will define its child's dl/dt to be zero.
+;;
+;; Note how this does not cover elements such as x-stack and y-stack in
+;; their multi-child variants. They manage dl/dt themselves (and this rule
+;; works for single-child x-stack & y-stack).
+((%not x-padding x-translate x-align) {¦ -dl_} ¦ _ dl: _number) <> {dl: 0}
+((%not y-padding y-translate y-align) {¦ -dt_} ¦ _ dt: _number) <> {dt: 0}
 
 ;; Nodes without children have 0 content-w/h.
 (_ ¦ _ -content-w_) <> {content-w: 0}
@@ -46,10 +46,6 @@
 ;; are specified manually.
 (rect ¦ _ w: max max-w_number -content-w_) <> {content-w: →max-w}
 (rect ¦ _ h: max max-h_number -content-h_) <> {content-h: →max-h}
-
-;; Inherit w/h
-;; (%all ⟨{¦ w_: inherit}⟩° {¦ w: W←(%any content max)}) <> {w: →W}
-;; (%all ⟨{¦ h_: inherit}⟩° {¦ h: H←(%any content max)}) <> {h: →H}
 
 ;; NODE: text
 
@@ -74,85 +70,51 @@
   <> {content-h: $(value (measure →caption →font →weight →size →leading) height),
       state: fully-measured}
 
-;; (backmap
-;;   (text caption_string ¦ _
-;;     w: content
-;;     h: (%any max content)
-;;     -content-w_
-;;     -content-h_
-;;     font_string
-;;     leading_number
-;;     weight_: (%any 100 200 300 400 450 500 600 700 800 900)
-;;     size_: (%number u8))
-;;   {content-w: $(value (measure →caption →font →weight →size →leading) width),
-;;    content-h: $(value (measure →caption →font →weight →size →leading) height)})
-;;
-;; (backmap
-;;   (text caption_string ¦ _
-;;     w_: max
-;;     h: content
-;;     max-w_
-;;     font_string
-;;     leading_number
-;;     weight_: (%any 100 200 300 400 450 500 600 700 800 900)
-;;     size_: (%number u8))
-;;   {w: content,
-;;    caption: $'(wrap →caption →font →weight →size →leading max-w: →max-w)})
-;;
-;; (backmap
-;;   (text caption_string ¦ _
-;;     w_: max
-;;     h_: max
-;;     max-w_
-;;     max-h_
-;;     font_string
-;;     leading_number
-;;     weight_: (%any 100 200 300 400 450 500 600 700 800 900)
-;;     size_: (%number u8))
-;;   {w: content,
-;;    h: content,
-;;    caption: $'(wrap →caption →font →weight →size →leading max-w: →max-w max-h: →max-h)})
+;; NODE: x-padding
 
-;; NODE: padding
+(x-padding _ ¦ _ -px_ pl⋮ 0 pr⋮ 0) <> {px: $'(+ →pl →pr)}
+(x-padding {¦ content-w: w_number} ¦ _ -content-w: W px_number) <> {W: $'(+ →w →px)}
+(x-padding {¦ -max-w: w} ¦ _ w: max max-w: W_number px_number) <> {w: $'(- →W →px)}
+(x-padding {¦ -dl_} ¦ _ dl: _number pl⋮ 0) <> {dl: →pl}
 
-(padding _ ¦ _ -px_ pl⋮ 0 pr⋮ 0) <> {px: $'(+ →pl →pr)}
-(padding _ ¦ _ -py_ pt⋮ 0 pb⋮ 0) <> {py: $'(+ →pt →pb)}
+;; NODE: y-padding
 
-(padding {¦ content-w: w_number} ¦ _ -content-w: W px_number) <> {W: $'(+ →w →px)}
-(padding {¦ content-h: h_number} ¦ _ -content-h: H py_number) <> {H: $'(+ →h →py)}
-(padding {¦ -max-w: w} ¦ _ w: max max-w: W_number px_number) <> {w: $'(- →W →px)}
-(padding {¦ -max-h: h} ¦ _ h: max max-h: H_number py_number) <> {h: $'(- →H →py)}
-(padding {¦ -l_} ¦ _ l: L_number pl_number) <> {l: $'(+ →L →pl)}
-(padding {¦ -t_} ¦ _ t: T_number pt_number) <> {t: $'(+ →T →pt)}
+(y-padding _ ¦ _ -py_ pt⋮ 0 pb⋮ 0) <> {py: $'(+ →pt →pb)}
+(y-padding {¦ content-h: h_number} ¦ _ -content-h: H py_number) <> {H: $'(+ →h →py)}
+(y-padding {¦ -max-h: h} ¦ _ h: max max-h: H_number py_number) <> {h: $'(- →H →py)}
+(y-padding {¦ -dt_} ¦ _ dt: _number pt⋮ 0) <> {dt: →pt}
 
 ;; NODE: viewport
 
 (viewport _ ¦ _ max-w_number -content-w_) <> {content-w: →max-w}
 (viewport _ ¦ _ max-h_number -content-h_) <> {content-h: →max-h}
 
-;; NODE: translate
-
-;; Propagate l/t if we do not have x/y defined.
-(translate {¦ -l_} ¦ _ -x l: L_number) <> {l: →L}
-(translate {¦ -t_} ¦ _ -y t: T_number) <> {t: →T}
-
-(translate {¦ -l_} ¦ _ l: L_number x_number) <> {l: $'(+ →L →x)}
-(translate {¦ -t_} ¦ _ t: T_number y_number) <> {t: $'(+ →T →y)}
+;; NODE: x-translate
 
 ;; Support fractional offset (fraction of child's final width).
-(translate {¦ final-w: w_number} ¦ _ final-w: W_number x_: (* frac←(%number 0 <= _ <= 1)))
-  <> {x: $(ceil (* →W →frac))}
-(translate {¦ final-h: h_number} ¦ _ final-h: H_number y_: (* frac←(%number 0 <= _ <= 1)))
-  <> {y: $(ceil (* →H →frac))}
+(x-translate {¦ -dl_ final-w: w_number} ¦ _ offset: (* frac←(%number 0 <= _ <= 1)) dl: _number final-w: W_number)
+  <> {dl: $(ceil (* →W →frac))}
 
-(translate {¦ -l_ final-w: w_number} ¦ _ x: center l: L_number final-w: W_number)
-  <> {l: $(+ →L (// (- →W →w) 2))}
-(translate {¦ -t_ final-h: h_number} ¦ _ y: center t: T_number final-h: H_number)
-  <> {t: $(+ →T (// (- →H →h) 2))}
-(translate {¦ -l_ final-w: w_number} ¦ _ x: right l: L_number final-w: W_number)
-  <> {l: $(- (+ →L →W) →w)}
-(translate {¦ -t_ final-h: h_number} ¦ _ y: bottom t: T_number final-h: H_number)
-  <> {t: $(- (+ →T →H) →h)}
+;; NODE: y-translate
+
+(y-translate {¦ -dt_ final-h: h_number} ¦ _ offset: (* frac←(%number 0 <= _ <= 1)) dt: _number final-h: H_number)
+  <> {dt: $(ceil (* →H →frac))}
+
+;; NODE: x-align
+
+(x-align {¦ -dl_ final-w: w_number} ¦ _ to: center dl: _number final-w: W_number)
+  <> {dl: $(// (- →W →w) 2)}
+
+(x-align {¦ -dl_ final-w: w_number} ¦ _ to: right dl: _number final-w: W_number)
+  <> {dl: $(- →W →w)}
+
+;; NODE: y-align
+
+(y-align {¦ -dt_ final-h: h_number} ¦ _ to: center dt: _number final-h: H_number)
+  <> {dt: $(// (- →H →h) 2)}
+
+(y-align {¦ -dt_ final-h: h_number} ¦ _ to: bottom dt: _number final-h: H_number)
+  <> {dt: $(- →H →h)}
 
 ;; NODE: floating
 ;;
@@ -213,23 +175,22 @@
 ;; mean that the child's max-h is max-h of the x-stack.
 (%all (x-stack _+ ¦ _ h: max max-h: H_number) ⟨{¦ h: max -max-h: h}⟩°) <> {h: →H}
 
-;; In case of a x-stack, all children tops are shared and are exactly
-;; x-stack's top.
-(%all (x-stack _+ ¦ _ t: T_number) ⟨{¦ -t_}⟩°) <> {t: →T}
+;; All children of x-stack with determinate dt have dt at 0.
+(%all (x-stack _+ ¦ _ dt: _number) ⟨{¦ -dt_}⟩°) <> {dt: 0}
 
-;; The first child of x-stack has the same left position as the x-stack itself.
-(x-stack {¦ -l_} _* ¦ _ l: L_number) <> {l: →L}
+;; The first child of x-stack has dl equal to 0.
+[x-stack {¦ -dl_} _*] <> {dl: 0}
 
-;; Any consecutive child learns its left position from the previous child
-;; plus the previous child's final-w.
+;; Any consecutive child learns its dl from the previous child plus
+;; the previous child's final-w.
 ;;
 ;; NOTE: we use the last child's left as a "flag" to signal that all children
 ;; had their lefts computed already and the rule engine should skip this rule.
 ;; This simplifies the job of the rule engine, making sure that it doesn't
 ;; have to go through all children every time before seeing that there is
 ;; no change, with regards to this particular rule.
-(%all (x-stack _* {¦ -l} ¦ _ gap⋮ 0) ⟨{¦ l: l0_number final-w: w0_number} {¦ -l: l1}⟩)
-  <> {l1: $'(+ →l0 →w0 →gap)}
+(%all (x-stack _* {¦ -dl} ¦ _ gap⋮ 0) ⟨{¦ dl: dl0_number final-w: w0_number} {¦ -dl: dl1}⟩)
+  <> {dl1: $'(+ →dl0 →w0 →gap)}
 
 ;; Sum content-w's of x-stack. Subtract from final-w of x-stack to get leftover-w.
 (%all (x-stack children_* ¦ _ fractions: true -leftover-w_ gap⋮ 0 final-w: W_number)
@@ -245,22 +206,39 @@
 ;; If x-stack child has w: max but x-stack does not have fractions: true, we
 ;; force the child to become w: content. Otherwise we risk not drawing the child
 ;; at all, which is worse than drawing innaccurately.
-(%all (x-stack _* ¦ _ -fractions) ⟨{¦ w_: max -max-w}⟩°) <> {w: content}
+(%all (x-stack _* ¦ _ -fractions) ⟨{¦ w_: max -max-w}⟩°)
+  <> {w: content}
 
 ;; NODE: y-stack
 ;;
 ;; The same as x-stack minus the occasional W<->H or L<->T swap. This can
 ;; be generalized, but will lead to unreadable, overly generic mess -- I tried.
 
-(y-stack (%many Cws {¦ content-w: 0←_number}) ¦ _ -content-w: W) <> {W: $(max (flatten →Cws))}
+(y-stack (%many Cws {¦ content-w: 0←_number}) ¦ _ -content-w: W)
+  <> {W: $(max (flatten →Cws))}
+
 (y-stack (%many Chs {¦ content-h: 0←_number}) ¦ _ -content-h: H gap⋮ 0)
   <> {H: $(+ (sum (flatten →Chs)) (* →gap (- (tally →Chs) 1)))}
-(%all (y-stack _+ ¦ _ w: content content-w: W_number) ⟨{¦ w: max -max-w: w}⟩°) <> {w: →W}
-(%all (y-stack _+ ¦ _ w: max max-w: W_number) ⟨{¦ w: max -max-w: w}⟩°) <> {w: →W}
-(%all (y-stack _+ ¦ _ l: L_number) ⟨{¦ -l_ }⟩°) <> {l: →L}
-(y-stack {¦ -t_} _* ¦ _ t: T_number) <> {t: →T}
-(%all (y-stack _* {¦ -t} ¦ _ gap⋮ 0) ⟨{¦ t: t0_number final-h: h0_number} {¦ -t: t1}⟩)
-  <> {t1: $'(+ →t0 →h0 →gap)}
+
+(%all (y-stack _+ ¦ _ w: content content-w: W_number) ⟨{¦ w: max -max-w: w}⟩°)
+  <> {w: →W}
+
+(%all (y-stack _+ ¦ _ w: max max-w: W_number) ⟨{¦ w: max -max-w: w}⟩°)
+  <> {w: →W}
+
+;; All children of y-stack with determinate dl have dl at 0.
+(%all (y-stack _+ ¦ _ dl: _number) ⟨{¦ -dl_}⟩°) <> {dl: 0}
+
+;; The first child of y-stack has dt of 0.
+[y-stack {¦ -dt_} _*] <> {dt: 0}
+
+;; Conecutive children learn their dt from their predecessor, plus
+;; the predecessor's height and the gap (if any).
+;;
+;; Similarly, we use the last child's dt as an indication that this rule
+;; was fully applied to the y-stack.
+(%all (y-stack _* {¦ -dt} ¦ _ gap⋮ 0) ⟨{¦ dt: dt0_number final-h: h0_number} {¦ -dt: dt1}⟩)
+  <> {dt1: $'(+ →dt0 →h0 →gap)}
 
 (%all (y-stack children_* ¦ _ fractions: true -leftover-h_ gap⋮ 0 final-h: H_number)
       (%items () {¦ h: content -final-h} min: 0)
@@ -271,7 +249,8 @@
       ⟨{¦ h: max fr_: (%number (whole _) > 0) -max-h: h}⟩°)
   <> {h: $(// (* →H →fr) →fr/sum)}
 
-(%all (y-stack _* ¦ _ -fractions) ⟨{¦ h_: max -max-h}⟩°) <> {h: content}
+(%all (y-stack _* ¦ _ -fractions) ⟨{¦ h_: max -max-h}⟩°)
+  <> {h: content}
 
 ;; Helper for both x-stack and y-stack.
 (%all {¦ -fr/sum_ fractions: true} (%items Frs_ {¦ fr: 0←(%number (whole _) > 0)}))
@@ -294,6 +273,6 @@
 (%all (z-stack _+ ¦ _ w: max max-w: W_number) ⟨{¦ -max-w: w}⟩°) <> {w: →W}
 (%all (z-stack _+ ¦ _ h: max max-h: H_number) ⟨{¦ -max-h: h}⟩°) <> {h: →H}
 
-;; The children of z-stack all receive left/top of the z-stack.
-(%all (z-stack _+ ¦ _ l: L_number) ⟨{¦ -l_}⟩°) <> {l: →L}
-(%all (z-stack _+ ¦ _ t: T_number) ⟨{¦ -t_}⟩°) <> {t: →T}
+;; z-stack with determinate dl/dt sets dt/dl of all of its children to zero.
+(%all (z-stack _+ ¦ _ dl: _number) ⟨{¦ -dl_}⟩°) <> {dl: 0}
+(%all (z-stack _+ ¦ _ dt: _number) ⟨{¦ -dt_}⟩°) <> {dt: 0}

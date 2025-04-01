@@ -357,22 +357,6 @@ module Microfold
     end
   end
 
-  # Appears if at least one delta (`dt`, `dl`) prop is present.
-  struct TranslateBox
-    include NodeBox
-
-    def call(ctx : UnitContext, subject : Term, subbox : Hierarchy) : {UnitContext, Term}
-      unless response = ctx.consume_some?(:dl, :dt)
-        return subbox.call(ctx, subject)
-      end
-
-      ictx, dl, dt = response
-      octx, inner = subbox.call(ictx.copy_with(nested: true), subject)
-
-      {octx, Term.of(:translate, inner, w: ctx.sheet[:w]?, h: ctx.sheet[:h]?, x: dl, y: dt)}
-    end
-  end
-
   # Appears if the z-index (`z`) prop is present.
   struct LayerBox
     include NodeBox
@@ -497,45 +481,63 @@ module Microfold
     end
   end
 
-  # Appears if at least one of the padding props (such as `pl`, `pt`) is present.
-  struct PaddingBox
+  struct PaddingYBox
     include NodeBox
 
     def call(ctx : UnitContext, subject : Term, subbox : Hierarchy) : {UnitContext, Term}
-      unless response = ctx.consume_some?(:pl, :pr, :pb, :pt)
+      unless response = ctx.consume_some?(:pt, :pb)
         return subbox.call(ctx, subject)
       end
 
-      ictx, pl, pr, pt, pb = response
+      ictx, pt, pb = response
       octx, inner = subbox.call(ictx.copy_with(nested: true), subject)
 
-      {octx, Term.of(:padding, inner,
-        w: ctx.sheet[:w]?,
-        h: ctx.sheet[:h]?,
-        pl: pl || 0,
-        pr: pr || 0,
-        pt: pt || 0,
-        pb: pb || 0,
-      )}
+      {octx, Term.of(:"y-padding", inner, w: ctx.sheet[:w]?, h: ctx.sheet[:h]?, pt: pt, pb: pb)}
     end
   end
 
-  # Appears if at least one content delta (`content-dt`, `content-dl`) prop
-  # is present.
-  struct ContentTranslateBox
+  struct PaddingXBox
     include NodeBox
 
     def call(ctx : UnitContext, subject : Term, subbox : Hierarchy) : {UnitContext, Term}
-      unless response = ctx.consume_some?(:"content-dl", :"content-dt")
+      unless response = ctx.consume_some?(:pl, :pr)
         return subbox.call(ctx, subject)
       end
 
-      ictx, dl, dt = response
-      ictx = ictx.override(:w, :content) if dl
-      ictx = ictx.override(:h, :content) if dt
+      ictx, pl, pr = response
       octx, inner = subbox.call(ictx.copy_with(nested: true), subject)
 
-      {octx, Term.of(:translate, inner, w: ctx.sheet[:w]?, h: ctx.sheet[:h]?, x: dl, y: dt)}
+      {octx, Term.of(:"x-padding", inner, w: ctx.sheet[:w]?, h: ctx.sheet[:h]?, pl: pl, pr: pr)}
+    end
+  end
+
+  struct AlignYBox
+    include NodeBox
+
+    def call(ctx : UnitContext, subject : Term, subbox : Hierarchy) : {UnitContext, Term}
+      unless response = ctx.consume_some?(:"align-y")
+        return subbox.call(ctx, subject)
+      end
+
+      ictx, point = response
+      octx, inner = subbox.call(ictx.override(:h, :content).copy_with(nested: true), subject)
+
+      {octx, Term.of(:"y-align", inner, w: ctx.sheet[:w]?, h: ctx.sheet[:h]?, to: point)}
+    end
+  end
+
+  struct AlignXBox
+    include NodeBox
+
+    def call(ctx : UnitContext, subject : Term, subbox : Hierarchy) : {UnitContext, Term}
+      unless response = ctx.consume_some?(:"align-x")
+        return subbox.call(ctx, subject)
+      end
+
+      ictx, point = response
+      octx, inner = subbox.call(ictx.override(:w, :content).copy_with(nested: true), subject)
+
+      {octx, Term.of(:"x-align", inner, w: ctx.sheet[:w]?, h: ctx.sheet[:h]?, to: point)}
     end
   end
 
@@ -650,10 +652,10 @@ module Microfold
     include NodeBox
 
     def call(ctx : UnitContext, subject : Term, subbox : Hierarchy) : {UnitContext, Term}
-      ictx, cursor, maxw, maxh, fr = ctx.consume(:cursor, :"max-w", :"max-h", :fr)
+      ictx, cursor, maxw, maxh, fr, dl, dt = ctx.consume(:cursor, :"max-w", :"max-h", :fr, :dl, :dt)
 
       octx, inner = subbox.call(ictx, subject)
-      inner = inner.morph({:fr, fr}, {:cursor, cursor}, {:"max-w", maxw}, {:"max-h", maxh})
+      inner = inner.morph({:fr, fr}, {:cursor, cursor}, {:"max-w", maxw}, {:"max-h", maxh}, {:dl, dl}, {:dt, dt})
 
       {octx.override(:w, nil).override(:h, nil), Term.of(inner)}
     end
@@ -689,14 +691,15 @@ module Microfold
     members: Slice(NodeBox).with(
       Toplevel.new,
       FloatingBox.new,
-      TranslateBox.new,
       LayerBox.new,
       MinHeightBox.new,
       MinWidthBox.new,
       BorderBox.new,
       BackgroundBox.new,
-      PaddingBox.new,
-      ContentTranslateBox.new,
+      PaddingYBox.new,
+      PaddingXBox.new,
+      AlignYBox.new,
+      AlignXBox.new,
     ),
     leaf: FlowBox.new(FlowEdge.new),
   )
@@ -705,11 +708,11 @@ module Microfold
     members: Slice(NodeBox).with(
       Toplevel.new,
       FloatingBox.new,
-      TranslateBox.new,
       LayerBox.new,
       MinHeightBox.new,
       MinWidthBox.new,
-      PaddingBox.new,
+      PaddingYBox.new,
+      PaddingXBox.new,
     ),
     leaf: Itself.new,
   )
@@ -791,9 +794,7 @@ module Microfold
 end
 
 # stuff = ML.term <<-WWML
-# (group style: "min-w-sm max-w-lg content flow-col gap-2"
-#   (p "hello" style: "w-max px-2 py-1 font-mono bg-neutral-700 text-neutral-200 font-medium rounded-sm")
-#   (p "Hello World" style: "w-max px-2 pb-1 text-sm text-neutral-300"))
+# (button "Hello World")
 # WWML
 
 # puts ML.display(Microfold.uir(Microfold::SPEC, stuff))
