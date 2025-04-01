@@ -1612,6 +1612,8 @@ class Tconn
     Sink.new do |overview|
       multisets1 = Term::Dict.build do |commit|
         overview.each do |key, view|
+          next if view.empty?
+
           commit.with(key, view.dict_multiset)
         end
       end
