@@ -935,6 +935,7 @@ module UIR::Platform::SFML
     case event.code
     when .f1?        then keyname = "f1"
     when .f2?        then keyname = "f2"
+    when .f3?        then keyname = "f3"
     when .escape?    then keyname = "escape"
     when .tab?       then keyname = "tab"
     when .home?      then keyname = "home"

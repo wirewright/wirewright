@@ -75,6 +75,27 @@ PRIMITIVES = ProcRuleset.build do
     xs[key]? || Term.of(:value, xs, key)
   end
 
+  rulepi1 %[(entries xs_dict)] do
+    Term[xs.ee]
+  end
+
+  rulepi1 %[(nth xs_dict n←(%number +i32))] do
+    if response = xs.nth?(n.to(Int32))
+      key, value = response
+      Term.of(:some, {key, value})
+    else
+      Term.of({:none, xs})
+    end
+  end
+
+  rulepi1 %[(itemspart xs_dict)] do
+    xs.itemspart
+  end
+
+  rulepi1 %[(pairspart xs_dict)] do
+    xs.pairspart
+  end
+
   # Flattens itemspart of *xs*, its items and so on, recursively.
   rulepi1 %[(flatten xs_)] do
     Term::Dict.build do |commit|

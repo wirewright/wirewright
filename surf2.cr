@@ -1278,7 +1278,6 @@ end
 struct Tspace
   alias Key = Tbase::Key | SensorDataMap::Key | AppearanceDataMap::Key
   alias Value = Tbase::Value | SensorDataMap::Value | AppearanceDataMap::Value
-
   alias Dismiss = ->
 
   def initialize(@fresh : LabelGenerator, @map : IMap(Key, Value))
@@ -1314,18 +1313,20 @@ struct Tspace
       mounted = false
 
       @map.decall(subject.id, deps.to_a { |(key, _)| key })
+
+      nil
     end
 
     {seen, dismiss}
   end
 
-  def summon(adata : AppearanceData, subject : Tbase::Appearance, &sink : SensorData ->) : Dismiss
+  def summon(adata : AppearanceData, subject : Tbase::Appearance, &excite : SensorData ->) : Dismiss
     deps = Bag({Key, Value}).new
 
     _ = appearances.mount(subject.id, adata, deps: deps)
     _ = tbase.mount(subject, deps: deps)
 
-    each_complement(subject, adata.selector, &sink)
+    each_complement(subject, adata.selector, &excite)
 
     mounted = true
 
@@ -1337,6 +1338,8 @@ struct Tspace
       mounted = false
 
       @map.decall(subject.id, deps.to_a { |(key, _)| key })
+
+      nil
     end
   end
 
@@ -1609,8 +1612,6 @@ class Tconn
     Sink.new do |overview|
       multisets1 = Term::Dict.build do |commit|
         overview.each do |key, view|
-          next if view.empty?
-
           commit.with(key, view.dict_multiset)
         end
       end
@@ -1801,8 +1802,11 @@ class Tconn
 
       data.destructors.each &.call(final)
 
-      @overview = @overview.dissoc(identity)
-      @sink.call(@overview)
+      overview1 = @overview.dissoc(identity)
+      unless @overview.same?(overview1)
+        @overview = overview1
+        @sink.call(@overview)
+      end
     end
 
     Log.debug { "#{@conid}: removed surface #{identity}" }

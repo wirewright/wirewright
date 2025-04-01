@@ -36,6 +36,8 @@ module Rhodium
   # :nodoc:
   PostCycle = Term.of(:"#post-cycle")
 
+  Tspaces = Term.of(:"#tspaces")
+
   # Follows an arbitrary *keypath* into *document*. Returns the pointed-to
   # node or `nil` if the keypath is invalid. This does not take into account
   # the passability of nodes (use `passable?` to check if the keypath is
@@ -621,14 +623,23 @@ module Rhodium
           {document1, false}
         end
 
+        givenpi %[(fragment v_ @cout_) (pulse @cout_ clear) _] do
+          effect(document1, nodepath, node0) do
+            backmap %[(_ v_ @_)], %[{(v): ()}]
+
+            true
+          end
+        end
+
         givenpi %[(fragment v0_ @cout_) (assign @cout_ v1_) _] do
           effect(document1, nodepath, node0) do
             event :"cell/updated", cout, v0, v1
             cell cout, v1
             backmap %[(fragment v_ @_)], v: v1
 
-            # The identity of the fragment did not change, do not trigger transition.
-            false
+            # Fragment may have been assigned anything, including something that
+            # needs a transition right now.
+            true
           end
         end
 
@@ -638,6 +649,25 @@ module Rhodium
 
             true
           end
+        end
+      end
+
+      # Sensors and appearances
+      begin
+        givenpi %{(sensor pattern_ in tspace_symbol to @_) initialize -1} do
+          {document1.morph({Tspaces, tspace, :sensors, pattern, true}), false}
+        end
+
+        givenpi %{(sensor pattern_ in tspace_ to @pout_) (stimuli tspace_ pattern_ multiset_) -1} do
+          effect(document1, nodepath, node0) do
+            event :pulse, pout, multiset
+
+            false
+          end
+        end
+
+        givenpi %{(appearance value_ in tspace_symbol) initialize -1} do
+          {document1.morph({Tspaces, tspace, :appearances, value, true}), false}
         end
       end
 
@@ -1141,6 +1171,8 @@ module Rhodium
   end
 
   # Returns the identity of *node*. Returns `nil` if *node* has no identity.
+  #
+  # Nodes with identity are interested in receiving initialize events.
   def identity?(node : Term) : Term?
     Term.case({node, cursordepth(node)}) do
       givenpi(
@@ -1155,7 +1187,6 @@ module Rhodium
         Term.of(:transform, pin, job)
       end
 
-      # Nodes interested in receiving initialize events.
       givenpi(
         %{(transform @_ to @_ with _ _) -1},
         %{(transform @_ to @_ _) -1},
@@ -1163,6 +1194,14 @@ module Rhodium
         %{(transform (@_ _) to @_ with _ _) -1},
         %{(absence @_ as _ to @_) -1},
       ) { node }
+
+      givenpi %{(sensor pattern_ in tspace_symbol to @_) -1} do
+        Term.of(:sensor, pattern, tspace)
+      end
+
+      givenpi %{(appearance value_ in tspace_symbol) -1} do
+        Term.of(:appearance, value, tspace)
+      end
 
       otherwise { }
     end
@@ -1189,6 +1228,14 @@ module Rhodium
 
       matchpi %{(transform @pin_ job_)} do
         document1.morph({JobsPending, job, nil})
+      end
+
+      matchpi %{(sensor pattern_ tspace_)} do
+        document1.morph({Tspaces, tspace, :sensors, pattern, nil})
+      end
+
+      matchpi %{(appearance value_ tspace_)} do
+        document1.morph({Tspaces, tspace, :appearances, value, nil})
       end
 
       otherwise { document1 }

@@ -2,6 +2,7 @@ require "./src/wirewright"
 require "./uiRb"
 require "./sfpaint"
 require "./pprint2"
+require "./meridium_step"
 
 module UIR::Platform
   alias Current = SFML
@@ -648,7 +649,25 @@ class Document
 
     # The following instance variables are owned exclusively by the document
     # thread. No one else must know they exist.
-    @nitrene = Nitrene::JobContext.new
+    @nictx = Nitrene::JobContext.new
+
+    reg = Meridium::TspaceRegistry.new
+    @mectx = Meridium::StepContext.new(reg)
+
+    reg[Term.of(:local)] = TspaceConfig.new(
+      map: SyncInMemoryMap(Tspace::Key, Tspace::Value).new,
+      chat: SyncInMemoryChat(Activation).new,
+      sink: Tconn::Sink.new do |overview|
+        @mectx.each_prompt(Term.of(:local), overview) do |prompt|
+          send(prompt)
+        end
+
+        nil
+      end,
+      fresh: WWID,
+      keepalive: nil,
+    )
+
     @document = Term[]
     @initial = true
     @state = State::Clean
@@ -657,7 +676,7 @@ class Document
     @nitrene_watch_thread.spawn do
       while true
         select
-        when @nitrene.alarm.receive
+        when @nictx.alarm.receive
           # Wake document thread up. The event doesn't matter. Nitrene.step
           # will do the rest.
           send(Term.of(:alarm))
@@ -695,7 +714,7 @@ class Document
     @document = D7.run(@document,
       log: D7::Log::None.new,
       transition: Rhodium.transition,
-      step: D7.steps(rendezvous, Rhodium.step, Nitrene.step(@nitrene)),
+      step: D7.steps(rendezvous, Rhodium.step, Nitrene.step(@nictx), Meridium.step(@mectx)),
       goal: D7::Goal.none,
       initial: @initial,
     )
@@ -777,7 +796,8 @@ class Document
   private def handle(prompt : Term) : Nil
     Term.case(prompt) do
       matchpi %{(open seed_dict)} { open(seed.unsafe_as_d) }
-      matchpi %{(key _)}, %{(input _string)} { edit(prompt) }
+      matchpi %{(key _)}, %{(input _string)} { event(Term.of(:edit, {:edge, :user}, prompt)) }
+      matchpi %{(event e_)} { event(e) }
       matchpi %{(click id_)} { click(id) }
       otherwise { }
     end
@@ -788,10 +808,10 @@ class Document
     @document = seed
   end
 
-  # Enqueues `(edit @user motion_)` event onto the document's queue.
-  private def edit(motion : Term) : Nil
+  # Enqueues *event* onto the document's queue.
+  private def event(event : Term) : Nil
     @document = Rhodium::Q.of(@document, Rhodium::Events)
-      .enqueue(Term.of(:edit, {:edge, :user}, motion))
+      .enqueue(event)
       .commit(@document, Rhodium::Events)
   end
 
@@ -883,7 +903,23 @@ demo = ML.dict <<-WWML
 ("" | "" () @user)
 WWML
 
-seed = ML.dict <<-WWML
+fb_loop = ML.dict <<-WWML
+(sensor x_number in local to @inputs)
+(queue @inputs to @input/0-in in () waiting @input/0)
+(transform @input/0-in to @input/0 (nth _ 0))
+(transform (@input/0 (some ({¦ x_} _))) to @xs x)
+(transform @xs to @ys (+ _ 1))
+(latest @ys @y)
+(cell 0 @y) ;; << This starts the feedback loop
+(initial @y to @ys)
+(absence @y as clear to @appearance)
+(transform @ys to @appearances (appearance _ in local))
+(latest @appearances @appearance)
+(fragment @appearance)
+(log @ys in ())
+WWML
+
+welcome = ML.dict <<-WWML
 (unit group style: "w-max h-content flow-col gap-3 max-w-3xl"
   (h1 "Welcome to µsoma, a GUI for Wirewright!")
   (hr style: "bg-neutral-600")
@@ -902,7 +938,7 @@ seed = ML.dict <<-WWML
     (unit ul style: "w-max h-content flow-col gap-1 pl-3"
       (text "- Drag on empty/non-clickable space to pan around if something overflows." style: "w-max text-sm")
       (text "- Hit Enter to escape from a pair." style: "w-max text-sm")
-      (text "- Hit F2 to replace this document with a more sophisticated demo." style: "w-max text-sm")
+      (text "- Hit F2-F3 to replace this document with more sophisticated demos." style: "w-max text-sm")
       (text "- Hit Ctrl-Backspace to remove this comment (and any *node* before the cursor in general)." style: "w-max text-sm")
       (text "- Play! The semi-readable implementation of this editor is in `editor.soma.wwml`; check it out for key bindings & what they do" style: "w-max text-sm")
       (text "- Take a look at D7 tests: `delta7.test.wwml`. Plenty of examples there." style: "w-max text-sm"))))
@@ -910,6 +946,8 @@ seed = ML.dict <<-WWML
 ("" | "" () @user)
 
 WWML
+
+seed = welcome
 
 doc = Document.new
 doc.send(Term.of(:open, seed))
@@ -959,6 +997,10 @@ ui = UIR::Reducers.microfold(Term.of(frame0)) do |inframe, drawable, event|
 
     matchpi %{(key f2)} do
       doc.send(Term.of(:open, demo))
+    end
+
+    matchpi %{(key f3)} do
+      doc.send(Term.of(:open, fb_loop))
     end
 
     matchpi %{(key _symbol)}, %{(input _string)} do
