@@ -84,7 +84,7 @@ PRIMITIVES = ProcRuleset.build do
       key, value = response
       Term.of(:some, {key, value})
     else
-      Term.of({:none, xs})
+      Term.of({:none})
     end
   end
 
