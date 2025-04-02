@@ -69,8 +69,11 @@ end
 module UIR
   extend self
 
-  @@base_cache = SyncCache(Term, Rewrite::Any).new(capacity: 2**14, preallocate: true)
-  @@control_cache = SyncCache(Term, Rewrite::Any).new(capacity: 2048, preallocate: true)
+  BASE_CAPACITY = ENV["UIR_BASE_CAP"]?.try(&.to_i) || 2**16
+  CTRL_CAPACITY = ENV["UIR_CTRL_CAP"]?.try(&.to_i) || 2**12
+
+  @@base_cache = SyncCache(Term, Rewrite::Any).new(capacity: BASE_CAPACITY, preallocate: true)
+  @@control_cache = SyncCache(Term, Rewrite::Any).new(capacity: CTRL_CAPACITY, preallocate: true)
 
   # Returns the UIR rewriter.
   #
@@ -158,10 +161,10 @@ module UIR
     set_control, rec_control = recR
 
     controlR = exhR(
-      set_control.call cueR({Term[:fallback]}, memoR(@@control_cache, choiceR(
+      set_control.call memoR(@@control_cache, choiceR(
           rulesetR(Ruleset.select(selector, ML.terms(base_control)), noR, backmapR, noR),
           itemsR(rec_control),
-      )))
+      ))
     )
 
     exhR(chainR(mainR, controlR))

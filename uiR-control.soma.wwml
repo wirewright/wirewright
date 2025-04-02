@@ -9,14 +9,9 @@
 ;; and all the user will see is nothingness beyond a certain point -- certainly
 ;; not good UX!
 
-N←{¦ -final-w fallback: (¦ source_ rem_: (%number +i32))}
+{¦ final-w: _number final-h: _number dl: _number dt: _number fallback_}
+  <> {(fallback): ()}
+
+N←{¦ fallback: (¦ () source_ rem_)}
   <> {N: $'(d7uir →source rem: →rem code-only: true)}
 
-N←{¦ -final-h fallback: (¦ source_ rem_: (%number +i32))}
-  <> {N: $'(d7uir →source rem: →rem code-only: true)}
-
-N←{¦ -dl fallback: (¦ source_ rem_: (%number +i32))}
-  <> {N: $'(d7uir →source rem: →rem code-only: true)}
-
-N←{¦ -dt fallback: (¦ source_ rem_: (%number +i32))}
-  <> {N: $'(d7uir →source rem: →rem code-only: true)}
