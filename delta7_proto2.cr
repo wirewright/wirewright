@@ -68,7 +68,7 @@ module Rhodium
       matchpi %[(edit-cage for @_ _*)] { 3...node.itemsize }
       matchpi %[(decay (%number +i32) _*)] { 2...node.itemsize }
       matchpi %[(lookaround @_ @_ _*)] { 3...node.itemsize }
-      matchpi %[(fragment _ @_)] { 1...2 }
+      matchpi %[(frag _ @_)] { 1...2 }
       matchpi %[(mutator @_ _)] { 2...3 }
       matchpi %[(cover _ _+)] { 2...node.itemsize }
       otherwise { }
@@ -165,6 +165,11 @@ module Rhodium
     end
 
     true
+  end
+
+  # Returns `true` if the node pointed to by *nodepath* has an observer parent.
+  def observed?(document : Term::Dict, nodepath : Stack(Int32)) : Bool
+    !!enclosing?(document, nodepath) { |parent| observer?(Term.of(parent)) }
   end
 
   # Rewrites the term at an arbitrary *keypath* into *document* using the block.
@@ -473,8 +478,10 @@ module Rhodium
 
     # Disappear allows the node to remove itself as if it didn't exist. This
     # lets us prevent expulsion.
-    if builder.disappear? && (identity = identity?(node))
-      document1 = document1.morph({Population, identity, false})
+    if builder.disappear?
+      each_identity(node) do |identity|
+        document1 = document1.morph({Population, identity, false})
+      end
     end
 
     # Replace node with its new version.
@@ -517,7 +524,7 @@ module Rhodium
       # TODO: these are very similar and should be refactored into
       # something single, with variations.
 
-      givenpi %[(cell v_ @cout_) initialize -1] do
+      givenpi %[(cell v_ @cout_) (initialize _) -1] do
         effect(document1, nodepath, node0) do
           event :"cell/created", cout, v
           cell cout, v
@@ -526,7 +533,7 @@ module Rhodium
         end
       end
 
-      givenpi %[(cell v_ @cout_ for pattern_) initialize -1] do
+      givenpi %[(cell v_ @cout_ for pattern_) (initialize _) -1] do
         effect(document1, nodepath, node0) do
           if created = M1.probe?(pattern, v)
             event :"cell/created", cout, v
@@ -606,12 +613,9 @@ module Rhodium
         end
       end
 
-      # Fragment
-      #
-      # Fragments behave like cells except they're passable. And don't have
-      # a guard variant.
+      # frag
       begin
-        givenpi %[(fragment v_ @cout_) initialize _] do
+        givenpi %[(frag v_ @cout_) (initialize (frag @_)) _] do
           effect(document1, nodepath, node0) do
             event :"cell/created", cout, v
             cell cout, v
@@ -620,11 +624,11 @@ module Rhodium
           end
         end
 
-        givenpi %[(fragment v_ @cout_) (assign @cout_ v_) _] do
+        givenpi %[(frag v_ @cout_) (assign @cout_ v_) _] do
           {document1, false}
         end
 
-        givenpi %[(fragment v_ @cout_) (pulse @cout_ clear) _] do
+        givenpi %[(frag v_ @cout_) (pulse @cout_ clear) _] do
           effect(document1, nodepath, node0) do
             backmap %[(_ v_ @_)], %[{(v): ()}]
 
@@ -632,11 +636,22 @@ module Rhodium
           end
         end
 
-        givenpi %[(fragment v0_ @cout_) (assign @cout_ v1_) _] do
+        # This will trigger the next rule due to fragment's secondary identity
+        # changing (being removed) after the assignment.
+        givenpi %[(frag v0_ @cout_) (assign @cout_ v1_) _] do
+          effect(document1, nodepath, node0) do
+            backmap %[(frag v_ @_)], v: v1
+
+            # We need this to trigger the next rule.
+            true
+          end
+        end
+
+        givenpi %[(frag v1_ @cout_) (frag/removed @cout_ v0_) _] do
           effect(document1, nodepath, node0) do
             event :"cell/updated", cout, v0, v1
             cell cout, v1
-            backmap %[(fragment v_ @_)], v: v1
+            backmap %[(frag v_ @_)], v: v1
 
             # Fragment may have been assigned anything, including something that
             # needs a transition right now.
@@ -644,9 +659,9 @@ module Rhodium
           end
         end
 
-        givenpi %[(fragment @cout_) (assign @cout_ v0_) _] do
+        givenpi %[(frag @cout_) (assign @cout_ v0_) _] do
           effect(document1, nodepath, node0) do
-            backmap %[(fragment ⏏v @_)], v: v0
+            backmap %[(frag ⏏v @_)], v: v0
 
             true
           end
@@ -655,7 +670,7 @@ module Rhodium
 
       # Sensors and appearances
       begin
-        givenpi %{(sensor pattern_ in tspace_symbol to @_) initialize -1} do
+        givenpi %{(sensor pattern_ in tspace_symbol to @_) (initialize _) -1} do
           {document1.morph({Tspaces, tspace, :sensors, pattern, true}), false}
         end
 
@@ -667,7 +682,7 @@ module Rhodium
           end
         end
 
-        givenpi %{(appearance value_ in tspace_symbol) initialize -1} do
+        givenpi %{(appearance value_ in tspace_symbol) (initialize _) -1} do
           {document1.morph({Tspaces, tspace, :appearances, value, true}), false}
         end
       end
@@ -781,7 +796,7 @@ module Rhodium
         end
       end
 
-      givenpi %[(log @pin_ in (entries_*) ¦ limit: (%optional 10 limit←(%number (whole _) > 0))) (pulse @pin_ term_) (%not 1 2)] do
+      givenpi %[(log @pin_ in (entries_*) ¦ limit: (%optional 10 limit←(%number (whole _) > 0))) (pulse @pin_ term_) _] do
         effect(document1, nodepath, node0) do
           backmap ML.term(%[(log _ in (entries_*) ¦ _)]), Term.of(Term[].with({:entries}, entries.rightmost(limit.to(Int32) - 1).append(term)))
 
@@ -984,7 +999,7 @@ module Rhodium
         end
 
         # Send feedback busy. Schedule job.
-        givenpi %[(transform _* ¦ #shadow: _ #spec: {¦ in: @pin_} #job: job_) initialize -1] do
+        givenpi %[(transform _* ¦ #shadow: _ #spec: {¦ in: @pin_} #job: job_) (initialize _) -1] do
           effect(document1, nodepath, node0) do
             schedule job
 
@@ -1005,7 +1020,7 @@ module Rhodium
       end
 
       # Initialize stateful transform
-      givenpi %[(transform @pin_ to @pout_ with state_ body_) initialize -1] do
+      givenpi %[(transform @pin_ to @pout_ with state_ body_) (initialize _) -1] do
         effect(document1, nodepath, node0) do
           change "#shadow": {:"%literal", node0.itemspart}, "#spec": {in: pin, out: pout, state: state, body: body}
 
@@ -1014,7 +1029,7 @@ module Rhodium
       end
 
       # Stateless transform
-      givenpi %[(transform @pin_ to @pout_ body_) initialize -1] do
+      givenpi %[(transform @pin_ to @pout_ body_) (initialize _) -1] do
         effect(document1, nodepath, node0) do
           change "#shadow": {:"%literal", node0.itemspart}, "#spec": {in: pin, out: pout, body: body}
 
@@ -1023,7 +1038,7 @@ module Rhodium
       end
 
       # Stateless filter transform
-      givenpi %[(transform (@pin_ pattern_) to @pout_ body_) initialize -1] do
+      givenpi %[(transform (@pin_ pattern_) to @pout_ body_) (initialize _) -1] do
         effect(document1, nodepath, node0) do
           change "#shadow": {:"%literal", node0.itemspart}, "#spec": {in: pin, out: pout, filter: pattern, body: body}
 
@@ -1032,7 +1047,7 @@ module Rhodium
       end
 
       # Stateful filter transform
-      givenpi %[(transform (@pin_ pattern_) to @pout_ with state_ body_) initialize -1] do
+      givenpi %[(transform (@pin_ pattern_) to @pout_ with state_ body_) (initialize _) -1] do
         effect(document1, nodepath, node0) do
           change "#shadow": {:"%literal", node0.itemspart}, "#spec": {in: pin, out: pout, filter: pattern, state: state, body: body}
 
@@ -1043,7 +1058,7 @@ module Rhodium
       # Absence node
       begin
         # Initialize `absence` to newborn state.
-        givenpi %{(absence @_ as _ to @_) initialize -1} do
+        givenpi %{(absence @_ as _ to @_) (initialize _) -1} do
           effect(document1, nodepath, node0) do
             change "#shadow": {:"%literal", node0.itemspart}, "#state": :newborn
 
@@ -1209,21 +1224,34 @@ module Rhodium
     end
   end
 
-  # Returns the identity of *node*. Returns `nil` if *node* has no identity.
+  # Returns `true` if *node* is an observer node.
+  def observer?(node : Term) : Bool
+    Term.case(node) do
+      matchpi %{(frag _ @_)} { true }
+      otherwise { false }
+    end
+  end
+
+  # Yields identities of *node*, if any.
   #
   # Nodes with identity are interested in receiving initialize events.
-  def identity?(node : Term) : Term?
+  def each_identity(node : Term, & : Term ->) : Nil
     Term.case({node, cursordepth(node)}) do
       givenpi(
         %{(cell _ @cout_) -1},
         %{(cell _ @cout_ for _) -1},
-        %{(fragment _ @cout_) _},
       ) do
-        Term.of(:cell, cout)
+        yield Term.of(:cell, cout)
+      end
+
+      # Fragments include the value in their identity so that we have observability.
+      givenpi %{(frag value_ @cout_) _} do
+        yield Term.of(:frag, cout)
+        yield Term.of(:frag, value, cout)
       end
 
       givenpi %{(transform _* ¦ #shadow: _ #spec: {¦ in: @pin_} #job: job_) -1} do
-        Term.of(:transform, pin, job)
+        yield Term.of(:transform, pin, job)
       end
 
       givenpi(
@@ -1232,14 +1260,14 @@ module Rhodium
         %{(transform (@_ _) to @_ _) -1},
         %{(transform (@_ _) to @_ with _ _) -1},
         %{(absence @_ as _ to @_) -1},
-      ) { node }
+      ) { yield node }
 
       givenpi %{(sensor pattern_ in tspace_symbol to @_) -1} do
-        Term.of(:sensor, pattern, tspace)
+        yield Term.of(:sensor, pattern, tspace)
       end
 
       givenpi %{(appearance value_ in tspace_symbol) -1} do
-        Term.of(:appearance, value, tspace)
+        yield Term.of(:appearance, value, tspace)
       end
 
       otherwise { }
@@ -1259,10 +1287,16 @@ module Rhodium
   # *document1* is write-only.
   def expel(document0 : Term::Dict, document1 : Term::Dict, identity : Term) : Term::Dict
     Term.case(identity) do
-      matchpi %{(cell @cout_)}, %{(fragment @cout_)} do
+      matchpi %{(cell @cout_)}, %{(frag @cout_)} do
         document1 = document1.morph({Cells, cout, nil})
 
         Q.of(document1, Events).enqueue(:"cell/removed", cout).commit(document1, Events)
+      end
+
+      # If there is a successor fragment to @cout, it will catch this event
+      # and perform a transition.
+      matchpi %{(frag value_ @cout_)} do
+        Q.of(document1, Events).enqueue(:"frag/removed", cout, value).commit(document1, Events)
       end
 
       matchpi %{(transform @pin_ job_)} do
@@ -1297,8 +1331,12 @@ module Rhodium
     while successor?(document0, nodepath)
       document1, node_transition_vote = handle(document0, document1, nodepath, event)
 
-      # If any node voted yes we vote yes.
-      if node_transition_vote
+      # - If the node voted yes (do transition) we vote yes (do transition).
+      # - If the node is observed (meaning it is e.g. inside of a fragment) we must
+      #   vote yes even if the node says otherwise; since e.g. fragment or any other
+      #   kind of observer will rely on transitions with an overwhelmingly
+      #   high probability.
+      if node_transition_vote || observed?(document0, nodepath)
         transition_vote = true
       end
     end
@@ -1316,12 +1354,12 @@ module Rhodium
       initialize_queue = initialize_queue.dequeue
 
       Term.case(head) do
-        matchpi %{(steps_number+)} do
+        matchpi %{((steps_number+) identity_)} do
           next unless keypath = keypath?(document0, steps.items)
 
           document1 = initialize_queue.commit(document0, Initialize)
 
-          return handle(document0, document1, keypath, Term.of(:initialize))
+          return handle(document0, document1, keypath, Term.of(:initialize, identity))
         end
 
         otherwise { }
@@ -1421,16 +1459,16 @@ module Rhodium
 
       # Ask each node for its identity. If it has one, we do this population thing.
       # It it does not, we ignore the node and move on.
-      next unless identity = identity?(node)
-
-      if identity.in?(population0)
-        # Prolong
-        population0 = population0.without(identity)
-        population1 = population1.with(identity, true)
-      elsif !identity.in?(population1)
-        # Initialize
-        document2 = Q.of(document2, Initialize).enqueue(nodepath).commit(document2, Initialize)
-        population1 = population1.with(identity, true)
+      each_identity(node) do |identity|
+        if identity.in?(population0)
+          # Prolong
+          population0 = population0.without(identity)
+          population1 = population1.with(identity, true)
+        elsif !identity.in?(population1)
+          # Initialize
+          document2 = Q.of(document2, Initialize).enqueue({nodepath, identity}).commit(document2, Initialize)
+          population1 = population1.with(identity, true)
+        end
       end
     end
 

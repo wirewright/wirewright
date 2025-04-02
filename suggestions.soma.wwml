@@ -104,12 +104,12 @@
 (node event "Emits an event and destroys itself"
   (literal e "term that should be emitted as an event"))
 
-(group fragment "Works exactly like cell but its value is passable -- meaning whatever is in there (buttons, delays, cells, etc.) gets executed")
+(group frag "Works exactly like cell but its value is passable -- meaning whatever is in there (buttons, delays, cells, etc.) gets executed and can be observed throughout execution using the `changes` node")
 
-(variant fragment
+(variant frag
   (const cout "sink for const signal"))
 
-(variant fragment
+(variant frag
   (literal v "current value")
   (const cout "sink for const signal"))
 

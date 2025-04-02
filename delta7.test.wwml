@@ -881,32 +881,73 @@
 ;; TODO: scrolling up at the top in suggestions/group
 ;; TODO: scrolling down at the top in suggestions/group
 
-;; fragment
+;; frag
 (group
   (d7
-    ((fragment @qux)
+    ((frag @qux)
      (changes @qux to @quxes)
      (absence @quxes as "Qux is absent!!" to @-quxes)
      (log @quxes in ())
      (log @-quxes in ())
      (delay 1 (event (assign @qux (delay 1 (event (assign @qux "Hello World")))))))
-    ((fragment "Hello World" @qux)
+    ((frag "Hello World" @qux)
      (changes @qux to @quxes)
      (absence @quxes as "Qux is absent!!" to @-quxes)
-     (log @quxes in ((delay 1 (event (assign @qux "Hello World"))) "Hello World"))
+     (log @quxes in ((delay 1 (event (assign @qux "Hello World")))
+                     (delay 0 (event (assign @qux "Hello World")))
+                     (event (assign @qux "Hello World"))
+                     "Hello World"))
      (log @-quxes in ("Qux is absent!!"))))
-  ;; Smart subsume should try to away from fragment
+  ;; Smart subsume should try to stay away from fragment if possible
   (d7
-    ((fragment ("" | "" () @user) @qux)
+    ((frag ("" | "" () @user) @qux)
      ("" | "" () @user)
      (event (edit @user (input "Hi"))))
-    ((fragment ("" | "" () @user) @qux)
+    ((frag ("" | "" () @user) @qux)
      ("Hi" | "" () @user)))
   ;; But if there is no choice, it must enter
   (d7
-    ((fragment ("" | "" () @user) @qux)
+    ((frag ("" | "" () @user) @qux)
      (event (edit @user (input "Hi"))))
-    ((fragment ("Hi" | "" () @user) @qux))))
+    ((frag ("Hi" | "" () @user) @qux)))
+  ;; Fragment must be able to observe delays
+  (d7
+    ((frag (delay 10) @qux)
+     (changes @qux to @quxes)
+     (log @quxes in () limit: 11))
+    ((frag @qux)
+     (changes @qux to @quxes)
+     (log @quxes in limit: 11
+       ((delay 10)
+        (delay 9)
+        (delay 8)
+        (delay 7)
+        (delay 6)
+        (delay 5)
+        (delay 4)
+        (delay 3)
+        (delay 2)
+        (delay 1)
+        (delay 0)))))
+  ;; Fragment must be able to observe cursor motions
+  (d7
+    ((frag ("" | "" () @user) @qux)
+     (changes @qux to @quxes)
+     (log @quxes in ())
+     (delay 0 (event (edit @user (input "H"))))
+     (delay 1 (event (edit @user (input "e"))))
+     (delay 2 (event (edit @user (input "l"))))
+     (delay 3 (event (edit @user (input "l"))))
+     (delay 4 (event (edit @user (input "o")))))
+    ((frag ("Hello" | "" () @user) @qux)
+     (changes @qux to @quxes)
+     (log @quxes in
+       (("" | "" () @user)
+        ("H" | "" () @user)
+        ("He" | "" () @user)
+        ("Hel" | "" () @user)
+        ("Hell" | "" () @user)
+        ("Hello" | "" () @user))))))
 
 ;; Button #shadow behavior
 (d7
