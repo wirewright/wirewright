@@ -132,14 +132,14 @@ module D7VR
     WWML
 
     SUGGESTION_TEMPLATE = ML.term <<-WWML
-    (box style: "floating z-10 dt-8 border border-neutral-600 bg-neutral-800 rounded p-2"
+    (box style: "floating z-20 dt-8 border border-neutral-600 bg-neutral-800 rounded p-2"
       (group style: "content min-w-xs max-w-md flow-col gap-2"
         (p ^name style: "w-max px-2 py-1 font-mono bg-neutral-700 text-neutral-200 font-medium rounded-sm")
         (p ^intro style: "w-max px-2 pb-1 text-sm text-neutral-300")))
     WWML
 
     SUGGESTION_GROUP_TEMPLATE = ML.term <<-WWML
-    (box style: "floating z-10 dt-8 border border-neutral-600 bg-neutral-800 rounded p-2"
+    (box style: "floating z-20 dt-8 border border-neutral-600 bg-neutral-800 rounded p-2"
       (group style: "content flow-col gap-2"
         (^match (> total 1)
           (when true
@@ -153,7 +153,7 @@ module D7VR
     WWML
 
     SUGGESTION_LIST_TEMPLATE = ML.term <<-WWML
-    (box style: "floating z-10 dt-8 border border-neutral-600 bg-neutral-800 rounded p-3"
+    (box style: "floating z-20 dt-8 border border-neutral-600 bg-neutral-800 rounded p-3"
       (main style: "content min-w-xs max-w-md flow-col gap-3"
         (header style: "w-max h-content flow-row font-sans font-normal text-xs text-neutral-300"
           "Showing " ^begin ".." ^end " out of " ^total)
@@ -209,6 +209,8 @@ module D7VR
     def call(ctx, term, postfix, head, rest)
       Term.case(term) do
         matchpi %{(lhs_string | rhs_string (_*) @user ¦ _ suggestions: (suggestions/list () ((name_string intro_string)) ()))} do
+          # FIXME: continue if not passable
+
           cursor_unit = Alloy.render(Term[lhs: lhs, rhs: rhs], CURSOR_TEMPLATE)
           suggestion_unit = Alloy.render(Term[name: name, intro: intro], SUGGESTION_TEMPLATE)
 
@@ -220,6 +222,8 @@ module D7VR
         end
 
         matchpi %{(lhs_string | rhs_string (_*) @user ¦ _ suggestions: (suggestions/list above←(_*) visible←((%past (_string _string) min: 1)) below←(_*)))} do
+          # FIXME: continue if not passable
+
           cursor_unit = Alloy.render(Term[lhs: lhs, rhs: rhs], CURSOR_TEMPLATE)
 
           b = above.size
@@ -244,6 +248,8 @@ module D7VR
         end
 
         matchpi %{(lhs_string | rhs_string (_*) @user ¦ _ suggestions_: (suggestions/group prefix←(_*) suffix←((head_string body_string) _*)))} do
+          # FIXME: continue if not passable
+
           cursor_unit = Alloy.render(Term[lhs: lhs, rhs: rhs], CURSOR_TEMPLATE)
 
           suggestion_unit = Alloy.render(Term[
@@ -816,6 +822,7 @@ class Document
   private def handle(prompt : Term) : Nil
     Term.case(prompt) do
       matchpi %{(open seed_dict)} { open(seed.unsafe_as_d) }
+      matchpi %{(key f4)} { puts ML.display(@document) }
       matchpi %{(key _)}, %{(input _string)} { event(Term.of(:edit, {:edge, :user}, prompt)) }
       matchpi %{(event e_)} { event(e) }
       matchpi %{(click id_)} { click(id) }
@@ -937,17 +944,22 @@ WWML
 
 fb_loop = ML.dict <<-WWML
 (sensor x_number in local to @inputs)
-(cover "Sensor output queue" (queue @inputs to @input/0-in in () waiting @input/0))
+(cover "Sensor queue"
+  (queue @inputs to @input/0-in in () waiting @acks))
 (transform @input/0-in to @input/0 (nth _ 0))
 (transform (@input/0 (some ({¦ x_} _))) to @xs x)
 (transform @xs to @ys (+ _ 1))
+
+(bridge (@input/0 (none)) to @acks)
+(bridge @appearances to @acks)
+
 (latest @ys @y)
 (cell 0 @y) ;; << This starts the feedback loop
 (initial @y to @ys)
 (absence @y as clear to @appearance)
 (transform @ys to @appearances (appearance _ in local))
 (latest @appearances @appearance)
-(fragment @appearance)
+(frag @appearance)
 (log @ys in ())
 ("" | "" () @user)
 WWML
@@ -986,7 +998,12 @@ doc = Document.new
 doc.send(Term.of(:open, seed))
 
 frame = ML.term <<-WWML
-((self window) style: "bg-neutral-900 max origin" max-w: 1000 max-h: 800 #model: {mouse: (0 0), view: (), pan-x: 0, pan-y: 0}
+((self window) icon: "icons/soma-256x256-white.png"
+               title: "MuSoma"
+               max-w: 1000
+               max-h: 800
+               style: "bg-neutral-900 max origin"
+               .model: {mouse: (0 0), view: (), pan-x: 0, pan-y: 0}
   (group style: "max flow-none"
     (group style: "max flow-col gap-3 p-3 fr"
       (group style: "bg-neutral-800 w-max h-content px-2 py-1 rounded-sm"
@@ -1021,7 +1038,7 @@ WWML
 # When press save, pick directory and file. Option to create file. Option to go back.
 # When press load, pick directory and file. Option to go back.
 
-frame = frame.morph({:"#model", :view, doc.view})
+frame = frame.morph({:".model", :view, doc.view})
 
 ui = UIR::Reducers.microfold(Term.of(frame)) do |_, drawable, event|
   Term.case(event) do
@@ -1042,39 +1059,39 @@ ui = UIR::Reducers.microfold(Term.of(frame)) do |_, drawable, event|
     end
 
     matchpi %{(mouse motion x_number y_number)} do
-      frame = frame.morph({:"#model", :mouse, {x, y}})
+      frame = frame.morph({:".model", :mouse, {x, y}})
 
-      if grip = frame[:"#model", :grip]?
+      if grip = frame[:".model", :grip]?
         gx, gy = grip
         dx = x - gx
         dy = y - gy
 
         frame = frame.morph(
-          {:"#model", :"pan-x", frame[:"#model", :"pan-x"] + dx},
-          {:"#model", :"pan-y", frame[:"#model", :"pan-y"] + dy},
-          {:"#model", :grip, frame[:"#model", :mouse]},
+          {:".model", :"pan-x", frame[:".model", :"pan-x"] + dx},
+          {:".model", :"pan-y", frame[:".model", :"pan-y"] + dy},
+          {:".model", :grip, frame[:".model", :mouse]},
         )
       end
     end
 
     matchpi %{(mouse press)} do
-      if hovered = frame[:"#model", :hovered]?
-        frame = frame.morph({:"#model", :active, hovered})
+      if hovered = frame[:".model", :hovered]?
+        frame = frame.morph({:".model", :active, hovered})
       else
         frame = frame.morph(
-          {:"#model", :grip, frame[:"#model", :mouse]},
+          {:".model", :grip, frame[:".model", :mouse]},
           {:cursor, :grabbing},
         )
       end
     end
 
     matchpi %{(mouse release)} do
-      if (active = frame[:"#model", :active]?) && (frame[:"#model", :active]? == frame[:"#model", :hovered]?)
+      if (active = frame[:".model", :active]?) && (frame[:".model", :active]? == frame[:".model", :hovered]?)
         doc.send(Term.of(:click, active))
-      elsif grip = frame[:"#model", :grip]?
-        frame = frame.morph({:"#model", :grip, nil}, {:cursor, nil})
+      elsif grip = frame[:".model", :grip]?
+        frame = frame.morph({:".model", :grip, nil}, {:cursor, nil})
       end
-      frame = frame.morph({:"#model", :active, nil})
+      frame = frame.morph({:".model", :active, nil})
     end
 
     matchpi %{(size w_number h_number)} do
@@ -1082,30 +1099,30 @@ ui = UIR::Reducers.microfold(Term.of(frame)) do |_, drawable, event|
     end
 
     matchpi %{cycle} do
-      frame = frame.morph({:"#model", :view, doc.view})
+      frame = frame.morph({:".model", :view, doc.view})
     end
 
     otherwise { }
   end
 
   # Instantiate, because hover logic needs an instance of the frame.
-  instance = Alloy.render(vars: frame[:"#model"].as_d, template: Term.of(frame.without(:"#model")), strict: true).as_d
-  instance = instance.morph({:"#model", frame[:"#model"]})
+  instance = Alloy.render(vars: frame[:".model"].as_d, template: Term.of(frame.without(:".model")), strict: true).as_d
+  instance = instance.morph({:".model", frame[:".model"]})
 
   # Unhover
-  if hovered = instance[:"#model", :hovered]?
+  if hovered = instance[:".model", :hovered]?
     instance = Frame.map(instance, hovered, &.morph({:hover, false}))
-    frame = frame.morph({:"#model", :hovered, nil})
+    frame = frame.morph({:".model", :hovered, nil})
   end
 
   # Hover
-  UIR.hit(drawable, frame[:"#model", :mouse, 0].as_n, instance[:"#model", :mouse, 1].as_n) do |keypath|
+  UIR.hit(drawable, frame[:".model", :mouse, 0].as_n, instance[:".model", :mouse, 1].as_n) do |keypath|
     target = Keypath.follow(drawable, keypath)
     next unless target[:hover]?
     next unless id = target[:id]?
 
     instance = Frame.map(instance, id, &.morph({:hover, true}))
-    frame = frame.morph({:"#model", :hovered, id})
+    frame = frame.morph({:".model", :hovered, id})
   end
 
   # Send instance to drawing

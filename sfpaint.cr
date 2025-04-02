@@ -943,6 +943,7 @@ module UIR::Platform::SFML
     when .f1?        then keyname = "f1"
     when .f2?        then keyname = "f2"
     when .f3?        then keyname = "f3"
+    when .f4?        then keyname = "f4"
     when .escape?    then keyname = "escape"
     when .tab?       then keyname = "tab"
     when .home?      then keyname = "home"
@@ -986,11 +987,22 @@ module UIR::Platform::SFML
     drawable = reducer.call(Term.of, Term.of(:open))
 
     Term.case(drawable) do
-      matchpi %[(window _ ¦ _ title⋮ "Untitled" final-w: w←(%number +i32) final-h: h←(%number +i32))] do
+      matchpi %[(window _ ¦ _ title⋮ "Untitled" icon⋮ "" final-w: w←(%number +i32) final-h: h←(%number +i32))] do
         Lock.lock
 
         window = SF::RenderWindow.new(SF::VideoMode.new(w.to(Int32), h.to(Int32)), title: title.to(String), settings: SF::ContextSettings.new(depth: 24, antialiasing: MAX_ANTIALIASING))
         window.framerate_limit = 60
+
+        iconfile = icon.to(String)
+        unless iconfile.empty?
+          iconpath = RESOURCES / iconfile
+
+          if File.exists?(iconpath)
+            iconimg = SF::Image.from_file(iconpath.to_s)
+
+            window.set_icon(256, 256, iconimg.pixels_ptr) # Assume 32-bit RGBA
+          end
+        end
 
         Lock.unlock
 
