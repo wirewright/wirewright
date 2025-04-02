@@ -277,3 +277,8 @@
 
 (variant codebox (literal code "code to show (preferably a string)"))
 (variant codebox (const code "cell from which to take the code to show"))
+
+(group cover "Like `group`, but conceals its children. `cover` is mainly used to reduce visual noise that certain nodes, e.g. `queue`, produce")
+
+(variant cover (literal title "description of what's under the cover (preferably a string)"))
+(variant cover (const title "cell from which to take the title for the cover"))

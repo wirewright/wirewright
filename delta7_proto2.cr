@@ -70,6 +70,7 @@ module Rhodium
       matchpi %[(lookaround @_ @_ _*)] { 3...node.itemsize }
       matchpi %[(fragment _ @_)] { 1...2 }
       matchpi %[(mutator @_ _)] { 2...3 }
+      matchpi %[(cover _ _+)] { 2...node.itemsize }
       otherwise { }
     end
   end

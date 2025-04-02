@@ -275,9 +275,15 @@ module D7VR
     end
   end
 
-  # Renders H1-H6 and P text nodes.
+  # Renders h1-h6, p (currently known as text), code (currently known as codebox),
+  # cover text nodes.
   struct TextNode
     include Feature
+
+    COVER_TEMPLATE = ML.term <<-WWML
+    (group style: "content my-2 p-3 border border-neutral-700 rounded-sm"
+      (p "…" ^title "…" style: "text-xs text-neutral-400 gap-1"))
+    WWML
 
     def initialize(@document : Term::Dict)
     end
@@ -323,6 +329,20 @@ module D7VR
               {:style, Term[Microfold::SPEC[:defaults, :hr]?.try(&.as_s?) || ""].stitch(" ").stitch(style)},
             )
           )
+
+          continue unless block = D7VR.block?(node, term)
+
+          postfixed(block, postfix)
+        end
+
+        matchpi %{(cover title_ _+)} do |title|
+          continue unless Rhodium.cursordepth(term, pairspart: true) == -1
+
+          if ML.edge?(title)
+            continue unless title = @document[Rhodium::Cells, title]?
+          end
+
+          node = Alloy.render(Term[title: title], COVER_TEMPLATE)
 
           continue unless block = D7VR.block?(node, term)
 
@@ -917,7 +937,7 @@ WWML
 
 fb_loop = ML.dict <<-WWML
 (sensor x_number in local to @inputs)
-(queue @inputs to @input/0-in in () waiting @input/0)
+(cover "Sensor output queue" (queue @inputs to @input/0-in in () waiting @input/0))
 (transform @input/0-in to @input/0 (nth _ 0))
 (transform (@input/0 (some ({¦ x_} _))) to @xs x)
 (transform @xs to @ys (+ _ 1))
@@ -929,6 +949,7 @@ fb_loop = ML.dict <<-WWML
 (latest @appearances @appearance)
 (fragment @appearance)
 (log @ys in ())
+("" | "" () @user)
 WWML
 
 welcome = ML.dict <<-WWML
@@ -1005,7 +1026,6 @@ frame = frame.morph({:"#model", :view, doc.view})
 ui = UIR::Reducers.microfold(Term.of(frame)) do |_, drawable, event|
   Term.case(event) do
     matchpi %{(key f1)} do
-      puts ML.display(doc.view, style: ML::Style::Indent2)
       puts ML.display(drawable, style: ML::Style::Indent2)
     end
 
