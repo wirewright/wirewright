@@ -55,6 +55,8 @@ module Microfold
   SYM_NAT = Term[:nat]
   # :nodoc:
   SYM_INT = Term[:int]
+  # :nodoc:
+  SYM_DYNAMIC = Term[:dynamic]
 
   # :nodoc:
   record SheetContext,
@@ -65,31 +67,48 @@ module Microfold
     rem : Term::Num,
     blacklist = Pf::Set(Term).new
 
+  # NOTE:
+  # - `[]` resolves as if it was part of the prop, e.g. bg-[qux], qux: red-500 => sheet: {bg: (oklch ...)}
+  # - `{}` is pasted as-is into the sheet, e.g. bg-{qux}, qux: red-500 => sheet: {bg: red-500}
+
+  private def dynamic?(ctx : SheetContext, r : Char::Reader, leader : String) : Term?
+    return unless r = consume?(r, leader)
+    return unless r = consume?(r, '-')
+    return unless word = remainder?(r)
+    return unless word.prefixed_by?('{') && word.postfixed_by?('}')
+
+    begin
+      key = ML.term(word[1...-1])
+    rescue ML::SyntaxError
+      return
+    end
+
+    ctx.attrs[key]?
+  end
+
   private def word?(ctx : SheetContext, r : Char::Reader, leader : String) : String?
     return unless r = consume?(r, leader)
     return unless r = consume?(r, '-')
     return unless word = remainder?(r)
 
-    if word.prefixed_by?('[') && word.postfixed_by?(']')
-      begin
-        key = ML.term(word[1...-1])
-      rescue ML::SyntaxError
-        return
-      end
-
-      return unless value = ctx.attrs[key]?
-
-      case value.type
-      when .number?
-        return value.inspect
-      when .string?, .symbol?
-        return value.to(String)
-      else
-        return
-      end
+    unless word.prefixed_by?('[') && word.postfixed_by?(']')
+      return word
     end
 
-    word
+    begin
+      key = ML.term(word[1...-1])
+    rescue ML::SyntaxError
+      return
+    end
+
+    return unless value = ctx.attrs[key]?
+
+    case value.type
+    when .number?
+      value.inspect
+    when .string?, .symbol?
+      value.to(String)
+    end
   end
 
   # Returns `true` if a style was applied. Returns `false` otherwise.
@@ -97,6 +116,8 @@ module Microfold
     r = Char::Reader.new(phrase)
 
     case type
+    when SYM_DYNAMIC
+      return false unless subst = dynamic?(ctx, r, leader)
     when SYM_COLOR
       return false unless color = word?(ctx, r, leader)
       return false unless subst = ctx.colors[color]?
@@ -373,6 +394,29 @@ module Microfold
     end
   end
 
+  struct MarginBox
+    include NodeBox
+
+    def call(ctx : UnitContext, subject : Term, subbox : Hierarchy) : {UnitContext, Term}
+      unless response = ctx.consume_some?(:ml, :mr, :mt, :mb)
+        return subbox.call(ctx, subject)
+      end
+
+      ictx, ml, mr, mt, mb = response
+      octx, inner = subbox.call(ictx.copy_with(nested: true), subject)
+
+      if mt || mb
+        inner = Term.of(:"y-padding", inner, w: ctx.sheet[:w]?, h: ctx.sheet[:h]?, pt: mt, pb: mb)
+      end
+
+      if ml || mr
+        inner = Term.of(:"x-padding", inner, w: ctx.sheet[:w]?, h: ctx.sheet[:h]?, pl: ml, pr: mr)
+      end
+
+      {octx, inner}
+    end
+  end
+
   # Appears if the min-height (`min-h`) prop is present.
   struct MinHeightBox
     include NodeBox
@@ -425,11 +469,16 @@ module Microfold
           "border-width": border_width,
           "border-radius": ctx.sheet[:"border-radius"]?,
         ),
-        Term.of(:padding, inner,
+        Term.of(:"y-padding",
+          Term.of(:"x-padding",
+            inner,
+            w: :max,
+            h: :max,
+            pl: border_width,
+            pr: border_width,
+          ),
           w: :max,
           h: :max,
-          pl: border_width,
-          pr: border_width,
           pt: border_width,
           pb: border_width,
         ),
@@ -481,33 +530,26 @@ module Microfold
     end
   end
 
-  struct PaddingYBox
+  struct PaddingBox
     include NodeBox
 
     def call(ctx : UnitContext, subject : Term, subbox : Hierarchy) : {UnitContext, Term}
-      unless response = ctx.consume_some?(:pt, :pb)
+      unless response = ctx.consume_some?(:pl, :pr, :pt, :pb)
         return subbox.call(ctx, subject)
       end
 
-      ictx, pt, pb = response
+      ictx, pl, pr, pt, pb = response
       octx, inner = subbox.call(ictx.copy_with(nested: true), subject)
 
-      {octx, Term.of(:"y-padding", inner, w: ctx.sheet[:w]?, h: ctx.sheet[:h]?, pt: pt, pb: pb)}
-    end
-  end
-
-  struct PaddingXBox
-    include NodeBox
-
-    def call(ctx : UnitContext, subject : Term, subbox : Hierarchy) : {UnitContext, Term}
-      unless response = ctx.consume_some?(:pl, :pr)
-        return subbox.call(ctx, subject)
+      if pt || pb
+        inner = Term.of(:"y-padding", inner, w: ctx.sheet[:w]?, h: ctx.sheet[:h]?, pt: pt, pb: pb)
       end
 
-      ictx, pl, pr = response
-      octx, inner = subbox.call(ictx.copy_with(nested: true), subject)
+      if pl || pr
+        inner = Term.of(:"x-padding", inner, w: ctx.sheet[:w]?, h: ctx.sheet[:h]?, pl: pl, pr: pr)
+      end
 
-      {octx, Term.of(:"x-padding", inner, w: ctx.sheet[:w]?, h: ctx.sheet[:h]?, pl: pl, pr: pr)}
+      {octx, inner}
     end
   end
 
@@ -692,12 +734,12 @@ module Microfold
       Toplevel.new,
       FloatingBox.new,
       LayerBox.new,
+      MarginBox.new,
       MinHeightBox.new,
       MinWidthBox.new,
       BorderBox.new,
       BackgroundBox.new,
-      PaddingYBox.new,
-      PaddingXBox.new,
+      PaddingBox.new,
       AlignYBox.new,
       AlignXBox.new,
     ),
@@ -709,10 +751,10 @@ module Microfold
       Toplevel.new,
       FloatingBox.new,
       LayerBox.new,
+      MarginBox.new,
       MinHeightBox.new,
       MinWidthBox.new,
-      PaddingYBox.new,
-      PaddingXBox.new,
+      PaddingBox.new,
     ),
     leaf: Itself.new,
   )
@@ -720,6 +762,26 @@ module Microfold
   # TODO: remove this in favor of a centralized observer "file manager".
   # So that we have "hot reload" of the spec.
   SPEC = ML.terms(File.read(RESOURCES / "ufold.spec.wwml")).as_d
+
+  private def transplant?(attr : Term) : Bool
+    return true unless attr = attr.as_sym?
+
+    !attr.to(String).prefixed_by?('.')
+  end
+
+  private def transplant(box : Term::Dict, sheet : Term::Dict, attrs : Term::Dict) : Term::Dict
+    box.transaction do |commit|
+      sheet.each_entry do |key, value|
+        commit.with(key, value)
+      end
+
+      attrs.each_entry do |key, value|
+        next unless transplant?(key)
+
+        commit.with(key, value)
+      end
+    end
+  end
 
   def uir0(spec : Term::Dict, unit : Term, rem : Term::Num, inherited : Term::Dict) : Term
     Term.case(unit) do
@@ -733,7 +795,7 @@ module Microfold
         sheet = sheet(spec, attrs.unsafe_as_d, style.to(String), rem: rem, base: nodal | inherited)
         ctx, box = HIERARCHY_SELF.call(UnitContext.new(spec, sheet, rem, collapse: true, nested: false), Term.of({node}))
 
-        Term.of(box | ctx.sheet | attrs)
+        Term.of(transplant(box.as_d, ctx.sheet, attrs.unsafe_as_d))
       end
 
       matchpi %{((self node_symbol) child_ ¦ attrs_ style⋮ "")} do
@@ -747,7 +809,7 @@ module Microfold
         inner = uir(spec, child, rem: rem, inherited: inherited)
         ctx, box = HIERARCHY_SELF.call(UnitContext.new(spec, sheet, rem, collapse: attrs.empty?, nested: false), Term.of(node, inner))
 
-        Term.of(box | ctx.sheet | attrs)
+        Term.of(transplant(box.as_d, ctx.sheet, attrs.unsafe_as_d))
       end
 
       matchpi %{(node_symbol children_+ ¦ attrs_ style⋮ "")} do
@@ -760,7 +822,7 @@ module Microfold
         sheet = sheet(spec, attrs.unsafe_as_d, style.to(String), rem: rem, base: nodal | inherited)
         ctx, box = HIERARCHY_NORMAL.call(UnitContext.new(spec, sheet, rem, collapse: attrs.empty?, nested: false), children)
 
-        Term.of(box | ctx.sheet | attrs)
+        Term.of(transplant(box.as_d, ctx.sheet, attrs.unsafe_as_d))
       end
 
       otherwise do

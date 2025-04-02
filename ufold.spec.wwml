@@ -66,8 +66,13 @@
 "bg-none": {bg: (unset)}
 
 (color "bg" C {bg: C_})
+(dynamic "bg" C {bg: C_})
+
 (color "text" C {text-color: C_})
+(dynamic "text" C {text-color: C_})
+
 (color "border" C {border-color: C_})
+(dynamic "border" C {border-color C_})
 
 (nat "gap" N {gap: (spacing N_)})
 
@@ -120,6 +125,25 @@
 (nat "py" (+ "pt" "pb"))
 
 (nat "p" (+ "px" "py"))
+
+"m-px": (+ "mx-px" "my-px")
+"mx-px": (+ "ml-px" "mr-px")
+"my-px": (+ "mt-px" "mb-px")
+
+"ml-px": {ml: 1}
+"mr-px": {mr: 1}
+"mt-px": {mt: 1}
+"mb-px": {mb: 1}
+
+(nat "ml" N {ml: (spacing N_)})
+(nat "mr" N {mr: (spacing N_)})
+(nat "mt" N {mt: (spacing N_)})
+(nat "mb" N {mb: (spacing N_)})
+
+(nat "mx" (+ "ml" "mr"))
+(nat "my" (+ "mt" "mb"))
+
+(nat "m" (+ "mx" "my"))
 
 "origin": (+ "dl-0" "dt-0")
 
