@@ -864,6 +864,44 @@ module Rhodium
         end
       end
 
+      begin
+        givenpi %{(bridge @pin_ to @pout_) (pulse @pin_ value_) -1} do
+          effect(document1, nodepath, node0) do
+            event :pulse, pout, value
+
+            false
+          end
+        end
+
+        givenpi %{(bridge (@pin_ pattern_) to @pout_) (pulse @pin_ matchee_) -1} do
+          unless M1.probe?(pattern, matchee)
+            return document1, false
+          end
+
+          effect(document1, nodepath, node0) do
+            event :pulse, pout, matchee
+
+            false
+          end
+        end
+
+        givenpi %{(bridge (@pin_ pattern_) to (@pout_ key_)) (pulse @pin_ matchee_) -1} do
+          unless envs = M1.matches(pattern, matchee)
+            return document1, false
+          end
+
+          effect(document1, nodepath, node0) do
+            envs.each do |env|
+              next unless value = env[key]?
+
+              event :pulse, pout, value
+            end
+
+            false
+          end
+        end
+      end
+
       givenpi %[(echo @pin_) (pulse @pin_ e_) -1] do
         effect(document1, nodepath, node0) do
           event e

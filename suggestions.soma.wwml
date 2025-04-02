@@ -282,3 +282,26 @@
 
 (variant cover (literal title "description of what's under the cover (preferably a string)"))
 (variant cover (const title "cell from which to take the title for the cover"))
+
+(group bridge "Direct connection between two pulse edges")
+
+(variant bridge
+  (pulse pin "source of pulse signals")
+  (comma to)
+  (pulse pout "sink for pulse signals"))
+
+(variant bridge
+  (nested
+    (pulse pin "source of pulse signals")
+    (literal pattern "pattern that they must match"))
+  (comma to)
+  (pulse pout "sink for pulse signals"))
+
+(variant bridge
+  (nested
+    (pulse pin "source of pulse signals")
+    (literal pattern "pattern that they must match"))
+  (comma to)
+  (nested
+    (pulse pout "sink for values of the capture")
+    (literal capture "name of the capture made by `pattern`")))
