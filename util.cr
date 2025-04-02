@@ -2485,19 +2485,27 @@ struct SyncCache(K, V)
     @lock = Mutex.new
   end
 
-  def fetch?(key : K, &) : {Bool, V}
-    if value = @lock.synchronize { @data[key]? }
-      return true, value
-    end
+  def load?(key : K) : V?
+    @lock.synchronize { @data[key]? }
+  end
 
-    value = yield
-
+  def store(key : K, value : V) : Nil
     @lock.synchronize do
       if @data.size > @capacity
         @data.delete(@data.first_key)
       end
       @data[key] = value
     end
+  end
+
+  def fetch?(key : K, &) : {Bool, V}
+    if value = load?(key)
+      return true, value
+    end
+
+    value = yield
+
+    store(key, value)
 
     {false, value}
   end
