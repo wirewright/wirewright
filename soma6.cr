@@ -868,12 +868,12 @@ module Frame
 end
 
 demo = ML.dict <<-WWML
-(unit group style: "max max-sm bg-neutral-800 flow-col gap-5 fr"
+(unit group style: "max max-sm bg-neutral-800 flow-col gap-5 fr p-3"
   (view @color-envs as ((self rect) color: ^color style: "w-max h-fr bg-[color] rounded"))
-  (unit group style: "w-max h-content flow-row gap-5"
-    (button "Make red" as red-500 to @colors ())
-    (button "Make green" as green-500 to @colors ())
-    (button "Make blue" as blue-500 to @colors ())))
+  (unit group style: "w-max h-content flow-row gap-5 fr"
+    (button "Make red" as red-500 to @colors () style: "w-fr")
+    (button "Make green" as green-500 to @colors () style: "w-fr")
+    (button "Make blue" as blue-500 to @colors () style: "w-fr")))
 
 (transform @colors to @color-envs {color: _})
 (event (pulse @colors red-500))
@@ -970,8 +970,8 @@ frame0 = ML.term <<-WWML
     (group style: "max flow-col gap-3 p-3 fr"
       (group style: "bg-neutral-800 w-max h-content px-2 py-1 rounded-sm"
         (p "Wirewright µsoma" style: "text-neutral-400 text-xs"))
-      ((self viewport) style: "w-max h-fr bg-neutral-900" x: 0 y: 0 id: viewport
-        (group style: "max" id: view)))))
+      ((self viewport) style: "w-max h-fr bg-neutral-900" pan-x: 0 pan-y: 0 id: viewport
+        (group style: "content" id: view)))))
 ;;    ;; Template for command palette
 ;;    (group style: "max center-x py-20 z-100 bg-neutral-950 opacity-80"
 ;;      (group style: "content min-w-lg flow-col gap-5"
@@ -1028,7 +1028,7 @@ ui = UIR::Reducers.microfold(Term.of(frame0)) do |inframe, drawable, event|
         dy = y - gy
 
         frame = Frame.map(frame, :viewport) do |viewport|
-          viewport.morph({:x, viewport[:x] + dx}, {:y, viewport[:y] + dy})
+          viewport.morph({:"pan-x", viewport[:"pan-x"] + dx}, {:"pan-y", viewport[:"pan-y"] + dy})
         end
 
         frame = frame.morph({:"#model", :grip, frame[:"#model", :mouse]})

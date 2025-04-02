@@ -306,12 +306,12 @@ def draw(ctx : DrawContext, node : Term, x : Int32, y : Int32, z : Int32) : Nil
              dt_: (%number +i32)
              final-w: w←(%number +i32)
              final-h: h←(%number +i32)
-             x: vx←(%number i32)
-             y: vy←(%number i32))]
+             pan-x_: (%number i32)
+             pan-y_: (%number i32))]
     ) do
       children = [] of DrawCommand
 
-      draw(ctx.copy_with(commands: children), child, vx.to(Int32), vy.to(Int32), z)
+      draw(ctx.copy_with(commands: children), child, pan_x.to(Int32), pan_y.to(Int32), z)
 
       # Sort children by layer (z-index) now that we know they're complete.
       #

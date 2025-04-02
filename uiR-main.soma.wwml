@@ -6,8 +6,8 @@
 ;; GENERAL
 
 ;; Learn the content width/height from a single child.
-((%not x-expand viewport) {¦ content-w: w_number} ¦ _ -content-w: W) <> {W: →w}
-((%not y-expand viewport) {¦ content-h: h_number} ¦ _ -content-h: H) <> {H: →h}
+((%not x-expand) {¦ content-w: w_number} ¦ _ -content-w: W) <> {W: →w}
+((%not y-expand) {¦ content-h: h_number} ¦ _ -content-h: H) <> {H: →h}
 
 ;; Propagate max-w/h if I know my max-w/h and I am w/h: max.
 (_ {¦ -max-w: w} ¦ _ w: max max-w: W_number) <> {w: →W}
@@ -83,11 +83,6 @@
 (y-padding {¦ content-h: h_number} ¦ _ -content-h: H py_number) <> {H: $'(+ →h →py)}
 (y-padding {¦ -max-h: h} ¦ _ h: max max-h: H_number py_number) <> {h: $'(- →H →py)}
 (y-padding {¦ -dt_} ¦ _ dt: _number pt⋮ 0) <> {dt: →pt}
-
-;; NODE: viewport
-
-(viewport _ ¦ _ max-w_number -content-w_) <> {content-w: →max-w}
-(viewport _ ¦ _ max-h_number -content-h_) <> {content-h: →max-h}
 
 ;; NODE: x-translate
 

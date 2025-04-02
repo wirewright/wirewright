@@ -213,17 +213,14 @@ module UIR
   end
 
   # :nodoc:
-  # FIXME: this implementation does not appear to be valid
   def hit(drawable : Term, x : Term::Num, y : Term::Num, sink, keypath : Stack(Term)) : Nil
     Term.case(drawable) do
-      matchpi %[{¦ dl_number dt_number final-w: w_number final-h: h_number}] do |dl, dt, w, h|
-        dl, dt, w, h = {dl, dt, w, h}.map(&.unsafe_as_n)
+      matchpi %[{¦ dl_number dt_number final-w: w_number final-h: h_number}] do
+        x -= dl.unsafe_as_n
+        y -= dt.unsafe_as_n
 
-        x -= dl
-        y -= dt
-
-        return unless x.in?(Term[0]...w)
-        return unless y.in?(Term[0]...h)
+        return unless x.in?(Term[0]...w.unsafe_as_n)
+        return unless y.in?(Term[0]...h.unsafe_as_n)
 
         sink.call(keypath)
 
@@ -231,11 +228,11 @@ module UIR
         continue
       end
 
-      matchpi %{(viewport child_ ¦ _ x: vx_number y: vy_number)} do
+      matchpi %{(viewport child_ ¦ _ pan-x_number pan-y_number)} do
         keypath.push(Term.of(1))
 
-        x -= vx
-        y -= vy
+        x -= pan_x.unsafe_as_n
+        y -= pan_y.unsafe_as_n
 
         # Yeeaah this reads strange...
         hit(child, x, y, sink, keypath)
