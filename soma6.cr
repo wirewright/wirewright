@@ -436,15 +436,14 @@ module D7VR
   end
 
   def ppdoc(document : Term::Dict) : Term
+    if document.empty?
+      raise ArgumentError.new("cannot get pretty-print tree of an empty document")
+    end
+
     ppin = pipe(document, visible, annotated)
     chain = ML::Display::MAIN_CHAIN.prepend(Button.new, Comment.new, Cursor.new, Unit.new(document), TextNode.new(document))
     ctx = DisplayContext.new(60, 120, features: chain)
-    # FIXME: handle empty document
-    if !ppin.empty?
-      tree = LayoutSet::All.thunk(Term.of(ppin), "", LayoutSet::DictAligned)
-    else
-      tree = chain.call(ctx, Term.of(ppin), "")
-    end
+    tree = LayoutSet::All.thunk(Term.of(ppin), "", LayoutSet::DictAligned)
     flat, _ = flatten(ctx, tree)
     flat
   end
@@ -551,6 +550,8 @@ module D7VR
   end
 
   # Renders the given *document* as D7VR.
+  #
+  # WARNING: Raises `ArgumentError` if *document* is empty.
   def of_document(document : Term::Dict) : Term
     pipe(document, D7VR.ppdoc, D7VR.unit)
   end
@@ -564,11 +565,6 @@ module D7VR
 end
 
 class Document
-  BLANK = ML.term <<-WWML
-  (group style: "max center bg-neutral-800"
-    (p "The view of the document is loading..." style: "text-neutral-300"))
-  WWML
-
   # Used to generate document ids.
   @@counter = Atomic(UInt32).new(0u32)
 
@@ -644,7 +640,7 @@ class Document
 
     @document_thread = ExecutionContext::SingleThreaded.new("Document #{id}")
 
-    @view = Atomic(Term::Dict).new(BLANK.as_d)
+    @view = Atomic(Term::Dict).new(Term[])
     @mailbox = Mailbox.new
 
     # The following instance variables are owned exclusively by the document
@@ -777,9 +773,13 @@ class Document
 
   # Draws the document.
   private def draw : Nil
-    drawable = D7VR.of_document(@document)
+    if @document.empty?
+      @view.set(Term[], :relaxed)
+    else
+      drawable = D7VR.of_document(@document)
 
-    @view.set(drawable.as_d, :relaxed)
+      @view.set(drawable.as_d, :relaxed)
+    end
   end
 
   # Checks the mailbox for new prompts. If none, returns immediately. If some,
@@ -964,14 +964,18 @@ seed = welcome
 doc = Document.new
 doc.send(Term.of(:open, seed))
 
-frame0 = ML.term <<-WWML
-((self window) style: "bg-neutral-900 max origin" max-w: 1000 max-h: 800 #model: {mouse: (0 0)}
+frame = ML.term <<-WWML
+((self window) style: "bg-neutral-900 max origin" max-w: 1000 max-h: 800 #model: {mouse: (0 0), view: (), pan-x: 0, pan-y: 0}
   (group style: "max flow-none"
     (group style: "max flow-col gap-3 p-3 fr"
       (group style: "bg-neutral-800 w-max h-content px-2 py-1 rounded-sm"
         (p "Wirewright µsoma" style: "text-neutral-400 text-xs"))
-      ((self viewport) style: "w-max h-fr bg-neutral-900" pan-x: 0 pan-y: 0 id: viewport
-        (group style: "content" id: view)))))
+      (^if (= view ())
+        (group style: "w-max h-fr bg-neutral-800 center rounded-sm"
+          (p "Waiting for a nonempty view of the document..." style: "text-sm text-neutral-300")))
+      (^unless (= view ())
+        ((self viewport) style: "w-max h-fr bg-neutral-900" pan-x: ^pan-x pan-y: ^pan-y
+          ^view)))))
 ;;    ;; Template for command palette
 ;;    (group style: "max center-x py-20 z-100 bg-neutral-950 opacity-80"
 ;;      (group style: "content min-w-lg flow-col gap-5"
@@ -996,11 +1000,9 @@ WWML
 # When press save, pick directory and file. Option to create file. Option to go back.
 # When press load, pick directory and file. Option to go back.
 
-frame0 = Frame.setchild(frame0.as_d, :view, doc.view)
+frame = frame.morph({:"#model", :view, doc.view})
 
-ui = UIR::Reducers.microfold(Term.of(frame0)) do |inframe, drawable, event|
-  frame = inframe.as_d
-
+ui = UIR::Reducers.microfold(Term.of(frame)) do |_, drawable, event|
   Term.case(event) do
     matchpi %{(key f1)} do
       puts ML.display(doc.view, style: ML::Style::Indent2)
@@ -1027,11 +1029,11 @@ ui = UIR::Reducers.microfold(Term.of(frame0)) do |inframe, drawable, event|
         dx = x - gx
         dy = y - gy
 
-        frame = Frame.map(frame, :viewport) do |viewport|
-          viewport.morph({:"pan-x", viewport[:"pan-x"] + dx}, {:"pan-y", viewport[:"pan-y"] + dy})
-        end
-
-        frame = frame.morph({:"#model", :grip, frame[:"#model", :mouse]})
+        frame = frame.morph(
+          {:"#model", :"pan-x", frame[:"#model", :"pan-x"] + dx},
+          {:"#model", :"pan-y", frame[:"#model", :"pan-y"] + dy},
+          {:"#model", :grip, frame[:"#model", :mouse]},
+        )
       end
     end
 
@@ -1039,7 +1041,10 @@ ui = UIR::Reducers.microfold(Term.of(frame0)) do |inframe, drawable, event|
       if hovered = frame[:"#model", :hovered]?
         frame = frame.morph({:"#model", :active, hovered})
       else
-        frame = frame.morph({:"#model", :grip, frame[:"#model", :mouse]}, {:cursor, :grabbing})
+        frame = frame.morph(
+          {:"#model", :grip, frame[:"#model", :mouse]},
+          {:cursor, :grabbing},
+        )
       end
     end
 
@@ -1057,29 +1062,34 @@ ui = UIR::Reducers.microfold(Term.of(frame0)) do |inframe, drawable, event|
     end
 
     matchpi %{cycle} do
-      frame = Frame.setchild(frame, :view, doc.view)
+      frame = frame.morph({:"#model", :view, doc.view})
     end
 
     otherwise { }
   end
 
+  # Instantiate, because hover logic needs an instance of the frame.
+  instance = Alloy.render(vars: frame[:"#model"].as_d, template: Term.of(frame.without(:"#model")), strict: true).as_d
+  instance = instance.morph({:"#model", frame[:"#model"]})
+
   # Unhover
-  if hovered = frame[:"#model", :hovered]?
-    frame = Frame.map(frame, hovered, &.morph({:hover, false}))
+  if hovered = instance[:"#model", :hovered]?
+    instance = Frame.map(instance, hovered, &.morph({:hover, false}))
     frame = frame.morph({:"#model", :hovered, nil})
   end
 
   # Hover
-  UIR.hit(drawable, frame[:"#model", :mouse, 0].as_n, frame[:"#model", :mouse, 1].as_n) do |keypath|
+  UIR.hit(drawable, frame[:"#model", :mouse, 0].as_n, instance[:"#model", :mouse, 1].as_n) do |keypath|
     target = Keypath.follow(drawable, keypath)
     next unless target[:hover]?
     next unless id = target[:id]?
 
-    frame = Frame.map(frame, id, &.morph({:hover, true}))
+    instance = Frame.map(instance, id, &.morph({:hover, true}))
     frame = frame.morph({:"#model", :hovered, id})
   end
 
-  Term.of(frame)
+  # Send instance to drawing
+  Term.of(instance)
 end
 
 UIR::Platform::Current.show(ui)
