@@ -1571,6 +1571,8 @@ class Tconn
 
   @unsubscribe : IChat::Unsubscribe
 
+  # NOTE: *sink* may be called with the same `Overview` multiple times in a row;
+  # it is your responsibility to suppress repetitions if necessary.
   def initialize(@map : Map,
                  @chat : Chat,
                  @sink : Sink,

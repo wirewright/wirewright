@@ -25,44 +25,52 @@ module Ww::Meridium
       @rappearances[identity]?
     end
 
-    def add_sensor_for(pattern : Term) : Bool
-      return false if @lsensors.has_key?(pattern)
+    def add_sensor_for(pattern : Term) : Identity
+      if identity = @lsensors[pattern]?
+        return identity
+      end
 
-      @lsensors[pattern] = @fresh
-      @rsensors[@fresh] = pattern
-      @conn[@fresh] = Tconn::Sensor.new(pattern)
+      identity = @fresh
       @fresh += 1
 
-      true
+      @lsensors[pattern] = identity
+      @rsensors[identity] = pattern
+      @conn[identity] = Tconn::Sensor.new(pattern)
+
+      identity
     end
 
-    def add_appearance_for(value : Term) : Bool
-      return false if @lappearances.has_key?(value)
+    def add_appearance_for(value : Term) : Identity
+      if identity = @lappearances[value]?
+        return identity
+      end
 
-      @lappearances[value] = @fresh
-      @rappearances[@fresh] = value
-      @conn[@fresh] = Tconn::Appearance.new(value)
+      identity = @fresh
       @fresh += 1
 
-      true
+      @lappearances[value] = identity
+      @rappearances[identity] = value
+      @conn[identity] = Tconn::Appearance.new(value)
+
+      identity
     end
 
-    def delete_sensor_for(pattern : Term) : Bool
-      return false unless identity = @lsensors.delete(pattern)
+    def delete_sensor_for?(pattern : Term) : Identity?
+      return unless identity = @lsensors.delete(pattern)
 
       @rsensors.delete(identity)
       @conn.delete(identity)
 
-      true
+      identity
     end
 
-    def delete_appearance_for(value : Term) : Bool
-      return false unless identity = @lappearances.delete(value)
+    def delete_appearance_for?(value : Term) : Identity?
+      return unless identity = @lappearances.delete(value)
 
       @rappearances.delete(identity)
       @conn.delete(identity)
 
-      true
+      identity
     end
   end
 
@@ -119,6 +127,7 @@ module Ww::Meridium
   class StepContext
     def initialize(@registry : TspaceRegistry)
       @state = Term[]
+      @msets = {} of Identity => Term::Dict
       @setconns = {} of Term => TsetConn
       @unsubscribe = {} of Term => TspaceRegistry::Unsubscribe
     end
@@ -259,7 +268,9 @@ module Ww::Meridium
       added, removed = sensors1.diff1(sensors0)
 
       removed.each_entry do |pattern, _|
-        setconn.delete_sensor_for(pattern)
+        next unless identity = setconn.delete_sensor_for?(pattern)
+
+        @msets.delete(identity)
       end
 
       added.each_entry do |pattern, _|
@@ -274,7 +285,7 @@ module Ww::Meridium
       added, removed = appearances1.diff1(appearances0)
 
       removed.each_entry do |value, _|
-        setconn.delete_appearance_for(value)
+        setconn.delete_appearance_for?(value)
       end
 
       added.each_entry do |value, _|
@@ -289,7 +300,14 @@ module Ww::Meridium
       overview.each do |identity, view|
         next unless pattern = setconn.pattern?(identity)
 
-        yield Term.of(:event, {:stimuli, tsid, pattern, view.dict_multiset})
+        mset1 = view.dict_multiset
+
+        # At this point we must guarantee that equal multisets won't be emitted.
+        next if @msets[identity]? == mset1
+
+        @msets[identity] = mset1
+
+        yield Term.of(:event, {:stimuli, tsid, pattern, mset1})
       end
     end
   end

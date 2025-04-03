@@ -671,7 +671,7 @@ module Rhodium
       # Sensors and appearances
       begin
         givenpi %{(sensor pattern_ in tspace_symbol to @_) (initialize _) -1} do
-          {document1.morph({Tspaces, tspace, :sensors, pattern, true}), false}
+          {document1.morph({Tspaces, tspace, :sensors, pattern, true}), true}
         end
 
         givenpi %{(sensor pattern_ in tspace_ to @pout_) (stimuli tspace_ pattern_ multiset_) -1} do
@@ -683,7 +683,7 @@ module Rhodium
         end
 
         givenpi %{(appearance value_ in tspace_symbol) (initialize _) -1} do
-          {document1.morph({Tspaces, tspace, :appearances, value, true}), false}
+          {document1.morph({Tspaces, tspace, :appearances, value, true}), true}
         end
       end
 

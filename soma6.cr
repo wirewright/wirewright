@@ -629,9 +629,7 @@ class Document
         break if ok
       end
 
-      # If we've settled on a nonempty queue we'll have to restart
-      # the mainloop (disallow caller to settle)!
-      state1.empty?
+      state1.settled?
     end
   end
 
@@ -657,7 +655,7 @@ class Document
     end
 
     def settled : State
-      State.new(@queue, settled: true)
+      State.new(@queue, settled: @queue.empty?)
     end
   end
 
@@ -943,24 +941,32 @@ demo = ML.dict <<-WWML
 WWML
 
 fb_loop = ML.dict <<-WWML
-(sensor x_number in local to @inputs)
-(cover "Sensor queue"
-  (queue @inputs to @input/0-in in () waiting @acks))
-(transform @input/0-in to @input/0 (nth _ 0))
-(transform (@input/0 (some ({¦ x_} _))) to @xs x)
-(transform @xs to @ys (+ _ 1))
+(sensor x_number in local to @stimuli/in)
 
-(bridge (@input/0 (none)) to @acks)
-(bridge @appearances to @acks)
+(cover "sensor queue"
+  (queue @stimuli/in to @stimuli/gated in () waiting @sensor/acks))
 
-(latest @ys @y)
-(cell 0 @y) ;; << This starts the feedback loop
-(initial @y to @ys)
-(absence @y as clear to @appearance)
-(transform @ys to @appearances (appearance _ in local))
+(transform @stimuli/gated to @stimuli/0 (nth _ 0))
+(transform (@stimuli/0 (some ({¦ x_} _))) to @percepts x)
+(bridge (@stimuli/0 (none)) to @sensor/acks)
+(bridge @percepts to @sensor/acks)
+(latest @percepts @percept)
+
+(comment "This cell is the origin & subject of the feedback loop")
+(cell 0 @percept)
+
+(comment "Publish percept as an appearance")
+(changes @percept to @appearance/in)
+
+(cover "appearance queue"
+  (queue @appearance/in to @appearance/percepts in () waiting @appearance/acks))
+
+(transform @appearance/percepts to @appearance/values (+ _ 1))
+(transform @appearance/values to @appearances (appearance _ in local))
 (latest @appearances @appearance)
 (frag @appearance)
-(log @ys in ())
+(changes @appearance to @appearance/acks)
+
 ("" | "" () @user)
 WWML
 
