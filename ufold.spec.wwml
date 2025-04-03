@@ -496,4 +496,5 @@ defaults: {
   codebox: "content font-mono text-base text-neutral-400 bg-neutral-950 p-2 font-text min-w-sm",
   button: "bg-neutral-700 hover:bg-blue-500 hover:cursor-pointer rounded-sm px-4 py-2 center text-sm text-neutral-50 content font-sans font-medium",
   rect: "max bg-white",
+  group: "content",
 }
