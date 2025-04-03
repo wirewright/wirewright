@@ -461,8 +461,11 @@ SCREEN_PY = 1
 class Soma
   def initialize
     @running = true
-    @mt = ExecutionContext::MultiThreaded.new("Soma", 2)
-    @nitrene = Nitrene::JobContext.new
+    @thread = ExecutionContext::SingleThreaded.new("Soma")
+    @nitrene = Nitrene::StepContext.new do
+      @events.send(Alarm.new)
+    rescue Channel::ClosedError
+    end
   end
 
   private def screen(& : Screen ->) : Nil
@@ -1122,7 +1125,7 @@ class Soma
     screen do |screen|
       settled = false
 
-      @mt.spawn do
+      @thread.spawn do
         while true
           event = Termbox.poll
 
@@ -1136,15 +1139,6 @@ class Soma
               break
             end
           end
-        end
-      rescue Channel::ClosedError
-        # Noop. We just stop polling.
-      end
-
-      @mt.spawn do
-        while true
-          @nitrene.alarm.receive
-          @events.send(Alarm.new)
         end
       rescue Channel::ClosedError
         # Noop. We just stop polling.
@@ -1176,7 +1170,6 @@ class Soma
         settled = true
       end
     rescue KeyboardInterrupt
-      @nitrene.alarm.close
       @events.close
     end
   end

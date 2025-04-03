@@ -1544,6 +1544,8 @@ class Tconn
 
   @unsubscribe : IChat::Unsubscribe
 
+  @surfaces_lock = Mutex.new(:reentrant) # FIXME: ?!
+
   # NOTE: *sink* may be called with the same `Overview` multiple times in a row;
   # it is your responsibility to suppress repetitions if necessary.
   def initialize(@map : Map,
@@ -1556,7 +1558,6 @@ class Tconn
     @overview = Overview.new
     @surfaces = {} of Identity => SurfaceData
     @last_alive_at = {} of Label => Time::Span
-    @surfaces_lock = Mutex.new(:reentrant) # FIXME: ?!
 
     @unsubscribe = @chat.subscribe(@conid) do |act|
       Log.debug { "#{@conid}: receive from chat: #{act}" }

@@ -669,7 +669,11 @@ class Document
 
     # The following instance variables are owned exclusively by the document
     # thread. No one else must know they exist.
-    @nictx = Nitrene::JobContext.new
+    @nictx = Nitrene::StepContext.new do
+      # Wake document thread up. The event doesn't matter. Nitrene.step
+      # will do the rest.
+      send(Term.of(:alarm))
+    end
 
     reg = Meridium::TspaceRegistry.new
     @mectx = Meridium::StepContext.new(reg)
@@ -691,19 +695,6 @@ class Document
     @document = Term[]
     @initial = true
     @state = State::Clean
-
-    @nitrene_watch_thread = ExecutionContext::SingleThreaded.new("Nitrene watch #{id}")
-    @nitrene_watch_thread.spawn do
-      while true
-        select
-        when @nictx.alarm.receive
-          # Wake document thread up. The event doesn't matter. Nitrene.step
-          # will do the rest.
-          send(Term.of(:alarm))
-        end
-      end
-    rescue Channel::ClosedError
-    end
   end
 
   # Returns the latest view of this document.

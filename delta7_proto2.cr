@@ -1521,15 +1521,14 @@ end
 module Nitrene
   extend self
 
-  class JobContext
-    getter alarm : Channel(Bool)
-
-    def initialize
+  class StepContext
+    # WARNING: *alarm* will be called from another thread. Make sure whatever
+    # you do there is thread-safe.
+    def initialize(&@alarm : ->)
       @mt = ExecutionContext::MultiThreaded.new("Nitrene", 4)
       @active = Atomic(UInt32).new(0u32)
       @running = Atomic(Term::Dict).new(Term[])
       @completed = Atomic(Term::Dict).new(Term[])
-      @alarm = Channel(Bool).new
     end
 
     class JobInterrupted < Exception
@@ -1557,7 +1556,7 @@ module Nitrene
         end
 
         @active.sub(1, :release)
-        @alarm.send(true)
+        @alarm.call
       rescue JobInterrupted
       end
     end
@@ -1609,7 +1608,7 @@ module Nitrene
   # :nodoc:
   #
   # Asynchronous step implementation.
-  def step(nictx : JobContext, document document0 : Term::Dict) : Term::Dict
+  def step(nictx : StepContext, document document0 : Term::Dict) : Term::Dict
     document1 = document0
 
     jobs_pending = document0[Rhodium::JobsPending]?.try(&.as_d?) || Term[]
@@ -1660,8 +1659,8 @@ module Nitrene
   # steps (along with `ExecutionContext` and so on).
   #
   # NOTE: you will have to restart the run loop if it terminates before some
-  # jobs complete. See also: `JobContext#alarm`, `Goal.jobless`.
-  def step(nictx : JobContext) : D7::Step
+  # jobs complete. See also: `StepContext.new`, `Goal.jobless`.
+  def step(nictx : StepContext) : D7::Step
     D7::Step.new do |document0, log|
       log.append { Term.of(:input, :nitrene, :step, document0) }
       document1 = step(nictx, document0)
@@ -1678,7 +1677,7 @@ module Nitrene
   # All Nitrene jobs are guaranteed to complete at the end of each step.
   #
   # Can be used for localizing bugs to asynchronous `step`. Otherwise prefer
-  # asynchronous `step(nictx : JobContext)` since that's what Nitrene is about.
+  # asynchronous `step(nictx : StepContext)` since that's what Nitrene is about.
   def step : D7::Step
     D7::Step.new do |document0, log|
       log.append { Term.of(:input, :nitrene, :step, document0) }
@@ -1871,7 +1870,8 @@ module D7
   #
   # See `run` for info on other arguments.
   def run?(document : Term::Dict, cond : Equal | Matches, *, log : Log = Log::None.new) : {Bool, Term::Dict}
-    nictx = Nitrene::JobContext.new
+    # We don't need an alarm because we're using Goal.jobless.
+    nictx = Nitrene::StepContext.new { }
 
     goal = Goal.jobless(cond.goal, nictx)
     transition = Rhodium.transition
@@ -1953,7 +1953,7 @@ module D7::Goal
 
   # Restricts *goal* to documents that have no running jobs in Nitrene
   # context *nictx*.
-  def jobless(goal : Fn, nictx : Nitrene::JobContext) : Fn
+  def jobless(goal : Fn, nictx : Nitrene::StepContext) : Fn
     Fn.new { |document| nictx.jobless? ? goal.call(document) : false }
   end
 
@@ -2035,7 +2035,7 @@ end
 #    (event (assign @count 100))
 # WWML
 
-# nctx = Nitrene::JobContext.new
+# nctx = Nitrene::StepContext.new
 # initial = true
 
 # while true
