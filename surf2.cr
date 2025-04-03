@@ -1553,7 +1553,7 @@ class Tconn
 
   @unsubscribe : IChat::Unsubscribe
 
-  @surfaces_lock = Mutex.new(:reentrant) # FIXME: ?!
+  @surfaces_lock = Mutex.new(:reentrant)
 
   class ClosedError < Exception
   end
@@ -1731,6 +1731,26 @@ class Tconn
     Log.debug { "#{@conid}: inserted appearance #{groupid} (surface: #{surface}) at #{identity}" }
   end
 
+  # WARNING: Assumes the surfaces lock is taken.
+  private def delete(identity : Identity, *, final : Bool) : Nil
+    Log.trace { "#{@conid}: begin delete of surface #{identity}" }
+
+    unless data = @surfaces.delete(identity)
+      Log.trace { "#{@conid}: delete early exit: surface #{identity} does not exist" }
+      return
+    end
+
+    data.destructors.each &.call(final)
+
+    overview1 = @overview.dissoc(identity)
+    unless @overview.same?(overview1)
+      @overview = overview1
+      @sink.call(@overview)
+    end
+
+    Log.debug { "#{@conid}: removed surface #{identity}" }
+  end
+
   def []=(identity : Identity, surface : Surface) : Nil
     groupid = @fresh.call
 
@@ -1786,29 +1806,25 @@ class Tconn
     end
   end
 
-  private def delete(identity : Identity, *, final : Bool) : Nil
-    Log.trace { "#{@conid}: begin delete of surface #{identity}" }
-
+  def delete(identity : Identity) : Nil
     @surfaces_lock.synchronize do
-      unless data = @surfaces.delete(identity)
-        Log.trace { "#{@conid}: delete early exit: surface #{identity} does not exist" }
-        return
-      end
-
-      data.destructors.each &.call(final)
-
-      overview1 = @overview.dissoc(identity)
-      unless @overview.same?(overview1)
-        @overview = overview1
-        @sink.call(@overview)
-      end
+      delete(identity, final: true)
     end
-
-    Log.debug { "#{@conid}: removed surface #{identity}" }
   end
 
-  def delete(identity : Identity) : Nil
-    delete(identity, final: true)
+  def pretty_print(pp)
+    @surfaces_lock.synchronize do
+      pp.list("Tconn{", @surfaces, "}") do |identity, data|
+        pp.group do
+          identity.pretty_print(pp)
+          pp.text ": "
+          pp.nest do
+            pp.breakable
+            data.pretty_print(pp)
+          end
+        end
+      end
+    end
   end
 end
 

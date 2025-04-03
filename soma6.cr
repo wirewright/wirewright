@@ -670,8 +670,7 @@ class Document
     # The following instance variables are owned exclusively by the document
     # thread. No one else must know they exist.
     @nictx = Nitrene::StepContext.new do
-      # Wake document thread up. The event doesn't matter. Nitrene.step
-      # will do the rest.
+      # Wake document thread up if it's sleeping. Nitrene.step will do the rest.
       send(Term.of(:alarm))
     end
 
@@ -682,9 +681,11 @@ class Document
       map: SyncInMemoryMap(Tspace::Key, Tspace::Value).new,
       chat: SyncInMemoryChat(Activation).new,
       sink: Tconn::Sink.new do |overview|
-        @mectx.each_prompt(Term.of(:local), overview) do |prompt|
-          send(prompt)
-        end
+        # Enqueue an update in the context.
+        @mectx.publish(Term.of(:local), overview)
+
+        # Wake document thread up if it's sleeping. Meridium.step will do the rest.
+        send(Term.of(:alarm))
 
         nil
       end,

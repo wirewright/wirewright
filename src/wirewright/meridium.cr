@@ -10,3 +10,4 @@ end
 
 require "./meridium/map"
 require "./meridium/tbase"
+require "./meridium/tsetconn"
