@@ -2,26 +2,36 @@ module Ww::Meridium
   extend self
 
   class TsetConn
-    MAX_FREE_SIZE = 16
+    # Default capacity of TsetConn's id pool.
+    #
+    # See also: `TsetConn`.
+    DEFAULT_IDPOOL_CAPACITY = 16
 
-    def initialize(@conn : Tconn)
+    alias SurfaceId = SensorId | AppearanceId
+
+    # Represents the identity of a sensor in `TsetConn`. Essentially this data
+    # is what sensors are compared by. Two equal `SensorId`s will map to the same
+    # underlying `Tconn` sensor surface according to `TsetConn`.
+    record SensorId, pattern : Term, selector : Term?
+
+    # Represents the identity of an appearance in `TsetConn`. Essentially this
+    # data is what appearances are compared by. Two equal `AppearanceId`s will map
+    # to the same underlying `Tconn` appearance surface according to `TsetConn`.
+    record AppearanceId, value : Term, selector : Term?
+
+    def initialize(@conn : Tconn, *, @idpool_capacity = DEFAULT_IDPOOL_CAPACITY)
       @fresh = Identity.new(0)
       @idpool = Set(Identity).new
-
-      @lsensors = {} of Term => Identity
-      @rsensors = {} of Identity => Term
-
-      @lappearances = {} of Term => Identity
-      @rappearances = {} of Identity => Term
+      @surfaces = Bimap(SurfaceId, Identity).new
     end
 
     def close : Nil
       @conn.close
-
-      # TODO: clear everything?
+      @idpool.clear
+      @surfaces.clear
     end
 
-    def acquire_id : Identity
+    private def acquire_id : Identity
       # If we have some free identity in the id pool, take it.
       if identity = @idpool.first?
         @idpool.delete(identity)
@@ -35,10 +45,10 @@ module Ww::Meridium
       identity
     end
 
-    def release_id(identity : Identity) : Nil
-      if 0 < MAX_FREE_SIZE < @idpool.size
-        # Delete any extra ids that we have in the id pool.
-        (MAX_FREE_SIZE...@idpool.size).each do
+    private def release_id(identity : Identity) : Nil
+      if 0 < @idpool_capacity <= @idpool.size
+        # Delete any extra ids that we have in the pool.
+        (@idpool_capacity..@idpool.size).each do
           @idpool.delete(@idpool.first)
         end
       end
@@ -47,46 +57,49 @@ module Ww::Meridium
       @idpool.add(identity)
     end
 
-    def pattern?(identity : Identity) : Term?
-      @rsensors[identity]?
+    # Returns the sensor id corresponding to the underlying Tconn *identity*.
+    def sensor?(identity : Identity) : SensorId?
+      @surfaces[identity]?.as?(SensorId)
     end
 
-    def value?(identity : Identity) : Term?
-      @rappearances[identity]?
+    # Returns the appearance id corresponding to the underlying Tconn *identity*.
+    def appearance?(identity : Identity) : AppearanceId?
+      @surfaces[identity]?.as?(AppearanceId)
     end
 
-    def add_sensor_for(pattern : Term) : Identity
-      if identity = @lsensors[pattern]?
+    def add_sensor_with(pattern : Term, *, selector : Term? = nil) : Identity
+      surface = SensorId.new(pattern, selector)
+
+      if identity = @surfaces[surface]?
         return identity
       end
 
       identity = acquire_id
 
-      @lsensors[pattern] = identity
-      @rsensors[identity] = pattern
-      @conn[identity] = Tconn::Sensor.new(pattern)
+      @surfaces[surface] = identity
+      @conn[identity] = Tconn::Sensor.new(pattern, selector: selector)
 
       identity
     end
 
-    def add_appearance_for(value : Term) : Identity
-      if identity = @lappearances[value]?
+    def add_appearance_with(value : Term, *, selector : Term? = nil) : Identity
+      surface = AppearanceId.new(value, selector)
+
+      if identity = @surfaces[surface]?
         return identity
       end
 
       identity = acquire_id
 
-      @lappearances[value] = identity
-      @rappearances[identity] = value
-      @conn[identity] = Tconn::Appearance.new(value)
+      @surfaces[surface] = identity
+      @conn[identity] = Tconn::Appearance.new(value, selector: selector)
 
       identity
     end
 
-    def delete_sensor_for?(pattern : Term) : Identity?
-      return unless identity = @lsensors.delete(pattern)
+    def delete_sensor_with?(pattern : Term, *, selector : Term? = nil) : Identity?
+      return unless identity = @surfaces.delete(SensorId.new(pattern, selector))
 
-      @rsensors.delete(identity)
       @conn.delete(identity)
 
       release_id(identity)
@@ -94,10 +107,9 @@ module Ww::Meridium
       identity
     end
 
-    def delete_appearance_for?(value : Term) : Identity?
-      return unless identity = @lappearances.delete(value)
+    def delete_appearance_with?(value : Term, *, selector : Term? = nil) : Identity?
+      return unless identity = @surfaces.delete(AppearanceId.new(value, selector))
 
-      @rappearances.delete(identity)
       @conn.delete(identity)
 
       release_id(identity)
@@ -292,15 +304,19 @@ module Ww::Meridium
     private def sync_sensors(setconn : TsetConn, sensors0 : Term::Dict, sensors1 : Term::Dict) : Nil
       added, removed = sensors1.diff1(sensors0)
 
-      removed.each_entry do |pattern, _|
-        next unless identity = setconn.delete_sensor_for?(pattern)
+      removed.each_entry do |spec, _|
+        next unless spec = spec.as_itemsonly_d?
+        next unless spec.size.in?(1, 2)
+        next unless identity = setconn.delete_sensor_with?(pattern: spec[0], selector: spec[1]?)
 
         @msets.delete(identity)
       end
 
-      added.each_entry do |pattern, _|
-        # TODO: selector
-        setconn.add_sensor_for(pattern)
+      added.each_entry do |spec, _|
+        next unless spec = spec.as_itemsonly_d?
+        next unless spec.size.in?(1, 2)
+
+        setconn.add_sensor_with(pattern: spec[0], selector: spec[1]?)
       end
     end
 
@@ -309,13 +325,18 @@ module Ww::Meridium
     private def sync_appearances(setconn : TsetConn, appearances0 : Term::Dict, appearances1 : Term::Dict) : Nil
       added, removed = appearances1.diff1(appearances0)
 
-      removed.each_entry do |value, _|
-        setconn.delete_appearance_for?(value)
+      removed.each_entry do |spec, _|
+        next unless spec = spec.as_itemsonly_d?
+        next unless spec.size.in?(1, 2)
+
+        setconn.delete_appearance_with?(value: spec[0], selector: spec[1]?)
       end
 
-      added.each_entry do |value, _|
-        # TODO: selector
-        setconn.add_appearance_for(value)
+      added.each_entry do |spec, _|
+        next unless spec = spec.as_itemsonly_d?
+        next unless spec.size.in?(1, 2)
+
+        setconn.add_appearance_with(value: spec[0], selector: spec[1]?)
       end
     end
 
@@ -323,7 +344,7 @@ module Ww::Meridium
       return unless setconn = @setconns[tsid]?
 
       overview.each do |identity, view|
-        next unless pattern = setconn.pattern?(identity)
+        next unless sensor = setconn.sensor?(identity)
 
         mset1 = view.dict_multiset
 
@@ -332,7 +353,7 @@ module Ww::Meridium
 
         @msets[identity] = mset1
 
-        yield Term.of(:event, {:stimuli, tsid, pattern, mset1})
+        yield Term.of(:event, {:stimuli, tsid, {sensor.pattern, sensor.selector}, mset1})
       end
     end
   end

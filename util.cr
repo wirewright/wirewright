@@ -2530,3 +2530,82 @@ end
 class Stack(T)
   include IStack(T)
 end
+
+# A bidirectional mapping between objects of type `L` and `R`.
+class Bimap(L, R)
+  include Enumerable({L, R})
+
+  # Constructs a bidirectional map with an optional *initial capacity*.
+  def initialize(*, initial_capacity cap0 = nil)
+    @l = Hash(L, R).new(initial_capacity: cap0)
+    @r = Hash(R, L).new(initial_capacity: cap0)
+  end
+
+  def each(& : {L, R} ->) : Nil
+    @l.each { |key, value| yield({key, value}) }
+  end
+
+  # Returns the object of type `R` associated with the object of type `L`.
+  # Returns `nil` if no such association exists.
+  def []?(object : L) : R?
+    @l[object]?
+  end
+
+  # Returns the object of type `L` associated with the object of type `R`.
+  # Returns `nil` if no such association exists.
+  def []?(object : R) : L?
+    @r[object]?
+  end
+
+  # Creates an association between an object of type `L`, *key*, and an object
+  # of type `R`, *value*, removing any previous association for both. Returns *value*.
+  def []=(key : L, value value1 : R) : R
+    if value0 = @l[key]?
+      @r.delete(value0)
+    end
+
+    @l[key] = value1
+    @r[value1] = key
+
+    value1
+  end
+
+  # Creates an association between an object of type `R`, *key*, and an object
+  # of type `L`, *value*, removing any previous association for both. Returns *value*.
+  def []=(key : R, value value1 : L) : L
+    if value0 = @r[key]?
+      @l.delete(value0)
+    end
+
+    @r[key] = value1
+    @l[value1] = key
+
+    value1
+  end
+
+  # Removes the association between the object of type `L` and an object of
+  # type `R`. Returns the latter if found & removed. Returns `nil` otherwise.
+  def delete(object : L) : R?
+    if value = @l.delete(object)
+      @r.delete(value)
+    end
+
+    value
+  end
+
+  # Removes the association between the object of type `R` and an object of
+  # type `L`. Returns the latter if found & removed. Returns `nil` otherwise.
+  def delete(object : R) : L?
+    if value = @r.delete(object)
+      @l.delete(value)
+    end
+
+    value
+  end
+
+  # Clears this bimap.
+  def clear : Nil
+    @l.clear
+    @r.clear
+  end
+end

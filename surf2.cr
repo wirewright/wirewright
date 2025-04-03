@@ -1614,14 +1614,18 @@ class Tconn
     end
   end
 
-  def self.open(*args, **kwargs, &)
-    conn = new(Spec.new(*args, **kwargs))
+  def self.open(spec : Spec, & : Tconn -> T) : T forall T
+    conn = new(spec)
 
     begin
       yield conn
     ensure
       conn.close
     end
+  end
+
+  def self.open(*args, **kwargs, & : Tconn -> T) : T forall T
+    open(Spec.new(*args, **kwargs)) { |conn| yield conn }
   end
 
   def tspace : Tspace
