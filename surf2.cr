@@ -1555,6 +1555,9 @@ class Tconn
 
   @surfaces_lock = Mutex.new(:reentrant) # FIXME: ?!
 
+  class ClosedError < Exception
+  end
+
   def initialize(spec : Spec)
     # Extract ivars from spec.
     @map = spec.map
