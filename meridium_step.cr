@@ -2,8 +2,11 @@ module Ww::Meridium
   extend self
 
   class TsetConn
+    MAX_FREE_SIZE = 16
+
     def initialize(@conn : Tconn)
       @fresh = Identity.new(0)
+      @idpool = Set(Identity).new
 
       # TODO: BidiHash
       @lsensors = {} of Term => Identity
@@ -15,6 +18,34 @@ module Ww::Meridium
 
     def close : Nil
       @conn.close
+
+      # TODO: clear everything?
+    end
+
+    def acquire_id : Identity
+      # If we have some free identity in the id pool, take it.
+      if identity = @idpool.first?
+        @idpool.delete(identity)
+        return identity
+      end
+
+      # Otherwise generate fresh identity.
+      identity = @fresh
+      @fresh += 1
+
+      identity
+    end
+
+    def release_id(identity : Identity) : Nil
+      if 0 < MAX_FREE_SIZE < @idpool.size
+        # Delete any extra ids that we have in the id pool.
+        (MAX_FREE_SIZE...@idpool.size).each do
+          @idpool.delete(@idpool.first)
+        end
+      end
+
+      # Release identity to the id pool.
+      @idpool.add(identity)
     end
 
     def pattern?(identity : Identity) : Term?
@@ -30,8 +61,7 @@ module Ww::Meridium
         return identity
       end
 
-      identity = @fresh
-      @fresh += 1
+      identity = acquire_id
 
       @lsensors[pattern] = identity
       @rsensors[identity] = pattern
@@ -45,8 +75,7 @@ module Ww::Meridium
         return identity
       end
 
-      identity = @fresh
-      @fresh += 1
+      identity = acquire_id
 
       @lappearances[value] = identity
       @rappearances[identity] = value
@@ -61,6 +90,8 @@ module Ww::Meridium
       @rsensors.delete(identity)
       @conn.delete(identity)
 
+      release_id(identity)
+
       identity
     end
 
@@ -70,10 +101,13 @@ module Ww::Meridium
       @rappearances.delete(identity)
       @conn.delete(identity)
 
+      release_id(identity)
+
       identity
     end
   end
 
+  # TODO: rename to TconnSpec, accept directly in Tconn constructor
   record TspaceConfig,
     map : Tconn::Map,
     chat : Tconn::Chat,
