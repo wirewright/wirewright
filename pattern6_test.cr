@@ -425,7 +425,7 @@ def tspace(flow : Term::Dict, & : Term, Term ->)
           matchpi %{[after added appearance surface-name_symbol value_]} do
             identity = lidentities[{conn_name, surface_name}]
 
-            conn[identity] = Tconn::Appearance.new(value, selector: child[:selector]?, tombstone: child[:tombstone]?)
+            conn[identity] = Tconn::Appearance.new(value, selector: child[:selector]?)
           end
 
           matchpi %{[after removed surface-name_symbol]} do

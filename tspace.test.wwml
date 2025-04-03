@@ -516,5 +516,4 @@
   (conn A (after removed x))
   (conn B (view {})))
 
-;; TODO: test appearance tombstone
 ;; TODO: test sensor, appearance selector

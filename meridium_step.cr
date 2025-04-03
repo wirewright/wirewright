@@ -289,7 +289,7 @@ module Ww::Meridium
       end
 
       added.each_entry do |value, _|
-        # TODO: selector, tombstone
+        # TODO: selector
         setconn.add_appearance_for(value)
       end
     end

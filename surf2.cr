@@ -71,32 +71,6 @@ module ILabelGenerator
   abstract def call : Label
 end
 
-# 64 bits
-#
-# <TIMESTAMP> <HUB> <CONN> <SEQ>
-#     32       6      16    10
-#
-# What this means?
-#
-#  - Timestamp, seconds since WW_EPOCH (1 Jan 2025); overflows on Feb 7, 2161
-#  - At max 64 id sources (hubs)
-#  - At max 65536 connection IDs per second
-#  - At max 1025 sequence IDs per connection per second
-#     ==> max 1025 IDs emitted for a given Tconn in one second => ~1 id per 1ms
-#
-# generate(timestamp0, id hub, id conn)
-#   timestamp1 = get seconds since WW_EPOCH
-#   if timestamp0 = timestamp1 and seq = 1024
-#     sleep until timestamp0 + 1 second
-#     timestamp1 = get seconds since WW_EPOCH
-#   if timestamp0 != timestamp1
-#     -- Reset sequence number
-#     seq = 0
-#   id timestamp = timestamp1
-#   id seq = seq
-#   seq += 1
-#   (timestamp1; new id(id timestamp, id hub, id conn, id seq))
-
 # An extremely simple globally unique id source.
 #
 # - The first 64 bits are used for nanoseconds since the Unix epoch.
@@ -113,6 +87,8 @@ end
 # component of S or A is incorrect, S will see A when it shouldn't have --
 # not a *huge* problem since A is matching S anyway, and has a lot of filtering
 # to go through.
+#
+# TODO: use something more battle-tested
 struct WWID
   extend ILabelGenerator
 
@@ -1137,23 +1113,21 @@ record AppearanceData,
   identity : Identity,
   instant : Label,
   value : Term,
-  selector : Term?,
-  tombstone : Term?
+  selector : Term?
 
 struct AppearanceData
   def encode(otype : Term.class) : Term
-    Term.of(:"appearance-data", conid.encode(Term), identity, instant.encode(Term), value, selector: selector, tombstone: tombstone)
+    Term.of(:"appearance-data", conid.encode(Term), identity, instant.encode(Term), value, selector: selector)
   end
 
   def self.decode?(object : Term) : AppearanceData?
-    Term.matchpi?(object, %{(appearance-data conid_ identity←(%number u32) instant_ value_ ¦ (%keypool selector tombstone))}) do
+    Term.matchpi?(object, %{(appearance-data conid_ identity←(%number u32) instant_ value_ ¦ (%keypool selector))}) do
       new(
         Label.decode?(conid) || return,
         identity.to(Identity),
         Label.decode?(instant) || return,
         value,
         object[:selector]?,
-        object[:tombstone]?,
       )
     end
   end
@@ -1506,7 +1480,6 @@ class Tview
     change(stimuli: stimuli1)
   end
 
-  # FIXME: what should we do with the tombstone ?!?!
   protected def absent(adata : AppearanceData) : Tview
     pid = {adata.conid, adata.identity}
 
@@ -1552,7 +1525,7 @@ class Tconn
     end
   end
 
-  record Appearance, value : Term, selector : Term? = nil, tombstone : Term? = nil do
+  record Appearance, value : Term, selector : Term? = nil do
     def self.new(value : String, **kwargs) : Appearance
       new(ML.term(value), **kwargs)
     end
@@ -1727,7 +1700,7 @@ class Tconn
     data = SurfaceData.new(instant: groupid, destructors: [] of Destructor)
 
     subject = Tbase::Appearance.new(groupid, surface.value)
-    adata = AppearanceData.new(@conid, identity, subject.id, subject.value, surface.selector, surface.tombstone)
+    adata = AppearanceData.new(@conid, identity, subject.id, subject.value, surface.selector)
 
     dismiss = tspace.summon(adata, subject) do |sdata|
       present(sdata, adata)
@@ -1994,12 +1967,11 @@ elsif ARGV[0]? == "join"
 end
 
 # - send & compare selector as hash, never send plaintext selector
-#   - at difficulty: easy selector is sent as (32-bit salt; sha256)
+#   - at difficulty: easy selector is sent as (64-bit salt; sha256)
 #   - at difficulty: medium selector is sent as (64-bit salt; sha512)
 #   - at difficulty: hard selector is sent as argon2id (crypto secure hash)
-# - use 64-bit Snowflake-like instead of WWID
+# - improve Etrace/SensorMultimap ID storage efficiency by using some kind of a Patricia trie?
 # - if map or chat connection is lost the Tconn must retire. Wrapping code should re-create
 #   it with new id etc. for each attempt to reconnect. This should be invisible to clients.
-# - tombstone handling ?!
 # - rewrite the horrible horrible servers&clients. Have one server instead of two,
 # either ditch my thing or the RPC. Preferably my thing but still.
