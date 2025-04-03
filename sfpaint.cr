@@ -960,6 +960,8 @@ module UIR::Platform::SFML
     when .numpad5?   then keyname = "np5"
     when .numpad6?   then keyname = "np6"
     when .numpad8?   then keyname = "np8"
+    when .page_up?   then keyname = "pgup"
+    when .page_down? then keyname = "pgdn"
     end
 
     if event.control

@@ -7,45 +7,33 @@
 ;; SCROLL
 
 ;; Scroll up in group suggestion.
-(_string | _string (M←(key up) _*) @EDGE_ ¦ _ suggestions: (suggestions/group (_* tail_) (⏏target _*)))
+(_string | _string (M←(key pgup) _*) @EDGE_ ¦ _ suggestions: (suggestions/group (_* tail_) (⏏target _*)))
   <> {target: →tail, (tail): (), (M): ()}
 
 ;; Prevent from scrolling out of bounds.
-;;
-;; TODO: I'm not sure about this. How about we give the user a way to
-;; escape from the suggestion?!
-(_string | _string (M←(key up) _*) @EDGE_ ¦ _ suggestions: (suggestions/group () (_*)))
+(_string | _string (M←(key pgup) _*) @EDGE_ ¦ _ suggestions: (suggestions/group () (_*)))
   <> {(M): ()}
 
 ;; Scroll down in group suggestion
-(_string | _string (M←(key down) _*) @EDGE_ ¦ _ suggestions: (suggestions/group (_* ⏏target) (head_ _+)))
+(_string | _string (M←(key pgdn) _*) @EDGE_ ¦ _ suggestions: (suggestions/group (_* ⏏target) (head_ _+)))
   <> {target: →head, (head): (), (M): ()}
 
 ;; Prevent from scrolling out of bounds.
-;;
-;; TODO: I'm not sure about this. How about we give the user a way to
-;; escape from the suggestion?!
-(_string | _string (M←(key down) _*) @EDGE_ ¦ _ suggestions: (suggestions/group (_*) (_)))
+(_string | _string (M←(key pgdn) _*) @EDGE_ ¦ _ suggestions: (suggestions/group (_*) (_)))
   <> {(M): ()}
 
 ;; Scroll up in suggestions list.
-(_string | _string (M←(key up) _*) @EDGE_ ¦ _ suggestions: (suggestions/list (_* pred_) (⏏top _* bot_) (⏏succ _*)))
+(_string | _string (M←(key pgup) _*) @EDGE_ ¦ _ suggestions: (suggestions/list (_* pred_) (⏏top _* bot_) (⏏succ _*)))
   <> {(M): (), top: →pred, (pred): (), succ: →bot, (bot): ()}
 
 ;; Prevent from scrolling out of bounds.
-;;
-;; TODO: I'm not sure about this. How about we give the user a way to
-;; escape from the suggestion?!
-(_string | _string (M←(key up) _*) @EDGE_ ¦ _ suggestions: (suggestions/list () (_*) (_*)))
+(_string | _string (M←(key pgup) _*) @EDGE_ ¦ _ suggestions: (suggestions/list () (_*) (_*)))
   <> {(M): ()}
 
 ;; Scroll down in suggestions list.
-(_string | _string (M←(key down) _*) @EDGE_ ¦ _ suggestions: (suggestions/list (_* ⏏pred) (top_ _* ⏏bot) (succ_ _*)))
+(_string | _string (M←(key pgdn) _*) @EDGE_ ¦ _ suggestions: (suggestions/list (_* ⏏pred) (top_ _* ⏏bot) (succ_ _*)))
   <> {(M): (), pred: →top, (top): (), bot: →succ, (succ): ()}
 
 ;; Prevent from scrolling out of bounds.
-;;
-;; TODO: I'm not sure about this. How about we give the user a way to
-;; escape from the suggestion?!
-(_string | _string (M←(key down) _*) @EDGE_ ¦ _ suggestions: (suggestions/list (_*) (_*) ()))
+(_string | _string (M←(key pgdn) _*) @EDGE_ ¦ _ suggestions: (suggestions/list (_*) (_*) ()))
   <> {(M): ()}

@@ -156,7 +156,7 @@ module D7VR
     (box style: "floating z-20 dt-8 border border-neutral-600 bg-neutral-800 rounded p-3"
       (main style: "content min-w-xs max-w-md flow-col gap-3"
         (header style: "w-max h-content flow-row font-sans font-normal text-xs text-neutral-300"
-          "Showing " ^begin ".." ^end " out of " ^total)
+          "Showing " ^begin ".." ^end " out of " ^total ". Use PgUp/Dn to scroll")
         (group style: "w-max h-content flow-row fr"
           (list style: "w-fr h-content flow-col text-sm font-mono font-text text-neutral-200 gap-2"
             (^*paste names 0 ..= -1))
