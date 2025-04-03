@@ -227,7 +227,7 @@
 ;; The first child of y-stack has dt of 0.
 [y-stack {¦ -dt_} _*] <> {dt: 0}
 
-;; Conecutive children learn their dt from their predecessor, plus
+;; Consecutive children learn their dt from their predecessor, plus
 ;; the predecessor's height and the gap (if any).
 ;;
 ;; Similarly, we use the last child's dt as an indication that this rule
