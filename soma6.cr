@@ -675,10 +675,10 @@ class Document
       send(Term.of(:alarm))
     end
 
-    reg = Meridium::TspaceRegistry.new
+    reg = Meridium::SpecRegistry.new
     @mectx = Meridium::StepContext.new(reg)
 
-    reg[Term.of(:local)] = TspaceConfig.new(
+    reg[Term.of(:local)] = Tconn::Spec.new(
       map: SyncInMemoryMap(Tspace::Key, Tspace::Value).new,
       chat: SyncInMemoryChat(Activation).new,
       sink: Tconn::Sink.new do |overview|

@@ -8,7 +8,6 @@ module Ww::Meridium
       @fresh = Identity.new(0)
       @idpool = Set(Identity).new
 
-      # TODO: BidiHash
       @lsensors = {} of Term => Identity
       @rsensors = {} of Identity => Term
 
@@ -107,25 +106,17 @@ module Ww::Meridium
     end
   end
 
-  # TODO: rename to TconnSpec, accept directly in Tconn constructor
-  record TspaceConfig,
-    map : Tconn::Map,
-    chat : Tconn::Chat,
-    sink : Tconn::Sink,
-    fresh : LabelGenerator,
-    keepalive : Tconn::Keepalive?
-
-  class TspaceRegistry
-    alias Subscriber = TspaceConfig? ->
+  class SpecRegistry
+    alias Subscriber = Tconn::Spec? ->
     alias Unsubscribe = ->
 
     def initialize
-      @configs = {} of Term => TspaceConfig
+      @specs = {} of Term => Tconn::Spec
       @subscribers = {} of Term => Set(Subscriber)
     end
 
-    def []=(tsid : Term, spec : TspaceConfig)
-      @configs[tsid] = spec
+    def []=(tsid : Term, spec : Tconn::Spec)
+      @specs[tsid] = spec
 
       return unless subscribers = @subscribers[tsid]?
 
@@ -133,16 +124,16 @@ module Ww::Meridium
     end
 
     def delete(tsid : Term) : Nil
-      return unless @configs.delete(tsid)
+      return unless @specs.delete(tsid)
       return unless subscribers = @subscribers.delete(tsid)
 
       subscribers.each &.call(nil)
     end
 
     def call(tsid : Term, fn : Subscriber) : Nil
-      return unless config = @configs[tsid]?
+      return unless spec = @specs[tsid]?
 
-      fn.call(config)
+      fn.call(spec)
     end
 
     def subscribe(tsid : Term, &fn : Subscriber) : Unsubscribe
@@ -159,11 +150,11 @@ module Ww::Meridium
   end
 
   class StepContext
-    def initialize(@registry : TspaceRegistry)
+    def initialize(@registry : SpecRegistry)
       @state = Term[]
       @msets = {} of Identity => Term::Dict
       @setconns = {} of Term => TsetConn
-      @unsubscribe = {} of Term => TspaceRegistry::Unsubscribe
+      @unsubscribe = {} of Term => SpecRegistry::Unsubscribe
     end
 
     def step(document : Term::Dict) : Nil
@@ -212,14 +203,14 @@ module Ww::Meridium
         raise "BUG: attempt to double connect() to #{tsid}"
       end
 
-      subscriber = TspaceRegistry::Subscriber.new do |config|
-        unless config
+      subscriber = SpecRegistry::Subscriber.new do |spec|
+        unless spec
           disconnect(tsid)
           next
         end
 
         setconn0 = @setconns[tsid]?
-        conn = Tconn.new(config.map, config.chat, config.sink, config.fresh, config.keepalive)
+        conn = Tconn.new(spec)
         setconn1 = TsetConn.new(conn)
 
         # If there was a previous connection of some kind we'll have to migrate.

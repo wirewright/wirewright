@@ -1533,6 +1533,15 @@ class Tconn
 
   alias Surface = Sensor | Appearance
 
+  # NOTE: *sink* may be called with the same `Overview` multiple times in a row;
+  # it is your responsibility to suppress repetitions if necessary.
+  record Spec,
+    map : Map,
+    chat : Chat,
+    sink : Sink,
+    fresh : LabelGenerator = WWID,
+    keepalive : Keepalive? = nil
+
   alias Overview = Pf::Map(Identity, Tview)
 
   alias Sink = Overview ->
@@ -1546,13 +1555,14 @@ class Tconn
 
   @surfaces_lock = Mutex.new(:reentrant) # FIXME: ?!
 
-  # NOTE: *sink* may be called with the same `Overview` multiple times in a row;
-  # it is your responsibility to suppress repetitions if necessary.
-  def initialize(@map : Map,
-                 @chat : Chat,
-                 @sink : Sink,
-                 @fresh : LabelGenerator = WWID,
-                 @keepalive : Keepalive? = nil)
+  def initialize(spec : Spec)
+    # Extract ivars from spec.
+    @map = spec.map
+    @chat = spec.chat
+    @sink = spec.sink
+    @fresh = spec.fresh
+    @keepalive = spec.keepalive
+
     @conid = @fresh.call
 
     @overview = Overview.new
@@ -1605,7 +1615,7 @@ class Tconn
   end
 
   def self.open(*args, **kwargs, &)
-    conn = new(*args, **kwargs)
+    conn = new(Spec.new(*args, **kwargs))
 
     begin
       yield conn
