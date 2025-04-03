@@ -4,7 +4,7 @@ module Alloy
   extend self
 
   # :nodoc:
-  record Context, vars : Term::Dict, templateR : Rewriter, exprR : Rewriter, errors = Stack(String).new do
+  record Context, vars : Term::Dict, templateR : Rewriter, exprR : Rewriter, strict : Bool, errors : Stack(String) do
     def error(&) : Nil
       errors << yield
     end
@@ -204,6 +204,54 @@ module Alloy
     end
   end
 
+  # Attempts to parse *term* as `^each` expression.
+  private def meach(ctx : Context, term : Term) : Rewrite::Any
+    variants = [] of String
+
+    Term.case(term, patterns: variants) do
+      matchpi %{(^each arg_ as itemvar_ children_+)} do
+        collection = rewrite(arg, ctx.exprR)
+
+        unless dict = collection.as_d?
+          ctx.error { "^each argument is not a dict: #{dict}" }
+
+          return Rewrite.none
+        end
+
+        children1 = Term::Dict.build do |commit|
+          dict.items.each do |item|
+            case rewrite = render0(ctx.vars.with(itemvar, item), children, ctx.strict, ctx.errors)
+            in Rewrite::None
+              commit.concat(children.items)
+            in Rewrite::One
+              childlist = rewrite.term
+              unless childlist = childlist.as_d?
+                childlist = Term[{childlist}]
+              end
+              commit.concat(childlist.items)
+            in Rewrite::Many
+              childlists = rewrite.list
+              childlists.items.each do |childlist|
+                unless childlist = childlist.as_d?
+                  childlist = Term[{childlist}]
+                end
+                commit.concat(childlist.items)
+              end
+            end
+          end
+        end
+
+        Rewrite.many(children1)
+      end
+
+      otherwise do
+        ctx.error { "invalid ^each, expected one of:\n#{variants.join('\n', &.li(bullet: "-", indent: 2))}" }
+
+        Rewrite.none
+      end
+    end
+  end
+
   # Attempts to parse *term* as `^expr` expression.
   private def expr(ctx : Context, term : Term) : Rewrite::Any
     variants = [] of String
@@ -221,11 +269,11 @@ module Alloy
     end
   end
 
-  def render(vars : Term::Dict, template : Term, *, strict : Bool = true)
+  def render0(vars : Term::Dict, template : Term, strict : Bool, errors : Stack(String)) : Rewrite::Any
     set_template, rec_template = recR
     set_expr, rec_expr = recR
 
-    ctx = Context.new(vars, templateR: rec_template, exprR: rec_expr)
+    ctx = Context.new(vars, templateR: rec_template, exprR: rec_expr, strict: strict, errors: errors)
 
     exprR = set_expr.call switchR(
       { %{rewritee_dict}, chainR(entriesR(rec_expr), callR(PRIMITIVES)) },
@@ -240,37 +288,34 @@ module Alloy
       { %{rewritee←[^match _*]}, chainR(callR(->match(Context, Term).partial(ctx)), rec_template)},
       { %{rewritee←[^if _*]}, chainR(callR(->mif(Context, Term).partial(ctx)), rec_template)},
       { %{rewritee←[^unless _*]}, chainR(callR(->munless(Context, Term).partial(ctx)), rec_template)},
+      { %{rewritee←[^each _*]}, callR(->meach(Context, Term).partial(ctx))},
       { %{rewritee←[^expr _*]}, chainR(callR(->expr(Context, Term).partial(ctx)), rec_template)},
       { %{rewritee_dict}, entriesR(rec_template)},
     )
 
-    render = rewrite(template, rewriter)
+    rewrite0(template, rewriter)
+  end
 
-    if strict && ctx.errors.present?
-      raise ctx.errors.join('\n')
+  def render(vars : Term::Dict, template : Term, *, strict : Bool = true)
+    errors = Stack(String).new
+    rewrite = render0(vars, template, strict, errors)
+
+    if strict && errors.present?
+      raise errors.join('\n')
     end
 
-    render
+    rewrite.term? || template
   end
 end
 
 # {% skip_file %}
 
 # templ = ML.term <<-WWML
-# (^match (lhs rhs)
-#   ;; If both are empty w-0 won't work so we have to create a rectangle
-#   ;; that is explicitly w-px.
-#   (when ("" "")
-#     ((self rect) style: "w-px h-max bg-blue-500"))
-#   (when _
-#     (group style: "content"
-#       ;; We could just leave either code empty here but to ease the load on
-#       ;; uiR we'll avoid generating an extra empty code.
-#       (^unless (= lhs "")
-#         (code ^lhs style: "text-neutral-400 bg-neutral-700"))
-#       ((self rect) style: "w-0 z-10 h-max bg-blue-500 ring-l ring-blue-500")
-#       (^unless (= rhs "")
-#         (code ^rhs style: "text-neutral-400 bg-neutral-700")))))
+# (group style: "flow-col gap-2"
+#   (^each todos as todo
+#     (group style: "bg-neutral-800 p-3 border border-neutral-500 flow-col gap-1"
+#       (p (^expr (value todo title)) style: "text-lg font-bold")
+#       (p (^expr (value todo body))))))
 # WWML
 
 # require "benchmark"
@@ -293,6 +338,13 @@ end
 
 # Benchmark.ips do |x|
 #   x.report("render") do
-#     Alloy.render(Term[x: 100, y: 200, xs: {1, 2, 3, 4, 5}, hovered: true], templ, strict: true)
+# env = Term[
+#   todos: {
+#     {title: "A", body: "Lorem ipsum"},
+#     {title: "B", body: "Dolor sit"},
+#     {title: "C", body: "Sit amet"},
+#   }
+# ]
+    # puts ML.display(Alloy.render(env, templ, strict: true))
 #   end
 # end
