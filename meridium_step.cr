@@ -8,43 +8,68 @@ module Ww::Meridium
     def initialize
       @specs = {} of Term => Tconn::Spec
       @subscribers = {} of Term => Set(Subscriber)
+      @lock = Mutex.new
     end
 
-    def []=(tsid : Term, spec : Tconn::Spec)
-      @specs[tsid] = spec
+    def []=(tsid : Term, spec : Tconn::Spec) : Nil
+      receivers = @lock.synchronize do
+        @specs[tsid] = spec
 
-      return unless subscribers = @subscribers[tsid]?
+        return unless subscribers = @subscribers[tsid]?
 
-      subscribers.each &.call(spec)
+        # Assume there aren't many and copy them out of the lock to not
+        # hold it for too long.
+        subscribers.dup
+      end
+
+      receivers.each &.call(spec)
     end
 
     def delete(tsid : Term) : Nil
-      return unless @specs.delete(tsid)
-      return unless subscribers = @subscribers.delete(tsid)
+      receivers = @lock.synchronize do
+        return unless @specs.delete(tsid)
+        return unless subscribers = @subscribers.delete(tsid)
 
-      subscribers.each &.call(nil)
+        # Nobody will see this set anymore so we don't need to copy. Remember
+        # that the only way to access the set is via SpecRegistry, and that
+        # has @locks everywhere.
+        subscribers
+      end
+
+      receivers.each &.call(nil)
     end
 
+    # Calls *fn* with the latest `Tconn::Spec` for *tsid*.
     def call(tsid : Term, fn : Subscriber) : Nil
-      return unless spec = @specs[tsid]?
+      return unless spec = @lock.synchronize { @specs[tsid]? }
 
       fn.call(spec)
     end
 
+    # Subscribes *fn* to `Tconn::Spec`s for *tsid*. Returns a function that
+    # can be used to unsubscribe.
+    #
+    # WARNING: *fn* may be called from another thread. Make sure what it does
+    # is thread-safe.
     def subscribe(tsid : Term, &fn : Subscriber) : Unsubscribe
-      subscribers = @subscribers.put_if_absent(tsid) { Set(Subscriber).new }
-      subscribers << fn
+      @lock.synchronize do
+        subscribers = @subscribers.put_if_absent(tsid) { Set(Subscriber).new }
+        subscribers << fn
+      end
 
       -> do
-        subscribers.delete(fn)
-        if subscribers.empty?
-          @subscribers.delete(tsid)
+        @lock.synchronize do
+          return unless subscribers = @subscribers[tsid]?
+
+          subscribers.delete(tsid)
+          if subscribers.empty?
+            @subscribers.delete(tsid)
+          end
         end
       end
     end
   end
 
-  # FIXME: thread safety!!!
   class StepContext
     def initialize(@registry : SpecRegistry)
       @state = Term[]
@@ -53,39 +78,73 @@ module Ww::Meridium
       @unsubscribe = {} of Term => SpecRegistry::Unsubscribe
       @overviews = {} of Term => Tconn::Overview
       @review = Set(Term).new
+
+      # This mutex must be reentrant because step() could call publish()
+      # in cases of in-memory map/chat.
+      @lock = Mutex.new(:reentrant)
     end
 
     def publish(tsid : Term, overview : Tconn::Overview) : Nil
-      @overviews[tsid] = overview
-      @review << tsid
+      @lock.synchronize do
+        @overviews[tsid] = overview
+        @review << tsid
+      end
     end
 
     def step(document : Term::Dict) : Term::Dict
       unless tspaces = document[Rhodium::Tspaces]?
-        sync(Term[])
+        @lock.synchronize do
+          sync(Term[])
 
-        # No matter what's been published, the document's tspaces is invalid,
-        # we won't be able to make use of @review, so just quietly consume.
-        @review.clear
+          # No matter what's been published, the document's tspaces is invalid,
+          # we won't be able to make use of @review, so just quietly consume.
+          @review.clear
+        end
 
         return document
       end
 
       unless tspaces = tspaces.as_d?
-        sync(Term[])
+        @lock.synchronize do
+          sync(Term[])
 
-        @review.clear
+          # Ditto
+          @review.clear
+        end
 
         return document
       end
 
-      sync(tspaces)
+      @lock.synchronize do
+        sync(tspaces)
+        notify(document)
+      end
+    end
 
-      if @review.empty?
-        return document
+    # WARNING: assumes the step context lock is taken.
+    private def sync(tspaces : Term::Dict) : Nil
+      return if @state.same?(tspaces) # Fast path
+
+      added, changed, removed = tspaces.diff1x(@state)
+
+      removed.each_entry do |tsid, _|
+        disconnect(tsid)
       end
 
-      # Read the newest overviews.
+      changed.each_entry do |tsid, tspace|
+        sync(tsid, tspace0: @state[tsid].as_d, tspace1: tspace)
+      end
+
+      added.each_entry do |tsid, tspace|
+        connect(tsid)
+        sync(tsid, tspace0: Term[], tspace1: tspace)
+      end
+
+      @state = tspaces
+    end
+
+    # WARNING: assumes the step context lock is taken.
+    private def notify(document : Term::Dict) : Term::Dict
       @review.each do |tsid|
         next unless overview = @overviews[tsid]?
         next unless setconn = @setconns[tsid]?
@@ -111,46 +170,32 @@ module Ww::Meridium
       document
     end
 
-    def sync(tspaces : Term::Dict) : Nil
-      return if @state.same?(tspaces) # Fast path
-
-      added, changed, removed = tspaces.diff1x(@state)
-
-      removed.each_entry do |tsid, _|
-        disconnect(tsid)
-      end
-
-      changed.each_entry do |tsid, tspace|
-        sync(tsid, tspace0: @state[tsid].as_d, tspace1: tspace)
-      end
-
-      added.each_entry do |tsid, tspace|
-        connect(tsid)
-        sync(tsid, tspace0: Term[], tspace1: tspace)
-      end
-
-      @state = tspaces
-    end
-
     # Creates a connection to the termspace with the given *tsid*.
     #
     # The termspace is guaranteed to be ready to accept `sync`s after this method.
     #
     # May or may not block depending on the underlying map implementation.
     # See also: `StepContext.new`.
+    #
+    # WARNING: assumes the step context lock is taken.
     private def connect(tsid : Term) : Nil
-      if @setconns.has_key?(tsid)
-        raise "BUG: attempt to double connect() to #{tsid}"
-      end
+      return if @setconns.has_key?(tsid)
 
-      subscriber = SpecRegistry::Subscriber.new do |spec|
+      subscriber = ->subscriber(Term, Tconn::Spec?).partial(tsid)
+      @unsubscribe[tsid] = @registry.subscribe(tsid, &subscriber)
+      @registry.call(tsid, subscriber)
+    end
+
+    private def subscriber(tsid : Term, spec : Tconn::Spec?) : Nil
+      @lock.synchronize do
         unless spec
           disconnect(tsid)
           next
         end
 
-        setconn0 = @setconns[tsid]?
         conn = Tconn.new(spec)
+
+        setconn0 = @setconns[tsid]?
         setconn1 = TsetConn.new(conn)
 
         # If there was a previous connection of some kind we'll have to migrate.
@@ -160,12 +205,11 @@ module Ww::Meridium
 
         @setconns[tsid] = setconn1
       end
-
-      @unsubscribe[tsid] = @registry.subscribe(tsid, &subscriber)
-      @registry.call(tsid, subscriber)
     end
 
     # Parses *tspace1* spec of *tsid* and syncs appropriately.
+    #
+    # WARNING: assumes the step context lock is taken.
     private def sync(tsid : Term, tspace0 : Term::Dict, tspace1 : Term) : Nil
       Term.case(tspace1) do
         matchpi %[(¦ sensors⋮ {} appearances⋮ {})] do
@@ -188,9 +232,21 @@ module Ww::Meridium
     #
     # May or may not block depending on the underlying map implementation.
     # See also: `StepContext.new`.
+    #
+    # WARNING: assumes the step context lock is taken.
     private def disconnect(tsid : Term) : Nil
-      unless setconn = @setconns.delete(tsid)
-        raise "BUG: attempt to disconnect() a connection that does not exist: #{tsid}"
+      return unless setconn = @setconns.delete(tsid)
+
+      # A call to disconnect() means there's now no sensors or appearances that refer
+      # to that termspace. We're free to clear it from review.
+      @review.delete(tsid)
+
+      # If the entire termspace disappears all at once we'll have to manually overview
+      # for its sensors.
+      if overview = @overviews.delete(tsid)
+        overview.each do |identity, _|
+          @msets.delete(identity)
+        end
       end
 
       unsubscribe = @unsubscribe[tsid]
@@ -199,6 +255,7 @@ module Ww::Meridium
       setconn.close
     end
 
+    # WARNING: assumes the step context lock is taken.
     private def migrate(tsid : Term, setconn0 : TsetConn, setconn1 : TsetConn)
       setconn0.close
 
@@ -210,25 +267,27 @@ module Ww::Meridium
       )
     end
 
+    # WARNING: assumes the step context lock is taken.
     private def sync(tsid : Term,
                      sensors0 : Term::Dict,
                      sensors1 : Term::Dict,
                      appearances0 : Term::Dict,
                      appearances1 : Term::Dict) : Nil
-      unless setconn = @setconns[tsid]?
-        raise "BUG: attempt to sync() a connection that does not exist: #{tsid}"
-      end
+      return unless setconn = @setconns[tsid]?
 
       sync(setconn, sensors0, sensors1, appearances0, appearances1)
     end
 
+    # WARNING: assumes the step context lock is taken.
     private def sync(setconn : TsetConn, sensors0, sensors1, appearances0, appearances1)
       sync_sensors(setconn, sensors0, sensors1)
       sync_appearances(setconn, appearances0, appearances1)
     end
 
-    # Applices the changes made between two sensor states *sensors0* (before)
+    # Applies the changes made between two sensor states *sensors0* (before)
     # and *sensors1* (after).
+    #
+    # WARNING: assumes the step context lock is taken.
     private def sync_sensors(setconn : TsetConn, sensors0 : Term::Dict, sensors1 : Term::Dict) : Nil
       added, removed = sensors1.diff1(sensors0)
 
@@ -248,8 +307,10 @@ module Ww::Meridium
       end
     end
 
-    # Applices the changes made between two appearance states *appearances0*
+    # Applies the changes made between two appearance states *appearances0*
     # (before) and *appearances1* (after).
+    #
+    # WARNING: assumes the step context lock is taken.
     private def sync_appearances(setconn : TsetConn, appearances0 : Term::Dict, appearances1 : Term::Dict) : Nil
       added, removed = appearances1.diff1(appearances0)
 

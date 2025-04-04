@@ -49,7 +49,7 @@ Building the frontends is harder than it should be, but currently, the best bet 
 1. Build Crystal at commit `0cc0264f423f136db5baa190118b722dade09681`. I don't think nightlies work due to my use of `ExecutionContext`.
    This is the hard part.
 3. Then as usual. `shards install`.
-4. Then `crystal build pprint2_vis.cr --release -Dpreview_mt` or `crystal build soma6.cr --release -Dpreview_mt -Dsoma6`. Do not forget to hope really really hard that it succeeds.
+4. Then `crystal build pprint2_vis.cr --release -Dpreview_mt` or `crystal build soma6.cr --release -Dmt -Dpreview_mt -Dsoma6`. Do not forget to hope really really hard that it succeeds.
 
 ## Want to learn more?
 

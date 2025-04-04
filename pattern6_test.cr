@@ -394,7 +394,8 @@ def tspace(flow : Term::Dict, & : Term, Term ->)
     Term.matchpi?(step, %{(conn conn-name_symbol children_*)}) do
       next if conns.has_key?(conn_name)
 
-      conns[conn_name] = Tconn.new(map, chat, Tconn.multisets { |multiset| view = multiset })
+      spec = Tconn::Spec.new(map, chat, Tconn::Spec.multisets { |multiset| view = multiset })
+      conns[conn_name] = Tconn.new(spec)
 
       children.each_item_unordered do |child|
         Term.matchpi?(child, %{[after added (%any sensor appearance) surface-name_symbol _]}) do

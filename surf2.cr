@@ -1339,17 +1339,13 @@ end
 class Tconn
 end
 
+# :nodoc:
+#
 # An object that manages keepalive & keepalive periods for `Tconn`.
 struct Tconn::Keepalive
   alias Task = Task ->
 
   Log = ::Log.for("Tconn keepalive")
-
-  # Period range used for sensors by default.
-  DEFAULT_SENSOR_PERIOD = 40.seconds..2.minutes
-
-  # Period range used for appearances by default.
-  DEFAULT_APPEARANCE_PERIOD = 20.seconds..50.seconds
 
   # Used to specify which of the periods one wants to address in e.g.
   # `min_for`, `max_for`, `schedule`.
@@ -1361,16 +1357,14 @@ struct Tconn::Keepalive
     Appearance
   end
 
-  # Constructs a Tconn keepalive object.
-  #
-  # - Keepalive fibers are spawned in *ctx*.
-  # - *sensor period* specifies minimum and maximum waiting time before
-  #   running sensor keepalive.
-  # - *appearance period* specifies minimum and maximum waiting time before
-  #   running appearance keepalive.
-  def initialize(@ctx : ExecutionContext = ExecutionContext::SingleThreaded.new("Tconn keepalive"),
-                 @sensor_period = DEFAULT_SENSOR_PERIOD,
-                 @appearance_period = DEFAULT_APPEARANCE_PERIOD)
+  @sensor_period : Range(Time::Span, Time::Span)
+  @appearance_period : Range(Time::Span, Time::Span)
+
+  def initialize(spec : KeepaliveSpec)
+    @ctx = spec.ctx
+    @sensor_period = spec.sensor_period
+    @appearance_period = spec.appearance_period
+
     if @sensor_period.exclusive?
       raise ArgumentError.new("sensor period range must be inclusive")
     end
@@ -1383,11 +1377,6 @@ struct Tconn::Keepalive
 
     @prng = Random::PCG32.new
     @prng_lock = Mutex.new
-  end
-
-  # Initializes both sensor period and appearance period to *period*.
-  def initialize(*args, period : Range(Time::Span, Time::Span), **kwargs)
-    initialize(*args, **kwargs, sensor_period: period, appearance_period: period)
   end
 
   # Returns the minimum waiting time for *period*.
@@ -1416,24 +1405,31 @@ struct Tconn::Keepalive
   end
 
   # Schedules *task* using minimum/maximum waiting time for *period*.
-  def schedule(task : Task, period : Period) : Nil
+  def schedule(task : Task, period : Period) : Channel(Bool)
     tmin = min_for(period).total_milliseconds
     tmax = max_for(period).total_milliseconds
     t = @prng_lock.synchronize { (tmin..tmax).sample(random: @prng) }.milliseconds
 
     Log.debug { "schedule task #{task} after #{t.total_seconds}s" }
 
+    cancel = Channel(Bool).new
+
     @ctx.spawn do
       select
       when @running.receive? # nil
+        Log.debug { "task #{task} canceled due to global close" }
+      when cancel.receive?  # nil
+        Log.debug { "task #{task} canceled due to targeted close" }
       when timeout(t)
         task.call(task)
       end
     end
+
+    cancel
   end
 
   # :ditto:
-  def schedule(period : Period, &task : Task ->) : Nil
+  def schedule(period : Period, &task : Task ->) : Channel(Bool)
     schedule(task, period)
   end
 end
@@ -1533,6 +1529,8 @@ class Tconn
 
   alias Surface = Sensor | Appearance
 
+  # A blueprint for a `Tconn`.
+  #
   # NOTE: *sink* may be called with the same `Overview` multiple times in a row;
   # it is your responsibility to suppress repetitions if necessary.
   record Spec,
@@ -1540,7 +1538,56 @@ class Tconn
     chat : Chat,
     sink : Sink,
     fresh : LabelGenerator = WWID,
-    keepalive : Keepalive? = nil
+    keepalive : KeepaliveSpec? = nil
+
+  struct Spec
+    def self.multisets(&sink : Term::Dict ->) : Sink
+      multisets0 = Term[]
+
+      Sink.new do |overview|
+        multisets1 = Term::Dict.build do |commit|
+          overview.each do |key, view|
+            next if view.empty?
+
+            commit.with(key, view.dict_multiset)
+          end
+        end
+
+        # TODO: check equality of overviews instead! And optimize Tview equality
+        # (e.g. have a dirty flag?)
+        next if multisets0 == multisets1
+
+        multisets0 = multisets1
+
+        sink.call(multisets0)
+      end
+    end
+  end
+
+  # A blueprint for a `Tconn` keepalive.
+  #
+  # - Keepalive fibers are spawned in *ctx*.
+  # - *sensor period* specifies minimum and maximum waiting time before
+  #   running sensor keepalive.
+  # - *appearance period* specifies minimum and maximum waiting time before
+  #   running appearance keepalive.
+  record KeepaliveSpec,
+    ctx : ExecutionContext = ExecutionContext::SingleThreaded.new("Tconn keepalive"),
+    sensor_period : Range(Time::Span, Time::Span) = DEFAULT_SENSOR_PERIOD,
+    appearance_period : Range(Time::Span, Time::Span) = DEFAULT_APPEARANCE_PERIOD
+
+  struct KeepaliveSpec
+    # Period range used for sensors by default.
+    DEFAULT_SENSOR_PERIOD = 40.seconds..2.minutes
+
+    # Period range used for appearances by default.
+    DEFAULT_APPEARANCE_PERIOD = 20.seconds..50.seconds
+
+    # Initializes both sensor period and appearance period to *period*.
+    def self.new(*args, period : Range(Time::Span, Time::Span), **kwargs)
+      new(*args, **kwargs, sensor_period: period, appearance_period: period)
+    end
+  end
 
   alias Overview = Pf::Map(Identity, Tview)
 
@@ -1553,10 +1600,13 @@ class Tconn
 
   @unsubscribe : IChat::Unsubscribe
 
+  # FIXME: How can we make this non-reentrant??
   @surfaces_lock = Mutex.new(:reentrant)
 
   class ClosedError < Exception
   end
+
+  @keepalive : Keepalive?
 
   def initialize(spec : Spec)
     # Extract ivars from spec.
@@ -1564,18 +1614,22 @@ class Tconn
     @chat = spec.chat
     @sink = spec.sink
     @fresh = spec.fresh
-    @keepalive = spec.keepalive
+
+    if keepalive_spec = spec.keepalive
+      @keepalive = Keepalive.new(keepalive_spec)
+    end
 
     @conid = @fresh.call
 
     @overview = Overview.new
     @surfaces = {} of Identity => SurfaceData
+    @cancel = {} of Identity => Channel(Bool)
     @last_alive_at = {} of Label => Time::Span
 
     @unsubscribe = @chat.subscribe(@conid) do |act|
       Log.debug { "#{@conid}: receive from chat: #{act}" }
 
-      @surfaces_lock.synchronize do
+      overview1 = @surfaces_lock.synchronize do
         # If we can fetch view for act's sensor identity, then we know it's still
         # a sensor.
         next unless view0 = @overview[act.sdata.identity]?
@@ -1589,31 +1643,11 @@ class Tconn
 
         # Update the view.
         @overview = @overview.assoc(act.sdata.identity, view1)
-
-        @sink.call(@overview)
-      end
-    end
-  end
-
-  def self.multisets(&sink : Term::Dict ->) : Sink
-    multisets0 = Term[]
-
-    Sink.new do |overview|
-      multisets1 = Term::Dict.build do |commit|
-        overview.each do |key, view|
-          next if view.empty?
-
-          commit.with(key, view.dict_multiset)
-        end
       end
 
-      # TODO: check equality of overviews instead! And optimize Tview equality
-      # (e.g. have a dirty flag?)
-      next if multisets0 == multisets1
-
-      multisets0 = multisets1
-
-      sink.call(multisets0)
+      if overview1
+        spec.sink.call(overview1)
+      end
     end
   end
 
@@ -1706,7 +1740,6 @@ class Tconn
 
     @surfaces[identity] = data
     @overview = @overview.assoc(identity, view)
-    @sink.call(@overview)
 
     Log.debug { "#{@conid}: inserted sensor group #{groupid}" }
   end
@@ -1742,10 +1775,10 @@ class Tconn
 
     data.destructors.each &.call(final)
 
-    overview1 = @overview.dissoc(identity)
-    unless @overview.same?(overview1)
-      @overview = overview1
-      @sink.call(@overview)
+    @overview = @overview.dissoc(identity)
+
+    if keepalive = @cancel.delete(identity)
+      keepalive.close
     end
 
     Log.debug { "#{@conid}: removed surface #{identity}" }
@@ -1754,9 +1787,16 @@ class Tconn
   def []=(identity : Identity, surface : Surface) : Nil
     groupid = @fresh.call
 
-    @surfaces_lock.synchronize do
+    ov1 = @surfaces_lock.synchronize do
+      overview0 = @overview
       delete(identity, final: true)
       insert(identity, surface, groupid)
+      overview1 = @overview
+      overview0.same?(overview1) ? nil : overview1
+    end
+
+    if ov1
+      @sink.call(ov1)
     end
 
     return unless keepalive = @keepalive
@@ -1768,10 +1808,10 @@ class Tconn
       period = Keepalive::Period::Appearance
     end
 
-    keepalive.schedule(period) do |this|
+    cancel = keepalive.schedule(period) do |this|
       Log.debug { "#{@conid}: run keepalive of #{identity}" }
 
-      @surfaces_lock.synchronize do
+      ov4 = @surfaces_lock.synchronize do
         # Make sure identity did not change in the meantime. If it did,
         # then someone else is now responsible for keeping it alive.
         unless data = @surfaces[identity]?
@@ -1798,18 +1838,33 @@ class Tconn
 
         groupid = @fresh.call
 
+        ov2 = @overview
         delete(identity, final: false)
         insert(identity, surface, groupid)
-
+        ov3 = @overview
         keepalive.schedule(this, period)
+        ov2.same?(ov3) ? nil : ov3
       end
+
+      next unless ov4
+
+      @sink.call(ov4)
     end
+
+    @surfaces_lock.synchronize { @cancel[identity] = cancel }
   end
 
   def delete(identity : Identity) : Nil
-    @surfaces_lock.synchronize do
+    overview = @surfaces_lock.synchronize do
+      overview0 = @overview
       delete(identity, final: true)
+      overview1 = @overview
+      overview0.same?(overview1) ? nil : overview1
     end
+
+    return unless overview
+
+    @sink.call(overview)
   end
 
   def pretty_print(pp)
@@ -1857,12 +1912,14 @@ class RemoteStringChat
   def subscribe(address : Label, &recv : String ->) : Unsubscribe
     unsub = @chat.subscribe(address, &recv)
     @socket.puts "+SUB #{address.value}"
+    @socket.flush
     unless @inbound.receive == "OK"
       raise "oh noes, something wrong happened on the chat server!!! i didnt get an OK"
     end
     Unsubscribe.new do
       unsub.call
       @socket.puts "-SUB #{address.value}"
+      @socket.flush
       unless @inbound.receive == "OK"
         raise "oh noes, something wrong happened on the chat server!!! i didnt get an OK"
       end
@@ -1871,6 +1928,7 @@ class RemoteStringChat
 
   def send(to receiver : Label, message : String) : Nil
     @socket.puts "SEND #{receiver.value} #{message}"
+    @socket.flush
     unless @inbound.receive == "OK"
       raise "oh noes, something wrong happened on the chat server!!! i didnt get an OK"
     end
@@ -1890,23 +1948,28 @@ def handle(chat, unsubs, unsubs_lock, socket)
     if topic = message.lchop?("+SUB ")
       topic_ = topic
       socket.puts "OK" # assume subscribe cannot fail
+      socket.flush
       unsub = chat.subscribe(Label.new(topic.to_u128)) do |message|
         socket.puts("MSG #{topic_} #{message}")
+        socket.flush
       end
       unsubs_lock.synchronize do
         unsubs[{topic, socket}] = unsub
       end
     elsif topic = message.lchop?("-SUB ")
       socket.puts "OK" # assume unsubscribe cannot fail
+      socket.flush
       if unsub = unsubs_lock.synchronize { unsubs.delete({topic, socket}) }
         unsub.call
       end
     elsif send = message.lchop?("SEND ")
       socket.puts "OK" # assume send cannot fail
+      socket.flush
       topic, message = send.split(" ", limit: 2)
       chat.send(Label.new(topic.to_u128), message)
     elsif message == "LIST"
       socket.puts "LISTING"
+      socket.flush
       topics = Set(String).new
       unsubs_lock.synchronize do
         unsubs.each do |(topic, _), _|
@@ -1917,8 +1980,10 @@ def handle(chat, unsubs, unsubs_lock, socket)
         socket.puts "TOPIC #{topic}"
       end
       socket.puts "OK"
+      socket.flush
     else
       socket.puts "ERR"
+      socket.flush
     end
   end
 ensure
@@ -1962,7 +2027,7 @@ elsif ARGV[0]? == "join"
   sink = ->(multisets : Term::Dict) do
     Tconn::Log.debug { ML.display(multisets) }
   end
-  Tconn.open(map, chat, Tconn.multisets(&sink), keepalive: Tconn::Keepalive.new(period: 5.seconds..10.seconds)) do |conn|
+  Tconn.open(map, chat, Tconn::Spec.multisets(&sink), keepalive: Tconn::KeepaliveSpec.new(period: 5.seconds..10.seconds)) do |conn|
     while input = (print "> "; gets)
       case input.strip
       when /^sensor\s+(\d+)\s+(.+)$/

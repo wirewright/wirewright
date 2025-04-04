@@ -677,6 +677,35 @@ class Document
     reg = Meridium::SpecRegistry.new
     @mectx = Meridium::StepContext.new(reg)
 
+    # FIXME: WTF IS THIS?
+    if ARGV[0]? == "join"
+      if ARGV.size == 4
+        _, host, port_map, port_chat = ARGV
+        port_map = port_map.to_i
+        port_chat = port_chat.to_i
+      else
+        host = "127.0.0.1"
+        port_map = 9810
+        port_chat = 9811
+      end
+
+      reg[Term.of(:remote)] = Tconn::Spec.new(
+        map: TermMap(Tspace::Key, Tspace::Value).new(CompactMLMap.new(KeyDigestMap(String, String).new(RemoteStringMap.new(host, port_map)))),
+        chat: TermChat(Activation).new(CompactMLChat.new(RemoteStringChat.new(host, port_chat))),
+        sink: Tconn::Sink.new do |overview|
+          # Enqueue an update in the context.
+          @mectx.publish(Term.of(:remote), overview)
+
+          # Wake document thread up if it's sleeping. Meridium.step will do the rest.
+          send(Term.of(:alarm))
+
+          nil
+        end,
+        fresh: WWID,
+        keepalive: Tconn::KeepaliveSpec.new(period: 5.seconds..10.seconds)
+      )
+    end
+
     reg[Term.of(:local)] = Tconn::Spec.new(
       map: SyncInMemoryMap(Tspace::Key, Tspace::Value).new,
       chat: SyncInMemoryChat(Activation).new,
@@ -933,7 +962,7 @@ demo = ML.dict <<-WWML
 WWML
 
 fb_loop = ML.dict <<-WWML
-(sensor x_number in local to @stimuli/in)
+(sensor x_number in remote to @stimuli/in)
 
 (cover "sensor queue"
   (queue @stimuli/in to @stimuli/gated in () waiting @sensor/acks))
@@ -945,7 +974,14 @@ fb_loop = ML.dict <<-WWML
 (latest @percepts @percept)
 
 (comment "This cell is the origin & subject of the feedback loop")
-(cell 0 @percept)
+(cell @percept)
+
+(frag
+  (group
+   (button "Start loop" as 0 to @percept/starters ())
+   (latest @percept/starters @percept)
+   (bridge @percept/starters as clear to @igniter))
+  @igniter)
 
 (comment "Publish percept as an appearance")
 (changes @percept to @appearance/in)
@@ -954,7 +990,7 @@ fb_loop = ML.dict <<-WWML
   (queue @appearance/in to @appearance/percepts in () waiting @appearance/acks))
 
 (transform @appearance/percepts to @appearance/values (+ _ 1))
-(transform @appearance/values to @appearances (appearance _ in local))
+(transform @appearance/values to @appearances (appearance _ in remote))
 (latest @appearances @appearance)
 (frag @appearance)
 (changes @appearance to @appearance/acks)
