@@ -108,7 +108,7 @@ module Ww::Meridium
     end
   end
 
-  # Encoding / decoding of Utrie Key, Value.
+  # Encoding / decoding of Utrie keys, values to terms.
 
   struct ::Ww::Term
     # :nodoc:

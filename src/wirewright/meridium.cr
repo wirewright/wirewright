@@ -11,5 +11,6 @@ end
 require "./meridium/map"
 require "./meridium/ubase"
 require "./meridium/utrie"
+require "./meridium/xgraph"
 require "./meridium/tbase"
 require "./meridium/tsetconn"
