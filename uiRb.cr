@@ -72,6 +72,10 @@ module UIR
   BASE_CAPACITY = ENV["UIR_BASE_CAP"]?.try(&.to_i) || 2**16
   CTRL_CAPACITY = ENV["UIR_CTRL_CAP"]?.try(&.to_i) || 2**12
 
+  # FIXME: these caches will leak a whole bunch of memory ... Note terms on both
+  # sides; they're pointers sometimes, so the GC won't be able to collect them and
+  # so on. This must be a weak ref cache of WeakRef(Term::Dict) => Rewrite::Any ---
+  # somehow!
   @@base_cache = SyncCache(Term, Rewrite::Any).new(capacity: BASE_CAPACITY, preallocate: true)
   @@control_cache = SyncCache(Term, Rewrite::Any).new(capacity: CTRL_CAPACITY, preallocate: true)
 
@@ -222,8 +226,8 @@ module UIR
         x -= dl.unsafe_as_n
         y -= dt.unsafe_as_n
 
-        return unless x.in?(Term[0]...w.unsafe_as_n)
-        return unless y.in?(Term[0]...h.unsafe_as_n)
+        return unless x.in?(Term[0]..w.unsafe_as_n)
+        return unless y.in?(Term[0]..h.unsafe_as_n)
 
         sink.call(keypath)
 
