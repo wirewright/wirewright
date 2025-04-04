@@ -86,6 +86,9 @@ module D7VR
     (button ^caption id: ^id style: ^style hover: false)
     WWML
 
+    def initialize(@document : Term::Dict)
+    end
+
     def call(ctx, term, postfix, head, rest)
       Term.case(term) do
         matchpi(
@@ -95,6 +98,10 @@ module D7VR
           %{(button caption_ as _ to @_ (_*) waiting @_ ¦ _ style⋮ "" id_)},
         ) do |caption|
           continue unless Rhodium.cursordepth(term, pairspart: true) == -1
+
+          if ML.edge?(caption)
+            continue unless caption = @document[Rhodium::Cells, caption]?
+          end
 
           if caption.type.dict?
             # TODO: use pretty print with forced inline
@@ -454,7 +461,7 @@ module D7VR
   end
 
   def ppnode(node : Term, document : Term::Dict) : Term
-    chain = ML::Display::MAIN_CHAIN.prepend(Button.new, Comment.new, Cursor.new, Unit.new(document), TextNode.new(document))
+    chain = ML::Display::MAIN_CHAIN.prepend(Button.new(document), Comment.new, Cursor.new, Unit.new(document), TextNode.new(document))
     ctx = DisplayContext.new(60, 120, features: chain)
     tree = ctx.features.call(ctx, node, "")
     flat, _ = flatten(ctx, tree)
@@ -467,7 +474,7 @@ module D7VR
     end
 
     ppin = pipe(document, visible, annotated)
-    chain = ML::Display::MAIN_CHAIN.prepend(Button.new, Comment.new, Cursor.new, Unit.new(document), TextNode.new(document))
+    chain = ML::Display::MAIN_CHAIN.prepend(Button.new(document), Comment.new, Cursor.new, Unit.new(document), TextNode.new(document))
     ctx = DisplayContext.new(60, 120, features: chain)
     tree = LayoutSet::All.thunk(Term.of(ppin), "", LayoutSet::DictAligned)
     flat, _ = flatten(ctx, tree)
