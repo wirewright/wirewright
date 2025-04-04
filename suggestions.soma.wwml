@@ -291,6 +291,13 @@
   (pulse pout "sink for pulse signals"))
 
 (variant bridge
+  (pulse pin "source of pulse signals")
+  (comma as)
+  (literal value "value to send to the sink")
+  (comma to)
+  (pulse pout "sink for pulse signals"))
+
+(variant bridge
   (nested
     (pulse pin "source of pulse signals")
     (literal pattern "pattern that they must match"))

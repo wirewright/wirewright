@@ -887,7 +887,10 @@ module Rhodium
       end
 
       begin
-        givenpi %{(bridge @pin_ to @pout_) (pulse @pin_ value_) -1} do
+        givenpi(
+          %{(bridge @pin_ to @pout_) (pulse @pin_ value_) -1},
+          %{(bridge @pin_ as value_ to @pout_) (pulse @pin_ _) -1}
+        ) do
           effect(document1, nodepath, node0) do
             event :pulse, pout, value
 

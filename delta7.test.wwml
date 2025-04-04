@@ -1015,7 +1015,16 @@
      (delay 4 (event (pulse @xs 5))))
     ((bridge @xs to @ys)
      (log @ys in (1 2 3 4 5))))
-
+  (d7
+    ((bridge @xs as "Hello" to @ys)
+     (log @ys in ())
+     (delay 0 (event (pulse @xs 1)))
+     (delay 1 (event (pulse @xs 2)))
+     (delay 2 (event (pulse @xs 3)))
+     (delay 3 (event (pulse @xs 4)))
+     (delay 4 (event (pulse @xs 5))))
+    ((bridge @xs as "Hello" to @ys)
+     (log @ys in ("Hello" "Hello" "Hello" "Hello" "Hello"))))
   (d7
     ((bridge (@xs (%pipe (mod 2) 0)) to @ys)
      (log @ys in ())
@@ -1026,7 +1035,6 @@
      (delay 4 (event (pulse @xs 5))))
     ((bridge (@xs (%pipe (mod 2) 0)) to @ys)
      (log @ys in (2 4))))
-
   (d7
     ((bridge (@xs (x_ y_)) to (@ys y))
      (log @ys in ())
@@ -1037,7 +1045,6 @@
      (delay 4 (event (pulse @xs (e 5)))))
     ((bridge (@xs (x_ y_)) to (@ys y))
      (log @ys in (1 2 3 4 5))))
-
   (d7
     ((bridge (@xs ⟨foo y_⟩°) to (@ys y))
      (log @ys in ())
