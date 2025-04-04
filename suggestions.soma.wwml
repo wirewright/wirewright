@@ -79,7 +79,7 @@
   (comma to)
   (pulse pout "sink for values of const on change")
   (comma as)
-  (literal v "value to send on change instead of const's"))
+  (literal value "value to send on change instead of const's"))
 
 (node col "Arranges its children in a vertical stack, with an optional gap")
 
@@ -110,7 +110,7 @@
   (const cout "sink for const signal"))
 
 (variant frag
-  (literal v "current value")
+  (literal value "current value")
   (const cout "sink for const signal"))
 
 (node group "Groups nodes together without any logical/UI effect")
@@ -223,7 +223,7 @@
   (comma to)
   (pulse pout "sink for value")
   (comma as)
-  (pulse v "value"))
+  (pulse value "value"))
 
 (node combined "Gathers latest values for all pulses and flushes them"
   (literal pins "list of pulse edges to wait for")
