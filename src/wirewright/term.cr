@@ -786,10 +786,11 @@ module Ww
     # Calls *fn* with non-dictionary values along with key paths to them (which
     # keys to follow to get to the value), arbitrarily long.
     #
-    # WARNING: key paths are contained within a mutable `Stack`s for memory
-    # efficiency; you do not the stack, for you the stack is read-only! Do not
+    # WARNING: keypaths are contained within a mutable `Stack` for memory
+    # efficiency; you do not own the stack, for you the stack is read-only! Do not
     # mutate the key path stack, instead, make a copy of it (`dup`) and mutate
-    # your copy instead.
+    # your copy instead. Or if you know what you're doing, make sure to return
+    # the stack to valid condition after you've modified it.
     def self.each_keypath_and_leaf(node : Term, &fn : Stack(Term), Term -> Bool) : Nil
       each_keypath_and_leaf?(node: node.downcast, prefix: Stack(Term).new, fn: fn)
     end
@@ -814,6 +815,58 @@ module Ww
 
     def self.each_keypath_and_item(node : Term, &fn : Stack(Term), Term -> Bool) : Nil
       each_keypath_and_item?(node: node.downcast, prefix: Stack(Term).new, fn: fn)
+    end
+  end
+
+  # Encoding / decoding front-end
+
+  struct Term
+    # Wait until all overloads are defined...
+    macro finished
+      {% verbatim do %}
+        # Turns a Crystal object of type `T` into a `Term`.
+        #
+        # Implementors define overloads for their specific type. This method handles
+        # union `T`s and raises at comptime otherwise.
+        def self.encode(src : T) : Term forall T
+          {% if T.union? %}
+            {% for member in T.union_types %}
+              if src.is_a?({{member}})
+                return encode(src)
+              end
+            {% end %}
+
+            unreachable
+          {% else %}
+            {% raise "Term.encode: cannot find an overload that can encode this type: #{T}" %}
+          {% end %}
+        end
+
+        # Turns *term* into a Crystal object of type `T`. Returns `nil` if this
+        # cannot be done.
+        #
+        # Implementors define overloads for their specific type. This method handles
+        # union `T`s and raises at comptime otherwise (or returns `nil` if appropriate).
+        def self.decode?(dst : T.class, term : Term) : T? forall T
+          {% if T.union? %}
+            # Ideally Crystal should be able to do this on its own but it doesn't
+            # seem that it can...
+            {% for member in T.union_types %}
+              if object = decode?({{member}}, term)
+                return object.as(T)
+              end
+            {% end %}
+          {% else %}
+            {% raise "Term.encode: cannot find an overload that can decode this type: #{T}" %}
+          {% end %}
+        end
+
+        # Turns *term* into a Crystal object of type `T`. Raises `ArgumentError`
+        # if this cannot be done.
+        def self.decode(dst : T.class, term : Term) : T forall T
+          decode?(dst, term) || raise ArgumentError.new("failed to decode from term #{term} to #{dst}")
+        end
+      {% end %}
     end
   end
 end

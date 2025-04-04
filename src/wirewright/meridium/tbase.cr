@@ -36,7 +36,7 @@ module Ww::Meridium
 
         M1.branches(skeleton) do |branch|
           M1.strands(branch) do |strand|
-            strands << strand.items.to_readonly_slice { |base| Ubase.parse(base) }
+            strands << strand.items.to_readonly_slice { |base| Term.decode(Ubase::Any, base) }
           end
 
           sensor = new(fresh.call, strands.to_readonly_slice(&.itself))

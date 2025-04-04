@@ -9,5 +9,7 @@ module Ww::Meridium
 end
 
 require "./meridium/map"
+require "./meridium/ubase"
+require "./meridium/utrie"
 require "./meridium/tbase"
 require "./meridium/tsetconn"

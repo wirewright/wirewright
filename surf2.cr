@@ -567,124 +567,6 @@ class CompactMLChat
   end
 end
 
-struct Utrie
-  alias Key = Origin | Step
-
-  record Origin, base : Ubase::Any do
-    def encode(otype : Term.class) : Term
-      Term.of(:utrie, :key, :origin, base.term)
-    end
-
-    def self.decode?(term : Term) : Key?
-      Term.matchpi?(term, %{(utrie key origin base_)}) do
-        new(Ubase.parse(base))
-      end
-    end
-  end
-
-  record Step, pred : Label, base : Ubase::Any do
-    def encode(otype : Term.class) : Term
-      Term.of(:utrie, :key, :step, pred.encode(Term), base.term)
-    end
-
-    def self.decode?(term : Term) : Key?
-      Term.matchpi?(term, %{(utrie key step pred_ base_)}) do
-        new(Label.decode?(pred) || return, Ubase.parse(base))
-      end
-    end
-  end
-
-  record Value, succ : Label do
-    def encode(otype : Term.class) : Term
-      Term.of(:utrie, :value, :primary, succ.encode(Term))
-    end
-
-    def self.decode?(term : Term) : Value?
-      Term.matchpi?(term, %{(utrie value primary succ_)}) do
-        new(Label.decode?(succ) || return)
-      end
-    end
-  end
-
-  def initialize(@fresh : LabelGenerator, @map : IMap(Key, Value))
-  end
-
-  # Mounts a *strand* of `Ubase`s for *referrer*. Returns a set of seen pairs
-  # (called *dependencies*; used for removal or maintenance) and the id of
-  # the endpoint thus reached.
-  def mount(referrer : Label, strand : Strand, *, deps = Bag({Key, Value}).new)
-    key = Origin.new(strand[0])
-    origin = @map.inc(referrer, key, Value.new(@fresh.call))
-    pred = origin.succ
-    deps << {key, origin}
-
-    strand[1..].each do |base|
-      key = Step.new(pred, base)
-      step = @map.inc(referrer, key, Value.new(@fresh.call))
-      pred = step.succ
-      deps << {key, step}
-    end
-
-    {deps, pred}
-  end
-
-  private def successor?(referrer : Label, key : Key) : Label?
-    @map.latest?(referrer, key).try(&.succ)
-  end
-
-  {% for type, base in {Term::Num => Ubase::IsNum, Term::Str => Ubase::IsStr, Term::Sym => Ubase::IsSym, Term::Boolean => Ubase::IsBool} %}
-    private def query(referrer : Label, pred : Label, term : {{type}}, sink : Label ->) : Nil
-      return unless succ0 = successor?(referrer, Step.new(pred, {{base}}.new))
-
-      sink.call(succ0)
-
-      if succ1 = successor?(referrer, Step.new(succ0, Ubase::Literal.new(Term.of(term))))
-        sink.call(succ1)
-      end
-    end
-  {% end %}
-
-  # NOTE: dictionaries must be normalized into IsDict - At(), even literal ones.
-  # We do not handle Literal(dict).
-  private def query(referrer : Label, pred : Label, term : Term::Dict, sink : Label ->) : Nil
-    return unless succ0 = successor?(referrer, Step.new(pred, Ubase::IsDict.new))
-
-    sink.call(succ0)
-
-    term.each_entry do |key, value|
-      next unless succ1 = successor?(referrer, Step.new(succ0, Ubase::At.new(key)))
-
-      sink.call(succ1)
-
-      query(referrer, succ1, value.downcast, sink)
-    end
-  end
-
-  private def query(referrer : Label, term : Term, sink) : Nil
-    return unless succ = successor?(referrer, Origin.new(Ubase::IsAny.new))
-
-    sink.call(succ)
-
-    query(referrer, succ, term.downcast, sink)
-  end
-
-  # Calls *sink* with all ids activated by *term*.
-  #
-  # Due to the nature of the underlying map, key-value pairs may randomly disappear,
-  # thus blocking the passage for activations by *term*. This means parts of Utrie
-  # may be temporarily unreachable during `query`, depending on the health of the map.
-  # In other words, depending on the health of the underlying map, *sink* may be called
-  # with extra (outdated) labels, or with too few labels (parts of the trie unreachable).
-  # If the Origin of the trie degenerates, until it is restored, the entire trie will
-  # be unreachable. This cannot be fixed on the "higher-order data structure" level.
-  # Introducing replication at the underlying map level should help in practice, however.
-  # Instead of storing trie Origin on one node, store it on three, or ten; so there's
-  # always someone to fall back on instead of immediate absence report.
-  def query(referrer : Label, term : Term, &sink : Label ->) : Nil
-    query(referrer, term, sink)
-  end
-end
-
 struct Xgraph
   record Key, a : Label, b : Label do
     def encode(otype : Term.class) : Term
@@ -775,12 +657,12 @@ struct Ttrie
 
   record Step, pred : Label, base : Ubase::Any do
     def encode(otype : Term.class) : Term
-      Term.of(:ttrie, :key, :step, pred.encode(Term), base.term)
+      Term.of(:ttrie, :key, :step, pred.encode(Term), Term.encode(base))
     end
 
     def self.decode?(term : Term) : Key?
       Term.matchpi?(term, %{(ttrie key step pred_ base_)}) do
-        new(Label.decode?(pred) || return, Ubase.parse(base))
+        new(Label.decode?(pred) || return, Term.decode?(Ubase::Any, base) || return)
       end
     end
   end
@@ -811,7 +693,7 @@ struct Ttrie
     end
 
     mount.call(Origin.new)
-    mount.call(Step.new(path.last, Ubase::IsAny.new))
+    mount.call(Step.new(path.last, Ubase::Trunk.new))
 
     strand.each do |term|
       if tip
