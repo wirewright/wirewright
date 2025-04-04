@@ -1,3 +1,5 @@
+require "wait_group"
+
 record Point, x : Int32, y : Int32
 record Rect, origin : Point, extent : Point
 
@@ -384,7 +386,7 @@ module UIR::Platform::SFML
   extend IPlatform
   extend self
 
-  MAX_ANTIALIASING = SF::RenderTexture.maximum_antialiasing_level
+  MAX_ANTIALIASING = Lock.synchronize { SF::RenderTexture.maximum_antialiasing_level }
 
   # FIXME: how to support nested viewports?
   class Scratchpad
@@ -777,7 +779,7 @@ module UIR::Platform::SFML
     raise "not implemented: fill triangle"
   end
 
-  @@scratch = Scratchpad.new
+  @@scratch : Scratchpad = Lock.synchronize { Scratchpad.new }
 
   private def paint(target : SF::RenderTarget, command : View)
     @@scratch.fit(command.box.extent.x, command.box.extent.y) do |surface|
@@ -985,7 +987,7 @@ module UIR::Platform::SFML
     [] of Term
   end
 
-  def show(reducer : Reducer) : Nil
+  def show0(reducer : Reducer) : Nil
     drawable = reducer.call(Term.of, Term.of(:open))
 
     Term.case(drawable) do
@@ -1023,6 +1025,18 @@ module UIR::Platform::SFML
         end
       end
     end
+  end
+
+  def show(reducer : Reducer) : Nil
+    wg = WaitGroup.new(1)
+
+    ExecutionContext::Isolated.new("SFML") do
+      show0(reducer)
+    ensure
+      wg.done
+    end
+
+    wg.wait
   end
 end
 
