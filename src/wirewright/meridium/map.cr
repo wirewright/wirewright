@@ -135,40 +135,22 @@ module Ww::Meridium
     end
   end
 
-  # Raised by `TermMap` if it cannot decode a term into a `V` type. This means
-  # `V`'s `decode?` was not able to decode the term; or if `V` is a union, none
-  # of its members were able to `decode?` the term.
-  class TermDecodeError < Exception
-  end
-
   # An `IMap(K, V)` backed by an `IMap(Term, Term)`, encoding keys and values
   # as `Term`s.
   #
   # Used primarily as an intermediate step for (de)serialization (since `Term`s are
-  # the lingua franca of Wirewright).
-  #
-  # `TermMap` ensures that stored values can be decoded back into `V`, raising
-  # `TermDecodeError` if decoding fails.
+  # the lingua franca of Wirewright; and have several further (de)serialization options).
+  # See also: `Term.encode`, `Term.decode`.
   class TermMap(K, V)
     include IMap(K, V)
 
     def initialize(@map : IMap(Term, Term))
     end
 
-    private def decode(term : Term) : V
-      {% for type in V.union_types %}
-        if object = {{type}}.decode?(term)
-          return object.as(V)
-        end
-      {% end %}
-
-      raise TermDecodeError.new("#{term}")
-    end
-
     def latest?(referrer : Label, key : K) : V?
-      return unless value = @map.latest?(referrer, key.encode(Term))
+      return unless value = @map.latest?(referrer, Term.encode(key))
 
-      decode(value)
+      Term.decode(V, value)
     end
 
     def size : Int32
@@ -176,17 +158,17 @@ module Ww::Meridium
     end
 
     def inc(referrer : Label, key : K, default : V) : V
-      value = @map.inc(referrer, key.encode(Term), default.encode(Term))
+      value = @map.inc(referrer, Term.encode(key), Term.encode(default))
 
-      decode(value)
+      Term.decode(V, value)
     end
 
     def dec(referrer : Label, key : K) : Nil
-      @map.dec(referrer, key.encode(Term))
+      @map.dec(referrer, Term.encode(key))
     end
 
     def decall(referrer : Label, keys : Array(K)) : Nil
-      @map.decall(referrer, keys.map &.encode(Term))
+      @map.decall(referrer, keys.map { |key| Term.encode(key) })
     end
   end
 

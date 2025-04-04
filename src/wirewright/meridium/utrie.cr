@@ -20,51 +20,17 @@ module Ww::Meridium
   struct Utrie
     alias Key = Origin | Step
 
-    # :nodoc:
-    #
     # The consensus starting point of the Utrie in the underlying map. Corresponds
     # to the initial `Ubase::Trunk` in strands, whose purpose is basically to verify
     # that the term is "anything at all" (which it always is!). `Trunk` (and therefore
     # Origin) is also the point-of-interest for `_` queries (toplevel any), e.g. `x_`.
-    record Origin do
-      def encode(otype : Term.class) : Term
-        Term.of(:utrie, :key, :origin)
-      end
+    record Origin
 
-      def self.decode?(term : Term) : Key?
-        Term.matchpi?(term, %{(utrie key origin)}) { new }
-      end
-    end
-
-    # :nodoc:
-    #
     # Represents each subsequent Ubase step following the `Origin`.
-    record Step, id : Label, base : Ubase::Any do
-      def encode(otype : Term.class) : Term
-        Term.of(:utrie, :key, :step, id.encode(Term), Term.encode(base))
-      end
+    record Step, id : Label, base : Ubase::Any
 
-      def self.decode?(term : Term) : Key?
-        Term.matchpi?(term, %{(utrie key step id_ base_)}) do
-          new(Label.decode?(id) || return, Term.decode?(Ubase::Any, base) || return)
-        end
-      end
-    end
-
-    # :nodoc:
-    #
     # Utrie values store links to the successor (`Step#id`).
-    record Value, succ : Label do
-      def encode(otype : Term.class) : Term
-        Term.of(:utrie, :value, :primary, succ.encode(Term))
-      end
-
-      def self.decode?(term : Term) : Value?
-        Term.matchpi?(term, %{(utrie value primary succ_)}) do
-          new(Label.decode?(succ) || return)
-        end
-      end
-    end
+    record Value, succ : Label
 
     def initialize(@fresh : LabelGenerator, @map : IMap(Key, Value))
     end
@@ -139,6 +105,41 @@ module Ww::Meridium
     # See also: `Utrie`.
     def query(referrer : Label, term : Term, &sink : Label ->) : Nil
       query(referrer, term, sink)
+    end
+  end
+
+  # Encoding / decoding of Utrie Key, Value.
+
+  struct ::Ww::Term
+    # :nodoc:
+    ENCODED_UTRIE_ORIGIN = of(:utrie, :key, :origin)
+
+    def self.encode(src : Utrie::Origin) : Term
+      ENCODED_UTRIE_ORIGIN
+    end
+
+    def self.decode?(dst : Utrie::Origin.class, term : Term) : Utrie::Origin?
+      term == ENCODED_UTRIE_ORIGIN ? Utrie::Origin.new : nil
+    end
+
+    def self.encode(src : Utrie::Step) : Term
+      Term.of(:utrie, :key, :step, encode(src.id), encode(src.base))
+    end
+
+    def self.decode?(dst : Utrie::Step.class, term : Term) : Utrie::Step?
+      matchpi?(term, %{(utrie key step id_ base_)}) do
+        Utrie::Step.new(decode?(Label, id) || return, decode?(Ubase::Any, base) || return)
+      end
+    end
+
+    def self.encode(src : Utrie::Value) : Term
+      Term.of(:utrie, :value, :primary, encode(src.succ))
+    end
+
+    def self.decode?(dst : Utrie::Value.class, term : Term) : Utrie::Value?
+      matchpi?(term, %{(utrie value primary succ_)}) do
+        Utrie::Value.new(decode?(Label, succ) || return)
+      end
     end
   end
 end

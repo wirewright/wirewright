@@ -820,6 +820,10 @@ module Ww
 
   # Encoding / decoding front-end
 
+  # Raised by `Term.decode` if it cannot decode a term.
+  class TermDecodeError < Exception
+  end
+
   struct Term
     # Wait until all overloads are defined...
     macro finished
@@ -861,10 +865,10 @@ module Ww
           {% end %}
         end
 
-        # Turns *term* into a Crystal object of type `T`. Raises `ArgumentError`
+        # Turns *term* into a Crystal object of type `T`. Raises `TermDecodeError`
         # if this cannot be done.
         def self.decode(dst : T.class, term : Term) : T forall T
-          decode?(dst, term) || raise ArgumentError.new("failed to decode from term #{term} to #{dst}")
+          decode?(dst, term) || raise TermDecodeError.new("failed to decode from term to #{dst}")
         end
       {% end %}
     end

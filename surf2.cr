@@ -19,16 +19,6 @@ record Label, value : UInt128 do
     value <=> other.value
   end
 
-  def encode(otype : Term.class) : Term
-    Term.of(value)
-  end
-
-  def self.decode?(value : Term) : Label?
-    Term.matchpi?(value, %{(%number u128)}) do
-      new(value.to(UInt128))
-    end
-  end
-
   def complete(digit, *, base, index)
     Label.new(value &+ (digit &* base**index))
   end
@@ -62,6 +52,20 @@ record Label, value : UInt128 do
     b = (@value << 64 >> 64).to_u64
 
     (a.rotate_left(1) &+ b).hash(hasher)
+  end
+end
+
+struct ::Ww::Term
+  def self.encode(src : Label) : Term
+    Term.of(src.value)
+  end
+
+  def self.decode?(dst : Label.class, term : Term) : Label?
+    return unless num = term.as_n?
+    return unless num.natural?
+    return unless value = num.to?(UInt128)
+
+    Label.new(value)
   end
 end
 
@@ -541,12 +545,12 @@ class TermChat(M)
 
   def subscribe(address : Label, &recv : M ->) : Unsubscribe
     @chat.subscribe(address) do |message|
-      recv.call(M.decode?(message) || raise TermDecodeError.new)
+      recv.call(Term.decode(M, message))
     end
   end
 
   def send(to receiver : Label, message : M) : Nil
-    @chat.send(receiver, message.encode(Term))
+    @chat.send(receiver, Term.encode(message))
   end
 end
 
@@ -568,29 +572,8 @@ class CompactMLChat
 end
 
 struct Xgraph
-  record Key, a : Label, b : Label do
-    def encode(otype : Term.class) : Term
-      Term.of(:xgraph, :key, :primary, a.encode(Term), b.encode(Term))
-    end
-
-    def self.decode?(term : Term) : Key?
-      Term.matchpi?(term, %{(xgraph key primary a_ b_)}) do
-        new(Label.decode?(a) || return, Label.decode?(b) || return)
-      end
-    end
-  end
-
-  record Value, succ : Label do
-    def encode(otype : Term.class) : Term
-      Term.of(:xgraph, :value, :primary, succ.encode(Term))
-    end
-
-    def self.decode?(term : Term) : Value?
-      Term.matchpi?(term, %{(xgraph value primary succ_)}) do
-        new(Label.decode?(succ) || return)
-      end
-    end
-  end
+  record Key, a : Label, b : Label
+  record Value, succ : Label
 
   def initialize(@fresh : LabelGenerator, @map : IMap(Key, Value))
   end
@@ -640,44 +623,34 @@ struct Xgraph
   end
 end
 
+struct ::Ww::Term
+  def self.encode(src : Xgraph::Key) : Term
+    Term.of(:xgraph, :key, :primary, encode(src.a), encode(src.b))
+  end
+
+  def self.decode?(dst : Xgraph::Key.class, term : Term) : Xgraph::Key?
+    matchpi?(term, %{(xgraph key primary a_ b_)}) do
+      Xgraph::Key.new(decode?(Label, a) || return, decode?(Label, b) || return)
+    end
+  end
+
+  def self.encode(src : Xgraph::Value) : Term
+    Term.of(:xgraph, :value, :primary, encode(src.succ))
+  end
+
+  def self.decode?(dst : Xgraph::Value.class, term : Term) : Xgraph::Value?
+    matchpi?(term, %{(xgraph value primary succ_)}) do
+      Xgraph::Value.new(Term.decode(Label, succ) || return)
+    end
+  end
+end
+
 struct Ttrie
   alias Key = Origin | Step
 
-  record Origin do
-    def encode(otype : Term.class) : Term
-      Term.of(:ttrie, :key, :origin)
-    end
-
-    def self.decode?(term : Term) : Key?
-      Term.matchpi?(term, %{(ttrie key origin)}) do
-        new
-      end
-    end
-  end
-
-  record Step, pred : Label, base : Ubase::Any do
-    def encode(otype : Term.class) : Term
-      Term.of(:ttrie, :key, :step, pred.encode(Term), Term.encode(base))
-    end
-
-    def self.decode?(term : Term) : Key?
-      Term.matchpi?(term, %{(ttrie key step pred_ base_)}) do
-        new(Label.decode?(pred) || return, Term.decode?(Ubase::Any, base) || return)
-      end
-    end
-  end
-
-  record Value, succ : Label do
-    def encode(otype : Term.class) : Term
-      Term.of(:ttrie, :value, :primary, succ.encode(Term))
-    end
-
-    def self.decode?(term : Term) : Value?
-      Term.matchpi?(term, %{(ttrie value primary succ_)}) do
-        new(Label.decode?(succ) || return)
-      end
-    end
-  end
+  record Origin
+  record Step, pred : Label, base : Ubase::Any
+  record Value, succ : Label
 
   def initialize(@fresh : LabelGenerator, @map : IMap(Key, Value))
   end
@@ -730,6 +703,38 @@ struct Ttrie
   end
 end
 
+struct ::Ww::Term
+  ENCODED_TTRIE_ORIGIN = Term.of(:ttrie, :key, :origin)
+
+  def self.encode(src : Ttrie::Origin) : Term
+    ENCODED_TTRIE_ORIGIN
+  end
+
+  def self.decode?(dst : Ttrie::Origin.class, term : Term) : Ttrie::Origin?
+    term == ENCODED_TTRIE_ORIGIN ? Ttrie::Origin.new : nil
+  end
+
+  def self.encode(src : Ttrie::Step) : Term
+    Term.of(:ttrie, :key, :step, encode(src.pred), encode(src.base))
+  end
+
+  def self.decode?(dst : Ttrie::Step.class, term : Term) : Ttrie::Step?
+    matchpi?(term, %{(ttrie key step pred_ base_)}) do
+      Ttrie::Step.new(decode?(Label, pred) || return, decode?(Ubase::Any, base) || return)
+    end
+  end
+
+  def self.encode(src : Ttrie::Value) : Term
+    Term.of(:ttrie, :value, :primary, encode(src.succ))
+  end
+
+  def self.decode?(dst : Ttrie::Value.class, term : Term) : Ttrie::Value?
+    matchpi?(term, %{(ttrie value primary succ_)}) do
+      Ttrie::Value.new(decode?(Label, succ) || return)
+    end
+  end
+end
+
 struct Etrace
   # :nodoc:
   #
@@ -749,27 +754,8 @@ struct Etrace
   # :nodoc:
   BASE_LENGTH_U128 = 64u8
 
-  record Key, scope : Label, state : Label, digitno : UInt8 do
-    def encode(otype : Term.class) : Term
-      Term.of(:etrace, :key, :primary, scope.encode(Term), state.encode(Term), digitno)
-    end
-
-    def self.decode?(term : Term) : Key?
-      Term.matchpi?(term, %{(etrace key primary scope_ state_ digitno←(%number u8))}) do
-        new(Label.decode?(scope) || return, Label.decode?(state) || return, digitno.to(UInt8))
-      end
-    end
-  end
-
-  record Value do
-    def encode(otype : Term.class) : Term
-      Term.of(:etrace, :value, :primary)
-    end
-
-    def self.decode?(term : Term) : Value?
-      Term.matchpi?(term, %{(etrace value primary)}) { new }
-    end
-  end
+  record Key, scope : Label, state : Label, digitno : UInt8
+  record Value
 
   def initialize(@fresh : LabelGenerator, @map : IMap(Key, Value))
   end
@@ -822,28 +808,35 @@ struct Etrace
   end
 end
 
+struct ::Ww::Term
+  def self.encode(src : Etrace::Key) : Term
+    Term.of(:etrace, :key, :primary, encode(src.scope), encode(src.state), src.digitno)
+  end
+
+  def self.decode?(dst : Etrace::Key.class, term : Term) : Etrace::Key?
+    matchpi?(term, %{(etrace key primary scope_ state_ digitno←(%number u8))}) do
+      Etrace::Key.new(
+        scope: decode?(Label, scope) || return,
+        state: decode?(Label, state) || return,
+        digitno: digitno.to(UInt8),
+      )
+    end
+  end
+
+  ENCODED_ETRACE_VALUE = Term.of(:etrace, :value, :primary)
+
+  def self.encode(src : Etrace::Value) : Term
+    ENCODED_ETRACE_VALUE
+  end
+
+  def self.decode?(dst : Etrace::Value.class, term : Term) : Etrace::Value?
+    term == ENCODED_ETRACE_VALUE ? Etrace::Value.new : nil
+  end
+end
+
 struct StrandSet
-  record Key, vertex : Label do
-    def encode(otype : Term.class) : Term
-      Term.of(:"strand-set", :key, :primary, vertex.encode(Term))
-    end
-
-    def self.decode?(term : Term) : Key?
-      Term.matchpi?(term, %{(strand-set key primary vertex_)}) do
-        new(Label.decode?(vertex) || return)
-      end
-    end
-  end
-
-  record Value do
-    def encode(otype : Term.class) : Term
-      Term.of(:"strand-set", :value, :primary)
-    end
-
-    def self.decode?(term : Term) : Value?
-      Term.matchpi?(term, %{(strand-set value primary)}) { new }
-    end
-  end
+  record Key, vertex : Label
+  record Value
 
   def initialize(@map : IMap(Key, Value))
   end
@@ -860,28 +853,31 @@ struct StrandSet
   end
 end
 
+struct ::Ww::Term
+  def self.encode(src : StrandSet::Key) : Term
+    Term.of(:"strand-set", :key, :primary, encode(src.vertex))
+  end
+
+  def self.decode?(dst : StrandSet::Key.class, term : Term) : StrandSet::Key?
+    matchpi?(term, %{(strand-set key primary vertex_)}) do
+      StrandSet::Key.new(decode?(Label, vertex) || return)
+    end
+  end
+
+  ENCODED_STRAND_SET_VALUE = Term.of(:"strand-set", :value, :primary)
+
+  def self.encode(src : StrandSet::Value) : Term
+    ENCODED_STRAND_SET_VALUE
+  end
+
+  def self.decode?(dst : StrandSet::Value.class, term : Term) : StrandSet::Value?
+    term == ENCODED_STRAND_SET_VALUE ? StrandSet::Value.new : nil
+  end
+end
+
 struct AppearanceSet
-  record Key, vertex : Label do
-    def encode(otype : Term.class) : Term
-      Term.of(:"appearance-set", :key, :primary, vertex.encode(Term))
-    end
-
-    def self.decode?(term : Term) : Key?
-      Term.matchpi?(term, %{(appearance-set key primary vertex_)}) do
-        new(Label.decode?(vertex) || return)
-      end
-    end
-  end
-
-  record Value do
-    def encode(otype : Term.class) : Term
-      Term.of(:"appearance-set", :value, :primary)
-    end
-
-    def self.decode?(term : Term) : Value?
-      Term.matchpi?(term, %{(appearance-set value primary)}) { new }
-    end
-  end
+  record Key, vertex : Label
+  record Value
 
   def initialize(@map : IMap(Key, Value))
   end
@@ -898,6 +894,28 @@ struct AppearanceSet
   end
 end
 
+struct ::Ww::Term
+  def self.encode(src : AppearanceSet::Key) : Term
+    Term.of(:"appearance-set", :key, :primary, encode(src.vertex))
+  end
+
+  def self.decode?(dst : AppearanceSet::Key.class, term : Term) : AppearanceSet::Key?
+    matchpi?(term, %{(appearance-set key primary vertex_)}) do
+      AppearanceSet::Key.new(decode?(Label, vertex) || return)
+    end
+  end
+
+  ENCODED_APPEARANCE_SET_VALUE = Term.of(:"appearance-set", :value, :primary)
+
+  def self.encode(src : AppearanceSet::Value) : Term
+    ENCODED_APPEARANCE_SET_VALUE
+  end
+
+  def self.decode?(dst : AppearanceSet::Value.class, term : Term) : AppearanceSet::Value?
+    term == ENCODED_APPEARANCE_SET_VALUE ? AppearanceSet::Value.new : nil
+  end
+end
+
 # One-to-many map for decoding a conjunction vertex into the sensors that
 # were bound to it.
 # TODO: extract common with `Etrace`
@@ -911,27 +929,8 @@ struct SensorMultimap
   # :nodoc:
   BASE_LENGTH_U128 = 64u8
 
-  record Key, scope : Label, state : Label, digitno : UInt8 do
-    def encode(otype : Term.class) : Term
-      Term.of(:"sensor-decoder", :key, :primary, scope.encode(Term), state.encode(Term), digitno)
-    end
-
-    def self.decode?(term : Term) : Key?
-      Term.matchpi?(term, %{(sensor-decoder key primary scope_ state_ digitno←(%number u8))}) do
-        new(Label.decode?(scope), Label.decode?(state), digitno.to(UInt8))
-      end
-    end
-  end
-
-  record Value do
-    def encode(otype : Term.class) : Term
-      Term.of(:"sensor-decoder", :value, :primary)
-    end
-
-    def self.decode?(term : Term) : Value?
-      Term.matchpi?(term, %{(sensor-decoder value primary)}) { new }
-    end
-  end
+  record Key, scope : Label, state : Label, digitno : UInt8
+  record Value
 
   def initialize(@fresh : LabelGenerator, @map : IMap(Key, Value))
   end
@@ -972,23 +971,38 @@ struct SensorMultimap
   end
 end
 
-record SensorData, conid : Label, groupid : Label, identity : Identity, instant : Label, selector : Term? do
-  def encode(otype : Term.class) : Term
-    Term.of(:"sensor-data", conid.encode(Term), groupid.encode(Term), identity, instant.encode(Term), selector: selector)
+struct ::Ww::Term
+  def self.encode(src : SensorMultimap::Key) : Term
+    Term.of(:"sensor-multimap", :key, :primary, encode(src.scope), encode(src.state), src.digitno)
   end
 
-  def self.decode?(object : Term) : SensorData?
-    Term.matchpi?(object, %{(sensor-data conid_ groupid_ identity←(%number u32) instant_ ¦ (%keypool selector))}) do
-      new(
-        Label.decode?(conid) || return,
-        Label.decode?(groupid) || return,
-        identity.to(Identity),
-        Label.decode?(instant) || return,
-        object[:selector]?,
+  def self.decode?(dst : SensorMultimap::Key.class, term : Term) : SensorMultimap::Key?
+    matchpi?(term, %{(sensor-multimap key primary scope_ state_ digitno←(%number u8))}) do
+      SensorMultimap::Key.new(
+        scope: decode?(Label, scope) || return,
+        state: decode?(Label, state) || return,
+        digitno: digitno.to(UInt8),
       )
     end
   end
+
+  ENCODED_SENSOR_MULTIMAP_VALUE = Term.of(:"sensor-multimap", :value, :primary)
+
+  def self.encode(src : SensorMultimap::Value) : Term
+    ENCODED_SENSOR_MULTIMAP_VALUE
+  end
+
+  def self.decode?(dst : SensorMultimap::Value.class, term : Term) : SensorMultimap::Value?
+    term == ENCODED_SENSOR_MULTIMAP_VALUE ? SensorMultimap::Value.new : nil
+  end
 end
+
+record SensorData,
+  conid : Label,
+  groupid : Label,
+  identity : Identity,
+  instant : Label,
+  selector : Term?
 
 record AppearanceData,
   conid : Label,
@@ -997,48 +1011,43 @@ record AppearanceData,
   value : Term,
   selector : Term?
 
-struct AppearanceData
-  def encode(otype : Term.class) : Term
-    Term.of(:"appearance-data", conid.encode(Term), identity, instant.encode(Term), value, selector: selector)
+struct ::Ww::Term
+  def self.encode(src : SensorData) : Term
+    Term.of(:"sensor-data", encode(src.conid), encode(src.groupid), src.identity, encode(src.instant), selector: src.selector)
   end
 
-  def self.decode?(object : Term) : AppearanceData?
-    Term.matchpi?(object, %{(appearance-data conid_ identity←(%number u32) instant_ value_ ¦ (%keypool selector))}) do
-      new(
-        Label.decode?(conid) || return,
-        identity.to(Identity),
-        Label.decode?(instant) || return,
-        value,
-        object[:selector]?,
+  def self.decode?(dst : SensorData.class, term : Term) : SensorData?
+    matchpi?(term, %{(sensor-data conid_ groupid_ identity←(%number u32) instant_ ¦ (%keypool selector))}) do
+      SensorData.new(
+        conid: decode?(Label, conid) || return,
+        groupid: decode?(Label, groupid) || return,
+        identity: identity.to(Identity),
+        instant: decode?(Label, instant) || return,
+        selector: term[:selector]?,
+      )
+    end
+  end
+
+  def self.encode(src : AppearanceData) : Term
+    Term.of(:"appearance-data", encode(src.conid), src.identity, encode(src.instant), src.value, selector: src.selector)
+  end
+
+  def self.decode?(dst : AppearanceData.class, term : Term) : AppearanceData?
+    matchpi?(term, %{(appearance-data conid_ identity←(%number u32) instant_ value_ ¦ (%keypool selector))}) do
+      AppearanceData.new(
+        conid: decode?(Label, conid) || return,
+        identity: identity.to(Identity),
+        instant: decode?(Label, instant) || return,
+        value: value,
+        selector: term[:selector]?,
       )
     end
   end
 end
 
 struct SensorDataMap
-  record Key, instant : Label do
-    def encode(otype : Term.class) : Term
-      Term.of(:"sensor-base", :key, :primary, instant.encode(Term))
-    end
-
-    def self.decode?(term : Term) : Key?
-      Term.matchpi?(term, %{(sensor-base key instant_)}) do
-        new(Label.decode?(scope) || return)
-      end
-    end
-  end
-
-  record Value, data : SensorData do
-    def encode(otype : Term.class) : Term
-      Term.of(:"sensor-base", :value, :primary, data.encode(Term))
-    end
-
-    def self.decode?(term : Term) : Value?
-      Term.matchpi?(term, %{(sensor-base value primary data_)}) do
-        new(SensorData.decode?(data) || return)
-      end
-    end
-  end
+  record Key, instant : Label
+  record Value, data : SensorData
 
   def initialize(@map : IMap(Key, Value))
   end
@@ -1062,30 +1071,31 @@ struct SensorDataMap
   end
 end
 
+struct ::Ww::Term
+  def self.encode(src : SensorDataMap::Key) : Term
+    Term.of(:"sensor-data-map", :key, :primary, encode(src.instant))
+  end
+
+  def self.decode?(dst : SensorDataMap::Key.class, term : Term) : SensorDataMap::Key?
+    matchpi?(term, %{(sensor-data-map key instant_)}) do
+      SensorDataMap::Key.new(decode?(Label, scope) || return)
+    end
+  end
+
+  def self.encode(src : SensorDataMap::Value) : Term
+    Term.of(:"sensor-data-map", :value, :primary, encode(src.data))
+  end
+
+  def self.decode?(dst : SensorDataMap::Value.class, term : Term) : SensorDataMap::Value?
+    matchpi?(term, %{(sensor-data-map value primary data_)}) do
+      SensorDataMap::Value.new(decode?(SensorData, data) || return)
+    end
+  end
+end
+
 struct AppearanceDataMap
-  record Key, instant : Label do
-    def encode(otype : Term.class) : Term
-      Term.of(:"appearance-base", :key, :primary, instant.encode(Term))
-    end
-
-    def self.decode?(term : Term) : Key?
-      Term.matchpi?(term, %{(appearance-base key instant_)}) do
-        new(Label.decode?(instant) || return)
-      end
-    end
-  end
-
-  record Value, data : AppearanceData do
-    def encode(otype : Term.class) : Term
-      Term.of(:"appearance-base", :value, :primary, data.encode(Term))
-    end
-
-    def self.decode?(term : Term) : Value?
-      Term.matchpi?(term, %{(appearance-base value primary data_)}) do
-        new(AppearanceData.decode?(data) || return)
-      end
-    end
-  end
+  record Key, instant : Label
+  record Value, data : AppearanceData
 
   def initialize(@map : IMap(Key, Value))
   end
@@ -1109,6 +1119,28 @@ struct AppearanceDataMap
   end
 end
 
+struct ::Ww::Term
+  def self.encode(src : AppearanceDataMap::Key) : Term
+    Term.of(:"appearance-data-map", :key, :primary, encode(src.instant))
+  end
+
+  def self.decode?(dst : AppearanceDataMap::Key.class, term : Term) : AppearanceDataMap::Key?
+    matchpi?(term, %{(appearance-data-map key instant_)}) do
+      AppearanceDataMap::Key.new(decode?(Label, scope) || return)
+    end
+  end
+
+  def self.encode(src : AppearanceDataMap::Value) : Term
+    Term.of(:"appearance-data-map", :value, :primary, encode(src.data))
+  end
+
+  def self.decode?(dst : AppearanceDataMap::Value.class, term : Term) : AppearanceDataMap::Value?
+    matchpi?(term, %{(appearance-data-map value primary data_)}) do
+      AppearanceDataMap::Value.new(decode?(AppearanceData, data) || return)
+    end
+  end
+end
+
 alias Identity = UInt32
 
 record Activation, kind : Kind, sdata : SensorData, adata : AppearanceData do
@@ -1116,14 +1148,20 @@ record Activation, kind : Kind, sdata : SensorData, adata : AppearanceData do
     StimulusPresence
     StimulusAbsence
   end
+end
 
-  def encode(otype : Term.class) : Term
-    Term.of(:activation, kind, sdata.encode(Term), adata.encode(Term))
+struct ::Ww::Term
+  def self.encode(src : Activation) : Term
+    Term.of(:activation, src.kind, encode(src.sdata), encode(src.adata))
   end
 
-  def self.decode?(term : Term) : Activation?
-    Term.matchpi?(term, %{(activation kind←(%number u8) sdata_ adata_)}) do
-      new(kind.to(Kind), SensorData.decode?(sdata) || return, AppearanceData.decode?(adata) || return)
+  def self.decode?(dst : Activation.class, term : Term) : Activation?
+    matchpi?(term, %{(activation kind←(%number u8) sdata_ adata_)}) do
+      Activation.new(
+        kind: kind.to(Activation::Kind),
+        sdata: decode?(SensorData, sdata) || return,
+        adata: decode?(AppearanceData, adata) || return,
+      )
     end
   end
 end
