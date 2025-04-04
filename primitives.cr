@@ -40,7 +40,7 @@ PRIMITIVES = ProcRuleset.build do
     # then draw it, then paint the resulting draw commands using some kind of painting
     # backend (e.g. sfpaint).
     rulepi1 %[(d7uir term_ ¦ () rem_: (%number +i32) code-only: true)] do
-      pipe(D7VR.of_term(term), D7VR.to_uir(rem: rem.unsafe_as_n))
+      pipe(term, D7VR.of_term, D7VR.to_uir(rem: rem.unsafe_as_n))
     end
   {% end %}
 

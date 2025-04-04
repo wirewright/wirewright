@@ -939,6 +939,10 @@ module UIR::Platform::SFML
     [Term.of(:mouse, :motion, event.x, event.y)]
   end
 
+  private def transcribe(window : SF::RenderWindow, event : SF::Event::MouseWheelScrolled)
+    [Term.of(:mouse, :scroll, event.delta == -1 ? :down : :up)]
+  end
+
   private def transcribe(window : SF::RenderWindow, event : SF::Event::KeyPressed)
     keyname = nil
     case event.code

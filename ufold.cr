@@ -197,11 +197,11 @@ module Microfold
   private def sheet1(ctx : SheetContext, key : Term, value : Term) : Nil
     Term.case(value) do
       matchpi %{(rem n_number)} do
-        ctx.sheet.with(key, n * ctx.rem)
+        ctx.sheet.with(key, (n * ctx.rem).ceil)
       end
 
       matchpi %{(spacing n_number)} do
-        ctx.sheet.with(key, n * ctx.rem * 0.25)
+        ctx.sheet.with(key, (n * ctx.rem * 0.25).ceil)
       end
 
       matchpi %{(oklch l←(%number 0 <= _ <= 1) c←(%number 0 <= _ <= 1) h←(%number 0 <= _ <= 360))} do
@@ -823,6 +823,10 @@ module Microfold
         ctx, box = HIERARCHY_NORMAL.call(UnitContext.new(spec, sheet, rem, collapse: attrs.empty?, nested: false), children)
 
         Term.of(transplant(box.as_d, ctx.sheet, attrs.unsafe_as_d))
+      end
+
+      matchpi %{((self) node_)} do
+        node
       end
 
       otherwise do

@@ -20,12 +20,15 @@ module D7VR
         (p ^desc style: "pl-3 text-neutral-500 bg-neutral-900 text-sm w-max leading-normal")))
     WWML
 
+    def initialize(@rem : Term::Num)
+    end
+
     def call(ctx, term, postfix, head, rest)
       Term.case(term) do
         matchpi %{(comment lines_string+)} do
           unit = Alloy.render(Term[desc: lines.items.join('\n') { |line| line.to(String) }], TEMPLATE)
 
-          continue unless block = D7VR.block?(unit, term)
+          continue unless block = D7VR.block?(unit, term, @rem)
 
           postfixed(block, postfix)
         end
@@ -40,7 +43,7 @@ module D7VR
   struct Unit
     include Feature
 
-    def initialize(@document : Term::Dict)
+    def initialize(@document : Term::Dict, @rem : Term::Num)
     end
 
     def call(ctx, term, postfix, head, rest)
@@ -53,13 +56,13 @@ module D7VR
             commit << node
             commit.concat(children.items) do |child|
               Term.case(child) do
-                matchpi %{_dict} { D7VR.of_document_node(@document, child) }
+                matchpi %{_dict} { D7VR.of_document_node(@document, child, @rem) }
                 otherwise { child }
               end
             end
           end
 
-          continue unless block = D7VR.block?(Term.of(unit), term)
+          continue unless block = D7VR.block?(Term.of(unit), term, @rem)
 
           postfixed(block, postfix)
         end
@@ -67,7 +70,7 @@ module D7VR
         matchpi %{[view @_ as _ instance_]} do
           # TODO: relax this a little bit
           continue unless Rhodium.cursordepth(term, pairspart: true) == -1
-          continue unless block = D7VR.block?(instance, term)
+          continue unless block = D7VR.block?(instance, term, @rem)
 
           postfixed(block, postfix)
         end
@@ -86,7 +89,7 @@ module D7VR
     (button ^caption id: ^id style: ^style hover: false)
     WWML
 
-    def initialize(@document : Term::Dict)
+    def initialize(@document : Term::Dict, @rem : Term::Num)
     end
 
     def call(ctx, term, postfix, head, rest)
@@ -110,7 +113,7 @@ module D7VR
 
           unit = Alloy.render(Term[id: id, caption: caption, style: style], TEMPLATE)
 
-          continue unless block = D7VR.block?(unit, term)
+          continue unless block = D7VR.block?(unit, term, @rem)
 
           postfixed(block, postfix)
         end
@@ -173,6 +176,9 @@ module D7VR
                 ((self rect/outline) style: "max border bg-neutral-600 rounded-sm" max-h: (* ^scroll-height))))))))
     WWML
 
+    def initialize(@rem : Term::Num)
+    end
+
     # FIXME: this does not belong here
     # TODO: ideally we should render markdown here, not this.
     # TODO: text wrapping, w-max
@@ -223,7 +229,7 @@ module D7VR
 
           unit = Term.of(:group, cursor_unit, suggestion_unit, style: "content flow-none")
 
-          continue unless block = D7VR.block?(unit, term)
+          continue unless block = D7VR.block?(unit, term, @rem)
 
           postfixed(block, postfix)
         end
@@ -249,7 +255,7 @@ module D7VR
           suggestion_unit = Alloy.render(suggestion_vars, SUGGESTION_LIST_TEMPLATE)
           unit = Term.of(:group, cursor_unit, suggestion_unit, style: "content flow-none")
 
-          continue unless block = D7VR.block?(unit, term)
+          continue unless block = D7VR.block?(unit, term, @rem)
 
           postfixed(block, postfix)
         end
@@ -268,7 +274,7 @@ module D7VR
 
           unit = Term.of(:group, cursor_unit, suggestion_unit, style: "content flow-none")
 
-          continue unless block = D7VR.block?(unit, term)
+          continue unless block = D7VR.block?(unit, term, @rem)
 
           postfixed(block, postfix)
         end
@@ -276,7 +282,7 @@ module D7VR
         matchpi %{[lhs_string | rhs_string (_*) @user]} do
           unit = Alloy.render(Term[lhs: lhs, rhs: rhs], CURSOR_TEMPLATE)
 
-          continue unless block = D7VR.block?(unit, term)
+          continue unless block = D7VR.block?(unit, term, @rem)
 
           postfixed(block, postfix)
         end
@@ -298,7 +304,7 @@ module D7VR
       (p "…" ^title "…" style: "text-xs text-neutral-400 gap-1"))
     WWML
 
-    def initialize(@document : Term::Dict)
+    def initialize(@document : Term::Dict, @rem : Term::Num)
     end
 
     def call(ctx, term, postfix, head, rest)
@@ -328,7 +334,7 @@ module D7VR
           # If content is not a string Microfold will take care of it and
           # convert it to string!
 
-          continue unless block = D7VR.block?(node, term)
+          continue unless block = D7VR.block?(node, term, @rem)
 
           postfixed(block, postfix)
         end
@@ -343,7 +349,7 @@ module D7VR
             )
           )
 
-          continue unless block = D7VR.block?(node, term)
+          continue unless block = D7VR.block?(node, term, @rem)
 
           postfixed(block, postfix)
         end
@@ -357,7 +363,7 @@ module D7VR
 
           node = Alloy.render(Term[title: title], COVER_TEMPLATE)
 
-          continue unless block = D7VR.block?(node, term)
+          continue unless block = D7VR.block?(node, term, @rem)
 
           postfixed(block, postfix)
         end
@@ -460,21 +466,21 @@ module D7VR
     flat
   end
 
-  def ppnode(node : Term, document : Term::Dict) : Term
-    chain = ML::Display::MAIN_CHAIN.prepend(Button.new(document), Comment.new, Cursor.new, Unit.new(document), TextNode.new(document))
+  def ppnode(node : Term, document : Term::Dict, rem : Term::Num) : Term
+    chain = ML::Display::MAIN_CHAIN.prepend(Button.new(document, rem), Comment.new(rem), Cursor.new(rem), Unit.new(document, rem), TextNode.new(document, rem))
     ctx = DisplayContext.new(60, 120, features: chain)
     tree = ctx.features.call(ctx, node, "")
     flat, _ = flatten(ctx, tree)
     flat
   end
 
-  def ppdoc(document : Term::Dict) : Term
+  def ppdoc(document : Term::Dict, rem : Term::Num) : Term
     if document.empty?
       raise ArgumentError.new("cannot get pretty-print tree of an empty document")
     end
 
     ppin = pipe(document, visible, annotated)
-    chain = ML::Display::MAIN_CHAIN.prepend(Button.new(document), Comment.new, Cursor.new, Unit.new(document), TextNode.new(document))
+    chain = ML::Display::MAIN_CHAIN.prepend(Button.new(document, rem), Comment.new(rem), Cursor.new(rem), Unit.new(document, rem), TextNode.new(document, rem))
     ctx = DisplayContext.new(60, 120, features: chain)
     tree = LayoutSet::All.thunk(Term.of(ppin), "", LayoutSet::DictAligned)
     flat, _ = flatten(ctx, tree)
@@ -546,9 +552,7 @@ module D7VR
     end
   end
 
-  def block?(unit : Term, source : Term) : Term?
-    rem = Term[16] # ?!
-
+  def block?(unit : Term, source : Term, rem : Term::Num) : Term?
     uir = Microfold.uir(Microfold::SPEC, unit, rem: rem)
     drawable = rewrite(uir, UIR.rewriter)
 
@@ -578,15 +582,15 @@ module D7VR
   end
 
   # Renders the given *node* that belongs to *document* as D7VR.
-  def of_document_node(document : Term::Dict, node : Term) : Term
-    pipe(node, D7VR.ppnode(document), D7VR.unit)
+  def of_document_node(document : Term::Dict, node : Term, rem : Term::Num) : Term
+    pipe(node, D7VR.ppnode(document, rem), D7VR.unit)
   end
 
   # Renders the given *document* as D7VR.
   #
   # WARNING: Raises `ArgumentError` if *document* is empty.
-  def of_document(document : Term::Dict) : Term
-    pipe(document, D7VR.ppdoc, D7VR.unit)
+  def of_document(document : Term::Dict, rem : Term::Num) : Term
+    pipe(document, D7VR.ppdoc(rem), D7VR.unit)
   end
 
   # Converts *d7vr* into UIR using `Microfold`.
@@ -666,6 +670,8 @@ class Document
     end
   end
 
+  @rem : Term::Num
+
   def initialize
     id = @@counter.add(1, :relaxed)
 
@@ -730,6 +736,7 @@ class Document
     )
 
     @document = Term[]
+    @rem = Term[16]
     @initial = true
     @state = State::Clean
   end
@@ -828,9 +835,9 @@ class Document
     if @document.empty?
       @view.set(Term[], :relaxed)
     else
-      drawable = D7VR.of_document(@document)
-
-      @view.set(drawable.as_d, :relaxed)
+      d7vr = D7VR.of_document(@document, @rem)
+      uir = Microfold.uir(Microfold::SPEC, d7vr, rem: @rem)
+      @view.set(uir.as_d, :relaxed)
     end
   end
 
@@ -852,6 +859,19 @@ class Document
       matchpi %{(key _)}, %{(input _string)} { event(Term.of(:edit, {:edge, :user}, prompt)) }
       matchpi %{(event e_)} { event(e) }
       matchpi %{(click id_)} { click(id) }
+
+      matchpi %{(zoom in)} do
+        @rem += 1
+
+        draw
+      end
+
+      matchpi %{(zoom out)} do
+        @rem = Math.max(Term[7], @rem - 1)
+
+        draw
+      end
+
       otherwise { }
     end
   end
@@ -1054,7 +1074,7 @@ frame = ML.term <<-WWML
           (p "Waiting for a nonempty view of the document..." style: "text-sm text-neutral-300")))
       (^unless (= view ())
         ((self viewport) style: "w-max h-fr bg-neutral-900" pan-x: ^pan-x pan-y: ^pan-y
-          ^view)))))
+          ((self) ^view))))))
 ;;    ;; Template for command palette
 ;;    (group style: "max center-x py-20 z-100 bg-neutral-950 opacity-80"
 ;;      (group style: "content min-w-lg flow-col gap-5"
@@ -1133,6 +1153,14 @@ ui = UIR::Reducers.microfold(Term.of(frame)) do |_, drawable, event|
         frame = frame.morph({:".model", :grip, nil}, {:cursor, nil})
       end
       frame = frame.morph({:".model", :active, nil})
+    end
+
+    matchpi %{(mouse scroll up)} do
+      doc.send(Term.of(:zoom, :in))
+    end
+
+    matchpi %{(mouse scroll down)} do
+      doc.send(Term.of(:zoom, :out))
     end
 
     matchpi %{(size w_number h_number)} do
