@@ -87,7 +87,7 @@ def smart_subsume(root, motion, edge, keypath, judgement : Judgement, &sink : Te
 
     otherwise do
       dict0.each_entry do |k, v|
-        next if Rhodium.internal_key?(k)
+        next if Rhodium.shadow?(k)
 
         smart_subsume(v, motion, edge, keypath.append(k), judgement, &sink)
       end

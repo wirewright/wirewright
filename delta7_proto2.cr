@@ -387,21 +387,21 @@ module Rhodium
     end
   end
 
-  # Returns `true` if *key* is an internal key. Returns `false` otherwise.
+  # Returns `true` if *key* is a shadow attribute key. Returns `false` otherwise.
   #
-  # We consider `#`-prefixed symbol keys *in a node pairspart* to be *internal keys*.
-  # The user is not supposed to see or create them (for debugging or exploration
-  # purposes, they may be allowed to see them; but creating them is not an expected
-  # use case).
-  def internal_key?(key : Term::Sym) : Bool
+  # We consider `#`-prefixed symbol keys *in a node pairspart* to be its *shadow
+  # attribute keys*. The user is not supposed to see or create them (for debugging
+  # or exploration purposes, they may be allowed to see them; but creating them is
+  # not an expected use case).
+  def shadow?(key : Term::Sym) : Bool
     key.to(String).prefixed_by?('#')
   end
 
   # :ditto:
-  def internal_key?(key : Term) : Bool
+  def shadow?(key : Term) : Bool
     return false unless symbol = key.as_sym?
 
-    internal_key?(symbol)
+    shadow?(symbol)
   end
 
   class EffectBuilder
@@ -1457,7 +1457,7 @@ module Rhodium
 
         node1 = node0.transaction do |commit|
           node0.each_pair do |key, _|
-            next unless internal_key?(key)
+            next unless shadow?(key)
 
             commit.without(key)
           end
@@ -1838,17 +1838,17 @@ module D7
   # The rewriting process continues until the document becomes equal to *target*.
   #
   # - *target* specifies the expected final state of the document.
-  # - If *only_visible* is set to `true`, ignores internal pairs on nodes
+  # - If *nonshadow* is set to `true`, ignores shadow attributes on nodes
   #   and the document itself when checking for equality.
   # - *limit* sets an optional limit on the number of rewriting steps before
   #   forced termination.
   #
-  # See also: `run?`, `Goal.equal`, `Goal.visible`, `Goal.limited`.
-  record Equal, target : Term::Dict, only_visible : Bool = true, limit : Int32? = nil do
+  # See also: `run?`, `Goal.equal`, `Goal.nonshadow`, `Goal.limited`.
+  record Equal, target : Term::Dict, nonshadow : Bool = true, limit : Int32? = nil do
     # :nodoc:
     def goal : Goal::Fn
       goal = Goal.equal(target)
-      goal = Goal.visible(goal) if only_visible
+      goal = Goal.nonshadow(goal) if nonshadow
       if limit_ = limit
         goal = Goal.limited(goal, limit: limit_)
       end
@@ -1862,17 +1862,17 @@ module D7
   # The rewriting process continues until the document matches *pattern*.
   #
   # - *pattern* is the pattern that must be matched for rewriting to stop.
-  # - If *only_visible* is set to `true`, ignores internal pairs on nodes
+  # - If *nonshadow* is set to `true`, ignores shadow attributes on nodes
   #   and the document itself when checking for equality.
   # - *limit* sets an optional limit on the number of rewriting steps before
   #   forced termination.
   #
-  # See also: `run?`, `Goal.matches`, `Goal.visible`, `Goal.limited`.
-  record Matches, pattern : Term, only_visible : Bool = true, limit : Int32? = nil do
+  # See also: `run?`, `Goal.matches`, `Goal.nonshadow`, `Goal.limited`.
+  record Matches, pattern : Term, nonshadow : Bool = true, limit : Int32? = nil do
     # :nodoc:
     def goal : Goal::Fn
       goal = Goal.matches(pattern)
-      goal = Goal.visible(goal) if only_visible
+      goal = Goal.nonshadow(goal) if nonshadow
       if limit_ = limit
         goal = Goal.limited(goal, limit: limit_)
       end
@@ -1902,42 +1902,45 @@ module D7
     end
   end
 
-  # Strips internal pairs off of *document* and the nodes in it.
-  #
-  # See also: `Rhodium#internal_key?`.
-  def visible(document document0 : Term::Dict, *, except = Tuple.new) : Term::Dict
-    nodepath = Stack(Int32).new
+  # Strips shadow pairs off of *node*.
+  def nonshadow1(node : Term) : Term
+    return node unless dict = node.as_d?
 
-    # Strip document.
-    document1 = document0.transaction do |commit|
-      document0.each_pair do |key, _|
-        next if key.in?(except)
-        next unless Rhodium.internal_key?(key)
+    Term.of(nonshadow1(dict))
+  end
 
+  # :ditto:
+  def nonshadow1(node : Term::Dict) : Term::Dict
+    node.transaction do |commit|
+      # NOTE: Assume shadow? is never true for keys from the itemspart.
+      node.each_pair do |key, value|
+        next unless Rhodium.shadow?(key)
         commit.without(key)
       end
     end
+  end
 
-    # Strip nodes.
-    while Rhodium.successor?(document0, nodepath)
-      document1 = Rhodium.rewrite(document1, nodepath) do |node0|
-        next Rewrite.none unless dict0 = node0.as_d?
-        next Rewrite.none unless dict0.pairsize > 0 # Saves an allocation in the common case
+  # Strips shadow pairs off of *node* and its itemspart children and
+  # so on recursively.
+  def nonshadow(node : Term) : Term
+    return node unless dict = node.as_d?
 
-        dict1 = dict0.transaction do |commit|
-          dict0.each_pair do |key, _|
-            next if key.in?(except)
-            next unless Rhodium.internal_key?(key)
+    Term.of(nonshadow(dict))
+  end
 
-            commit.without(key)
-          end
-        end
+  # :ditto:
+  def nonshadow(node : Term::Dict) : Term::Dict
+    node.transaction do |commit|
+      node.each_item_with_index do |item, index|
+        commit.with(index, nonshadow(item))
+      end
 
-        Rewrite.one(dict1)
+      # NOTE: Assume shadow? is never true for keys from the itemspart.
+      node.each_pair do |key, value|
+        next unless Rhodium.shadow?(key)
+        commit.without(key)
       end
     end
-
-    document1
   end
 end
 
@@ -1948,13 +1951,13 @@ module D7::Goal
 
   alias Fn = Term::Dict -> Bool
 
-  # Restricts *goal* to the visible part of the document.
+  # Restricts *goal* to the nonshadow part of the document.
   #
-  # Allows you to hide internal pairs on nodes and the document itself to *goal*.
+  # Allows you to hide shadow attributes on nodes and the document itself to *goal*.
   #
-  # See also: `D7.visible`.
-  def visible(goal : Fn) : Fn
-    Fn.new { |document| goal.call(D7.visible(document)) }
+  # See also: `D7.nonshadow`.
+  def nonshadow(goal : Fn) : Fn
+    Fn.new { |document| goal.call(D7.nonshadow(document)) }
   end
 
   # Constructs a `Goal::Fn` that waits until the document being rewritten
