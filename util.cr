@@ -665,6 +665,13 @@ class Stack(T)
     end
   end
 
+  # Shallow copy: returns a copy of this stack object without copying its values.
+  def dup : Stack(T)
+    reduce(Stack(T).new(size)) do |copy, value|
+      copy << value
+    end
+  end
+
   def pretty_print(pp)
     pp.list("Stack[", self, "]")
   end
