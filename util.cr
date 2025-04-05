@@ -1886,7 +1886,7 @@ abstract struct Enum
       end
     {% end %}
 
-    raise ArgumentError.new
+    raise ArgumentError.new("no such member: #{v}")
   end
 
   private def self.join(v1, v2, *vs)
