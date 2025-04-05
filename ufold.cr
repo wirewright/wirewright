@@ -785,10 +785,13 @@ module Microfold
 
   def uir0(spec : Term::Dict, unit : Term, rem : Term::Num, inherited : Term::Dict) : Term
     Term.case(unit) do
-      matchpi %{((self node_symbol) ¦ attrs_ style⋮ "")} do
+      matchpi(
+        %{((self basis←node_symbol) ¦ attrs_ style⋮ "")},
+        %{((self basis_symbol node_symbol) ¦ attrs_ style⋮ "")},
+      ) do
         # Read node defaults.
         nodal = Term[]
-        if (defaults = spec[:defaults, node]?) && (defaults = defaults.as_s?)
+        if (defaults = spec[:defaults, basis]?) && (defaults = defaults.as_s?)
           nodal = sheet(spec, attrs.unsafe_as_d, defaults.to(String), rem: rem)
         end
 
@@ -798,10 +801,13 @@ module Microfold
         Term.of(transplant(box.as_d, ctx.sheet, attrs.unsafe_as_d))
       end
 
-      matchpi %{((self node_symbol) child_ ¦ attrs_ style⋮ "")} do
+      matchpi(
+        %{((self basis←node_symbol) child_ ¦ attrs_ style⋮ "")},
+        %{((self basis_symbol node_symbol) child_ ¦ attrs_ style⋮ "")},
+      ) do
         # Read node defaults.
         nodal = Term[]
-        if (defaults = spec[:defaults, node]?) && (defaults = defaults.as_s?)
+        if (defaults = spec[:defaults, basis]?) && (defaults = defaults.as_s?)
           nodal = sheet(spec, attrs.unsafe_as_d, defaults.to(String), rem: rem)
         end
 
