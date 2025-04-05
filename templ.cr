@@ -269,6 +269,30 @@ module Alloy
     end
   end
 
+  # Attempts to parse *term* as `^extend` expression.
+  private def mextend(ctx : Context, term : Term) : Rewrite::Any
+    variants = [] of String
+
+    Term.case(term, patterns: variants) do
+      matchpi %{(^extend template_dict extension_)} do
+        result = rewrite(extension, ctx.exprR)
+        unless result = result.as_d?
+          ctx.error { "^extend expected the result of extension to be a dict, but got: #{result}" }
+
+          return Rewrite.one(template)
+        end
+
+        Rewrite.one(template.unsafe_as_d | result)
+      end
+
+      otherwise do
+        ctx.error { "invalid ^extend expression, expected one of:\n#{variants.join('\n', &.li(bullet: "-", indent: 2))}" }
+
+        Rewrite.none
+      end
+    end
+  end
+
   def render0(vars : Term::Dict, template : Term, strict : Bool, errors : Stack(String)) : Rewrite::Any
     set_template, rec_template = recR
     set_expr, rec_expr = recR
@@ -290,6 +314,7 @@ module Alloy
       { %{rewritee←[^unless _*]}, chainR(callR(->munless(Context, Term).partial(ctx)), rec_template)},
       { %{rewritee←[^each _*]}, callR(->meach(Context, Term).partial(ctx))},
       { %{rewritee←[^expr _*]}, chainR(callR(->expr(Context, Term).partial(ctx)), rec_template)},
+      { %{rewritee←[^extend _*]}, chainR(callR(->mextend(Context, Term).partial(ctx)), rec_template)},
       { %{rewritee_dict}, entriesR(rec_template)},
     )
 
