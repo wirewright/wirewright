@@ -872,6 +872,14 @@ module Ww
       end
     end
 
+    # Removes the entry with the given *key* if present. Returns the modified
+    # copy of this dict and the value associated with *key* (if any, else `nil`).
+    def without?(key) : {Dict, Term?}
+      dict1 = without(key)
+
+      {dict1, self[key]?}
+    end
+
     # :nodoc:
     def without(key : Term::Num) : Dict
       return without_default(key) unless key.whole? && key.positive?
