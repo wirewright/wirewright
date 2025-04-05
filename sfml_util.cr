@@ -78,21 +78,6 @@ struct Cloak(T)
   end
 end
 
-# Defines a `change` method which functions like `#copy_with` for records.
-macro def_change
-  {% verbatim do %}
-    def change(**kwargs) : self
-      {% begin %}
-        {{@type}}.new(
-          {% for var in @type.instance_vars %}
-            {{var.id}}: (kwargs[{{var.symbolize}}]? || @{{var.id}}),
-          {% end %}
-        )
-      {% end %}
-    end
-  {% end %}
-end
-
 struct NamedTuple
   # Yields each `{key, value}` pair, uses the block's return value
   # as the new value in the returned named tuple.
