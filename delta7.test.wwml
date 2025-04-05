@@ -172,21 +172,21 @@
 
   ;; Button clock
   (d7
-    ((button "Qux" as 100 to @ys ((press) (press) (press)) waiting @xs)
+    ((button "Qux" as 100 to @ys waiting @xs ((press) (press) (press)))
      (delay 1 (button "Press" to @xs ((press))))
      (log @ys in ()))
-    ((button "Qux" as 100 to @ys ((pressed) (press)) waiting @xs)
+    ((button "Qux" as 100 to @ys waiting @xs ((pressed) (press)))
      (button "Press" to @xs ())
      (log @ys in (100 100))))
 
   ;; Button clock feedback simulate
   (d7
     ((cell 5 @n)
-     (button "Square it" as @n to @inputs ((press) (press) (press)) waiting @outputs)
+     (button "Square it" as @n to @inputs waiting @outputs ((press) (press) (press)))
      (transform (@inputs n_number) to @outputs (* n n))
      (latest @outputs @n))
     ((cell 390625 @n)
-     (button "Square it" as @n to @inputs () waiting @outputs)
+     (button "Square it" as @n to @inputs waiting @outputs ())
      (transform (@inputs n_number) to @outputs (* n n))
      (latest @outputs @n))))
 
@@ -320,28 +320,28 @@
 ;; Stateful filter transform
 (d7
   ((cell 5 @count)
-   (button "Increment" to @actions ((press) (press) (press)) waiting @counts)
-   (button "Decrement" to @actions () waiting @counts)
+   (button "Increment" to @actions waiting @counts ((press) (press) (press)))
+   (button "Decrement" to @actions waiting @counts ())
    (transform (@actions "Increment") to @counts with @count (+ count 1))
    (transform (@actions "Decrement") to @counts with @count (- count 1))
    (latest @counts @count))
   ((cell 8 @count)
-   (button "Increment" to @actions () waiting @counts)
-   (button "Decrement" to @actions () waiting @counts)
+   (button "Increment" to @actions waiting @counts ())
+   (button "Decrement" to @actions waiting @counts ())
    (transform (@actions "Increment") to @counts with @count (+ count 1))
    (transform (@actions "Decrement") to @counts with @count (- count 1))
    (latest @counts @count)))
 
 (d7
   ((cell 8 @count)
-   (button "Increment" to @actions () waiting @counts)
-   (button "Decrement" to @actions ((press) (press) (press)) waiting @counts)
+   (button "Increment" to @actions waiting @counts ())
+   (button "Decrement" to @actions waiting @counts ((press) (press) (press)))
    (transform (@actions "Increment") to @counts with @count (+ count 1))
    (transform (@actions "Decrement") to @counts with @count (- count 1))
    (latest @counts @count))
   ((cell 5 @count)
-   (button "Increment" to @actions () waiting @counts)
-   (button "Decrement" to @actions () waiting @counts)
+   (button "Increment" to @actions waiting @counts ())
+   (button "Decrement" to @actions waiting @counts ())
    (transform (@actions "Increment") to @counts with @count (+ count 1))
    (transform (@actions "Decrement") to @counts with @count (- count 1))
    (latest @counts @count)))
@@ -401,13 +401,13 @@
 ;; Counter multi step
 (d7
   ((cell 5 @count)
-   (button "Increment" as +1 to @deltas ((press) (press) (press)) waiting @counts)
-   (button "Decrement" as -1 to @deltas () waiting @counts)
+   (button "Increment" as +1 to @deltas waiting @counts ((press) (press) (press)))
+   (button "Decrement" as -1 to @deltas waiting @counts ())
    (transform @deltas to @counts with @count (+ count _))
    (latest @counts @count))
   ((cell 8 @count)
-   (button "Increment" as +1 to @deltas () waiting @counts)
-   (button "Decrement" as -1 to @deltas () waiting @counts)
+   (button "Increment" as +1 to @deltas waiting @counts ())
+   (button "Decrement" as -1 to @deltas waiting @counts ())
    (transform @deltas to @counts with @count (+ count _))
    (latest @counts @count)))
 
@@ -416,7 +416,7 @@
   ((cell 0 @count)
    (cell 2 @square)
    (cell @sum)
-   (button "Increment" as +1 to @deltas ((press) (press) (press)) waiting @sums)
+   (button "Increment" as +1 to @deltas waiting @sums ((press) (press) (press)))
    (transform @deltas to @counts with @count (+ count _))
    (transform @deltas to @squares with @square (* square square))
    (latest @counts @count)
@@ -427,7 +427,7 @@
   ((cell 3 @count)
    (cell 256 @square)
    (cell 259 @sum)
-   (button "Increment" as +1 to @deltas () waiting @sums)
+   (button "Increment" as +1 to @deltas waiting @sums ())
    (transform @deltas to @counts with @count (+ count _))
    (transform @deltas to @squares with @square (* square square))
    (latest @counts @count)

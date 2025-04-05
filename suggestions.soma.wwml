@@ -25,9 +25,9 @@
   (literal msg "used both as caption and message sent to sink on click")
   (comma to)
   (pulse pout "sink for messages")
-  (literal mailbox "mailbox dict through which µsoma will communicate with the button")
   (comma waiting)
-  (pulse acks "source of message acknowledgements"))
+  (pulse acks "source of message acknowledgements")
+  (literal mailbox "mailbox dict through which µsoma will communicate with the button"))
 
 (variant button
   (literal caption "string term that is going to be written on top of the button")
@@ -43,9 +43,9 @@
   (literal msg "message sent to sink on click")
   (comma to)
   (pulse pout "sink for messages")
-  (literal mailbox "mailbox dict through which µsoma will communicate with the button")
   (comma waiting)
-  (pulse acks "source of message acknowledgements"))
+  (pulse acks "source of message acknowledgements")
+  (literal mailbox "mailbox dict through which µsoma will communicate with the button"))
 
 (group cell "Stores a term inside itself. Acts as a source of const signal")
 
@@ -266,17 +266,17 @@
 (variant h6 (literal caption "text to show in the header (preferably a string)"))
 (variant h6 (const caption "cell from which to take the header's content"))
 
-(group text "A purely visual node that displays as plain text")
+(group p "A purely visual node that displays as plain text")
 
-(variant text (literal caption "text to show (preferably a string)"))
-(variant text (const caption "cell from which to take the text's content"))
+(variant p (literal caption "text to show (preferably a string)"))
+(variant p (const caption "cell from which to take the text's content"))
 
 (node hr "A purely visual node that displays as a horizontal separator")
 
-(group codebox "A purely visual node that displays as a block of code")
+(group src "A purely visual node that displays as a block of code")
 
-(variant codebox (literal code "code to show (preferably a string)"))
-(variant codebox (const code "cell from which to take the code to show"))
+(variant src (literal code "code to show (preferably a string)"))
+(variant src (const code "cell from which to take the code to show"))
 
 (group cover "Like `group`, but conceals its children. `cover` is mainly used to reduce visual noise that certain nodes, e.g. `queue`, produce")
 
