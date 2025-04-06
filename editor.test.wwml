@@ -1043,7 +1043,7 @@
    (comment "Hello World")
    ("" | "" () @user)))
  (after
-  ((key escape) (input "hello") (key escape))
+  ((key insert) (input "hello") (key insert))
   ((row
     (button
      "+ Increment"
@@ -1055,7 +1055,7 @@
    (comment "Hello World")
    ("" | "" () @user)))
  (after
-  ((key escape) (input "<") (input "-"))
+  ((key insert) (input "<") (input "-"))
   ((row
     (button
      "+ Increment"
@@ -1067,7 +1067,7 @@
    (comment "Hello World")
    ("←" | "" () @user)))
  (after
-  ((key escape) (input "-") (input ">"))
+  ((key insert) (input "-") (input ">"))
   ((row
     (button
      "+ Increment"
@@ -1079,7 +1079,7 @@
    (comment "Hello World")
    ("←→" | "" () @user)))
  (after
-  ((key escape) (input "^") (input "|"))
+  ((key insert) (input "^") (input "|"))
   ((row
     (button
      "+ Increment"
@@ -1091,7 +1091,7 @@
    (comment "Hello World")
    ("←→↑" | "" () @user)))
  (after
-  ((key escape) (input "|") (input "v"))
+  ((key insert) (input "|") (input "v"))
   ((row
     (button
      "+ Increment"
@@ -1103,7 +1103,7 @@
    (comment "Hello World")
    ("←→↑↓" | "" () @user)))
  (after
-  ((key escape) (input "o") (input "o"))
+  ((key insert) (input "o") (input "o"))
   ((row
     (button
      "+ Increment"
@@ -1115,7 +1115,7 @@
    (comment "Hello World")
    ("←→↑↓°" | "" () @user)))
  (after
-  ((key escape) (input "|") (input "|"))
+  ((key insert) (input "|") (input "|"))
   ((row
     (button
      "+ Increment"
@@ -1133,7 +1133,7 @@
    (key backspace)
    (key backspace)
    (key backspace)
-   (key escape)
+   (key insert)
    (input "(")
    (input "+")
    (input " ")
@@ -1282,7 +1282,7 @@
    (+ 1 2)
    ("" | "" () @user)))
  (after
-  ((key escape)
+  ((key insert)
    (key enter)
    (input "C-backspace")
    (key backspace)
@@ -1300,7 +1300,7 @@
    (+ 1 2)
    ("" | "" () @user)))
  (after
-  ((key escape)
+  ((key insert)
    (key enter)
    (input "(")
    (input "key")
@@ -1376,14 +1376,14 @@
  (after
   ((input "(")
    (input "hello")
-   (key escape)
+   (key insert)
    (input "c")
    (key backspace)
    (input "\"")
    (input "World")
    (key home)
    (key right)
-   (key escape)
+   (key insert)
    (input "c")
    (key delete))
   ((("\"" | "" () @user))
@@ -1401,12 +1401,12 @@
    (input ":")
    (input "100")
    (key enter)
-   (key escape)
+   (key insert)
    (input "c")
    (key backspace)
    (input "C")
    (key backspace)
-   (key escape)
+   (key insert)
    (input "C")
    (key backspace))
   (("" | "" () @user)
@@ -1424,7 +1424,7 @@
    (input ":")
    (input "100")
    (key enter)
-   (key escape)
+   (key insert)
    (input "C")
    (key delete))
   (("" | "" () @user)

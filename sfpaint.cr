@@ -955,6 +955,7 @@ module UIR::Platform::SFML
     when .f3?        then keyname = "f3"
     when .f4?        then keyname = "f4"
     when .escape?    then keyname = "escape"
+    when .insert?    then keyname = "insert"
     when .tab?       then keyname = "tab"
     when .home?      then keyname = "home"
     when .end?       then keyname = "end"

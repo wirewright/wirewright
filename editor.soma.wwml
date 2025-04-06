@@ -212,11 +212,11 @@ C←[lhs←";" | rhs←"" (M←(input ";") _*) @EDGE_]
 ;; ESCAPE MODE
 
 ;; Enter
-[_string c←| _string (M←(key escape) _*) @EDGE_]
+[_string c←| _string (M←(key insert) _*) @EDGE_]
   <> {(M): (), c: (| "")}
 
 ;; Leave
-[_string c←[| _string] _string (M←(key escape) _*) @EDGE_]
+[_string c←[| _string] _string (M←(key insert) _*) @EDGE_]
   <> {(M): (), c: |}
 
 ;; Ignore unknown
