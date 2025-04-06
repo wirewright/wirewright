@@ -159,24 +159,39 @@ module UIR
 
     selector = ML.term(%[(%any° (rule pattern_ template_) (backmap pattern_ backspec_))])
 
+    # Successor rewriter is only called with dicts (presumably UIR nodes) that do not
+    # have the ready prop set. This is an example of how a rewriter circuit and a rule
+    # system that can cooperate, in this case for performance. The latter computes `ready`
+    # and the former is using it to direct the rewriting process.
+    nonreadyR = ->(successor : Rewriter) do
+      Rewriter.new do |ctx, staging|
+        staging.reduce do |term|
+          next Rewrite.none unless dict = term.as_d?
+          next Rewrite.none if dict[:ready]?
+
+          successor.call(ctx, Rewrite.one(dict))
+        end
+      end
+    end
+
     set_main, rec_main = recR
 
     mainR = exhR(
-      set_main.call memoR(@@base_cache,
+      set_main.call nonreadyR.call(memoR(@@base_cache,
         choiceR(
           rulesetR(Ruleset.select(selector, ML.terms(base_main)), noR, backmapR, noR),
           itemsR(rec_main),
         )
-      )
+      ))
     )
 
     set_control, rec_control = recR
 
     controlR = exhR(
-      set_control.call memoR(@@control_cache, choiceR(
+      set_control.call nonreadyR.call(memoR(@@control_cache, choiceR(
           rulesetR(Ruleset.select(selector, ML.terms(base_control)), noR, backmapR, noR),
           itemsR(rec_control),
-      ))
+      )))
     )
 
     exhR(chainR(mainR, controlR))

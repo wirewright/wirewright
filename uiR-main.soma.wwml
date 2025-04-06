@@ -39,34 +39,45 @@
 ((%not y-padding y-translate y-align) {¦ -dt_} ¦ _ dt: _number) <> {dt: 0}
 
 ;; Nodes without children have 0 content-w/h.
-(_ ¦ _ -content-w_) <> {content-w: 0}
-(_ ¦ _ -content-h_) <> {content-h: 0}
+((%not text) ¦ _ -content-w_) <> {content-w: 0}
+((%not text) ¦ _ -content-h_) <> {content-h: 0}
 
 ;; Rectangles will have content-w/h equal to their max-w/h if the latter
 ;; are specified manually.
 (rect ¦ _ w: max max-w_number -content-w_) <> {content-w: →max-w}
 (rect ¦ _ h: max max-h_number -content-h_) <> {content-h: →max-h}
 
+;; If something has no children then it's x/y-ready when it knows its final-w/final-h
+;; and its dl/dt.
+(_ ¦ _ final-w: _number final-h: _number dl: _number dt: _number -ready_)
+  <> {ready: true}
+
+((%plural min: 2) ¦ _ dl: _number dt: _number final-w: _number final-h: _number -self-ready_)
+  <> {self-ready: true}
+
+((%not viewport) (%past {¦ ready: true} min: 1) ¦ _ self-ready: true)
+  <> {ready: true}
+
 ;; NODE: text
 
-(text _string ¦ _ font: _string weight: (%any 100 200 300 400 450 500 600 700 800 900) size: (%number u8) leading: _number -state_)
+(text ¦ _ caption: _string font: _string weight: (%any 100 200 300 400 450 500 600 700 800 900) size: (%number u8) leading: _number -state_)
   <> {state: width-unknown}
 
-(text caption_ ¦ _ font_ weight_ size_ leading_ state_: width-unknown -content-w_)
+(text ¦ _ caption_ font_ weight_ size_ leading_ state_: width-unknown -content-w_)
   <> {content-w: $(value (measure →caption →font →weight →size →leading) width),
       state: height-unknown}
 
-(text _ ¦ _ w: content state_: height-unknown)
+(text ¦ _ w: content state_: height-unknown)
   <> {state: height-measurable}
 
 ;; Wrap caption at max-w if w: max once max-w is known, and transition
 ;; to measurable.
-(text caption_ ¦ _ font_ weight_ size_ leading_ state_: height-unknown w: max max-w_number)
+(text ¦ _ caption_ font_ weight_ size_ leading_ state_: height-unknown w: max max-w_number)
   <> {caption: $'(wrap →caption →font →weight →size →leading max-w: →max-w),
       state: height-measurable}
 
 ;; Compute content-h once in state: height-measurable.
-(text caption_ ¦ _ font_ weight_ size_ leading_ state_: height-measurable -content-h_)
+(text ¦ _ caption_ font_ weight_ size_ leading_ state_: height-measurable -content-h_)
   <> {content-h: $(value (measure →caption →font →weight →size →leading) height),
       state: fully-measured}
 

@@ -205,11 +205,11 @@ def UIR::Platform.draw(ctx : DrawContext, node : Term, x : Int32, y : Int32, z :
     end
 
     matchpi(
-      %[(text caption_string ¦ _ color_ font_string leading_number
-                               weight_: (%any 100 200 300 400 450 500 600 700 800 900)
-                               size_: (%number u16)
-                               dl_: (%number i32)
-                               dt_: (%number i32))]
+      %[(text ¦ _ color_ caption_string font_string leading_number
+                  weight_: (%any 100 200 300 400 450 500 600 700 800 900)
+                  size_: (%number u16)
+                  dl_: (%number i32)
+                  dt_: (%number i32))]
     ) do
       ctx.commands << FillText.new(z,
         origin: Point.new(x + dl.to(Int32), y + dt.to(Int32)),

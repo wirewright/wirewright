@@ -663,7 +663,8 @@ module Microfold
     private def text(ctx : UnitContext, caption : Term::Str)
       octx, font, weight, size, leading, color = ctx.consume(:font, :"font-weight", :"text-size", :leading, :"text-color")
 
-      {octx, Term.of(:text, caption,
+      {octx, Term.of(:text,
+        caption: caption,
         w: ctx.sheet[:w]?,
         h: ctx.sheet[:h]?,
         font: font,
