@@ -399,6 +399,22 @@ module Ww::M1::Operator
       Operator.match(behind0.value(key: op.key), op.value, v, ahead1)
     end
 
+    def match(behind0, op : Present, matchee : Term, ahead0)
+      unless dict = matchee.as_d?
+        return Fb::Mismatch.new(behind0.env)
+      end
+
+      unless v = dict[op.key]?
+        return Fb::Mismatch.new(behind0.env)
+      end
+
+      unless v.type.subtype?(op.type)
+        return Fb::Mismatch.new(behind0.env)
+      end
+
+      Ahead.tr(behind0, ahead0)
+    end
+
     def match(behind0, op : Optional, matchee : Term, ahead0)
       unless dict = matchee.as_d?
         return Fb::Mismatch.new(behind0.env)

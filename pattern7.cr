@@ -3567,6 +3567,30 @@ module ::Ww::M1
   module Pair
     def self.operator(key, value, captures)
       Term.case(value, engine: M0) do
+        matchpi %{(%entry/required (%any))}, cue: {:"%entry/required", :"%any"} do
+          Operator::Entry::Present.new(key, type: :any)
+        end
+
+        matchpi %{(%entry/required (%number _))}, cue: {:"%entry/required", :"%number"} do
+          Operator::Entry::Present.new(key, type: :number)
+        end
+
+        matchpi %{(%entry/required (%symbol))}, cue: {:"%entry/required", :"%symbol"} do
+          Operator::Entry::Present.new(key, type: :symbol)
+        end
+
+        matchpi %{(%entry/required (%string))}, cue: {:"%entry/required", :"%string"} do
+          Operator::Entry::Present.new(key, type: :string)
+        end
+
+        matchpi %{(%entry/required (%boolean))}, cue: {:"%entry/required", :"%boolean"} do
+          Operator::Entry::Present.new(key, type: :boolean)
+        end
+
+        matchpi %{(%entry/required (%dict))}, cue: {:"%entry/required", :"%boolean"} do
+          Operator::Entry::Present.new(key, type: :dict)
+        end
+
         match({:"%entry/required", :value_}, cue: :"%entry/required") do |value|
           Operator::Entry::Required.new(key, M1.operator(value, captures))
         end
@@ -3720,6 +3744,9 @@ module ::Ww::M1
         side.each_entry do |k, v|
           entries << Pair.operator(k, v, captures)
         end
+
+        # Lowest cost goes first.
+        entries.unstable_sort_by!(&.cost)
 
         Operator::Layer.new(operator(below, captures), entries)
       end

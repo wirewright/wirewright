@@ -87,13 +87,57 @@ module Ww::M1::Operator
   defcase Partition, itemspart : Any, pairspart : Any
 
   module Entry
-    alias Any = Required | Optional | Absent | AbsentKeypath | Negative | NegativeKeypath
+    alias Any = Required | Optional | Present | Absent | AbsentKeypath | Negative | NegativeKeypath
 
-    record Required, key : Term, value : Operator::Any
-    record Optional, key : Term, default : Term, value : Operator::Any
-    record Absent, key : Term
-    record AbsentKeypath, key : Term, name : Term
-    record Negative, key : Term, positive : Operator::Any
-    record NegativeKeypath, key : Term, positive : Operator::Any, name : Term
+    # Entries are assigned an eyeballed "cost". Cheaper entries are checked
+    # first by e.g. `%layer`.
+    enum Cost : UInt8
+      VeryCheap
+      Cheap
+      Moderate
+      Expensive
+    end
+
+    record Required, key : Term, value : Operator::Any do
+      def cost : Cost
+        Cost::Moderate
+      end
+    end
+
+    record Optional, key : Term, default : Term, value : Operator::Any do
+      def cost : Cost
+        Cost::Expensive
+      end
+    end
+
+    record Present, key : Term, type : TermType do
+      def cost : Cost
+        Cost::Cheap
+      end
+    end
+
+    record Absent, key : Term do
+      def cost : Cost
+        Cost::VeryCheap
+      end
+    end
+
+    record AbsentKeypath, key : Term, name : Term do
+      def cost : Cost
+        Cost::Expensive
+      end
+    end
+
+    record Negative, key : Term, positive : Operator::Any do
+      def cost : Cost
+        Cost::Moderate
+      end
+    end
+
+    record NegativeKeypath, key : Term, positive : Operator::Any, name : Term do
+      def cost : Cost
+        Cost::Expensive
+      end
+    end
   end
 end
