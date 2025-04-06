@@ -267,6 +267,8 @@ module D7VR
 
   # :nodoc:
   def block?(unit : Term, source : Term, rem : Term::Num) : Term?
+    return unless unit.type.dict?
+
     uir = Microfold.uir(Microfold::SPEC, unit, rem: rem)
     drawable = rewrite(uir, UIR.rewriter)
 
@@ -391,6 +393,17 @@ module D7VR
       end
 
       # Instantiate VIEW node.
+      matchpi %{[view view_]} do |view|
+        # TODO: relax this a little bit
+        continue unless Rhodium.cursordepth_in_node(node1) == -1
+
+        if ML.edge?(view)
+          continue unless view = document0[Rhodium::Cells, view]?
+        end
+
+        node1.morph({:"#view", view}, {:"#fallback", node1})
+      end
+
       matchpi %{[view @_ as _ instance_]} do
         # TODO: relax this a little bit
         continue unless Rhodium.cursordepth_in_node(node1) == -1
@@ -1049,9 +1062,13 @@ demo = ML.dict <<-WWML
      active: false
      inbox: ()
    @hover/message)
-  (view @hover/updates as ((self rect) style: "w-10 h-max bg-[color]" color: ^color)))
+  (view @hover/rect))
 
 (cover "guts"
+  (cell @hover/rect)
+  (latest @hover/rects @hover/rect)
+  (alloy (@hover/updates to @hover/rects)
+    ((self rect) style: "w-10 h-max bg-[color]" color: ^color))
   (cell "Hover or click me" @hover/message)
   (transform (@hover/events (hover)) to @colors red-500)
   (transform (@hover/events (hover)) to @hover/messages "Hovering!")
@@ -1065,14 +1082,19 @@ demo = ML.dict <<-WWML
 (hr)
 
 (unit group style: "max max-sm bg-neutral-800 flow-col gap-5 fr p-3"
-  (view @color-envs as ((self rect) color: ^color style: "w-max h-fr bg-[color] rounded"))
+  (view @color-rect)
   (unit group style: "w-max h-content flow-row gap-5 fr"
     (button "Make red" as red-500 to @colors () style: "w-fr")
     (button "Make green" as green-500 to @colors () style: "w-fr")
     (button "Make blue" as blue-500 to @colors () style: "w-fr")))
 
-(transform @colors to @color-envs {color: _})
-(event (pulse @colors red-500))
+(cover "guts"
+  (transform @colors to @color-envs {color: _})
+  (cell @color-rect)
+  (alloy (@color-envs to @color-rects)
+    ((self rect) color: ^color style: "w-max h-fr bg-[color] rounded"))
+  (latest @color-rects @color-rect)
+  (event (pulse @colors red-500)))
 
 (hr)
 
@@ -1096,7 +1118,7 @@ demo = ML.dict <<-WWML
 
 (unit group style: "content flow-col gap-5 bg-neutral-800 p-5"
   (unit group style: "w-max h-content center-x"
-    (view @count-envs as (p ^count style: "text-7xl font-bold text-neutral-100")))
+    (p @count style: "text-7xl font-bold text-neutral-100"))
   (unit group style: "content flow-row gap-5"
     (button "Increment" as 1 to @deltas ())
     (button "Decrement" as -1 to @deltas ())))

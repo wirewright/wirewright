@@ -207,10 +207,10 @@
 (node unit "A microfold node with zero or more D7 children"
   (literal node "name of the node (e.g. p, button)"))
 
-(node view "Instantiates an Alloy template to be rendered using Microfold"
-  (pulse updates "environments for the template (dicts)")
-  (comma as)
-  (literal template "Alloy template to be rendered using Microfold"))
+(group view  "A purely visual node that passes its content directly to Microfold")
+
+(variant view (literal content "Microfold markup to show"))
+(variant view (const content "Cell from which to take the Microfold markup to show"))
 
 (group initial "Companion of `absence`, outputs the first-ever value of a const")
 
