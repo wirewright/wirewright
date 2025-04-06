@@ -287,11 +287,6 @@ module D7VR
     end
   end
 
-  TEMPLATE_BUTTON = ML.term <<-WWML
-  ;; Button is given hover and active automatically.
-  (^extend (button ^caption hover: false active: false #backlink: ^backlink) attrs)
-  WWML
-
   TEMPLATE_COVER = ML.term <<-WWML
   (group style: "content my-2 p-3 border border-neutral-700 rounded-sm"
     (p "…" ^title "…" style: "text-xs text-neutral-400 gap-1"))
@@ -303,8 +298,17 @@ module D7VR
       (p ^desc style: "pl-3 text-neutral-500 bg-neutral-900 text-sm w-max leading-normal")))
   WWML
 
-  private def instance1(document0 : Term::Dict, node : Term, nodepath : Stack(Int32)) : Term
-    Term.of_case(node) do
+  private def instance1(document0 : Term::Dict, node0 : Term, nodepath : Stack(Int32)) : Term
+    if Rhodium.passable_node?(node0)
+      # If node is passable, remove only its own shadow attributes so that child
+      # instantiations have a chance of seeing them.
+      node1 = D7.nonshadow1(node0)
+    else
+      # If node is impassable, remove shadow attributes recursively.
+      node1 = D7.nonshadow(node0)
+    end
+
+    node1 = Term.of_case(node0) do
       # Instantiate BUTTON node.
       matchpi(
         %{(button caption_ to @_ (_*) ¦ attrs_)},
@@ -312,7 +316,7 @@ module D7VR
         %{(button caption_ to @_ waiting @_ (_*) ¦ attrs_)},
         %{(button caption_ as _ to @_ waiting @_ (_*) ¦ attrs_)},
       ) do |caption|
-        continue unless Rhodium.cursordepth_in_node(node) == -1
+        continue unless Rhodium.cursordepth_in_node(node1) == -1
 
         if ML.edge?(caption)
           continue unless caption = document0[Rhodium::Cells, caption]?
@@ -323,35 +327,43 @@ module D7VR
           caption = Term.of(ML.display(caption, endl: false).gsub(/\s+/, ' '))
         end
 
-        view = Alloy.render(Term[caption: caption, backlink: nodepath, attrs: attrs], TEMPLATE_BUTTON)
+        view = Term.of(:button, caption) | attrs
 
-        node.morph({:"#view", view}, {:"#fallback", node})
+        node1.morph(
+          {:"#view", view},
+          {:"#fallback", node1},
+          # Button is given hover and active automatically. They are later removed
+          # so the user will likely never see them unless they e.g. observe the button
+          # through (frag).
+          {:hover, node1[:hover]? || false},
+          {:active, node1[:active]? || false},
+        )
       end
 
       # Instantiate H1-H6, P, SRC nodes.
       matchpi %{[(%any h1 h2 h3 h4 h5 h6 p src) content_]} do
-        continue unless Rhodium.cursordepth_in_node(node) == -1
+        continue unless Rhodium.cursordepth_in_node(node1) == -1
 
         if ML.edge?(content)
           continue unless caption = document0[Rhodium::Cells, content]?
 
           # Instantiate caption if it's an edge.
-          view = node.morph({1, caption})
+          view = node1.morph({1, caption})
         else
           # A curious case where a node is its own view.
-          view = node
+          view = node1
         end
 
-        node.morph({:"#view", view}, {:"#fallback", node})
+        node1.morph({:"#view", view}, {:"#fallback", node1})
       end
 
       # Instantiate HR node.
       matchpi %{[hr]} do
-        continue unless Rhodium.cursordepth_in_node(node) == -1
+        continue unless Rhodium.cursordepth_in_node(node1) == -1
 
-        view = node.morph({0, {:self, :hr, :rect}})
+        view = node1.morph({0, {:self, :hr, :rect}})
 
-        node.morph({:"#view", view}, {:"#fallback", node})
+        node1.morph({:"#view", view}, {:"#fallback", node1})
       end
 
       # Instantiate COVER node.
@@ -360,7 +372,7 @@ module D7VR
       # This is useful to avoid wasting compute on whatever is under the cover
       # later on.
       matchpi %{[cover title_ _+]} do |title|
-        continue unless Rhodium.cursordepth_in_node(node) == -1
+        continue unless Rhodium.cursordepth_in_node(node1) == -1
 
         if ML.edge?(title)
           continue unless title = document0[Rhodium::Cells, title]?
@@ -368,22 +380,22 @@ module D7VR
 
         view = Alloy.render(Term[title: title], TEMPLATE_COVER)
 
-        Term.of(:cover, "#view": view, "#fallback": node)
+        Term.of(:cover, "#view": view, "#fallback": node1)
       end
 
       # Instantiate COMMENT node.
       matchpi %{[comment lines_string+]} do
         view = Alloy.render(Term[desc: lines.items.join('\n') { |line| line.to(String) }], TEMPLATE_COMMENT)
 
-        node.morph({:"#view", view}, {:"#fallback", node})
+        node1.morph({:"#view", view}, {:"#fallback", node1})
       end
 
       # Instantiate VIEW node.
       matchpi %{[view @_ as _ instance_]} do
         # TODO: relax this a little bit
-        continue unless Rhodium.cursordepth_in_node(node) == -1
+        continue unless Rhodium.cursordepth_in_node(node1) == -1
 
-        node.morph({:"#view", instance}, {:"#fallback", node})
+        node1.morph({:"#view", instance}, {:"#fallback", node1})
       end
 
       # NOTE: we do not handle UNIT nodes and the cursor here. This is because
@@ -393,32 +405,27 @@ module D7VR
 
       matchpi %{[unit _ _+]} do
         # TODO: relax this a little bit
-        continue unless Rhodium.cursordepth_in_node(node) == -1
+        continue unless Rhodium.cursordepth_in_node(node1) == -1
 
-        # Unit is a passable node. Clear only its own shadow attributes.
-        node = D7.nonshadow1(node)
-        node.morph({:"#fallback", node})
+        node1.morph({:"#fallback", node1})
       end
 
-      otherwise do
-        if Rhodium.passable_node?(node)
-          # If node is passable, remove only its own shadow attributes so that child
-          # instantiations have a chance of seeing them.
-          node = D7.nonshadow1(node)
-        else
-          # If node is impassable, remove shadow attributes recursively.
-          node = D7.nonshadow(node)
-        end
-
-        # Equip anything with an inbox: (...) attribute with a backlink via #extend.
-        # Configure the backlink so that it sends any event.
-        if (inbox = node[:inbox]?) && inbox.type.dict?
-          node.morph({:"#extend", :"#backlink", nodepath})
-        else
-          node
-        end
-      end
+      otherwise { node1 }
     end
+
+    # Equip anything with an inbox: (...) attribute or with hover: attribute
+    # with a backlink via #extend. This includes buttons, for example.
+    Term.case(node1) do
+      matchpi %[{¦ inbox: _dict}], %[{¦ hover: _boolean}] do
+        continue unless Rhodium.cursordepth_in_node(node0) == -1
+
+        node1 = node1.morph({:"#extend", :"#backlink", nodepath})
+      end
+
+      otherwise { }
+    end
+
+    Term.of(node1)
   end
 
   # *Instantiation* is the first-ever step you need to do to see an arbitrary
@@ -905,13 +912,25 @@ class Document
       node0 = node1 = Rhodium.follow(@document, nodepath)
       hovered = mouseover ? nodepath.equals?(mouseover) { |a, b| a == b } : false
 
-      Term.case(node0) do
-        matchpi %{[button _*]} do
-          node1 = node0.morph({:hover, hovered ? true : nil})
+      Term.case({node0, Rhodium.cursordepth_in_node(node0)}) do
+        givenpi %{[button _*] _} do
+          node1 = node1.morph({:hover, hovered ? true : nil})
         end
 
-        matchpi %[{¦ hover_boolean}] do
-          node1 = node0.morph({:hover, hovered})
+        givenpi %[{¦ hover: true inbox_dict} -1] do
+          unless hovered
+            node1 = node1.morph({:hover, false}, {:inbox, inbox.append({:unhover})})
+          end
+        end
+
+        givenpi %[{¦ hover: false inbox_dict} -1] do
+          if hovered
+            node1 = node1.morph({:hover, true}, {:inbox, inbox.append({:hover})})
+          end
+        end
+
+        givenpi %[{¦ hover: _boolean} -1] do
+          node1 = node1.morph({:hover, hovered})
         end
 
         otherwise { }
@@ -1021,6 +1040,30 @@ module Frame
 end
 
 demo = ML.dict <<-WWML
+("" | "" () @user)
+
+(unit group style: "flow-row gap-10"
+  (p style: "p-5 text-5xl bg-neutral-700 hover:bg-blue-500 hover:cursor-pointer"
+     hover: false
+     mail: @hover/events
+     active: false
+     inbox: ()
+   @hover/message)
+  (view @hover/updates as ((self rect) style: "w-10 h-max bg-[color]" color: ^color)))
+
+(cover "guts"
+  (cell "Hover or click me" @hover/message)
+  (transform (@hover/events (hover)) to @colors red-500)
+  (transform (@hover/events (hover)) to @hover/messages "Hovering!")
+  (transform (@hover/events (unhover)) to @colors green-500)
+  (transform (@hover/events (unhover)) to @hover/messages "Hover or click me")
+  (transform (@hover/events (press)) to @colors blue-500)
+  (transform (@hover/events (press)) to @hover/messages "Pressed!")
+  (latest @hover/messages @hover/message)
+  (transform @colors to @hover/updates {color: _}))
+
+(hr)
+
 (unit group style: "max max-sm bg-neutral-800 flow-col gap-5 fr p-3"
   (view @color-envs as ((self rect) color: ^color style: "w-max h-fr bg-[color] rounded"))
   (unit group style: "w-max h-content flow-row gap-5 fr"
@@ -1065,7 +1108,6 @@ demo = ML.dict <<-WWML
 (cell 0 @count)
 (transform (@deltas delta_number) to @counts with @count (+ count delta))
 (latest @counts @count)
-("" | "" () @user)
 WWML
 
 fb_loop = ML.dict <<-WWML
