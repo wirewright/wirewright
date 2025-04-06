@@ -1273,7 +1273,7 @@ module Rhodium
         end
       end
 
-      givenpi %{[map @pin_ to @pout_ (%group conds (%past (_ _) min: 1))] (pulse @pin_ input_) -1} do |conds|
+      givenpi %{[match (@pin_ to @pout_) (%group conds (%past (_ _) min: 1))] (pulse @pin_ input_) -1} do |conds|
         conds.items.each do |(pattern, template)|
           next unless env = M1.match?(pattern, input)
 

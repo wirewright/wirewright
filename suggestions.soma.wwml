@@ -147,10 +147,11 @@
   (pulse snapshots "sink for snapshots of nodes behind and ahead (tuple)")
   (pulse capture "source for triggers to capture a snapshot"))
 
-(node map "Converts an incoming pulse to one of templated outputs using pattern-matching"
-  (pulse pin "source of terms to match")
-  (comma to)
-  (pulse pout "sink for instantiated templates"))
+(node match "Converts an incoming pulse to one of templated outputs using pattern-matching"
+  (nested
+    (pulse pin "source of terms to match")
+    (comma to)
+    (pulse pout "sink for instantiated templates")))
 
 (node periodic "Emits an event on every cycle"
   (literal e "term that should be emitted as an event"))

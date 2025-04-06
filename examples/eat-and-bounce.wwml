@@ -49,10 +49,7 @@
      filter: (behind_ ahead_),
      body: (dir behind ahead),
      in: @snapshots})
-  (map
-   @stimuli
-   to
-   @actions
+  (match (@stimuli to @actions)
    ((up (_* o) (. _*)) dir-down)
    ((down (_* .) (o _*)) dir-up)
    ((up (_* .) _) keep-moving)
@@ -179,10 +176,7 @@
      body: dir,
      in: @actions})
   (latest @dirs @dir)
-  (map
-   @dirs
-   to
-   @rod-commands
+  (match (@dirs to @rod-commands)
    (up (move-parent-behind))
    (down (move-parent-ahead))))
  .

@@ -1216,7 +1216,7 @@ else
       (transform @rod-commands to @relook true)
       (cell up @dir)
       (transform (@snapshots (behind_ ahead_)) to @stimuli with @dir (dir behind ahead))
-      (map @stimuli to @actions
+      (match (@stimuli to @actions)
         ((up (_* o) (. _*)) dir-down)
         ((down (_* .) (o _*)) dir-up)
         ((up (_* .) _) keep-moving)
@@ -1225,7 +1225,7 @@ else
       (transform (@actions dir-up) to @dirs up)
       (transform (@actions keep-moving) to @dirs with @dir dir)
       (latest @dirs @dir)
-      (map @dirs to @rod-commands (up (move-parent-behind)) (down (move-parent-ahead))))
+      (match (@dirs to @rod-commands) (up (move-parent-behind)) (down (move-parent-ahead))))
     .
     o
 

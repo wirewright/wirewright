@@ -619,7 +619,7 @@
    (lookaround @views @relook
      ("" | "" () @cursor)
      (periodic (pulse @relook true))
-     (map @views to @decisions
+     (match (@views to @decisions)
        (((_* target) _) eat-behind)
        ((⟨target⟩ _) go-behind)
        ((_ (target _*)) eat-ahead)
@@ -645,7 +645,7 @@
    (lookaround @views @relook
      ("" | "" () @cursor)
      (periodic (pulse @relook true))
-     (map @views to @decisions
+     (match (@views to @decisions)
        (((_* target) _) eat-behind)
        ((⟨target⟩ _) go-behind)
        ((_ (target _*)) eat-ahead)
@@ -680,7 +680,7 @@
    (lookaround @views @relook
      ("" | "" () @cursor)
      (periodic (pulse @relook true))
-     (map @views to @decisions
+     (match (@views to @decisions)
        (((_* target) _) eat-behind)
        ((⟨target⟩ _) go-behind)
        ((_ (target _*)) eat-ahead)
@@ -713,7 +713,7 @@
    (lookaround @views @relook
      ("" | "" () @cursor)
      (periodic (pulse @relook true))
-     (map @views to @decisions
+     (match (@views to @decisions)
        (((_* target) _) eat-behind)
        ((⟨target⟩ _) go-behind)
        ((_ (target _*)) eat-ahead)
