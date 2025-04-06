@@ -1,4 +1,126 @@
 module Ww::Meridium
+  module ISet(T)
+    abstract def includes?(identity : T) : Bool
+    abstract def add(referrer : Label, identity : T) : Nil
+    abstract def delete(referrer : Label, identity : T) : Nil
+
+    def subset(cls : St.class) forall St
+      SubSet(T, St).new(self)
+    end
+  end
+
+  struct SubSet(T, St)
+    include ISet(St)
+
+    def initialize(@set : ISet(T))
+    end
+
+    def includes?(identity : St) : Bool
+      @set.includes?(identity.as(T))
+    end
+
+    def add(referrer : Label, identity : St) : Nil
+      @set.add(referrer, identity.as(T))
+    end
+
+    def delete(referrer : Label, identity : St) : Nil
+      @set.delete(referrer, identity.as(T))
+    end
+  end
+
+  class SyncInMemorySet(T)
+    include ISet(T)
+
+    @data = {} of T => Set(Label)
+    @lock = Mutex.new
+
+    def includes?(identity : T) : Bool
+      @lock.synchronize { @data.has_key?(identity) }
+    end
+
+    def add(referrer : Label, identity : T) : Nil
+      @lock.synchronize do
+        referrers = @data.put_if_absent(identity) { Set(Label).new }
+        referrers << referrer
+      end
+    end
+
+    def delete(referrer : Label, identity : T) : Nil
+      @lock.synchronize do
+        return unless referrers = @data[identity]?
+        return unless referrers.delete(referrer)
+        return unless referrers.empty?
+
+        @data.delete(identity)
+      end
+    end
+
+    def clear : Nil
+      @lock.synchronize { @data.clear }
+    end
+  end
+
+  class DigestSet
+    include ISet(String)
+
+    def initialize(@set : ISet(String), @algorithm : Digest::ClassMethods = Digest::SHA256)
+    end
+
+    private def digest(identity : String) : String
+      identity.digest(@algorithm, base: 64)
+    end
+
+    def includes?(identity : String) : Bool
+      @set.includes?(digest(identity))
+    end
+
+    def add(referrer : Label, identity : String) : Nil
+      @set.add(referrer, digest(identity))
+    end
+
+    def delete(referrer : Label, identity : String) : Nil
+      @set.delete(referrer, digest(identity))
+    end
+  end
+
+  class TermSet(T)
+    include ISet(T)
+
+    def initialize(@set : ISet(Term))
+    end
+
+    def includes?(identity : T) : Bool
+      @set.includes?(Term.encode(identity))
+    end
+
+    def add(referrer : Label, identity : T) : Nil
+      @set.add(referrer, Term.encode(identity))
+    end
+
+    def delete(referrer : Label, identity : T) : Nil
+      @set.delete(referrer, Term.encode(identity))
+    end
+  end
+
+  class CompactMLSet
+    include ISet(Term)
+
+    def initialize(@set : ISet(String))
+    end
+
+    def includes?(identity : Term) : Bool
+      @set.includes?(ML.compact(identity))
+    end
+
+    def add(referrer : Label, identity : Term) : Nil
+      @set.add(referrer, ML.compact(identity))
+    end
+
+    def delete(referrer : Label, identity : Term) : Nil
+      @set.delete(referrer, ML.compact(identity))
+    end
+  end
+
   # Includers can be used as map backends for `Tspace`, `Tbase`, and so on.
   module IMap(K, V)
     # Returns the latest value of *key*, or `nil` if absent.
@@ -15,24 +137,12 @@ module Ww::Meridium
 
     # Atomically registers a reference of *referrer* to *key*. If *key* is absent,
     # creates it and sets its value to *default*. Returns the value read at
-    # the time of assignment. This is an INCREF. Each call will increment the reference
-    # count of *key* by *referrer*.
-    abstract def inc(referrer : Label, key : K, default : V) : V
+    # the time of assignment.
+    abstract def ref(referrer : Label, key : K, default : V) : V
 
     # Atomically removes *referrer*'s reference to *key*, removing the underlying
-    # key-value pair if necessary. This is a DECREF; i.e., if you called `inc`
-    # N times you'd have to call `dec` N times.
-    abstract def dec(referrer : Label, key : K) : Nil
-
-    # Conceptually the same as calling `dec` with each key from *keys* and *referrer*.
-    # In fact, some includers will do just that, if they cannot delegate to an
-    # underlying map.
-    #
-    # This method exists to allow map client implementations that talk to a centralized
-    # map server to send one big `decall` request instead of thousands of small `dec`
-    # requests. This is beneficial for compression since the majority of `dec` calls
-    # are very similar to each other; and is in general a good practice.
-    abstract def decall(referrer : Label, keys : Array(K)) : Nil
+    # key-value pair if necessary.
+    abstract def unref(referrer : Label, key : K) : Nil
 
     # Constructs a submap (see `SubMap`).
     def submap(k : Sk.class, v : Sv.class) forall Sk, Sv
@@ -59,16 +169,12 @@ module Ww::Meridium
       @map.size
     end
 
-    def inc(referrer : Label, key : K, default : V) : V
-      @map.inc(referrer, key.as(Pk), default.as(Pv)).as(V)
+    def ref(referrer : Label, key : K, default : V) : V
+      @map.ref(referrer, key.as(Pk), default.as(Pv)).as(V)
     end
 
-    def dec(referrer : Label, key : K) : Nil
-      @map.dec(referrer, key.as(Pk))
-    end
-
-    def decall(referrer : Label, keys : Array(K)) : Nil
-      @map.decall(referrer, keys.map &.as(Pk))
+    def unref(referrer : Label, key : K) : Nil
+      @map.unref(referrer, key.as(Pk))
     end
   end
 
@@ -77,7 +183,7 @@ module Ww::Meridium
   class SyncInMemoryMap(K, V)
     include IMap(K, V)
 
-    record Cell(T), refs : Bag(Label), value : T
+    record Cell(T), refs : Set(Label), value : T
 
     @data = {} of K => Cell(V)
     @lock = Mutex.new
@@ -92,31 +198,31 @@ module Ww::Meridium
       @data.size
     end
 
-    def inc(referrer : Label, key : K, default : V) : V
+    def ref(referrer : Label, key : K, default : V) : V
       @lock.synchronize do
         if cell = @data[key]?
           cell.refs.add(referrer)
           cell.value
         else
-          @data[key] = Cell.new(Bag{referrer}, default)
+          @data[key] = Cell.new(Set{referrer}, default)
 
           default
         end
       end
     end
 
-    def dec(referrer : Label, key : K) : Nil
+    def unref(referrer : Label, key : K) : Nil
       @lock.synchronize do
         return unless cell = @data[key]?
-        return unless cell.refs.delete?(referrer)
+        return unless cell.refs.delete(referrer)
         return unless cell.refs.empty?
 
         @data.delete(key)
       end
     end
 
-    def decall(referrer : Label, keys : Array(K)) : Nil
-      keys.each { |key| dec(referrer, key) }
+    def clear : Nil
+      @lock.synchronize { @data.clear }
     end
 
     def pretty_print(pp)
@@ -157,18 +263,14 @@ module Ww::Meridium
       @map.size
     end
 
-    def inc(referrer : Label, key : K, default : V) : V
-      value = @map.inc(referrer, Term.encode(key), Term.encode(default))
+    def ref(referrer : Label, key : K, default : V) : V
+      value = @map.ref(referrer, Term.encode(key), Term.encode(default))
 
       Term.decode(V, value)
     end
 
-    def dec(referrer : Label, key : K) : Nil
-      @map.dec(referrer, Term.encode(key))
-    end
-
-    def decall(referrer : Label, keys : Array(K)) : Nil
-      @map.decall(referrer, keys.map { |key| Term.encode(key) })
+    def unref(referrer : Label, key : K) : Nil
+      @map.unref(referrer, Term.encode(key))
     end
   end
 
@@ -195,18 +297,14 @@ module Ww::Meridium
       @map.size
     end
 
-    def inc(referrer : Label, key : Term, default : Term) : Term
-      value = @map.inc(referrer, ML.compact(key), ML.compact(default))
+    def ref(referrer : Label, key : Term, default : Term) : Term
+      value = @map.ref(referrer, ML.compact(key), ML.compact(default))
 
       ML.term(value)
     end
 
-    def dec(referrer : Label, key : K) : Nil
-      @map.dec(referrer, ML.compact(key))
-    end
-
-    def decall(referrer : Label, keys : Array(K)) : Nil
-      @map.decall(referrer, keys.map { |key| ML.compact(key) })
+    def unref(referrer : Label, key : K) : Nil
+      @map.unref(referrer, ML.compact(key))
     end
   end
 
@@ -232,16 +330,12 @@ module Ww::Meridium
       @map.size
     end
 
-    def inc(referrer : Label, key : K, default : V) : V
-      @map.inc(referrer, digest(key), default)
+    def ref(referrer : Label, key : K, default : V) : V
+      @map.ref(referrer, digest(key), default)
     end
 
-    def dec(referrer : Label, key : K) : Nil
-      @map.dec(referrer, digest(key))
-    end
-
-    def decall(referrer : Label, keys : Array(K)) : Nil
-      @map.decall(referrer, keys.map { |key| digest(key) })
+    def unref(referrer : Label, key : K) : Nil
+      @map.unref(referrer, digest(key))
     end
   end
 end

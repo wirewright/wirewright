@@ -712,8 +712,10 @@ class Document
         port_chat = 9811
       end
 
+      remote = RemoteStringMapSet.new(host, port_map)
       reg[Term.of(:remote)] = Tconn::Spec.new(
-        map: TermMap(Tspace::Key, Tspace::Value).new(CompactMLMap.new(KeyDigestMap(String, String).new(RemoteStringMap.new(host, port_map)))),
+        map: TermMap(Tspace::Key, Tspace::Value).new(CompactMLMap.new(KeyDigestMap(String, String).new(remote))),
+        set: TermSet(Tspace::Identity).new(CompactMLSet.new(DigestSet.new(remote))),
         chat: TermChat(Activation).new(CompactMLChat.new(RemoteStringChat.new(host, port_chat))),
         sink: Tconn::Sink.new do |overview|
           # Enqueue an update in the context.
@@ -731,6 +733,7 @@ class Document
 
     reg[Term.of(:local)] = Tconn::Spec.new(
       map: SyncInMemoryMap(Tspace::Key, Tspace::Value).new,
+      set: SyncInMemorySet(Tspace::Identity).new,
       chat: SyncInMemoryChat(Activation).new,
       sink: Tconn::Sink.new do |overview|
         # Enqueue an update in the context.

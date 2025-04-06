@@ -104,322 +104,22 @@ struct WWID
   end
 end
 
-# Represents a single, immutable map bucket.
-class StringBucket
-  # :nodoc:
-  alias Refcount = UInt32
-
-  # :nodoc:
-  record Cell, refs : Pf::Map(Label, Refcount), value : String
-
-  def initialize
-    initialize(entries: Pf::Map(String, Cell).new, seen: Pf::Map(Label, Time).new)
-  end
-
-  # :nodoc:
-  def initialize(@entries : Pf::Map(String, Cell), @seen : Pf::Map(Label, Time))
-  end
-
-  private def_change
-
-  protected def renew(referrer : Label) : StringBucket
-    change(seen: @seen.assoc(referrer, Time.utc))
-  end
-
-  # Returns the amount of entries in the bucket.
-  #
-  # Complexity: O(1).
-  def size : Int32
-    @entries.size
-  end
-
-  # Returns the latest value of *key* in the bucket, or `nil` if *key* is absent.
-  # Records the activity of *referrer* (thus delaying its decay).
-  #
-  # Rough complexity: O(1).
-  def latest?(referrer : Label, key : String) : {StringBucket, String?}
-    {renew(referrer), @entries[key]?.try(&.value)}
-  end
-
-  protected def inc0(referrer : Label, key : String, default : String) : {StringBucket, String}
-    if cell0 = @entries[key]?
-      refs0 = cell0.refs
-      refs1 = refs0.assoc(referrer, (refs0[referrer]? || Refcount.new(0)) + 1)
-      cell1 = cell0.copy_with(refs: refs1)
-    else
-      cell1 = Cell.new(Pf::Map.assoc(referrer, Refcount.new(1)), default)
-    end
-
-    {change(entries: @entries.assoc(key, cell1)), cell1.value}
-  end
-
-  # Increments *referrer*'s reference count for *key*. If *key* is absent, a new entry
-  # is created and assigned the given *default* value. Returns a tuple containing
-  # the updated bucket and the current value of *key*.
-  #
-  # Records the activity of *referrer* (thus delaying its decay).
-  #
-  # Rough complexity: O(1).
-  def inc(referrer : Label, key : String, default : String) : {StringBucket, String}
-    renew(referrer).inc0(referrer, key, default)
-  end
-
-  protected def dec0(referrer : Label, key : String) : StringBucket
-    return self unless cell0 = @entries[key]?
-
-    refs0 = cell0.refs
-
-    return self unless refcount = refs0[referrer]?
-
-    if refcount == 1
-      refs1 = refs0.dissoc(referrer)
-    else
-      refs1 = refs0.assoc(referrer, refcount - 1)
-    end
-
-    if refs1.empty?
-      return change(entries: @entries.dissoc(key))
-    end
-
-    cell1 = cell0.copy_with(refs: refs1)
-
-    change(entries: @entries.assoc(key, cell1))
-  end
-
-  # Decrements *referrer*'s reference count for *key*. Returns the updated bucket.
-  #
-  # Records the activity of *referrer* (thus delaying its decay).
-  #
-  # Rough complexity: O(1).
-  def dec(referrer : Label, key : String) : StringBucket
-    renew(referrer).dec0(referrer, key)
-  end
-
-  # Decays the bucket by removing inactive referrers and their associated entries.
-  #
-  # A referrer is considered inactive if the time since its last recorded activity
-  # exceeds the specified *lifespan*.
-  #
-  # Returns the updated bucket.
-  #
-  # Rough complexity: O(S + E*R), where S - number of referrers in the seen map,
-  # E - number of entries in the bucket, R - average number of referrers per entry.
-  def decay(*, lifespan = 30.seconds, now = Time.utc) : StringBucket
-    bucket = self
-    expired = Set(Label).new
-
-    seen1 = @seen
-
-    @seen.each do |referrer, accessed|
-      next unless now - accessed >= lifespan
-
-      seen1 = seen1.dissoc(referrer)
-      expired << referrer
-    end
-
-    entries1 = @entries
-
-    @entries.each do |key, cell0|
-      refs0 = cell0.refs
-      refs1 = refs0.reject { |referrer, _| referrer.in?(expired) }
-      next if refs0.same?(refs1)
-
-      if refs1.empty?
-        entries1 = entries1.dissoc(key)
-      else
-        cell1 = cell0.copy_with(refs: refs1)
-        entries1 = entries1.assoc(key, cell1)
-      end
-    end
-
-    change(entries: entries1, seen: seen1)
-  end
-end
-
-# Thread-safe, mutable wrapper around `StringBucket` (powered by Atomics).
-class ConcurrentStringBucket
-  def initialize
-    @bucket = Atomic(StringBucket).new(StringBucket.new)
-    @state = Atomic(Int32).new(0)
-  end
-
-  def self.spawn(ctx : ExecutionContext, *, lifespan = 30.seconds, running = Channel(Bool).new) : {ConcurrentStringBucket, Channel(Bool)}
-    bucket = new
-
-    ctx.spawn do
-      while true
-        select
-        when running.receive? # nil
-          break
-        when timeout(lifespan)
-          bucket.decay(lifespan: lifespan)
-        end
-      end
-    end
-
-    {bucket, running}
-  end
-
-  # Makes sure `decay` doesn't run during the block.
-  private def nodecay(&)
-    state0 = @state.get(:acquire)
-
-    # If state is -1, busy-wait until it is not, and increment.
-    while true
-      if state0 == -1
-        state0 = @state.get(:acquire)
-
-        Intrinsics.pause
-
-        next
-      end
-
-      state1 = state0 + 1
-      state0, ok = @state.compare_and_set(state0, state1, :release, :acquire)
-      break if ok
-
-      Intrinsics.pause
-    end
-
-    begin
-      yield
-    ensure
-      @state.sub(1, :release)
-    end
-  end
-
-  # Locks `@bucket` for decay during the block.
-  private def decay(&)
-    state0 = @state.get(:acquire)
-    if state0 == -1
-      raise "invalid state: expected just one decay fiber"
-    end
-
-    # If state is nonzero, busy-wait until it zero, and decrement.
-    while true
-      _, ok = @state.compare_and_set(0, -1, :release, :acquire)
-      break if ok
-
-      Intrinsics.pause
-    end
-
-    begin
-      yield
-    ensure
-      @state.add(1, :release)
-    end
-  end
-
-  private def assign(& : StringBucket -> T) forall T
-    nodecay do
-      bucket0 = @bucket.get(:acquire)
-
-      while true
-        bucket1 = bucket0
-        result = nil
-
-        {% if T.has_method?(:[]) %}
-          bucket1, result = yield bucket0
-        {% else %}
-          bucket1 = yield bucket0
-        {% end %}
-
-        bucket0, ok = @bucket.compare_and_set(bucket0, bucket1, :release, :acquire)
-
-        return result if ok
-
-        Intrinsics.pause
-      end
-    end
-  end
-
-  def size : Int32
-    bucket = @bucket.get(:acquire)
-    bucket.size
-  end
-
-  def latest?(referrer : Label, key : String) : String?
-    assign &.latest?(referrer, key)
-  end
-
-  def inc(referrer : Label, key : String, default : String) : String
-    assign &.inc(referrer, key, default)
-  end
-
-  def dec(referrer : Label, key : String) : Nil
-    assign &.dec(referrer, key)
-  end
-
-  def decay(*, lifespan = 30.seconds, now = Time.utc) : Nil
-    decay do
-      bucket0 = @bucket.get(:acquire)
-
-      while true
-        bucket1 = bucket0.decay(lifespan: lifespan, now: now)
-        bucket0, ok = @bucket.compare_and_set(bucket0, bucket1, :release, :acquire)
-        return if ok
-      end
-    end
-  end
-end
-
-# TODO: rewrite using locks, should end up being simpler...
-
-# A concurrent `IMap(String, String)` with entry storage distributed across `N` buckets.
-#
-# `ConcurrentStringMap` partitions keys across `N` independent `ConcurrentStringBucket`s
-# based on their hash. Each bucket is assigned a fiber that performs decay for that bucket
-# (see also: `ConcurrentStringBucket#decay`). The sleep times and referrer lifespans are
-# randomized for each bucket.
-class ConcurrentStringMap(N)
-  include IMap(String, String)
-
-  def initialize(ctx : ExecutionContext, min_lifespan = 30.seconds, max_lifespan = 1.minute)
-    min_lifespan_ms = min_lifespan.total_milliseconds
-    max_lifespan_ms = max_lifespan.total_milliseconds
-
-    @running = Channel(Bool).new
-    @buckets = StaticArray(ConcurrentStringBucket, N).new do
-      lifespan = (min_lifespan_ms..max_lifespan_ms).sample.milliseconds
-      bucket, _ = ConcurrentStringBucket.spawn(ctx, lifespan: lifespan, running: @running)
-      bucket
-    end
-  end
-
-  # Stops all decay fibers. Can only be called once.
-  def nodecay : Nil
-    @running.close
-  end
-
-  def size : Int32
-    @buckets.sum(&.size)
-  end
-
-  def latest?(referrer : Label, key : String) : String?
-    bucket = @buckets[key.hash % N]
-    bucket.latest?(referrer, key)
-  end
-
-  def inc(referrer : Label, key : String, default : String) : String
-    bucket = @buckets[key.hash % N]
-    bucket.inc(referrer, key, default)
-  end
-
-  def dec(referrer : Label, key : String) : Nil
-    bucket = @buckets[key.hash % N]
-    bucket.dec(referrer, key)
-  end
-
-  def decall(referrer : Label, keys : Array(String)) : Nil
-    keys.each { |key| dec(referrer, key) }
-  end
-end
-
-struct StringMapRPC
+struct StringMapSetRPC
   include SimpleRpc::Proto
 
-  @@ctx = ExecutionContext::MultiThreaded.new("bucket decay", System.cpu_count.to_i)
-  @@map = ConcurrentStringMap(128).new(@@ctx)
+  @@map = SyncInMemoryMap(String, String).new
+  @@set = SyncInMemorySet(String).new
+
+  # The lamest way to do cleanup right here.
+  spawn do
+    while true
+      select
+      when timeout(30.seconds)
+        @@map.clear
+        @@set.clear
+      end
+    end
+  end
 
   def latest(referrer : String, key : String) : String?
     @@map.latest?(Label.new(referrer.to_u128), key)
@@ -429,40 +129,36 @@ struct StringMapRPC
     @@map.size
   end
 
-  def inc(referrer : String, key : String, default : String) : String
-    @@map.inc(Label.new(referrer.to_u128), key, default)
+  def ref(referrer : String, key : String, default : String) : String
+    @@map.ref(Label.new(referrer.to_u128), key, default)
   end
 
-  def dec(referrer : String, key : String) : Nil
-    @@map.dec(Label.new(referrer.to_u128), key)
+  def unref(referrer : String, key : String) : Nil
+    @@map.unref(Label.new(referrer.to_u128), key)
   end
 
-  def decall(referrer : String, keys : Array(String)) : Nil
-    @@map.decall(Label.new(referrer.to_u128), keys)
+  def includes(identity : String) : Bool
+    @@set.includes?(identity)
   end
 
-  def gzdecall(referrer : String, zipped : String) : Nil
-    io = IO::Memory.new(zipped)
+  def add(referrer : String, identity : String) : Nil
+    @@set.add(Label.new(referrer.to_u128), identity)
+  end
 
-    unzipped = Compress::Gzip::Reader.open(io) do |gzip|
-      gzip.gets_to_end
-    end
-
-    # FIXME: something more reliable than newline separation
-    keys = unzipped.split('\n')
-
-    @@map.decall(Label.new(referrer.to_u128), keys)
+  def delete(referrer : String, identity : String) : Nil
+    @@set.delete(Label.new(referrer.to_u128), identity)
   end
 end
 
 # A remote `IMap(String, String)` client using RPC for communication.
 #
 # `RemoteStringMap` connects to a remote string map service via `StringMapRPC::Client`.
-class RemoteStringMap
+class RemoteStringMapSet
+  include ISet(String)
   include IMap(String, String)
 
   def initialize(host : String, port : Int32, *, pool_size = 50, pool_timeout = 1)
-    @client = StringMapRPC::Client.new(host, port, mode: :pool, pool_size: pool_size, pool_timeout: pool_timeout)
+    @client = StringMapSetRPC::Client.new(host, port, mode: :pool, pool_size: pool_size, pool_timeout: pool_timeout)
   end
 
   def latest?(referrer : Label, key : String) : String?
@@ -473,24 +169,24 @@ class RemoteStringMap
     @client.size!
   end
 
-  def inc(referrer : Label, key : String, default : String) : String
-    @client.inc!(referrer.value.to_s, key, default)
+  def ref(referrer : Label, key : String, default : String) : String
+    @client.ref!(referrer.value.to_s, key, default)
   end
 
-  def dec(referrer : Label, key : String) : Nil
-    @client.dec!(referrer.value.to_s, key)
+  def unref(referrer : Label, key : String) : Nil
+    @client.unref!(referrer.value.to_s, key)
   end
 
-  def decall(referrer : Label, keys : Array(String)) : Nil
-    # FIXME: something more reliable than newline separation
-    unzipped = keys.join('\n')
-    zipped = String.build do |io|
-      Compress::Gzip::Writer.open(io) do |gzip|
-        gzip << unzipped
-      end
-    end
+  def includes?(identity : String) : Bool
+    @client.includes!(identity)
+  end
 
-    @client.gzdecall!(referrer.value.to_s, zipped)
+  def add(referrer : Label, identity : String) : Nil
+    @client.add!(referrer.value.to_s, identity)
+  end
+
+  def delete(referrer : Label, identity : String) : Nil
+    @client.delete!(referrer.value.to_s, identity)
   end
 end
 
@@ -581,13 +277,13 @@ struct Ttrie
   def initialize(@fresh : LabelGenerator, @map : IMap(Key, Value))
   end
 
-  def mount(referrer : Label, strand : Enumerable(Term), endpoint : Label, *, deps = Bag({Key, Value}).new)
+  def mount(referrer : Label, strand : Enumerable(Term), endpoint : Label, deps : IDepSet) : Array(Label)
     tip = nil
     path = [] of Label
 
     mount = ->(key : Key) do
-      value = @map.inc(referrer, key, Value.new(@fresh.call))
-      deps << {key, value}
+      value = @map.ref(referrer, key, Value.new(@fresh.call))
+      deps.add(key, value)
       path << value.succ
     end
 
@@ -609,8 +305,7 @@ struct Ttrie
     end
 
     path << endpoint
-
-    {deps, path}
+    path
   end
 
   def query?(referrer : Label, strand : Enumerable(Ubase::Any)) : Label?
@@ -661,51 +356,40 @@ struct ::Ww::Term
   end
 end
 
-struct Etrace
+# TODO: create an implementor of IMap & ISet that is "buffered". We keep a buffer
+# for adds and deletes in case of set, for ref! (buffered ref, returns nothing) &
+# unref; flush on includes? for set and latest? for map. Also flush for map on
+# unbuffered ref (ref). Use that as a temporary wrapper around the actual map in
+# Tspace. Hard flush on quit when summon()ing or looking things up.
+
+module EmergentLabelMultimap(Identity)
   # :nodoc:
   #
-  # The choice of base is very important for Etrace; it determines the fundamental
-  # tradeoff between how much we are willing to store vs. compute. The larger the base,
-  # the less digits we'll have to store; the more guesses we'll have to make for each
-  # digit, and thus, the more lookups (computation). Both base 3 and 4 seem to be good
-  # tradeoff points. Base 2 requires too much storage (remember we're using u128 for ids,
-  # so 128 entries per id) but very little guessing per digit (you're basically asking
-  # the network, "yes or no?") The benefit of larger bases diminishes quickly while
-  # increasing guesswork.
-  BASE = 4u128
+  # Sacrifice storage for less lookups (less guessing), because guessing is more
+  # likely to go over the network & follows a "chain" order. Whereas with addition
+  # we can simply batch-add everything and that's it.
+  BASE = 2u128
 
   # :nodoc:
-  BASE_DIGITS = {0u128, 1u128, 2u128, 3u128}
+  BASE_DIGITS = {0u128, 1u128}
 
   # :nodoc:
-  BASE_LENGTH_U128 = 64u8
+  BASE_LENGTH_U128 = 128u8
 
-  record Key, scope : Label, state : Label, digitno : UInt8
-  record Value
+  abstract def set : ISet(Identity)
 
-  def initialize(@fresh : LabelGenerator, @map : IMap(Key, Value))
-  end
-
-  def mount(referrer : Label, scope : Label, succ : Label, *, deps = Bag({Key, Value}).new)
-    succ.each_prefix_with_index(base: BASE, max: BASE_LENGTH_U128) do |prefix, index|
-      key = Key.new(scope, prefix, index)
-      value = @map.inc(referrer, key, Value.new)
-      deps << {key, value}
+  # Creates an association between *key* and *value* for the given *referrer*.
+  def assign(referrer : Label, key : Label, value : Label, deps : IDepSet) : Nil
+    value.each_prefix_with_index(base: BASE, max: BASE_LENGTH_U128) do |prefix, index|
+      identity = Identity.new(key, prefix, index)
+      set.add(referrer, identity)
+      deps.add(identity)
     end
-
-    deps
-  end
-
-  def mount(referrer : Label, path : Array(Label), *, deps = Bag({Key, Value}).new)
-    path.each_cons_pair do |u, v|
-      _ = mount(referrer, u, v, deps: deps)
-    end
-
-    deps
   end
 
   # TODO: what this method is doing appears to be "embarassingly parallel". Parallelize!
-  def each_successor(referrer : Label, scope : Label, &sink : Label ->) : Nil
+  # TODO: add error correction ± checksum
+  def each_value(referrer : Label, key : Label, & : Label ->) : Nil
     queue = Deque{ {Label.zero, BASE_LENGTH_U128 - 1} }
 
     while entry = queue.shift?
@@ -714,212 +398,161 @@ struct Etrace
       BASE_DIGITS.each do |choice|
         completion = state.complete(choice, base: BASE, index: digitno)
 
-        next unless @map.latest?(referrer, Key.new(scope, completion, digitno))
+        next unless @set.includes?(Identity.new(key, completion, digitno))
 
         if digitno == 0
-          sink.call(completion)
+          yield completion
         else
           queue << {completion, digitno - 1}
         end
       end
     end
   end
+end
+
+struct Etrace
+  record Identity, key : Label, state : Label, digitno : UInt8
+
+  include EmergentLabelMultimap(Identity)
+
+  def initialize(@fresh : LabelGenerator, @set : ISet(Identity))
+  end
+
+  private def set : ISet(Identity)
+    @set
+  end
+
+  def mount(referrer : Label, path : Array(Label), deps : IDepSet)
+    path.each_cons_pair do |u, v|
+      assign(referrer, u, v, deps: deps)
+    end
+
+    deps
+  end
 
   def walk(referrer : Label, origin : Label, &sink : Label ->) : Nil
     sink.call(origin)
 
-    each_successor(referrer, origin) do |successor|
+    each_value(referrer, origin) do |successor|
       walk(referrer, successor, &sink)
     end
   end
 end
 
 struct ::Ww::Term
-  def self.encode(src : Etrace::Key) : Term
-    Term.of(:etrace, :key, :primary, encode(src.scope), encode(src.state), src.digitno)
+  def self.encode(src : Etrace::Identity) : Term
+    Term.of(:etrace, :key, :primary, encode(src.key), encode(src.state), src.digitno)
   end
 
-  def self.decode?(dst : Etrace::Key.class, term : Term) : Etrace::Key?
-    matchpi?(term, %{(etrace key primary scope_ state_ digitno←(%number u8))}) do
-      Etrace::Key.new(
-        scope: decode?(Label, scope) || return,
+  def self.decode?(dst : Etrace::Identity.class, term : Term) : Etrace::Identity?
+    matchpi?(term, %{(etrace key primary key_ state_ digitno←(%number u8))}) do
+      Etrace::Identity.new(
+        key: decode?(Label, key) || return,
         state: decode?(Label, state) || return,
         digitno: digitno.to(UInt8),
       )
     end
   end
-
-  ENCODED_ETRACE_VALUE = Term.of(:etrace, :value, :primary)
-
-  def self.encode(src : Etrace::Value) : Term
-    ENCODED_ETRACE_VALUE
-  end
-
-  def self.decode?(dst : Etrace::Value.class, term : Term) : Etrace::Value?
-    term == ENCODED_ETRACE_VALUE ? Etrace::Value.new : nil
-  end
 end
 
 struct StrandSet
-  record Key, vertex : Label
-  record Value
+  record Identity, vertex : Label
 
-  def initialize(@map : IMap(Key, Value))
+  def initialize(@set : ISet(Identity))
   end
 
-  def mount(referrer : Label, vertex : Label, *, deps = Bag({Key, Value}).new)
-    key = Key.new(vertex)
-    value = @map.inc(referrer, key, Value.new)
-    deps << {key, value}
-    deps
+  def mount(referrer : Label, vertex : Label, deps : IDepSet) : Nil
+    key = Identity.new(vertex)
+
+    @set.add(referrer, key)
+
+    deps.add(key)
   end
 
   def strand?(referrer : Label, vertex : Label) : Bool
-    !!@map.latest?(referrer, Key.new(vertex))
+    @set.includes?(Identity.new(vertex))
   end
 end
 
 struct ::Ww::Term
-  def self.encode(src : StrandSet::Key) : Term
+  def self.encode(src : StrandSet::Identity) : Term
     Term.of(:"strand-set", :key, :primary, encode(src.vertex))
   end
 
-  def self.decode?(dst : StrandSet::Key.class, term : Term) : StrandSet::Key?
+  def self.decode?(dst : StrandSet::Identity.class, term : Term) : StrandSet::Identity?
     matchpi?(term, %{(strand-set key primary vertex_)}) do
-      StrandSet::Key.new(decode?(Label, vertex) || return)
+      StrandSet::Identity.new(decode?(Label, vertex) || return)
     end
-  end
-
-  ENCODED_STRAND_SET_VALUE = Term.of(:"strand-set", :value, :primary)
-
-  def self.encode(src : StrandSet::Value) : Term
-    ENCODED_STRAND_SET_VALUE
-  end
-
-  def self.decode?(dst : StrandSet::Value.class, term : Term) : StrandSet::Value?
-    term == ENCODED_STRAND_SET_VALUE ? StrandSet::Value.new : nil
   end
 end
 
 struct AppearanceSet
-  record Key, vertex : Label
-  record Value
+  record Identity, vertex : Label
 
-  def initialize(@map : IMap(Key, Value))
+  def initialize(@set : ISet(Identity))
   end
 
-  def mount(referrer : Label, vertex : Label, *, deps = Bag({Key, Value}).new)
-    key = Key.new(vertex)
-    value = @map.inc(referrer, key, Value.new)
-    deps << {key, value}
-    deps
+  def mount(referrer : Label, vertex : Label, deps : IDepSet) : Nil
+    key = Identity.new(vertex)
+
+    @set.add(referrer, key)
+
+    deps.add(key)
   end
 
   def appearance?(referrer : Label, vertex : Label) : Bool
-    !!@map.latest?(referrer, Key.new(vertex))
+    @set.includes?(Identity.new(vertex))
   end
 end
 
 struct ::Ww::Term
-  def self.encode(src : AppearanceSet::Key) : Term
+  def self.encode(src : AppearanceSet::Identity) : Term
     Term.of(:"appearance-set", :key, :primary, encode(src.vertex))
   end
 
-  def self.decode?(dst : AppearanceSet::Key.class, term : Term) : AppearanceSet::Key?
+  def self.decode?(dst : AppearanceSet::Identity.class, term : Term) : AppearanceSet::Identity?
     matchpi?(term, %{(appearance-set key primary vertex_)}) do
-      AppearanceSet::Key.new(decode?(Label, vertex) || return)
+      AppearanceSet::Identity.new(decode?(Label, vertex) || return)
     end
-  end
-
-  ENCODED_APPEARANCE_SET_VALUE = Term.of(:"appearance-set", :value, :primary)
-
-  def self.encode(src : AppearanceSet::Value) : Term
-    ENCODED_APPEARANCE_SET_VALUE
-  end
-
-  def self.decode?(dst : AppearanceSet::Value.class, term : Term) : AppearanceSet::Value?
-    term == ENCODED_APPEARANCE_SET_VALUE ? AppearanceSet::Value.new : nil
   end
 end
 
 # One-to-many map for decoding a conjunction vertex into the sensors that
 # were bound to it.
-# TODO: extract common with `Etrace`
 struct SensorMultimap
-  # :nodoc:
-  BASE = 4u128
+  record Identity, key : Label, state : Label, digitno : UInt8
 
-  # :nodoc:
-  BASE_DIGITS = {0u128, 1u128, 2u128, 3u128}
+  include EmergentLabelMultimap(Identity)
 
-  # :nodoc:
-  BASE_LENGTH_U128 = 64u8
-
-  record Key, scope : Label, state : Label, digitno : UInt8
-  record Value
-
-  def initialize(@fresh : LabelGenerator, @map : IMap(Key, Value))
+  def initialize(@fresh : LabelGenerator, @set : ISet(Identity))
   end
 
-  def mount(referrer : Label, scope : Label, succ : Label, *, deps = Bag({Key, Value}).new)
-    succ.each_prefix_with_index(base: BASE, max: BASE_LENGTH_U128) do |prefix, index|
-      key = Key.new(scope, prefix, index)
-      value = @map.inc(referrer, key, Value.new)
-      deps << {key, value}
-    end
-
-    deps
+  private def set : ISet(Identity)
+    @set
   end
 
-  # TODO: what this method is doing appears to be "embarassingly parallel". Parallelize!
-  def each_successor(referrer : Label, scope : Label, &sink : Label ->) : Nil
-    queue = Deque{ {Label.zero, BASE_LENGTH_U128 - 1} }
-
-    while entry = queue.shift?
-      state, digitno = entry
-
-      BASE_DIGITS.each do |choice|
-        completion = state.complete(choice, base: BASE, index: digitno)
-
-        next unless @map.latest?(referrer, Key.new(scope, completion, digitno))
-
-        if digitno == 0
-          sink.call(completion)
-        else
-          queue << {completion, digitno - 1}
-        end
-      end
-    end
+  def mount(referrer : Label, conjv : Label, sensor : Label, deps : IDepSet) : Nil
+    assign(referrer, conjv, sensor, deps)
   end
 
   def decode(referrer : Label, sensor : Label, &sink : Label ->)
-    each_successor(referrer, sensor, &sink)
+    each_value(referrer, sensor, &sink)
   end
 end
 
 struct ::Ww::Term
-  def self.encode(src : SensorMultimap::Key) : Term
-    Term.of(:"sensor-multimap", :key, :primary, encode(src.scope), encode(src.state), src.digitno)
+  def self.encode(src : SensorMultimap::Identity) : Term
+    Term.of(:"sensor-multimap", :key, :primary, encode(src.key), encode(src.state), src.digitno)
   end
 
-  def self.decode?(dst : SensorMultimap::Key.class, term : Term) : SensorMultimap::Key?
-    matchpi?(term, %{(sensor-multimap key primary scope_ state_ digitno←(%number u8))}) do
-      SensorMultimap::Key.new(
-        scope: decode?(Label, scope) || return,
+  def self.decode?(dst : SensorMultimap::Identity.class, term : Term) : SensorMultimap::Identity?
+    matchpi?(term, %{(sensor-multimap key primary key_ state_ digitno←(%number u8))}) do
+      SensorMultimap::Identity.new(
+        key: decode?(Label, key) || return,
         state: decode?(Label, state) || return,
         digitno: digitno.to(UInt8),
       )
     end
-  end
-
-  ENCODED_SENSOR_MULTIMAP_VALUE = Term.of(:"sensor-multimap", :value, :primary)
-
-  def self.encode(src : SensorMultimap::Value) : Term
-    ENCODED_SENSOR_MULTIMAP_VALUE
-  end
-
-  def self.decode?(dst : SensorMultimap::Value.class, term : Term) : SensorMultimap::Value?
-    term == ENCODED_SENSOR_MULTIMAP_VALUE ? SensorMultimap::Value.new : nil
   end
 end
 
@@ -978,16 +611,15 @@ struct SensorDataMap
   def initialize(@map : IMap(Key, Value))
   end
 
-  def mount(instant : Label, data : SensorData, *, deps = Bag({Key, Value}).new)
+  def mount(instant : Label, data : SensorData, deps : IDepSet) : Nil
     key = Key.new(instant)
     value0 = Value.new(data)
-    value1 = @map.inc(instant, key, value0)
+    value1 = @map.ref(instant, key, value0)
     unless value0 == value1
       raise ArgumentError.new("instant is not unique")
     end
 
-    deps << {key, value0}
-    deps
+    deps.add(key, value0)
   end
 
   def query?(instant : Label) : SensorData?
@@ -1026,16 +658,15 @@ struct AppearanceDataMap
   def initialize(@map : IMap(Key, Value))
   end
 
-  def mount(instant : Label, data : AppearanceData, *, deps = Bag({Key, Value}).new)
+  def mount(instant : Label, data : AppearanceData, deps : IDepSet) : Nil
     key = Key.new(instant)
     value0 = Value.new(data)
-    value1 = @map.inc(instant, key, value0)
+    value1 = @map.ref(instant, key, value0)
     unless value0 == value1
       raise ArgumentError.new("instant is not unique")
     end
 
-    deps << {key, value0}
-    deps
+    deps.add(key, value0)
   end
 
   def query?(instant : Label) : AppearanceData?
@@ -1095,16 +726,45 @@ end
 class SurfaceNotMountedError < Exception
 end
 
+module IDepSet
+end
+
+struct DepSet(K, V, T)
+  include IDepSet
+
+  def initialize
+    @entries = [] of {K, V}
+    @identities = [] of T
+  end
+
+  def add(object : T) : Nil
+    @identities << object
+  end
+
+  def add(key : K, value : V) : Nil
+    @entries << {key, value}
+  end
+
+  def clear(referrer : Label, map : IMap(K, V), set : ISet(T)) : Nil
+    @entries.each { |key, _| map.unref(referrer, key)  }
+    @identities.each { |identity| set.delete(referrer, identity) }
+    @entries.clear
+    @identities.clear
+  end
+end
+
 struct Tspace
   alias Key = Tbase::Key | SensorDataMap::Key | AppearanceDataMap::Key
   alias Value = Tbase::Value | SensorDataMap::Value | AppearanceDataMap::Value
+  alias Identity = Tbase::Identity
+
   alias Dismiss = ->
 
-  def initialize(@fresh : LabelGenerator, @map : IMap(Key, Value))
+  def initialize(@fresh : LabelGenerator, @map : IMap(Key, Value), @set : ISet(Identity))
   end
 
   def tbase : Tbase
-    Tbase.new(@fresh, @map.submap(Tbase::Key, Tbase::Value))
+    Tbase.new(@fresh, @map.submap(Tbase::Key, Tbase::Value), @set)
   end
 
   def sensors : SensorDataMap
@@ -1116,7 +776,7 @@ struct Tspace
   end
 
   def summon(sdata : SensorData, subject : Tbase::Sensor, *, seen : S = [] of AppearanceData) : {S, Dismiss} forall S
-    deps = Bag({Key, Value}).new
+    deps = DepSet(Key, Value, Identity).new
 
     _ = sensors.mount(subject.id, sdata, deps: deps)
     _ = tbase.mount(subject, deps: deps)
@@ -1132,7 +792,7 @@ struct Tspace
 
       mounted = false
 
-      @map.decall(subject.id, deps.to_a { |(key, _)| key })
+      deps.clear(subject.id, @map, @set)
 
       nil
     end
@@ -1141,7 +801,7 @@ struct Tspace
   end
 
   def summon(adata : AppearanceData, subject : Tbase::Appearance, &excite : SensorData ->) : Dismiss
-    deps = Bag({Key, Value}).new
+    deps = DepSet(Key, Value, Identity).new
 
     _ = appearances.mount(subject.id, adata, deps: deps)
     _ = tbase.mount(subject, deps: deps)
@@ -1157,7 +817,7 @@ struct Tspace
 
       mounted = false
 
-      @map.decall(subject.id, deps.to_a { |(key, _)| key })
+      deps.clear(subject.id, @map, @set)
 
       nil
     end
@@ -1358,9 +1018,6 @@ end
 class Tconn
   Log = ::Log.for("Tconn")
 
-  alias Map = IMap(Tspace::Key, Tspace::Value)
-  alias Chat = IChat(Activation)
-
   record Sensor, pattern : Term, selector : Term? = nil do
     def self.new(pattern : String, **kwargs) : Sensor
       new(ML.term(pattern), **kwargs)
@@ -1380,8 +1037,9 @@ class Tconn
   # NOTE: *sink* may be called with the same `Overview` multiple times in a row;
   # it is your responsibility to suppress repetitions if necessary.
   record Spec,
-    map : Map,
-    chat : Chat,
+    map : IMap(Tspace::Key, Tspace::Value),
+    set : ISet(Tspace::Identity),
+    chat : IChat(Activation),
     sink : Sink,
     fresh : LabelGenerator = WWID,
     keepalive : KeepaliveSpec? = nil
@@ -1457,6 +1115,7 @@ class Tconn
   def initialize(spec : Spec)
     # Extract ivars from spec.
     @map = spec.map
+    @set = spec.set
     @chat = spec.chat
     @sink = spec.sink
     @fresh = spec.fresh
@@ -1512,7 +1171,7 @@ class Tconn
   end
 
   def tspace : Tspace
-    Tspace.new(@fresh, @map)
+    Tspace.new(@fresh, @map, @set)
   end
 
   def close
@@ -1781,6 +1440,143 @@ class RemoteStringChat
   end
 end
 
+# struct EmergentStringMap
+#   alias Atom = Value | Bytesize
+
+#   record Value, key : String, byte_index : UInt32, state : UInt32
+#   record Bytesize, key : String, byte_index : UInt32
+
+#   def initialize(@set : ISet(Atom))
+#   end
+
+#   # TODO: include checksum/running hash in state
+#   def latest?(key : String) : String?
+#     String.build do |io|
+#       byte_index = 0u32
+
+#       until @set.includes?(Bytesize.new(key, byte_index))
+#         byte_state = 0u32
+#         byte_completed = false
+
+#         (0u32...8u32).each do |bit_index|
+#           {0u32, 1u32}.each do |bit|
+#             completion = byte_state | (bit << bit_index)
+#             next unless @set.includes?(Value.new(key, byte_index, completion))
+
+#             byte_state = completion
+#             byte_completed = true
+#           end
+
+#           break unless byte_completed
+#         end
+
+#         return if byte_state.zero?
+
+#         io.write_byte(byte_state.to_u8)
+#         byte_index += 1
+#       end
+#     end
+#   end
+
+#   # TODO: include checksum/running hash in state
+#   def assign(referrer : Label, key : String, value : String, atoms : Array(Atom)) : Nil
+#     # - We assume Unicode, encoded using UTF-8.
+#     # - Each byte of UTF-8 is built up from smaller Value atoms, in Big Endian order.
+#     (0...value.bytesize).each do |byte_index|
+#       byte = value.byte_at(byte_index)
+#       state = 0u32
+
+#       (0...byte.bit_length).each do |bit_index|
+#         digit = byte.bit(bit_index)
+#         state |= digit << bit_index
+#         atom = Value.new(key, byte_index.to_u32, state)
+#         @set.add(referrer, atom)
+#         atoms << atom
+#       end
+#     end
+
+#     atom = Bytesize.new(key, value.bytesize.to_u32)
+#     @set.add(referrer, atom)
+#   end
+# end
+
+# struct ::Ww::Term
+#   def self.encode(object : EmergentStringMap::Value)
+#     Term.of(0, object.key, object.byte_index, object.state)
+#   end
+
+#   def self.encode(object : EmergentStringMap::Bytesize)
+#     Term.of(1, object.key, object.byte_index)
+#   end
+# end
+
+# class SetStringMap
+#   include IMap(String, String)
+
+#   def initialize(set : ISet(String))
+#     set = TermSet(EmergentStringMap::Atom).new(CompactMLSet.new(DigestSet.new(set)))
+#     @emap = EmergentStringMap.new(set)
+#   end
+
+#   def latest?(referrer : Label, key : String) : String?
+#     @emap.latest?(key)
+#   end
+
+#   def size : Int32
+#     -1
+#   end
+
+#   # "If value exists, return it; otherwise, assign to default"
+#   def ref(referrer : Label, key : String, default : String) : String
+#     @emap.put_if_absent(referrer, key, default, [] of EmergentStringMap::Atom)
+#     # if value = @emap.value?(key)
+#     #   return value
+#     # end
+#     # @emap.assign(referrer, key, default, [] of EmergentStringMap::Atom)
+#     # default
+#   end
+
+#   def unref(referrer : Label, key : String) : Nil
+#     # NOP (use atom array instead)
+#   end
+# end
+
+# {% skip_file unless flag?(:surfmain) %}
+
+# ref1 = WWID.call
+# ref2 = WWID.call
+
+# base_set = SyncInMemorySet(EmergentStringMap::Atom).new
+# map = EmergentStringMap.new(base_set)
+# map.put_if_absent(ref1, "John Doe", "0", [] of EmergentStringMap::Atom)
+# pp map
+
+# base_map = SetStringMap.new(base_set)
+# set = TermSet(Tspace::Identity).new(CompactMLSet.new(DigestSet.new(base_set)))
+# map = TermMap(Tspace::Key, Tspace::Value).new(CompactMLMap.new(base_map))
+
+# # map.ref(ref1, "John Doe", "0")
+# # map.ref(ref2, "Samantha Doe", "1")
+# # pp map.latest?(ref1, "John Doe")
+# # pp map.latest?(ref2, "Samantha Doe")
+# # map.ref(ref1, "John Doe", "45")
+# # map.ref(ref2, "John Doe", "50")
+
+# # pp map
+
+# # map.unref(ref1, "John Doe")
+
+# # pp map
+# # map.unref(ref2, "John Doe")
+# # pp map
+# chat = SyncInMemoryChat(Activation).new
+
+# Tconn.open(set: set, map: map, sink: Tconn::Sink.new { |act| pp act }, chat: chat) do |conn|
+#   conn[0] = Tconn::Appearance.new(Term.of(123))
+#   conn[1] = Tconn::Sensor.new(Term.of(:x_number))
+#   conn[0] = Tconn::Appearance.new(Term.of(456))
+# end
+
 {% skip_file unless flag?(:surf2) %}
 
 Log.setup_from_env(default_level: :trace)
@@ -1858,22 +1654,24 @@ end
 
 if ARGV[0]? == "serve"
   ctx = ExecutionContext::MultiThreaded.new("Serve Threads", 2)
-  ctx.spawn { StringMapRPC::Server.new("127.0.0.1", 9810).run }
+  ctx.spawn { StringMapSetRPC::Server.new("127.0.0.1", 9810).run }
   ctx.spawn { serve_chat("127.0.0.1", 9811) }
 
   puts "Map on port 9810"
   puts "Chat on port 9811"
   sleep
 elsif ARGV[0]? == "join"
+  remote = RemoteStringMapSet.new("127.0.0.1", 9810)
   # map = SyncInMemoryMap(Tspace::Key, Tspace::Value).new
-  map = TermMap(Tspace::Key, Tspace::Value).new(CompactMLMap.new(KeyDigestMap(String, String).new(RemoteStringMap.new("127.0.0.1", 9810))))
+  map = TermMap(Tspace::Key, Tspace::Value).new(CompactMLMap.new(KeyDigestMap(String, String).new(remote)))
   # chat = SyncInMemoryChat(Activation).new
   chat = TermChat(Activation).new(CompactMLChat.new(RemoteStringChat.new("127.0.0.1", 9811)))
+  set = TermSet(Tspace::Identity).new(CompactMLSet.new(DigestSet.new(remote)))
 
   sink = ->(multisets : Term::Dict) do
     Tconn::Log.debug { ML.display(multisets) }
   end
-  Tconn.open(map, chat, Tconn::Spec.multisets(&sink), keepalive: Tconn::KeepaliveSpec.new(period: 5.seconds..10.seconds)) do |conn|
+  Tconn.open(map, set, chat, Tconn::Spec.multisets(&sink), keepalive: Tconn::KeepaliveSpec.new(period: 5.seconds..10.seconds)) do |conn|
     while input = (print "> "; gets)
       case input.strip
       when /^sensor\s+(\d+)\s+(.+)$/

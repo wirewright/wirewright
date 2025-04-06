@@ -24,13 +24,12 @@ module Ww::Meridium
     def initialize(@fresh : LabelGenerator, @map : IMap(Key, Value))
     end
 
-    # Mounts an Xgraph rule (an *xrule*) for *referrer*. Returns a bag of pair
-    # dependencies (an existing bag can be provided via *deps*) for removal or
-    # maintenance; and the label of the resulting xrule. See also: `Xgraph`.
+    # Mounts an Xgraph rule (an *xrule*) for *referrer*. Returns the label of
+    # the xrule. See also: `Xgraph`.
     #
     # NOTE: *xrule* must be pre-sorted ascending. You lose ownership of *xrule*
     # until this method returns.
-    def mount(referrer : Label, xrule : Deque(Label), *, deps : D = Bag({Key, Value}).new) : {D, Label} forall D
+    def mount(referrer : Label, xrule : Deque(Label), deps : IDepSet) : Label
       if xrule.empty?
         raise ArgumentError.new
       end
@@ -40,13 +39,13 @@ module Ww::Meridium
         b = xrule.shift
 
         key = Key.new(a, b)
-        value = @map.inc(referrer, key, Value.new(@fresh.call))
-        deps << {key, value}
+        value = @map.ref(referrer, key, Value.new(@fresh.call))
+        deps.add(key, value)
 
         xrule << value.id
       end
 
-      {deps, xrule[0]}
+      xrule[0]
     end
 
     private def conjs(referrer : Label, vertices : Deque(Label), sink : Label ->) : Nil

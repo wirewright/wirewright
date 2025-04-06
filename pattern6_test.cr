@@ -383,6 +383,7 @@ def tspace(flow : Term::Dict, & : Term, Term ->)
 
   # Use as many maps out of the ones used in practice as possible when testing.
   map = TermMap(Tspace::Key, Tspace::Value).new(CompactMLMap.new(KeyDigestMap(String, String).new(SyncInMemoryMap(String, String).new)))
+  set = SyncInMemorySet(Tspace::Identity).new
   chat = TermChat(Activation).new(CompactMLChat.new(SyncInMemoryChat(String).new))
 
   conns = {} of Term => Tconn
@@ -394,7 +395,7 @@ def tspace(flow : Term::Dict, & : Term, Term ->)
     Term.matchpi?(step, %{(conn conn-name_symbol children_*)}) do
       next if conns.has_key?(conn_name)
 
-      spec = Tconn::Spec.new(map, chat, Tconn::Spec.multisets { |multiset| view = multiset })
+      spec = Tconn::Spec.new(map, set, chat, Tconn::Spec.multisets { |multiset| view = multiset })
       conns[conn_name] = Tconn.new(spec)
 
       children.each_item_unordered do |child|

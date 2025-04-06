@@ -20,8 +20,9 @@ module Ww::Meridium
   # does not care. As long as the map is thread-safe, Tbase is thread-safe; as long
   # as the map is distributed, Tbase is distributed, and so on.
   struct Tbase
-    alias Key = Utrie::Key | Xgraph::Key | Ttrie::Key | Etrace::Key | StrandSet::Key | AppearanceSet::Key | SensorMultimap::Key
-    alias Value = Utrie::Value | Xgraph::Value | Ttrie::Value | Etrace::Value | StrandSet::Value | AppearanceSet::Value | SensorMultimap::Value
+    alias Key = Utrie::Key | Xgraph::Key | Ttrie::Key
+    alias Value = Utrie::Value | Xgraph::Value | Ttrie::Value
+    alias Identity = Etrace::Identity | StrandSet::Identity | AppearanceSet::Identity | SensorMultimap::Identity
 
     # Data that `Tbase` needs to know about a sensor.
     record Sensor, id : Label, strands : StrandList do
@@ -53,7 +54,7 @@ module Ww::Meridium
 
     alias Subject = Sensor | Appearance
 
-    def initialize(@fresh : LabelGenerator, @map : IMap(Key, Value))
+    def initialize(@fresh : LabelGenerator, @map : IMap(Key, Value), @set : ISet(Identity))
     end
 
     # Constructs a `Utrie` view of this termbase's underlying map.
@@ -68,12 +69,12 @@ module Ww::Meridium
 
     # Constructs an `Etrace` view of this termbase's underlying map.
     def etrace : Etrace
-      Etrace.new(@fresh, @map.submap(Etrace::Key, Etrace::Value))
+      Etrace.new(@fresh, @set.subset(Etrace::Identity))
     end
 
     # Constructs a `StrandSet` view of this termbase's underlying map.
     def strands : StrandSet
-      StrandSet.new(@map.submap(StrandSet::Key, StrandSet::Value))
+      StrandSet.new(@set.subset(StrandSet::Identity))
     end
 
     # Constructs an `Xgraph` view of this termbase's underlying map.
@@ -83,61 +84,54 @@ module Ww::Meridium
 
     # Constructs a `SensorMultimap` view of this termbase's underlying map.
     def sensors : SensorMultimap
-      SensorMultimap.new(@fresh, @map.submap(SensorMultimap::Key, SensorMultimap::Value))
+      SensorMultimap.new(@fresh, @set.subset(SensorMultimap::Identity))
     end
 
     # Constructs an `AppearanceSet` view of this termbase's underlying map.
     def appearances : AppearanceSet
-      AppearanceSet.new(@map.submap(AppearanceSet::Key, AppearanceSet::Value))
+      AppearanceSet.new(@set.subset(AppearanceSet::Identity))
     end
 
     # Inserts a sensor *subject* into this termbase. Returns *deps*.
     #
     # *deps* acts as a sink for all key-value pairs inserted by this method into
-    # the underlying map. It must respond to `<<`. Its main purpose is to allow you
-    # to unmount *subject* later on; to unmount *subject* you will simply have to
-    # delete all key-value pairs contained in *deps* from the underlying map
-    # (see `IMap#dec`).
-    def mount(subject : Sensor, *, deps : D = Bag({Key, Value}).new) : D forall D
+    # the underlying map. Its main purpose is to allow you to unmount *subject*
+    # later on; it collects all necessary data to do so.
+    def mount(subject : Sensor, deps : IDepSet) : Nil
       rule = Deque(Label).new
 
       subject.strands.each do |strand|
-        _, endpoint = utrie.mount(subject.id, strand, deps: deps)
-        _ = strands.mount(subject.id, endpoint, deps: deps)
+        endpoint = utrie.mount(subject.id, strand, deps: deps)
+
+        strands.mount(subject.id, endpoint, deps: deps)
 
         rule << endpoint
       end
 
       rule.unstable_sort!
 
-      _, conjv = xgraph.mount(subject.id, rule, deps: deps)
-      _ = sensors.mount(subject.id, conjv, subject.id, deps: deps)
+      conjv = xgraph.mount(subject.id, rule, deps: deps)
 
-      deps
+      sensors.mount(subject.id, conjv, subject.id, deps: deps)
     end
 
     # Inserts an appearance *subject* into this termbase. Returns *deps*.
     #
     # *deps* acts as a sink for all key-value pairs inserted by this method into
-    # the underlying map. It must respond to `<<`. Its main purpose is to allow you
-    # to unmount *subject* later on; to unmount *subject* you will simply have to
-    # delete all key-value pairs contained in *deps* from the underlying map
-    # (see `IMap#dec`).
-    def mount(subject : Appearance, *, deps : D = Bag({Key, Value}).new) : D forall D
+    # the underlying map. Its main purpose is to allow you to unmount *subject*
+    # later on; it collects all necessary data to do so.
+    def mount(subject : Appearance, deps : IDepSet) : Nil
       Term.each_keypath_and_leaf(subject.value) do |keypath, leaf|
-        keypath.push(leaf)
+        keypath.push(leaf) do
+          path = ttrie.mount(subject.id, keypath, subject.id, deps: deps)
 
-        _, path = ttrie.mount(subject.id, keypath, subject.id, deps: deps)
-        _ = etrace.mount(subject.id, path, deps: deps)
-
-        keypath.pop
+          etrace.mount(subject.id, path, deps: deps)
+        end
 
         true # continue
       end
 
-      _ = appearances.mount(subject.id, subject.id, deps: deps)
-
-      deps
+      appearances.mount(subject.id, subject.id, deps: deps)
     end
 
     # Calls *sink* with each appearance complement of *subject*.

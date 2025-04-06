@@ -35,28 +35,26 @@ module Ww::Meridium
     def initialize(@fresh : LabelGenerator, @map : IMap(Key, Value))
     end
 
-    # Mounts a *strand* of `Ubase`s for *referrer*. Returns a bag of pair
-    # dependencies (an existing bag can be provided via *deps*) for removal or
-    # maintenance; and the label of the step thus reached (`Step#id` of the last
-    # base in *strand*).
-    def mount(referrer : Label, strand : Strand, *, deps : D = Bag({Key, Value}).new) : {D, Label} forall D
+    # Mounts a *strand* of `Ubase`s for *referrer*. Returns the label of
+    # the step thus reached (`Step#id` of the last base in *strand*).
+    def mount(referrer : Label, strand : Strand, deps : IDepSet) : Label
       unless strand[0]? == Ubase::Trunk.new
         raise ArgumentError.new("expected a nonempty strand that starts with Trunk")
       end
 
       key = Origin.new
-      origin = @map.inc(referrer, key, Value.new(@fresh.call))
+      origin = @map.ref(referrer, key, Value.new(@fresh.call))
       current = origin.succ
-      deps << {key, origin}
+      deps.add(key, origin)
 
       strand[1..].each do |base|
         key = Step.new(current, base)
-        step = @map.inc(referrer, key, Value.new(@fresh.call))
+        step = @map.ref(referrer, key, Value.new(@fresh.call))
         current = step.succ
-        deps << {key, step}
+        deps.add(key, step)
       end
 
-      {deps, current}
+      current
     end
 
     private def successor?(referrer : Label, key : Key) : Label?
