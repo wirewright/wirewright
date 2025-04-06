@@ -313,3 +313,12 @@
   (nested
     (pulse pout "sink for values of the capture")
     (literal capture "name of the capture made by `pattern`")))
+
+(node alloy "Renders an Alloy template from incoming variable dicts (environments)"
+  (nested
+    (pulse envs "source of environments")
+    (comma to)
+    (pulse instances "sink for rendered templates (template instances)"))
+  (literal template "Alloy template that should be rendered")
+  (prop? strict "Do not render if there are problems (e.g. some variables missing). Default: false")
+  (prop? complaints "Pulse edge to file complaints to (e.g. that some variable is missing)"))

@@ -734,6 +734,26 @@ module Rhodium
         end
       end
 
+      givenpi %{(alloy (@pin_ to @pout_) template_ ¦ _ strict⋮ false) (pulse @pin_ vars_) -1} do |vars|
+        vars = vars.as_d? || Term[]
+        instance, complaints = Alloy.render_with_complaints(vars, template)
+
+        effect(document1, nodepath, node0) do
+          if (complout = node0[:complaints]?) && ML.edge?(complout)
+            complaints.each do |complaint|
+              event :pulse, complout, complaint
+            end
+          end
+
+          # TODO: have the node "tell" about errors in the template when strict: false!!!
+          if strict.false? || complaints.empty?
+            event :pulse, pout, instance
+          end
+
+          false
+        end
+      end
+
       # Sensors and appearances
       begin
         givenpi %{[sensor pattern_ in tspace_symbol to @_] (initialize _) -1} do

@@ -300,6 +300,7 @@ module NodeCompletion
 
       matchpi %{(prop? id_ desc_string)} do
         io << "property " << id << " -  " << desc.to(String)
+        io.puts
 
         ord
       end

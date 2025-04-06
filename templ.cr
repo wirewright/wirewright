@@ -4,7 +4,7 @@ module Alloy
   extend self
 
   # :nodoc:
-  record Context, vars : Term::Dict, templateR : Rewriter, exprR : Rewriter, strict : Bool, errors : Stack(String) do
+  record Context, vars : Term::Dict, templateR : Rewriter, exprR : Rewriter, errors : Stack(String) do
     def error(&) : Nil
       errors << yield
     end
@@ -220,7 +220,7 @@ module Alloy
 
         children1 = Term::Dict.build do |commit|
           dict.items.each do |item|
-            case rewrite = render0(ctx.vars.with(itemvar, item), children, ctx.strict, ctx.errors)
+            case rewrite = render0(ctx.vars.with(itemvar, item), children, ctx.errors)
             in Rewrite::None
               commit.concat(children.items)
             in Rewrite::One
@@ -293,11 +293,34 @@ module Alloy
     end
   end
 
-  def render0(vars : Term::Dict, template : Term, strict : Bool, errors : Stack(String)) : Rewrite::Any
+  # Attempts to parse *term* as `^fallback` expression.
+  private def fallback(ctx : Context, term : Term) : Rewrite::Any
+    variants = [] of String
+
+    Term.case(term, patterns: variants) do
+      matchpi %{(^fallback main_ fallback_)} do
+        problems = Stack(String).new
+        rewrite = render0(ctx.vars, main, errors: problems)
+        if problems.present?
+          rewrite = rewrite0(fallback, ctx.templateR).as?(Rewrite::Some)
+          rewrite ||= Rewrite.one(fallback)
+        end
+        rewrite
+      end
+
+      otherwise do
+        ctx.error { "invalid ^fallback expression, expected one of:\n#{variants.join('\n', &.li(bullet: "-", indent: 2))}" }
+
+        Rewrite.none
+      end
+    end
+  end
+
+  def render0(vars : Term::Dict, template : Term, errors : Stack(String)) : Rewrite::Any
     set_template, rec_template = recR
     set_expr, rec_expr = recR
 
-    ctx = Context.new(vars, templateR: rec_template, exprR: rec_expr, strict: strict, errors: errors)
+    ctx = Context.new(vars, templateR: rec_template, exprR: rec_expr, errors: errors)
 
     exprR = set_expr.call switchR(
       { %{rewritee_dict}, chainR(entriesR(rec_expr), callR(PRIMITIVES)) },
@@ -315,6 +338,7 @@ module Alloy
       { %{rewritee←[^each _*]}, callR(->meach(Context, Term).partial(ctx))},
       { %{rewritee←[^expr _*]}, chainR(callR(->expr(Context, Term).partial(ctx)), rec_template)},
       { %{rewritee←[^extend _*]}, chainR(callR(->mextend(Context, Term).partial(ctx)), rec_template)},
+      { %{rewritee←[^fallback _*]}, callR(->fallback(Context, Term).partial(ctx))},
       { %{rewritee_dict}, entriesR(rec_template)},
     )
 
@@ -323,13 +347,20 @@ module Alloy
 
   def render(vars : Term::Dict, template : Term, *, strict : Bool = true)
     errors = Stack(String).new
-    rewrite = render0(vars, template, strict, errors)
+    rewrite = render0(vars, template, errors)
 
     if strict && errors.present?
       raise errors.join('\n')
     end
 
     rewrite.term? || template
+  end
+
+  def render_with_complaints(vars : Term::Dict, template : Term) : {Term, Enumerable(String)}
+    errors = Stack(String).new
+    rewrite = render0(vars, template, errors)
+
+    {rewrite.term? || template, errors}
   end
 end
 
