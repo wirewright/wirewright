@@ -15,8 +15,16 @@ module Ww
 
     # Returns Crystal `true` if this boolean is Wirewright `true`. Effectively,
     # converts this boolean to a Crystal boolean.
+    @[AlwaysInline]
     def true? : Bool
       @value
+    end
+
+    # Returns Crystal `false` if this boolean is Wirewright `false`. Effectively,
+    # converts this boolean to a Crystal boolean.
+    @[AlwaysInline]
+    def false? : Bool
+      !@value
     end
 
     def_equals @value

@@ -10,13 +10,17 @@ PRIMITIVES = ProcRuleset.build do
 
   rulepi1 %[(string term_)] { ML.display(term, endl: false) }
 
-  rulepi1 %[(ml ml_string)] do
-    begin
-      {:"ml/ok", ML.term(ml.to(String))}
-    rescue ML::SyntaxError
+  rulepi1 %[(ml ml_string ¦ () shadow⋮ true)] do
+    term = ML.term(ml.to(String))
+    if shadow.false? && (symbol = term.as_sym?) && Rhodium.shadow?(symbol)
       # TODO: line col message
       {:"ml/err"}
+    else
+      {:"ml/ok", term}
     end
+  rescue ML::SyntaxError
+    # TODO: line col message
+    {:"ml/err"}
   end
 
   rulepi1 %[(< a_number b_number)] do

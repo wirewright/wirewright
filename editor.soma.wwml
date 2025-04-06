@@ -273,7 +273,7 @@ C←[lhs←";" | rhs←"" (M←(input ";") _*) @EDGE_]
 
 ;; Convert to motion
 [_string c←(| motion←(%string nonempty) ¦ motion: true) _string (M←(key enter) _*) @EDGE_]
-  <> {M: (motion $'(ml →motion)), c: |}
+  <> {M: (motion $'(ml →motion shadow: false)), c: |}
 
 ;; Parse motion
 [_string | _string (M←(motion (ml/ok term_)) _*) @EDGE_]
@@ -549,7 +549,7 @@ C←(_string | _string (M←(paste-ahead) _*) @EDGE_ ¦ _ clipboard_: (cut term_
   <> {(M): ((move-back-right) (leave-pair))}
 
 [lhs←(%string nonempty) | "" (M←(leave-pair) _*) @EDGE_]
-  <> {M: (leave-pair $'(ml →lhs))}
+  <> {M: (leave-pair $'(ml →lhs shadow: false))}
 
 (_* ⏏target ¦ (%entry _ C←[lhs_string | "" (M←(leave-pair (ml/ok term_)) _*) @EDGE_]))
   <> {(M): (), lhs: "", target: ↑C, C: ↑term}
@@ -570,7 +570,7 @@ C←(_string | _string (M←(paste-ahead) _*) @EDGE_ ¦ _ clipboard_: (cut term_
 
 ;; (expel-left)
 [lhs_string | _string (M←(expel-left (ok_*) (err_*)) _*) @EDGE_]
-  <> {M: (expel-left $'(ml →lhs) ↑ok ↑err)}
+  <> {M: (expel-left $'(ml →lhs shadow: false) ↑ok ↑err)}
 
 [_* ⏏pred [lhs_string | _string (M←(expel-left (ml/ok term_) (ok_*) (_*)) _*) @EDGE_] _*]
   <> {(M): ↑ok, lhs: "", pred: →term}
@@ -580,7 +580,7 @@ C←(_string | _string (M←(paste-ahead) _*) @EDGE_ ¦ _ clipboard_: (cut term_
 
 ;; (expel-right)
 [_string | rhs_string (M←(expel-right (ok_*) (err_*)) _*) @EDGE_]
-  <> {M: (expel-right $'(ml →rhs) ↑ok ↑err)}
+  <> {M: (expel-right $'(ml →rhs shadow: false) ↑ok ↑err)}
 
 [_* [_string | rhs_string (M←(expel-right (ml/ok term_) (ok_*) (_*)) _*) @EDGE_] ⏏succ _*]
   <> {(M): ↑ok, rhs: "", succ: →term}
@@ -590,7 +590,7 @@ C←(_string | _string (M←(paste-ahead) _*) @EDGE_ ¦ _ clipboard_: (cut term_
 
 ;; (expel-mid)
 [lhs_string | rhs_string (M←(expel-mid (ok_*) (err_*)) _*) @EDGE_]
-  <> {M: (expel-mid $'(ml →lhs) $'(ml →rhs) ↑ok ↑err)}
+  <> {M: (expel-mid $'(ml →lhs shadow: false) $'(ml →rhs shadow: false) ↑ok ↑err)}
 
 [_* ⏏pred [lhs_string | rhs_string (M←(expel-mid (ml/ok lterm_) (ml/ok rterm_) (ok_*) (_*)) _*) @EDGE_] ⏏succ _*]
   <> {(M): ↑ok, lhs: "", rhs: "", pred: →lterm, succ: →rterm}
