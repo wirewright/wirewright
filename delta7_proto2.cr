@@ -62,17 +62,23 @@ module Rhodium
   # if *node* is impassable.
   def passable_range?(node : Term) : Range(Int32, Int32)?
     Term.case(node) do
-      matchpi %[(group _*)], %{[row _*]}, %{[col _*]} { 1...node.itemsize }
+      matchpi %{[group _*]}, %{[row _*]}, %{[col _*]} { 1...node.itemsize }
       matchpi %{[unit _ _*]} { 2...node.itemsize }
-      matchpi %{(view @_ as _ _)} { 4...5 }
-      matchpi %[(edit-cage for @_ _*)] { 3...node.itemsize }
-      matchpi %[(decay (%number +i32) _*)] { 2...node.itemsize }
-      matchpi %[(lookaround @_ @_ _*)] { 3...node.itemsize }
-      matchpi %[(frag _ @_)] { 1...2 }
-      matchpi %[(mutator @_ _)] { 2...3 }
-      matchpi %[(cover _ _+)] { 2...node.itemsize }
+      matchpi %{[view @_ as _ _]} { 4...5 }
+      matchpi %{[edit-cage for @_ _*]} { 3...node.itemsize }
+      matchpi %{[decay (%number +i32) _*]} { 2...node.itemsize }
+      matchpi %{[lookaround @_ @_ _*]} { 3...node.itemsize }
+      matchpi %{[frag _ @_]} { 1...2 }
+      matchpi %{[mutator @_ _]} { 2...3 }
+      matchpi %{[cover _ _+]} { 2...node.itemsize }
       otherwise { }
     end
+  end
+
+  # Returns `true` if *node* is passable, i.e. has children that are also nodes.
+  # Returns `false` otherwise.
+  def passable_node?(node : Term) : Bool
+    !!passable_range?(node)
   end
 
   # Mutates *keypath* into its successor in *document*, taking into account
@@ -85,7 +91,7 @@ module Rhodium
   # that is, a keypath to a valid nodes. The terms are used somewhat interchangeably
   # throughout the code, but in theory there is a distinction. A *keypath* is
   # an arbitrary keypath whereas a *nodepath* points to a node exclusively.
-  def successor?(document : Term::Dict, keypath : Stack(Int32)) : Bool
+  def successor?(document : Term::Dict, keypath : Stack(Int32), *, descend : Bool = true) : Bool
     return false unless focus = follow?(document, keypath)
 
     # We're at the root.
@@ -100,15 +106,17 @@ module Rhodium
     end
 
     # Check if we can descend. Descend if that is the case.
-    passable_range = passable_range?(focus)
-    if passable_range && !passable_range.empty?
-      unless passable_range.exclusive?
-        raise "BUG: expected .possible_range? to return an exclusive range"
+    if descend
+      passable_range = passable_range?(focus)
+      if passable_range && !passable_range.empty?
+        unless passable_range.exclusive?
+          raise "BUG: expected .possible_range? to return an exclusive range"
+        end
+
+        keypath << passable_range.end - 1
+
+        return true
       end
-
-      keypath << passable_range.end - 1
-
-      return true
     end
 
     index = keypath.pop
@@ -261,46 +269,102 @@ module Rhodium
     enclosing?(document, keypath) { |parent| yield parent } || raise KeypathError.new
   end
 
-  private def cursordepth0(node : Term, depth : Int32, pairspart : Bool) : Int32
-    if M1::Operator.probe?(Term[], CURSORP, node)
+  @[Flags]
+  enum CursordepthConfig : UInt8
+    # Visit the itemspart of dictionaries.
+    Items
+
+    # Visit the shadow pairspart of dictionaries.
+    PairsShadow
+
+    # Visit the nonshadow pairspart of dictionaries.
+    PairsNonshadow
+
+    # When visiting deep itemspart, consider the items there as those of the node
+    # on which cursordepth() was called. If a deep item is a cursor, this
+    # will result in `1` being returned as if the cursor was a direct item of
+    # the original node.
+    AdoptInDeepItems
+
+    # When visiting deep pairspart, consider the pairs there as those of the node
+    # on which cursordepth() was called. If a deep pair is a cursor, this
+    # will result in `1` being returned as if the cursor was a direct pair of
+    # the original node.
+    AdoptInDeepPairs
+
+    def each(dict : Term::Dict, & : Term ->) : Nil
+      if items?
+        dict.each_item_unordered { |item| yield item }
+      end
+
+      if pairs_shadow? && pairs_nonshadow?
+        dict.each_entry { |_, value| yield value }
+      elsif pairs_shadow?
+        dict.each_entry do |key, value|
+          next unless Rhodium.shadow?(key)
+          yield value
+        end
+      elsif pairs_nonshadow?
+        dict.each_entry do |key, value|
+          next if Rhodium.shadow?(key)
+          yield value
+        end
+      end
+    end
+  end
+
+  private def cursordepth0(dict : Term::Dict, depth : Int32, config : CursordepthConfig) : Int32
+    if M1::Operator.probe?(Term[], CURSORP, Term.of(dict))
       return depth
     end
 
-    return Int32::MAX unless dict = node.as_d?
-    return Int32::MAX unless dict.probably_includes?(Term[:|])
+    unless dict.probably_includes?(Term[:|])
+      return Int32::MAX
+    end
 
     mindepth = Int32::MAX
 
-    if pairspart
-      dict.each_entry do |_, value|
-        subdepth = cursordepth0(value, depth + 1, pairspart)
-        mindepth = subdepth if subdepth < mindepth
-      end
-    else
-      dict.each_item_unordered do |item|
-        subdepth = cursordepth0(item, depth + 1, pairspart)
-        mindepth = subdepth if subdepth < mindepth
-      end
+    config.each(dict) do |child|
+      next unless child = child.as_d?
+
+      subdepth = cursordepth0(child, depth + 1, config)
+      mindepth = subdepth if subdepth < mindepth
     end
 
     mindepth
   end
 
-  # Returns the depth at which the cursor is found in *node*.
+  # Returns the depth at which the cursor is found in *term*.
   #
-  # - If *node* is the cursor returns `0`.
-  # - If the cursor is contained in one of *node*'s entries returns `1`,
-  #   if in one of *node*'s entry entries, `2`, and so on.
-  # - If there are no cursors in *node* returns `-1`.
+  # - If *term* is the cursor returns `0`.
+  # - If the cursor is contained in one of *term*'s entries returns `1`,
+  #   if in one of *term*'s entry entries, `2`, and so on.
+  # - If there are no cursors in *term* returns `-1`.
   #
-  # By default, only the itemspart of *node* is inspected. If *pairspart* is set
-  # to `true`, its pairspart is going to be inspected as well.
+  # See also: `CursordepthConfig`.
   #
-  # If there are multiple cursors in *node*, returns the depth of the closest
-  # cursor (i.e., minimum depth).
-  def cursordepth(node : Term, *, pairspart : Bool = false) : Int32
-    depth = cursordepth0(node, 0, pairspart)
-    depth == Int32::MAX ? -1 : depth
+  # If there are multiple cursors in *node*, returns the *minimum* depth of one
+  # in the itemspart; or if there is no cursor there, then the minimum depth of
+  # one in the pairspart.
+  def cursordepth(term : Term, *, config : CursordepthConfig = {:items}) : Int32
+    return -1 unless dict = term.as_d?
+
+    itemsdepth = cursordepth0(dict.itemspart, 0, config)
+    if itemsdepth < Int32::MAX
+      return config.adopt_in_deep_items? && itemsdepth > 1 ? 1 : itemsdepth
+    end
+
+    pairsdepth = cursordepth0(dict.pairspart, 0, config)
+    if pairsdepth < Int32::MAX
+      return config.adopt_in_deep_pairs? && pairsdepth > 1 ? 1 : pairsdepth
+    end
+
+    -1
+  end
+
+  # Shorthand for calling `cursordepth` with config preferred by Rhodium nodes.
+  def cursordepth_in_node(node : Term) : Int32
+    cursordepth(node, config: CursordepthConfig.new({:items, :pairs_nonshadow, :adopt_in_deep_pairs}))
   end
 
   # Converts *source* indexable of terms to a keypath into *document*. Returns
@@ -514,17 +578,11 @@ module Rhodium
   def handle(document0 : Term::Dict, document1 : Term::Dict, nodepath : Stack(Int32), event : Term) : {Term::Dict, Bool}
     node0 = follow(document0, nodepath)
 
-    if node0.type.dict?
-      cursordepth = cursordepth(Term.of(node0.unsafe_as_d))
-    else
-      cursordepth = -1
-    end
-
-    Term.case({node0, event, cursordepth}) do
+    Term.case({node0, event, cursordepth_in_node(node0)}) do
       # TODO: these are very similar and should be refactored into
-      # something single, with variations.
+      # something single, with variations, like transform.
 
-      givenpi %[(cell v_ @cout_) (initialize _) -1] do
+      givenpi %{[cell v_ @cout_] (initialize _) -1} do
         effect(document1, nodepath, node0) do
           event :"cell/created", cout, v
           cell cout, v
@@ -533,13 +591,13 @@ module Rhodium
         end
       end
 
-      givenpi %[(cell v_ @cout_ for pattern_) (initialize _) -1] do
+      givenpi %{[cell v_ @cout_ for pattern_] (initialize _) -1} do
         effect(document1, nodepath, node0) do
           if created = M1.probe?(pattern, v)
             event :"cell/created", cout, v
             cell cout, v
           else
-            backmap ML.term(%[(cell v_ _ for _)]), Term.of(Term[].with({:v}, Term[]))
+            backmap ML.term(%{[cell v_ _ for _]}), Term.of(Term[].with({:v}, Term[]))
           end
 
           created
@@ -547,45 +605,45 @@ module Rhodium
       end
 
       givenpi(
-        %[(cell v_ @cout_) (assign @cout_ v_) -1],
-        %[(cell v_ @cout_ for _) (assign @cout_ v_) -1],
+        %{[cell v_ @cout_] (assign @cout_ v_) -1},
+        %{[cell v_ @cout_ for _] (assign @cout_ v_) -1},
       ) do
         {document1, false}
       end
 
-      givenpi %[(cell v0_ @cout_) (assign @cout_ v1_) -1] do
+      givenpi %{[cell v0_ @cout_] (assign @cout_ v1_) -1} do
         effect(document1, nodepath, node0) do
           event :"cell/updated", cout, v0, v1
           cell cout, v1
-          backmap %[(cell v_ @_)], v: v1
+          backmap %{[cell v_ @_]}, v: v1
 
           # The identity of the cell did not change, do not trigger transition.
           false
         end
       end
 
-      givenpi %[(cell @cout_) (assign @cout_ v0_) -1] do
+      givenpi %{[cell @cout_] (assign @cout_ v0_) -1} do
         effect(document1, nodepath, node0) do
-          backmap %[(cell ⏏v @_)], v: v0
+          backmap %[[cell ⏏v @_]], v: v0
 
           true
         end
       end
 
-      givenpi %[(cell @cout_ for _) (assign @cout_ v0_) -1] do
+      givenpi %{[cell @cout_ for _] (assign @cout_ v0_) -1} do
         effect(document1, nodepath, node0) do
-          backmap %[(cell ⏏v @_ for _)], v: v0
+          backmap %{[cell ⏏v @_ for _]}, v: v0
 
           true
         end
       end
 
-      givenpi %[(cell v0_ @cout_ for pattern_) (assign @cout_ v1_) -1] do
+      givenpi %{[cell v0_ @cout_ for pattern_] (assign @cout_ v1_) -1} do
         if M1.probe?(pattern, v1)
           effect(document1, nodepath, node0) do
             event :"cell/updated", cout, v0, v1
             cell cout, v1
-            backmap %[(cell v_ @_ _*)], v: v1
+            backmap %{[cell v_ @_ _*]}, v: v1
 
             # The identity of the cell did not change, do not trigger transition.
             false
@@ -595,18 +653,18 @@ module Rhodium
         end
       end
 
-      # TODO: instead of (%number (whole _) > 0) we should have (%number i32 > 0). All +-variants must
+      # TODO: instead of (%number (whole _) > 0) we should have (%number 0 < i32). All +-variants must
       # allow the exclusion of zero this way.
 
       # TODO: this should support for ... guard as well!!
 
-      givenpi %[(cell vs0←(_*) @cout_) (assign/log @cout_ v_ limit←(%number (whole _) > 0)) -1] do
+      givenpi %{[cell vs0←(_*) @cout_] (assign/log @cout_ v_ limit←(%number (whole _) > 0)) -1} do
         vs1 = vs0.rightmost(limit.to(Int32) - 1).append(v)
 
         effect(document1, nodepath, node0) do
           event :"cell/updated", cout, vs0, vs1
           cell cout, vs1
-          backmap %[(cell v_ @_)], v: vs1
+          backmap %{[cell v_ @_]}, v: vs1
 
           # The identity of the cell did not change, do not trigger transition.
           false
@@ -615,7 +673,7 @@ module Rhodium
 
       # frag
       begin
-        givenpi %[(frag v_ @cout_) (initialize (frag @_)) _] do
+        givenpi %{[frag v_ @cout_] (initialize (frag @_)) _} do
           effect(document1, nodepath, node0) do
             event :"cell/created", cout, v
             cell cout, v
@@ -624,13 +682,13 @@ module Rhodium
           end
         end
 
-        givenpi %[(frag v_ @cout_) (assign @cout_ v_) _] do
+        givenpi %{[frag v_ @cout_] (assign @cout_ v_) _} do
           {document1, false}
         end
 
-        givenpi %[(frag v_ @cout_) (pulse @cout_ clear) _] do
+        givenpi %{[frag v_ @cout_] (pulse @cout_ clear) _} do
           effect(document1, nodepath, node0) do
-            backmap %[(_ v_ @_)], %[{(v): ()}]
+            backmap %[[_ v_ @_]], %[{(v): ()}]
 
             true
           end
@@ -638,20 +696,20 @@ module Rhodium
 
         # This will trigger the next rule due to fragment's secondary identity
         # changing (being removed) after the assignment.
-        givenpi %[(frag v0_ @cout_) (assign @cout_ v1_) _] do
+        givenpi %{[frag v0_ @cout_] (assign @cout_ v1_) _} do
           effect(document1, nodepath, node0) do
-            backmap %[(frag v_ @_)], v: v1
+            backmap %{[frag v_ @_]}, v: v1
 
             # We need this to trigger the next rule.
             true
           end
         end
 
-        givenpi %[(frag v1_ @cout_) (frag/removed @cout_ v0_) _] do
+        givenpi %{[frag v1_ @cout_] (frag/removed @cout_ v0_) _} do
           effect(document1, nodepath, node0) do
             event :"cell/updated", cout, v0, v1
             cell cout, v1
-            backmap %[(frag v_ @_)], v: v1
+            backmap %{[frag v_ @_]}, v: v1
 
             # Fragment may have been assigned anything, including something that
             # needs a transition right now.
@@ -659,9 +717,9 @@ module Rhodium
           end
         end
 
-        givenpi %[(frag @cout_) (assign @cout_ v0_) _] do
+        givenpi %{[frag @cout_] (assign @cout_ v0_) _} do
           effect(document1, nodepath, node0) do
-            backmap %[(frag ⏏v @_)], v: v0
+            backmap %{[frag ⏏v @_]}, v: v0
 
             true
           end
@@ -670,15 +728,15 @@ module Rhodium
 
       # Sensors and appearances
       begin
-        givenpi %{(sensor pattern_ in tspace_symbol to @_ ¦ (%keypool selector)) (initialize _) -1} do
+        givenpi %{[sensor pattern_ in tspace_symbol to @_] (initialize _) -1} do
           selector = node0[:selector]?
 
           {document1.morph({Tspaces, tspace, :sensors, {pattern, selector}, true}), true}
         end
 
         givenpi(
-          %{(sensor pattern_ in tspace_ to @pout_) (stimuli tspace_ (pattern_) multiset_) -1},
-          %{(sensor pattern_ in tspace_ to @pout_ ¦ () selector_) (stimuli tspace_ (pattern_ selector_) multiset_) -1},
+          %{[sensor pattern_ in tspace_ to @pout_] (stimuli tspace_ (pattern_) multiset_) -1},
+          %{(sensor pattern_ in tspace_ to @pout_ ¦ _ selector_) (stimuli tspace_ (pattern_ selector_) multiset_) -1},
         ) do
           effect(document1, nodepath, node0) do
             event :pulse, pout, multiset
@@ -687,38 +745,101 @@ module Rhodium
           end
         end
 
-        givenpi %{(appearance value_ in tspace_symbol ¦ (%keypool selector)) (initialize _) -1} do
+        givenpi %{[appearance value_ in tspace_symbol] (initialize _) -1} do
           selector = node0[:selector]?
 
           {document1.morph({Tspaces, tspace, :appearances, {value, selector}, true}), true}
         end
       end
 
+      # Any node can define mail: @pout_ attribute. If that's the case this rule
+      # activates, helping the node consume events from its inbox.
+      givenpi %[{¦ inbox: (msg_ _*) mail: @pout_} cycle -1] do
+        effect(document1, nodepath, node0) do
+          event :pulse, pout, msg
+          backmap %[{¦ inbox: (M_ _*)}], %[{(M): ()}]
+
+          false
+        end
+      end
+
+      # Any node that wants to receive hover sets its hover: false.
+      # Any node that wants to receive active sets its active: false.
+      # Here we handle hover: true + mouse press = active: false -> active: true,
+      # and the reverse. We also enqueue mail about hover and press.
+      begin
+        # Activate
+        givenpi %[{¦ hover: true active: false} (mouse press) -1] do
+          effect(document1, nodepath, node0) do
+            backmap %[{¦ active_}], %[{active: true}]
+
+            false
+          end
+        end
+
+        # Deactivate & press
+        givenpi %[{¦ active: true inbox_dict} (mouse release) -1] do
+          effect(document1, nodepath, node0) do
+            backmap %[{¦ active_ inbox: [_* ⏏M]}], %[{active: false, M: (press)}]
+
+            false
+          end
+        end
+      end
+
       # Button
       begin
+        # Activate
+        givenpi(
+          %{(button _ to @_ (_*) ¦ _ hover: true) (mouse press) _},
+          %{(button _ as _ to @_ (_*) ¦ _ hover: true) (mouse press) _},
+          %{(button _ to @_ waiting @_ (_*) ¦ _ hover: true) (mouse press) _},
+          %{(button _ as _ to @_ waiting @_ (_*) ¦ _ hover: true) (mouse press) _},
+        ) do
+          effect(document1, nodepath, node0) do
+            backmap %[{¦ -active_}], %[{active: true}]
+
+            false
+          end
+        end
+
+        # Deactivate & press
+        givenpi(
+          %{(button _ to @_ (_*) ¦ _ active: true) (mouse release) _},
+          %{(button _ as _ to @_ (_*) ¦ _ active: true) (mouse release) _},
+          %{(button _ to @_ waiting @_ (_*) ¦ _ active: true) (mouse release) _},
+          %{(button _ as _ to @_ waiting @_ (_*) ¦ _ active: true) (mouse release) _},
+        ) do
+          effect(document1, nodepath, node0) do
+            backmap %[(_* (_* ⏏M) ¦ _ active_)], %[{(active): (), M: (press)}]
+
+            false
+          end
+        end
+
         # 1 phase button
 
-        givenpi %[[button _ as msg_ to @pout_ ((press) _*)] cycle _] do |msg|
+        givenpi %{[button _ as msg_ to @pout_ ((press) _*)] cycle _} do |msg|
           effect(document1, nodepath, node0) do
             if ML.edge?(msg.not_nil!)
               msg = document0[Cells, msg]?
             end
             if msg
               event :pulse, pout, msg
-              backmap %[[button _ as _ to @_ (state_ _*)]], %[{(state): ()}]
+              backmap %{[button _ as _ to @_ (state_ _*)]}, %[{(state): ()}]
             end
             false
           end
         end
 
-        givenpi %[[button msg_ to @pout_ ((press) _*)] cycle _] do |msg|
+        givenpi %{[button msg_ to @pout_ ((press) _*)] cycle _} do |msg|
           effect(document1, nodepath, node0) do
             if ML.edge?(msg.not_nil!)
               msg = document0[Cells, msg]?
             end
             if msg
               event :pulse, pout, msg
-              backmap %[[button _ to _ (action_ _*)]], %[{(action): ()}]
+              backmap %{[button _ to _ (action_ _*)]}, %[{(action): ()}]
             end
             false
           end
@@ -727,37 +848,37 @@ module Rhodium
         # 2 phase button
 
         # Down
-        givenpi %[[button _ as msg_ to @pout_ waiting @_ ((press) _*)] cycle _] do |msg|
+        givenpi %{[button _ as msg_ to @pout_ waiting @_ ((press) _*)] cycle _} do |msg|
           effect(document1, nodepath, node0) do
             if ML.edge?(msg.not_nil!)
               msg = document0[Cells, msg]?
             end
             if msg
               event :pulse, pout, msg
-              backmap %[[button _ as _ to @_ waiting _ ((state_) _*)]], %[{state: pressed}]
+              backmap %{[button _ as _ to @_ waiting _ ((state_) _*)]}, %[{state: pressed}]
             end
             false
           end
         end
 
         # Up
-        givenpi %[[button _ as _ to @_ waiting @acks_ ((pressed) _*)] (pulse @acks_ _) _] do
+        givenpi %{[button _ as _ to @_ waiting @acks_ ((pressed) _*)] (pulse @acks_ _) _} do
           effect(document1, nodepath, node0) do
-            backmap %[[button _ as _ to @_ waiting _ (state_ _*)]], %[{(state): ()}]
+            backmap %{[button _ as _ to @_ waiting _ (state_ _*)]}, %[{(state): ()}]
 
             false
           end
         end
 
         # Down
-        givenpi %[[button msg_ to @pout_ waiting @_ ((press) _*)] cycle _] do |msg|
+        givenpi %{[button msg_ to @pout_ waiting @_ ((press) _*)] cycle _} do |msg|
           effect(document1, nodepath, node0) do
             if ML.edge?(msg.not_nil!)
               msg = document0[Cells, msg]?
             end
             if msg
               event :pulse, pout, msg
-              backmap %[[button _ to _ waiting _ ((state_) _*)]], %[{state: pressed}]
+              backmap %{[button _ to _ waiting _ ((state_) _*)]}, %[{state: pressed}]
             end
 
             false
@@ -765,16 +886,16 @@ module Rhodium
         end
 
         # Up
-        givenpi %[[button _ to @_ waiting @acks_ ((pressed) _*)] (pulse @acks_ _) _] do
+        givenpi %{[button _ to @_ waiting @acks_ ((pressed) _*)] (pulse @acks_ _) _} do
           effect(document1, nodepath, node0) do
-            backmap %[[button _ to @_  waiting _ (state_ _*)]], %[{(state): ()}]
+            backmap %{[button _ to @_  waiting _ (state_ _*)]}, %[{(state): ()}]
 
             false
           end
         end
       end
 
-      givenpi %[(combined pins←⟨@pin_⟩ in storage_dict to @pout_) (pulse @pin_ value_) -1] do
+      givenpi %{[combine pins←⟨@pin_⟩ in storage_dict for @pout_] (pulse @pin_ value_) -1} do
         storage1 = storage
 
         pins.items.each_with_index do |current, index|
@@ -789,13 +910,13 @@ module Rhodium
             storage1 = Term[]
           end
 
-          backmap %[(combined _ in storage_ to @_)], storage: storage1
+          backmap %{[combine _ in storage_ for @_]}, storage: storage1
 
           false
         end
       end
 
-      givenpi %[(log @pin_ in @cout_ ¦ limit⋮ 10) (pulse @pin_ term_) -1] do
+      givenpi %{(log @pin_ in @cout_ ¦ _ limit⋮ 10) (pulse @pin_ term_) -1} do
         effect(document1, nodepath, node0) do
           event :"assign/log", cout, term, limit
 
@@ -803,15 +924,15 @@ module Rhodium
         end
       end
 
-      givenpi %[(log @pin_ in (entries_*) ¦ limit: (%optional 10 limit←(%number (whole _) > 0))) (pulse @pin_ term_) _] do
+      givenpi %{(log @pin_ in (entries_*) ¦ _ limit: (%optional 10 limit←(%number (whole _) > 0))) (pulse @pin_ term_) _} do
         effect(document1, nodepath, node0) do
-          backmap ML.term(%[(log _ in (entries_*) ¦ _)]), Term.of(Term[].with({:entries}, entries.rightmost(limit.to(Int32) - 1).append(term)))
+          backmap ML.term(%{[log _ in (entries_*)]}), Term.of(Term[].with({:entries}, entries.rightmost(limit.to(Int32) - 1).append(term)))
 
           false
         end
       end
 
-      givenpi %[(latest @pin_ @cout_) (pulse @pin_ v_) -1] do
+      givenpi %{[latest @pin_ @cout_] (pulse @pin_ v_) -1} do
         effect(document1, nodepath, node0) do
           event :assign, cout, v
 
@@ -819,7 +940,7 @@ module Rhodium
         end
       end
 
-      givenpi %[(latest (@pin_ pattern_) (@cout_ form_)) (pulse @pin_ v_) -1] do
+      givenpi %{[latest (@pin_ pattern_) (@cout_ form_)] (pulse @pin_ v_) -1} do
         if env = M1.match?(pattern, v)
           effect(document1, nodepath, node0) do
             event :assign, cout, M1.bsubst(form, env)
@@ -831,31 +952,31 @@ module Rhodium
         end
       end
 
-      givenpi %[(view @updates_ as template_) (pulse @updates_ update_dict) -1] do
+      givenpi %{[view @updates_ as template_] (pulse @updates_ update_dict) -1} do
         effect(document1, nodepath, node0) do
           instance = Alloy.render(update.unsafe_as_d, template, strict: false)
 
-          backmap %[(_ _ as _ ⏏instance)], instance: instance
+          backmap %{[_ _ as _ ⏏instance]}, instance: instance
 
           false
         end
       end
 
-      givenpi %[(view @updates_ as template_ _) (pulse @updates_ update_dict) -1] do
+      givenpi %{[view @updates_ as template_ _] (pulse @updates_ update_dict) -1} do
         effect(document1, nodepath, node0) do
           instance = Alloy.render(update.unsafe_as_d, template, strict: false)
 
-          backmap %[(_ _ as _ instance_)], instance: instance
+          backmap %{[_ _ as _ instance_]}, instance: instance
 
           false
         end
       end
 
       givenpi(
-        %[(changes @cin_ to @pout_) (cell/created @cin_ v_) -1],
-        %[(changes @cin_ to @pout_) (cell/updated @cin_ _ v_) -1],
-        %[(changes @cin_ to @pout_ as v_) (cell/created @cin_ _) -1],
-        %[(changes @cin_ to @pout_ as v_) (cell/updated @cin_ _ _) -1],
+        %{[changes @cin_ to @pout_] (cell/created @cin_ v_) -1},
+        %{[changes @cin_ to @pout_] (cell/updated @cin_ _ v_) -1},
+        %{[changes @cin_ to @pout_ as v_] (cell/created @cin_ _) -1},
+        %{[changes @cin_ to @pout_ as v_] (cell/updated @cin_ _ _) -1},
       ) do
         effect(document1, nodepath, node0) do
           event :pulse, pout, v
@@ -865,8 +986,8 @@ module Rhodium
       end
 
       givenpi(
-        %[(initial @cin_ to @pout_) (cell/created @cin_ v_) -1],
-        %[(initial @cin_ to @pout_ as v_) (cell/created @cin_ _) -1],
+        %{[initial @cin_ to @pout_] (cell/created @cin_ v_) -1},
+        %{[initial @cin_ to @pout_ as v_] (cell/created @cin_ _) -1},
       ) do
         effect(document1, nodepath, node0) do
           event :pulse, pout, v
@@ -876,7 +997,7 @@ module Rhodium
       end
 
       # `blast`: inorder emission of items from lists received on `pin`.
-      givenpi %[(blast @pin_ to @pout_) (pulse @pin_ list_dict) -1] do
+      givenpi %{[blast @pin_ to @pout_] (pulse @pin_ list_dict) -1} do
         effect(document1, nodepath, node0) do
           list.items.each do |item|
             event :pulse, pout, item
@@ -888,8 +1009,8 @@ module Rhodium
 
       begin
         givenpi(
-          %{(bridge @pin_ to @pout_) (pulse @pin_ value_) -1},
-          %{(bridge @pin_ as value_ to @pout_) (pulse @pin_ _) -1}
+          %{[bridge @pin_ to @pout_] (pulse @pin_ value_) -1},
+          %{[bridge @pin_ as value_ to @pout_] (pulse @pin_ _) -1}
         ) do
           effect(document1, nodepath, node0) do
             event :pulse, pout, value
@@ -898,7 +1019,7 @@ module Rhodium
           end
         end
 
-        givenpi %{(bridge (@pin_ pattern_) to @pout_) (pulse @pin_ matchee_) -1} do
+        givenpi %{[bridge (@pin_ pattern_) to @pout_] (pulse @pin_ matchee_) -1} do
           unless M1.probe?(pattern, matchee)
             return document1, false
           end
@@ -910,7 +1031,7 @@ module Rhodium
           end
         end
 
-        givenpi %{(bridge (@pin_ pattern_) to (@pout_ key_)) (pulse @pin_ matchee_) -1} do
+        givenpi %{[bridge (@pin_ pattern_) to (@pout_ key_)] (pulse @pin_ matchee_) -1} do
           unless envs = M1.matches(pattern, matchee)
             return document1, false
           end
@@ -927,7 +1048,7 @@ module Rhodium
         end
       end
 
-      givenpi %[(echo @pin_) (pulse @pin_ e_) -1] do
+      givenpi %{[echo @pin_] (pulse @pin_ e_) -1} do
         effect(document1, nodepath, node0) do
           event e
 
@@ -935,7 +1056,7 @@ module Rhodium
         end
       end
 
-      givenpi %[(event e_) cycle -1] do
+      givenpi %{[event e_] cycle -1} do
         effect(document1, nodepath, node0) do
           event e
           backmap %[N_], %[{(N): ()}]
@@ -946,26 +1067,26 @@ module Rhodium
         end
       end
 
-      givenpi %[(queue @pin_ to @_ in (_*) waiting @_) (pulse @pin_ value_) -1] do
+      givenpi %{[queue @pin_ to @_ in (_*) waiting @_] (pulse @pin_ value_) -1} do
         effect(document1, nodepath, node0) do
-          backmap %[(_ _ to _ in (_* ⏏back) waiting _)], back: {:new, value}
+          backmap %{[_ _ to _ in (_* ⏏back) waiting _]}, back: {:new, value}
 
           false
         end
       end
 
-      givenpi %[(queue @_ to @pout_ in ((new value_) _*) waiting @_) cycle -1] do
+      givenpi %{[queue @_ to @pout_ in ((new value_) _*) waiting @_] cycle -1} do
         effect(document1, nodepath, node0) do
           event :pulse, pout, value
-          backmap %[(_ _ to _ in ((state_ _) _*) waiting _)], state: :pending
+          backmap %{[_ _ to _ in ((state_ _) _*) waiting _]}, state: :pending
 
           false
         end
       end
 
-      givenpi %[(queue @_ to @_ in ((pending _) _*) waiting @acks_) (pulse @acks_ _) -1] do
+      givenpi %{[queue @_ to @_ in ((pending _) _*) waiting @acks_] (pulse @acks_ _) -1} do
         effect(document1, nodepath, node0) do
-          backmap %[(_ _ to _ in (state_ _*) waiting _)], %[{(state): ()}]
+          backmap %{[_ _ to _ in (state_ _*) waiting _]}, %[{(state): ()}]
 
           false
         end
@@ -974,7 +1095,7 @@ module Rhodium
       # Transform logic
       begin
         # Schedule job.
-        givenpi %[(transform _* ¦ #shadow: _ #spec: spec←{¦ in: @pin_, body_}) (pulse @pin_ input_) -1] do
+        givenpi %{(transform _* ¦ _ #shadow: _ #spec: spec←{¦ in: @pin_, body_}) (pulse @pin_ input_) -1} do
           env0 = Term[]
 
           if (state_edge = spec[:state]?) && ML.edge?(state_edge)
@@ -1009,7 +1130,7 @@ module Rhodium
         end
 
         # Send feedback busy. Schedule job.
-        givenpi %[(transform _* ¦ #shadow: _ #spec: {¦ in: @pin_} #job: job_) (initialize _) -1] do
+        givenpi %{(transform _* ¦ _ #shadow: _ #spec: {¦ in: @pin_} #job: job_) (initialize _) -1} do
           effect(document1, nodepath, node0) do
             schedule job
 
@@ -1018,7 +1139,7 @@ module Rhodium
         end
 
         # Wait for the job to complete.
-        givenpi %[(transform _* ¦ #shadow: _ #spec: {¦ in: @pin_, out: @pout_} #job: job_) (job/completed job_ result_) -1] do
+        givenpi %{(transform _* ¦ _ #shadow: _ #spec: {¦ in: @pin_, out: @pout_} #job: job_) (job/completed job_ result_) -1} do
           effect(document1, nodepath, node0) do
             event :pulse, pout, result
             clear :"#job"
@@ -1029,8 +1150,8 @@ module Rhodium
         end
       end
 
-      # Initialize stateful transform
-      givenpi %[(transform @pin_ to @pout_ with state_ body_) (initialize _) -1] do
+      # Stateful transform
+      givenpi %{[transform @pin_ to @pout_ with state_ body_] (initialize _) -1} do
         effect(document1, nodepath, node0) do
           change "#shadow": {:"%literal", node0.itemspart}, "#spec": {in: pin, out: pout, state: state, body: body}
 
@@ -1039,7 +1160,7 @@ module Rhodium
       end
 
       # Stateless transform
-      givenpi %[(transform @pin_ to @pout_ body_) (initialize _) -1] do
+      givenpi %{[transform @pin_ to @pout_ body_] (initialize _) -1} do
         effect(document1, nodepath, node0) do
           change "#shadow": {:"%literal", node0.itemspart}, "#spec": {in: pin, out: pout, body: body}
 
@@ -1048,7 +1169,7 @@ module Rhodium
       end
 
       # Stateless filter transform
-      givenpi %[(transform (@pin_ pattern_) to @pout_ body_) (initialize _) -1] do
+      givenpi %{[transform (@pin_ pattern_) to @pout_ body_] (initialize _) -1} do
         effect(document1, nodepath, node0) do
           change "#shadow": {:"%literal", node0.itemspart}, "#spec": {in: pin, out: pout, filter: pattern, body: body}
 
@@ -1057,7 +1178,7 @@ module Rhodium
       end
 
       # Stateful filter transform
-      givenpi %[(transform (@pin_ pattern_) to @pout_ with state_ body_) (initialize _) -1] do
+      givenpi %{[transform (@pin_ pattern_) to @pout_ with state_ body_] (initialize _) -1} do
         effect(document1, nodepath, node0) do
           change "#shadow": {:"%literal", node0.itemspart}, "#spec": {in: pin, out: pout, filter: pattern, state: state, body: body}
 
@@ -1068,7 +1189,7 @@ module Rhodium
       # Absence node
       begin
         # Initialize `absence` to newborn state.
-        givenpi %{(absence @_ as _ to @_) (initialize _) -1} do
+        givenpi %{[absence @_ as _ to @_] (initialize _) -1} do
           effect(document1, nodepath, node0) do
             change "#shadow": {:"%literal", node0.itemspart}, "#state": :newborn
 
@@ -1078,7 +1199,7 @@ module Rhodium
 
         # Whenever we're in newborn state, on cycle, look around to see if the cell's
         # identity is in the population.
-        givenpi %{(absence @cin_ as msg_ to @pout_ ¦ #shadow: _ #state: newborn) cycle -1} do
+        givenpi %{(absence @cin_ as msg_ to @pout_ ¦ _ #shadow: _ #state: newborn) cycle -1} do
           effect(document1, nodepath, node0) do
             if document0[Cells, cin]?
               change "#state": :paired
@@ -1091,7 +1212,7 @@ module Rhodium
           end
         end
 
-        givenpi %{(absence @cin_ as msg_ to @pout_ ¦ #shadow: _ #state: paired) (cell/removed @cin_) -1} do
+        givenpi %{(absence @cin_ as msg_ to @pout_ ¦ _ #shadow: _ #state: paired) (cell/removed @cin_) -1} do
           effect(document1, nodepath, node0) do
             event :pulse, pout, msg
             change "#state": :unpaired
@@ -1100,7 +1221,7 @@ module Rhodium
           end
         end
 
-        givenpi %{(absence @cin_ as _ to @_ ¦ #shadow: _ #state: unpaired) (cell/created @cin_ _) -1} do
+        givenpi %{(absence @cin_ as _ to @_ ¦ _ #shadow: _ #state: unpaired) (cell/created @cin_ _) -1} do
           effect(document1, nodepath, node0) do
             change "#state": :paired
 
@@ -1109,32 +1230,32 @@ module Rhodium
         end
       end
 
-      givenpi %[(delay 0 children_*) cycle _] do
+      givenpi %{[delay 0 children_*] cycle _} do
         {rewrite(document1, nodepath, Rewrite.many(children.unsafe_as_d)), true}
       end
 
-      givenpi %[(delay n←(%number +i32) _*) cycle _] do
+      givenpi %{[delay n←(%number +i32) _*] cycle _} do
         effect(document1, nodepath, node0) do
-          backmap %[(delay n_ _*)], n: n - 1
+          backmap %{[delay n_ _*]}, n: n - 1
 
           false
         end
       end
 
-      givenpi %[(decay 0 _*) cycle _] do
+      givenpi %{[decay 0 _*] cycle _} do
         {rewrite(document1, nodepath, Rewrite.many(Term[])), true}
       end
 
-      givenpi %[(decay n←(%number +i32) _*) cycle _] do
+      givenpi %{[decay n←(%number +i32) _*] cycle _} do
         effect(document1, nodepath, node0) do
-          backmap %[(decay n_ _*)], n: n - 1
+          backmap %{[decay n_ _*]}, n: n - 1
 
           false
         end
       end
 
       # `edit-cast`: converts pulse signal to root-centric edit broadcast.
-      givenpi %[(edit-cast @pin_ to @bout_) (pulse @pin_ motion_) -1] do
+      givenpi %{[edit-cast @pin_ to @bout_] (pulse @pin_ motion_) -1} do
         effect(document1, nodepath, node0) do
           event :edit, bout, motion
 
@@ -1144,15 +1265,15 @@ module Rhodium
       end
 
       # `edit-cage`: converts pulse signal to children-centric non-broadcast (private) edit.
-      givenpi %[(edit-cage for @pin_ children_*) (pulse @pin_ motion_) _] do
+      givenpi %{[edit-cage for @pin_ children_*] (pulse @pin_ motion_) _} do
         effect(document1, nodepath, node0) do
-          backmap ML.term(%[(_ _ _ children_*)]), Term[].with({:children}, edit(children, motion, edge: pin, smart: true)).upcast
+          backmap ML.term(%{[_ _ _ children_*]}), Term[].with({:children}, edit(children, motion, edge: pin, smart: true)).upcast
 
           true
         end
       end
 
-      givenpi %[(map @pin_ to @pout_ (%group conds (%past (_ _) min: 1))) (pulse @pin_ input_) -1] do |conds|
+      givenpi %{[map @pin_ to @pout_ (%group conds (%past (_ _) min: 1))] (pulse @pin_ input_) -1} do |conds|
         conds.items.each do |(pattern, template)|
           next unless env = M1.match?(pattern, input)
 
@@ -1170,7 +1291,7 @@ module Rhodium
 
       # Lookaround can look behind and ahead on demand. It can also contain children.
       # On the children part, there is no isolation; it works just like `group`.
-      givenpi %[(lookaround @views_ @capture_ children_*) (pulse @capture_ _) _] do
+      givenpi %{[lookaround @views_ @capture_ children_*] (pulse @capture_ _) _} do
         expect nodepath.size > 0
 
         pivot = nodepath.last
@@ -1196,7 +1317,7 @@ module Rhodium
         end
       end
 
-      givenpi %{(mutator @pin_ value0_) (pulse @pin_ (pattern_ backspec_)) _} do
+      givenpi %{[mutator @pin_ value0_] (pulse @pin_ (pattern_ backspec_)) _} do
         value1 = M1.backmap?(pattern, backspec, value0) || value0
         node1 = Term.of(node0.morph({2, value1}))
 
@@ -1208,7 +1329,7 @@ module Rhodium
       # FIXME: this node will lead to cryptic bugs in user land. it should be removed.
       # if users want periodicity they can construct feedback circuits. those are user-
       # content centric rather than related to D7 internals.
-      givenpi %[(periodic e_) cycle -1] do
+      givenpi %{[periodic e_] cycle -1} do
         effect(document1, nodepath, node0) do
           event e
 
@@ -1246,7 +1367,7 @@ module Rhodium
   #
   # Nodes with identity are interested in receiving initialize events.
   def each_identity(node : Term, & : Term ->) : Nil
-    Term.case({node, cursordepth(node)}) do
+    Term.case({node, cursordepth_in_node(node)}) do
       givenpi(
         %{(cell _ @cout_) -1},
         %{(cell _ @cout_ for _) -1},
@@ -1831,6 +1952,19 @@ module D7
       document0 = document1
       document1 = document2
     end
+  end
+
+  # The simplest way to run a document. May block forever if *document* has
+  # e.g. a feedback loop or something that is cyclic. Uses synchronous Nitrene.
+  # Does not handle surfaces.
+  def run(document : Term::Dict) : Term::Dict
+    run(document,
+      log: Log::None.new,
+      transition: Rhodium.transition,
+      step: steps(Rhodium.step, Nitrene.step),
+      goal: Goal.none,
+      initial: true,
+    )
   end
 
   # Spec for an *equality* termination condition for document rewriting.

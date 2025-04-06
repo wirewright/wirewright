@@ -1915,7 +1915,7 @@ end
 #   - at difficulty: easy selector is sent as (64-bit salt; sha256)
 #   - at difficulty: medium selector is sent as (64-bit salt; sha512)
 #   - at difficulty: hard selector is sent as argon2id (crypto secure hash)
-# - improve Etrace/SensorMultimap ID storage efficiency by using some kind of a Patricia trie?
+# - improve Etrace/SensorMultimap ID storage efficiency by using some kind of Patricia trie?
 # - if map or chat connection is lost the Tconn must retire. Wrapping code should re-create
 #   it with new id etc. for each attempt to reconnect. This should be invisible to clients.
 # - rewrite the horrible horrible servers&clients. Have one server instead of two,

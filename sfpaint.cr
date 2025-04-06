@@ -195,7 +195,7 @@ record DrawContext, commands : Array(DrawCommand), setcursor : (Cursor ->)
 # Appends draw commands associated with *node* to *ctx*.
 #
 # - *z* is the z-index of *node*.
-def draw(ctx : DrawContext, node : Term, x : Int32, y : Int32, z : Int32) : Nil
+def UIR::Platform.draw(ctx : DrawContext, node : Term, x : Int32, y : Int32, z : Int32) : Nil
   Term.case(node) do
     # Any node can specify the cursor.
     matchpi %[{¦ cursor_symbol}] do
@@ -333,7 +333,7 @@ def draw(ctx : DrawContext, node : Term, x : Int32, y : Int32, z : Int32) : Nil
     matchpi(
       %[(layer child_ ¦ _ dl_: (%number i32)
                           dt_: (%number i32)
-                          z-index: n←(%number +i32))]
+                          z-index: n←(%number i32))]
     ) do
       draw(ctx, child, x + dl.to(Int32), y + dt.to(Int32), z: n.to(Int32))
     end
@@ -349,7 +349,7 @@ end
 # Converts uiR *markup* into a `Window` object. This object, among other
 # things, contains an array of draw commands to be executed by a Painter
 # to actually paint the window on the screen.
-def draw(markup : Term) : Window
+def UIR::Platform.draw(markup : Term) : Window
   Term.case(markup) do
     matchpi %{(window child_ ¦ _ bg_ final-w: w←(%number +i32) final-h: h←(%number +i32) cursor⋮ arrow)} do
       children = [] of DrawCommand
@@ -923,6 +923,10 @@ module UIR::Platform::SFML
   end
 
   private def transcribe(window : SF::RenderWindow, event : SF::Event::TextEntered)
+    if SF::Keyboard.key_pressed?(SF::Keyboard::Key::LControl) || SF::Keyboard.key_pressed?(SF::Keyboard::Key::RControl)
+      return [] of Term
+    end
+
     chr = event.unicode.chr
     chr.printable? ? [Term.of(:input, chr)] : [] of Term
   end
@@ -972,9 +976,11 @@ module UIR::Platform::SFML
 
     if event.control
       case event.code
-      when .a? then keyname = "a"
-      when .c? then keyname = "c"
-      when .v? then keyname = "v"
+      when .a?     then keyname = "a"
+      when .c?     then keyname = "c"
+      when .v?     then keyname = "v"
+      when .equal? then keyname = "equal"
+      when .dash?  then keyname = "minus"
       end
     end
 
@@ -1021,7 +1027,7 @@ module UIR::Platform::SFML
           end
 
           drawable = reducer.call(drawable, Term.of(:cycle))
-          commands = draw(drawable)
+          commands = UIR::Platform.draw(drawable)
 
           Lock.synchronize do
             paint(window, commands)

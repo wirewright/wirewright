@@ -11,32 +11,57 @@ end
 module D7VR
   extend self
 
-  struct Comment
+  struct AttrLeader
     include Feature
-
-    TEMPLATE = ML.term <<-WWML
-    (box style: "content py-2"
-      (box style: "w-max max-w-lg h-content pl-1 bg-neutral-700"
-        (p ^desc style: "pl-3 text-neutral-500 bg-neutral-900 text-sm w-max leading-normal")))
-    WWML
 
     def initialize(@rem : Term::Num)
     end
 
     def call(ctx, term, postfix, head, rest)
-      Term.case(term) do
-        matchpi %{(comment lines_string+)} do
-          unit = Alloy.render(Term[desc: lines.items.join('\n') { |line| line.to(String) }], TEMPLATE)
-
-          continue unless block = D7VR.block?(unit, term, @rem)
-
-          postfixed(block, postfix)
-        end
-
-        otherwise do
-          rest.call(ctx, term, postfix)
-        end
+      unless dict = term.as_d?
+        return rest.call(ctx, term, postfix)
       end
+
+      # NOTE: We assume that instantiation worked properly. This means that #-attrs
+      # are only where they should be; the user cannot inject them all the way in the
+      # document (perhaps maliciously) for them to end up here -- instance() would
+      # have removed them as they would have looked like shadow attribute keys.
+
+      dict, view = dict.without?(:"#view")
+      dict, extension = dict.without?(:"#extend")
+
+      printout = nil
+
+      # If the term defines a #view for itself attempt to render that as
+      # a block.
+      if view
+        dict, fallback = dict.without?(:"#fallback")
+
+        unless fallback
+          raise "BUG: view provided #view but did not provide #fallback"
+        end
+
+        # block? requires fallback for fallback at runtime, if the size
+        # cannot be figured out.
+        if printout = D7VR.block?(Term.of(view), fallback, @rem)
+          printout = postfixed(printout, postfix)
+        else
+          # ... If it fails right now though, at printout, we'll resort to
+          # the same fallback here.
+          printout = rest.call(ctx, fallback, postfix)
+        end
+      else
+        # If no view then render the dict (i.e. without any #-attrs)
+        printout ||= rest.call(ctx, Term.of(dict), postfix)
+      end
+
+      # FIXME: this will include postfix into info, so e.g. if we hover on
+      # postfix it'll count as a hover on printout too -- wrongly.
+      if extension
+        printout = Term.of(:info, printout) | extension
+      end
+
+      Term.of(printout)
     end
   end
 
@@ -48,72 +73,18 @@ module D7VR
 
     def call(ctx, term, postfix, head, rest)
       Term.case(term) do
-        matchpi %{[unit node_ children_+]} do
-          # TODO: relax this a little bit
-          continue unless Rhodium.cursordepth(term, pairspart: true) == -1
-
+        matchpi %{(unit node_ children_+ ¦ _ #fallback: fallback_)} do
           unit = term.pairspart.transaction do |commit|
             commit << node
             commit.concat(children.items) do |child|
               Term.case(child) do
-                matchpi %{_dict} { D7VR.of_document_node(@document, child, @rem) }
+                matchpi %{_dict} { D7VR.document_node_unit(@document, child, @rem) }
                 otherwise { child }
               end
             end
           end
 
-          continue unless block = D7VR.block?(Term.of(unit), term, @rem)
-
-          postfixed(block, postfix)
-        end
-
-        matchpi %{[view @_ as _ instance_]} do
-          # TODO: relax this a little bit
-          continue unless Rhodium.cursordepth(term, pairspart: true) == -1
-          continue unless block = D7VR.block?(instance, term, @rem)
-
-          postfixed(block, postfix)
-        end
-
-        otherwise do
-          rest.call(ctx, term, postfix)
-        end
-      end
-    end
-  end
-
-  struct Button
-    include Feature
-
-    TEMPLATE = ML.term <<-WWML
-    (button ^caption id: ^id style: ^style hover: false)
-    WWML
-
-    def initialize(@document : Term::Dict, @rem : Term::Num)
-    end
-
-    def call(ctx, term, postfix, head, rest)
-      Term.case(term) do
-        matchpi(
-          %{(button caption_ to @_ (_*) ¦ _ style⋮ "" id_)},
-          %{(button caption_ as _ to @_ (_*) ¦ _ style⋮ "" id_)},
-          %{(button caption_ to @_ (_*) waiting @_ ¦ _ style⋮ "" id_)},
-          %{(button caption_ as _ to @_ (_*) waiting @_ ¦ _ style⋮ "" id_)},
-        ) do |caption|
-          continue unless Rhodium.cursordepth(term, pairspart: true) == -1
-
-          if ML.edge?(caption)
-            continue unless caption = @document[Rhodium::Cells, caption]?
-          end
-
-          if caption.type.dict?
-            # TODO: use pretty print with forced inline
-            caption = Term.of(ML.display(caption, endl: false).gsub(/\s+/, ' '))
-          end
-
-          unit = Alloy.render(Term[id: id, caption: caption, style: style], TEMPLATE)
-
-          continue unless block = D7VR.block?(unit, term, @rem)
+          continue unless block = D7VR.block?(Term.of(unit), fallback, @rem)
 
           postfixed(block, postfix)
         end
@@ -294,214 +265,234 @@ module D7VR
     end
   end
 
-  # Renders h1-h6, p (currently known as text), code (currently known as codebox),
-  # cover text nodes.
-  struct TextNode
-    include Feature
+  # :nodoc:
+  def block?(unit : Term, source : Term, rem : Term::Num) : Term?
+    uir = Microfold.uir(Microfold::SPEC, unit, rem: rem)
+    drawable = rewrite(uir, UIR.rewriter)
 
-    COVER_TEMPLATE = ML.term <<-WWML
-    (group style: "content my-2 p-3 border border-neutral-700 rounded-sm"
-      (p "…" ^title "…" style: "text-xs text-neutral-400 gap-1"))
-    WWML
+    Term.case(drawable) do
+      # If we know its size outside of its context.
+      matchpi %[{¦ final-w: w←(%number i32) final-h: h←(%number i32)}] do
+        if w.natural_nonzero? && h.natural_nonzero?
+          Term.of(:block, unit, w: w//rem, h: h//rem)
+        end
+      end
 
-    def initialize(@document : Term::Dict, @rem : Term::Num)
+      # If we do not know its size, leave it to the UI context. Note how we specify
+      # a fallback thunk for the node, so that if it fails we can go back roughly
+      # here to pretty-printing, but this time do it only with code.
+      otherwise do
+        Term.of(:"block/floating", unit.morph({:fallback, :source, source}, {:fallback, :rem, rem}))
+      end
     end
+  end
 
-    def call(ctx, term, postfix, head, rest)
-      Term.case(term) do
-        matchpi %{[name←(%any h1 h2 h3 h4 h5 h6 text codebox) content_]} do
-          continue unless Rhodium.cursordepth(term, pairspart: true) == -1
+  TEMPLATE_BUTTON = ML.term <<-WWML
+  ;; Button is given hover and active automatically.
+  (^extend (button ^caption hover: false active: false #backlink: ^backlink) attrs)
+  WWML
 
-          node = term
+  TEMPLATE_COVER = ML.term <<-WWML
+  (group style: "content my-2 p-3 border border-neutral-700 rounded-sm"
+    (p "…" ^title "…" style: "text-xs text-neutral-400 gap-1"))
+  WWML
 
-          # TODO: Remove and make text -> p once we have smarter keypath-based rendering.
-          # Currently using p messes up the UI sometimes (e.g. interpreted as P when
-          # it must be interpreted as code).
-          if name == Term[:text]
-            node = Term.of(node.morph({0, :p}))
-          end
+  TEMPLATE_COMMENT = ML.term <<-WWML
+  (box style: "content py-2"
+    (box style: "w-max max-w-lg h-content pl-1 bg-neutral-700"
+      (p ^desc style: "pl-3 text-neutral-500 bg-neutral-900 text-sm w-max leading-normal")))
+  WWML
 
-          if ML.edge?(content)
-            # If a cell changes, the visible part of the document inevitably changes
-            # as well, since the cell primarily stores the data there; and Rhodium::Cells
-            # is only used for caching/secondary access, like we do here. Thus a rerender
-            # of associated h1-6/p will inevitably be triggered.
-            continue unless value = @document[Rhodium::Cells, content]?
+  private def instance1(document0 : Term::Dict, node : Term, nodepath : Stack(Int32)) : Term
+    Term.of_case(node) do
+      # Instantiate BUTTON node.
+      matchpi(
+        %{(button caption_ to @_ (_*) ¦ attrs_)},
+        %{(button caption_ as _ to @_ (_*) ¦ attrs_)},
+        %{(button caption_ to @_ waiting @_ (_*) ¦ attrs_)},
+        %{(button caption_ as _ to @_ waiting @_ (_*) ¦ attrs_)},
+      ) do |caption|
+        continue unless Rhodium.cursordepth_in_node(node) == -1
 
-            node = Term.of(node.morph({1, value}))
-          end
-
-          # If content is not a string Microfold will take care of it and
-          # convert it to string!
-
-          continue unless block = D7VR.block?(node, term, @rem)
-
-          postfixed(block, postfix)
+        if ML.edge?(caption)
+          continue unless caption = document0[Rhodium::Cells, caption]?
         end
 
-        matchpi %{(hr ¦ pairspart_ style⋮ "")} do
-          continue unless Rhodium.cursordepth(term, pairspart: true) == -1
-
-          node = Term.of(
-            pairspart.morph(
-              {0, {:self, :rect}},
-              {:style, Term[Microfold::SPEC[:defaults, :hr]?.try(&.as_s?) || ""].stitch(" ").stitch(style)},
-            )
-          )
-
-          continue unless block = D7VR.block?(node, term, @rem)
-
-          postfixed(block, postfix)
+        if caption.type.dict?
+          # TODO: use pretty print with forced inline
+          caption = Term.of(ML.display(caption, endl: false).gsub(/\s+/, ' '))
         end
 
-        matchpi %{(cover title_ _+)} do |title|
-          continue unless Rhodium.cursordepth(term, pairspart: true) == -1
+        view = Alloy.render(Term[caption: caption, backlink: nodepath, attrs: attrs], TEMPLATE_BUTTON)
 
-          if ML.edge?(title)
-            continue unless title = @document[Rhodium::Cells, title]?
-          end
+        node.morph({:"#view", view}, {:"#fallback", node})
+      end
 
-          node = Alloy.render(Term[title: title], COVER_TEMPLATE)
+      # Instantiate H1-H6, P, SRC nodes.
+      matchpi %{[(%any h1 h2 h3 h4 h5 h6 p src) content_]} do
+        continue unless Rhodium.cursordepth_in_node(node) == -1
 
-          continue unless block = D7VR.block?(node, term, @rem)
+        if ML.edge?(content)
+          continue unless caption = document0[Rhodium::Cells, content]?
 
-          postfixed(block, postfix)
+          # Instantiate caption if it's an edge.
+          view = node.morph({1, caption})
+        else
+          # A curious case where a node is its own view.
+          view = node
         end
 
-        otherwise do
-          rest.call(ctx, term, postfix)
+        node.morph({:"#view", view}, {:"#fallback", node})
+      end
+
+      # Instantiate HR node.
+      matchpi %{[hr]} do
+        continue unless Rhodium.cursordepth_in_node(node) == -1
+
+        view = node.morph({0, {:self, :hr, :rect}})
+
+        node.morph({:"#view", view}, {:"#fallback", node})
+      end
+
+      # Instantiate COVER node.
+      #
+      # Note how we also replace the cover node with one without its children.
+      # This is useful to avoid wasting compute on whatever is under the cover
+      # later on.
+      matchpi %{[cover title_ _+]} do |title|
+        continue unless Rhodium.cursordepth_in_node(node) == -1
+
+        if ML.edge?(title)
+          continue unless title = document0[Rhodium::Cells, title]?
+        end
+
+        view = Alloy.render(Term[title: title], TEMPLATE_COVER)
+
+        Term.of(:cover, "#view": view, "#fallback": node)
+      end
+
+      # Instantiate COMMENT node.
+      matchpi %{[comment lines_string+]} do
+        view = Alloy.render(Term[desc: lines.items.join('\n') { |line| line.to(String) }], TEMPLATE_COMMENT)
+
+        node.morph({:"#view", view}, {:"#fallback", node})
+      end
+
+      # Instantiate VIEW node.
+      matchpi %{[view @_ as _ instance_]} do
+        # TODO: relax this a little bit
+        continue unless Rhodium.cursordepth_in_node(node) == -1
+
+        node.morph({:"#view", instance}, {:"#fallback", node})
+      end
+
+      # NOTE: we do not handle UNIT nodes and the cursor here. This is because
+      # units require full recursion and it is too early to do it here; and cursors
+      # must work at any depth, not just at passable spots. We handle both during
+      # pretty printing which visits everything.
+
+      matchpi %{[unit _ _+]} do
+        # TODO: relax this a little bit
+        continue unless Rhodium.cursordepth_in_node(node) == -1
+
+        # Unit is a passable node. Clear only its own shadow attributes.
+        node = D7.nonshadow1(node)
+        node.morph({:"#fallback", node})
+      end
+
+      otherwise do
+        if Rhodium.passable_node?(node)
+          # If node is passable, remove only its own shadow attributes so that child
+          # instantiations have a chance of seeing them.
+          node = D7.nonshadow1(node)
+        else
+          # If node is impassable, remove shadow attributes recursively.
+          node = D7.nonshadow(node)
+        end
+
+        # Equip anything with an inbox: (...) attribute with a backlink via #extend.
+        # Configure the backlink so that it sends any event.
+        if (inbox = node[:inbox]?) && inbox.type.dict?
+          node.morph({:"#extend", :"#backlink", nodepath})
+        else
+          node
         end
       end
     end
   end
 
-  def visible(document : Term::Dict) : Term::Dict
-    D7.visible(document)
-  end
-
-  def annotated(document document0 : Term::Dict) : Term::Dict
+  # *Instantiation* is the first-ever step you need to do to see an arbitrary
+  # *document* through µsoma. During instantiation nodes are labeled, inbox
+  # addresses remembered, cells resolved, etc. The end result of instantiation
+  # is ready for *printing*: see `printout`.
+  def instance(document document0 : Term::Dict) : Term::Dict
     nodepath = Stack(Int32).new
-
     document1 = document0
 
-    while Rhodium.successor?(document0, nodepath)
-      node0 = Rhodium.follow(document0, nodepath)
-      node1 = node0
-
-      # TODO: extract into identity
-      Term.case(node0) do
-        matchpi(
-          %{[button caption_ to @edge_ (_*)]},
-          %{[button caption_ to @edge_ (_*) waiting @_]},
-        ) do
-          continue unless Rhodium.cursordepth(node0, pairspart: true) == -1
-
-          node1 = Term.of(node0.morph({:id, {caption.hash, caption.hash, edge.hash}.hash}))
-        end
-
-        matchpi(
-          %{[button caption_ as value_ to @edge_ (_*)]},
-          %{[button caption_ as value_ to @edge_ (_*) waiting @_]},
-        ) do
-          continue unless Rhodium.cursordepth(node0, pairspart: true) == -1
-
-          node1 = Term.of(node0.morph({:id, {caption.hash, value.hash, edge.hash}.hash}))
-        end
-
-        otherwise { }
-      end
-
+    while Rhodium.successor?(document1, nodepath)
+      node0 = Rhodium.follow(document1, nodepath)
+      node1 = instance1(document0, node0, nodepath)
       next if node0.same?(node1)
 
       document1 = Rhodium.assign(document1, nodepath, node1)
     end
 
+    # Remove shadow attributes of document1.
+    document1 = D7.nonshadow1(document1)
     document1
   end
 
-  def ref(document document0 : Term::Dict, id : Term, & : Term -> Term)
-    nodepath = Stack(Int32).new
-
-    document1 = document0
-
-    while Rhodium.successor?(document0, nodepath)
-      node0 = Rhodium.follow(document0, nodepath)
-      node1 = node0
-
-      # TODO: extract into identity
-      Term.case(node0) do
-        matchpi(
-          %{[button caption_ to @edge_ (_*)]},
-          %{[button caption_ to @edge_ (_*) waiting @_]},
-        ) do
-          next unless Term.of({caption.hash, caption.hash, edge.hash}.hash) == id
-
-          node1 = yield node0
-        end
-
-        matchpi(
-          %{[button caption_ as value_ to @edge_ (_*)]},
-          %{[button caption_ as value_ to @edge_ (_*) waiting @_]},
-        ) do
-          next unless Term.of({caption.hash, value.hash, edge.hash}.hash) == id
-
-          node1 = yield node0
-        end
-
-        otherwise { }
-      end
-
-      next if node0.same?(node1)
-
-      document1 = Rhodium.assign(document1, nodepath, node1)
-    end
-
-    document1
+  # Returns the main pretty print chain for D7VR.
+  private def ppchain(instance : Term::Dict, rem : Term::Num)
+    ML::Display::MAIN_CHAIN.prepend(
+      AttrLeader.new(rem),
+      Cursor.new(rem),
+      Unit.new(instance, rem),
+    )
   end
 
-  def ppcode(term : Term) : Term
+  # Returns the printout of a *node instance* of the given document *instance*.
+  def node_printout(instance : Term::Dict, node_instance : Term, rem : Term::Num) : Term
+    ctx = DisplayContext.new(60, 120, features: ppchain(instance, rem))
+    tree = ctx.features.call(ctx, node_instance, "")
+    printout, _ = flatten(ctx, tree)
+    printout
+  end
+
+  # Returns the printout of an arbitrary *term*.
+  #
+  # This method is interesting because it does not accept an instance of some
+  # kind (i.e. the result of `instance` or a part thereof); but rather,
+  # an arbitrary term. In effect, this method can convert any term into
+  # a printout, unlocking the rest of the rendering chain.
+  def term_printout(term : Term) : Term
     ctx = DisplayContext.new(60, 120)
     tree = ctx.features.call(ctx, term, "")
-    flat, _ = flatten(ctx, tree)
-    flat
+    printout, _ = flatten(ctx, tree)
+    printout
   end
 
-  def ppnode(node : Term, document : Term::Dict, rem : Term::Num) : Term
-    chain = ML::Display::MAIN_CHAIN.prepend(Button.new(document, rem), Comment.new(rem), Cursor.new(rem), Unit.new(document, rem), TextNode.new(document, rem))
-    ctx = DisplayContext.new(60, 120, features: chain)
-    tree = ctx.features.call(ctx, node, "")
-    flat, _ = flatten(ctx, tree)
-    flat
-  end
-
-  def ppdoc(document : Term::Dict, rem : Term::Num) : Term
-    if document.empty?
-      raise ArgumentError.new("cannot get pretty-print tree of an empty document")
+  # *Printing* converts a D7VR document *instance* into something a bit
+  # more visual -- the pretty print (or ML display) tree, along with blocks
+  # and more. Most importantly, the D7VR document printout is ready to
+  # become a Microfold unit; see `unit`.
+  #
+  # Raises `ArgumentError` if *instance* is empty.
+  def printout(instance : Term::Dict, *, rem : Term::Num) : Term
+    if instance.empty?
+      raise ArgumentError.new("cannot print an empty document")
     end
 
-    ppin = pipe(document, visible, annotated)
-    chain = ML::Display::MAIN_CHAIN.prepend(Button.new(document, rem), Comment.new(rem), Cursor.new(rem), Unit.new(document, rem), TextNode.new(document, rem))
-    ctx = DisplayContext.new(60, 120, features: chain)
-    tree = LayoutSet::All.thunk(Term.of(ppin), "", LayoutSet::DictAligned)
+    ctx = DisplayContext.new(60, 120, features: ppchain(instance, rem))
+    tree = LayoutSet::All.thunk(Term.of(instance), "", LayoutSet::DictAligned)
     flat, _ = flatten(ctx, tree)
     flat
   end
 
-  private def ugroup(children : Term::Dict, style : String = "") : Term
-    ugroup = Term::Dict.build do |commit|
-      commit << :group
-      commit.with(:style, style) unless style.empty?
-      commit.concat(children.items) { |child| unit(child) }
-    end
-
-    Term.of(ugroup)
-  end
-
-  # TODO: memoize
-
-  # Converts the given pretty-print tree *pptree* into a Microfold unit.
-  def unit(pptree : Term, style = "") : Term
-    Term.case(pptree) do
+  # Converts a D7VR document *printout* into a Microfold unit. This is where
+  # D7VR ends; it is now Microfold's job to get the document to drawing.
+  def unit(printout : Term, style = "") : Term
+    Term.of_case(printout) do
       matchpi %{(frag content_string)} do
         Term.of(:code, content, style: "#{style} text-neutral-400")
       end
@@ -530,6 +521,10 @@ module D7VR
         unit(child, style: "#{style} content pl-#{n}")
       end
 
+      matchpi %{(info child_ ¦ info_)} do
+        unit(child) | info
+      end
+
       matchpi %{(row children_+)} do
         ugroup(children.unsafe_as_d, "#{style} content flow-row")
       end
@@ -552,52 +547,43 @@ module D7VR
     end
   end
 
-  def block?(unit : Term, source : Term, rem : Term::Num) : Term?
-    uir = Microfold.uir(Microfold::SPEC, unit, rem: rem)
-    drawable = rewrite(uir, UIR.rewriter)
-
-    Term.case(drawable) do
-      # If we know its size outside of UI context
-      matchpi %[{¦ final-w: w←(%number i32) final-h: h←(%number i32)}] do
-        if w.natural_nonzero? && h.natural_nonzero?
-          # If both are valid
-          Term.of(:block, unit, w: w//rem, h: h//rem)
-        else
-          # If they're invalid then we fall back to code.
-        end
-      end
-
-      # If we do not know its size, leave it to the UI context. Note how we wrap
-      # the unit in a fallback node.
-      otherwise do
-        Term.of(:"block/floating", unit.morph({:fallback, :source, source}, {:fallback, :rem, rem}))
-      end
+  private def ugroup(children : Term::Dict, style : String = "") : Term
+    ugroup = Term::Dict.build do |commit|
+      commit << :group
+      commit.with(:style, style) unless style.empty?
+      commit.concat(children.items) { |child| unit(child) }
     end
+
+    Term.of(ugroup)
   end
 
-  # Renders an arbitrary *term* as D7VR by showing it in its code form
-  # (i.e. no fancy visuals such as buttons, cursor, etc.)
-  def of_term(term : Term) : Term
-    pipe(term, D7VR.ppcode, D7VR.unit)
+  # Renders an arbitrary *term* as a Microfold unit by showing it in its
+  # code form (i.e. no fancy visuals such as buttons, cursor, etc.)
+  def term_unit(term : Term) : Term
+    pipe(term, term_printout, unit)
   end
 
-  # Renders the given *node* that belongs to *document* as D7VR.
-  def of_document_node(document : Term::Dict, node : Term, rem : Term::Num) : Term
-    pipe(node, D7VR.ppnode(document, rem), D7VR.unit)
+  # Renders the given *node instance* that belongs to a document *instance*
+  # as a Microfold unit.
+  def document_node_unit(instance : Term::Dict, node_instance : Term, rem : Term::Num) : Term
+    printout = node_printout(instance, node_instance, rem)
+
+    unit(printout)
   end
 
-  # Renders the given *document* as D7VR.
+  # Renders the given *document* as a Microfold unit.
   #
   # WARNING: Raises `ArgumentError` if *document* is empty.
-  def of_document(document : Term::Dict, rem : Term::Num) : Term
-    pipe(document, D7VR.ppdoc(rem), D7VR.unit)
+  def document_unit(document : Term::Dict, rem : Term::Num) : Term
+    pipe(document, instance, printout(rem: rem), unit)
   end
 
-  # Converts *d7vr* into UIR using `Microfold`.
+  # Converts *unit* into UIR using `Microfold`. This method exists so that
+  # there is a centralized, D7VR-controlled way to convert into UIR.
   #
-  # You can obtain *d7vr* using `code`, `node`, or `document`.
-  def to_uir(d7vr : Term, *, rem : Term::Num) : Term
-    Microfold.uir(Microfold::SPEC, d7vr, rem: rem)
+  # You can obtain *unit* mainly using `term_unit` or `document_unit`.
+  def uir(unit : Term, *, rem : Term::Num) : Term
+    Microfold.uir(Microfold::SPEC, unit, rem: rem)
   end
 end
 
@@ -670,14 +656,18 @@ class Document
     end
   end
 
-  @rem : Term::Num
+  @rem0 : Term::Num
+  @rem1 : Term::Num
+
+  @mouse0 : {Term::Num, Term::Num}
+  @mouse1 : {Term::Num, Term::Num}
 
   def initialize
     id = @@counter.add(1, :relaxed)
 
     @document_thread = ExecutionContext::SingleThreaded.new("Document #{id}")
 
-    @view = Atomic(Term::Dict).new(Term[])
+    @dwuir = Atomic(Term::Dict).new(Term[])
     @mailbox = Mailbox.new
 
     # The following instance variables are owned exclusively by the document
@@ -736,22 +726,41 @@ class Document
     )
 
     @document = Term[]
-    @rem = Term[16]
+    @drawn = Term[]
+    @rem0 = @rem1 = Term[16]
     @initial = true
     @state = State::Clean
+    @mouse0 = @mouse1 = {Term[0], Term[0]}
   end
 
-  # Returns the latest view of this document.
-  def view : Term::Dict
-    @view.get(:relaxed)
+  # Returns the latest drawable UIR of this document.
+  def dwuir : Term::Dict
+    @dwuir.get(:relaxed)
   end
 
   # Adds *prompt* to this document's mailbox.
   def send(prompt : Term) : Nil
     @mailbox.enqueue(prompt) do
+      initial0 = @initial
+
+      @initial = false
+
+      # Force initial if it is (open ...) waking up the document thread.
+      # Otherwise the document will manage kickstarting itself during
+      # transition.
+      Term.matchpi?(prompt, %{(open _)}) do
+        initial0 = true
+      end
+
       @document_thread.spawn do
-        while mainloop?
+        initial = initial0
+
+        while mainloop?(initial: initial)
+          initial = false
         end
+
+        # WARNING: after we exit the loop above we're back in thread-
+        # unsafe territory!
       end
     end
   end
@@ -763,7 +772,7 @@ class Document
   #
   # Once the document has settled the mainloop ends. Returns `true` if
   # the mainloop needs to be restarted; `false` otherwise.
-  private def mainloop? : Bool
+  private def mainloop?(*, initial = true) : Bool
     draw
 
     @document = D7.run(@document,
@@ -771,10 +780,8 @@ class Document
       transition: Rhodium.transition,
       step: D7.steps(rendezvous, Rhodium.step, Nitrene.step(@nictx), Meridium.step(@mectx)),
       goal: D7::Goal.none,
-      initial: @initial,
+      initial: initial,
     )
-
-    @initial = false
 
     draw
 
@@ -833,11 +840,88 @@ class Document
   # Draws the document.
   private def draw : Nil
     if @document.empty?
-      @view.set(Term[], :relaxed)
+      @drawn = Term[]
+      @rem1 = @rem0
+      @mouse1 = @mouse0
+      @dwuir.set(Term[], :relaxed)
+      return
+    end
+
+    instance0 = @drawn
+    instance1 = D7VR.instance(@document)
+
+    # Check if instance changed or mouse moved (potential hover/unhover).
+    #   - If instance changed we must redraw.
+    #   - If mouse moved we must redraw due to potential mouse hover/unhover.
+    #   - Otherwise we may not redraw.
+    same = instance0 == instance1 && @rem0 == @rem1
+    return if same && @mouse0 == @mouse1
+
+    if same
+      # We don't *really* need to redraw though if the mouse moved. The old
+      # dwUIR will work just as well!
+      dwuir = Term.of(@dwuir.get(:relaxed))
     else
-      d7vr = D7VR.of_document(@document, @rem)
-      uir = Microfold.uir(Microfold::SPEC, d7vr, rem: @rem)
-      @view.set(uir.as_d, :relaxed)
+      @drawn = instance1
+      @rem0 = @rem1
+      printout = D7VR.printout(instance1, rem: @rem0)
+      unit = Term.of(:group, D7VR.unit(printout), style: "origin")
+      uir = Microfold.uir(Microfold::SPEC, unit, rem: @rem0)
+      dwuir = UIR.drawable(uir)
+      @dwuir.set(dwuir.as_d, :relaxed)
+    end
+
+    # Find out the nodepath of the thing we're hovering over.
+    strata = UIR.strata(dwuir, *@mouse1)
+
+    # Thus we've handled the mouse.
+    @mouse0 = @mouse1
+
+    if stratum = strata.first_value?
+      mouseover = stratum.leftmost? do |keypath|
+        hit = Keypath.follow(dwuir, keypath)
+        next unless backlink = hit[:"#backlink"]?
+        next unless backlink = backlink.as_itemsonly_d?
+
+        nodepath = Stack(Int32).new(backlink.size)
+
+        valid = backlink.items.all? do |index|
+          nodepath << (index.to?(Int32) || next)
+        end
+
+        next unless valid
+
+        nodepath
+      end
+    end
+
+    # Go through nodes and set hover: false on every one except for
+    # the one we're hovering over. The one we're hovering over, we'll
+    # set its hover: true.
+
+    nodepath = Stack(Int32).new
+
+    while Rhodium.successor?(@document, nodepath)
+      node0 = node1 = Rhodium.follow(@document, nodepath)
+      hovered = mouseover ? nodepath.equals?(mouseover) { |a, b| a == b } : false
+
+      Term.case(node0) do
+        matchpi %{[button _*]} do
+          node1 = node0.morph({:hover, hovered ? true : nil})
+        end
+
+        matchpi %[{¦ hover_boolean}] do
+          node1 = node0.morph({:hover, hovered})
+        end
+
+        otherwise { }
+      end
+
+      node1 = Term.of(node1)
+
+      next if node0.same?(node1)
+
+      @document = Rhodium.assign(@document, nodepath, node1)
     end
   end
 
@@ -854,22 +938,40 @@ class Document
   # dispatch point for prompts.
   private def handle(prompt : Term) : Nil
     Term.case(prompt) do
-      matchpi %{(open seed_dict)} { open(seed.unsafe_as_d) }
-      matchpi %{(key f4)} { puts ML.display(@document) }
-      matchpi %{(key _)}, %{(input _string)} { event(Term.of(:edit, {:edge, :user}, prompt)) }
-      matchpi %{(event e_)} { event(e) }
-      matchpi %{(click id_)} { click(id) }
-
-      matchpi %{(zoom in)} do
-        @rem += 1
-
-        draw
+      matchpi %{(open seed_dict)} do
+        open(seed.unsafe_as_d)
       end
 
-      matchpi %{(zoom out)} do
-        @rem = Math.max(Term[7], @rem - 1)
+      # FIXME: WTF?!
+      matchpi %{(key f4)} do
+        puts ML.display(@document)
+      end
 
-        draw
+      # Zoom in
+      matchpi %{(key C-equal)} do
+        @rem1 += 1
+      end
+
+      # Zoom out
+      matchpi %{(key C-minus)} do
+        @rem1 = Math.max(Term[7], @rem1 - 1)
+      end
+
+      matchpi %{(key _)}, %{(input _string)} do
+        event(Term.of(:edit, {:edge, :user}, prompt))
+      end
+
+      matchpi %{(event e_)} do
+        event(e)
+      end
+
+      matchpi %{(mouse motion x_number y_number)} do
+        @mouse1 = {x.unsafe_as_n, y.unsafe_as_n}
+      end
+
+      # FIXME: we're effectively handling these before we know what's hovered.
+      matchpi %{(mouse press)}, %{(mouse release)} do
+        event(prompt)
       end
 
       otherwise { }
@@ -886,28 +988,6 @@ class Document
     @document = Rhodium::Q.of(@document, Rhodium::Events)
       .enqueue(event)
       .commit(@document, Rhodium::Events)
-  end
-
-  # Clicks on an element with the given *id*.
-  #
-  # *id* is usually a big number, the hash of the relevant pieces of identity
-  # of the target element.
-  #
-  # See also: `D7VR.ref`.
-  private def click(id : Term) : Nil
-    @document = D7VR.ref(@document, id) do |target|
-      Term.of_case(target) do
-        matchpi(
-          %{[button _ to @_ (_*)]},
-          %{[button _ to @_ (_*) waiting @_]},
-        ) { target.morph({4, Tail, {:press}}) }
-
-        matchpi(
-          %{[button caption_ as value_ to @edge_ (_*)]},
-          %{[button caption_ as value_ to @edge_ (_*) waiting @_]},
-        ) { target.morph({6, Tail, {:press}}) }
-      end
-    end
   end
 end
 
@@ -959,11 +1039,11 @@ demo = ML.dict <<-WWML
 (h4 "Heading 4")
 (h5 "Heading 5")
 (h6 "Heading 6")
-(text "Simple text")
+(p "Simple text")
 (hr)
-(text "Show counter using text:")
+(p "Show counter using text:")
 (hr)
-(text @count style: "text-xl font-bold text-green-500")
+(p @count style: "text-xl font-bold text-green-500")
 (hr)
 
 (unit group style: "content bg-neutral-800 gap-5 p-5 flow-col"
@@ -1026,28 +1106,29 @@ fb_loop = ML.dict <<-WWML
 WWML
 
 welcome = ML.dict <<-WWML
-(unit group style: "w-max h-content flow-col gap-3 max-w-3xl"
+(unit group style: "w-max h-content flow-col gap-3 max-w-4xl"
   (h1 "Welcome to µsoma, a GUI for Wirewright!")
   (hr style: "bg-neutral-600")
   (unit group style: "w-max h-content flow-col gap-3 text-neutral-300"
-    (text "µsoma to Wirewright is roughly what a web browser is to the Internet." style: "w-max text-sm")
-    (text "You're looking at a *self-embodied program*. Well, sort of — it only contains some text nodes right now. Hit left/right arrow to see for yourself." style: "w-max text-sm")
-    (text "Try typing the following:" style: "w-max text-sm")
-    (codebox style: "w-max text-sm rounded"
+    (p "µsoma to Wirewright is roughly what a web browser is to the Internet." style: "w-max text-sm")
+    (p "You're looking at a *self-embodied program*. Well, sort of — it only contains some text nodes right now. Hit left/right arrow to see for yourself." style: "w-max text-sm")
+    (p "Try typing the following:" style: "w-max text-sm")
+    (src style: "w-max text-sm rounded"
       "(h1 @count)
        (cell 0 @count)
        (button \\"Increment\\" as 1 to @deltas ())
        (button \\"Decrement\\" as -1 to @deltas ())
        (transform @deltas to @counts with @count (+ count _))
        (latest @counts @count)")
-    (text "Click on the buttons and see what happens! :^)" style: "w-max text-sm")
+    (p "Click on the buttons and see what happens! :^)" style: "w-max text-sm")
     (unit ul style: "w-max h-content flow-col gap-1 pl-3"
-      (text "- Drag on empty/non-clickable space to pan around if something overflows." style: "w-max text-sm")
-      (text "- Hit Enter to escape from a pair." style: "w-max text-sm")
-      (text "- Hit F2-F3 to replace this document with more sophisticated demos." style: "w-max text-sm")
-      (text "- Hit Ctrl-Backspace to remove this comment (and any *node* before the cursor in general)." style: "w-max text-sm")
-      (text "- Play! The semi-readable implementation of this editor is in `editor.soma.wwml`; check it out for key bindings & what they do" style: "w-max text-sm")
-      (text "- Take a look at D7 tests: `delta7.test.wwml`. Plenty of examples there." style: "w-max text-sm"))))
+      (p "- Drag on empty/non-clickable space to pan around if something overflows." style: "w-max text-sm font-semibold")
+      (p "- Use Ctrl-Plus to zoom in and Ctrl-Minus to zoom out." style: "w-max text-sm font-semibold")
+      (p "- Hit F2-F3 to replace this document with more sophisticated demos." style: "w-max text-sm font-semibold")
+      (p "- Hit Ctrl-Backspace to remove this comment (and any *node* before the cursor in general)." style: "w-max text-sm font-semibold")
+      (p "- Hit Enter to escape from a pair." style: "w-max text-sm text-neutral-400")
+      (p "- Play! The semi-readable implementation of this editor is in `editor.soma.wwml`; check it out for key bindings & what they do" style: "w-max text-sm text-neutral-400")
+      (p "- Take a look at D7 tests: `delta7.test.wwml`. Plenty of examples in there." style: "w-max text-sm text-neutral-400"))))
 
 ("" | "" () @user)
 
@@ -1064,17 +1145,17 @@ frame = ML.term <<-WWML
                max-w: 1000
                max-h: 800
                style: "bg-neutral-900 max origin"
-               .model: {mouse: (0 0), view: (), pan-x: 0, pan-y: 0}
+               .model: {mouse: (0 0), dwuir: (), pan-x: 0, pan-y: 0}
   (group style: "max flow-none"
     (group style: "max flow-col gap-3 p-3 fr"
-      (group style: "bg-neutral-800 w-max h-content px-2 py-1 rounded-sm"
+      (group style: "z-100 bg-neutral-800 w-max h-content px-2 py-1 rounded-sm"
         (p "Wirewright µsoma" style: "text-neutral-400 text-xs"))
-      (^if (= view ())
+      (^if (= dwuir ())
         (group style: "w-max h-fr bg-neutral-800 center rounded-sm"
-          (p "Waiting for a nonempty view of the document..." style: "text-sm text-neutral-300")))
-      (^unless (= view ())
-        ((self viewport) style: "w-max h-fr bg-neutral-900" pan-x: ^pan-x pan-y: ^pan-y
-          ((self) ^view))))))
+          (p "The document's view will appear here shortly, please wait..." style: "text-sm text-neutral-300")))
+      (^unless (= dwuir ())
+        ((self viewport) style: "w-max h-fr bg-neutral-900" pan-x: ^pan-x pan-y: ^pan-y id: viewport
+          ((self) ^dwuir))))))
 ;;    ;; Template for command palette
 ;;    (group style: "max center-x py-20 z-100 bg-neutral-950 opacity-80"
 ;;      (group style: "content min-w-lg flow-col gap-5"
@@ -1099,9 +1180,11 @@ WWML
 # When press save, pick directory and file. Option to create file. Option to go back.
 # When press load, pick directory and file. Option to go back.
 
-frame = frame.morph({:".model", :view, doc.view})
+frame = frame.morph({:".model", :dwuir, doc.dwuir})
 
-ui = UIR::Reducers.microfold(Term.of(frame)) do |_, drawable, event|
+ui = UIR::Reducers.microfold(Term.of(frame)) do |current, drawable, event|
+  rerender = true
+
   Term.case(event) do
     matchpi %{(key f1)} do
       puts ML.display(drawable, style: ML::Style::Indent2)
@@ -1132,12 +1215,19 @@ ui = UIR::Reducers.microfold(Term.of(frame)) do |_, drawable, event|
           {:".model", :"pan-y", frame[:".model", :"pan-y"] + dy},
           {:".model", :grip, frame[:".model", :mouse]},
         )
+      elsif response = UIR.node_and_coords?(drawable) { |node| node[:id]? == Term.of(:viewport) }
+        viewport, l, t = response
+        relx = x - l
+        rely = y - t
+        if relx > 0 && rely > 0
+          doc.send(Term.of(:mouse, :motion, relx - viewport[:"pan-x"], rely - viewport[:"pan-y"]))
+        end
       end
     end
 
     matchpi %{(mouse press)} do
-      if hovered = frame[:".model", :hovered]?
-        frame = frame.morph({:".model", :active, hovered})
+      if frame[:".model", :forward]? == Term[true]
+        doc.send(event)
       else
         frame = frame.morph(
           {:".model", :grip, frame[:".model", :mouse]},
@@ -1147,20 +1237,11 @@ ui = UIR::Reducers.microfold(Term.of(frame)) do |_, drawable, event|
     end
 
     matchpi %{(mouse release)} do
-      if (active = frame[:".model", :active]?) && (frame[:".model", :active]? == frame[:".model", :hovered]?)
-        doc.send(Term.of(:click, active))
-      elsif grip = frame[:".model", :grip]?
+      if grip = frame[:".model", :grip]?
         frame = frame.morph({:".model", :grip, nil}, {:cursor, nil})
+      elsif frame[:".model", :forward]? == Term[true]
+        doc.send(event)
       end
-      frame = frame.morph({:".model", :active, nil})
-    end
-
-    matchpi %{(mouse scroll up)} do
-      doc.send(Term.of(:zoom, :in))
-    end
-
-    matchpi %{(mouse scroll down)} do
-      doc.send(Term.of(:zoom, :out))
     end
 
     matchpi %{(size w_number h_number)} do
@@ -1168,31 +1249,41 @@ ui = UIR::Reducers.microfold(Term.of(frame)) do |_, drawable, event|
     end
 
     matchpi %{cycle} do
-      frame = frame.morph({:".model", :view, doc.view})
+      rerender = true
+
+      # "Download" the newest view on cycle
+      frame1 = frame.morph({:".model", :dwuir, doc.dwuir})
+      if frame.same?(frame1)
+        rerender = false
+      end
+
+      frame = frame1
     end
 
     otherwise { }
   end
 
-  # Instantiate, because hover logic needs an instance of the frame.
+  unless frame[:".model", :grip]?
+    mousex, mousey = frame[:".model", :mouse]
+
+    frame = frame.morph({:".model", :forward, nil})
+
+    strata = UIR.strata(drawable, mousex.as_n, mousey.as_n)
+    forward = strata.any? do |_, stratum|
+      stratum.any? do |keypath|
+        target = Keypath.follow(drawable, keypath)
+        !!target[:"#backlink"]?
+      end
+    end
+
+    frame = frame.morph({:".model", :forward, forward})
+  end
+
+  unless rerender
+    next current
+  end
+
   instance = Alloy.render(vars: frame[:".model"].as_d, template: Term.of(frame.without(:".model")), strict: true).as_d
-  instance = instance.morph({:".model", frame[:".model"]})
-
-  # Unhover
-  if hovered = instance[:".model", :hovered]?
-    instance = Frame.map(instance, hovered, &.morph({:hover, false}))
-    frame = frame.morph({:".model", :hovered, nil})
-  end
-
-  # Hover
-  UIR.hit(drawable, frame[:".model", :mouse, 0].as_n, instance[:".model", :mouse, 1].as_n) do |keypath|
-    target = Keypath.follow(drawable, keypath)
-    next unless target[:hover]?
-    next unless id = target[:id]?
-
-    instance = Frame.map(instance, id, &.morph({:hover, true}))
-    frame = frame.morph({:".model", :hovered, id})
-  end
 
   # Send instance to drawing
   Term.of(instance)

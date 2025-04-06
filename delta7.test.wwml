@@ -421,7 +421,7 @@
    (transform @deltas to @squares with @square (* square square))
    (latest @counts @count)
    (latest @squares @square)
-   (combined (@squares @counts) in () to @states)
+   (combine (@squares @counts) in () for @states)
    (transform (@states (square_number count_number)) to @sums (+ square count))
    (latest @sums @sum))
   ((cell 3 @count)
@@ -432,7 +432,7 @@
    (transform @deltas to @squares with @square (* square square))
    (latest @counts @count)
    (latest @squares @square)
-   (combined (@squares @counts) in () to @states)
+   (combine (@squares @counts) in () for @states)
    (transform (@states (square_number count_number)) to @sums (+ square count))
    (latest @sums @sum)))
 
@@ -775,23 +775,23 @@
   (d7
     ((absence ("" | "" () @user)))
     matches
-    ((absence ("" | "" () @user suggestions: (suggestions/group () (("(absence *@cin_* as msg_ to @pout_)" _string)))))))
+    ((absence ("" | "" () @user suggestions: (suggestions/group () (("[absence *@cin_* as msg_ to @pout_]" _string)))))))
   (d7
     ((absence @qux ("" | "" () @user)))
     matches
-    ((absence @qux ("" | "" () @user suggestions: (suggestions/group () (("(absence @cin_ *as* msg_ to @pout_)" _string)))))))
+    ((absence @qux ("" | "" () @user suggestions: (suggestions/group () (("[absence @cin_ *as* msg_ to @pout_]" _string)))))))
   (d7
     ((absence @qux as ("" | "" () @user)))
     matches
-    ((absence @qux as ("" | "" () @user suggestions: (suggestions/group () (("(absence @cin_ as *msg_* to @pout_)" _string)))))))
+    ((absence @qux as ("" | "" () @user suggestions: (suggestions/group () (("[absence @cin_ as *msg_* to @pout_]" _string)))))))
   (d7
     ((absence @qux as foo ("" | "" () @user)))
     matches
-    ((absence @qux as foo ("" | "" () @user suggestions: (suggestions/group () (("(absence @cin_ as msg_ *to* @pout_)" _string)))))))
+    ((absence @qux as foo ("" | "" () @user suggestions: (suggestions/group () (("[absence @cin_ as msg_ *to* @pout_]" _string)))))))
   (d7
     ((absence @qux as foo to ("" | "" () @user)))
     matches
-    ((absence @qux as foo to ("" | "" () @user suggestions: (suggestions/group () (("(absence @cin_ as msg_ to *@pout_*)" _string)))))))
+    ((absence @qux as foo to ("" | "" () @user suggestions: (suggestions/group () (("[absence @cin_ as msg_ to *@pout_*]" _string)))))))
   (d7
     ((absence @qux as foo to @-quxes ("" | "" () @user)))
     ((absence @qux as foo to @-quxes ("" | "" () @user)))))
@@ -804,8 +804,8 @@
     ((latest
       ("" | "" () @user
         suggestions:
-          (suggestions/group () (("(latest *@pin_* @cout_)" _string)
-                                 ("(latest *(*@pin_ pattern_*)* (@cout_ template_))" _string)))))))
+          (suggestions/group () (("[latest *@pin_* @cout_]" _string)
+                                 ("[latest *(*@pin_ pattern_*)* (@cout_ template_)]" _string)))))))
   ;; Branch 1
   (d7
     ((latest @quxes ("" | "" () @user)))
@@ -814,7 +814,7 @@
       @quxes
       ("" | "" () @user
         suggestions:
-          (suggestions/group () (("(latest @pin_ *@cout_*)" _string)))))))
+          (suggestions/group () (("[latest @pin_ *@cout_*]" _string)))))))
   (d7
     ((latest @quxes @qux ("" | "" () @user)))
     matches
@@ -826,7 +826,7 @@
     ((latest
       (("" | "" () @user
         suggestions:
-          (suggestions/group () (("(latest (*@pin_* pattern_) (@cout_ template_))" _string))))))))
+          (suggestions/group () (("[latest (*@pin_* pattern_) (@cout_ template_)]" _string))))))))
   (d7
     ((latest (@quxes ("" | "" () @user))))
     matches
@@ -834,7 +834,7 @@
       (@quxes
        ("" | "" () @user
          suggestions:
-           (suggestions/group () (("(latest (@pin_ *pattern_*) (@cout_ template_))" _string))))))))
+           (suggestions/group () (("[latest (@pin_ *pattern_*) (@cout_ template_)]" _string))))))))
 
   (d7
     ((latest (@quxes qux) ("" | "" () @user)))
@@ -842,7 +842,7 @@
     ((latest (@quxes qux)
        ("" | "" () @user
          suggestions:
-           (suggestions/group () (("(latest (@pin_ pattern_) *(*@cout_ template_*)*)" _string)))))))
+           (suggestions/group () (("[latest (@pin_ pattern_) *(*@cout_ template_*)*]" _string)))))))
   ;; Make sure that the suggestion disappears if we do something wrong.
   (d7
     ((latest (@quxes qux) foobar ("" | "" () @user)))
@@ -854,7 +854,7 @@
     ((latest (@quxes qux)
        (("" | "" () @user
          suggestions:
-           (suggestions/group () (("(latest (@pin_ pattern_) (*@cout_* template_))" _string))))))))
+           (suggestions/group () (("[latest (@pin_ pattern_) (*@cout_* template_)]" _string))))))))
   (d7
     ((latest (@quxes qux) (qux ("" | "" () @user))))
     ((latest (@quxes qux) (qux ("" | "" () @user)))))
@@ -865,7 +865,7 @@
        (@qux
         ("" | "" () @user
           suggestions:
-            (suggestions/group () (("(latest (@pin_ pattern_) (@cout_ *template_*))" _string))))))))
+            (suggestions/group () (("[latest (@pin_ pattern_) (@cout_ *template_*)]" _string))))))))
   (d7
     ((latest (@quxes qux) (@qux foo ("" | "" () @user))))
     ((latest (@quxes qux) (@qux foo ("" | "" () @user))))))

@@ -138,7 +138,7 @@ module NodeCompletion
       end
     end
 
-    {Term.of(pattern), Term[cursorpath]}
+    {Term.of(:"%partition", pattern, :_), Term[cursorpath]}
   end
 
   private def maxpivot(param : Term, ord : Int32) : Int32
@@ -236,11 +236,11 @@ module NodeCompletion
   # of its *params*. *pivot*-th parameter is highlighted.
   def long_head(name : String, params : Term::Dict, pivot : Int32) : String
     String.build do |io|
-      io << "("
+      io << "["
       io << name
       io << " "
       long_head(io, params, pivot, ord: 0)
-      io << ")"
+      io << "]"
     end
   end
 
@@ -437,7 +437,7 @@ module NodeCompletion
     # Otherwise, returns `nil`.
     def complete?(node : Term) : Term?
       Term.case(node) do
-        matchpi %{((lhs_string | rhs_string () @user ¦ _ suggestions: (%- _)))} do
+        matchpi %{[(lhs_string | rhs_string () @user ¦ _ suggestions: (%- _))]} do
           query = lhs.to(String) + rhs.to(String)
 
           prefix = Term[]

@@ -27,13 +27,18 @@ module ::Ww::Keypath
     each_item_impl(term, fn, keypath: Stack(Term).new)
   end
 
-  def ascend(root : Term, keypath : Stack(Term), &)
+  def ascend(root : Term, keypath : Stack(Term), & : Term::Dict -> Bool)
     stack = Stack(Term::Dict).new
     tip = root
 
     keypath.each do |step|
-      return unless node0 = tip.as_d?
-      return unless node1 = node0[step]?
+      unless node0 = tip.as_d?
+        raise KeypathError.new
+      end
+
+      unless node1 = node0[step]?
+        raise KeypathError.new
+      end
 
       stack << node0
       tip = node1
@@ -64,6 +69,9 @@ module ::Ww::Keypath
 
     Term.of(root1)
   end
+end
+
+module UIR::Platform
 end
 
 module UIR
@@ -219,45 +227,61 @@ module UIR
     abstract def show(reducer : Reducer) : Nil
   end
 
-  # :nodoc:
-  def hit(drawable : Term, x : Term::Num, y : Term::Num, sink, keypath : Stack(Term)) : Nil
-    Term.case(drawable) do
+  private def hit(dwuir, x : Term::Num, y : Term::Num, sink, keypath, predicate) : Nil
+    Term.case(dwuir) do
+      matchpi %{(floating subnode_ ¦ _ dl_number dt_number)} do
+        return unless predicate.call(keypath, dwuir)
+
+        x -= dl.unsafe_as_n
+        y -= dt.unsafe_as_n
+
+        keypath.push(Term.of(1)) do
+          hit(subnode, x, y, sink, keypath, predicate)
+        end
+      end
+
       matchpi %[{¦ dl_number dt_number final-w: w_number final-h: h_number}] do
         x -= dl.unsafe_as_n
         y -= dt.unsafe_as_n
 
-        return unless x.in?(Term[0]..w.unsafe_as_n)
-        return unless y.in?(Term[0]..h.unsafe_as_n)
+        # Due to floating elements we'll have to visit subnodes anyway,
+        # even if the parent does not contain the hit point. However, as
+        # a slight optimization, do this only if the parent probably contains
+        # `floating`. We'll either get a definite no (best) or a probable yes
+        # (not good). Since sketches are hierarchical there's some chance
+        # we'll not need to recurse too deep if there's no floating element.
 
-        sink.call(keypath)
+        return if x.negative? || y.negative? # These are a definite no.
+
+        if x.in?(Term[0]..w.unsafe_as_n) && y.in?(Term[0]..h.unsafe_as_n)
+          sink << keypath.dup
+        elsif !dwuir.probably_includes?(Term[:floating])
+          return
+        end
 
         # Fallthrough
         continue
       end
 
-      matchpi %{(viewport child_ ¦ _ pan-x_number pan-y_number)} do
-        keypath.push(Term.of(1))
+      matchpi %{(viewport subnode_ ¦ _ pan-x_number pan-y_number)} do
+        return unless predicate.call(keypath, dwuir)
 
-        x -= pan_x.unsafe_as_n
-        y -= pan_y.unsafe_as_n
+        keypath.push(Term.of(1)) do
+          x -= pan_x.unsafe_as_n
+          y -= pan_y.unsafe_as_n
 
-        # Yeeaah this reads strange...
-        hit(child, x, y, sink, keypath)
-
-        # Terminate
-      ensure
-        keypath.pop
+          hit(subnode, x, y, sink, keypath, predicate)
+        end
       end
 
       matchpi %{_dict} do
-        dict = drawable.unsafe_as_d
-        dict.items.each_with_index do |child, index|
-          keypath.push(Term.of(index))
+        return unless predicate.call(keypath, dwuir)
 
-          # Gosh
-          hit(child, x, y, sink, keypath)
-        ensure
-          keypath.pop
+        dict = dwuir.unsafe_as_d
+        dict.items.each_with_index do |subnode, index|
+          keypath.push(Term.of(index)) do
+            hit(subnode, x, y, sink, keypath, predicate)
+          end
         end
       end
 
@@ -265,9 +289,98 @@ module UIR
     end
   end
 
-  # Calls *sink* with keypaths (`Stack(Term)` *which you do not own*) of nodes
-  # that include the point *x*, *y*.
-  def hit(*args, **kwargs, &fn : Stack(Term) ->) : Nil
-    hit(*args, **kwargs, sink: fn, keypath: Stack(Term).new)
+  def hit(*args, **kwargs, &predicate : Stack(Term), Term -> Bool) : Array(Stack(Term))
+    sink = [] of Stack(Term)
+    hit(*args, **kwargs, sink: sink, keypath: Stack(Term).new, predicate: predicate)
+    sink
+  end
+
+  # Returns a hash of strata under point *x*, *y*. Strata are sorted
+  # by their Z-index. The highest Z-index goes first. Each stratum is
+  # a list of keypaths for elements hit in that stratum.
+  def strata(dwuir : Term, x : Term::Num, y : Term::Num, &predicate : Stack(Term), Term -> Bool) : Hash(Term::Num, Array(Stack(Term)))
+    hits = hit(dwuir, x, y, &predicate)
+    hits = hits.map { |keypath| {z_index(dwuir, keypath), keypath} }
+
+    # Sort by z-index descending.
+    hits.unstable_sort! { |(z0, _), (z1, _)| z1 <=> z0 }
+
+    # NOTE: assumes Crystal hash tables are ordered (they are).
+    strata = {} of Term::Num => Array(Stack(Term))
+    hits.each do |z, keypath|
+      stratum = strata.put_if_absent(z) { [] of Stack(Term) }
+      stratum << keypath
+    end
+
+    strata
+  end
+
+  def strata(*args, **kwargs)
+    strata(*args, **kwargs) { true }
+  end
+
+  def z_index(dwuir : Term, keypath : Stack(Term)) : Term::Num
+    zmax = Term[0]
+
+    Keypath.ascend(dwuir, keypath) do |node|
+      Term.case(node) do
+        matchpi %{(layer _ ¦ _ z-index: z←(%number i32))} do
+          zmax = Math.max(zmax, z.unsafe_as_n)
+
+          true # break
+        end
+
+        otherwise do
+          false # continue
+        end
+      end
+    end
+
+    zmax
+  end
+
+  private def node_and_coords?(dwuir, ox : Term::Num, oy : Term::Num, predicate : Term::Dict -> Bool)
+    Term.case(dwuir) do
+      matchpi %{(floating subnode←{¦ final-w: w_number final-h: h_number} ¦ _ dl_number dt_number)} do
+        ox += dl.unsafe_as_n
+        oy += dt.unsafe_as_n
+
+        if predicate.call(dwuir.unsafe_as_d)
+          return dwuir.unsafe_as_d, ox, oy
+        end
+
+        node_and_coords?(subnode, ox, oy, predicate)
+      end
+
+      matchpi %[{¦ dl_number dt_number final-w: w_number final-h: h_number}] do
+        ox += dl.unsafe_as_n
+        oy += dt.unsafe_as_n
+
+        if predicate.call(dwuir.unsafe_as_d)
+          return dwuir.unsafe_as_d, ox, oy
+        end
+
+        # Fallthrough
+        continue
+      end
+
+      matchpi %{(viewport subnode_ ¦ _ pan-x_number pan-y_number)} do
+        node_and_coords?(subnode, pan_x.unsafe_as_n, pan_y.unsafe_as_n, predicate)
+      end
+
+      matchpi %{_dict} do
+        dict = dwuir.unsafe_as_d
+        dict.items.each_with_index do |subnode, index|
+          next unless response = node_and_coords?(subnode, ox, oy, predicate)
+          return response
+        end
+      end
+
+      otherwise {}
+    end
+  end
+
+  def node_and_coords?(dwuir : Term, &predicate : Term::Dict -> Bool) : {Term::Dict, Term::Num, Term::Num}?
+    node_and_coords?(dwuir, ox: Term[0], oy: Term[0], predicate: predicate)
   end
 end

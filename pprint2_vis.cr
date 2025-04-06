@@ -248,7 +248,7 @@ struct Col
   def call(ctx, term, postfix, head, rest)
     Term.of_case(term) do
       matchpi %{(col (%plural children min: 2) ¦ gap⋮ 0)} do |children|
-        continue if Rhodium.cursordepth(term, pairspart: true) == 1 # Allow cursor inside children.
+        continue if Rhodium.cursordepth_in_node(term) == 1 # Allow cursor inside children.
 
         Term::Dict.build do |commit|
           commit << :col
@@ -272,7 +272,7 @@ struct Row
   def call(ctx, term, postfix, head, rest)
     Term.of_case(term) do
       matchpi %{(row (%plural children min: 2) ¦ gap⋮ 0)} do |children|
-        continue if Rhodium.cursordepth(term, pairspart: true) == 1 # Allow cursor inside children.
+        continue if Rhodium.cursordepth_in_node(term) == 1 # Allow cursor inside children.
 
         Term::Dict.build do |commit|
           commit << :row
@@ -313,18 +313,18 @@ struct Button
     Term.case(term) do
       matchpi(
         %{[button caption_ to @_ (_*)]},
-        %{[button caption_ to @_ (_*) waiting @_]},
+        %{[button caption_ to @_ waiting @_ (_*)]},
       ) do
-        continue unless Rhodium.cursordepth(term, pairspart: true) == -1
+        continue unless Rhodium.cursordepth_in_node(term) == -1
 
         Term.of(:row, button(term, caption), Term.of(:frag, postfix))
       end
 
       matchpi(
         %{[button caption_ as _ to @_ (_*)]},
-        %{[button caption_ as _ to @_ (_*) waiting @_]},
+        %{[button caption_ as _ to @_ waiting @_ (_*)]},
       ) do
-        continue unless Rhodium.cursordepth(term, pairspart: true) == -1
+        continue unless Rhodium.cursordepth_in_node(term) == -1
 
         Term.of(:row, button(term, caption), Term.of(:frag, postfix))
       end
@@ -369,18 +369,18 @@ def annotate(document : Term::Dict)
     Term.case(node) do
       matchpi(
         %{[button _ to @_ (_*)]},
-        %{[button _ to @_ (_*) waiting @_]},
+        %{[button _ to @_ waiting @_ (_*)]},
       ) do
-        continue unless Rhodium.cursordepth(node, pairspart: true) == -1
+        continue unless Rhodium.cursordepth_in_node(node) == -1
 
         document = Rhodium.assign(document, nodepath, Term.of(node.with(:mailbox, Term[nodepath].append(4))))
       end
 
       matchpi(
         %{[button _ as _ to @_ (_*)]},
-        %{[button _ as _ to @_ (_*) waiting @_]},
+        %{[button _ as _ to @_ waiting @_ (_*)]},
       ) do
-        continue unless Rhodium.cursordepth(node, pairspart: true) == -1
+        continue unless Rhodium.cursordepth_in_node(node) == -1
 
         document = Rhodium.assign(document, nodepath, Term.of(node.with(:mailbox, Term[nodepath].append(6))))
       end
@@ -861,7 +861,7 @@ class Soma
     if @debug
       next_visible_document = document
     else
-      next_visible_document = D7.visible(document)
+      next_visible_document = D7.nonshadow(document)
     end
 
     # Handle Resize

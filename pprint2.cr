@@ -1177,7 +1177,7 @@ def measure(ctx : DisplayContext, node : Term) : {Int32, Int32}
         {0, 0}
       end
 
-      matchpi %{[longer child_]} do
+      matchpi %{[info child_]}, %{[longer child_]} do
         measure(ctx, child)
       end
 
@@ -1240,6 +1240,12 @@ def flatten(ctx, node : Term, maxwidth : Int32, layouts : LayoutSet) : {Term, In
     # Floating blocks are exempt from sizing
     matchpi %{[block/floating _]} do
       {node, maxwidth}
+    end
+
+    matchpi %{[info child_]} do
+      flattened, maxwidth = flatten(ctx, child, maxwidth, layouts)
+
+      {Term.of(node.morph({1, flattened})), maxwidth}
     end
 
     matchpi %{(longer child_)} do
