@@ -947,7 +947,17 @@
         ("He" | "" () @user)
         ("Hel" | "" () @user)
         ("Hell" | "" () @user)
-        ("Hello" | "" () @user))))))
+        ("Hello" | "" () @user)))))
+  ;; Fragment must accept clear feedback to clear itself
+  (d7
+    ((frag "hello" @qux)
+     (event (pulse @qux clear)))
+    ((frag @qux)))
+  ;; Fragment must accept destroy feedback to destroy itself
+  (d7
+    ((frag "hello" @qux)
+     (event (pulse @qux destroy)))
+    ()))
 
 ;; Button #shadow behavior
 (d7

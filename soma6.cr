@@ -1129,7 +1129,7 @@ fb_loop = ML.dict <<-WWML
   (group
    (button "Start loop" as 0 to @percept/starters ())
    (latest @percept/starters @percept)
-   (bridge @percept/starters as clear to @igniter))
+   (bridge @percept/starters as destroy to @igniter))
   @igniter)
 
 (comment "Publish percept as an appearance")

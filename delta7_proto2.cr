@@ -694,6 +694,14 @@ module Rhodium
           end
         end
 
+        givenpi(
+          %{[frag @cout_] (pulse @cout_ destroy) _},
+          %{[frag _ @cout_] (pulse @cout_ destroy) _},
+        ) do
+          # Vote for transition to cleanup etc.
+          {rewrite(document1, nodepath, Rewrite.many(Term[])), true}
+        end
+
         # This will trigger the next rule due to fragment's secondary identity
         # changing (being removed) after the assignment.
         givenpi %{[frag v0_ @cout_] (assign @cout_ v1_) _} do
