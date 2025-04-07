@@ -6,6 +6,7 @@
 "font-sans": {font: "IBM Plex Sans"}
 "font-mono": {font: "IBM Plex Mono"}
 
+"rounded-none": {border-radius: 0}
 "rounded-xs": {border-radius: (rem 0.125)}
 "rounded-sm": {border-radius: (rem 0.25)}
 "rounded-md": {border-radius: (rem 0.375)}
