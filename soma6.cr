@@ -269,24 +269,9 @@ module D7VR
   def block?(unit : Term, source : Term, rem : Term::Num) : Term?
     return unless unit.type.dict?
 
-    uir = Microfold.uir(Microfold::SPEC, unit, rem: rem)
-    drawable = rewrite(uir, UIR.rewriter)
-
-    Term.case(drawable) do
-      # If we know its size outside of its context.
-      matchpi %[{¦ final-w: w←(%number i32) final-h: h←(%number i32)}] do
-        if w.natural_nonzero? && h.natural_nonzero?
-          Term.of(:block, unit, w: w//rem, h: h//rem)
-        end
-      end
-
-      # If we do not know its size, leave it to the UI context. Note how we specify
-      # a fallback thunk for the node, so that if it fails we can go back roughly
-      # here to pretty-printing, but this time do it only with code.
-      otherwise do
-        Term.of(:"block/floating", unit.morph({:fallback, :source, source}, {:fallback, :rem, rem}))
-      end
-    end
+    # FIXME: hack: we shouldn't hard-code these to 1, but we also shouldn't
+    # talk to the main thread. What should we do then?
+    Term.of(:block, unit.morph({:fallback, :source, source}, {:fallback, :rem, rem}), w: 1, h: 1)
   end
 
   TEMPLATE_COVER = ML.term <<-WWML
@@ -682,12 +667,12 @@ class Document
   @mouse0 : {Term::Num, Term::Num}
   @mouse1 : {Term::Num, Term::Num}
 
-  def initialize
+  def initialize(@draw : Channel({Term::Dict, Channel(Term::Dict)}))
     id = @@counter.add(1, :relaxed)
 
     @document_thread = ExecutionContext::SingleThreaded.new("Document #{id}")
 
-    @dwuir = Atomic(Term::Dict).new(Term[])
+    # @dwuir = Atomic(Term::Dict).new(Term[])
     @mailbox = Mailbox.new
 
     # The following instance variables are owned exclusively by the document
@@ -748,6 +733,7 @@ class Document
       keepalive: nil,
     )
 
+    @dwuir = Term[]
     @document = Term[]
     @drawn = Term[]
     @rem0 = @rem1 = Term[16]
@@ -757,9 +743,9 @@ class Document
   end
 
   # Returns the latest drawable UIR of this document.
-  def dwuir : Term::Dict
-    @dwuir.get(:relaxed)
-  end
+  # def dwuir : Term::Dict
+  #   @dwuir.get(:relaxed)
+  # end
 
   # Adds *prompt* to this document's mailbox.
   def send(prompt : Term) : Nil
@@ -862,13 +848,8 @@ class Document
 
   # Draws the document.
   private def draw : Nil
-    if @document.empty?
-      @drawn = Term[]
-      @rem1 = @rem0
-      @mouse1 = @mouse0
-      @dwuir.set(Term[], :relaxed)
-      return
-    end
+    # TODO: what to do if its empty though? We have to do something...
+    return if @document.empty?
 
     instance0 = @drawn
     instance1 = D7VR.instance(@document)
@@ -880,19 +861,23 @@ class Document
     same = instance0 == instance1 && @rem0 == @rem1
     return if same && @mouse0 == @mouse1
 
-    if same
-      # We don't *really* need to redraw though if the mouse moved. The old
-      # dwUIR will work just as well!
-      dwuir = Term.of(@dwuir.get(:relaxed))
-    else
+    # We don't *really* need to redraw though if the mouse moved. The old
+    # dwUIR will work just as well!
+    unless same
       @drawn = instance1
       @rem0 = @rem1
       printout = D7VR.printout(instance1, rem: @rem0)
       unit = Term.of(:group, D7VR.unit(printout), style: "origin")
       uir = Microfold.uir(Microfold::SPEC, unit, rem: @rem0)
-      dwuir = UIR.drawable(uir)
-      @dwuir.set(dwuir.as_d, :relaxed)
+
+      dwuir_chan = Channel(Term::Dict).new
+
+      @draw.send({uir.as_d, dwuir_chan})
+
+      @dwuir = dwuir_chan.receive
     end
+
+    dwuir = Term.of(@dwuir)
 
     # Find out the nodepath of the thing we're hovering over.
     strata = UIR.strata(dwuir, *@mouse1)
@@ -1203,7 +1188,9 @@ WWML
 
 seed = welcome
 
-doc = Document.new
+draw_chan = Channel({Term::Dict, Channel(Term::Dict)}).new
+
+doc = Document.new(draw_chan)
 doc.send(Term.of(:open, seed))
 
 frame = ML.term <<-WWML
@@ -1247,7 +1234,7 @@ WWML
 # When press save, pick directory and file. Option to create file. Option to go back.
 # When press load, pick directory and file. Option to go back.
 
-frame = frame.morph({:".model", :dwuir, doc.dwuir})
+# frame = frame.morph({:".model", :dwuir, doc.dwuir})
 
 ui = UIR::Reducers.microfold(Term.of(frame)) do |current, drawable, event|
   rerender = true
@@ -1318,13 +1305,23 @@ ui = UIR::Reducers.microfold(Term.of(frame)) do |current, drawable, event|
     matchpi %{cycle} do
       rerender = true
 
-      # "Download" the newest view on cycle
-      frame1 = frame.morph({:".model", :dwuir, doc.dwuir})
-      if frame.same?(frame1)
-        rerender = false
-      end
+      # Rendezvous with the document thread. Help it draw its UIR -> dwUIR.
+      # Keep a copy of dwUIR on our side to show it on the screen.
+      select
+      when request = draw_chan.receive
+        uir, response = request
+        dwuir = UIR.drawable(Term.of(uir))
+        dwuir_dict = dwuir.as_d
 
-      frame = frame1
+        frame1 = frame.morph({:".model", :dwuir, dwuir})
+        if frame.same?(frame1)
+          rerender = false
+        end
+
+        frame = frame1
+        response.send(dwuir_dict)
+      else
+      end
     end
 
     otherwise { }
