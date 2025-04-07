@@ -816,6 +816,20 @@ module Rhodium
         end
       end
 
+      # Spawner
+      begin
+        givenpi(
+          %{(spawner @pin_ ¦ _ -dir) (pulse @pin_ offspring_) -1},
+          %{(spawner @pin_ ¦ _ dir: up) (pulse @pin_ offspring_) -1},
+        ) do
+          {rewrite(document1, nodepath, Rewrite.many(Term[offspring, node0])), true}
+        end
+
+        givenpi %{(spawner @pin_ ¦ _ dir: down) (pulse @pin_ offspring_) -1} do
+          {rewrite(document1, nodepath, Rewrite.many(Term[node0, offspring])), true}
+        end
+      end
+
       # Sensors and appearances
       begin
         givenpi %{[sensor pattern_ in tspace_symbol to @_] (initialize _) -1} do
@@ -839,41 +853,6 @@ module Rhodium
           selector = node0[:selector]?
 
           {document1.morph({Tspaces, tspace, :appearances, {value, selector}, true}), true}
-        end
-      end
-
-      # Any node can define mail: @pout_ attribute. If that's the case this rule
-      # activates, helping the node consume events from its inbox.
-      givenpi %[{¦ inbox: (msg_ _*) mail: @pout_} cycle -1] do
-        effect(document1, nodepath, node0) do
-          event :pulse, pout, msg
-          backmap %[{¦ inbox: (M_ _*)}], %[{(M): ()}]
-
-          false
-        end
-      end
-
-      # Any node that wants to receive hover sets its hover: false.
-      # Any node that wants to receive active sets its active: false.
-      # Here we handle hover: true + mouse press = active: false -> active: true,
-      # and the reverse. We also enqueue mail about hover and press.
-      begin
-        # Activate
-        givenpi %[{¦ hover: true active: false} (mouse press) -1] do
-          effect(document1, nodepath, node0) do
-            backmap %[{¦ active_}], %[{active: true}]
-
-            false
-          end
-        end
-
-        # Deactivate & press
-        givenpi %[{¦ active: true inbox_dict} (mouse release) -1] do
-          effect(document1, nodepath, node0) do
-            backmap %[{¦ active_ inbox: [_* ⏏M]}], %[{active: false, M: (press)}]
-
-            false
-          end
         end
       end
 
@@ -1432,6 +1411,42 @@ module Rhodium
           event e
 
           false
+        end
+      end
+
+      # FIXME: if node handles cycle it won't hit this. It should be able to!
+      # Any node can define mail: @pout_ attribute. If that's the case this rule
+      # activates, helping the node consume events from its inbox.
+      givenpi %[{¦ inbox: (msg_ _*) mail: @pout_} cycle -1] do
+        effect(document1, nodepath, node0) do
+          event :pulse, pout, msg
+          backmap %[{¦ inbox: (M_ _*)}], %[{(M): ()}]
+
+          false
+        end
+      end
+
+      # Any node that wants to receive hover sets its hover: false.
+      # Any node that wants to receive active sets its active: false.
+      # Here we handle hover: true + mouse press = active: false -> active: true,
+      # and the reverse. We also enqueue mail about hover and press.
+      begin
+        # Activate
+        givenpi %[{¦ hover: true active: false} (mouse press) -1] do
+          effect(document1, nodepath, node0) do
+            backmap %[{¦ active_}], %[{active: true}]
+
+            false
+          end
+        end
+
+        # Deactivate & press
+        givenpi %[{¦ active: true inbox_dict} (mouse release) -1] do
+          effect(document1, nodepath, node0) do
+            backmap %[{¦ active_ inbox: [_* ⏏M]}], %[{active: false, M: (press)}]
+
+            false
+          end
         end
       end
 

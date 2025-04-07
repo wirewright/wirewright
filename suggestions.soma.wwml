@@ -359,3 +359,6 @@
   (comma to)
   (pulse samples "sink for samples taken (lists of simultaneously sampled cins)"))
 
+(node spawner "Spawns nodes above or below itself"
+  (pulse nodes "source of nodes to spawn")
+  (prop? dir "can be `up` (default) or `down`, anything else is invalid"))

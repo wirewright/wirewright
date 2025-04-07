@@ -1244,3 +1244,28 @@
    (log @xs in (0 0))
    (log @ys in (100))
    (log @zs in ((0 100)))))
+
+;; spawner
+(group
+  (d7
+    ((spawner @nodes)
+     (spawner @nodes dir: up)
+     (spawner @nodes dir: down)
+     (spawner @nodes dir: qux)
+     (event (pulse @nodes hello)))
+    (hello
+     (spawner @nodes)
+     hello
+     (spawner @nodes dir: up)
+     (spawner @nodes dir: down)
+     hello
+     (spawner @nodes dir: qux)))
+  (d7
+    ((spawner @nodes)
+     (event (pulse @nodes (cell 0 @x)))
+     (changes @x to @xs)
+     (log @xs in ()))
+    ((cell 0 @x)
+     (spawner @nodes)
+     (changes @x to @xs)
+     (log @xs in (0)))))
