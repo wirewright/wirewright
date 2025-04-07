@@ -1124,6 +1124,17 @@
      (delay 2 (event (pulse @envs {a: 100, b: 200, c: 300}))))
     ((alloy (@envs to @instances) (^fallback (^a ^b ^c) "missing or invalid data"))
      (log @instances in ("missing or invalid data" "missing or invalid data" (100 200 300)))))
+  ;; Ability to pass const as template
+  (d7
+    ((alloy (@envs to @instances) @template)
+     (alloy (@envs to @instances) @missing)
+     (cell (^a ^b ^c) @template)
+     (log @instances in ())
+     (event (pulse @envs {a: 100, b: 200, c: 300})))
+    ((alloy (@envs to @instances) @template)
+     (alloy (@envs to @instances) @missing)
+     (cell (^a ^b ^c) @template)
+     (log @instances in ((100 200 300)))))
   ;; More complex template
   (d7
     ((alloy (@todos/newest to @views)

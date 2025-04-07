@@ -789,8 +789,15 @@ module Rhodium
         end
       end
 
-      givenpi %{(alloy (@pin_ to @pout_) template_ ¦ _ strict⋮ false) (pulse @pin_ vars_) -1} do |vars|
+      givenpi %{(alloy (@pin_ to @pout_) template_ ¦ _ strict⋮ false) (pulse @pin_ vars_) -1} do |vars, template|
         vars = vars.as_d? || Term[]
+
+        if ML.edge?(template)
+          unless template = document0[Cells, template]?
+            return document1, false
+          end
+        end
+
         instance, complaints = Alloy.render_with_complaints(vars, template)
 
         effect(document1, nodepath, node0) do
