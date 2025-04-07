@@ -1162,3 +1162,50 @@
           (group style: "w-max m-5 bg-neutral-800 p-3 border border-neutral-700 flow-col gap-1 rounded-lg"
             (p "C" style: "w-max text-lg font-bold")
             (p "Sit amet" style: "w-max"))))))))
+
+;; changes/view
+(group
+  ;; Assign
+  (d7
+    ((changes/view @v)
+     (event (assign @v "hello")))
+    ((changes/view "hello" @v)))
+  ;; Update
+  (d7
+    ((changes/view "hello" @v)
+     (event (assign @v "world")))
+    ((changes/view "world" @v)))
+  ;; Clear
+  (d7
+    ((changes/view "hello" @v)
+     (event (pulse @v clear)))
+    ((changes/view @v)))
+  ;; Destroy
+  (d7
+    ((changes/view "hello" @v)
+     (changes/view @v)
+     (event (pulse @v destroy)))
+    ())
+  ;; Cell created
+  (d7
+    ((changes/view @v)
+     (cell "hello" @v))
+    ((changes/view "hello" @v)
+     (cell "hello" @v)))
+  (d7
+    ((changes/view "world" @v)
+     (cell "hello" @v))
+    ((changes/view "hello" @v)
+     (cell "hello" @v)))
+  ;; Cell changed
+  (d7
+    ((changes/view @v)
+     (cell "hello" @v)
+     (delay 1 (event (assign @v "world"))))
+    ((changes/view "world" @v)
+     (cell "world" @v)))
+  ;; Cell removed
+  (d7
+    ((changes/view @v)
+     (decay 1 (cell "hello" @v)))
+    ((changes/view @v))))

@@ -733,6 +733,56 @@ module Rhodium
         end
       end
 
+      # changes/view
+      begin
+        givenpi(
+          %{[changes/view @cin_] (assign @cin_ view_) -1},
+          %{[changes/view @cin_] (cell/created @cin_ view_) -1},
+        ) do
+          effect(document1, nodepath, node0) do
+            backmap %{[changes/view ⏏view @_]}, view: view
+
+            # changes/view doesn't have an identity like cells or frags do; it
+            # only listens to (assign)s.
+            false
+          end
+        end
+
+        givenpi(
+          %{[changes/view _ @cin_] (assign @cin_ view_) -1},
+          %{[changes/view _ @cin_] (cell/created @cin_ view_) -1},
+          %{[changes/view _ @cin_] (cell/changed @cin_ _ view_) -1},
+        ) do
+          effect(document1, nodepath, node0) do
+            backmap %{[changes/view view_ @_]}, view: view
+
+            # ditto
+            false
+          end
+        end
+
+        # changes/view also understands clear and destroy feedback
+        givenpi(
+          %{[changes/view _ @cin_] (pulse @cin_ clear) -1},
+          %{[changes/view _ @cin_] (cell/removed @cin_) -1},
+        ) do
+          effect(document1, nodepath, node0) do
+            backmap %{[changes/view view_ @_]}, %[{(view): ()}]
+
+            # ditto
+            false
+          end
+        end
+
+        givenpi(
+          %{[changes/view @cin_] (pulse @cin_ destroy) -1},
+          %{[changes/view _ @cin_] (pulse @cin_ destroy) -1},
+        ) do
+          # ditto on transition
+          {rewrite(document1, nodepath, Rewrite.many(Term[])), false}
+        end
+      end
+
       givenpi %{(alloy (@pin_ to @pout_) template_ ¦ _ strict⋮ false) (pulse @pin_ vars_) -1} do |vars|
         vars = vars.as_d? || Term[]
         instance, complaints = Alloy.render_with_complaints(vars, template)

@@ -212,6 +212,13 @@
 (variant view (literal content "Microfold markup to show"))
 (variant view (const content "Cell from which to take the Microfold markup to show"))
 
+(group changes/view "Converts cell changes/assignments to views. Little brother of both `view` and `changes`")
+
+(variant changes/view (const cin "edge to listen for cell changes/assignments on"))
+(variant changes/view
+  (literal view "Microfold markup to show")
+  (const cin "edge to listen for cell changes/assignments on"))
+
 (group initial "Companion of `absence`, outputs the first-ever value of a const")
 
 (variant initial

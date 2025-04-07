@@ -387,11 +387,11 @@ module D7VR
         node1.morph({:"#view", view}, {:"#fallback", node1})
       end
 
-      matchpi %{[view @_ as _ instance_]} do
+      matchpi %{[changes/view view_ @_]} do
         # TODO: relax this a little bit
         continue unless Rhodium.cursordepth_in_node(node1) == -1
 
-        node1.morph({:"#view", instance}, {:"#fallback", node1})
+        node1.morph({:"#view", view}, {:"#fallback", node1})
       end
 
       # NOTE: we do not handle UNIT nodes and the cursor here. This is because
