@@ -201,7 +201,7 @@ module NodeCompletion
       end
 
       matchpi %{(prop? id_ _string)} do
-        io << id << "?: ..."
+        io << id << "?: _"
 
         ord
       end
