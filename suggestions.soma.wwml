@@ -107,11 +107,13 @@
 (group frag "Works exactly like cell but its value is passable -- meaning whatever is in there (buttons, delays, cells, etc.) gets executed and can be observed throughout execution using the `changes` node")
 
 (variant frag
-  (const cout "sink for const signal"))
+  (const cout "sink for const signal")
+  (prop? visible "if true, shows the frag and the value (default); if false, shows the value alone"))
 
 (variant frag
   (literal value "current value")
-  (const cout "sink for const signal"))
+  (const cout "sink for const signal")
+  (prop? visible "if true, shows the frag and the value (default); if false, shows the value alone"))
 
 (node group "Groups nodes together without any logical/UI effect")
 

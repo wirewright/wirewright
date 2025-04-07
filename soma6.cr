@@ -394,6 +394,13 @@ module D7VR
         node1.morph({:"#view", view}, {:"#fallback", node1})
       end
 
+      # Instantiate invisible FRAG node (hide it).
+      matchpi %{(frag value_ @_ ¦ _ visible: false)} do
+        continue unless Rhodium.cursordepth_in_node(node1) == -1
+
+        value
+      end
+
       # NOTE: we do not handle UNIT nodes and the cursor here. This is because
       # units require full recursion and it is too early to do it here; and cursors
       # must work at any depth, not just at passable spots. We handle both during
