@@ -507,7 +507,7 @@ module FontEntryParser
     end
 
     unless match = path.stem.match(FONT_FILE_REGEX, options: :anchored)
-      Log.error { "path with font-like extension did not match font regex: #{path}" }
+      Log.warn { "path with font-like extension did not match font regex: #{path}, skip" }
       return
     end
 
@@ -516,7 +516,7 @@ module FontEntryParser
     weightid ||= "Regular"
 
     unless weight = FontWeight.parse?(weightid)
-      Log.error { "weight did not match one of known weights for font: #{path}" }
+      Log.warn { "weight did not match one of known weights for font: #{path}, skip" }
       return
     end
 
@@ -527,7 +527,7 @@ module FontEntryParser
     when "Italic"
       italic = true
     else
-      Log.error { "unknown font variant: #{path}" }
+      Log.warn { "unknown font variant: #{path}, skip" }
       return
     end
 
@@ -583,7 +583,7 @@ module FontFinder
       query = FontQuery.new(entry.family, entry.weight, entry.italic)
 
       if twin = index[query]?
-        Log.error { "twin font files: #{twin.path}, #{entry.path}" }
+        Log.warn { "twin font files: #{twin.path}, skip #{entry.path}" }
         next
       end
 
@@ -595,7 +595,7 @@ module FontFinder
 
       query = FontQuery.new(entry.family, entry.weight, entry.italic)
       unless font = index[query]?
-        Log.error { "found a .codepoints file but not the corresponding font file: #{entry.path}" }
+        Log.warn { "found a .codepoints file but not the corresponding font file: #{entry.path}" }
         next
       end
 
@@ -604,12 +604,12 @@ module FontFinder
           name, codepoint_hex = line.split(' ', limit: 2)
 
           if font.codepoints.has_key?(name)
-            Log.error { "#{entry.path}: duplicate name for codepoint: #{name}" }
+            Log.warn { "#{entry.path}: duplicate name for codepoint: #{name}, skip" }
             next
           end
 
           unless codepoint = codepoint_hex.to_i?(base: 16)
-            Log.error { "#{entry.path}: cannot parse codepoint hex: #{codepoint_hex}" }
+            Log.warn { "#{entry.path}: cannot parse codepoint hex: #{codepoint_hex}, skip" }
             next
           end
 
