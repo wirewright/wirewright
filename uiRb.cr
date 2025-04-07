@@ -1,3 +1,10 @@
+# NOTE: the naming that evolved is quite confusing but I like it:
+#  - UIR (all caps) is UI Representation
+#  - uiR (lowercase, uppercase R) stands for UIR rewriter, it rewrites UIR to dwUIR
+#  - dwUIR is short for drawable UIR.
+#
+# Some reorganization is required according to this naming schema for more consistency.
+
 require "./ufold"
 
 # FIXME: this does not belong here
@@ -72,6 +79,592 @@ module ::Ww::Keypath
 end
 
 module UIR::Platform
+end
+
+record Point, x : Int32, y : Int32
+record Rect, origin : Point, extent : Point
+
+record Ring, l : UInt8, r : UInt8, t : UInt8, b : UInt8 do
+  def x : UInt16
+    l.to_u16 + r.to_u16
+  end
+
+  def y : UInt16
+    t.to_u16 + b.to_u16
+  end
+end
+
+record RGB, r : UInt8, g : UInt8, b : UInt8 do
+  def self.parse(term : Term) : RGB
+    Term.case(term) do
+      matchpi(
+        %{(r←(%number u8) g←(%number u8) b←(%number u8))},
+        %{(rgb r←(%number u8) g←(%number u8) b←(%number u8))},
+      ) do
+        new(r.to(UInt8), g.to(UInt8), b.to(UInt8))
+      end
+
+      matchpi %{(oklch l←(%number 0 <= _ <= 1) c←(%number 0 <= _ <= 1) h←(%number 0 <= _ <= 360))} do
+        new(*oklch(l.to(Float64), c.to(Float64), h.to(Float64)))
+      end
+
+      otherwise do
+        new(0u8, 0u8, 0u8)
+      end
+    end
+  end
+end
+
+enum Heading : UInt8
+  Left
+  Right
+  Up
+  Down
+
+  def self.parse(term : Term)
+    Term.case(term) do
+      matchpi %{left} { Left }
+      matchpi %{right} { Right }
+      matchpi %{up} { Up }
+      matchpi %{down} { Down }
+
+      otherwise { Up }
+    end
+  end
+end
+
+enum FontWeight : UInt8
+  Thin
+  ExtraLight
+  Light
+  Regular
+  Text
+  Medium
+  SemiBold
+  Bold
+  ExtraBold
+  Black
+
+  def self.parse(n : Int32)
+    weights = {100, 200, 300, 400, 450, 500, 600, 700, 800, 900}
+    weight = weights.min_by { |weight| (weight - n).abs }
+    new(weights.index!(weight).to_u8)
+  end
+
+  def self.size : Int32
+    {{ @type.constants.size }}
+  end
+
+  def self.sway(pivot : FontWeight, & : FontWeight ->)
+    yield pivot
+
+    (1...size).each do |offset|
+      yield pivot - offset if p = pivot.value >= offset
+      yield pivot + offset if q = pivot.value + offset < size
+      break unless p || q
+    end
+  end
+end
+
+abstract class DrawCommand
+end
+
+# Draws a string of text.
+#
+# - *z* is the z-index of the text.
+# - *caption* specifies the string value for the text.
+# - *font*, *size*, *weight*, *leading*, and *tracking* are font properties.
+# - *color* sets the color of the text.
+# - *origin* sets the position where the text should be drawn.
+defcase FillText < DrawCommand, z : Int32,
+  origin : Point,
+  caption : String,
+  font : String,
+  size : UInt16,
+  weight : FontWeight,
+  leading : Float32,
+  tracking : Float32,
+  color : RGB
+
+# Draws a filled rectangle.
+#
+# - *z* is the z-index of the rectangle.
+# - *box* specifies its origin and extent.
+# - *color* specifies its fill color.
+# - *alpha* specifies the opacity (0 - transparent, 255 - opaque) of the fill.
+# - *radius* specifies its corner radius (0 - square corners).
+# - *ring* specifies its ring, which in CSS terms could be described as a fully
+#   opaque box shadow. Setting to all-0 disables the ring.
+defcase FillRect < DrawCommand,
+  z : Int32,
+  box : Rect,
+  color : RGB,
+  alpha : UInt8,
+  radius : UInt16,
+  ring : Ring
+
+# Draws a rectangle outline.
+#
+# - *z* is the z-index of the outline.
+# - *box* specifies its origin and extent.
+# - *color* specifies its color.
+# - *thickness* specifies how thick the outline is.
+# - *radius* specifies corner radius (0 - square corners).
+defcase OutlineRect < DrawCommand,
+  z : Int32,
+  box : Rect,
+  color : RGB,
+  thickness : UInt8,
+  radius : UInt16
+
+# Draws a filled circle.
+#
+# - *z* is the z-index of the circle.
+# - *origin* specifies the location of its top-left corner.
+# - *radius* is its radius.
+# - *color* is the fill color.
+defcase FillCircle < DrawCommand,
+  z : Int32,
+  origin : Point,
+  radius : UInt16,
+  color : RGB
+
+# Draws a filled triangle.
+#
+# - *z* is the z-index of the triangle.
+# - *box* specifies its bounding box.
+# - *heading* specifies where the triangle points (left, right, etc.)
+# - *color* specifies the fill color of the triangle.
+defcase FillTriangle < DrawCommand,
+  z : Int32,
+  box : Rect,
+  heading : Heading,
+  color : RGB
+
+# A limited view into the product of children draw commands *children*.
+#
+# - *z* is the z-index of the view itself. Its children may have different z-indices.
+# - *box* is the bounding box of the view.
+# - *color* is the clear-color of the view.
+defcase View < DrawCommand,
+  z : Int32,
+  children : Array(DrawCommand),
+  box : Rect,
+  color : RGB
+
+enum Cursor : UInt8
+  Arrow
+  Pointer
+  Grabbing
+
+  def self.parse(term : Term)
+    Term.case(term) do
+      matchpi %{arrow} { Arrow }
+      matchpi %{pointer} { Pointer }
+      matchpi %{grabbing} { Grabbing }
+
+      otherwise { Arrow }
+    end
+  end
+end
+
+defcase Window,
+  cursor : Cursor,
+  size : Point,
+  color : RGB,
+  children : Array(DrawCommand)
+
+# :nodoc:
+record DrawContext, commands : Array(DrawCommand), setcursor : (Cursor ->)
+
+# :nodoc:
+#
+# Appends draw commands associated with *node* to *ctx*.
+#
+# - *z* is the z-index of *node*.
+def UIR::Platform.draw(ctx : DrawContext, node : Term, x : Int32, y : Int32, z : Int32) : Nil
+  Term.case(node) do
+    # Any node can specify the cursor.
+    matchpi %[{¦ cursor_symbol}] do
+      ctx.setcursor.call(Cursor.parse(cursor))
+
+      continue
+    end
+
+    matchpi(
+      %[(text ¦ _ color_ caption_string font_string leading_number
+                  weight_: (%any 100 200 300 400 450 500 600 700 800 900)
+                  size_: (%number u16)
+                  dl_: (%number i32)
+                  dt_: (%number i32))]
+    ) do
+      ctx.commands << FillText.new(z,
+        origin: Point.new(x + dl.to(Int32), y + dt.to(Int32)),
+        caption: caption.to(String),
+        font: font.to(String),
+        size: size.to(UInt16),
+        weight: FontWeight.parse(weight.to(Int32)),
+        leading: leading.to(Float32),
+        tracking: 1.0f32,
+        color: RGB.parse(color),
+      )
+    end
+
+    matchpi(
+      %[(rect ¦ _ bg_
+                  alpha: (%optional 255 alpha←(%number u8))
+                  dl_: (%number i32)
+                  dt_: (%number i32)
+                  final-w: w←(%number +i32)
+                  final-h: h←(%number +i32)
+                  border-radius: (%optional 0 radius←(%number u16))
+                  ring-l: (%optional 0 rl←(%number u8))
+                  ring-r: (%optional 0 rr←(%number u8))
+                  ring-t: (%optional 0 rt←(%number u8))
+                  ring-b: (%optional 0 rb←(%number u8)))]
+    ) do
+      ctx.commands << FillRect.new(z,
+        box: Rect.new(
+          origin: Point.new(x + dl.to(Int32), y + dt.to(Int32)),
+          extent: Point.new(w.to(Int32), h.to(Int32)),
+        ),
+        color: RGB.parse(bg),
+        alpha: alpha.to(UInt8),
+        radius: radius.to(UInt16),
+        ring: Ring.new(rl.to(UInt8), rr.to(UInt8), rt.to(UInt8), rb.to(UInt8)),
+      )
+    end
+
+    matchpi(
+      %[(rect/outline ¦ _ bg_
+                          dl_: (%number i32)
+                          dt_: (%number i32)
+                          final-w: w←(%number +i32)
+                          final-h: h←(%number +i32)
+                          border-width: thickness←(%number u8)
+                          border-radius: (%optional 0 radius←(%number u16)))]
+    ) do
+      inset = thickness.to(Int32)
+
+      ctx.commands << OutlineRect.new(z,
+        box: Rect.new(
+          origin: Point.new(x + dl.to(Int32) + inset, y + dt.to(Int32) + inset),
+          extent: Point.new(w.to(Int32) - inset*2, h.to(Int32) - inset*2),
+        ),
+        color: RGB.parse(bg),
+        thickness: inset.to_u8,
+        radius: radius.to(UInt16),
+      )
+    end
+
+    matchpi(
+      %[(circle ¦ _ bg_
+                    dl_: (%number i32)
+                    dt_: (%number i32)
+                    radius_: (%number u16))]
+    ) do
+      ctx.commands << FillCircle.new(z,
+        origin: Point.new(x + dl.to(Int32), y + dt.to(Int32)),
+        radius: radius.to(UInt16),
+        color: RGB.parse(bg),
+      )
+    end
+
+    matchpi(
+      %[(triangle ¦ _ bg_
+                      dl_: (%number i32)
+                      dt_: (%number i32)
+                      final-w: w←(%number +i32)
+                      final-h: h←(%number +i32)
+                      pointing_: (%any left right up down))]
+    ) do
+      ctx.commands << FillTriangle.new(z,
+        box: Rect.new(
+          origin: Point.new(x + dl.to(Int32), y + dt.to(Int32)),
+          extent: Point.new(w.to(Int32), h.to(Int32)),
+        ),
+        heading: Heading.parse(pointing),
+        color: RGB.parse(bg),
+      )
+    end
+
+    matchpi(
+      %[(viewport child←{¦ final-w: cw←(%number +i32) final-h: ch←(%number +i32)}
+         ¦ _ bg_
+             dl_: (%number +i32)
+             dt_: (%number +i32)
+             final-w: w←(%number +i32)
+             final-h: h←(%number +i32)
+             pan-x_: (%number i32)
+             pan-y_: (%number i32))]
+    ) do
+      children = [] of DrawCommand
+
+      draw(ctx.copy_with(commands: children), child, pan_x.to(Int32), pan_y.to(Int32), z)
+
+      # Sort children by layer (z-index) now that we know they're complete.
+      #
+      # Smaller z-index will be drawn on top of, so the default order (ASC) is fine.
+      children.sort_by!(&.z)
+
+      ctx.commands << View.new(z,
+        children: children,
+        box: Rect.new(
+          origin: Point.new(x + dl.to(Int32), y + dt.to(Int32)),
+          extent: Point.new(w.to(Int32), h.to(Int32)),
+        ),
+        color: RGB.parse(bg),
+      )
+    end
+
+    matchpi(
+      %[(layer child_ ¦ _ dl_: (%number i32)
+                          dt_: (%number i32)
+                          z-index: n←(%number i32))]
+    ) do
+      draw(ctx, child, x + dl.to(Int32), y + dt.to(Int32), z: n.to(Int32))
+    end
+
+    matchpi %[{¦ dl_: (%number i32) dt_: (%number i32)}] do
+      node.items.each { |child| draw(ctx, child, x + dl.to(Int32), y + dt.to(Int32), z) }
+    end
+
+    otherwise { }
+  end
+end
+
+# Converts uiR *markup* into a `Window` object. This object, among other
+# things, contains an array of draw commands to be executed by a Painter
+# to actually paint the window on the screen.
+def UIR::Platform.draw(markup : Term) : Window
+  Term.case(markup) do
+    matchpi %{(window child_ ¦ _ bg_ final-w: w←(%number +i32) final-h: h←(%number +i32) cursor⋮ arrow)} do
+      children = [] of DrawCommand
+      cursor0 = Cursor.parse(cursor)
+
+      setcursor = ->(proposal : Cursor) do
+        # Only allow changing Arrow to any cursor.
+        case {cursor0, proposal}
+        when {Cursor::Arrow, _}
+          cursor0 = proposal
+        end
+      end
+
+      draw(DrawContext.new(children, setcursor), child, x: 0, y: 0, z: 0)
+
+      # Sort children by layer (z-index) now that we know they're complete.
+      #
+      # Smaller z-index will be drawn on top of, so the default order (ASC) is fine.
+      children.sort_by!(&.z)
+
+      Window.new(cursor0, Point.new(w.to(Int32), h.to(Int32)), RGB.parse(bg), children)
+    end
+
+    # TODO: if markup is invalid, display an error window.
+  end
+end
+
+# Specifies where to start searching for fonts.
+FONTS_ROOT = RESOURCES / "fonts"
+
+# Font entry parser can parse candidate font or font-related paths into
+# `FontEntry` objects.
+module FontEntryParser
+  extend self
+
+  Log = ::Log.for("FontEntryParser")
+
+  record FontEntry, kind : Kind, path : Path, family : String, weight : FontWeight, italic : Bool do
+    enum Kind : UInt8
+      Font
+      Codepoints
+    end
+  end
+
+  # :nodoc:
+  CAMEL_BOUND_REGEX = /(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])/
+
+  # :nodoc:
+  def spaced(camel : String) : String
+    camel.gsub(CAMEL_BOUND_REGEX, ' ')
+  end
+
+  # :nodoc:
+  FONT_FILE_REGEX = /(?<family>\w+)\-(?<weightid>\w+?)??(?<variant>Italic)?$/
+
+  # :nodoc:
+  FONT_EXTENSIONS = UIR::Platform::Current.font_extensions
+
+  # Attempts to parse *path* into a font entry. Returns `nil` if parsing failed.
+  def font_entry?(path : Path) : FontEntry?
+    case path.extension
+    when .in?(FONT_EXTENSIONS)
+      kind = FontEntry::Kind::Font
+    when ".codepoints"
+      kind = FontEntry::Kind::Codepoints
+    else
+      return
+    end
+
+    unless match = path.stem.match(FONT_FILE_REGEX, options: :anchored)
+      Log.error { "path with font-like extension did not match font regex: #{path}" }
+      return
+    end
+
+    family, weightid, variant = match["family"], match["weightid"]?, match["variant"]?
+
+    weightid ||= "Regular"
+
+    unless weight = FontWeight.parse?(weightid)
+      Log.error { "weight did not match one of known weights for font: #{path}" }
+      return
+    end
+
+    italic = false
+
+    case variant = match["variant"]?
+    when .nil?
+    when "Italic"
+      italic = true
+    else
+      Log.error { "unknown font variant: #{path}" }
+      return
+    end
+
+    FontEntry.new(kind, path, spaced(family), weight, italic)
+  end
+end
+
+# Font finder can locate a font on disk based on its name (e.g. "IBM Plex Sans")
+# and weight (e.g. `FontWeight::Bold`). The result of font finder's work is an
+# absolute path to the font file (TTF, OTF, etc.) Font finder is also able to
+# map human-readable codepoint name to the actual numeric codepoints, provided
+# the font has a corresponding `.codepoints` file.
+#
+# See: `path?`, `codepoint?`.
+module FontFinder
+  extend self
+
+  Log = ::Log.for("FontFinder")
+
+  # :nodoc:
+  record CodepointMap, codepoints = {} of String => Char do
+    delegate :has_key?, :[]?, :[]=, to: @codepoints
+
+    def inspect(io)
+      io << "{codepoint map with " << codepoints.size << " codepoint(s)}"
+    end
+
+    def to_s(io)
+      inspect(io)
+    end
+  end
+
+  # :nodoc:
+  record FontQuery, family : String, weight : FontWeight, italic : Bool
+
+  # :nodoc:
+  record FontResponse, path : Path, codepoints : CodepointMap
+
+  # :nodoc:
+  alias FontIndex = Hash(FontQuery, FontResponse)
+
+  # :nodoc:
+  #
+  # Constructs a font index based on fonts on the disk.
+  def index(root : Path) : FontIndex
+    leaves = Dir[root / "**/*.*", match: :none]
+    entries = leaves.compact_map { |file| FontEntryParser.font_entry?(Path[file]) }
+    index = FontIndex.new(initial_capacity: entries.size)
+
+    entries.each do |entry|
+      next unless entry.kind.font?
+
+      query = FontQuery.new(entry.family, entry.weight, entry.italic)
+
+      if twin = index[query]?
+        Log.error { "twin font files: #{twin.path}, #{entry.path}" }
+        next
+      end
+
+      index[query] = FontResponse.new(entry.path, codepoints: CodepointMap.new)
+    end
+
+    entries.each do |entry|
+      next unless entry.kind.codepoints?
+
+      query = FontQuery.new(entry.family, entry.weight, entry.italic)
+      unless font = index[query]?
+        Log.error { "found a .codepoints file but not the corresponding font file: #{entry.path}" }
+        next
+      end
+
+      File.open(entry.path) do |io|
+        io.each_line do |line|
+          name, codepoint_hex = line.split(' ', limit: 2)
+
+          if font.codepoints.has_key?(name)
+            Log.error { "#{entry.path}: duplicate name for codepoint: #{name}" }
+            next
+          end
+
+          unless codepoint = codepoint_hex.to_i?(base: 16)
+            Log.error { "#{entry.path}: cannot parse codepoint hex: #{codepoint_hex}" }
+            next
+          end
+
+          font.codepoints[name] = codepoint.chr
+        end
+      end
+    end
+
+    index
+  end
+
+  @@lock = Mutex.new
+  @@index : FontIndex = @@lock.synchronize { index(FONTS_ROOT) }
+
+  private def each_possible_query_with_italic(family, weight pivot, italic, &) : Nil
+    FontWeight.sway(pivot) do |weight|
+      yield FontQuery.new(family, weight, italic)
+    end
+  end
+
+  # :nodoc:
+  def each_possible_query(family, weight, italic) : Nil
+    each_possible_query_with_italic(family, weight, italic) { |query| yield query }
+    each_possible_query_with_italic(family, weight, !italic) { |query| yield query }
+  end
+
+  # Returns the path to *font* with the given *weight*, or optionally to its *italic* variant.
+  #
+  # - If *weight* does not exist for *font* tries to sway *weight* to find an existing
+  #   font. For example, for Regular it will sway Text-Medium, Light-Bold, Thin-Black.
+  # - If still nothing, tries to flip your *italic* choice. For non italic queries tries
+  #   to find an italic variant that satisfies *family* and *weight*, if possible; for
+  #   non-italic queries, similarly tries to find an italic variant.
+  # - If still nothing, returns `nil`.
+  def path?(family : String, weight : FontWeight = FontWeight::Regular, *, italic : Bool = false) : Path?
+    each_possible_query(family, weight, italic) do |query|
+      next unless response = @@lock.synchronize { @@index[query]? }
+      return response.path
+    end
+  end
+
+  # Retrieves the codepoint for *name* based on the `.codepoints` file for
+  # the given font variant.
+  #
+  # The algorithm for looking up the font and the corresponding `.codepoints`
+  # file is the same as in `path?`.
+  def codepoint?(name : String, family : String, weight : FontWeight = FontWeight::Regular, *, italic : Bool = false) : Char?
+    each_possible_query(family, weight, italic) do |query|
+      @@lock.synchronize do
+        next unless response = @@index[query]?
+        next unless codepoint = response.codepoints[name]?
+        return codepoint
+      end
+    end
+  end
 end
 
 module UIR
@@ -235,8 +828,10 @@ module UIR
     end
   end
 
-  # Includers are UIR *platforms*, capable of displaying UIR.
+  # Includers are UIR *platforms*, capable of displaying *drawable UIR*
+  # (known as *dwUIR* for short).
   module IPlatform
+    abstract def font_extensions : Indexable(String)
     abstract def wrap(content : String, font : String, weight : FontWeight, size : Int32, leading : Float32, w : Int32?, h : Int32?) : String
     abstract def measure(content : String, font : String, weight : FontWeight, size : Int32, leading : Float32) : {Int32, Int32}
     abstract def show(reducer : Reducer) : Nil

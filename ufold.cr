@@ -684,6 +684,20 @@ module Microfold
 
     def call(ctx : UnitContext, child : Term) : {UnitContext, Term}
       Term.case(child) do
+        matchpi %{(codepoint name_string)} do
+          continue unless font = ctx.sheet[:font]?
+          continue unless weight = ctx.sheet[:"font-weight"]?
+
+          continue unless family = font.to?(String)
+          continue unless weight = weight.to?(Int32)
+
+          weight = FontWeight.parse(weight)
+
+          continue unless codepoint = FontFinder.codepoint?(name.to(String), family, weight)
+
+          text(ctx, Term[codepoint])
+        end
+
         matchpi %{_dict} { unit(ctx, child) }
         matchpi %{_string} { text(ctx, child.unsafe_as_s) }
         otherwise { text(ctx, Term[child.inspect]) }
@@ -786,6 +800,10 @@ module Microfold
 
   def uir0(spec : Term::Dict, unit : Term, rem : Term::Num, inherited : Term::Dict) : Term
     Term.case(unit) do
+      matchpi %{((self) node_)} do
+        node
+      end
+
       matchpi(
         %{((self basis←node_symbol) ¦ attrs_ style⋮ "")},
         %{((self basis_symbol node_symbol) ¦ attrs_ style⋮ "")},
@@ -819,6 +837,20 @@ module Microfold
         Term.of(transplant(box.as_d, ctx.sheet, attrs.unsafe_as_d))
       end
 
+      matchpi %{(node←icon name_string ¦ attrs_ style⋮ "")} do
+        # Read node defaults.
+        nodal = Term[]
+        if (defaults = spec[:defaults, node]?) && (defaults = defaults.as_s?)
+          nodal = sheet(spec, attrs.unsafe_as_d, defaults.to(String), rem: rem)
+        end
+
+        sheet = sheet(spec, attrs.unsafe_as_d, style.to(String), rem: rem, base: nodal | inherited)
+        children = Term.of({ {:codepoint, name} })
+        ctx, box = HIERARCHY_NORMAL.call(UnitContext.new(spec, sheet, rem, collapse: attrs.empty?, nested: false), children)
+
+        Term.of(transplant(box.as_d, ctx.sheet, attrs.unsafe_as_d))
+      end
+
       matchpi %{(node_symbol children_+ ¦ attrs_ style⋮ "")} do
         # Read node defaults.
         nodal = Term[]
@@ -830,10 +862,6 @@ module Microfold
         ctx, box = HIERARCHY_NORMAL.call(UnitContext.new(spec, sheet, rem, collapse: attrs.empty?, nested: false), children)
 
         Term.of(transplant(box.as_d, ctx.sheet, attrs.unsafe_as_d))
-      end
-
-      matchpi %{((self) node_)} do
-        node
       end
 
       otherwise do

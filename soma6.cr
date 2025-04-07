@@ -4,9 +4,7 @@ require "./sfpaint"
 require "./pprint2"
 require "./meridium_step"
 
-module UIR::Platform
-  alias Current = SFML
-end
+alias UIR::Platform::Current = SFML
 
 module D7VR
   extend self
@@ -1222,7 +1220,7 @@ frame = ML.term <<-WWML
           (group style: "flow-col gap-5 min-w-lg max-w-lg"
             (group style: "w-max flow-col gap-4"
               (group style: "w-max gap-3"
-                (icon "\\u00e76e" style: "text-neutral-200 text-5xl") ;; disabled_visible
+                (icon "disabled_visible" style: "text-neutral-200 text-5xl")
                 (p "Concealed" style: "h-max center-y leading-none font-bold text-neutral-200 text-4xl"))
               (p style: "w-max text-neutral-300 font-normal"
                 "This document is currently concealed. This means it’s running at full speed without you in the loop."))
@@ -1278,11 +1276,11 @@ ui = UIR::Reducers.microfold(Term.of(frame)) do |current, drawable, event|
       frame = frame.morph({:".model", :concealed, !concealed})
     end
 
-    if frame[:".model", :concealed].false?
-      matchpi %{(key f1)} do
-        puts ML.display(drawable, style: ML::Style::Indent2)
-      end
+    matchpi %{(key f1)} do
+      puts ML.display(drawable, style: ML::Style::Indent2)
+    end
 
+    if frame[:".model", :concealed].false?
       matchpi %{(key f2)} do
         doc.send(Term.of(:open, demo))
       end
