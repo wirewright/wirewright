@@ -1209,3 +1209,27 @@
     ((changes/view @v)
      (decay 1 (cell "hello" @v)))
     ((changes/view @v))))
+
+;; sampler
+(d7
+  ((cell 0 @x)
+   (cell @y)
+   (sampler @x on @quxes to @xs)
+   (sampler @y on @quxes to @ys)
+   (sampler (@x @y) on @quxes to @zs)
+   (event (pulse @quxes 123))
+   (delay 1
+     (cell 100 @y)
+     (event (pulse @quxes 123)))
+   (log @xs in ())
+   (log @ys in ())
+   (log @zs in ()))
+  ((cell 0 @x)
+   (cell 100 @y)
+   (sampler @x on @quxes to @xs)
+   (sampler @y on @quxes to @ys)
+   (sampler (@x @y) on @quxes to @zs)
+   (cell 100 @y)
+   (log @xs in (0 0))
+   (log @ys in (100))
+   (log @zs in ((0 100)))))

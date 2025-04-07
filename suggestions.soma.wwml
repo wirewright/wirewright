@@ -329,3 +329,20 @@
   (literal template "Alloy template that should be rendered")
   (prop? strict "Do not render if there are problems (e.g. some variables missing). Default: false")
   (prop? complaints "Pulse edge to file complaints to (e.g. that some variable is missing)"))
+
+(group sampler "Reads the value of const(s) on demand")
+
+(variant sampler
+  (const cin "const edge that should be sampled")
+  (comma on)
+  (pulse trigger "triggers the read")
+  (comma to)
+  (pulse samples "sink for samples taken"))
+
+(variant sampler
+  (literal cins "list of const edges that should be sampled simultaneously")
+  (comma on)
+  (pulse trigger "triggers the read")
+  (comma to)
+  (pulse samples "sink for samples taken (lists of simultaneously sampled cins)"))
+

@@ -621,7 +621,10 @@ module Rhodium
         end
       end
 
-      givenpi %{[cell @cout_] (assign @cout_ v0_) -1} do
+      givenpi(
+        %{[cell @cout_] (assign @cout_ v0_) -1},
+        %{[cell @cout_] (cell/created @cout_ v0_) -1},
+      ) do
         effect(document1, nodepath, node0) do
           backmap %[[cell ⏏v @_]], v: v0
 
@@ -629,7 +632,10 @@ module Rhodium
         end
       end
 
-      givenpi %{[cell @cout_ for _] (assign @cout_ v0_) -1} do
+      givenpi(
+        %{[cell @cout_ for _] (assign @cout_ v0_) -1},
+        %{[cell @cout_ for _] (cell/created @cout_ v0_) -1},
+      ) do
         effect(document1, nodepath, node0) do
           backmap %{[cell ⏏v @_ for _]}, v: v0
 
@@ -988,6 +994,34 @@ module Rhodium
           end
 
           backmap %{[combine _ in storage_ for @_]}, storage: storage1
+
+          false
+        end
+      end
+
+      givenpi %{[sampler @cin_ on @pin_ to @pout_] (pulse @pin_ _) -1} do
+        effect(document1, nodepath, node0) do
+          if value = document0[Cells, cin]?
+            event :pulse, pout, value
+          end
+
+          false
+        end
+      end
+
+      givenpi %{[sampler cins←⟨@_⟩ on @pin_ to @pout_] (pulse @pin_ _) -1} do
+        effect(document1, nodepath, node0) do
+          row = Term::Dict.build do |commit|
+            cins.items.each do |cin|
+              unless value = document0[Cells, cin]?
+                return document1, false
+              end
+
+              commit << value
+            end
+          end
+
+          event :pulse, pout, row
 
           false
         end
