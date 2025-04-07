@@ -422,10 +422,34 @@ module UIR::Platform::SFML
   module FontFinder
     extend self
 
+    # TODO: IDEALLY we would do the reverse, index the fonts/ directory on boot and then
+    # search through the index here, since the fonts/ directory always knows better.
+    # But this will do for now.
+
     # :nodoc:
-    def refs(font : String, postfix : String) : Indexable(Path)
-      {RESOURCES / "fonts" / "#{font.delete(' ')}-#{postfix}.ttf",
-       RESOURCES / "fonts" / "#{font.delete(' ')}-#{postfix}.otf"}
+    def each_possible_path_to(prefix : Path, font : String, postfix : String, & : Path ->) : Nil
+      yield prefix / "#{font.delete(' ')}-#{postfix}.ttf"
+      yield prefix / "#{font.delete(' ')}-#{postfix}.otf"
+    end
+
+    # :nodoc:
+    def each_possible_path_to(font : String, postfix : String, & : Path ->) : Nil
+      # Maybe it's directly in fonts/
+      each_possible_path_to(RESOURCES / "fonts", font, postfix) do |candidate|
+        yield candidate
+      end
+
+      # Or maybe it's in a directory under its name or something shorter, e.g.
+      # for IBM Plex Sans the directory is perhaps IBM Plex Sans/, or perhaps
+      # IBM Plex/, or could it be IBM/?
+      words = font.split(' ', remove_empty: true)
+      (0..words.size).reverse_each do |possible_wordsize|
+        dirname = words[0...possible_wordsize].join(' ')
+
+        each_possible_path_to(RESOURCES / "fonts" / dirname, font, postfix) do |candidate|
+          yield candidate
+        end
+      end
     end
 
     # :nodoc:
@@ -433,14 +457,14 @@ module UIR::Platform::SFML
       FontWeight.reverse_each_with_name do |weight, postfix|
         next unless weight <= pivot
 
-        refs(font, postfix).each do |ref|
+        each_possible_path_to(font, postfix) do |ref|
           next unless File.exists?(ref)
           return ref
         end
       end
 
       FontWeight.each_with_name do |weight, postfix|
-        refs(font, postfix).each do |ref|
+        each_possible_path_to(font, postfix) do |ref|
           next unless File.exists?(ref)
           return ref
         end

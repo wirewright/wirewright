@@ -116,6 +116,15 @@
 "pt-px": {pt: 1}
 "pb-px": {pb: 1}
 
+"p-0.5": (+ "px-0.5" "py-0.5")
+"px-0.5": (+ "pl-0.5" "pr-0.5")
+"py-0.5": (+ "pt-0.5" "pb-0.5")
+
+"pl-0.5": {pl: (spacing 0.5)}
+"pr-0.5": {pr: (spacing 0.5)}
+"pt-0.5": {pt: (spacing 0.5)}
+"pb-0.5": {pb: (spacing 0.5)}
+
 (nat "pl" N {pl: (spacing N_)})
 (nat "pr" N {pr: (spacing N_)})
 (nat "pt" N {pt: (spacing N_)})

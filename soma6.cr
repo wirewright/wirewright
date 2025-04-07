@@ -599,6 +599,11 @@ class Document
   class Mailbox
     @state = Atomic(State).new(State.new)
 
+    def settled? : Bool
+      state = @state.get(:relaxed)
+      state.settled?
+    end
+
     def enqueue(prompt : Term, & : ->) : Nil
       state0 = @state.get(:relaxed)
       while true
@@ -734,6 +739,7 @@ class Document
     )
 
     @dwuir = Term[]
+    @concealed = false
     @document = Term[]
     @drawn = Term[]
     @rem0 = @rem1 = Term[16]
@@ -742,10 +748,9 @@ class Document
     @mouse0 = @mouse1 = {Term[0], Term[0]}
   end
 
-  # Returns the latest drawable UIR of this document.
-  # def dwuir : Term::Dict
-  #   @dwuir.get(:relaxed)
-  # end
+  def settled? : Bool
+    @mailbox.settled?
+  end
 
   # Adds *prompt* to this document's mailbox.
   def send(prompt : Term) : Nil
@@ -849,7 +854,7 @@ class Document
   # Draws the document.
   private def draw : Nil
     # TODO: what to do if its empty though? We have to do something...
-    return if @document.empty?
+    return if @document.empty? || @concealed
 
     instance0 = @drawn
     instance1 = D7VR.instance(@document)
@@ -960,6 +965,14 @@ class Document
     Term.case(prompt) do
       matchpi %{(open seed_dict)} do
         open(seed.unsafe_as_d)
+      end
+
+      matchpi %{(conceal)} do
+        @concealed = true
+      end
+
+      matchpi %{(reveal)} do
+        @concealed = false
       end
 
       # FIXME: WTF?!
@@ -1199,17 +1212,32 @@ frame = ML.term <<-WWML
                max-w: 1000
                max-h: 800
                style: "bg-neutral-900 max origin"
-               .model: {mouse: (0 0), dwuir: (), pan-x: 0, pan-y: 0}
+               .model: {mouse: (0 0), dwuir: (), concealed: false, settled: false, pan-x: 0, pan-y: 0}
   (group style: "max flow-none"
     (group style: "max flow-col gap-3 p-3 fr"
       (group style: "z-100 bg-neutral-800 w-max h-content px-2 py-1 rounded-sm"
         (p "Wirewright µsoma" style: "text-neutral-400 text-xs"))
-      (^if (= dwuir ())
-        (group style: "w-max h-fr bg-neutral-800 center rounded-sm"
-          (p "The document's view will appear here shortly, please wait..." style: "text-sm text-neutral-300")))
-      (^unless (= dwuir ())
-        ((self viewport) style: "w-max h-fr bg-neutral-900" pan-x: ^pan-x pan-y: ^pan-y id: viewport
-          ((self) ^dwuir))))))
+      (^if concealed
+        (group style: "w-max h-fr bg-neutral-950 border-2 border-neutral-800 rounded-sm center"
+          (group style: "flow-col gap-5 min-w-lg max-w-lg"
+            (group style: "w-max flow-col gap-4"
+              (group style: "w-max gap-3"
+                (icon "\\u00e76e" style: "text-neutral-200 text-5xl") ;; disabled_visible
+                (p "Concealed" style: "h-max center-y leading-none font-bold text-neutral-200 text-4xl"))
+              (p style: "w-max text-neutral-300 font-normal"
+                "This document is currently concealed. This means it’s running at full speed without you in the loop."))
+            (group style: "border border-yellow-200 gap-2 rounded p-2 settled:border-green-200" settled: ^settled
+              (p style: "px-1 py-0.5 font-mono leading-none text-neutral-950 font-medium text-xs rounded-sm bg-yellow-200 settled:bg-green-200" settled: ^settled
+                "Esc")
+              (p style: "leading-tight text-yellow-200 settled:text-green-200 h-max center-y" settled: ^settled
+                "Hit escape to reveal")))))
+      (^unless concealed
+        (^if (= dwuir ())
+          (group style: "w-max h-fr bg-neutral-800 center rounded-sm"
+            (p "The document's view will appear here shortly, please wait..." style: "text-sm text-neutral-300")))
+        (^unless (= dwuir ())
+          ((self viewport) style: "w-max h-fr bg-neutral-900" pan-x: ^pan-x pan-y: ^pan-y id: viewport
+            ((self) ^dwuir)))))))
 ;;    ;; Template for command palette
 ;;    (group style: "max center-x py-20 z-100 bg-neutral-950 opacity-80"
 ;;      (group style: "content min-w-lg flow-col gap-5"
@@ -1240,61 +1268,73 @@ ui = UIR::Reducers.microfold(Term.of(frame)) do |current, drawable, event|
   rerender = true
 
   Term.case(event) do
-    matchpi %{(key f1)} do
-      puts ML.display(drawable, style: ML::Style::Indent2)
+    matchpi %{(key escape)} do
+      if concealed = frame[:".model", :concealed].true?
+        doc.send(Term.of({:reveal}))
+      else
+        doc.send(Term.of({:conceal}))
+      end
+
+      frame = frame.morph({:".model", :concealed, !concealed})
     end
 
-    matchpi %{(key f2)} do
-      doc.send(Term.of(:open, demo))
-    end
+    if frame[:".model", :concealed].false?
+      matchpi %{(key f1)} do
+        puts ML.display(drawable, style: ML::Style::Indent2)
+      end
 
-    matchpi %{(key f3)} do
-      doc.send(Term.of(:open, fb_loop))
-    end
+      matchpi %{(key f2)} do
+        doc.send(Term.of(:open, demo))
+      end
 
-    matchpi %{(key _symbol)}, %{(input _string)} do
-      doc.send(event)
-    end
+      matchpi %{(key f3)} do
+        doc.send(Term.of(:open, fb_loop))
+      end
 
-    matchpi %{(mouse motion x_number y_number)} do
-      frame = frame.morph({:".model", :mouse, {x, y}})
+      matchpi %{(key _symbol)}, %{(input _string)} do
+        doc.send(event)
+      end
 
-      if grip = frame[:".model", :grip]?
-        gx, gy = grip
-        dx = x - gx
-        dy = y - gy
+      matchpi %{(mouse motion x_number y_number)} do
+        frame = frame.morph({:".model", :mouse, {x, y}})
 
-        frame = frame.morph(
-          {:".model", :"pan-x", frame[:".model", :"pan-x"] + dx},
-          {:".model", :"pan-y", frame[:".model", :"pan-y"] + dy},
-          {:".model", :grip, frame[:".model", :mouse]},
-        )
-      elsif response = UIR.node_and_coords?(drawable) { |node| node[:id]? == Term.of(:viewport) }
-        viewport, l, t = response
-        relx = x - l
-        rely = y - t
-        if relx > 0 && rely > 0
-          doc.send(Term.of(:mouse, :motion, relx - viewport[:"pan-x"], rely - viewport[:"pan-y"]))
+        if grip = frame[:".model", :grip]?
+          gx, gy = grip
+          dx = x - gx
+          dy = y - gy
+
+          frame = frame.morph(
+            {:".model", :"pan-x", frame[:".model", :"pan-x"] + dx},
+            {:".model", :"pan-y", frame[:".model", :"pan-y"] + dy},
+            {:".model", :grip, frame[:".model", :mouse]},
+          )
+        elsif response = UIR.node_and_coords?(drawable) { |node| node[:id]? == Term.of(:viewport) }
+          viewport, l, t = response
+          relx = x - l
+          rely = y - t
+          if relx > 0 && rely > 0
+            doc.send(Term.of(:mouse, :motion, relx - viewport[:"pan-x"], rely - viewport[:"pan-y"]))
+          end
         end
       end
-    end
 
-    matchpi %{(mouse press)} do
-      if frame[:".model", :forward]? == Term[true]
-        doc.send(event)
-      else
-        frame = frame.morph(
-          {:".model", :grip, frame[:".model", :mouse]},
-          {:cursor, :grabbing},
-        )
+      matchpi %{(mouse press)} do
+        if frame[:".model", :forward]? == Term[true]
+          doc.send(event)
+        else
+          frame = frame.morph(
+            {:".model", :grip, frame[:".model", :mouse]},
+            {:cursor, :grabbing},
+          )
+        end
       end
-    end
 
-    matchpi %{(mouse release)} do
-      if grip = frame[:".model", :grip]?
-        frame = frame.morph({:".model", :grip, nil}, {:cursor, nil})
-      elsif frame[:".model", :forward]? == Term[true]
-        doc.send(event)
+      matchpi %{(mouse release)} do
+        if grip = frame[:".model", :grip]?
+          frame = frame.morph({:".model", :grip, nil}, {:cursor, nil})
+        elsif frame[:".model", :forward]? == Term[true]
+          doc.send(event)
+        end
       end
     end
 
@@ -1305,6 +1345,8 @@ ui = UIR::Reducers.microfold(Term.of(frame)) do |current, drawable, event|
     matchpi %{cycle} do
       rerender = true
 
+      frame1 = frame
+
       # Rendezvous with the document thread. Help it draw its UIR -> dwUIR.
       # Keep a copy of dwUIR on our side to show it on the screen.
       select
@@ -1313,21 +1355,24 @@ ui = UIR::Reducers.microfold(Term.of(frame)) do |current, drawable, event|
         dwuir = UIR.drawable(Term.of(uir))
         dwuir_dict = dwuir.as_d
 
-        frame1 = frame.morph({:".model", :dwuir, dwuir})
-        if frame.same?(frame1)
-          rerender = false
-        end
-
-        frame = frame1
         response.send(dwuir_dict)
+
+        frame1 = frame1.morph({:".model", :dwuir, dwuir})
       else
       end
+
+      frame1 = frame1.morph({:".model", :settled, doc.settled?})
+
+      if frame.same?(frame1)
+        rerender = false
+      end
+      frame = frame1
     end
 
     otherwise { }
   end
 
-  unless frame[:".model", :grip]?
+  unless frame[:".model", :grip]? || frame[:".model", :concealed].true?
     mousex, mousey = frame[:".model", :mouse]
 
     frame = frame.morph({:".model", :forward, nil})
