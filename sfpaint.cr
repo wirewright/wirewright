@@ -386,7 +386,7 @@ module UIR::Platform::SFML
   extend IPlatform
   extend self
 
-  MAX_ANTIALIASING = Lock.synchronize { SF::RenderTexture.maximum_antialiasing_level }
+  MAX_ANTIALIASING = SF::RenderTexture.maximum_antialiasing_level
 
   # FIXME: how to support nested viewports?
   class Scratchpad
@@ -779,7 +779,7 @@ module UIR::Platform::SFML
     raise "not implemented: fill triangle"
   end
 
-  @@scratch : Scratchpad = Lock.synchronize { Scratchpad.new }
+  @@scratch = Scratchpad.new
 
   private def paint(target : SF::RenderTarget, command : View)
     @@scratch.fit(command.box.extent.x, command.box.extent.y) do |surface|
@@ -818,42 +818,22 @@ module UIR::Platform::SFML
     sf.display
   end
 
-  # Global SFML lock. Any SFML call must be synchronized using this lock:
-  # SFML is not thread-safe.
-  module Lock
-    @@lock = Mutex.new(:reentrant)
-
-    def self.lock
-      @@lock.lock
-    end
-
-    def self.unlock
-      @@lock.unlock
-    end
-
-    def self.synchronize(&)
-      @@lock.synchronize { yield }
-    end
-  end
+  # :nodoc:
+  SF_HAND = SF::Cursor.from_system(SF::Cursor::Type::Hand)
 
   # :nodoc:
-  SF_HAND = Lock.synchronize { SF::Cursor.from_system(SF::Cursor::Type::Hand) }
+  SF_ARROW = SF::Cursor.from_system(SF::Cursor::Type::Arrow)
 
   # :nodoc:
-  SF_ARROW = Lock.synchronize { SF::Cursor.from_system(SF::Cursor::Type::Arrow) }
-
-  # :nodoc:
-  SF_SIZEALL = Lock.synchronize { SF::Cursor.from_system(SF::Cursor::Type::SizeAll) }
+  SF_SIZEALL = SF::Cursor.from_system(SF::Cursor::Type::SizeAll)
 
   def wrap(content : String, font : String, weight : FontWeight, size : Int32, leading : Float32, w : Int32?, h : Int32?) : String
-    Lock.synchronize do
-      return "" unless path = FontFinder.path?(font, weight)
+    return "" unless path = FontFinder.path?(font, weight)
 
-      data = FontKeeper.font_data(path, size)
-      text = TextData.new(data.font, size, leading, tracking: 1.0f32)
+    data = FontKeeper.font_data(path, size)
+    text = TextData.new(data.font, size, leading, tracking: 1.0f32)
 
-      TextCursor.wrap(text, content, WrapBounds.new(SF.vector2i(0, 0), w, h))
-    end
+    TextCursor.wrap(text, content, WrapBounds.new(SF.vector2i(0, 0), w, h))
   end
 
   private def measure_line(text : TextData, string : String, *, window = 0...string.size) : Int32
@@ -886,28 +866,26 @@ module UIR::Platform::SFML
   end
 
   def measure(content : String, font : String, weight : FontWeight, size : Int32, leading : Float32) : {Int32, Int32}
-    Lock.synchronize do
-      unless path = FontFinder.path?(font, weight)
-        return 0, 0
-      end
-
-      data = FontKeeper.font_data(path, size)
-      text = TextData.new(data.font, size, leading, tracking: 1.0f32)
-
-      if content.empty?
-        return 0, text.line_height
-      end
-
-      width = 0
-      height = 0
-
-      content.each_line(chomp: true) do |line|
-        width = Math.max(width, measure_line(text, line))
-        height += text.line_height
-      end
-
-      {width, height}
+    unless path = FontFinder.path?(font, weight)
+      return 0, 0
     end
+
+    data = FontKeeper.font_data(path, size)
+    text = TextData.new(data.font, size, leading, tracking: 1.0f32)
+
+    if content.empty?
+      return 0, text.line_height
+    end
+
+    width = 0
+    height = 0
+
+    content.each_line(chomp: true) do |line|
+      width = Math.max(width, measure_line(text, line))
+      height += text.line_height
+    end
+
+    {width, height}
   end
 
   private def transcribe(window : SF::RenderWindow, event : SF::Event::Closed)
@@ -1003,8 +981,6 @@ module UIR::Platform::SFML
 
     Term.case(drawable) do
       matchpi %[(window _ ¦ _ title⋮ "Untitled" icon⋮ "" final-w: w←(%number +i32) final-h: h←(%number +i32))] do
-        Lock.lock
-
         window = SF::RenderWindow.new(SF::VideoMode.new(w.to(Int32), h.to(Int32)), title: title.to(String), settings: SF::ContextSettings.new(depth: 24, antialiasing: MAX_ANTIALIASING))
         window.framerate_limit = 60
 
@@ -1019,20 +995,16 @@ module UIR::Platform::SFML
           end
         end
 
-        Lock.unlock
-
-        while Lock.synchronize { window.open? }
-          while event = Lock.synchronize { window.poll_event }
-            transcribed = Lock.synchronize { transcribe(window, event) }
+        while window.open?
+          while event = window.poll_event
+            transcribed = transcribe(window, event)
             transcribed.each { |term| drawable = reducer.call(drawable, term) }
           end
 
           drawable = reducer.call(drawable, Term.of(:cycle))
           commands = UIR::Platform.draw(drawable)
 
-          Lock.synchronize do
-            paint(window, commands)
-          end
+          paint(window, commands)
         end
       end
     end
