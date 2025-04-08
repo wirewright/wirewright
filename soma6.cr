@@ -671,6 +671,53 @@ class Document
     end
   end
 
+  # FIXME: this implementation of history is not *really* correct. What I envision is
+  # us taking periodic snapshots of the document while it is running and also snapshots
+  # after "important" events (a bit similarly to what we do now). We should then have the ability
+  # to "pause" the document and review these snapshots using the UI, in a timeline-kind of way,
+  # perhaps with branches or even a graph; or something like that. We should then be able to
+  # select one of the versions we like and "un-pause" it.
+
+  class History
+    getter? present : Term::Dict?
+
+    def initialize
+      @past = [] of Term::Dict
+      @future = [] of Term::Dict
+    end
+
+    def push(document : Term::Dict) : Nil
+      return if document.empty?
+      return if @present == document
+
+      @future.clear
+
+      unless present = @present
+        @present = document
+        return
+      end
+
+      @past << present
+      @present = document
+    end
+
+    def undo : Nil
+      return unless present = @present
+
+      @future.unshift(present)
+      @present = @past.pop?
+    end
+
+    def redo : Nil
+      return unless succ = @future.shift?
+
+      if present = @present
+        @past << present
+      end
+      @present = succ
+    end
+  end
+
   @rem0 : Term::Num
   @rem1 : Term::Num
 
@@ -745,6 +792,8 @@ class Document
 
     @dwuir = Term[]
     @concealed = false
+    @important = false
+    @history = History.new
     @document = Term[]
     @drawn = Term[]
     @rem0 = @rem1 = Term[16]
@@ -807,6 +856,11 @@ class Document
     !@mailbox.settle?
   end
 
+  enum DoTransition : UInt8
+    Yes
+    No
+  end
+
   # Rendezvous step assesses and modifies the state of the document. It enhances
   # the document based on prompts (`peek`), and decides whether the document should
   # be drawn.
@@ -814,7 +868,7 @@ class Document
     D7::Step.new do |document|
       @document = document
 
-      peek
+      transition = peek
 
       state0 = @state
       state1 = state
@@ -831,9 +885,7 @@ class Document
 
       @state = state1
 
-      # Trigger a transition if the itemsparts are different. Peek may
-      # override the document (perhaps even entirely!)
-      {@document, @document.itemspart != document.itemspart}
+      {@document, transition.yes?}
     end
   end
 
@@ -874,6 +926,8 @@ class Document
     # We don't *really* need to redraw though if the mouse moved. The old
     # dwUIR will work just as well!
     unless same
+      remember
+
       @drawn = instance1
       @rem0 = @rem1
       printout = D7VR.printout(instance1, rem: @rem0)
@@ -955,64 +1009,123 @@ class Document
     end
   end
 
+  private def remember : Nil
+    return unless @important
+
+    @history.push(@document)
+    @important = false
+  end
+
   # Checks the mailbox for new prompts. If none, returns immediately. If some,
   # handles the front prompt.
-  private def peek : Nil
+  private def peek : DoTransition
     if prompt = @mailbox.dequeue?
-      handle(prompt)
+      return handle(prompt)
     end
+
+    DoTransition::No
   end
 
   # Handles the given *prompt*. We call events directed toward the document *prompts*
   # to avoid confusion (e.g. relative to UI events in general). This method is the main
   # dispatch point for prompts.
-  private def handle(prompt : Term) : Nil
+  private def handle(prompt : Term) : DoTransition
     Term.case(prompt) do
       matchpi %{(open seed_dict)} do
+        @important = true
+
         open(seed.unsafe_as_d)
+
+        DoTransition::Yes
       end
 
       matchpi %{(conceal)} do
         @concealed = true
+
+        DoTransition::No
       end
 
       matchpi %{(reveal)} do
         @concealed = false
+
+        DoTransition::No
       end
 
       # FIXME: WTF?!
       matchpi %{(key f4)} do
         puts ML.display(@document)
+
+        DoTransition::No
+      end
+
+      # Undo
+      matchpi %{(key C-z)} do
+        @history.undo
+
+        if document = @history.present?
+          @document = document
+        end
+
+        DoTransition::No
+      end
+
+      # Redo
+      matchpi %{(key C-r)} do
+        @history.redo
+
+        if successor = @history.present?
+          @document = successor
+        end
+
+        DoTransition::No
       end
 
       # Zoom in
       matchpi %{(key C-equal)} do
         @rem1 += 1
+
+        DoTransition::No
       end
 
       # Zoom out
       matchpi %{(key C-minus)} do
         @rem1 = Math.max(Term[7], @rem1 - 1)
+
+        DoTransition::No
       end
 
       matchpi %{(key _)}, %{(input _string)} do
+        @important = true
+
         event(Term.of(:edit, {:edge, :user}, prompt))
+
+        DoTransition::No
       end
 
       matchpi %{(event e_)} do
         event(e)
+
+        DoTransition::No
       end
 
       matchpi %{(mouse motion x_number y_number)} do
         @mouse1 = {x.unsafe_as_n, y.unsafe_as_n}
+
+        DoTransition::No
       end
 
       # FIXME: we're effectively handling these before we know what's hovered.
       matchpi %{(mouse press)}, %{(mouse release)} do
+        @important = true
+
         event(prompt)
+
+        DoTransition::No
       end
 
-      otherwise { }
+      otherwise do
+        DoTransition::No
+      end
     end
   end
 
@@ -1194,11 +1307,12 @@ welcome = ML.dict <<-WWML
     (unit ul style: "w-max h-content flow-col gap-1 pl-3"
       (p "- Drag on empty/non-clickable space to pan around if something overflows." style: "w-max text-sm font-semibold")
       (p "- Use Ctrl-Plus to zoom in and Ctrl-Minus to zoom out." style: "w-max text-sm font-semibold")
+      (p "- Use Ctrl-Z to undo and Ctrl-R to redo (experimental)." style: "w-max text-sm font-semibold")
       (p "- Hit F2-F3 to replace this document with more sophisticated demos." style: "w-max text-sm font-semibold")
       (p "- Hit Ctrl-Backspace to remove this comment (and any *node* before the cursor in general)." style: "w-max text-sm font-semibold")
-      (p "- Hit Enter to escape from a pair." style: "w-max text-sm text-neutral-400")
-      (p "- Play! The semi-readable implementation of this editor is in `editor.soma.wwml`; check it out for key bindings & what they do" style: "w-max text-sm text-neutral-400")
-      (p "- Take a look at D7 tests: `delta7.test.wwml`. Plenty of examples in there." style: "w-max text-sm text-neutral-400"))))
+      (p "- Hit Enter to escape from a pair." style: "w-max text-sm")
+      (p "- Play! The semi-readable implementation of this editor is in `editor.soma.wwml`; check it out for key bindings & what they do" style: "w-max text-sm")
+      (p "- Take a look at D7 tests: `delta7.test.wwml`. Plenty of examples in there." style: "w-max text-sm"))))
 
 ("" | "" () @user)
 
