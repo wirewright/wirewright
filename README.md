@@ -8,7 +8,7 @@ I am working hard to package the hundreds of thousands of lines of "all over the
 
 ### Frontend: soma6
 
-https://github.com/user-attachments/assets/20107e02-a23b-43ed-9b57-591e2ea49f71
+https://github.com/user-attachments/assets/e86cb81d-67d7-45b8-8a68-7399e4fe367e
 
 ### Frontend: pprint2_vis
 
