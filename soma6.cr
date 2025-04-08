@@ -376,7 +376,7 @@ module D7VR
       end
 
       # Instantiate VIEW node.
-      matchpi %{[view view_]} do |view|
+      matchpi %{(view view_ ¦ attrs_)} do |view|
         # TODO: relax this a little bit
         continue unless Rhodium.cursordepth_in_node(node1) == -1
 
@@ -384,14 +384,14 @@ module D7VR
           continue unless view = document0[Rhodium::Cells, view]?
         end
 
-        node1.morph({:"#view", view}, {:"#fallback", node1})
+        node1.morph({:"#view", view | attrs}, {:"#fallback", node1})
       end
 
-      matchpi %{[changes/view view_ @_]} do
+      matchpi %{(changes/view view_ @_ ¦ attrs_)} do
         # TODO: relax this a little bit
         continue unless Rhodium.cursordepth_in_node(node1) == -1
 
-        node1.morph({:"#view", view}, {:"#fallback", node1})
+        node1.morph({:"#view", view | attrs}, {:"#fallback", node1})
       end
 
       # Instantiate invisible FRAG node (hide it).
