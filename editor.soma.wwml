@@ -52,7 +52,7 @@
 ["" | "" (M←(input "(") _*) @EDGE_] <> {M: (nest-self)}
 
 [(%string nonempty) | "" (M←(input ":") _*) @EDGE_]
-  <> {M: (expel-left ((enter-key-behind)) ())}
+  <> {M: (expel-left ((enter-key-behind)) ((append-left ":")))}
 
 ["" | "" (M←(input ":") _*) @EDGE_] <> {M: (enter-key-behind)}
 

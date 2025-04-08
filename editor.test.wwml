@@ -1492,4 +1492,26 @@
      style: "text-xs"
      qux: (+ 1 2))
     (button "- Decrement" @actions style: "text-lg")
+    (button "0 Reset" @actions style: "text-sm"))))
+ (after
+  ((input "\"") (input "qux") (input ":"))
+  (("\"qux:" | "" () @user)
+   (row
+    (button
+     "+ Increment"
+     @actions
+     style: "text-xs"
+     qux: (+ 1 2))
+    (button "- Decrement" @actions style: "text-lg")
+    (button "0 Reset" @actions style: "text-sm"))))
+ (after
+  ((key C-backspace) (key C-backspace))
+  (("" | "" () @user)
+   (row
+    (button
+     "+ Increment"
+     @actions
+     style: "text-xs"
+     qux: (+ 1 2))
+    (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm")))))
