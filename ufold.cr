@@ -866,7 +866,8 @@ module Microfold
 
       otherwise do
         # TODO: pretty print inline
-        Term.of(:invalid, unit.inspect)
+        # TODO: text-truncate instead of wrapping
+        uir(spec, Term.of(:code, "invalid µfold unit: #{unit.inspect}", style: "min-w-content max-w-xs text-xs bg-red-200 p-1 border text-red-900 border-red-900"), rem: rem)
       end
     end
   end

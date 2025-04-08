@@ -55,7 +55,7 @@
 ((%plural min: 2) ¦ _ dl: _number dt: _number final-w: _number final-h: _number -self-ready_)
   <> {self-ready: true}
 
-((%not viewport) (%past {¦ ready: true} min: 1) ¦ _ self-ready: true)
+((%not viewport) (%past {¦ ready: true} min: 1) ¦ _ self-ready: true -ready_)
   <> {ready: true}
 
 ;; NODE: text
@@ -75,6 +75,11 @@
 (text ¦ _ caption_ font_ weight_ size_ leading_ state_: height-unknown w: max max-w_number)
   <> {caption: $'(wrap →caption →font →weight →size →leading max-w: →max-w),
       state: height-measurable}
+
+;; But if it's the same as content-w don't do anything! Our current text wrapping
+;; algorithm is too stupid to be pixel perfect.
+(text ¦ _ state_: height-unknown w: max content-w: w_ max-w: w_number)
+  <> {state: height-measurable}
 
 ;; Compute content-h once in state: height-measurable.
 (text ¦ _ caption_ font_ weight_ size_ leading_ state_: height-measurable -content-h_)
@@ -140,8 +145,13 @@
 
 ;; If x-expand knows max-w but it's w: content then make use of max-w to have an
 ;; upper bound on the width of the child.
-(x-expand {¦ content-w_number -max-w_} ¦ _ w: content min-w_number max-w_number)
-  <> {max-w: $(min (max →content-w →min-w) →max-w)}
+(x-expand {¦ content-w_number -max-w_} ¦ _ w: content min-w_number max-w: W_number)
+  <> {max-w: $(min (max →content-w →min-w) →W)}
+
+;; If w: content min-w: content, then we must wait for an upper bound on the child
+;; and only use that.
+(x-expand {¦ content-w_number -max-w_} ¦ _ w: content min-w: content max-w: W_number)
+  <> {max-w: $'(min →content-w →W)}
 
 ;; Compute content-w of x-expand based on the determined max-w of the child.
 (x-expand {¦ max-w_number} ¦ _ -content-w: W) <> {W: →max-w}
@@ -156,8 +166,13 @@
 
 ;; If y-expand knows max-h but it's h: content then make use of max-h to have an
 ;; upper bound on the height of the child.
-(y-expand {¦ content-h_number -max-h_} ¦ _ h: content min-h_number max-h_number)
-  <> {max-h: $(min (max →content-h →min-h) →max-h)}
+(y-expand {¦ content-h_number -max-h_} ¦ _ h: content min-h_number max-h: H_number)
+  <> {max-h: $(min (max →content-h →min-h) →H)}
+
+;; If h: content min-h: content, then we must wait for an upper bound on the child
+;; and only use that.
+(y-expand {¦ content-h_number -max-h_} ¦ _ h: content min-h: content max-h: H_number)
+  <> {max-h: $'(min →content-h →H)}
 
 ;; Compute content-h of y-expand based on the determined max-h of the child.
 (y-expand {¦ max-h_number} ¦ _ -content-h: H) <> {H: →max-h}

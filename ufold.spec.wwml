@@ -187,33 +187,36 @@
 
 (word "min" (+ "min-w" "min-h"))
 
-"min-w-3xs": { min-w: (rem 16) }
-"min-w-2xs": { min-w: (rem 18) }
-"min-w-xs": { min-w: (rem 20) }
-"min-w-sm": { min-w: (rem 24) }
-"min-w-md": { min-w: (rem 28) }
-"min-w-lg": { min-w: (rem 32) }
-"min-w-xl": { min-w: (rem 36) }
-"min-w-2xl": { min-w: (rem 42) }
-"min-w-3xl": { min-w: (rem 48) }
-"min-w-4xl": { min-w: (rem 56) }
-"min-w-5xl": { min-w: (rem 64) }
-"min-w-6xl": { min-w: (rem 72) }
-"min-w-7xl": { min-w: (rem 80) }
+"min-w-content": {min-w: content}
+"min-h-content": {min-h: content}
 
-"min-h-3xs": { min-h: (rem 16) }
-"min-h-2xs": { min-h: (rem 18) }
-"min-h-xs": { min-h: (rem 20) }
-"min-h-sm": { min-h: (rem 24) }
-"min-h-md": { min-h: (rem 28) }
-"min-h-lg": { min-h: (rem 32) }
-"min-h-xl": { min-h: (rem 36) }
-"min-h-2xl": { min-h: (rem 42) }
-"min-h-3xl": { min-h: (rem 48) }
-"min-h-4xl": { min-h: (rem 56) }
-"min-h-5xl": { min-h: (rem 64) }
-"min-h-6xl": { min-h: (rem 72) }
-"min-h-7xl": { min-h: (rem 80) }
+"min-w-3xs": {min-w: (rem 16)}
+"min-w-2xs": {min-w: (rem 18)}
+"min-w-xs": {min-w: (rem 20)}
+"min-w-sm": {min-w: (rem 24)}
+"min-w-md": {min-w: (rem 28)}
+"min-w-lg": {min-w: (rem 32)}
+"min-w-xl": {min-w: (rem 36)}
+"min-w-2xl": {min-w: (rem 42)}
+"min-w-3xl": {min-w: (rem 48)}
+"min-w-4xl": {min-w: (rem 56)}
+"min-w-5xl": {min-w: (rem 64)}
+"min-w-6xl": {min-w: (rem 72)}
+"min-w-7xl": {min-w: (rem 80)}
+
+"min-h-3xs": {min-h: (rem 16)}
+"min-h-2xs": {min-h: (rem 18)}
+"min-h-xs": {min-h: (rem 20)}
+"min-h-sm": {min-h: (rem 24)}
+"min-h-md": {min-h: (rem 28)}
+"min-h-lg": {min-h: (rem 32)}
+"min-h-xl": {min-h: (rem 36)}
+"min-h-2xl": {min-h: (rem 42)}
+"min-h-3xl": {min-h: (rem 48)}
+"min-h-4xl": {min-h: (rem 56)}
+"min-h-5xl": {min-h: (rem 64)}
+"min-h-6xl": {min-h: (rem 72)}
+"min-h-7xl": {min-h: (rem 80)}
 
 (word "max" (+ "max-w" "max-h"))
 
