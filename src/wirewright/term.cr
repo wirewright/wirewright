@@ -842,7 +842,7 @@ module Ww
 
             unreachable
           {% else %}
-            {% raise "Term.encode: cannot find an overload that can encode this type: #{T}" %}
+            {% @caller.raise "Term.encode: cannot find an overload that can encode this type: #{T}" %}
           {% end %}
         end
 
@@ -861,7 +861,7 @@ module Ww
               end
             {% end %}
           {% else %}
-            {% raise "Term.encode: cannot find an overload that can decode this type: #{T}" %}
+            {% @caller.raise "Term.decode: cannot find an overload that can decode this type: #{T}" %}
           {% end %}
         end
 
