@@ -1,4 +1,13 @@
 module Ww
+  # TODO: this whole encoding scheme is still vulnerable to randomness. The order in
+  # which symbols are created should not determine their identity; right now it does,
+  # so e.g. symbols with the same name created at a different time on different machines/
+  # between runs will have a different hash, and therefore, will breach purity & correctness
+  # when e.g. a dict containing them will be pretty-printed. A solution to this is required.
+  # We must also keep most symbols in the u8/u16 plane since they're later going to be targets
+  # for the TermArray optimization of dicts. The hash of a symbol must not depend on its spec;
+  # but rather, must depend on the symbol's name.
+
   # Represents a symbol. Mainly for use in WwML.
   struct Term::Sym
     include ITerm
