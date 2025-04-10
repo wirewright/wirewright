@@ -150,6 +150,8 @@ struct DisplayContext
 end
 
 module Layout
+  # TODO: express each one of these using Alloy!!!
+
   # ```wwml
   # (text "Hello World 1" "Hello World 2" "Hello World 3" x: 100 y: 200)
   # ```
@@ -522,6 +524,37 @@ module Layout
       end
     end
   end
+
+  # ```wwml
+  # (def (add a_ b_)
+  #   (+ a b))
+  #
+  # (let q
+  #   (+ 1 2))
+  # ```
+  struct CallArgIndentedBlock
+    include Layout
+
+    TEMPLATE = ML.term <<-WWML
+    (col
+      (longer (row ^head ^arg gap: 1))
+      (indented ^block))
+    WWML
+
+    def call(ctx, term, postfix, head, rest) : Term
+      unless ctx.layouts_allowed.call_arg_indented_block? && (dict = term.as_d?) && dict.itemsonly? && dict.size == 3
+        return rest.call(ctx, term, postfix)
+      end
+
+      head, arg, block = dict
+
+      head = ctx.features.call(ctx.inline, head, "")
+      arg = ctx.features.call(ctx.inline, arg, "")
+      block = ctx.features.call(ctx, block, postfix)
+
+      Alloy.render(Term[head: head, arg: arg, block: block], TEMPLATE)
+    end
+  end
 end
 
 # A dirt cheap, Enum-based set of `Layout` includer types.
@@ -550,6 +583,16 @@ enum LayoutSet : UInt16
         raise ArgumentError.new
       end
     {% end %}
+  end
+
+  # Layouts suitable for itemsonly dicts.
+  def self.list : LayoutSet
+    new({:dict_inline, :call_arg_indented_block, :call_column, :call_indented, :dict_aligned})
+  end
+
+  # Layouts suitable for dicts containing both items and pairs
+  def self.dict : LayoutSet
+    new({:dict_inline, :call_kwargs_inline_with_block, :call_kwargs_column_with_block, :call_arg_indented_kwargs, :call_indented, :dict_aligned})
   end
 end
 
@@ -1095,13 +1138,14 @@ module Feature
     def call(ctx, term, postfix, head, rest) : Term
       Term.case(term) do
         matchpi %{((%symbol nonblank) _*)} do
-          thunk = ctx.layouts_allowed.thunk(term, ")" + postfix, {:dict_inline, :call_column, :call_indented, :dict_aligned})
+
+          thunk = ctx.layouts_allowed.thunk(term, ")" + postfix, LayoutSet.list)
 
           Term.of(:row, FRAG_LPAREN, thunk)
         end
 
         matchpi %{[(%symbol nonblank) _*]} do
-          thunk = ctx.layouts_allowed.thunk(term, ")" + postfix, {:dict_inline, :call_kwargs_inline_with_block, :call_kwargs_column_with_block, :call_arg_indented_kwargs, :call_indented, :dict_aligned})
+          thunk = ctx.layouts_allowed.thunk(term, ")" + postfix, LayoutSet.dict)
 
           Term.of(:row, FRAG_LPAREN, thunk)
         end
@@ -1466,6 +1510,7 @@ module ::Ww::ML::Display
   # Default layout chain for displaying WwML.
   LAYOUT_CHAIN = Chain(Layout).new(
     Layout::DictInline.new,
+    Layout::CallArgIndentedBlock.new,
     Layout::CallColumn.new,
     Layout::CallKwargsInlineWithBlock.new,
     Layout::CallArgIndentedKwargs.new,
