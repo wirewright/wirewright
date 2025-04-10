@@ -171,6 +171,7 @@
 "flow-row": {flow: row}
 "flow-col": {flow: col}
 "flow-none": {flow: none}
+"flow-wrap": {flow: wrap}
 
 "floating": {floating: true, w: content, h: content}
 

@@ -603,8 +603,8 @@ module Microfold
     end
   end
 
-  # Appears if there are more than one children. Handles `flow-row`/`flow-col`
-  # prop as well as the `gap` prop.
+  # Appears if there are more than one children. Handles `flow-*` props as well
+  # as the `gap` prop.
   struct FlowBox
     include LeafBox
 
@@ -636,8 +636,6 @@ module Microfold
       coctxs = [] of UnitContext # child octxs
 
       flow = Term::Dict.build do |commit|
-        commit.with(:gap, gap)
-        commit.with(:fractions, fractions)
         commit.with(:w, w)
         commit.with(:h, h)
 
@@ -649,8 +647,19 @@ module Microfold
             coctxs << coctx
             uir
           end
+        when Term.of(:wrap)
+          commit << Term.of(:"x-stack")
+          commit.with(:gap, gap)
+          commit.with(:wrap, true)
+          commit.concat(children.items) do |child|
+            coctx, uir = @edge.call(ictx, child)
+            coctxs << coctx
+            uir
+          end
         when Term.of(:col)
           commit << Term.of(:"y-stack")
+          commit.with(:gap, gap)
+          commit.with(:fractions, fractions)
           commit.concat(children.items) do |child|
             coctx, uir = @edge.call(ictx.overwrite(:h, :content), child)
             coctxs << coctx
@@ -660,6 +669,8 @@ module Microfold
           # In case of row as well as anything else (e.g. absence) we use row
           # flow (x-stack).
           commit << Term.of(:"x-stack")
+          commit.with(:gap, gap)
+          commit.with(:fractions, fractions)
           commit.concat(children.items) do |child|
             coctx, uir = @edge.call(ictx.overwrite(:w, :content), child)
             coctxs << coctx

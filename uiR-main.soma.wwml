@@ -1,8 +1,3 @@
-;; TODO: support x-wrapping using x-wrap: if item does not fit inside
-;; w: max (max-w) then it should wrap. x-wrap is always w: max h: content!!!
-;; TODO: support y-wrapping using y-wrap: if item does not fit inside
-;; h: max (max-h) then it should wrap. y-wrap is always w: content h: max!!!
-
 ;; GENERAL
 
 ;; Learn the content width/height from a single child.
@@ -180,55 +175,125 @@
 ;; NODE: x-stack
 
 ;; Compute the content-w of x-stack.
+;;
+;; This applies to wrap: true as well.
 (x-stack (%many Cws {¦ content-w: 0←_number}) ¦ _ -content-w: W gap⋮ 0)
   <> {W: $(+ (sum (flatten →Cws)) (* →gap (- (tally →Cws) 1)))}
 
-;; Compute the content-h of x-stack.
-(x-stack (%many Chs {¦ content-h: 0←_number}) ¦ _ -content-h: H)
+;; Compute max-sibling-h of x-stack.
+(x-stack (%many Chs {¦ content-h: 0←_number}) ¦ _ -max-sibling-h: H)
   <> {H: $(max (flatten →Chs))}
 
-;; If x-stack is set to h: content then setting h: max in a child
-;; would mean that the child's max-h is content-h of the x-stack
-;; (i.e., maximum sibling height).
-(%all (x-stack _+ ¦ _ h: content content-h: H_number) ⟨{¦ h: max -max-h: h}⟩°) <> {h: →H}
+;; Set content-h of x-stack to its max-sibling-h.
+;;
+;; This **does not** apply to wrap: true because wrap: true computes its
+;; content-h after wrapping (although it does make use of max-sibling-h).
+(x-stack _* ¦ _ -wrap max-sibling-h: sh_ -content-h: h)
+  <> {h: →sh}
+
+;; If x-stack is set to h: content then setting h: max in a child would
+;; mean that the child's max-h is content-h of the x-stack (i.e., maximum
+;; sibling height).
+;;
+;; This will apply to wrap: true x-stack's because h: content is still there,
+;; so we'll be able to grow as much as we need to make all elements have
+;; equal height.
+(%all (x-stack _+ ¦ _ h: content content-h: H_number) ⟨{¦ h: max -max-h: h}⟩°)
+  <> {h: →H}
 
 ;; If x-stack is set to h: max then setting h: max in a child would
 ;; mean that the child's max-h is max-h of the x-stack.
-(%all (x-stack _+ ¦ _ h: max max-h: H_number) ⟨{¦ h: max -max-h: h}⟩°) <> {h: →H}
+;;
+;; This **does not** apply to wrap: true x-stack's because they do not support
+;; h: max; an x-stack that wants to grow but exceeds h: max is confused; instead,
+;; the user should set h: content on the x-stack and wrap it in e.g. a viewport
+;; (i.e. implement some sort of scrolling).
+(%all (x-stack _+ ¦ _ -wrap h: max max-h: H_number) ⟨{¦ h: max -max-h: h}⟩°)
+  <> {h: →H}
 
 ;; All children of x-stack with determinate dt have dt at 0.
-(%all (x-stack _+ ¦ _ dt: _number) ⟨{¦ -dt_}⟩°) <> {dt: 0}
+;;
+;; This **does not** apply to wrap: true x-stack's since we may wrap, thus
+;; changing a child's dt.
+(%all (x-stack _+ ¦ _ -wrap dt: _number) ⟨{¦ -dt_}⟩°)
+  <> {dt: 0}
 
 ;; The first child of x-stack has dl equal to 0.
+;;
+;; This applies to wrap: true x-stack's as well.
 [x-stack {¦ -dl_} _*] <> {dl: 0}
 
 ;; Any consecutive child learns its dl from the previous child plus
 ;; the previous child's final-w.
+;;
+;; This rule does not apply to wrap: true x-stack's because they're a bit
+;; more nuanced than this.
 ;;
 ;; NOTE: we use the last child's left as a "flag" to signal that all children
 ;; had their lefts computed already and the rule engine should skip this rule.
 ;; This simplifies the job of the rule engine, making sure that it doesn't
 ;; have to go through all children every time before seeing that there is
 ;; no change, with regards to this particular rule.
-(%all (x-stack _* {¦ -dl} ¦ _ gap⋮ 0) ⟨{¦ dl: dl0_number final-w: w0_number} {¦ -dl: dl1}⟩)
+(%all (x-stack _* {¦ -dl} ¦ _ -wrap gap⋮ 0) ⟨{¦ dl: dl0_number final-w: w0_number} {¦ -dl: dl1}⟩)
   <> {dl1: $'(+ →dl0 →w0 →gap)}
 
 ;; Sum content-w's of x-stack. Subtract from final-w of x-stack to get leftover-w.
-(%all (x-stack children_* ¦ _ fractions: true -leftover-w_ gap⋮ 0 final-w: W_number)
+;;
+;; This rule obviously **does not** apply to wrap: true x-stack's since they
+;; do not support fractions.
+(%all (x-stack children_* ¦ _ -wrap fractions: true -leftover-w_ gap⋮ 0 final-w: W_number)
       (%items () {¦ w: content -final-w} min: 0)
       (%items Ws_ {¦ final-w: 0←_number} min: 0))
   <> {leftover-w: $(- →W (sum (flatten →Ws)) (* →gap (- (tally →children) 1)))}
 
 ;; Distribute leftover-w across w: max children.
-(%all (x-stack _* ¦ _ fractions: true leftover-w: W_number fr/sum_number)
+;;
+;; Ditto regarding wrap: true x-stack's.
+(%all (x-stack _* ¦ _ -wrap fractions: true leftover-w: W_number fr/sum_number)
       ⟨{¦ w: max fr_: (%number (whole _) > 0) -max-w: w}⟩°)
   <> {w: $(// (* →W →fr) →fr/sum)}
 
 ;; If x-stack child has w: max but x-stack does not have fractions: true, we
 ;; force the child to become w: content. Otherwise we risk not drawing the child
 ;; at all, which is worse than drawing innaccurately.
-(%all (x-stack _* ¦ _ -fractions) ⟨{¦ w_: max -max-w}⟩°)
+;;
+;; This rule **does not** apply to wrap: true x-stack's since it does not support
+;; w: max children.
+;;
+;; NOTE: the whole thing with `fractions: true` is to save a bit of compute on
+;; most x-stack's since most x-stack's do not use fractions, and we require some
+;; rather expensive patterns to figure them out.
+(%all (x-stack _* ¦ _ -wrap -fractions) ⟨{¦ w_: max -max-w}⟩°)
   <> {w: content}
+
+;; NODE: x-stack wrap: true
+
+;; The first child of wrap: true x-stack with determinate dt gets dt: 0.
+(x-stack {¦ -dt_} _+ ¦ _ wrap: true dt: _number)
+  <> {dt: 0}
+
+;; Do the wrapping logic and save under delta: (dl dt dh) for the node
+;; to unpack later on.
+(%all (x-stack _* {¦ -delta} ¦ _ wrap: true gap⋮ 0 max-w: W_number max-sibling-h: H_number)
+      ⟨{¦ dl: dl0_number dt: dt0_number final-w: w0_number}
+       {¦ -delta_ final-w: w1_number final-h: h1_number}⟩)
+  <> {delta:
+        $(if (< (+ →dl0 →w0 →gap →w1) →W)      ;; < Do I fit?
+           ((+ →dl0 →w0 →gap) →dt0 0)          ;; < If I do, what should my delta be?
+           (0 (+ →dt0 →gap →H) (+ →gap →h1)))} ;; < If I don't, what should my delta be?
+
+;; When the last child knows its delta, this means all children know their delta.
+;; We can thus sum height-increments (part of delta) and  thus obtain content-h
+;; of the x-stack.
+;;
+;; NOTE: we skip the first child since it doesn't have a delta attr.
+(%all (x-stack _+ {¦ delta: _} ¦ _ -content-h: H max-sibling-h: sh_number)
+      [x-stack _ (%many Dhs {¦ delta: (_ _ 0←_number)})])
+  <> {H: $(+ →sh (sum (flatten →Dhs)))}
+
+;; Unpack delta.
+{¦ delta: (DL_number DT_number _) -dl_ -dt_}
+  <> {dl: →DL, dt: →DT}
 
 ;; NODE: y-stack
 ;;
