@@ -511,3 +511,5 @@ defaults: {
   rect: "max bg-white",
   group: "content",
 }
+
+inherit: {, font font-weight text-color}

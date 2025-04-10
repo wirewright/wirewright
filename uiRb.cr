@@ -993,4 +993,26 @@ module UIR
   def node_and_coords?(dwuir : Term, &predicate : Term::Dict -> Bool) : {Term::Dict, Term::Num, Term::Num}?
     node_and_coords?(dwuir, ox: Term[0], oy: Term[0], predicate: predicate)
   end
+
+  def approx_inline_charcount(uir : Term) : Int32
+    Term.case(uir) do
+      matchpi %{[floating _]} do
+        0
+      end
+
+      matchpi %{(text ¦ _ caption_string)} do
+        caption.charcount
+      end
+
+      matchpi %{[rect]}, %{[rect/outline]} do
+        1
+      end
+
+      matchpi %{_dict} do
+        uir.items.sum(0) { |node| approx_inline_charcount(node) }
+      end
+
+      otherwise { 0 }
+    end
+  end
 end

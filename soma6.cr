@@ -12,7 +12,7 @@ module D7VR
   struct AttrLeader
     include Feature
 
-    def initialize(@rem : Term::Num)
+    def initialize(@rem : Term::Num, @inherited : Term::Dict)
     end
 
     def call(ctx, term, postfix, head, rest)
@@ -41,7 +41,7 @@ module D7VR
 
         # block? requires fallback for fallback at runtime, if the size
         # cannot be figured out.
-        if printout = D7VR.block?(Term.of(view), fallback, @rem)
+        if printout = D7VR.block?(Term.of(view), fallback, @rem, @inherited)
           printout = postfixed(printout, postfix)
         else
           # ... If it fails right now though, at printout, we'll resort to
@@ -66,23 +66,25 @@ module D7VR
   struct Unit
     include Feature
 
-    def initialize(@document : Term::Dict, @rem : Term::Num)
+    def initialize(@document : Term::Dict, @rem : Term::Num, @inherited : Term::Dict)
     end
 
     def call(ctx, term, postfix, head, rest)
       Term.case(term) do
-        matchpi %{(unit node_ children_+ ¦ _ #fallback: fallback_)} do
+        matchpi %{(unit node_ children_+ ¦ attrs_ style⋮ "" #fallback: fallback_)} do
+          cascaded = Microfold.cascaded(Microfold::SPEC, attrs.unsafe_as_d, style.to(String), @rem, base: @inherited)
+
           unit = term.pairspart.transaction do |commit|
             commit << node
             commit.concat(children.items) do |child|
               Term.case(child) do
-                matchpi %{_dict} { D7VR.document_node_unit(@document, child, @rem) }
+                matchpi %{_dict} { D7VR.document_node_unit(@document, child, @rem, inherit: cascaded) }
                 otherwise { child }
               end
             end
           end
 
-          continue unless block = D7VR.block?(Term.of(unit), fallback, @rem)
+          continue unless block = D7VR.block?(Term.of(unit), fallback, @rem, @inherited)
 
           postfixed(block, postfix)
         end
@@ -264,12 +266,15 @@ module D7VR
   end
 
   # :nodoc:
-  def block?(unit : Term, source : Term, rem : Term::Num) : Term?
+  def block?(unit : Term, code : Term, rem : Term::Num, inherited : Term::Dict = Term[]) : Term?
     return unless unit.type.dict?
 
-    # FIXME: hack: we shouldn't hard-code these to 1, but we also shouldn't
-    # talk to the main thread. What should we do then?
-    Term.of(:block, unit.morph({:fallback, :source, source}, {:fallback, :rem, rem}), w: 1, h: 1)
+    unit = unit.morph({:fallback, :source, code}, {:fallback, :rem, rem})
+    uir = D7VR.uir(Term.of(unit), rem: rem, inherited: inherited)
+
+    inline_charcount = UIR.approx_inline_charcount(uir)
+
+    Term.of(:block, { {:self}, uir }, w: inline_charcount, h: 1)
   end
 
   TEMPLATE_COVER = ML.term <<-WWML
@@ -453,17 +458,17 @@ module D7VR
   end
 
   # Returns the main pretty print chain for D7VR.
-  private def ppchain(instance : Term::Dict, rem : Term::Num)
+  private def ppchain(instance : Term::Dict, rem : Term::Num, inherited : Term::Dict = Term[])
     ML::Display::MAIN_CHAIN.prepend(
-      AttrLeader.new(rem),
+      AttrLeader.new(rem, inherited),
       Cursor.new(rem),
-      Unit.new(instance, rem),
+      Unit.new(instance, rem, inherited),
     )
   end
 
   # Returns the printout of a *node instance* of the given document *instance*.
-  def node_printout(instance : Term::Dict, node_instance : Term, rem : Term::Num) : Term
-    ctx = DisplayContext.new(60, 120, features: ppchain(instance, rem))
+  def node_printout(instance : Term::Dict, node_instance : Term, rem : Term::Num, inherited : Term::Dict = Term[]) : Term
+    ctx = DisplayContext.new(60, 120, features: ppchain(instance, rem, inherited))
     tree = ctx.features.call(ctx, node_instance, "")
     printout, _ = flatten(ctx, tree)
     printout
@@ -575,8 +580,8 @@ module D7VR
 
   # Renders the given *node instance* that belongs to a document *instance*
   # as a Microfold unit.
-  def document_node_unit(instance : Term::Dict, node_instance : Term, rem : Term::Num) : Term
-    printout = node_printout(instance, node_instance, rem)
+  def document_node_unit(instance : Term::Dict, node_instance : Term, rem : Term::Num, *, inherit = Term[]) : Term
+    printout = node_printout(instance, node_instance, rem, inherit)
 
     unit(printout)
   end
@@ -592,8 +597,8 @@ module D7VR
   # there is a centralized, D7VR-controlled way to convert into UIR.
   #
   # You can obtain *unit* mainly using `term_unit` or `document_unit`.
-  def uir(unit : Term, *, rem : Term::Num) : Term
-    Microfold.uir(Microfold::SPEC, unit, rem: rem)
+  def uir(unit : Term, **kwargs) : Term
+    Microfold.uir(Microfold::SPEC, unit, **kwargs)
   end
 end
 

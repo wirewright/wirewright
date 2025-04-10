@@ -279,6 +279,26 @@ module Microfold
     end
   end
 
+  # Returns a sub-sheet of attributes that should be passed down (cascaded)
+  # based on *spec*, *attrs*, *style*, and *rem*.
+  #
+  # *base* can serve as the prototype of the sub-sheet. This method will overwrite
+  # existing keys if needed.
+  def cascaded(spec : Term::Dict, attrs : Term::Dict, style : String, rem : Term::Num, *, base = Term[]) : Term::Dict
+    return base unless inherit = spec[:inherit]?
+    return base unless inherit = inherit.as_d?
+
+    sheet = sheet(spec, attrs, style, rem: rem)
+
+    base.transaction do |commit|
+      inherit.each_entry do |attr, _|
+        next unless value = sheet[attr]?
+
+        commit.with(attr, value)
+      end
+    end
+  end
+
   # :nodoc:
   record UnitContext, spec : Term::Dict, sheet : Term::Dict, rem : Term::Num, collapse : Bool, nested : Bool do
     # Merges child output contexts *coctxs* into parent's output context
@@ -291,14 +311,14 @@ module Microfold
 
       ictx.sheet.each_entry do |key, value|
         if coctxs.any? { |coctx| !key.in?(coctx.sheet) } # consumed
-          octx = octx.override(key, value: nil)
+          octx = octx.overwrite(key, value: nil)
         end
       end
 
       octx
     end
 
-    def override(prop, value)
+    def overwrite(prop, value)
       copy_with(sheet: sheet.with(prop, value))
     end
 
@@ -306,7 +326,7 @@ module Microfold
       subctx = self
       values = props.map do |prop|
         value = subctx.sheet[prop]?
-        subctx = subctx.override(prop, value: nil)
+        subctx = subctx.overwrite(prop, value: nil)
         value
       end
 
@@ -319,7 +339,7 @@ module Microfold
       subctx = self
       values = props.map do |prop|
         return unless value = subctx.sheet[prop]?
-        subctx = subctx.override(prop, value: nil)
+        subctx = subctx.overwrite(prop, value: nil)
         value
       end
 
@@ -332,7 +352,7 @@ module Microfold
       subctx = self
       values = props.map do |prop|
         value = subctx.sheet[prop]?
-        subctx = subctx.override(prop, value: nil)
+        subctx = subctx.overwrite(prop, value: nil)
         value
       end
 
@@ -427,7 +447,7 @@ module Microfold
       end
 
       ictx, minh = response
-      octx, inner = subbox.call(ictx.override(:h, :max).copy_with(nested: true), subject)
+      octx, inner = subbox.call(ictx.overwrite(:h, :max).copy_with(nested: true), subject)
 
       {octx, Term.of(:"y-expand", inner, "min-h": minh, w: ctx.sheet[:w]?, h: ctx.sheet[:h]?)}
     end
@@ -443,7 +463,7 @@ module Microfold
       end
 
       ictx, minw = response
-      octx, inner = subbox.call(ictx.override(:w, :max).copy_with(nested: true), subject)
+      octx, inner = subbox.call(ictx.overwrite(:w, :max).copy_with(nested: true), subject)
 
       {octx, Term.of(:"x-expand", inner, "min-w": minw, w: ctx.sheet[:w]?, h: ctx.sheet[:h]?)}
     end
@@ -562,7 +582,7 @@ module Microfold
       end
 
       ictx, point = response
-      octx, inner = subbox.call(ictx.override(:h, :content).copy_with(nested: true), subject)
+      octx, inner = subbox.call(ictx.overwrite(:h, :content).copy_with(nested: true), subject)
 
       {octx, Term.of(:"y-align", inner, w: ctx.sheet[:w]?, h: ctx.sheet[:h]?, to: point)}
     end
@@ -577,7 +597,7 @@ module Microfold
       end
 
       ictx, point = response
-      octx, inner = subbox.call(ictx.override(:w, :content).copy_with(nested: true), subject)
+      octx, inner = subbox.call(ictx.overwrite(:w, :content).copy_with(nested: true), subject)
 
       {octx, Term.of(:"x-align", inner, w: ctx.sheet[:w]?, h: ctx.sheet[:h]?, to: point)}
     end
@@ -632,7 +652,7 @@ module Microfold
         when Term.of(:col)
           commit << Term.of(:"y-stack")
           commit.concat(children.items) do |child|
-            coctx, uir = @edge.call(ictx.override(:h, :content), child)
+            coctx, uir = @edge.call(ictx.overwrite(:h, :content), child)
             coctxs << coctx
             uir
           end
@@ -641,7 +661,7 @@ module Microfold
           # flow (x-stack).
           commit << Term.of(:"x-stack")
           commit.concat(children.items) do |child|
-            coctx, uir = @edge.call(ictx.override(:w, :content), child)
+            coctx, uir = @edge.call(ictx.overwrite(:w, :content), child)
             coctxs << coctx
             uir
           end
@@ -677,9 +697,20 @@ module Microfold
 
     # Handles the unit-unit boundary.
     private def unit(ctx : UnitContext, unit : Term)
-      octx, font, weight, color = ctx.consume(:font, :"font-weight", :"text-color")
+      octx = ctx
 
-      {octx, Microfold.uir(ctx.spec, unit, rem: ctx.rem, inherited: Term[font: font, "font-weight": weight, "text-color": color])}
+      inherited = Term::Dict.build do |commit|
+        inherit = ctx.spec[:inherit]? || Term[]
+        inherit.each_entry do |attr, _|
+          next unless response = octx.consume(attr)
+
+          octx, value = response
+
+          commit.with(attr, value)
+        end
+      end
+
+      {octx, Microfold.uir(ctx.spec, unit, rem: ctx.rem, inherited: inherited)}
     end
 
     def call(ctx : UnitContext, child : Term) : {UnitContext, Term}
@@ -714,7 +745,7 @@ module Microfold
       octx, inner = subbox.call(ictx, subject)
       inner = inner.morph({:fr, fr}, {:cursor, cursor}, {:"max-w", maxw}, {:"max-h", maxh}, {:dl, dl}, {:dt, dt})
 
-      {octx.override(:w, nil).override(:h, nil), Term.of(inner)}
+      {octx.overwrite(:w, nil).overwrite(:h, nil), Term.of(inner)}
     end
   end
 
@@ -800,8 +831,8 @@ module Microfold
 
   def uir0(spec : Term::Dict, unit : Term, rem : Term::Num, inherited : Term::Dict) : Term
     Term.case(unit) do
-      matchpi %{((self) node_)} do
-        node
+      matchpi %{((self) node_ ¦ attrs_)} do
+        Term.of(node | attrs.unsafe_as_d)
       end
 
       matchpi(
