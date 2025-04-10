@@ -172,35 +172,37 @@
 (group transform "Transforms incoming pulse into outgoing pulse using Nitrene")
 
 (variant transform
-  (pulse pin "source of terms to transform")
-  (comma to)
-  (pulse pout "sink for transformed terms")
-  (literal body "Nitrene program that will do the transformation"))
-
-(variant transform
-  (pulse pin "source of terms to transform")
-  (comma to)
-  (pulse pout "sink for transformed terms")
-  (comma with)
-  (const state "const signal that the transform node will read and pass to Nitrene under `state`")
+  (nested
+    (pulse pin "source of terms to transform")
+    (comma to)
+    (pulse pout "sink for transformed terms"))
   (literal body "Nitrene program that will do the transformation"))
 
 (variant transform
   (nested
     (pulse pin "source of terms to transform")
-    (literal pattern "pattern that terms to transform must match"))
-  (comma to)
-  (pulse pout "sink for transformed terms")
+    (comma to)
+    (pulse pout "sink for transformed terms")
+    (comma with)
+    (const state "const signal that the transform node will read and pass to Nitrene under `state`"))
+  (literal body "Nitrene program that will do the transformation"))
+
+(variant transform
+  (nested
+    (pulse pin "source of terms to transform")
+    (literal pattern "pattern that terms to transform must match")
+    (comma to)
+    (pulse pout "sink for transformed terms"))
   (literal body "Nitrene program that will do the transformation; has access to captures made by pattern"))
 
 (variant transform
   (nested
     (pulse pin "source of terms to transform")
-    (literal pattern "pattern that terms to transform must match; has access to state"))
-  (comma to)
-  (pulse pout "sink for transformed terms")
-  (comma with)
-  (const state "const signal that the transform node will read and pass to Nitrene under `state`")
+    (literal pattern "pattern that terms to transform must match; has access to state")
+    (comma to)
+    (pulse pout "sink for transformed terms")
+    (comma with)
+    (const state "const signal that the transform node will read and pass to Nitrene under `state`"))
   (literal body "Nitrene program that will do the transformation; has access to captures made by pattern"))
 
 (node comment "Grayed out text that is explaining something"

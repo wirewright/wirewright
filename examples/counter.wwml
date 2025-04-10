@@ -7,11 +7,7 @@
    gap: 1)
   gap: 1)
  (transform
-  @deltas
-  to
-  @counts
-  with
-  @count
+  (@deltas to @counts with @count)
   (+ count _)
   #spec:
    {state: @count,
@@ -20,7 +16,7 @@
     out: @counts}
   #shadow:
    (%literal
-    (transform @deltas to @counts with @count (+ count _))))
+    (transform (@deltas to @counts with @count) (+ count _))))
  (latest @counts @count)
  #population: {(cell @count): true}
  #jobs/pending: ()

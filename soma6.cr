@@ -214,13 +214,13 @@ module D7VR
           names = visible.items.map { |(name, _)| name }
 
           suggestion_vars = Term[
-              begin: b,
-              end: e,
-              total: total,
-              names: names,
-              "scroll-offset": b / total,
-              "scroll-height": visible.size / total,
-           ]
+            begin: b,
+            end: e,
+            total: total,
+            names: names,
+            "scroll-offset": b / total,
+            "scroll-height": visible.size / total,
+          ]
           suggestion_unit = Alloy.render(suggestion_vars, SUGGESTION_LIST_TEMPLATE)
           unit = Term.of(:group, cursor_unit, suggestion_unit, style: "content flow-none")
 
@@ -1189,14 +1189,14 @@ demo = ML.dict <<-WWML
   (alloy (@hover/updates to @hover/rects)
     ((self rect) style: "w-10 h-max bg-[color]" color: ^color))
   (cell "Hover or click me" @hover/message)
-  (transform (@hover/events (hover)) to @colors red-500)
-  (transform (@hover/events (hover)) to @hover/messages "Hovering!")
-  (transform (@hover/events (unhover)) to @colors green-500)
-  (transform (@hover/events (unhover)) to @hover/messages "Hover or click me")
-  (transform (@hover/events (press)) to @colors blue-500)
-  (transform (@hover/events (press)) to @hover/messages "Pressed!")
+  (transform (@hover/events (hover) to @colors) red-500)
+  (transform (@hover/events (hover) to @hover/messages) "Hovering!")
+  (transform (@hover/events (unhover) to @colors) green-500)
+  (transform (@hover/events (unhover) to @hover/messages) "Hover or click me")
+  (transform (@hover/events (press) to @colors) blue-500)
+  (transform (@hover/events (press) to @hover/messages) "Pressed!")
   (latest @hover/messages @hover/message)
-  (transform @colors to @hover/updates {color: _}))
+  (transform (@colors to @hover/updates) {color: _}))
 
 (hr)
 
@@ -1208,7 +1208,7 @@ demo = ML.dict <<-WWML
     (button "Make blue" as blue-500 to @colors () style: "w-fr")))
 
 (cover "guts"
-  (transform @colors to @color-envs {color: _})
+  (transform (@colors to @color-envs) {color: _})
   (cell @color-rect)
   (alloy (@color-envs to @color-rects)
     ((self rect) color: ^color style: "w-max h-fr bg-[color] rounded"))
@@ -1242,12 +1242,12 @@ demo = ML.dict <<-WWML
     (button "Increment" as 1 to @deltas ())
     (button "Decrement" as -1 to @deltas ())))
 
-(transform @counts to @count-envs {count: _})
+(transform (@counts to @count-envs) {count: _})
 (initial @count to @counts)
 
 (comment "Lorem ipsum dolor sit amet, officia excepteur ex fugiat reprehenderit enim labore culpa sint ad nisi Lorem pariatur mollit ex esse exercitation amet. Nisi anim cupidatat excepteur officia. Reprehenderit nostrud nostrud ipsum Lorem est aliquip amet voluptate voluptate dolor minim nulla est proident. Nostrud officia pariatur ut officia. Sit irure elit esse ea nulla sunt ex occaecat reprehenderit commodo officia dolor Lorem duis laboris cupidatat officia voluptate. Culpa proident adipisicing id nulla nisi laboris ex in Lorem sunt duis officia eiusmod. Aliqua reprehenderit commodo ex non excepteur duis sunt velit enim. Voluptate laboris sint cupidatat ullamco ut ea consectetur et est culpa et culpa duis.")
 (cell 0 @count)
-(transform (@deltas delta_number) to @counts with @count (+ count delta))
+(transform (@deltas delta_number to @counts with @count) (+ count delta))
 (latest @counts @count)
 WWML
 
@@ -1257,8 +1257,8 @@ fb_loop = ML.dict <<-WWML
 (cover "sensor queue"
   (queue @stimuli/in to @stimuli/gated in () waiting @sensor/acks))
 
-(transform @stimuli/gated to @stimuli/0 (nth _ 0))
-(transform (@stimuli/0 (some ({¦ x_} _))) to @percepts x)
+(transform (@stimuli/gated to @stimuli/0) (nth _ 0))
+(transform (@stimuli/0 (some ({¦ x_} _)) to @percepts) x)
 (bridge (@stimuli/0 (none)) to @sensor/acks)
 (bridge @percepts to @sensor/acks)
 (latest @percepts @percept)
@@ -1279,8 +1279,8 @@ fb_loop = ML.dict <<-WWML
 (cover "appearance queue"
   (queue @appearance/in to @appearance/percepts in () waiting @appearance/acks))
 
-(transform @appearance/percepts to @appearance/values (+ _ 1))
-(transform @appearance/values to @appearances (appearance _ in remote))
+(transform (@appearance/percepts to @appearance/values) (+ _ 1))
+(transform (@appearance/values to @appearances) (appearance _ in remote))
 (latest @appearances @appearance)
 (frag @appearance)
 (changes @appearance to @appearance/acks)
@@ -1301,7 +1301,7 @@ welcome = ML.dict <<-WWML
        (cell 0 @count)
        (button \\"Increment\\" as 1 to @deltas ())
        (button \\"Decrement\\" as -1 to @deltas ())
-       (transform @deltas to @counts with @count (+ count _))
+       (transform (@deltas to @counts with @count) (+ count _))
        (latest @counts @count)")
     (p "Click on the buttons and see what happens! :^)" style: "w-max text-sm")
     (unit ul style: "w-max h-content flow-col gap-1 pl-3"
@@ -1518,4 +1518,3 @@ ui = UIR::Reducers.microfold(Term.of(frame)) do |current, drawable, event|
 end
 
 UIR::Platform::Current.show(ui)
-

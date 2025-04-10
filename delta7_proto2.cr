@@ -1228,7 +1228,7 @@ module Rhodium
       end
 
       # Stateful transform
-      givenpi %{[transform @pin_ to @pout_ with state_ body_] (initialize _) -1} do
+      givenpi %{[transform (@pin_ to @pout_ with state_) body_] (initialize _) -1} do
         effect(document1, nodepath, node0) do
           change "#shadow": {:"%literal", node0.itemspart}, "#spec": {in: pin, out: pout, state: state, body: body}
 
@@ -1237,7 +1237,7 @@ module Rhodium
       end
 
       # Stateless transform
-      givenpi %{[transform @pin_ to @pout_ body_] (initialize _) -1} do
+      givenpi %{[transform (@pin_ to @pout_) body_] (initialize _) -1} do
         effect(document1, nodepath, node0) do
           change "#shadow": {:"%literal", node0.itemspart}, "#spec": {in: pin, out: pout, body: body}
 
@@ -1246,7 +1246,7 @@ module Rhodium
       end
 
       # Stateless filter transform
-      givenpi %{[transform (@pin_ pattern_) to @pout_ body_] (initialize _) -1} do
+      givenpi %{[transform (@pin_ pattern_ to @pout_) body_] (initialize _) -1} do
         effect(document1, nodepath, node0) do
           change "#shadow": {:"%literal", node0.itemspart}, "#spec": {in: pin, out: pout, filter: pattern, body: body}
 
@@ -1255,7 +1255,7 @@ module Rhodium
       end
 
       # Stateful filter transform
-      givenpi %{[transform (@pin_ pattern_) to @pout_ with state_ body_] (initialize _) -1} do
+      givenpi %{[transform (@pin_ pattern_ to @pout_ with state_) body_] (initialize _) -1} do
         effect(document1, nodepath, node0) do
           change "#shadow": {:"%literal", node0.itemspart}, "#spec": {in: pin, out: pout, filter: pattern, state: state, body: body}
 
@@ -1499,10 +1499,10 @@ module Rhodium
       end
 
       givenpi(
-        %{(transform @_ to @_ with _ _) -1},
-        %{(transform @_ to @_ _) -1},
-        %{(transform (@_ _) to @_ _) -1},
-        %{(transform (@_ _) to @_ with _ _) -1},
+        %{(transform (@_ to @_) _) -1},
+        %{(transform (@_ to @_ with _) _) -1},
+        %{(transform (@_ _ to @_) _) -1},
+        %{(transform (@_ _ to @_ with _) _) -1},
         %{(absence @_ as _ to @_) -1},
       ) { yield node }
 

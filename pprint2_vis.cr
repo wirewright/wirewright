@@ -10,31 +10,31 @@ require "./libtermbox2"
 
 BORDERSETS = {
   rounded: {
-    tl: '╭',
-    tr: '╮',
-    bl: '╰',
-    br: '╯',
-    t: '─',
-    hr: '─',
+    tl:  '╭',
+    tr:  '╮',
+    bl:  '╰',
+    br:  '╯',
+    t:   '─',
+    hr:  '─',
     lhr: '├',
     rhr: '┤',
-    b: '─',
-    l: '│',
-    r: '│',
+    b:   '─',
+    l:   '│',
+    r:   '│',
   },
   square: {
-    tl: '┌',
-    tr: '┐',
-    bl: '└',
-    br: '┘',
-    t: '─',
-    hr: '─',
+    tl:  '┌',
+    tr:  '┐',
+    bl:  '└',
+    br:  '┘',
+    t:   '─',
+    hr:  '─',
     lhr: '├',
     rhr: '┤',
-    b: '─',
-    l: '│',
-    r: '│',
-  }
+    b:   '─',
+    l:   '│',
+    r:   '│',
+  },
 }
 
 class Screen
@@ -730,7 +730,7 @@ class Soma
         end
       end
 
-      otherwise {}
+      otherwise { }
     end
 
     {x, y}
@@ -953,7 +953,7 @@ class Soma
               document1 = Rhodium.assign(document1, keypath, Term.of(mailbox.append({:press})))
             end
 
-            otherwise {}
+            otherwise { }
           end
         end
       end
@@ -1195,7 +1195,7 @@ else
     (comment "\\t(cell 0 @count)")
     (comment "\\t(button \\"Increment\\" as 1 to @deltas ())")
     (comment "\\t(button \\"Decrement\\" as -1 to @deltas ())")
-    (comment "\\t(transform @deltas to @counts with @count (+ count _))")
+    (comment "\\t(transform (@deltas to @counts with @count) (+ count _))")
     (comment "\\t(latest @counts @count)")
     (comment "")
     (comment "Click on the buttons and see what happens! :^)")
@@ -1213,17 +1213,17 @@ else
       ("" | "" () @rod)
       (button "Kickstart" to @relook ())
       (edit-cast @rod-commands to @rod)
-      (transform @rod-commands to @relook true)
+      (transform (@rod-commands to @relook) true)
       (cell up @dir)
-      (transform (@snapshots (behind_ ahead_)) to @stimuli with @dir (dir behind ahead))
+      (transform (@snapshots (behind_ ahead_) to @stimuli with @dir) (dir behind ahead))
       (match (@stimuli to @actions)
         ((up (_* o) (. _*)) dir-down)
         ((down (_* .) (o _*)) dir-up)
         ((up (_* .) _) keep-moving)
         ((down _ (. _*)) keep-moving))
-      (transform (@actions dir-down) to @dirs down)
-      (transform (@actions dir-up) to @dirs up)
-      (transform (@actions keep-moving) to @dirs with @dir dir)
+      (transform (@actions dir-down to @dirs) down)
+      (transform (@actions dir-up to @dirs) up)
+      (transform (@actions keep-moving to @dirs with @dir) dir)
       (latest @dirs @dir)
       (match (@dirs to @rod-commands) (up (move-parent-behind)) (down (move-parent-ahead))))
     .

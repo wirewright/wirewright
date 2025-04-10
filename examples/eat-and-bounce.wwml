@@ -18,30 +18,20 @@
   (button "Kickstart" to @relook ())
   (edit-cast @rod-commands to @rod)
   (transform
-   @rod-commands
-   to
-   @relook
+   (@rod-commands to @relook)
    true
    #job: {env: {_: (move-parent-ahead)}, program: true}
    #shadow:
-    (%literal (transform @rod-commands to @relook true))
+    (%literal (transform (@rod-commands to @relook) true))
    #spec: {out: @relook, body: true, in: @rod-commands})
   (cell down @dir)
   (transform
-   (@snapshots (behind_ ahead_))
-   to
-   @stimuli
-   with
-   @dir
+   (@snapshots (behind_ ahead_) to @stimuli with @dir)
    (dir behind ahead)
    #shadow:
     (%literal
      (transform
-      (@snapshots (behind_ ahead_))
-      to
-      @stimuli
-      with
-      @dir
+      (@snapshots (behind_ ahead_) to @stimuli with @dir)
       (dir behind ahead)))
    #spec:
     {state: @dir,
@@ -57,30 +47,24 @@
    ((up (_* x) _) eat-up)
    ((down _ (x _*)) eat-down))
   (transform
-   (@actions dir-down)
-   to
-   @dirs
+   (@actions dir-down to @dirs)
    down
    #shadow:
-    (%literal (transform (@actions dir-down) to @dirs down))
+    (%literal (transform (@actions dir-down to @dirs) down))
    #spec:
     {out: @dirs,
      filter: dir-down,
      body: down,
      in: @actions})
   (transform
-   (@actions dir-up)
-   to
-   @dirs
+   (@actions dir-up to @dirs)
    up
    #shadow:
-    (%literal (transform (@actions dir-up) to @dirs up))
+    (%literal (transform (@actions dir-up to @dirs) up))
    #spec:
     {out: @dirs, filter: dir-up, body: up, in: @actions})
   (transform
-   (@actions eat-up)
-   to
-   @rod-command-sequences
+   (@actions eat-up to @rod-command-sequences)
    ((key home)
     (key left)
     (key C-backspace)
@@ -91,9 +75,7 @@
    #shadow:
     (%literal
      (transform
-      (@actions eat-up)
-      to
-      @rod-command-sequences
+      (@actions eat-up to @rod-command-sequences)
       ((key home)
        (key left)
        (key C-backspace)
@@ -114,9 +96,7 @@
        (key down)),
      in: @actions})
   (transform
-   (@actions eat-down)
-   to
-   @rod-command-sequences
+   (@actions eat-down to @rod-command-sequences)
    ((key end)
     (key right)
     (key C-delete)
@@ -128,9 +108,7 @@
    #shadow:
     (%literal
      (transform
-      (@actions eat-down)
-      to
-      @rod-command-sequences
+      (@actions eat-down to @rod-command-sequences)
       ((key end)
        (key right)
        (key C-delete)
@@ -154,20 +132,12 @@
      in: @actions})
   (blast @rod-command-sequences to @rod-commands)
   (transform
-   (@actions keep-moving)
-   to
-   @dirs
-   with
-   @dir
+   (@actions keep-moving to @dirs with @dir)
    dir
    #shadow:
     (%literal
      (transform
-      (@actions keep-moving)
-      to
-      @dirs
-      with
-      @dir
+      (@actions keep-moving to @dirs with @dir)
       dir))
    #spec:
     {state: @dir,
