@@ -96,11 +96,20 @@ module Ww::ML
 
   def self.compact(io : IO, term : Term::Dict)
     io << "("
-    term.ee.join(io, " ") do |(k, v)|
-      compact(io, k)
-      io << ":"
-      compact(io, v)
+
+    term.items.join(io, ' ') do |item|
+      compact(io, item)
     end
+
+    unless term.itemsonly?
+      io << ' '
+      term.each_pair do |k, v|
+        compact(io, k)
+        io << ":"
+        compact(io, v)
+      end
+    end
+
     io << ")"
   end
 
