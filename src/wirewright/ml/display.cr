@@ -95,22 +95,23 @@ module Ww::ML
   end
 
   def self.compact(io : IO, term : Term::Dict)
-    io << "("
+    io << '('
 
-    term.items.join(io, ' ') do |item|
+    term.ie.join(io, ' ') do |item|
       compact(io, item)
     end
 
-    unless term.itemsonly?
+    unless term.itemsonly? || term.pairsonly?
       io << ' '
-      term.each_pair do |k, v|
-        compact(io, k)
-        io << ":"
-        compact(io, v)
-      end
     end
 
-    io << ")"
+    term.pe.join(io, ' ') do |(k, v)|
+      compact(io, k)
+      io << ":"
+      compact(io, v)
+    end
+
+    io << ')'
   end
 
   def self.compact(io : IO, term : ITerm)
