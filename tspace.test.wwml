@@ -472,7 +472,68 @@
     (conn A
       (view {}))))
 
-;; TODO: test empty dict nested
+;; Test empty dict nested
+;; Gosh it's a lot of parentheses ...
+(tspace
+  (conn A
+    (after added sensor Sa m←())
+    (after added sensor Sb m←())
+    (after added sensor Sc m←(()))
+    (after added sensor Sd m←((())))
+    (view ()))
+  (conn B
+    (after added appearance Aa ())
+    (after added appearance Ab (()))
+    (after added appearance Ac ((())))
+    (after added appearance Ad ())
+    (after added appearance Ae (((())))))
+  (conn A
+    (view {Sa: {# {m: ()} {m: ()}},
+           Sb: {# {m: ()} {m: ()}},
+           Sc: {# {m: (())}},
+           Sd: {# {m: ((()))}}})
+    (after added sensor Se m←(((()))))
+    (view {Sa: {# {m: ()} {m: ()}},
+           Sb: {# {m: ()} {m: ()}},
+           Sc: {# {m: (())}},
+           Sd: {# {m: ((()))}},
+           Se: {# {m: (((())))}}}))
+  (conn B
+    (after removed Aa))
+  (conn A
+    (view {Sa: {# {m: ()}},
+           Sb: {# {m: ()}},
+           Sc: {# {m: (())}},
+           Sd: {# {m: ((()))}},
+           Se: {# {m: (((())))}}}))
+  (conn B
+    (after removed Ab))
+  (conn A
+    (view {Sa: {# {m: ()}},
+           Sb: {# {m: ()}},
+           Sd: {# {m: ((()))}},
+           Se: {# {m: (((())))}}})
+    (after removed Se)
+    (view {Sa: {# {m: ()}},
+           Sb: {# {m: ()}},
+           Sd: {# {m: ((()))}}}))
+  (conn B
+    (after removed Ae))
+  (conn A
+    (view {Sa: {# {m: ()}},
+           Sb: {# {m: ()}},
+           Sd: {# {m: ((()))}}}))
+  (conn B
+    (after removed Ac))
+  (conn A
+    (view {Sa: {# {m: ()}},
+           Sb: {# {m: ()}}})
+    (after removed Sa)
+    (view {Sb: {# {m: ()}}}))
+  (conn B
+    (after removed Ad))
+  (conn A
+    (view ())))
 
 (tspace
   (conn A
@@ -516,4 +577,92 @@
   (conn A (after removed x))
   (conn B (view {})))
 
-;; TODO: test sensor, appearance selector
+;; Sensor & appearance interaction with secret
+
+(tspace
+  ;; Alice adds two sensors: one with a secret (a) and one without (b).
+  (conn A
+    (after added sensor a x_number secret: "passw0rd")
+    (after added sensor b y_number)
+    (view ()))
+  ;; Bob adds an appearance, foo, with secret that matches Alice's `a`.
+  (conn B
+    (after added appearance foo 100 secret: "passw0rd"))
+  ;; Alice is now aware of Bob's appearance foo.
+  (conn A
+    (view {a: {# {x: 100}}}))
+  ;; Bob adds another appearance, bar, with a different secret.
+  (conn B
+    (after added appearance bar 200 secret: "strong and secure"))
+  ;; Alice doesn't see anything. She continues to see just Bob's
+  ;; `foo` appearance.
+  (conn A
+    (view {a: {# {x: 100}}}))
+  ;; Bob can change his `foo` appearance. While the secret is intact,
+  ;; Alice will try to be in sync.
+  (conn B
+    (after added appearance foo 1.234 secret: "passw0rd"))
+  (conn A
+    (view {a: {# {x: 1.234}}}))
+  ;; Bob adds a third appearance, `baz`, without a secret.
+  (conn B
+    (after added appearance baz 300))
+  ;; Alice has one sensor, `b`, capable of receiving secret-less number.
+  ;; Alice is now aware of Bob's appearance `baz`.
+  (conn A
+    (view {a: {# {x: 1.234}}, b: {# {y: 300}}}))
+  ;; Alice changes her `b` sensor's secret from nothing to "strong and secure".
+  ;; This is the secret that Bob used on his appearance `bar` above. Alice is
+  ;; now aware of that appearance instead of the public one through her `b` sensor.
+  (conn A
+    (after added sensor b y_number secret: "strong and secure")
+    (view {a: {# {x: 1.234}}, b: {# {y: 200}}}))
+  ;; Bob changes his `bar` appearance to a different secret.
+  (conn B
+    (after added appearance bar 1/2 secret: "something else"))
+  ;; Alice loses track of it because now her `b` sensor does not know
+  ;; the correct secret.
+  (conn A
+    (view {a: {# {x: 1.234}}}))
+  ;; Bob changes the secret of his `bar` appearance yet again. It is now
+  ;; passw0rd, which matches Alice's `a` but not `b` sensor.
+  (conn B
+    (after added appearance bar 1/2 secret: "passw0rd"))
+  (conn A
+    (view {a: {# {x: 1.234} {x: 1/2}}}))
+  ;; Alice removes the secret from her `b` sensor. Now she again sees Bob's
+  ;; secret-less baz appearance with it.
+  (conn A
+    (after added sensor b y_number)
+    (view {a: {# {x: 1.234} {x: 1/2}}, b: {# {y: 300}}}))
+  ;; Bob removes the secret from his appearance `bar`. Now Alice's
+  ;; secret-less `b` sensor can see it.
+  (conn B
+    (after added appearance bar 12345))
+  (conn A
+    (view {a: {# {x: 1.234}}, b: {# {y: 300} {y: 12345}}}))
+  ;; Bob removes his baz appearance. Alice is aware.
+  (conn B
+    (after removed baz))
+  (conn A
+    (view {a: {# {x: 1.234}}, b: {# {y: 12345}}}))
+  ;; Alice removes her `a` sensor.
+  (conn A
+    (after removed a)
+    (view {b: {# {y: 12345}}}))
+  ;; Bob changes his foo appearance to see if Alice responds. She shouldn't.
+  (conn B
+    (after added appearance foo 112233 secret: "passw0rd"))
+  (conn A
+    (view {b: {# {y: 12345}}}))
+  ;; Bob removes his appearance `foo`. Alice doesn't react.
+  (conn B
+    (after removed foo))
+  (conn A
+    (view {b: {# {y: 12345}}}))
+  ;; Bob removes his appearance `bar`. Alice's view becomes empty. There are
+  ;; now no appearances, and Alice only has her sensor `b`.
+  (conn B
+    (after removed bar))
+  (conn A
+    (view ())))

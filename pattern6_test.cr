@@ -379,34 +379,37 @@ def process(queue, testcase, ctx)
 end
 
 def tspace(flow : Term::Dict, & : Term, Term ->)
-  counter = Identity.new(0)
+  counter = Slot.new(0)
 
-  # Use as many maps out of the ones used in practice as possible when testing.
-  map = TermMap(Tspace::Key, Tspace::Value).new(CompactMLMap.new(KeyDigestMap(String, String).new(SyncInMemoryMap(String, String).new)))
-  set = SyncInMemorySet(Tspace::Identity).new
-  chat = TermChat(Activation).new(CompactMLChat.new(SyncInMemoryChat(String).new))
+  set = TspaceDigestMultiset.new(SyncInMemoryMultiset(Bytes).new)
+  chat = SyncInMemoryChat(Activation).new
 
   conns = {} of Term => Tconn
-  lidentities = {} of {Term, Term} => Identity
-  ridentities = {} of Identity => Term
+  lslots = {} of {Term, Term} => Slot
+  rslots = {} of Slot => Term
   view = Term[]
 
   flow.items.each do |step|
     Term.matchpi?(step, %{(conn conn-name_symbol children_*)}) do
-      next if conns.has_key?(conn_name)
+      conns.put_if_absent(conn_name) do
+        sink = Tconn::Sink.new do |connview|
+          view = connview.dict_multisets
+        end
 
-      spec = Tconn::Spec.new(map, set, chat, Tconn::Spec.multisets { |multiset| view = multiset })
-      conns[conn_name] = Tconn.new(spec)
+        blueprint = Tconn::Blueprint.new(set, chat, sink)
+
+        Tconn.new(blueprint)
+      end
 
       children.each_item_unordered do |child|
         Term.matchpi?(child, %{[after added (%any sensor appearance) surface-name_symbol _]}) do
           key = {conn_name, surface_name}
-          next if lidentities.has_key?(key)
+          next if lslots.has_key?(key)
 
-          identity = counter += 1
+          slot = counter += 1
 
-          lidentities[key] = identity
-          ridentities[identity] = surface_name
+          lslots[key] = slot
+          rslots[slot] = surface_name
         end
       end
     end
@@ -419,28 +422,28 @@ def tspace(flow : Term::Dict, & : Term, Term ->)
       children.items.each do |child|
         Term.case(child) do
           matchpi %{[after added sensor surface-name_symbol pattern_]} do
-            identity = lidentities[{conn_name, surface_name}]
+            slot = lslots[{conn_name, surface_name}]
 
-            conn[identity] = Tconn::Sensor.new(pattern, selector: child[:selector]?)
+            conn[slot] = Tconn::Sensor.new(pattern, secret: child[:secret]?)
           end
 
           matchpi %{[after added appearance surface-name_symbol value_]} do
-            identity = lidentities[{conn_name, surface_name}]
+            slot = lslots[{conn_name, surface_name}]
 
-            conn[identity] = Tconn::Appearance.new(value, selector: child[:selector]?)
+            conn[slot] = Tconn::Appearance.new(value, secret: child[:secret]?)
           end
 
           matchpi %{[after removed surface-name_symbol]} do
-            identity = lidentities[{conn_name, surface_name}]
+            slot = lslots[{conn_name, surface_name}]
 
-            conn.delete(identity)
+            conn.delete(slot)
           end
 
           matchpi %{(view expected_)} do
             seeing = Term::Dict.build do |commit|
-              view.each_entry do |identity, multiset|
+              view.each_entry do |slot, multiset|
                 # Map numeric identities to original surface names (symbols).
-                commit.with(ridentities[identity.to(Identity)], multiset)
+                commit.with(rslots[slot.to(Slot)], multiset)
               end
             end
 

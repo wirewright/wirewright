@@ -2,7 +2,6 @@ require "./src/wirewright"
 require "./uiRb"
 require "./sfpaint"
 require "./pprint2"
-require "./meridium_step"
 
 alias UIR::Platform::Current = SFML
 
@@ -744,57 +743,6 @@ class Document
       send(Term.of(:alarm))
     end
 
-    reg = Meridium::SpecRegistry.new
-    @mectx = Meridium::StepContext.new(reg)
-
-    # FIXME: WTF IS THIS?
-    if ARGV[0]? == "join"
-      if ARGV.size == 4
-        _, host, port_map, port_chat = ARGV
-        port_map = port_map.to_i
-        port_chat = port_chat.to_i
-      else
-        host = "127.0.0.1"
-        port_map = 9810
-        port_chat = 9811
-      end
-
-      remote = RemoteStringMapSet.new(host, port_map)
-      reg[Term.of(:remote)] = Tconn::Spec.new(
-        map: TermMap(Tspace::Key, Tspace::Value).new(CompactMLMap.new(KeyDigestMap(String, String).new(remote))),
-        set: TermSet(Tspace::Identity).new(CompactMLSet.new(DigestSet.new(remote))),
-        chat: TermChat(Activation).new(CompactMLChat.new(RemoteStringChat.new(host, port_chat))),
-        sink: Tconn::Sink.new do |overview|
-          # Enqueue an update in the context.
-          @mectx.publish(Term.of(:remote), overview)
-
-          # Wake document thread up if it's sleeping. Meridium.step will do the rest.
-          send(Term.of(:alarm))
-
-          nil
-        end,
-        fresh: WWID,
-        keepalive: Tconn::KeepaliveSpec.new(period: 5.seconds..10.seconds)
-      )
-    end
-
-    reg[Term.of(:local)] = Tconn::Spec.new(
-      map: SyncInMemoryMap(Tspace::Key, Tspace::Value).new,
-      set: SyncInMemorySet(Tspace::Identity).new,
-      chat: SyncInMemoryChat(Activation).new,
-      sink: Tconn::Sink.new do |overview|
-        # Enqueue an update in the context.
-        @mectx.publish(Term.of(:local), overview)
-
-        # Wake document thread up if it's sleeping. Meridium.step will do the rest.
-        send(Term.of(:alarm))
-
-        nil
-      end,
-      fresh: WWID,
-      keepalive: nil,
-    )
-
     @dwuir = Term[]
     @concealed = false
     @important = false
@@ -851,7 +799,7 @@ class Document
     @document = D7.run(@document,
       log: D7::Log::None.new,
       transition: Rhodium.transition,
-      step: D7.steps(rendezvous, Rhodium.step, Nitrene.step(@nictx), Meridium.step(@mectx)),
+      step: D7.steps(rendezvous, Rhodium.step, Nitrene.step(@nictx)),
       goal: D7::Goal.none,
       initial: initial,
     )

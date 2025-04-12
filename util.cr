@@ -555,6 +555,31 @@ abstract struct Int
 
     q
   end
+
+  def self.bit_size
+    {% begin %}
+      {% table = {UInt8 => 8,
+                  Int8 => 8,
+                  UInt16 => 16,
+                  Int16 => 16,
+                  UInt32 => 32,
+                  Int32 => 32,
+                  UInt64 => 64,
+                  Int64 => 64,
+                  UInt128 => 128,
+                  Int128 => 128} %}
+
+      {{table[@type] || @type.raise "unsupported number type"}}
+    {% end %}
+  end
+
+  def self.byte_size
+    bit_size//8
+  end
+
+  def byte_size
+    self.class.byte_size
+  end
 end
 
 struct ::BigInt < Int
@@ -665,6 +690,11 @@ class Stack(T)
     end
   end
 
+  def clear : Nil
+    @stack.clear(@size)
+    @size = 0
+  end
+
   # Shallow copy: returns a copy of this stack object without copying its values.
   def dup : Stack(T)
     reduce(Stack(T).new(size)) do |copy, value|
@@ -678,11 +708,19 @@ class Stack(T)
 end
 
 class IO::Empty < IO
+  INSTANCE = new
+
   def read(slice : Bytes)
     0
   end
 
   def write(slice : Bytes) : Nil
+  end
+end
+
+class IO
+  def self.empty
+    Empty::INSTANCE
   end
 end
 
@@ -880,6 +918,15 @@ class ::Hash
         upsert(key, new_value)
       end
     end
+  end
+
+  def put?(key : K, value : V) : Bool
+    result = false
+    put_if_absent(key) do
+      result = true
+      value
+    end
+    result
   end
 end
 
@@ -2614,5 +2661,126 @@ class Bimap(L, R)
   def clear : Nil
     @l.clear
     @r.clear
+  end
+end
+
+struct BitReader
+  def initialize(@bytes : Bytes, @i = 0, @j = 0u8)
+  end
+
+  def progress?
+    return if @i >= @bytes.size # At end
+
+    # Since we're reading bits from left to right j is offset from MSB
+    # (j = 0 means MSB). Make a mask to take j MSB bits from the byte.
+    mask = 0xFFu8 << (7 - @j)
+
+    {@bytes[...@i], @bytes[@i] & mask, @j}
+  end
+
+  def consume? : UInt8?
+    return if @i >= @bytes.size # At end
+
+    bit = @bytes[@i].bit(7 - @j)
+
+    @j += 1
+
+    if @j >= 8
+      @i += 1
+      @j = 0u8
+    end
+
+    bit
+  end
+end
+
+struct BitWriter
+  def initialize(@prefix = Bytes.empty)
+    @state = 0u8
+    @cursor = 0u8
+  end
+
+  def <<(bit : UInt8)
+    @state |= bit << (7 - @cursor)
+    @cursor += 1
+
+    if @cursor == 8
+      @prefix += Bytes.with(@state)
+      @state = 0u8
+      @cursor = 0u8
+    end
+  end
+
+  def progress
+    {@prefix, @state, @cursor}
+  end
+
+  def final
+    if @cursor.zero?
+      @prefix
+    else
+      @prefix + Bytes.with(@state)
+    end
+  end
+
+  def inspect(io)
+    io << @prefix.hexstring << '|' << @cursor
+  end
+end
+
+struct MutBitWriter
+  def initialize(@prefix = [] of UInt8)
+    @state = 0u8
+    @cursor = 0u8
+  end
+
+  def initialize(prefix : Bytes)
+    initialize(prefix.to_a)
+  end
+
+  def append(bits : Int, bitsize : Int32)
+    (0...bitsize).reverse_each do |bit_index|
+      self << bits.bit(bit_index).to_u8
+    end
+  end
+
+  def append(bits : Enum, bitsize)
+    append(bits.value, bitsize)
+  end
+
+  def <<(bit : UInt8)
+    @state |= bit << (7 - @cursor)
+    @cursor += 1
+
+    if @cursor == 8
+      @prefix << @state
+      @state = 0u8
+      @cursor = 0u8
+    end
+  end
+
+  def progress
+    # NOTE: for whatever reason we get garbage if we do not copy here. Probably
+    # has to do with realloc/malloc/etc. in the array.
+    {@prefix.to_readonly_slice(&.itself), @state, @cursor}
+  end
+
+  def detach
+    @prefix = @prefix.dup
+  end
+
+  def final
+    if @cursor.zero?
+      @prefix.to_readonly_slice(&.itself)
+    else
+      final = Bytes.new(@prefix.size + 1)
+      final.copy_from(@prefix.to_readonly_slice)
+      final[-1] = @state
+      final
+    end
+  end
+
+  def inspect(io)
+    io << @prefix.to_readonly_slice.hexstring << '|' << @cursor
   end
 end
