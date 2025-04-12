@@ -72,7 +72,7 @@ struct SubSet(T, St)
   end
 
   # WARNING: delegates to the backing set; this method **does not** return
-  # the amount of identities of type `T`!
+  # the amount of identities of type `St`!
   def size? : Int32?
     @set.size?
   end
@@ -1499,10 +1499,15 @@ struct Tspace
     subjects : Array(Tbase::Sensor)
 
   class Sensor
-    def self.new(conid : Label, slot : Slot, grpid : Label, secret : Term?, pattern : Term)
+    def self.new(fresh : LabelGenerator,
+                 conid : Label,
+                 slot : Slot,
+                 grpid : Label,
+                 secret : Term?,
+                 pattern : Term) : Sensor
       subjects = [] of Tbase::Sensor
 
-      Tbase::Sensor.each(WWID, pattern) do |subject|
+      Tbase::Sensor.each(fresh, pattern) do |subject|
         subjects << subject
       end
 
@@ -1973,7 +1978,7 @@ class Tconn
     Log.trace { "#{@conid}: initiate summon of sensor #{grpid} (for #{spec}@#{slot})" }
 
     atoms = AtomArray.new
-    sensor = Tspace::Sensor.new(@conid, slot, grpid, spec.secret, spec.pattern)
+    sensor = Tspace::Sensor.new(@fresh, @conid, slot, grpid, spec.secret, spec.pattern)
 
     tspace.summon(sensor, atoms)
 
@@ -2184,8 +2189,6 @@ pp set.size?
 # TODO: reduce atom cost of Utrie (remove Trunk etc.)
 # TODO: reduce atom cost of appearanceinfo (WwMR)
 # TODO: proof of work cost for atoms and activations
-
-
 
 # sleep 1.second
 # pp set
