@@ -1153,7 +1153,7 @@
    (+ 1 2)
    ("" | "" () @user)))
  (after
-  ((key enter))
+  ((key left))
   ((row
     (button
      "+ Increment"
@@ -1506,6 +1506,39 @@
     (button "0 Reset" @actions style: "text-sm"))))
  (after
   ((key C-backspace) (key C-backspace))
+  (("" | "" () @user)
+   (row
+    (button
+     "+ Increment"
+     @actions
+     style: "text-xs"
+     qux: (+ 1 2))
+    (button "- Decrement" @actions style: "text-lg")
+    (button "0 Reset" @actions style: "text-sm"))))
+ (after
+  ((key right) (key down) (key enter))
+  ((row
+    (button
+     "+ Increment"
+     @actions
+     style: "text-xs"
+     qux: (+ 1 2))
+    (button "- Decrement" @actions style: "text-lg")
+    (button "0 Reset" @actions style: "text-sm"))
+   ("" | "" () @user)))
+ (after
+  ((key left) (key up) (key S-enter))
+  (("" | "" () @user)
+   (row
+    (button
+     "+ Increment"
+     @actions
+     style: "text-xs"
+     qux: (+ 1 2))
+    (button "- Decrement" @actions style: "text-lg")
+    (button "0 Reset" @actions style: "text-sm"))))
+ (after
+  ((key enter) (key S-enter))
   (("" | "" () @user)
    (row
     (button

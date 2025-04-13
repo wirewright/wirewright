@@ -127,7 +127,9 @@
 
 ;; Interpret (key enter).
 [_string | _string (M←(key enter) _*) @EDGE_] <> {M: (expel)}
-⟨_dict ["" | "" (M←(key enter) _*) @EDGE_]⟩ <> {M: (move-in-behind)}
+
+["" | "" (M←(key enter) _*) @EDGE_] <> {M: (escape-below)}
+["" | "" (M←(key S-enter) _*) @EDGE_] <> {M: (escape-above)}
 
 ;; Interpret (key backspace) and (key delete).
 [(%string nonempty) | _string (M←(key backspace) _*) @EDGE_] <> {M: (delete-left)}
@@ -388,11 +390,11 @@ C←["" | "" ((m←edit/2 D_dict) _*) @EDGE_]
 ⟨[_string | _string (M←(delete-ahead) _*) @EDGE_] ahead_⟩
   <> {(M): (), (ahead): ()}
 
-[_* ⏏above ⟨C←[_string | _string (M←(escape-above) _*) @EDGE_]⟩ _*]
-  <> {(M): (), above: ↑C0, (C): ($tr C0 ())}
+⟨P←⟨C←[_string | _string (M←(escape-above) _*) @EDGE_]⟩⟩
+  <> {(M): (), (C): ($tr C0 ()), (P): (↑C0 ↑P)}
 
-[_* ⟨C←[_string | _string (M←(escape-below) _*) @EDGE_]⟩ ⏏below _*]
-  <> {(M): (), below: ↑C0, (C): ($tr C0 ())}
+⟨P←⟨C←[_string | _string (M←(escape-below) _*) @EDGE_]⟩⟩
+  <> {(M): (), (C): ($tr C0 ()), (P): (↑P ↑C0)}
 
 [⏏front _* ⟨C←[_string | _string (M←(escape-front-above) _*) @EDGE_]⟩ _*]
   <> {(M): (), front: ↑C0, (C): ($tr C0 ())}
