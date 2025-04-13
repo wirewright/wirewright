@@ -4,10 +4,11 @@ require "./surf_common"
 require "digest"
 require "bit_array"
 
-Log.setup_from_env(default_level: :error)
+Log.setup_from_env(default_level: :warn)
 
 module IAtom
-  abstract def destroy : Nil
+  abstract def reinsert
+  abstract def burn : Nil
 end
 
 alias AtomArray = Array(IAtom)
@@ -102,12 +103,16 @@ class SyncInMemoryMultiset(T)
     def initialize(@set : SyncInMemoryMultiset(T), @identity : T)
     end
 
-    def destroy : Nil
+    def reinsert
+      @set.reinsert(@identity)
+    end
+
+    def burn : Nil
       @set.delete(@identity)
     end
 
     def inspect(io)
-      io << "atom(" << @key << ")"
+      io << "atom(" << @identity << ")"
     end
   end
 
@@ -128,6 +133,12 @@ class SyncInMemoryMultiset(T)
     end
 
     atoms << Atom.new(self, identity)
+  end
+
+  protected def reinsert(identity : T) : Nil
+    @lock.synchronize do
+      @set.put_if_absent(identity, 1)
+    end
   end
 
   protected def delete(identity : T) : Nil
@@ -154,6 +165,67 @@ class SyncInMemoryMultiset(T)
     end
   end
 end
+
+class SyncInMemorySet(T)
+  include ISet(T)
+
+  struct Atom(T)
+    include IAtom
+
+    def initialize(@set : SyncInMemorySet(T), @identity : T)
+    end
+
+    def reinsert
+      @set.reinsert(@identity)
+    end
+
+    def burn : Nil
+      @set.delete(@identity)
+    end
+
+    def inspect(io)
+      io << "atom(" << @identity << ")"
+    end
+  end
+
+  @set = Set(T).new
+  @lock = Mutex.new
+
+  def includes?(identity : T) : Bool
+    @lock.synchronize { @set.includes?(identity) }
+  end
+
+  def size? : Int32?
+    @set.size
+  end
+
+  def add(identity : T, atoms : AtomArray) : Nil
+    @lock.synchronize { @set << identity }
+
+    atoms << Atom.new(self, identity)
+  end
+
+  protected def reinsert(identity : T) : Nil
+    @lock.synchronize { @set << identity }
+  end
+
+  protected def delete(identity : T) : Nil
+    @lock.synchronize { @set.delete(identity) }
+  end
+
+  def pretty_print(pp)
+    @lock.synchronize do
+      pp.list("{", @set, "}") do |item|
+        {% if T == ::Bytes %}
+          pp.text(Base64.strict_encode(item))
+        {% else %}
+          item.pretty_print(pp)
+        {% end %}
+      end
+    end
+  end
+end
+
 
 alias Fingerprint = Bytes
 
@@ -1301,7 +1373,7 @@ struct SensorRegistry
 
     row = multimap.complete1(prefix)
 
-    return if row.size == cursor.size
+    return if row.size == prefix.size
 
     unless row.size == bytesize(secret)
       Log.warn { "reject row: size mismatch (#{row.size} != #{bytesize(secret)})" }
@@ -1676,50 +1748,304 @@ defcase Activation, kind : Kind, sensor : SensorInfo, instant : Label, appearanc
   end
 end
 
+# Keepalive objects are companion objects of `Tconn` that manage the insertion
+# and removal of atoms.
 module Tkeepalive
-  alias Any = None
-
-  def self.new(bp : Blueprint::None) : None
-    None.new(bp)
-  end
+  abstract def schedule(tid : Label, atoms : AtomArray) : Nil
+  abstract def cancel : Nil
+  abstract def cancel(tid : Label) : Nil
 end
 
 class Tkeepalive::None
-  def initialize(bp : Blueprint::None)
+  include Tkeepalive
+
+  def initialize
     @atoms = {} of Label => AtomArray
   end
 
   def schedule(tid : Label, atoms : AtomArray) : Nil
     unless @atoms.put?(tid, atoms)
-      raise ArgumentError.new("task id must be unique")
+      Log.warn { "attempt to overwrite an existing task: #{tid}" }
+      return
     end
   end
 
-  def cancel
-    @atoms.each { |_, atoms| atoms.each &.destroy }
+  def cancel : Nil
+    @atoms.each { |_, atoms| atoms.each(&.burn) }
     @atoms.clear
   end
 
-  def cancel(tid : Label)
+  def cancel(tid : Label) : Nil
     unless atoms = @atoms.delete(tid)
-      raise ArgumentError.new("task id absent")
+      Log.warn { "attempt to remove a task that does not exist: #{tid}" }
+      return
     end
 
-    atoms.each &.destroy
+    atoms.each(&.burn)
   end
 end
 
-module Tkeepalive::Blueprint
-  alias Any = None
+# With continuous keepalive, each atom is assigned to a millisecond in the user-
+# specified interval. When it's the millisecond's turn the atoms assigned to that
+# millisecond are reinserted.
+class Tkeepalive::Continuous
+  include Tkeepalive
 
-  record None do
-    def compatible_with?(set : ISet) : Bool
-      false
+  Log = ::Log.for(self)
+
+  # NOTE: For some reason making this a struct triggers a SEGFAULT at runtime.
+  defcase Reinsert, tid : Label, atom : IAtom
+
+  # :nodoc:
+  #
+  # Continuous keepalive assigns each task to a millisecond bucket within
+  # the specified interval based on the task's hash.
+  #
+  # A `Millisecond` is such a bucket. It is persistent & immutable.
+  struct Millisecond
+    getter ord : UInt32
+
+    def initialize(@ord : UInt32, @tasks = Pf::Set(Reinsert).new)
     end
 
-    def compatible_with?(set : IMultiset) : Bool
-      !set.is_a?(IDecay)
+    private def_change
+
+    def empty? : Bool
+      @tasks.empty?
     end
+
+    def same?(other : Millisecond) : Bool
+      @tasks.same?(other.@tasks)
+    end
+
+    def each(& : Reinsert ->) : Nil
+      @tasks.each { |task| yield task }
+    end
+
+    def with(task : Reinsert) : Millisecond
+      change(tasks: @tasks.add(task))
+    end
+
+    def without(task : Reinsert) : Millisecond
+      change(tasks: @tasks.delete(task))
+    end
+  end
+
+  # :nodoc:
+  #
+  # Millisecond buckets are put in a crude immutable & persistent BST, Schedule,
+  # ordered by their ordinal (i.e. the millisecond they're at in the interval).
+  #
+  # There is no need to balance anything since the position is determined by
+  # the hash function, which should be reasonably random to balance everything
+  # out itself.
+  abstract class Schedule
+    EMPTY = Empty.new
+
+    def empty? : Bool
+      same?(EMPTY)
+    end
+
+    def each(&fn : Millisecond ->) : Nil
+      each(fn)
+    end
+  end
+
+  defcase Schedule::Empty < Schedule do
+    def size : Int32
+      0
+    end
+
+    def each(fn : Millisecond ->) : Nil
+    end
+
+    def with(ord : UInt32, task : Reinsert) : Schedule
+      Node.new(EMPTY, Millisecond.new(ord).with(task), 1, EMPTY)
+    end
+
+    def without(ord : UInt32, task : Reinsert) : Schedule
+      self
+    end
+  end
+
+  defcase Schedule::Node < Schedule, l : Schedule, ms : Millisecond, size : Int32, r : Schedule do
+    def each(fn : Millisecond ->) : Nil
+      l.each(fn)
+      fn.call(ms)
+      r.each(fn)
+    end
+
+    def with(ord : UInt32, task : Reinsert) : Schedule
+      if ord == ms.ord
+        ms1 = ms.with(task)
+        ms1.same?(ms) ? self : copy_with(ms: ms1, size: size + 1)
+      elsif ord < ms.ord
+        l1 = l.with(ord, task)
+        l1.same?(l) ? self : copy_with(l: l1, size: size + 1)
+      else # ord > ms.ord
+        r1 = r.with(ord, task)
+        r1.same?(r) ? self : copy_with(r: r1, size: size + 1)
+      end
+    end
+
+    def without(ord : UInt32, task : Reinsert) : Schedule
+      if ord == ms.ord
+        ms1 = ms.without(task)
+
+        if ms1.same?(ms)
+          self
+        elsif ms1.empty? && l.empty?
+          r
+        elsif ms1.empty? && r.empty?
+          l
+        else
+          copy_with(ms: ms1, size: size - 1)
+        end
+      elsif ord < ms.ord
+        l1 = l.without(ord, task)
+        l1.same?(l) ? self : copy_with(l: l1, size: size - 1)
+      else # ord > ms.ord
+        r1 = r.without(ord, task)
+        r1.same?(r) ? self : copy_with(r: r1, size: size - 1)
+      end
+    end
+  end
+
+  @reinserts : Schedule
+
+  def initialize(@interval : Time::Span)
+    @fibers = Fiber::ExecutionContext::SingleThreaded.new("Continuous Keepalive")
+
+    # These instance variables are protected by the lock. They are modified by
+    # the keepalive mainloop fiber once per interval, and by the caller randomly.
+    @running = false
+    @reinserts = Schedule::EMPTY
+    @removals = [] of AtomArray
+    @lock = Mutex.new
+
+    # These instance variables are only modified by the caller. They are not
+    # protected by anything.
+    @tasks = {} of Label => AtomArray
+  end
+
+  # Returns the size of the keepalive interval (no. of milliseconds).
+  private def size : Int32
+    @interval.total_milliseconds.to_i
+  end
+
+  private def mainloop : Nil
+    Log.trace { "keepalive mainloop started" }
+
+    while true
+      reinserts, removals = @lock.synchronize do
+        if @reinserts.empty? && @removals.empty?
+          @running = false
+          Log.debug { "mainloop was stopped: nothing more to do" }
+          return
+        end
+
+        @removals, tmp = [] of AtomArray, @removals
+
+        {@reinserts, tmp}
+      end
+
+      Log.debug { "copied schedule with #{reinserts.size} reinsert(s)" }
+
+      if removals.size > 0
+        Log.trace { "copied schedule with #{removals.size} atom group(s)" }
+
+        removals.each do |atoms|
+          atoms.each(&.burn)
+        end
+
+        Log.trace { "burned atoms from #{removals.size} atom group(s)" }
+      end
+
+      ord0 = 0
+
+      reinserts.each do |ms|
+        dt = (ms.ord - ord0).milliseconds
+
+        if dt > 100.milliseconds
+          Log.trace { "sleep for #{dt} until reinsert" }
+        end
+
+        sleep dt
+
+        ms.each(&.atom.reinsert)
+
+        ord0 = ms.ord
+      end
+
+      Log.debug { "completed #{reinserts.size} reinsert(s)" }
+
+      dt = @interval - ord0.milliseconds
+
+      if dt > 100.milliseconds
+        Log.trace { "sleep for #{dt} until next round" }
+      end
+
+      sleep dt
+    end
+  end
+
+  private def run_unless_running : Nil
+    @lock.synchronize do
+      return if @running
+
+      @running = true
+      @fibers.spawn { mainloop }
+    end
+  end
+
+  def schedule(tid : Label, atoms : AtomArray) : Nil
+    unless @tasks.put?(tid, atoms)
+      Log.warn { "attempt to overwrite an existing task: #{tid}" }
+      return
+    end
+
+    atoms.each do |atom|
+      task = Reinsert.new(tid, atom)
+      needle = (task.hash % size).to_u32
+
+      @lock.synchronize do
+        @reinserts = @reinserts.with(needle, task)
+      end
+    end
+
+    run_unless_running
+  end
+
+  def cancel : Nil
+    @lock.synchronize { @reinserts = Schedule::EMPTY }
+
+    @tasks.each_value do |atoms|
+      @lock.synchronize { @removals << atoms }
+    end
+
+    @tasks.clear
+
+    run_unless_running
+  end
+
+  def cancel(tid : Label) : Nil
+    unless atoms = @tasks.delete(tid)
+      Log.warn { "attempt to remove a task that does not exist: #{tid}" }
+      return
+    end
+
+    atoms.each do |atom|
+      task = Reinsert.new(tid, atom)
+      needle = (task.hash % size).to_u32
+
+      @lock.synchronize do
+        @reinserts = @reinserts.without(needle, task)
+      end
+    end
+
+    @lock.synchronize { @removals << atoms }
+
+    run_unless_running
   end
 end
 
@@ -1876,13 +2202,6 @@ class Tview
   end
 end
 
-# - Tconn is constructed from Tconn::Blueprint
-# - Tconn can do periodic keepalive. For that we have the Tkeepalive
-#   object and the corresponding Tkeepalive blueprint. Tkeepalive is
-#   completely independent from Tconn. Tconn calls #keepalive(atoms) on
-#   it, that's all they have in terms of interaction. Tconn can also call
-#   #cancel to cancel all keepalive operations.
-
 # WARNING: only the internals of `Tconn` that deal with `IChat` are thread-safe;
 # nothing else is thread-safe. Create a `Tconn` per thread/fiber. Do not use
 # the same `Tconn` from different threads/fibers. This will not work and will
@@ -1929,22 +2248,16 @@ class Tconn
   @view : Tview
   @unsubscribe : IChat::Unsubscribe
 
-  def initialize(bp : Blueprint)
-    @fresh = bp.fresh
+  def initialize(@set : ISet(Tspace::Atom),
+                 @chat : IChat(Activation),
+                 @sink : (Tview ->),
+                 @fresh : LabelGenerator = WWID,
+                 @keepalive : Tkeepalive = Tkeepalive::None.new)
     @conid = @fresh.call
-
-    unless bp.keepalive.compatible_with?(bp.set)
-      Log.warn { "#{@conid}: running on bad keepalive+set combo, may degenerate: #{bp.keepalive.class}, #{bp.set.class}" }
-    end
-
-    @set = bp.set
-    @chat = bp.chat
-    @sink = bp.sink
     @surfaces = {} of Slot => Tspace::Surface
     @view = Tview::EMPTY
     @open = true
 
-    @keepalive = Tkeepalive.new(bp.keepalive)
     @unsubscribe = @chat.subscribe(@conid, &->receive(Activation))
   end
 
@@ -1975,7 +2288,7 @@ class Tconn
     @sink.call(view1)
   end
 
-  private def delete!(slot : Slot, surface : Tspace::Surface) : Nil
+  private def delete!(slot : Slot, surface : Tspace::Surface, *, cancel : Bool = true) : Nil
     Log.trace { "#{@conid}: initiate delete of surface @#{slot}" }
 
     case surface
@@ -1983,9 +2296,13 @@ class Tconn
       # Make sure the sensor is gone from the view.
       relook &.without(slot)
 
-      @keepalive.cancel(surface.grpid)
+      if cancel
+        @keepalive.cancel(surface.grpid)
+      end
     in Tspace::Appearance
-      @keepalive.cancel(surface.instant)
+      if cancel
+        @keepalive.cancel(surface.instant)
+      end
     end
 
     Log.trace { "#{@conid}: keepalive will schedule cancel, complete delete of surface @#{slot}" }
@@ -2097,8 +2414,8 @@ class Tconn
 
     @open = false
     @unsubscribe.call
-    @keepalive.close
-    @surfaces.each { |slot, surface| delete!(slot, surface) }
+    @keepalive.cancel
+    @surfaces.each { |slot, surface| delete!(slot, surface, cancel: false) }
     @surfaces.clear
   end
 
@@ -2162,12 +2479,28 @@ class Tconn
   end
 end
 
-record Tconn::Blueprint,
-  set : ISet(Tspace::Atom),
-  chat : IChat(Activation),
-  sink : (Tview ->),
-  fresh : LabelGenerator = WWID,
-  keepalive : Tkeepalive::Blueprint::Any = Tkeepalive::Blueprint::None.new
+{% skip_file %}
+
+set = SyncInMemorySet(Tspace::Atom).new
+chat = SyncInMemoryChat(Activation).new
+map = Tconn.new(set, chat, ->(v : Tview) { pp v })
+map[0] = Tconn.sensor(ML.term %{((%any + -) x_number y_number)})
+map[1] = Tconn.appearance(ML.term %{(+ 1 2)})
+map[2] = Tconn.appearance(ML.term %{(- 1 2)})
+
+sleep 20.seconds
+
+map.delete(1)
+
+sleep 20.seconds
+
+map[3] = Tconn.sensor(ML.term %{(- x_ y_)})
+
+sleep 20.seconds
+
+map.close
+
+sleep
 
 {% skip_file %}
 
@@ -2194,23 +2527,21 @@ pp set.size?
 # TODO: sensors must have a user-configurable refresh rate to observe missing appearances
 #   & appearances that were removed before the sensor was inserted, but did not decay
 #   until after the sensor was inserted.
-# TODO: implement "lightweight" or "stateless" sensors that do not commit themselves
-#   to the view. Such sensors are provided as a way to disable periodic refresh. In
-#   D7 they're going to be e.g.:
-#      (sensor (in tspace blasting x to @xs) x_number)
-#      (log @xs in ())
-#   Such sensors are unable to perceive absence.
-# TODO: keepalive::spanning N seconds will split atom array into some random
-# number of groups, schedule them randomly in 0..N seconds, when time comes
-# will insert atoms into the set.
-#
 # TODO: Tsetconn
 # TODO: implement UnbufferedSet(IRemoteSet) < ISet
 # TODO: implement BufferedSet(IRemoteSet) < ISet
 # TODO: implement basic string set & chat client < IRemoteSet; server to start working
 #   on remote stuff in D7/soma. p2p can wait.
 # TODO: use this in soma
-# TODO: move to src/, replace/remove old files
+# TODO: move ready stuff to src/, replace/remove old files
+#
+# TODO: implement "lightweight" or "stateless" sensors that do not commit themselves
+#   to the view. Such sensors are provided as a way to disable periodic refresh. In
+#   D7 they're going to be e.g.:
+#      (sensor (in tspace blasting x to @xs) x_number)
+#      (log @xs in ())
+#   Such sensors are unable to perceive absence.
+#
 #
 # TODO: reduce atom cost of Utrie (remove Trunk etc.)
 # TODO: reduce atom cost of appearanceinfo

@@ -396,9 +396,7 @@ def tspace(flow : Term::Dict, & : Term, Term ->)
           view = connview.dict_multisets
         end
 
-        blueprint = Tconn::Blueprint.new(set, chat, sink)
-
-        Tconn.new(blueprint)
+        Tconn.new(set, chat, sink)
       end
 
       children.each_item_unordered do |child|
