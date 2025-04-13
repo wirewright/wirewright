@@ -461,7 +461,7 @@ SCREEN_PY = 1
 class Soma
   def initialize
     @running = true
-    @thread = ExecutionContext::SingleThreaded.new("Soma")
+    @thread = Fiber::ExecutionContext::MultiThreaded.new("Soma", 1)
     @nitrene = Nitrene::StepContext.new do
       @events.send(Alarm.new)
     rescue Channel::ClosedError

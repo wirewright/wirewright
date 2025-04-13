@@ -1,6 +1,7 @@
 name: wirewright
 version: 0.1.0
 
+crystal: ">= 1.16.0"
 # authors:
 #   - name <email@example.com>
 
@@ -13,9 +14,6 @@ dependencies:
   crsfml:
     github: oprypin/crsfml
     commit: e6f5102
-  execution_context:
-    github: ysbaddaden/execution_context
-    branch: main
   simple_rpc:
     github: kostya/simple_rpc
 # dependencies:
@@ -27,4 +25,4 @@ dependencies:
 #   webmock:
 #     github: manastech/webmock.cr
 
-# license: MIT
+license: MIT

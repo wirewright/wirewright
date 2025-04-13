@@ -731,7 +731,7 @@ class Document
   def initialize(@draw : Channel({Term::Dict, Channel(Term::Dict)}))
     id = @@counter.add(1, :relaxed)
 
-    @document_thread = ExecutionContext::SingleThreaded.new("Document #{id}")
+    @document_thread = Fiber::ExecutionContext::SingleThreaded.new("Document #{id}")
 
     # @dwuir = Atomic(Term::Dict).new(Term[])
     @mailbox = Mailbox.new

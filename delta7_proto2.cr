@@ -2,7 +2,6 @@ require "./src/wirewright"
 require "./baz5"
 require "./baz5_editor"
 require "./suggestion_synthesis"
-require "execution_context"
 
 # TODO: "arbitrary keypath" Stack(Int32) must be called "docpath" (as in "path into a document")
 # TODO: nodepath Stack(Int32) is emitted by successor? and is "path into a document that is proven to point to a node"
@@ -1774,10 +1773,12 @@ module Nitrene
   extend self
 
   class StepContext
+    @mt : Fiber::ExecutionContext
+
     # WARNING: *alarm* will be called from another thread. Make sure whatever
     # you do there is thread-safe.
     def initialize(&@alarm : ->)
-      @mt = ExecutionContext::MultiThreaded.new("Nitrene", 4)
+      @mt = Fiber::ExecutionContext::MultiThreaded.new("Nitrene", 4)
       @active = Atomic(UInt32).new(0u32)
       @running = Atomic(Term::Dict).new(Term[])
       @completed = Atomic(Term::Dict).new(Term[])

@@ -44,12 +44,14 @@ Link so you don't have to scroll: https://github.com/wirewright/wirewright/relea
 
 ## Building
 
-Building the frontends is harder than it should be, but currently, the best bet is to:
+The pprint2_vis frontend is scheduled for removal so you probably don't want to build it.
 
-1. Build Crystal at commit `0cc0264f423f136db5baa190118b722dade09681`. I don't think nightlies work due to my use of `ExecutionContext`.
-   This is the hard part.
-3. Then as usual. `shards install`.
-4. Then `crystal build pprint2_vis.cr --release -Dpreview_mt` or `crystal build soma6.cr --release -Dmt -Dpreview_mt -Dsoma6`. Do not forget to hope really really hard that it succeeds.
+Wirewright can be built with Crystal 1.16.0 or later.
+
+1. `shards install`.
+2. `crystal build soma6.cr --release -Dmt -Dpreview_mt -Dexecution_context -Dsoma6 -o soma`.
+
+And do not forget to hope really really hard for success!
 
 ## Want to learn more?
 
