@@ -29,7 +29,7 @@
   <> {M: (append-left →text)}
 
 ;; These append first, then try to expel
-[_string | _string (M←(input ch←(%any " " "\"")) _*) @EDGE_]
+[_string | _string (M←(input ch←(%any " ")) _*) @EDGE_]
   <> {(M): ((append-left →ch) (expel))}
 
 ;; These try to expel first, then if that fails, append, then again try
@@ -62,6 +62,14 @@
 
 ;; ... or if editing inside a top-level dict
 (_* ¦ (%entry _ ⟨[_string | _string (M←(key enter) _*) @EDGE_]⟩))
+  <> {M: (leave-pair)}
+
+;; Similarly (input " ") at the end in pair must leave it.
+(_* ¦ (%entry _ [_string | "" (M←(input " ") _*) @EDGE_]))
+  <> {M: (leave-pair)}
+
+;; ... or if trying to leave a top-level dict similarly.
+(_* ¦ (%entry _ [_* ["" | "" (M←(input " ") _*) @EDGE_]]))
   <> {M: (leave-pair)}
 
 ;; Interpret (key left) and (key right)

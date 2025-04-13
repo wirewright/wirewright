@@ -1,4 +1,3 @@
-;; WARNING: Do not modify this file. It was generated automatically.
 (editor
  (("" | "" () @user))
  (after
@@ -20,7 +19,7 @@
    (key end))
   (button ("\"+ Increment" | "" () @user)))
  (after
-  ((input "\""))
+  ((input "\"") (input " "))
   (button "+ Increment" ("" | "" () @user)))
  (after
   ((input "\"")
@@ -39,7 +38,8 @@
    (input "Decrement")
    (input " ")
    (key backspace)
-   (input "\""))
+   (input "\"")
+   (input " "))
   (button "+ Increment" "- Decrement" ("" | "" () @user)))
  (after
   ((key C-S-home))
@@ -142,6 +142,7 @@
    (key backspace)
    (input "- ")
    (input "\"")
+   (input " ")
    (key left)
    (key left)
    (input "Decrement")
@@ -628,7 +629,8 @@
    (key backspace)
    (input " ")
    (input "(")
-   (input "\""))
+   (input "\"")
+   (input " "))
   ((row
     (button "+ Increment" @actions)
     (button "- Decrement" @actions)
@@ -1547,4 +1549,68 @@
      style: "text-xs"
      qux: (+ 1 2))
     (button "- Decrement" @actions style: "text-lg")
-    (button "0 Reset" @actions style: "text-sm")))))
+    (button "0 Reset" @actions style: "text-sm"))))
+ (after
+  ((input "key") (input ":") (input "hello") (input " "))
+  ((row
+    (button
+     "+ Increment"
+     @actions
+     style: "text-xs"
+     qux: (+ 1 2))
+    (button "- Decrement" @actions style: "text-lg")
+    (button "0 Reset" @actions style: "text-sm"))
+   ("" | "" () @user)
+   key: hello))
+ (after
+  ((input "key")
+   (input ":")
+   (key C-backspace)
+   (input "(")
+   (input "+")
+   (input " ")
+   (input "100")
+   (input " ")
+   (input " "))
+  ((row
+    (button
+     "+ Increment"
+     @actions
+     style: "text-xs"
+     qux: (+ 1 2))
+    (button "- Decrement" @actions style: "text-lg")
+    (button "0 Reset" @actions style: "text-sm"))
+   ("" | "" () @user)
+   key: (+ 100)))
+ (after
+  ((input "key")
+   (input ":")
+   (input "fooze")
+   (input ":")
+   (input "(")
+   (input "1")
+   (input " ")
+   (input "2")
+   (input " ")
+   (input " "))
+  ((row
+    (button
+     "+ Increment"
+     @actions
+     style: "text-xs"
+     qux: (+ 1 2))
+    (button "- Decrement" @actions style: "text-lg")
+    (button "0 Reset" @actions style: "text-sm"))
+   key: (+ 100 ("" | "" () @user) fooze: (1 2))))
+ (after
+  ((input " "))
+  ((row
+    (button
+     "+ Increment"
+     @actions
+     style: "text-xs"
+     qux: (+ 1 2))
+    (button "- Decrement" @actions style: "text-lg")
+    (button "0 Reset" @actions style: "text-sm"))
+   ("" | "" () @user)
+   key: (+ 100 fooze: (1 2)))))

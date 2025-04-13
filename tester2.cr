@@ -95,8 +95,6 @@ while true
       root0 = root
       motions = Term[]
       File.open("./editor.test.wwml", mode: "w") do |io|
-        io.puts ";; WARNING: Do not modify this file. It was generated automatically."
-
         ML.display(io, test)
       end
     end
