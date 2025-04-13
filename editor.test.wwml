@@ -1613,4 +1613,22 @@
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))
    ("" | "" () @user)
-   key: (+ 100 fooze: (1 2)))))
+   key: (+ 100 fooze: (1 2))))
+ (after
+  ((input "foo")
+   (input ":")
+   (input "\"")
+   (input " ")
+   (input "\"")
+   (input " "))
+  ((row
+    (button
+     "+ Increment"
+     @actions
+     style: "text-xs"
+     qux: (+ 1 2))
+    (button "- Decrement" @actions style: "text-lg")
+    (button "0 Reset" @actions style: "text-sm"))
+   ("" | "" () @user)
+   key: (+ 100 fooze: (1 2))
+   foo: " ")))

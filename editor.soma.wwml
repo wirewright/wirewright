@@ -58,19 +58,19 @@
 
 ;; (key enter) should expel + leave from pair if editing at top-level
 (_* ¦ (%entry _ [_string | _string (M←(key enter) _*) @EDGE_]))
-  <> {M: (leave-pair)}
+  <> {M: (leave-pair () ())}
 
 ;; ... or if editing inside a top-level dict
 (_* ¦ (%entry _ ⟨[_string | _string (M←(key enter) _*) @EDGE_]⟩))
-  <> {M: (leave-pair)}
+  <> {M: (leave-pair () ())}
 
 ;; Similarly (input " ") at the end in pair must leave it.
 (_* ¦ (%entry _ [_string | "" (M←(input " ") _*) @EDGE_]))
-  <> {M: (leave-pair)}
+  <> {M: (leave-pair () ((append-left " ")))}
 
 ;; ... or if trying to leave a top-level dict similarly.
 (_* ¦ (%entry _ [_* ["" | "" (M←(input " ") _*) @EDGE_]]))
-  <> {M: (leave-pair)}
+  <> {M: (leave-pair () ())}
 
 ;; Interpret (key left) and (key right)
 [(%string nonempty) | _string (M←(key left) _*) @EDGE_] <> {M: (move-left)}
@@ -546,26 +546,26 @@ C←(_string | _string (M←(paste-ahead) _*) @EDGE_ ¦ _ clipboard_: (cut term_
 ;; to expel-left.
 
 ;; Leave pair with empty cursor should remove the pair and leave.
-(_* ⏏target ¦ (%entry _ C←["" | "" (M←(leave-pair) _*) @EDGE_]))
-  <> {(M): (), target: ↑C, (C): ()}
+(_* ⏏target ¦ (%entry _ C←["" | "" (M←(leave-pair ok←(_*) (_*)) _*) @EDGE_]))
+  <> {(M): →ok, target: ↑C, (C): ()}
 
-(_* ⏏target ¦ (%entry _ ⟨C←["" | "" (M←(leave-pair) _*) @EDGE_]⟩))
-  <> {(M): (), target: ↑C0, (C): ($tr C0 ())}
+(_* ⏏target ¦ (%entry _ ⟨C←["" | "" (M←(leave-pair ok←(_*) (_*)) _*) @EDGE_]⟩))
+  <> {(M): →ok, target: ↑C0, (C): ($tr C0 ())}
 
-["" | (%string nonempty) (M←(leave-pair) _*) @EDGE_]
-  <> {(M): ((move-back-right) (leave-pair))}
+["" | (%string nonempty) (M←(leave-pair (_*) (_*)) _*) @EDGE_]
+  <> {(M): ((move-back-right) →M)}
 
-[(%string nonempty) | (%string nonempty) (M←(leave-pair) _*) @EDGE_]
-  <> {(M): ((move-back-right) (leave-pair))}
+[(%string nonempty) | (%string nonempty) (M←(leave-pair (_*) (_*)) _*) @EDGE_]
+  <> {(M): ((move-back-right) →M)}
 
-[lhs←(%string nonempty) | "" (M←(leave-pair) _*) @EDGE_]
-  <> {M: (leave-pair $'(ml →lhs shadow: false))}
+[lhs←(%string nonempty) | "" (M←(leave-pair ok←(_*) err←(_*)) _*) @EDGE_]
+  <> {M: (leave-pair $'(ml →lhs shadow: false) →ok →err)}
 
-(_* ⏏target ¦ (%entry _ C←[lhs_string | "" (M←(leave-pair (ml/ok term_)) _*) @EDGE_]))
-  <> {(M): (), lhs: "", target: ↑C, C: ↑term}
+(_* ⏏target ¦ (%entry _ C←[lhs_string | "" (M←(leave-pair (ml/ok term_) ok←(_*) _) _*) @EDGE_]))
+  <> {(M): →ok, lhs: "", target: ↑C, C: ↑term}
 
-[_string | _string (M←(leave-pair (ml/err)) _*) @EDGE_]
-  <> {(M): ()}
+[_string | _string (M←(leave-pair (ml/err) _ err←(_*)) _*) @EDGE_]
+  <> {(M): →err}
 
 ;; Expand (expel) into (expel () ()), similarly for (expel-left), ...
 [_string | _string (M←(expel) _*) @EDGE_] <> {M: (expel () ())}
