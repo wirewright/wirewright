@@ -110,7 +110,13 @@ while true
     next
   end
 
-  motion = ML.term(command)
+  begin
+    motion = ML.term(command)
+  rescue e : ML::SyntaxError
+    e.humanize(STDOUT, command)
+    next
+  end
+
   root = edit(root, motion)
   motions = motions.append(motion)
 end
