@@ -48,6 +48,12 @@ module Ww::ML
 
       column
     end
+
+    def humanize(io, source : String)
+      col = column(source)
+      io.puts "SyntaxError: #{lineno(source) + 1}:#{col + 1}: #{message}"
+      io.puts "  >>> #{line(source).insert(col, "‸")}"
+    end
   end
 
   # Parses and returns multiple top-level WwML expressions from *source*,
@@ -60,9 +66,7 @@ module Ww::ML
     parser.expressions
   rescue e : SyntaxError
     {% if flag?(:mlerr) %}
-      col = e.column(source)
-      STDERR.puts "SyntaxError: #{e.lineno(source) + 1}:#{col + 1}: #{e.message}"
-      STDERR.puts "  >>> #{e.line(source).insert(col, "‸")}"
+      e.humanize(STDERR, source)
     {% end %}
 
     raise e
@@ -82,9 +86,7 @@ module Ww::ML
     parser.expression
   rescue e : SyntaxError
     {% if flag?(:mlerr) %}
-      col = e.column(source)
-      STDERR.puts "SyntaxError: #{e.lineno(source) + 1}:#{col + 1}: #{e.message}"
-      STDERR.puts "  >>> #{e.line(source).insert(col, "‸")}"
+      e.humanize(STDERR, source)
     {% end %}
 
     raise e
