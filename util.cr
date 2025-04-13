@@ -718,6 +718,19 @@ class IO::Empty < IO
   end
 end
 
+class IO::BytesizeCounter < IO
+  # Returns the number of bytes written to this IO.
+  getter bytesize = 0
+
+  def read(slice : Bytes)
+    0
+  end
+
+  def write(slice : Bytes) : Nil
+    @bytesize += slice.size
+  end
+end
+
 class IO
   def self.empty
     Empty::INSTANCE

@@ -1,8 +1,10 @@
 require "./src/wirewright"
+require "compress/gzip"
 require "log"
 require "./surf_common"
 require "digest"
 require "bit_array"
+require "brotli"
 
 Log.setup_from_env(default_level: :warn)
 
@@ -1442,20 +1444,25 @@ struct AppearanceRegistry
     end
   end
 
+  @[Flags]
+  enum RowFlags : UInt8
+    ValueCompressed
+  end
+
   def initialize(@set : ISet(Atom))
   end
 
   # AppearanceInfo row format is as follows:
   #
-  # frag   <instant> <secret> : <conid> <slot> <value> <checksum>
-  # bytes      16         0..       16      4       1..       4
+  # frag   <instant> <secret> : <conid> <slot>  <flags> <value payload> <checksum>
+  # bytes      16         0..       16      4      1          1..          4
   #
   # Checksum is calculated for the entire row, i.e. for instant and secret
   # as well. This way, both sides can have some certainty & proceed with their
   # doings more or less confidently.
 
   private def bytesize(secret : Bytes) : Int32
-    {Label.bytesize, secret.size, Label.bytesize, sizeof(Slot), sizeof(Checksum)}.sum
+    {Label.bytesize, secret.size, Label.bytesize, sizeof(Slot), sizeof(RowFlags), sizeof(Checksum)}.sum
   end
 
   private def bytesize(secret : Bytes, value : Bytes) : Int32
@@ -1467,6 +1474,7 @@ struct AppearanceRegistry
                        conid : Label,
                        slot : Slot,
                        value : Bytes,
+                       flags : RowFlags,
                        atoms : AtomArray) : Nil
     row = cursor = Bytes.new(bytesize(secret, value))
 
@@ -1478,6 +1486,9 @@ struct AppearanceRegistry
 
     IO::ByteFormat::BigEndian.encode(slot, cursor)
     cursor += sizeof(Slot)
+
+    IO::ByteFormat::BigEndian.encode(flags.value, cursor)
+    cursor += sizeof(RowFlags)
 
     cursor.copy_from(value)
     cursor += value.size
@@ -1520,7 +1531,8 @@ struct AppearanceRegistry
 
     offset_conid = prefix.size
     offset_slot = offset_conid + Label.bytesize
-    offset_value = offset_slot + sizeof(Slot)
+    offset_flags = offset_slot + sizeof(Slot)
+    offset_value = offset_flags + sizeof(RowFlags)
 
     unless conid = Label.from_slice_be?(row[offset_conid, Label.bytesize])
       Log.warn { "reject row: bad conid label: #{row.hexstring}" }
@@ -1533,8 +1545,27 @@ struct AppearanceRegistry
     end
 
     slot = IO::ByteFormat::BigEndian.decode(Slot, row[offset_slot, sizeof(Slot)])
+    flags_value = IO::ByteFormat::BigEndian.decode(typeof(RowFlags::All.value), row[offset_flags, sizeof(RowFlags)])
 
-    ml_value = String.new(row[offset_value...-sizeof(Checksum)])
+    unless flags = RowFlags.from_value?(flags_value)
+      Log.warn { "reject row: invalid row flags: #{flags_value}" }
+      return
+    end
+
+    ml_value_bytes = row[offset_value...-sizeof(Checksum)]
+
+    if flags.value_compressed?
+      buffer = IO::Memory.new(ml_value_bytes)
+
+      begin
+        ml_value = Compress::Brotli::Reader.open(buffer, &.gets_to_end)
+      rescue e : Compress::Brotli::BrotliError
+        Log.warn(exception: e) { "reject row: compression error" }
+        return
+      end
+    else
+      ml_value = String.new(ml_value_bytes)
+    end
 
     begin
       value = ML.term(ml_value)
@@ -1549,9 +1580,27 @@ struct AppearanceRegistry
   # WARNING: the caller guarantees *instant* will never be registered again.
   def register(instant : Label, secret : Term?, info : AppearanceInfo, atoms : AtomArray) : Nil
     ml_secret = secret ? ML.compact(secret) : ""
-    ml_value = ML.compact(info.value)
 
-    register(instant, ml_secret.to_slice, info.conid, info.slot, ml_value.to_slice, atoms)
+    flags = RowFlags::None
+
+    # Do not compress the value if it is very small.
+    if ML.compact_bytesize(info.value) <= 64
+      ml_value = ML.compact(info.value).to_slice
+    else
+      buffer = IO::Memory.new
+
+      # NOTE: we really really do not care about CPU right now, the querying side
+      # will have to **guess** all those bazillion bytes; we must compress as much
+      # as we can.
+      Compress::Brotli::Writer.open(buffer) do |gz|
+        ML.compact(gz, info.value)
+      end
+
+      ml_value = buffer.to_slice
+      flags |= RowFlags::ValueCompressed
+    end
+
+    register(instant, ml_secret.to_slice, info.conid, info.slot, ml_value, flags, atoms)
   end
 
   def query?(instant : Label, secret : Term?) : AppearanceInfo?
@@ -2477,6 +2526,26 @@ class Tconn
       Appearance.new(surface.value, surface.secret)
     end
   end
+end
+
+{% skip_file %}
+
+# With brotli, atom cost = 1 953 287
+
+patterns = ML.terms File.read("./patterns.test.wwml")
+
+set = TspaceDigestSet.new(SyncInMemorySet(Bytes).new)
+chat = SyncInMemoryChat(Activation).new
+map = Tconn.new(set, chat, ->(v : Tview) { pp v })
+puts "Begin"
+map[0] = Tconn.appearance(ML.term %{(+ 1 2)})
+map[1] = Tconn.appearance(patterns)
+
+puts "Atom cost ="
+puts set.size?
+
+while (print "> "; i = gets)
+  map[2] = Tconn.sensor(ML.term i)
 end
 
 {% skip_file %}

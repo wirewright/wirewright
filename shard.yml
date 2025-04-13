@@ -16,6 +16,8 @@ dependencies:
     commit: e6f5102
   simple_rpc:
     github: kostya/simple_rpc
+  brotli:
+    github: naqvis/brotli.cr
 # dependencies:
 #   pg:
 #     github: will/crystal-pg

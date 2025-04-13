@@ -35,20 +35,20 @@ module ::Ww::M1::Skeleton
   extend self
 
   # Generates a sequence of *subject* itemseq calls repeated *n* times.
-  private def repeated(prefix, key, subject, n, ahead0) : Term
+  private def repeated(prefix, key, subject, n, ahead0, rear) : Term
     if n.zero?
       return ahead0.call(prefix, key)
     end
 
     ahead1 = ->(prefix : Term::Dict, key : Term::Num) do
-      repeated(prefix, key, subject, n - 1, ahead0)
+      repeated(prefix, key, subject, n - 1, ahead0, rear)
     end
 
-    itemseq(prefix, key, subject, ahead1)
+    itemseq(prefix, key, subject, ahead1, rear)
   end
 
   # Returns the skeleton of an itemseq *item*.
-  private def itemseq(prefix, key, item : Term, ahead) : Term
+  private def itemseq(prefix, key, item : Term, ahead, rear) : Term
     Term.of_case(item) do
       # Fetch successor.
       matchpi %{(%'%singular successor_)} do
@@ -90,7 +90,7 @@ module ::Ww::M1::Skeleton
 
       # Dive into %group's.
       matchpi %{(%'%group _ children_+)} do
-        itemseq(prefix, key, children.items, ahead)
+        itemseq(prefix, key, children.items, ahead, rear)
       end
 
       # Expand small bounded %past and %many's into a disjunction with each
@@ -108,7 +108,7 @@ module ::Ww::M1::Skeleton
           disj << :"%any/source"
 
           (min.to(Int32)..max.to(Int32)).each do |hi|
-            disj << repeated(prefix, key, children.items, hi, ahead)
+            disj << repeated(prefix, key, children.items, hi, ahead, rear)
           end
         end
       end
@@ -121,28 +121,29 @@ module ::Ww::M1::Skeleton
         Term.of(:"%any/source", variant0, variant1)
       end
 
-      otherwise { prefix }
+      otherwise { rear.call(prefix) }
     end
   end
 
   # Returns the skeleton of an itemseq in *feed*.
-  private def itemseq(prefix, key, feed : Term::Dict::ItemsView, ahead0) : Term
+  private def itemseq(prefix, key, feed : Term::Dict::ItemsView, ahead0, rear) : Term
     unless item = feed.first?
       return ahead0.call(prefix, key)
     end
 
     ahead1 = ->(prefix : Term::Dict, key : Term::Num) do
-      itemseq(prefix, key, feed.move(1), ahead0)
+      itemseq(prefix, key, feed.move(1), ahead0, rear)
     end
 
-    itemseq(prefix, key, item, ahead1)
+    itemseq(prefix, key, item, ahead1, rear)
   end
 
   # Returns the skeleton of an itemseq *seq*.
   def itemseq(seq : Term::Dict)
-    ahead = ->(prefix : Term::Dict, key : Term::Num) { all2(prefix) }
+    rear = ->(prefix : Term::Dict) { all2(prefix) }
+    ahead = ->(prefix : Term::Dict, key : Term::Num) { rear.call(prefix) }
 
-    itemseq(Term.dict(:"%all"), Term[0], seq.items, ahead)
+    itemseq(Term.dict(:"%all"), Term[0], seq.items, ahead, rear)
   end
 
   private def entry(prefix, key, value, ahead) : Term

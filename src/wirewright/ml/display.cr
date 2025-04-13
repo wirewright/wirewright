@@ -125,4 +125,12 @@ module Ww::ML
   def self.compact(term : Term) : String
     String.build { |io| compact(io, term) }
   end
+
+  def self.compact_bytesize(term : Term) : Int32
+    io = IO::BytesizeCounter.new
+
+    compact(io, term)
+
+    io.bytesize
+  end
 end
