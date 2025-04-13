@@ -1300,9 +1300,9 @@ frame = ML.term <<-WWML
                 "This document is currently concealed. This means it’s running at full speed without you in the loop."))
             (group style: "border border-yellow-200 gap-2 rounded p-2 settled:border-green-200" settled: ^settled
               (p style: "px-1 py-0.5 font-mono leading-none text-neutral-950 font-medium text-xs rounded-sm bg-yellow-200 settled:bg-green-200" settled: ^settled
-                "Esc")
+                "Tab")
               (p style: "leading-tight text-yellow-200 settled:text-green-200 h-max center-y" settled: ^settled
-                "Hit escape to reveal")))))
+                "Hit Tab to reveal")))))
       (^unless concealed
         (^if (= dwuir ())
           (group style: "w-max h-fr bg-neutral-800 center rounded-sm"
@@ -1340,7 +1340,7 @@ ui = UIR::Reducers.microfold(Term.of(frame)) do |current, drawable, event|
   rerender = true
 
   Term.case(event) do
-    matchpi %{(key escape)} do
+    matchpi %{(key tab)} do
       if concealed = frame[:".model", :concealed].true?
         doc.send(Term.of({:reveal}))
       else
