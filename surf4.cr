@@ -12,14 +12,21 @@ end
 
 alias AtomArray = Array(IAtom)
 
-module IMultiset(T)
+module ISet(T)
   abstract def includes?(identity : T) : Bool
-  abstract def ref(identity : T, atoms : AtomArray) : Nil
+  abstract def add(identity : T, atoms : AtomArray) : Nil
   abstract def size? : Int32?
 
   def subset(cls : St.class) forall St
     SubSet(T, St).new(self)
   end
+end
+
+module IMultiset(T)
+  include ISet(T)
+end
+
+module IDecay
 end
 
 module IChat(M)
@@ -66,9 +73,9 @@ class SyncInMemoryChat(M)
 end
 
 struct SubSet(T, St)
-  include IMultiset(St)
+  include ISet(St)
 
-  def initialize(@set : IMultiset(T))
+  def initialize(@set : ISet(T))
   end
 
   # WARNING: delegates to the backing set; this method **does not** return
@@ -81,8 +88,8 @@ struct SubSet(T, St)
     @set.includes?(identity.as(T))
   end
 
-  def ref(identity : St, atoms : AtomArray) : Nil
-    @set.ref(identity.as(T), atoms)
+  def add(identity : St, atoms : AtomArray) : Nil
+    @set.add(identity.as(T), atoms)
   end
 end
 
@@ -115,7 +122,7 @@ class SyncInMemoryMultiset(T)
     @set.size
   end
 
-  def ref(identity : T, atoms : AtomArray) : Nil
+  def add(identity : T, atoms : AtomArray) : Nil
     @lock.synchronize do
       @set[identity] = (@set[identity]? || 0u32) + 1
     end
@@ -458,7 +465,7 @@ struct Utrie
     end
   end
 
-  def initialize(@set : IMultiset(Atom))
+  def initialize(@set : ISet(Atom))
   end
 
   def mount(strand : Strand, atoms : AtomArray) : Fingerprint
@@ -470,7 +477,7 @@ struct Utrie
     digest.update(Bytes[0]) # FIXME: ?!
 
     strand.each do |base|
-      @set.ref(Atom.new(prefix: digest.dup.final, base: base), atoms)
+      @set.add(Atom.new(prefix: digest.dup.final, base: base), atoms)
 
       Ubase.update(digest, base)
     end
@@ -581,7 +588,7 @@ struct Xtrie
     end
   end
 
-  def initialize(@set : IMultiset(Atom))
+  def initialize(@set : ISet(Atom))
   end
 
   # Mounts an Xtrie rule (an *xrule*). Returns the fingerprint of the xrule.
@@ -600,7 +607,7 @@ struct Xtrie
       a = xrule.shift
       b = xrule.shift
 
-      @set.ref(Atom.new(a, b), atoms)
+      @set.add(Atom.new(a, b), atoms)
 
       digest.reset
       digest.update(a)
@@ -722,7 +729,7 @@ end
 struct BytesMultimap(I)
   Log = ::Log.for(self)
 
-  def initialize(@set : IMultiset(I))
+  def initialize(@set : ISet(I))
   end
 
   def mount(byteslice : Bytes, atoms : AtomArray, *, start = 0)
@@ -740,7 +747,7 @@ struct BytesMultimap(I)
       bit0 = reader.consume? || break
       bit1 = reader.consume? || 0u8
 
-      @set.ref(I.new(*writer.progress, (bit0 << 1) | bit1), atoms)
+      @set.add(I.new(*writer.progress, (bit0 << 1) | bit1), atoms)
 
       writer << bit0
       writer << bit1
@@ -863,7 +870,7 @@ struct SensorMultimap
     end
   end
 
-  def initialize(@set : IMultiset(Atom))
+  def initialize(@set : ISet(Atom))
   end
 
   private def bytesize : Int32
@@ -941,7 +948,7 @@ struct AppearanceMultimap
     end
   end
 
-  def initialize(@set : IMultiset(Atom))
+  def initialize(@set : ISet(Atom))
   end
 
   # The row layout is as follows:
@@ -1024,11 +1031,11 @@ struct StrandSet
     end
   end
 
-  def initialize(@set : IMultiset(Atom))
+  def initialize(@set : ISet(Atom))
   end
 
   def mount(fingerprint : Fingerprint, atoms : AtomArray) : Nil
-    @set.ref(Atom.new(fingerprint), atoms)
+    @set.add(Atom.new(fingerprint), atoms)
   end
 
   def strand?(fingerprint : Fingerprint) : Bool
@@ -1082,7 +1089,7 @@ struct Tbase
 
   alias Subject = Sensor | Appearance
 
-  def initialize(@set : IMultiset(Atom))
+  def initialize(@set : ISet(Atom))
   end
 
   # Constructs a `Utrie` view of this termbase's backing set.
@@ -1229,7 +1236,7 @@ struct SensorRegistry
     end
   end
 
-  def initialize(@set : IMultiset(Atom))
+  def initialize(@set : ISet(Atom))
   end
 
   # SensorInfo row format is as follows:
@@ -1363,7 +1370,7 @@ struct AppearanceRegistry
     end
   end
 
-  def initialize(@set : IMultiset(Atom))
+  def initialize(@set : ISet(Atom))
   end
 
   # AppearanceInfo row format is as follows:
@@ -1543,7 +1550,7 @@ struct Tspace
     end
   end
 
-  def initialize(@set : IMultiset(Atom))
+  def initialize(@set : ISet(Atom))
   end
 
   def tbase : Tbase
@@ -1597,8 +1604,8 @@ struct Tspace
   end
 end
 
-class TspaceDigestMultiset
-  include IMultiset(Tspace::Atom)
+class TspaceDigestSet
+  include ISet(Tspace::Atom)
 
   enum Scope : UInt8
     Utrie
@@ -1624,7 +1631,7 @@ class TspaceDigestMultiset
 
   @digest : Digest
 
-  def initialize(@set : IMultiset(Bytes), algorithm : Digest.class = Digest::SHA256)
+  def initialize(@set : ISet(Bytes), algorithm : Digest.class = Digest::SHA256)
     @digest = algorithm.new
   end
 
@@ -1643,8 +1650,8 @@ class TspaceDigestMultiset
     @set.size?
   end
 
-  def ref(identity : Tspace::Atom, atoms : AtomArray) : Nil
-    @set.ref(digest(Scope.of(identity), identity), atoms)
+  def add(identity : Tspace::Atom, atoms : AtomArray) : Nil
+    @set.add(digest(Scope.of(identity), identity), atoms)
   end
 end
 
@@ -1669,8 +1676,16 @@ defcase Activation, kind : Kind, sensor : SensorInfo, instant : Label, appearanc
   end
 end
 
-class Tkeepalive::Manual
-  def initialize
+module Tkeepalive
+  alias Any = None
+
+  def self.new(bp : Blueprint::None) : None
+    None.new(bp)
+  end
+end
+
+class Tkeepalive::None
+  def initialize(bp : Blueprint::None)
     @atoms = {} of Label => AtomArray
   end
 
@@ -1694,7 +1709,19 @@ class Tkeepalive::Manual
   end
 end
 
-record Tkeepalive::Blueprint
+module Tkeepalive::Blueprint
+  alias Any = None
+
+  record None do
+    def compatible_with?(set : ISet) : Bool
+      false
+    end
+
+    def compatible_with?(set : IMultiset) : Bool
+      !set.is_a?(IDecay)
+    end
+  end
+end
 
 class Tstimuli
   record Owner, conid : Label, slot : Slot
@@ -1903,24 +1930,22 @@ class Tconn
   @unsubscribe : IChat::Unsubscribe
 
   def initialize(bp : Blueprint)
+    @fresh = bp.fresh
+    @conid = @fresh.call
+
+    unless bp.keepalive.compatible_with?(bp.set)
+      Log.warn { "#{@conid}: running on bad keepalive+set combo, may degenerate: #{bp.keepalive.class}, #{bp.set.class}" }
+    end
+
     @set = bp.set
     @chat = bp.chat
     @sink = bp.sink
-    @fresh = bp.fresh
-    @conid = @fresh.call
     @surfaces = {} of Slot => Tspace::Surface
     @view = Tview::EMPTY
     @open = true
 
-    if keepalive = bp.keepalive
-      raise "not implemented"
-    else
-      @keepalive = Tkeepalive::Manual.new
-    end
-
-    @unsubscribe = @chat.subscribe(@conid) do |act|
-      receive(act)
-    end
+    @keepalive = Tkeepalive.new(bp.keepalive)
+    @unsubscribe = @chat.subscribe(@conid, &->receive(Activation))
   end
 
   # Convenience method to construct a `Sensor` surface.
@@ -2138,11 +2163,11 @@ class Tconn
 end
 
 record Tconn::Blueprint,
-  set : IMultiset(Tspace::Atom),
+  set : ISet(Tspace::Atom),
   chat : IChat(Activation),
   sink : (Tview ->),
   fresh : LabelGenerator = WWID,
-  keepalive : Tkeepalive::Blueprint? = nil
+  keepalive : Tkeepalive::Blueprint::Any = Tkeepalive::Blueprint::None.new
 
 {% skip_file %}
 
@@ -2180,15 +2205,27 @@ pp set.size?
 # will insert atoms into the set.
 #
 # TODO: Tsetconn
-# TODO: implement UnbufferedSet(IRemoteSet) < IMultiset
-# TODO: implement BufferedSet(IRemoteSet) < IMultiset
-# TODO: implement string set & chat client < IRemoteSet; server
+# TODO: implement UnbufferedSet(IRemoteSet) < ISet
+# TODO: implement BufferedSet(IRemoteSet) < ISet
+# TODO: implement basic string set & chat client < IRemoteSet; server to start working
+#   on remote stuff in D7/soma. p2p can wait.
 # TODO: use this in soma
 # TODO: move to src/, replace/remove old files
 #
 # TODO: reduce atom cost of Utrie (remove Trunk etc.)
-# TODO: reduce atom cost of appearanceinfo (WwMR)
-# TODO: proof of work cost for atoms and activations
+# TODO: reduce atom cost of appearanceinfo
+#   * use ML.compactf -> pretty printer which is much smarter & has a chance
+#     of emitting something shorter than what ML.compact would. E.g. `%partition`
+#     and so on.
+# TODO: experiment with unstructured p2p multiset impl/proto, simulate stuff
+#    * ant colony inspired "scout message" routing, neighborhood mapping,
+#      deep exploration
+#    * I have a feeling it would work, but how to build a multiset on top of that
+#      with enough guarantees to make it practical?!
+#    * stuff should be as simple as possible. single threaded core. no fanciness
+#      on the implementation. protocol as simple as possible. p2p stuff is unbelievably
+#      hard. try to keep it simple,stupid.
+# TODO: proof of work cost for atoms and activations once p2p stuff works.
 
 # sleep 1.second
 # pp set

@@ -381,7 +381,7 @@ end
 def tspace(flow : Term::Dict, & : Term, Term ->)
   counter = Slot.new(0)
 
-  set = TspaceDigestMultiset.new(SyncInMemoryMultiset(Bytes).new)
+  set = TspaceDigestSet.new(SyncInMemoryMultiset(Bytes).new)
   chat = SyncInMemoryChat(Activation).new
 
   conns = {} of Term => Tconn
