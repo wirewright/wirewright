@@ -2709,9 +2709,6 @@ sleep 1.second
 pp set.size?
 
 # TODO: thread safety of Tconn<>IChat, Tconn<>Relook
-# TODO: sensors must have a user-configurable refresh rate to observe missing appearances
-#   & appearances that were removed before the sensor was inserted, but did not decay
-#   until after the sensor was inserted.
 # TODO: Tsetconn
 # TODO: implement UnbufferedSet(IRemoteSet) < ISet
 # TODO: implement BufferedSet(IRemoteSet) < ISet
