@@ -1418,7 +1418,11 @@ module Rhodium
       # activates, helping the node consume events from its inbox.
       givenpi %[{¦ inbox: (msg_ _*) mail: @pout_} cycle -1] do
         effect(document1, nodepath, node0) do
-          event :pulse, pout, msg
+          if id = node0[:id]?
+            event :pulse, pout, {:mail, msg, id}
+          else
+            event :pulse, pout, {:mail, msg}
+          end
           backmap %[{¦ inbox: (M_ _*)}], %[{(M): ()}]
 
           false
