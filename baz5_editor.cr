@@ -19,82 +19,6 @@ def subsume(root, motion, edge)
   Term.of(dict0.replace { |_, v| subsume(v, motion, edge) })
 end
 
-enum Judgement : UInt8
-  # Bad, impassable places such as `log` entries have the worst judgement.
-  BadImpassable
-
-  # Bad, passable places such as `frag` value have the worst judgement.
-  BadPassable
-
-  # Everything else has good judgement.
-  Good
-end
-
-def smart_subsume(root, motion, edge)
-  impassable = [] of Term::Dict
-  passable = [] of Term::Dict
-  good = [] of Term::Dict
-
-  smart_subsume(root, motion, edge, Term[], judgement: :good) do |keypath, judgement|
-    case judgement
-    in .bad_impassable?
-      next unless good.empty? && passable.empty?
-
-      impassable << keypath
-    in .bad_passable?
-      next unless good.empty?
-
-      passable << keypath
-    in .good?
-      good << keypath
-    end
-  end
-
-  {good, passable, impassable}.each do |category|
-    next if category.empty?
-
-    category.each do |keypath|
-      root = root.as_d.follow(keypath.items) { |cursor| subsume1(cursor, motion) }
-    end
-
-    break
-  end
-
-  Term.of(root)
-end
-
-# TODO: this must have more patterns (and be "smarter"!!)
-def smart_subsume(root, motion, edge, keypath, judgement : Judgement, &sink : Term::Dict, Judgement ->)
-  if M1::Operator.probe?(Term["EDGE": edge], CURSORPE, root)
-    sink.call(keypath, judgement)
-    return
-  end
-
-  return unless dict0 = root.as_d?
-
-  Term.case(dict0) do
-    matchpi %{(log @_ in (entries_*))} do
-      smart_subsume(entries, motion, edge, keypath.append(3), judgement: :bad_impassable, &sink)
-    end
-
-    matchpi %{(cell value_dict @_)} do
-      smart_subsume(value, motion, edge, keypath.append(1), judgement: :bad_impassable, &sink)
-    end
-
-    matchpi %{(frag value_dict @_)} do
-      smart_subsume(value, motion, edge, keypath.append(1), judgement: :bad_passable, &sink)
-    end
-
-    otherwise do
-      dict0.each_entry do |k, v|
-        next if Rhodium.shadow?(k)
-
-        smart_subsume(v, motion, edge, keypath.append(k), judgement, &sink)
-      end
-    end
-  end
-end
-
 def editR : Rewriter
   selector = ML.term(%[(%any° (rule pattern_ template_) (backmap pattern_ backspec_))])
 
@@ -160,12 +84,8 @@ end
 
 EDITR = editR
 
-def edit(root root0 : Term, motion : Term, edge = Term.of(:edge, :user), *, smart = false) : Term
-  if smart
-    root1 = smart_subsume(root0, motion, edge)
-  else
-    root1 = subsume(root0, motion, edge)
-  end
+def edit(root root0 : Term, motion : Term, edge = Term.of(:edge, :user)) : Term
+  root1 = subsume(root0, motion, edge)
 
   if root0.same?(root1)
     return root1

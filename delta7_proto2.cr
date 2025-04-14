@@ -37,6 +37,8 @@ module Rhodium
 
   Tspaces = Term.of(:"#tspaces")
 
+  Cursors = Term[:"#cursors"]
+
   # Follows an arbitrary *keypath* into *document*. Returns the pointed-to
   # node or `nil` if the keypath is invalid. This does not take into account
   # the passability of nodes (use `passable?` to check if the keypath is
@@ -267,104 +269,6 @@ module Rhodium
     enclosing?(document, keypath) { |parent| yield parent } || raise KeypathError.new
   end
 
-  @[Flags]
-  enum CursordepthConfig : UInt8
-    # Visit the itemspart of dictionaries.
-    Items
-
-    # Visit the shadow pairspart of dictionaries.
-    PairsShadow
-
-    # Visit the nonshadow pairspart of dictionaries.
-    PairsNonshadow
-
-    # When visiting deep itemspart, consider the items there as those of the node
-    # on which cursordepth() was called. If a deep item is a cursor, this
-    # will result in `1` being returned as if the cursor was a direct item of
-    # the original node.
-    AdoptInDeepItems
-
-    # When visiting deep pairspart, consider the pairs there as those of the node
-    # on which cursordepth() was called. If a deep pair is a cursor, this
-    # will result in `1` being returned as if the cursor was a direct pair of
-    # the original node.
-    AdoptInDeepPairs
-
-    def each(dict : Term::Dict, & : Term ->) : Nil
-      if items?
-        dict.each_item_unordered { |item| yield item }
-      end
-
-      if pairs_shadow? && pairs_nonshadow?
-        dict.each_entry { |_, value| yield value }
-      elsif pairs_shadow?
-        dict.each_entry do |key, value|
-          next unless Rhodium.shadow?(key)
-          yield value
-        end
-      elsif pairs_nonshadow?
-        dict.each_entry do |key, value|
-          next if Rhodium.shadow?(key)
-          yield value
-        end
-      end
-    end
-  end
-
-  private def cursordepth0(dict : Term::Dict, depth : Int32, config : CursordepthConfig) : Int32
-    if M1::Operator.probe?(Term[], CURSORP, Term.of(dict))
-      return depth
-    end
-
-    unless dict.probably_includes?(Term[:|])
-      return Int32::MAX
-    end
-
-    mindepth = Int32::MAX
-
-    config.each(dict) do |child|
-      next unless child = child.as_d?
-
-      subdepth = cursordepth0(child, depth + 1, config)
-      mindepth = subdepth if subdepth < mindepth
-    end
-
-    mindepth
-  end
-
-  # Returns the depth at which the cursor is found in *term*.
-  #
-  # - If *term* is the cursor returns `0`.
-  # - If the cursor is contained in one of *term*'s entries returns `1`,
-  #   if in one of *term*'s entry entries, `2`, and so on.
-  # - If there are no cursors in *term* returns `-1`.
-  #
-  # See also: `CursordepthConfig`.
-  #
-  # If there are multiple cursors in *node*, returns the *minimum* depth of one
-  # in the itemspart; or if there is no cursor there, then the minimum depth of
-  # one in the pairspart.
-  def cursordepth(term : Term, *, config : CursordepthConfig = {:items}) : Int32
-    return -1 unless dict = term.as_d?
-
-    itemsdepth = cursordepth0(dict.itemspart, 0, config)
-    if itemsdepth < Int32::MAX
-      return config.adopt_in_deep_items? && itemsdepth > 1 ? 1 : itemsdepth
-    end
-
-    pairsdepth = cursordepth0(dict.pairspart, 0, config)
-    if pairsdepth < Int32::MAX
-      return config.adopt_in_deep_pairs? && pairsdepth > 1 ? 1 : pairsdepth
-    end
-
-    -1
-  end
-
-  # Shorthand for calling `cursordepth` with config preferred by Rhodium nodes.
-  def cursordepth_in_node(node : Term) : Int32
-    cursordepth(node, config: CursordepthConfig.new({:items, :pairs_nonshadow, :adopt_in_deep_pairs}))
-  end
-
   # Converts *source* indexable of terms to a keypath into *document*. Returns
   # `nil` if the resulting keypath is invalid. Guarantees to return a valid
   # keypath into *document*.
@@ -466,6 +370,11 @@ module Rhodium
     shadow?(symbol)
   end
 
+  # Inverse of `shadow?`.
+  def nonshadow?(key : Term) : Bool
+    !shadow?(key)
+  end
+
   class EffectBuilder
     getter events = [] of Term
     getter rewrite : Rewrite::Any = Rewrite.none
@@ -523,7 +432,7 @@ module Rhodium
 
   # TODO: rename keypath to nodepath in Rhodium
 
-  def effect(document1 : Term::Dict, nodepath : Stack(Int32), node : Term, &) : {Term::Dict, Bool}
+  def effect(document1 : Term::Dict, nodepath : Stack(Int32), node : Term, cursordepth : Int32, &) : {Term::Dict, Bool}
     builder = EffectBuilder.new(node)
 
     transition_vote = with builder yield builder
@@ -541,7 +450,7 @@ module Rhodium
     # Disappear allows the node to remove itself as if it didn't exist. This
     # lets us prevent expulsion.
     if builder.disappear?
-      each_identity(node) do |identity|
+      each_identity(node, cursordepth) do |identity|
         document1 = document1.morph({Population, identity, false})
       end
     end
@@ -575,13 +484,14 @@ module Rhodium
   #   thing here. Small backmaps should be pretty efficient, a few microseconds perhaps.
   def handle(document0 : Term::Dict, document1 : Term::Dict, nodepath : Stack(Int32), event : Term) : {Term::Dict, Bool}
     node0 = follow(document0, nodepath)
+    cursordepth = cursordepth_in_node(document0, nodepath)
 
-    Term.case({node0, event, cursordepth_in_node(node0)}) do
+    Term.case({node0, event, cursordepth}) do
       # TODO: these are very similar and should be refactored into
       # something single, with variations, like transform.
 
       givenpi %{[cell v_ @cout_] (initialize _) -1} do
-        effect(document1, nodepath, node0) do
+        effect(document1, nodepath, node0, cursordepth) do
           event :"cell/created", cout, v
           cell cout, v
 
@@ -590,7 +500,7 @@ module Rhodium
       end
 
       givenpi %{[cell v_ @cout_ for pattern_] (initialize _) -1} do
-        effect(document1, nodepath, node0) do
+        effect(document1, nodepath, node0, cursordepth) do
           if created = M1.probe?(pattern, v)
             event :"cell/created", cout, v
             cell cout, v
@@ -610,7 +520,7 @@ module Rhodium
       end
 
       givenpi %{[cell v0_ @cout_] (assign @cout_ v1_) -1} do
-        effect(document1, nodepath, node0) do
+        effect(document1, nodepath, node0, cursordepth) do
           event :"cell/updated", cout, v0, v1
           cell cout, v1
           backmap %{[cell v_ @_]}, v: v1
@@ -624,7 +534,7 @@ module Rhodium
         %{[cell @cout_] (assign @cout_ v0_) -1},
         %{[cell @cout_] (cell/created @cout_ v0_) -1},
       ) do
-        effect(document1, nodepath, node0) do
+        effect(document1, nodepath, node0, cursordepth) do
           backmap %[[cell ⏏v @_]], v: v0
 
           true
@@ -635,7 +545,7 @@ module Rhodium
         %{[cell @cout_ for _] (assign @cout_ v0_) -1},
         %{[cell @cout_ for _] (cell/created @cout_ v0_) -1},
       ) do
-        effect(document1, nodepath, node0) do
+        effect(document1, nodepath, node0, cursordepth) do
           backmap %{[cell ⏏v @_ for _]}, v: v0
 
           true
@@ -644,7 +554,7 @@ module Rhodium
 
       givenpi %{[cell v0_ @cout_ for pattern_] (assign @cout_ v1_) -1} do
         if M1.probe?(pattern, v1)
-          effect(document1, nodepath, node0) do
+          effect(document1, nodepath, node0, cursordepth) do
             event :"cell/updated", cout, v0, v1
             cell cout, v1
             backmap %{[cell v_ @_ _*]}, v: v1
@@ -665,7 +575,7 @@ module Rhodium
       givenpi %{[cell vs0←(_*) @cout_] (assign/log @cout_ v_ limit←(%number (whole _) > 0)) -1} do
         vs1 = vs0.rightmost(limit.to(Int32) - 1).append(v)
 
-        effect(document1, nodepath, node0) do
+        effect(document1, nodepath, node0, cursordepth) do
           event :"cell/updated", cout, vs0, vs1
           cell cout, vs1
           backmap %{[cell v_ @_]}, v: vs1
@@ -678,7 +588,7 @@ module Rhodium
       # frag
       begin
         givenpi %{[frag v_ @cout_] (initialize (frag @_)) _} do
-          effect(document1, nodepath, node0) do
+          effect(document1, nodepath, node0, cursordepth) do
             event :"cell/created", cout, v
             cell cout, v
 
@@ -691,7 +601,7 @@ module Rhodium
         end
 
         givenpi %{[frag v_ @cout_] (pulse @cout_ clear) _} do
-          effect(document1, nodepath, node0) do
+          effect(document1, nodepath, node0, cursordepth) do
             backmap %[[_ v_ @_]], %[{(v): ()}]
 
             true
@@ -709,7 +619,7 @@ module Rhodium
         # This will trigger the next rule due to fragment's secondary identity
         # changing (being removed) after the assignment.
         givenpi %{[frag v0_ @cout_] (assign @cout_ v1_) _} do
-          effect(document1, nodepath, node0) do
+          effect(document1, nodepath, node0, cursordepth) do
             backmap %{[frag v_ @_]}, v: v1
 
             # We need this to trigger the next rule.
@@ -718,7 +628,7 @@ module Rhodium
         end
 
         givenpi %{[frag v1_ @cout_] (frag/removed @cout_ v0_) _} do
-          effect(document1, nodepath, node0) do
+          effect(document1, nodepath, node0, cursordepth) do
             event :"cell/updated", cout, v0, v1
             cell cout, v1
             backmap %{[frag v_ @_]}, v: v1
@@ -730,7 +640,7 @@ module Rhodium
         end
 
         givenpi %{[frag @cout_] (assign @cout_ v0_) _} do
-          effect(document1, nodepath, node0) do
+          effect(document1, nodepath, node0, cursordepth) do
             backmap %{[frag ⏏v @_]}, v: v0
 
             true
@@ -744,7 +654,7 @@ module Rhodium
           %{[changes/view @cin_] (assign @cin_ view_) -1},
           %{[changes/view @cin_] (cell/created @cin_ view_) -1},
         ) do
-          effect(document1, nodepath, node0) do
+          effect(document1, nodepath, node0, cursordepth) do
             backmap %{[changes/view ⏏view @_]}, view: view
 
             # changes/view doesn't have an identity like cells or frags do; it
@@ -758,7 +668,7 @@ module Rhodium
           %{[changes/view _ @cin_] (cell/created @cin_ view_) -1},
           %{[changes/view _ @cin_] (cell/changed @cin_ _ view_) -1},
         ) do
-          effect(document1, nodepath, node0) do
+          effect(document1, nodepath, node0, cursordepth) do
             backmap %{[changes/view view_ @_]}, view: view
 
             # ditto
@@ -771,7 +681,7 @@ module Rhodium
           %{[changes/view _ @cin_] (pulse @cin_ clear) -1},
           %{[changes/view _ @cin_] (cell/removed @cin_) -1},
         ) do
-          effect(document1, nodepath, node0) do
+          effect(document1, nodepath, node0, cursordepth) do
             backmap %{[changes/view view_ @_]}, %[{(view): ()}]
 
             # ditto
@@ -799,7 +709,7 @@ module Rhodium
 
         instance, complaints = Alloy.render_with_complaints(vars, template)
 
-        effect(document1, nodepath, node0) do
+        effect(document1, nodepath, node0, cursordepth) do
           if (complout = node0[:complaints]?) && ML.edge?(complout)
             complaints.each do |complaint|
               event :pulse, complout, complaint
@@ -841,7 +751,7 @@ module Rhodium
           %{[sensor pattern_ in tspace_ to @pout_] (stimuli tspace_ (pattern_) multiset_) -1},
           %{(sensor pattern_ in tspace_ to @pout_ ¦ _ selector_) (stimuli tspace_ (pattern_ selector_) multiset_) -1},
         ) do
-          effect(document1, nodepath, node0) do
+          effect(document1, nodepath, node0, cursordepth) do
             event :pulse, pout, multiset
 
             false
@@ -864,7 +774,7 @@ module Rhodium
           %{(button _ to @_ waiting @_ (_*) ¦ _ hover: true) (mouse press) _},
           %{(button _ as _ to @_ waiting @_ (_*) ¦ _ hover: true) (mouse press) _},
         ) do
-          effect(document1, nodepath, node0) do
+          effect(document1, nodepath, node0, cursordepth) do
             backmap %[{¦ -active_}], %[{active: true}]
 
             false
@@ -878,7 +788,7 @@ module Rhodium
           %{(button _ to @_ waiting @_ (_*) ¦ _ active: true) (mouse release) _},
           %{(button _ as _ to @_ waiting @_ (_*) ¦ _ active: true) (mouse release) _},
         ) do
-          effect(document1, nodepath, node0) do
+          effect(document1, nodepath, node0, cursordepth) do
             backmap %[(_* (_* ⏏M) ¦ _ active_)], %[{(active): (), M: (press)}]
 
             false
@@ -888,7 +798,7 @@ module Rhodium
         # 1 phase button
 
         givenpi %{[button _ as msg_ to @pout_ ((press) _*)] cycle _} do |msg|
-          effect(document1, nodepath, node0) do
+          effect(document1, nodepath, node0, cursordepth) do
             if ML.edge?(msg.not_nil!)
               msg = document0[Cells, msg]?
             end
@@ -901,7 +811,7 @@ module Rhodium
         end
 
         givenpi %{[button msg_ to @pout_ ((press) _*)] cycle _} do |msg|
-          effect(document1, nodepath, node0) do
+          effect(document1, nodepath, node0, cursordepth) do
             if ML.edge?(msg.not_nil!)
               msg = document0[Cells, msg]?
             end
@@ -917,7 +827,7 @@ module Rhodium
 
         # Down
         givenpi %{[button _ as msg_ to @pout_ waiting @_ ((press) _*)] cycle _} do |msg|
-          effect(document1, nodepath, node0) do
+          effect(document1, nodepath, node0, cursordepth) do
             if ML.edge?(msg.not_nil!)
               msg = document0[Cells, msg]?
             end
@@ -931,7 +841,7 @@ module Rhodium
 
         # Up
         givenpi %{[button _ as _ to @_ waiting @acks_ ((pressed) _*)] (pulse @acks_ _) _} do
-          effect(document1, nodepath, node0) do
+          effect(document1, nodepath, node0, cursordepth) do
             backmap %{[button _ as _ to @_ waiting _ (state_ _*)]}, %[{(state): ()}]
 
             false
@@ -940,7 +850,7 @@ module Rhodium
 
         # Down
         givenpi %{[button msg_ to @pout_ waiting @_ ((press) _*)] cycle _} do |msg|
-          effect(document1, nodepath, node0) do
+          effect(document1, nodepath, node0, cursordepth) do
             if ML.edge?(msg.not_nil!)
               msg = document0[Cells, msg]?
             end
@@ -955,7 +865,7 @@ module Rhodium
 
         # Up
         givenpi %{[button _ to @_ waiting @acks_ ((pressed) _*)] (pulse @acks_ _) _} do
-          effect(document1, nodepath, node0) do
+          effect(document1, nodepath, node0, cursordepth) do
             backmap %{[button _ to @_  waiting _ (state_ _*)]}, %[{(state): ()}]
 
             false
@@ -972,7 +882,7 @@ module Rhodium
           storage1 = storage1.with(index, value)
         end
 
-        effect(document1, nodepath, node0) do
+        effect(document1, nodepath, node0, cursordepth) do
           if storage1.size == pins.size
             event :pulse, pout, storage1
             storage1 = Term[]
@@ -985,7 +895,7 @@ module Rhodium
       end
 
       givenpi %{[sampler @cin_ on @pin_ to @pout_] (pulse @pin_ _) -1} do
-        effect(document1, nodepath, node0) do
+        effect(document1, nodepath, node0, cursordepth) do
           if value = document0[Cells, cin]?
             event :pulse, pout, value
           end
@@ -995,7 +905,7 @@ module Rhodium
       end
 
       givenpi %{[sampler cins←⟨@_⟩ on @pin_ to @pout_] (pulse @pin_ _) -1} do
-        effect(document1, nodepath, node0) do
+        effect(document1, nodepath, node0, cursordepth) do
           row = Term::Dict.build do |commit|
             cins.items.each do |cin|
               unless value = document0[Cells, cin]?
@@ -1013,7 +923,7 @@ module Rhodium
       end
 
       givenpi %{(log @pin_ in @cout_ ¦ _ limit⋮ 10) (pulse @pin_ term_) -1} do
-        effect(document1, nodepath, node0) do
+        effect(document1, nodepath, node0, cursordepth) do
           event :"assign/log", cout, term, limit
 
           false
@@ -1021,7 +931,7 @@ module Rhodium
       end
 
       givenpi %{(log @pin_ in (entries_*) ¦ _ limit: (%optional 10 limit←(%number (whole _) > 0))) (pulse @pin_ term_) _} do
-        effect(document1, nodepath, node0) do
+        effect(document1, nodepath, node0, cursordepth) do
           backmap ML.term(%{[log _ in (entries_*)]}), Term.of(Term[].with({:entries}, entries.rightmost(limit.to(Int32) - 1).append(term)))
 
           false
@@ -1029,7 +939,7 @@ module Rhodium
       end
 
       givenpi %{[latest @pin_ @cout_] (pulse @pin_ v_) -1} do
-        effect(document1, nodepath, node0) do
+        effect(document1, nodepath, node0, cursordepth) do
           event :assign, cout, v
 
           false
@@ -1038,7 +948,7 @@ module Rhodium
 
       givenpi %{[latest (@pin_ pattern_) (@cout_ form_)] (pulse @pin_ v_) -1} do
         if env = M1.match?(pattern, v)
-          effect(document1, nodepath, node0) do
+          effect(document1, nodepath, node0, cursordepth) do
             event :assign, cout, M1.bsubst(form, env)
 
             false
@@ -1054,7 +964,7 @@ module Rhodium
         %{[changes @cin_ to @pout_ as v_] (cell/created @cin_ _) -1},
         %{[changes @cin_ to @pout_ as v_] (cell/updated @cin_ _ _) -1},
       ) do
-        effect(document1, nodepath, node0) do
+        effect(document1, nodepath, node0, cursordepth) do
           event :pulse, pout, v
 
           false
@@ -1065,7 +975,7 @@ module Rhodium
         %{[initial @cin_ to @pout_] (cell/created @cin_ v_) -1},
         %{[initial @cin_ to @pout_ as v_] (cell/created @cin_ _) -1},
       ) do
-        effect(document1, nodepath, node0) do
+        effect(document1, nodepath, node0, cursordepth) do
           event :pulse, pout, v
 
           false
@@ -1074,7 +984,7 @@ module Rhodium
 
       # `blast`: inorder emission of items from lists received on `pin`.
       givenpi %{[blast @pin_ to @pout_] (pulse @pin_ list_dict) -1} do
-        effect(document1, nodepath, node0) do
+        effect(document1, nodepath, node0, cursordepth) do
           list.items.each do |item|
             event :pulse, pout, item
           end
@@ -1088,7 +998,7 @@ module Rhodium
           %{[bridge @pin_ to @pout_] (pulse @pin_ value_) -1},
           %{[bridge @pin_ as value_ to @pout_] (pulse @pin_ _) -1}
         ) do
-          effect(document1, nodepath, node0) do
+          effect(document1, nodepath, node0, cursordepth) do
             event :pulse, pout, value
 
             false
@@ -1100,7 +1010,7 @@ module Rhodium
             return document1, false
           end
 
-          effect(document1, nodepath, node0) do
+          effect(document1, nodepath, node0, cursordepth) do
             event :pulse, pout, matchee
 
             false
@@ -1112,7 +1022,7 @@ module Rhodium
             return document1, false
           end
 
-          effect(document1, nodepath, node0) do
+          effect(document1, nodepath, node0, cursordepth) do
             envs.each do |env|
               next unless value = env[key]?
 
@@ -1125,7 +1035,7 @@ module Rhodium
       end
 
       givenpi %{[echo @pin_] (pulse @pin_ e_) -1} do
-        effect(document1, nodepath, node0) do
+        effect(document1, nodepath, node0, cursordepth) do
           event e
 
           false
@@ -1133,7 +1043,7 @@ module Rhodium
       end
 
       givenpi %{[event e_] cycle -1} do
-        effect(document1, nodepath, node0) do
+        effect(document1, nodepath, node0, cursordepth) do
           event e
           backmap %[N_], %[{(N): ()}]
 
@@ -1144,7 +1054,7 @@ module Rhodium
       end
 
       givenpi %{[queue @pin_ to @_ in (_*) waiting @_] (pulse @pin_ value_) -1} do
-        effect(document1, nodepath, node0) do
+        effect(document1, nodepath, node0, cursordepth) do
           backmap %{[_ _ to _ in (_* ⏏back) waiting _]}, back: {:new, value}
 
           false
@@ -1152,7 +1062,7 @@ module Rhodium
       end
 
       givenpi %{[queue @_ to @pout_ in ((new value_) _*) waiting @_] cycle -1} do
-        effect(document1, nodepath, node0) do
+        effect(document1, nodepath, node0, cursordepth) do
           event :pulse, pout, value
           backmap %{[_ _ to _ in ((state_ _) _*) waiting _]}, state: :pending
 
@@ -1161,7 +1071,7 @@ module Rhodium
       end
 
       givenpi %{[queue @_ to @_ in ((pending _) _*) waiting @acks_] (pulse @acks_ _) -1} do
-        effect(document1, nodepath, node0) do
+        effect(document1, nodepath, node0, cursordepth) do
           backmap %{[_ _ to _ in (state_ _*) waiting _]}, %[{(state): ()}]
 
           false
@@ -1198,7 +1108,7 @@ module Rhodium
           env1 ||= env0
           env1 = env1.with(:_, input)
 
-          effect(document1, nodepath, node0) do
+          effect(document1, nodepath, node0, cursordepth) do
             change "#job": {program: body, env: env1}
 
             true
@@ -1207,7 +1117,7 @@ module Rhodium
 
         # Send feedback busy. Schedule job.
         givenpi %{(transform _* ¦ _ #shadow: _ #spec: {¦ in: @pin_} #job: job_) (initialize _) -1} do
-          effect(document1, nodepath, node0) do
+          effect(document1, nodepath, node0, cursordepth) do
             schedule job
 
             false
@@ -1216,7 +1126,7 @@ module Rhodium
 
         # Wait for the job to complete.
         givenpi %{(transform _* ¦ _ #shadow: _ #spec: {¦ in: @pin_, out: @pout_} #job: job_) (job/completed job_ result_) -1} do
-          effect(document1, nodepath, node0) do
+          effect(document1, nodepath, node0, cursordepth) do
             event :pulse, pout, result
             clear :"#job"
             disappear
@@ -1228,7 +1138,7 @@ module Rhodium
 
       # Stateful transform
       givenpi %{[transform (@pin_ to @pout_ with state_) body_] (initialize _) -1} do
-        effect(document1, nodepath, node0) do
+        effect(document1, nodepath, node0, cursordepth) do
           change "#shadow": {:"%literal", node0.itemspart}, "#spec": {in: pin, out: pout, state: state, body: body}
 
           true
@@ -1237,7 +1147,7 @@ module Rhodium
 
       # Stateless transform
       givenpi %{[transform (@pin_ to @pout_) body_] (initialize _) -1} do
-        effect(document1, nodepath, node0) do
+        effect(document1, nodepath, node0, cursordepth) do
           change "#shadow": {:"%literal", node0.itemspart}, "#spec": {in: pin, out: pout, body: body}
 
           true
@@ -1246,7 +1156,7 @@ module Rhodium
 
       # Stateless filter transform
       givenpi %{[transform (@pin_ pattern_ to @pout_) body_] (initialize _) -1} do
-        effect(document1, nodepath, node0) do
+        effect(document1, nodepath, node0, cursordepth) do
           change "#shadow": {:"%literal", node0.itemspart}, "#spec": {in: pin, out: pout, filter: pattern, body: body}
 
           true
@@ -1255,7 +1165,7 @@ module Rhodium
 
       # Stateful filter transform
       givenpi %{[transform (@pin_ pattern_ to @pout_ with state_) body_] (initialize _) -1} do
-        effect(document1, nodepath, node0) do
+        effect(document1, nodepath, node0, cursordepth) do
           change "#shadow": {:"%literal", node0.itemspart}, "#spec": {in: pin, out: pout, filter: pattern, state: state, body: body}
 
           true
@@ -1266,7 +1176,7 @@ module Rhodium
       begin
         # Initialize `absence` to newborn state.
         givenpi %{[absence @_ as _ to @_] (initialize _) -1} do
-          effect(document1, nodepath, node0) do
+          effect(document1, nodepath, node0, cursordepth) do
             change "#shadow": {:"%literal", node0.itemspart}, "#state": :newborn
 
             true
@@ -1276,7 +1186,7 @@ module Rhodium
         # Whenever we're in newborn state, on cycle, look around to see if the cell's
         # identity is in the population.
         givenpi %{(absence @cin_ as msg_ to @pout_ ¦ _ #shadow: _ #state: newborn) cycle -1} do
-          effect(document1, nodepath, node0) do
+          effect(document1, nodepath, node0, cursordepth) do
             if document0[Cells, cin]?
               change "#state": :paired
             else
@@ -1289,7 +1199,7 @@ module Rhodium
         end
 
         givenpi %{(absence @cin_ as msg_ to @pout_ ¦ _ #shadow: _ #state: paired) (cell/removed @cin_) -1} do
-          effect(document1, nodepath, node0) do
+          effect(document1, nodepath, node0, cursordepth) do
             event :pulse, pout, msg
             change "#state": :unpaired
 
@@ -1298,7 +1208,7 @@ module Rhodium
         end
 
         givenpi %{(absence @cin_ as _ to @_ ¦ _ #shadow: _ #state: unpaired) (cell/created @cin_ _) -1} do
-          effect(document1, nodepath, node0) do
+          effect(document1, nodepath, node0, cursordepth) do
             change "#state": :paired
 
             false
@@ -1311,7 +1221,7 @@ module Rhodium
       end
 
       givenpi %{[delay n←(%number +i32) _*] cycle _} do
-        effect(document1, nodepath, node0) do
+        effect(document1, nodepath, node0, cursordepth) do
           backmap %{[delay n_ _*]}, n: n - 1
 
           false
@@ -1323,7 +1233,7 @@ module Rhodium
       end
 
       givenpi %{[decay n←(%number +i32) _*] cycle _} do
-        effect(document1, nodepath, node0) do
+        effect(document1, nodepath, node0, cursordepth) do
           backmap %{[decay n_ _*]}, n: n - 1
 
           false
@@ -1332,7 +1242,7 @@ module Rhodium
 
       # `edit-cast`: converts pulse signal to root-centric edit broadcast.
       givenpi %{[edit-cast @pin_ to @bout_] (pulse @pin_ motion_) -1} do
-        effect(document1, nodepath, node0) do
+        effect(document1, nodepath, node0, cursordepth) do
           event :edit, bout, motion
 
           # Transition will be done at edit-time.
@@ -1342,8 +1252,8 @@ module Rhodium
 
       # `edit-cage`: converts pulse signal to children-centric non-broadcast (private) edit.
       givenpi %{[edit-cage for @pin_ children_*] (pulse @pin_ motion_) _} do
-        effect(document1, nodepath, node0) do
-          backmap ML.term(%{[_ _ _ children_*]}), Term[].with({:children}, edit(children, motion, edge: pin, smart: true)).upcast
+        effect(document1, nodepath, node0, cursordepth) do
+          backmap ML.term(%{[_ _ _ children_*]}), Term[].with({:children}, edit(children, motion, edge: pin)).upcast
 
           true
         end
@@ -1354,12 +1264,13 @@ module Rhodium
           next unless env = M1.match?(pattern, input)
 
           output = M1.bsubst(template, env)
-
-          return effect(document1, nodepath, node0) do
+          response = effect(document1, nodepath, node0, cursordepth) do
             event :pulse, pout, output
 
             false
           end
+
+          return response
         end
 
         {document1, false}
@@ -1386,7 +1297,7 @@ module Rhodium
         behind = parent.items(Term[range.begin], Term[pivot])
         ahead = parent.items(Term[pivot + 1], Term[range.end])
 
-        effect(document1, nodepath, node0) do
+        effect(document1, nodepath, node0, cursordepth) do
           event :pulse, views, {behind, ahead}
 
           false
@@ -1406,7 +1317,7 @@ module Rhodium
       # if users want periodicity they can construct feedback circuits. those are user-
       # content centric rather than related to D7 internals.
       givenpi %{[periodic e_] cycle -1} do
-        effect(document1, nodepath, node0) do
+        effect(document1, nodepath, node0, cursordepth) do
           event e
 
           false
@@ -1417,7 +1328,7 @@ module Rhodium
       # Any node can define mail: @pout_ attribute. If that's the case this rule
       # activates, helping the node consume events from its inbox.
       givenpi %[{¦ inbox: (msg_ _*) mail: @pout_} cycle -1] do
-        effect(document1, nodepath, node0) do
+        effect(document1, nodepath, node0, cursordepth) do
           if id = node0[:id]?
             event :pulse, pout, {:mail, msg, id}
           else
@@ -1436,7 +1347,7 @@ module Rhodium
       begin
         # Activate
         givenpi %[{¦ hover: true active: false} (mouse press) -1] do
-          effect(document1, nodepath, node0) do
+          effect(document1, nodepath, node0, cursordepth) do
             backmap %[{¦ active_}], %[{active: true}]
 
             false
@@ -1445,7 +1356,7 @@ module Rhodium
 
         # Deactivate & press
         givenpi %[{¦ active: true inbox_dict} (mouse release) -1] do
-          effect(document1, nodepath, node0) do
+          effect(document1, nodepath, node0, cursordepth) do
             backmap %[{¦ active_ inbox: [_* ⏏M]}], %[{active: false, M: (press)}]
 
             false
@@ -1479,11 +1390,35 @@ module Rhodium
     end
   end
 
+  # Returns the cursor category override for leaves of *node*. Returns `nil` if
+  # *node* defines no such override.
+  def cursor_category_override?(node : Term) : CursorCategory?
+    Term.case(node) do
+      matchpi %{[log @pin_ in (entries_*)]} do
+        CursorCategory::ImpassableDisplay
+      end
+
+      matchpi %{[cell _dict @_]} do
+        CursorCategory::ImpassableDisplay
+      end
+
+      matchpi %{[frag _dict @_]} do
+        CursorCategory::PassableDependent
+      end
+
+      matchpi %{[appearance value_dict in _symbol]} do
+        CursorCategory::ImpassableDisplay
+      end
+
+      otherwise { }
+    end
+  end
+
   # Yields identities of *node*, if any.
   #
   # Nodes with identity are interested in receiving initialize events.
-  def each_identity(node : Term, & : Term ->) : Nil
-    Term.case({node, cursordepth_in_node(node)}) do
+  def each_identity(node : Term, cursordepth : Int32, & : Term ->) : Nil
+    Term.case({node, cursordepth}) do
       givenpi(
         %{(cell _ @cout_) -1},
         %{(cell _ @cout_ for _) -1},
@@ -1601,7 +1536,7 @@ module Rhodium
 
   # Steps forward in time the document *document0*. Returns the resulting
   # document *document1* (the *successor* of *document0*).
-  def step(document0 : Term::Dict) : {Term::Dict, Bool}
+  def timestep(document0 : Term::Dict) : {Term::Dict, Bool}
     # First we have to exhaust all initialize events.
     initialize_queue = Q.of(document0, Initialize)
 
@@ -1642,11 +1577,24 @@ module Rhodium
 
     Term.case(event) do
       matchpi %{(edit @edge_ motion_)} do
-        edited = edit(Term.of(document1), motion, edge, smart: true)
+        subsumed = false
+
+        cursors = document0[Cursors, edge]? || Term[]
+        cursors.each_entry do |cursorpath, _|
+          cursor0 = document1.follow(cursorpath.items)
+          cursor1 = cursor0.morph({3, Tail, motion}, {:"#rep", (cursor0[:"#rep"]? || 0) + 1}) # FIXME: ?!
+          document1 = document1.where(cursorpath.items, eq: cursor1)
+          subsumed = true
+        end
+
+        if subsumed
+          document1 = ::rewrite(Term.of(document1), EDITR, env: Term[].with(:EDGE, edge))
+          document1 = document1.as_d? || raise "toplevel edit must produce a dict"
+        end
 
         # Edit is potentially destructive and not under our control; therefore it
-        # will always force a transition.
-        {edited.as_d? || raise("toplevel edit must produce a dict"), true}
+        # will always force a transition if subsumption succeeded.
+        {document1, subsumed}
       end
 
       matchpi %{cycle} do
@@ -1711,10 +1659,11 @@ module Rhodium
 
     while successor?(document1, nodepath)
       node = follow(document1, nodepath)
+      cursordepth = cursordepth_in_node(document1, nodepath)
 
       # Ask each node for its identity. If it has one, we do this population thing.
       # It it does not, we ignore the node and move on.
-      each_identity(node) do |identity|
+      each_identity(node, cursordepth) do |identity|
         if identity.in?(population0)
           # Prolong
           population0 = population0.without(identity)
@@ -1746,6 +1695,391 @@ module Rhodium
     document2.morph({Population, population1})
   end
 
+  # Returns the timestep step function of Rhodium.
+  def timestep : D7::Step
+    D7::Step.new do |document0, log|
+      log.append { Term.of(:input, :"rhodium/timestep", :step, document0) }
+      document1, transition_vote = timestep(document0)
+      log.append { Term.of(:output, :"rhodium/timestep", :step, document1) }
+      {document1, transition_vote}
+    end
+  end
+end
+
+module Rhodium
+  # NOTE: Categories are arranged ascending; higher number value means more
+  # preferred, lower number value means less preferred.
+  enum CursorCategory : UInt8
+    # Nodes such as `log` or `cell` have cursors located within
+    # them tagged with `ImpassableDisplay`.
+    ImpassableDisplay
+
+    # Nodes such as `frag` have cursors located within them tagged
+    # as `PassableDependent`.
+    PassableDependent
+
+    # Cursors located at an impassable spot in the document are tagged
+    # as `Impassable`.
+    Impassable
+
+    # Cursors located at a passable spot in the document are tagged
+    # as `PassableIndependent`.
+    PassableIndependent
+  end
+
+  # :nodoc:
+  SYM_CURSOR = Term[:|]
+
+  # :nodoc:
+  CURSORPE = M1.operator(ML.term(%{(_string (%any° | [| _string]) _string (_*) @edge_ ¦ _ #rep: (%optional 0 rep←(%number +i32)))}))
+
+  # :nodoc:
+  CURSOR_EDGE_USER = Term.of(:edge, :user)
+
+  record Cursor, edge : Term, category : CursorCategory, keypath : Term::Dict, rep : Int32 do
+    include Comparable(Cursor)
+
+    # :nodoc:
+    def score
+      {rep, category, -keypath.size}
+    end
+
+    # Compares two cursors.
+    #
+    # - Cursors are compared by reputation. Highest reputation wins.
+    # - Cursors are compared by category. Highest category wins.
+    # - Ties in category @user are broken by depth. Shallowest cursor wins.
+    # - Ties in depth are resolved "randomly" (i.e. it is an implementation detail)
+    def <=>(other : Cursor)
+      score <=> other.score
+    end
+
+    # Returns `true` if this cursor is controlled by the user.
+    def user? : Bool
+      edge == CURSOR_EDGE_USER
+    end
+  end
+
+  # Calls *fn* with information about each of the cursors in *term*.
+  #
+  # "Information" here means the following tuple:
+  #
+  # ```text
+  # {cursor edge, keypath to cursor, cursor reputation, is the cursor in the pairspart?}
+  # ```
+  #
+  # - *path* can be used to specify prefix keypath.
+  # - *skip self* can be set to `true` to skip *term* itself on the very first
+  #   call. This is useful if you already know that *term* is not a cursor.
+  def each_cursor_info(term : Term, *,
+                       path = Term[],
+                       skip_self : Bool = false,
+                       pppath : Bool = false,
+                       &fn : Term, Term::Dict, Int32, Bool ->) : Nil
+    return unless dict = term.as_d?
+    return unless dict.probably_includes?(SYM_CURSOR)
+
+    if !skip_self && (env = M1::Operator.match?(Term[], CURSORPE, term))
+      fn.call(env[:edge], path, env[:rep].to(Int32), pppath)
+      return
+    end
+
+    dict.each_item_with_index do |item, index|
+      each_cursor_info(item, path: path.append(index), pppath: pppath, &fn)
+    end
+
+    dict.each_pair do |key, value|
+      each_cursor_info(value, path: path.append(key), pppath: true, &fn)
+    end
+  end
+
+  # Maps out the cursors in *document*. Returns an array of them.
+  def cursors(document : Term::Dict) : Array(Cursor)
+    descend = true
+    cursors = [] of Cursor
+    nodepath = Stack(Int32).new
+
+    while successor?(document, nodepath, descend: descend)
+      descend = true
+
+      node = follow(document, nodepath)
+
+      # Fast path
+      next unless node.probably_includes?(SYM_CURSOR)
+
+      if env = M1::Operator.match?(Term[], CURSORPE, node)
+        cursors << Cursor.new(
+          edge: env[:edge],
+          category: CursorCategory::PassableIndependent,
+          keypath: Term[nodepath],
+          rep: env[:rep].to(Int32),
+        )
+        next
+      end
+
+      # Do not descend to successors if category was overridden by the node.
+      # This means the node wants all of its children nodes & cursors in them
+      # to be of that category; we don't need to descend.
+      if category_ = cursor_category_override?(node)
+        descend = false
+      end
+
+      category = category_ || CursorCategory::Impassable
+
+      each_cursor_info(node, skip_self: true, path: Term[nodepath]) do |edge, cursorpath, rep, pppath|
+        if pppath
+          # Cursors within the pairspart at any depth are tagged simply
+          # as Impassable.
+          cursors << Cursor.new(edge, CursorCategory::Impassable, cursorpath, rep)
+          next
+        end
+
+        cursors << Cursor.new(edge, category, cursorpath, rep)
+      end
+    end
+
+    cursors
+  end
+
+  @[Flags]
+  enum CursordepthConfig : UInt8
+    # Visit the itemspart of dictionaries.
+    Items
+
+    # Visit the shadow pairspart of dictionaries.
+    PairsShadow
+
+    # Visit the nonshadow pairspart of dictionaries.
+    PairsNonshadow
+
+    # When visiting deep itemspart, consider the items there as those of the node
+    # on which cursordepth() was called. If a deep item is a cursor, this
+    # will result in `1` being returned as if the cursor was a direct item of
+    # the original node.
+    AdoptInDeepItems
+
+    # When visiting deep pairspart, consider the pairs there as those of the node
+    # on which cursordepth() was called. If a deep pair is a cursor, this
+    # will result in `1` being returned as if the cursor was a direct pair of
+    # the original node.
+    AdoptInDeepPairs
+
+    def each(dict : Term::Dict, & : Term ->) : Nil
+      if items?
+        dict.each_item_unordered { |item| yield item }
+      end
+
+      if pairs_shadow? && pairs_nonshadow?
+        dict.each_entry { |_, value| yield value }
+      elsif pairs_shadow?
+        dict.each_entry do |key, value|
+          next unless Rhodium.shadow?(key)
+          yield value
+        end
+      elsif pairs_nonshadow?
+        dict.each_entry do |key, value|
+          next if Rhodium.shadow?(key)
+          yield value
+        end
+      end
+    end
+
+    def satisfied?(cursorpath : Term::Dict) : Bool
+      cursorpath.each_item_unordered do |key|
+        unless items?
+          # Reject if there are indices in the path.
+          return false if key.natural?
+        end
+
+        unless pairs_shadow?
+          # Reject if there are shadow pairs in the path.
+          return false if Rhodium.shadow?(key)
+        end
+
+        unless pairs_nonshadow?
+          # Reject if there are nonshadow pairs in the path.
+
+          return false if !Rhodium.index?(key) && Rhodium.nonshadow?(key)
+        end
+      end
+
+      true
+    end
+  end
+
+  private def cursordepth0(dict : Term::Dict, depth : Int32, config : CursordepthConfig) : Int32
+    unless dict.probably_includes?(SYM_CURSOR)
+      return Int32::MAX
+    end
+
+    if M1::Operator.probe?(Term[], CURSORP, Term.of(dict))
+      return depth
+    end
+
+    mindepth = Int32::MAX
+
+    config.each(dict) do |child|
+      next unless child = child.as_d?
+
+      subdepth = cursordepth0(child, depth + 1, config)
+      mindepth = subdepth if subdepth < mindepth
+    end
+
+    mindepth
+  end
+
+  # FIXME: a natural key doesn't always mean it's an item. This must be
+  # a bit more elaborate & check if key is in parent's itemspart.
+  protected def index?(key : Term) : Bool
+    key.natural?
+  end
+
+  protected def pair?(key : Term) : Bool
+    !index?(key)
+  end
+
+  # Returns the depth at which the cursor is found in *term*.
+  #
+  # - If *term* is the cursor returns `0`.
+  # - If the cursor is contained in one of *term*'s entries returns `1`,
+  #   if in one of *term*'s entry entries, `2`, and so on.
+  # - If there are no cursors in *term* returns `-1`.
+  #
+  # See also: `CursordepthConfig`.
+  #
+  # If there are multiple cursors in *node*, returns the *minimum* depth of one
+  # in the itemspart; or if there is no cursor there, then the minimum depth of
+  # one in the pairspart.
+  def cursordepth(term : Term, *, config : CursordepthConfig = CursordepthConfig::Items) : Int32
+    return -1 unless dict = term.as_d?
+
+    itemsdepth = cursordepth0(dict.itemspart, 0, config)
+    if itemsdepth < Int32::MAX
+      return config.adopt_in_deep_items? && itemsdepth > 1 ? 1 : itemsdepth
+    end
+
+    pairsdepth = cursordepth0(dict.pairspart, 0, config)
+    if pairsdepth < Int32::MAX
+      return config.adopt_in_deep_pairs? && pairsdepth > 1 ? 1 : pairsdepth
+    end
+
+    -1
+  end
+
+  # Similar to the other overload in terms of the interface & response, but works off
+  # of a *nodepath* into the given *document* rather than off of an arbitrary term.
+  #
+  # Semantically, however, this cursordepth overload is slightly different from
+  # the other one; in that it uses information from the document's `cursorstep`
+  # to determine whether a cursor that is indeed found at the pointed-to node,
+  # is a cursor that can be targeted by `edit`s.
+  #
+  # If it is such a cursor, it is "seen" by this overload and taken into account.
+  # On the other hand, if the cursor cannot be targeted by `edit`s according to
+  # `cursorstep`, this overload will ignore it and move on.
+  #
+  # Another difference is that this overload returns the minimum cursor depth
+  # for both items and pairs simultaneously; not items and pairs in sequence
+  # like the other overload.
+  def cursordepth(document : Term::Dict, nodepath : Stack(Int32), *, config : CursordepthConfig = CursordepthConfig::Items) : Int32
+    mindepth = Int32::MAX
+
+    cursors = document[Cursors]? || Term[]
+    cursors.each_entry do |_, cursorpaths|
+      cursorpaths.each_entry do |cursorpath, _|
+        next unless cursorpath = cursorpath.as_d?
+        next unless cursorpath.items.starts_with?(nodepath) { |key, index| key == Term[index] }
+
+        # Nodepath points to the cursor.
+        if cursorpath.size == nodepath.size
+          return 0
+        end
+
+        next unless config.satisfied?(cursorpath)
+
+        # Check if we have an all-items path, if we do, then adopt (deep item).
+        if config.adopt_in_deep_items? && cursorpath.items.move(nodepath.size).all? { |key| index?(key) }
+          return 1 # No point in searching further
+        end
+
+        # Check if we have a path that goes into a pair. If we do, then adopt
+        # (deep pair).
+        if config.adopt_in_deep_pairs? && cursorpath.items.move(nodepath.size).any? { |key| pair?(key) }
+          return 1 # No point in searching further
+        end
+
+        mindepth = Math.min(mindepth || 0, cursorpath.size - nodepath.size)
+      end
+    end
+
+    mindepth == Int32::MAX ? -1 : mindepth
+  end
+
+  # Shorthand for calling `cursordepth` with config preferred by Rhodium nodes.
+  def cursordepth_in_node(*args, **kwargs) : Int32
+    cursordepth(*args, config: CursordepthConfig.new({:items, :pairs_nonshadow, :adopt_in_deep_pairs}))
+  end
+
+  # Checks whether a cursor is contained in the term/node provided in *args*,
+  # using the config preferred by Rhodium nodes.
+  #
+  # Delegates to one of the two `cursordepth` implementations, see them to
+  # learn more about arguments etc.
+  def cursor_in_node?(*args, **kwargs) : Bool
+    # NOTE: we also adopt in deep items here since we're only interested in
+    # whether the cursor is there; not about how deep it is; so we're in effect
+    # allowing an early exit to the cursordepth implementation.
+    config = CursordepthConfig.new({:items, :pairs_nonshadow, :adopt_in_deep_items, :adopt_in_deep_pairs})
+
+    cursordepth(*args, **kwargs, config: config) != -1
+  end
+
+  # Recomputes the `#cursors` shadow attribute of *document0* based on cursors
+  # in it. Returns the resulting document *document1*.
+  def cursorstep(document0 : Term::Dict) : {Term::Dict, Bool}
+    document1 = document0
+
+    cursors = cursors(document0)
+    users, others = cursors.partition(&.user?)
+
+    targets0 = document0[Cursors]?
+    targets1 = Term[]
+
+    # Only target @user cursor with the highest score.
+    if cursor = users.max?
+      targets1 = targets1.morph({cursor.edge, cursor.keypath, true})
+    end
+
+    others.each do |cursor|
+      targets1 = targets1.morph({cursor.edge, cursor.keypath, true})
+    end
+
+    # If nothing changed, do not trigger a transition. Transitions are fairly
+    # expensive, certainly more expensive than an equality check.
+    if targets0 == targets1
+      return document1, false
+    end
+
+    {document1.morph({Cursors, targets1}), true}
+  end
+
+  # Returns the cursorstep step function of Rhodium.
+  def cursorstep : D7::Step
+    D7::Step.new do |document0, log|
+      log.append { Term.of(:input, :"rhodium/cursorstep", :step, document0) }
+      document1, transition_vote = cursorstep(document0)
+      log.append { Term.of(:output, :"rhodium/cursorstep", :step, document1) }
+      {document1, transition_vote}
+    end
+  end
+end
+
+module Rhodium
+  # Returns the step function for `Rhodium`.
+  def step : D7::Step
+    D7.steps(cursorstep, timestep)
+  end
+
   # Returns the transition function for `Rhodium`.
   def transition : D7::Transition
     D7::Transition.new do |document0, document1, log|
@@ -1753,16 +2087,6 @@ module Rhodium
       document1 = transition(document0, document1)
       log.append { Term.of(:output, :rhodium, :transition, document1) }
       document1
-    end
-  end
-
-  # Returns the step function for `Rhodium`.
-  def step : D7::Step
-    D7::Step.new do |document0, log|
-      log.append { Term.of(:input, :rhodium, :step, document0) }
-      document1, transition_vote = step(document0)
-      log.append { Term.of(:output, :rhodium, :step, document1) }
-      {document1, transition_vote}
     end
   end
 end
@@ -2021,6 +2345,10 @@ module D7
   # Chains steps *a*, *b* and so on.
   def steps(a : Step, b : Step, *cs : Step) : Step
     steps(steps(a, b), *cs)
+  end
+
+  def steps(a : Step) : Step
+    a
   end
 
   # Chains transitions *a* and *b*.
@@ -2301,28 +2629,38 @@ observe = ->(entry : Term) do
 end
 
 # doc0 = ML.terms <<-WWML
-# (cell @count for _number)
-#    (changes @count to @log)
-#    (absence @count as "Missing" to @log)
-#    (log @log in ())
-#    (event (assign @count 100))
+#  ("" | "" () @cursor)
+#  (delay 0 (event (edit @cursor (input "("))))
+#  (delay 1 (event (edit @cursor (input "cell"))))
+#  (delay 2 (event (edit @cursor (input " "))))
+#  (delay 3 (event (edit @cursor (input "0"))))
+#  (delay 4 (event (edit @cursor (input " "))))
+#  (delay 5 (event (edit @cursor (input "@x"))))
+#  (delay 6 (event (edit @cursor (key enter))))
+#  (delay 7 (event (edit @cursor (key right))))
+#  (changes @x to @xs)
+#  (log @xs in ())
+
 # WWML
 
-# nctx = Nitrene::StepContext.new
+# # nctx = Nitrene::StepContext.new
 # initial = true
 
 # while true
 #   doc0 = D7.run(doc0.as_d,
 #     log: D7::Log::Fn.new(observe),
 #     transition: Rhodium.transition,
-#     step: D7.steps(Rhodium.step, Nitrene.step(nctx)),
+#     step: D7.steps(Rhodium.step),
 #     goal: D7::Goal.none,
 #     initial: initial,
 #   )
 #   initial = false
+#   break
 
-#   break unless nctx.wait?
+#   # break unless nctx.wait?
 # end
+# pp doc0
+# pp Rhodium.cursordepth_in_node(doc0, Stack(Int32).new)
 
 # puts D7.run_until_equal?(doc0.as_d, doc1.as_d, log: D7::Log::Fn.new(observe), limit: 128)
 

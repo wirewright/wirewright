@@ -2094,6 +2094,20 @@ class Channel
   end
 end
 
+module Indexable(T)
+  def starts_with?(other : Indexable(U), & : T, U -> Bool) : Bool forall U
+    return false unless size >= other.size
+
+    other.each_with_index do |b, index|
+      a = unsafe_fetch(index)
+
+      return false unless yield a, b
+    end
+
+    true
+  end
+end
+
 struct Slice(T)
   def self.with(*objects)
     Slice(T).new(objects.size, read_only: true) { |index| objects[index].as(T) }
