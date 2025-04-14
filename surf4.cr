@@ -29,9 +29,6 @@ module IMultiset(T)
   include ISet(T)
 end
 
-module IDecay
-end
-
 module IChat(M)
   alias Unsubscribe = ->
 
@@ -1645,6 +1642,9 @@ struct Tspace
     def info : SensorInfo
       SensorInfo.new(conid, grpid, slot)
     end
+
+    # Two sensors are hashed and compared by their grpid's.
+    def_equals_and_hash grpid
   end
 
   defcase Appearance,
@@ -1669,6 +1669,9 @@ struct Tspace
     def info : AppearanceInfo
       AppearanceInfo.new(conid, slot, subject.value)
     end
+
+    # Two appearances are hashed and compared by their instants.
+    def_equals_and_hash instant
   end
 
   def initialize(@set : ISet(Atom))
@@ -1799,14 +1802,14 @@ end
 
 # Keepalive objects are companion objects of `Tconn` that manage the insertion
 # and removal of atoms.
-module Tkeepalive
+module Keepalive
   abstract def schedule(tid : Label, atoms : AtomArray) : Nil
   abstract def cancel : Nil
   abstract def cancel(tid : Label) : Nil
 end
 
-class Tkeepalive::None
-  include Tkeepalive
+class Keepalive::None
+  include Keepalive
 
   def initialize
     @atoms = {} of Label => AtomArray
@@ -1837,8 +1840,8 @@ end
 # With continuous keepalive, each atom is assigned to a millisecond in the user-
 # specified interval. When it's the millisecond's turn the atoms assigned to that
 # millisecond are reinserted.
-class Tkeepalive::Continuous
-  include Tkeepalive
+class Keepalive::Continuous
+  include Keepalive
 
   Log = ::Log.for(self)
 
@@ -1983,7 +1986,7 @@ class Tkeepalive::Continuous
   end
 
   private def mainloop : Nil
-    Log.trace { "keepalive mainloop started" }
+    Log.debug { "keepalive mainloop started" }
 
     while true
       reinserts, removals = @lock.synchronize do
@@ -2095,6 +2098,100 @@ class Tkeepalive::Continuous
     @lock.synchronize { @removals << atoms }
 
     run_unless_running
+  end
+end
+
+# Includers are companion objects of `Tconn` responsible for scheduling and
+# executing *relook* for sensors.
+#
+# *relook* is necessary to detect appearances that "died unexpectedly", or are
+# otherwise unable to report about their demise. Relook, which is basically "close
+# your eyes and open them again, noting what changed" -- but for sensors; solves
+# this issue.
+#
+# Includers of `Relook` are internal objects that you most likely should not be
+# creating manually. See `Tconn::Sensor` for a user-facing interface to `Relook`.
+module Relook
+  # Schedules a relook task for *sensor* surface on *conn*'s *slot*. *period*
+  # is the period of the relook task.
+  abstract def schedule(conn : Tconn, slot : Slot, sensor : Tspace::Sensor, period : Time::Span) : Nil
+
+  # Issues a targeted close of *sensor*'s relook task. Noop if such a task
+  # was not scheduled.
+  abstract def cancel(sensor : Tspace::Sensor) : Nil
+
+  # Cancels all relook tasks. This method may only be called once. This relook
+  # object will be unusable after that.
+  abstract def cancel : Nil
+end
+
+# Noop relook implementation.
+class Relook::None
+  include Relook
+
+  def schedule(conn : Tconn, slot : Slot, sensor : Tspace::Sensor, period : Time::Span) : Nil
+  end
+
+  def cancel(sensor : Tspace::Sensor) : Nil
+  end
+
+  def cancel : Nil
+  end
+end
+
+# Periodic relook implementation. Spawns a fiber per sensor, which calls
+# `Tconn#relook` for that sensor periodically.
+class Relook::Periodic
+  include Relook
+
+  Log = ::Log.for(self)
+
+  def initialize
+    @fibers = Fiber::ExecutionContext::SingleThreaded.new("periodic relook")
+    @cancel = Channel(Nil).new
+
+    @stopswitches = {} of Tspace::Sensor => Channel(Nil)
+    @lock = Mutex.new
+  end
+
+  def schedule(conn : Tconn, slot : Slot, sensor : Tspace::Sensor, period : Time::Span) : Nil
+    stopswitch = Channel(Nil).new
+
+    @lock.synchronize do
+      @stopswitches[sensor] = stopswitch
+    end
+
+    @fibers.spawn do
+      Log.trace { "started relook fiber for #{sensor} with period=#{period}" }
+
+      while true
+        select
+        when @cancel.receive?
+          Log.trace { "stopped relook fiber for #{sensor} due to global cancel" }
+          break
+        when stopswitch.receive?
+          Log.trace { "stopped relook fiber for #{sensor} due to directed cancel" }
+          break
+        when timeout(period)
+          unless conn.relook?(slot, sensor)
+            Log.trace { "stopped relook fiber for #{sensor} due to failed relook" }
+            break
+          end
+        end
+      end
+    ensure
+      @lock.synchronize { @stopswitches.delete(sensor) }
+    end
+  end
+
+  def cancel(sensor : Tspace::Sensor) : Nil
+    return unless chan = @lock.synchronize { @stopswitches[sensor]? }
+
+    chan.close
+  end
+
+  def cancel : Nil
+    @cancel.close
   end
 end
 
@@ -2265,7 +2362,7 @@ class Tconn
 
   alias Spec = Sensor | Appearance
 
-  record Sensor, pattern : Term, secret : Term? do
+  record Sensor, pattern : Term, secret : Term? = nil, relook : Time::Span? = nil do
     def inspect(io)
       io << "Sensor["
       ML.compact(io, pattern)
@@ -2279,12 +2376,12 @@ class Tconn
     end
   end
 
-  record Appearance, value : Term, secret : Term? do
+  record Appearance, value : Term, secret : Term? = nil do
     def inspect(io)
       io << "Appearance["
       ML.compact(io, value)
       if secret_ = secret
-        io << ":/"
+        io << "::"
         ML.compact(io, secret_)
       else
         io << ":public"
@@ -2301,7 +2398,8 @@ class Tconn
                  @chat : IChat(Activation),
                  @sink : (Tview ->),
                  @fresh : LabelGenerator = WWID,
-                 @keepalive : Tkeepalive = Tkeepalive::None.new)
+                 @keepalive : Keepalive = Keepalive::None.new,
+                 @relook : Relook = Relook::None.new)
     @conid = @fresh.call
     @surfaces = {} of Slot => Tspace::Surface
     @view = Tview::EMPTY
@@ -2311,13 +2409,13 @@ class Tconn
   end
 
   # Convenience method to construct a `Sensor` surface.
-  def self.sensor(pattern : Term, *, secret : Term? = nil) : Sensor
-    Sensor.new(pattern, secret)
+  def self.sensor(*args, **kwargs) : Sensor
+    Sensor.new(*args, **kwargs)
   end
 
   # Convenience method to construct an `Appearance` surface.
-  def self.appearance(value : Term, *, secret : Term? = nil) : Appearance
-    Appearance.new(value, secret)
+  def self.appearance(*args, **kwargs) : Appearance
+    Appearance.new(*args, **kwargs)
   end
 
   # Returns the `Tspace` object with which this map connection works.
@@ -2325,10 +2423,9 @@ class Tconn
     Tspace.new(@set)
   end
 
-  # TODO: while we're doing **anything** with tmap, we should use the queue
-  # for activations instead of calling sink!!
+  # FIXME: apparently everything here must be thread safe!!!!
 
-  private def relook(& : Tview -> Tview) : Nil
+  private def review(& : Tview -> Tview) : Nil
     view0 = @view
     view1 = yield view0
     return if view0.same?(view1)
@@ -2343,7 +2440,7 @@ class Tconn
     case surface
     in Tspace::Sensor
       # Make sure the sensor is gone from the view.
-      relook &.without(slot)
+      review &.without(slot)
 
       if cancel
         @keepalive.cancel(surface.grpid)
@@ -2449,7 +2546,7 @@ class Tconn
 
     return unless changed
 
-    relook { view1 }
+    review { view1 }
   end
 
   private def assert_open : Nil
@@ -2458,12 +2555,42 @@ class Tconn
     end
   end
 
+  # :nodoc:
+  #
+  # WARNING: this method is **always** called from another fiber.
+  def relook?(slot : Slot, sensor : Tspace::Sensor) : Bool
+    unless @open
+      Log.debug { "cancel relook on @#{slot}: conn is closed" }
+      return false
+    end
+
+    # Make sure the surface is still there.
+    unless surface = @surfaces[slot]?
+      Log.debug { "cancel relook on @#{slot}: surface absent" }
+      return false
+    end
+
+    # Make sure it's the same sensor.
+    unless surface.same?(sensor)
+      Log.debug { "cancel relook on @#{slot}: different sensor" }
+      return false
+    end
+
+    # Remove the sensor's view and refresh.
+    @view = @view.without(slot)
+
+    refresh!(sensor, as: :stimulus_presence)
+
+    true
+  end
+
   def close : Nil
     assert_open
 
     @open = false
     @unsubscribe.call
     @keepalive.cancel
+    @relook.cancel
     @surfaces.each { |slot, surface| delete!(slot, surface, cancel: false) }
     @surfaces.clear
   end
@@ -2475,6 +2602,10 @@ class Tconn
 
     surface0 = delete?(slot)
     surface1 = insert!(slot, spec, grpid)
+
+    if spec.is_a?(Sensor) && (period = spec.relook)
+      @relook.schedule(self, slot, surface1, period)
+    end
 
     if surface0.is_a?(Tspace::Appearance)
       # Make sure to notify anybody interested in the appearance's demise.
@@ -2494,18 +2625,7 @@ class Tconn
     spec
   end
 
-  def refresh(slot : Slot) : Nil
-    assert_open
-
-    unless surface = @surfaces[slot]?
-      Log.warn { "attempt to refresh surface at absent slot: @#{slot}" }
-      return
-    end
-
-    refresh!(surface, as: :stimulus_presence)
-  end
-
-  def delete(slot : Slot) : Spec?
+  def delete(slot : Slot) : Nil
     assert_open
 
     unless surface = @surfaces.delete(slot)
@@ -2513,21 +2633,32 @@ class Tconn
       return
     end
 
+    if surface.is_a?(Tspace::Sensor)
+      @relook.cancel(surface)
+    end
+
     delete!(slot, surface)
 
     if surface.is_a?(Tspace::Appearance)
       refresh!(surface, as: :stimulus_absence)
     end
-
-    case surface
-    in Tspace::Sensor
-      Sensor.new(surface.pattern, surface.secret)
-    in Tspace::Appearance
-      Appearance.new(surface.value, surface.secret)
-    end
   end
 end
 
+{% skip_file %}
+
+set = SyncInMemoryMultiset(Tspace::Atom).new
+chat = SyncInMemoryChat(Activation).new
+map = Tconn.new(set, chat, ->(v : Tview) { pp v }, relook: Relook::Periodic.new)
+map[0] = Tconn.sensor(ML.term(%{((%any + -) x_number y_number)}), relook: 10.seconds)
+sleep 3.seconds
+map[1] = Tconn.appearance(Term.of(:+, 1, 2))
+sleep 3.seconds
+map.delete(1)
+sleep 3.seconds
+map.delete(0)
+
+sleep
 {% skip_file %}
 
 # With brotli, atom cost = 1 953 287
@@ -2592,7 +2723,7 @@ map.delete(1)
 sleep 1.second
 pp set.size?
 
-# TODO: thread safety of Tconn<>IChat activation queue
+# TODO: thread safety of Tconn<>IChat, Tconn<>Relook
 # TODO: sensors must have a user-configurable refresh rate to observe missing appearances
 #   & appearances that were removed before the sensor was inserted, but did not decay
 #   until after the sensor was inserted.
@@ -2603,6 +2734,12 @@ pp set.size?
 #   on remote stuff in D7/soma. p2p can wait.
 # TODO: use this in soma
 # TODO: move ready stuff to src/, replace/remove old files
+#
+# TODO: ensure each Tconn has its own, unique Keepalive
+# TODO: compute Keepalive interval based on the number of atoms. The more
+#  atoms the longer the period, so that keepalive is spread out. If we have
+#  millions of atoms it's better to have minutes-long interval so that we don't
+#  overwhelm the network/etc.
 #
 # TODO: implement "lightweight" or "stateless" sensors that do not commit themselves
 #   to the view. Such sensors are provided as a way to disable periodic refresh. In
