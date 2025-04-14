@@ -387,16 +387,17 @@ def tspace(flow : Term::Dict, & : Term, Term ->)
   conns = {} of Term => Tconn
   lslots = {} of {Term, Term} => Slot
   rslots = {} of Slot => Term
-  view = Term[]
+  views = Atomic(Term::Dict).new(Term[])
 
   flow.items.each do |step|
     Term.matchpi?(step, %{(conn conn-name_symbol children_*)}) do
       conns.put_if_absent(conn_name) do
-        sink = Tconn::Sink.new do |connview|
+        observer = Tconn::Observer.new do |connview|
           view = connview.dict_multisets
+          views.set(views.get.with(conn_name, view))
         end
 
-        Tconn.new(set, chat, sink)
+        Tconn.new(set, chat, observer)
       end
 
       children.each_item_unordered do |child|
@@ -439,6 +440,7 @@ def tspace(flow : Term::Dict, & : Term, Term ->)
 
           matchpi %{(view expected_)} do
             seeing = Term::Dict.build do |commit|
+              view = views.get[conn_name]? || Term[]
               view.each_entry do |slot, multiset|
                 # Map numeric identities to original surface names (symbols).
                 commit.with(rslots[slot.to(Slot)], multiset)

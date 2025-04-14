@@ -2305,10 +2305,10 @@ class Tview
 
   private def_change
 
-  def without(slot : Slot) : Tview
+  def without(slot : Slot) : {Tview, Bool}
     view0 = @view
     view1 = @view.dissoc(slot)
-    view0.same?(view1) ? self : change(view: view1)
+    view0.same?(view1) ? {self, false} : {change(view: view1), true}
   end
 
   def next(pattern : Term, act : Activation) : {Tview, Bool}
@@ -2353,12 +2353,9 @@ end
 # the same `Tconn` from different threads/fibers. This will not work and will
 # lead to cryptic bugs.
 class Tconn
-  alias Sink = Tview ->
+  alias Observer = Tview ->
 
   Log = ::Log.for(self)
-
-  class ClosedError < Exception
-  end
 
   alias Spec = Sensor | Appearance
 
@@ -2396,16 +2393,16 @@ class Tconn
 
   def initialize(@set : ISet(Tspace::Atom),
                  @chat : IChat(Activation),
-                 @sink : (Tview ->),
+                 @observer : Observer,
                  @fresh : LabelGenerator = WWID,
                  @keepalive : Keepalive = Keepalive::None.new,
                  @relook : Relook = Relook::None.new)
     @conid = @fresh.call
-    @surfaces = {} of Slot => Tspace::Surface
-    @view = Tview::EMPTY
-    @open = true
-
     @unsubscribe = @chat.subscribe(@conid, &->receive(Activation))
+
+    @view = Tview::EMPTY
+    @surfaces = {} of Slot => Tspace::Surface
+    @lock = Mutex.new
   end
 
   # Convenience method to construct a `Sensor` surface.
@@ -2423,82 +2420,128 @@ class Tconn
     Tspace.new(@set)
   end
 
-  # FIXME: apparently everything here must be thread safe!!!!
+  # Closes this connection and terminates all fibers associated with it.
+  #
+  # This method can only be called once; the connection will be in an expended
+  # state afterwards. Thus after calling this method, you should dispose of
+  # the connection as soon as possible.
+  def close : Nil
+    @lock.synchronize do
+      @surfaces.clear
+      @view = Tview::EMPTY
+      @observer.call(@view)
+    end
 
-  private def review(& : Tview -> Tview) : Nil
-    view0 = @view
-    view1 = yield view0
-    return if view0.same?(view1)
-
-    @view = view1
-    @sink.call(view1)
+    @unsubscribe.call
+    @keepalive.cancel
+    @relook.cancel
   end
 
-  private def delete!(slot : Slot, surface : Tspace::Surface, *, cancel : Bool = true) : Nil
-    Log.trace { "#{@conid}: initiate delete of surface @#{slot}" }
+  # :nodoc:
+  #
+  # This is an internal method called by the `Relook` companion of this
+  # connection when it wants the connection to "refresh" a specific
+  # sensor's view.
+  def relook?(slot : Slot, sensor : Tspace::Sensor) : Bool
+    clear(slot, sensor)
+    refresh(sensor, as: :stimulus_presence)
+
+    true
+  end
+
+  # Updates or inserts *spec* at the given *slot*. Returns *spec*.
+  def []=(slot : Slot, spec : Spec) : Spec
+    grpid = @fresh.call
+
+    if surface0 = unregister?(slot)
+      Log.trace { "#{@conid}: iseq(#{grpid}): unregistered previous value @#{slot}, #{surface0}" }
+
+      case surface0
+      in Tspace::Sensor
+        @keepalive.cancel(surface0.grpid)
+        @relook.cancel(surface0)
+      in Tspace::Appearance
+        @keepalive.cancel(surface0.instant)
+      end
+
+      Log.trace { "#{@conid}: iseq(#{grpid}): canceled keepalive&/relook of #{surface0}" }
+    end
+
+    case spec
+    in Sensor
+      surface1 = Tspace::Sensor.new(@fresh, @conid, slot, grpid, spec.secret, spec.pattern)
+    in Appearance
+      surface1 = Tspace::Appearance.new(@conid, slot, grpid, spec.secret, spec.value)
+    end
+
+    register(slot, surface1)
+
+    Log.trace { "#{@conid}: iseq(#{grpid}): registered" }
+
+    # Now summon the surface. Assume it is thread-safe to do that.
+    atoms = AtomArray.new
+    tspace.summon(surface1, atoms)
+
+    Log.trace { "#{@conid}: iseq(#{grpid}): summoned" }
+
+    # Finally schedule keepalive for the atoms that constitute the surface.
+    # Assume keepalive scheduling logic is thread-safe.
+    @keepalive.schedule(grpid, atoms)
+
+    Log.trace { "#{@conid}: iseq(#{grpid}): scheduled keepalive" }
+
+    # If we were inserting a sensor, schedule relook as well, provided the sensor
+    # has a relook period set.
+    if spec.is_a?(Sensor) && (period = spec.relook)
+      @relook.schedule(self, slot, surface1, period)
+
+      Log.trace { "#{@conid}: iseq(#{grpid}): scheduled relook" }
+    end
+
+    # If we've managed to remove an appearance, make sure to notify anybody
+    # interested in the appearance's demise.
+    #
+    # A known problem is sensors connecting after we've canceled keepalive of
+    # the appearance, but before our atoms start to decay; thus sensors will
+    # see the "corpse" as "lively enough".
+    #
+    # This is the reason why we have periodic, forced sensor refresh (or its
+    # alternative, blast sensors, which are stateless & thus cannot perceive
+    # absence & leak).
+    if surface0.is_a?(Tspace::Appearance)
+      refresh(surface0, as: :stimulus_absence)
+    end
+
+    refresh(surface1, as: :stimulus_presence)
+
+    spec
+  end
+
+  # Removes the surface assigned to *slot*.
+  def delete(slot : Slot) : Nil
+    return unless surface = unregister?(slot)
+
+    Log.trace { "#{@conid}: dseq: unregistered previous value @#{slot}, #{surface}" }
 
     case surface
     in Tspace::Sensor
-      # Make sure the sensor is gone from the view.
-      review &.without(slot)
-
-      if cancel
-        @keepalive.cancel(surface.grpid)
-      end
+      @keepalive.cancel(surface.grpid)
+      @relook.cancel(surface)
     in Tspace::Appearance
-      if cancel
-        @keepalive.cancel(surface.instant)
-      end
+      @keepalive.cancel(surface.instant)
+      refresh(surface, as: :stimulus_absence)
     end
 
-    Log.trace { "#{@conid}: keepalive will schedule cancel, complete delete of surface @#{slot}" }
+    Log.trace { "#{@conid}: dseq: canceled keepalive&/relook of #{surface}" }
   end
 
-  private def delete?(slot : Slot) : Tspace::Surface?
-    return unless surface = @surfaces.delete(slot)
-
-    delete!(slot, surface)
-
-    surface
+  # This method is called by `IChat` when it receives a message directed
+  # at this connection; or at insertion through self-activation.
+  private def receive(act : Activation) : Nil
+    activate(act)
   end
 
-  private def insert!(slot : Slot, spec : Sensor, grpid : Label) # : Tspace::Sensor
-    Log.trace { "#{@conid}: initiate summon of sensor #{grpid} (for #{spec}@#{slot})" }
-
-    atoms = AtomArray.new
-    sensor = Tspace::Sensor.new(@fresh, @conid, slot, grpid, spec.secret, spec.pattern)
-
-    tspace.summon(sensor, atoms)
-
-    Log.debug { "#{@conid}: summoned sensor with atom cost=#{atoms.size}" }
-
-    @surfaces[slot] = sensor
-    @keepalive.schedule(grpid, atoms)
-
-    Log.trace { "#{@conid}: keepalive will schedule, complete summon of sensor #{grpid}" }
-
-    sensor
-  end
-
-  private def insert!(slot : Slot, spec : Appearance, grpid : Label) : Tspace::Appearance
-    Log.trace { "#{@conid}: initiate summon of appearance #{grpid} (for #{spec}@#{slot})" }
-
-    atoms = AtomArray.new
-    appearance = Tspace::Appearance.new(@conid, slot, grpid, spec.secret, spec.value)
-
-    tspace.summon(appearance, atoms)
-
-    Log.debug { "#{@conid}: summoned appearance with atom cost=#{atoms.size}" }
-
-    @surfaces[slot] = appearance
-    @keepalive.schedule(grpid, atoms)
-
-    Log.trace { "#{@conid}: keepalive will schedule, complete summon of appearance #{grpid}" }
-
-    appearance
-  end
-
-  private def refresh!(surface : Tspace::Sensor, *, as kind : Activation::Kind) : Nil
+  private def refresh(surface : Tspace::Sensor, *, as kind : Activation::Kind) : Nil
     Log.trace { "#{@conid}: refresh surface @#{surface.slot}" }
 
     tspace.each_complement(surface) do |instant, appearance|
@@ -2510,155 +2553,97 @@ class Tconn
     Log.trace { "#{@conid}: end refresh surface @#{surface.slot}" }
   end
 
-  private def refresh!(surface : Tspace::Appearance, *, as kind : Activation::Kind) : Nil
+  private def refresh(surface : Tspace::Appearance, *, as kind : Activation::Kind) : Nil
     Log.trace { "#{@conid}: refresh surface @#{surface.slot}" }
 
     tspace.each_complement(surface) do |instant, sensor|
       Log.debug { "#{@conid}: send #{kind} to complement sensor surface #{instant}" }
 
+      # Assume `IChat#send` is thread-safe.
       @chat.send(sensor.conid, Activation.new(kind, sensor, surface.instant, surface.info))
     end
 
     Log.trace { "#{@conid}: end refresh surface @#{surface.slot}" }
   end
 
-  private def receive(act : Activation) : Nil
-    Log.trace { "#{@conid}: receive activation #{act}" }
+  private def unregister?(slot : Slot) : Tspace::Surface?
+    @lock.synchronize do
+      return unless surface = @surfaces.delete(slot)
 
-    sensor = act.sensor
+      # Do not forget to update the view -- remove the sensor from there.
+      # Importantly we must do this before responding. Otherwise nasty
+      # out-of-order could mess things up and leave staleness.
+      if surface.is_a?(Tspace::Sensor)
+        @view, changed = @view.without(slot)
+        if changed
+          @observer.call(@view)
+        end
+      end
 
-    unless @conid == sensor.conid
-      Log.warn { "ignore activation: not owned by self: #{act}" }
-      return
-    end
-
-    unless surface = @surfaces[sensor.slot]?
-      Log.debug { "ignore activation: surface missing for activation @#{sensor.slot}, outdated?" }
-      return
-    end
-
-    unless surface.is_a?(Tspace::Sensor)
-      Log.debug { "ignore activation: surface is not a sensor for activation @#{sensor.slot}, outdated?" }
-      return
-    end
-
-    view1, changed = @view.next(surface.pattern, act)
-
-    return unless changed
-
-    review { view1 }
-  end
-
-  private def assert_open : Nil
-    unless @open
-      raise ClosedError.new
+      surface
     end
   end
 
-  # :nodoc:
-  #
-  # WARNING: this method is **always** called from another fiber.
-  def relook?(slot : Slot, sensor : Tspace::Sensor) : Bool
-    unless @open
-      Log.debug { "cancel relook on @#{slot}: conn is closed" }
-      return false
-    end
-
-    # Make sure the surface is still there.
-    unless surface = @surfaces[slot]?
-      Log.debug { "cancel relook on @#{slot}: surface absent" }
-      return false
-    end
-
-    # Make sure it's the same sensor.
-    unless surface.same?(sensor)
-      Log.debug { "cancel relook on @#{slot}: different sensor" }
-      return false
-    end
-
-    # Remove the sensor's view and refresh.
-    @view = @view.without(slot)
-
-    refresh!(sensor, as: :stimulus_presence)
-
-    true
+  private def register(slot : Slot, surface : Tspace::Surface) : Nil
+    @lock.synchronize { @surfaces[slot] = surface }
   end
 
-  def close : Nil
-    assert_open
+  private def clear(slot : Slot, sensor : Tspace::Sensor) : Nil
+    @lock.synchronize do
+      # Make sure the surface is still there and it's the same sensor.
+      surface = @surfaces[slot]?
 
-    @open = false
-    @unsubscribe.call
-    @keepalive.cancel
-    @relook.cancel
-    @surfaces.each { |slot, surface| delete!(slot, surface, cancel: false) }
-    @surfaces.clear
+      unless surface && surface == sensor
+        Log.debug { "cancel clear on @#{slot}: surface absent or different" }
+        return
+      end
+
+      # Remove the sensor's view & call the observer if something changed.
+      @view, changed = @view.without(slot)
+      if changed
+        @observer.call(@view)
+      end
+    end
   end
 
-  def []=(slot : Slot, spec : Spec) : Spec
-    assert_open
+  private def activate(act : Activation)
+    @lock.synchronize do
+      # Make sure we actually own the sensor.
+      unless act.sensor.conid == @conid
+        Log.debug { "cancel activation on @#{act.sensor.slot}: excited sensor not owned by self" }
+        return
+      end
 
-    grpid = @fresh.call
+      # Make sure the surface is still there, is a sensor, and it's the same
+      # sensor that is set to be the receiver of the activation.
+      surface = @surfaces[act.sensor.slot]?
 
-    surface0 = delete?(slot)
-    surface1 = insert!(slot, spec, grpid)
+      unless surface && surface.is_a?(Tspace::Sensor) && surface.grpid == act.sensor.grpid
+        Log.debug { "cancel activation on @#{act.sensor.slot}: surface absent or different" }
+        return
+      end
 
-    if spec.is_a?(Sensor) && (period = spec.relook)
-      @relook.schedule(self, slot, surface1, period)
-    end
-
-    if surface0.is_a?(Tspace::Appearance)
-      # Make sure to notify anybody interested in the appearance's demise.
-      #
-      # A known problem is sensors connecting after we've canceled keepalive,
-      # but before our atoms start to decay; thus sensors will see the "corpse"
-      # as "lively enough".
-      #
-      # This is the reason why we have periodic, forced sensor refresh (or its
-      # alternative, blast sensors, which are stateless & thus cannot perceive
-      # absence & leak).
-      refresh!(surface0, as: :stimulus_absence)
-    end
-
-    refresh!(surface1, as: :stimulus_presence)
-
-    spec
-  end
-
-  def delete(slot : Slot) : Nil
-    assert_open
-
-    unless surface = @surfaces.delete(slot)
-      Log.trace { "did not delete surface: slot absent: #{slot}" }
-      return
-    end
-
-    if surface.is_a?(Tspace::Sensor)
-      @relook.cancel(surface)
-    end
-
-    delete!(slot, surface)
-
-    if surface.is_a?(Tspace::Appearance)
-      refresh!(surface, as: :stimulus_absence)
+      # If everything checks out, update the view & call the observer.
+      @view, changed = @view.next(surface.pattern, act)
+      if changed
+        @observer.call(@view)
+      end
     end
   end
 end
 
-{% skip_file %}
+# set = SyncInMemoryMultiset(Tspace::Atom).new
+# chat = SyncInMemoryChat(Activation).new
+# map = Tconn.new(set, chat, ->(v : Tview) { pp v }, relook: Relook::Periodic.new)
+# map[0] = Tconn.sensor(ML.term(%{((%any + -) x_number y_number)}), relook: 10.seconds)
+# sleep 3.seconds
+# map[1] = Tconn.appearance(Term.of(:+, 1, 2))
+# sleep 3.seconds
+# map.delete(1)
+# sleep 3.seconds
+# map.delete(0)
 
-set = SyncInMemoryMultiset(Tspace::Atom).new
-chat = SyncInMemoryChat(Activation).new
-map = Tconn.new(set, chat, ->(v : Tview) { pp v }, relook: Relook::Periodic.new)
-map[0] = Tconn.sensor(ML.term(%{((%any + -) x_number y_number)}), relook: 10.seconds)
-sleep 3.seconds
-map[1] = Tconn.appearance(Term.of(:+, 1, 2))
-sleep 3.seconds
-map.delete(1)
-sleep 3.seconds
-map.delete(0)
-
-sleep
+# sleep
 {% skip_file %}
 
 # With brotli, atom cost = 1 953 287
