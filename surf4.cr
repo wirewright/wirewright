@@ -911,13 +911,13 @@ end
 module BytesMultimap::Atom
   abstract def prefix : Bytes
 
-  # 0..64
+  # Value range: 0..64
   abstract def byte : UInt8
 
-  # 0..3
+  # Value range: 0..3
   abstract def cursor : UInt8
 
-  # 0..3
+  # Value range: 0..3
   abstract def digit : UInt8
 
   def update(digest : Digest) : Nil
@@ -974,6 +974,12 @@ struct SensorMultimap
   def each_sensor(conjv : Fingerprint, &sink : Label ->) : Nil
     multimap = BytesMultimap.new(@set)
     multimap.complete(conjv) do |row|
+      # NOTE: The .notice conditions here are not .warns because they're more or less
+      # nominal in case another thread / client etc. suddenly removes their appearance
+      # while completion is in progress. Some atoms we were able to read but then were
+      # suddenly cut off due to removal. Completion would terminate early therefore;
+      # and one of these sanity checks would fail.
+
       unless row.size == bytesize
         # Do not spam log messages if conjv doesn't have any sensors attached.
         #
@@ -981,7 +987,7 @@ struct SensorMultimap
         # check is enough.
         next if row.size == conjv.size
 
-        Log.warn { "reject row: size mismatch (#{row.size} != #{bytesize})" }
+        Log.notice { "reject row: size mismatch (#{row.size} != #{bytesize})" }
         next
       end
 
@@ -990,14 +996,14 @@ struct SensorMultimap
       checksum1 = Digest::CRC32.checksum(row[...-sizeof(Checksum)])
 
       unless checksum0 == checksum1
-        Log.warn { "reject row: checksum mismatch: #{checksum0} (its) != #{checksum1} (my)" }
+        Log.notice { "reject row: checksum mismatch: #{checksum0} (its) != #{checksum1} (my)" }
         next
       end
 
       label_offset = FINGERPRINT_BYTESIZE
 
       unless sensor = Label.from_slice_be?(row[label_offset, Label.bytesize])
-        Log.warn { "reject row: bad label: #{row.hexstring}" }
+        Log.notice { "reject row: bad label: #{row.hexstring}" }
         next
       end
 
@@ -1061,12 +1067,18 @@ struct AppearanceMultimap
 
     multimap = BytesMultimap(Atom).new(@set)
     multimap.complete(prefix0) do |row|
+      # NOTE: The .notice conditions here are not .warns because they're more or less
+      # nominal in case another thread / client etc. suddenly removes their appearance
+      # while completion is in progress. Some atoms we were able to read but then were
+      # suddenly cut off due to removal. Completion would terminate early therefore;
+      # and one of these sanity checks would fail.
+
       if row.size < Label.bytesize + sizeof(Checksum)
-        # Do not spam log messages if the multimap is empty and someone is trying to
-        # query it.
+        # Do not spam log messages if the multimap is empty and someone is trying
+        # to query it.
         next if row.size == prefix0.size
 
-        Log.warn { "reject row: size mismatch (#{row.size} < #{Label.bytesize + sizeof(Checksum)})" }
+        Log.notice { "reject row: size mismatch (#{row.size} < #{Label.bytesize + sizeof(Checksum)})" }
         next
       end
 
@@ -1075,12 +1087,12 @@ struct AppearanceMultimap
       checksum1 = Digest::CRC32.checksum(row[...-sizeof(Checksum)])
 
       unless checksum0 == checksum1
-        Log.warn { "reject row: checksum mismatch: #{checksum0} (its) != #{checksum1} (my)" }
+        Log.notice { "reject row: checksum mismatch: #{checksum0} (its) != #{checksum1} (my)" }
         next
       end
 
       unless id = Label.from_slice_be?(row[-sizeof(Checksum) - Label.bytesize...-sizeof(Checksum)])
-        Log.warn { "reject row: bad label: #{row.hexstring}" }
+        Log.notice { "reject row: bad label: #{row.hexstring}" }
         next
       end
 
@@ -1757,13 +1769,16 @@ class TspaceDigestSet
 
   def initialize(@set : ISet(Bytes), algorithm : Digest.class = Digest::SHA256)
     @digest = algorithm.new
+    @lock = Mutex.new
   end
 
   private def digest(scope : Scope, atom) : Bytes
-    @digest.reset
-    @digest.update(Bytes[scope.value]) # FIXME: ?!
-    atom.update(@digest)
-    @digest.final
+    @lock.synchronize do
+      @digest.reset
+      @digest.update(Bytes[scope.value]) # FIXME: ?!
+      atom.update(@digest)
+      @digest.final
+    end
   end
 
   def includes?(identity : Tspace::Atom) : Bool
@@ -1855,9 +1870,9 @@ class Keepalive::Continuous
   #
   # A `Millisecond` is such a bucket. It is persistent & immutable.
   struct Millisecond
-    getter ord : UInt32
+    getter ord : Int32
 
-    def initialize(@ord : UInt32, @tasks = Pf::Set(Reinsert).new)
+    def initialize(@ord : Int32, @tasks = Pf::Set(Reinsert).new)
     end
 
     private def_change
@@ -1898,7 +1913,7 @@ class Keepalive::Continuous
       same?(EMPTY)
     end
 
-    def each(&fn : Millisecond ->) : Nil
+    def each(&fn : Millisecond -> Bool) : Nil
       each(fn)
     end
   end
@@ -1908,26 +1923,25 @@ class Keepalive::Continuous
       0
     end
 
-    def each(fn : Millisecond ->) : Nil
+    def each(fn : Millisecond -> Bool) : Bool
+      true
     end
 
-    def with(ord : UInt32, task : Reinsert) : Schedule
+    def with(ord : Int32, task : Reinsert) : Schedule
       Node.new(EMPTY, Millisecond.new(ord).with(task), 1, EMPTY)
     end
 
-    def without(ord : UInt32, task : Reinsert) : Schedule
+    def without(ord : Int32, task : Reinsert) : Schedule
       self
     end
   end
 
   defcase Schedule::Node < Schedule, l : Schedule, ms : Millisecond, size : Int32, r : Schedule do
-    def each(fn : Millisecond ->) : Nil
-      l.each(fn)
-      fn.call(ms)
-      r.each(fn)
+    def each(fn : Millisecond -> Bool) : Bool
+      l.each(fn) && fn.call(ms) && r.each(fn)
     end
 
-    def with(ord : UInt32, task : Reinsert) : Schedule
+    def with(ord : Int32, task : Reinsert) : Schedule
       if ord == ms.ord
         ms1 = ms.with(task)
         ms1.same?(ms) ? self : copy_with(ms: ms1, size: size + 1)
@@ -1940,7 +1954,8 @@ class Keepalive::Continuous
       end
     end
 
-    def without(ord : UInt32, task : Reinsert) : Schedule
+    # FIXME: proper removal if ms is empty but l, r nonempty!!
+    def without(ord : Int32, task : Reinsert) : Schedule
       if ord == ms.ord
         ms1 = ms.without(task)
 
@@ -1988,6 +2003,8 @@ class Keepalive::Continuous
   private def mainloop : Nil
     Log.debug { "keepalive mainloop started" }
 
+    ord0 = 0
+
     while true
       reinserts, removals = @lock.synchronize do
         if @reinserts.empty? && @removals.empty?
@@ -2013,7 +2030,7 @@ class Keepalive::Continuous
         Log.trace { "burned atoms from #{removals.size} atom group(s)" }
       end
 
-      ord0 = 0
+      new_removals = false
 
       reinserts.each do |ms|
         dt = (ms.ord - ord0).milliseconds
@@ -2022,12 +2039,26 @@ class Keepalive::Continuous
           Log.trace { "sleep for #{dt} until reinsert" }
         end
 
+        if dt.negative?
+          next true # continue
+        end
+
         sleep dt
+
+        if new_removals = @lock.synchronize { @removals.present? }
+          Log.trace { "reinsertion early exit due to removals" }
+
+          next false # break
+        end
 
         ms.each(&.atom.reinsert)
 
         ord0 = ms.ord
+
+        true # continue
       end
+
+      next if new_removals
 
       Log.debug { "completed #{reinserts.size} reinsert(s)" }
 
@@ -2038,6 +2069,8 @@ class Keepalive::Continuous
       end
 
       sleep dt
+
+      ord0 = 0
     end
   end
 
@@ -2058,7 +2091,7 @@ class Keepalive::Continuous
 
     atoms.each do |atom|
       task = Reinsert.new(tid, atom)
-      needle = (task.hash % size).to_u32
+      needle = (task.hash % size).to_i
 
       @lock.synchronize do
         @reinserts = @reinserts.with(needle, task)
@@ -2088,7 +2121,7 @@ class Keepalive::Continuous
 
     atoms.each do |atom|
       task = Reinsert.new(tid, atom)
-      needle = (task.hash % size).to_u32
+      needle = (task.hash % size).to_i
 
       @lock.synchronize do
         @reinserts = @reinserts.without(needle, task)
@@ -2298,20 +2331,25 @@ class Tstimuli
 end
 
 class Tview
-  EMPTY = new(view: Pf::Map(Slot, Tstimuli).new)
+  EMPTY = new(view: Pf::Map(Slot, Tstimuli).new, version: 0u32)
 
-  protected def initialize(@view : Pf::Map(Slot, Tstimuli))
+  # Version number is incremented on every change of the view.
+  #
+  # WARNING: views must share lineage for versions to be comparable.
+  getter version : UInt32
+
+  protected def initialize(@view : Pf::Map(Slot, Tstimuli), @version : UInt32)
   end
 
   private def_change
 
-  def without(slot : Slot) : {Tview, Bool}
+  def without(slot : Slot) : Tview
     view0 = @view
     view1 = @view.dissoc(slot)
-    view0.same?(view1) ? {self, false} : {change(view: view1), true}
+    view0.same?(view1) ? self : change(view: view1, version: @version + 1)
   end
 
-  def next(pattern : Term, act : Activation) : {Tview, Bool}
+  def next(pattern : Term, act : Activation) : Tview
     sensor = act.sensor
     stimulus = act.appearance
 
@@ -2319,7 +2357,7 @@ class Tview
 
     # Make sure it still belongs to the same grpid.
     unless view0.grpid == sensor.grpid
-      return self, false
+      return self
     end
 
     case act.kind
@@ -2331,10 +2369,10 @@ class Tview
 
     # Make sure there truly was a change before committing to the map.
     if view0.same?(view1)
-      return self, false
+      return self
     end
 
-    {change(view: @view.assoc(sensor.slot, view1)), changed}
+    change(view: @view.assoc(sensor.slot, view1), version: changed ? @version + 1 : @version)
   end
 
   def dict_multisets : Term::Dict
@@ -2348,14 +2386,14 @@ class Tview
   end
 end
 
-# WARNING: only the internals of `Tconn` that deal with `IChat` are thread-safe;
-# nothing else is thread-safe. Create a `Tconn` per thread/fiber. Do not use
-# the same `Tconn` from different threads/fibers. This will not work and will
-# lead to cryptic bugs.
+# WARNING: only the internals of `Tconn` that deal with `IChat` and `Relook`
+# are thread-safe; nothing else is thread-safe. Create a `Tconn` per thread/
+# fiber. Do not use the same `Tconn` from different threads/fibers. This will
+# not work and will lead to cryptic bugs.
 class Tconn
-  alias Observer = Tview ->
-
   Log = ::Log.for(self)
+
+  alias Observer = Tview ->
 
   alias Spec = Sensor | Appearance
 
@@ -2388,21 +2426,17 @@ class Tconn
   end
 
   @conid : Label
-  @view : Tview
   @unsubscribe : IChat::Unsubscribe
 
   def initialize(@set : ISet(Tspace::Atom),
                  @chat : IChat(Activation),
-                 @observer : Observer,
+                 observer : Observer,
                  @fresh : LabelGenerator = WWID,
                  @keepalive : Keepalive = Keepalive::None.new,
                  @relook : Relook = Relook::None.new)
     @conid = @fresh.call
-    @unsubscribe = @chat.subscribe(@conid, &->receive(Activation))
-
-    @view = Tview::EMPTY
-    @surfaces = {} of Slot => Tspace::Surface
-    @lock = Mutex.new
+    @kernel = SyncObservableKernel.new(@conid, observer)
+    @unsubscribe = @chat.subscribe(@conid) { |act| @kernel.activate(act) }
   end
 
   # Convenience method to construct a `Sensor` surface.
@@ -2426,24 +2460,25 @@ class Tconn
   # state afterwards. Thus after calling this method, you should dispose of
   # the connection as soon as possible.
   def close : Nil
-    @lock.synchronize do
-      @surfaces.clear
-      @view = Tview::EMPTY
-      @observer.call(@view)
-    end
+    @kernel.observation = false
 
+    @kernel.teardown
     @unsubscribe.call
     @keepalive.cancel
     @relook.cancel
+  ensure
+    @kernel.observation = true
   end
 
   # :nodoc:
   #
   # This is an internal method called by the `Relook` companion of this
-  # connection when it wants the connection to "refresh" a specific
-  # sensor's view.
+  # connection when it wants the connection to "refresh" a specific sensor's
+  # view. It is always called from another fiber, thus potentially in parallel
+  # with the client fiber.
   def relook?(slot : Slot, sensor : Tspace::Sensor) : Bool
-    clear(slot, sensor)
+    @kernel.clear(slot, sensor)
+
     refresh(sensor, as: :stimulus_presence)
 
     true
@@ -2451,9 +2486,11 @@ class Tconn
 
   # Updates or inserts *spec* at the given *slot*. Returns *spec*.
   def []=(slot : Slot, spec : Spec) : Spec
+    @kernel.observation = false
+
     grpid = @fresh.call
 
-    if surface0 = unregister?(slot)
+    if surface0 = @kernel.unregister?(slot)
       Log.trace { "#{@conid}: iseq(#{grpid}): unregistered previous value @#{slot}, #{surface0}" }
 
       case surface0
@@ -2474,7 +2511,7 @@ class Tconn
       surface1 = Tspace::Appearance.new(@conid, slot, grpid, spec.secret, spec.value)
     end
 
-    register(slot, surface1)
+    @kernel.register(slot, surface1)
 
     Log.trace { "#{@conid}: iseq(#{grpid}): registered" }
 
@@ -2515,11 +2552,15 @@ class Tconn
     refresh(surface1, as: :stimulus_presence)
 
     spec
+  ensure
+    @kernel.observation = true
   end
 
   # Removes the surface assigned to *slot*.
   def delete(slot : Slot) : Nil
-    return unless surface = unregister?(slot)
+    @kernel.observation = false
+
+    return unless surface = @kernel.unregister?(slot)
 
     Log.trace { "#{@conid}: dseq: unregistered previous value @#{slot}, #{surface}" }
 
@@ -2533,12 +2574,8 @@ class Tconn
     end
 
     Log.trace { "#{@conid}: dseq: canceled keepalive&/relook of #{surface}" }
-  end
-
-  # This method is called by `IChat` when it receives a message directed
-  # at this connection; or at insertion through self-activation.
-  private def receive(act : Activation) : Nil
-    activate(act)
+  ensure
+    @kernel.observation = true
   end
 
   private def refresh(surface : Tspace::Sensor, *, as kind : Activation::Kind) : Nil
@@ -2547,7 +2584,7 @@ class Tconn
     tspace.each_complement(surface) do |instant, appearance|
       Log.debug { "#{@conid}: self-directed #{kind} from complement appearance surface #{instant}" }
 
-      receive(Activation.new(kind, surface.info, instant, appearance))
+      @kernel.activate(Activation.new(kind, surface.info, instant, appearance))
     end
 
     Log.trace { "#{@conid}: end refresh surface @#{surface.slot}" }
@@ -2565,79 +2602,264 @@ class Tconn
 
     Log.trace { "#{@conid}: end refresh surface @#{surface.slot}" }
   end
+end
 
-  private def unregister?(slot : Slot) : Tspace::Surface?
-    @lock.synchronize do
-      return unless surface = @surfaces.delete(slot)
+# Whereas a `Tconn` object itself is an "orchestrator" of sorts, a Tconn's `Kernel`
+# is its book-keeping part & point of consensus. The purpose of "orchestration",
+# in fact, is to direct every Tconn component's flow to the kernel.
+#
+# The kernel keeps track of surfaces; and maintains the connection's view (the sum of
+# the views of the sensors in it). All "orchestrated" parts are eventually facing
+# the kernel, and are filtered according to its current state.
+#
+# WARNING: This object is purposefully not thread-safe. It has a thread-safe
+# wrapper, `SyncObservableKernel`.
+class Tconn::Kernel
+  getter view : Tview
 
-      # Do not forget to update the view -- remove the sensor from there.
-      # Importantly we must do this before responding. Otherwise nasty
-      # out-of-order could mess things up and leave staleness.
-      if surface.is_a?(Tspace::Sensor)
-        @view, changed = @view.without(slot)
-        if changed
-          @observer.call(@view)
-        end
-      end
-
-      surface
-    end
+  def initialize(@conid : Label)
+    @view = Tview::EMPTY
+    @surfaces = {} of Slot => Tspace::Surface
   end
 
-  private def register(slot : Slot, surface : Tspace::Surface) : Nil
-    @lock.synchronize { @surfaces[slot] = surface }
+  def teardown : Nil
+    @surfaces.clear
+    @view = Tview::EMPTY
   end
 
-  private def clear(slot : Slot, sensor : Tspace::Sensor) : Nil
-    @lock.synchronize do
-      # Make sure the surface is still there and it's the same sensor.
-      surface = @surfaces[slot]?
-
-      unless surface && surface == sensor
-        Log.debug { "cancel clear on @#{slot}: surface absent or different" }
-        return
-      end
-
-      # Remove the sensor's view & call the observer if something changed.
-      @view, changed = @view.without(slot)
-      if changed
-        @observer.call(@view)
-      end
-    end
+  def register(slot : Slot, surface : Tspace::Surface) : Nil
+    @surfaces[slot] = surface
   end
 
-  private def activate(act : Activation)
-    @lock.synchronize do
-      # Make sure we actually own the sensor.
-      unless act.sensor.conid == @conid
-        Log.debug { "cancel activation on @#{act.sensor.slot}: excited sensor not owned by self" }
-        return
-      end
+  def unregister?(slot : Slot) : Tspace::Surface?
+    return unless surface = @surfaces.delete(slot)
 
-      # Make sure the surface is still there, is a sensor, and it's the same
-      # sensor that is set to be the receiver of the activation.
-      surface = @surfaces[act.sensor.slot]?
-
-      unless surface && surface.is_a?(Tspace::Sensor) && surface.grpid == act.sensor.grpid
-        Log.debug { "cancel activation on @#{act.sensor.slot}: surface absent or different" }
-        return
-      end
-
-      # If everything checks out, update the view & call the observer.
-      @view, changed = @view.next(surface.pattern, act)
-      if changed
-        @observer.call(@view)
-      end
+    # Do not forget to update the view -- remove the sensor from there.
+    # Importantly we must do this before responding. Otherwise nasty
+    # out-of-order could mess things up and leave staleness.
+    if surface.is_a?(Tspace::Sensor)
+      @view = @view.without(slot)
     end
+
+    surface
+  end
+
+  def activate(act : Activation) : Nil
+    # Make sure we actually own the sensor.
+    unless act.sensor.conid == @conid
+      Log.warn { "cancel activation on @#{act.sensor.slot}: excited sensor not owned by self" }
+      return
+    end
+
+    # Make sure the surface is still there, is a sensor, and it's the same
+    # sensor that is set to be the receiver of the activation.
+    surface = @surfaces[act.sensor.slot]?
+
+    unless surface && surface.is_a?(Tspace::Sensor) && surface.grpid == act.sensor.grpid
+      Log.debug { "cancel activation on @#{act.sensor.slot}: surface absent or different" }
+      return
+    end
+
+    @view = @view.next(surface.pattern, act)
+  end
+
+  def clear(slot : Slot, sensor : Tspace::Sensor) : Nil
+    # Make sure the surface is still there and it's the same sensor.
+    surface = @surfaces[slot]?
+
+    unless surface && surface == sensor
+      Log.debug { "cancel clear on @#{slot}: surface absent or different" }
+      return
+    end
+
+    @view = @view.without(slot)
   end
 end
 
-# set = SyncInMemoryMultiset(Tspace::Atom).new
-# chat = SyncInMemoryChat(Activation).new
-# map = Tconn.new(set, chat, ->(v : Tview) { pp v }, relook: Relook::Periodic.new)
-# map[0] = Tconn.sensor(ML.term(%{((%any + -) x_number y_number)}), relook: 10.seconds)
+# A synchronous wrapper around a connection `Kernel` that also provides deadlock-
+# and duplication-protected observability of kernel views.
+class Tconn::SyncObservableKernel
+  def initialize(conid : Label, @observer : Observer)
+    @kernel = Kernel.new(conid)
+    @kernel_lock = Mutex.new
+
+    @view_seen = @kernel.view
+    @view_latest = @kernel.view
+    @view_flow = true
+    @view_lock = Mutex.new
+  end
+
+  # Makes sure that the obsever doesn't accidentally block while the lock is taken;
+  # or call the connection recursively, thereby locking recursively and causing
+  # a deadlock.
+  private def push(view1 : Tview) : Nil
+    observed = nil
+
+    @view_lock.synchronize do
+      @view_latest = view1
+
+      # Halt if view flow is blocked.
+      return unless @view_flow
+
+      # See whether there was any change between what was last observed
+      # and the most up-to-date view.
+      return if @view_seen.version == @view_latest.version
+
+      # If something changed, call the observer (outside of the lock to
+      # prevent recursive locking!)
+      @view_seen = observed = view1
+    end
+
+    if observed
+      @observer.call(observed)
+    end
+  end
+
+  # Allows or prevents view updates from flowing to the observer. Effectively,
+  # toggles observation on or off.
+  #
+  # Default: `true`.
+  def observation=(state : Bool) : Bool
+    observed = nil
+
+    @view_lock.synchronize do
+      case {@view_flow, state}
+      in {false, false}, {true, true}
+        # No change
+      in {true, false}
+        # Disabled
+        @view_flow = false
+      in {false, true}
+        # Enabled
+        @view_flow = true
+
+        unless @view_seen.version == @view_latest.version
+          # If there were changes, call the observer (outside of the lock
+          # to prevent recursive locking!)
+          @view_seen = observed = @view_latest
+        end
+      end
+    end
+
+    if observed
+      @observer.call(observed)
+    end
+
+    state
+  end
+
+  # See the same method in `Kernel`.
+  def teardown : Nil
+    view1 = @kernel_lock.synchronize do
+      @kernel.teardown
+      @kernel.view
+    end
+
+    push(view1)
+  end
+
+  # :ditto:
+  def register(*args, **kwargs) : Nil
+    view1 = @kernel_lock.synchronize do
+      @kernel.register(*args, **kwargs)
+      @kernel.view
+    end
+
+    push(view1)
+  end
+
+  # :ditto:
+  def unregister?(*args, **kwargs) : Tspace::Surface?
+    surface, view1 = @kernel_lock.synchronize do
+      {@kernel.unregister?(*args, **kwargs), @kernel.view}
+    end
+
+    push(view1)
+
+    surface
+  end
+
+  # :ditto:
+  def activate(*args, **kwargs) : Nil
+    view1 = @kernel_lock.synchronize do
+      @kernel.activate(*args, **kwargs)
+      @kernel.view
+    end
+
+    push(view1)
+  end
+
+  # :ditto:
+  def clear(*args, **kwargs) : Nil
+    view1 = @kernel_lock.synchronize do
+      @kernel.clear(*args, **kwargs)
+      @kernel.view
+    end
+
+    push(view1)
+  end
+end
+
+{% skip_file %}
+
+set = SyncInMemoryMultiset(Bytes).new
+chat = SyncInMemoryChat(Activation).new
+
+sumthread = Fiber::ExecutionContext::SingleThreaded.new("sum")
+sumthread.spawn do
+  Log.info { "run product thread" }
+  map = nil
+
+  obs = ->(v : Tview) do
+    msets = v.dict_multisets
+    return unless s0view = msets[0]?
+    return unless entry = s0view.ee.first?
+
+    env, _ = entry
+
+    map.not_nil![1] = Tconn.appearance(Term.of(:product, env[:x], env[:y], env[:x] * env[:y]))
+
+    nil
+  end
+
+  map = Tconn.new(TspaceDigestSet.new(set), chat, obs, relook: Relook::Periodic.new, keepalive: Keepalive::Continuous.new(10.seconds))
+  map.not_nil![0] = Tconn.sensor(ML.term(%{(* x_number y_number)}), relook: 15.seconds)
+  sleep # ?!?!?!!?
+end
+
+printthread = Fiber::ExecutionContext::SingleThreaded.new("print")
+printthread.spawn do
+  Log.info { "run print thread" }
+  obs = ->(v : Tview) do
+    msets = v.dict_multisets
+    return unless s0view = msets[0]?
+    return unless entry = s0view.ee.first?
+
+    env, _ = entry
+    puts "#{env[:x]} * #{env[:y]} = #{env[:n]}"
+
+    nil
+  end
+  map = Tconn.new(TspaceDigestSet.new(set), chat, obs, relook: Relook::Periodic.new, keepalive: Keepalive::Continuous.new(10.seconds))
+  map[0] = Tconn.sensor(ML.term(%{(product x←(%pipe (mod 100) 0) y←(%pipe (mod 100) 0) n_number)}), relook: 15.seconds)
+  sleep # ?!?!?!!?
+end
+
+sleep 1.second
+
+appearancethread = Fiber::ExecutionContext::SingleThreaded.new("appearance")
+appearancethread.spawn do
+  Log.info { "run appearance thread" }
+  map = Tconn.new(TspaceDigestSet.new(set), chat, Tconn::Observer.new {}, relook: Relook::Periodic.new, keepalive: Keepalive::Continuous.new(10.seconds))
+  (0...100_000).each do |n|
+    map[0] = Tconn.appearance(Term.of(:*, n, n))
+  end
+  map.close
+  Log.info { "close appearance thread" }
+end
+
+sleep
 # sleep 3.seconds
-# map[1] = Tconn.appearance(Term.of(:+, 1, 2))
 # sleep 3.seconds
 # map.delete(1)
 # sleep 3.seconds
@@ -2708,16 +2930,16 @@ map.delete(1)
 sleep 1.second
 pp set.size?
 
-# TODO: thread safety of Tconn<>IChat, Tconn<>Relook
 # TODO: Tsetconn
-# TODO: implement UnbufferedSet(IRemoteSet) < ISet
-# TODO: implement BufferedSet(IRemoteSet) < ISet
 # TODO: implement basic string set & chat client < IRemoteSet; server to start working
 #   on remote stuff in D7/soma. p2p can wait.
+# TODO: implement UnbufferedSet(IRemoteSet) < ISet
+# TODO: implement BufferedSet(IRemoteSet) < ISet
 # TODO: use this in soma
 # TODO: move ready stuff to src/, replace/remove old files
 #
-# TODO: ensure each Tconn has its own, unique Keepalive
+# TODO: ensure each Tconn has its own, unique Keepalive & Retain object. Do not
+#       let clients mess this up.
 # TODO: compute Keepalive interval based on the number of atoms. The more
 #  atoms the longer the period, so that keepalive is spread out. If we have
 #  millions of atoms it's better to have minutes-long interval so that we don't
@@ -2730,12 +2952,18 @@ pp set.size?
 #      (log @xs in ())
 #   Such sensors are unable to perceive absence.
 #
-#
 # TODO: reduce atom cost of Utrie (remove Trunk etc.)
 # TODO: reduce atom cost of appearanceinfo
 #   * use ML.compactf -> pretty printer which is much smarter & has a chance
 #     of emitting something shorter than what ML.compact would. E.g. `%partition`
 #     and so on.
+#
+# TODO: better Keepalive implementation. Current one is pretty slow (in general and
+# also slow to react). Maybe we can use Crystal's fibers somehow? But I'm afraid
+# there's going to be too many fibers for Crystal. For an interval of just 1.minute we're
+# talking about 60 000 fibers that each handle its corresponding millisecond (in case
+# all millisecond buckets are full, of course).
+#
 # TODO: experiment with unstructured p2p multiset impl/proto, simulate stuff
 #    * ant colony inspired "scout message" routing, neighborhood mapping,
 #      deep exploration
