@@ -2172,8 +2172,8 @@ class Relook::None
   end
 end
 
-# Periodic relook implementation. Spawns a fiber per sensor, which calls
-# `Tconn#relook` for that sensor periodically.
+# Periodic relook implementation. Spawns a fiber per sensor, which triggers
+# `Tconn`'s relook facilities for that sensor periodically.
 class Relook::Periodic
   include Relook
 
@@ -2386,10 +2386,17 @@ class Tview
   end
 end
 
+# Tconn (short for termspace connection) provides a hash map-like interface
+# to a termspace. It also maintains the illusion of persistence of sensors and
+# appearances throughout periodic keepalive, relook; and in general handles
+# the boring stuff for you.
+#
 # WARNING: only the internals of `Tconn` that deal with `IChat` and `Relook`
 # are thread-safe; nothing else is thread-safe. Create a `Tconn` per thread/
-# fiber. Do not use the same `Tconn` from different threads/fibers. This will
-# not work and will lead to cryptic bugs.
+# fiber. Do not use the same `Tconn` from different threads/fibers simultaneously.
+# This will not work and will lead to cryptic bugs. The identity of the fiber/
+# thread does not matter, but it must be the only owner of a particular
+# `Tconn` instance.
 class Tconn
   Log = ::Log.for(self)
 
@@ -2425,15 +2432,39 @@ class Tconn
     end
   end
 
+  # Raised when trying to interact with a connection that was closed.
+  class ClosedError < Exception
+  end
+
   @conid : Label
   @unsubscribe : IChat::Unsubscribe
 
+  # Constructs a termspace connection.
+  #
+  # - *set* is the set for atoms of the termspace.
+  # - *chat* will be used by connections to chat with each other.
+  # - *observer* is a proc that will receive newest `Tview`s.
+  # - *fresh* is the label generator that should be used to generate GUIDs.
+  #   The ids must be time-sortable.
+  # - *keepalive* points to the companion keepalive object.
+  # - *relook* points to the companion relook object.
+  #
+  # WARNING: *observer* can be called by three fibers, sometimes simultaneously:
+  # by the client fiber (e.g. on insert); by the relook fiber if relook is enabled;
+  # and by the chat fiber (if there is one, this depends on the *chat* that was passed).
+  # You must think really hard before deciding to do anything thread-unsafe in
+  # *observer* (including e.g. recursively calling this `Tconn`'s methods).
+  #
+  # WARNING: each `Tconn` must have a unique *keepalive* companion object.
+  #
+  # WARNING: each `Tconn` must have a unique *relook* companion object.
   def initialize(@set : ISet(Tspace::Atom),
                  @chat : IChat(Activation),
                  observer : Observer,
                  @fresh : LabelGenerator = WWID,
                  @keepalive : Keepalive = Keepalive::None.new,
                  @relook : Relook = Relook::None.new)
+    @open = true
     @conid = @fresh.call
     @kernel = SyncObservableKernel.new(@conid, observer)
     @unsubscribe = @chat.subscribe(@conid) { |act| @kernel.activate(act) }
@@ -2454,20 +2485,41 @@ class Tconn
     Tspace.new(@set)
   end
 
+  private def assert_open : Nil
+    unless @open
+      raise ClosedError.new
+    end
+  end
+
+  # Disables observation for the duration of the block.
+  private def concealed(& : -> T) : T forall T
+    @kernel.observation = false
+
+    yield
+  ensure
+    @kernel.observation = true
+  end
+
   # Closes this connection and terminates all fibers associated with it.
   #
   # This method can only be called once; the connection will be in an expended
   # state afterwards. Thus after calling this method, you should dispose of
   # the connection as soon as possible.
+  #
+  # Noop if the connection is closed already.
+  #
+  # NOTE: can only be called by the client.
   def close : Nil
-    @kernel.observation = false
+    return unless @open
 
-    @kernel.teardown
-    @unsubscribe.call
-    @keepalive.cancel
-    @relook.cancel
-  ensure
-    @kernel.observation = true
+    @open = false
+
+    concealed do
+      @kernel.close
+      @unsubscribe.call
+      @keepalive.cancel
+      @relook.cancel
+    end
   end
 
   # :nodoc:
@@ -2484,98 +2536,111 @@ class Tconn
     true
   end
 
+  # Forces a refresh of the view.
+  #
+  # NOTE: can only be called by the client.
+  def refresh_view : Nil
+    assert_open
+
+    @kernel.refresh_view
+  end
+
   # Updates or inserts *spec* at the given *slot*. Returns *spec*.
+  #
+  # NOTE: can only be called by the client.
   def []=(slot : Slot, spec : Spec) : Spec
-    @kernel.observation = false
+    assert_open
 
-    grpid = @fresh.call
+    concealed do
+      grpid = @fresh.call
 
-    if surface0 = @kernel.unregister?(slot)
-      Log.trace { "#{@conid}: iseq(#{grpid}): unregistered previous value @#{slot}, #{surface0}" }
+      if surface0 = @kernel.unregister?(slot)
+        Log.trace { "#{@conid}: iseq(#{grpid}): unregistered previous value @#{slot}, #{surface0}" }
 
-      case surface0
-      in Tspace::Sensor
-        @keepalive.cancel(surface0.grpid)
-        @relook.cancel(surface0)
-      in Tspace::Appearance
-        @keepalive.cancel(surface0.instant)
+        case surface0
+        in Tspace::Sensor
+          @keepalive.cancel(surface0.grpid)
+          @relook.cancel(surface0)
+        in Tspace::Appearance
+          @keepalive.cancel(surface0.instant)
+        end
+
+        Log.trace { "#{@conid}: iseq(#{grpid}): canceled keepalive&/relook of #{surface0}" }
       end
 
-      Log.trace { "#{@conid}: iseq(#{grpid}): canceled keepalive&/relook of #{surface0}" }
+      case spec
+      in Sensor
+        surface1 = Tspace::Sensor.new(@fresh, @conid, slot, grpid, spec.secret, spec.pattern)
+      in Appearance
+        surface1 = Tspace::Appearance.new(@conid, slot, grpid, spec.secret, spec.value)
+      end
+
+      @kernel.register(slot, surface1)
+
+      Log.trace { "#{@conid}: iseq(#{grpid}): registered" }
+
+      # Now summon the surface. Assume it is thread-safe to do that.
+      atoms = AtomArray.new
+      tspace.summon(surface1, atoms)
+
+      Log.trace { "#{@conid}: iseq(#{grpid}): summoned" }
+
+      # Finally schedule keepalive for the atoms that constitute the surface.
+      # Assume keepalive scheduling logic is thread-safe.
+      @keepalive.schedule(grpid, atoms)
+
+      Log.trace { "#{@conid}: iseq(#{grpid}): scheduled keepalive" }
+
+      # If we were inserting a sensor, schedule relook as well, provided the sensor
+      # has a relook period set.
+      if spec.is_a?(Sensor) && (period = spec.relook)
+        @relook.schedule(self, slot, surface1, period)
+
+        Log.trace { "#{@conid}: iseq(#{grpid}): scheduled relook" }
+      end
+
+      # If we've managed to remove an appearance, make sure to notify anybody
+      # interested in the appearance's demise.
+      #
+      # A known problem is sensors connecting after we've canceled keepalive of
+      # the appearance, but before our atoms start to decay; thus sensors will
+      # see the "corpse" as "lively enough".
+      #
+      # This is the reason why we have periodic, forced sensor refresh (or its
+      # alternative, blast sensors, which are stateless & thus cannot perceive
+      # absence & leak).
+      if surface0.is_a?(Tspace::Appearance)
+        refresh(surface0, as: :stimulus_absence)
+      end
+
+      refresh(surface1, as: :stimulus_presence)
+
+      spec
     end
-
-    case spec
-    in Sensor
-      surface1 = Tspace::Sensor.new(@fresh, @conid, slot, grpid, spec.secret, spec.pattern)
-    in Appearance
-      surface1 = Tspace::Appearance.new(@conid, slot, grpid, spec.secret, spec.value)
-    end
-
-    @kernel.register(slot, surface1)
-
-    Log.trace { "#{@conid}: iseq(#{grpid}): registered" }
-
-    # Now summon the surface. Assume it is thread-safe to do that.
-    atoms = AtomArray.new
-    tspace.summon(surface1, atoms)
-
-    Log.trace { "#{@conid}: iseq(#{grpid}): summoned" }
-
-    # Finally schedule keepalive for the atoms that constitute the surface.
-    # Assume keepalive scheduling logic is thread-safe.
-    @keepalive.schedule(grpid, atoms)
-
-    Log.trace { "#{@conid}: iseq(#{grpid}): scheduled keepalive" }
-
-    # If we were inserting a sensor, schedule relook as well, provided the sensor
-    # has a relook period set.
-    if spec.is_a?(Sensor) && (period = spec.relook)
-      @relook.schedule(self, slot, surface1, period)
-
-      Log.trace { "#{@conid}: iseq(#{grpid}): scheduled relook" }
-    end
-
-    # If we've managed to remove an appearance, make sure to notify anybody
-    # interested in the appearance's demise.
-    #
-    # A known problem is sensors connecting after we've canceled keepalive of
-    # the appearance, but before our atoms start to decay; thus sensors will
-    # see the "corpse" as "lively enough".
-    #
-    # This is the reason why we have periodic, forced sensor refresh (or its
-    # alternative, blast sensors, which are stateless & thus cannot perceive
-    # absence & leak).
-    if surface0.is_a?(Tspace::Appearance)
-      refresh(surface0, as: :stimulus_absence)
-    end
-
-    refresh(surface1, as: :stimulus_presence)
-
-    spec
-  ensure
-    @kernel.observation = true
   end
 
   # Removes the surface assigned to *slot*.
+  #
+  # NOTE: can only be called by the client.
   def delete(slot : Slot) : Nil
-    @kernel.observation = false
+    assert_open
 
-    return unless surface = @kernel.unregister?(slot)
+    concealed do
+      return unless surface = @kernel.unregister?(slot)
 
-    Log.trace { "#{@conid}: dseq: unregistered previous value @#{slot}, #{surface}" }
+      Log.trace { "#{@conid}: dseq: unregistered previous value @#{slot}, #{surface}" }
 
-    case surface
-    in Tspace::Sensor
-      @keepalive.cancel(surface.grpid)
-      @relook.cancel(surface)
-    in Tspace::Appearance
-      @keepalive.cancel(surface.instant)
-      refresh(surface, as: :stimulus_absence)
+      case surface
+      in Tspace::Sensor
+        @keepalive.cancel(surface.grpid)
+        @relook.cancel(surface)
+      in Tspace::Appearance
+        @keepalive.cancel(surface.instant)
+        refresh(surface, as: :stimulus_absence)
+      end
+
+      Log.trace { "#{@conid}: dseq: canceled keepalive&/relook of #{surface}" }
     end
-
-    Log.trace { "#{@conid}: dseq: canceled keepalive&/relook of #{surface}" }
-  ensure
-    @kernel.observation = true
   end
 
   private def refresh(surface : Tspace::Sensor, *, as kind : Activation::Kind) : Nil
@@ -2622,7 +2687,7 @@ class Tconn::Kernel
     @surfaces = {} of Slot => Tspace::Surface
   end
 
-  def teardown : Nil
+  def close : Nil
     @surfaces.clear
     @view = Tview::EMPTY
   end
@@ -2748,10 +2813,19 @@ class Tconn::SyncObservableKernel
     state
   end
 
+  # Forces a refresh of the view (even if observation is disabled).
+  def refresh_view : Nil
+    observed = @view_lock.synchronize do
+      @view_seen = @view_latest
+    end
+
+    @observer.call(observed)
+  end
+
   # See the same method in `Kernel`.
-  def teardown : Nil
+  def close : Nil
     view1 = @kernel_lock.synchronize do
-      @kernel.teardown
+      @kernel.close
       @kernel.view
     end
 
@@ -2798,6 +2872,208 @@ class Tconn::SyncObservableKernel
 
     push(view1)
   end
+end
+
+# A *set conn* sits on top of a `Tconn` and provides a "set view" or "set-like access"
+# to it, remotely similar to how a set can be implemented on top of a hash map.
+#
+# The "elements" of a set conn are surfaces -- sensors and appearances. They are
+# no longer assigned an arbitrary numeric slot like in `Tconn` -- by you; but rather,
+# their slot is assigned based on their *identity* -- by the set conn. In case of
+# sensors that'd be pattern, secret, and relook; in case of appearances, that'd
+# be value and secret.
+#
+# Since this entails the generation of new Tconn slots on every change of e.g.
+# an appearance's value, what set conns do is they maintain a pool of free slots.
+#
+# When an appearance's value changes (let's say increments), its previous version
+# (with the old value) gets removed from the set conn; and its slot is released
+# to the slot pool. We then add to the set conn the appearance with the new
+# (incremented) value. This ends up taking the slot from the slot pool and reusing it,
+# which is beneficial primarily for sensors perceiving the appearance -- they
+# don't have to go through additional rounds of "un-seeing" the previous
+# appearance & its slot before seeing the new one (completely novel to them!)
+#
+# WARNING: `Tsetconn` is not thread-safe. Create separate `Tsetconn`s per thread/
+# fiber, pointing all of them to the same Sync or otherwise thread-safe set/chat
+# includer. See also the warnings in `Tconn`.
+class Tsetconn
+  # Default capacity of Tsetconn's slot pool.
+  #
+  # See also: `Tsetconn`.
+  DEFAULT_SLOT_POOL_CAPACITY = 16
+
+  alias Identity = Sensor | Appearance
+
+  # Represents the identity of a sensor in a set conn. Essentially this data
+  # is what sensors are compared by. Two equal `Sensor`s will map to the same
+  # underlying `Tconn` sensor surface identity.
+  record Sensor, pattern : Term, secret : Term? = nil, relook : Time::Span? = nil do
+    def spec : Tconn::Sensor
+      Tconn::Sensor.new(pattern, secret, relook)
+    end
+  end
+
+  # Represents the identity of an appearance in a set conn. Essentially this
+  # data is what appearances are compared by. Two equal `Appearance`s will map
+  # to the same underlying `Tconn` appearance surface identity.
+  record Appearance, value : Term, secret : Term? = nil do
+    def spec : Tconn::Appearance
+      Tconn::Appearance.new(value, secret)
+    end
+  end
+
+  # Constructs this set conn on top of an existing `Tconn` *conn*.
+  #
+  # You can optionally specify this set conn's *slot pool capacity*. Free slots
+  # will be "burned" once this capacity is exceeded.
+  def initialize(@conn : Tconn, *, @slotcap = DEFAULT_SLOT_POOL_CAPACITY)
+    @open = true
+    @fresh = Slot.new(0)
+    @free = Set(Slot).new
+    @encoding = Bimap(Sensor | Appearance, Slot).new
+  end
+
+  # Convenience method to construct a `Sensor` identity.
+  def self.sensor(*args, **kwargs) : Sensor
+    Sensor.new(*args, **kwargs)
+  end
+
+  # Convenience method to construct an `Appearance` identity.
+  def self.appearance(*args, **kwargs) : Appearance
+    Appearance.new(*args, **kwargs)
+  end
+
+  private def assert_open : Nil
+    unless @open
+      raise Tconn::ClosedError.new
+    end
+  end
+
+  # Clears this set conn and closes the underlying `Tconn`. Noop if this set
+  # conn is already closed.
+  def close : Nil
+    return unless @open
+
+    @open = false
+
+    @conn.close
+    @free.clear
+    @encoding.clear
+  end
+
+  private def acquire_slot : Slot
+    if slot = @free.first?
+      @free.delete(slot)
+      return slot
+    end
+
+    slot = @fresh
+    @fresh += 1
+
+    slot
+  end
+
+  private def release_slot(slot : Slot) : Nil
+    if 0 < @slotcap <= @free.size
+      (@slotcap..@free.size).each do
+        @free.delete(@free.first)
+      end
+    end
+
+    @free.add(slot)
+  end
+
+  # Returns the sensor identity currently occupying the given Tconn *slot*.
+  # Returns `nil` if no such identity exists.
+  #
+  # Raises `Tconn::ClosedError` if this set conn is closed.
+  def sensor?(slot : Slot) : Sensor?
+    assert_open
+
+    @encoding[slot]?.as?(Sensor)
+  end
+
+  # Returns the appearance identity currently occupying the underlying Tconn *slot*.
+  # Returns `nil` if no such identity exists.
+  #
+  # Raises `Tconn::ClosedError` if this set conn is closed.
+  def appearance?(slot : Slot) : Appearance?
+    assert_open
+
+    @encoding[slot]?.as?(Appearance)
+  end
+
+  # Adds a surface with the given *identity* to this set conn, if absent.
+  # Returns the slot of the underlying Tconn surface.
+  #
+  # Raises `Tconn::ClosedError` if this set conn is closed.
+  def add(identity : Identity) : Slot
+    assert_open
+
+    if slot = @encoding[identity]?
+      return slot
+    end
+
+    slot = acquire_slot
+
+    @encoding[identity] = slot
+
+    # Insert after defining an encoding because the moment []= is called,
+    # we should be able to receive & sanely react to messages about `slot`.
+    @conn[slot] = identity.spec
+
+    slot
+  end
+
+  # Alias of `add`. Returns `self`.
+  def <<(identity : Identity) : self
+    add(identity)
+
+    self
+  end
+
+  # Removes a surface with the given *identity* from this set conn, if present.
+  # Returns the slot of the underlying Tconn surface, or `nil` if absent.
+  #
+  # Raises `Tconn::ClosedError` if this set conn is closed.
+  def delete(identity : Identity) : Slot?
+    assert_open
+
+    return unless slot = @encoding.delete(identity)
+
+    @conn.delete(slot)
+
+    release_slot(slot)
+
+    slot
+  end
+
+  def pretty_print(pp)
+    unless @open
+      pp.text("Tsetconn{<closed>}")
+      return
+    end
+
+    pp.list("Tsetconn{", @encoding, "}") do |identity, _|
+      identity.pretty_print(pp)
+    end
+  end
+end
+
+{% skip_file %}
+
+set = SyncInMemoryMultiset(Bytes).new
+chat = SyncInMemoryChat(Activation).new
+obs = ->(v : Tview) { pp v }
+conn = Tconn.new(TspaceDigestSet.new(set), chat, obs)
+conn.refresh_view
+setconn = Tsetconn.new(conn)
+setconn << Tsetconn.sensor(Term.of(:+, :x_number, :y_number))
+
+(0...100).each do |n|
+  setconn.delete(Tsetconn.appearance(Term.of(:+, n - 1, n - 1)))
+  setconn << Tsetconn.appearance(Term.of(:+, n, n))
 end
 
 {% skip_file %}
@@ -2930,7 +3206,6 @@ map.delete(1)
 sleep 1.second
 pp set.size?
 
-# TODO: Tsetconn
 # TODO: implement basic string set & chat client < IRemoteSet; server to start working
 #   on remote stuff in D7/soma. p2p can wait.
 # TODO: implement UnbufferedSet(IRemoteSet) < ISet
