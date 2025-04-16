@@ -3206,12 +3206,10 @@ map.delete(1)
 sleep 1.second
 pp set.size?
 
-# TODO: implement basic string set & chat client < IRemoteSet; server to start working
-#   on remote stuff in D7/soma. p2p can wait.
-# TODO: implement UnbufferedSet(IRemoteSet) < ISet
-# TODO: implement BufferedSet(IRemoteSet) < ISet
+# FIXME: notify about removal of all appearances on `Tconn#close`
 # TODO: use this in soma
 # TODO: move ready stuff to src/, replace/remove old files
+# TODO: implement BufferedSet(IRemoteSet) < ISet
 #
 # TODO: ensure each Tconn has its own, unique Keepalive & Retain object. Do not
 #       let clients mess this up.

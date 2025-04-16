@@ -122,11 +122,11 @@ module Ww::ML
     compact(io, term.downcast)
   end
 
-  def self.compact(term : Term) : String
+  def self.compact(term : Term | ITerm) : String
     String.build { |io| compact(io, term) }
   end
 
-  def self.compact_bytesize(term : Term) : Int32
+  def self.compact_bytesize(term : Term | ITerm) : Int32
     io = IO::BytesizeCounter.new
 
     compact(io, term)
