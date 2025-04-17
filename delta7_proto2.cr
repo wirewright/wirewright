@@ -783,13 +783,26 @@ module Rhodium
 
         # Deactivate & press
         givenpi(
+          %{(button _ to @_ (_*) ¦ _ hover: true active: true) (mouse release) _},
+          %{(button _ as _ to @_ (_*) ¦ _ hover: true active: true) (mouse release) _},
+          %{(button _ to @_ waiting @_ (_*) ¦ _ hover: true active: true) (mouse release) _},
+          %{(button _ as _ to @_ waiting @_ (_*) ¦ _ hover: true active: true) (mouse release) _},
+        ) do
+          effect(document1, nodepath, node0, cursordepth) do
+            backmap %[(_* (_* ⏏M) ¦ _ active_)], %[{(active): (), M: (press)}]
+
+            false
+          end
+        end
+
+        givenpi(
           %{(button _ to @_ (_*) ¦ _ active: true) (mouse release) _},
           %{(button _ as _ to @_ (_*) ¦ _ active: true) (mouse release) _},
           %{(button _ to @_ waiting @_ (_*) ¦ _ active: true) (mouse release) _},
           %{(button _ as _ to @_ waiting @_ (_*) ¦ _ active: true) (mouse release) _},
         ) do
           effect(document1, nodepath, node0, cursordepth) do
-            backmap %[(_* (_* ⏏M) ¦ _ active_)], %[{(active): (), M: (press)}]
+            backmap %[{¦ active_}], %[{(active): ()}]
 
             false
           end
@@ -1358,6 +1371,14 @@ module Rhodium
         givenpi %[{¦ active: true inbox_dict} (mouse release) -1] do
           effect(document1, nodepath, node0, cursordepth) do
             backmap %[{¦ active_ inbox: [_* ⏏M]}], %[{active: false, M: (press)}]
+
+            false
+          end
+        end
+
+        givenpi %[{¦ active: true} (mouse release) -1] do
+          effect(document1, nodepath, node0, cursordepth) do
+            backmap %[{¦ active_}], %[{active: false}]
 
             false
           end

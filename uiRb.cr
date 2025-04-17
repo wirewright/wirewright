@@ -929,6 +929,16 @@ module UIR
     strata(*args, **kwargs) { true }
   end
 
+  # TODO: this is lame, optimize!!
+  def stratum(*args, **kwargs) : Array(Stack(Term))
+    strata = strata(*args, **kwargs)
+    unless row = strata.first?
+      return [] of Stack(Term)
+    end
+    _, stratum = row
+    stratum
+  end
+
   def z_index(dwuir : Term, keypath : Stack(Term)) : Term::Num
     zmax = Term[0]
 

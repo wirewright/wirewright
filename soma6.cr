@@ -725,15 +725,11 @@ class Document
   @rem0 : Term::Num
   @rem1 : Term::Num
 
-  @mouse0 : {Term::Num, Term::Num}
-  @mouse1 : {Term::Num, Term::Num}
-
   def initialize(@draw : Channel({Term::Dict, Channel(Term::Dict)}))
     id = @@counter.add(1, :relaxed)
 
     @document_thread = Fiber::ExecutionContext::SingleThreaded.new("Document #{id}")
 
-    # @dwuir = Atomic(Term::Dict).new(Term[])
     @mailbox = Mailbox.new
 
     # The following instance variables are owned exclusively by the document
@@ -752,7 +748,8 @@ class Document
     @rem0 = @rem1 = Term[16]
     @initial = true
     @state = State::Clean
-    @mouse0 = @mouse1 = {Term[0], Term[0]}
+    @mouseq = Deque(Term).new
+    @mouseq_state = :default
   end
 
   def settled? : Bool
@@ -874,7 +871,7 @@ class Document
     #   - If mouse moved we must redraw due to potential mouse hover/unhover.
     #   - Otherwise we may not redraw.
     same = instance0 == instance1 && @rem0 == @rem1
-    return if same && @mouse0 == @mouse1
+    return if same && @mouseq.empty?
 
     # We don't *really* need to redraw though if the mouse moved. The old
     # dwUIR will work just as well!
@@ -896,69 +893,114 @@ class Document
 
     dwuir = Term.of(@dwuir)
 
-    # Find out the nodepath of the thing we're hovering over.
-    strata = UIR.strata(dwuir, *@mouse1)
+    # FIXME: the way this is organized is pure instanity. WTF is mouse event handling
+    # doing inside of the draw function ?!?!?!
 
-    # Thus we've handled the mouse.
-    @mouse0 = @mouse1
+    while mevent = @mouseq.shift?
+      Term.case(mevent) do
+        # Set `hover: true` on hovered nodes, and `hover: false` (or removed) on
+        # unhovered ones.
+        matchpi %{(mouse motion x_number y_number)} do
+          target = below?(x.unsafe_as_n, y.unsafe_as_n)
 
-    if stratum = strata.first_value?
-      mouseover = stratum.leftmost? do |keypath|
-        hit = Keypath.follow(dwuir, keypath)
-        next unless backlink = hit[:"#backlink"]?
-        next unless backlink = backlink.as_itemsonly_d?
-
-        nodepath = Stack(Int32).new(backlink.size)
-
-        valid = backlink.items.all? do |index|
-          nodepath << (index.to?(Int32) || next)
+          mark { |nodepath, node| hover(nodepath, node, target) }
         end
 
-        next unless valid
-
-        nodepath
-      end
-    end
-
-    # Go through nodes and set hover: false on every one except for
-    # the one we're hovering over. The one we're hovering over, we'll
-    # set its hover: true.
-
-    nodepath = Stack(Int32).new
-
-    while Rhodium.successor?(@document, nodepath)
-      node0 = node1 = Rhodium.follow(@document, nodepath)
-      hovered = mouseover ? nodepath.equals?(mouseover) { |a, b| a == b } : false
-
-      Term.case({node0, Rhodium.cursordepth_in_node(@document, nodepath)}) do
-        givenpi %{[button _*] _} do
-          node1 = node1.morph({:hover, hovered ? true : nil})
-        end
-
-        givenpi %[{¦ hover: true inbox_dict} -1] do
-          unless hovered
-            node1 = node1.morph({:hover, false}, {:inbox, inbox.append({:unhover})})
-          end
-        end
-
-        givenpi %[{¦ hover: false inbox_dict} -1] do
-          if hovered
-            node1 = node1.morph({:hover, true}, {:inbox, inbox.append({:hover})})
-          end
-        end
-
-        givenpi %[{¦ hover: _boolean} -1] do
-          node1 = node1.morph({:hover, hovered})
+        matchpi %{(mouse press)}, %{(mouse release)} do
+          event(mevent)
+          return
         end
 
         otherwise { }
       end
+    end
 
-      node1 = Term.of(node1)
+    @mouseq_state = :default
+  end
 
+  # Returns the nodepath of the topmost node that includes the point *x*, *y*,
+  # if any. Returns `nil` otherwise.
+  private def below?(x : Term::Num, y : Term::Num) : Stack(Int32)?
+    stratum = UIR.stratum(Term.of(@dwuir), x, y)
+    stratum.leftmost? do |keypath|
+      hit = @dwuir.follow(keypath)
+      next unless backlink = hit[:"#backlink"]?
+      next unless backlink = backlink.as_itemsonly_d?
+
+      nodepath = Stack(Int32).new(backlink.size)
+
+      valid = backlink.items.all? do |index|
+        nodepath << (index.to?(Int32) || next)
+      end
+
+      next unless valid
+
+      nodepath
+    end
+  end
+
+  private def mark(& : Stack(Int32), Term -> Term) : Nil
+    nodepath = Stack(Int32).new
+
+    while Rhodium.successor?(@document, nodepath)
+      node0 = Rhodium.follow(@document, nodepath)
+      node1 = yield nodepath, node0
       next if node0.same?(node1)
 
       @document = Rhodium.assign(@document, nodepath, node1)
+    end
+  end
+
+  private def hover(nodepath : Stack(Int32), node : Term, mouseover : Stack(Int32)?) : Term
+    pointee = nodepath == mouseover
+
+    Term.case(node) do
+      # If this particular button is hovered, set `hover: true`. If it is not,
+      # remove the hover prop (this behavior is specific to buttons).
+      matchpi %{[button _*]} do
+        return Term.of(node.morph({:hover, pointee ? true : nil}))
+      end
+
+      otherwise do
+        # Fallthrough
+      end
+    end
+
+    if Rhodium.cursor_in_node?(@document, nodepath)
+      return node
+    end
+
+    Term.case(node) do
+      # If it has inbox, we also notify.
+      matchpi %[{¦ hover_boolean inbox_dict}] do
+        case {hover.true?, pointee}
+        in {false, false}, {true, true}
+          # No change
+          node
+        in {false, true}
+          # Just got hovered
+          Term.of(node.morph({:hover, true}, {:inbox, inbox.append({:hover})}))
+        in {true, false}
+          # Just got unhovered
+          Term.of(node.morph({:hover, false}, {:inbox, inbox.append({:unhover})}))
+        end
+      end
+
+      matchpi %[{¦ hover_boolean}] do
+        case {hover.true?, pointee}
+        in {false, false}, {true, true}
+          # No change
+          node
+        in {false, true}
+          # Just got hovered
+          Term.of(node.morph({:hover, true}))
+        in {true, false}
+          # Just got unhovered
+          Term.of(node.morph({:hover, false}))
+        end
+      end
+
+      otherwise { node }
     end
   end
 
@@ -1062,16 +1104,20 @@ class Document
       end
 
       matchpi %{(mouse motion x_number y_number)} do
-        @mouse1 = {x.unsafe_as_n, y.unsafe_as_n}
+        if @mouseq_state == :motion
+          @mouseq[-1] = prompt
+        else
+          @mouseq << prompt
+          @mouseq_state = :motion
+        end
 
         DoTransition::No
       end
 
-      # FIXME: we're effectively handling these before we know what's hovered.
       matchpi %{(mouse press)}, %{(mouse release)} do
         @important = true
-
-        event(prompt)
+        @mouseq << prompt
+        @mouseq_state = :default
 
         DoTransition::No
       end
@@ -1392,6 +1438,8 @@ ui = UIR::Reducers.microfold(Term.of(frame)) do |current, drawable, event|
 
       matchpi %{(mouse press)} do
         if frame[:".model", :forward]? == Term[true]
+          frame = frame.morph({:".model", :pressed, true})
+
           doc.send(event)
         else
           frame = frame.morph(
@@ -1402,10 +1450,13 @@ ui = UIR::Reducers.microfold(Term.of(frame)) do |current, drawable, event|
       end
 
       matchpi %{(mouse release)} do
-        if grip = frame[:".model", :grip]?
-          frame = frame.morph({:".model", :grip, nil}, {:cursor, nil})
+        if frame[:".model", :pressed]? == Term[true]
+          doc.send(event)
+          frame = frame.morph({:".model", :pressed, nil})
         elsif frame[:".model", :forward]? == Term[true]
           doc.send(event)
+        elsif grip = frame[:".model", :grip]?
+          frame = frame.morph({:".model", :grip, nil}, {:cursor, nil})
         end
       end
     end

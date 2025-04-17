@@ -705,6 +705,10 @@ class Stack(T)
   def pretty_print(pp)
     pp.list("Stack[", self, "]")
   end
+
+  def ==(other : Stack(T)) : Bool
+    equals?(other) { |a, b| a == b }
+  end
 end
 
 class IO::Empty < IO
