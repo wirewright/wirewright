@@ -55,6 +55,8 @@
 
 ;; NODE: text
 
+(text ¦ _ -leading_) <> {leading: 1}
+
 (text ¦ _ caption: _string font: _string weight: (%any 100 200 300 400 450 500 600 700 800 900) size: (%number u8) leading: _number -state_)
   <> {state: width-unknown}
 

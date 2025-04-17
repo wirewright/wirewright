@@ -713,9 +713,8 @@ module Microfold
       inherited = Term::Dict.build do |commit|
         inherit = ctx.spec[:inherit]? || Term[]
         inherit.each_entry do |attr, _|
-          next unless response = octx.consume(attr)
-
-          octx, value = response
+          octx, value = octx.consume(attr)
+          next unless value
 
           commit.with(attr, value)
         end

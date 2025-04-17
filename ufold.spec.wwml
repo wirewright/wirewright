@@ -24,19 +24,33 @@
 "leading-relaxed": {leading: 1.625}
 "leading-loose": {leading: 2}
 
-"text-xs": {text-size: (rem 0.75), leading: (/ 1 0.75)}
-"text-sm": {text-size: (rem 0.875), leading: (/ 1.25 0.875)}
-"text-base": {text-size: (rem 1), leading: (/ 1.5 1)}
-"text-lg": {text-size: (rem 1.125), leading: (/ 1.75 1.125)}
-"text-xl": {text-size: (rem 1.25), leading: (/ 1.75 1.25)}
-"text-2xl": {text-size: (rem 1.5), leading: (/ 1.75 1.5)}
-"text-3xl": {text-size: (rem 1.5), leading: (/ 2.25 1.875)}
-"text-4xl": {text-size: (rem 2.25), leading: (/ 2.5 2.25)}
-"text-5xl": {text-size: (rem 3), leading: 1}
-"text-6xl": {text-size: (rem 3.75), leading: 1}
-"text-7xl": {text-size: (rem 4.5), leading: 1}
-"text-8xl": {text-size: (rem 6), leading: 1}
-"text-9xl": {text-size: (rem 8), leading: 1}
+"leading-xs": {leading: (/ 1 0.75)}
+"leading-sm": {leading: (/ 1.25 0.875)}
+"leading-base": {leading: (/ 1.5 1)}
+"leading-lg": {leading: (/ 1.75 1.125)}
+"leading-xl": {leading: (/ 1.75 1.25)}
+"leading-2xl": {leading: (/ 1.75 1.5)}
+"leading-3xl": {leading: (/ 2.25 1.875)}
+"leading-4xl": {leading: (/ 2.5 2.25)}
+"leading-5xl": {leading: 1}
+"leading-6xl": {leading: 1}
+"leading-7xl": {leading: 1}
+"leading-8xl": {leading: 1}
+"leading-9xl": {leading: 1}
+
+"text-xs": {text-size: (rem 0.75)}
+"text-sm": {text-size: (rem 0.875)}
+"text-base": {text-size: (rem 1)}
+"text-lg": {text-size: (rem 1.125)}
+"text-xl": {text-size: (rem 1.25)}
+"text-2xl": {text-size: (rem 1.5)}
+"text-3xl": {text-size: (rem 1.5)}
+"text-4xl": {text-size: (rem 2.25)}
+"text-5xl": {text-size: (rem 3)}
+"text-6xl": {text-size: (rem 3.75)}
+"text-7xl": {text-size: (rem 4.5)}
+"text-8xl": {text-size: (rem 6)}
+"text-9xl": {text-size: (rem 8)}
 
 "font-thin": {font-weight: 100}
 "font-extralight": {font-weight: 200}
@@ -497,20 +511,20 @@ colors: {
 }
 
 defaults: {
-  p: "content font-sans text-base text-neutral-400 font-text",
-  h1: "content font-sans text-4xl text-neutral-300 font-bold",
-  h2: "content font-sans text-2xl text-neutral-300 font-semibold",
-  h3: "content font-sans text-xl text-neutral-300 font-medium",
-  h4: "content font-sans text-lg text-neutral-400 font-medium",
-  h5: "content font-sans text-sm text-neutral-400 font-semibold",
-  h6: "content font-sans text-xs text-neutral-400 font-bold",
+  p: "content font-sans text-base leading-base text-neutral-400 font-text",
+  h1: "content font-sans text-4xl leading-4xl text-neutral-300 font-bold",
+  h2: "content font-sans text-2xl leading-2xl text-neutral-300 font-semibold",
+  h3: "content font-sans text-xl leading-xl text-neutral-300 font-medium",
+  h4: "content font-sans text-lg leading-lg text-neutral-400 font-medium",
+  h5: "content font-sans text-sm leading-sm text-neutral-400 font-semibold",
+  h6: "content font-sans text-xs leading-xs text-neutral-400 font-bold",
   hr: "w-max max-w-4xl h-px py-1 bg-neutral-500",
-  icon: "content font-icons leading-none text-base text-neutral-400 font-normal",
-  code: "content font-mono text-base text-neutral-400 font-text",
-  src: "content font-mono text-base text-neutral-400 bg-neutral-950 p-2 font-text min-w-sm",
-  button: "bg-neutral-700 hover:bg-blue-500 hover:cursor-pointer rounded-sm px-4 py-2 center text-sm text-neutral-50 content font-sans font-medium",
+  icon: "content font-icons text-base text-neutral-400 font-normal",
+  code: "content font-mono text-base leading-base text-neutral-400 font-text",
+  src: "content font-mono text-base leading-base text-neutral-400 bg-neutral-950 p-2 font-text min-w-sm",
+  button: "bg-neutral-700 hover:bg-blue-500 hover:cursor-pointer rounded-sm px-4 py-2 center text-sm leading-sm text-neutral-50 content font-sans font-medium",
   rect: "max bg-white",
   group: "content",
 }
 
-inherit: {, font font-weight text-color}
+inherit: {, font font-weight text-color text-size leading}

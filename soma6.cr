@@ -138,7 +138,7 @@ module D7VR
         (header style: "w-max h-content flow-row font-sans font-normal text-xs text-neutral-300"
           "Showing " ^begin ".." ^end " out of " ^total ". Use PgUp/Dn to scroll")
         (group style: "w-max h-content flow-row fr"
-          (list style: "w-fr h-content flow-col text-sm font-mono font-text text-neutral-200 gap-2"
+          (list style: "w-fr h-content flow-col text-sm leading-sm font-mono font-text text-neutral-200 gap-2"
             (^*paste names 0 ..= -1))
           (^if (< scroll-offset 1)
             (scroll style: "w-2 h-max pr-1"
@@ -1236,7 +1236,7 @@ demo = ML.dict <<-WWML
 
 (unit group style: "content flow-col gap-5 bg-neutral-800 p-5"
   (unit group style: "w-max h-content center-x"
-    (p @count style: "text-7xl font-bold text-neutral-100"))
+    (p @count style: "text-7xl leading-none font-bold text-neutral-100"))
   (unit group style: "content flow-row gap-5"
     (button "Increment" as 1 to @deltas ())
     (button "Decrement" as -1 to @deltas ())))
@@ -1291,10 +1291,10 @@ welcome = ML.dict <<-WWML
 (unit group style: "w-max h-content flow-col gap-3 max-w-4xl"
   (h1 "Welcome to µsoma, a GUI for Wirewright!")
   (hr style: "bg-neutral-600")
-  (unit group style: "w-max h-content flow-col gap-3 text-neutral-300"
-    (p "µsoma to Wirewright is roughly what a web browser is to the Internet." style: "w-max text-sm")
-    (p "You're looking at a *self-embodied program*. Well, sort of — it only contains some text nodes right now. Hit left/right arrow to see for yourself." style: "w-max text-sm")
-    (p "Try typing the following:" style: "w-max text-sm")
+  (unit group style: "w-max h-content flow-col gap-3 text-sm text-neutral-300"
+    (p "µsoma to Wirewright is roughly what a web browser is to the Internet." style: "w-max")
+    (p "You're looking at a *self-embodied program*. Well, sort of — it only contains some text nodes right now. Hit left/right arrow to see for yourself." style: "w-max")
+    (p "Try typing the following:" style: "w-max")
     (src style: "w-max text-sm rounded"
       "(h1 @count)
        (cell 0 @count)
@@ -1303,15 +1303,15 @@ welcome = ML.dict <<-WWML
        (transform (@deltas to @counts with @count) (+ count _))
        (latest @counts @count)")
     (p "Click on the buttons and see what happens! :^)" style: "w-max text-sm")
-    (unit ul style: "w-max h-content flow-col gap-1 pl-3"
-      (p "- Drag on empty/non-clickable space to pan around if something overflows." style: "w-max text-sm font-semibold")
-      (p "- Use Ctrl-Plus to zoom in and Ctrl-Minus to zoom out." style: "w-max text-sm font-semibold")
-      (p "- Use Ctrl-Z to undo and Ctrl-R to redo (experimental)." style: "w-max text-sm font-semibold")
-      (p "- Hit F2-F3 to replace this document with more sophisticated demos." style: "w-max text-sm font-semibold")
-      (p "- Hit Ctrl-Backspace to remove this comment (and any *node* before the cursor in general)." style: "w-max text-sm font-semibold")
-      (p "- Hit Enter to escape from a pair." style: "w-max text-sm")
-      (p "- Play! The semi-readable implementation of this editor is in `editor.soma.wwml`; check it out for key bindings & what they do" style: "w-max text-sm")
-      (p "- Take a look at D7 tests: `delta7.test.wwml`. Plenty of examples in there." style: "w-max text-sm"))))
+    (unit ul style: "w-max h-content flow-col gap-1 pl-3 text-sm"
+      (p "- Drag on empty/non-clickable space to pan around if something overflows." style: "w-max")
+      (p "- Use Ctrl-Plus to zoom in and Ctrl-Minus to zoom out." style: "w-max")
+      (p "- Use Ctrl-Z to undo and Ctrl-R to redo (experimental)." style: "w-max")
+      (p "- Hit F2-F3 to replace this document with more sophisticated demos." style: "w-max")
+      (p "- Hit Ctrl-Backspace to remove this comment (and any *node* before the cursor in general)." style: "w-max")
+      (p "- Hit Enter to escape from a pair." style: "w-max")
+      (p "- Play! The semi-readable implementation of this editor is in `editor.soma.wwml`; check it out for key bindings & what they do" style: "w-max")
+      (p "- Take a look at D7 tests: `delta7.test.wwml`. Plenty of examples in there." style: "w-max"))))
 
 ("" | "" () @user)
 
