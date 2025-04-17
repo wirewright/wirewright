@@ -1600,7 +1600,12 @@ module Rhodium
       matchpi %{(edit @edge_ motion_)} do
         subsumed = false
 
-        cursors = document0[Cursors, edge]? || Term[]
+        unless document1.includes?(Cursors)
+          document1 = cursorstep(document1)
+        end
+
+        cursors = document1[Cursors, edge]? || Term[]
+
         cursors.each_entry do |cursorpath, _|
           cursor0 = document1.follow(cursorpath.items)
           cursor1 = cursor0.morph({3, Tail, motion}, {:"#rep", (cursor0[:"#rep"]? || 0) + 1}) # FIXME: ?!
@@ -1613,8 +1618,8 @@ module Rhodium
           document1 = document1.as_d? || raise "toplevel edit must produce a dict"
         end
 
-        # Edit is potentially destructive and not under our control; therefore it
-        # will always force a transition if subsumption succeeded.
+        document1 = cursorstep(document1)
+
         {document1, subsumed}
       end
 
@@ -2057,7 +2062,7 @@ module Rhodium
 
   # Recomputes the `#cursors` shadow attribute of *document0* based on cursors
   # in it. Returns the resulting document *document1*.
-  def cursorstep(document0 : Term::Dict) : {Term::Dict, Bool}
+  def cursorstep(document0 : Term::Dict) : Term::Dict
     document1 = document0
 
     cursors = cursors(document0)
@@ -2075,30 +2080,14 @@ module Rhodium
       targets1 = targets1.morph({cursor.edge, cursor.keypath, true})
     end
 
-    # If nothing changed, do not trigger a transition. Transitions are fairly
-    # expensive, certainly more expensive than an equality check.
-    if targets0 == targets1
-      return document1, false
-    end
-
-    {document1.morph({Cursors, targets1}), true}
-  end
-
-  # Returns the cursorstep step function of Rhodium.
-  def cursorstep : D7::Step
-    D7::Step.new do |document0, log|
-      log.append { Term.of(:input, :"rhodium/cursorstep", :step, document0) }
-      document1, transition_vote = cursorstep(document0)
-      log.append { Term.of(:output, :"rhodium/cursorstep", :step, document1) }
-      {document1, transition_vote}
-    end
+    document1.morph({Cursors, targets1})
   end
 end
 
 module Rhodium
   # Returns the step function for `Rhodium`.
   def step : D7::Step
-    D7.steps(cursorstep, timestep)
+    timestep
   end
 
   # Returns the transition function for `Rhodium`.
