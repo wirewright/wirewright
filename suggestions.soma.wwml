@@ -8,10 +8,19 @@
   (comma to)
   (pulse pout "sink for the message"))
 
-(node blast "Emits the items of lists received inorder"
+(group blast "Emits the items of lists received inorder")
+
+(variant blast
   (pulse pin "source of lists")
   (comma to)
   (pulse pout "sink for items"))
+
+(variant blast
+  (pulse pin "sensor stimuli")
+  (comma to)
+  (pulse pout "sink for capture values")
+  (comma stimulus)
+  (literal capture "name of the capture that should be extracted"))
 
 (group button "Triggers a pulse when clicked")
 
@@ -364,3 +373,15 @@
 (node spawner "Spawns nodes above or below itself"
   (pulse nodes "source of nodes to spawn")
   (prop? dir "can be `up` (default) or `down`, anything else is invalid"))
+
+(node sensor "Senses appearances matching its pattern in a termspace"
+  (literal pattern "pattern that appearances must match")
+  (comma in)
+  (literal tspace "termspace id")
+  (comma to)
+  (pulse stimuli "sink for match env multisets"))
+
+(node appearance "Excites sensors in a termspace by showing them a value of some kind"
+  (literal value "value to show to sensors")
+  (comma in)
+  (literal tspace "termspace id"))

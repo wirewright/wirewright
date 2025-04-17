@@ -742,14 +742,14 @@ module Rhodium
       # Sensors and appearances
       begin
         givenpi %{[sensor pattern_ in tspace_symbol to @_] (initialize _) -1} do
-          selector = node0[:selector]?
+          secret = node0[:secret]?
 
-          {document1.morph({Tspaces, tspace, :sensors, {pattern, selector}, true}), true}
+          {document1.morph({Tspaces, tspace, :sensors, {pattern, secret}, true}), true}
         end
 
         givenpi(
           %{[sensor pattern_ in tspace_ to @pout_] (stimuli tspace_ (pattern_) multiset_) -1},
-          %{(sensor pattern_ in tspace_ to @pout_ ¦ _ selector_) (stimuli tspace_ (pattern_ selector_) multiset_) -1},
+          %{(sensor pattern_ in tspace_ to @pout_ ¦ _ secret_) (stimuli tspace_ (pattern_ secret_) multiset_) -1},
         ) do
           effect(document1, nodepath, node0, cursordepth) do
             event :pulse, pout, multiset
@@ -759,9 +759,9 @@ module Rhodium
         end
 
         givenpi %{[appearance value_ in tspace_symbol] (initialize _) -1} do
-          selector = node0[:selector]?
+          secret = node0[:secret]?
 
-          {document1.morph({Tspaces, tspace, :appearances, {value, selector}, true}), true}
+          {document1.morph({Tspaces, tspace, :appearances, {value, secret}, true}), true}
         end
       end
 
@@ -1000,6 +1000,18 @@ module Rhodium
         effect(document1, nodepath, node0, cursordepth) do
           list.items.each do |item|
             event :pulse, pout, item
+          end
+
+          false
+        end
+      end
+
+      givenpi %{[blast @pin_ to @pout_ stimulus capture_] (pulse @pin_ envs_dict) -1} do
+        effect(document1, nodepath, node0, cursordepth) do
+          envs.each_entry do |env, _|
+            next unless value = env[capture]?
+
+            event :pulse, pout, value
           end
 
           false
@@ -1465,12 +1477,12 @@ module Rhodium
         %{(absence @_ as _ to @_) -1},
       ) { yield node }
 
-      givenpi %{(sensor pattern_ in tspace_symbol to @_ ¦ (%keypool selector)) -1} do
-        yield Term.of(:sensor, tspace, pattern, node[:selector]?)
+      givenpi %{(sensor pattern_ in tspace_symbol to @_ ¦ (%keypool secret)) -1} do
+        yield Term.of(:sensor, tspace, pattern, node[:secret]?)
       end
 
-      givenpi %{(appearance value_ in tspace_symbol ¦ (%keypool selector)) -1} do
-        yield Term.of(:appearance, tspace, value, node[:selector]?)
+      givenpi %{(appearance value_ in tspace_symbol ¦ (%keypool secret)) -1} do
+        yield Term.of(:appearance, tspace, value, node[:secret]?)
       end
 
       otherwise { }
@@ -1510,16 +1522,16 @@ module Rhodium
         document1.morph({Tspaces, tspace, :sensors, {pattern}, nil})
       end
 
-      matchpi %{(sensor tspace_ pattern_ selector_)} do
-        document1.morph({Tspaces, tspace, :sensors, {pattern, selector}, nil})
+      matchpi %{(sensor tspace_ pattern_ secret_)} do
+        document1.morph({Tspaces, tspace, :sensors, {pattern, secret}, nil})
       end
 
       matchpi %{(appearance tspace_ value_)} do
         document1.morph({Tspaces, tspace, :appearances, {value}, nil})
       end
 
-      matchpi %{(appearance tspace_ value_ selector_)} do
-        document1.morph({Tspaces, tspace, :appearances, {value, selector}, nil})
+      matchpi %{(appearance tspace_ value_ secret_)} do
+        document1.morph({Tspaces, tspace, :appearances, {value, secret}, nil})
       end
 
       otherwise { document1 }

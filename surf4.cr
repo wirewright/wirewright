@@ -2349,6 +2349,10 @@ class Tview
     view0.same?(view1) ? self : change(view: view1, version: @version + 1)
   end
 
+  def each(& : Slot, Tstimuli ->)
+    @view.each { |slot, stimuli| yield slot, stimuli }
+  end
+
   def next(pattern : Term, act : Activation) : Tview
     sensor = act.sensor
     stimulus = act.appearance
@@ -2377,7 +2381,7 @@ class Tview
 
   def dict_multisets : Term::Dict
     Term::Dict.build do |commit|
-      @view.each do |slot, stimuli|
+      each do |slot, stimuli|
         next if stimuli.absent?
 
         commit.with(slot, stimuli.dict_multiset)
@@ -2932,6 +2936,7 @@ class Tsetconn
     @fresh = Slot.new(0)
     @free = Set(Slot).new
     @encoding = Bimap(Sensor | Appearance, Slot).new
+    @encoding_lock = Mutex.new
   end
 
   # Convenience method to construct a `Sensor` identity.
@@ -2987,21 +2992,17 @@ class Tsetconn
   # Returns the sensor identity currently occupying the given Tconn *slot*.
   # Returns `nil` if no such identity exists.
   #
-  # Raises `Tconn::ClosedError` if this set conn is closed.
+  # This method is thread-safe to call.
   def sensor?(slot : Slot) : Sensor?
-    assert_open
-
-    @encoding[slot]?.as?(Sensor)
+    @encoding_lock.synchronize { @encoding[slot]?.as?(Sensor) }
   end
 
   # Returns the appearance identity currently occupying the underlying Tconn *slot*.
   # Returns `nil` if no such identity exists.
   #
-  # Raises `Tconn::ClosedError` if this set conn is closed.
+  # This method is thread-safe to call.
   def appearance?(slot : Slot) : Appearance?
-    assert_open
-
-    @encoding[slot]?.as?(Appearance)
+    @encoding_lock.synchronize { @encoding[slot]?.as?(Appearance) }
   end
 
   # Adds a surface with the given *identity* to this set conn, if absent.
@@ -3017,7 +3018,7 @@ class Tsetconn
 
     slot = acquire_slot
 
-    @encoding[identity] = slot
+    @encoding_lock.synchronize { @encoding[identity] = slot }
 
     # Insert after defining an encoding because the moment []= is called,
     # we should be able to receive & sanely react to messages about `slot`.
@@ -3040,7 +3041,7 @@ class Tsetconn
   def delete(identity : Identity) : Slot?
     assert_open
 
-    return unless slot = @encoding.delete(identity)
+    return unless slot = @encoding_lock.synchronize { @encoding.delete(identity) }
 
     @conn.delete(slot)
 
@@ -3055,8 +3056,10 @@ class Tsetconn
       return
     end
 
-    pp.list("Tsetconn{", @encoding, "}") do |identity, _|
-      identity.pretty_print(pp)
+    @encoding_lock.synchronize do
+      pp.list("Tsetconn{", @encoding, "}") do |identity, _|
+        identity.pretty_print(pp)
+      end
     end
   end
 end

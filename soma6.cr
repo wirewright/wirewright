@@ -2,6 +2,8 @@ require "./src/wirewright"
 require "./uiRb"
 require "./sfpaint"
 require "./pprint2"
+require "./mstep2"
+require "./surfsrv"
 
 alias UIR::Platform::Current = SFML
 
@@ -601,6 +603,9 @@ module D7VR
   end
 end
 
+# FIXME: this thing is crazy big & complicated & nasty. Can we simplify?
+# FIXME: due to complexity it's hard to *stop* a document, to e.g. implement pause/unpase
+#  which we require for the command palette.
 class Document
   # Used to generate document ids.
   @@counter = Atomic(UInt32).new(0u32)
@@ -725,7 +730,7 @@ class Document
   @rem0 : Term::Num
   @rem1 : Term::Num
 
-  def initialize(@draw : Channel({Term::Dict, Channel(Term::Dict)}))
+  def initialize(@draw : Channel({Term::Dict, Channel(Term::Dict)}), @mstep : Meridium::Step)
     id = @@counter.add(1, :relaxed)
 
     @document_thread = Fiber::ExecutionContext::SingleThreaded.new("Document #{id}")
@@ -796,7 +801,7 @@ class Document
     @document = D7.run(@document,
       log: D7::Log::None.new,
       transition: Rhodium.transition,
-      step: D7.steps(rendezvous, Rhodium.step, Nitrene.step(@nictx)),
+      step: D7.steps(rendezvous, Rhodium.step, Nitrene.step(@nictx), @mstep.fn),
       goal: D7::Goal.none,
       initial: initial,
     )
@@ -1321,7 +1326,12 @@ seed = welcome
 
 draw_chan = Channel({Term::Dict, Channel(Term::Dict)}).new
 
-doc = Document.new(draw_chan)
+mstep = Meridium::Step.new
+doc = Document.new(draw_chan, mstep)
+mstep.register(Term.of(:local), Meridium::StepSpace.inmemory(doc, Term.of(:local)))
+if ARGV[0]? == "join"
+  mstep.register(Term.of(:remote), Meridium::StepSpace.tcp(doc, "0.0.0.0", 9810, Term.of(:remote)))
+end
 doc.send(Term.of(:open, seed))
 
 frame = ML.term <<-WWML

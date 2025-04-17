@@ -740,7 +740,7 @@ struct UnbufferedSet(T)
   end
 end
 
-if ARGV[0] == "serve"
+if ARGV[0]? == "serve"
   set = DecayingAtomMultiset.new(nbuckets: System.cpu_count.to_i, minlife: 30.seconds, maxlife: 1.minute)
   chat = SyncInMemoryChat(Term).new
 
@@ -753,7 +753,7 @@ if ARGV[0] == "serve"
       client.mainloop
     end
   end
-elsif ARGV[0] == "join-s"
+elsif ARGV[0]? == "join-s"
   server = RemoteSurfnetServer.new("0.0.0.0", 9810)
   obs = ->(view : Tview) { pp view; nil }
   conn = Tconn.new(TspaceDigestSet.new(UnbufferedSet.new(server)), server, obs, keepalive: Keepalive::Continuous.new(30.seconds), relook: Relook::Periodic.new)
@@ -762,7 +762,7 @@ elsif ARGV[0] == "join-s"
   setconn << Tsetconn.sensor(ML.term(%{(+ a_number b_number)}), relook: 1.minute)
   # setconn << Tsetconn.appearance(ML.term %{(+ 1 2)})
   sleep
-elsif ARGV[0] == "join-a"
+elsif ARGV[0]? == "join-a"
   server = RemoteSurfnetServer.new("0.0.0.0", 9810)
   obs = ->(view : Tview) { pp view; nil }
   conn = Tconn.new(TspaceDigestSet.new(UnbufferedSet.new(server)), server, obs, keepalive: Keepalive::Continuous.new(30.seconds), relook: Relook::Periodic.new)
