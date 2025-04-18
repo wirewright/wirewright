@@ -1612,12 +1612,11 @@ module Rhodium
       matchpi %{(edit @edge_ motion_)} do
         subsumed = false
 
-        unless document1.includes?(Cursors)
-          document1 = cursorstep(document1)
-        end
+        # Anything could happen between `edit` events! We cannot rely on previous
+        # Cursors. Hopefully cursorfind will get optimizations someday...
+        document1 = cursorfind(document1)
 
         cursors = document1[Cursors, edge]? || Term[]
-
         cursors.each_entry do |cursorpath, _|
           cursor0 = document1.follow(cursorpath.items)
           cursor1 = cursor0.morph({3, Tail, motion}, {:"#rep", (cursor0[:"#rep"]? || 0) + 1}) # FIXME: ?!
@@ -1630,7 +1629,7 @@ module Rhodium
           document1 = document1.as_d? || raise "toplevel edit must produce a dict"
         end
 
-        document1 = cursorstep(document1)
+        document1 = cursorfind(document1)
 
         {document1, subsumed}
       end
@@ -2008,13 +2007,13 @@ module Rhodium
   # of a *nodepath* into the given *document* rather than off of an arbitrary term.
   #
   # Semantically, however, this cursordepth overload is slightly different from
-  # the other one; in that it uses information from the document's `cursorstep`
+  # the other one; in that it uses information from the document's `cursorfind`
   # to determine whether a cursor that is indeed found at the pointed-to node,
   # is a cursor that can be targeted by `edit`s.
   #
   # If it is such a cursor, it is "seen" by this overload and taken into account.
   # On the other hand, if the cursor cannot be targeted by `edit`s according to
-  # `cursorstep`, this overload will ignore it and move on.
+  # `cursorfind`, this overload will ignore it and move on.
   #
   # Another difference is that this overload returns the minimum cursor depth
   # for both items and pairs simultaneously; not items and pairs in sequence
@@ -2074,7 +2073,7 @@ module Rhodium
 
   # Recomputes the `#cursors` shadow attribute of *document0* based on cursors
   # in it. Returns the resulting document *document1*.
-  def cursorstep(document0 : Term::Dict) : Term::Dict
+  def cursorfind(document0 : Term::Dict) : Term::Dict
     document1 = document0
 
     cursors = cursors(document0)
