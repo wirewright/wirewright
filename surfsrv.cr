@@ -118,14 +118,20 @@ class DecayingAtomMultiset
 end
 
 module IRemoteSet(T)
-  # Unbuffered synchronous (blocking) query.
+  # Synchronous query (blocks until sent & received valid response)
   abstract def includes?(identity : T) : Bool
 
-  # Unbuffered asynchronous add
+  # Asynchronous add (blocks until sent)
   abstract def add(identity : T) : Nil
 
-  # Unbuffered asynchronous delete
+  # Asynchronous delete (blocks until sent)
   abstract def delete(identity : T) : Nil
+end
+
+module ITransactRemoteSet(T)
+  include IRemoteSet(T)
+
+  abstract def transact(additions : Set(T), deletions : Set(T)) : Nil
 end
 
 module Protocol
@@ -194,8 +200,8 @@ module Protocol
   {% end %}
 
   # :nodoc:
-  def encode(object : Bytes)
-    Base64.strict_encode(object)
+  def encode(object : Bytes) : Term
+    Term.of(Base64.strict_encode(object))
   end
 
   # :nodoc:
@@ -355,6 +361,25 @@ class RemoteSurfnetClient
           @set.delete(identity)
         end
 
+        matchpi %{(atom/tx additions←(_*) deletions←(_*))} do
+          identities_added = Array(AtomIdentity).new(additions.size)
+          identities_deleted = Array(AtomIdentity).new(deletions.size)
+
+          additions.each_item_unordered do |identity|
+            identities_added << Protocol.decode(AtomIdentity, identity)
+          end
+
+          deletions.each_item_unordered do |identity|
+            identities_deleted << Protocol.decode(AtomIdentity, identity)
+          end
+
+          # Everything checks out, commit.
+          identities_deleted.each { |identity| @set.delete(identity) }
+          identities_added.each { |identity| @set.add(identity) }
+
+          Log.trace { "transaction +#{identities_added.size} -#{identities_deleted.size} identities" }
+        end
+
         matchpi %{(sub/add conid_)} do
           @unsub.put_if_absent(conid) do
             # NOTE: This callback is run by everyone who wants to send something to
@@ -406,8 +431,8 @@ end
 
 # Represents a server from the client's point of view.
 class RemoteSurfnetServer
-  include IRemoteSet(Bytes)
   include IChat(Activation)
+  include ITransactRemoteSet(Bytes)
 
   Log = ::Log.for(self)
 
@@ -716,6 +741,21 @@ class RemoteSurfnetServer
   def send(to receiver : Label, message : Activation) : Nil
     request :send, Protocol.encode(receiver), Protocol.encode(message)
   end
+
+  # :inherit:
+  #
+  # Blocks until sent.
+  def transact(additions : Set(Bytes), deletions : Set(Bytes)) : Nil
+    additions_dict = Term::Dict.build do |commit|
+      commit.concat(additions) { |identity| Protocol.encode(identity) }
+    end
+
+    deletions_dict = Term::Dict.build do |commit|
+      commit.concat(deletions) { |identity| Protocol.encode(identity) }
+    end
+
+    request :"atom/tx", additions_dict, deletions_dict
+  end
 end
 
 struct UnbufferedSet(T)
@@ -739,7 +779,7 @@ struct UnbufferedSet(T)
   def initialize(@set : IRemoteSet(T))
   end
 
-  def size? : Int32
+  def size? : Int32?
   end
 
   def includes?(identity : T) : Bool
@@ -752,12 +792,80 @@ struct UnbufferedSet(T)
     atoms << Atom.new(self, identity)
   end
 
+  def flush : Nil
+  end
+
   protected def add(identity : T) : Nil
     @set.add(identity)
   end
 
   protected def delete(identity : T) : Nil
     @set.delete(identity)
+  end
+end
+
+class BufferedSet(T)
+  include ISet(T)
+
+  struct Atom(T)
+    include IAtom
+
+    def initialize(@set : BufferedSet(T), @identity : T)
+    end
+
+    def burn : Nil
+      @set.delete(@identity)
+      @set.flush # FIXME: ?!
+    end
+
+    def reinsert : Nil
+      @set.add(@identity)
+      @set.flush # FIXME: ?!
+    end
+  end
+
+  def initialize(@set : ITransactRemoteSet(T))
+    @additions = Set(T).new
+    @deletions = Set(T).new
+    @lock = Mutex.new
+  end
+
+  def size? : Int32?
+  end
+
+  def includes?(identity : T) : Bool
+    @lock.synchronize { @additions.includes?(identity) } || @set.includes?(identity)
+  end
+
+  def add(identity : T, atoms : AtomArray) : Nil
+    add(identity)
+
+    atoms << Atom.new(self, identity)
+  end
+
+  def flush : Nil
+    additions, deletions = @lock.synchronize do
+      state = {@additions, @deletions}
+      @additions = Set(T).new
+      @deletions = Set(T).new
+      state
+    end
+
+    @set.transact(additions, deletions)
+  end
+
+  protected def add(identity : T) : Nil
+    @lock.synchronize do
+      @additions << identity
+    end
+  end
+
+  protected def delete(identity : T) : Nil
+    @lock.synchronize do
+      return if @additions.delete(identity)
+
+      @deletions << identity
+    end
   end
 end
 

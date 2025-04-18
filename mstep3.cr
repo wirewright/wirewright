@@ -57,7 +57,7 @@ class Meridium::Space
       {% raise "server must include IRemoteSet(Bytes)" %}
     {% end %}
 
-    set = TspaceDigestSet.new(UnbufferedSet.new(server))
+    set = TspaceDigestSet.new(BufferedSet.new(server))
     chat = server
     instance = new(set, chat, **kwargs)
 
@@ -80,7 +80,7 @@ class Meridium::Space
   end
 
   # NOTE: obsever fn can be called from multiple fibers simultaneously;
-  # each passing a different views. Each view has a strictly increasing
+  # each passing a different view. Each view has a strictly increasing
   # version number; we're guaranteed that. So we only process a view whose
   # version number is newer than the one we already know, then use a single
   # CAS to make sure we weren't outrun by an even-newer view.

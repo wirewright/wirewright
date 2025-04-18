@@ -19,6 +19,7 @@ module ISet(T)
   abstract def includes?(identity : T) : Bool
   abstract def add(identity : T, atoms : AtomArray) : Nil
   abstract def size? : Int32?
+  abstract def flush : Nil
 
   def subset(cls : St.class) forall St
     SubSet(T, St).new(self)
@@ -91,6 +92,10 @@ struct SubSet(T, St)
   def add(identity : St, atoms : AtomArray) : Nil
     @set.add(identity.as(T), atoms)
   end
+
+  def flush : Nil
+    @set.flush
+  end
 end
 
 class SyncInMemoryMultiset(T)
@@ -132,6 +137,9 @@ class SyncInMemoryMultiset(T)
     end
 
     atoms << Atom.new(self, identity)
+  end
+
+  def flush : Nil
   end
 
   protected def reinsert(identity : T) : Nil
@@ -202,6 +210,9 @@ class SyncInMemorySet(T)
     @lock.synchronize { @set << identity }
 
     atoms << Atom.new(self, identity)
+  end
+
+  def flush : Nil
   end
 
   protected def reinsert(identity : T) : Nil
@@ -1792,6 +1803,10 @@ class TspaceDigestSet
   def add(identity : Tspace::Atom, atoms : AtomArray) : Nil
     @set.add(digest(Scope.of(identity), identity), atoms)
   end
+
+  def flush : Nil
+    @set.flush
+  end
 end
 
 defcase Activation, kind : Kind, sensor : SensorInfo, instant : Label, appearance : AppearanceInfo do
@@ -2613,6 +2628,8 @@ class Tconn
         Log.trace { "#{@conid}: iseq(#{grpid}): scheduled relook" }
       end
 
+      @set.flush
+
       # If we've managed to remove an appearance, make sure to notify anybody
       # interested in the appearance's demise.
       #
@@ -2648,8 +2665,10 @@ class Tconn
       in Tspace::Sensor
         @keepalive.cancel(surface.grpid)
         @relook.cancel(surface)
+        @set.flush
       in Tspace::Appearance
         @keepalive.cancel(surface.instant)
+        @set.flush
         refresh(surface, as: :stimulus_absence)
       end
 
@@ -3220,7 +3239,6 @@ sleep 1.second
 pp set.size?
 
 # FIXME: notify about removal of all appearances on `Tconn#close`
-# TODO: use this in soma
 # TODO: move ready stuff to src/, replace/remove old files
 # TODO: implement BufferedSet(IRemoteSet) < ISet
 #
