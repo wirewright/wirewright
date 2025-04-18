@@ -2,7 +2,7 @@ require "./src/wirewright"
 require "./uiRb"
 require "./sfpaint"
 require "./pprint2"
-require "./mstep2"
+require "./mstep3"
 require "./surfsrv"
 
 alias UIR::Platform::Current = SFML
@@ -27,6 +27,7 @@ module D7VR
       # have removed them as they would have looked like shadow attribute keys.
 
       dict, view = dict.without?(:"#view")
+      dict, status = dict.without?(:"#status")
       dict, extension = dict.without?(:"#extend")
 
       printout = nil
@@ -58,6 +59,14 @@ module D7VR
       # postfix it'll count as a hover on printout too -- wrongly.
       if extension
         printout = Term.of(:info, printout) | extension
+      end
+
+      if status
+        if status.true?
+          printout = Term.of(:row, Term.of(:block, Term.of({:self, :rect}, style: "w-2 h-2 bg-green-500 dt-2 mr-1 rounded-xs"), w: 1, h: 1), printout)
+        else
+          printout = Term.of(:row, Term.of(:block, Term.of({:self, :rect}, style: "w-2 h-2 bg-yellow-500 dt-2 mr-1 rounded-xs"), w: 1, h: 1), printout)
+        end
       end
 
       Term.of(printout)
@@ -419,6 +428,34 @@ module D7VR
         node1.morph({:"#fallback", node1})
       end
 
+      matchpi %{[sensor pattern_ in tspace_symbol to @_]} do
+        continue if Rhodium.cursor_in_node?(document0, nodepath)
+        continue unless in_sync = document0[Rhodium::Tspaces, tspace, :sensors, {pattern}]?
+
+        node1 = node1.morph({:"#status", in_sync.true?})
+      end
+
+      matchpi %{(sensor pattern_ in tspace_symbol to @_ ¦ _ secret_)} do
+        continue if Rhodium.cursor_in_node?(document0, nodepath)
+        continue unless in_sync = document0[Rhodium::Tspaces, tspace, :sensors, {pattern, secret}]?
+
+        node1 = node1.morph({:"#status", in_sync.true?})
+      end
+
+      matchpi %{[appearance value_ in tspace_symbol]} do
+        continue if Rhodium.cursor_in_node?(document0, nodepath)
+        continue unless in_sync = document0[Rhodium::Tspaces, tspace, :appearances, {value}]?
+
+        node1 = node1.morph({:"#status", in_sync.true?})
+      end
+
+      matchpi %{(appearance value_ in tspace_symbol ¦ _ secret_)} do
+        continue if Rhodium.cursor_in_node?(document0, nodepath)
+        continue unless in_sync = document0[Rhodium::Tspaces, tspace, :appearances, {value, secret}]?
+
+        node1 = node1.morph({:"#status", in_sync.true?})
+      end
+
       otherwise { node1 }
     end
 
@@ -618,10 +655,14 @@ class Document
       state.settled?
     end
 
-    def enqueue(prompt : Term, & : ->) : Nil
+    def enqueue(prompt : Term, *, only_settled : Bool = false, & : ->) : Nil
       state0 = @state.get(:relaxed)
       while true
-        state1 = state0.enqueue(prompt)
+        if only_settled
+          state1 = state0.settled? ? state0.enqueue(prompt) : state0
+        else
+          state1 = state0.enqueue(prompt)
+        end
         state0, ok = @state.compare_and_set(state0, state1, :relaxed, :relaxed)
         break if ok
       end
@@ -739,10 +780,7 @@ class Document
 
     # The following instance variables are owned exclusively by the document
     # thread. No one else must know they exist.
-    @nictx = Nitrene::StepContext.new do
-      # Wake document thread up if it's sleeping. Nitrene.step will do the rest.
-      send(Term.of(:alarm))
-    end
+    @nictx = Nitrene::StepContext.new { alarm }
 
     @dwuir = Term[]
     @concealed = false
@@ -761,9 +799,14 @@ class Document
     @mailbox.settled?
   end
 
+  # Wakes the document thread up if it's sleeping.
+  def alarm : Nil
+    send(Term.of(:alarm), only_settled: true)
+  end
+
   # Adds *prompt* to this document's mailbox.
-  def send(prompt : Term) : Nil
-    @mailbox.enqueue(prompt) do
+  def send(prompt : Term, *, only_settled : Bool = false) : Nil
+    @mailbox.enqueue(prompt, only_settled: only_settled) do
       initial0 = @initial
 
       @initial = false
@@ -1322,16 +1365,25 @@ welcome = ML.dict <<-WWML
 
 WWML
 
+test = ML.dict <<-WWML
+(appearance 0 in remote)
+
+("" | "" () @user)
+WWML
+
 seed = welcome
 
 draw_chan = Channel({Term::Dict, Channel(Term::Dict)}).new
 
 mstep = Meridium::Step.new
 doc = Document.new(draw_chan, mstep)
-mstep.register(Term.of(:local), Meridium::StepSpace.inmemory(doc, Term.of(:local)))
+alert = ->doc.alarm
+mstep.register(Term.of(:local), Meridium::Space.local(alert: alert))
 if ARGV[0]? == "join"
-  mstep.register(Term.of(:remote), Meridium::StepSpace.tcp(doc, "0.0.0.0", 9810, Term.of(:remote)))
+  server = RemoteSurfnetServer.new("0.0.0.0", 9810)
+  mstep.register(Term.of(:remote), Meridium::Space.remote(server, alert: alert, keepalive: Keepalive::Continuous.new(30.seconds), relook: Relook::Periodic.new))
 end
+
 doc.send(Term.of(:open, seed))
 
 frame = ML.term <<-WWML

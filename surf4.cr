@@ -2232,9 +2232,10 @@ class Tstimuli
   record Owner, conid : Label, slot : Slot
   defcase Instance, instant : Label, value : Term, matches : Array(Term::Dict)
 
+  getter surface : Tspace::Sensor
   getter grpid : Label
 
-  def initialize(@pattern : Term, @grpid : Label, @stimuli = Pf::Map(Owner, Instance).new)
+  def initialize(@surface : Tspace::Sensor, @grpid : Label, @stimuli = Pf::Map(Owner, Instance).new)
   end
 
   private def_change
@@ -2249,7 +2250,7 @@ class Tstimuli
     # If we do not know about the owner already, then simply create the corresponding
     # entry and move on.
     unless instance0 = @stimuli[owner]?
-      matches = M1.matches(@pattern, stimulus.value)
+      matches = M1.matches(@surface.pattern, stimulus.value)
       if matches.empty?
         return self, false
       end
@@ -2284,7 +2285,7 @@ class Tstimuli
     # move on. If stimuli are equal, return no change (but update the stimuli
     # map with the new instant!)
 
-    matches = M1.matches(@pattern, stimulus.value)
+    matches = M1.matches(@surface.pattern, stimulus.value)
     if matches.empty?
       return change(stimuli: @stimuli.dissoc(owner)), true
     end
@@ -2353,11 +2354,11 @@ class Tview
     @view.each { |slot, stimuli| yield slot, stimuli }
   end
 
-  def next(pattern : Term, act : Activation) : Tview
+  def next(surface : Tspace::Sensor, act : Activation) : Tview
     sensor = act.sensor
     stimulus = act.appearance
 
-    view0 = @view[sensor.slot]? || Tstimuli.new(pattern, sensor.grpid)
+    view0 = @view[sensor.slot]? || Tstimuli.new(surface, sensor.grpid)
 
     # Make sure it still belongs to the same grpid.
     unless view0.grpid == sensor.grpid
@@ -2441,7 +2442,7 @@ class Tconn
   end
 
   @conid : Label
-  @unsubscribe : IChat::Unsubscribe
+  @unsubscribe : IChat::Unsubscribe?
 
   # Constructs a termspace connection.
   #
@@ -2471,7 +2472,6 @@ class Tconn
     @open = true
     @conid = @fresh.call
     @kernel = SyncObservableKernel.new(@conid, observer)
-    @unsubscribe = @chat.subscribe(@conid) { |act| @kernel.activate(act) }
   end
 
   # Convenience method to construct a `Sensor` surface.
@@ -2520,7 +2520,7 @@ class Tconn
 
     concealed do
       @kernel.close
-      @unsubscribe.call
+      @unsubscribe.try(&.call)
       @keepalive.cancel
       @relook.cancel
     end
@@ -2575,6 +2575,16 @@ class Tconn
       case spec
       in Sensor
         surface1 = Tspace::Sensor.new(@fresh, @conid, slot, grpid, spec.secret, spec.pattern)
+
+        # If we're inserting a sensor for the first time, we should subscribe to conid
+        # in chat.
+        unless @unsubscribe
+          Log.trace { "#{@conid}: first sensor insert, time to subscribe" }
+
+          @unsubscribe = @chat.subscribe(@conid) { |act| @kernel.activate(act) }
+
+          Log.trace { "#{@conid}: subscribed to messages to self in chat" }
+        end
       in Appearance
         surface1 = Tspace::Appearance.new(@conid, slot, grpid, spec.secret, spec.value)
       end
@@ -2729,7 +2739,7 @@ class Tconn::Kernel
       return
     end
 
-    @view = @view.next(surface.pattern, act)
+    @view = @view.next(surface, act)
   end
 
   def clear(slot : Slot, sensor : Tspace::Sensor) : Nil

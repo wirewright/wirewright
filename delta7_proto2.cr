@@ -744,7 +744,7 @@ module Rhodium
         givenpi %{[sensor pattern_ in tspace_symbol to @_] (initialize _) -1} do
           secret = node0[:secret]?
 
-          {document1.morph({Tspaces, tspace, :sensors, {pattern, secret}, true}), true}
+          {document1.morph({Tspaces, tspace, :sensors, {pattern, secret}, false}), true}
         end
 
         givenpi(
@@ -761,7 +761,7 @@ module Rhodium
         givenpi %{[appearance value_ in tspace_symbol] (initialize _) -1} do
           secret = node0[:secret]?
 
-          {document1.morph({Tspaces, tspace, :appearances, {value, secret}, true}), true}
+          {document1.morph({Tspaces, tspace, :appearances, {value, secret}, false}), true}
         end
       end
 

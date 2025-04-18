@@ -195,7 +195,7 @@ module Protocol
 
   # :nodoc:
   def encode(object : Bytes)
-    Base64.encode(object)
+    Base64.strict_encode(object)
   end
 
   # :nodoc:
@@ -412,14 +412,25 @@ class RemoteSurfnetServer
   Log = ::Log.for(self)
 
   def initialize(host : String, port : Int)
+    # These ivars are accessed by the client fiber & by the reconnect fiber;
+    # we need to synchronize.
     @subs = {} of Term => (Activation ->)
-    @subs_lock = Mutex.new
+    @online = false
+    @statecb = ->(state : Bool) { }
+    @lock = Mutex.new
 
     @requests = Channel({Term::Dict, Channel(Bool)}).new
     @answers = Channel(Term::Dict).new
     @errors = Channel(Protocol::Error).new
 
     spawn reconnect(host, port)
+  end
+
+  def on_connection_state_changed(&fn : Bool ->) : Nil
+    @lock.synchronize do
+      @statecb = fn
+      @statecb.call(@online)
+    end
   end
 
   # The reconnect loop manages reconnect (and initial connect) with exponential
@@ -440,6 +451,11 @@ class RemoteSurfnetServer
         socket.tcp_nodelay = true
 
         Log.info { "established connection" }
+
+        @lock.synchronize do
+          @online = true
+          @statecb.call(@online)
+        end
 
         # Requests for just this turn.
         requests = Channel({Term::Dict, Channel(Bool)}).new
@@ -498,6 +514,11 @@ class RemoteSurfnetServer
       rescue e : Socket::ConnectError
         # Abnormal close
         Log.debug(exception: e) { "could not establish connection" }
+      end
+
+      @lock.synchronize do
+        @online = false
+        @statecb.call(@online)
       end
 
       reconnects += 1
@@ -577,7 +598,7 @@ class RemoteSurfnetServer
   #
   # WARNING: do not use `@requests`; nobody is listening to it yet!
   private def restore(requests : Channel({Term::Dict, Channel(Bool)})) : Nil
-    sub_requests = @subs_lock.synchronize do
+    sub_requests = @lock.synchronize do
       @subs.map { |conid, _| Term[:"sub/add", conid] }
     end
 
@@ -600,7 +621,7 @@ class RemoteSurfnetServer
 
   # Notifies *conid* about activation *act*.
   private def notify(conid : Term, act : Activation) : Nil
-    if sub = @subs_lock.synchronize { @subs[conid]? }
+    if sub = @lock.synchronize { @subs[conid]? }
       sub.call(act)
     end
   end
@@ -678,12 +699,12 @@ class RemoteSurfnetServer
   def subscribe(address : Label, &recv : Activation ->) : Unsubscribe
     address = Protocol.encode(address)
 
-    if @subs_lock.synchronize { @subs.put?(address, recv) }
+    if @lock.synchronize { @subs.put?(address, recv) }
       request :"sub/add", address
     end
 
     Unsubscribe.new do
-      if @subs_lock.synchronize { @subs.delete(address) }
+      if @lock.synchronize { @subs.delete(address) }
         request :"sub/del", address
       end
     end
