@@ -487,101 +487,57 @@ module Rhodium
     cursordepth = cursordepth_in_node(document0, nodepath)
 
     Term.case({node0, event, cursordepth}) do
-      # TODO: these are very similar and should be refactored into
-      # something single, with variations, like transform.
-
-      givenpi %{[cell v_ @cout_] (initialize _) -1} do
-        effect(document1, nodepath, node0, cursordepth) do
-          event :"cell/created", cout, v
-          cell cout, v
-
-          true
-        end
-      end
-
-      givenpi %{[cell v_ @cout_ for pattern_] (initialize _) -1} do
-        effect(document1, nodepath, node0, cursordepth) do
-          if created = M1.probe?(pattern, v)
+      # cell
+      begin
+        givenpi %{[cell v_ @cout_] (initialize _) -1} do
+          effect(document1, nodepath, node0, cursordepth) do
             event :"cell/created", cout, v
             cell cout, v
-          else
-            backmap ML.term(%{[cell v_ _ for _]}), Term.of(Term[].with({:v}, Term[]))
+
+            true
           end
-
-          created
         end
-      end
 
-      givenpi(
-        %{[cell v_ @cout_] (assign @cout_ v_) -1},
-        %{[cell v_ @cout_ for _] (assign @cout_ v_) -1},
-      ) do
-        {document1, false}
-      end
-
-      givenpi %{[cell v0_ @cout_] (assign @cout_ v1_) -1} do
-        effect(document1, nodepath, node0, cursordepth) do
-          event :"cell/updated", cout, v0, v1
-          cell cout, v1
-          backmap %{[cell v_ @_]}, v: v1
-
-          # The identity of the cell did not change, do not trigger transition.
-          false
+        givenpi %{[cell v_ @cout_] (assign @cout_ v_) -1} do
+          {document1, false}
         end
-      end
 
-      givenpi(
-        %{[cell @cout_] (assign @cout_ v0_) -1},
-        %{[cell @cout_] (cell/created @cout_ v0_) -1},
-      ) do
-        effect(document1, nodepath, node0, cursordepth) do
-          backmap %[[cell ⏏v @_]], v: v0
-
-          true
-        end
-      end
-
-      givenpi(
-        %{[cell @cout_ for _] (assign @cout_ v0_) -1},
-        %{[cell @cout_ for _] (cell/created @cout_ v0_) -1},
-      ) do
-        effect(document1, nodepath, node0, cursordepth) do
-          backmap %{[cell ⏏v @_ for _]}, v: v0
-
-          true
-        end
-      end
-
-      givenpi %{[cell v0_ @cout_ for pattern_] (assign @cout_ v1_) -1} do
-        if M1.probe?(pattern, v1)
+        givenpi %{[cell v0_ @cout_] (assign @cout_ v1_) -1} do
           effect(document1, nodepath, node0, cursordepth) do
             event :"cell/updated", cout, v0, v1
             cell cout, v1
-            backmap %{[cell v_ @_ _*]}, v: v1
+            backmap %{[cell v_ @_]}, v: v1
 
             # The identity of the cell did not change, do not trigger transition.
             false
           end
-        else
-          {document1, false}
         end
-      end
 
-      # TODO: instead of (%number (whole _) > 0) we should have (%number 0 < i32). All +-variants must
-      # allow the exclusion of zero this way.
+        givenpi(
+          %{[cell @cout_] (assign @cout_ v0_) -1},
+          %{[cell @cout_] (cell/created @cout_ v0_) -1},
+        ) do
+          effect(document1, nodepath, node0, cursordepth) do
+            backmap %[[cell ⏏v @_]], v: v0
 
-      # TODO: this should support for ... guard as well!!
+            true
+          end
+        end
 
-      givenpi %{[cell vs0←(_*) @cout_] (assign/log @cout_ v_ limit←(%number (whole _) > 0)) -1} do
-        vs1 = vs0.rightmost(limit.to(Int32) - 1).append(v)
+        # TODO: instead of (%number (whole _) > 0) we should have (%number 0 < i32). All +-variants must
+        # allow the exclusion of zero this way.
 
-        effect(document1, nodepath, node0, cursordepth) do
-          event :"cell/updated", cout, vs0, vs1
-          cell cout, vs1
-          backmap %{[cell v_ @_]}, v: vs1
+        givenpi %{[cell vs0←(_*) @cout_] (assign/log @cout_ v_ limit←(%number (whole _) > 0)) -1} do
+          vs1 = vs0.rightmost(limit.to(Int32) - 1).append(v)
 
-          # The identity of the cell did not change, do not trigger transition.
-          false
+          effect(document1, nodepath, node0, cursordepth) do
+            event :"cell/updated", cout, vs0, vs1
+            cell cout, vs1
+            backmap %{[cell v_ @_]}, v: vs1
+
+            # The identity of the cell did not change, do not trigger transition.
+            false
+          end
         end
       end
 
@@ -951,47 +907,180 @@ module Rhodium
         end
       end
 
-      givenpi %{[latest @pin_ @cout_] (pulse @pin_ v_) -1} do
-        effect(document1, nodepath, node0, cursordepth) do
-          event :assign, cout, v
-
-          false
-        end
-      end
-
-      givenpi %{[latest (@pin_ pattern_) (@cout_ form_)] (pulse @pin_ v_) -1} do
-        if env = M1.match?(pattern, v)
+      begin
+        givenpi %{[latest @pin_ @cout_] (pulse @pin_ v_) -1} do
           effect(document1, nodepath, node0, cursordepth) do
-            event :assign, cout, M1.bsubst(form, env)
+            event :assign, cout, v
 
             false
           end
-        else
-          {document1, false}
+        end
+
+        givenpi %{[latest (@pin_ pattern_ @cout_) template_] (pulse @pin_ vin_) -1} do
+          if env = M1.match?(pattern, vin)
+            effect(document1, nodepath, node0, cursordepth) do
+              event :assign, cout, Alloy.render(env, template, strict: false)
+
+              false
+            end
+          else
+            {document1, false}
+          end
         end
       end
 
-      givenpi(
-        %{[changes @cin_ to @pout_] (cell/created @cin_ v_) -1},
-        %{[changes @cin_ to @pout_] (cell/updated @cin_ _ v_) -1},
-        %{[changes @cin_ to @pout_ as v_] (cell/created @cin_ _) -1},
-        %{[changes @cin_ to @pout_ as v_] (cell/updated @cin_ _ _) -1},
-      ) do
-        effect(document1, nodepath, node0, cursordepth) do
-          event :pulse, pout, v
+      # changes
+      begin
+        # Without pattern
+        givenpi(
+          %{[changes @cin_ to @pout_] (cell/created @cin_ v_) -1},
+          %{[changes @cin_ to @pout_] (cell/updated @cin_ _ v_) -1},
+        ) do
+          effect(document1, nodepath, node0, cursordepth) do
+            event :pulse, pout, v
 
-          false
+            false
+          end
+        end
+
+        # With pattern
+        givenpi(
+          %{[changes (@cin_ pattern_ to @pout_)] (cell/created @cin_ vin_) -1},
+          %{[changes (@cin_ pattern_ to @pout_)] (cell/updated @cin_ _ vin_) -1},
+        ) do
+          effect(document1, nodepath, node0, cursordepth) do
+            if M1.probe?(pattern, vin)
+              event :pulse, pout, vin
+            end
+
+            false
+          end
+        end
+
+        # With pattern & template
+        givenpi(
+          %{[changes (@cin_ pattern_ to @pout_) template_] (cell/created @cin_ vin_) -1},
+          %{[changes (@cin_ pattern_ to @pout_) template_] (cell/updated @cin_ _ vin_) -1},
+        ) do
+          effect(document1, nodepath, node0, cursordepth) do
+            envs = M1.matches(pattern, vin)
+            envs.each do |env|
+              event :pulse, pout, Alloy.render(env, template, strict: false)
+            end
+
+            false
+          end
         end
       end
 
-      givenpi(
-        %{[initial @cin_ to @pout_] (cell/created @cin_ v_) -1},
-        %{[initial @cin_ to @pout_ as v_] (cell/created @cin_ _) -1},
-      ) do
-        effect(document1, nodepath, node0, cursordepth) do
-          event :pulse, pout, v
+      # initial
+      begin
+        # Without pattern
+        givenpi %{[initial @cin_ to @pout_] (cell/created @cin_ v_) -1} do
+          effect(document1, nodepath, node0, cursordepth) do
+            event :pulse, pout, v
 
-          false
+            false
+          end
+        end
+
+        # With pattern
+        givenpi(
+          %{[initial (@_ _ to @_)] (initialize _) -1},
+          %{[initial (@_ _ to @_) _] (initialize _) -1},
+        ) do
+          effect(document1, nodepath, node0, cursordepth) do
+            change "#shadow": {:"%literal", node0.itemspart}, "#fired": false
+
+            false
+          end
+        end
+
+        givenpi(
+          %{(initial (@cin_ pattern_ to @pout_) ¦ _ #fired: false) (cell/created @cin_ vin_) -1},
+          %{(initial (@cin_ pattern_ to @pout_) ¦ _ #fired: false) (cell/updated @cin_ _ vin_) -1},
+        ) do
+          effect(document1, nodepath, node0, cursordepth) do
+            if M1.probe?(pattern, vin)
+              event :pulse, pout, vin
+              change "#fired": true
+            end
+
+            false
+          end
+        end
+
+        # With pattern & template
+        givenpi(
+          %{(initial (@cin_ pattern_ to @pout_) template_ ¦ _ #fired: false) (cell/created @cin_ vin_) -1},
+          %{(initial (@cin_ pattern_ to @pout_) template_ ¦ _ #fired: false) (cell/updated @cin_ _ vin_) -1},
+        ) do
+          effect(document1, nodepath, node0, cursordepth) do
+            envs = M1.matches(pattern, vin)
+            envs.each do |env|
+              event :pulse, pout, Alloy.render(env, template, strict: false)
+            end
+            if envs.present?
+              change "#fired": true
+            end
+
+            false
+          end
+        end
+
+        givenpi(
+          %{(initial (@cin_ _ to @_) ¦ _ #fired: true) (cell/removed @cin_) -1},
+          %{(initial (@cin_ _ to @_) _ ¦ _ #fired: true) (cell/removed @cin_) -1},
+        ) do
+          effect(document1, nodepath, node0, cursordepth) do
+            change "#fired": false
+
+            false
+          end
+        end
+      end
+
+      # Absence node
+      begin
+        # Initialize `absence` to newborn state.
+        givenpi %{[absence @_ as _ to @_] (initialize _) -1} do
+          effect(document1, nodepath, node0, cursordepth) do
+            change "#shadow": {:"%literal", node0.itemspart}, "#state": :newborn
+
+            true
+          end
+        end
+
+        # Whenever we're in newborn state, on cycle, look around to see if the cell's
+        # identity is in the population.
+        givenpi %{(absence @cin_ as msg_ to @pout_ ¦ _ #state: newborn) cycle -1} do
+          effect(document1, nodepath, node0, cursordepth) do
+            if document0[Cells, cin]?
+              change "#state": :paired
+            else
+              event :pulse, pout, msg
+              change "#state": :unpaired
+            end
+
+            false
+          end
+        end
+
+        givenpi %{(absence @cin_ as msg_ to @pout_ ¦ _ #state: paired) (cell/removed @cin_) -1} do
+          effect(document1, nodepath, node0, cursordepth) do
+            event :pulse, pout, msg
+            change "#state": :unpaired
+
+            false
+          end
+        end
+
+        givenpi %{(absence @cin_ as _ to @_ ¦ _ #state: unpaired) (cell/created @cin_ _) -1} do
+          effect(document1, nodepath, node0, cursordepth) do
+            change "#state": :paired
+
+            false
+          end
         end
       end
 
@@ -1106,7 +1195,7 @@ module Rhodium
       # Transform logic
       begin
         # Schedule job.
-        givenpi %{(transform _* ¦ _ #shadow: _ #spec: spec←{¦ in: @pin_, body_}) (pulse @pin_ input_) -1} do
+        givenpi %{(transform _* ¦ _ #spec: spec←{¦ in: @pin_, body_}) (pulse @pin_ input_) -1} do
           env0 = Term[]
 
           if (state_edge = spec[:state]?) && ML.edge?(state_edge)
@@ -1141,7 +1230,7 @@ module Rhodium
         end
 
         # Send feedback busy. Schedule job.
-        givenpi %{(transform _* ¦ _ #shadow: _ #spec: {¦ in: @pin_} #job: job_) (initialize _) -1} do
+        givenpi %{(transform _* ¦ _ #spec: {¦ in: @pin_} #job: job_) (initialize _) -1} do
           effect(document1, nodepath, node0, cursordepth) do
             schedule job
 
@@ -1150,7 +1239,7 @@ module Rhodium
         end
 
         # Wait for the job to complete.
-        givenpi %{(transform _* ¦ _ #shadow: _ #spec: {¦ in: @pin_, out: @pout_} #job: job_) (job/completed job_ result_) -1} do
+        givenpi %{(transform _* ¦ _ #spec: {¦ in: @pin_, out: @pout_} #job: job_) (job/completed job_ result_) -1} do
           effect(document1, nodepath, node0, cursordepth) do
             event :pulse, pout, result
             clear :"#job"
@@ -1194,50 +1283,6 @@ module Rhodium
           change "#shadow": {:"%literal", node0.itemspart}, "#spec": {in: pin, out: pout, filter: pattern, state: state, body: body}
 
           true
-        end
-      end
-
-      # Absence node
-      begin
-        # Initialize `absence` to newborn state.
-        givenpi %{[absence @_ as _ to @_] (initialize _) -1} do
-          effect(document1, nodepath, node0, cursordepth) do
-            change "#shadow": {:"%literal", node0.itemspart}, "#state": :newborn
-
-            true
-          end
-        end
-
-        # Whenever we're in newborn state, on cycle, look around to see if the cell's
-        # identity is in the population.
-        givenpi %{(absence @cin_ as msg_ to @pout_ ¦ _ #shadow: _ #state: newborn) cycle -1} do
-          effect(document1, nodepath, node0, cursordepth) do
-            if document0[Cells, cin]?
-              change "#state": :paired
-            else
-              event :pulse, pout, msg
-              change "#state": :unpaired
-            end
-
-            false
-          end
-        end
-
-        givenpi %{(absence @cin_ as msg_ to @pout_ ¦ _ #shadow: _ #state: paired) (cell/removed @cin_) -1} do
-          effect(document1, nodepath, node0, cursordepth) do
-            event :pulse, pout, msg
-            change "#state": :unpaired
-
-            false
-          end
-        end
-
-        givenpi %{(absence @cin_ as _ to @_ ¦ _ #shadow: _ #state: unpaired) (cell/created @cin_ _) -1} do
-          effect(document1, nodepath, node0, cursordepth) do
-            change "#state": :paired
-
-            false
-          end
         end
       end
 
@@ -1452,36 +1497,35 @@ module Rhodium
   # Nodes with identity are interested in receiving initialize events.
   def each_identity(node : Term, cursordepth : Int32, & : Term ->) : Nil
     Term.case({node, cursordepth}) do
-      givenpi(
-        %{(cell _ @cout_) -1},
-        %{(cell _ @cout_ for _) -1},
-      ) do
+      givenpi %{[cell _ @cout_] -1} do
         yield Term.of(:cell, cout)
       end
 
       # Fragments include the value in their identity so that we have observability.
-      givenpi %{(frag value_ @cout_) _} do
+      givenpi %{[frag value_ @cout_] _} do
         yield Term.of(:frag, cout)
         yield Term.of(:frag, value, cout)
       end
 
-      givenpi %{(transform _* ¦ #shadow: _ #spec: {¦ in: @pin_} #job: job_) -1} do
+      givenpi %{(transform _* ¦ _ #spec: {¦ in: @pin_} #job: job_) -1} do
         yield Term.of(:transform, pin, job)
       end
 
       givenpi(
-        %{(transform (@_ to @_) _) -1},
-        %{(transform (@_ to @_ with _) _) -1},
-        %{(transform (@_ _ to @_) _) -1},
-        %{(transform (@_ _ to @_ with _) _) -1},
-        %{(absence @_ as _ to @_) -1},
-      ) { yield node }
+        %{[transform (@_ to @_) _] -1},
+        %{[transform (@_ to @_ with _) _] -1},
+        %{[transform (@_ _ to @_) _] -1},
+        %{[transform (@_ _ to @_ with _) _] -1},
+        %{[initial (@_ _ to @_)] -1},
+        %{[initial (@_ _ to @_) _] -1},
+        %{[absence @_ as _ to @_] -1},
+      ) { yield Term.of(node.itemspart) }
 
-      givenpi %{(sensor pattern_ in tspace_symbol to @_ ¦ (%keypool secret)) -1} do
+      givenpi %{[sensor pattern_ in tspace_symbol to @_] -1} do
         yield Term.of(:sensor, tspace, pattern, node[:secret]?)
       end
 
-      givenpi %{(appearance value_ in tspace_symbol ¦ (%keypool secret)) -1} do
+      givenpi %{[appearance value_ in tspace_symbol] -1} do
         yield Term.of(:appearance, tspace, value, node[:secret]?)
       end
 
@@ -2632,35 +2676,29 @@ module D7::Goal
   end
 end
 
-last_doc = nil
+# last_doc = nil
 
-observe = ->(entry : Term) do
-  Term.case(entry) do
-    matchpi %{(original doc_)}, %{(output _ _ doc_)} do
-      next if doc == last_doc
+# observe = ->(entry : Term) do
+#   Term.case(entry) do
+#     matchpi %{(original doc_)}, %{(output _ _ doc_)} do
+#       next if doc == last_doc
 
-      puts ML.display(doc, maxwidth: 80)
-      sleep 1.second
+#       puts ML.display(doc, maxwidth: 80)
+#       sleep 1.second
 
-      last_doc = doc
-    end
+#       last_doc = doc
+#     end
 
-    otherwise { }
-  end
-end
+#     otherwise { }
+#   end
+# end
 
 # doc0 = ML.terms <<-WWML
-#  ("" | "" () @cursor)
-#  (delay 0 (event (edit @cursor (input "("))))
-#  (delay 1 (event (edit @cursor (input "cell"))))
-#  (delay 2 (event (edit @cursor (input " "))))
-#  (delay 3 (event (edit @cursor (input "0"))))
-#  (delay 4 (event (edit @cursor (input " "))))
-#  (delay 5 (event (edit @cursor (input "@x"))))
-#  (delay 6 (event (edit @cursor (key enter))))
-#  (delay 7 (event (edit @cursor (key right))))
-#  (changes @x to @xs)
-#  (log @xs in ())
+#     (cell "hello" @x)
+#      (initial (@x _number) to @xs)
+#      (delay 1 (event (assign @x 100)))
+#      (delay 2 (event (assign @x 200)))
+#      (log @xs in ())
 
 # WWML
 

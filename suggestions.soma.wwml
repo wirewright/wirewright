@@ -62,19 +62,8 @@
   (const cout "sink for const signal"))
 
 (variant cell
-  (const cout "sink for const signal")
-  (comma for)
-  (literal guard "pattern that each assignment to this cell must satisfy"))
-
-(variant cell
   (literal v "current value")
   (const cout "sink for const signal"))
-
-(variant cell
-  (literal v "current value")
-  (const cout "sink for const signal")
-  (comma for)
-  (literal guard "pattern that each assignment to this cell must satisfy"))
 
 (group changes "Converts a const signal into a pulse whenever the former changes")
 
@@ -84,11 +73,19 @@
   (pulse pout "sink for values of const on change"))
 
 (variant changes
-  (const cin "source of const signal")
-  (comma to)
-  (pulse pout "sink for values of const on change")
-  (comma as)
-  (literal value "value to send on change instead of const's"))
+  (nested
+    (const cin "source of const signal")
+    (literal pattern "pattern that const signal must match")
+    (comma to)
+    (pulse pout "sink for values of const on change")))
+
+(variant changes
+  (nested
+    (const cin "source of const signal")
+    (literal pattern "pattern that const signal must match")
+    (comma to)
+    (pulse pout "sink for instances of template on change"))
+  (literal template "Alloy template with captures from pattern available"))
 
 (node col "Arranges its children in a vertical stack, with an optional gap")
 
@@ -135,10 +132,9 @@
 (variant latest
   (nested
     (pulse pin "source of pulse signals")
-    (literal pattern "pattern which the pulse should match"))
-  (nested
-    (const cout "sink for const signals")
-    (literal template "template to fill using captures made by the pattern")))
+    (literal pattern "pattern which the pulse should match")
+    (const cout "cell where template instance should be stored"))
+  (literal template "Alloy template with captures from pattern available"))
 
 (group log "Shows last N pulses received")
 
@@ -240,11 +236,19 @@
   (pulse pout "sink for first-ever values"))
 
 (variant initial
-  (const cin "const signal to watch for")
-  (comma to)
-  (pulse pout "sink for value")
-  (comma as)
-  (pulse value "value"))
+  (nested
+    (const cin "const signal to watch for")
+    (literal pattern "pattern that the signal must match")
+    (comma to)
+    (pulse pout "sink for the initial value")))
+
+(variant initial
+  (nested
+    (const cin "const signal to watch for")
+    (literal pattern "pattern that the signal must match")
+    (comma to)
+    (pulse pout "sink for instances of template"))
+  (literal template "Alloy template with captures from pattern available"))
 
 (node combine "Gathers latest values for all pulses and flushes them"
   (literal pins "list of pulse edges to wait for")

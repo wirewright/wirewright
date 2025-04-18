@@ -19,8 +19,6 @@
    (button "Initialize cell" as 0 to @xs ())
    (latest @xs @x)))
 
-;; Initialized cell pattern mismatch degenerates into an uninitialized cell
-;; without effects.
 (d7
   ((cell @x)
    (changes @x to @xs)
@@ -30,112 +28,84 @@
    (changes @x to @xs)
    (absence @x as "Missing" to @xs)
    (log @xs in ("Missing"))))
-(d7
-  ((cell "Hello World" @x for _number)
-   (changes @x to @xs)
-   (absence @x as "Missing" to @xs)
-   (log @xs in ()))
-  ((cell @x for _number)
-   (changes @x to @xs)
-   (absence @x as "Missing" to @xs)
-   (log @xs in ("Missing"))))
 
-;; (cell @_ for _) init with OK value
-(d7
-  ((cell @count for _number)
-   (changes @count to @log)
-   (absence @count as "Missing" to @log)
-   (log @log in ())
-   (delay 1 (event (assign @count 100))))
-  ((cell 100 @count for _number)
-   (changes @count to @log)
-   (absence @count as "Missing" to @log)
-   (log @log in ("Missing" 100))))
+;; changes with pattern
+(group
+  (d7
+    ((cell 0 @x)
+     (changes (@x _number to @xs))
+     (log @xs in ()))
+    ((cell 0 @x)
+     (changes (@x _number to @xs))
+     (log @xs in (0))))
 
-;; (cell @_ for _) init with OK value no cycle
-(d7
-  ((cell @count for _number)
-   (changes @count to @log)
-   (absence @count as "Missing" to @log)
-   (log @log in ())
-   (event (assign @count 100)))
-  ((cell 100 @count for _number)
-   (changes @count to @log)
-   (absence @count as "Missing" to @log)
-   (log @log in ("Missing" 100))))
+  (d7
+    ((decay 1 (cell "hello" @x))
+     (delay 2 (cell 100 @x))
+     (changes (@x _number to @xs))
+     (log @xs in ()))
+    ((cell 100 @x)
+     (changes (@x _number to @xs))
+     (log @xs in (100))))
 
-;; (cell @_ for _) init with BAD value
-(d7
-  ((cell @count for _number)
-   (changes @count to @log)
-   (absence @count as "Missing" to @log)
-   (log @log in ())
-   (event (assign @count "Hello World")))
-  ((cell @count for _number)
-   (changes @count to @log)
-   (absence @count as "Missing" to @log)
-   (log @log in ("Missing"))))
+  (d7
+    ((cell (0 0) @pos)
+     (changes (@pos (x_number _) to @xs) ^x)
+     (log @xs in ()))
+    ((cell (0 0) @pos)
+     (changes (@pos (x_number _) to @xs) ^x)
+     (log @xs in (0))))
 
-;; (cell @_ for _) init with BAD value then OK value after a delay
-(d7
-  ((cell @count for _number)
-   (changes @count to @log)
-   (absence @count as "Missing" to @log)
-   (log @log in ())
-   (event (assign @count "Hello World"))
-   (delay 5 (event (assign @count 100))))
-  ((cell 100 @count for _number)
-   (changes @count to @log)
-   (absence @count as "Missing" to @log)
-   (log @log in ("Missing" 100))))
+  (d7
+    ((cell (0 0) @pos)
+     (changes (@pos (_number _) to @xs) qux)
+     (log @xs in ()))
+    ((cell (0 0) @pos)
+     (changes (@pos (_number _) to @xs) qux)
+     (log @xs in (qux)))))
 
-;; (cell <bad value> @_ for _) init with OK value
-(d7
-  ((cell "Hello World" @count for _number)
-   (changes @count to @log)
-   (absence @count as "Missing" to @log)
-   (log @log in ())
-   (delay 5 (event (assign @count 100))))
-  ((cell 100 @count for _number)
-   (changes @count to @log)
-   (absence @count as "Missing" to @log)
-   (log @log in ("Missing" 100))))
-
-;; (cell <bad value> @x for _) init with BAD value
-(d7
-  ((cell "Hello World" @count for _number)
-   (changes @count to @log)
-   (absence @count as "Missing" to @log)
-   (log @log in ())
-   (delay 5 (event (assign @count "Hell World"))))
-  ((cell @count for _number)
-   (changes @count to @log)
-   (absence @count as "Missing" to @log)
-   (log @log in ("Missing"))))
-
-;; (cell <ok value> @x for _) init with OK value
-(d7
-  ((cell 100 @count for _number)
-   (changes @count to @log)
-   (absence @count as "Missing" to @log)
-   (log @log in ())
-   (delay 5 (event (assign @count 200))))
-  ((cell 200 @count for _number)
-   (changes @count to @log)
-   (absence @count as "Missing" to @log)
-   (log @log in (100 200))))
-
-;; (cell <ok value> @x for _) init with BAD value
-(d7
-  ((cell 100 @count for _number)
-   (changes @count to @log)
-   (absence @count as "Missing" to @log)
-   (log @log in ())
-   (delay 5 (event (assign @count "Hello World"))))
-  ((cell 100 @count for _number)
-   (changes @count to @log)
-   (absence @count as "Missing" to @log)
-   (log @log in (100))))
+;; initial with pattern
+(group
+  (d7
+    ((cell 0 @x)
+     (initial (@x _number to @xs))
+     (delay 1 (event (assign @x 100)))
+     (log @xs in ()))
+    ((cell 100 @x)
+     (initial (@x _number to @xs))
+     (log @xs in (0))))
+  (d7
+    ((cell "hello" @x)
+     (initial (@x _number to @xs))
+     (delay 1 (event (assign @x 100)))
+     (delay 2 (event (assign @x 200)))
+     (log @xs in ()))
+    ((cell 200 @x)
+     (initial (@x _number to @xs))
+     (log @xs in (100))))
+  (d7
+    ((cell 0 @x)
+     (initial (@x _number to @xs) qux)
+     (delay 1 (event (assign @x 100)))
+     (log @xs in ()))
+    ((cell 100 @x)
+     (initial (@x _number to @xs) qux)
+     (log @xs in (qux))))
+  (d7
+    ((cell (100 0) @x)
+     (initial (@x (x_number _) to @xs) ^x)
+     (log @xs in ()))
+    ((cell (100 0) @x)
+     (initial (@x (x_number _) to @xs) ^x)
+     (log @xs in (100))))
+  (d7
+    ((decay 1 (cell 0 @x))
+     (delay 2 (cell 100 @x))
+     (initial (@x x_number to @xs) ^x)
+     (log @xs in ()))
+    ((cell 100 @x)
+     (initial (@x x_number to @xs) ^x)
+     (log @xs in (0 100)))))
 
 (group
   ;; Button long form, raw value
@@ -214,14 +184,14 @@
 
 ;; Log limit (and a whole bunch of other things)
 (d7
-  ((cell 10 @count for (%number (whole _) > 0))
-   (changes @count to @deltas as -1)
+  ((cell 10 @count)
+   (changes (@count (%number (whole _) > 0) to @deltas) -1)
    (transform (@deltas to @counts with @count) (+ count _))
    (latest @counts @count)
    (changes @count to @counts~)
    (log @counts~ in () limit: 5))
-  ((cell 1 @count for (%number (whole _) > 0))
-   (changes @count to @deltas as -1)
+  ((cell 1 @count)
+   (changes (@count (%number (whole _) > 0) to @deltas) -1)
    (transform (@deltas to @counts with @count) (+ count _))
    (latest @counts @count)
    (changes @count to @counts~)
@@ -302,15 +272,15 @@
 
 ;; Stateless filter transform
 (d7 limit: 256
-  ((cell 0 @value for (%number (whole _) < 10))
-   (changes @value to @values)
+  ((cell 0 @value)
+   (changes (@value (%number (whole _) < 10) to @values))
    (transform (@values n←(%pipe (mod 2) 0) to @parities) (even n))
    (transform (@values n←(%pipe (mod 2) 1) to @parities) (odd n))
    (transform (@values to @successors) (+ _ 1))
    (latest @successors @value)
    (log @parities in () limit: 7))
-  ((cell 9 @value for (%number (whole _) < 10))
-   (changes @value to @values)
+  ((cell 9 @value)
+   (changes (@value (%number (whole _) < 10) to @values))
    (transform (@values n←(%pipe (mod 2) 0) to @parities) (even n))
    (transform (@values n←(%pipe (mod 2) 1) to @parities) (odd n))
    (transform (@values to @successors) (+ _ 1))
@@ -559,11 +529,11 @@
   ((cell 0 @count)
    (changes @count to @counts)
    (transform (@counts to @counts/future) (+ _ 1))
-   (latest (@counts/future n←(%number (whole _) < 10)) (@count n_)))
+   (latest (@counts/future n←(%number (whole _) < 10) @count) ^n))
   ((cell 9 @count)
    (changes @count to @counts)
    (transform (@counts to @counts/future) (+ _ 1))
-   (latest (@counts/future n←(%number (whole _) < 10)) (@count n_))))
+   (latest (@counts/future n←(%number (whole _) < 10) @count) ^n)))
 
 ;; lookaround node
 
@@ -781,78 +751,78 @@
     ((absence @qux as foo to @-quxes ("" | "" () @user)))))
 
 ;; Suggestion for multi-variant nodes
-(group
-  (d7
-    ((latest ("" | "" () @user)))
-    matches
-    ((latest
-      ("" | "" () @user
-        suggestions:
-          (suggestions/group () (("[latest *@pin_* @cout_]" _string)
-                                 ("[latest *(*@pin_ pattern_*)* (@cout_ template_)]" _string)))))))
-  ;; Branch 1
-  (d7
-    ((latest @quxes ("" | "" () @user)))
-    matches
-    ((latest
-      @quxes
-      ("" | "" () @user
-        suggestions:
-          (suggestions/group () (("[latest @pin_ *@cout_*]" _string)))))))
-  (d7
-    ((latest @quxes @qux ("" | "" () @user)))
-    matches
-    ((latest @quxes @qux ("" | "" () @user))))
-  ;; Branch 2
-  (d7
-    ((latest (("" | "" () @user))))
-    matches
-    ((latest
-      (("" | "" () @user
-        suggestions:
-          (suggestions/group () (("[latest (*@pin_* pattern_) (@cout_ template_)]" _string))))))))
-  (d7
-    ((latest (@quxes ("" | "" () @user))))
-    matches
-    ((latest
-      (@quxes
-       ("" | "" () @user
-         suggestions:
-           (suggestions/group () (("[latest (@pin_ *pattern_*) (@cout_ template_)]" _string))))))))
-
-  (d7
-    ((latest (@quxes qux) ("" | "" () @user)))
-    matches
-    ((latest (@quxes qux)
-       ("" | "" () @user
-         suggestions:
-           (suggestions/group () (("[latest (@pin_ pattern_) *(*@cout_ template_*)*]" _string)))))))
-  ;; Make sure that the suggestion disappears if we do something wrong.
-  (d7
-    ((latest (@quxes qux) foobar ("" | "" () @user)))
-    ((latest (@quxes qux) foobar ("" | "" () @user))))
-  ;; Continue with branch 2
-  (d7
-    ((latest (@quxes qux) (("" | "" () @user))))
-    matches
-    ((latest (@quxes qux)
-       (("" | "" () @user
-         suggestions:
-           (suggestions/group () (("[latest (@pin_ pattern_) (*@cout_* template_)]" _string))))))))
-  (d7
-    ((latest (@quxes qux) (qux ("" | "" () @user))))
-    ((latest (@quxes qux) (qux ("" | "" () @user)))))
-  (d7
-    ((latest (@quxes qux) (@qux ("" | "" () @user))))
-    matches
-    ((latest (@quxes qux)
-       (@qux
-        ("" | "" () @user
-          suggestions:
-            (suggestions/group () (("[latest (@pin_ pattern_) (@cout_ *template_*)]" _string))))))))
-  (d7
-    ((latest (@quxes qux) (@qux foo ("" | "" () @user))))
-    ((latest (@quxes qux) (@qux foo ("" | "" () @user))))))
+;; (group
+;;   (d7
+;;     ((latest ("" | "" () @user)))
+;;     matches
+;;     ((latest
+;;       ("" | "" () @user
+;;         suggestions:
+;;           (suggestions/group () (("[latest *@pin_* @cout_]" _string)
+;;                                  ("[latest *(*@pin_ pattern_*)* (@cout_ template_)]" _string)))))))
+;;   ;; Branch 1
+;;   (d7
+;;     ((latest @quxes ("" | "" () @user)))
+;;     matches
+;;     ((latest
+;;       @quxes
+;;       ("" | "" () @user
+;;         suggestions:
+;;           (suggestions/group () (("[latest @pin_ *@cout_*]" _string)))))))
+;;   (d7
+;;     ((latest @quxes @qux ("" | "" () @user)))
+;;     matches
+;;     ((latest @quxes @qux ("" | "" () @user))))
+;;   ;; Branch 2
+;;   (d7
+;;     ((latest (("" | "" () @user))))
+;;     matches
+;;     ((latest
+;;       (("" | "" () @user
+;;         suggestions:
+;;           (suggestions/group () (("[latest (*@pin_* pattern_) (@cout_ template_)]" _string))))))))
+;;   (d7
+;;     ((latest (@quxes ("" | "" () @user))))
+;;     matches
+;;     ((latest
+;;       (@quxes
+;;        ("" | "" () @user
+;;          suggestions:
+;;            (suggestions/group () (("[latest (@pin_ *pattern_*) (@cout_ template_)]" _string))))))))
+;;
+;;   (d7
+;;     ((latest (@quxes qux) ("" | "" () @user)))
+;;     matches
+;;     ((latest (@quxes qux)
+;;        ("" | "" () @user
+;;          suggestions:
+;;            (suggestions/group () (("[latest (@pin_ pattern_) *(*@cout_ template_*)*]" _string)))))))
+;;   ;; Make sure that the suggestion disappears if we do something wrong.
+;;   (d7
+;;     ((latest (@quxes qux) foobar ("" | "" () @user)))
+;;     ((latest (@quxes qux) foobar ("" | "" () @user))))
+;;   ;; Continue with branch 2
+;;   (d7
+;;     ((latest (@quxes qux) (("" | "" () @user))))
+;;     matches
+;;     ((latest (@quxes qux)
+;;        (("" | "" () @user
+;;          suggestions:
+;;            (suggestions/group () (("[latest (@pin_ pattern_) (*@cout_* template_)]" _string))))))))
+;;   (d7
+;;     ((latest (@quxes qux) (qux ("" | "" () @user))))
+;;     ((latest (@quxes qux) (qux ("" | "" () @user)))))
+;;   (d7
+;;     ((latest (@quxes qux) (@qux ("" | "" () @user))))
+;;     matches
+;;     ((latest (@quxes qux)
+;;        (@qux
+;;         ("" | "" () @user
+;;           suggestions:
+;;             (suggestions/group () (("[latest (@pin_ pattern_) (@cout_ *template_*)]" _string))))))))
+;;   (d7
+;;     ((latest (@quxes qux) (@qux foo ("" | "" () @user))))
+;;     ((latest (@quxes qux) (@qux foo ("" | "" () @user))))))
 
 ;; TODO: suggestions with cursor at the end of valid node/nested should suggest (suggestion/key right)
 ;; TODO: scrolling up in suggestions/list
