@@ -2815,3 +2815,29 @@ struct MutBitWriter
     io << @prefix.to_readonly_slice.hexstring << '|' << @cursor
   end
 end
+
+struct StaticArray(T, N)
+  def to_unsafe_bytes : Bytes
+    to_slice.to_unsafe_bytes
+  end
+
+  def to_voidptr : Void*
+    to_unsafe.as(Void*)
+  end
+end
+
+struct Slice(T)
+  def append(object : T) : Slice(T)
+    Slice(T).new(size + 1) do |index|
+      if index < size
+        unsafe_fetch(index)
+      else
+        object
+      end
+    end
+  end
+
+  def to_voidptr : Void*
+    to_unsafe.as(Void*)
+  end
+end
