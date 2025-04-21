@@ -735,6 +735,19 @@ class IO::BytesizeCounter < IO
   end
 end
 
+class IO::ByteStream < IO
+  def initialize(&@fn : Bytes ->)
+  end
+
+  def read(slice : Bytes)
+    0
+  end
+
+  def write(slice : Bytes) : Nil
+    @fn.call(slice)
+  end
+end
+
 class IO
   def self.empty
     Empty::INSTANCE

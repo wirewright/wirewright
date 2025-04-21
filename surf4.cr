@@ -257,7 +257,7 @@ struct ::Ww::Term
   #
   # NOTE: To retain compatibility with M1's normal form we encode/decode
   # Trunk as %any.
-  ENCODED_TRUNK = Term.of({:"%any"})
+  ENCODED_BEGIN = Term.of({:"%any"})
 
   # :nodoc:
   ENCODED_IS_SYM = Term.of({:"%symbol"})
@@ -274,7 +274,7 @@ struct ::Ww::Term
   # :nodoc:
   ENCODED_IS_BOOL = Term.of({:"%boolean"})
 
-  {% for base in %w(Trunk IsSym IsNum IsStr IsDict IsBool) %}
+  {% for base in %w(Begin IsSym IsNum IsStr IsDict IsBool) %}
     def self.encode(src : Ubase::{{base.id}}) : Term
       ENCODED_{{base.underscore.upcase.id}}
     end
@@ -294,6 +294,9 @@ struct ::Ww::Term
     Term.matchpi?(term, %{(%'%literal value_)}) do
       Ubase::Literal.new(value)
     end
+  end
+
+  def self.decode?(dst : Ubase::End.class, term : Term)
   end
 end
 
@@ -319,8 +322,8 @@ struct Utrie
   end
 
   def mount(strand : Strand, atoms : AtomArray) : Fingerprint
-    unless strand[0]? == Ubase::Trunk.new
-      raise ArgumentError.new("expected a nonempty strand that starts with Trunk")
+    unless strand[0]? == Ubase::Begin.new
+      raise ArgumentError.new("expected a nonempty strand that starts with Begin")
     end
 
     digest = DIGEST_ALG.new
@@ -399,7 +402,7 @@ struct Utrie
 
     prefix = digest.dup.final
 
-    state = Atom.new(prefix, base: Ubase::Trunk.new)
+    state = Atom.new(prefix, base: Ubase::Begin.new)
     return unless @set.includes?(state)
 
     # Append base to prefix to obtain new prefix in the `digest` state.
@@ -527,8 +530,8 @@ module Ttrie
 
   # Converts a Ubase *query* into a path prefix.
   def self.steps(query : Indexable(Ubase::Any)) : Array(Fingerprint)
-    unless query[0]? == Ubase::Trunk.new
-      raise "expected a nonempty query that starts with Trunk"
+    unless query[0]? == Ubase::Begin.new
+      raise "expected a nonempty query that starts with Begin"
     end
 
     path = [] of Fingerprint

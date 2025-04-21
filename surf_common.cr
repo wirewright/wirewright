@@ -401,6 +401,7 @@ alias Fingerprint = Bytes
 
 DIGEST_ALG           = Digest::SHA256
 FINGERPRINT_BYTESIZE = 32
+LABEL_BYTESIZE = 16
 
 record Label, value : UInt128 do
   include Comparable(Label)
@@ -424,6 +425,14 @@ record Label, value : UInt128 do
     IO::ByteFormat::BigEndian.encode(value, dst)
 
     dst + Label.bytesize
+  end
+
+  def append_be(dst : Array(UInt8)) : Nil
+    buffer = uninitialized UInt8[16]
+
+    IO::ByteFormat::BigEndian.encode(value, buffer.to_slice)
+
+    dst.concat(buffer)
   end
 
   def self.bytesize
@@ -499,6 +508,14 @@ end
 struct WWID
   extend ILabelGenerator
 
+  def self.makes_sense?(label : Label)
+    t_lo = (Time.utc - 1.year).to_unix_ns.to_u128
+    t_hi = (Time.utc + 1.day).to_unix_ns.to_u128
+
+    t = label.value >> 64
+    t_lo <= t <= t_hi
+  end
+
   def self.call : Label
     order = Time.utc.to_unix_ns.to_u128
     randomness = Random::Secure.rand(UInt64)
@@ -523,16 +540,22 @@ alias BranchList = Slice(StrandList)
 #
 # See `Utrie` to learn more.
 module Ubase
-  alias Any = At | Trunk | IsSym | IsStr | IsNum | IsBool | IsDict | Literal
+  alias Any = At | Begin | End | IsSym | IsStr | IsNum | IsBool | IsDict | Literal
 
   # Passes a dictionary term's value for *key* forward.
-  record At, key : Term
+  record At, key : Term do
+    # FIXME: rename key to term
+    def term : Term
+      key
+    end
+  end
 
-  # Positioned at the beginning of all valid strands. Relied upon by
-  # match-any patterns such as `_` or `x_`, since they aren't matching
-  # anything in particular (so `Trunk` is a NOP in terms of filtering
-  # or transformation).
-  record Trunk
+  # Anchor put at the beginning of all strands.
+  record Begin
+
+  # Indicates an abrupt (non-literal) stop. This base is not emitted if the strand
+  # ends with `Literal`.
+  record End
 
   # Passes only symbol terms forward.
   record IsSym do
@@ -570,7 +593,12 @@ module Ubase
   end
 
   # Passes foward only terms that match *value* exactly.
-  record Literal, value : Term
+  record Literal, value : Term do
+    # FIXME: rename value to term
+    def term : Term
+      value
+    end
+  end
 
   # Returns the is-type `Ubase` (e.g. `IsNum`) that corresponds to the given
   # `TermType` *type*.
@@ -587,7 +615,12 @@ module Ubase
     end
   end
 
-  def self.update(digest, base : Trunk)
+  def self.update(digest, base : End)
+    digest.update(Bytes[0])
+  end
+
+
+  def self.update(digest, base : Begin)
     digest.update(Bytes[1])
   end
 
@@ -611,20 +644,16 @@ module Ubase
     digest.update(Bytes[6])
   end
 
+  # TODO: optimize
   def self.update(digest, base : Literal)
     digest.update(Bytes[7])
-
-    io = IO::Digest.new(IO.empty, digest, mode: :write)
-
-    ML.compact(io, base.value)
+    digest.update(ML.compact(base.value))
   end
 
+  # TODO: optimize
   def self.update(digest, base : At)
     digest.update(Bytes[8])
-
-    io = IO::Digest.new(IO.empty, digest, mode: :write)
-
-    ML.compact(io, base.key)
+    digest.update(ML.compact(base.key))
   end
 end
 

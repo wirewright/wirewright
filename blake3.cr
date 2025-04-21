@@ -46,8 +46,22 @@ class Blake3
     instance.final(output.to_voidptr)
   end
 
+  def self.final(string : String)
+    output = Bytes.new(32)
+
+    instance = new
+    instance.update(string.to_slice)
+    instance.final(output.to_voidptr)
+
+    output
+  end
+
   def update(input : UInt8)
     LibBlake3.hasher_update(pointerof(@state), pointerof(input), 1)
+  end
+
+  def update(input : String)
+    LibBlake3.hasher_update(pointerof(@state), input, input.bytesize)
   end
 
   def update(input : Void*, size)
@@ -60,6 +74,13 @@ class Blake3
 
   def reset
     LibBlake3.hasher_reset(pointerof(@state))
+  end
+
+  def final(target : Bytes) : Nil
+    unless target.size == 32
+      raise ArgumentError.new
+    end
+    LibBlake3.hasher_finalize(pointerof(@state), target, 32)
   end
 
   def final(target : Void*) : Nil
@@ -76,6 +97,10 @@ class Blake3
     digest = uninitialized UInt64[4]
     LibBlake3.hasher_finalize(pointerof(@state), digest, 32)
     digest
+  end
+
+  def inspect(io)
+    io << "BLAKE3(<internal state>)"
   end
 end
 
