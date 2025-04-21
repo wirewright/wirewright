@@ -399,7 +399,6 @@ end
 
 alias Fingerprint = Bytes
 
-DIGEST_ALG           = Digest::SHA256
 FINGERPRINT_BYTESIZE = 32
 LABEL_BYTESIZE = 16
 
@@ -443,6 +442,10 @@ record Label, value : UInt128 do
     return unless bytes.size == Label.bytesize
 
     new(IO::ByteFormat::BigEndian.decode(UInt128, bytes))
+  end
+
+  def self.from_slice_be(bytes : Bytes) : Label
+    from_slice_be?(bytes) || raise ArgumentError.new
   end
 
   def complete(digit, *, base, index)
@@ -540,7 +543,9 @@ alias BranchList = Slice(StrandList)
 #
 # See `Utrie` to learn more.
 module Ubase
-  alias Any = At | Begin | End | IsSym | IsStr | IsNum | IsBool | IsDict | Literal
+  alias Any = Anchor | Content
+  alias Anchor = Begin | End
+  alias Content = At | IsSym | IsStr | IsNum | IsBool | IsDict | Literal
 
   # Passes a dictionary term's value for *key* forward.
   record At, key : Term do

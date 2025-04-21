@@ -6,6 +6,7 @@ require "digest"
 require "bit_array"
 require "brotli"
 
+DIGEST_ALG           = Digest::SHA256
 Log.setup_from_env(default_level: :warn)
 
 module IAtom

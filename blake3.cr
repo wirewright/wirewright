@@ -35,7 +35,7 @@ class Blake3
   end
 
   def self.final(*inputs, to output : Bytes) : Nil
-    unless output.size == 32
+    unless output.size >= 32
       raise ArgumentError.new("unexpected output size")
     end
 
@@ -77,7 +77,7 @@ class Blake3
   end
 
   def final(target : Bytes) : Nil
-    unless target.size == 32
+    unless target.size >= 32
       raise ArgumentError.new
     end
     LibBlake3.hasher_finalize(pointerof(@state), target, 32)

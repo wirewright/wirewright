@@ -7,36 +7,56 @@ require "./blake3"
 
 alias Checksum = UInt32
 
+DIGEST_ALG = Blake3
+
+record Atom, blk0 : UInt64, blk1 : UInt64, blk2 : UInt64, blk3 : UInt64 do
+  def self.of(h0 : Bytes)
+    unless h0.size == 32
+      raise ArgumentError.new("invalid h0")
+    end
+
+    blocks = h0.unsafe_slice_of(UInt64)
+
+    Atom.new(blocks[0], blocks[1], blocks[2], blocks[3])
+  end
+
+  def copy_hash_to(target : Bytes) : Nil
+    copy_blocks_to target.unsafe_slice_of(UInt64)
+  end
+
+  def copy_blocks_to(target : Slice(UInt64)) : Nil
+    target[0] = blk0
+    target[1] = blk1
+    target[2] = blk2
+    target[3] = blk3
+  end
+
+  def <=>(other : Atom)
+    {blk0, blk1, blk2, blk3} <=> {other.blk0, other.blk1, other.blk2, other.blk3}
+  end
+
+  def hash(hasher)
+    blk0.hash(hasher)
+  end
+
+  def inspect(io)
+    io << "Atom["
+    blk0.to_s(io, base: 32, precision: 13, upcase: true)
+    io << "-"
+    blk1.to_s(io, base: 32, precision: 13, upcase: true)
+    io << "-"
+    blk2.to_s(io, base: 32, precision: 13, upcase: true)
+    io << "-"
+    blk3.to_s(io, base: 32, precision: 13, upcase: true)
+    io << "]"
+  end
+end
+
 # TODO: refactor
-module BytesMultimap(A)
+module BytesMultimap
   extend self
 
   Log = ::Log.for(self)
-
-  module IAtom
-    # Always zero for valid atoms. Nonzero sanity is invalid and is used as
-    # a sanity check for the underlying set.
-    abstract def sanity : UInt8
-    abstract def block0 : UInt64
-    abstract def block1 : UInt64
-    abstract def block2 : UInt64
-    abstract def block3 : UInt64
-
-    def hash(hasher)
-      block0.hash(hasher)
-    end
-  end
-
-  abstract struct Atom
-    getter sanity
-    getter block0
-    getter block1
-    getter block2
-    getter block3
-
-    def initialize(@sanity : UInt8, @block0 : UInt64, @block1 : UInt64, @block2 : UInt64, @block3 : UInt64)
-    end
-  end
 
   # Initializes and populates the supplied *atoms* container with atoms for *byteslice*.
   #
@@ -46,7 +66,7 @@ module BytesMultimap(A)
   # This will help you in filtering junk off as well; since an EOI marker can only be
   # found at the end of the input, finding one in the middle is a way to early exit
   # due to corruption.
-  def mount(atoms, byteslice : Bytes, *, start = 0, hasher = Blake3.new)
+  def mount(atoms, byteslice : Bytes, *, start = 0, hasher = DIGEST_ALG.new)
     # This is the fastest arrangement I was able to achieve yet. I'm getting roughly
     # 500ns per byte which is enormous, literally thousands of cycles for whatever...;
     # but still, better than what we had before.
@@ -57,7 +77,7 @@ module BytesMultimap(A)
     # be BLAKE3's "hash of nothing".
     hasher.reset
     hasher.update(byteslice[...start])
-    hasher.final(h0.to_voidptr)
+    hasher.final(h0.to_slice[...-1])
 
     reader = BitReader.new(byteslice[start..])
 
@@ -91,11 +111,11 @@ module BytesMultimap(A)
       h0.unsafe_put(32, digit)
       hasher.reset
       hasher.update(h0)
-      hasher.final(h0.to_voidptr)
+      hasher.final(h0.to_slice[...-1])
 
       block0, block1, block2, block3 = blocks
 
-      atoms << A.new(0u8, block0, block1, block2, block3)
+      atoms << Atom.new(block0, block1, block2, block3)
     end
   end
 
@@ -158,47 +178,29 @@ module BytesMultimap(A)
 
   # A quad of atoms originating from the same parent atom, with that parent atom's
   # *completion* retained for further processing on squeeze.
-  record AtomQuad(A), a : A, b : A, c : A, d : A, completion : Completion
+  record AtomQuad, a : Atom, b : Atom, c : Atom, d : Atom, completion : Completion
 
   # :nodoc:
-  record AtomQuadQuery(A), quads : Array(AtomQuad(A)), sanity : Bool = false do
-    include Enumerable(A)
+  record AtomQuadQuery, quads : Array(AtomQuad) do
+    include Enumerable(Atom)
 
-    def ntests : Int32
-      Math.max(@quads.size * 0.25, 1).to_i
-    end
-
-    def each(& : A ->) : Nil
+    def each(& : Atom ->) : Nil
       @quads.each do |quad|
         yield quad.a
         yield quad.b
         yield quad.c
         yield quad.d
       end
-
-      return unless @sanity
-
-      ntests.times do
-        yield A.new((1u8..255u8).sample, rand(UInt64), rand(UInt64), rand(UInt64), rand(UInt64))
-      end
     end
   end
 
-  # Raised when the underlying set is thought to be corrupted.
-  #
-  # We fight noise with noise; we periodically check whether the underlying set
-  # is sane by asking it about whether nonsensical atoms exist. If the set reports
-  # that such an atom exists, we consider the set "insane" and explore no further.
-  class SanityCheckException < Exception
-  end
-
   # Helps you query a `BytesMultimap`.
-  class Completer(A, H)
+  class Completer(H)
     def initialize(
-      @quads = [] of AtomQuad(A),
-      @answer = DynBitArray.new,
-      @survivors = [] of {A, Completion},
-      @hasher : H = Blake3.new,
+      @quads = [] of AtomQuad,
+      @answers = DynamicBitArray.new,
+      @survivors = [] of {Atom, Completion},
+      @hasher : H = DIGEST_ALG.new,
     )
       @clock = @trial = 0u32
       @trialstep = 1.0f32
@@ -209,7 +211,7 @@ module BytesMultimap(A)
     # NOTE: you will need to re-`seed` it as well.
     def reset : Nil
       @quads.clear
-      @answer.clear
+      @answers.clear
       @survivors.clear
       @hasher.reset
       @clock = @trial = 0u32
@@ -234,7 +236,7 @@ module BytesMultimap(A)
       # Make H0 = hash() or H0 = hash(hash() x key)
       @hasher.reset
       @hasher.update(key)
-      @hasher.final(h0.to_voidptr)
+      @hasher.final(h0.to_slice[...-1])
 
       # Loop through candidate digits and obtain quad = hash(H0 x candidate)
       quad = {0u8, 1u8, 2u8, 3u8}.map do |candidate|
@@ -243,14 +245,14 @@ module BytesMultimap(A)
 
         @hasher.reset
         @hasher.update(h0)
-        @hasher.final(h1.to_voidptr)
+        @hasher.final(h1.to_slice)
 
         block0, block1, block2, block3 = blocks1
 
-        A.new(0u8, block0, block1, block2, block3)
+        Atom.new(block0, block1, block2, block3)
       end
 
-      @quads << AtomQuad(A).new(*quad, completion: Completion.new(key.to_a))
+      @quads << AtomQuad.new(*quad, completion: Completion.new(key.to_a))
     end
 
     # Filters out or "squeezes" the set of possible atoms using *question*.
@@ -261,24 +263,12 @@ module BytesMultimap(A)
     # down the search space.
     def squeeze(question, & : Bytes ->) : Nil
       @survivors.clear
-      @answer.clear
+      @answers.clear
 
-      sanity = @clock == @trial
-      query = AtomQuadQuery.new(@quads, sanity)
-      question.call(Question::MemberSome(A).new(query, @answer))
+      return if @quads.empty?
 
-      if sanity
-        (@answer.size - query.ntests...@answer.size).each do |index|
-          if @answer[index]
-            raise SanityCheckException.new
-          end
-        end
-
-        @trial = (@clock + @trialstep).to_i
-        @trialstep = Math.min(@trialstep * 1.3, 8.0f32)
-      end
-
-      @clock += 1
+      query = AtomQuadQuery.new(@quads)
+      question.call(query, @answers)
 
       index = 0
 
@@ -286,10 +276,10 @@ module BytesMultimap(A)
         head = nil
 
         progress = {
-          {@answer[index], quad.a},
-          {@answer[index + 1], quad.b},
-          {@answer[index + 2], quad.c},
-          {@answer[index + 3], quad.d},
+          {@answers[index], quad.a},
+          {@answers[index + 1], quad.b},
+          {@answers[index + 2], quad.c},
+          {@answers[index + 3], quad.d},
         }
 
         progress.each_with_index do |(survived, atom), digit|
@@ -333,23 +323,19 @@ module BytesMultimap(A)
       @survivors.each do |survivor, completion|
         # Loop through candidate digits and obtain quad = hash(H0 x candidate)
         quad = {0u8, 1u8, 2u8, 3u8}.map do |candidate|
-          # Copy blocks into H0
-          blocks[0] = survivor.block0
-          blocks[1] = survivor.block1
-          blocks[2] = survivor.block2
-          blocks[3] = survivor.block3
+          survivor.copy_blocks_to(blocks)
           h0.unsafe_put(32, candidate)
 
           @hasher.reset
           @hasher.update(h0)
-          @hasher.final(h0.to_voidptr)
+          @hasher.final(h0.to_slice[...-1])
 
           block0, block1, block2, block3 = blocks
 
-          A.new(0u8, block0, block1, block2, block3)
+          Atom.new(block0, block1, block2, block3)
         end
 
-        @quads << AtomQuad(A).new(*quad, completion)
+        @quads << AtomQuad.new(*quad, completion)
       end
     end
 
@@ -359,14 +345,11 @@ module BytesMultimap(A)
       end
     end
 
-    private def append(atom : A, bytes)
+    private def append(atom : Atom, bytes)
       h0 = uninitialized UInt8[33]
       blocks = h0.to_slice.unsafe_slice_of(UInt64)
 
-      blocks[0] = atom.block0
-      blocks[1] = atom.block1
-      blocks[2] = atom.block2
-      blocks[3] = atom.block3
+      atom.copy_blocks_to(blocks)
 
       reader = BitReader.new(bytes)
 
@@ -380,11 +363,11 @@ module BytesMultimap(A)
 
         @hasher.reset
         @hasher.update(h0)
-        @hasher.final(h0.to_voidptr)
+        @hasher.final(h0.to_slice[...-1])
 
         block0, block1, block2, block3 = blocks
 
-        atom = A.new(0u8, block0, block1, block2, block3)
+        atom = Atom.new(block0, block1, block2, block3)
       end
 
       atom
@@ -409,8 +392,8 @@ module BytesMultimap(A)
     # through completions (using e.g. `Completion#peek`). Removes completions that
     # the block rejected (returned `false` for).
     #
-    # May raise `SanityCheckException` in case the underlying set fails
-    # a periodic sanity check.
+    # May raise `SanityCheckException` in case the underlying set fails a periodic
+    # sanity check.
     #
     # WARNING: the yielded completion is read-only.
     def refine(question, n : Int, & : Bytes -> Bool) : Nil
@@ -445,15 +428,16 @@ module BytesMultimap(A)
     # are more and more completions etc. This is why you should design known-width
     # (and ideally fixed-width) data structures and read only that much bytes, and
     # then verify-verify-verify, because what you've read might be noise.
-    def complete(question, key = Bytes.empty, & : Bytes ->) : Nil
-      seed(key)
+    def complete(question, key : Bytes? = Bytes.empty, & : Bytes ->) : Nil
+      if key
+        seed(key)
+      end
+
       squeeze(question) { |final| yield final }
 
       until at_end?
         b4digit(question) { |final| yield final }
       end
-    rescue e : SanityCheckException
-      Log.debug(exception: e) { "completion stopped: the underlying set has collisions and/or is insane" }
     end
 
     # Returns `true` if no more completions are possible.
@@ -463,499 +447,7 @@ module BytesMultimap(A)
   end
 end
 
-# ---------
-
-module Utrie
-  extend self
-
-  record Atom, g0 : UInt64, g1 : UInt64, g2 : UInt64, g3 : UInt64 do
-    # :nodoc:
-    def self.of(h0 : Bytes)
-      unless h0.size == 32
-        raise ArgumentError.new("invalid h0")
-      end
-
-      blocks = h0.unsafe_slice_of(UInt64)
-
-      Atom.new(blocks[0], blocks[1], blocks[2], blocks[3])
-    end
-
-    # :nodoc:
-    def copy_groups_to(target : Slice(UInt64)) : Nil
-      target[0] = g0
-      target[1] = g1
-      target[2] = g2
-      target[3] = g3
-    end
-  end
-
-  # :nodoc:
-  enum Action : UInt8
-    EmitTypecheck
-    EmitKeys
-    EmitLiteral
-    EmitEnd
-    End
-  end
-
-  # :nodoc:
-  record Arm, atom : Atom, arg : Term, ok : Action
-
-  # Breaks down the given *strand* into atoms; appends those atoms to *atoms*.
-  def mount(atoms, strand : Indexable(Ubase::Any), *, hasher = Blake3.new) : Nil
-    buffer = uninitialized UInt8[32]
-
-    # Create a byte- and block-level view into the buffer.
-    h0 = buffer.to_slice
-
-    # Initialize H0 to hasher's null hash, our consensus starting point.
-    hasher.final(h0)
-
-    # We hash bases recursively. For instance, the following strand:
-    #
-    #    Begin - IsDict - At[0] - IsNum - Literal[100]
-    #
-    # Will be hashed as:
-    #
-    #    H0 = hash() -- null hash of hasher, e.g. BLAKE3
-    #    H1 = hash(H0 x Begin)
-    #    H2 = hash(H1 x IsDict)
-    #    H3 = hash(H2 x At[0])
-    #    H4 = hash(H3 x IsNum)
-    #    H5 = hash(H4 x Literal[100])
-    #
-    # H5 is the endpoint of the strand. It is then fed to Xtrie and so on.
-    strand.each do |base|
-      hstep(h0, base, hasher: hasher)
-
-      atoms << Atom.of(h0)
-    end
-  end
-
-  # :nodoc:
-  #
-  # Updates *h0* with `hash(h0 x base)`.
-  def hstep(h0 : Bytes, base : Ubase::Any, *, hasher = Blake3.new) : Nil
-    hasher.reset
-    hasher.update(h0)
-    Ubase.update(hasher, base)
-    hasher.final(h0)
-  end
-
-  # :nodoc:
-  #
-  # Clears and populates *gen* with seed `Atom`s for *query*.
-  def seed(gen : Array(Arm), query : Term, *, hasher = Blake3.new) : Nil
-    buffer = uninitialized UInt8[32]
-
-    h0 = buffer.to_slice
-
-    # Initialize H0 to hasher's null hash, our consensus starting point.
-    hasher.final(h0)
-
-    # Finally, populate gen with hash(hash() x Begin).
-    hstep(h0, Ubase::Begin.new, hasher: hasher)
-
-    # NOTE: We also handle stop at the root, e.g. in `_` we have Begin - End.
-    gen.clear
-    gen << Utrie::Arm.new(Atom.of(h0), query, :emit_typecheck)
-    gen << Utrie::Arm.new(Atom.of(h0), query, :emit_end)
-  end
-
-  # :nodoc:
-  struct GenAtoms
-    include Enumerable(Atom)
-
-    def initialize(@gen : Array(Arm))
-    end
-
-    def each(& : Atom ->) : Nil
-      @gen.each { |arm| yield arm.atom }
-    end
-  end
-
-  # :nodoc:
-  #
-  # Filters *gen* to leave only arms whose atoms exist, according to *question*.
-  def sieve(question, gen : Array(Arm), answers : DynBitArray) : Nil
-    answers.clear
-    question.call(Question::MemberSome.new(GenAtoms.new(gen), answers))
-
-    index = 0
-    gen.select! do |arm|
-      answers[index]
-    ensure
-      index += 1
-    end
-  end
-
-  # :nodoc:
-  #
-  # Replaces arms in *gen0* with their offspring; those offspring are put in
-  # *gen1* (which is cleared beforehand).
-  def advance(gen0 : Array(Arm), gen1 : Array(Arm), *, hasher = Blake3.new)
-    buffer = StaticArray(UInt8, 32).new(0u8)
-
-    h0 = buffer.to_slice
-    g = h0.unsafe_slice_of(UInt64)
-
-    gen1.clear
-    gen0.each do |arm|
-      # So Dwarf Fortress, huh?
-      ok, arg, atom = arm.ok, arm.arg, arm.atom
-
-      case ok
-      in .emit_typecheck?
-        atom.copy_groups_to(g)
-
-        hstep(h0, Ubase.from(arm.arg.type), hasher: hasher)
-
-        if arg.type.dict?
-          gen1 << Arm.new(Atom.of(h0), arg, ok: :emit_keys)
-        else
-          gen1 << Arm.new(Atom.of(h0), arg, ok: :emit_literal)
-        end
-
-        # NOTE: We can stop at e.g. IsNum - End.
-        gen1 << Arm.new(Atom.of(h0), arg, ok: :emit_end)
-      in .emit_keys?
-        dict = arg.as_d
-        dict.each_entry do |key, value|
-          atom.copy_groups_to(g)
-
-          hstep(h0, Ubase::At.new(key), hasher: hasher)
-
-          # NOTE: We can stop at e.g. IsDict - At(0) - . as seen in `(_)`
-          gen1 << Arm.new(Atom.of(h0), value, ok: :emit_typecheck)
-          gen1 << Arm.new(Atom.of(h0), value, ok: :emit_end)
-        end
-      in .emit_literal?
-        atom.copy_groups_to(g)
-
-        hstep(h0, Ubase::Literal.new(arg), hasher: hasher)
-
-        # NOTE: Literals are always terminal. We do not insert a terminator
-        # after a literal. So we route literals directly to :end.
-        gen1 << Arm.new(Atom.of(h0), arg, ok: :end)
-      in .emit_end?
-        atom.copy_groups_to(g)
-
-        hstep(h0, Ubase::End.new, hasher: hasher)
-
-        gen1 << Arm.new(Atom.of(h0), arg, ok: :end)
-      in .end?
-        yield atom
-      end
-    end
-  end
-
-  # Yields endpoint atoms that *query* excites.
-  #
-  # - *answers* is reused in calls to *question*.
-  def each_endpoint_atom(question, query : Term, answers : DynBitArray, & : Atom ->) : Nil
-    gen0 = [] of Arm
-    gen1 = [] of Arm
-
-    seed(gen0, query)
-
-    # NOTE: This loop will terminate no matter what, since *query* is finite;
-    # even if *question* lies, we're still bounded by *query*. Worst-case, we
-    # yield all possible atoms for *query*.
-    while true
-      sieve(question, gen0, answers)
-      advance(gen0, gen1) { |endpoint| yield endpoint }
-
-      gen0, gen1 = gen1, gen0
-
-      break if gen0.empty?
-    end
-  end
-end
-
-# xtrie
-
-# One-to-many map for decoding a conjunction vertex fingerprint into unique sensor
-# ids that are bound to it.
-#
-# Sensor multimap entries have the following byte format:
-#
-# ```text
-# <conjv: fingerprint> | S R M M <sensor id : label> <crc32 checksum : 4 bytes>
-# ```
-module SensorMultimap
-  extend self
-
-  Log = ::Log.for(self)
-
-  struct Atom < BytesMultimap::Atom
-  end
-
-  SIGNATURE = "SRMM".to_slice
-  SIGNATURE_BYTESIZE = 4
-
-  {% begin %}
-    ENTRY_BYTESIZE = {{FINGERPRINT_BYTESIZE + SIGNATURE_BYTESIZE + LABEL_BYTESIZE + sizeof(Checksum)}}
-  {% end %}
-
-  # Appends the atoms for the multimap binding of *sensor* to the given conjunction
-  # vertex fingerprint *conjv*.
-  #
-  # Current atom cost of one such binding is ~100 atoms. If multiple sensors are bound
-  # to *conjv*, they will share the bytes for *conjv* itself, so the cost of each
-  # binding will be slightly lower.
-  def bind(atoms, conjv : Fingerprint, sensor : Label) : Nil
-    unless conjv.size == FINGERPRINT_BYTESIZE
-      raise ArgumentError.new("invalid conjunction vertex")
-    end
-
-    buffer = uninitialized UInt8[ENTRY_BYTESIZE]
-    entry = cursor = buffer.to_slice
-
-    # Append key (conjv).
-    cursor.copy_from(conjv)
-    cursor += conjv.size
-
-    # Append signature.
-    cursor.copy_from(SIGNATURE)
-    cursor += SIGNATURE_BYTESIZE
-
-    # Append sensor label.
-    cursor = sensor.append_be(cursor)
-
-    # Append checksum.
-    checksum = Digest::CRC32.checksum(entry[...-sizeof(Checksum)])
-    IO::ByteFormat::BigEndian.encode(checksum, cursor)
-    cursor += sizeof(Checksum)
-
-    # Produce atoms.
-    BytesMultimap(Atom).mount(atoms, entry, start: FINGERPRINT_BYTESIZE)
-  end
-
-  # Yields sensors bound to the given conjunction vertex fingerprint *conjv*
-  # according to *question*.
-  def each_sensor(question, conjv : Fingerprint, *, hasher : H = Blake3.new, &sink : Label ->) : Nil forall H
-    reader = BytesMultimap::Completer(Atom, H).new(hasher: hasher)
-    reader.seed(conjv)
-
-    # NOTE: The .debug conditions here are not .warns because they're more or less
-    # nominal in case another thread / client etc. suddenly removes their appearance
-    # while completion is in progress. Some atoms we were able to read but then were
-    # suddenly cut off due to removal. Completion would terminate early therefore;
-    # and one of these sanity checks would fail.
-
-    # Read signature.
-    reader.refine(question, SIGNATURE_BYTESIZE) do |entry|
-      unless entry.size == FINGERPRINT_BYTESIZE + SIGNATURE_BYTESIZE
-        Log.debug { "reject entry: invalid fingerprint-signature sequence bytesize" }
-        next false
-      end
-
-      unless entry[-SIGNATURE_BYTESIZE...] == SIGNATURE
-        Log.debug { "reject entry: invalid signature byte sequence" }
-        next false
-      end
-
-      true
-    end
-
-    # Read sensor label.
-    reader.refine(question, LABEL_BYTESIZE) do |entry|
-      unless label = Label.from_slice_be?(entry[-LABEL_BYTESIZE..])
-        Log.debug { "reject entry: invalid label byte sequence" }
-        next false
-      end
-
-      unless WWID.makes_sense?(label)
-        Log.debug { "reject entry: label is nonsensical (e.g. too old or is from the future)" }
-        next false
-      end
-
-      true
-    end
-
-    # Read checksum.
-    reader.refine(question, sizeof(Checksum)) do |entry|
-      # Verify checksum (0 stands for "original")
-      checksum0 = IO::ByteFormat::BigEndian.decode(Checksum, entry[-sizeof(Checksum)..])
-      checksum1 = Digest::CRC32.checksum(entry[...-sizeof(Checksum)])
-      valid = checksum0 == checksum1
-
-      unless valid
-        Log.debug { "reject entry: checksum mismatch (my #{checksum1} != its #{checksum0})" }
-      end
-
-      valid
-    end
-
-    # Entries "squeezed out" at this point (ones that terminate) are valid entries.
-    # Any other entries are invalid.
-    reader.squeeze(question) do |entry|
-      sensor = entry[FINGERPRINT_BYTESIZE + SIGNATURE_BYTESIZE...-sizeof(Checksum)]
-
-      yield Label.from_slice_be?(sensor).not_nil!
-    end
-  rescue e : BytesMultimap::SanityCheckException
-    Log.debug(exception: e) { "completion stopped: the underlying set has collisions and/or is insane" }
-  end
-end
-
-# Appearance field entries have the following byte format:
-#
-# ```
-# <secret: fingerprint> | A P R F <encoded bases: ...> <appearance id : label> <crc32 checksum : 4 bytes> 0
-# ```
-module AppearanceField
-  extend self
-
-  struct Atom < BytesMultimap::Atom
-  end
-
-  PERIOD = 0u8
-
-  SIGNATURE_BYTESIZE = 4
-  SIGNATURE = "APRF".to_slice
-
-  # Appends the atoms for the multimap binding of *secret* and *value* to the given
-  # appearance label *appearance*.
-  #
-  # The atom cost of such binding depends heavily on the size of *value*, and could
-  # range from hundreds to hundreds of thousands of atoms (or more).
-  def mount(atoms, secret : Bytes, value : Term, appearance : Label)
-    strand = [] of Ubase::Any
-    entry = [] of UInt8
-
-    Term.each_keypath_and_leaf(value) do |keypath, leaf|
-      strand.clear
-      entry.clear
-
-      # All entries start with the secret.
-      entry.concat(secret)
-
-      # Secret is followed by the signature on the value side.
-      entry.concat(SIGNATURE)
-
-      # Then we convert the keypath and leaf into a sequence of Ubases,
-      # aka "strand".
-      Ubase.strandof(keypath, leaf, to: strand)
-
-      # We then encode the strand as a bunch of bytes.
-      Ubase.encode(strand, to: entry)
-
-      # We then append the id of the appearance.
-      appearance.append_be(entry)
-
-      # And finally, we compute the checksum of the entry so far...
-      checksum = Digest::CRC32.checksum(entry.to_readonly_slice)
-
-      # ... and append it to the entry as well.
-      buffer = uninitialized UInt8[4]
-      IO::ByteFormat::BigEndian.encode(checksum, buffer.to_slice)
-
-      entry.concat(buffer)
-
-      # Append PERIOD byte
-      entry << PERIOD
-
-      # Finally, we mount the resulting entry in the multimap; making sure to
-      # skip through the entirety of the secret. This means we will not leave
-      # hints about what each digit in the secret is; so while it is still possible
-      # to just start exploring from an empty prefix, we'd have to explore through
-      # e.g. 32 bytes (in case of a hash) without any hints whatsoever. This means
-      # we'd have to explore a 2**256 search space before we get to hints. So
-      # the secrets are secret enough, as long as they're longer than a few bytes.
-      BytesMultimap(Atom).mount(atoms, entry.to_readonly_slice, start: secret.size)
-
-      true # continue
-    end
-  end
-
-  # Yields appearance ids at the endpoints of valid continuations of *strand*.
-  def each_appearance(question, secret : Bytes, strand : Array(Ubase::Any), *, hasher : H = Blake3.new, & : Label ->) : Nil forall H
-    completer = BytesMultimap::Completer(Atom, H).new(hasher: hasher)
-    completer.seed(secret)
-
-    completer.refine(question, SIGNATURE_BYTESIZE) do |entry|
-      unless entry.size == secret.size + SIGNATURE_BYTESIZE
-        Log.debug { "reject entry: invalid fingerprint-signature sequence bytesize" }
-        next false
-      end
-
-      unless entry[-SIGNATURE_BYTESIZE...] == SIGNATURE
-        Log.debug { "reject entry: invalid signature byte sequence" }
-        next false
-      end
-
-      true
-    end
-
-    prefix = [] of UInt8
-
-    unless strand.empty?
-      Ubase.encode(strand, to: prefix)
-
-      # Expect each signature to be followed by the Ubase sequence that we are
-      # querying for.
-      completer.concat(prefix.to_readonly_slice)
-    end
-
-    zerosize = secret.size + SIGNATURE_BYTESIZE + prefix.size
-
-    until completer.at_end?
-      completer.b4digit(question) do |entry|
-        next if entry.size == zerosize
-
-        unless entry.last == PERIOD
-          Log.debug { "reject entry: does not end with PERIOD" }
-          next
-        end
-
-        entry = entry[...-1]
-
-        if entry.size < zerosize + Label.bytesize + sizeof(Checksum)
-          Log.debug { "reject entry: size mismatch (#{entry.size} < #{zerosize + Label.bytesize + sizeof(Checksum)})" }
-          next
-        end
-
-        # Verify checksum (0 stands for "original")
-        checksum0 = IO::ByteFormat::BigEndian.decode(Checksum, entry[-sizeof(Checksum)..])
-        checksum1 = Digest::CRC32.checksum(entry[...-sizeof(Checksum)])
-
-        unless checksum0 == checksum1
-          Log.debug { "reject entry: checksum mismatch (my #{checksum1} != its #{checksum0})" }
-          next
-        end
-
-        unless appearance = Label.from_slice_be?(entry[-LABEL_BYTESIZE - sizeof(Checksum)...-sizeof(Checksum)])
-          Log.debug { "reject entry: invalid label byte sequence" }
-          next
-        end
-
-        unless WWID.makes_sense?(appearance)
-          Log.debug { "reject entry: label is nonsensical (e.g. too old or is from the future)" }
-          next
-        end
-
-        yield appearance
-      end
-    end
-  rescue e : BytesMultimap::SanityCheckException
-    Log.debug(exception: e) { "completion stopped: the underlying set has collisions and/or is insane" }
-  end
-end
-
-# tbase
-
-# sensorregistry
-
-# appearanceregistry
-# TODO: we don't need to store value in AppearanceRegistry. Instead we
-# can use IChat to ask the conid that owns the appearance to send the value.
-
-# class sensor
-
-# class appearance
-
-class DynBitArray
+class DynamicBitArray
   include Indexable::Mutable(Bool)
 
   GROWTH_FACTOR = 1.5
@@ -1003,22 +495,9 @@ class DynBitArray
   end
 end
 
-module Question(A)
-  record MemberOne(A), atom : A, answer : Bool* do
-    include Question(A)
-  end
-
-  record MemberAny(A), atoms : Enumerable(A), answer : Bool* do
-    include Question(A)
-  end
-
-  record MemberSome(A), atoms : Enumerable(A), answers : DynBitArray do
-    include Question(A)
-  end
-end
-
 module Ubase
-  def self.strandof(keypath : Stack(Term), leaf : Term, *, to strand : Array(Ubase::Any)) : Nil
+  # FIXME: this does not belong here
+  def self.strandof(keypath : Stack(Term), leaf : Term, *, to strand : Array(Ubase::Content)) : Nil
     keypath.each do |key|
       strand << Ubase::IsDict.new
       strand << Ubase::At.new(key)
@@ -1040,6 +519,18 @@ module Ubase
     strand << Ubase::Literal.new(leaf)
   end
 
+  # TODO: encode valid combinations to reduce bytesize:
+  #
+  #  -  IsDict - AtH
+  #  -  IsDict - AtT
+  #  -  IsNum  - LiteralH
+  #  -  IsNum  - LiteralT
+  #  -  IsStr  - LiteralH
+  #  -  IsStr  - LiteralT
+  #  -  IsSym  - LiteralH
+  #  -  IsSym  - LiteralT
+  #  -  IsBool - Literal
+
   CODE_DICT  = 0u8
   CODE_SYM   = 1u8
   CODE_STR   = 2u8
@@ -1050,11 +541,10 @@ module Ubase
   CODE_LITERAL_ML = 7u8
   CODE_LITERAL_HASH = 8u8
 
-  def self.encode(strand : Array(Ubase::Any), *, to encoding : Array(UInt8))
+  # FIXME: this does not belong here
+  def self.encode(strand : Indexable(Content), *, to encoding : Array(UInt8))
     strand.each do |base|
       case base
-      in Ubase::Begin
-        raise ArgumentError.new("unexpected trunk in strand")
       in Ubase::IsDict
         encoding << CODE_DICT
       in Ubase::IsSym
@@ -1083,7 +573,7 @@ module Ubase
           in Ubase::Literal then encoding << CODE_LITERAL_HASH
           end
 
-          hasher = Blake3.new
+          hasher = DIGEST_ALG.new
           buffer = uninitialized UInt8[32]
 
           # Stream bytes that `ML.compact` writes into the hasher.
@@ -1092,7 +582,7 @@ module Ubase
           ML.compact(io, base.term)
 
           # Append hash bytes to encoding.
-          hasher.final(buffer.to_voidptr)
+          hasher.final(buffer.to_slice)
           encoding.concat(buffer)
         end
       end
@@ -1100,28 +590,1247 @@ module Ubase
   end
 end
 
+# ---------
+
+module Utrie
+  extend self
+
+  # :nodoc:
+  enum Action : UInt8
+    EmitTypecheck
+    EmitKeys
+    EmitLiteral
+    EmitEnd
+    End
+  end
+
+  # :nodoc:
+  record Arm, atom : Atom, arg : Term, ok : Action
+
+  # Breaks down the given *strand* into atoms; appends those atoms to *atoms*.
+  def mount(atoms, strand : Enumerable(Ubase::Any), *, hasher = DIGEST_ALG.new) : Atom
+    buffer = uninitialized UInt8[32]
+
+    # Create a byte- and block-level view into the buffer.
+    h0 = buffer.to_slice
+
+    # Initialize H0 to hasher's null hash, our consensus starting point.
+    hasher.reset
+    hasher.final(h0)
+
+    # We hash bases recursively. For instance, the following strand:
+    #
+    #    Begin - IsDict - At[0] - IsNum - Literal[100]
+    #
+    # Will be hashed as:
+    #
+    #    H0 = hash() -- null hash of hasher, e.g. BLAKE3
+    #    H1 = hash(H0 x Begin)
+    #    H2 = hash(H1 x IsDict)
+    #    H3 = hash(H2 x At[0])
+    #    H4 = hash(H3 x IsNum)
+    #    H5 = hash(H4 x Literal[100])
+    #
+    # H5 is the endpoint of the strand. It is then fed to Xtrie and so on.
+    strand.each_with_index do |base, index|
+      hstep(h0, base, hasher: hasher)
+
+      atoms << Atom.of(h0)
+    end
+
+    Atom.of(h0)
+  end
+
+  # :nodoc:
+  #
+  # Updates *h0* with `hash(h0 x base)`.
+  def hstep(h0 : Bytes, base : Ubase::Any, *, hasher = DIGEST_ALG.new) : Nil
+    hasher.reset
+    hasher.update(h0)
+    Ubase.update(hasher, base)
+    hasher.final(h0)
+  end
+
+  # :nodoc:
+  #
+  # Clears and populates *gen* with seed `Atom`s for *query*.
+  def seed(gen : Array(Arm), query : Term, *, hasher = DIGEST_ALG.new) : Nil
+    buffer = uninitialized UInt8[32]
+
+    h0 = buffer.to_slice
+
+    # Initialize H0 to hasher's null hash, our consensus starting point.
+    hasher.final(h0)
+
+    # Finally, populate gen with hash(hash() x Begin).
+    hstep(h0, Ubase::Begin.new, hasher: hasher)
+
+    # NOTE: We also handle stop at the root, e.g. in `_` we have Begin - End.
+    gen.clear
+    gen << Utrie::Arm.new(Atom.of(h0), query, :emit_typecheck)
+    gen << Utrie::Arm.new(Atom.of(h0), query, :emit_end)
+  end
+
+  # :nodoc:
+  struct GenAtoms
+    include Enumerable(Atom)
+
+    def initialize(@gen : Array(Arm))
+    end
+
+    def each(& : Atom ->) : Nil
+      @gen.each { |arm| yield arm.atom }
+    end
+  end
+
+  # :nodoc:
+  #
+  # Filters *gen* to leave only arms whose atoms exist, according to *question*.
+  def sieve(question, gen : Array(Arm), answers : DynamicBitArray) : Nil
+    answers.clear
+    question.call(GenAtoms.new(gen), answers)
+
+    index = 0
+    gen.select! do |arm|
+      answers[index]
+    ensure
+      index += 1
+    end
+  end
+
+  # :nodoc:
+  #
+  # Replaces arms in *gen0* with their offspring; those offspring are put in
+  # *gen1* (which is cleared beforehand).
+  def advance(gen0 : Array(Arm), gen1 : Array(Arm), *, hasher = DIGEST_ALG.new)
+    buffer = StaticArray(UInt8, 32).new(0u8)
+
+    h0 = buffer.to_slice
+    g = h0.unsafe_slice_of(UInt64)
+
+    gen1.clear
+    gen0.each do |arm|
+      # So Dwarf Fortress, huh?
+      ok, arg, atom = arm.ok, arm.arg, arm.atom
+
+      case ok
+      in .emit_typecheck?
+        atom.copy_blocks_to(g)
+
+        hstep(h0, Ubase.from(arm.arg.type), hasher: hasher)
+
+        if arg.type.dict?
+          gen1 << Arm.new(Atom.of(h0), arg, ok: :emit_keys)
+        else
+          gen1 << Arm.new(Atom.of(h0), arg, ok: :emit_literal)
+        end
+
+        # NOTE: We can stop at e.g. IsNum - End.
+        gen1 << Arm.new(Atom.of(h0), arg, ok: :emit_end)
+      in .emit_keys?
+        dict = arg.as_d
+        dict.each_entry do |key, value|
+          atom.copy_blocks_to(g)
+
+          hstep(h0, Ubase::At.new(key), hasher: hasher)
+
+          # NOTE: We can stop at e.g. IsDict - At(0) - . as seen in `(_)`
+          gen1 << Arm.new(Atom.of(h0), value, ok: :emit_typecheck)
+          gen1 << Arm.new(Atom.of(h0), value, ok: :emit_end)
+        end
+      in .emit_literal?
+        atom.copy_blocks_to(g)
+
+        hstep(h0, Ubase::Literal.new(arg), hasher: hasher)
+
+        # NOTE: Literals are always terminal. We do not insert a terminator
+        # after a literal. So we route literals directly to :end.
+        gen1 << Arm.new(Atom.of(h0), arg, ok: :end)
+      in .emit_end?
+        atom.copy_blocks_to(g)
+
+        hstep(h0, Ubase::End.new, hasher: hasher)
+
+        gen1 << Arm.new(Atom.of(h0), arg, ok: :end)
+      in .end?
+        yield atom
+      end
+    end
+  end
+
+  # Yields endpoint atoms that *query* excites.
+  #
+  # - *answers* is reused in calls to *question*.
+  def each_endpoint_atom(question, query : Term, answers : DynamicBitArray, & : Atom ->) : Nil
+    gen0 = [] of Arm
+    gen1 = [] of Arm
+
+    seed(gen0, query)
+
+    # NOTE: This loop will terminate no matter what, since *query* is finite;
+    # even if *question* lies, we're still bounded by *query*. Worst-case, we
+    # yield all possible atoms for *query*.
+    while true
+      sieve(question, gen0, answers)
+      advance(gen0, gen1) { |endpoint| yield endpoint }
+
+      gen0, gen1 = gen1, gen0
+
+      break if gen0.empty?
+    end
+  end
+end
+
+module Xgraph
+  extend self
+
+  def mount(atoms, conj : Deque(Atom), *, hasher = DIGEST_ALG.new) : Atom
+    mem = uninitialized UInt8[32]
+    buffer = mem.to_slice
+    blocks = buffer.unsafe_slice_of(UInt64)
+
+    while conj.size > 1
+      u = conj.shift
+      v = conj.shift
+
+      hasher.reset
+
+      u.copy_blocks_to(blocks)
+      hasher.update(buffer)
+
+      v.copy_blocks_to(blocks)
+      hasher.update(buffer)
+
+      hasher.final(buffer)
+
+      conjv = Atom.new(blocks[0], blocks[1], blocks[2], blocks[3])
+
+      atoms << conjv
+      conj << conjv
+    end
+
+    conj.first
+  end
+
+  def each_fact(question, vertices : Deque(Atom), *, answers = DynamicBitArray.new, hasher = DIGEST_ALG.new, & : Atom ->)
+    if vertices.empty?
+      raise ArgumentError.new("vertices must contain at least one vertex")
+    end
+
+    query = [] of Atom
+
+    h_mem = uninitialized UInt8[32]
+    h_buffer = h_mem.to_slice
+    h_blocks = h_buffer.unsafe_slice_of(UInt64)
+
+    while vertices.size > 1
+      u = vertices.shift
+
+      yield u
+
+      query.clear
+
+      vertices.each do |v|
+        hasher.reset
+
+        u.copy_blocks_to(h_blocks)
+        hasher.update(h_buffer)
+
+        v.copy_blocks_to(h_blocks)
+        hasher.update(h_buffer)
+
+        hasher.final(h_buffer)
+
+        query << Atom.of(h_buffer)
+      end
+
+      answers.clear
+      question.call(query, answers)
+
+      query.each_with_index do |atom, index|
+        next unless answers[index] # exists
+
+        vertices << atom
+      end
+    end
+
+    yield vertices.last
+  end
+end
+
+# TODO: remove signature, it is useless
+# TODO: use complete() instead of refine(), there's not much difference between them
+# and the former reads easier.
+#
+# One-to-many map for decoding a conjunction vertex fingerprint into unique sensor
+# ids that are bound to it.
+#
+# Sensor multimap entries have the following byte format:
+#
+# ```text
+# <conjv: fingerprint> | S R M M <sensor id : label> <crc32 checksum : 4 bytes>
+# ```
+module SensorMultimap
+  extend self
+
+  Log = ::Log.for(self)
+
+  SIGNATURE = "SRMM".to_slice
+  SIGNATURE_BYTESIZE = 4
+
+  {% begin %}
+    ENTRY_BYTESIZE = {{FINGERPRINT_BYTESIZE + SIGNATURE_BYTESIZE + LABEL_BYTESIZE + sizeof(Checksum)}}
+  {% end %}
+
+  # Appends the atoms for the multimap binding of *sensor* to the given conjunction
+  # vertex fingerprint *conjv*.
+  #
+  # Current atom cost of one such binding is ~100 atoms. If multiple sensors are bound
+  # to *conjv*, they will share the bytes for *conjv* itself, so the cost of each
+  # binding will be slightly lower.
+  def bind(atoms, conjv : Atom, sensor : Label) : Nil
+    buffer = uninitialized UInt8[ENTRY_BYTESIZE]
+    entry = cursor = buffer.to_slice
+
+    # Append key (conjv).
+    conjv.copy_hash_to(cursor)
+    cursor += FINGERPRINT_BYTESIZE
+
+    # Append signature.
+    cursor.copy_from(SIGNATURE)
+    cursor += SIGNATURE_BYTESIZE
+
+    # Append sensor label.
+    cursor = sensor.append_be(cursor)
+
+    # Append checksum.
+    checksum = Digest::CRC32.checksum(entry[...-sizeof(Checksum)])
+    IO::ByteFormat::BigEndian.encode(checksum, cursor)
+    cursor += sizeof(Checksum)
+
+    # Produce atoms.
+    BytesMultimap.mount(atoms, entry, start: FINGERPRINT_BYTESIZE)
+  end
+
+  # Yields sensors bound to the given conjunction vertex fingerprint *conjv*
+  # according to *question*.
+  def each_sensor(question, conjvs : Array(Atom), *, hasher : H = DIGEST_ALG.new, answers = DynamicBitArray.new, &sink : Label ->) : Nil forall H
+    completer = BytesMultimap::Completer.new(hasher: hasher, answers: answers,)
+
+    buffer = uninitialized UInt8[32]
+    conjvs.each do |conjv|
+      conjv.copy_hash_to(buffer.to_slice)
+
+      completer.seed(buffer.to_slice)
+    end
+
+    # NOTE: The .debug conditions here are not .warns because they're more or less
+    # nominal in case another thread / client etc. suddenly removes their appearance
+    # while completion is in progress. Some atoms we were able to read but then were
+    # suddenly cut off due to removal. Completion would terminate early therefore;
+    # and one of these sanity checks would fail.
+
+    # Read signature.
+    completer.refine(question, SIGNATURE_BYTESIZE) do |entry|
+      unless entry.size == FINGERPRINT_BYTESIZE + SIGNATURE_BYTESIZE
+        Log.debug { "reject entry: invalid fingerprint-signature sequence bytesize" }
+        next false
+      end
+
+      unless entry[-SIGNATURE_BYTESIZE...] == SIGNATURE
+        Log.debug { "reject entry: invalid signature byte sequence" }
+        next false
+      end
+
+      true
+    end
+
+    # Read sensor label.
+    completer.refine(question, LABEL_BYTESIZE) do |entry|
+      unless label = Label.from_slice_be?(entry[-LABEL_BYTESIZE..])
+        Log.debug { "reject entry: invalid label byte sequence" }
+        next false
+      end
+
+      unless WWID.makes_sense?(label)
+        Log.debug { "reject entry: label is nonsensical (e.g. too old or is from the future)" }
+        next false
+      end
+
+      true
+    end
+
+    # Read checksum.
+    completer.refine(question, sizeof(Checksum)) do |entry|
+      # Verify checksum (0 stands for "original")
+      checksum0 = IO::ByteFormat::BigEndian.decode(Checksum, entry[-sizeof(Checksum)..])
+      checksum1 = Digest::CRC32.checksum(entry[...-sizeof(Checksum)])
+      valid = checksum0 == checksum1
+
+      unless valid
+        Log.debug { "reject entry: checksum mismatch (my #{checksum1} != its #{checksum0})" }
+      end
+
+      valid
+    end
+
+    # Entries "squeezed out" at this point (ones that terminate) are valid entries.
+    # Any other entries are invalid.
+    completer.squeeze(question) do |entry|
+      sensor = entry[FINGERPRINT_BYTESIZE + SIGNATURE_BYTESIZE...-sizeof(Checksum)]
+
+      yield Label.from_slice_be?(sensor).not_nil!
+    end
+  end
+end
+
+# TODO: remove signature, it is useless; remove terminating 0, it is useless
+#
+# Appearance field entries have the following byte format:
+#
+# ```
+# <secret : fingerprint> | A P R F <encoded bases : ...> <appearance id : label> <crc32 checksum : 4 bytes> 0
+# ```
+module AppearanceField
+  extend self
+
+  PERIOD = 0u8
+
+  SIGNATURE_BYTESIZE = 4
+  SIGNATURE = "APRF".to_slice
+
+  # Appends the atoms for the multimap binding of *secret* and *value* to the given
+  # appearance label *appearance*.
+  #
+  # The atom cost of such binding depends heavily on the size of *value*, and could
+  # range from hundreds to hundreds of thousands of atoms (or more).
+  def mount(atoms, secret : Term?, value : Term, instant : Label, *, hasher = DIGEST_ALG.new)
+    strand = [] of Ubase::Content
+    entry = [] of UInt8
+
+    secret_hash = uninitialized UInt8[32]
+
+    # If the secret is present, update hasher with it. Otherwise, we'll use
+    # BLAKE3's null hash as consensus no-secret.
+    hasher.reset
+    if secret
+      io = IO::ByteStream.new { |slice| hasher.update(slice) }
+      ML.compact(io, secret)
+    end
+    hasher.final(secret_hash.to_slice)
+
+    Term.each_keypath_and_leaf(value) do |keypath, leaf|
+      strand.clear
+      entry.clear
+
+      # All entries start with the secret.
+      entry.concat(secret_hash)
+
+      # Secret is followed by the signature on the value side.
+      entry.concat(SIGNATURE)
+
+      # Then we convert the keypath and leaf into a sequence of Ubases,
+      # aka "strand".
+      Ubase.strandof(keypath, leaf, to: strand)
+
+      # We then encode the strand as a bunch of bytes.
+      Ubase.encode(strand, to: entry)
+
+      # We then append the id of the appearance.
+      instant.append_be(entry)
+
+      # And finally, we compute the checksum of the entry so far...
+      checksum = Digest::CRC32.checksum(entry.to_readonly_slice)
+
+      # ... and append it to the entry as well.
+      buffer = uninitialized UInt8[4]
+      IO::ByteFormat::BigEndian.encode(checksum, buffer.to_slice)
+
+      entry.concat(buffer)
+
+      # Append PERIOD byte
+      entry << PERIOD
+
+      # Finally, we mount the resulting entry in the multimap; making sure to
+      # skip through the entirety of the secret. This means we will not leave
+      # hints about what each digit in the secret is; so while it is still possible
+      # to just start exploring from an empty prefix, we'd have to explore through
+      # e.g. 32 bytes (in case of a hash) without any hints whatsoever. This means
+      # we'd have to explore a 2**256 search space before we get to hints. So
+      # the secrets are secret enough, as long as they're longer than a few bytes.
+      BytesMultimap.mount(atoms, entry.to_readonly_slice, start: secret_hash.size)
+
+      true # continue
+    end
+  end
+
+  # Yields appearance ids at the endpoints of valid continuations of *strand*.
+  def each_appearance(question, secret : Term?, strand : Indexable(Ubase::Content), *, hasher : H = DIGEST_ALG.new, & : Label ->) : Nil forall H
+    secret_hash = uninitialized UInt8[32]
+
+    # If the secret is present, update hasher with it. Otherwise, we'll use
+    # BLAKE3's null hash as consensus no-secret.
+    hasher.reset
+    if secret
+      io = IO::ByteStream.new { |slice| hasher.update(slice) }
+      ML.compact(io, secret)
+    end
+    hasher.final(secret_hash.to_slice)
+
+    completer = BytesMultimap::Completer.new(hasher: hasher)
+    completer.seed(secret_hash.to_slice)
+
+    completer.refine(question, SIGNATURE_BYTESIZE) do |entry|
+      unless entry.size == secret_hash.size + SIGNATURE_BYTESIZE
+        Log.debug { "reject entry: invalid fingerprint-signature sequence bytesize" }
+        next false
+      end
+
+      unless entry[-SIGNATURE_BYTESIZE...] == SIGNATURE
+        Log.debug { "reject entry: invalid signature byte sequence" }
+        next false
+      end
+
+      true
+    end
+
+    prefix = [] of UInt8
+
+    unless strand.empty?
+      Ubase.encode(strand, to: prefix)
+
+      # Expect each signature to be followed by the Ubase sequence that we are
+      # querying for.
+      completer.concat(prefix.to_readonly_slice)
+    end
+
+    zerosize = secret_hash.size + SIGNATURE_BYTESIZE + prefix.size
+
+    until completer.at_end?
+      completer.b4digit(question) do |entry|
+        next if entry.size == zerosize
+
+        unless entry.last == PERIOD
+          Log.debug { "reject entry: does not end with PERIOD" }
+          next
+        end
+
+        entry = entry[...-1]
+
+        if entry.size < zerosize + Label.bytesize + sizeof(Checksum)
+          Log.debug { "reject entry: size mismatch (#{entry.size} < #{zerosize + Label.bytesize + sizeof(Checksum)})" }
+          next
+        end
+
+        # Verify checksum (0 stands for "original")
+        checksum0 = IO::ByteFormat::BigEndian.decode(Checksum, entry[-sizeof(Checksum)..])
+        checksum1 = Digest::CRC32.checksum(entry[...-sizeof(Checksum)])
+
+        unless checksum0 == checksum1
+          Log.debug { "reject entry: checksum mismatch (my #{checksum1} != its #{checksum0})" }
+          next
+        end
+
+        unless instant = Label.from_slice_be?(entry[-LABEL_BYTESIZE - sizeof(Checksum)...-sizeof(Checksum)])
+          Log.debug { "reject entry: invalid label byte sequence" }
+          next
+        end
+
+        unless WWID.makes_sense?(instant)
+          Log.debug { "reject entry: label is nonsensical (e.g. too old or is from the future)" }
+          next
+        end
+
+        yield instant
+      end
+    end
+  end
+end
+
+record SensorInfo, conid : Label, grpid : Label
+
+# <instant : label> <secret : fingerprint> | <conid : label> <grpid : label> <checksum : u32>
+module SensorRegistry
+  extend self
+
+  Log = ::Log.for(self)
+
+  {% begin %}
+    # :nodoc:
+    ENTRY_BYTESIZE = {{LABEL_BYTESIZE + FINGERPRINT_BYTESIZE + LABEL_BYTESIZE + LABEL_BYTESIZE + sizeof(Checksum)}}
+  {% end %}
+
+  # Binds sensor info to the given *instant*. Appends the atoms that constitute
+  # the binding to *atoms*.
+  #
+  # The atom cost is currently 144 atoms per binding.
+  #
+  # NOTE: you should not call this method multiple times with the same *instant*. This
+  # would work, but you'll get one of the bound sensor info's; which one depends
+  # on the implementation of bytes multimap, so for you it is pretty much random.
+  def register(atoms, instant : Label, secret : Term?, info : SensorInfo, *, hasher = DIGEST_ALG.new) : Nil
+    buffer = uninitialized UInt8[ENTRY_BYTESIZE]
+    entry = cursor = buffer.to_slice
+
+    cursor = instant.append_be(cursor)
+
+    # If the secret is present, update hasher with it. Otherwise, we'll use
+    # BLAKE3's null hash as consensus no-secret.
+    hasher.reset
+    if secret
+      io = IO::ByteStream.new { |slice| hasher.update(slice) }
+      ML.compact(io, secret)
+    end
+    hasher.final(entry[LABEL_BYTESIZE, FINGERPRINT_BYTESIZE])
+    cursor += FINGERPRINT_BYTESIZE
+
+    cursor = info.conid.append_be(cursor)
+    cursor = info.grpid.append_be(cursor)
+
+    checksum = Digest::CRC32.checksum(entry[...-sizeof(Checksum)])
+    IO::ByteFormat::BigEndian.encode(checksum, cursor)
+    cursor += sizeof(Checksum)
+
+    # Produce atoms for stuff after label and secret (which constitute the key;
+    # the querying side must know them on its own to be able to access the rest
+    # of the stuff).
+    BytesMultimap.mount(atoms, entry, start: LABEL_BYTESIZE + FINGERPRINT_BYTESIZE)
+  end
+
+  # :nodoc:
+  PREFIX_BYTESIZE = LABEL_BYTESIZE + FINGERPRINT_BYTESIZE
+
+  # Yields `SensorInfo` objects associated with each of *instants* and accessible
+  # through *secret*, according to *question*.
+  def each_info(question, instants : Enumerable(Label), secret : Term?, *, hasher : H = DIGEST_ALG.new, answers = DynamicBitArray.new, & : SensorInfo, Label ->) : Nil forall H
+    key = uninitialized UInt8[PREFIX_BYTESIZE]
+    keyslice = key.to_slice
+
+    # Append the digest of *secret* to *key*. We'll have a bunch of leading
+    # zeros to fill afterwards.
+    hasher.reset
+    if secret
+      io = IO::ByteStream.new { |slice| hasher.update(slice) }
+      ML.compact(io, secret)
+    end
+    hasher.final(keyslice[LABEL_BYTESIZE, FINGERPRINT_BYTESIZE])
+
+    completer = BytesMultimap::Completer.new(hasher: hasher, answers: answers)
+
+    instants.each do |instant|
+      # Append instant to the beginning of the key, filling the aforementioned
+      # leading zeros.
+      instant.append_be(keyslice[0, LABEL_BYTESIZE])
+
+      # Seed the completer with the full key.
+      completer.seed(keyslice)
+    end
+
+    completer.complete(question, key: nil) do |entry|
+      next if entry.size == PREFIX_BYTESIZE
+
+      unless entry.size == ENTRY_BYTESIZE
+        Log.debug { "reject entry: invalid entry bytesize" }
+        next
+      end
+
+      conid_offset = LABEL_BYTESIZE + FINGERPRINT_BYTESIZE
+      grpid_offset = conid_offset + LABEL_BYTESIZE
+      checksum_offset = grpid_offset + LABEL_BYTESIZE
+
+      checksum0 = Digest::CRC32.checksum(entry[...checksum_offset])
+      checksum1 = IO::ByteFormat::BigEndian.decode(UInt32, entry[checksum_offset..])
+
+      unless checksum0 == checksum1
+        Log.debug { "reject entry: checksum mismatch (my #{checksum1} != its #{checksum0})" }
+        next
+      end
+
+      unless conid = Label.from_slice_be?(entry[conid_offset...grpid_offset])
+        Log.debug { "reject entry: invalid conid byte sequence" }
+        next
+      end
+
+      unless grpid = Label.from_slice_be?(entry[grpid_offset...checksum_offset])
+        Log.debug { "reject entry: invalid grpid byte sequence" }
+        next
+      end
+
+      unless WWID.makes_sense?(conid) && WWID.makes_sense?(grpid)
+        Log.debug { "reject entry: conid or grpid is nonsensical (e.g. too old or is from the future)" }
+        next
+      end
+
+      instant = Label.from_slice_be(entry[0, LABEL_BYTESIZE])
+
+      unless conid < grpid < instant
+        Log.debug { "reject entry: order constraint violation (#{conid} !< #{grpid} !< #{instant})" }
+        next
+      end
+
+      yield SensorInfo.new(conid, grpid), instant
+    end
+  end
+end
+
+record AppearanceInfo, conid : Label
+
+# <instant : label> <secret : fingerprint> | <conid : label> <checksum : u32>
+module AppearanceRegistry
+  extend self
+
+  Log = ::Log.for(self)
+
+  {% begin %}
+    # :nodoc:
+    ENTRY_BYTESIZE = {{LABEL_BYTESIZE + FINGERPRINT_BYTESIZE + LABEL_BYTESIZE + sizeof(Checksum)}}
+  {% end %}
+
+  # Binds appearance *info* to the given *instant*. Appends the atoms that
+  # constitute the binding to *atoms*.
+  #
+  # The atom cost of one such binding is 80 atoms.
+  #
+  # NOTE: you should not call this method multiple times with the same *instant*. This
+  # would work, but you'll get one of the bound appearance info's; which one depends
+  # on the implementation of bytes multimap, so for you it is pretty much random.
+  def register(atoms, instant : Label, secret : Term?, info : AppearanceInfo, *, hasher = DIGEST_ALG.new) : Nil
+    buffer = uninitialized UInt8[ENTRY_BYTESIZE]
+    entry = cursor = buffer.to_slice
+
+    cursor = instant.append_be(cursor)
+
+    # If the secret is present, update hasher with it. Otherwise, we'll use
+    # BLAKE3's null hash as consensus no-secret.
+    hasher.reset
+    if secret
+      io = IO::ByteStream.new { |slice| hasher.update(slice) }
+      ML.compact(io, secret)
+    end
+    hasher.final(entry[LABEL_BYTESIZE, FINGERPRINT_BYTESIZE])
+    cursor += FINGERPRINT_BYTESIZE
+
+    cursor = info.conid.append_be(cursor)
+
+    checksum = Digest::CRC32.checksum(entry[...-sizeof(Checksum)])
+    IO::ByteFormat::BigEndian.encode(checksum, cursor)
+    cursor += sizeof(Checksum)
+
+    # Produce atoms for stuff after label and secret (which constitute the key;
+    # the querying side must know them on its own to be able to access the rest
+    # of the stuff).
+    BytesMultimap.mount(atoms, entry, start: LABEL_BYTESIZE + FINGERPRINT_BYTESIZE)
+  end
+
+  # :nodoc:
+  PREFIX_BYTESIZE = LABEL_BYTESIZE + FINGERPRINT_BYTESIZE
+
+  # Yields `AppearanceInfo` objects associated with each of *instants* and accessible
+  # through *secret*, according to *question*.
+  def each_info(question, instants : Enumerable(Label), secret : Term?, *, hasher : H = DIGEST_ALG.new, answers = DynamicBitArray.new, & : AppearanceInfo, Label ->) : Nil forall H
+    key = uninitialized UInt8[PREFIX_BYTESIZE]
+    keyslice = key.to_slice
+
+    # Append the digest of *secret* to *key*. We'll have a bunch of leading
+    # zeros to fill afterwards.
+    hasher.reset
+    if secret
+      io = IO::ByteStream.new { |slice| hasher.update(slice) }
+      ML.compact(io, secret)
+    end
+    hasher.final(keyslice[LABEL_BYTESIZE, FINGERPRINT_BYTESIZE])
+
+    completer = BytesMultimap::Completer.new(hasher: hasher, answers: answers)
+
+    instants.each do |instant|
+      # Append instant to the beginning of the key, filling the aforementioned
+      # leading zeros.
+      instant.append_be(keyslice[0, LABEL_BYTESIZE])
+
+      # Seed the completer with the full key.
+      completer.seed(keyslice)
+    end
+
+    completer.complete(question, key: nil) do |entry|
+      next if entry.size == keyslice.size
+
+      unless entry.size == ENTRY_BYTESIZE
+        Log.debug { "reject entry: invalid entry bytesize" }
+        next
+      end
+
+      conid_offset = LABEL_BYTESIZE + FINGERPRINT_BYTESIZE
+      checksum_offset = conid_offset + LABEL_BYTESIZE
+
+      checksum0 = Digest::CRC32.checksum(entry[...checksum_offset])
+      checksum1 = IO::ByteFormat::BigEndian.decode(UInt32, entry[checksum_offset..])
+
+      unless checksum0 == checksum1
+        Log.debug { "reject entry: checksum mismatch (my #{checksum1} != its #{checksum0})" }
+        next
+      end
+
+      unless conid = Label.from_slice_be?(entry[conid_offset...checksum_offset])
+        Log.debug { "reject entry: invalid conid byte sequence" }
+        next
+      end
+
+      unless WWID.makes_sense?(conid)
+        Log.debug { "reject entry: conid is nonsensical (e.g. too old or is from the future)" }
+        next
+      end
+
+      instant = Label.from_slice_be(entry[0, LABEL_BYTESIZE])
+
+      unless conid < instant
+        Log.debug { "reject entry: order constraint violation (#{conid} !< #{instant})" }
+        next
+      end
+
+      yield AppearanceInfo.new(conid), instant
+    end
+  end
+
+end
+
+enum TspaceEntity : UInt8
+  Utrie
+  Xgraph
+  SensorMultimap
+  SensorRegistry
+  AppearanceField
+  AppearanceRegistry
+end
+
 Log.setup_from_env(default_level: :trace)
 
-set = Set(Utrie::Atom).new
+# :nodoc:
+struct TaggedAtomPipe(H)
+  def initialize(@entity : TspaceEntity, @hasher : H, @fn : Atom ->)
+  end
 
-ask = ->(question : Question(Utrie::Atom)) do
-  case question
-  when Question::MemberOne(Utrie::Atom)
-    question.answer.value = question.atom.in?(set)
-  when Question::MemberAny(Utrie::Atom)
-    # question.answer.value = {true, false}.sample
-    question.answer.value = question.atoms.any? &.in?(set)
-  when Question::MemberSome(Utrie::Atom)
-    question.atoms.each do |atom|
-      # question.answers << {true, false}.sample
-      question.answers << atom.in?(set)
+  def <<(atom : Atom) : self
+    buffer = uninitialized UInt8[33]
+    buffer_slice = buffer.to_slice
+
+    atom.copy_hash_to(buffer_slice)
+
+    buffer_slice[-1] = @entity.value
+
+    @hasher.reset
+    @hasher.update(buffer_slice)
+    @hasher.final(buffer_slice[...-1])
+
+    @fn.call(Atom.of(buffer_slice[...-1]))
+
+    self
+  end
+end
+
+# :nodoc:
+struct TaggedAtomQuestion(H, Q)
+  def initialize(@entity : TspaceEntity, @hasher : H, @question : Q, reuse @query = [] of Atom)
+  end
+
+  def call(query : Enumerable(Atom), answers : DynamicBitArray) : Nil
+    buffer = uninitialized UInt8[33]
+    buffer_slice = buffer.to_slice
+
+    query.each do |atom|
+      atom.copy_hash_to(buffer_slice)
+
+      buffer_slice[-1] = @entity.value
+
+      @hasher.reset
+      @hasher.update(buffer_slice)
+      @hasher.final(buffer_slice[...-1])
+
+      @query << Atom.of(buffer_slice[...-1])
     end
-  else
-    unreachable
+
+    @question.call(@query, answers)
+    @query.clear
+  end
+end
+
+class Sensor
+  alias Strand = Array(Ubase::Any)
+  alias Conj = Array(Strand)
+  alias Disj = Array({Conj, Label})
+
+  class StrandParseError < Exception
+  end
+
+  # :nodoc:
+  def initialize(
+    @conid : Label,
+    @grpid : Label,
+    @pattern : Term,
+    @secret : Term?,
+    @branches : Disj,
+  )
+  end
+
+  private SK_ANY  = Term.of({:"%any"})
+  private SK_SYM  = Term.of({:"%symbol"})
+  private SK_STR  = Term.of({:"%string"})
+  private SK_NUM  = Term.of({:"%number", :_})
+  private SK_DICT = Term.of({:"%dict"})
+  private SK_BOOL = Term.of({:"%boolean"})
+
+  # Converts skeleton strand *bases* to a `Strand`.
+  #
+  # May raise `StrandParseError` if *bases* are improperly arranged.
+  private def self.strand(bases : Term::Dict) : Strand
+    strand = Strand.new
+    state = :start
+
+    bases.items.each do |base|
+      case state
+      when :start
+        unless base == SK_ANY
+          raise StrandParseError.new("unexpected base #{base}, expected (%any)")
+        end
+        strand << Ubase::Begin.new
+        state = :typecheck
+      when :typecheck
+        case base
+        when SK_DICT
+          strand << Ubase::IsDict.new
+          state = :key
+        when SK_SYM
+          strand << Ubase::IsSym.new
+          state = :literal
+        when SK_NUM
+          strand << Ubase::IsNum.new
+          state = :literal
+        when SK_STR
+          strand << Ubase::IsStr.new
+          state = :literal
+        when SK_BOOL
+          strand << Ubase::IsBool.new
+          state = :literal
+        else
+          raise StrandParseError.new("unexpected base #{base}, expected typecheck")
+        end
+      when :key
+        Term.case(base) do
+          matchpi %{(%'%value (%'%literal term_))} do
+            strand << Ubase::At.new(term)
+            state = :typecheck
+          end
+
+          otherwise do
+            raise StrandParseError.new("unexpected base #{base}, expected %value %literal")
+          end
+        end
+      when :literal
+        Term.case(base) do
+          matchpi %{(%'%literal term_)} do
+            strand << Ubase::Literal.new(term)
+            state = :after_literal
+          end
+
+          otherwise do
+            raise StrandParseError.new("unexpected base #{base}, expected %literal")
+          end
+        end
+      when :after_literal
+        raise StrandParseError.new("expected end-of-strand after literal, but found base #{base}")
+      end
+    end
+
+    # Indicate abrupt end (as in e.g. `Begin - *` or `Begin - IsDict - At(0) - *`) by
+    # an explicit End base. If we had literal we treat it as end-of-strand regardless.
+    unless state == :after_literal
+      strand << Ubase::End.new
+    end
+
+    strand
+  end
+
+  # Converts skeleton *branch* to the corresponding conjunction object `Conj`.
+  #
+  # May raise `StrandParseError` if the strands that *branch* consists of are
+  # improperly arranged.
+  private def self.conj(branch : Term) : Conj
+    strands = [] of Strand
+    M1.strands(branch) do |bases|
+      strands << strand(bases)
+    end
+    strands
+  end
+
+  # Converts pattern *skeleton* to the corresponding disjunction object `Conj`.
+  #
+  # *fresh* is used to generate fresh labels for branches in *skeleton*.
+  #
+  # May raise `StrandParseError` if the strands that *skeleton* consists of are
+  # improperly arranged.
+  private def self.disj(skeleton : Term, fresh : LabelGenerator) : Disj
+    branches = Disj.new
+    M1.branches(skeleton) do |branch|
+      branches << {conj(branch), fresh.call}
+    end
+    branches
+  end
+
+  # Returns the skeleton of *pattern*.
+  #
+  # See also: `M1.skeleton`.
+  private def self.skeleton(pattern : Term) : Term
+    pipe(pattern, M1.normal, M1.skeleton)
+  end
+
+  def self.new(fresh : LabelGenerator, conid : Label, grpid : Label, pattern : Term, secret : Term? = nil)
+    branches = pipe(pattern, skeleton, disj(fresh))
+
+    new(conid, grpid, pattern, secret, branches)
+  end
+
+  def each_atom(&fn : Atom ->) : Nil
+    hasher = DIGEST_ALG.new
+
+    conj = Deque(Atom).new
+
+    @branches.each do |strands, instant|
+      # Form a conjunction from endpoints of strands in the Utrie.
+      strands.each do |strand|
+        conj << Utrie.mount(TaggedAtomPipe.new(:utrie, hasher, fn), strand, hasher: hasher)
+      end
+
+      # Sort vertices in the conjunction as `Xgraph` demands. The order isn't
+      # important, what matters is that it's the same for insertion and querying.
+      conj.unstable_sort!
+
+      # Mount conjunction.
+      conjv = Xgraph.mount(TaggedAtomPipe.new(:xgraph, hasher, fn), conj, hasher: hasher)
+
+      conj.clear
+
+      # Create an entry in the sensor multimap, pointing conjv to instant.
+      SensorMultimap.bind(TaggedAtomPipe.new(:sensor_multimap, hasher, fn), conjv, instant)
+
+      # Create an entry in the sensor registry, pointing anyone who stumbles on
+      # our instant to conid and grpid.
+      SensorRegistry.register(TaggedAtomPipe.new(:sensor_registry, hasher, fn), instant, @secret, SensorInfo.new(@conid, @grpid), hasher: hasher)
+    end
+  end
+
+  def each_complement(question, & : Label, Label ->)
+    hasher = Blake3.new
+
+    content = [] of Ubase::Content
+    hitsets = [] of Set(Label)
+    complements = Set(Label).new
+
+    @branches.each do |conj, instant|
+      hitsets.clear
+
+      # TODO: can we parallelize these each_appearance calls somehow?
+      conj.each do |strand|
+        hits = Set(Label).new
+
+        content.clear
+        content.concat(strand.to_readonly_slice[1...-1]) { |base| base.as(Ubase::Content) }
+
+        fieldq = TaggedAtomQuestion.new(:appearance_field, hasher, question)
+
+        AppearanceField.each_appearance(fieldq, @secret, content, hasher: hasher) do |appearance|
+          hits << appearance
+        end
+
+        if hits.empty?
+          hitsets.clear
+          break
+        end
+
+        hitsets << hits
+      end
+
+      next unless hitsets.size == conj.size
+
+      hitsets.unstable_sort_by!(&.size)
+      hitsets[0].each do |candidate|
+        # Make sure the candidate is in all sets (matches all strands of the sensor).
+        next unless (1...hitsets.size).all? { |index| candidate.in?(hitsets[index]) }
+
+        complements << candidate
+      end
+    end
+
+    registryq = TaggedAtomQuestion.new(:appearance_registry, hasher, question)
+
+    AppearanceRegistry.each_info(registryq, complements, @secret) do |info, instant|
+      yield info.conid, instant
+    end
+  end
+end
+
+class Appearance
+  def initialize(@conid : Label, @instant : Label, @value : Term, @secret : Term? = nil)
+  end
+
+  # Calls *fn* with atoms that `self` consists of.
+  #
+  # - *hasher* is the hasher to reuse.
+  def each_atom(*, hasher = DIGEST_ALG.new, &fn : Atom ->) : Nil
+    hasher.reset
+
+    # Mount the appearance's value in the appearance field, pointing anyone
+    # who found it to instant.
+    AppearanceField.mount(
+      atoms: TaggedAtomPipe.new(:appearance_field, hasher, fn),
+      secret: @secret,
+      value: @value,
+      instant: @instant,
+      hasher: hasher,
+    )
+
+    # Create an entry in the appearance registry, pointing anyone who stumbles on
+    # our instant to conid.
+    AppearanceRegistry.register(
+      atoms: TaggedAtomPipe.new(:appearance_registry, hasher, fn),
+      instant: @instant,
+      secret: @secret,
+      info: AppearanceInfo.new(@conid),
+      hasher: hasher,
+    )
+  ensure
+    hasher.reset
+  end
+
+  # Yields sensor complements of this appearance to the block, according to *query*.
+  #
+  # - *query* is the query array to reuse.
+  # - *answers* is the answers bit array to reuse.
+  # - *hasher* is the hasher to reuse.
+  def each_complement(question, *, query = [] of Atom, answers = DynamicBitArray.new, hasher = DIGEST_ALG.new, & : Label, Label, Label ->) : Nil
+    query.clear
+    answers.clear
+    hasher.reset
+
+    # Collect vertices to form a conjunction.
+    vertices = Deque(Atom).new
+    utrieq = TaggedAtomQuestion.new(:utrie, hasher, question, reuse: query)
+
+    Utrie.each_endpoint_atom(utrieq, @value, answers) do |atom|
+      vertices << atom
+    end
+
+    return if vertices.empty? # No hits
+
+    # Sort vertices in the conjunction as `Xgraph` demands. The order isn't
+    # important, what matters is that it's the same for insertion and querying.
+    vertices.unstable_sort!
+
+    # Collect facts.
+    hits = [] of Atom
+    xgraphq = TaggedAtomQuestion.new(:xgraph, hasher, question, reuse: query)
+
+    Xgraph.each_fact(xgraphq, vertices, answers: answers, hasher: hasher) do |atom|
+      hits << atom
+    end
+
+    # *hits* cannot be empty because it is passthrough. If there are no
+    # conjunctions we'll simply have the same content as *vertices*, which
+    # as we know at this point is nonempty.
+
+    # For each fact, find out which sensor instant corresponds to that fact.
+    instants = [] of Label
+    multimapq = TaggedAtomQuestion.new(:sensor_multimap, hasher, question, reuse: query)
+
+    SensorMultimap.each_sensor(multimapq, hits, hasher: hasher, answers: answers) do |instant|
+      instants << instant
+    end
+
+    return if instants.empty?
+
+    # For each instant, find the associated sensor info object and
+    # yield it to the block.
+    registryq = TaggedAtomQuestion.new(:sensor_registry, hasher, question, reuse: query)
+
+    SensorRegistry.each_info(registryq, instants, @secret, hasher: hasher, answers: answers) do |info, instant|
+      yield info.conid, info.grpid, instant
+    end
+  ensure
+    query.clear
+    answers.clear
+    hasher.reset
+  end
+end
+
+conid = WWID.call
+atoms = Set(Atom).new
+
+sensor0 = Sensor.new(WWID, conid, WWID.call, Term.of({:"%any", :+, :-}, :x_number, :y_number))
+sensor0.each_atom { |atom| atoms << atom }
+sensor1 = Sensor.new(WWID, conid, WWID.call, Term.of(:+, :x_, :y_))
+sensor1.each_atom { |atom| atoms << atom }
+
+require "benchmark"
+
+
+appearance = Appearance.new(conid, WWID.call, Term.of(:+, 1, 2))
+appearance.each_atom { |atom| atoms << atom }
+
+appearance2 = Appearance.new(conid, WWID.call, Term.of(:-, 3, 4))
+appearance2.each_atom { |atom| atoms << atom }
+
+ask = ->(atoms_ : Enumerable(Atom), answers_ : DynamicBitArray) do
+  atoms_.each do |atom|
+    # question.answers << {true, false}.sample
+    answers_ << atom.in?(atoms)
   end
 
   nil
 end
+
+appearance.each_complement(ask) do |cconid, cgrpid, cinstant|
+  puts "Complement of #{appearance} is sensor @ #{cconid},#{cgrpid} -- #{cinstant}"
+end
+
+sensor0.each_complement(ask) do |cconid, cinstant|
+  puts "Complement of #{sensor0} 0 is appearance @ #{cconid},#{cinstant}"
+end
+sensor1.each_complement(ask) do |cconid, cinstant|
+  puts "Complement of #{sensor1} 1 is appearance @ #{cconid},#{cinstant}"
+end
+
+# pp n
+# appearance.each_atom do |atom|
+#   m += 1
+# end
+# pp m
+
+# set = Set(Atom).new
+
+{% skip_file %}
+
+pp! Xgraph.mount(set, Deque{Atom.of(Blake3.final("a")), Atom.of(Blake3.final("b")), Atom.of(Blake3.final("c"))})
+pp! Xgraph.mount(set, Deque{Atom.of(Blake3.final("a")), Atom.of(Blake3.final("b"))})
+pp! Xgraph.mount(set, Deque{Atom.of(Blake3.final("a")), Atom.of(Blake3.final("c"))})
+
+Xgraph.each_fact(ask, Deque{Atom.of(Blake3.final("a")), Atom.of(Blake3.final("b")), Atom.of(Blake3.final("c"))}) do |conjv|
+  pp conjv
+end
+
+{% skip_file %}
+
+conid = WWID.call
+a = WWID.call
+b = WWID.call
+c = WWID.call
+AppearanceRegistry.register(set, a, nil, AppearanceInfo.new(conid))
+# AppearanceRegistry.register(set, b, Term.of(:qux), AppearanceInfo.new(conid))
+# pp! AppearanceRegistry.info?(ask, a, nil)
+# pp! AppearanceRegistry.info?(ask, b, Term.of(:qux))
+# pp! AppearanceRegistry.info?(ask, c, nil)
+# pp! AppearanceRegistry.info?(ask, a, Term.of(:qux))
+
+pp set.size
+
+{% skip_file %}
 
 Utrie.mount(set, [Ubase::Begin.new, Ubase::IsNum.new, Ubase::Literal.new(Term.of(0))])
 Utrie.mount(set, [Ubase::Begin.new, Ubase::IsNum.new, Ubase::Literal.new(Term.of(1))])
@@ -1131,7 +1840,7 @@ Utrie.mount(set, [Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(:y)
 Utrie.mount(set, [Ubase::Begin.new, Ubase::IsDict.new, Ubase::End.new])
 Utrie.mount(set, [Ubase::Begin.new, Ubase::End.new])
 
-answer = DynBitArray.new
+answer = DynamicBitArray.new
 
 Utrie.each_endpoint_atom(ask, Term.of(0), answer) { |a| pp! a }
 Utrie.each_endpoint_atom(ask, Term.of(1), answer) { |b| pp! b }
