@@ -1,6 +1,5 @@
 require "digest"
 require "log"
-require "bit_array"
 require "./src/wirewright"
 require "./surf_common"
 require "./blake3"
@@ -447,60 +446,19 @@ module BytesMultimap
   end
 end
 
-class DynamicBitArray
-  include Indexable::Mutable(Bool)
-
-  GROWTH_FACTOR = 1.5
-
-  def initialize(capacity0 = 32)
-    @bits = BitArray.new(capacity0)
-    @size = 0
-  end
-
-  def size : Int32
-    @size
-  end
-
-  def unsafe_fetch(index : Int) : Bool
-    @bits.unsafe_fetch(index)
-  end
-
-  def unsafe_put(index : Int, value : Bool) : Nil
-    @bits.unsafe_put(index, value)
-  end
-
-  def push(value : Bool) : Nil
-    # Resize
-    if @size + 1 > @bits.size
-      bits1 = BitArray.new((@bits.size * GROWTH_FACTOR).to_i)
-      @bits.each_with_index do |bit, index|
-        bits1.unsafe_put(index, bit)
-      end
-      @bits = bits1
-    end
-
-    unsafe_put(@size, value)
-
-    @size += 1
-  end
-
-  def <<(value : Bool) : self
-    push(value)
-
-    self
-  end
-
-  def clear : Nil
-    @size = 0
-  end
-end
-
 module Ubase
   # FIXME: this does not belong here
-  def self.strandof(keypath : Stack(Term), leaf : Term, *, to strand : Array(Ubase::Content)) : Nil
+  def self.strandof(keypath : Stack(Term), leaf : Term, *, to strand : Array(Ubase::Any)) : Nil
+    strand << Ubase::Begin.new
+
     keypath.each do |key|
       strand << Ubase::IsDict.new
       strand << Ubase::At.new(key)
+    end
+
+    if leaf == Term[]
+      strand << Ubase::IsDict.new
+      return
     end
 
     case leaf.type
@@ -531,20 +489,29 @@ module Ubase
   #  -  IsSym  - LiteralT
   #  -  IsBool - Literal
 
-  CODE_DICT  = 0u8
-  CODE_SYM   = 1u8
-  CODE_STR   = 2u8
-  CODE_NUM   = 3u8
-  CODE_BOOL  = 4u8
-  CODE_AT_ML = 5u8
-  CODE_AT_HASH = 6u8
-  CODE_LITERAL_ML = 7u8
-  CODE_LITERAL_HASH = 8u8
+  CODE_BEGIN = 0u8
+  CODE_END   = 1u8
+  CODE_DICT  = 2u8
+  CODE_SYM   = 3u8
+  CODE_STR   = 4u8
+  CODE_NUM   = 5u8
+  CODE_BOOL  = 6u8
+  CODE_AT_ML = 7u8
+  CODE_AT_HASH = 8u8
+  CODE_LITERAL_ML = 9u8
+  CODE_LITERAL_HASH = 10u8
 
   # FIXME: this does not belong here
-  def self.encode(strand : Indexable(Content), *, to encoding : Array(UInt8))
+  def self.encode(strand : Indexable(Any), *, to encoding : Array(UInt8))
     strand.each do |base|
       case base
+      in Ubase::Begin
+        encoding << CODE_BEGIN
+      in Ubase::End
+        # Remember this is for AppearanceField, thus appearances. Appearances do not
+        # have Ends in them because they do not end abruptly; there's always a value
+        # of some kind, a leaf. But something like an empty dict encodes as Begin - IsDict
+        # which is fine as far as sensors are concerned.
       in Ubase::IsDict
         encoding << CODE_DICT
       in Ubase::IsSym
@@ -591,195 +558,6 @@ module Ubase
 end
 
 # ---------
-
-module Utrie
-  extend self
-
-  # :nodoc:
-  enum Action : UInt8
-    EmitTypecheck
-    EmitKeys
-    EmitLiteral
-    EmitEnd
-    End
-  end
-
-  # :nodoc:
-  record Arm, atom : Atom, arg : Term, ok : Action
-
-  # Breaks down the given *strand* into atoms; appends those atoms to *atoms*.
-  def mount(atoms, strand : Enumerable(Ubase::Any), *, hasher = DIGEST_ALG.new) : Atom
-    buffer = uninitialized UInt8[32]
-
-    # Create a byte- and block-level view into the buffer.
-    h0 = buffer.to_slice
-
-    # Initialize H0 to hasher's null hash, our consensus starting point.
-    hasher.reset
-    hasher.final(h0)
-
-    # We hash bases recursively. For instance, the following strand:
-    #
-    #    Begin - IsDict - At[0] - IsNum - Literal[100]
-    #
-    # Will be hashed as:
-    #
-    #    H0 = hash() -- null hash of hasher, e.g. BLAKE3
-    #    H1 = hash(H0 x Begin)
-    #    H2 = hash(H1 x IsDict)
-    #    H3 = hash(H2 x At[0])
-    #    H4 = hash(H3 x IsNum)
-    #    H5 = hash(H4 x Literal[100])
-    #
-    # H5 is the endpoint of the strand. It is then fed to Xtrie and so on.
-    strand.each_with_index do |base, index|
-      hstep(h0, base, hasher: hasher)
-
-      atoms << Atom.of(h0)
-    end
-
-    Atom.of(h0)
-  end
-
-  # :nodoc:
-  #
-  # Updates *h0* with `hash(h0 x base)`.
-  def hstep(h0 : Bytes, base : Ubase::Any, *, hasher = DIGEST_ALG.new) : Nil
-    hasher.reset
-    hasher.update(h0)
-    Ubase.update(hasher, base)
-    hasher.final(h0)
-  end
-
-  # :nodoc:
-  #
-  # Clears and populates *gen* with seed `Atom`s for *query*.
-  def seed(gen : Array(Arm), query : Term, *, hasher = DIGEST_ALG.new) : Nil
-    buffer = uninitialized UInt8[32]
-
-    h0 = buffer.to_slice
-
-    # Initialize H0 to hasher's null hash, our consensus starting point.
-    hasher.final(h0)
-
-    # Finally, populate gen with hash(hash() x Begin).
-    hstep(h0, Ubase::Begin.new, hasher: hasher)
-
-    # NOTE: We also handle stop at the root, e.g. in `_` we have Begin - End.
-    gen.clear
-    gen << Utrie::Arm.new(Atom.of(h0), query, :emit_typecheck)
-    gen << Utrie::Arm.new(Atom.of(h0), query, :emit_end)
-  end
-
-  # :nodoc:
-  struct GenAtoms
-    include Enumerable(Atom)
-
-    def initialize(@gen : Array(Arm))
-    end
-
-    def each(& : Atom ->) : Nil
-      @gen.each { |arm| yield arm.atom }
-    end
-  end
-
-  # :nodoc:
-  #
-  # Filters *gen* to leave only arms whose atoms exist, according to *question*.
-  def sieve(question, gen : Array(Arm), answers : DynamicBitArray) : Nil
-    answers.clear
-    question.call(GenAtoms.new(gen), answers)
-
-    index = 0
-    gen.select! do |arm|
-      answers[index]
-    ensure
-      index += 1
-    end
-  end
-
-  # :nodoc:
-  #
-  # Replaces arms in *gen0* with their offspring; those offspring are put in
-  # *gen1* (which is cleared beforehand).
-  def advance(gen0 : Array(Arm), gen1 : Array(Arm), *, hasher = DIGEST_ALG.new)
-    buffer = StaticArray(UInt8, 32).new(0u8)
-
-    h0 = buffer.to_slice
-    g = h0.unsafe_slice_of(UInt64)
-
-    gen1.clear
-    gen0.each do |arm|
-      # So Dwarf Fortress, huh?
-      ok, arg, atom = arm.ok, arm.arg, arm.atom
-
-      case ok
-      in .emit_typecheck?
-        atom.copy_blocks_to(g)
-
-        hstep(h0, Ubase.from(arm.arg.type), hasher: hasher)
-
-        if arg.type.dict?
-          gen1 << Arm.new(Atom.of(h0), arg, ok: :emit_keys)
-        else
-          gen1 << Arm.new(Atom.of(h0), arg, ok: :emit_literal)
-        end
-
-        # NOTE: We can stop at e.g. IsNum - End.
-        gen1 << Arm.new(Atom.of(h0), arg, ok: :emit_end)
-      in .emit_keys?
-        dict = arg.as_d
-        dict.each_entry do |key, value|
-          atom.copy_blocks_to(g)
-
-          hstep(h0, Ubase::At.new(key), hasher: hasher)
-
-          # NOTE: We can stop at e.g. IsDict - At(0) - . as seen in `(_)`
-          gen1 << Arm.new(Atom.of(h0), value, ok: :emit_typecheck)
-          gen1 << Arm.new(Atom.of(h0), value, ok: :emit_end)
-        end
-      in .emit_literal?
-        atom.copy_blocks_to(g)
-
-        hstep(h0, Ubase::Literal.new(arg), hasher: hasher)
-
-        # NOTE: Literals are always terminal. We do not insert a terminator
-        # after a literal. So we route literals directly to :end.
-        gen1 << Arm.new(Atom.of(h0), arg, ok: :end)
-      in .emit_end?
-        atom.copy_blocks_to(g)
-
-        hstep(h0, Ubase::End.new, hasher: hasher)
-
-        gen1 << Arm.new(Atom.of(h0), arg, ok: :end)
-      in .end?
-        yield atom
-      end
-    end
-  end
-
-  # Yields endpoint atoms that *query* excites.
-  #
-  # - *answers* is reused in calls to *question*.
-  def each_endpoint_atom(question, query : Term, answers : DynamicBitArray, & : Atom ->) : Nil
-    gen0 = [] of Arm
-    gen1 = [] of Arm
-
-    seed(gen0, query)
-
-    # NOTE: This loop will terminate no matter what, since *query* is finite;
-    # even if *question* lies, we're still bounded by *query*. Worst-case, we
-    # yield all possible atoms for *query*.
-    while true
-      sieve(question, gen0, answers)
-      advance(gen0, gen1) { |endpoint| yield endpoint }
-
-      gen0, gen1 = gen1, gen0
-
-      break if gen0.empty?
-    end
-  end
-end
 
 module Xgraph
   extend self
@@ -1005,7 +783,7 @@ module AppearanceField
   # The atom cost of such binding depends heavily on the size of *value*, and could
   # range from hundreds to hundreds of thousands of atoms (or more).
   def mount(atoms, secret : Term?, value : Term, instant : Label, *, hasher = DIGEST_ALG.new)
-    strand = [] of Ubase::Content
+    strand = [] of Ubase::Any
     entry = [] of UInt8
 
     secret_hash = uninitialized UInt8[32]
@@ -1065,7 +843,7 @@ module AppearanceField
   end
 
   # Yields appearance ids at the endpoints of valid continuations of *strand*.
-  def each_appearance(question, secret : Term?, strand : Indexable(Ubase::Content), *, hasher : H = DIGEST_ALG.new, & : Label ->) : Nil forall H
+  def each_appearance(question, secret : Term?, strand : Indexable(Ubase::Any), *, answers = DynamicBitArray.new, hasher : H = DIGEST_ALG.new, & : Label ->) : Nil forall H
     secret_hash = uninitialized UInt8[32]
 
     # If the secret is present, update hasher with it. Otherwise, we'll use
@@ -1077,7 +855,7 @@ module AppearanceField
     end
     hasher.final(secret_hash.to_slice)
 
-    completer = BytesMultimap::Completer.new(hasher: hasher)
+    completer = BytesMultimap::Completer.new(hasher: hasher, answers: answers)
     completer.seed(secret_hash.to_slice)
 
     completer.refine(question, SIGNATURE_BYTESIZE) do |entry|
@@ -1292,7 +1070,7 @@ module AppearanceRegistry
   # The atom cost of one such binding is 80 atoms.
   #
   # NOTE: you should not call this method multiple times with the same *instant*. This
-  # would work, but you'll get one of the bound appearance info's; which one depends
+  # will work, but you'll get one of the bound appearance info's; which one depends
   # on the implementation of bytes multimap, so for you it is pretty much random.
   def register(atoms, instant : Label, secret : Term?, info : AppearanceInfo, *, hasher = DIGEST_ALG.new) : Nil
     buffer = uninitialized UInt8[ENTRY_BYTESIZE]
@@ -1352,7 +1130,7 @@ module AppearanceRegistry
     end
 
     completer.complete(question, key: nil) do |entry|
-      next if entry.size == keyslice.size
+      next if entry.size == PREFIX_BYTESIZE
 
       unless entry.size == ENTRY_BYTESIZE
         Log.debug { "reject entry: invalid entry bytesize" }
@@ -1453,312 +1231,7 @@ struct TaggedAtomQuestion(H, Q)
   end
 end
 
-class Sensor
-  alias Strand = Array(Ubase::Any)
-  alias Conj = Array(Strand)
-  alias Disj = Array({Conj, Label})
-
-  class StrandParseError < Exception
-  end
-
-  # :nodoc:
-  def initialize(
-    @conid : Label,
-    @grpid : Label,
-    @pattern : Term,
-    @secret : Term?,
-    @branches : Disj,
-  )
-  end
-
-  private SK_ANY  = Term.of({:"%any"})
-  private SK_SYM  = Term.of({:"%symbol"})
-  private SK_STR  = Term.of({:"%string"})
-  private SK_NUM  = Term.of({:"%number", :_})
-  private SK_DICT = Term.of({:"%dict"})
-  private SK_BOOL = Term.of({:"%boolean"})
-
-  # Converts skeleton strand *bases* to a `Strand`.
-  #
-  # May raise `StrandParseError` if *bases* are improperly arranged.
-  private def self.strand(bases : Term::Dict) : Strand
-    strand = Strand.new
-    state = :start
-
-    bases.items.each do |base|
-      case state
-      when :start
-        unless base == SK_ANY
-          raise StrandParseError.new("unexpected base #{base}, expected (%any)")
-        end
-        strand << Ubase::Begin.new
-        state = :typecheck
-      when :typecheck
-        case base
-        when SK_DICT
-          strand << Ubase::IsDict.new
-          state = :key
-        when SK_SYM
-          strand << Ubase::IsSym.new
-          state = :literal
-        when SK_NUM
-          strand << Ubase::IsNum.new
-          state = :literal
-        when SK_STR
-          strand << Ubase::IsStr.new
-          state = :literal
-        when SK_BOOL
-          strand << Ubase::IsBool.new
-          state = :literal
-        else
-          raise StrandParseError.new("unexpected base #{base}, expected typecheck")
-        end
-      when :key
-        Term.case(base) do
-          matchpi %{(%'%value (%'%literal term_))} do
-            strand << Ubase::At.new(term)
-            state = :typecheck
-          end
-
-          otherwise do
-            raise StrandParseError.new("unexpected base #{base}, expected %value %literal")
-          end
-        end
-      when :literal
-        Term.case(base) do
-          matchpi %{(%'%literal term_)} do
-            strand << Ubase::Literal.new(term)
-            state = :after_literal
-          end
-
-          otherwise do
-            raise StrandParseError.new("unexpected base #{base}, expected %literal")
-          end
-        end
-      when :after_literal
-        raise StrandParseError.new("expected end-of-strand after literal, but found base #{base}")
-      end
-    end
-
-    # Indicate abrupt end (as in e.g. `Begin - *` or `Begin - IsDict - At(0) - *`) by
-    # an explicit End base. If we had literal we treat it as end-of-strand regardless.
-    unless state == :after_literal
-      strand << Ubase::End.new
-    end
-
-    strand
-  end
-
-  # Converts skeleton *branch* to the corresponding conjunction object `Conj`.
-  #
-  # May raise `StrandParseError` if the strands that *branch* consists of are
-  # improperly arranged.
-  private def self.conj(branch : Term) : Conj
-    strands = [] of Strand
-    M1.strands(branch) do |bases|
-      strands << strand(bases)
-    end
-    strands
-  end
-
-  # Converts pattern *skeleton* to the corresponding disjunction object `Conj`.
-  #
-  # *fresh* is used to generate fresh labels for branches in *skeleton*.
-  #
-  # May raise `StrandParseError` if the strands that *skeleton* consists of are
-  # improperly arranged.
-  private def self.disj(skeleton : Term, fresh : LabelGenerator) : Disj
-    branches = Disj.new
-    M1.branches(skeleton) do |branch|
-      branches << {conj(branch), fresh.call}
-    end
-    branches
-  end
-
-  # Returns the skeleton of *pattern*.
-  #
-  # See also: `M1.skeleton`.
-  private def self.skeleton(pattern : Term) : Term
-    pipe(pattern, M1.normal, M1.skeleton)
-  end
-
-  def self.new(fresh : LabelGenerator, conid : Label, grpid : Label, pattern : Term, secret : Term? = nil)
-    branches = pipe(pattern, skeleton, disj(fresh))
-
-    new(conid, grpid, pattern, secret, branches)
-  end
-
-  def each_atom(&fn : Atom ->) : Nil
-    hasher = DIGEST_ALG.new
-
-    conj = Deque(Atom).new
-
-    @branches.each do |strands, instant|
-      # Form a conjunction from endpoints of strands in the Utrie.
-      strands.each do |strand|
-        conj << Utrie.mount(TaggedAtomPipe.new(:utrie, hasher, fn), strand, hasher: hasher)
-      end
-
-      # Sort vertices in the conjunction as `Xgraph` demands. The order isn't
-      # important, what matters is that it's the same for insertion and querying.
-      conj.unstable_sort!
-
-      # Mount conjunction.
-      conjv = Xgraph.mount(TaggedAtomPipe.new(:xgraph, hasher, fn), conj, hasher: hasher)
-
-      conj.clear
-
-      # Create an entry in the sensor multimap, pointing conjv to instant.
-      SensorMultimap.bind(TaggedAtomPipe.new(:sensor_multimap, hasher, fn), conjv, instant)
-
-      # Create an entry in the sensor registry, pointing anyone who stumbles on
-      # our instant to conid and grpid.
-      SensorRegistry.register(TaggedAtomPipe.new(:sensor_registry, hasher, fn), instant, @secret, SensorInfo.new(@conid, @grpid), hasher: hasher)
-    end
-  end
-
-  def each_complement(question, & : Label, Label ->)
-    hasher = Blake3.new
-
-    content = [] of Ubase::Content
-    hitsets = [] of Set(Label)
-    complements = Set(Label).new
-
-    @branches.each do |conj, instant|
-      hitsets.clear
-
-      # TODO: can we parallelize these each_appearance calls somehow?
-      conj.each do |strand|
-        hits = Set(Label).new
-
-        content.clear
-        content.concat(strand.to_readonly_slice[1...-1]) { |base| base.as(Ubase::Content) }
-
-        fieldq = TaggedAtomQuestion.new(:appearance_field, hasher, question)
-
-        AppearanceField.each_appearance(fieldq, @secret, content, hasher: hasher) do |appearance|
-          hits << appearance
-        end
-
-        if hits.empty?
-          hitsets.clear
-          break
-        end
-
-        hitsets << hits
-      end
-
-      next unless hitsets.size == conj.size
-
-      hitsets.unstable_sort_by!(&.size)
-      hitsets[0].each do |candidate|
-        # Make sure the candidate is in all sets (matches all strands of the sensor).
-        next unless (1...hitsets.size).all? { |index| candidate.in?(hitsets[index]) }
-
-        complements << candidate
-      end
-    end
-
-    registryq = TaggedAtomQuestion.new(:appearance_registry, hasher, question)
-
-    AppearanceRegistry.each_info(registryq, complements, @secret) do |info, instant|
-      yield info.conid, instant
-    end
-  end
-end
-
-class Appearance
-  def initialize(@conid : Label, @instant : Label, @value : Term, @secret : Term? = nil)
-  end
-
-  # Calls *fn* with atoms that `self` consists of.
-  #
-  # - *hasher* is the hasher to reuse.
-  def each_atom(*, hasher = DIGEST_ALG.new, &fn : Atom ->) : Nil
-    hasher.reset
-
-    # Mount the appearance's value in the appearance field, pointing anyone
-    # who found it to instant.
-    AppearanceField.mount(
-      atoms: TaggedAtomPipe.new(:appearance_field, hasher, fn),
-      secret: @secret,
-      value: @value,
-      instant: @instant,
-      hasher: hasher,
-    )
-
-    # Create an entry in the appearance registry, pointing anyone who stumbles on
-    # our instant to conid.
-    AppearanceRegistry.register(
-      atoms: TaggedAtomPipe.new(:appearance_registry, hasher, fn),
-      instant: @instant,
-      secret: @secret,
-      info: AppearanceInfo.new(@conid),
-      hasher: hasher,
-    )
-  ensure
-    hasher.reset
-  end
-
-  # Yields sensor complements of this appearance to the block, according to *query*.
-  #
-  # - *query* is the query array to reuse.
-  # - *answers* is the answers bit array to reuse.
-  # - *hasher* is the hasher to reuse.
-  def each_complement(question, *, query = [] of Atom, answers = DynamicBitArray.new, hasher = DIGEST_ALG.new, & : Label, Label, Label ->) : Nil
-    query.clear
-    answers.clear
-    hasher.reset
-
-    # Collect vertices to form a conjunction.
-    vertices = Deque(Atom).new
-    utrieq = TaggedAtomQuestion.new(:utrie, hasher, question, reuse: query)
-
-    Utrie.each_endpoint_atom(utrieq, @value, answers) do |atom|
-      vertices << atom
-    end
-
-    return if vertices.empty? # No hits
-
-    # Sort vertices in the conjunction as `Xgraph` demands. The order isn't
-    # important, what matters is that it's the same for insertion and querying.
-    vertices.unstable_sort!
-
-    # Collect facts.
-    hits = [] of Atom
-    xgraphq = TaggedAtomQuestion.new(:xgraph, hasher, question, reuse: query)
-
-    Xgraph.each_fact(xgraphq, vertices, answers: answers, hasher: hasher) do |atom|
-      hits << atom
-    end
-
-    # *hits* cannot be empty because it is passthrough. If there are no
-    # conjunctions we'll simply have the same content as *vertices*, which
-    # as we know at this point is nonempty.
-
-    # For each fact, find out which sensor instant corresponds to that fact.
-    instants = [] of Label
-    multimapq = TaggedAtomQuestion.new(:sensor_multimap, hasher, question, reuse: query)
-
-    SensorMultimap.each_sensor(multimapq, hits, hasher: hasher, answers: answers) do |instant|
-      instants << instant
-    end
-
-    return if instants.empty?
-
-    # For each instant, find the associated sensor info object and
-    # yield it to the block.
-    registryq = TaggedAtomQuestion.new(:sensor_registry, hasher, question, reuse: query)
-
-    SensorRegistry.each_info(registryq, instants, @secret, hasher: hasher, answers: answers) do |info, instant|
-      yield info.conid, info.grpid, instant
-    end
-  ensure
-    query.clear
-    answers.clear
-    hasher.reset
-  end
-end
+require "./surf5_clean"
 
 conid = WWID.call
 atoms = Set(Atom).new

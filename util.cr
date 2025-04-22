@@ -2854,3 +2854,55 @@ struct Slice(T)
     to_unsafe.as(Void*)
   end
 end
+
+require "bit_array"
+
+class DynamicBitArray
+  include Indexable::Mutable(Bool)
+
+  GROWTH_FACTOR = 1.5
+
+  def initialize(capacity0 = 32)
+    @bits = BitArray.new(capacity0)
+    @size = 0
+  end
+
+  def size : Int32
+    @size
+  end
+
+  def unsafe_fetch(index : Int) : Bool
+    @bits.unsafe_fetch(index)
+  end
+
+  def unsafe_put(index : Int, value : Bool) : Nil
+    @bits.unsafe_put(index, value)
+  end
+
+  def push(value : Bool) : Nil
+    # Resize
+    if @size + 1 > @bits.size
+      bits1 = BitArray.new((@bits.size * GROWTH_FACTOR).to_i)
+      @bits.each_with_index do |bit, index|
+        bits1.unsafe_put(index, bit)
+      end
+      @bits = bits1
+    end
+
+    unsafe_put(@size, value)
+
+    @size += 1
+  end
+
+  def <<(value : Bool) : self
+    push(value)
+
+    self
+  end
+
+  def clear : Nil
+    @size = 0
+  end
+end
+
+

@@ -543,9 +543,7 @@ alias BranchList = Slice(StrandList)
 #
 # See `Utrie` to learn more.
 module Ubase
-  alias Any = Anchor | Content
-  alias Anchor = Begin | End
-  alias Content = At | IsSym | IsStr | IsNum | IsBool | IsDict | Literal
+  alias Any = Begin | End | At | IsSym | IsStr | IsNum | IsBool | IsDict | Literal
 
   # Passes a dictionary term's value for *key* forward.
   record At, key : Term do
