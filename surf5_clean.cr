@@ -1,3 +1,5 @@
+ATOM_BYTESIZE = 32
+
 # An internal, ephemeral trie-like data structure for mapping sensor strands to
 # atoms via recursive hashing.
 #
@@ -25,10 +27,9 @@ module Utrie
   record Arm, atom : Atom, arg : Term, ok : Action
 
   # Breaks down the given *strand* into atoms; appends those atoms to *atoms*.
-  def mount(atoms, strand : Enumerable(Ubase::Any), hasher) : Atom
-    buffer = uninitialized UInt8[32]
+  def mount(atoms, strand : Enumerable(Ubase::Any), hasher : IHasher) : Atom
+    buffer = uninitialized UInt8[ATOM_BYTESIZE]
 
-    # Create a byte- and block-level view into the buffer.
     h0 = buffer.to_slice
 
     # Initialize H0 to hasher's null hash, our consensus starting point.
@@ -61,7 +62,7 @@ module Utrie
   # :nodoc:
   #
   # Updates *h0* with `hash(h0 x base)`.
-  def hstep(h0 : Bytes, base : Ubase::Any, hasher) : Nil
+  def hstep(h0 : Bytes, base : Ubase::Any, hasher : IHasher) : Nil
     hasher.reset
     hasher.update(h0)
     Ubase.update(hasher, base)
@@ -71,8 +72,8 @@ module Utrie
   # :nodoc:
   #
   # Clears and populates *gen* with seed `Atom`s for *query*.
-  def seed(gen : Array(Arm), query : Term, hasher) : Nil
-    buffer = uninitialized UInt8[32]
+  def seed(gen : Array(Arm), query : Term, hasher : IHasher) : Nil
+    buffer = uninitialized UInt8[ATOM_BYTESIZE]
 
     h0 = buffer.to_slice
 
@@ -104,7 +105,7 @@ module Utrie
   # :nodoc:
   #
   # Filters *gen* to leave only arms whose atoms exist, according to *question*.
-  def sieve(question, gen : Array(Arm), answers : DynamicBitArray) : Nil
+  def sieve(question : Question, gen : Array(Arm), answers : DynamicBitArray) : Nil
     answers.clear
     question.call(GenAtoms.new(gen), answers)
 
@@ -120,11 +121,10 @@ module Utrie
   #
   # Replaces arms in *gen0* with their offspring; those offspring are put in
   # *gen1* (which is cleared beforehand).
-  def advance(gen0 : Array(Arm), gen1 : Array(Arm), hasher)
-    buffer = uninitialized UInt8[32]
+  def advance(gen0 : Array(Arm), gen1 : Array(Arm), hasher : IHasher) : Nil
+    buffer = uninitialized UInt8[ATOM_BYTESIZE]
 
     h0 = buffer.to_slice
-    blocks = h0.unsafe_slice_of(UInt64)
 
     gen1.clear
     gen0.each do |arm|
@@ -133,7 +133,7 @@ module Utrie
 
       case ok
       in .emit_typecheck?
-        atom.copy_blocks_to(blocks)
+        atom.copy_hash_to(h0)
 
         hstep(h0, Ubase.from(arm.arg.type), hasher)
 
@@ -148,7 +148,7 @@ module Utrie
       in .emit_keys?
         dict = arg.as_d
         dict.each_entry do |key, value|
-          atom.copy_blocks_to(blocks)
+          atom.copy_hash_to(h0)
 
           hstep(h0, Ubase::At.new(key), hasher)
 
@@ -157,7 +157,7 @@ module Utrie
           gen1 << Arm.new(Atom.of(h0), value, ok: :emit_end)
         end
       in .emit_literal?
-        atom.copy_blocks_to(blocks)
+        atom.copy_hash_to(h0)
 
         hstep(h0, Ubase::Literal.new(arg), hasher)
 
@@ -165,7 +165,7 @@ module Utrie
         # after a literal. So we route literals directly to :end.
         gen1 << Arm.new(Atom.of(h0), arg, ok: :end)
       in .emit_end?
-        atom.copy_blocks_to(blocks)
+        atom.copy_hash_to(h0)
 
         hstep(h0, Ubase::End.new, hasher)
 
@@ -179,7 +179,13 @@ module Utrie
   # Yields endpoint atoms that *query* excites.
   #
   # - *answers* is reused in calls to *question*.
-  def each_endpoint_atom(question, query : Term, answers, hasher, & : Atom ->) : Nil
+  def each_endpoint_atom(
+    question : Question,
+    query : Term,
+    answers : DynamicBitArray,
+    hasher : IHasher,
+    & : Atom ->
+  ) : Nil
     gen0 = [] of Arm
     gen1 = [] of Arm
 
@@ -195,6 +201,200 @@ module Utrie
       gen0, gen1 = gen1, gen0
 
       break if gen0.empty?
+    end
+  end
+end
+
+# An ephemeral graph of intersections. Materialized by "hints" about which binary
+# conjunctions exist. The querying side can then "climb" this "ladder of hints".
+# Sensors can be looked up given their top binary conjunction (called conjunction
+# vertex) using `SensorMultimap`.
+module Xgraph
+  extend self
+
+  # Appends conjunction atoms for *conj* to *atoms*. Returns the atom corresponding
+  # to the entire conjunction *conj*. When *conj* is satisfied, this atom will be
+  # yielded in `each_conj_atom`.
+  def mount(atoms, conj : Deque(Atom), hasher : IHasher) : Atom
+    {% begin %}
+      conj.unstable_sort!
+
+      buffer = uninitialized UInt8[{{ATOM_BYTESIZE * 2}}]
+
+      h0 = buffer.to_slice[0, ATOM_BYTESIZE]
+      h1 = buffer.to_slice[ATOM_BYTESIZE, ATOM_BYTESIZE]
+
+      while conj.size > 1
+        u = conj.shift
+        v = conj.shift
+
+        hasher.reset
+        u.copy_hash_to(h0)
+        v.copy_hash_to(h1)
+        hasher.update(buffer.to_slice)
+        hasher.final(h0)
+
+        conjv = Atom.of(h0)
+
+        atoms << conjv
+        conj << conjv
+      end
+
+      conj.first
+    {% end %}
+  end
+
+  # Yields conjunction atoms activated by *hits*, according to *question*.
+  def each_conj_atom(
+    question : Question,
+    hits : Deque(Atom),
+    answers : DynamicBitArray,
+    hasher : IHasher,
+    & : Atom ->
+  ) : Nil
+    {% begin %}
+      if hits.empty?
+        raise ArgumentError.new("hits must contain at least one vertex")
+      end
+
+      hits.unstable_sort!
+
+      buffer = uninitialized UInt8[{{ATOM_BYTESIZE * 2}}]
+
+      h0 = buffer.to_slice[0, ATOM_BYTESIZE]
+      h1 = buffer.to_slice[ATOM_BYTESIZE, ATOM_BYTESIZE]
+
+      query = [] of Atom
+
+      while hits.size > 1
+        query.clear
+
+        u = hits.shift
+
+        yield u
+
+        hits.each do |v|
+          hasher.reset
+          u.copy_hash_to(h0)
+          v.copy_hash_to(h1)
+          hasher.update(buffer.to_slice)
+          hasher.final(h0)
+
+          query << Atom.of(h0)
+        end
+
+        answers.clear
+        question.call(query, answers)
+
+        query.each_with_index do |atom, index|
+          next unless answers[index] # exists
+
+          hits << atom
+        end
+      end
+
+      yield hits.last
+    {% end %}
+  end
+end
+
+# One-to-many map for decoding a conjunction vertex fingerprint into unique sensor
+# ids that are bound to it.
+#
+# Sensor multimap entries have the following byte format:
+#
+# ```text
+# <conjv: fingerprint> | <sensor id : label> <crc32 checksum : 4 bytes>
+# ```
+module SensorMultimap
+  extend self
+
+  Log = ::Log.for(self)
+
+  {% begin %}
+    ENTRY_BYTESIZE = {{FINGERPRINT_BYTESIZE + LABEL_BYTESIZE + sizeof(Checksum)}}
+  {% end %}
+
+  # Appends the atoms for the multimap binding of *sensor* to the given conjunction
+  # vertex *conjv*.
+  #
+  # Current atom cost of one such binding is ~100 atoms. If multiple sensors are bound
+  # to *conjv*, they will share the bytes for *conjv* itself, so the cost of each
+  # binding will be slightly lower.
+  def bind(atoms, conjv : Atom, sensor : Label) : Nil
+    buffer = uninitialized UInt8[ENTRY_BYTESIZE]
+    entry = cursor = buffer.to_slice
+
+    # Append key (conjv).
+    conjv.copy_hash_to(cursor)
+    cursor += FINGERPRINT_BYTESIZE
+
+    # Append sensor label.
+    cursor = sensor.append_be(cursor)
+
+    # Append checksum.
+    checksum = Digest::CRC32.checksum(entry[...-sizeof(Checksum)])
+    IO::ByteFormat::BigEndian.encode(checksum, cursor)
+    cursor += sizeof(Checksum)
+
+    # Produce atoms.
+    BytesMultimap.mount(atoms, entry, start: FINGERPRINT_BYTESIZE)
+  end
+
+  # Yields sensors bound to the given conjunction vertex *conjv* according to *question*.
+  def each_sensor(
+    question : Question,
+    conjvs : Array(Atom),
+    hasher : IHasher,
+    answers : DynamicBitArray,
+    &sink : Label ->
+  ) : Nil
+    completer = BytesMultimap::Completer.new(hasher: hasher, answers: answers)
+
+    buffer = uninitialized UInt8[ATOM_BYTESIZE]
+
+    conjvs.each do |conjv|
+      conjv.copy_hash_to(buffer.to_slice)
+
+      completer.seed(buffer.to_slice)
+    end
+
+    # NOTE: The .debug conditions here are not .warns because they're more or less
+    # nominal in case another thread / client etc. suddenly removes their appearance
+    # while completion is in progress. Some atoms we were able to read but then were
+    # suddenly cut off due to removal. Completion would terminate early therefore;
+    # and one of these sanity checks would fail.
+
+    completer.complete(question, key: nil) do |entry|
+      next if entry.size == FINGERPRINT_BYTESIZE # no completion
+
+      unless entry.size == ENTRY_BYTESIZE
+        Log.debug { "reject entry: invalid size" }
+        next
+      end
+
+      bytes_sensor = entry[FINGERPRINT_BYTESIZE, LABEL_BYTESIZE]
+      bytes_checksum = entry[FINGERPRINT_BYTESIZE + LABEL_BYTESIZE, sizeof(Checksum)]
+
+      unless sensor = Label.from_slice_be?(bytes_sensor)
+        Log.debug { "reject entry: invalid label byte sequence" }
+        next
+      end
+
+      unless WWID.makes_sense?(sensor)
+        Log.debug { "reject entry: label is nonsensical (e.g. too old or is from the future)" }
+        next
+      end
+
+      checksum0 = IO::ByteFormat::BigEndian.decode(Checksum, bytes_checksum)
+      checksum1 = Digest::CRC32.checksum(entry[0, FINGERPRINT_BYTESIZE + LABEL_BYTESIZE])
+
+      unless checksum0 == checksum1
+        Log.debug { "reject entry: checksum mismatch (my #{checksum1} != its #{checksum0})" }
+        next
+      end
+
+      yield sensor
     end
   end
 end
@@ -388,10 +588,8 @@ class Sensor
 
       # Sort vertices in the conjunction as `Xgraph` demands. The order isn't
       # important, what matters is that it's the same for insertion and querying.
-      conjdeq.unstable_sort!
-
       xgraphp = TaggedAtomPipe.new(:xgraph, hasher, fn)
-      conjv = Xgraph.mount(xgraphp, conjdeq, hasher: hasher)
+      conjv = Xgraph.mount(xgraphp, conjdeq, hasher)
       conjdeq.clear
 
       multimapp = TaggedAtomPipe.new(:sensor_multimap, hasher, fn)
@@ -543,13 +741,9 @@ class Appearance
 
     return if endpoints.empty? # No hits
 
-    # Sort vertices in the conjunction as `Xgraph` demands. The order isn't
-    # important, what matters is that it's the same for insertion and querying.
-    endpoints.unstable_sort!
-
     facts = [] of Atom
     xgraphq = TaggedAtomQuestion.new(:xgraph, hasher, question, reuse: query)
-    Xgraph.each_fact(xgraphq, endpoints, answers: answers, hasher: hasher) do |atom|
+    Xgraph.each_conj_atom(xgraphq, endpoints, answers, hasher) do |atom|
       facts << atom
     end
 
@@ -559,7 +753,7 @@ class Appearance
 
     instants = [] of Label
     multimapq = TaggedAtomQuestion.new(:sensor_multimap, hasher, question, reuse: query)
-    SensorMultimap.each_sensor(multimapq, facts, hasher: hasher, answers: answers) do |instant|
+    SensorMultimap.each_sensor(multimapq, facts, hasher, answers) do |instant|
       instants << instant
     end
 

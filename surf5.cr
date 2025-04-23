@@ -559,207 +559,20 @@ end
 
 # ---------
 
-module Xgraph
-  extend self
+alias Question = IQuestion | (Enumerable(Atom), DynamicBitArray ->)
 
-  def mount(atoms, conj : Deque(Atom), *, hasher = DIGEST_ALG.new) : Atom
-    mem = uninitialized UInt8[32]
-    buffer = mem.to_slice
-    blocks = buffer.unsafe_slice_of(UInt64)
-
-    while conj.size > 1
-      u = conj.shift
-      v = conj.shift
-
-      hasher.reset
-
-      u.copy_blocks_to(blocks)
-      hasher.update(buffer)
-
-      v.copy_blocks_to(blocks)
-      hasher.update(buffer)
-
-      hasher.final(buffer)
-
-      conjv = Atom.new(blocks[0], blocks[1], blocks[2], blocks[3])
-
-      atoms << conjv
-      conj << conjv
-    end
-
-    conj.first
-  end
-
-  def each_fact(question, vertices : Deque(Atom), *, answers = DynamicBitArray.new, hasher = DIGEST_ALG.new, & : Atom ->)
-    if vertices.empty?
-      raise ArgumentError.new("vertices must contain at least one vertex")
-    end
-
-    query = [] of Atom
-
-    h_mem = uninitialized UInt8[32]
-    h_buffer = h_mem.to_slice
-    h_blocks = h_buffer.unsafe_slice_of(UInt64)
-
-    while vertices.size > 1
-      u = vertices.shift
-
-      yield u
-
-      query.clear
-
-      vertices.each do |v|
-        hasher.reset
-
-        u.copy_blocks_to(h_blocks)
-        hasher.update(h_buffer)
-
-        v.copy_blocks_to(h_blocks)
-        hasher.update(h_buffer)
-
-        hasher.final(h_buffer)
-
-        query << Atom.of(h_buffer)
-      end
-
-      answers.clear
-      question.call(query, answers)
-
-      query.each_with_index do |atom, index|
-        next unless answers[index] # exists
-
-        vertices << atom
-      end
-    end
-
-    yield vertices.last
-  end
+module IQuestion
+  abstract def call(query : Enumerable(Atom), answers : DynamicBitArray) : Nil
 end
 
-# TODO: remove signature, it is useless
-# TODO: use complete() instead of refine(), there's not much difference between them
-# and the former reads easier.
-#
-# One-to-many map for decoding a conjunction vertex fingerprint into unique sensor
-# ids that are bound to it.
-#
-# Sensor multimap entries have the following byte format:
-#
-# ```text
-# <conjv: fingerprint> | S R M M <sensor id : label> <crc32 checksum : 4 bytes>
-# ```
-module SensorMultimap
-  extend self
+module IHasher
+  abstract def update(source : Bytes)
+  abstract def final(target : Bytes)
+  abstract def reset
+end
 
-  Log = ::Log.for(self)
-
-  SIGNATURE = "SRMM".to_slice
-  SIGNATURE_BYTESIZE = 4
-
-  {% begin %}
-    ENTRY_BYTESIZE = {{FINGERPRINT_BYTESIZE + SIGNATURE_BYTESIZE + LABEL_BYTESIZE + sizeof(Checksum)}}
-  {% end %}
-
-  # Appends the atoms for the multimap binding of *sensor* to the given conjunction
-  # vertex fingerprint *conjv*.
-  #
-  # Current atom cost of one such binding is ~100 atoms. If multiple sensors are bound
-  # to *conjv*, they will share the bytes for *conjv* itself, so the cost of each
-  # binding will be slightly lower.
-  def bind(atoms, conjv : Atom, sensor : Label) : Nil
-    buffer = uninitialized UInt8[ENTRY_BYTESIZE]
-    entry = cursor = buffer.to_slice
-
-    # Append key (conjv).
-    conjv.copy_hash_to(cursor)
-    cursor += FINGERPRINT_BYTESIZE
-
-    # Append signature.
-    cursor.copy_from(SIGNATURE)
-    cursor += SIGNATURE_BYTESIZE
-
-    # Append sensor label.
-    cursor = sensor.append_be(cursor)
-
-    # Append checksum.
-    checksum = Digest::CRC32.checksum(entry[...-sizeof(Checksum)])
-    IO::ByteFormat::BigEndian.encode(checksum, cursor)
-    cursor += sizeof(Checksum)
-
-    # Produce atoms.
-    BytesMultimap.mount(atoms, entry, start: FINGERPRINT_BYTESIZE)
-  end
-
-  # Yields sensors bound to the given conjunction vertex fingerprint *conjv*
-  # according to *question*.
-  def each_sensor(question, conjvs : Array(Atom), *, hasher : H = DIGEST_ALG.new, answers = DynamicBitArray.new, &sink : Label ->) : Nil forall H
-    completer = BytesMultimap::Completer.new(hasher: hasher, answers: answers,)
-
-    buffer = uninitialized UInt8[32]
-    conjvs.each do |conjv|
-      conjv.copy_hash_to(buffer.to_slice)
-
-      completer.seed(buffer.to_slice)
-    end
-
-    # NOTE: The .debug conditions here are not .warns because they're more or less
-    # nominal in case another thread / client etc. suddenly removes their appearance
-    # while completion is in progress. Some atoms we were able to read but then were
-    # suddenly cut off due to removal. Completion would terminate early therefore;
-    # and one of these sanity checks would fail.
-
-    # Read signature.
-    completer.refine(question, SIGNATURE_BYTESIZE) do |entry|
-      unless entry.size == FINGERPRINT_BYTESIZE + SIGNATURE_BYTESIZE
-        Log.debug { "reject entry: invalid fingerprint-signature sequence bytesize" }
-        next false
-      end
-
-      unless entry[-SIGNATURE_BYTESIZE...] == SIGNATURE
-        Log.debug { "reject entry: invalid signature byte sequence" }
-        next false
-      end
-
-      true
-    end
-
-    # Read sensor label.
-    completer.refine(question, LABEL_BYTESIZE) do |entry|
-      unless label = Label.from_slice_be?(entry[-LABEL_BYTESIZE..])
-        Log.debug { "reject entry: invalid label byte sequence" }
-        next false
-      end
-
-      unless WWID.makes_sense?(label)
-        Log.debug { "reject entry: label is nonsensical (e.g. too old or is from the future)" }
-        next false
-      end
-
-      true
-    end
-
-    # Read checksum.
-    completer.refine(question, sizeof(Checksum)) do |entry|
-      # Verify checksum (0 stands for "original")
-      checksum0 = IO::ByteFormat::BigEndian.decode(Checksum, entry[-sizeof(Checksum)..])
-      checksum1 = Digest::CRC32.checksum(entry[...-sizeof(Checksum)])
-      valid = checksum0 == checksum1
-
-      unless valid
-        Log.debug { "reject entry: checksum mismatch (my #{checksum1} != its #{checksum0})" }
-      end
-
-      valid
-    end
-
-    # Entries "squeezed out" at this point (ones that terminate) are valid entries.
-    # Any other entries are invalid.
-    completer.squeeze(question) do |entry|
-      sensor = entry[FINGERPRINT_BYTESIZE + SIGNATURE_BYTESIZE...-sizeof(Checksum)]
-
-      yield Label.from_slice_be?(sensor).not_nil!
-    end
-  end
+class Blake3
+  include IHasher
 end
 
 # TODO: remove signature, it is useless; remove terminating 0, it is useless
@@ -1183,7 +996,7 @@ end
 Log.setup_from_env(default_level: :trace)
 
 # :nodoc:
-struct TaggedAtomPipe(H)
+class TaggedAtomPipe(H)
   def initialize(@entity : TspaceEntity, @hasher : H, @fn : Atom ->)
   end
 
@@ -1206,8 +1019,10 @@ struct TaggedAtomPipe(H)
 end
 
 # :nodoc:
-struct TaggedAtomQuestion(H, Q)
-  def initialize(@entity : TspaceEntity, @hasher : H, @question : Q, reuse @query = [] of Atom)
+class TaggedAtomQuestion(H)
+  include IQuestion
+
+  def initialize(@entity : TspaceEntity, @hasher : H, @question : Question, reuse @query = [] of Atom)
   end
 
   def call(query : Enumerable(Atom), answers : DynamicBitArray) : Nil
@@ -1233,6 +1048,10 @@ end
 
 require "./surf5_clean"
 
+require "benchmark"
+
+n = m = 0u32
+
 conid = WWID.call
 atoms = Set(Atom).new
 
@@ -1240,9 +1059,6 @@ sensor0 = Sensor.new(WWID, conid, WWID.call, Term.of({:"%any", :+, :-}, :x_numbe
 sensor0.each_atom { |atom| atoms << atom }
 sensor1 = Sensor.new(WWID, conid, WWID.call, Term.of(:+, :x_, :y_))
 sensor1.each_atom { |atom| atoms << atom }
-
-require "benchmark"
-
 
 appearance = Appearance.new(conid, WWID.call, Term.of(:+, 1, 2))
 appearance.each_atom { |atom| atoms << atom }
@@ -1269,6 +1085,35 @@ end
 sensor1.each_complement(ask) do |cconid, cinstant|
   puts "Complement of #{sensor1} 1 is appearance @ #{cconid},#{cinstant}"
 end
+
+p = q = 0u32
+
+Benchmark.ips do |x|
+  x.report("add sensor") do
+    s = Sensor.new(WWID, conid, WWID.call, Term.of({:"%any", :+, :-}, :x_number, :y_number))
+    s.each_atom { n += 1 }
+  end
+
+  x.report("add appearance") do
+    a = Appearance.new(conid, WWID.call, Term.of(:+, 1, 2))
+    a.each_atom { m += 1 }
+  end
+
+  x.report("query sensor") do
+    sensor0.each_complement(ask) { |cconid, cinstant| p += 1 }
+  end
+
+  x.report("query appearance") do
+    appearance.each_complement(ask) { |cconid, cgrpid, cinstant| q += 1 }
+  end
+end
+
+pp! n
+pp! m
+pp! p
+pp! q
+
+require "benchmark"
 
 # pp n
 # appearance.each_atom do |atom|

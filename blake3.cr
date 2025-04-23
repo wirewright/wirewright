@@ -68,11 +68,11 @@ class Blake3
     LibBlake3.hasher_update(pointerof(@state), input, size)
   end
 
-  def update(input : Bytes | StaticArray(UInt8, _))
+  def update(input : Bytes | StaticArray(UInt8, _)) : Nil
     update(input.to_unsafe.as(Void*), input.size)
   end
 
-  def reset
+  def reset : Nil
     LibBlake3.hasher_reset(pointerof(@state))
   end
 
