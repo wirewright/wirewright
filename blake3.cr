@@ -27,7 +27,7 @@ lib LibBlake3
   fun hasher_reset = blake3_hasher_reset(state : Hasher*) : Void
 end
 
-class Blake3
+struct Blake3
   def initialize
     @state = uninitialized LibBlake3::Hasher
 
