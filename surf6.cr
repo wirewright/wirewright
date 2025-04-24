@@ -68,7 +68,7 @@ struct WWID
   @@slot = Atomic(UInt32).new(0u32)
 
   WW_EPOCH = Time.utc(year: 2025, month: 1, day: 1)
-  WW_ORDER_MAX = 2u64**(6 * 8) # max of 6 bytes
+  WW_ORDER_MAX = 0xff_ff_ff_ff_ff_ffu64
 
   BYTESIZE = 16
 
@@ -225,7 +225,7 @@ module BytesMultimap
   private def each_b4_digit(data : Bytes, & : UInt8 ->)
     reader = BitReader.new(data)
 
-    while true
+    loop do
       # Consume one base-4 digit.
       bit0 = reader.consume? || break
       bit1 = reader.consume? || 0u8
@@ -244,8 +244,6 @@ module BytesMultimap
   # NOTE: You can execute multiple calls to `add` in parallel for better performance;
   # since the majority of the time is spent hashing *data*, even a crude lock-protected
   # *atoms* set would do.
-  #
-  # *hasher* can be provided for reuse. It is reset automatically.
   def add(atoms, entity : Entity, key, data : Bytes) : Nil
     hasher = Blake3.new
 
@@ -308,7 +306,7 @@ module BytesMultimap
   private def explore(wg, atoms, completion, h0 : Atom, fn : Bytes ->) : Nil
     hasher = Blake3.new
 
-    while true
+    loop do
       candidates = {0u8, 1u8, 2u8, 3u8}.map do |digit|
         h(pointerof(hasher), h0, digit.to_u8)
       end
@@ -390,7 +388,7 @@ module BytesMultimap
     completion0 = Completion.new(key, prefix)
 
     wg = WaitGroup.new
-    wg.add(1)
+    wg.add
 
     ctx = mt ? MT : ST
     ctx.spawn { explore(wg, atoms, completion0, h0, fn) }
@@ -400,6 +398,8 @@ module BytesMultimap
 end
 
 alias Checksum = UInt32
+
+# FIXME: h0 - entity consensus prefix to scope things off!!!!
 
 # An emergent graph of intersections. Materialized by "hints" about which binary
 # conjunctions exist. The querying side can then "climb" this "ladder of hints",
