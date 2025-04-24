@@ -1533,7 +1533,7 @@ module Rhodium
     end
   end
 
-  # Handles the expellation of a node *identity* from *document0*.
+  # Handles the expulsion of a node *identity* from *document0*.
   #
   # - Node identity is present in *document0*.
   # - Node identity is absent in *document1*.

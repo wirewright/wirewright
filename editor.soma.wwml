@@ -535,13 +535,13 @@ C←(_string | _string (M←(paste-ahead) _*) @EDGE_ ¦ _ clipboard_: (cut term_
 [_* ⟨C←[_string | _string (M←(move-out-ahead) _*) @EDGE_]⟩ ⏏target _*]
   <> {(M): (), target: ↑C0, (C): ($tr C0 ())}
 
-;; Expellation
+;; Expulsion
 ;;
-;; Expellation involves parsing left/right-hand sides (or both). If that's
+;; Expulstion involves parsing left/right-hand sides (or both). If that's
 ;; successful the term is expelled to the left or to the right of the cursor,
 ;; and the corresponding side is cleared.
 
-;; Leave-pair is a variant of expel. It refuses to leave if expellation fails.
+;; Leave-pair is a variant of expel. It refuses to leave if expulsion fails.
 ;; It also has just one variant, one similar to expel-left. The others all map
 ;; to expel-left.
 
