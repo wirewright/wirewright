@@ -2772,7 +2772,7 @@ struct BitWriter
   end
 end
 
-struct MutBitWriter
+class MutBitWriter
   def initialize(@prefix = [] of UInt8)
     @state = 0u8
     @cursor = 0u8
@@ -2792,6 +2792,10 @@ struct MutBitWriter
     append(bits.value, bitsize)
   end
 
+  def bitsize
+    @prefix.size*8 + @cursor
+  end
+
   def <<(bit : UInt8)
     @state |= bit << (7 - @cursor)
     @cursor += 1
@@ -2801,6 +2805,8 @@ struct MutBitWriter
       @state = 0u8
       @cursor = 0u8
     end
+
+    self
   end
 
   def progress

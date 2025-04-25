@@ -5,13 +5,14 @@ require "digest"
 require "wait_group"
 
 # - Utrie    ;; maps bases to endpoints
-# + Xgraph   ;; maps endpoint conjunctions to conjunction apex through binary conjunctions
+# - Xgraph   ;; maps endpoint conjunctions to conjunction apex through binary conjunctions
 # + BytesMultimap
 #   + SensorRegistry     ;; maps conjunction apex to sensor ids
-#   - AppearanceRegistry ;; maps term strands to appearance ids
+#   + AppearanceRegistry ;; maps term strands to appearance ids
 
 enum Entity : UInt8
   SensorRegistry
+  AppearanceRegistry
 end
 
 # Atom is currently a 256-bit hash split into 4 64-bit blocks. For some reason
@@ -57,6 +58,12 @@ struct Atom
   def_equals @blk0, @blk1, @blk2, @blk3
 end
 
+# The first 12 bytes are always conid, used to find & contact the owner of
+# *slot*. The 4-byte value of slot is globally irrelevant; it is only useful
+# to the conid that was contacted through the first 12 bytes, to resolve the
+# surface of interest. A 0-slot conid usually acts as an id "origin" and `succ`
+# is used to obtain successive WWIDs under that conid.
+#
 # ```text
 #                        randomness
 #                    -----------------
@@ -83,10 +90,8 @@ struct WWID
     end
 
     disorder = Random::Secure.rand(UInt64)
-    slot = @@slot.add(1, :relaxed)
-    raw = (order << 10*8) | (disorder << 4*8) | slot
 
-    new(raw)
+    new(raw: (order << 10*8) | (disorder << 4*8))
   end
 
   def self.from_slice_be?(slice : Bytes) : WWID?
@@ -114,6 +119,14 @@ struct WWID
     order = @raw >> (6*8 + 4*8)
 
     WW_EPOCH + order.milliseconds
+  end
+
+  def succ : WWID
+    if @raw & 0xff_ff_ff_ff == 0xff_ff_ff_ff
+      raise OverflowError.new("slot id overflow")
+    end
+
+    WWID.new(@raw &+ 1)
   end
 
   def inspect(io)
@@ -196,6 +209,21 @@ def h(hasherptr, a : Atom, b : UInt8) : Atom
   {% end %}
 end
 
+def h(hasherptr, a : Atom, b : Nil) : Atom
+  h(hasherptr, a, h(hasherptr))
+end
+
+def secret_to_bytes(secret : Term) : Bytes
+  io = IO::Memory.new
+  io.write_byte(1)
+  ML.compact(io, secret)
+  io.to_slice
+end
+
+def secret_to_bytes(secret : Nil) : Bytes
+  Bytes[0]
+end
+
 # :nodoc:
 ST = Fiber::ExecutionContext::SingleThreaded.new("Meridium single-threaded")
 
@@ -244,17 +272,35 @@ module BytesMultimap
   # NOTE: You can execute multiple calls to `add` in parallel for better performance;
   # since the majority of the time is spent hashing *data*, even a crude lock-protected
   # *atoms* set would do.
-  def add(atoms, entity : Entity, key, data : Bytes) : Nil
+  def add(atoms, entity : Entity, key : Bytes, data : Bytes) : Atom
     hasher = Blake3.new
 
     h0 = h(pointerof(hasher))
     h0 = h(pointerof(hasher), h0, entity.value)
     h0 = h(pointerof(hasher), h0, key)
 
+    add(atoms, h0, data)
+  end
+
+  def add(atoms, h0, data) : Atom
+    hasher = Blake3.new
+
     each_b4_digit(data) do |digit|
       h0 = h(pointerof(hasher), h0, digit)
       atoms << h0
     end
+
+    h0
+  end
+
+  def append(h0, data) : Atom
+    hasher = Blake3.new
+
+    each_b4_digit(data) do |digit|
+      h0 = h(pointerof(hasher), h0, digit)
+    end
+
+    h0
   end
 
   # :nodoc:
@@ -262,22 +308,33 @@ module BytesMultimap
   # TODO: split *data* into blocks to avoid copying all data on clone. E.g.
   # blocks of 4 bytes or 8 bytes etc. So that we only copy the last e.g. 8 bytes
   # on clone and the blocks are only copied on block append.
-  record Completion, key : Bytes, prefix : Bytes, data = [] of UInt8, tip = 0u8, cursor = 0u8 do
-    def final : Bytes
-      @data << tip unless cursor.zero?
+  record Completion, key = Bytes.empty, prefix = Bytes.empty, data = [] of UInt8, tip = 0u8, cursor = 0u8 do
+    def bytesize
+      key.size + prefix.size + data.size + (cursor.zero? ? 0 : 1)
+    end
 
-      result = cursor = Bytes.new(key.size + prefix.size + data.size)
+    def final
+      final(Bytes.new(bytesize))
+    end
 
-      cursor.copy_from(key)
-      cursor += key.size
+    def final(target : Bytes) : Bytes
+      entry = start = target
 
-      cursor.copy_from(prefix)
-      cursor += prefix.size
+      start.copy_from(key)
+      start += key.size
 
-      cursor.copy_from(data.to_readonly_slice)
-      cursor += data.size
+      start.copy_from(prefix)
+      start += prefix.size
 
-      result
+      start.copy_from(data.to_readonly_slice)
+      start += data.size
+
+      unless cursor.zero?
+        start[0] = tip
+        start += 1
+      end
+
+      entry
     end
 
     def clone : Completion
@@ -300,10 +357,22 @@ module BytesMultimap
 
       copy_with(tip: tip, cursor: cursor)
     end
+
+    def append_byte(byte : UInt8) : Completion
+      completion = self
+      offset = 6
+
+      while offset > 0
+        completion = append((byte >> offset) & 0b11)
+        offset -= 2
+      end
+
+      completion
+    end
   end
 
   # Each exploration fiber is running this method.
-  private def explore(wg, atoms, completion, h0 : Atom, fn : Bytes ->) : Nil
+  private def explore(wg, atoms, completion, h0 : Atom, fn : Completion, Atom ->) : Nil
     hasher = Blake3.new
 
     loop do
@@ -335,7 +404,7 @@ module BytesMultimap
       end
 
       unless first
-        fn.call(completion.final)
+        fn.call(completion, h0)
         wg.done
         return
       end
@@ -374,7 +443,7 @@ module BytesMultimap
   # values there are in the multimap, the more comparable *mt* becomes to *st*; which
   # is actually expected, since the underlying algorithm adapts to the contents of
   # the set.
-  def complete(atoms, entity : Entity, key : Bytes, prefix : Bytes, *, mt : Bool = true, &fn : Bytes ->) : Nil
+  def complete(atoms, entity : Entity, key : Bytes, prefix : Bytes, *, mt : Bool = true, &fn : Completion, Atom ->) : Nil
     hasher = Blake3.new
 
     h0 = h(pointerof(hasher))
@@ -395,11 +464,101 @@ module BytesMultimap
 
     wg.wait
   end
+
+  record Quad, a : Atom, b : Atom, c : Atom, d : Atom do
+    include Enumerable(Atom)
+
+    def each(& : Atom ->)
+      {a, b, c, d}.each { |atom| yield atom }
+    end
+  end
+
+  # TODO: make into u8
+  record QuadMask, a : Bool, b : Bool, c : Bool, d : Bool do
+    def none? : Bool
+      {a, b, c, d}.none?
+    end
+
+    def select_with_digit(quad : Quad, & : Atom, UInt8 ->) : Nil
+      yield quad.a, 0u8 if a
+      yield quad.b, 1u8 if b
+      yield quad.c, 2u8 if c
+      yield quad.d, 3u8 if d
+    end
+
+    def &(other : QuadMask)
+      QuadMask.new(a && other.a, b && other.b, c && other.c, d && other.d)
+    end
+  end
+
+  alias Arm = {Completion, Atom}
+
+  private def quad(hasherptr, atom : Atom)
+    Quad.new(
+      h(hasherptr, atom, 0u8),
+      h(hasherptr, atom, 1u8),
+      h(hasherptr, atom, 2u8),
+      h(hasherptr, atom, 3u8),
+    )
+  end
+
+  alias Expanded = {Completion, Quad}
+
+  def expand(hasherptr, arms : Array({Completion, Atom})) : Array(Expanded)
+    arms.map do |completion, atom|
+      {completion, quad(hasherptr, atom)}
+    end
+  end
+
+  alias Marked = {Completion, Quad, QuadMask}
+
+  def mark(atoms, expansions : Array(Expanded)) : Array(Marked)
+    answer = atoms.present?(expansions) do |_, quad|
+      {quad.a, quad.b, quad.c, quad.d}
+    end
+
+    cursor = 0
+
+    expansions.map do |completion, quad|
+      mask = QuadMask.new(
+        answer[cursor],
+        answer[cursor + 1],
+        answer[cursor + 2],
+        answer[cursor + 3],
+      )
+
+      cursor += 4
+
+      {completion, quad, mask}
+    end
+  end
+
+  def prune(marked : Array(Marked), & : Completion ->) : Array({Completion, Atom})
+    arms = [] of {Completion, Atom}
+
+    marked.each do |completion, quad, mask|
+      if mask.none?
+        yield completion
+        next
+      end
+
+      mask.select_with_digit(quad) do |atom, digit|
+        arms << {completion.clone.append(digit), atom}
+      end
+    end
+
+    arms
+  end
+
+  def prune(marked)
+    prune(marked) { }
+  end
 end
 
 alias Checksum = UInt32
 
 # FIXME: h0 - entity consensus prefix to scope things off!!!!
+# FIXME: make it layered so that we can parallelize & rely more on it.
 
 # An emergent graph of intersections. Materialized by "hints" about which binary
 # conjunctions exist. The querying side can then "climb" this "ladder of hints",
@@ -415,64 +574,64 @@ alias Checksum = UInt32
 # newer nodes. I'm not smart enough to improve this :^)
 #
 # I'm still not sure whether this implementation actually works. It appears to.
-module Xgraph
-  extend self
+# module Xgraph
+#   extend self
 
-  # Mounts the given conjunction *conj* in the Xgraph. Returns its apex vertex.
-  #
-  # TODO: parallelize
-  def mount(atoms, conj : Deque(Atom)) : Atom
-    if conj.empty?
-      raise ArgumentError.new("expected a nonempty conjunction")
-    end
+#   # Mounts the given conjunction *conj* in the Xgraph. Returns its apex vertex.
+#   #
+#   # TODO: parallelize
+#   def mount(atoms, conj : Deque(Atom)) : Atom
+#     if conj.empty?
+#       raise ArgumentError.new("expected a nonempty conjunction")
+#     end
 
-    hasher = Blake3.new
+#     hasher = Blake3.new
 
-    conj.unstable_sort!
+#     conj.unstable_sort!
 
-    while conj.size > 1
-      u = conj.shift
-      v = conj.shift
-      conjv = h(pointerof(hasher), u, v)
-      atoms << conjv
-      conj << conjv
-    end
+#     while conj.size > 1
+#       u = conj.shift
+#       v = conj.shift
+#       conjv = h(pointerof(hasher), u, v)
+#       atoms << conjv
+#       conj << conjv
+#     end
 
-    conj.first # apex
-  end
+#     conj.first # apex
+#   end
 
-  # Yields conjunction vertices that exist in *hits* and are part of the Xgraph
-  # in *atoms*. The yielded vertices may or may not be conjunction apexes; it
-  # is your responsibility to track and check that, if necessary.
-  #
-  # TODO: parallelize
-  def each_conjv(atoms, hits : Deque(Atom), & : Atom ->) : Nil
-    if hits.empty?
-      raise ArgumentError.new("hits must contain at least one vertex")
-    end
+#   # Yields conjunction vertices that exist in *hits* and are part of the Xgraph
+#   # in *atoms*. The yielded vertices may or may not be conjunction apexes; it
+#   # is your responsibility to track and check that, if necessary.
+#   #
+#   # TODO: parallelize
+#   def each_conjv(atoms, hits : Deque(Atom), & : Atom ->) : Nil
+#     if hits.empty?
+#       raise ArgumentError.new("hits must contain at least one vertex")
+#     end
 
-    hasher = Blake3.new
+#     hasher = Blake3.new
 
-    hits.unstable_sort!
+#     hits.unstable_sort!
 
-    while hits.size > 1
-      u = hits.shift
+#     while hits.size > 1
+#       u = hits.shift
 
-      yield u
+#       yield u
 
-      query = hits.map { |v| h(pointerof(hasher), u, v) }
+#       query = hits.map { |v| h(pointerof(hasher), u, v) }
 
-      answer = atoms.present?(query, &.itself)
-      answer.each_with_index do |exists, index|
-        next unless exists
+#       answer = atoms.present?(query, &.itself)
+#       answer.each_with_index do |exists, index|
+#         next unless exists
 
-        hits << query[index]
-      end
-    end
+#         hits << query[index]
+#       end
+#     end
 
-    yield hits.first
-  end
-end
+#     yield hits.first
+#   end
+# end
 
 # A sensor registry is an emergent data structure that associates a sensor
 # conjunction apex to a sensor id. It is effectively a table with
@@ -506,14 +665,7 @@ module SensorRegistry
   # *mt* specifies whether to run under a multi-threaded or single-threaded
   # fiber execution context.
   def register(atoms, secret : Term?, apexes : Indexable(Atom), sensor : WWID, *, mt : Bool = true) : Nil
-    if secret
-      io = IO::Memory.new
-      io.write_byte(1)
-      ML.compact(io, secret)
-      secret_slice = io.to_slice
-    else
-      secret_slice = Bytes[0]
-    end
+    secret_slice = secret_to_bytes(secret)
 
     wg = WaitGroup.new(apexes.size)
     ctx = mt ? MT : ST
@@ -564,14 +716,7 @@ module SensorRegistry
   # fully compartmentalized *fn*, or *fn* that talks to the outside world in a
   # thread-safe manner.
   def each_sensor(atoms, secret : Term?, apexes : Indexable(Atom), *, mt : Bool = true, &fn : WWID ->) : Nil
-    if secret
-      io = IO::Memory.new
-      io.write_byte(1)
-      ML.compact(io, secret)
-      secret_slice = io.to_slice
-    else
-      secret_slice = Bytes[0]
-    end
+    secret_slice = secret_to_bytes(secret)
 
     ctx = mt ? MT : ST
     wg = WaitGroup.new(apexes.size)
@@ -590,7 +735,9 @@ module SensorRegistry
         # it from complete() callback which could be called from another
         # fiber/thread.
 
-        BytesMultimap.complete(atoms, :sensor_registry, key, prefix: Bytes.empty, mt: mt) do |entry|
+        BytesMultimap.complete(atoms, :sensor_registry, key, prefix: Bytes.empty, mt: mt) do |completion, _|
+          entry = completion.final
+
           next if entry.size == key.size # No completions
 
           # Verify size
@@ -628,6 +775,306 @@ module SensorRegistry
   end
 end
 
+# Ubases are tiny gate-keeper nodes for `Utrie` and the internal term trie
+# created by `AppearanceRegistry`.
+#
+# Arbitrary M1 patterns are broken down into `BranchList` (so DNF, which has
+# terrible scaling characteristics but still works!) Each branch in the branch
+# list is a `StrandList` (so a conjunction of strands; we're DNF, remember?)
+# A strand is a sequence of Ubases that create, in effect, a "chain of filters".
+# Each Ubase, then, is such a filter. E.g. `IsNum` filters number terms; `Literal`
+# filters literal matches. The `At` Ubase, on the other hand, is interesting
+# because its output is different from its input.
+#
+# See `Utrie` to learn more.
+module Ubase
+  alias Any = Begin | End | At | IsSym | IsStr | IsNum | IsBool | IsDict | Literal
+
+  # Passes a dictionary term's value for key *term* forward.
+  record At, term : Term
+
+  # Anchor put at the beginning of all strands.
+  record Begin
+
+  # Indicates an abrupt (non-literal) stop. This base is not emitted if the strand
+  # ends with `Literal`.
+  record End
+
+  # Passes only symbol terms forward.
+  record IsSym
+
+  # Passes only string terms forward.
+  record IsStr
+
+  # Passes only number terms forward.
+  record IsNum
+
+  # Passes only boolean terms forward.
+  record IsBool
+
+  # Passes only dictionary terms forward.
+  record IsDict
+
+  # Passes foward only terms that match *term* exactly.
+  record Literal, term : Term
+end
+
+module AppearanceRegistry
+  extend self
+
+  private def ubases(keypath : Stack(Term), leaf : Term) : Array(Ubase::Any)
+    strand = [] of Ubase::Any
+    strand << Ubase::Begin.new
+
+    keypath.each do |key|
+      strand << Ubase::IsDict.new
+      strand << Ubase::At.new(key)
+    end
+
+    # Handle the edge case where the leaf is an empty dict.
+    if leaf == Term[]
+      strand << Ubase::IsDict.new
+      strand << Ubase::End.new
+      return strand
+    end
+
+    case leaf.type
+    in .symbol?  then strand << Ubase::IsSym.new
+    in .string?  then strand << Ubase::IsStr.new
+    in .number?  then strand << Ubase::IsNum.new
+    in .boolean? then strand << Ubase::IsBool.new
+    in .dict?, .any?
+      raise ArgumentError.new("invalid leaf")
+    end
+
+    strand << Ubase::Literal.new(leaf)
+    strand
+  end
+
+  # :nodoc:
+  enum Uopcode : UInt8
+    Begin
+    End
+    IsSym
+    IsStr
+    IsNum
+    IsBool
+    IsDict
+    HashedAt
+    QuotedAt
+    HashedLiteral
+    QuotedLiteral
+  end
+
+  private def upack(io, ubase : Ubase::Begin) : Nil
+    io.write_byte(Uopcode::Begin.value)
+  end
+
+  private def upack(io, ubase : Ubase::End) : Nil
+    io.write_byte(Uopcode::End.value)
+  end
+
+  {% for base in %w[IsSym IsStr IsNum IsBool IsDict] %}
+    private def upack(io, ubase : Ubase::{{base.id}}) : Nil
+      io.write_byte(Uopcode::{{base.id}}.value)
+    end
+  {% end %}
+
+  {% for base in %w[At Literal] %}
+    private def upack(io, ubase : Ubase::{{base.id}}) : Nil
+      if ML.compact_bytesize(ubase.term) <= Atom::BYTESIZE
+        io.write_byte(Uopcode::Quoted{{base.id}}.value)
+
+        ML.compact(io, ubase.term)
+      else
+        io.write_byte(Uopcode::Hashed{{base.id}}.value)
+
+        scratch = uninitialized UInt8[Atom::BYTESIZE]
+        hasher = Blake3.new
+
+        digester = IO::ByteStream.new { |slice| hasher.update(slice) }
+        ML.compact(digester, ubase.term)
+
+        hasher.final(scratch.to_slice)
+
+        io.write(scratch.to_slice)
+      end
+    end
+  {% end %}
+
+  private def upack(strand : Array(Ubase::Any)) : Bytes
+    io = IO::Memory.new
+
+    strand.each do |base|
+      upack(io, base)
+    end
+
+    io.to_slice
+  end
+
+  # :nodoc:
+  APPEARANCE_SET_GAP = "appearances".to_slice
+
+  private def mount1(wg, atoms, secret_slice : Bytes, ubases : Array(Ubase::Any), appearance : WWID) : Nil
+    data = upack(ubases)
+
+    terminal = BytesMultimap.add(atoms, :appearance_registry, secret_slice, data: data)
+
+    # Insert an artificial gap after the terminal atom in data. After this gap we
+    # will have the appearances subscribed to the strand.
+    terminal = BytesMultimap.append(terminal, APPEARANCE_SET_GAP)
+
+    # Append the appearance id after the gap. The gap is implicit. The other side
+    # will need to know it on its own.
+    scratch = uninitialized UInt8[WWID::BYTESIZE]
+
+    appearance.to_slice_be(scratch.to_slice)
+
+    BytesMultimap.add(atoms, terminal, scratch.to_slice)
+  ensure
+    wg.done
+  end
+
+  # Subscribes *appearance* to perceptions of *value* under *secret*.
+  #
+  # *mt* specifies whether to run under a multi-threaded or single-threaded
+  # fiber execution context.
+  def mount(atoms, secret : Term?, value : Term, appearance : WWID, *, mt : Bool = true) : Nil
+    secret_slice = secret_to_bytes(secret)
+
+    ctx = mt ? MT : ST
+    wg = WaitGroup.new
+
+    Term.each_keypath_and_leaf(value) do |keypath, leaf|
+      ubases = ubases(keypath, leaf)
+
+      wg.add
+      ctx.spawn do
+        mount1(wg, atoms, secret_slice, ubases, appearance)
+      end
+
+      true # continue
+    end
+
+    wg.wait
+  end
+
+  alias Row = {BytesMultimap::Completion, Atom}
+
+  private def bundleof(atoms, secret_slice : Bytes, strand : Array(Ubase::Any), mt : Bool) : Array(Row)
+    prefix = upack(strand)
+
+    # The completion callback runs on different threads (that is, it may).
+    # So we must synchronize somehow.
+    bundle = [] of Row
+    lock = Mutex.new
+
+    BytesMultimap.complete(atoms, :appearance_registry, secret_slice, prefix, mt: mt) do |completion, atom|
+      # Remember that we insert an artificial gap between the strand bytes and the set
+      # of appearances subscribed to that strand (represented as a digit trie). To fill
+      # this gap we have to complete 0, by an implicit mount-query consensus; there are
+      # no explicit hints for us to do that in the set, so complete() terminates -- not
+      # knowing what to do. We know, though -- we have to complete 0.
+      row = {BytesMultimap::Completion.new, BytesMultimap.append(atom, APPEARANCE_SET_GAP)}
+
+      lock.synchronize { bundle << row }
+    end
+
+    # At this point we know all completion fibers have terminated. We can use
+    # row without a lock safely.
+
+    bundle
+  end
+
+  def each_appearance(atoms, secret : Term?, strands, *, mt : Bool = true, &fn : WWID ->) : Nil
+    secret_slice = secret_to_bytes(secret)
+
+    wg = WaitGroup.new
+    ctx = mt ? MT : ST
+
+    # Convert strands to bundles concurrently.
+    bundles = [] of Array(Row)
+    lock = Mutex.new
+
+    strands.each do |strand|
+      wg.add
+
+      ctx.spawn do
+        bundle = bundleof(atoms, secret_slice, strand, mt)
+
+        lock.synchronize { bundles << bundle }
+      ensure
+        wg.done
+      end
+    end
+
+    wg.wait
+
+    hasher = Blake3.new
+    marked = [] of Array(BytesMultimap::Marked)
+    expanded = [] of Array(BytesMultimap::Expanded)
+
+    (WWID::BYTESIZE*4 + 1).times do |ord|
+      return if bundles.empty?
+
+      # Expand each bundle with possible digit completions.
+      expanded.clear
+      expanded.concat(bundles) { |bundle| BytesMultimap.expand(pointerof(hasher), bundle) }
+
+      # FIXME: we need to run mark() in concurrently. Otherwise mark()
+      # would block for each bundle -- nonsense!!
+
+      # Mark each digit completion according to whether it is present in *atoms*.
+      marked.clear
+      marked.concat(expanded) { |bundle| BytesMultimap.mark(atoms, bundle) }
+
+      unless ord == WWID::BYTESIZE*4
+        # Prune all dead-end completions.
+        bundles.clear
+        bundles.concat(marked) { |bundle| BytesMultimap.prune(bundle) }
+
+        # Select only those completions that are present in all other bundles.
+        bundles.each do |bundle0|
+          xsect = bundle0.select! do |completion0, _|
+            bundles.all? do |bundle1|
+              bundle0.same?(bundle1) || bundle1.any? { |completion1, _| completion0 == completion1 }
+            end
+          end
+
+          # If any bundle ends up being empty, then all other bundles will
+          # be empty and so on. No point in continuing to complete.
+          return if xsect.empty?
+        end
+
+        next
+      end
+
+      marked.each do |bundle|
+        # Dead-end completions at this point are valid completions. Process them.
+        BytesMultimap.prune(bundle) do |completion|
+          unless completion.bytesize == WWID::BYTESIZE
+            Log.debug { "reject entry: unexpected entry bytesize #{completion.bytesize}" }
+            next
+          end
+
+          scratch = uninitialized UInt8[WWID::BYTESIZE]
+          entry = scratch.to_slice
+          completion.final(entry)
+
+          unless appearance = WWID.from_slice_be?(entry)
+            Log.debug { "reject entry: invalid id byte sequence: #{entry.hexstring}" }
+            next
+          end
+
+          fn.call(appearance)
+        end
+      end
+
+      break
+    end
+  end
+end
+
 class MySet(N)
   def initialize
     @sets = StaticArray(Set(Atom), N).new { Set(Atom).new }
@@ -648,11 +1095,19 @@ class MySet(N)
     end
   end
 
-  def present?(objects : Enumerable(T), & : T -> Atom) : BitList forall T
+  def present?(objects : Enumerable(T), & : T -> Atom | Enumerable(Atom)) : BitList forall T
     answer = BitList.new
 
     objects.each do |object|
-      answer << present?(yield object)
+      ee = yield object
+
+      unless ee.is_a?(Enumerable(Atom))
+        ee = {ee}
+      end
+
+      ee.each do |atom|
+        answer << present?(atom)
+      end
     end
 
     answer
@@ -673,18 +1128,124 @@ alias BitList = DynamicBitArray
 
 Log.setup_from_env(default_level: :debug)
 
-set = MySet(1).new
+set = MySet(1024).new
+conid = WWID.next
+origin = conid
+aid0 = origin = origin.succ
+aid1 = origin = origin.succ
+aid2 = origin = origin.succ
 
-p = Xgraph.mount(set, Deque{Atom.of("a"), Atom.of("b")})
-q = Xgraph.mount(set, Deque{Atom.of("a"), Atom.of("b"), Atom.of("c")})
-r = Xgraph.mount(set, Deque{Atom.of("b"), Atom.of("c")})
-pp! p
-pp! q
-pp! r
+pp! aid0
+pp! aid1
+pp! aid2
 
-Xgraph.each_conjv(set, Deque{Atom.of("a"), Atom.of("b"), Atom.of("c"), Atom.of("d")}) do |conjv|
-  pp conjv
+require "benchmark"
+
+lock = Mutex.new
+
+AppearanceRegistry.mount(set, nil, Term.of(:add, 1, 2, 3, 4, 5), aid0)
+AppearanceRegistry.mount(set, nil, Term.of(:sub, 1, 2), aid1)
+AppearanceRegistry.mount(set, nil, Term.of(:sub, "hello", 4), aid2)
+
+# _
+seen = Set(WWID).new
+AppearanceRegistry.each_appearance(set, nil, { [Ubase::Begin.new] }) do |aid|
+  lock.synchronize { seen << aid }
 end
+expect seen == Set{aid0, aid1, aid2}
+
+# _dict
+seen = Set(WWID).new
+AppearanceRegistry.each_appearance(set, nil, { [Ubase::Begin.new, Ubase::IsDict.new] }) do |aid|
+  lock.synchronize { seen << aid }
+end
+expect seen == Set{aid0, aid1, aid2}
+
+# (_)
+seen = Set(WWID).new
+AppearanceRegistry.each_appearance(set, nil, { [Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(0))] }) do |aid|
+  lock.synchronize { seen << aid }
+end
+expect seen == Set{aid0, aid1, aid2}
+
+# (_symbol)
+seen = Set(WWID).new
+AppearanceRegistry.each_appearance(set, nil, { [Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(0)), Ubase::IsSym.new] }) do |aid|
+  lock.synchronize { seen << aid }
+end
+expect seen == Set{aid0, aid1, aid2}
+
+# (add)
+seen = Set(WWID).new
+AppearanceRegistry.each_appearance(set, nil, { [Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(0)), Ubase::IsSym.new, Ubase::Literal.new(Term.of(:add))] }) do |aid|
+  lock.synchronize { seen << aid }
+end
+expect seen == Set{aid0}
+
+# (sub)
+seen = Set(WWID).new
+AppearanceRegistry.each_appearance(set, nil, { [Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(0)), Ubase::IsSym.new, Ubase::Literal.new(Term.of(:sub))] }) do |aid|
+  lock.synchronize { seen << aid }
+end
+expect seen == Set{aid1, aid2}
+
+# (sub _)
+seen = Set(WWID).new
+AppearanceRegistry.each_appearance(set, nil, {
+  [Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(0)), Ubase::IsSym.new, Ubase::Literal.new(Term.of(:sub))],
+  [Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(1))],
+}) do |aid|
+  lock.synchronize { seen << aid }
+end
+expect seen == Set{aid1, aid2}
+
+# (sub _number)
+seen = Set(WWID).new
+AppearanceRegistry.each_appearance(set, nil, {
+  [Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(0)), Ubase::IsSym.new, Ubase::Literal.new(Term.of(:sub))],
+  [Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(1)), Ubase::IsNum.new],
+}) do |aid|
+  lock.synchronize { seen << aid }
+end
+expect seen == Set{aid1}
+
+# (sub _string)
+seen = Set(WWID).new
+AppearanceRegistry.each_appearance(set, nil, {
+  [Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(0)), Ubase::IsSym.new, Ubase::Literal.new(Term.of(:sub))],
+  [Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(1)), Ubase::IsStr.new],
+}) do |aid|
+  lock.synchronize { seen << aid }
+end
+expect seen == Set{aid2}
+
+require "benchmark"
+
+Benchmark.ips do |x|
+  x.report("do it") do
+# 1000.times do
+ seen = Set(WWID).new
+AppearanceRegistry.each_appearance(set, nil, {
+  [Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(0)), Ubase::IsSym.new, Ubase::Literal.new(Term.of(:sub))],
+  [Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(1)), Ubase::IsStr.new],
+}) do |aid|
+  lock.synchronize { seen << aid }
+end
+end
+end
+
+#   end
+# end
+# p = Xgraph.mount(set, Deque{Atom.of("a"), Atom.of("b")})
+# q = Xgraph.mount(set, Deque{Atom.of("a"), Atom.of("b"), Atom.of("c")})
+# r = Xgraph.mount(set, Deque{Atom.of("b"), Atom.of("c")})
+# pp! p
+# pp! q
+# pp! r
+
+# Xgraph.each_conjv(set, Deque{Atom.of("a"), Atom.of("b"), Atom.of("c"), Atom.of("d")}) do |conjv|
+#   pp conjv
+# end
 
 # sid0 = WWID.next
 # sid1 = WWID.next
