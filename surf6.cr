@@ -5,12 +5,26 @@ require "digest"
 require "wait_group"
 
 # - Utrie    ;; maps bases to endpoints
-# - Xgraph   ;; maps endpoint conjunctions to conjunction apex through binary conjunctions
+# + Xgraph   ;; maps endpoint conjunctions to conjunction apex through binary conjunctions
 # + BytesMultimap
 #   + SensorRegistry     ;; maps conjunction apex to sensor ids
 #   + AppearanceRegistry ;; maps term strands to appearance ids
+#
+# TODO: add checksum at the end of strands in AppearanceRegistry
+# TODO: fit 2-byte checksum in WWID
+#
+# LATER: protect BytesMultimap, Utrie, and Xgraph from lying sets by emitting two
+# types of sanity check queries:
+# - Since we have Entity already we can introduce NegXgraph NegSensorRegistry etc.,
+#   elements of which are always absent (else the set is insane.) This tests how sanely
+#   the set generates negative responses.
+# - We can also do randomized lookback -- i.e. remember a random `true` query from the past
+#   and emit it sometime in the future. This tests how sanely the set generates positive
+#   reponses -- if it says `false` for something that was `true` before and we're working
+#   on the consequences of that right now, we halt.
 
 enum Entity : UInt8
+  Xgraph
   SensorRegistry
   AppearanceRegistry
 end
@@ -209,8 +223,27 @@ def h(hasherptr, a : Atom, b : UInt8) : Atom
   {% end %}
 end
 
+def h(hasherptr, a : UInt8, b : Atom) : Atom
+  {% begin %}
+    scratch = uninitialized UInt8[{{Atom::BYTESIZE + 1}}]
+
+    scratch[0] = a
+    b.copy_hash_to(scratch.to_slice[1, Atom::BYTESIZE])
+
+    hasherptr.value.reset
+    hasherptr.value.update(scratch.to_slice)
+    hasherptr.value.final(scratch.to_slice[0, Atom::BYTESIZE])
+
+    Atom.of(scratch.to_slice[0, Atom::BYTESIZE])
+  {% end %}
+end
+
 def h(hasherptr, a : Atom, b : Nil) : Atom
   h(hasherptr, a, h(hasherptr))
+end
+
+def h(hasherptr, entity : Entity, a, b) : Atom
+  h(hasherptr, h(hasherptr, entity.value, a), b)
 end
 
 def secret_to_bytes(secret : Term) : Bytes
@@ -557,85 +590,134 @@ end
 
 alias Checksum = UInt32
 
-# FIXME: h0 - entity consensus prefix to scope things off!!!!
-# FIXME: make it layered so that we can parallelize & rely more on it.
-
 # An emergent graph of intersections. Materialized by "hints" about which binary
 # conjunctions exist. The querying side can then "climb" this "ladder of hints",
 # inferring higher and higher conjunctions by induction. Sensors can be looked
 # up under their top binary conjunction (called the sensor's conjunction *apex*)
 # using `SensorRegistry`.
 #
-# There is a certain trade-off in how smart the Xgraph is vs. how much packing
+# There is a certain trade-off in how smart the Xgraph is and how much packing
 # it provides. This is a particularly simple (one may even say crude) implementation;
 # it does not care about packing at all. We sort out of necessity, and this will
 # provide some kind of packing for very similar conjunctions; but divergence at any
 # point will derail this thing completely, and it will proceed to create newer and
-# newer nodes. I'm not smart enough to improve this :^)
-#
-# I'm still not sure whether this implementation actually works. It appears to.
-# module Xgraph
-#   extend self
+# newer nodes. Apparently I'm not smart enough to improve this :^)
+module Xgraph
+  extend self
 
-#   # Mounts the given conjunction *conj* in the Xgraph. Returns its apex vertex.
-#   #
-#   # TODO: parallelize
-#   def mount(atoms, conj : Deque(Atom)) : Atom
-#     if conj.empty?
-#       raise ArgumentError.new("expected a nonempty conjunction")
-#     end
+  # Returns the apex atom for *conj*, mounting "road sign" atoms along the way
+  # that will lead the querying side to the apex.
+  #
+  # ```text
+  #  a      b     c      d      e  [conj]
+  #
+  #     ab           cd     de
+  #
+  #          abcd       cdde
+  #
+  #              abcdcdde [apex]
+  # ```
+  def mount(atoms, conj : Enumerable(Atom)) : Atom
+    hasher = Blake3.new
 
-#     hasher = Blake3.new
+    gen0 = conj.to_a(&.itself)
+    gen1 = [] of Atom
 
-#     conj.unstable_sort!
+    while gen0.size > 1
+      # NOTE: we're sorting by hash. The order won't be obvious. But "rulial"
+      # clustering should be preserved (i.e. clustering within rule bounds).
+      gen0.unstable_sort!
 
-#     while conj.size > 1
-#       u = conj.shift
-#       v = conj.shift
-#       conjv = h(pointerof(hasher), u, v)
-#       atoms << conjv
-#       conj << conjv
-#     end
+      cursor = 0
+      while cursor < gen0.size
+        u = gen0[cursor]
+        unless v = gen0[cursor + 1]?
+          v = u
+          u = gen0[cursor - 1]
+        end
 
-#     conj.first # apex
-#   end
+        atom = h(pointerof(hasher), :xgraph, u, v)
+        gen1 << atom
+        atoms << atom
 
-#   # Yields conjunction vertices that exist in *hits* and are part of the Xgraph
-#   # in *atoms*. The yielded vertices may or may not be conjunction apexes; it
-#   # is your responsibility to track and check that, if necessary.
-#   #
-#   # TODO: parallelize
-#   def each_conjv(atoms, hits : Deque(Atom), & : Atom ->) : Nil
-#     if hits.empty?
-#       raise ArgumentError.new("hits must contain at least one vertex")
-#     end
+        cursor += 2
+      end
 
-#     hasher = Blake3.new
+      gen0, gen1 = gen1, gen0
+      gen1.clear
+    end
 
-#     hits.unstable_sort!
+    gen0.first # apex
+  end
 
-#     while hits.size > 1
-#       u = hits.shift
+  private def explore(wg, atoms, u, vs, promoted, lock) : Nil
+    hasher = Blake3.new
 
-#       yield u
+    # NOTE: we assume here that allocation is more expensive than hashing.
+    # Whether it actually is I'm not sure; I guess it depends on how many
+    # positive answers we get. If we get many then we've done twice the job
+    # hashing -- bad; if we get little then we've saved some memory on all
+    # the negative hashes -- good.
 
-#       query = hits.map { |v| h(pointerof(hasher), u, v) }
+    answer = atoms.present?(vs) { |v| h(pointerof(hasher), :xgraph, u, v) }
+    answer.each_with_index do |exists, index|
+      next unless exists
 
-#       answer = atoms.present?(query, &.itself)
-#       answer.each_with_index do |exists, index|
-#         next unless exists
+      atom = h(pointerof(hasher), :xgraph, u, vs[index])
+      lock.synchronize do
+        promoted << atom
+      end
+    end
+  end
 
-#         hits << query[index]
-#       end
-#     end
+  # Yields conjunction vertices that exist in *hits* and are part of the Xgraph
+  # in *atoms*. The yielded vertices may or may not be conjunction apexes; it
+  # is your responsibility to track and check that, if necessary. Note that this
+  # method may yield a lot of atoms; how much depends on the size of *hits* and
+  # the exhaustiveness of the Xgraph in *atoms*.
+  #
+  # *mt* specifies whether to run under a multi-threaded or single-threaded
+  # fiber execution context.
+  def each_conjv(atoms, hits : Enumerable(Atom), *, mt : Bool = true, & : Atom ->) : Nil
+    gen0 = hits.to_a(&.itself)
+    gen1 = [] of Atom
 
-#     yield hits.first
-#   end
-# end
+    wg = WaitGroup.new
+    ctx = mt ? MT : ST
+    lock = Mutex.new
+
+    while gen0.size > 1
+      gen0.unstable_sort!
+      gen0.each { |conjv| yield conjv }
+
+      wg.add(gen0.size - 1)
+
+      (0...gen0.size - 1).each do |index|
+        u = gen0[index]
+        vs = gen0.to_readonly_slice[index + 1..]
+
+        ctx.spawn do
+          explore(wg, atoms, u, vs, gen1, lock)
+        ensure
+          wg.done
+        end
+      end
+
+      wg.wait
+
+      gen0, gen1 = gen1, gen0
+      gen1.clear
+    end
+
+    if top = gen0.first?
+      yield top
+    end
+  end
+end
 
 # A sensor registry is an emergent data structure that associates a sensor
 # conjunction apex to a sensor id. It is effectively a table with
-# the following rows:
+# the following columns:
 #
 # ```text
 #    secret     apex    sensor id     checksum
@@ -925,7 +1007,7 @@ module AppearanceRegistry
     terminal = BytesMultimap.append(terminal, APPEARANCE_SET_GAP)
 
     # Append the appearance id after the gap. The gap is implicit. The other side
-    # will need to know it on its own.
+    # will need to pass it on its own.
     scratch = uninitialized UInt8[WWID::BYTESIZE]
 
     appearance.to_slice_be(scratch.to_slice)
@@ -1114,6 +1196,62 @@ class MySet(N)
   end
 end
 
+Log.setup_from_env(default_level: :debug)
+
+{% if flag?(:test_xgraph) %}
+  atoms = MySet(1024).new
+
+  nletters = 30
+  nwords = 1000
+  maxwordlen = 20
+  nchoices = 300
+  nepochs = 1000
+
+  # Generate letters
+  alphabet = [] of Atom
+  (0...nletters).each do |letter|
+    alphabet << Atom.of("#{letter}")
+  end
+
+  # Generate rules (words)
+  words = {} of Atom => Array(Atom)
+
+  (0...nwords).each do
+    length = (1...maxwordlen).sample
+    word = alphabet.sample(length)
+    apex = Xgraph.mount(atoms, word)
+    unless words.put?(apex, word)
+      Log.debug { "generated duplicate word #{word}" }
+      next
+    end
+  end
+
+  nepochs.times do |epoch|
+    puts "Epoch #{epoch}/#{nepochs} (#{((epoch/nepochs) * 100).round(2)}%)"
+    # Pick N random words
+    choices = words.sample(nchoices)
+
+    expected = Set(Atom).new
+    pool = Set(Atom).new
+
+    choices.each do |word, letters|
+      expected << word
+      pool.concat(letters)
+    end
+
+    hit = Set(Atom).new
+    dt = Time.measure do
+      Xgraph.each_conjv(atoms, pool) do |conjv|
+        hit << conjv
+      end
+    end
+
+    expect expected.subset_of?(hit)
+
+    puts "OK in #{dt.total_milliseconds}ms!"
+  end
+{% end %}
+
 # require "benchmark"
 
 # Benchmark.ips do |x|
@@ -1125,8 +1263,6 @@ end
 # require "benchmark"
 
 alias BitList = DynamicBitArray
-
-Log.setup_from_env(default_level: :debug)
 
 set = MySet(1024).new
 conid = WWID.next
@@ -1221,6 +1357,7 @@ expect seen == Set{aid2}
 
 require "benchmark"
 
+{% skip_file %}
 Benchmark.ips do |x|
   x.report("do it") do
 # 1000.times do
