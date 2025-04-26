@@ -4,7 +4,7 @@ require "./blake3"
 require "digest"
 require "wait_group"
 
-# - Utrie    ;; maps bases to endpoints
+# + Utrie    ;; maps bases to endpoints
 # + Xgraph   ;; maps endpoint conjunctions to conjunction apex through binary conjunctions
 # + BytesMultimap
 #   + SensorRegistry     ;; maps conjunction apex to sensor ids
@@ -13,7 +13,7 @@ require "wait_group"
 # TODO: add checksum at the end of strands in AppearanceRegistry
 # TODO: fit 2-byte checksum in WWID
 #
-# LATER: protect BytesMultimap, Utrie, and Xgraph from lying sets by emitting two
+# LATER: protect BytesMultimap, and Xgraph from lying sets by emitting two
 # types of sanity check queries:
 # - Since we have Entity already we can introduce NegXgraph NegSensorRegistry etc.,
 #   elements of which are always absent (else the set is insane.) This tests how sanely
@@ -24,6 +24,7 @@ require "wait_group"
 #   on the consequences of that right now, we halt.
 
 enum Entity : UInt8
+  Utrie
   Xgraph
   SensorRegistry
   AppearanceRegistry
@@ -167,6 +168,16 @@ def h(hasherptr, a : Nil) : Atom
   h(hasherptr)
 end
 
+def h(hasherptr, a : Entity) : Atom
+  scratch = uninitialized UInt8[Atom::BYTESIZE]
+
+  hasherptr.value.reset
+  hasherptr.value.update(a.value)
+  hasherptr.value.final(scratch.to_slice)
+
+  Atom.of(scratch.to_slice)
+end
+
 def h(hasherptr, a : Term) : Atom
   scratch = uninitialized UInt8[Atom::BYTESIZE]
 
@@ -237,6 +248,45 @@ def h(hasherptr, a : UInt8, b : Atom) : Atom
     Atom.of(scratch.to_slice[0, Atom::BYTESIZE])
   {% end %}
 end
+
+def h(hasherptr, a : Atom, b : Ubase::Any) : Atom
+  scratch = uninitialized UInt8[Atom::BYTESIZE]
+
+  a.copy_hash_to(scratch.to_slice)
+
+  hasherptr.value.reset
+  hasherptr.value.update(scratch.to_slice)
+
+  hupdate(hasherptr, b)
+
+  hasherptr.value.final(scratch.to_slice)
+
+  Atom.of(scratch.to_slice)
+end
+
+def hupdate(hasherptr, ubase : Ubase::Begin) : Nil
+  hasherptr.value.update(Uopcode::Begin.value)
+end
+
+def hupdate(hasherptr, ubase : Ubase::End) : Nil
+  hasherptr.value.update(Uopcode::End.value)
+end
+
+{% for base in %w[IsSym IsStr IsNum IsBool IsDict] %}
+  def hupdate(hasherptr, ubase : Ubase::{{base.id}}) : Nil
+    hasherptr.value.update(Uopcode::{{base.id}}.value)
+  end
+{% end %}
+
+{% for base in %w[At Literal] %}
+  def hupdate(hasherptr, ubase : Ubase::{{base.id}}) : Nil
+    hasherptr.value.update(Uopcode::Hashed{{base.id}}.value)
+
+    digestion = IO::ByteStream.new { |slice| hasherptr.value.update(slice) }
+
+    ML.compact(digestion, ubase.term)
+  end
+{% end %}
 
 def h(hasherptr, a : Atom, b : Nil) : Atom
   h(hasherptr, a, h(hasherptr))
@@ -590,6 +640,167 @@ end
 
 alias Checksum = UInt32
 
+module Utrie
+  extend self
+
+  # We hash bases recursively. For instance, the following strand:
+  #
+  #    Begin - IsDict - At[0] - IsNum - Literal[100]
+  #
+  # Will be hashed as:
+  #
+  #    H0 = hash(entity utrie)
+  #    H1 = hash(H0 x Begin)
+  #    H2 = hash(H1 x IsDict)
+  #    H3 = hash(H2 x At[0])
+  #    H4 = hash(H3 x IsNum)
+  #    H5 = hash(H4 x Literal[100])
+  #
+  # H5 is the endpoint of the strand. It is then fed to Xgraph and so on.
+  private def mount1(atoms, strand : Enumerable(Ubase::Any)) : Atom
+    hasher = Blake3.new
+
+    h0 = h(pointerof(hasher), :utrie)
+
+    strand.each do |base|
+      h0 = h(pointerof(hasher), h0, base)
+      atoms << h0
+    end
+
+    h0
+  end
+
+  # Mounts the atoms of strands in the strands enumerable *strands* to the Utrie
+  # in *atoms*. Each strand is mounted concurrently with the others. Returns a
+  # **disordered** array of endpoints corresponding to *strands*.
+  #
+  # *mt* specifies whether to run under a multi-threaded or single-threaded
+  # fiber execution context.
+  def mount(atoms, strands : Enumerable(Enumerable(Ubase::Any)), *, mt : Bool = true) : Array(Atom)
+    wg = WaitGroup.new(strands.size)
+    ctx = mt ? MT : ST
+
+    endpoints = [] of Atom
+    lock = Mutex.new
+
+    strands.each do |strand|
+      ctx.spawn do
+        endpoint = mount1(atoms, strand)
+
+        lock.synchronize { endpoints << endpoint }
+      ensure
+        wg.done
+      end
+    end
+
+    wg.wait
+
+    endpoints
+  end
+
+  # :nodoc:
+  @[Flags]
+  enum State : UInt8
+    BeforeTypecheck
+    BeforeKeys
+    BeforeLiteral
+    BeforeEnd
+    End
+  end
+
+  # :nodoc:
+  record Arm, atom : Atom, arg : Term, state : State
+
+  private def seed(hasherptr, term : Term) : Array(Arm)
+    h0 = h(hasherptr, :utrie)
+    h0 = h(hasherptr, h0, Ubase::Begin.new)
+
+    [Arm.new(h0, term, State::BeforeTypecheck | State::BeforeEnd)]
+  end
+
+  private def sweep(atoms, gen0 : Array(Arm), gen1 : Array(Arm)) : Nil
+    answer = atoms.present?(gen0, &.atom)
+
+    gen1.clear
+    gen0.each_with_index do |arm, index|
+      next unless answer[index] # exists
+
+      gen1 << arm
+    end
+  end
+
+  private def advance(atoms, hasherptr, gen0, gen1, & : Atom ->) : Nil
+    gen0.clear
+    gen1.each do |arm|
+      if arm.state.before_typecheck?
+        case arm.arg.type
+        in .any?     then unreachable
+        in .symbol?  then base, state1 = Ubase::IsSym.new, State::BeforeLiteral
+        in .number?  then base, state1 = Ubase::IsNum.new, State::BeforeLiteral
+        in .string?  then base, state1 = Ubase::IsStr.new, State::BeforeLiteral
+        in .boolean? then base, state1 = Ubase::IsBool.new, State::BeforeLiteral
+        in .dict?    then base, state1 = Ubase::IsDict.new, State::BeforeKeys
+        end
+
+        atom1 = h(hasherptr, arm.atom, base)
+
+        # We can stop at e.g. IsNum - End or IsDict - End so add the BeforeEnd
+        # state as well.
+        gen0 << Arm.new(atom1, arm.arg, state1 | State::BeforeEnd)
+      end
+
+      if arm.state.before_end?
+        atom1 = h(hasherptr, arm.atom, Ubase::End.new)
+
+        gen0 << Arm.new(atom1, arm.arg, State::End)
+      end
+
+      if arm.state.before_keys?
+        #   This state is only reachable through BeforeTypechec where we make sure
+        # v it is in fact a dict.
+        dict = arm.arg.as_d
+        dict.each_entry do |key, value|
+          atom1 = h(hasherptr, arm.atom, Ubase::At.new(key))
+
+          # We can stop at e.g. IsDict - At(0) - End so add the BeforeEnd state
+          # as well.
+          gen0 << Arm.new(atom1, value, State::BeforeTypecheck | State::BeforeEnd)
+        end
+      end
+
+      if arm.state.before_literal?
+        atom1 = h(hasherptr, arm.atom, Ubase::Literal.new(arm.arg))
+
+        # We do not put End after Literal. Switch to End state right away.
+        gen0 << Arm.new(atom1, arm.arg, State::End)
+      end
+
+      if arm.state.end?
+        yield arm.atom
+      end
+    end
+  end
+
+  # Yields endpoint atoms for strands from the Utrie in *atoms* that match
+  # the given *term*.
+  #
+  # Currently the implementation is rather sequential, and instead of mult-threading
+  # relies on checking for the existence of large batches of atoms at a time. How large
+  # depends on the Utrie in *atoms* and on *term*.
+  def each_endpoint(atoms, term : Term, & : Atom ->) : Nil
+    hasher = Blake3.new
+
+    gen0 = seed(pointerof(hasher), term)
+    gen1 = [] of Arm
+    lock = Mutex.new
+
+    until gen0.empty?
+      sweep(atoms, gen0, gen1)
+      advance(atoms, pointerof(hasher), gen0, gen1) { |endpoint| yield endpoint }
+    end
+  end
+end
+
 # An emergent graph of intersections. Materialized by "hints" about which binary
 # conjunctions exist. The querying side can then "climb" this "ladder of hints",
 # inferring higher and higher conjunctions by induction. Sensors can be looked
@@ -901,6 +1112,21 @@ module Ubase
   record Literal, term : Term
 end
 
+# :nodoc:
+enum Uopcode : UInt8
+  Begin
+  End
+  IsSym
+  IsStr
+  IsNum
+  IsBool
+  IsDict
+  HashedAt
+  QuotedAt
+  HashedLiteral
+  QuotedLiteral
+end
+
 module AppearanceRegistry
   extend self
 
@@ -931,21 +1157,6 @@ module AppearanceRegistry
 
     strand << Ubase::Literal.new(leaf)
     strand
-  end
-
-  # :nodoc:
-  enum Uopcode : UInt8
-    Begin
-    End
-    IsSym
-    IsStr
-    IsNum
-    IsBool
-    IsDict
-    HashedAt
-    QuotedAt
-    HashedLiteral
-    QuotedLiteral
   end
 
   private def upack(io, ubase : Ubase::Begin) : Nil
@@ -1197,6 +1408,20 @@ class MySet(N)
 end
 
 Log.setup_from_env(default_level: :debug)
+
+atoms = MySet(1).new
+endpoints = Utrie.mount(atoms, [
+  {Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(:x)), Ubase::IsNum.new, Ubase::Literal.new(Term.of(0))},
+  {Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(:x)), Ubase::IsNum.new, Ubase::Literal.new(Term.of(1))},
+  {Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(:x)), Ubase::IsNum.new, Ubase::Literal.new(Term.of(2))},
+  {Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(:x)), Ubase::IsNum.new, Ubase::Literal.new(Term.of(3))},
+  {Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(:x)), Ubase::IsNum.new, Ubase::Literal.new(Term.of(4))},
+  {Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(:x)), Ubase::IsNum.new, Ubase::Literal.new(Term.of(5))},
+])
+pp endpoints
+Utrie.each_endpoint(atoms, Term.of(x: 3)) do |ep|
+  pp ep
+end
 
 {% if flag?(:test_xgraph) %}
   atoms = MySet(1024).new
