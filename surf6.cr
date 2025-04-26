@@ -4,6 +4,8 @@ require "./blake3"
 require "digest"
 require "wait_group"
 
+alias BitList = DynamicBitArray
+
 # + Utrie    ;; maps bases to endpoints
 # + Xgraph   ;; maps endpoint conjunctions to conjunction apex through binary conjunctions
 # + BytesMultimap
@@ -68,6 +70,18 @@ struct Atom
 
   def hash(hasher)
     @blk0.hash(hasher)
+  end
+
+  def inspect(io)
+    io << "Atom["
+    @blk0.to_s(io, base: 32, precision: 13, upcase: true)
+    io << "-"
+    @blk1.to_s(io, base: 32, precision: 13, upcase: true)
+    io << "-"
+    @blk2.to_s(io, base: 32, precision: 13, upcase: true)
+    io << "-"
+    @blk3.to_s(io, base: 32, precision: 13, upcase: true)
+    io << "]"
   end
 
   def_equals @blk0, @blk1, @blk2, @blk3
@@ -799,6 +813,14 @@ module Utrie
       advance(atoms, pointerof(hasher), gen0, gen1) { |endpoint| yield endpoint }
     end
   end
+
+  def endpoints(atoms, term : Term) : Array(Atom)
+    endpoints = [] of Atom
+    each_endpoint(atoms, term) do |endpoint|
+      endpoints << endpoint
+    end
+    endpoints
+  end
 end
 
 # An emergent graph of intersections. Materialized by "hints" about which binary
@@ -923,6 +945,14 @@ module Xgraph
     if top = gen0.first?
       yield top
     end
+  end
+
+  def conjvs(atoms, hits : Enumerable(Atom), **kwargs) : Array(Atom)
+    conjvs = [] of Atom
+    each_conjv(atoms, hits, **kwargs) do |conjv|
+      conjvs << conjv
+    end
+    conjvs
   end
 end
 
@@ -1139,20 +1169,13 @@ module AppearanceRegistry
       strand << Ubase::At.new(key)
     end
 
-    # Handle the edge case where the leaf is an empty dict.
-    if leaf == Term[]
-      strand << Ubase::IsDict.new
-      strand << Ubase::End.new
-      return strand
-    end
-
     case leaf.type
+    in .any?     then unreachable
     in .symbol?  then strand << Ubase::IsSym.new
     in .string?  then strand << Ubase::IsStr.new
     in .number?  then strand << Ubase::IsNum.new
     in .boolean? then strand << Ubase::IsBool.new
-    in .dict?, .any?
-      raise ArgumentError.new("invalid leaf")
+    in .dict?    then strand << Ubase::IsDict.new
     end
 
     strand << Ubase::Literal.new(leaf)
@@ -1164,7 +1187,6 @@ module AppearanceRegistry
   end
 
   private def upack(io, ubase : Ubase::End) : Nil
-    io.write_byte(Uopcode::End.value)
   end
 
   {% for base in %w[IsSym IsStr IsNum IsBool IsDict] %}
@@ -1251,6 +1273,12 @@ module AppearanceRegistry
 
     wg.wait
   end
+
+  # TODO: I see a huge slowdown due to O(n^2) xsect behavior where we should have
+  # no slowdown!!!!! Row must be a record! Hashed by completion! Have Set(Row)
+  # instead of Array(Row)!!!! Have bundle be a set instead of an array!!! We probably
+  # actually have to split Row into a set of completions & an array of atoms or smth
+  # like that.
 
   alias Row = {BytesMultimap::Completion, Atom}
 
@@ -1368,6 +1396,258 @@ module AppearanceRegistry
   end
 end
 
+struct AtomSink
+  def initialize(@sink : Atom ->)
+  end
+
+  def <<(atom : Atom) : self
+    @sink.call(atom)
+
+    self
+  end
+end
+
+module Surface
+  # Calls *sink* with atoms that constitute `self`. Atoms may repeat with intent.
+  # This can be used for e.g. refcounting (instead of using a set, you can use
+  # a multiset and have much less disruptive removals later on).
+  #
+  # *mt* specifies whether to run under a multi-threaded or single-threaded
+  # fiber execution context.
+  #
+  # WARNING: *sink* must be thread-safe -- it will be called from different fibers.
+  # If you don't want to be bothered with thread-safety, use `atoms` which returns
+  # a set of atoms and does the thread-safety stuff on its own.
+  abstract def each_atom(instant : WWID, *, mt : Bool = true, &sink : Atom ->) : Nil
+
+  def atoms_to(instant, object, **kwargs) : Nil
+    each_atom(instant, **kwargs) do |atom|
+      object << atom
+    end
+  end
+
+  # Returns the set of atoms that constitute `self`.
+  #
+  # See `each_atom` for *kwargs*.
+  def atoms(instant, **kwargs) : Set(Atom)
+    atoms = Set(Atom).new
+    lock = Mutex.new
+
+    each_atom(instant, **kwargs) do |atom|
+      lock.synchronize { atoms << atom }
+    end
+
+    atoms
+  end
+
+  def complements(atoms, **kwargs) : Set(WWID)
+    complements = Set(WWID).new
+    lock = Mutex.new
+
+    each_complement(atoms, **kwargs) do |complement|
+      lock.synchronize { complements << complement }
+    end
+
+    complements
+  end
+end
+
+class Sensor
+  include Surface
+
+  alias Strand = Array(Ubase::Any)
+  alias StrandList = Array(Strand)
+  alias BranchList = Array(StrandList)
+
+  protected def initialize(@pattern : Term, @secret : Term?, @branches : BranchList)
+    if @branches.empty?
+      raise ArgumentError.new("branches list must contain at least one branch")
+    end
+  end
+
+  private SK_ANY  = Term.of({:"%any"})
+  private SK_SYM  = Term.of({:"%symbol"})
+  private SK_STR  = Term.of({:"%string"})
+  private SK_NUM  = Term.of({:"%number", :_})
+  private SK_DICT = Term.of({:"%dict"})
+  private SK_BOOL = Term.of({:"%boolean"})
+
+  # Converts skeleton strand *bases* to a `Strand`.
+  private def self.strand(bases : Term::Dict) : Strand
+    strand = Strand.new
+    state = :start
+
+    bases.items.each do |base|
+      case state
+      when :start
+        unless base == SK_ANY
+          raise "BUG: unexpected base #{base}, expected (%any)"
+        end
+        strand << Ubase::Begin.new
+        state = :typecheck
+      when :typecheck
+        case base
+        when SK_DICT
+          strand << Ubase::IsDict.new
+          state = :key
+        when SK_SYM
+          strand << Ubase::IsSym.new
+          state = :literal
+        when SK_NUM
+          strand << Ubase::IsNum.new
+          state = :literal
+        when SK_STR
+          strand << Ubase::IsStr.new
+          state = :literal
+        when SK_BOOL
+          strand << Ubase::IsBool.new
+          state = :literal
+        else
+          raise "BUG: unexpected base #{base}, expected typecheck"
+        end
+      when :key
+        Term.case(base) do
+          matchpi %{(%'%literal ())} do # empty dict
+            strand << Ubase::Literal.new(Term.of)
+            state = :after_literal
+          end
+
+          matchpi %{(%'%value (%'%literal term_))} do
+            strand << Ubase::At.new(term)
+            state = :typecheck
+          end
+
+          otherwise do
+            raise "BUG: unexpected base #{base}, expected %value %literal"
+          end
+        end
+      when :literal
+        Term.case(base) do
+          matchpi %{(%'%literal term_)} do
+            strand << Ubase::Literal.new(term)
+            state = :after_literal
+          end
+
+          otherwise do
+            raise "BUG: unexpected base #{base}, expected %literal"
+          end
+        end
+      when :after_literal
+        raise "BUG: expected end-of-strand after literal, but found base #{base}"
+      end
+    end
+
+    # Indicate abrupt end (as in e.g. `Begin - *` or `Begin - IsDict - At(0) - *`) by
+    # an explicit End base. If we had literal we treat it as end-of-strand regardless.
+    unless state == :after_literal
+      strand << Ubase::End.new
+    end
+
+    strand
+  end
+
+  # Breaks *branch* down into its constituent strands and so on.
+  private def self.strand_list(branch : Term) : StrandList
+    strands = StrandList.new
+    M1.strands(branch) do |bases|
+      strands << strand(bases)
+    end
+    strands
+  end
+
+  # Breaks *skeleton* down into its constituent branches and so on.
+  private def self.branch_list(skeleton : Term) : BranchList
+    branches = BranchList.new
+    M1.branches(skeleton) do |branch|
+      branches << strand_list(branch)
+    end
+    branches
+  end
+
+  # Returns the skeleton of *pattern*.
+  #
+  # See also: `M1.skeleton`.
+  private def self.skeleton(pattern : Term) : Term
+    pipe(pattern, M1.normal, M1.skeleton)
+  end
+
+  def self.new(pattern : Term, secret : Term? = nil) : Sensor
+    branches = pipe(pattern, skeleton, branch_list)
+
+    new(pattern, secret, branches)
+  end
+
+  def each_atom(instant : WWID, *, mt : Bool = true, &sink : Atom ->) : Nil
+    atoms = AtomSink.new(sink)
+
+    if @branches.size == 1
+      strands = @branches[0]
+      endpoints = Utrie.mount(atoms, strands, mt: mt)
+      apexes = {Xgraph.mount(atoms, endpoints)}
+    else
+      wg = WaitGroup.new(@branches.size)
+      ctx = mt ? MT : ST
+
+      apexes = [] of Atom
+      lock = Mutex.new
+
+      @branches.each do |strands|
+        ctx.spawn do
+          endpoints = Utrie.mount(atoms, strands, mt: mt)
+          apex = Xgraph.mount(atoms, endpoints)
+
+          lock.synchronize { apexes << apex }
+        ensure
+          wg.done
+        end
+      end
+
+      wg.wait
+    end
+
+    SensorRegistry.register(atoms, @secret, apexes, instant, mt: mt)
+  end
+
+  def each_complement(atoms, *, mt : Bool = true, &sink : WWID ->) : Nil
+    if @branches.size == 1
+      strands = @branches[0]
+      AppearanceRegistry.each_appearance(atoms, @secret, strands, mt: mt, &sink)
+      return
+    end
+
+    wg = WaitGroup.new(@branches.size)
+    ctx = mt ? MT : ST
+
+    @branches.each do |strands|
+      ctx.spawn do
+        AppearanceRegistry.each_appearance(atoms, @secret, strands, mt: mt, &sink)
+      ensure
+        wg.done
+      end
+    end
+
+    wg.wait
+  end
+end
+
+class Appearance
+  include Surface
+
+  def initialize(@value : Term, @secret : Term? = nil)
+  end
+
+  def each_atom(instant : WWID, *, mt : Bool = true, &sink : Atom ->) : Nil
+    AppearanceRegistry.mount(AtomSink.new(sink), @secret, @value, instant, mt: mt)
+  end
+
+  def each_complement(atoms, *, mt : Bool = true, &sink : WWID ->) : Nil
+    hits = Utrie.endpoints(atoms, @value)
+    conjvs = Xgraph.conjvs(atoms, hits, mt: mt)
+
+    SensorRegistry.each_sensor(atoms, @secret, conjvs, mt: mt, &sink)
+  end
+end
+
 class MySet(N)
   def initialize
     @sets = StaticArray(Set(Atom), N).new { Set(Atom).new }
@@ -1386,6 +1666,10 @@ class MySet(N)
     @locks[bucket].synchronize do
       @sets[bucket].includes?(atom)
     end
+  end
+
+  def size
+    @sets.sum(&.size)
   end
 
   def present?(objects : Enumerable(T), & : T -> Atom | Enumerable(Atom)) : BitList forall T
@@ -1409,6 +1693,96 @@ end
 
 Log.setup_from_env(default_level: :debug)
 
+tspace = MySet(1024).new
+
+trunk = WWID.next
+
+puts "Generate appearances"
+
+appearances = (0...1000).flat_map do |x|
+  (0...1000).map do |y|
+    Appearance.new(Term.of(type: "pixel", x: x, y: y, color: {rand(UInt8), rand(UInt8), rand(UInt8)}))
+  end
+end
+
+puts "Insert appearances into termspace"
+
+appearances.each_with_index do |appearance, index|
+  if index % 1000 == 0
+    puts "Insert #{index}/#{appearances.size}"
+  end
+
+  id = trunk = trunk.succ
+
+  appearance.atoms_to(id, tspace)
+end
+
+puts "1000x1000 set cost is #{tspace.size}"
+
+while true
+  puts "Enter sensor pattern ML"
+
+  q = ML.term(gets || break)
+
+  sensor = Sensor.new(q)
+
+  pp sensor
+
+  complements = Set(WWID).new
+  dt = Time.measure do
+    complements = sensor.complements(tspace)
+  end
+
+  puts "#{complements.size} complement(s). Done in #{dt.total_milliseconds}ms"
+end
+
+{% skip_file %}
+
+aid0 = trunk = trunk.succ
+aid1 = trunk = trunk.succ
+aid2 = trunk = trunk.succ
+aid3 = trunk = trunk.succ
+sid0 = trunk = trunk.succ
+sid1 = trunk = trunk.succ
+
+s0 = Sensor.new(Term.of(type: "pixel", x: {:"%any", 0, 1}, y: :y_number))
+s1 = Sensor.new(Term.of(type: "pixel", color: {:_, :_, 255}))
+
+a1 = Appearance.new(Term.of(type: "pixel", x: 0, y: 100, color: {255, 0, 0}))
+a2 = Appearance.new(Term.of(type: "pixel", x: 1, y: 200, color: {0, 255, 0}))
+a3 = Appearance.new(Term.of(type: "pixel", x: 2, y: 300, color: {0, 0, 255}))
+a4 = Appearance.new(Term.of(type: "pixel", x: 0, y: 400, color: {255, 0, 255}))
+
+dt = Time.measure do
+  s0.atoms_to(sid0, atoms)
+  s1.atoms_to(sid1, atoms)
+  a1.atoms_to(aid0, atoms)
+  a2.atoms_to(aid1, atoms)
+  a3.atoms_to(aid2, atoms)
+  a4.atoms_to(aid3, atoms)
+
+  scomps = s0.complements(atoms)
+  expect scomps == Set{aid0, aid1, aid3}
+
+  scomps = s1.complements(atoms)
+  expect scomps == Set{aid2, aid3}
+
+  acomps = a3.complements(atoms)
+  expect acomps == Set{sid1}
+
+  acomps = a2.complements(atoms)
+  expect acomps == Set{sid0}
+
+  acomps = a4.complements(atoms)
+  expect acomps == Set{sid0, sid1}
+end
+
+puts "OK in #{dt.total_milliseconds}ms"
+
+# acomps = a.complements(atoms)
+# pp acomps
+
+{% skip_file unless flag?(:tail) %}
 atoms = MySet(1).new
 endpoints = Utrie.mount(atoms, [
   {Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(:x)), Ubase::IsNum.new, Ubase::Literal.new(Term.of(0))},
@@ -1487,7 +1861,6 @@ end
 # end
 # require "benchmark"
 
-alias BitList = DynamicBitArray
 
 set = MySet(1024).new
 conid = WWID.next
