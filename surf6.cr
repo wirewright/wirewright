@@ -12,9 +12,6 @@ alias BitList = DynamicBitArray
 #   + SensorRegistry     ;; maps conjunction apex to sensor ids
 #   + AppearanceRegistry ;; maps term strands to appearance ids
 #
-# TODO: add checksum at the end of strands in AppearanceRegistry
-# TODO: fit 2-byte checksum in WWID
-#
 # LATER: protect BytesMultimap, and Xgraph from lying sets by emitting two
 # types of sanity check queries:
 # - Since we have Entity already we can introduce NegXgraph NegSensorRegistry etc.,
@@ -148,6 +145,10 @@ struct WWID
     order = @raw >> (6*8 + 4*8)
 
     WW_EPOCH + order.milliseconds
+  end
+
+  def with_slot(slot : UInt32)
+    WWID.new((@raw >> (4*8) << (4*8)) | slot)
   end
 
   def succ : WWID
@@ -1274,12 +1275,6 @@ module AppearanceRegistry
     wg.wait
   end
 
-  # TODO: I see a huge slowdown due to O(n^2) xsect behavior where we should have
-  # no slowdown!!!!! Row must be a record! Hashed by completion! Have Set(Row)
-  # instead of Array(Row)!!!! Have bundle be a set instead of an array!!! We probably
-  # actually have to split Row into a set of completions & an array of atoms or smth
-  # like that.
-
   alias Row = {BytesMultimap::Completion, Atom}
 
   private def bundleof(atoms, secret_slice : Bytes, strand : Array(Ubase::Any), mt : Bool) : Array(Row)
@@ -1354,12 +1349,16 @@ module AppearanceRegistry
         bundles.clear
         bundles.concat(marked) { |bundle| BytesMultimap.prune(bundle) }
 
+        # Index for cheap intersection
+        populations = [] of Set(BytesMultimap::Completion)
+        bundles.each do |bundle|
+          populations << bundle.to_set { |completion, _| completion }
+        end
+
         # Select only those completions that are present in all other bundles.
         bundles.each do |bundle0|
-          xsect = bundle0.select! do |completion0, _|
-            bundles.all? do |bundle1|
-              bundle0.same?(bundle1) || bundle1.any? { |completion1, _| completion0 == completion1 }
-            end
+          xsect = bundle0.select! do |completion, _|
+            populations.all? { |population| completion.in?(population) }
           end
 
           # If any bundle ends up being empty, then all other bundles will
@@ -1648,21 +1647,21 @@ class Appearance
   end
 end
 
-class MySet(N)
-  def initialize
-    @sets = StaticArray(Set(Atom), N).new { Set(Atom).new }
-    @locks = StaticArray(Mutex, N).new { Mutex.new }
+class MySet
+  def initialize(@n : Int32)
+    @sets = Slice(Set(Atom)).new(@n) { Set(Atom).new }
+    @locks = Slice(Mutex).new(@n) { Mutex.new }
   end
 
   def <<(atom : Atom)
-    bucket = atom.@blk0 % N
+    bucket = atom.@blk0 % @n
     @locks[bucket].synchronize do
       @sets[bucket] << atom
     end
   end
 
   def present?(atom : Atom)
-    bucket = atom.@blk0 % N
+    bucket = atom.@blk0 % @n
     @locks[bucket].synchronize do
       @sets[bucket].includes?(atom)
     end
@@ -1693,7 +1692,7 @@ end
 
 Log.setup_from_env(default_level: :debug)
 
-tspace = MySet(1024).new
+tspace = MySet.new(4096)
 
 trunk = WWID.next
 
@@ -1703,153 +1702,213 @@ appearances = (0...1000).flat_map do |x|
   (0...1000).map do |y|
     Appearance.new(Term.of(type: "pixel", x: x, y: y, color: {rand(UInt8), rand(UInt8), rand(UInt8)}))
   end
-end
+end.to_readonly_slice
 
 puts "Insert appearances into termspace"
 
-appearances.each_with_index do |appearance, index|
-  if index % 1000 == 0
-    puts "Insert #{index}/#{appearances.size}"
-  end
+wg = WaitGroup.new
 
-  id = trunk = trunk.succ
-
-  appearance.atoms_to(id, tspace)
-end
-
-puts "1000x1000 set cost is #{tspace.size}"
-
-while true
-  puts "Enter sensor pattern ML"
-
-  q = ML.term(gets || break)
-
-  sensor = Sensor.new(q)
-
-  pp sensor
-
-  complements = Set(WWID).new
-  dt = Time.measure do
-    complements = sensor.complements(tspace)
-  end
-
-  puts "#{complements.size} complement(s). Done in #{dt.total_milliseconds}ms"
-end
-
-{% skip_file %}
-
-aid0 = trunk = trunk.succ
-aid1 = trunk = trunk.succ
-aid2 = trunk = trunk.succ
-aid3 = trunk = trunk.succ
-sid0 = trunk = trunk.succ
-sid1 = trunk = trunk.succ
-
-s0 = Sensor.new(Term.of(type: "pixel", x: {:"%any", 0, 1}, y: :y_number))
-s1 = Sensor.new(Term.of(type: "pixel", color: {:_, :_, 255}))
-
-a1 = Appearance.new(Term.of(type: "pixel", x: 0, y: 100, color: {255, 0, 0}))
-a2 = Appearance.new(Term.of(type: "pixel", x: 1, y: 200, color: {0, 255, 0}))
-a3 = Appearance.new(Term.of(type: "pixel", x: 2, y: 300, color: {0, 0, 255}))
-a4 = Appearance.new(Term.of(type: "pixel", x: 0, y: 400, color: {255, 0, 255}))
-
-dt = Time.measure do
-  s0.atoms_to(sid0, atoms)
-  s1.atoms_to(sid1, atoms)
-  a1.atoms_to(aid0, atoms)
-  a2.atoms_to(aid1, atoms)
-  a3.atoms_to(aid2, atoms)
-  a4.atoms_to(aid3, atoms)
-
-  scomps = s0.complements(atoms)
-  expect scomps == Set{aid0, aid1, aid3}
-
-  scomps = s1.complements(atoms)
-  expect scomps == Set{aid2, aid3}
-
-  acomps = a3.complements(atoms)
-  expect acomps == Set{sid1}
-
-  acomps = a2.complements(atoms)
-  expect acomps == Set{sid0}
-
-  acomps = a4.complements(atoms)
-  expect acomps == Set{sid0, sid1}
-end
-
-puts "OK in #{dt.total_milliseconds}ms"
-
-# acomps = a.complements(atoms)
-# pp acomps
-
-{% skip_file unless flag?(:tail) %}
-atoms = MySet(1).new
-endpoints = Utrie.mount(atoms, [
-  {Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(:x)), Ubase::IsNum.new, Ubase::Literal.new(Term.of(0))},
-  {Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(:x)), Ubase::IsNum.new, Ubase::Literal.new(Term.of(1))},
-  {Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(:x)), Ubase::IsNum.new, Ubase::Literal.new(Term.of(2))},
-  {Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(:x)), Ubase::IsNum.new, Ubase::Literal.new(Term.of(3))},
-  {Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(:x)), Ubase::IsNum.new, Ubase::Literal.new(Term.of(4))},
-  {Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(:x)), Ubase::IsNum.new, Ubase::Literal.new(Term.of(5))},
-])
-pp endpoints
-Utrie.each_endpoint(atoms, Term.of(x: 3)) do |ep|
-  pp ep
-end
-
-{% if flag?(:test_xgraph) %}
-  atoms = MySet(1024).new
-
-  nletters = 30
-  nwords = 1000
-  maxwordlen = 20
-  nchoices = 300
-  nepochs = 1000
-
-  # Generate letters
-  alphabet = [] of Atom
-  (0...nletters).each do |letter|
-    alphabet << Atom.of("#{letter}")
-  end
-
-  # Generate rules (words)
-  words = {} of Atom => Array(Atom)
-
-  (0...nwords).each do
-    length = (1...maxwordlen).sample
-    word = alphabet.sample(length)
-    apex = Xgraph.mount(atoms, word)
-    unless words.put?(apex, word)
-      Log.debug { "generated duplicate word #{word}" }
-      next
+wg.spawn do
+  slot = 0u32
+  piece = appearances[0...250000]
+  piece.each_with_index do |appearance, index|
+    if slot % 1000 == 0
+      Log.debug { "fiber 1 #{(index/piece.size)*100}%" }
     end
+    appearance.atoms_to(trunk.with_slot(slot), tspace)
+    slot += 1
   end
+end
 
-  nepochs.times do |epoch|
-    puts "Epoch #{epoch}/#{nepochs} (#{((epoch/nepochs) * 100).round(2)}%)"
-    # Pick N random words
-    choices = words.sample(nchoices)
-
-    expected = Set(Atom).new
-    pool = Set(Atom).new
-
-    choices.each do |word, letters|
-      expected << word
-      pool.concat(letters)
+wg.spawn do
+  slot = 250000u32
+  piece = appearances[250000...500000]
+  piece.each_with_index do |appearance, index|
+    if slot % 1000 == 0
+      Log.debug { "fiber 2 #{(index/piece.size)*100}%" }
     end
-
-    hit = Set(Atom).new
-    dt = Time.measure do
-      Xgraph.each_conjv(atoms, pool) do |conjv|
-        hit << conjv
-      end
-    end
-
-    expect expected.subset_of?(hit)
-
-    puts "OK in #{dt.total_milliseconds}ms!"
+    appearance.atoms_to(trunk.with_slot(slot), tspace)
+    slot += 1
   end
-{% end %}
+end
+
+wg.spawn do
+  slot = 500000u32
+  piece = appearances[500000...750000]
+  piece.each_with_index do |appearance, index|
+    if slot % 1000 == 0
+      Log.debug { "fiber 3 #{(index/piece.size)*100}%" }
+    end
+    appearance.atoms_to(trunk.with_slot(slot), tspace)
+    slot += 1
+  end
+end
+
+wg.spawn do
+  slot = 750000u32
+  piece = appearances[750000...1000000]
+  piece.each_with_index do |appearance, index|
+    if slot % 1000 == 0
+      Log.debug { "fiber 4 #{(index/piece.size)*100}%" }
+    end
+    appearance.atoms_to(trunk.with_slot(slot), tspace)
+    slot += 1
+  end
+end
+
+wg.wait
+
+# appearances.each_with_index do |appearance, index|
+#   if index % 1000 == 0
+#     puts "Insert #{index}/#{appearances.size}"
+#   end
+
+# end
+
+puts "Done, 100x100 set cost is #{tspace.size}"
+
+s = Sensor.new(Term.of(color: {0, :_, :_}))
+
+100.times do
+dt, comp = Time.measured do
+  s.complements(tspace)
+end
+
+pp comp
+puts "Took #{dt.total_milliseconds}ms"
+end
+
+# while true
+#   puts "Enter sensor pattern ML"
+
+#   q = ML.term(gets || break)
+
+#   sensor = Sensor.new(q)
+
+#   pp sensor
+
+#   complements = Set(WWID).new
+#   dt = Time.measure do
+#     complements = sensor.complements(tspace)
+#   end
+
+#   puts "#{complements.size} complement(s). Done in #{dt.total_milliseconds}ms"
+# end
+
+# {% skip_file %}
+
+# aid0 = trunk = trunk.succ
+# aid1 = trunk = trunk.succ
+# aid2 = trunk = trunk.succ
+# aid3 = trunk = trunk.succ
+# sid0 = trunk = trunk.succ
+# sid1 = trunk = trunk.succ
+
+# s0 = Sensor.new(Term.of(type: "pixel", x: {:"%any", 0, 1}, y: :y_number))
+# s1 = Sensor.new(Term.of(type: "pixel", color: {:_, :_, 255}))
+
+# a1 = Appearance.new(Term.of(type: "pixel", x: 0, y: 100, color: {255, 0, 0}))
+# a2 = Appearance.new(Term.of(type: "pixel", x: 1, y: 200, color: {0, 255, 0}))
+# a3 = Appearance.new(Term.of(type: "pixel", x: 2, y: 300, color: {0, 0, 255}))
+# a4 = Appearance.new(Term.of(type: "pixel", x: 0, y: 400, color: {255, 0, 255}))
+
+# dt = Time.measure do
+#   s0.atoms_to(sid0, atoms)
+#   s1.atoms_to(sid1, atoms)
+#   a1.atoms_to(aid0, atoms)
+#   a2.atoms_to(aid1, atoms)
+#   a3.atoms_to(aid2, atoms)
+#   a4.atoms_to(aid3, atoms)
+
+#   scomps = s0.complements(atoms)
+#   expect scomps == Set{aid0, aid1, aid3}
+
+#   scomps = s1.complements(atoms)
+#   expect scomps == Set{aid2, aid3}
+
+#   acomps = a3.complements(atoms)
+#   expect acomps == Set{sid1}
+
+#   acomps = a2.complements(atoms)
+#   expect acomps == Set{sid0}
+
+#   acomps = a4.complements(atoms)
+#   expect acomps == Set{sid0, sid1}
+# end
+
+# puts "OK in #{dt.total_milliseconds}ms"
+
+# # acomps = a.complements(atoms)
+# # pp acomps
+
+# {% skip_file unless flag?(:tail) %}
+# atoms = MySet(1).new
+# endpoints = Utrie.mount(atoms, [
+#   {Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(:x)), Ubase::IsNum.new, Ubase::Literal.new(Term.of(0))},
+#   {Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(:x)), Ubase::IsNum.new, Ubase::Literal.new(Term.of(1))},
+#   {Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(:x)), Ubase::IsNum.new, Ubase::Literal.new(Term.of(2))},
+#   {Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(:x)), Ubase::IsNum.new, Ubase::Literal.new(Term.of(3))},
+#   {Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(:x)), Ubase::IsNum.new, Ubase::Literal.new(Term.of(4))},
+#   {Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(:x)), Ubase::IsNum.new, Ubase::Literal.new(Term.of(5))},
+# ])
+# pp endpoints
+# Utrie.each_endpoint(atoms, Term.of(x: 3)) do |ep|
+#   pp ep
+# end
+
+# {% if flag?(:test_xgraph) %}
+#   atoms = MySet(1024).new
+
+#   nletters = 30
+#   nwords = 1000
+#   maxwordlen = 20
+#   nchoices = 300
+#   nepochs = 1000
+
+#   # Generate letters
+#   alphabet = [] of Atom
+#   (0...nletters).each do |letter|
+#     alphabet << Atom.of("#{letter}")
+#   end
+
+#   # Generate rules (words)
+#   words = {} of Atom => Array(Atom)
+
+#   (0...nwords).each do
+#     length = (1...maxwordlen).sample
+#     word = alphabet.sample(length)
+#     apex = Xgraph.mount(atoms, word)
+#     unless words.put?(apex, word)
+#       Log.debug { "generated duplicate word #{word}" }
+#       next
+#     end
+#   end
+
+#   nepochs.times do |epoch|
+#     puts "Epoch #{epoch}/#{nepochs} (#{((epoch/nepochs) * 100).round(2)}%)"
+#     # Pick N random words
+#     choices = words.sample(nchoices)
+
+#     expected = Set(Atom).new
+#     pool = Set(Atom).new
+
+#     choices.each do |word, letters|
+#       expected << word
+#       pool.concat(letters)
+#     end
+
+#     hit = Set(Atom).new
+#     dt = Time.measure do
+#       Xgraph.each_conjv(atoms, pool) do |conjv|
+#         hit << conjv
+#       end
+#     end
+
+#     expect expected.subset_of?(hit)
+
+#     puts "OK in #{dt.total_milliseconds}ms!"
+#   end
+# {% end %}
 
 # require "benchmark"
 
@@ -1862,7 +1921,7 @@ end
 # require "benchmark"
 
 
-set = MySet(1024).new
+set = MySet.new(1024)
 conid = WWID.next
 origin = conid
 aid0 = origin = origin.succ
@@ -1953,6 +2012,7 @@ AppearanceRegistry.each_appearance(set, nil, {
 end
 expect seen == Set{aid2}
 
+puts "OK"
 require "benchmark"
 
 {% skip_file %}

@@ -2911,4 +2911,11 @@ class DynamicBitArray
   end
 end
 
-
+struct Time
+  def self.measured(& : -> T) : {Time::Span, T} forall T
+    b = Time.monotonic
+    result = yield
+    e = Time.monotonic
+    {e - b, result}
+  end
+end
