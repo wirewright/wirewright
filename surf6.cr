@@ -91,78 +91,144 @@ end
 # is used to obtain successive WWIDs under that conid.
 #
 # ```text
-#                        randomness
-#                    -----------------
+#                   randomness              checksum
+#                 ---------------            -----
 #  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-#  -----------------                   -----------
-#  ms since 1 Jan 2025                    slot (client-defined sequ)
+#  --------------                -----------
+#  ms since 1 Jan 2025        slot (client-defined)
 # ```
 struct WWID
-  @@slot = Atomic(UInt32).new(0u32)
-
   WW_EPOCH = Time.utc(year: 2025, month: 1, day: 1)
-  WW_ORDER_MAX = 0xff_ff_ff_ff_ff_ffu64
-
   BYTESIZE = 16
 
-  def initialize(@raw : UInt128)
+  class ParseError < Exception
+  end
+
+  def initialize(@order : UInt64, @disorder : UInt64, @slot : UInt32)
   end
 
   # Generates a new WWID.
   def self.next : WWID
-    order = (Time.utc - WW_EPOCH).total_milliseconds.ceil.to_u128
-    if order > WW_ORDER_MAX
-      raise OverflowError.new("order overflow")
-    end
+    order = (Time.utc - WW_EPOCH).total_milliseconds.floor.to_u64
+    disorder = (0u64..U40_MAX).sample(Random::Secure)
 
-    disorder = Random::Secure.rand(UInt64)
-
-    new(raw: (order << 10*8) | (disorder << 4*8))
+    new(order, disorder, 0u32)
   end
 
-  def self.from_slice_be?(slice : Bytes) : WWID?
-    return unless slice.size == BYTESIZE
+  U40_MAX = 0xff_ff_ff_ff_ffu64
 
-    raw = IO::ByteFormat::BigEndian.decode(UInt128, slice)
+  def self.encode_u40_be(int : UInt64, target : Bytes) : Nil
+    if target.size < 5
+      raise ArgumentError.new("target too small to write u40")
+    end
 
-    instance = new(raw)
+    if int > U40_MAX
+      raise OverflowError.new("number exceeds u40 max")
+    end
 
-    now = Time.local
-    if now < instance.created_at # Order is in the future
-      return
+    scratch = uninitialized UInt8[8] # 64 bits
+
+    IO::ByteFormat::BigEndian.encode(int, scratch.to_slice)
+
+    encoding = scratch.to_slice[3, 5] # 40 least significant bits
+    encoding.copy_to(target)
+  end
+
+  def self.decode_u40_be(target : Bytes) : UInt64
+    if target.size < 5
+      raise ArgumentError.new("target too small to contain u40")
+    end
+
+    scratch = uninitialized UInt8[8] # 64 bits
+
+    # Initialize 3 high bytes to 0.
+    scratch[0] = 0
+    scratch[1] = 0
+    scratch[2] = 0
+
+    # Copy low 5 bytes.
+    target[0, 5].copy_to(scratch.to_slice + 3)
+
+    IO::ByteFormat::BigEndian.decode(UInt64, scratch.to_slice)
+  end
+
+  def self.from_slice_be(source : Bytes) : WWID?
+    unless source.size == BYTESIZE
+      raise ParseError.new("bytesize #{source.size} != #{BYTESIZE}")
+    end
+
+    offset = 0
+
+    order = decode_u40_be(source + offset)
+    offset += 5 # bytes
+
+    slot = IO::ByteFormat::BigEndian.decode(UInt32, source + offset)
+    offset += sizeof(UInt32)
+
+    disorder = decode_u40_be(source + offset)
+    offset += 5 # bytes
+
+    checksum0 = Digest::CRC16.checksum(source[0, offset])
+    checksum1 = IO::ByteFormat::BigEndian.decode(UInt16, source + offset)
+    offset += 2 # bytes
+
+    unless checksum0 == checksum1
+      raise ParseError.new("wrong checksum #{checksum1} (its) != #{checksum0} (my)")
+    end
+
+    instance = new(order, disorder, slot)
+
+    now = Time.utc
+    if now < instance.created_at
+      raise ParseError.new("id is from the future")
     end
 
     instance
   end
 
-  def to_slice_be(target = Bytes.new(16)) : Bytes
-    IO::ByteFormat::BigEndian.encode(@raw, target)
+  def to_slice_be(target = Bytes.new(BYTESIZE)) : Bytes
+    offset = 0
+
+    # The order is weird to allow the id to be sortable by raw bytes. We use
+    # a different order on the struct to have it properly aligned.
+
+    WWID.encode_u40_be(@order, target + offset)
+    offset += 5 # bytes
+
+    IO::ByteFormat::BigEndian.encode(@slot, target + offset)
+    offset += 4 # bytes
+
+    WWID.encode_u40_be(@disorder, target + offset)
+    offset += 5 # bytes
+
+    checksum = Digest::CRC16.checksum(target[0, offset])
+
+    IO::ByteFormat::BigEndian.encode(checksum, target + offset)
+    offset += 2 # bytes
 
     target
   end
 
   def created_at : Time
-    order = @raw >> (6*8 + 4*8)
-
-    WW_EPOCH + order.milliseconds
+    WW_EPOCH + @order.milliseconds
   end
 
   def with_slot(slot : UInt32)
-    WWID.new((@raw >> (4*8) << (4*8)) | slot)
+    WWID.new(@order, @disorder, slot)
   end
 
   def succ : WWID
-    if @raw & 0xff_ff_ff_ff == 0xff_ff_ff_ff
-      raise OverflowError.new("slot id overflow")
-    end
-
-    WWID.new(@raw &+ 1)
+    WWID.new(@order, @disorder, @slot + 1)
   end
 
   def inspect(io)
-    io << "#'"
-
-    @raw.to_s(io, base: 62, precision: 22)
+    io << "#("
+    @order.to_s(io, base: 32, precision: 9, upcase: true)
+    io << "|"
+    @disorder.to_s(io, base: 32, precision: 9, upcase: true)
+    io << "|"
+    @slot.to_s(io, base: 16, precision: 8)
+    io << ")"
   end
 end
 
@@ -1082,8 +1148,10 @@ module SensorRegistry
           # Decode sensor id
           sensor_slice = entry[key.size, WWID::BYTESIZE]
 
-          unless sensor = WWID.from_slice_be?(sensor_slice)
-            Log.debug { "reject entry: invalid or nonsensical sensor byte sequence: #{sensor_slice.hexstring}" }
+          begin
+            sensor = WWID.from_slice_be(sensor_slice)
+          rescue e : WWID::ParseError
+            Log.debug(exception: e) { "reject entry" }
             next
           end
 
@@ -1381,8 +1449,10 @@ module AppearanceRegistry
           entry = scratch.to_slice
           completion.final(entry)
 
-          unless appearance = WWID.from_slice_be?(entry)
-            Log.debug { "reject entry: invalid id byte sequence: #{entry.hexstring}" }
+          begin
+            appearance = WWID.from_slice_be(entry)
+          rescue e : WWID::ParseError
+            Log.debug(exception: e) { "reject entry" }
             next
           end
 
@@ -1692,91 +1762,91 @@ end
 
 Log.setup_from_env(default_level: :debug)
 
-tspace = MySet.new(4096)
+# tspace = MySet.new(4096)
 
-trunk = WWID.next
+# trunk = WWID.next
 
-puts "Generate appearances"
+# puts "Generate appearances"
 
-appearances = (0...1000).flat_map do |x|
-  (0...1000).map do |y|
-    Appearance.new(Term.of(type: "pixel", x: x, y: y, color: {rand(UInt8), rand(UInt8), rand(UInt8)}))
-  end
-end.to_readonly_slice
-
-puts "Insert appearances into termspace"
-
-wg = WaitGroup.new
-
-wg.spawn do
-  slot = 0u32
-  piece = appearances[0...250000]
-  piece.each_with_index do |appearance, index|
-    if slot % 1000 == 0
-      Log.debug { "fiber 1 #{(index/piece.size)*100}%" }
-    end
-    appearance.atoms_to(trunk.with_slot(slot), tspace)
-    slot += 1
-  end
-end
-
-wg.spawn do
-  slot = 250000u32
-  piece = appearances[250000...500000]
-  piece.each_with_index do |appearance, index|
-    if slot % 1000 == 0
-      Log.debug { "fiber 2 #{(index/piece.size)*100}%" }
-    end
-    appearance.atoms_to(trunk.with_slot(slot), tspace)
-    slot += 1
-  end
-end
-
-wg.spawn do
-  slot = 500000u32
-  piece = appearances[500000...750000]
-  piece.each_with_index do |appearance, index|
-    if slot % 1000 == 0
-      Log.debug { "fiber 3 #{(index/piece.size)*100}%" }
-    end
-    appearance.atoms_to(trunk.with_slot(slot), tspace)
-    slot += 1
-  end
-end
-
-wg.spawn do
-  slot = 750000u32
-  piece = appearances[750000...1000000]
-  piece.each_with_index do |appearance, index|
-    if slot % 1000 == 0
-      Log.debug { "fiber 4 #{(index/piece.size)*100}%" }
-    end
-    appearance.atoms_to(trunk.with_slot(slot), tspace)
-    slot += 1
-  end
-end
-
-wg.wait
-
-# appearances.each_with_index do |appearance, index|
-#   if index % 1000 == 0
-#     puts "Insert #{index}/#{appearances.size}"
+# appearances = (0...1000).flat_map do |x|
+#   (0...1000).map do |y|
+#     Appearance.new(Term.of(type: "pixel", x: x, y: y, color: {rand(UInt8), rand(UInt8), rand(UInt8)}))
 #   end
+# end.to_readonly_slice
 
+# puts "Insert appearances into termspace"
+
+# wg = WaitGroup.new
+
+# wg.spawn do
+#   slot = 0u32
+#   piece = appearances[0...250000]
+#   piece.each_with_index do |appearance, index|
+#     if slot % 1000 == 0
+#       Log.debug { "fiber 1 #{(index/piece.size)*100}%" }
+#     end
+#     appearance.atoms_to(trunk.with_slot(slot), tspace)
+#     slot += 1
+#   end
 # end
 
-puts "Done, 100x100 set cost is #{tspace.size}"
+# wg.spawn do
+#   slot = 250000u32
+#   piece = appearances[250000...500000]
+#   piece.each_with_index do |appearance, index|
+#     if slot % 1000 == 0
+#       Log.debug { "fiber 2 #{(index/piece.size)*100}%" }
+#     end
+#     appearance.atoms_to(trunk.with_slot(slot), tspace)
+#     slot += 1
+#   end
+# end
 
-s = Sensor.new(Term.of(color: {0, :_, :_}))
+# wg.spawn do
+#   slot = 500000u32
+#   piece = appearances[500000...750000]
+#   piece.each_with_index do |appearance, index|
+#     if slot % 1000 == 0
+#       Log.debug { "fiber 3 #{(index/piece.size)*100}%" }
+#     end
+#     appearance.atoms_to(trunk.with_slot(slot), tspace)
+#     slot += 1
+#   end
+# end
 
-100.times do
-dt, comp = Time.measured do
-  s.complements(tspace)
-end
+# wg.spawn do
+#   slot = 750000u32
+#   piece = appearances[750000...1000000]
+#   piece.each_with_index do |appearance, index|
+#     if slot % 1000 == 0
+#       Log.debug { "fiber 4 #{(index/piece.size)*100}%" }
+#     end
+#     appearance.atoms_to(trunk.with_slot(slot), tspace)
+#     slot += 1
+#   end
+# end
 
-pp comp
-puts "Took #{dt.total_milliseconds}ms"
-end
+# wg.wait
+
+# # appearances.each_with_index do |appearance, index|
+# #   if index % 1000 == 0
+# #     puts "Insert #{index}/#{appearances.size}"
+# #   end
+
+# # end
+
+# puts "Done, 100x100 set cost is #{tspace.size}"
+
+# s = Sensor.new(Term.of(color: {0, :_, :_}))
+
+# 100.times do
+# dt, comp = Time.measured do
+#   s.complements(tspace)
+# end
+
+# pp comp
+# puts "Took #{dt.total_milliseconds}ms"
+# end
 
 # while true
 #   puts "Enter sensor pattern ML"
