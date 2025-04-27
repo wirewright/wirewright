@@ -394,6 +394,75 @@ ST = Fiber::ExecutionContext::SingleThreaded.new("Meridium single-threaded")
 # :nodoc:
 MT = Fiber::ExecutionContext::MultiThreaded.new("Meridium multi-threaded", System.cpu_count.to_i)
 
+class Completion
+  OFFSET_BEGIN = 62u8
+  OFFSET_END   = 0u8
+
+  def initialize(@blocks = Slice(UInt64).empty, @block = 0u64, @offset = OFFSET_BEGIN)
+  end
+
+  def append(digit : UInt8) : Completion
+    offset = @offset
+
+    @block |= digit.to_u64 << offset
+
+    if offset == OFFSET_END
+      @blocks = @blocks.append(@block)
+      @block = 0u64
+      @offset = OFFSET_BEGIN
+    else
+      @offset -= 2 # one base-4 digit
+    end
+
+    self
+  end
+
+  def bytesize(key : Bytes, prefix : Bytes) : Int32
+    ntailbytes, ntailbits = (OFFSET_BEGIN - @offset).divmod(8)
+
+    key.size + prefix.size + @blocks.size*8 + ntailbytes + (ntailbits.zero? ? 0 : 1)
+  end
+
+  def final_to(target : Bytes, key : Bytes, prefix : Bytes) : Bytes
+    ntailbytes, ntailbits = (OFFSET_BEGIN - @offset).divmod(8)
+
+    cursor = target
+
+    cursor.copy_from(key)
+    cursor += key.size
+
+    cursor.copy_from(prefix)
+    cursor += prefix.size
+
+    @blocks.each do |block|
+      IO::ByteFormat::BigEndian.encode(block, cursor)
+      cursor += 8 # bytes
+    end
+
+    if ntailbytes + ntailbits > 0
+      scratch = uninitialized UInt8[8]
+
+      IO::ByteFormat::BigEndian.encode(@block, scratch.to_slice)
+
+      cursor.copy_from(scratch.to_slice[0, ntailbytes])
+      cursor += ntailbytes
+
+      if ntailbits > 0
+        cursor[0] = scratch[ntailbytes]
+        cursor += 1 # byte
+      end
+    end
+
+    target
+  end
+
+  def final(key : Bytes, prefix : Bytes) : Bytes
+    final_to(Bytes.new(bytesize(key, prefix)), key, prefix)
+  end
+
+  def_equals_and_hash @blocks, @block, @offset
+end
+
 # Implements an emergent *bytes multimap*: effectively a general-purpose digit
 # trie that can store any number of arbitrary byte sequences into an `Atom` set;
 # and can then complete any prefix up to all of the stored sequences with
@@ -467,74 +536,6 @@ module BytesMultimap
     h0
   end
 
-  # :nodoc:
-  #
-  # TODO: split *data* into blocks to avoid copying all data on clone. E.g.
-  # blocks of 4 bytes or 8 bytes etc. So that we only copy the last e.g. 8 bytes
-  # on clone and the blocks are only copied on block append.
-  record Completion, key = Bytes.empty, prefix = Bytes.empty, data = [] of UInt8, tip = 0u8, cursor = 0u8 do
-    def bytesize
-      key.size + prefix.size + data.size + (cursor.zero? ? 0 : 1)
-    end
-
-    def final
-      final(Bytes.new(bytesize))
-    end
-
-    def final(target : Bytes) : Bytes
-      entry = start = target
-
-      start.copy_from(key)
-      start += key.size
-
-      start.copy_from(prefix)
-      start += prefix.size
-
-      start.copy_from(data.to_readonly_slice)
-      start += data.size
-
-      unless cursor.zero?
-        start[0] = tip
-        start += 1
-      end
-
-      entry
-    end
-
-    def clone : Completion
-      copy_with(data: data.dup, tip: tip, cursor: cursor)
-    end
-
-    def append(digit : UInt8) : Completion
-      unless 0 <= digit <= 3
-        raise ArgumentError.new
-      end
-
-      tip, cursor = @tip, @cursor
-      tip |= digit << (6 - cursor)
-      cursor += 2 # one base-4 digit
-
-      if cursor == 8
-        @data << tip
-        tip = cursor = 0u8
-      end
-
-      copy_with(tip: tip, cursor: cursor)
-    end
-
-    def append_byte(byte : UInt8) : Completion
-      completion = self
-      offset = 6
-
-      while offset > 0
-        completion = append((byte >> offset) & 0b11)
-        offset -= 2
-      end
-
-      completion
-    end
-  end
-
   # Each exploration fiber is running this method.
   private def explore(wg, atoms, completion, h0 : Atom, fn : Completion, Atom ->) : Nil
     hasher = Blake3.new
@@ -558,7 +559,7 @@ module BytesMultimap
           next
         end
 
-        completion1 = completion.clone.append(digit)
+        completion1 = completion.dup.append(digit)
 
         wg.add
 
@@ -618,7 +619,7 @@ module BytesMultimap
       h0 = h(pointerof(hasher), h0, digit)
     end
 
-    completion0 = Completion.new(key, prefix)
+    completion0 = Completion.new
 
     wg = WaitGroup.new
     wg.add
@@ -629,7 +630,7 @@ module BytesMultimap
     wg.wait
   end
 
-  record Quad, a : Atom, b : Atom, c : Atom, d : Atom do
+  defcase Quad, a : Atom, b : Atom, c : Atom, d : Atom do
     include Enumerable(Atom)
 
     def each(& : Atom ->)
@@ -637,21 +638,29 @@ module BytesMultimap
     end
   end
 
-  # TODO: make into u8
-  record QuadMask, a : Bool, b : Bool, c : Bool, d : Bool do
+  record QuadMask, bits : UInt8 do
+    def self.new(a : Bool, b : Bool, c : Bool, d : Bool) : QuadMask
+      bits = 0u8
+      bits |= 0b1 if a
+      bits |= 0b10 if b
+      bits |= 0b100 if c
+      bits |= 0b1000 if d
+      new(bits)
+    end
+
     def none? : Bool
-      {a, b, c, d}.none?
+      bits.zero?
     end
 
     def select_with_digit(quad : Quad, & : Atom, UInt8 ->) : Nil
-      yield quad.a, 0u8 if a
-      yield quad.b, 1u8 if b
-      yield quad.c, 2u8 if c
-      yield quad.d, 3u8 if d
+      yield quad.a, 0u8 if bits.bit_set?(0)
+      yield quad.b, 1u8 if bits.bit_set?(1)
+      yield quad.c, 2u8 if bits.bit_set?(2)
+      yield quad.d, 3u8 if bits.bit_set?(3)
     end
 
     def &(other : QuadMask)
-      QuadMask.new(a && other.a, b && other.b, c && other.c, d && other.d)
+      QuadMask.new(bits & other.bits)
     end
   end
 
@@ -707,7 +716,7 @@ module BytesMultimap
       end
 
       mask.select_with_digit(quad) do |atom, digit|
-        arms << {completion.clone.append(digit), atom}
+        arms << {completion.dup.append(digit), atom}
       end
     end
 
@@ -1126,7 +1135,7 @@ module SensorRegistry
         # fiber/thread.
 
         BytesMultimap.complete(atoms, :sensor_registry, key, prefix: Bytes.empty, mt: mt) do |completion, _|
-          entry = completion.final
+          entry = completion.final(key, prefix: Bytes.empty)
 
           next if entry.size == key.size # No completions
 
@@ -1343,7 +1352,7 @@ module AppearanceRegistry
     wg.wait
   end
 
-  alias Row = {BytesMultimap::Completion, Atom}
+  alias Row = {Completion, Atom}
 
   private def bundleof(atoms, secret_slice : Bytes, strand : Array(Ubase::Any), mt : Bool) : Array(Row)
     prefix = upack(strand)
@@ -1359,7 +1368,7 @@ module AppearanceRegistry
       # this gap we have to complete 0, by an implicit mount-query consensus; there are
       # no explicit hints for us to do that in the set, so complete() terminates -- not
       # knowing what to do. We know, though -- we have to complete 0.
-      row = {BytesMultimap::Completion.new, BytesMultimap.append(atom, APPEARANCE_SET_GAP)}
+      row = {Completion.new, BytesMultimap.append(atom, APPEARANCE_SET_GAP)}
 
       lock.synchronize { bundle << row }
     end
@@ -1397,6 +1406,7 @@ module AppearanceRegistry
     hasher = Blake3.new
     marked = [] of Array(BytesMultimap::Marked)
     expanded = [] of Array(BytesMultimap::Expanded)
+    populations = [] of Set(Completion)
 
     (WWID::BYTESIZE*4 + 1).times do |ord|
       return if bundles.empty?
@@ -1418,9 +1428,9 @@ module AppearanceRegistry
         bundles.concat(marked) { |bundle| BytesMultimap.prune(bundle) }
 
         # Index for cheap intersection
-        populations = [] of Set(BytesMultimap::Completion)
-        bundles.each do |bundle|
-          populations << bundle.to_set { |completion, _| completion }
+        populations.clear
+        populations.concat(bundles) do |bundle|
+          bundle.to_set { |completion, _| completion }
         end
 
         # Select only those completions that are present in all other bundles.
@@ -1440,14 +1450,16 @@ module AppearanceRegistry
       marked.each do |bundle|
         # Dead-end completions at this point are valid completions. Process them.
         BytesMultimap.prune(bundle) do |completion|
-          unless completion.bytesize == WWID::BYTESIZE
-            Log.debug { "reject entry: unexpected entry bytesize #{completion.bytesize}" }
+          bytesize = completion.bytesize(key: Bytes.empty, prefix: Bytes.empty)
+          unless bytesize == WWID::BYTESIZE
+            pp completion
+            Log.debug { "reject entry: unexpected entry bytesize #{bytesize}" }
             next
           end
 
           scratch = uninitialized UInt8[WWID::BYTESIZE]
           entry = scratch.to_slice
-          completion.final(entry)
+          completion.final_to(entry, key: Bytes.empty, prefix: Bytes.empty)
 
           begin
             appearance = WWID.from_slice_be(entry)
@@ -1762,14 +1774,14 @@ end
 
 Log.setup_from_env(default_level: :debug)
 
-# tspace = MySet.new(4096)
+tspace = MySet.new(4096)
 
 # trunk = WWID.next
 
 # puts "Generate appearances"
 
-# appearances = (0...1000).flat_map do |x|
-#   (0...1000).map do |y|
+# appearances = (0...100).flat_map do |x|
+#   (0...100).map do |y|
 #     Appearance.new(Term.of(type: "pixel", x: x, y: y, color: {rand(UInt8), rand(UInt8), rand(UInt8)}))
 #   end
 # end.to_readonly_slice
@@ -1780,7 +1792,7 @@ Log.setup_from_env(default_level: :debug)
 
 # wg.spawn do
 #   slot = 0u32
-#   piece = appearances[0...250000]
+#   piece = appearances[0...2500]
 #   piece.each_with_index do |appearance, index|
 #     if slot % 1000 == 0
 #       Log.debug { "fiber 1 #{(index/piece.size)*100}%" }
@@ -1791,8 +1803,8 @@ Log.setup_from_env(default_level: :debug)
 # end
 
 # wg.spawn do
-#   slot = 250000u32
-#   piece = appearances[250000...500000]
+#   slot = 2500u32
+#   piece = appearances[2500...5000]
 #   piece.each_with_index do |appearance, index|
 #     if slot % 1000 == 0
 #       Log.debug { "fiber 2 #{(index/piece.size)*100}%" }
@@ -1803,8 +1815,8 @@ Log.setup_from_env(default_level: :debug)
 # end
 
 # wg.spawn do
-#   slot = 500000u32
-#   piece = appearances[500000...750000]
+#   slot = 5000u32
+#   piece = appearances[5000...7500]
 #   piece.each_with_index do |appearance, index|
 #     if slot % 1000 == 0
 #       Log.debug { "fiber 3 #{(index/piece.size)*100}%" }
@@ -1815,8 +1827,8 @@ Log.setup_from_env(default_level: :debug)
 # end
 
 # wg.spawn do
-#   slot = 750000u32
-#   piece = appearances[750000...1000000]
+#   slot = 7500u32
+#   piece = appearances[7500...10000]
 #   piece.each_with_index do |appearance, index|
 #     if slot % 1000 == 0
 #       Log.debug { "fiber 4 #{(index/piece.size)*100}%" }
@@ -1828,12 +1840,12 @@ Log.setup_from_env(default_level: :debug)
 
 # wg.wait
 
-# # appearances.each_with_index do |appearance, index|
-# #   if index % 1000 == 0
-# #     puts "Insert #{index}/#{appearances.size}"
-# #   end
+# # # appearances.each_with_index do |appearance, index|
+# # #   if index % 1000 == 0
+# # #     puts "Insert #{index}/#{appearances.size}"
+# # #   end
 
-# # end
+# # # end
 
 # puts "Done, 100x100 set cost is #{tspace.size}"
 
@@ -1867,46 +1879,47 @@ Log.setup_from_env(default_level: :debug)
 
 # {% skip_file %}
 
-# aid0 = trunk = trunk.succ
-# aid1 = trunk = trunk.succ
-# aid2 = trunk = trunk.succ
-# aid3 = trunk = trunk.succ
-# sid0 = trunk = trunk.succ
-# sid1 = trunk = trunk.succ
+trunk = WWID.next
+aid0 = trunk = trunk.succ
+aid1 = trunk = trunk.succ
+aid2 = trunk = trunk.succ
+aid3 = trunk = trunk.succ
+sid0 = trunk = trunk.succ
+sid1 = trunk = trunk.succ
 
-# s0 = Sensor.new(Term.of(type: "pixel", x: {:"%any", 0, 1}, y: :y_number))
-# s1 = Sensor.new(Term.of(type: "pixel", color: {:_, :_, 255}))
+s0 = Sensor.new(Term.of(type: "pixel", x: {:"%any", 0, 1}, y: :y_number))
+s1 = Sensor.new(Term.of(type: "pixel", color: {:_, :_, 255}))
 
-# a1 = Appearance.new(Term.of(type: "pixel", x: 0, y: 100, color: {255, 0, 0}))
-# a2 = Appearance.new(Term.of(type: "pixel", x: 1, y: 200, color: {0, 255, 0}))
-# a3 = Appearance.new(Term.of(type: "pixel", x: 2, y: 300, color: {0, 0, 255}))
-# a4 = Appearance.new(Term.of(type: "pixel", x: 0, y: 400, color: {255, 0, 255}))
+a1 = Appearance.new(Term.of(type: "pixel", x: 0, y: 100, color: {255, 0, 0}))
+a2 = Appearance.new(Term.of(type: "pixel", x: 1, y: 200, color: {0, 255, 0}))
+a3 = Appearance.new(Term.of(type: "pixel", x: 2, y: 300, color: {0, 0, 255}))
+a4 = Appearance.new(Term.of(type: "pixel", x: 0, y: 400, color: {255, 0, 255}))
 
-# dt = Time.measure do
-#   s0.atoms_to(sid0, atoms)
-#   s1.atoms_to(sid1, atoms)
-#   a1.atoms_to(aid0, atoms)
-#   a2.atoms_to(aid1, atoms)
-#   a3.atoms_to(aid2, atoms)
-#   a4.atoms_to(aid3, atoms)
+dt = Time.measure do
+  s0.atoms_to(sid0, tspace)
+  s1.atoms_to(sid1, tspace)
+  a1.atoms_to(aid0, tspace)
+  a2.atoms_to(aid1, tspace)
+  a3.atoms_to(aid2, tspace)
+  a4.atoms_to(aid3, tspace)
 
-#   scomps = s0.complements(atoms)
-#   expect scomps == Set{aid0, aid1, aid3}
+  scomps = s0.complements(tspace)
+  expect scomps == Set{aid0, aid1, aid3}
 
-#   scomps = s1.complements(atoms)
-#   expect scomps == Set{aid2, aid3}
+  scomps = s1.complements(tspace)
+  expect scomps == Set{aid2, aid3}
 
-#   acomps = a3.complements(atoms)
-#   expect acomps == Set{sid1}
+  acomps = a3.complements(tspace)
+  expect acomps == Set{sid1}
 
-#   acomps = a2.complements(atoms)
-#   expect acomps == Set{sid0}
+  acomps = a2.complements(tspace)
+  expect acomps == Set{sid0}
 
-#   acomps = a4.complements(atoms)
-#   expect acomps == Set{sid0, sid1}
-# end
+  acomps = a4.complements(tspace)
+  expect acomps == Set{sid0, sid1}
+end
 
-# puts "OK in #{dt.total_milliseconds}ms"
+puts "OK in #{dt.total_milliseconds}ms"
 
 # # acomps = a.complements(atoms)
 # # pp acomps
@@ -2085,7 +2098,6 @@ expect seen == Set{aid2}
 puts "OK"
 require "benchmark"
 
-{% skip_file %}
 Benchmark.ips do |x|
   x.report("do it") do
 # 1000.times do

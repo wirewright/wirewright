@@ -475,6 +475,10 @@ end
 # ^^^
 
 abstract struct Int
+  def bit_set?(index)
+    !bit(index).zero?
+  end
+
   def each_bit(&)
     if zero?
       yield 0
