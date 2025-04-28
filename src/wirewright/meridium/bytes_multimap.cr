@@ -45,11 +45,11 @@ module Ww::Meridium
     # since the majority of the time is spent hashing *data*, even a crude lock-protected
     # *atoms* set would do.
     def add(atoms : IAtomAppend, entity : Entity, key : Bytes, data : Bytes) : Atom
-      hasher = Atom::HASHER.new
+      hasher = Atom::Hasher.new
 
-      h0 = Meridium.h(pointerof(hasher))
-      h0 = Meridium.h(pointerof(hasher), h0, entity.value)
-      h0 = Meridium.h(pointerof(hasher), h0, key)
+      h0 = Meridium.h(hasher)
+      h0 = Meridium.h(hasher, h0, entity.value)
+      h0 = Meridium.h(hasher, h0, key)
 
       add(atoms, h0, data)
     end
@@ -72,10 +72,10 @@ module Ww::Meridium
     # ;; Where dataN is the Nth base-4 digit of *data*.
     # ```
     def append(h0 : Atom, data : Bytes, & : Atom ->) : Atom
-      hasher = Atom::HASHER.new
+      hasher = Atom::Hasher.new
 
       each_b4_digit(data) do |digit|
-        h0 = Meridium.h(pointerof(hasher), h0, digit)
+        h0 = Meridium.h(hasher, h0, digit)
 
         yield h0
       end
@@ -174,11 +174,11 @@ module Ww::Meridium
 
     # Each exploration fiber is running this method.
     private def explore(wg, atoms, completion, h0 : Atom, fn : Completion, Atom ->) : Nil
-      hasher = Atom::HASHER.new
+      hasher = Atom::Hasher.new
 
       loop do
         candidates = {0u8, 1u8, 2u8, 3u8}.map do |digit|
-          Meridium.h(pointerof(hasher), h0, digit.to_u8)
+          Meridium.h(hasher, h0, digit.to_u8)
         end
 
         first = nil
@@ -206,7 +206,6 @@ module Ww::Meridium
 
         unless first
           fn.call(completion, h0)
-          wg.done
           return
         end
 
@@ -216,22 +215,14 @@ module Ww::Meridium
         h0, digit = first
         completion = completion.append(digit)
       end
-    rescue e : Exception
-      # Crash gracefully (humph?!)
+    ensure
       wg.done
-      raise e
     end
 
     # Calls *fn* with each possible completion for *key*-*prefix* under the given
     # *entity*. See also: `bind`.
     #
-    # *mt* specifies whether to run under a multi-threaded or single-threaded
-    # fiber execution context.
-    #
-    # WARNING: *fn* will be called from another fiber, perhaps running on another
-    # thread if *mt* is `true` (it is by default). Thus make sure to either have
-    # fully compartmentalized *fn*, or *fn* that talks to the outside world in a
-    # thread-safe manner.
+    # WARNING: *fn* will be called from multiple fibers.
     #
     # The performance of this method in multi-threaded mode should *ideally*
     # be <no. of cpu cores>x vs. single-threaded; but this depends heavily on
@@ -241,25 +232,24 @@ module Ww::Meridium
     # with a lock). There's a lot of variables involved though, and we cannot
     # guarantee a lot (other than the underlying implementation is friendly toward
     # parallelization in general). As a general observation, it appears that the less
-    # values there are in the multimap, the more comparable *mt* becomes to *st*; which
-    # is actually expected, since the underlying algorithm adapts to the contents of
-    # the set.
+    # values there are in the multimap, the more comparable multi-threaded becomes to
+    # single-threaded; which is actually expected, since the underlying algorithm adapts
+    # to the contents of the set.
     def complete(
       atoms : IAtomsPresent,
       entity : Entity,
       key : Bytes,
-      prefix : Bytes, *,
-      mt : Bool,
+      prefix : Bytes,
       &fn : Completion, Atom ->
     ) : Nil
-      hasher = Atom::HASHER.new
+      hasher = Atom::Hasher.new
 
-      h0 = Meridium.h(pointerof(hasher))
-      h0 = Meridium.h(pointerof(hasher), h0, entity.value)
-      h0 = Meridium.h(pointerof(hasher), h0, key)
+      h0 = Meridium.h(hasher)
+      h0 = Meridium.h(hasher, h0, entity.value)
+      h0 = Meridium.h(hasher, h0, key)
 
       each_b4_digit(prefix) do |digit|
-        h0 = Meridium.h(pointerof(hasher), h0, digit)
+        h0 = Meridium.h(hasher, h0, digit)
       end
 
       completion0 = Completion.new
@@ -267,8 +257,7 @@ module Ww::Meridium
       wg = WaitGroup.new
       wg.add
 
-      ctx = mt ? MT : ST
-      ctx.spawn { explore(wg, atoms, completion0, h0, fn) }
+      spawn explore(wg, atoms, completion0, h0, fn)
 
       wg.wait
     end
@@ -311,12 +300,12 @@ module Ww::Meridium
 
     # Constructs a quad for *atom* by continuing it with each of the base-4 digits
     # separately. This results is four atoms -- a quad.
-    def quad(hasherptr, atom : Atom) : Quad
+    def quad(hasher, atom : Atom) : Quad
       Quad.new(
-        Meridium.h(hasherptr, atom, 0u8),
-        Meridium.h(hasherptr, atom, 1u8),
-        Meridium.h(hasherptr, atom, 2u8),
-        Meridium.h(hasherptr, atom, 3u8),
+        Meridium.h(hasher, atom, 0u8),
+        Meridium.h(hasher, atom, 1u8),
+        Meridium.h(hasher, atom, 2u8),
+        Meridium.h(hasher, atom, 3u8),
       )
     end
 
@@ -359,13 +348,13 @@ module Ww::Meridium
     #                                          └───────────────────────────┘  │
     #                                                                         ▼
     # ```
-    def expand(hasherptr, rows : Array(Row)) : Array(Expansion)
-      rows.map { |completion, atom| {completion, quad(hasherptr, atom)} }
+    def expand(hasher, rows : Array(Row)) : Array(Expansion)
+      rows.map { |completion, atom| {completion, quad(hasher, atom)} }
     end
 
     # Two dimensional version of `expand`.
-    def expand2d(hasherptr, rows2d : Array(Array(Row))) : Array(Array(Expansion))
-      rows2d.map { |rows| expand(hasherptr, rows) }
+    def expand2d(hasher, rows2d : Array(Array(Row))) : Array(Array(Expansion))
+      rows2d.map { |rows| expand(hasher, rows) }
     end
 
     # Represents a quad mask-marked `Expansion`.

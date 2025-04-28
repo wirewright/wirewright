@@ -55,23 +55,13 @@ module Ww::Meridium
 
     # Creates a record in the sensor registry, pointing each of *apexes* to
     # the given *sensor* under *secret*.
-    #
-    # *mt* specifies whether to run under a multi-threaded or single-threaded
-    # fiber execution context.
-    def register(
-      atoms : IAtomAppend,
-      secret : Term?,
-      apexes : Indexable(Atom),
-      sensor : WWID, *,
-      mt : Bool,
-    ) : Nil
+    def register(atoms : IAtomAppend, secret : Term?, apexes : Indexable(Atom), sensor : WWID) : Nil
       secret_slice = Meridium.secret_to_bytes(secret)
 
       wg = WaitGroup.new(apexes.size)
-      ctx = mt ? MT : ST
 
       apexes.each do |apex|
-        ctx.spawn do
+        spawn do
           register1(atoms, secret_slice, apex, sensor)
         ensure
           wg.done
@@ -81,7 +71,7 @@ module Ww::Meridium
       wg.wait
     end
 
-    private def complete1(atoms, secret_slice, apex, mt, fn) : Nil
+    private def complete1(atoms, secret_slice, apex, fn) : Nil
       key = cursor = Bytes.new(secret_slice.size + Atom::BYTESIZE)
 
       cursor.copy_from(secret_slice)
@@ -94,7 +84,7 @@ module Ww::Meridium
       # it from complete() callback which could be called from another
       # fiber/thread.
 
-      BytesMM.complete(atoms, :sensor_registry, key, prefix: Bytes.empty, mt: mt) do |completion, _|
+      BytesMM.complete(atoms, :sensor_registry, key, prefix: Bytes.empty) do |completion, _|
         entry = completion.final(key, prefix: Bytes.empty)
 
         next if entry.size == key.size # No completions
@@ -132,28 +122,15 @@ module Ww::Meridium
     # Calls *fn* with each sensor registered at each of *apexes* under *secret*.
     # Sensors may repeat if one sensor is registered at multiple *apexes*.
     #
-    # *mt* specifies whether to run under a multi-threaded or single-threaded
-    # fiber execution context.
-    #
-    # WARNING: *fn* will be called from another fiber, perhaps running on another
-    # thread if *mt* is `true` (it is by default). Thus make sure to either have
-    # fully compartmentalized *fn*, or *fn* that talks to the outside world in a
-    # thread-safe manner.
-    def each_sensor(
-      atoms : IAtomsPresent,
-      secret : Term?,
-      apexes : Indexable(Atom), *,
-      mt : Bool,
-      &fn : WWID ->
-    ) : Nil
+    # WARNING: *fn* will be called from multiple fibers.
+    def each_sensor(atoms : IAtomsPresent, secret : Term?, apexes : Indexable(Atom), &fn : WWID ->) : Nil
       secret_slice = Meridium.secret_to_bytes(secret)
 
-      ctx = mt ? MT : ST
       wg = WaitGroup.new(apexes.size)
 
       apexes.each do |apex|
-        ctx.spawn do
-          complete1(atoms, secret_slice, apex, mt, fn)
+        spawn do
+          complete1(atoms, secret_slice, apex, fn)
         ensure
           wg.done
         end

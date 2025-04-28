@@ -1,5 +1,9 @@
 version: 2.0
 shards:
+  blake3:
+    git: https://github.com/didactic-drunk/blake3.cr.git
+    version: 1.1.0
+
   brotli:
     git: https://github.com/naqvis/brotli.cr.git
     version: 0.1.5

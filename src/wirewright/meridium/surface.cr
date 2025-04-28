@@ -19,13 +19,10 @@ module Ww::Meridium
     # This can be used for e.g. refcounting (instead of using a set, you can use
     # a multiset and have much less disruptive removals later on).
     #
-    # *mt* specifies whether to run under a multi-threaded or single-threaded
-    # fiber execution context.
-    #
     # WARNING: *sink* must be thread-safe -- it will be called from multiple fibers.
     # If you don't want to be bothered with thread-safety, use `atom_set` which
-    # returns a set of atoms and does the thread-safety stuff for you.
-    abstract def each_atom(instant : WWID, *, mt : Bool, &sink : Atom ->) : Nil
+    # returns a set of complements and does the thread-safety stuff for you.
+    abstract def each_atom(instant : WWID, &sink : Atom ->) : Nil
 
     # Appends the atoms that constitute `self` to *object*.
     #
@@ -59,13 +56,10 @@ module Ww::Meridium
     # - For a sensor, its *complements* are appearances that the sensor is excited by.
     # - For an appearance, its *complements* are sensors that the appearance excites.
     #
-    # *mt* specifies whether to run under a multi-threaded or single-threaded
-    # fiber execution context.
-    #
     # WARNING: *sink* must be thread-safe -- it will be called from multiple fibers.
     # If you don't want to be bothered with thread-safety, use `complement_set` which
     # returns a set of complements and does the thread-safety stuff for you.
-    abstract def each_complement(atoms : IAtomsPresent, *, mt : Bool, &sink : WWID ->) : Nil
+    abstract def each_complement(atoms : IAtomsPresent, &sink : WWID ->) : Nil
 
     # Returns the set of complements for `self` in the termspace.
     #
@@ -214,23 +208,22 @@ module Ww::Meridium
       new(pattern, secret, branches)
     end
 
-    def each_atom(instant : WWID, *, mt : Bool, &sink : Atom ->) : Nil
+    def each_atom(instant : WWID, &sink : Atom ->) : Nil
       atoms = AtomSink.new(sink)
 
       if @branches.size == 1
         strands = @branches[0]
-        endpoints = Utrie.mount(atoms, strands, mt: mt)
+        endpoints = Utrie.mount(atoms, strands)
         apexes = {Xgraph.mount(atoms, endpoints)}
       else
         wg = WaitGroup.new(@branches.size)
-        ctx = mt ? MT : ST
 
         apexes = [] of Atom
         lock = Mutex.new
 
         @branches.each do |strands|
-          ctx.spawn do
-            endpoints = Utrie.mount(atoms, strands, mt: mt)
+          spawn do
+            endpoints = Utrie.mount(atoms, strands)
             apex = Xgraph.mount(atoms, endpoints)
 
             lock.synchronize { apexes << apex }
@@ -242,22 +235,21 @@ module Ww::Meridium
         wg.wait
       end
 
-      SensorRegistry.register(atoms, @secret, apexes, instant, mt: mt)
+      SensorRegistry.register(atoms, @secret, apexes, instant)
     end
 
-    def each_complement(atoms : IAtomsPresent, *, mt : Bool, &sink : WWID ->) : Nil
+    def each_complement(atoms : IAtomsPresent, &sink : WWID ->) : Nil
       if @branches.size == 1
         strands = @branches[0]
-        AppearanceRegistry.each_appearance(atoms, @secret, strands, mt: mt, &sink)
+        AppearanceRegistry.each_appearance(atoms, @secret, strands, &sink)
         return
       end
 
       wg = WaitGroup.new(@branches.size)
-      ctx = mt ? MT : ST
 
       @branches.each do |strands|
-        ctx.spawn do
-          AppearanceRegistry.each_appearance(atoms, @secret, strands, mt: mt, &sink)
+        spawn do
+          AppearanceRegistry.each_appearance(atoms, @secret, strands, &sink)
         ensure
           wg.done
         end
@@ -281,15 +273,15 @@ module Ww::Meridium
     def initialize(@value : Term, @secret : Term? = nil)
     end
 
-    def each_atom(instant : WWID, *, mt : Bool, &sink : Atom ->) : Nil
-      AppearanceRegistry.mount(AtomSink.new(sink), @secret, @value, instant, mt: mt)
+    def each_atom(instant : WWID, &sink : Atom ->) : Nil
+      AppearanceRegistry.mount(AtomSink.new(sink), @secret, @value, instant)
     end
 
-    def each_complement(atoms : IAtomsPresent, *, mt : Bool, &sink : WWID ->) : Nil
+    def each_complement(atoms : IAtomsPresent, &sink : WWID ->) : Nil
       hits = Utrie.endpoints(atoms, @value)
-      conjvs = Xgraph.conjvs(atoms, hits, mt: mt)
+      conjvs = Xgraph.conjvs(atoms, hits)
 
-      SensorRegistry.each_sensor(atoms, @secret, conjvs, mt: mt, &sink)
+      SensorRegistry.each_sensor(atoms, @secret, conjvs, &sink)
     end
   end
 end

@@ -27,7 +27,7 @@ module Ww::Meridium
     #              abcdcdde [apex]
     # ```
     def mount(atoms : IAtomAppend, conj : Enumerable(Atom)) : Atom
-      hasher = Atom::HASHER.new
+      hasher = Atom::Hasher.new
 
       gen0 = conj.to_a(&.itself)
       gen1 = [] of Atom
@@ -45,7 +45,7 @@ module Ww::Meridium
             u = gen0[cursor - 1]
           end
 
-          atom = Meridium.h(pointerof(hasher), :xgraph, u, v)
+          atom = Meridium.h(hasher, :xgraph, u, v)
           gen1 << atom
           atoms << atom
 
@@ -59,8 +59,8 @@ module Ww::Meridium
       gen0.first # apex
     end
 
-    private def explore(wg, atoms, u, vs, gen1, lock) : Nil
-      hasher = Atom::HASHER.new
+    private def explore(atoms, u, vs, gen1, lock) : Nil
+      hasher = Atom::Hasher.new
 
       # NOTE: we assume here that allocation is more expensive than hashing.
       # Whether it actually is I'm not sure; I guess it depends on how many
@@ -69,13 +69,13 @@ module Ww::Meridium
       # the negative hashes -- good.
 
       answer = atoms.present?(vs) do |v|
-        Meridium.h(pointerof(hasher), :xgraph, u, v)
+        Meridium.h(hasher, :xgraph, u, v)
       end
 
       answer.each_with_index do |exists, index|
         next unless exists
 
-        atom = Meridium.h(pointerof(hasher), :xgraph, u, vs[index])
+        atom = Meridium.h(hasher, :xgraph, u, vs[index])
 
         lock.synchronize { gen1 << atom }
       end
@@ -86,20 +86,11 @@ module Ww::Meridium
     # is your responsibility to track and check that, if necessary. Note that this
     # method may yield a lot of atoms; how much depends on the size of *hits* and
     # the exhaustiveness of the Xgraph in *atoms*.
-    #
-    # *mt* specifies whether to run under a multi-threaded or single-threaded
-    # fiber execution context.
-    def each_conjv(
-      atoms : IAtomsPresent,
-      hits : Enumerable(Atom), *,
-      mt : Bool,
-      & : Atom ->
-    ) : Nil
+    def each_conjv(atoms : IAtomsPresent, hits : Enumerable(Atom), & : Atom ->) : Nil
       gen0 = hits.to_a(&.itself)
       gen1 = [] of Atom
 
       wg = WaitGroup.new
-      ctx = mt ? MT : ST
       lock = Mutex.new
 
       while gen0.size > 1
@@ -112,8 +103,8 @@ module Ww::Meridium
           u = gen0[index]
           vs = gen0.to_readonly_slice[index + 1..]
 
-          ctx.spawn do
-            explore(wg, atoms, u, vs, gen1, lock)
+          spawn do
+            explore(atoms, u, vs, gen1, lock)
           ensure
             wg.done
           end

@@ -1,9 +1,8 @@
 require "./src/wirewright"
-require "log"
-require "./blake3"
-require "digest"
-require "wait_group"
+require "benchmark"
 
+alias Ubase = Meridium::Ubase
+alias WWID = Meridium::WWID
 # LATER: protect BytesMM, and Xgraph from lying sets by emitting two
 # types of sanity check queries:
 # - Since we have Entity already we can introduce NegXgraph NegSensorRegistry etc.,
@@ -62,8 +61,6 @@ class MySet
 end
 
 Log.setup_from_env(default_level: :debug)
-
-tspace = MySet.new(4096)
 
 # trunk = WWID.new
 
@@ -168,47 +165,52 @@ tspace = MySet.new(4096)
 
 # {% skip_file %}
 
-trunk = WWID.new
-aid0 = trunk = trunk.succ
-aid1 = trunk = trunk.succ
-aid2 = trunk = trunk.succ
-aid3 = trunk = trunk.succ
-sid0 = trunk = trunk.succ
-sid1 = trunk = trunk.succ
+wg = WaitGroup.new(1)
+ctx = Fiber::ExecutionContext::MultiThreaded.new("main", 4)
+ctx.spawn do
+  tspace = MySet.new(4096)
 
-s0 = Meridium::Sensor.new(Term.of(type: "pixel", x: {:"%any", 0, 1}, y: :y_number))
-s1 = Meridium::Sensor.new(Term.of(type: "pixel", color: {:_, :_, 255}))
+  trunk = WWID.new
+  aid0 = trunk = trunk.succ
+  aid1 = trunk = trunk.succ
+  aid2 = trunk = trunk.succ
+  aid3 = trunk = trunk.succ
+  sid0 = trunk = trunk.succ
+  sid1 = trunk = trunk.succ
 
-a1 = Meridium::Appearance.new(Term.of(type: "pixel", x: 0, y: 100, color: {255, 0, 0}))
-a2 = Meridium::Appearance.new(Term.of(type: "pixel", x: 1, y: 200, color: {0, 255, 0}))
-a3 = Meridium::Appearance.new(Term.of(type: "pixel", x: 2, y: 300, color: {0, 0, 255}))
-a4 = Meridium::Appearance.new(Term.of(type: "pixel", x: 0, y: 400, color: {255, 0, 255}))
+  s0 = Meridium::Sensor.new(Term.of(type: "pixel", x: {:"%any", 0, 1}, y: :y_number))
+  s1 = Meridium::Sensor.new(Term.of(type: "pixel", color: {:_, :_, 255}))
 
-dt = Time.measure do
-  s0.atoms_to(sid0, tspace, mt: true)
-  s1.atoms_to(sid1, tspace, mt: true)
-  a1.atoms_to(aid0, tspace, mt: true)
-  a2.atoms_to(aid1, tspace, mt: true)
-  a3.atoms_to(aid2, tspace, mt: true)
-  a4.atoms_to(aid3, tspace, mt: true)
+  a1 = Meridium::Appearance.new(Term.of(type: "pixel", x: 0, y: 100, color: {255, 0, 0}))
+  a2 = Meridium::Appearance.new(Term.of(type: "pixel", x: 1, y: 200, color: {0, 255, 0}))
+  a3 = Meridium::Appearance.new(Term.of(type: "pixel", x: 2, y: 300, color: {0, 0, 255}))
+  a4 = Meridium::Appearance.new(Term.of(type: "pixel", x: 0, y: 400, color: {255, 0, 255}))
 
-  scomps = s0.complement_set(tspace, mt: true)
-  expect scomps == Set{aid0, aid1, aid3}
+  dt = Time.measure do
+    s0.atoms_to(sid0, tspace)
+    s1.atoms_to(sid1, tspace)
+    a1.atoms_to(aid0, tspace)
+    a2.atoms_to(aid1, tspace)
+    a3.atoms_to(aid2, tspace)
+    a4.atoms_to(aid3, tspace)
 
-  scomps = s1.complement_set(tspace, mt: true)
-  expect scomps == Set{aid2, aid3}
+    scomps = s0.complement_set(tspace)
+    expect scomps == Set{aid0, aid1, aid3}
 
-  acomps = a3.complement_set(tspace, mt: true)
-  expect acomps == Set{sid1}
+    scomps = s1.complement_set(tspace)
+    expect scomps == Set{aid2, aid3}
 
-  acomps = a2.complement_set(tspace, mt: true)
-  expect acomps == Set{sid0}
+    acomps = a3.complement_set(tspace)
+    expect acomps == Set{sid1}
 
-  acomps = a4.complement_set(tspace, mt: true)
-  expect acomps == Set{sid0, sid1}
-end
+    acomps = a2.complement_set(tspace)
+    expect acomps == Set{sid0}
 
-puts "OK in #{dt.total_milliseconds}ms"
+    acomps = a4.complement_set(tspace)
+    expect acomps == Set{sid0, sid1}
+  end
+
+  puts "OK in #{dt.total_milliseconds}ms"
 
 # # acomps = a.complement_set(atoms)
 # # pp acomps
@@ -291,115 +293,113 @@ puts "OK in #{dt.total_milliseconds}ms"
 #   end
 # end
 # require "benchmark"
+  set = MySet.new(1024)
+  conid = WWID.new
+  origin = conid
+  aid0 = origin = origin.succ
+  aid1 = origin = origin.succ
+  aid2 = origin = origin.succ
 
-set = MySet.new(1024)
-conid = WWID.new
-origin = conid
-aid0 = origin = origin.succ
-aid1 = origin = origin.succ
-aid2 = origin = origin.succ
+  pp! aid0
+  pp! aid1
+  pp! aid2
 
-pp! aid0
-pp! aid1
-pp! aid2
+  lock = Mutex.new
 
-require "benchmark"
+  Meridium::AppearanceRegistry.mount(set, nil, Term.of(:add, 1, 2, 3, 4, 5), aid0)
+  Meridium::AppearanceRegistry.mount(set, nil, Term.of(:sub, 1, 2), aid1)
+  Meridium::AppearanceRegistry.mount(set, nil, Term.of(:sub, "hello", 4), aid2)
 
-lock = Mutex.new
+  # _
+  seen = Set(WWID).new
+  Meridium::AppearanceRegistry.each_appearance(set, nil, [[Ubase::Begin.new]]) do |aid|
+    lock.synchronize { seen << aid }
+  end
+  expect seen == Set{aid0, aid1, aid2}
 
-alias Ubase = Meridium::Ubase
-alias WWID = Meridium::WWID
-Meridium::AppearanceRegistry.mount(set, nil, Term.of(:add, 1, 2, 3, 4, 5), aid0, mt: true)
-Meridium::AppearanceRegistry.mount(set, nil, Term.of(:sub, 1, 2), aid1, mt: true)
-Meridium::AppearanceRegistry.mount(set, nil, Term.of(:sub, "hello", 4), aid2, mt: true)
+  # _dict
+  seen = Set(WWID).new
+  Meridium::AppearanceRegistry.each_appearance(set, nil, [[Ubase::Begin.new, Ubase::IsDict.new]]) do |aid|
+    lock.synchronize { seen << aid }
+  end
+  expect seen == Set{aid0, aid1, aid2}
 
-# _
-seen = Set(WWID).new
-Meridium::AppearanceRegistry.each_appearance(set, nil, [[Ubase::Begin.new]], mt: true) do |aid|
-  lock.synchronize { seen << aid }
-end
-expect seen == Set{aid0, aid1, aid2}
+  # (_)
+  seen = Set(WWID).new
+  Meridium::AppearanceRegistry.each_appearance(set, nil, [[Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(0))]]) do |aid|
+    lock.synchronize { seen << aid }
+  end
+  expect seen == Set{aid0, aid1, aid2}
 
-# _dict
-seen = Set(WWID).new
-Meridium::AppearanceRegistry.each_appearance(set, nil, [[Ubase::Begin.new, Ubase::IsDict.new]], mt: true) do |aid|
-  lock.synchronize { seen << aid }
-end
-expect seen == Set{aid0, aid1, aid2}
+  # (_symbol)
+  seen = Set(WWID).new
+  Meridium::AppearanceRegistry.each_appearance(set, nil, [[Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(0)), Ubase::IsSym.new]]) do |aid|
+    lock.synchronize { seen << aid }
+  end
+  expect seen == Set{aid0, aid1, aid2}
 
-# (_)
-seen = Set(WWID).new
-Meridium::AppearanceRegistry.each_appearance(set, nil, [[Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(0))]], mt: true) do |aid|
-  lock.synchronize { seen << aid }
-end
-expect seen == Set{aid0, aid1, aid2}
+  # (add)
+  seen = Set(WWID).new
+  Meridium::AppearanceRegistry.each_appearance(set, nil, [[Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(0)), Ubase::IsSym.new, Ubase::Literal.new(Term.of(:add))]]) do |aid|
+    lock.synchronize { seen << aid }
+  end
+  expect seen == Set{aid0}
 
-# (_symbol)
-seen = Set(WWID).new
-Meridium::AppearanceRegistry.each_appearance(set, nil, [[Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(0)), Ubase::IsSym.new]], mt: true) do |aid|
-  lock.synchronize { seen << aid }
-end
-expect seen == Set{aid0, aid1, aid2}
+  # (sub)
+  seen = Set(WWID).new
+  Meridium::AppearanceRegistry.each_appearance(set, nil, [[Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(0)), Ubase::IsSym.new, Ubase::Literal.new(Term.of(:sub))]]) do |aid|
+    lock.synchronize { seen << aid }
+  end
+  expect seen == Set{aid1, aid2}
 
-# (add)
-seen = Set(WWID).new
-Meridium::AppearanceRegistry.each_appearance(set, nil, [[Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(0)), Ubase::IsSym.new, Ubase::Literal.new(Term.of(:add))]], mt: true) do |aid|
-  lock.synchronize { seen << aid }
-end
-expect seen == Set{aid0}
+  # (sub _)
+  seen = Set(WWID).new
+  Meridium::AppearanceRegistry.each_appearance(set, nil, [
+    [Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(0)), Ubase::IsSym.new, Ubase::Literal.new(Term.of(:sub))],
+    [Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(1))],
+  ]) do |aid|
+    lock.synchronize { seen << aid }
+  end
+  expect seen == Set{aid1, aid2}
 
-# (sub)
-seen = Set(WWID).new
-Meridium::AppearanceRegistry.each_appearance(set, nil, [[Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(0)), Ubase::IsSym.new, Ubase::Literal.new(Term.of(:sub))]], mt: true) do |aid|
-  lock.synchronize { seen << aid }
-end
-expect seen == Set{aid1, aid2}
+  # (sub _number)
+  seen = Set(WWID).new
+  Meridium::AppearanceRegistry.each_appearance(set, nil, [
+    [Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(0)), Ubase::IsSym.new, Ubase::Literal.new(Term.of(:sub))],
+    [Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(1)), Ubase::IsNum.new],
+  ]) do |aid|
+    lock.synchronize { seen << aid }
+  end
+  expect seen == Set{aid1}
 
-# (sub _)
-seen = Set(WWID).new
-Meridium::AppearanceRegistry.each_appearance(set, nil, [
-  [Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(0)), Ubase::IsSym.new, Ubase::Literal.new(Term.of(:sub))],
-  [Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(1))],
-], mt: true) do |aid|
-  lock.synchronize { seen << aid }
-end
-expect seen == Set{aid1, aid2}
+  # (sub _string)
+  seen = Set(WWID).new
+  Meridium::AppearanceRegistry.each_appearance(set, nil, [
+    [Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(0)), Ubase::IsSym.new, Ubase::Literal.new(Term.of(:sub))],
+    [Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(1)), Ubase::IsStr.new],
+  ]) do |aid|
+    lock.synchronize { seen << aid }
+  end
+  expect seen == Set{aid2}
 
-# (sub _number)
-seen = Set(WWID).new
-Meridium::AppearanceRegistry.each_appearance(set, nil, [
-  [Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(0)), Ubase::IsSym.new, Ubase::Literal.new(Term.of(:sub))],
-  [Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(1)), Ubase::IsNum.new],
-], mt: true) do |aid|
-  lock.synchronize { seen << aid }
-end
-expect seen == Set{aid1}
+  puts "OK"
 
-# (sub _string)
-seen = Set(WWID).new
-Meridium::AppearanceRegistry.each_appearance(set, nil, [
-  [Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(0)), Ubase::IsSym.new, Ubase::Literal.new(Term.of(:sub))],
-  [Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(1)), Ubase::IsStr.new],
-], mt: true) do |aid|
-  lock.synchronize { seen << aid }
-end
-expect seen == Set{aid2}
-
-puts "OK"
-require "benchmark"
-
-Benchmark.ips do |x|
-  x.report("do it") do
-    # # 1000.times do
-    seen = Set(WWID).new
-    Meridium::AppearanceRegistry.each_appearance(set, nil, [
-      [Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(0)), Ubase::IsSym.new, Ubase::Literal.new(Term.of(:sub))],
-      [Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(1)), Ubase::IsStr.new],
-    ], mt: true) do |aid|
-      lock.synchronize { seen << aid }
+  Benchmark.ips do |x|
+    x.report("do it") do
+      seen = Set(WWID).new
+      Meridium::AppearanceRegistry.each_appearance(set, nil, [
+        [Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(0)), Ubase::IsSym.new, Ubase::Literal.new(Term.of(:sub))],
+        [Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(1)), Ubase::IsStr.new],
+      ]) do |aid|
+        lock.synchronize { seen << aid }
+      end
     end
   end
-end
+    ensure
+      wg.done
+    end
+wg.wait
+# end
 
 #   end
 # end

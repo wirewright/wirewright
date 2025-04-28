@@ -65,9 +65,11 @@ module Ww::Meridium
   end
 
   module Ubase
+    extend self
+
     # Converts *keypath* and *leaf* (produced by e.g. `Term.each_keypath_and_leaf`)
     # to a strand of ubases.
-    def self.strand(keypath : Stack(Term), leaf : Term) : Strand
+    def strand(keypath : Stack(Term), leaf : Term) : Strand
       strand = [] of Ubase::Any
       strand << Ubase::Begin.new
 
@@ -90,24 +92,24 @@ module Ww::Meridium
     end
 
     # :nodoc:
-    def self.upack(io, ubase : Ubase::Begin) : Nil
+    def upack(io, ubase : Ubase::Begin) : Nil
       io.write_byte(Uopcode::Begin.value)
     end
 
     # :nodoc:
-    def self.upack(io, ubase : Ubase::End) : Nil
+    def upack(io, ubase : Ubase::End) : Nil
     end
 
     {% for base in %w[IsSym IsStr IsNum IsBool IsDict] %}
       # :nodoc:
-      def self.upack(io, ubase : Ubase::{{base.id}}) : Nil
+      def upack(io, ubase : Ubase::{{base.id}}) : Nil
         io.write_byte(Uopcode::{{base.id}}.value)
       end
     {% end %}
 
     {% for base in %w[At Literal] %}
       # :nodoc:
-      def self.upack(io, ubase : Ubase::{{base.id}}) : Nil
+      def upack(io, ubase : Ubase::{{base.id}}) : Nil
         if ML.compact_bytesize(ubase.term) <= Atom::BYTESIZE
           io.write_byte(Uopcode::Quoted{{base.id}}.value)
 
@@ -115,7 +117,7 @@ module Ww::Meridium
         else
           io.write_byte(Uopcode::Hashed{{base.id}}.value)
 
-          hasher = Atom::HASHER.new
+          hasher = Atom::Hasher.new
           scratch = uninitialized UInt8[Atom::BYTESIZE]
           updater = IO::ByteStream.new { |slice| hasher.update(slice) }
 
@@ -130,12 +132,12 @@ module Ww::Meridium
 
     {% if flag?(:docs) %}
       # Appends the **lossily** packed, encoded version of *ubase* to *io*.
-      def self.upack(io, ubase : Ubase::Any) : Nil
+      def upack(io, ubase : Ubase::Any) : Nil
       end
     {% end %}
 
     # Returns a byteslice for the **lossily** packed, encoded version of *strand*.
-    def self.upack(strand : Strand) : Bytes
+    def upack(strand : Strand) : Bytes
       io = IO::Memory.new
       strand.each do |base|
         upack(io, base)
@@ -143,37 +145,32 @@ module Ww::Meridium
       io.to_slice
     end
 
-    # :nodoc:
-    def self.update(hasherptr, ubase : Ubase::Begin) : Nil
-      hasherptr.value.update(Uopcode::Begin.value)
-    end
-
-    # :nodoc:
-    def self.update(hasherptr, ubase : Ubase::End) : Nil
-      hasherptr.value.update(Uopcode::End.value)
-    end
-
-    {% for base in %w[IsSym IsStr IsNum IsBool IsDict] %}
+    {% for base in %w[Begin End IsSym IsStr IsNum IsBool IsDict] %}
       # :nodoc:
-      def self.update(hasherptr, ubase : Ubase::{{base.id}}) : Nil
-        hasherptr.value.update(Uopcode::{{base.id}}.value)
+      def update(hasher, ubase : Ubase::{{base.id}}) : Nil
+        scratch = uninitialized UInt8[1]
+        scratch[0] = Uopcode::{{base.id}}.value
+
+        hasher.update(scratch.to_slice)
       end
     {% end %}
 
     {% for base in %w[At Literal] %}
       # :nodoc:
-      def self.update(hasherptr, ubase : Ubase::{{base.id}}) : Nil
-        hasherptr.value.update(Uopcode::Hashed{{base.id}}.value)
+      def update(hasher, ubase : Ubase::{{base.id}}) : Nil
+        scratch = uninitialized UInt8[1]
+        scratch[0] = Uopcode::Hashed{{base.id}}.value
+        hasher.update(scratch.to_slice)
 
-        digestion = IO::ByteStream.new { |slice| hasherptr.value.update(slice) }
+        digester = IO::ByteStream.new { |slice| hasher.update(slice) }
 
-        ML.compact(digestion, ubase.term)
+        ML.compact(digester, ubase.term)
       end
     {% end %}
 
     {% if flag?(:docs) %}
-      # Updates the hasher (e.g. `Blake3`) pointed to by *hasherptr* with *ubase*.
-      def self.update(hasherptr : Pointer, ubase : Ubase::Any) : Nil
+      # Updates the hasher (e.g. `Blake3`) pointed to by *hasher* with *ubase*.
+      def update(hasher : Pointer, ubase : Ubase::Any) : Nil
       end
     {% end %}
   end

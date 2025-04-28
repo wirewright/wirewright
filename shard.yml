@@ -18,6 +18,8 @@ dependencies:
     github: kostya/simple_rpc
   brotli:
     github: naqvis/brotli.cr
+  blake3:
+    github: didactic-drunk/blake3.cr
 # dependencies:
 #   pg:
 #     github: will/crystal-pg

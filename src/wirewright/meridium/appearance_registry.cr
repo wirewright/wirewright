@@ -36,30 +36,15 @@ module Ww::Meridium
     end
 
     # Subscribes *appearance* to sensors perceiving *value* under *secret*.
-    #
-    # *mt* specifies whether to run under a multi-threaded or single-threaded
-    # fiber execution context.
-    def mount(
-      atoms : IAtomAppend,
-      secret : Term?,
-      value : Term,
-      appearance : WWID, *,
-      mt : Bool,
-    ) : Nil
+    def mount(atoms : IAtomAppend, secret : Term?, value : Term, appearance : WWID) : Nil
       secret_slice = Meridium.secret_to_bytes(secret)
 
-      ctx = mt ? MT : ST
       wg = WaitGroup.new
 
       Term.each_keypath_and_leaf(value) do |keypath, leaf|
         ubases = Ubase.strand(keypath, leaf)
 
-        wg.add
-        ctx.spawn do
-          mount1(atoms, secret_slice, ubases, appearance)
-        ensure
-          wg.done
-        end
+        wg.spawn { mount1(atoms, secret_slice, ubases, appearance) }
 
         true # continue
       end
@@ -67,7 +52,7 @@ module Ww::Meridium
       wg.wait
     end
 
-    private def bundleof(atoms, secret_slice, strand, mt) : Array(BytesMM::Row)
+    private def bundleof(atoms, secret_slice, strand) : Array(BytesMM::Row)
       prefix = Ubase.upack(strand)
 
       # The completion callback runs on different threads (that is, it may).
@@ -75,7 +60,7 @@ module Ww::Meridium
       bundle = [] of BytesMM::Row
       lock = Mutex.new
 
-      BytesMM.complete(atoms, :appearance_registry, secret_slice, prefix, mt: mt) do |completion, atom|
+      BytesMM.complete(atoms, :appearance_registry, secret_slice, prefix) do |completion, atom|
         entry = completion.final(key: secret_slice, prefix: prefix)
 
         checksum0 = IO::ByteFormat::BigEndian.decode(UInt32, entry[-sizeof(UInt32)..])
@@ -104,30 +89,18 @@ module Ww::Meridium
 
     # Yields appearances that are perceived by all of the given sensor *strands*
     # simultaneously.
-    #
-    # *mt* specifies whether to run under a multi-threaded or single-threaded
-    # fiber execution context.
-    def each_appearance(
-      atoms : IAtomsPresent,
-      secret : Term?,
-      strands : StrandList, *,
-      mt : Bool,
-      & : WWID ->
-    ) : Nil
+    def each_appearance(atoms : IAtomsPresent, secret : Term?, strands : StrandList, & : WWID ->) : Nil
       secret_slice = Meridium.secret_to_bytes(secret)
 
-      wg = WaitGroup.new
-      ctx = mt ? MT : ST
+      wg = WaitGroup.new(strands.size)
 
       # Convert strands to bundles concurrently.
       bundles = [] of Array(BytesMM::Row)
       lock = Mutex.new
 
       strands.each do |strand|
-        wg.add
-
-        ctx.spawn do
-          bundle = bundleof(atoms, secret_slice, strand, mt)
+        spawn do
+          bundle = bundleof(atoms, secret_slice, strand)
 
           lock.synchronize { bundles << bundle }
         ensure
@@ -137,7 +110,7 @@ module Ww::Meridium
 
       wg.wait
 
-      hasher = Atom::HASHER.new
+      hasher = Atom::Hasher.new
 
       # To read a WWID, we need BYTESIZE bytes. Each byte consists of 4 base-4 digits.
       # We need to iterate one base-4 digit more so that we see there's nothing past
@@ -145,7 +118,7 @@ module Ww::Meridium
       (WWID::BYTESIZE*4 + 1).times do |ord|
         return if bundles.empty?
 
-        expanded = BytesMM.expand2d(pointerof(hasher), bundles)
+        expanded = BytesMM.expand2d(hasher, bundles)
         marked = BytesMM.mark2d(atoms, expanded)
 
         unless ord == WWID::BYTESIZE*4

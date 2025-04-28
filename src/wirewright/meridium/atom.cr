@@ -5,9 +5,9 @@ module Ww::Meridium
     include Comparable(Atom)
 
     # Algorithm used for hashing. Must be cryptographically secure.
-    HASHER = Blake3
+    alias Hasher = Digest::Blake3
 
-    # Bytesize of hashes produced by `HASHER`.
+    # Bytesize of hashes produced by `Hasher`.
     BYTESIZE = 32
 
     def initialize(@blk0 : UInt64, @blk1 : UInt64, @blk2 : UInt64, @blk3 : UInt64)
@@ -26,7 +26,7 @@ module Ww::Meridium
 
     # Constructs an atom from *string* by hashing that string and so on.
     def self.of(string : String) : Atom
-      of(Blake3.final(string))
+      of(Hasher.digest(string))
     end
 
     def <=>(other : Atom)
