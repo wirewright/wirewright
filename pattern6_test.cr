@@ -2,7 +2,7 @@ require "./src/wirewright"
 require "./baz5_editor"
 require "./delta7_proto2"
 
-CASES  = [
+CASES = [
   File.read("patterns.test.wwml"),
   File.read("editor.test.wwml"),
   File.read("delta7.test.wwml"),
@@ -39,7 +39,7 @@ class Statistics
   end
 end
 
-def track(ctx, pattern)
+def track(ctx, pattern, &)
   failures0 = ctx.failures.size
 
   begin

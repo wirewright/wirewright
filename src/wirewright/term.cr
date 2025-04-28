@@ -589,7 +589,7 @@ module Ww
       # :nodoc:
       FNV_OFFSET_BASIS = 14695981039346656037u64
       # :nodoc:
-      FNV_PRIME        = 1099511628211u64
+      FNV_PRIME = 1099511628211u64
 
       def initialize
         @state = FNV_OFFSET_BASIS

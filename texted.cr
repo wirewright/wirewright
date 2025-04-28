@@ -227,4 +227,3 @@ ui = UIR::Reducers.microfold(Term.of(frame0)) do |frame, drawable, event|
 end
 
 UIR::Platform::Current.show(ui)
-

@@ -19,10 +19,10 @@ module Ww::M1::Operator
     end
   end
 
-  INSTANCE_SYM = Sym.new
-  INSTANCE_STR = Str.new
+  INSTANCE_SYM     = Sym.new
+  INSTANCE_STR     = Str.new
   INSTANCE_BOOLEAN = Boolean.new
-  INSTANCE_DICT = Dict.new
+  INSTANCE_DICT    = Dict.new
 
   defcase Sym
 

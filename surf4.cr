@@ -6,7 +6,7 @@ require "digest"
 require "bit_array"
 require "brotli"
 
-DIGEST_ALG           = Digest::SHA256
+DIGEST_ALG = Digest::SHA256
 Log.setup_from_env(default_level: :warn)
 
 module IAtom
@@ -2930,7 +2930,7 @@ sleep 1.second
 appearancethread = Fiber::ExecutionContext::SingleThreaded.new("appearance")
 appearancethread.spawn do
   Log.info { "run appearance thread" }
-  map = Tconn.new(TspaceDigestSet.new(set), chat, Tconn::Observer.new {}, relook: Relook::Periodic.new, keepalive: Keepalive::Continuous.new(10.seconds))
+  map = Tconn.new(TspaceDigestSet.new(set), chat, Tconn::Observer.new { }, relook: Relook::Periodic.new, keepalive: Keepalive::Continuous.new(10.seconds))
   (0...100_000).each do |n|
     map[0] = Tconn.appearance(Term.of(:*, n, n))
   end

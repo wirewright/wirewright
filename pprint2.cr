@@ -840,7 +840,7 @@ module Feature
   struct PatternPairspart
     include Feature
 
-    FRAG_LPAREN = ML.term %{(frag "(")}
+    FRAG_LPAREN   = ML.term %{(frag "(")}
     FRAG_LBRACKET = ML.term %{(frag "[")}
 
     TEMPLATE_INLINE = ML.term <<-WWML
@@ -963,7 +963,7 @@ module Feature
             commit << ctx.layouts_allowed.thunk(itemspart, "", {:dict_inline})
             commit << {:frag, "¦"}
             commit << ctx.features.call(ctx.inline, pp, ")" + postfix)
-           end
+          end
 
           if ctx.inline_only?
             Term.of(:row, FRAG_LPAREN, inline)
@@ -992,7 +992,6 @@ module Feature
           Term.of(:row, rk, rv, gap: 1),
           Term.of(:col, rk, Term.of(:indented, rv, by: 2)))
       end
-
 
       rest.call(ctx, term, postfix)
     end
@@ -1138,7 +1137,6 @@ module Feature
     def call(ctx, term, postfix, head, rest) : Term
       Term.case(term) do
         matchpi %{((%symbol nonblank) _*)} do
-
           thunk = ctx.layouts_allowed.thunk(term, ")" + postfix, LayoutSet.list)
 
           Term.of(:row, FRAG_LPAREN, thunk)
@@ -1407,7 +1405,7 @@ struct Chain(T)
 
   # Prepends *callables* to this chain.
   def prepend(*callables : T) : Chain(T)
-    Chain(T).new(Slice(T).join({callables.to_readonly_slice(&.as(T)),  @callables}))
+    Chain(T).new(Slice(T).join({callables.to_readonly_slice(&.as(T)), @callables}))
   end
 
   # Delayed `Chain#call` at a specific index.

@@ -897,23 +897,23 @@ module Ww::ML::Text
     private def slot(token : Token) : Term
       term =
         case token.type
-        when :term  then token.term
-        when :"⟨"   then pitem
-        when :"("   then plist
-        when :"["   then litemspart
-        when :"{"   then kvdict
-        when :"{,"  then dictset
-        when :"{#"  then dictmultiset
-        when :"{¦"  then Term.of(:"%partition", :_, {:"%layer", :_, pentrylist(:"}")})
-        when :"→"   then Term.of(:"$my", slot)
-        when :"↑"   then Term.of(:"$up", slot)
-        when :"↓"   then Term.of(:"$down", slot)
-        when :"$"   then Term.of(:"$", slot)
-        when :"$'"  then Term.of(:"$once", slot)
-        when :"'"   then Term.of(:hold, slot)
-        when :"⏏"   then Term.of(:"%slot", slot)
-        when :"≡"   then Term.of(:"%nonself", slot)
-        when :"%'"  then Term.of(:"%literal", slot)
+        when :term then token.term
+        when :"⟨"  then pitem
+        when :"("  then plist
+        when :"["  then litemspart
+        when :"{"  then kvdict
+        when :"{," then dictset
+        when :"{#" then dictmultiset
+        when :"{¦" then Term.of(:"%partition", :_, {:"%layer", :_, pentrylist(:"}")})
+        when :"→"  then Term.of(:"$my", slot)
+        when :"↑"  then Term.of(:"$up", slot)
+        when :"↓"  then Term.of(:"$down", slot)
+        when :"$"  then Term.of(:"$", slot)
+        when :"$'" then Term.of(:"$once", slot)
+        when :"'"  then Term.of(:hold, slot)
+        when :"⏏"  then Term.of(:"%slot", slot)
+        when :"≡"  then Term.of(:"%nonself", slot)
+        when :"%'" then Term.of(:"%literal", slot)
         when :"@"
           unless name = term?(Term::Sym) || term?(Term::Str) || term?(Term::Num)
             raise "expected symbol, string, or number as edge name"

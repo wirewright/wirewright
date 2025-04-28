@@ -5,7 +5,7 @@ alias Rewriter = RewriterContext, Rewrite::Any -> Rewrite::Any
 alias Observer = Backpath::Appender, String, Rewrite::Some ->
 alias Tick = ->
 
-record RewriterContext, rng : Random, backpath : Backpath::Appender?, envs = Term[], observer : Observer | Tick = (Tick.new {}), exhr = {} of {UInt64, Term} => Rewrite::Any, options = Term[] do
+record RewriterContext, rng : Random, backpath : Backpath::Appender?, envs = Term[], observer : Observer | Tick = (Tick.new { }), exhr = {} of {UInt64, Term} => Rewrite::Any, options = Term[] do
   # If available, returns memoized exhaustive rewrite of *term* for an exhR rewriter
   # with the given *id*.
   #
@@ -1195,7 +1195,7 @@ end
   # (((<pred> grandparent) parent) child)
   # ... etc -- edge rewrite
 
-  pp rewrite(Term.of(:qux, {:+, 1, 2}, {:*, 3, 4}, a: 100, b: 200, qux: 300),  chainR(wrapR(%[in_], %[in_], noR, %[out_], %[(out_)]), edgeR(effectR(noR) { |re| pp re})))
+  pp rewrite(Term.of(:qux, {:+, 1, 2}, {:*, 3, 4}, a: 100, b: 200, qux: 300), chainR(wrapR(%[in_], %[in_], noR, %[out_], %[(out_)]), edgeR(effectR(noR) { |re| pp re })))
 
   # puts rewrite(Term.of(:+, 1, 2), wrapR(%[(+ a_ b_)], %[(node (+ (literal a_) (literal b_)))], %[(node (literal out_))], callR(mod)))
   # puts rewrite(Term.of(:*, 5, 3), wrapR(%[(node in_)], callR(mod), %[(node out_)]))

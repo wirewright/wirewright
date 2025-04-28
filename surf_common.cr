@@ -1,7 +1,7 @@
 alias Fingerprint = Bytes
 
 FINGERPRINT_BYTESIZE = 32
-LABEL_BYTESIZE = 16
+LABEL_BYTESIZE       = 16
 
 record Label, value : UInt128 do
   include Comparable(Label)
@@ -223,7 +223,6 @@ module Ubase
     digest.update(Bytes[0])
   end
 
-
   def self.update(digest, base : Begin)
     digest.update(Bytes[1])
   end
@@ -260,4 +259,3 @@ module Ubase
     digest.update(ML.compact(base.key))
   end
 end
-

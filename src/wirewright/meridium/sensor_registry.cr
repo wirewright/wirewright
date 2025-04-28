@@ -63,7 +63,7 @@ module Ww::Meridium
       secret : Term?,
       apexes : Indexable(Atom),
       sensor : WWID, *,
-      mt : Bool
+      mt : Bool,
     ) : Nil
       secret_slice = Meridium.secret_to_bytes(secret)
 

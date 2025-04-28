@@ -604,4 +604,3 @@ module UIR::Platform::SFML
     wg.wait
   end
 end
-

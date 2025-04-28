@@ -40,7 +40,7 @@ module Ww::Meridium
     def mount(
       atoms : IAtomAppend,
       strands : Enumerable(Enumerable(Ubase::Any)), *,
-      mt : Bool
+      mt : Bool,
     ) : Array(Atom)
       wg = WaitGroup.new(strands.size)
       ctx = mt ? MT : ST

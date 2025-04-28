@@ -328,18 +328,18 @@ module Alloy
     )
 
     rewriter = set_template.call switchR(
-      { %{rewritee_symbol}, callR(->var(Context, Term).partial(ctx))},
-      { %{rewritee←[^paste _*]}, callR(->paste(Context, Term).partial(ctx))},
-      { %{rewritee←[^*paste _*]}, callR(->multipaste(Context, Term).partial(ctx))},
-      { %{rewritee←[^* _*]}, chainR(callR(->splice(Context, Term).partial(ctx)), rec_template)},
-      { %{rewritee←[^match _*]}, chainR(callR(->match(Context, Term).partial(ctx)), rec_template)},
-      { %{rewritee←[^if _*]}, chainR(callR(->mif(Context, Term).partial(ctx)), rec_template)},
-      { %{rewritee←[^unless _*]}, chainR(callR(->munless(Context, Term).partial(ctx)), rec_template)},
-      { %{rewritee←[^each _*]}, callR(->meach(Context, Term).partial(ctx))},
-      { %{rewritee←[^expr _*]}, chainR(callR(->expr(Context, Term).partial(ctx)), rec_template)},
-      { %{rewritee←[^extend _*]}, chainR(callR(->mextend(Context, Term).partial(ctx)), rec_template)},
-      { %{rewritee←[^fallback _*]}, callR(->fallback(Context, Term).partial(ctx))},
-      { %{rewritee_dict}, entriesR(rec_template)},
+      { %{rewritee_symbol}, callR(->var(Context, Term).partial(ctx)) },
+      { %{rewritee←[^paste _*]}, callR(->paste(Context, Term).partial(ctx)) },
+      { %{rewritee←[^*paste _*]}, callR(->multipaste(Context, Term).partial(ctx)) },
+      { %{rewritee←[^* _*]}, chainR(callR(->splice(Context, Term).partial(ctx)), rec_template) },
+      { %{rewritee←[^match _*]}, chainR(callR(->match(Context, Term).partial(ctx)), rec_template) },
+      { %{rewritee←[^if _*]}, chainR(callR(->mif(Context, Term).partial(ctx)), rec_template) },
+      { %{rewritee←[^unless _*]}, chainR(callR(->munless(Context, Term).partial(ctx)), rec_template) },
+      { %{rewritee←[^each _*]}, callR(->meach(Context, Term).partial(ctx)) },
+      { %{rewritee←[^expr _*]}, chainR(callR(->expr(Context, Term).partial(ctx)), rec_template) },
+      { %{rewritee←[^extend _*]}, chainR(callR(->mextend(Context, Term).partial(ctx)), rec_template) },
+      { %{rewritee←[^fallback _*]}, callR(->fallback(Context, Term).partial(ctx)) },
+      { %{rewritee_dict}, entriesR(rec_template) },
     )
 
     rewrite0(template, rewriter)
@@ -401,6 +401,6 @@ end
 #     {title: "C", body: "Sit amet"},
 #   }
 # ]
-    # puts ML.display(Alloy.render(env, templ, strict: true))
+# puts ML.display(Alloy.render(env, templ, strict: true))
 #   end
 # end

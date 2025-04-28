@@ -2993,7 +2993,7 @@ module ::Ww::M1
 
   def self.normal_escaped(pattern : Term, **kwargs) : Term
     Term.of_case(pattern) do
-      matchpi %{_dict}  do
+      matchpi %{_dict} do
         side = Term::Dict.build do |commit|
           pattern.each_entry do |key, value|
             commit.with(key, {:"%entry/required", normal_escaped(value)})
@@ -6379,5 +6379,3 @@ module ::Ww::M1
     strands(Term.dict({:"%any"}), branch, sink)
   end
 end
-
-

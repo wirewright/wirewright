@@ -901,14 +901,14 @@ elsif ARGV[0]? == "join-a"
   gets
   setconn.close
   sleep 10.seconds
-#   conid = WWID.call
+  #   conid = WWID.call
 
-#   server.subscribe(conid) do |act|
-#     pp act
-#   end
+  #   server.subscribe(conid) do |act|
+  #     pp act
+  #   end
 
-#   while (print "> "; input = gets)
-#   my_act = Activation.new(:stimulus_presence, SensorInfo.new(conid, WWID.call, 0), WWID.call, AppearanceInfo.new(conid, 1, ML.term(input)))
-#   server.send(conid, my_act)
-# end
+  #   while (print "> "; input = gets)
+  #   my_act = Activation.new(:stimulus_presence, SensorInfo.new(conid, WWID.call, 0), WWID.call, AppearanceInfo.new(conid, 1, ML.term(input)))
+  #   server.send(conid, my_act)
+  # end
 end

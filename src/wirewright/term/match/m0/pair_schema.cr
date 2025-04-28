@@ -17,44 +17,44 @@ module Ww::M0
         dict
       end
     end
-  
+
     # :nodoc:
     record OptionalPair, key : Term, check : Check, default : Term do
       def enriched?(dict : Term::Dict) : Term::Dict?
         unless value = dict[key]?
           return dict.with(key, default)
         end
-  
+
         return unless check.satisfied?(value)
-  
+
         dict
       end
     end
 
     # :nodoc:
     alias Check = MatchesAny | IntBounds
-  
+
     # :nodoc:
     record MatchesAny, options : Array(Term) do
       def satisfied?(value : Term) : Bool
         options.any? { |option| !!M0.match?(option, value) }
       end
     end
-  
+
     # :nodoc:
     record IntBounds, min : Term::Num, max : Term::Num do
       def satisfied?(value : Term) : Bool
         return false unless n = value.as_n?
-  
+
         n.whole? && n.in?(min..max)
       end
     end
-  
+
     def initialize
       @pairs = [] of Pair
       @predicates = [] of Term::Dict -> Bool
     end
-  
+
     # Registers a predicate function: if all of *block*'s arguments are present in
     # the input term as keys, their values will be given to the block.
     macro where(&block)
@@ -66,7 +66,7 @@ module Ww::M0
         {{yield}}
       end
     end
-  
+
     # A DSL-like interface to the construction of a pair schema.
     #
     # ```
@@ -79,14 +79,14 @@ module Ww::M0
     # ```
     def self.build(&) : PairSchema
       with schema = new yield schema
-  
+
       schema
     end
-  
+
     private def check(range : Range)
       IntBounds.new(Term[range.begin], Term[range.end])
     end
-  
+
     private def check(allowed : Tuple)
       MatchesAny.new([*allowed.map { |value| Term.of(value) }])
     end
@@ -94,14 +94,14 @@ module Ww::M0
     private def check(allowed : Enumerable)
       MatchesAny.new(allowed.map { |value| Term.of(value) })
     end
-  
+
     # Registers a required *key* with an allowed set of *values* (an enumerable or a range).
     #
     # *key* must be a pairspart key. Itemspart keys will not work.
     def key(key, *, values) : Nil
       @pairs << RequiredPair.new(Term.of(key), check(values))
     end
-  
+
     # Registers an optional *key* with an allowed set of *values* (an enumerable or a range).
     # If missing in the input term, will be assigned the value of *default*.
     #
@@ -111,33 +111,33 @@ module Ww::M0
     def key(key, *, values, default) : Nil
       @pairs << OptionalPair.new(Term.of(key), check(values), Term.of(default))
     end
-  
+
     # Registers a predicate function *fn* to run on the input term.
     #
     # See also: `where`.
     def predicate(&fn : Term::Dict -> Bool) : Nil
       @predicates << fn
     end
-  
+
     # Validates *term* against the pairs in this schema and extends it with defaults
     # for the optional ones. Returns the resulting dictionary.
     def enriched?(term : Term) : Term::Dict?
       return unless dict0 = term.as_d?
       return unless dict0.pairsonly?
-  
+
       good = dict0
       bad = dict0.transaction do |commit|
         @pairs.each do |pair|
           good = pair.enriched?(good) || return # Validation failed
-  
+
           commit.without(pair.key)
         end
       end
-  
+
       return unless bad.empty? # Extra pairs left.
       return unless @predicates.all?(&.call(dict0))
-  
+
       good
     end
   end
-end  
+end

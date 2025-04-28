@@ -1,9 +1,9 @@
 @[Link(ldflags: "#{__DIR__}/libblake3.so")]
 lib LibBlake3
   BLAKE3_BLOCK_LEN = 64
-  BLAKE3_OUT_LEN = 32
+  BLAKE3_OUT_LEN   = 32
   BLAKE3_MAX_DEPTH = 54
-  BLAKE3_CV_SIZE = (BLAKE3_MAX_DEPTH + 1) * BLAKE3_OUT_LEN
+  BLAKE3_CV_SIZE   = (BLAKE3_MAX_DEPTH + 1) * BLAKE3_OUT_LEN
 
   struct ChunkState
     cv : UInt32[8]

@@ -562,16 +562,16 @@ abstract struct Int
 
   def self.bit_size
     {% begin %}
-      {% table = {UInt8 => 8,
-                  Int8 => 8,
-                  UInt16 => 16,
-                  Int16 => 16,
-                  UInt32 => 32,
-                  Int32 => 32,
-                  UInt64 => 64,
-                  Int64 => 64,
+      {% table = {UInt8   => 8,
+                  Int8    => 8,
+                  UInt16  => 16,
+                  Int16   => 16,
+                  UInt32  => 32,
+                  Int32   => 32,
+                  UInt64  => 64,
+                  Int64   => 64,
                   UInt128 => 128,
-                  Int128 => 128} %}
+                  Int128  => 128} %}
 
       {{table[@type] || @type.raise "unsupported number type"}}
     {% end %}
@@ -2142,7 +2142,7 @@ struct Slice(T)
     size > other.size && self[0...other.size] == other
   end
 
-  def split(object : T)
+  def split(object : T, &)
     return if empty?
 
     start = 0

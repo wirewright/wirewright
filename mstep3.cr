@@ -15,7 +15,7 @@ class Meridium::Space
   #   have them `monitor` the newest view. If they're already awake they should simply
   #   ignore the alert. Note that *alert* may be called excessively; it is your
   #   responsibility to ignore efficiently.
-  def initialize(set, chat, @alert : -> = ->{ }, **kwargs)
+  def initialize(set, chat, @alert : -> = -> { }, **kwargs)
     # Represents the goal state that is exclusively set() by the document
     # step function, and is read in the syncloop.
     @goal = Atomic(Term::Dict?).new(nil)

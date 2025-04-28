@@ -292,7 +292,6 @@ puts "OK in #{dt.total_milliseconds}ms"
 # end
 # require "benchmark"
 
-
 set = MySet.new(1024)
 conid = WWID.new
 origin = conid
@@ -316,42 +315,42 @@ Meridium::AppearanceRegistry.mount(set, nil, Term.of(:sub, "hello", 4), aid2, mt
 
 # _
 seen = Set(WWID).new
-Meridium::AppearanceRegistry.each_appearance(set, nil, [ [Ubase::Begin.new] ], mt: true) do |aid|
+Meridium::AppearanceRegistry.each_appearance(set, nil, [[Ubase::Begin.new]], mt: true) do |aid|
   lock.synchronize { seen << aid }
 end
 expect seen == Set{aid0, aid1, aid2}
 
 # _dict
 seen = Set(WWID).new
-Meridium::AppearanceRegistry.each_appearance(set, nil, [ [Ubase::Begin.new, Ubase::IsDict.new] ], mt: true) do |aid|
+Meridium::AppearanceRegistry.each_appearance(set, nil, [[Ubase::Begin.new, Ubase::IsDict.new]], mt: true) do |aid|
   lock.synchronize { seen << aid }
 end
 expect seen == Set{aid0, aid1, aid2}
 
 # (_)
 seen = Set(WWID).new
-Meridium::AppearanceRegistry.each_appearance(set, nil, [ [Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(0))] ], mt: true) do |aid|
+Meridium::AppearanceRegistry.each_appearance(set, nil, [[Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(0))]], mt: true) do |aid|
   lock.synchronize { seen << aid }
 end
 expect seen == Set{aid0, aid1, aid2}
 
 # (_symbol)
 seen = Set(WWID).new
-Meridium::AppearanceRegistry.each_appearance(set, nil, [ [Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(0)), Ubase::IsSym.new] ], mt: true) do |aid|
+Meridium::AppearanceRegistry.each_appearance(set, nil, [[Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(0)), Ubase::IsSym.new]], mt: true) do |aid|
   lock.synchronize { seen << aid }
 end
 expect seen == Set{aid0, aid1, aid2}
 
 # (add)
 seen = Set(WWID).new
-Meridium::AppearanceRegistry.each_appearance(set, nil, [ [Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(0)), Ubase::IsSym.new, Ubase::Literal.new(Term.of(:add))] ], mt: true) do |aid|
+Meridium::AppearanceRegistry.each_appearance(set, nil, [[Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(0)), Ubase::IsSym.new, Ubase::Literal.new(Term.of(:add))]], mt: true) do |aid|
   lock.synchronize { seen << aid }
 end
 expect seen == Set{aid0}
 
 # (sub)
 seen = Set(WWID).new
-Meridium::AppearanceRegistry.each_appearance(set, nil, [ [Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(0)), Ubase::IsSym.new, Ubase::Literal.new(Term.of(:sub))] ], mt: true) do |aid|
+Meridium::AppearanceRegistry.each_appearance(set, nil, [[Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(0)), Ubase::IsSym.new, Ubase::Literal.new(Term.of(:sub))]], mt: true) do |aid|
   lock.synchronize { seen << aid }
 end
 expect seen == Set{aid1, aid2}
@@ -391,15 +390,15 @@ require "benchmark"
 
 Benchmark.ips do |x|
   x.report("do it") do
-# # 1000.times do
- seen = Set(WWID).new
-Meridium::AppearanceRegistry.each_appearance(set, nil, [
-  [Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(0)), Ubase::IsSym.new, Ubase::Literal.new(Term.of(:sub))],
-  [Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(1)), Ubase::IsStr.new],
-], mt: true) do |aid|
-  lock.synchronize { seen << aid }
-end
-end
+    # # 1000.times do
+    seen = Set(WWID).new
+    Meridium::AppearanceRegistry.each_appearance(set, nil, [
+      [Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(0)), Ubase::IsSym.new, Ubase::Literal.new(Term.of(:sub))],
+      [Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(1)), Ubase::IsStr.new],
+    ], mt: true) do |aid|
+      lock.synchronize { seen << aid }
+    end
+  end
 end
 
 #   end
@@ -446,7 +445,6 @@ end
 # # BytesMM.add(set, :sensor_registry, "".to_slice, "5 Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo. Nemo enim ipsam voluptatem quia voluptas sit aspernatur aut odit aut fugit, sed quia consequuntur magni dolores eos qui ratione voluptatem sequi nesciunt. Neque porro quisquam est, qui dolorem ipsum quia dolor sit amet, consectetur, adipisci velit, sed quia non numquam eius modi tempora incidunt ut labore et dolore magnam aliquam quaerat voluptatem. Ut enim ad minima veniam, quis nostrum exercitationem ullam corporis suscipit laboriosam, nisi ut aliquid ex ea commodi consequatur? Quis autem vel eum iure reprehenderit qui in ea voluptate velit esse quam nihil molestiae consequatur, vel illum qui dolorem eum fugiat quo voluptas nulla pariatur?".to_slice)
 # # BytesMM.add(set, :sensor_registry, "".to_slice, "6 Lorem ipsum dolor sit amet, officia excepteur ex fugiat reprehenderit enim labore culpa sint ad nisi Lorem pariatur mollit ex esse exercitation amet. Nisi anim cupidatat excepteur officia. Reprehenderit nostrud nostrud ipsum Lorem est aliquip amet voluptate voluptate dolor minim nulla est proident. Nostrud officia pariatur ut officia. Sit irure elit esse ea nulla sunt ex occaecat reprehenderit commodo officia dolor Lorem duis laboris cupidatat officia voluptate. Culpa proident adipisicing id nulla nisi laboris ex in Lorem sunt duis officia eiusmod. Aliqua reprehenderit commodo ex non excepteur duis sunt velit enim. Voluptate laboris sint cupidatat ullamco ut ea consectetur et est culpa et culpa duis.".to_slice)
 
-
 # require "benchmark"
 
 # n = Atomic.new(0)
@@ -469,5 +467,3 @@ end
 # pp n
 # # puts
 # # pp atoms.size
-
-

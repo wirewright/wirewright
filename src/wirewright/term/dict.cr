@@ -1342,7 +1342,6 @@ module Ww
       end
     end
 
-
     # FIXME: extract into Nitrene
     def dfs(&fn : Term -> Bool) : Bool
       items.each do |item|

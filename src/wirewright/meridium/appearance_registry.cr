@@ -44,7 +44,7 @@ module Ww::Meridium
       secret : Term?,
       value : Term,
       appearance : WWID, *,
-      mt : Bool
+      mt : Bool,
     ) : Nil
       secret_slice = Meridium.secret_to_bytes(secret)
 

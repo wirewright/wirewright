@@ -631,7 +631,7 @@ module FontFinder
   end
 
   # :nodoc:
-  def each_possible_query(family, weight, italic) : Nil
+  def each_possible_query(family, weight, italic, &) : Nil
     each_possible_query_with_italic(family, weight, italic) { |query| yield query }
     each_possible_query_with_italic(family, weight, !italic) { |query| yield query }
   end
@@ -721,8 +721,8 @@ module UIR
       allR(
         wrapR(%{(if in_ a_ b_)}, %{in_}, rec_exhevalr, %{out_}, %{(if out_ a_ b_)}),
         switchR(
-          { %{(if false _ rewritee_)}, rec_exhevalr},
-          { %{(if _ rewritee_ _)}, rec_exhevalr},
+          { %{(if false _ rewritee_)}, rec_exhevalr },
+          { %{(if _ rewritee_ _)}, rec_exhevalr },
         )
       )
     )
@@ -782,8 +782,8 @@ module UIR
 
     controlR = exhR(
       set_control.call nonreadyR.call(memoR(@@control_cache, choiceR(
-          rulesetR(Ruleset.select(selector, ML.terms(base_control)), noR, backmapR, noR),
-          itemsR(rec_control),
+        rulesetR(Ruleset.select(selector, ML.terms(base_control)), noR, backmapR, noR),
+        itemsR(rec_control),
       )))
     )
 
@@ -895,7 +895,7 @@ module UIR
         end
       end
 
-      otherwise {}
+      otherwise { }
     end
   end
 
@@ -996,7 +996,7 @@ module UIR
         end
       end
 
-      otherwise {}
+      otherwise { }
     end
   end
 
