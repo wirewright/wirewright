@@ -2166,12 +2166,9 @@ module Nitrene
   extend self
 
   class StepContext
-    @mt : Fiber::ExecutionContext
-
     # WARNING: *alarm* will be called from another thread. Make sure whatever
     # you do there is thread-safe.
     def initialize(&@alarm : ->)
-      @mt = Fiber::ExecutionContext::MultiThreaded.new("Nitrene", 4)
       @active = Atomic(UInt32).new(0u32)
       @running = Atomic(Term::Dict).new(Term[])
       @completed = Atomic(Term::Dict).new(Term[])
@@ -2181,7 +2178,7 @@ module Nitrene
     end
 
     private def spawn(job : Term, program : Term, env : Term::Dict) : Nil
-      @mt.spawn do
+      MT.spawn do
         @active.add(1, :release)
         # sleep 3.seconds
 
@@ -2301,8 +2298,7 @@ module Nitrene
   # Constructs an **asynchronous** step function for `Nitrene`.
   #
   # *nictx* is the job context. Nitrene will serve jobs asynchronously; the
-  # context will keep info about the currently running jobs etc. between
-  # steps (along with `ExecutionContext` and so on).
+  # context will keep info about the currently running jobs etc. between steps.
   #
   # NOTE: you will have to restart the run loop if it terminates before some
   # jobs complete. See also: `StepContext.new`, `Goal.jobless`.

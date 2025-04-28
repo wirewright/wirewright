@@ -23,4 +23,8 @@ require "../primitives"
 {% end %}
 require "../templ"
 
-RESOURCES = Path[ENV["SOMA_RESOURCES_DIR"]? || Dir.current]
+module Ww
+  RESOURCES = Path[ENV["SOMA_RESOURCES_DIR"]? || Dir.current]
+
+  MT = Fiber::ExecutionContext::MultiThreaded.new("Wirewright", System.cpu_count.to_i)
+end
