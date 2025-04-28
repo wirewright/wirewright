@@ -899,7 +899,7 @@ module Rhodium
         end
       end
 
-      givenpi %{(log @pin_ in (entries_*) ¦ _ limit: (%optional 10 limit←(%number (whole _) > 0))) (pulse @pin_ term_) _} do
+      givenpi %{(log @pin_ in (entries_*) ¦ _ limit: (%optional 10 limit←(%number (whole _) > 0))) (pulse @pin_ term_) -1} do
         effect(document1, nodepath, node0, cursordepth) do
           backmap ML.term(%{[log _ in (entries_*)]}), Term.of(Term[].with({:entries}, entries.rightmost(limit.to(Int32) - 1).append(term)))
 
