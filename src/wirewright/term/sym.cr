@@ -76,13 +76,27 @@ module Ww
     @@decode = Array(Bytes).new(initial_capacity: 1024)
     @@lock = Mutex.new
 
+    # Ref used for symbols such as `_`, `_number`, `_string`, etc. that have
+    # an empty name component.
+    EMPTY_BLANK_REF = 0u32
+
     # :nodoc:
     def self.encode(bytes : Bytes, *, blank : Bool) : UInt32
+      if bytes.empty?
+        unless blank
+          raise ArgumentError.new("cannot encode empty nonblank")
+        end
+
+        # Empty blank is always unambiguous!
+        return EMPTY_BLANK_REF
+      end
+
       @@lock.synchronize do
         @@encode.put_if_absent(bytes) do
           @@decode << bytes
 
-          ref = @@decode.size.to_u32 - 1
+          # Store ref + 1 to avoid ref = 0 which we use for EMPTY_BLANK_REF.
+          ref = @@decode.size.to_u32
           ref <<= 1
 
           # Ambiguity matters only when we're a blank. Thus, force the caller to say
@@ -100,7 +114,11 @@ module Ww
 
     # :nodoc:
     def self.decode(ref : UInt32) : Bytes
-      @@lock.synchronize { @@decode[ref >> 1] }
+      if ref == EMPTY_BLANK_REF
+        return Bytes.empty
+      end
+
+      @@lock.synchronize { @@decode[(ref >> 1) - 1] }
     end
 
     # Returns `true` if *ref* was deemed "ambiguous" during encoding.
