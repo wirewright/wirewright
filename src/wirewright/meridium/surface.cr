@@ -90,15 +90,6 @@ module Ww::Meridium
   class Sensor
     include Surface
 
-    # :nodoc:
-    alias Strand = Array(Ubase::Any)
-
-    # :nodoc:
-    alias StrandList = Array(Strand)
-
-    # :nodoc:
-    alias BranchList = Array(StrandList)
-
     protected def initialize(@pattern : Term, @secret : Term?, @branches : BranchList)
       if @branches.empty?
         raise ArgumentError.new("branches list must contain at least one branch")

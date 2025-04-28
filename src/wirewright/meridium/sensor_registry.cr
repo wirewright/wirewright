@@ -26,7 +26,7 @@ module Ww::Meridium
     Log = ::Log.for(self)
 
     private def register1(atoms, secret_slice, apex, sensor) : Nil
-      entry = cursor = Bytes.new(secret_slice.size + Atom::BYTESIZE + WWID::BYTESIZE + sizeof(Checksum))
+      entry = cursor = Bytes.new(secret_slice.size + Atom::BYTESIZE + WWID::BYTESIZE + sizeof(UInt32))
 
       cursor.copy_from(secret_slice)
       cursor += secret_slice.size
@@ -42,15 +42,15 @@ module Ww::Meridium
       # and the checksum computed from raw secret must collide, which is a bit
       # less likely I suppose. Although we're walking on very shaky ground
       # here anyway.
-      checksum = Digest::CRC32.checksum(entry[...-sizeof(Checksum)])
+      checksum = Digest::CRC32.checksum(entry[...-sizeof(UInt32)])
 
       IO::ByteFormat::BigEndian.encode(checksum, cursor)
-      cursor += sizeof(Checksum)
+      cursor += sizeof(UInt32)
 
       key = entry[0, secret_slice.size + Atom::BYTESIZE]
-      data = entry[secret_slice.size + Atom::BYTESIZE, WWID::BYTESIZE + sizeof(Checksum)]
+      data = entry[secret_slice.size + Atom::BYTESIZE, WWID::BYTESIZE + sizeof(UInt32)]
 
-      BytesMultimap.add(atoms, :sensor_registry, key, data)
+      BytesMM.add(atoms, :sensor_registry, key, data)
     end
 
     # Creates a record in the sensor registry, pointing each of *apexes* to
@@ -65,7 +65,7 @@ module Ww::Meridium
       sensor : WWID, *,
       mt : Bool
     ) : Nil
-      secret_slice = secret_to_bytes(secret)
+      secret_slice = Meridium.secret_to_bytes(secret)
 
       wg = WaitGroup.new(apexes.size)
       ctx = mt ? MT : ST
@@ -94,20 +94,20 @@ module Ww::Meridium
       # it from complete() callback which could be called from another
       # fiber/thread.
 
-      BytesMultimap.complete(atoms, :sensor_registry, key, prefix: Bytes.empty, mt: mt) do |completion, _|
+      BytesMM.complete(atoms, :sensor_registry, key, prefix: Bytes.empty, mt: mt) do |completion, _|
         entry = completion.final(key, prefix: Bytes.empty)
 
         next if entry.size == key.size # No completions
 
         # Verify size
-        unless entry.size == (expected = key.size + WWID::BYTESIZE + sizeof(Checksum))
+        unless entry.size == (expected = key.size + WWID::BYTESIZE + sizeof(UInt32))
           Log.debug { "reject entry: size too small (#{entry.size} != #{expected})" }
           next
         end
 
-        # Check checksum
-        checksum0 = IO::ByteFormat::BigEndian.decode(Checksum, entry[-sizeof(Checksum)..])
-        checksum1 = Digest::CRC32.checksum(entry[...-sizeof(Checksum)])
+        # Verify checksum
+        checksum0 = IO::ByteFormat::BigEndian.decode(UInt32, entry[-sizeof(UInt32)..])
+        checksum1 = Digest::CRC32.checksum(entry[...-sizeof(UInt32)])
 
         unless checksum0 == checksum1
           Log.debug { "reject entry: checksum mismatch (my #{checksum1} != its #{checksum0})" }
@@ -146,7 +146,7 @@ module Ww::Meridium
       mt : Bool,
       &fn : WWID ->
     ) : Nil
-      secret_slice = secret_to_bytes(secret)
+      secret_slice = Meridium.secret_to_bytes(secret)
 
       ctx = mt ? MT : ST
       wg = WaitGroup.new(apexes.size)

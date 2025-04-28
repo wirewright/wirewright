@@ -11,7 +11,6 @@ module Ww::Meridium
   #   those with a lower *slot* value.
   # - CRC16 is used as the algorithm to compute the two-byte *checksum*.
   #
-  #
   # A `0`-valued *slot* usually acts as an id "origin" for a conid, and `succ`
   # is used to obtain successive WWIDs under that conid.
   #
@@ -27,7 +26,7 @@ module Ww::Meridium
   # The reasoning is as follows:
   #
   # - 5-byte timestamp with millisecond precision gives us time up to 2059, which
-  #   good enough for now.
+  #   is good enough for now.
   # - 5-byte randomness (2**40 possible values) further divide each millisecond
   #   into just over 1 million slots (before collision chance is >50%, due to
   #   the birthday paradox).

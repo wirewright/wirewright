@@ -27,7 +27,7 @@ module Ww::Meridium
     #              abcdcdde [apex]
     # ```
     def mount(atoms : IAtomAppend, conj : Enumerable(Atom)) : Atom
-      hasher = Blake3.new
+      hasher = Atom::HASHER.new
 
       gen0 = conj.to_a(&.itself)
       gen1 = [] of Atom
@@ -45,7 +45,7 @@ module Ww::Meridium
             u = gen0[cursor - 1]
           end
 
-          atom = h(pointerof(hasher), :xgraph, u, v)
+          atom = Meridium.h(pointerof(hasher), :xgraph, u, v)
           gen1 << atom
           atoms << atom
 
@@ -60,7 +60,7 @@ module Ww::Meridium
     end
 
     private def explore(wg, atoms, u, vs, gen1, lock) : Nil
-      hasher = Blake3.new
+      hasher = Atom::HASHER.new
 
       # NOTE: we assume here that allocation is more expensive than hashing.
       # Whether it actually is I'm not sure; I guess it depends on how many
@@ -68,11 +68,14 @@ module Ww::Meridium
       # hashing -- bad; if we get little then we've saved some memory on all
       # the negative hashes -- good.
 
-      answer = atoms.present?(vs) { |v| h(pointerof(hasher), :xgraph, u, v) }
+      answer = atoms.present?(vs) do |v|
+        Meridium.h(pointerof(hasher), :xgraph, u, v)
+      end
+
       answer.each_with_index do |exists, index|
         next unless exists
 
-        atom = h(pointerof(hasher), :xgraph, u, vs[index])
+        atom = Meridium.h(pointerof(hasher), :xgraph, u, vs[index])
 
         lock.synchronize { gen1 << atom }
       end

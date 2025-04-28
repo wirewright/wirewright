@@ -46,6 +46,8 @@ module Ww::Meridium
   # A chain of ubases is called a *strand*, and is represented simply by an array
   # of ubases.
   alias Strand = Array(Ubase::Any)
+  alias StrandList = Array(Strand)
+  alias BranchList = Array(StrandList)
 
   # :nodoc:
   enum Uopcode : UInt8
@@ -113,10 +115,10 @@ module Ww::Meridium
         else
           io.write_byte(Uopcode::Hashed{{base.id}}.value)
 
+          hasher = Atom::HASHER.new
           scratch = uninitialized UInt8[Atom::BYTESIZE]
-          hasher = Blake3.new
-
           updater = IO::ByteStream.new { |slice| hasher.update(slice) }
+
           ML.compact(updater, ubase.term)
 
           hasher.final(scratch.to_slice)

@@ -19,12 +19,12 @@ module Ww::Meridium
     #
     # H5 is the endpoint of the strand. It is then fed to Xgraph and so on.
     private def mount1(atoms, strand : Enumerable(Ubase::Any)) : Atom
-      hasher = Blake3.new
+      hasher = Atom::HASHER.new
 
-      h0 = h(pointerof(hasher), :utrie)
+      h0 = Meridium.h(pointerof(hasher), :utrie)
 
       strand.each do |base|
-        h0 = h(pointerof(hasher), h0, base)
+        h0 = Meridium.h(pointerof(hasher), h0, base)
         atoms << h0
       end
 
@@ -79,8 +79,8 @@ module Ww::Meridium
     record Arm, atom : Atom, arg : Term, state : State
 
     private def seed(hasherptr, term : Term) : Array(Arm)
-      h0 = h(hasherptr, :utrie)
-      h0 = h(hasherptr, h0, Ubase::Begin.new)
+      h0 = Meridium.h(hasherptr, :utrie)
+      h0 = Meridium.h(hasherptr, h0, Ubase::Begin.new)
 
       [Arm.new(h0, term, State::BeforeTypecheck | State::BeforeEnd)]
     end
@@ -109,7 +109,7 @@ module Ww::Meridium
           in .dict?    then base, state1 = Ubase::IsDict.new, State::BeforeKeys
           end
 
-          atom1 = h(hasherptr, arm.atom, base)
+          atom1 = Meridium.h(hasherptr, arm.atom, base)
 
           # We can stop at e.g. IsNum - End or IsDict - End so add the BeforeEnd
           # state as well.
@@ -117,7 +117,7 @@ module Ww::Meridium
         end
 
         if arm.state.before_end?
-          atom1 = h(hasherptr, arm.atom, Ubase::End.new)
+          atom1 = Meridium.h(hasherptr, arm.atom, Ubase::End.new)
 
           gen0 << Arm.new(atom1, arm.arg, State::End)
         end
@@ -127,7 +127,7 @@ module Ww::Meridium
           # v it is in fact a dict.
           dict = arm.arg.as_d
           dict.each_entry do |key, value|
-            atom1 = h(hasherptr, arm.atom, Ubase::At.new(key))
+            atom1 = Meridium.h(hasherptr, arm.atom, Ubase::At.new(key))
 
             # We can stop at e.g. IsDict - At(0) - End so add the BeforeEnd state
             # as well.
@@ -136,7 +136,7 @@ module Ww::Meridium
         end
 
         if arm.state.before_literal?
-          atom1 = h(hasherptr, arm.atom, Ubase::Literal.new(arm.arg))
+          atom1 = Meridium.h(hasherptr, arm.atom, Ubase::Literal.new(arm.arg))
 
           # We do not put End after Literal. Switch to End state right away.
           gen0 << Arm.new(atom1, arm.arg, State::End)
@@ -155,7 +155,7 @@ module Ww::Meridium
     # relies on checking for the existence of large batches of atoms at a time. How large
     # depends on the Utrie in *atoms* and on *term*.
     def each_endpoint(atoms : IAtomsPresent, term : Term, & : Atom ->) : Nil
-      hasher = Blake3.new
+      hasher = Atom::HASHER.new
 
       gen0 = seed(pointerof(hasher), term)
       gen1 = [] of Arm

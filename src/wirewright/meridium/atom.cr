@@ -4,6 +4,10 @@ module Ww::Meridium
   struct Atom
     include Comparable(Atom)
 
+    # Algorithm used for hashing. Must be cryptographically secure.
+    HASHER = Blake3
+
+    # Bytesize of hashes produced by `HASHER`.
     BYTESIZE = 32
 
     def initialize(@blk0 : UInt64, @blk1 : UInt64, @blk2 : UInt64, @blk3 : UInt64)

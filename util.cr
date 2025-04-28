@@ -2867,7 +2867,7 @@ end
 
 require "bit_array"
 
-class DynamicBitArray
+class BitList
   include Indexable::Mutable(Bool)
 
   GROWTH_FACTOR = 1.5

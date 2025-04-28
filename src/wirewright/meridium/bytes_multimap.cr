@@ -16,7 +16,10 @@ module Ww::Meridium
   # hashing recursively or appending digits; thus multi-threading helps and is able
   # to (in some cases?) get us the <no. of cores>x speedup expected of "perfectly
   # parallelizable" problems such as this one.
-  module BytesMultimap
+  #
+  # NOTE: I call nested arrays "dimensions" here and there for brevity & analogy. Do
+  # not take it too seriously.
+  module BytesMM
     extend self
 
     private def each_b4_digit(data : Bytes, & : UInt8 ->)
@@ -42,11 +45,11 @@ module Ww::Meridium
     # since the majority of the time is spent hashing *data*, even a crude lock-protected
     # *atoms* set would do.
     def add(atoms : IAtomAppend, entity : Entity, key : Bytes, data : Bytes) : Atom
-      hasher = Blake3.new
+      hasher = Atom::HASHER.new
 
-      h0 = h(pointerof(hasher))
-      h0 = h(pointerof(hasher), h0, entity.value)
-      h0 = h(pointerof(hasher), h0, key)
+      h0 = Meridium.h(pointerof(hasher))
+      h0 = Meridium.h(pointerof(hasher), h0, entity.value)
+      h0 = Meridium.h(pointerof(hasher), h0, key)
 
       add(atoms, h0, data)
     end
@@ -69,10 +72,10 @@ module Ww::Meridium
     # ;; Where dataN is the Nth base-4 digit of *data*.
     # ```
     def append(h0 : Atom, data : Bytes, & : Atom ->) : Atom
-      hasher = Blake3.new
+      hasher = Atom::HASHER.new
 
       each_b4_digit(data) do |digit|
-        h0 = h(pointerof(hasher), h0, digit)
+        h0 = Meridium.h(pointerof(hasher), h0, digit)
 
         yield h0
       end
@@ -85,13 +88,97 @@ module Ww::Meridium
       append(h0, data) { }
     end
 
+    # Represents completion state, which is effectively a sequence of base-4 digits.
+    # See the diagrams in `expand`, `mark`, `collapse`.
+    class Completion
+      # :nodoc:
+      OFFSET_BEGIN = 62u8
+
+      # :nodoc:
+      OFFSET_END = 0u8
+
+      def initialize(@blocks = Slice(UInt64).empty, @block = 0u64, @offset = OFFSET_BEGIN)
+      end
+
+      # Appends a base-4 *digit* to this completion.
+      def append(digit : UInt8) : Completion
+        unless 0 <= digit <= 3
+          raise ArgumentError.new("#{digit} is not a base-4 digit")
+        end
+
+        offset = @offset
+
+        @block |= digit.to_u64 << offset
+
+        if offset == OFFSET_END
+          @blocks = @blocks.append(@block)
+          @block = 0u64
+          @offset = OFFSET_BEGIN
+        else
+          @offset -= 2 # one base-4 digit
+        end
+
+        self
+      end
+
+      # Returns the final bytesize of this completion given a *key* and a number
+      # of *prefix* bytes.
+      def bytesize(key : Bytes, prefix : Bytes) : Int32
+        ntailbytes, ntailbits = (OFFSET_BEGIN - @offset).divmod(8)
+
+        key.size + prefix.size + @blocks.size*8 + ntailbytes + (ntailbits.zero? ? 0 : 1)
+      end
+
+      # Renders this completion into a sequence of bytes; then writes
+      # `<key> <prefix> <completion bytes>` to *target*.
+      def final_to(target : Bytes, key : Bytes, prefix : Bytes) : Bytes
+        ntailbytes, ntailbits = (OFFSET_BEGIN - @offset).divmod(8)
+
+        cursor = target
+
+        cursor.copy_from(key)
+        cursor += key.size
+
+        cursor.copy_from(prefix)
+        cursor += prefix.size
+
+        @blocks.each do |block|
+          IO::ByteFormat::BigEndian.encode(block, cursor)
+          cursor += 8 # bytes
+        end
+
+        if ntailbytes + ntailbits > 0
+          scratch = uninitialized UInt8[8]
+
+          IO::ByteFormat::BigEndian.encode(@block, scratch.to_slice)
+
+          cursor.copy_from(scratch.to_slice[0, ntailbytes])
+          cursor += ntailbytes
+
+          if ntailbits > 0
+            cursor[0] = scratch[ntailbytes]
+            cursor += 1 # byte
+          end
+        end
+
+        target
+      end
+
+      # Same as `final_to`, but allocates the target byteslice for you.
+      def final(key : Bytes, prefix : Bytes) : Bytes
+        final_to(Bytes.new(bytesize(key, prefix)), key, prefix)
+      end
+
+      def_equals_and_hash @blocks, @block, @offset
+    end
+
     # Each exploration fiber is running this method.
     private def explore(wg, atoms, completion, h0 : Atom, fn : Completion, Atom ->) : Nil
-      hasher = Blake3.new
+      hasher = Atom::HASHER.new
 
       loop do
         candidates = {0u8, 1u8, 2u8, 3u8}.map do |digit|
-          h(pointerof(hasher), h0, digit.to_u8)
+          Meridium.h(pointerof(hasher), h0, digit.to_u8)
         end
 
         first = nil
@@ -165,14 +252,14 @@ module Ww::Meridium
       mt : Bool,
       &fn : Completion, Atom ->
     ) : Nil
-      hasher = Blake3.new
+      hasher = Atom::HASHER.new
 
-      h0 = h(pointerof(hasher))
-      h0 = h(pointerof(hasher), h0, entity.value)
-      h0 = h(pointerof(hasher), h0, key)
+      h0 = Meridium.h(pointerof(hasher))
+      h0 = Meridium.h(pointerof(hasher), h0, entity.value)
+      h0 = Meridium.h(pointerof(hasher), h0, key)
 
       each_b4_digit(prefix) do |digit|
-        h0 = h(pointerof(hasher), h0, digit)
+        h0 = Meridium.h(pointerof(hasher), h0, digit)
       end
 
       completion0 = Completion.new
@@ -226,10 +313,10 @@ module Ww::Meridium
     # separately. This results is four atoms -- a quad.
     def quad(hasherptr, atom : Atom) : Quad
       Quad.new(
-        h(hasherptr, atom, 0u8),
-        h(hasherptr, atom, 1u8),
-        h(hasherptr, atom, 2u8),
-        h(hasherptr, atom, 3u8),
+        Meridium.h(hasherptr, atom, 0u8),
+        Meridium.h(hasherptr, atom, 1u8),
+        Meridium.h(hasherptr, atom, 2u8),
+        Meridium.h(hasherptr, atom, 3u8),
       )
     end
 
@@ -276,11 +363,36 @@ module Ww::Meridium
       rows.map { |completion, atom| {completion, quad(hasherptr, atom)} }
     end
 
+    # Two dimensional version of `expand`.
+    def expand2d(hasherptr, rows2d : Array(Array(Row))) : Array(Array(Expansion))
+      rows2d.map { |rows| expand(hasherptr, rows) }
+    end
+
     # Represents a quad mask-marked `Expansion`.
     alias MarkedExpansion = {Completion, Quad, QuadMask}
 
+    # :nodoc:
+    struct Expansions2Dee
+      include Enumerable(Atom)
+
+      def initialize(@expansions2d : Array(Array(Expansion)))
+      end
+
+      def each(& : Atom ->)
+        @expansions2d.each do |expansions|
+          expansions.each do |_, quad|
+            quad.each { |atom| yield atom }
+          end
+        end
+      end
+    end
+
     # Creates a quad mask for each expansion, masking only atoms of the quad
     # that are present in *atoms*.
+    #
+    # NOTE: this is a 2D implementation (note array of array of expansions).
+    # The following diagram illustrates just one dimension.
+
     #
     # ```text
     #                expansion                              marked expansion
@@ -312,24 +424,23 @@ module Ww::Meridium
     #            │  │                    └── C3 │   └─┘    │                    └── C3   absent   │ │
     #            ▼  └───────────────────────────┘          └──────────────────────────────────────┘ ▼
     # ```
-    def mark(atoms : IAtomsPresent, expansions : Array(Expansion)) : Array(MarkedExpansion)
-      answer = atoms.present?(expansions) do |_, quad|
-        {quad.a, quad.b, quad.c, quad.d}
-      end
-
+    def mark2d(atoms : IAtomsPresent, expansions2d : Array(Array(Expansion))) : Array(Array(MarkedExpansion))
+      answer = atoms.present?(Expansions2Dee.new(expansions2d), &.itself)
       cursor = 0
 
-      expansions.map do |completion, quad|
-        mask = QuadMask.new(
-          answer[cursor],
-          answer[cursor + 1],
-          answer[cursor + 2],
-          answer[cursor + 3],
-        )
+      expansions2d.map do |expansions|
+        expansions.map do |completion, quad|
+          mask = QuadMask.new(
+            answer[cursor],
+            answer[cursor + 1],
+            answer[cursor + 2],
+            answer[cursor + 3],
+          )
 
-        cursor += 4
+          cursor += 4
 
-        {completion, quad, mask}
+          {completion, quad, mask}
+        end
       end
     end
 
@@ -393,6 +504,11 @@ module Ww::Meridium
     # Same as `collapse`, but ignores the yielded completions.
     def collapse(marked : Array(MarkedExpansion)) : Array(Row)
       collapse(marked) { }
+    end
+
+    # Two dimensional version of `collapse`.
+    def collapse2d(marked2d : Array(Array(MarkedExpansion))) : Array(Array(Row))
+      marked2d.map { |marked| collapse(marked) }
     end
   end
 end
