@@ -15,10 +15,9 @@ module Ww::Meridium
       end
     end
 
-    # Calls *sink* with atoms that constitute `self`. Atoms may repeat with
-    # deliberately. This can be used for e.g. refcounting (instead of using
-    # a set, you can use a multiset and have much less disruptive removals
-    # later on).
+    # Calls *sink* with atoms that constitute `self`. Atoms may repeat deliberately.
+    # This can be used for e.g. refcounting (instead of using a set, you can use
+    # a multiset and have much less disruptive removals later on).
     #
     # *mt* specifies whether to run under a multi-threaded or single-threaded
     # fiber execution context.
@@ -224,7 +223,7 @@ module Ww::Meridium
       new(pattern, secret, branches)
     end
 
-    def each_atom(instant : WWID, *, mt : Bool = true, &sink : Atom ->) : Nil
+    def each_atom(instant : WWID, *, mt : Bool, &sink : Atom ->) : Nil
       atoms = AtomSink.new(sink)
 
       if @branches.size == 1
@@ -255,7 +254,7 @@ module Ww::Meridium
       SensorRegistry.register(atoms, @secret, apexes, instant, mt: mt)
     end
 
-    def each_complement(atoms, *, mt : Bool = true, &sink : WWID ->) : Nil
+    def each_complement(atoms : IAtomsPresent, *, mt : Bool, &sink : WWID ->) : Nil
       if @branches.size == 1
         strands = @branches[0]
         AppearanceRegistry.each_appearance(atoms, @secret, strands, mt: mt, &sink)
@@ -283,7 +282,7 @@ module Ww::Meridium
   class Appearance
     include Surface
 
-    # Constructs an appearance.
+    # Constructs an appearance surface.
     #
     # - *value* is the value of this appearance.
     # - *secret* acts like a "password" or "scope" protecting this appearance;
@@ -291,11 +290,11 @@ module Ww::Meridium
     def initialize(@value : Term, @secret : Term? = nil)
     end
 
-    def each_atom(instant : WWID, *, mt : Bool = true, &sink : Atom ->) : Nil
+    def each_atom(instant : WWID, *, mt : Bool, &sink : Atom ->) : Nil
       AppearanceRegistry.mount(AtomSink.new(sink), @secret, @value, instant, mt: mt)
     end
 
-    def each_complement(atoms, *, mt : Bool = true, &sink : WWID ->) : Nil
+    def each_complement(atoms : IAtomsPresent, *, mt : Bool, &sink : WWID ->) : Nil
       hits = Utrie.endpoints(atoms, @value)
       conjvs = Xgraph.conjvs(atoms, hits, mt: mt)
 

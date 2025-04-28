@@ -1053,26 +1053,26 @@ a3 = Appearance.new(Term.of(type: "pixel", x: 2, y: 300, color: {0, 0, 255}))
 a4 = Appearance.new(Term.of(type: "pixel", x: 0, y: 400, color: {255, 0, 255}))
 
 dt = Time.measure do
-  s0.atoms_to(sid0, tspace)
-  s1.atoms_to(sid1, tspace)
-  a1.atoms_to(aid0, tspace)
-  a2.atoms_to(aid1, tspace)
-  a3.atoms_to(aid2, tspace)
-  a4.atoms_to(aid3, tspace)
+  s0.atoms_to(sid0, tspace, mt: true)
+  s1.atoms_to(sid1, tspace, mt: true)
+  a1.atoms_to(aid0, tspace, mt: true)
+  a2.atoms_to(aid1, tspace, mt: true)
+  a3.atoms_to(aid2, tspace, mt: true)
+  a4.atoms_to(aid3, tspace, mt: true)
 
-  scomps = s0.complement_set(tspace)
+  scomps = s0.complement_set(tspace, mt: true)
   expect scomps == Set{aid0, aid1, aid3}
 
-  scomps = s1.complement_set(tspace)
+  scomps = s1.complement_set(tspace, mt: true)
   expect scomps == Set{aid2, aid3}
 
-  acomps = a3.complement_set(tspace)
+  acomps = a3.complement_set(tspace, mt: true)
   expect acomps == Set{sid1}
 
-  acomps = a2.complement_set(tspace)
+  acomps = a2.complement_set(tspace, mt: true)
   expect acomps == Set{sid0}
 
-  acomps = a4.complement_set(tspace)
+  acomps = a4.complement_set(tspace, mt: true)
   expect acomps == Set{sid0, sid1}
 end
 

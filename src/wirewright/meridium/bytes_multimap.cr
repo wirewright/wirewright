@@ -282,7 +282,7 @@ module Ww::Meridium
     # Creates a quad mask for each expansion, masking only atoms of the quad
     # that are present in *atoms*.
     #
-    # ```
+    # ```text
     #                expansion                              marked expansion
     #
     #            │  ┌───────────────────────────┐          ┌──────────────────────────────────────┐

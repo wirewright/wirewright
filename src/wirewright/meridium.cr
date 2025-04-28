@@ -2,9 +2,9 @@
 # the outside world via the network. It is the general abstraction Wirewright
 # employs for networking.
 #
-# Clients and servers of the termspace, termbase, internal objects such as
-# `Xgraph`, surfaces (sensors & appearances), the underlying maps, and everything
-# else network-related is the domain of Meridium.
+# Clients and servers of the termspace, internal emergent entities such as
+# `Xgraph`, surfaces (`Sensor`s & `Appearance`s), and lots of other network-
+# related things are within the domain of Meridium.
 module Ww::Meridium
   # Implementations can capture atoms coming from various sources such as `Utrie`,
   # `Xgraph`, etc.
@@ -12,7 +12,7 @@ module Ww::Meridium
     abstract def <<(atom : Atom)
   end
 
-  # Implementations can be queried for the presence of certain `Atom`s.
+  # Implementations can be queried about the presence of `Atom`s.
   module IAtomsPresent
     # Returns a BitList indicating whether each atom, rendered from *objects*
     # via the block, exists.
