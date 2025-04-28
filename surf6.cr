@@ -32,154 +32,6 @@ end
 
 include Ww::Meridium
 
-# The first 12 bytes are always conid, used to find & contact the owner of
-# *slot*. The 4-byte value of slot is globally irrelevant; it is only useful
-# to the conid that was contacted through the first 12 bytes, to resolve the
-# surface of interest. A 0-slot conid usually acts as an id "origin" and `succ`
-# is used to obtain successive WWIDs under that conid.
-#
-# ```text
-#                   randomness              checksum
-#                 ---------------            -----
-#  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
-#  --------------                -----------
-#  ms since 1 Jan 2025        slot (client-defined)
-# ```
-struct WWID
-  WW_EPOCH = Time.utc(year: 2025, month: 1, day: 1)
-  BYTESIZE = 16
-
-  class ParseError < Exception
-  end
-
-  def initialize(@order : UInt64, @disorder : UInt64, @slot : UInt32)
-  end
-
-  # Generates a new WWID.
-  def self.next : WWID
-    order = (Time.utc - WW_EPOCH).total_milliseconds.floor.to_u64
-    disorder = (0u64..U40_MAX).sample(Random::Secure)
-
-    new(order, disorder, 0u32)
-  end
-
-  U40_MAX = 0xff_ff_ff_ff_ffu64
-
-  def self.encode_u40_be(int : UInt64, target : Bytes) : Nil
-    if target.size < 5
-      raise ArgumentError.new("target too small to write u40")
-    end
-
-    if int > U40_MAX
-      raise OverflowError.new("number exceeds u40 max")
-    end
-
-    scratch = uninitialized UInt8[8] # 64 bits
-
-    IO::ByteFormat::BigEndian.encode(int, scratch.to_slice)
-
-    encoding = scratch.to_slice[3, 5] # 40 least significant bits
-    encoding.copy_to(target)
-  end
-
-  def self.decode_u40_be(target : Bytes) : UInt64
-    if target.size < 5
-      raise ArgumentError.new("target too small to contain u40")
-    end
-
-    scratch = uninitialized UInt8[8] # 64 bits
-
-    # Initialize 3 high bytes to 0.
-    scratch[0] = 0
-    scratch[1] = 0
-    scratch[2] = 0
-
-    # Copy low 5 bytes.
-    target[0, 5].copy_to(scratch.to_slice + 3)
-
-    IO::ByteFormat::BigEndian.decode(UInt64, scratch.to_slice)
-  end
-
-  def self.from_slice_be(source : Bytes) : WWID?
-    unless source.size == BYTESIZE
-      raise ParseError.new("bytesize #{source.size} != #{BYTESIZE}")
-    end
-
-    offset = 0
-
-    order = decode_u40_be(source + offset)
-    offset += 5 # bytes
-
-    slot = IO::ByteFormat::BigEndian.decode(UInt32, source + offset)
-    offset += sizeof(UInt32)
-
-    disorder = decode_u40_be(source + offset)
-    offset += 5 # bytes
-
-    checksum0 = Digest::CRC16.checksum(source[0, offset])
-    checksum1 = IO::ByteFormat::BigEndian.decode(UInt16, source + offset)
-    offset += 2 # bytes
-
-    unless checksum0 == checksum1
-      raise ParseError.new("wrong checksum #{checksum1} (its) != #{checksum0} (my)")
-    end
-
-    instance = new(order, disorder, slot)
-
-    now = Time.utc
-    if now < instance.created_at
-      raise ParseError.new("id is from the future")
-    end
-
-    instance
-  end
-
-  def to_slice_be(target = Bytes.new(BYTESIZE)) : Bytes
-    offset = 0
-
-    # The order is weird to allow the id to be sortable by raw bytes. We use
-    # a different order on the struct to have it properly aligned.
-
-    WWID.encode_u40_be(@order, target + offset)
-    offset += 5 # bytes
-
-    IO::ByteFormat::BigEndian.encode(@slot, target + offset)
-    offset += 4 # bytes
-
-    WWID.encode_u40_be(@disorder, target + offset)
-    offset += 5 # bytes
-
-    checksum = Digest::CRC16.checksum(target[0, offset])
-
-    IO::ByteFormat::BigEndian.encode(checksum, target + offset)
-    offset += 2 # bytes
-
-    target
-  end
-
-  def created_at : Time
-    WW_EPOCH + @order.milliseconds
-  end
-
-  def with_slot(slot : UInt32)
-    WWID.new(@order, @disorder, slot)
-  end
-
-  def succ : WWID
-    WWID.new(@order, @disorder, @slot + 1)
-  end
-
-  def inspect(io)
-    io << "#("
-    @order.to_s(io, base: 32, precision: 9, upcase: true)
-    io << "|"
-    @disorder.to_s(io, base: 32, precision: 9, upcase: true)
-    io << "|"
-    @slot.to_s(io, base: 16, precision: 8)
-    io << ")"
-  end
-end
-
 def h0 : Atom
   hasher = Blake3.new
   scratch = uninitialized UInt8[Atom::BYTESIZE]
@@ -286,36 +138,12 @@ def h(hasherptr, a : Atom, b : Ubase::Any) : Atom
   hasherptr.value.reset
   hasherptr.value.update(scratch.to_slice)
 
-  hupdate(hasherptr, b)
+  Ubase.update(hasherptr, b)
 
   hasherptr.value.final(scratch.to_slice)
 
   Atom.of(scratch.to_slice)
 end
-
-def hupdate(hasherptr, ubase : Ubase::Begin) : Nil
-  hasherptr.value.update(Uopcode::Begin.value)
-end
-
-def hupdate(hasherptr, ubase : Ubase::End) : Nil
-  hasherptr.value.update(Uopcode::End.value)
-end
-
-{% for base in %w[IsSym IsStr IsNum IsBool IsDict] %}
-  def hupdate(hasherptr, ubase : Ubase::{{base.id}}) : Nil
-    hasherptr.value.update(Uopcode::{{base.id}}.value)
-  end
-{% end %}
-
-{% for base in %w[At Literal] %}
-  def hupdate(hasherptr, ubase : Ubase::{{base.id}}) : Nil
-    hasherptr.value.update(Uopcode::Hashed{{base.id}}.value)
-
-    digestion = IO::ByteStream.new { |slice| hasherptr.value.update(slice) }
-
-    ML.compact(digestion, ubase.term)
-  end
-{% end %}
 
 def h(hasherptr, a : Atom, b : Nil) : Atom
   h(hasherptr, a, h(hasherptr))
@@ -343,8 +171,11 @@ ST = Fiber::ExecutionContext::SingleThreaded.new("Meridium single-threaded")
 MT = Fiber::ExecutionContext::MultiThreaded.new("Meridium multi-threaded", System.cpu_count.to_i)
 
 class Completion
+  # :nodoc:
   OFFSET_BEGIN = 62u8
-  OFFSET_END   = 0u8
+
+  # :nodoc:
+  OFFSET_END = 0u8
 
   def initialize(@blocks = Slice(UInt64).empty, @block = 0u64, @offset = OFFSET_BEGIN)
   end
@@ -413,309 +244,14 @@ end
 
 alias Checksum = UInt32
 
-module Utrie
-  extend self
-
-  # We hash bases recursively. For instance, the following strand:
-  #
-  #    Begin - IsDict - At[0] - IsNum - Literal[100]
-  #
-  # Will be hashed as:
-  #
-  #    H0 = hash(entity utrie)
-  #    H1 = hash(H0 || Begin)
-  #    H2 = hash(H1 || IsDict)
-  #    H3 = hash(H2 || At[0])
-  #    H4 = hash(H3 || IsNum)
-  #    H5 = hash(H4 || Literal[100])
-  #
-  # H5 is the endpoint of the strand. It is then fed to Xgraph and so on.
-  private def mount1(atoms, strand : Enumerable(Ubase::Any)) : Atom
-    hasher = Blake3.new
-
-    h0 = h(pointerof(hasher), :utrie)
-
-    strand.each do |base|
-      h0 = h(pointerof(hasher), h0, base)
-      atoms << h0
-    end
-
-    h0
-  end
-
-  # Mounts the atoms of strands in the strands enumerable *strands* to the Utrie
-  # in *atoms*. Each strand is mounted concurrently with the others. Returns a
-  # **disordered** array of endpoints corresponding to *strands*.
-  #
-  # *mt* specifies whether to run under a multi-threaded or single-threaded
-  # fiber execution context.
-  def mount(atoms, strands : Enumerable(Enumerable(Ubase::Any)), *, mt : Bool) : Array(Atom)
-    wg = WaitGroup.new(strands.size)
-    ctx = mt ? MT : ST
-
-    endpoints = [] of Atom
-    lock = Mutex.new
-
-    strands.each do |strand|
-      ctx.spawn do
-        endpoint = mount1(atoms, strand)
-
-        lock.synchronize { endpoints << endpoint }
-      ensure
-        wg.done
-      end
-    end
-
-    wg.wait
-
-    endpoints
-  end
-
-  # :nodoc:
-  @[Flags]
-  enum State : UInt8
-    BeforeTypecheck
-    BeforeKeys
-    BeforeLiteral
-    BeforeEnd
-    End
-  end
-
-  # :nodoc:
-  record Arm, atom : Atom, arg : Term, state : State
-
-  private def seed(hasherptr, term : Term) : Array(Arm)
-    h0 = h(hasherptr, :utrie)
-    h0 = h(hasherptr, h0, Ubase::Begin.new)
-
-    [Arm.new(h0, term, State::BeforeTypecheck | State::BeforeEnd)]
-  end
-
-  private def sweep(atoms, gen0 : Array(Arm), gen1 : Array(Arm)) : Nil
-    answer = atoms.present?(gen0, &.atom)
-
-    gen1.clear
-    gen0.each_with_index do |arm, index|
-      next unless answer[index] # exists
-
-      gen1 << arm
-    end
-  end
-
-  private def advance(atoms, hasherptr, gen0, gen1, & : Atom ->) : Nil
-    gen0.clear
-    gen1.each do |arm|
-      if arm.state.before_typecheck?
-        case arm.arg.type
-        in .any?     then unreachable
-        in .symbol?  then base, state1 = Ubase::IsSym.new, State::BeforeLiteral
-        in .number?  then base, state1 = Ubase::IsNum.new, State::BeforeLiteral
-        in .string?  then base, state1 = Ubase::IsStr.new, State::BeforeLiteral
-        in .boolean? then base, state1 = Ubase::IsBool.new, State::BeforeLiteral
-        in .dict?    then base, state1 = Ubase::IsDict.new, State::BeforeKeys
-        end
-
-        atom1 = h(hasherptr, arm.atom, base)
-
-        # We can stop at e.g. IsNum - End or IsDict - End so add the BeforeEnd
-        # state as well.
-        gen0 << Arm.new(atom1, arm.arg, state1 | State::BeforeEnd)
-      end
-
-      if arm.state.before_end?
-        atom1 = h(hasherptr, arm.atom, Ubase::End.new)
-
-        gen0 << Arm.new(atom1, arm.arg, State::End)
-      end
-
-      if arm.state.before_keys?
-        #   This state is only reachable through BeforeTypechec where we make sure
-        # v it is in fact a dict.
-        dict = arm.arg.as_d
-        dict.each_entry do |key, value|
-          atom1 = h(hasherptr, arm.atom, Ubase::At.new(key))
-
-          # We can stop at e.g. IsDict - At(0) - End so add the BeforeEnd state
-          # as well.
-          gen0 << Arm.new(atom1, value, State::BeforeTypecheck | State::BeforeEnd)
-        end
-      end
-
-      if arm.state.before_literal?
-        atom1 = h(hasherptr, arm.atom, Ubase::Literal.new(arm.arg))
-
-        # We do not put End after Literal. Switch to End state right away.
-        gen0 << Arm.new(atom1, arm.arg, State::End)
-      end
-
-      if arm.state.end?
-        yield arm.atom
-      end
-    end
-  end
-
-  # Yields endpoint atoms for strands from the Utrie in *atoms* that match
-  # the given *term*.
-  #
-  # Currently the implementation is rather sequential, and instead of mult-threading
-  # relies on checking for the existence of large batches of atoms at a time. How large
-  # depends on the Utrie in *atoms* and on *term*.
-  def each_endpoint(atoms, term : Term, & : Atom ->) : Nil
-    hasher = Blake3.new
-
-    gen0 = seed(pointerof(hasher), term)
-    gen1 = [] of Arm
-    lock = Mutex.new
-
-    until gen0.empty?
-      sweep(atoms, gen0, gen1)
-      advance(atoms, pointerof(hasher), gen0, gen1) { |endpoint| yield endpoint }
-    end
-  end
-
-  def endpoints(atoms, term : Term) : Array(Atom)
-    endpoints = [] of Atom
-    each_endpoint(atoms, term) do |endpoint|
-      endpoints << endpoint
-    end
-    endpoints
-  end
-end
-
-# Ubases are tiny gate-keeper nodes for `Utrie` and the internal term trie
-# created by `AppearanceRegistry`.
-#
-# Arbitrary M1 patterns are broken down into `BranchList` (so DNF, which has
-# terrible scaling characteristics but still works!) Each branch in the branch
-# list is a `StrandList` (so a conjunction of strands; we're DNF, remember?)
-# A strand is a sequence of Ubases that create, in effect, a "chain of filters".
-# Each Ubase, then, is such a filter. E.g. `IsNum` filters number terms; `Literal`
-# filters literal matches. The `At` Ubase, on the other hand, is interesting
-# because its output is different from its input.
-#
-# See `Utrie` to learn more.
-module Ubase
-  alias Any = Begin | End | At | IsSym | IsStr | IsNum | IsBool | IsDict | Literal
-
-  # Passes a dictionary term's value for key *term* forward.
-  record At, term : Term
-
-  # Anchor put at the beginning of all strands.
-  record Begin
-
-  # Indicates an abrupt (non-literal) stop. This base is not emitted if the strand
-  # ends with `Literal`.
-  record End
-
-  # Passes only symbol terms forward.
-  record IsSym
-
-  # Passes only string terms forward.
-  record IsStr
-
-  # Passes only number terms forward.
-  record IsNum
-
-  # Passes only boolean terms forward.
-  record IsBool
-
-  # Passes only dictionary terms forward.
-  record IsDict
-
-  # Passes foward only terms that match *term* exactly.
-  record Literal, term : Term
-end
-
-# :nodoc:
-enum Uopcode : UInt8
-  Begin
-  End
-  IsSym
-  IsStr
-  IsNum
-  IsBool
-  IsDict
-  HashedAt
-  QuotedAt
-  HashedLiteral
-  QuotedLiteral
-end
-
 module AppearanceRegistry
   extend self
-
-  private def ubases(keypath : Stack(Term), leaf : Term) : Array(Ubase::Any)
-    strand = [] of Ubase::Any
-    strand << Ubase::Begin.new
-
-    keypath.each do |key|
-      strand << Ubase::IsDict.new
-      strand << Ubase::At.new(key)
-    end
-
-    case leaf.type
-    in .any?     then unreachable
-    in .symbol?  then strand << Ubase::IsSym.new
-    in .string?  then strand << Ubase::IsStr.new
-    in .number?  then strand << Ubase::IsNum.new
-    in .boolean? then strand << Ubase::IsBool.new
-    in .dict?    then strand << Ubase::IsDict.new
-    end
-
-    strand << Ubase::Literal.new(leaf)
-    strand
-  end
-
-  private def upack(io, ubase : Ubase::Begin) : Nil
-    io.write_byte(Uopcode::Begin.value)
-  end
-
-  private def upack(io, ubase : Ubase::End) : Nil
-  end
-
-  {% for base in %w[IsSym IsStr IsNum IsBool IsDict] %}
-    private def upack(io, ubase : Ubase::{{base.id}}) : Nil
-      io.write_byte(Uopcode::{{base.id}}.value)
-    end
-  {% end %}
-
-  {% for base in %w[At Literal] %}
-    private def upack(io, ubase : Ubase::{{base.id}}) : Nil
-      if ML.compact_bytesize(ubase.term) <= Atom::BYTESIZE
-        io.write_byte(Uopcode::Quoted{{base.id}}.value)
-
-        ML.compact(io, ubase.term)
-      else
-        io.write_byte(Uopcode::Hashed{{base.id}}.value)
-
-        scratch = uninitialized UInt8[Atom::BYTESIZE]
-        hasher = Blake3.new
-
-        digester = IO::ByteStream.new { |slice| hasher.update(slice) }
-        ML.compact(digester, ubase.term)
-
-        hasher.final(scratch.to_slice)
-
-        io.write(scratch.to_slice)
-      end
-    end
-  {% end %}
-
-  private def upack(strand : Array(Ubase::Any)) : Bytes
-    io = IO::Memory.new
-
-    strand.each do |base|
-      upack(io, base)
-    end
-
-    io.to_slice
-  end
 
   # :nodoc:
   APPEARANCE_SET_GAP = "appearances".to_slice
 
   private def mount1(atoms, secret_slice : Bytes, ubases : Array(Ubase::Any), appearance : WWID) : Nil
-    data = upack(ubases)
+    data = Ubase.upack(ubases)
 
     terminal = BytesMultimap.add(atoms, :appearance_registry, secret_slice, data: data)
 
@@ -743,7 +279,7 @@ module AppearanceRegistry
     wg = WaitGroup.new
 
     Term.each_keypath_and_leaf(value) do |keypath, leaf|
-      ubases = ubases(keypath, leaf)
+      ubases = Ubase.strand(keypath, leaf)
 
       wg.add
       ctx.spawn do
@@ -761,7 +297,7 @@ module AppearanceRegistry
   alias Row = {Completion, Atom}
 
   private def bundleof(atoms, secret_slice : Bytes, strand : Array(Ubase::Any), mt : Bool) : Array(Row)
-    prefix = upack(strand)
+    prefix = Ubase.upack(strand)
 
     # The completion callback runs on different threads (that is, it may).
     # So we must synchronize somehow.
@@ -933,7 +469,7 @@ Log.setup_from_env(default_level: :debug)
 
 tspace = MySet.new(4096)
 
-# trunk = WWID.next
+# trunk = WWID.new
 
 # puts "Generate appearances"
 
@@ -1036,7 +572,7 @@ tspace = MySet.new(4096)
 
 # {% skip_file %}
 
-trunk = WWID.next
+trunk = WWID.new
 aid0 = trunk = trunk.succ
 aid1 = trunk = trunk.succ
 aid2 = trunk = trunk.succ
@@ -1155,14 +691,14 @@ puts "OK in #{dt.total_milliseconds}ms"
 # Benchmark.ips do |x|
 #   x.report("gen") do
 
-# WWID.next
+# WWID.new
 #   end
 # end
 # require "benchmark"
 
 
 set = MySet.new(1024)
-conid = WWID.next
+conid = WWID.new
 origin = conid
 aid0 = origin = origin.succ
 aid1 = origin = origin.succ
@@ -1281,8 +817,8 @@ require "benchmark"
 #   pp conjv
 # end
 
-# sid0 = WWID.next
-# sid1 = WWID.next
+# sid0 = WWID.new
+# sid1 = WWID.new
 # SensorRegistry.register(set, nil, {Atom.of(Blake3.final("a")), Atom.of(Blake3.final("b")), Atom.of(Blake3.final("c"))}, sid0)
 # SensorRegistry.register(set, nil, {Atom.of(Blake3.final("d"))}, sid1)
 # apexes = {Atom.of(Blake3.final("a")), Atom.of(Blake3.final("b")), Atom.of(Blake3.final("c")), Atom.of(Blake3.final("d"))}

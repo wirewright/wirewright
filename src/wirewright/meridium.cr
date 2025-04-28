@@ -23,7 +23,10 @@ module Ww::Meridium
 end
 
 require "./meridium/atom"
+require "./meridium/wwid"
 require "./meridium/bytes_multimap"
+require "./meridium/ubase"
+require "./meridium/utrie"
 require "./meridium/xgraph"
 require "./meridium/sensor_registry"
 require "./meridium/surface"
