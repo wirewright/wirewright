@@ -21,6 +21,7 @@ alias BitList = DynamicBitArray
 #   and emit it sometime in the future. This tests how sanely the set generates positive
 #   reponses -- if it says `false` for something that was `true` before and we're working
 #   on the consequences of that right now, we halt.
+# These should occur on IAtomsPresent implementor level.
 
 enum Entity : UInt8
   Utrie
@@ -29,60 +30,7 @@ enum Entity : UInt8
   AppearanceRegistry
 end
 
-# Atom is currently a 256-bit hash split into 4 64-bit blocks. For some reason
-# this appears to be faster than passing the bytes as-is (e.g. as `u8[16]`).
-struct Atom
-  include Comparable(Atom)
-
-  BYTESIZE = 32
-
-  def initialize(@blk0 : UInt64, @blk1 : UInt64, @blk2 : UInt64, @blk3 : UInt64)
-  end
-
-  def self.of(digest : Bytes)
-    unless digest.size == 32
-      raise ArgumentError.new("expected digest to be 32 bytes")
-    end
-
-    blk0, blk1, blk2, blk3 = digest.unsafe_slice_of(UInt64)
-
-    new(blk0, blk1, blk2, blk3)
-  end
-
-  def self.of(string : String)
-    of(Blake3.final(string))
-  end
-
-  def <=>(other : Atom)
-    {@blk0, @blk1, @blk2, @blk3} <=> {other.@blk0, other.@blk1, other.@blk2, other.@blk3}
-  end
-
-  def copy_hash_to(target : Bytes) : Nil
-    blks = target.unsafe_slice_of(UInt64)
-    blks[0] = @blk0
-    blks[1] = @blk1
-    blks[2] = @blk2
-    blks[3] = @blk3
-  end
-
-  def hash(hasher)
-    @blk0.hash(hasher)
-  end
-
-  def inspect(io)
-    io << "Atom["
-    @blk0.to_s(io, base: 32, precision: 13, upcase: true)
-    io << "-"
-    @blk1.to_s(io, base: 32, precision: 13, upcase: true)
-    io << "-"
-    @blk2.to_s(io, base: 32, precision: 13, upcase: true)
-    io << "-"
-    @blk3.to_s(io, base: 32, precision: 13, upcase: true)
-    io << "]"
-  end
-
-  def_equals @blk0, @blk1, @blk2, @blk3
-end
+include Ww::Meridium
 
 # The first 12 bytes are always conid, used to find & contact the owner of
 # *slot*. The 4-byte value of slot is globally irrelevant; it is only useful
@@ -463,271 +411,6 @@ class Completion
   def_equals_and_hash @blocks, @block, @offset
 end
 
-# Implements an emergent *bytes multimap*: effectively a general-purpose digit
-# trie that can store any number of arbitrary byte sequences into an `Atom` set;
-# and can then complete any prefix up to all of the stored sequences with
-# that prefix.
-#
-# Base 4 was chosen as the digit base; so much so that it is hard-coded into
-# the implementation. This is because it appears to be a suitable compromise
-# between very little guessing (as with base 2, you only have two choices ->
-# two questions to ask at each level) vs. atom count (with base 2 you get
-# breadth=2, and thus very deep tries that require a lot of "road signs" -- atoms).
-#
-# This implementation is *extremely* experimental, and rather slow even after
-# my efforts to optimize it. Thankfully, it is at least *somewhat* parallelizable
-# (how much depends on the underlying set). The majority of time we spend in Blake3,
-# hashing recursively or appending digits; thus multi-threading helps and is able
-# to (in some cases?) get us the <no. of cores>x speedup expected of "perfectly
-# parallelizable" problems such as this one.
-module BytesMultimap
-  extend self
-
-  private def each_b4_digit(data : Bytes, & : UInt8 ->)
-    reader = BitReader.new(data)
-
-    loop do
-      # Consume one base-4 digit.
-      bit0 = reader.consume? || break
-      bit1 = reader.consume? || 0u8
-      digit = (bit0 << 1) | bit1
-      yield digit
-    end
-  end
-
-  # Adds *data* to the multimap under *key* (which can be empty). We hash *key*
-  # in but do not include hints for its generation on query, so *key* can be used
-  # as a kind of "password" for *data*.
-  #
-  # *entity* is the "entity" to which the *key*-*data* pair belongs. It acts as
-  # a "scope" for *key*-*data*.
-  #
-  # NOTE: You can execute multiple calls to `add` in parallel for better performance;
-  # since the majority of the time is spent hashing *data*, even a crude lock-protected
-  # *atoms* set would do.
-  def add(atoms, entity : Entity, key : Bytes, data : Bytes) : Atom
-    hasher = Blake3.new
-
-    h0 = h(pointerof(hasher))
-    h0 = h(pointerof(hasher), h0, entity.value)
-    h0 = h(pointerof(hasher), h0, key)
-
-    add(atoms, h0, data)
-  end
-
-  def add(atoms, h0, data) : Atom
-    hasher = Blake3.new
-
-    each_b4_digit(data) do |digit|
-      h0 = h(pointerof(hasher), h0, digit)
-      atoms << h0
-    end
-
-    h0
-  end
-
-  def append(h0, data) : Atom
-    hasher = Blake3.new
-
-    each_b4_digit(data) do |digit|
-      h0 = h(pointerof(hasher), h0, digit)
-    end
-
-    h0
-  end
-
-  # Each exploration fiber is running this method.
-  private def explore(wg, atoms, completion, h0 : Atom, fn : Completion, Atom ->) : Nil
-    hasher = Blake3.new
-
-    loop do
-      candidates = {0u8, 1u8, 2u8, 3u8}.map do |digit|
-        h(pointerof(hasher), h0, digit.to_u8)
-      end
-
-      first = nil
-
-      answer = atoms.present?(candidates, &.itself)
-      answer.each_with_index do |exists, digit|
-        next unless exists
-
-        digit = digit.to_u8
-        candidate = candidates[digit]
-
-        unless first
-          first = {candidate, digit}
-          next
-        end
-
-        completion1 = completion.dup.append(digit)
-
-        wg.add
-
-        # Spawn further fibers to explore the other branches if their
-        # atoms were found to exist.
-        spawn explore(wg, atoms, completion1, candidate, fn)
-      end
-
-      unless first
-        fn.call(completion, h0)
-        wg.done
-        return
-      end
-
-      # Reuse the same fiber for exploring one of the branches. This was supposed
-      # to be a tail call, but since Crystal doesn't guarantee those would be
-      # optimized, we write it as a loop explicitly.
-      h0, digit = first
-      completion = completion.append(digit)
-    end
-  rescue e : Exception
-    # Crash gracefully (humph?!)
-    wg.done
-    raise e
-  end
-
-  # Calls *fn* with each possible completion for *key*-*prefix* under the given
-  # *entity*. See also: `bind`.
-  #
-  # *mt* specifies whether to run under a multi-threaded or single-threaded
-  # fiber execution context.
-  #
-  # WARNING: *fn* will be called from another fiber, perhaps running on another
-  # thread if *mt* is `true` (it is by default). Thus make sure to either have
-  # fully compartmentalized *fn*, or *fn* that talks to the outside world in a
-  # thread-safe manner.
-  #
-  # The performance of this method in multi-threaded mode should *ideally*
-  # be <no. of cpu cores>x vs. single-threaded; but this depends heavily on
-  # how well `Fiber::ExecutionContext` schedules things as well as on the implementation
-  # of the underlying *atoms* set. In my case, I'm getting ~3.5x speedup over
-  # single-threaded mode with a very simple bucketized set (1024 buckets, each
-  # with a lock). There's a lot of variables involved though, and we cannot
-  # guarantee a lot (other than the underlying implementation is friendly toward
-  # parallelization in general). As a general observation, it appears that the less
-  # values there are in the multimap, the more comparable *mt* becomes to *st*; which
-  # is actually expected, since the underlying algorithm adapts to the contents of
-  # the set.
-  def complete(atoms, entity : Entity, key : Bytes, prefix : Bytes, *, mt : Bool = true, &fn : Completion, Atom ->) : Nil
-    hasher = Blake3.new
-
-    h0 = h(pointerof(hasher))
-    h0 = h(pointerof(hasher), h0, entity.value)
-    h0 = h(pointerof(hasher), h0, key)
-
-    each_b4_digit(prefix) do |digit|
-      h0 = h(pointerof(hasher), h0, digit)
-    end
-
-    completion0 = Completion.new
-
-    wg = WaitGroup.new
-    wg.add
-
-    ctx = mt ? MT : ST
-    ctx.spawn { explore(wg, atoms, completion0, h0, fn) }
-
-    wg.wait
-  end
-
-  defcase Quad, a : Atom, b : Atom, c : Atom, d : Atom do
-    include Enumerable(Atom)
-
-    def each(& : Atom ->)
-      {a, b, c, d}.each { |atom| yield atom }
-    end
-  end
-
-  record QuadMask, bits : UInt8 do
-    def self.new(a : Bool, b : Bool, c : Bool, d : Bool) : QuadMask
-      bits = 0u8
-      bits |= 0b1 if a
-      bits |= 0b10 if b
-      bits |= 0b100 if c
-      bits |= 0b1000 if d
-      new(bits)
-    end
-
-    def none? : Bool
-      bits.zero?
-    end
-
-    def select_with_digit(quad : Quad, & : Atom, UInt8 ->) : Nil
-      yield quad.a, 0u8 if bits.bit_set?(0)
-      yield quad.b, 1u8 if bits.bit_set?(1)
-      yield quad.c, 2u8 if bits.bit_set?(2)
-      yield quad.d, 3u8 if bits.bit_set?(3)
-    end
-
-    def &(other : QuadMask)
-      QuadMask.new(bits & other.bits)
-    end
-  end
-
-  alias Arm = {Completion, Atom}
-
-  private def quad(hasherptr, atom : Atom)
-    Quad.new(
-      h(hasherptr, atom, 0u8),
-      h(hasherptr, atom, 1u8),
-      h(hasherptr, atom, 2u8),
-      h(hasherptr, atom, 3u8),
-    )
-  end
-
-  alias Expanded = {Completion, Quad}
-
-  def expand(hasherptr, arms : Array({Completion, Atom})) : Array(Expanded)
-    arms.map do |completion, atom|
-      {completion, quad(hasherptr, atom)}
-    end
-  end
-
-  alias Marked = {Completion, Quad, QuadMask}
-
-  def mark(atoms, expansions : Array(Expanded)) : Array(Marked)
-    answer = atoms.present?(expansions) do |_, quad|
-      {quad.a, quad.b, quad.c, quad.d}
-    end
-
-    cursor = 0
-
-    expansions.map do |completion, quad|
-      mask = QuadMask.new(
-        answer[cursor],
-        answer[cursor + 1],
-        answer[cursor + 2],
-        answer[cursor + 3],
-      )
-
-      cursor += 4
-
-      {completion, quad, mask}
-    end
-  end
-
-  def prune(marked : Array(Marked), & : Completion ->) : Array({Completion, Atom})
-    arms = [] of {Completion, Atom}
-
-    marked.each do |completion, quad, mask|
-      if mask.none?
-        yield completion
-        next
-      end
-
-      mask.select_with_digit(quad) do |atom, digit|
-        arms << {completion.dup.append(digit), atom}
-      end
-    end
-
-    arms
-  end
-
-  def prune(marked)
-    prune(marked) { }
-  end
-end
-
 alias Checksum = UInt32
 
 module Utrie
@@ -740,11 +423,11 @@ module Utrie
   # Will be hashed as:
   #
   #    H0 = hash(entity utrie)
-  #    H1 = hash(H0 x Begin)
-  #    H2 = hash(H1 x IsDict)
-  #    H3 = hash(H2 x At[0])
-  #    H4 = hash(H3 x IsNum)
-  #    H5 = hash(H4 x Literal[100])
+  #    H1 = hash(H0 || Begin)
+  #    H2 = hash(H1 || IsDict)
+  #    H3 = hash(H2 || At[0])
+  #    H4 = hash(H3 || IsNum)
+  #    H5 = hash(H4 || Literal[100])
   #
   # H5 is the endpoint of the strand. It is then fed to Xgraph and so on.
   private def mount1(atoms, strand : Enumerable(Ubase::Any)) : Atom
@@ -766,7 +449,7 @@ module Utrie
   #
   # *mt* specifies whether to run under a multi-threaded or single-threaded
   # fiber execution context.
-  def mount(atoms, strands : Enumerable(Enumerable(Ubase::Any)), *, mt : Bool = true) : Array(Atom)
+  def mount(atoms, strands : Enumerable(Enumerable(Ubase::Any)), *, mt : Bool) : Array(Atom)
     wg = WaitGroup.new(strands.size)
     ctx = mt ? MT : ST
 
@@ -896,283 +579,6 @@ module Utrie
       endpoints << endpoint
     end
     endpoints
-  end
-end
-
-# An emergent graph of intersections. Materialized by "hints" about which binary
-# conjunctions exist. The querying side can then "climb" this "ladder of hints",
-# inferring higher and higher conjunctions by induction. Sensors can be looked
-# up under their top binary conjunction (called the sensor's conjunction *apex*)
-# using `SensorRegistry`.
-#
-# There is a certain trade-off in how smart the Xgraph is and how much packing
-# it provides. This is a particularly simple (one may even say crude) implementation;
-# it does not care about packing at all. We sort out of necessity, and this will
-# provide some kind of packing for very similar conjunctions; but divergence at any
-# point will derail this thing completely, and it will proceed to create newer and
-# newer nodes. Apparently I'm not smart enough to improve this :^)
-module Xgraph
-  extend self
-
-  # Returns the apex atom for *conj*, mounting "road sign" atoms along the way
-  # that will lead the querying side to the apex.
-  #
-  # ```text
-  #  a      b     c      d      e  [conj]
-  #
-  #     ab           cd     de
-  #
-  #          abcd       cdde
-  #
-  #              abcdcdde [apex]
-  # ```
-  def mount(atoms, conj : Enumerable(Atom)) : Atom
-    hasher = Blake3.new
-
-    gen0 = conj.to_a(&.itself)
-    gen1 = [] of Atom
-
-    while gen0.size > 1
-      # NOTE: we're sorting by hash. The order won't be obvious. But "rulial"
-      # clustering should be preserved (i.e. clustering within rule bounds).
-      gen0.unstable_sort!
-
-      cursor = 0
-      while cursor < gen0.size
-        u = gen0[cursor]
-        unless v = gen0[cursor + 1]?
-          v = u
-          u = gen0[cursor - 1]
-        end
-
-        atom = h(pointerof(hasher), :xgraph, u, v)
-        gen1 << atom
-        atoms << atom
-
-        cursor += 2
-      end
-
-      gen0, gen1 = gen1, gen0
-      gen1.clear
-    end
-
-    gen0.first # apex
-  end
-
-  private def explore(wg, atoms, u, vs, promoted, lock) : Nil
-    hasher = Blake3.new
-
-    # NOTE: we assume here that allocation is more expensive than hashing.
-    # Whether it actually is I'm not sure; I guess it depends on how many
-    # positive answers we get. If we get many then we've done twice the job
-    # hashing -- bad; if we get little then we've saved some memory on all
-    # the negative hashes -- good.
-
-    answer = atoms.present?(vs) { |v| h(pointerof(hasher), :xgraph, u, v) }
-    answer.each_with_index do |exists, index|
-      next unless exists
-
-      atom = h(pointerof(hasher), :xgraph, u, vs[index])
-      lock.synchronize do
-        promoted << atom
-      end
-    end
-  end
-
-  # Yields conjunction vertices that exist in *hits* and are part of the Xgraph
-  # in *atoms*. The yielded vertices may or may not be conjunction apexes; it
-  # is your responsibility to track and check that, if necessary. Note that this
-  # method may yield a lot of atoms; how much depends on the size of *hits* and
-  # the exhaustiveness of the Xgraph in *atoms*.
-  #
-  # *mt* specifies whether to run under a multi-threaded or single-threaded
-  # fiber execution context.
-  def each_conjv(atoms, hits : Enumerable(Atom), *, mt : Bool = true, & : Atom ->) : Nil
-    gen0 = hits.to_a(&.itself)
-    gen1 = [] of Atom
-
-    wg = WaitGroup.new
-    ctx = mt ? MT : ST
-    lock = Mutex.new
-
-    while gen0.size > 1
-      gen0.unstable_sort!
-      gen0.each { |conjv| yield conjv }
-
-      wg.add(gen0.size - 1)
-
-      (0...gen0.size - 1).each do |index|
-        u = gen0[index]
-        vs = gen0.to_readonly_slice[index + 1..]
-
-        ctx.spawn do
-          explore(wg, atoms, u, vs, gen1, lock)
-        ensure
-          wg.done
-        end
-      end
-
-      wg.wait
-
-      gen0, gen1 = gen1, gen0
-      gen1.clear
-    end
-
-    if top = gen0.first?
-      yield top
-    end
-  end
-
-  def conjvs(atoms, hits : Enumerable(Atom), **kwargs) : Array(Atom)
-    conjvs = [] of Atom
-    each_conjv(atoms, hits, **kwargs) do |conjv|
-      conjvs << conjv
-    end
-    conjvs
-  end
-end
-
-# A sensor registry is an emergent data structure that associates a sensor
-# conjunction apex to a sensor id. It is effectively a table with
-# the following columns:
-#
-# ```text
-#    secret     apex    sensor id     checksum
-#   primary   primary
-# ```
-#
-# Both the secret and the conjunction apex are assumed to be known by
-# the querying side implicitly. The underlying bytes multimap only stores
-# starting from the sensor id, assuming the prefix of secret followed
-# by apex implicitly. This provides an arguable degree of cryptographic
-# security to entries in the registry: only querying sides that know
-# the secret and were able to derive the apex as well are able to access
-# the sensor id.
-#
-# The sensor id acts as a connection pointer as well. In fact, only the last
-# four bytes of the sensor id identify the sensor itself; the former 12 bytes
-# identify the connection to which this sensor belongs, something akin to an
-# IP address.
-module SensorRegistry
-  extend self
-
-  Log = ::Log.for(self)
-
-  # Creates a record in the sensor registry, pointing each of *apexes* to
-  # the given *sensor* under *secret*.
-  #
-  # *mt* specifies whether to run under a multi-threaded or single-threaded
-  # fiber execution context.
-  def register(atoms, secret : Term?, apexes : Indexable(Atom), sensor : WWID, *, mt : Bool = true) : Nil
-    secret_slice = secret_to_bytes(secret)
-
-    wg = WaitGroup.new(apexes.size)
-    ctx = mt ? MT : ST
-
-    apexes.each do |apex|
-      ctx.spawn do
-        entry = cursor = Bytes.new(secret_slice.size + Atom::BYTESIZE + WWID::BYTESIZE + sizeof(Checksum))
-
-        cursor.copy_from(secret_slice)
-        cursor += secret_slice.size
-
-        apex.copy_hash_to(cursor)
-        cursor += Atom::BYTESIZE
-
-        sensor.to_slice_be(cursor)
-        cursor += WWID::BYTESIZE
-
-        # Compute checksum. Note how we leave the secret unhashed. This acts as a
-        # tiny protection against hash collision for secrets: now both the hash
-        # and the checksum computed from raw secret must collide, which is a bit
-        # less likely I suppose. Although we're walking on very shaky ground
-        # here anyway.
-        checksum = Digest::CRC32.checksum(entry[...-sizeof(Checksum)])
-
-        IO::ByteFormat::BigEndian.encode(checksum, cursor)
-        cursor += sizeof(Checksum)
-
-        key = entry[0, secret_slice.size + Atom::BYTESIZE]
-        data = entry[secret_slice.size + Atom::BYTESIZE, WWID::BYTESIZE + sizeof(Checksum)]
-
-        BytesMultimap.add(atoms, :sensor_registry, key, data)
-      ensure
-        wg.done
-      end
-    end
-
-    wg.wait
-  end
-
-  # Calls *fn* with each sensor registered at each of *apexes* under *secret*.
-  # Sensors may repeat if one sensor is registered at multiple *apexes*.
-  #
-  # *mt* specifies whether to run under a multi-threaded or single-threaded
-  # fiber execution context.
-  #
-  # WARNING: *fn* will be called from another fiber, perhaps running on another
-  # thread if *mt* is `true` (it is by default). Thus make sure to either have
-  # fully compartmentalized *fn*, or *fn* that talks to the outside world in a
-  # thread-safe manner.
-  def each_sensor(atoms, secret : Term?, apexes : Indexable(Atom), *, mt : Bool = true, &fn : WWID ->) : Nil
-    secret_slice = secret_to_bytes(secret)
-
-    ctx = mt ? MT : ST
-    wg = WaitGroup.new(apexes.size)
-
-    apexes.each do |apex|
-      ctx.spawn do
-        key = cursor = Bytes.new(secret_slice.size + Atom::BYTESIZE)
-
-        cursor.copy_from(secret_slice)
-        cursor += secret_slice.size
-
-        apex.copy_hash_to(cursor)
-        cursor += Atom::BYTESIZE
-
-        # Key is readonly from this point onward. It must be, since we access
-        # it from complete() callback which could be called from another
-        # fiber/thread.
-
-        BytesMultimap.complete(atoms, :sensor_registry, key, prefix: Bytes.empty, mt: mt) do |completion, _|
-          entry = completion.final(key, prefix: Bytes.empty)
-
-          next if entry.size == key.size # No completions
-
-          # Verify size
-          unless entry.size == (expected = key.size + WWID::BYTESIZE + sizeof(Checksum))
-            Log.debug { "reject entry: size too small (#{entry.size} != #{expected})" }
-            next
-          end
-
-          # Check checksum
-          checksum0 = IO::ByteFormat::BigEndian.decode(Checksum, entry[-sizeof(Checksum)..])
-          checksum1 = Digest::CRC32.checksum(entry[...-sizeof(Checksum)])
-
-          unless checksum0 == checksum1
-            Log.debug { "reject entry: checksum mismatch (my #{checksum1} != its #{checksum0})" }
-            next
-          end
-
-          # Decode sensor id
-          sensor_slice = entry[key.size, WWID::BYTESIZE]
-
-          begin
-            sensor = WWID.from_slice_be(sensor_slice)
-          rescue e : WWID::ParseError
-            Log.debug(exception: e) { "reject entry" }
-            next
-          end
-
-          # Call fn with sensor id
-          fn.call(sensor)
-        end
-      ensure
-        wg.done
-      end
-    end
-
-    wg.wait
   end
 end
 
@@ -1308,7 +714,7 @@ module AppearanceRegistry
   # :nodoc:
   APPEARANCE_SET_GAP = "appearances".to_slice
 
-  private def mount1(wg, atoms, secret_slice : Bytes, ubases : Array(Ubase::Any), appearance : WWID) : Nil
+  private def mount1(atoms, secret_slice : Bytes, ubases : Array(Ubase::Any), appearance : WWID) : Nil
     data = upack(ubases)
 
     terminal = BytesMultimap.add(atoms, :appearance_registry, secret_slice, data: data)
@@ -1324,15 +730,13 @@ module AppearanceRegistry
     appearance.to_slice_be(scratch.to_slice)
 
     BytesMultimap.add(atoms, terminal, scratch.to_slice)
-  ensure
-    wg.done
   end
 
   # Subscribes *appearance* to perceptions of *value* under *secret*.
   #
   # *mt* specifies whether to run under a multi-threaded or single-threaded
   # fiber execution context.
-  def mount(atoms, secret : Term?, value : Term, appearance : WWID, *, mt : Bool = true) : Nil
+  def mount(atoms, secret : Term?, value : Term, appearance : WWID, *, mt : Bool) : Nil
     secret_slice = secret_to_bytes(secret)
 
     ctx = mt ? MT : ST
@@ -1343,7 +747,9 @@ module AppearanceRegistry
 
       wg.add
       ctx.spawn do
-        mount1(wg, atoms, secret_slice, ubases, appearance)
+        mount1(atoms, secret_slice, ubases, appearance)
+      ensure
+        wg.done
       end
 
       true # continue
@@ -1379,7 +785,7 @@ module AppearanceRegistry
     bundle
   end
 
-  def each_appearance(atoms, secret : Term?, strands, *, mt : Bool = true, &fn : WWID ->) : Nil
+  def each_appearance(atoms, secret : Term?, strands, *, mt : Bool, &fn : WWID ->) : Nil
     secret_slice = secret_to_bytes(secret)
 
     wg = WaitGroup.new
@@ -1404,8 +810,8 @@ module AppearanceRegistry
     wg.wait
 
     hasher = Blake3.new
-    marked = [] of Array(BytesMultimap::Marked)
-    expanded = [] of Array(BytesMultimap::Expanded)
+    marked = [] of Array(BytesMultimap::MarkedExpansion)
+    expanded = [] of Array(BytesMultimap::Expansion)
     populations = [] of Set(Completion)
 
     (WWID::BYTESIZE*4 + 1).times do |ord|
@@ -1425,7 +831,7 @@ module AppearanceRegistry
       unless ord == WWID::BYTESIZE*4
         # Prune all dead-end completions.
         bundles.clear
-        bundles.concat(marked) { |bundle| BytesMultimap.prune(bundle) }
+        bundles.concat(marked) { |bundle| BytesMultimap.collapse(bundle) }
 
         # Index for cheap intersection
         populations.clear
@@ -1449,7 +855,7 @@ module AppearanceRegistry
 
       marked.each do |bundle|
         # Dead-end completions at this point are valid completions. Process them.
-        BytesMultimap.prune(bundle) do |completion|
+        BytesMultimap.collapse(bundle) do |completion|
           bytesize = completion.bytesize(key: Bytes.empty, prefix: Bytes.empty)
           unless bytesize == WWID::BYTESIZE
             pp completion
@@ -1477,259 +883,10 @@ module AppearanceRegistry
   end
 end
 
-struct AtomSink
-  def initialize(@sink : Atom ->)
-  end
-
-  def <<(atom : Atom) : self
-    @sink.call(atom)
-
-    self
-  end
-end
-
-module Surface
-  # Calls *sink* with atoms that constitute `self`. Atoms may repeat with intent.
-  # This can be used for e.g. refcounting (instead of using a set, you can use
-  # a multiset and have much less disruptive removals later on).
-  #
-  # *mt* specifies whether to run under a multi-threaded or single-threaded
-  # fiber execution context.
-  #
-  # WARNING: *sink* must be thread-safe -- it will be called from different fibers.
-  # If you don't want to be bothered with thread-safety, use `atoms` which returns
-  # a set of atoms and does the thread-safety stuff on its own.
-  abstract def each_atom(instant : WWID, *, mt : Bool = true, &sink : Atom ->) : Nil
-
-  def atoms_to(instant, object, **kwargs) : Nil
-    each_atom(instant, **kwargs) do |atom|
-      object << atom
-    end
-  end
-
-  # Returns the set of atoms that constitute `self`.
-  #
-  # See `each_atom` for *kwargs*.
-  def atoms(instant, **kwargs) : Set(Atom)
-    atoms = Set(Atom).new
-    lock = Mutex.new
-
-    each_atom(instant, **kwargs) do |atom|
-      lock.synchronize { atoms << atom }
-    end
-
-    atoms
-  end
-
-  def complements(atoms, **kwargs) : Set(WWID)
-    complements = Set(WWID).new
-    lock = Mutex.new
-
-    each_complement(atoms, **kwargs) do |complement|
-      lock.synchronize { complements << complement }
-    end
-
-    complements
-  end
-end
-
-class Sensor
-  include Surface
-
-  alias Strand = Array(Ubase::Any)
-  alias StrandList = Array(Strand)
-  alias BranchList = Array(StrandList)
-
-  protected def initialize(@pattern : Term, @secret : Term?, @branches : BranchList)
-    if @branches.empty?
-      raise ArgumentError.new("branches list must contain at least one branch")
-    end
-  end
-
-  private SK_ANY  = Term.of({:"%any"})
-  private SK_SYM  = Term.of({:"%symbol"})
-  private SK_STR  = Term.of({:"%string"})
-  private SK_NUM  = Term.of({:"%number", :_})
-  private SK_DICT = Term.of({:"%dict"})
-  private SK_BOOL = Term.of({:"%boolean"})
-
-  # Converts skeleton strand *bases* to a `Strand`.
-  private def self.strand(bases : Term::Dict) : Strand
-    strand = Strand.new
-    state = :start
-
-    bases.items.each do |base|
-      case state
-      when :start
-        unless base == SK_ANY
-          raise "BUG: unexpected base #{base}, expected (%any)"
-        end
-        strand << Ubase::Begin.new
-        state = :typecheck
-      when :typecheck
-        case base
-        when SK_DICT
-          strand << Ubase::IsDict.new
-          state = :key
-        when SK_SYM
-          strand << Ubase::IsSym.new
-          state = :literal
-        when SK_NUM
-          strand << Ubase::IsNum.new
-          state = :literal
-        when SK_STR
-          strand << Ubase::IsStr.new
-          state = :literal
-        when SK_BOOL
-          strand << Ubase::IsBool.new
-          state = :literal
-        else
-          raise "BUG: unexpected base #{base}, expected typecheck"
-        end
-      when :key
-        Term.case(base) do
-          matchpi %{(%'%literal ())} do # empty dict
-            strand << Ubase::Literal.new(Term.of)
-            state = :after_literal
-          end
-
-          matchpi %{(%'%value (%'%literal term_))} do
-            strand << Ubase::At.new(term)
-            state = :typecheck
-          end
-
-          otherwise do
-            raise "BUG: unexpected base #{base}, expected %value %literal"
-          end
-        end
-      when :literal
-        Term.case(base) do
-          matchpi %{(%'%literal term_)} do
-            strand << Ubase::Literal.new(term)
-            state = :after_literal
-          end
-
-          otherwise do
-            raise "BUG: unexpected base #{base}, expected %literal"
-          end
-        end
-      when :after_literal
-        raise "BUG: expected end-of-strand after literal, but found base #{base}"
-      end
-    end
-
-    # Indicate abrupt end (as in e.g. `Begin - *` or `Begin - IsDict - At(0) - *`) by
-    # an explicit End base. If we had literal we treat it as end-of-strand regardless.
-    unless state == :after_literal
-      strand << Ubase::End.new
-    end
-
-    strand
-  end
-
-  # Breaks *branch* down into its constituent strands and so on.
-  private def self.strand_list(branch : Term) : StrandList
-    strands = StrandList.new
-    M1.strands(branch) do |bases|
-      strands << strand(bases)
-    end
-    strands
-  end
-
-  # Breaks *skeleton* down into its constituent branches and so on.
-  private def self.branch_list(skeleton : Term) : BranchList
-    branches = BranchList.new
-    M1.branches(skeleton) do |branch|
-      branches << strand_list(branch)
-    end
-    branches
-  end
-
-  # Returns the skeleton of *pattern*.
-  #
-  # See also: `M1.skeleton`.
-  private def self.skeleton(pattern : Term) : Term
-    pipe(pattern, M1.normal, M1.skeleton)
-  end
-
-  def self.new(pattern : Term, secret : Term? = nil) : Sensor
-    branches = pipe(pattern, skeleton, branch_list)
-
-    new(pattern, secret, branches)
-  end
-
-  def each_atom(instant : WWID, *, mt : Bool = true, &sink : Atom ->) : Nil
-    atoms = AtomSink.new(sink)
-
-    if @branches.size == 1
-      strands = @branches[0]
-      endpoints = Utrie.mount(atoms, strands, mt: mt)
-      apexes = {Xgraph.mount(atoms, endpoints)}
-    else
-      wg = WaitGroup.new(@branches.size)
-      ctx = mt ? MT : ST
-
-      apexes = [] of Atom
-      lock = Mutex.new
-
-      @branches.each do |strands|
-        ctx.spawn do
-          endpoints = Utrie.mount(atoms, strands, mt: mt)
-          apex = Xgraph.mount(atoms, endpoints)
-
-          lock.synchronize { apexes << apex }
-        ensure
-          wg.done
-        end
-      end
-
-      wg.wait
-    end
-
-    SensorRegistry.register(atoms, @secret, apexes, instant, mt: mt)
-  end
-
-  def each_complement(atoms, *, mt : Bool = true, &sink : WWID ->) : Nil
-    if @branches.size == 1
-      strands = @branches[0]
-      AppearanceRegistry.each_appearance(atoms, @secret, strands, mt: mt, &sink)
-      return
-    end
-
-    wg = WaitGroup.new(@branches.size)
-    ctx = mt ? MT : ST
-
-    @branches.each do |strands|
-      ctx.spawn do
-        AppearanceRegistry.each_appearance(atoms, @secret, strands, mt: mt, &sink)
-      ensure
-        wg.done
-      end
-    end
-
-    wg.wait
-  end
-end
-
-class Appearance
-  include Surface
-
-  def initialize(@value : Term, @secret : Term? = nil)
-  end
-
-  def each_atom(instant : WWID, *, mt : Bool = true, &sink : Atom ->) : Nil
-    AppearanceRegistry.mount(AtomSink.new(sink), @secret, @value, instant, mt: mt)
-  end
-
-  def each_complement(atoms, *, mt : Bool = true, &sink : WWID ->) : Nil
-    hits = Utrie.endpoints(atoms, @value)
-    conjvs = Xgraph.conjvs(atoms, hits, mt: mt)
-
-    SensorRegistry.each_sensor(atoms, @secret, conjvs, mt: mt, &sink)
-  end
-end
-
 class MySet
+  include IAtomAppend
+  include IAtomsPresent
+
   def initialize(@n : Int32)
     @sets = Slice(Set(Atom)).new(@n) { Set(Atom).new }
     @locks = Slice(Mutex).new(@n) { Mutex.new }
@@ -1853,7 +1010,7 @@ tspace = MySet.new(4096)
 
 # 100.times do
 # dt, comp = Time.measured do
-#   s.complements(tspace)
+#   s.complement_set(tspace)
 # end
 
 # pp comp
@@ -1871,7 +1028,7 @@ tspace = MySet.new(4096)
 
 #   complements = Set(WWID).new
 #   dt = Time.measure do
-#     complements = sensor.complements(tspace)
+#     complements = sensor.complement_set(tspace)
 #   end
 
 #   puts "#{complements.size} complement(s). Done in #{dt.total_milliseconds}ms"
@@ -1903,25 +1060,25 @@ dt = Time.measure do
   a3.atoms_to(aid2, tspace)
   a4.atoms_to(aid3, tspace)
 
-  scomps = s0.complements(tspace)
+  scomps = s0.complement_set(tspace)
   expect scomps == Set{aid0, aid1, aid3}
 
-  scomps = s1.complements(tspace)
+  scomps = s1.complement_set(tspace)
   expect scomps == Set{aid2, aid3}
 
-  acomps = a3.complements(tspace)
+  acomps = a3.complement_set(tspace)
   expect acomps == Set{sid1}
 
-  acomps = a2.complements(tspace)
+  acomps = a2.complement_set(tspace)
   expect acomps == Set{sid0}
 
-  acomps = a4.complements(tspace)
+  acomps = a4.complement_set(tspace)
   expect acomps == Set{sid0, sid1}
 end
 
 puts "OK in #{dt.total_milliseconds}ms"
 
-# # acomps = a.complements(atoms)
+# # acomps = a.complement_set(atoms)
 # # pp acomps
 
 # {% skip_file unless flag?(:tail) %}
@@ -2019,48 +1176,48 @@ require "benchmark"
 
 lock = Mutex.new
 
-AppearanceRegistry.mount(set, nil, Term.of(:add, 1, 2, 3, 4, 5), aid0)
-AppearanceRegistry.mount(set, nil, Term.of(:sub, 1, 2), aid1)
-AppearanceRegistry.mount(set, nil, Term.of(:sub, "hello", 4), aid2)
+AppearanceRegistry.mount(set, nil, Term.of(:add, 1, 2, 3, 4, 5), aid0, mt: true)
+AppearanceRegistry.mount(set, nil, Term.of(:sub, 1, 2), aid1, mt: true)
+AppearanceRegistry.mount(set, nil, Term.of(:sub, "hello", 4), aid2, mt: true)
 
 # _
 seen = Set(WWID).new
-AppearanceRegistry.each_appearance(set, nil, { [Ubase::Begin.new] }) do |aid|
+AppearanceRegistry.each_appearance(set, nil, { [Ubase::Begin.new] }, mt: true) do |aid|
   lock.synchronize { seen << aid }
 end
 expect seen == Set{aid0, aid1, aid2}
 
 # _dict
 seen = Set(WWID).new
-AppearanceRegistry.each_appearance(set, nil, { [Ubase::Begin.new, Ubase::IsDict.new] }) do |aid|
+AppearanceRegistry.each_appearance(set, nil, { [Ubase::Begin.new, Ubase::IsDict.new] }, mt: true) do |aid|
   lock.synchronize { seen << aid }
 end
 expect seen == Set{aid0, aid1, aid2}
 
 # (_)
 seen = Set(WWID).new
-AppearanceRegistry.each_appearance(set, nil, { [Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(0))] }) do |aid|
+AppearanceRegistry.each_appearance(set, nil, { [Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(0))] }, mt: true) do |aid|
   lock.synchronize { seen << aid }
 end
 expect seen == Set{aid0, aid1, aid2}
 
 # (_symbol)
 seen = Set(WWID).new
-AppearanceRegistry.each_appearance(set, nil, { [Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(0)), Ubase::IsSym.new] }) do |aid|
+AppearanceRegistry.each_appearance(set, nil, { [Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(0)), Ubase::IsSym.new] }, mt: true) do |aid|
   lock.synchronize { seen << aid }
 end
 expect seen == Set{aid0, aid1, aid2}
 
 # (add)
 seen = Set(WWID).new
-AppearanceRegistry.each_appearance(set, nil, { [Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(0)), Ubase::IsSym.new, Ubase::Literal.new(Term.of(:add))] }) do |aid|
+AppearanceRegistry.each_appearance(set, nil, { [Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(0)), Ubase::IsSym.new, Ubase::Literal.new(Term.of(:add))] }, mt: true) do |aid|
   lock.synchronize { seen << aid }
 end
 expect seen == Set{aid0}
 
 # (sub)
 seen = Set(WWID).new
-AppearanceRegistry.each_appearance(set, nil, { [Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(0)), Ubase::IsSym.new, Ubase::Literal.new(Term.of(:sub))] }) do |aid|
+AppearanceRegistry.each_appearance(set, nil, { [Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(0)), Ubase::IsSym.new, Ubase::Literal.new(Term.of(:sub))] }, mt: true) do |aid|
   lock.synchronize { seen << aid }
 end
 expect seen == Set{aid1, aid2}
@@ -2070,7 +1227,7 @@ seen = Set(WWID).new
 AppearanceRegistry.each_appearance(set, nil, {
   [Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(0)), Ubase::IsSym.new, Ubase::Literal.new(Term.of(:sub))],
   [Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(1))],
-}) do |aid|
+}, mt: true) do |aid|
   lock.synchronize { seen << aid }
 end
 expect seen == Set{aid1, aid2}
@@ -2080,7 +1237,7 @@ seen = Set(WWID).new
 AppearanceRegistry.each_appearance(set, nil, {
   [Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(0)), Ubase::IsSym.new, Ubase::Literal.new(Term.of(:sub))],
   [Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(1)), Ubase::IsNum.new],
-}) do |aid|
+}, mt: true) do |aid|
   lock.synchronize { seen << aid }
 end
 expect seen == Set{aid1}
@@ -2090,7 +1247,7 @@ seen = Set(WWID).new
 AppearanceRegistry.each_appearance(set, nil, {
   [Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(0)), Ubase::IsSym.new, Ubase::Literal.new(Term.of(:sub))],
   [Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(1)), Ubase::IsStr.new],
-}) do |aid|
+}, mt: true) do |aid|
   lock.synchronize { seen << aid }
 end
 expect seen == Set{aid2}
@@ -2098,18 +1255,18 @@ expect seen == Set{aid2}
 puts "OK"
 require "benchmark"
 
-Benchmark.ips do |x|
-  x.report("do it") do
-# 1000.times do
- seen = Set(WWID).new
-AppearanceRegistry.each_appearance(set, nil, {
-  [Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(0)), Ubase::IsSym.new, Ubase::Literal.new(Term.of(:sub))],
-  [Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(1)), Ubase::IsStr.new],
-}) do |aid|
-  lock.synchronize { seen << aid }
-end
-end
-end
+# Benchmark.ips do |x|
+#   x.report("do it") do
+# # 1000.times do
+#  seen = Set(WWID).new
+# AppearanceRegistry.each_appearance(set, nil, {
+#   [Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(0)), Ubase::IsSym.new, Ubase::Literal.new(Term.of(:sub))],
+#   [Ubase::Begin.new, Ubase::IsDict.new, Ubase::At.new(Term.of(1)), Ubase::IsStr.new],
+# }) do |aid|
+#   lock.synchronize { seen << aid }
+# end
+# end
+# end
 
 #   end
 # end

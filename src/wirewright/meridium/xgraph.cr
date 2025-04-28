@@ -1,97 +1,140 @@
 module Ww::Meridium
-  # Xgraph takes the set of matched "facts" (see `Utrie`) and searches for
-  # `mount`ed conjunctions (called *xrules*) that these facts satisfy.
+  # An emergent graph of intersections. Materialized by "hints" about which binary
+  # conjunctions exist. The querying side can then "climb" this "ladder of hints",
+  # inferring higher and higher conjunctions by induction. Sensors can be looked
+  # up under their top binary conjunction (called the sensor's conjunction *apex*)
+  # using `SensorRegistry`.
   #
-  # In a nutshell, thanks to `Utrie`, this turns into a subset search problem:
-  # given a set of rules R where each rule r is a set of labels (e.g. integers),
-  # and a set of "facts" known about the term, F, also a set of labels (e.g. integers),
-  # find all rules r that are subset of F.
-  #
-  # The core problem here and the one Xgraph tries to solve to an extent, is that
-  # we *really really* don't want to depend on the number of rules in R. R could
-  # contain millions of rules; whereas in practice we see only several triggered
-  # by a particular term. So we want an algorithm whose runtime depends on the size
-  # of F for as long as possible and as much as possible; vs. one whose runtime
-  # depends on R.
-  struct Xgraph
-    # Represents a connection between two "facts".
-    record Key, a : Label, b : Label
+  # There is a certain trade-off in how smart the Xgraph is and how much packing
+  # it provides. This is a particularly simple (one may even say crude) implementation;
+  # it does not care about packing at all. We sort out of necessity, and this will
+  # provide some kind of packing for very similar conjunctions; but divergence at any
+  # point will derail this thing completely, and it will proceed to create newer and
+  # newer nodes. Apparently I'm not smart enough to improve this :^)
+  module Xgraph
+    extend self
 
-    # Gives a name to a connection between two "facts". Thus a higher-order
-    # "fact" emerges, that is the combination of two basis "facts".
-    record Value, id : Label
-
-    def initialize(@fresh : LabelGenerator, @map : IMap(Key, Value))
-    end
-
-    # Mounts an Xgraph rule (an *xrule*) for *referrer*. Returns the label of
-    # the xrule. See also: `Xgraph`.
+    # Returns the apex atom for *conj*, mounting "road sign" atoms along the way
+    # that will lead the querying side to the apex.
     #
-    # NOTE: *xrule* must be pre-sorted ascending. You lose ownership of *xrule*
-    # until this method returns.
-    def mount(referrer : Label, xrule : Deque(Label), deps : IDepSet) : Label
-      if xrule.empty?
-        raise ArgumentError.new
-      end
+    # ```text
+    #  a      b     c      d      e  [conj]
+    #
+    #     ab           cd     de
+    #
+    #          abcd       cdde
+    #
+    #              abcdcdde [apex]
+    # ```
+    def mount(atoms : IAtomAppend, conj : Enumerable(Atom)) : Atom
+      hasher = Blake3.new
 
-      while xrule.size > 1
-        a = xrule.shift
-        b = xrule.shift
+      gen0 = conj.to_a(&.itself)
+      gen1 = [] of Atom
 
-        key = Key.new(a, b)
-        value = @map.ref(referrer, key, Value.new(@fresh.call))
-        deps.add(key, value)
+      while gen0.size > 1
+        # NOTE: we're sorting by hash. The order won't be obvious. But "rulial"
+        # clustering should be preserved (i.e. clustering within rule bounds).
+        gen0.unstable_sort!
 
-        xrule << value.id
-      end
+        cursor = 0
+        while cursor < gen0.size
+          u = gen0[cursor]
+          unless v = gen0[cursor + 1]?
+            v = u
+            u = gen0[cursor - 1]
+          end
 
-      xrule[0]
-    end
+          atom = h(pointerof(hasher), :xgraph, u, v)
+          gen1 << atom
+          atoms << atom
 
-    private def conjs(referrer : Label, vertices : Deque(Label), sink : Label ->) : Nil
-      while a = vertices.shift?
-        sink.call(a)
-
-        (0...vertices.size).each do |i|
-          b = vertices.unsafe_fetch(i)
-          next unless value = @map.latest?(referrer, Key.new(a, b))
-
-          vertices << value.id
+          cursor += 2
         end
+
+        gen0, gen1 = gen1, gen0
+        gen1.clear
+      end
+
+      gen0.first # apex
+    end
+
+    private def explore(wg, atoms, u, vs, gen1, lock) : Nil
+      hasher = Blake3.new
+
+      # NOTE: we assume here that allocation is more expensive than hashing.
+      # Whether it actually is I'm not sure; I guess it depends on how many
+      # positive answers we get. If we get many then we've done twice the job
+      # hashing -- bad; if we get little then we've saved some memory on all
+      # the negative hashes -- good.
+
+      answer = atoms.present?(vs) { |v| h(pointerof(hasher), :xgraph, u, v) }
+      answer.each_with_index do |exists, index|
+        next unless exists
+
+        atom = h(pointerof(hasher), :xgraph, u, vs[index])
+
+        lock.synchronize { gen1 << atom }
       end
     end
 
-    # Calls *sink* with all mounted conjunction vertices whose corresponding
-    # conjunctions are satisfied by *vertices*.
+    # Yields conjunction vertices that exist in *hits* and are part of the Xgraph
+    # in *atoms*. The yielded vertices may or may not be conjunction apexes; it
+    # is your responsibility to track and check that, if necessary. Note that this
+    # method may yield a lot of atoms; how much depends on the size of *hits* and
+    # the exhaustiveness of the Xgraph in *atoms*.
     #
-    # NOTE: *vertices* must be pre-sorted ascending. You lose ownership of *vertices*
-    # until this method returns.
-    def conjs(referrer : Label, vertices : Deque(Label), &sink : Label ->) : Nil
-      conjs(referrer, vertices, sink)
-    end
-  end
+    # *mt* specifies whether to run under a multi-threaded or single-threaded
+    # fiber execution context.
+    def each_conjv(
+      atoms : IAtomsPresent,
+      hits : Enumerable(Atom), *,
+      mt : Bool,
+      & : Atom ->
+    ) : Nil
+      gen0 = hits.to_a(&.itself)
+      gen1 = [] of Atom
 
-  # Encoding / decoding of Utrie keys, values to terms.
+      wg = WaitGroup.new
+      ctx = mt ? MT : ST
+      lock = Mutex.new
 
-  struct ::Ww::Term
-    def self.encode(src : Xgraph::Key) : Term
-      Term.of(:xgraph, :key, :primary, encode(src.a), encode(src.b))
-    end
+      while gen0.size > 1
+        gen0.unstable_sort!
+        gen0.each { |conjv| yield conjv }
 
-    def self.decode?(dst : Xgraph::Key.class, term : Term) : Xgraph::Key?
-      matchpi?(term, %{(xgraph key primary a_ b_)}) do
-        Xgraph::Key.new(decode?(Label, a) || return, decode?(Label, b) || return)
+        wg.add(gen0.size - 1)
+
+        (0...gen0.size - 1).each do |index|
+          u = gen0[index]
+          vs = gen0.to_readonly_slice[index + 1..]
+
+          ctx.spawn do
+            explore(wg, atoms, u, vs, gen1, lock)
+          ensure
+            wg.done
+          end
+        end
+
+        wg.wait
+
+        gen0, gen1 = gen1, gen0
+        gen1.clear
+      end
+
+      if top = gen0.first?
+        yield top
       end
     end
 
-    def self.encode(src : Xgraph::Value) : Term
-      Term.of(:xgraph, :value, :primary, encode(src.id))
-    end
-
-    def self.decode?(dst : Xgraph::Value.class, term : Term) : Xgraph::Value?
-      matchpi?(term, %{(xgraph value primary id_)}) do
-        Xgraph::Value.new(Term.decode(Label, id) || return)
+    # Collects the conjunction vertices yielded by `each_conjv` into an array for
+    # you. Returns that array.
+    def conjvs(atoms : IAtomsPresent, hits : Enumerable(Atom), **kwargs) : Array(Atom)
+      conjvs = [] of Atom
+      each_conjv(atoms, hits, **kwargs) do |conjv|
+        conjvs << conjv
       end
+      conjvs
     end
   end
 end

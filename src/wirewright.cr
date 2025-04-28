@@ -7,7 +7,9 @@ require "../oklch"
 require "../util"
 require "./wirewright/term"
 require "./wirewright/ml"
-# require "./wirewright/meridium"
+{% if flag?(:surf5) %}
+require "./wirewright/meridium"
+{% end %}
 require "../pattern7"
 require "../baz5"
 require "../delta7_proto2"

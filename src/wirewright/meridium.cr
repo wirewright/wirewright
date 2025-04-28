@@ -6,11 +6,24 @@
 # `Xgraph`, surfaces (sensors & appearances), the underlying maps, and everything
 # else network-related is the domain of Meridium.
 module Ww::Meridium
+  # Implementations can capture atoms coming from various sources such as `Utrie`,
+  # `Xgraph`, etc.
+  module IAtomAppend
+    abstract def <<(atom : Atom)
+  end
+
+  # Implementations can be queried for the presence of certain `Atom`s.
+  module IAtomsPresent
+    # Returns a BitList indicating whether each atom, rendered from *objects*
+    # via the block, exists.
+    #
+    # Guarantees the resulting bit list matches the size of *objects*.
+    abstract def present?(objects : Enumerable(T), & : T -> Atom | Enumerable(Atom)) : BitList forall T
+  end
 end
 
-require "./meridium/map"
-require "./meridium/ubase"
-require "./meridium/utrie"
+require "./meridium/atom"
+require "./meridium/bytes_multimap"
 require "./meridium/xgraph"
-require "./meridium/tbase"
-require "./meridium/tsetconn"
+require "./meridium/sensor_registry"
+require "./meridium/surface"
