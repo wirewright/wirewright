@@ -49,7 +49,7 @@ The pprint2_vis frontend is scheduled for removal so you probably don't want to 
 Wirewright can be built with Crystal 1.16.0 or later.
 
 1. `shards install`.
-2. `crystal build soma6.cr --release -Dmt -Dpreview_mt -Dexecution_context -Dsoma6 -o soma`.
+2. `crystal build soma6.cr --release -Dpreview_mt -Dexecution_context -Dsoma6 -o soma`.
 
 And do not forget to hope really really hard for success!
 
