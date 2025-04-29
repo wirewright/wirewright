@@ -1870,6 +1870,8 @@ module Rhodium
     end
 
     dict.each_pair do |key, value|
+      next if Rhodium.shadow?(key)
+
       each_cursor_info(value, path: path.append(key), pppath: true, &fn)
     end
   end
@@ -1927,9 +1929,6 @@ module Rhodium
     # Visit the itemspart of dictionaries.
     Items
 
-    # Visit the shadow pairspart of dictionaries.
-    PairsShadow
-
     # Visit the nonshadow pairspart of dictionaries.
     PairsNonshadow
 
@@ -1950,38 +1949,15 @@ module Rhodium
         dict.each_item_unordered { |item| yield item }
       end
 
-      if pairs_shadow? && pairs_nonshadow?
-        dict.each_entry { |_, value| yield value }
-      elsif pairs_shadow?
-        dict.each_entry do |key, value|
-          next unless Rhodium.shadow?(key)
-          yield value
-        end
-      elsif pairs_nonshadow?
-        dict.each_entry do |key, value|
-          next if Rhodium.shadow?(key)
-          yield value
-        end
+      dict.each_entry do |key, value|
+        yield value unless Rhodium.shadow?(key)
       end
     end
 
     def satisfied?(cursorpath : Term::Dict) : Bool
       cursorpath.each_item_unordered do |key|
-        unless items?
-          # Reject if there are indices in the path.
-          return false if key.natural?
-        end
-
-        unless pairs_shadow?
-          # Reject if there are shadow pairs in the path.
-          return false if Rhodium.shadow?(key)
-        end
-
-        unless pairs_nonshadow?
-          # Reject if there are nonshadow pairs in the path.
-
-          return false if !Rhodium.index?(key) && Rhodium.nonshadow?(key)
-        end
+        return false if !items? && Rhodium.index?(key)
+        return false if pairs_nonshadow? && Rhodium.shadow?(key)
       end
 
       true
