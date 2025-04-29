@@ -655,14 +655,10 @@ class Document
       state.settled?
     end
 
-    def enqueue(prompt : Term, *, only_settled : Bool = false, & : ->) : Nil
+    def enqueue(prompt : Term, & : ->) : Nil
       state0 = @state.get(:relaxed)
       while true
-        if only_settled
-          state1 = state0.settled? ? state0.enqueue(prompt) : state0
-        else
-          state1 = state0.enqueue(prompt)
-        end
+        state1 = state0.enqueue(prompt)
         state0, ok = @state.compare_and_set(state0, state1, :relaxed, :relaxed)
         break if ok
       end
@@ -801,12 +797,12 @@ class Document
 
   # Wakes the document thread up if it's sleeping.
   def alarm : Nil
-    send(Term.of(:alarm), only_settled: true)
+    send(Term.of(:alarm))
   end
 
   # Adds *prompt* to this document's mailbox.
-  def send(prompt : Term, *, only_settled : Bool = false) : Nil
-    @mailbox.enqueue(prompt, only_settled: only_settled) do
+  def send(prompt : Term) : Nil
+    @mailbox.enqueue(prompt) do
       initial0 = @initial
 
       @initial = false
