@@ -1957,7 +1957,8 @@ module Rhodium
     def satisfied?(cursorpath : Term::Dict) : Bool
       cursorpath.each_item_unordered do |key|
         return false if !items? && Rhodium.index?(key)
-        return false if pairs_nonshadow? && Rhodium.shadow?(key)
+        return false unless pairs_nonshadow?
+        return false if Rhodium.shadow?(key)
       end
 
       true
