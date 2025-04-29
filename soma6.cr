@@ -1399,11 +1399,11 @@ frame = ML.term <<-WWML
             (group style: "w-max flow-col gap-4"
               (group style: "w-max gap-3"
                 (icon "disabled_visible" style: "text-neutral-200 text-5xl")
-                (p "Concealed" style: "h-max center-y leading-none font-bold text-neutral-200 text-4xl"))
+                (p "Concealed" style: "h-max center-y leading-tight font-bold text-neutral-200 text-4xl"))
               (p style: "w-max text-neutral-300 font-normal"
                 "This document is currently concealed. This means it’s running at full speed without you in the loop."))
             (group style: "border border-yellow-200 gap-2 rounded p-2 settled:border-green-200" settled: ^settled
-              (p style: "px-1 py-0.5 font-mono leading-none text-neutral-950 font-medium text-xs rounded-sm bg-yellow-200 settled:bg-green-200" settled: ^settled
+              (p style: "px-1 py-0.5 font-mono leading-tight text-neutral-950 font-medium text-xs rounded-sm bg-yellow-200 settled:bg-green-200" settled: ^settled
                 "Tab")
               (p style: "leading-tight text-yellow-200 settled:text-green-200 h-max center-y" settled: ^settled
                 "Hit Tab to reveal")))))
