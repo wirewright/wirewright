@@ -256,6 +256,9 @@ class PerceptData
     end
   {% end %}
 
+  # Updates this object according to an exhaustive set of *appearances*
+  # perceived by the given sensor *surface*; in other words, removes all
+  # perceived appearances **not** in the *appearances* set.
   def presence(surface : Sensor, appearances : Set(WWID)) : {PerceptData, Bool}
     percepts1 = @percepts.select { |id, _| id.in?(appearances) }
 
@@ -296,7 +299,8 @@ class View
     @map.each { |slot, data| yield slot, data }
   end
 
-  # Registers a sensor *surface* at *slot*.
+  # Registers a sensor *surface* at *slot*. Returns the resulting copy of
+  # this view.
   #
   # This is necessary to begin perceiving stimuli.
   def register(slot : Slot, surface : Sensor) : View
@@ -304,7 +308,8 @@ class View
     map1.same?(@map) ? self : change(map: map1, version: @version + 1)
   end
 
-  # Unregisters the sensor *surface* at *slot*.
+  # Unregisters the sensor *surface* at *slot*. Returns the resulting copy of
+  # this view.
   #
   # This is necessary to stop perceiving stimuli.
   def unregister(slot : Slot, surface : Sensor) : View
@@ -312,6 +317,9 @@ class View
     map1.same?(@map) ? self : change(map: map1, version: @version + 1)
   end
 
+  # Updates the percept data of *surface* at *slot* based on an exhaustive
+  # set of *appearances* it perceives at the moment. Returns the resulting
+  # copy of this view.
   def presence(slot : Slot, surface : Sensor, appearances : Set(WWID)) : View
     unless stimuli0 = @map[slot]?
       return self
@@ -434,6 +442,8 @@ class Node
     end
   end
 
+  # Updates the view according to an exhaustive set of appearances perceived
+  # by the sensor at *slot*. Yields the effects of that to the block.
   def presence(slot : Slot, appearances : Set(WWID), & : Effect ->) : Nil
     unless surface = @surfaces[slot]?
       Log.debug { "presence was called for a slot that is absent" }
