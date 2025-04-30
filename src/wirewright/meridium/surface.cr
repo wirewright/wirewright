@@ -290,12 +290,16 @@ module Ww::Meridium
       end
       io << ", relook="
       @relook.inspect(io)
+      io << ", branches="
+      @branches.inspect(io)
       io << ")"
     end
 
     def to_s(io)
       inspect(io)
     end
+
+    def_equals_and_hash @pattern, @secret, @relook
   end
 
   # Represents an appearance surface.
@@ -344,5 +348,7 @@ module Ww::Meridium
     def to_s(io)
       inspect(io)
     end
+
+    def_equals_and_hash @value, @secret
   end
 end

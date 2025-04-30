@@ -16,6 +16,9 @@ module Ww::Meridium
 
   # Implementations can be queried about the presence of `Atom`s.
   module IAtomsPresent
+    # Returns `true` if *atom* exists. Returns `false` otherwise.
+    abstract def present?(atom : Atom) : Bool
+
     # Returns a BitList indicating whether each atom, rendered from *objects*
     # via the block, exists.
     #

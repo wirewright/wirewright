@@ -202,5 +202,7 @@ module Ww::Meridium
       @slot.to_s(io, base: 16, precision: 8)
       io << ")"
     end
+
+    def_equals_and_hash @order, @disorder, @slot
   end
 end

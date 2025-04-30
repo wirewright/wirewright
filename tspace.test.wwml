@@ -473,7 +473,7 @@
       (view {}))))
 
 ;; Test empty dict nested
-;; Gosh it's a lot of parentheses ...
+;; Gosh that's a lot of parentheses ...
 (tspace
   (conn A
     (after added sensor Sa m←())

@@ -2,8 +2,8 @@ require "./src/wirewright"
 require "./uiRb"
 require "./sfpaint"
 require "./pprint2"
-require "./mstep3"
-require "./surfsrv"
+# require "./mstep3"
+# require "./surfsrv"
 
 alias UIR::Platform::Current = SFML
 
@@ -767,7 +767,7 @@ class Document
   @rem0 : Term::Num
   @rem1 : Term::Num
 
-  def initialize(@draw : Channel({Term::Dict, Channel(Term::Dict)}), @mstep : Meridium::Step)
+  def initialize(@draw : Channel({Term::Dict, Channel(Term::Dict)})) # , @mstep : Meridium::Step)
     id = @@counter.add(1, :relaxed)
 
     @document_thread = Fiber::ExecutionContext::SingleThreaded.new("Document #{id}")
@@ -840,7 +840,7 @@ class Document
     @document = D7.run(@document,
       log: D7::Log::None.new,
       transition: Rhodium.transition,
-      step: D7.steps(rendezvous, Rhodium.step, Nitrene.step(@nictx), @mstep.fn),
+      step: D7.steps(rendezvous, Rhodium.step, Nitrene.step(@nictx)), # @mstep.fn),
       goal: D7::Goal.none,
       initial: initial,
     )
@@ -1371,14 +1371,14 @@ seed = welcome
 
 draw_chan = Channel({Term::Dict, Channel(Term::Dict)}).new
 
-mstep = Meridium::Step.new
-doc = Document.new(draw_chan, mstep)
-alert = ->doc.alarm
-mstep.register(Term.of(:local), Meridium::Space.local(alert: alert))
-if ARGV[0]? == "join"
-  server = RemoteSurfnetServer.new("0.0.0.0", 9810)
-  mstep.register(Term.of(:remote), Meridium::Space.remote(server, alert: alert, keepalive: Keepalive::Continuous.new(30.seconds), relook: Relook::Periodic.new))
-end
+# mstep = Meridium::Step.new
+doc = Document.new(draw_chan) # , mstep)
+# alert = ->doc.alarm
+# mstep.register(Term.of(:local), Meridium::Space.local(alert: alert))
+# if ARGV[0]? == "join"
+#   server = RemoteSurfnetServer.new("0.0.0.0", 9810)
+#   mstep.register(Term.of(:remote), Meridium::Space.remote(server, alert: alert, keepalive: Keepalive::Continuous.new(30.seconds), relook: Relook::Periodic.new))
+# end
 
 doc.send(Term.of(:open, seed))
 

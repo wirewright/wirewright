@@ -113,15 +113,23 @@ module Ww::Meridium
         end
 
         if arm.state.before_keys?
-          #   This state is only reachable through BeforeTypechec where we make sure
+          #   This state is only reachable through BeforeTypecheck where we make sure
           # v it is in fact a dict.
           dict = arm.arg.as_d
-          dict.each_entry do |key, value|
-            atom1 = Meridium.h(hasher, arm.atom, Ubase::At.new(key))
+          if dict.empty?
+            # Empty dict is represented as strands IsDict - Literal({})
+            atom1 = Meridium.h(hasher, arm.atom, Ubase::Literal.new(Term.of))
 
-            # We can stop at e.g. IsDict - At(0) - End so add the BeforeEnd state
-            # as well.
-            gen0 << Arm.new(atom1, value, State::BeforeTypecheck | State::BeforeEnd)
+            # We do not put End after Literal. Switch to End state right away.
+            gen0 << Arm.new(atom1, Term.of, State::End)
+          else
+            dict.each_entry do |key, value|
+              atom1 = Meridium.h(hasher, arm.atom, Ubase::At.new(key))
+
+              # We can stop at e.g. IsDict - At(0) - End so add the BeforeEnd state
+              # as well.
+              gen0 << Arm.new(atom1, value, State::BeforeTypecheck | State::BeforeEnd)
+            end
           end
         end
 

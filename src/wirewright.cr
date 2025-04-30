@@ -11,16 +11,12 @@ require "../oklch"
 require "../util"
 require "./wirewright/term"
 require "./wirewright/ml"
-{% if flag?(:surf5) %}
-  require "./wirewright/meridium"
-{% end %}
+require "./wirewright/meridium"
 require "../pattern7"
 require "../baz5"
 require "../delta7_proto2"
+require "../surfconn"
 require "../primitives"
-{% unless flag?(:surf5) %}
-  require "../surf4"
-{% end %}
 require "../templ"
 
 module Ww

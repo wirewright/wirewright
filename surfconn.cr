@@ -4,10 +4,12 @@ Log.setup_from_env(default_level: :debug)
 
 include Meridium
 
+alias AtomFn = Atom ->
+
 module IAtomSet
   include IAtomsPresent
 
-  abstract def commit(adds : Enumerable(Atom), dels : Enumerable(Atom)) : Nil
+  abstract def transaction(& : AtomFn, AtomFn ->) : Nil
 end
 
 module IChat(M)
@@ -30,6 +32,8 @@ class SyncInMemoryChat(M)
         recvs = @subscribers.put_if_absent(conid) { Set(M ->).new }
         recvs << recv
       end
+
+      nil
     end
 
     unsub = Unsubscribe.new do
@@ -40,6 +44,8 @@ class SyncInMemoryChat(M)
 
         @subscribers.delete(conid)
       end
+
+      nil
     end
 
     {sub, unsub}
@@ -58,78 +64,22 @@ class SyncInMemoryChat(M)
   end
 end
 
-struct MyMultiset
-  def initialize
-    @hash = {} of Atom => UInt32
+module SerialAtomSet
+  include IAtomAppend
+
+  abstract def delete(atom : Atom) : Nil
+
+  def transaction(& : AtomFn, AtomFn ->) : Nil
+    yield ->(atom : Atom) { self << atom; nil }, ->delete(Atom)
   end
 
-  def includes?(atom : Atom) : Bool
-    @hash.has_key?(atom)
-  end
-
-  def <<(atom : Atom)
-    @hash[atom] = (@hash[atom]? || 0u32) + 1
-
-    self
-  end
-
-  def delete(atom : Atom)
-    return unless tally = @hash[atom]?
-
-    if tally == 1
-      @hash.delete(atom)
-    else
-      @hash[atom] = tally - 1
-    end
-  end
-end
-
-class MySet
-  include IAtomSet
-
-  def initialize(@n : Int32)
-    @sets = Slice(MyMultiset).new(@n) { MyMultiset.new }
-    @locks = Slice(Mutex).new(@n) { Mutex.new }
-  end
-
-  def <<(atom : Meridium::Atom)
-    bucket = atom.@blk0 % @n
-    @locks[bucket].synchronize do
-      @sets[bucket] << atom
-    end
-  end
-
-  def commit(adds : Enumerable(Atom), dels : Enumerable(Atom)) : Nil
-    dels.each do |atom|
-      bucket = atom.@blk0 % @n
-      @locks[bucket].synchronize do
-        @sets[bucket].delete(atom)
-      end
-    end
-
-    adds.each do |atom|
-      self << atom
-    end
-  end
-
-  def present?(atom : Meridium::Atom)
-    bucket = atom.@blk0 % @n
-    @locks[bucket].synchronize do
-      @sets[bucket].includes?(atom)
-    end
-  end
-
-  def size
-    @sets.sum(&.size)
-  end
-
-  def present?(objects : Enumerable(T), & : T -> Meridium::Atom | Enumerable(Meridium::Atom)) : BitList forall T
+  def present?(objects : Enumerable(T), & : T -> Atom | Enumerable(Atom)) : BitList forall T
     answer = BitList.new
 
     objects.each do |object|
       ee = yield object
 
-      unless ee.is_a?(Enumerable(Meridium::Atom))
+      unless ee.is_a?(Enumerable(Atom))
         ee = {ee}
       end
 
@@ -139,6 +89,75 @@ class MySet
     end
 
     answer
+  end
+end
+
+struct SyncAtomMultiset
+  include IAtomAppend
+  include IAtomSet
+  include SerialAtomSet
+
+  def initialize
+    @hash = {} of Atom => UInt32
+    @lock = Mutex.new
+  end
+
+  def size
+    @lock.synchronize { @hash.size }
+  end
+
+  def present?(atom : Atom) : Bool
+    @lock.synchronize { @hash.has_key?(atom) }
+  end
+
+  def <<(atom : Atom)
+    @lock.synchronize do
+      @hash[atom] = (@hash[atom]? || 0u32) + 1
+    end
+
+    self
+  end
+
+  def delete(atom : Atom) : Nil
+    @lock.synchronize do
+      return unless tally = @hash[atom]?
+
+      if tally == 1
+        @hash.delete(atom)
+      else
+        @hash[atom] = tally - 1
+      end
+    end
+  end
+end
+
+struct SyncBucketedAtomMultiset(N)
+  include IAtomSet
+  include SerialAtomSet
+
+  def initialize
+    @buckets = Slice(SyncAtomMultiset).new(N) { SyncAtomMultiset.new }
+  end
+
+  def size
+    @buckets.sum(&.size)
+  end
+
+  def present?(atom : Atom) : Bool
+    bucket = @buckets[atom.@blk0 % N]
+    bucket.present?(atom)
+  end
+
+  def <<(atom : Atom) : self
+    bucket = @buckets[atom.@blk0 % N]
+    bucket << atom
+
+    self
+  end
+
+  def delete(atom : Atom) : Nil
+    bucket = @buckets[atom.@blk0 % N]
+    bucket.delete(atom)
   end
 end
 
@@ -562,52 +581,13 @@ class Conn
   @sub : IChat::Subscribe
   @unsub : IChat::Unsubscribe
 
-  # :nodoc:
-  class SyncAtomBuffer(N)
-    include IAtomAppend
-    include Enumerable(Atom)
-
-    def initialize
-      @buckets = Slice(Array(Atom)).new(N) { [] of Atom }
-      @locks = Slice(Mutex).new(N) { Mutex.new }
-    end
-
-    def <<(atom : Atom) : self
-      bucket = atom.@blk0 % N
-
-      @locks[bucket].synchronize do
-        @buckets[bucket] << atom
-      end
-
-      self
-    end
-
-    # WARNING: this method is not thread-safe. Make sure all `<<` calls terminate
-    # before calling it.
-    def each(& : Atom ->) : Nil
-      @buckets.each do |bucket|
-        bucket.each { |atom| yield atom }
-      end
-    end
-
-    # WARNING: this method is not thread-safe. Make sure all `<<` calls terminate
-    # before calling it.
-    def clear : Nil
-      @buckets.each(&.clear)
-    end
-  end
-
-  # No. of buffer buckets in the connection's atom buffer (before atoms are
-  # transferred to the atom set).
-  NBUFBUCKETS = 32
-
   # WARNING: the implementations of *atoms* and *chat* must be thread-safe. *alert*
   # must also be thread-safe.
   def initialize(@atoms : IAtomSet, @chat : IChat(Activation), @alert : Conn ->)
     @node = Node.new
     @relook = {} of Slot => Channel(Nil)
-    @adds = SyncAtomBuffer(NBUFBUCKETS).new
-    @dels = SyncAtomBuffer(NBUFBUCKETS).new
+    @effects = Stack(Effect).new
+    @summoned = false
     @lock = Mutex.new # < protects all of the above
 
     @sub, @unsub = @chat.connect(@node.conid, &->receive(Activation))
@@ -619,7 +599,7 @@ class Conn
   end
 
   private def receive(act : Activation) : Nil
-    Log.trace { "received #{act} from chat" }
+    Log.trace { "#{@node.conid}: received #{act} from chat" }
 
     transaction &.receive(act)
   end
@@ -630,8 +610,10 @@ class Conn
   # dependent if someone inserts a sensor and an appearance simultaneously
   # that can excite each other.
 
-  private def insert(adds, dels, effect : SurfaceAddition) : Nil
-    effect.surface.atoms_to(effect.id.wwid, target: adds)
+  private def insert(add, del, effect : SurfaceAddition) : Nil
+    effect.surface.each_atom(effect.id.wwid) do |atom|
+      add.call(atom)
+    end
 
     return unless surface = effect.surface.as?(Sensor)
     return unless period = surface.relook?
@@ -646,7 +628,7 @@ class Conn
     spawn relook(slot, cancel, period, surface)
   end
 
-  private def insert(adds, dels, effect : SurfaceDeletion) : Nil
+  private def insert(add, del, effect : SurfaceDeletion) : Nil
     if surface = effect.surface.as?(Sensor)
       if surface.relook?
         @lock.synchronize do
@@ -656,14 +638,16 @@ class Conn
       end
     end
 
-    effect.surface.atoms_to(effect.id.wwid, target: dels)
+    effect.surface.each_atom(effect.id.wwid) do |atom|
+      del.call(atom)
+    end
   end
 
-  private def insert(adds, dels, effect : ViewChange | Stimulation) : Nil
+  private def insert(add, del, effect : ViewChange | Stimulation) : Nil
   end
 
-  private def insert(adds, dels, effects : Enumerable(Effect)) : Nil
-    effects.each { |effect| insert(adds, dels, effect) }
+  private def insert(add, del, effects : Enumerable(Effect)) : Nil
+    effects.each { |effect| insert(add, del, effect) }
   end
 
   private def activate(effect : SurfaceAddition) : Nil
@@ -689,15 +673,15 @@ class Conn
   # in *absence* of appearances we already know about.
 
   private def relook(slot, cancel, period, surface) : Nil
-    Log.trace { "relook loop running for #{surface} at #{slot}" }
+    Log.trace { "#{@node.conid}: relook loop running for #{surface} at #{slot}" }
 
     while true
       select
       when cancel.receive? # nil
-        Log.trace { "relook loop for #{surface} at #{slot} ended due to cancel" }
+        Log.trace { "#{@node.conid}: relook loop for #{surface} at #{slot} ended due to cancel" }
         break
       when timeout(period)
-        Log.trace { "relook #{surface} at #{slot}" }
+        Log.trace { "#{@node.conid}: relook #{surface} at #{slot}" }
 
         relook(slot, surface)
       end
@@ -707,7 +691,7 @@ class Conn
   private def relook(slot : Slot, surface : Sensor) : Nil
     appearances = surface.complement_set(@atoms)
 
-    Log.trace { "relook resulted in #{appearances.size} appearance(s)" }
+    Log.trace { "#{@node.conid}: relook resulted in #{appearances.size} appearance(s)" }
 
     transaction &.presence(slot, appearances)
   end
@@ -715,16 +699,9 @@ class Conn
   private def show(id : IWWID, surface : Sensor) : Nil
     appearances = surface.complement_set(@atoms)
     appearances.each do |appearance|
-      # If appearance is owned by a more recent conn than mine then it probably
-      # already sent me stimulus presence. No need to overload the network.
-      if appearance > id.wwid
-        Log.trace { "skip appearance #{appearance} because it will probably notify me" }
-        next
-      end
-
       act = StimulusRequest.new(id, appearance)
 
-      Log.trace { "send activation #{act} to #{appearance.conid}" }
+      Log.trace { "#{@node.conid}: send activation #{act} to #{appearance.conid}" }
 
       @chat.send(appearance.conid, act)
     end
@@ -733,16 +710,9 @@ class Conn
   private def show(id : IWWID, surface : Appearance) : Nil
     sensors = surface.complement_set(@atoms)
     sensors.each do |sensor|
-      # If sensor is owned by a more recent conn than mine then it probably
-      # already saw me. No need to overload the network.
-      if sensor > id.wwid
-        Log.trace { "skip sensor #{sensor} because it probably saw me" }
-        next
-      end
-
       act = StimulusPresence.new(sensor, id, surface.value)
 
-      Log.trace { "send activation #{act} to #{sensor.conid}" }
+      Log.trace { "#{@node.conid}: send activation #{act} to #{sensor.conid}" }
 
       @chat.send(sensor.conid, act)
     end
@@ -756,36 +726,38 @@ class Conn
     sensors.each do |sensor|
       act = StimulusAbsence.new(sensor, id)
 
-      Log.trace { "send activation #{act} to #{sensor.conid}" }
+      Log.trace { "#{@node.conid}: send activation #{act} to #{sensor.conid}" }
 
       @chat.send(sensor.conid, act)
     end
   end
 
-  private def handle(effects : Indexable(Effect)) : Nil
-    return if effects.empty?
+  private def propagate : Nil
+    handled = @lock.synchronize do
+      return if @effects.empty?
 
-    Log.trace { "handling #{effects.size} effect(s)" }
+      unless @summoned
+        Log.debug do
+          "#{@node.conid}: propagate aborted because the conn was not summoned yet, #{@effects.size} stale effect(s)"
+        end
+        return
+      end
 
-    # The lock makes sure only one handle() owns @adds/@dels throughout
-    # the transaction; thus only its atoms are in there, and we clean
-    # up afterwards.
-    @lock.synchronize do
-      insert(@adds, @dels, effects)
+      Log.trace { "#{@node.conid}: handling #{@effects.size} effect(s)" }
 
-      @atoms.commit(@adds, @dels)
-    ensure
-      @adds.clear
-      @dels.clear
+      @atoms.transaction do |add, del|
+        insert(add, del, @effects)
+      end
+
+      # Clear ("consume") all effects that we've handled.
+      @effects, _ = Stack(Effect).new, @effects
     end
 
-    activate(effects)
+    activate(handled)
 
-    return unless effects.any?(ViewChange)
-
-    Log.trace { "effects contained ViewChange, call alert" }
-
-    @alert.call(self)
+    if handled.any?(ViewChange)
+      @alert.call(self)
+    end
   end
 
   # Returns the latest view of the termspace according to this connection.
@@ -807,30 +779,44 @@ class Conn
     end
   end
 
-  # Silently inserts the atoms of this connection into the termspace.
+  # Inserts the atoms of this connection into the termspace.
   #
   # This method is thread-safe.
   def summon : Nil
-    Log.trace { "summon" }
-
-    @sub.call
     @lock.synchronize do
-      @node.each do |wwid, surface|
-        surface.atoms_to(wwid, @atoms)
+      return if @summoned
+
+      Log.trace { "#{@node.conid}: summon" }
+
+      @summoned = true
+
+      @sub.call
+      @atoms.transaction do |add, del|
+        @node.each do |wwid, surface|
+          surface.each_atom(wwid) { |atom| add.call(atom) }
+        end
       end
     end
+
+    propagate
   end
 
   # Silently removes the atoms of this connection from the termspace.
   #
   # This method is thread-safe.
   def dismiss : Nil
-    Log.trace { "dismiss" }
-
-    @unsub.call
     @lock.synchronize do
-      @node.each do |wwid, surface|
-        surface.each_atom(wwid) { |atom| @atoms.delete(atom) }
+      return unless @summoned
+
+      Log.trace { "#{@node.conid}: dismiss" }
+
+      @summoned = false
+
+      @unsub.call
+      @atoms.transaction do |add, del|
+        @node.each do |wwid, surface|
+          surface.each_atom(wwid) { |atom| del.call(atom) }
+        end
       end
     end
   end
@@ -870,33 +856,33 @@ class Conn
   # Transactions allow to group actions together so that they are sent to
   # the termspace as one big message vs. many small ones.
   def transaction(& : Commit ->) : Nil
-    Log.trace { "transaction is collecting effects" }
+    @lock.synchronize do
+      Log.trace { "#{@node.conid}: transaction is collecting effects" }
 
-    effects = @lock.synchronize do
       commit = Commit.new
       yield commit
 
-      Log.trace { "transaction will process #{commit.actions.size} action(s)" }
-
-      effects_ = Stack(Effect).new
+      if commit.actions.size < 8
+        Log.trace { "#{@node.conid}: transaction will process actions: #{commit.actions.join("; ")}" }
+      else
+        Log.trace { "#{@node.conid}: transaction will process #{commit.actions.size} action(s)" }
+      end
 
       commit.actions.each do |action|
         case action
         in Action::Put
-          @node.put(action.slot, action.surface) { |effect| effects_ << effect }
+          @node.put(action.slot, action.surface) { |effect| @effects << effect }
         in Action::Delete
-          @node.delete(action.slot) { |effect| effects_ << effect }
+          @node.delete(action.slot) { |effect| @effects << effect }
         in Action::Receive
-          @node.receive(action.act) { |effect| effects_ << effect }
+          @node.receive(action.act) { |effect| @effects << effect }
         in Action::Presence
-          @node.presence(action.slot, action.appearances) { |effect| effects_ << effect }
+          @node.presence(action.slot, action.appearances) { |effect| @effects << effect }
         end
       end
-
-      effects_
     end
 
-    handle(effects)
+    propagate
   end
 
   # Removes all surfaces from this connection. This is not the same as `dismiss`
@@ -923,12 +909,13 @@ class Conn
   #
   # This method is thread-safe.
   def delete(slot : Slot) : Nil
-    transaction &.delete(slot, surface)
+    transaction &.delete(slot)
   end
 end
 
+{% skip_file %}
 MT.spawn do
-  set = MySet.new(1024)
+  set = SyncBucketedAtomMultiset(1024).new
   chat = SyncInMemoryChat(Activation).new
   n = Atomic(Int32).new(0)
   conn = Conn.new(set, chat) do |c|
