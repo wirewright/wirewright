@@ -110,23 +110,27 @@ module Ww::Meridium
     {% for base in %w[At Literal] %}
       # :nodoc:
       def upack(io, ubase : Ubase::{{base.id}}) : Nil
-        if ML.compact_bytesize(ubase.term) <= Atom::BYTESIZE
+        bytesize = ML.compact_bytesize(ubase.term)
+
+        # Do not hash if the hash would be longer than raw value.
+        if bytesize <= Atom::BYTESIZE - 1
           io.write_byte(Uopcode::Quoted{{base.id}}.value)
-
+          io.write_byte(bytesize.to_u8)
           ML.compact(io, ubase.term)
-        else
-          io.write_byte(Uopcode::Hashed{{base.id}}.value)
-
-          hasher = Atom::Hasher.new
-          scratch = uninitialized UInt8[Atom::BYTESIZE]
-          updater = IO::ByteStream.new { |slice| hasher.update(slice) }
-
-          ML.compact(updater, ubase.term)
-
-          hasher.final(scratch.to_slice)
-
-          io.write(scratch.to_slice)
+          return
         end
+
+        io.write_byte(Uopcode::Hashed{{base.id}}.value)
+
+        hasher = Atom::Hasher.new
+        scratch = uninitialized UInt8[Atom::BYTESIZE]
+        updater = IO::ByteStream.new { |slice| hasher.update(slice) }
+
+        ML.compact(updater, ubase.term)
+
+        hasher.final(scratch.to_slice)
+
+        io.write(scratch.to_slice)
       end
     {% end %}
 

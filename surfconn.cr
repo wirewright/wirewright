@@ -747,6 +747,8 @@ class Conn
   end
 
   # Returns the latest view of the termspace according to this connection.
+  #
+  # This method is thread-safe.
   def view : View
     @lock.synchronize { @node.view }
   end

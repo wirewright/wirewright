@@ -11,10 +11,7 @@ module Ww::Meridium
   #   of *slot*.
   # - The 4-byte value of *slot* is globally irrelevant; it is only useful
   #   to the conid that was contacted through the first 10 bytes, to address
-  #   the surface of interest. One important assumption encoded in the order
-  #   of fields in the id is that the *slot* is time-sortable -- higher *slot*
-  #   values are assumed to have been generated at a later point in time vs.
-  #   those with a lower *slot* value.
+  #   the surface of interest.
   # - CRC16 is used as the algorithm to compute the two-byte *checksum*.
   #
   # In other words, you can think of the *timestamp*-*randomness* combo as a
@@ -24,8 +21,8 @@ module Ww::Meridium
   # is used to obtain successive WWIDs under that conid.
   #
   # ```text
-  #                   randomness                checksum
-  #                 --------------               -----
+  #                   randomness              checksum
+  #                 --------------             -----
   #  00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
   #  --------------                ------------
   #     timestamp                      slot

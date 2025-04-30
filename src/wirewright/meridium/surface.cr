@@ -117,8 +117,8 @@ module Ww::Meridium
 
     # Converts skeleton strand *bases* to a `Strand`.
     private def self.strand(bases : Term::Dict) : Strand
-      strand = Strand.new
       state = :start
+      strand = Strand{Ubase::Begin.new}
 
       bases.items.each do |base|
         case state
@@ -126,7 +126,6 @@ module Ww::Meridium
           unless base == SK_ANY
             raise "BUG: unexpected base #{base}, expected (%any)"
           end
-          strand << Ubase::Begin.new
           state = :typecheck
         when :typecheck
           case base

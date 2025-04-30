@@ -149,7 +149,6 @@ module Ww::Meridium
 
       gen0 = seed(hasher, term)
       gen1 = [] of Arm
-      lock = Mutex.new
 
       until gen0.empty?
         sweep(atoms, gen0, gen1)
