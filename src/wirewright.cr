@@ -15,9 +15,14 @@ require "./wirewright/meridium"
 require "../pattern7"
 require "../baz5"
 require "../delta7_proto2"
-require "../surfconn"
 require "../primitives"
 require "../templ"
+
+{% if flag?(:release) %}
+  Log.setup_from_env(default_level: :warn)
+{% else %}
+  Log.setup_from_env(default_level: :debug)
+{% end %}
 
 module Ww
   RESOURCES = Path[ENV["SOMA_RESOURCES_DIR"]? || Dir.current]

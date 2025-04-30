@@ -1,6 +1,6 @@
 module Ww::Meridium
   # A Meridium connection is a "shell" around a `Node` that lets it communicate &
-  # influence the outside world through an `IAtomSet` and an `IChat`.
+  # influence the outside world through an `IAtomSet` and an `IActivationChat`.
   #
   # NOTE: The main way you can obtain a termspace view is by polling: just call
   # `view`. If you want to be woken up on possible view change, you can use
@@ -8,12 +8,12 @@ module Ww::Meridium
   class Conn
     Log = ::Log.for(self)
 
-    @sub : IChat::Subscribe
-    @unsub : IChat::Unsubscribe
+    @sub : IActivationChat::Subscribe
+    @unsub : IActivationChat::Unsubscribe
 
     # WARNING: the implementations of *atoms* and *chat* must be thread-safe. *alert*
     # must also be thread-safe.
-    def initialize(@atoms : IAtomSet, @chat : IChat(Activation), @alert : Conn ->)
+    def initialize(@atoms : IAtomSet, @chat : IActivationChat, @alert : Conn ->)
       @node = Node.new
       @relook = {} of Slot => Channel(Nil)
       @effects = Stack(Effect).new
@@ -21,6 +21,12 @@ module Ww::Meridium
       @lock = Mutex.new # < protects all of the above
 
       @sub, @unsub = @chat.connect(@node.conid, &->receive(Activation))
+    end
+
+    # WARNING: the implementation of *tspace* must be thread-safe. *alert* must
+    # also be thread-safe.
+    def initialize(tspace : Tspace, alert : Conn ->)
+      initialize(tspace, tspace, alert)
     end
 
     # :ditto:
