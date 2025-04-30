@@ -121,12 +121,16 @@ module Ww::Meridium
         self
       end
 
-      # Returns the final bytesize of this completion given a *key* and a number
+      # Returns the final bytesize of this completion given a *key* and some
       # of *prefix* bytes.
       def bytesize(key : Bytes, prefix : Bytes) : Int32
         ntailbytes, ntailbits = (OFFSET_BEGIN - @offset).divmod(8)
 
         key.size + prefix.size + @blocks.size*8 + ntailbytes + (ntailbits.zero? ? 0 : 1)
+      end
+
+      def bytesize : Int32
+        bytesize(key: Bytes.empty, prefix: Bytes.empty)
       end
 
       # Renders this completion into a sequence of bytes; then writes
@@ -252,12 +256,10 @@ module Ww::Meridium
         h0 = Meridium.h(hasher, h0, digit)
       end
 
-      completion0 = Completion.new
-
       wg = WaitGroup.new
       wg.add
 
-      spawn explore(wg, atoms, completion0, h0, fn)
+      spawn explore(wg, atoms, Completion.new, h0, fn)
 
       wg.wait
     end

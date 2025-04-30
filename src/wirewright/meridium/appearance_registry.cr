@@ -61,10 +61,17 @@ module Ww::Meridium
       lock = Mutex.new
 
       BytesMM.complete(atoms, :appearance_registry, secret_slice, prefix) do |completion, atom|
-        entry = completion.final(key: secret_slice, prefix: prefix)
+        # We must at least complete the checksum.
+        next if completion.bytesize < sizeof(UInt32)
 
-        checksum0 = IO::ByteFormat::BigEndian.decode(UInt32, entry[-sizeof(UInt32)..])
-        checksum1 = Digest::CRC32.checksum(entry[...-sizeof(UInt32)])
+        suffix = completion.final(key: Bytes.empty, prefix: Bytes.empty)
+
+        checksum0 = IO::ByteFormat::BigEndian.decode(UInt32, suffix[-sizeof(UInt32)..])
+
+        checksum1 = Digest::CRC32.initial
+        checksum1 = Digest::CRC32.update(secret_slice, checksum1)
+        checksum1 = Digest::CRC32.update(prefix, checksum1)
+        checksum1 = Digest::CRC32.update(suffix[...-sizeof(UInt32)], checksum1)
 
         unless checksum0 == checksum1
           Log.debug { "reject entry: checksum mismatch (my #{checksum1} != its #{checksum0})" }
@@ -146,7 +153,7 @@ module Ww::Meridium
         marked.each do |bundle|
           # Dead-end completions at this point are valid completions. Process them.
           BytesMM.collapse(bundle) do |completion|
-            bytesize = completion.bytesize(key: Bytes.empty, prefix: Bytes.empty)
+            bytesize = completion.bytesize
             unless bytesize == WWID::BYTESIZE
               Log.debug { "reject entry: unexpected entry bytesize #{bytesize}" }
               next

@@ -15,6 +15,8 @@ module Ww::Meridium
       end
     end
 
+    abstract def atoms_to(id : WWID, target : IAtomAppend) : Nil
+
     # Calls *sink* with atoms that constitute `self`. Atoms may repeat deliberately.
     # This can be used for e.g. refcounting (instead of using a set, you can use
     # a multiset and have much less disruptive removals later on).
@@ -22,17 +24,19 @@ module Ww::Meridium
     # WARNING: *sink* must be thread-safe -- it will be called from multiple fibers.
     # If you don't want to be bothered with thread-safety, use `atom_set` which
     # returns a set of complements and does the thread-safety stuff for you.
-    abstract def each_atom(instant : WWID, &sink : Atom ->) : Nil
+    def each_atom(id : WWID, &sink : Atom ->) : Nil
+      atoms_to(id, target: AtomSink.new(sink))
+    end
 
-    # Appends the atoms that constitute `self` to *object*.
+    # Appends the atoms that constitute `self` to *target*.
     #
-    # *object* must respond to `<<`.
+    # *target* must respond to `<<`.
     #
-    # WARNING: *object*'s `<<` method must be thread-safe! It will be called
+    # WARNING: *target*'s `<<` method must be thread-safe! It will be called
     # from multiple fibers.
-    def atoms_to(instant : WWID, object, **kwargs) : Nil
-      each_atom(instant, **kwargs) do |atom|
-        object << atom
+    def atoms_to(id : WWID, target, **kwargs) : Nil
+      each_atom(id, **kwargs) do |atom|
+        target << atom
       end
     end
 
@@ -84,7 +88,21 @@ module Ww::Meridium
   class Sensor
     include Surface
 
-    protected def initialize(@pattern : Term, @secret : Term?, @branches : BranchList)
+    # Returns the M1 pattern term of this sensor.
+    getter pattern : Term
+
+    # Returns the secret term of this sensor.
+    getter? secret : Term?
+
+    # Returns the relook period for this sensor.
+    getter? relook : Time::Span?
+
+    protected def initialize(
+      @pattern : Term,
+      @secret : Term?,
+      @relook : Time::Span?,
+      @branches : BranchList,
+    )
       if @branches.empty?
         raise ArgumentError.new("branches list must contain at least one branch")
       end
@@ -202,19 +220,23 @@ module Ww::Meridium
     #   be excited by.
     # - *secret* acts like a "password" or "scope" to appearances; for the sensor
     #   to see an appearance, both must have the same secret.
-    def self.new(pattern : Term, secret : Term? = nil) : Sensor
+    # - *relook* specifies the relook period for the sensor. "Relook" is an update
+    #   of the sensor's view originating from that sensor itself. Normally sensors
+    #   are notified about stimuli by appearances. But when the owner of an appearance
+    #   e.g. crashes, there is nobody to notify the sensor about that. Thus the sensor
+    #   periodically refreshes -- "relook"s -- itself to clean up appearances that
+    #   exited without notice.
+    def self.new(pattern : Term, secret : Term? = nil, relook : Time::Span? = nil) : Sensor
       branches = pipe(pattern, skeleton, branch_list)
 
-      new(pattern, secret, branches)
+      new(pattern, secret, relook, branches)
     end
 
-    def each_atom(instant : WWID, &sink : Atom ->) : Nil
-      atoms = AtomSink.new(sink)
-
+    def atoms_to(id : WWID, target : IAtomAppend) : Nil
       if @branches.size == 1
         strands = @branches[0]
-        endpoints = Utrie.mount(atoms, strands)
-        apexes = {Xgraph.mount(atoms, endpoints)}
+        endpoints = Utrie.mount(target, strands)
+        apexes = {Xgraph.mount(target, endpoints)}
       else
         wg = WaitGroup.new(@branches.size)
 
@@ -223,8 +245,8 @@ module Ww::Meridium
 
         @branches.each do |strands|
           spawn do
-            endpoints = Utrie.mount(atoms, strands)
-            apex = Xgraph.mount(atoms, endpoints)
+            endpoints = Utrie.mount(target, strands)
+            apex = Xgraph.mount(target, endpoints)
 
             lock.synchronize { apexes << apex }
           ensure
@@ -235,7 +257,7 @@ module Ww::Meridium
         wg.wait
       end
 
-      SensorRegistry.register(atoms, @secret, apexes, instant)
+      SensorRegistry.register(target, @secret, apexes, id)
     end
 
     def each_complement(atoms : IAtomsPresent, &sink : WWID ->) : Nil
@@ -257,6 +279,24 @@ module Ww::Meridium
 
       wg.wait
     end
+
+    def inspect(io)
+      io << "Sensor(pattern="
+      ML.compact(io, @pattern)
+      io << ", secret="
+      if secret = @secret
+        ML.compact(io, secret)
+      else
+        io << "nil"
+      end
+      io << ", relook="
+      @relook.inspect(io)
+      io << ")"
+    end
+
+    def to_s(io)
+      inspect(io)
+    end
   end
 
   # Represents an appearance surface.
@@ -264,6 +304,12 @@ module Ww::Meridium
   # Appearance surfaces serve as stimuli/excitation sources for sensors.
   class Appearance
     include Surface
+
+    # Returns the value term of this appearance.
+    getter value : Term
+
+    # Returns the secret term of this appearance.
+    getter? secret : Term?
 
     # Constructs an appearance surface.
     #
@@ -273,8 +319,8 @@ module Ww::Meridium
     def initialize(@value : Term, @secret : Term? = nil)
     end
 
-    def each_atom(instant : WWID, &sink : Atom ->) : Nil
-      AppearanceRegistry.mount(AtomSink.new(sink), @secret, @value, instant)
+    def atoms_to(id : WWID, target : IAtomAppend) : Nil
+      AppearanceRegistry.mount(target, @secret, @value, id)
     end
 
     def each_complement(atoms : IAtomsPresent, &sink : WWID ->) : Nil
@@ -282,6 +328,22 @@ module Ww::Meridium
       conjvs = Xgraph.conjvs(atoms, hits)
 
       SensorRegistry.each_sensor(atoms, @secret, conjvs, &sink)
+    end
+
+    def inspect(io)
+      io << "Appearance(value="
+      ML.compact(io, @value)
+      io << ", secret="
+      if secret = @secret
+        ML.compact(io, secret)
+      else
+        io << "nil"
+      end
+      io << ")"
+    end
+
+    def to_s(io)
+      inspect(io)
     end
   end
 end
