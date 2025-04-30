@@ -5,10 +5,9 @@ Log.setup_from_env(default_level: :debug)
 include Meridium
 
 module IAtomSet
-  include IAtomAppend
   include IAtomsPresent
 
-  abstract def delete(atom : Atom) : Nil
+  abstract def commit(adds : Enumerable(Atom), dels : Enumerable(Atom)) : Nil
 end
 
 module IChat(M)
@@ -100,10 +99,16 @@ class MySet
     end
   end
 
-  def delete(atom : Meridium::Atom) : Nil
-    bucket = atom.@blk0 % @n
-    @locks[bucket].synchronize do
-      @sets[bucket].delete(atom)
+  def commit(adds : Enumerable(Atom), dels : Enumerable(Atom)) : Nil
+    dels.each do |atom|
+      bucket = atom.@blk0 % @n
+      @locks[bucket].synchronize do
+        @sets[bucket].delete(atom)
+      end
+    end
+
+    adds.each do |atom|
+      self << atom
     end
   end
 
@@ -557,12 +562,53 @@ class Conn
   @sub : IChat::Subscribe
   @unsub : IChat::Unsubscribe
 
+  # :nodoc:
+  class SyncAtomBuffer(N)
+    include IAtomAppend
+    include Enumerable(Atom)
+
+    def initialize
+      @buckets = Slice(Array(Atom)).new(N) { [] of Atom }
+      @locks = Slice(Mutex).new(N) { Mutex.new }
+    end
+
+    def <<(atom : Atom) : self
+      bucket = atom.@blk0 % N
+
+      @locks[bucket].synchronize do
+        @buckets[bucket] << atom
+      end
+
+      self
+    end
+
+    # WARNING: this method is not thread-safe. Make sure all `<<` calls terminate
+    # before calling it.
+    def each(& : Atom ->) : Nil
+      @buckets.each do |bucket|
+        bucket.each { |atom| yield atom }
+      end
+    end
+
+    # WARNING: this method is not thread-safe. Make sure all `<<` calls terminate
+    # before calling it.
+    def clear : Nil
+      @buckets.each(&.clear)
+    end
+  end
+
+  # No. of buffer buckets in the connection's atom buffer (before atoms are
+  # transferred to the atom set).
+  NBUFBUCKETS = 32
+
   # WARNING: the implementations of *atoms* and *chat* must be thread-safe. *alert*
   # must also be thread-safe.
   def initialize(@atoms : IAtomSet, @chat : IChat(Activation), @alert : Conn ->)
     @node = Node.new
     @relook = {} of Slot => Channel(Nil)
-    @lock = Mutex.new
+    @adds = SyncAtomBuffer(NBUFBUCKETS).new
+    @dels = SyncAtomBuffer(NBUFBUCKETS).new
+    @lock = Mutex.new # < protects all of the above
 
     @sub, @unsub = @chat.connect(@node.conid, &->receive(Activation))
   end
@@ -572,22 +618,10 @@ class Conn
     new(*args, alert, **kwargs)
   end
 
-  private macro on_node(call)
-    Log.trace { "#{ {{call.id.stringify}} } is collecting effects" }
-
-    %effects = Stack(Effect).new
-
-    @lock.synchronize do
-      @node.{{call}} { |%effect| %effects << %effect }
-    end
-
-    handle(%effects)
-  end
-
   private def receive(act : Activation) : Nil
     Log.trace { "received #{act} from chat" }
 
-    on_node receive(act)
+    transaction &.receive(act)
   end
 
   # NOTE: we split surface addition/removal into two phases: insert() and
@@ -596,8 +630,8 @@ class Conn
   # dependent if someone inserts a sensor and an appearance simultaneously
   # that can excite each other.
 
-  private def insert(effect : SurfaceAddition) : Nil
-    effect.surface.atoms_to(effect.id.wwid, @atoms)
+  private def insert(adds, dels, effect : SurfaceAddition) : Nil
+    effect.surface.atoms_to(effect.id.wwid, target: adds)
 
     return unless surface = effect.surface.as?(Sensor)
     return unless period = surface.relook?
@@ -612,7 +646,7 @@ class Conn
     spawn relook(slot, cancel, period, surface)
   end
 
-  private def insert(effect : SurfaceDeletion) : Nil
+  private def insert(adds, dels, effect : SurfaceDeletion) : Nil
     if surface = effect.surface.as?(Sensor)
       if surface.relook?
         @lock.synchronize do
@@ -622,17 +656,14 @@ class Conn
       end
     end
 
-    effect.surface.each_atom(effect.id.wwid) { |atom| @atoms.delete(atom) }
+    effect.surface.atoms_to(effect.id.wwid, target: dels)
   end
 
-  private def insert(effect : ViewChange) : Nil
+  private def insert(adds, dels, effect : ViewChange | Stimulation) : Nil
   end
 
-  private def insert(effect : Stimulation) : Nil
-  end
-
-  private def insert(effects : Enumerable(Effect)) : Nil
-    effects.each { |effect| insert(effect) }
+  private def insert(adds, dels, effects : Enumerable(Effect)) : Nil
+    effects.each { |effect| insert(adds, dels, effect) }
   end
 
   private def activate(effect : SurfaceAddition) : Nil
@@ -678,7 +709,7 @@ class Conn
 
     Log.trace { "relook resulted in #{appearances.size} appearance(s)" }
 
-    on_node presence(slot, appearances)
+    transaction &.presence(slot, appearances)
   end
 
   private def show(id : IWWID, surface : Sensor) : Nil
@@ -736,7 +767,18 @@ class Conn
 
     Log.trace { "handling #{effects.size} effect(s)" }
 
-    insert(effects)
+    # The lock makes sure only one handle() owns @adds/@dels throughout
+    # the transaction; thus only its atoms are in there, and we clean
+    # up afterwards.
+    @lock.synchronize do
+      insert(@adds, @dels, effects)
+
+      @atoms.commit(@adds, @dels)
+    ensure
+      @adds.clear
+      @dels.clear
+    end
+
     activate(effects)
 
     return unless effects.any?(ViewChange)
@@ -793,32 +835,86 @@ class Conn
     end
   end
 
+  # Actions that can be grouped in a transaction.
+  module Action
+    # :nodoc:
+    alias Any = Put | Delete | Receive | Presence
+
+    # See `Conn#[]=`.
+    record Put, slot : Slot, surface : Surface
+
+    # See `Conn#delete`.
+    record Delete, slot : Slot
+
+    # :nodoc:
+    record Receive, act : Activation
+
+    # :nodoc:
+    record Presence, slot : Slot, appearances : Set(WWID)
+  end
+
+  struct Commit
+    # :nodoc:
+    getter actions = [] of Action::Any
+
+    {% for action in Action::Any.union_types %}
+      {% name = action.id.split("::")[-1].downcase %}
+
+      # See `Action`.
+      def {{name.id}}(*args, **kwargs) : Nil
+        @actions << {{action}}.new(*args, **kwargs)
+      end
+    {% end %}
+  end
+
+  # Transactions allow to group actions together so that they are sent to
+  # the termspace as one big message vs. many small ones.
+  def transaction(& : Commit ->) : Nil
+    Log.trace { "transaction is collecting effects" }
+
+    effects = @lock.synchronize do
+      commit = Commit.new
+      yield commit
+
+      Log.trace { "transaction will process #{commit.actions.size} action(s)" }
+
+      effects_ = Stack(Effect).new
+
+      commit.actions.each do |action|
+        case action
+        in Action::Put
+          @node.put(action.slot, action.surface) { |effect| effects_ << effect }
+        in Action::Delete
+          @node.delete(action.slot) { |effect| effects_ << effect }
+        in Action::Receive
+          @node.receive(action.act) { |effect| effects_ << effect }
+        in Action::Presence
+          @node.presence(action.slot, action.appearances) { |effect| effects_ << effect }
+        end
+      end
+
+      effects_
+    end
+
+    handle(effects)
+  end
+
   # Removes all surfaces from this connection. This is not the same as `dismiss`
   # because `clear` removes surfaces "loudly", with view updates etc.
   #
   # This method is thread-safe.
   def clear : Nil
-    Log.trace { "clear is collecting effects" }
-
-    effects = Stack(Effect).new
-
-    @lock.synchronize do
+    transaction do |commit|
       slots = @node.slots
-      slots.each do |slot|
-        @node.delete(slot) { |effect| effects << effect }
-      end
+      slots.each { |slot| commit.delete(slot) }
     end
-
-    Log.trace { "clear will handle #{effects.size} effect(s)" }
-
-    handle(effects)
   end
 
   # Updates or inserts the given *surface* at *slot*.
   #
   # This method is thread-safe.
   def []=(slot : Slot, surface : Surface) : Surface
-    on_node put(slot, surface)
+    transaction &.put(slot, surface)
 
     surface
   end
@@ -827,7 +923,7 @@ class Conn
   #
   # This method is thread-safe.
   def delete(slot : Slot) : Nil
-    on_node delete(slot)
+    transaction &.delete(slot, surface)
   end
 end
 
@@ -836,6 +932,7 @@ MT.spawn do
   chat = SyncInMemoryChat(Activation).new
   n = Atomic(Int32).new(0)
   conn = Conn.new(set, chat) do |c|
+    # pp c.view.dict_multisets
     if n.add(1) % 1000 == 0
       Log.notice { "#{n}" }
     end
@@ -854,10 +951,10 @@ MT.spawn do
       conn[2] = Appearance.new(Term.of(:+, n, n))
     end
   end
+  # conn.each do |slot, surface|
+  #   puts "Conn has #{slot} #{surface}"
+  # end
+
+  # conn.clear
 end
 sleep
-# conn.each do |slot, surface|
-#   puts "Conn has #{slot} #{surface}"
-# end
-
-# conn.clear
