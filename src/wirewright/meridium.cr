@@ -194,6 +194,8 @@ module Ww::Meridium
   end
 end
 
+# The order of requires here is that of most low level -> most high level components.
+
 require "./meridium/atom"
 require "./meridium/wwid"
 require "./meridium/bytes_multimap"
@@ -203,3 +205,6 @@ require "./meridium/xgraph"
 require "./meridium/sensor_registry"
 require "./meridium/appearance_registry"
 require "./meridium/surface"
+require "./meridium/view"
+require "./meridium/node"
+require "./meridium/conn"

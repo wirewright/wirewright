@@ -205,4 +205,27 @@ module Ww::Meridium
 
     def_equals_and_hash @order, @disorder, @slot
   end
+
+  # A nanosecond-precision timestamp identifying the moment at which something
+  # was created. Normally that "something" is a `Surface`; `Conn` and `Node` are
+  # the main users & sources of `IWWID`s, and thus of `Instant`s too. They use
+  # it to make sure some surface info is newer than the one they have already.
+  record Instant, timestamp : UInt64 do
+    include Comparable(Instant)
+
+    def self.new : Instant
+      dt = Time.utc - WW_EPOCH
+
+      new(timestamp: dt.total_nanoseconds.floor.to_u64)
+    end
+
+    def <=>(other : Instant)
+      timestamp <=> other.timestamp
+    end
+  end
+
+  # An IWWID is a `WWID` equipped with an `Instant` at which it was created.
+  record IWWID, wwid : WWID, instant : Instant do
+    delegate :conid, :slot, to: @wwid
+  end
 end
