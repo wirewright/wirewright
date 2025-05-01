@@ -11,19 +11,57 @@ module Ww::Meridium
   # Implementations can capture atoms coming from various sources such as `Utrie`,
   # `Xgraph`, etc.
   module IAtomAppend
-    abstract def <<(atom : Atom)
+    abstract def <<(atom : Atom) : self
   end
 
   # Implementations can be queried about the presence of `Atom`s.
   module IAtomsPresent
-    # Returns `true` if *atom* exists. Returns `false` otherwise.
-    abstract def present?(atom : Atom) : Bool
+    # Represents an enumerable source of atoms. This struct doesn't include
+    # `Enumerable` to avoid cycles.
+    struct AtomSource(T)
+      def initialize(@objects : Enumerable(T), @fn : T -> Atom | Enumerable(Atom))
+      end
+
+      private def visit(ee : Atom, & : Atom ->) : Nil
+        yield ee
+      end
+
+      private def visit(ee : Enumerable(Atom), & : Atom ->) : Nil
+        ee.each { |atom| yield atom }
+      end
+
+      def each(& : Atom ->) : Nil
+        @objects.each do |object|
+          ee = @fn.call(object)
+
+          visit(ee) do |atom|
+            yield atom
+          end
+        end
+      end
+
+      def each_with_index(& : Atom, Int32 ->) : Nil
+        index = 0
+        each do |atom|
+          yield atom, index
+          index += 1
+        end
+      end
+    end
+
+    # Returns a BitList indicating which *atoms* exist (bit set to 1) and
+    # which ones do not (bit set to 0).
+    #
+    # Guarantees the resulting bit list matches the size of *atoms*.
+    abstract def present?(atoms : AtomSource) : BitList
 
     # Returns a BitList indicating whether each atom, rendered from *objects*
     # via the block, exists.
     #
     # Guarantees the resulting bit list matches the size of *objects*.
-    abstract def present?(objects : Enumerable(T), & : T -> Atom | Enumerable(Atom)) : BitList forall T
+    def present?(objects : Enumerable(T), &fn : T -> Atom | Enumerable(Atom)) : BitList forall T
+      present?(AtomSource.new(objects, fn))
+    end
   end
 
   # This enum acts as a "scope", protecting atoms of various Meridium entities
@@ -33,6 +71,11 @@ module Ww::Meridium
     Xgraph
     SensorRegistry
     AppearanceRegistry
+
+    # This entity is used for sanity checks. No atoms belong to this entity
+    # so if the set reports that some do, we know something is wrong with
+    # the set.
+    Negative
   end
 
   # The following are internal "hash step" functions. We need to make sure

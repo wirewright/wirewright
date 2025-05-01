@@ -76,6 +76,11 @@ module Ww::Meridium
       end
     end
 
+    # Returns `true` if this node contains no surfaces. Returns `false` otherwise.
+    def empty? : Bool
+      @surfaces.empty?
+    end
+
     # Returns the surface at *slot*, if any. Returns `nil` otherwise.
     def []?(slot : Slot) : Surface?
       @surfaces[slot]?

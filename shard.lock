@@ -2,7 +2,7 @@ version: 2.0
 shards:
   blake3:
     git: https://github.com/didactic-drunk/blake3.cr.git
-    version: 1.1.0
+    version: 1.1.0+git.commit.d7ac0b7ff8f766b528cc99170664402518dd78b4
 
   brotli:
     git: https://github.com/naqvis/brotli.cr.git

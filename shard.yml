@@ -20,6 +20,7 @@ dependencies:
     github: naqvis/brotli.cr
   blake3:
     github: didactic-drunk/blake3.cr
+    commit: d7ac0b7
 # dependencies:
 #   pg:
 #     github: will/crystal-pg

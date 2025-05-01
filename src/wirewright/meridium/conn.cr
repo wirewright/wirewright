@@ -1,6 +1,8 @@
 module Ww::Meridium
   # A Meridium connection is a "shell" around a `Node` that lets it communicate &
-  # influence the outside world through an `IAtomSet` and an `IActivationChat`.
+  # influence the outside world through an `AtomSet` and an `IActivationChat`.
+  #
+  # NOTE: all public methods are thread-safe.
   #
   # NOTE: The main way you can obtain a termspace view is by polling: just call
   # `view`. If you want to be woken up on possible view change, you can use
@@ -13,7 +15,7 @@ module Ww::Meridium
 
     # WARNING: the implementations of *atoms* and *chat* must be thread-safe. *alert*
     # must also be thread-safe.
-    def initialize(@atoms : IAtomSet, @chat : IActivationChat, @alert : Conn ->)
+    def initialize(@atoms : AtomSet, @chat : IActivationChat, @alert : Conn ->)
       @node = Node.new
       @relook = {} of Slot => Channel(Nil)
       @effects = Stack(Effect).new
@@ -26,7 +28,7 @@ module Ww::Meridium
     # WARNING: the implementation of *tspace* must be thread-safe. *alert* must
     # also be thread-safe.
     def initialize(tspace : Tspace, alert : Conn ->)
-      initialize(tspace, tspace, alert)
+      initialize(AtomSet.new(CheckedAtomsPresence.new(tspace), tspace), tspace, alert)
     end
 
     # :ditto:
@@ -125,7 +127,7 @@ module Ww::Meridium
     end
 
     private def relook(slot : Slot, surface : Sensor) : Nil
-      appearances = surface.complement_set(@atoms)
+      appearances = surface.complement_set(@atoms.presence)
 
       Log.trace { "#{@node.conid}: relook resulted in #{appearances.size} appearance(s)" }
 
@@ -133,7 +135,7 @@ module Ww::Meridium
     end
 
     private def show(id : IWWID, surface : Sensor) : Nil
-      appearances = surface.complement_set(@atoms)
+      appearances = surface.complement_set(@atoms.presence)
       appearances.each do |appearance|
         act = StimulusRequest.new(id, appearance)
 
@@ -144,7 +146,7 @@ module Ww::Meridium
     end
 
     private def show(id : IWWID, surface : Appearance) : Nil
-      sensors = surface.complement_set(@atoms)
+      sensors = surface.complement_set(@atoms.presence)
       sensors.each do |sensor|
         act = StimulusPresence.new(sensor, id, surface.value)
 
@@ -158,7 +160,7 @@ module Ww::Meridium
     end
 
     private def hide(id : IWWID, surface : Appearance) : Nil
-      sensors = surface.complement_set(@atoms)
+      sensors = surface.complement_set(@atoms.presence)
       sensors.each do |sensor|
         act = StimulusAbsence.new(sensor, id)
 
@@ -181,7 +183,7 @@ module Ww::Meridium
 
         Log.trace { "#{@node.conid}: handling #{@effects.size} effect(s)" }
 
-        @atoms.transaction do |add, del|
+        @atoms.content.transaction do |add, del|
           insert(add, del, @effects)
         end
 
@@ -196,17 +198,20 @@ module Ww::Meridium
       end
     end
 
+    # Returns the id of this connection.
+    def conid : WWID
+      @node.conid
+    end
+
     # Returns the latest view of the termspace according to this connection.
-    #
-    # This method is thread-safe.
     def view : View
       @lock.synchronize { @node.view }
     end
 
     # Yields each occupied slot and the corresponding surface.
     #
-    # This method is thread-safe, but will block until all surfaces have
-    # been yielded. So you cannot e.g. call this method recursively.
+    # This method will block until all surfaces have been yielded. So you
+    # cannot e.g. call this method recursively.
     def each(& : Slot, Surface ->) : Nil
       @lock.synchronize do
         @node.each do |wwid, surface|
@@ -216,8 +221,6 @@ module Ww::Meridium
     end
 
     # Inserts the atoms of this connection into the termspace.
-    #
-    # This method is thread-safe.
     def summon : Nil
       @lock.synchronize do
         return if @summoned
@@ -227,7 +230,10 @@ module Ww::Meridium
         @summoned = true
 
         @sub.call
-        @atoms.transaction do |add, del|
+
+        next if @node.empty?
+
+        @atoms.content.transaction do |add, del|
           @node.each do |wwid, surface|
             surface.each_atom(wwid) { |atom| add.call(atom) }
           end
@@ -238,8 +244,6 @@ module Ww::Meridium
     end
 
     # Silently removes the atoms of this connection from the termspace.
-    #
-    # This method is thread-safe.
     def dismiss : Nil
       @lock.synchronize do
         return unless @summoned
@@ -249,7 +253,7 @@ module Ww::Meridium
         @summoned = false
 
         @unsub.call
-        @atoms.transaction do |add, del|
+        @atoms.content.transaction do |add, del|
           @node.each do |wwid, surface|
             surface.each_atom(wwid) { |atom| del.call(atom) }
           end
@@ -323,17 +327,13 @@ module Ww::Meridium
 
     # Removes all surfaces from this connection. This is not the same as `dismiss`
     # because `clear` removes surfaces "loudly", with view updates etc.
-    #
-    # This method is thread-safe.
     def clear : Nil
       transaction do |commit|
-        @node.each { |slot, _| commit.delete(slot) }
+        @node.each { |wwid, _| commit.delete(wwid.slot) }
       end
     end
 
     # Updates or inserts the given *surface* at *slot*.
-    #
-    # This method is thread-safe.
     def []=(slot : Slot, surface : Surface) : Surface
       transaction &.put(slot, surface)
 
@@ -341,8 +341,6 @@ module Ww::Meridium
     end
 
     # Removes the surface at *slot*.
-    #
-    # This method is thread-safe.
     def delete(slot : Slot) : Nil
       transaction &.delete(slot)
     end

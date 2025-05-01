@@ -2877,6 +2877,14 @@ class BitList
     @size = 0
   end
 
+  protected def initialize(*, @size)
+    @bits = BitArray.new(@size)
+  end
+
+  def self.zeroes(n)
+    new(size: n)
+  end
+
   def size : Int32
     @size
   end
@@ -2912,6 +2920,9 @@ class BitList
 
   def clear : Nil
     @size = 0
+  end
+
+  def resize(@size)
   end
 end
 

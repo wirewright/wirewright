@@ -378,15 +378,18 @@ def process(queue, testcase, ctx)
   end
 end
 
+alias Mm = Meridium
+
 def tspace(flow : Term::Dict, & : Term, Term ->)
-  counter = Slot.new(0)
+  counter = Mm::Slot.new(0)
 
-  set = SyncAtomMultiset.new
-  chat = SyncInMemoryChat(Activation).new
+  mset = Mm::SyncAtomMultiset.new
+  set = Mm::AtomSet.new(Mm::CheckedAtomsPresence.new(mset), mset)
+  chat = Mm::SyncActivationChat.new
 
-  conns = {} of Term => Conn
-  lslots = {} of {Term, Term} => Slot
-  rslots = {} of Slot => Term
+  conns = {} of Term => Mm::Conn
+  lslots = {} of {Term, Term} => Mm::Slot
+  rslots = {} of Mm::Slot => Term
   views = Term[]
   versions = {} of Term => UInt32
   views_lock = Mutex.new
@@ -394,7 +397,7 @@ def tspace(flow : Term::Dict, & : Term, Term ->)
   flow.items.each do |step|
     Term.matchpi?(step, %{(conn conn-name_symbol children_*)}) do
       conns.put_if_absent(conn_name) do
-        alert = ->(conn : Conn) do
+        alert = ->(conn : Mm::Conn) do
           view1 = conn.view
           views_lock.synchronize do
             v0 = versions[conn_name]?
@@ -406,7 +409,7 @@ def tspace(flow : Term::Dict, & : Term, Term ->)
           end
         end
 
-        conn = Conn.new(set, chat, alert)
+        conn = Mm::Conn.new(set, chat, alert)
         conn.summon
         conn
       end
@@ -434,13 +437,13 @@ def tspace(flow : Term::Dict, & : Term, Term ->)
           matchpi %{[after added sensor surface-name_symbol pattern_]} do
             slot = lslots[{conn_name, surface_name}]
 
-            conn[slot] = Sensor.new(pattern, secret: child[:secret]?)
+            conn[slot] = Mm::Sensor.new(pattern, secret: child[:secret]?)
           end
 
           matchpi %{[after added appearance surface-name_symbol value_]} do
             slot = lslots[{conn_name, surface_name}]
 
-            conn[slot] = Appearance.new(value, secret: child[:secret]?)
+            conn[slot] = Mm::Appearance.new(value, secret: child[:secret]?)
           end
 
           matchpi %{[after removed surface-name_symbol]} do
@@ -454,7 +457,7 @@ def tspace(flow : Term::Dict, & : Term, Term ->)
               view = views_lock.synchronize { views[conn_name]? } || Term[]
               view.each_entry do |slot, multiset|
                 # Map numeric identities to original surface names (symbols).
-                commit.with(rslots[slot.to(Slot)], multiset)
+                commit.with(rslots[slot.to(Mm::Slot)], multiset)
               end
             end
 

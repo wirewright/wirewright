@@ -29,6 +29,13 @@ module Ww::Meridium
       of(Hasher.digest(string))
     end
 
+    # Generates a random atom using *random*.
+    #
+    # Atom bytes are generated as-is, without hashing.
+    def self.rand(random : Random = Random::DEFAULT) : Atom
+      new(random.rand(UInt64), random.rand(UInt64), random.rand(UInt64), random.rand(UInt64))
+    end
+
     def <=>(other : Atom)
       {@blk0, @blk1, @blk2, @blk3} <=> {other.@blk0, other.@blk1, other.@blk2, other.@blk3}
     end
@@ -42,10 +49,6 @@ module Ww::Meridium
       blks[3] = @blk3
     end
 
-    def hash(hasher)
-      @blk0.hash(hasher)
-    end
-
     def inspect(io)
       io << "Atom["
       @blk0.to_s(io, base: 32, precision: 13, upcase: true)
@@ -56,6 +59,10 @@ module Ww::Meridium
       io << "-"
       @blk3.to_s(io, base: 32, precision: 13, upcase: true)
       io << "]"
+    end
+
+    def hash(hasher)
+      @blk0.hash(hasher)
     end
 
     def_equals @blk0, @blk1, @blk2, @blk3
