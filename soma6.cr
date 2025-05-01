@@ -646,9 +646,6 @@ end
 # FIXME: due to complexity it's hard to *stop* a document, to e.g. implement pause/unpase
 #  which we require for the command palette.
 class Document
-  # Used to generate document ids.
-  @@counter = Atomic(UInt32).new(0u32)
-
   class Mailbox
     @state = Atomic(State).new(State.new)
 
@@ -770,10 +767,8 @@ class Document
   @rem1 : Term::Num
   @mouse : {Term::Num, Term::Num}
 
-  def initialize(@draw : Channel({Term::Dict, Channel(Term::Dict)})) # , @mstep : Meridium::Step)
-    id = @@counter.add(1, :relaxed)
-
-    @document_thread = Fiber::ExecutionContext::SingleThreaded.new("Document #{id}")
+  def initialize(@title : String, @draw : Channel({Term::Dict, Channel(Term::Dict)})) # , @mstep : Meridium::Step)
+    @document_thread = Fiber::ExecutionContext::SingleThreaded.new(@title)
 
     @mailbox = Mailbox.new
 
@@ -1355,7 +1350,7 @@ seed = welcome
 draw_chan = Channel({Term::Dict, Channel(Term::Dict)}).new
 
 # mstep = Meridium::Step.new
-doc = Document.new(draw_chan) # , mstep)
+doc = Document.new("Untitled", draw_chan) # , mstep)
 # alert = ->doc.alarm
 # mstep.register(Term.of(:local), Meridium::Space.local(alert: alert))
 # if ARGV[0]? == "join"
