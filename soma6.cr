@@ -768,6 +768,7 @@ class Document
 
   @rem0 : Term::Num
   @rem1 : Term::Num
+  @mouse : {Term::Num, Term::Num}
 
   def initialize(@draw : Channel({Term::Dict, Channel(Term::Dict)})) # , @mstep : Meridium::Step)
     id = @@counter.add(1, :relaxed)
@@ -791,6 +792,7 @@ class Document
     @state = State::Clean
     @mouseq = Deque(Term).new
     @mouseq_state = :default
+    @mouse = {Term[0], Term[0]}
   end
 
   def settled? : Bool
@@ -935,6 +937,12 @@ class Document
       @draw.send({uir.as_d, dwuir_chan})
 
       @dwuir = dwuir_chan.receive
+
+      # The instance changed, so anything could be under the mouse. We have to
+      # emit a fake mouse motion event, just to make sure.
+      if @mouseq.empty?
+        @mouseq << Term.of(:mouse, :motion, *@mouse)
+      end
     end
 
     dwuir = Term.of(@dwuir)
@@ -947,6 +955,8 @@ class Document
         # Set `hover: true` on hovered nodes, and `hover: false` (or removed) on
         # unhovered ones.
         matchpi %{(mouse motion x_number y_number)} do
+          @mouse = {x.unsafe_as_n, y.unsafe_as_n}
+
           target = below?(x.unsafe_as_n, y.unsafe_as_n)
 
           mark { |nodepath, node| hover(nodepath, node, target) }
