@@ -1197,35 +1197,6 @@ class Document
   end
 end
 
-module Frame
-  extend self
-
-  def set(frame : Term::Dict, id, attr, value) : Term::Dict
-    map(frame, id, &.with(attr, value))
-  end
-
-  def setchild(frame : Term::Dict, id, child) : Term::Dict
-    set(frame, id, 1, child)
-  end
-
-  def map(frame : Term::Dict, id : Term, &fn : Term::Dict -> Term::Dict) : Term::Dict
-    Keypath.each_item(Term.of(frame)) do |keypath, item|
-      next unless item = item.as_d?
-      next unless id == item[:id]?
-
-      frame = Keypath.assign(Term.of(frame), keypath, Term.of(fn.call(item))).as_d
-
-      true # continue
-    end
-
-    frame
-  end
-
-  def map(frame : Term::Dict, id, &fn : Term::Dict -> Term::Dict) : Term::Dict
-    map(frame, Term.of(id), &fn)
-  end
-end
-
 demo = ML.dict <<-WWML
 ("" | "" () @user)
 
