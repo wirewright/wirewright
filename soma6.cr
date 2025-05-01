@@ -413,7 +413,9 @@ module D7VR
       matchpi %{(frag value_ @_ ¦ _ visible: false)} do
         continue if Rhodium.cursor_in_node?(document0, nodepath)
 
-        value
+        # If the node is impassable, instance() will skip it once we return;
+        # thus we have to recurse manually.
+        Rhodium.passable_node?(value) ? value : instance1(document0, value, nodepath)
       end
 
       # NOTE: we do not handle UNIT nodes and the cursor here. This is because
@@ -1362,7 +1364,7 @@ welcome = ML.dict <<-WWML
 WWML
 
 test = ML.dict <<-WWML
-(appearance 0 in remote)
+(frag (h1 "hello") @qux visible: false)
 
 ("" | "" () @user)
 WWML
