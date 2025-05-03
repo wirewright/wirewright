@@ -1081,7 +1081,7 @@
     (+ (1) (1 2 3))
     (- () (a 2 3) (1 a 3) (1 2 a)))
 
-  ;; Test %bounds implicitly if in optimize mode
+  ;; Test %bounds indirectly if in optimize mode
 
   (pattern (_+)
     (+ (1) (1 2 3) (x) (x y z) ("foo" x 1 2))
@@ -3883,7 +3883,7 @@
 ;; TODO: test empty %many, %group, %past
 
 ;; Walk
-;; With these tests we implicitly test M1.walk
+;; With these tests we indirectly test M1.walk
 (group
   (specificity (level _ (%new x_)))
   (specificity (level x_dict (%pipe (map (x_ y_)) _)))
