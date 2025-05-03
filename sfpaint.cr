@@ -593,14 +593,10 @@ module UIR::Platform::SFML
   end
 
   def show(reducer : Reducer) : Nil
-    wg = WaitGroup.new(1)
-
-    Fiber::ExecutionContext::Isolated.new("SFML", spawn_context: MT) do
+    ctx = Fiber::ExecutionContext::Isolated.new("SFML", spawn_context: MT) do
       show0(reducer)
-    ensure
-      wg.done
     end
 
-    wg.wait
+    ctx.wait
   end
 end
