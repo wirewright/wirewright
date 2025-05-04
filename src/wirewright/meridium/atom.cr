@@ -1,6 +1,6 @@
 module Ww::Meridium
   # Atom is currently a 256-bit hash split into 4 64-bit blocks. For some reason
-  # this appears to be faster than passing the bytes as-is (e.g. as `u8[16]`).
+  # this appears to be faster than passing the bytes as-is (e.g. as `u8[32]`).
   struct Atom
     include Comparable(Atom)
 
@@ -9,6 +9,10 @@ module Ww::Meridium
 
     # Bytesize of hashes produced by `Hasher`.
     BYTESIZE = 32
+
+    # Gives public access to the first block of this atom; used for e.g.
+    # cheap hash.
+    getter blk0 : UInt64
 
     def initialize(@blk0 : UInt64, @blk1 : UInt64, @blk2 : UInt64, @blk3 : UInt64)
     end
@@ -47,6 +51,30 @@ module Ww::Meridium
       blks[1] = @blk1
       blks[2] = @blk2
       blks[3] = @blk3
+    end
+
+    def self.from_slice_be(source : Slice) : Atom
+      unless source.size == BYTESIZE
+        raise ArgumentError.new("invalid bytesize")
+      end
+
+      blk0 = IO::ByteFormat::BigEndian.decode(UInt64, source)
+      blk1 = IO::ByteFormat::BigEndian.decode(UInt64, source + 8)
+      blk2 = IO::ByteFormat::BigEndian.decode(UInt64, source + 16)
+      blk3 = IO::ByteFormat::BigEndian.decode(UInt64, source + 24)
+
+      new(blk0, blk1, blk2, blk3)
+    end
+
+    def to_slice_be(&)
+      scratch = uninitialized UInt8[BYTESIZE]
+
+      IO::ByteFormat::BigEndian.encode(@blk0, scratch.to_slice)
+      IO::ByteFormat::BigEndian.encode(@blk1, scratch.to_slice + 8)
+      IO::ByteFormat::BigEndian.encode(@blk2, scratch.to_slice + 16)
+      IO::ByteFormat::BigEndian.encode(@blk3, scratch.to_slice + 24)
+
+      yield scratch.to_slice
     end
 
     def inspect(io)

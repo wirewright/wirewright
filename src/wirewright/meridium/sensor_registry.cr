@@ -56,7 +56,7 @@ module Ww::Meridium
     # Creates a record in the sensor registry, pointing each of *apexes* to
     # the given *sensor* under *secret*.
     def register(atoms : IAtomAppend, secret : Term?, apexes : Indexable(Atom), sensor : WWID) : Nil
-      secret_slice = Meridium.secret_to_bytes(secret)
+      secret_slice = Meridium.secret_slice(secret)
 
       wg = WaitGroup.new(apexes.size)
 
@@ -124,7 +124,7 @@ module Ww::Meridium
     #
     # WARNING: *fn* will be called from multiple fibers.
     def each_sensor(atoms : IAtomsPresent, secret : Term?, apexes : Indexable(Atom), &fn : WWID ->) : Nil
-      secret_slice = Meridium.secret_to_bytes(secret)
+      secret_slice = Meridium.secret_slice(secret)
 
       wg = WaitGroup.new(apexes.size)
 

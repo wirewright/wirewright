@@ -3,10 +3,45 @@ module Ww::Meridium
   # conn to its "nucleus", `Node`.
   alias Activation = StimulusPresence | StimulusAbsence | StimulusRequest | StimulusResponse
 
-  record StimulusPresence, sensor : WWID, appearance : IWWID, stimulus : Term
-  record StimulusAbsence, sensor : WWID, appearance : IWWID
-  record StimulusRequest, sensor : IWWID, appearance : WWID
+  record StimulusPresence, sensor : WWID, appearance : IWWID, stimulus : Term do
+    def sender : WWID
+      appearance.conid
+    end
+
+    def receiver : WWID
+      sensor.conid
+    end
+  end
+
+  record StimulusAbsence, sensor : WWID, appearance : IWWID do
+    def sender : WWID
+      appearance.conid
+    end
+
+    def receiver : WWID
+      sensor.conid
+    end
+  end
+
+  record StimulusRequest, sensor : IWWID, appearance : WWID do
+    def sender : WWID
+      sensor.conid
+    end
+
+    def receiver : WWID
+      appearance.conid
+    end
+  end
+
   record StimulusResponse, sensor : IWWID, appearance : IWWID, stimulus : Term do
+    def sender : WWID
+      appearance.conid
+    end
+
+    def receiver : WWID
+      sensor.conid
+    end
+
     def to_stimulus_presence : StimulusPresence
       StimulusPresence.new(sensor.wwid, appearance, stimulus)
     end
@@ -47,7 +82,7 @@ module Ww::Meridium
     # Returns the latest view.
     getter view : View
 
-    def initialize(@conid = WWID.new)
+    def initialize(@conid : WWID)
       unless @conid.slot.zero?
         raise ArgumentError.new("expected trunk conid (conid with slot=0)")
       end
@@ -101,8 +136,14 @@ module Ww::Meridium
     end
 
     # Removes the surface at *slot*. Yields the effects of that to the block.
-    def delete(slot : Slot, & : Effect ->) : Nil
-      return unless surface = @surfaces.delete(slot)
+    def delete(slot : Slot, *, __in_clear = false, & : Effect ->) : Nil
+      if __in_clear
+        surface = @surfaces[slot]?
+      else
+        surface = @surfaces.delete(slot)
+      end
+
+      return unless surface
 
       unless instant = @instants.delete(slot)
         raise "BUG: surface was deleted but instant was not"
@@ -132,6 +173,20 @@ module Ww::Meridium
 
       if review? &.presence(slot, surface, appearances)
         yield ViewChange.new(@view)
+      end
+    end
+
+    def populate(& : Effect ->) : Nil
+      @surfaces.each do |slot, surface|
+        instant = @instants[slot]
+
+        yield SurfaceAddition.new(IWWID.new(@conid.with_slot(slot), instant), surface)
+      end
+    end
+
+    def clear(& : Effect ->) : Nil
+      @surfaces.each do |slot, _|
+        delete(slot, __in_clear: true) { |effect| yield effect }
       end
     end
 

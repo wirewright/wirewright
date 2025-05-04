@@ -383,11 +383,9 @@ alias Mm = Meridium
 def tspace(flow : Term::Dict, & : Term, Term ->)
   counter = Mm::Slot.new(0)
 
-  mset = Mm::SyncAtomMultiset.new
-  set = Mm::AtomSet.new(Mm::CheckedAtomsPresence.new(mset), mset)
-  chat = Mm::SyncActivationChat.new
+  tspace = SyncInMemoryTspace.new
 
-  conns = {} of Term => Mm::Conn
+  conns = {} of Term => Conn
   lslots = {} of {Term, Term} => Mm::Slot
   rslots = {} of Mm::Slot => Term
   views = Term[]
@@ -397,7 +395,7 @@ def tspace(flow : Term::Dict, & : Term, Term ->)
   flow.items.each do |step|
     Term.matchpi?(step, %{(conn conn-name_symbol children_*)}) do
       conns.put_if_absent(conn_name) do
-        alert = ->(conn : Mm::Conn) do
+        alert = ->(conn : Conn) do
           view1 = conn.view
           views_lock.synchronize do
             v0 = versions[conn_name]?
@@ -409,7 +407,8 @@ def tspace(flow : Term::Dict, & : Term, Term ->)
           end
         end
 
-        conn = Mm::Conn.new(set, chat, alert)
+        conid = Mm::WWID.new
+        conn = Conn.new(conid, tspace.book, alert)
         conn.summon
         conn
       end
@@ -437,19 +436,19 @@ def tspace(flow : Term::Dict, & : Term, Term ->)
           matchpi %{[after added sensor surface-name_symbol pattern_]} do
             slot = lslots[{conn_name, surface_name}]
 
-            conn[slot] = Mm::Sensor.new(pattern, secret: child[:secret]?)
+            conn.transaction &.put(slot, Mm::Sensor.new(pattern, secret: child[:secret]?))
           end
 
           matchpi %{[after added appearance surface-name_symbol value_]} do
             slot = lslots[{conn_name, surface_name}]
 
-            conn[slot] = Mm::Appearance.new(value, secret: child[:secret]?)
+            conn.transaction &.put(slot, Mm::Appearance.new(value, secret: child[:secret]?))
           end
 
           matchpi %{[after removed surface-name_symbol]} do
             slot = lslots[{conn_name, surface_name}]
 
-            conn.delete(slot)
+            conn.transaction &.delete(slot)
           end
 
           matchpi %{(view expected_)} do

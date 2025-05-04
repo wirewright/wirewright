@@ -17,6 +17,7 @@ require "../baz5"
 require "../delta7_proto2"
 require "../primitives"
 require "../templ"
+require "../surfsheet2"
 
 {% if flag?(:release) %}
   Log.setup_from_env(default_level: :warn)

@@ -383,7 +383,6 @@ module Ww::Meridium
     #
     # NOTE: this is a 2D implementation (note array of array of expansions).
     # The following diagram illustrates just one dimension.
-
     #
     # ```text
     #                expansion                              marked expansion

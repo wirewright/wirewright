@@ -20,7 +20,7 @@ module Ww::Meridium
       checksum = Digest::CRC32.update(secret_slice, checksum)
       checksum = Digest::CRC32.update(data, checksum)
 
-      # Add data bytes.
+      # Append data bytes.
       terminal = BytesMM.add(atoms, :appearance_registry, secret_slice, data: data)
 
       # Append checksum bytes.
@@ -37,7 +37,7 @@ module Ww::Meridium
 
     # Subscribes *appearance* to sensors perceiving *value* under *secret*.
     def mount(atoms : IAtomAppend, secret : Term?, value : Term, appearance : WWID) : Nil
-      secret_slice = Meridium.secret_to_bytes(secret)
+      secret_slice = Meridium.secret_slice(secret)
 
       wg = WaitGroup.new
 
@@ -78,18 +78,18 @@ module Ww::Meridium
           next
         end
 
-        # Remember that we insert an artificial gap between the strand bytes and the set
-        # of appearances subscribed to that strand (represented as a digit trie). To fill
-        # this gap we have to complete 0, by an implicit mount-query consensus; there are
-        # no explicit hints for us to do that in the set, so complete() terminates -- not
-        # knowing what to do. We know, though -- we have to complete 0.
+        # Remember that we insert an artificial gap between the strand bytes +
+        # checksum and the set of appearances subscribed to that strand (represented
+        # as a digit trie). complete() doesn't know how to bridge this gap
+        # (that's why we're here in the residue block). So we bridge this gap
+        # manually, making sure to collect progress in *bundle*.
         row = {BytesMM::Completion.new, BytesMM.append(atom, APPEARANCE_SET_GAP)}
 
         lock.synchronize { bundle << row }
       end
 
       # At this point we know all completion fibers have terminated. We can use
-      # row without a lock safely.
+      # bundle without a lock safely.
 
       bundle
     end
@@ -97,7 +97,7 @@ module Ww::Meridium
     # Yields appearances that are perceived by all of the given sensor *strands*
     # simultaneously.
     def each_appearance(atoms : IAtomsPresent, secret : Term?, strands : StrandList, & : WWID ->) : Nil
-      secret_slice = Meridium.secret_to_bytes(secret)
+      secret_slice = Meridium.secret_slice(secret)
 
       wg = WaitGroup.new(strands.size)
 

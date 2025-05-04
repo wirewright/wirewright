@@ -14,41 +14,41 @@ module Ww::Meridium
     abstract def <<(atom : Atom) : self
   end
 
-  # Implementations can be queried about the presence of `Atom`s.
-  module IAtomsPresent
-    # Represents an enumerable source of atoms. This struct doesn't include
-    # `Enumerable` to avoid cycles.
-    struct AtomSource(T)
-      def initialize(@objects : Enumerable(T), @fn : T -> Atom | Enumerable(Atom))
-      end
+  # Represents an enumerable source of atoms. This struct doesn't include
+  # `Enumerable` to avoid cycles.
+  struct AtomSource(T)
+    def initialize(@objects : Enumerable(T), @fn : T -> Atom | Enumerable(Atom))
+    end
 
-      private def visit(ee : Atom, & : Atom ->) : Nil
-        yield ee
-      end
+    private def visit(ee : Atom, & : Atom ->) : Nil
+      yield ee
+    end
 
-      private def visit(ee : Enumerable(Atom), & : Atom ->) : Nil
-        ee.each { |atom| yield atom }
-      end
+    private def visit(ee : Enumerable(Atom), & : Atom ->) : Nil
+      ee.each { |atom| yield atom }
+    end
 
-      def each(& : Atom ->) : Nil
-        @objects.each do |object|
-          ee = @fn.call(object)
+    def each(& : Atom ->) : Nil
+      @objects.each do |object|
+        ee = @fn.call(object)
 
-          visit(ee) do |atom|
-            yield atom
-          end
-        end
-      end
-
-      def each_with_index(& : Atom, Int32 ->) : Nil
-        index = 0
-        each do |atom|
-          yield atom, index
-          index += 1
+        visit(ee) do |atom|
+          yield atom
         end
       end
     end
 
+    def each_with_index(& : Atom, Int32 ->) : Nil
+      index = 0
+      each do |atom|
+        yield atom, index
+        index += 1
+      end
+    end
+  end
+
+  # Implementations can be queried about the presence of `Atom`s.
+  module IAtomsPresent
     # Returns a BitList indicating which *atoms* exist (bit set to 1) and
     # which ones do not (bit set to 0).
     #
@@ -222,7 +222,7 @@ module Ww::Meridium
   end
 
   # :nodoc:
-  def secret_to_bytes(secret : Term) : Bytes
+  def secret_slice(secret : Term) : Bytes
     io = IO::Memory.new
     io.write_byte(1)
 
@@ -232,7 +232,7 @@ module Ww::Meridium
   end
 
   # :nodoc:
-  def secret_to_bytes(secret : Nil) : Bytes
+  def secret_slice(secret : Nil) : Bytes
     Bytes[0]
   end
 end
@@ -250,5 +250,5 @@ require "./meridium/appearance_registry"
 require "./meridium/surface"
 require "./meridium/view"
 require "./meridium/node"
-require "./meridium/conn"
 require "./meridium/tspace"
+require "./meridium/conn"

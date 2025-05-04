@@ -148,24 +148,33 @@ module Ww::Meridium
 
     # Writes this WWID to a byteslice *target*, using big-endian to encode
     # the integer components of the id. Returns *target*.
-    def to_slice_be(target = Bytes.new(BYTESIZE)) : Bytes
+    def to_slice_be(&)
+      scratch = uninitialized UInt8[BYTESIZE]
+
       offset = 0
 
-      WWID.encode_u40_be(@order, target + offset)
+      WWID.encode_u40_be(@order, scratch.to_slice + offset)
       offset += 5 # bytes
 
-      WWID.encode_u40_be(@disorder, target + offset)
+      WWID.encode_u40_be(@disorder, scratch.to_slice + offset)
       offset += 5 # bytes
 
-      IO::ByteFormat::BigEndian.encode(@slot, target + offset)
+      IO::ByteFormat::BigEndian.encode(@slot, scratch.to_slice + offset)
       offset += sizeof(Slot) # bytes
 
-      checksum = Digest::CRC16.checksum(target[0, offset])
+      checksum = Digest::CRC16.checksum(scratch.to_slice[0, offset])
 
-      IO::ByteFormat::BigEndian.encode(checksum, target + offset)
+      IO::ByteFormat::BigEndian.encode(checksum, scratch.to_slice + offset)
       offset += 2 # bytes
 
-      target
+      yield scratch.to_slice
+    end
+
+    def to_slice_be(target = Bytes.new(BYTESIZE)) : Bytes
+      to_slice_be do |slice|
+        slice.copy_to(target)
+        slice
+      end
     end
 
     # Shorthand for `with_slot(0)`.
@@ -213,19 +222,59 @@ module Ww::Meridium
   record Instant, timestamp : UInt64 do
     include Comparable(Instant)
 
+    BYTESIZE = 8
+
     def self.new : Instant
       dt = Time.utc - WW_EPOCH
 
       new(timestamp: dt.total_nanoseconds.floor.to_u64)
     end
 
+    def self.from_slice_be(slice : Bytes) : Instant
+      timestamp = IO::ByteFormat::BigEndian.decode(UInt64, slice)
+
+      new(timestamp)
+    end
+
     def <=>(other : Instant)
       timestamp <=> other.timestamp
+    end
+
+    def to_slice_be(&)
+      scratch = uninitialized UInt8[sizeof(Instant)]
+
+      IO::ByteFormat::BigEndian.encode(timestamp, scratch.to_slice)
+
+      yield scratch.to_slice
     end
   end
 
   # An IWWID is a `WWID` equipped with an `Instant` at which it was created.
   record IWWID, wwid : WWID, instant : Instant do
+    {% begin %}
+      BYTESIZE = {{WWID::BYTESIZE + Instant::BYTESIZE}}
+    {% end %}
+
     delegate :conid, :slot, to: @wwid
+
+    def self.new : IWWID
+      new(WWID.new, Instant.new)
+    end
+
+    def self.from_slice_be(slice : Bytes) : IWWID
+      unless slice.size == BYTESIZE
+        raise ArgumentError.new("invalid slice size")
+      end
+
+      new(
+        wwid: WWID.from_slice_be(slice[0, WWID::BYTESIZE]),
+        instant: Instant.from_slice_be(slice[WWID::BYTESIZE, Instant::BYTESIZE]),
+      )
+    end
+
+    def to_slice_be(&)
+      wwid.to_slice_be { |slice| yield slice }
+      instant.to_slice_be { |slice| yield slice }
+    end
   end
 end

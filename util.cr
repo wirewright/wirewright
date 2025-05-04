@@ -2435,6 +2435,26 @@ struct Range(B, E)
   def proper_subrange_of?(other : Range) : Bool
     subrange_of?(other) && size > other.size
   end
+
+  def in_subranges_of(size step : Int, & : Range(B, E) ->) : Nil
+    if step.zero?
+      raise ArgumentError.new("cannot take subranges of size 0")
+    end
+
+    p, q = size.divmod(step)
+
+    b = @begin
+
+    p.times do
+      e = b + step
+      yield b...e
+      b = e
+    end
+
+    if q > 0
+      yield b...b + q
+    end
+  end
 end
 
 struct Int
@@ -2777,6 +2797,8 @@ struct BitWriter
 end
 
 class MutBitWriter
+  getter cursor
+
   def initialize(@prefix = [] of UInt8)
     @state = 0u8
     @cursor = 0u8
@@ -2796,11 +2818,19 @@ class MutBitWriter
     append(bits.value, bitsize)
   end
 
+  def bytesize : Int32
+    @prefix.size + (@cursor.zero? ? 0 : 1)
+  end
+
   def bitsize
     @prefix.size*8 + @cursor
   end
 
   def <<(bit : UInt8)
+    unless bit.in?(0u8, 1u8)
+      raise ArgumentError.new("invalid bit digit")
+    end
+
     @state |= bit << (7 - @cursor)
     @cursor += 1
 
@@ -2821,6 +2851,12 @@ class MutBitWriter
 
   def detach
     @prefix = @prefix.dup
+  end
+
+  def each_byte(&)
+    @prefix.each { |byte| yield byte }
+    return if @cursor.zero?
+    yield @state
   end
 
   def final
@@ -2881,7 +2917,7 @@ class BitList
     @bits = BitArray.new(@size)
   end
 
-  def self.zeroes(n)
+  def self.zeros(n)
     new(size: n)
   end
 
@@ -2923,6 +2959,26 @@ class BitList
   end
 
   def resize(@size)
+  end
+
+  def each_bucket(&)
+    @bits.each_bucket { |bucket| yield bucket }
+  end
+
+  def nbuckets
+    @bits.nbuckets
+  end
+end
+
+struct BitArray
+  def each_bucket(&)
+    @bits.to_slice(malloc_size).each do |bucket|
+      yield bucket
+    end
+  end
+
+  def nbuckets
+    malloc_size
   end
 end
 
