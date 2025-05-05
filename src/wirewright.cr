@@ -1,11 +1,12 @@
 require "log"
 require "big"
 require "json"
+require "socket"
 require "digest"
+require "blake3"
 require "colorize"
 require "permafrost"
 require "wait_group"
-require "blake3"
 
 require "../oklch"
 require "../util"
@@ -17,7 +18,6 @@ require "../baz5"
 require "../delta7_proto2"
 require "../primitives"
 require "../templ"
-require "../surfsheet2"
 
 {% if flag?(:release) %}
   Log.setup_from_env(default_level: :warn)

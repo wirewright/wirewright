@@ -3044,3 +3044,41 @@ module Digest::CRC16
     checksum
   end
 end
+
+struct SyncHash(K, V)
+  @hash = {} of K => V
+  @lock = Mutex.new
+
+  def size : Int32
+    @lock.synchronize { @hash.size }
+  end
+
+  def each(& : K, V ->)
+    @lock.synchronize do
+      @hash.each { |key, value| yield key, value }
+    end
+  end
+
+  def []=(key : K, value : V) : self
+    @lock.synchronize { @hash[key] = value }
+
+    self
+  end
+
+  def delete(key : K) : self
+    @lock.synchronize { @hash.delete(key) }
+
+    self
+  end
+
+  def find(key : K, & : V -> T) : T forall T
+    @lock.synchronize do
+      return unless value = @hash[key]?
+      yield value
+    end
+  end
+
+  def clear
+    @lock.synchronize { @hash.clear }
+  end
+end

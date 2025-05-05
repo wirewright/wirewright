@@ -182,6 +182,11 @@ module Ww::Meridium
       with_slot(0)
     end
 
+    # Returns `true` if this WWID is a connection id (its slot = `0`).
+    def conid? : Bool
+      slot.zero?
+    end
+
     # Two WWIDs are compared by their order component (timestamp).
     def <=>(other : WWID)
       @order <=> other.@order

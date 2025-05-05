@@ -1,18 +1,46 @@
 module Ww::Meridium
   alias AtomSubmit = Atom ->
 
+  # A *termspace* is an entity that acts both as an atom set and as a kind of router;
+  # In other words, a *termspace* provides both *communication* and *set-like storage*
+  # capabilities for connections. Implementations can range from simple in-memory ones
+  # (`Tspace::InMemory`) to ones that use the client-server model (`Tspace::Axis`);
+  # hub and spokes model; and beyond to distributed (e.g. through consensus) or even
+  # emergent models.
   module Tspace
-    abstract def present?(conn : Conn, atoms : AtomSource) : BitList
-    abstract def send(conn : Conn, act : Activation) : Nil
-    abstract def transaction(conn : Conn, & : AtomSubmit, AtomSubmit ->) : Nil
-    abstract def subscribe(conn : Conn) : Nil
-    abstract def unsubscribe(conn : Conn) : Nil
+    module IBookMeeting
+      # Books a meeting of *meetable* with a termspace.
+      abstract def book(meetable : Tspace::Meetable) : Nil
+    end
+
+    # WARNING: This method is guaranteed to be thread-safe.
+    abstract def present?(conn : IConn, atoms : AtomSource) : BitList
+
+    # WARNING: This method is **not** guaranteed to be thread-safe.
+    abstract def send(conn : IConn, act : Activation) : Nil
+
+    # Yields two procs: the first one is to *add*, and the second one is to
+    # *remove* atoms. Whether each atom is submitted separately or all are
+    # submitted in batch is implementation-defined; this method is simply
+    # a hint for that. Similarly, the order of additions/removals is
+    # implementation-defined. Callers aren't expected to care about that
+    # at this point.
+    #
+    # WARNING: This method is **not** guaranteed to be thread-safe. However,
+    # both `AtomSubmit` procs are guaranteed to be thread-safe.
+    abstract def transaction(conn : IConn, & : AtomSubmit, AtomSubmit ->) : Nil
+
+    # WARNING: This method is **not** guaranteed to be thread-safe.
+    abstract def subscribe(conn : IConn) : Nil
+
+    # WARNING: This method is **not** guaranteed to be thread-safe.
+    abstract def unsubscribe(conn : IConn) : Nil
 
     # :nodoc:
     struct Presences
       include IAtomsPresent
 
-      def initialize(@tspace : Tspace, @conn : Conn)
+      def initialize(@tspace : Tspace, @conn : IConn)
       end
 
       def present?(atoms : AtomSource) : BitList
@@ -20,200 +48,44 @@ module Ww::Meridium
       end
     end
 
-    def presences(conn : Conn) : IAtomsPresent
+    # Constructs an object that implements `IAtomsPresent` for this termspace.
+    # The object is simply a wrapper around `present?` for *conn*.
+    def presences(conn : IConn) : IAtomsPresent
       Presences.new(self, conn)
     end
   end
 
+  # Implementations can `meet` with a termspace (`Tspace`).
   module Tspace::Meetable
+    # Returns the id of the connection that this meetable corresponds to.
     abstract def conid : WWID
+
+    # Conducts a meeting with *tspace*. Notifies *tspace* about the various
+    # changes that occurred in the meantime. A meeting must be booked first.
+    # When the termspace is ready, it will call the meeting. Only one meetable
+    # can hold a meeting with a termspace at a time.
     abstract def meet(tspace : Tspace) : Nil
   end
 
-  # alias ChatSubscribe = ->
-  # alias ChatUnsubscribe = ->
+  module IConn
+    include Tspace::Meetable
 
-  # # Implementations are "chats" where connections can send messages -- "write" --
-  # # to each other, knowing only each other's connection id -- *conid* for short.
-  # module IActivationChatClient
-  #   abstract def subscribe(&recv : Activation ->) : Nil
+    # Returns the id of this connection.
+    abstract def conid : WWID
 
-  #   abstract def unsubscribe : Nil
+    # This method is called by a termspace when the connection switches to online.
+    # It is expected to adjust its state accordingly, and to book a meeting with
+    # `Tspace` for synchronization.
+    abstract def online : Nil
 
-  #   # Sends *act* to *receiver*.
-  #   #
-  #   # Note that we cannot guarantee delivery, for one because *receiver* might not
-  #   # exist at this point.
-  #   abstract def send(receiver : WWID, act : Activation) : Nil
-  # end
+    # This method is called by a termspace when the connection switches to offline.
+    # It is expected to adjust its state accordingly.
+    abstract def offline : Nil
 
-  # # A simple in-memory activation chat protected by a lock (and therefore thread-safe).
-  # module SyncActivationChat
-  # end
-
-  # # Server side of `SyncActivationChat`.
-  # class SyncActivationChat::Server
-  #   @subscribers = {} of WWID => Set(Activation ->)
-  #   @lock = Mutex.new
-
-  #   def subscribe(conid : WWID, &recv : Activation ->)
-  #     @lock.synchronize do
-  #       recvs = @subscribers.put_if_absent(conid) { Set(Activation ->).new }
-  #       recvs << recv
-  #     end
-  #   end
-
-  #   def unsubscribe(conid : WWID) : Nil
-  #     @lock.synchronize do
-  #       next unless recvs = @subscribers[conid]?
-  #       next unless recvs.delete(recv)
-  #       next unless recvs.empty?
-
-  #       @subscribers.delete(conid)
-  #     end
-  #   end
-
-  #   def send(conid : WWID, act : Activation) : Nil
-  #     recvs = @lock.synchronize do
-  #       # Copy receiver procs (if any) so that we can call them outside of the lock,
-  #       # and so that they're "frozen in time".
-  #       @subscribers[conid]?.try(&.dup)
-  #     end
-
-  #     return unless recvs
-
-  #     recvs.each &.call(act)
-  #   end
-  # end
-
-  # # Client side for `SyncActivationChat`.
-  # struct SyncActivationChat::Client
-  #   include IActivationChatClient
-
-  #   def initialize(@server : Server, @conid : WWID)
-  #   end
-
-  #   def subscribe(&recv : Activation ->) : Nil
-  #     @server.subscribe(@conid, &recv)
-  #   end
-
-  #   def unsubscribe : Nil
-  #     @server.unsubscribe(@conid)
-  #   end
-
-  #   def send(receiver : WWID, act : Activation) : Nil
-  #     @server.send(receiver, act)
-  #   end
-  # end
-
-  module IAtomsTransact
-    # Yields two procs: the first one is to *add*, and the second one is to
-    # *remove* atoms. Whether each atom is submitted separately or all are
-    # submitted in batch is implementation-defined; this method is simply
-    # a hint for that. Similarly, the order of additions/removals is
-    # implementation-defined. Callers aren't expected to care about that
-    # at this point.
-    abstract def transaction(& : AtomSubmit, AtomSubmit ->) : Nil
+    # *tspace* will notify this connection occasionally about *act*ivations
+    # targeted at it through this method.
+    abstract def receive(tspace : Tspace, act : Activation) : Nil
   end
-
-  # Sets or set-like objects that store & allow to query `Atom`s produced by
-  # e.g. a `Conn`.
-  # struct AtomSet
-  #   getter presence : IAtomsPresent
-  #   getter content : IAtomsTransact
-
-  #   def initialize(@presence, @content)
-  #   end
-  # end
-
-  # # Implements `transaction` and multi-atom `present?` serially, that is,
-  # # without any kind of batching: the atoms are added, removed, or looked
-  # # up one after another.
-  # module SerialAtomSet
-  #   include IAtomAppend
-  #   include IAtomsPresent
-  #   include IAtomsTransact
-
-  #   # Returns `true` if *atom* exists. Returns `false` otherwise.
-  #   abstract def present?(atom : Atom) : Bool
-
-  #   # Removes the given *atom*.
-  #   abstract def delete(atom : Atom) : Nil
-
-  #   def transaction(& : AtomSubmit, AtomSubmit ->) : Nil
-  #     add = ->(atom : Atom) { self << atom; nil }
-  #     del = ->delete(Atom)
-
-  #     yield add, del
-  #   end
-
-  #   def present?(atoms : AtomSource) : BitList
-  #     answer = BitList.new
-  #     atoms.each do |atom|
-  #       answer << present?(atom)
-  #     end
-  #     answer
-  #   end
-  # end
-
-  # # A simple in-memory atom multiset protected by a lock (and therefore
-  # # thread-safe).
-  # struct SyncAtomMultiset
-  #   include SerialAtomSet
-
-  #   @hash = {} of Atom => UInt32
-  #   @lock = Mutex.new
-
-  #   def present?(atom : Atom) : Bool
-  #     @lock.synchronize { @hash.has_key?(atom) }
-  #   end
-
-  #   def <<(atom : Atom) : self
-  #     @lock.synchronize do
-  #       @hash[atom] = (@hash[atom]? || 0u32) + 1
-  #     end
-
-  #     self
-  #   end
-
-  #   def delete(atom : Atom) : Nil
-  #     @lock.synchronize do
-  #       return unless tally = @hash[atom]?
-
-  #       if tally == 1
-  #         @hash.delete(atom)
-  #       else
-  #         @hash[atom] = tally - 1
-  #       end
-  #     end
-  #   end
-  # end
-
-  # # A simple in-memory atom multiset that consists of `N` `SyncAtomMultiset`
-  # # buckets; this means that by using this implementation, you gain a bit
-  # # more parallelism by reducing contention.
-  # struct SyncBucketedAtomMultiset(N)
-  #   include SerialAtomSet
-
-  #   @buckets = Slice(SyncAtomMultiset).new(N) { SyncAtomMultiset.new }
-
-  #   def present?(atom : Atom) : Bool
-  #     bucket = @buckets[atom.@blk0 % N]
-  #     bucket.present?(atom)
-  #   end
-
-  #   def <<(atom : Atom) : self
-  #     bucket = @buckets[atom.@blk0 % N]
-  #     bucket << atom
-
-  #     self
-  #   end
-
-  #   def delete(atom : Atom) : Nil
-  #     bucket = @buckets[atom.@blk0 % N]
-  #     bucket.delete(atom)
-  #   end
-  # end
 
   # FIXME: do not include IAtomsPresent here; implement as a wrapper method or smth!!!!
 
@@ -280,14 +152,4 @@ module Ww::Meridium
       answer
     end
   end
-
-  # A *termspace* is an entity that acts both as an `IAtomSet` and an `IActivationChat`.
-  # In other words, a *termspace* provides both communication and set-like storage
-  # capabilities for connections. Implementations can range from simple in-memory ones
-  # to ones that use the client-server model; hub and spokes model; and beyond to
-  # distributed (e.g. through consensus) or even emergent models.
-  # module Tspace
-  #   include IAtomsPresent
-  #   include IAtomsTransact
-  # end
 end

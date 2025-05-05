@@ -8,12 +8,13 @@ module Ww::Meridium
   # a meeting with its "boss" -- the termspace; and report progress to it, whenever
   # the termspace decides to hear about it.
   #
-  # NOTE: all public methods are thread-safe.
+  # NOTE: All public methods are thread-safe.
   #
   # NOTE: The main way you can obtain a termspace view is by polling: just call
   # `view`. If you want to be woken up on possible view change, you can use
   # the alert callback for that.
   class Conn
+    include IConn
     include Tspace::Meetable
 
     Log = ::Log.for(self)
@@ -26,7 +27,7 @@ module Ww::Meridium
       SyncOpen
     end
 
-    def initialize(conid : WWID, @book : Tspace::Meetable ->, @alert : self ->)
+    def initialize(conid : WWID, @meeting : Tspace::IBookMeeting, @alert : self ->)
       @node = Node.new(conid)
       @relook = {} of Slot => Channel(Nil)
       @effects = Stack(Effect).new
@@ -62,7 +63,7 @@ module Ww::Meridium
     # This method is called from the relook fiber. Here the relook fiber requests
     # rendezvous with the termspace fiber, through `Relook`.
     private def relook(slot : Slot, surface : Sensor) : Nil
-      @book.call(Relook.new(self, slot, surface))
+      @meeting.book(Relook.new(self, slot, surface))
     end
 
     # :nodoc:
@@ -236,6 +237,9 @@ module Ww::Meridium
       return unless period = surface.relook?
 
       slot = effect.id.slot
+
+      return if @relook.has_key?(slot)
+
       cancel = Channel(Nil).new
 
       @relook[slot] = cancel
@@ -267,7 +271,7 @@ module Ww::Meridium
       Log.trace { "#{conid}: online" }
 
       @lock.synchronize { @state = State::UnsyncOpen }
-      @book.call(self)
+      @meeting.book(self)
     end
 
     # :nodoc:
@@ -283,7 +287,7 @@ module Ww::Meridium
     end
 
     # :nodoc:
-    def receive(tspace : Tspace, act : Activation)
+    def receive(tspace : Tspace, act : Activation) : Nil
       @lock.synchronize do
         @node.receive(act) { |effect| capture(effect) }
       end
@@ -326,7 +330,7 @@ module Ww::Meridium
 
       Log.trace { "#{conid}: summon: book a meeting with tspace" }
 
-      @book.call(self)
+      @meeting.book(self)
     end
 
     # Removes the atoms of this connection from the termspace.
@@ -344,7 +348,7 @@ module Ww::Meridium
 
       Log.trace { "#{conid}: dismiss: book a meeting with tspace" }
 
-      @book.call(self)
+      @meeting.book(self)
     end
 
     # Actions that can be performed during a transaction.
@@ -405,7 +409,7 @@ module Ww::Meridium
 
       Log.trace { "#{conid}: transaction: book a meeting with tspace" }
 
-      @book.call(self)
+      @meeting.book(self)
     end
   end
 end

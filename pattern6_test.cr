@@ -378,16 +378,16 @@ def process(queue, testcase, ctx)
   end
 end
 
-alias Mm = Meridium
+alias MM = Meridium
 
 def tspace(flow : Term::Dict, & : Term, Term ->)
-  counter = Mm::Slot.new(0)
+  counter = MM::Slot.new(0)
 
-  tspace = SyncInMemoryTspace.new
+  tspace = MM::Tspace::InMemory.new
 
-  conns = {} of Term => Conn
-  lslots = {} of {Term, Term} => Mm::Slot
-  rslots = {} of Mm::Slot => Term
+  conns = {} of Term => MM::Conn
+  lslots = {} of {Term, Term} => MM::Slot
+  rslots = {} of MM::Slot => Term
   views = Term[]
   versions = {} of Term => UInt32
   views_lock = Mutex.new
@@ -395,7 +395,7 @@ def tspace(flow : Term::Dict, & : Term, Term ->)
   flow.items.each do |step|
     Term.matchpi?(step, %{(conn conn-name_symbol children_*)}) do
       conns.put_if_absent(conn_name) do
-        alert = ->(conn : Conn) do
+        alert = ->(conn : MM::Conn) do
           view1 = conn.view
           views_lock.synchronize do
             v0 = versions[conn_name]?
@@ -407,8 +407,8 @@ def tspace(flow : Term::Dict, & : Term, Term ->)
           end
         end
 
-        conid = Mm::WWID.new
-        conn = Conn.new(conid, tspace.book, alert)
+        conid = MM::WWID.new
+        conn = MM::Conn.new(conid, tspace, alert)
         conn.summon
         conn
       end
@@ -436,13 +436,13 @@ def tspace(flow : Term::Dict, & : Term, Term ->)
           matchpi %{[after added sensor surface-name_symbol pattern_]} do
             slot = lslots[{conn_name, surface_name}]
 
-            conn.transaction &.put(slot, Mm::Sensor.new(pattern, secret: child[:secret]?))
+            conn.transaction &.put(slot, MM::Sensor.new(pattern, secret: child[:secret]?))
           end
 
           matchpi %{[after added appearance surface-name_symbol value_]} do
             slot = lslots[{conn_name, surface_name}]
 
-            conn.transaction &.put(slot, Mm::Appearance.new(value, secret: child[:secret]?))
+            conn.transaction &.put(slot, MM::Appearance.new(value, secret: child[:secret]?))
           end
 
           matchpi %{[after removed surface-name_symbol]} do
@@ -456,7 +456,7 @@ def tspace(flow : Term::Dict, & : Term, Term ->)
               view = views_lock.synchronize { views[conn_name]? } || Term[]
               view.each_entry do |slot, multiset|
                 # Map numeric identities to original surface names (symbols).
-                commit.with(rslots[slot.to(Mm::Slot)], multiset)
+                commit.with(rslots[slot.to(MM::Slot)], multiset)
               end
             end
 
