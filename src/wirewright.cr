@@ -1,7 +1,6 @@
 require "log"
 require "big"
 require "json"
-require "socket"
 require "digest"
 require "blake3"
 require "colorize"
@@ -30,3 +29,5 @@ module Ww
 
   MT = Fiber::ExecutionContext::MultiThreaded.new("Wirewright", System.cpu_count.to_i)
 end
+
+require "socket"
