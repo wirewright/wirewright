@@ -409,6 +409,7 @@ def tspace(flow : Term::Dict, & : Term, Term ->)
 
         conid = MM::WWID.new
         conn = MM::Conn.new(conid, tspace, alert)
+        conn.online
         conn.summon
         conn
       end

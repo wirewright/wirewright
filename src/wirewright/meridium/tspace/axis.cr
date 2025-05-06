@@ -92,12 +92,21 @@ module Ww::Meridium
 
     # Subscribes *conn* to notifications about `status`.
     def subscribe(conn : IConn) : Nil
-      @lock.synchronize { @subscribers << conn }
+      online = @lock.synchronize do
+        @subscribers << conn
+        @running && @status.online?
+      end
+
+      if online
+        conn.online
+      end
     end
 
     # Unsubscribes *conn* from notifications about `status`.
     def unsubscribe(conn : IConn) : Nil
       @lock.synchronize { @subscribers.delete(conn) }
+
+      conn.offline
     end
 
     # Starts the connect loop in the calling fiber. The connect loop runs until

@@ -63,7 +63,8 @@ module Ww::Meridium
     # Conducts a meeting with *tspace*. Notifies *tspace* about the various
     # changes that occurred in the meantime. A meeting must be booked first.
     # When the termspace is ready, it will call the meeting. Only one meetable
-    # can hold a meeting with a termspace at a time.
+    # can hold a meeting with a termspace at a time. This method is always called
+    # from the termspace fiber (if any fiber at all!)
     abstract def meet(tspace : Tspace) : Nil
   end
 
@@ -83,7 +84,11 @@ module Ww::Meridium
     abstract def offline : Nil
 
     # *tspace* will notify this connection occasionally about *act*ivations
-    # targeted at it through this method.
+    # targeted at it through this method. This method is always called from
+    # the termspace fiber (if any fiber at all!) You do not need to book
+    # a meeting; in fact, we would most likely deadlock if you do. The meeting
+    # is already being conducted, due to *act*; simply continue with `meet`
+    # if that is needed.
     abstract def receive(tspace : Tspace, act : Activation) : Nil
   end
 

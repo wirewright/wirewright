@@ -1,6 +1,6 @@
 module Ww::Meridium
   # A Meridium connection is a "shell" around a `Node` that lets it communicate with
-  # and influence the outside world through a so-called *termspace*.
+  # and influence the outside world through a so-called *termspace* (see also: `Tspace`).
   #
   # We don't *actually* give connections direct access to a termspace; instead,
   # they can "book an appointment" with the termspace. Connections are a bit like
@@ -17,27 +17,26 @@ module Ww::Meridium
     include IConn
     include Tspace::Meetable
 
-    Log = ::Log.for(self)
-
-    # :nodoc:
-    enum State : UInt8
-      SyncClosed
-      UnsyncClosed
-      UnsyncOpen
-      SyncOpen
-    end
-
-    def initialize(conid : WWID, @meeting : Tspace::IBookMeeting, @alert : self ->)
-      @node = Node.new(conid)
+    def initialize(conid : WWID, @meetup : Tspace::IBookMeeting, @alert : self ->)
+      @baseline = Node.new(conid)
+      @staging = @baseline
       @relook = {} of Slot => Channel(Nil)
-      @effects = Stack(Effect).new
-      @state = State::SyncClosed
       @lock = Mutex.new
     end
 
     # :ditto:
     def self.new(*args, **kwargs, &alert : self ->) : self
       new(*args, alert, **kwargs)
+    end
+
+    # Returns the id of this connection.
+    def conid : WWID
+      @lock.synchronize { @staging.conid }
+    end
+
+    # Returns the latest view of the termspace for this connection.
+    def view : View
+      @lock.synchronize { @staging.view }
     end
 
     # This method hosts the relook loop, executed in the relook fiber: all it
@@ -63,14 +62,14 @@ module Ww::Meridium
     # This method is called from the relook fiber. Here the relook fiber requests
     # rendezvous with the termspace fiber, through `Relook`.
     private def relook(slot : Slot, surface : Sensor) : Nil
-      @meeting.book(Relook.new(self, slot, surface))
+      @meetup.book(Relook.new(self, slot, surface))
     end
 
     # :nodoc:
     #
-    # Conn's companion object that can schedule its own meetings with the "boss"
-    # as well, on behalf of the connection. After doing its own business, relook
-    # yields the floor to the connection.
+    # Conn's companion object that can schedule its own meetings with the "boss" --
+    # tspace -- as well, on behalf of the connection. After doing its own business,
+    # relook yields the floor to the connection.
     class Relook
       include Tspace::Meetable
 
@@ -94,215 +93,162 @@ module Ww::Meridium
     # :nodoc:
     protected def presence(slot : Slot, appearances : Set(WWID))
       @lock.synchronize do
-        @node.presence(slot, appearances) { |effect| capture(effect) }
+        @staging = @staging.presence(slot, appearances)
       end
     end
 
-    # :nodoc:
     def meet(tspace : Tspace) : Nil
-      acts = Stack(Activation).new
+      effects = Stack(Effect).new
 
-      alert = @lock.synchronize do
-        Log.trace { "#{conid}: begin meeting with state=#{@state}" }
+      @lock.synchronize do
+        Log.trace { "#{@staging.conid}: begin meeting for #{@baseline.state}->#{@staging.state}" }
 
-        case @state
-        in .sync_closed?
-          @effects.clear
-          Log.debug { "#{conid}: state is sync_closed during meeting, abort meeting" }
-          return
-        in .unsync_closed?
-          @state = State::SyncClosed
-          tspace.unsubscribe(self)
-          @effects.clear
-          @node.clear { |effect| capture(effect) }
-        in .unsync_open?
-          @state = State::SyncOpen
-          tspace.subscribe(self)
-          @effects.clear
-          @node.populate { |effect| capture(effect) }
-        in .sync_open?
+        @baseline = @staging = @baseline.swap(@staging) do |effect|
+          effects << effect
         end
 
-        if @effects.empty?
-          Log.trace { "#{conid}: nothing to say, end meeting" }
+        if effects.empty?
+          Log.trace { "#{@staging.conid}: meeting resulted in no effects" }
           return
         end
-
-        report(tspace) { |act| acts << act }
       end
 
-      # It is important that we call chat.send() outside of the lock; who
-      # knows what it could be doing.
-      if acts.present?
-        Log.trace { "#{conid}: meeting: #{acts.size} activation(s) to send" }
+      Log.trace { "#{@staging.conid}: meeting resulted in #{effects.size} effect(s)" }
 
-        acts.each { |act| tspace.send(self, act) }
-      end
+      manage(tspace, effects)
+      push(tspace, effects)
+      notify(tspace, effects)
 
-      # Ditto for alert, we don't know what it'll do (most probably call
-      # #view though).
-      if alert
-        Log.trace { "#{conid}: call alert" }
-
+      # This may seem somewhat careless, but remember that meet() can be called
+      # by just one fiber at a time. In other words they form a queue to call
+      # meet() rather than all rushing to it. @alert cannot change, too.
+      if effects.any?(ViewChanged)
         @alert.call(self)
       end
     end
 
-    # Reports about effects to *tspace*. Returns `true` if the view changed
-    # during the report.
-    #
-    # NOTE: we split surface addition/removal into two phases: push() and
-    # trigger(). This is needed so that we finish insertion before actually
-    # querying the termspace. Otherwise the result of queries would be order
-    # dependent if someone inserts a sensor and an appearance simultaneously
-    # that can excite each other.
-    #
-    # WARNING: assumes @lock is taken!
-    private def report(tspace, & : Activation ->) : Bool
-      push(tspace)
-      trigger(tspace) { |*args| yield *args }
-      changed = @effects.any?(ViewChange)
-      @effects.clear
-      changed
+    private def manage(tspace, effects : Enumerable) : Nil
+      effects.each { |effect| manage(tspace, effect) }
     end
 
-    private def push(tspace) : Nil
-      Log.trace { "#{conid}: push #{@effects.size} effect(s)" }
+    private def manage(tspace, effect : Subscribed) : Nil
+      unless conid == effect.conid
+        raise ArgumentError.new("unexpected conid in Subscribed")
+      end
 
+      tspace.subscribe(self)
+    end
+
+    private def manage(tspace, effect : Unsubscribed) : Nil
+      unless conid == effect.conid
+        raise ArgumentError.new("unexpected conid in Unsubscribed")
+      end
+
+      tspace.unsubscribe(self)
+    end
+
+    private def manage(tspace, effect) : Nil
+    end
+
+    private def push(tspace, effects : Enumerable) : Nil
       tspace.transaction(self) do |add, del|
-        @effects.each { |effect| push(add, del, effect) }
+        effects.each { |effect| push(add, del, effect) }
       end
     end
 
-    private def push(add, del, effect : SurfaceAddition) : Nil
-      effect.surface.each_atom(effect.id.wwid) { |atom| add.call(atom) }
-    end
+    private def push(add, del, effect : SurfaceAdded) : Nil
+      Log.trace { "#{conid}: push effect #{effect}" }
 
-    private def push(add, del, effect : SurfaceDeletion) : Nil
-      effect.surface.each_atom(effect.id.wwid) { |atom| del.call(atom) }
-    end
+      surface = effect.surface
+      surface.each_atom(effect.id.wwid) { |atom| add.call(atom) }
 
-    private def push(add, del, effect : ViewChange | Stimulation) : Nil
-    end
-
-    private def trigger(tspace, &) : Nil
-      Log.trace { "#{conid}: trigger #{@effects.size} effect(s)" }
-
-      @effects.each do |effect|
-        trigger(tspace, effect) { |*args| yield *args }
-      end
-    end
-
-    private def trigger(tspace, effect : SurfaceAddition, &) : Nil
-      show(tspace, effect.id, effect.surface) { |*args| yield *args }
-    end
-
-    private def trigger(tspace, effect : SurfaceDeletion, &) : Nil
-      hide(tspace, effect.id, effect.surface) { |*args| yield *args }
-    end
-
-    private def trigger(tspace, effect : ViewChange, &) : Nil
-    end
-
-    private def trigger(tspace, effect : Stimulation, &) : Nil
-      yield effect.to_stimulus_response
-    end
-
-    # Tells the termspace about *surface*.
-    private def show(tspace, id : IWWID, surface : Sensor, &) : Nil
-      appearances = surface.complement_set(tspace.presences(self))
-      appearances.each { |appearance| yield StimulusRequest.new(id, appearance) }
-    end
-
-    # :ditto:
-    private def show(tspace, id : IWWID, surface : Appearance, &) : Nil
-      sensors = surface.complement_set(tspace.presences(self))
-      sensors.each { |sensor| yield StimulusPresence.new(sensor, id, surface.value) }
-    end
-
-    # Tells the termspace that *surface* is no longer present.
-    private def hide(tspace, id : IWWID, surface : Sensor, &) : Nil
-    end
-
-    # :ditto:
-    private def hide(tspace, id : IWWID, surface : Appearance, &) : Nil
-      sensors = surface.complement_set(tspace.presences(self))
-      sensors.each { |sensor| yield StimulusAbsence.new(sensor, id) }
-    end
-
-    private def capture(effect : SurfaceAddition) : Nil
-      @effects << effect
-
-      return unless surface = effect.surface.as?(Sensor)
+      return unless surface.is_a?(Sensor)
       return unless period = surface.relook?
 
       slot = effect.id.slot
-
-      return if @relook.has_key?(slot)
-
       cancel = Channel(Nil).new
-
-      @relook[slot] = cancel
+      @lock.synchronize { @relook[slot] = cancel }
 
       spawn relook(slot, cancel, period, surface)
     end
 
-    private def capture(effect : SurfaceDeletion) : Nil
-      @effects << effect
+    private def push(add, del, effect : SurfaceRemoved) : Nil
+      Log.trace { "#{conid}: push effect #{effect}" }
 
-      return unless surface = effect.surface.as?(Sensor)
+      surface = effect.surface
+      surface.each_atom(effect.id.wwid) { |atom| del.call(atom) }
 
-      if surface.relook?
-        cancel = @relook.delete(effect.id.slot) || raise "BUG: relook sensor with no cancel chan"
-        cancel.close
+      return unless surface.is_a?(Sensor)
+      return unless surface.relook?
+
+      cancel = @relook.delete(effect.id.slot).not_nil!("slot-relook discrepancy")
+      cancel.close
+    end
+
+    private def push(add, del, effect) : Nil
+    end
+
+    private def notify(tspace, effects : Enumerable) : Nil
+      effects.each { |effect| notify(tspace, effect) }
+    end
+
+    private def notify(tspace, effect : SurfaceAdded) : Nil
+      show(tspace, effect.id, effect.surface)
+    end
+
+    private def notify(tspace, effect : SurfaceRemoved) : Nil
+      hide(tspace, effect.id, effect.surface)
+    end
+
+    private def notify(tspace, effect : Stimulated) : Nil
+      tspace.send(self, effect.to_stimulus_response)
+    end
+
+    private def notify(tspace, effect) : Nil
+    end
+
+    # Tells the termspace about *surface*.
+    private def show(tspace, id : IWWID, surface : Sensor) : Nil
+      Log.trace { "#{conid}: show #{surface} to the termspace" }
+
+      appearances = surface.complement_set(tspace.presences(self))
+      appearances.each do |appearance|
+        tspace.send(self, StimulusRequest.new(id, appearance))
       end
     end
 
-    private def capture(effect) : Nil
-      @effects << effect
+    # :ditto:
+    private def show(tspace, id : IWWID, surface : Appearance) : Nil
+      Log.trace { "#{conid}: show #{surface} to the termspace" }
+
+      sensors = surface.complement_set(tspace.presences(self))
+      sensors.each do |sensor|
+        tspace.send(self, StimulusPresence.new(sensor, id, surface.value))
+      end
     end
 
-    # :nodoc:
-    #
-    # NOTE: this isn't the same as summon! Summon assumes we're connected and
-    # does some state "shorthand" stuff. I.e. summon(unsync close) -> open
-    # without interacting with the termspace.
-    def online : Nil
-      Log.trace { "#{conid}: online" }
-
-      @lock.synchronize { @state = State::UnsyncOpen }
-      @meeting.book(self)
+    # Tells the termspace that *surface* is no longer present.
+    private def hide(tspace, id : IWWID, surface : Sensor) : Nil
     end
 
-    # :nodoc:
-    #
-    # NOTE: this isn't the same as dismiss! Dismiss assumes we're connected
-    # and will try to remove atoms etc. Here we assume we're disconnected
-    # already, for whatever reason; and just do the necessary post-factum
-    # state adjustments.
-    def offline : Nil
-      Log.trace { "#{conid}: offline" }
+    # :ditto:
+    private def hide(tspace, id : IWWID, surface : Appearance) : Nil
+      Log.trace { "#{conid}: hide #{surface} from the termspace" }
 
-      @lock.synchronize { @state = State::SyncClosed }
+      sensors = surface.complement_set(tspace.presences(self))
+      sensors.each do |sensor|
+        tspace.send(self, StimulusAbsence.new(sensor, id))
+      end
     end
 
-    # :nodoc:
     def receive(tspace : Tspace, act : Activation) : Nil
+      Log.trace { "receive activation #{act} from the termspace" }
+
       @lock.synchronize do
-        @node.receive(act) { |effect| capture(effect) }
+        @staging = @staging.receive(act)
       end
 
       meet(tspace)
-    end
-
-    # Returns the id of this connection.
-    def conid : WWID
-      @node.conid
-    end
-
-    # Returns the latest view of the termspace according to this connection.
-    def view : View
-      @lock.synchronize { @node.view }
     end
 
     # Yields each occupied slot and the corresponding surface.
@@ -315,101 +261,74 @@ module Ww::Meridium
       end
     end
 
-    # Inserts the atoms of this connection into the termspace.
+    # Inserts the surfaces of this connection into the termspace.
     def summon : Nil
-      @lock.synchronize do
-        case @state
-        in .sync_closed?
-          @state = State::UnsyncOpen
-        in .unsync_closed?
-          @state = State::SyncOpen
-        in .unsync_open?, .sync_open?
-          return
-        end
-      end
+      Log.trace { "#{conid}: summoned" }
 
-      Log.trace { "#{conid}: summon: book a meeting with tspace" }
-
-      @meeting.book(self)
+      @lock.synchronize { @staging = @staging.summon }
+      @meetup.book(self)
     end
 
-    # Removes the atoms of this connection from the termspace.
+    # Removes the surfaces of this connection from the termspace.
     def dismiss : Nil
-      @lock.synchronize do
-        case @state
-        in .sync_closed?, .unsync_closed?
-          return
-        in .unsync_open?
-          @state = State::SyncClosed
-        in .sync_open?
-          @state = State::UnsyncClosed
-        end
-      end
+      Log.trace { "#{conid}: dismissed" }
 
-      Log.trace { "#{conid}: dismiss: book a meeting with tspace" }
-
-      @meeting.book(self)
+      @lock.synchronize { @staging = @staging.dismiss }
+      @meetup.book(self)
     end
 
-    # Actions that can be performed during a transaction.
-    module Action
-      # :nodoc:
-      alias Any = Put | Delete | Receive
+    def online : Nil
+      Log.trace { "#{conid}: online" }
 
-      # See `Conn#[]=`.
-      record Put, slot : Slot, surface : Surface
+      @lock.synchronize { @staging = @staging.online }
+      @meetup.book(self)
+    end
 
-      # See `Conn#delete`.
-      record Delete, slot : Slot
+    def offline : Nil
+      Log.trace { "#{conid}: offline" }
 
-      # :nodoc:
-      record Receive, act : Activation
+      # Note how we take over baseline merging here for a moment.
+      # Normally it is the termspace that does this.
+      @lock.synchronize { @baseline = @staging = @staging.offline }
+      @alert.call(self)
     end
 
     # Transaction object yielded by `transaction`.
-    struct Txn
+    class Txn
       # :nodoc:
-      getter actions = [] of Action::Any
-
-      {% for action in Action::Any.union_types %}
-      {% name = action.id.split("::")[-1].downcase %}
-
-      # See `Action`.
-      def {{name.id}}(*args, **kwargs) : Nil
-        @actions << {{action}}.new(*args, **kwargs)
+      def initialize(@head : Node)
       end
-    {% end %}
+
+      # See `Node#put`.
+      def put(slot : Slot, surface : Surface) : Nil
+        @head = @head.put(slot, surface)
+      end
+
+      # See `Node#delete`.
+      def delete(slot : Slot) : Nil
+        @head = @head.delete(slot)
+      end
     end
 
     # Transactions allow to group actions together so that they are sent to
     # the termspace as one big message vs. many small ones.
     def transaction(& : Txn ->) : Nil
+      Log.trace { "#{conid}: begin transaction" }
+
       @lock.synchronize do
-        Log.trace { "#{conid}: transaction is collecting effects" }
+        yield txn = Txn.new(@staging)
 
-        txn = Txn.new
-        yield txn
-
-        if txn.actions.size < 8
-          Log.trace { "#{conid}: transaction will process actions: #{txn.actions.join("; ")}" }
-        else
-          Log.trace { "#{conid}: transaction will process #{txn.actions.size} action(s)" }
+        if @staging.same?(txn.@head)
+          Log.trace { "#{conid}: transaction resulted in no change" }
+          return
         end
 
-        txn.actions.each do |action|
-          case action
-          in Action::Put
-            @node.put(action.slot, action.surface) { |effect| capture(effect) }
-          in Action::Delete
-            @node.delete(action.slot) { |effect| capture(effect) }
-          in Action::Receive
-          end
-        end
+        @staging = txn.@head
       end
 
       Log.trace { "#{conid}: transaction: book a meeting with tspace" }
 
-      @meeting.book(self)
+      @meetup.book(self)
     end
   end
 end

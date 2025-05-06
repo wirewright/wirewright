@@ -17,7 +17,7 @@ module Ww::Meridium
   # An internal object that maintains the percepts that a sensor perceives.
   #
   # See also: `Percept`.
-  class PerceptData
+  struct PerceptData
     # :nodoc:
     def initialize(@percepts = Pf::Map(WWID, Percept).new)
     end
@@ -164,6 +164,12 @@ module Ww::Meridium
       stimuli1, changed = stimuli0.after(surface, act)
 
       change(map: @map.assoc(slot, stimuli1), version: changed ? @version + 1 : @version)
+    end
+
+    # Clears all percept data objects. Returns the modified copy of this view.
+    def clear : View
+      map1 = @map.map_value { PerceptData.new }
+      map1.same?(@map) ? self : change(map: map1, version: @version + 1)
     end
 
     # Formats this view as a dict, mapping slots to multisets of percept features

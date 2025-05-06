@@ -48,13 +48,15 @@ module Ww::Meridium
   end
 
   # Effects are messages directed outward from a conn's "nucleus" `Node` to that
-  # conn, and then perhaps to the chat (or trigger addition of atoms to the atom set).
-  alias Effect = SurfaceAddition | SurfaceDeletion | ViewChange | Stimulation
+  # conn, and then perhaps to the termspace.
+  alias Effect = SurfaceAdded | SurfaceRemoved | ViewChanged | Stimulated | Subscribed | Unsubscribed
 
-  record ViewChange, view : View
-  record SurfaceAddition, id : IWWID, surface : Surface
-  record SurfaceDeletion, id : IWWID, surface : Surface
-  record Stimulation, surface : Appearance, sensor : IWWID, appearance : IWWID do
+  record ViewChanged, view : View
+  record Subscribed, conid : WWID
+  record Unsubscribed, conid : WWID
+  record SurfaceAdded, id : IWWID, surface : Surface
+  record SurfaceRemoved, id : IWWID, surface : Surface
+  record Stimulated, surface : Appearance, sensor : IWWID, appearance : IWWID do
     def to_stimulus_response : StimulusResponse
       StimulusResponse.new(sensor, appearance, surface.value)
     end
@@ -72,44 +74,40 @@ module Ww::Meridium
   # of `Conn` is to guard its node and make sure it is accessed in a thread-safe
   # manner; `Node` itself doesn't care.
   class Node
-    Log = ::Log.for(self)
+    # :nodoc:
+    NO_STIMULATIONS = Pf::Map(Slot, Pf::Set(IWWID)).new
+
+    @[Flags]
+    enum State : UInt8
+      Online
+      Summoned
+    end
 
     # Returns the connection id of this node.
-    #
-    # This method is the only thread-safe one because nobody ever modifies the conid.
     getter conid : WWID
 
-    # Returns the latest view.
+    # Returns the curren state of this node.
+    getter state : State
+
+    # Returns the current view of this node.
     getter view : View
 
     def initialize(@conid : WWID)
-      unless @conid.slot.zero?
-        raise ArgumentError.new("expected trunk conid (conid with slot=0)")
+      unless @conid.conid?
+        raise ArgumentError.new("expected WWID trunk as conid (slot must be 0)")
       end
 
       @view = View.new
-      @surfaces = {} of Slot => Surface
-      @instants = {} of Slot => Instant
+      @state = State::None
+      @surfaces = Pf::Map(Slot, Surface).new
+      @instants = Pf::Map(Slot, Instant).new
+      @stimulations = NO_STIMULATIONS
     end
 
-    private def review?(& : View -> View) : Bool
-      view0 = @view
-      @view = yield view0
-      view0.version != @view.version
+    def initialize(@conid, @state, @view, @surfaces, @instants, @stimulations)
     end
 
-    private def insert(slot, surface, & : Effect ->) : Nil
-      @instants[slot] = instant = Instant.new
-      @surfaces[slot] = surface
-
-      yield SurfaceAddition.new(IWWID.new(@conid.with_slot(slot), instant), surface)
-
-      return unless surface.is_a?(Sensor)
-
-      if review? &.register(slot, surface)
-        yield ViewChange.new(@view)
-      end
-    end
+    private def_change
 
     # Returns `true` if this node contains no surfaces. Returns `false` otherwise.
     def empty? : Bool
@@ -121,6 +119,22 @@ module Ww::Meridium
       @surfaces[slot]?
     end
 
+    # Returns the `WWID` currently associated with *slot*, or `nil` if *slot*
+    # is absent.
+    def wwid?(slot : Slot) : WWID?
+      return unless @surfaces.has_key?(slot)
+
+      @conid.with_slot(slot)
+    end
+
+    # Returns the `IWWID` currently associated with *slot*, or `nil` if *slot*
+    # is absent.
+    def iwwid?(slot : Slot) : IWWID?
+      return unless wwid = wwid?(slot)
+
+      IWWID.new(wwid, @instants[slot])
+    end
+
     # Yields WWIDs and their corresponding surfaces.
     def each(& : WWID, Surface ->) : Nil
       @surfaces.each do |slot, surface|
@@ -128,153 +142,223 @@ module Ww::Meridium
       end
     end
 
-    # Updates or inserts the surface at *slot*. Yields the effects of that
-    # to the block.
-    def put(slot : Slot, surface : Surface, & : Effect ->) : Nil
-      delete(slot) { |effect| yield effect }
-      insert(slot, surface) { |effect| yield effect }
+    protected def insert(slot : Slot, surface : Surface) : Node
+      change(
+        surfaces: @surfaces.assoc(slot, surface),
+        instants: @instants.assoc(slot, Instant.new),
+        view: surface.is_a?(Sensor) ? @view.register(slot, surface) : @view,
+        # NOTE: we do not insert into @stimulations here simply to save a tiny
+        # bit of space. We don't know if an entry there is going to be needed.
+      )
     end
 
-    # Removes the surface at *slot*. Yields the effects of that to the block.
-    def delete(slot : Slot, *, __in_clear = false, & : Effect ->) : Nil
-      if __in_clear
-        surface = @surfaces[slot]?
-      else
-        surface = @surfaces.delete(slot)
-      end
-
-      return unless surface
-
-      unless instant = @instants.delete(slot)
-        raise "BUG: surface was deleted but instant was not"
-      end
-
-      yield SurfaceDeletion.new(IWWID.new(@conid.with_slot(slot), instant), surface)
-
-      return unless surface.is_a?(Sensor)
-
-      if review? &.unregister(slot, surface)
-        yield ViewChange.new(@view)
-      end
+    # Adjusts the state of this node to signal it's online now.
+    def online : Node
+      change(state: @state | State::Online)
     end
 
-    # Updates the view according to an exhaustive set of appearances perceived
-    # by the sensor at *slot*. Yields the effects of that to the block.
-    def presence(slot : Slot, appearances : Set(WWID), & : Effect ->) : Nil
+    # Adjusts the state of this node to signal it's offline now.
+    def offline : Node
+      change(state: @state & ~State::Online, view: @view.clear, stimulations: NO_STIMULATIONS)
+    end
+
+    # Adjusts the state of this node to signal that it should join the termspace
+    # now. Note that (obviously) it will join only if it is online. Otherwise it
+    # will wait until it is online and only then join.
+    def summon : Node
+      change(state: @state | State::Summoned)
+    end
+
+    # Adjusts the state of this node to signal that it should leave the termspace
+    # now. If online, this will gracefully remove all appearances and notify everybody
+    # that the node left. If offline, this is a noop, since we assume offline to mean
+    # "connection and all associated state lost".
+    def dismiss : Node
+      change(state: @state & ~State::Summoned, view: @view.clear, stimulations: NO_STIMULATIONS)
+    end
+
+    # Updates or inserts the surface at *slot*. Returns the modified copy of `self`.
+    def put(slot : Slot, surface : Surface) : Node
+      delete(slot).insert(slot, surface)
+    end
+
+    # Removes the surface at *slot*. Returns the modified copy of `self`.
+    def delete(slot : Slot) : Node
+      return self unless surface = @surfaces[slot]?
+
+      change(
+        surfaces: @surfaces.dissoc(slot),
+        instants: @instants.dissoc(slot),
+        view: surface.is_a?(Sensor) ? @view.unregister(slot, surface) : @view,
+        stimulations: surface.is_a?(Appearance) ? @stimulations.dissoc(slot) : @stimulations,
+      )
+    end
+
+    # Updates the view by excluding appearances not in the given *appearances*
+    # set. Returns the modified copy of `self`.
+    def presence(slot : Slot, appearances : Set(WWID)) : Node
       unless surface = @surfaces[slot]?
         Log.debug { "presence was called for a slot that is absent" }
-        return
+        return self
       end
 
       unless surface.is_a?(Sensor)
         Log.debug { "presence was called for an appearance" }
-        return
+        return self
       end
 
-      if review? &.presence(slot, surface, appearances)
-        yield ViewChange.new(@view)
-      end
-    end
-
-    def populate(& : Effect ->) : Nil
-      @surfaces.each do |slot, surface|
-        instant = @instants[slot]
-
-        yield SurfaceAddition.new(IWWID.new(@conid.with_slot(slot), instant), surface)
-      end
-    end
-
-    def clear(& : Effect ->) : Nil
-      @surfaces.each do |slot, _|
-        delete(slot, __in_clear: true) { |effect| yield effect }
-      end
+      change(view: @view.presence(slot, surface, appearances))
     end
 
     # :nodoc:
-    def receive(act : StimulusPresence | StimulusAbsence, & : Effect ->) : Nil
-      unless act.sensor.conid == @conid
+    def receive(act : StimulusPresence | StimulusAbsence) : Node
+      unless @conid == act.sensor.conid
         Log.debug { "reject stimulus presence: conid of #{act.sensor} != my #{@conid}" }
-        return
+        return self
       end
 
       unless surface = @surfaces[act.sensor.slot]?
         Log.debug { "reject stimulus presence: slot of #{act.sensor} absent" }
-        return
+        return self
       end
 
       unless surface.is_a?(Sensor)
         Log.debug { "reject stimulus presence: slot of #{act.sensor} is no longer a sensor" }
-        return
+        return self
       end
 
-      if review? &.after(surface, act)
-        yield ViewChange.new(@view)
-      end
+      change(view: @view.after(surface, act))
     end
 
     # :nodoc:
-    def receive(act : StimulusRequest, & : Effect ->) : Nil
-      unless act.appearance.conid == @conid
+    def receive(act : StimulusRequest) : Node
+      return self unless @state.online?
+
+      unless @conid == act.appearance.conid
         Log.debug { "reject stimulus request: conid of #{act.appearance} != my #{@conid}" }
-        return
+        return self
       end
 
       unless surface = @surfaces[act.appearance.slot]?
         Log.debug { "reject stimulus request: slot of #{act.appearance} absent" }
-        return
+        return self
       end
 
       unless surface.is_a?(Appearance)
         Log.debug { "reject stimulus request: slot of #{act.appearance} is no longer an appearance" }
-        return
+        return self
       end
 
-      appearance = IWWID.new(act.appearance, @instants[act.appearance.slot])
-
-      yield Stimulation.new(surface, act.sensor, appearance)
+      change(stimulations: @stimulations.extend(act.appearance.slot, Pf::Set(IWWID).new, &.add(act.sensor)))
     end
 
     # :nodoc:
-    def receive(act : StimulusResponse, & : Effect ->) : Nil
-      # Stimulus response is only emitted when a sensor is inserted *after* an
-      # appearance; therefore, the sensor must be *newer* than the appearance.
-      unless act.sensor.instant > act.appearance.instant
-        Log.debug { "reject stimulus response: expected stimulus presence" }
-        return
-      end
-
+    def receive(act : StimulusResponse) : Node
       unless act.sensor.conid == @conid
         Log.debug { "reject stimulus response: conid of #{act.sensor} != my #{@conid}" }
-        return
+        return self
       end
 
       unless surface = @surfaces[act.sensor.slot]?
         Log.debug { "reject stimulus response: slot of #{act.sensor} absent" }
-        return
+        return self
       end
 
       unless surface.is_a?(Sensor)
         Log.debug { "reject stimulus response: slot of #{act.sensor} is no longer a sensor" }
-        return
+        return self
       end
 
       instant = @instants[act.sensor.slot]
 
       unless act.sensor.instant == instant
         Log.debug { "reject stimulus response: instant of #{act.sensor} is outdated (currently #{instant})" }
-        return
+        return self
       end
 
-      if review? &.after(surface, act.to_stimulus_presence)
-        yield ViewChange.new(@view)
-      end
+      change(view: @view.after(surface, act.to_stimulus_presence))
     end
 
     {% if flag?(:docs) %}
-      # Handles the given activation *act*. Yields the effects of that to
-      # the block.
-      def receive(act : Activation, & : Effect ->) : Nil
+      # Handles the given activation *act*. Returns the modified copy of this node.
+      def receive(act : Activation) : Node
       end
     {% end %}
+
+    protected def join(& : Effect ->) : Node
+      yield Subscribed.new(@conid)
+
+      @surfaces.each do |slot, surface|
+        yield SurfaceAdded.new(iwwid?(slot).not_nil!("slot-instance discrepancy"), surface)
+      end
+
+      change(stimulations: NO_STIMULATIONS)
+    end
+
+    protected def leave(& : Effect ->) : Node
+      yield Unsubscribed.new(@conid)
+
+      @surfaces.each do |slot, surface|
+        yield SurfaceRemoved.new(iwwid?(slot).not_nil!("slot-instance discrepancy"), surface)
+      end
+
+      change(stimulations: NO_STIMULATIONS)
+    end
+
+    protected def stimulate(& : Stimulated ->) : Node
+      @stimulations.each do |sender, receivers|
+        surface = @surfaces[sender].as(Appearance)
+        appearance = iwwid?(sender).not_nil!("slot-instance discrepancy")
+        receivers.each do |sensor|
+          yield Stimulated.new(surface, sensor, appearance)
+        end
+      end
+
+      change(stimulations: NO_STIMULATIONS)
+    end
+
+    # Logically replaces `self` -- assumed to be an older, established node --
+    # with its *successor*. Yields any associated effects. Returns the modified
+    # copy of *successor*.
+    def swap(successor : Node, & : Effect ->) : Node
+      s0, s1 = @state, successor.@state
+
+      # online | offline -> offline
+      return successor unless s1.online?
+
+      # offline -> online
+      unless s0.online?
+        if s1.summoned?
+          return successor.join { |effect| yield effect }
+        end
+
+        return successor
+      end
+
+      # online -> online
+      if s0.summoned? && s1.summoned?
+        @surfaces.each do |slot, lhs|
+          next if lhs == successor.@surfaces[slot]?
+          yield SurfaceRemoved.new(iwwid?(slot).not_nil!("slot-instance discrepancy"), lhs)
+        end
+
+        successor.@surfaces.each do |slot, rhs|
+          next if @surfaces[slot]? == rhs
+          yield SurfaceAdded.new(successor.iwwid?(slot).not_nil!("slot-instance discrepancy"), rhs)
+        end
+
+        successor.stimulate { |effect| yield effect }
+      elsif s0.summoned?
+        successor.leave { |effect| yield effect }
+      elsif s1.summoned?
+        successor.join { |effect| yield effect }
+      else
+        successor
+      end
+    ensure
+      unless @view.version == successor.@view.version
+        yield ViewChanged.new(successor.@view)
+      end
+    end
   end
 end
