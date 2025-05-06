@@ -47,7 +47,7 @@ module Ww::Meridium
       # this means the appearance changed its value to something we don't like
       # anymore. In that case we remove the appearance.
       if features1.empty?
-        return change(percepts: @percepts.dissoc(act.appearance.wwid)), false
+        return change(percepts: @percepts.dissoc(act.appearance.wwid)), true
       end
 
       percept = Percept.new(act.appearance.instant, act.stimulus, features1)
@@ -158,6 +158,7 @@ module Ww::Meridium
       slot = act.sensor.slot
 
       unless stimuli0 = @map[slot]?
+        Log.trace { "stimuli absent for sensor #{slot}" }
         return self
       end
 
