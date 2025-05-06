@@ -492,7 +492,7 @@ module Ww::ML::Text
           return Token.new(:"⋮", pos - 3, pos)
         when '`'
           advance
-          return Token.new(:"`", pos - 3, pos)
+          return Token.new(:"`", pos - 1, pos)
         when '⟨'
           advance
           return Token.new(:"⟨", pos - 3, pos)
