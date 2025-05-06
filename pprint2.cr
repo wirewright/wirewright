@@ -744,8 +744,8 @@ module Feature
     end
   end
 
-  # Renders `(%slot x)` as `⏏x`.
-  def_prefix PatternSlot, %{(%'%slot suffix_)}, "⏏"
+  # Renders `(%slot x)` as `\`x`.
+  def_prefix PatternSlot, %{(%'%slot suffix_)}, "`"
   # Renders `(%nonself x)` as `=x`
   def_prefix PatternNonself, %{(%'%nonself suffix_)}, "≡"
   # Renders `(%literal x)` as `%'x`

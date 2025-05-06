@@ -1,11 +1,3 @@
-# TODO: shorthand syntax for repetitive key-value pair stores in partition: e.g. `leading: leading_number`,
-# `leading: leading←(%nat)`.
-#   maybe x:_... syntax would work for blanks, e.g. x:_number, and for lets, similarly
-#   x:←(...) [no whitespace allowed]
-# TODO: shorthand for number patterns such as (%nat) after there are more of them,
-# allow combining etc. Should be easy to restrict numbers, otherwise everyone
-# including me will use _number which is bad bad bad especially in Crystal land because
-# it could cause overflows & exceptions!
 #   -- study/explore syntactic modularity for this. something like HTML/CSS classes could work,
 #      maybe define a bunch of "class-like aliases"/have them be user-defined, aka get them from
 #      the environment. then one would be able to invoke them.
@@ -20,11 +12,6 @@
 #       `x` between `1` and `100`, `⎡N:x` for natural x, and so on.
 # TODO: short syntax for nested "ignore everything else" patterns in partition, i.e.:
 #   wrap: (¦ _ collapse: (¦ _ newlines: true)) ==> wrap.collapse.newlines: true
-# TODO: maybe use something else (:? perhaps, or ⦂) instead of ⋮ for defaults in partition
-# because it is too similar to ¦.
-# TODO: in general, partition should hold the majority of these "syntaxes". most of
-#   them should not leak out into the outer language. If you don't use partition syntax,
-#   you won't have these shorthands around, and that's exactly what we want!
 
 # TODO: general: I'm more and more in favor of throwing this parser away and actually
 # creating a parsing engine (like we have pattern matching engine etc.) that can accept
@@ -35,9 +22,6 @@
 # This would cause a considerable performance hit though, but for performance sensitive
 # stuff (e.g. talking over the network) we'll have WwMR anyway (the machine-readable
 # representation of terms)
-#
-#     -state_ is a shorthand for state: (%pair/absent state) which should be a variant of (%pair/absent) that mounts
-#     the keypath to the absent pair in keypath mode.
 
 module Ww::ML::Text
   # An exclusive range, specifies the begin and end of the source substring that
@@ -506,9 +490,9 @@ module Ww::ML::Text
         when '⋮'
           advance
           return Token.new(:"⋮", pos - 3, pos)
-        when '⏏'
+        when '`'
           advance
-          return Token.new(:"⏏", pos - 3, pos)
+          return Token.new(:"`", pos - 3, pos)
         when '⟨'
           advance
           return Token.new(:"⟨", pos - 3, pos)
@@ -911,7 +895,7 @@ module Ww::ML::Text
         when :"$"  then Term.of(:"$", slot)
         when :"$'" then Term.of(:"$once", slot)
         when :"'"  then Term.of(:hold, slot)
-        when :"⏏"  then Term.of(:"%slot", slot)
+        when :"`"  then Term.of(:"%slot", slot)
         when :"≡"  then Term.of(:"%nonself", slot)
         when :"%'" then Term.of(:"%literal", slot)
         when :"@"

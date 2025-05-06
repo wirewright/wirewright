@@ -518,7 +518,7 @@ module Rhodium
           %{[cell @cout_] (cell/created @cout_ v0_) -1},
         ) do
           effect(document1, nodepath, node0, cursordepth) do
-            backmap %[[cell ⏏v @_]], v: v0
+            backmap %[[cell `v @_]], v: v0
 
             true
           end
@@ -597,7 +597,7 @@ module Rhodium
 
         givenpi %{[frag @cout_] (assign @cout_ v0_) _} do
           effect(document1, nodepath, node0, cursordepth) do
-            backmap %{[frag ⏏v @_]}, v: v0
+            backmap %{[frag `v @_]}, v: v0
 
             true
           end
@@ -611,7 +611,7 @@ module Rhodium
           %{[changes/view @cin_] (cell/created @cin_ view_) -1},
         ) do
           effect(document1, nodepath, node0, cursordepth) do
-            backmap %{[changes/view ⏏view @_]}, view: view
+            backmap %{[changes/view `view @_]}, view: view
 
             # changes/view doesn't have an identity like cells or frags do; it
             # only listens to (assign)s.
@@ -745,7 +745,7 @@ module Rhodium
           %{(button _ as _ to @_ waiting @_ (_*) ¦ _ hover: true active: true) (mouse release) _},
         ) do
           effect(document1, nodepath, node0, cursordepth) do
-            backmap %[(_* (_* ⏏M) ¦ _ active_)], %[{(active): (), M: (press)}]
+            backmap %[(_* (_* `M) ¦ _ active_)], %[{(active): (), M: (press)}]
 
             false
           end
@@ -1169,7 +1169,7 @@ module Rhodium
 
       givenpi %{[queue @pin_ to @_ in (_*) waiting @_] (pulse @pin_ value_) -1} do
         effect(document1, nodepath, node0, cursordepth) do
-          backmap %{[_ _ to _ in (_* ⏏back) waiting _]}, back: {:new, value}
+          backmap %{[_ _ to _ in (_* `back) waiting _]}, back: {:new, value}
 
           false
         end
@@ -1427,7 +1427,7 @@ module Rhodium
         # Deactivate & press
         givenpi %[{¦ active: true inbox_dict} (mouse release) -1] do
           effect(document1, nodepath, node0, cursordepth) do
-            backmap %[{¦ active_ inbox: [_* ⏏M]}], %[{active: false, M: (press)}]
+            backmap %[{¦ active_ inbox: [_* `M]}], %[{active: false, M: (press)}]
 
             false
           end

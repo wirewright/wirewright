@@ -102,7 +102,7 @@
 
 # TODO: support
 # ;; Moves all (+ 1 2) etc. into additions field in context.
-# (context (_* ⏏s) `n←(+ a_number b_number)`)
+# (context (_* `s) `n←(+ a_number b_number)`)
 #   <=> { s: (add lhs: →a rhs: →b), (n): ()}
 #
 # ;; ^^^ This one would require some sort of caching because it's all DfsFirst's,
@@ -112,7 +112,7 @@
 #
 # Note that we remove n, this may not be always appropriate! Instead you can mark:
 #
-# (context (_* ⏏s) `(+ a_number b_number)` ¦ _ -processed-adds)
+# (context (_* `s) `(+ a_number b_number)` ¦ _ -processed-adds)
 #   <=>  { s: (add lhs: #a rhs: #b)} ;; Runs on loci
 #   <=>. { processed-adds: true} ;; Runs on the resulting context
 #
@@ -5559,7 +5559,7 @@ module ::Ww::M1
   # Returns the "head" of a normal pattern *normp*.
   #
   # The head of a pattern is the first literal in an expected dictionary matchee.
-  # For example, in `(+ a_ b_)` that would be `+`; and in `(⏏a ⏏b x←qux x_ y_)` that
+  # For example, in `(+ a_ b_)` that would be `+`; and in `(`a `b x←qux x_ y_)` that
   # would be `qux`. On the other hand, for `qux` or `(xs_* qux)` the head is
   # indeterminate (because we'd have to know how many `xs` there were), therefore,
   # `nil` is returned.

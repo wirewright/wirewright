@@ -345,7 +345,7 @@ P←⟨C←[_string | _string (M←(replace-parent-with-self) _*) @EDGE_]⟩
   <> {(M): (), P: ↑C}
 
 ;; (edit), (edit-behind), and (edit-ahead)
-C←["" | "" ((m←edit [_* ⏏target]) _*) @EDGE_]
+C←["" | "" ((m←edit [_* `target]) _*) @EDGE_]
   <> {m: edit/1, target: ↑C}
 
 C←["" | "" ((m←edit/1 [_* ["" | "" (M_ _*) @EDGE_]]) _*) @EDGE_]
@@ -363,13 +363,13 @@ C←["" | "" ((m←edit/2 D_dict) _*) @EDGE_]
 ⟨behind_ [lhs←"" | "" (M←(edit-behind) _*) @EDGE_]⟩
   <> {(M): (), (behind): (), lhs: $'(string →behind)}
 
-⟨[_* ⏏back] C←[lhs←"" | "" (M←(edit-behind) _*) @EDGE_]⟩
+⟨[_* `back] C←[lhs←"" | "" (M←(edit-behind) _*) @EDGE_]⟩
   <> {(M): (), (C): (), back: ↑C}
 
 ⟨["" | rhs←"" (M←(edit-ahead) _*) @EDGE_] ahead_⟩
   <> {(M): (), rhs: $'(string →ahead), (ahead): ()}
 
-⟨C←["" | "" (M←(edit-ahead) _*) @EDGE_] [⏏front _*]⟩
+⟨C←["" | "" (M←(edit-ahead) _*) @EDGE_] [`front _*]⟩
   <> {(M): (), (C): (), front: ↑C}
 
 ;; If the user attempts to edit an edge, show them the pretty-printed
@@ -386,10 +386,10 @@ C←["" | "" ((m←edit/2 D_dict) _*) @EDGE_]
 ⟨C←[_string | _string (M←(move-ahead) _*) @EDGE_] ahead_⟩
   <> {(M): (), C: ↑ahead, ahead: ↑C}
 
-[⏏front _* C←[_string | _string (M←(move-front-behind) _*) @EDGE_] _*]
+[`front _* C←[_string | _string (M←(move-front-behind) _*) @EDGE_] _*]
   <> {(M): (), (C): (), front: ↑C}
 
-[_* C←[_string | _string (M←(move-back-ahead) _*) @EDGE_] _* ⏏back]
+[_* C←[_string | _string (M←(move-back-ahead) _*) @EDGE_] _* `back]
   <> {(M): (), (C): (), back: ↑C}
 
 ⟨behind_ [_string | _string (M←(delete-behind) _*) @EDGE_]⟩
@@ -404,10 +404,10 @@ C←["" | "" ((m←edit/2 D_dict) _*) @EDGE_]
 ⟨P←⟨C←[_string | _string (M←(escape-below) _*) @EDGE_]⟩⟩
   <> {(M): (), (C): ($tr C0 ()), (P): (↑P ↑C0)}
 
-[⏏front _* ⟨C←[_string | _string (M←(escape-front-above) _*) @EDGE_]⟩ _*]
+[`front _* ⟨C←[_string | _string (M←(escape-front-above) _*) @EDGE_]⟩ _*]
   <> {(M): (), front: ↑C0, (C): ($tr C0 ())}
 
-[_* ⟨C←[_string | _string (M←(escape-back-below) _*) @EDGE_]⟩ _* ⏏below]
+[_* ⟨C←[_string | _string (M←(escape-back-below) _*) @EDGE_]⟩ _* `below]
   <> {(M): (), below: ↑C0, (C): ($tr C0 ())}
 
 ⟨behind_ [_string | _string (M←(dup-behind) _*) @EDGE_]⟩
@@ -425,7 +425,7 @@ C←["" | "" ((m←edit/2 D_dict) _*) @EDGE_]
 P←(behind_* C←[_string | _string (M←(split) _*) @EDGE_] ahead_*)
   <> {(M): (), (P): (↑behind ↑C ↑ahead)}
 
-⟨[_* ⏏mid ⏏rhs] C←[_string | _string (M←(join) _*) @EDGE_] ahead←(_*)⟩
+⟨[_* `mid `rhs] C←[_string | _string (M←(join) _*) @EDGE_] ahead←(_*)⟩
   <> {(M): (), mid: ↑C, (rhs): ↑ahead, (C): (), (ahead): ()}
 
 ⟨behind_ (_string | _string (M←(copy-behind) _*) @EDGE_ ¦ _ clipboard⋮ ())⟩
@@ -485,10 +485,10 @@ C←(_string | _string (M←(paste-ahead) _*) @EDGE_ ¦ _ clipboard_: (cut term_
 ⟨P←⟨[_string | _string (M←(move-parent-ahead) _*) @EDGE_]⟩ ahead_⟩
   <> {(M): (), ahead: ↑P, P: ↑ahead}
 
-[⏏target _* P←⟨[_string | _string (M←(move-parent-front-behind) _*) @EDGE_]⟩ _*]
+[`target _* P←⟨[_string | _string (M←(move-parent-front-behind) _*) @EDGE_]⟩ _*]
   <> {(M): (), target: ↑P, (P): ()}
 
-[_* P←⟨[_string | _string (M←(move-parent-back-ahead) _*) @EDGE_]⟩ _* ⏏target]
+[_* P←⟨[_string | _string (M←(move-parent-back-ahead) _*) @EDGE_]⟩ _* `target]
   <> {(M): (), target: ↑P, (P): ()}
 
 ;; GP is for "grandparent"
@@ -498,10 +498,10 @@ C←(_string | _string (M←(paste-ahead) _*) @EDGE_ ¦ _ clipboard_: (cut term_
 ⟨GP←⟨P←⟨[_string | _string (M←(move-parent-above) _*) @EDGE_]⟩⟩⟩
   <> {(M): (), (P): ($tr P0 ()), (GP): (↑P0 ↑GP)}
 
-⟨[_* ⏏target] P←⟨[_string | _string (M←(move-parent-into-behind) _*) @EDGE_]⟩⟩
+⟨[_* `target] P←⟨[_string | _string (M←(move-parent-into-behind) _*) @EDGE_]⟩⟩
   <> {(M): (), (P): (), target: ↑P}
 
-⟨P←⟨[_string | _string (M←(move-parent-into-ahead) _*) @EDGE_]⟩ [⏏target _*]⟩
+⟨P←⟨[_string | _string (M←(move-parent-into-ahead) _*) @EDGE_]⟩ [`target _*]⟩
   <> {(M): (), (P): (), target: ↑P}
 
 ;; NOTE: we create two bindings to behind here so that %value doesn't hear us
@@ -517,22 +517,22 @@ C←(_string | _string (M←(paste-ahead) _*) @EDGE_ ¦ _ clipboard_: (cut term_
       (%any° (%value k v_) (%-value k v)))
   <> {(M): (), (K): (), (V): (), v: ↑V}
 
-(_* ⏏target ¦ (%entry k_ F←[_string | _string (M←(delete-pair-self) _*) @EDGE_]))
+(_* `target ¦ (%entry k_ F←[_string | _string (M←(delete-pair-self) _*) @EDGE_]))
   <> {(M): (), (k): (), (F): (), target: ↑F}
 
-(_* ⏏target ¦ (%entry k_ F←[C←[_string | _string (M←(delete-pair-parent) _*) @EDGE_] _*]))
+(_* `target ¦ (%entry k_ F←[C←[_string | _string (M←(delete-pair-parent) _*) @EDGE_] _*]))
   <> {(M): (), (k): (), (F): (), (C): ($tr C0 ()), (target): (↑C0 ↑F)}
 
-(_* ⏏target ¦ (%entry k_ F←[_string | _string (M←(unpair-self) _*) @EDGE_]))
+(_* `target ¦ (%entry k_ F←[_string | _string (M←(unpair-self) _*) @EDGE_]))
   <> {(M): (), (k): (), (F): (), (target): (↑k ↑F)}
 
-(_* ⏏target ¦ (%entry k_ F←[C←[_string | _string (M←(unpair-parent) _*) @EDGE_] _*]))
+(_* `target ¦ (%entry k_ F←[C←[_string | _string (M←(unpair-parent) _*) @EDGE_] _*]))
   <> {(M): (), (k): (), (F): (), (C): ($tr C0 ()), (target): (↑k ↑C0 ↑F)}
 
-⟨[_* ⏏target] C←[_string | _string (M←(move-in-behind) _*) @EDGE_]⟩
+⟨[_* `target] C←[_string | _string (M←(move-in-behind) _*) @EDGE_]⟩
   <> {(M): (), target: ↑C, (C): ()}
 
-[_* ⟨C←[_string | _string (M←(move-out-ahead) _*) @EDGE_]⟩ ⏏target _*]
+[_* ⟨C←[_string | _string (M←(move-out-ahead) _*) @EDGE_]⟩ `target _*]
   <> {(M): (), target: ↑C0, (C): ($tr C0 ())}
 
 ;; Expulsion
@@ -546,10 +546,10 @@ C←(_string | _string (M←(paste-ahead) _*) @EDGE_ ¦ _ clipboard_: (cut term_
 ;; to expel-left.
 
 ;; Leave pair with empty cursor should remove the pair and leave.
-(_* ⏏target ¦ (%entry _ C←["" | "" (M←(leave-pair ok←(_*) (_*)) _*) @EDGE_]))
+(_* `target ¦ (%entry _ C←["" | "" (M←(leave-pair ok←(_*) (_*)) _*) @EDGE_]))
   <> {(M): →ok, target: ↑C, (C): ()}
 
-(_* ⏏target ¦ (%entry _ ⟨C←["" | "" (M←(leave-pair ok←(_*) (_*)) _*) @EDGE_]⟩))
+(_* `target ¦ (%entry _ ⟨C←["" | "" (M←(leave-pair ok←(_*) (_*)) _*) @EDGE_]⟩))
   <> {(M): →ok, target: ↑C0, (C): ($tr C0 ())}
 
 ["" | (%string nonempty) (M←(leave-pair (_*) (_*)) _*) @EDGE_]
@@ -561,7 +561,7 @@ C←(_string | _string (M←(paste-ahead) _*) @EDGE_ ¦ _ clipboard_: (cut term_
 [lhs←(%string nonempty) | "" (M←(leave-pair ok←(_*) err←(_*)) _*) @EDGE_]
   <> {M: (leave-pair $'(ml →lhs shadow: false) →ok →err)}
 
-(_* ⏏target ¦ (%entry _ C←[lhs_string | "" (M←(leave-pair (ml/ok term_) ok←(_*) _) _*) @EDGE_]))
+(_* `target ¦ (%entry _ C←[lhs_string | "" (M←(leave-pair (ml/ok term_) ok←(_*) _) _*) @EDGE_]))
   <> {(M): →ok, lhs: "", target: ↑C, C: ↑term}
 
 [_string | _string (M←(leave-pair (ml/err) _ err←(_*)) _*) @EDGE_]
@@ -582,7 +582,7 @@ C←(_string | _string (M←(paste-ahead) _*) @EDGE_ ¦ _ clipboard_: (cut term_
 [lhs_string | _string (M←(expel-left (ok_*) (err_*)) _*) @EDGE_]
   <> {M: (expel-left $'(ml →lhs shadow: false) ↑ok ↑err)}
 
-[_* ⏏pred [lhs_string | _string (M←(expel-left (ml/ok term_) (ok_*) (_*)) _*) @EDGE_] _*]
+[_* `pred [lhs_string | _string (M←(expel-left (ml/ok term_) (ok_*) (_*)) _*) @EDGE_] _*]
   <> {(M): ↑ok, lhs: "", pred: →term}
 
 [_string | _string (M←(expel-left (ml/err) (_*) (err_*)) _*) @EDGE_]
@@ -592,7 +592,7 @@ C←(_string | _string (M←(paste-ahead) _*) @EDGE_ ¦ _ clipboard_: (cut term_
 [_string | rhs_string (M←(expel-right (ok_*) (err_*)) _*) @EDGE_]
   <> {M: (expel-right $'(ml →rhs shadow: false) ↑ok ↑err)}
 
-[_* [_string | rhs_string (M←(expel-right (ml/ok term_) (ok_*) (_*)) _*) @EDGE_] ⏏succ _*]
+[_* [_string | rhs_string (M←(expel-right (ml/ok term_) (ok_*) (_*)) _*) @EDGE_] `succ _*]
   <> {(M): ↑ok, rhs: "", succ: →term}
 
 [_string | _string (M←(expel-right (ml/err) (_*) (err_*)) _*) @EDGE_]
@@ -602,7 +602,7 @@ C←(_string | _string (M←(paste-ahead) _*) @EDGE_ ¦ _ clipboard_: (cut term_
 [lhs_string | rhs_string (M←(expel-mid (ok_*) (err_*)) _*) @EDGE_]
   <> {M: (expel-mid $'(ml →lhs shadow: false) $'(ml →rhs shadow: false) ↑ok ↑err)}
 
-[_* ⏏pred [lhs_string | rhs_string (M←(expel-mid (ml/ok lterm_) (ml/ok rterm_) (ok_*) (_*)) _*) @EDGE_] ⏏succ _*]
+[_* `pred [lhs_string | rhs_string (M←(expel-mid (ml/ok lterm_) (ml/ok rterm_) (ok_*) (_*)) _*) @EDGE_] `succ _*]
   <> {(M): ↑ok, lhs: "", rhs: "", pred: →lterm, succ: →rterm}
 
 [_string | _string (M←(expel-mid _ _ (_*) (err_*)) _*) @EDGE_]

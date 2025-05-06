@@ -14,7 +14,7 @@
   <> {(E): (), l: $'(~ →l →ch)}
 
 ;; Insert line break
-[(_* ⏏spot) l_string | _string (_*) (E←(key enter) _*)]
+[(_* `spot) l_string | _string (_*) (E←(key enter) _*)]
   <> {(E): (), spot: →l, l: ""}
 
 ;; Move left
@@ -48,11 +48,11 @@
   <> {E: (key end)}
 
 ;; Move to line above
-[(_* above_string) l_string | r_string (⏏below _*) (E←(key up) _*)]
+[(_* above_string) l_string | r_string (`below _*) (E←(key up) _*)]
   <> {(E): (), (above): (), l: $'(prefix →above →l), r: $'(suffix →above →l), below: $'(~ →l →r)}
 
 ;; Move to line below
-[(_* ⏏above) l_string | r_string (below_string _*) (E←(key down) _*)]
+[(_* `above) l_string | r_string (below_string _*) (E←(key down) _*)]
   <> {(E): (), above: $'(~ →l →r), l: $'(prefix →below →l), r: $'(suffix →below →l), (below): ()}
 
 ;; Delete left
@@ -156,7 +156,7 @@
   <> {E: (key S-home)}
 
 ;; Extend to line above
-[(_* above_string) l_string (<| ⏏head front_string _*) _string (_*) (E←(key S-up) _*)]
+[(_* above_string) l_string (<| `head front_string _*) _string (_*) (E←(key S-up) _*)]
   <> {(E): (),
       (above): (),
       l: $'(prefix →above →l),
@@ -164,7 +164,7 @@
       front: $'(~ →l →front)}
 
 ;; Extend line left
-[(_* above_string) l←"" (<| ⏏front _*) _string (_*) (E←(key (%any S-left C-S-left)) _*)]
+[(_* above_string) l←"" (<| `front _*) _string (_*) (E←(key (%any S-left C-S-left)) _*)]
   <> {(E): (), (above): (), l: →above, front: →l}
 
 ;; Expel left
@@ -180,7 +180,7 @@
   <> {(E): (), l: $'(~ →l →front), front: ""}
 
 ;; Expel line above
-[(_* ⏏above) l_string (<| front0_string front1_string _*) _string (_*) (E←(key S-down) _*)]
+[(_* `above) l_string (<| front0_string front1_string _*) _string (_*) (E←(key S-down) _*)]
   <> {(E): (),
       above: $'(~ →l →front0),
       l: $'(prefix →front1 →l),
@@ -188,7 +188,7 @@
       front1: $'(suffix →front1 →l)}
 
 ;; Expel line left
-[(_* ⏏above) l_string (<| front←"" _+) _string (_*) (E←(key (%any S-right C-S-right)) _*)]
+[(_* `above) l_string (<| front←"" _+) _string (_*) (E←(key (%any S-right C-S-right)) _*)]
   <> {(E): (), above: →l, l: "", (front): ()}
 
 ;; Escape
@@ -215,7 +215,7 @@
   <> {E: (key S-end)}
 
 ;; Extend to line below
-[(_*) _string (|> _* back_string ⏏tail) r_string (below_string _*) (E←(key S-down) _*)]
+[(_*) _string (|> _* back_string `tail) r_string (below_string _*) (E←(key S-down) _*)]
   <> {(E): (),
       back: $'(~ →back →r),
       tail: $'(prefix →below →back),
@@ -223,7 +223,7 @@
       (below): ()}
 
 ;; Extend line right
-[(_*) _string (|> _* ⏏back) r←"" (below_string _*) (E←(key (%any S-right C-S-right)) _*)]
+[(_*) _string (|> _* `back) r←"" (below_string _*) (E←(key (%any S-right C-S-right)) _*)]
   <> {(E): (), back: →r, r: →below, (below): ()}
 
 ;; Expel right
@@ -239,7 +239,7 @@
   <> {(E): (), back: "", r: $'(~ →back →r)}
 
 ;; Expel line below
-[(_*) _string (|> _* back1_string back0_string) r_string (⏏below _*) (E←(key S-up) _*)]
+[(_*) _string (|> _* back1_string back0_string) r_string (`below _*) (E←(key S-up) _*)]
   <> {(E): (),
       (back1): (),
       back0: $'(prefix →back1 →back0),
@@ -247,7 +247,7 @@
       below: $'(~ →back0 →r)}
 
 ;; Expel line right
-[(_*) _string (|> _+ back←"") r_string (⏏below _*) (E←(key (%any S-left C-S-left)) _*)]
+[(_*) _string (|> _+ back←"") r_string (`below _*) (E←(key (%any S-left C-S-left)) _*)]
   <> {(E): (), (back): (), r: "", below: →r}
 
 ;; Escape
@@ -276,12 +276,12 @@
 [(_*) _string C←((%any <| |>) front_string) r_string (_*) (E←(key left) _*)]
   <> {(E): (), C: |, r: $'(~ →front →r)}
 
-[(_*) _string C←((%any <| |>) front_string mid_string* back_string) r_string (⏏below0 ⏏below1 _*) (E←(key left) _*)]
+[(_*) _string C←((%any <| |>) front_string mid_string* back_string) r_string (`below0 `below1 _*) (E←(key left) _*)]
   <> {(E): (), C: |, r: →front, (below0): →mid, below1: $'(~ →back →r)}
 
 ;; Escape right
 [(_*) l_string C←((%any <| |>) front_string) _string (_*) (E←(key right) _*)]
   <> {(E): (), l: $'(~ →l →front), C: |}
 
-[(_* ⏏above0 ⏏above1) l_string C←((%any <| |>) front_string mid_string* back_string) _string (_*) (E←(key right) _*)]
+[(_* `above0 `above1) l_string C←((%any <| |>) front_string mid_string* back_string) _string (_*) (E←(key right) _*)]
   <> {(E): (), above0: $'(~ →l →front), (above1): →mid, l: →back, C: |}

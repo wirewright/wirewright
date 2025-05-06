@@ -320,7 +320,7 @@ outright syntax error to prevent confusion. Similarly, `(edge x_dict)` is invali
 will be interpreted as a normal dictionary pattern.
 
 ```wwml
-(appender (_* ⏏target) @edge_) <> {target: →edge, (edge): ()}
+(appender (_* `target) @edge_) <> {target: →edge, (edge): ()}
 
 (appender () @foo)     ;; => (appender (@foo))
 (appender (@foo) @bar) ;; => (appender (@foo @bar))
@@ -332,7 +332,7 @@ or use `%nonself` on the argument: `(edge (%nonself x_))`. `%nonself` has the sh
 prefix `≡` so the latter may be rewritten as `(edge ≡x_)`.
 
 ```wwml
-(appender (_* ⏏target) (edge ≡edge_)) <> {target: →edge, (edge): ()}
+(appender (_* `target) (edge ≡edge_)) <> {target: →edge, (edge): ()}
 
 (appender () @foo) ;; => (appender (foo) (edge))
 ```

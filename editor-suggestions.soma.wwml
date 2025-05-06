@@ -7,7 +7,7 @@
 ;; SCROLL
 
 ;; Scroll up in group suggestion.
-(_string | _string (M←(key pgup) _*) @EDGE_ ¦ _ suggestions: (suggestions/group (_* tail_) (⏏target _*)))
+(_string | _string (M←(key pgup) _*) @EDGE_ ¦ _ suggestions: (suggestions/group (_* tail_) (`target _*)))
   <> {target: →tail, (tail): (), (M): ()}
 
 ;; Prevent from scrolling out of bounds.
@@ -15,7 +15,7 @@
   <> {(M): ()}
 
 ;; Scroll down in group suggestion
-(_string | _string (M←(key pgdn) _*) @EDGE_ ¦ _ suggestions: (suggestions/group (_* ⏏target) (head_ _+)))
+(_string | _string (M←(key pgdn) _*) @EDGE_ ¦ _ suggestions: (suggestions/group (_* `target) (head_ _+)))
   <> {target: →head, (head): (), (M): ()}
 
 ;; Prevent from scrolling out of bounds.
@@ -23,7 +23,7 @@
   <> {(M): ()}
 
 ;; Scroll up in suggestions list.
-(_string | _string (M←(key pgup) _*) @EDGE_ ¦ _ suggestions: (suggestions/list (_* pred_) (⏏top _* bot_) (⏏succ _*)))
+(_string | _string (M←(key pgup) _*) @EDGE_ ¦ _ suggestions: (suggestions/list (_* pred_) (`top _* bot_) (`succ _*)))
   <> {(M): (), top: →pred, (pred): (), succ: →bot, (bot): ()}
 
 ;; Prevent from scrolling out of bounds.
@@ -31,7 +31,7 @@
   <> {(M): ()}
 
 ;; Scroll down in suggestions list.
-(_string | _string (M←(key pgdn) _*) @EDGE_ ¦ _ suggestions: (suggestions/list (_* ⏏pred) (top_ _* ⏏bot) (succ_ _*)))
+(_string | _string (M←(key pgdn) _*) @EDGE_ ¦ _ suggestions: (suggestions/list (_* `pred) (top_ _* `bot) (succ_ _*)))
   <> {(M): (), pred: →top, (top): (), bot: →succ, (succ): ()}
 
 ;; Prevent from scrolling out of bounds.
