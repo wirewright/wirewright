@@ -152,6 +152,8 @@ class Array(T)
     sum { |n| yield n } / size
   end
 
+  # WARNING: the caller must guarantee/have guarantees that this array won't ever
+  # be modified.
   def to_readonly_slice : Slice(T)
     Slice.new(to_unsafe, size, read_only: true)
   end

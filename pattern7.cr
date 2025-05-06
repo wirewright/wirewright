@@ -67,9 +67,6 @@
 # ~ will do
 # · not needed
 
-# TODO: we're pure so our hash must be deterministic, regardless of threats! Use fnv1a or something similar & fast
-#       as a hashing algorithm for terms! E.g. the order of (keys (x: 1 y: 2)) must be the same across all machines&runs.
-
 # --- After the above & tests are in place:
 
 # - At this point we should be able to implement %string stuff. It includes some advanced

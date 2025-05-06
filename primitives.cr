@@ -79,10 +79,15 @@ PRIMITIVES = ProcRuleset.build do
     xs[key]? || Term.of(:value, xs, key)
   end
 
-  rulepi1 %[(entries xs_dict)] do
-    Term[xs.ee]
+  rulepi1 %[(hashcode term_)] do
+    Term.hashcode(term)
   end
 
+  rulepi1 %[(entries xs_dict)] do
+    Term[xs.ee(ordered: true)]
+  end
+
+  # TODO: remove!!!!!! this leaks the fact that we don't actually have proper entry order!!
   rulepi1 %[(nth xs_dict n←(%number +i32))] do
     if response = xs.nth?(n.to(Int32))
       key, value = response

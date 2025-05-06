@@ -54,7 +54,7 @@ module Ww::ML::Formatter
             pp.breakable if index > 0
             format(pp, item, style)
           end
-          term.pe.each do |k, v|
+          term.pe(ordered: true).each do |k, v|
             next if style.hidden_meta? && ML.meta?(k)
             pp.breakable
             format(pp, k, style)
@@ -105,7 +105,7 @@ module Ww::ML
       io << ' '
     end
 
-    term.pe.join(io, ' ') do |(k, v)|
+    term.pe(ordered: true).join(io, ' ') do |(k, v)|
       compact(io, k)
       io << ":"
       compact(io, v)

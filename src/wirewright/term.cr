@@ -574,15 +574,24 @@ module Ww
     # Wirewright is assumed to run on x86 only. This means system-endian is
     # little-endian. Under this assumption we say that the hash is *globally
     # stable*, meaning it stays the same across runs and machines for
-    # equal values.
+    # equal (or colliding!) values.
     #
     # Global stability is explicitly implemented despite susceptibility to
     # HashDoS etc. This is because Wirewright's Terms are for use in a purely
     # functional setting; randomly seeded hash functions lead to different dict
-    # entry order per run/machine => different return result of e.g. `(entries ...)`
-    # per run/machine, which we would consider as an implementation error.
+    # entry order per run/machine => different return result for `(hashcode term_)`
+    # in particular, which we would consider as an implementation error.
     #
-    # WARNING: `Hasher` is a mutable struct. Pass it around carefully.
+    # Note that due to hash collisions and the way symbols are implemented right now,
+    # dictionaries have a special ordered variant of their `each_entry`, namely
+    # `each_entry_ord`, that one must use if one wants to do globally stable, ordered
+    # pretty printing or entry iteration. This is because the moment we have a collision,
+    # the hash function is of no use ordering entries. And with symbols -- the way we
+    # implement them right now for efficiency -- their hash code roughly depends on
+    # the time they were created at / the order in which they were created, which is
+    # obviously globally indeterminate.
+    #
+    # WARNING: `Hasher` is a mutable struct. Pass it around with care.
     struct Hasher
       # Reference: https://softwareengineering.stackexchange.com/a/145633
 

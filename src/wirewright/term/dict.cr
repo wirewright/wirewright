@@ -75,61 +75,6 @@
 # - It appears that we can try to use linear probing for the items array on HAMT nodes instead of Sparse32.
 #   If the key cannot be found, we proceed as usual into the Sparse32 children array.
 
-class ::Pf::Core::Node(T)
-  # :nodoc:
-  record CheckoutItem(T), item : T
-  # :nodoc:
-  record CheckoutNode(T), node : Node(T)
-
-  # FIXME: uses sample & shuffle! which use rand which isn't thread safe ?!
-  def each_randomized(& : T ->) : Nil
-    # To ensure fairness we must interleave items with nodes, which makes all
-    # of this a bit more involved. We must ensure fairness in all cases, even
-    # if performance is severely harmed -- the callers of this method usually
-    # deal with infinities and letting an infinity win would be an error.
-
-    # Scratch buffer that can hold up to 32 items + 32 children.
-    scratch = uninitialized UInt8[64]
-    commands = [CheckoutNode.new(self)] of CheckoutNode(T) | CheckoutItem(T)
-
-    while command = commands.pop?
-      case command
-      in CheckoutItem(T)
-        yield command.item
-      in CheckoutNode(T)
-        node = command.node
-
-        midpoint = node.@items.size
-        indices = Slice(UInt8).new(scratch.to_unsafe, midpoint + node.@children.size)
-
-        # Shuffling will mix item and node indices so we have to mark
-        # them beforehand.
-
-        (0...midpoint).each do |index|
-          indices[index] = index.to_u8 << 1
-        end
-
-        (midpoint...indices.size).each_with_index do |index, ord|
-          indices[index] = (ord.to_u8 << 1) | 1u8
-        end
-
-        indices.shuffle!
-        indices.each do |index|
-          # We must insert the command at a random index for fairness. Otherwise
-          # upper values may block lower values forever.
-          target = (0..commands.size).sample
-
-          if (index & 1u8).zero?
-            commands.insert(target, CheckoutItem.new(node.@items.to_unsafe[index >> 1]))
-          else
-            commands.insert(target, CheckoutNode.new(node.@children.to_unsafe[index >> 1]))
-          end
-        end
-      end
-    end
-  end
-end
-
 module Ww
   module Tail
   end
@@ -511,21 +456,62 @@ module Ww
       dig?(*keys)
     end
 
-    # Yields each entry from this dictionary.
+    # Yields each entry from this dictionary. **The order of entries is
+    # implementation-defined.**
     def each_entry(& : Term, Term ->) : Nil
       @items.each { |entry| yield Term.of(entry.index), entry.value }
       @pairs.each { |entry| yield entry.key, entry.value }
     end
 
-    # Fair, randomized iteration over entries of this dict.
-    #
-    # This has fairly specific use cases, for instance in absolute rewriting
-    # (absr). In absr we would like to achieve progress even in the presence
-    # of potentially infinite rewrites. That is, an infinite rewrite should
-    # not block progress of other, potentially non-infinite rewrites.
-    def each_entry_randomized(& : Term, Term ->) : Nil
-      @items.each_randomized { |entry| yield Term.of(entry.index), entry.value }
-      @pairs.each_randomized { |entry| yield entry.key, entry.value }
+    # Yields each entry from this dictionary in stable order. Guarantees the order
+    # of entries to be the same across all machines & runs.
+    def each_entry_ord(& : Term, Term ->) : Nil
+      unless pairsonly?
+        items.each_with_index { |item, index| yield Term.of(index), item }
+      end
+
+      return if itemsonly?
+
+      # Collect pairs in a buffer. Use Stack for to have very light-weight methods/
+      # allocations compared to e.g. Array.
+      buffer = Stack(Pair).new(@pairs.size)
+      @pairs.each do |pair|
+        buffer << pair
+      end
+
+      # "Registers". Note that we're usually dealing with very small symbol keys.
+      # There's no need to allocate 64 bytes for that.
+      r0 = IO::Memory.new(8)
+      r1 = IO::Memory.new(8)
+
+      # Sort pairs in buffer by their compact byte reprs. Beware: this **will** recurse
+      # on dictionaries, since compact in turn relies on each_entry_ord to print
+      # dict entries.
+      buffer.unstable_sort! do |a, b|
+        r0.clear
+        r1.clear
+
+        ML.compact(r0, a.key)
+        ML.compact(r1, b.key)
+
+        {rank(a.key), r0.to_slice} <=> {rank(b.key), r1.to_slice}
+      end
+
+      buffer.each do |pair|
+        yield pair.key, pair.value
+      end
+    end
+
+    # The order is: number keys, symbol keys, string keys, boolean keys, dict keys.
+    private def rank(key : Term) : Int32
+      case key.type
+      in .number?  then 0
+      in .symbol?  then 1
+      in .string?  then 2
+      in .boolean? then 3
+      in .dict?    then 4
+      in .any?     then unreachable
+      end
     end
 
     # Yields each item from this dictionary followed by its index. **Items are yielded
@@ -538,9 +524,9 @@ module Ww
       @items.each { |entry| yield entry.value }
     end
 
-    # Yields each pair from this dictionary.
+    # Yields each pair from this dictionary. **Pairs are yielded out of order**.
     def each_pair(& : Term, Term ->)
-      @pairs.each { |entry| yield entry.key, entry.value }
+      pairspart.each_entry { |key, value| yield key, value }
     end
 
     # :nodoc:
@@ -549,17 +535,22 @@ module Ww
     struct EntryEnumerable
       include Enumerable({Term, Term})
 
-      def initialize(@dict : Dict)
+      def initialize(@dict : Dict, @ord : Bool)
       end
 
       def each(& : {Term, Term} ->)
-        @dict.each_entry { |k, v| yield({k, v}) }
+        if @ord
+          @dict.each_entry_ord { |k, v| yield({k, v}) }
+        else
+          @dict.each_entry { |k, v| yield({k, v}) }
+        end
       end
     end
 
-    # Returns an enumerable based on `each_entry`.
-    def ee : Enumerable({Term, Term})
-      EntryEnumerable.new(self)
+    # Returns an enumerable based on `each_entry` (if *ordered* is `false`) or
+    # `each_entry_ord` (if *ordered* is `true`).
+    def ee(*, ordered = false) : Enumerable({Term, Term})
+      EntryEnumerable.new(self, ordered)
     end
 
     # :nodoc:
@@ -604,9 +595,10 @@ module Ww
       ItemEnumerable.new(self)
     end
 
-    # Returns an enumerable based on `each_pair`.
-    def pe : Enumerable({Term, Term})
-      pairspart.ee
+    # Returns an enumerable based on `each_pair`. The pairs will be emitted
+    # in order if *ordered* is set to `true`.
+    def pe(*, ordered = false) : Enumerable({Term, Term})
+      pairspart.ee(ordered: ordered)
     end
 
     # Returns `true` if this dict appears to be a *dict set*: it is nonempty,
@@ -1601,9 +1593,11 @@ module Ww
         io << "]"
       else
         io << "{"
-        ee.map { |(k, v)| {k.inspect, v.inspect} }
-          .sort_by! { |k, _| k }
-          .join(io, ", ") { |(k, v)| io << k << ": " << v }
+        pe(ordered: true).join(io, ", ") do |(k, v)|
+          k.inspect(io)
+          io << ": "
+          v.inspect(io)
+        end
         io << "}"
       end
     end

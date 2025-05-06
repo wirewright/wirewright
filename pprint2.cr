@@ -1,5 +1,4 @@
 require "./src/wirewright"
-require "./baz5"
 
 # NOTE: the existence of LayoutSet should be re-evaluated. It appears to be an overkill.
 # We *really* only check of Inline/Multiline. "Layouts" are more or less a hard-coded/thunked
@@ -52,7 +51,7 @@ module OrdDict
   struct Sorted
     include Indexable({Term, Term})
 
-    def initialize(@itemspart : Term::Dict, @ppsorted : Slice({Term, Term}), @pprest : Slice({Term, Term})?)
+    def initialize(@itemspart : Term::Dict, @ppsorted : Slice({Term, Term}))
     end
 
     def unsafe_fetch(index)
@@ -60,28 +59,24 @@ module OrdDict
         return Term.of(index), @itemspart[index]
       end
 
-      index &-= @itemspart.size
+      index -= @itemspart.size
 
       if index < @ppsorted.size
         return @ppsorted.unsafe_fetch(index)
       end
 
-      index &-= @ppsorted.size
-
-      @pprest.not_nil!.unsafe_fetch(index)
+      raise IndexError.new
     end
 
     def size
-      @itemspart.size + @ppsorted.size + (@pprest.try(&.size) || 0)
+      @itemspart.size + @ppsorted.size
     end
   end
 
   # Returns a sorted indexable of *dict*'s entries.
   #
   # - Items are ordered by their index.
-  # - Pairs with literal keys and singleton literal keys (e.g. `(x)`) are sorted by
-  #   those keys lexicographically.
-  # - Non-singleton dicts are ordered by their hash and are put after all sorted pairs.
+  # - Pairs are ordered lexicographically.
   def self.sorted(dict : Term::Dict) : Indexable({Term, Term})
     if dict.itemsonly?
       return Unsorted.new(dict.itemspart)
@@ -91,32 +86,12 @@ module OrdDict
       return Unsorted.new(dict)
     end
 
-    # Split pairs into sortable and unsortable ones.
-    pairs_sortable = [] of {Term, Term}
-    pairs_trailing = nil
-
-    dict.each_pair do |key, value|
-      if key.type.dict? && !(key.itemsonly? && key.size == 1 && !key[0].type.dict?)
-        pairs_trailing ||= [] of {Term, Term}
-        pairs_trailing << {key, value}
-      else
-        pairs_sortable << {key, value}
-      end
+    ppsorted = Array({Term, Term}).new(dict.pairsize)
+    dict.pairspart.each_entry_ord do |key, value|
+      ppsorted << {key, value}
     end
 
-    # Sort the sortable pairs.
-    #
-    # TODO: Right now we do this naively, by sorting their .inspect()s. This works
-    # for all literals and singleton dicts containing literals, but is obviously
-    # really, really slow.
-    pairs_sortable.sort_by! { |key, _| key.inspect }
-
-    # Return as an indexable that is smart enough to point into the
-    # appropriate array.
-    Sorted.new(dict.itemspart,
-      ppsorted: pairs_sortable.to_readonly_slice,
-      pprest: pairs_trailing ? pairs_trailing.to_readonly_slice : nil,
-    )
+    Sorted.new(dict.itemspart, ppsorted.to_readonly_slice)
   end
 
   # Returns an unsorted indexable of *dict*'s entries.
