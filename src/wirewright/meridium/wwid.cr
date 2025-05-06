@@ -220,35 +220,34 @@ module Ww::Meridium
     def_equals_and_hash @order, @disorder, @slot
   end
 
-  # A nanosecond-precision timestamp identifying the moment at which something
-  # was created. Normally that "something" is a `Surface`; `Conn` and `Node` are
-  # the main users & sources of `IWWID`s, and thus of `Instant`s too. They use
-  # it to make sure some surface info is newer than the one they have already.
-  record Instant, timestamp : UInt64 do
+  # A conn-local, monotonically increasing "timestamp" used to identify the moment
+  # at which something was created. Most likely that "something" is a `Surface`; `Conn`
+  # and `Node` are the main users & sources of `IWWID`s, and thus of `Instant`s too.
+  # They use it to make sure some surface info is newer than the one they have already
+  # about that same surface.
+  record Instant, raw : UInt32 do
     include Comparable(Instant)
 
-    BYTESIZE = 8
-
-    def self.new : Instant
-      dt = Time.utc - WW_EPOCH
-
-      new(timestamp: dt.total_nanoseconds.floor.to_u64)
-    end
+    BYTESIZE = 4
 
     def self.from_slice_be(slice : Bytes) : Instant
-      timestamp = IO::ByteFormat::BigEndian.decode(UInt64, slice)
+      raw = IO::ByteFormat::BigEndian.decode(UInt32, slice)
 
-      new(timestamp)
+      new(raw)
     end
 
     def <=>(other : Instant)
-      timestamp <=> other.timestamp
+      raw <=> other.raw
+    end
+
+    def succ : Instant
+      copy_with(raw: @raw + 1)
     end
 
     def to_slice_be(&)
-      scratch = uninitialized UInt8[sizeof(Instant)]
+      scratch = uninitialized UInt8[sizeof(UInt32)]
 
-      IO::ByteFormat::BigEndian.encode(timestamp, scratch.to_slice)
+      IO::ByteFormat::BigEndian.encode(raw, scratch.to_slice)
 
       yield scratch.to_slice
     end

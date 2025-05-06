@@ -166,6 +166,7 @@ module Ww::Meridium
         raise ArgumentError.new("expected WWID trunk as conid (slot must be 0)")
       end
 
+      @clock = Instant.new(0)
       @view = View.new
       @state = State::None
       @surfaces = Pf::Map(Slot, Surface).new
@@ -173,7 +174,7 @@ module Ww::Meridium
       @replies = NO_REPLIES
     end
 
-    def initialize(@conid, @state, @view, @surfaces, @instants, @replies)
+    def initialize(@conid, @state, @clock, @view, @surfaces, @instants, @replies)
     end
 
     private def_change
@@ -214,7 +215,8 @@ module Ww::Meridium
     protected def insert(slot : Slot, surface : Surface) : Node
       change(
         surfaces: @surfaces.assoc(slot, surface),
-        instants: @instants.assoc(slot, Instant.new),
+        instants: @instants.assoc(slot, @clock),
+        clock: @clock.succ,
         view: surface.is_a?(Sensor) ? @view.register(slot, surface) : @view,
         # NOTE: we do not insert into @replies here simply to save a tiny
         # bit of space. We don't know if an entry there is going to be needed.
