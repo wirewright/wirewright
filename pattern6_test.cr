@@ -389,26 +389,19 @@ def tspace(flow : Term::Dict, & : Term, Term ->)
   lslots = {} of {Term, Term} => MM::Slot
   rslots = {} of MM::Slot => Term
   views = Term[]
-  versions = {} of Term => UInt32
   views_lock = Mutex.new
 
   flow.items.each do |step|
     Term.matchpi?(step, %{(conn conn-name_symbol children_*)}) do
       conns.put_if_absent(conn_name) do
-        alert = ->(conn : MM::Conn) do
-          view1 = conn.view
+        viewcb = ->(view : MM::View) do
           views_lock.synchronize do
-            v0 = versions[conn_name]?
-            v1 = view1.version
-            next if v0 && v0 >= v1
-
-            versions[conn_name] = v1
-            views = views.with(conn_name, view1.dict_multisets)
+            views = views.with(conn_name, view.dict_multisets)
           end
         end
 
         conid = MM::WWID.new
-        conn = MM::Conn.new(conid, tspace, alert)
+        conn = MM::Conn.new(conid, tspace, &viewcb)
         conn.online
         conn.summon
         conn

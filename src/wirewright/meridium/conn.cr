@@ -10,23 +10,45 @@ module Ww::Meridium
   #
   # NOTE: All public methods are thread-safe.
   #
-  # NOTE: The main way you can obtain a termspace view is by polling: just call
-  # `view`. If you want to be woken up on possible view change, you can use
-  # the alert callback for that.
+  # NOTE: You can obtain a termspace view by polling (`view`) or using the view callback
+  # which is called with the latest view automatically. The view callback must be as quick
+  # as possible. It is normally executed while the conn has exclusive access to the termspace.
+  # Obviously other conns won't be able to make progress until you do while you're in
+  # the views callback.#
+  #
+  # WARNING: You should also absolutely **not** make calls to other conns in
+  # the view callback. This is likely to cause a deadlock.
   class Conn
     include IConn
     include Tspace::Meetable
 
-    def initialize(conid : WWID, @meetup : Tspace::IBookMeeting, @alert : self ->)
+    # :nodoc:
+    class ViewStreamer
+      @latest : View::Version?
+
+      def initialize(@dest : View ->)
+        @lock = Mutex.new
+      end
+
+      def send(view : View)
+        @lock.synchronize do
+          return if (latest = @latest) && latest >= view.version
+
+          @latest = view.version
+          @dest.call(view)
+        end
+      end
+    end
+
+    def initialize(conid : WWID, @meetup : Tspace::IBookMeeting, @views : ViewStreamer)
       @baseline = Node.new(conid)
       @staging = @baseline
       @relook = {} of Slot => Channel(Nil)
       @lock = Mutex.new
     end
 
-    # :ditto:
-    def self.new(*args, **kwargs, &alert : self ->) : self
-      new(*args, alert, **kwargs)
+    def self.new(*args, **kwargs, &views : View ->) : self
+      new(*args, ViewStreamer.new(views), **kwargs)
     end
 
     # Returns the id of this connection.
@@ -118,13 +140,6 @@ module Ww::Meridium
       manage(tspace, effects)
       push(tspace, effects)
       notify(tspace, effects)
-
-      # This may seem somewhat careless, but remember that meet() can be called
-      # by just one fiber at a time. In other words they form a queue to call
-      # meet() rather than all rushing to it. @alert cannot change, too.
-      if effects.any?(ViewChanged)
-        @alert.call(self)
-      end
     end
 
     private def manage(tspace, effects : Enumerable) : Nil
@@ -213,6 +228,10 @@ module Ww::Meridium
       end
 
       tspace.send(self, act)
+    end
+
+    private def notify(tspace, effect : ViewChanged)
+      @views.send(effect.view)
     end
 
     private def notify(tspace, effect) : Nil
@@ -309,8 +328,12 @@ module Ww::Meridium
 
       # Note how we take over baseline merging here for a moment.
       # Normally it is the termspace that does this.
-      @lock.synchronize { @baseline = @staging = @staging.offline }
-      @alert.call(self)
+      view = @lock.synchronize do
+        @baseline = @staging = @staging.offline
+        @staging.view
+      end
+
+      @views.send(view)
     end
 
     # Transaction object yielded by `transaction`.
