@@ -70,9 +70,7 @@ module Ww::Meridium
   #
   # Nodes maintain `view`s for their sensors.
   #
-  # WARNING: all methods except `conid` are thread-**unsafe**. One of the goals
-  # of `Conn` is to guard its node and make sure it is accessed in a thread-safe
-  # manner; `Node` itself doesn't care.
+  # Nodes are immutable for simplicity.
   class Node
     # :nodoc:
     NO_STIMULATIONS = Pf::Map(Slot, Pf::Set(IWWID)).new
