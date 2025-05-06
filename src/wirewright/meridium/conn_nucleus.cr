@@ -205,6 +205,11 @@ module Ww::Meridium
       IWWID.new(wwid, @instants[slot])
     end
 
+    # Same as `iwwid?`, but raises `KeyError` if *slot* absent.
+    def iwwid(slot : Slot) : IWWID
+      iwwid?(slot) || raise KeyError.new("slot-instance discrepancy")
+    end
+
     # Yields WWIDs and their corresponding surfaces.
     def each(& : WWID, Surface ->) : Nil
       @surfaces.each do |slot, surface|
@@ -398,7 +403,7 @@ module Ww::Meridium
       yield Subscribed.new(@conid)
 
       @surfaces.each do |slot, surface|
-        yield SurfaceAdded.new(iwwid?(slot).not_nil!("slot-instance discrepancy"), surface)
+        yield SurfaceAdded.new(iwwid(slot), surface)
       end
 
       change(replies: NO_REPLIES)
@@ -408,7 +413,7 @@ module Ww::Meridium
       yield Unsubscribed.new(@conid)
 
       @surfaces.each do |slot, surface|
-        yield SurfaceRemoved.new(iwwid?(slot).not_nil!("slot-instance discrepancy"), surface)
+        yield SurfaceRemoved.new(iwwid(slot), surface)
       end
 
       change(replies: NO_REPLIES)
@@ -444,12 +449,12 @@ module Ww::Meridium
       if s0.summoned? && s1.summoned?
         @surfaces.each do |slot, lhs|
           next if lhs == successor.@surfaces[slot]?
-          yield SurfaceRemoved.new(iwwid?(slot).not_nil!("slot-instance discrepancy"), lhs)
+          yield SurfaceRemoved.new(iwwid(slot), lhs)
         end
 
         successor.@surfaces.each do |slot, rhs|
           next if @surfaces[slot]? == rhs
-          yield SurfaceAdded.new(successor.iwwid?(slot).not_nil!("slot-instance discrepancy"), rhs)
+          yield SurfaceAdded.new(successor.iwwid(slot), rhs)
         end
 
         successor.reply { |effect| yield effect }

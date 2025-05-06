@@ -302,6 +302,22 @@ module Ww::Meridium
       end
     end
 
+    # Returns `true` if the termspace appears to be aware of the surface currently
+    # occupying *slot*. Returns `false` otherwise.
+    #
+    # Note that this can only *truly* be known through user-level feedback. For all
+    # we know, we could be talking to emptyness. We can only know whether we *tried*
+    # to talk and nothing in particular failed during the process.
+    def sync?(slot : Slot) : Bool
+      @lock.synchronize do
+        return false unless @staging.state.online?
+        return false unless x = @baseline[slot]?
+        return false unless y = @staging[slot]?
+
+        x == y && @baseline.iwwid(slot) == @staging.iwwid(slot)
+      end
+    end
+
     # Inserts the surfaces of this connection into the termspace.
     def summon : Nil
       Log.trace { "#{conid}: summoned" }
