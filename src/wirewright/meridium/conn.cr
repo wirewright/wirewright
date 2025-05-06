@@ -354,7 +354,6 @@ module Ww::Meridium
       @views.send(view)
     end
 
-    # Transaction object yielded by `transaction`.
     class Txn
       # :nodoc:
       def initialize(@head : Nucleus)
