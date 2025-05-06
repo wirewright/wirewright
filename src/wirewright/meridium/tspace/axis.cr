@@ -47,6 +47,37 @@ module Ww::Meridium
   # `Tspace` implementation that uses `Meridium::Axis`. It is designed to be as
   # plug-and-play as possible, abstracting away connection establishment,
   # communication, automatic reconnect, and connection failure.
+  #
+  # ```
+  # tspace = Tspace::Axis.spawn { TCPSocket.new("0.0.0.0", 9810) }
+  #
+  # conn = Conn.new(WWID.new, tspace) do |view|
+  #   # Do something non-blocking and thread-safe with view...
+  # end
+  #
+  # # Initialize
+  # tspace.subscribe(conn)
+  # conn.online
+  # conn.summon
+  #
+  # # Do stuff
+  # conn.transaction do |txn|
+  #   txn.put(0, Appearance.new(Term.of("Hello World")))
+  #   txn.put(1, Sensor.new(Term.of(:x_string)))
+  # end
+  #
+  # # Maybe poll for status:
+  # tspace.status # => Online
+  # tspace.status # => Offline [will try to auto-reconnect]
+  # tspace.status # => Suspended [some kind of error, most likely protocol error, needs manual reconnect]
+  #
+  # # Cleanup
+  # conn.dismiss
+  # conn.offline
+  # tspace.unsubscribe(conn)
+  #
+  # tspace.disconnect
+  # ```
   class Tspace::Axis
     include Tspace::IBookMeeting
 
@@ -70,6 +101,13 @@ module Ww::Meridium
       @bookings = Channel(Tspace::Meetable).new
       @subscribers = Set(IConn).new
       @lock = Mutex.new
+    end
+
+    # Constructs an Axis termspace client and starts its connection loop.
+    def self.spawn(&connect : -> IO) : self
+      instance = new(connect)
+      MT.spawn { instance.connect }
+      instance
     end
 
     # Returns the termspace status.

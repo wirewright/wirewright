@@ -1,9 +1,33 @@
 module Ww::Meridium
+  # An implementation of an in-memory termspace.
+  #
   # NOTE: All methods of this implementation of `Tspace` are guaranteed to
   # be thread-safe; this is because there is no booking process to speak of.
   # We pretend to book stuff but the meetings are commenced immediately and
   # within the fiber that called for one. The principle that only one fiber
   # can work with the termspace still holds, however.
+  #
+  # ```
+  # tspace = Tspace::InMemory.new
+  #
+  # conn = Conn.new(WWID.new, tspace) do |view|
+  #   # Do something non-blocking and thread-safe with view...
+  # end
+  #
+  # # Initialize
+  # conn.online
+  # conn.summon
+  #
+  # # Do stuff
+  # conn.transaction do |txn|
+  #   txn.put(0, Appearance.new(Term.of("Hello World")))
+  #   txn.put(1, Sensor.new(Term.of(:x_string)))
+  # end
+  #
+  # # Cleanup
+  # conn.dismiss
+  # conn.offline
+  # ```
   class Tspace::InMemory
     include Tspace::IBookMeeting
 

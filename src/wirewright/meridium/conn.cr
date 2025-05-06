@@ -18,6 +18,8 @@ module Ww::Meridium
   #
   # WARNING: You should also absolutely **not** make calls to other conns in
   # the view callback. This is likely to cause a deadlock.
+  #
+  # See `Tspace::InMemory`, `Tspace::Axis` for examples.
   class Conn
     include IConn
     include Tspace::Meetable

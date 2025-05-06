@@ -121,6 +121,17 @@ module Ww::Meridium::Axis
     end
   end
 
+  # Implementation of an Axis server.
+  #
+  # ```
+  # start, stop = Axis::Server.control { TCPServer.new("0.0.0.0", 9810) }
+  #
+  # spawn { start.call }
+  #
+  # # Do stuff while the server is running...
+  #
+  # stop.call
+  # ```
   class Server
     Log = ::Log.for(self)
 
