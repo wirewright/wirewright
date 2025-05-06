@@ -31,3 +31,4 @@ module Ww
 end
 
 require "socket"
+require "openssl"

@@ -131,6 +131,26 @@ module Ww::Meridium::Axis
         @server.routes.find(sensor.conid) do |session|
           session.write &.send(AxT::SRS, sensor, appearance, payload, AxT::OVR)
         end
+      when .stps?
+        sensor, appearance, alg, iv, ciphertext = @r.read(WWID), @r.read(IWWID), @r.read(Secure::Alg), @r.read(Bytes), @r.read(Bytes)
+        @r.expect(:ovr)
+
+        Log.trace { "#{self}: relay STPS to #{sensor.conid}" }
+
+        @server.routes.find(sensor.conid) do |session|
+          session.write &.send(AxT::STPS, sensor, appearance, alg, iv, ciphertext, AxT::OVR)
+        end
+      when .srss?
+        sensor, appearance, alg, iv, ciphertext = @r.read(IWWID), @r.read(IWWID), @r.read(Secure::Alg), @r.read(Bytes), @r.read(Bytes)
+        @r.expect(:ovr)
+
+        Log.trace { "#{self}: relay SRSS to #{sensor.conid}" }
+
+        @server.routes.find(sensor.conid) do |session|
+          session.write &.send(AxT::SRSS, sensor, appearance, alg, iv, ciphertext, AxT::OVR)
+        end
+      when .err?
+        @r.err "protocol error", quiet: true
       else
         @r.err "unexpected opcode"
       end
@@ -152,6 +172,12 @@ module Ww::Meridium::Axis
 
       loop do
         handle(@r.read(AxT))
+      end
+    rescue e : ProtocolError
+      # To avoid even the slightest potential of recursion / weirdness we do not reply
+      # to ERRs from the client with an ERR, and instead just terminate quietly.
+      unless e.quiet?
+        write &.send(AxT::ERR)
       end
     ensure
       Log.trace { "#{self}: cleanup after listen" }

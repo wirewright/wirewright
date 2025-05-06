@@ -1,9 +1,31 @@
 module Ww::Meridium
-  # Activations are messages directed inward from chat to conn, and from
+  # Activations are messages directed inward from termspace to conn, and from
   # conn to its "nucleus", `Node`.
-  alias Activation = StimulusPresence | StimulusAbsence | StimulusRequest | StimulusResponse
+  alias Activation = StimulusPresence | StimulusAbsence | StimulusRequest | StimulusResponse | SecureStimulusPresence | SecureStimulusResponse
 
-  record StimulusPresence, sensor : WWID, appearance : IWWID, stimulus : Term do
+  defcase StimulusPresence, sensor : WWID, appearance : IWWID, stimulus : Term do
+    include InspectToS
+
+    def sender : WWID
+      appearance.conid
+    end
+
+    def receiver : WWID
+      sensor.conid
+    end
+
+    def to_secure?(alg : Secure::Alg, secret : Term) : SecureStimulusPresence?
+      return unless response = Secure.to_secure?(alg, secret, stimulus)
+
+      iv, ciphertext = response
+
+      SecureStimulusPresence.new(sensor, appearance, alg, iv, ciphertext)
+    end
+  end
+
+  defcase StimulusAbsence, sensor : WWID, appearance : IWWID do
+    include InspectToS
+
     def sender : WWID
       appearance.conid
     end
@@ -13,17 +35,9 @@ module Ww::Meridium
     end
   end
 
-  record StimulusAbsence, sensor : WWID, appearance : IWWID do
-    def sender : WWID
-      appearance.conid
-    end
+  defcase StimulusRequest, sensor : IWWID, appearance : WWID do
+    include InspectToS
 
-    def receiver : WWID
-      sensor.conid
-    end
-  end
-
-  record StimulusRequest, sensor : IWWID, appearance : WWID do
     def sender : WWID
       sensor.conid
     end
@@ -33,7 +47,9 @@ module Ww::Meridium
     end
   end
 
-  record StimulusResponse, sensor : IWWID, appearance : IWWID, stimulus : Term do
+  defcase StimulusResponse, sensor : IWWID, appearance : IWWID, stimulus : Term do
+    include InspectToS
+
     def sender : WWID
       appearance.conid
     end
@@ -45,21 +61,76 @@ module Ww::Meridium
     def to_stimulus_presence : StimulusPresence
       StimulusPresence.new(sensor.wwid, appearance, stimulus)
     end
+
+    def to_secure?(alg : Secure::Alg, secret : Term) : SecureStimulusResponse?
+      return unless response = Secure.to_secure?(alg, secret, stimulus)
+
+      iv, ciphertext = response
+
+      SecureStimulusResponse.new(sensor, appearance, alg, iv, ciphertext)
+    end
+  end
+
+  defcase SecureStimulusPresence, sensor : WWID, appearance : IWWID, alg : Secure::Alg, iv : Bytes, ciphertext : Bytes do
+    include InspectToS
+
+    def sender : WWID
+      appearance.conid
+    end
+
+    def receiver : WWID
+      sensor.conid
+    end
+
+    def to_insecure?(secret : Term) : StimulusPresence?
+      return unless stimulus = Secure.from_secure?(alg, secret, iv, ciphertext)
+
+      StimulusPresence.new(sensor, appearance, stimulus)
+    end
+  end
+
+  defcase SecureStimulusResponse, sensor : IWWID, appearance : IWWID, alg : Secure::Alg, iv : Bytes, ciphertext : Bytes do
+    include InspectToS
+
+    def sender : WWID
+      appearance.conid
+    end
+
+    def receiver : WWID
+      sensor.conid
+    end
+
+    def to_stimulus_presence : SecureStimulusPresence
+      SecureStimulusPresence.new(sensor.wwid, appearance, alg, iv, ciphertext)
+    end
   end
 
   # Effects are messages directed outward from a conn's "nucleus" `Node` to that
   # conn, and then perhaps to the termspace.
-  alias Effect = SurfaceAdded | SurfaceRemoved | ViewChanged | Stimulated | Subscribed | Unsubscribed
+  alias Effect = SurfaceAdded | SurfaceRemoved | ViewChanged | Replied | Subscribed | Unsubscribed
 
-  record ViewChanged, view : View
-  record Subscribed, conid : WWID
-  record Unsubscribed, conid : WWID
-  record SurfaceAdded, id : IWWID, surface : Surface
-  record SurfaceRemoved, id : IWWID, surface : Surface
-  record Stimulated, surface : Appearance, sensor : IWWID, appearance : IWWID do
-    def to_stimulus_response : StimulusResponse
-      StimulusResponse.new(sensor, appearance, surface.value)
-    end
+  defcase ViewChanged, view : View do
+    include InspectToS
+  end
+
+  defcase Subscribed, conid : WWID do
+    include InspectToS
+  end
+
+  defcase Unsubscribed, conid : WWID do
+    include InspectToS
+  end
+
+  defcase SurfaceAdded, id : IWWID, surface : Surface do
+    include InspectToS
+  end
+
+  defcase SurfaceRemoved, id : IWWID, surface : Surface do
+    include InspectToS
+  end
+
+  defcase Replied, sensor : IWWID, appearance : IWWID, surface : Appearance do
+    include InspectToS
   end
 
   # The "nucleus" of a `Conn` which implements all of its core behavior.
@@ -73,7 +144,7 @@ module Ww::Meridium
   # Nodes are immutable for simplicity.
   class Node
     # :nodoc:
-    NO_STIMULATIONS = Pf::Map(Slot, Pf::Set(IWWID)).new
+    NO_REPLIES = Pf::Map(Slot, Pf::Set(Replied)).new
 
     @[Flags]
     enum State : UInt8
@@ -99,10 +170,10 @@ module Ww::Meridium
       @state = State::None
       @surfaces = Pf::Map(Slot, Surface).new
       @instants = Pf::Map(Slot, Instant).new
-      @stimulations = NO_STIMULATIONS
+      @replies = NO_REPLIES
     end
 
-    def initialize(@conid, @state, @view, @surfaces, @instants, @stimulations)
+    def initialize(@conid, @state, @view, @surfaces, @instants, @replies)
     end
 
     private def_change
@@ -145,7 +216,7 @@ module Ww::Meridium
         surfaces: @surfaces.assoc(slot, surface),
         instants: @instants.assoc(slot, Instant.new),
         view: surface.is_a?(Sensor) ? @view.register(slot, surface) : @view,
-        # NOTE: we do not insert into @stimulations here simply to save a tiny
+        # NOTE: we do not insert into @replies here simply to save a tiny
         # bit of space. We don't know if an entry there is going to be needed.
       )
     end
@@ -157,7 +228,7 @@ module Ww::Meridium
 
     # Adjusts the state of this node to signal it's offline now.
     def offline : Node
-      change(state: @state & ~State::Online, view: @view.clear, stimulations: NO_STIMULATIONS)
+      change(state: @state & ~State::Online, view: @view.clear, replies: NO_REPLIES)
     end
 
     # Adjusts the state of this node to signal that it should join the termspace
@@ -172,7 +243,7 @@ module Ww::Meridium
     # that the node left. If offline, this is a noop, since we assume offline to mean
     # "connection and all associated state lost".
     def dismiss : Node
-      change(state: @state & ~State::Summoned, view: @view.clear, stimulations: NO_STIMULATIONS)
+      change(state: @state & ~State::Summoned, view: @view.clear, replies: NO_REPLIES)
     end
 
     # Updates or inserts the surface at *slot*. Returns the modified copy of `self`.
@@ -188,7 +259,7 @@ module Ww::Meridium
         surfaces: @surfaces.dissoc(slot),
         instants: @instants.dissoc(slot),
         view: surface.is_a?(Sensor) ? @view.unregister(slot, surface) : @view,
-        stimulations: surface.is_a?(Appearance) ? @stimulations.dissoc(slot) : @stimulations,
+        replies: surface.is_a?(Appearance) ? @replies.dissoc(slot) : @replies,
       )
     end
 
@@ -229,6 +300,36 @@ module Ww::Meridium
     end
 
     # :nodoc:
+    def receive(act : SecureStimulusPresence) : Node
+      unless @conid == act.sensor.conid
+        Log.debug { "reject secure stimulus presence: conid of #{act.sensor} != my #{@conid}" }
+        return self
+      end
+
+      unless surface = @surfaces[act.sensor.slot]?
+        Log.debug { "reject secure stimulus presence: slot of #{act.sensor} absent" }
+        return self
+      end
+
+      unless surface.is_a?(Sensor)
+        Log.debug { "reject secure stimulus presence: slot of #{act.sensor} is no longer a sensor" }
+        return self
+      end
+
+      unless secret = surface.secret?
+        Log.debug { "reject secure stimulus presence: sensor lacks secret" }
+        return self
+      end
+
+      unless decrypted = act.to_insecure?(secret)
+        Log.debug { "reject secure stimulus presence: invalid secret (decrypt failed)" }
+        return self
+      end
+
+      change(view: @view.after(surface, decrypted))
+    end
+
+    # :nodoc:
     def receive(act : StimulusRequest) : Node
       return self unless @state.online?
 
@@ -237,7 +338,9 @@ module Ww::Meridium
         return self
       end
 
-      unless surface = @surfaces[act.appearance.slot]?
+      slot = act.appearance.slot
+
+      unless surface = @surfaces[slot]?
         Log.debug { "reject stimulus request: slot of #{act.appearance} absent" }
         return self
       end
@@ -247,11 +350,16 @@ module Ww::Meridium
         return self
       end
 
-      change(stimulations: @stimulations.extend(act.appearance.slot, Pf::Set(IWWID).new, &.add(act.sensor)))
+      reply = Replied.new(act.sensor, IWWID.new(act.appearance, @instants[slot]), surface)
+
+      replies0 = @replies
+      replies1 = @replies.extend(slot, Pf::Set(Replied).new, &.add(reply))
+
+      change(replies: replies1)
     end
 
     # :nodoc:
-    def receive(act : StimulusResponse) : Node
+    def receive(act : StimulusResponse | SecureStimulusResponse) : Node
       unless act.sensor.conid == @conid
         Log.debug { "reject stimulus response: conid of #{act.sensor} != my #{@conid}" }
         return self
@@ -274,7 +382,7 @@ module Ww::Meridium
         return self
       end
 
-      change(view: @view.after(surface, act.to_stimulus_presence))
+      receive(act.to_stimulus_presence)
     end
 
     {% if flag?(:docs) %}
@@ -290,7 +398,7 @@ module Ww::Meridium
         yield SurfaceAdded.new(iwwid?(slot).not_nil!("slot-instance discrepancy"), surface)
       end
 
-      change(stimulations: NO_STIMULATIONS)
+      change(replies: NO_REPLIES)
     end
 
     protected def leave(& : Effect ->) : Node
@@ -300,19 +408,15 @@ module Ww::Meridium
         yield SurfaceRemoved.new(iwwid?(slot).not_nil!("slot-instance discrepancy"), surface)
       end
 
-      change(stimulations: NO_STIMULATIONS)
+      change(replies: NO_REPLIES)
     end
 
-    protected def stimulate(& : Stimulated ->) : Node
-      @stimulations.each do |sender, receivers|
-        surface = @surfaces[sender].as(Appearance)
-        appearance = iwwid?(sender).not_nil!("slot-instance discrepancy")
-        receivers.each do |sensor|
-          yield Stimulated.new(surface, sensor, appearance)
-        end
+    protected def reply(& : Replied ->) : Node
+      @replies.each do |_, effects|
+        effects.each { |effect| yield effect }
       end
 
-      change(stimulations: NO_STIMULATIONS)
+      change(replies: NO_REPLIES)
     end
 
     # Logically replaces `self` -- assumed to be an older, established node --
@@ -345,7 +449,7 @@ module Ww::Meridium
           yield SurfaceAdded.new(successor.iwwid?(slot).not_nil!("slot-instance discrepancy"), rhs)
         end
 
-        successor.stimulate { |effect| yield effect }
+        successor.reply { |effect| yield effect }
       elsif s0.summoned?
         successor.leave { |effect| yield effect }
       elsif s1.summoned?

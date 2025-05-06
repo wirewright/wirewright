@@ -200,8 +200,19 @@ module Ww::Meridium
       hide(tspace, effect.id, effect.surface)
     end
 
-    private def notify(tspace, effect : Stimulated) : Nil
-      tspace.send(self, effect.to_stimulus_response)
+    private def notify(tspace, effect : Replied) : Nil
+      surface = effect.surface
+
+      act = StimulusResponse.new(effect.sensor, effect.appearance, surface.value)
+      if secret = surface.secret?
+        act = act.to_secure?(Secure::Alg::ChaCha20_Poly1305, secret)
+        unless act
+          Log.warn { "#{conid}: will not reply, failed to encrypt" }
+          return
+        end
+      end
+
+      tspace.send(self, act)
     end
 
     private def notify(tspace, effect) : Nil
@@ -223,7 +234,16 @@ module Ww::Meridium
 
       sensors = surface.complement_set(tspace.presences(self))
       sensors.each do |sensor|
-        tspace.send(self, StimulusPresence.new(sensor, id, surface.value))
+        act = StimulusPresence.new(sensor, id, surface.value)
+        if secret = surface.secret?
+          act = act.to_secure?(Secure::Alg::ChaCha20_Poly1305, secret)
+          unless act
+            Log.warn { "#{conid}: will not send stimulus presence, failed to encrypt" }
+            return
+          end
+        end
+
+        tspace.send(self, act)
       end
     end
 

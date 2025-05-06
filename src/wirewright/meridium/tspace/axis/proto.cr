@@ -5,6 +5,7 @@ module Ww::Meridium::Axis
 
     # Lists the tokens used in the protocol.
     enum Token : UInt8
+      ERR
       ASK
       HAS
       ANS
@@ -14,9 +15,11 @@ module Ww::Meridium::Axis
       ADD
       DEL
       STP
+      STPS
       STA
       SRQ
       SRS
+      SRSS
       OVR
     end
 
@@ -35,12 +38,14 @@ module Ww::Meridium::Axis
         raise ProtocolError.new(*args, **kwargs)
       end
 
-      # Reads an object of type *cls* using the protocol.
-      def read(cls : UInt32.class) : UInt32
-        @io.read_bytes(UInt32, IO::ByteFormat::BigEndian)
-      rescue e : IO::Error
-        raise NetworkError.new(cause: e)
-      end
+      {% for type in %w[UInt8 UInt16 UInt32 UInt64 Int8 Int16 Int32 Int64] %}
+        # Reads an object of type *cls* using the protocol.
+        def read(cls : {{type.id}}.class) : {{type.id}}
+          @io.read_bytes(cls, IO::ByteFormat::BigEndian)
+        rescue e : IO::Error
+          raise NetworkError.new(cause: e)
+        end
+      {% end %}
 
       # :ditto:
       def read(cls : Token.class) : Token
@@ -136,6 +141,17 @@ module Ww::Meridium::Axis
         err "invalid or malformed term", cause: e
       end
 
+      # :ditto:
+      def read(cls : Enum.class)
+        read_enum_impl(cls)
+      end
+
+      private def read_enum_impl(cls : T.class) : T forall T
+        value = read(typeof({{T.constant(T.constants[0])}}))
+
+        T.from_value?(value) || err "invalid enum value"
+      end
+
       # Shorthand for `read(WWID)` that also makes sure that the resulting WWID
       # is a connection id.
       def conid : WWID
@@ -169,14 +185,16 @@ module Ww::Meridium::Axis
           raise NetworkError.new(cause: e)
         end
 
-        # :ditto:
-        def <<(object : UInt32) : self
-          @io.write_bytes(object, IO::ByteFormat::BigEndian)
+        {% for type in %w[UInt8 UInt16 UInt32 UInt64 Int8 Int16 Int32 Int64] %}
+          # :ditto:
+          def <<(object : {{type.id}}) : self
+            @io.write_bytes(object, IO::ByteFormat::BigEndian)
 
-          self
-        rescue e : IO::Error
-          raise NetworkError.new(cause: e)
-        end
+            self
+          rescue e : IO::Error
+            raise NetworkError.new(cause: e)
+          end
+        {% end %}
 
         # :ditto:
         def <<(object : BitList) : self
@@ -234,6 +252,11 @@ module Ww::Meridium::Axis
           self
         rescue e : IO::Error
           raise NetworkError.new(cause: e)
+        end
+
+        # :ditto:
+        def <<(object : Enum) : self
+          self << object.value
         end
 
         # Writes all of *objects* to the underlying IO inorder.

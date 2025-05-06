@@ -126,9 +126,9 @@ module Ww::Meridium::Axis
     #
     # May raise `NetworkError` or `ProtocolError`.
     def handle(r : Proto::Reader, opcode : AxT) : Nil
-      Log.trace { "#{self}: receive #{opcode}" }
-
       case opcode
+      when .err?
+        r.err "protocol error"
       when .stp?
         sensor, appearance, stimulus = r.read(WWID), r.read(IWWID), r.read(Term)
         r.expect(:ovr)
@@ -149,6 +149,16 @@ module Ww::Meridium::Axis
         r.expect(:ovr)
 
         @acts << StimulusResponse.new(sensor, appearance, stimulus)
+      when .stps?
+        sensor, appearance, alg, iv, ciphertext = r.read(WWID), r.read(IWWID), r.read(Secure::Alg), r.read(Bytes), r.read(Bytes)
+        r.expect(:ovr)
+
+        @acts << SecureStimulusPresence.new(sensor, appearance, alg, iv, ciphertext)
+      when .srss?
+        sensor, appearance, alg, iv, ciphertext = r.read(IWWID), r.read(IWWID), r.read(Secure::Alg), r.read(Bytes), r.read(Bytes)
+        r.expect(:ovr)
+
+        @acts << SecureStimulusResponse.new(sensor, appearance, alg, iv, ciphertext)
       else
         r.err "unexpected token #{opcode}"
       end
@@ -165,8 +175,6 @@ module Ww::Meridium::Axis
           raise NetworkError.new unless response
 
           response.handle do |r, opcode|
-            Log.trace { "#{self}: received #{opcode} while waiting for #{keyword}" }
-
             if opcode == keyword
               yield r
             else
@@ -310,6 +318,16 @@ module Ww::Meridium::Axis
     # :nodoc:
     def send(conn : IConn, act : StimulusResponse) : Nil
       say AxT::SRS, act.sensor, act.appearance, act.stimulus, AxT::OVR
+    end
+
+    # :nodoc:
+    def send(conn : IConn, act : SecureStimulusPresence) : Nil
+      say AxT::STPS, act.sensor, act.appearance, act.alg, act.iv, act.ciphertext, AxT::OVR
+    end
+
+    # :nodoc:
+    def send(conn : IConn, act : SecureStimulusResponse) : Nil
+      say AxT::SRSS, act.sensor, act.appearance, act.alg, act.iv, act.ciphertext, AxT::OVR
     end
 
     # :nodoc:

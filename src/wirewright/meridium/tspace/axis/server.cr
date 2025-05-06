@@ -1,7 +1,7 @@
 module Ww::Meridium::Axis
   # :nodoc:
   #
-  # Implements a simple lock-protected reference-counted atom multiset.
+  # Implements a simple lock-protected referrer+reference-counted atom multiset.
   struct AtomMultiset
     @atoms = {} of Atom => Hash(WWID, UInt32)
     @lock = Mutex.new

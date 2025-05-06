@@ -3084,3 +3084,9 @@ struct SyncHash(K, V)
     @lock.synchronize { @hash.clear }
   end
 end
+
+module InspectToS
+  def to_s(io)
+    inspect(io)
+  end
+end

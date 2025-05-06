@@ -21,6 +21,10 @@ module Ww::Meridium::Axis
   # Raised when the Axis protocol (`Proto`) is violated. Remotely similar to
   # syntax errors in programming languages.
   class ProtocolError < Exception
+    getter? quiet : Bool
+
+    def initialize(*args, @quiet : Bool = false, **kwargs)
+    end
   end
 
   # Lets Axis configure *io* as it desires.
