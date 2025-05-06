@@ -65,7 +65,7 @@
   <> {M: (leave-pair () ())}
 
 ;; Similarly (input " ") at the end in pair must leave it.
-(_* ¦ (%entry _ [_string | "" (M←(input " ") _*) @EDGE_]))
+(_* ¦ (%entry _ [(%string nonempty) | "" (M←(input " ") _*) @EDGE_]))
   <> {M: (leave-pair () ((append-left " ")))}
 
 ;; ... or if trying to leave a top-level dict similarly.

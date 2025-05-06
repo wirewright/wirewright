@@ -776,8 +776,8 @@
     (button
      "+ Increment"
      @actions
-     style: "text-xl"
-     qux: ("\"hello" | "" () @user))
+     qux: ("\"hello" | "" () @user)
+     style: "text-xl")
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))))
  (after
@@ -786,8 +786,8 @@
     (button
      "+ Increment"
      @actions
-     style: "text-xl"
-     qux: ("" | "" () @user))
+     qux: ("" | "" () @user)
+     style: "text-xl")
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))))
  (after
@@ -864,8 +864,8 @@
      "+ Increment"
      @actions
      ("" | "" () @user)
-     style: "text-xl"
      qux: @fooze
+     style: "text-xl"
      xyzzy: (+ 1 2))
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))))
@@ -881,8 +881,8 @@
      "+ Increment"
      @actions
      ("" | "" () @user)
-     style: "text-xs"
      qux: @fooze
+     style: "text-xs"
      xyzzy: (+ 1 2))
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))))
@@ -918,8 +918,8 @@
      "+ Increment"
      @actions
      ("" | "" () @user)
-     style: "text-xs"
      qux: @fooze
+     style: "text-xs"
      xyzzy: (+ 1 2))
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))))
@@ -945,8 +945,8 @@
      "+ Increment"
      @actions
      ("" | "" () @user)
-     style: "text-xs"
      qux: @fooze
+     style: "text-xs"
      xyzzy: (+ 1 2))
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))))
@@ -956,8 +956,8 @@
     (button
      "+ Increment"
      @actions
-     style: "text-xs"
      qux: @fooze
+     style: "text-xs"
      xyzzy: (("" | "" () @user) + 1 2))
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))))
@@ -970,8 +970,8 @@
      xyzzy
      ("" | "" () @user)
      (+ 1 2)
-     style: "text-xs"
-     qux: @fooze)
+     qux: @fooze
+     style: "text-xs")
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))))
  (after
@@ -984,8 +984,8 @@
     (button
      "+ Increment"
      @actions
-     style: "text-xs"
      qux: @fooze
+     style: "text-xs"
      xyzzy: (("" | "" () @user) + 1 2))
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))))
@@ -997,8 +997,8 @@
      @actions
      ("" | "" () @user)
      (+ 1 2)
-     style: "text-xs"
-     qux: @fooze)
+     qux: @fooze
+     style: "text-xs")
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))))
  (after
@@ -1010,8 +1010,8 @@
      qux
      ("" | "" () @user)
      (+ 1 2)
-     style: "text-xs"
-     qux: @fooze)
+     qux: @fooze
+     style: "text-xs")
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))))
  (after
@@ -1021,8 +1021,8 @@
      "+ Increment"
      @actions
      ("" | "" () @user)
-     style: "text-xs"
-     qux: (+ 1 2))
+     qux: (+ 1 2)
+     style: "text-xs")
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))))
  (after
@@ -1038,8 +1038,8 @@
     (button
      "+ Increment"
      @actions
-     style: "text-xs"
-     qux: (+ 1 2))
+     qux: (+ 1 2)
+     style: "text-xs")
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))
    (comment "Hello World")
@@ -1050,8 +1050,8 @@
     (button
      "+ Increment"
      @actions
-     style: "text-xs"
-     qux: (+ 1 2))
+     qux: (+ 1 2)
+     style: "text-xs")
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))
    (comment "Hello World")
@@ -1062,8 +1062,8 @@
     (button
      "+ Increment"
      @actions
-     style: "text-xs"
-     qux: (+ 1 2))
+     qux: (+ 1 2)
+     style: "text-xs")
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))
    (comment "Hello World")
@@ -1074,8 +1074,8 @@
     (button
      "+ Increment"
      @actions
-     style: "text-xs"
-     qux: (+ 1 2))
+     qux: (+ 1 2)
+     style: "text-xs")
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))
    (comment "Hello World")
@@ -1086,8 +1086,8 @@
     (button
      "+ Increment"
      @actions
-     style: "text-xs"
-     qux: (+ 1 2))
+     qux: (+ 1 2)
+     style: "text-xs")
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))
    (comment "Hello World")
@@ -1098,8 +1098,8 @@
     (button
      "+ Increment"
      @actions
-     style: "text-xs"
-     qux: (+ 1 2))
+     qux: (+ 1 2)
+     style: "text-xs")
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))
    (comment "Hello World")
@@ -1110,8 +1110,8 @@
     (button
      "+ Increment"
      @actions
-     style: "text-xs"
-     qux: (+ 1 2))
+     qux: (+ 1 2)
+     style: "text-xs")
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))
    (comment "Hello World")
@@ -1122,8 +1122,8 @@
     (button
      "+ Increment"
      @actions
-     style: "text-xs"
-     qux: (+ 1 2))
+     qux: (+ 1 2)
+     style: "text-xs")
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))
    (comment "Hello World")
@@ -1147,8 +1147,8 @@
     (button
      "+ Increment"
      @actions
-     style: "text-xs"
-     qux: (+ 1 2))
+     qux: (+ 1 2)
+     style: "text-xs")
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))
    (comment "Hello World")
@@ -1160,8 +1160,8 @@
     (button
      "+ Increment"
      @actions
-     style: "text-xs"
-     qux: (+ 1 2))
+     qux: (+ 1 2)
+     style: "text-xs")
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))
    (comment "Hello World")
@@ -1172,8 +1172,8 @@
     (button
      "+ Increment"
      @actions
-     style: "text-xs"
-     qux: (+ 1 2))
+     qux: (+ 1 2)
+     style: "text-xs")
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))
    (comment "Hello World")
@@ -1185,8 +1185,8 @@
     (button
      "+ Increment"
      @actions
-     style: "text-xs"
-     qux: (+ 1 2))
+     qux: (+ 1 2)
+     style: "text-xs")
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))
    (comment "Hello World")
@@ -1203,8 +1203,8 @@
     (button
      "+ Increment"
      @actions
-     style: "text-xs"
-     qux: (+ 1 2))
+     qux: (+ 1 2)
+     style: "text-xs")
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm")
     ("" | "" () @user))
@@ -1216,8 +1216,8 @@
     (button
      "+ Increment"
      @actions
-     style: "text-xs"
-     qux: (+ 1 2))
+     qux: (+ 1 2)
+     style: "text-xs")
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))
    ("" | "" () @user)
@@ -1229,8 +1229,8 @@
     (button
      "+ Increment"
      @actions
-     style: "text-xs"
-     qux: (+ 1 2))
+     qux: (+ 1 2)
+     style: "text-xs")
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))
    (comment "Hello World")
@@ -1242,8 +1242,8 @@
     (button
      "+ Increment"
      @actions
-     style: "text-xs"
-     qux: (+ 1 2))
+     qux: (+ 1 2)
+     style: "text-xs")
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))
    (comment "Hello World")
@@ -1255,8 +1255,8 @@
     (button
      "+ Increment"
      @actions
-     style: "text-xs"
-     qux: (+ 1 2))
+     qux: (+ 1 2)
+     style: "text-xs")
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))
    ("" | "" () @user)
@@ -1276,8 +1276,8 @@
     (button
      "+ Increment"
      @actions
-     style: "text-xs"
-     qux: (+ 1 2))
+     qux: (+ 1 2)
+     style: "text-xs")
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))
    (comment "Hello World")
@@ -1294,8 +1294,8 @@
     (button
      "+ Increment"
      @actions
-     style: "text-xs"
-     qux: (+ 1 2))
+     qux: (+ 1 2)
+     style: "text-xs")
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))
    (comment "Hello World")
@@ -1314,8 +1314,8 @@
     (button
      "+ Increment"
      @actions
-     style: "text-xs"
-     qux: (+ 1 2))
+     qux: (+ 1 2)
+     style: "text-xs")
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))
    (comment "Hello World")
@@ -1326,8 +1326,8 @@
     (button
      "+ Increment"
      @actions
-     style: "text-xs"
-     qux: (+ 1 2))
+     qux: (+ 1 2)
+     style: "text-xs")
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))
    (comment "Hello World" ("" | "" () @user))))
@@ -1338,8 +1338,8 @@
     (button
      "+ Increment"
      @actions
-     style: "text-xs"
-     qux: (+ 1 2))
+     qux: (+ 1 2)
+     style: "text-xs")
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))))
  (after
@@ -1355,8 +1355,8 @@
     (button
      "+ Increment"
      @actions
-     style: "text-xs"
-     qux: (+ 1 2))
+     qux: (+ 1 2)
+     style: "text-xs")
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))))
  (after
@@ -1371,8 +1371,8 @@
     (button
      "+ Increment"
      @actions
-     style: "text-xs"
-     qux: (+ 1 2))
+     qux: (+ 1 2)
+     style: "text-xs")
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))))
  (after
@@ -1393,8 +1393,8 @@
     (button
      "+ Increment"
      @actions
-     style: "text-xs"
-     qux: (+ 1 2))
+     qux: (+ 1 2)
+     style: "text-xs")
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))))
  (after
@@ -1416,8 +1416,8 @@
     (button
      "+ Increment"
      @actions
-     style: "text-xs"
-     qux: (+ 1 2))
+     qux: (+ 1 2)
+     style: "text-xs")
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))))
  (after
@@ -1434,8 +1434,8 @@
     (button
      "+ Increment"
      @actions
-     style: "text-xs"
-     qux: (+ 1 2))
+     qux: (+ 1 2)
+     style: "text-xs")
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))))
  (after
@@ -1445,8 +1445,8 @@
     (button
      "+ Increment"
      @actions
-     style: "text-xs"
-     qux: (+ 1 2))
+     qux: (+ 1 2)
+     style: "text-xs")
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))))
  (after
@@ -1456,8 +1456,8 @@
     (button
      "+ Increment"
      @actions
-     style: "text-xs"
-     qux: (+ 1 2))
+     qux: (+ 1 2)
+     style: "text-xs")
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))))
  (after
@@ -1467,8 +1467,8 @@
     (button
      "+ Increment"
      @actions
-     style: "text-xs"
-     qux: (+ 1 2))
+     qux: (+ 1 2)
+     style: "text-xs")
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))))
  (after
@@ -1480,8 +1480,8 @@
     (button
      "+ Increment"
      @actions
-     style: "text-xs"
-     qux: (+ 1 2))
+     qux: (+ 1 2)
+     style: "text-xs")
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))))
  (after
@@ -1491,8 +1491,8 @@
     (button
      "+ Increment"
      @actions
-     style: "text-xs"
-     qux: (+ 1 2))
+     qux: (+ 1 2)
+     style: "text-xs")
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))))
  (after
@@ -1502,8 +1502,8 @@
     (button
      "+ Increment"
      @actions
-     style: "text-xs"
-     qux: (+ 1 2))
+     qux: (+ 1 2)
+     style: "text-xs")
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))))
  (after
@@ -1513,8 +1513,8 @@
     (button
      "+ Increment"
      @actions
-     style: "text-xs"
-     qux: (+ 1 2))
+     qux: (+ 1 2)
+     style: "text-xs")
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))))
  (after
@@ -1523,8 +1523,8 @@
     (button
      "+ Increment"
      @actions
-     style: "text-xs"
-     qux: (+ 1 2))
+     qux: (+ 1 2)
+     style: "text-xs")
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))
    ("" | "" () @user)))
@@ -1535,8 +1535,8 @@
     (button
      "+ Increment"
      @actions
-     style: "text-xs"
-     qux: (+ 1 2))
+     qux: (+ 1 2)
+     style: "text-xs")
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))))
  (after
@@ -1546,8 +1546,8 @@
     (button
      "+ Increment"
      @actions
-     style: "text-xs"
-     qux: (+ 1 2))
+     qux: (+ 1 2)
+     style: "text-xs")
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))))
  (after
@@ -1556,8 +1556,8 @@
     (button
      "+ Increment"
      @actions
-     style: "text-xs"
-     qux: (+ 1 2))
+     qux: (+ 1 2)
+     style: "text-xs")
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))
    ("" | "" () @user)
@@ -1576,8 +1576,8 @@
     (button
      "+ Increment"
      @actions
-     style: "text-xs"
-     qux: (+ 1 2))
+     qux: (+ 1 2)
+     style: "text-xs")
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))
    ("" | "" () @user)
@@ -1597,8 +1597,8 @@
     (button
      "+ Increment"
      @actions
-     style: "text-xs"
-     qux: (+ 1 2))
+     qux: (+ 1 2)
+     style: "text-xs")
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))
    key: (+ 100 ("" | "" () @user) fooze: (1 2))))
@@ -1608,8 +1608,8 @@
     (button
      "+ Increment"
      @actions
-     style: "text-xs"
-     qux: (+ 1 2))
+     qux: (+ 1 2)
+     style: "text-xs")
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))
    ("" | "" () @user)
@@ -1625,10 +1625,37 @@
     (button
      "+ Increment"
      @actions
-     style: "text-xs"
-     qux: (+ 1 2))
+     qux: (+ 1 2)
+     style: "text-xs")
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))
    ("" | "" () @user)
+   foo: " "
+   key: (+ 100 fooze: (1 2))))
+ (after
+  ((input "qux") (input ":") (input " "))
+  ((row
+    (button
+     "+ Increment"
+     @actions
+     qux: (+ 1 2)
+     style: "text-xs")
+    (button "- Decrement" @actions style: "text-lg")
+    (button "0 Reset" @actions style: "text-sm"))
+   foo: " "
    key: (+ 100 fooze: (1 2))
-   foo: " ")))
+   qux: ("" | "" () @user)))
+ (after
+  ((input "baz") (input " "))
+  ((row
+    (button
+     "+ Increment"
+     @actions
+     qux: (+ 1 2)
+     style: "text-xs")
+    (button "- Decrement" @actions style: "text-lg")
+    (button "0 Reset" @actions style: "text-sm"))
+   ("" | "" () @user)
+   foo: " "
+   key: (+ 100 fooze: (1 2))
+   qux: baz)))
