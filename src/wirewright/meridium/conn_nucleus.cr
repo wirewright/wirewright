@@ -1,6 +1,6 @@
 module Ww::Meridium
   # Activations are messages directed inward from termspace to conn, and from
-  # conn to its "nucleus", `Node`.
+  # conn to its "nucleus", `Nucleus`.
   alias Activation = StimulusPresence | StimulusAbsence | StimulusRequest | StimulusResponse | SecureStimulusPresence | SecureStimulusResponse
 
   defcase StimulusPresence, sensor : WWID, appearance : IWWID, stimulus : Term do
@@ -105,7 +105,7 @@ module Ww::Meridium
     end
   end
 
-  # Effects are messages directed outward from a conn's "nucleus" `Node` to that
+  # Effects are messages directed outward from a conn's "nucleus" `Nucleus` to that
   # conn, and then perhaps to the termspace.
   alias Effect = SurfaceAdded | SurfaceRemoved | ViewChanged | Replied | Subscribed | Unsubscribed
 
@@ -133,16 +133,16 @@ module Ww::Meridium
     include InspectToS
   end
 
-  # The "nucleus" of a `Conn` which implements all of its core behavior.
+  # The "nucleus" of a `Conn` that implements all of its core behavior.
   #
-  # The goal of `Node` is to handle `Activation`s coming from the connection that
+  # The goal of `Nucleus` is to handle `Activation`s coming from the connection that
   # it is enclosed in; and to produce `Effect`s that are in turn handled by
   # the enclosing connection.
   #
-  # Nodes maintain `view`s for their sensors.
+  # Nuclei maintain `view`s for their sensors.
   #
-  # Nodes are immutable for simplicity.
-  class Node
+  # Nuclei are immutable for simplicity.
+  class Conn::Nucleus
     # :nodoc:
     NO_REPLIES = Pf::Map(Slot, Pf::Set(Replied)).new
 
@@ -152,13 +152,13 @@ module Ww::Meridium
       Summoned
     end
 
-    # Returns the connection id of this node.
+    # Returns the connection id of this nucleus.
     getter conid : WWID
 
-    # Returns the curren state of this node.
+    # Returns the curren state of this nucleus.
     getter state : State
 
-    # Returns the current view of this node.
+    # Returns the current view of this nucleus.
     getter view : View
 
     def initialize(@conid : WWID)
@@ -179,7 +179,7 @@ module Ww::Meridium
 
     private def_change
 
-    # Returns `true` if this node contains no surfaces. Returns `false` otherwise.
+    # Returns `true` if this nucleus contains no surfaces. Returns `false` otherwise.
     def empty? : Bool
       @surfaces.empty?
     end
@@ -212,7 +212,7 @@ module Ww::Meridium
       end
     end
 
-    protected def insert(slot : Slot, surface : Surface) : Node
+    protected def insert(slot : Slot, surface : Surface) : Nucleus
       change(
         surfaces: @surfaces.assoc(slot, surface),
         instants: @instants.assoc(slot, @clock),
@@ -223,38 +223,38 @@ module Ww::Meridium
       )
     end
 
-    # Adjusts the state of this node to signal it's online now.
-    def online : Node
+    # Adjusts the state of this nucleus to signal it's online now.
+    def online : Nucleus
       change(state: @state | State::Online)
     end
 
-    # Adjusts the state of this node to signal it's offline now.
-    def offline : Node
+    # Adjusts the state of this nucleus to signal it's offline now.
+    def offline : Nucleus
       change(state: @state & ~State::Online, view: @view.clear, replies: NO_REPLIES)
     end
 
-    # Adjusts the state of this node to signal that it should join the termspace
+    # Adjusts the state of this nucleus to signal that it should join the termspace
     # now. Note that (obviously) it will join only if it is online. Otherwise it
     # will wait until it is online and only then join.
-    def summon : Node
+    def summon : Nucleus
       change(state: @state | State::Summoned)
     end
 
-    # Adjusts the state of this node to signal that it should leave the termspace
+    # Adjusts the state of this nucleus to signal that it should leave the termspace
     # now. If online, this will gracefully remove all appearances and notify everybody
-    # that the node left. If offline, this is a noop, since we assume offline to mean
+    # that the nucleus left. If offline, this is a noop, since we assume offline to mean
     # "connection and all associated state lost".
-    def dismiss : Node
+    def dismiss : Nucleus
       change(state: @state & ~State::Summoned, view: @view.clear, replies: NO_REPLIES)
     end
 
     # Updates or inserts the surface at *slot*. Returns the modified copy of `self`.
-    def put(slot : Slot, surface : Surface) : Node
+    def put(slot : Slot, surface : Surface) : Nucleus
       delete(slot).insert(slot, surface)
     end
 
     # Removes the surface at *slot*. Returns the modified copy of `self`.
-    def delete(slot : Slot) : Node
+    def delete(slot : Slot) : Nucleus
       return self unless surface = @surfaces[slot]?
 
       change(
@@ -267,7 +267,7 @@ module Ww::Meridium
 
     # Updates the view by excluding appearances not in the given *appearances*
     # set. Returns the modified copy of `self`.
-    def presence(slot : Slot, appearances : Set(WWID)) : Node
+    def presence(slot : Slot, appearances : Set(WWID)) : Nucleus
       unless surface = @surfaces[slot]?
         Log.debug { "presence was called for a slot that is absent" }
         return self
@@ -282,7 +282,7 @@ module Ww::Meridium
     end
 
     # :nodoc:
-    def receive(act : StimulusPresence | StimulusAbsence) : Node
+    def receive(act : StimulusPresence | StimulusAbsence) : Nucleus
       unless @conid == act.sensor.conid
         Log.debug { "reject stimulus presence: conid of #{act.sensor} != my #{@conid}" }
         return self
@@ -302,7 +302,7 @@ module Ww::Meridium
     end
 
     # :nodoc:
-    def receive(act : SecureStimulusPresence) : Node
+    def receive(act : SecureStimulusPresence) : Nucleus
       unless @conid == act.sensor.conid
         Log.debug { "reject secure stimulus presence: conid of #{act.sensor} != my #{@conid}" }
         return self
@@ -332,7 +332,7 @@ module Ww::Meridium
     end
 
     # :nodoc:
-    def receive(act : StimulusRequest) : Node
+    def receive(act : StimulusRequest) : Nucleus
       return self unless @state.online?
 
       unless @conid == act.appearance.conid
@@ -361,7 +361,7 @@ module Ww::Meridium
     end
 
     # :nodoc:
-    def receive(act : StimulusResponse | SecureStimulusResponse) : Node
+    def receive(act : StimulusResponse | SecureStimulusResponse) : Nucleus
       unless act.sensor.conid == @conid
         Log.debug { "reject stimulus response: conid of #{act.sensor} != my #{@conid}" }
         return self
@@ -388,12 +388,13 @@ module Ww::Meridium
     end
 
     {% if flag?(:docs) %}
-      # Handles the given activation *act*. Returns the modified copy of this node.
-      def receive(act : Activation) : Node
+      # Handles the given activation *act*. Returns the modified copy of
+      # this nucleus.
+      def receive(act : Activation) : Nucleus
       end
     {% end %}
 
-    protected def join(& : Effect ->) : Node
+    protected def join(& : Effect ->) : Nucleus
       yield Subscribed.new(@conid)
 
       @surfaces.each do |slot, surface|
@@ -403,7 +404,7 @@ module Ww::Meridium
       change(replies: NO_REPLIES)
     end
 
-    protected def leave(& : Effect ->) : Node
+    protected def leave(& : Effect ->) : Nucleus
       yield Unsubscribed.new(@conid)
 
       @surfaces.each do |slot, surface|
@@ -413,7 +414,7 @@ module Ww::Meridium
       change(replies: NO_REPLIES)
     end
 
-    protected def reply(& : Replied ->) : Node
+    protected def reply(& : Replied ->) : Nucleus
       @replies.each do |_, effects|
         effects.each { |effect| yield effect }
       end
@@ -421,10 +422,10 @@ module Ww::Meridium
       change(replies: NO_REPLIES)
     end
 
-    # Logically replaces `self` -- assumed to be an older, established node --
+    # Logically replaces `self` -- assumed to be an older, established nucleus --
     # with its *successor*. Yields any associated effects. Returns the modified
     # copy of *successor*.
-    def swap(successor : Node, & : Effect ->) : Node
+    def swap(successor : Nucleus, & : Effect ->) : Nucleus
       s0, s1 = @state, successor.@state
 
       # online | offline -> offline

@@ -235,6 +235,11 @@ module Ww::Meridium
   def secret_slice(secret : Nil) : Bytes
     Bytes[0]
   end
+
+  # Forward declare.
+
+  class Conn
+  end
 end
 
 # The order of requires here is that of most low level -> most high level components.
@@ -250,7 +255,7 @@ require "./meridium/appearance_registry"
 require "./meridium/surface"
 require "./meridium/secure"
 require "./meridium/view"
-require "./meridium/node"
+require "./meridium/conn_nucleus"
 require "./meridium/tspace"
 require "./meridium/conn"
 require "./meridium/tspace/*"

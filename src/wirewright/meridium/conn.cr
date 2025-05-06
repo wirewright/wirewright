@@ -1,10 +1,10 @@
 module Ww::Meridium
-  # A Meridium connection is a "shell" around a `Node` that lets it communicate with
+  # A Meridium connection is a "shell" around a `Nucleus` that lets it communicate with
   # and influence the outside world through a so-called *termspace* (see also: `Tspace`).
   #
   # We don't *actually* give connections direct access to a termspace; instead,
   # they can "book an appointment" with the termspace. Connections are a bit like
-  # workers in an office; and `Node` is their "brain". A connection can schedule
+  # workers in an office; and `Nucleus` is their "brain". A connection can schedule
   # a meeting with its "boss" -- the termspace; and report progress to it, whenever
   # the termspace decides to hear about it.
   #
@@ -41,7 +41,7 @@ module Ww::Meridium
     end
 
     def initialize(conid : WWID, @meetup : Tspace::IBookMeeting, @views : ViewStreamer)
-      @baseline = Node.new(conid)
+      @baseline = Nucleus.new(conid)
       @staging = @baseline
       @relook = {} of Slot => Channel(Nil)
       @lock = Mutex.new
@@ -296,7 +296,7 @@ module Ww::Meridium
     # cannot e.g. call this method recursively.
     def each(& : Slot, Surface ->) : Nil
       @lock.synchronize do
-        @node.each { |id, surface| yield id.slot, surface }
+        @staging.each { |id, surface| yield id.slot, surface }
       end
     end
 
@@ -339,15 +339,15 @@ module Ww::Meridium
     # Transaction object yielded by `transaction`.
     class Txn
       # :nodoc:
-      def initialize(@head : Node)
+      def initialize(@head : Nucleus)
       end
 
-      # See `Node#put`.
+      # See `Nucleus#put`.
       def put(slot : Slot, surface : Surface) : Nil
         @head = @head.put(slot, surface)
       end
 
-      # See `Node#delete`.
+      # See `Nucleus#delete`.
       def delete(slot : Slot) : Nil
         @head = @head.delete(slot)
       end
