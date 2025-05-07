@@ -447,14 +447,14 @@ module Ww::Meridium
 
       # online -> online
       if s0.summoned? && s1.summoned?
-        @surfaces.each do |slot, lhs|
-          next if lhs == successor.@surfaces[slot]?
-          yield SurfaceRemoved.new(iwwid(slot), lhs)
-        end
-
         successor.@surfaces.each do |slot, rhs|
           next if @surfaces[slot]? == rhs
           yield SurfaceAdded.new(successor.iwwid(slot), rhs)
+        end
+
+        @surfaces.each do |slot, lhs|
+          next if lhs == successor.@surfaces[slot]?
+          yield SurfaceRemoved.new(iwwid(slot), lhs)
         end
 
         successor.reply { |effect| yield effect }
