@@ -1095,7 +1095,7 @@ module Rhodium
         end
       end
 
-      givenpi %{[blast @pin_ to @pout_ stimulus capture_] (pulse @pin_ envs_dict) -1} do
+      givenpi %{[blast @pin_ to @pout_ percept capture_] (pulse @pin_ envs_dict) -1} do
         effect(document1, nodepath, node0, cursordepth) do
           envs.each_entry do |env, _|
             next unless value = env[capture]?
