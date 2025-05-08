@@ -255,6 +255,8 @@ module Ww::Meridium
 
     # Updates or inserts the surface at *slot*. Returns the modified copy of `self`.
     def put(slot : Slot, surface : Surface) : Nucleus
+      return self if surface == @surfaces[slot]?
+
       delete(slot).insert(slot, surface)
     end
 

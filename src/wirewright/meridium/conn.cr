@@ -42,8 +42,11 @@ module Ww::Meridium
       end
     end
 
-    def initialize(conid : WWID, @tspace : Tspace::IFrontend, @views : ViewStreamer)
-      @baseline = Nucleus.new(conid)
+    # Returns the id of this connection.
+    getter conid : WWID
+
+    def initialize(@conid : WWID, @tspace : Tspace::IFrontend, @views : ViewStreamer)
+      @baseline = Nucleus.new(@conid)
       @staging = @baseline
       @relook = {} of Slot => Channel(Nil)
       @lock = Mutex.new
@@ -51,11 +54,6 @@ module Ww::Meridium
 
     def self.new(*args, **kwargs, &views : View ->) : self
       new(*args, ViewStreamer.new(views), **kwargs)
-    end
-
-    # Returns the id of this connection.
-    def conid : WWID
-      @lock.synchronize { @staging.conid }
     end
 
     # Returns the latest view of the termspace for this connection.
@@ -137,7 +135,7 @@ module Ww::Meridium
         end
       end
 
-      Log.trace { "#{@staging.conid}: meeting resulted in #{effects.size} effect(s)" }
+      Log.trace { "#{@staging.conid}: meeting resulted in effect(s): #{effects.join(&.inspect)}" }
 
       manage(tspace, effects)
       push(tspace, effects)

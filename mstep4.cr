@@ -8,7 +8,10 @@ class Meridium::StepSpace
     @percepts = Term[]
     @percepts_lock = Mutex.new
 
+    @syncd = STATE0
+
     @state = STATE0
+    @goal = Atomic(Term::Dict?).new(nil)
 
     @surfaces = SetConn.new(WWID.new, tspace) do |view|
       @percepts_lock.synchronize do
@@ -19,18 +22,16 @@ class Meridium::StepSpace
             commit.with(spec, percepts.dict_multiset)
           end
         end
-      end
 
-      @alert.call
+        Log.info { "#{view.inspect} percepts = #{@percepts}" }
+        @alert.call
+      end
     end
   end
 
   delegate :connect, :disconnect, to: @surfaces
 
-  def sync(goal, & : Term, Term ->) : Term::Dict
-    state0 = @state
-    state1 = sanitize(goal)
-
+  def sync(goal : Term, & : Term, Term ->) : Term::Dict
     @percepts_lock.synchronize do
       @percepts.each_entry do |spec, mset|
         yield spec, mset
@@ -39,11 +40,52 @@ class Meridium::StepSpace
       @percepts = Term[]
     end
 
-    unless state0 == state1
-      sync!(state0, state1)
+    goal = sanitize(goal)
+
+    if needs_sync?(@syncd, goal)
+      sync(goal)
+      @syncd = goal
     end
 
-    @state = peek(state1)
+    peek(goal)
+  end
+
+  # NOTE: *syncd* must have been `sanitize`d.
+  # NOTE: *gooal* must have been `sanitize`d.
+  private def needs_sync?(syncd : Term::Dict, goal : Term::Dict)
+    sensors0, sensors1 = {syncd, goal}.map { |it| it[:sensors].as_d }
+    appearances0, appearances1 = {syncd, goal}.map { |it| it[:appearances].as_d }
+
+    unless {sensors0.size, appearances0.size} == {sensors1.size, appearances1.size}
+      return true
+    end
+
+    return true unless sensors0.ee.all? { |surface, _| surface.in?(sensors1) }
+    return true unless appearances0.ee.all? { |surface, _| surface.in?(appearances1) }
+
+    false
+  end
+
+  # NOTE: *goal* must have been `sanitize`d.
+  private def sync(goal)
+    # If previous was nil, there's no thread to sync. Spawn a thread to sync.
+    return if @goal.swap(goal, :release)
+
+    Log.trace { "spawn syncloop" }
+
+    spawn syncloop
+  end
+
+  private def syncloop : Nil
+    goal0 = @goal.get(:acquire)
+
+    while goal0
+      sync!(@state, goal0)
+      @state = goal0
+
+      goal0, ok = @goal.compare_and_set(goal0, nil, :release, :acquire)
+      break if ok
+    end
   end
 
   private def sanitize(goal : Term) : Term::Dict
@@ -92,8 +134,6 @@ class Meridium::StepSpace
       sync!(Sensor, state0[:sensors], state1[:sensors], txn)
       sync!(Appearance, state0[:appearances], state1[:appearances], txn)
     end
-
-    @state = state1
   end
 
   private def sync!(cls, surfaces0, surfaces1, txn)
@@ -108,6 +148,7 @@ class Meridium::StepSpace
     end
   end
 
+  # NOTE: *state* must have been `sanitize`d.
   private def peek(state : Term::Dict) : Term::Dict
     Term[sensors: peek(Sensor, state[:sensors].as_d), appearances: peek(Appearance, state[:appearances].as_d)]
   end

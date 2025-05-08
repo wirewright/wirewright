@@ -1353,9 +1353,9 @@ mstep.register(Term.of(:local), Meridium::StepSpace.new(local, alarm))
 
 OptionParser.parse do |parser|
   parser.banner = "Usage: soma [arguments]"
-  parser.on("-r TSADDR", "--remote=TSADDR", "Connects to a remote termspace (e.g.: tcp/qux:0.0.0.0:9810, unix/foo:/path/to/file.sock)") do |tsaddr|
+  parser.on("-r TSADDR", "--remote=TSADDR", "Connects to a remote termspace (e.g.: qux@tcp:0.0.0.0:9810, foo@unix:/path/to/file.sock)") do |tsaddr|
     case tsaddr
-    when /tcp\/(?<name>[a-z]\w*):(?<host>\d+(?:\.\d+){3}):(?<port>\d+)/
+    when /(?<name>[a-z]\w*)@tcp:(?<host>\d+(?:\.\d+){3}):(?<port>\d+)/
       unless Socket::IPAddress.valid_v4?($~["host"]) && Socket::IPAddress.valid_port?($~["port"].to_i)
         STDERR.puts "invalid TSADDR #{tsaddr}"
         STDERR.puts parser
@@ -1363,7 +1363,7 @@ OptionParser.parse do |parser|
       end
       remote = Meridium::Tspace::Axis.new { TCPSocket.new($~["host"], $~["port"].to_i) }
       name = Term::Sym.new($~["name"])
-    when /unix\/(?<name>[a-z]\w*):(?<path>.+)/
+    when /(?<name>[a-z]\w*)@unix:(?<path>.+)/
       remote = Meridium::Tspace::Axis.new { UNIXSocket.new($~["path"]) }
       name = Term::Sym.new($~["name"])
     else
@@ -1381,13 +1381,6 @@ OptionParser.parse do |parser|
     abort
   end
 end
-
-# if ARGV[0]? == "join"
-#   remote = Meridium::Tspace::Axis.new { TCPSocket.new("0.0.0.0", 9810) }
-#   MT.spawn { remote.connect }
-
-#   mstep.register(Term.of(:remote), Meridium::StepSpace.new(remote, alarm))
-# end
 
 seed = welcome
 draw_chan = Channel({Term::Dict, Channel(Term::Dict)}).new
