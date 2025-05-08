@@ -8,9 +8,10 @@ module Ww::Meridium
   # hub and spokes model; and beyond to distributed (e.g. through consensus) or even
   # emergent models.
   module Tspace
-    module IBookMeeting
-      # Books a meeting of *meetable* with a termspace.
+    module IFrontend
       abstract def book(meetable : Tspace::Meetable) : Nil
+      abstract def connect(conn : IConn) : Nil
+      abstract def disconnect(conn : IConn) : Nil
     end
 
     # WARNING: This method is guaranteed to be thread-safe.

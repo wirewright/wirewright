@@ -16,10 +16,10 @@
   (pulse pout "sink for items"))
 
 (variant blast
-  (pulse pin "sensor stimuli")
+  (pulse pin "sensor percepts")
   (comma to)
   (pulse pout "sink for capture values")
-  (comma stimulus)
+  (comma percept)
   (literal capture "name of the capture that should be extracted"))
 
 (group button "Triggers a pulse when clicked")
@@ -383,7 +383,7 @@
   (comma in)
   (literal tspace "termspace id")
   (comma to)
-  (pulse stimuli "sink for match env multisets"))
+  (pulse percepts "sink for match env multisets"))
 
 (node appearance "Excites sensors in a termspace by showing them a value of some kind"
   (literal value "value to show to sensors")

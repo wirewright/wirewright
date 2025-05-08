@@ -18,8 +18,11 @@ module Ww::Meridium
   #
   # See also: `Percept`.
   struct PerceptData
+    # Returns the surface associated with this object.
+    getter surface : Sensor
+
     # :nodoc:
-    def initialize(@percepts = Pf::Map(WWID, Percept).new)
+    def initialize(@surface : Sensor, @percepts = Pf::Map(WWID, Percept).new)
     end
 
     private def_change
@@ -30,7 +33,7 @@ module Ww::Meridium
     end
 
     # :nodoc:
-    def after(surface : Sensor, act : StimulusPresence) : {PerceptData, Bool}
+    def after(act : StimulusPresence) : {PerceptData, Bool}
       if percept = @percepts[act.appearance.wwid]?
         # Make sure WE are outdated, not act.
         unless percept.instant < act.appearance.instant
@@ -41,7 +44,7 @@ module Ww::Meridium
         features0 = percept.features
       end
 
-      features1 = M1.matches(surface.pattern, act.stimulus)
+      features1 = M1.matches(@surface.pattern, act.stimulus)
 
       # If there is a pattern mismatch, and we've previously known the appearance,
       # this means the appearance changed its value to something we don't like
@@ -56,7 +59,7 @@ module Ww::Meridium
     end
 
     # :nodoc:
-    def after(surface : Sensor, act : StimulusAbsence) : {PerceptData, Bool}
+    def after(act : StimulusAbsence) : {PerceptData, Bool}
       unless percept = @percepts[act.appearance.wwid]?
         return self, false
       end
@@ -71,17 +74,17 @@ module Ww::Meridium
     end
 
     {% if flag?(:docs) %}
-      # Registers the activation *act* targeted at the given sensor *surface*.
-      # Returns the resulting copy of this object, followed by a boolean indicating
-      # whether some percept changed due to *act*.
-      def after(surface : Sensor, act : StimulusPresence | StimulusAbsence) : {PerceptData, Bool}
+      # Registers the activation *act* targeted at the sensor associated with
+      # this object. Returns the resulting copy of this object, followed by
+      # a boolean indicating whether some percept changed due to *act*.
+      def after(act : StimulusPresence | StimulusAbsence) : {PerceptData, Bool}
       end
     {% end %}
 
     # Updates this object according to an exhaustive set of *appearances*
-    # perceived by the given sensor *surface*; in other words, removes all
-    # perceived appearances **not** in the *appearances* set.
-    def presence(surface : Sensor, appearances : Set(WWID)) : {PerceptData, Bool}
+    # perceived by the sensor associated with this object; in other words,
+    # removes all perceived appearances **not** in the *appearances* set.
+    def presence(appearances : Set(WWID)) : {PerceptData, Bool}
       percepts1 = @percepts.select { |id, _| id.in?(appearances) }
 
       {change(percepts: percepts1), @percepts != percepts1}
@@ -126,7 +129,7 @@ module Ww::Meridium
     #
     # This is necessary to begin perceiving stimuli.
     def register(slot : Slot, surface : Sensor) : View
-      map1 = @map.assoc(slot, PerceptData.new)
+      map1 = @map.assoc(slot, PerceptData.new(surface))
       map1.same?(@map) ? self : change(map: map1, version: @version + 1)
     end
 
@@ -143,13 +146,13 @@ module Ww::Meridium
     # set of *appearances* it perceives at the moment. Returns the resulting
     # copy of this view.
     def presence(slot : Slot, surface : Sensor, appearances : Set(WWID)) : View
-      unless stimuli0 = @map[slot]?
+      unless percepts0 = @map[slot]?
         return self
       end
 
-      stimuli1, changed = stimuli0.presence(surface, appearances)
+      percepts1, changed = percepts0.presence(appearances)
 
-      change(map: @map.assoc(slot, stimuli1), version: changed ? @version + 1 : @version)
+      change(map: @map.assoc(slot, percepts1), version: changed ? @version + 1 : @version)
     end
 
     # Registers the activation *act* targeted at the given sensor *surface*.
@@ -157,19 +160,19 @@ module Ww::Meridium
     def after(surface : Sensor, act : StimulusPresence | StimulusAbsence) : View
       slot = act.sensor.slot
 
-      unless stimuli0 = @map[slot]?
-        Log.trace { "stimuli absent for sensor #{slot}" }
+      unless percepts0 = @map[slot]?
+        Log.trace { "percepts absent for sensor #{slot}" }
         return self
       end
 
-      stimuli1, changed = stimuli0.after(surface, act)
+      percepts1, changed = percepts0.after(act)
 
-      change(map: @map.assoc(slot, stimuli1), version: changed ? @version + 1 : @version)
+      change(map: @map.assoc(slot, percepts1), version: changed ? @version + 1 : @version)
     end
 
     # Clears all percept data objects. Returns the modified copy of this view.
     def clear : View
-      map1 = @map.map_value { PerceptData.new }
+      map1 = @map.map_value { |percepts| PerceptData.new(percepts.surface) }
       map1.same?(@map) ? self : change(map: map1, version: @version + 1)
     end
 
@@ -177,10 +180,10 @@ module Ww::Meridium
     # perceived by the sensor at that slot.
     def dict_multisets : Term::Dict
       Term::Dict.build do |commit|
-        each do |slot, stimuli|
-          next if stimuli.absent?
+        each do |slot, percepts|
+          next if percepts.absent?
 
-          commit.with(slot, stimuli.dict_multiset)
+          commit.with(slot, percepts.dict_multiset)
         end
       end
     end

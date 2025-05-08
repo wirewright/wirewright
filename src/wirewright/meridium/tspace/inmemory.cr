@@ -29,7 +29,7 @@ module Ww::Meridium
   # conn.offline
   # ```
   class Tspace::InMemory
-    include Tspace::IBookMeeting
+    include Tspace::IFrontend
 
     @atoms = {} of Atom => UInt32
     @routes = {} of WWID => IConn
@@ -39,6 +39,16 @@ module Ww::Meridium
       @lock.synchronize do
         meetable.meet(Face.new(@atoms, @routes))
       end
+    end
+
+    def connect(conn : IConn) : Nil
+      conn.online
+      conn.summon
+    end
+
+    def disconnect(conn : IConn) : Nil
+      conn.dismiss
+      conn.offline
     end
 
     # :nodoc:

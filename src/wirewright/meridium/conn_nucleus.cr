@@ -466,7 +466,7 @@ module Ww::Meridium
         successor
       end
     ensure
-      unless @view.version == successor.@view.version
+      if @view.version != successor.@view.version || @state != successor.@state
         yield ViewChanged.new(successor.@view)
       end
     end

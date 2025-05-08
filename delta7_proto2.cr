@@ -700,12 +700,12 @@ module Rhodium
         givenpi %{[sensor pattern_ in tspace_symbol to @_] (initialize _) -1} do
           secret = node0[:secret]?
 
-          {document1.morph({Tspaces, tspace, :sensors, {pattern, secret}, false}), true}
+          {document1.morph({Tspaces, tspace, :sensors, {query: pattern, secret: secret}, false}), true}
         end
 
         givenpi(
-          %{[sensor pattern_ in tspace_ to @pout_] (stimuli tspace_ (pattern_) multiset_) -1},
-          %{(sensor pattern_ in tspace_ to @pout_ ¦ _ secret_) (stimuli tspace_ (pattern_ secret_) multiset_) -1},
+          %{[sensor pattern_ in tspace_ to @pout_] (percepts tspace_ {query: pattern_} multiset_dict) -1},
+          %{(sensor pattern_ in tspace_ to @pout_ ¦ _ secret_) (percepts tspace_ {query: pattern_ secret: secret_} multiset_dict) -1},
         ) do
           effect(document1, nodepath, node0, cursordepth) do
             event :pulse, pout, multiset
@@ -717,7 +717,7 @@ module Rhodium
         givenpi %{[appearance value_ in tspace_symbol] (initialize _) -1} do
           secret = node0[:secret]?
 
-          {document1.morph({Tspaces, tspace, :appearances, {value, secret}, false}), true}
+          {document1.morph({Tspaces, tspace, :appearances, {value: value, secret: secret}, false}), true}
         end
       end
 
@@ -1563,19 +1563,19 @@ module Rhodium
       end
 
       matchpi %{(sensor tspace_ pattern_)} do
-        document1.morph({Tspaces, tspace, :sensors, {pattern}, nil})
+        document1.morph({Tspaces, tspace, :sensors, {query: pattern}, nil})
       end
 
       matchpi %{(sensor tspace_ pattern_ secret_)} do
-        document1.morph({Tspaces, tspace, :sensors, {pattern, secret}, nil})
+        document1.morph({Tspaces, tspace, :sensors, {query: pattern, secret: secret}, nil})
       end
 
       matchpi %{(appearance tspace_ value_)} do
-        document1.morph({Tspaces, tspace, :appearances, {value}, nil})
+        document1.morph({Tspaces, tspace, :appearances, {value: value}, nil})
       end
 
       matchpi %{(appearance tspace_ value_ secret_)} do
-        document1.morph({Tspaces, tspace, :appearances, {value, secret}, nil})
+        document1.morph({Tspaces, tspace, :appearances, {value: value, secret: secret}, nil})
       end
 
       otherwise { document1 }

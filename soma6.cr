@@ -1,8 +1,9 @@
+require "option_parser"
 require "./src/wirewright"
 require "./uiRb"
 require "./sfpaint"
 require "./pprint2"
-# require "./mstep3"
+require "./mstep4"
 # require "./surfsrv"
 
 alias UIR::Platform::Current = SFML
@@ -432,28 +433,14 @@ module D7VR
 
       matchpi %{[sensor pattern_ in tspace_symbol to @_]} do
         continue if Rhodium.cursor_in_node?(document0, nodepath)
-        continue unless in_sync = document0[Rhodium::Tspaces, tspace, :sensors, {pattern}]?
-
-        node1 = node1.morph({:"#status", in_sync.true?})
-      end
-
-      matchpi %{(sensor pattern_ in tspace_symbol to @_ ¦ _ secret_)} do
-        continue if Rhodium.cursor_in_node?(document0, nodepath)
-        continue unless in_sync = document0[Rhodium::Tspaces, tspace, :sensors, {pattern, secret}]?
+        continue unless in_sync = document0[Rhodium::Tspaces, tspace, :sensors, {query: pattern, secret: node0[:secret]?}]?
 
         node1 = node1.morph({:"#status", in_sync.true?})
       end
 
       matchpi %{[appearance value_ in tspace_symbol]} do
         continue if Rhodium.cursor_in_node?(document0, nodepath)
-        continue unless in_sync = document0[Rhodium::Tspaces, tspace, :appearances, {value}]?
-
-        node1 = node1.morph({:"#status", in_sync.true?})
-      end
-
-      matchpi %{(appearance value_ in tspace_symbol ¦ _ secret_)} do
-        continue if Rhodium.cursor_in_node?(document0, nodepath)
-        continue unless in_sync = document0[Rhodium::Tspaces, tspace, :appearances, {value, secret}]?
+        continue unless in_sync = document0[Rhodium::Tspaces, tspace, :appearances, {value: value, secret: node0[:secret]?}]?
 
         node1 = node1.morph({:"#status", in_sync.true?})
       end
@@ -767,7 +754,7 @@ class Document
   @rem1 : Term::Num
   @mouse : {Term::Num, Term::Num}
 
-  def initialize(@title : String, @draw : Channel({Term::Dict, Channel(Term::Dict)})) # , @mstep : Meridium::Step)
+  def initialize(@title : String, @draw : Channel({Term::Dict, Channel(Term::Dict)}), @mstep : Meridium::Step)
     @document_thread = Fiber::ExecutionContext::SingleThreaded.new(@title)
 
     @mailbox = Mailbox.new
@@ -839,7 +826,7 @@ class Document
     @document = D7.run(@document,
       log: D7::Log::None.new,
       transition: Rhodium.transition,
-      step: D7.steps(rendezvous, Rhodium.step, Nitrene.step(@nictx)), # @mstep.fn),
+      step: D7.steps(rendezvous, Rhodium.step, Nitrene.step(@nictx), @mstep.fn),
       goal: D7::Goal.none,
       initial: initial,
     )
@@ -1340,24 +1327,72 @@ welcome = ML.dict <<-WWML
 WWML
 
 test = ML.dict <<-WWML
-(frag (h1 "hello") @qux visible: false)
+(sensor x_number in local to @xs)
+(appearance 100 in local)
 
 ("" | "" () @user)
 WWML
 
-seed = welcome
+if ARGV[0]? == "host-tcp"
+  start, stop = Meridium::Axis::Server.control { TCPServer.new("0.0.0.0", ARGV[1].to_i) }
+  start.call
+  sleep
+end
 
-draw_chan = Channel({Term::Dict, Channel(Term::Dict)}).new
+docs = [] of Document
+docs_lock = Mutex.new
 
-# mstep = Meridium::Step.new
-doc = Document.new("Untitled", draw_chan) # , mstep)
-# alert = ->doc.alarm
-# mstep.register(Term.of(:local), Meridium::Space.local(alert: alert))
+mstep = Meridium::Step.new
+alarm = -> { docs_lock.synchronize { docs.each(&.alarm) } }
+
+# Register local termspace
+local = Meridium::Tspace::InMemory.new
+mstep.register(Term.of(:local), Meridium::StepSpace.new(local, alarm))
+
+# Register user-provided remote termspaces.
+
+OptionParser.parse do |parser|
+  parser.banner = "Usage: soma [arguments]"
+  parser.on("-r TSADDR", "--remote=TSADDR", "Connects to a remote termspace (e.g.: tcp/qux:0.0.0.0:9810, unix/foo:/path/to/file.sock)") do |tsaddr|
+    case tsaddr
+    when /tcp\/(?<name>[a-z]\w*):(?<host>\d+(?:\.\d+){3}):(?<port>\d+)/
+      unless Socket::IPAddress.valid_v4?($~["host"]) && Socket::IPAddress.valid_port?($~["port"].to_i)
+        STDERR.puts "invalid TSADDR #{tsaddr}"
+        STDERR.puts parser
+        abort
+      end
+      remote = Meridium::Tspace::Axis.new { TCPSocket.new($~["host"], $~["port"].to_i) }
+      name = Term::Sym.new($~["name"])
+    when /unix\/(?<name>[a-z]\w*):(?<path>.+)/
+      remote = Meridium::Tspace::Axis.new { UNIXSocket.new($~["path"]) }
+      name = Term::Sym.new($~["name"])
+    else
+      STDERR.puts "invalid TSADDR #{tsaddr}"
+      STDERR.puts parser
+      abort
+    end
+    at_exit { remote.disconnect }
+    MT.spawn { remote.connect }
+    mstep.register(Term.of(name), Meridium::StepSpace.new(remote, alarm))
+  end
+  parser.invalid_option do |flag|
+    STDERR.puts "#{flag} is not a valid option"
+    STDERR.puts parser
+    abort
+  end
+end
+
 # if ARGV[0]? == "join"
-#   server = RemoteSurfnetServer.new("0.0.0.0", 9810)
-#   mstep.register(Term.of(:remote), Meridium::Space.remote(server, alert: alert, keepalive: Keepalive::Continuous.new(30.seconds), relook: Relook::Periodic.new))
+#   remote = Meridium::Tspace::Axis.new { TCPSocket.new("0.0.0.0", 9810) }
+#   MT.spawn { remote.connect }
+
+#   mstep.register(Term.of(:remote), Meridium::StepSpace.new(remote, alarm))
 # end
 
+seed = welcome
+draw_chan = Channel({Term::Dict, Channel(Term::Dict)}).new
+doc = Document.new("Untitled", draw_chan, mstep)
+docs_lock.synchronize { docs << doc }
 doc.send(Term.of(:open, seed))
 
 frame = ML.term <<-WWML

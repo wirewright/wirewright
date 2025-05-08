@@ -79,7 +79,7 @@ module Ww::Meridium
   # tspace.disconnect
   # ```
   class Tspace::Axis
-    include Tspace::IBookMeeting
+    include Tspace::IFrontend
 
     Log = ::Log.for(self)
 
@@ -133,21 +133,21 @@ module Ww::Meridium
     end
 
     # Subscribes *conn* to notifications about `status`.
-    def subscribe(conn : IConn) : Nil
+    def connect(conn : IConn) : Nil
       online = @lock.synchronize do
         @subscribers << conn
         @running && @status.online?
       end
 
-      if online
-        conn.online
-      end
+      conn.online if online
+      conn.summon
     end
 
     # Unsubscribes *conn* from notifications about `status`.
-    def unsubscribe(conn : IConn) : Nil
+    def disconnect(conn : IConn) : Nil
       @lock.synchronize { @subscribers.delete(conn) }
 
+      conn.dismiss
       conn.offline
     end
 

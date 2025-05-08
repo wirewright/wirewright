@@ -42,7 +42,7 @@ module Ww::Meridium
       end
     end
 
-    def initialize(conid : WWID, @meetup : Tspace::IBookMeeting, @views : ViewStreamer)
+    def initialize(conid : WWID, @tspace : Tspace::IFrontend, @views : ViewStreamer)
       @baseline = Nucleus.new(conid)
       @staging = @baseline
       @relook = {} of Slot => Channel(Nil)
@@ -86,7 +86,7 @@ module Ww::Meridium
     # This method is called from the relook fiber. Here the relook fiber requests
     # rendezvous with the termspace fiber, through `Relook`.
     private def relook(slot : Slot, surface : Sensor) : Nil
-      @meetup.book(Relook.new(self, slot, surface))
+      @tspace.book(Relook.new(self, slot, surface))
     end
 
     # :nodoc:
@@ -310,7 +310,7 @@ module Ww::Meridium
     # to talk and nothing in particular failed during the process.
     def sync?(slot : Slot) : Bool
       @lock.synchronize do
-        return false unless @staging.state.online?
+        return false unless @baseline.state.online? && @staging.state.online?
         return false unless x = @baseline[slot]?
         return false unless y = @staging[slot]?
 
@@ -323,7 +323,7 @@ module Ww::Meridium
       Log.trace { "#{conid}: summoned" }
 
       @lock.synchronize { @staging = @staging.summon }
-      @meetup.book(self)
+      @tspace.book(self)
     end
 
     # Removes the surfaces of this connection from the termspace.
@@ -331,14 +331,14 @@ module Ww::Meridium
       Log.trace { "#{conid}: dismissed" }
 
       @lock.synchronize { @staging = @staging.dismiss }
-      @meetup.book(self)
+      @tspace.book(self)
     end
 
     def online : Nil
       Log.trace { "#{conid}: online" }
 
       @lock.synchronize { @staging = @staging.online }
-      @meetup.book(self)
+      @tspace.book(self)
     end
 
     def offline : Nil
@@ -352,6 +352,14 @@ module Ww::Meridium
       end
 
       @views.send(view)
+    end
+
+    def connect : Nil
+      @tspace.connect(self)
+    end
+
+    def disconnect : Nil
+      @tspace.disconnect(self)
     end
 
     class Txn
@@ -388,7 +396,7 @@ module Ww::Meridium
 
       Log.trace { "#{conid}: transaction: book a meeting with tspace" }
 
-      @meetup.book(self)
+      @tspace.book(self)
     end
   end
 end

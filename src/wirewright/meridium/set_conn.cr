@@ -46,8 +46,8 @@ module Ww::Meridium
 
     # You can optionally specify this set conn's *slot pool capacity*. Free slots
     # will be "burned" once this capacity is exceeded.
-    def initialize(conid : WWID, meetup : Tspace::IBookMeeting, views : View ->, @slotcap = DEFAULT_SLOT_POOL_CAPACITY)
-      @conn = Conn.new(conid, meetup, &views)
+    def initialize(conid : WWID, tspace : Tspace::IFrontend, views : View ->, @slotcap = DEFAULT_SLOT_POOL_CAPACITY)
+      @conn = Conn.new(conid, tspace, &views)
       @fresh = Slot.new(0)
       @free = Set(Slot).new
       @encoding = Bimap(Surface, Slot).new
@@ -59,7 +59,7 @@ module Ww::Meridium
     end
 
     # Delegates to the underlying `Conn`.
-    delegate :summon, :dismiss, :online, :offline, to: @conn
+    delegate :summon, :dismiss, :online, :offline, :connect, :disconnect, to: @conn
 
     private def acquire_slot : Slot
       if slot = @free.first?
@@ -92,7 +92,7 @@ module Ww::Meridium
     end
 
     protected def unbind(surface : Surface) : Slot?
-      return unless slot = @encoding.delete(identity)
+      return unless slot = @encoding.delete(surface)
 
       release_slot(slot)
 
@@ -135,7 +135,7 @@ module Ww::Meridium
 
       # Removes *surface* from the set conn.
       def delete(surface : Surface) : Nil
-        slot = @owner.unbind(surface)
+        return unless slot = @owner.unbind(surface)
 
         @conn.delete(slot)
       end
@@ -149,14 +149,9 @@ module Ww::Meridium
     end
 
     def pretty_print(pp)
-      unless @open
-        pp.text("SetConn{<closed>}")
-        return
-      end
-
-      @encoding_lock.synchronize do
-        pp.list("SetConn{", @encoding, "}") do |identity, _|
-          identity.pretty_print(pp)
+      @lock.synchronize do
+        pp.list("SetConn{", @encoding, "}") do |surface, _|
+          surface.pretty_print(pp)
         end
       end
     end
