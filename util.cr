@@ -712,6 +712,18 @@ class Stack(T)
     pp.list("Stack[", self, "]")
   end
 
+  def inspect(io)
+    io << "Stack["
+    @stack.to_slice(@size).join(", ") do |el|
+      el.inspect(io)
+    end
+    io << "]"
+  end
+
+  def to_s(io)
+    inspect(io)
+  end
+
   def ==(other : Stack(T)) : Bool
     equals?(other) { |a, b| a == b }
   end

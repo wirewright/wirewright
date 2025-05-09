@@ -489,7 +489,7 @@ module Rhodium
     Term.case({node0, event, cursordepth}) do
       # cell
       begin
-        givenpi %{[cell v_ @cout_] (initialize _) -1} do
+        givenpi %{[cell v_ @cout_] (initialize _ () _) -1} do
           effect(document1, nodepath, node0, cursordepth) do
             event :"cell/created", cout, v
             cell cout, v
@@ -543,7 +543,7 @@ module Rhodium
 
       # frag
       begin
-        givenpi %{[frag v_ @cout_] (initialize (frag @_)) _} do
+        givenpi %{[frag v_ @cout_] (initialize (frag @_) () _) _} do
           effect(document1, nodepath, node0, cursordepth) do
             event :"cell/created", cout, v
             cell cout, v
@@ -697,7 +697,7 @@ module Rhodium
 
       # Sensors and appearances
       begin
-        givenpi %{[sensor pattern_ in tspace_symbol to @_] (initialize _) -1} do
+        givenpi %{[sensor pattern_ in tspace_symbol to @_] (initialize _ () _) -1} do
           secret = node0[:secret]?
 
           {document1.morph({Tspaces, tspace, :sensors, {query: pattern, secret: secret}, false}), true}
@@ -714,7 +714,7 @@ module Rhodium
           end
         end
 
-        givenpi %{[appearance value_ in tspace_symbol] (initialize _) -1} do
+        givenpi %{[appearance value_ in tspace_symbol] (initialize _ () _) -1} do
           secret = node0[:secret]?
 
           {document1.morph({Tspaces, tspace, :appearances, {value: value, secret: secret}, false}), true}
@@ -986,8 +986,8 @@ module Rhodium
 
         # With pattern
         givenpi(
-          %{[initial (@_ _ to @_)] (initialize _) -1},
-          %{[initial (@_ _ to @_) _] (initialize _) -1},
+          %{[initial (@_ _ to @_)] (initialize _ () _) -1},
+          %{[initial (@_ _ to @_) _] (initialize _ () _) -1},
         ) do
           effect(document1, nodepath, node0, cursordepth) do
             change "#shadow": {:"%literal", node0.itemspart}, "#fired": false
@@ -1043,7 +1043,7 @@ module Rhodium
       # Absence node
       begin
         # Initialize `absence` to newborn state.
-        givenpi %{[absence @_ as _ to @_] (initialize _) -1} do
+        givenpi %{[absence @_ as _ to @_] (initialize _ () _) -1} do
           effect(document1, nodepath, node0, cursordepth) do
             change "#shadow": {:"%literal", node0.itemspart}, "#state": :newborn
 
@@ -1230,7 +1230,7 @@ module Rhodium
         end
 
         # Send feedback busy. Schedule job.
-        givenpi %{(transform _* ¦ _ #spec: {¦ in: @pin_} #job: job_) (initialize _) -1} do
+        givenpi %{(transform _* ¦ _ #spec: {¦ in: @pin_} #job: job_) (initialize _ () _) -1} do
           effect(document1, nodepath, node0, cursordepth) do
             schedule job
 
@@ -1251,7 +1251,7 @@ module Rhodium
       end
 
       # Stateful transform
-      givenpi %{[transform (@pin_ to @pout_ with state_) body_] (initialize _) -1} do
+      givenpi %{[transform (@pin_ to @pout_ with state_) body_] (initialize _ () _) -1} do
         effect(document1, nodepath, node0, cursordepth) do
           change "#shadow": {:"%literal", node0.itemspart}, "#spec": {in: pin, out: pout, state: state, body: body}
 
@@ -1260,7 +1260,7 @@ module Rhodium
       end
 
       # Stateless transform
-      givenpi %{[transform (@pin_ to @pout_) body_] (initialize _) -1} do
+      givenpi %{[transform (@pin_ to @pout_) body_] (initialize _ () _) -1} do
         effect(document1, nodepath, node0, cursordepth) do
           change "#shadow": {:"%literal", node0.itemspart}, "#spec": {in: pin, out: pout, body: body}
 
@@ -1269,7 +1269,7 @@ module Rhodium
       end
 
       # Stateless filter transform
-      givenpi %{[transform (@pin_ pattern_ to @pout_) body_] (initialize _) -1} do
+      givenpi %{[transform (@pin_ pattern_ to @pout_) body_] (initialize _ () _) -1} do
         effect(document1, nodepath, node0, cursordepth) do
           change "#shadow": {:"%literal", node0.itemspart}, "#spec": {in: pin, out: pout, filter: pattern, body: body}
 
@@ -1278,7 +1278,7 @@ module Rhodium
       end
 
       # Stateful filter transform
-      givenpi %{[transform (@pin_ pattern_ to @pout_ with state_) body_] (initialize _) -1} do
+      givenpi %{[transform (@pin_ pattern_ to @pout_ with state_) body_] (initialize _ () _) -1} do
         effect(document1, nodepath, node0, cursordepth) do
           change "#shadow": {:"%literal", node0.itemspart}, "#spec": {in: pin, out: pout, filter: pattern, state: state, body: body}
 
@@ -1544,7 +1544,9 @@ module Rhodium
   # violate semantics, introducing order-dependence of reads (since *document1* is possibly
   # only partially modified whenever you get hold of it). *document0* is read-only and
   # *document1* is write-only.
-  def expel(document0 : Term::Dict, document1 : Term::Dict, identity : Term) : Term::Dict
+  def expel(document0 : Term::Dict, document1 : Term::Dict, identity : Term, successors : Term::Dict) : Term::Dict
+    return document1 unless successors.empty?
+
     Term.case(identity) do
       matchpi %{(cell @cout_)}, %{(frag @cout_)} do
         document1 = document1.morph({Cells, cout, nil})
@@ -1621,12 +1623,12 @@ module Rhodium
       initialize_queue = initialize_queue.dequeue
 
       Term.case(head) do
-        matchpi %{((steps_number+) identity_)} do
+        matchpi %{((steps_number+) identity_ preds_ family_)} do
           next unless keypath = keypath?(document0, steps.items)
 
           document1 = initialize_queue.commit(document0, Initialize)
 
-          return handle(document0, document1, keypath, Term.of(:initialize, identity))
+          return handle(document0, document1, keypath, Term.of(:initialize, identity, preds, family))
         end
 
         otherwise { }
@@ -1736,41 +1738,57 @@ module Rhodium
     population0 = document0[Population]? || Term[]
     population1 = Term[]
 
-    document2 = document1
-
+    # Carry identities of existing nodes into population1.
     while successor?(document1, nodepath)
+      # FIXME: We should probably either have a successor? variant that emits dicts,
+      # or just have successor? emit dicts. I suppose we may be wasting a lot of time
+      # converting back and forth this way.
+      nodepath_dict = Term[nodepath]
+
       node = follow(document1, nodepath)
       cursordepth = cursordepth_in_node(document1, nodepath)
 
-      # Ask each node for its identity. If it has one, we do this population thing.
-      # It it does not, we ignore the node and move on.
       each_identity(node, cursordepth) do |identity|
-        if identity.in?(population0)
-          # Prolong
-          population0 = population0.without(identity)
-          population1 = population1.with(identity, true)
-        elsif !identity.in?(population1)
-          # Initialize
-          document2 = Q.of(document2, Initialize).enqueue({nodepath, identity}).commit(document2, Initialize)
-          population1 = population1.with(identity, true)
-        end
+        population1 = population1.morph({identity, nodepath_dict, true})
       end
     end
 
-    population0.each_entry do |identity, _|
-      # Handle controlled expulsion, when the node wants itself to disappear
-      # without anyone knowing. The node removes itself and marks its identity
-      # as `false` in population1. We see that its identity is indeed absent
-      # from document1 at this point (if there are duplicates we'll never reach
-      # this check since the duplicates will override with their existence);
-      # and also see the `false` mark, meaning the node's disappearance
-      # was controlled.
-      next if document1[Population, identity]? == Term[false]
+    document2 = document1
 
-      # Expel. Note that this cannot be an event, because in fact, there's no node
-      # to send it to; only to that node's identity, its "ghost"; the document's
-      # "memory" of the node.
-      document2 = expel(document0, document2, identity)
+    # Expel
+    population0.each_entry do |identity, loci|
+      succs = (population1[identity]? || Term.of).as_d
+
+      loci.each_entry do |locus, vocal|
+        next if population1[identity, locus]?
+
+        # Handle controlled expulsion, when the node wants itself to disappear
+        # without anyone knowing. The node removes itself and marks its identity
+        # as `false` in population1. We see that its identity is indeed absent
+        # from document1 at this point (if there are duplicates we'll never reach
+        # this check since the duplicates will override with their existence);
+        # and also see the `false` mark, meaning the node's disappearance
+        # was controlled.
+        next if vocal.false?
+
+        # Expel. Note that this cannot be an event, because in fact, there's no node
+        # to send it to; only to that node's identity, its "ghost"; the document's
+        # "memory" of the node.
+        document2 = expel(document0, document2, identity, succs)
+      end
+    end
+
+    # Initialize
+    population1.each_entry do |identity, loci|
+      preds = (population0[identity]? || Term.of).as_d
+
+      loci.each_entry do |locus, _|
+        next if population0[identity, locus]?
+
+        document2 = Q.of(document2, Initialize)
+          .enqueue({locus, identity, preds, loci})
+          .commit(document2, Initialize)
+      end
     end
 
     document2.morph({Population, population1})
@@ -2667,12 +2685,11 @@ end
 # end
 
 # doc0 = ML.terms <<-WWML
-#     (cell "hello" @x)
-#      (initial (@x _number) to @xs)
-#      (delay 1 (event (assign @x 100)))
-#      (delay 2 (event (assign @x 200)))
-#      (log @xs in ())
-
+# (decay 10 (cell "a" @x))
+# (decay 1 (cell "b" @x))
+# (decay 5 (cell "c" @x))
+# (absence @x as "Missing" to @quxes)
+# (log @quxes in ())
 # WWML
 
 # # nctx = Nitrene::StepContext.new
