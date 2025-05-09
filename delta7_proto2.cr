@@ -380,9 +380,11 @@ module Rhodium
     getter rewrite : Rewrite::Any = Rewrite.none
     getter cells = [] of {Term, Term}
     getter jobs = [] of Term
+    getter sensors = [] of {Term, Term}
+    getter appearances = [] of {Term, Term}
     getter? disappear = false
 
-    def initialize(@node : Term)
+    def initialize(@document : Term::Dict, @node : Term)
     end
 
     def disappear : Nil
@@ -393,8 +395,20 @@ module Rhodium
       cells << {Term.of(k), Term.of(v)}
     end
 
+    def cell?(name : Term)
+      @document[Cells, name]?
+    end
+
     def schedule(job)
       jobs << job
+    end
+
+    def sensor(tspace, surface)
+      sensors << {tspace, Term.of(surface)}
+    end
+
+    def appearance(tspace, surface)
+      appearances << {tspace, Term.of(surface)}
     end
 
     def event(*args, **kwargs)
@@ -428,14 +442,17 @@ module Rhodium
 
       @rewrite = Rewrite.one(@node.without(*keys))
     end
+
+    def rewrite(@rewrite)
+    end
   end
 
   # TODO: rename keypath to nodepath in Rhodium
 
-  def effect(document1 : Term::Dict, nodepath : Stack(Int32), node : Term, cursordepth : Int32, &) : {Term::Dict, Bool}
-    builder = EffectBuilder.new(node)
+  def effect(document0 : Term::Dict, document1 : Term::Dict, nodepath : Stack(Int32), node : Term, cursordepth : Int32, & : EffectBuilder -> Bool) : {Term::Dict, Bool}
+    builder = EffectBuilder.new(document0, node)
 
-    transition_vote = with builder yield builder
+    transition_vote = yield builder
 
     document0 = document1
 
@@ -451,7 +468,7 @@ module Rhodium
     # lets us prevent expulsion.
     if builder.disappear?
       each_identity(node, cursordepth) do |identity|
-        document1 = document1.morph({Population, identity, false})
+        document1 = document1.morph({Population, identity, nodepath, false})
       end
     end
 
@@ -462,6 +479,14 @@ module Rhodium
 
     builder.jobs.each do |job|
       document1 = document1.morph({JobsPending, job, true})
+    end
+
+    builder.sensors.each do |tspace, surface|
+      document1 = document1.morph({Tspaces, tspace, :sensors, surface, false})
+    end
+
+    builder.appearances.each do |tspace, surface|
+      document1 = document1.morph({Tspaces, tspace, :appearances, surface, false})
     end
 
     {document1, transition_vote}
@@ -486,976 +511,869 @@ module Rhodium
     node0 = follow(document0, nodepath)
     cursordepth = cursordepth_in_node(document0, nodepath)
 
-    Term.case({node0, event, cursordepth}) do
-      # cell
-      begin
-        givenpi %{[cell v_ @cout_] (initialize _ () _) -1} do
-          effect(document1, nodepath, node0, cursordepth) do
-            event :"cell/created", cout, v
-            cell cout, v
+    effect(document0, document1, nodepath, node0, cursordepth) do |e|
+      Term.case({node0, event, cursordepth}) do
+        # cell
+        begin
+          givenpi %{[cell v_ @cout_] (initialize _ () _) -1} do
+            e.event :"cell/created", cout, v
+            e.cell cout, v
 
             true
           end
-        end
 
-        givenpi %{[cell v_ @cout_] (assign @cout_ v_) -1} do
-          {document1, false}
-        end
+          givenpi %{[cell v_ @cout_] (assign @cout_ v_) -1} do
+            false
+          end
 
-        givenpi %{[cell v0_ @cout_] (assign @cout_ v1_) -1} do
-          effect(document1, nodepath, node0, cursordepth) do
-            event :"cell/updated", cout, v0, v1
-            cell cout, v1
-            backmap %{[cell v_ @_]}, v: v1
+          givenpi %{[cell v0_ @cout_] (assign @cout_ v1_) -1} do
+            e.event :"cell/updated", cout, v0, v1
+            e.cell cout, v1
+            e.backmap %{[cell v_ @_]}, v: v1
+
+            # The identity of the cell did not change, do not trigger transition.
+            false
+          end
+
+          givenpi(
+            %{[cell @cout_] (assign @cout_ v0_) -1},
+            %{[cell @cout_] (cell/created @cout_ v0_) -1},
+          ) do
+            e.backmap %[[cell `v @_]], v: v0
+
+            true
+          end
+
+          # TODO: instead of (%number (whole _) > 0) we should have (%number 0 < i32). All +-variants must
+          # allow the exclusion of zero this way.
+
+          givenpi %{[cell vs0←(_*) @cout_] (assign/log @cout_ v_ limit←(%number (whole _) > 0)) -1} do
+            vs1 = vs0.rightmost(limit.to(Int32) - 1).append(v)
+
+            e.event :"cell/updated", cout, vs0, vs1
+            e.cell cout, vs1
+            e.backmap %{[cell v_ @_]}, v: vs1
 
             # The identity of the cell did not change, do not trigger transition.
             false
           end
         end
 
-        givenpi(
-          %{[cell @cout_] (assign @cout_ v0_) -1},
-          %{[cell @cout_] (cell/created @cout_ v0_) -1},
-        ) do
-          effect(document1, nodepath, node0, cursordepth) do
-            backmap %[[cell `v @_]], v: v0
+        # frag
+        begin
+          givenpi %{[frag v_ @cout_] (initialize (frag @_) () _) _} do
+            e.event :"cell/created", cout, v
+            e.cell cout, v
 
             true
           end
-        end
 
-        # TODO: instead of (%number (whole _) > 0) we should have (%number 0 < i32). All +-variants must
-        # allow the exclusion of zero this way.
-
-        givenpi %{[cell vs0←(_*) @cout_] (assign/log @cout_ v_ limit←(%number (whole _) > 0)) -1} do
-          vs1 = vs0.rightmost(limit.to(Int32) - 1).append(v)
-
-          effect(document1, nodepath, node0, cursordepth) do
-            event :"cell/updated", cout, vs0, vs1
-            cell cout, vs1
-            backmap %{[cell v_ @_]}, v: vs1
-
-            # The identity of the cell did not change, do not trigger transition.
+          givenpi %{[frag v_ @cout_] (assign @cout_ v_) _} do
             false
           end
-        end
-      end
 
-      # frag
-      begin
-        givenpi %{[frag v_ @cout_] (initialize (frag @_) () _) _} do
-          effect(document1, nodepath, node0, cursordepth) do
-            event :"cell/created", cout, v
-            cell cout, v
+          givenpi %{[frag v_ @cout_] (pulse @cout_ clear) _} do
+            e.backmap %[[_ v_ @_]], %[{(v): ()}]
 
             true
           end
-        end
 
-        givenpi %{[frag v_ @cout_] (assign @cout_ v_) _} do
-          {document1, false}
-        end
+          givenpi(
+            %{[frag @cout_] (pulse @cout_ destroy) _},
+            %{[frag _ @cout_] (pulse @cout_ destroy) _},
+          ) do
+            e.rewrite Rewrite.many(Term[])
 
-        givenpi %{[frag v_ @cout_] (pulse @cout_ clear) _} do
-          effect(document1, nodepath, node0, cursordepth) do
-            backmap %[[_ v_ @_]], %[{(v): ()}]
-
+            # Vote for transition to cleanup etc.
             true
           end
-        end
 
-        givenpi(
-          %{[frag @cout_] (pulse @cout_ destroy) _},
-          %{[frag _ @cout_] (pulse @cout_ destroy) _},
-        ) do
-          # Vote for transition to cleanup etc.
-          {rewrite(document1, nodepath, Rewrite.many(Term[])), true}
-        end
-
-        # This will trigger the next rule due to fragment's secondary identity
-        # changing (being removed) after the assignment.
-        givenpi %{[frag v0_ @cout_] (assign @cout_ v1_) _} do
-          effect(document1, nodepath, node0, cursordepth) do
-            backmap %{[frag v_ @_]}, v: v1
+          # This will trigger the next rule due to fragment's secondary identity
+          # changing (being removed) after the assignment.
+          givenpi %{[frag v0_ @cout_] (assign @cout_ v1_) _} do
+            e.backmap %{[frag v_ @_]}, v: v1
 
             # We need this to trigger the next rule.
             true
           end
-        end
 
-        givenpi %{[frag v1_ @cout_] (frag/removed @cout_ v0_) _} do
-          effect(document1, nodepath, node0, cursordepth) do
-            event :"cell/updated", cout, v0, v1
-            cell cout, v1
-            backmap %{[frag v_ @_]}, v: v1
+          givenpi %{[frag v1_ @cout_] (frag/removed @cout_ v0_) _} do
+            e.event :"cell/updated", cout, v0, v1
+            e.cell cout, v1
+            e.backmap %{[frag v_ @_]}, v: v1
 
             # Fragment may have been assigned anything, including something that
             # needs a transition right now.
             true
           end
-        end
 
-        givenpi %{[frag @cout_] (assign @cout_ v0_) _} do
-          effect(document1, nodepath, node0, cursordepth) do
-            backmap %{[frag `v @_]}, v: v0
+          givenpi %{[frag @cout_] (assign @cout_ v0_) _} do
+            e.backmap %{[frag `v @_]}, v: v0
 
             true
           end
         end
-      end
 
-      # changes/view
-      begin
-        givenpi(
-          %{[changes/view @cin_] (assign @cin_ view_) -1},
-          %{[changes/view @cin_] (cell/created @cin_ view_) -1},
-        ) do
-          effect(document1, nodepath, node0, cursordepth) do
-            backmap %{[changes/view `view @_]}, view: view
+        # changes/view
+        begin
+          givenpi(
+            %{[changes/view @cin_] (assign @cin_ view_) -1},
+            %{[changes/view @cin_] (cell/created @cin_ view_) -1},
+          ) do
+            e.backmap %{[changes/view `view @_]}, view: view
 
             # changes/view doesn't have an identity like cells or frags do; it
             # only listens to (assign)s.
             false
           end
-        end
 
-        givenpi(
-          %{[changes/view _ @cin_] (assign @cin_ view_) -1},
-          %{[changes/view _ @cin_] (cell/created @cin_ view_) -1},
-          %{[changes/view _ @cin_] (cell/changed @cin_ _ view_) -1},
-        ) do
-          effect(document1, nodepath, node0, cursordepth) do
-            backmap %{[changes/view view_ @_]}, view: view
+          givenpi(
+            %{[changes/view _ @cin_] (assign @cin_ view_) -1},
+            %{[changes/view _ @cin_] (cell/created @cin_ view_) -1},
+            %{[changes/view _ @cin_] (cell/updated @cin_ _ view_) -1},
+          ) do
+            e.backmap %{[changes/view view_ @_]}, view: view
 
             # ditto
             false
           end
-        end
 
-        # changes/view also understands clear and destroy feedback
-        givenpi(
-          %{[changes/view _ @cin_] (pulse @cin_ clear) -1},
-          %{[changes/view _ @cin_] (cell/removed @cin_) -1},
-        ) do
-          effect(document1, nodepath, node0, cursordepth) do
-            backmap %{[changes/view view_ @_]}, %[{(view): ()}]
+          # changes/view also understands clear and destroy feedback
+          givenpi(
+            %{[changes/view _ @cin_] (pulse @cin_ clear) -1},
+            %{[changes/view _ @cin_] (cell/removed @cin_) -1},
+          ) do
+            e.backmap %{[changes/view view_ @_]}, %[{(view): ()}]
 
             # ditto
             false
           end
-        end
 
-        givenpi(
-          %{[changes/view @cin_] (pulse @cin_ destroy) -1},
-          %{[changes/view _ @cin_] (pulse @cin_ destroy) -1},
-        ) do
-          # ditto on transition
-          {rewrite(document1, nodepath, Rewrite.many(Term[])), false}
-        end
-      end
+          givenpi(
+            %{[changes/view @cin_] (pulse @cin_ destroy) -1},
+            %{[changes/view _ @cin_] (pulse @cin_ destroy) -1},
+          ) do
+            e.rewrite Rewrite.many(Term[])
 
-      givenpi %{(alloy (@pin_ to @pout_) template_ ¦ _ strict⋮ false) (pulse @pin_ vars_) -1} do |vars, template|
-        vars = vars.as_d? || Term[]
-
-        if ML.edge?(template)
-          unless template = document0[Cells, template]?
-            return document1, false
+            # ditto on transition
+            false
           end
         end
 
-        instance, complaints = Alloy.render_with_complaints(vars, template)
+        givenpi %{(alloy (@pin_ to @pout_) template_ ¦ _ strict⋮ false) (pulse @pin_ vars_) -1} do |vars, template|
+          vars = vars.as_d? || Term[]
 
-        effect(document1, nodepath, node0, cursordepth) do
+          if ML.edge?(template)
+            unless template = e.cell?(template)
+              return document1, false
+            end
+          end
+
+          instance, complaints = Alloy.render_with_complaints(vars, template)
+
           if (complout = node0[:complaints]?) && ML.edge?(complout)
             complaints.each do |complaint|
-              event :pulse, complout, complaint
+              e.event :pulse, complout, complaint
             end
           end
 
           # TODO: have the node "tell" about errors in the template when strict: false!!!
           if strict.false? || complaints.empty?
-            event :pulse, pout, instance
+            e.event :pulse, pout, instance
           end
 
           false
         end
-      end
 
-      # Spawner
-      begin
-        givenpi(
-          %{(spawner @pin_ ¦ _ -dir) (pulse @pin_ offspring_) -1},
-          %{(spawner @pin_ ¦ _ dir: up) (pulse @pin_ offspring_) -1},
-        ) do
-          {rewrite(document1, nodepath, Rewrite.many(Term[offspring, node0])), true}
-        end
+        # Spawner
+        begin
+          givenpi(
+            %{(spawner @pin_ ¦ _ -dir) (pulse @pin_ offspring_) -1},
+            %{(spawner @pin_ ¦ _ dir: up) (pulse @pin_ offspring_) -1},
+          ) do
+            e.rewrite Rewrite.many(Term[offspring, node0])
 
-        givenpi %{(spawner @pin_ ¦ _ dir: down) (pulse @pin_ offspring_) -1} do
-          {rewrite(document1, nodepath, Rewrite.many(Term[node0, offspring])), true}
-        end
-      end
-
-      # Sensors and appearances
-      begin
-        givenpi %{[sensor pattern_ in tspace_symbol to @_] (initialize _ () _) -1} do
-          secret = node0[:secret]?
-
-          {document1.morph({Tspaces, tspace, :sensors, {query: pattern, secret: secret}, false}), true}
-        end
-
-        givenpi(
-          %{[sensor pattern_ in tspace_ to @pout_] (percepts tspace_ {query: pattern_} multiset_dict) -1},
-          %{(sensor pattern_ in tspace_ to @pout_ ¦ _ secret_) (percepts tspace_ {query: pattern_ secret: secret_} multiset_dict) -1},
-        ) do
-          effect(document1, nodepath, node0, cursordepth) do
-            event :pulse, pout, multiset
-
-            false
-          end
-        end
-
-        givenpi %{[appearance value_ in tspace_symbol] (initialize _ () _) -1} do
-          secret = node0[:secret]?
-
-          {document1.morph({Tspaces, tspace, :appearances, {value: value, secret: secret}, false}), true}
-        end
-      end
-
-      # Button
-      begin
-        # Activate
-        givenpi(
-          %{(button _ to @_ (_*) ¦ _ hover: true) (mouse press) _},
-          %{(button _ as _ to @_ (_*) ¦ _ hover: true) (mouse press) _},
-          %{(button _ to @_ waiting @_ (_*) ¦ _ hover: true) (mouse press) _},
-          %{(button _ as _ to @_ waiting @_ (_*) ¦ _ hover: true) (mouse press) _},
-        ) do
-          effect(document1, nodepath, node0, cursordepth) do
-            backmap %[{¦ -active_}], %[{active: true}]
-
-            false
-          end
-        end
-
-        # Deactivate & press
-        givenpi(
-          %{(button _ to @_ (_*) ¦ _ hover: true active: true) (mouse release) _},
-          %{(button _ as _ to @_ (_*) ¦ _ hover: true active: true) (mouse release) _},
-          %{(button _ to @_ waiting @_ (_*) ¦ _ hover: true active: true) (mouse release) _},
-          %{(button _ as _ to @_ waiting @_ (_*) ¦ _ hover: true active: true) (mouse release) _},
-        ) do
-          effect(document1, nodepath, node0, cursordepth) do
-            backmap %[(_* (_* `M) ¦ _ active_)], %[{(active): (), M: (press)}]
-
-            false
-          end
-        end
-
-        givenpi(
-          %{(button _ to @_ (_*) ¦ _ active: true) (mouse release) _},
-          %{(button _ as _ to @_ (_*) ¦ _ active: true) (mouse release) _},
-          %{(button _ to @_ waiting @_ (_*) ¦ _ active: true) (mouse release) _},
-          %{(button _ as _ to @_ waiting @_ (_*) ¦ _ active: true) (mouse release) _},
-        ) do
-          effect(document1, nodepath, node0, cursordepth) do
-            backmap %[{¦ active_}], %[{(active): ()}]
-
-            false
-          end
-        end
-
-        # 1 phase button
-
-        givenpi %{[button _ as msg_ to @pout_ ((press) _*)] cycle _} do |msg|
-          effect(document1, nodepath, node0, cursordepth) do
-            if ML.edge?(msg.not_nil!)
-              msg = document0[Cells, msg]?
-            end
-            if msg
-              event :pulse, pout, msg
-              backmap %{[button _ as _ to @_ (state_ _*)]}, %[{(state): ()}]
-            end
-            false
-          end
-        end
-
-        givenpi %{[button msg_ to @pout_ ((press) _*)] cycle _} do |msg|
-          effect(document1, nodepath, node0, cursordepth) do
-            if ML.edge?(msg.not_nil!)
-              msg = document0[Cells, msg]?
-            end
-            if msg
-              event :pulse, pout, msg
-              backmap %{[button _ to _ (action_ _*)]}, %[{(action): ()}]
-            end
-            false
-          end
-        end
-
-        # 2 phase button
-
-        # Down
-        givenpi %{[button _ as msg_ to @pout_ waiting @_ ((press) _*)] cycle _} do |msg|
-          effect(document1, nodepath, node0, cursordepth) do
-            if ML.edge?(msg.not_nil!)
-              msg = document0[Cells, msg]?
-            end
-            if msg
-              event :pulse, pout, msg
-              backmap %{[button _ as _ to @_ waiting _ ((state_) _*)]}, %[{state: pressed}]
-            end
-            false
-          end
-        end
-
-        # Up
-        givenpi %{[button _ as _ to @_ waiting @acks_ ((pressed) _*)] (pulse @acks_ _) _} do
-          effect(document1, nodepath, node0, cursordepth) do
-            backmap %{[button _ as _ to @_ waiting _ (state_ _*)]}, %[{(state): ()}]
-
-            false
-          end
-        end
-
-        # Down
-        givenpi %{[button msg_ to @pout_ waiting @_ ((press) _*)] cycle _} do |msg|
-          effect(document1, nodepath, node0, cursordepth) do
-            if ML.edge?(msg.not_nil!)
-              msg = document0[Cells, msg]?
-            end
-            if msg
-              event :pulse, pout, msg
-              backmap %{[button _ to _ waiting _ ((state_) _*)]}, %[{state: pressed}]
-            end
-
-            false
-          end
-        end
-
-        # Up
-        givenpi %{[button _ to @_ waiting @acks_ ((pressed) _*)] (pulse @acks_ _) _} do
-          effect(document1, nodepath, node0, cursordepth) do
-            backmap %{[button _ to @_  waiting _ (state_ _*)]}, %[{(state): ()}]
-
-            false
-          end
-        end
-      end
-
-      givenpi %{[combine pins←⟨@pin_⟩ in storage_dict for @pout_] (pulse @pin_ value_) -1} do
-        storage1 = storage
-
-        pins.items.each_with_index do |current, index|
-          next unless current == pin
-
-          storage1 = storage1.with(index, value)
-        end
-
-        effect(document1, nodepath, node0, cursordepth) do
-          if storage1.size == pins.size
-            event :pulse, pout, storage1
-            storage1 = Term[]
+            true
           end
 
-          backmap %{[combine _ in storage_ for @_]}, storage: storage1
-
-          false
-        end
-      end
-
-      givenpi %{[sampler @cin_ on @pin_ to @pout_] (pulse @pin_ _) -1} do
-        effect(document1, nodepath, node0, cursordepth) do
-          if value = document0[Cells, cin]?
-            event :pulse, pout, value
-          end
-
-          false
-        end
-      end
-
-      givenpi %{[sampler cins←⟨@_⟩ on @pin_ to @pout_] (pulse @pin_ _) -1} do
-        effect(document1, nodepath, node0, cursordepth) do
-          row = Term::Dict.build do |commit|
-            cins.items.each do |cin|
-              unless value = document0[Cells, cin]?
-                return document1, false
-              end
-
-              commit << value
-            end
-          end
-
-          event :pulse, pout, row
-
-          false
-        end
-      end
-
-      givenpi %{(log @pin_ in @cout_ ¦ _ limit⋮ 10) (pulse @pin_ term_) -1} do
-        effect(document1, nodepath, node0, cursordepth) do
-          event :"assign/log", cout, term, limit
-
-          false
-        end
-      end
-
-      givenpi %{(log @pin_ in (entries_*) ¦ _ limit: (%optional 10 limit←(%number (whole _) > 0))) (pulse @pin_ term_) -1} do
-        effect(document1, nodepath, node0, cursordepth) do
-          backmap ML.term(%{[log _ in (entries_*)]}), Term.of(Term[].with({:entries}, entries.rightmost(limit.to(Int32) - 1).append(term)))
-
-          false
-        end
-      end
-
-      begin
-        givenpi %{[latest @pin_ @cout_] (pulse @pin_ v_) -1} do
-          effect(document1, nodepath, node0, cursordepth) do
-            event :assign, cout, v
-
-            false
-          end
-        end
-
-        givenpi %{[latest (@pin_ pattern_ @cout_) template_] (pulse @pin_ vin_) -1} do
-          if env = M1.match?(pattern, vin)
-            effect(document1, nodepath, node0, cursordepth) do
-              event :assign, cout, Alloy.render(env, template, strict: false)
-
-              false
-            end
-          else
-            {document1, false}
-          end
-        end
-      end
-
-      # changes
-      begin
-        # Without pattern
-        givenpi(
-          %{[changes @cin_ to @pout_] (cell/created @cin_ v_) -1},
-          %{[changes @cin_ to @pout_] (cell/updated @cin_ _ v_) -1},
-        ) do
-          effect(document1, nodepath, node0, cursordepth) do
-            event :pulse, pout, v
-
-            false
-          end
-        end
-
-        # With pattern
-        givenpi(
-          %{[changes (@cin_ pattern_ to @pout_)] (cell/created @cin_ vin_) -1},
-          %{[changes (@cin_ pattern_ to @pout_)] (cell/updated @cin_ _ vin_) -1},
-        ) do
-          effect(document1, nodepath, node0, cursordepth) do
-            if M1.probe?(pattern, vin)
-              event :pulse, pout, vin
-            end
-
-            false
-          end
-        end
-
-        # With pattern & template
-        givenpi(
-          %{[changes (@cin_ pattern_ to @pout_) template_] (cell/created @cin_ vin_) -1},
-          %{[changes (@cin_ pattern_ to @pout_) template_] (cell/updated @cin_ _ vin_) -1},
-        ) do
-          effect(document1, nodepath, node0, cursordepth) do
-            envs = M1.matches(pattern, vin)
-            envs.each do |env|
-              event :pulse, pout, Alloy.render(env, template, strict: false)
-            end
-
-            false
-          end
-        end
-      end
-
-      # initial
-      begin
-        # Without pattern
-        givenpi %{[initial @cin_ to @pout_] (cell/created @cin_ v_) -1} do
-          effect(document1, nodepath, node0, cursordepth) do
-            event :pulse, pout, v
-
-            false
-          end
-        end
-
-        # With pattern
-        givenpi(
-          %{[initial (@_ _ to @_)] (initialize _ () _) -1},
-          %{[initial (@_ _ to @_) _] (initialize _ () _) -1},
-        ) do
-          effect(document1, nodepath, node0, cursordepth) do
-            change "#shadow": {:"%literal", node0.itemspart}, "#fired": false
-
-            false
-          end
-        end
-
-        givenpi(
-          %{(initial (@cin_ pattern_ to @pout_) ¦ _ #fired: false) (cell/created @cin_ vin_) -1},
-          %{(initial (@cin_ pattern_ to @pout_) ¦ _ #fired: false) (cell/updated @cin_ _ vin_) -1},
-        ) do
-          effect(document1, nodepath, node0, cursordepth) do
-            if M1.probe?(pattern, vin)
-              event :pulse, pout, vin
-              change "#fired": true
-            end
-
-            false
-          end
-        end
-
-        # With pattern & template
-        givenpi(
-          %{(initial (@cin_ pattern_ to @pout_) template_ ¦ _ #fired: false) (cell/created @cin_ vin_) -1},
-          %{(initial (@cin_ pattern_ to @pout_) template_ ¦ _ #fired: false) (cell/updated @cin_ _ vin_) -1},
-        ) do
-          effect(document1, nodepath, node0, cursordepth) do
-            envs = M1.matches(pattern, vin)
-            envs.each do |env|
-              event :pulse, pout, Alloy.render(env, template, strict: false)
-            end
-            if envs.present?
-              change "#fired": true
-            end
-
-            false
-          end
-        end
-
-        givenpi(
-          %{(initial (@cin_ _ to @_) ¦ _ #fired: true) (cell/removed @cin_) -1},
-          %{(initial (@cin_ _ to @_) _ ¦ _ #fired: true) (cell/removed @cin_) -1},
-        ) do
-          effect(document1, nodepath, node0, cursordepth) do
-            change "#fired": false
-
-            false
-          end
-        end
-      end
-
-      # Absence node
-      begin
-        # Initialize `absence` to newborn state.
-        givenpi %{[absence @_ as _ to @_] (initialize _ () _) -1} do
-          effect(document1, nodepath, node0, cursordepth) do
-            change "#shadow": {:"%literal", node0.itemspart}, "#state": :newborn
+          givenpi %{(spawner @pin_ ¦ _ dir: down) (pulse @pin_ offspring_) -1} do
+            e.rewrite Rewrite.many(Term[node0, offspring])
 
             true
           end
         end
 
-        # Whenever we're in newborn state, on cycle, look around to see if the cell's
-        # identity is in the population.
-        givenpi %{(absence @cin_ as msg_ to @pout_ ¦ _ #state: newborn) cycle -1} do
-          effect(document1, nodepath, node0, cursordepth) do
-            if document0[Cells, cin]?
-              change "#state": :paired
-            else
-              event :pulse, pout, msg
-              change "#state": :unpaired
+        # Sensors and appearances
+        begin
+          givenpi %{[sensor pattern_ in tspace_symbol to @_] (initialize _ () _) -1} do
+            e.sensor(tspace, {query: pattern, secret: node0[:secret]?})
+
+            true
+          end
+
+          givenpi(
+            %{[sensor pattern_ in tspace_ to @pout_] (percepts tspace_ {query: pattern_} multiset_dict) -1},
+            %{(sensor pattern_ in tspace_ to @pout_ ¦ _ secret_) (percepts tspace_ {query: pattern_ secret: secret_} multiset_dict) -1},
+          ) do
+            e.event :pulse, pout, multiset
+
+            false
+          end
+
+          givenpi %{[appearance value_ in tspace_symbol] (initialize _ () _) -1} do
+            e.appearance(tspace, {value: value, secret: node0[:secret]?})
+
+            true
+          end
+        end
+
+        # Button
+        begin
+          # Activate
+          givenpi(
+            %{(button _ to @_ (_*) ¦ _ hover: true) (mouse press) _},
+            %{(button _ as _ to @_ (_*) ¦ _ hover: true) (mouse press) _},
+            %{(button _ to @_ waiting @_ (_*) ¦ _ hover: true) (mouse press) _},
+            %{(button _ as _ to @_ waiting @_ (_*) ¦ _ hover: true) (mouse press) _},
+          ) do
+            e.backmap %[{¦ -active_}], %[{active: true}]
+
+            false
+          end
+
+          # Deactivate & press
+          givenpi(
+            %{(button _ to @_ (_*) ¦ _ hover: true active: true) (mouse release) _},
+            %{(button _ as _ to @_ (_*) ¦ _ hover: true active: true) (mouse release) _},
+            %{(button _ to @_ waiting @_ (_*) ¦ _ hover: true active: true) (mouse release) _},
+            %{(button _ as _ to @_ waiting @_ (_*) ¦ _ hover: true active: true) (mouse release) _},
+          ) do
+            e.backmap %[(_* (_* `M) ¦ _ active_)], %[{(active): (), M: (press)}]
+
+            false
+          end
+
+          givenpi(
+            %{(button _ to @_ (_*) ¦ _ active: true) (mouse release) _},
+            %{(button _ as _ to @_ (_*) ¦ _ active: true) (mouse release) _},
+            %{(button _ to @_ waiting @_ (_*) ¦ _ active: true) (mouse release) _},
+            %{(button _ as _ to @_ waiting @_ (_*) ¦ _ active: true) (mouse release) _},
+          ) do
+            e.backmap %[{¦ active_}], %[{(active): ()}]
+
+            false
+          end
+
+          # 1 phase button
+
+          givenpi %{[button _ as msg_ to @pout_ ((press) _*)] cycle _} do |msg|
+            if ML.edge?(msg.not_nil!)
+              msg = e.cell?(msg)
+            end
+            if msg
+              e.event :pulse, pout, msg
+              e.backmap %{[button _ as _ to @_ (state_ _*)]}, %[{(state): ()}]
+            end
+
+            false
+          end
+
+          givenpi %{[button msg_ to @pout_ ((press) _*)] cycle _} do |msg|
+            if ML.edge?(msg.not_nil!)
+              msg = e.cell?(msg)
+            end
+            if msg
+              e.event :pulse, pout, msg
+              e.backmap %{[button _ to _ (action_ _*)]}, %[{(action): ()}]
+            end
+
+            false
+          end
+
+          # 2 phase button
+
+          # Down
+          givenpi %{[button _ as msg_ to @pout_ waiting @_ ((press) _*)] cycle _} do |msg|
+            if ML.edge?(msg.not_nil!)
+              msg = e.cell?(msg)
+            end
+            if msg
+              e.event :pulse, pout, msg
+              e.backmap %{[button _ as _ to @_ waiting _ ((state_) _*)]}, %[{state: pressed}]
+            end
+
+            false
+          end
+
+          # Up
+          givenpi %{[button _ as _ to @_ waiting @acks_ ((pressed) _*)] (pulse @acks_ _) _} do
+            e.backmap %{[button _ as _ to @_ waiting _ (state_ _*)]}, %[{(state): ()}]
+
+            false
+          end
+
+          # Down
+          givenpi %{[button msg_ to @pout_ waiting @_ ((press) _*)] cycle _} do |msg|
+            if ML.edge?(msg.not_nil!)
+              msg = e.cell?(msg)
+            end
+            if msg
+              e.event :pulse, pout, msg
+              e.backmap %{[button _ to _ waiting _ ((state_) _*)]}, %[{state: pressed}]
+            end
+
+            false
+          end
+
+          # Up
+          givenpi %{[button _ to @_ waiting @acks_ ((pressed) _*)] (pulse @acks_ _) _} do
+            e.backmap %{[button _ to @_  waiting _ (state_ _*)]}, %[{(state): ()}]
+
+            false
+          end
+        end
+
+        givenpi %{[combine pins←⟨@pin_⟩ in storage_dict for @pout_] (pulse @pin_ value_) -1} do
+          storage1 = storage
+
+          pins.items.each_with_index do |current, index|
+            next unless current == pin
+
+            storage1 = storage1.with(index, value)
+          end
+
+          if storage1.size == pins.size
+            e.event :pulse, pout, storage1
+            storage1 = Term[]
+          end
+
+          e.backmap %{[combine _ in storage_ for @_]}, storage: storage1
+
+          false
+        end
+
+        # sampler
+        begin
+          givenpi %{[sampler @cin_ on @pin_ to @pout_] (pulse @pin_ _) -1} do
+            if value = e.cell?(cin)
+              e.event :pulse, pout, value
+            end
+
+            false
+          end
+
+          givenpi %{[sampler cins←⟨@_⟩ on @pin_ to @pout_] (pulse @pin_ _) -1} do
+            row = Term::Dict.build do |commit|
+              cins.items.each do |cin|
+                unless value = e.cell?(cin)
+                  return document1, false
+                end
+
+                commit << value
+              end
+            end
+
+            e.event :pulse, pout, row
+
+            false
+          end
+        end
+
+        # log
+        begin
+          givenpi %{(log @pin_ in @cout_ ¦ _ limit⋮ 10) (pulse @pin_ term_) -1} do
+            e.event :"assign/log", cout, term, limit
+
+            false
+          end
+
+          givenpi %{(log @pin_ in (entries_*) ¦ _ limit: (%optional 10 limit←(%number (whole _) > 0))) (pulse @pin_ term_) -1} do
+            e.backmap ML.term(%{[log _ in (entries_*)]}), Term.of(Term[].with({:entries}, entries.rightmost(limit.to(Int32) - 1).append(term)))
+
+            false
+          end
+        end
+
+        # latest
+        begin
+          givenpi %{[latest @pin_ @cout_] (pulse @pin_ v_) -1} do
+            e.event :assign, cout, v
+
+            false
+          end
+
+          givenpi %{[latest (@pin_ pattern_ @cout_) template_] (pulse @pin_ vin_) -1} do
+            if env = M1.match?(pattern, vin)
+              e.event :assign, cout, Alloy.render(env, template, strict: false)
             end
 
             false
           end
         end
 
-        givenpi %{(absence @cin_ as msg_ to @pout_ ¦ _ #state: paired) (cell/removed @cin_) -1} do
-          effect(document1, nodepath, node0, cursordepth) do
-            event :pulse, pout, msg
-            change "#state": :unpaired
+        # changes
+        begin
+          # Without pattern
+          givenpi(
+            %{[changes @cin_ to @pout_] (cell/created @cin_ v_) -1},
+            %{[changes @cin_ to @pout_] (cell/updated @cin_ _ v_) -1},
+          ) do
+            e.event :pulse, pout, v
+
+            false
+          end
+
+          # With pattern
+          givenpi(
+            %{[changes (@cin_ pattern_ to @pout_)] (cell/created @cin_ vin_) -1},
+            %{[changes (@cin_ pattern_ to @pout_)] (cell/updated @cin_ _ vin_) -1},
+          ) do
+            if M1.probe?(pattern, vin)
+              e.event :pulse, pout, vin
+            end
+
+            false
+          end
+
+          # With pattern & template
+          givenpi(
+            %{[changes (@cin_ pattern_ to @pout_) template_] (cell/created @cin_ vin_) -1},
+            %{[changes (@cin_ pattern_ to @pout_) template_] (cell/updated @cin_ _ vin_) -1},
+          ) do
+            envs = M1.matches(pattern, vin)
+            envs.each do |env|
+              e.event :pulse, pout, Alloy.render(env, template, strict: false)
+            end
 
             false
           end
         end
 
-        givenpi %{(absence @cin_ as _ to @_ ¦ _ #state: unpaired) (cell/created @cin_ _) -1} do
-          effect(document1, nodepath, node0, cursordepth) do
-            change "#state": :paired
+        # initial
+        begin
+          # Without pattern
+          givenpi %{[initial @cin_ to @pout_] (cell/created @cin_ v_) -1} do
+            e.event :pulse, pout, v
+
+            false
+          end
+
+          # With pattern
+          givenpi(
+            %{[initial (@_ _ to @_)] (initialize _ () _) -1},
+            %{[initial (@_ _ to @_) _] (initialize _ () _) -1},
+          ) do
+            e.change "#shadow": {:"%literal", node0.itemspart}, "#fired": false
+
+            false
+          end
+
+          givenpi(
+            %{(initial (@cin_ pattern_ to @pout_) ¦ _ #fired: false) (cell/created @cin_ vin_) -1},
+            %{(initial (@cin_ pattern_ to @pout_) ¦ _ #fired: false) (cell/updated @cin_ _ vin_) -1},
+          ) do
+            if M1.probe?(pattern, vin)
+              e.event :pulse, pout, vin
+              e.change "#fired": true
+            end
+
+            false
+          end
+
+          # With pattern & template
+          givenpi(
+            %{(initial (@cin_ pattern_ to @pout_) template_ ¦ _ #fired: false) (cell/created @cin_ vin_) -1},
+            %{(initial (@cin_ pattern_ to @pout_) template_ ¦ _ #fired: false) (cell/updated @cin_ _ vin_) -1},
+          ) do
+            envs = M1.matches(pattern, vin)
+            envs.each do |env|
+              e.event :pulse, pout, Alloy.render(env, template, strict: false)
+            end
+            if envs.present?
+              e.change "#fired": true
+            end
+
+            false
+          end
+
+          givenpi(
+            %{(initial (@cin_ _ to @_) ¦ _ #fired: true) (cell/removed @cin_) -1},
+            %{(initial (@cin_ _ to @_) _ ¦ _ #fired: true) (cell/removed @cin_) -1},
+          ) do
+            e.change "#fired": false
 
             false
           end
         end
-      end
 
-      # `blast`: inorder emission of items from lists received on `pin`.
-      givenpi %{[blast @pin_ to @pout_] (pulse @pin_ list_dict) -1} do
-        effect(document1, nodepath, node0, cursordepth) do
-          list.items.each do |item|
-            event :pulse, pout, item
+        # Absence node
+        begin
+          # Initialize `absence` to newborn state.
+          givenpi %{[absence @_ as _ to @_] (initialize _ () _) -1} do
+            e.change "#shadow": {:"%literal", node0.itemspart}, "#state": :newborn
+
+            true
           end
 
-          false
-        end
-      end
+          # Whenever we're in newborn state, on cycle, look around to see if the cell's
+          # identity is in the population.
+          givenpi %{(absence @cin_ as msg_ to @pout_ ¦ _ #state: newborn) cycle -1} do
+            if e.cell?(cin)
+              e.change "#state": :paired
+            else
+              e.event :pulse, pout, msg
+              e.change "#state": :unpaired
+            end
 
-      givenpi %{[blast @pin_ to @pout_ percept capture_] (pulse @pin_ envs_dict) -1} do
-        effect(document1, nodepath, node0, cursordepth) do
-          envs.each_entry do |env, _|
-            next unless value = env[capture]?
-
-            event :pulse, pout, value
+            false
           end
 
-          false
-        end
-      end
+          givenpi %{(absence @cin_ as msg_ to @pout_ ¦ _ #state: paired) (cell/removed @cin_) -1} do
+            e.event :pulse, pout, msg
+            e.change "#state": :unpaired
 
-      begin
-        givenpi(
-          %{[bridge @pin_ to @pout_] (pulse @pin_ value_) -1},
-          %{[bridge @pin_ as value_ to @pout_] (pulse @pin_ _) -1}
-        ) do
-          effect(document1, nodepath, node0, cursordepth) do
-            event :pulse, pout, value
+            false
+          end
+
+          givenpi %{(absence @cin_ as _ to @_ ¦ _ #state: unpaired) (cell/created @cin_ _) -1} do
+            e.change "#state": :paired
 
             false
           end
         end
 
-        givenpi %{[bridge (@pin_ pattern_) to @pout_] (pulse @pin_ matchee_) -1} do
-          unless M1.probe?(pattern, matchee)
-            return document1, false
+        # blast
+        begin
+          givenpi %{[blast @pin_ to @pout_] (pulse @pin_ list_dict) -1} do
+            list.items.each do |item|
+              e.event :pulse, pout, item
+            end
+
+            false
           end
 
-          effect(document1, nodepath, node0, cursordepth) do
-            event :pulse, pout, matchee
+          givenpi %{[blast @pin_ to @pout_ percept capture_] (pulse @pin_ envs_dict) -1} do
+            envs.each_entry do |env, _|
+              next unless value = env[capture]?
+
+              e.event :pulse, pout, value
+            end
 
             false
           end
         end
 
-        givenpi %{[bridge (@pin_ pattern_) to (@pout_ key_)] (pulse @pin_ matchee_) -1} do
-          unless envs = M1.matches(pattern, matchee)
-            return document1, false
+        # bridge
+        begin
+          givenpi(
+            %{[bridge @pin_ to @pout_] (pulse @pin_ value_) -1},
+            %{[bridge @pin_ as value_ to @pout_] (pulse @pin_ _) -1}
+          ) do
+            e.event :pulse, pout, value
+
+            false
           end
 
-          effect(document1, nodepath, node0, cursordepth) do
+          givenpi %{[bridge (@pin_ pattern_) to @pout_] (pulse @pin_ matchee_) -1} do
+            unless M1.probe?(pattern, matchee)
+              return document1, false
+            end
+
+            e.event :pulse, pout, matchee
+
+            false
+          end
+
+          givenpi %{[bridge (@pin_ pattern_) to (@pout_ key_)] (pulse @pin_ matchee_) -1} do
+            unless envs = M1.matches(pattern, matchee)
+              return document1, false
+            end
+
             envs.each do |env|
               next unless value = env[key]?
 
-              event :pulse, pout, value
+              e.event :pulse, pout, value
             end
 
             false
           end
         end
-      end
 
-      givenpi %{[echo @pin_] (pulse @pin_ e_) -1} do
-        effect(document1, nodepath, node0, cursordepth) do
-          event e
+        givenpi %{[echo @pin_] (pulse @pin_ arg_) -1} do
+          e.event arg
 
           false
         end
-      end
 
-      givenpi %{[event e_] cycle -1} do
-        effect(document1, nodepath, node0, cursordepth) do
-          event e
-          backmap %[N_], %[{(N): ()}]
+        givenpi %{[event arg_] cycle -1} do
+          e.event arg
+          e.backmap %[N_], %[{(N): ()}]
 
           # Event can be anything, including something that needs a transition.
           # Thus force a transition.
           true
         end
-      end
 
-      givenpi %{[queue @pin_ to @_ in (_*) waiting @_] (pulse @pin_ value_) -1} do
-        effect(document1, nodepath, node0, cursordepth) do
-          backmap %{[_ _ to _ in (_* `back) waiting _]}, back: {:new, value}
+        # queue
+        begin
+          givenpi %{[queue @pin_ to @_ in (_*) waiting @_] (pulse @pin_ value_) -1} do
+            e.backmap %{[_ _ to _ in (_* `back) waiting _]}, back: {:new, value}
 
-          false
-        end
-      end
-
-      givenpi %{[queue @_ to @pout_ in ((new value_) _*) waiting @_] cycle -1} do
-        effect(document1, nodepath, node0, cursordepth) do
-          event :pulse, pout, value
-          backmap %{[_ _ to _ in ((state_ _) _*) waiting _]}, state: :pending
-
-          false
-        end
-      end
-
-      givenpi %{[queue @_ to @_ in ((pending _) _*) waiting @acks_] (pulse @acks_ _) -1} do
-        effect(document1, nodepath, node0, cursordepth) do
-          backmap %{[_ _ to _ in (state_ _*) waiting _]}, %[{(state): ()}]
-
-          false
-        end
-      end
-
-      # Transform logic
-      begin
-        # Schedule job.
-        givenpi %{(transform _* ¦ _ #spec: spec←{¦ in: @pin_, body_}) (pulse @pin_ input_) -1} do
-          env0 = Term[]
-
-          if (state_edge = spec[:state]?) && ML.edge?(state_edge)
-            unless state = document0[Cells, state_edge]?
-              return document1, false
-            end
-
-            # If state is a symbolic edge e.g. @qux, use qux to refer to its value.
-            # Otherwise, use the generic `state`.
-            unless state_id = state_edge[1].as_sym?
-              state_id = Term[:state]
-            end
-
-            env0 = env0.with(state_id, state)
+            false
           end
 
-          # If a filter pattern is defined, make sure it matches.
-          if filter = spec[:filter]?
-            unless env1 = M1.match?(filter, input, env: env0)
-              return document1, false
-            end
+          givenpi %{[queue @_ to @pout_ in ((new value_) _*) waiting @_] cycle -1} do
+            e.event :pulse, pout, value
+            e.backmap %{[_ _ to _ in ((state_ _) _*) waiting _]}, state: :pending
+
+            false
           end
 
-          env1 ||= env0
-          env1 = env1.with(:_, input)
-
-          effect(document1, nodepath, node0, cursordepth) do
-            change "#job": {program: body, env: env1}
-
-            true
-          end
-        end
-
-        # Send feedback busy. Schedule job.
-        givenpi %{(transform _* ¦ _ #spec: {¦ in: @pin_} #job: job_) (initialize _ () _) -1} do
-          effect(document1, nodepath, node0, cursordepth) do
-            schedule job
+          givenpi %{[queue @_ to @_ in ((pending _) _*) waiting @acks_] (pulse @acks_ _) -1} do
+            e.backmap %{[_ _ to _ in (state_ _*) waiting _]}, %[{(state): ()}]
 
             false
           end
         end
 
-        # Wait for the job to complete.
-        givenpi %{(transform _* ¦ _ #spec: {¦ in: @pin_, out: @pout_} #job: job_) (job/completed job_ result_) -1} do
-          effect(document1, nodepath, node0, cursordepth) do
-            event :pulse, pout, result
-            clear :"#job"
-            disappear
+        # Transform logic
+        begin
+          # Schedule job.
+          givenpi %{(transform _* ¦ _ #spec: spec←{¦ in: @pin_, body_}) (pulse @pin_ input_) -1} do
+            env0 = Term[]
+
+            if (state_edge = spec[:state]?) && ML.edge?(state_edge)
+              unless state = e.cell?(state_edge)
+                return document1, false
+              end
+
+              # If state is a symbolic edge e.g. @qux, use qux to refer to its value.
+              # Otherwise, use the generic `state`.
+              unless state_id = state_edge[1].as_sym?
+                state_id = Term[:state]
+              end
+
+              env0 = env0.with(state_id, state)
+            end
+
+            # If a filter pattern is defined, make sure it matches.
+            if filter = spec[:filter]?
+              unless env1 = M1.match?(filter, input, env: env0)
+                return document1, false
+              end
+            end
+
+            env1 ||= env0
+            env1 = env1.with(:_, input)
+
+            e.change "#job": {program: body, env: env1}
+
+            true
+          end
+
+          # Send feedback busy. Schedule job.
+          givenpi %{(transform _* ¦ _ #spec: {¦ in: @pin_} #job: job_) (initialize _ () _) -1} do
+            e.schedule job
+
+            false
+          end
+
+          # Wait for the job to complete.
+          givenpi %{(transform _* ¦ _ #spec: {¦ in: @pin_, out: @pout_} #job: job_) (job/completed job_ result_) -1} do
+            e.event :pulse, pout, result
+            e.clear :"#job"
+            e.disappear
 
             true
           end
         end
-      end
 
-      # Stateful transform
-      givenpi %{[transform (@pin_ to @pout_ with state_) body_] (initialize _ () _) -1} do
-        effect(document1, nodepath, node0, cursordepth) do
-          change "#shadow": {:"%literal", node0.itemspart}, "#spec": {in: pin, out: pout, state: state, body: body}
+        # Transform variants
+        begin
+          # Stateful transform
+          givenpi %{[transform (@pin_ to @pout_ with state_) body_] (initialize _ () _) -1} do
+            e.change "#shadow": {:"%literal", node0.itemspart}, "#spec": {in: pin, out: pout, state: state, body: body}
+
+            true
+          end
+
+          # Stateless transform
+          givenpi %{[transform (@pin_ to @pout_) body_] (initialize _ () _) -1} do
+            e.change "#shadow": {:"%literal", node0.itemspart}, "#spec": {in: pin, out: pout, body: body}
+
+            true
+          end
+
+          # Stateless filter transform
+          givenpi %{[transform (@pin_ pattern_ to @pout_) body_] (initialize _ () _) -1} do
+            e.change "#shadow": {:"%literal", node0.itemspart}, "#spec": {in: pin, out: pout, filter: pattern, body: body}
+
+            true
+          end
+
+          # Stateful filter transform
+          givenpi %{[transform (@pin_ pattern_ to @pout_ with state_) body_] (initialize _ () _) -1} do
+            e.change "#shadow": {:"%literal", node0.itemspart}, "#spec": {in: pin, out: pout, filter: pattern, state: state, body: body}
+
+            true
+          end
+        end
+
+        givenpi %{[delay 0 children_*] cycle _} do
+          e.rewrite Rewrite.many(children.unsafe_as_d)
 
           true
         end
-      end
 
-      # Stateless transform
-      givenpi %{[transform (@pin_ to @pout_) body_] (initialize _ () _) -1} do
-        effect(document1, nodepath, node0, cursordepth) do
-          change "#shadow": {:"%literal", node0.itemspart}, "#spec": {in: pin, out: pout, body: body}
-
-          true
-        end
-      end
-
-      # Stateless filter transform
-      givenpi %{[transform (@pin_ pattern_ to @pout_) body_] (initialize _ () _) -1} do
-        effect(document1, nodepath, node0, cursordepth) do
-          change "#shadow": {:"%literal", node0.itemspart}, "#spec": {in: pin, out: pout, filter: pattern, body: body}
-
-          true
-        end
-      end
-
-      # Stateful filter transform
-      givenpi %{[transform (@pin_ pattern_ to @pout_ with state_) body_] (initialize _ () _) -1} do
-        effect(document1, nodepath, node0, cursordepth) do
-          change "#shadow": {:"%literal", node0.itemspart}, "#spec": {in: pin, out: pout, filter: pattern, state: state, body: body}
-
-          true
-        end
-      end
-
-      givenpi %{[delay 0 children_*] cycle _} do
-        {rewrite(document1, nodepath, Rewrite.many(children.unsafe_as_d)), true}
-      end
-
-      givenpi %{[delay n←(%number +i32) _*] cycle _} do
-        effect(document1, nodepath, node0, cursordepth) do
-          backmap %{[delay n_ _*]}, n: n - 1
+        givenpi %{[delay n←(%number +i32) _*] cycle _} do
+          e.backmap %{[delay n_ _*]}, n: n - 1
 
           false
         end
-      end
 
-      givenpi %{[decay 0 _*] cycle _} do
-        {rewrite(document1, nodepath, Rewrite.many(Term[])), true}
-      end
+        givenpi %{[decay 0 _*] cycle _} do
+          e.rewrite Rewrite.many(Term[])
 
-      givenpi %{[decay n←(%number +i32) _*] cycle _} do
-        effect(document1, nodepath, node0, cursordepth) do
-          backmap %{[decay n_ _*]}, n: n - 1
+          true
+        end
+
+        givenpi %{[decay n←(%number +i32) _*] cycle _} do
+          e.backmap %{[decay n_ _*]}, n: n - 1
 
           false
         end
-      end
 
-      # `edit-cast`: converts pulse signal to root-centric edit broadcast.
-      givenpi %{[edit-cast @pin_ to @bout_] (pulse @pin_ motion_) -1} do
-        effect(document1, nodepath, node0, cursordepth) do
-          event :edit, bout, motion
+        # `edit-cast`: converts pulse signal to root-centric edit broadcast.
+        givenpi %{[edit-cast @pin_ to @bout_] (pulse @pin_ motion_) -1} do
+          e.event :edit, bout, motion
 
           # Transition will be done at edit-time.
           false
         end
-      end
 
-      # `edit-cage`: converts pulse signal to children-centric non-broadcast (private) edit.
-      givenpi %{[edit-cage for @pin_ children_*] (pulse @pin_ motion_) _} do
-        effect(document1, nodepath, node0, cursordepth) do
-          backmap ML.term(%{[_ _ _ children_*]}), Term[].with({:children}, edit(children, motion, edge: pin)).upcast
+        # `edit-cage`: converts pulse signal to children-centric non-broadcast (private) edit.
+        givenpi %{[edit-cage for @pin_ children_*] (pulse @pin_ motion_) _} do
+          e.backmap ML.term(%{[_ _ _ children_*]}), Term[].with({:children}, edit(children, motion, edge: pin)).upcast
 
           true
         end
-      end
 
-      givenpi %{[match (@pin_ to @pout_) (%group conds (%past (_ _) min: 1))] (pulse @pin_ input_) -1} do |conds|
-        conds.items.each do |(pattern, template)|
-          next unless env = M1.match?(pattern, input)
+        givenpi %{[match (@pin_ to @pout_) (%group conds (%past (_ _) min: 1))] (pulse @pin_ input_) -1} do |conds|
+          branch = conds.items.leftmost? do |(pattern, template)|
+            next unless env = M1.match?(pattern, input)
 
-          output = M1.bsubst(template, env)
-          response = effect(document1, nodepath, node0, cursordepth) do
-            event :pulse, pout, output
-
-            false
+            M1.bsubst(template, env)
           end
 
-          return response
-        end
-
-        {document1, false}
-      end
-
-      # Lookaround can look behind and ahead on demand. It can also contain children.
-      # On the children part, there is no isolation; it works just like `group`.
-      givenpi %{[lookaround @views_ @capture_ children_*] (pulse @capture_ _) _} do
-        expect nodepath.size > 0
-
-        pivot = nodepath.last
-        parent = nodepath.pop { follow(document0, nodepath) }.as_d
-
-        if parent.same?(document0)
-          range = 0...parent.itemsize
-        else
-          range = passable_range?(document0, Term.of(parent))
-
-          # We've arrived here somehow. Assume we did that by `successor?` -- which
-          # guarantees adherence to passability.
-          expect range
-        end
-
-        behind = parent.items(Term[range.begin], Term[pivot])
-        ahead = parent.items(Term[pivot + 1], Term[range.end])
-
-        effect(document1, nodepath, node0, cursordepth) do
-          event :pulse, views, {behind, ahead}
+          if branch
+            e.event :pulse, pout, branch
+          end
 
           false
         end
-      end
 
-      givenpi %{[mutator @pin_ value0_] (pulse @pin_ (pattern_ backspec_)) _} do
-        value1 = M1.backmap?(pattern, backspec, value0) || value0
-        node1 = Term.of(node0.morph({2, value1}))
+        # Lookaround can look behind and ahead on demand. It can also contain children.
+        # On the children part, there is no isolation; it works just like `group`.
+        givenpi %{[lookaround @views_ @capture_ children_*] (pulse @capture_ _) _} do
+          expect nodepath.size > 0
 
-        # Always trigger transition because we don't know what was edited. Maybe
-        # it needs a transition and maybe not!
-        {assign(document1, nodepath, node1), true}
-      end
+          pivot = nodepath.last
+          parent = nodepath.pop { follow(document0, nodepath) }.as_d
 
-      # FIXME: this node will lead to cryptic bugs in user land. it should be removed.
-      # if users want periodicity they can construct feedback circuits. those are user-
-      # content centric rather than related to D7 internals.
-      givenpi %{[periodic e_] cycle -1} do
-        effect(document1, nodepath, node0, cursordepth) do
-          event e
-
-          false
-        end
-      end
-
-      # FIXME: if node handles cycle it won't hit this. It should be able to!
-      # Any node can define mail: @pout_ attribute. If that's the case this rule
-      # activates, helping the node consume events from its inbox.
-      givenpi %[{¦ inbox: (msg_ _*) mail: @pout_} cycle -1] do
-        effect(document1, nodepath, node0, cursordepth) do
-          if id = node0[:id]?
-            event :pulse, pout, {:mail, msg, id}
+          if parent.same?(document0)
+            range = 0...parent.itemsize
           else
-            event :pulse, pout, {:mail, msg}
+            range = passable_range?(document0, Term.of(parent))
+
+            # We've arrived here somehow. Assume we did that by `successor?` -- which
+            # guarantees adherence to passability.
+            expect range
           end
-          backmap %[{¦ inbox: (M_ _*)}], %[{(M): ()}]
+
+          behind = parent.items(Term[range.begin], Term[pivot])
+          ahead = parent.items(Term[pivot + 1], Term[range.end])
+
+          e.event :pulse, views, {behind, ahead}
 
           false
         end
-      end
 
-      # Any node that wants to receive hover sets its hover: false.
-      # Any node that wants to receive active sets its active: false.
-      # Here we handle hover: true + mouse press = active: false -> active: true,
-      # and the reverse. We also enqueue mail about hover and press.
-      begin
-        # Activate
-        givenpi %[{¦ hover: true active: false} (mouse press) -1] do
-          effect(document1, nodepath, node0, cursordepth) do
-            backmap %[{¦ active_}], %[{active: true}]
+        givenpi %{[mutator @pin_ value0_] (pulse @pin_ (pattern_ backspec_)) _} do
+          value1 = M1.backmap?(pattern, backspec, value0) || value0
+          node1 = Term.of(node0.morph({2, value1}))
+
+          e.rewrite Rewrite.one(node1)
+
+          # Always trigger transition because we don't know what was edited. Maybe
+          # it needs a transition and maybe not!
+          true
+        end
+
+        # FIXME: this node will lead to cryptic bugs in user land. it should be removed.
+        # if users want periodicity they can construct feedback circuits. those are user-
+        # content centric rather than related to D7 internals.
+        givenpi %{[periodic arg_] cycle -1} do
+          e.event arg
+
+          false
+        end
+
+        # FIXME: if node handles cycle it won't hit this. It should be able to!
+        # Any node can define mail: @pout_ attribute. If that's the case this rule
+        # activates, helping the node consume events from its inbox.
+        givenpi %[{¦ inbox: (msg_ _*) mail: @pout_} cycle -1] do
+          if id = node0[:id]?
+            e.event :pulse, pout, {:mail, msg, id}
+          else
+            e.event :pulse, pout, {:mail, msg}
+          end
+
+          e.backmap %[{¦ inbox: (M_ _*)}], %[{(M): ()}]
+
+          false
+        end
+
+        # Any node that wants to receive hover sets its hover: false.
+        # Any node that wants to receive active sets its active: false.
+        # Here we handle hover: true + mouse press = active: false -> active: true,
+        # and the reverse. We also enqueue mail about hover and press.
+        begin
+          # Activate
+          givenpi %[{¦ hover: true active: false} (mouse press) -1] do
+            e.backmap %[{¦ active_}], %[{active: true}]
+
+            false
+          end
+
+          # Deactivate & press
+          givenpi %[{¦ active: true inbox_dict} (mouse release) -1] do
+            e.backmap %[{¦ active_ inbox: [_* `M]}], %[{active: false, M: (press)}]
+
+            false
+          end
+
+          givenpi %[{¦ active: true} (mouse release) -1] do
+            e.backmap %[{¦ active_}], %[{active: false}]
 
             false
           end
         end
 
-        # Deactivate & press
-        givenpi %[{¦ active: true inbox_dict} (mouse release) -1] do
-          effect(document1, nodepath, node0, cursordepth) do
-            backmap %[{¦ active_ inbox: [_* `M]}], %[{active: false, M: (press)}]
-
-            false
+        # Suggestions
+        #
+        # When we see a cursor in a suitable position, we populate it with a list
+        # of suggestions. What the cursor/UI does with them is not of our interest.
+        givenpi %{_ cycle _} do
+          if node1 = COMPLETION_MANAGER.complete?(node0)
+            e.rewrite Rewrite.one(node1)
           end
+
+          false
         end
 
-        givenpi %[{¦ active: true} (mouse release) -1] do
-          effect(document1, nodepath, node0, cursordepth) do
-            backmap %[{¦ active_}], %[{active: false}]
-
-            false
-          end
+        otherwise do
+          false
         end
-      end
-
-      # Suggestions
-      #
-      # When we see a cursor in a suitable position, we populate it with a list
-      # of suggestions. What the cursor/UI does with them is not of our interest.
-      givenpi %{_ cycle _} do
-        if node1 = COMPLETION_MANAGER.complete?(node0)
-          {assign(document1, nodepath, node1), false}
-        else
-          {document1, false}
-        end
-      end
-
-      otherwise do
-        {document1, false}
       end
     end
   end
