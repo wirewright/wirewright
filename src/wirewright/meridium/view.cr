@@ -119,6 +119,12 @@ module Ww::Meridium
 
     private def_change
 
+    # Increments the version of this view. This is usually needed to force
+    # an update when no actual change has occurred.
+    def succ : View
+      change(version: @version + 1)
+    end
+
     # Yields each sensor slot and percept data object to the block.
     def each(& : Slot, PerceptData ->) : Nil
       @map.each { |slot, data| yield slot, data }

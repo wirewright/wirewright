@@ -23,7 +23,6 @@ class Meridium::StepSpace
           end
         end
 
-        Log.info { "#{view.inspect} percepts = #{@percepts}" }
         @alert.call
       end
     end
