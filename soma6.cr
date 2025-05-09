@@ -416,7 +416,7 @@ module D7VR
 
         # If the node is impassable, instance() will skip it once we return;
         # thus we have to recurse manually.
-        Rhodium.passable_node?(value) ? value : instance1(document0, value, nodepath)
+        instance1(document0, value, nodepath)
       end
 
       # NOTE: we do not handle UNIT nodes and the cursor here. This is because
