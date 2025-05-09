@@ -757,13 +757,58 @@ module Ww
     #   otherwise { }
     # end
     # ```
-    macro matchpi?(term, pattern, &)
-      Term.case({{term}}) do
-        matchpi {{pattern}} do
-          {{yield}}
-        end
-
+    macro matchpi?(term, pattern, &block)
+      ::Ww::Term.case({{term}}) do
+        matchpi({{pattern}}) {{block}}
         otherwise { }
+      end
+    end
+
+    # Shorthand for a single-`matchpi` call to `Term.case`:
+    #
+    # ```
+    # Term.case(term) do
+    #   matchpi pattern do
+    #     # Block
+    #   end
+    # end
+    # ```
+    macro matchpi(term, pattern, &block)
+      ::Ww::Term.case({{term}}) do
+        matchpi({{pattern}}) {{block}}
+      end
+    end
+
+    # Shorthand for a single-`givenpi` call to `Term.case`:
+    #
+    # ```
+    # Term.case(term) do
+    #   givenpi pattern do
+    #     # Block
+    #   end
+    #
+    #   otherwise { }
+    # end
+    # ```
+    macro givenpi?(term, pattern, &block)
+      ::Ww::Term.case({{term}}) do
+        givenpi({{pattern}}) {{block}}
+        otherwise { }
+      end
+    end
+
+    # Shorthand for a single-`givenpi` call to `Term.case`:
+    #
+    # ```
+    # Term.case(term) do
+    #   givenpi pattern do
+    #     # Block
+    #   end
+    # end
+    # ```
+    macro givenpi(term, pattern, &block)
+      ::Ww::Term.case({{term}}) do
+        givenpi({{pattern}}) {{block}}
       end
     end
   end
