@@ -61,7 +61,7 @@ module Rhodium
 
   # Returns the passable range (children range) for *node*. Returns `nil`
   # if *node* is impassable.
-  def passable_range?(node : Term) : Range(Int32, Int32)?
+  def passable_range?(document : Term::Dict, node : Term) : Range(Int32, Int32)?
     Term.case(node) do
       matchpi %{[group _*]}, %{[row _*]}, %{[col _*]} { 1...node.itemsize }
       matchpi %{[unit _ _*]} { 2...node.itemsize }
@@ -77,8 +77,8 @@ module Rhodium
 
   # Returns `true` if *node* is passable, i.e. has children that are also nodes.
   # Returns `false` otherwise.
-  def passable_node?(node : Term) : Bool
-    !!passable_range?(node)
+  def passable_node?(document : Term::Dict, node : Term) : Bool
+    !!passable_range?(document, node)
   end
 
   # Mutates *keypath* into its successor in *document*, taking into account
@@ -107,7 +107,7 @@ module Rhodium
 
     # Check if we can descend. Descend if that is the case.
     if descend
-      passable_range = passable_range?(focus)
+      passable_range = passable_range?(document, focus)
       if passable_range && !passable_range.empty?
         unless passable_range.exclusive?
           raise "BUG: expected .possible_range? to return an exclusive range"
@@ -127,7 +127,7 @@ module Rhodium
         parent_passable_range = 0...document.itemsize
       else
         parent = follow(document, keypath)
-        parent_passable_range = passable_range?(parent)
+        parent_passable_range = passable_range?(document, parent)
 
         # We somehow ended up here so the parent must have been passable. Otherwise
         # we were provided a bogus keypath so raise.
@@ -163,7 +163,7 @@ module Rhodium
       if document.same?(node)
         passable_range = 0...document.itemsize
       else
-        passable_range = passable_range?(node)
+        passable_range = passable_range?(document, node)
       end
 
       return false unless passable_range
@@ -1357,7 +1357,7 @@ module Rhodium
         if parent.same?(document0)
           range = 0...parent.itemsize
         else
-          range = passable_range?(Term.of(parent))
+          range = passable_range?(document0, Term.of(parent))
 
           # We've arrived here somehow. Assume we did that by `successor?` -- which
           # guarantees adherence to passability.

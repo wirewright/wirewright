@@ -300,7 +300,7 @@ module D7VR
   WWML
 
   private def instance1(document0 : Term::Dict, node0 : Term, nodepath : Stack(Int32)) : Term
-    if Rhodium.passable_node?(node0)
+    if Rhodium.passable_node?(document0, node0)
       # If node is passable, remove only its own shadow attributes so that child
       # instantiations have a chance of seeing them.
       node1 = D7.nonshadow1(node0)
