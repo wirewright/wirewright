@@ -1,3 +1,6 @@
+# SIMPLE DICTIONARIES ARE DICTIONARIES THAT DO NOT CONTAIN
+# SIMPLE DICTIONARIES.
+
 # Dictionaries should have small (8/16-element) short-term memory for which
 # patterns they were matched by. However this would require some integration
 # on the pattern matching/PatternSet side. Doable though. PatternSet can assign
@@ -1593,7 +1596,7 @@ module Ww
         io << "]"
       else
         io << "{"
-        pe(ordered: true).join(io, ", ") do |(k, v)|
+        ee(ordered: true).join(io, ", ") do |(k, v)|
           k.inspect(io)
           io << ": "
           v.inspect(io)
