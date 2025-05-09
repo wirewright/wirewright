@@ -1999,16 +1999,23 @@ module ::Ww::M1
     SYMS_CMP = {SYM_LT, SYM_GT, SYM_LTE, SYM_GTE}
     SYMS_LTX = {SYM_LT, SYM_LTE}
 
-    NORMAL_PASS = Term.of({:"%pass"})
+    PASS = Term.of({:"%pass"})
 
-    NORMAL_BLANK_DICT    = Term.of({:"%dict"})
-    NORMAL_BLANK_NUMBER  = Term.of({:"%number", :_})
-    NORMAL_BLANK_STRING  = Term.of({:"%string"})
-    NORMAL_BLANK_SYMBOL  = Term.of({:"%symbol"})
-    NORMAL_BLANK_BOOLEAN = Term.of({:"%boolean"})
+    BLANK_DICT    = Term.of({:"%dict"})
+    BLANK_NUMBER  = Term.of({:"%number", :_})
+    BLANK_STRING  = Term.of({:"%string"})
+    BLANK_SYMBOL  = Term.of({:"%symbol"})
+    BLANK_BOOLEAN = Term.of({:"%boolean"})
+
+    EDGE_ANY     = Term.of(:"%edge", :_)
+    EDGE_SYMBOL  = Term.of(:"%edge", :_symbol)
+    EDGE_STRING  = Term.of(:"%edge", :_string)
+    EDGE_NUMBER  = Term.of(:"%edge", :_number)
+    EDGE_DICT    = Term.of(:"%edge", :_dict)
+    EDGE_BOOLEAN = Term.of(:"%edge", :_boolean)
 
     # :nodoc:
-    NORMAL_INT = Term.of(
+    INT = Term.of(
       u8: {:"%number", UInt8::MIN, :<=, {:whole, :_}, :<=, UInt8::MAX},
       u16: {:"%number", UInt16::MIN, :<=, {:whole, :_}, :<=, UInt16::MAX},
       u32: {:"%number", UInt32::MIN, :<=, {:whole, :_}, :<=, UInt32::MAX},
@@ -2239,12 +2246,12 @@ module ::Ww::M1
         # not rewriting here we must recurse explicitly).
         matchpi %[_symbol] do
           case pattern
-          when SYM_BLANK_ANY     then NORMAL_PASS
-          when SYM_BLANK_NUMBER  then NORMAL_BLANK_NUMBER
-          when SYM_BLANK_STRING  then NORMAL_BLANK_STRING
-          when SYM_BLANK_SYMBOL  then NORMAL_BLANK_SYMBOL
-          when SYM_BLANK_BOOLEAN then NORMAL_BLANK_BOOLEAN
-          when SYM_BLANK_DICT    then NORMAL_BLANK_DICT
+          when SYM_BLANK_ANY     then PASS
+          when SYM_BLANK_NUMBER  then BLANK_NUMBER
+          when SYM_BLANK_STRING  then BLANK_STRING
+          when SYM_BLANK_SYMBOL  then BLANK_SYMBOL
+          when SYM_BLANK_BOOLEAN then BLANK_BOOLEAN
+          when SYM_BLANK_DICT    then BLANK_DICT
           else
             continue unless blank = pattern.unsafe_as_sym.blank?
             continue unless blank.single?
@@ -2263,19 +2270,19 @@ module ::Ww::M1
         #
         # (edge ...) is the only pattern matching construct not prefixed with a %.
         # It is extremely abundant in Soma/delta7 patterns, and ML emits it on @...,
-        # e.g. @foo is (edge ...). We reuse @foo_ to match roughly ((%literal edge) _).
+        # e.g. @foo is (edge ...). We reuse @foo_ to match ((%literal edge) _).
         matchpi %[(edge arg_symbol)], cue: :edge do |arg|
           arg = arg.unsafe_as_sym
           continue unless blank = arg.blank?
           continue unless blank.single?
 
           case blank.type
-          when .symbol? then edge = Term.of(:"%edge", :_symbol)
-          when .string? then edge = Term.of(:"%edge", :_string)
-          when .number? then edge = Term.of(:"%edge", :_number)
-          when .any?    then edge = Term.of(:"%edge", :_)
-          else
-            continue
+          in .symbol?  then edge = EDGE_SYMBOL
+          in .string?  then edge = EDGE_STRING
+          in .number?  then edge = EDGE_NUMBER
+          in .dict?    then edge = EDGE_DICT
+          in .boolean? then edge = EDGE_BOOLEAN
+          in .any?     then edge = EDGE_ANY
           end
 
           if name = blank.name?
@@ -2318,7 +2325,7 @@ module ::Ww::M1
         # actually have fixed-width numbers. These kinds of patterns are often used
         # on the Crystal side to ensure we can safely e.g. to(Int32).
         matchpi %[(%number type_symbol)], cue: :"%number" do
-          continue unless normal = NORMAL_INT[type]?
+          continue unless normal = INT[type]?
 
           {:"%terminal", normal}
         end
@@ -2381,7 +2388,7 @@ module ::Ww::M1
         end
 
         matchpi %[(%all)], cue: :"%all" do
-          NORMAL_PASS
+          PASS
         end
 
         matchpi %[(%all a_)], cue: :"%all" do
@@ -2429,14 +2436,6 @@ module ::Ww::M1
         matchpi %[(%keypath capture_)], cue: :"%keypath" do
           {:"%keypath", {:"%capture", capture}}
         end
-
-        matchpi(
-          %[(%edge %'_symbol)],
-          %[(%edge %'_string)],
-          %[(%edge %'_number)],
-          %[(%edge %'_)],
-          cue: :"%edge"
-        ) { pattern }
 
         # %nonself is dissolved at normalization.
         matchpi %[(%nonself arg_)], cue: :"%nonself" do
@@ -3410,7 +3409,7 @@ module ::Ww::M1
         matchpi %{[%bounds (%itemseq/singular-only args_+)]} do
           continue unless normp.probably_includes?(Term[:"%pass"])
 
-          passes = args.items.count(Normal::NORMAL_PASS)
+          passes = args.items.count(Normal::PASS)
 
           continue unless passes/args.itemsize >= 0.5
 
@@ -3418,7 +3417,7 @@ module ::Ww::M1
             commit << :"%all"
 
             args.items.each_with_index do |arg, index|
-              next if arg == Normal::NORMAL_PASS
+              next if arg == Normal::PASS
 
               commit << {:"%value", {:"%literal", index}, arg}
             end
@@ -3964,20 +3963,17 @@ module ::Ww::M1
         Operator::SourceChoice.new(operator(a, captures), operator(Term.of(rest), captures))
       end
 
-      match({:"%edge", {:"%literal", :_}}, cue: :"%edge") do
-        Operator::Edge.new(:any)
-      end
-
-      match({:"%edge", {:"%literal", :_symbol}}, cue: :"%edge") do
-        Operator::Edge.new(:symbol)
-      end
-
-      match({:"%edge", {:"%literal", :_string}}, cue: :"%edge") do
-        Operator::Edge.new(:string)
-      end
-
-      match({:"%edge", {:"%literal", :_number}}, cue: :"%edge") do
-        Operator::Edge.new(:number)
+      matchpi %{(%edge _symbol)}, cue: :"%edge" do
+        case node
+        when Normal::EDGE_ANY     then Operator::Edge.new(:any)
+        when Normal::EDGE_SYMBOL  then Operator::Edge.new(:symbol)
+        when Normal::EDGE_STRING  then Operator::Edge.new(:string)
+        when Normal::EDGE_NUMBER  then Operator::Edge.new(:number)
+        when Normal::EDGE_DICT    then Operator::Edge.new(:dict)
+        when Normal::EDGE_BOOLEAN then Operator::Edge.new(:boolean)
+        else
+          continue
+        end
       end
 
       match({:"%not", :_, :"_*"}, cue: :"%not") do
@@ -5052,7 +5048,7 @@ module ::Ww::M1
         {Magnitude.new(0), Magnitude::INFINITY}
       end
 
-      matchpi %{[%'%literal x_dict]}, cue: :"%literal" do
+      matchpi %{[%'%literal x_dict]}, %{[%edge x_dict]}, cues: {:"%literal", :"%edge"} do
         maxdepth = x.fresh_maxdepth
 
         {Magnitude.new(maxdepth), Magnitude.new(maxdepth)}
@@ -5976,7 +5972,7 @@ end
 # Binarizes and simplifies nested/long `%all` *node*.
 def all2(node) : Term
   Term.case(node) do
-    matchpi %{(%'%all)} { M1::Normal::NORMAL_PASS }
+    matchpi %{(%'%all)} { M1::Normal::PASS }
     matchpi %{(%'%all a_)} { a }
     matchpi %{(%'%all a_ %'(%pass))} { a }
     matchpi %{(%'%all %'(%pass) b_)} { b }
@@ -6040,12 +6036,12 @@ module ::Ww::M1::Skeleton
             type_symbol)}
       ) do
         case type.blank.type
-        in .any?     then unit = M1::Normal::NORMAL_PASS
-        in .number?  then unit = M1::Normal::NORMAL_BLANK_NUMBER
-        in .string?  then unit = M1::Normal::NORMAL_BLANK_STRING
-        in .symbol?  then unit = M1::Normal::NORMAL_BLANK_SYMBOL
-        in .dict?    then unit = M1::Normal::NORMAL_BLANK_DICT
-        in .boolean? then unit = M1::Normal::NORMAL_BLANK_BOOLEAN
+        in .any?     then unit = M1::Normal::PASS
+        in .number?  then unit = M1::Normal::BLANK_NUMBER
+        in .string?  then unit = M1::Normal::BLANK_STRING
+        in .symbol?  then unit = M1::Normal::BLANK_SYMBOL
+        in .dict?    then unit = M1::Normal::BLANK_DICT
+        in .boolean? then unit = M1::Normal::BLANK_BOOLEAN
         end
 
         Term::Dict.build do |disj|
@@ -6240,18 +6236,18 @@ module ::Ww::M1::Skeleton
         %{(%'%pipe (%barrier (div _number)) _)},
         %{(%'%pipe (%barrier (mod _number)) _)},
         %{(%'%pipe (%barrier (** _number)) _)},
-      ) { M1::Normal::NORMAL_BLANK_NUMBER }
+      ) { M1::Normal::BLANK_NUMBER }
 
       matchpi(
         %{(%'%pipe (map _) _)},
         %{(%'%pipe type _)},
-      ) { M1::Normal::NORMAL_PASS }
+      ) { M1::Normal::PASS }
 
-      matchpi %{(%'%pipe span _)} { M1::Normal::NORMAL_BLANK_STRING }
-      matchpi %{(%'%pipe tally _)} { M1::Normal::NORMAL_BLANK_DICT }
+      matchpi %{(%'%pipe span _)} { M1::Normal::BLANK_STRING }
+      matchpi %{(%'%pipe tally _)} { M1::Normal::BLANK_DICT }
 
       matchpi %{(%'%symbol nonblank)}, %{(%'%symbol blank _ _)} do
-        M1::Normal::NORMAL_BLANK_SYMBOL
+        M1::Normal::BLANK_SYMBOL
       end
 
       matchpi %{(%'%terminal node_)} do
@@ -6259,7 +6255,7 @@ module ::Ww::M1::Skeleton
       end
 
       otherwise do
-        M1::Normal::NORMAL_PASS
+        M1::Normal::PASS
       end
     end
   end
@@ -6323,23 +6319,23 @@ module ::Ww::M1
       end
 
       matchpi %{(%'%literal ())} do
-        sink.call(prefix.append(M1::Normal::NORMAL_BLANK_DICT).append(branch))
+        sink.call(prefix.append(M1::Normal::BLANK_DICT).append(branch))
       end
 
       matchpi %{(%'%literal _number)} do
-        sink.call(prefix.append(M1::Normal::NORMAL_BLANK_NUMBER).append(branch))
+        sink.call(prefix.append(M1::Normal::BLANK_NUMBER).append(branch))
       end
 
       matchpi %{(%'%literal _string)} do
-        sink.call(prefix.append(M1::Normal::NORMAL_BLANK_STRING).append(branch))
+        sink.call(prefix.append(M1::Normal::BLANK_STRING).append(branch))
       end
 
       matchpi %{(%'%literal _symbol)} do
-        sink.call(prefix.append(M1::Normal::NORMAL_BLANK_SYMBOL).append(branch))
+        sink.call(prefix.append(M1::Normal::BLANK_SYMBOL).append(branch))
       end
 
       matchpi %{(%'%literal _boolean)} do
-        sink.call(prefix.append(M1::Normal::NORMAL_BLANK_BOOLEAN).append(branch))
+        sink.call(prefix.append(M1::Normal::BLANK_BOOLEAN).append(branch))
       end
 
       matchpi %{(%'%all a_ b_)} do
@@ -6349,7 +6345,7 @@ module ::Ww::M1
 
       matchpi %{(%'%value (%'%literal _) successor_)} do
         prefix = prefix
-          .append(M1::Normal::NORMAL_BLANK_DICT)
+          .append(M1::Normal::BLANK_DICT)
           .append(branch.without(2))
 
         strands(prefix, successor, sink)

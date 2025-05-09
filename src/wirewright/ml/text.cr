@@ -898,12 +898,7 @@ module Ww::ML::Text
         when :"`"  then Term.of(:"%slot", slot)
         when :"≡"  then Term.of(:"%nonself", slot)
         when :"%'" then Term.of(:"%literal", slot)
-        when :"@"
-          unless name = term?(Term::Sym) || term?(Term::Str) || term?(Term::Num)
-            raise "expected symbol, string, or number as edge name"
-          end
-
-          Term.of(:edge, name)
+        when :"@"  then Term.of(:edge, slot)
         else
           raise "unexpected token: '#{token.type}'"
         end

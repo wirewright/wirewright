@@ -736,8 +736,8 @@ module Feature
     include Feature
 
     def call(ctx, term, postfix, head, rest)
-      Term.matchpi?(term, %{(edge suffix←(%any° _symbol _number _string))}) do
-        return postfixed(Term.of(:frag, "@#{suffix.inspect}", tag: :edge), postfix)
+      Term.matchpi?(term, %{(%'edge suffix_)}) do
+        return postfixed(Term.of(:frag, "@#{ML.compact(suffix)}", tag: :edge), postfix)
       end
 
       rest.call(ctx, term, postfix)

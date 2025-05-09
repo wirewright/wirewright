@@ -296,30 +296,42 @@
 (group
   (pattern @qux
     (+ @qux)
-    (- @xyzzy @1 @"John Doe" (edge true)))
+    (- @xyzzy @1 @"John Doe" @true))
 
   ;; Interpreted literally!
   (pattern @xs_*
     (= (edge a b c) {xs: (a b c)})
-    (+ @qux @1 @"John Doe" (edge true) (edge ())))
+    (+ @qux @1 @"John Doe" @true @()))
 
   (pattern @x_
     (= @1 {x: @1})
     (= @qux {x: @qux})
     (= @"John Doe" {x: @"John Doe"})
-    (- (edge ()) (edge true) (qux 1 num2)))
+    (= @() {x: @()})
+    (= @(a b c) {x: @(a b c)})
+    (= @true {x: @true})
+    (= @false {x: @false})
+    (- (qux 1 num2)))
 
   (pattern @x_symbol
     (= @qux {x: @qux})
-    (- @0 @"John Doe" (edge ()) true))
+    (- @0 @"John Doe" @() true))
 
   (pattern @x_number
     (= @1 {x: @1})
-    (- @qux @"John Doe" (edge ()) (edge true)))
+    (- @qux @"John Doe" @() @true))
 
   (pattern @x_string
     (= @"John Doe" {x: @"John Doe"})
-    (- @1 @qux (edge ()) (edge true))))
+    (- @1 @qux @() @true))
+
+  (pattern @_boolean
+    (+ @true @false)
+    (- @123 @"hello" @qux @()))
+
+  (pattern @_dict
+    (+ @() @(a) @(a b) @(qux: 123) @(a b qux: 123))
+    (- @123 @"hello" @qux @true)))
 
 ;; %layer
 (group
@@ -2865,6 +2877,9 @@
   (backmap (@x_ {(x): (a b c)})
     (= @quux (a b c)))
 
+  (backmap ((+ @x_) {(x): (a b c)})
+    (= (+ @qux) (+ a b c)))
+
   (backmap ((@x_) {(x): (I have seen ($my x))})
     (= (@quux) (I have seen @quux)))
 
@@ -3664,6 +3679,9 @@
       (%items xs_ (+ a_number b_number))
       min: 2 max: 2)
   (of @x @x_ @x_string @x_symbol @x_number min: 1 max: 1)
+  (of @() @(a b c) @(1 2 3) min: 2 max: 2)
+  (of @((a b) (c d)) min: 3 max: 3)
+  (of @(() a: (+ (3) 4)) min: 4 max: 4)
   (of (qux a_ ¦ {z: (((z_number))), a: 1, b: ()} x: () y: (())) min: 4)
   (of (qux a_number ¦ {z: (((z_number))), a: 1, b: ()} x: () y: (())) min: 4 max: 4)
   ;; For open layers we never know the maximum depth

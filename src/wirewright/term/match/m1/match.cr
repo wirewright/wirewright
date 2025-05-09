@@ -170,10 +170,8 @@ module Ww::M1::Operator
     case op.type
     when .any?
       valid = ML.edge?(matchee)
-    when .number?, .string?, .symbol?
-      valid = ML.edge?(matchee, allowed: {op.type})
     else
-      raise ArgumentError.new("unexpected edge type after compilation: expected Any, Number, String, or Symbol")
+      valid = ML.edge?(matchee, type: op.type)
     end
 
     unless valid

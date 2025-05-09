@@ -1,6 +1,5 @@
 @[Flags]
 enum Ww::ML::Style : UInt8
-  HiddenMeta
   Indent2
 
   def indent
@@ -13,7 +12,7 @@ module Ww::ML::Formatter
 
   def format(pp, term : Term, style : Style)
     Term.case(term) do
-      matchp %[(edge (%any° _number _symbol _string))] do
+      matchp %[(edge _)] do
         pp.text("@")
         format(pp, term[1], style)
       end
@@ -26,7 +25,6 @@ module Ww::ML::Formatter
         pp.group(style.indent, "{", "}") do
           index = 0
           term.ee.each do |k, v|
-            next if style.hidden_meta? && ML.meta?(k)
             pp.comma if index > 0
             format(pp, k, style)
             pp.text(":")
@@ -55,7 +53,6 @@ module Ww::ML::Formatter
             format(pp, item, style)
           end
           term.pe(ordered: true).each do |k, v|
-            next if style.hidden_meta? && ML.meta?(k)
             pp.breakable
             format(pp, k, style)
             pp.text(":")

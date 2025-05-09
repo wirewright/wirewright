@@ -305,19 +305,17 @@ an "atomic" (indivisible) unit despite the way the pattern is written. It is an 
 very useful exception from the strictness of `%`-prefixing terms that are specially treated by
 the pattern matching engine.
 
-The special treatment is in the fact that `(edge x_)` will be matched as `x←(edge _)`. The only
-valid types for the blank are `_number`, `_string`, and `_symbol`. `_` (pass, untyped blank) is
-treated as `(%any° _number _string _symbol)`.
+The special treatment is in the fact that `(edge x_)` will be matched as `x←(edge _)`.
 
 `(edge  ...)` has a shorthand syntax of `@...` in WwML: `@x` is the same as `(edge x)` and
 `@x_` is the same as `(edge x_)` (which will be matched as `x←(edge _)`). `@x_number` is
 a shorthand for `(edge x_number)`, which, as expected, receives special treatment:
 `x←(edge _number)`.
 
-However, `(edge (+ 1 2))` is invalid and will be treated "one level of meaning down",
-in other words, as a dictionary pattern rather than an edge. Writing `@(+ 1 2)` is an
-outright syntax error to prevent confusion. Similarly, `(edge x_dict)` is invalid and
-will be interpreted as a normal dictionary pattern.
+It is possible to use a dictionary literal as an edge name. This is useful for representing
+edge scopes / paths; however, this is normally done internally in Wirewright. For example,
+`@(a b c)` could represent what one would write in a more traditional programming language
+as `a.b.c`.
 
 ```wwml
 (appender (_* `target) @edge_) <> {target: →edge, (edge): ()}
