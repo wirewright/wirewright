@@ -471,6 +471,11 @@ module Ww
       Num.new(object.value)
     end
 
+    # Constructs a string term from the given UUID *object*.
+    def self.[](object : UUID) : Str
+      Str.new(object.to_s)
+    end
+
     # Constructs an indexed dictionary from the given enumerable *object*.
     # Elements of *object* receive successive keys 0, 1, 2, etc.
     #

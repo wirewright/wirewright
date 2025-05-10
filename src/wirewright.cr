@@ -1,5 +1,6 @@
 require "log"
 require "big"
+require "uuid"
 require "json"
 require "digest"
 require "blake3"
