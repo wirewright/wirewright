@@ -70,6 +70,7 @@ module Microfold
   # NOTE:
   # - `[]` resolves as if it was part of the prop, e.g. bg-[qux], qux: red-500 => sheet: {bg: (oklch ...)}
   # - `{}` is pasted as-is into the sheet, e.g. bg-{qux}, qux: red-500 => sheet: {bg: red-500}
+  #    Thus you can use it to do `bg-{color} color: (oklch ...)` for e.g. custom colors.
 
   private def dynamic?(ctx : SheetContext, r : Char::Reader, leader : String) : Term?
     return unless r = consume?(r, leader)

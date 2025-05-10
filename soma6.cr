@@ -556,7 +556,12 @@ module D7VR
       end
 
       matchpi %{(frag content_string ¦ tag: edge)} do
-        Term.of(:code, content, style: "#{style} text-green-400")
+        hashcode = Term.hashcode(content)
+        l = 0.6 + (hashcode % 1024)*((0.9 - 0.6)/1024)
+        c = 0.1 + (hashcode % 1024)*((0.25 - 0.1)/1024)
+        h = hashcode % 360
+
+        Term.of(:code, content, style: "#{style} text-{color}", color: {:oklch, l, c, h})
       end
 
       matchpi %{(indented child_ by: n←(%number (whole _)))} do
