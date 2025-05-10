@@ -469,7 +469,7 @@ module Rhodium
     # the same *container*. Violating this assumption is not an error,
     # but you should think hard before doing that.
     def commit(container : Term::Dict, key : Term::Sym) : Term::Dict
-      @carrier.empty? ? container.without(key) : container.with(key, @carrier)
+      container.with(key, @carrier)
     end
   end
 
@@ -1857,9 +1857,12 @@ module Rhodium
 
     # PASS 3.
     #
-    # Population diff.
-    population0 = document0[Population]? || Term[]
-    population1 = Term[]
+    # Population diff. Both populations must be tracked for this to work. Otherwise
+    # we do a "cold start" which triggers e.g. cell/created events.
+    population0 = population1 = Term[]
+    if Population.in?(document1)
+      population0 = document0[Population]? || population0
+    end
 
     # Carry identities of existing nodes into population1.
     while successor?(document1, nodepath)
