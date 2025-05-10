@@ -226,8 +226,17 @@
    (log @msgs in @log limit: 4)))
 
 ;; TODO: log to uninitialized cell
-;; TODO: log to guarded cell
-;; TODO: log to guarded uninitialized cell
+
+;; cell clear, destroy feedback
+(group
+  (d7
+    ((cell 0 @x)
+     (event (pulse @x clear)))
+    ((cell @x)))
+  (d7
+    ((cell 0 @x)
+     (event (pulse @x destroy)))
+    ()))
 
 ;; See how transform behaves with symbolic/non-symblic state edge
 (group

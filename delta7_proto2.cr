@@ -659,6 +659,22 @@ module Rhodium
             true
           end
 
+          givenpi %{[cell v_ @cout_] (pulse @cout_ clear)} do
+            e.backmap %[[_ v_ @_]], %[{(v): ()}]
+
+            true
+          end
+
+          givenpi(
+            %{[cell @cout_] (pulse @cout_ destroy)},
+            %{[cell _ @cout_] (pulse @cout_ destroy)},
+          ) do
+            e.rewrite Rewrite.many(Term[])
+
+            # Vote for transition to cleanup etc.
+            true
+          end
+
           givenpi %{[cell v_ @cout_] (assign @cout_ v_)} do
             false
           end
