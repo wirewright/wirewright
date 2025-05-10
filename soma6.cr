@@ -994,25 +994,19 @@ class Document
   end
 
   private def hover(nodepath : Stack(Int32), node : Term, mouseover : Stack(Int32)?) : Term
+    unless Rhodium.active?(@document, nodepath, node)
+      return node
+    end
+
     pointee = nodepath == mouseover
 
     Term.case(node) do
       # If this particular button is hovered, set `hover: true`. If it is not,
       # remove the hover prop (this behavior is specific to buttons).
       matchpi %{[button _*]} do
-        return Term.of(node.morph({:hover, pointee ? true : nil}))
+        Term.of(node.morph({:hover, pointee ? true : nil}))
       end
 
-      otherwise do
-        # Fallthrough
-      end
-    end
-
-    unless Rhodium.active?(@document, nodepath, node)
-      return node
-    end
-
-    Term.case(node) do
       # If it has inbox, we also notify.
       matchpi %[{¦ hover_boolean inbox_dict}] do
         case {hover.true?, pointee}
@@ -1331,9 +1325,6 @@ welcome = ML.dict <<-WWML
 WWML
 
 test = ML.dict <<-WWML
-(sensor x_number in local to @xs)
-(appearance 100 in local)
-
 ("" | "" () @user)
 WWML
 
