@@ -317,7 +317,7 @@ module D7VR
         %{(button caption_ to @_ waiting @_ (_*) ¦ attrs_)},
         %{(button caption_ as _ to @_ waiting @_ (_*) ¦ attrs_)},
       ) do |caption|
-        continue if Rhodium.cursor_in_node?(document0, nodepath)
+        continue unless Rhodium.active?(document0, nodepath, node0)
 
         if ML.edge?(caption)
           continue unless caption = Rhodium.cell?(document0, nodepath, caption)
@@ -343,7 +343,7 @@ module D7VR
 
       # Instantiate H1-H6, P, SRC nodes.
       matchpi %{[(%any h1 h2 h3 h4 h5 h6 p src) content_]} do
-        continue if Rhodium.cursor_in_node?(document0, nodepath)
+        continue unless Rhodium.active?(document0, nodepath, node0)
 
         if ML.edge?(content)
           continue unless caption = Rhodium.cell?(document0, nodepath, content)
@@ -360,7 +360,7 @@ module D7VR
 
       # Instantiate HR node.
       matchpi %{[hr]} do
-        continue if Rhodium.cursor_in_node?(document0, nodepath)
+        continue unless Rhodium.active?(document0, nodepath, node0)
 
         view = node1.morph({0, {:self, :hr, :rect}})
 
@@ -373,7 +373,8 @@ module D7VR
       # This is useful to avoid wasting compute on whatever is under the cover
       # later on.
       matchpi %{[cover title_ _+]} do |title|
-        continue if Rhodium.cursor_in_node?(document0, nodepath)
+        continue unless Rhodium.active?(document0, nodepath, node0)
+        continue if Rhodium.has_cursor_at_depth?(document0, nodepath, node0) { |depth| depth > 0 }
 
         if ML.edge?(title)
           continue unless title = Rhodium.cell?(document0, nodepath, title)
@@ -393,8 +394,7 @@ module D7VR
 
       # Instantiate VIEW node.
       matchpi %{(view view_ ¦ attrs_)} do |view|
-        # TODO: relax this a little bit
-        continue if Rhodium.cursor_in_node?(document0, nodepath)
+        continue unless Rhodium.active?(document0, nodepath, node0)
 
         if ML.edge?(view)
           continue unless view = Rhodium.cell?(document0, nodepath, view)
@@ -404,15 +404,14 @@ module D7VR
       end
 
       matchpi %{(changes/view view_ @_ ¦ attrs_)} do
-        # TODO: relax this a little bit
-        continue if Rhodium.cursor_in_node?(document0, nodepath)
+        continue unless Rhodium.active?(document0, nodepath, node0)
 
         node1.morph({:"#view", view | attrs}, {:"#fallback", node1})
       end
 
       # Instantiate invisible FRAG node (hide it).
       matchpi %{(frag value_ @_ ¦ _ visible: false)} do
-        continue if Rhodium.cursor_in_node?(document0, nodepath)
+        continue unless Rhodium.active?(document0, nodepath, node0)
 
         # If the node is impassable, instance() will skip it once we return;
         # thus we have to recurse manually.
@@ -425,21 +424,21 @@ module D7VR
       # pretty printing which visits everything.
 
       matchpi %{[unit _ _+]} do
-        # TODO: relax this a little bit
-        continue if Rhodium.cursor_in_node?(document0, nodepath)
+        continue unless Rhodium.active?(document0, nodepath, node0)
+        continue if Rhodium.has_cursor_at_depth?(document0, nodepath, node0) { |depth| depth == 1 }
 
         node1.morph({:"#fallback", node1})
       end
 
       matchpi %{[sensor pattern_ in tspace_symbol to @_]} do
-        continue if Rhodium.cursor_in_node?(document0, nodepath)
+        continue unless Rhodium.active?(document0, nodepath, node0)
         continue unless in_sync = document0[Rhodium::Tspaces, tspace, :sensors, {query: pattern, secret: node0[:secret]?}]?
 
         node1 = node1.morph({:"#status", in_sync.true?})
       end
 
       matchpi %{[appearance value_ in tspace_symbol]} do
-        continue if Rhodium.cursor_in_node?(document0, nodepath)
+        continue unless Rhodium.active?(document0, nodepath, node0)
         continue unless in_sync = document0[Rhodium::Tspaces, tspace, :appearances, {value: value, secret: node0[:secret]?}]?
 
         node1 = node1.morph({:"#status", in_sync.true?})
@@ -452,7 +451,7 @@ module D7VR
     # with a backlink via #extend. This includes buttons, for example.
     Term.case(node1) do
       matchpi %[{¦ inbox: _dict}], %[{¦ hover: _boolean}] do
-        continue if Rhodium.cursor_in_node?(document0, nodepath)
+        continue unless Rhodium.active?(document0, nodepath, node0)
 
         node1 = node1.morph({:"#extend", :"#backlink", nodepath})
       end
@@ -1009,7 +1008,7 @@ class Document
       end
     end
 
-    if Rhodium.cursor_in_node?(@document, nodepath)
+    unless Rhodium.active?(@document, nodepath, node)
       return node
     end
 
