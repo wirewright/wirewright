@@ -320,7 +320,7 @@ module D7VR
         continue if Rhodium.cursor_in_node?(document0, nodepath)
 
         if ML.edge?(caption)
-          continue unless caption = document0[Rhodium::Cells, caption]?
+          continue unless caption = Rhodium.cell?(document0, nodepath, caption)
         end
 
         if caption.type.dict?
@@ -346,7 +346,7 @@ module D7VR
         continue if Rhodium.cursor_in_node?(document0, nodepath)
 
         if ML.edge?(content)
-          continue unless caption = document0[Rhodium::Cells, content]?
+          continue unless caption = Rhodium.cell?(document0, nodepath, content)
 
           # Instantiate caption if it's an edge.
           view = node1.morph({1, caption})
@@ -376,7 +376,7 @@ module D7VR
         continue if Rhodium.cursor_in_node?(document0, nodepath)
 
         if ML.edge?(title)
-          continue unless title = document0[Rhodium::Cells, title]?
+          continue unless title = Rhodium.cell?(document0, nodepath, title)
         end
 
         view = Alloy.render(Term[title: title], TEMPLATE_COVER)
@@ -397,7 +397,7 @@ module D7VR
         continue if Rhodium.cursor_in_node?(document0, nodepath)
 
         if ML.edge?(view)
-          continue unless view = document0[Rhodium::Cells, view]?
+          continue unless view = Rhodium.cell?(document0, nodepath, view)
         end
 
         node1.morph({:"#view", view | attrs}, {:"#fallback", node1})

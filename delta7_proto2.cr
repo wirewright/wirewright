@@ -71,6 +71,8 @@ module Rhodium
       matchpi %{[frag _ @_]} { 1...2 }
       matchpi %{[mutator @_ _]} { 2...3 }
       matchpi %{[cover _ _+]} { 2...node.itemsize }
+      matchpi %{[module (_*) _*]} { 2...node.itemsize }
+
       otherwise { }
     end
   end
@@ -242,8 +244,8 @@ module Rhodium
     rewrite(document, keypath, Rewrite.one(term))
   end
 
-  # Returns the nearest enclosing parent of the term pointed to by *keypath*
-  # for which the block is truthy. Returns `nil` if *keypath* is invalid.
+  # Returns the nearest ancestor (parent) of the term pointed to by *keypath*
+  # that satisfies the block.
   def enclosing?(document : Term::Dict, keypath : Stack(Int32), & : Term::Dict -> Bool) : Term::Dict?
     stack = Stack(Term::Dict).new
     tip = Term.of(document)
@@ -267,6 +269,127 @@ module Rhodium
   # Same as `enclosing?`, but raises `KeypathError` if *keypath* is invalid.
   def enclosing(document : Term::Dict, keypath : Stack(Int32), & : Term::Dict -> Bool) : Term::Dict
     enclosing?(document, keypath) { |parent| yield parent } || raise KeypathError.new
+  end
+
+  # Converts relative *edge* into an absolute edge.
+  #
+  # An absolute edge incorporates all scopes that *edge* is embedded in.
+  def abs(document : Term::Dict, nodepath : Stack(Int32), edge : Term) : Term
+    unless ML.edge?(edge)
+      return edge
+    end
+
+    _, leaf = edge
+    modpath = Term::Dict.build do |commit|
+      commit << leaf
+
+      enclosing?(document, nodepath) do |parent|
+        Term.case(parent) do
+          matchpi %{(module (exposed_*) _* ¦ _ #id: id_)} do
+            continue if edge.in?(exposed.items)
+
+            commit << id
+          end
+
+          otherwise { }
+        end
+
+        false # continue
+      end
+    end
+
+    Term.of(SYM_EDGE, modpath)
+  end
+
+  # Converts absolute *edge* into an edge relative to *nodepath*.
+  #
+  # Edges that are "out of scope" (cannot be expressed relative to *nodepath*)
+  # are returned without change. It is expected that the caller will simply ignore
+  # them, assuming there are no local facilities to handle absolute edges.
+  def rel(document : Term::Dict, nodepath : Stack(Int32), edge : Term) : Term
+    unless ML.edge?(edge)
+      return edge # Not an edge!
+    end
+
+    _, name = edge
+    unless name.type.dict? && (head = name[0]?)
+      return edge # Not an abs() edge!
+    end
+
+    candidate = Term.of(SYM_EDGE, head)
+    unless edge == abs(document, nodepath, candidate)
+      return edge # Out of scope!
+    end
+
+    candidate
+  end
+
+  struct Scope
+    def initialize(@document : Term::Dict, @nodepath : Stack(Int32))
+    end
+
+    def ref(edge : Term) : Term
+      Rhodium.abs(@document, @nodepath, edge)
+    end
+  end
+
+  # Converts all edges in *event* into global edges (ones that can be passed
+  # between modules without loss of scope).
+  #
+  # NOTE: *event* is assumed to have been `localized`.
+  # NOTE: *event* must be one of recognized events for this to work.
+  def globalized(document : Term::Dict, nodepath : Stack(Int32), event : Term) : Term
+    unless event.type.dict? # Fast path
+      return event
+    end
+
+    Term.case(event) do
+      matchpi(
+        %{(assign @edge_ _)},
+        %{(assign/log @edge_ _ _)},
+        %{(pulse @edge_ _)},
+        %{(cell/created @edge_ _)},
+        %{(cell/updated @edge_ _ _)},
+        %{(cell/removed @edge_)},
+        %{(frag/removed @edge_ _)},
+      ) do
+        Term.of(event.morph({1, abs(document, nodepath, edge)}))
+      end
+
+      otherwise { event }
+    end
+  end
+
+  # Converts all edges in *event* into local edges (relative to *nodepath*).
+  #
+  # NOTE: *event* is assumed to have been `globalized`.
+  # NOTE: *event* must be one of recognized events for this to work.
+  def localized(document : Term::Dict, nodepath : Stack(Int32), event : Term) : Term
+    unless event.type.dict? # Fast path
+      return event
+    end
+
+    Term.case(event) do
+      matchpi(
+        %{(assign @edge_ _)},
+        %{(assign/log @edge_ _ _)},
+        %{(pulse @edge_ _)},
+        %{(cell/created @edge_ _)},
+        %{(cell/updated @edge_ _ _)},
+        %{(cell/removed @edge_)},
+        %{(frag/removed @edge_ _)},
+      ) do
+        Term.of(event.morph({1, rel(document, nodepath, edge)}))
+      end
+
+      otherwise { event }
+    end
+  end
+
+  # Returns the cell value of a localized *edge* in *document* at the given
+  # *nodepath*. Returns `nil` if no such cell exists.
+  def cell?(document : Term::Dict, nodepath : Stack(Int32), edge : Term) : Term?
+    document[Cells, abs(document, nodepath, edge)]?
   end
 
   # Converts *source* indexable of terms to a keypath into *document*. Returns
@@ -384,7 +507,7 @@ module Rhodium
     getter appearances = [] of {Term, Term}
     getter? disappear = false
 
-    def initialize(@document : Term::Dict, @node : Term)
+    def initialize(@document : Term::Dict, @nodepath : Stack(Int32), @node : Term)
     end
 
     def disappear : Nil
@@ -392,11 +515,11 @@ module Rhodium
     end
 
     def cell(k, v)
-      cells << {Term.of(k), Term.of(v)}
+      cells << {Rhodium.abs(@document, @nodepath, Term.of(k)), Term.of(v)}
     end
 
     def cell?(name : Term)
-      @document[Cells, name]?
+      Rhodium.cell?(@document, @nodepath, name)
     end
 
     def schedule(job)
@@ -450,14 +573,16 @@ module Rhodium
   # TODO: rename keypath to nodepath in Rhodium
 
   def effect(document0 : Term::Dict, document1 : Term::Dict, nodepath : Stack(Int32), node : Term, cursordepth : Int32, & : EffectBuilder -> Bool) : {Term::Dict, Bool}
-    builder = EffectBuilder.new(document0, node)
+    builder = EffectBuilder.new(document0, nodepath, node)
 
     transition_vote = yield builder
 
     document0 = document1
 
     builder.events.each do |event|
-      document1 = Q.of(document1, Events).enqueue(event).commit(document1, Events)
+      document1 = Q.of(document1, Events)
+        .enqueue(globalized(document0, nodepath, event))
+        .commit(document1, Events)
     end
 
     builder.cells.each do |k, v|
@@ -467,7 +592,7 @@ module Rhodium
     # Disappear allows the node to remove itself as if it didn't exist. This
     # lets us prevent expulsion.
     if builder.disappear?
-      each_identity(node, cursordepth) do |identity|
+      each_identity(Scope.new(document0, nodepath), node, cursordepth) do |identity|
         document1 = document1.morph({Population, identity, nodepath, false})
       end
     end
@@ -508,6 +633,8 @@ module Rhodium
   #   And I'm not talking about all the parse-backmap calls, that's the least stupid
   #   thing here. Small backmaps should be pretty efficient, a few microseconds perhaps.
   def handle(document0 : Term::Dict, document1 : Term::Dict, nodepath : Stack(Int32), event : Term) : {Term::Dict, Bool}
+    event = localized(document0, nodepath, event)
+
     node0 = follow(document0, nodepath)
     cursordepth = cursordepth_in_node(document0, nodepath)
 
@@ -1413,31 +1540,48 @@ module Rhodium
   # Yields identities of *node*, if any.
   #
   # Nodes with identity are interested in receiving initialize events.
-  def each_identity(node : Term, cursordepth : Int32, & : Term ->) : Nil
+  def each_identity(s : Scope, node : Term, cursordepth : Int32, & : Term ->) : Nil
     Term.case({node, cursordepth}) do
       givenpi %{[cell _ @cout_] -1} do
-        yield Term.of(:cell, cout)
+        yield Term.of(:cell, s.ref(cout))
       end
 
       # Fragments include the value in their identity so that we have observability.
       givenpi %{[frag value_ @cout_] _} do
-        yield Term.of(:frag, cout)
-        yield Term.of(:frag, value, cout)
+        yield Term.of(:frag, s.ref(cout))
+        yield Term.of(:frag, value, s.ref(cout))
       end
 
       givenpi %{(transform _* ¦ _ #spec: {¦ in: @pin_} #job: job_) -1} do
-        yield Term.of(:transform, pin, job)
+        yield Term.of(:transform, s.ref(pin), job)
+      end
+
+      givenpi %{[transform (@pin_ to @pout_) _] -1} do
+        yield Term.of(node.itemspart.morph({1, 0, s.ref(pin)}, {1, 2, s.ref(pout)}))
+      end
+
+      givenpi %{[transform (@pin_ to @pout_ with state_) _] -1} do
+        yield Term.of(node.itemspart.morph({1, 0, s.ref(pin)}, {1, 2, s.ref(pout)}, {1, 4, s.ref(state)}))
+      end
+
+      givenpi %{[transform (@pin_ _ to @pout_) _] -1} do
+        yield Term.of(node.itemspart.morph({1, 0, s.ref(pin)}, {1, 3, s.ref(pout)}))
+      end
+
+      givenpi %{[transform (@pin_ _ to @pout_ with state_) _] -1} do
+        yield Term.of(node.itemspart.morph({1, 0, s.ref(pin)}, {1, 3, s.ref(pout)}, {1, 5, s.ref(state)}))
       end
 
       givenpi(
-        %{[transform (@_ to @_) _] -1},
-        %{[transform (@_ to @_ with _) _] -1},
-        %{[transform (@_ _ to @_) _] -1},
-        %{[transform (@_ _ to @_ with _) _] -1},
-        %{[initial (@_ _ to @_)] -1},
-        %{[initial (@_ _ to @_) _] -1},
-        %{[absence @_ as _ to @_] -1},
-      ) { yield Term.of(node.itemspart) }
+        %{[initial (@cin_ _ to @pout_)] -1},
+        %{[initial (@cin_ _ to @pout_) _] -1},
+      ) do
+        yield Term.of(node.itemspart.morph({1, 0, s.ref(cin)}, {1, 3, s.ref(pout)}))
+      end
+
+      givenpi %{[absence @cin_ as _ to @pout_] -1} do
+        yield Term.of(node.itemspart.morph({1, s.ref(cin)}, {5, s.ref(pout)}))
+      end
 
       givenpi %{[sensor pattern_ in tspace_symbol to @_] -1} do
         yield Term.of(:sensor, tspace, pattern, node[:secret]?)
@@ -1632,8 +1776,11 @@ module Rhodium
     # Common nodepath stack we will reuse.
     nodepath = Stack(Int32).new
 
+    # PASS 1.
+    #
     # "Fix" nodes whose #shadow is not the same as itemspart -- by removing
     # all #-pairs in their pairspart.
+
     while successor?(document1, nodepath)
       # Assume there is little repetition.
       document1 = rewrite(document1, nodepath) do |node|
@@ -1653,6 +1800,41 @@ module Rhodium
       end
     end
 
+    # PASS 2.
+    #
+    # Generate unique ids for modules that don't have ones. For ones that
+    # do, make sure they're not duplicate; if that's the case, generate a
+    # fresh name.
+    seen = Set(Term).new
+
+    while successor?(document1, nodepath)
+      document1 = rewrite(document1, nodepath) do |node|
+        Term.case(node) do
+          matchpi %{(module (_*) _* ¦ _ -#id)} do
+            while true
+              id = Term.of(UUID.random)
+              break if seen.add?(id)
+            end
+
+            Rewrite.one(node.morph({:"#id", id}))
+          end
+
+          matchpi %{(module (_*) _* ¦ _ #id: id_string)} do
+            until seen.add?(id)
+              id = Term.of(UUID.random)
+            end
+
+            Rewrite.one(node.morph({:"#id", id}))
+          end
+
+          otherwise { Rewrite.none }
+        end
+      end
+    end
+
+    # PASS 3.
+    #
+    # Population diff.
     population0 = document0[Population]? || Term[]
     population1 = Term[]
 
@@ -1666,7 +1848,7 @@ module Rhodium
       node = follow(document1, nodepath)
       cursordepth = cursordepth_in_node(document1, nodepath)
 
-      each_identity(node, cursordepth) do |identity|
+      each_identity(Scope.new(document1, nodepath), node, cursordepth) do |identity|
         population1 = population1.morph({identity, nodepath_dict, true})
       end
     end
@@ -2602,15 +2784,64 @@ end
 #   end
 # end
 
-# doc0 = ML.terms <<-WWML
-# (decay 10 (cell "a" @x))
-# (decay 1 (cell "b" @x))
-# (decay 5 (cell "c" @x))
-# (absence @x as "Missing" to @quxes)
-# (log @quxes in ())
+# doc0 = ML.dict <<-WWML
+# ;;(cell 0 @x)
+# ;;(cell 0 @y)
+
+# (module () #id: "qux"
+#   (changes @x to @xs)
+#   (changes @y to @ys)
+#   (log @xs in ())
+#   (log @ys in ())
+#   (module () #id: "qux"
+#     (changes @x to @xs)
+#     (changes @y to @ys)
+#     (log @xs in ())
+#     (log @ys in ())
+#     (module (@x) #id: "qux"
+#       (changes @x to @xs)
+#       (changes @y to @ys)
+#       (log @xs in ())
+#       (log @ys in ())
+#       (cell 0 @x)
+#       (cell 0 @y))))
+
+# (changes @x to @xs)
+# (changes @y to @ys)
+# (log @xs in ())
+# (log @ys in ())
 # WWML
 
-# # nctx = Nitrene::StepContext.new
+# ge0 = Rhodium.globalized(doc0, Stack{0}, Term.of(:pulse, {:edge, :x}, 100))
+# ge1 = Rhodium.globalized(doc0, Stack{0, 3, 3, 2}, Term.of(:pulse, {:edge, :x}, 100))
+# ge2 = Rhodium.globalized(doc0, Stack{0, 3, 3, 2}, Term.of(:pulse, {:edge, :y}, 100))
+
+# pp! ge0
+# pp! ge1
+# pp! ge2
+
+# pp! Rhodium.localized(doc0, Stack{0}, ge0)
+# pp! Rhodium.localized(doc0, Stack{0, 3, 3, 2}, ge1)
+# pp! Rhodium.localized(doc0, Stack{0, 3, 3, 2}, ge2)
+# pp! Rhodium.localized(doc0, Stack{0}, ge1)
+# pp! Rhodium.localized(doc0, Stack{0}, ge2)
+# require "benchmark"
+
+# S = Stack{0, 3, 3, 2}
+# E = Term.of(:edge, :x)
+# Benchmark.ips do |x|
+#   x.report("np 2 mp") do
+#     Rhodium.ref(doc0, S, E)
+#   end
+# end
+# pp! Rhodium.np2mp(doc0, Stack{0, 1})
+# pp! Rhodium.np2mp(doc0, Stack{0, 2})
+# pp! Rhodium.np2mp(doc0, Stack{0, 2, 1})
+# pp! Rhodium.np2mp(doc0, Stack{0, 2, 2})
+# pp!
+# # pp! Rhodium.np2mp(doc0, Stack{0, 3})
+
+# # # nctx = Nitrene::StepContext.new
 # initial = true
 
 # while true
