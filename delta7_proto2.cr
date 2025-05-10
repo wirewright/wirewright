@@ -15,9 +15,6 @@ module Rhodium
   Events = Term[:"#events"]
 
   # :nodoc:
-  Shadow = Term.of(:"#shadow")
-
-  # :nodoc:
   Cells = Term.of(:"#cells")
 
   # :nodoc:
@@ -1103,7 +1100,7 @@ module Rhodium
             %{[initial (@_ _ to @_)] (initialize _ () _)},
             %{[initial (@_ _ to @_) _] (initialize _ () _)},
           ) do
-            e.change "#shadow": {:"%literal", node0.itemspart}, "#fired": false
+            e.change "#fired": false
 
             false
           end
@@ -1150,7 +1147,7 @@ module Rhodium
         begin
           # Initialize `absence` to newborn state.
           givenpi %{[absence @_ as _ to @_] (initialize _ () _)} do
-            e.change "#shadow": {:"%literal", node0.itemspart}, "#state": :newborn
+            e.change "#state": :newborn
 
             true
           end
@@ -1332,28 +1329,28 @@ module Rhodium
         begin
           # Stateful transform
           givenpi %{[transform (@pin_ to @pout_ with state_) body_] (initialize _ () _)} do
-            e.change "#shadow": {:"%literal", node0.itemspart}, "#spec": {in: pin, out: pout, state: state, body: body}
+            e.change "#spec": {in: pin, out: pout, state: state, body: body}
 
             true
           end
 
           # Stateless transform
           givenpi %{[transform (@pin_ to @pout_) body_] (initialize _ () _)} do
-            e.change "#shadow": {:"%literal", node0.itemspart}, "#spec": {in: pin, out: pout, body: body}
+            e.change "#spec": {in: pin, out: pout, body: body}
 
             true
           end
 
           # Stateless filter transform
           givenpi %{[transform (@pin_ pattern_ to @pout_) body_] (initialize _ () _)} do
-            e.change "#shadow": {:"%literal", node0.itemspart}, "#spec": {in: pin, out: pout, filter: pattern, body: body}
+            e.change "#spec": {in: pin, out: pout, filter: pattern, body: body}
 
             true
           end
 
           # Stateful filter transform
           givenpi %{[transform (@pin_ pattern_ to @pout_ with state_) body_] (initialize _ () _)} do
-            e.change "#shadow": {:"%literal", node0.itemspart}, "#spec": {in: pin, out: pout, filter: pattern, state: state, body: body}
+            e.change "#spec": {in: pin, out: pout, filter: pattern, state: state, body: body}
 
             true
           end
@@ -1787,15 +1784,12 @@ module Rhodium
 
     # PASS 1.
     #
-    # "Fix" nodes whose #shadow is not the same as itemspart -- by removing
-    # all #-pairs in their pairspart.
-
+    # Remove shadow pairspart from inactive nodes.
     while successor?(document1, nodepath)
-      # Assume there is little repetition.
       document1 = rewrite(document1, nodepath) do |node|
         next Rewrite.none unless node0 = node.as_d?
-        next Rewrite.none unless shadow = node0[Shadow]?
-        next Rewrite.none if M1.probe?(shadow, Term.of(node0.itemspart))
+        next Rewrite.none if node0.itemsonly?
+        next Rewrite.none if active?(document1, nodepath, node)
 
         node1 = node0.transaction do |commit|
           node0.each_pair do |key, _|
