@@ -415,6 +415,19 @@
    (transform (@states (square_number count_number) to @sums) (+ square count))
    (latest @sums @sum)))
 
+;; transform with literal state
+(d7
+  ((transform (@xs to @ys with 2) (* _ state))
+   (transform (@foos x_string to @bars with 4) (x state))
+   (event (pulse @xs 100))
+   (event (pulse @foos "qux"))
+   (log @ys in ())
+   (log @bars in ()))
+  ((transform (@xs to @ys with 2) (* _ state))
+   (transform (@foos x_string to @bars with 4) (x state))
+   (log @ys in (200))
+   (log @bars in (("qux" 4)))))
+
 ;; Basic self-edit
 (d7
   (("" | "" () @cursor)

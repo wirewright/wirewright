@@ -1295,15 +1295,19 @@ module Rhodium
           givenpi %{(transform _* ¦ _ #spec: spec←{¦ in: @pin_, body_}) (pulse @pin_ input_)} do
             env0 = Term[]
 
-            if (state_edge = spec[:state]?) && ML.edge?(state_edge)
-              unless state = e.cell?(state_edge)
-                return document1, false
-              end
+            state_id = Term[:state]
 
-              # If state is a symbolic edge e.g. @qux, use qux to refer to its value.
-              # Otherwise, use the generic `state`.
-              unless state_id = state_edge[1].as_sym?
-                state_id = Term[:state]
+            if state_in = spec[:state]?
+              if ML.edge?(state_in)
+                unless state = e.cell?(state_in)
+                  return document1, false
+                end
+
+                # If state is a symbolic edge e.g. @qux, use qux to refer to its value.
+                # Otherwise, use the generic `state`.
+                state_id = state_in[1].as_sym? || state_id
+              else
+                state = state_in
               end
 
               env0 = env0.with(state_id, state)
