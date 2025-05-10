@@ -502,7 +502,9 @@ module Layout
 
   # ```wwml
   # (def (add a_ b_)
-  #   (+ a b))
+  #   (+ a b)
+  #   (- a b)
+  #   (* a b))
   #
   # (let q
   #   (+ 1 2))
@@ -513,21 +515,25 @@ module Layout
     TEMPLATE = ML.term <<-WWML
     (col
       (longer (row ^head ^arg gap: 1))
-      (indented ^block))
+      (indented (col ^*block)))
     WWML
 
     def call(ctx, term, postfix, head, rest) : Term
-      unless ctx.layouts_allowed.call_arg_indented_block? && (dict = term.as_d?) && dict.itemsonly? && dict.size == 3
-        return rest.call(ctx, term, postfix)
+      if ctx.layouts_allowed.call_arg_indented_block?
+        Term.matchpi?(term, %{(headsrc_symbol argsrc←(_*) blocksrc_+)}) do
+          head = ctx.features.call(ctx.inline, headsrc, "")
+          arg = ctx.features.call(ctx.inline, argsrc, "")
+          block = Term::Dict.build do |commit|
+            blocksrc.items.each_with_last do |item, last|
+              commit << ctx.features.call(ctx, item, last ? postfix : "")
+            end
+          end
+
+          return Alloy.render(Term[head: head, arg: arg, block: block], TEMPLATE)
+        end
       end
 
-      head, arg, block = dict
-
-      head = ctx.features.call(ctx.inline, head, "")
-      arg = ctx.features.call(ctx.inline, arg, "")
-      block = ctx.features.call(ctx, block, postfix)
-
-      Alloy.render(Term[head: head, arg: arg, block: block], TEMPLATE)
+      rest.call(ctx, term, postfix)
     end
   end
 end
@@ -1111,6 +1117,14 @@ module Feature
 
     def call(ctx, term, postfix, head, rest) : Term
       Term.case(term) do
+        # Modules receive special treatment because they look very ugly when printed
+        # inline -- especially when they contain UI components.
+        matchpi %{(module (_*) _+)} do
+          thunk = ctx.layouts_allowed.thunk(term, ")" + postfix, LayoutSet::CallArgIndentedBlock)
+
+          Term.of(:row, FRAG_LPAREN, thunk)
+        end
+
         matchpi %{((%symbol nonblank) _*)} do
           thunk = ctx.layouts_allowed.thunk(term, ")" + postfix, LayoutSet.list)
 
