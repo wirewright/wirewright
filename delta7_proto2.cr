@@ -68,7 +68,6 @@ module Rhodium
       matchpi %{[frag _ @_]} { 1...2 }
       matchpi %{[mutator @_ _]} { 2...3 }
       matchpi %{[cover _ _+]} { 2...node.itemsize }
-      matchpi %{[module (_*) _*]} { 2...node.itemsize }
 
       otherwise { }
     end
@@ -282,7 +281,7 @@ module Rhodium
 
       enclosing?(document, nodepath) do |parent|
         Term.case(parent) do
-          matchpi %{(module (exposed_*) _* ¦ _ #id: id_)} do
+          matchpi %[{¦ exposes: (exposed_*) #module: id_}] do
             continue if edge.in?(exposed.items)
 
             commit << id
@@ -1832,22 +1831,24 @@ module Rhodium
 
     while successor?(document1, nodepath)
       document1 = rewrite(document1, nodepath) do |node|
+        next Rewrite.none unless active?(document1, nodepath, node)
+
         Term.case(node) do
-          matchpi %{(module (_*) _* ¦ _ -#id)} do
+          matchpi %[{¦ exposes: (_*) -#module}] do
             while true
               id = Term.of(UUID.random)
               break if seen.add?(id)
             end
 
-            Rewrite.one(node.morph({:"#id", id}))
+            Rewrite.one(node.morph({:"#module", id}))
           end
 
-          matchpi %{(module (_*) _* ¦ _ #id: id_string)} do
+          matchpi %[{¦ exposes: (_*) #module: id_string}] do
             until seen.add?(id)
               id = Term.of(UUID.random)
             end
 
-            Rewrite.one(node.morph({:"#id", id}))
+            Rewrite.one(node.morph({:"#module", id}))
           end
 
           otherwise { Rewrite.none }

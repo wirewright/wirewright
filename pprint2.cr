@@ -1117,14 +1117,6 @@ module Feature
 
     def call(ctx, term, postfix, head, rest) : Term
       Term.case(term) do
-        # Modules receive special treatment because they look very ugly when printed
-        # inline -- especially when they contain UI components.
-        matchpi %{(module (_*) _+)} do
-          thunk = ctx.layouts_allowed.thunk(term, ")" + postfix, LayoutSet::CallArgIndentedBlock)
-
-          Term.of(:row, FRAG_LPAREN, thunk)
-        end
-
         matchpi %{((%symbol nonblank) _*)} do
           thunk = ctx.layouts_allowed.thunk(term, ")" + postfix, LayoutSet.list)
 
