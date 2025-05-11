@@ -708,13 +708,17 @@ class Stack(T)
     end
   end
 
+  def slice : Slice(T)
+    @stack.to_slice(@size)
+  end
+
   def pretty_print(pp)
     pp.list("Stack[", self, "]")
   end
 
   def inspect(io)
     io << "Stack["
-    @stack.to_slice(@size).join(", ") do |el|
+    slice.join(", ") do |el|
       el.inspect(io)
     end
     io << "]"

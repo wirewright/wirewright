@@ -565,51 +565,94 @@ module Rhodium
     end
   end
 
+  # :nodoc:
+  class DocumentTxn
+    # Returns the original document.
+    getter document0 : Term::Dict
+
+    def initialize(@document0)
+      @document1 = @document0
+      @rewrites = [] of {Stack(Int32), Rewrite::Some}
+    end
+
+    # NOTE: this method must only be used for document pairspart assignments! Anything else
+    # would lead to broken semantics.
+    def set(*path, eq v) : Nil
+      @document1 = @document1.morph({*path, v})
+    end
+
+    # Enqueues *event* in *queue* (e.g. `Events`).
+    def enqueue(event : Term, *, queue : Term::Sym)
+      @document1 = Q.of(@document1, queue).enqueue(event).commit(@document1, queue)
+    end
+
+    # Dequeues an event from *queue* (e.g. `Events`).
+    def dequeue?(queue : Term::Sym) : Term?
+      if event = Q.of(@document1, queue).first?
+        @document1 = Q.of(@document1, queue).dequeue.commit(@document1, queue)
+      end
+
+      event
+    end
+
+    # Schedules a rewrite at *nodepath*.
+    def at(nodepath : Stack(Int32), rewrite : Rewrite::Some) : Nil
+      @rewrites << {nodepath.dup, rewrite}
+    end
+
+    # :ditto:
+    def at(nodepath : Stack(Int32), rewrite : Rewrite::None) : Nil
+    end
+
+    # Finalizes & collects all changes and returns the next version of the document.
+    #
+    # This method may be called multiple times.
+    def document1 : Term::Dict
+      @rewrites.unstable_sort! { |(np0, _), (np1, _)| {np1.size, np1.slice} <=> {np0.size, np0.slice} }
+      @rewrites.reduce(@document1) do |state, (nodepath, rewrite)|
+        Rhodium.rewrite(state, nodepath, rewrite)
+      end
+    end
+  end
+
   # TODO: rename keypath to nodepath in Rhodium
 
-  def effect(document0 : Term::Dict, document1 : Term::Dict, nodepath : Stack(Int32), node : Term, & : EffectBuilder -> Bool) : {Term::Dict, Bool}
-    builder = EffectBuilder.new(document0, nodepath, node)
+  def effect(txn : DocumentTxn, nodepath : Stack(Int32), node : Term, & : EffectBuilder -> Bool) : Bool
+    builder = EffectBuilder.new(txn.document0, nodepath, node)
 
     transition_vote = yield builder
 
-    document0 = document1
-
     builder.events.each do |event|
-      document1 = Q.of(document1, Events)
-        .enqueue(globalized(document0, nodepath, event))
-        .commit(document1, Events)
+      txn.enqueue(globalized(txn.document0, nodepath, event), queue: Events)
     end
 
     builder.cells.each do |k, v|
-      document1 = document1.morph({Cells, k, v})
+      txn.set(Cells, k, eq: v)
     end
 
     # Disappear allows the node to remove itself as if it didn't exist. This
     # lets us prevent expulsion.
     if builder.disappear?
-      each_identity(document0, nodepath, node) do |identity|
-        document1 = document1.morph({Population, identity, nodepath, false})
+      each_identity(txn.document0, nodepath, node) do |identity|
+        txn.set(Population, identity, nodepath, eq: false)
       end
     end
 
-    # Replace node with its new version.
-    if rewrite = builder.rewrite.as?(Rewrite::Some)
-      document1 = rewrite(document1, nodepath, rewrite)
-    end
+    txn.at(nodepath, builder.rewrite)
 
     builder.jobs.each do |job|
-      document1 = document1.morph({JobsPending, job, true})
+      txn.set(JobsPending, job, eq: true)
     end
 
     builder.sensors.each do |tspace, surface|
-      document1 = document1.morph({Tspaces, tspace, :sensors, surface, false})
+      txn.set(Tspaces, tspace, :sensors, surface, eq: false)
     end
 
     builder.appearances.each do |tspace, surface|
-      document1 = document1.morph({Tspaces, tspace, :appearances, surface, false})
+      txn.set(Tspaces, tspace, :appearances, surface, eq: false)
     end
 
-    {document1, transition_vote}
+    transition_vote
   end
 
   COMPLETION_MANAGER = begin
@@ -628,12 +671,12 @@ module Rhodium
   #   And I'm not talking about all the parse-backmap calls, that's the least stupid
   #   thing here. Small backmaps should be pretty efficient, a few microseconds perhaps.
 
-  def handlepp(document0 : Term::Dict, document1 : Term::Dict, nodepath : Stack(Int32), node0 : Term, event : Term) : {Term::Dict, Bool}
-    effect(document0, document1, nodepath, node0) do |e|
+  def handlepp(txn : DocumentTxn, nodepath : Stack(Int32), node0 : Term, event : Term) : Bool
+    effect(txn, nodepath, node0) do |e|
       Term.case({node0, event}) do
         givenpi %[{¦ self: @pin_} (pulse @pin_ (pattern_ backspec_))] do
           unless node1 = M1.backmap?(pattern, backspec, D7.nonshadow(node0))
-            return document1, false
+            return false
           end
 
           e.rewrite Rewrite.one(node1)
@@ -686,8 +729,8 @@ module Rhodium
     end
   end
 
-  def handleip(document0 : Term::Dict, document1 : Term::Dict, nodepath : Stack(Int32), node0 : Term, event : Term) : {Term::Dict, Bool}
-    effect(document0, document1, nodepath, node0) do |e|
+  def handleip(txn : DocumentTxn, nodepath : Stack(Int32), node0 : Term, event : Term) : Bool
+    effect(txn, nodepath, node0) do |e|
       Term.case({node0, event}) do
         # cell
         begin
@@ -857,7 +900,7 @@ module Rhodium
 
           if ML.edge?(template)
             unless template = e.cell?(template)
-              return document1, false
+              return false
             end
           end
 
@@ -1058,7 +1101,7 @@ module Rhodium
             row = Term::Dict.build do |commit|
               cins.items.each do |cin|
                 unless value = e.cell?(cin)
-                  return document1, false
+                  return false
                 end
 
                 commit << value
@@ -1268,7 +1311,7 @@ module Rhodium
 
           givenpi %{[bridge (@pin_ pattern_) to @pout_] (pulse @pin_ matchee_)} do
             unless M1.probe?(pattern, matchee)
-              return document1, false
+              return false
             end
 
             e.event :pulse, pout, matchee
@@ -1278,7 +1321,7 @@ module Rhodium
 
           givenpi %{[bridge (@pin_ pattern_) to (@pout_ key_)] (pulse @pin_ matchee_)} do
             unless envs = M1.matches(pattern, matchee)
-              return document1, false
+              return false
             end
 
             envs.each do |env|
@@ -1339,7 +1382,7 @@ module Rhodium
             if state_in = spec[:state]?
               if ML.edge?(state_in)
                 unless state = e.cell?(state_in)
-                  return document1, false
+                  return false
                 end
 
                 # If state is a symbolic edge e.g. @qux, use qux to refer to its value.
@@ -1355,7 +1398,7 @@ module Rhodium
             # If a filter pattern is defined, make sure it matches.
             if filter = spec[:filter]?
               unless env1 = M1.match?(filter, input, env: env0)
-                return document1, false
+                return false
               end
             end
 
@@ -1474,12 +1517,12 @@ module Rhodium
           expect nodepath.size > 0
 
           pivot = nodepath.last
-          parent = nodepath.pop { follow(document0, nodepath) }.as_d
+          parent = nodepath.pop { follow(txn.document0, nodepath) }.as_d
 
-          if parent.same?(document0)
+          if parent.same?(txn.document0)
             range = 0...parent.itemsize
           else
-            range = passable_range?(document0, Term.of(parent))
+            range = passable_range?(txn.document0, Term.of(parent))
 
             # We've arrived here somehow. Assume we did that by `successor?` -- which
             # guarantees adherence to passability.
@@ -1510,24 +1553,24 @@ module Rhodium
     end
   end
 
-  def handle(document0 : Term::Dict, document1 : Term::Dict, nodepath : Stack(Int32), event : Term) : {Term::Dict, Bool}
-    node0 = follow(document0, nodepath)
+  def handle(txn : DocumentTxn, nodepath : Stack(Int32), event : Term) : Bool
+    node0 = follow(txn.document0, nodepath)
 
-    unless active?(document0, nodepath, node0)
+    unless active?(txn.document0, nodepath, node0)
       # Suggestions
       #
       # When we see a cursor in a suitable position, we populate it with a list
       # of suggestions. What the cursor/UI does with them is not of our interest.
       if event == Cycle
         if node1 = COMPLETION_MANAGER.complete?(node0)
-          return assign(document1, nodepath, node1), false
+          txn.at(nodepath, Rewrite.one(node1))
         end
       end
 
-      return document1, false
+      return false
     end
 
-    event = localized(document0, nodepath, event)
+    event = localized(txn.document0, nodepath, event)
 
     # FIXME: note how we pass node0 to both of them. This would cause conflicts when
     # both handlepp() and handleip() rewrite the same node. E.g. a decay with a mailbox.
@@ -1549,10 +1592,9 @@ module Rhodium
     # I guess we need to have priority. self: has higher priority than "just any rewrite"
     # because it is more deliberate.
 
-    document1, tr0 = handlepp(document0, document1, nodepath, node0, event)
-    document1, tr1 = handleip(document0, document1, nodepath, node0, event)
-
-    {document1, tr0 || tr1}
+    tr0 = handlepp(txn, nodepath, node0, event)
+    tr1 = handleip(txn, nodepath, node0, event)
+    tr0 || tr1
   end
 
   # Returns `true` if *node* is an observer node.
@@ -1700,33 +1742,26 @@ module Rhodium
     end
   end
 
-  # Steps forward in time the document *document0*, assuming the occurrence of *event*.
-  # Returns the resulting document *document1* (the *successor* of *document0*).
-  #
-  # NOTE: *document1* is passed for modification (writing) only. Do not read it. This will
-  # violate semantics, introducing order-dependence of reads (since *document1* is possibly
-  # only partially modified whenever you get hold of it). *document0* is read-only and
-  # *document1* is write-only.
-  def step(document0 : Term::Dict, document1 : Term::Dict, event : Term) : {Term::Dict, Bool}
+  def step(txn : DocumentTxn, event : Term) : Bool
     nodepath = Stack(Int32).new
 
     # All nodes must unanimously vote `false` for us to vote `false` on transition.
     transition_vote = false
 
-    while successor?(document0, nodepath)
-      document1, node_transition_vote = handle(document0, document1, nodepath, event)
+    while successor?(txn.document0, nodepath)
+      node_transition_vote = handle(txn, nodepath, event)
 
       # - If the node voted yes (do transition) we vote yes (do transition).
       # - If the node is observed (meaning it is e.g. inside of a fragment) we must
       #   vote yes even if the node says otherwise; since e.g. fragment or any other
       #   kind of observer will rely on transitions with an overwhelmingly
       #   high probability.
-      if node_transition_vote || observed?(document0, nodepath)
+      if node_transition_vote || observed?(txn.document0, nodepath)
         transition_vote = true
       end
     end
 
-    {document1, transition_vote}
+    transition_vote
   end
 
   # Steps forward in time the document *document0*. Returns the resulting
@@ -1736,47 +1771,36 @@ module Rhodium
       document0 = cursorfind(document0)
     end
 
+    txn = DocumentTxn.new(document0)
+
     # First we have to exhaust all initialize events.
-    initialize_queue = Q.of(document0, Initialize)
-
-    while head = initialize_queue.first?
-      initialize_queue = initialize_queue.dequeue
-
-      Term.case(head) do
+    while event = txn.dequeue?(Initialize)
+      Term.case(event) do
         matchpi %{((steps_number+) identity_ preds_ family_)} do
           next unless keypath = keypath?(document0, steps.items)
 
-          document1 = initialize_queue.commit(document0, Initialize)
+          tr = handle(txn, keypath, Term.of(:initialize, identity, preds, family))
 
-          return handle(document0, document1, keypath, Term.of(:initialize, identity, preds, family))
+          # Process just one initialize event per timestep().
+          return txn.document1, tr
         end
 
         otherwise { }
       end
     end
 
-    # There may have been some bogus initialize events; commit the queue that
-    # is empty of them. If there were no initialize events, this will be
-    # a noop.
-    document0 = initialize_queue.commit(document0, Initialize)
-
-    queue = Q.of(document0, Events)
-
-    unless event = queue.first?
-      document1 = queue.enqueue(Cycle).commit(document0, Events)
-
-      return document1, false
+    # Any event other than cycle => remove #post-cycle. It's post-that event now.
+    if event = txn.dequeue?(Events)
+      txn.set(PostCycle, eq: nil)
     end
 
-    document1 = queue.dequeue.commit(document0, Events)
-
-    # Any event other than cycle => remove #post-cycle. It's post-that
-    # event now.
-    document1 = document1.morph({PostCycle, nil})
+    event ||= Cycle
 
     Term.case(event) do
       matchpi %{(edit @edge_ motion_)} do
         subsumed = false
+
+        document1 = txn.document1
 
         # Anything could happen between `edit` events! We cannot rely on previous
         # Cursors. Hopefully cursorfind will get optimizations someday...
@@ -1801,13 +1825,15 @@ module Rhodium
       end
 
       matchpi %{cycle} do
-        document1 = document1.morph({PostCycle, true})
+        txn.set(PostCycle, eq: true)
 
         continue
       end
 
       otherwise do
-        step(document0, document1, event)
+        tr = step(txn, event)
+
+        {txn.document1, tr}
       end
     end
   end
@@ -2746,7 +2772,7 @@ end
 #       next if doc == last_doc
 
 #       puts ML.display(doc, maxwidth: 80)
-#       sleep 1.second
+#       sleep 100.milliseconds
 
 #       last_doc = doc
 #     end
@@ -2756,31 +2782,9 @@ end
 # end
 
 # doc0 = ML.dict <<-WWML
-# ;;(cell 0 @x)
-# ;;(cell 0 @y)
-
-# (module () #id: "qux"
-#   (changes @x to @xs)
-#   (changes @y to @ys)
-#   (log @xs in ())
-#   (log @ys in ())
-#   (module () #id: "qux"
-#     (changes @x to @xs)
-#     (changes @y to @ys)
-#     (log @xs in ())
-#     (log @ys in ())
-#     (module (@x) #id: "qux"
-#       (changes @x to @xs)
-#       (changes @y to @ys)
-#       (log @xs in ())
-#       (log @ys in ())
-#       (cell 0 @x)
-#       (cell 0 @y))))
-
-# (changes @x to @xs)
-# (changes @y to @ys)
-# (log @xs in ())
-# (log @ys in ())
+# (frag (decay 10) @qux)
+# (changes @qux to @quxes)
+# (log @quxes in ())
 # WWML
 
 # ge0 = Rhodium.globalized(doc0, Stack{0}, Term.of(:pulse, {:edge, :x}, 100))
