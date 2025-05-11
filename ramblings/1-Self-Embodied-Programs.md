@@ -74,6 +74,8 @@ I believe consciousness could be such utterances; it could be an alignment langu
 
 The "window of now" effect that one observes with consciousness is attributed to the fact it is being rewritten (as a self-embodied program). It is an ephemeral object, a phrase, an utterance, always in passing. It delegates persistence (and action) to the environment in that the environment and the utterers (neurons in this case) can "write down" their utterances.
 
+In fact, this is the only thing a self-embodied program *cannot* learn to do -- it cannot learn to stop its progression. Just like more speech does not stop speech; a self-embodied program cannot stop its propagation in time. This makes the "window of now" or "always in passing" property of consciousness even more obvious; no matter what consciousness does, it will never be able to stop or in any other way alter its own perpetuation; for that is solely the responsibility of the environment.
+
 If the self-embodied program learns to manipulate the participant "speakers" for "writing some stuff down" it learns the way of persistence; now it can "write down" parts of itself at will, by "surrounding" that part with an "incantation" that it has learned makes the rewrite environment persist whatever is surrounded.
 
 Similarly an English utterance, one that exists for the shortest moment, can affect the state of the speaker and the listener in a persistent way, perhaps being written down in the process; thus, making it to persistence.
