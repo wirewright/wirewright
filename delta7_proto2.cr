@@ -2200,11 +2200,6 @@ module Rhodium
     true
   end
 
-  # :ditto:
-  def active?(document : Term::Dict, nodepath : Stack(Int32)) : Bool
-    active?(document, nodepath, node: follow(document, nodepath))
-  end
-
   # Returns `true` if *node* contains one or more cursors at a depth approved
   # by the block. Returns `false` otherwise.
   #
@@ -2228,6 +2223,15 @@ module Rhodium
     end
 
     false
+  end
+
+  # Returns `true` if *node* contains one or more cursors at any depth. Returns
+  # `false` otherwise.
+  #
+  # WARNING: you must pass the document through `cursorfind` at some point before
+  # using this method.
+  def has_cursor_at_any_depth?(document : Term::Dict, nodepath : Stack(Int32), node : Term) : Bool
+    has_cursor_at_depth?(document, nodepath, node) { |depth| depth > 0 }
   end
 end
 

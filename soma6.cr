@@ -374,7 +374,7 @@ module D7VR
       # later on.
       matchpi %{[cover title_ _+]} do |title|
         continue unless Rhodium.active?(document0, nodepath, node0)
-        continue if Rhodium.has_cursor_at_depth?(document0, nodepath, node0) { |depth| depth > 0 }
+        continue if Rhodium.has_cursor_at_any_depth?(document0, nodepath, node0)
 
         if ML.edge?(title)
           continue unless title = Rhodium.cell?(document0, nodepath, title)
@@ -425,7 +425,7 @@ module D7VR
 
       matchpi %{[unit _ _+]} do
         continue unless Rhodium.active?(document0, nodepath, node0)
-        continue if Rhodium.has_cursor_at_depth?(document0, nodepath, node0) { |depth| depth == 1 }
+        continue if Rhodium.has_cursor_at_any_depth?(document0, nodepath, node0)
 
         node1.morph({:"#fallback", node1})
       end
@@ -1325,6 +1325,8 @@ welcome = ML.dict <<-WWML
 WWML
 
 test = ML.dict <<-WWML
+(group (h1 @count) exposes: (@count))
+
 ("" | "" () @user)
 WWML
 
