@@ -87,8 +87,6 @@
     (pulse pout "sink for instances of template on change"))
   (literal template "Alloy template with captures from pattern available"))
 
-(node col "Arranges its children in a vertical stack, with an optional gap")
-
 (node decay "Counts down until destroying itself and its children"
   (literal n "counter that you should initialize to a nonzero natural number"))
 
@@ -171,8 +169,6 @@
   (literal storage "dict for storing enqueued values")
   (comma waiting)
   (pulse acks "source of dequeue confirmations (any term)"))
-
-(node row "Arranges its children in a horizontal stack, with an optional gap")
 
 (group transform "Transforms incoming pulse into outgoing pulse using Nitrene")
 
