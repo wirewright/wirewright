@@ -1348,8 +1348,16 @@ mstep.register(Term.of(:local), Meridium::StepSpace.new(local, alarm))
 
 # Register user-provided remote termspaces.
 
+seed = nil
+
 OptionParser.parse do |parser|
   parser.banner = "Usage: soma [arguments]"
+
+  parser.on("-s FILE", "--seed=FILE", "Uses the given file as a seed for the document (i.e. initial document)") do |file|
+    source = File.read(file)
+    seed = ML.term(source).as_d
+  end
+
   parser.on("-r TSADDR", "--remote=TSADDR", "Connects to a remote termspace (e.g.: qux@tcp:0.0.0.0:9810, foo@unix:/path/to/file.sock)") do |tsaddr|
     case tsaddr
     when /(?<name>[a-z]\w*)@tcp:(?<host>\d+(?:\.\d+){3}):(?<port>\d+)/
@@ -1379,7 +1387,7 @@ OptionParser.parse do |parser|
   end
 end
 
-seed = welcome
+seed ||= welcome
 draw_chan = Channel({Term::Dict, Channel(Term::Dict)}).new
 doc = Document.new("Untitled", draw_chan, mstep)
 docs_lock.synchronize { docs << doc }
