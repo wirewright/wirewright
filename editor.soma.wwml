@@ -164,16 +164,16 @@
 
 ;; C-backspace while editing at toplevel or in toplevel dict in pairs
 ;; should delete the key and move the value out.
-(_* ¦ (%entry _ [[_string | _string (M←(key C-backspace) _*) @EDGE_] _*]))
+(_* ¦ (%entry _ [["" | "" (M←(key C-S-backspace) _*) @EDGE_] _*]))
   <> {M: (delete-pair-parent)}
 
 (_* ¦ (%entry _ C←["" | _string (M←(key C-backspace) _*) @EDGE_]))
   <> {M: (delete-pair-self)}
 
-(_* ¦ (%entry _ C←["" | _string (M←(key backspace) _*) @EDGE_]))
+(_* ¦ (%entry _ C←["" | _string (M←(key C-backslash) _*) @EDGE_]))
   <> {M: (unpair-self)}
 
-(_* ¦ (%entry _ [[_string | _string (M←(key backspace) _*) @EDGE_] _*]))
+(_* ¦ (%entry _ [["" | "" (M←(key C-S-backslash) _*) @EDGE_] _*]))
   <> {M: (unpair-parent)}
 
 ;; (!) Careful: (key left) and (key right) must not map back to (key backspace)/(key delete)

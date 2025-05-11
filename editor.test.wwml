@@ -887,7 +887,7 @@
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))))
  (after
-  ((input "style") (input ":") (key home) (key backspace))
+  ((input "style") (input ":") (key home) (key C-backslash))
   ((row
     (button
      "+ Increment"
@@ -962,7 +962,7 @@
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))))
  (after
-  ((key backspace))
+  ((key C-S-backslash))
   ((row
     (button
      "+ Increment"
@@ -990,7 +990,7 @@
     (button "- Decrement" @actions style: "text-lg")
     (button "0 Reset" @actions style: "text-sm"))))
  (after
-  ((key C-backspace))
+  ((key C-S-backspace))
   ((row
     (button
      "+ Increment"

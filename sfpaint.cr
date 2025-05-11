@@ -535,13 +535,14 @@ module UIR::Platform::SFML
 
     if event.control
       case event.code
-      when .a?     then keyname = "a"
-      when .c?     then keyname = "c"
-      when .r?     then keyname = "r"
-      when .v?     then keyname = "v"
-      when .z?     then keyname = "z"
-      when .equal? then keyname = "equal"
-      when .dash?  then keyname = "minus"
+      when .a?         then keyname = "a"
+      when .c?         then keyname = "c"
+      when .r?         then keyname = "r"
+      when .v?         then keyname = "v"
+      when .z?         then keyname = "z"
+      when .equal?     then keyname = "equal"
+      when .dash?      then keyname = "minus"
+      when .backslash? then keyname = "backslash"
       end
     end
 
