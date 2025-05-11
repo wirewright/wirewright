@@ -571,9 +571,19 @@ enum LayoutSet : UInt16
     new({:dict_inline, :call_arg_indented_block, :call_column, :call_indented, :dict_aligned})
   end
 
-  # Layouts suitable for dicts containing both items and pairs
+  # Multiline layouts suitable for itemsonly dicts.
+  def self.multiline_list : LayoutSet
+    self.list & ~LayoutSet::DictInline
+  end
+
+  # Layouts suitable for dicts containing both items and pairs.
   def self.dict : LayoutSet
     new({:dict_inline, :call_kwargs_inline_with_block, :call_kwargs_column_with_block, :call_arg_indented_kwargs, :call_indented, :dict_aligned})
+  end
+
+  # Multiline layouts suitable for dicts containing both items and pairs.
+  def self.multiline_dict : LayoutSet
+    self.dict & ~LayoutSet::DictInline
   end
 end
 
@@ -1117,6 +1127,18 @@ module Feature
 
     def call(ctx, term, postfix, head, rest) : Term
       Term.case(term) do
+        matchpi %{(group _+)}, %{(unit _ _+)}, %{(cover _ _+)} do
+          thunk = ctx.layouts_allowed.thunk(term, ")" + postfix, LayoutSet.multiline_list)
+
+          Term.of(:row, FRAG_LPAREN, thunk)
+        end
+
+        matchpi %{[group _+]}, %{[unit _ _+]}, %{[cover _ _+]} do
+          thunk = ctx.layouts_allowed.thunk(term, ")" + postfix, LayoutSet.multiline_dict)
+
+          Term.of(:row, FRAG_LPAREN, thunk)
+        end
+
         matchpi %{((%symbol nonblank) _*)} do
           thunk = ctx.layouts_allowed.thunk(term, ")" + postfix, LayoutSet.list)
 
