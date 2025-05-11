@@ -10,22 +10,6 @@ I am working hard to package the hundreds of thousands of lines of "all over the
 
 https://github.com/user-attachments/assets/e86cb81d-67d7-45b8-8a68-7399e4fe367e
 
-### Frontend: pprint2_vis
-
-A 45-minute video where I try to explain (and fail, I guess, given it's 45 minutes?) what some of this is.
-
-[Wirewright as an alternative to compilation and interpretation: building a counter ­— YouTube](https://youtu.be/SQP96xtfLvc)
-
-NOTE: stuff is much snappier in reality, GIFs compress a lot of that snappiness.
-
-**Interactivity in µsoma**
-
-![Interactive experience in µsoma](img/interactivity.gif)
-
-**A jumping self-embodied program ("ping-pong")**
-
-![A jumping program](img/jumping_program.gif)
-
 ## Upcoming "selling points"
 
 **Warning**: Wirewright is several months away from a working [prototype](https://youtu.be/eUkZNk90rbQ). These "selling points" are for the far future.
@@ -43,8 +27,6 @@ There's an AppImage build in the releases section. No idea whether it'll work on
 Link so you don't have to scroll: https://github.com/wirewright/wirewright/releases/latest
 
 ## Building
-
-The pprint2_vis frontend is scheduled for removal so you probably don't want to build it.
 
 Wirewright can be built with Crystal 1.16.0 or later.
 
