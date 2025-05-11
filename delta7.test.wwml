@@ -1333,6 +1333,25 @@
      (group exposes: (@in @out)
        (transform (@in (baz x_) to @xs) x)
        (transform (@xs to @out) (baz/seen _)))
-     (log @out in ((foo/seen 123) (bar/seen 456) (baz/seen 789))))))
+     (log @out in ((foo/seen 123) (bar/seen 456) (baz/seen 789)))))
+  ;; We do not leak when being edited
+  (d7
+    ((group (cell 0 @count) exposes: ("" | "" () @user))
+     (changes @count to @counts)
+     (log @counts in ()))
+    ((group (cell 0 @count) exposes: ("" | "" () @user))
+     (changes @count to @counts)
+     (log @counts in ()))))
 
 ;; TODO: add more module tests, this is an especially important bit of machinery!!!
+
+;; Passable spots must be disabled while pairspart is modified by a cursor.
+(d7
+  ((decay 10 qux: ("" | "" () @user)))
+  ((decay 10 qux: ("" | "" () @user))))
+
+;; But they should be enabled if the cursor is in shadow pairspart.
+(d7
+  ((decay 10 #qux: ("" | "" () @user)))
+  ())
+

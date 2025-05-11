@@ -60,7 +60,7 @@ module Rhodium
   # if *node* is impassable.
   def passable_range?(document : Term::Dict, node : Term) : Range(Int32, Int32)?
     Term.case(node) do
-      matchpi %{[group _*]}, %{[row _*]}, %{[col _*]} { 1...node.itemsize }
+      matchpi %{[group _*]} { 1...node.itemsize }
       matchpi %{[unit _ _*]} { 2...node.itemsize }
       matchpi %{[edit-cage for @_ _*]} { 3...node.itemsize }
       matchpi %{[decay (%number +i32) _*]} { 2...node.itemsize }
@@ -89,7 +89,7 @@ module Rhodium
   # that is, a keypath to a valid nodes. The terms are used somewhat interchangeably
   # throughout the code, but in theory there is a distinction. A *keypath* is
   # an arbitrary keypath whereas a *nodepath* points to a node exclusively.
-  def successor?(document : Term::Dict, keypath : Stack(Int32), *, descend : Bool = true) : Bool
+  def successor?(document : Term::Dict, keypath : Stack(Int32), *, descend : Bool = true, only_active : Bool = true) : Bool
     return false unless focus = follow?(document, keypath)
 
     # We're at the root.
@@ -104,7 +104,7 @@ module Rhodium
     end
 
     # Check if we can descend. Descend if that is the case.
-    if descend
+    if descend && (!only_active || active?(document, keypath, focus))
       passable_range = passable_range?(document, focus)
       if passable_range && !passable_range.empty?
         unless passable_range.exclusive?
@@ -1804,7 +1804,7 @@ module Rhodium
     # PASS 1.
     #
     # Remove shadow pairspart from inactive nodes.
-    while successor?(document1, nodepath)
+    while successor?(document1, nodepath, only_active: false)
       document1 = rewrite(document1, nodepath) do |node|
         next Rewrite.none unless node0 = node.as_d?
         next Rewrite.none if node0.itemsonly?
@@ -1956,6 +1956,9 @@ module Rhodium
   SYM_CURSOR = Term[:|]
 
   # :nodoc:
+  CURSORP = M1.operator(ML.term(%{[_string (%any° | [| _string]) _string (_*) @_]}))
+
+  # :nodoc:
   CURSORPE = M1.operator(ML.term(%{(_string (%any° | [| _string]) _string (_*) @edge_ ¦ _ #rep: (%optional 0 rep←(%number +i32)))}))
 
   # :nodoc:
@@ -2026,7 +2029,7 @@ module Rhodium
     cursors = [] of Cursor
     nodepath = Stack(Int32).new
 
-    while successor?(document, nodepath, descend: descend)
+    while successor?(document, nodepath, descend: descend, only_active: false)
       descend = true
 
       node = follow(document, nodepath)
@@ -2145,6 +2148,9 @@ module Rhodium
 
   # Returns `true` if *node* contains one or more cursors at a depth approved
   # by the block. Returns `false` otherwise.
+  #
+  # WARNING: you must pass the document through `cursorfind` at some point before
+  # using this method.
   def has_cursor_at_depth?(document : Term::Dict, nodepath : Stack(Int32), node : Term, & : Int32 -> Bool) : Bool
     cursors = document[Cursors]? || Term[]
     cursors.each_entry do |_, cursorpaths|
