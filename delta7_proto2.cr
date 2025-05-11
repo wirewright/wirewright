@@ -66,7 +66,6 @@ module Rhodium
       matchpi %{[decay (%number +i32) _*]} { 2...node.itemsize }
       matchpi %{[lookaround @_ @_ _*]} { 3...node.itemsize }
       matchpi %{[frag _ @_]} { 1...2 }
-      matchpi %{[mutator @_ _]} { 2...3 }
       matchpi %{[cover _ _+]} { 2...node.itemsize }
 
       otherwise { }
@@ -628,26 +627,67 @@ module Rhodium
   #   somehow partition into nested cases with chained env or smth like that.
   #   And I'm not talking about all the parse-backmap calls, that's the least stupid
   #   thing here. Small backmaps should be pretty efficient, a few microseconds perhaps.
-  def handle(document0 : Term::Dict, document1 : Term::Dict, nodepath : Stack(Int32), event : Term) : {Term::Dict, Bool}
-    node0 = follow(document0, nodepath)
 
+  def handlepp(document0 : Term::Dict, document1 : Term::Dict, nodepath : Stack(Int32), node0 : Term, event : Term) : {Term::Dict, Bool}
     effect(document0, document1, nodepath, node0) do |e|
-      unless active?(document0, nodepath, node0)
-        # Suggestions
-        #
-        # When we see a cursor in a suitable position, we populate it with a list
-        # of suggestions. What the cursor/UI does with them is not of our interest.
-        if event == Cycle
-          if node1 = COMPLETION_MANAGER.complete?(node0)
-            e.rewrite Rewrite.one(node1)
+      Term.case({node0, event}) do
+        givenpi %[{¦ self: @pin_} (pulse @pin_ (pattern_ backspec_))] do
+          unless node1 = M1.backmap?(pattern, backspec, D7.nonshadow(node0))
+            return document1, false
+          end
+
+          e.rewrite Rewrite.one(node1)
+
+          # Always trigger transition because we don't know what was edited. Maybe
+          # it needs a transition and maybe not!
+          true
+        end
+
+        givenpi %[{¦ inbox: (msg_ _*) mail: @pout_} cycle] do
+          if id = node0[:id]?
+            e.event :pulse, pout, {:mail, msg, id}
+          else
+            e.event :pulse, pout, {:mail, msg}
+          end
+
+          e.backmap %[{¦ inbox: (M_ _*)}], %[{(M): ()}]
+
+          false
+        end
+
+        # Any node that wants to receive hover sets its hover: false.
+        # Any node that wants to receive active sets its active: false.
+        # Here we handle hover: true + mouse press = active: false -> active: true,
+        # and the reverse. We also enqueue mail about hover and press.
+        begin
+          # Activate
+          givenpi %[{¦ hover: true active: false} (mouse press)] do
+            e.backmap %[{¦ active_}], %[{active: true}]
+
+            false
+          end
+
+          # Deactivate & press
+          givenpi %[{¦ active: true inbox_dict} (mouse release)] do
+            e.backmap %[{¦ active_ inbox: [_* `M]}], %[{active: false, M: (press)}]
+
+            false
+          end
+
+          givenpi %[{¦ active: true} (mouse release)] do
+            e.backmap %[{¦ active_}], %[{active: false}]
+
+            false
           end
         end
 
-        next false
+        otherwise { false }
       end
+    end
+  end
 
-      event = localized(document0, nodepath, event)
-
+  def handleip(document0 : Term::Dict, document1 : Term::Dict, nodepath : Stack(Int32), node0 : Term, event : Term) : {Term::Dict, Bool}
+    effect(document0, document1, nodepath, node0) do |e|
       Term.case({node0, event}) do
         # cell
         begin
@@ -1454,17 +1494,6 @@ module Rhodium
           false
         end
 
-        givenpi %{[mutator @pin_ value0_] (pulse @pin_ (pattern_ backspec_))} do
-          value1 = M1.backmap?(pattern, backspec, value0) || value0
-          node1 = Term.of(node0.morph({2, value1}))
-
-          e.rewrite Rewrite.one(node1)
-
-          # Always trigger transition because we don't know what was edited. Maybe
-          # it needs a transition and maybe not!
-          true
-        end
-
         # FIXME: this node will lead to cryptic bugs in user land. it should be removed.
         # if users want periodicity they can construct feedback circuits. those are user-
         # content centric rather than related to D7 internals.
@@ -1474,52 +1503,56 @@ module Rhodium
           false
         end
 
-        # FIXME: if node handles cycle it won't hit this. It should be able to!
-        # Any node can define mail: @pout_ attribute. If that's the case this rule
-        # activates, helping the node consume events from its inbox.
-        givenpi %[{¦ inbox: (msg_ _*) mail: @pout_} cycle] do
-          if id = node0[:id]?
-            e.event :pulse, pout, {:mail, msg, id}
-          else
-            e.event :pulse, pout, {:mail, msg}
-          end
-
-          e.backmap %[{¦ inbox: (M_ _*)}], %[{(M): ()}]
-
-          false
-        end
-
-        # Any node that wants to receive hover sets its hover: false.
-        # Any node that wants to receive active sets its active: false.
-        # Here we handle hover: true + mouse press = active: false -> active: true,
-        # and the reverse. We also enqueue mail about hover and press.
-        begin
-          # Activate
-          givenpi %[{¦ hover: true active: false} (mouse press)] do
-            e.backmap %[{¦ active_}], %[{active: true}]
-
-            false
-          end
-
-          # Deactivate & press
-          givenpi %[{¦ active: true inbox_dict} (mouse release)] do
-            e.backmap %[{¦ active_ inbox: [_* `M]}], %[{active: false, M: (press)}]
-
-            false
-          end
-
-          givenpi %[{¦ active: true} (mouse release)] do
-            e.backmap %[{¦ active_}], %[{active: false}]
-
-            false
-          end
-        end
-
         otherwise do
           false
         end
       end
     end
+  end
+
+  def handle(document0 : Term::Dict, document1 : Term::Dict, nodepath : Stack(Int32), event : Term) : {Term::Dict, Bool}
+    node0 = follow(document0, nodepath)
+
+    unless active?(document0, nodepath, node0)
+      # Suggestions
+      #
+      # When we see a cursor in a suitable position, we populate it with a list
+      # of suggestions. What the cursor/UI does with them is not of our interest.
+      if event == Cycle
+        if node1 = COMPLETION_MANAGER.complete?(node0)
+          return assign(document1, nodepath, node1), false
+        end
+      end
+
+      return document1, false
+    end
+
+    event = localized(document0, nodepath, event)
+
+    # FIXME: note how we pass node0 to both of them. This would cause conflicts when
+    # both handlepp() and handleip() rewrite the same node. E.g. a decay with a mailbox.
+    # Currently handleip() will win, but this is odd behavior. We should at least be able
+    # to catch this. At most we should not have the problem at all! As long as they are
+    # rewriting different parts of the node, like delay & mailbox, we should be fine!
+    #
+    # The problem here is, what if the node is e.g. removed by handleip()? Or rewritten
+    # into multiple nodes by handlepp()? Who should win?
+    #
+    # We must do the rewrite array patch first. Then we'll have clear knowledge where
+    # rewrites collide, regardless of node/non-node status. Then we'll simply merge.
+    # Or not simply, but merge. Single-sided removals or inserts are consensus. Updates
+    # on which both sides agree are consensus. Intact parts are consensus. The only
+    # conflict is when we have an irresolvable conflict: e.g. one handle() replaced
+    # the node that another handle() modified. In such case the only way is priority.
+    # The most likely way this scenario can happen is with self: @_ which is also reacted
+    # to somehow by the node itself. E.g. (log @quxes in () self: @quxes). In such cases
+    # I guess we need to have priority. self: has higher priority than "just any rewrite"
+    # because it is more deliberate.
+
+    document1, tr0 = handlepp(document0, document1, nodepath, node0, event)
+    document1, tr1 = handleip(document0, document1, nodepath, node0, event)
+
+    {document1, tr0 || tr1}
   end
 
   # Returns `true` if *node* is an observer node.

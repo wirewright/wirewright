@@ -257,10 +257,6 @@
   (comma for)
   (pulse pout "sink for full storages"))
 
-(node mutator "Mutator allows to morph a passable child using a backmap. What it does is expressible with circuitry, transform nodes, etc., but for common use cases, a separate, simple node is most convenient."
-  (pulse pin "source of (pattern_ backspec_) backmaps; pattern captures things of interest in the child, backspec defines what to replace them with")
-  (literal value "passable child susceptible to mutation"))
-
 (group h1 "A purely visual node that displays as a massive header")
 
 (variant h1 (literal caption "text to show in the header (preferably a string)"))

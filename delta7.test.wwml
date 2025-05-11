@@ -982,12 +982,35 @@
      (latest @counts @count)
      (log @messages in ("Missing" 0)))))
 
-;; mutator
-(d7
-  ((mutator @commands (group (delay 2: (event (pulse @commands (it_ {it: "Bye World"}))))))
-   ;; "group where the first child is missing key 1"
-   (event (pulse @commands ((group {¦ 1: (%- _ t) }) {t: 1}))))
-  ((mutator @commands "Bye World")))
+;; mutation (self: prop)
+(group
+  (d7
+    ((group (delay 2: (event (pulse @commands (it_ {it: "Bye World"})))) self: @commands)
+     ;; "group where the first child is missing key 1"
+     (event (pulse @commands ([group {¦ 1: (%- _ t) }] {t: 1}))))
+    ("Bye World"))
+
+  (d7
+    ((transform (@foos to @bars) (+ _ 1) self: @tfs)
+     (log @bars in ())
+     (delay 0 (event (pulse @foos 100)))
+     (delay 1 (event (pulse @tfs ([transform (@src_ to @_) _] {src: @quxes}))))
+     (delay 2 (event (pulse @quxes 200))))
+    ((transform (@quxes to @bars) (+ _ 1) self: @tfs)
+     (log @bars in (101 201))))
+
+  ;; FIXME
+  (d7
+    ((decay 10 (p "Hello World") inbox: (a b c) mail: @mailout)
+     (log @mailout in ()))
+    ((p "Hello World")
+     (log @mailout in ((mail a) (mail b) (mail c)))))
+
+  ;; FIXME
+  (d7
+    ((log @quxes in () self: @quxes)
+     (event (pulse @quxes (x_ {x: 100}))))
+    (100)))
 
 ;; bridge
 (group
