@@ -61,7 +61,7 @@
   <> {M: (leave-pair () ())}
 
 ;; ... or if editing inside a top-level dict
-(_* ¦ (%entry _ ⟨[_string | _string (M←(key enter) _*) @EDGE_]⟩))
+(_* ¦ (%entry _ ⟨["" | "" (M←(key enter) _*) @EDGE_]⟩))
   <> {M: (leave-pair () ())}
 
 ;; Similarly (input " ") at the end in pair must leave it.
@@ -537,7 +537,7 @@ C←(_string | _string (M←(paste-ahead) _*) @EDGE_ ¦ _ clipboard_: (cut term_
 
 ;; Expulsion
 ;;
-;; Expulstion involves parsing left/right-hand sides (or both). If that's
+;; Expulsion involves parsing left/right-hand sides (or both). If that's
 ;; successful the term is expelled to the left or to the right of the cursor,
 ;; and the corresponding side is cleared.
 

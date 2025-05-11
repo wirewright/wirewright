@@ -1658,4 +1658,31 @@
    ("" | "" () @user)
    foo: " "
    key: (+ 100 fooze: (1 2))
+   qux: baz))
+ (after
+  ((input "key") (input ":") (input "foo") (key enter))
+  ((row
+    (button
+     "+ Increment"
+     @actions
+     qux: (+ 1 2)
+     style: "text-xs")
+    (button "- Decrement" @actions style: "text-lg")
+    (button "0 Reset" @actions style: "text-sm"))
+   foo: " "
+   key: (+ 100 foo ("" | "" () @user) fooze: (1 2))
+   qux: baz))
+ (after
+  ((key enter))
+  ((row
+    (button
+     "+ Increment"
+     @actions
+     qux: (+ 1 2)
+     style: "text-xs")
+    (button "- Decrement" @actions style: "text-lg")
+    (button "0 Reset" @actions style: "text-sm"))
+   ("" | "" () @user)
+   foo: " "
+   key: (+ 100 foo fooze: (1 2))
    qux: baz)))
