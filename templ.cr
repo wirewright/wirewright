@@ -35,6 +35,16 @@ module Alloy
       end
 
       Rewrite.many(list)
+    elsif id.size > 2 && (suffix = id.lchop?("^\\"))
+      var = Term::Sym.new(suffix)
+
+      unless value = ctx.vars[var]?
+        ctx.error { "variable '#{var}' does not exist" }
+        return Rewrite.none
+      end
+
+      # TODO: use pretty print with forced inline
+      Rewrite.one(Term.of(ML.display(value, endl: false).gsub(/\s+/, ' ')))
     elsif id.size > 1 && (suffix = id.lchop?("^"))
       var = Term::Sym.new(suffix)
 
@@ -140,6 +150,9 @@ module Alloy
   end
 
   # Attempts to parse *term* as `^match` expression.
+  #
+  # TODO: extract captures into scope!!!
+  # TODO: support ° (source) patterns (aka multiple matches from pattern)!!!
   private def match(ctx : Context, term : Term) : Rewrite::Any
     variants = [] of String
 
