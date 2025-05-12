@@ -377,7 +377,8 @@ module D7VR
         continue if Rhodium.has_cursor_at_any_depth?(document0, nodepath, node0)
 
         if ML.edge?(title)
-          continue unless title = Rhodium.cell?(document0, nodepath, title)
+          # NOTE: cover references its title from inside itself.
+          continue unless title = nodepath.push(1) { Rhodium.cell?(document0, nodepath, title) }
         end
 
         view = Alloy.render(Term[title: title], TEMPLATE_COVER)
