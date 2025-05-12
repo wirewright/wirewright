@@ -209,7 +209,7 @@ module Alloy
     variants = [] of String
 
     Term.case(term, patterns: variants) do
-      matchpi %{(^each arg_ as itemvar_ children_+)} do
+      matchpi %{(^each (arg_ as pattern_) children_+)} do
         collection = rewrite(arg, ctx.exprR)
 
         unless dict = collection.as_d?
@@ -220,22 +220,25 @@ module Alloy
 
         children1 = Term::Dict.build do |commit|
           dict.items.each do |item|
-            case rewrite = render0(ctx.vars.with(itemvar, item), children, ctx.errors)
-            in Rewrite::None
-              commit.concat(children.items)
-            in Rewrite::One
-              childlist = rewrite.term
-              unless childlist = childlist.as_d?
-                childlist = Term[{childlist}]
-              end
-              commit.concat(childlist.items)
-            in Rewrite::Many
-              childlists = rewrite.list
-              childlists.items.each do |childlist|
+            matches = M1.matches(pattern, item, env: ctx.vars)
+            matches.each do |match|
+              case rewrite = render0(ctx.vars | match, children, ctx.errors)
+              in Rewrite::None
+                commit.concat(children.items)
+              in Rewrite::One
+                childlist = rewrite.term
                 unless childlist = childlist.as_d?
                   childlist = Term[{childlist}]
                 end
                 commit.concat(childlist.items)
+              in Rewrite::Many
+                childlists = rewrite.list
+                childlists.items.each do |childlist|
+                  unless childlist = childlist.as_d?
+                    childlist = Term[{childlist}]
+                  end
+                  commit.concat(childlist.items)
+                end
               end
             end
           end

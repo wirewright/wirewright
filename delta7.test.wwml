@@ -1138,10 +1138,10 @@
   (d7
     ((alloy (@todos/newest to @views)
        (group style: "min-w-sm max-w-2xl flow-col"
-         (^each todos as todo
+         (^each (todos as {¦ title_string body_string})
            (group style: "w-max m-5 bg-neutral-800 p-3 border border-neutral-700 flow-col gap-1 rounded-lg"
-             (p (^ (value todo title)) style: "w-max text-lg font-bold")
-             (p (^ (value todo body)) style: "w-max")))))
+             (p ^title style: "w-max text-lg font-bold")
+             (p ^body style: "w-max")))))
      (cell
        {todos: {{title: "A", body: "Lorem ipsum"},
                 {title: "B", body: "Dolor sit"},
@@ -1151,10 +1151,10 @@
      (log @views in ()))
     ((alloy (@todos/newest to @views)
        (group style: "min-w-sm max-w-2xl flow-col"
-         (^each todos as todo
+         (^each (todos as {¦ title_string body_string})
            (group style: "w-max m-5 bg-neutral-800 p-3 border border-neutral-700 flow-col gap-1 rounded-lg"
-             (p (^ (value todo title)) style: "w-max text-lg font-bold")
-             (p (^ (value todo body)) style: "w-max")))))
+             (p ^title style: "w-max text-lg font-bold")
+             (p ^body style: "w-max")))))
      (cell
        {todos: {{title: "A", body: "Lorem ipsum"},
                 {title: "B", body: "Dolor sit"},
