@@ -272,6 +272,33 @@ module Alloy
     end
   end
 
+  # Attempts to parse *term* as `^let` expression.
+  private def let(ctx : Context, term : Term) : Rewrite::Any
+    variants = [] of String
+
+    Term.case(term, patterns: variants) do
+      matchpi %{(^let children_+ ¦ defns_)} do
+        defnvs = Term::Dict.build do |commit|
+          defns.each_entry do |k, v|
+            commit.with(k, rewrite0(v, ctx.exprR).term? || v)
+          end
+        end
+
+        if children1 = render0(ctx.vars | defnvs, children, ctx.errors).term?
+          Rewrite.many(children1.as_d)
+        else
+          Rewrite.none
+        end
+      end
+
+      otherwise do
+        ctx.error { "invalid ^let expression, expected one of:\n#{variants.join('\n', &.li(bullet: "-", indent: 2))}" }
+
+        Rewrite.none
+      end
+    end
+  end
+
   # Attempts to parse *term* as `^extend` expression.
   private def mextend(ctx : Context, term : Term) : Rewrite::Any
     variants = [] of String
@@ -336,6 +363,7 @@ module Alloy
       { %{rewritee←[^*paste _*]}, callR(->multipaste(Context, Term).partial(ctx)) },
       { %{rewritee←[^* _*]}, chainR(callR(->splice(Context, Term).partial(ctx)), rec_template) },
       { %{rewritee←[^match _*]}, chainR(callR(->match(Context, Term).partial(ctx)), rec_template) },
+      { %{rewritee←[^let _*]}, chainR(callR(->let(Context, Term).partial(ctx)), rec_template) },
       { %{rewritee←[^if _*]}, chainR(callR(->mif(Context, Term).partial(ctx)), rec_template) },
       { %{rewritee←[^unless _*]}, chainR(callR(->munless(Context, Term).partial(ctx)), rec_template) },
       { %{rewritee←[^each _*]}, callR(->meach(Context, Term).partial(ctx)) },
