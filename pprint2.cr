@@ -124,6 +124,9 @@ struct DisplayContext
   end
 end
 
+module GroupLikeLayout
+end
+
 module Layout
   # TODO: express each one of these using Alloy!!!
 
@@ -167,6 +170,7 @@ module Layout
   # ```
   struct DictAligned
     include Layout
+    include GroupLikeLayout
 
     def call(ctx, term, postfix, head, rest) : Term
       unless ctx.layouts_allowed.dict_aligned? && (dict = term.as_d?) && dict.size > 0
@@ -284,6 +288,7 @@ module Layout
   # ```
   struct CallIndented
     include Layout
+    include GroupLikeLayout
 
     def call(ctx, term, postfix, head, rest) : Term
       unless ctx.layouts_allowed.call_indented? && (dict = term.as_d?) && dict.size >= 2
@@ -363,6 +368,7 @@ module Layout
   # ```
   struct CallKwargsInlineWithBlock
     include Layout
+    include GroupLikeLayout
 
     TEMPLATE = ML.term <<-WWML
     (col (row gap: 1
@@ -414,6 +420,7 @@ module Layout
   # ```
   struct CallKwargsColumnWithBlock
     include Layout
+    include GroupLikeLayout
 
     TEMPLATE = ML.term <<-WWML
     (col (row gap: 1
@@ -463,6 +470,7 @@ module Layout
   # ```
   struct CallArgIndentedKwargs
     include Layout
+    include GroupLikeLayout
 
     TEMPLATE = ML.term <<-WWML
     (col (row gap: 1
@@ -571,19 +579,9 @@ enum LayoutSet : UInt16
     new({:dict_inline, :call_arg_indented_block, :call_column, :call_indented, :dict_aligned})
   end
 
-  # Multiline layouts suitable for itemsonly dicts.
-  def self.multiline_list : LayoutSet
-    self.list & ~LayoutSet::DictInline
-  end
-
   # Layouts suitable for dicts containing both items and pairs.
   def self.dict : LayoutSet
     new({:dict_inline, :call_kwargs_inline_with_block, :call_kwargs_column_with_block, :call_arg_indented_kwargs, :call_indented, :dict_aligned})
-  end
-
-  # Multiline layouts suitable for dicts containing both items and pairs.
-  def self.multiline_dict : LayoutSet
-    self.dict & ~LayoutSet::DictInline
   end
 end
 
@@ -1127,18 +1125,6 @@ module Feature
 
     def call(ctx, term, postfix, head, rest) : Term
       Term.case(term) do
-        matchpi %{(group _+)}, %{(unit _ _+)}, %{(cover _ _+)} do
-          thunk = ctx.layouts_allowed.thunk(term, ")" + postfix, LayoutSet.multiline_list)
-
-          Term.of(:row, FRAG_LPAREN, thunk)
-        end
-
-        matchpi %{[group _+]}, %{[unit _ _+]}, %{[cover _ _+]} do
-          thunk = ctx.layouts_allowed.thunk(term, ")" + postfix, LayoutSet.multiline_dict)
-
-          Term.of(:row, FRAG_LPAREN, thunk)
-        end
-
         matchpi %{((%symbol nonblank) _*)} do
           thunk = ctx.layouts_allowed.thunk(term, ")" + postfix, LayoutSet.list)
 
@@ -1338,12 +1324,23 @@ def flatten(ctx, node : Term, maxwidth : Int32, layouts : LayoutSet) : {Term, In
       max_rem = Int32::MIN
       max_flat = Term.of
 
-      candidates = [] of Chain::Thunk(Layout)
+      # FIXME: Here we basically create a ranked sub-chain. Ranked however subject
+      # desires that is. Lots of hacking & memory waste to get there. Is there
+      # a better way?
+      #
+      # FIXME: each call() here may trigger the rest of the chain if its conditions
+      # are not met. This is very bad!!!
+
+      candidates = [] of {Layout, Int32}
       myself.each do |option|
-        candidates << ctx.layouts.find(option.layout)
+        candidate = ctx.layouts.find(option.layout)
+        candidates << {candidate.get, candidate.preference}
       end
-      candidates.sort_by!(&.preference)
-      candidates.each do |candidate|
+
+      rank(candidates, subject.unsafe_as_d)
+
+      subchain = Chain.new(candidates.to_readonly_slice { |candidate, _| candidate })
+      subchain.each do |candidate|
         begin
           rendered = candidate.call(ctx.copy_with(layouts_allowed: children), subject, postfix.to(String))
         rescue TermPassthrough
@@ -1397,6 +1394,21 @@ def flatten(ctx, node : Term, layouts : LayoutSet = LayoutSet::All) : {Term, Int
   flatten(ctx, node, maxwidth: ctx.normal_width, layouts: layouts)
 end
 
+def rank(candidates, subject : Term::Dict)
+  Term.case(subject) do
+    matchpi %{[group _+]}, %{[unit _ _+]}, %{[cover _ _+]} do
+      candidates.sort_by! do |candidate, preference|
+        # Prefer NON inline layouts.
+        {candidate.is_a?(GroupLikeLayout) ? -1 : 1, preference}
+      end
+    end
+
+    otherwise do
+      candidates.sort_by! { |_, preference| preference }
+    end
+  end
+end
+
 struct Chain(T)
   def initialize(@callables : Slice(T))
   end
@@ -1404,6 +1416,12 @@ struct Chain(T)
   # Constructs a chain of *callables*.
   def self.new(*callables : T)
     Chain(T).new(callables.to_readonly_slice(&.as(T)))
+  end
+
+  def each(& : Thunk(T) ->) : Nil
+    @callables.each_index do |index|
+      yield Thunk.new(self, index)
+    end
   end
 
   # Prepends *callables* to this chain.
@@ -1414,6 +1432,10 @@ struct Chain(T)
   # Delayed `Chain#call` at a specific index.
   struct Thunk(T)
     def initialize(@chain : Chain(T), @index : Int32)
+    end
+
+    def get : T
+      @chain.@callables.unsafe_fetch(@index)
     end
 
     # Returns the *preference* of this call -- a number indicating how early
