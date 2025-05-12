@@ -4,7 +4,6 @@ require "./uiRb"
 require "./sfpaint"
 require "./pprint2"
 require "./mstep4"
-# require "./surfsrv"
 
 alias UIR::Platform::Current = SFML
 
@@ -118,8 +117,8 @@ module D7VR
       ;; if we're using ring-l, it may overflow outside of the viewport
       ;; if the cursor is located at origin.
       ((self rect) style: "h-max z-10 bg-blue-500 w-0 ring-l lempty:ring-l-0 lempty:ring-r empty:w-px empty:ring-0"
-        empty: (^expr (= lhs rhs ""))
-        lempty: (^expr (= lhs "")))
+        empty: (^ (= lhs rhs ""))
+        lempty: (^ (= lhs "")))
       (code ^rhs style: "text-neutral-400 bg-neutral-700"))
     WWML
 

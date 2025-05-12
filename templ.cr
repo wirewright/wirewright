@@ -252,17 +252,17 @@ module Alloy
     end
   end
 
-  # Attempts to parse *term* as `^expr` expression.
+  # Attempts to parse *term* as `^` expression.
   private def expr(ctx : Context, term : Term) : Rewrite::Any
     variants = [] of String
 
     Term.case(term, patterns: variants) do
-      matchpi %{(^expr arg_)} do
+      matchpi %{(^ arg_)} do
         rewrite0(arg, ctx.exprR)
       end
 
       otherwise do
-        ctx.error { "invalid ^expr expression, expected one of:\n#{variants.join('\n', &.li(bullet: "-", indent: 2))}" }
+        ctx.error { "invalid ^ expression, expected one of:\n#{variants.join('\n', &.li(bullet: "-", indent: 2))}" }
 
         Rewrite.none
       end
@@ -336,7 +336,7 @@ module Alloy
       { %{rewritee←[^if _*]}, chainR(callR(->mif(Context, Term).partial(ctx)), rec_template) },
       { %{rewritee←[^unless _*]}, chainR(callR(->munless(Context, Term).partial(ctx)), rec_template) },
       { %{rewritee←[^each _*]}, callR(->meach(Context, Term).partial(ctx)) },
-      { %{rewritee←[^expr _*]}, chainR(callR(->expr(Context, Term).partial(ctx)), rec_template) },
+      { %{rewritee←[^ _*]}, chainR(callR(->expr(Context, Term).partial(ctx)), rec_template) },
       { %{rewritee←[^extend _*]}, chainR(callR(->mextend(Context, Term).partial(ctx)), rec_template) },
       { %{rewritee←[^fallback _*]}, callR(->fallback(Context, Term).partial(ctx)) },
       { %{rewritee_dict}, entriesR(rec_template) },
