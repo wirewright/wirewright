@@ -14,6 +14,7 @@ show_help() {
     echo "      -r, --release : Build with --release flag"
     echo "  t, test [args...] : Run the pattern6_test.cr file with additional arguments"
     echo "  i, init : Install shards and build the crsfml library"
+    echo "  r, run <file.cr> [args...] : Run Crystal file"
 }
 
 if [ $# -eq 0 ]; then
@@ -98,6 +99,21 @@ case $subcommand in
         done
         # Construct the command
         crystal run pattern6_test.cr --progress -Dpreview_mt -Dexecution_context --error-trace -- "${additional_args[@]}"
+        ;;
+    r|run)
+        if [ $# -eq 0 ]; then
+            echo "Error: run requires an argument"
+            exit 1
+        fi
+        file=$1
+        shift
+        additional_args=()
+        while [ $# -gt 0 ]; do
+            additional_args+=("$1")
+            shift
+        done
+        # Construct the command
+        crystal run $file --progress -Dpreview_mt -Dexecution_context --error-trace -- "${additional_args[@]}"
         ;;
     i|init)
         # Run shards install
