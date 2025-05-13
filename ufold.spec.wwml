@@ -88,7 +88,7 @@
 (dynamic "text" C {text-color: C_})
 
 (color "border" C {border-color: C_})
-(dynamic "border" C {border-color C_})
+(dynamic "border" C {border-color: C_})
 
 (nat "gap" N {gap: (spacing N_)})
 
