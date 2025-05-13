@@ -5,7 +5,7 @@
     (p "µsoma to Wirewright is roughly what a web browser is to the Internet." style: "w-max")
     (p "You're looking at a *self-embodied program*. Well, sort of — it only contains some text nodes right now. Hit left/right arrow to see for yourself." style: "w-max")
     (p "Try typing the following:" style: "w-max")
-    (src style: "w-max text-sm rounded"
+    (src style: "w-max text-sm rounded bg-none border border-neutral-700"
       "(h1 @count)
        (cell 0 @count)
        (button \"Increment\" as 1 to @deltas ())
