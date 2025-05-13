@@ -3106,3 +3106,29 @@ module InspectToS
     inspect(io)
   end
 end
+
+def watch(path : Path, &fn : IO ->)
+  File.open(path, "r") do |io|
+    fn.call(io)
+  end
+
+  MT.spawn do
+    modt0 = nil
+
+    loop do
+      info = File.info(path)
+      modt1 = info.modification_time
+      next if modt0 == modt1
+
+      Log.info { "file at #{path} changed" }
+
+      modt0 = modt1
+
+      File.open(path, "r") do |io|
+        fn.call(io)
+      end
+    ensure
+      sleep 300.milliseconds
+    end
+  end
+end
