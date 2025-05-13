@@ -387,6 +387,24 @@ module Rhodium
     document[Cells, abs(document, nodepath, edge)]?
   end
 
+  def const?(document : Term::Dict, nodepath : Stack(Int32), value : Term) : Term?
+    ML.edge?(value) ? cell?(document, nodepath, value) : value
+  end
+
+  def sensor_in_sync?(document : Term::Dict, tspace : Term, pattern : Term, secret : Term?) : Bool
+    return false unless status = document[Tspaces, tspace, :sensors, {query: pattern, secret: secret}]?
+    return false unless status.as_b?
+
+    status.unsafe_as_b.true?
+  end
+
+  def appearance_in_sync?(document : Term::Dict, tspace : Term, value : Term, secret : Term?) : Bool
+    return false unless status = document[Tspaces, tspace, :appearances, {value: value, secret: secret}]?
+    return false unless status.as_b?
+
+    status.unsafe_as_b.true?
+  end
+
   # Converts *source* indexable of terms to a keypath into *document*. Returns
   # `nil` if the resulting keypath is invalid. Guarantees to return a valid
   # keypath into *document*.

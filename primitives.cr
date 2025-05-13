@@ -5,6 +5,7 @@ PRIMITIVES = ProcRuleset.build do
 
   rulepi1 %[(/ a_number (%all b_number (%not 0)))] { a / b }
   rulepi1 %[(// a_number (%all b_number (%not 0)))] { a // b }
+  rulepi1 %[(mod a_number (%all b_number (%not 0)))] { a % b }
 
   rulepi1 %[(~ args_string+)] { args.items.reduce { |a, b| a.stitch(b) } }
 
@@ -79,7 +80,7 @@ PRIMITIVES = ProcRuleset.build do
     xs[key]? || Term.of(:value, xs, key)
   end
 
-  rulepi1 %[(hashcode term_)] do
+  rulepi1 %[(hash term_)] do
     Term.hashcode(term)
   end
 
@@ -95,6 +96,13 @@ PRIMITIVES = ProcRuleset.build do
     else
       Term.of({:none})
     end
+  end
+
+  rulepi1 %[(nth (range b_number e_number points: m_number) n_number)] do |n, m|
+    n = n.floor
+    m = m.floor
+    n %= m
+    b + n * ((e - b)/m)
   end
 
   rulepi1 %[(itemspart xs_dict)] do
