@@ -264,6 +264,36 @@
 "max-h-6xl": { max-h: (rem 72) }
 "max-h-7xl": { max-h: (rem 80) }
 
+(word "max-bound" (+ "max-w-bound" "max-h-bound"))
+
+"max-w-bound-3xs": { max-w-bound: (rem 16) }
+"max-w-bound-2xs": { max-w-bound: (rem 18) }
+"max-w-bound-xs": { max-w-bound: (rem 20) }
+"max-w-bound-sm": { max-w-bound: (rem 24) }
+"max-w-bound-md": { max-w-bound: (rem 28) }
+"max-w-bound-lg": { max-w-bound: (rem 32) }
+"max-w-bound-xl": { max-w-bound: (rem 36) }
+"max-w-bound-2xl": { max-w-bound: (rem 42) }
+"max-w-bound-3xl": { max-w-bound: (rem 48) }
+"max-w-bound-4xl": { max-w-bound: (rem 56) }
+"max-w-bound-5xl": { max-w-bound: (rem 64) }
+"max-w-bound-6xl": { max-w-bound: (rem 72) }
+"max-w-bound-7xl": { max-w-bound: (rem 80) }
+
+"max-h-bound-3xs": { max-h-bound: (rem 16) }
+"max-h-bound-2xs": { max-h-bound: (rem 18) }
+"max-h-bound-xs": { max-h-bound: (rem 20) }
+"max-h-bound-sm": { max-h-bound: (rem 24) }
+"max-h-bound-md": { max-h-bound: (rem 28) }
+"max-h-bound-lg": { max-h-bound: (rem 32) }
+"max-h-bound-xl": { max-h-bound: (rem 36) }
+"max-h-bound-2xl": { max-h-bound: (rem 42) }
+"max-h-bound-3xl": { max-h-bound: (rem 48) }
+"max-h-bound-4xl": { max-h-bound: (rem 56) }
+"max-h-bound-5xl": { max-h-bound: (rem 64) }
+"max-h-bound-6xl": { max-h-bound: (rem 72) }
+"max-h-bound-7xl": { max-h-bound: (rem 80) }
+
 colors: {
   "red-50": (oklch 0.971 0.013 17.38),
   "red-100": (oklch 0.936 0.032 17.717),

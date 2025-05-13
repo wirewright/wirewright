@@ -157,6 +157,10 @@
 (x-expand {¦ content-w_number -max-w_} ¦ _ w: content min-w: content max-w: W_number)
   <> {max-w: $'(min →content-w →W)}
 
+;; Pick the limit that is smallest (shrinkable with bounded max-w).
+(x-expand {¦ -max-w_} ¦ _ max-w: Wp_ max-w-bound: Wl_number)
+  <> {max-w: $'(min →Wp →Wl)}
+
 ;; Compute content-w of x-expand based on the determined max-w of the child.
 (x-expand {¦ max-w_number} ¦ _ -content-w: W) <> {W: →max-w}
 
@@ -177,6 +181,10 @@
 ;; and only use that.
 (y-expand {¦ content-h_number -max-h_} ¦ _ h: content min-h: content max-h: H_number)
   <> {max-h: $'(min →content-h →H)}
+
+;; Pick the limit that is smallest (shrinkable with bounded max-h).
+(y-expand {¦ -max-h_} ¦ _ max-h: Hp_ max-h-bound: Hl_number)
+  <> {max-h: $'(min →Hp →Hl)}
 
 ;; Compute content-h of y-expand based on the determined max-h of the child.
 (y-expand {¦ max-h_number} ¦ _ -content-h: H) <> {H: →max-h}

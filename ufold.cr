@@ -438,35 +438,35 @@ module Microfold
     end
   end
 
-  # Appears if the min-height (`min-h`) prop is present.
+  # Appears if the `min-h` or `max-h-bound` prop is present.
   struct MinHeightBox
     include NodeBox
 
     def call(ctx : UnitContext, subject : Term, subbox : Hierarchy) : {UnitContext, Term}
-      unless response = ctx.consume_some?(:"min-h")
+      unless response = ctx.consume_some?(:"min-h", :"max-h-bound")
         return subbox.call(ctx, subject)
       end
 
-      ictx, minh = response
+      ictx, minh, maxhb = response
       octx, inner = subbox.call(ictx.overwrite(:h, :max).copy_with(nested: true), subject)
 
-      {octx, Term.of(:"y-expand", inner, "min-h": minh, w: ctx.sheet[:w]?, h: ctx.sheet[:h]?)}
+      {octx, Term.of(:"y-expand", inner, "min-h": minh, "max-h-bound": maxhb, w: ctx.sheet[:w]?, h: ctx.sheet[:h]?)}
     end
   end
 
-  # Appears if the min-width (`min-w`) prop is present.
+  # Appears if the `min-w` or `max-w-bound` prop is present.
   struct MinWidthBox
     include NodeBox
 
     def call(ctx : UnitContext, subject : Term, subbox : Hierarchy) : {UnitContext, Term}
-      unless response = ctx.consume_some?(:"min-w")
+      unless response = ctx.consume_some?(:"min-w", :"max-w-bound")
         return subbox.call(ctx, subject)
       end
 
-      ictx, minw = response
+      ictx, minw, maxwb = response
       octx, inner = subbox.call(ictx.overwrite(:w, :max).copy_with(nested: true), subject)
 
-      {octx, Term.of(:"x-expand", inner, "min-w": minw, w: ctx.sheet[:w]?, h: ctx.sheet[:h]?)}
+      {octx, Term.of(:"x-expand", inner, "min-w": minw, "max-w-bound": maxwb, w: ctx.sheet[:w]?, h: ctx.sheet[:h]?)}
     end
   end
 
