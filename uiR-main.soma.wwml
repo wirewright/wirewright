@@ -15,8 +15,15 @@
   <> {max-h: $(ceil (* →H →frac))}
 
 ;; Propagate my content-w/h as max-w/h of children if I am w/h: content.
-(_ {¦ w: max -max-w: w} ¦ _ w: content content-w: W_number) <> {w: →W}
-(_ {¦ h: max -max-h: h} ¦ _ h: content content-h: H_number) <> {h: →H}
+((%not x-padding) {¦ w: max -max-w: w} ¦ _ w: content content-w: W_number) <> {w: →W}
+((%not y-padding) {¦ h: max -max-h: h} ¦ _ h: content content-h: H_number) <> {h: →H}
+
+;; For padding nodes, we need to subtract padding from content size
+;; before converting it to child max-w/h.
+(x-padding {¦ w: max -max-w: w} ¦ _ w: content content-w: W_number px_number)
+  <> {w: $'(- →W →px)}
+(y-padding {¦ h: max -max-h: h} ¦ _ h: content content-h: H_number py_number)
+  <> {h: $'(- →H →py)}
 
 ;; Set final-w/h according to w/h.
 {¦ w: content content-w_number -final-w_} <> {final-w: →content-w}
