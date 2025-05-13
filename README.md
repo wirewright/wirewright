@@ -28,12 +28,12 @@ Link so you don't have to scroll: https://github.com/wirewright/wirewright/relea
 
 ## Building
 
-Wirewright can be built with Crystal 1.16.0 or later.
+Wirewright can be built with Crystal 1.16.0 or later. Due to some bugfixes that Wirewright depends on, it is recommended that you build on 1.16.2 or later.
 
-1. `shards install`.
-2. `crystal build soma6.cr --release -Dpreview_mt -Dexecution_context -Dsoma6 -o soma`.
-
-And do not forget to hope really really hard for success!
+0. You'd probably want to make `dev.sh` executable, if it's not already; something like `chmod +x dev.sh` should work.
+1. Run `dev.sh init`. This will run `shards install`; and also point CrSFML to the header files of SFML 2.6.0, found in ext/.
+2. Run `dev.sh soma --release` to *build* in release mode. Run `dev.sh soma` to *run* in debug mode.
+3. `dev.sh soma --release` will **hopefully** produce an executable named `soma`. That's it.
 
 ## Want to learn more?
 
