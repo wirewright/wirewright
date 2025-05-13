@@ -3,6 +3,7 @@
 ;; https://tailwindcss.com
 
 "font-icons": {font: "Material Icons Outlined"}
+"font-condensed": {font: "IBM Plex Sans Condensed"}
 "font-sans": {font: "IBM Plex Sans"}
 "font-mono": {font: "IBM Plex Mono"}
 
