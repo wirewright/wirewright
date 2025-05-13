@@ -107,12 +107,12 @@
 ;; NODE: x-translate
 
 ;; Support fractional offset (fraction of child's final width).
-(x-translate {¦ -dl_ final-w: w_number} ¦ _ offset: (* frac←(%number 0 <= _ <= 1)) dl: _number final-w: W_number)
+(x-translate {¦ -dl_ final-w: w_number} ¦ _ offset: (* frac←(%number -1 <= _ <= 1)) dl: _number final-w: W_number)
   <> {dl: $(ceil (* →W →frac))}
 
 ;; NODE: y-translate
 
-(y-translate {¦ -dt_ final-h: h_number} ¦ _ offset: (* frac←(%number 0 <= _ <= 1)) dt: _number final-h: H_number)
+(y-translate {¦ -dt_ final-h: h_number} ¦ _ offset: (* frac←(%number -1 <= _ <= 1)) dt: _number final-h: H_number)
   <> {dt: $(ceil (* →H →frac))}
 
 ;; NODE: x-align
