@@ -345,6 +345,8 @@ struct Ruleset
   def initialize(@pset : PatternSet, @rules : Slice(Rule::Any))
   end
 
+  # - Capture `template` in *selector* forms a template rule.
+  # - Capture `backspec` in *selector* forms a backmap rule.
   def self.select(selector, base)
     rules = [] of Rule::Any
 
@@ -353,7 +355,7 @@ struct Ruleset
         rule = Rule::Template.new(template)
       elsif backspec = env[:backspec]?
         rule = Term.case(normp) do
-          matchpi %[((%literal %let) (%capture toplevel_) _)] { Rule::BackmapMany.new(toplevel, backspec) }
+          matchpi %[(%'%let (%capture toplevel_) _)] { Rule::BackmapMany.new(toplevel, backspec) }
           otherwise { Rule::BackmapOne.new(backspec) }
         end
       else
