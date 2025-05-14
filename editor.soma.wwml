@@ -283,7 +283,7 @@ C←[lhs←";" | rhs←"" (M←(input ";") _*) @EDGE_]
 
 ;; Convert to motion
 [_string c←(| motion←(%string nonempty) ¦ motion: true) _string (M←(key enter) _*) @EDGE_]
-  <> {M: (motion $'(ml →motion shadow: false)), c: |}
+  <> {M: (motion $'(ml->term →motion shadow: false)), c: |}
 
 ;; Parse motion
 [_string | _string (M←(motion (ml/ok term_)) _*) @EDGE_]
@@ -355,19 +355,19 @@ C←["" | "" ((m←edit/2 D_dict) _*) @EDGE_]
   <> {C: →D}
 
 [lhs←"" | "" (M←(edit @term_) _*) @EDGE_]
-  <> {(M): (), lhs: $'(string →term)}
+  <> {(M): (), lhs: $'(term->ml →term)}
 
 [lhs←"" | "" (M←(edit term_) _*) @EDGE_]
-  <> {(M): (), lhs: $'(string →term)}
+  <> {(M): (), lhs: $'(term->ml →term)}
 
 ⟨behind_ [lhs←"" | "" (M←(edit-behind) _*) @EDGE_]⟩
-  <> {(M): (), (behind): (), lhs: $'(string →behind)}
+  <> {(M): (), (behind): (), lhs: $'(term->ml →behind)}
 
 ⟨[_* `back] C←[lhs←"" | "" (M←(edit-behind) _*) @EDGE_]⟩
   <> {(M): (), (C): (), back: ↑C}
 
 ⟨["" | rhs←"" (M←(edit-ahead) _*) @EDGE_] ahead_⟩
-  <> {(M): (), rhs: $'(string →ahead), (ahead): ()}
+  <> {(M): (), rhs: $'(term->ml →ahead), (ahead): ()}
 
 ⟨C←["" | "" (M←(edit-ahead) _*) @EDGE_] [`front _*]⟩
   <> {(M): (), (C): (), front: ↑C}
@@ -375,10 +375,10 @@ C←["" | "" ((m←edit/2 D_dict) _*) @EDGE_]
 ;; If the user attempts to edit an edge, show them the pretty-printed
 ;; version of the edge rather than its underlying dict implementation.
 ⟨@edge_ C←[lhs←"" | "" (M←(edit-behind) _*) @EDGE_]⟩
-  <> {(M): (), (edge): (), lhs: $'(string →edge)}
+  <> {(M): (), (edge): (), lhs: $'(term->ml →edge)}
 
 ⟨C←["" | rhs←"" (M←(edit-ahead) _*) @EDGE_] @edge_⟩
-  <> {(M): (), (edge): (), rhs: $'(string →edge)}
+  <> {(M): (), (edge): (), rhs: $'(term->ml →edge)}
 
 ⟨behind_ C←[_string | _string (M←(move-behind) _*) @EDGE_]⟩
   <> {(M): (), C: ↑behind, behind: ↑C}
@@ -559,7 +559,7 @@ C←(_string | _string (M←(paste-ahead) _*) @EDGE_ ¦ _ clipboard_: (cut term_
   <> {(M): ((move-back-right) →M)}
 
 [lhs←(%string nonempty) | "" (M←(leave-pair ok←(_*) err←(_*)) _*) @EDGE_]
-  <> {M: (leave-pair $'(ml →lhs shadow: false) →ok →err)}
+  <> {M: (leave-pair $'(ml->term →lhs shadow: false) →ok →err)}
 
 (_* `target ¦ (%entry _ C←[lhs_string | "" (M←(leave-pair (ml/ok term_) ok←(_*) _) _*) @EDGE_]))
   <> {(M): →ok, lhs: "", target: ↑C, C: ↑term}
@@ -580,7 +580,7 @@ C←(_string | _string (M←(paste-ahead) _*) @EDGE_ ¦ _ clipboard_: (cut term_
 
 ;; (expel-left)
 [lhs_string | _string (M←(expel-left (ok_*) (err_*)) _*) @EDGE_]
-  <> {M: (expel-left $'(ml →lhs shadow: false) ↑ok ↑err)}
+  <> {M: (expel-left $'(ml->term →lhs shadow: false) ↑ok ↑err)}
 
 [_* `pred [lhs_string | _string (M←(expel-left (ml/ok term_) (ok_*) (_*)) _*) @EDGE_] _*]
   <> {(M): ↑ok, lhs: "", pred: →term}
@@ -590,7 +590,7 @@ C←(_string | _string (M←(paste-ahead) _*) @EDGE_ ¦ _ clipboard_: (cut term_
 
 ;; (expel-right)
 [_string | rhs_string (M←(expel-right (ok_*) (err_*)) _*) @EDGE_]
-  <> {M: (expel-right $'(ml →rhs shadow: false) ↑ok ↑err)}
+  <> {M: (expel-right $'(ml->term →rhs shadow: false) ↑ok ↑err)}
 
 [_* [_string | rhs_string (M←(expel-right (ml/ok term_) (ok_*) (_*)) _*) @EDGE_] `succ _*]
   <> {(M): ↑ok, rhs: "", succ: →term}
@@ -600,7 +600,9 @@ C←(_string | _string (M←(paste-ahead) _*) @EDGE_ ¦ _ clipboard_: (cut term_
 
 ;; (expel-mid)
 [lhs_string | rhs_string (M←(expel-mid (ok_*) (err_*)) _*) @EDGE_]
-  <> {M: (expel-mid $'(ml →lhs shadow: false) $'(ml →rhs shadow: false) ↑ok ↑err)}
+  <> {M: (expel-mid $'(ml->term →lhs shadow: false)
+                    $'(ml->term →rhs shadow: false)
+                    ↑ok ↑err)}
 
 [_* `pred [lhs_string | rhs_string (M←(expel-mid (ml/ok lterm_) (ml/ok rterm_) (ok_*) (_*)) _*) @EDGE_] `succ _*]
   <> {(M): ↑ok, lhs: "", rhs: "", pred: →lterm, succ: →rterm}

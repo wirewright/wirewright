@@ -75,10 +75,10 @@
 ;; TODO: the rest of cursor suggestions
 
 (col children_+ ¦ _ gap⋮ 0 style⋮ "")
-  => (group ^*children style: (^ (~ "flow-col gap-" (string (* gap 2)) " " style)))
+  => (group ^*children style: (^ (~ "flow-col gap-" (* gap 2) " " style)))
 
 (row children_+ ¦ _ gap⋮ 0 style⋮ "")
-  => (group ^*children style: (^ (~ "flow-row gap-" (string (* gap 2)) " " style)))
+  => (group ^*children style: (^ (~ "flow-row gap-" (* gap 2) " " style)))
 
 (token caption_string ¦ _ tag: symbol)
   => (code ^caption style: "text-neutral-200")

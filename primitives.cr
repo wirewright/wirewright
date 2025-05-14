@@ -7,11 +7,19 @@ PRIMITIVES = ProcRuleset.build do
   rulepi1 %[(// a_number (%all b_number (%not 0)))] { a // b }
   rulepi1 %[(mod a_number (%all b_number (%not 0)))] { a % b }
 
-  rulepi1 %[(~ args_string+)] { args.items.reduce { |a, b| a.stitch(b) } }
+  rulepi1 %[(~ args_+)] do
+    args.items.reduce(Term[""]) do |prefix, arg|
+      suffix = arg.as_s? || Term[ML.display(arg, endl: false)]
+      prefix.stitch(suffix)
+    end
+  end
 
-  rulepi1 %[(string term_)] { ML.display(term, endl: false) }
+  rulepi1 %[(term->ml term_)] do
+    # TODO: use pretty print with forced inline
+    Term[ML.display(term, endl: false)]
+  end
 
-  rulepi1 %[(ml ml_string ¦ () shadow⋮ true)] do
+  rulepi1 %[(ml->term ml_string ¦ () shadow⋮ true)] do
     term = ML.term(ml.to(String))
     if shadow.false? && (symbol = term.as_sym?) && Rhodium.shadow?(symbol)
       # TODO: line col message
