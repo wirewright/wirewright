@@ -1,4 +1,3 @@
-require "./libtermbox2"
 require "./src/wirewright"
 require "./baz5_editor"
 
