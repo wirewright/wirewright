@@ -13,13 +13,12 @@ alias UIR::Platform::Current = SFML
 module D7MR
   extend self
 
-  private def stringify(term : Term) : Term::Str
-    unless term.type.string?
-      # TODO: use pretty print with forced inline
-      term = Term[ML.display(term, endl: false).gsub(/\s+/, ' ')]
-    end
+  record Printable, document : Term::Dict
+  record Printout, term : Term
 
-    term.as_s
+  private def stringify(term : Term) : Term::Str
+    # TODO: use pretty print with forced inline
+    term.as_s? || Term[ML.display(term, endl: false).gsub(/\s+/, ' ')]
   end
 
   private def printable(document : Term::Dict, nodepath : Stack(Int32), node : Term) : Term
@@ -32,38 +31,38 @@ module D7MR
       ) do |caption|
         continue unless caption = Rhodium.const?(document, nodepath, caption)
 
-        node.morph({1, stringify(caption)}, {:"#addr", nodepath})
+        node.morph({1, stringify(caption)}, {:"#node", nodepath})
       end
 
       matchpi %{[(%any h1 h2 h3 h4 h5 h6 p src) caption_]} do |caption|
         continue unless caption = Rhodium.const?(document, nodepath, caption)
 
-        node.morph({1, stringify(caption)}, {:"#addr", nodepath})
+        node.morph({1, stringify(caption)}, {:"#node", nodepath})
       end
 
       matchpi %{[hr]} do
-        node.morph({:"#addr", nodepath})
+        node.morph({:"#node", nodepath})
       end
 
       matchpi %{[cover title_ _+]} do |title|
         continue if Rhodium.has_cursor_at_any_depth?(document, nodepath, node)
         continue unless title = nodepath.push(1) { Rhodium.const?(document, nodepath, title) }
 
-        Term[:cover, stringify(title)] | node.pairspart | Term["#addr": nodepath]
+        Term[:cover, stringify(title)] | node.pairspart | Term["#node": nodepath]
       end
 
       matchpi %{[comment _string+]} do
-        node.morph({:"#addr", nodepath})
+        node.morph({:"#node", nodepath})
       end
 
       matchpi %{[view view_]} do |view|
         continue unless view = Rhodium.const?(document, nodepath, view)
 
-        node.morph({1, view}, {:"#addr", nodepath})
+        node.morph({1, view}, {:"#node", nodepath})
       end
 
       matchpi %{(changes/view view_ @_ ¦ attrs_)} do
-        Term[:view, view] | attrs | Term["#addr": nodepath]
+        Term[:view, view] | attrs | Term["#node": nodepath]
       end
 
       # TODO: what should we do if invisible frag has style:, hover:, active:, etc.?
@@ -77,19 +76,19 @@ module D7MR
         continue if Rhodium.has_cursor_at_any_depth?(document, nodepath, node)
         continue unless head = Rhodium.const?(document, nodepath, head)
 
-        node.morph({1, head}, {:"#addr", nodepath})
+        node.morph({1, head}, {:"#node", nodepath})
       end
 
       matchpi %{[sensor pattern_ in tspace_symbol to @_]} do
         syncd = Rhodium.sensor_in_sync?(document, tspace, pattern, node[:secret]?)
 
-        node.morph({:"#addr", nodepath}, {:"#syncd", syncd})
+        node.morph({:"#node", nodepath}, {:"#syncd", syncd})
       end
 
       matchpi %{[appearance value_ in tspace_symbol]} do
         syncd = Rhodium.appearance_in_sync?(document, tspace, value, node[:secret]?)
 
-        node.morph({:"#addr", nodepath}, {:"#syncd", syncd})
+        node.morph({:"#node", nodepath}, {:"#syncd", syncd})
       end
 
       otherwise { node }
@@ -109,7 +108,7 @@ module D7MR
   # out what it should pretty print and what it should treat specially (e.g. `h1`
   # node for which a model is created, vs. `(cell 0 @qux)`, which we can roughly
   # say is "pretty printed as code").
-  def printable(document : Term::Dict) : Term::Dict
+  def printable(document : Term::Dict) : Printable
     nodepath = Stack(Int32).new
 
     while Rhodium.successor?(document, nodepath)
@@ -124,11 +123,11 @@ module D7MR
       # of node.
       node1 = Term.of_case(node1) do
         matchpi(
-          %[{¦ hover_boolean -#addr}],
-          %[{¦ active_boolean -#addr}],
-          %[{¦ in: (_*) out: (_*) focus_boolean -#addr}],
+          %[{¦ hover_boolean -#node}],
+          %[{¦ active_boolean -#node}],
+          %[{¦ in: (_*) out: (_*) focus_boolean -#node}],
         ) do
-          node1.morph({:"#addr", nodepath})
+          node1.morph({:"#node", nodepath})
         end
 
         otherwise { node1 }
@@ -146,7 +145,7 @@ module D7MR
       document = document.where(cursorpath.items, eq: cursor1)
     end
 
-    document
+    Printable.new(document)
   end
 
   # Hides the shadow pairspart for downstream features.
@@ -183,43 +182,43 @@ module D7MR
     include Feature
 
     private def prune(node)
-      node.itemspart | node.pairspart.pluck(:style, :hover, :active, :focus, :"#addr")
+      node.itemspart | node.pairspart.pluck(:style, :hover, :active, :focus, :out, :"#node")
     end
 
     def call(ctx, term, postfix, head, rest)
       Term.case(term) do
-        matchpi %{(%all (button caption_string _* ¦ attrs_) {¦ #addr: _})} do
+        matchpi %{(%all (button caption_string _* ¦ attrs_) {¦ #node: _})} do
           model = Term.of(:button, caption) | prune(attrs)
           block = Term.of(:block, model, w: Math.max(caption.charcount, 1), h: 1)
 
           postfixed(block, postfix)
         end
 
-        matchpi %{((%any h1 h2 h3 h4 h5 h6 p src) caption_string ¦ _ #addr: _)} do
+        matchpi %{((%any h1 h2 h3 h4 h5 h6 p src) caption_string ¦ _ #node: _)} do
           block = Term.of(:block, prune(term), w: Math.max(caption.charcount, 1), h: 1)
 
           postfixed(block, postfix)
         end
 
-        matchpi %{(hr ¦ _ #addr: _)} do
+        matchpi %{(hr ¦ _ #node: _)} do
           block = Term.of(:block, prune(term), w: ctx.normal_width, h: 1)
 
           postfixed(block, postfix)
         end
 
-        matchpi %{(cover title_string ¦ _ #addr: _)} do
+        matchpi %{(cover title_string ¦ _ #node: _)} do
           block = Term.of(:block, prune(term), w: Math.max(title.charcount, 1), h: 1)
 
           postfixed(block, postfix)
         end
 
-        matchpi %{(comment lines_string+ ¦ _ #addr: _)} do
+        matchpi %{(comment lines_string+ ¦ _ #node: _)} do
           block = Term.of(:block, prune(term), w: Math.max(lines.items.max_of(&.charcount), 1), h: lines.size)
 
           postfixed(block, postfix)
         end
 
-        matchpi %{(%all (view view_ ¦ attrs_) {¦ #addr: _})} do
+        matchpi %{(%all (view view_ ¦ attrs_) {¦ #node: _})} do
           # I would say we *never* want a view to be inline with anything else.
           # Most probably this would look very ugly. So instead of doing a lot of
           # complicated (or not) measurement, just hard-code to w: 100%.
@@ -228,7 +227,7 @@ module D7MR
           postfixed(block, postfix)
         end
 
-        matchpi %{(%all (unit head_ children_+ ¦ attrs_) {¦ #addr: _})} do |head|
+        matchpi %{(%all (unit head_ children_+ ¦ attrs_) {¦ #node: _})} do |head|
           blockw = 1
           blockh = 1
 
@@ -240,7 +239,7 @@ module D7MR
 
               # NOTE: blocks can **only** contain models; because we do not recurse on
               # blocks in printout_model()
-              commit << D7MR.printout_model0(printout)
+              commit << D7MR.model(Printout.new(printout))
 
               childw, childh = measure(ctx, printout)
               blockw = Math.max(blockw, childw)
@@ -252,13 +251,13 @@ module D7MR
         end
 
         matchpi(
-          %{(sensor _ in _ to @_ ¦ attrs_ #addr: addr_ #syncd: syncd_)},
-          %{(appearance _ in _symbol ¦ attrs_ #addr: addr_ #syncd: syncd_)},
+          %{(sensor _ in _ to @_ ¦ attrs_ #node: addr_ #syncd: syncd_)},
+          %{(appearance _ in _symbol ¦ attrs_ #node: addr_ #syncd: syncd_)},
         ) do
           pattrs = prune(attrs)
 
-          indicator = Term.of(:block, Term.of(:indicator, syncd, "#addr": addr) | pattrs, w: 1, h: 1)
-          suffix = rest.call(ctx, Term.of(term.itemspart | pattrs | Term["#addr": addr]), postfix)
+          indicator = Term.of(:block, Term.of(:indicator, syncd, "#node": addr) | pattrs, w: 1, h: 1)
+          suffix = rest.call(ctx, Term.of(term.itemspart | pattrs | Term["#node": addr]), postfix)
 
           Term.of(:row, indicator, suffix)
         end
@@ -270,30 +269,32 @@ module D7MR
 
   MAIN_CHAIN = ML::Display::MAIN_CHAIN.prepend(Fmodel.new, Fcursor.new, Fnonshadow.new)
 
-  # Converts the given *printable* document into a *document printout*.
+  # Converts the given printable *document* into a *document printout*.
   #
   # A *document printout* is *almost* a document model; there is nothing else
   # interesting to say about it.
-  def printout(printable document : Term::Dict, *, normw = 80, longerw = 140) : Term::Dict
+  def printout(document wrapper : Printable, *, wide = 80, wider = 140) : Printout
+    document = wrapper.document
     document = D7.nonshadow1(document)
     if document.empty?
       raise ArgumentError.new("cannot print an empty document")
     end
 
-    ctx = DisplayContext.new(normw, longerw, features: MAIN_CHAIN)
+    ctx = DisplayContext.new(wide, wider, features: MAIN_CHAIN)
     thunk = LayoutSet::All.thunk(Term.of(document), postfix: "", myself: LayoutSet::DictAligned)
     printout, _ = flatten(ctx, thunk)
-    printout.as_d
+
+    Printout.new(printout)
   end
 
   # Converts the given *printout* of a document into a *document model*.
-  def printout_model(printout : Term::Dict) : Term
-    Term.of(:document, printout_model0(Term.of(printout)))
+  def model(printout : Printout) : Term
+    Term.of(:document, model0(printout))
   end
 
   # :nodoc:
-  def printout_model0(printout : Term) : Term
-    Term.of_case(printout) do
+  def model0(printout : Printout) : Term
+    Term.of_case(printout.term) do
       # Rename frag -> token because 'frag' would be quite a confusing & generic
       # name once we gain some distance from the pretty-printing machinery.
       matchpi %{(frag caption_string ¦ attrs_)} do
@@ -301,26 +302,26 @@ module D7MR
       end
 
       matchpi %{(indented child_ ¦ attrs_)} do
-        Term.of(:indented, printout_model0(child)) | attrs
+        Term.of(:indented, model0(Printout.new(child))) | attrs
       end
 
       matchpi %{(tag←row children_+ ¦ attrs_)}, %{(tag←col children_+ ¦ attrs_)} do
-        printout_model0(tag, children.items) | attrs
+        model0(tag, children.items) | attrs
       end
 
       matchpi %{[block model_]}, %{[block/floating model_]} do
         model
       end
 
-      otherwise { printout }
+      otherwise { printout.term }
     end
   end
 
   # :nodoc:
-  def printout_model0(tag : Term, children : Term::Dict::ItemsView) : Term
+  def model0(tag : Term, children : Term::Dict::ItemsView) : Term
     model = Term::Dict.build do |commit|
       commit << tag
-      commit.concat(children) { |child| printout_model0(child) }
+      commit.concat(children) { |child| model0(Printout.new(child)) }
     end
 
     Term.of(model)
@@ -328,7 +329,7 @@ module D7MR
 
   # Returns the document model for *document*.
   def model(document : Term::Dict) : Term
-    pipe(document, printable, printout, printout_model)
+    pipe(document, printable, printout, model)
   end
 end
 
@@ -391,10 +392,10 @@ def render(ruleset : Ruleset, model : Term)
 
     instance = Alloy.render(env, rule.body)
 
-    # Transplant #addr, we'll need it to refer back to the model from the UI
+    # Transplant #node, we'll need it to refer back to the model from the UI
     # (e.g. for hit-testing).
-    if (addr = model[:"#addr"]?) && instance.type.dict?
-      instance = Term.of(instance.morph({:"#addr", addr}))
+    if (addr = model[:"#node"]?) && instance.type.dict?
+      instance = Term.of(instance.morph({:"#node", addr}))
     end
 
     if model == instance # base case
