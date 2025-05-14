@@ -143,7 +143,7 @@ module D7VR
           (list style: "w-fr h-content flow-col text-sm leading-sm font-mono font-text text-neutral-200 gap-2"
             (^*paste names 0 ..= -1))
           (^if (< scroll-offset 1)
-            (scroll style: "w-2 h-max pr-1"
+            (scroll style: "w-3 h-max pr-1"
               ((self y-translate) offset: (* ^scroll-offset) style: "max"
                 ((self rect/outline) style: "max border bg-neutral-600 rounded-sm" max-h: (* ^scroll-height))))))))
     WWML
