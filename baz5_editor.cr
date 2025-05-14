@@ -65,10 +65,16 @@ def editR : Rewriter
     )
   )
 
+  onceR = callR(PRIMITIVES)
+
+  # First rewrite entries, then rewrite self.
+  set, exhevalR = recR
+  set.call chainR(entriesR(exhevalR), onceR)
+
   evalR = dfsR(
     switchR(
-      { %[($ rewritee_)], exhR(dfsR(callR(PRIMITIVES))) },
-      { %[($once rewritee_)], callR(PRIMITIVES) },
+      { %[($ rewritee_)], exhevalR },
+      { %[($once rewritee_)], onceR },
     )
   )
 
