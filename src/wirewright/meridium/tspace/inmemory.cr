@@ -52,15 +52,16 @@ module Ww::Meridium
     end
 
     # :nodoc:
-    struct Face
+    class Face
       include Tspace
 
       def initialize(@atoms : Hash(Atom, UInt32), @routes : Hash(WWID, IConn))
+        @lock = Mutex.new
       end
 
       # :nodoc:
       def present?(atom : Atom) : Bool
-        @atoms.has_key?(atom)
+        @lock.synchronize { @atoms.has_key?(atom) }
       end
 
       def present?(conn : IConn, atoms : AtomSource) : BitList
@@ -71,17 +72,21 @@ module Ww::Meridium
 
       # :nodoc:
       def add(atom : Atom) : Nil
-        @atoms[atom] = (@atoms[atom]? || 0u32) + 1
+        @lock.synchronize do
+          @atoms[atom] = (@atoms[atom]? || 0u32) + 1
+        end
       end
 
       # :nodoc:
       def delete(atom : Atom) : Nil
-        return unless tally = @atoms[atom]?
+        @lock.synchronize do
+          return unless tally = @atoms[atom]?
 
-        if tally == 1
-          @atoms.delete(atom)
-        else
-          @atoms[atom] = tally - 1
+          if tally == 1
+            @atoms.delete(atom)
+          else
+            @atoms[atom] = tally - 1
+          end
         end
       end
 
