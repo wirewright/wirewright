@@ -27,7 +27,7 @@ module UIR::Platform::SFML
       end
 
       if @surface.size.x < w || @surface.size.y < h
-        @surface = SF::RenderTexture.new(w, h)
+        @surface = SF::RenderTexture.new(w, h, SF::ContextSettings.new(depth: 24, antialiasing: MAX_ANTIALIASING))
       end
 
       @locked = true
