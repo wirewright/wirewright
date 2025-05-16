@@ -586,6 +586,10 @@ abstract struct Int
   def byte_size
     self.class.byte_size
   end
+
+  def nonzero?
+    !zero?
+  end
 end
 
 struct ::BigInt < Int

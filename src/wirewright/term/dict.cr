@@ -237,7 +237,7 @@ module Ww
     EMPTY_PAIR_NODE = PairNode.new
 
     # Cached hash code for this dict.
-    @hash : UInt64?
+    @hash = 0u64
 
     alias Sketch = UInt128
 
@@ -1043,7 +1043,7 @@ module Ww
       # Throw away the copy if nothing changed, but prefer the copy if it has
       # computed the hashcode.
       return self unless instance
-      return instance if @hash.nil? && !instance.@hash.nil?
+      return instance if @hash.zero? && instance.@hash.nonzero?
       return self if state == instance.state
 
       instance
@@ -1557,7 +1557,20 @@ module Ww
 
     # :nodoc:
     def hashcode(& : -> UInt64) : UInt64
-      @hash ||= yield
+      if @hash.nonzero?
+        return @hash
+      end
+
+      hashcode = yield
+
+      # Take away one slot from the hash function for our own use. This
+      # sadly means we have to collide all 0-hash values with all 1-
+      # hash ones.
+      if hashcode.zero?
+        hashcode = 1u64
+      end
+
+      @hash = hashcode
     end
 
     # Returns `true` if this and *other* dictionaries are equal. Returns `false` otherwise.
@@ -1574,7 +1587,11 @@ module Ww
       # TODO: use @maxdepth somehow as well
 
       return false unless @items.size == other.@items.size && @pairs.size == other.@pairs.size
-      return false if (hx = @hash) && (hy = other.@hash) && hx != hy
+
+      h0 = @hash
+      h1 = other.@hash
+
+      return false if h0.nonzero? && h1.nonzero? && h0 != h1
 
       each_entry do |k, v1|
         return false unless v2 = other[k]?
