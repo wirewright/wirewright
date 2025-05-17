@@ -651,7 +651,7 @@ module Rhodium
     # Disappear allows the node to remove itself as if it didn't exist. This
     # lets us prevent expulsion.
     if builder.disappear?
-      each_identity(txn.document0, nodepath, node) do |identity|
+      classify(txn.document0, nodepath, node) do |identity|
         txn.set(Population, identity, nodepath, eq: false)
       end
     end
@@ -692,6 +692,38 @@ module Rhodium
   def handlepp(txn : DocumentTxn, nodepath : Stack(Int32), node0 : Term, event : Term) : Bool
     effect(txn, nodepath, node0) do |e|
       Term.case({node0, event}) do
+        # TODO: ditch UUID in favor of a simple monotonic counter on the document!! It is
+        # possible with care about how we take/output stuff from/to the outside world!
+
+        givenpi %{_ (initialize (ui) _ _)} do
+          e.change "#id": UUID.random
+
+          true
+        end
+
+        givenpi %{_ (initialize (ui _) _ (%pipe tally (%number _ > 1)))} do
+          e.change "#id": UUID.random
+
+          true
+        end
+
+        # TODO: enhance population tracking so that this works. Currently it doesn't
+        # because cells are looking around at the same time as modules initializing;
+        # this is wrong because if modules decide to rename themselves, then we get
+        # a lot of extra buzz from the cells that we don't want.
+
+        # givenpi %{_ (initialize (module) _ _)} do
+        #   e.change "#module": UUID.random
+
+        #   true
+        # end
+
+        # givenpi %{_ (initialize (module _) _ (%pipe tally (%number _ > 1)))} do
+        #   e.change "#module": UUID.random
+
+        #   true
+        # end
+
         givenpi %[{¦ self: @pin_} (pulse @pin_ (pattern_ backspec_))] do
           unless node1 = M1.backmap?(pattern, backspec, D7.nonshadow(node0))
             return false
@@ -1650,8 +1682,13 @@ module Rhodium
   # Yields identities of *node*, if any.
   #
   # Nodes with identity are interested in receiving initialize events.
-  def each_identity(document : Term::Dict, nodepath : Stack(Int32), node : Term, & : Term ->) : Nil
+  def classify(document : Term::Dict, nodepath : Stack(Int32), node : Term, & : Term ->) : Nil
     return unless active?(document, nodepath, node)
+
+    # TODO:
+    # if node[:exposes]?
+    #   yield Term.of(:module, node[:"#module"]?)
+    # end
 
     s = Scope.new(document, nodepath)
 
@@ -1703,6 +1740,23 @@ module Rhodium
 
       matchpi %{[appearance value_ in tspace_symbol]} do
         yield Term.of(:appearance, tspace, value, node[:secret]?)
+      end
+
+      matchpi(
+        %{[button _ to @_ (_*)]},
+        %{[button _ as _ to @_ (_*)]},
+        %{[button _ to @_ waiting @_ (_*)]},
+        %{[button _ as _ to @_ waiting @_ (_*)]},
+        %{[input _string _string _string to @_]},
+        %{[(%any h1 h2 h3 h4 h5 h6 p src) _]},
+        %{[hr]},
+        %{[cover _ _+]},
+        %{[comment _string+]},
+        %{[view _]},
+        %{[changes/view view_ @_]},
+        %{[unit _ _+]},
+      ) do
+        yield Term.of(:ui, node[:"#id"]?)
       end
 
       otherwise { }
@@ -1920,7 +1974,7 @@ module Rhodium
             Rewrite.one(node.morph({:"#module", id}))
           end
 
-          matchpi %[{¦ exposes: (_*) #module: id_string}] do
+          matchpi %[{¦ exposes: (_*) #module: id_}] do
             until seen.add?(id)
               id = Term.of(UUID.random)
             end
@@ -1951,7 +2005,7 @@ module Rhodium
 
       node = follow(document1, nodepath)
 
-      each_identity(document1, nodepath, node) do |identity|
+      classify(document1, nodepath, node) do |identity|
         population1 = population1.morph({identity, nodepath_dict, true})
       end
     end
@@ -2804,9 +2858,14 @@ end
 # end
 
 # doc0 = ML.dict <<-WWML
-# (frag (decay 10) @qux)
-# (changes @qux to @quxes)
-# (log @quxes in ())
+# (group #module: foo exposes: ()
+#   (cell 0 @x)
+#   (changes @x to @xs)
+#   (log @xs in ()))
+# (group #module: foo exposes: ()
+#   (cell 0 @x)
+#   (changes @x to @xs)
+#   (log @xs in ()))
 # WWML
 
 # ge0 = Rhodium.globalized(doc0, Stack{0}, Term.of(:pulse, {:edge, :x}, 100))

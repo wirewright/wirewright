@@ -1366,6 +1366,26 @@
      (changes @count to @counts)
      (log @counts in ()))))
 
+;; Make sure module deduplication works as it should
+
+(d7
+  ((group #module: foo exposes: ()
+    (cell 100 @x)
+    (changes @x to @xs)
+    (log @xs in ()))
+   (group #module: foo exposes: ()
+    (cell 200 @x)
+    (changes @x to @xs)
+    (log @xs in ())))
+  ((group exposes: ()
+    (cell 100 @x)
+    (changes @x to @xs)
+    (log @xs in (100)))
+   (group exposes: ()
+    (cell 200 @x)
+    (changes @x to @xs)
+    (log @xs in (200)))))
+
 ;; TODO: add more module tests, this is an especially important bit of machinery!!!
 
 ;; Passable spots must be disabled while pairspart is modified by a cursor.
