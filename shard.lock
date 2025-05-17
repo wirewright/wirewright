@@ -4,27 +4,11 @@ shards:
     git: https://github.com/didactic-drunk/blake3.cr.git
     version: 1.1.0+git.commit.d7ac0b7ff8f766b528cc99170664402518dd78b4
 
-  brotli:
-    git: https://github.com/naqvis/brotli.cr.git
-    version: 0.1.5
-
   crsfml:
     git: https://github.com/oprypin/crsfml.git
     version: 2.6.0+git.commit.e6f5102f37a107ccadb55c1bae6ffe427ddfba95
 
-  msgpack:
-    git: https://github.com/crystal-community/msgpack-crystal.git
-    version: 1.3.4
-
   permafrost:
     git: https://github.com/homonoidian/permafrost.git
     version: 0.4.0
-
-  pool:
-    git: https://github.com/ysbaddaden/pool.git
-    version: 0.2.4
-
-  simple_rpc:
-    git: https://github.com/kostya/simple_rpc.git
-    version: 1.9.1
 

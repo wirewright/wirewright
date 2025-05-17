@@ -14,10 +14,6 @@ dependencies:
   crsfml:
     github: oprypin/crsfml
     commit: e6f5102
-  simple_rpc:
-    github: kostya/simple_rpc
-  brotli:
-    github: naqvis/brotli.cr
   blake3:
     github: didactic-drunk/blake3.cr
     commit: d7ac0b7
