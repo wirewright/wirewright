@@ -552,7 +552,7 @@ defaults: {
   hr: "w-max max-w-4xl h-px py-1 bg-neutral-500",
   icon: "content font-icons text-base text-neutral-400 font-normal",
   code: "content font-mono text-base leading-base text-neutral-400 font-text",
-  src: "content font-mono text-base leading-base text-neutral-400 bg-neutral-950 p-2 font-text min-w-sm",
+  src: "content font-mono text-base leading-base text-neutral-400 bg-neutral-950 p-2 font-text",
   button: "bg-neutral-700 hover:bg-blue-500 hover:cursor-pointer rounded-sm px-4 py-2 center text-sm leading-sm text-neutral-50 content font-sans font-medium",
   rect: "max bg-white",
   group: "content",
