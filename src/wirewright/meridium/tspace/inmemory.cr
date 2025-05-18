@@ -33,7 +33,7 @@ module Ww::Meridium
 
     @atoms = {} of Atom => UInt32
     @routes = {} of WWID => IConn
-    @lock = Mutex.new
+    @lock = Sync::Mutex.new # outer lack
 
     def book(meetable : Tspace::Meetable) : Nil
       @lock.synchronize do
@@ -56,12 +56,13 @@ module Ww::Meridium
       include Tspace
 
       def initialize(@atoms : Hash(Atom, UInt32), @routes : Hash(WWID, IConn))
-        @lock = Mutex.new
+        # inner lock for thread-safety of present? and transaction
+        @lock = Sync::RWLock.new
       end
 
       # :nodoc:
       def present?(atom : Atom) : Bool
-        @lock.synchronize { @atoms.has_key?(atom) }
+        @lock.read { @atoms.has_key?(atom) }
       end
 
       def present?(conn : IConn, atoms : AtomSource) : BitList
@@ -72,14 +73,14 @@ module Ww::Meridium
 
       # :nodoc:
       def add(atom : Atom) : Nil
-        @lock.synchronize do
+        @lock.write do
           @atoms[atom] = (@atoms[atom]? || 0u32) + 1
         end
       end
 
       # :nodoc:
       def delete(atom : Atom) : Nil
-        @lock.synchronize do
+        @lock.write do
           return unless tally = @atoms[atom]?
 
           if tally == 1
@@ -95,10 +96,12 @@ module Ww::Meridium
       end
 
       def subscribe(conn : IConn) : Nil
+        # protected by outer lock
         @routes[conn.conid] = conn
       end
 
       def unsubscribe(conn : IConn) : Nil
+        # protected by outer lock
         @routes.delete(conn.conid)
       end
 

@@ -91,7 +91,7 @@ module Ww::Meridium
       gen1 = [] of Atom
 
       wg = WaitGroup.new
-      lock = Mutex.new
+      lock = Sync::Mutex.new
 
       while gen0.size > 1
         gen0.unstable_sort!

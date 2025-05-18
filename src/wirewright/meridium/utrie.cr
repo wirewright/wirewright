@@ -38,7 +38,7 @@ module Ww::Meridium
       endpoints = [] of Atom
 
       wg = WaitGroup.new
-      lock = Mutex.new
+      lock = Sync::Mutex.new
 
       strands.each do |strand|
         wg.spawn do

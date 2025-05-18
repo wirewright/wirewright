@@ -52,7 +52,7 @@ module Ww::Meridium::Axis
       # This lock protects mainly @acts and @state. It is also a write lock for @w.
       # @w has its own lock but it is never synchronized with here in Client;
       # since we are already synchronized with @lock.
-      @lock = Mutex.new
+      @lock = Sync::Mutex.new
     end
 
     # Constructs a new client and spawns the associated fibers on top of *io*.
@@ -335,7 +335,7 @@ module Ww::Meridium::Axis
       return unless @lock.synchronize { @state.online? }
 
       open = false
-      openlock = Mutex.new
+      openlock = Sync::Mutex.new
 
       # WARNING: these procs are called from multiple fibers.
       add = AtomSubmit.new do |atom|

@@ -29,7 +29,7 @@ module Ww::Meridium
       @latest : View::Version?
 
       def initialize(@dest : View ->)
-        @lock = Mutex.new
+        @lock = Sync::Mutex.new
       end
 
       def send(view : View)
@@ -49,7 +49,7 @@ module Ww::Meridium
       @baseline = Nucleus.new(@conid)
       @staging = @baseline
       @relook = {} of Slot => Channel(Nil)
-      @lock = Mutex.new
+      @lock = Sync::RWLock.new
     end
 
     def self.new(*args, **kwargs, &views : View ->) : self
@@ -58,7 +58,7 @@ module Ww::Meridium
 
     # Returns the latest view of the termspace for this connection.
     def view : View
-      @lock.synchronize { @staging.view }
+      @lock.read { @staging.view }
     end
 
     # This method hosts the relook loop, executed in the relook fiber: all it
@@ -114,7 +114,7 @@ module Ww::Meridium
 
     # :nodoc:
     protected def presence(slot : Slot, appearances : Set(WWID))
-      @lock.synchronize do
+      @lock.write do
         @staging = @staging.presence(slot, appearances)
       end
     end
@@ -122,7 +122,7 @@ module Ww::Meridium
     def meet(tspace : Tspace) : Nil
       effects = Stack(Effect).new
 
-      @lock.synchronize do
+      @lock.write do
         Log.trace { "#{@staging.conid}: begin meeting for #{@baseline.state}->#{@staging.state}" }
 
         @baseline = @staging = @baseline.swap(@staging) do |effect|
@@ -182,7 +182,7 @@ module Ww::Meridium
 
       slot = effect.id.slot
       cancel = Channel(Nil).new
-      @lock.synchronize { @relook[slot] = cancel }
+      @lock.write { @relook[slot] = cancel }
 
       spawn relook(slot, cancel, period, surface)
     end
@@ -283,7 +283,7 @@ module Ww::Meridium
     def receive(tspace : Tspace, act : Activation) : Nil
       Log.trace { "receive activation #{act} from the termspace" }
 
-      @lock.synchronize do
+      @lock.write do
         @staging = @staging.receive(act)
       end
 
@@ -295,7 +295,7 @@ module Ww::Meridium
     # This method will block until all surfaces have been yielded. So you
     # cannot e.g. call this method recursively.
     def each(& : Slot, Surface ->) : Nil
-      @lock.synchronize do
+      @lock.read do
         @staging.each { |id, surface| yield id.slot, surface }
       end
     end
@@ -307,7 +307,7 @@ module Ww::Meridium
     # we know, we could be talking to emptyness. We can only know whether we *tried*
     # to talk and nothing in particular failed during the process.
     def sync?(slot : Slot) : Bool
-      @lock.synchronize do
+      @lock.read do
         return false unless @baseline.state.online? && @staging.state.online?
         return false unless x = @baseline[slot]?
         return false unless y = @staging[slot]?
@@ -320,7 +320,7 @@ module Ww::Meridium
     def summon : Nil
       Log.trace { "#{conid}: summoned" }
 
-      @lock.synchronize { @staging = @staging.summon }
+      @lock.write { @staging = @staging.summon }
       @tspace.book(self)
     end
 
@@ -328,14 +328,14 @@ module Ww::Meridium
     def dismiss : Nil
       Log.trace { "#{conid}: dismissed" }
 
-      @lock.synchronize { @staging = @staging.dismiss }
+      @lock.write { @staging = @staging.dismiss }
       @tspace.book(self)
     end
 
     def online : Nil
       Log.trace { "#{conid}: online" }
 
-      @lock.synchronize { @staging = @staging.online }
+      @lock.write { @staging = @staging.online }
       @tspace.book(self)
     end
 
@@ -344,7 +344,7 @@ module Ww::Meridium
 
       # Note how we take over baseline merging here for a moment.
       # Normally it is the termspace that does this.
-      view = @lock.synchronize do
+      view = @lock.write do
         @baseline = @staging = @staging.offline
         @staging.view
       end
@@ -381,7 +381,7 @@ module Ww::Meridium
     def transaction(& : Txn ->) : Nil
       Log.trace { "#{conid}: begin transaction" }
 
-      @lock.synchronize do
+      @lock.write do
         yield txn = Txn.new(@staging)
 
         if @staging.same?(txn.@head)

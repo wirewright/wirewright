@@ -202,7 +202,7 @@ struct Ww::Term
       @acceptions = {} of Term => UInt32
       @rejections = {} of Term => UInt32
       @rejections_by_cue = 0u32
-      @lock = Mutex.new
+      @lock = Sync::Mutex.new
     end
 
     def accepted(pattern : Term) : Nil

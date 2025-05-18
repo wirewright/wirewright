@@ -58,7 +58,7 @@ module Ww::Meridium
       # The completion callback runs on different threads (that is, it may).
       # So we must synchronize somehow.
       bundle = [] of BytesMM::Row
-      lock = Mutex.new
+      lock = Sync::Mutex.new
 
       BytesMM.complete(atoms, :appearance_registry, secret_slice, prefix) do |completion, atom|
         # We must at least complete the checksum.
@@ -103,7 +103,7 @@ module Ww::Meridium
 
       # Convert strands to bundles concurrently.
       bundles = [] of Array(BytesMM::Row)
-      lock = Mutex.new
+      lock = Sync::Mutex.new
 
       strands.each do |strand|
         spawn do

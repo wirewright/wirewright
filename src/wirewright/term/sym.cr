@@ -60,12 +60,8 @@ module Ww
       end
     end
 
-    # TODO: split @@encode into multiple buckets hash-index them, lock individual
-    # buckets not the entire hash.
-
-    @@encode = Hash(Bytes, UInt32).new(initial_capacity: 1024)
-    @@decode = Array(Bytes).new(initial_capacity: 1024)
-    @@lock = Mutex.new
+    @@encode = Sync::Map(Bytes, UInt32).new(initial_capacity: 1024)
+    @@decode = Sync::Shared(Array(Bytes)).new(Array(Bytes).new(initial_capacity: 1024))
 
     # Ref used for symbols such as `_`, `_number`, `_string`, etc. that have
     # an empty name component.
@@ -82,24 +78,22 @@ module Ww
         return EMPTY_BLANK_REF
       end
 
-      @@lock.synchronize do
-        @@encode.put_if_absent(bytes) do
-          @@decode << bytes
-
+      @@encode.put_if_absent(bytes) do
+        ref = @@decode.write do |ary|
+          ary << bytes
           # Store ref + 1 to avoid ref = 0 which we use for EMPTY_BLANK_REF.
-          ref = @@decode.size.to_u32
-          ref <<= 1
-
-          # Ambiguity matters only when we're a blank. Thus, force the caller to say
-          # whether the symbol is a blank or not; and use that to prevent an O(n) pass
-          # over the bytestring for the vast majority of calls.
-          if blank
-            ambiguous = bytes.any?({{'_'.ord}})
-            ref |= ambiguous ? 1u32 : 0u32
-          end
-
-          ref
+          ary.size.to_u32 << 1
         end
+
+        # Ambiguity matters only when we're a blank. Thus, force the caller to say
+        # whether the symbol is a blank or not; and use that to prevent an O(n) pass
+        # over the bytestring for the vast majority of calls.
+        if blank
+          ambiguous = bytes.any?({{'_'.ord}})
+          ref |= ambiguous ? 1u32 : 0u32
+        end
+
+        ref
       end
     end
 
@@ -109,7 +103,7 @@ module Ww
         return Bytes.empty
       end
 
-      @@lock.synchronize { @@decode[(ref >> 1) - 1] }
+      @@decode.read { |ary| ary[(ref >> 1) - 1] }
     end
 
     # Returns `true` if *ref* was deemed "ambiguous" during encoding.

@@ -45,7 +45,7 @@ module Ww::Meridium
     # See `each_atom` for *args* and *kwargs*.
     def atom_set(*args, **kwargs) : Set(Atom)
       atoms = Set(Atom).new
-      lock = Mutex.new
+      lock = Sync::Mutex.new
 
       each_atom(*args, **kwargs) do |atom|
         lock.synchronize { atoms << atom }
@@ -70,7 +70,7 @@ module Ww::Meridium
     # See `each_atom` for *args*, *kwargs*, and details.
     def complement_set(*args, **kwargs) : Set(WWID)
       complements = Set(WWID).new
-      lock = Mutex.new
+      lock = Sync::Mutex.new
 
       each_complement(*args, **kwargs) do |complement|
         lock.synchronize { complements << complement }
@@ -240,7 +240,7 @@ module Ww::Meridium
         wg = WaitGroup.new(@branches.size)
 
         apexes = [] of Atom
-        lock = Mutex.new
+        lock = Sync::Mutex.new
 
         @branches.each do |strands|
           spawn do

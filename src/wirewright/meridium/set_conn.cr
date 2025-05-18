@@ -51,7 +51,7 @@ module Ww::Meridium
       @fresh = Slot.new(0)
       @free = Set(Slot).new
       @encoding = Bimap(Surface, Slot).new
-      @lock = Mutex.new
+      @lock = Sync::RWLock.new
     end
 
     def self.new(*args, **kwargs, &views : View ->) : SetConn
@@ -102,12 +102,12 @@ module Ww::Meridium
     # Returns the surface currently occupying the given *slot*. Returns `nil`
     # if there is no such surface.
     def surface?(slot : Slot) : Surface?
-      @lock.synchronize { @encoding[slot]? }
+      @lock.read { @encoding[slot]? }
     end
 
     # See `Conn#sync?`.
     def sync?(surface : Surface) : Bool
-      @lock.synchronize do
+      @lock.read do
         return false unless slot = @encoding[surface]?
 
         @conn.sync?(slot)
@@ -143,13 +143,13 @@ module Ww::Meridium
 
     # Yields a transaction object `Txn` to make changes to this set conn.
     def transaction(& : Txn ->) : Nil
-      @lock.synchronize do
+      @lock.write do
         @conn.transaction { |txn| yield Txn.new(self, txn) }
       end
     end
 
     def pretty_print(pp)
-      @lock.synchronize do
+      @lock.read do
         pp.list("SetConn{", @encoding, "}") do |surface, _|
           surface.pretty_print(pp)
         end

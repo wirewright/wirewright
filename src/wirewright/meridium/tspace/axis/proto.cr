@@ -270,7 +270,7 @@ module Ww::Meridium::Axis
       end
 
       def initialize(@io : IO)
-        @lock = Mutex.new
+        @lock = Sync::Mutex.new
       end
 
       # Gives the block exclusive write access to the underlying IO. Yields

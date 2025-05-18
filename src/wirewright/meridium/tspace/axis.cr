@@ -100,7 +100,7 @@ module Ww::Meridium
       @status = Status::Offline
       @bookings = Channel(Tspace::Meetable).new
       @subscribers = Set(IConn).new
-      @lock = Mutex.new
+      @lock = Sync::RWLock.new
     end
 
     # Constructs an Axis termspace client and starts its connection loop.
@@ -112,11 +112,11 @@ module Ww::Meridium
 
     # Returns the termspace status.
     def status : Status
-      @lock.synchronize { @status }
+      @lock.read { @status }
     end
 
     def book(meetable : Tspace::Meetable) : Nil
-      chan = @lock.synchronize do
+      chan = @lock.read do
         unless @status.online?
           Log.trace { "ignore book(): call because status=#{@status}" }
           return
@@ -134,7 +134,7 @@ module Ww::Meridium
 
     # Subscribes *conn* to notifications about `status`.
     def connect(conn : IConn) : Nil
-      online = @lock.synchronize do
+      online = @lock.write do
         @subscribers << conn
         @running && @status.online?
       end
@@ -145,7 +145,7 @@ module Ww::Meridium
 
     # Unsubscribes *conn* from notifications about `status`.
     def disconnect(conn : IConn) : Nil
-      @lock.synchronize { @subscribers.delete(conn) }
+      @lock.write { @subscribers.delete(conn) }
 
       conn.dismiss
       conn.offline
@@ -158,7 +158,7 @@ module Ww::Meridium
     # The connect loop can be restarted after `disconnect`. The connect loop won't
     # be started if one is running already.
     def connect : Nil
-      @lock.synchronize do
+      @lock.write do
         return if @running
 
         @running = true
@@ -211,7 +211,7 @@ module Ww::Meridium
 
         reconnects = 0
 
-        @lock.synchronize do
+        @lock.write do
           @status = Status::Online
         end
 
@@ -220,7 +220,7 @@ module Ww::Meridium
         # isn't running yet; nor are we able to handle the @bookings. That's why we spawn
         # here; the fiber will block on @bookings.send.
         spawn do
-          subscribers = @lock.synchronize { @subscribers.dup }
+          subscribers = @lock.read { @subscribers.dup }
           subscribers.each(&.online)
         end
 
@@ -228,7 +228,7 @@ module Ww::Meridium
 
         Log.debug { "run terminated with state=#{state}" }
 
-        @lock.synchronize do
+        @lock.write do
           case state
           in .online?
             raise "BUG: online state after run ended"
@@ -254,7 +254,7 @@ module Ww::Meridium
     ensure
       Log.debug { "awaiting manual connect in state=#{status}" }
 
-      @lock.synchronize { @running = false }
+      @lock.write { @running = false }
     end
 
     # Ends the connect loop and disconnects from the termspace.

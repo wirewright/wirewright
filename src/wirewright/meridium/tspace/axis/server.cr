@@ -4,14 +4,14 @@ module Ww::Meridium::Axis
   # Implements a simple lock-protected referrer+reference-counted atom multiset.
   struct AtomMultiset
     @atoms = {} of Atom => Hash(WWID, UInt32)
-    @lock = Mutex.new
+    @lock = Sync::RWLock.new
 
     def size : Int32
-      @lock.synchronize { @atoms.size }
+      @lock.read { @atoms.size }
     end
 
     def present?(atom : Atom) : Bool
-      @lock.synchronize { @atoms.has_key?(atom) }
+      @lock.read { @atoms.has_key?(atom) }
     end
 
     def present?(atoms : Enumerable(Atom)) : BitList
@@ -23,14 +23,14 @@ module Ww::Meridium::Axis
     end
 
     def incref(referrer : WWID, atom : Atom) : Nil
-      @lock.synchronize do
+      @lock.write do
         refs = @atoms.put_if_absent(atom) { {} of WWID => UInt32 }
         refs[referrer] = (refs[referrer]? || 0u32) + 1
       end
     end
 
     def decref(referrer : WWID, atom : Atom) : Nil
-      @lock.synchronize do
+      @lock.write do
         return unless refs = @atoms[atom]?
         return unless refcount = refs[referrer]?
 
@@ -47,7 +47,7 @@ module Ww::Meridium::Axis
     end
 
     def sweep(referrer : WWID) : Int32
-      @lock.synchronize do
+      @lock.write do
         size0 = @atoms.size
 
         @atoms.reject! do |_, referrers|
@@ -59,7 +59,7 @@ module Ww::Meridium::Axis
     end
 
     def clear : Nil
-      @lock.synchronize { @atoms.clear }
+      @lock.write { @atoms.clear }
     end
   end
 
@@ -153,7 +153,7 @@ module Ww::Meridium::Axis
     # to do whatever they want.
     def self.control(&fn : -> Socket) : {->, ->}
       socket = nil
-      lock = Mutex.new
+      lock = Sync::Mutex.new
       running = Channel(Nil).new
 
       start = -> do
