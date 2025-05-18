@@ -198,6 +198,7 @@
 
 "cursor-pointer": {cursor: pointer}
 "cursor-grabbing": {cursor: grabbing}
+"cursor-text": {cursor: text}
 
 (nat "opacity" N {opacity: N_})
 

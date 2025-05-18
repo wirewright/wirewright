@@ -256,12 +256,14 @@ enum Cursor : UInt8
   Arrow
   Pointer
   Grabbing
+  Text
 
   def self.parse(term : Term)
     Term.case(term) do
       matchpi %{arrow} { Arrow }
       matchpi %{pointer} { Pointer }
       matchpi %{grabbing} { Grabbing }
+      matchpi %{text} { Text }
 
       otherwise { Arrow }
     end

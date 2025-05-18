@@ -381,12 +381,26 @@ module UIR::Platform::SFML
     commands.each { |command| paint(target, command) }
   end
 
+  # :nodoc:
+  SF_HAND = SF::Cursor.from_system(SF::Cursor::Type::Hand)
+
+  # :nodoc:
+  SF_ARROW = SF::Cursor.from_system(SF::Cursor::Type::Arrow)
+
+  # :nodoc:
+  SF_SIZEALL = SF::Cursor.from_system(SF::Cursor::Type::SizeAll)
+
+  # :nodoc:
+  SF_TEXT = SF::Cursor.from_system(SF::Cursor::Type::Text)
+
   private def paint(sf : SF::RenderWindow, window : Window) : Nil
     case window.cursor
     in .arrow?
       sf.mouse_cursor = SF_ARROW
     in .pointer?
       sf.mouse_cursor = SF_HAND
+    in .text?
+      sf.mouse_cursor = SF_TEXT
     in .grabbing?
       sf.mouse_cursor = SF_SIZEALL
     end
@@ -397,15 +411,6 @@ module UIR::Platform::SFML
 
     sf.display
   end
-
-  # :nodoc:
-  SF_HAND = SF::Cursor.from_system(SF::Cursor::Type::Hand)
-
-  # :nodoc:
-  SF_ARROW = SF::Cursor.from_system(SF::Cursor::Type::Arrow)
-
-  # :nodoc:
-  SF_SIZEALL = SF::Cursor.from_system(SF::Cursor::Type::SizeAll)
 
   def wrap(content : String, font : String, weight : FontWeight, size : Int32, leading : Float32, w : Int32?, h : Int32?) : String
     return "" unless path = FontFinder.path?(font, weight)
