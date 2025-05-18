@@ -4,10 +4,15 @@ require "./sfpaint"
 
 alias UIR::Platform::Current = SFML
 
-source = Atomic(String).new("")
+pg_source = Atomic(String).new("")
+render_source = Atomic(String).new("")
 changed = Atomic(Bool).new(false)
-watch(Path["ui-pg.wwml"]) do |updated|
-  source.set(updated.gets_to_end)
+watch(Path["ui-pg1.wwml"]) do |updated|
+  pg_source.set(updated.gets_to_end)
+  changed.set(true)
+end
+watch(Path["component.spec.wwml"]) do |updated|
+  render_source.set(updated.gets_to_end)
   changed.set(true)
 end
 
@@ -19,6 +24,9 @@ fallback = ML.term <<-WWML
     (p "It appears there's an error in the playground file." style: "text-red-200")))
 WWML
 
+fallback_spec = ML.terms <<-WWML
+
+WWML
 #   (group style: "flow-col gap-1"
 #     (^let x: (1 2 3)
 #       (p ^\\x))))
@@ -74,15 +82,79 @@ frame = fallback
 vw = frame[:"max-w"]
 vh = frame[:"max-h"]
 
+struct Renderer
+  SELECTOR = ML.term %{(rule pattern_ template_)}
+
+  def initialize(@spec : Term)
+    @ruleset = Ruleset.select(SELECTOR, @spec)
+  end
+
+  def call(spec : Term, view : Term) : {Renderer, Term}
+    if @spec == spec
+      {self, render(@ruleset, view)}
+    else
+      rr = Renderer.new(spec)
+      rr.call(spec, view)
+    end
+  end
+end
+
+def renderer(spec : Term)
+  Renderer.new(spec)
+end
+
+def render(ruleset : Ruleset, view : Term)
+  unless view.type.dict? # base case
+    return view
+  end
+
+  responses = ruleset.responses(view)
+  responses.each do |response|
+    pr, rule = response
+
+    case pr
+    in Pr::One  then env = pr.env
+    in Pr::Many then env = pr.envs[0]
+    end
+
+    unless rule.is_a?(Rule::Template)
+      raise "render: unsupported rule type"
+    end
+
+    instance = Alloy.render(env, rule.body)
+
+    if view == instance # base case
+      return instance
+    end
+
+    return render(ruleset, instance)
+  end
+
+  view = view.pairspart.transaction do |commit|
+    view.items.each do |item|
+      commit << render(ruleset, item)
+    end
+  end
+
+  Term.of(view)
+end
+
+spec = fallback_spec
+
+rr = renderer(spec)
+
 ui = UIR::Reducers.microfold(frame) do |_, drawable, event|
   if changed.swap(false)
     begin
-      updated = ML.term(source.get)
+      updated_pg = ML.term(pg_source.get)
+      updated_spec = ML.terms(render_source.get)
     rescue e : ML::SyntaxError
       Log.error(exception: e)
       frame = fallback
+      spec = fallback_spec
     else
-      frame = updated
+      spec = updated_spec
+      rr, frame = rr.call(spec, updated_pg)
     end
   end
 

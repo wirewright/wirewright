@@ -154,7 +154,7 @@ module Rhodium
   # NOTE: this does not mean that the pointed-to node is a valid node! Check
   # that yourself if you care.
   def passable?(document : Term::Dict, keypath : Stack(Int32)) : Bool
-    node = document
+    node = Term.of(document)
 
     keypath.each do |step|
       if document.same?(node)
@@ -696,13 +696,13 @@ module Rhodium
         # possible with care about how we take/output stuff from/to the outside world!
 
         givenpi %{_ (initialize (ui) _ _)} do
-          e.change "#id": UUID.random
+          e.change "#el": UUID.random
 
           true
         end
 
         givenpi %{_ (initialize (ui _) _ (%pipe tally (%number _ > 1)))} do
-          e.change "#id": UUID.random
+          e.change "#el": UUID.random
 
           true
         end
@@ -1756,7 +1756,7 @@ module Rhodium
         %{[changes/view view_ @_]},
         %{[unit _ _+]},
       ) do
-        yield Term.of(:ui, node[:"#id"]?)
+        yield Term.of(:ui, node[:"#el"]?)
       end
 
       otherwise { }
