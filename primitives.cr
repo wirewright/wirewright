@@ -151,6 +151,9 @@ PRIMITIVES = ProcRuleset.build do
 
   rulepi1 %[(ceil arg_number)] { arg.ceil }
 
+  rulepi1 %[(upcase arg_string)] { arg.upcase }
+  rulepi1 %[(downcase arg_string)] { arg.downcase }
+
   rulepi1 %[(runes s_string b←(%number i32) to e←(%number i32))] do
     Term::Str::Substring.runes(s.unsafe_as_s, b.to(Int32), e.to(Int32))
   end
