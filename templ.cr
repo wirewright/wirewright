@@ -157,7 +157,7 @@ module Alloy
     variants = [] of String
 
     Term.case(term, patterns: variants) do
-      matchp %{(^match cond_ (%many options (when pattern_ children_+)))} do |cond, options|
+      matchp %{(^match cond_ (%many options (when pattern_ children_*)))} do |cond, options|
         matchee = rewrite(cond, ctx.exprR)
 
         rewrite = options.items.leftmost? do |optenv|
