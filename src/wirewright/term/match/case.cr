@@ -89,7 +89,7 @@ struct Ww::Term
       end
 
       unless %result.is_a?(::Ww::Term::CaseContext::Continue.class)
-        # This macro is expanded with a .case, as in:
+        # This macro is expanded within a .case, as in:
         #
         #   X.case(...) do
         #     ...
