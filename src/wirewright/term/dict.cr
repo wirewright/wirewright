@@ -1125,6 +1125,18 @@ module Ww
       end
     end
 
+    def separate(*args, **kwargs) : {Term::Dict, Term::Dict}
+      plucked = pluck(*args, **kwargs)
+
+      base = transaction do |commit|
+        plucked.each_entry do |key, _|
+          commit.without(key)
+        end
+      end
+
+      {base, plucked}
+    end
+
     # Shallow merge.
     #
     # Merges this dictionary with a *newer* one. If two keys are equal the value
