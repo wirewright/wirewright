@@ -693,7 +693,7 @@ module Microfold
 
     # String and other non-dict children of units are displayed as text.
     private def text(ctx : UnitContext, caption : Term::Str)
-      octx, font, weight, size, leading, color = ctx.consume(:font, :"font-weight", :"text-size", :leading, :"text-color")
+      octx, font, weight, size, leading, color, sel_anchor, sel_span, sel_color, sel_fill = ctx.consume(:font, :"font-weight", :"text-size", :leading, :"text-color", :"sel-anchor", :"sel-span", :"sel-color", :"sel-fill")
 
       {octx, Term.of(:text,
         caption: caption,
@@ -704,6 +704,10 @@ module Microfold
         size: size,
         leading: leading,
         color: color,
+        "sel-color": sel_color,
+        "sel-fill": sel_fill,
+        "sel-anchor": sel_anchor,
+        "sel-span": sel_span,
       )}
     end
 
@@ -901,6 +905,11 @@ module Microfold
         end
 
         sheet = sheet(spec, attrs.unsafe_as_d, style.to(String), rem: rem, base: nodal | inherited)
+
+        # FIXME: hack
+        attrs, sel_attrs = attrs.separate(:"sel-anchor", :"sel-span")
+        sheet |= sel_attrs
+
         ctx, box = HIERARCHY_NORMAL.call(UnitContext.new(spec, sheet, rem, collapse: attrs.empty?, nested: false), children)
 
         Term.of(transplant(box.as_d, ctx.sheet, attrs.unsafe_as_d))

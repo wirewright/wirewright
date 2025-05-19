@@ -1,26 +1,32 @@
-;; Transfer unhandled event from my inbox to first focused child's inbox.
+;; Downward motion of events to focused nodes.
 ⟨{¦ focus: true in: (_* `Eout)} ¦ _ in: (Ein_ _*)⟩ <> {(Ein): (), Eout: →Ein}
 
-;; Transfer events from outboxes of my children to my outbox.
+;; Upward motion of events through any nodes (not just focused ones).
 ⟨{¦ out: (Ein_ _*)} ¦ _ out: (_* `Eout)⟩ <> {(Ein): (), Eout: →Ein}
 
-;; Transfer unhandled events from inbox to outbox.
+;; Flip direction at leaves.
 {¦ in: (Ein_ _*) out: (_* `Eout)} <> {(Ein): (), Eout: →Ein}
 
-;; Focus myself on (focus) coming from child.
+;; Focus myself on upward (focus).
 {¦ out: ((focus) _*) focus_: false} <> {focus: true}
 
-;; Unfocus myself on (blur) coming from parent.
+;; Unfocus myself on downward (blur).
 {¦ in: ((blur) _*) focus_: true} <> {focus: false}
+
+;; By default, whenever an element is clicked, it sends a (focus) message
+;; to itself. This triggers a chain reaction where focus propagates to
+;; the parent and so on due to the rule system above.
+{¦ in: (Ein←(click) _*)} <> {Ein: (focus)}
 
 ;;
 ;; button
 ;;
 
-;; A button is a leaf, it doesn't have to send (blur). So we're free to just
-;; consume (focus).
-(button (_* `Mout) ¦ _ out: (Ein←(focus) _*))
-  <> {(Ein): (), Mout: (press)}
+;; Whenever a button is clicked, instead of acquiring focus, it sends
+;; an upward <action> message. It is up to the parent(s) how to handle
+;; this action.
+(button ¦ _ action_ in: (Ein←(click) _*) out: (_* `Mout))
+  <> {(Ein): (), Mout: →action}
 
 ;;
 ;; input
@@ -78,6 +84,8 @@
 ;; TODO: have a way to NOT repeat the body. we can't use %any° because of
 ;; its semantics & because it lacks specificity
 ;; TODO: these patterns are a bit too verbose. is there a way to fix that?
+;; TODO: if patterns contain anything nested we'd have a bug. we need to send
+;; (blur) to fsrc and (focus) to fdst instead.
 
 (_* {¦ focus: Fdst←false} (%past/max {¦ -focus}) {¦ focus: Fsrc←true} _* ¦ _ behaviors: ⟨y-list⟩ out: (Ein←(key up) _*))
   <> {(Ein): (), Fsrc: false, Fdst: true}

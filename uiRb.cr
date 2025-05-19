@@ -169,6 +169,12 @@ end
 abstract class DrawCommand
 end
 
+defcase FillTextSelection,
+  anchor : UInt32,
+  span : Int32,
+  fill : RGB,
+  color : RGB
+
 # Draws a string of text.
 #
 # - *z* is the z-index of the text.
@@ -184,7 +190,8 @@ defcase FillText < DrawCommand, z : Int32,
   weight : FontWeight,
   leading : Float32,
   tracking : Float32,
-  color : RGB
+  color : RGB,
+  sel : FillTextSelection?
 
 # Draws a filled rectangle.
 #
@@ -300,6 +307,18 @@ def UIR::Platform.draw(ctx : DrawContext, node : Term, x : Int32, y : Int32, z :
                   dl_: (%number i32)
                   dt_: (%number i32))]
     ) do
+      sel = nil
+      sel_cfg = node.pluck(:"sel-anchor", :"sel-span", :"sel-fill", :"sel-color")
+      unless sel_cfg.empty?
+        Term.matchpi(sel_cfg, %[{¦ sel-color⋮ (rgb 0 0 255)
+                                   sel-fill⋮ (rgb 255 255 255)
+                                   sel-anchor: (%optional 0 sel-anchor←(%number u32))
+                                   sel-span: (%optional 0 sel-span←(%number i32))}]
+        ) do
+          sel = FillTextSelection.new(sel_anchor.to(UInt32), sel_span.to(Int32), RGB.parse(sel_fill), RGB.parse(sel_color))
+        end
+      end
+
       ctx.commands << FillText.new(z,
         origin: Point.new(x + dl.to(Int32), y + dt.to(Int32)),
         caption: caption.to(String),
@@ -309,6 +328,7 @@ def UIR::Platform.draw(ctx : DrawContext, node : Term, x : Int32, y : Int32, z :
         leading: leading.to(Float32),
         tracking: 1.0f32,
         color: RGB.parse(color),
+        sel: sel
       )
     end
 

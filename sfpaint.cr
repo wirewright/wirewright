@@ -260,8 +260,7 @@ module UIR::Platform::SFML
     SF.int_rect(sf(object.origin), sf(object.extent))
   end
 
-  # Returns the vertex array corresponding to *caption*.
-  private def write(data : TextData, caption : String, position : SF::Vector2i, color : SF::Color) : SF::VertexArray
+  private def write(data : TextData, caption : String, position : SF::Vector2i, color : SF::Color, sel : FillTextSelection, &) : SF::VertexArray
     vertices = SF::VertexArray.new(SF::Quads)
 
     state = '\0'
@@ -269,7 +268,72 @@ module UIR::Platform::SFML
     offset = position
     voffset = SF.vector2i(0, data.size)
 
-    caption.each_char_with_index do |chr|
+    sel_begin, sel_end = {sel.anchor, Math.max(0, sel.anchor.to_i64 + sel.span).to_u32}.minmax
+
+    caption.each_char_with_index do |chr, index|
+      offset0 = offset
+      glyph = data.glyph(chr)
+
+      selected_beam = sel_begin == index == sel_end
+      selected_block = sel_begin <= index < sel_end
+
+      if selected_block
+        ch_color = sf(sel.color)
+      else
+        ch_color = color
+      end
+
+      case chr
+      when '\r'
+        next
+      when ' '
+        offset += data.wsstep
+        width = data.wsstep.x
+      when '\t'
+        offset += data.wsstep*4
+        width = data.wsstep.x*4
+      when '\n'
+        offset = SF.vector2i(position.x, offset.y) + data.nlstep
+        width = data.wsstep.x
+      else
+        offset0 = offset
+
+        offset += SF.vector2(data.kerning(state, chr), 0).to_i
+
+        vertices.append SF::Vertex.new(offset + voffset + glyph.bounds.top_left, ch_color, glyph.texture_rect.top_left)
+        vertices.append SF::Vertex.new(offset + voffset + glyph.bounds.top_right, ch_color, glyph.texture_rect.top_right)
+        vertices.append SF::Vertex.new(offset + voffset + glyph.bounds.bottom_right, ch_color, glyph.texture_rect.bottom_right)
+        vertices.append SF::Vertex.new(offset + voffset + glyph.bounds.bottom_left, ch_color, glyph.texture_rect.bottom_left)
+
+        offset += SF.vector2f(glyph.advance + data.letter_spacing, 0).to_i
+        width = offset.x - offset0.x
+      end
+
+      if selected_block
+        yield sel, Rect.new(Point.new(offset0.x, offset0.y), Point.new(width, (data.size * data.leading).to_i))
+      elsif selected_beam
+        yield sel, Rect.new(Point.new(offset0.x, offset0.y), Point.new(1, (data.size * data.leading).to_i))
+      end
+    ensure
+      state = chr
+    end
+
+    if sel_begin == sel_end == caption.size
+      yield sel, Rect.new(Point.new(offset.x, offset.y), Point.new(1, (data.size * data.leading).to_i))
+    end
+
+    vertices
+  end
+
+  private def write(data : TextData, caption : String, position : SF::Vector2i, color : SF::Color, sel : Nil, &) : SF::VertexArray
+    vertices = SF::VertexArray.new(SF::Quads)
+
+    state = '\0'
+
+    offset = position
+    voffset = SF.vector2i(0, data.size)
+
+    caption.each_char_with_index do |chr, index|
       glyph = data.glyph(chr)
 
       case chr
@@ -304,7 +368,14 @@ module UIR::Platform::SFML
     data = FontKeeper.font_data(path, command.size)
     text = TextData.new(data.font, data.size, command.leading, command.tracking)
 
-    vertices = write(text, command.caption, sf(command.origin), sf(command.color))
+    sel_rect = SF::RectangleShape.new
+
+    vertices = write(text, command.caption, sf(command.origin), sf(command.color), command.sel) do |sel, rect|
+      sel_rect.fill_color = sf(sel.fill)
+      sel_rect.position = sf(rect.origin)
+      sel_rect.size = sf(rect.extent)
+      target.draw(sel_rect)
+    end
 
     target.draw(vertices, SF::RenderStates.new(text.texture))
   end
@@ -614,6 +685,8 @@ module UIR::Platform::SFML
           reducer.call(drawable, Term.of(:mouse, :motion, mouse0.x, mouse0.y))
 
           while window.open?
+            # FIXME: do not call reducer per event, queue events and call reducer with event
+            # batch!!! Reducer is always smarter than we are here!!
             while event = window.poll_event
               transcribed = transcribe(window, event)
               transcribed.each { |term| drawable = reducer.call(drawable, term) }

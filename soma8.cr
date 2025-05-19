@@ -71,12 +71,12 @@ module Dmodel
       end
 
       matchpi(
-        %{[button _ to @_ mail←(_*)]},
-        %{[button _ as _ to @_ mail←(_*)]},
-        %{[button _ to @_ waiting @_ mail←(_*)]},
-        %{[button _ as _ to @_ waiting @_ mail←(_*)]},
+        %{[button _ to @_ (_*)]},
+        %{[button _ as _ to @_ (_*)]},
+        %{[button _ to @_ waiting @_ (_*)]},
+        %{[button _ as _ to @_ waiting @_ (_*)]},
       ) do
-        dmodel << (Term.of(:button, mail) | pluck(node, el))
+        dmodel << (Term.of({:button}) | pluck(node, el) | Term[action: {:press, el}])
       end
 
       # Text nodes cannot receive focus
@@ -135,10 +135,6 @@ module Dmodel
         node1 = node1.morph({1, l}, {2, m}, {3, r})
       end
 
-      matchpi %{[button mail←(_*)]} do
-        node1 = node1.morph({Hi, mail})
-      end
-
       otherwise { }
     end
 
@@ -154,22 +150,58 @@ module Dmodel
   # by the document node and by no other node. In other words, the document node
   # did not change in any significant way between `extract` and `merge`.
 
-  # TODO: use #population instead of scanning the document
+  MSG_PRESS = Term.of({:press})
 
-  def merge(model, els : Hash(Term, Term::Dict), document : Term::Dict) : Term::Dict
-    nodepath = Stack(Int32).new
+  # TODO(?): merge1(#el, & : node0 -> node1)
 
-    while Rhodium.successor?(document, nodepath)
-      node0 = Rhodium.follow(document, nodepath)
-      next unless el = node0[:"#el"]?
-      next unless keypath = els[el]?
+  # rename to integrate?
+  def merge(model, els : Hash(Term, Term::Dict), document document0 : Term::Dict) : Term::Dict
+    document1 = document0
 
-      mnode = model.follow(keypath.items)
-      node1 = merge1(document, nodepath, node0, mnode)
-      document = Rhodium.assign(document, nodepath, node1)
+    # NOTE: In the vast majority of cases we should expect just one locus at
+    # (ui <id>). But since the format of #populatio nassumes multiple such loci,
+    # we handle all of them anyway; that would be a stupid reason to crash.
+
+    outbox = model[:out]? || Term[]
+    outbox.items.each do |message|
+      Term.case(message) do
+        matchpi %{(press id_string)} do
+          loci = document0[Rhodium::Population, {:ui, id}]? || Term[]
+          loci.each_entry do |locus, _|
+            next unless nodepath = Rhodium.keypath?(document0, locus.items)
+
+            document1 = Rhodium.rewrite(document1, nodepath) do |node0|
+              Term.case(node0) do
+                matchpi %{[button _* mailbox0←(_*)]} do
+                  mailbox1 = mailbox0.append(MSG_PRESS)
+                  node1 = node0.morph({node0.itemsize - 1, mailbox1})
+                  Rewrite.one(node1)
+                end
+
+                otherwise { Rewrite.none }
+              end
+            end
+          end
+        end
+
+        otherwise { }
+      end
     end
 
-    document
+    els.each do |id, keypath|
+      mnode = model.follow(keypath.items)
+
+      loci = document0[Rhodium::Population, {:ui, id}]? || Term[]
+      loci.each_entry do |locus, _|
+        next unless nodepath = Rhodium.keypath?(document0, locus.items)
+
+        document1 = Rhodium.rewrite(document1, nodepath) do |node0|
+          Rewrite.one(merge1(document0, nodepath, node0, mnode)).diff(node0)
+        end
+      end
+    end
+
+    document1
   end
 end
 
@@ -232,6 +264,7 @@ module Dview
         end
 
         # TODO: what should we do if invisible frag has style:, hover:, active:, etc.?
+        # FIXME: if invisible frag has style hover active etc., wrap its contents in a unit group.
         matchpi %{(frag value_ @_ ¦ _ visible: false)} do
           nodepath.push(1) do
             printable(document, nodepath, value)
@@ -490,7 +523,7 @@ document = ML.dict <<-WWML
 (cell "Hello World" @qux)
 (sensor x_number in foo to @xs)
 (fooze hover: false)
-(unit group style: "flow-col p-3 border border-neutral-800 focus:border-blue-500 gap-5 rounded-lg" behaviors: (y-list)
+(unit group style: "min-w-xs flow-col p-3 border border-neutral-800 focus:border-blue-500 gap-5 rounded-lg" behaviors: (y-list)
   (h1 "My Form")
   (input "" (| runes) "" to @first-names label: "First name" placeholder: "John" limit: 10)
   (input "" (| runes) "" to @last-names label: "Last name" placeholder: "Doe")
@@ -512,6 +545,7 @@ puts
 doc = D7.run(document)
 
 model = Dmodel.extract(doc)
+model = model.morph({:focus, true})
 els = Dmodel.index(model)
 # puts ML.display(m)
 
@@ -704,7 +738,9 @@ hovered0 = hovered1 = nil
 active = nil
 model0 = nil
 
-# FIXME: eq: nil instead of false!!!! Merge is broken
+# FIXME: use NIL instead of FALSE on active: focus: etc. Aka do not pollute
+# the document with crap
+
 behavior_source = Atomic(String).new("")
 watch(Path["behavior.spec.wwml"]) do |updated|
   behavior_source.set(updated.gets_to_end)
@@ -712,6 +748,13 @@ end
 backup = ""
 r = nil
 src0 = nil
+
+# NOTE: what I see here is a "Model" entity of some kind that we can
+# run a transaction() on. During transaction we can modify the raw
+# model content (e.g. access elements by #el, and/or enqueue events).
+# After transaction, the model is passed to the rewriter (which is
+# maintained up-to-date by the same Model entity). After such transactions
+# we trigger further updates, e.g. absorption into the document.
 
 frame = Term.of({:self, :window}, scene, "max-w": 1000, "max-h": 800, style: "max origin bg-neutral-900")
 ui = UIR::Reducers.microfold(frame) do |_, dwuir, event|
@@ -732,18 +775,22 @@ ui = UIR::Reducers.microfold(frame) do |_, dwuir, event|
     end
 
     matchpi %{(mouse press)} do
-      model = model.morph({:in, (model[:in]? || Term[]).append({:blur})})
-
       active = hovered0
+
       active.try do |el|
         model = update(model, els, el, :active, eq: true)
       end
     end
 
     matchpi %{(mouse release)} do
+      model = model.morph({:in, (model[:in]? || Term[]).append({:blur})})
+      model = rewrite(Term.of(model), r.not_nil!).as_d
+
       active.try do |el|
+        next unless el == hovered0
+
         model = update(model, els, el) do |node|
-          node.morph({:active, false}, {:in, (node[:in]? || Term[]).append({:focus})})
+          node.morph({:active, false}, {:in, (node[:in]? || Term[]).append({:click})})
         end
       end
       active = nil
@@ -807,7 +854,8 @@ ui = UIR::Reducers.microfold(frame) do |_, dwuir, event|
     # ... on doc changed (?)
 
     # X = fork do
-    model = Dmodel.extract(doc) | model.pairspart.with(:out, Term[])
+    model = Dmodel.extract(doc)
+    model = model.morph({:focus, true})
     els = Dmodel.index(model)
     # end
     # Y = fork do
@@ -837,21 +885,31 @@ UIR::Platform::Current.show(ui)
 #          events then?
 # - add a way to cycle through all elements globally (e.g. tab/S-tab in browsers --
 #   but in our case Tab is taken so maybe something else)
-# - do nothing when focusing a focused element
 # - indicate focus on focused elements that are not buttons/inputs. currently it's
 #   impossible to tell.
-# - selection handling in input
-# - multiline input
+# - focus vs. focus-within; add a way to disable focus. maybe have focus: none/disabled/within/self
+#   instead of a boolean. Clarify focus: ... defaults for different kinds of nodes.
+#     - if document has focus: self, events should go to the cursor (VIA THE OUTBOX; the model wasn't able to handle --
+#       let the cursor try to)
+#     - in ufold, add a way to scope based on non-boolean attrs: e.g. focus: disabled should be accessible
+#       through e.g. `focus-disabled:bg-neutral-500`, `focus-within:...`, etc.
+#          so for booleans it is `focus:<...>` for `true`
+#             for symbols or nats it is `focus-<symbol or nat>:...`
+# - selection handling in input, multiline input
+#     i think the best bet is to use a range based solution and that's it. maybe
+#     <b>...<e> or maybe anchor and span based.
 # - input: selection using mouse, put cursor on click
+#     text nodes should support the ability to hit() a text. this will require an sfpaint/uiRb
+#     rewrite though. It is impossible or very difficult otherwise. We should be able to pass
+#     the uiR node **itself** to hit(). It should then work with platform to figure out what
+#     was hit. Then on soma side we just annotate the node with #owner or #chars-to or smth.
+#     and point it to the owner node in the model. Then when we click we determine the index
+#     of what was hit and send that off to the owner node's mailbox. The node can keep track
+#     of state to e.g. move the selection anchor there instead of the cursor, so we'll get
+#     mouse selection working.
 # - allow the user to define button hot keys. (key pressed) must map onto (mouse press)
 #   on the buttons, and key released onto (mouse release)
-# - think about ways to word-wrap inputs. This is actually quite straight-
-#   forward if we manage somehow to compute the beam position/size without
-#   splitting the text. i.e. the beam should "hover over the text". If the
-#   text is contiguous the usual word wrap/character wrap algorithm will
-#   work just fine. Reuse is good!!
 # - think about ways to scroll inside inputs. If an input is bound by both
 #   w: max and h: max (how to determine that?!) it must use a viewport & implement scroll.
-# - if document does not have focused children in the model, events go to the cursor
 # - implement x-list behavior. make sure xy-list can be composed by nesting x or y-lists inside y or x-lists corr.
 # - complete TODOs in this subsection

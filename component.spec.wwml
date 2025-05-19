@@ -14,14 +14,19 @@
 ;; in Microfold. I.e. focus-color, hover, active, focus must all be inheritable. In fact,
 ;; we must not capture them like we do now; Microfold should "do the math" to figure out
 ;; where focus/hover/active come from.
+;;
+;;    - hint -> detail
+;;    - detail-color
+;;    - label -> title
+;;    - subtitle
 (input-field l_string m_string r_string ¦ _ icon_⋮ none placeholder_⋮ none focus⋮ false hover⋮ false active⋮ false)
-  => (group style: "w-max rounded border border-neutral-800 px-3 py-2 gap-2 fr hover:cursor-text hover:border-neutral-700 active:border-neutral-600 focus:border-{focus-color}"
+  => (group style: "max rounded border border-neutral-800 px-3 py-2 gap-3 fr hover:cursor-text hover:border-neutral-700 active:border-neutral-600 focus:border-{focus-color}"
             focus-color: (oklch 0.6 0.0853 251.813)
             hover: ^hover
             active: ^active
             focus: ^focus
        (^unless (= icon none)
-         (icon ^icon style: "text-neutral-500 text-lg h-max center-y focus:text-{focus-color}" focus-color: (oklch 0.6 0.0853 251.813) focus: ^focus))
+         (icon ^icon style: "text-neutral-500 text-lg h-max focus:text-{focus-color}" focus-color: (oklch 0.6 0.0853 251.813) focus: ^focus))
        (^match (focus l m r)
         (when (false "" "" "")
           (p style: "text-neutral-500 leading-tight h-max center-y font-normal w-fr"
@@ -29,14 +34,19 @@
               (when none "")
               (when _ ^placeholder))))
         (when (_ _ (%string nonempty) _)
-          (group style: "w-fr font-sans font-normal text-neutral-300 leading-tight text-base"
-            ^l (p ^m style: "bg-neutral-500 text-white rounded-sm focus:bg-blue-500" focus: ^focus) ^r))
+          (p style: "w-fr font-sans font-normal text-neutral-300 leading-tight text-base sel-text-white sel-neutral-500 focus:sel-blue-500"
+             sel-anchor: (^ (charcount l))
+             sel-span: (^ (charcount m))
+             focus: ^focus
+            (^ (~ l m r))))
         (when (true _ _ _)
-          (group style: "w-fr font-sans font-normal text-neutral-300 leading-tight text-base"
-            ^l ((self rect) style: "bg-neutral-100 ring-r bg-white h-max") ^r))
+          (p style: "w-fr font-sans font-normal text-neutral-300 leading-tight text-base sel-neutral-100"
+             sel-anchor: (^ (charcount l))
+             sel-span: 0
+            (^ (~ l r))))
         (when _
-          (group style: "w-fr font-sans font-normal text-neutral-300 leading-tight text-base"
-            ^l ^r))))
+          (p style: "w-fr font-sans font-normal text-neutral-300 leading-tight text-base"
+            (^ (~ l r))))))
 
 [input-label caption_string]
   => (p style: "w-max font-condensed font-medium text-neutral-400 text-sm"
@@ -67,6 +77,10 @@
 ;;     have them depend on the component they're used in? How can we implement
 ;;     input-limit etc. without depending on the way input lays out things, esp.
 ;;     with wrapping and all?
+;;       I think we should build components with w-max & h-max all throughout. Assume
+;;       they occupy the entirety of the available space that is. This leaves the power
+;;       to choose what layout strat to use to the user; either they wrap in content-sized
+;;       container or max-sized. It won't work the other way.
 
 ;; TODO: apparently we require some kind of syntax to ^extend with attrs like this.
 ;; This seems to be a rather useful pattern for passing stuff down. Note that we're
@@ -75,10 +89,10 @@
 ;; mutable mechanisms and can only pass down. Or maybe I don't know something.
 
 (input l_string (| _) r_string ¦ attrs_ #el: id_ label_⋮ none hint_⋮ none limit_⋮ none)
-  => (group style: "flow-col gap-1 min-w-3xs"
+  => (group style: "max flow-col gap-1 fr"
        (^unless (= label none)
          (^extend (input-label ^label) attrs))
-       (group style: "w-max" inherit: ^id
+       (group style: "w-max h-fr" inherit: ^id
          (^extend (input-field ^l "" ^r) attrs))
        (^let length: (charcount l r)
          (^match (hint limit)

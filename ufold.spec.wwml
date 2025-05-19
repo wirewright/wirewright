@@ -90,6 +90,12 @@
 (color "border" C {border-color: C_})
 (dynamic "border" C {border-color: C_})
 
+(color "sel" C {sel-fill: C_})
+(dynamic "sel" C {sel-fill: C_})
+
+(color "sel-text" C {sel-color: C_})
+(dynamic "sel-text" C {sel-color: C_})
+
 (nat "gap" N {gap: (spacing N_)})
 
 "ring": (+ "ring-x" "ring-y")
