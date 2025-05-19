@@ -443,6 +443,10 @@ module Ww::ML::Text
           return symbol
         when '^'
           case ahead
+          when '…'
+            advance
+            advance
+            return Token.new(:"^…", pos - 4, pos) # '^' + 3 bytes …
           when '('
             advance
             # Do not advance through paren, it'll be consumed by slot.
@@ -748,6 +752,22 @@ module Ww::ML::Text
           list.with(key, slot)
 
           prev = nil
+        when :"^…"
+          @lexer.thru?
+
+          list.append(prev) if prev
+
+          arg = slot
+
+          unless token = @lexer.thru?
+            raise "unexpected end-of-input after '^…' argument"
+          end
+
+          unless token.type == :")"
+            raise "expected ')' after '^…' argument"
+          end
+
+          return Term.of(:"^extend", list.resolve, arg)
         when :"¦"
           unless list.pairsize.zero?
             raise "cannot combine '¦' with pairs, this leaves pairs in the itemspart"

@@ -91,21 +91,21 @@
 (input l_string (| _) r_string ¦ attrs_ #el: id_ label_⋮ none hint_⋮ none limit_⋮ none)
   => (group style: "max flow-col gap-1 fr"
        (^unless (= label none)
-         (^extend (input-label ^label) attrs))
+         (input-label ^label ^…attrs))
        (group style: "w-max h-fr" inherit: ^id
-         (^extend (input-field ^l "" ^r) attrs))
+         (input-field ^l "" ^r ^…attrs))
        (^let length: (charcount l r)
          (^match (hint limit)
            (when (none none))
            (when (_ none)
              (group style: "w-max mt-1"
-               (^extend (input-hint ^hint) attrs)))
+               (input-hint ^hint ^…attrs)))
            (when (none _)
              (group style: "w-max right mt-1"
-               (^extend (input-limit ^length ^limit) attrs)))
+               (input-limit ^length ^limit ^…attrs)))
            (when _
              (group style: "w-max fr mt-1"
-               (group (^extend (input-hint ^hint) attrs) style: "w-fr")
+               (group (input-hint ^hint ^…attrs) style: "w-fr")
                (input-limit ^length ^limit))))))
 
 ;; TODO: viewport, pan-x, pan-y
