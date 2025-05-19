@@ -101,16 +101,10 @@ module D7VR
     include Feature
 
     CURSOR_TEMPLATE = ML.term <<-WWML
-    (group style: "content"
-      (code ^lhs style: "text-neutral-400 bg-neutral-700")
-      ;; If both are empty w-0 won't work so we have to create a rectangle
-      ;; that is explicitly w-px. Also, if lhs is empty, use ring-r, because
-      ;; if we're using ring-l, it may overflow outside of the viewport
-      ;; if the cursor is located at origin.
-      ((self rect) style: "h-max z-10 bg-blue-500 w-0 ring-l lempty:ring-l-0 lempty:ring-r empty:w-px empty:ring-0"
-        empty: (^ (= lhs rhs ""))
-        lempty: (^ (= lhs "")))
-      (code ^rhs style: "text-neutral-400 bg-neutral-700"))
+    (code style: "text-neutral-400 bg-neutral-700 sel-blue-500"
+          sel-anchor: (^ (charcount lhs))
+          sel-span: 0
+      (^ (~ lhs rhs)))
     WWML
 
     SUGGESTION_TEMPLATE = ML.term <<-WWML

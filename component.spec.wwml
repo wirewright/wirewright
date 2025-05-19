@@ -130,16 +130,10 @@
            (p ^line style: "pl-3 text-neutral-500 bg-neutral-900 text-sm w-max leading-normal"))))
 
 [cursor lhs_string rhs_string ()]
-  => (group style: "content"
-       (code ^lhs style: "text-neutral-400 bg-neutral-700")
-       ;; If both are empty w-0 won't work so we have to create a rectangle
-       ;; that is explicitly w-px. Also, if lhs is empty, use ring-r, because
-       ;; if we're using ring-l, it may overflow outside of the viewport
-       ;; if the cursor is located at origin.
-       ((self rect) style: "h-max z-10 bg-blue-500 w-0 ring-l lempty:ring-l-0 lempty:ring-r empty:w-px empty:ring-0"
-         empty: (^ (= lhs rhs ""))
-         lempty: (^ (= lhs "")))
-       (code ^rhs style: "text-neutral-400 bg-neutral-700"))
+  => (code style: "text-neutral-400 bg-neutral-700 sel-blue-500"
+          sel-anchor: (^ (charcount lhs))
+          sel-span: 0
+       (^ (~ lhs rhs)))
 
 [suggestion name_string intro_string]
   => (box style: "floating z-20 dt-8 border border-neutral-600 bg-neutral-800 rounded p-2"
@@ -149,8 +143,8 @@
 
 [cursor lhs_string rhs_string (suggestions/list () ((name_string intro_string)) ())]
   => (group style: "content flow-none"
-        (cursor ^lhs ^rhs ())
-        (suggestion ^name ^intro))
+       (cursor ^lhs ^rhs ())
+       (suggestion ^name ^intro))
 
 ;; TODO: the rest of cursor suggestions
 
