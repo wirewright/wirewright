@@ -290,6 +290,12 @@ module Ww
       dict
     end
 
+    def as_itemspart_d? : Dict?
+      return unless tag.dict?
+
+      unsafe_as_d.itemspart
+    end
+
     # Attempts to cast this term into a number term `Term::Num`.
     #
     # Raises `TypeCastError` if the cast cannot be performed.
