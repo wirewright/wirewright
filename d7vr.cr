@@ -102,9 +102,9 @@ module D7VR
 
     CURSOR_TEMPLATE = ML.term <<-WWML
     (code style: "text-neutral-400 bg-neutral-700 sel-blue-500"
-          sel-anchor: (^ (charcount lhs))
+          sel-anchor: ^(charcount lhs)
           sel-span: 0
-      (^ (~ lhs rhs)))
+      ^(~ lhs rhs))
     WWML
 
     SUGGESTION_TEMPLATE = ML.term <<-WWML

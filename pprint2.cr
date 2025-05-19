@@ -770,6 +770,8 @@ module Feature
   def_prefix BackrefUp, %{($up suffix_)}, "↑"
   # Renders `($down x)` as `↓x`
   def_prefix BackrefDown, %{($down suffix_)}, "↓"
+  # Renders `(^ (...))` as `^(...)`
+  def_prefix AlloyExpr, %{(^ suffix_dict)}, "^"
   # Renders `(hold x)` as `'x`
   def_prefix Hold, %{(hold suffix_)}, "'"
 
@@ -1499,6 +1501,7 @@ module ::Ww::ML::Display
     Feature::BackrefMy.new,
     Feature::BackrefUp.new,
     Feature::BackrefDown.new,
+    Feature::AlloyExpr.new,
     Feature::Hold.new,
     Feature::PatternSlot.new,
     Feature::PatternNonself.new,

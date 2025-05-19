@@ -35,22 +35,22 @@
               (when _ ^placeholder))))
         (when (_ _ (%string nonempty) _)
           (p style: "w-fr font-sans font-normal text-neutral-300 leading-tight text-base sel-text-white sel-neutral-500 focus:sel-blue-500"
-             sel-anchor: (^ (charcount l))
-             sel-span: (^ (charcount m))
+             sel-anchor: ^(charcount l)
+             sel-span: ^(charcount m)
              focus: ^focus
-            (^ (~ l m r))))
+            ^(~ l m r)))
         (when (true _ _ _)
           (p style: "w-fr font-sans font-normal text-neutral-300 leading-tight text-base sel-neutral-100"
-             sel-anchor: (^ (charcount l))
+             sel-anchor: ^(charcount l)
              sel-span: 0
-            (^ (~ l r))))
+            ^(~ l r)))
         (when _
           (p style: "w-fr font-sans font-normal text-neutral-300 leading-tight text-base"
-            (^ (~ l r))))))
+            ^(~ l r)))))
 
 [input-label caption_string]
   => (p style: "w-max font-condensed font-medium text-neutral-400 text-sm"
-       (^ (upcase caption)))
+       ^(upcase caption))
 
 [input-label node_]
   => (group ^node style: "w-max")
@@ -59,7 +59,7 @@
   => (p ^caption style: "w-max text-xs font-normal text-neutral-400 mx-1")
 
 (input-limit n←(%number +i32) hi←(%number +i32) ¦ _ focus⋮ false)
-  => (p ^n "/" ^hi style: "text-xs font-normal text-neutral-400 reached:text-yellow-400" reached: (^ (and (= n hi) focus)))
+  => (p ^n "/" ^hi style: "text-xs font-normal text-neutral-400 reached:text-yellow-400" reached: ^(and (= n hi) focus))
 
 
 ;; TODO: there are two very obvious problems here.
@@ -131,9 +131,9 @@
 
 [cursor lhs_string rhs_string ()]
   => (code style: "text-neutral-400 bg-neutral-700 sel-blue-500"
-          sel-anchor: (^ (charcount lhs))
+          sel-anchor: ^(charcount lhs)
           sel-span: 0
-       (^ (~ lhs rhs)))
+       ^(~ lhs rhs))
 
 [suggestion name_string intro_string]
   => (box style: "floating z-20 dt-8 border border-neutral-600 bg-neutral-800 rounded p-2"
@@ -149,10 +149,10 @@
 ;; TODO: the rest of cursor suggestions
 
 (col children_+ ¦ _ gap⋮ 0 style⋮ "")
-  => (group ^*children style: (^ (~ "flow-col gap-" (max 1 (* gap 2)) " " style)))
+  => (group ^*children style: ^(~ "flow-col gap-" (max 1 (* gap 2)) " " style))
 
 (row children_+ ¦ _ gap⋮ 0 style⋮ "")
-  => (group ^*children style: (^ (~ "flow-row gap-" (* gap 2) " " style)))
+  => (group ^*children style: ^(~ "flow-row gap-" (* gap 2) " " style))
 
 (token caption_string ¦ _ tag: symbol)
   => (code ^caption style: "text-neutral-200")
@@ -178,5 +178,5 @@
           (code ^caption style: "text-{color}" color: (oklch ^l ^c ^h))))
 
 (indented child_ ¦ _ by: n←(%number +i32))
-  => (group ^child style: (^ (~ "pl-" n)))
+  => (group ^child style: ^(~ "pl-" n))
 
