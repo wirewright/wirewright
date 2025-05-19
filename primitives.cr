@@ -44,6 +44,22 @@ PRIMITIVES = ProcRuleset.build do
     bs.unsafe_as_d.items.all? { |b| a == b }
   end
 
+  rulepi1 %[(join true a_ _)] do
+    a
+  end
+
+  rulepi1 %[(join false _ b_)] do
+    b
+  end
+
+  rulepi1 %[(and true true)] do
+    true
+  end
+
+  rulepi1 %[(and _ _)] do
+    false
+  end
+
   # FIXME: remove this flag
   {% if flag?(:soma6) %}
     # Converts an arbitrary term into its D7VR (Microfold unit) -> UIR (thus D7UIR)
@@ -136,8 +152,8 @@ PRIMITIVES = ProcRuleset.build do
     xs.unsafe_as_d.size
   end
 
-  rulepi1 %[(charcount xs_string)] do
-    xs.unsafe_as_s.charcount
+  rulepi1 %[(charcount xs_string+)] do
+    xs.items.sum(0, &.unsafe_as_s.charcount)
   end
 
   rulepi1 %[(sum ())] { 0 }
@@ -153,6 +169,16 @@ PRIMITIVES = ProcRuleset.build do
 
   rulepi1 %[(upcase arg_string)] { arg.upcase }
   rulepi1 %[(downcase arg_string)] { arg.downcase }
+
+  rulepi1 %[(take s_string o←(%number +i32) span←(%number i32))] do
+    mb, me = {o.to(Int32), (o + span).to(Int32)}.minmax
+
+    l = Term::Str::Substring.runes(s.unsafe_as_s, 0, mb)
+    m = Term::Str::Substring.runes(s.unsafe_as_s, mb, me)
+    r = Term::Str::Substring.runes(s.unsafe_as_s, me, s.charcount)
+
+    {l, m, r}
+  end
 
   rulepi1 %[(runes s_string b←(%number i32) to e←(%number i32))] do
     Term::Str::Substring.runes(s.unsafe_as_s, b.to(Int32), e.to(Int32))

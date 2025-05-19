@@ -1747,7 +1747,7 @@ module Rhodium
         %{[button _ as _ to @_ (_*)]},
         %{[button _ to @_ waiting @_ (_*)]},
         %{[button _ as _ to @_ waiting @_ (_*)]},
-        %{[input _string _string _string to @_]},
+        %{[input _string _ _string to @_]},
         %{[(%any h1 h2 h3 h4 h5 h6 p src) _]},
         %{[hr]},
         %{[cover _ _+]},

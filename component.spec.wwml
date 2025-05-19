@@ -7,7 +7,7 @@
 
 (button caption_string ¦ _ #el: id_)
   => (text inherit: ^id
-           style: "content bg-neutral-700 hover:bg-blue-500 hover:cursor-pointer rounded-sm px-4 py-2 center text-sm leading-sm text-neutral-50 font-sans font-medium"
+           style: "content bg-neutral-700 hover:bg-blue-500 active:bg-blue-400 hover:cursor-pointer rounded-sm px-4 py-2 center text-sm leading-sm text-neutral-50 font-sans font-medium"
        ^caption)
 
 ;; TODO: An obvious point A is that it would be very convenient to inherit custom props
@@ -23,7 +23,7 @@
        (^unless (= icon none)
          (icon ^icon style: "text-neutral-500 text-lg h-max center-y focus:text-{focus-color}" focus-color: (oklch 0.6 0.0853 251.813) focus: ^focus))
        (^match (focus l m r)
-        (when (_ "" "" "")
+        (when (false "" "" "")
           (p style: "text-neutral-500 leading-tight h-max center-y font-normal w-fr"
             (^match placeholder
               (when none "")
@@ -48,8 +48,8 @@
 [input-hint caption_string]
   => (p ^caption style: "w-max text-xs font-normal text-neutral-400 mx-1")
 
-[input-limit n←(%number +i32) hi←(%number +i32)]
-  => (p ^n "/" ^hi style: "text-xs font-normal text-neutral-400")
+(input-limit n←(%number +i32) hi←(%number +i32) ¦ _ focus⋮ false)
+  => (p ^n "/" ^hi style: "text-xs font-normal text-neutral-400 reached:text-yellow-400" reached: (^ (and (= n hi) focus)))
 
 
 ;; TODO: there are two very obvious problems here.
@@ -74,12 +74,13 @@
 ;; believe it is as pure as it can get. We don't have access to any of the fancy
 ;; mutable mechanisms and can only pass down. Or maybe I don't know something.
 
-(input l_string m_string r_string ¦ attrs_ #el: id_ label_⋮ none hint_⋮ none limit_⋮ none)
-  => (group style: "flow-col gap-1 min-w-3xs" inherit: ^id
+(input l_string (| _) r_string ¦ attrs_ #el: id_ label_⋮ none hint_⋮ none limit_⋮ none)
+  => (group style: "flow-col gap-1 min-w-3xs"
        (^unless (= label none)
          (^extend (input-label ^label) attrs))
-       (^extend (input-field ^l ^m ^r) attrs)
-       (^let length: (+ (charcount l) (charcount m) (charcount r))
+       (group style: "w-max" inherit: ^id
+         (^extend (input-field ^l "" ^r) attrs))
+       (^let length: (charcount l r)
          (^match (hint limit)
            (when (none none))
            (when (_ none)

@@ -1,0 +1,93 @@
+;; Transfer unhandled event from my inbox to first focused child's inbox.
+⟨{¦ focus: true in: (_* `Eout)} ¦ _ in: (Ein_ _*)⟩ <> {(Ein): (), Eout: →Ein}
+
+;; Transfer events from outboxes of my children to my outbox.
+⟨{¦ out: (Ein_ _*)} ¦ _ out: (_* `Eout)⟩ <> {(Ein): (), Eout: →Ein}
+
+;; Transfer unhandled events from inbox to outbox.
+{¦ in: (Ein_ _*) out: (_* `Eout)} <> {(Ein): (), Eout: →Ein}
+
+;; Focus myself on (focus) coming from child.
+{¦ out: ((focus) _*) focus_: false} <> {focus: true}
+
+;; Unfocus myself on (blur) coming from parent.
+{¦ in: ((blur) _*) focus_: true} <> {focus: false}
+
+;;
+;; button
+;;
+
+;; A button is a leaf, it doesn't have to send (blur). So we're free to just
+;; consume (focus).
+(button (_* `Mout) ¦ _ out: (Ein←(focus) _*))
+  <> {(Ein): (), Mout: (press)}
+
+;;
+;; input
+;;
+;; TODO: first of all, we lack proper modifier handling. modifier pressed/released
+;;       is a hack that works only up to some distance. (key <keyname> A: _boolean C: _boolean S: _boolean)
+;;       should be more appropriate. This should allow us to remove the nasty %any's as well.
+;;       this IS a massive change though, esp. due to editor/editor tests.
+;; TODO: second, we must have multiline support! I.e. key up/down, home-end must
+;;       be within line, home row, etc.
+;; TODO: third, I am completely unsure about how to implement selection with this.
+;;       it is quite straightforward to implement basic selection, but it quickly
+;;       gets out of hand, especially when the selection has to flip etc. Obviously
+;;       we can go index-based (the sane & most popular way to implement selections
+;;       in such inputs). But we're not for such ways here.
+
+;; Append input if within limit
+(input l_string (| _) r_string ¦ _ focus: true in: (Ein←(input ch_string) _*) limit_: (%number +i32))
+  <> {(Ein): (), l: $(join (< (charcount →l →r) →limit) (~ →l →ch) →l)}
+
+(input l_string (| _) _ ¦ _ focus: true in: (Ein←(input ch_string) _*))
+  <> {(Ein): (), l: $'(~ →l →ch)}
+
+;; Switch between units
+(input _ (_ unit←runes) _ ¦ _ focus: true in: (Ein←(modifier pressed C) _*))
+  <> {(Ein): (), unit: words}
+(input _ (_ unit←words) _ ¦ _ focus: true in: (Ein←(modifier released C) _*))
+  <> {(Ein): (), unit: runes}
+
+;; Move left/right
+(input l←(%string nonempty) (| unit_) r_string ¦ _ focus: true in: (Ein←(key (%any C-left left)) _*))
+  <> {(Ein): (), l: $'(→unit →l 0 to -2), r: $(~ (→unit →l -1 to -1) →r)}
+(input l_string (| unit_) r←(%string nonempty) ¦ _ focus: true in: (Ein←(key (%any C-right right)) _*))
+  <> {(Ein): (), l: $(~ →l (→unit →r 0 to 0)), r: $'(→unit →r 1 to -1)}
+
+;; Backspace/delete
+(input l←(%string nonempty) (| unit_) _ ¦ _ focus: true in: (Ein←(key (%any C-backspace backspace)) _*))
+  <> {(Ein): (), l: $'(→unit →l 0 to -2)}
+(input _ (| unit_) r←(%string nonempty) ¦ _ focus: true in: (Ein←(key (%any C-delete delete)) _*))
+  <> {(Ein): (), r: $'(→unit →r 1 to -1)}
+
+;; Home/end
+(input l←(%string nonempty) (| _) r_string ¦ _ focus: true in: (Ein←(key home) _*))
+  <> {(Ein): (), l: "", r: $'(~ →l →r)}
+(input l_string (| _) r←(%string nonempty) ¦ _ focus: true in: (Ein←(key end) _*))
+  <> {(Ein): (), l: $'(~ →l →r), r: ""}
+
+;;
+;; Behavior: y-list
+;;
+;; (key up) to move focus to the previous item (or cycle to the back)
+;; (key down) to move focus to the next item (or cycle to the front)
+;;
+
+;; TODO: have a way to NOT repeat the body. we can't use %any° because of
+;; its semantics & because it lacks specificity
+;; TODO: these patterns are a bit too verbose. is there a way to fix that?
+
+(_* {¦ focus: Fdst←false} (%past/max {¦ -focus}) {¦ focus: Fsrc←true} _* ¦ _ behaviors: ⟨y-list⟩ out: (Ein←(key up) _*))
+  <> {(Ein): (), Fsrc: false, Fdst: true}
+
+(_* {¦ focus: Fsrc←true} (%past/max {¦ -focus}) {¦ focus: Fdst←false} _* ¦ _ behaviors: ⟨y-list⟩ out: (Ein←(key down) _*))
+  <> {(Ein): (), Fsrc: false, Fdst: true}
+
+(_ (%past/max {¦ -focus}) {¦ focus: Fsrc←true} _* {¦ focus: Fdst←false} (%past/max {¦ -focus}) ¦ _ behaviors: ⟨y-list⟩ out: (Ein←(key up) _*))
+  <> {(Ein): (), Fsrc: false, Fdst: true}
+
+(_ (%past/max {¦ -focus}) {¦ focus: Fdst←false} _* {¦ focus: Fsrc←true} (%past/max {¦ -focus}) ¦ _ behaviors: ⟨y-list⟩ out: (Ein←(key down) _*))
+  <> {(Ein): (), Fsrc: false, Fdst: true}
+

@@ -511,6 +511,8 @@ module UIR::Platform::SFML
   end
 
   private def transcribe(window : SF::RenderWindow, event : SF::Event::KeyPressed)
+    transcription = [] of Term
+
     keyname = nil
     case event.code
     when .f1?        then keyname = "f1"
@@ -551,13 +553,36 @@ module UIR::Platform::SFML
       end
     end
 
-    return [] of Term unless keyname
+    return transcription unless keyname
 
-    keyname = "S-#{keyname}" if event.shift
-    keyname = "C-#{keyname}" if event.control
+    if event.shift
+      transcription << Term.of(:modifier, :pressed, :S)
+      keyname = "S-#{keyname}"
+    end
+
+    if event.control
+      transcription << Term.of(:modifier, :pressed, :C)
+      keyname = "C-#{keyname}"
+    end
+
     key = Term::Sym.new(keyname)
 
-    [Term.of(:key, key)]
+    transcription << Term.of(:key, key)
+    transcription
+  end
+
+  def transcribe(window : SF::RenderWindow, event : SF::Event::KeyReleased) : Array(Term)
+    transcription = [] of Term
+
+    if event.code.l_control? || event.code.r_control?
+      transcription << Term.of(:modifier, :released, :C)
+    end
+
+    if event.code.l_shift? || event.code.r_shift?
+      transcription << Term.of(:modifier, :released, :S)
+    end
+
+    transcription
   end
 
   private def transcribe(window : SF::RenderWindow, event : _)
@@ -583,16 +608,24 @@ module UIR::Platform::SFML
           end
         end
 
-        while window.open?
-          while event = window.poll_event
-            transcribed = transcribe(window, event)
-            transcribed.each { |term| drawable = reducer.call(drawable, term) }
+        mouse0 = SF::Mouse.get_position(window)
+
+        begin
+          reducer.call(drawable, Term.of(:mouse, :motion, mouse0.x, mouse0.y))
+
+          while window.open?
+            while event = window.poll_event
+              transcribed = transcribe(window, event)
+              transcribed.each { |term| drawable = reducer.call(drawable, term) }
+            end
+
+            drawable = reducer.call(drawable, Term.of(:cycle))
+            commands = UIR::Platform.draw(drawable)
+
+            paint(window, commands)
           end
-
-          drawable = reducer.call(drawable, Term.of(:cycle))
-          commands = UIR::Platform.draw(drawable)
-
-          paint(window, commands)
+        ensure
+          window.close
         end
       end
     end

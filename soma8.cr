@@ -11,8 +11,24 @@ alias UIR::Platform::Current = SFML
 module Dmodel
   extend self
 
+  private def pluck1(docnode, key, default, & : Term -> T?) : T forall T
+    return Term[default] unless dict = docnode.as_d?
+    return Term[default] unless value = dict[key]?
+    return Term[default] unless subtype = yield value
+
+    subtype
+  end
+
   private def pluck(docnode : Term, el) : Term::Dict
-    Term[el: el] | docnode.pluck(:active, :hover, :focus, :behaviors, :in, :out)
+    Term[
+      el: el,
+      active: pluck1(docnode, :active, false, &.as_b?),
+      hover: pluck1(docnode, :hover, false, &.as_b?),
+      focus: pluck1(docnode, :focus, false, &.as_b?),
+      in: pluck1(docnode, :in, Term[], &.as_itemspart_d?),
+      out: pluck1(docnode, :out, Term[], &.as_itemspart_d?),
+      behaviors: pluck1(docnode, :behaviors, Term[], &.as_itemspart_d?),
+    ]
   end
 
   private def unpluck(mnode : Term, docnode : Term) : Term::Dict
@@ -50,8 +66,22 @@ module Dmodel
 
       # The remaining nodes are treated as leaves.
 
-      matchpi %{[input l_string m_string r_string to @_]} do
-        dmodel << (Term.of(:input, l, m, r) | pluck(node, el))
+      matchpi %{[input l_string m_ r_string to @_]} do
+        dmodel << (Term.of(:input, l, m, r) | pluck(node, el) | Term[limit: node[:limit]?])
+      end
+
+      matchpi(
+        %{[button _ to @_ mail←(_*)]},
+        %{[button _ as _ to @_ mail←(_*)]},
+        %{[button _ to @_ waiting @_ mail←(_*)]},
+        %{[button _ as _ to @_ waiting @_ mail←(_*)]},
+      ) do
+        dmodel << (Term.of(:button, mail) | pluck(node, el))
+      end
+
+      # Text nodes cannot receive focus
+      matchpi %{[head←(%any h1 h2 h3 h4 h5 h6 p src) _*]} do
+        dmodel << (Term.of({head}) | pluck(node, el).without(:focus))
       end
 
       matchpi %{[head_ _*]} do
@@ -69,6 +99,9 @@ module Dmodel
 
     Term::Dict.build do |commit|
       commit << :document
+      commit.with(:focus, false)
+      commit.with(:in, Term[])
+      commit.with(:out, Term[])
 
       document.items.each_with_index do |node, index|
         nodepath.push(index) do
@@ -78,17 +111,17 @@ module Dmodel
     end
   end
 
-  private def index(dmodel : Term::Dict, els = {} of Term => Term)
-    dmodel.each_item_unordered do |item|
+  def index(dmodel : Term::Dict, keypath = Term[], els = {} of Term => Term::Dict)
+    dmodel.each_item_with_index do |item, index|
       next unless mnode = item.as_d?
 
       if el = mnode[:el]?
-        unless els.put?(el, item)
+        unless els.put?(el, keypath.append(index))
           raise ArgumentError.new("invalid dmodel: duplicate `el`")
         end
       end
 
-      index(mnode, els)
+      index(mnode, keypath.append(index), els)
     end
 
     els
@@ -98,29 +131,18 @@ module Dmodel
     node1 = unpluck(mnode, node0)
 
     Term.case(mnode) do
-      matchpi %{[input l_string m_string r_string]} do
+      matchpi %{[input l_string m_ r_string]} do
         node1 = node1.morph({1, l}, {2, m}, {3, r})
+      end
+
+      matchpi %{[button mail←(_*)]} do
+        node1 = node1.morph({Hi, mail})
       end
 
       otherwise { }
     end
 
     Term.of(node1)
-  end
-
-  private def merge0(els, document : Term::Dict) : Term::Dict
-    nodepath = Stack(Int32).new
-
-    while Rhodium.successor?(document, nodepath)
-      node0 = Rhodium.follow(document, nodepath)
-      next unless el = node0[:"#el"]?
-      next unless mnode = els[el]?
-
-      node1 = merge1(document, nodepath, node0, mnode)
-      document = Rhodium.assign(document, nodepath, node1)
-    end
-
-    document
   end
 
   # Merges UI elements from *dmodel* into nodes with matching `#el` id in
@@ -131,8 +153,23 @@ module Dmodel
   # in the document and `el` of an mnode are equal, then the mnode was produced
   # by the document node and by no other node. In other words, the document node
   # did not change in any significant way between `extract` and `merge`.
-  def merge(dmodel : Term::Dict, document : Term::Dict) : Term::Dict
-    merge0(index(dmodel), document)
+
+  # TODO: use #population instead of scanning the document
+
+  def merge(model, els : Hash(Term, Term::Dict), document : Term::Dict) : Term::Dict
+    nodepath = Stack(Int32).new
+
+    while Rhodium.successor?(document, nodepath)
+      node0 = Rhodium.follow(document, nodepath)
+      next unless el = node0[:"#el"]?
+      next unless keypath = els[el]?
+
+      mnode = model.follow(keypath.items)
+      node1 = merge1(document, nodepath, node0, mnode)
+      document = Rhodium.assign(document, nodepath, node1)
+    end
+
+    document
   end
 end
 
@@ -149,63 +186,64 @@ module Dview
 
   private def printable(document : Term::Dict, nodepath : Stack(Int32), term : Term) : Term
     return term unless node = term.as_d?
-    return term unless node[:"#el"]?
 
     Term.of_case(node) do
-      matchpi(
-        %{[button caption_ to @_ (_*)]},
-        %{[button caption_ as _ to @_ (_*)]},
-        %{[button caption_ to @_ waiting @_ (_*)]},
-        %{[button caption_ as _ to @_ waiting @_ (_*)]},
-      ) do |caption|
-        continue unless caption = Rhodium.const?(document, nodepath, caption)
+      if node[:"#el"]? # UI elements
+        matchpi(
+          %{[button caption_ to @_ (_*)]},
+          %{[button caption_ as _ to @_ (_*)]},
+          %{[button caption_ to @_ waiting @_ (_*)]},
+          %{[button caption_ as _ to @_ waiting @_ (_*)]},
+        ) do |caption|
+          continue unless caption = Rhodium.const?(document, nodepath, caption)
 
-        node.morph({1, stringify(caption)}, {:"#visual", true})
-      end
-
-      matchpi %{[(%any h1 h2 h3 h4 h5 h6 p src) caption_]} do |caption|
-        continue unless caption = Rhodium.const?(document, nodepath, caption)
-
-        node.morph({1, stringify(caption)}, {:"#visual", true})
-      end
-
-      matchpi(
-        %{[hr]},
-        %{[input _string _string _string to @_]},
-        %{[comment _string+]},
-      ) do
-        node.morph({:"#visual", true})
-      end
-
-      matchpi %{[cover title_ _+]} do |title|
-        continue if Rhodium.has_cursor_at_any_depth?(document, nodepath, term)
-        continue unless title = nodepath.push(1) { Rhodium.const?(document, nodepath, title) }
-
-        Term[:cover, stringify(title)] | node.pairspart | Term["#visual": true]
-      end
-
-      matchpi %{[view view_]} do |view|
-        continue unless view = Rhodium.const?(document, nodepath, view)
-
-        node.morph({1, view}, {:"#visual", true})
-      end
-
-      matchpi %{(changes/view view_ @_ ¦ attrs_)} do
-        Term[:view, view] | attrs | Term["#visual": true]
-      end
-
-      # TODO: what should we do if invisible frag has style:, hover:, active:, etc.?
-      matchpi %{(frag value_ @_ ¦ _ visible: false)} do
-        nodepath.push(1) do
-          printable(document, nodepath, value)
+          node.morph({1, stringify(caption)}, {:"#visual", true})
         end
-      end
 
-      matchpi %{[unit head_ _+]} do |head|
-        continue if Rhodium.has_cursor_at_any_depth?(document, nodepath, term)
-        continue unless head = Rhodium.const?(document, nodepath, head)
+        matchpi %{[(%any h1 h2 h3 h4 h5 h6 p src) caption_]} do |caption|
+          continue unless caption = Rhodium.const?(document, nodepath, caption)
 
-        node.morph({1, head}, {:"#visual", true})
+          node.morph({1, stringify(caption)}, {:"#visual", true})
+        end
+
+        matchpi(
+          %{[hr]},
+          %{[input _string m_ _string to @_]},
+          %{[comment _string+]},
+        ) do
+          node.morph({:"#visual", true})
+        end
+
+        matchpi %{[cover title_ _+]} do |title|
+          continue if Rhodium.has_cursor_at_any_depth?(document, nodepath, term)
+          continue unless title = nodepath.push(1) { Rhodium.const?(document, nodepath, title) }
+
+          Term[:cover, stringify(title)] | node.pairspart | Term["#visual": true]
+        end
+
+        matchpi %{[view view_]} do |view|
+          continue unless view = Rhodium.const?(document, nodepath, view)
+
+          node.morph({1, view}, {:"#visual", true})
+        end
+
+        matchpi %{(changes/view view_ @_ ¦ attrs_)} do
+          Term[:view, view] | attrs | Term["#visual": true]
+        end
+
+        # TODO: what should we do if invisible frag has style:, hover:, active:, etc.?
+        matchpi %{(frag value_ @_ ¦ _ visible: false)} do
+          nodepath.push(1) do
+            printable(document, nodepath, value)
+          end
+        end
+
+        matchpi %{[unit head_ _+]} do |head|
+          continue if Rhodium.has_cursor_at_any_depth?(document, nodepath, term)
+          continue unless head = Rhodium.const?(document, nodepath, head)
+
+          node.morph({1, head}, {:"#visual", true})
+        end
       end
 
       matchpi %{[sensor pattern_ in tspace_symbol to @_]} do
@@ -306,9 +344,9 @@ module Dview
           postfixed(block, postfix)
         end
 
-        matchpi %{(input l_string m_string r_string _* ¦ _ #visual: true)} do
+        matchpi %{(input l_string m_ r_string _* ¦ _ #visual: true)} do
           view = Term.of(:input, l, m, r) | term.pairspart
-          block = Term.of(:block, view, w: Math.max(l.charcount + m.charcount + r.charcount, 1), h: 1)
+          block = Term.of(:block, view, w: Math.max(l.charcount + r.charcount, 1), h: 1)
 
           postfixed(block, postfix)
         end
@@ -368,8 +406,8 @@ module Dview
         end
 
         matchpi(
-          %{(sensor _ in _ to @_ ¦ _ #visual: true #syncd: syncd_)},
-          %{(appearance _ in _symbol ¦ _ #visua: true #syncd: syncd_)},
+          %{(sensor _ in _symbol to @_ ¦ _ #visual: true #syncd: syncd_)},
+          %{(appearance _ in _symbol ¦ _ #visual: true #syncd: syncd_)},
         ) do
           indicator = Term.of(:block, Term.of(:indicator, syncd), w: 1, h: 1)
           suffix = rest.call(ctx, term, postfix)
@@ -452,10 +490,14 @@ document = ML.dict <<-WWML
 (cell "Hello World" @qux)
 (sensor x_number in foo to @xs)
 (fooze hover: false)
-(input "" "" "" to @names label: "First name" placeholder: "John Doe")
+(unit group style: "flow-col p-3 border border-neutral-800 focus:border-blue-500 gap-5 rounded-lg" behaviors: (y-list)
+  (h1 "My Form")
+  (input "" (| runes) "" to @first-names label: "First name" placeholder: "John" limit: 10)
+  (input "" (| runes) "" to @last-names label: "Last name" placeholder: "Doe")
+  (input "" (| runes) "" to @emails label: "Email" placeholder: "jd@example.com" icon: "mail" hint: "Temporary mails not allowed"))
 (unit group style: "p-5 flow-col gap-5 bg-neutral-800"
   (h1 @qux style: "qux:bg-neutral-500" qux: true)
-  (button "Hello" to @quxes () hover: true style: "w-max")
+  (button "Hello" to @quxes () hover: false style: "w-max")
   (button "World" to @quxes () qux: true style: "qux:bg-neutral-500"))
 (hr)
 (comment "Hello World" "John Doe was here")
@@ -469,7 +511,8 @@ puts
 
 doc = D7.run(document)
 
-m = Dmodel.extract(doc)
+model = Dmodel.extract(doc)
+els = Dmodel.index(model)
 # puts ML.display(m)
 
 v = Dview.view(doc)
@@ -593,6 +636,58 @@ def inherit(view : Term::Dict, unit : Term) : Term
   inherit(els(view), unit)
 end
 
+def update(model, els : Hash(Term, Term::Dict), el : Term, &) : Term::Dict
+  return model unless keypath = els[el]?
+
+  node0 = model.follow(keypath.items)
+  node1 = yield node0
+
+  model.where(keypath.items, eq: node1)
+end
+
+def update(model, els, el, key, eq value)
+  update(model, els, el) { |node| Term.of(node.with(key, value)) }
+end
+
+def mkbhvr(base : String)
+  refR = dfsR(
+    switchR(
+      { %[($my rewritee_)], envR(Term.of(:"$my")) },
+      { %[($up rewritee_)], choiceR(envR(Term.of(:"$up")), envR(Term.of(:"$my"))) },
+      { %[($down rewritee_)], choiceR(envR(Term.of(:"$down")), envR(Term.of(:"$my"))) },
+    )
+  )
+
+  primitives = ProcRuleset.build do
+  end
+
+  onceR = callR(PRIMITIVES)
+
+  # First rewrite entries, then rewrite self.
+  set, exhevalR = recR
+  set.call chainR(entriesR(exhevalR), onceR)
+
+  evalR = dfsR(
+    switchR(
+      { %[($ rewritee_)], exhevalR },
+      { %[($once rewritee_)], onceR },
+    )
+  )
+
+  backmapR = chainR(refR, evalR)
+
+  selector = ML.term(%[(%any° (rule pattern_ template_) (backmap pattern_ backspec_))])
+
+  set, rec = recR
+
+  exhR(
+    set.call choiceR(
+      exhR(rulesetR(Ruleset.select(selector, ML.terms(base)), noR, backmapR, noR)),
+      itemsR(rec),
+    )
+  )
+end
+
 spec = ML.terms File.read("./component.spec.wwml")
 
 rr = renderer(spec)
@@ -600,14 +695,129 @@ rr, tree = rr.call(spec, v)
 
 scene = inherit(v.as_d, tree)
 
+stratum_state = nil
+
+mouse_x = Term[0]
+mouse_y = Term[0]
+
+hovered0 = hovered1 = nil
+active = nil
+model0 = nil
+
+# FIXME: eq: nil instead of false!!!! Merge is broken
+behavior_source = Atomic(String).new("")
+watch(Path["behavior.spec.wwml"]) do |updated|
+  behavior_source.set(updated.gets_to_end)
+end
+backup = ""
+r = nil
+src0 = nil
+
 frame = Term.of({:self, :window}, scene, "max-w": 1000, "max-h": 800, style: "max origin bg-neutral-900")
-ui = UIR::Reducers.microfold(frame) do |_, drawable, event|
+ui = UIR::Reducers.microfold(frame) do |_, dwuir, event|
   Term.case(event) do
-    matchpi %{(key enter)} do
-      puts ML.display(drawable)
+    matchpi %{(key f1)} do
+      puts ML.display(dwuir)
+    end
+    matchpi %{(key f3)} do
+      puts ML.display(model)
+    end
+    matchpi %{(key f4)} do
+      puts ML.display(doc)
+    end
+
+    matchpi %{(mouse motion x_number y_number)} do
+      mouse_x = x.unsafe_as_n
+      mouse_y = y.unsafe_as_n
+    end
+
+    matchpi %{(mouse press)} do
+      model = model.morph({:in, (model[:in]? || Term[]).append({:blur})})
+
+      active = hovered0
+      active.try do |el|
+        model = update(model, els, el, :active, eq: true)
+      end
+    end
+
+    matchpi %{(mouse release)} do
+      active.try do |el|
+        model = update(model, els, el) do |node|
+          node.morph({:active, false}, {:in, (node[:in]? || Term[]).append({:focus})})
+        end
+      end
+      active = nil
+    end
+
+    matchpi %{(key _)}, %{(modifier _ _)}, %{(input _)} do
+      model = model.morph({:in, (model[:in]? || Term[]).append(event)})
     end
 
     otherwise { }
+  end
+
+  unless stratum_state == {dwuir, mouse_x, mouse_y}
+    stratum = UIR.stratum(dwuir, mouse_x, mouse_y)
+    stratum_state = {dwuir, mouse_x, mouse_y}
+
+    stratum.sort_by!(&.size)
+    hovered1 = stratum.reverse_each do |hit|
+      target = dwuir.follow(hit)
+      next unless el = target[:"#el"]?
+      break el
+    end
+
+    unless hovered0 == hovered1
+      hovered0.try { |el| model = update(model, els, el, :hover, eq: false) } # unhover
+      hovered1.try { |el| model = update(model, els, el, :hover, eq: true) }  # hover
+    end
+
+    hovered0 = hovered1
+  end
+
+  # on model changed
+  unless model0 == model
+    src = behavior_source.get
+
+    # regen behavior rewriter circuit for live reload
+    unless src == src0
+      begin
+        r = mkbhvr(src)
+        backup = src
+      rescue e : ML::SyntaxError
+        e.humanize(STDERR, src)
+        r = mkbhvr(backup)
+      ensure
+        src0 = src
+      end
+    end
+
+    # puts "Rewrite"
+    # puts ML.display(model)
+    model = rewrite(Term.of(model), r.not_nil!).as_d
+    # puts "----"
+    # puts ML.display(model)
+  end
+
+  # close the feedback loop if model changed
+  #
+  # FIXME: do this only if the DOCmodel changed!!!
+  unless model0 == model
+    doc = Dmodel.merge(model, els, doc)
+    # ... on doc changed (?)
+
+    # X = fork do
+    model = Dmodel.extract(doc) | model.pairspart.with(:out, Term[])
+    els = Dmodel.index(model)
+    # end
+    # Y = fork do
+    v = Dview.view(doc)
+    rr, tree = rr.call(spec, v)
+    scene = inherit(v.as_d, tree)
+    # end
+    # model, els, scene = join(X, Y)
+    frame = Term.of(frame.morph({1, scene}))
+    model0 = model
   end
 
   # frame = Term.of(frame.morph({:"max-w", vw}, {:"max-h", vh}))
@@ -617,29 +827,31 @@ end
 
 UIR::Platform::Current.show(ui)
 
-# puts ML.display(inherit(v.as_d, tree))
 # - think about ways to let the document process events from the inbox/outbox.
-# - on mouse events, change hover: and active: in the model for #el
-# -? if mouse release on hover: true, active: true, put (focus) in its outbox
-# - on any other event, pass it to inbox of root
-# - implement basic focus, blur behavior. add a way to cycle through all
-#   elements globally (e.g. tab/S-tab in browsers -- but in our case Tab
-#   is taken so maybe something else)
-# - implement button press
-# - implement basic `input` functionality that uses all of the available
-#   styles -- meaning char limit, basic selection.
+#   ? if deferred: true, the inbox/outbox will queue events without dequeueing them.
+#     this lets us wait for the document to handle events.
+#   ? if -deferred, then we handle them at behavior level without even letting
+#     the document see them.
+#   ---- ^ THIS should probably be a rewriter circuit level flag. If it has deferred: true
+#          then just stop there & do not rewrite. But how do we let child components receive
+#          events then?
+# - add a way to cycle through all elements globally (e.g. tab/S-tab in browsers --
+#   but in our case Tab is taken so maybe something else)
+# - do nothing when focusing a focused element
+# - indicate focus on focused elements that are not buttons/inputs. currently it's
+#   impossible to tell.
+# - selection handling in input
+# - multiline input
+# - input: selection using mouse, put cursor on click
+# - allow the user to define button hot keys. (key pressed) must map onto (mouse press)
+#   on the buttons, and key released onto (mouse release)
 # - think about ways to word-wrap inputs. This is actually quite straight-
 #   forward if we manage somehow to compute the beam position/size without
 #   splitting the text. i.e. the beam should "hover over the text". If the
 #   text is contiguous the usual word wrap/character wrap algorithm will
 #   work just fine. Reuse is good!!
 # - think about ways to scroll inside inputs. If an input is bound by both
-#   w: max and h: max it must use a viewport & implement scroll.
-# - implement some basic behaviors (e.g. `y-list` behavior with up/down keys to move
-#   focus between items, `x-list`, `xy-list`).
-
-{% skip_file %}
-m = m.morph({1, 1, "hello"})
-doc = Dmodel.merge(m, doc)
-
-puts ML.display(doc)
+#   w: max and h: max (how to determine that?!) it must use a viewport & implement scroll.
+# - if document does not have focused children in the model, events go to the cursor
+# - implement x-list behavior. make sure xy-list can be composed by nesting x or y-lists inside y or x-lists corr.
+# - complete TODOs in this subsection
