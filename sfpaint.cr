@@ -544,120 +544,103 @@ module UIR::Platform::SFML
     {width, height}
   end
 
-  private def transcribe(window : SF::RenderWindow, event : SF::Event::Closed)
+  private def transcribe(window : SF::RenderWindow, event : SF::Event::Closed, &) : Nil
     window.close
 
-    [Term.of(:exit)]
+    yield Term.of(:exit)
   end
 
-  private def transcribe(window : SF::RenderWindow, event : SF::Event::Resized)
+  private def transcribe(window : SF::RenderWindow, event : SF::Event::Resized, &) : Nil
     window.view = SF::View.new(SF.float_rect(0, 0, event.width, event.height))
 
-    [Term.of(:size, event.width, event.height)]
+    yield Term.of(:size, event.width, event.height)
   end
 
-  private def transcribe(window : SF::RenderWindow, event : SF::Event::TextEntered)
+  private def transcribe(window : SF::RenderWindow, event : SF::Event::TextEntered, &) : Nil
     if SF::Keyboard.key_pressed?(SF::Keyboard::Key::LControl) || SF::Keyboard.key_pressed?(SF::Keyboard::Key::RControl)
       return [] of Term
     end
 
     chr = event.unicode.chr
-    chr.printable? ? [Term.of(:input, chr)] : [] of Term
-  end
-
-  private def transcribe(window : SF::RenderWindow, event : SF::Event::MouseButtonPressed)
-    [Term.of(:mouse, :motion, event.x, event.y), Term.of(:mouse, :press)]
-  end
-
-  private def transcribe(window : SF::RenderWindow, event : SF::Event::MouseButtonReleased)
-    [Term.of(:mouse, :motion, event.x, event.y), Term.of(:mouse, :release)]
-  end
-
-  private def transcribe(window : SF::RenderWindow, event : SF::Event::MouseMoved)
-    [Term.of(:mouse, :motion, event.x, event.y)]
-  end
-
-  private def transcribe(window : SF::RenderWindow, event : SF::Event::MouseWheelScrolled)
-    [Term.of(:mouse, :scroll, event.delta == -1 ? :down : :up)]
-  end
-
-  private def transcribe(window : SF::RenderWindow, event : SF::Event::KeyPressed)
-    transcription = [] of Term
-
-    keyname = nil
-    case event.code
-    when .f1?        then keyname = "f1"
-    when .f2?        then keyname = "f2"
-    when .f3?        then keyname = "f3"
-    when .f4?        then keyname = "f4"
-    when .escape?    then keyname = "escape"
-    when .insert?    then keyname = "insert"
-    when .tab?       then keyname = "tab"
-    when .home?      then keyname = "home"
-    when .end?       then keyname = "end"
-    when .enter?     then keyname = "enter"
-    when .delete?    then keyname = "delete"
-    when .left?      then keyname = "left"
-    when .right?     then keyname = "right"
-    when .up?        then keyname = "up"
-    when .down?      then keyname = "down"
-    when .backspace? then keyname = "backspace"
-    when .numpad2?   then keyname = "np2"
-    when .numpad4?   then keyname = "np4"
-    when .numpad5?   then keyname = "np5"
-    when .numpad6?   then keyname = "np6"
-    when .numpad8?   then keyname = "np8"
-    when .page_up?   then keyname = "pgup"
-    when .page_down? then keyname = "pgdn"
+    if chr.printable?
+      yield Term.of(:input, chr)
     end
-
-    if event.control
-      case event.code
-      when .a?         then keyname = "a"
-      when .c?         then keyname = "c"
-      when .r?         then keyname = "r"
-      when .v?         then keyname = "v"
-      when .z?         then keyname = "z"
-      when .equal?     then keyname = "equal"
-      when .dash?      then keyname = "minus"
-      when .backslash? then keyname = "backslash"
-      end
-    end
-
-    return transcription unless keyname
-
-    if event.shift
-      transcription << Term.of(:modifier, :pressed, :S)
-      keyname = "S-#{keyname}"
-    end
-
-    if event.control
-      transcription << Term.of(:modifier, :pressed, :C)
-      keyname = "C-#{keyname}"
-    end
-
-    key = Term::Sym.new(keyname)
-
-    transcription << Term.of(:key, key)
-    transcription
   end
 
-  def transcribe(window : SF::RenderWindow, event : SF::Event::KeyReleased) : Array(Term)
-    transcription = [] of Term
-
-    if event.code.l_control? || event.code.r_control?
-      transcription << Term.of(:modifier, :released, :C)
-    end
-
-    if event.code.l_shift? || event.code.r_shift?
-      transcription << Term.of(:modifier, :released, :S)
-    end
-
-    transcription
+  private def transcribe(window : SF::RenderWindow, event : SF::Event::MouseButtonPressed, &) : Nil
+    yield Term.of(:mouse, :motion, event.x, event.y)
+    yield Term.of(:mouse, :press)
   end
 
-  private def transcribe(window : SF::RenderWindow, event : _)
-    [] of Term
+  private def transcribe(window : SF::RenderWindow, event : SF::Event::MouseButtonReleased, &) : Nil
+    yield Term.of(:mouse, :motion, event.x, event.y)
+    yield Term.of(:mouse, :release)
+  end
+
+  private def transcribe(window : SF::RenderWindow, event : SF::Event::MouseMoved, &) : Nil
+    yield Term.of(:mouse, :motion, event.x, event.y)
+  end
+
+  private def transcribe(window : SF::RenderWindow, event : SF::Event::MouseWheelScrolled, &) : Nil
+    yield Term.of(:mouse, :scroll, event.delta == -1 ? :down : :up)
+  end
+
+  private def keyname?(key : SF::Keyboard::Key) : String?
+    case key
+    when .f1?        then return "f1"
+    when .f2?        then return "f2"
+    when .f3?        then return "f3"
+    when .f4?        then return "f4"
+    when .escape?    then return "escape"
+    when .insert?    then return "insert"
+    when .tab?       then return "tab"
+    when .home?      then return "home"
+    when .end?       then return "end"
+    when .enter?     then return "enter"
+    when .delete?    then return "delete"
+    when .left?      then return "left"
+    when .right?     then return "right"
+    when .up?        then return "up"
+    when .down?      then return "down"
+    when .backspace? then return "backspace"
+    when .numpad2?   then return "np2"
+    when .numpad4?   then return "np4"
+    when .numpad5?   then return "np5"
+    when .numpad6?   then return "np6"
+    when .numpad8?   then return "np8"
+    when .page_up?   then return "pgup"
+    when .page_down? then return "pgdn"
+    when .a?         then return "a"
+    when .c?         then return "c"
+    when .r?         then return "r"
+    when .v?         then return "v"
+    when .z?         then return "z"
+    when .equal?     then return "equal"
+    when .dash?      then return "minus"
+    when .backslash? then return "backslash"
+    when .l_control?, .r_control?
+      return "ctrl"
+    when .l_shift?, .r_shift?
+      return "shift"
+    end
+  end
+
+  private def transcribe(window : SF::RenderWindow, event : SF::Event::KeyPressed, &) : Nil
+    return unless keyname = keyname?(event.code)
+
+    keyname = "S-#{keyname}" if event.shift
+    keyname = "C-#{keyname}" if event.control
+
+    yield Term.of(:key, Term::Sym.new(keyname))
+  end
+
+  def transcribe(window : SF::RenderWindow, event : SF::Event::KeyReleased, &) : Nil
+    return unless keyname = keyname?(event.code)
+
+    yield Term.of(:"key-up", Term::Sym.new(keyname))
+  end
+
+  private def transcribe(window : SF::RenderWindow, event : _, &) : Nil
   end
 
   def show0(reducer : Reducer) : Nil
@@ -688,8 +671,9 @@ module UIR::Platform::SFML
             # FIXME: do not call reducer per event, queue events and call reducer with event
             # batch!!! Reducer is always smarter than we are here!!
             while event = window.poll_event
-              transcribed = transcribe(window, event)
-              transcribed.each { |term| drawable = reducer.call(drawable, term) }
+              transcribe(window, event) do |term|
+                drawable = reducer.call(drawable, term)
+              end
             end
 
             drawable = reducer.call(drawable, Term.of(:cycle))

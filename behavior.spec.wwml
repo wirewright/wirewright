@@ -31,12 +31,8 @@
 ;;
 ;; input
 ;;
-;; TODO: first of all, we lack proper modifier handling. modifier pressed/released
-;;       is a hack that works only up to some distance. (key <keyname> A: _boolean C: _boolean S: _boolean)
-;;       should be more appropriate. This should allow us to remove the nasty %any's as well.
-;;       this IS a massive change though, esp. due to editor/editor tests.
 ;; TODO: second, we must have multiline support! I.e. key up/down, home-end must
-;;       be within line, home row, etc.
+;;       be within line, home col, etc.
 ;; TODO: third, I am completely unsure about how to implement selection with this.
 ;;       it is quite straightforward to implement basic selection, but it quickly
 ;;       gets out of hand, especially when the selection has to flip etc. Obviously
@@ -51,9 +47,9 @@
   <> {(Ein): (), l: $'(~ →l →ch)}
 
 ;; Switch between units
-(input _ (_ unit←runes) _ ¦ _ focus: true in: (Ein←(modifier pressed C) _*))
+(input _ (_ unit←runes) _ ¦ _ focus: true in: (Ein←(key ctrl) _*))
   <> {(Ein): (), unit: words}
-(input _ (_ unit←words) _ ¦ _ focus: true in: (Ein←(modifier released C) _*))
+(input _ (_ unit←words) _ ¦ _ focus: true in: (Ein←(key-up ctrl) _*))
   <> {(Ein): (), unit: runes}
 
 ;; Move left/right

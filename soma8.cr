@@ -796,7 +796,7 @@ ui = UIR::Reducers.microfold(frame) do |_, dwuir, event|
       active = nil
     end
 
-    matchpi %{(key _)}, %{(modifier _ _)}, %{(input _)} do
+    matchpi %{(key _)}, %{(key-up _)}, %{(input _)} do
       model = model.morph({:in, (model[:in]? || Term[]).append(event)})
     end
 
