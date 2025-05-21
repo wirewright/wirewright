@@ -19,7 +19,7 @@ struct Ww::Term
     PATTERN_TERM_ID = [0u32]
 
     # :nodoc:
-    PATTERN_TERM_CACHE = Pf::Cache(UInt32, Term).new
+    PATTERN_TERM_CACHE = Sync::Map(UInt32, Term).new
 
     # :nodoc:
     def reflect(ml : String) : Nil
@@ -34,7 +34,7 @@ struct Ww::Term
         return default
       end
 
-      pterm = PATTERN_TERM_CACHE.fetch(pid, &pattern)
+      pterm = PATTERN_TERM_CACHE.put_if_absent(pid, &pattern)
 
       unless env = Engine.match?(pterm, @matchee, env: @env)
         @stats.try &.rejected(pterm)
