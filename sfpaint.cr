@@ -363,7 +363,7 @@ module UIR::Platform::SFML
   end
 
   private def paint(target : SF::RenderTarget, command : FillText)
-    return unless path = FontFinder.path?(command.font, command.weight)
+    return unless path = FontIndex.path_to?(command.font, command.weight)
 
     data = FontKeeper.font_data(path, command.size)
     text = TextData.new(data.font, data.size, command.leading, command.tracking)
@@ -484,7 +484,7 @@ module UIR::Platform::SFML
   end
 
   def wrap(content : String, font : String, weight : FontWeight, size : Int32, leading : Float32, w : Int32?, h : Int32?) : String
-    return "" unless path = FontFinder.path?(font, weight)
+    return "" unless path = FontIndex.path_to?(font, weight)
 
     data = FontKeeper.font_data(path, size)
     text = TextData.new(data.font, size, leading, tracking: 1.0f32)
@@ -522,7 +522,7 @@ module UIR::Platform::SFML
   end
 
   def measure(content : String, font : String, weight : FontWeight, size : Int32, leading : Float32) : {Int32, Int32}
-    unless path = FontFinder.path?(font, weight)
+    unless path = FontIndex.path_to?(font, weight)
       return 0, 0
     end
 

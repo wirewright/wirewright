@@ -366,6 +366,14 @@ struct ::Tuple(*T)
       {% end %}
     {% end %}
   end
+
+  def x
+    self[0]
+  end
+
+  def y
+    self[1]
+  end
 end
 
 struct ::NamedTuple
@@ -1205,6 +1213,37 @@ class String
       algorithm.base64digest(self)
     else
       raise ArgumentError.new("base not supported: #{base}")
+    end
+  end
+
+  # FIXME: improve, reuse word string
+  def each_word(& : String ->) : Nil
+    l, sep0, r = partition(' ')
+
+    loop do
+      yield l unless l.empty?
+
+      break if sep0.empty?
+
+      if r.empty?
+        yield sep0
+        break
+      end
+
+      succ, sep1, r1 = r.partition(' ')
+
+      l = sep0 + succ
+      sep0 = sep1
+      r = r1
+    end
+  end
+
+  def each_word_with_index(& : String, Int32 ->) : Nil
+    index = 0
+
+    each_word do |word|
+      yield word, index
+      index += 1
     end
   end
 end

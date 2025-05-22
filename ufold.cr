@@ -739,7 +739,7 @@ module Microfold
 
           weight = FontWeight.parse(weight)
 
-          continue unless codepoint = FontFinder.codepoint?(name.to(String), family, weight)
+          continue unless codepoint = FontIndex.codepoint?(name.to(String), family, weight)
 
           text(ctx, Term[codepoint])
         end

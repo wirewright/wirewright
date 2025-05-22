@@ -11,9 +11,12 @@ require "wait_group"
 
 require "../oklch"
 require "../util"
+
 require "./wirewright/term"
 require "./wirewright/ml"
 require "./wirewright/meridium"
+require "./wirewright/soma"
+
 require "../pattern7"
 require "../baz5"
 require "../delta7_proto2"
