@@ -5,6 +5,7 @@
 "font-icons": {font: "Material Icons Outlined"}
 "font-condensed": {font: "IBM Plex Sans Condensed"}
 "font-sans": {font: "IBM Plex Sans"}
+"font-serif": {font: "IBM Plex Serif"}
 "font-mono": {font: "IBM Plex Mono"}
 
 "rounded-none": {border-radius: 0}
