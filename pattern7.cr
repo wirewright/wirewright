@@ -4317,7 +4317,7 @@ module ::Ww::M1
     storage
   end
 
-  PATTERN_CACHE = Pf::Cache(Void*, Operator::Any).new
+  PATTERN_CACHE = Sync::Map(Term, Operator::Any).new
 
   {% if flag?(:popt_0) %}
     DEFAULT_OPT_LEVEL = O0
@@ -4327,14 +4327,31 @@ module ::Ww::M1
     DEFAULT_OPT_LEVEL = O2
   {% end %}
 
+  def self.operator0(pattern : Term, *, normalize = true, optimize = true, opt = DEFAULT_OPT_LEVEL) : Operator::Any
+    normal = normalize ? normal(pattern) : pattern
+    optimal = optimize ? optimized(normal, opt) : normal
+    captures = captures(normal)
+
+    operator(optimal, captures)
+  end
+
   # TODO: overwrite in cache if higher opt level
-  def self.operator(pattern : Term, *, normalize = true, optimize = true, fresh = false, opt = DEFAULT_OPT_LEVEL) : Operator::Any
-    PATTERN_CACHE.fetch(pattern.unsafe_repr, fresh: fresh) do
-      normal = normalize ? normal(pattern) : pattern
-      optimal = optimize ? optimized(normal, opt) : normal
-      captures = captures(normal)
-      operator(optimal, captures)
+  def self.operator(pattern : Term, *, fresh = false, **kwargs) : Operator::Any
+    if fresh
+      return operator0(pattern, **kwargs)
     end
+
+    # Optimistic fast path: fetch from cache
+    if operator = PATTERN_CACHE[pattern]?
+      return operator
+    end
+
+    # Slow path: compile and add to cache. Sometimes multiple threads will do
+    # multiple times the work; that's fine. We cannot block because that'd cause
+    # a deadlock -- operator0() may in turn call operator() at some point and so on.
+    operator = operator0(pattern, **kwargs)
+
+    PATTERN_CACHE.put_if_absent(pattern, operator)
   end
 
   def self.matches(pattern : Term, matchee : Term, *, env : Term::Dict = Term[], opt = DEFAULT_OPT_LEVEL, **kwargs) : Array(Term::Dict)
