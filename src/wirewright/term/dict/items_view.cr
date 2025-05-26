@@ -177,10 +177,6 @@ module Ww
       {upto(rest), rest}
     end
 
-    def bounds
-      Term[0]..Term[size]
-    end
-
     # Passes each consecutive item from this items view through the block,
     # collecting block return values in an array until the block returns `nil`,
     # or no more items are left. Returns the resulting array followed by the view
