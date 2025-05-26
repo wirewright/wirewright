@@ -4803,7 +4803,7 @@ module ::Ww::M1
         in Word::Range
           next unless layer == 1
 
-          unless (word.b...word.e).subrange_of?(matchee.items.bounds)
+          unless (word.b..word.e).subrange_of?(0..matchee.items.size)
             raise KeypathError.new
           end
 

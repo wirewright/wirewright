@@ -2489,8 +2489,12 @@ struct Bag(T)
 end
 
 struct Range(B, E)
-  def subrange_of?(other : Range) : Bool
-    @begin.in?(other) && @end.in?(other)
+  def subrange_of?(other : Range(B, E)) : Bool
+    {% unless B < ::Int && E < ::Int %}
+      {% raise "subrange_of? only supports integer ranges" %}
+    {% end %}
+
+    @begin.in?(other) && (exclusive? ? (@end - 1).in?(other) : @end.in?(other))
   end
 
   def proper_subrange_of?(other : Range) : Bool
