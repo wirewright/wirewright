@@ -18,7 +18,7 @@ module Ww::Meridium
     end
 
     # Constructs an atom from a byteslice *digest*.
-    def self.of(digest : Bytes) : Atom
+    def self.new(digest : Bytes) : Atom
       unless digest.size == 32
         raise ArgumentError.new("expected digest to be 32 bytes")
       end

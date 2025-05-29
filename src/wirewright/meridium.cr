@@ -91,7 +91,7 @@ module Ww::Meridium
     hasher = Atom::Hasher.new
     hasher.final(scratch.to_slice)
 
-    Atom.of(scratch.to_slice)
+    Atom.new(scratch.to_slice)
   end
 
   # :nodoc:
@@ -116,7 +116,7 @@ module Ww::Meridium
     hasher.update(scratch.to_slice[0, 1])
     hasher.final(scratch.to_slice)
 
-    Atom.of(scratch.to_slice)
+    Atom.new(scratch.to_slice)
   end
 
   # :nodoc:
@@ -130,7 +130,7 @@ module Ww::Meridium
 
     hasher.final(scratch.to_slice)
 
-    Atom.of(scratch.to_slice)
+    Atom.new(scratch.to_slice)
   end
 
   # :nodoc:
@@ -144,7 +144,7 @@ module Ww::Meridium
     hasher.update(b)
     hasher.final(scratch.to_slice)
 
-    Atom.of(scratch.to_slice)
+    Atom.new(scratch.to_slice)
   end
 
   # :nodoc:
@@ -159,7 +159,7 @@ module Ww::Meridium
       hasher.update(scratch.to_slice)
       hasher.final(scratch.to_slice)
 
-      Atom.of(scratch.to_slice[0, Atom::BYTESIZE])
+      Atom.new(scratch.to_slice[0, Atom::BYTESIZE])
     {% end %}
   end
 
@@ -175,7 +175,7 @@ module Ww::Meridium
       hasher.update(scratch.to_slice)
       hasher.final(scratch.to_slice[0, Atom::BYTESIZE])
 
-      Atom.of(scratch.to_slice[0, Atom::BYTESIZE])
+      Atom.new(scratch.to_slice[0, Atom::BYTESIZE])
     {% end %}
   end
 
@@ -191,7 +191,7 @@ module Ww::Meridium
       hasher.update(scratch.to_slice)
       hasher.final(scratch.to_slice[0, Atom::BYTESIZE])
 
-      Atom.of(scratch.to_slice[0, Atom::BYTESIZE])
+      Atom.new(scratch.to_slice[0, Atom::BYTESIZE])
     {% end %}
   end
 
@@ -208,7 +208,7 @@ module Ww::Meridium
 
     hasher.final(scratch.to_slice)
 
-    Atom.of(scratch.to_slice)
+    Atom.new(scratch.to_slice)
   end
 
   # :nodoc:
