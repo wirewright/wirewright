@@ -835,105 +835,6 @@ def wrap(text : String, maxwidth = 60) : String
   String.build { |io| wrap(io, text, maxwidth) }
 end
 
-# Represents an LCH color, used throughout the code.
-record Color, l : Int32, c : Int32, h : Int32, a : Int32 = 0xff do
-  Transparent = Color.new(0, 0, 0, 0)
-  Black       = Color.new(0, 0, 0, 255)
-  White       = Color.new(100, 0, 0, 255)
-  DarkGray    = Color.new(20, 0, 0, 255)
-  Gray        = Color.new(50, 0, 0, 255)
-  LightGray   = Color.new(80, 0, 0, 255)
-  DarkBlue    = Color.new(20, 40, 270, 255)
-  LightBlue   = Color.new(80, 40, 270, 255)
-
-  TW = {
-    "neutral-50":  Color.rgb(0xfa, 0xfa, 0xfa),
-    "neutral-100": Color.rgb(0xf5, 0xf5, 0xf5),
-    "neutral-200": Color.rgb(0xe5, 0xe5, 0xe5),
-    "neutral-300": Color.rgb(0xd4, 0xd4, 0xd4),
-    "neutral-400": Color.rgb(0xa3, 0xa3, 0xa3),
-    "neutral-500": Color.rgb(0x73, 0x73, 0x73),
-    "neutral-600": Color.rgb(0x52, 0x52, 0x52),
-    "neutral-700": Color.rgb(0x40, 0x40, 0x40),
-    "neutral-800": Color.rgb(0x26, 0x26, 0x26),
-    "neutral-900": Color.rgb(0x17, 0x17, 0x17),
-    "neutral-950": Color.rgb(0x0a, 0x0a, 0x0a),
-    "blue-50":     Color.rgb(0xef, 0xf6, 0xff),
-    "blue-100":    Color.rgb(0xdb, 0xea, 0xfe),
-    "blue-200":    Color.rgb(0xbf, 0xdb, 0xfe),
-    "blue-300":    Color.rgb(0x93, 0xc5, 0xfd),
-    "blue-400":    Color.rgb(0x60, 0xa5, 0xfa),
-    "blue-500":    Color.rgb(0x3b, 0x82, 0xf6),
-    "blue-600":    Color.rgb(0x25, 0x63, 0xeb),
-    "blue-700":    Color.rgb(0x1d, 0x4e, 0xd8),
-    "blue-800":    Color.rgb(0x1e, 0x40, 0xaf),
-    "blue-900":    Color.rgb(0x1e, 0x3a, 0x8a),
-    "blue-950":    Color.rgb(0x17, 0x25, 0x54),
-    "yellow-50":   Color.rgb(0xfe, 0xfc, 0xe8),
-    "yellow-100":  Color.rgb(0xfe, 0xf9, 0xc3),
-    "yellow-200":  Color.rgb(0xfe, 0xf0, 0x8a),
-    "yellow-300":  Color.rgb(0xfd, 0xe0, 0x47),
-    "yellow-400":  Color.rgb(0xfa, 0xcc, 0x15),
-    "yellow-500":  Color.rgb(0xea, 0xb3, 0x08),
-    "yellow-600":  Color.rgb(0xca, 0x8a, 0x04),
-    "yellow-700":  Color.rgb(0xa1, 0x62, 0x07),
-    "yellow-800":  Color.rgb(0x85, 0x4d, 0x0e),
-    "yellow-900":  Color.rgb(0x71, 0x3f, 0x12),
-    "yellow-950":  Color.rgb(0x42, 0x20, 0x06),
-    "orange-50":   Color.rgb(0xff, 0xf7, 0xed),
-    "orange-100":  Color.rgb(0xff, 0xed, 0xd5),
-    "orange-200":  Color.rgb(0xfe, 0xd7, 0xaa),
-    "orange-300":  Color.rgb(0xfd, 0xba, 0x74),
-    "orange-400":  Color.rgb(0xfb, 0x92, 0x3c),
-    "orange-500":  Color.rgb(0xf9, 0x73, 0x16),
-    "orange-600":  Color.rgb(0xea, 0x58, 0x0c),
-    "orange-700":  Color.rgb(0xc2, 0x41, 0x0c),
-    "orange-800":  Color.rgb(0x9a, 0x34, 0x12),
-    "orange-900":  Color.rgb(0x7c, 0x2d, 0x12),
-    "orange-950":  Color.rgb(0x43, 0x14, 0x07),
-    "amber-50":    Color.rgb(0xff, 0xfb, 0xeb),
-    "amber-100":   Color.rgb(0xfe, 0xf3, 0xc7),
-    "amber-200":   Color.rgb(0xfd, 0xe6, 0x8a),
-    "amber-300":   Color.rgb(0xfc, 0xd3, 0x4d),
-    "amber-400":   Color.rgb(0xfb, 0xbf, 0x24),
-    "amber-500":   Color.rgb(0xf5, 0x9e, 0x0b),
-    "amber-600":   Color.rgb(0xd9, 0x77, 0x06),
-    "amber-700":   Color.rgb(0xb4, 0x53, 0x09),
-    "amber-800":   Color.rgb(0x92, 0x40, 0x0e),
-    "amber-900":   Color.rgb(0x78, 0x35, 0x0f),
-    "amber-950":   Color.rgb(0x45, 0x1a, 0x03),
-    "green-50":    Color.rgb(0xf0, 0xfd, 0xf4),
-    "green-100":   Color.rgb(0xdc, 0xfc, 0xe7),
-    "green-200":   Color.rgb(0xbb, 0xf7, 0xd0),
-    "green-300":   Color.rgb(0x86, 0xef, 0xac),
-    "green-400":   Color.rgb(0x4a, 0xde, 0x80),
-    "green-500":   Color.rgb(0x22, 0xc5, 0x5e),
-    "green-600":   Color.rgb(0x16, 0xa3, 0x4a),
-    "green-700":   Color.rgb(0x15, 0x80, 0x3d),
-    "green-800":   Color.rgb(0x16, 0x65, 0x34),
-    "green-900":   Color.rgb(0x14, 0x53, 0x2d),
-    "green-950":   Color.rgb(0x05, 0x2e, 0x16),
-  }
-
-  def self.[](tailwind : Symbol)
-    TW[tailwind]
-  end
-
-  def self.rgb(r : UInt8, g : UInt8, b : UInt8, a : UInt8 = 255)
-    Color.new(*LCH.rgb2lch(r, g, b).map(&.to_i), a.to_i)
-  end
-
-  # Changes this color's brightness according to *percentage*.
-  def brighten(percentage : Float64) : Color
-    Color.new((l*percentage).clamp(0..360).to_i, c, h, a)
-  end
-
-  # Returns the corresponding SFML color.
-  def sf : SF::Color
-    SF::Color.new(*LCH.lch2rgb(l, c, h), a)
-  end
-end
-
 class ::Hash
   def transform(key : K, default_value : V, & : V -> V) : V
     if entry_index = find_entry_with_index(key)
@@ -1167,7 +1068,493 @@ struct Queue(T)
   end
 end
 
+struct Char
+  def view : StringView
+    to_s.view
+  end
+
+  def each_char(& : Char ->) : Nil
+    yield self
+  end
+end
+
+struct StringView
+  getter string : String
+  getter byte_start : Int32
+  getter byte_end : Int32
+
+  def initialize(@string, @byte_start, @byte_end)
+    unless 0 <= @byte_start <= @byte_end <= @string.bytesize
+      raise ArgumentError.new("invalid byte range #{@byte_start}...#{@byte_end}")
+    end
+  end
+
+  private def self.join_copy(views : Enumerable(StringView)) : StringView
+    sum = String.build do |io|
+      views.each do |view|
+        io << view
+      end
+    end
+
+    StringView.new(sum, 0, sum.bytesize)
+  end
+
+  def self.join(views : Enumerable(StringView)) : StringView
+    view_head = view_tail = nil
+
+    views.each do |view|
+      unless view_tail
+        view_head = view_tail = view
+        next
+      end
+
+      unless view_tail.precedes?(view)
+        return join_copy(views)
+      end
+
+      view_tail = view
+    end
+
+    unless view_head && view_tail
+      raise Enumerable::EmptyError.new
+    end
+
+    StringView.new(view_head.string, view_head.byte_start, view_tail.byte_end)
+  end
+
+  def before_begin : StringView
+    StringView.new(@string, @byte_start, @byte_start)
+  end
+
+  def after_end : StringView
+    StringView.new(@string, @byte_end, @byte_end)
+  end
+
+  def empty? : Bool
+    @byte_start == @byte_end
+  end
+
+  def bytesize : Int32
+    @byte_end - @byte_start
+  end
+
+  def size : Int32
+    if @string.ascii_only?
+      bytesize
+    elsif {@byte_start, @byte_end} == {0, @string.bytesize}
+      @string.size
+    else
+      size = 0
+      each_char do
+        size += 1
+      end
+      size
+    end
+  end
+
+  def blank? : Bool
+    each_char do |char|
+      return false unless char.whitespace?
+    end
+
+    true
+  end
+
+  def starts_with?(ch : Char) : Bool
+    first_char? == ch
+  end
+
+  def starts_with?(string : String) : Bool
+    return false if size < string.size
+
+    (0...string.bytesize).each do |offset|
+      byte = string.byte_at(offset)
+
+      unless @string.byte_at(@byte_start + offset) == byte
+        return false
+      end
+    end
+
+    true
+  end
+
+  def ends_with?(ch : Char)
+    last_char? == ch
+  end
+
+  def precedes?(other : StringView)
+    @string.same?(other.string) && @byte_end == other.byte_start
+  end
+
+  def +(other : StringView) : StringView
+    if precedes?(other)
+      return StringView.new(@string, @byte_start, other.@byte_end)
+    end
+
+    sum = String.build do |io|
+      io << self
+      io << other
+    end
+
+    StringView.new(sum, 0, sum.bytesize)
+  end
+
+  # NOTE: this is probably not what you want. You probably want `lskip`
+  # or `rskip`.
+  def skip(nbytes : Int32) : StringView
+    StringView.new(@string, @byte_start + nbytes, @byte_end)
+  end
+
+  def first_char? : Char?
+    each_char { |char| return char }
+  end
+
+  def last_char? : Char?
+    reverse_each_char { |char| return char }
+  end
+
+  def lcount(prefix : Char) : Int32
+    count = 0
+
+    each_char do |char|
+      break unless prefix == char
+
+      count += 1
+    end
+
+    count
+  end
+
+  def lskip(nchars : Int32, charset = nil) : StringView
+    reader = Char::Reader.new(@string, pos: @byte_start)
+    reader.each do |char|
+      break if reader.pos >= @byte_end
+
+      if nchars.zero? || (charset && !char.in?(charset))
+        return StringView.new(@string, reader.pos, @byte_end)
+      end
+
+      nchars -= 1
+    end
+
+    after_end
+  end
+
+  # Removes one leading character *ch* from this string view, if present.
+  def lchop(ch : Char) : StringView
+    starts_with?(ch) ? skip(ch.bytesize) : self
+  end
+
+  def lstrip(charset = "\n") : StringView
+    reader = Char::Reader.new(@string, pos: @byte_start)
+    reader.each do |char|
+      break if reader.pos >= @byte_end
+
+      unless charset.includes?(char)
+        return StringView.new(@string, reader.pos, byte_end: @byte_end)
+      end
+    end
+
+    after_end
+  end
+
+  def rstrip(charset = "\n") : StringView
+    reader = Char::Reader.new(@string, pos: @byte_end)
+
+    until reader.pos == @byte_start
+      reader.previous_char
+
+      unless charset.includes?(reader.current_char)
+        return StringView.new(@string, @byte_start, byte_end: reader.pos + 1)
+      end
+    end
+
+    before_begin
+  end
+
+  def strip(charset = "\n")
+    lstrip(charset).rstrip(charset)
+  end
+
+  # Splits before *index* (i.e. *index*-th character is included in the right-
+  # hand side).
+  def split(index : Int32) : {StringView, StringView}
+    l, mid, r = partition(index)
+    {l, mid + r}
+  end
+
+  def partition(index : Int32) : {StringView, StringView, StringView}
+    reader = Char::Reader.new(@string, pos: @byte_start)
+
+    until reader.pos == @byte_end
+      if index.zero?
+        return {StringView.new(@string, @byte_start, reader.pos),
+                StringView.new(@string, reader.pos, reader.pos + reader.current_char.bytesize),
+                StringView.new(@string, reader.pos + reader.current_char.bytesize, @byte_end)}
+      end
+
+      index -= 1
+      reader.next_char
+    end
+
+    {self, after_end, after_end}
+  end
+
+  def partition(separator : Char) : {StringView, StringView, StringView}
+    reader = Char::Reader.new(@string, pos: @byte_start)
+
+    until reader.pos == @byte_end
+      if reader.current_char == separator
+        l = StringView.new(@string, @byte_start, reader.pos)
+        mid = StringView.new(@string, reader.pos, reader.pos + 1)
+        r = StringView.new(@string, reader.pos + 1, @byte_end)
+        return l, mid, r
+      end
+
+      reader.next_char
+    end
+
+    {self, after_end, after_end}
+  end
+
+  # Yields each character in this string view, going from left to right.
+  def each_char(& : Char ->) : Nil
+    reader = Char::Reader.new(@string, pos: @byte_start)
+
+    until reader.pos == @byte_end
+      yield reader.current_char
+      reader.next_char
+    end
+  end
+
+  # Yields each character in this string view, going from right to left.
+  def reverse_each_char(& : Char ->) : Nil
+    reader = Char::Reader.new(@string, pos: @byte_end)
+
+    until reader.pos < @byte_start
+      reader.previous_char # byte end must be skipped, we're exclusive!
+      yield reader.current_char
+    end
+  end
+
+  # Yields each character in this string view along with its index.
+  def each_char_with_index(& : Char, Int32 ->) : Nil
+    index = 0
+
+    each_char do |char|
+      yield char, index
+
+      index += 1
+    end
+  end
+
+  # Yields each character in this string view along with its byte index
+  # within this view's parent string.
+  def each_char_with_abs_byte_index(& : Char, Int32 ->) : Nil
+    index = 0
+
+    each_char do |char|
+      yield char, index
+
+      index += char.bytesize
+    end
+  end
+
+  # Yields each word in this view.
+  #
+  # This method never consumes any characters. All trailing and leading whitespaces
+  # are kept (if any) -- attached either to the left- or the right-hand side word.
+  def each_word(& : StringView ->) : Nil
+    l, sep0, r = partition(' ')
+
+    loop do
+      yield l unless l.empty?
+
+      break if sep0.empty?
+
+      if r.empty?
+        yield sep0
+        break
+      end
+
+      succ, sep1, r1 = r.partition(' ')
+
+      l = sep0 + succ
+      sep0 = sep1
+      r = r1
+    end
+  end
+
+  # Yields each word in this view along with its index.
+  #
+  # See also: `each_word`.
+  def each_word_with_index(& : StringView, Int32 ->) : Nil
+    index = 0
+
+    each_word do |word|
+      yield word, index
+
+      index += 1
+    end
+  end
+
+  def to_s(io)
+    (@byte_start...@byte_end).each do |byte_index|
+      io.write_byte(@string.byte_at(byte_index))
+    end
+  end
+
+  def to_s : String
+    if @byte_start == 0 && @byte_end == @string.bytesize
+      return @string
+    end
+
+    super
+  end
+
+  def to_slice : Bytes
+    @string.to_slice[@byte_start, @byte_end - @byte_start]
+  end
+
+  def inspect(io)
+    io << "…\"" << self << "\"…"
+  end
+end
+
 class String
+  def ===(other : StringView) : Bool
+    to_slice == other.to_slice
+  end
+end
+
+struct Char::Reader
+  def reverse_each(& : Char ->)
+    while has_previous?
+      yield previous_char
+    end
+  end
+end
+
+# struct StringDelta
+#   alias Change = Keep | Mod
+#   alias Mod = Ins | Sub | Del
+
+#   record Keep, char : Char
+#   record Sub, char : Char
+#   record Ins, string : String
+#   record Del
+
+#   class Builder
+#     def initialize(@base : String)
+#       @mods = {} of Int32 => Mod
+#       @byte_index = 0
+#       @bytesize = 0
+#     end
+
+#     # Advances the cursor through *object*.
+#     #
+#     # Raises `ArgumentError` if there is no *object* following the cursor.
+#     def keep(object : Char | String | StringView)
+#       reader = Char::Reader.new(@base, pos: @byte_index)
+
+#       object.each_char do |char|
+#         unless reader.current_char == char
+#           raise ArgumentError.new("keep() of char that does not exist in the base string")
+#         end
+
+#         reader.next_char
+
+#         @byte_index += 1
+#         @bytesize += 1
+#       end
+#     end
+
+#     # Replaces the character at the cursor with *char*.
+#     def replace(char : Char) : Nil
+#       unless @mods.put?(@byte_index, Sub.new(char))
+#         raise ArgumentError.new("conflict")
+#       end
+#     end
+
+#     # Inserts *string* before the current cursor position.
+#     def insert(string : String) : Nil
+#       unless @mods.put?(@byte_index, Ins.new(string))
+#         raise ArgumentError.new("conflict")
+#       end
+
+#       @bytesize += string.bytesize
+#     end
+
+#     # Removes the character at the current cursor position.
+#     def delete : Nil
+#       unless @mods.put?(@byte_index, Del.new)
+#         raise ArgumentError.new("conflict")
+#       end
+
+#       @bytesize -= 1
+#     end
+
+#     # Returns a `StringDelta` object containing all the changes made so far.
+#     def final : StringDelta
+#       StringDelta.new(@base, @bytesize, @mods)
+#     end
+#   end
+
+#   # :nodoc:
+#   def initialize(@base : String, @bytesize : Int32, @mods : Hash(Int32, Mod))
+#   end
+
+#   # Constructs an empty string delta.
+#   def initialize(@base : String)
+#     @mods = {} of Int32 => Mod
+#     @bytesize = @base.bytesize
+#   end
+
+#   # Iterates through the base string and yields the change object associated
+#   # with each char.
+#   def each_char_as_change(& : Change ->) : Nil
+#     bytesize = 0
+
+#     reader = Char::Reader.new(@base)
+#     reader.each do |char|
+#       break if bytesize == @bytesize
+
+#       if mod = @mods[reader.pos]?
+#         yield mod
+#         if mod.is_a?(Ins)
+#           bytesize += mod.string.bytesize
+#         else
+#           bytesize += mod.char.bytesize
+#         end
+#       else
+#         yield Keep.new(char)
+#         bytesize += char.bytesize
+#       end
+#     end
+#   end
+
+#   # Applies changes to the base string and returns the resulting string.
+#   def apply : String
+#     String.build do |io|
+#       each_char_as_change do |change|
+#         case change
+#         in Keep, Sub
+#           io << change.char
+#         in Ins
+#           io << change.string
+#         in Del
+#           # skip
+#         end
+#       end
+#     end
+#   end
+# end
+
+class String
+  def view : StringView
+    StringView.new(self, 0, bytesize)
+  end
+
   def li(*, bullet = "*", indent = 0, ws = ' ') : String
     String.build(indent * ws.bytesize + bullet.bytesize + ' '.bytesize + bytesize) do |io|
       indent.times { io << ws }
@@ -1245,6 +1632,29 @@ class String
       yield word, index
       index += 1
     end
+  end
+
+  # Yields string views corresponding to each line in this string. Byte slices
+  # will include *trailing* newlines (i.e. this method does not "take away" any
+  # characters from the string).
+  #
+  # If this string ends with a trailing newline, also yields an empty trailing
+  # string view.
+  #
+  # If this string is empty, yields one empty string view.
+  def each_line_view(& : StringView ->) : Nil
+    start = 0
+
+    unless empty?
+      reader = Char::Reader.new(self)
+      reader.each do |char|
+        next unless char == '\n'
+        yield StringView.new(self, start, start + (reader.pos - start) + 1)
+        start = reader.pos + 1
+      end
+    end
+
+    yield StringView.new(self, start, bytesize)
   end
 end
 
@@ -2648,7 +3058,7 @@ module Disorder
 end
 
 def oklch(l : Float64, c : Float64, h : Float64)
-  Oklch.to_rgb(l*100, c, h)
+  Oklch.to_rgb(l, c, h)
 end
 
 # FIFO fixed-capacity cache.
@@ -3112,39 +3522,57 @@ end
 
 struct SyncHash(K, V)
   @hash = {} of K => V
-  @lock = Mutex.new
+  @lock = Sync::RWLock.new
 
   def size : Int32
-    @lock.synchronize { @hash.size }
+    @lock.read { @hash.size }
   end
 
   def each(& : K, V ->)
-    @lock.synchronize do
+    @lock.read do
       @hash.each { |key, value| yield key, value }
     end
   end
 
+  def put_if_absent(key : K, & : -> V) : V
+    # Fast path: definitely exists
+    @lock.read do
+      if value = @hash[key]?
+        return value
+      end
+    end
+
+    # Slow path: probably does not exist
+    @lock.write do
+      if value = @hash[key]?
+        return value
+      end
+
+      @hash[key] = yield
+    end
+  end
+
   def []=(key : K, value : V) : self
-    @lock.synchronize { @hash[key] = value }
+    @lock.write { @hash[key] = value }
 
     self
   end
 
   def delete(key : K) : self
-    @lock.synchronize { @hash.delete(key) }
+    @lock.write { @hash.delete(key) }
 
     self
   end
 
   def find(key : K, & : V -> T) : T forall T
-    @lock.synchronize do
+    @lock.read do
       return unless value = @hash[key]?
       yield value
     end
   end
 
   def clear
-    @lock.synchronize { @hash.clear }
+    @lock.write { @hash.clear }
   end
 end
 
