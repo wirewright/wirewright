@@ -9,8 +9,8 @@ require "colorize"
 require "permafrost"
 require "wait_group"
 
-require "../oklch"
 require "../util"
+require "../rtk"
 
 require "./wirewright/term"
 require "./wirewright/ml"

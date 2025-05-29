@@ -18,6 +18,7 @@
 module Ww::Soma
 end
 
+require "./color"
 require "./font"
 
 {% unless flag?(:soma6) %}

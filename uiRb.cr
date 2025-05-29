@@ -96,27 +96,6 @@ record Ring, l : UInt8, r : UInt8, t : UInt8, b : UInt8 do
   end
 end
 
-record RGB, r : UInt8, g : UInt8, b : UInt8 do
-  def self.parse(term : Term) : RGB
-    Term.case(term) do
-      matchpi(
-        %{(r←(%number u8) g←(%number u8) b←(%number u8))},
-        %{(rgb r←(%number u8) g←(%number u8) b←(%number u8))},
-      ) do
-        new(r.to(UInt8), g.to(UInt8), b.to(UInt8))
-      end
-
-      matchpi %{(oklch l←(%number 0 <= _ <= 1) c←(%number 0 <= _ <= 1) h←(%number 0 <= _ <= 360))} do
-        new(*oklch(l.to(Float64), c.to(Float64), h.to(Float64)))
-      end
-
-      otherwise do
-        new(0u8, 0u8, 0u8)
-      end
-    end
-  end
-end
-
 enum Heading : UInt8
   Left
   Right
@@ -141,8 +120,8 @@ end
 defcase FillTextSelection,
   anchor : UInt32,
   span : Int32,
-  fill : RGB,
-  color : RGB
+  fill : Color,
+  color : Color
 
 # Draws a string of text.
 #
@@ -159,7 +138,7 @@ defcase FillText < DrawCommand, z : Int32,
   weight : FontWeight,
   leading : Float32,
   tracking : Float32,
-  color : RGB,
+  color : Color,
   sel : FillTextSelection?
 
 # Draws a filled rectangle.
@@ -174,7 +153,7 @@ defcase FillText < DrawCommand, z : Int32,
 defcase FillRect < DrawCommand,
   z : Int32,
   box : Rect,
-  color : RGB,
+  color : Color,
   alpha : UInt8,
   radius : UInt16,
   ring : Ring
@@ -189,7 +168,7 @@ defcase FillRect < DrawCommand,
 defcase OutlineRect < DrawCommand,
   z : Int32,
   box : Rect,
-  color : RGB,
+  color : Color,
   thickness : UInt8,
   radius : UInt16
 
@@ -203,7 +182,7 @@ defcase FillCircle < DrawCommand,
   z : Int32,
   origin : Point,
   radius : UInt16,
-  color : RGB
+  color : Color
 
 # Draws a filled triangle.
 #
@@ -215,7 +194,7 @@ defcase FillTriangle < DrawCommand,
   z : Int32,
   box : Rect,
   heading : Heading,
-  color : RGB
+  color : Color
 
 # A limited view into the product of children draw commands *children*.
 #
@@ -226,7 +205,7 @@ defcase View < DrawCommand,
   z : Int32,
   children : Array(DrawCommand),
   box : Rect,
-  color : RGB
+  color : Color
 
 enum Cursor : UInt8
   Arrow
@@ -249,7 +228,7 @@ end
 defcase Window,
   cursor : Cursor,
   size : Point,
-  color : RGB,
+  color : Color,
   children : Array(DrawCommand)
 
 # :nodoc:
@@ -284,7 +263,7 @@ def UIR::Platform.draw(ctx : DrawContext, node : Term, x : Int32, y : Int32, z :
                                    sel-anchor: (%optional 0 sel-anchor←(%number u32))
                                    sel-span: (%optional 0 sel-span←(%number i32))}]
         ) do
-          sel = FillTextSelection.new(sel_anchor.to(UInt32), sel_span.to(Int32), RGB.parse(sel_fill), RGB.parse(sel_color))
+          sel = FillTextSelection.new(sel_anchor.to(UInt32), sel_span.to(Int32), Color.term(sel_fill), Color.term(sel_color))
         end
       end
 
@@ -296,7 +275,7 @@ def UIR::Platform.draw(ctx : DrawContext, node : Term, x : Int32, y : Int32, z :
         weight: FontWeight.parse(weight.to(Int32)),
         leading: leading.to(Float32),
         tracking: 1.0f32,
-        color: RGB.parse(color),
+        color: Color.term(color),
         sel: sel
       )
     end
@@ -319,7 +298,7 @@ def UIR::Platform.draw(ctx : DrawContext, node : Term, x : Int32, y : Int32, z :
           origin: Point.new(x + dl.to(Int32), y + dt.to(Int32)),
           extent: Point.new(w.to(Int32), h.to(Int32)),
         ),
-        color: RGB.parse(bg),
+        color: Color.term(bg),
         alpha: alpha.to(UInt8),
         radius: radius.to(UInt16),
         ring: Ring.new(rl.to(UInt8), rr.to(UInt8), rt.to(UInt8), rb.to(UInt8)),
@@ -342,7 +321,7 @@ def UIR::Platform.draw(ctx : DrawContext, node : Term, x : Int32, y : Int32, z :
           origin: Point.new(x + dl.to(Int32) + inset, y + dt.to(Int32) + inset),
           extent: Point.new(w.to(Int32) - inset*2, h.to(Int32) - inset*2),
         ),
-        color: RGB.parse(bg),
+        color: Color.term(bg),
         thickness: inset.to_u8,
         radius: radius.to(UInt16),
       )
@@ -357,7 +336,7 @@ def UIR::Platform.draw(ctx : DrawContext, node : Term, x : Int32, y : Int32, z :
       ctx.commands << FillCircle.new(z,
         origin: Point.new(x + dl.to(Int32), y + dt.to(Int32)),
         radius: radius.to(UInt16),
-        color: RGB.parse(bg),
+        color: Color.term(bg),
       )
     end
 
@@ -375,7 +354,7 @@ def UIR::Platform.draw(ctx : DrawContext, node : Term, x : Int32, y : Int32, z :
           extent: Point.new(w.to(Int32), h.to(Int32)),
         ),
         heading: Heading.parse(pointing),
-        color: RGB.parse(bg),
+        color: Color.term(bg),
       )
     end
 
@@ -404,7 +383,7 @@ def UIR::Platform.draw(ctx : DrawContext, node : Term, x : Int32, y : Int32, z :
           origin: Point.new(x + dl.to(Int32), y + dt.to(Int32)),
           extent: Point.new(w.to(Int32), h.to(Int32)),
         ),
-        color: RGB.parse(bg),
+        color: Color.term(bg),
       )
     end
 
@@ -448,7 +427,7 @@ def UIR::Platform.draw(markup : Term) : Window
       # Smaller z-index will be drawn on top of, so the default order (ASC) is fine.
       children.sort_by!(&.z)
 
-      Window.new(cursor0, Point.new(w.to(Int32), h.to(Int32)), RGB.parse(bg), children)
+      Window.new(cursor0, Point.new(w.to(Int32), h.to(Int32)), Color.term(bg), children)
     end
 
     # TODO: if markup is invalid, display an error window.

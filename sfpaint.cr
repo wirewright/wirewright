@@ -244,11 +244,11 @@ module UIR::Platform::SFML
     end
   end
 
-  private def sf(object : RGB) : SF::Color
+  private def sf(object : Color) : SF::Color
     SF::Color.new(object.r, object.g, object.b)
   end
 
-  private def sf(object : RGB, a : UInt8) : SF::Color
+  private def sf(object : Color, a : UInt8) : SF::Color
     SF::Color.new(object.r, object.g, object.b, a)
   end
 

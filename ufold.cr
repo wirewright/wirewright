@@ -205,10 +205,6 @@ module Microfold
         ctx.sheet.with(key, (n * ctx.rem * 0.25).ceil)
       end
 
-      matchpi %{(oklch l←(%number 0 <= _ <= 1) c←(%number 0 <= _ <= 1) h←(%number 0 <= _ <= 360))} do
-        ctx.sheet.with(key, oklch(l.to(Float64), c.to(Float64), h.to(Float64)))
-      end
-
       matchpi %{(/ a_number (%all (%not 0) b_number))} do
         ctx.sheet.with(key, a / b)
       end
@@ -217,7 +213,7 @@ module Microfold
         ctx.sheet.without(key)
       end
 
-      matchpi %{_symbol}, %{_string}, %{_number}, %{_boolean} do
+      otherwise do
         ctx.sheet.with(key, value)
       end
     end
