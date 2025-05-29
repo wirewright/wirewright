@@ -33,6 +33,18 @@ module Ww
   RESOURCES = Path[ENV["SOMA_RESOURCES_DIR"]? || Dir.current]
 
   MT = Fiber::ExecutionContext::MultiThreaded.new("Wirewright", System.cpu_count.to_i)
+
+  module Approx
+    extend self
+
+    EPS = 0.001
+
+    {% for type in %w(Float32 Float64) %}
+      def equals?(a : {{type.id}}, b : {{type.id}}) : Bool
+        (a - b).abs < EPS
+      end
+    {% end %}
+  end
 end
 
 require "socket"

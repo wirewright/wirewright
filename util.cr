@@ -3179,3 +3179,11 @@ def watch(path : Path, &fn : IO ->)
     end
   end
 end
+
+module Math
+  DEG_TO_RAD = Math::PI/180
+
+  def deg2rad(degrees)
+    degrees * DEG_TO_RAD
+  end
+end

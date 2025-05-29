@@ -19,3 +19,8 @@ module Ww::Soma
 end
 
 require "./font"
+
+{% unless flag?(:soma6) %}
+  require "./point"
+  require "./rect"
+{% end %}
