@@ -61,6 +61,11 @@ module Ww::Soma
       mv(x: x * other, y: y * other)
     end
 
+    # Returns the 2D cross product of this point and *other* (as vectors from origin).
+    def x(other : Point) : Float32
+      x * other.y - y * other.x
+    end
+
     # Subtracts *other* point or scalar from this point.
     def -(other) : Point
       self + -other

@@ -18,10 +18,15 @@
 module Ww::Soma
 end
 
-require "./color"
-require "./font"
+require "./soma/color"
+require "./soma/font"
 
-{% unless flag?(:soma6) %}
-  require "./point"
-  require "./rect"
+{% if flag?(:newsoma) %}
+  require "./soma/tf"
+  require "./soma/pencil"
+  require "./soma/draw_command"
+  require "./soma/point"
+  require "./soma/segment"
+  require "./soma/rect"
+  require "./soma/quad"
 {% end %}
