@@ -24,9 +24,10 @@ require "./soma/font"
 {% if flag?(:newsoma) %}
   require "./soma/tf"
   require "./soma/pencil"
-  require "./soma/draw_command"
   require "./soma/point"
   require "./soma/segment"
   require "./soma/rect"
   require "./soma/quad"
+  require "./soma/paint"
+  require "./soma/draw_command"
 {% end %}

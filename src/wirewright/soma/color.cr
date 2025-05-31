@@ -1,5 +1,5 @@
 module Ww::Soma
-  # |@ns soma.color
+  # |@ soma.color
   #
   # |@block
   # Wirewright implements a variety of ways to specify the color of stuff. This
@@ -139,12 +139,10 @@ module Ww::Soma
     # *fallback* is returned when *term* cannot be parsed.
     def self.term(term : Term, fallback : Color = rgba(0, 0, 0)) : Color
       Term.case(term) do
-        # |@ns soma.color
-        # |@section OkLCH
-        # |@item oklch
+        # |@ soma.color.oklch
         #
         # |@block
-        # `oklch` defines a solid color using the OKLCH color space, which represents
+        # `oklch` defines a color using the OKLCH color space, which represents
         # colors with perceptual lightness, chroma, and hue.
         # |@endblock
         #
@@ -159,7 +157,7 @@ module Ww::Soma
           oklch(l.to(Float64), c.to(Float64), h.to(Float64))
         end
 
-        # |@overload soma.color.oklch
+        # |@ soma.color.oklch
         #
         # |@key opacity -- Specifies the opacity of the color (a number between 0
         # and 1, where 0 means fully transparent and 1 means opaque).
@@ -168,13 +166,11 @@ module Ww::Soma
           color.change(a: opacity_to_alpha(opacity))
         end
 
-        # |@ns soma.color
-        # |@section RGB
-        # |@item rgb
+        # |@ soma.color.rgb
         #
         # |@block
-        # `rgb` defines a solid color using the RGB color space, specifying red,
-        # green, and blue components.
+        # `rgb` defines a color using the RGB color space, specifying red, green,
+        # and blue components.
         # |@endblock
         #
         # |@key r -- Specifies the red component of the color, an 8-bit unsigned
@@ -192,7 +188,7 @@ module Ww::Soma
           rgba(r.to(UInt8), g.to(UInt8), b.to(UInt8))
         end
 
-        # |@overload soma.color.rgb
+        # |@ soma.color.rgb
         #
         # |@key opacity -- Specifies the opacity of the color (a number between 0
         # and 1, where 0 means fully transparent and 1 means opaque).
@@ -201,7 +197,7 @@ module Ww::Soma
           color.change(a: opacity_to_alpha(opacity))
         end
 
-        # |@overload soma.color.rgb
+        # |@ soma.color.rgb
         #
         # |@key a -- Specifies the alpha (opacity) component of the color, an 8-bit
         # unsigned integer (0 to 255).
@@ -212,12 +208,10 @@ module Ww::Soma
           rgba(r.to(UInt8), g.to(UInt8), b.to(UInt8), a.to(UInt8))
         end
 
-        # |@ns soma.color
-        # |@section HSL
-        # |@item hsl
+        # |@ soma.color.hsl
         #
         # |@block
-        # `hsl` defines a solid color using the HSL color space, specifying hue,
+        # `hsl` defines a color using the HSL color space, specifying hue,
         # saturation, and lightness.
         # |@endblock
         #
@@ -230,7 +224,7 @@ module Ww::Soma
           hsl(h.to(Float64), s.to(Float64), l.to(Float64))
         end
 
-        # |@overload soma.color.hsl
+        # |@ soma.color.hsl
         #
         # |@key a -- Specifies the opacity of the color (a number between 0 and 1,
         # where 0 means fully transparent and 1 means opaque).
@@ -239,9 +233,7 @@ module Ww::Soma
           color.change(a: opacity_to_alpha(opacity))
         end
 
-        # |@ns soma.color
-        # |@section Named colors and hex colors
-        # |@item string
+        # |@ soma.color.string
         #
         # |@block
         # String terms are treated in the following way (and order).
@@ -259,8 +251,7 @@ module Ww::Soma
           string?(term.to(String)) || continue
         end
 
-        # |@ns soma.color
-        # |@section Raw integer color
+        # |@ soma.color.integer
         #
         # |@block
         # Number terms that fit within the unsigned 32-bit range are parsed as
@@ -273,7 +264,7 @@ module Ww::Soma
         #
         # NOTE: since this variant cannot distinguish between colors of the form
         # `0xRRGGBBAA` vs. `0xRRGGBB`, you **must** specify the alpha component.
-        # If you don't like that, use the named/hex color variant (@~ string ~@).
+        # If you don't like that, use the named/hex color variant (`soma.color.string`).
         # |@endblock
         matchpi %{(%number u32)} do
           rgba(term.to(UInt32))

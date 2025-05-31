@@ -20,6 +20,11 @@ module Ww::Soma
       new(tl, tl + size)
     end
 
+    # Constructs an empty rectangle at 0, 0.
+    def self.empty : Rect
+      new(Point.new(0, 0), Point.new(0, 0))
+    end
+
     # Returns the size (width and height) of this rectangle.
     def size : Point
       br - tl
@@ -84,10 +89,14 @@ module Ww::Soma
       includes_y?(object.to_point.y)
     end
 
-    # Returns four floats: the x and y coordinates of this rectangle's top-left
-    # point, followed by its width and height.
+    # Returns flattened `xy`, `wh`.
     def xywh : {Float32, Float32, Float32, Float32}
       {*xy, *wh}
+    end
+
+    # Returns flattened `ixy`, `iwh`.
+    def ixywh : {Int32, Int32, Int32, Int32}
+      {*ixy, *iwh}
     end
 
     # Returns four floats: two zeros representing the origin, followed by this
@@ -100,6 +109,12 @@ module Ww::Soma
     # top-left point.
     def xy : {Float32, Float32}
       {x, y}
+    end
+
+    # Returns two integers representing the x and y coordinates of this rectangle's
+    # top-left point. The ceiling function is used to remove the fractional part.
+    def ixy : {Int32, Int32}
+      tl.ixy
     end
 
     # Returns two floats representing the width and height of this rectangle.
@@ -131,6 +146,11 @@ module Ww::Soma
     # Returns the height of this rectangle.
     def h : Float32
       size.y
+    end
+
+    # Returns the size of this rectangle's diagonal.
+    def diagonal : Float32
+      Math.hypot(w, h)
     end
 
     # Calculates the A point for this rectangle and *radii*.
@@ -235,6 +255,15 @@ module Ww::Soma
     # Returns a copy of this rectangle translated (moved) by *delta*.
     def translate(delta : Point) : Rect
       Rect.new(tl + delta, br + delta)
+    end
+
+    # Converts *point* (whose components normally are, but not restricted to,
+    # the unit range 0-1), into coordinates within this rectangle.
+    #
+    # For example, an `Point(0.5, 0.5)` point would be the same as the middle
+    # point (`mid`) of this rectangle.
+    def map(point : Point) : Point
+      Point.new(x + point.x * w, y + point.y * h)
     end
   end
 end
