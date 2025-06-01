@@ -1,0 +1,32 @@
+;; NOTE: this file stores the state for the `dev` tool. Prefer to use
+;; the `dev` tool to modify this file.
+
+preset:
+"dev"
+
+presets:
+{"tests":
+  {flags: {"preview_mt": true, "execution_context": true},
+   source: "pattern6_test.cr"},
+ "mt":
+  {flags: {"preview_mt": true, "execution_context": true}},
+ "dwuir":
+  {flags:
+    {"preview_mt": true,
+     "execution_context": true,
+     "newsoma": true},
+   source: "dwuir2-failed-layers.cr"},
+ "dev":
+  {flags: {"preview_mt": true, "execution_context": true},
+   source: "src/dev.cr"},
+ "soma":
+  {linkdirs: {"ext/sfml/lib": true},
+   flags:
+    {"preview_mt": true,
+     "execution_context": true,
+     "soma6": true},
+   source: "soma6.cr"}}
+
+protocol:
+"dev0"
+
