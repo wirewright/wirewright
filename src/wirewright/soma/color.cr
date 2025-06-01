@@ -160,7 +160,7 @@ module Ww::Soma
         # |@ soma.color.oklch
         #
         # |@key opacity -- Specifies the opacity of the color (a number between 0
-        # and 1, where 0 means fully transparent and 1 means opaque).
+        # and 1, where 0 means fully transparent and 1 means fully opaque).
         matchpi %{(oklch l_number c_number h_number opacity_number)} do
           color = oklch(l.to(Float64), c.to(Float64), h.to(Float64))
           color.change(a: opacity_to_alpha(opacity))
@@ -191,7 +191,7 @@ module Ww::Soma
         # |@ soma.color.rgb
         #
         # |@key opacity -- Specifies the opacity of the color (a number between 0
-        # and 1, where 0 means fully transparent and 1 means opaque).
+        # and 1, where 0 means fully transparent and 1 means fully opaque).
         matchpi %{(rgb r←(%number u8) g←(%number u8) b←(%number u8) opacity_number)} do
           color = rgba(r.to(UInt8), g.to(UInt8), b.to(UInt8))
           color.change(a: opacity_to_alpha(opacity))
@@ -227,7 +227,7 @@ module Ww::Soma
         # |@ soma.color.hsl
         #
         # |@key a -- Specifies the opacity of the color (a number between 0 and 1,
-        # where 0 means fully transparent and 1 means opaque).
+        # where 0 means fully transparent and 1 means fully opaque).
         matchpi %{(hsl h_number s_number l_number opacity_number)} do
           color = hsl(h.to(Float64), s.to(Float64), l.to(Float64))
           color.change(a: opacity_to_alpha(opacity))
@@ -297,7 +297,7 @@ module Ww::Soma
 
     # Maps the alpha component into unit range (0-1).
     #
-    # `0` means fully transparent. `1` means opaque.
+    # `0` means fully transparent. `1` means fully opaque.
     def ua : Float32
       @a/255.0f32
     end
@@ -314,8 +314,8 @@ module Ww::Soma
       @a.zero?
     end
 
-    # Returns `true` if this color is opaque; meaning its alpha value is exactly
-    # `255`. Returns `false` otherwise.
+    # Returns `true` if this color is fully opaque; meaning its alpha value is
+    # exactly `255`. Returns `false` otherwise.
     def opaque? : Bool
       @a == 255
     end

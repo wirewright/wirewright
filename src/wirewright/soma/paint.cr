@@ -121,7 +121,7 @@ module Ww::Soma
         # will support different specifications; consult e.g. `soma.painter.plutovg`.
         #
         # |@key opacity -- Specifies the opacity of the image, a number between `0`
-        # (meaning fully transparent) and `1` (meaning opaque).
+        # (meaning fully transparent) and `1` (meaning fully opaque).
         #
         # |@key fit soma.dwuir.image-fit -- Specifies how the image should occupy
         # the painted area.
@@ -288,7 +288,7 @@ module Ww::Soma
       Approx.equals?(opacity(paint), 0.0f32)
     end
 
-    # Returns `true` if *paint* is opaque. Returns `false` otherwise.
+    # Returns `true` if *paint* is fully opaque. Returns `false` otherwise.
     def opaque?(paint : Any) : Bool
       Approx.equals?(opacity(paint), 1.0f32)
     end
