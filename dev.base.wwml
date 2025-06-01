@@ -1,8 +1,5 @@
-;; NOTE: this file stores the state for the `dev` tool. Prefer to use
+;; NOTE: this file is part of the state for the `dev` tool. Prefer to use
 ;; the `dev` tool to modify this file.
-
-preset:
-"dev"
 
 presets:
 {"tests":
@@ -20,13 +17,13 @@ presets:
   {flags: {"preview_mt": true, "execution_context": true},
    source: "src/dev.cr"},
  "soma":
-  {linkdirs: {"ext/sfml/lib": true},
-   flags:
+  {flags:
     {"preview_mt": true,
      "execution_context": true,
      "soma6": true},
-   source: "soma6.cr"}}
+   source: "soma6.cr",
+   linkdirs: {"ext/sfml/lib": true}}}
 
 protocol:
-"dev0"
+"dev 0"
 

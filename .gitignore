@@ -25,3 +25,4 @@ massif.out.*
 flamegraph.svg
 perf.data
 perf.data.*
+dev.active.wwml
