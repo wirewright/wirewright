@@ -3180,6 +3180,14 @@ class Bimap(L, R)
     value1
   end
 
+  def put_if_absent(key : L, & : -> R) : R
+    if value = self[key]?
+      return value
+    end
+
+    self[key] = yield
+  end
+
   # Removes the association between the object of type `L` and an object of
   # type `R`. Returns the latter if found & removed. Returns `nil` otherwise.
   def delete(object : L) : R?
