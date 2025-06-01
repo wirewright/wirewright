@@ -149,6 +149,7 @@ module Ww::Soma
       whitesmoke:           rgba(245, 245, 245),
       yellow:               rgba(255, 255, 0),
       yellowgreen:          rgba(154, 205, 50),
+      transparent:          rgba(0, 0, 0, 0),
     }
   end
 end

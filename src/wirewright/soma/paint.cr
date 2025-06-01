@@ -141,8 +141,9 @@ module Ww::Soma
         # a straight line from a starting point to an ending point.
         # |@endblock
         #
-        # |@key stops -- Specifies a sequence of color stops, each with a position
-        # (a number between 0 and 1) and a color value. At least one stop is required.
+        # |@key stops soma.color -- Specifies a sequence of color stops, each with
+        # a position (a number between 0 and 1) and a color value. At least one
+        # stop is required.
         #
         # |@key begin-l -- Specifies the x-coordinate of the gradient's starting point;
         # numbers between `0` and `1` are expected although not enforced, relative to
@@ -186,8 +187,9 @@ module Ww::Soma
         # to an outer boundary.
         # |@endblock
         #
-        # |@key stops -- Specifies a sequence of color stops, each with a position
-        # (a number between 0 and 1) and a color value. At least one stop is required.
+        # |@key stops soma.color -- Specifies a sequence of color stops, each with
+        # a position (a number between 0 and 1) and a color value. At least one stop
+        # is required.
         #
         # |@key center-l -- Specifies the x-coordinate of the gradient's center point;
         # numbers between `0` and `1` are expected although not enforced, relative to

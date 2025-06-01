@@ -247,7 +247,7 @@ module Ww::Soma
         # Leading and trailing ASCII whitespace characters are omitted. Any other
         # characters will lead to the string being ignored.
         # |@endblock
-        matchpi %{_string} do
+        matchpi %{_symbol}, %{_string} do
           string?(term.to(String)) || continue
         end
 

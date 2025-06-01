@@ -14,6 +14,79 @@ module Ww::Soma
     end
   end
 
+  # Represents the four sides of a rectangle along with the paint that they should
+  # be stroked with.
+  record RectBorder, l = 0.0f32, r = 0.0f32, t = 0.0f32, b = 0.0f32, color : Paint::Any = Paint.transparent do
+    # Multiplies all four sides by *scale*.
+    def *(scale : Float32) : RectBorder
+      copy_with(l: l * scale, r: r * scale, t: t * scale, b: b * scale)
+    end
+
+    # Pads *rect* by the sizes of each side.
+    def pad(rect : Rect) : Rect
+      Rect.new(
+        rect.tl + Point.new(l, t),
+        rect.br - Point.new(r, b),
+      )
+    end
+
+    # Clamps the sizes of each side according to *bounds*.
+    def clamp(bounds : Rect) : RectBorder
+      copy_with(
+        l: l.clamp(0.0f32..bounds.w/4),
+        r: r.clamp(0.0f32..bounds.w/4),
+        t: t.clamp(0.0f32..bounds.h/4),
+        b: b.clamp(0.0f32..bounds.h/4),
+      )
+    end
+
+    # Returns `true` if this border is transparent. Returns `false` otherwise.
+    def transparent? : Bool
+      return true if Approx.equals?(l + r + t + b, 0.0f32)
+
+      Paint.transparent?(color)
+    end
+  end
+
+  # Represents the radii of the four rectangle corners.
+  record RectRadii, tl = 0.0f32, tr = 0.0f32, bl = 0.0f32, br = 0.0f32 do
+    def self.all(radius r : Float32)
+      new(r, r, r, r)
+    end
+
+    # Returns the top-left corner radius as a point.
+    def tl2 : Point
+      Point.new(tl, tl)
+    end
+
+    # Returns the top-right corner radius as a point.
+    def tr2 : Point
+      Point.new(tr, tr)
+    end
+
+    # Returns the bottom-left corner radius as a point.
+    def bl2 : Point
+      Point.new(bl, bl)
+    end
+
+    # Returns the bottom-right corner radius as a point.
+    def br2 : Point
+      Point.new(br, br)
+    end
+
+    # Clamps each radius according to *bounds*.
+    def clamp(bounds : Rect) : RectRadii
+      rmax = Math.min(bounds.w, bounds.h)/2
+
+      copy_with(
+        tl: tl.clamp(0.0f32..rmax),
+        tr: tr.clamp(0.0f32..rmax),
+        bl: bl.clamp(0.0f32..rmax),
+        br: br.clamp(0.0f32..rmax),
+      )
+    end
+  end
+
   # Represents a snippet of *inline*, *printable* text.
   #
   # - *font* specifies an absolute path to the font file in one of the supported formats.
@@ -26,9 +99,18 @@ module Ww::Soma
     string : String,
     font : Path,
     size : Float32,
-    tracking : Measure,
+    tracking : Magn,
     underline : UnderlineSpec?,
     color : Paint::Any
+
+  # Configures the underline for `FragShape`.
+  #
+  # - If *color* is `nil`, the underline's color would be the same as the text
+  #   color at that point.
+  record UnderlineSpec,
+    color : Paint::Any?,
+    thickness : Float32,
+    offset : Float32
 
   # Lists the available ranks for a draw command. Most shapes are in the `Mid`
   # rank. Something like a selection rect would be in the `Back` rank. Something

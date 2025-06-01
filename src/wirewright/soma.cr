@@ -23,6 +23,7 @@ require "./soma/font"
 
 {% if flag?(:newsoma) %}
   require "./soma/tf"
+  require "./soma/magn"
   require "./soma/pencil"
   require "./soma/point"
   require "./soma/segment"

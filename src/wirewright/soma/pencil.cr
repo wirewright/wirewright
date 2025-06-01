@@ -79,6 +79,6 @@ module Ww::Soma
   record PencilRequest,
     font : Path,
     size : Float32,
-    leading : Measure = Measure.rel(1.0),
-    tracking : Measure = Measure.rel(0.0)
+    leading : Magn = Magn.rel(1.0),
+    tracking : Magn = Magn.rel(0.0)
 end
