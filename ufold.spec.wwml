@@ -566,4 +566,4 @@ defaults: {
   group: "content",
 }
 
-inherit: {, font font-weight text-color text-size leading}
+inherit: {+ font font-weight text-color text-size leading}

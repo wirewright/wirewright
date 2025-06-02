@@ -415,10 +415,10 @@ module Ww::ML::Text
             advance
             # 1 byte '{' + 2 byte '¦'
             return Token.new(:"{¦", pos - 3, pos)
-          when ','
+          when '+'
             advance
             advance
-            return Token.new(:"{,", pos - 2, pos)
+            return Token.new(:"{+", pos - 2, pos)
           when '#'
             advance
             advance
@@ -819,10 +819,20 @@ module Ww::ML::Text
       end.upcast
     end
 
-    # Parses a dictionary set assuming `{,‸<...>`.
+    # Parses a dictionary set assuming `{+‸<...>`.
     private def dictset : Term
-      Term::Dict.build do |commit|
+      unless token = @lexer.ahead?
+        raise "unexpected end-of-input, expected item, '¦', or '}'"
+      end
+
+      # {+¦
+      if pattern = token.type == :"¦"
+        @lexer.thru?
+      end
+
+      dictset = Term::Dict.build do |commit|
         closed = false
+
         while token = @lexer.thru?
           if token.type == :"}"
             closed = true
@@ -830,10 +840,17 @@ module Ww::ML::Text
           end
           commit.with(slot(token), true)
         end
+
         unless closed
           raise "expected closing '}'"
         end
-      end.upcast
+      end
+
+      if pattern
+        return Term.of(:"%layer", :_, dictset)
+      end
+
+      Term.of(dictset)
     end
 
     # Parses a dictionary multiset assuming `{#‸<...>`.
@@ -915,9 +932,9 @@ module Ww::ML::Text
         when :"("  then plist
         when :"["  then litemspart
         when :"{"  then kvdict
-        when :"{," then dictset
+        when :"{+" then dictset
         when :"{#" then dictmultiset
-        when :"{¦" then Term.of(:"%partition", :_, {:"%layer", :_, pentrylist(:"}")})
+        when :"{¦" then Term.of(:"%layer", :_, pentrylist(:"}"))
         when :"→"  then Term.of(:"$my", slot)
         when :"↑"  then Term.of(:"$up", slot)
         when :"↓"  then Term.of(:"$down", slot)
