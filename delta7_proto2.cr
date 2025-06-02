@@ -829,10 +829,7 @@ module Rhodium
             true
           end
 
-          # TODO: instead of (%number (whole _) > 0) we should have (%number 0 < i32). All +-variants must
-          # allow the exclusion of zero this way.
-
-          givenpi %{[cell vs0←(_*) @cout_] (assign/log @cout_ v_ limit←(%number (whole _) > 0))} do
+          givenpi %{[cell vs0←(_*) @cout_] (assign/log @cout_ v_ limit←(%number +i32!))} do
             vs1 = vs0.rightmost(limit.to(Int32) - 1).append(v)
 
             e.event :"cell/updated", cout, vs0, vs1
@@ -1172,7 +1169,7 @@ module Rhodium
             false
           end
 
-          givenpi %{(log @pin_ in (entries_*) ¦ _ limit: (%optional 10 limit←(%number (whole _) > 0))) (pulse @pin_ term_)} do
+          givenpi %{(log @pin_ in (entries_*) ¦ _ limit: (%optional 10 limit←(%number +i32!))) (pulse @pin_ term_)} do
             e.backmap ML.term(%{[log _ in (entries_*)]}), Term.of(Term[].with({:entries}, entries.rightmost(limit.to(Int32) - 1).append(term)))
 
             false

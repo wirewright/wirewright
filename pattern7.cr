@@ -2024,18 +2024,23 @@ module ::Ww::M1
       i8: {:"%number", Int8::MIN, :<=, {:whole, :_}, :<=, Int8::MAX},
       "-i8": {:"%number", Int8::MIN, :<=, {:whole, :_}, :<, 0},
       "+i8": {:"%number", 0, :<=, {:whole, :_}, :<=, Int8::MAX},
+      "+i8!": {:"%number", 0, :<, {:whole, :_}, :<=, Int8::MAX},
       i16: {:"%number", Int16::MIN, :<=, {:whole, :_}, :<=, Int16::MAX},
       "-i16": {:"%number", Int16::MIN, :<=, {:whole, :_}, :<, 0},
       "+i16": {:"%number", 0, :<=, {:whole, :_}, :<=, Int16::MAX},
+      "+i16!": {:"%number", 0, :<, {:whole, :_}, :<=, Int16::MAX},
       i32: {:"%number", Int32::MIN, :<=, {:whole, :_}, :<=, Int32::MAX},
       "-i32": {:"%number", Int32::MIN, :<=, {:whole, :_}, :<, 0},
       "+i32": {:"%number", 0, :<=, {:whole, :_}, :<=, Int32::MAX},
+      "+i32!": {:"%number", 0, :<, {:whole, :_}, :<=, Int32::MAX},
       i64: {:"%number", Int64::MIN, :<=, {:whole, :_}, :<=, Int64::MAX},
       "-i64": {:"%number", Int64::MIN, :<=, {:whole, :_}, :<, 0},
       "+i64": {:"%number", 0, :<=, {:whole, :_}, :<=, Int64::MAX},
+      "+i64!": {:"%number", 0, :<, {:whole, :_}, :<=, Int64::MAX},
       i128: {:"%number", Int128::MIN, :<=, {:whole, :_}, :<=, Int128::MAX},
       "-i128": {:"%number", Int128::MIN, :<=, {:whole, :_}, :<, 0},
       "+i128": {:"%number", 0, :<=, {:whole, :_}, :<=, Int128::MAX},
+      "+i128!": {:"%number", 0, :<, {:whole, :_}, :<=, Int128::MAX},
     )
 
     private def typesym(blank : Term::Sym::Blank) : Term::Sym
