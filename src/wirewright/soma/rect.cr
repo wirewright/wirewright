@@ -236,6 +236,12 @@ module Ww::Soma
       Rect.new(tl: tl.round(grain: grain), size: size.round(grain: grain))
     end
 
+    # Removes the fractional part from the points defining this rectangle
+    # using the ceiling function. Returns the resulting rectangle.
+    def ceil : Rect
+      Rect.new(tl: tl.ceil, size: size.ceil)
+    end
+
     # Returns a copy of this rectangle padded by *n*.
     def pad(n : Float32) : Rect
       Rect.new(tl: tl + n, br: br - n)
@@ -264,6 +270,11 @@ module Ww::Soma
     # point (`mid`) of this rectangle.
     def map(point : Point) : Point
       Point.new(x + point.x * w, y + point.y * h)
+    end
+
+    # Returns the bounding box of `self` and *other*.
+    def max(other : Rect) : Rect
+      Rect.new(tl.min(other.tl), br.max(other.br))
     end
   end
 end

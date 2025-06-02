@@ -1,6 +1,6 @@
 module Ww::Soma
   # Defines the kinds of shapes that can be drawn.
-  alias DrawShape = RectShape | FragShape
+  alias Shape = RectShape | FragShape
 
   # Represents a rectangle shape. Optionally, *border* and corner *radii* can
   # be provided.
@@ -112,18 +112,23 @@ module Ww::Soma
     thickness : Float32,
     offset : Float32
 
-  # Lists the available ranks for a draw command. Most shapes are in the `Mid`
-  # rank. Something like a selection rect would be in the `Back` rank. Something
-  # like a cursor rectangle would be in the `Front` rank.
-  #
-  # See also: `DrawCommand`.
-  enum Rank : Int32
-    Back
-    Mid
-    Front
+  abstract class DrawCommand
+    # Returns the value that draw commands must be ordered (e.g. sorted) by.
+    abstract def ord
+
+    # Returns the bounding box of this command after applying its `bounds_tf`.
+    abstract def tfbounds : Rect
+
+    # Returns the damage bounding box for this command.
+    #
+    # It is essentially a box that is slightly larger than `tfbounds`, to accomodate
+    # for painting errors/imprecisions.
+    def dmgbounds : Rect
+      tfbounds.pad(-10)
+    end
   end
 
-  # Provides an exhaustive context so as to how a `DrawShape` should actually be
+  # Provides an exhaustive context so as to how a `Shape` should actually be
   # drawn: how it should be clipped, what transformations should be applied to
   # it, etc.
   #
@@ -136,23 +141,66 @@ module Ww::Soma
   #   layer is drawn before larger layer.
   # - *rank* is similar to *layer* in purpose. It is used to sort things such as cursor
   #   or selection rectangles which are otherwise members of the same *layer*.
-  # - *opacity* specifies the opacity of the resulting shape.
-  # - *shape* specifies the `DrawShape` itself.
-  defcase DrawCommand,
+  # - *shape* specifies the `Shape` itself.
+  defcase DrawShape < DrawCommand,
     view : Rect,
     view_tf : Tf,
     bounds : Rect,
     bounds_tf : Tf,
     layer : Int32,
     rank : Rank,
-    opacity : Float32,
-    shape : DrawShape
+    shape : Shape
 
-  class DrawCommand
+  class DrawShape
     # Extracts a `DrawKey` from this draw command.
     def key : DrawKey
       DrawKey.new(bounds.size.round, bounds_tf, shape)
     end
+
+    def ord
+      {layer, rank}
+    end
+
+    def tfbounds : Rect
+      bounds_tf.map(bounds)
+    end
+  end
+
+  # Instructs the compositor to draw a *composite shape*.
+  #
+  # Composite shapes are basically *picture*s nested within a parent picture,
+  # with an optional *opacity*; they also act as z-index scopes (aka *layer* scopes).
+  #
+  # Composite shapes are useful when you want to scope z-indices; or have a group
+  # share the same opacity. Otherwise, prefer not to use them. They do have a certain
+  # memory & runtime overhead.
+  #
+  # The compositor will allocate a separate so-called *paper* to draw *picture*;
+  # and only then blend this paper with the parent paper and so on.
+  defcase DrawComposite < DrawCommand,
+    picture : Picture,
+    opacity : Float32,
+    layer : Int32
+
+  class DrawComposite
+    def ord
+      {layer, Rank::Mid}
+    end
+
+    def tfbounds : Rect
+      picture.tfbounds
+    end
+  end
+
+  # Lists the available ranks for a draw command. Most shapes are in the `Mid`
+  # rank. Something like a selection rect would be in the `Back` rank. Something
+  # like a cursor rectangle would be in the `Front` rank.
+  #
+  # See also: `DrawCommand`.
+  enum Rank : Int32
+    Back
+    Mid
+    Front
   end
 
   # A draw key is used to cache the results of rasterizing `DrawCommand`s. Therefore,
@@ -165,5 +213,5 @@ module Ww::Soma
   # reuse the rasterization from an older position, if any. On the other hand, rotation
   # and scale do change *tf*, and thus will trigger a re-rasterization. The older cache
   # entry will likely be evicted from the cache, replaced by the new rotated/scaled one.
-  record DrawKey, extent : Point, tf : Tf, shape : DrawShape
+  record DrawKey, extent : Point, tf : Tf, shape : Shape
 end

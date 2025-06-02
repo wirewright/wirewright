@@ -162,10 +162,10 @@ module Ww::Soma
         # the height of the painted area.
         matchpi(<<-WWML
         (linear-gradient (%past (stop (%number 0 <= _ <= 1) _) min: 1) ¦ _
-          begin-l_number
-          begin-t_number
-          end-l_number
-          end-t_number)
+          begin-l⋮ 0.5
+          begin-t⋮ 0
+          end-l⋮ 0.5
+          end-t⋮ 1)
         WWML
         ) do
           stops = term.items.move(1)

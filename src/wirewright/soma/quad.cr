@@ -39,5 +39,10 @@ module Ww::Soma
 
       Rect.new(tl: Point.new(tlx, tly), br: Point.new(brx, bry))
     end
+
+    # Translates all of this quad's points by *delta*.
+    def translate(delta : Point) : Quad
+      Quad.new(@a + delta, @b + delta, @c + delta, @d + delta)
+    end
   end
 end

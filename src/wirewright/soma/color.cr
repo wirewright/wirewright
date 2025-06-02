@@ -319,47 +319,6 @@ module Ww::Soma
     def opaque? : Bool
       @a == 255
     end
-
-    # Represents this color as a pre-multiplied 32-bit ARGB integer.
-    #
-    # Reference: https://github.com/sammycage/plutovg/blob/c6a1c3b7989cde72f21e09a74cfa6078528ff978/source/plutovg-paint.c#L79
-    # Reference: https://github.com/sammycage/plutovg/blob/c6a1c3b7989cde72f21e09a74cfa6078528ff978/source/plutovg-utils.h#L57
-    def pargb32 : UInt32
-      r32, g32, b32, a32 = {@r, @g, @b, @a}.map(&.to_u32)
-
-      unless a32 == 255
-        r32 = (r32 * a32) // 255
-        g32 = (g32 * a32) // 255
-        b32 = (b32 * a32) // 255
-      end
-
-      (a32 << 24) | (r32 << 16) | (g32 << 8) | b
-    end
-
-    # Multiplies a color encoded as pre-multiplied ARGB (see `Color#prgb32`) by
-    # an alpha value *a* (0-255).
-    #
-    # Reference: https://github.com/sammycage/plutovg/blob/c6a1c3b7989cde72f21e09a74cfa6078528ff978/source/plutovg-blend.c#L70
-    def self.pargb32_mul(x : UInt32, a : UInt32) : UInt32
-      t = (x & 0xff00ffu32) * a
-      t = (t + ((t >> 8) & 0xff00ffu32) + 0x800080u32) >> 8
-      t &= 0xff00ffu32
-      x = ((x >> 8) & 0xff00ffu32) * a
-      x = (x + ((x >> 8) & 0xff00ffu32) + 0x800080u32)
-      x &= 0xff00ff00u32
-      x |= t
-      x
-    end
-
-    # Blends *src* color over *dst* color. Both colors are encoded as pre-
-    # multiplied ARGB (see `Color#prgb32`).
-    #
-    # Reference: https://github.com/sammycage/plutovg/blob/c6a1c3b7989cde72f21e09a74cfa6078528ff978/source/plutovg-blend.c#L318
-    def self.pargb32_blend(src : UInt32, *, over dst : UInt32) : UInt32
-      alpha = src >> 24
-
-      src + pargb32_mul(dst, 255u32 - alpha)
-    end
   end
 end
 

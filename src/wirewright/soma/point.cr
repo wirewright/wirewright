@@ -71,12 +71,14 @@ module Ww::Soma
       self + -other
     end
 
-    # Returns the top- and left-most point between `self` and *other*.
+    # Constructs a point with the minimum x and y components among
+    # `self` and *other*.
     def min(other : Point) : Point
       mv(x: Math.min(x, other.x), y: Math.min(y, other.y))
     end
 
-    # Returns the bottom- and right-most point between `self` and *other*.
+    # Constructs a point with the maximum x and y components among
+    # `self` and *other*.
     def max(other : Point) : Point
       mv(x: Math.max(x, other.x), y: Math.max(y, other.y))
     end

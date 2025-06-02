@@ -31,4 +31,6 @@ require "./soma/font"
   require "./soma/quad"
   require "./soma/paint"
   require "./soma/draw_command"
+  require "./soma/layer"
+  require "./soma/pixel"
 {% end %}
