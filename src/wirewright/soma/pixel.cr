@@ -47,11 +47,11 @@ module Ww::Soma
     # Converts this pixel's premultiplied ARGB value to RGBA.
     #
     # Reference: https://github.com/sammycage/plutovg/blob/c6a1c3b7989cde72f21e09a74cfa6078528ff978/source/plutovg-surface.c#L246
-    def rgba : {UInt8, UInt8, UInt8, UInt8}
+    def rgba : {UInt32, UInt32, UInt32, UInt32}
       a = self.a
 
       if a == 0u32
-        return 0u8, 0u8, 0u8, 0u8
+        return 0u32, 0u32, 0u32, 0u32
       end
 
       r, g, b = self.r, self.g, self.b
@@ -62,7 +62,14 @@ module Ww::Soma
         b = (b &* 255u32) // a
       end
 
-      {r.to_u8, g.to_u8, b.to_u8, a.to_u8}
+      {r, g, b, a}
+    end
+
+    # Formats the output of `rgba` as 32-bit integer in little endian order.
+    def rgba_le : UInt32
+      r, g, b, a = rgba
+
+      (a << 24) | (b << 16) | (g << 8) | r
     end
 
     # Blends *src* pixel over *dst* pixel.

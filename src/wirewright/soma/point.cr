@@ -33,7 +33,7 @@ module Ww::Soma
 
     # Checks whether both the x and y components are approximately zero.
     def zero? : Bool
-      Approx.equals?(x, 0) && Approx.equals?(y, 0)
+      Approx.equals?(x, 0.0f32) && Approx.equals?(y, 0.0f32)
     end
 
     # Returns a new point with both x and y components negated.

@@ -50,10 +50,15 @@ module Ww::Soma
       br.inf?
     end
 
-    # Returns `true` if this rectangle has zero or negative size.
-    # Returns `false` otherwise.
+    # Returns `true` if this rectangle's bottom right corner is above or
+    # to the left of its top-left corner,
+    def negative? : Bool
+      tl.x > br.x || tl.y > br.y
+    end
+
+    # Returns `true` if this rectangle has zero size. Returns `false` otherwise.
     def empty? : Bool
-      tl.x >= br.x || tl.y >= br.y
+      size.zero?
     end
 
     # Returns `true` if this rectangle includes *object*.
@@ -224,7 +229,8 @@ module Ww::Soma
 
     # Returns the intersection of this and *other* rectangles.
     def &(other : Rect) : Rect
-      Rect.new(tl: tl.max(other.tl), br: br.min(other.br))
+      xrect = Rect.new(tl: tl.max(other.tl), br: br.min(other.br))
+      xrect.negative? ? Rect.empty : xrect
     end
 
     # Returns a copy of this rectangle whose location and size are rounded to
