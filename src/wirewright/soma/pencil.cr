@@ -40,14 +40,14 @@ module Ww::Soma
     # Measures and returns the line height for this pencil.
     def line_height : Float32
       pencil1 = after_writing('\n')
-      pencil1.tip.y - tip.y
+      (pencil1.tip.y - tip.y).ceil
     end
 
     # Measures and returns the width of the ASCII whitespace character for
     # this pencil.
     def space_width : Float32
       pencil1 = after_writing(' ')
-      pencil1.tip.x - tip.x
+      (pencil1.tip.x - tip.x).ceil
     end
 
     # Returns the location of this pencil's tip.

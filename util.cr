@@ -1186,6 +1186,14 @@ struct StringView
     @string.same?(other.string) && @byte_end == other.byte_start
   end
 
+  def blank? : Bool
+    each_char do |char|
+      return false unless char.whitespace?
+    end
+
+    true
+  end
+
   def +(other : StringView) : StringView
     if precedes?(other)
       return StringView.new(@string, @byte_start, other.@byte_end)
@@ -1638,23 +1646,22 @@ class String
   # will include *trailing* newlines (i.e. this method does not "take away" any
   # characters from the string).
   #
-  # If this string ends with a trailing newline, also yields an empty trailing
-  # string view.
-  #
-  # If this string is empty, yields one empty string view.
+  # If this string is empty, does not yield anything.
   def each_line_view(& : StringView ->) : Nil
+    return if empty?
+
     start = 0
 
-    unless empty?
-      reader = Char::Reader.new(self)
-      reader.each do |char|
-        next unless char == '\n'
-        yield StringView.new(self, start, start + (reader.pos - start) + 1)
-        start = reader.pos + 1
-      end
+    reader = Char::Reader.new(self)
+    reader.each do |char|
+      next unless char == '\n'
+      yield StringView.new(self, start, start + (reader.pos - start) + 1)
+      start = reader.pos + 1
     end
 
-    yield StringView.new(self, start, bytesize)
+    unless start == bytesize
+      yield StringView.new(self, start, bytesize)
+    end
   end
 end
 
