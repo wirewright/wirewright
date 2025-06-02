@@ -83,12 +83,11 @@ module Ww::Soma
       d5 = d4 && hexdigit?(r)
       d6 = d5 && hexdigit?(r)
       d7 = d6 && hexdigit?(r)
-      n = {d0, d1, d2, d3, d4, d5, d6, d7}.count { |x| !x.nil? }
 
       Rtk.skip(r, " ")
       return unless Rtk.at_end?(r)
 
-      if n.in?(3, 4) && d0 && d1 && d2
+      if d0 && d1 && d2 && d4.nil?
         r = (d0 << 4 | d0).to_u8
         g = (d1 << 4 | d1).to_u8
         b = (d2 << 4 | d2).to_u8
@@ -96,12 +95,16 @@ module Ww::Soma
         return r, g, b, a
       end
 
-      if n.in?(6, 8) && d0 && d1 && d2 && d3 && d4 && d5
+      if d0 && d1 && d2 && d3 && d4 && d5
         r = (d0 << 4 | d1).to_u8
         g = (d2 << 4 | d3).to_u8
         b = (d4 << 4 | d5).to_u8
-        a = d6 && d7 ? (d6 << 4 | d7).to_u8 : 255u8
-        return r, g, b, a
+        if d6.nil?
+          return r, g, b, 255u8
+        end
+        if d7
+          return r, g, b, (d6 << 4 | d7).to_u8
+        end
       end
     end
 

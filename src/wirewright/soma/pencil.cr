@@ -18,14 +18,15 @@ module Ww::Soma
 
     # Returns the location of this pencil's tip specifically for character *ch*. This
     # takes into account the kerning computed from the previous character that this
-    # pen wrote and *ch*.
+    # pencil wrote and *ch*.
     abstract def tip(ch : Char) : Point
 
     # Returns the top-left corner of the "box" where the next character will be put.
     abstract def origin : Point
 
-    # NOTE: The caller must guarantee that *string* does not contain newlines.
-    # Otherwise the measurement provided by this method will be incorrect.
+    # Measures the width of *string* by writing it using this pencil.
+    #
+    # NOTE: This method will raise `ArgumentError` if *string* contains newlines.
     def measure(string : String) : Float32
       pencil1 = after_writing(string)
 
@@ -72,7 +73,8 @@ module Ww::Soma
   # A generic way to ask something -- usually a "pencil server" -- to return
   # a pencil with the given configuration.
   #
-  # - *font* specifies an absolute path to the font file of one of the supported types.
+  # - *font* specifies an absolute path to the font file of one of the types
+  #   supported by the "pencil server".
   # - *size* specifies the font's size.
   # - *leading* specifies the line height (named after Tailwind).
   # - *tracking* specifies the letter spacing (named after Tailwind).

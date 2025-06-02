@@ -33,12 +33,17 @@ module Ww::Soma
     # - *stride* specifies the byte size of one row of pixels in *pixels*.
     #
     # NOTE: it is your responsibility to ensure the format of *pixels* conforms
-    # to the one used by `Pixel`. If the format differ, you'll get wrong colors
+    # to the one used by `Pixel`. If the formats differ, you'll get wrong colors
     # and invalid blending behavior.
+    #
+    # NOTE: *pixels* are reinterpreted as `UInt32` without any further bit rearrangement.
+    # It is your responsibility to make sure that simply reinterpreting *pixels* as
+    # UInt32 is enough to convert them to `Pixel`s. This usually means premultiplied BGRA,
+    # since we assume Wirewright only runs on little-endian machines.
     def initialize(pixels : UInt8*, @width, @height, stride : Int32)
       @data = Stack(UInt32).new
 
-      raw = pixels.to_slice(@height * stride).unsafe_slice_of(UInt32)
+      raw = pixels.to_slice(@height * stride)
 
       Layer.pack(raw) do |count, pixel|
         alpha = pixel >> 24
@@ -72,13 +77,13 @@ module Ww::Soma
     end
 
     # :nodoc:
-    def self.pack(objects : Enumerable(T), & : UInt32, T ->) : Nil forall T
+    def self.pack(pixels : Slice(UInt8), & : UInt32, UInt32 ->) : Nil
       state = nil
       count = 0u32
 
-      objects.each do |object|
+      each_u32_pixel(pixels) do |pixel|
         if state
-          if state == object
+          if state == pixel
             count += 1
             next
           end
@@ -86,12 +91,23 @@ module Ww::Soma
           yield count, state
         end
 
-        state = object
+        state = pixel
         count = 1u32
       end
 
       if state
         yield count, state
+      end
+    end
+
+    # :nodoc:
+    def self.each_u32_pixel(pixels : Slice(UInt8), & : UInt32 ->)
+      # This feels really really really wonky due to the dependence on system-
+      # endianness; but we use it in places where that's more or less expected
+      # behavior. PlutoVG does this; and Wirewright is only ever expected to
+      # be run on little-endian machines.
+      pixels.unsafe_slice_of(UInt32).each do |pixel|
+        yield pixel
       end
     end
 
