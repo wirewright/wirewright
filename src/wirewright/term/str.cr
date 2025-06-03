@@ -25,6 +25,10 @@ module Ww
       @value
     end
 
+    def to?(type : StringView.class) : StringView
+      @value.view
+    end
+
     # Returns the number of characters in this string.
     def charcount : Int32
       @value.size

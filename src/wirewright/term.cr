@@ -457,6 +457,11 @@ module Ww
       Str.new(object)
     end
 
+    # Constructs a string term from the given string view *object*.
+    def self.[](object : StringView) : Str
+      Str.new(object.to_s)
+    end
+
     # Constructs a string term from the given character *object*.
     def self.[](object : Char) : Str
       Str.new(object.to_s)
