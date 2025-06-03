@@ -1,5 +1,10 @@
 # Wirewright
 
+> Instead of asking:
+> “What program should I write?”
+> You ask:
+> “What kind of universe can I design that causes the behaviors I want to see?”
+
 Wirewright is a rewrite environment for self-embodied programs.
 
 I am working hard to package the hundreds of thousands of lines of "all over the place" code I've written and about two years of ideas and exploration into something simple, usable, and practical. Please wait and wish me a lot of energy :)
@@ -37,27 +42,27 @@ Wirewright can be built with Crystal 1.16.0 or later. Due to some bugfixes that 
 
 ## Want to learn more?
 
-### What is Wirewright?
+### A rough analogy and some core design principles
 
-I find the question “What is Wirewright?” surprisingly hard to answer.
+Wirewright is designed to be the "body" that runs your programs. We implement "the eyes", "the ears", "the arms", and "the brains". And you implement "the mind".
 
-One attempt could be to say that Wirewright is everything I’ve been working on and thinking about for roughly two years already, more or less full-time.
+Wirewright offers a universal "language", so-called *terms*; and complex machinery to map terms to and from various "modalities".
 
-Wirewright is a bunch of ideas about ways to exchange messages in a truly distributed, decentralized, amorphous setting (that is, in a setting where no peer knows about “the whole” it’s part of; but rather, each peer is exploring the whole, “feeling it out”). In fact, that's the source of the project's name.
+- The "protocol" or "format" for describing terms with text is called WwML.
+- WwML parser thus turns strings into terms. WwML pretty printer, in turn, converts terms into strings.
+- Meridium subsystem turns terms into network messages with *appearances*, and network messages back into terms using so-caled *sensors*.
+- DwUIR turns terms into images. ??? turns images into terms (TODO).
+- UIR rewriter turns layout describing terms into DwUIR.
+- Microfold turns Tailwind-like style descriptions (also terms) into UIR.
+- Delta7, Rhodium, Nitrene are various kinds of "physics" for terms. They're the "brain" of Wirewright.
+- M1 is a pattern matching engine for terms.
+- Rewrite circuits are a way to combine all of the above. Rewrite circuits are also terms, of course!
 
-Wirewright is also a bunch of ideas about term rewriting, pattern matching, rule systems, rewriter circuits, and so on, taking inspiration from (among many other things) the work of Stephen Wolfram on physics and computation, and on his company’s Mathematica. Linked to that is my work in trying to bootstrap modern-looking UI using rule systems and a thin layer of native code for drawing. I’m still in the very beginning on this one. Naive me thought modern UIs are simple 😣 And in all honesty, I’m surprised it is running at all!
+The Crystal part (i.e. the implementation) acts as an *observer*. It looks at terms, sees what changed, and reacts appropriately (and most likely, imperatively). In a sense, it is "outside" of the system; it is the magic -- a term structured just the right way is like a "spell", which "materializes" into the result, if any.
 
-Wirewright is also an effort to prove that rule systems, which are, in my opinion, one level of abstraction above traditional programming (whatever that means), can run at least as fast as modern interpreters (e.g. Python). This performance effort — quite sadly! — is at zero percent progress right now. But hopefully there will be some progress on it in the future. I truly believe one can make immutability, persistence, rewriter circuits, and rule systems as fast as modern interpreters. Modern interpreters (pure interpreters, that is; no JIT) are obviously much worse (sometimes thousands of times worse) than native code. That’s still a very ambitious goal when talking about rule systems, though; seeing how they plough through hundreds if not thousands of complex patterns for even the smallest things, sometimes recursively, sometimes exhaustively, but most of the time, both — and more!
+Most parts of Wirewright are what I would call *purely declarative*. Think HTML, but for general-purpose computation (not just page/text markup).
 
-The second answer is, Wirewright is about self-embodied programs. That’s a fairly cryptic term, and, I must confess — one that I’m not able to define as clearly as they do in textbooks yet. But, more visually, I can define self-embodied programs as moving programs, or even go so far as to say self-embodied programs are living programs — programs that can modify themselves in reaction to stimuli. In other words, self-embodied programs are about *embodied response to stimuli*. In such cases response perceived by an observer is only an indirect effect of what is in fact self-modification.
-
-The latter is particularly weird. Imagine an observer looking at Bob. Bob is moving his arm, perhaps in a greeting gesture. There are two ways to look at the matter. One, is that Bob is "moving his arm". One may consider in such case, that there is a certain algorithm with an input in the Bob's brain, and so on; nerves carrying carefully arranged signals down the spinal cord and to Bob's arm of choice, muscle cells responding. A chain reaction. Another, is to look at Bob wholly; to consider that Bob is undergoing self-modification on a potentially whole-body level that manifests itself, externally as Bob's arm moving so and so.
-
-Wirewright is an attempt to craft an environment for such programs — which means, for example, the “laws of physics” that these programs will follow. In this regard Wirewright takes inspiration from Conway’s Game of Life and from cellular automata in general.
-
-Wirewright’s approach to programming is, let’s create a world. Some laws of physics here, some “basic building blocks” there, then let’s build a program out of those building blocks (a self-embodied program); and then sit back, relax, and enjoy the show. Obviously not the most safety-critical kind of programming; you won’t program an autopilot or an MRI machine this way (please don’t!) Nor would Wirewright make you a billion dollars.
-
-Instead, Wirewright is attempting to be a novel, “alien” way to program; importing ideas from lesser known parts of computer science and hopefully introducing some novel ones as well; and “mixing” them until just the right consistency is achieved. Wirewright is intended mainly as an inspiration; as a source of ideas, and a proof that they work.
+Wirewright, with its self-embodied programs, is also exploring the idea of a "holistic" approach to life; in that life should be interpreted as embedded and inseparable from its environment. In effect, what I am saying is that us placing a boundary between a living organism and the environment is actually a mistake; and that such a boundary in fact does not exist. The given organism and its behaviors must always be considered "in context", and that context often includes the surrounding environment. Otherwise, we see "complexity out of nowhere"; not because this is the case, but because we're looking too narrowly -- just at things within the boundary. It's like trying to understand what an ant does by studying its mandibles excessively, and being surprised by the complexity of behaviors "resultant from the structure of ant's mandibles". The extremal end of holism is to consider "the universe as a unit" -- as the only thing worth studying & designing (if one wants to produce interesting & extremely complex behavior). I am more and more turning into this extremal "school of thought". Wirewright is an experiment to design a "universe" (obviously in a very naive, simplified, and rather "practicalized" way); and see what kinds of behavior I can get out of that. Once the universe is defined, programs (agents, actors, patterns) don’t "run" in a linear, imperative sense. They exist inside that universe, and behavior emerges as a result of the laws you (or most likely, I!) designed. Conway’s Game of Life is the simplest example of approaching this extreme endpoint of holism from an engineering point of view. Wirewright attempts to generalize this, into a general-purpose, practical software platform.
 
 ### More of my ramblings
 
