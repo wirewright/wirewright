@@ -284,10 +284,14 @@ module Ww::Soma::DwUIR
       Rect.new(tl.min(other.tl), br.max(other.br))
     end
 
+    # Changes the X components of the top-left and bottom-right corners using
+    # the block. Returns the resulting rectangle.
     def mapx(& : Float32 -> Float32) : Rect
       Rect.new(Point.new((yield tl.x), tl.y), Point.new((yield br.x), br.y))
     end
 
+    # Changes the Y components of the top-left and bottom-right corners using
+    # the block. Returns the resulting rectangle.
     def mapy(& : Float32 -> Float32) : Rect
       Rect.new(Point.new(tl.x, (yield tl.y)), Point.new(br.x, (yield br.y)))
     end
