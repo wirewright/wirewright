@@ -1087,6 +1087,12 @@ struct StringView
     unless 0 <= @byte_start <= @byte_end <= @string.bytesize
       raise ArgumentError.new("invalid byte range #{@byte_start}...#{@byte_end}")
     end
+
+    {% if flag?(:debug) %}
+      unless Unicode.valid?(@string.to_slice[@byte_start...@byte_end])
+        raise ArgumentError.new("invalid encoding")
+      end
+    {% end %}
   end
 
   private def self.join_copy(views : Enumerable(StringView)) : StringView
@@ -1273,7 +1279,9 @@ struct StringView
       reader.previous_char
 
       unless charset.includes?(reader.current_char)
-        return StringView.new(@string, @byte_start, byte_end: reader.pos + 1)
+        reader.next_char
+
+        return StringView.new(@string, @byte_start, byte_end: reader.pos)
       end
     end
 
@@ -1574,8 +1582,8 @@ class String
     !empty?
   end
 
-  def prefixed_by?(char : Char)
-    size > 1 && starts_with?(char)
+  def prefixed_by?(object)
+    bytesize > object.bytesize && starts_with?(object)
   end
 
   def postfixed_by?(char : Char)
