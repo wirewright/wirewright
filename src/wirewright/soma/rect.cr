@@ -283,5 +283,13 @@ module Ww::Soma
     def max(other : Rect) : Rect
       Rect.new(tl.min(other.tl), br.max(other.br))
     end
+
+    def mapx(& : Float32 -> Float32) : Rect
+      Rect.new(Point.new((yield tl.x), tl.y), Point.new((yield br.x), br.y))
+    end
+
+    def mapy(& : Float32 -> Float32) : Rect
+      Rect.new(Point.new(tl.x, (yield tl.y)), Point.new(br.x, (yield br.y)))
+    end
   end
 end

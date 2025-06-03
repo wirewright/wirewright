@@ -240,7 +240,10 @@ module Ww::Soma
         end
 
         # |@ soma.dwuir.paint.solid
-        # |@ref soma.color
+        #
+        # |@block
+        # See `soma.color`.
+        # |@endblock
         otherwise do
           Solid.new(Color.term(term))
         end

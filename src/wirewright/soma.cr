@@ -33,4 +33,6 @@ require "./soma/font"
   require "./soma/draw_command"
   require "./soma/layer"
   require "./soma/pixel"
+
+  require "./soma/dwuir"
 {% end %}
