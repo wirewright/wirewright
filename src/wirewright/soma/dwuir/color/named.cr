@@ -1,4 +1,4 @@
-module Ww::Soma
+module Ww::Soma::DwUIR
   struct Color
     NAMED = {
       aliceblue:            rgba(240, 248, 255),

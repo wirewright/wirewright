@@ -18,21 +18,4 @@
 module Ww::Soma
 end
 
-require "./soma/color"
-require "./soma/font"
-
-{% if flag?(:newsoma) %}
-  require "./soma/tf"
-  require "./soma/magn"
-  require "./soma/pencil"
-  require "./soma/point"
-  require "./soma/segment"
-  require "./soma/rect"
-  require "./soma/quad"
-  require "./soma/paint"
-  require "./soma/draw_command"
-  require "./soma/layer"
-  require "./soma/pixel"
-
-  require "./soma/dwuir"
-{% end %}
+require "./soma/dwuir"

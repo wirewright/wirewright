@@ -1,4 +1,4 @@
-module Ww::Soma
+module Ww::Soma::DwUIR
   # Represents a quadrilateral.
   struct Quad
     # NOTE: points must be given in clockwise order.

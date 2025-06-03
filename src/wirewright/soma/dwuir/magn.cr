@@ -1,4 +1,4 @@
-module Ww::Soma
+module Ww::Soma::DwUIR
   # |@ soma.dwuir.magnitude
   #
   # |@block

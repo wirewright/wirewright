@@ -1,4 +1,4 @@
-module Ww::Soma
+module Ww::Soma::DwUIR
   # Includers are immutable & persistent objects that allow you to "write" using
   # a font face. Pencils track their location through this "typing".
   #

@@ -1,4 +1,4 @@
-module Ww::Soma
+module Ww::Soma::DwUIR
   # Defines the kinds of shapes that can be drawn.
   alias Shape = RectShape | FragShape
 

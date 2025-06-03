@@ -7,7 +7,7 @@
 
 require "./ufold"
 
-include Ww::Soma
+include Ww::Soma::DwUIR
 
 # FIXME: this does not belong here
 module ::Ww::Keypath

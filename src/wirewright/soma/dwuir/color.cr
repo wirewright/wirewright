@@ -1,9 +1,8 @@
-module Ww::Soma
-  # |@ soma.color
+module Ww::Soma::DwUIR
+  # |@ soma.dwuir.color
   #
   # |@block
-  # Wirewright implements a variety of ways to specify the color of stuff. This
-  # namespace lists all of these, reused by different parts of the system.
+  # Wirewright implements a variety of ways to specify the color of stuff.
   # |@endblock
 
   # Represents a color using RGBA.
@@ -136,13 +135,13 @@ module Ww::Soma
 
     # Constructs a `Color` by parsing the given term.
     #
-    # Using doctool, search for `soma.color` to learn about the possible
+    # Using doctool, search for `soma.dwuir.color` to learn about the possible
     # values for *term*.
     #
     # *fallback* is returned when *term* cannot be parsed.
     def self.term(term : Term, fallback : Color = rgba(0, 0, 0)) : Color
       Term.case(term) do
-        # |@ soma.color.oklch
+        # |@ soma.dwuir.color.oklch
         #
         # |@block
         # `oklch` defines a color using the OKLCH color space, which represents
@@ -160,7 +159,7 @@ module Ww::Soma
           oklch(l.to(Float64), c.to(Float64), h.to(Float64))
         end
 
-        # |@ soma.color.oklch
+        # |@ soma.dwuir.color.oklch
         #
         # |@key opacity -- Specifies the opacity of the color (a number between 0
         # and 1, where 0 means fully transparent and 1 means fully opaque).
@@ -169,7 +168,7 @@ module Ww::Soma
           color.change(a: opacity_to_alpha(opacity))
         end
 
-        # |@ soma.color.rgb
+        # |@ soma.dwuir.color.rgb
         #
         # |@block
         # `rgb` defines a color using the RGB color space, specifying red, green,
@@ -191,7 +190,7 @@ module Ww::Soma
           rgba(r.to(UInt8), g.to(UInt8), b.to(UInt8))
         end
 
-        # |@ soma.color.rgb
+        # |@ soma.dwuir.color.rgb
         #
         # |@key opacity -- Specifies the opacity of the color (a number between 0
         # and 1, where 0 means fully transparent and 1 means fully opaque).
@@ -200,7 +199,7 @@ module Ww::Soma
           color.change(a: opacity_to_alpha(opacity))
         end
 
-        # |@ soma.color.rgb
+        # |@ soma.dwuir.color.rgb
         #
         # |@key a -- Specifies the alpha (opacity) component of the color, an 8-bit
         # unsigned integer (0 to 255).
@@ -211,7 +210,7 @@ module Ww::Soma
           rgba(r.to(UInt8), g.to(UInt8), b.to(UInt8), a.to(UInt8))
         end
 
-        # |@ soma.color.hsl
+        # |@ soma.dwuir.color.hsl
         #
         # |@block
         # `hsl` defines a color using the HSL color space, specifying hue,
@@ -227,7 +226,7 @@ module Ww::Soma
           hsl(h.to(Float64), s.to(Float64), l.to(Float64))
         end
 
-        # |@ soma.color.hsl
+        # |@ soma.dwuir.color.hsl
         #
         # |@key a -- Specifies the opacity of the color (a number between 0 and 1,
         # where 0 means fully transparent and 1 means fully opaque).
@@ -236,7 +235,7 @@ module Ww::Soma
           color.change(a: opacity_to_alpha(opacity))
         end
 
-        # |@ soma.color.string
+        # |@ soma.dwuir.color.string
         #
         # |@block
         # String terms are treated in the following way (and order).
@@ -254,7 +253,7 @@ module Ww::Soma
           string?(term.to(String)) || continue
         end
 
-        # |@ soma.color.integer
+        # |@ soma.dwuir.color.integer
         #
         # |@block
         # Number terms that fit within the unsigned 32-bit range are parsed as
@@ -266,8 +265,8 @@ module Ww::Soma
         # those bytes are then resolved as an RGBA color.
         #
         # NOTE: since this variant cannot distinguish between colors of the form
-        # `0xRRGGBBAA` vs. `0xRRGGBB`, you **must** specify the alpha component.
-        # If you don't like that, use the named/hex color variant (`soma.color.string`).
+        # `0xRRGGBBAA` vs. `0xRRGGBB`, you **must** specify the alpha component. If you
+        # don't like that, use the named/hex color variant (`soma.dwuir.color.string`).
         # |@endblock
         matchpi %{(%number u32)} do
           rgba(term.to(UInt32))

@@ -1,4 +1,4 @@
-module Ww::Soma
+module Ww::Soma::DwUIR
   # A layer should be imagined simply as a 2D array of `Pixel`s.
   #
   # Note that the pixels are stored in compressed form; run length encoding

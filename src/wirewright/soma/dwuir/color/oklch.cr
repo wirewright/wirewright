@@ -1,4 +1,4 @@
-module Ww::Soma
+module Ww::Soma::DwUIR
   # Functions to convert OkLCH to RGB and vice versa.
   #
   # Ported from: https://gist.github.com/dkaraush/65d19d61396f5f3cd8ba7d1b4b3c9432

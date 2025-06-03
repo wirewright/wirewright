@@ -1,4 +1,4 @@
-module Ww::Soma
+module Ww::Soma::DwUIR
   # Represents a 2D rectangle with a pair of `Point`s.
   struct Rect
     # Returns the top-left point of this rectangle.

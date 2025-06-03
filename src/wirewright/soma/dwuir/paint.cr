@@ -1,4 +1,4 @@
-module Ww::Soma
+module Ww::Soma::DwUIR
   # |@ soma.dwuir.paint
   #
   # |@block
@@ -141,7 +141,7 @@ module Ww::Soma
         # a straight line from a starting point to an ending point.
         # |@endblock
         #
-        # |@key stops soma.color -- Specifies a sequence of color stops, each with
+        # |@key stops soma.dwuir.color -- Specifies a sequence of color stops, each with
         # a position (a number between 0 and 1) and a color value. At least one
         # stop is required.
         #
@@ -187,7 +187,7 @@ module Ww::Soma
         # to an outer boundary.
         # |@endblock
         #
-        # |@key stops soma.color -- Specifies a sequence of color stops, each with
+        # |@key stops soma.dwuir.color -- Specifies a sequence of color stops, each with
         # a position (a number between 0 and 1) and a color value. At least one stop
         # is required.
         #
@@ -242,7 +242,7 @@ module Ww::Soma
         # |@ soma.dwuir.paint.solid
         #
         # |@block
-        # See `soma.color`.
+        # See `soma.dwuir.color`.
         # |@endblock
         otherwise do
           Solid.new(Color.term(term))

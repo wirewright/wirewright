@@ -1,4 +1,4 @@
-module Ww::Soma
+module Ww::Soma::DwUIR
   # Lists the supported font weights.
   enum FontWeight : UInt8
     Thin

@@ -1,4 +1,4 @@
-module Ww::Soma
+module Ww::Soma::DwUIR
   # Functions to convert HSL to RGB and vice versa.
   #
   # Reference: https://www.niwa.nu/2013/05/math-behind-colorspace-conversions-rgb-hsl/

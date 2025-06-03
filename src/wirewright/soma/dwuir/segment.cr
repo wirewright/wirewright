@@ -1,4 +1,4 @@
-module Ww::Soma
+module Ww::Soma::DwUIR
   # Represents a segment defined by two `Point`s.
   struct Segment
     def initialize(@a : Point, @b : Point)

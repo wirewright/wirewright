@@ -1,4 +1,4 @@
-module Ww::Soma
+module Ww::Soma::DwUIR
   # Represents a 2D point with a pair of `Float32`s.
   struct Point
     # Returns the x component of this point.

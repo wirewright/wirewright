@@ -1,4 +1,4 @@
-module Ww::Soma
+module Ww::Soma::DwUIR
   # Represents a transformation matrix.
   #
   # Reference: https://github.com/sammycage/plutovg/blob/c6a1c3b7989cde72f21e09a74cfa6078528ff978/source/plutovg-matrix.c
