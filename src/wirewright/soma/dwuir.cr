@@ -1,4 +1,6 @@
 module Ww::Soma::DwUIR
+  extend self
+
   # TODO: move!!!
   alias TextSelectionRange = Range(Int32, Int32)?
 end
@@ -24,4 +26,5 @@ require "./dwuir/font"
   require "./dwuir/text_command"
   require "./dwuir/text_drawable"
   require "./dwuir/walk"
+  require "./dwuir/render"
 {% end %}

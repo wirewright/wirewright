@@ -66,6 +66,10 @@ module Ww::Soma::DwUIR
       x * other.y - y * other.x
     end
 
+    def normalized : Point
+      Point.new(1/x, 1/y)
+    end
+
     # Subtracts *other* point or scalar from this point.
     def -(other) : Point
       self + -other

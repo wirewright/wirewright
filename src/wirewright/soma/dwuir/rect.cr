@@ -295,5 +295,19 @@ module Ww::Soma::DwUIR
     def mapy(& : Float32 -> Float32) : Rect
       Rect.new(Point.new(tl.x, (yield tl.y)), Point.new(br.x, (yield br.y)))
     end
+
+    def normalize(point : Point) : Point
+      (point - tl) * size.normalized
+    end
+
+    def denormalize(point : Point) : Point
+      tl + point * size
+    end
+
+    # Returns a translated copy of `self` so that normalized *point*s of
+    # both rectangles match.
+    def align(other : Rect, point : Point) : Rect
+      translate(denormalize(point) - other.denormalize(point))
+    end
   end
 end

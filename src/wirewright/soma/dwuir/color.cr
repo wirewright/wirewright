@@ -56,7 +56,7 @@ module Ww::Soma::DwUIR
     end
 
     private def self.hexdigit?(r : Rtk::R) : Int32?
-      return unless Rtk.peek?(r, "0123456789abcdefABCDEF")
+      return unless Rtk.peek?(r, "0-9a-fA-F")
 
       case char = Rtk.advance(r)
       when '0'..'9' then char - '0'

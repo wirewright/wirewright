@@ -16,7 +16,9 @@ module Rtk
   end
 
   def peek?(r, charset : String | StringView) : Bool
-    peek?(r, &.in?(charset))
+    charset = charset.to_s
+
+    peek?(r, &.in_set?(charset))
   end
 
   def peek?(r, charset : Char) : Bool
@@ -43,6 +45,20 @@ module Rtk
     char
   end
 
+  def skip?(r, arg)
+    if peek?(r, arg)
+      advance(r)
+
+      true
+    else
+      false
+    end
+  end
+
+  def at_start?(r)
+    !r.value.has_previous?
+  end
+
   def at_end?(r)
     !r.value.has_next?
   end
@@ -65,13 +81,20 @@ module Rtk
     end
   end
 
-  def save(r, &)
-    pos = r.value.pos
+  # Expects the block to return true or truthy. Otherwise rolls back.
+  def txn(r, &)
+    v0 = r.value
     begin
-      yield
+      res = yield
     ensure
-      r.value.pos = pos
+      unless res
+        r.value = v0
+      end
     end
+  end
+
+  def save(r, &)
+    txn(r) { return yield }
   end
 
   def expect(r, charset, *, error = "expected one of #{charset.inspect}")
@@ -100,20 +123,40 @@ module Rtk
     end
   end
 
+  def thru(r, arg)
+    while peek?(r, arg)
+      advance(r)
+    end
+  end
+
+  def past?(r, arg)
+    if peek?(r, arg)
+      advance(r)
+      true
+    else
+      false
+    end
+  end
+
+  def pastsequ?(r, sequ)
+    if peeksequ?(r, sequ)
+      sequ.bytesize.times { r.value.next_char }
+      true
+    else
+      false
+    end
+  end
+
   def skip_to(r, charset)
     until peek?(r, charset)
       advance(r)
     end
   end
 
-  def column(r) : Int32
-    save(r) do
-      column = 0
-      r.value.reverse_each do |char|
-        break if char == '\n'
-        column += 1
-      end
-      column
-    end
+  def bytespan(r, &) : Int32
+    p0 = r.value.pos
+    yield
+    p1 = r.value.pos
+    p1 - p0
   end
 end

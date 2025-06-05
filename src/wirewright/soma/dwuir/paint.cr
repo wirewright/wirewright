@@ -57,47 +57,47 @@ module Ww::Soma::DwUIR
     #   by `Paint`; instead, it is left for the interpretation by the painter,
     #   since only the painter knows the kinds of images it can render, how, and
     #   and what it needs to know to render them.
-    record Image, src : Term, opacity : Float32, fit : ImageFit
+    record Image,
+      src : Term,
+      fit : ImageFit::Any,
+      tile : Bool,
+      opacity : Float32,
+      resize_w : Magn,
+      resize_h : Magn
 
     # Represents the ways an image can occupy the painted area.
-    enum ImageFit : UInt8
-      Origin
-      Stretch
-      Tile
-      Center
+    module ImageFit
+      extend self
+
+      alias Any = Pan | Align | Stretch
+
+      record Pan, delta : Point
+      record Align, normpt : Point
+      record Stretch
+
+      Default = Stretch.new
 
       # Parses *term* as an `ImageFit` value; returns *fallback* if unable to.
-      def self.term(term, fallback : ImageFit) : ImageFit
+      def term(term, fallback = Default) : Any
         Term.case(term) do
-          # |@ soma.dwuir.paint.image-fit.origin
+          # |@ soma.dwuir.paint.image-fit.align
           #
           # |@block
-          # The image will be put at the top-left corner of the painted area, and
-          # clipped on overflow.
           # |@endblock
-          matchpi %{origin} { Origin }
+          matchpi %{(align ¦ _ l⋮ 0 t⋮ 0)} do
+            Align.new(Point.new(l.to(Float32), t.to(Float32)))
+          end
+
+          matchpi %{(pan ¦ _ l⋮ 0 t⋮ 0)} do
+            Pan.new(Point.new(l.to(Float32), t.to(Float32)))
+          end
 
           # |@ soma.dwuir.paint.image-fit.stretch
           #
           # |@block
           # The image will be scaled up or down to fit in the painted area.
           # |@endblock
-          matchpi %{stretch} { Stretch }
-
-          # |@ soma.dwuir.paint.image-fit.tile
-          #
-          # |@block
-          # The image will be tiled across the painted area.
-          # |@endblock
-          matchpi %{tile} { Tile }
-
-          # |@ soma.dwuir.paint.image-fit.center
-          #
-          # |@block
-          # The image's center will be aligned with the filled drawable's bounding
-          # box center. The image will be cropped to fit in bounds, if necessary.
-          # |@endblock
-          matchpi %{center} { Center }
+          matchpi %{stretch} { Stretch.new }
 
           otherwise { fallback }
         end
@@ -125,13 +125,29 @@ module Ww::Soma::DwUIR
         #
         # |@key fit soma.dwuir.image-fit -- Specifies how the image should occupy
         # the painted area.
+        #
+        # |@key tile -- The image will be tiled across the painted area if `true`.
+        #
+        # |@key resize-w soma.dwuir.magn -- Changes the initial width of the image.
+        #
+        # |@key resize-h soma.dwuir.magn -- Changes the initial height of the image.
         matchpi(<<-WWML
         (image src_ ¦ _
           opacity: (%optional 1 opacity←(%number 0 <= _ <= 1))
-          fit⋮ origin)
+          fit_⋮ stretch
+          tile⋮ false
+          resize-w_⋮ (* 1)
+          resize-h_⋮ (* 1)
+          )
         WWML
         ) do
-          Image.new(src, opacity.to(Float32), ImageFit.term(fit, fallback: :origin))
+          Image.new(src,
+            fit: ImageFit.term(fit),
+            tile: tile.true?,
+            opacity: opacity.to(Float32),
+            resize_w: Magn.abst(resize_w, Magn.rel(1)),
+            resize_h: Magn.abst(resize_h, Magn.rel(1)),
+          )
         end
 
         # |@ soma.dwuir.paint.linear-gradient
@@ -214,11 +230,11 @@ module Ww::Soma::DwUIR
         # |@key focus-radius -- Specifies the radius of the gradient's focus.
         matchpi(<<-WWML
         (radial-gradient (%past (stop (%number 0 <= _ <= 1) _) min: 1) ¦ _
-          center-l_number
-          center-t_number
+          center-l⋮ 0.5
+          center-t⋮ 0.5
           center-radius_number
-          focus-l_number
-          focus-t_number
+          focus-l⋮ 0.5
+          focus-t⋮ 0.5
           focus-radius_number)
         WWML
         ) do
