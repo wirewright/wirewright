@@ -1,12 +1,14 @@
 module Ww::Soma::DwUIR
   # Represents a segment defined by two `Point`s.
+  #
+  # Zero-length segments are allowed and treated as points.
   struct Segment
     def initialize(@a : Point, @b : Point)
     end
 
     # Returns the bounding box of this segment.
     def bounds : Rect
-      Rect.new(tl: @a, br: @b)
+      Rect.new(tl: @a.min(@b), br: @a.max(@b))
     end
 
     # Returns `true` if *point* is located on this segment. Returns `false` otherwise.
@@ -15,7 +17,32 @@ module Ww::Soma::DwUIR
     end
 
     private def collinear?(point : Point) : Bool
-      (point - @a).x(@b - @a).abs < 1e-10
+      Segment.new(@a, point).orientation(@b) == 0
+    end
+
+    # Returns the orientation of this segment relative to *c*.
+    def orientation(c : Point) : Int32
+      val = (@b - @a).x(c - @a)
+
+      if val.abs < 1e-10 # ≈ 0
+        return 0
+      end
+
+      val.positive? ? 1 : -1
+    end
+
+    # Returns `true` if this segment intersects *other*. Returns `false` otherwise.
+    def intersects?(other : Segment) : Bool
+      o1 = orientation(other.@a)
+      o2 = orientation(other.@b)
+      o3 = other.orientation(@a)
+      o4 = other.orientation(@b)
+
+      if o1 != o2 && o3 != o4
+        return true
+      end
+
+      includes?(other.@a) || includes?(other.@b) || other.includes?(@a) || other.includes?(@b)
     end
 
     # Returns `true` if this segment intersects with the horizontal ray

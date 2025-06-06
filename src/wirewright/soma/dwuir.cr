@@ -25,6 +25,15 @@ require "./dwuir/font"
   require "./dwuir/text_element"
   require "./dwuir/text_command"
   require "./dwuir/text_drawable"
+  require "./dwuir/picture"
   require "./dwuir/walk"
   require "./dwuir/render"
+
+  require "./dwuir/pixel_rect"
+  require "./dwuir/compositor"
+  require "./dwuir/resource_loader"
+  require "./dwuir/platform"
+  require "./dwuir/player"
+
+  require "./dwuir/pvg"
 {% end %}

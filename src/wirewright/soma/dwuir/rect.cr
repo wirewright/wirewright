@@ -309,5 +309,34 @@ module Ww::Soma::DwUIR
     def align(other : Rect, point : Point) : Rect
       translate(denormalize(point) - other.denormalize(point))
     end
+
+    def points : {Point, Point, Point, Point}
+      {tl, tr, bl, br}
+    end
+
+    def segments : {Segment, Segment, Segment, Segment}
+      {Segment.new(tl, tr),
+       Segment.new(tr, br),
+       Segment.new(br, bl),
+       Segment.new(bl, tl)}
+    end
+
+    def visible?(quad : Quad) : Bool
+      return false if empty?
+      return true if points.any? { |point| quad.includes?(point) }
+      return true if quad.points.any? { |point| includes?(point) }
+
+      quad.segments.each do |s1|
+        segments.each do |s2|
+          return true if s1.intersects?(s2)
+        end
+      end
+
+      false
+    end
+
+    def visible?(quads : Slice(Quad)) : Bool
+      !empty? && quads.all? { |quad| visible?(quad) }
+    end
   end
 end

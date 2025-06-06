@@ -1,7 +1,7 @@
 module Ww::Soma::DwUIR
   # Represents the context of each node.
   defcase Context,
-    view : Rect,
+    view : Slice(Quad),
     view_tf : Tf,
     layer : Int32,
     tf : Tf,
@@ -12,10 +12,12 @@ module Ww::Soma::DwUIR
   # Returns `true` if *bounds* are going to be seen by the user after all
   # transformations based on *context*. Returns `false` otherwise.
   def visible?(context : Context, bounds : Rect = context.bounds) : Bool
-    tfview = context.view_tf.map(context.view)
     tfbounds = context.tf.map(bounds)
+    tfbounds.visible?(context.view)
 
-    !(tfview & tfbounds).empty?
+    # tfview = bounds.visible?() context.view_tf.map(context.view)
+
+    # !(tfview & tfbounds).empty?
   end
 
   # Determines whether `walk` should recurse into children nodes.
@@ -29,7 +31,7 @@ module Ww::Soma::DwUIR
   # *fn* must in turn respond whether to recurse into the node or not.
   def walk(dwuir : Term, &fn : Context, Term -> WalkFlow) : Nil
     context = Context.new(
-      view: Rect.inf,
+      view: Slice(Quad).empty,
       view_tf: Tf.new,
       layer: 0,
       tf: Tf.new,
@@ -38,11 +40,11 @@ module Ww::Soma::DwUIR
       bounds: Rect.empty,
     )
 
-    walk(context, dwuir, fn)
+    walk(context, dwuir, &fn)
   end
 
   # :nodoc:
-  def walk(context, node, fn)
+  def walk(context, node, &fn : Context, Term -> WalkFlow) : Nil
     Term.case(node) do
       # NOTE: the order of matchpis here is important for some nodes but
       # not others; try not to shuffle them too much.
@@ -63,7 +65,7 @@ module Ww::Soma::DwUIR
       # there is no dependence between item order in the DwUIR markup and the z-index
       # etc. Clients must express their intent clearly; DwUIR will *not* try to guess.
       #
-      # See also: `soma.dwuir.composite` to learn about scoping z-indices.
+      # See also: `soma.dwuir.node.composite` to learn about scoping z-indices.
       # |@endblock
       #
       # |@key z-index -- The z-index to use.
@@ -245,7 +247,7 @@ module Ww::Soma::DwUIR
         continue
       end
 
-      # |@ soma.dwuir.viewport
+      # |@ soma.dwuir.node.viewport
       #
       # |@block
       # Use the `viewport` node to control overflow by clipping.
@@ -275,8 +277,7 @@ module Ww::Soma::DwUIR
         ]
 
         context = context.copy_with(
-          view: context.bounds,
-          view_tf: context.tf,
+          view: context.view.append(context.tf.quad(context.bounds)),
           bounds: context.bounds.translate(pan),
           tf: context.tf.append(action),
         )
@@ -291,7 +292,7 @@ module Ww::Soma::DwUIR
           next unless node.type.dict?
 
           node.each_item_unordered do |child|
-            walk(context, child, fn)
+            walk(context, child, &fn)
           end
         end
       end

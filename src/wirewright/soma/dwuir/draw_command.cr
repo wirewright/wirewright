@@ -113,6 +113,8 @@ module Ww::Soma::DwUIR
     offset : Float32
 
   abstract class DrawCommand
+    DMG_RING_THICKNESS = 1.0f32
+
     # Returns the value that draw commands must be ordered (e.g. sorted) by.
     abstract def ord
 
@@ -124,7 +126,7 @@ module Ww::Soma::DwUIR
     # It is essentially a box that is slightly larger than `tfbounds`, to accomodate
     # for painting errors/imprecisions.
     def dmgbounds : Rect
-      tfbounds.pad(-10)
+      tfbounds.pad(-DMG_RING_THICKNESS).ceil
     end
   end
 
@@ -143,8 +145,7 @@ module Ww::Soma::DwUIR
   #   or selection rectangles which are otherwise members of the same *layer*.
   # - *shape* specifies the `Shape` itself.
   defcase DrawShape < DrawCommand,
-    view : Rect,
-    view_tf : Tf,
+    view : Slice(Quad),
     bounds : Rect,
     bounds_tf : Tf,
     layer : Int32,
@@ -190,6 +191,10 @@ module Ww::Soma::DwUIR
     def tfbounds : Rect
       picture.tfbounds
     end
+
+    # Composites are not compared by their content (`picture`); only by opacity
+    # and layer (their own "contribution" so to speak).
+    def_equals_and_hash opacity, layer
   end
 
   # Lists the available ranks for a draw command. Most shapes are in the `Mid`

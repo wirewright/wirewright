@@ -66,8 +66,16 @@ module Ww::Soma::DwUIR
       x * other.y - y * other.x
     end
 
+    # Divides the unit range into `x` and `y` equally sized buckets, and returns
+    # the size of one bucket.
     def normalized : Point
-      Point.new(1/x, 1/y)
+      Point.new(1 / x, 1 / y)
+    end
+
+    # Compares this point to a reference point *ref*. This is effectively
+    # a component-wise division of this point's coordinates by *ref*'s.
+    def compare(ref : Point) : Point
+      Point.new(x / ref.x, y / ref.y)
     end
 
     # Subtracts *other* point or scalar from this point.

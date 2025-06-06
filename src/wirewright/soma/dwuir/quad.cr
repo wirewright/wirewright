@@ -5,6 +5,10 @@ module Ww::Soma::DwUIR
     def initialize(@a : Point, @b : Point, @c : Point, @d : Point)
     end
 
+    def points : {Point, Point, Point, Point}
+      {@a, @b, @c, @d}
+    end
+
     # Returns the segments that this quad is composed of.
     def segments : {Segment, Segment, Segment, Segment}
       {Segment.new(@a, @b),

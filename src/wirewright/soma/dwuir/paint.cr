@@ -117,8 +117,9 @@ module Ww::Soma::DwUIR
         # is accepted.
         # |@endblock
         #
-        # |@key src -- The specification for how to load an image. Different painters
-        # will support different specifications; consult e.g. `soma.painter.plutovg`.
+        # |@key src soma.dwuir.resources.image -- The specification for how to load
+        # an image. Different painters will support different specifications. See
+        # `soma.dwuir.painters.plutovg.image` to learn about the supported formats.
         #
         # |@key opacity -- Specifies the opacity of the image, a number between `0`
         # (meaning fully transparent) and `1` (meaning fully opaque).

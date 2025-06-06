@@ -1,5 +1,5 @@
 module Ww::Soma::DwUIR
-  # |@ soma.dwuir.magnitude
+  # |@ soma.dwuir.magn
   #
   # |@block
   # There are currently two kinds of supported magnitudes:

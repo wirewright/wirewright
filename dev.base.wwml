@@ -2,17 +2,17 @@
 ;; the `dev` tool to modify this file.
 
 presets:
-{"tests":
-  {flags: {"preview_mt": true, "execution_context": true},
-   source: "pattern6_test.cr"},
- "mt":
-  {flags: {"preview_mt": true, "execution_context": true}},
- "dwuir":
+{"vdwuir":
   {flags:
     {"preview_mt": true,
      "execution_context": true,
      "newsoma": true},
-   source: "dwuir2-failed-layers.cr"},
+   source: "src/vdwuir.cr"},
+ "tests":
+  {flags: {"preview_mt": true, "execution_context": true},
+   source: "pattern6_test.cr"},
+ "mt":
+  {flags: {"preview_mt": true, "execution_context": true}},
  "dev":
   {flags: {"preview_mt": true, "execution_context": true},
    source: "src/dev.cr"},

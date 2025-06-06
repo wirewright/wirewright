@@ -25,7 +25,9 @@ module Ww::Soma::DwUIR
       matchpi %[(composite children_+ ¦ _ opacity⋮ 1)] do
         target = Picture.new
 
-        render(target, pencils, context, children)
+        walk(context, children) do |subcontext, child|
+          render(target, pencils, subcontext, child)
+        end
 
         target.finish
 
@@ -117,7 +119,7 @@ module Ww::Soma::DwUIR
         )
 
         shape = RectShape.new(Paint.term(fill), border, radii)
-        command = DrawShape.new(context.view, context.view_tf, context.bounds, context.tf, context.layer, :mid, shape)
+        command = DrawShape.new(context.view, context.bounds, context.tf, context.layer, :mid, shape)
 
         picture << command
 
@@ -412,7 +414,7 @@ module Ww::Soma::DwUIR
               color: dw.selected ? selection.try(&.color) || frag_color : frag_color,
             )
 
-            command = DrawShape.new(context.view, context.view_tf, frag_bounds, context.tf, context.layer, :mid, shape)
+            command = DrawShape.new(context.view, frag_bounds, context.tf, context.layer, :mid, shape)
 
             picture << command
           in TextDrawable::Selection
@@ -427,7 +429,7 @@ module Ww::Soma::DwUIR
             next unless visible?(context, sel_bounds)
 
             shape = RectShape.new(sel.fill, radii: RectRadii.all(sel.radius))
-            command = DrawShape.new(context.view, context.view_tf, sel_bounds, context.tf, context.layer, dw.rank, shape)
+            command = DrawShape.new(context.view, sel_bounds, context.tf, context.layer, dw.rank, shape)
 
             picture << command
           end
