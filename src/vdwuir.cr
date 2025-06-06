@@ -54,11 +54,11 @@ module VDwUIR
   end
 
   def open(path : Path, initial : Term, title0 : String, w0 : Int32, h0 : Int32)
-    resources = DwUIR::ResourceLoader.new
+    files = Disk
 
     buffer = Slice(UInt32).new(w0 * h0)
     screen = DwUIR::PixelRect.new(0, 0, w0, h0)
-    viewer = DwUIR::Viewer.new(screen, DwUIR::Compositor.new, DwUIR::PvgPlatform.new, resources)
+    viewer = DwUIR::Viewer.new(screen, DwUIR::Compositor.new, DwUIR::PvgPlatform.new(files, DwUIR::Point[w0, h0]))
     texture = SF::Texture.new(w0, h0)
 
     window = SF::RenderWindow.new(SF::VideoMode.new(w0, h0), title: title0)

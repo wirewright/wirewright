@@ -15,6 +15,13 @@ module Ww::Soma::DwUIR
       new(Float32::INFINITY, Float32::INFINITY)
     end
 
+    # Constructs a point at *x*, *y*.
+    #
+    # NOTE: All of *x*, *y* must respond to `to_f32`.
+    def self.[](x, y) : Point
+      Point.new(x.to_f32, y.to_f32)
+    end
+
     # Changes the *x* or *y* component of this point -- effectively moving
     # this point to another location.
     def mv(x : Float32 = @x, y : Float32 = @y) : Point

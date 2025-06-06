@@ -83,4 +83,6 @@ module Ww::Soma::DwUIR
     size : Float32,
     leading : Magn = Magn.rel(1.0),
     tracking : Magn = Magn.rel(0.0)
+
+  alias PencilServer = PencilRequest -> IPencil
 end

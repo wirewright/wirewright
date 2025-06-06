@@ -6,17 +6,15 @@ module Ww::Soma::DwUIR
   class Viewer
     @picture : Picture?
 
-    def initialize(
-      @screen : PixelRect,
-      @compositor : Compositor,
-      @platform : Platform,
-      @resources : ResourceLoader,
-    )
+    def initialize(@screen : PixelRect, @compositor : Compositor, @platform : Platform)
+      unless @screen.bounds.xy == {0, 0}
+        raise ArgumentError.new("expected a pixel rect with x=0 y=0")
+      end
     end
 
     # :nodoc:
     def paint(key : DrawKey) : Nil
-      @compositor.layer_for(key) { @platform.layer_for(@resources, key) }
+      @compositor.layer_for(key) { @platform.layer_for(key) }
     end
 
     # :nodoc:
@@ -80,7 +78,7 @@ module Ww::Soma::DwUIR
 
       picture1.damage(picture0) do |dmgrect|
         rects << dmgrect
-        dmgbounds = dmgbounds ? dmgbounds.max(dmgrect) : dmgrect
+        dmgbounds = dmgbounds ? dmgbounds | dmgrect : dmgrect
       end
 
       # Nothing damaged, meaning there is no change between the pictures.

@@ -1,0 +1,139 @@
+module Ww::Soma::DwUIR
+  # A PlutoVG-based implementation of an image server.
+  class PvgImageServer
+    include ImageServer
+
+    Log = ::Log.for(self)
+
+    # Constructs an image server.
+    #
+    # - The file server at *files* lets the image server read the paths that
+    #   the user provides.
+    # - *vwh* sets the viewport width and height; as far as I understand, this is
+    #   necessary for PlutoSVG to be able to resolve percent (root size?) of SVG.
+    def initialize(@files : FileServer, @vwh : Point)
+      @cache = {} of Term => PvgImage
+    end
+
+    private def load!(src : Term) : PvgImage?
+      Term.case(src) do
+        matchpi %{(file path_string)} do |path|
+          path = Path[path.to(String)]
+
+          begin
+            data = @files.read(path)
+          rescue e : FileServerException
+            raise ImageServerException.new("could not read image file", cause: e)
+          end
+
+          case path.extension
+          when ".svg"
+            unless document0 = PlutoSVG.document_load_from_data(data, data.size, @vwh.x, @vwh.y, nil, nil)
+              raise ImageServerException.new("image file found does not appear to be (a supported kind of) SVG")
+            end
+
+            documents = -> do
+              PlutoSVG.document_load_from_data(data, data.size, @vwh.x, @vwh.y, nil, nil) || unreachable
+            end
+
+            PvgSvgImage.new(document0, documents)
+          when ".png", ".jpg", ".jpeg", ".bmp", ".psd", ".gif", ".ppm"
+            # |@ soma.dwuir.paint.image.plutovg
+            #
+            # |@block
+            # PlutoVG uses stb-image under the hood. Thus the following formats are supported, citing
+            # from stb-image v2.30:
+            #
+            #   - JPEG baseline & progressive (12 bpc/arithmetic not supported, same as stock IJG lib)
+            #   - PNG 1/2/4/8/16-bit-per-channel
+            #   - TGA (not sure what subset, if a subset)
+            #   - BMP non-1bpp, non-RLE
+            #   - PSD (composited view only, no extra channels, 8/16 bit-per-channel)
+            #   - GIF (*comp always reports as 4-channel)
+            #   - HDR (radiance rgbE format)
+            #   - PIC (Softimage PIC)
+            #   - PNM (PPM and PGM binary only)
+            #
+            # Note that Wirewright itself only lets the following file extensions through:
+            # png, jpg, jpeg, bmp, psd, gif, ppm. The above applies to them.
+            # |@endblock
+
+            unless surface = PlutoVG.surface_load_from_image_data(data, data.size)
+              raise ImageServerException.new("image file found but its content appears to be malformed (could not load)")
+            end
+
+            PvgRasterImage.new(surface)
+          else
+            raise ImageServerException.new("invalid or unsupported file extension: #{path.extension}")
+          end
+        end
+
+        otherwise do
+          raise ImageServerException.new("invalid or unsupported image src: #{src}")
+        end
+      end
+    end
+
+    def load(src : Term) : PvgImage
+      @cache.put_if_absent(src) { load!(src) }
+    end
+
+    def unload(src : Term) : Nil
+      @cache.delete(src)
+    end
+  end
+
+  alias PvgImage = PvgRasterImage | PvgSvgImage
+
+  # Represents a raster image. Points to the underlying PlutoVG surface, which
+  # will therefore be reused for all instances of the image.
+  class PvgRasterImage
+    include Image
+
+    getter size : Point
+
+    def initialize(@surface : PlutoVG::Surface)
+      @size = Point[
+        PlutoVG.surface_get_width(surface),
+        PlutoVG.surface_get_height(surface),
+      ]
+    end
+
+    def finalize
+      PlutoVG.surface_destroy(@surface)
+    end
+
+    def to_unsafe : PlutoVG::Surface
+      @surface
+    end
+  end
+
+  # Represents an SVG image.
+  #
+  # It appears that PlutoSVG documents are expended by rendering them; therefore,
+  # `document` yields a new document every time it is called. Only the underlying
+  # SVG bytes (markup) are reused.
+  class PvgSvgImage
+    include Image
+
+    getter size : Point
+
+    def initialize(document0 : PlutoSVG::Document, @documents : -> PlutoSVG::Document)
+      PlutoSVG.document_extents(document0, nil, out extents)
+
+      @size = Point.new(extents.w, extents.h)
+    end
+
+    # WARNING: you **must not** retain the yielded document. It is freed
+    # after the block.
+    def document(& : PlutoSVG::Document ->)
+      document = @documents.call
+
+      begin
+        yield document
+      ensure
+        PlutoSVG.document_destroy(document)
+      end
+    end
+  end
+end

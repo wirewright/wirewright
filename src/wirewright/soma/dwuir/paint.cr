@@ -133,13 +133,12 @@ module Ww::Soma::DwUIR
         #
         # |@key resize-h soma.dwuir.magn -- Changes the initial height of the image.
         matchpi(<<-WWML
-        (image src_ ¦ _
-          opacity: (%optional 1 opacity←(%number 0 <= _ <= 1))
-          fit_⋮ stretch
-          tile⋮ false
-          resize-w_⋮ (* 1)
-          resize-h_⋮ (* 1)
-          )
+          (image src_ ¦ _
+            opacity: (%optional 1 opacity←(%number 0 <= _ <= 1))
+            fit_⋮ stretch
+            tile⋮ false
+            resize-w_⋮ (* 1)
+            resize-h_⋮ (* 1))
         WWML
         ) do
           Image.new(src,
@@ -178,11 +177,11 @@ module Ww::Soma::DwUIR
         # numbers between `0` and `1` are expected although not enforced, relative to
         # the height of the painted area.
         matchpi(<<-WWML
-        (linear-gradient (%past (stop (%number 0 <= _ <= 1) _) min: 1) ¦ _
-          begin-l⋮ 0.5
-          begin-t⋮ 0
-          end-l⋮ 0.5
-          end-t⋮ 1)
+          (linear-gradient (%past (stop (%number 0 <= _ <= 1) _) min: 1) ¦ _
+            begin-l⋮ 0.5
+            begin-t⋮ 0
+            end-l⋮ 0.5
+            end-t⋮ 1)
         WWML
         ) do
           stops = term.items.move(1)
@@ -230,13 +229,13 @@ module Ww::Soma::DwUIR
         #
         # |@key focus-radius -- Specifies the radius of the gradient's focus.
         matchpi(<<-WWML
-        (radial-gradient (%past (stop (%number 0 <= _ <= 1) _) min: 1) ¦ _
-          center-l⋮ 0.5
-          center-t⋮ 0.5
-          center-radius_number
-          focus-l⋮ 0.5
-          focus-t⋮ 0.5
-          focus-radius_number)
+          (radial-gradient (%past (stop (%number 0 <= _ <= 1) _) min: 1) ¦ _
+            center-l⋮ 0.5
+            center-t⋮ 0.5
+            center-radius_number
+            focus-l⋮ 0.5
+            focus-t⋮ 0.5
+            focus-radius_number)
         WWML
         ) do
           stops = term.items.move(1)

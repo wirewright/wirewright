@@ -7,125 +7,53 @@ module Ww::Soma::DwUIR
     radius : Float32,
     height : Float32
 
-  private def render(picture : Picture, pencils : PencilRequest -> IPencil, context : Context, node : Term) : WalkFlow
+  defcase TextSpec,
+    caption : String,
+    font : Path,
+    size : Float32,
+    color : Paint::Any,
+    leading : Magn,
+    tracking : Magn,
+    wrap : WrapSpec,
+    selection : SelectionSpec?,
+    underline : UnderlineSpec?
+
+  class TextSpec
+    def each_text_drawable(pencils : PencilServer, *, origin = Point.new(0, 0), &sink : TextDrawable::Any ->)
+      pencil = pencils.call(PencilRequest.new(font, size, leading, tracking))
+
+      TextDrawable.each(pencil, wrap, caption, selection.try(&.range)) do |dw|
+        case dw
+        in TextDrawable::InlineString
+          dw = dw.copy_with(bounds: dw.bounds
+            .grow(dh: underline.try { |u| u.offset + u.thickness } || 0.0f32)
+            .translate(origin)
+            .ceil)
+        in TextDrawable::Selection
+          next unless sel = selection
+
+          dw = dw.copy_with(bounds: dw.bounds
+            .resize(h: sel.height)
+            .translate(origin)
+            .mapx(&.round)
+            .mapy(&.ceil))
+        end
+
+        sink.call(dw)
+      end
+    end
+  end
+
+  # :nodoc:
+  #
+  # Parses a possibly text *node* and returns the corresponding `TextSpec`.
+  #
+  # - *pencils* specifies the pencil server to use (used here for calculating
+  #   line height etc.)
+  # - *wrap extent* specifies the width/height of text to wrap at/until. Points
+  #   with infinite width, height, or both are allowed as well.
+  def text_spec?(node : Term, pencils : PencilServer, wrap_extent : Point) : TextSpec?
     Term.case(node) do
-      # |@ soma.dwuir.node.composite
-      #
-      # |@block
-      # The `composite` node lets you scope `z-index`, and apply *opacity* to any
-      # number of children. All children are going to be drawn as a unit, and only
-      # then will *opacity* be applied to them. Using `composite` is therefore
-      # different from setting opacity of each individual child.
-      # |@endblock
-      #
-      # |@key children soma.dwuir.node -- Children that will be part of the composite.
-      #
-      # |@key opacity -- Specifies the opacity (clamped to 0-1). `0` means fully
-      # transparent, and `1` means fully opaque.
-      matchpi %[(composite children_+ ¦ _ opacity⋮ 1)] do
-        target = Picture.new
-
-        walk(context, children) do |subcontext, child|
-          render(target, pencils, subcontext, child)
-        end
-
-        target.finish
-
-        picture << DrawComposite.new(target, opacity: opacity.to(Float32).clamp(0.0f32..1.0f32), layer: context.layer)
-
-        WalkFlow::Next
-      end
-
-      # |@ soma.dwuir.node.rect
-      #
-      # |@block
-      # The `rect` node is drawn as a rectangle.
-      # |@endblock
-      #
-      # |@key fill soma.dwuir.paint -- Sets the fill (background) paint of
-      # the rectangle.
-      #
-      # |@key thickness-l soma.dwuir.magn -- Sets the thickness of the left
-      # border of the rectangle. Relative numbers are interpreted as fractions
-      # of the rectangle's width. Raw numbers receive absolute treatment (pixels).
-      #
-      # |@key thickness-r soma.dwuir.magn -- Sets the thickness of the right
-      # border of the rectangle. Relative numbers are interpreted as fractions
-      # of the rectangle's width. Raw numbers receive absolute treatment (pixels).
-      #
-      # |@key thickness-t soma.dwuir.magn -- Sets the thickness of the top
-      # border of the rectangle. Relative numbers are interpreted as fractions
-      # of the rectangle's height. Raw numbers receive absolute treatment (pixels).
-      #
-      # |@key thickness-b soma.dwuir.magn -- Sets the thickness of the bottom
-      # border of the rectangle. Relative numbers are interpreted as fractions
-      # of the rectangle's height. Raw numbers receive absolute treatment (pixels).
-      #
-      # |@key stroke soma.dwuir.paint -- Sets the stroke (border) paint of
-      # the rectangle.
-      #
-      # |@key radius-tl soma.dwuir.magn -- Sets the radius of the rectangle's
-      # top-left corner. Relative numbers are interpreted as fractions of
-      # the length of the rectangle's longest side. Raw numbers receive
-      # absolute treatment (pixels).
-      #
-      # |@key radius-tr soma.dwuir.magn -- Sets the radius of the rectangle's
-      # top-right corner. Relative numbers are interpreted as fractions of
-      # the length of the rectangle's longest side. Raw numbers receive
-      # absolute treatment (pixels).
-      #
-      # |@key radius-bl soma.dwuir.magn -- Sets the radius of the rectangle's
-      # bottom-left corner. Relative numbers are interpreted as fractions of
-      # the length of the rectangle's longest side. Raw numbers receive
-      # absolute treatment (pixels).
-      #
-      # |@key radius-br soma.dwuir.magn -- Sets the radius of the rectangle's
-      # bottom-right corner. Relative numbers are interpreted as fractions of
-      # the length of the rectangle's longest side. Raw numbers receive
-      # absolute treatment (pixels).
-      matchpi(<<-WWML
-        (rect ¦ _
-          fill_⋮ (rgba 0 0 0 0)
-          thickness-l_⋮ 0
-          thickness-r_⋮ 0
-          thickness-t_⋮ 0
-          thickness-b_⋮ 0
-          stroke_⋮ (rgba 0 0 0 0)
-          radius-tl_⋮ 0
-          radius-tr_⋮ 0
-          radius-bl_⋮ 0
-          radius-br_⋮ 0)
-      WWML
-      ) do
-        unless visible?(context)
-          return WalkFlow::Next
-        end
-
-        border = RectBorder.new(
-          l: Magn.abst(thickness_l, Magn.abs(0)).resolve(context.bounds.w),
-          r: Magn.abst(thickness_r, Magn.abs(0)).resolve(context.bounds.w),
-          t: Magn.abst(thickness_t, Magn.abs(0)).resolve(context.bounds.h),
-          b: Magn.abst(thickness_b, Magn.abs(0)).resolve(context.bounds.h),
-          color: Paint.term(stroke),
-        )
-
-        rmax = {context.bounds.w, context.bounds.h}.max
-
-        radii = RectRadii.new(
-          tl: Magn.abst(radius_tl, Magn.abs(0)).resolve(rmax),
-          tr: Magn.abst(radius_tr, Magn.abs(0)).resolve(rmax),
-          bl: Magn.abst(radius_bl, Magn.abs(0)).resolve(rmax),
-          br: Magn.abst(radius_br, Magn.abs(0)).resolve(rmax),
-        )
-
-        shape = RectShape.new(Paint.term(fill), border, radii)
-        command = DrawShape.new(context.view, context.bounds, context.tf, context.layer, :mid, shape)
-
-        picture << command
-
-        WalkFlow::Next
-      end
-
       # |@ soma.dwuir.node.text
       #
       # |@block
@@ -156,36 +84,31 @@ module Ww::Soma::DwUIR
       # |@key color soma.dwuir.paint -- Specifies the paint that should be used
       # for the text.
       matchpi(<<-WWML
-        (text ¦ _ caption_string
-                  font_string
-                  size_number
-                  weight:
-                    (%optional 400
-                      weight←(%any 100 200 300
-                                   400 450 500
-                                   600 700 800
-                                   900))
-                  italic⋮ false
-                  leading⋮ 1.5
-                  tracking⋮ 0.0
-                  color_⋮ (rgb 0 0 0))
+        (text ¦ _
+          caption_string
+          font_string
+          size_number
+          weight: (%optional 400 weight←(%any 100 200 300 400 450 500 600 700 800 900))
+          italic⋮ false
+          leading⋮ 1.5
+          tracking⋮ 0.0
+          color_⋮ (rgb 0 0 0))
       WWML
       ) do |caption|
-        fontpath = FontIndex.path_to?(
+        text_font = FontIndex.path_to?(
           family: font.to(String),
           weight: FontWeight.parse(weight.to(Int32)),
           italic: italic.true?,
         )
 
-        unless fontpath
-          return WalkFlow::Next
-        end
+        return unless text_font
 
-        frag_color = Paint.term(color)
-        frag_leading = Magn.relt(leading, Magn.rel(0))
-        frag_tracking = Magn.relt(tracking, Magn.rel(1))
+        text_size = size.to(Float32)
+        text_color = Paint.term(color)
+        text_leading = Magn.relt(leading, Magn.rel(0))
+        text_tracking = Magn.relt(tracking, Magn.rel(1))
 
-        pencil = pencils.call(PencilRequest.new(fontpath, size.to(Float32), frag_leading, frag_tracking))
+        pencil = pencils.call(PencilRequest.new(text_font, text_size, text_leading, text_tracking))
 
         wrap = WrapSpec.nowrap
         selection = nil
@@ -302,18 +225,19 @@ module Ww::Soma::DwUIR
           # |@key wrap-on-words -- Enables or disables wrapping on word boundaries.
           #
           # |@key wrap-on-letters -- Enables or disables wrapping on letter boundaries.
-          matchpi(
-            %[{¦ wrap: true
-                 wrap-ellipsis⋮ "..."
-                 wrap-history: (%optional auto wrap-history←(%any° auto (%number +i32!)))
-                 wrap-on-words⋮ true
-                 wrap-on-letters⋮ true}]
+          matchpi(<<-WWML
+            {¦ wrap: true
+               wrap-ellipsis⋮ "..."
+               wrap-history: (%optional auto wrap-history←(%any° auto (%number +i32!)))
+               wrap-on-words⋮ true
+               wrap-on-letters⋮ true}
+          WWML
           ) do
             wrap = WrapSpec.new(
               ellipsis: wrap_ellipsis.to(String),
               on_words: wrap_on_words.true?,
               on_letters: wrap_on_letters.true?,
-              bounds: Rect.new(tl: Point.new(0, 0), size: context.bounds.size),
+              bounds: Rect.new(Point.new(0, 0), wrap_extent),
               history: wrap_history == Term[:auto] ? WrapHistory::INFINITE : wrap_history.to(Int32),
             )
 
@@ -395,42 +319,169 @@ module Ww::Soma::DwUIR
           otherwise { }
         end
 
-        TextDrawable.each(pencil, wrap, caption, selection.try(&.range)) do |dw|
+        TextSpec.new(caption,
+          text_font, text_size,
+          text_color,
+          text_leading, text_tracking,
+          wrap, selection, underline,
+        )
+      end
+    end
+  end
+
+  private def render(picture : Picture, pencils : PencilServer, context : Context, node : Term) : WalkFlow
+    Term.case(node) do
+      # |@ soma.dwuir.node.composite
+      #
+      # |@block
+      # The `composite` node lets you scope `z-index`, and apply *opacity* to any
+      # number of children. All children are going to be drawn as a unit, and only
+      # then will *opacity* be applied to them. Using `composite` is therefore
+      # different from setting opacity of each individual child.
+      # |@endblock
+      #
+      # |@key children soma.dwuir.node -- Children that will be part of the composite.
+      #
+      # |@key opacity -- Specifies the opacity (clamped to 0-1). `0` means fully
+      # transparent, and `1` means fully opaque.
+      matchpi %[(composite children_+ ¦ _ opacity⋮ 1)] do
+        target = Picture.new
+
+        walk(context, children) do |subcontext, child|
+          render(target, pencils, subcontext, child)
+        end
+
+        target.finish
+
+        command = DrawComposite.new(target,
+          opacity: opacity.to(Float32).clamp(0.0f32..1.0f32),
+          layer: context.layer,
+        )
+
+        picture << command
+
+        WalkFlow::Next
+      end
+
+      # |@ soma.dwuir.node.rect
+      #
+      # |@block
+      # The `rect` node is drawn as a rectangle.
+      # |@endblock
+      #
+      # |@key fill soma.dwuir.paint -- Sets the fill (background) paint of
+      # the rectangle.
+      #
+      # |@key thickness-l soma.dwuir.magn -- Sets the thickness of the left
+      # border of the rectangle. Relative numbers are interpreted as fractions
+      # of the rectangle's width. Raw numbers receive absolute treatment (pixels).
+      #
+      # |@key thickness-r soma.dwuir.magn -- Sets the thickness of the right
+      # border of the rectangle. Relative numbers are interpreted as fractions
+      # of the rectangle's width. Raw numbers receive absolute treatment (pixels).
+      #
+      # |@key thickness-t soma.dwuir.magn -- Sets the thickness of the top
+      # border of the rectangle. Relative numbers are interpreted as fractions
+      # of the rectangle's height. Raw numbers receive absolute treatment (pixels).
+      #
+      # |@key thickness-b soma.dwuir.magn -- Sets the thickness of the bottom
+      # border of the rectangle. Relative numbers are interpreted as fractions
+      # of the rectangle's height. Raw numbers receive absolute treatment (pixels).
+      #
+      # |@key stroke soma.dwuir.paint -- Sets the stroke (border) paint of
+      # the rectangle.
+      #
+      # |@key radius-tl soma.dwuir.magn -- Sets the radius of the rectangle's
+      # top-left corner. Relative numbers are interpreted as fractions of
+      # the length of the rectangle's longest side. Raw numbers receive
+      # absolute treatment (pixels).
+      #
+      # |@key radius-tr soma.dwuir.magn -- Sets the radius of the rectangle's
+      # top-right corner. Relative numbers are interpreted as fractions of
+      # the length of the rectangle's longest side. Raw numbers receive
+      # absolute treatment (pixels).
+      #
+      # |@key radius-bl soma.dwuir.magn -- Sets the radius of the rectangle's
+      # bottom-left corner. Relative numbers are interpreted as fractions of
+      # the length of the rectangle's longest side. Raw numbers receive
+      # absolute treatment (pixels).
+      #
+      # |@key radius-br soma.dwuir.magn -- Sets the radius of the rectangle's
+      # bottom-right corner. Relative numbers are interpreted as fractions of
+      # the length of the rectangle's longest side. Raw numbers receive
+      # absolute treatment (pixels).
+      matchpi(<<-WWML
+        (rect ¦ _
+          fill_⋮ (rgba 0 0 0 0)
+          thickness-l_⋮ 0
+          thickness-r_⋮ 0
+          thickness-t_⋮ 0
+          thickness-b_⋮ 0
+          stroke_⋮ (rgba 0 0 0 0)
+          radius-tl_⋮ 0
+          radius-tr_⋮ 0
+          radius-bl_⋮ 0
+          radius-br_⋮ 0)
+      WWML
+      ) do
+        unless visible?(context)
+          return WalkFlow::Next
+        end
+
+        border = RectBorder.new(
+          l: Magn.abst(thickness_l, Magn.abs(0)).resolve(context.bounds.w),
+          r: Magn.abst(thickness_r, Magn.abs(0)).resolve(context.bounds.w),
+          t: Magn.abst(thickness_t, Magn.abs(0)).resolve(context.bounds.h),
+          b: Magn.abst(thickness_b, Magn.abs(0)).resolve(context.bounds.h),
+          color: Paint.term(stroke),
+        )
+
+        rmax = {context.bounds.w, context.bounds.h}.max
+
+        radii = RectRadii.new(
+          tl: Magn.abst(radius_tl, Magn.abs(0)).resolve(rmax),
+          tr: Magn.abst(radius_tr, Magn.abs(0)).resolve(rmax),
+          bl: Magn.abst(radius_bl, Magn.abs(0)).resolve(rmax),
+          br: Magn.abst(radius_br, Magn.abs(0)).resolve(rmax),
+        )
+
+        shape = RectShape.new(Paint.term(fill), border, radii)
+        command = DrawShape.new(context.view, context.bounds, context.tf, context.layer, :mid, shape)
+        picture << command
+
+        WalkFlow::Next
+      end
+
+      # See `text_spec?` for docs. We use a separate method for parsing texts
+      # to allow the other methods (`hit`, `measure`, etc.) have access to it
+      # as well.
+      matchpi %{[text]} do
+        unless spec = text_spec?(node, pencils, wrap_extent: context.bounds.size)
+          return WalkFlow::Next
+        end
+
+        spec.each_text_drawable(pencils, origin: context.bounds.tl) do |dw|
           case dw
           in TextDrawable::InlineString
-            frag_bounds = dw.bounds
-              .translate(context.bounds.tl)
-              .grow(dh: underline.try { |u| u.offset + u.thickness } || 0.0f32)
-              .ceil
-
-            next unless visible?(context, frag_bounds)
+            next unless visible?(context, dw.bounds)
 
             shape = FragShape.new(
               string: dw.string,
-              font: fontpath,
-              size: size.to(Float32),
-              tracking: frag_tracking,
-              underline: underline,
-              color: dw.selected ? selection.try(&.color) || frag_color : frag_color,
+              font: spec.font,
+              size: spec.size,
+              tracking: spec.tracking,
+              underline: spec.underline,
+              color: dw.selected ? spec.selection.try(&.color) || spec.color : spec.color,
             )
 
-            command = DrawShape.new(context.view, frag_bounds, context.tf, context.layer, :mid, shape)
-
+            command = DrawShape.new(context.view, dw.bounds, context.tf, context.layer, :mid, shape)
             picture << command
           in TextDrawable::Selection
-            next unless sel = selection
+            next unless selection = spec.selection
+            next unless visible?(context, dw.bounds)
 
-            sel_bounds = dw.bounds
-              .resize(h: sel.height)
-              .translate(context.bounds.tl)
-              .mapx(&.round)
-              .mapy(&.ceil)
-
-            next unless visible?(context, sel_bounds)
-
-            shape = RectShape.new(sel.fill, radii: RectRadii.all(sel.radius))
-            command = DrawShape.new(context.view, sel_bounds, context.tf, context.layer, dw.rank, shape)
-
+            shape = RectShape.new(selection.fill, radii: RectRadii.all(selection.radius))
+            command = DrawShape.new(context.view, dw.bounds, context.tf, context.layer, dw.rank, shape)
             picture << command
           end
         end
@@ -499,7 +550,6 @@ module Ww::Soma::DwUIR
 
         shape = SvgShape.new(src, Color.term(color), resize)
         command = DrawShape.new(context.view, context.bounds, context.tf, context.layer, :mid, shape)
-
         picture << command
 
         WalkFlow::Next
@@ -533,7 +583,7 @@ module Ww::Soma::DwUIR
   # *everything* that it needs to be drawn correctly in isolation.
   #
   # *pencils* is a callback that should serve pencil requests for this function.
-  def picture(dwuir : Term, pencils : PencilRequest -> IPencil) : Picture
+  def picture(dwuir : Term, pencils : PencilServer) : Picture
     picture = Picture.new
 
     walk(dwuir) do |context, node|

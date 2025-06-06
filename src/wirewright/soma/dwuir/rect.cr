@@ -30,7 +30,7 @@ module Ww::Soma::DwUIR
     #
     # NOTE: All of *x*, *y*, *w*, *h* must respond to `to_f32`.
     def self.[](x, y, w, h) : Rect
-      new(Point.new(x.to_f32, y.to_f32), Point.new(w.to_f32, h.to_f32))
+      new(Point[x, y], Point[w, h])
     end
 
     # Returns the size (width and height) of this rectangle.
@@ -236,10 +236,15 @@ module Ww::Soma::DwUIR
       tr - Point.new(radii.tr, 0)
     end
 
-    # Returns the intersection of this and *other* rectangles.
+    # Returns the intersection rect of this and *other* rectangles.
     def &(other : Rect) : Rect
       xrect = Rect.new(tl: tl.max(other.tl), br: br.min(other.br))
       xrect.negative? ? Rect.empty : xrect
+    end
+
+    # Returns the union rect of this and *other* rectangles.
+    def |(other : Rect) : Rect
+      Rect.new(tl.min(other.tl), br.max(other.br))
     end
 
     # Returns a copy of this rectangle whose location and size are rounded to
@@ -285,11 +290,6 @@ module Ww::Soma::DwUIR
     # point (`mid`) of this rectangle.
     def map(point : Point) : Point
       Point.new(x + point.x * w, y + point.y * h)
-    end
-
-    # Returns the bounding box of `self` and *other*.
-    def max(other : Rect) : Rect
-      Rect.new(tl.min(other.tl), br.max(other.br))
     end
 
     # Changes the X components of the top-left and bottom-right corners using

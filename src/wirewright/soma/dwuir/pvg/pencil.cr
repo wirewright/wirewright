@@ -139,7 +139,7 @@ module Ww::Soma::DwUIR
   # and `PvgPencil`s. Acts as a cache for `PvgFontFace`s.
   class PvgFontFaceStore
     # Returns the pencil request handling proc.
-    getter pencils : (PencilRequest -> IPencil)
+    getter pencils : PencilServer
 
     def initialize
       @faces = {} of Path => PvgFontFace

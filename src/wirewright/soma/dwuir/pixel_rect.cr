@@ -21,10 +21,7 @@ module Ww::Soma::DwUIR
     # Returns the *absolute* bounding box of this pixel rect. Point coordinates
     # are guaranteed to have no fractional part.
     def bounds : Rect
-      Rect.new(
-        tl: Point.new(@x.to_f32, @y.to_f32),
-        size: Point.new(@width.to_f32, @height.to_f32),
-      )
+      Rect[@x, @y, @width, @height]
     end
 
     # Clamps *rect* into the bounds of this pixel rect.

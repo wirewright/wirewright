@@ -52,7 +52,7 @@ module Ww::Soma::DwUIR
 
       @sequence.unstable_sort_by!(&.ord)
       @sequence.each do |command|
-        @tfbounds = @tfbounds.max(command.tfbounds)
+        @tfbounds |= command.tfbounds
       end
 
       @finished = true

@@ -1,10 +1,10 @@
 module Ww::Soma::DwUIR
   # A painter converts `DrawKey`s to `Layer`s. This is an implementation of
   # a painter that uses PlutoVG.
-  struct PvgPainter
+  class PvgPainter
     # :nodoc:
     def initialize(@fonts : PvgFontFaceStore,
-                   @resources : ResourceLoader,
+                   @images : PvgImageServer,
                    width : Int32,
                    height : Int32)
       unless @surface = PlutoVG.surface_create(width, height)
@@ -24,13 +24,13 @@ module Ww::Soma::DwUIR
 
     # Paints *key* and returns the resulting `Layer`.
     #
-    # Uses the font store at *fonts* to load PlutoVG fonts.
-    # Uses the resource loader at *resources* to fetch images etc.
-    def self.layer_for(fonts : PvgFontFaceStore, resources : ResourceLoader, key : DrawKey) : Layer
+    # - Uses the font store at *fonts* to load PlutoVG fonts.
+    # - Uses the image server at *images* to fetch raster and SVG images.
+    def self.layer_for(fonts : PvgFontFaceStore, images : PvgImageServer, key : DrawKey) : Layer
       bounds = Rect.new(Point.new(0, 0), key.extent).round
       tfbounds = key.tf.map(bounds).round
 
-      painter = new(fonts, resources, *tfbounds.iwh)
+      painter = new(fonts, images, *tfbounds.iwh)
 
       begin
         painter.layer_for(key, bounds, tfbounds)
@@ -135,49 +135,50 @@ module Ww::Soma::DwUIR
       end
     end
 
-    # TODO: instead of using warnings, draw as a red rect with text saying
+    # TODO: instead of/along with warnings, draw as a red rect with text saying
     # something went wrong! Similarly for Paint::Invalid.
 
     private def paint(shape : SvgShape, bounds : Rect) : Nil
-      unless data = @resources.ref?(shape.src)
-        Log.warn { "failed to load resource #{shape.src}" }
-        return
-      end
-
-      unless document = PlutoSVG.document_load_from_data(data, data.size, *bounds.wh, nil, nil)
-        Log.warn { "failed to load document from data" }
-        return
-      end
-
-      PlutoSVG.document_extents(document, nil, out svg_extents)
-
-      svgbounds = Rect[svg_extents.x, svg_extents.y, svg_extents.w, svg_extents.h]
-
-      case shape.resize
-      in .clip?
-        transform = Tf.new
-      in .stretch?
-        transform = Tf[
-          Tf.translate(svgbounds.tl),
-          Tf.scale(bounds.size * svgbounds.size.normalized),
-        ]
-      in .keep_ratio?
-        ratio = svgbounds.h/svgbounds.w
-        scale = Point.new(bounds.w / svgbounds.w, (bounds.w * ratio) / svgbounds.h)
-
-        transform = Tf[
-          Tf.translate(svgbounds.tl),
-          # Center vertically.
-          Tf.translate(Point.new(0, (bounds.h - svgbounds.h * scale.y) * 0.5)),
-          Tf.scale(scale),
-        ]
-      end
-
-      tfmatrix = to_pvg_matrix(transform)
-
-      PlutoVG.canvas_transform(@canvas, pointerof(tfmatrix))
-
       begin
+        svg = @images.load(shape.src)
+
+        unless svg.is_a?(PvgSvgImage)
+          raise ImageServerException.new("expected an SVG image")
+        end
+      rescue e : ImageServerException
+        Log.warn(exception: e) { "failed to load SVG #{shape.src}" }
+        return
+      end
+
+      svg.document do |document|
+        PlutoSVG.document_extents(document, nil, out svg_extents)
+
+        svgbounds = Rect[svg_extents.x, svg_extents.y, svg_extents.w, svg_extents.h]
+
+        case shape.resize
+        in .clip?
+          transform = Tf.new
+        in .stretch?
+          transform = Tf[
+            Tf.translate(svgbounds.tl),
+            Tf.scale(bounds.size * svgbounds.size.normalized),
+          ]
+        in .keep_ratio?
+          ratio = svgbounds.h/svgbounds.w
+          scale = Point.new(bounds.w / svgbounds.w, (bounds.w * ratio) / svgbounds.h)
+
+          transform = Tf[
+            Tf.translate(svgbounds.tl),
+            # Center vertically.
+            Tf.translate(Point.new(0, (bounds.h - svgbounds.h * scale.y) * 0.5)),
+            Tf.scale(scale),
+          ]
+        end
+
+        tfmatrix = to_pvg_matrix(transform)
+
+        PlutoVG.canvas_transform(@canvas, pointerof(tfmatrix))
+
         color = PlutoVG::Color.new(
           r: shape.color.ur,
           g: shape.color.ug,
@@ -189,8 +190,6 @@ module Ww::Soma::DwUIR
           Log.warn { "failed to render document" }
           return
         end
-      ensure
-        PlutoSVG.document_destroy(document)
       end
     end
 
@@ -270,83 +269,54 @@ module Ww::Soma::DwUIR
       )
     end
 
-    # |@ soma.dwuir.painters.plutovg.image
-    #
-    # |@block
-    # PlutoVG uses stb-image under the hood. Thus the following formats are supported, citing
-    # from stb-image v2.30:
-    #
-    #   - JPEG baseline & progressive (12 bpc/arithmetic not supported, same as stock IJG lib)
-    #   - PNG 1/2/4/8/16-bit-per-channel
-    #   - TGA (not sure what subset, if a subset)
-    #   - BMP non-1bpp, non-RLE
-    #   - PSD (composited view only, no extra channels, 8/16 bit-per-channel)
-    #   - GIF (*comp always reports as 4-channel)
-    #   - HDR (radiance rgbE format)
-    #   - PIC (Softimage PIC)
-    #   - PNM (PPM and PGM binary only)
-    # |@endblock
-
     private def set_paint(paint : Paint::Image, bounds : Rect)
-      if data = @resources.ref?(paint.src)
-        surface = PlutoVG.surface_load_from_image_data(data, data.size)
+      begin
+        image = @images.load(paint.src)
 
-        img_bounds = Rect.new(
-          tl: Point.new(0, 0),
-          size: Point.new(
-            PlutoVG.surface_get_width(surface).to_f32,
-            PlutoVG.surface_get_height(surface).to_f32,
-          ),
-        )
-
-        unless surface.null?
-          type = PlutoVG::TextureType::Plain
-
-          if paint.tile
-            type = PlutoVG::TextureType::Tiled
-          end
-
-          # Resize
-          target_bounds = Rect.new(
-            tl: Point.new(0, 0),
-            size: Point.new(
-              paint.resize_w.resolve(img_bounds.w),
-              paint.resize_h.resolve(img_bounds.h),
-            ),
-          )
-
-          scale = target_bounds.size * img_bounds.size.normalized
-
-          # Fit
-          case fit = paint.fit
-          in Paint::ImageFit::Align
-            transform = Tf[
-              Tf.translate(bounds.align(target_bounds, fit.normpt).tl),
-              Tf.scale(scale),
-            ]
-          in Paint::ImageFit::Pan
-            transform = Tf[
-              Tf.translate(bounds.tl + fit.delta),
-              Tf.scale(scale),
-            ]
-          in Paint::ImageFit::Stretch
-            transform = Tf[
-              Tf.scale(scale),
-              Tf.translate(bounds.tl),
-              Tf.scale(bounds.size * target_bounds.size.normalized),
-            ]
-          end
-
-          matrix = to_pvg_matrix(transform)
-
-          PlutoVG.canvas_set_texture(@canvas, surface, type, paint.opacity, pointerof(matrix))
-          return
+        unless image.is_a?(PvgRasterImage)
+          raise ImageServerException.new("expected a raster image to paint with")
         end
+      rescue e : ImageServerException
+        Log.warn(exception: e) { "could not paint with image" }
 
-        Log.debug { "failed to load image: #{paint.src}" }
+        return set_paint(Paint::Invalid.new, bounds)
       end
 
-      set_paint(Paint::Invalid.new, bounds)
+      type = PlutoVG::TextureType::Plain
+      if paint.tile
+        type = PlutoVG::TextureType::Tiled
+      end
+
+      # Resize
+      target_w = paint.resize_w.resolve(image.size.x)
+      target_h = paint.resize_h.resolve(image.size.y)
+      target_bounds = Rect[0, 0, target_w, target_h]
+
+      scale = target_bounds.size * image.size.normalized
+
+      # Fit
+      case fit = paint.fit
+      in Paint::ImageFit::Align
+        transform = Tf[
+          Tf.translate(bounds.align(target_bounds, fit.normpt).tl),
+          Tf.scale(scale),
+        ]
+      in Paint::ImageFit::Pan
+        transform = Tf[
+          Tf.translate(bounds.tl + fit.delta),
+          Tf.scale(scale),
+        ]
+      in Paint::ImageFit::Stretch
+        transform = Tf[
+          Tf.scale(scale),
+          Tf.translate(bounds.tl),
+          Tf.scale(bounds.size * target_bounds.size.normalized),
+        ]
+      end
+
+      matrix = to_pvg_matrix(transform)
+
+      PlutoVG.canvas_set_texture(@canvas, image, type, paint.opacity, pointerof(matrix))
     end
 
     private def to_pvg_matrix(transform : Tf)

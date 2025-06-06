@@ -31,9 +31,9 @@ require "./dwuir/font"
 
   require "./dwuir/pixel_rect"
   require "./dwuir/compositor"
-  require "./dwuir/resource_loader"
   require "./dwuir/platform"
   require "./dwuir/viewer"
+  require "./dwuir/measured"
 
   require "./dwuir/pvg"
 {% end %}

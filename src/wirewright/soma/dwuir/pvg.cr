@@ -5,16 +5,21 @@ module Ww::Soma::DwUIR
   struct PvgPlatform
     include Platform
 
-    def initialize
+    def initialize(files : FileServer, vwh : Point)
       @fonts = PvgFontFaceStore.new
+      @images = PvgImageServer.new(files, vwh)
     end
 
-    def pencils : (PencilRequest -> IPencil)
+    def pencils : PencilServer
       @fonts.pencils
     end
 
-    def layer_for(resources : ResourceLoader, key : DrawKey) : Layer
-      PvgPainter.layer_for(@fonts, resources, key)
+    def images : ImageServer
+      @images
+    end
+
+    def layer_for(key : DrawKey) : Layer
+      PvgPainter.layer_for(@fonts, @images, key)
     end
   end
 end
@@ -23,3 +28,4 @@ require "./pvg/libplutovg"
 require "./pvg/libplutosvg"
 require "./pvg/pencil"
 require "./pvg/painter"
+require "./pvg/image_server"

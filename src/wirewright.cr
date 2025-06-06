@@ -13,6 +13,7 @@ require "../util"
 require "../rtk"
 
 require "./wirewright/term"
+require "./wirewright/file_server"
 require "./wirewright/ml"
 require "./wirewright/meridium"
 require "./wirewright/soma"
