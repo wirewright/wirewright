@@ -20,5 +20,6 @@ module Ww::Soma::DwUIR
 end
 
 require "./pvg/libplutovg"
+require "./pvg/libplutosvg"
 require "./pvg/pencil"
 require "./pvg/painter"

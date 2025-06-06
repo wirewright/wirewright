@@ -58,25 +58,31 @@ module VDwUIR
 
     buffer = Slice(UInt32).new(w0 * h0)
     screen = DwUIR::PixelRect.new(0, 0, w0, h0)
-    player = DwUIR::Player.new(screen, DwUIR::Compositor.new, DwUIR::PvgPlatform.new, resources)
+    viewer = DwUIR::Viewer.new(screen, DwUIR::Compositor.new, DwUIR::PvgPlatform.new, resources)
     texture = SF::Texture.new(w0, h0)
 
     window = SF::RenderWindow.new(SF::VideoMode.new(w0, h0), title: title0)
     window.framerate_limit = 60
 
-    vars = Term[]
-    committed = nil
-    reviewed = initial
-    candidate = nil
+    vars = Term["mouse-x": 0, "mouse-y": 0, "wheel": 0, w: w0, h: h0]
+    showing = {initial, vars}
+    rejected = nil
 
     while window.open?
       while event = window.poll_event
         case event
         when SF::Event::Closed then window.close
         when SF::Event::MouseWheelScrolled
+          vars = vars.morph({:wheel, vars[:wheel] + event.delta})
         when SF::Event::MouseMoved
+          vars = vars.morph({:"mouse-x", event.x}, {:"mouse-y", event.y})
+        when SF::Event::Resized
+          window.view = SF::View.new(SF.float_rect(0, 0, event.width, event.height))
+          vars = vars.morph({:w, event.width}, {:h, event.height})
         end
       end
+
+      candidate, _ = showing
 
       rendezvous(path) do |source|
         begin
@@ -86,38 +92,33 @@ module VDwUIR
         end
       end
 
-      if candidate
+      if rejected != {candidate, vars} && showing != {candidate, vars}
         instance, complaints = Alloy.render_with_complaints(vars, candidate)
 
         unless complaints.empty?
           complaints.each do |complaint|
             puts complaint
           end
+          rejected = {candidate, vars}
         end
 
         if complaints.empty?
           Term.case(instance) do
             matchpi %[{¦ bg_⋮ white}] do
-              reviewed = candidate
+              showing = {candidate, vars}
+
+              dmgrects = viewer.show(instance, bg: DwUIR::Color.term(bg))
+              dmgrects.each do |rect|
+                region = screen.region(rect)
+                region.each_pixel_with_coords do |pixel, i, j|
+                  buffer[w0 * j + i] = pixel.rgba_le
+                end
+              end
+
+              texture.update(buffer.to_unsafe.as(UInt8*), w0, h0, 0, 0)
             end
           end
         end
-
-        candidate = nil
-      end
-
-      if reviewed && committed != {vars, reviewed}
-        committed = {vars, reviewed} # Commit
-
-        dmgrects = player.show(reviewed, bg: DwUIR::Color.term(reviewed[:bg]))
-        dmgrects.each do |rect|
-          region = screen.region(rect)
-          region.each_pixel_with_coords do |pixel, i, j|
-            buffer[w0 * j + i] = pixel.rgba_le
-          end
-        end
-
-        texture.update(buffer.to_unsafe.as(UInt8*), w0, h0, 0, 0)
       end
 
       window.clear(SF::Color::White)
@@ -154,16 +155,7 @@ module VDwUIR
       matchpi %{("open" file_string)} do
         path = Path[file.to(String)]
 
-        rendezvous(path) do |source|
-          begin
-            candidate = ML.terms(source)
-          rescue e : ML::SyntaxError
-            e.humanize(STDOUT, source)
-            abort "cannot continue: no fallback state"
-          end
-
-          open(path, candidate)
-        end
+        open(path, Term.of(title: "Untitled", "initial-w": 800, "initial-h": 600))
       end
 
       otherwise do

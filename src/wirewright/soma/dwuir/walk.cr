@@ -13,11 +13,7 @@ module Ww::Soma::DwUIR
   # transformations based on *context*. Returns `false` otherwise.
   def visible?(context : Context, bounds : Rect = context.bounds) : Bool
     tfbounds = context.tf.map(bounds)
-    tfbounds.visible?(context.view)
-
-    # tfview = bounds.visible?() context.view_tf.map(context.view)
-
-    # !(tfview & tfbounds).empty?
+    tfbounds.intersects?(context.view)
   end
 
   # Determines whether `walk` should recurse into children nodes.
@@ -251,6 +247,11 @@ module Ww::Soma::DwUIR
       #
       # |@block
       # Use the `viewport` node to control overflow by clipping.
+      #
+      # WARNING: Use the zoom factor with care. Zoom will trigger full repaint
+      # at the resulting size. The resulting layer may occupy a lot of memory
+      # (a lot compared to everything else; it's still usually in the range of
+      # some megabytes.) Be especially careful when zooming into very large nodes.
       # |@endblock
       #
       # |@key pan-l -- used as pivot left for zoom; and also as additional left
@@ -259,11 +260,11 @@ module Ww::Soma::DwUIR
       # |@key pan-t -- used as pivot top for zoom; and also as additional top
       # offset for nodes in the viewport.
       #
-      # |@key zoom -- zoom factor (increase to zoom in, decrease to zoom out).
+      # |@key zoom -- zoom factor (`> 1` to zoom in, `< 1` to zoom out).
       matchpi(<<-WWML
         (viewport _ ¦ _ pan-l⋮ 0
                         pan-t⋮ 0
-                        zoom: (%optional 1 zoom←(%number _ > 0)))
+                        zoom: (%optional 1 zoom←(%number 0.1 <= _ <= 8)))
       WWML
       ) do
         return unless visible?(context)

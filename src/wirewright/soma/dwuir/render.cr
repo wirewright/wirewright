@@ -323,7 +323,7 @@ module Ww::Soma::DwUIR
           # |@ soma.dwuir.node.text.transform
           #
           # |@block
-          # The `transform` property lets you apply a set of transformation
+          # The `transform` attribute lets you apply a set of transformation
           # functions before displaying the text.
           #
           # NOTE: some of the transformation functions may be *destructive*; others
@@ -434,6 +434,73 @@ module Ww::Soma::DwUIR
             picture << command
           end
         end
+
+        WalkFlow::Next
+      end
+
+      # |@ soma.dwuir.node.svg
+      #
+      # |@block
+      # Use the `svg` node to embed an SVG document into the DwUIR.
+      #
+      # Use the `final-w` and `final-h` attributes along with the `resize`
+      # attribute to control how the document is sized.
+      # |@endblock
+      #
+      # |@key src soma.dwuir.resource -- Specifies what SVG document to render.
+      #
+      # |@key color soma.dwuir.color -- Controls the `currentColor` property#
+      # in the document.
+      matchpi %{(svg ¦ _ src_ color⋮ black)} do
+        resize = SvgShape::Resize::Stretch
+
+        Term.case(node) do
+          # |@ soma.dwuir.node.svg.resize
+          #
+          # |@block
+          # Defines how the SVG document should be resized to fit in the box
+          # defined by `final-w` and `final-h`.
+          # |@endblock
+
+          # |@ soma.dwuir.node.svg.resize.clip
+          #
+          # |@block
+          # The document will not be resized. `final-w` and `final-h` will used
+          # to clip it.
+          # |@endblock
+          matchpi %[{¦ resize: clip}] do
+            resize = SvgShape::Resize::Clip
+          end
+
+          # |@ soma.dwuir.node.svg.resize.stretch
+          #
+          # |@block
+          # The document will be stretched to fit into the box defined by `final-w`
+          # and `final-h`.
+          # |@endblock
+          matchpi %[{¦ resize: stretch}] do
+            resize = SvgShape::Resize::Stretch
+          end
+
+          # |@ soma.dwuir.node.svg.resize.keep-ratio
+          #
+          # |@block
+          # The document will be scaled horizontally so that its width becomes
+          # `final-w`; its height will be scaled as appropriate to keep the aspect
+          # ratio intact. The scaled document will be centered along the vertical
+          # axis as defined by `final-h`.
+          # |@endblock
+          matchpi %[{¦ resize: keep-ratio}] do
+            resize = SvgShape::Resize::KeepRatio
+          end
+
+          otherwise { }
+        end
+
+        shape = SvgShape.new(src, Color.term(color), resize)
+        command = DrawShape.new(context.view, context.bounds, context.tf, context.layer, :mid, shape)
+
+        picture << command
 
         WalkFlow::Next
       end

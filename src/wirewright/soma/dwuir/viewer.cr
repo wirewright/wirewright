@@ -1,9 +1,9 @@
 module Ww::Soma::DwUIR
-  # A player object stores all the state necessary to "convert" or write a DwUIR
+  # A viewer object stores all the state necessary to "convert" or write a DwUIR
   # to a `PixelRect` called the *screen*. *You* provide the pixel rect along with
   # the other auxiliary objects. So you're free to do whatever you want with it,
   # before or after `show`ing your DwUIR.
-  class Player
+  class Viewer
     @picture : Picture?
 
     def initialize(

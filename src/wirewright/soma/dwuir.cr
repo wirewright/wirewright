@@ -33,7 +33,7 @@ require "./dwuir/font"
   require "./dwuir/compositor"
   require "./dwuir/resource_loader"
   require "./dwuir/platform"
-  require "./dwuir/player"
+  require "./dwuir/viewer"
 
   require "./dwuir/pvg"
 {% end %}

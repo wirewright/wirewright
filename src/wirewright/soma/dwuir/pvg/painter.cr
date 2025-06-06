@@ -1,7 +1,7 @@
 module Ww::Soma::DwUIR
   # A painter converts `DrawKey`s to `Layer`s. This is an implementation of
   # a painter that uses PlutoVG.
-  class PvgPainter
+  struct PvgPainter
     # :nodoc:
     def initialize(@fonts : PvgFontFaceStore,
                    @resources : ResourceLoader,
@@ -16,7 +16,8 @@ module Ww::Soma::DwUIR
       end
     end
 
-    def finalize
+    # :nodoc:
+    def destroy : Nil
       PlutoVG.canvas_destroy(@canvas)
       PlutoVG.surface_destroy(@surface)
     end
@@ -30,7 +31,18 @@ module Ww::Soma::DwUIR
       tfbounds = key.tf.map(bounds).round
 
       painter = new(fonts, resources, *tfbounds.iwh)
-      painter.layer_for(key, bounds, tfbounds)
+
+      begin
+        painter.layer_for(key, bounds, tfbounds)
+      ensure
+        # We are not using finalizers here to make sure the GC doesn't free
+        # @surface/@canvas until we're sure we've created  a layer from it.
+        # Apparently @surface/@canvas are disconnected from PvgPainter in
+        # the object graph (nor should they, they're from C!). So when the GC
+        # thinks it's time to finalize PvgPainter is the moment when @canvas/
+        # @surface are destroyed -- right under our feet.
+        painter.destroy
+      end
     end
 
     # :nodoc:
@@ -120,6 +132,65 @@ module Ww::Soma::DwUIR
           PlutoVG.canvas_clip_rect(@canvas, *underline_bounds.xywh)
           PlutoVG.canvas_paint(@canvas)
         end
+      end
+    end
+
+    # TODO: instead of using warnings, draw as a red rect with text saying
+    # something went wrong! Similarly for Paint::Invalid.
+
+    private def paint(shape : SvgShape, bounds : Rect) : Nil
+      unless data = @resources.ref?(shape.src)
+        Log.warn { "failed to load resource #{shape.src}" }
+        return
+      end
+
+      unless document = PlutoSVG.document_load_from_data(data, data.size, *bounds.wh, nil, nil)
+        Log.warn { "failed to load document from data" }
+        return
+      end
+
+      PlutoSVG.document_extents(document, nil, out svg_extents)
+
+      svgbounds = Rect[svg_extents.x, svg_extents.y, svg_extents.w, svg_extents.h]
+
+      case shape.resize
+      in .clip?
+        transform = Tf.new
+      in .stretch?
+        transform = Tf[
+          Tf.translate(svgbounds.tl),
+          Tf.scale(bounds.size * svgbounds.size.normalized),
+        ]
+      in .keep_ratio?
+        ratio = svgbounds.h/svgbounds.w
+        scale = Point.new(bounds.w / svgbounds.w, (bounds.w * ratio) / svgbounds.h)
+
+        transform = Tf[
+          Tf.translate(svgbounds.tl),
+          # Center vertically.
+          Tf.translate(Point.new(0, (bounds.h - svgbounds.h * scale.y) * 0.5)),
+          Tf.scale(scale),
+        ]
+      end
+
+      tfmatrix = to_pvg_matrix(transform)
+
+      PlutoVG.canvas_transform(@canvas, pointerof(tfmatrix))
+
+      begin
+        color = PlutoVG::Color.new(
+          r: shape.color.ur,
+          g: shape.color.ug,
+          b: shape.color.ub,
+          a: shape.color.ua,
+        )
+
+        unless PlutoSVG.document_render(document, nil, @canvas, pointerof(color), nil, nil)
+          Log.warn { "failed to render document" }
+          return
+        end
+      ensure
+        PlutoSVG.document_destroy(document)
       end
     end
 

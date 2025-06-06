@@ -1,6 +1,6 @@
 module Ww::Soma::DwUIR
   # Defines the kinds of shapes that can be drawn.
-  alias Shape = RectShape | FragShape
+  alias Shape = RectShape | FragShape | SvgShape
 
   # Represents a rectangle shape. Optionally, *border* and corner *radii* can
   # be provided.
@@ -111,6 +111,24 @@ module Ww::Soma::DwUIR
     color : Paint::Any?,
     thickness : Float32,
     offset : Float32
+
+  # Represents an SVG resource.
+  #
+  # - *src* specifies how to obtain it.
+  # - *color* controls the `currentColor` property of the SVG.
+  # - *resize* sets the resize mode (see `soma.dwuir.node.svg.resize` for more info).
+  record SvgShape,
+    src : Term,
+    color : Color,
+    resize : Resize
+
+  struct SvgShape
+    enum Resize
+      Clip
+      Stretch
+      KeepRatio
+    end
+  end
 
   abstract class DrawCommand
     DMG_RING_THICKNESS = 1.0f32

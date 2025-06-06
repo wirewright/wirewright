@@ -25,6 +25,14 @@ module Ww::Soma::DwUIR
       new(Point.new(0, 0), Point.new(0, 0))
     end
 
+    # Constructs a rectangle with its top-left corner at *x*, *y*; width *w*, and
+    # height *h*.
+    #
+    # NOTE: All of *x*, *y*, *w*, *h* must respond to `to_f32`.
+    def self.[](x, y, w, h) : Rect
+      new(Point.new(x.to_f32, y.to_f32), Point.new(w.to_f32, h.to_f32))
+    end
+
     # Returns the size (width and height) of this rectangle.
     def size : Point
       br - tl
@@ -310,10 +318,12 @@ module Ww::Soma::DwUIR
       translate(denormalize(point) - other.denormalize(point))
     end
 
+    # Returns the four points that this rectangle is defined by.
     def points : {Point, Point, Point, Point}
       {tl, tr, bl, br}
     end
 
+    # Returns the four segments that this rectangle is defined by.
     def segments : {Segment, Segment, Segment, Segment}
       {Segment.new(tl, tr),
        Segment.new(tr, br),
@@ -321,7 +331,8 @@ module Ww::Soma::DwUIR
        Segment.new(bl, tl)}
     end
 
-    def visible?(quad : Quad) : Bool
+    # Returns `true` if this rectangle intersects *quad*. Returns `false` otherwise.
+    def intersects?(quad : Quad) : Bool
       return false if empty?
       return true if points.any? { |point| quad.includes?(point) }
       return true if quad.points.any? { |point| includes?(point) }
@@ -335,8 +346,10 @@ module Ww::Soma::DwUIR
       false
     end
 
-    def visible?(quads : Slice(Quad)) : Bool
-      !empty? && quads.all? { |quad| visible?(quad) }
+    # Returns `true` if this rectangle intersects *all of* *quads*. Returns
+    # `false` otherwise.
+    def intersects?(quads : Slice(Quad)) : Bool
+      !empty? && quads.all? { |quad| intersects?(quad) }
     end
   end
 end
