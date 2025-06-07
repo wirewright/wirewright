@@ -51,7 +51,7 @@ module Ww::Soma::DwUIR
       layer.each_pixel_with_coords do |pixel, i, j|
         next unless 0 <= x + i < clip.x
         next unless 0 <= y + j < clip.y
-        next unless command.view.all? { |quad| quad.includes?(Point[x + i, y + j]) }
+        next unless command.views.all?(&.includes?(Point[x + i, y + j]))
 
         dst.blend(x + i, y + j, pixel)
       end

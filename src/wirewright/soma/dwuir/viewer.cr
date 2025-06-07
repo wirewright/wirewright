@@ -34,7 +34,7 @@ module Ww::Soma::DwUIR
 
     # Modifies the screen pixel rect to match *dwuir*.
     #
-    # Returns the master damage rect (bounding box of all damage rectangles).
+    # Returns the array of damage rects.
     def show(dwuir : Term, bg : Color, *, dmgdbg = false) : Array(Rect)
       picture1 = DwUIR.picture(dwuir, @platform.pencils)
 

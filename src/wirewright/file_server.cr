@@ -3,7 +3,8 @@ module Ww
   class FileServerException < Exception
   end
 
-  # Includers can read files at a path. How they do that is implementation-specific.
+  # Includers can reference files with a path, and operate on them. How
+  # they do that or what the path contains is implementation-specific.
   module FileServer
     # Returns the content of the file at *path*.
     #

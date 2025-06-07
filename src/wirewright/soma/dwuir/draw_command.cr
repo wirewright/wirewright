@@ -152,8 +152,8 @@ module Ww::Soma::DwUIR
   # drawn: how it should be clipped, what transformations should be applied to
   # it, etc.
   #
-  # - *view* is the untransformed view (aka clipping) rect.
-  # - *view tf* is the transformation that should be applied to *view*.
+  # - *views* is the stack of view quads (view rects post-transform) that
+  #   the shape must be visible in.
   # - *bounds* is the untransformed bounding box of *shape*.
   # - *bounds tf* is the transformation that should be applied to *bounds*; and also
   #   to *shape* when drawing.
@@ -163,7 +163,7 @@ module Ww::Soma::DwUIR
   #   or selection rectangles which are otherwise members of the same *layer*.
   # - *shape* specifies the `Shape` itself.
   defcase DrawShape < DrawCommand,
-    view : Slice(Quad),
+    views : Slice(Quad),
     bounds : Rect,
     bounds_tf : Tf,
     layer : Int32,
