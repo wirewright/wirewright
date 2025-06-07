@@ -2,12 +2,8 @@ require "./src/wirewright"
 require "./baz5_editor"
 require "./delta7_proto2"
 
-CASES = [
-  File.read("patterns.test.wwml"),
-  File.read("editor.test.wwml"),
-  File.read("delta7.test.wwml"),
-  File.read("tspace.test.wwml"),
-].join("\n")
+CASES = Dir["tests/*.wwml"].join('\n') { |test| File.read(test) }
+
 PEOPLE = Term.of(JSON.parse(File.read("data/people.json")))
 
 class Statistics
