@@ -1571,10 +1571,22 @@ class String
     StringView.new(self, 0, bytesize)
   end
 
-  def li(*, bullet = "*", indent = 0, ws = ' ') : String
+  def li(*, bullet = "*", indent = 0, ws = ' ', strip_first = false) : String
     String.build(indent * ws.bytesize + bullet.bytesize + ' '.bytesize + bytesize) do |io|
       indent.times { io << ws }
-      io << bullet << ' ' << self
+      io << bullet << ' '
+
+      first = true
+      each_line_view do |line|
+        if first && strip_first
+          line = line.lstrip(" ")
+        else
+          indent.times { io << ws }
+        end
+        io << line.rstrip
+        io.puts
+        first = false
+      end
     end
   end
 

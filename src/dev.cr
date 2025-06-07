@@ -31,8 +31,8 @@ module DevTool
       changes to with this tool.
 
     * dev.base.wwml: git-tracked base state. It is initially copied to produce
-      dev.active.wwml. You can write `dev.active.wwml` over `dev.base.wwml` using
-      the `dev sync` command.
+      dev.active.wwml. You can sync individual presets from `dev.active.wwml`
+      to `dev.base.wwml` using the `dev sync` command.
 
   USAGE
 
@@ -78,7 +78,7 @@ module DevTool
       Adds a link flag: -L/path/to/working-dir/<dirpath>
 
     dev sync
-      Writes active state over base state.
+      Writes active preset to base state.
 
     dev r|run [--release] [...args]
       Builds and runs the source file in debug mode. The `--release` switch can
@@ -258,7 +258,7 @@ module DevTool
 
     note command
 
-    Process.run("crystal", args, env, error: Process::Redirect::Inherit, output: Process::Redirect::Inherit)
+    Process.run("crystal", args, env, input: Process::Redirect::Inherit, error: Process::Redirect::Inherit, output: Process::Redirect::Inherit)
   end
 
   private def with_active_preset(state : Term::Dict, & : Term ->)
@@ -402,7 +402,9 @@ module DevTool
       end
 
       matchpi %{("sync")} do
-        state = state.morph({:base, state[:active]})
+        with_active_preset(state) do |preset|
+          state = state.morph({:base, :presets, preset, state[:active, :presets, preset]?})
+        end
       end
 
       matchpi(<<-WWML
