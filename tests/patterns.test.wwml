@@ -292,6 +292,14 @@
   (= true {type: _boolean})
   (= {} {type: _dict}))
 
+;; %pipe ml
+(pattern (%pipe ml x_number)
+  (- 0 1/3 "hello" "(+ 1 2 3)" "(" "" a true (x y z))
+  (- "1/0")
+  (= "100" {x: 100})
+  (= "1/3" {x: 1/3})
+  (= "1.5" {x: 1.5}))
+
 ;; %edge
 (group
   (pattern @qux

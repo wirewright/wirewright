@@ -72,6 +72,7 @@ module Ww::M1::Operator
   defcase Span, successor : Any
   defcase Tally, successor : Any
   defcase Type, successor : Any
+  defcase ParseML, successor : Any
 
   defcase Add, arg : Term::Num, successor : Any
   defcase Sub, arg : Term::Num, successor : Any

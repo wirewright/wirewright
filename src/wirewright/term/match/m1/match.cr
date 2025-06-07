@@ -292,6 +292,20 @@ module Ww::M1::Operator
     match(behind0, op.successor, Term.of(matchee.type.blank), ahead0)
   end
 
+  def match(behind0, op : ParseML, matchee : Term, ahead0)
+    unless string = matchee.as_s?
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    begin
+      result = ML.term(string.to(String))
+    rescue ML::SyntaxError
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    match(behind0, op.successor, result, ahead0)
+  end
+
   def match(behind0, op : Add, matchee : Term, ahead0)
     unless a = matchee.as_n?
       return Fb::Mismatch.new(behind0.env)

@@ -657,6 +657,12 @@ transformations are supported:
   matches dictionaries with three entries (items, pairs, or both).
 - `type`: transforms any term into an unnamed, typed blank: e.g. `(%pipe type T_)` will match
   `42` with `{T: _number}`, `"hello"` with `{T: _string}`, etc.
+- `ml`: interprets a string matchee as a term represented using WwML. Speaking more plainly,
+  it parses the string matchee as WwML. If parsing fails, that is a mismatch. If parsing
+  succeeds, the term is passed to the pipe successor so that pattern matching can continue
+  on the parsed term: e.g. running `(%pipe ml (mod 2) (map (even odd)) x_)` on `"100"` produces
+  `{x: even}`, running it on `"101"` produces `{x: odd}`, and running it on e.g. `"abc"` or
+  `"("` produces a mismatch.
 - `(+ n_number)`: adds `n` to a number matchee: e.g. `(%pipe (+ 100) x_)`.
 - `(- n_number)`: subtracts `n` from a number matchee: e.g. `(%pipe (- 100) x_)`.
 - `(* n_number)`: multiplies a number matchee by `n`: e.g. `(%pipe (* 2) double_)`.
