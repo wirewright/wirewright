@@ -10,13 +10,17 @@ presets:
      "newsoma": true}},
  "tests":
   {source: "pattern6_test.cr",
-   flags: {"preview_mt": true, "execution_context": true}},
+   flags:
+    {"preview_mt": true,
+     "execution_context": true,
+     "newsoma": true}},
  "mt":
   {flags: {"preview_mt": true, "execution_context": true}},
  "dwuir2ppm":
   {source: "src/dwuir2ppm.cr",
    flags:
     {"preview_mt": true,
+     "dwuir2ppm": true,
      "execution_context": true,
      "newsoma": true}},
  "dev":

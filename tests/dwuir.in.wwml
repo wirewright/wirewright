@@ -1,0 +1,2532 @@
+title: "Hello DwUIR"
+initial-w: 1800
+initial-h: 1000
+
+;; Test the various color spaces / ways to write colors. All of these rects
+;; must have the same color (or in the worst case, approximately the same color --
+;; due to precision errors).
+(group dt: 0
+  (rect
+    fill: 3917298175 ;; #e97d39ff
+    dl: 0
+    final-w: 20
+    final-h: 20)
+  (rect
+    fill: "#e97d39ff"
+    dl: 20
+    final-w: 20
+    final-h: 20)
+  (rect
+    fill: "#e97d39ff"
+    dl: 40
+    final-w: 20
+    final-h: 20)
+  (rect
+    fill: (hsl 23.22 0.8 0.57)
+    dl: 60
+    final-w: 20
+    final-h: 20)
+  (rect
+    fill: (oklch 0.7 0.1554 49.76)
+    dl: 80
+    final-w: 20
+    final-h: 20))
+
+;; Test the treatment of named colors.
+(group dt: 20
+  (rect
+    fill: "wheat"
+    dl: 0
+    final-w: 20
+    final-h: 20)
+  (rect
+    fill: "yellow"
+    dl: 20
+    final-w: 20
+    final-h: 20)
+  (rect
+    fill: "blue"
+    dl: 40
+    final-w: 20
+    final-h: 20)
+  (rect
+    fill: "turquoise"
+    dl: 60
+    final-w: 20
+    final-h: 20)
+  (rect
+    fill: "thistle"
+    dl: 80
+    final-w: 20
+    final-h: 20))
+
+;; Test the treatment of #RGB.
+(group dt: 40
+  (rect
+    fill: "#f00"
+    dl: 0
+    final-w: 20
+    final-h: 20)
+  (rect
+    fill: "#0f03"
+    dl: 20
+    final-w: 20
+    final-h: 20)
+  (rect
+    fill: "#00f"
+    dl: 40
+    final-w: 20
+    final-h: 20)
+  ;; These two should have the same color.
+  (rect
+    fill: "#ffcc00"
+    dl: 60
+    final-w: 20
+    final-h: 20)
+  (rect
+    fill: "#fc0"
+    dl: 80
+    final-w: 20
+    final-h: 20))
+
+;; Make sure color opacity works, and all color spaces have variants
+;; with opacity.
+(group dt: 60
+  (rect
+    fill: "#f00a"
+    dl: 0
+    final-w: 20
+    final-h: 20)
+  (rect
+    fill: "#ffff00aa"
+    dl: 15
+    z-index: 1
+    final-w: 20
+    final-h: 20)
+  (rect
+    fill: (rgb 0 0 255 0.5)
+    dl: 30
+    z-index: 2
+    final-w: 20
+    final-h: 20)
+  (rect
+    fill: (rgba 0 255 0 100)
+    dl: 45
+    z-index: 3
+    final-w: 20
+    final-h: 20)
+  (rect
+    fill: (hsl 339.21 0.87 0.37 0.7)
+    dl: 65
+    z-index: 4
+    final-w: 20
+    final-h: 20)
+  (rect
+    fill: (oklch 0.8 0.1 200 0.5)
+    dl: 80
+    z-index: 5
+    final-w: 20
+    final-h: 20))
+
+;; Rectangle corner radii
+(group dt: 85
+  (rect
+    dl: 0
+    fill: black
+    final-w: 20
+    final-h: 20
+    radius-tl: 9)
+  (rect
+    dl: 25
+    fill: black
+    final-w: 20
+    final-h: 20
+    radius-tr: 9)
+  (rect
+    dl: 50
+    fill: black
+    final-w: 20
+    final-h: 20
+    radius-bl: 9)
+  (rect
+    dl: 75
+    fill: black
+    final-w: 20
+    final-h: 20
+    radius-br: 9)
+  (rect
+    dl: 100
+    fill: black
+    final-w: 20
+    final-h: 20
+    radius-tl: 3
+    radius-tr: 5
+    radius-br: 7
+    radius-bl: 9)
+  (rect
+    dl: 105
+    dt: -25
+    fill: black
+    final-w: 20
+    final-h: 20
+    radius-tl: 3
+    radius-br: 7
+    radius-bl: 9)
+  (rect
+    dl: 105
+    dt: -50
+    fill: black
+    final-w: 20
+    final-h: 20
+    radius-br: 7
+    radius-bl: 9)
+  (rect
+    dl: 105
+    dt: -75
+    fill: black
+    final-w: 20
+    final-h: 20
+    radius-tl: 3
+    radius-br: 9))
+
+;; Rectangle border
+(group dt: 110
+  (rect
+    dl: 0
+    fill: black
+    thickness-l: 3
+    stroke: green
+    final-w: 20
+    final-h: 20)
+  (rect
+    dl: 25
+    fill: black
+    thickness-t: 3
+    stroke: green
+    final-w: 20
+    final-h: 20)
+  (rect
+    dl: 50
+    fill: black
+    thickness-r: 3
+    stroke: green
+    final-w: 20
+    final-h: 20)
+  (rect
+    dl: 75
+    fill: black
+    thickness-r: 3
+    stroke: green
+    final-w: 20
+    final-h: 20)
+  (rect
+    dl: 100
+    fill: black
+    thickness-l: 5
+    thickness-r: 3
+    stroke: green
+    final-w: 20
+    final-h: 20)
+  (rect
+    dl: 125
+    fill: black
+    thickness-t: 5
+    thickness-l: 3
+    stroke: green
+    final-w: 20
+    final-h: 20)
+  (rect
+    dl: 130
+    dt: -25
+    fill: black
+    thickness-r: 5
+    thickness-b: 1
+    thickness-l: 3
+    stroke: violet
+    final-w: 20
+    final-h: 20)
+  (rect
+    dl: 130
+    dt: -50
+    fill: black
+    thickness-r: 5
+    thickness-b: 2
+    thickness-l: 3
+    stroke: violet
+    final-w: 20
+    final-h: 20)
+  (rect
+    dl: 130
+    dt: -75
+    fill: black
+    thickness-t: 3
+    thickness-r: 5
+    thickness-b: 7
+    thickness-l: 3
+    stroke: violet
+    final-w: 20
+    final-h: 20)
+  (rect
+    dl: 130
+    dt: -100
+    fill: black
+    thickness-t: 2
+    thickness-r: 2
+    thickness-b: 2
+    thickness-l: 2
+    stroke: violet
+    final-w: 20
+    final-h: 20))
+
+;; Rectangle radii & border
+(group dt: 140
+  (rect
+    dl: 0
+    fill: black
+    thickness-l: 3
+    radius-tl: 5
+    stroke: green
+    final-w: 20
+    final-h: 20)
+  (rect
+    dl: 25
+    fill: black
+    thickness-l: 3
+    radius-tr: 5
+    stroke: green
+    final-w: 20
+    final-h: 20)
+  (rect
+    dl: 50
+    fill: black
+    thickness-l: 3
+    radius-tl: 5
+    radius-tr: 5
+    stroke: green
+    final-w: 20
+    final-h: 20)
+  (rect
+    dl: 75
+    fill: black
+    thickness-l: 3
+    thickness-b: 5
+    radius-tl: 9
+    radius-tr: 5
+    stroke: green
+    final-w: 20
+    final-h: 20)
+  (rect
+    dl: 100
+    fill: black
+    thickness-l: 3
+    thickness-b: 5
+    radius-tl: 9
+    radius-bl: 10
+    stroke: green
+    final-w: 20
+    final-h: 20)
+  ;; Draw a figurine to test out the robustness
+  (group dl: 125
+    (rect
+      fill: white
+      final-w: 5
+      final-h: 5
+      z-index: 1
+      dl: 7
+      dt: 7
+      radius-tl: (* 1)
+      radius-tr: (* 1)
+      radius-bl: (* 1)
+      radius-br: (* 1))
+    (rect
+      fill: black
+      final-w: 2
+      final-h: 2
+      z-index: 2
+      dl: 8
+      dt: 8
+      radius-tl: (* 1)
+      radius-tr: (* 1)
+      radius-bl: (* 1)
+      radius-br: (* 1))
+    (rect
+      fill: white
+      final-w: 5
+      final-h: 5
+      z-index: 1
+      dl: 13
+      dt: 7
+      radius-tl: (* 1)
+      radius-tr: (* 1)
+      radius-bl: (* 1)
+      radius-br: (* 1))
+    (rect
+      fill: black
+      final-w: 2
+      final-h: 2
+      z-index: 2
+      dl: 14
+      dt: 8
+      radius-tl: (* 1)
+      radius-tr: (* 1)
+      radius-bl: (* 1)
+      radius-br: (* 1))
+    (rect
+      fill: darkgray
+      final-w: 10
+      final-h: 2
+      z-index: 1
+      dl: 7
+      dt: 15
+      radius-tl: 3
+      radius-tr: 3
+      radius-bl: 3
+      radius-br: 3)
+    (rect
+      pivot: true
+      angle: 90
+      fill: black
+      thickness-l: 3
+      thickness-b: 5
+      radius-tl: 9
+      radius-bl: 10
+      stroke: brown
+      final-w: 20
+      final-h: 20))
+  (rect
+     dl: 150
+     thickness-l: 10
+     thickness-r: 3
+     thickness-b: 10
+     final-w: 20
+     final-h: 20
+     radius-tl: 10
+     radius-tr: 10
+     radius-bl: 10
+     radius-br: 3
+     fill: black
+     stroke: green)
+  ;; Draw another figurine with "sunglasses", to test color blending
+  (group dl: 210 dt: -40
+    (rect
+      final-w: 200
+      final-h: 200
+      z-index: -1
+      fill: pink
+      radius-tl: (* 1)
+      radius-tr: (* 1)
+      radius-bl: (* 1)
+      radius-br: (* 1)
+      dt: -90
+      dl: -30)
+    (composite dt: -80 dl: -25 final-h: 80 final-w: 165 opacity: 0.5 z-index: 3
+      (rect
+        final-w: 80
+        final-h: 80
+        fill: black
+        stroke: black
+        thickness-l: 10
+        thickness-r: 10
+        thickness-t: 10
+        thickness-b: 10
+        radius-tl: (* 1)
+        radius-tr: (* 1)
+        radius-bl: (* 1)
+        radius-br: (* 1))
+      (rect
+        dl: (* 0.5)
+        dt: (* 0.5)
+        origin: true
+        origin-l: 0.5
+        final-w: 100
+        final-h: 10
+        fill: black)
+      (rect
+        dl: 85
+        final-w: 80
+        final-h: 80
+        fill: black
+        stroke: black
+        thickness-l: 10
+        thickness-r: 10
+        thickness-t: 10
+        thickness-b: 10
+        radius-tl: (* 1)
+        radius-tr: (* 1)
+        radius-bl: (* 1)
+        radius-br: (* 1)))
+    (rect
+      dt: 20
+      final-w: 110
+      final-h: 30
+      fill: (oklch 0.3 0.2 0)
+      thickness-l: 7
+      thickness-r: 7
+      thickness-t: 10
+      thickness-b: 10
+      pivot: true
+      angle: -5
+      stroke: (oklch 0.7 0.2 0)
+      radius-tl: (* 1)
+      radius-tr: (* 1)
+      radius-bl: (* 1)
+      radius-br: (* 1))
+    (rect
+      dt: -60
+      final-w: 50
+      final-h: 50
+      z-index: 1
+      fill: (oklch 0.3 0 0)
+      thickness-l: 9
+      thickness-t: 3
+      thickness-r: 9
+      thickness-b: 5
+      stroke: white
+      radius-tl: (* 1)
+      radius-tr: (* 1)
+      radius-bl: (* 1)
+      radius-br: (* 1))
+    (rect
+      dl: 60
+      dt: -60
+      final-w: 50
+      final-h: 50
+      z-index: 1
+      fill: (oklch 0.3 0 0)
+      thickness-l: 9
+      thickness-t: 3
+      thickness-r: 9
+      thickness-b: 5
+      stroke: white
+      radius-tl: (* 1)
+      radius-tr: (* 1)
+      radius-bl: (* 1)
+      radius-br: (* 1))))
+
+;; Opacity grouping.
+(group dt: 230 dl: 150
+  (rect
+    dt: -5
+    dl: -5
+    final-w: 50
+    final-h: 30
+    radius-tl: 3
+    radius-tr: 3
+    radius-bl: 3
+    radius-br: 3
+    fill: green)
+  (composite opacity: 0.5 z-index: 10
+    ;; Must be red
+    (rect
+      final-w: 200
+      final-h: 20
+      z-index: 0
+      radius-tr: 10
+      radius-br: 10
+      fill: red)
+    ;; Must be translucent white (a shade of green should appear)
+    (rect
+      final-w: 20
+      final-h: 20
+      z-index: 1
+      fill: white)))
+
+;; Rectangle clamping. Must not "dicombobulate" the rect.
+(group dt: 180
+  (rect
+    final-w: 20
+    final-h: 20
+    dl: 0
+    radius-tl: 1000
+    fill: black)
+  (rect
+    final-w: 20
+    final-h: 20
+    dl: 25
+    radius-tr: 1000
+    fill: black)
+  (rect
+    final-w: 20
+    final-h: 20
+    dl: 50
+    radius-bl: 1000
+    fill: black)
+  (rect
+    final-w: 20
+    final-h: 20
+    dl: 75
+    radius-br: 1000
+    fill: black)
+  (rect
+    final-w: 20
+    final-h: 20
+    dl: 100
+    stroke: green
+    thickness-l: 1000
+    fill: black)
+  (rect
+    final-w: 20
+    final-h: 20
+    dl: 125
+    stroke: green
+    thickness-r: 1000
+    fill: black)
+  (rect
+    final-w: 20
+    final-h: 20
+    dl: 150
+    stroke: green
+    thickness-t: 1000
+    fill: black)
+  (rect
+    final-w: 20
+    final-h: 20
+    dl: 175
+    stroke: green
+    thickness-b: 1000
+    fill: black))
+
+;; Transparent fill with border, linear gradient stroke, translucent
+;; linear gradient stroke.
+;;
+;; FIXME: BUG: colors leak out of transparent borders. This appears to be a problem
+;; with PlutoVG/its rasterizer & even-odd fill mode. But it could be my error as well.
+(group
+  (rect
+    dl: 160
+    final-w: 250
+    final-h: 220
+    z-index: 10
+    stroke:
+      (linear-gradient
+        (stop 0 (oklch 0.5 0.2 0 0.5))
+        (stop 1 (oklch 0.5 0.2 50 0.7)))
+    thickness-l: 10
+    thickness-r: 10
+    thickness-t: 10
+    thickness-b: 10
+    radius-tl: 10
+    radius-tr: 10
+    radius-bl: 10
+    radius-br: 10)
+  (rect
+    dl: 10
+    dt: 210
+    final-w: 50
+    final-h: 50
+    z-index: 10
+    stroke: black
+    thickness-r: 5
+    thickness-t: 5
+    thickness-b: 5)
+  (rect
+    dl: 70
+    dt: 210
+    final-w: 50
+    final-h: 50
+    z-index: 10
+    stroke: black
+    thickness-r: 5
+    thickness-b: 5)
+  (rect
+    dl: 10
+    dt: 270
+    final-w: 50
+    final-h: 50
+    z-index: 10
+    stroke: black
+    thickness-l: 5
+    thickness-r: 5))
+
+;; Transparent border with fill
+(group dl: 10 dt: 330
+  (rect
+    final-w: 50
+    final-h: 50
+    fill: black
+    z-index: 1
+    thickness-l: 10
+    thickness-r: 10
+    thickness-t: 10
+    thickness-b: 10)
+  (rect
+    final-w: 50
+    final-h: 50
+    fill: orange
+    z-index: 0))
+
+;; Text size, text weight
+(group dl: 80 dt: 280
+  (text
+    caption: "Heading 1"
+    font: "IBM Plex Sans"
+    weight: 800
+    size: 32
+    final-w: 100
+    final-h: 100)
+  (text
+    caption: "Heading 2"
+    dt: 40
+    font: "IBM Plex Sans"
+    weight: 700
+    size: 24
+    final-w: 100
+    final-h: 100)
+  (text
+    caption: "Heading 3"
+    dt: 70
+    font: "IBM Plex Sans"
+    weight: 600
+    size: 18
+    final-w: 100
+    final-h: 100)
+  (text
+    caption: "Heading 4"
+    dt: 90
+    font: "IBM Plex Sans"
+    weight: 500
+    size: 16
+    final-w: 100
+    final-h: 100)
+  (text
+    caption: "Heading 5"
+    dt: 110
+    font: "IBM Plex Sans"
+    weight: 450
+    size: 14
+    final-w: 100
+    final-h: 100)
+  (text
+    caption: "Heading 6"
+    dt: 130
+    font: "IBM Plex Sans"
+    size: 11
+    final-w: 100
+    final-h: 100))
+
+;; Same thing, different font
+(group dl: 250 dt: 250
+  (text
+    caption: "Heading 1"
+    font: "IBM Plex Serif"
+    weight: 800
+    size: 32
+    final-w: 100
+    final-h: 100)
+  (text
+    caption: "Heading 2"
+    dt: 40
+    font: "IBM Plex Serif"
+    weight: 700
+    size: 24
+    final-w: 100
+    final-h: 100)
+  (text
+    caption: "Heading 3"
+    dt: 70
+    font: "IBM Plex Serif"
+    weight: 600
+    size: 18
+    final-w: 100
+    final-h: 100)
+  (text
+    caption: "Heading 4"
+    dt: 90
+    font: "IBM Plex Serif"
+    weight: 500
+    size: 16
+    final-w: 100
+    final-h: 100)
+  (text
+    caption: "Heading 5"
+    dt: 110
+    font: "IBM Plex Serif"
+    weight: 450
+    size: 14
+    final-w: 100
+    final-h: 100)
+  (text
+    caption: "Heading 6"
+    dt: 130
+    font: "IBM Plex Serif"
+    size: 11
+    final-w: 100
+    final-h: 100))
+
+;; Essential text wrapping
+(group dl: 430 dt: 20 pivot: true angle: ^wheel
+  (group
+    (rect
+      final-w: 10
+      final-h: 80
+      fill: blue)
+    (text
+      dl: 20
+      caption: "GIZA ESKUBIDEEN ALDARRIKAPEN UNIBERTSALA"
+      font: "IBM Plex Sans"
+      size: 24
+      weight: 800
+      tracking: 0.1
+      leading: 1
+      wrap: true
+      final-w: 350
+      final-h: 100))
+  (group dl: 20 dt: 90
+    (text
+      caption: "1. atala"
+      font: "IBM Plex Sans"
+      size: 20
+      weight: 600
+      final-w: 100
+      final-h: 100)
+    (text
+      caption: "Gizon-emakume guztiak aske jaiotzen dira, duintasun eta eskubide berberak dituztela; eta ezaguera eta kontzientzia dutenez gero, elkarren artean senide legez jokatu beharra dute."
+      dt: 40
+      font: "IBM Plex Serif"
+      size: 16
+      weight: 450
+      wrap: true
+      final-w: 500
+      final-h: 500))
+  (group dl: 20 dt: 220
+    (text
+      caption: "2. atala"
+      font: "IBM Plex Sans"
+      size: 20
+      weight: 600
+      final-w: 100
+      final-h: 100)
+    (text
+      caption: "Gizaki orori dagozkio Aldarrikapen honetan adierazitako eskubide eta askatasunak, eta ez da inor bereziko arraza, larru-kolorea, sexua, hizkuntza, erlijioa, politikako edo bestelako iritzia, sorterria edo gizarteko jatorria, ekonomi maila, jaiotza edo beste inolako gorabeheragatik.\n\nEz zaio begiratuko gainera, pertsona zein herrialde edo lurraldetakoa den; ezta hango politikari, legeei edo nazioarteko egoerari, nahiz eta herri hori burujabea izan, besteren zainpeko lurraldea, autonomiarik gabea edo nola-halako burujabetasun-mugak dituena. "
+      dt: 40
+      font: "IBM Plex Serif"
+      size: 16
+      weight: 450
+      wrap: true
+      final-w: 500
+      final-h: 500)))
+
+;; Text wrapping
+(group dl: 10 dt: 450
+  ;; All defaults
+  (group
+    (text
+      caption: "Lorem ipsum dolor sit amet, qui minim labore adipisicing minim sint cillum sint consectetur cupidatat."
+      font: "IBM Plex Sans"
+      size: 11
+      color: (oklch 0.3 0 0)
+      z-index: 2
+      wrap: true
+      final-w: 100
+      final-h: 100)
+    (rect
+      z-index: 1
+      fill: (oklch 0.8 0 0)
+      final-w: 100
+      final-h: 100))
+
+  ;; wrap-history: auto. Long ellipsis. But the text fits just fine!
+  (group dl: 110
+    (text
+      caption: "Lorem ipsum dolor sit amet, qui minim labore adipisicing minim sint cillum sint consectetur cupidatat."
+      font: "IBM Plex Sans"
+      size: 11
+      color: (oklch 0.3 0 0)
+      z-index: 2
+      wrap: true
+      wrap-ellipsis: "(... omitted ...)"
+      final-w: 100
+      final-h: 100)
+    (rect
+      z-index: 1
+      fill: (oklch 0.8 0 0)
+      final-w: 100
+      final-h: 100))
+
+  ;; wrap-history: auto. Wrap with smaller height so that it does not fit.
+  (group dl: 220 dt: -30
+    (text
+      caption: "Lorem ipsum dolor sit amet, qui minim labore adipisicing minim sint cillum sint consectetur cupidatat."
+      font: "IBM Plex Sans"
+      size: 11
+      color: (oklch 0.3 0 0)
+      z-index: 2
+      wrap: true
+      final-w: 100
+      final-h: 50)
+    (rect
+      z-index: 1
+      fill: (oklch 0.8 0 0)
+      final-w: 100
+      final-h: 50))
+
+  ;; wrap-history: auto. Smaller height, long ellipsis.
+  (group dl: 330 dt: -50
+    (text
+      caption: "Lorem ipsum dolor sit amet, qui minim labore adipisicing minim sint cillum sint consectetur cupidatat."
+      font: "IBM Plex Sans"
+      size: 11
+      color: (oklch 0.3 0 0)
+      z-index: 2
+      wrap: true
+      wrap-ellipsis: "(... omitted ...)"
+      final-w: 100
+      final-h: 50)
+    (rect
+      z-index: 1
+      fill: (oklch 0.8 0 0)
+      final-w: 100
+      final-h: 50))
+
+  ;; wrap-history: auto. Degenerate ellipsis, fits
+  (group dl: 220 dt: 30
+    (text
+      caption: "Lorem ipsum dolor sit amet, qui minim labore (fits)"
+      font: "IBM Plex Sans"
+      size: 11
+      color: (oklch 0.3 0 0)
+      z-index: 2
+      wrap: true
+      wrap-ellipsis: "I am an incredibly long ellipsis that will not fit in a single line"
+      final-w: 100
+      final-h: 50)
+    (rect
+      z-index: 1
+      fill: (oklch 0.8 0 0)
+      final-w: 100
+      final-h: 50))
+
+  ;; wrap-history: auto. Degenerate ellipsis, does not fit. We wrap
+  ;; in viewport to clip.
+  (viewport dl: 330 dt: 10 final-w: 100 final-h: 100
+    (group
+      (text
+        caption: "Lorem ipsum dolor sit amet, qui minim labore adipisicing minim sint cillum sint consectetur cupidatat."
+        font: "IBM Plex Sans"
+        size: 11
+        color: (oklch 0.3 0 0)
+        z-index: 2
+        wrap: true
+        wrap-ellipsis: "I am an incredibly long ellipsis that will not fit in a single line"
+        final-w: 100
+        final-h: 50)
+      (rect
+        z-index: 1
+        fill: (oklch 0.8 0 0)
+        final-w: 100
+        final-h: 50)))
+
+  ;; Set wrap-history to `1`. Note how we can only undo once. This is faster
+  ;; and consumes a constant amount of memory. But may not be able to handle
+  ;; arbitrary ellipsis. Note how here we overflow.
+  (viewport dt: 110 final-w: 100 final-h: 100
+    (group
+      (text
+        caption: "Lorem ipsum dolor sit amet, qui minim labore adipisicing minim sint cillum sint consectetur cupidatat."
+        font: "IBM Plex Sans"
+        size: 11
+        color: (oklch 0.3 0 0)
+        z-index: 2
+        wrap: true
+        wrap-ellipsis: "(... omitted ...)"
+        wrap-history: 1
+        final-w: 100
+        final-h: 50)
+      (rect
+        z-index: 1
+        fill: (oklch 0.8 0 0)
+        final-w: 100
+        final-h: 50)))
+
+  ;; Set wrap-history to `4`. This makes our ellipsis *not* overflow. This
+  ;; is what `wrap-history: auto` does -- it finds this number, in our case
+  ;; `4`, where ellipsis does not overflow.
+  (group dl: 110 dt: 110
+    (text
+      caption: "Lorem ipsum dolor sit amet, qui minim labore adipisicing minim sint cillum sint consectetur cupidatat."
+      font: "IBM Plex Sans"
+      size: 11
+      color: (oklch 0.3 0 0)
+      z-index: 2
+      wrap: true
+      wrap-ellipsis: "(... omitted ...)"
+      wrap-history: 4
+      final-w: 100
+      final-h: 50)
+    (rect
+      z-index: 1
+      fill: (oklch 0.8 0 0)
+      final-w: 100
+      final-h: 50))
+
+  ;; Trailing newlines must display ellipsis
+  (group dl: 220 dt: 90
+    (text
+      caption: "Lorem ipsum dolor sit amet,\n\n\n\n\n\n"
+      font: "IBM Plex Sans"
+      size: 11
+      color: (oklch 0.3 0 0)
+      z-index: 2
+      wrap: true
+      final-w: 100
+      final-h: 50)
+    (rect
+      z-index: 1
+      fill: (oklch 0.8 0 0)
+      final-w: 100
+      final-h: 50))
+
+  ;; Single newline must display ellipsis
+  (group dl: 220 dt: 290
+    (text
+      caption: "Trailing newline does not fit\n"
+      font: "IBM Plex Sans"
+      size: 11
+      color: (oklch 0.3 0 0)
+      z-index: 2
+      wrap: true
+      final-w: 100
+      final-h: 30)
+    (rect
+      z-index: 1
+      fill: (oklch 0.8 0 0)
+      final-w: 100
+      final-h: 30))
+
+  ;; Single letter after trailing newlines must display ellipsis
+  (group dl: 330 dt: 70
+    (text
+      caption: "Lorem ipsum dolor sit amet,\n\n\n\n\n\na"
+      font: "IBM Plex Sans"
+      size: 11
+      color: (oklch 0.3 0 0)
+      z-index: 2
+      wrap: true
+      final-w: 100
+      final-h: 50)
+    (rect
+      z-index: 1
+      fill: (oklch 0.8 0 0)
+      final-w: 100
+      final-h: 50))
+
+  ;; Ellipsis can undo hard break
+  (group dt: 170
+    (text
+      caption: "Lorem ipsum dolor sit amet, qui\n\nminim labore adipisicing minim sint cillum sint consectetur cupidatat."
+      font: "IBM Plex Sans"
+      size: 11
+      color: (oklch 0.3 0 0)
+      z-index: 2
+      wrap: true
+      final-w: 100
+      final-h: 50)
+    (rect
+      z-index: 1
+      fill: (oklch 0.8 0 0)
+      final-w: 100
+      final-h: 50))
+
+  ;; Leading newlines must trigger ellipsis
+  (group dl: 110 dt: 170
+    (text
+      caption: "\n\n\nLorem ipsum dolor sit amet, qui\n\nminim labore adipisicing minim sint cillum sint consectetur cupidatat."
+      font: "IBM Plex Sans"
+      size: 11
+      color: (oklch 0.3 0 0)
+      z-index: 2
+      wrap: true
+      final-w: 100
+      final-h: 50)
+    (rect
+      z-index: 1
+      fill: (oklch 0.8 0 0)
+      final-w: 100
+      final-h: 50))
+
+  ;; Leading newlines alone must trigger ellipsis
+  (group dl: 220 dt: 150
+    (text
+      caption: "\n\n\n\n\n\n\n"
+      font: "IBM Plex Sans"
+      size: 11
+      color: (oklch 0.3 0 0)
+      z-index: 2
+      wrap: true
+      final-w: 100
+      final-h: 50)
+    (rect
+      z-index: 1
+      fill: (oklch 0.8 0 0)
+      final-w: 100
+      final-h: 50))
+
+  ;; Leading newlines with one letter must trigger ellipsis
+  (group dl: 330 dt: 130
+    (text
+      caption: "\n\n\n\n\n\n\na"
+      font: "IBM Plex Sans"
+      size: 11
+      color: (oklch 0.3 0 0)
+      z-index: 2
+      wrap: true
+      final-w: 100
+      final-h: 50)
+    (rect
+      z-index: 1
+      fill: (oklch 0.8 0 0)
+      final-w: 100
+      final-h: 50)))
+
+;; Text wrapping: on-letters, on-words
+(group dl: 10 dt: 680
+  ;; Disable wrapping on word boundary. Text fits.
+  (group
+    (text
+      caption: "Lorem ipsum dolor sit amet, qui minim labore adipisicing minim sint cillum sint consectetur cupidatat."
+      font: "IBM Plex Sans"
+      size: 11
+      color: (oklch 0.3 0 0)
+      z-index: 2
+      wrap: true
+      wrap-on-words: false
+      final-w: 80
+      final-h: 110)
+    (rect
+      z-index: 1
+      fill: (oklch 0.8 0 0)
+      final-w: 80
+      final-h: 110))
+  ;; Disable wrapping on word boundary. Text does not fit.
+  (group dt: 120
+    (text
+      caption: "Lorem ipsum dolor sit amet, qui minim labore adipisicing minim sint cillum sint consectetur cupidatat."
+      font: "IBM Plex Sans"
+      size: 11
+      color: (oklch 0.3 0 0)
+      z-index: 2
+      wrap: true
+      wrap-on-words: false
+      final-w: 80
+      final-h: 50)
+    (rect
+      z-index: 1
+      fill: (oklch 0.8 0 0)
+      final-w: 80
+      final-h: 50))
+  ;; Disable wrapping on letter boundary. Text fits. Note how it overflows
+  ;; slighly. This is expected behavior. One must use `viewport` to clip if
+  ;; that is undesired.
+  (group dl: 90
+    (text
+      caption: "Lorem ipsum dolor sit amet, qui minim labore adipisicing minim sint cillum sint consectetur cupidatat."
+      font: "IBM Plex Sans"
+      size: 11
+      color: (oklch 0.3 0 0)
+      z-index: 2
+      wrap: true
+      wrap-on-letters: false
+      final-w: 50
+      final-h: 210)
+    (rect
+      z-index: 1
+      fill: (oklch 0.8 0 0)
+      final-w: 50
+      final-h: 210))
+  ;; Ditto, text does not fit.
+  (group dl: 160
+    (text
+      caption: "Lorem ipsum dolor sit amet, qui minim labore adipisicing minim sint cillum sint consectetur cupidatat."
+      font: "IBM Plex Sans"
+      size: 11
+      color: (oklch 0.3 0 0)
+      z-index: 2
+      wrap: true
+      wrap-on-letters: false
+      final-w: 50
+      final-h: 100)
+    (rect
+      z-index: 1
+      fill: (oklch 0.8 0 0)
+      final-w: 50
+      final-h: 100))
+  ;; Disable both. This is effectively disabling multiline wrapping.
+  ;; The text will be omitted when we run out of horizontal space.
+  ;; Note how there is still plenty of vertical space. But it is not
+  ;; used since we have nothing to wrap on.
+  (group dl: 220
+    (text
+      caption: "Lorem ipsum dolor sit amet, qui minim labore adipisicing minim sint cillum sint consectetur cupidatat."
+      font: "IBM Plex Sans"
+      size: 11
+      color: (oklch 0.3 0 0)
+      z-index: 2
+      wrap: true
+      wrap-on-letters: false
+      wrap-on-words: false
+      final-w: 100
+      final-h: 50)
+    (rect
+      z-index: 1
+      fill: (oklch 0.8 0 0)
+      final-w: 100
+      final-h: 50)))
+
+;; Text without wrapping will overflow. One can use the `viewport` node
+;; to clip overflow (among other things).
+(group dl: 170 dt: 790
+  (viewport final-w: 100 final-h: 100
+    (group
+      (text
+        caption: "Lorem ipsum dolor sit amet, qui minim labore adipisicing minim sint cillum sint consectetur cupidatat."
+        font: "IBM Plex Sans"
+        size: 11
+        color: (oklch 0.3 0 0)
+        z-index: 2
+        final-w: 100
+        final-h: 100)
+      (rect
+        z-index: 1
+        fill: (oklch 0.8 0 0)
+        final-w: 100
+        final-h: 100))))
+
+;; Essential selection with span=0
+(group dl: 10 dt: 390
+  (text caption: "Lorem\nipsum" font: "IBM Plex Sans"
+    size: 14
+    color: black
+    final-w: 100
+    final-h: 100
+    selection: true
+    selection-anchor: 0
+    selection-span: 0
+    selection-color: (oklch 1.0 0 0)
+    selection-fill: (oklch 0.6 0.3 250))
+  (^each ((1 2 3 4 5 6 7 8 9 10 11) as anchor_)
+    (text caption: "Lorem\nipsum" font: "IBM Plex Sans"
+      size: 14
+      color: transparent
+      final-w: 100
+      final-h: 100
+      selection: true
+      selection-anchor: ^anchor
+      selection-span: 0
+      selection-color: (oklch 1.0 0 0)
+      selection-fill: (oklch 0.6 0.3 250))))
+
+;; Essential selection anchor
+;;
+;; NOTE: we **expect** this particular test to render with sizing
+;; artifacts. There's a reason we have nonzero span and all the logic
+;; that it is surrounded by.
+(group dl: 350 dt: 650
+  (text
+    caption: "  Lorem\tipsum dolor  "
+    font: "IBM Plex Serif"
+    color: white
+    size: 14
+    selection: true
+    selection-anchor: 0
+    selection-color: transparent
+    selection-span: 1
+    final-w: 100
+    final-h: 30)
+  (^each ((1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20) as anchor_)
+    (text
+      caption: "  Lorem\tipsum dolor  "
+      font: "IBM Plex Serif"
+      color: transparent
+      size: 14
+      selection: true
+      selection-anchor: ^anchor
+      selection-color: transparent
+      selection-span: 1
+      final-w: 100
+      final-h: 30)))
+
+;; Select some
+;; Negative span normalization
+(group dl: 350 dt: 680
+  (text
+    caption: "  Lorem\tipsum dolor  "
+    font: "IBM Plex Serif"
+    color: black
+    size: 14
+    selection: true
+    selection-anchor: 0
+    selection-span: 10
+    final-w: 100
+    final-h: 30)
+  (text dt: 30
+    caption: "  Lorem\tipsum dolor  "
+    font: "IBM Plex Serif"
+    color: black
+    size: 14
+    selection: true
+    selection-anchor: 8
+    selection-span: -5
+    final-w: 100
+    final-h: 30))
+
+;; Select all
+;; Positive and negative span clamping
+(group dl: 350 dt: 740
+  (text
+    caption: "  Lorem\tipsum dolor  "
+    font: "IBM Plex Serif"
+    color: black
+    size: 14
+    selection: true
+    selection-anchor: 0
+    selection-span: 21
+    final-w: 100
+    final-h: 30)
+  (text dt: 25
+    caption: "  Lorem\tipsum dolor  "
+    font: "IBM Plex Serif"
+    color: black
+    size: 14
+    selection: true
+    selection-anchor: 21
+    selection-span: -21
+    final-w: 100
+    final-h: 30)
+  (text dt: 50
+    caption: "  Lorem\tipsum dolor  "
+    font: "IBM Plex Serif"
+    color: black
+    size: 14
+    selection: true
+    selection-anchor: 0
+    selection-span: 100
+    final-w: 100
+    final-h: 30)
+  (text dt: 75
+    caption: "  Lorem\tipsum dolor  "
+    font: "IBM Plex Serif"
+    color: black
+    size: 14
+    selection: true
+    selection-anchor: 21
+    selection-span: -100
+    final-w: 100
+    final-h: 30))
+
+;; Anchor and selection in a fully hard break string
+(group dl: 350 dt: 840
+  (rect
+    final-w: 20
+    final-h: 80
+    fill: black
+    z-index: -1)
+  (group dl: 3 dt: 3
+    (text
+      caption: "\n\n"
+      font: "IBM Plex Serif"
+      color: black
+      size: 14
+      selection: true
+      selection-anchor: 0
+      selection-fill: white
+      selection-span: 3
+      final-w: 100
+      final-h: 30)
+    (text
+      caption: "\n\n"
+      font: "IBM Plex Serif"
+      color: transparent
+      size: 14
+      selection: true
+      selection-anchor: 0
+      selection-fill: red
+      z-index: 1
+      selection-span: 0
+      final-w: 100
+      final-h: 30)
+    (text
+      caption: "\n\n"
+      font: "IBM Plex Serif"
+      color: transparent
+      size: 14
+      selection: true
+      selection-anchor: 1
+      selection-fill: green
+      z-index: 1
+      selection-span: 0
+      final-w: 100
+      final-h: 30)
+    (text
+      caption: "\n\n"
+      font: "IBM Plex Serif"
+      color: transparent
+      size: 14
+      selection: true
+      selection-anchor: 2
+      selection-fill: red
+      z-index: 1
+      selection-span: 0
+      final-w: 100
+      final-h: 30)))
+
+;; Selection and leading newlines
+(group dl: 380 dt: 840
+  (text
+    caption: "\n\nHello"
+    font: "IBM Plex Serif"
+    color: black
+    size: 14
+    selection: true
+    selection-anchor: 0
+    selection-span: 2
+    final-w: 100
+    final-h: 30)
+  (text dl: 50
+    caption: "\n\nHello"
+    font: "IBM Plex Serif"
+    color: black
+    size: 14
+    selection: true
+    selection-anchor: 0
+    selection-span: 6
+    final-w: 100
+    final-h: 30))
+
+;; Selection and trailing newlines
+(group dl: 480 dt: 840
+  (text
+    caption: "Hello\n\n"
+    font: "IBM Plex Serif"
+    color: black
+    size: 14
+    selection: true
+    selection-anchor: 5
+    selection-span: 3 ;; < intentional: make sure it clamps correctly
+    final-w: 100
+    final-h: 30)
+  (text dl: 50
+    caption: "Hello\n\n"
+    font: "IBM Plex Serif"
+    color: black
+    size: 14
+    selection: true
+    selection-anchor: 3
+    selection-span: 5 ;; < ditto
+    final-w: 100
+    final-h: 30))
+
+;; Selection span across space breaks
+(group dl: 450 dt: 545
+  (text
+    caption: "Lorem ipsum dolor sit amet, qui minim labore adipisicing minim sint cillum sint consectetur cupidatat."
+    font: "IBM Plex Sans"
+    size: 11
+    color: (oklch 0.3 0 0)
+    z-index: 2
+    selection: true
+    selection-anchor: 3
+    selection-span: 80
+    wrap: true
+    final-w: 100
+    final-h: 100)
+  (rect
+    z-index: 1
+    fill: (oklch 0.8 0 0)
+    final-w: 100
+    final-h: 100))
+
+;; Selection span across soft breaks
+(group dl: 560 dt: 545
+  (text
+    caption: "Lorem ipsum dolor sit amet, qui minim labore adipisicing minim sint cillum sint consectetur cupidatat."
+    font: "IBM Plex Sans"
+    size: 11
+    color: (oklch 0.3 0 0)
+    z-index: 2
+    selection: true
+    selection-anchor: 3
+    selection-span: 80
+    wrap: true
+    wrap-on-words: false
+    final-w: 100
+    final-h: 100)
+  (rect
+    z-index: 1
+    fill: (oklch 0.8 0 0)
+    final-w: 100
+    final-h: 100))
+
+;; Selection span across hard breaks, into ellipsis
+(group dl: 670 dt: 545
+  (text
+    caption: "Lorem ipsum dolor sit amet,\nqui minim labore adipisicing minim\n\nsint cillum sint consectetur cupidatat."
+    font: "IBM Plex Sans"
+    size: 11
+    color: (oklch 0.3 0 0)
+    z-index: 2
+    selection: true
+    selection-anchor: 3
+    selection-span: 80
+    wrap: true
+    final-w: 100
+    final-h: 100)
+  (rect
+    z-index: 1
+    fill: (oklch 0.8 0 0)
+    final-w: 100
+    final-h: 100))
+
+;; Anchor motion through space break
+(group dl: 780 dt: 545
+  (text
+    caption: "Lorem ipsum dolor sit amet, qui minim labore adipisicing minim sint cillum sint consectetur cupidatat."
+    font: "IBM Plex Sans"
+    size: 11
+    color: (oklch 0.3 0 0)
+    z-index: 2
+    selection: true
+    selection-anchor: 17
+    selection-span: 0
+    wrap: true
+    final-w: 100
+    final-h: 100)
+  (text
+    caption: "Lorem ipsum dolor sit amet, qui minim labore adipisicing minim sint cillum sint consectetur cupidatat."
+    font: "IBM Plex Sans"
+    size: 11
+    color: transparent
+    z-index: 2
+    selection: true
+    selection-anchor: 18
+    selection-span: 0
+    wrap: true
+    final-w: 100
+    final-h: 100)
+  (rect
+    z-index: 1
+    fill: (oklch 0.8 0 0)
+    final-w: 100
+    final-h: 100))
+
+;; Anchor motion through soft break
+(group dl: 780 dt: 655
+  (text
+    caption: "Lorem ipsum dolor sit amet, qui minim labore adipisicing minim sint cillum sint consectetur cupidatat."
+    font: "IBM Plex Sans"
+    size: 11
+    color: (oklch 0.3 0 0)
+    z-index: 2
+    selection: true
+    selection-anchor: 57
+    selection-span: 0
+    wrap: true
+    wrap-on-words: false
+    final-w: 100
+    final-h: 100)
+  (text
+    caption: "Lorem ipsum dolor sit amet, qui minim labore adipisicing minim sint cillum sint consectetur cupidatat."
+    font: "IBM Plex Sans"
+    size: 11
+    color: transparent
+    z-index: 2
+    selection: true
+    selection-anchor: 58
+    selection-span: 0
+    wrap: true
+    wrap-on-words: false
+    final-w: 100
+    final-h: 100)
+  (rect
+    z-index: 1
+    fill: (oklch 0.8 0 0)
+    final-w: 100
+    final-h: 100))
+
+;; Anchor motion through hard break
+(group dl: 670 dt: 655
+  (text
+    caption: "Lorem\nipsum\ndolor\n\nsit amet"
+    font: "IBM Plex Sans"
+    size: 11
+    color: (oklch 0.3 0 0)
+    z-index: 2
+    selection: true
+    selection-anchor: 17
+    selection-span: 0
+    wrap: true
+    final-w: 100
+    final-h: 100)
+  (text
+    caption: "Lorem\nipsum\ndolor\n\nsit amet"
+    font: "IBM Plex Sans"
+    size: 11
+    color: transparent
+    z-index: 2
+    selection: true
+    selection-anchor: 18
+    selection-span: 0
+    wrap: true
+    final-w: 100
+    final-h: 100)
+  (text
+    caption: "Lorem\nipsum\ndolor\n\nsit amet"
+    font: "IBM Plex Sans"
+    size: 11
+    color: transparent
+    z-index: 2
+    selection: true
+    selection-anchor: 19
+    selection-span: 0
+    wrap: true
+    final-w: 100
+    final-h: 100)
+  (rect
+    z-index: 1
+    fill: (oklch 0.8 0 0)
+    final-w: 100
+    final-h: 100))
+
+;; Anchor with leading newlines
+;; Anchor with trailing newlines
+(group dl: 560 dt: 655
+  (text
+    caption: "\n\n\nLorem ipsum\n\n"
+    font: "IBM Plex Sans"
+    size: 11
+    color: (oklch 0.3 0 0)
+    z-index: 2
+    selection: true
+    selection-anchor: 0
+    selection-span: 0
+    wrap: true
+    final-w: 100
+    final-h: 100)
+  (text
+    caption: "\n\n\nLorem ipsum\n\n"
+    font: "IBM Plex Sans"
+    size: 11
+    color: transparent
+    z-index: 2
+    selection: true
+    selection-anchor: 1
+    selection-span: 0
+    wrap: true
+    final-w: 100
+    final-h: 100)
+  (text
+    caption: "\n\n\nLorem ipsum\n\n"
+    font: "IBM Plex Sans"
+    size: 11
+    color: transparent
+    z-index: 2
+    selection: true
+    selection-anchor: 2
+    selection-span: 0
+    wrap: true
+    final-w: 100
+    final-h: 100)
+  (text
+    caption: "\n\n\nLorem ipsum\n\n"
+    font: "IBM Plex Sans"
+    size: 11
+    color: transparent
+    z-index: 2
+    selection: true
+    selection-anchor: 3
+    selection-span: 0
+    wrap: true
+    final-w: 100
+    final-h: 100)
+  (text
+    caption: "\n\n\nLorem ipsum\n\n"
+    font: "IBM Plex Sans"
+    size: 11
+    color: transparent
+    z-index: 2
+    selection: true
+    selection-anchor: 4
+    selection-span: 0
+    wrap: true
+    final-w: 100
+    final-h: 100)
+  (text
+    caption: "\n\n\nLorem ipsum\n\n"
+    font: "IBM Plex Sans"
+    size: 11
+    color: transparent
+    z-index: 2
+    selection: true
+    selection-anchor: 14
+    selection-span: 0
+    wrap: true
+    final-w: 100
+    final-h: 100)
+  (text
+    caption: "\n\n\nLorem ipsum\n\n"
+    font: "IBM Plex Sans"
+    size: 11
+    color: transparent
+    z-index: 2
+    selection: true
+    selection-anchor: 15
+    selection-span: 0
+    wrap: true
+    final-w: 100
+    final-h: 100)
+  (text
+    caption: "\n\n\nLorem ipsum\n\n"
+    font: "IBM Plex Sans"
+    size: 11
+    color: transparent
+    z-index: 2
+    selection: true
+    selection-anchor: 16
+    selection-span: 0
+    wrap: true
+    final-w: 100
+    final-h: 100)
+  (text
+    caption: "\n\n\nLorem ipsum\n\n"
+    font: "IBM Plex Sans"
+    size: 11
+    color: transparent
+    z-index: 2
+    selection: true
+    selection-anchor: 17 ;; < intentional: this should generate nothing.
+    selection-span: 0
+    wrap: true
+    final-w: 100
+    final-h: 100)
+  (rect
+    z-index: 1
+    fill: (oklch 0.8 0 0)
+    final-w: 100
+    final-h: 100))
+
+;; Selection radius, color, fill span=0
+(group dl: 510 dt: 765
+  (text
+    caption: "  Lorem\tipsum dolor  "
+    font: "IBM Plex Serif"
+    color: black
+    size: 14
+    selection: true
+    selection-anchor: 0
+    selection-span: 0
+    selection-radius: 5
+    selection-color: white
+    selection-fill: darkgreen
+    final-w: 100
+    final-h: 30)
+  (text
+    caption: "  Lorem\tipsum dolor  "
+    font: "IBM Plex Serif"
+    color: transparent
+    size: 14
+    selection: true
+    selection-anchor: 8
+    selection-span: 0
+    selection-radius: 5
+    selection-color: white
+    selection-fill: darkgreen
+    final-w: 100
+    final-h: 30))
+
+;; Selection radius, color, fill span>0
+(group dl: 510 dt: 795
+  (text
+    caption: "  Lorem\tipsum dolor  "
+    font: "IBM Plex Serif"
+    color: black
+    size: 14
+    selection: true
+    selection-anchor: 0
+    selection-span: 6
+    selection-radius: 4
+    selection-color: white
+    selection-fill: darkgreen
+    final-w: 100
+    final-h: 30)
+  (text dl: 150 dt: -30
+    caption: "  Lorem\tipsum dolor  "
+    font: "IBM Plex Serif"
+    color: black
+    size: 14
+    selection: true
+    selection-anchor: 12
+    selection-span: -5
+    selection-radius: 5
+    selection-color: white
+    selection-fill: darkgreen
+    final-w: 100
+    final-h: 30))
+
+;; Selection gap
+(group dl: 665 dt: 795
+  (text
+    caption: "Lorem ipsum dolor sit amet, qui minim labore adipisicing minim sint cillum sint consectetur cupidatat."
+    font: "IBM Plex Serif"
+    color: black
+    size: 14
+    wrap: true
+    pivot: true
+    selection: true
+    selection-gap: 0.7
+    selection-anchor: 0
+    selection-span: 50
+    selection-radius: 4
+    selection-color: white
+    selection-fill: darkgreen
+    final-w: 100
+    final-h: 100))
+
+;; Text transform: upcase
+(group dl: 700 dt: 10
+  (text
+    caption: "hello world"
+    font: "IBM Plex Serif"
+    color: black
+    size: 14
+    wrap: true
+    transform: {+ upcase}
+    final-w: 100
+    final-h: 100))
+
+;; Text transform: downcase
+(group dl: 770 dt: 10
+  (text
+    caption: "HELLO WORLD"
+    font: "IBM Plex Serif"
+    color: black
+    size: 14
+    wrap: true
+    transform: {+ downcase}
+    final-w: 50
+    final-h: 100))
+
+;; Text transform: show original
+(group dl: 700 dt: 50
+  (text
+    caption: "\n   Lorem      ipsum   \n"
+    font: "IBM Plex Serif"
+    color: black
+    size: 14
+    wrap: true
+    wrap-on-words: false
+    z-index: 1
+    final-w: 50
+    final-h: 100)
+  (rect
+    fill: (oklch 0.8 0 0)
+    z-index: 0
+    final-w: 50
+    final-h: 100))
+
+;; Text transform: strip
+(group dl: 760 dt: 50
+  (text
+    caption: "\n   Lorem      ipsum   \n"
+    font: "IBM Plex Serif"
+    color: black
+    size: 14
+    wrap: true
+    wrap-on-words: false
+    transform: {+ strip}
+    z-index: 1
+    final-w: 50
+    final-h: 100)
+  (rect
+    fill: (oklch 0.8 0 0)
+    z-index: 0
+    final-w: 50
+    final-h: 100))
+
+;; Text transform: collapse
+(group dl: 820 dt: 50
+  (text
+    caption: "\n   Lorem      ipsum   \n"
+    font: "IBM Plex Serif"
+    color: black
+    size: 14
+    wrap: true
+    wrap-on-words: false
+    transform: {+ collapse}
+    z-index: 1
+    final-w: 50
+    final-h: 100)
+  (rect
+    fill: (oklch 0.8 0 0)
+    z-index: 0
+    final-w: 50
+    final-h: 100))
+
+;; Draw a clock to test relative dl/dt, pivot, origin.
+(group dl: 800 dt: 800 final-w: 100 final-h: 100
+  (rect
+    final-w: 100
+    final-h: 100
+    radius-tl: (* 1)
+    radius-tr: (* 1)
+    radius-bl: (* 1)
+    radius-br: (* 1)
+    fill: (oklch 0.8 0 0)
+    z-index: 0)
+  (rect
+    dl: (* 0.5)
+    dt: (* 0.5)
+    final-w: 10
+    final-h: 10
+    origin: true
+    origin-l: 0.5
+    origin-t: 0.5
+    radius-tl: (* 1)
+    radius-tr: (* 1)
+    radius-bl: (* 1)
+    radius-br: (* 1)
+    fill: (oklch 0.9 0 0)
+    z-index: 10)
+  (rect
+    dl: (* 0.5)
+    dt: (* 0.5)
+    pivot: true
+    pivot-t: 1.0
+    origin: true
+    origin-l: 0.5
+    origin-t: 1.0
+    angle: 250
+    final-w: 3
+    final-h: 40
+    fill: (oklch 0.5 0.2 0 0.5)
+    z-index: 1)
+  (rect
+    dl: (* 0.5)
+    dt: (* 0.5)
+    pivot: true
+    pivot-t: 1.0
+    origin: true
+    origin-l: 0.5
+    origin-t: 1.0
+    angle: 0
+    final-w: 3
+    final-h: 40
+    fill: (oklch 0.5 0.2 150 0.5)
+    z-index: 1)
+  (rect
+    dl: (* 0.5)
+    dt: (* 0.5)
+    pivot: true
+    pivot-t: 1.0
+    origin: true
+    origin-l: 0.5
+    origin-t: 1.0
+    angle: 80
+    final-w: 4
+    final-h: 40
+    fill: (oklch 0 0 0 0.5)
+    z-index: 2))
+
+;; Rotation of text
+;; Rotation of text with selection
+(group dl: 950 dt: 50
+  (group
+    (text
+      caption: "Lorem ipsum dolor sit amet, qui minim labore adipisicing minim sint cillum sint consectetur cupidatat."
+      font: "IBM Plex Serif"
+      color: black
+      size: 14
+      pivot: true
+      angle: 45
+      wrap: true
+      wrap-on-words: false
+      z-index: 1
+      final-w: 100
+      final-h: 100)
+    (rect
+      fill: (oklch 0.8 0 0)
+      z-index: 0
+      final-w: 100
+      final-h: 100))
+  (group dt: 130
+    (text
+      caption: "Lorem ipsum dolor sit amet, qui minim labore adipisicing minim sint cillum sint consectetur cupidatat."
+      font: "IBM Plex Serif"
+      color: black
+      size: 14
+      pivot: true
+      angle: 180
+      selection: true
+      selection-anchor: 5
+      selection-span: 0
+      selection-fill: red
+      wrap: true
+      wrap-on-words: false
+      transform: {+ collapse}
+      z-index: 1
+      final-w: 100
+      final-h: 100)
+    (rect
+      fill: (oklch 0.8 0 0)
+      z-index: 0
+      final-w: 100
+      final-h: 100))
+  (group dl: 130
+    (text
+      caption: "Lorem ipsum dolor sit amet, qui minim labore adipisicing minim sint cillum sint consectetur cupidatat."
+      font: "IBM Plex Serif"
+      color: black
+      size: 14
+      selection: true
+      selection-anchor: 0
+      selection-span: 20
+      selection-radius: 5
+      selection-gap: 0.5
+      selection-fill: violet
+      selection-color: black
+      pivot: true
+      angle: -45
+      wrap: true
+      wrap-on-words: false
+      transform: {+ collapse}
+      z-index: 1
+      final-w: 100
+      final-h: 100)
+    (rect
+      fill: (oklch 0.8 0 0)
+      z-index: 0
+      final-w: 100
+      final-h: 100)))
+
+;; Linear gradient
+;; Linear gradient paint on text, selection rect, underline.
+;;
+;; FIXME: for text and underline, gradients must be generated for
+;; that text's tfbounds box! Right now we're painting each individual
+;; frag (or continuous segments thereof); and each frag's underline
+;; individually. This is wrong for anything except solid color.
+(group dl: 1000 dt: 300
+  (rect
+    radius-tl: 10
+    radius-tr: 10
+    radius-bl: 10
+    radius-br: 10
+    fill:
+      (linear-gradient begin-l: 0
+                       begin-t: 0.5
+                       end-l: 1
+                       end-t: 0.5
+        (stop 0 (oklch 0.5 0.2 0))
+        (stop 0.3 (oklch 0.5 0.2 100))
+        (stop 0.5 (oklch 0.5 0.2 150))
+        (stop 0.8 (oklch 0.5 0.2 200))
+        (stop 1.0 (oklch 0.5 0.2 300)))
+    final-w: 150
+    final-h: 30)
+  (group dt: 50
+    (text
+      caption: "Hello World"
+      font: "IBM Plex Mono"
+      color:
+        (linear-gradient begin-l: 0
+                         begin-t: 0.5
+                         end-l: 1
+                         end-t: 0.5
+          (stop 0 (oklch 0.5 0.2 0))
+          (stop 0.3 (oklch 0.5 0.2 100))
+          (stop 0.5 (oklch 0.5 0.2 150))
+          (stop 0.8 (oklch 0.5 0.2 200))
+          (stop 1.0 (oklch 0.5 0.2 300)))
+      size: 18
+      wrap: true
+      wrap-on-words: false
+      z-index: 1
+      final-w: 200
+      final-h: 100))
+  (group dt: 80
+    (text
+      caption: "Hello World"
+      font: "IBM Plex Sans"
+      selection: true
+      selection-anchor: 5
+      selection-span: 0
+      selection-fill:
+        (linear-gradient begin-l: 0
+                         begin-t: 0.5
+                         end-l: 1
+                         end-t: 0.5
+          (stop 0 (oklch 0.5 0.2 0))
+          (stop 0.3 (oklch 0.5 0.2 100))
+          (stop 0.5 (oklch 0.5 0.2 150))
+          (stop 0.8 (oklch 0.5 0.2 200))
+          (stop 1.0 (oklch 0.5 0.2 300)))
+      size: 18
+      wrap: true
+      wrap-on-words: false
+      z-index: 1
+      final-w: 200
+      final-h: 100))
+  (group dt: 110
+    (text
+      caption: "Hello World"
+      font: "IBM Plex Sans"
+      selection-radius: 5
+      selection: true
+      selection-anchor: 3
+      selection-span: 7
+      selection-fill:
+        (linear-gradient begin-l: 0
+                         begin-t: 0.5
+                         end-l: 1
+                         end-t: 0.5
+          (stop 0 (oklch 0.5 0.2 0))
+          (stop 0.3 (oklch 0.5 0.2 100))
+          (stop 0.5 (oklch 0.5 0.2 150))
+          (stop 0.8 (oklch 0.5 0.2 200))
+          (stop 1.0 (oklch 0.5 0.2 300)))
+      size: 18
+      wrap: true
+      wrap-on-words: false
+      z-index: 1
+      final-w: 200
+      final-h: 100))
+  (group dt: 140
+    (text
+      caption: "Hello World"
+      font: "IBM Plex Sans"
+      selection-radius: 5
+      selection: true
+      selection-anchor: 3
+      selection-span: 7
+      selection-gap: 0.5
+      selection-fill:
+        (linear-gradient begin-l: 0
+                         begin-t: 0.5
+                         end-l: 1
+                         end-t: 0.5
+          (stop 0 (oklch 0.5 0.2 0))
+          (stop 0.3 (oklch 0.5 0.2 100))
+          (stop 0.5 (oklch 0.5 0.2 150))
+          (stop 0.8 (oklch 0.5 0.2 200))
+          (stop 1.0 (oklch 0.5 0.2 300)))
+      size: 18
+      underline: true
+      underline-offset: 7
+      underline-thickness: 3
+      underline-color:
+        (linear-gradient begin-l: 0
+                         begin-t: 0.5
+                         end-l: 1
+                         end-t: 0.5
+          (stop 0 (oklch 0.5 0.2 0))
+          (stop 0.3 (oklch 0.5 0.2 100))
+          (stop 0.5 (oklch 0.5 0.2 150))
+          (stop 0.8 (oklch 0.5 0.2 200))
+          (stop 1.0 (oklch 0.5 0.2 300)))
+      wrap: true
+      wrap-on-words: false
+      z-index: 1
+      final-w: 200
+      final-h: 100)))
+
+;; Radial gradient "cursor"
+(rect
+  dl: ^mouse-x
+  dt: ^mouse-y
+  final-w: 300
+  final-h: 300
+  z-index: 100
+  origin: true
+  origin-l: 0.5
+  origin-t: 0.5
+  fill:
+    (radial-gradient
+      center-radius: 0.5
+      focus-radius: 0.1
+      (stop 0 (oklch 0.3 0 0 0.9))
+      (stop 0.5 (oklch 0.5 0 0 0.5))
+      (stop 1 (oklch 0 0 0 0))))
+
+;; Radial gradient paint on text, rounded rect, selection rect, underline.
+
+;; Image paint
+(group dl: 1080 dt: 180
+  ;; fit: default
+  (group
+    (text
+      caption: "fit: stretch"
+      font: "IBM Plex Mono"
+      size: 11
+      z-index: 1
+      final-w: 100
+      final-h: 30)
+    (rect
+      fill: (image (file "data/214-500x400.jpg"))
+      radius-tl: 10
+      radius-br: 10
+      final-w: 100
+      final-h: 100))
+  ;; fit: match origin
+  (group dl: 120
+    (text
+      caption: "fit: origin"
+      font: "IBM Plex Mono"
+      size: 11
+      z-index: 1
+      final-w: 100
+      final-h: 30)
+    (rect
+      fill:
+        (image fit: (align)
+          (file "data/214-500x400.jpg"))
+      final-w: 100
+      final-h: 100))
+  ;; fit: align centers
+  (group dl: 240
+    (text
+      caption: "fit: center"
+      font: "IBM Plex Mono"
+      size: 11
+      z-index: 1
+      final-w: 100
+      final-h: 30)
+    (rect
+      fill:
+        (image fit: (align l: 0.5 t: 0.5)
+          (file "data/214-500x400.jpg"))
+      final-w: 100
+      final-h: 100))
+  ;; fit: align bottom right
+  (group dl: 120 dt: -110
+    (text
+      caption: "fit: bottom-right"
+      font: "IBM Plex Mono"
+      size: 11
+      z-index: 1
+      final-w: 100
+      final-h: 30)
+    (rect
+      fill:
+        (image fit: (align l: 1 t: 1)
+          (file "data/214-500x400.jpg"))
+      final-w: 100
+      final-h: 100))
+  ;; fit: pan
+  (group dl: 240 dt: -110
+    (text
+      caption: "fit: pan"
+      font: "IBM Plex Mono"
+      size: 11
+      z-index: 1
+      final-w: 100
+      final-h: 30)
+    (rect
+      fill:
+        (image fit: (pan l: -100 t: -100)
+          (file "data/214-500x400.jpg"))
+      final-w: 100
+      final-h: 100))
+  ;; fit: align, tile, resize
+  (group dl: 360
+    (text
+      caption: "fit: tile"
+      font: "IBM Plex Mono"
+      size: 11
+      z-index: 1
+      dt: 110
+      final-w: 100
+      final-h: 30)
+    (rect
+      fill: (image fit: (align)
+                   tile: true
+                   resize-w: 32
+                   resize-h: 32
+        (file "data/soma-256x256-white.png"))
+      final-w: 100
+      final-h: 100))
+  ;; Show logo
+  (group dl: 360 dt: -110
+    (rect
+      z-index: 1
+      fill: (image fit: (align l: 0.5 t: 0.5)
+                   resize-w: (= 64)
+                   resize-h: (= 64)
+                   opacity: 0.8
+        (file "data/soma-256x256-white.png"))
+      final-w: 100
+      final-h: 100)
+    (rect
+      fill:
+        (radial-gradient
+          center-radius: 3.5
+          focus-radius: 0
+          (stop 0 (oklch 0 0 0))
+          (stop 1 (oklch 1 0 0)))
+      final-w: 100
+      final-h: 100)))
+
+;; Image paint on text, rounded rect, selection, underline.
+
+;; Essential viewport: pan, zoom
+(viewport zoom: 2.3 final-w: 100 final-h: 100 pan-l: 10 pan-t: -10 dl: 950 dt: 800
+  (text caption: "Lorem\n\nipsum"
+    font: "IBM Plex Sans"
+    size: 14
+    z-index: 1
+    color: (oklch 0.5 0.3 0)
+    final-w: 500
+    final-h: 500
+    leading: 1.5
+    tracking: 0.3
+    selection: true
+    selection-anchor: 12
+    selection-span: -12
+    selection-color: (oklch 1.0 0 0)
+    selection-fill: (oklch 0.6 0.3 250)
+    wrap: true))
+
+;; Rotate within viewport
+(group dl: 900 dt: 600 final-w: 300 final-h: 100
+  (rect z-index: 0 final-w: 300 final-h: 100 fill: (oklch 0.8 0 0))
+  (viewport zoom: 1.5 pan-l: 0 pan-t: 0 final-w: 300 final-h: 100
+    (group final-w: 300 final-h: 100 pivot: true angle: -10
+      (rect
+        fill: (oklch 0.8 0.05 0)
+        final-w: 300
+        final-h: 100
+        z-index: 10)
+
+      (text
+        caption: "MuSoma"
+        font: "IBM Plex Sans"
+        weight: 900
+        size: 24
+        underline: true
+        selection: true
+        selection-anchor: 6
+        selection-span: -5
+        selection-fill: (hsl 163.72 0.39 0.51)
+        underline-offset: 15
+        final-w: 300
+        final-h: 100
+        z-index: 100
+        opacity: 1.0
+        color: (oklch 0.5 0.1 250)))))
+
+;; Rotate viewport itself
+(group dl: 1100 dt: 500 final-w: 300 final-h: 100 pivot: true angle: 45
+  (rect z-index: 0 final-w: 300 final-h: 100 fill: (oklch 0.8 0 0))
+  (viewport zoom: 1.5 pan-l: 0 pan-t: 0 final-w: 300 final-h: 100
+    (group final-w: 300 final-h: 100
+      (rect
+        fill: (oklch 0.8 0.05 0)
+        final-w: 300
+        final-h: 100
+        z-index: 10)
+
+      (text
+        caption: "MuSoma"
+        font: "IBM Plex Sans"
+        weight: 900
+        size: 24
+        underline: true
+        selection: true
+        selection-anchor: 6
+        selection-span: -5
+        selection-fill: (hsl 163.72 0.39 0.51)
+        underline-offset: 15
+        final-w: 300
+        final-h: 100
+        z-index: 100
+        opacity: 1.0
+        color: (oklch 0.5 0.1 250)))))
+
+;; Rotate within viewport & viewport itself, zoom, pan
+(group dl: 1200 dt: 400 final-w: 300 final-h: 100 pivot: true angle: 45
+  (rect z-index: 0 final-w: 300 final-h: 100 fill: (oklch 0.8 0 0))
+  (viewport zoom: 1.5 pan-l: 50 pan-t: 100 final-w: 300 final-h: 100
+    (group final-w: 300 final-h: 100 pivot: true angle: 40
+      (rect
+        fill: (oklch 0.8 0.05 0)
+        final-w: 300
+        final-h: 100
+        z-index: 10)
+
+      (text
+        caption: "MuSoma"
+        font: "IBM Plex Sans"
+        weight: 900
+        size: 24
+        underline: true
+        selection: true
+        selection-anchor: 6
+        selection-span: -5
+        selection-fill: (hsl 163.72 0.39 0.51)
+        underline-offset: 15
+        final-w: 300
+        final-h: 100
+        z-index: 100
+        opacity: 1.0
+        color: (oklch 0.5 0.1 250)))))
+
+;; Loading-like linear gradient on text (use green so that it's visible statically)
+(text
+  caption: "Please wait..."
+  font: "IBM Plex Serif"
+  color:
+    (linear-gradient begin-l: 0
+                     begin-t: 0.5
+                     end-l: 1
+                     end-t: 0.5
+      (stop 0 black)
+      (stop 0.4 green)
+      (stop 1 black))
+  size: 24
+  wrap: true
+  wrap-on-words: false
+  z-index: 1
+  dl: 950
+  dt: 520
+  final-w: 200
+  final-h: 100)
+
+;; Nested viewport
+(group dl: 1100 dt: 750
+  (rect
+    z-index: -1
+    final-w: 200
+    final-h: 200
+    fill: lightgray)
+  (viewport zoom: 0.5 pan-l: 10 pan-t: 80 final-w: 200 final-h: 200
+    (group final-w: 300 final-h: 100 pivot: true angle: 45
+      (rect z-index: 0 final-w: 200 final-h: 100 fill: orange)
+      (viewport z-index: 1 zoom: 1.8 pan-l: 0 pan-t: -100 final-w: 200 final-h: 100
+        (group final-w: 300 final-h: 100 pivot: true angle: -40
+          (rect
+            fill: darkgray
+            final-w: 300
+            final-h: 100
+            z-index: 10)
+          (text
+            caption: "Hello World"
+            font: "IBM Plex Mono"
+            weight: 900
+            size: 24
+            underline: true
+            selection: true
+            selection-anchor: 6
+            selection-span: -5
+            selection-fill: (hsl 163.72 0.39 0.51)
+            underline-offset: 15
+            final-w: 300
+            final-h: 100
+            z-index: 100
+            opacity: 1.0
+            color: (oklch 0.5 0.1 250)))))))
+
+;; SVG: clip
+(group
+ dl: 1400
+ dt: 800
+ final-w: 300
+ final-h: 150
+ (text
+   caption: "resize: clip"
+   dt: -20
+   font: "IBM Plex Mono"
+   size: 11)
+ (rect
+   z-index: 1
+   fill: (rgb 0 0 0 0.5))
+ (svg
+   src: (file "data/soma-logo.svg")
+   color: black
+   resize: clip))
+
+;; SVG: stretch
+(group
+ dl: 1400
+ dt: 730
+ final-w: 100
+ final-h: 35
+ (text
+   caption: "resize: stretch"
+   dt: -20
+   font: "IBM Plex Mono"
+   size: 11)
+ (rect
+   z-index: 1
+   fill: (rgb 0 0 0 0.5))
+ (svg
+   src: (file "data/soma-logo.svg")
+   color: black
+   resize: stretch))
+
+;; SVG: keep-ratio
+(group
+ dl: 1550
+ dt: 520
+ final-w: 200
+ final-h: 250
+ (text
+   caption: "resize: keep-ratio"
+   dt: -20
+   font: "IBM Plex Mono"
+   size: 11)
+ (rect
+   z-index: 1
+   fill: (rgb 0 0 0 0.5))
+ (svg
+   src: (file "data/soma-logo.svg")
+   color: green
+   resize: keep-ratio))
+
+;; SVG: rotate
+(group
+ dl: 1480
+ dt: 430
+ final-w: 100
+ final-h: 35
+ pivot: true
+ angle: -45
+ (text
+   caption: "resize: stretch"
+   dt: -20
+   font: "IBM Plex Mono"
+   size: 11)
+ (rect
+   z-index: 1
+   fill: (rgb 0 0 0 0.5))
+ (svg
+   src: (file "data/soma-logo.svg")
+   color: black
+   resize: stretch))
+
+;; SVG: rotate & scale inside viewport
+(group
+  dl: 1580
+  dt: 300
+  final-w: 200
+  final-h: 60
+  (rect
+    z-index: -1
+    fill: pink)
+  (viewport
+   pan-l: 20
+   pan-t: 10
+   zoom: 1.5
+    (group
+     pivot: true
+     angle: -10
+     final-w: 100
+     final-h: 35
+     (text
+       caption: "resize: stretch"
+       dt: -20
+       font: "IBM Plex Mono"
+       size: 11)
+     (rect
+       z-index: 1
+       fill: (rgb 0 0 0 0.5))
+     (svg
+       src: (file "data/soma-logo.svg")
+       color: black
+       resize: stretch))))

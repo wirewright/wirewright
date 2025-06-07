@@ -1574,7 +1574,9 @@ class String
   def li(*, bullet = "*", indent = 0, ws = ' ', strip_first = false) : String
     String.build(indent * ws.bytesize + bullet.bytesize + ' '.bytesize + bytesize) do |io|
       indent.times { io << ws }
-      io << bullet << ' '
+      unless bullet.empty?
+        io << bullet << ' '
+      end
 
       first = true
       each_line_view do |line|

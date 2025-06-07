@@ -132,7 +132,8 @@ module VDwUIR
   def open(path : Path, term : Term)
     Term.case(term) do
       matchpi %[{¦ title_string initial-w: w←(%number 0 < _ <= 4096) initial-h: h←(%number 0 < _ <= 4096)}] do
-        instance, complaints = Alloy.render_with_complaints(Term[], term)
+        vars = Term["mouse-x": 0, "mouse-y": 0, "wheel": 0, w: w, h: h]
+        instance, complaints = Alloy.render_with_complaints(vars, term)
         unless complaints.empty?
           complaints.each do |complaint|
             puts complaint
@@ -154,8 +155,9 @@ module VDwUIR
     Term.case(ARGV) do
       matchpi %{("open" file_string)} do
         path = Path[file.to(String)]
+        initial = ML.terms(File.read(path))
 
-        open(path, Term.of(title: "Untitled", "initial-w": 800, "initial-h": 600))
+        open(path, initial)
       end
 
       otherwise do
