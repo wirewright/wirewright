@@ -2,6 +2,8 @@ module Ww::Soma::DwUIR
   # A painter converts `DrawKey`s to `Layer`s. This is an implementation of
   # a painter that uses PlutoVG.
   class PvgPainter
+    Log = ::Log.for(self)
+
     # :nodoc:
     def initialize(@fonts : PvgFontFaceStore,
                    @images : PvgImageServer,

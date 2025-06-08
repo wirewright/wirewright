@@ -1,8 +1,7 @@
 module Ww::Soma::DwUIR
   extend self
 
-  # TODO: move!!!
-  alias TextSelectionRange = Range(Int32, Int32)?
+  Log = ::Log.for(self)
 end
 
 require "./dwuir/color"

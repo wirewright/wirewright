@@ -41,7 +41,7 @@ module Ww::Soma::DwUIR
   module FontEntryParser
     extend self
 
-    Log = ::Log.for("FontEntryParser")
+    Log = ::Log.for(self)
 
     record FontEntry, kind : Kind, path : Path, family : String, weight : FontWeight, italic : Bool do
       enum Kind : UInt8
@@ -115,7 +115,7 @@ module Ww::Soma::DwUIR
   module FontIndex
     extend self
 
-    Log = ::Log.for("FontIndex")
+    Log = ::Log.for(self)
 
     # :nodoc:
     record CodepointMap, codepoints = {} of String => Char do

@@ -2,6 +2,8 @@ module Ww::Soma::DwUIR
   # A compositor manages `Layer`s produced by a painter, and finally blends them
   # back-to-front over the destination pixel rect.
   class Compositor
+    Log = ::Log.for(self)
+
     def initialize
       @curr = {} of DrawKey => Layer
       @succ = {} of DrawKey => Layer

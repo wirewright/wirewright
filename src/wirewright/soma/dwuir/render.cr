@@ -1,4 +1,6 @@
 module Ww::Soma::DwUIR
+  alias TextSelectionRange = Range(Int32, Int32)?
+
   # Specifies how a selection should look like, and the selection range.
   record SelectionSpec,
     range : Range(Int32, Int32),
@@ -46,7 +48,7 @@ module Ww::Soma::DwUIR
 
   # :nodoc:
   #
-  # Parses a possibly text *node* and returns the corresponding `TextSpec`.
+  # Parses a pontential text *node* and returns the corresponding `TextSpec`.
   #
   # - *pencils* specifies the pencil server to use (used here for calculating
   #   line height etc.)
@@ -326,6 +328,8 @@ module Ww::Soma::DwUIR
           wrap, selection, underline,
         )
       end
+
+      otherwise { }
     end
   end
 
