@@ -159,4 +159,11 @@ module Rtk
     p1 = r.value.pos
     p1 - p0
   end
+
+  def hexdigit?(r) : Int32?
+    return unless Rtk.peek?(r, "0-9a-fA-F")
+
+    char = Rtk.advance(r)
+    char.to_i(base: 16)
+  end
 end

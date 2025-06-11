@@ -55,18 +55,6 @@ module Ww::Soma::DwUIR
       new(r.to_u8, g.to_u8, b.to_u8, a.to_u8)
     end
 
-    private def self.hexdigit?(r : Rtk::R) : Int32?
-      return unless Rtk.peek?(r, "0-9a-fA-F")
-
-      case char = Rtk.advance(r)
-      when '0'..'9' then char - '0'
-      when 'a'..'f' then 15 + (char - 'f')
-      when 'A'..'F' then 15 + (char - 'F')
-      else
-        unreachable
-      end
-    end
-
     private def self.hexcolor?(r : Rtk::R)
       Rtk.skip(r, " ")
       return unless Rtk.peek?(r, "#")
@@ -74,14 +62,14 @@ module Ww::Soma::DwUIR
       Rtk.advance(r)
 
       # Try to read all the way up to RRGGBBAA.
-      d0 = hexdigit?(r)
-      d1 = d0 && hexdigit?(r)
-      d2 = d1 && hexdigit?(r)
-      d3 = d2 && hexdigit?(r)
-      d4 = d3 && hexdigit?(r)
-      d5 = d4 && hexdigit?(r)
-      d6 = d5 && hexdigit?(r)
-      d7 = d6 && hexdigit?(r)
+      d0 = Rtk.hexdigit?(r)
+      d1 = d0 && Rtk.hexdigit?(r)
+      d2 = d1 && Rtk.hexdigit?(r)
+      d3 = d2 && Rtk.hexdigit?(r)
+      d4 = d3 && Rtk.hexdigit?(r)
+      d5 = d4 && Rtk.hexdigit?(r)
+      d6 = d5 && Rtk.hexdigit?(r)
+      d7 = d6 && Rtk.hexdigit?(r)
 
       Rtk.skip(r, " ")
       return unless Rtk.at_end?(r)
