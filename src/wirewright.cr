@@ -12,6 +12,7 @@ require "wait_group"
 require "../util"
 require "../rtk"
 
+require "./wirewright/unicode"
 require "./wirewright/term"
 require "./wirewright/file_server"
 require "./wirewright/ml"
