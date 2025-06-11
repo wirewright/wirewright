@@ -271,6 +271,11 @@ module Ww
       end
     {% end %}
 
+    # Appends *digit* in *base* to a copy of this number. Returns the copy.
+    def append(digit : Num, *, base : Num) : Num
+      self * base + digit
+    end
+
     # :nodoc:
     def inspect(io)
       Kernel.inspect(io, @k)
