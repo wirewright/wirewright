@@ -68,7 +68,7 @@ module Rtk
     yield
     e = r.value.pos
 
-    StringView.new(r.value.string, b, e)
+    StringView.new(r.value.string, b, e, r.value.string.ascii_only?)
   end
 
   def capture(r, io, &)

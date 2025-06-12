@@ -184,7 +184,7 @@ module Ww
 
     # :nodoc:
     def unsafe_as_s : Str
-      Str.new(Pointer(Void).new(@mem.address >> 3 << 3).as(String))
+      Str.new(Pointer(Void).new(@mem.address >> 3 << 3).as(StringView))
     end
 
     # Constructs a generic `Term` from the given symbol *term*.
@@ -452,19 +452,19 @@ module Ww
       Num.new(object)
     end
 
-    # Constructs a string term from the given string *object*.
-    def self.[](object : String) : Str
+    # Constructs a string term from the given string view *object*.
+    def self.[](object : StringView) : Str
       Str.new(object)
     end
 
-    # Constructs a string term from the given string view *object*.
-    def self.[](object : StringView) : Str
-      Str.new(object.to_s)
+    # Constructs a string term from the given string *object*.
+    def self.[](object : String) : Str
+      Term[object.view]
     end
 
     # Constructs a string term from the given character *object*.
     def self.[](object : Char) : Str
-      Str.new(object.to_s)
+      Term[object.to_s]
     end
 
     # Constructs a symbol term from the given symbol *object*.
@@ -484,7 +484,7 @@ module Ww
 
     # Constructs a string term from the given UUID *object*.
     def self.[](object : UUID) : Str
-      Str.new(object.to_s)
+      Term[object.to_s]
     end
 
     # Constructs an indexed dictionary from the given enumerable *object*.

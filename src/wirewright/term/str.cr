@@ -3,11 +3,24 @@ module Ww
   struct Term::Str
     include ITerm
 
-    def initialize(@value : String)
+    def initialize(@value : StringView)
     end
 
-    # :nodoc:
-    delegate :inspect, to: @value
+    def inspect(io)
+      io << '"'
+      @value.each_char do |char|
+        if char.ascii_control? || char.ord >= 0x80
+          char.unicode_escape(io)
+        else
+          io << char
+        end
+      end
+      io << '"'
+    end
+
+    def after_end : Str
+      Str.new(@value.after_end)
+    end
 
     def single_byte? : Bool
       @value.bytesize == 1
@@ -22,11 +35,11 @@ module Ww
     end
 
     def to?(type : String.class) : String
-      @value
+      @value.to_s
     end
 
     def to?(type : StringView.class) : StringView
-      @value.view
+      @value
     end
 
     # Returns the number of characters in this string.
@@ -52,28 +65,28 @@ module Ww
 
     # Returns an uppercase version of this string.
     def upcase : Str
-      Term[@value.upcase]
+      Term[@value.to_s.upcase]
     end
 
     # Returns a lowercase version of this string.
     def downcase : Str
-      Term[@value.downcase]
+      Term[@value.to_s.downcase]
     end
 
     def first : Str
-      Term[@value[0]? || ""]
+      Term[@value.first_or_empty]
     end
 
     def rest : Str
-      Term[@value.lchop]
+      Term[@value.rest_or_empty]
     end
 
     def prior : Str
-      Term[@value.rchop]
+      Term[@value.prior_or_empty]
     end
 
     def last : Str
-      Term[@value[-1]? || ""]
+      Term[@value.last_or_empty]
     end
 
     def_equals @value

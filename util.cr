@@ -1078,37 +1078,57 @@ struct Char
   end
 end
 
-struct StringView
+class StringView
   getter string : String
   getter byte_start : Int32
-  getter byte_end : Int32
 
-  def initialize(@string, @byte_start, @byte_end)
-    unless 0 <= @byte_start <= @byte_end <= @string.bytesize
-      raise ArgumentError.new("invalid byte range #{@byte_start}...#{@byte_end}")
+  @byte_tail : UInt32
+
+  def byte_end : Int32
+    (@byte_tail >> 1).to_i
+  end
+
+  # Returns `true` if this string view only contains ASCII characters.
+  def ascii_only? : Bool
+    @byte_tail & 0b1 == 1
+  end
+
+  def initialize(@string, @byte_start, byte_end : Int32, ascii_only : Bool)
+    unless 0 <= @byte_start <= byte_end <= @string.bytesize
+      raise ArgumentError.new("invalid byte range #{@byte_start}...#{byte_end}")
     end
 
+    # Byte end is nonnegative, we know that now!
+
+    @byte_tail = (byte_end.to_u32 << 1) | (ascii_only ? 1u32 : 0u32)
+
     {% if flag?(:debug) %}
-      unless Unicode.valid?(@string.to_slice[@byte_start...@byte_end])
+      unless Unicode.valid?(@string.to_slice[@byte_start...byte_end])
         raise ArgumentError.new("invalid encoding")
       end
     {% end %}
   end
 
   private def self.join_copy(views : Enumerable(StringView)) : StringView
+    ascii_only = true
+
     sum = String.build do |io|
       views.each do |view|
+        ascii_only &&= view.ascii_only?
         io << view
       end
     end
 
-    StringView.new(sum, 0, sum.bytesize)
+    StringView.new(sum, 0, sum.bytesize, ascii_only)
   end
 
   def self.join(views : Enumerable(StringView)) : StringView
     view_head = view_tail = nil
+    ascii_only = true
 
     views.each do |view|
+      ascii_only &&= view.ascii_only?
+
       unless view_tail
         view_head = view_tail = view
         next
@@ -1125,29 +1145,34 @@ struct StringView
       raise Enumerable::EmptyError.new
     end
 
-    StringView.new(view_head.string, view_head.byte_start, view_tail.byte_end)
+    StringView.new(view_head.string, view_head.byte_start, view_tail.byte_end, ascii_only)
   end
 
   def before_begin : StringView
-    StringView.new(@string, @byte_start, @byte_start)
+    StringView.new(@string, @byte_start, @byte_start, ascii_only: true)
   end
 
   def after_end : StringView
-    StringView.new(@string, @byte_end, @byte_end)
+    StringView.new(@string, byte_end, byte_end, ascii_only: true)
   end
 
   def empty? : Bool
-    @byte_start == @byte_end
+    @byte_start == byte_end
+  end
+
+  def nonempty? : Bool
+    !empty?
   end
 
   def bytesize : Int32
-    @byte_end - @byte_start
+    byte_end - @byte_start
   end
 
   def size : Int32
-    if @string.ascii_only?
+    if ascii_only?
       bytesize
-    elsif {@byte_start, @byte_end} == {0, @string.bytesize}
+    elsif covers_fully?
+      # String always knows better than we do how to do this efficiently!
       @string.size
     else
       size = 0
@@ -1189,7 +1214,11 @@ struct StringView
   end
 
   def precedes?(other : StringView)
-    @string.same?(other.string) && @byte_end == other.byte_start
+    @string.same?(other.string) && byte_end == other.byte_start
+  end
+
+  def covers_fully? : Bool
+    {0, @string.bytesize} == {@byte_start, byte_end}
   end
 
   def blank? : Bool
@@ -1201,8 +1230,10 @@ struct StringView
   end
 
   def +(other : StringView) : StringView
+    ascii_only = ascii_only? && other.ascii_only?
+
     if precedes?(other)
-      return StringView.new(@string, @byte_start, other.@byte_end)
+      return StringView.new(@string, @byte_start, other.byte_end, ascii_only)
     end
 
     sum = String.build do |io|
@@ -1210,21 +1241,188 @@ struct StringView
       io << other
     end
 
-    StringView.new(sum, 0, sum.bytesize)
+    StringView.new(sum, 0, sum.bytesize, ascii_only)
+  end
+
+  struct EE
+    include Enumerable(Char)
+
+    def initialize(@v : StringView)
+    end
+
+    def each(& : Char ->)
+      @v.each_char { |ch| yield ch }
+    end
+  end
+
+  def ee : Enumerable(Char)
+    EE.new(self)
+  end
+
+  def -(other : StringView) : StringView
+    unless @string.same?(other.@string)
+      raise ArgumentError.new("cannot use `-` on string views pointing to different strings")
+    end
+
+    StringView.new(@string, other.@byte_start, @byte_start, ascii_only?)
+  end
+
+  def []?(index : Int32) : Char?
+    if index == 0
+      return first_char?
+    end
+
+    if index == -1
+      return last_char?
+    end
+
+    return unless offset = @string.byte_index_to_char_index(@byte_start)
+
+    @string[offset + index]?
+  end
+
+  def [](index : Int32) : Char
+    self[index]? || raise IndexError.new
   end
 
   # NOTE: this is probably not what you want. You probably want `lskip`
   # or `rskip`.
   def skip(nbytes : Int32) : StringView
-    StringView.new(@string, @byte_start + nbytes, @byte_end)
+    StringView.new(@string, @byte_start + nbytes, byte_end, ascii_only?)
+  end
+
+  def prev_char? : Char?
+    if ascii_only?
+      return unless @byte_start > 0
+      return @string.to_slice[@byte_start - 1].chr
+    end
+
+    reader = Char::Reader.new(@string, pos: @byte_start)
+    return unless reader.has_previous?
+
+    reader.previous_char
   end
 
   def first_char? : Char?
+    if ascii_only?
+      return unless codepoint = to_slice.first?
+      return codepoint.unsafe_chr
+    end
+
+    if covers_fully?
+      return @string[0]?
+    end
+
     each_char { |char| return char }
   end
 
+  def first_char : Char
+    first_char? || raise IndexError.new
+  end
+
   def last_char? : Char?
+    if ascii_only?
+      return unless codepoint = to_slice.last?
+      return codepoint.unsafe_chr
+    end
+
+    if covers_fully?
+      return @string[@string.size - 1]?
+    end
+
     reverse_each_char { |char| return char }
+  end
+
+  def last_char : Char
+    last_char? || raise IndexError.new
+  end
+
+  def first? : StringView?
+    return if empty?
+
+    if ascii_only?
+      return StringView.new(@string, @byte_start, @byte_start + 1, ascii_only: true)
+    end
+
+    each_char do |char|
+      return StringView.new(@string, @byte_start, @byte_start + char.bytesize, ascii_only: false)
+    end
+
+    unreachable
+  end
+
+  def rest? : StringView?
+    return if empty?
+
+    if ascii_only?
+      return StringView.new(@string, @byte_start + 1, byte_end, ascii_only: true)
+    end
+
+    each_char do |char|
+      return StringView.new(@string, @byte_start + char.bytesize, byte_end, ascii_only: false)
+    end
+
+    unreachable
+  end
+
+  def first : StringView
+    first? || raise IndexError.new
+  end
+
+  def first_or_empty : StringView
+    first? || before_begin
+  end
+
+  def rest : StringView
+    rest? || raise IndexError.new
+  end
+
+  def rest_or_empty : StringView
+    rest? || after_end
+  end
+
+  def last? : StringView?
+    return if empty?
+
+    if ascii_only?
+      return StringView.new(@string, byte_end - 1, byte_end, ascii_only: true)
+    end
+
+    reverse_each_char do |char|
+      return StringView.new(@string, byte_end - char.bytesize, byte_end, ascii_only: false)
+    end
+
+    unreachable
+  end
+
+  def last_or_empty : StringView
+    last? || after_end
+  end
+
+  def prior? : StringView?
+    return if empty?
+
+    if ascii_only?
+      return StringView.new(@string, @byte_start, byte_end - 1, ascii_only: true)
+    end
+
+    reverse_each_char do |char|
+      return StringView.new(@string, @byte_start, byte_end - char.bytesize, ascii_only: false)
+    end
+
+    unreachable
+  end
+
+  def prior_or_empty : StringView
+    prior? || before_begin
+  end
+
+  def last : StringView
+    last? || raise IndexError.new
+  end
+
+  def prior : StringView
+    prior? || raise IndexError.new
   end
 
   def lcount(prefix : Char) : Int32
@@ -1242,10 +1440,10 @@ struct StringView
   def lskip(nchars : Int32, charset = nil) : StringView
     reader = Char::Reader.new(@string, pos: @byte_start)
     reader.each do |char|
-      break if reader.pos >= @byte_end
+      break if reader.pos >= byte_end
 
       if nchars.zero? || (charset && !char.in?(charset))
-        return StringView.new(@string, reader.pos, @byte_end)
+        return StringView.new(@string, reader.pos, byte_end, ascii_only?)
       end
 
       nchars -= 1
@@ -1262,10 +1460,10 @@ struct StringView
   def lstrip(charset = "\n") : StringView
     reader = Char::Reader.new(@string, pos: @byte_start)
     reader.each do |char|
-      break if reader.pos >= @byte_end
+      break if reader.pos >= byte_end
 
       unless charset.includes?(char)
-        return StringView.new(@string, reader.pos, byte_end: @byte_end)
+        return StringView.new(@string, reader.pos, byte_end, ascii_only?)
       end
     end
 
@@ -1273,7 +1471,7 @@ struct StringView
   end
 
   def rstrip(charset = "\n") : StringView
-    reader = Char::Reader.new(@string, pos: @byte_end)
+    reader = Char::Reader.new(@string, pos: byte_end)
 
     until reader.pos == @byte_start
       reader.previous_char
@@ -1281,7 +1479,7 @@ struct StringView
       unless charset.includes?(reader.current_char)
         reader.next_char
 
-        return StringView.new(@string, @byte_start, byte_end: reader.pos)
+        return StringView.new(@string, @byte_start, reader.pos, ascii_only?)
       end
     end
 
@@ -1302,14 +1500,20 @@ struct StringView
   def partition(index : Int32) : {StringView, StringView, StringView}
     reader = Char::Reader.new(@string, pos: @byte_start)
 
-    until reader.pos == @byte_end
+    lhs_ascii_only = true
+
+    until reader.pos == byte_end
+      char = reader.current_char
+      char_ascii = char.ascii?
+
       if index.zero?
-        return {StringView.new(@string, @byte_start, reader.pos),
-                StringView.new(@string, reader.pos, reader.pos + reader.current_char.bytesize),
-                StringView.new(@string, reader.pos + reader.current_char.bytesize, @byte_end)}
+        return {StringView.new(@string, @byte_start, reader.pos, lhs_ascii_only),
+                StringView.new(@string, reader.pos, reader.pos + char.bytesize, char_ascii),
+                StringView.new(@string, reader.pos + char.bytesize, byte_end, ascii_only?)}
       end
 
       index -= 1
+      lhs_ascii_only &&= char_ascii
       reader.next_char
     end
 
@@ -1319,13 +1523,20 @@ struct StringView
   def partition(separator : Char) : {StringView, StringView, StringView}
     reader = Char::Reader.new(@string, pos: @byte_start)
 
-    until reader.pos == @byte_end
-      if reader.current_char == separator
-        l = StringView.new(@string, @byte_start, reader.pos)
-        mid = StringView.new(@string, reader.pos, reader.pos + 1)
-        r = StringView.new(@string, reader.pos + 1, @byte_end)
+    lhs_ascii_only = true
+
+    until reader.pos == byte_end
+      char = reader.current_char
+      char_ascii = char.ascii?
+
+      if char == separator
+        l = StringView.new(@string, @byte_start, reader.pos, lhs_ascii_only)
+        mid = StringView.new(@string, reader.pos, reader.pos + 1, char_ascii)
+        r = StringView.new(@string, reader.pos + 1, byte_end, ascii_only?)
         return l, mid, r
       end
+
+      lhs_ascii_only &&= char_ascii
 
       reader.next_char
     end
@@ -1333,11 +1544,15 @@ struct StringView
     {self, after_end, after_end}
   end
 
+  def each_byte(& : UInt8 ->) : Nil
+    to_slice.each { |byte| yield byte }
+  end
+
   # Yields each character in this string view, going from left to right.
   def each_char(& : Char ->) : Nil
     reader = Char::Reader.new(@string, pos: @byte_start)
 
-    until reader.pos == @byte_end
+    until reader.pos == byte_end
       yield reader.current_char
       reader.next_char
     end
@@ -1345,7 +1560,7 @@ struct StringView
 
   # Yields each character in this string view, going from right to left.
   def reverse_each_char(& : Char ->) : Nil
-    reader = Char::Reader.new(@string, pos: @byte_end)
+    reader = Char::Reader.new(@string, pos: byte_end)
 
     until reader.pos < @byte_start
       reader.previous_char # byte end must be skipped, we're exclusive!
@@ -1415,13 +1630,18 @@ struct StringView
   end
 
   def to_s(io)
-    (@byte_start...@byte_end).each do |byte_index|
+    if covers_fully?
+      io << @string
+      return
+    end
+
+    (@byte_start...byte_end).each do |byte_index|
       io.write_byte(@string.byte_at(byte_index))
     end
   end
 
   def to_s : String
-    if @byte_start == 0 && @byte_end == @string.bytesize
+    if covers_fully?
       return @string
     end
 
@@ -1429,12 +1649,18 @@ struct StringView
   end
 
   def to_slice : Bytes
-    @string.to_slice[@byte_start, @byte_end - @byte_start]
+    @string.to_slice[@byte_start, byte_end - @byte_start]
+  end
+
+  def to_unsafe : UInt8*
+    to_slice.to_unsafe
   end
 
   def inspect(io)
     io << "…\"" << self << "\"…"
   end
+
+  def_equals_and_hash to_slice
 end
 
 class String
@@ -1568,7 +1794,7 @@ end
 
 class String
   def view : StringView
-    StringView.new(self, 0, bytesize)
+    StringView.new(self, 0, bytesize, ascii_only?)
   end
 
   def li(*, bullet = "*", indent = 0, ws = ' ', strip_first = false) : String
@@ -1673,16 +1899,22 @@ class String
     return if empty?
 
     start = 0
+    line_ascii_only = true
 
     reader = Char::Reader.new(self)
     reader.each do |char|
+      line_ascii_only &&= char.ascii?
       next unless char == '\n'
-      yield StringView.new(self, start, start + (reader.pos - start) + 1)
-      start = reader.pos + 1
+
+      yield StringView.new(self, start, reader.pos + 1, line_ascii_only)
+      start = reader.pos + 1 # start after newline
+      line_ascii_only = true
     end
 
+    # Handle nonempty tail
     unless start == bytesize
-      yield StringView.new(self, start, bytesize)
+      yield StringView.new(self, start, bytesize, line_ascii_only)
+      line_ascii_only = true
     end
   end
 end

@@ -125,12 +125,12 @@ module Microfold
     when SYM_WORD
       return false unless word = word?(ctx, r, leader)
 
-      subst = Term::Str.new(word)
+      subst = Term[word]
     when SYM_NAT
       return false unless word = word?(ctx, r, leader)
       return false unless nat = word.to_u32?
 
-      subst = Term::Num.new(nat)
+      subst = Term[nat]
     when SYM_INT
       negative = false
       if r1 = consume?(r, '-')
@@ -141,7 +141,7 @@ module Microfold
       return false unless word = word?(ctx, r, leader)
       return false unless nat = word.to_i?
 
-      subst = Term::Num.new(negative ? -nat : nat)
+      subst = Term[negative ? -nat : nat]
     end
 
     instance = M1.bsubst(body, Term[].with(var, subst))
@@ -271,7 +271,7 @@ module Microfold
           next if attrs[Term::Sym.new(group)]?.in?(nil, Term[false])
         end
 
-        sheet1?(ctx, Term::Str.new(phrase))
+        sheet1?(ctx, Term[phrase])
       end
     end
   end
