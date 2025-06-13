@@ -346,6 +346,26 @@ struct ::Tuple(*T)
     Tuple.flatten(self)
   end
 
+  def flatten1
+    Tuple.flatten1(*self)
+  end
+
+  def self.flatten1(x : Tuple, *xs)
+    x + flatten1(xs)
+  end
+
+  def self.flatten1(x, *xs)
+    {x} + flatten1(xs)
+  end
+
+  def self.flatten1(x : Tuple)
+    x
+  end
+
+  def self.flatten1(x)
+    {x}
+  end
+
   def compact
     Tuple.compact(*self)
   end
@@ -1078,7 +1098,7 @@ struct Char
   end
 end
 
-class StringView
+struct StringView
   getter string : String
   getter byte_start : Int32
 
@@ -1146,6 +1166,16 @@ class StringView
     end
 
     StringView.new(view_head.string, view_head.byte_start, view_tail.byte_end, ascii_only)
+  end
+
+  def self.cat(*args) : StringView
+    content = String.build(args.sum(&.bytesize)) do |io|
+      args.each do |arg|
+        io << arg
+      end
+    end
+
+    content.view
   end
 
   def before_begin : StringView
@@ -1291,6 +1321,16 @@ class StringView
     StringView.new(@string, @byte_start + nbytes, byte_end, ascii_only?)
   end
 
+  def skip(& : Char -> Bool) : StringView
+    reader = Char::Reader.new(@string, pos: @byte_start)
+    reader.each do |char|
+      break if reader.pos == byte_end
+      break unless yield char
+    end
+
+    StringView.new(@string, reader.pos, byte_end, ascii_only?)
+  end
+
   def prev_char? : Char?
     if ascii_only?
       return unless @byte_start > 0
@@ -1303,17 +1343,21 @@ class StringView
     reader.previous_char
   end
 
-  def first_char? : Char?
-    if ascii_only?
-      return unless codepoint = to_slice.first?
-      return codepoint.unsafe_chr
-    end
+  @[AlwaysInline]
+  private def first_char_ascii? : Char?
+    empty? ? nil : to_unsafe[@byte_start].unsafe_chr
+  end
 
+  private def first_char_unicode? : Char?
     if covers_fully?
       return @string[0]?
     end
 
     each_char { |char| return char }
+  end
+
+  def first_char? : Char?
+    ascii_only? ? first_char_ascii? : first_char_unicode?
   end
 
   def first_char : Char
@@ -1653,7 +1697,7 @@ class StringView
   end
 
   def to_unsafe : UInt8*
-    to_slice.to_unsafe
+    @string.to_unsafe
   end
 
   def inspect(io)
@@ -1664,6 +1708,14 @@ class StringView
 end
 
 class String
+  def fill(char : Char) : String
+    String.build(bytesize) do |io|
+      size.times do
+        io << char
+      end
+    end
+  end
+
   def ===(other : StringView) : Bool
     to_slice == other.to_slice
   end

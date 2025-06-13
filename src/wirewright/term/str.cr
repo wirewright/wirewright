@@ -1,6 +1,6 @@
 module Ww
   # Represents a string.
-  struct Term::Str
+  class Term::Str
     include ITerm
 
     def initialize(@value : StringView)
@@ -9,10 +9,10 @@ module Ww
     def inspect(io)
       io << '"'
       @value.each_char do |char|
-        if char.ascii_control? || char.ord >= 0x80
-          char.unicode_escape(io)
-        else
+        if char.printable?
           io << char
+        else
+          char.unicode_escape(io)
         end
       end
       io << '"'

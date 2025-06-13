@@ -179,12 +179,12 @@ module Ww
 
     # Constructs a generic `Term` instance from the given string *term*.
     def self.of(term : Str) : Term
-      Term.new(Pointer(Void).new(term.@value.as(Void*).address | Tag::Str.value))
+      Term.new(Pointer(Void).new(term.as(Void*).address | Tag::Str.value))
     end
 
     # :nodoc:
     def unsafe_as_s : Str
-      Str.new(Pointer(Void).new(@mem.address >> 3 << 3).as(StringView))
+      Pointer(Void).new(@mem.address >> 3 << 3).as(Str)
     end
 
     # Constructs a generic `Term` from the given symbol *term*.
