@@ -16,9 +16,9 @@ module Ww::ML
           r.previous_char
         end
         while r.has_next?
-          r.next_char
           break if r.current_char == '\n'
           io << r.current_char
+          r.next_char
         end
       end
     end
@@ -52,7 +52,9 @@ module Ww::ML
     def humanize(io, source : String)
       col = column(source)
       io.puts "SyntaxError: #{lineno(source) + 1}:#{col + 1}: #{message}"
-      io.puts "  >>> #{line(source).insert(col, "‸")}"
+      line = line(source)
+      io.puts "  >>> #{line}"
+      io.puts "      #{line.fill(' ').insert(col, "^")}"
     end
   end
 
