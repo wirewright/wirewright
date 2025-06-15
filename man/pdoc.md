@@ -1,3 +1,14 @@
+# M1 pattern matching engine
+
+> [!NOTE]
+> This is a temporary document containing bits and pieces of M1. This does not cover
+> M1 fully, since I do not have time to write this unfortunately. The project is growing out
+> of control. But regardless, the rest is currently in pattern7.cr in the root directory, which
+> is quite a scary piece of code that will undergo some refactors in the future. The contents
+> of this document are going to move to Wirewrights interal documentation system when a viewer
+> for it is ready; which is going to use DwUIR, UIR, and Microfold -- so they are first in queue
+> and only then at some point the viewer, hopefully integrated into µsoma.
+
 ## Matching anything
 
 If you need to match any term whatsoever, you should use the pass operator. The pass operator
