@@ -96,8 +96,8 @@ end
 class ::UnreachableException < Exception
 end
 
-macro unreachable
-  raise ::UnreachableException.new
+macro unreachable(detail = "unreachable")
+  raise ::UnreachableException.new({{detail}})
 end
 
 macro unimplemented
@@ -1122,7 +1122,7 @@ struct StringView
 
     @byte_tail = (byte_end.to_u32 << 1) | (ascii_only ? 1u32 : 0u32)
 
-    {% if flag?(:debug) %}
+    {% if flag?(:view_check_valid) %}
       unless Unicode.valid?(@string.to_slice[@byte_start...byte_end])
         raise ArgumentError.new("invalid encoding")
       end
@@ -1222,14 +1222,26 @@ struct StringView
   end
 
   def starts_with?(ch : Char) : Bool
-    first_char? == ch
+    return false if bytesize < ch.bytesize
+
+    offset = @byte_start
+
+    ch.each_byte do |byte|
+      unless @string.byte_at(offset) == byte
+        return false
+      end
+
+      offset += 1
+    end
+
+    true
   end
 
-  def starts_with?(string : String) : Bool
-    return false if size < string.size
+  def starts_with?(prefix : String) : Bool
+    return false if bytesize < prefix.bytesize
 
-    (0...string.bytesize).each do |offset|
-      byte = string.byte_at(offset)
+    (0...prefix.bytesize).each do |offset|
+      byte = prefix.byte_at(offset)
 
       unless @string.byte_at(@byte_start + offset) == byte
         return false
@@ -1321,10 +1333,18 @@ struct StringView
     StringView.new(@string, @byte_start + nbytes, byte_end, ascii_only?)
   end
 
-  def skip(& : Char -> Bool) : StringView
+  def skip(stopword = nil, & : Char -> Bool) : StringView
     reader = Char::Reader.new(@string, pos: @byte_start)
     reader.each do |char|
       break if reader.pos == byte_end
+
+      if stopword
+        remainder = StringView.new(@string, reader.pos, byte_end, ascii_only?)
+        if remainder.starts_with?(stopword)
+          break
+        end
+      end
+
       break unless yield char
     end
 
@@ -1612,7 +1632,7 @@ struct StringView
     end
   end
 
-  # Yields each character in this string view along with its index.
+  # Yields each character in this string view along with its view-local index.
   def each_char_with_index(& : Char, Int32 ->) : Nil
     index = 0
 
@@ -1626,12 +1646,22 @@ struct StringView
   # Yields each character in this string view along with its byte index
   # within this view's parent string.
   def each_char_with_abs_byte_index(& : Char, Int32 ->) : Nil
-    index = 0
+    byte_index = @byte_start
 
     each_char do |char|
-      yield char, index
+      yield char, byte_index
 
-      index += char.bytesize
+      byte_index += char.bytesize
+    end
+  end
+
+  def each_char_with_rel_byte_index(& : Char, Int32 ->) : Nil
+    byte_index = 0
+
+    each_char do |char|
+      yield char, byte_index
+
+      byte_index += char.bytesize
     end
   end
 
@@ -1673,6 +1703,28 @@ struct StringView
     end
   end
 
+  def each_line(& : StringView ->)
+    return if empty?
+
+    start = @byte_start
+    line_ascii_only = true
+
+    each_char_with_abs_byte_index do |char, byte_index|
+      line_ascii_only &&= char.ascii?
+      next unless char == '\n'
+
+      yield StringView.new(@string, start, byte_index + 1, line_ascii_only)
+      start = byte_index + 1 # start after newline
+      line_ascii_only = true
+    end
+
+    # Handle nonempty tail
+    if start < byte_end
+      yield StringView.new(@string, start, byte_end, line_ascii_only)
+      line_ascii_only = true
+    end
+  end
+
   def to_s(io)
     if covers_fully?
       io << @string
@@ -1701,7 +1753,9 @@ struct StringView
   end
 
   def inspect(io)
-    io << "…\"" << self << "\"…"
+    io << "…\""
+    @string.byte_slice(@byte_start...byte_end).dump_unquoted(io)
+    io << "\"…"
   end
 
   def_equals_and_hash to_slice
@@ -1717,6 +1771,11 @@ class String
   end
 
   def ===(other : StringView) : Bool
+    # Fast path
+    unless bytesize == other.bytesize
+      return false
+    end
+
     to_slice == other.to_slice
   end
 end
@@ -1948,26 +2007,7 @@ class String
   #
   # If this string is empty, does not yield anything.
   def each_line_view(& : StringView ->) : Nil
-    return if empty?
-
-    start = 0
-    line_ascii_only = true
-
-    reader = Char::Reader.new(self)
-    reader.each do |char|
-      line_ascii_only &&= char.ascii?
-      next unless char == '\n'
-
-      yield StringView.new(self, start, reader.pos + 1, line_ascii_only)
-      start = reader.pos + 1 # start after newline
-      line_ascii_only = true
-    end
-
-    # Handle nonempty tail
-    unless start == bytesize
-      yield StringView.new(self, start, bytesize, line_ascii_only)
-      line_ascii_only = true
-    end
+    view.each_line { |v| yield v }
   end
 end
 

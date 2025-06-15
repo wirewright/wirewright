@@ -104,7 +104,7 @@ module Ww::ML
 
     term.pe(ordered: true).join(io, ' ') do |(k, v)|
       compact(io, k)
-      io << ":"
+      io << ": "
       compact(io, v)
     end
 

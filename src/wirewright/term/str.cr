@@ -9,11 +9,7 @@ module Ww
     def inspect(io)
       io << '"'
       @value.each_char do |char|
-        if char.printable?
-          io << char
-        else
-          char.unicode_escape(io)
-        end
+        ML::Grammar::Escape.display(io, char)
       end
       io << '"'
     end

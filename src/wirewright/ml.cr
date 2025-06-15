@@ -8,53 +8,45 @@ module Ww::ML
     def initialize(@message : String, @byte_index : Int32)
     end
 
-    def line(source : String) : String
-      r = Char::Reader.new(source, pos: @byte_index)
-
-      String.build do |io|
-        while r.has_previous? && r.current_char != '\n'
-          r.previous_char
-        end
-        while r.has_next?
-          break if r.current_char == '\n'
-          io << r.current_char
-          r.next_char
-        end
+    def line(source : String) : StringView
+      source.each_line_view do |line|
+        next unless line.byte_start <= @byte_index <= line.byte_end
+        return line
       end
+
+      raise IndexError.new
     end
 
     def lineno(source : String) : Int32
-      r = Char::Reader.new(source, pos: @byte_index)
-      line = 0
-
-      while r.has_previous?
-        if r.current_char == '\n'
-          line += 1
-        end
-        r.previous_char
+      lineno = 0
+      source.each_line_view do |line|
+        lineno += 1
+        next unless line.byte_start <= @byte_index <= line.byte_end
+        return lineno
       end
 
-      line
+      raise IndexError.new
     end
 
-    def column(source : String) : Int32
-      r = Char::Reader.new(source, pos: @byte_index)
-      column = 0
-
-      while r.has_previous? && r.current_char != '\n'
-        column += 1
-        r.previous_char
-      end
-
-      column
+    def column(line : StringView) : Int32
+      @byte_index - line.byte_start
     end
 
     def humanize(io, source : String)
-      col = column(source)
-      io.puts "SyntaxError: #{lineno(source) + 1}:#{col + 1}: #{message}"
-      line = line(source)
-      io.puts "  >>> #{line}"
-      io.puts "      #{line.fill(' ').insert(col, "^")}"
+      line = line(source + "$".colorize.dark_gray.to_s)
+      lineno = lineno(source)
+      col = column(line)
+      linestr = line.to_s
+
+      subt = {
+        ' '  => "·".colorize.dark_gray.to_s,
+        '\t' => "↹".colorize.dark_gray.to_s,
+        '\n' => "⏎".colorize.dark_gray.to_s,
+      }
+
+      io.puts "syntax error: #{lineno + 1}:#{col + 1}: #{message}"
+      io.puts "  >>> #{linestr.gsub(subt)}"
+      io.puts "      #{linestr.fill(' ').insert(col, "^")}"
     end
   end
 
@@ -118,5 +110,6 @@ module Ww::ML
   end
 end
 
+require "./ml/grammar"
 require "./ml/text"
 require "./ml/display"

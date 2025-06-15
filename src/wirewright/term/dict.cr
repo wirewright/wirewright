@@ -1137,6 +1137,25 @@ module Ww
       {base, plucked}
     end
 
+    # Merge-concatenate.
+    def mcat(other : Dict) : Dict
+      # Fast path
+      if itemsonly? && other.pairsonly?
+        return Dict.new(@items, other.@pairs, @sketch | other.@sketch, Math.max(@maxdepth, other.@maxdepth))
+      end
+
+      # Slow path
+      transaction do |commit|
+        other.items.each do |item|
+          commit << item
+        end
+
+        other.each_pair do |key, value|
+          commit.with(key, value)
+        end
+      end
+    end
+
     # Shallow merge.
     #
     # Merges this dictionary with a *newer* one. If two keys are equal the value
