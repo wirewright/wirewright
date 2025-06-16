@@ -7,7 +7,7 @@ class Ww::ML::Grammar
     # Appends an escaped representation of *chr* to *io*.
     #
     # NOTE: This method is located here because escape sequences are obviously
-    # tighly coupled to parsing thereof. It's easier to keep things in sync if
+    # tighly coupled to parsing thereof. It's easier to keep things in sync when
     # they're as close to each other as they are now.
     def self.display(io, ch : Char) : Nil
       case {ch, ch.bytesize}

@@ -1,6 +1,8 @@
 # WwML
 
-FIXME: there are some inconsistencies with the actual grammar here and there.
+> [!WARNING]
+> There are some inconsistencies with the actual grammar here and there. They
+> remain to be fixed.
 
 *WwML* stands for *Wirewright Main Language*. WwML is a textual representation
 of Wirewright *terms*.
@@ -34,14 +36,13 @@ but may very well take hundreds of bytes in-memory with all the indexing and con
 overhead (I am working actively on reducing the memory footprint of dictionaries specifically,
 but there are limits). Compactness is traded off for the general inefficiency of parsing.
 
-How could one build algorithms that use characters directly as their *only* memory/state,
-without such constructions exploding with algorithmic and/or operational complexity. I suppose
-it is an unsolved problem and an interesting avenue for exploration, very much in line
+How would one build algorithms that use characters directly as their *only* memory/state,
+without such constructions exploding with algorithmic and/or operational complexity? I suppose
+this is an unsolved problem and an interesting avenue for exploration, very much in line
 with Wirewright. But let's leave that aside for now :^)
 
-NOTE: "expands to" below refers to expansion at *parse-time*.
-
-NOTE: character sets are expressed in [Crystal character set notation](https://crystal-lang.org/api/1.16.2/Char.html#in_set%3F%28%2Asets%3AString%29%3ABool-instance-method).
+> [!NOTE]
+> Character sets are expressed in [Crystal character set notation](https://crystal-lang.org/api/1.16.2/Char.html#in_set%3F%28%2Asets%3AString%29%3ABool-instance-method).
 
 ## What you will need to be able to type
 
@@ -59,7 +60,7 @@ able to type them (e.g. using the Compose key).
 | `⸣`       | U+2E23            | <kbd>Compose</kbd> + <kbd>]</kbd> + <kbd>]</kbd>   |
 | `⟨`       | U+27E8            | <kbd>Compose</kbd> + <kbd>{</kbd> + <kbd>{</kbd>   |
 | `⟩`       | U+27E9            | <kbd>Compose</kbd> + <kbd>}</kbd> + <kbd>}</kbd>   |
-| `¦`       | U+00A6            | <kbd>Compose</kbd> + <kbd>|</kbd> + <kbd>|</kbd> |
+| `¦`       | U+00A6            | <kbd>Compose</kbd> + <kbd>\|</kbd> + <kbd>\|</kbd> |
 | `…`       | U+2026            | <kbd>Compose</kbd> + <kbd>.</kbd> + <kbd>.</kbd>   |
 | `⁺`       | U+207A            | <kbd>Compose</kbd> + <kbd>^</kbd> + <kbd>+</kbd>   |
 | `⁻`       | U+207B            | <kbd>Compose</kbd> + <kbd>^</kbd> + <kbd>-</kbd>   |
@@ -67,8 +68,8 @@ able to type them (e.g. using the Compose key).
 | `×`       | U+00D7            | <kbd>Compose</kbd> + <kbd>x</kbd> + <kbd>x</kbd>   |
 | `≡`       | U+2261            | <kbd>Compose</kbd> + <kbd>=</kbd> + <kbd>=</kbd>   |
 | `←`       | U+2190            | <kbd>Compose</kbd> + <kbd><</kbd> + <kbd>-</kbd>  |
-| `↑`       | U+2191            | <kbd>Compose</kbd> + <kbd>^</kbd> + <kbd>|</kbd>  |
-| `↓`       | U+2193            | <kbd>Compose</kbd> + <kbd>v</kbd> + <kbd>|</kbd>  |
+| `↑`       | U+2191            | <kbd>Compose</kbd> + <kbd>^</kbd> + <kbd>\|</kbd>  |
+| `↓`       | U+2193            | <kbd>Compose</kbd> + <kbd>v</kbd> + <kbd>\|</kbd>  |
 | `→`       | U+2192            | <kbd>Compose</kbd> + <kbd>-</kbd> + <kbd>></kbd>   |
 | `₀`..`₉`  | U+2080-U+2089     | <kbd>Compose</kbd> + <kbd>_</kbd> + <kbd>0</kbd>-<kbd>9</kbd>   |
 
@@ -125,7 +126,8 @@ the set: `a-zA-Z0-9_!$%&*+\-./#<=>?@~λ|∞°∈⊆⊂\`. Symbol terms that cont
 characters not in this set cannot be represented by WwML. Using such characters
 outside of strings is a syntax error.
 
-NOTE: symbols **cannot** start with a digit `0-9`.
+> [!NOTE]
+> Symbols **cannot** start with a digit `0-9`.
 
 ```wwml
 abc
@@ -187,7 +189,7 @@ Zz₆₂  ;; base-62
 ```
 
 **Retention**: WwML is not a calculator, it is a notation. It *does not* simplify
-radix notation to decimal. For example, `1f₁₆` expands to `(digits 1 15 radix: 16)`. It is up
+radix notation to decimal. For example, `1f₁₆` is the same as writing `(digits 1 15 radix: 16)`. It is up
 to the client to decide what to do with this term. Some clients ("runtimes") may want to
 e.g. support radix-aware addition or otherwise manipulate numbers with explicit base. WwML
 will not interfere by reducing everything to decimal like traditional languages do.
@@ -318,13 +320,13 @@ Interpolation is syntactic sugar for dictionaries of the form `(~ s1 s2 ... sn)`
 
 ```wwml
 "Your name is: ⸢name⸣. Have a nice day!"
-;; Expands to: (~ "Your name is: " name ". Have a nice day!")
+;; is the same as writing: (~ "Your name is: " name ". Have a nice day!")
 
 "Your name is: ⸢first-name⸣ ⸢last-name⸣. Have a nice day!"
-;; Expands to: (~ "Your name is: " first-name " " last-name ". Have a nice day!")
+;; is the same as writing: (~ "Your name is: " first-name " " last-name ". Have a nice day!")
 
 "1 + 1 = ⸢(+ 1 1)⸣"
-;; Expands to: (~ "1 + 1 =" (+ 1 1))
+;; is the same as writing: (~ "1 + 1 =" (+ 1 1))
 ```
 
 > [!NOTE]
@@ -419,7 +421,7 @@ a b c
 d e f
 ```
 
-This expands to `{default: (a b c), aux: (d e f)}`
+This is the same as writing `{default: (a b c), aux: (d e f)}`
 
 You can add multiple sections by naming them. Having two different sections with
 the same name is a syntax error. Names are compared literally; no evaluation
@@ -450,7 +452,7 @@ cillum sint consectetur cupidatat.
 """
 ```
 
-Expands to: `{default: (a b c), rewriter: (d e f), help: ("Lorem ipsum ...")}`
+is the same as writing: `{default: (a b c), rewriter: (d e f), help: ("Lorem ipsum ...")}`
 
 Note that you can use any term as a section name, even multiline dictionaries.
 However, for readability, we advise using symbols. Use strings if you need
@@ -472,45 +474,45 @@ qoox
 
 ### Key-value pair shorthands (+)
 
-- `:<term>` expands to `<term>: <term>`. E.g. `:foo` expands to `foo: foo`. **The absence of
+- `:<term>` is the same as writing `<term>: <term>`. E.g. `:foo` is the same as writing `foo: foo`. **The absence of
   whitespace between colon and term is mandatory.**
 
 ### M1 (pattern matching) (+)
 
 #### Shorthands for `%let` (+)
 
-- `<name term>←<value term>` expands to `(%let <name term> <value term>)`. **The absence of
+- `<name term>←<value term>` is the same as writing `(%let <name term> <value term>)`. **The absence of
   whitespace on both sides of the arrow is mandatory.**
 
 #### Shorthands for `%keypool` (+)
 
-- `{% <term list>}` expands to `(%keypool <term list>)`.
+- `{% <term list>}` is the same as writing `(%keypool <term list>)`.
 
 #### Shorthands for `%item` and `%item°` (+)
 
-- `⟨<term list>⟩` expands to `(%item <term list>)`.
-- `⟨<term list>⟩°` expands to `(%item° <term list>)`.
-- `⟨<term list> ¦ <pairspattern>⟩` expands to `(%all (%item <term list>) <pairspattern>)`.
-- `⟨<term list> ¦ <pairspattern>⟩°` expands to `(%all (%item° <term list>) <pairspattern>)`.
+- `⟨<term list>⟩` is the same as writing `(%item <term list>)`.
+- `⟨<term list>⟩°` is the same as writing `(%item° <term list>)`.
+- `⟨<term list> ¦ <pairspattern>⟩` is the same as writing `(%all (%item <term list>) <pairspattern>)`.
+- `⟨<term list> ¦ <pairspattern>⟩°` is the same as writing `(%all (%item° <term list>) <pairspattern>)`.
 
 #### Shorthands for `%split` and `%split°` (+)
 
-- `⟨<left term list> … <right term list>⟩` expands to `(%split _ <first left term> (%all (<rest of left terms> _*) (%split _ <first right term> (<rest of right terms> _*))))`.
+- `⟨<left term list> … <right term list>⟩` is the same as writing `(%split _ <first left term> (%all (<rest of left terms> _*) (%split _ <first right term> (<rest of right terms> _*))))`.
 - `⟨<> … <>⟩°` uses `%split°` instead of `%split`.
-- `⟨<> … <> ¦ <pairspattern>⟩` expands to `(%all (%split ...) <pairspattern>)`.
-- `⟨<> … <> ¦ <pairspattern>⟩°` expands to `(%all (%split° ...) <pairspattern>)`.
+- `⟨<> … <> ¦ <pairspattern>⟩` is the same as writing `(%all (%split ...) <pairspattern>)`.
+- `⟨<> … <> ¦ <pairspattern>⟩°` is the same as writing `(%all (%split° ...) <pairspattern>)`.
 
 #### Shorthands for itemspart `%partition` (+)
 
-- `[<term list>]` expands to `(%partition (<term list>) _)`.
+- `[<term list>]` is the same as writing `(%partition (<term list>) _)`.
 
 #### Shorthands for pairspart `%partition` (+)
 
-- `{¦ <pairspattern>}` expands to `<pairspattern>`.
-- `{…<term>¦ <pairspattern>}` expands to `(%partition (%let <term> _) <pairspattern>)`.
+- `{¦ <pairspattern>}` is the same as writing `<pairspattern>`.
+- `{…<term>¦ <pairspattern>}` is the same as writing `(%partition (%let <term> _) <pairspattern>)`.
    **Absence of whitespace between … and the term is mandatory.**
-- `{+¦ <term list>}` expands to `(%layer _ {<each term from term list>: true})`
-- `{-¦ <term list>}` expands to `(%layer _ {<each term from term list>: false})`
+- `{+¦ <term list>}` is the same as writing `(%layer _ {<each term from term list>: true})`
+- `{-¦ <term list>}` is the same as writing `(%layer _ {<each term from term list>: false})`
 
 #### Pairspattern (+)
 
@@ -530,12 +532,12 @@ an itemsonly dictionary; this is because its expansion is `(%partition (_*) (%la
 Pairspatterns optionally begin with a so-called *pairspattern residue* term, which
 corresponds to the first argument of `%layer`. If it is absent, it defaults to `()`.
 
-- `_` expands to `(%layer _ {})`
-- `x_` expands to `(%layer x_ {})`
-- `_ x: 100 y: 200` expands to `(%layer _ {x: 100, y: 200})`
-- `() x: 100 y: 200` expands to `(%layer () {x: 100, y: 200})`
-- `x: 100 y: 200` expands to `(%layer () {x: 100, y: 200})`
-- `{% a b c} x: 100 y: 200` expands to `(%layer (%keypool a b c) {x: 100, y: 200})`
+- `_` is the same as writing `(%layer _ {})`
+- `x_` is the same as writing `(%layer x_ {})`
+- `_ x: 100 y: 200` is the same as writing `(%layer _ {x: 100, y: 200})`
+- `() x: 100 y: 200` is the same as writing `(%layer () {x: 100, y: 200})`
+- `x: 100 y: 200` is the same as writing `(%layer () {x: 100, y: 200})`
+- `{% a b c} x: 100 y: 200` is the same as writing `(%layer (%keypool a b c) {x: 100, y: 200})`
 
 The residue term is optional.
 
@@ -554,61 +556,61 @@ of other shorthands is available.
 
 ##### Key-value pair shorthands (+)
 
-- `-<name>` expands to `<name>: (%- _)`.
-- `-<name>_<type>` expands to `<name>: (%- <type> <name>)`.
-- `-<key>: <name>` expands to `<key>: (%- _ <name>)`.
-- `<name>⁺` expands to `<name>: (%let <name> true)`
-- `<name>⁻` expands to `<name>: (%let <name> false)`
-- `<name>_<type>` expands to `<name>: <name>_<type>`.
-- `<name>` expands to `<name>: _`.
-- `<name>_: (%optional <default> <value>)` expands to `<name>: (%optional <default> (%let <name> <value>))`.
-- `<name>_<type>: <value>` expands to `<name>: (%let <name> (%all _<type> <value>))`.
-- `<name>_: <value>` expands to `<name>: (%let <name> <value>)`.
-- `<name>⋮ <value>` expands to `<name>: (%optional <value> <name>_<type of value>)`.
-- `<name>_<type>⋮ <value>` expands to `<name>: (%optional <value> <name>_<type>)`.
-- `⋮<name>` expands to `<name>: (%- (%never) <name>)`.
+- `-<name>` is the same as writing `<name>: (%- _)`.
+- `-<name>_<type>` is the same as writing `<name>: (%- <type> <name>)`.
+- `-<key>: <name>` is the same as writing `<key>: (%- _ <name>)`.
+- `<name>⁺` is the same as writing `<name>: (%let <name> true)`
+- `<name>⁻` is the same as writing `<name>: (%let <name> false)`
+- `<name>_<type>` is the same as writing `<name>: <name>_<type>`.
+- `<name>` is the same as writing `<name>: _`.
+- `<name>_: (%optional <default> <value>)` is the same as writing `<name>: (%optional <default> (%let <name> <value>))`.
+- `<name>_<type>: <value>` is the same as writing `<name>: (%let <name> (%all _<type> <value>))`.
+- `<name>_: <value>` is the same as writing `<name>: (%let <name> <value>)`.
+- `<name>⋮ <value>` is the same as writing `<name>: (%optional <value> <name>_<type of value>)`.
+- `<name>_<type>⋮ <value>` is the same as writing `<name>: (%optional <value> <name>_<type>)`.
+- `⋮<name>` is the same as writing `<name>: (%- (%never) <name>)`.
 
 #### Misc (+)
 
 **Absence of whitespace between prefix and term is mandatory**.
 
-- `<BACKTICK><term>` expands to `(%slot <term>)`.
-- `≡<term>` expands to `(%nonself <term>)`.
-- `%'<term>` expands to `(%literal <term>)`.
+- `<BACKTICK><term>` is the same as writing `(%slot <term>)`.
+- `≡<term>` is the same as writing `(%nonself <term>)`.
+- `%'<term>` is the same as writing `(%literal <term>)`.
 
 ### Dictionary set and multiset (+)
 
-- `{+ x y z}` expands to `{x: true, y: true, z: true}`. Elements are arbitrary terms.
-- `{- x y z}` expands to `{x: false, y: false, z: false}`. Elements are arbitrary terms.
-- `{# a a b c}` expands to `{a: 2, b: 1, c: 1}`. Elements are arbitrary terms.
-- `{# 100×a 5×b c}` expands to `{a: 100, b: 5, c: 1}`. Elements are arbitrary terms. **Absence
+- `{+ x y z}` is the same as writing `{x: true, y: true, z: true}`. Elements are arbitrary terms.
+- `{- x y z}` is the same as writing `{x: false, y: false, z: false}`. Elements are arbitrary terms.
+- `{# a a b c}` is the same as writing `{a: 2, b: 1, c: 1}`. Elements are arbitrary terms.
+- `{# 100×a 5×b c}` is the same as writing `{a: 100, b: 5, c: 1}`. Elements are arbitrary terms. **Absence
   of whitespace between the amount, `×`, and the term is necessary.**
 
 ### Alloy (+)
 
-- `^<term>` expands to `(^ <term>)`.
-- `(<term list> ^… <arg>)` expands to `(^extend (<term list>) <arg>)`.
+- `^<term>` is the same as writing `(^ <term>)`.
+- `(<term list> ^… <arg>)` is the same as writing `(^extend (<term list>) <arg>)`.
 
 ### Rulesets (+)
 
-- `<left term> => <right term>` expands to `(rule <left term> <right term>)`.
-- `<left term> <> <right term>` expands to `(backmap <left term> <right term>)`.
+- `<left term> => <right term>` is the same as writing `(rule <left term> <right term>)`.
+- `<left term> <> <right term>` is the same as writing `(backmap <left term> <right term>)`.
 
-### Backmaps and rewrite circuits (+)
+### Backmaps and rewriter circuits (+)
 
-- `→<term>` expands to `($my <term>)`
-- `↑<term>` expands to `($up <term>)`
-- `↓<term>` expands to `($down <term>)`
-- `$<term>` expands to `($ <term>)`
-- `$'<term>` expands to `($once <term>)`
+- `→<term>` is the same as writing `($my <term>)`
+- `↑<term>` is the same as writing `($up <term>)`
+- `↓<term>` is the same as writing `($down <term>)`
+- `$<term>` is the same as writing `($ <term>)`
+- `$'<term>` is the same as writing `($once <term>)`
 
 ### Nitrene (+)
 
-- `'<term>` expands to `(leaf <term>)`
+- `'<term>` is the same as writing `(leaf <term>)`
 
 ### Delta7 (+)
 
-- `@<term>` expands to `(edge <term>)`
+- `@<term>` is the same as writing `(edge <term>)`
 
 ## Precedence
 

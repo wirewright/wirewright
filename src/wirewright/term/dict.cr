@@ -2,7 +2,7 @@
 # SIMPLE DICTIONARIES.
 
 # Dictionaries should have small (8/16-element) short-term memory for which
-# patterns they were matched by. However this would require some integration
+# patterns they were NOT matched by. However this would require some integration
 # on the pattern matching/PatternSet side. Doable though. PatternSet can assign
 # patterns application-unique ids, and so on. In some places we have redundant
 # pattern matching. This should eliminate that. Especially useful would be rejection.

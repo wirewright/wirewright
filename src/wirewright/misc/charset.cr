@@ -12,8 +12,8 @@ module Ww
   # and thus ~4x faster for sets such as `"\n\t\r\u0020-\u{10FFFF}^\"⸢\\\\"`.
   #
   # `N2` specifies the amount of stack memory that the charset will be
-  # allowed to use. It must be `N + 2`, hence the name; the first memory
-  # cell is used to store auxiliary data.
+  # allowed to use. It must be `N + 2`, hence the name; the first two memory
+  # cells are used to store auxiliary data.
   module Charset(N2)
     extend self
 
