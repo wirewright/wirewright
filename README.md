@@ -1,9 +1,13 @@
+<div align="center">
+  
+![Wirewright Logo](https://github.com/user-attachments/assets/3e5dc602-9c8d-412d-a7fa-9e1a0c3b466e)
+</div>
+
 # Wirewright
 
-> Instead of asking:
-> “What program should I write?”
-> You ask:
-> “What kind of universe can I design that causes the behaviors I want to see?”
+> Instead of asking: "What program should I write?"
+> 
+> You ask: "What kind of universe can I design that causes the behaviors I want to see?"
 
 Wirewright is a rewrite environment for self-embodied programs.
 
