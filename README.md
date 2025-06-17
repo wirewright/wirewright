@@ -1,12 +1,12 @@
 <div align="center">
-  
+
 ![Wirewright Logo](https://github.com/user-attachments/assets/3e5dc602-9c8d-412d-a7fa-9e1a0c3b466e)
 </div>
 
 # Wirewright
 
 > Instead of asking: "What program should I write?"
-> 
+>
 > You ask: "What kind of universe can I design that causes the behaviors I want to see?"
 
 Wirewright is a rewrite environment for self-embodied programs.
@@ -18,6 +18,40 @@ I am working hard to package the hundreds of thousands of lines of "all over the
 ### Frontend: soma6
 
 https://github.com/user-attachments/assets/e86cb81d-67d7-45b8-8a68-7399e4fe367e
+
+## Okay, but what *is* Wirewright?
+
+The short answer is, I don't know. Rephrased slightly, *Wirewright is a rewrite environment for self-embodied programs*.
+
+The long answer is, well, it's complicated. I'm trying to achieve *something* with this but I can barely tell what that something is.
+
+In software, programs are usually seen as active agents. Programs are in control of what happens next. The operating system, the hardware, the network -- they are treated as resources that the program manipulates, makes API calls to, and so on. In other words, programs control the environment (or run under the illusion thereof; even "active environments in disguise" -- interpreters, for example -- are designed in such a way as to give reins to the program).
+
+In Wirewright, programs are not active agents. They are passive structures. They don't run -- they exist. It's not necessary for them to be *programs* in the usual sense, even. They are immutable, persistent *shapes* made of universal building blocks called *terms*.
+
+It is the environment that is active now. Behavior is no longer something authored by a program. It is something drawn out of a program by the rules of the world -- the environment, and its way of "looking" at things.
+
+This is not only a metaphor. Wirewright implements a certain kind of *rewrite physics* -- so called *rule systems* that transform terms, inspired by the work of Stephen Wolfram, cellular automata, term rewriting systems, propagators, and more.
+
+At the core of Wirewright is the environment's ability to change -- *rewrite* -- this passive structure made up of temrs. Thus we get what I refer to as *indirect self-modification*. The structure does not mutate itself. It is transformed by a *world* that interprets its shape through pattern matching; its embedded information, and sometimes even its symbolic self-description.
+
+To reiterate, this is not self-modifying code; not in the usual sense. Self-modifying code attempts to rewrite itself from within -- often unsafely, and with little control. It is easy to see why (or, well, it is not!) There are many paradoxes arising immediately when one considers self-controlled self-modification.
+
+A structure in Wirewright cannot modify itself at all. But it can be *modified*, in complex, meaningful ways, *by an environment that understands what that structure is*.
+
+In Wirewright, programming means building shapes that invite transformation -- shapes that can be *read*, *interpreted*, and *evolved by* the environment they are put in. What I am writing here -- Wirewright -- is a *rewrite environment*. Your job, then, if you ever plan to interact with this... "alien artifact" sort of thing -- is to *discover* such shapes, to be rewritten by Wirewright with practically meaningful effect.
+
+Wirewright is a little more complex, in that we provide an "overlay" of environments for the same structure of terms. Wirewright can be considered a layered, co-aware system of *interpreters* observing the same underlying passive terms. Some of those observers are written in Crystal (and thus native code); others, are formatted as rule systems implemented with Wirewright itself.
+
+A *self-embodied program*, thus, has a pretty precise meaning: it is such a passive structure, a shape made of terms, that executes an *algorithm* under a given environment (interleaving observers & systems of rules). SEPs persist and change like living organisms in an ecosystem. In simple, "null" cases, a SEP persists forever under the laws of its environment, and its algorithm is "identity". In richer cases, a SEP may contain a symbolic model of itself -- a kind of DNA -- and the world is capable of reading that model and building the next generation from it.
+
+Developing the biological analogy, you can think of Wirewright as a crude kind of *biological cell*. Given my limited understanding of biology, what I see cells do is they provide an environment to the DNA. It is the DNA that is reacting to stimuli; but importantly enough, it does so *indirectly*, through activation and deactivation of certain genes by the environment (*stimulus*), directly or indirectly through gradient or concentration change in the cell and sensing thereof; and transcription, translation, protein synthesis, interactions of proteins and so on to get *reaction*. Epigenetics and DNA mutation gives way to the persistence of certain kinds of reactions.
+
+In Wirewright, even something like a UI button -- which would normally be thought of as a visual element or interactive widget -- is, at its core, just a term, the same kind of passive structure. It has no inherent interactivity or execution semantics. But because the environment includes interpreters like DwUIR, UIR, and Microfold, these same structures can be rendered visually as layouts, styled like Tailwind components, and presented as UI elements.
+
+So one interpreter can see the same term as a button. Another can see it as a self-embodied program, to be read and transformed. The user presses a button; the environment senses that, and modifies the term that caused the button to be drawn in the first place. UIR, Microfold, and others react not to user interaction directly; but to the change of the underlying term. For one, this lets the surrounding structure, too, "click" the button, with the same visual effect. In this sense, it is no different from a "user".
+
+It is a difference of perspectives -- about the same static, structural, eternal underlying term. In Wirewright, meaning arises not from composition of instructions or functions, but from *composition of observers*.
 
 ## Upcoming "selling points"
 
@@ -66,7 +100,7 @@ The Crystal part (i.e. the implementation) acts as an *observer*. It looks at te
 
 Most parts of Wirewright are what I would call *purely declarative*. Think HTML, but for general-purpose computation (not just page/text markup).
 
-Wirewright, with its self-embodied programs, is also exploring the idea of a "holistic" approach to life; in that life should be interpreted as embedded and inseparable from its environment. In effect, what I am saying is that us placing a boundary between a living organism and the environment is actually a mistake; and that such a boundary in fact does not exist. The given organism and its behaviors must always be considered "in context", and that context often includes the surrounding environment. Otherwise, we see "complexity out of nowhere"; not because this is the case, but because we're looking too narrowly -- just at things within the boundary. It's like trying to understand what an ant does by studying its mandibles excessively, and being surprised by the complexity of behaviors "resultant from the structure of ant's mandibles". The extremal end of holism is to consider "the universe as a unit" -- as the only thing worth studying & designing (if one wants to produce interesting & extremely complex behavior). I am more and more turning into this extremal "school of thought". Wirewright is an experiment to design a "universe" (obviously in a very naive, simplified, and rather "practicalized" way); and see what kinds of behavior I can get out of that. Once the universe is defined, programs (agents, actors, patterns) don’t "run" in a linear, imperative sense. They exist inside that universe, and behavior emerges as a result of the laws you (or most likely, I!) designed. Conway’s Game of Life is the simplest example of approaching this extreme endpoint of holism from an engineering point of view. Wirewright attempts to generalize this, into a general-purpose, practical software platform.
+Wirewright, with its self-embodied programs, is also exploring the idea of a "holistic" approach to life; in that life should be interpreted as embedded and inseparable from its environment. In effect, what I am saying is that us placing a boundary between a living organism and the environment is actually a mistake; and that such a boundary in fact does not exist. The given organism and its behaviors must always be considered "in context", and that context often includes the surrounding environment. Otherwise, we see "complexity out of nowhere"; not because this is the case, but because we're looking too narrowly -- just at things within the boundary. It's like trying to understand what an ant does by studying its mandibles excessively, and being surprised by the complexity of behaviors "resultant from the structure of ant's mandibles". The extremal end of holism is to consider "the universe as a unit" -- as the only thing worth studying & designing (if one wants to produce interesting & extremely complex behavior). I am more and more turning into this extremal "school of thought". Wirewright is an experiment to design a "universe" (obviously in a very naive, simplified, and rather "practicalized" way); and see what kinds of behavior I can get out of that. Once the universe is defined, programs (agents, actors, patterns) don't "run" in a linear, imperative sense. They exist inside that universe, and behavior emerges as a result of the laws you (or most likely, I!) designed. Conway's Game of Life is the simplest example of approaching this extreme endpoint of holism from an engineering point of view. Wirewright attempts to generalize this, into a general-purpose, practical software platform.
 
 ### More of my ramblings
 
