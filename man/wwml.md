@@ -306,6 +306,16 @@ TODO
 
 \u[LATIN SMALL leTter R with CEDILLA]
 ;; ŗ
+
+\u[:poop:]
+;;
+```
+
+You can escape newline *and the following horizontal whitespace* using `\␤`, as in:
+
+```wwml
+"Lorem ipsum dolor sit amet, qui minim labore adipisicing \
+ minim sint cillum sint consectetur cupidatat."
 ```
 
 ### Interpolation (+)
@@ -479,34 +489,34 @@ qoox
 
 ### M1 (pattern matching) (+)
 
-#### Shorthands for `%let` (+)
+#### Shorthands for `%let` (+) (+)
 
 - `<name term>←<value term>` is the same as writing `(%let <name term> <value term>)`. **The absence of
   whitespace on both sides of the arrow is mandatory.**
 
-#### Shorthands for `%keypool` (+)
+#### Shorthands for `%keypool` (+) (+)
 
 - `{% <term list>}` is the same as writing `(%keypool <term list>)`.
 
-#### Shorthands for `%item` and `%item°` (+)
+#### Shorthands for `%item` and `%item°` (+) (+)
 
 - `⟨<term list>⟩` is the same as writing `(%item <term list>)`.
 - `⟨<term list>⟩°` is the same as writing `(%item° <term list>)`.
 - `⟨<term list> ¦ <pairspattern>⟩` is the same as writing `(%all (%item <term list>) <pairspattern>)`.
 - `⟨<term list> ¦ <pairspattern>⟩°` is the same as writing `(%all (%item° <term list>) <pairspattern>)`.
 
-#### Shorthands for `%split` and `%split°` (+)
+#### Shorthands for `%split` and `%split°` (+) (+)
 
 - `⟨<left term list> … <right term list>⟩` is the same as writing `(%split _ <first left term> (%all (<rest of left terms> _*) (%split _ <first right term> (<rest of right terms> _*))))`.
 - `⟨<> … <>⟩°` uses `%split°` instead of `%split`.
 - `⟨<> … <> ¦ <pairspattern>⟩` is the same as writing `(%all (%split ...) <pairspattern>)`.
 - `⟨<> … <> ¦ <pairspattern>⟩°` is the same as writing `(%all (%split° ...) <pairspattern>)`.
 
-#### Shorthands for itemspart `%partition` (+)
+#### Shorthands for itemspart `%partition` (+) (+)
 
 - `[<term list>]` is the same as writing `(%partition (<term list>) _)`.
 
-#### Shorthands for pairspart `%partition` (+)
+#### Shorthands for pairspart `%partition` (+) (+)
 
 - `{¦ <pairspattern>}` is the same as writing `<pairspattern>`.
 - `{…<term>¦ <pairspattern>}` is the same as writing `(%partition (%let <term> _) <pairspattern>)`.
@@ -584,7 +594,7 @@ of other shorthands is available.
 - `{- x y z}` is the same as writing `{x: false, y: false, z: false}`. Elements are arbitrary terms.
 - `{# a a b c}` is the same as writing `{a: 2, b: 1, c: 1}`. Elements are arbitrary terms.
 - `{# 100×a 5×b c}` is the same as writing `{a: 100, b: 5, c: 1}`. Elements are arbitrary terms. **Absence
-  of whitespace between the amount, `×`, and the term is necessary.**
+  of whitespace between the amount, `×`, and the term is mandatory.**
 
 ### Alloy (+)
 

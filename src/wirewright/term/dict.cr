@@ -1146,9 +1146,7 @@ module Ww
 
       # Slow path
       transaction do |commit|
-        other.items.each do |item|
-          commit << item
-        end
+        commit.concat(other.items)
 
         other.each_pair do |key, value|
           commit.with(key, value)

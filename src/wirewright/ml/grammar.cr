@@ -1,14 +1,16 @@
-class Ww::ML::Grammar
+module Ww::ML::Grammar
+  extend self
+
   # :nodoc:
   macro rule(name, result, &)
-    getter({{name.id}} : P::Pi(State -> { {{result}}, State } | P::Err)) do
+    class_getter({{name.id}} : P::Pi(State -> { {{result}}, State } | P::Err)) do
       {{yield}}
     end
   end
 
   # :nodoc:
   macro rule(name, &)
-    getter({{name.id}} : P::Pi(State -> { P::Ok, State } | P::Err)) do
+    class_getter({{name.id}} : P::Pi(State -> { P::Ok, State } | P::Err)) do
       {{yield}}
     end
   end
@@ -39,8 +41,8 @@ class Ww::ML::Grammar
       change(feed: @feed.skip(bytesize))
     end
 
-    def skip(stopword : String? = nil, & : Char -> Bool) : State
-      change(feed: @feed.skip(stopword) { |ch| yield ch })
+    def skip(lquote : String?, rquote : String?, & : Char -> Bool) : State
+      change(feed: @feed.skip(lquote, rquote) { |ch| yield ch })
     end
 
     def view_upto(ahead : State) : StringView

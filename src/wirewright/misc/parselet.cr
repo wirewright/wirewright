@@ -7,7 +7,7 @@
 # - `#at_end? : Bool`
 # - `#ahead?(chars : String | StringView) : Bool`
 # - `#skip(bytesize : Int32) : S`
-# - `#skip(stopword : String? = nil, & : Char -> Bool) : S`
+# - `#skip(nest : String?, unnest : String?, & : Char -> Bool) : S`
 # - `#view_upto(ahead : S) : StringView`
 #
 # It is an absolute requirement that `S` is immutable and persistent.
@@ -33,7 +33,7 @@ module Ww::Parselet(S)
   # A parselet may refuse to match, this is considered "soft failure"; refusal
   # is the way a parselet can politely ask its caller to try something else;
   # it is a potential point-of-dispatch from the caller's point of view.
-  record Refusal, byte : Int32, detail : String
+  record Refusal, byte_start : Int32, byte_end : Int32, detail : String
 
   # A parselet may fail to match, this is considered "hard failure". A vast
   # majority of callers would simply propagate failure up, similarly to exceptions
@@ -49,7 +49,7 @@ module Ww::Parselet(S)
   # Whether to refuse or fail is still a difficult question sometimes. When
   # parselets misbehave in this regard, callers can place `strict` appropriately
   # to convert all refusals to failures; or `relaxed` to do the opposite.
-  record Failure, byte : Int32, detail : String
+  record Failure, byte_start : Int32, byte_end : Int32, detail : String
 
   # Shorthand to construct `OK`.
   def ok
@@ -58,27 +58,35 @@ module Ww::Parselet(S)
 
   # Shorthand to construct `Refusal` at the current location.
   def refusal(s : S, detail : String)
-    refusal(s.loc, detail)
+    refusal(s.loc, s.loc, detail)
   end
 
   # Shorthand to construct `Failure` at the current location.
   def failure(s : S, detail : String)
-    failure(s.loc, detail)
+    failure(s.loc, s.loc, detail)
   end
 
   # Shorthand to construct `Refusal` at *loc* (e.g. given by `loc`).
-  def refusal(loc, detail : String) : Err
-    Refusal.new(loc, detail).as(Err)
+  def refusal(loc_start, loc_end, detail : String) : Err
+    unless 0 <= loc_start <= loc_end
+      raise ArgumentError.new("expected an exclusive range")
+    end
+
+    Refusal.new(loc_start, loc_end, detail).as(Err)
   end
 
   # Shorthand to construct `Failure` at *loc* (e.g. given by `loc`).
-  def failure(loc, detail : String) : Err
-    Failure.new(loc, detail).as(Err)
+  def failure(loc_start, loc_end, detail : String) : Err
+    unless 0 <= loc_start <= loc_end
+      raise ArgumentError.new("expected an exclusive range")
+    end
+
+    Failure.new(loc_start, loc_end, detail).as(Err)
   end
 
   # :nodoc:
   def strict(response : Refusal)
-    Failure.new(response.byte, response.detail)
+    Failure.new(response.byte_start, response.byte_end, response.detail)
   end
 
   # Converts refusals to failures.
@@ -88,7 +96,7 @@ module Ww::Parselet(S)
 
   # :nodoc:
   def relaxed(response : Failure)
-    Refusal.new(response.byte, response.detail)
+    Refusal.new(response.byte_start, response.byte_end, response.detail)
   end
 
   # Converts failures to refusals.
@@ -97,10 +105,10 @@ module Ww::Parselet(S)
   end
 
   # See `parseout`.
-  defcase MissingParseout < Exception, err : Err
+  defcase NoParseout < Exception, err : Err
 
   # Extracts the parseout object from a parselet *response*. Raises
-  # `MissingParseout` in case of an error.
+  # `NoParseout` in case of an error.
   def parseout(response : {T, S}) : T forall T
     parseout, s = response
 
@@ -113,7 +121,7 @@ module Ww::Parselet(S)
 
   # :ditto:
   def parseout(response : Err)
-    raise MissingParseout.new(response)
+    raise NoParseout.new(response)
   end
 
   # Advances through a character from the given character *set*.
@@ -152,17 +160,35 @@ module Ww::Parselet(S)
   # is likely to be faster than using `reduce`, since skipping with `past` is
   # much more local.
   #
+  # *unnest* can optionally set a terminating character *sequence* (as opposed to
+  # character in *set*).
+  #
+  # *nest* can optionally set a character *sequence* that will cause the next
+  # *unnest* to be subsumed. If you're implementin strings, this will help do
+  # nested strings, assuming *nest* and *unnest* character sequences are not
+  # the same (in that case this method will raise `ArgumentError` at
+  # construction-time).
+  #
+  # NOTE: *nest* is consumed. Nested *unnest* (one with a matching *nest*)
+  # is consumed. The first *unnest* that does not have a corresponding *nest*
+  # is *not* consumed, pastchr terminates just *before* it.
+  #
   # End-of-input matching is not supported!
   #
   # See `Charset` to learn about the set syntax.
   def pastchr(
     set : String,
-    stopword : String? = nil,
     *,
+    nest : String? = nil,
+    unnest : String? = nil,
     cls = Charset8,
     min : Int32 = 0,
     detail : String = "unexpected end-of-input",
   ) : Pi
+    if nest && nest == unnest
+      raise ArgumentError.new("nest and unnest must not be the same")
+    end
+
     cls.compile(set) do |stackptr|
       # Copy into closure-seen, local scope.
       charset = stackptr.value
@@ -170,7 +196,7 @@ module Ww::Parselet(S)
       core = ->(s0 : S) do
         size = 0
 
-        s1 = s0.skip(stopword) do |ch|
+        s1 = s0.skip(nest, unnest) do |ch|
           if cls.match?(pointerof(charset), ch)
             size += 1
             true
@@ -258,7 +284,7 @@ module Ww::Parselet(S)
   # Lets parselet *a* advance state; then lets parselet *b* advance state.
   # Reverts to the state before matching on refusal or failure of *a* or *b*,
   # The parseout is a tuple of *a*'s parseout followed by *b*'s parseout.
-  def seq(a : Pi(_), b : Pi(_)) : Pi
+  def seqf(a : Pi(_), b : Pi(_)) : Pi
     core = ->(s : S) do
       response0 = a.call(s)
       if response0.is_a?(Err)
@@ -281,8 +307,8 @@ module Ww::Parselet(S)
   end
 
   # A sequence of N parselets. The parseout is a tuple of parseouts of *a*, *b*, *cs*.
-  def seq(a : Pi(_), b : Pi(_), *cs : Pi(_)) : Pi
-    parselet = seq(seq(a, b), *cs)
+  def seqf(a : Pi(_), b : Pi(_), *cs : Pi(_)) : Pi
+    parselet = seqf(seqf(a, b), *cs)
 
     core = ->(s : S) do
       response = parselet.call(s)
@@ -298,8 +324,17 @@ module Ww::Parselet(S)
   end
 
   # :nodoc:
-  def seq(a : Pi(_))
+  def seqf(a : Pi(_))
     a
+  end
+
+  # Shorthand macro to wrap `seqf` with *block* `map` if *block* is present.
+  macro seq(*parselets, &block)
+    {% if block %}
+      {{@type}}.map({{@type}}.seqf({{parselets.splat}})) {{block}}
+    {% else %}
+      {{@type}}.seqf({{parselets.splat}})
+    {% end %}
   end
 
   # Shorthand for `discard(seq)`.
@@ -340,7 +375,7 @@ module Ww::Parselet(S)
 
           if response.is_a?(Refusal)
             if index < min
-              return refusal(s, "unexpected end-of-input")
+              return refusal(s, mindetail)
             end
             break
           end
@@ -407,6 +442,13 @@ module Ww::Parselet(S)
     cat(ReduceSlot.new(initial, fn), a, **kwargs)
   end
 
+  def reduce(initial, successor a : Pi(_), **kwargs) : Pi
+    reduce(initial, a, **kwargs) do |memo, el|
+      memo << el
+      memo
+    end
+  end
+
   # Same as `reduce`, but discards all parseouts of *successor*.
   def reduce(successor a : Pi(_), **kwargs) : Pi
     reduce(ok, a, **kwargs) { |memo, _| memo }
@@ -436,7 +478,7 @@ module Ww::Parselet(S)
         in Failure
           return err
         in Refusal
-          if maxrefusal.nil? || err.byte >= maxrefusal.byte
+          if maxrefusal.nil? || {err.byte_start, err.byte_end} >= {maxrefusal.byte_start, maxrefusal.byte_end}
             maxrefusal = err
           end
         end
@@ -529,7 +571,7 @@ module Ww::Parselet(S)
   # Constructs a parselet that converts refusals of *successor* into
   # failure with *detail*.
   def strict(successor a : Pi(_), *, detail : String)
-    choice(strict(a), fail(detail))
+    strict(choice(a, refuse(detail)))
   end
 
   # A parselet that converts failures of *successor* into refusals.
@@ -547,6 +589,42 @@ module Ww::Parselet(S)
     Pi.new(core)
   end
 
+  # A parselet that overwrites details of refusals coming from *successor*
+  # with *detail*.
+  def refuse_with(detail : String, successor a : Pi(_)) : Pi
+    core = ->(s : S) do
+      response = a.call(s)
+      response.is_a?(Refusal) ? response.copy_with(detail: detail) : response
+    end
+
+    Pi.new(core)
+  end
+
+  def elaborate(successor a : Pi(_), cond b : Pi(_), detail : String)
+    core = ->(s : S) do
+      response0 = a.call(s)
+      pp response0
+      unless response0.is_a?(Refusal)
+        return response0
+      end
+
+      serr = s.skip(response0.byte_end - s.loc)
+
+      response1 = b.call(serr)
+      if response1.is_a?(Refusal)
+        return response0
+      elsif response1.is_a?(Failure)
+        return response1
+      end
+
+      # response0 : Refusal
+      # response1 : !Err
+      response0.copy_with(detail: detail)
+    end
+
+    Pi.new(core)
+  end
+
   # A parselet that unconditionally fails with *detail*. Can be
   # used e.g. in `choice` as the last "alternative".
   def fail(detail : String)
@@ -560,6 +638,10 @@ module Ww::Parselet(S)
     core = ->(s : S) { {s.loc, s} }
 
     Pi.new(core)
+  end
+
+  def locrange(successor a)
+    seq(loc, a, loc) { |before, pout, after| { {before, after}, pout } }
   end
 
   # Returns a parselet and a proc to define it at a later point.
@@ -598,13 +680,13 @@ module Ww::Parselet(S)
   # Parses *prefix* followed by *operand*, selecting *operand*'s parseout
   # and discarding that of *prefix*.
   def prefixed(prefix, operand)
-    map(seq(prefix, operand)) { |_, pout| pout }
+    seq(prefix, operand) { |_, pout| pout }
   end
 
   # Parses *l* followed by *infix* followed by *r*, selecting the parseouts
   # of *l* and *r* (formatted as a tuple), and discarding *infix*'s parseout.
   def infixed(l, infix, r)
-    map(seq(l, infix, r)) { |lpout, _, rpout| {lpout, rpout} }
+    seq(l, infix, r) { |lpout, _, rpout| {lpout, rpout} }
   end
 
   # Parses *l* followed by *operand* followed by *r*, selecting only *operand*'s
@@ -613,15 +695,15 @@ module Ww::Parselet(S)
   # *strict* can be used to wrap both *operand* and *r* in a call to `strict`.
   def surrounded(l, operand, r, *, strict : Bool = false)
     if strict
-      map(seq(l, strict(seq(operand, r)))) { |_, (pout, _)| pout }
+      seq(l, strict(seq(operand, r))) { |_, (pout, _)| pout }
     else
-      map(seq(l, operand, r)) { |_, pout, _| pout }
+      seq(l, operand, r) { |_, pout, _| pout }
     end
   end
 
   # Parses *operand* followed by *postfix*, selecting only *operand*'s
   # parseout and discarding that of *prefix*.
   def postfixed(operand, postfix)
-    map(seq(operand, postfix)) { |pout, _| pout }
+    seq(operand, postfix) { |pout, _| pout }
   end
 end

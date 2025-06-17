@@ -20,8 +20,10 @@ module Ww::ML
     def lineno(source : String) : Int32
       lineno = 0
       source.each_line_view do |line|
-        lineno += 1
-        next unless line.byte_start <= @byte_index <= line.byte_end
+        unless line.byte_start <= @byte_index <= line.byte_end
+          lineno += 1
+          next
+        end
         return lineno
       end
 
@@ -29,7 +31,16 @@ module Ww::ML
     end
 
     def column(line : StringView) : Int32
-      @byte_index - line.byte_start
+      column = 0
+
+      line.each_char_with_abs_byte_index do |char, byte_index|
+        if @byte_index == byte_index
+          return column
+        end
+        column += 1
+      end
+
+      raise ArgumentError.new("byte start points to a character's interior")
     end
 
     def humanize(io, source : String)

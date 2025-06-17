@@ -1333,22 +1333,30 @@ struct StringView
     StringView.new(@string, @byte_start + nbytes, byte_end, ascii_only?)
   end
 
-  def skip(stopword = nil, & : Char -> Bool) : StringView
-    reader = Char::Reader.new(@string, pos: @byte_start)
-    reader.each do |char|
-      break if reader.pos == byte_end
-
-      if stopword
-        remainder = StringView.new(@string, reader.pos, byte_end, ascii_only?)
-        if remainder.starts_with?(stopword)
-          break
-        end
-      end
-
-      break unless yield char
+  def skip(nest : String? = nil, unnest : String? = nil, & : Char -> Bool) : StringView
+    if nest && nest == unnest
+      raise ArgumentError.new("nest and unnest arguments must not be the same")
     end
 
-    StringView.new(@string, reader.pos, byte_end, ascii_only?)
+    remainder = self
+    nesting = 1
+
+    until nesting.zero? || remainder.empty?
+      if nest && remainder.starts_with?(nest)
+        nesting += 1
+        remainder = remainder.skip(nest.bytesize)
+      elsif unnest && remainder.starts_with?(unnest)
+        nesting -= 1
+        break if nesting.zero?
+        remainder = remainder.skip(unnest.bytesize)
+      else
+        char = remainder.first_char
+        break unless yield char
+        remainder = remainder.skip(char.bytesize)
+      end
+    end
+
+    remainder
   end
 
   def prev_char? : Char?
