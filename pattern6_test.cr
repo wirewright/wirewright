@@ -2,7 +2,7 @@ require "./src/wirewright"
 require "./baz5_editor"
 require "./delta7_proto2"
 
-CASES = Dir["tests/*.test.wwml"].join('\n') { |test| File.read(test) }
+CASES = Dir["tests/[^-]*.test.wwml"].join('\n') { |test| File.read(test) }
 
 PEOPLE = Term.of(JSON.parse(File.read("data/people.json")))
 

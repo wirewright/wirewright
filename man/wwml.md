@@ -72,15 +72,17 @@ able to type them (e.g. using the Compose key).
 | `↓`       | U+2193            | <kbd>Compose</kbd> + <kbd>v</kbd> + <kbd>\|</kbd>  |
 | `→`       | U+2192            | <kbd>Compose</kbd> + <kbd>-</kbd> + <kbd>></kbd>   |
 | `₀`..`₉`  | U+2080-U+2089     | <kbd>Compose</kbd> + <kbd>_</kbd> + <kbd>0</kbd>-<kbd>9</kbd>   |
+| `⎡`       | U+23A1            | <kbd>Compose</kbd> + <kbd>"</kbd> + <kbd>[</kbd>   |
+| `⎤`       | U+23A4            | <kbd>Compose</kbd> + <kbd>"</kbd> + <kbd>]</kbd>   |
 
-## Comma (+)
+## Comma (+) (+)
 
 The comma character is treated as whitespace and can be used where whitespace
 can be used. E.g. `x,y` is the same as `x y`.
 
-## Comments (+)
+## Comments (+) (+)
 
-### Inline comments (lexical comments) (+)
+### Inline comments (lexical comments) (+) (+)
 
 Inline comments start with `;;` and extend to the end of the line or EOF.
 
@@ -91,14 +93,14 @@ Inline comments start with `;;` and extend to the end of the line or EOF.
    2) ;; adipisicing minim sint
 ```
 
-### Term comments (syntactic comments) (+)
+### Structural comments (+) (+)
 
-A single term can be commented out using the `;` prefix.
+A single term or an entry can be commented out using the `;` prefix.
 
 > [!NOTE]
-> The commented-out term **must** be a syntactically valid term.
+> The commented-out term or entry **must** be a syntactically valid.
 
-Term comments are very useful for experimentation, e.g. to disable test cases
+Structural comments are very useful for experimentation, e.g. to disable test cases
 or arguments quickly.
 
 ```wwml
@@ -112,18 +114,53 @@ or arguments quickly.
 ;; Same as `(+ 1)`
 ```
 
-## Boolean terms (+)
+> [!NOTE]
+> Structural comments work where whitespace works. Note, however, that you can only
+> comment out *terms* or *entries*, as in `;x: 100` or `;:x`. You cannot comment
+> pairspattern items, keys, etc. structurally. Use inline comments for this.
+
+### "Inverse comments" for selecting one or more dictionary item(s) (+) (+)
+
+This is analogous to a structural comment, except this time you're not commenting
+a specific term out; but rather, commenting *all other* terms out. This can be done
+using the `;,` prefix.
+
+```wwml
+(+ ;,1 2 x: 100 y: 200)
+;; Same as: `(1 x: 100 y: 200)`
+
+(+ 1 ;,2 x: 100 y: 200)
+;; Same as: `(2 x: 100 y: 200)`
+
+(;,+ 1 ;,2 x: 100 y: 200)
+;; Same as: `(+ 2 x: 100 y: 200)`
+```
+
+Similarly to structural comments, these "inverse comments" are useful for experimentation;
+especially isolation. This might look like a weird feature to have, but if you have hundreds
+of test cases and want to isolate just a few -- this feature helps a lot with that, making it
+a matter of a few keystrokes rather than painful commenting.
+
+> [!NOTE]
+> Inverse comments are currently only supported in dictionaries of the general form,
+> and can only be placed before their items.
+>
+> Inverse comments cannot be "commented out" with structural ones because inverse
+> comments aren't terms. They are interpreted by the dictionary that you place them
+> in, because only that dictionary knows which items to leave out.
+
+## Boolean terms (+) (+)
 
 ```wwml
 true  ;; boolean true
 false ;; boolean false
 ```
 
-## Symbol terms (+)
+## Symbol terms (+) (+)
 
 Symbol terms are represented by combinations of one or more characters from
-the set: `a-zA-Z0-9_!$%&*+\-./#<=>?@~λ|∞°∈⊆⊂\`. Symbol terms that contain
-characters not in this set cannot be represented by WwML. Using such characters
+the set: `a-zA-Z0-9_!$%&*+\-\^./#<=>?@~λ|∞°∈⊆⊂\`. Symbol terms that contain
+characters not in this set cannot be represented with WwML. Using such characters
 outside of strings is a syntax error.
 
 > [!NOTE]
@@ -141,11 +178,11 @@ divide-by-zero?
 %item°
 ```
 
-## Number terms (+)
+## Number terms (+) (+)
 
 Wirewright number terms are represented using rational numbers.
 
-### Basic numbers (+)
+### Basic numbers (+) (+)
 
 ```wwml
 0
@@ -153,7 +190,7 @@ Wirewright number terms are represented using rational numbers.
 12345
 ```
 
-### Sign (+)
+### Sign (+) (+)
 
 You can optionally precede number terms with a `+` or `-` sign.
 
@@ -170,7 +207,7 @@ representation in `(- _)`:
 -beef₁₆ ;; is the same as writing: (- (digits 11 14 14 15 radix: 16))
 ```
 
-#### Radix notation (+)
+#### Radix notation (+) (+)
 
 Base (also referred to as radix to avoid confusion with the word base in general, which
 is useful in other contexts) can be given by a sequence of one or two postfix subscript
@@ -194,7 +231,7 @@ to the client to decide what to do with this term. Some clients ("runtimes") may
 e.g. support radix-aware addition or otherwise manipulate numbers with explicit base. WwML
 will not interfere by reducing everything to decimal like traditional languages do.
 
-### Decimal form for rationals (+)
+### Decimal form for rationals (+) (+)
 
 ```wwml
 ;; INVALID: 3.
@@ -207,7 +244,7 @@ will not interfere by reducing everything to decimal like traditional languages 
 
 Use the fractional form to write non-terminating fractions such as `0.333...`.
 
-### Fractional form for rationals (+)
+### Fractional form for rationals (+) (+)
 
 A fraction is a number of the form `a/b`, where `a` is an integer, and `b`
 is a nonzero natural number.
@@ -228,7 +265,7 @@ will be printed as `0.04`.
 
 Non-terminating fractions such as `1/3` will be printed using the fractional form.
 
-### Scientific notation (+)
+### Scientific notation (+) (+)
 
 ```wwml
 1e6          ;; scientific notation (1 million)
@@ -240,7 +277,7 @@ Non-terminating fractions such as `1/3` will be printed using the fractional for
 as `(sci mantissa_ exponent_)`. For instance, writing `1e6` results in `(sci 1 6)`,
 and `-2.5E-3` results in `(sci -2.5 -3)`.
 
-### Separating digit blocks with `_` (+)
+### Separating digit blocks with `_` (+) (+)
 
 Non-leading and non-trailing underscore is ignored in all number literals.
 It can be used to help separate digit blocks.
@@ -265,9 +302,9 @@ FFFF_FFFF₁₆
 HELLO_world₆₂
 ```
 
-## String terms
+## String terms (+) (+)
 
-### Standard form (+)
+### Standard form (+) (+)
 
 Escape sequences are initiated by `\`.
 
@@ -279,7 +316,7 @@ Escape sequences are initiated by `\`.
 
 TODO
 
-### Escape sequences (+)
+### Escape sequences (+) (+)
 
 - `\"` is the same as `\x22` (`"`)
 - `\\` is the same as `\x5C` (`\`)
@@ -318,7 +355,7 @@ You can escape newline *and the following horizontal whitespace* using `\␤`, a
  minim sint cillum sint consectetur cupidatat."
 ```
 
-### Interpolation (+)
+### Interpolation (+) (+)
 
 Interpolation uses the characters `⸢` and `⸣`. You can escape `⸢` with `\⸢` or one of
 the `\u` escape sequences if necessary.
@@ -351,7 +388,7 @@ Interpolation is syntactic sugar for dictionaries of the form `(~ s1 s2 ... sn)`
 
 The majority of WwML is focused on the representation of dictionary terms.
 
-### General form (+)
+### General form (+) (+)
 
 The general form for dictionaries is: `(item0 item1 ... itemN key0: value0 key1: value1 ... keyN: valueN)`.
 
@@ -374,7 +411,7 @@ You are not advised to arbitrarily mix key-value pairs since this makes it very 
 to read the dictionary. But you can do that: `(+ a: 100 qux b: 200)` is the same as the vastly more
 readable `(+ qux a: 100 b: 200)`.
 
-#### Curly brackets (+)
+#### Curly brackets (+) (+)
 
 You can use curly brackets `{}` to force key-value pairs only.
 
@@ -393,13 +430,13 @@ Wirewright's dictionary terms, you can still create items even with curly bracke
 {0: +, 1: 100, 2: 200}
 
 ;; ... is **exactly** the same as writing:
-(+ 1 2)
+(+ 100 200)
 
 ;; Or for instance:
 {0: +, 1: 100, 2: 200, a: foo, b: bar}
 
 ;; ... is **exactly** the same as writing:
-(+ 1 2 a: foo b: bar)
+(+ 100 200 a: foo b: bar)
 ```
 
 This demonstrates very well that WwML is indeed a system of shorthands.
@@ -482,12 +519,12 @@ qyx
 qoox
 ```
 
-### Key-value pair shorthands (+)
+### Key-value pair shorthands (+) (+)
 
 - `:<term>` is the same as writing `<term>: <term>`. E.g. `:foo` is the same as writing `foo: foo`. **The absence of
   whitespace between colon and term is mandatory.**
 
-### M1 (pattern matching) (+)
+### M1 (pattern matching) (+) (+)
 
 #### Shorthands for `%let` (+) (+)
 
@@ -524,7 +561,7 @@ qoox
 - `{+¦ <term list>}` is the same as writing `(%layer _ {<each term from term list>: true})`
 - `{-¦ <term list>}` is the same as writing `(%layer _ {<each term from term list>: false})`
 
-#### Pairspattern (+)
+#### Pairspattern (+) (+)
 
 *Pairspatterns* are a group of syntactic shorthands for matching dictionary pairspart.
 Pairspatterns are associated with the character `¦`, called the "pairspart pipe" in
@@ -564,7 +601,7 @@ The residue term is optional.
 The pairspattern generally consists of key value pairs: `<key>: <value>`. A variety
 of other shorthands is available.
 
-##### Key-value pair shorthands (+)
+##### Key-value pair shorthands (+) (+)
 
 - `-<name>` is the same as writing `<name>: (%- _)`.
 - `-<name>_<type>` is the same as writing `<name>: (%- <type> <name>)`.
@@ -580,7 +617,7 @@ of other shorthands is available.
 - `<name>_<type>⋮ <value>` is the same as writing `<name>: (%optional <value> <name>_<type>)`.
 - `⋮<name>` is the same as writing `<name>: (%- (%never) <name>)`.
 
-#### Misc (+)
+#### Misc (+) (+)
 
 **Absence of whitespace between prefix and term is mandatory**.
 
@@ -588,7 +625,7 @@ of other shorthands is available.
 - `≡<term>` is the same as writing `(%nonself <term>)`.
 - `%'<term>` is the same as writing `(%literal <term>)`.
 
-### Dictionary set and multiset (+)
+### Dictionary set and multiset (+) (+)
 
 - `{+ x y z}` is the same as writing `{x: true, y: true, z: true}`. Elements are arbitrary terms.
 - `{- x y z}` is the same as writing `{x: false, y: false, z: false}`. Elements are arbitrary terms.
@@ -596,7 +633,7 @@ of other shorthands is available.
 - `{# 100×a 5×b c}` is the same as writing `{a: 100, b: 5, c: 1}`. Elements are arbitrary terms. **Absence
   of whitespace between the amount, `×`, and the term is mandatory.**
 
-### Alloy (+)
+### Alloy (+) (+)
 
 - `^<term>` is the same as writing `(^ <term>)`.
 - `(<term list> ^… <arg>)` is the same as writing `(^extend (<term list>) <arg>)`.
@@ -606,7 +643,7 @@ of other shorthands is available.
 - `<left term> => <right term>` is the same as writing `(rule <left term> <right term>)`.
 - `<left term> <> <right term>` is the same as writing `(backmap <left term> <right term>)`.
 
-### Backmaps and rewriter circuits (+)
+### Backmaps and rewriter circuits (+) (+)
 
 - `→<term>` is the same as writing `($my <term>)`
 - `↑<term>` is the same as writing `($up <term>)`
@@ -614,11 +651,11 @@ of other shorthands is available.
 - `$<term>` is the same as writing `($ <term>)`
 - `$'<term>` is the same as writing `($once <term>)`
 
-### Nitrene (+)
+### Nitrene (+) (+)
 
 - `'<term>` is the same as writing `(leaf <term>)`
 
-### Delta7 (+)
+### Delta7 (+) (+)
 
 - `@<term>` is the same as writing `(edge <term>)`
 

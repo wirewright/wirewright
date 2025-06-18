@@ -1,0 +1,565 @@
+;; What you're looking at is WwML parser tests written in WwML itself.
+;;
+;; Some bootstrapping is obviouisly required and WwML should be working already
+;; and sane enough to parse the outer language -- itemsonly dicts, symbols,
+;; comments, etc.
+;;
+;; In this sense, these tests are *regression tests* that assume the majority of
+;; WwML is working properly *already*.
+;;
+;; I'm not a fan of testing *machinery*. I like testing *behavior*, so that
+;; the particular implementation is swappable without invalidation of the tests.
+;; There is inevitable coupling, especially with error tests; but this coupling
+;; is "behavioral", in the sense that I don't need to know what's going on under
+;; the hood to explain it. Something like eager-ness vs. laziness comes to mind.
+;;
+;; The main method here is testing for *equivalence*. In other words, we're
+;; testing WwML in terms of "writing X is the same as writing Y". This lets
+;; us test the semantic "meat" of WwML, but the big con is that WwML must work
+;; in some form already.
+;;
+;; Note that I *am* testing error messages here which is kind of bad, due to
+;; the coupling it introduces. But it's a relatively easy find-and-replace
+;; regardless, and it helps us know the parser is keeping track of everything
+;; properly.
+
+;; Structural comments
+(ml ;; <Test how well the inline ones work>
+  (= ⎡(;+ 1 2 x: 100 y: 200)⎤ ⎡(1 2 x: 100 y: 200)⎤) ;; foo
+  (= ⎡(+ ;1 2 x: 100 y: 200)⎤ ⎡(+ 2 x: 100 y: 200)⎤) ;; bar
+  (= ⎡(+ 1 ;2 x: 100 y: 200)⎤ ⎡(+ 1 x: 100 y: 200)⎤)
+  (= ⎡(+ 1 2 ;x: 100 y: 200)⎤ ⎡(+ 1 2 y: 200)⎤)
+  (= ⎡(+ 1 2 x: 100 ;y: 200)⎤ ⎡(+ 1 2 x: 100)⎤)
+  ;; baz
+  (= ⎡(;+ 1 2 ;x: 100 ;y: 200)⎤ ⎡(1 2)⎤)
+  (= ⎡(+ 1 2 ;:x :y)⎤ ⎡(+ 1 2 y: y)⎤)
+  (= ⎡(+ 1 2 :x ;:y)⎤ ⎡(+ 1 2 x: x)⎤)
+  (= ⎡(+ 1 2 ;:x ;:y)⎤ ⎡(+ 1 2)⎤))
+
+;; Focus item(s)
+(ml
+  (= ⎡(;,+ 1 2 x: 100 y: 200)⎤ ⎡(+ x: 100 y: 200)⎤)
+  (= ⎡(+ ;,1 2 x: 100 y: 200)⎤ ⎡(1 x: 100 y: 200)⎤)
+  (= ⎡(+ 1 ;,2 x: 100 y: 200)⎤ ⎡(2 x: 100 y: 200)⎤)
+  (= ⎡(;,+ 1 ;,2 x: 100 y: 200)⎤ ⎡(+ 2 x: 100 y: 200)⎤)
+  (= ⎡(;,+ 1 2 x: 100 ;,3 y: 200)⎤ ⎡(+ 3 x: 100 y: 200)⎤))
+
+;; Symbols
+(ml
+  (+ ⎡foo42⎤ _symbol)
+  (- ⎡42⏏foo⎤ ⎡trailing symbolic characters found after number⎤)
+  (+ ⎡divide-by-zero?⎤ _symbol)
+  (+ ⎡-⎤ _symbol)
+  (+ ⎡<=⎤ _symbol)
+  (+ ⎡⊆⎤ _symbol)
+  (+ ⎡λx⎤ _symbol)
+  (+ ⎡∞/2⎤ _symbol))
+
+;; Booleans
+(ml
+  (+ ⎡true⎤ _boolean)
+  (+ ⎡false⎤ _boolean)
+  (+ ⎡truex⎤ _symbol)
+  (+ ⎡xtrue⎤ _symbol)
+  (+ ⎡falsex⎤ _symbol)
+  (+ ⎡xfalse⎤ _symbol))
+
+;; Escape sequences.
+(ml
+  (= ⎡"\""⎤ ⎡"\x22"⎤ ⎡"\u0022"⎤ ⎡"\u{22}"⎤ ⎡"\u{022}"⎤ ⎡"\u{0022}"⎤ ⎡"\u{00022}"⎤ ⎡"\u{000022}"⎤)
+  (= ⎡"\\"⎤ ⎡"\x5c"⎤ ⎡"\u005c"⎤ ⎡"\u{5c}"⎤ ⎡"\u{05c}"⎤ ⎡"\u{005c}"⎤ ⎡"\u{0005c}"⎤ ⎡"\u{00005c}"⎤)
+  (= "\"\n\"" ⎡"\n"⎤ ⎡"\x0A"⎤ ⎡"\u000A"⎤ ⎡"\u{a}"⎤ ⎡"\u{0A}"⎤ ⎡"\u{00A}"⎤ ⎡"\u{000A}"⎤ ⎡"\u{0000A}"⎤ ⎡"\u{00000A}"⎤)
+  (= "\"\t\"" ⎡"\t"⎤ ⎡"\x09"⎤ ⎡"\u0009"⎤ ⎡"\u{9}"⎤ ⎡"\u{09}"⎤ ⎡"\u{009}"⎤ ⎡"\u{0009}"⎤ ⎡"\u{00009}"⎤ ⎡"\u{000009}"⎤)
+  (= "\"\r\"" ⎡"\r"⎤ ⎡"\x0D"⎤ ⎡"\u000D"⎤ ⎡"\u{d}"⎤ ⎡"\u{0D}"⎤ ⎡"\u{00D}"⎤ ⎡"\u{000D}"⎤ ⎡"\u{0000D}"⎤ ⎡"\u{00000D}"⎤)
+  (= ⎡"\⸢"⎤ ⎡"\u{2E22}"⎤ ⎡"\u{2e22}"⎤ ⎡"\u{02e22}"⎤ ⎡"\u{002e22}"⎤ ⎡⎡⸢⎤⎤)
+  (= ⎡"Δ"⎤ ⎡"\u[greek    CAPITAL letter delta]"⎤ ⎡"\u[Delta]"⎤ ⎡"\u0394"⎤ ⎡"\u{394}"⎤)
+  (= ⎡"δ"⎤ ⎡"\u[greek small letter delta]"⎤ ⎡"\u[delta]"⎤ ⎡"\u03B4"⎤ ⎡"\u{3B4}"⎤)
+  (= ⎡"💩"⎤ ⎡"\u[:poop:]"⎤)
+  (= ⎡"💩😄🚶💇"⎤ ⎡"\u[:poop:]\u[:smile:]\u[:walking:]\u[:haircut:]"⎤)
+  (= ⎡"🧔"⎤ ⎡"\u[bearded person]"⎤ ⎡"\u{1F9D4}"⎤)
+
+  (- ⎡"\⏏⎤ ⎡invalid or abruptly terminated escape sequence, expected one of⎤)
+  (- ⎡"\⏏z"⎤ ⎡invalid or abruptly terminated escape sequence, expected one of⎤)
+  (- ⎡"\"⏏⎤ ⎡expected `"` to end the string⎤)
+
+  (- ⎡"\x⏏"⎤ ⎡expected exactly two hex digits after `\x`⎤)
+  (- ⎡"\xA⏏"⎤ ⎡expected exactly two hex digits after `\x`⎤)
+  (- ⎡"\x⏏x"⎤ ⎡expected exactly two hex digits after `\x`⎤)
+  (- ⎡"\x⏏xy"⎤ ⎡expected exactly two hex digits after `\x`⎤)
+
+  (- ⎡"\u⏏"⎤ ⎡expected one of `\u{...}`, `\u[...]`, `\u____`⎤)
+
+  (- ⎡"\u{⏏}"⎤ ⎡expected 1-6 hex digits in `\u{}`⎤)
+  (- ⎡"\u{⏏qux}"⎤ ⎡expected 1-6 hex digits in `\u{}`⎤)
+  (- ⎡"\u{bac⏏on}"⎤ ⎡expected `}` to close `\u{`⎤)
+
+  (- ⎡"\u{⏏110000⏏}"⎤ ⎡unsupported codepoint `110000`⎤)
+
+  (- ⎡"\u[⏏"⎤ ⎡expected Greek letter, codepoint, or emoji name (e.g. `\u[delta]`, or \u[greek capital letter delta]`, or `\u[:poop:]`)⎤)
+  (- ⎡"\u[⏏]"⎤ ⎡expected Greek letter, codepoint, or emoji name (e.g. `\u[delta]`, or \u[greek capital letter delta]`, or `\u[:poop:]`)⎤)
+
+  (- ⎡"\u[⏏hello⏏]"⎤ ⎡`hello` is not a Greek letter name nor a Unicode codepoint name⎤)
+  (- ⎡"\u[delta⏏"⎤ ⎡expected `]` to close `\u[`⎤)
+  (- ⎡"\u[hello⏏"⎤ ⎡expected `]` to close `\u[`⎤)
+
+  (- ⎡"\u[:⏏]"⎤ ⎡expected emoji name⎤)
+  (- ⎡"\u[:⏏:]"⎤ ⎡expected emoji name⎤)
+  (- ⎡"\u[:qux⏏]"⎤ ⎡expected `:` after emoji name⎤)
+  (- ⎡"\u[:⏏qux⏏:]"⎤ ⎡`qux` is not an emoji⎤))
+
+;; Strings, standard form.
+(ml
+  ;; Empty string
+  (= ⎡""⎤ ⎡⎡⎤⎤)
+
+  ;; Equivalence of raw strings ⎡⎤ and ""
+  (= ⎡"hello world"⎤ ⎡⎡hello world⎤⎤)
+  (= ⎡"hello\\nworld"⎤ ⎡⎡hello\nworld⎤⎤)
+  (= ⎡"hello\\\\nworld"⎤ ⎡⎡hello\\nworld⎤⎤)
+
+  ;; String containing raw newlines
+  (= ⎡"Lorem ipsum dolor sit amet, qui minim labore adipisicing
+        minim sint cillum sint consectetur cupidatat."⎤
+     ⎡"Lorem ipsum dolor sit amet, qui minim labore adipisicing\n        minim sint cillum sint consectetur cupidatat."⎤)
+
+  ;; Escaping newlines and whitespace
+  (= ⎡"Lorem ipsum dolor sit amet, qui minim labore adipisicing \
+        minim sint cillum sint consectetur cupidatat."⎤
+     ⎡"Lorem ipsum dolor sit amet, qui minim labore adipisicing minim sint cillum sint consectetur cupidatat."⎤)
+
+  ;; More escaping newline and whitespace. Longer strings.
+  (= ⎡"Lorem ipsum dolor sit amet, officia excepteur ex fugiat \
+        reprehenderit enim labore culpa sint ad nisi Lorem pariatur \
+        mollit ex esse exercitation amet. Nisi anim cupidatat excepteur \
+        officia. Reprehenderit nostrud nostrud ipsum Lorem est aliquip \
+        amet voluptate voluptate dolor minim nulla est proident. Nostrud \
+        officia pariatur ut officia. Sit irure elit esse ea nulla sunt ex \
+        occaecat reprehenderit commodo officia dolor Lorem duis laboris \
+        cupidatat officia voluptate. Culpa proident adipisicing id nulla \
+        nisi laboris ex in Lorem sunt duis officia eiusmod. Aliqua \
+        reprehenderit commodo ex non excepteur duis sunt velit enim."⎤
+     ⎡"Lorem ipsum dolor sit amet, officia excepteur ex fugiat reprehenderit enim labore culpa sint ad nisi Lorem pariatur mollit ex esse exercitation amet. Nisi anim cupidatat excepteur officia. Reprehenderit nostrud nostrud ipsum Lorem est aliquip amet voluptate voluptate dolor minim nulla est proident. Nostrud officia pariatur ut officia. Sit irure elit esse ea nulla sunt ex occaecat reprehenderit commodo officia dolor Lorem duis laboris cupidatat officia voluptate. Culpa proident adipisicing id nulla nisi laboris ex in Lorem sunt duis officia eiusmod. Aliqua reprehenderit commodo ex non excepteur duis sunt velit enim."⎤)
+
+  ;; Working with escape sequences in strings.
+  (= ⎡"\u[delta]\u[Delta]: Lorem ispum \x41\x42C dolor sit amet! \u[:smile:]"⎤
+     ⎡"\u[greek small letter delta]\u[Delta]: Lorem ispum \u{41}\u{00042}C dolor sit amet! 😄"⎤
+     ⎡"δΔ: Lorem ispum ABC dolor sit amet! 😄"⎤)
+
+  ;; Escape sequence errors in strings.
+  (- ⎡"\u[delta ⏏\u[Delta]: Lorem ispum \x41\x42C dolor sit amet! \u[:smile:]"⎤
+     ⎡expected `]` to close `\u[`⎤)
+  (- ⎡"\u[delta]\uDe⏏lta]: Lorem ispum \x41\x42C dolor sit amet! \u[:smile:]"⎤
+     ⎡expected exactly four hex digits after `\u`⎤)
+  (- ⎡"\u[delta]\u[⏏qux⏏]: Lorem ispum \x41\x42C dolor sit amet! \u[:smile:]"⎤
+     ⎡`qux` is not a Greek letter name nor a Unicode codepoint name⎤)
+  (- ⎡"\u[delta]\u[Delta]: Lorem ispum \x4⏏\x42C dolor sit amet! \u[:smile:]"⎤
+     ⎡expected exactly two hex digits after `\x`⎤)
+  (- ⎡"\u[delta]\u[Delta]: Lorem ispum \x41\x42C dolor sit amet! \u[:⏏notarealthing⏏:]"⎤
+     ⎡`notarealthing` is not an emoji⎤)
+
+  ;; Escape sequence errors in multiline strings.
+  ;; TODO
+
+  ;; Interpolation in strings.
+  (= ⎡"⸢100⸣"⎤ ⎡100⎤)
+  (= ⎡"⸢(+ 1 2)⸣"⎤ ⎡(+ 1 2)⎤)
+  (= ⎡"⸢"hello world"⸣"⎤ ⎡"hello world"⎤)
+  (= ⎡"⸢"hello ⸢qux⸣ world"⸣"⎤ ⎡(~ "hello " qux " world")⎤)
+  (= ⎡"foo ⸢"hello ⸢qux⸣ world"⸣ bar"⎤ ⎡(~ "foo " (~ "hello " qux " world") " bar")⎤)
+  (= ⎡"Your name is ⸢name⸣"⎤ ⎡(~ "Your name is " name)⎤)
+
+  ;; Interpolation errors.
+  (- ⎡"hello ⸢⏏ qux⸣ world"⎤ ⎡expected a term (without whitespace after `⸢`)⎤)
+  (- ⎡"hello ⸢qux⏏ ⸣ world"⎤ ⎡expected `⸣` to close `⸢` (without whitespace before `⸣`)⎤)
+  (- ⎡"hello ⸢⏏ qux ⸣ world"⎤ ⎡expected a term (without whitespace after `⸢`)⎤)
+  (- ⎡"hello ⸢(+ 1 2⏏⸣ world"⎤ ⎡expected `)` to close `(`⎤)
+  (- ⎡"hello ⸢(+ "\u[:⏏notarealthing⏏:]" 2)⸣ world"⎤ ⎡`notarealthing` is not an emoji⎤)
+
+  ;; Interpolation in multiline strings.
+  (= ⎡"Lorem ipsum dolor sit amet, qui minim ⸢foo⸣ adipisicing
+        minim sint cillum ⸢bar⸣ consectetur cupidatat."⎤
+     ⎡(~ "Lorem ipsum dolor sit amet, qui minim "
+          foo
+          " adipisicing\n        minim sint cillum "
+          bar
+          " consectetur cupidatat.")⎤)
+  (= ⎡"Lorem ipsum dolor sit amet, qui minim ⸢foo⸣ adipisicing \
+        minim sint cillum ⸢bar⸣ consectetur cupidatat."⎤
+     ⎡(~ "Lorem ipsum dolor sit amet, qui minim "
+          foo
+          " adipisicing "
+          "minim sint cillum "
+          bar
+          " consectetur cupidatat.")⎤)
+  (- ⎡"Lorem ipsum dolor sit amet, qui minim ⸢(+ 1 2⏏⸣ adipisicing \
+        minim sint cillum ⸢bar⸣ consectetur cupidatat."⎤
+     ⎡expected `)` to close `(`⎤)
+  (- ⎡"Lorem ipsum dolor sit amet, qui minim ⸢(+ 1 2)⸣ adipisicing \
+        minim sint cillum ⸢(+ 1 2⏏⸣ consectetur cupidatat."⎤
+     ⎡expected `)` to close `(`⎤)
+
+  ;; Interpolation and escape sequences in strings.
+  ;; TODO
+
+  ;; Interpolation and escape sequences in multiline strings.
+  ;; TODO
+)
+
+;; Numbers
+(ml
+  (= ⎡00000₁⎤ ⎡(digits 0 0 0 0 0 radix: 1)⎤)
+  (= ⎡0₂⎤ ⎡(digits 0 radix: 2)⎤)
+  (= ⎡1₂⎤ ⎡(digits 1 radix: 2)⎤)
+  (= ⎡1011₂⎤ ⎡10_11₂⎤ ⎡(digits 1 0 1 1 radix: 2)⎤)
+  (= ⎡755₈⎤ ⎡7_5_5₈⎤ ⎡(digits 7 5 5 radix: 8)⎤)
+  (= ⎡FFFF_FFFF₁₆⎤ ⎡FFFF_ff_ff₁₆⎤ ⎡(digits 15 15 15 15 15 15 15 15 radix: 16)⎤)
+  (= ⎡52_b₁₂⎤ ⎡5_2B₁₂⎤ ⎡(digits 5 2 11 radix: 12)⎤)
+  (= ⎡1F₁₆⎤ ⎡(digits 1 15 radix: 16)⎤)
+  (= ⎡deadbeef₁₆⎤ ⎡(digits 13 14 10 13 11 14 14 15 radix: 16)⎤)
+  (= ⎡-deadbeef₁₆⎤ ⎡(- (digits 13 14 10 13 11 14 14 15 radix: 16))⎤)
+  (= ⎡3farfnf₃₂⎤ ⎡(digits 3 15 10 27 15 23 15 radix: 32)⎤)
+  (= ⎡-3farfnf₃₂⎤ ⎡(- (digits 3 15 10 27 15 23 15 radix: 32))⎤)
+  (= ⎡1Fq₆₂⎤ ⎡+1Fq₆₂⎤ ⎡(digits 1 15 52 radix: 62)⎤)
+  (= ⎡-1Fq₆₂⎤ ⎡(- (digits 1 15 52 radix: 62))⎤)
+
+  (- ⎡0 ⏏₂⎤ ⎡expected end-of-input⎤)
+  (- ⎡0⏏₀⏏⎤ ⎡expected radix 1-62, not `0`⎤)
+  (- ⎡0⏏₆₃⏏⎤ ⎡expected radix 1-62, not `63`⎤)
+  (- ⎡0⏏₁₂₃₄⏏⎤ ⎡expected radix 1-62, not `1234`⎤)
+  (- ⎡⏏x⏏yzzy₂⎤ ⎡invalid digit `x` for base `2`⎤)
+  (- ⎡0010⏏y⏏₂⎤ ⎡invalid digit `y` for base `2`⎤)
+  (- ⎡xyzzy⏏_⏏₃₆⎤ ⎡trailing underscores forbidden in numbers⎤)
+  (- ⎡xyz⏏__⏏__zy₃₆⎤ ⎡multiple consecutive underscores forbidden in numbers⎤))
+
+(ml
+  (= ⎡-0⎤ ⎡+0⎤ ⎡0⎤)
+  (= ⎡+17⎤ ⎡1_7⎤ ⎡17⎤)
+  (= ⎡123_456⎤ ⎡12_34_56⎤ ⎡123456⎤)
+  (= ⎡-123_456⎤ ⎡-12_34_56⎤ ⎡-123456⎤)
+
+  (- ⎡-100⏏_⏏⎤ ⎡trailing underscores forbidden in numbers⎤)
+  (- ⎡-100⏏__⏏__000⎤ ⎡multiple consecutive underscores forbidden in numbers⎤))
+
+(ml
+  (= ⎡0.0⎤ ⎡0⎤)
+  (= ⎡3.0⎤ ⎡3⎤)
+  (= ⎡1.23_45⎤ ⎡1.2345⎤)
+  (= ⎡12.34_5⎤ ⎡12.345⎤)
+  (= ⎡-12.34500⎤ ⎡-12.345⎤)
+  (= ⎡-0.345_000⎤ ⎡-0.345⎤)
+  (= ⎡-0.0000_345⎤ ⎡-0.00003450_00⎤)
+  (- ⎡1.⏏⎤ ⎡expected at least one fractional part digit after `.`⎤))
+
+(ml
+  (= ⎡0e0⎤ ⎡(sci 0 0)⎤)
+  (= ⎡1e0⎤ ⎡(sci 1 0)⎤)
+  (= ⎡0e10⎤ ⎡(sci 0 10)⎤)
+  (= ⎡1E-0⎤ ⎡(sci 1 0)⎤)
+  (= ⎡-1.23e3⎤ ⎡(- (sci 1.23 3))⎤)
+  (= ⎡+4.56e-2⎤ ⎡(sci 4.56 -2)⎤)
+  (= ⎡-0e+10⎤ ⎡(- (sci 0 10))⎤)
+  (= ⎡1.23000e2⎤ ⎡(sci 1.23000 2)⎤)
+  (= ⎡1.0E2⎤ ⎡(sci 1 2)⎤)
+  (= ⎡0.1e2⎤ ⎡(sci 0.1 2)⎤)
+  (= ⎡1.0e+100⎤ ⎡(sci 1 100)⎤)
+  (= ⎡1.0E+000⎤ ⎡(sci 1 0)⎤)
+  (= ⎡1.234567890123456789e0⎤ ⎡(sci 1.234567890123456789 0)⎤)
+  (= ⎡1E+00010⎤ ⎡1e+10⎤ ⎡1e10⎤ ⎡(sci 1 10)⎤)
+  (= ⎡1e-00010⎤ ⎡1e-10⎤ ⎡(sci 1 -10)⎤)
+  (= ⎡1e9999⎤ ⎡(sci 1 9999)⎤)
+
+  (- ⎡1.23e⏏⎤ ⎡expected at least one digit for the exponent⎤)
+  (- ⎡1.23e⏏e4⎤ ⎡expected at least one digit for the exponent⎤)
+  (- ⎡1.23e+⏏⎤ ⎡expected digits after the `+` sign⎤)
+  (- ⎡1.23e-⏏⎤ ⎡expected digits after the `-` sign⎤)
+  (- ⎡1.23e+⏏e3⎤ ⎡expected digits after the `+` sign⎤)
+  (- ⎡1.23e+4⏏.5⎤ ⎡trailing symbolic characters found after number⎤)
+  (- ⎡1.23e-4⏏e2⎤ ⎡trailing symbolic characters found after number⎤))
+
+(ml
+  (= ⎡1/2⎤ ⎡0.5⎤)
+  (= ⎡-3/4⎤ ⎡-0.75⎤)
+  (= ⎡123_456/789⎤ ⎡123456/789⎤)
+  (= ⎡5/6_000⎤ ⎡5/6000⎤)
+  (= ⎡0/1⎤ ⎡0⎤)
+
+  (- ⎡⏏1/0⏏⎤ ⎡division by zero⎤)
+  (- ⎡-⏏1/0⏏⎤ ⎡division by zero⎤)
+  (- ⎡⏏1/00⏏⎤ ⎡division by zero⎤)
+  (- ⎡⏏001/0_0⏏⎤ ⎡division by zero⎤)
+  (- ⎡1⏏_⏏/3⎤ ⎡trailing underscores forbidden in numbers⎤)
+  (- ⎡123/456⏏_⏏⎤ ⎡trailing underscores forbidden in numbers⎤)
+  (- ⎡1/⏏-5⎤ ⎡expected at least one digit for the denominator⎤)
+  (- ⎡1/⏏_⏏3⎤ ⎡leading underscores forbidden in numbers⎤)
+  (- ⎡1/⏏_⏏3⎤ ⎡leading underscores forbidden in numbers⎤)
+  (- ⎡1/⏏/3⎤ ⎡expected at least one digit for the denominator⎤))
+
+;; General form
+(ml
+  (= ⎡(text color: black
+             width: 100
+             height: 200
+         "Hello World")⎤
+     ⎡(text "Hello World" color: black width: 100 height: 200)⎤
+     ⎡(text color: black "Hello World" width: 100 height: 200)⎤
+     ⎡(text, color: black, "Hello World", width: 100, height: 200,,,)⎤
+     ⎡{0: text, color: black, 1: "Hello World", width: 100, height: 200}⎤
+     ⎡(0: text color: black 1: "Hello World" width: 100 height: 200)⎤)
+
+  (- ⎡(x:⏏)⎤ ⎡expected a term (without whitespace, assuming you wanted e.g. `:foo` -> `foo: foo`)⎤)
+  (- ⎡(foobar :⏏ 123)⎤ ⎡expected a term (without whitespace, assuming you wanted e.g. `:foo` -> `foo: foo`)⎤)
+  (- ⎡(foobar:⏏123)⎤ ⎡qux⎤))
+
+;; Key-value pair shorthand
+(ml
+  (= ⎡(q :a b: c :d :e f)⎤
+     ⎡(q f a: a b: c d: d e: e)⎤
+     ⎡(a: a, b: c, d: d, e: e, 0: q 1: f)⎤))
+
+;; M1 shorthands
+
+;; %let
+(ml
+  (= ⎡x←100⎤ ⎡(%let x 100)⎤)
+  (= ⎡x←y←100⎤ ⎡(%let x y←100)⎤ ⎡(%let x (%let y 100))⎤)
+  (= ⎡x←y←z←100⎤ ⎡(%let x y←z←100)⎤ ⎡(%let x (%let y (%let z 100)))⎤)
+  (- ⎡x ⏏←100⎤ ⎡expected end-of-input⎤)
+  (- ⎡(x ⏏←100)⎤ ⎡expected `)` to close `(`⎤)
+  (- ⎡x←⏏ 100⎤ ⎡without whitespace after `←`⎤)
+  (- ⎡(+ x←⏏ y←200)⎤ ⎡without whitespace after `←`⎤))
+
+;; %keypool
+(ml
+  (= ⎡{%}⎤ ⎡(%keypool)⎤)
+  (= ⎡{% a}⎤ ⎡(%keypool a)⎤)
+  (= ⎡{% a b c}⎤ ⎡(%keypool a b c)⎤)
+  (= ⎡{% "Hello World" (+ 1 2) 3 4.567 true}⎤ ⎡(%keypool "Hello World" (+ 1 2) 3 4.567 true)⎤)
+  (= ⎡{% (+ 1 2 x: 100) 34}⎤ ⎡(%keypool (+ 1 2 x: 100) 34)⎤)
+  (- ⎡{% ⏏10⏏×(+ 1 2 x: 100) 34}⎤ ⎡count `10` on `(+ 1 2 x: 100)` makes no sense for %keypool⎤))
+
+;; %item and %item°
+(ml
+  (- ⎡⟨⏏⟩⎤ ⎡expected at least one item in `⟨⟩`⎤)
+  (= ⎡⟨a⟩⎤ ⎡(%item a)⎤)
+  (= ⎡⟨a⟩°⎤ ⎡(%item° a)⎤)
+  (= ⎡⟨a b c⟩⎤ ⎡(%item a b c)⎤)
+  (= ⎡⟨a b c⟩°⎤ ⎡(%item° a b c)⎤)
+  (= ⎡⟨a b c ¦⟩⎤ ⎡(%partition (%item a b c) ())⎤)
+  (= ⎡⟨a b c ¦⟩°⎤ ⎡(%partition (%item° a b c) ())⎤)
+  (- ⎡⟨a (+ 1 2 c⏏⟩⎤ ⎡expected `)` to close `(`⎤)
+  (- ⎡⟨a (+ 1 2) ⏏⎤ ⎡expected `⟩` to close `⟨`⎤))
+
+;; %split and %split°
+(ml
+  (- ⎡⟨⏏…⟩⎤ ⎡expected at least one item in `⟨⟩`⎤)
+  (- ⎡⟨a⏏…⟩⎤ ⎡expected `⟩` to close `⟨`⎤)
+  (- ⎡⏏⟨a … b … c⟩⏏⎤ ⎡expected 1, 2, or 5 `…`-separated nonempty slot groups⎤)
+  (= ⎡⟨a … b⟩⎤ ⎡(%split _ a (%split _ b _))⎤)
+  (= ⎡⟨xs … a … ys … b … zs⟩⎤ ⎡(%split xs a (%split ys b zs))⎤)
+  (= ⎡⟨a b … c d⟩⎤ ⎡(%split _ a (%split (b _*) c (d _*)))⎤)
+  (= ⎡⟨a b c … d e f⟩⎤ ⎡(%split _ a (%split (b c _*) d (e f _*)))⎤)
+  (= ⎡⟨xs … a b c … ys … d e f … zs⟩⎤ ⎡(%split xs a (%split (b c (%group ys _*)) d (e f (%group zs _*))))⎤)
+  (= ⎡⟨a b c … d e f⟩°⎤ ⎡(%split° _ a (%split° (b c _*) d (e f _*)))⎤))
+
+;; itemspart %partition
+(ml
+  (= ⎡[]⎤ ⎡(%partition () _)⎤)
+  (= ⎡[a]⎤ ⎡(%partition (a) _)⎤)
+  (= ⎡[a b c]⎤ ⎡(%partition (a b c) _)⎤)
+  (- ⎡[⏏⎤ ⎡expected `]` to close `[`⎤)
+  (- ⎡[a b x⏏: 100]⎤ ⎡cannot use pairs in itemspart partition⎤))
+
+;; pairspart %partition
+(ml
+  (= ⎡{¦}⎤ ⎡(%layer _ ())⎤)
+  (= ⎡{¦ x}⎤ ⎡(%layer _ (x: _))⎤)
+  (= ⎡{¦ x y z}⎤ ⎡(%layer _ (x: _ y: _ z: _))⎤)
+  (- ⎡{⏏ ¦}⎤ ⎡expected `}` to close `{`⎤)
+  (- ⎡{¦⏏⎤ ⎡expected `}` to close `{¦`⎤))
+
+(ml
+  (= ⎡{…X¦ a b c}⎤ ⎡(%partition (%let X _) (%layer _ (a: _ b: _ c: _)))⎤)
+  (= ⎡{…(+ 1 2)¦ a b c}⎤ ⎡(%partition (%let (+ 1 2) _) (%layer _ (a: _ b: _ c: _)))⎤)
+  (- ⎡{…⏏ X¦ a b c⎤ ⎡expected a term (without whitespace after `…`)⎤)
+  (- ⎡{…X⏏ ¦ a b c⎤ ⎡expected `¦` (without preceding whitespace)⎤))
+
+(ml
+  (= ⎡{+¦}⎤ ⎡(%layer _ ())⎤)
+  (= ⎡{+¦ a}⎤ ⎡(%layer _ (a: true))⎤)
+  (= ⎡{+¦ a b c}⎤ ⎡(%layer _ (a: true b: true c: true))⎤)
+  (- ⎡{+¦ a b ⏏a⏏}⎤ ⎡duplicate key in dict set: `a`⎤)
+  (- ⎡{+¦ (+ 1 2 x: 100) b ⏏(+ 1 2 x: 100)⏏}⎤ ⎡duplicate key in dict set: `(+ 1 2 x: 100)`⎤)
+  (- ⎡{+¦ b 100×⏏(+ 1 2 x: 100)⏏}⎤ ⎡duplicate key in dict set: `(+ 1 2 x: 100)`⎤))
+
+(ml
+  (= ⎡{-¦}⎤ ⎡(%layer _ ())⎤)
+  (= ⎡{-¦ a}⎤ ⎡(%layer _ (a: false))⎤)
+  (= ⎡{-¦ a b c}⎤ ⎡(%layer _ (a: false b: false c: false))⎤)
+  (- ⎡{-¦ "hello" ⏏"hello"⏏ b}⎤ ⎡duplicate key in dict set: `"hello"`⎤)
+  (- ⎡{-¦ 100×⏏"hello"⏏ b}⎤ ⎡duplicate key in dict set: `"hello"`⎤))
+
+(ml
+  (= ⎡{#¦ a 100×b c}⎤ ⎡(%layer _ (a: 1 b: 100 c: 1))⎤))
+
+;; Pairspattern
+
+(ml
+  (= ⎡(¦)⎤ ⎡(%partition () ())⎤)
+  (= ⎡(_* ¦)⎤ ⎡(%partition (_*) ())⎤)
+  (= ⎡(¦ _)⎤ ⎡(%partition () _)⎤)
+  (= ⎡(¦ x_)⎤ ⎡(%partition () x_)⎤)
+  (= ⎡(¦ x: 100 y: 200)⎤ ⎡(¦ () x: 100 y: 200)⎤ ⎡(%partition () (x: 100, y: 200))⎤)
+  (= ⎡(¦ _ x: 100 y: 200)⎤ ⎡(%partition () (%layer _ {x: 100, y: 200}))⎤)
+
+  (= ⎡(¦ {% a b c})⎤ ⎡(%partition () (%keypool a b c))⎤)
+
+  (= ⎡(¦ {% a b c} x: 100 y: 200)⎤
+     ⎡(¦ (%keypool a b c) x: 100 y: 200)⎤
+     ⎡(%partition () (%layer (%keypool a b c) (x: 100, y: 200)))⎤)
+
+  (= ⎡{¦ -a -b_number -c: foo
+            d⁺ (eta)⁻ f_string g_ h
+            i_: (%optional 0 (%not 100))
+            j_number: (%not 0)
+            k⋮ 100
+            l⋮ (+ 1 2)
+            m_⋮ "John Doe"
+            n_: 3.14
+            ⋮o ⋮p :q :r}⎤
+     ⎡(%layer _
+          {a: (%- _),
+           b: (%- _number b),
+           c: (%- _ foo),
+           d: (%let d true),
+           (eta): (eta)←false,
+           f: f_string,
+           g: g_,
+           h: _,
+           i: (%optional 0 i←(%not 100)),
+           j: (%let j (%all _number (%not 0))),
+           k: (%optional 100 k_number),
+           l: (%optional (+ 1 2) l_dict),
+           m: (%optional "John Doe" m_),
+           n: n←3.14,
+           o: (%- (%never) o),
+           p: (%- (%never) p),
+           q: q,
+           r: r})⎤))
+
+;; Misc M1 shorthands
+(ml
+  (= ⎡`x⎤ ⎡(%slot x)⎤)
+  (= ⎡`(+ 1 2)⎤ ⎡(%slot (+ 1 2))⎤)
+  (- ⎡`⏏⎤ ⎡expected a term (without whitespace after ```)⎤)
+  (- ⎡`⏏ x⎤ ⎡expected a term (without whitespace after ```)⎤))
+
+(ml
+  (= ⎡≡x⎤ ⎡(%nonself x)⎤)
+  (= ⎡≡(+ 1 2)⎤ ⎡(%nonself (+ 1 2))⎤)
+  (- ⎡≡⏏⎤ ⎡expected a term (without whitespace after `≡`)⎤)
+  (- ⎡≡⏏ x⎤ ⎡expected a term (without whitespace after `≡`)⎤))
+
+(ml
+  (= ⎡%'x⎤ ⎡(%literal x)⎤)
+  (= ⎡%'(+ 1 2)⎤ ⎡(%literal (+ 1 2))⎤)
+  (- ⎡%'⏏⎤ ⎡expected a term (without whitespace after `%'`)⎤)
+  (- ⎡%'⏏ x⎤ ⎡expected a term (without whitespace after `%'`)⎤))
+
+;; Dictionary set and multiset
+(ml
+  (= ⎡{+ x y z}⎤ ⎡{x: true, y: true, z: true}⎤ ⎡(x: true, y: true z: true)⎤)
+  (- ⎡{+ x y ⏏x⏏ z}⎤ ⎡duplicate key in dict set: `x`⎤)
+  (- ⎡{+ x 5×⏏y⏏ z}⎤ ⎡duplicate key in dict set: `y`⎤)
+  (= ⎡{- x y z}⎤ ⎡{x: false, y: false, z: false}⎤ ⎡(x: false, y: false z: false)⎤)
+  (- ⎡{- x y ⏏x⏏ z}⎤ ⎡duplicate key in dict set: `x`⎤)
+  (- ⎡{- x 5×⏏y⏏ x z}⎤ ⎡duplicate key in dict set: `y`⎤)
+  (= ⎡{# x y y 3×z 5}⎤ ⎡{# 1×x 2×y 3×z 1×5}⎤ ⎡{x: 1, y: 2, z: 3, 5: 1}⎤)
+  (- ⎡{# x y y 3×⏏ 5}⎤ ⎡expected a term (if you are using `×`, it must have no surrounding whitespace)⎤)
+  (- ⎡{# x y y 3 ⏏× 5}⎤ ⎡expected a term (if you are using `×`, it must have no surrounding whitespace)⎤)
+  (- ⎡{# x y y 3×⏏}⎤ ⎡expected a term (if you are using `×`, it must have no surrounding whitespace)⎤))
+
+;; Alloy shorthands
+
+;; ^
+(ml
+  (+ ⎡^⎤ _symbol)
+  (+ ⎡^qux⎤ _symbol)
+  (= ⎡^100⎤ ⎡(^ 100)⎤)
+  (= ⎡^true⎤ ⎡(^ true)⎤)
+  (= ⎡^1010₂⎤ ⎡(^ (digits 1 0 1 0 radix: 2))⎤)
+  (= ⎡^"hello"⎤ ⎡(^ "hello")⎤)
+  (= ⎡^"foobar ⸢qux⸣ baz"⎤ ⎡(^ (~ "foobar " qux " baz"))⎤)
+  (= ⎡^(+ 1 2)⎤ ⎡(^ (+ 1 2))⎤)
+  (= ⎡^(+ ^1 ^2)⎤ ⎡(^ (+ (^ 1) (^ 2)))⎤))
+
+;; ^…
+
+(ml
+  (= ⎡(^… rest)⎤ ⎡(^extend () rest)⎤)
+  (= ⎡(+ 1 2 ^… rest)⎤ ⎡(^extend (+ 1 2) rest)⎤)
+  (- ⎡(+ 1 2 x: 100 y: 200 ⏏^… rest)⎤ ⎡expected `)` to close `(`⎤))
+
+;; Ruleset shorthands and sections
+;; TODO
+
+;; Backmap and rewriter circuit shorthands
+
+;; $my
+(ml
+  (= ⎡→x⎤ ⎡($my x)⎤)
+  (= ⎡→(+ 1 2)⎤ ⎡($my (+ 1 2))⎤)
+  (- ⎡→⏏⎤ ⎡expected a term (without whitespace after `→`)⎤)
+  (- ⎡→⏏ x⎤ ⎡expected a term (without whitespace after `→`)⎤))
+
+;; $up
+(ml
+  (= ⎡↑x⎤ ⎡($up x)⎤)
+  (= ⎡↑(+ 1 2)⎤ ⎡($up (+ 1 2))⎤)
+  (- ⎡↑⏏⎤ ⎡expected a term (without whitespace after `↑`)⎤)
+  (- ⎡↑⏏ x⎤ ⎡expected a term (without whitespace after `↑`)⎤))
+
+;; $down
+(ml
+  (= ⎡↓x⎤ ⎡($down x)⎤)
+  (= ⎡↓(+ 1 2)⎤ ⎡($down (+ 1 2))⎤)
+  (- ⎡↓⏏⎤ ⎡expected a term (without whitespace after `↓`)⎤)
+  (- ⎡↓⏏ x⎤ ⎡expected a term (without whitespace after `↓`)⎤))
+
+;; $
+(ml
+  (+ ⎡$⎤ _symbol)
+  (+ ⎡$qux⎤ _symbol)
+  (= ⎡$100⎤ ⎡($ 100)⎤)
+  (= ⎡$true⎤ ⎡($ true)⎤)
+  (= ⎡$1010₂⎤ ⎡($ (digits 1 0 1 0 radix: 2))⎤)
+  (= ⎡$"hello"⎤ ⎡($ "hello")⎤)
+  (= ⎡$"foobar ⸢qux⸣ baz"⎤ ⎡($ (~ "foobar " qux " baz"))⎤)
+  (= ⎡$(+ 1 2)⎤ ⎡($ (+ 1 2))⎤)
+  (= ⎡$(+ $1 $2)⎤ ⎡($ (+ ($ 1) ($ 2)))⎤))
+
+;; $'
+(ml
+  (= ⎡$'x⎤ ⎡($once x)⎤)
+  (= ⎡$'(+ 1 2)⎤ ⎡($once (+ 1 2))⎤)
+  (- ⎡$'⏏⎤ ⎡expected a term (without whitespace after `$'`)⎤)
+  (- ⎡$'⏏ x⎤ ⎡expected a term (without whitespace after `$'`)⎤))
+
+;; Nitrene shorthands
+
+;; leaf
+(ml
+  (= ⎡'x⎤ ⎡(leaf x)⎤)
+  (= ⎡'"hello world"⎤ ⎡(leaf "hello world")⎤)
+  (= ⎡'(+ 1 '2)⎤ ⎡(leaf (+ 1 (leaf 2)))⎤)
+  (- ⎡'⏏⎤ ⎡expected a term (without whitespace after `'`)⎤)
+  (- ⎡'⏏ x⎤ ⎡expected a term (without whitespace after `'`)⎤))
+
+;; Delta7 shorthands
+
+;; edge
+(ml
+  (= ⎡@x⎤ ⎡(edge x)⎤)
+  (= ⎡@"hello world"⎤ ⎡(edge "hello world")⎤)
+  (= ⎡@(+ 1 @2)⎤ ⎡(edge (+ 1 (edge 2)))⎤)
+  (- ⎡@⏏⎤ ⎡expected a term (without whitespace after `@`)⎤)
+  (- ⎡@⏏ x⎤ ⎡expected a term (without whitespace after `@`)⎤))

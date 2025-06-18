@@ -63,7 +63,7 @@ module Ww::ML::Grammar
         P.map(P.chr("t")) { '\t' },
         P.map(P.chr("r")) { '\r' },
         P.map(P.chr("⸢")) { '⸢' },
-        P.seq(P.chr("\n"), G.hspace0) { "" },
+        P.seq(P.chr("\n"), P.pastchr(" \t", min: 0)) { "" },
       )
     end
 
@@ -106,7 +106,7 @@ module Ww::ML::Grammar
     end
 
     # :nodoc:
-    alias BracketedEntity = {Bracketed, {Int32, Int32}, StringView}
+    alias BracketedEntity = {Bracketed, P::LocationRange, StringView}
 
     # :nodoc:
     G.rule(ubracket, String | Char) do
@@ -129,7 +129,7 @@ module Ww::ML::Grammar
       caption = chars.to_s
 
       unless emoji = Unicode::Index.emoji?(caption)
-        return P.refusal(*loc, "`#{caption}` is not an emoji")
+        return P.refusal(loc, "`#{caption}` is not an emoji")
       end
 
       emoji
@@ -150,11 +150,11 @@ module Ww::ML::Grammar
         begin
           return codepoint.chr
         rescue ArgumentError
-          return P.refusal(*loc, "unsupported codepoint `#{codepoint.to_s(base: 16)}`")
+          return P.refusal(loc, "unsupported codepoint `#{codepoint.to_s(base: 16)}`")
         end
       end
 
-      P.refusal(*loc, "`#{caption}` is not a Greek letter name nor a Unicode codepoint name")
+      P.refusal(loc, "`#{caption}` is not a Greek letter name nor a Unicode codepoint name")
     end
 
     # :nodoc:
@@ -187,12 +187,12 @@ module Ww::ML::Grammar
       P.select(core) do |_, (loc, codepoint)|
         codepoint.chr
       rescue ArgumentError
-        P.refusal(*loc, "unsupported codepoint `#{codepoint.to_s(base: 16)}`")
+        P.refusal(loc, "unsupported codepoint `#{codepoint.to_s(base: 16)}`")
       end
     end
 
     # :nodoc:
-    G.rule(byname, {Bracketed, {Int32, Int32}, StringView}) do
+    G.rule(byname, {Bracketed, P::LocationRange, StringView}) do
       P.choice(
         emoji,
         chrname,
@@ -205,14 +205,13 @@ module Ww::ML::Grammar
 
     # :nodoc:
     G.rule(emoji, BracketedEntity) do
-      chars = P.pastchr(EMOJI_NAME_CHARSET, min: 1, detail: "expected emoji name")
-      core = P.surrounded(
+      chars = P.pastchr(EMOJI_NAME_CHARSET, min: 1, mindetail: "expected emoji name")
+
+      P.surrounded(
         P.chrseq(":", detail: "expected `:` before emoji name"),
         P.locrange(P.view(chars)),
         P.chrseq(":", detail: "expected `:` after emoji name"),
-      )
-
-      P.map(core) { |loc, codepoint| {Bracketed::Emoji, loc, codepoint} }
+      ) { |loc, codepoint| {Bracketed::Emoji, loc, codepoint} }
     end
 
     # Defines the characters allowed in codepoint names.
@@ -220,7 +219,7 @@ module Ww::ML::Grammar
 
     # :nodoc:
     G.rule(chrname, BracketedEntity) do
-      chars = P.pastchr(CODEPOINT_NAME_CHARSET, cls: Charset16, min: 1)
+      chars = P.pastchr(CODEPOINT_NAME_CHARSET, cls: Charset16, min: 1, mindetail: "expected codepoint name")
       core = P.locrange(P.view(chars))
 
       P.map(core) { |loc, codepoint| {Bracketed::Codename, loc, codepoint} }

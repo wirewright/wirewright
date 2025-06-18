@@ -53,4 +53,7 @@ module Ww::ML::Grammar
   alias P = Parselet(State)
 end
 
+require "./grammar/symbol"
+require "./grammar/boolean"
+require "./grammar/number"
 require "./grammar/escape"
