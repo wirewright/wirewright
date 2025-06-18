@@ -157,6 +157,43 @@ module Ww
       raise NoParseout.new(response)
     end
 
+    # Transforms successful parses using the block.
+    def map(response : {T, S}, & : {T, S} -> {U, S} | Err) : {U, S} | Err forall T, U
+      yield response
+    end
+
+    # :ditto:
+    def map(response : Err, &)
+      response
+    end
+
+    # :nodoc:
+    def chrp(s, detail, fn)
+      char = s.current_char? || '\0'
+
+      unless fn.call(char)
+        return refusal(s, detail)
+      end
+
+      # Do not advance on EOI.
+      if char == '\0'
+        return ok, s
+      end
+
+      {ok, s.skip(char.bytesize)}
+    end
+
+    # Advances through a character for which *fn* returns `true`.
+    #
+    # End-of-input is passed to *fn* as `\0`. This parselet will not advance
+    # on EOI.
+    #
+    # *detail* specifies the message to use for refusal (when *fn* rejects
+    # a character).
+    def chr(*, detail : String = "unexpected input", &fn : Char -> Bool) : Pi
+      Pi.new(->(s : S) { chrp(s, detail, fn) })
+    end
+
     # Advances through a character from the given character *set*.
     #
     # End-of-input can be matched with `\0`. This parselet will not advance
@@ -165,28 +202,33 @@ module Ww
     # *detail* specifies the message to use for refusal.
     #
     # See `Charset` to learn about the set syntax.
-    def chr(set : String, *, cls = Charset8, detail : String = "unexpected input") : Pi
+    def chr(set : String, *, cls = Charset8, **kwargs) : Pi
       cls.compile(set) do |stackptr|
         # Copy into closure-seen, local scope.
         charset = stackptr.value
 
-        core = ->(s : S) do
-          char = s.current_char? || '\0'
-
-          unless cls.match?(pointerof(charset), char)
-            return refusal(s, detail)
-          end
-
-          # Do not advance on EOI.
-          if char == '\0'
-            return ok, s
-          end
-
-          {ok, s.skip(char.bytesize)}
-        end
-
-        Pi.new(core)
+        chr(**kwargs) { |char| cls.match?(pointerof(charset), char) }
       end
+    end
+
+    # :nodoc:
+    def pastchrp(s0, cls, charset, nest, unnest, min, mindetail, fn)
+      size = 0
+
+      s1 = s0.skip(nest, unnest) do |ch|
+        if fn.call(ch) || cls.match?(pointerof(charset), ch)
+          size += 1
+          true
+        else
+          false
+        end
+      end
+
+      if size < min
+        return refusal(s1, mindetail)
+      end
+
+      {ok, s1}
     end
 
     # Skips through zero or more characters from the given character *set*. This
@@ -217,6 +259,7 @@ module Ww
       cls = Charset8,
       min : Int32 = 0,
       mindetail : String = "unexpected end-of-input",
+      &fn : Char -> Bool
     ) : Pi
       if nest && nest == unnest
         raise ArgumentError.new("nest and unnest must not be the same")
@@ -226,42 +269,35 @@ module Ww
         # Copy into closure-seen, local scope.
         charset = stackptr.value
 
-        core = ->(s0 : S) do
-          size = 0
-
-          s1 = s0.skip(nest, unnest) do |ch|
-            if cls.match?(pointerof(charset), ch)
-              size += 1
-              true
-            else
-              false
-            end
-          end
-
-          if size < min
-            return refusal(s1, mindetail)
-          end
-
-          {ok, s1}
-        end
-
-        Pi.new(core)
+        Pi.new(->(s : S) { pastchrp(s, cls, charset, nest, unnest, min, mindetail, fn) })
       end
+    end
+
+    def pastchr(*args, **kwargs) : Pi
+      pastchr(*args, **kwargs) { false }
+    end
+
+    # :nodoc:
+    def chrseqp(s, seq, detail)
+      unless s.ahead?(seq)
+        return refusal(s, detail)
+      end
+
+      {ok, s.skip(seq.bytesize)}
     end
 
     # Advances through a character sequence *seq*.
     #
     # *detail* specifies the message to use for refusal.
     def chrseq(seq : String, *, detail : String = "unexpected input") : Pi
-      core = ->(s : S) do
-        unless s.ahead?(seq)
-          return refusal(s, detail)
-        end
+      Pi.new(->(s : S) { chrseqp(s, seq, detail) })
+    end
 
-        {ok, s.skip(seq.bytesize)}
+    # :nodoc:
+    def viewp(s0, a)
+      map(a.call(s0)) do |_, s1|
+        {s0.view_upto(s1), s1}
       end
-
-      Pi.new(core)
     end
 
     # A parselet whose parseout is the fragment of the source string matched
@@ -269,39 +305,25 @@ module Ww
     #
     # *successor*'s own parseout is discarded.
     def view(successor a : Pi(_)) : Pi
-      core = ->(s0 : S) do
-        response = a.call(s0)
-        if response.is_a?(Err)
-          return response
-        end
+      Pi.new(->(s : S) { viewp(s, a) })
+    end
 
-        _, s1 = response
-
-        {s0.view_upto(s1), s1}
+    # :nodoc:
+    def selectp(s, a, fn)
+      map(a.call(s)) do |pout0, s|
+        pout1 = fn.call(s, pout0)
+        pout1.is_a?(Err) ? pout1 : {pout1, s}
       end
-
-      Pi.new(core)
     end
 
     # A parselet that converts parseouts of type `T` to parseouts of type `U`.
     # *fn* is also allowed to refuse or fail.
     def select(successor a : Pi(S -> {T, S} | Err), &fn : S, T -> U | Err) : Pi forall T, U
       {% if U <= Err %}
-      {% raise "cannot use Err for U, you should wrap it" %}
-    {% end %}
+        {% raise "cannot use Err for U, you should wrap it" %}
+      {% end %}
 
-      core = ->(s : S) do
-        response = a.call(s)
-        if response.is_a?(Err)
-          return response
-        end
-
-        pout0, s = response
-        pout1 = fn.call(s, pout0)
-        pout1.is_a?(Err) ? pout1 : {pout1, s}
-      end
-
-      Pi.new(core)
+      Pi.new(->(s : S) { selectp(s, a, fn) })
     end
 
     # A parselet that converts parseouts of type `T` to parseouts of another type.
@@ -314,46 +336,33 @@ module Ww
       map(successor) { ok }
     end
 
-    # Lets parselet *a* advance state; then lets parselet *b* advance state.
-    # Reverts to the state before matching on refusal or failure of *a* or *b*,
-    # The parseout is a tuple of *a*'s parseout followed by *b*'s parseout.
-    def seqf(a : Pi(_), b : Pi(_)) : Pi
-      core = ->(s : S) do
-        response0 = a.call(s)
-        if response0.is_a?(Err)
-          return response0
-        end
+    # :nodoc:
+    def seqfp(s, parselets : T) forall T
+      {% begin %}
+        parseouts = {
+          {% for el, index in T %}
+            pass do
+              response = parselets[{{index}}].call(s)
+              if response.is_a?(Err)
+                return response
+              end
 
-        pout0, s = response0
+              pout, s = response
+              pout
+            end,
+          {% end %}
+        }
 
-        response1 = b.call(s)
-        if response1.is_a?(Err)
-          return response1
-        end
-
-        pout1, s = response1
-
-        { {pout0, pout1}, s }
-      end
-
-      Pi.new(core)
+        {parseouts, s}
+      {% end %}
     end
 
-    # A sequence of N parselets. The parseout is a tuple of parseouts of *a*, *b*, *cs*.
-    def seqf(a : Pi(_), b : Pi(_), *cs : Pi(_)) : Pi
-      parselet = seqf(seqf(a, b), *cs)
-
-      core = ->(s : S) do
-        response = parselet.call(s)
-        if response.is_a?(Err)
-          return response
-        end
-
-        results, state = response
-        {results.flatten1, state}
-      end
-
-      Pi.new(core)
+    # Lets the first parselet advance state; then lets the second one advance state;
+    # and so on. Reverts to the state before matching the entire sequence on refusal
+    # or failure of any parselet in the sequence. The parseout is a tuple of parseouts
+    # of each parselet.
+    def seqf(*parselets : Pi(_)) : Pi
+      Pi.new(->(s : S) { seqfp(s, parselets) })
     end
 
     # :nodoc:
@@ -363,12 +372,12 @@ module Ww
 
     # Shorthand macro to wrap `seqf` with *block* `map` if *block* is present.
     macro seq(*parselets, &block)
-    {% if block %}
-      {{@type}}.map({{@type}}.seqf({{parselets.splat}})) {{block}}
-    {% else %}
-      {{@type}}.seqf({{parselets.splat}})
-    {% end %}
-  end
+      {% if block %}
+        {{@type}}.map({{@type}}.seqf({{parselets.splat}})) {{block}}
+      {% else %}
+        {{@type}}.seqf({{parselets.splat}})
+      {% end %}
+    end
 
     # Shorthand for `discard(seq)`.
     def dseq(*args, **kwargs) : Pi
@@ -381,6 +390,56 @@ module Ww
       # Constructs a builder object and yields it to the block. Returns
       # the object that was built.
       abstract def build(& : B ->)
+    end
+
+    # :nodoc:
+    def selcatp(s, builder, a, min, max, mindetail, delimiter, fn)
+      built = builder.build do |memo|
+        (0...max).each do |index|
+          if delimiter
+            response0 = delimiter.call(s)
+
+            if response0.is_a?(Failure)
+              return response0
+            end
+
+            if response0.is_a?({Ok, S})
+              _, s = response0
+              break
+            end
+
+            # response0 : Refusal
+          end
+
+          response1 = a.call(s)
+
+          if response1.is_a?(Failure)
+            return response1
+          end
+
+          if response1.is_a?(Refusal)
+            if delimiter
+              return response1
+            end
+
+            if index < min
+              return refusal(s, mindetail)
+            end
+
+            break
+          end
+
+          pout0, s = response1
+          pout1 = fn.call(s, memo, pout0)
+          if pout1.is_a?(Err)
+            return pout1
+          end
+
+          # pout1 : Ok
+        end
+      end
+
+      {built, s}
     end
 
     # Select-concat: appends *min* to *max* parseouts of *successor* to the given
@@ -398,56 +457,7 @@ module Ww
       delimiter : Pi(S -> {Ok, S} | Err)? = nil,
       &fn : S, B, U -> Ok | Err
     ) : Pi forall B, T, U
-      core = ->(s : S) do
-        built = builder.build do |memo|
-          (0...max).each do |index|
-            if delimiter
-              response0 = delimiter.call(s)
-
-              if response0.is_a?(Failure)
-                return response0
-              end
-
-              if response0.is_a?({Ok, S})
-                _, s = response0
-                break
-              end
-
-              # response0 : Refusal
-            end
-
-            response1 = a.call(s)
-
-            if response1.is_a?(Failure)
-              return response1
-            end
-
-            if response1.is_a?(Refusal)
-              if delimiter
-                return response1
-              end
-
-              if index < min
-                return refusal(s, mindetail)
-              end
-
-              break
-            end
-
-            pout0, s = response1
-            pout1 = fn.call(s, memo, pout0)
-            if pout1.is_a?(Err)
-              return pout1
-            end
-
-            # pout1 : Ok
-          end
-        end
-
-        {built, s}
-      end
-
-      Pi.new(core)
+      Pi.new(->(s : S) { selcatp(s, builder, a, min, max, mindetail, delimiter, fn) })
     end
 
     # Same as `selcat`, but returns `ok` and discards parse state for you.
@@ -519,64 +529,80 @@ module Ww
       response
     end
 
+    # :nodoc:
+    def choicep(s, branches)
+      maxrefusal = nil
+
+      branches.each do |branch|
+        err = attempt(s, branch) { |response| return response }
+
+        case err
+        in Failure
+          return err
+        in Refusal
+          if maxrefusal.nil? || err.loc.follows_or_equal?(maxrefusal.loc)
+            maxrefusal = err
+          end
+        end
+      end
+
+      maxrefusal || raise ArgumentError.new("choice without branches")
+    end
+
     # A parselet whose parseout is that of the first successful branch. The parseout's
     # type is a union of the types of *branches*.
     def choice(*branches : Pi(_)) : Pi
-      core = ->(s : S) do
-        maxrefusal = nil
+      Pi.new(->(s : S) { choicep(s, branches) })
+    end
 
-        branches.each do |branch|
-          err = attempt(s, branch) { |response| return response }
-
-          case err
-          in Failure
-            return err
-          in Refusal
-            if maxrefusal.nil? || err.loc.follows_or_equal?(maxrefusal.loc)
-              maxrefusal = err
-            end
-          end
-        end
-
-        maxrefusal || raise ArgumentError.new("choice without branches")
+    # :nodoc:
+    def notp(s, a, detail)
+      response = a.call(s)
+      if response.is_a?(Refusal)
+        return ok, s
       end
 
-      Pi.new(core)
+      if response.is_a?(Failure)
+        return response
+      end
+
+      refusal(s, detail)
     end
 
     # A parselet that performs what amounts to negative lookahead on *successor*.
     # If *successor* succeeds, the parselet outputs refusal with *detail*.
     # Failures are propagated.
     def not(successor a : Pi(_), *, detail : String = "unexpected input") : Pi
-      core = ->(s : S) do
-        response = a.call(s)
-        if response.is_a?(Refusal)
-          return ok, s
-        end
+      Pi.new(->(s : S) { notp(s, a, detail) })
+    end
 
-        if response.is_a?(Failure)
-          return response
-        end
-
-        refusal(s, detail)
-      end
-
-      Pi.new(core)
+    # :nodoc:
+    def optionalp(s, a, default)
+      response = a.call(s)
+      response.is_a?(Refusal) ? {default, s} : response
     end
 
     # A parselet that tries to match *a*, and maps refusals to *default*.
     # Failures are propagated.
     def optional(a : Pi(S -> {T, S} | Err), *, default = nil) : Pi forall T
       {% if T <= Err %}
-      {% raise "cannot use Err for T, you should wrap it" %}
-    {% end %}
+        {% raise "cannot use Err for T, you should wrap it" %}
+      {% end %}
 
-      core = ->(s : S) do
-        response = a.call(s)
-        response.is_a?(Refusal) ? {default, s} : response
+      Pi.new(->(s : S) { optionalp(s, a, default) })
+    end
+
+    # :nodoc:
+    def dispatcherp(s, detail, dispatch)
+      unless subject = s.current_char?
+        return refusal(s, "unexpected end-of-input")
       end
 
-      Pi.new(core)
+      unless successor = dispatch.call(subject)
+        return refusal(s, detail)
+      end
+
+      successor.call(s)
     end
 
     # A parselet that performs character-based dispatch. Similar to `choice`.
@@ -585,41 +611,22 @@ module Ww
     # *dispatch* can return `nil` to signal refusal. *detail* is used as
     # the message in such case.
     def dispatcher(*, detail : String = "unexpected input", &dispatch : Char -> Pi(_)?) : Pi
-      core = ->(s : S) do
-        unless subject = s.current_char?
-          return refusal(s, "unexpected end-of-input")
-        end
+      Pi.new(->(s : S) { dispatcherp(s, detail, dispatch) })
+    end
 
-        unless successor = dispatch.call(subject)
-          return refusal(s, detail)
-        end
-
-        successor.call(s)
-      end
-
-      Pi.new(core)
+    # :nodoc:
+    def aheadp(s0, a)
+      map(a.call(s0)) { |pout, _| {pout, s0} }
     end
 
     # Same as *successor*, but discards any state advancement.
     def ahead(successor a : Pi(S -> {T, S} | Err)) : Pi forall T
-      core = ->(s0 : S) do
-        response = a.call(s0)
-        if response.is_a?(Err)
-          return response
-        end
-
-        pout, _ = response
-        {pout, s0}
-      end
-
-      Pi.new(core)
+      Pi.new(->(s : S) { aheadp(s, a) })
     end
 
     # A parselet that converts refusals of *successor* into failures.
     def strict(successor a : Pi(_)) : Pi
-      core = ->(s : S) { strict(a.call(s)) }
-
-      Pi.new(core)
+      Pi.new(->(s : S) { strict(a.call(s)) })
     end
 
     # Constructs a parselet that converts refusals of *successor* into
@@ -630,28 +637,25 @@ module Ww
 
     # A parselet that converts failures of *successor* into refusals.
     def relaxed(successor a : Pi(_)) : Pi
-      core = ->(s : S) { relaxed(a.call(s)) }
-
-      Pi.new(core)
+      Pi.new(->(s : S) { relaxed(a.call(s)) })
     end
 
     # A parselet that unconditionally refuses with *detail*. Can be
     # used e.g. in `choice` as the last "alternative".
     def refuse(detail : String) : Pi
-      core = ->(s : S) { refusal(s, detail) }
+      Pi.new(->(s : S) { refusal(s, detail) })
+    end
 
-      Pi.new(core)
+    # :nodoc:
+    def refuse_withp(s, a, detail)
+      response = a.call(s)
+      response.is_a?(Refusal) ? response.copy_with(detail: detail) : response
     end
 
     # A parselet that overwrites details of refusals coming from *successor*
     # with *detail*.
     def refuse_with(detail : String, successor a : Pi(_)) : Pi
-      core = ->(s : S) do
-        response = a.call(s)
-        response.is_a?(Refusal) ? response.copy_with(detail: detail) : response
-      end
-
-      Pi.new(core)
+      Pi.new(->(s : S) { refuse_withp(s, a, detail) })
     end
 
     def elaborate(successor a : Pi(_), cond b : Pi(_), detail : String) : Pi
@@ -681,16 +685,12 @@ module Ww
     # A parselet that unconditionally fails with *detail*. Can be
     # used e.g. in `choice` as the last "alternative".
     def fail(detail : String) : Pi
-      core = ->(s : S) { failure(s, detail) }
-
-      Pi.new(core)
+      Pi.new(->(s : S) { failure(s, detail) })
     end
 
     # A parselet whose parseout is the current byte index.
     def loc : Pi
-      core = ->(s : S) { {s.loc, s} }
-
-      Pi.new(core)
+      Pi.new(->(s : S) { {s.loc, s} })
     end
 
     def locrange(successor a) : Pi

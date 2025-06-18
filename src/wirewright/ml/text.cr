@@ -716,8 +716,14 @@ module Ww::ML::Text
         key, value = ppentry(head)
         Term.of(pentrylist(stopper, initial: Term[].with(key, value)))
       else
-        # Otherwise this is an open itemspart (%layer).
-        Term.of(:"%layer", head, pentrylist(stopper))
+        side = pentrylist(stopper)
+
+        if head == Term[]
+          Term.of(side)
+        else
+          # Otherwise this is an open itemspart (%layer).
+          Term.of(:"%layer", head, side)
+        end
       end
     end
 

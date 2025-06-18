@@ -267,28 +267,41 @@ module Ww
       {@items, @pairs, @sketch, @maxdepth}
     end
 
-    # Yields a `Commit` object so that you can build a dictionary without having
-    # to produce many useless intermediate copies. See also: `#transaction`.
-    def self.build(& : Commit ->)
-      EMPTY.transaction { |commit| yield commit }
+    # Yields one or more `Commit` objects so that you can build one or more
+    # dictionaries without having to produce many useless intermediate copies.
+    #
+    # If *block* has one parameter, returns the resulting dict.
+    # If *block* has more than one parameters, returns a tuple of the resulting dicts.
+    #
+    # See also: `#transaction`.
+    macro build(&block)
+      pass do
+        %result = ::Ww::Term::Dict.give({{block.args.map(&.symbolize).splat}}) {{block}}
+        {% if block.args.size == 1 %}
+          %result[0]
+        {% end %}
+      end
     end
 
-    macro give(&block)
-      ::Ww::Term::Dict.give({{block.args.map(&.symbolize).splat}}) {{ block }}
-    end
-
+    # :nodoc:
     def self.give(arg, &)
-      {build { |commit| yield commit }}
+      {build_impl { |commit| yield commit }}
     end
 
+    # :nodoc:
     def self.give(arg, *args, &)
       dicts = nil
-      dict = build do |commit|
+      dict = build_impl do |commit|
         dicts = give(*args) do |*commits|
           yield commit, *commits
         end
       end
       {dict, *dicts.not_nil!}
+    end
+
+    # :nodoc:
+    def self.build_impl(& : Commit ->)
+      EMPTY.transaction { |commit| yield commit }
     end
 
     # Returns `true` if this dictionary contains items only.

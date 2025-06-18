@@ -1,22 +1,35 @@
 module Ww::ML::Grammar
-  # Boolean literal rules.
+  # Boolean literal rule constructors.
   module Boolean
     extend self
 
-    private alias G = Grammar
-
-    G.rule(boolean, Term::Boolean, comment: "Parses a boolean literal.") do
-      P.choice(self.true, self.false)
+    # Parses a boolean literal.
+    #
+    # *symbolic* is used to test whether the boolean is actually a symbol
+    # prefix or not (as in `⏏true⏏s` or `⏏false⏏s`).
+    def boolean(symbolic : P::Pi(_)) : P::Pi
+      P.choice(
+        self.true(symbolic),
+        self.false(symbolic),
+      )
     end
 
-    G.rule(true, Term::Boolean, comment: "Parses boolean `true`.") do
-      core = P.dseq(P.chrseq("true"), P.ahead(Symbol.nonsymbolic))
+    # Parses boolean `true`.
+    #
+    # *symbolic* is used to test whether the boolean is actually a symbol
+    # prefix or not (as in `⏏true⏏s` or `⏏false⏏s`).
+    def true(symbolic : P::Pi(_)) : P::Pi
+      core = P.dseq(P.chrseq("true"), P.ahead(P.not(symbolic)))
 
       P.map(core) { Term[true] }
     end
 
-    G.rule(false, Term::Boolean, comment: "Parses boolean `false`.") do
-      core = P.dseq(P.chrseq("false"), P.ahead(Symbol.nonsymbolic))
+    # Parses boolean `false`.
+    #
+    # *symbolic* is used to test whether the boolean is actually a symbol
+    # prefix or not (as in `⏏true⏏s` or `⏏false⏏s`).
+    def false(symbolic : P::Pi(_)) : P::Pi
+      core = P.dseq(P.chrseq("false"), P.ahead(P.not(symbolic)))
 
       P.map(core) { Term[false] }
     end

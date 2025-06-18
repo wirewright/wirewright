@@ -2,28 +2,35 @@ module Ww::ML::Grammar
   module Number
     extend self
 
-    private alias G = Grammar
-
-    # Parses a number literal.
+    # Parses a number literal. The parseout type is `Term::Num | Term::Dict`.
+    #
+    # *symbolic* is used to refuse on numbers with trailing symbolic characters
+    # (as in `42⏏qux⏏`).
     #
     # NOTE: there are several kinds of number literals in WwML, and some of
-    # them emit dictionaries rather than numbers to preserve the notation.
-    # Thus the return type is not just a number but also a dict. Make sure to
+    # them emit dictionaries rather than numbers to preserve notation. Thus
+    # the parseout type is not just a number but also a dict. Make sure to
     # filter appropriately.
-    G.rule(number, Term::Num | Term::Dict) do
-      signed(mag) { |n| n.type.number? ? n.unsafe_as_n * Term[-1] : Term[:-, n] }
+    def number(symbolic : P::Pi) : P::Pi
+      signed(magn(symbolic)) do |n|
+        n.type.number? ? n.unsafe_as_n * Term[-1] : Term[:-, n]
+      end
     end
 
     # :nodoc:
-    G.rule(mag, Term::Num | Term::Dict) do
+    def magn(symbolic : P::Pi) : P::Pi
       P.postfixed(
-        P.choice(radixmag, fracmag, decmag),
-        P.strict(P.ahead(Symbol.nonsymbolic), detail: "trailing symbolic characters found after number"),
+        P.choice(radixmagn, fracmagn, decmagn),
+        P.strict(
+          P.ahead(P.not(symbolic)),
+          detail: "trailing symbolic characters found after number"
+        ),
       )
     end
 
-    # Parses *radix magnitude*, as in `⏏1001₂` or `⏏deadbeef₁₆`.
-    G.rule(radixmag, Term::Dict) do
+    # Parses *radix magnitude*, as in `⏏1001₂` or `⏏deadbeef₁₆`. Parseout
+    # type is `Term::Dict`.
+    def radixmagn : P::Pi
       letters = P.pastchr("a-zA-Z0-9_", min: 1, mindetail: "expected at least one digit before radix subscript")
       core = P.seq(P.locrange(P.view(letters)), P.locrange(subnat))
 
@@ -97,8 +104,8 @@ module Ww::ML::Grammar
       digit < base ? digit : nil
     end
 
-    # Parses a subscript natural number, e.g. `₁₀`, represented as an Int32.
-    G.rule(subnat, Int32) do
+    # Parses a subscript natural number, e.g. `₁₀`. Parseout type is `Int32`.
+    def subnat : P::Pi
       digits = P.pastchr("₀-₉", min: 1, mindetail: "expected at least one subscript digit")
       core = P.locrange(P.view(digits))
 
@@ -115,8 +122,9 @@ module Ww::ML::Grammar
       value
     end
 
-    # Parses *fractional magnitude*, as in `⏏1/3` or `-⏏1/24`.
-    G.rule(fracmag, Term::Num) do
+    # Parses *fractional magnitude*, as in `⏏1/3` or `-⏏1/24`. Parseout type
+    # is `Term::Num`.
+    def fracmagn : P::Pi
       core = P.locrange(
         P.infixed(
           nat,
@@ -130,8 +138,9 @@ module Ww::ML::Grammar
       end
     end
 
-    # Parses *decimal magnitude*, as in `⏏100` or `⏏1.23` or `⏏1.23e-45`.
-    G.rule(decmag, Term::Num | Term::Dict) do
+    # Parses *decimal magnitude*, as in `⏏100` or `⏏1.23` or `⏏1.23e-45`. Parseout
+    # type is `Term::Num | Term::Dict`.
+    def decmagn : P::Pi
       core = P.seq(decfrac, P.optional(expn))
 
       P.map(core) do |mantissa, exponent|
@@ -140,14 +149,14 @@ module Ww::ML::Grammar
     end
 
     # :nodoc:
-    G.rule(decfrac, Term::Num) do
+    def decfrac : P::Pi # Term::Num
       core = P.seq(nat, P.optional(decfracpart, default: Term[0]))
 
       P.map(core) { |int, fracpart| int + fracpart }
     end
 
     # :nodoc:
-    G.rule(decfracpart, Term::Num) do
+    def decfracpart : P::Pi # Term::Num
       core = P.prefixed(
         P.chrseq("."),
         P.strict(natdigits, detail: "expected at least one fractional part digit after `.`"),
@@ -157,20 +166,20 @@ module Ww::ML::Grammar
     end
 
     # :nodoc:
-    G.rule(expn, Term::Num) do
+    def expn : P::Pi # Term::Dict
       P.prefixed(
         P.chr("eE"),
         P.strict(int, detail: "expected at least one digit for the exponent"),
       )
     end
 
-    # Parses a natural number with a sign.
-    G.rule(int, Term::Num) do
+    # Parses a natural number with a sign. Parseout type is `Term::Num`.
+    def int : P::Pi
       signed(nat) { |n| Term[-1] * n }
     end
 
-    # Parses a natural number (zero or positive).
-    G.rule(nat, Term::Num) do
+    # Parses a natural number (zero or positive). Parseout type is `Term::Num`.
+    def nat
       P.map(natdigits) { |value, _| value }
     end
 

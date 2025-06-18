@@ -53,7 +53,8 @@
   (+ ⎡<=⎤ _symbol)
   (+ ⎡⊆⎤ _symbol)
   (+ ⎡λx⎤ _symbol)
-  (+ ⎡∞/2⎤ _symbol))
+  (+ ⎡∞/2⎤ _symbol)
+  (+ ⎡Δx⎤ _symbol))
 
 ;; Booleans
 (ml
@@ -187,8 +188,7 @@
         minim sint cillum ⸢bar⸣ consectetur cupidatat."⎤
      ⎡(~ "Lorem ipsum dolor sit amet, qui minim "
           foo
-          " adipisicing "
-          "minim sint cillum "
+          " adipisicing minim sint cillum "
           bar
           " consectetur cupidatat.")⎤)
   (- ⎡"Lorem ipsum dolor sit amet, qui minim ⸢(+ 1 2⏏⸣ adipisicing \
@@ -335,7 +335,7 @@
   (= ⎡{% a b c}⎤ ⎡(%keypool a b c)⎤)
   (= ⎡{% "Hello World" (+ 1 2) 3 4.567 true}⎤ ⎡(%keypool "Hello World" (+ 1 2) 3 4.567 true)⎤)
   (= ⎡{% (+ 1 2 x: 100) 34}⎤ ⎡(%keypool (+ 1 2 x: 100) 34)⎤)
-  (- ⎡{% ⏏10⏏×(+ 1 2 x: 100) 34}⎤ ⎡count `10` on `(+ 1 2 x: 100)` makes no sense for %keypool⎤))
+  (- ⎡{% ⏏10⏏×(+ 1 2 x: 100) 34}⎤ ⎡count `10` on `(+ 1 2 x: 100)` has no meaning for %keypool⎤))
 
 ;; %item and %item°
 (ml

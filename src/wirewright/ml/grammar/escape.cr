@@ -3,8 +3,6 @@ module Ww::ML::Grammar
   module Escape
     extend self
 
-    private alias G = Grammar
-
     # Appends an escaped representation of *chr* to *io*.
     #
     # NOTE: This method is located here because escape sequences are obviously
@@ -39,13 +37,13 @@ module Ww::ML::Grammar
       end
     end
 
-    # Parses a string escape sequence such as `⏏\n`.
-    G.rule(escape, String | Char) do
+    # Parses a string escape sequence such as `⏏\n`. Parseout type is `String | Char`.
+    def escape : P::Pi
       P.prefixed(P.chr("\\\\"), P.strict(escaped))
     end
 
     # :nodoc:
-    G.rule(escaped, String | Char) do
+    def escaped : P::Pi # String | Char
       P.choice(
         control,
         P.prefixed(P.chrseq("x"), P.strict(byte)),
@@ -55,7 +53,7 @@ module Ww::ML::Grammar
     end
 
     # :nodoc:
-    G.rule(control, String | Char) do
+    def control : P::Pi # String | Char
       P.choice(
         P.map(P.chr("\"")) { '"' },
         P.map(P.chr("\\\\")) { '\\' },
@@ -68,14 +66,14 @@ module Ww::ML::Grammar
     end
 
     # :nodoc:
-    G.rule(byte, Char) do
+    def byte : P::Pi # Char
       P.refuse_with("expected exactly two hex digits after `\\x`",
         P.seq(hexdigit, hexdigit) { |d0, d1| ((d0 << 4) | d1).chr }
       )
     end
 
     # :nodoc:
-    G.rule(codepoint, String | Char) do
+    def codepoint : P::Pi #  String | Char
       P.choice(
         ucurly,
         ubracket,
@@ -85,7 +83,7 @@ module Ww::ML::Grammar
     end
 
     # :nodoc:
-    G.rule(ucurly, Char) do
+    def ucurly : P::Pi # Char
       P.surrounded(
         P.chrseq("{", detail: "expected `{` to begin `\\u{`"),
         uni6,
@@ -109,7 +107,7 @@ module Ww::ML::Grammar
     alias BracketedEntity = {Bracketed, P::LocationRange, StringView}
 
     # :nodoc:
-    G.rule(ubracket, String | Char) do
+    def ubracket : P::Pi # String | Char
       core = P.surrounded(
         P.chrseq("[", detail: "expected `[` to begin `\\u[`"),
         byname,
@@ -158,7 +156,7 @@ module Ww::ML::Grammar
     end
 
     # :nodoc:
-    G.rule(uni4, Char) do
+    def uni4 : P::Pi # Char
       core = P.refuse_with("expected exactly four hex digits after `\\u`",
         P.reduce(
           initial: 0,
@@ -172,7 +170,7 @@ module Ww::ML::Grammar
     end
 
     # :nodoc:
-    G.rule(uni6, Char) do
+    def uni6 : P::Pi # Char
       core = P.refuse_with("expected 1-6 hex digits in `\\u{}`",
         P.locrange(
           P.reduce(
@@ -192,7 +190,7 @@ module Ww::ML::Grammar
     end
 
     # :nodoc:
-    G.rule(byname, {Bracketed, P::LocationRange, StringView}) do
+    def byname : P::Pi # {Bracketed, P::LocationRange, StringView}
       P.choice(
         emoji,
         chrname,
@@ -204,7 +202,7 @@ module Ww::ML::Grammar
     EMOJI_NAME_CHARSET = "a-zA-Z0-9_"
 
     # :nodoc:
-    G.rule(emoji, BracketedEntity) do
+    def emoji : P::Pi # BracketedEntity
       chars = P.pastchr(EMOJI_NAME_CHARSET, min: 1, mindetail: "expected emoji name")
 
       P.surrounded(
@@ -218,7 +216,7 @@ module Ww::ML::Grammar
     CODEPOINT_NAME_CHARSET = "a-zA-Z0-9() \\-"
 
     # :nodoc:
-    G.rule(chrname, BracketedEntity) do
+    def chrname : P::Pi # BracketedEntity
       chars = P.pastchr(CODEPOINT_NAME_CHARSET, cls: Charset16, min: 1, mindetail: "expected codepoint name")
       core = P.locrange(P.view(chars))
 
@@ -226,7 +224,7 @@ module Ww::ML::Grammar
     end
 
     # :nodoc:
-    G.rule(hexdigit, Int32) do
+    def hexdigit : P::Pi # Int32
       core = P.chr("a-fA-F0-9")
 
       P.capture(core, &.first_char.to_i(base: 16))

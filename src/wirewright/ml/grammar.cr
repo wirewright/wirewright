@@ -1,20 +1,6 @@
 module Ww::ML::Grammar
   extend self
 
-  macro rule(name, result, *, comment = "", &)
-    # {{comment.id}}
-    class_getter({{name.id}} : P::Pi(State -> { {{result}}, State } | P::Err)) do
-      {{yield}}
-    end
-  end
-
-  macro rule(name, *, comment = "", &)
-    # {{comment.id}}
-    class_getter({{name.id}} : P::Pi(State -> { P::Ok, State } | P::Err)) do
-      {{yield}}
-    end
-  end
-
   struct State
     def initialize(@feed : StringView)
     end
@@ -57,3 +43,5 @@ require "./grammar/symbol"
 require "./grammar/boolean"
 require "./grammar/number"
 require "./grammar/escape"
+require "./grammar/string"
+require "./grammar/pairspattern"

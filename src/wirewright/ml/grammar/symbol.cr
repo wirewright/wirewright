@@ -1,36 +1,37 @@
 module ::Ww::ML::Grammar
-  # Symbol literal rules.
+  # Symbol literal rule constructors.
   module Symbol
     extend self
 
-    private alias G = Grammar
+    # Symbolic nonletter character set. These characters, along with Unicode letter
+    # characters (category L), are considered *symbolic characters*.
+    SYMBOLIC_NONLETTER = %{0-9_!$%&*+\\-\\^./#<=>?@~λ|∞°∈⊆⊂\\\\}
 
-    # The set of characters allowed in symbols.
-    SYMBOLIC = %{a-zA-Z0-9_!$%&*+\\-\\^./#<=>?@~λ|∞°∈⊆⊂\\\\}
+    # A subset of symbolic characters that can be treated as symbol unambiguously
+    # (if also followed by `SYMBOLIC_QUICK_DELIM`).
+    SYMBOLIC_QUICK = %{a-zA-Z_\\-}
 
-    # A subset of characters from `SYMBOLIC` that can be treated as symbol
-    # unambiguously (if also followed by `SYMBOLIC_FAST_DELIM`).
-    SYMBOLIC_FAST = %{a-zA-Z_\\-}
-
-    # After we see `SYMBOLIC_FAST` followed by this we are **certain**
+    # After we see `SYMBOLIC_QUICK` followed by this we are **certain**
     # it's a symbol, no going back.
-    SYMBOLIC_FAST_DELIM = %| \n)}]⟩|
+    SYMBOLIC_QUICK_DELIM = %| \n)}]⟩|
 
-    # Parses one `SYMBOLIC` character.
-    G.rule(symbolic) { P.chr(SYMBOLIC, cls: Charset32) }
+    # Parses one symbolic character.
+    def symbolic : P::Pi
+      P.choice(
+        P.chr(&.letter?),
+        P.chr(SYMBOLIC_NONLETTER, cls: Charset32),
+      )
+    end
 
-    # Parses one non-`SYMBOLIC` character.
-    G.rule(nonsymbolic) { P.not(symbolic) }
-
-    # Fast path for symbol literals.
+    # Fast path for symbol literals. The parseout type is `Term::Sym`.
     #
     # Symbols are by far the most frequent character-consumer in WwML. The vast
     # majority of symbols are purely alphabetic sequences followed by whitespace
     # or one of the closing brackets. This is the path we're optimizing for here,
     # at the cost of a backtrack.
-    G.rule(fast, Term::Sym) do
-      chars = P.pastchr(SYMBOLIC_FAST, min: 1)
-      delim = P.ahead(P.chr(SYMBOLIC_FAST_DELIM))
+    def quick : P::Pi
+      chars = P.pastchr(SYMBOLIC_QUICK, min: 1)
+      delim = P.ahead(P.chr(SYMBOLIC_QUICK_DELIM))
       core = P.postfixed(P.view(chars), delim)
 
       P.select(core) do |s, caption|
@@ -43,14 +44,14 @@ module ::Ww::ML::Grammar
       end
     end
 
-    # Parses a symbol literal.
+    # Parses a symbol literal. The parseout type is `Term::Sym`.
     #
     # Slow (and thorough) path for symbol literals.
     #
     # This rule is usually "activated" as a last resort, after everything
     # else has been tried; and nothing would "fit".
-    G.rule(symbol, Term::Sym) do
-      chars = P.pastchr(SYMBOLIC, cls: Charset32, min: 1)
+    def symbol : P::Pi
+      chars = P.pastchr(SYMBOLIC_NONLETTER, cls: Charset32, min: 1, &.letter?)
 
       # HACK: ^ is a valid symbol character whereas `…` is not; we have to manually
       # hit the brake pedal here, or else `^` will be consumed & become a symbol and `…`
