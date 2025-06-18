@@ -6,8 +6,8 @@ module Ww::ML::Grammar
 
     # Parses a number literal.
     #
-    # NOTE: there are several different kinds of number literals in WwML, and
-    # some of them emit dictionaries rather than numbers to preserve the notation.
+    # NOTE: there are several kinds of number literals in WwML, and some of
+    # them emit dictionaries rather than numbers to preserve the notation.
     # Thus the return type is not just a number but also a dict. Make sure to
     # filter appropriately.
     G.rule(number, Term::Num | Term::Dict) do
@@ -22,7 +22,100 @@ module Ww::ML::Grammar
       )
     end
 
+    # Parses *radix magnitude*, as in `⏏1001₂` or `⏏deadbeef₁₆`.
+    G.rule(radixmag, Term::Dict) do
+      letters = P.pastchr("a-zA-Z0-9_", min: 1, mindetail: "expected at least one digit before radix subscript")
+      core = P.seq(P.locrange(P.view(letters)), P.locrange(subnat))
+
+      P.select(core) do |_, ((startrng, digits), (baseloc, base))|
+        radixf(startrng, digits, baseloc, base)
+      end
+    end
+
     # :nodoc:
+    def radixf(startloc, digits : StringView, baseloc, base : Int32)
+      unless 1 <= base <= 62
+        return P.failure(baseloc, "expected radix 1-62, not `#{base}`")
+      end
+
+      if digits.starts_with?('_')
+        # We fail here as opposed to e.g. natf, because we *already* found a valid
+        # looking subscript. Thus the client probably meant to have a radix number
+        # here and we're responsible for that.
+        return P.failure(startloc.first(1), "leading underscores forbidden in numbers")
+      end
+
+      if digits.ends_with?('_')
+        return P.failure(startloc.last(1), "trailing underscores forbidden in numbers")
+      end
+
+      Term::Dict.build do |commit|
+        commit << :digits
+        commit.with(:radix, base)
+
+        state = :digit
+
+        digits.each_char_with_rel_byte_index do |digit, offset|
+          case {state, digit}
+          when {:digit, '_'}
+            state = :underscore
+            next
+          when {:digit, _}
+          when {:underscore, '_'}
+            return P.failure(startloc.at(offset).halo(1), "multiple consecutive underscores forbidden in numbers")
+          when {:underscore, _}
+            state = :digit
+          else
+            unreachable("unknown state in radixf: #{state}")
+          end
+
+          # Radices less than or equal to 36 are case-insensitive.
+          normdigit = 11 <= base <= 36 ? digit.upcase : digit
+
+          unless value = digit?(normdigit, base)
+            return P.failure(startloc.at(offset).first(1), "invalid digit `#{digit}` for base `#{base}`")
+          end
+
+          commit << Term[value]
+        end
+      end
+    end
+
+    private def digit?(ch : Char, base : Int32) : Int32?
+      return unless 1 <= base <= 62
+
+      if ch.in?('0'..'9')
+        digit = ch - '0'
+      elsif ch.in?('A'..'Z')
+        digit = 10 + (ch - 'A')
+      elsif ch.in?('a'..'z')
+        digit = 36 + (ch - 'a')
+      else
+        return
+      end
+
+      digit < base ? digit : nil
+    end
+
+    # Parses a subscript natural number, e.g. `₁₀`, represented as an Int32.
+    G.rule(subnat, Int32) do
+      digits = P.pastchr("₀-₉", min: 1, mindetail: "expected at least one subscript digit")
+      core = P.locrange(P.view(digits))
+
+      P.select(core) { |_, args| subnatf(*args) }
+    end
+
+    # :nodoc:
+    def subnatf(startloc, digits : StringView)
+      value = 0
+      digits.each_char do |digit|
+        value = value * 10 + (digit - '₀')
+      end
+
+      value
+    end
+
+    # Parses *fractional magnitude*, as in `⏏1/3` or `-⏏1/24`.
     G.rule(fracmag, Term::Num) do
       core = P.locrange(
         P.infixed(
@@ -37,7 +130,7 @@ module Ww::ML::Grammar
       end
     end
 
-    # :nodoc:
+    # Parses *decimal magnitude*, as in `⏏100` or `⏏1.23` or `⏏1.23e-45`.
     G.rule(decmag, Term::Num | Term::Dict) do
       core = P.seq(decfrac, P.optional(expn))
 
@@ -134,99 +227,6 @@ module Ww::ML::Grammar
       end
 
       {value, size}
-    end
-
-    # :nodoc:
-    G.rule(radixmag, Term::Dict) do
-      letters = P.pastchr("a-zA-Z0-9_", min: 1, mindetail: "expected at least one digit before radix subscript")
-      core = P.seq(P.locrange(P.view(letters)), P.locrange(subnat))
-
-      P.select(core) do |_, ((startrng, digits), (baseloc, base))|
-        radixf(startrng, digits, baseloc, base)
-      end
-    end
-
-    # :nodoc:
-    def radixf(startloc, digits : StringView, baseloc, base : Int32)
-      unless 1 <= base <= 62
-        return P.failure(baseloc, "expected radix 1-62, not `#{base}`")
-      end
-
-      if digits.starts_with?('_')
-        # We fail here as opposed to e.g. natf, because we *already* found a valid
-        # looking subscript. Thus the client probably meant to have a radix number
-        # here and we're responsible for that.
-        return P.failure(startloc.first(1), "leading underscores forbidden in numbers")
-      end
-
-      if digits.ends_with?('_')
-        return P.failure(startloc.last(1), "trailing underscores forbidden in numbers")
-      end
-
-      Term::Dict.build do |commit|
-        commit << :digits
-        commit.with(:radix, base)
-
-        state = :digit
-
-        digits.each_char_with_rel_byte_index do |digit, offset|
-          case {state, digit}
-          when {:digit, '_'}
-            state = :underscore
-            next
-          when {:digit, _}
-          when {:underscore, '_'}
-            return P.failure(startloc.at(offset).halo(1), "multiple consecutive underscores forbidden in numbers")
-          when {:underscore, _}
-            state = :digit
-          else
-            unreachable("unknown state in radixf: #{state}")
-          end
-
-          # Radices less than or equal to 36 are case-insensitive.
-          normdigit = 11 <= base <= 36 ? digit.upcase : digit
-
-          unless value = digit?(normdigit, base)
-            return P.failure(startloc.at(offset).first(1), "invalid digit `#{digit}` for base `#{base}`")
-          end
-
-          commit << Term[value]
-        end
-      end
-    end
-
-    private def digit?(ch : Char, base : Int32) : Int32?
-      return unless 1 <= base <= 62
-
-      if ch.in?('0'..'9')
-        digit = ch - '0'
-      elsif ch.in?('A'..'Z')
-        digit = 10 + (ch - 'A')
-      elsif ch.in?('a'..'z')
-        digit = 36 + (ch - 'a')
-      else
-        return
-      end
-
-      digit < base ? digit : nil
-    end
-
-    # Parses a subscript natural number, e.g. `₁₀`, represented as an Int32.
-    G.rule(subnat, Int32) do
-      digits = P.pastchr("₀-₉", min: 1, mindetail: "expected at least one subscript digit")
-      core = P.locrange(P.view(digits))
-
-      P.select(core) { |_, args| subnatf(*args) }
-    end
-
-    # :nodoc:
-    def subnatf(startloc, digits : StringView)
-      value = 0
-      digits.each_char do |digit|
-        value = value * 10 + (digit - '₀')
-      end
-
-      value
     end
   end
 end

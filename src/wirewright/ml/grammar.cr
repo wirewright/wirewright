@@ -1,15 +1,15 @@
 module Ww::ML::Grammar
   extend self
 
-  # :nodoc:
-  macro rule(name, result, &)
+  macro rule(name, result, *, comment = "", &)
+    # {{comment.id}}
     class_getter({{name.id}} : P::Pi(State -> { {{result}}, State } | P::Err)) do
       {{yield}}
     end
   end
 
-  # :nodoc:
-  macro rule(name, &)
+  macro rule(name, *, comment = "", &)
+    # {{comment.id}}
     class_getter({{name.id}} : P::Pi(State -> { P::Ok, State } | P::Err)) do
       {{yield}}
     end
