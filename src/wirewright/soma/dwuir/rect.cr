@@ -53,6 +53,11 @@ module Ww::Soma::DwUIR
       tl + size*0.5
     end
 
+    # Returns this rectangle as a quad.
+    def quad : Quad
+      Quad.new(tl, tr, br, bl)
+    end
+
     # Returns `true` if this rectangle has infinite size.
     def inf? : Bool
       br.inf?
