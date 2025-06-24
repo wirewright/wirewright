@@ -359,6 +359,23 @@ module Alloy
     end
   end
 
+  # Attempts to parse *term* as `^verbatim` expression.
+  private def verbatim(ctx : Context, term : Term) : Rewrite::Any
+    variants = [] of String
+
+    Term.case(term, patterns: variants) do
+      matchpi %{(^verbatim children_*)} do
+        Rewrite.many(children.unsafe_as_d)
+      end
+
+      otherwise do
+        ctx.error { "invalid ^verbatim expression, expected one of:\n#{variants.join('\n', &.li(bullet: "-", indent: 2))}" }
+
+        Rewrite.none
+      end
+    end
+  end
+
   def render0(vars : Term::Dict, template : Term, errors : Stack(String)) : Rewrite::Any
     set_template, rec_template = recR
     set_expr, rec_expr = recR
@@ -383,6 +400,7 @@ module Alloy
       { %{rewritee←[^ _*]}, chainR(callR(->expr(Context, Term).partial(ctx)), rec_template) },
       { %{rewritee←[^extend _*]}, chainR(callR(->mextend(Context, Term).partial(ctx)), rec_template) },
       { %{rewritee←[^fallback _*]}, callR(->fallback(Context, Term).partial(ctx)) },
+      { %{rewritee←[^verbatim _*]}, callR(->verbatim(Context, Term).partial(ctx)) },
       { %{rewritee_dict}, entriesR(rec_template) },
     )
 
