@@ -3,6 +3,10 @@ module Ww::M1::Operator
     Ahead.tr(behind0, ahead0)
   end
 
+  def match(behind0, op : Never, matchee : Term, ahead0)
+    Fb::Mismatch.new(behind0.env)
+  end
+
   private def compare?(a, op, b)
     case op
     when :lt  then a < b

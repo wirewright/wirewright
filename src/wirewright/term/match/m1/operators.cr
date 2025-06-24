@@ -3,6 +3,10 @@ module Ww::M1::Operator
 
   defcase Pass
 
+  INSTANCE_NEVER = Never.new
+
+  defcase Never
+
   INSTANCE_NUM       = Num.new(min: nil, max: nil, options: :none)
   INSTANCE_NUM_WHOLE = Num.new(min: nil, max: nil, options: :whole)
 

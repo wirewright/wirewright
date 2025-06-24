@@ -388,7 +388,7 @@ end
 #   are not, fix that. In fact, Operator should probably be renamed to Subject or something
 #   like that. Not sure how large of a refactor that is, and how much point is there in it.
 module ::Ww::M1::Operator
-  alias Any = Pass | Num | Sym | SymBlank | SymNonblank | Boolean | Dict | Itemsonly | Pairsonly | SketchSubset | Bounds | BoundsGuard | MaxDepth | DictGuard | Literal | Capture | CaptureItemsonly | ItemSeq | ItemFirst | ItemLast | SingularSeq | Partition | Edge | LiteralChoices | SourceChoice | ValueLiteral | Keypool | Span | Tally | Type | ParseML | Bin | Both | Not | Layer | ScanFirst | ScanSource | ScanAll | ScanAllIsolated | DfsFirst | DfsSource | DfsAllIsolated | DfsAll | BfsFirst | BfsAllIsolated | BfsAll | Value | NegativeValue | NegativeValueKeypath | EntriesFirst | EntriesSource | EntriesAllIsolated | EntriesAll | Str | New | KeypathCapture
+  alias Any = Pass | Never | Num | Sym | SymBlank | SymNonblank | Boolean | Dict | Itemsonly | Pairsonly | SketchSubset | Bounds | BoundsGuard | MaxDepth | DictGuard | Literal | Capture | CaptureItemsonly | ItemSeq | ItemFirst | ItemLast | SingularSeq | Partition | Edge | LiteralChoices | SourceChoice | ValueLiteral | Keypool | Span | Tally | Type | ParseML | Bin | Both | Not | Layer | ScanFirst | ScanSource | ScanAll | ScanAllIsolated | DfsFirst | DfsSource | DfsAllIsolated | DfsAll | BfsFirst | BfsAllIsolated | BfsAll | Value | NegativeValue | NegativeValueKeypath | EntriesFirst | EntriesSource | EntriesAllIsolated | EntriesAll | Str | New | KeypathCapture
 
   alias Bin = Add | Sub | Mul | Div | Idiv | Mod | Pow | Map
 
@@ -2448,6 +2448,22 @@ module ::Ww::M1
           pattern(ctx, arg)
         end
 
+        # |@ patterns.operator.%never
+        #
+        # |@block
+        # `%never` is a dedicated nevermatch operator.
+        #
+        # Its most frequent use-case is in combination with `patterns.operator.pair.%-.keypath`.
+        # By writing `x: (%- (%never) x)`, what you mean is, "the positive example" --
+        # which for `%-` signals "do not match" -- is a nevermatch. In other words,
+        # *nothing* will be considered a positive example for `%-`; everything will be
+        # considered a negative example. Thus you will be able to set `x` in both
+        # possible cases: one where it exists, and one where it doesn't.
+        # |@endblock
+        matchpi %[(%never)], cue: :"%never" do
+          pattern
+        end
+
         matchpi %[(%value capture_ body_)], cue: :"%value" do
           {:"%value", {:"%capture", capture}, pattern(ctx, body)}
         end
@@ -3992,6 +4008,10 @@ module ::Ww::M1
         Operator::Not.new(blacklist.set)
       end
 
+      matchpi %{(%never)}, cue: :"%never" do
+        Operator::INSTANCE_NEVER
+      end
+
       match({:"%number", {:"%literal", :_}}, cue: :"%number") do
         Operator::INSTANCE_NUM
       end
@@ -5497,6 +5517,7 @@ module ::Ww::M1
         # *do not*. This is because most operators make restrictions.
         matchpi(
           %[(%'%pass)],
+          %[(%'%never)],
           %[(%'%let _ _)],
           %[(%'%not _+)],
           %[(%'%new _)],
