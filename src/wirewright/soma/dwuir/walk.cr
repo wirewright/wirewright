@@ -25,9 +25,9 @@ module Ww::Soma::DwUIR
   # Calls *fn* with each node of *dwuir* and its corresponding `Context`.
   #
   # *fn* must in turn respond whether to recurse into the node or not.
-  def walk(dwuir : Term, &fn : Context, Term -> WalkFlow) : Nil
+  def walk(dwuir : Term, *, viewport : Rect, &fn : Context, Term -> WalkFlow) : Nil
     context = Context.new(
-      view: Slice(Quad).empty,
+      view: viewport.inf? ? Slice(Quad).empty : Slice[viewport.quad],
       view_tf: Tf.new,
       layer: 0,
       tf: Tf.new,

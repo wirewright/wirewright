@@ -587,10 +587,15 @@ module Ww::Soma::DwUIR
   # *everything* that it needs to be drawn correctly in isolation.
   #
   # *pencils* is a callback that should serve pencil requests for this function.
-  def picture(dwuir : Term, pencils : PencilServer) : Picture
+  #
+  # *viewport* may specify the visible area of the screen; it acts as a toplevel
+  # `viewport` (as in DwUIR viewport node). You are recommended to specify this
+  # parameter since it will cause out-of-view top-level draw commands to be skipped --
+  # which is an important optimization.
+  def picture(dwuir : Term, pencils : PencilServer, viewport : Rect = Rect.inf) : Picture
     picture = Picture.new
 
-    walk(dwuir) do |context, node|
+    walk(dwuir, viewport: viewport) do |context, node|
       render(picture, pencils, context, node)
     end
 

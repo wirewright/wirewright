@@ -36,7 +36,7 @@ module Ww::Soma::DwUIR
     #
     # Returns the array of damage rects.
     def show(dwuir : Term, bg : Color, *, dmgdbg = false) : Array(Rect)
-      picture1 = DwUIR.picture(dwuir, @platform.pencils)
+      picture1 = DwUIR.picture(dwuir, @platform.pencils, viewport: @screen.bounds)
 
       dmgbounds_and_dmgrects(picture1) do |dmgbounds, dmgrects|
         dmgcov = dmgbounds.size.compare(@screen.bounds.size)
