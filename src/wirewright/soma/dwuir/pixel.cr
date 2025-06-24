@@ -72,6 +72,13 @@ module Ww::Soma::DwUIR
       (a << 24) | (b << 16) | (g << 8) | r
     end
 
+    # Formats the output of `rgba` as 32-bit integer in little endian order.
+    def argb_be : UInt32
+      r, g, b, a = rgba
+
+      (a << 24) | (r << 16) | (g << 8) | b
+    end
+
     # Blends *src* pixel over *dst* pixel.
     def blend(over other : Pixel)
       Pixel[Pixel.pargb32_blend(argb, over: other.argb)]
