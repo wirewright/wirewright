@@ -44,11 +44,22 @@ module Ww::Soma::DwUIR
       composite(dst, clip, picture, Rect[0, 0, *clip])
     end
 
+    # TODO: concentrate all blending function in the Compositor. Currently we have
+    # Pixel, composite(), and PixelRect all doing blending in one way or another.
+    # This f**ks up any optimization efforts due to spread.
+
     private def composite(dst, clip, command : DrawShape, dmg : Rect)
       return if (command.dmgbounds & dmg).empty? # not damaged
 
       x, y, _, _ = command.tfbounds.round.ixywh
 
+      # TODO: this is extremely slow & barely useful beyond a certain point.
+      #
+      # We need Layer to give us PixelGroup-s for parallelism (beyond
+      # a certain layer size threshold). We need PixelGroup-s to consist
+      # of PixelRow's for SIMD (e.g. as in https://github.com/WojciechMula/toys/blob/1863bfd2b139ecbf4f1c9ae3fc018767c143ed8a/blend_32bpp/blend_32bpp.c#L184)
+      # Each core should receive a pixel group; and blend the pixel rows it consists
+      # of with SIMD.
       layer = @curr[command.key]
       layer.each_pixel_with_coords do |pixel, i, j|
         next unless 0 <= x + i < clip.x

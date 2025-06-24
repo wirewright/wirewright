@@ -1,6 +1,9 @@
 module Ww::Soma::DwUIR
+  # A pixel buffer of the given *width* and *height*.
+  #
   # `PixelRect` translates global coordinates (called *absolute coordinates*)
-  # into local (*relative*) buffer indices when accessing or modifying pixels.
+  # into local (*relative*) indices into a buffer it owns when accessing
+  # or modifying pixels.
   class PixelRect
     # Returns the width of this pixel rect.
     getter width : Int32
@@ -8,7 +11,7 @@ module Ww::Soma::DwUIR
     # Returns the height of this pixel rect.
     getter height : Int32
 
-    # A pixel buffer of the given *width* and *height*.
+    # Constructs a pixel rect of the given *width* and *height*.
     #
     # *x* and *y* define the absolute coordinates for this pixel rect's "virtual"
     # top-left corner. They will be used to translate absolute coordinates
@@ -53,7 +56,7 @@ module Ww::Soma::DwUIR
       pixel
     end
 
-    # Blends *pixel* over the existing pixel at the given *absolute* coordinates.
+    # Blends *pixel* over an existing pixel at the given *absolute* coordinates.
     #
     # Raises `IndexError` if coordinates are out of bounds.
     def blend(x : Int32, y : Int32, pixel src : Pixel)
