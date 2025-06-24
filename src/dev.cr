@@ -84,7 +84,7 @@ module DevTool
       Builds and runs the source file in debug mode. The `--release` switch can
       be used to build in release mode instead.
 
-    dev b|build [--debug] [executable-name]
+    dev b|build [--debug] [--native] [executable-name]
       Builds the source file in release mode. The `--debug` switch can be used
       to build in debug mode instead.
 
@@ -409,7 +409,7 @@ module DevTool
 
       matchpi(<<-WWML
       ((%any "r" "run")
-       (%optional debug mode←(%any debug "--release"))
+       (%optional unset mode←(%any unset "--release"))
        rest_string*)
       WWML
       ) do
@@ -421,21 +421,18 @@ module DevTool
           crystal_from_conf(conf, rest.as_d, envvars: (conf[:runvars]? || Term[]).as_d) do |args|
             args << "run" << source.to(String) << "--progress" << "--error-trace"
 
-            unless mode == Term[:debug]
+            unless mode == Term[:unset]
               args << mode.to(String)
             end
           end
         end
       end
 
-      # NOTE: for some reason building e.g. soma with `--debug` causes a Crystal codegen bug.
-      # I suppose building without `--release` is not the same as building with `--debug`...
-      matchpi(<<-WWML
+      matchp(<<-WWML
       ((%any "b" "build")
-       (%optional release mode←(%any release "--debug"))
-       (%optional auto target←(%any° auto _string)))
+       (%many options (%any° flag←(%any "--debug" "--native") target_string) min: 0))
       WWML
-      ) do
+      ) do |options|
         with_active_preset_and_conf(state) do |preset, conf|
           unless source = conf[:source]?
             fatal "preset is missing a source file, use `dev src` to add a source file"
@@ -444,13 +441,25 @@ module DevTool
           crystal_from_conf(conf, rest: Term[], envvars: Term[]) do |args|
             args << "build" << source.to(String) << "--progress" << "--error-trace"
 
-            unless target == Term[:auto]
-              args << "-o" << target.to(String)
+            release = true
+
+            options.items.each do |option|
+              if target = option[:target]?
+                args << "-o" << target.to(String)
+              end
+
+              # NOTE: for some reason building e.g. soma with `--debug` causes a Crystal codegen bug.
+              # I suppose building without `--release` is not the same as building with `--debug`...
+              if option == Term[flag: "--debug"]
+                release = false
+              end
+
+              if option == Term[flag: "--native"]
+                args << "--mcpu" << "native"
+              end
             end
 
-            if mode == Term[:release]
-              args << "--release"
-            end
+            args << "--release" if release
           end
         end
       end
