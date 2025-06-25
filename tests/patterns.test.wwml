@@ -2130,19 +2130,22 @@
   (pattern (a: (%optional 0 x_number))
     (= {} {x: 0})
     (= {a: 100} {x: 100})
-    (= {a: y} {x: 0})
     (= {a: 0} {x: 0})
+    ;; Only absence counts toward default in pairspart optional. Vs. itemspart
+    ;; optional, where mismatch counts toward default as well.
+    (- {a: y})
     (- a 1 true (b: 200) (a: 100 b: 200)))
 
   (pattern (%layer _ a: (%optional 0 x_number))
     (= {} {x: 0})
     (= {a: 100} {x: 100})
-    (= {a: y} {x: 0})
     (= {a: 0} {x: 0})
     (= {b: 200} {x: 0})
     (= {a: 100, b: 200} {x: 100})
     (= (+ 1 2 b: 200) {x: 0})
     (= (+ 1 2 a: 100 b: 200) {x: 100})
+    ;; Ditto, mismatch is propagated in pairspart optional.
+    (- {a: y})
     (- a 1 true))
 
   (pattern (a: (%optional bad x_number))
@@ -3503,6 +3506,11 @@
           {})
   (= (focus () inbox: ((pulse @xs qux)))
      (focus () inbox: ((pulse @xs qux)))))
+
+(backmap ({¦ a_dict⋮ {¦ -b_}} {b: 100})
+  (= () (a: {b: 100}))
+  (= (a: {}) (a: {b: 100}))
+  (- (a: {b: 200})))
 
 ;; %itemseq bounds
 ;;

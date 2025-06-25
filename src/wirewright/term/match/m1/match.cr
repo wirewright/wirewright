@@ -441,11 +441,12 @@ module Ww::M1::Operator
       if value = dict[op.key]?
         behind1 = behind0.value(key: op.key)
 
-        case fb = Operator.match(behind1, op.value, value, ahead1)
-        in Fb::Match, Fb::Interrupt
-          return fb
-        in Fb::Mismatch
-        end
+        # NOTE: Itemspart optional has different failure semantics vs. pairspart
+        # optional. In itemspart optional, if the body fails to match the item
+        # underneath, the default is tried. In pairspart optional, however,
+        # we fail to match rather than trying default. In pairspart optional,
+        # only absence counts toward default.
+        return Operator.match(behind1, op.value, value, ahead1)
       end
 
       behind1 = behind0.backpath(&.create_pair(op.key, value: op.default))

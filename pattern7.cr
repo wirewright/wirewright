@@ -496,7 +496,7 @@ module ::Ww::M1::Operator::Item
 
   record Group, capture : Term, children : Array(Any)
   record Gap, measurer : Operator::Any, frac : UInt32, strategy : ExpandStrategy
-  record Optional, default : Term, tail : Operator::Any
+  record Optional, default : Term, body : Operator::Any
   record Many, capture : Term, children : Array(Any), interior : Set(Term), min : UInt8, max : UInt8
   record Past, children : Array(Any), min : UInt8, max : UInt8, greedy : Bool
 end
@@ -1826,7 +1826,13 @@ module ::Ww::M1::Operator::Item
       ahead1 = Ahead::Item::Advance.new(1, Ahead::Item.stackptr(ahead0))
       ahead2 = Ahead::ItemAdapter.new(progress.ord, matchees, Ahead::Item.stackptr(ahead1))
 
-      fb = Operator.match(progress.behind, item.tail, matchee, ahead2)
+      fb = Operator.match(progress.behind, item.body, matchee, ahead2)
+
+      # NOTE: Itemspart optional has different failure semantics vs. pairspart
+      # optional. In itemspart optional, if the body fails to match the item
+      # underneath, the default is tried. In pairspart optional, however,
+      # we fail to match rather than trying default. In pairspart optional,
+      # only absence counts toward default.
       if fb.is_a?(Fb::Match)
         return fb
       end
@@ -1835,7 +1841,7 @@ module ::Ww::M1::Operator::Item
     ahead1 = Ahead::ItemAdapter.new(progress.ord, matchees, Ahead::Item.stackptr(ahead0))
     ahead2 = Ahead::Goto.new(progress.behind.backpath?, Ahead.stackptr(ahead1))
 
-    Operator.match(progress.behind.backpath(&.insert_item(item.default, ord: progress.ord)), item.tail, item.default, ahead2)
+    Operator.match(progress.behind.backpath(&.insert_item(item.default, ord: progress.ord)), item.body, item.default, ahead2)
   end
 
   def self.many(progress : Progress, item : Many, matchees, ahead0, memo)
