@@ -501,34 +501,36 @@ end
 puts
 puts
 
-# Run DwUIR tests
 require "./src/dwuir2ppm"
 
-begin
-  dwuir = ML.terms(File.read("./tests/dwuir.in.wwml"))
+# Run DwUIR tests
+unless "-no-dwuir".in?(ARGV)
+  begin
+    dwuir = ML.terms(File.read("./tests/dwuir.in.wwml"))
 
-  expected = File.open("./tests/dwuir.expected.ppm", "rb", &.getb_to_end)
-  actual = IO::Memory.new
+    expected = File.open("./tests/dwuir.expected.ppm", "rb", &.getb_to_end)
+    actual = IO::Memory.new
 
-  ctx.stats.run do
-    DwUIR2PPM.dwuir2ppm(actual, dwuir, 1800, 1000)
+    ctx.stats.run do
+      DwUIR2PPM.dwuir2ppm(actual, dwuir, 1800, 1000)
+    end
+
+    if expected.to_slice == actual.to_slice
+      puts "✔️ DwUIR actual image matches expected image".colorize.green
+    else
+      puts "❌DwUIR actual image does not match expected image".colorize.red
+      puts
+      puts "  Either DwUIR does not work anymore; or the expected image is out of date."
+      puts "  Use the `dwuir2ppm` tool to re-generate."
+    end
+  rescue e
+    Log.error(exception: e)
+
+    puts "❌Crashed while running DwUIR tests".colorize.red
   end
 
-  if expected.to_slice == actual.to_slice
-    puts "✔️ DwUIR actual image matches expected image".colorize.green
-  else
-    puts "❌DwUIR actual image does not match expected image".colorize.red
-    puts
-    puts "  Either DwUIR does not work anymore; or the expected image is out of date."
-    puts "  Use the `dwuir2ppm` tool to re-generate."
-  end
-rescue e
-  Log.error(exception: e)
-
-  puts "❌Crashed while running DwUIR tests".colorize.red
+  puts
 end
-
-puts
 
 if ctx.failures.empty?
   puts "Ran #{ctx.stats.ncases} test case(s) in #{ctx.stats.duration.humanize}.".colorize.green
