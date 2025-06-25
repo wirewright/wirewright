@@ -119,6 +119,24 @@ module Ww::ML
 
     edge?(term.unsafe_as_d, type)
   end
+
+  # Returns the initial value for the given term *type*.
+  #
+  # See also the WwML spec, section "M1 Key-value pair shorthands", subsection
+  # "Initial values".
+  #
+  # Raises `ArgumentError` if *type* is `any`.
+  def initial(type : TermType) : Term
+    case type
+    in .any?
+      raise ArgumentError.new("TermType::Any initial value is undefined")
+    in .boolean? then Term.of(false)
+    in .dict?    then Term.of
+    in .number?  then Term.of(0)
+    in .string?  then Term.of("")
+    in .symbol?  then Term.of(:unset)
+    end
+  end
 end
 
 require "./ml/grammar"

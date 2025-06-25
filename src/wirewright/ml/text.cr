@@ -620,11 +620,13 @@ module Ww::ML::Text
           raise "expected a single named blank"
         end
 
-        unless value.type.subtype?(blank.type)
-          raise "type mismatch: key says #{key.type.blank}, but default value is #{value.type.blank}"
+        # x_⋮ 100 => x: (%optional 100 x_)
+        if blank.type.any?
+          return name, Term.of(:"%optional", value, key)
         end
 
-        {name, Term.of(:"%optional", value, key)}
+        # x_number⋮ (%pipe (mod 2) 0) => x: (%optional 0 (%pipe (mod 2) 0))
+        {name, Term.of(:"%optional", ML.initial(blank.type), value)}
       else
         unless keysym = key.as_sym?
           raise "expected a symbol for entry capture (e.g. `¦ ... x_ ...`) or pair negation (e.g. `¦ ... -x ...`) shorthand"
