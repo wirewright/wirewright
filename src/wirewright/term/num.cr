@@ -238,6 +238,10 @@ module Ww
       Num.new(Kernel.floor(@k))
     end
 
+    def round
+      Num.new(Kernel.round(@k))
+    end
+
     def ceil
       Num.new(Kernel.ceil(@k))
     end

@@ -165,7 +165,9 @@ PRIMITIVES = ProcRuleset.build do
   rulepi1 %[(max args_number+)] { args.items.max_by(&.unsafe_as_n) }
   rulepi1 %[(max (args_number+))] { args.items.max_by(&.unsafe_as_n) }
 
-  rulepi1 %[(ceil arg_number)] { arg.ceil }
+  rulepi1 %[(floor arg_number)] { arg.unsafe_as_n.floor }
+  rulepi1 %[(ceil arg_number)] { arg.unsafe_as_n.ceil }
+  rulepi1 %[(round arg_number)] { arg.unsafe_as_n.round }
 
   rulepi1 %[(upcase arg_string)] { arg.upcase }
   rulepi1 %[(downcase arg_string)] { arg.downcase }

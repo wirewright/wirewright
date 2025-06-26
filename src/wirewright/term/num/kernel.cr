@@ -227,6 +227,10 @@ module Ww
       from(a.v.floor)
     end
 
+    def self.round(a : Kernel)
+      from(a.v.round)
+    end
+
     def self.ceil(a : Kernel)
       from(a.v.ceil)
     end
