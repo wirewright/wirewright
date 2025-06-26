@@ -77,7 +77,7 @@ module Ww::Soma::DwUIR
       )
 
       unless shape.border.transparent?
-        add_rrect(inner.pad(0.5), inner_radii)
+        add_rrect(inner, inner_radii)
         add_rrect(outer, shape.radii)
         PlutoVG.canvas_clip_preserve(@canvas)
         set_paint(shape.border.color, bounds)
