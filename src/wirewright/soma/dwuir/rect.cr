@@ -30,7 +30,7 @@ module Ww::Soma::DwUIR
     #
     # NOTE: All of *x*, *y*, *w*, *h* must respond to `to_f32`.
     def self.[](x, y, w, h) : Rect
-      new(Point[x, y], Point[w, h])
+      new(tl: Point[x, y], size: Point[w, h])
     end
 
     # Returns the size (width and height) of this rectangle.

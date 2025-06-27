@@ -73,17 +73,9 @@ module Ww::Soma::DwUIR
     def blend_over(dst : PixelRect, opacity : Float32) : Nil
       alpha = (opacity * 255).clamp(0.0..255.0).to_u32
 
-      i = j = 0
-
-      @pixels.each do |srcpx|
-        dst.blend(@x + i, @y + j, Pixel[srcpx].alpha(alpha))
-
-        if i + 1 < @width
-          i += 1
-        else
-          i = 0
-          j += 1
-        end
+      display = region(dst.bounds)
+      display.each_pixel_with_coords do |srcpx, x, y|
+        dst.blend(x, y, srcpx.alpha(alpha))
       end
     end
 
