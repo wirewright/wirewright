@@ -351,7 +351,7 @@ module Ww::Soma::DwUIR
       matchpi %[(composite children_+ ¦ _ opacity⋮ 1)] do
         target = Picture.new
 
-        walk(context, children) do |subcontext, child|
+        walk(context.copy_with(layer: LayerRank[]), children) do |subcontext, child|
           render(target, pencils, subcontext, child)
         end
 

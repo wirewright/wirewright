@@ -3,7 +3,7 @@ module Ww::Soma::DwUIR
   defcase Context,
     view : Slice(Quad),
     view_tf : Tf,
-    layer : Int32,
+    layer : LayerRank,
     tf : Tf,
     opacity : Float32,
     pivot : Point,
@@ -29,7 +29,7 @@ module Ww::Soma::DwUIR
     context = Context.new(
       view: viewport.inf? ? Slice(Quad).empty : Slice[viewport.quad],
       view_tf: Tf.new,
-      layer: 0,
+      layer: LayerRank[],
       tf: Tf.new,
       opacity: 1.0f32,
       pivot: Point.new(0, 0),
@@ -48,25 +48,49 @@ module Ww::Soma::DwUIR
       # |@ soma.dwuir.z-index
       #
       # |@block
-      # Use `z-index` to specify the z-index of any node.
+      # Use `z-index` to control the draw order of a node within the current z-index scope.
       #
-      # z-index determines the draw order. Nodes with higher z-indices are drawn
-      # on top of those with a lower one.
+      # Nodes with higher z-indices are drawn above those with lower ones. The default,
+      # implicit z-index is `0`.
       #
-      # The default, implicit z-index is `0`.
+      # > [!NOTE]
+      # > You must explicitly annotate overlapping nodes with `z-index` to establish a
+      # > deterministic draw order.
       #
-      # NOTE: it is the client's responsibility to annotate their nodes with
-      # the desired z-index. DwUIR gives absolutely no guarantees about the draw
-      # order of nodes that have the same z-index; it is undefined. To reiterate,
-      # there is no dependence between item order in the DwUIR markup and the z-index
-      # etc. Clients must express their intent clearly; DwUIR will *not* try to guess.
+      # Z-index values are interpreted relative to the current z-scope. If the node
+      # is nested inside a z-scope (its parent set `z-index: (nested _)`), the effective
+      # draw order is computed relative to that nested context and so on.
       #
-      # See also: `soma.dwuir.node.composite` to learn about scoping z-indices.
+      # See the other overload to understand how z-scopes can be introduced.
+      #
+      # See also: `soma.dwuir.node.composite` for isolating z-indices entirely from the outside.
       # |@endblock
       #
-      # |@key z-index -- The z-index to use.
-      matchpi %[{¦ z-index: z←(%number i32)}] do
-        context = context.copy_with(layer: z.to(Int32))
+      # |@key z-index -- The relative z-index to assign within the current z-scope.
+      matchpi %[{¦ z-index: z←(%number i16)}] do
+        context = context.copy_with(layer: context.layer.assign(z.to(Int16)))
+
+        continue
+      end
+
+      # |@ soma.dwuir.z-index
+      #
+      # |@block
+      # Use `z-index: (nested _)` to simultaneously assign a z-index and begin a new,
+      # nested z-scope rooted at the current node.
+      #
+      # Nodes beneath this point will be drawn in their own local z-index context. Their
+      # z-indices are evaluated relative to this nested scope. This allows component
+      # internals to define local draw order independently, while still placing the
+      # component as a whole within the parent’s draw order at index *z*.
+      #
+      # This is the recommended way to introduce a z-index boundary when writing
+      # self-contained components with internal layering.
+      #
+      # See also: the simpler `z-index: _` overload, for assigning draw order without nesting.
+      # |@endblock
+      matchpi %[{¦ z-index: (nested z←(%number i16))}] do
+        context = context.copy_with(layer: context.layer.assign(z.to(Int16)).nested)
 
         continue
       end

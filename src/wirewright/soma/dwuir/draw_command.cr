@@ -1,4 +1,38 @@
 module Ww::Soma::DwUIR
+  # The *layer rank* of a node is an object which it uses to negotiate its
+  # draw order among other nodes. A layer rank is represented with a slice
+  # of z-indices and a tip z-index. This helps create a crude kind of
+  # scope for z-indices.
+  struct LayerRank
+    include Comparable(LayerRank)
+
+    # :nodoc:
+    def initialize(@zs : Slice(Int16), @z : Int16)
+    end
+
+    # Constructs an empty layer rank.
+    def self.[] : LayerRank
+      new(Slice(Int16).empty, 0i16)
+    end
+
+    def <=>(other : LayerRank)
+      {@zs, @z} <=> {other.@zs, other.@z}
+    end
+
+    # Replaces the tip z-index with *z*. Returns the modified copy of
+    # this layer rank.
+    def assign(z : Int16) : LayerRank
+      LayerRank.new(@zs, z: z)
+    end
+
+    # Introduces a new z-scope: appends the tip z-index to the slice of
+    # z-indices, and resets the tip to `0`. Returns the modified copy
+    # of this layer rank.
+    def nested : LayerRank
+      LayerRank.new(@zs.append(@z), z: 0i16)
+    end
+  end
+
   # Defines the kinds of shapes that can be drawn.
   alias Shape = RectShape | FragShape | SvgShape
 
@@ -166,7 +200,7 @@ module Ww::Soma::DwUIR
     views : Slice(Quad),
     bounds : Rect,
     bounds_tf : Tf,
-    layer : Int32,
+    layer : LayerRank,
     rank : Rank,
     shape : Shape
 
@@ -195,11 +229,11 @@ module Ww::Soma::DwUIR
   # memory & runtime overhead.
   #
   # The compositor will allocate a separate so-called *paper* to draw *picture*;
-  # and only then blend this paper with the parent paper and so on.
+  # and then blend the paper with the parent paper and so on.
   defcase DrawComposite < DrawCommand,
     picture : Picture,
     opacity : Float32,
-    layer : Int32
+    layer : LayerRank
 
   class DrawComposite
     def ord
