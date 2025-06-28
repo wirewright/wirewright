@@ -113,6 +113,11 @@ module Ww::Soma::DwUIR
       rgba(*rgba)
     end
 
+    # Same as `string?`, but raises `ArgumentError` instead of returning `nil`.
+    def self.string(value : String) : Color
+      string?(value) || raise ArgumentError.new
+    end
+
     private def self.opacity_to_alpha(opacity : Float64) : UInt8
       (opacity.clamp(0.0..1.0) * 255).to_u8
     end
