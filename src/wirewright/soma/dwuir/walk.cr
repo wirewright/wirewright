@@ -76,21 +76,37 @@ module Ww::Soma::DwUIR
       # |@ soma.dwuir.z-index
       #
       # |@block
-      # Use `z-index: (nested _)` to simultaneously assign a z-index and begin a new,
-      # nested z-scope rooted at the current node.
+      # Use `z-index: (nested _)` to simultaneously assign a z-index in the parent z-scope
+      # and begin a new, nested z-scope, rooted at the current node.
       #
       # Nodes beneath this point will be drawn in their own local z-index context. Their
       # z-indices are evaluated relative to this nested scope. This allows component
       # internals to define local draw order independently, while still placing the
       # component as a whole within the parent’s draw order at index *z*.
       #
-      # This is the recommended way to introduce a z-index boundary when writing
-      # self-contained components with internal layering.
-      #
       # See also: the simpler `z-index: _` overload, for assigning draw order without nesting.
       # |@endblock
       matchpi %[{¦ z-index: (nested z←(%number i16))}] do
         context = context.copy_with(layer: context.layer.assign(z.to(Int16)).nested)
+
+        continue
+      end
+
+      # |@ soma.dwuir.z-index
+      #
+      # |@block
+      # Use `z-index: nested` to begin a new, nested z-scope, rooted at the current node.
+      #
+      # This is the recommended way to introduce a z-index boundary when writing
+      # self-contained components with internal layering.
+      #
+      # See also: the simpler `z-index: _` overload, for assigning draw order without nesting.
+      #
+      # See also: the `z-index: (nested _)` overload, for assigning a parent z-index and
+      # beginning a z-scope simultaneously.
+      # |@endblock
+      matchpi %[{¦ z-index: nested}] do
+        context = context.copy_with(layer: context.layer.nested)
 
         continue
       end
