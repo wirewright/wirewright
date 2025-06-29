@@ -195,6 +195,11 @@ module Ww::Soma::DwUIR
       end
     end
 
+    # FIXME: setting large-arc-flag=true sometimes fixes the halo problem
+    # apparent, for instance, when rect fill is transparent, rect is
+    # rounded, border left thickness is set to any value and all other
+    # thickness is disabled. This will display as a 0.5 pixel halo. But how
+    # do we set it automatically? And is this really the problem?
     private def add_rrect(bounds : Rect, radii : RectRadii) : Nil
       PlutoVG.canvas_move_to(@canvas, *bounds.rra(radii).xy)
       PlutoVG.canvas_arc_to(@canvas, *radii.tl2.xy, 0, false, false, *bounds.rrb(radii).xy)

@@ -552,9 +552,11 @@ module Ww::Soma::DwUIR
           otherwise { }
         end
 
-        shape = SvgShape.new(src, Color.term(color), resize)
-        command = DrawShape.new(context.view, context.bounds, context.tf, context.layer, :mid, shape)
-        picture << command
+        unless context.bounds.empty?
+          shape = SvgShape.new(src, Color.term(color), resize)
+          command = DrawShape.new(context.view, context.bounds, context.tf, context.layer, :mid, shape)
+          picture << command
+        end
 
         WalkFlow::Next
       end

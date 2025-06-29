@@ -15,8 +15,18 @@ module Ww::Soma::DwUIR
       new(Slice(Int16).empty, 0i16)
     end
 
+    # Compares two layer ranks.
+    #
+    # The prefixes of both layer ranks are compared. The shortest size
+    # of this vs. *other* layer rank is pixed as the prefix size.
     def <=>(other : LayerRank)
-      {@zs, @z} <=> {other.@zs, other.@z}
+      min = {@zs.size, other.@zs.size}.min
+      min.times do |i|
+        cmp = @zs.unsafe_fetch(i) <=> other.@zs.unsafe_fetch(i)
+        return cmp unless cmp == 0
+      end
+
+      (@zs[min]? || @z) <=> (other.@zs[min]? || other.@z)
     end
 
     # Replaces the tip z-index with *z*. Returns the modified copy of
