@@ -1,8 +1,8 @@
 module Ww::Soma::DwUIR
-  # The *layer rank* of a node is an object which it uses to negotiate its
-  # draw order among other nodes. A layer rank is represented with a slice
-  # of z-indices and a tip z-index. This helps create a crude kind of
-  # scope for z-indices.
+  # The *layer rank* of a draw command is an object which it uses to negotiate its
+  # draw order among other draw commands. A layer rank is represented with a slice
+  # of z-indices and a tip z-index. This helps create a crude kind of scope for
+  # z-indices, more commonly referred to as the *z-scope*.
   struct LayerRank
     include Comparable(LayerRank)
 
@@ -17,8 +17,9 @@ module Ww::Soma::DwUIR
 
     # Compares two layer ranks.
     #
-    # The prefixes of both layer ranks are compared. The shortest size
-    # of this vs. *other* layer rank is pixed as the prefix size.
+    # The prefixes of both layer ranks are compared as in `Slice#<=>`.
+    # The shortest size of this vs. *other* layer rank is picked as
+    # the prefix size.
     def <=>(other : LayerRank)
       min = {@zs.size, other.@zs.size}.min
       min.times do |i|
@@ -231,15 +232,18 @@ module Ww::Soma::DwUIR
 
   # Instructs the compositor to draw a *composite shape*.
   #
-  # Composite shapes are basically *picture*s nested within a parent picture,
-  # with an optional *opacity*; they also act as z-index scopes (aka *layer* scopes).
+  # Composite shapes are basically nested *picture*s, with an optional *opacity*;
+  # they also act as the strictest and most isolated kind of z-index scope.
   #
-  # Composite shapes are useful when you want to scope z-indices; or have a group
-  # share the same opacity. Otherwise, prefer not to use them. They do have a certain
-  # memory & runtime overhead.
+  # Composite shapes are useful when you want to isolate z-indices completely
+  # from the outside world; or have a group of commands be rendered with
+  # the same opacity; or both. With opacity, more specifically, composites
+  # prevent their member commands from blending with each other when the group
+  # as a whole is blended.
   #
-  # The compositor will allocate a separate so-called *paper* to draw *picture*;
-  # and then blend the paper with the parent paper and so on.
+  # Composites have a certain memory & runtime overhead right now: not only
+  # is the content cached, but also the composite itself, as a whole, is cached.
+  # This may or may not be beneficial or desired.
   defcase DrawComposite < DrawCommand,
     picture : Picture,
     opacity : Float32,
@@ -254,8 +258,9 @@ module Ww::Soma::DwUIR
       picture.tfbounds
     end
 
-    # Composites are not compared by their content (`picture`); only by opacity
-    # and layer (their own "contribution" so to speak).
+    # NOTE: Composites are not compared by their content (`picture`); only by opacity
+    # and layer (their own "contribution" so to speak rather than the contribution
+    # of their content).
     def_equals_and_hash opacity, layer
   end
 
