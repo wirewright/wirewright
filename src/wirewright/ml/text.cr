@@ -183,7 +183,7 @@ module Ww::ML::Text
                '-', '.', '/', '<', '=', '>',
                '?', '@', '_', '~', 'λ', '|',
                '∞', '°', '∈', '⊆', '⊂', '#',
-               '^', '\\'
+               '^', '\\', 'Σ', 'χ', '\''
             io << chr
             advance
           else
@@ -439,7 +439,7 @@ module Ww::ML::Text
           else
             return symbol
           end
-        when '!', '&', '*', '.', '/', '>', '?', '_', '~', 'λ', '|', '∞', '°', '∈', '⊆', '⊂', '#', '\\'
+        when '!', '&', '*', '.', '/', '>', '?', '_', '~', 'λ', '|', '∞', '°', '∈', '⊆', '⊂', '#', '\\', 'Σ', 'χ'
           return symbol
         when '^'
           case ahead
@@ -491,9 +491,6 @@ module Ww::ML::Text
         when '⇒'
           advance
           return Token.new(:"=>", pos - 3, pos)
-        when '\''
-          advance
-          return Token.new(:"'", pos - 1, pos)
         when '@'
           advance
           return Token.new(:"@", pos - 1, pos)
@@ -949,7 +946,6 @@ module Ww::ML::Text
         when :"^"  then Term.of(:"^", slot)
         when :"$"  then Term.of(:"$", slot)
         when :"$'" then Term.of(:"$once", slot)
-        when :"'"  then Term.of(:hold, slot)
         when :"`"  then Term.of(:"%slot", slot)
         when :"≡"  then Term.of(:"%nonself", slot)
         when :"%'" then Term.of(:"%literal", slot)

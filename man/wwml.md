@@ -77,6 +77,7 @@ able to type them (e.g. using the Compose key).
 | `₀`..`₉`  | U+2080-U+2089     | <kbd>Compose</kbd> + <kbd>_</kbd> + <kbd>0</kbd>-<kbd>9</kbd>   |
 | `⎡`       | U+23A1            | <kbd>Compose</kbd> + <kbd>"</kbd> + <kbd>[</kbd>   |
 | `⎤`       | U+23A4            | <kbd>Compose</kbd> + <kbd>"</kbd> + <kbd>]</kbd>   |
+| `±`       | U+00B1            | <kbd>Compose</kbd> + <kbd>+</kbd> + <kbd>-</kbd>   |
 
 ## Comma
 
@@ -162,16 +163,19 @@ false ;; boolean false
 ## Symbol terms
 
 Symbol terms are represented by combinations of one or more characters from
-the set: `a-zA-Z0-9_!$%&*+\-\^./#<=>?@~λ|∞°∈⊆⊂\`. Symbol terms that contain
-characters not in this set cannot be represented with WwML. Using such characters
-outside of strings is a syntax error.
+the set `0-9_'!$%&*+\-\^./#<=>?@~|∞°∈⊆⊂\`, union Unicode letters (Unicode General Category L).
+Symbol terms that contain characters outside of this set cannot be represented with WwML.
 
 > [!NOTE]
-> Symbols **cannot** start with a digit `0-9`.
+> Symbols **cannot** start with a digit `0-9` or single quote `'`. Digits are
+> forbidden to avoid confusion with numbers; such occasions are probably
+> the result of a typo/missed space after the digits. One wouldn't want this
+> to bubble up all the way to the runtime!
 
 ```wwml
 abc
 foo42
+x'
 divide-by-zero?
 +
 <=
@@ -228,11 +232,12 @@ Z3₃₆  ;; base-36
 Zz₆₂  ;; base-62
 ```
 
-**Retention**: WwML is not a calculator, it is a notation. It *does not* simplify
-radix notation to decimal. For example, `1f₁₆` is the same as writing `(digits 1 15 radix: 16)`. It is up
-to the client to decide what to do with this term. Some clients ("runtimes") may want to
-e.g. support radix-aware addition or otherwise manipulate numbers with explicit base. WwML
-will not interfere by reducing everything to decimal like traditional languages do.
+**Retention**: WwML is not a calculator, nor will it burn information for you. WwML
+is a notation. It *does not* simplify radix notation to decimal. For example, `1f₁₆`
+is the same as writing `(digits 1 15 radix: 16)`. It is up to the client to decide
+what to do with this term. Some clients (analogous to "runtimes") may want to e.g.
+support radix-aware addition or otherwise manipulate numbers with explicit base.
+WwML will not interfere by reducing everything to decimal like traditional languages do.
 
 ### Decimal form for rationals
 
@@ -620,7 +625,8 @@ of other shorthands is available.
 - `<name>_⋮ <value>` is the same as writing `<name>: (%optional <value> <name>_)`.
 - `<name>_<type>⋮ <value>` is the same as writing `<name>: (%optional <initial value of type> <value>)`.
 - `⋮<name>` is the same as writing `<name>: (%- (%never) <name>)`.
-
+- `±<name>` is the same as writing `<name>: (%let <name> _number)`.
+- `±<key>: <name>` is the same as writing `<key>: (%let <name> _number)`.
 
 ###### Initial values
 
@@ -639,6 +645,7 @@ of other shorthands is available.
 - `<BACKTICK><term>` is the same as writing `(%slot <term>)`.
 - `≡<term>` is the same as writing `(%nonself <term>)`.
 - `%'<term>` is the same as writing `(%literal <term>)`.
+- `±<term>` is the same as writing `(%let <term> _number)`.
 
 ### Dictionary set and multiset
 
@@ -665,10 +672,6 @@ of other shorthands is available.
 - `↓<term>` is the same as writing `($down <term>)`
 - `$<term>` is the same as writing `($ <term>)`
 - `$'<term>` is the same as writing `($once <term>)`
-
-### Nitrene
-
-- `'<term>` is the same as writing `(leaf <term>)`
 
 ### Delta7
 
