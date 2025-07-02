@@ -48,8 +48,6 @@ module Ww::Soma::DwUIR
     def finish : Nil
       assert_unfinished
 
-      opaque = true
-
       @sequence.unstable_sort_by!(&.ord)
       @sequence.each do |command|
         @tfbounds |= command.tfbounds
@@ -113,6 +111,19 @@ module Ww::Soma::DwUIR
 
       damaged.each do |command|
         yield command.dmgbounds.ceil
+      end
+    end
+
+    # Calls *fn* with indentation level followed by the line to display, for
+    # each line of this picture's partial (i.e. with omissions), pretty
+    # printed text representation.
+    def each_line_to_display(&fn : Int32, String ->) : Nil
+      fn.call(0, "picture")
+
+      @sequence.each do |command|
+        command.each_line_to_display do |indent, line|
+          fn.call(indent + 2, line)
+        end
       end
     end
 

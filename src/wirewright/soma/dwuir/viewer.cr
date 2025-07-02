@@ -35,8 +35,12 @@ module Ww::Soma::DwUIR
     # Modifies the screen pixel rect to match *dwuir*.
     #
     # Returns the array of damage rects.
-    def show(dwuir : Term, bg : Color, *, dmgdbg = false) : Array(Rect)
+    #
+    # Yields `Picture` for inspection by the caller.
+    def show(dwuir : Term, bg : Color, *, dmgdbg = false, & : Picture ->) : Array(Rect)
       picture1 = DwUIR.picture(dwuir, @platform.pencils, viewport: @screen.bounds)
+
+      yield picture1
 
       dmgbounds_and_dmgrects(picture1) do |dmgbounds, dmgrects|
         dmgcov = dmgbounds.size.compare(@screen.bounds.size)
@@ -65,6 +69,11 @@ module Ww::Soma::DwUIR
       end
 
       [] of Rect
+    end
+
+    # Shorthand for `show` with an empty block (i.e. picture ignored).
+    def show(*args, **kwargs)
+      show(*args, **kwargs) { }
     end
 
     private def dmgbounds_and_dmgrects(picture1, &)

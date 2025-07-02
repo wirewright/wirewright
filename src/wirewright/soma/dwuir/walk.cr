@@ -58,7 +58,7 @@ module Ww::Soma::DwUIR
       # > deterministic draw order.
       #
       # Z-index values are interpreted relative to the current z-scope. If the node
-      # is nested inside a z-scope (its parent set `z-index: (nested _)`), the effective
+      # is nested inside a z-scope (its parent set `z-index: (local _)`), the effective
       # draw order is computed relative to that nested context and so on.
       #
       # See the other overload to understand how z-scopes can be introduced.
@@ -76,7 +76,7 @@ module Ww::Soma::DwUIR
       # |@ soma.dwuir.z-index
       #
       # |@block
-      # Use `z-index: (nested _)` to simultaneously assign a z-index in the parent z-scope
+      # Use `z-index: (local _)` to simultaneously assign a z-index in the parent z-scope
       # and begin a new, nested z-scope, rooted at the current node.
       #
       # Nodes beneath this point will be drawn in their own local z-index context. Their
@@ -86,8 +86,8 @@ module Ww::Soma::DwUIR
       #
       # See also: the simpler `z-index: _` overload, for assigning draw order without nesting.
       # |@endblock
-      matchpi %[{¦ z-index: (nested z←(%number i16))}] do
-        context = context.copy_with(layer: context.layer.assign(z.to(Int16)).nested)
+      matchpi %[{¦ z-index: (local z←(%number i16))}] do
+        context = context.copy_with(layer: context.layer.assign(z.to(Int16)).local)
 
         continue
       end
@@ -95,18 +95,18 @@ module Ww::Soma::DwUIR
       # |@ soma.dwuir.z-index
       #
       # |@block
-      # Use `z-index: nested` to begin a new, nested z-scope, rooted at the current node.
+      # Use `z-index: local` to begin a new, nested z-scope, rooted at the current node.
       #
       # This is the recommended way to introduce a z-index boundary when writing
       # self-contained components with internal layering.
       #
       # See also: the simpler `z-index: _` overload, for assigning draw order without nesting.
       #
-      # See also: the `z-index: (nested _)` overload, for assigning a parent z-index and
+      # See also: the `z-index: (local _)` overload, for assigning a parent z-index and
       # beginning a z-scope simultaneously.
       # |@endblock
-      matchpi %[{¦ z-index: nested}] do
-        context = context.copy_with(layer: context.layer.nested)
+      matchpi %[{¦ z-index: local}] do
+        context = context.copy_with(layer: context.layer.local)
 
         continue
       end

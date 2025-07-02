@@ -18,16 +18,23 @@ module Ww::Soma::DwUIR
     # Compares two layer ranks.
     #
     # The prefixes of both layer ranks are compared as in `Slice#<=>`.
+    #
     # The shortest size of this vs. *other* layer rank is picked as
     # the prefix size.
+    #
+    # If prefixes are equal, layer rank sizes are compared. Layer ranks with
+    # larger size draw before ones with a smaller size.
     def <=>(other : LayerRank)
       min = {@zs.size, other.@zs.size}.min
       min.times do |i|
-        cmp = @zs.unsafe_fetch(i) <=> other.@zs.unsafe_fetch(i)
+        cmp = @zs[i] <=> other.@zs[i]
         return cmp unless cmp == 0
       end
 
-      (@zs[min]? || @z) <=> (other.@zs[min]? || other.@z)
+      cmp = (@zs[min]? || @z) <=> (other.@zs[min]? || other.@z)
+      return cmp unless cmp == 0
+
+      @zs.size <=> other.@zs.size
     end
 
     # Replaces the tip z-index with *z*. Returns the modified copy of
@@ -39,9 +46,19 @@ module Ww::Soma::DwUIR
     # Introduces a new z-scope: appends the tip z-index to the slice of
     # z-indices, and resets the tip to `0`. Returns the modified copy
     # of this layer rank.
-    def nested : LayerRank
+    def local : LayerRank
       LayerRank.new(@zs.append(@z), z: 0i16)
     end
+
+    def inspect(io)
+      io << "Z<"
+      @zs.join(io, ",")
+      io << "," unless @zs.empty?
+      io << @z
+      io << ">"
+    end
+
+    def_equals_and_hash @zs, @z
   end
 
   # Defines the kinds of shapes that can be drawn.
@@ -52,10 +69,20 @@ module Ww::Soma::DwUIR
   #
   # - *fill* specifies the paint with which the rectangle will be filled.
   # - For borders, use `RectBorder#color`.
-  record RectShape, fill : Paint::Any, border = RectBorder.new, radii = RectRadii.new do
+  defcase RectShape,
+    fill : Paint::Any,
+    border : RectBorder,
+    radii : RectRadii
+
+  class RectShape
     # Clamps the properties of this rectangle shape to respect *bounds*.
     def clamp(bounds : Rect) : RectShape
       copy_with(radii: radii.clamp(bounds), border: border.clamp(bounds))
+    end
+
+    # See `Picture#each_line_to_display`.
+    def each_line_to_display(&fn : Int32, String ->) : Nil
+      fn.call(0, "rect(fill=#{fill})")
     end
   end
 
@@ -140,13 +167,20 @@ module Ww::Soma::DwUIR
   # - *underline* can optionally enable and configure the underline.
   # - *color* specifies the paint with which the text will be filled. You can use
   #   any `Paint`, including solid color, image, and gradient paint.
-  record FragShape,
+  defcase FragShape,
     string : String,
     font : Path,
     size : Float32,
     tracking : Magn,
     underline : UnderlineSpec?,
     color : Paint::Any
+
+  class FragShape
+    # See `Picture#each_line_to_display`.
+    def each_line_to_display(&fn : Int32, String ->) : Nil
+      fn.call(0, "frag(text=#{string.dump})")
+    end
+  end
 
   # Configures the underline for `FragShape`.
   #
@@ -172,6 +206,11 @@ module Ww::Soma::DwUIR
       Clip
       Stretch
       KeepRatio
+    end
+
+    # See `Picture#each_line_to_display`.
+    def each_line_to_display(&fn : Int32, String ->) : Nil
+      fn.call(0, "svg(src=#{ML.compact(src)})")
     end
   end
 
@@ -228,6 +267,15 @@ module Ww::Soma::DwUIR
     def tfbounds : Rect
       bounds_tf.map(bounds)
     end
+
+    # See `Picture#each_line_to_display`.
+    def each_line_to_display(&fn : Int32, String ->) : Nil
+      fn.call(0, "shape(bounds=#{bounds.xywh}, layer=#{layer}, rank=#{rank})")
+
+      shape.each_line_to_display do |nesting, line|
+        fn.call(nesting + 2, line)
+      end
+    end
   end
 
   # Instructs the compositor to draw a *composite shape*.
@@ -256,6 +304,15 @@ module Ww::Soma::DwUIR
 
     def tfbounds : Rect
       picture.tfbounds
+    end
+
+    # See `Picture#each_line_to_display`.
+    def each_line_to_display(&fn : Int32, String ->)
+      fn.call(0, "composite(opacity=#{opacity}, layer=#{layer})")
+
+      picture.each_line_to_display do |indent, line|
+        fn.call(indent + 2, line)
+      end
     end
 
     # NOTE: Composites are not compared by their content (`picture`); only by opacity

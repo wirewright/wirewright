@@ -479,15 +479,20 @@ module Ww::Soma::DwUIR
             )
 
             command = DrawShape.new(context.view, dw.bounds, context.tf, context.layer, :mid, shape)
-            picture << command
           in TextDrawable::Selection
             next unless selection = spec.selection
             next unless visible?(context, dw.bounds)
 
-            shape = RectShape.new(selection.fill, radii: RectRadii.all(selection.radius))
+            shape = RectShape.new(
+              fill: selection.fill,
+              border: RectBorder.new,
+              radii: RectRadii.all(selection.radius),
+            )
+
             command = DrawShape.new(context.view, dw.bounds, context.tf, context.layer, dw.rank, shape)
-            picture << command
           end
+
+          picture << command
         end
 
         WalkFlow::Next
