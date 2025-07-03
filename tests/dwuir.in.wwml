@@ -2530,3 +2530,61 @@ initial-h: 1000
        src: (file "data/soma-logo.svg")
        color: black
        resize: stretch))))
+
+;; oklch named hue without opacity
+(group dl: 1500
+  (rect
+    final-w: 30
+    final-h: 30
+    fill: (oklch 0.5 0.2 red)
+    radius-tl: (* 1)
+    radius-tr: (* 1)
+    radius-bl: (* 1)
+    radius-br: (* 1))
+  (rect
+    dl: 40
+    final-w: 30
+    final-h: 30
+    fill: (oklch 0.5 0.2 "green")
+    radius-tl: (* 1)
+    radius-tr: (* 1)
+    radius-bl: (* 1)
+    radius-br: (* 1))
+  (rect
+    dl: 80
+    final-w: 30
+    final-h: 30
+    fill: (oklch 0.5 0.2 blue)
+    radius-tl: (* 1)
+    radius-tr: (* 1)
+    radius-bl: (* 1)
+    radius-br: (* 1)))
+
+;; oklch named hue without opacity
+(group dl: 1500 dt: 20 z-index: 10
+  (rect
+    final-w: 30
+    final-h: 30
+    fill: (oklch 0.5 0.2 yellow 0.5)
+    radius-tl: (* 1)
+    radius-tr: (* 1)
+    radius-bl: (* 1)
+    radius-br: (* 1))
+  (rect
+    dl: 40
+    final-w: 30
+    final-h: 30
+    fill: (oklch 0.5 0.2 "violet" 0.8)
+    radius-tl: (* 1)
+    radius-tr: (* 1)
+    radius-bl: (* 1)
+    radius-br: (* 1))
+  (rect
+    dl: 80
+    final-w: 30
+    final-h: 30
+    fill: (oklch 0.5 0.2 cyan 0.6)
+    radius-tl: (* 1)
+    radius-tr: (* 1)
+    radius-bl: (* 1)
+    radius-br: (* 1)))

@@ -103,7 +103,7 @@ module Ww::Soma::DwUIR
 
     # Constructs a color by parsing the given *string*. Hex colors and named
     # colors (see `NAMED`) are supported.
-    def self.string?(value : String) : Color?
+    def self.named?(value : String) : Color?
       if color = NAMED[value]?
         return color
       end
@@ -113,9 +113,9 @@ module Ww::Soma::DwUIR
       rgba(*rgba)
     end
 
-    # Same as `string?`, but raises `ArgumentError` instead of returning `nil`.
-    def self.string(value : String) : Color
-      string?(value) || raise ArgumentError.new
+    # Same as `named?`, but raises `ArgumentError` instead of returning `nil`.
+    def self.named(value : String) : Color
+      named?(value) || raise ArgumentError.new
     end
 
     private def self.opacity_to_alpha(opacity : Float64) : UInt8
@@ -125,6 +125,26 @@ module Ww::Soma::DwUIR
     private def self.opacity_to_alpha(opacity : Term) : UInt8
       opacity_to_alpha(opacity.to(Float64))
     end
+
+    # |@table soma.dwuir.color.oklch.hue
+    OKLCH_HUES = {
+      "red"     => 27.0,
+      "orange"  => 50.0,
+      "amber"   => 70.0,
+      "yellow"  => 90.0,
+      "lime"    => 120.0,
+      "green"   => 145.0,
+      "teal"    => 175.0,
+      "cyan"    => 195.0,
+      "sky"     => 220.0,
+      "blue"    => 250.0,
+      "indigo"  => 275.0,
+      "violet"  => 295.0,
+      "purple"  => 320.0,
+      "magenta" => 340.0,
+      "pink"    => 355.0,
+      "crimson" => 10.0,
+    }
 
     # Constructs a `Color` by parsing the given term.
     #
@@ -154,10 +174,34 @@ module Ww::Soma::DwUIR
 
         # |@ soma.dwuir.color.oklch
         #
+        # |@key h soma.dwuir.color.oklch.hue -- Specifies the name of the hue of the color.
+        matchpi(
+          %{(oklch l_number c_number h_symbol)},
+          %{(oklch l_number c_number h_string)},
+        ) do
+          oklch(l.to(Float64), c.to(Float64), OKLCH_HUES[h.to(String)]? || continue)
+        end
+
+        # |@ soma.dwuir.color.oklch
+        #
         # |@key opacity -- Specifies the opacity of the color (a number between 0
         # and 1, where 0 means fully transparent and 1 means fully opaque).
         matchpi %{(oklch l_number c_number h_number opacity_number)} do
           color = oklch(l.to(Float64), c.to(Float64), h.to(Float64))
+          color.change(a: opacity_to_alpha(opacity))
+        end
+
+        # |@ soma.dwuir.color.oklch
+        #
+        # |@key h soma.dwuir.color.oklch.hue -- Specifies the name of the hue of the color.
+        #
+        # |@key opacity -- Specifies the opacity of the color (a number between 0
+        # and 1, where 0 means fully transparent and 1 means fully opaque).
+        matchpi(
+          %{(oklch l_number c_number h_symbol opacity_number)},
+          %{(oklch l_number c_number h_string opacity_number)},
+        ) do
+          color = oklch(l.to(Float64), c.to(Float64), OKLCH_HUES[h.to(String)]? || continue)
           color.change(a: opacity_to_alpha(opacity))
         end
 
@@ -243,7 +287,7 @@ module Ww::Soma::DwUIR
         # characters will lead to the string being ignored.
         # |@endblock
         matchpi %{_symbol}, %{_string} do
-          string?(term.to(String)) || continue
+          named?(term.to(String)) || continue
         end
 
         # |@ soma.dwuir.color.integer
@@ -266,9 +310,7 @@ module Ww::Soma::DwUIR
         end
 
         otherwise do
-          {% unless flag?(:release) %}
-            Log.warn { "invalid color term: #{term}" }
-          {% end %}
+          Log.debug { "invalid color term: #{term}" }
 
           fallback
         end
