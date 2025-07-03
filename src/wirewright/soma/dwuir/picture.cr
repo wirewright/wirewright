@@ -48,7 +48,7 @@ module Ww::Soma::DwUIR
     def finish : Nil
       assert_unfinished
 
-      @sequence.unstable_sort_by!(&.ord)
+      @sequence.sort_by!(&.ord)
       @sequence.each do |command|
         @tfbounds |= command.tfbounds
       end
