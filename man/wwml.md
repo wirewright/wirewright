@@ -665,6 +665,41 @@ of other shorthands is available.
 - `<left term> => <right term>` is the same as writing `(rule <left term> <right term>)`.
 - `<left term> <> <right term>` is the same as writing `(backmap <left term> <right term>)`.
 
+#### Rule or backmap-local gensym
+
+The character `◇` is replaced with a symbolic generated specifically for the current
+rule/backmap at read-time.
+
+You can use subscripts to generate more such symbols for the current rule: `◇` is in fact
+a shorthand for `◇₀`; you can use `◇₁`, `◇₂`, `◇₁₂₃` etc.
+
+```wwml
+(foo ¦ _ v_number -◇_) <> {v: $'(+ →v 1), ◇: true}
+(foo ¦ _ v_number -◇_) <> {v: $'(* →v 2), ◇: true}
+(foo ¦ _ v_number -◇_) <> {v: $'(/ →v 3), ◇: true}
+```
+
+Treat `◇` as a "did I fire on this term" mark that the rule places on the underlying
+term to not fire again (perhaps preventing infinite rewriting, which all rules in
+the example above will display unless they prevent themselves from firing in some way,
+in this case with `◇`).
+
+This is yet another aid from WwML in helping you avoid coming up with extra names.
+
+#### Block gensym
+
+Similarly to `◇`, `▢` is replaced with a symbolic generated specifically for the current
+*block*. You can similarly generate more than one such symbol using subscripts: `▢` is
+a shorthand for `▢₀`, and so on: `▢₁`, `▢₁₃`, etc.
+
+```wwml
+;; One of (their specificity is the same so any one of them can fire,
+;; depending on rule lookup implementation):
+(foo ¦ _ v_number -▢_) <> {v: $'(+ →v 1), ▢: true}
+(foo ¦ _ v_number -▢_) <> {v: $'(* →v 2), ▢: true}
+(foo ¦ _ v_number -▢_) <> {v: $'(/ →v 3), ▢: true}
+```
+
 ### Backmaps and rewriter circuits
 
 - `→<term>` is the same as writing `($my <term>)`
