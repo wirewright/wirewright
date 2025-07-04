@@ -1,0 +1,817 @@
+;; Nothing is supposed to be interactive here. As with DwUIR, this is a "produces-this-
+;; image" type of test. There is no interactivity at this level. Pure imagery. Moreover,
+;; as you can see from the (arguable) complexity of the markup, this is not a "test" in
+;; the TDD kind of sense etc. This is a big regression test. If it's "green", most if not all
+;; rules in the UIR rule system are working nicely and cooperating to get the desired image.
+;; If it's "red", it's your responsibility to find why. Use your eyes, intuition, etc. Most
+;; failures are going to be localizable, since localization was one of design goals for UIR.
+;;
+;; Sorry, but this isn't the kind of thing where TDD-ish tests can be written without boring
+;; oneself to death.
+;;
+;; NOTE: expect no "clarity" or "reuse" in here. This is a lot of "hacking together" to
+;; get reasonably thorough coverage with a practically-looking UI.
+
+(branch-btn name_string) =>
+  (z-stack z-index: local
+    (rect
+      z-index: -1
+      fill: (oklch 0.3 0 0)
+      stroke: (oklch 0.35 0 0)
+      thickness-l: 1
+      thickness-r: 1
+      thickness-t: 1
+      thickness-b: 1
+      radius-tl: 5
+      radius-tr: 5
+      radius-bl: 5
+      radius-br: 5)
+    (padding pl: 8 pr: 8 pt: 5 pb: 5
+      (align y: 0.5
+        (x-stack gap: 10
+          (align y: 0.5
+            (text caption: "\u00e97a" leading: 1 color: (oklch 0.9 0 0) font: "Material Icons Outlined" size: 14))
+          (align fr: 1 y: 0.5
+            (text caption: ^name color: (oklch 0.9 0 0) font: "IBM Plex Sans" size: 16))
+          (align y: 0.5
+            (text caption: "\u00e5c5" leading: 1 color: (oklch 0.9 0 0) font: "Material Icons Outlined" size: 14))))))
+
+(branch-menu name_string) =>
+  (limit z-index: local
+    (z-stack
+      (rect z-index: 0
+        fill: (oklch 0.1 0 0)
+        stroke: (oklch 0.35 0 0)
+        thickness-l: 1
+        thickness-r: 1
+        thickness-t: 1
+        thickness-b: 1
+        radius-tl: 5
+        radius-tr: 5
+        radius-bl: 5
+        radius-br: 5)
+      (floating
+        (rect z-index: -1
+          fill: (oklch 0.4 0 0)
+          angle: 45
+          pivot: true
+          dl: 10
+          dt: -3
+          up-w: 10
+          up-h: 10))
+      (group z-index: 1
+        (branch-menu-inner ^name))))
+
+(branch-menu-inner name_string) =>
+  (y-stack gap: 10
+    (padding pl: 10 pr: 10 pt: 10
+      (branch-menu-header))
+    (hr (oklch 0.4 0 0))
+    (branch-menu-main ^name)
+    (hr (oklch 0.4 0 0))
+    (view-all-branches))
+
+(view-all-branches) =>
+  (padding pl: 15 pr: 15 pb: 10
+    (text wrap: true caption: "View all branches" font: "IBM Plex Sans" size: 14 color: (oklch 0.95 0 0)))
+
+(branch-menu-header) =>
+  (y-stack gap: 10
+    (x-stack
+      (align y: 0.5 fr: 1
+        (text wrap: true caption: "Switch branches/tags" font: "IBM Plex Sans" weight: 500 size: 14 color: (oklch 0.8 0 0)))
+      (cancel-btn))
+    (input-field placeholder: "Find or create a branch..."))
+
+(branch-menu-main name_string) =>
+  (y-stack gap: 8
+    (tab-bar ((active "Branches") "Tags"))
+    (branch-item-list ^name))
+
+(branch-item-list name_string) =>
+  (padding pl: 5 pr: 5
+    (y-stack
+      (branch-list-item ^name badge: "default" hover: true)
+      (branch-list-item "trunk")))
+
+(branch name_string) =>
+  (branch-btn ^name)
+
+(branch (active name_string)) =>
+  (y-stack gap: 10 z-index: local
+    (branch-btn ^name)
+    (floating z-index: 10
+      (branch-menu ^name)))
+
+(branch-row (branches_*)) =>
+  (x-stack gap: 10
+    (^each (branches as branch_)
+      (branch ^branch)))
+
+(branches-card (branches_*)) =>
+  (z-stack z-index: local
+   (rect z-index: -1
+     fill: (oklch 0.2 0 0)
+     radius-tl: 10
+     radius-tr: 10
+     radius-bl: 10
+     radius-br: 10)
+   (padding pl: 20 pr: 20 pt: 20 pb: 20
+     (y-stack gap: 10
+       (text wrap: true caption: "Branches" font: "IBM Plex Mono" weight: 800 size: 24 color: (oklch 0.7 0 0))
+       (text wrap: true shrink: true caption: "Lorem ipsum dolor sit amet, qui minim labore adipisicing minim sint cillum sint consectetur cupidatat." font: "IBM Plex Sans" size: 16 color: (oklch 0.8 0 0))
+       (branch-row ^branches))))
+
+(cancel-btn) =>
+  (align x: 0.5 y: 0.5 z-index: local
+    (z-stack
+      (rect
+        z-index: -1
+        fill: (oklch 0.3 0 0)
+        radius-tl: 5
+        radius-tr: 5
+        radius-bl: 5
+        radius-br: 5)
+      (padding pl: 5 pr: 5 pt: 5 pb: 5
+        (text caption: "\u00e5cd" leading: 1 color: (oklch 0.9 0 0) font: "Material Icons Outlined" size: 14))))
+
+(input-field ¦ _ icon⋮ "\u00e8b6" placeholder⋮ "" value⋮ "" active⋮ false) =>
+  (z-stack z-index: local
+    (rect
+      z-index: -1
+      fill: (oklch 0.18 0 0)
+      stroke:
+        (^match active
+          (when true (oklch 0.5 0.25 250))
+          (when false (oklch 0.4 0 0)))
+      thickness-l: 1
+      thickness-r: 1
+      thickness-t: 1
+      thickness-b: 1
+      radius-tl: 5
+      radius-tr: 5
+      radius-bl: 5
+      radius-br: 5)
+    (padding pl: 8 pr: 8 pt: 5 pb: 5
+      (viewport
+        (x-stack gap: 5
+          (align y: 0.5
+            (text
+              caption: ^icon
+              leading: 1
+              color:
+                (^match active
+                  (when true (oklch 0.7 0.25 250))
+                  (when false (oklch 0.7 0 0)))
+              font: "Material Icons Outlined"
+              size: 14))
+          (align y: 0.5 fr: 1
+            ;; Offset the text by 1 to remove the out-of-center feeling I have, although
+            ;; it does appear centered. Text centering is really hard, you see!
+            (^match active
+              (when true
+                (text caption: ^value dt: 1 font: "IBM Plex Sans" size: 14 color: (oklch 0.9 0 0) selection: true selection-anchor: 3 selection-span: 0 selection-fill: (oklch 1.0 0 0)))
+              (when false
+                (text caption: ^placeholder dt: 1 font: "IBM Plex Sans" size: 14 color: (oklch 0.7 0 0)))))))))
+
+(hr color_ ¦ _ thickness⋮ 1) =>
+  (align y: 0.5
+    (limit max-h: ^thickness
+      (rect up-w: 0 up-h: ^thickness fill: ^color)))
+
+(tab (active caption_string)) =>
+  (z-stack z-index: local
+    (rect
+      z-index: -1
+      fill: (oklch 0.2 0 0)
+      stroke: (oklch 0.35 0 0)
+      thickness-l: 1
+      thickness-r: 1
+      thickness-t: 1
+      thickness-b: 0
+      radius-tl: 5
+      radius-tr: 5
+      radius-bl: 0
+      radius-br: 0)
+    (padding pl: 8 pr: 8 pt: 5 pb: 5
+      (text caption: ^caption font: "IBM Plex Sans" size: 14 color: (oklch 0.95 0 0))))
+
+(tab caption_string) =>
+  (padding pl: 8 pr: 8 pt: 5 pb: 5
+    (text caption: ^caption font: "IBM Plex Sans" size: 14 color: (oklch 0.95 0 0)))
+
+(tab-bar (tabs_*)) =>
+  (y-stack z-index: local
+    (padding pl: 10
+      (x-stack z-index: 1
+        (^each (tabs as tab_)
+          (tab ^tab))))
+    (group z-index: 0 dt: -1
+      (hr (oklch 0.4 0 0))))
+
+(badge caption_string) =>
+  (z-stack z-index: local
+    (rect
+      z-index: -1
+      stroke: (oklch 0.35 0 0)
+      thickness-l: 1
+      thickness-r: 1
+      thickness-t: 1
+      thickness-b: 1
+      radius-tl: 10
+      radius-tr: 10
+      radius-bl: 10
+      radius-br: 10)
+    (padding pl: 6 pr: 6
+      (align x: 0.5 y: 0.5
+        (text wrap: true caption: ^caption font: "IBM Plex Sans" size: 12 color: (oklch 0.95 0 0)))))
+
+(branch-list-item caption_string ¦ _ badge⋮ "" hover⋮ false) =>
+  (z-stack z-index: local
+    (^if hover
+      (rect
+        z-index: -1
+        fill: (oklch 0.25 0 0)
+        radius-tl: 5
+        radius-tr: 5
+        radius-bl: 5
+        radius-br: 5))
+    (padding pl: 5 pr: 5 pt: 5 pb: 5
+      (x-stack gap: 5
+        (align y: 0.5
+          (text
+            caption:
+              (^match hover
+                (when true "\u00e5ca") ;; check
+                (when false "\u00e061")) ;; fiber_manual_record
+            leading: 1 color: (oklch 0.9 0 0) font: "Material Icons Outlined" size: 14))
+        (align y: 0.5 fr: 1
+          (text wrap: true caption: ^caption font: "IBM Plex Sans" size: 14 color: (oklch 0.95 0 0)))
+        (^unless (= badge "")
+          (align y: 0.5
+            (badge ^badge))))))
+
+(up-badge caption_string ¦ _ color_) =>
+  (z-stack z-index: local
+    (rect
+      z-index: -1
+      stroke: ^color
+      thickness-l: 1
+      thickness-r: 1
+      thickness-t: 1
+      thickness-b: 1
+      radius-tl: 3
+      radius-tr: 3
+      radius-bl: 3
+      radius-br: 3)
+    (padding pl: 5 pt: 3 pb: 4 pr: 5
+      (x-stack z-index: 1 gap: 3
+        (align y: 0.5
+          (text caption: ^caption leading: 1 font: "IBM Plex Sans" size: 11 color: ^color))
+        (align y: 0.5
+          (text caption: "\u00e316" leading: 1 font: "Material Icons Outlined" size: 11 color: ^color)))))
+
+(arrow-out-btn/active) =>
+  (align x: 0.5 y: 0.5
+    (z-stack z-index: local
+      (rect
+        fill: white
+        radius-tl: (* 1)
+        radius-tr: (* 1)
+        radius-bl: (* 1)
+        radius-br: (* 1))
+      (padding pl: 5 pr: 5 pb: 5 pt: 5
+        (text caption: "\u00f8ce" z-index: 1 leading: 1 font: "Material Icons Outlined" size: 16 color: black))))
+
+(arrow-out-btn/inactive) =>
+  (align x: 0.5 y: 0.5
+    (z-stack z-index: local
+      (rect
+        stroke: (oklch 0.8 0 0)
+        thickness-l: 1
+        thickness-r: 1
+        thickness-t: 1
+        thickness-b: 1
+        radius-tl: (* 1)
+        radius-tr: (* 1)
+        radius-bl: (* 1)
+        radius-br: (* 1))
+      (padding pl: 5 pr: 5 pb: 5 pt: 5
+        (text caption: "\u00f8ce" z-index: 1 leading: 1 font: "Material Icons Outlined" size: 16 color: (oklch 0.8 0 0)))))
+
+(stat-card ¦ _ title_string stat_string badge_⋮ none comment_string active⋮ false) =>
+  (z-stack z-index: local
+    (^match active
+      (when true
+        (rect z-index: -1
+          fill:
+            (linear-gradient start-l: 0
+              (stop 0 (oklch 0.4496 0.0686 143.68))
+              (stop 1 (oklch 0.319 0.0576 143.68)))
+          radius-tl: 7
+          radius-tr: 7
+          radius-bl: 7
+          radius-br: 7))
+      (when false
+        (rect z-index: -1
+          stroke: (oklch 0.25 0 0)
+          thickness-l: 1
+          thickness-r: 1
+          thickness-t: 1
+          thickness-b: 1
+          radius-tl: 7
+          radius-tr: 7
+          radius-bl: 7
+          radius-br: 7)))
+    (padding pl: 15 pr: 15 pt: 15 pb: 15
+      (y-stack
+        (x-stack gap: 10
+          (text fr: 1 caption: ^title font: "IBM Plex Sans" weight: 450 size: 16 color: (oklch 0.98 0 0))
+          (^match active
+            (when true (arrow-out-btn/active))
+            (when false (arrow-out-btn/inactive))))
+        (text caption: ^stat font: "IBM Plex Sans" size: 36 color: white weight: 600)
+        (x-stack gap: 10
+          (^unless (= badge none)
+            (align x: 0 y: 0
+              ^badge))
+          (align y: 0.5
+            (text caption: ^comment wrap: true font: "IBM Plex Sans" size: 11 color: (oklch 0.9665 0.1 143.68)))))))
+
+(status-badge caption_string ¦ _ hue_number) =>
+  (z-stack z-index: local
+    (rect z-index: -1
+      fill: (oklch 0.3 0.05 ^hue)
+      stroke: (oklch 0.5 0.05 ^hue)
+      thickness-l: 1
+      thickness-r: 1
+      thickness-t: 1
+      thickness-b: 1
+      radius-tl: 3
+      radius-tr: 3
+      radius-bl: 3
+      radius-br: 3)
+    (padding pl: 3 pr: 3
+      (text caption: ^caption font: "IBM Plex Sans" size: 11 color: (oklch 0.9 0.05 ^hue))))
+
+(person-entry ¦ _ avatar_ name_string task_string badge_⋮ none) =>
+  (z-stack z-index: local
+    (rect
+      z-index: -1
+      fill: (oklch 0.175 0 0)
+      radius-tl: 5
+      radius-tr: 5
+      radius-bl: 5
+      radius-br: 5)
+    (padding pl: 10 pr: 10 pt: 5 pb: 5
+      (x-stack gap: 15
+        (align x: 0.5 y: 0.5
+          (limit max-w: 32 max-h: 32
+            ^avatar))
+        (y-stack fr: 1
+          (text caption: ^name font: "IBM Plex Sans" weight: 450 size: 14 color: white)
+          (x-stack gap: 3
+            (text caption: "Working on" font: "IBM Plex Sans" size: 11 color: (oklch 0.7 0 0))
+            (text caption: ^task font: "IBM Plex Sans" size: 11 weight: 500 color: (oklch 0.9 0 0))))
+        (^unless (= badge none)
+          (align x: 0.5 y: 0.5
+            ^badge)))))
+
+(avatar-img ¦ _ src_) =>
+  (rect
+    fill: (image ^src)
+    radius-tl: (* 1)
+    radius-tr: (* 1)
+    radius-bl: (* 1)
+    radius-br: (* 1))
+
+(people-card people_+ ¦ _ title_string) =>
+  (z-stack z-index: local
+    (rect z-index: -1
+      stroke: (oklch 0.25 0 0)
+      thickness-l: 1
+      thickness-r: 1
+      thickness-t: 1
+      thickness-b: 1
+      radius-tl: 7
+      radius-tr: 7
+      radius-bl: 7
+      radius-br: 7)
+    (padding pl: 15 pr: 15 pt: 15 pb: 15
+      (y-stack gap: 10
+        (text caption: ^title font: "IBM Plex Sans" weight: 450 size: 16 color: (oklch 0.98 0 0))
+        (y-stack gap: 8
+          ^*people))))
+
+(project-card ¦ _ icon_string title_string detail_string progress_: (%number 0 <= _ <= 1)) =>
+  (y-stack z-index: local
+    (z-stack
+      (rect
+        z-index: -1
+        fill: (oklch 0.175 0 0)
+        radius-tl: 5
+        radius-tr: 5
+        radius-bl: 5
+        radius-br: 5)
+      (padding pl: 15 pr: 15 pt: 8 pb: 8
+        (x-stack gap: 15 z-index: local
+          (align x: 0.5 y: 0.5 fr: 1
+            (text caption: ^icon leading: 1 color: (oklch 0.9 0 0) font: "Material Icons Outlined" size: 24))
+          (y-stack fr: 9
+            (text wrap: true caption: ^title font: "IBM Plex Sans" weight: 450 size: 14 color: (oklch 0.9 0 0))
+            (text wrap: true caption: ^detail font: "IBM Plex Sans" weight: 400 size: 11 color: (oklch 0.85 0 0)))
+          (align x: 1 y: 0.5 fr: 2
+            (text wrap: true caption: ^(~ (round (* progress 100)) "%") color: (oklch 0.7 0.1 143.68) font: "IBM Plex Sans" size: 16)))))
+    (group z-index: 10 dt: -2.5
+      (limit max-h: 5
+        (percents w: ^progress
+          (rect up-h: 5 radius-tl: 5 radius-tr: 5 radius-bl: 5 radius-br: 5 fill: (oklch 0.7 0.1 143.68))))))
+
+(selection-slot child_ ¦ _ selected⋮ false) =>
+  (x-stack gap: 15
+    (align x: 0.5 y: 0.5
+      (z-stack z-index: local
+        (rect z-index: -1 up-w: 16 up-h: 16 fill: (oklch 0.3 0 0) radius-tl: (* 1) radius-tr: (* 1) radius-bl: (* 1) radius-br: (* 1))
+        (^if selected
+          (limit max-w: 16 max-h: 16
+            (align x: 0.3 y: 0.9 lax: true
+              (text caption: "\u00e5ca" leading: 1 color: (oklch 0.9 0.15 270) font: "Material Icons Outlined" size: 32))))))
+    (group fr: 1
+      (z-stack z-index: local
+        (^if selected
+          (rect z-index: 1 fill: (oklch 0.7 0.2 270 0.3) radius-tl: 15 radius-tr: 15 radius-bl: 15 radius-br: 15))
+        (padding z-index: (local 0) pl: 10 pr: 10 pb: 10 pt: 10
+          ^child))))
+
+(selection-button ¦ _ icon_string caption_string) =>
+  (limit min-w: 80 min-h: 90 max-w: 80 max-h: 90
+    (z-stack z-index: local
+      (rect z-index: -1
+        fill: (oklch 0.4 0 0)
+        radius-tl: 5
+        radius-tr: 5
+        radius-bl: 5
+        radius-br: 5)
+      (padding pl: 5 pr: 5 pt: 5 pb: 5
+        (y-stack gap: 5
+          (group fr: 1
+            (align x: 0.5 y: 0.5
+              (text caption: ^icon leading: 1 color: (oklch 0.95 0 0) font: "Material Icons Outlined" size: 24)))
+          (align x: 0.5 y: 0.5
+            (text wrap: true align: center caption: ^caption font: "IBM Plex Sans" weight: 400 size: 12 color: (oklch 0.95 0 0)))))))
+
+(projects-card) =>
+  (z-stack z-index: local
+    (rect z-index: -1
+      stroke: (oklch 0.25 0 0)
+      thickness-l: 1
+      thickness-r: 1
+      thickness-t: 1
+      thickness-b: 1
+      radius-tl: 7
+      radius-tr: 7
+      radius-bl: 7
+      radius-br: 7)
+      (y-stack
+        (padding pl: 16 pr: 16 pt: 8 pb: 8
+          (x-stack gap: 10
+            (align fr: 1 y: 0.5
+              (text wrap: true caption: "Projects" font: "IBM Plex Sans" weight: 500 size: 16 color: (oklch 0.98 0 0)))
+            (group fr: 2
+              (input-field placeholder: "Find project..."))))
+        (hr (oklch 0.25 0 0))
+        (padding pl: 15 pr: 15 pt: 10 pb: 10
+          (y-stack gap: 10
+            (text caption: "Showing 5 project(s)" font: "IBM Plex Sans" weight: 400 size: 14 color: (oklch 0.8 0 0))
+            (y-stack
+              (selection-slot
+                selected: true
+                (project-card
+                  icon: "\u00e1b7"
+                  title: "Support search"
+                  detail: "Lorem ipsum dolor sit amet, qui minim labore adipisicing minim sint cillum sint consectetur cupidatat."
+                  progress: 0.7))
+              (selection-slot
+                (project-card
+                  icon: "\u00e881"
+                  title: "Support replace"
+                  detail: "Lorem ipsum dolor sit amet, qui minim labore adipisicing minim sint cillum sint consectetur cupidatat."
+                  progress: 0.2))
+              (selection-slot
+                (project-card
+                  icon: "\u00e3e4"
+                  title: "Support highlight"
+                  detail: "Lorem ipsum dolor sit amet, qui minim labore adipisicing minim sint cillum sint consectetur cupidatat."
+                  progress: 0.05))
+              (selection-slot
+                selected: true
+                (project-card
+                  icon: "\u00ef4a"
+                  title: "Support void"
+                  detail: "Lorem ipsum dolor sit amet, qui minim labore adipisicing minim sint cillum sint consectetur cupidatat."
+                  progress: 0))
+              (selection-slot
+                (project-card
+                  icon: "\u00e58f"
+                  title: "Support window"
+                  detail: "Lorem ipsum dolor sit amet, qui minim labore adipisicing minim sint cillum sint consectetur cupidatat."
+                  progress: 1)))))
+        (z-stack z-index: local
+          (rect z-index: -1
+            fill: (oklch 0.25 0 0)
+            radius-bl: 7
+            radius-br: 7)
+          (padding pl: 8 pr: 8 pt: 8 pb: 8
+            (z-stack z-index: local
+              (x-ratio/source
+                (viewport z-index: (local 0)
+                  (x-stack gap: 8
+                    (group fr: 1 (selection-button icon: "\u00e14d" caption: "Copy"))
+                    (group fr: 1 (selection-button icon: "\u00e14e" caption: "Cut"))
+                    (group fr: 1 (selection-button icon: "\u00e872" caption: "Delete"))
+                    (group fr: 1 (selection-button icon: "\u00e6b8" caption: "Share"))
+                    (group fr: 1 (selection-button icon: "\u00e0b8" caption: "Clear selection")))))
+              (x-ratio/sink
+                (align y: 1
+                  (limit max-h: 5 z-index: 1
+                    (rect
+                      up-h: 5
+                      dt: 7.5
+                      radius-tl: (* 1)
+                      radius-tr: (* 1)
+                      radius-bl: (* 1)
+                      radius-br: (* 1)
+                      fill: (oklch 1 0 0 0.3))))))))))
+
+(code caption_string ¦ _ fill_⋮ (oklch 0.1 0 0) color_⋮ (oklch 0.8 0 0)) =>
+  (z-stack z-index: local
+    (rect z-index: -1 fill: ^fill radius-tl: 3 radius-tr: 3 radius-bl: 3 radius-br: 3)
+    (padding pl: 3 pr: 3
+      (text caption: ^caption size: 14 font: "IBM Plex Mono" color: ^color)))
+
+(word caption_string) =>
+  (text caption: ^caption size: 14 font: "IBM Plex Mono" color: (oklch 0.9 0 0))
+
+(emphasis caption_string) =>
+  (text caption: ^caption size: 14 font: "IBM Plex Mono" color: (oklch 0.9 0 0) italic: true)
+
+(x-wrapped children_+ ¦ props_) =>
+  (x-wrap nodes: ^children ^… props)
+
+(y-wrapped children_+ ¦ props_) =>
+  (y-wrap nodes: ^children ^… props)
+
+(suggestion-card words_+) =>
+  (z-stack z-index: local
+    (rect
+      fill: (oklch 0.25 0 0)
+      stroke: (oklch 0.35 0 0)
+      thickness-l: 1.5
+      thickness-r: 1.5
+      thickness-t: 1.5
+      thickness-b: 1.5
+      radius-tl: 10
+      radius-tr: 10
+      radius-bl: 10
+      radius-br: 10
+      z-index: -1)
+    (y-stack gap: 5
+      (padding pl: 10 pr: 10 pt: 8
+        (x-stack gap: 8
+          (align y: 0.5
+            (text caption: "\u00ea25" leading: 1 font: "Material Icons Outlined" size: 16 color: white))
+          (text fr: 1 wrap: true caption: "soma.dwuir.node.composite" size: 16 font: "IBM Plex Mono" weight: 800 color: white)))
+      (hr (oklch 0.35 0 0))
+      (padding pl: 10 pr: 10 pb: 10 pt: 10
+        (x-wrapped gap-x: 5 gap-y: 3
+          (^each (words as word_)
+            (^match word
+              (when _string (word ^word))
+              (when _ ^word)))))))
+
+(suggestion-card/composite) =>
+  (suggestion-card
+    "The" (code "composite") "node" "lets" "you" "scope" (code "z-index") "," "and" "apply"
+    (emphasis "opacity") "to" "any" "of" "children."
+    "All" "children" "are" "going" "to" "be" "drawn" "as" "a" "unit," "and" "only"
+    "then" "will" (emphasis "opacity") "be" "applied" "to" "them."
+    "Using" (code "composite") "is" "therefore" "different" "from" "setting"
+    (emphasis "opacity") "of" "each" "individual" "child.")
+
+(figma-card ¦ _ hue_ icon⋮ "\u00e746" title_string subscript_string) =>
+  (z-stack z-index: local
+    (rect
+      z-index: 1
+      stroke: (oklch 0.35 0 0)
+      thickness-l: 1.5
+      thickness-t: 1.5
+      thickness-r: 1.5
+      thickness-b: 1.5
+      radius-tl: 10
+      radius-tr: 10
+      radius-bl: 10
+      radius-br: 10)
+    (padding pl: 1 pr: 1 pt: 1 pb: 1
+      (y-stack
+        (rect fr: 1 radius-tl: 10 radius-tr: 10 up-w: 10 up-h: 10 fill: (oklch 0.2 0.08 ^hue))
+        (z-stack z-index: local
+          (rect z-index: -1 fill: (oklch 0.25 0 0) stroke: (oklch 0.35 0 0) thickness-t: 1.5 radius-bl: 10 radius-br: 10)
+          (padding pl: 8 pr: 8 pt: 10 pb: 10
+            (x-stack gap: 10
+              (align x: 0.5 y: 0.5
+                (text caption: ^icon leading: 1 color: (oklch 0.9 0 0) font: "Material Icons Outlined" size: 20))
+              (y-stack fr: 1
+                (text caption: ^title font: "IBM Plex Sans" size: 14 color: white)
+                (x-stack
+                  (text caption: ^subscript font: "IBM Plex Sans" size: 14 color: (oklch 0.8 0 0))))))))))
+
+(wrap-card ¦ _ hue_) =>
+  (align x: 0.5 y: 0.5
+    (rect
+      up-w: 30
+      up-h: 30
+      thickness-l: 1.5
+      thickness-r: 1.5
+      thickness-t: 1.5
+      thickness-b: 1.5
+      radius-tl: 5
+      radius-tr: 5
+      radius-bl: 5
+      radius-br: 5
+      stroke: (oklch 0.9 0.15 ^hue)
+      fill: (oklch 0.5 0.15 ^hue)))
+
+(wrap-cards mode←(%any x-wrapped y-wrapped)) =>
+  (z-stack
+    (rect fill: (oklch 0.35 0 0) z-index: -1)
+    (padding pl: 10 pr: 10 pt: 10 pb: 10
+      (^mode min-span: 2 max-span: 5 gap-x: 5 gap-y: 5
+        (wrap-card hue: red)
+        (wrap-card hue: green)
+        (wrap-card hue: blue)
+        (wrap-card hue: crimson)
+        (wrap-card hue: violet)
+        (wrap-card hue: orange)
+        (wrap-card hue: cyan)
+        (wrap-card hue: pink))))
+
+(main) =>
+  (group
+    ;; Banner
+    (content root: true dl: 1650
+      (padding pl: 10 pr: 10 pt: 10 pb: 10
+        (limit max-w: 200
+          (z-stack z-index: (local 1000)
+            (rect z-index: -1 fill: (oklch 1 0 0 0.8) radius-tl: 10 radius-tr: 10 radius-bl: 10 radius-br: 10)
+            (padding pl: 7 pr: 7 pt: 7 pb: 7
+              (text wrap: true caption: "This is a static test (result is an image) for UIR & DwUIR. Use Page Up/Page Dn to scroll." font: "IBM Plex Mono" size: 11 color: (oklch 0.2 0 0)))))))
+
+    ;; A regression/z-index/floating test: Branches menu
+    ;;
+    ;; Reference: https://github.com/
+    (content root: true dl: 950 dt: 10
+      (padding pl: 10 pr: 10 pt: 10 pb: 10
+        (branches-card ((active "alpha") "beta" "gamma" (active "delta") "kappa" "foo" (active "bar")))))
+
+    ;; A regression test: Dashboard design
+    ;;
+    ;; Reference: https://dribbble.com/shots/25241984-Task-Management-Dashboard
+    (content root: true dl: 10 dt: 10
+      (limit max-w: 900
+        (z-stack z-index: local
+          (rect fill: (oklch 0.15 0 0))
+          (padding z-index: 1 pl: 15 pr: 15 pt: 15 pb: 15
+            (y-stack gap: 15
+              (y-stack
+                (text caption: "Dashboard" font: "IBM Plex Sans" size: 32 color: (oklch 0.9 0 0))
+                (text caption: "Plan, prioritize, and accomplish your tasks with ease." font: "IBM Plex Sans" size: 16 color: (oklch 0.8 0 0)))
+              (x-stack gap: 15
+                (group fr: 1
+                  (stat-card
+                    active: true
+                    title: "Total projects"
+                    stat: "24"
+                    badge: (up-badge "5" color: (oklch 0.9665 0.1 143.68))
+                    comment: "Increased from last month"))
+                (group fr: 1
+                  (stat-card
+                    title: "Ended projects"
+                    stat: "10"
+                    badge: (up-badge "6" color: (oklch 0.9665 0.1 143.68))
+                    comment: "Increased from last month"))
+                (group fr: 1
+                  (stat-card
+                    title: "Running projects"
+                    stat: "12"
+                    badge: (up-badge "2" color: (oklch 0.9665 0.1 143.68))
+                    comment: "Increased from last month"))
+                (group fr: 1
+                  (stat-card
+                    title: "Pending projects"
+                    stat: "2"
+                    comment: "On discuss")))
+              (x-stack gap: 15
+                (people-card fr: 8 title: "Team Collaboration"
+                  (person-entry name: "Samantha Doe" avatar: (svg src: (file "data/avatar-girl.svg")) task: "Project Repository" badge: (status-badge "Completed" hue: 143.68))
+                  (person-entry name: "John Doe" avatar: (avatar-img src: (file "data/avatar-male1-32.jpg")) task: "Auth" badge: (status-badge "Pending" hue: 0))
+                  (person-entry name: "Sarah Doe" avatar: (avatar-img src: (file "data/avatar-female1-32.jpg")) task: "UX design" badge: (status-badge "In Progress" hue: 70))
+                  (person-entry name: "Kate Doe" avatar: (avatar-img src: (file "data/avatar-female2-32.jpg")) task: "Admin Panel"))
+                (group fr: 4
+                  (projects-card))))))))
+
+    ;; Test x-wrap with a text-like example.
+    (content root: true dl: 950 dt: 400
+      (x-wrapped gap-x: 30
+        (limit max-w: 200 (suggestion-card/composite))
+        (limit dt: -20 max-w: 250 (suggestion-card/composite))
+        (limit dt: -40 max-w: 400 (suggestion-card/composite))))
+
+    ;; Test x-wrap with a cards example.
+    ;;
+    ;; Reference: https://figma.com
+    (content root: true dl: 10 dt: 1000
+      (limit max-w: 850
+        (z-stack z-index: local
+          (rect z-index: -1 fill: (oklch 0.2 0 0))
+          (padding pl: 20 pr: 20 pt: 20 pb: 20
+            (y-stack gap: 10
+              (text caption: "Cards" font: "IBM Plex Sans" size: 32 color: white)
+              (x-wrapped gap-x: 30 gap-y: 30
+                ;; Make these fr: 1 so that they share the first row.
+                (align fr: 1 x: 0.5 y: 0.5
+                  (limit min-w: 300 max-w: 300 min-h: 200
+                    (figma-card hue: red title: "Untitled 1" subscript: "Drafts · Edited 2 hours ago")))
+                (align fr: 1 x: 0.5 y: 0.5
+                  (limit min-w: 300 max-w: 300 min-h: 200
+                    (figma-card hue: green title: "Untitled 2" subscript: "Drafts · Edited 3 hours ago")))
+                (limit min-w: 300 max-w: 300 min-h: 200
+                  (figma-card hue: blue title: "Untitled 3" subscript: "Drafts · Edited 4 hours ago"))
+                (limit min-w: 300 max-w: 300 min-h: 200
+                  (figma-card hue: orange title: "Untitled 4" subscript: "Drafts · Edited 5 hours ago"))
+                (limit min-w: 300 max-w: 300 min-h: 200
+                  (figma-card hue: violet title: "Untitled 5" subscript: "Drafts · Edited 6 hours ago"))))))))
+
+    ;; Test x-wrap with min-span and max-span.
+    (content root: true dl: 900 dt: 1000
+      (y-stack gap: 20
+        (y-stack
+          (text shrink: true wrap: true caption: "NOTE: Since max-span: 5, only 5 cards are going to be placed on the main axis" font: "IBM Plex Sans" size: 11 color: (oklch 0.8 0 0))
+          (limit min-w: 500 (wrap-cards x-wrapped)))
+        (limit min-w: 300 (wrap-cards x-wrapped))
+        (limit max-w: 150 (wrap-cards x-wrapped))
+        (limit max-w: 100 (wrap-cards x-wrapped))
+        (y-stack
+          (text wrap: true caption: "NOTE: This is expected to overflow since min-span: 2" font: "IBM Plex Sans" size: 11 color: (oklch 0.8 0 0))
+          (limit max-w: 50 (wrap-cards x-wrapped)))))
+
+    ;; Test y-wrap with min-span and max-span.
+    (content root: true dl: 1500 dt: 800
+      (y-stack gap: 20
+        (y-stack
+          (text shrink: true wrap: true caption: "NOTE: Since max-span: 5, only 5 cards are going to be placed on the main axis" font: "IBM Plex Sans" size: 11 color: (oklch 0.8 0 0))
+          (limit min-h: 500 (wrap-cards y-wrapped)))
+        (limit min-h: 300 (wrap-cards y-wrapped))
+        (limit max-h: 150 (wrap-cards y-wrapped))
+        (limit max-h: 100 (wrap-cards y-wrapped))
+        (y-stack
+          (text wrap: true caption: "NOTE: This is expected to overflow since min-span: 2" font: "IBM Plex Sans" size: 11 color: (oklch 0.8 0 0))
+          (limit max-h: 50 (wrap-cards y-wrapped)))))
+
+    ;; Test x-wrap and y-wrap alongside each other.
+    (content root: true dl: 1100 dt: 1300
+      (x-stack gap: 30
+        (limit max-w: 100 max-h: 100
+          (x-wrap gap-x: 5 gap-y: 5
+            nodes:
+             ((rect up-w: 30 up-h: 30 fill: red)
+              (rect up-w: 30 up-h: 30 fill: green)
+              (rect up-w: 30 up-h: 30 fill: blue)
+              (rect up-w: 30 up-h: 30 fill: violet)
+              (rect up-w: 30 up-h: 30 fill: pink)
+              (rect up-w: 30 up-h: 30 fill: yellow)
+              (rect up-w: 30 up-h: 30 fill: darkorange))))
+        (limit max-w: 100 max-h: 100
+          (y-wrap gap-x: 5 gap-y: 5
+            nodes:
+             ((rect up-w: 30 up-h: 30 fill: red)
+              (rect up-w: 30 up-h: 30 fill: green)
+              (rect up-w: 30 up-h: 30 fill: blue)
+              (rect up-w: 30 up-h: 30 fill: violet)
+              (rect up-w: 30 up-h: 30 fill: pink)
+              (rect up-w: 30 up-h: 30 fill: yellow)
+              (rect up-w: 30 up-h: 30 fill: darkorange))))))
+)
+
+title: "Untitled"
+width: 1900
+height: 1000
+content-w: 1900
+content-h: 2500 ;; < approximately
+fill: (oklch 0.13 0 0)
+
+(^match uir2ppm
+  (when true (main))
+  (when _
+    (viewport final-w: 1900 final-h: 1000 pan-t: (^verbatim ^(- 0 page))
+      (main))))
+

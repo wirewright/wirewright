@@ -532,6 +532,37 @@ unless "-no-dwuir".in?(ARGV)
   puts
 end
 
+require "./uir2ppm"
+
+# Run UIR tests
+unless "-no-uir".in?(ARGV)
+  begin
+    uir = ML.terms(File.read("./tests/uir.in.wwml"))
+
+    expected = File.open("./tests/uir.expected.ppm", "rb", &.getb_to_end)
+    actual = IO::Memory.new
+
+    ctx.stats.run do
+      UIR2PPM.uir2ppm(actual, uir)
+    end
+
+    if expected.to_slice == actual.to_slice
+      puts "✔️ UIR actual image matches expected image".colorize.green
+    else
+      puts "❌UIR actual image does not match expected image".colorize.red
+      puts
+      puts "  Either UIR does not work anymore; or the expected image is out of date."
+      puts "  Use the `uir2ppm` tool to re-generate."
+    end
+  rescue e
+    Log.error(exception: e)
+
+    puts "❌Crashed while running UIR tests".colorize.red
+  end
+
+  puts
+end
+
 if ctx.failures.empty?
   puts "Ran #{ctx.stats.ncases} test case(s) in #{ctx.stats.duration.humanize}.".colorize.green
   exit 0

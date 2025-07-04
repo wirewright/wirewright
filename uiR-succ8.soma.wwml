@@ -1,0 +1,613 @@
+;; TODO: UIR: size (dn-w+h) conditionals of some kind? branching?
+;;      ask the parent for the larger one's up-w/h. when the parent responds,
+;;      if that's less than a size bound of some kind, swap to the smaller one
+;;      and send the dn-w/h there. So in a sense, this "branch" node always
+;;      appears to the outside as the larger argument; but may choose to render
+;;      the smaller argument within its bounds instead, if it's given some size.
+
+;; TODO: UIR: facilities for connecting viewport to scrollbar
+
+;; TODO: DwUIR: align: left/center/right on text, then fix selection-button
+
+;; (^verbatim
+;;   (text z-index: 100 dt: 0 caption: ^src font: "IBM Plex Mono" size: 9 color: green))
+
+;; TODO: fix naming.
+;;
+;; The convention that seems to be emerging leads to names such as Wup, Wdn
+;; rather than up-w, up-h. final-w/h style should still be kept as is since
+;; it is used by DwUIR.
+;;
+;; Most names here are wonky, the most consistent thing here is me being inconsistent.
+;; The names themselves are very bad, too.
+
+;; TODO: we miss a lot of shorthands that would make this much less clumsy
+;; and line lengths reduced. With templating, we'll get some line count/
+;; clumsiness reduction as well, through dedupe. I expect ~100 LoC to be
+;; "shave-able", plus comments can be ignored, giving us a ~300-400 LoC
+;; layout engine. Neat!
+
+;;
+;; General
+;;
+
+;; up-w/h's flow from the child to the parent.
+(_symbol {¦ up-w: w_number} ¦ _ -up-w: W) <> {W: →w, (w): ()}
+(_symbol {¦ up-h: h_number} ¦ _ -up-h: H) <> {H: →h, (h): ()}
+
+;; dn-w/h's flow from the parent to the child.
+(_symbol {¦ -dn-w: w} ¦ _ dn-w: W_number) <> {w: →W, (W): ()}
+(_symbol {¦ -dn-h: h} ¦ _ dn-h: H_number) <> {h: →H, (H): ()}
+
+;; Positioning trigger flows from the parent to the child.
+(_symbol {¦ -position_} ¦ _ position: _) <> {position: true}
+
+⟨{-l: dst} {¦ l: src←[M_*]}⟩ <> {dst: →M, (src): ()}
+⟨{¦ r: src←[M_*]} {¦ -r: dst}⟩ <> {dst: →M, (src): ()}
+
+{¦ -up-w/old: w0 up-w/new: w1←w_ -up-w: w0} <> {w0: →w1, (w1): ()}
+{¦ -up-h/old: h0 up-h/new: h1←h_ -up-h: h0} <> {h0: →h1, (h1): ()}
+
+{¦ up-w/old: w_ up-w/new: w1←w_} <> {(w1): ()}
+{¦ up-h/old: h_ up-h/new: h1←h_} <> {(h1): ()}
+
+{¦ up-w/old: w0_ up-w/new: w1_ -up-w: w0} <> {w0: →w1, (w1): ()}
+{¦ up-h/old: h0_ up-h/new: h1_ -up-h: h0} <> {h0: →h1, (h1): ()}
+
+;;
+;; root
+;;
+
+;; There is no one to take up-w/h from root, so burn them.
+{¦ root: _ up-w: w_number} <> {(w): ()}
+{¦ root: _ up-h: h_number} <> {(h): ()}
+
+;; When root nodes receive control unrelated to up-w/h, treat that as
+;; request for phase change; switch to the `position` phase.
+;;
+;; NOTE: we separate sizing and positioning into two distinct phases to avoid
+;; needless position recomputation in case of constraint refinement. In other
+;; words, once definite sizes are determined, position once -- instead of
+;; positioning on every size change.
+{¦ root: _ -up-w -up-h -position_} <> {position: true}
+
+;;
+;; content
+;;
+
+(content {¦ up-w: w_number -dn-w: W} ¦ _ -up-w: W) <> {W: →w, (w): ()}
+(content {¦ up-h: h_number -dn-h: H} ¦ _ -up-h: H) <> {H: →h, (h): ()}
+
+(content _ ¦ _ dn-w: W_number) <> {(W): ()}
+(content _ ¦ _ dn-h: H_number) <> {(H): ()}
+
+;;
+;; text
+;;
+
+;; Make a request to DwUIR to get the content size of the text without
+;; any constraints.
+(text ¦ _ -intrinsic-status -dw-request_)
+  <> {dw-request: (measure intrinsic-w intrinsic-h status: intrinsic-status)}
+
+;; Propagate width from DwUIR's intrinsic-size as up-w unconditionally.
+(text ¦ _ -up-w_ intrinsic-w: w_number)
+  <> {up-w: →w, (w): ()}
+
+;; Ask DwUIR to define up-h for us once dn-w is known. Now that we know
+;; dn-w, we can define final-w of the text (a property required by DwUIR).
+(text ¦ _ dn-w: w_number final-w: (%- (%never) final-w) -up-h -dw-request_)
+  <> {dw-request: (measure →w up-h status: intrinsic-status), final-w: →w, (w): ()}
+
+;; Similarly, define final-h based on dn-h once it is know. final-h is also
+;; a property required by DwUIR to draw text.
+(text ¦ _ dn-h: h_number final-h: (%- (%never) final-h))
+  <> {final-h: →h, (h): ()}
+
+;;
+;; rect, svg
+;;
+
+((%any rect svg) ¦ _ dn-w: W_number final-w: (%- (%never) final-w)) <> {final-w: →W, (W): ()}
+((%any rect svg) ¦ _ dn-h: H_number final-h: (%- (%never) final-h)) <> {final-h: →H, (H): ()}
+
+;; For rectangles with image fill, we will attempt to query the intrinsic
+;; size of the image and use that as our up-w/h proposal.
+(rect ¦ _ fill: [image _] -intrinsic-status -dw-request_)
+  <> {dw-request: (measure intrinsic-w intrinsic-h status: intrinsic-status)}
+
+;; Ask DwUIR about the svg's size. If possible, DwUIR will reply through rewriting
+;; with the SVG's intrinsic size, which we'll use as the proposal up-w/h.
+(svg ¦ _ -intrinsic-status -dw-request_)
+  <> {dw-request: (measure intrinsic-w intrinsic-h status: intrinsic-status)}
+
+;; NOTE: DwUIR may very well return ugly floating point numbers for size; so we
+;; use ceil to remove that.
+((%any svg rect) ¦ _ intrinsic-w: w_number intrinsic-h: h_number -up-w_ -up-h_)
+  <> {up-w: $'(ceil →w), up-h: $'(ceil →h), (w): (), (h): ()}
+
+;;
+;; viewport
+;;
+
+(viewport _ ¦ _ dn-w: W_number final-w: (%- (%never) final-w)) <> {final-w: →W}
+(viewport _ ¦ _ dn-h: H_number final-h: (%- (%never) final-h)) <> {final-h: →H}
+
+;;
+;; padding
+;;
+
+;; Initialize
+(padding _ ¦ _ pl⋮ 0 pr⋮ 0 -px_) <> {px: $'(+ →pl →pr)}
+(padding _ ¦ _ pt⋮ 0 pb⋮ 0 -py_) <> {py: $'(+ →pt →pb)}
+
+;; Alter up-w/h flow.
+(padding {¦ up-w: w_number} ¦ _ px_number -up-w: W) <> {W: $'(+ →w →px), (w): ()}
+(padding {¦ up-h: h_number} ¦ _ py_number -up-h: H) <> {H: $'(+ →h →py), (h): ()}
+
+;; Alter dn-w/h flow.
+(padding {¦ -dn-w: w} ¦ _ px_number dn-w: W_number) <> {w: $'(- →W →px), (W): ()}
+(padding {¦ -dn-h: h} ¦ _ py_number dn-h: H_number) <> {h: $'(- →H →py), (H): ()}
+
+;; Offset the child by pl/pt.
+(padding {¦ dl⋮ 0} ¦ _ pl_number position: _ -Lχ_) <> {dl: $'(+ →dl →pl), Lχ: true}
+(padding {¦ dt⋮ 0} ¦ _ pt_number position: _ -Tχ_) <> {dt: $'(+ →dt →pt), Tχ: true}
+
+;;
+;; limit
+;;
+
+;; Intercept up-w/h.
+(limit {¦ up-w: w_number} ¦ _ -up-w: W) <> {W: (arg →w), (w): ()}
+(limit {¦ up-h: h_number} ¦ _ -up-h: H) <> {H: (arg →h), (h): ()}
+
+;; Apply min/max on up-w.
+(limit _ ¦ _ up-w: (arg w_number ¦ _ -minχ_) min-w_number)
+  <> {w: $'(max →min-w →w), minχ: true}
+(limit _ ¦ _ up-w: (arg w_number ¦ _ -maxχ_) max-w_number)
+  <> {w: $'(min →max-w →w), maxχ: true}
+
+;; Apply min/max on up-h.
+(limit _ ¦ _ up-h: (arg h_number ¦ _ -minχ_) min-h_number)
+  <> {h: $'(max →min-h →h), minχ: true}
+(limit _ ¦ _ up-h: (arg h_number ¦ _ -maxχ_) max-h_number)
+  <> {h: $'(min →max-h →h), maxχ: true}
+
+;; Release up-w/h.
+(limit _ ¦ _ up-w_: [arg w_number]) <> {up-w: →w}
+(limit _ ¦ _ up-h_: [arg h_number]) <> {up-h: →h}
+
+;; Intercept.
+(limit _ ¦ _ dn-w: W_number) <> {W: (arg →W)}
+(limit _ ¦ _ dn-h: H_number) <> {H: (arg →H)}
+
+;; Make sure dn-w/h fits into the desired max-w/h, too. This appears semantically
+;; coherent -- even if the parent gives us more size we'll still adhere to
+;; the child's own restriction.
+(limit _ ¦ _ dn-w: (arg w_number ¦ _ -maxχ_) max-w_number)
+  <> {w: $'(min →w →max-w), maxχ: true}
+(limit _ ¦ _ dn-h: (arg h_number ¦ _ -maxχ_) max-h_number)
+  <> {h: $'(min →h →max-h), maxχ: true}
+
+;; Release dn-w/h.
+(limit {¦ -dn-w: W} ¦ _ dn-w_: [arg w_number]) <> {W: →w, (dn-w): ()}
+(limit {¦ -dn-h: H} ¦ _ dn-h_: [arg h_number]) <> {H: →h, (dn-h): ()}
+
+;;
+;; percents
+;;
+
+;; Intercept dn-w/h.
+(percents _ ¦ _ dn-w_number) <> {dn-w: (arg →dn-w)}
+(percents _ ¦ _ dn-h_number) <> {dn-h: (arg →dn-h)}
+
+;; Scale.
+(percents _ ¦ _ dn-w: (arg W_number ¦ _ -χ_) w_: (%number 0 <= _ <= 1))
+  <> {W: $(round (* →W →w)), χ: true}
+(percents _ ¦ _ dn-h: (arg H_number ¦ _ -χ_) h_: (%number 0 <= _ <= 1))
+  <> {H: $(round (* →H →h)), χ: true}
+
+;; Release dn-w/h.
+(percents {¦ -dn-w: Wdst} ¦ _ dn-w_: [arg W_number]) <> {Wdst: →W, (dn-w): ()}
+(percents {¦ -dn-h: Hdst} ¦ _ dn-h_: [arg H_number]) <> {Hdst: →H, (dn-h): ()}
+
+;;
+;; floating
+;;
+
+[floating {¦ up-w: w_number -dn-w: W}] <> {W: →w, w1: →w, (w): ()}
+[floating {¦ up-h: h_number -dn-h: H}] <> {H: →h, h1: →h, (h): ()}
+
+(floating _ ¦ _ dn-w: W_number) <> {(W): ()}
+(floating _ ¦ _ dn-h: H_number) <> {(H): ()}
+
+;;
+;; align
+;;
+
+(align {¦ content-w: (%- (%never) content-w) up-w: w_number} ¦ _ x: _number -up-w: W)
+  <> {content-w: →w, W: →w, (w): ()}
+(align {¦ content-h: (%- (%never) content-h) up-h: h_number} ¦ _ y: _number -up-h: H)
+  <> {content-h: →h, H: →h, (h): ()}
+
+(align {¦ content-w: Wcontent_number current-w: (%- (%never) w) -dn-w: w} ¦ _ x: _number dn-w: W_number frame-w: (%- (%never) frame-w))
+  <> {frame-w: →W, w: $'(min →Wcontent →W), (W): ()}
+(align {¦ content-h: Hcontent_number current-h: (%- (%never) h) -dn-h: h} ¦ _ y: _number dn-h: H_number frame-h: (%- (%never) frame-h))
+  <> {frame-h: →H, h: $'(min →Hcontent →H), (H): ()}
+
+;; TODO: can we dedupe these somehow ?! their bodies are exactly the same
+
+(align {¦ current-w: Winner_number dl⋮ 0} ¦ _ frame-w: Wframe_number position: _ x_number -Lχ_)
+  <> {dl: $(+ →dl (round (- (* →Wframe →x) (* →Winner →x)))), Lχ: true}
+(align {¦ current-h: Hinner_number dt⋮ 0} ¦ _ frame-h: Hframe_number position: _ y_number -Tχ_)
+  <> {dt: $(+ →dt (round (- (* →Hframe →y) (* →Hinner →y)))), Tχ: true}
+
+(align {¦ content-w: Winner_number dl⋮ 0} ¦ _ position: _ lax: _ frame-w: Wframe_number x_number -Lχ_)
+  <> {dl: $(+ →dl (round (- (* →Wframe →x) (* →Winner →x)))), Lχ: true}
+(align {¦ content-h: Hinner_number dt⋮ 0} ¦ _ position: _ lax: _ frame-h: Hframe_number y_number -Tχ_)
+  <> {dt: $(+ →dt (round (- (* →Hframe →y) (* →Hinner →y)))), Tχ: true}
+
+;;
+;; `metrics` event
+;;
+;; metrics events are sent by x/y/z-stack and x/y-wrap to assess the state of
+;; their children. The measurement is generic. We do not differentiate between
+;; the different kinds of stacks or wraps at this point.
+
+;; TODO: these should be mostly generated from a template aka machine generated!
+
+;; Update x/y-stride from up-w/h.
+{¦ r: [metrics _] up-w_number x-stride: (%- (%never) stride)} <> {stride: →up-w, (up-w): ()}
+{¦ r: [metrics _] up-h_number y-stride: (%- (%never) stride)} <> {stride: →up-h, (up-h): ()}
+
+;; Max of widths/heights.
+{¦ r: (metrics {¦ Wmax_: ?} ¦ _ -Wmax: χ) shrink: (%- (%any true w)) -up-w x-stride_number} <> {Wmax: →x-stride, χ: true}
+{¦ r: (metrics {¦ Wmax_number} ¦ _ -Wmax: χ) shrink: (%- (%any true w)) -up-w x-stride_number} <> {Wmax: $'(max →Wmax →x-stride), χ: true}
+
+{¦ r: (metrics {¦ Hmax_: ?} ¦ _ -Hmax: χ) shrink: (%- (%any true h)) -up-h y-stride_number} <> {Hmax: →y-stride, χ: true}
+{¦ r: (metrics {¦ Hmax_number} ¦ _ -Hmax: χ) shrink: (%- (%any true h)) -up-h y-stride_number} <> {Hmax: $'(max →Hmax →y-stride), χ: true}
+
+;; Sum of widths/heights excluding fr children.
+{¦ r: (metrics {¦ Wlo_: ?} ¦ _ -Wlo: χ) -fr -up-w x-stride_number} <> {Wlo: →x-stride, χ: true}
+{¦ r: (metrics {¦ Wlo_number} ¦ _ -Wlo: χ) -fr -up-w x-stride_number} <> {Wlo: $'(+ →Wlo →x-stride), χ: true}
+
+{¦ r: (metrics {¦ Hlo_: ?} ¦ _ -Hlo: χ) -fr -up-h y-stride_number} <> {Hlo: →y-stride, χ: true}
+{¦ r: (metrics {¦ Hlo_number} ¦ _ -Hlo: χ) -fr -up-h y-stride_number} <> {Hlo: $'(+ →Hlo →y-stride), χ: true}
+
+;; Sum of widths/heights including fr children.
+{¦ r: (metrics {¦ Whi_: ?} ¦ _ -Whi: χ) -up-w x-stride_number} <> {Whi: →x-stride, χ: true}
+{¦ r: (metrics {¦ Whi_number} ¦ _ -Whi: χ) -up-w x-stride_number} <> {Whi: $'(+ →Whi →x-stride), χ: true}
+
+{¦ r: (metrics {¦ Hhi_: ?} ¦ _ -Hhi: χ) -up-h y-stride_number} <> {Hhi: →y-stride, χ: true}
+{¦ r: (metrics {¦ Hhi_number} ¦ _ -Hhi: χ) -up-h y-stride_number} <> {Hhi: $'(+ →Hhi →y-stride), χ: true}
+
+;; Sum of frs.
+{¦ r: (metrics {¦ Fsum_number} ¦ _ -Fsum: χ) fr_number} <> {Fsum: $'(+ →Fsum →fr), χ: true}
+
+;; No. of participants: if I modified the metrics then I am a participant of it.
+{¦ r: (metrics {¦ N⋮ 0} ¦ (%not ()) -N: χ)} <> {N: $'(+ →N 1), χ: true}
+
+;;
+;; Stack events
+;;
+
+;; TODO: x/y-arrange and x/y-place DRY. They're exactly the same minus x->y letter changes.
+
+;; If a child reports up-w/h that is exactly the same as the previous one,
+;; x/y/z-stack won't reply to avoid infinite loops. However, the child itself
+;; may rely on the parent replying to its up-w/h. Therefore, if the child sees
+;; that its x/y-stride is exactly the same as up-w/h that it reports, it will
+;; reply to itself with det-w/h.
+{¦ x-stride: w_ up-w_: w_ det-w_number -dn-w_} <> {dn-w: →det-w, (up-w): ()}
+{¦ y-stride: h_ up-h_: h_ det-h_number -dn-h_} <> {dn-h: →det-h, (up-h): ()}
+
+;; x-arrange
+
+;; Update det-w of fractionally-sized node.
+{¦ r: (x-arrange {¦ Fsum_number: (%not 0)} Rw_number ¦ _ -Fχ_) det-w: (%- (%never) det-w) fr_number}
+  <> {det-w: $(round (* →Rw (/ →fr →Fsum))), Fχ: true}
+
+;; Update det-w of exact-sized node.
+{¦ r: (x-arrange _ _ ¦ _ -Fχ_) x-stride_number det-w: (%- (%never) det-w)}
+  <> {det-w: →x-stride, Fχ: true}
+
+;; Send det-w as dn-w.
+{¦ r: (x-arrange _ _ ¦ _ Fχ: _ -Wχ_) -dn-w_ det-w_number}
+  <> {dn-w: →det-w, Wχ: true}
+
+;; y-arrange
+{¦ r: (y-arrange {¦ Fsum_number: (%not 0)} Rh_number ¦ _ -Fχ_) det-h: (%- (%never) det-h) fr_number}
+  <> {det-h: $(round (* →Rh (/ →fr →Fsum))), Fχ: true}
+
+{¦ r: (y-arrange _ _ ¦ _ -Fχ_) y-stride_number det-h: (%- (%never) det-h)}
+  <> {det-h: →y-stride, Fχ: true}
+
+{¦ r: (y-arrange _ _ ¦ _ Fχ: _ -Hχ_) -dn-h_ det-h_number}
+  <> {dn-h: →det-h, Hχ: true}
+
+;; x/y-expand
+{¦ r: (x-expand _ W_number ¦ _ -χ_) det-w: (%- (%never) w) -dn-w: w} <> {w: →W, χ: true}
+{¦ r: (y-expand _ H_number ¦ _ -χ_) det-h: (%- (%never) h) -dn-h: h} <> {h: →H, χ: true}
+
+;; x-place
+{¦ r: [x-place L_number gap_number] det-w_number dl⋮ 0 -position_}
+  <> {dl: $'(+ →L →dl), L: $'(+ →L →gap →det-w), position: true}
+
+;; fallback (e.g. floating nodes)
+{¦ r: [x-place L_number _] dt⋮ 0 -position_}
+  <> {dt: →L, position: true}
+
+;; y-place
+{¦ r: [y-place T_number gap_number] det-h_number dt⋮ 0 -position_}
+  <> {dt: $'(+ →T →dt), T: $'(+ →T →gap →det-h), position: true}
+
+;; fallback (e.g. floating nodes)
+{¦ r: [y-place T_number _] dt⋮ 0 -position_}
+  <> {dt: →T, position: true}
+
+;; z-place
+{¦ r: (z-place) -position_} <> {position: true}
+
+;;
+
+{¦ up-w: _ r: [(%any x-arrange y-arrange x-expand y-expand) {¦ -invalid_} _*]} <> {invalid: true}
+{¦ up-h: _ r: [(%any x-arrange y-arrange x-expand y-expand) {¦ -invalid_} _*]} <> {invalid: true}
+
+;;
+;; Rules common to x/y/z-stack.
+;;
+
+;; place the metrics to the pairspart.
+((%any x-stack y-stack z-stack) _* {¦ r_: [metrics S_]} ¦ _ metrics_)
+  <> {(r): (), metrics: →S}
+
+;; Invalidate metrics.
+((%any x-stack y-stack z-stack) _* {¦ r_: [_ {¦ invalid: _} _*]} ¦ _ metrics_)
+  <> {(metrics): (), (r): ()}
+[(%any x-stack y-stack z-stack) _* {¦ r_}]
+  <> {(r): ()}
+
+;;
+;; Rules common to x/y-stack.
+;;
+
+;; Enhance resulting metrics with accumulated gap (Agap)
+((%any x-stack y-stack) _* {¦ r: [metrics {¦ -Agap_ N_number}]} ¦ _ gap⋮ 0)
+  <> {Agap: $(* (- →N 1) →gap)}
+
+
+;; TODO: x/y-stack DRY. They're exactly the same minus x->y letter changes.
+
+;;
+;; x-stack
+;;
+
+;; Order metrics for x-stack.
+(x-stack {¦ -r_} _+ ¦ _ -metrics_)
+  <> {r: (metrics {Wlo: 0, Whi: ?, Hmax: ?, Fsum: 0}), metrics: wait}
+
+;; Calculate up-w candidate.
+(x-stack _* {¦ r: [metrics {¦ Whi_number Agap_number}]} ¦ _ -up-w/new: w)
+  <> {w: $(+ →Whi →Agap)}
+
+;; Calculate up-h candidate.
+(x-stack _* {¦ r: [metrics {¦ Hmax_number}]} ¦ _ -up-h/new: h)
+  <> {h: →Hmax}
+
+;; Trigger x-arrange once dn-w is known.
+(x-stack {¦ -r_} _* ¦ _ metrics_: {¦ Wlo_number Agap_number} dn-w_number)
+  <> {r: (x-arrange →metrics $'(- →dn-w →Wlo →Agap)), (dn-w): ()}
+
+;; Trigger y-expand once dn-h is known.
+(x-stack {¦ -r_} _* ¦ _ metrics_ dn-h_number)
+  <> {r: (y-expand →metrics →dn-h), (dn-h): ()}
+
+;; Trigger positioning of children.
+(x-stack {¦ -r_} _* ¦ _ position_: true gap⋮ 0)
+  <> {r: (x-place 0 →gap), position: false}
+
+;;
+;; y-stack
+;;
+
+(y-stack {¦ -r_} _+ ¦ _ -metrics_)
+  <> {r: (metrics {Wmax: ?, Hlo: 0, Hhi: ?, Fsum: 0}), metrics: wait}
+
+(y-stack _* {¦ r: [metrics {¦ Wmax_number}]} ¦ _ -up-w/new: w)
+  <> {w: →Wmax}
+
+(y-stack _* {¦ r: [metrics {¦ Hhi_number Agap_number}]} ¦ _ -up-h/new: h)
+  <> {h: $(+ →Hhi →Agap)}
+
+(y-stack {¦ -r_} _* ¦ _ metrics_ dn-w_number)
+  <> {r: (x-expand →metrics →dn-w), (dn-w): ()}
+
+(y-stack {¦ -r_} _* ¦ _ metrics_: {¦ Hlo_number Agap_number} dn-h_number)
+  <> {r: (y-arrange →metrics $'(- →dn-h →Hlo →Agap)), (dn-h): ()}
+
+(y-stack {¦ -r_} _* ¦ _ position_: true gap⋮ 0)
+  <> {r: (y-place 0 →gap), position: false}
+
+;;
+;; z-stack
+;;
+
+(z-stack {¦ -r_} _+ ¦ _ -metrics_) <> {r: (metrics {Wmax: ?, Hmax: ?}), metrics: wait}
+(z-stack _* {¦ r: [metrics {¦ Wmax_number}]} ¦ _ -up-w/new: w) <> {w: →Wmax}
+(z-stack _* {¦ r: [metrics {¦ Hmax_number}]} ¦ _ -up-h/new: h) <> {h: →Hmax}
+(z-stack {¦ -r_} _* ¦ _ metrics_ dn-w_number) <> {r: (x-expand →metrics →dn-w), (dn-w): ()}
+(z-stack {¦ -r_} _* ¦ _ metrics_ dn-h_number) <> {r: (y-expand →metrics →dn-h), (dn-h): ()}
+(z-stack {¦ -r_} _* ¦ _ position_: true) <> {r: (z-place), position: false}
+
+;;
+;; x/y-log
+;;
+
+;; For children that know their up-w already, x-log simply records that up-w.
+{¦ r: (x-log (_* `T) ¦ _ -χ_) up-w: w_number} <> {T: →w, χ: true}
+{¦ r: (y-log (_* `T) ¦ _ -χ_) up-h: h_number} <> {T: →h, χ: true}
+
+;; For children that tell they're fr but do not know their size, x-log
+;; records that as flexible size, indicated by `~`.
+{¦ r: (x-log (_* `T) ¦ _ -χ_) -up-w fr: _} <> {T: ~, χ: true}
+{¦ r: (y-log (_* `T) ¦ _ -χ_) -up-h fr: _} <> {T: ~, χ: true}
+
+;; For other children, x/y-log records unknown size, indicated by `?`.
+{¦ r: (x-log (_* `T) ¦ _ -χ_)} <> {T: ?, χ: true}
+{¦ r: (y-log (_* `T) ¦ _ -χ_)} <> {T: ?, χ: true}
+
+;;
+;; wrap-stat
+;;
+
+;; Zip through the log, collecting statistics. We're interested in N,
+;; the number of known-participant children (to calculate accumulated gap),
+;; and Sp, the total size of participant children.
+[wrap-stat `L R←(_*)] <> {L: ()}
+(wrap-stat (_* `l) (r←~ _*) ¦ _ Np⋮ 0) <> {Np: $'(+ →Np 1), l: →r, (r): ()}
+[wrap-stat (_* `l) (r←? _*)] <> {l: →r, (r): ()}
+(wrap-stat (_* `l) (w_number _*) ¦ _ Np⋮ 0 Sp⋮ 0)
+  <> {Np: $'(+ →Np 1), Sp: $'(+ →Sp →w), l: →w, (w): ()}
+
+;;
+;; x/y-wrap
+;;
+
+;; Copy nodes out of the rewrite-protected pairspart into rewriteable
+;; itemspart. Let nodes rewrite themselves until some of them can tell
+;; their up-w (if they can of course).
+(x-wrap `T ¦ _ -state_ nodes_: (_+)) <> {(T): →nodes, state: initial}
+(y-wrap `T ¦ _ -state_ nodes_: (_+)) <> {(T): →nodes, state: initial}
+
+(x-wrap {¦ -r_} _* ¦ _ state_: initial) <> {r: (x-log ()), state: log}
+(y-wrap {¦ -r_} _* ¦ _ state_: initial) <> {r: (y-log ()), state: log}
+
+;; After the log is known, stat it by instantiating the wrap-stat zipper.
+(x-wrap (%group children _* {¦ r_: [x-log log_]}) ¦ _ state_: log)
+  <> {children: (wrap-stat →log), state: stat}
+(y-wrap (%group children _* {¦ r_: [y-log log_]}) ¦ _ state_: log)
+  <> {children: (wrap-stat →log), state: stat}
+
+;; NOTE: x/y-wrap must have at least one sized child for Sp/N to be defined,
+;; otherwise, x/y-wrap itself will be unsized (most likely causing it to float).
+(x-wrap N←(wrap-stat log_ () ¦ stats_) ¦ _ state_: stat -log: log-dst -stats: stats-dst)
+  <> {(N): (), log-dst: →log, stats-dst: →stats, state: sizing}
+(y-wrap N←(wrap-stat log_ () ¦ stats_) ¦ _ state_: stat -log: log-dst -stats: stats-dst)
+  <> {(N): (), log-dst: →log, stats-dst: →stats, state: sizing}
+
+;; Calculate up-w/h.
+(x-wrap ¦ _ state_: sizing gap-x_number⋮ gap_ stats: {¦ Sp_number Np_number} -up-w: w)
+  <> {state: sized, w: $(+ →Sp (* →gap (- →Np 1)))}
+(y-wrap ¦ _ state_: sizing gap-y_number⋮ gap_ stats: {¦ Sp_number Np_number} -up-h: h)
+  <> {state: sized, h: $(+ →Sp (* →gap (- →Np 1)))}
+
+;; Consume dn-w/h until in sized state.
+(x-wrap _* ¦ _ dn-w_number) <> {(dn-w): ()}
+(y-wrap _* ¦ _ dn-h_number) <> {(dn-h): ()}
+
+;; Construct wrapper on dn-w/h in sized state.
+(x-wrap children_* ¦ _ state: sized limit: (%- (%never) limit) dn-w_number)
+  <> {children: (wrapper main: x-stack cross: y-stack), limit: →dn-w, (dn-w): ()}
+(y-wrap children_* ¦ _ state: sized limit: (%- (%never) limit) dn-h_number)
+  <> {children: (wrapper main: y-stack cross: x-stack), limit: →dn-h, (dn-h): ()}
+
+;; Respond with limit to any up-w/h to avoid infinite loops (children
+;; x/y-stack's reporting their size leads to rewrap leads to new x/y-stack's
+;; reporting their sizes and so on).
+(x-wrap {¦ up-w_number -dn-w_} ¦ _ limit_number) <> {dn-w: →limit, (up-w): ()}
+(y-wrap {¦ up-h_number -dn-h_} ¦ _ limit_number) <> {dn-h: →limit, (up-h): ()}
+
+;; Copy limit.
+(x-wrap (wrapper ¦ _ -limit: limit') ¦ _ limit_number) <> {limit': →limit}
+(y-wrap (wrapper ¦ _ -limit: limit') ¦ _ limit_number) <> {limit': →limit}
+
+;; Copy log.
+(x-wrap (wrapper ¦ _ -log: log') ¦ _ log_) <> {log': →log}
+(y-wrap (wrapper ¦ _ -log: log') ¦ _ log_) <> {log': →log}
+
+;; Copy nodes.
+(x-wrap (wrapper ¦ _ -nodes: nodes') ¦ _ nodes_) <> {nodes': →nodes}
+(y-wrap (wrapper ¦ _ -nodes: nodes') ¦ _ nodes_) <> {nodes': →nodes}
+
+;; Copy min span.
+(x-wrap (wrapper ¦ _ -min-span: min-span') ¦ _ min-span_) <> {min-span': →min-span}
+(y-wrap (wrapper ¦ _ -min-span: min-span') ¦ _ min-span_) <> {min-span': →min-span}
+
+;; Copy max span.
+(x-wrap (wrapper ¦ _ -max-span: max-span') ¦ _ max-span_) <> {max-span': →max-span}
+(y-wrap (wrapper ¦ _ -max-span: max-span') ¦ _ max-span_) <> {max-span': →max-span}
+
+;; Define gap-main and gap-cross.
+(x-wrap (wrapper ¦ _ -gap-main_) ¦ _ gap-x_number) <> {gap-main: →gap-x}
+(y-wrap (wrapper ¦ _ -gap-main_) ¦ _ gap-y_number) <> {gap-main: →gap-y}
+
+(x-wrap (wrapper ¦ _ -gap-cross_) ¦ _ gap-y_number) <> {gap-cross: →gap-y}
+(y-wrap (wrapper ¦ _ -gap-cross_) ¦ _ gap-x_number) <> {gap-cross: →gap-x}
+
+;; Transition into an initialized state by defining rem (remainder)
+;; and span (no. of nodes on the main axis).
+[x-wrap (wrapper ¦ _ -rem_ -span_ limit_number)] <> {rem: →limit, span: 0}
+[y-wrap (wrapper ¦ _ -rem_ -span_ limit_number)] <> {rem: →limit, span: 0}
+
+;; Sink rule that fires when there's nothing left to initialize.
+[x-wrap C←(wrapper ¦ _ -ready_)] <> {ready: true}
+[y-wrap C←(wrapper ¦ _ -ready_)] <> {ready: true}
+
+;; Surround with cross axis.
+[x-wrap C←(wrapper ¦ _ ready: _ cross_ gap-cross⋮ 0)] <> {C: (→cross →C gap: →gap-cross)}
+[y-wrap C←(wrapper ¦ _ ready: _ cross_ gap-cross⋮ 0)] <> {C: (→cross →C gap: →gap-cross)}
+
+;; Surround with main axis.
+[cross_ _* C←(wrapper ¦ _ main_ cross_ gap-main⋮ 0)]
+  <> {C: (→main →C gap: →gap-main)}
+
+;; Propose to expel left. This rule votes yes unconditionally.
+[main_ _* (wrapper ¦ _ main_ rem_number span_number log: (w_number _*) -proposal_)]
+  <> {proposal: (prepare {irem: $'(- →rem →w), span: $'(+ →span 1), accept: true})}
+[main_ _* (wrapper ¦ _ main_ span_number log: (~ _*) -proposal_)]
+  <> {proposal: (prepare {irem: →rem, span: $'(+ →span 1), accept: true})}
+[main_ _* (wrapper ¦ _ main_ log: (? _*) -proposal_)]
+  <> {proposal: (prepare {accept: true})}
+
+;; Subtract gap-x if necessary from intrinsic rem to obtain rem.
+(wrapper ¦ _ proposal: (prepare {¦ irem_number -rem_}) span: 0)
+  <> {rem: →irem}
+(wrapper ¦ _ proposal: (prepare {¦ irem_number -rem_}) gap-main⋮ 0)
+  <> {rem: $'(- →irem →gap-main)}
+
+(wrapper ¦ _ proposal_: (prepare P_)) <> {proposal: →P}
+
+;; These rules vote on the proposal to expel left also. Note how each
+;; proceeds only if all other accepted with the `accept: true` constraint.
+(wrapper ¦ _ proposal: {¦ rem_number accept_: true -Wχ_})
+  <> {accept: $'(>= →rem 0), Wχ: true}
+(wrapper ¦ _ proposal: {¦ span_number accept: true -min-sat_} min-span_: (%number (whole _) > 0))
+  <> {min-sat: $'(> →span →min-span)}
+(wrapper ¦ _ proposal: {¦ span_number accept: true min-sat: true -max-sat_} max-span_: (%number (whole _) > 0))
+  <> {max-sat: $'(<= →span →max-span)}
+
+;; If max unsat, vote against proposal. Otherwise, either max is missing
+;; or it is sat.
+(wrapper ¦ _ proposal: {¦ span_number accept_: true max-sat: false}) <> {accept: false}
+
+;; These rules have deliberately low specificity vs. the voting rules.
+;; They announce the result of voting when no more voters remain.
+(wrapper ¦ _ proposal: P←{¦ accept: true}) <> {P: (accepted →P)}
+(wrapper ¦ _ proposal: P←{¦ accept: false}) <> {P: (declined →P)}
+
+;; If min unsat in declined, convert to accepted (aka force even if overflows
+;; when min unsat).
+(wrapper ¦ _ proposal: P←(declined p←{¦ min-sat: false}))
+  <> {P: (accepted →p)}
+
+;; Merge accepted.
+C←(wrapper ¦ _ proposal: P←(accepted {¦ rem: rem'_number span: span'_number}) rem_number span_number nodes: (N_ _*) log: (rec_ _*))
+  <> {(C): (↑N0 ↑C), (P): (), rem: →rem', span: →span', (N): ($tr N0 ()), (rec): ()}
+
+;; Destroy declined and exit the x-stack.
+S←[main_ _* C←(wrapper ¦ _ main_ proposal: P←(declined _) rem_number span_number limit_number)]
+  <> {(P): (), rem: →limit, span: 0, (S): (↑S ↑C0), (C): ($tr C0 ())}
+
+;; Self-destruct once exhausted.
+C←(wrapper ¦ _ nodes: ()) <> {(C): ()}
+
