@@ -32,7 +32,7 @@ require "./dwuir/font"
   require "./dwuir/compositor"
   require "./dwuir/platform"
   require "./dwuir/viewer"
-  require "./dwuir/measured"
+  require "./dwuir/replier"
 
   require "./dwuir/pvg"
 {% end %}
