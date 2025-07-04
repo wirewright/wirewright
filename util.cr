@@ -3473,6 +3473,10 @@ struct SyncCache(K, V)
 
     value
   end
+
+  def put_if_absent(key, &)
+    fetch(key) { yield }
+  end
 end
 
 module IStack(T)

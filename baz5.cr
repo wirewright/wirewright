@@ -5,17 +5,7 @@ alias Rewriter = RewriterContext, Rewrite::Any -> Rewrite::Any
 alias Observer = Backpath::Appender, String, Rewrite::Some ->
 alias Tick = ->
 
-record RewriterContext, rng : Random, backpath : Backpath::Appender?, envs = Term[], observer : Observer | Tick = (Tick.new { }), exhr = {} of {UInt64, Term} => Rewrite::Any, options = Term[] do
-  # If available, returns memoized exhaustive rewrite of *term* for an exhR rewriter
-  # with the given *id*.
-  #
-  # Otherwise, yields and adds the resulting *rewrite* as the memoized exhaustive
-  # rewrite of *term* for *id*. The addition is available within all versions of
-  # this context (mutates the context).
-  def exhr(id : UInt64, term : Term, & : -> Rewrite::Any) : Rewrite::Any
-    @exhr.put_if_absent({id, term}) { yield }
-  end
-
+record RewriterContext, rng : Random, backpath : Backpath::Appender?, envs = Term[], observer : Observer | Tick = (Tick.new { }), options = Term[] do
   def backpath(& : Backpath::Appender -> Backpath::Appender)
     return self unless kp0 = @backpath
 
@@ -131,6 +121,11 @@ end
 # :nodoc:
 def itemsR(ctx0, term, successor, start : Int32) : Rewrite::Any
   unless dict0 = term.as_d?
+    return Rewrite.none
+  end
+
+  # Fast path
+  if dict0.pairsonly?
     return Rewrite.none
   end
 
@@ -507,11 +502,6 @@ def exhR(ctx, term, successor)
   end
 end
 
-# :nodoc:
-def exhR(ctx, id, term, successor)
-  ctx.exhr(id, term) { exhR(ctx, term, successor) }
-end
-
 # Absolute rewriter. Performs absolute rewriting of a term using *successor*.
 #
 # *Absolute rewriting* is similar to depth-first search rewriting `dfsR`.
@@ -547,16 +537,6 @@ def absR(successor) : Rewriter
   set.call choiceR(successor, entryR(rec))
 end
 
-# :nodoc:
-module ExhrId
-  @@fresh = Atomic(UInt64).new(0u64)
-
-  # Returns a fresh, application-unique exhR id.
-  def self.fresh : UInt64
-    @@fresh.add(1, :relaxed)
-  end
-end
-
 # Exhaustive rewriter. Performs exhaustive rewriting of a term using *successor*.
 #
 # *Exhaustive rewriting* is rewriting that stops only when there are no more rewrites
@@ -564,10 +544,8 @@ end
 # to `true` (it is by default), this exhaustively rewritten term is stored so that
 # further rewrites with the same exhR instance are a noop.
 def exhR(successor : Rewriter) : Rewriter
-  id = ExhrId.fresh
-
   Rewriter.new do |ctx, staging|
-    staging.reduce { |term| exhR(ctx, id, term, successor) }
+    staging.reduce { |term| exhR(ctx, term, successor) }
   end
 end
 
@@ -751,16 +729,16 @@ def effectR(successor : Rewriter, callable, *, edge = EffectEdge::In) : Rewriter
 
   Rewriter.new do |ctx, staging|
     staging.reduce do |term|
-      callable.call(Rewrite.one(term)) if edge.in?
+      callable.call(EffectEdge::In, Rewrite.one(term)) if edge.in?
       rewrite = successor.call(ctx, Rewrite.one(term))
-      callable.call(rewrite) if edge.out?
+      callable.call(EffectEdge::Out, rewrite) if edge.out?
       rewrite
     end
   end
 end
 
 # See the other overload.
-def effectR(successor : Rewriter, *, edge = EffectEdge::In, &effect : Rewrite::Any ->) : Rewriter
+def effectR(successor : Rewriter, *, edge = EffectEdge::In, &effect : EffectEdge, Rewrite::Any ->) : Rewriter
   effectR(successor, effect, edge: edge)
 end
 
@@ -824,7 +802,27 @@ def ruleR(ctx, term, rule : Rule::BackmapOne, pr : Pr::Pos, templr, backmapr)
 
   # The backmap rewriter may lie sometimes that there was a change, make sure
   # we're on track with Rewrites.
-  ctx.observable(rewrite.diff(term)) { "replace with backmapped (one)" }
+  ctx.observable(rewrite.diff(term)) do
+    <<-EXPLAIN
+    Replace with backmapped (one).
+
+    Input term:
+
+      #{ML.compact(term)}
+
+    Match env(s):
+
+      #{pr.envs.join('\n') { |env| ML.compact(env) }.li}
+
+    Backspec:
+
+      #{ML.compact(rule.backspec)}
+
+    Resulted in rewrite:
+
+      #{rewrite.diff(term)}
+    EXPLAIN
+  end
 end
 
 def ruleR(ctx, term, rule : Rule::BackmapMany, pr : Pr::Pos, templr, backmapr)
@@ -859,13 +857,33 @@ def ruleR(ctx, term, rule : Rule::BackmapMany, pr : Pr::Pos, templr, backmapr)
     rewrite = Rewrite.many(list)
   end
 
-  ctx.observable(rewrite.diff(term)) { "replace with backmapped (many)" }
+  ctx.observable(rewrite.diff(term)) do
+    <<-EXPLAIN
+    Replace with backmapped (many).
+
+    Input term:
+
+      #{ML.compact(term)}
+
+    Match env(s):
+
+      #{pr.envs.join('\n') { |env| ML.compact(env) }.li}
+
+    Backspec:
+
+      #{ML.compact(rule.backspec)}
+
+    Resulted in rewrite:
+
+      #{rewrite.diff(term)}
+    EXPLAIN
+  end
 end
 
 def rulesetR(ctx, term, ruleset, templr, backmapr, elser, env : Term::Dict)
   cursor = ruleset.responses(term, env: env)
   cursor.each do |pr, rule|
-    rewrite = ruleR(ctx, term, rule, pr, templr, backmapr).diff(term)
+    rewrite = ruleR(ctx, term, rule, pr, templr, backmapr)
 
     case rewrite
     in Rewrite::Some
@@ -1038,20 +1056,12 @@ end
 # Must be put in "strategic" and, more importantly, *context-independent* places.
 # This usually means some kind of "master recursive step" somewhere in the rewriter
 # circuit.
-def memoR(memo : SyncCache(Term, Rewrite::Any), successor : Rewriter) : Rewriter
+def memoR(memo, successor : Rewriter) : Rewriter
   Rewriter.new do |ctx, staging|
     staging.reduce do |term|
-      if rewrite = memo.load?(term)
-        ctx.observable(rewrite) { "loaded from cache" }
-
-        next rewrite
+      memo.put_if_absent(term) do
+        successor.call(ctx, Rewrite.one(term))
       end
-
-      rewrite = successor.call(ctx, Rewrite.one(term))
-
-      memo.store(term, rewrite)
-
-      rewrite
     end
   end
 end
