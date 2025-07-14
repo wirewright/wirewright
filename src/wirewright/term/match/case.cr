@@ -141,7 +141,7 @@ struct Ww::Term
     macro given(*items, **pairs, &block)
       {% location = "#{block.filename.id}:#{block.line_number}:#{block.column_number}" %}
 
-      match!(-> { Term.dict({{items.splat}}, {{pairs.double_splat}}) }, location: {{location}}, {{kwargs.double_splat}}) {{block}}
+      match!(-> { Term.of_dict({{items.splat}}, {{pairs.double_splat}}) }, location: {{location}}) {{block}}
     end
 
     # Same as `matchp`, but *ml* is treated like a top-level dict (without parens).
