@@ -42,7 +42,7 @@
 ;; Positioning trigger flows from the parent to the child.
 (_symbol {¦ -position_} ¦ _ position: _) <> {position: true}
 
-⟨{-l: dst} {¦ l: src←[M_*]}⟩ <> {dst: →M, (src): ()}
+⟨{¦ -l: dst} {¦ l: src←[M_*]}⟩ <> {dst: →M, (src): ()}
 ⟨{¦ r: src←[M_*]} {¦ -r: dst}⟩ <> {dst: →M, (src): ()}
 
 {¦ -up-w/old: w0 up-w/new: w1←w_ -up-w: w0} <> {w0: →w1, (w1): ()}
