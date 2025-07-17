@@ -1096,9 +1096,17 @@ struct Char
   def each_char(& : Char ->) : Nil
     yield self
   end
+
+  def ===(other : StringView)
+    other === self
+  end
 end
 
+# FIXME: I use `ascii_only?` but really I meant `single_byte_optimizable?`. Rename
+# and fix conditions!!!
 struct StringView
+  # WARNING: This will return the original string into which the view
+  # is pointing! You probably want `to_s`.
   getter string : String
   getter byte_start : Int32
 
@@ -1221,6 +1229,24 @@ struct StringView
     true
   end
 
+  def prefixed_by?(ch : Char) : Bool
+    bytesize > ch.bytesize && starts_with?(ch)
+  end
+
+  def postfixed_by?(ch : Char) : Bool
+    bytesize > ch.bytesize && starts_with?(ch)
+  end
+
+  def starts_with?(range : Range(Char, Char)) : Bool
+    return false unless fst = first_char?
+
+    fst.in?(range)
+  end
+
+  def starts_with?(*chars : Char) : Bool
+    chars.any? { |char| starts_with?(char) }
+  end
+
   def starts_with?(ch : Char) : Bool
     return false if bytesize < ch.bytesize
 
@@ -1284,6 +1310,14 @@ struct StringView
     end
 
     StringView.new(sum, 0, sum.bytesize, ascii_only)
+  end
+
+  def &+(other : StringView)
+    unless precedes?(other)
+      raise ArgumentError.new("lhs string view does not precede rhs")
+    end
+
+    self + other
   end
 
   struct EE
@@ -1409,6 +1443,12 @@ struct StringView
     last_char? || raise IndexError.new
   end
 
+  def first_char_and_rest : {Char, StringView}
+    fst = first_char
+
+    {fst, StringView.new(@string, byte_start + fst.bytesize, byte_end, ascii_only: ascii_only?)}
+  end
+
   def first? : StringView?
     return if empty?
 
@@ -1529,6 +1569,30 @@ struct StringView
     starts_with?(ch) ? skip(ch.bytesize) : self
   end
 
+  def lchop?(ch : Char) : StringView?
+    starts_with?(ch) ? skip(ch.bytesize) : nil
+  end
+
+  def byte_subview(byte_start_rel : Int32, byte_end_rel : Int32)
+    StringView.new(@string, byte_start + byte_start_rel, byte_start + byte_end_rel, ascii_only: ascii_only?)
+  end
+
+  def byte_subview(byte_start_rel, size byte_size : Int32)
+    byte_subview(byte_start_rel, byte_start_rel + byte_size)
+  end
+
+  def byte_subview(byte_start_rel, size char : Char)
+    byte_subview(byte_start_rel, size: char.bytesize)
+  end
+
+  def upto(other : StringView)
+    unless @string.same?(other.@string)
+      raise ArgumentError.new("views point to different strings")
+    end
+
+    StringView.new(@string, byte_start, other.byte_start, ascii_only: ascii_only?)
+  end
+
   def lstrip(charset = "\n") : StringView
     reader = Char::Reader.new(@string, pos: @byte_start)
     reader.each do |char|
@@ -1592,7 +1656,7 @@ struct StringView
     {self, after_end, after_end}
   end
 
-  def partition(separator : Char) : {StringView, StringView, StringView}
+  def partition(& : Char -> Bool) : {StringView, StringView, StringView}
     reader = Char::Reader.new(@string, pos: @byte_start)
 
     lhs_ascii_only = true
@@ -1601,10 +1665,10 @@ struct StringView
       char = reader.current_char
       char_ascii = char.ascii?
 
-      if char == separator
+      if yield char
         l = StringView.new(@string, @byte_start, reader.pos, lhs_ascii_only)
-        mid = StringView.new(@string, reader.pos, reader.pos + 1, char_ascii)
-        r = StringView.new(@string, reader.pos + 1, byte_end, ascii_only?)
+        mid = StringView.new(@string, reader.pos, reader.pos + char.bytesize, char_ascii)
+        r = StringView.new(@string, reader.pos + char.bytesize, byte_end, ascii_only?)
         return l, mid, r
       end
 
@@ -1614,6 +1678,20 @@ struct StringView
     end
 
     {self, after_end, after_end}
+  end
+
+  def partition(separator : Char)
+    partition { |ch| ch == separator }
+  end
+
+  def split(separator : Char, &)
+    lhs = self
+
+    until lhs.empty?
+      lhs, _, rest = lhs.partition(separator)
+      yield lhs
+      lhs = rest
+    end
   end
 
   def each_byte(& : UInt8 ->) : Nil
@@ -1634,7 +1712,7 @@ struct StringView
   def reverse_each_char(& : Char ->) : Nil
     reader = Char::Reader.new(@string, pos: byte_end)
 
-    until reader.pos < @byte_start
+    until reader.pos <= @byte_start
       reader.previous_char # byte end must be skipped, we're exclusive!
       yield reader.current_char
     end
@@ -1653,13 +1731,17 @@ struct StringView
 
   # Yields each character in this string view along with its byte index
   # within this view's parent string.
-  def each_char_with_abs_byte_index(& : Char, Int32 ->) : Nil
+  def each_char_with_abs_byte_index(*, eoi = false, & : Char, Int32 ->) : Nil
     byte_index = @byte_start
 
     each_char do |char|
       yield char, byte_index
 
       byte_index += char.bytesize
+    end
+
+    if eoi
+      yield '\0', byte_index
     end
   end
 
@@ -1733,6 +1815,66 @@ struct StringView
     end
   end
 
+  def span(other : StringView) : StringView
+    unless string.same?(other.string)
+      raise ArgumentError.new("expected string views of the same string")
+    end
+
+    StringView.new(string, byte_start, other.byte_end, string.single_byte_optimizable?)
+  end
+
+  def reader : Reader
+    Reader.new(self)
+  end
+
+  def reader(& : Pointer(Reader) ->)
+    reader = self.reader
+    r = pointerof(reader)
+    yield r
+  end
+
+  private module NullState
+  end
+
+  def chunk_by(& : Char, Int32 -> T) : Array({T, StringView}) forall T
+    state0 = NullState
+    start0 = @byte_start
+    chunks = [] of {T, StringView}
+
+    ascii = true
+
+    each_char_with_abs_byte_index do |char, start1|
+      state1 = yield char, start1 - @byte_start
+      if state0 == state1
+        ascii &&= char.ascii?
+        next
+      end
+
+      if state0.is_a?(T)
+        chunks << {state0, StringView.new(@string, start0, start1, ascii_only: ascii)}
+      end
+
+      state0 = state1
+      start0 = start1
+      ascii = char.ascii?
+    end
+
+    if state0.is_a?(T)
+      chunks << {state0, StringView.new(@string, start0, byte_end, ascii_only: ascii)}
+    end
+
+    chunks
+  end
+
+  def each_split(& : StringView, StringView, StringView ->)
+    each_char_with_abs_byte_index do |chr, byte_index|
+      l = StringView.new(@string, byte_start, byte_index, ascii_only: ascii_only?)
+      m = StringView.new(@string, byte_index, byte_index + 1, ascii_only: chr.ascii?)
+      r = StringView.new(@string, byte_index + 1, byte_end, ascii_only: ascii_only?)
+      yield l, m, r
+    end
+  end
+
   def to_s(io)
     if covers_fully?
       io << @string
@@ -1762,11 +1904,62 @@ struct StringView
 
   def inspect(io)
     io << "…\""
-    @string.byte_slice(@byte_start...byte_end).dump_unquoted(io)
+    each_char do |char|
+      if char.printable?
+        io << char
+      else
+        char.unicode_escape(io)
+      end
+    end
     io << "\"…"
   end
 
+  def ==(other : Char)
+    starts_with?(other)
+  end
+
   def_equals_and_hash to_slice
+end
+
+struct StringView
+  struct Reader
+    def initialize(source : StringView)
+      @r = Char::Reader.new(source.string, source.byte_start)
+      @end = source.byte_end
+    end
+
+    def has_next?
+      @r.pos < @end
+    end
+
+    def pos
+      @r.pos
+    end
+
+    def max_pos : Int32
+      @end
+    end
+
+    def current_char
+      if @r.pos >= @end
+        '\0'
+      else
+        @r.current_char
+      end
+    end
+
+    def next_char
+      if @r.pos >= @end
+        raise IndexError.new
+      else
+        @r.next_char
+      end
+    end
+
+    def string
+      @r.string
+    end
+  end
 end
 
 class String
@@ -1776,6 +1969,12 @@ class String
         io << char
       end
     end
+  end
+
+  def starts_with?(range : Range(Char, Char))
+    return unless first_char = self[0]?
+
+    first_char.in?(range)
   end
 
   def ===(other : StringView) : Bool
@@ -1796,124 +1995,21 @@ struct Char::Reader
   end
 end
 
-# struct StringDelta
-#   alias Change = Keep | Mod
-#   alias Mod = Ins | Sub | Del
-
-#   record Keep, char : Char
-#   record Sub, char : Char
-#   record Ins, string : String
-#   record Del
-
-#   class Builder
-#     def initialize(@base : String)
-#       @mods = {} of Int32 => Mod
-#       @byte_index = 0
-#       @bytesize = 0
-#     end
-
-#     # Advances the cursor through *object*.
-#     #
-#     # Raises `ArgumentError` if there is no *object* following the cursor.
-#     def keep(object : Char | String | StringView)
-#       reader = Char::Reader.new(@base, pos: @byte_index)
-
-#       object.each_char do |char|
-#         unless reader.current_char == char
-#           raise ArgumentError.new("keep() of char that does not exist in the base string")
-#         end
-
-#         reader.next_char
-
-#         @byte_index += 1
-#         @bytesize += 1
-#       end
-#     end
-
-#     # Replaces the character at the cursor with *char*.
-#     def replace(char : Char) : Nil
-#       unless @mods.put?(@byte_index, Sub.new(char))
-#         raise ArgumentError.new("conflict")
-#       end
-#     end
-
-#     # Inserts *string* before the current cursor position.
-#     def insert(string : String) : Nil
-#       unless @mods.put?(@byte_index, Ins.new(string))
-#         raise ArgumentError.new("conflict")
-#       end
-
-#       @bytesize += string.bytesize
-#     end
-
-#     # Removes the character at the current cursor position.
-#     def delete : Nil
-#       unless @mods.put?(@byte_index, Del.new)
-#         raise ArgumentError.new("conflict")
-#       end
-
-#       @bytesize -= 1
-#     end
-
-#     # Returns a `StringDelta` object containing all the changes made so far.
-#     def final : StringDelta
-#       StringDelta.new(@base, @bytesize, @mods)
-#     end
-#   end
-
-#   # :nodoc:
-#   def initialize(@base : String, @bytesize : Int32, @mods : Hash(Int32, Mod))
-#   end
-
-#   # Constructs an empty string delta.
-#   def initialize(@base : String)
-#     @mods = {} of Int32 => Mod
-#     @bytesize = @base.bytesize
-#   end
-
-#   # Iterates through the base string and yields the change object associated
-#   # with each char.
-#   def each_char_as_change(& : Change ->) : Nil
-#     bytesize = 0
-
-#     reader = Char::Reader.new(@base)
-#     reader.each do |char|
-#       break if bytesize == @bytesize
-
-#       if mod = @mods[reader.pos]?
-#         yield mod
-#         if mod.is_a?(Ins)
-#           bytesize += mod.string.bytesize
-#         else
-#           bytesize += mod.char.bytesize
-#         end
-#       else
-#         yield Keep.new(char)
-#         bytesize += char.bytesize
-#       end
-#     end
-#   end
-
-#   # Applies changes to the base string and returns the resulting string.
-#   def apply : String
-#     String.build do |io|
-#       each_char_as_change do |change|
-#         case change
-#         in Keep, Sub
-#           io << change.char
-#         in Ins
-#           io << change.string
-#         in Del
-#           # skip
-#         end
-#       end
-#     end
-#   end
-# end
-
 class String
   def view : StringView
-    StringView.new(self, 0, bytesize, ascii_only?)
+    StringView.new(self, 0, bytesize, single_byte_optimizable?)
+  end
+
+  def view(byte_start : Int32, *, byte_end : Int32) : StringView
+    unless 0 <= byte_start && byte_end <= bytesize
+      raise IndexError.new
+    end
+
+    StringView.new(self, byte_start, byte_end, single_byte_optimizable?)
+  end
+
+  def view(byte_start : Int32, *, byte_size : Int32) : StringView
+    view(byte_start, byte_end: byte_start + byte_size)
   end
 
   def li(*, bullet = "*", indent = 0, ws = ' ', strip_first = false) : String
@@ -2974,6 +3070,39 @@ struct Slice(T)
     size > other.size && self[0...other.size] == other
   end
 
+  private module NullState
+  end
+
+  def chunk_by(accessor : T -> U, & : U, Slice(T) ->) forall U
+    start = self
+    size = 0
+    chunks = [] of {T, Slice(T)}
+
+    state0 = NullState
+
+    each do |el|
+      state1 = accessor.call(el)
+      if state0 == state1
+        size += 1
+        next
+      end
+
+      if state0.is_a?(NullState.class)
+        state0 = state1
+        size += 1
+        next
+      end
+
+      yield state0, start[0, size]
+
+      state0 = state1
+      start += size
+      size = 0
+    end
+
+    chunks
+  end
+
   def split(object : T, &)
     return if empty?
 
@@ -3290,6 +3419,12 @@ struct Range(B, E)
     if q > 0
       yield b...b + q
     end
+  end
+
+  def ===(other : StringView) : Bool
+    return false unless other.size == 1
+
+    other.first_char.in?(self)
   end
 end
 
