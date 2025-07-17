@@ -257,6 +257,26 @@ module Ww
       new(encode(source.to_slice, blank: false), type: TermType::Any, blank: false, poly: false, named: true)
     end
 
+    # Validates a symbol *name*. If this method returns `true`, you are safe to
+    # call `new` with *name*; safe not in the sense of memory safety etc., but
+    # in the sense of being able to give the symbol to any subsystem of Wirewright
+    # and expect it to work, pretty-print, etc.
+    def self.valid?(name : String) : Bool
+      if name.empty?
+        return false
+      end
+
+      name.each_char do |chr|
+        rune = ML::Rune.new(chr)
+
+        unless rune.symbolic?
+          return false
+        end
+      end
+
+      ML.can_represent_symbol?(name)
+    end
+
     private def ref : UInt32
       @spec.bits(7..)
     end

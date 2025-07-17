@@ -137,6 +137,19 @@ module Ww::ML
     in .symbol?  then Term.of(:unset)
     end
   end
+
+  # Returns `true` if a symbol with the given *name* has a representation in WwML.
+  # Returns `false` otherwise.
+  def can_represent_symbol?(name : String) : Bool
+    case name
+    when "true", "false",
+         .prefixed_by?('\''),
+         .starts_with?('0'..'9')
+      false
+    else
+      true
+    end
+  end
 end
 
 require "./ml/rune"
