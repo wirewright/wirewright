@@ -57,9 +57,9 @@ module Ww::Soma::DwUIR
 
     private def self.hexcolor?(r : Rtk::R)
       Rtk.skip(r, " ")
-      return unless Rtk.peek?(r, "#")
+      return unless Rtk.ahead?(r, "#")
 
-      Rtk.advance(r)
+      Rtk.forward(r)
 
       # Try to read all the way up to RRGGBBAA.
       d0 = Rtk.hexdigit?(r)

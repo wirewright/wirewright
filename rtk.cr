@@ -11,43 +11,47 @@ module Rtk
     raise Error.new(message)
   end
 
-  def peek?(r, & : Char -> Bool) : Bool
-    yield r.value.current_char
+  def chr(r)
+    r.value.current_char
   end
 
-  def peek?(r, charset : String | StringView) : Bool
+  def ahead?(r, & : Char -> Bool) : Bool
+    yield chr(r)
+  end
+
+  def ahead?(r, charset : String | StringView) : Bool
     charset = charset.to_s
 
-    peek?(r, &.in_set?(charset))
+    ahead?(r, &.in_set?(charset))
   end
 
-  def peek?(r, charset : Char) : Bool
-    peek?(r) { |char| char == charset }
+  def ahead?(r, charset : Char) : Bool
+    ahead?(r) { |char| char == charset }
   end
 
-  def peeksequ?(r, sequ : String | StringView) : Bool
+  def aheadsequ?(r, sequ : String | StringView) : Bool
     save(r) do
       sequ.each_char do |char|
-        return false unless peek?(r, char)
-        advance(r)
+        return false unless ahead?(r, char)
+        forward(r)
       end
     end
 
     true
   end
 
-  def advance(r)
-    char = r.value.current_char
+  def forward(r) : Bool
+    char = chr(r)
     if at_end?(r)
-      err(r, "unexpected end-of-input")
+      return false
     end
     r.value.next_char
-    char
+    true
   end
 
   def skip?(r, arg)
-    if peek?(r, arg)
-      advance(r)
+    if ahead?(r, arg)
+      forward(r)
 
       true
     else
@@ -63,7 +67,7 @@ module Rtk
     !r.value.has_next?
   end
 
-  def capture_view(r, &)
+  def view(r, &)
     b = r.value.pos
     yield
     e = r.value.pos
@@ -71,8 +75,16 @@ module Rtk
     StringView.new(r.value.string, b, e, r.value.string.ascii_only?)
   end
 
+  def view2(r, &)
+    b = r.value.pos
+    result = yield
+    e = r.value.pos
+
+    {result, StringView.new(r.value.string, b, e, r.value.string.ascii_only?)}
+  end
+
   def capture(r, io, &)
-    io << capture_view(r) { yield }
+    io << view(r) { yield }
   end
 
   def capture(r, &) : String
@@ -98,11 +110,11 @@ module Rtk
   end
 
   def expect(r, charset, *, error = "expected one of #{charset.inspect}")
-    unless peek?(r, charset)
+    unless ahead?(r, charset)
       err(r, "#{error}")
     end
 
-    advance(r)
+    forward(r)
   end
 
   def expectsequ(r, sequ : String | StringView)
@@ -112,26 +124,26 @@ module Rtk
   end
 
   def skip(r, charset)
-    while peek?(r, charset)
-      advance(r)
+    while ahead?(r, charset)
+      forward(r)
     end
   end
 
   def thru(r, & : Char -> Bool)
-    while peek?(r) { |char| yield char }
-      advance(r)
+    while ahead?(r) { |char| yield char }
+      forward(r)
     end
   end
 
   def thru(r, arg)
-    while peek?(r, arg)
-      advance(r)
+    while ahead?(r, arg)
+      forward(r)
     end
   end
 
   def past?(r, arg)
-    if peek?(r, arg)
-      advance(r)
+    if ahead?(r, arg)
+      forward(r)
       true
     else
       false
@@ -139,17 +151,23 @@ module Rtk
   end
 
   def pastsequ?(r, sequ)
-    if peeksequ?(r, sequ)
-      sequ.bytesize.times { r.value.next_char }
+    if aheadsequ?(r, sequ)
+      sequ.each_char do |chr|
+        break if chr == '\0'
+
+        r.value.next_char
+      end
+
       true
     else
       false
     end
   end
 
-  def skip_to(r, charset)
-    until peek?(r, charset)
-      advance(r)
+  def skip_to(r, charset) : Bool
+    loop do
+      return true if ahead?(r, charset)
+      return false unless forward(r)
     end
   end
 
@@ -160,10 +178,35 @@ module Rtk
     p1 - p0
   end
 
-  def hexdigit?(r) : Int32?
-    return unless Rtk.peek?(r, "0-9a-fA-F")
+  def pos(r)
+    r.value.pos
+  end
 
-    char = Rtk.advance(r)
-    char.to_i(base: 16)
+  def ahead0(r)
+    Rtk.view(r) { }
+  end
+
+  def ahead1(r)
+    Rtk.save(r) { Rtk.view(r) { Rtk.forward(r) } }
+  end
+
+  def feed(r)
+    b = r.value.pos
+    e = r.value.max_pos
+
+    StringView.new(r.value.string, b, e, r.value.string.ascii_only?)
+  end
+
+  def hexdigit?(r) : Int32?
+    return unless Rtk.ahead?(r, "0-9a-fA-F")
+
+    char = Rtk.view(r) { Rtk.forward(r) }
+    char[0].to_i(base: 16)
+  end
+end
+
+struct Char::Reader
+  def max_pos : Int32
+    @string.bytesize
   end
 end
