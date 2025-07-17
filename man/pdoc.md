@@ -136,13 +136,18 @@ all 8-bit integers: `(%number 0 <= (whole _) <= 255)`.
 ```
 
 Speaking of 8-bit integers, there is also a series of shorthands for matching the frequently
-appearing fixed-width numeric types. The previous 8-bit number pattern is the expanded form
-of `(%number u8)`. There is also `(%number u16)`, u32, u64, and u128 for unsigned; and similarly
-`(%number i8)`, i16, i32, i64, and i128 for signed fixed-width types. If for some reason you only
-want to match the positive or negative ranges of the signed types, you can prepend a sign `+` or
-`-` to the type: `(%number -i8)` will only match the negative end and `(%number +i8)` will match
-the positive end **and zero** of the range for the signed type `i8`. Similarly for i16, i32, and
-so on:
+appearing fixed-width numeric types. Wirewright's numbers are not fixed-width under the hood;
+however, this is still a very convenient way to do bounds checking, especially when interfacing
+with e.g. Crystal.
+
+The previous 8-bit number pattern is the expanded form of `(%number u8)`. There is also `(%number u16)`,
+u32, u64, and u128 for unsigned; and similarly `(%number i8)`, i16, i32, i64, and i128 for signed
+fixed-width types.
+
+If for some reason you only want to match the positive or negative ranges of the signed types,
+you can prepend the sign `+` or `-` to the type: `(%number -i8)` will only match the negative end,
+and `(%number +i8)` will match the **positive** side of the `i8` range, **or zero**. Similarly for i16,
+i32, and so on:
 
 ```wwml
 (rgb? ((%number u8) (%number u8) (%number u8))) => true
@@ -159,6 +164,9 @@ so on:
 (side 0)     ;; => right
 (side 10)    ;; => right
 ```
+
+Use `(%number +i8!)`, `(%number +i16!)` and so on to match **positive nonzero** side
+of fixed-width numbers.
 
 ## Matching symbols
 
@@ -226,7 +234,7 @@ Another way is to use a toplevel `%any°`, in case you cannot define multiple ru
 
 Strings specifically can be matched by `_string` or similarly `x_string`.
 
-The companion operator `%string` (like we have `%number`) is being developed. With `%string`, you
+The companion operator `%string` (like we have `%number`) is planned. With `%string`, you
 will be able to pattern match inside strings (like regex, but tightly integrated into the pattern
 matching/backmap process).
 
