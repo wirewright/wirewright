@@ -430,7 +430,7 @@ module Ww
       end
 
       {% unless found_some %}
-        {% raise "no such method in any ITerm includer: #{call.name}, cannot autocast" %}
+        {% raise "no such method in any ITerm includer: #{call}, cannot autocast" %}
       {% end %}
     end
   end
@@ -560,12 +560,19 @@ module Ww
       end
     end
 
-    def self.set(ee : Enumerable(Term))
+    # Shorthand for `of(dict(*args, **kwargs))`.
+    def self.of_dict(*args, **kwargs) : Term
+      of(dict(*args, **kwargs))
+    end
+
+    # Constructs a dict set containing terms from the given enumerable *ee*.
+    def self.set(ee : Enumerable(_))
       Dict.build do |commit|
         ee.each { |arg| commit.with(arg, true) }
       end
     end
 
+    # Constructs a dict set containing the terms provided in *args*.
     def self.set(*args) : Dict
       set(args)
     end
@@ -587,7 +594,7 @@ module Ww
     #
     # Currently implements 64-bit Fowler–Noll–Vo hash function.
     #
-    # Wirewright is assumed to run on x86 only. This means system-endian is
+    # Wirewright is assumed to run on x86-64 only. This means system-endian is
     # little-endian. Under this assumption we say that the hash is *globally
     # stable*, meaning it stays the same across runs and machines for
     # equal (or colliding!) values.
@@ -662,7 +669,7 @@ module Ww
       end
     end
 
-    # Returns the hashcode of *object*. See `hashcode(hasher, object)` variants
+    # Returns the hashcode of *object*. See `hashcode(hasher, object)` overloads
     # to learn about supported types of *object*s.
     def self.hashcode(object) : UInt64
       hasher = hashcode(Hasher.new, object)
@@ -842,7 +849,7 @@ module Ww
         prefix.push(key)
 
         break unless each_keypath_and_leaf?(value.downcast, prefix, fn)
-
+      ensure
         prefix.pop
       end
 
@@ -872,7 +879,7 @@ module Ww
         prefix.push(Term.of(index))
 
         break unless each_keypath_and_item?(item.downcast, prefix, fn)
-
+      ensure
         prefix.pop
       end
 
@@ -888,59 +895,37 @@ module Ww
     end
   end
 
-  # Encoding / decoding front-end
-
-  # Raised by `Term.decode` if it cannot decode a term.
-  class TermDecodeError < Exception
-  end
-
   struct Term
-    # Wait until all overloads are defined...
-    macro finished
-      {% verbatim do %}
-        # Turns a Crystal object of type `T` into a `Term`.
-        #
-        # Implementors define overloads for their specific type. This method handles
-        # union `T`s and raises at comptime otherwise.
-        def self.encode(src : T) : Term forall T
-          {% if T.union? %}
-            {% for member in T.union_types %}
-              if src.is_a?({{member}})
-                return encode(src)
-              end
-            {% end %}
+    # NOTE: If replacement occurs within a key, and it collides, with an existing
+    # key, the replacement's value is preferred over the existing key's.
+    def self.patch(term : Term, &fn : Term -> Term?) : Term
+      if rep = fn.call(term)
+        return rep
+      end
 
-            unreachable
-          {% else %}
-            {% @caller.raise "Term.encode: cannot find an overload that can encode this type: #{T}" %}
-          {% end %}
+      unless dict = term.as_d?
+        return term
+      end
+
+      dict1 = dict
+      dict.each_entry do |key0, value0|
+        key1 = patch(key0, &fn)
+        value1 = patch(value0, &fn)
+
+        # Key changed
+        unless key0.same?(key1)
+          dict1 = dict1.without(key0).with(key1, value1)
+          next
         end
 
-        # Turns *term* into a Crystal object of type `T`. Returns `nil` if this
-        # cannot be done.
-        #
-        # Implementors define overloads for their specific type. This method handles
-        # union `T`s and raises at comptime otherwise (or returns `nil` if appropriate).
-        def self.decode?(dst : T.class, term : Term) : T? forall T
-          {% if T.union? %}
-            # Ideally Crystal should be able to do this on its own but it doesn't
-            # seem that it can...
-            {% for member in T.union_types %}
-              if object = decode?({{member}}, term)
-                return object.as(T)
-              end
-            {% end %}
-          {% else %}
-            {% @caller.raise "Term.decode: cannot find an overload that can decode this type: #{T}" %}
-          {% end %}
+        # Value changed
+        unless value0.same?(value1)
+          dict1 = dict1.with(key1, value1)
+          next
         end
+      end
 
-        # Turns *term* into a Crystal object of type `T`. Raises `TermDecodeError`
-        # if this cannot be done.
-        def self.decode(dst : T.class, term : Term) : T forall T
-          decode?(dst, term) || raise TermDecodeError.new("failed to decode from term to #{dst}")
-        end
-      {% end %}
+      Term.of(dict1)
     end
   end
 end
