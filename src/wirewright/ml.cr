@@ -139,6 +139,7 @@ module Ww::ML
   end
 end
 
+require "./ml/rune"
 require "./ml/grammar"
 require "./ml/text"
 require "./ml/display"
