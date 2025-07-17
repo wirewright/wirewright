@@ -75,8 +75,8 @@ module Ww
       type.from_value?(to_i)
     end
 
-    # Converts this number to an `Int32` if this can be done fast (and obviously
-    # if the conversion is possible at all). Otherwise returns `nil`.
+    # Converts this number to an `Int32` if this can be done quickly
+    # (if the conversion is possible at all). Otherwise returns `nil`.
     #
     # Prefer to use `to?(Int32)` unless it's a *very* internal and performance-
     # sensitive place.
@@ -275,9 +275,9 @@ module Ww
       end
     {% end %}
 
-    # Appends *digit* in *base* to a copy of this number. Returns the copy.
-    def append(digit : Num, *, base : Num) : Num
-      self * base + digit
+    # Appends *digit* in *radix* to a copy of this number. Returns the copy.
+    def append(digit : Num, *, radix : Num) : Num
+      self * radix + digit
     end
 
     # :nodoc:
