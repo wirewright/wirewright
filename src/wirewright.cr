@@ -13,7 +13,6 @@ require "semantic_version"
 require "../util"
 require "../rtk"
 
-require "./wirewright/misc/*"
 require "./wirewright/unicode"
 require "./wirewright/term"
 require "./wirewright/file_server"

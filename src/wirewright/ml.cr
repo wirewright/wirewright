@@ -153,6 +153,6 @@ module Ww::ML
 end
 
 require "./ml/rune"
-require "./ml/grammar"
+require "./ml/kit"
 require "./ml/text"
 require "./ml/display"

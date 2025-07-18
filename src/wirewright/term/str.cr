@@ -9,7 +9,7 @@ module Ww
     def inspect(io)
       io << '"'
       @value.each_char do |char|
-        ML::Grammar::Escape.display(io, char)
+        ML::Kit.escape(io, char)
       end
       io << '"'
     end
