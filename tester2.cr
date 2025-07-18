@@ -1,7 +1,7 @@
 require "./src/wirewright"
 require "./baz5_editor"
 
-test = ML.term(File.read("./editor.test.wwml"))
+test = ML.term(File.read("./tests/editor.test.wwml"))
 
 puts "Replay editor.test.wwml"
 
@@ -93,7 +93,7 @@ while true
       test = test.append(tail)
       root0 = root
       motions = Term[]
-      File.open("./editor.test.wwml", mode: "w") do |io|
+      File.open("./tests/editor.test.wwml", mode: "w") do |io|
         ML.display(io, test)
       end
     end
@@ -112,7 +112,7 @@ while true
   begin
     motion = ML.term(command)
   rescue e : ML::SyntaxError
-    e.humanize(STDOUT, command)
+    e.humanize(STDOUT)
     next
   end
 
