@@ -252,6 +252,7 @@ end
 require "./ml/rune"
 require "./ml/kit"
 require "./ml/lexeme"
+require "./ml/reader"
 
 require "./ml/text"
 
