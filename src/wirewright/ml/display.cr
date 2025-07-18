@@ -94,18 +94,14 @@ module Ww::ML
   def self.compact(io : IO, term : Term::Dict)
     io << '('
 
-    term.ie.join(io, ' ') do |item|
-      compact(io, item)
-    end
-
-    unless term.itemsonly? || term.pairsonly?
-      io << ' '
-    end
-
-    term.pe(ordered: true).join(io, ' ') do |(k, v)|
-      compact(io, k)
-      io << ": "
-      compact(io, v)
+    term.ee(ordered: true).join(io, ' ') do |(k, v)|
+      if (i = k.to?(Int32)) && i < term.itemsize
+        compact(io, v)
+      else
+        compact(io, k)
+        io << ": "
+        compact(io, v)
+      end
     end
 
     io << ')'
