@@ -2,62 +2,159 @@ module Ww::ML
   extend self
 
   class SyntaxError < Exception
-    # Returns the byte index near which the error occured in the source string.
-    getter byte_index : Int32
+    # Returns a string that explains the error.
+    getter detail : String
 
-    def initialize(@message : String, @byte_index : Int32)
+    # Returns the offending text -- a view of the original source string.
+    getter text : StringView
+
+    def initialize(@detail : String, @text : StringView)
     end
 
-    def line(source : String) : StringView
-      source.each_line_view do |line|
-        next unless line.byte_start <= @byte_index <= line.byte_end
-        return line
+    # Returns the starting byte index for the offending text.
+    def byte_index : Int32
+      @text.byte_start
+    end
+
+    # :nodoc:
+    struct StyleStack
+      def initialize(&@fn : Symbol, Symbol ->)
+        @stack = Stack(Symbol).new
       end
 
-      raise IndexError.new
-    end
+      def push(style style1 : Symbol)
+        style0 = @stack.last? || :initial
+        @stack << style1
+        @fn.call(style0, style1)
+      end
 
-    def lineno(source : String) : Int32
-      lineno = 0
-      source.each_line_view do |line|
-        unless line.byte_start <= @byte_index <= line.byte_end
-          lineno += 1
-          next
+      def push(style : Symbol, &)
+        push(style)
+
+        yield
+      ensure
+        pop(style)
+      end
+
+      def pop(style : Symbol) : Nil
+        style0 = @stack.pop
+
+        unless style0 == style
+          raise ArgumentError.new("expected style #{style.inspect}, but got: #{style0.inspect}")
         end
-        return lineno
-      end
 
-      raise IndexError.new
+        @fn.call(style0, @stack.last? || :initial)
+      end
     end
 
-    def column(line : StringView) : Int32
-      column = 0
+    # Appends a human-readable error message to *io*.
+    #
+    # - *styled* can be used to enable/disable emission of ANSI escape
+    #   sequences for colors, emphasis, etc.
+    # - *filename* defines the filename printed in front of the line and column.
+    def humanize(io, *, filename = "scratch", styled : Bool = Colorize.enabled?) : Nil
+      extended = @text
+        .reverse_extend { |chr| chr != '\n' }
+        .extend { |chr| chr != '\n' }
 
-      line.each_char_with_abs_byte_index do |char, byte_index|
-        if @byte_index == byte_index
-          return column
+      column_index = @text
+        .before_begin
+        .reverse_extend { |chr| chr != '\n' }
+        .size
+
+      column = column_index + 1
+
+      line_index = extended.prior_string.count('\n')
+      line = line_index + 1
+
+      styles = StyleStack.new do |style0, style1|
+        next unless styled
+
+        case {style0, style1}
+        when {_, :initial}
+          io << "\e[0m"
+        when {_, :normal}
+          io << "\e[0;38;5;252m" # reset, grey82
+        when {_, :focus}
+          io << "\e[0;97;1m" # reset, white, bold
+        when {_, :error}
+          io << "\e[0;33;1m" # reset, light yellow, bold
+        when {_, :dark_error}
+          io << "\e[0;93m" # reset, dark yellow
+        when {_, :link}
+          io << "\e[0;97;4m" # reset, white, underline
+        when {:focus, :dim}
+          io << "\e[0;38;5;244m" # reset, grey50
+        when {_, :dim}, {_, :fg}
+          io << "\e[0;38;5;240m" # reset, grey35
+        else
+          raise ArgumentError.new("unexpected style transition #{style0.inspect} -> #{style1.inspect}")
         end
-        column += 1
       end
 
-      raise ArgumentError.new("byte start points to a character's interior")
-    end
+      io << "In "
 
-    def humanize(io, source : String)
-      line = line(source + "$".colorize.dark_gray.to_s)
-      lineno = lineno(source)
-      col = column(line)
-      linestr = line.to_s
+      styles.push(:link) do
+        io << filename << ":" unless filename.empty?
+        io << line << ":" << column
+      end
 
-      subt = {
-        ' '  => "·".colorize.dark_gray.to_s,
-        '\t' => "↹".colorize.dark_gray.to_s,
-        '\n' => "⏎".colorize.dark_gray.to_s,
-      }
+      io.puts
+      io.puts
 
-      io.puts "syntax error: #{lineno + 1}:#{col + 1}: #{message}"
-      io.puts "  >>> #{linestr.gsub(subt)}"
-      io.puts "      #{linestr.fill(' ').insert(col, "^")}"
+      hand = "  #{line} | "
+      line_prefix = "  #{" " * line.to_s.size} | "
+
+      styles.push(:fg) { io << hand }
+      styles.push(:normal) do
+        extended.each_line_with_index do |line, index|
+          if index > 0
+            styles.push(:fg) { io << line_prefix }
+          end
+
+          line.each_char_with_abs_byte_index do |chr, byte_index|
+            if byte_index.entering?(@text.byte_bounds)
+              styles.push(:focus)
+            end
+
+            if @text.empty? && byte_index == @text.byte_start
+              styles.push(:error) { io << '⏏' }
+            end
+
+            case chr
+            when ' '
+              styles.push(:dim) { io << '·' }
+            when '\n'
+              styles.push(:dim) { io << '⏎' }
+              io.puts
+            when '\t'
+              styles.push(:dim) { io << '⭾' }
+            when '\r'
+              styles.push(:dim) { io << '␍' }
+            else
+              io << chr
+            end
+
+            if byte_index.leaving?(@text.byte_bounds)
+              styles.pop(:focus)
+            end
+          end
+        end
+
+        if @text.empty? && extended.byte_end == @text.byte_start
+          styles.push(:error) { io << '⏏' }
+        end
+      end
+
+      io.puts
+      io.puts
+
+      styles.push(:dark_error) do
+        io << "syntax error: " << @detail
+      end
+
+      io.puts
+      io.puts
     end
   end
 
@@ -154,5 +251,8 @@ end
 
 require "./ml/rune"
 require "./ml/kit"
+require "./ml/lexeme"
+
 require "./ml/text"
+
 require "./ml/display"

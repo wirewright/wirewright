@@ -88,7 +88,7 @@ module Ww::ML::Text
     end
 
     private def raise(message : String)
-      raise SyntaxError.new(message, pos - 1)
+      raise SyntaxError.new(message, @source.view(pos, byte_size: 0))
     end
 
     # Skips a string token assuming `‸"<rest of the input>`.
@@ -556,7 +556,7 @@ module Ww::ML::Text
 
     # Override `raise` so we don't have to type `SyntaxError` all the time.
     private def raise(message : String) : NoReturn
-      raise SyntaxError.new(message, @lexer.pos - 1)
+      raise SyntaxError.new(message, @lexer.@source.view(@lexer.pos, byte_size: 0))
     end
 
     # Parses an entry assuming `<key>‸<...>`.

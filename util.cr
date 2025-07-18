@@ -1089,6 +1089,10 @@ struct Queue(T)
 end
 
 struct Char
+  def single_byte? : Bool
+    0 <= ord <= 0xff
+  end
+
   def view : StringView
     to_s.view
   end
@@ -1219,6 +1223,10 @@ struct StringView
       end
       size
     end
+  end
+
+  def byte_bounds : Range(Int32, Int32)
+    @byte_start...byte_end
   end
 
   def blank? : Bool
@@ -1537,6 +1545,27 @@ struct StringView
     prior? || raise IndexError.new
   end
 
+  def prior_string
+    StringView.new(@string, 0, @byte_start, @string.single_byte_optimizable?)
+  end
+
+  def posterior_string
+    StringView.new(@string, @byte_end, @string.bytesize, @string.single_byte_optimizable?)
+  end
+
+  def count(&)
+    count = 0
+    each_char do |chr|
+      next unless yield chr
+      count += 1
+    end
+    count
+  end
+
+  def count(pattern)
+    count { |chr| pattern === chr }
+  end
+
   def lcount(prefix : Char) : Int32
     count = 0
 
@@ -1815,6 +1844,14 @@ struct StringView
     end
   end
 
+  def each_line_with_index(& : StringView, Int32 ->)
+    index = 0
+    each_line do |line|
+      yield line, index
+      index += 1
+    end
+  end
+
   def span(other : StringView) : StringView
     unless string.same?(other.string)
       raise ArgumentError.new("expected string views of the same string")
@@ -1873,6 +1910,40 @@ struct StringView
       r = StringView.new(@string, byte_index + 1, byte_end, ascii_only: ascii_only?)
       yield l, m, r
     end
+  end
+
+  def extend(& : Char -> Bool) : StringView
+    reader = Char::Reader.new(@string, pos: byte_end)
+
+    single_byte = true
+
+    loop do
+      chr = reader.current_char
+      break if chr == '\0'
+      break unless yield chr
+      single_byte &&= chr.single_byte?
+      reader.next_char
+    end
+
+    StringView.new(@string, byte_start, reader.pos, single_byte)
+  end
+
+  def reverse_extend(& : Char -> Bool) : StringView
+    reader = Char::Reader.new(@string, pos: byte_start)
+
+    single_byte = true
+
+    loop do
+      break unless reader.has_previous?
+      chr = reader.previous_char
+      unless yield chr
+        reader.next_char
+        break
+      end
+      single_byte &&= chr.single_byte?
+    end
+
+    StringView.new(@string, reader.pos, byte_end, single_byte)
   end
 
   def to_s(io)
@@ -3429,6 +3500,14 @@ struct Range(B, E)
 end
 
 struct Int
+  def entering?(range : Range(Int32, Int32)) : Bool
+    !range.includes?(self - 1) && range.includes?(self)
+  end
+
+  def leaving?(range : Range(Int32, Int32)) : Bool
+    range.includes?(self) && !range.includes?(self + 1)
+  end
+
   def self.min
     {% begin %}
       {{@type}}::MIN
