@@ -5,3 +5,4 @@ module Ww::ML
 end
 
 require "./lexeme/lexeme"
+require "./lexeme/reader"

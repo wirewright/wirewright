@@ -68,8 +68,8 @@ module Ww::ML
         Caret
         DollarLeft
         Dollar
-        Symbolic
-        SymbolicSuffix
+        Symbol
+        SymbolSuffix
         DquoteLeft
         DquoteRight
         TLHalfBracket
@@ -128,14 +128,17 @@ module Ww::ML
     # examples of Data: they are simply too close to the characters to be parsed at
     # term-read time; it is clearly the job of lexical analysis to do this instead.
     #
-    # - *label* details the lexical origin of the datum. In other words, it is
+    # - *label* specifies the lexical origin of the datum. In other words, it is
     #   the "historical token type" of the datum.
     # - *text* points to the portion of the source string that generated
     #   this datum.
     record Datum, label : Label, term : Term, text : StringView do
       enum Label : UInt8
         Other
-        Numeric
+        Number
+        Boolean
+        RawString
+        Substring
       end
     end
 
