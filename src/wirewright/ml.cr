@@ -74,9 +74,9 @@ module Ww::ML
         when {_, :initial}
           io << "\e[0m"
         when {_, :normal}
-          io << "\e[0;38;5;252m" # reset, grey82
+          io << "\e[0;37m" # reset, light gray
         when {_, :focus}
-          io << "\e[0;97;1m" # reset, white, bold
+          io << "\e[0;4:3;97;1m" # reset, undercurl, white, bold
         when {_, :error}
           io << "\e[0;33;1m" # reset, light yellow, bold
         when {_, :dark_error}
@@ -84,9 +84,9 @@ module Ww::ML
         when {_, :link}
           io << "\e[0;97;4m" # reset, white, underline
         when {:focus, :dim}
-          io << "\e[0;38;5;244m" # reset, grey50
+          io << "\e[0;4:3;37m" # reset, undercurl, light gray
         when {_, :dim}, {_, :fg}
-          io << "\e[0;38;5;240m" # reset, grey35
+          io << "\e[0;90m" # reset, dark gray
         else
           raise ArgumentError.new("unexpected style transition #{style0.inspect} -> #{style1.inspect}")
         end
