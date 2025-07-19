@@ -1,7 +1,7 @@
 module Ww::ML
-  # Represents the abstract lexical structure of a string of WwML, capturing
-  # individual tokens, data, and syntactic choices prior to term parsing
-  # or macro expansion.
+  # A lexeme is, in the most general sense, an abstract lexical substructure
+  # in a string of WwML. Most likely it is, or corresponds to, a group of `Rune`s --
+  # Unicode codepoints with lightweight WwML-specific tagging.
   module Lexeme
     extend self
 
@@ -111,8 +111,9 @@ module Ww::ML
         ColonSubPlusLeft
         ColonSubPlusRight
         PlusMinus
-        NewlineTripleDash
-        NewlineTripleDashNewline
+        VspaceTripleDash
+        VspaceTripleDashVspace
+        WhiteRectangle
         BlankLine
         DoubleBlankLine
         FatArrowRight
@@ -183,81 +184,66 @@ module Ww::ML
       lexemes.to_readonly_slice
     end
 
-    # :nodoc:
-    def block_boundary?(lexeme : Token) : Bool
-      # We treat `---` as a block boundary, to make sure cases like:
-      #
-      #   a⫽b
-      #   --- foo
-      #   c⫽d⫽e
-      #
-      # ... are treated like blank lines, ensuring proper expansion:
-      #
-      #   a
-      #   b
-      #   --- foo
-      #   c
-      #   d
-      #   e
-      case lexeme.type
-      when .blank_line?,
-           .double_blank_line?,
-           .newline_triple_dash?,
-           .newline_triple_dash_newline?,
-           .boi?, .eoi?
-        true
-      else
-        false
-      end
+    enum BlockBoundaryResponse
+      # Lexeme is not a block boundary
+      No
+      # Lexeme is a block boundary. It must be excluded from the delimited
+      # block and from the next block -- thus, forming a block of its own.
+      Exclusive
+      # Lexeme is a block boundary. It must be put at the start of the next block.
+      Front
+      # Lexeme is a block boundary. It must be put at the end of the delimited block.
+      Rear
     end
 
-    # Returns `true` if *lexeme* is a block boundary lexeme (e.g. a blank line).
-    # Returns `false` otherwise.
-    def block_boundary?(lexeme) : Bool
-      false
-    end
-
-    # :nodoc:
-    def block_boundary_exclusive?(lexeme : Lexeme::Token) : Bool
+    def block_boundary?(lexeme : Lexeme::Token) : BlockBoundaryResponse
       case lexeme.type
       when .blank_line?,
            .double_blank_line?,
            .boi?, .eoi?
-        true
+        BlockBoundaryResponse::Exclusive
+      when .vspace_triple_dash?,
+           .vspace_triple_dash_vspace?,
+           .white_rectangle?
+        BlockBoundaryResponse::Front
       else
-        false
+        BlockBoundaryResponse::No
       end
     end
 
-    # Returns `true` if *lexeme* is a block boundary lexeme that must be excluded
-    # from the block it delimits. Returns `false` otherwise.
-    def block_boundary_exclusive?(lexeme) : Bool
-      false
+    def block_boundary?(lexeme)
+      BlockBoundaryResponse::No
     end
 
     # Yields each lexical block in *lexemes*. A lexical block is usually delimited
     # by a blank line, a double blank line, etc. A lexical block is the unit of
-    # choice instantiation if any lexeme `Choice` is found in it.
+    # choice instantiation for lexical `Choice`s found in it.
     #
-    # Delimiter lexemes attach to the end of the block above.
+    # Delimiter lexemes are yielded as a separate block unless they are *inclusive*
+    # (e.g. `***`), in which case they attach to the end of the block they delimit.
+    #
+    # NOTE: May emit empty blocks.
     def each_block(lexemes : Slice(One), & : Slice(One) ->) : Nil
       origin = lexemes
       size = 0
 
       lexemes.each do |lexeme|
-        unless block_boundary?(lexeme)
+        case block_boundary?(lexeme)
+        in .no?
           size += 1
-          next
-        end
-
-        if block_boundary_exclusive?(lexeme)
-          yield origin[0, size + 1] # including delimiter
+        in .exclusive?
+          yield origin[0, size] # excluding delimiter
+          yield origin[size, 1] # delimiter
           origin += size + 1
           size = 0
-        else
-          yield origin[0, size] # excluding delimiter
+        in .front?
+          yield origin[0, size]
           origin += size
           size = 1
+        in .rear?
+          yield origin[0, size + 1]
+          origin += size + 1
+          size = 0
         end
       end
 
@@ -274,19 +260,31 @@ module Ww::ML
     # See also: `arity`.
     MAX_BLOCK_ARITY = 8
 
-    # Returns the block arity of *block*.
+    # Returns the current delay and block arity of *block*.
     #
     # Block arity is the number of block instances generated from the lexical choice
     # operators `⸨⸩⟦⟧⫽`. In other words, block arity is the common *choice arity* --
     # the number of branches *all* choices in the block have.
     #
     # If different choice arities are found in the same block, raises `SyntaxError`.
-    def arity(block : Slice(One)) : Int32
+    def delay_and_arity?(block : Slice(One)) : {Int32, Int32}?
+      # Find minimum delay.
+      delay = nil
+
+      block.each do |lexeme|
+        next unless lexeme.is_a?(Lexeme::Choice)
+        next unless delay.nil? || lexeme.delay < delay
+
+        delay = lexeme.delay
+      end
+
+      return unless delay
+
       arity0 = 0
 
       block.each do |lexeme|
         next unless lexeme.is_a?(Lexeme::Choice)
-        next unless lexeme.delay.zero?
+        next unless lexeme.delay == delay
 
         arity1 = lexeme.options.size
         if arity1 > MAX_BLOCK_ARITY
@@ -300,12 +298,16 @@ module Ww::ML
         arity0 = arity1
       end
 
-      arity0
+      if arity0.zero?
+        unreachable("block has choice delay but its arity is zero")
+      end
+
+      {delay, arity0}
     end
 
     # See `arity(Slice(One))`.
-    def arity(block : Array(One)) : Int32
-      arity(block.to_readonly_slice)
+    def delay_and_arity?(block : Array(One)) : {Int32, Int32}?
+      delay_and_arity?(block.to_readonly_slice)
     end
 
     # Instantiates *block* and yields lexeme `Atom`s in a flat stream.
@@ -316,10 +318,10 @@ module Ww::ML
       back = __back
 
       (0..).each do |epoch|
-        complete = true
+        break unless response = delay_and_arity?(front)
 
-        arity = arity(front)
-        break if arity.zero?
+        complete = true
+        delay, arity = response
 
         (0...arity).each do |pivot|
           front.each do |lexeme|
@@ -327,11 +329,12 @@ module Ww::ML
             in Atom
               back << lexeme
             in Choice
-              unless lexeme.delay.zero?
+              unless lexeme.delay == delay
                 complete = false
                 back << lexeme.copy_with(delay: lexeme.delay - 1)
                 next
               end
+
               back << Token.new(lexeme.type, lexeme.options[pivot])
             end
           end
@@ -372,18 +375,11 @@ module Ww::ML
       back = [] of One
 
       each_block(lexemes) do |block|
-        if lst = block[-1]?.as?(Atom)
-          if block_boundary_exclusive?(lst)
-            block = block[0...-1]
-            footer = lst
-          end
-        end
+        next if block.empty?
 
         each_instance_in_block(block, __front: front, __back: back) do |lexeme|
           atoms << lexeme
         end
-
-        atoms << footer if footer
       end
 
       atoms.to_readonly_slice

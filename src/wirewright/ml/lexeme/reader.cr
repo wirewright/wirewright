@@ -1,5 +1,5 @@
 module Ww::ML::Lexeme
-  # A WwML lexeme reader is an object capable of producing a stream of lexemes
+  # The WwML lexeme reader is an object capable of producing a stream of lexemes
   # from a UTF-8-encoded string of WwML source code.
   #
   # The lexeme reader is a fairly important part of reading WwML, because it resolves
@@ -629,6 +629,7 @@ module Ww::ML::Lexeme
         case ahead
         when '⸨'
           options = [] of StringView
+          delay = 0
 
           text = view do
             forward # ⸨⏏
@@ -647,6 +648,7 @@ module Ww::ML::Lexeme
           end
         when '⟦'
           options = [] of StringView
+          delay = 1
 
           text = view do
             forward # ⟦⏏
@@ -665,6 +667,7 @@ module Ww::ML::Lexeme
           end
         when .symbolic?
           options = [] of StringView
+          delay = 0
 
           text = view do
             options << view { past?(&.symbolic?) }
@@ -682,9 +685,9 @@ module Ww::ML::Lexeme
         end
 
         if segments.empty?
-          segments << Lexeme::Choice.new(:symbol, options, text, delay: 0)
+          segments << Lexeme::Choice.new(:symbol, options, text, delay)
         else
-          segments << Lexeme::Choice.new(:symbol_suffix, options, text, delay: 0)
+          segments << Lexeme::Choice.new(:symbol_suffix, options, text, delay)
         end
       end
     end
@@ -832,11 +835,11 @@ module Ww::ML::Lexeme
 
           # ---⏏
           if ahead.vspace?
-            return token(:newline_triple_dash_newline)
+            return token(:vspace_triple_dash_vspace)
           end
 
           # --- ⏏qux
-          return token(:newline_triple_dash)
+          return token(:vspace_triple_dash)
         end
 
         if ahead.content?
@@ -844,6 +847,8 @@ module Ww::ML::Lexeme
         else
           return token(:minus)
         end
+      when past?('▪')
+        return token(:white_rectangle)
       when past?('%')
         if past?('\'')
           return nows("%'") { token(:percent_quote) }

@@ -25,7 +25,7 @@ struct Ww::ML::Reader
     # Returns `false` otherwise.
     def self.ignores?(lexeme : Lexeme::Token) : Bool
       case lexeme.type
-      when .line_comment?, .blank_line?, .double_blank_line?
+      when .line_comment?, .blank_line?, .double_blank_line?, .white_rectangle?
         true
       else
         false
