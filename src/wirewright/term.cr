@@ -927,6 +927,38 @@ module Ww
 
       Term.of(dict1)
     end
+
+    # Thoroughly visits all leaves of *term*, and yields them to the block.
+    #
+    # *Thoroughly* here means that both keys and values are visited recursively.
+    #
+    # Dictionaries are emitted before their entries. For each entry, first, its
+    # key is visited recursively; then, its value is visited recursively.
+    def self.each_leaf_thorough(term : Term, & : Term ->) : Nil
+      state_initial = -1 # const
+
+      stack = Stack{ {state: state_initial, term: term} }
+
+      while rec = stack.pop?
+        case rec[:state]
+        when state_initial
+          yield rec[:term]
+          next unless rec[:term].type.dict?
+
+          stack << {state: 0, term: rec[:term]}
+        else
+          # If state is zero or positive = N, this means nth(N) on the term
+          # and an assertion that term is a dict.
+          dict = rec[:term].unsafe_as_d
+          next unless entry = dict.nth?(rec[:state])
+
+          key, value = entry
+          stack << {state: rec[:state] + 1, term: rec[:term]}
+          stack << {state: state_initial, term: value}
+          stack << {state: state_initial, term: key}
+        end
+      end
+    end
   end
 end
 
