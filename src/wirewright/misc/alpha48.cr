@@ -1,10 +1,16 @@
 # Alpha-48 is a reduced version of base-62, omitting visually ambiguous symbols
-# and digits. This is useful for generating short and always-valid-as-WwML
-# identifiers. Alpha-48 is used in rule (`◇`) and block (`▢`) ids.
+# and all of digits (to avoid tricky starts-with-digit situations).
+#
+# Base alpha-48 is useful for generating identifiers that are short and always
+# valid when treated as WwML.
+#
+# Base alpha-48 is used in rule (`◇`) and block (`▢`) ids.
 module Ww::Alpha48
   extend self
 
   # :nodoc:
+  #
+  # Maps byte 0-255 to the corresponding sequence of digits in base alpha-48.
   TABLE = Slice[
     "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "m", "n", "o", "p",
     "q", "r", "s", "t", "u", "v", "w", "x", "y", "z", "A", "B", "C", "D", "E",
