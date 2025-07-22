@@ -1,0 +1,29 @@
+;;
+;; The `tests` tool uses this file to figure out the tests it needs
+;; to run.
+;;
+
+((test "ml.test.wwml"
+   color: orange
+   tags: (ml))
+ (comparison "WwML Corpus"
+   (ml "corpus.in.wwml") (lr.gz "corpus.expected.wwlr.gz")
+   tags: (ml ml-corpus))
+ (test "patterns.test.wwml"
+   color: magenta
+   tags: (patterns))
+ (test "editor.test.wwml"
+   color: lightpink
+   tags: (editor))
+ (test "delta7.test.wwml"
+   color: lightgreen
+   tags: (d7))
+ (test "tspace.test.wwml"
+   color: white
+   tags: (tspace))
+ (comparison "DwUIR regressions"
+   (dwuir "dwuir.in.wwml") (ppm "dwuir.expected.ppm")
+   tags: (ui dwuir))
+ (comparison "UIR regressions"
+   (uir "uir.in.wwml") (ppm "uir.expected.ppm")
+   tags: (ui uir)))
