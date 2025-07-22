@@ -1,6 +1,6 @@
 module Ww::ML
   # Utilities associated with WwML. The main user of these is WwML itself
-  # (i.e., the lexeme reader and term reader).
+  # (i.e., the lexeme reader and the term reader).
   module Kit
     extend self
 

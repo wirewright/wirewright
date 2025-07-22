@@ -1,7 +1,7 @@
 module Ww::ML
   # A lexeme is, in the most general sense, an abstract lexical substructure
-  # in a string of WwML. Most likely it is, or corresponds to, a group of `Rune`s --
-  # Unicode codepoints with lightweight WwML-specific tagging.
+  # identified in a string of WwML. Most likely it is, or corresponds to, a group
+  # of `Rune`s -- Unicode codepoints with lightweight WwML-specific tagging.
   module Lexeme
     extend self
 
@@ -10,7 +10,7 @@ module Ww::ML
     # Represents a lexical unit that corresponds to a single atom after instantiation.
     alias One = Atom | Choice
 
-    # Represents an individual lexical unit -- a *lexical atom*.
+    # Represents an indivisible lexical unit -- a *lexical atom*.
     alias Atom = Token | Datum
 
     # Represents a "null" or "ignore me" lexeme, emitted sometimes to avoid
@@ -20,7 +20,7 @@ module Ww::ML
     # Represents a *lexical token*.
     #
     # - *type* determines the type of the token.
-    # - *text* points to the portion of the source string that generated
+    # - *text* points to the fragment of the source string that generated
     #   this datum.
     record Token, type : Type, text : StringView do
       # Lists the available types of tokens.
@@ -129,11 +129,11 @@ module Ww::ML
     # Represents a lexical unit that was parsed into a `Term` during lexical analysis
     # (whereas normally this is done at term read-time). Numbers and raw strings are
     # examples of Data: they are simply too close to the characters to be parsed at
-    # term-read time; it is clearly the job of lexical analysis to do this instead.
+    # term-read time; it is clearly the job of lexical analysis to do that instead.
     #
     # - *label* specifies the lexical origin of the datum. In other words, it is
     #   the "historical token type" of the datum.
-    # - *text* points to the portion of the source string that generated
+    # - *text* points to the fragment of the source string that generated
     #   this datum.
     record Datum, label : Label, term : Term, text : StringView do
       enum Label : UInt8
@@ -196,6 +196,7 @@ module Ww::ML
       Rear
     end
 
+    # :nodoc:
     def block_boundary?(lexeme : Lexeme::Token) : BlockBoundaryResponse
       case lexeme.type
       when .blank_line?,
@@ -211,7 +212,9 @@ module Ww::ML
       end
     end
 
-    def block_boundary?(lexeme)
+    # Returns whether *lexeme* is a block boundary and what kind of block
+    # boundary it is.
+    def block_boundary?(lexeme) : BlockBoundaryResponse
       BlockBoundaryResponse::No
     end
 
