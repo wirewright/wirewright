@@ -304,7 +304,7 @@ module Ww::Soma::DwUIR
       matchpi(<<-WWML
         (viewport _ ¦ _ pan-l⋮ 0
                         pan-t⋮ 0
-                        zoom: (%optional 1 zoom←(%number 0.1 <= _ <= 8)))
+                        zoom: (%optional 1 (%pipe (clamp 0.1 to 8) zoom_)))
       WWML
       ) do
         return unless visible?(context)
