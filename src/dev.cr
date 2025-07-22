@@ -139,9 +139,9 @@ module DevTool
       basesrc = File.read(DEVPATH / SRC_BASE)
 
       begin
-        base = ML.dict(basesrc)
+        base = ML.dict(basesrc, filename: (DEVPATH / SRC_BASE).to_s)
       rescue e : ML::SyntaxError
-        e.humanize(STDERR, basesrc)
+        e.humanize(STDERR)
 
         fatal "invalid or malformed state: #{DEVPATH / SRC_BASE}"
       end
@@ -152,9 +152,9 @@ module DevTool
       activesrc = File.read(DEVPATH / SRC_ACTIVE)
 
       begin
-        active = ML.dict(activesrc)
+        active = ML.dict(activesrc, filename: (DEVPATH / SRC_ACTIVE).to_s)
       rescue e : ML::SyntaxError
-        e.humanize(STDERR, activesrc)
+        e.humanize(STDERR)
 
         fatal "invalid or malformed state: #{DEVPATH / SRC_ACTIVE}"
       end
@@ -330,7 +330,15 @@ module DevTool
           fatal "preset #{preset} does not exist"
         end
 
-        state = state.morph({:active, :presets, preset, nil}, {:active, :preset, nil})
+        # Leave preset if it's the one being removed.
+        if state[:active, :preset]? == preset
+          state = state.morph({:active, :preset, nil})
+        end
+
+        state = state.morph(
+          {:active, :presets, preset, nil},
+          {:base, :presets, preset, nil},
+        )
       end
 
       matchpi %{("src" path_string)} do

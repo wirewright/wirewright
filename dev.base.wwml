@@ -2,37 +2,37 @@
 ;; the `dev` tool to modify this file.
 
 presets:
-{"vdwuir":
-  {source: "src/vdwuir.cr",
-   flags:
-    {"preview_mt": true,
-     "execution_context": true,
-     "newsoma": true}},
- "tests":
-  {source: "testtool.cr",
-   flags:
-    {"preview_mt": true,
-     "execution_context": true,
-     "newsoma": true}},
- "mt":
-  {flags: {"preview_mt": true, "execution_context": true}},
+{"dev":
+  {flags: {"execution_context": true, "preview_mt": true},
+   source: "src/dev.cr"},
  "dwuir2ppm":
-  {source: "src/dwuir2ppm.cr",
-   flags:
-    {"preview_mt": true,
-     "dwuir2ppm": true,
+  {flags:
+    {"dwuir2ppm": true,
      "execution_context": true,
-     "newsoma": true}},
- "dev":
-  {source: "src/dev.cr",
-   flags: {"preview_mt": true, "execution_context": true}},
+     "newsoma": true,
+     "preview_mt": true},
+   source: "src/dwuir2ppm.cr"},
+ "mt":
+  {flags: {"execution_context": true, "preview_mt": true}},
  "soma":
-  {source: "soma6.cr",
+  {flags:
+    {"execution_context": true,
+     "preview_mt": true,
+     "soma6": true},
    linkdirs: {"ext/sfml/lib": true},
-   flags:
-    {"preview_mt": true,
-     "execution_context": true,
-     "soma6": true}}}
+   source: "soma6.cr"},
+ "tests":
+  {flags:
+    {"execution_context": true,
+     "newsoma": true,
+     "preview_mt": true},
+   source: "testtool.cr"},
+ "vdwuir":
+  {flags:
+    {"execution_context": true,
+     "newsoma": true,
+     "preview_mt": true},
+   source: "src/vdwuir.cr"}}
 
 protocol:
 "dev 0"
