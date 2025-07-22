@@ -694,6 +694,11 @@ transformations are supported:
   if `n=0`.
 - `(** n_number)`: raises a number matchee to the power `n`: e.g. `(%pipe (** 2) n_)` will
   match `4` with `{x: 16}`. It is a nevermatch if the matchee is zero and `n` is negative.
+- `(clamp min_number to max_number)`: clamps a number matchee to lie within the given bounds.
+  If the matchee is less than `min`, it is replaced with `min`; if greater than `max`, it is
+  replaced with `max`. Otherwise, the value passes through unchanged. For example,
+  `(%pipe (clamp 0 to 10) x_)` will match `-5` with `{x: 0}`, `5` with `{x: 5}`, and `20`
+  with `{x: 10}`.
 - `(map mapper_dict)`: retrieves the value (if any) associated with a matchee term
   in `mapper`.
 

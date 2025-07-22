@@ -85,6 +85,7 @@ module Ww::M1::Operator
   defcase Idiv, arg : Term::Num, successor : Any
   defcase Mod, arg : Term::Num, successor : Any
   defcase Pow, arg : Term::Num, successor : Any
+  defcase Clamp, min : Term::Num, max : Term::Num, successor : Any
   defcase Map, arg : Term::Dict, successor : Any
 
   defcase CaptureItemsonly, capture : Term

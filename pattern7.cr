@@ -388,7 +388,7 @@ end
 #   are not, fix that. In fact, Operator should probably be renamed to Subject or something
 #   like that. Not sure how large of a refactor that is, and how much point is there in it.
 module ::Ww::M1::Operator
-  alias Any = Pass | Never | Num | Sym | SymBlank | SymNonblank | Boolean | Dict | Itemsonly | Pairsonly | SketchSubset | Bounds | BoundsGuard | MaxDepth | DictGuard | Literal | Capture | CaptureItemsonly | ItemSeq | ItemFirst | ItemLast | SingularSeq | Partition | Edge | LiteralChoices | SourceChoice | ValueLiteral | Keypool | Span | Tally | Type | ParseML | Bin | Both | Not | Layer | ScanFirst | ScanSource | ScanAll | ScanAllIsolated | DfsFirst | DfsSource | DfsAllIsolated | DfsAll | BfsFirst | BfsAllIsolated | BfsAll | Value | NegativeValue | NegativeValueKeypath | EntriesFirst | EntriesSource | EntriesAllIsolated | EntriesAll | Str | New | KeypathCapture
+  alias Any = Pass | Never | Num | Sym | SymBlank | SymNonblank | Boolean | Dict | Itemsonly | Pairsonly | SketchSubset | Bounds | BoundsGuard | MaxDepth | DictGuard | Literal | Capture | CaptureItemsonly | ItemSeq | ItemFirst | ItemLast | SingularSeq | Partition | Edge | LiteralChoices | SourceChoice | ValueLiteral | Keypool | Span | Tally | Type | ParseML | Clamp | Bin | Both | Not | Layer | ScanFirst | ScanSource | ScanAll | ScanAllIsolated | DfsFirst | DfsSource | DfsAllIsolated | DfsAll | BfsFirst | BfsAllIsolated | BfsAll | Value | NegativeValue | NegativeValueKeypath | EntriesFirst | EntriesSource | EntriesAllIsolated | EntriesAll | Str | New | KeypathCapture
 
   alias Bin = Add | Sub | Mul | Div | Idiv | Mod | Pow | Map
 
@@ -2372,13 +2372,14 @@ module ::Ww::M1
           %[(%pipe (div _number) successor_)],
           %[(%pipe (mod _number) successor_)],
           %[(%pipe (** _number) successor_)],
+          %[(%pipe (clamp _number to _number) successor_)],
           %[(%pipe (map _dict) successor_)],
           %[(%pipe span successor_)],
           %[(%pipe tally successor_)],
           %[(%pipe type successor_)],
           %[(%pipe ml successor_)],
           cue: :"%pipe",
-          cues: {:+, :-, :*, :/, :div, :mod, :**, :map, :span, :tally, :type, :ml}
+          cues: {:+, :-, :*, :/, :div, :mod, :**, :clamp, :map, :span, :tally, :type, :ml}
         ) do
           pattern.morph(
             {1, ->(term : Term) { Term.of(:"%barrier", term) }},
@@ -3817,6 +3818,10 @@ module ::Ww::M1
 
       matchpi %[(%pipe (%barrier (** n_number)) successor_)], cue: {:"%pipe", :**} do
         Operator::Pow.new(n.unsafe_as_n, operator(successor, captures))
+      end
+
+      matchpi %[(%pipe (%barrier (clamp min_number to max_number)) successor_)], cue: {:"%pipe", :clamp, :to} do
+        Operator::Clamp.new(min.unsafe_as_n, max.unsafe_as_n, operator(successor, captures))
       end
 
       matchpi %[(%pipe (%barrier (map arg_dict)) successor_)], cue: {:"%pipe", :map} do
@@ -6290,6 +6295,7 @@ module ::Ww::M1::Skeleton
         %{(%'%pipe (%barrier (div _number)) _)},
         %{(%'%pipe (%barrier (mod _number)) _)},
         %{(%'%pipe (%barrier (** _number)) _)},
+        %{(%'%pipe (%barrier (clamp _number to _number)) _)},
       ) { M1::Normal::BLANK_NUMBER }
 
       matchpi(

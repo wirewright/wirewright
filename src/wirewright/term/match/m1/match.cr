@@ -390,6 +390,17 @@ module Ww::M1::Operator
     match(behind0, op.successor, c, ahead0)
   end
 
+  def match(behind0, op : Clamp, matchee : Term, ahead0)
+    unless a = matchee.as_n?
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    a = op.min if a < op.min
+    a = op.max if a > op.max
+
+    match(behind0, op.successor, Term.of(a), ahead0)
+  end
+
   def match(behind0, op : Map, matchee : Term, ahead0)
     unless v = op.arg[matchee]?
       return Fb::Mismatch.new(behind0.env)
