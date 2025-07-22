@@ -1021,9 +1021,7 @@ module Ww
       end
     end
 
-    # Yields each *itemspart stem* dict into the given *root*. The block should return `true`
-    # to continue descent into the stem tip's subtree; or `false` to abort descent and
-    # move to the non-descendant successor under traversal.
+    # Yields keypath and *itemspart stem* into the given *root*.
     #
     # A *stem* is an itemsonly dict whose last item is a node from the root's subtree;
     # prefixed by its ancestor nodes all the way up to, but not including the root itself.
@@ -1031,32 +1029,34 @@ module Ww
     # Stems are used to turn tree traversal into declarative pattern matching.
     #
     # An *itemspart stem* is a *stem* restricted to the itemsparts of *root*'s subtree.
-    #
-    # For example, in the dict `(((a) b) (c d))`, one can identify the following
-    # itemspart stems:
-    #
-    # - `((a) b)`
-    # - `(c d)`
-    # - `((a) b) (a)`
-    # - `((a) b) b`
-    # - `(c d) c`
-    # - `(c d) d`
-    # - `((a) b) (a) a`
-    #
-    # NOTE: iteration order is implementation-defined. Clients should not rely on it.
-    def self.each_itemspart_stem(root : Term::Dict, & : Term::Dict -> Bool)
-      queue = Deque{Term[]}
+    def self.each_itemspart_stem(root : Term::Dict, & : Term::Dict, Term::Dict -> Bool)
+      queue = Deque{ {Term[], Term[]} }
 
-      while stem = queue.shift?
-        if stem.empty?
-          root.each_item_unordered do |item|
-            queue << stem.append(item)
+      while entry = queue.shift?
+        keypath, stem = entry
+
+        if keypath.empty?
+          root.each_item_with_index do |item, index|
+            queue << {Term[{index}], stem.append(item)}
           end
-        elsif yield stem
+        elsif yield keypath, stem.append(:node)
           next unless tip = stem.items.last.as_d?
 
-          tip.each_item_unordered do |item|
-            queue << stem.append(item)
+          l = Term[]
+          r = tip.itemspart
+
+          while item = r.items.first?
+            if yield keypath, stem.append({l, :children, r})
+              # Block says to descend into rest.
+              break
+            end
+
+            l = l.append(item)
+            r = r.items.move(1).collect # FIXME: gosh this is inefficient!!
+          end
+
+          r.each_item_with_index do |item, index|
+            queue << {keypath.append(l.size + index), stem.append(item)}
           end
         end
       end

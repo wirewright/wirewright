@@ -83,8 +83,8 @@ module Ww
     defcase Paint, child : Element, style : Style
 
     # Displays as a string of text.
-    def text(caption : String, style : Style = :normal)
-      lines = wrap(caption, maxwidth: 80).lines
+    def text(caption : String, style : Style = :normal, *, wrap = true)
+      lines = (wrap ? wrap(caption, maxwidth: 80) : caption).lines
       if lines.size == 1
         return Text.new(caption, style)
       end
@@ -93,13 +93,13 @@ module Ww
     end
 
     # :ditto:
-    def text(caption : StringView, style : Style = :normal)
-      text(caption.to_s, style)
+    def text(caption : StringView, style : Style = :normal, **kwargs)
+      text(caption.to_s, style, **kwargs)
     end
 
     # Paints the output of *child* using *style*.
-    def painted(child, style : Style)
-      Paint.new(child, style)
+    def painted(child, style : Style, **kwargs)
+      Paint.new(child, style, **kwargs)
     end
 
     # Flips between `row` and `col` based on content width.
