@@ -7,6 +7,9 @@ module UIR2PPM
 
   extend self
 
+  class Error < Exception
+  end
+
   struct Renderer
     SELECTOR = ML.term %{[rule pattern_ template_]}
 
@@ -43,7 +46,7 @@ module UIR2PPM
       end
 
       unless rule.is_a?(Rule::Template)
-        raise "render: unsupported rule type"
+        raise Error.new("render: unsupported rule type")
       end
 
       instance = Alloy.render(env, rule.body)
@@ -88,7 +91,7 @@ module UIR2PPM
     end
 
     unless w && h
-      abort "unable to determine width and height, please set content-w: and content-h:"
+      raise Error.new("unable to determine width and height, please set content-w: and content-h:")
     end
 
     rr = renderer(input)
@@ -110,14 +113,7 @@ module UIR2PPM
 
     env = Term[uir2ppm: true, frame: 0, page: 0, src: "", ui: false]
 
-    instance, complaints = Alloy.render_with_complaints(env, template)
-    unless complaints.empty?
-      complaints.each do |complaint|
-        puts complaint
-      end
-      abort "template error"
-    end
-
+    instance = Alloy.render(env, template)
     instance = rewrite(instance, uiR)
 
     viewer.show(instance, bg: fill0)
@@ -145,7 +141,7 @@ module UIR2PPM
         if File.exists?(fout.to(String))
           puts "uir2ppm: #{fout.to(String)} exists, overwrite? (y/)"
           unless gets == "y"
-            abort "uir2ppm: cancelled"
+            raise Error.new("uir2ppm: cancelled")
           end
         end
 
@@ -154,7 +150,7 @@ module UIR2PPM
         rescue e : File::Error
           Log.fatal(exception: e)
 
-          abort "uir2ppm: could not read file"
+          raise Error.new("uir2ppm: could not read file")
         end
 
         begin
@@ -164,7 +160,7 @@ module UIR2PPM
 
           Log.fatal(exception: e)
 
-          abort "uir2ppm: syntax error"
+          raise Error.new("uir2ppm: syntax error")
         end
 
         puts "uir2ppm: #{fin.to(String)}->#{fout.to(String)}"
@@ -178,11 +174,11 @@ module UIR2PPM
         rescue e : File::Error
           Log.fatal(exception: e)
 
-          abort "uir2ppm: error while opening the output file"
+          raise Error.new("uir2ppm: error while opening the output file")
         rescue e : IO::Error
           Log.fatal(exception: e)
 
-          abort "uir2ppm: i/o error"
+          raise Error.new("uir2ppm: i/o error")
         end
 
         puts "uir2ppm: wrote #{fout.to(String)}"
@@ -209,5 +205,14 @@ module UIR2PPM
 end
 
 {% if flag?(:uir2ppm) %}
-  UIR2PPM.run
+  begin
+    UIR2PPM.run
+  rescue e
+    {% if flag?(:release) %}
+      STDERR.puts(e.message)
+    {% else %}
+      e.inspect_with_backtrace(STDERR)
+    {% end %}
+    exit 1
+  end
 {% end %}
