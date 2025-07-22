@@ -7,8 +7,37 @@ module Ww::ML
     # Returns the offending text -- a view of the original source string.
     getter text : StringView
 
+    # Accesses the name of the file associated with the offending text.
+    property? filename : String?
+
     # :nodoc:
-    def initialize(@detail : String, @text : StringView)
+    def initialize(@detail : String, @text : StringView, @filename : String? = nil)
+    end
+
+    # Performs canonical ML lookaround, where *text* is the offending
+    # snippet of source code.
+    #
+    # Returns three things:
+    # - *text* extended to newlines on both ends (left newline is not included
+    #   but the one on the right is)
+    # - Line number (counting from 1).
+    # - Column (counting from 1).
+    def self.lookaround(text : StringView) : {StringView, Int32, Int32}
+      extended = text
+        .reverse_extend { |chr| chr != '\n' }
+        .extend(exclusive: false) { |chr| chr != '\n' }
+
+      column_index = text
+        .before_begin
+        .reverse_extend { |chr| chr != '\n' }
+        .size
+
+      column = column_index + 1
+
+      line_index = extended.prior_string.count('\n')
+      line = line_index + 1
+
+      {extended, line, column}
     end
 
     # Returns the starting byte index for the offending text.
@@ -49,23 +78,12 @@ module Ww::ML
 
     # Appends a human-readable error message to *io*.
     #
-    # - *styled* can be used to enable/disable emission of ANSI escape
-    #   sequences for colors, emphasis, etc.
-    # - *filename* defines the filename printed in front of the line and column.
-    def humanize(io, *, filename = "scratch", styled : Bool = Colorize.enabled?) : Nil
-      extended = @text
-        .reverse_extend { |chr| chr != '\n' }
-        .extend { |chr| chr != '\n' }
-
-      column_index = @text
-        .before_begin
-        .reverse_extend { |chr| chr != '\n' }
-        .size
-
-      column = column_index + 1
-
-      line_index = extended.prior_string.count('\n')
-      line = line_index + 1
+    # *styled* can be used to enable/disable emission of ANSI escape
+    # sequences for colors, emphasis, etc.
+    def humanize(io, *, styled : Bool = Colorize.enabled?) : Nil
+      # TODO: Implement this using Ω once it is capable enough (mainly in terms
+      # of rich text).
+      extended, line, column = SyntaxError.lookaround(@text)
 
       styles = StyleStack.new do |style0, style1|
         next unless styled
@@ -95,7 +113,9 @@ module Ww::ML
       io << "In "
 
       styles.push(:link) do
-        io << filename << ":" unless filename.empty?
+        if (filename = @filename) && !filename.blank?
+          io << filename << ":"
+        end
         io << line << ":" << column
       end
 
@@ -154,7 +174,13 @@ module Ww::ML
       end
 
       io.puts
-      io.puts
+    end
+
+    # Returns a human-readable error message.
+    #
+    # See the other overload to learn about *kwargs*
+    def humanize(**kwargs) : String
+      String.build { |io| humanize(io, **kwargs) }
     end
   end
 end

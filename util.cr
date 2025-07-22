@@ -813,6 +813,8 @@ end
 # - *maxwidth* is the maximum number of columns that the text should occupy (inclusive).
 #
 # Appends wrapped text to *io*.
+# FIXME: this is a very useful routine but it is broken in how it handles whitespace!!! It must keep all whitespace!!
+# I.e. we're not SPLITTING on whitespace we're DECIDING WHICH WHITESPACE TO CONVERT TO A BREAK!
 def wrap(io : IO, text : String, maxwidth = 60) : Nil
   return unless maxwidth > 0
 
@@ -1196,6 +1198,22 @@ struct StringView
 
   def after_end : StringView
     StringView.new(@string, byte_end, byte_end, ascii_only: true)
+  end
+
+  def char_start : Int32
+    if @byte_start == @string.bytesize
+      return @string.size
+    end
+
+    @string.byte_index_to_char_index(@byte_start).not_nil!
+  end
+
+  def char_end : Int32
+    if byte_end == @string.bytesize
+      return @string.size
+    end
+
+    @string.byte_index_to_char_index(byte_end).not_nil!
   end
 
   def empty? : Bool
@@ -1912,7 +1930,7 @@ struct StringView
     end
   end
 
-  def extend(& : Char -> Bool) : StringView
+  def extend(*, exclusive = true, & : Char -> Bool) : StringView
     reader = Char::Reader.new(@string, pos: byte_end)
 
     single_byte = true
@@ -1920,9 +1938,15 @@ struct StringView
     loop do
       chr = reader.current_char
       break if chr == '\0'
-      break unless yield chr
+
+      unless ok = yield chr
+        break if exclusive
+      end
+
       single_byte &&= chr.single_byte?
       reader.next_char
+
+      break unless ok
     end
 
     StringView.new(@string, byte_start, reader.pos, single_byte)
@@ -3315,10 +3339,7 @@ struct Time::Span
       return
     end
 
-    if nanos < k1**4
-      io << (nanos/k1**3).round(2) << "s"
-      return
-    end
+    io << (nanos/k1**3).round(2) << "s"
   end
 
   def humanize
@@ -4200,5 +4221,17 @@ module Math
 
   def deg2rad(degrees)
     degrees * DEG_TO_RAD
+  end
+end
+
+class Log::AsyncInMemoryBackend < Log::Backend
+  getter entries = Array(Log::Entry).new
+
+  def initialize(@severity : Log::Severity)
+    super(:async)
+  end
+
+  def write(entry : Log::Entry) : Nil
+    @entries << entry
   end
 end
