@@ -24,7 +24,7 @@ module Ww::ML::Formatter
       matchpi %[(¦ _)] do
         pp.group(style.indent, "{", "}") do
           index = 0
-          term.ee.each do |k, v|
+          term.each_entry_ord do |k, v|
             pp.comma if index > 0
             format(pp, k, style)
             pp.text(":")
