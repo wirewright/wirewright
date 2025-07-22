@@ -1175,7 +1175,7 @@ end
 focused = Set(Term).new
 disabled = Set(Term).new
 
-ARGV.each do |arg|
+args.each do |arg|
   if arg.prefixed_by?("-")
     disabled << Term.of(Term::Sym.new(arg[1..]))
   elsif arg.prefixed_by?("+")
@@ -1185,7 +1185,7 @@ end
 
 Ω.render(STDOUT, Ω.text("Wirewright tests tool", style: :emphasis))
 
-success = TestHarness.new do |harness|
+success = TestHarness.new(preview: preview, styled: styled) do |harness|
   specpath = Path["tests"] / "index.wwml"
   specsrc = File.read("tests/index.wwml")
   spec, srcmap = ML.term_and_srcmap(specsrc, filename: specpath.to_s)
