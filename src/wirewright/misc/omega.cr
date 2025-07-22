@@ -170,6 +170,8 @@ module Ww
         end
       end
 
+      return unless lines.present?
+
       max_line_width = lines.max_of(&.width)
 
       # Add padding to the right to make equally wide
@@ -188,8 +190,11 @@ module Ww
         if index > 0 && el.gap > 0
           outputs << [Line.new(" " * el.gap, :normal)]
         end
+        next unless output.present?
         outputs << output
       end
+
+      return unless outputs.present?
 
       max_col_height = outputs.max_of(&.size)
 
