@@ -72,26 +72,27 @@ module Ww::ML::Formatter
 end
 
 module Ww::ML
-  def self.display(io : IO, term : Term, *, endl : Bool = true, maxwidth = 60, style = Style::None)
+  def display(io : IO, term : Term, *, endl : Bool = true, maxwidth = 60, style = Style::None)
     pp = PrettyPrint.new(io, maxwidth: maxwidth)
     Formatter.format(pp, term, style)
     pp.flush
     io.puts if endl
   end
 
-  def self.display(io : IO, term : ITerm, **kwargs)
+  def display(io : IO, term : ITerm, **kwargs)
     display(io, term.upcast, **kwargs)
   end
 
-  def self.display(term : Term, **kwargs)
+  def display(term : Term, **kwargs)
     String.build { |io| display(io, term, **kwargs) }
   end
 
-  def self.display(term : ITerm, **kwargs)
+  def display(term : ITerm, **kwargs)
     display(term.upcast, **kwargs)
   end
 
-  def self.compact(io : IO, term : Term::Dict)
+  # :nodoc:
+  def compact(io : IO, term : Term::Dict) : Nil
     io << '('
 
     term.ee(ordered: true).join(io, ' ') do |(k, v)|
@@ -107,19 +108,23 @@ module Ww::ML
     io << ')'
   end
 
-  def self.compact(io : IO, term : ITerm)
+  # :nodoc:
+  def compact(io : IO, term : ITerm) : Nil
     term.inspect(io)
   end
 
-  def self.compact(io : IO, term : Term)
+  # Appends the compact WwML representation of *term* to *io*.
+  def compact(io : IO, term : Term) : Nil
     compact(io, term.downcast)
   end
 
-  def self.compact(term : Term | ITerm) : String
+  # Returns the compact WwML representation of *term*.
+  def compact(term : Term | ITerm) : String
     String.build { |io| compact(io, term) }
   end
 
-  def self.compact_bytesize(term : Term | ITerm) : Int32
+  # Returns the bytesize of *term*'s compact WwML representation.
+  def compact_bytesize(term : Term | ITerm) : Int32
     io = IO::BytesizeCounter.new
 
     compact(io, term)
