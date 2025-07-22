@@ -3,36 +3,36 @@
 
 presets:
 {"vdwuir":
-  {flags:
+  {source: "src/vdwuir.cr",
+   flags:
     {"preview_mt": true,
      "execution_context": true,
-     "newsoma": true},
-   source: "src/vdwuir.cr"},
+     "newsoma": true}},
  "tests":
-  {flags:
+  {source: "testtool.cr",
+   flags:
     {"preview_mt": true,
      "execution_context": true,
-     "newsoma": true},
-   source: "tests.cr"},
+     "newsoma": true}},
  "mt":
   {flags: {"preview_mt": true, "execution_context": true}},
  "dwuir2ppm":
-  {flags:
+  {source: "src/dwuir2ppm.cr",
+   flags:
     {"preview_mt": true,
      "dwuir2ppm": true,
      "execution_context": true,
-     "newsoma": true},
-   source: "src/dwuir2ppm.cr"},
+     "newsoma": true}},
  "dev":
-  {flags: {"preview_mt": true, "execution_context": true},
-   source: "src/dev.cr"},
+  {source: "src/dev.cr",
+   flags: {"preview_mt": true, "execution_context": true}},
  "soma":
-  {flags:
+  {source: "soma6.cr",
+   linkdirs: {"ext/sfml/lib": true},
+   flags:
     {"preview_mt": true,
      "execution_context": true,
-     "soma6": true},
-   linkdirs: {"ext/sfml/lib": true},
-   source: "soma6.cr"}}
+     "soma6": true}}}
 
 protocol:
 "dev 0"
