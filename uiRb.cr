@@ -517,7 +517,7 @@ module UIR
 
     backmapR = set_backmapr.call chainR(refR, evalR)
 
-    selector = ML.term(%[(%any° (rule pattern_ template_) (backmap pattern_ backspec_))])
+    selector = ML.term(%[(%any° [rule pattern_ template_] [backmap pattern_ backspec_])])
 
     # Successor rewriter is only called with dicts (presumably UIR nodes) that do not
     # have the ready prop set. This is an example of how a rewriter circuit and a rule

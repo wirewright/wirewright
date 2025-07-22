@@ -41,6 +41,9 @@ module Ww
       end
 
       # :nodoc:
+      #
+      # TODO: remove this. Symbol should be responsible for printing, or even better,
+      # the specific implementation -- e.g. ML.compact!!
       def inspect(io, name : Bytes)
         io.write(name) if name?
         io << '_'
@@ -257,6 +260,57 @@ module Ww
       new(encode(source.to_slice, blank: false), type: TermType::Any, blank: false, poly: false, named: true)
     end
 
+    # Maybe:
+    #
+    # TAG
+    # 0 0 -- normal symbol
+    # 0 1 -- blank
+    # 1 0 -- ambiguous blank
+    # 1 1 -- entity
+    #
+    # Entity:
+    #   ENTITY TYPE (6 bits)
+    #   ENTITY PAYLOAD -- 3 bytes
+    #
+    # ENTITY TYPE
+    #    rule id [underscore]
+    #    rule group id [underscore]
+    #    reader byte start
+    #    reader byte end
+    #
+    # NOTE: rule ids rely on the fact that *_blank variants are real blanks!!
+    # I.e. note how <BYTE START>:◇_ is a real blank! Thus if we separate into
+    # entities we must also support parsing blanks -- `#blank` must be aware
+    # of some entities but not others!
+
+    def self.rule_id(byte_start, *, blank : Bool) : Sym
+      name = String.build do |io|
+        byte_start.to_s(io, base: 16, upcase: true)
+        io << ":◇"
+        io << "_" if blank
+      end
+
+      new(name)
+    end
+
+    def self.rule_block_id(byte_start, *, blank : Bool) : Sym
+      name = String.build do |io|
+        byte_start.to_s(io, base: 16, upcase: true)
+        io << ":▢"
+        io << "_" if blank
+      end
+
+      new(name)
+    end
+
+    def self.byte_start : Sym
+      new("(byte_start)")
+    end
+
+    def self.byte_end : Sym
+      new("(byte_end)")
+    end
+
     # Validates a symbol *name*. If this method returns `true`, you are safe to
     # call `new` with *name*; safe not in the sense of memory safety etc., but
     # in the sense of being able to give the symbol to any subsystem of Wirewright
@@ -299,6 +353,62 @@ module Ww
 
     def blank
       blank? || raise "expected symbol to be a blank"
+    end
+
+    record RuleId, byte_start : Int32 do
+      def name
+        "◇"
+      end
+    end
+
+    record RuleIdBlank, byte_start : Int32 do
+      def name
+        "◇_"
+      end
+    end
+
+    record RuleBlockId, byte_start : Int32 do
+      def name
+        "▢"
+      end
+    end
+
+    record RuleBlockIdBlank, byte_start : Int32 do
+      def name
+        "▢_"
+      end
+    end
+
+    def rule_id_sentinel? : RuleId?
+      name = to(String)
+      return unless name.ends_with?(":◇")
+
+      start, _, _ = name.partition(':')
+      RuleId.new(start.to_i(base: 16))
+    end
+
+    def rule_id_blank_sentinel? : RuleIdBlank?
+      name = to(String)
+      return unless name.ends_with?(":◇_")
+
+      start, _, _ = name.partition(':')
+      RuleIdBlank.new(start.to_i(base: 16))
+    end
+
+    def rule_block_id_sentinel? : RuleBlockId?
+      name = to(String)
+      return unless name.ends_with?(":▢")
+
+      start, _, _ = name.partition(':')
+      RuleBlockId.new(start.to_i(base: 16))
+    end
+
+    def rule_block_id_blank_sentinel? : RuleBlockIdBlank?
+      name = to(String)
+      return unless name.ends_with?(":▢_")
+
+      start, _, _ = name.partition(':')
+      RuleBlockIdBlank.new(start.to_i(base: 16))
     end
 
     def to(type : String.class) : String

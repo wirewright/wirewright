@@ -30,11 +30,11 @@
       (align y: 0.5
         (x-stack gap: 10
           (align y: 0.5
-            (text caption: "\u00e97a" leading: 1 color: (oklch 0.9 0 0) font: "Material Icons Outlined" size: 14))
+            (text caption: "\ue97a" leading: 1 color: (oklch 0.9 0 0) font: "Material Icons Outlined" size: 14))
           (align fr: 1 y: 0.5
             (text caption: ^name color: (oklch 0.9 0 0) font: "IBM Plex Sans" size: 16))
           (align y: 0.5
-            (text caption: "\u00e5c5" leading: 1 color: (oklch 0.9 0 0) font: "Material Icons Outlined" size: 14))))))
+            (text caption: "\ue5c5" leading: 1 color: (oklch 0.9 0 0) font: "Material Icons Outlined" size: 14))))))
 
 (branch-menu name_string) =>
   (limit z-index: local
@@ -133,9 +133,9 @@
         radius-bl: 5
         radius-br: 5)
       (padding pl: 5 pr: 5 pt: 5 pb: 5
-        (text caption: "\u00e5cd" leading: 1 color: (oklch 0.9 0 0) font: "Material Icons Outlined" size: 14))))
+        (text caption: "\ue5cd" leading: 1 color: (oklch 0.9 0 0) font: "Material Icons Outlined" size: 14))))
 
-(input-field ¦ _ icon⋮ "\u00e8b6" placeholder⋮ "" value⋮ "" active⋮ false) =>
+(input-field ¦ _ icon⋮ "\ue8b6" placeholder⋮ "" value⋮ "" active⋮ false) =>
   (z-stack z-index: local
     (rect
       z-index: -1
@@ -242,8 +242,8 @@
           (text
             caption:
               (^match hover
-                (when true "\u00e5ca") ;; check
-                (when false "\u00e061")) ;; fiber_manual_record
+                (when true "\ue5ca") ;; check
+                (when false "\ue061")) ;; fiber_manual_record
             leading: 1 color: (oklch 0.9 0 0) font: "Material Icons Outlined" size: 14))
         (align y: 0.5 fr: 1
           (text wrap: true caption: ^caption font: "IBM Plex Sans" size: 14 color: (oklch 0.95 0 0)))
@@ -269,7 +269,7 @@
         (align y: 0.5
           (text caption: ^caption leading: 1 font: "IBM Plex Sans" size: 11 color: ^color))
         (align y: 0.5
-          (text caption: "\u00e316" leading: 1 font: "Material Icons Outlined" size: 11 color: ^color)))))
+          (text caption: "\ue316" leading: 1 font: "Material Icons Outlined" size: 11 color: ^color)))))
 
 (arrow-out-btn/active) =>
   (align x: 0.5 y: 0.5
@@ -281,7 +281,7 @@
         radius-bl: (* 1)
         radius-br: (* 1))
       (padding pl: 5 pr: 5 pb: 5 pt: 5
-        (text caption: "\u00f8ce" z-index: 1 leading: 1 font: "Material Icons Outlined" size: 16 color: black))))
+        (text caption: "\uf8ce" z-index: 1 leading: 1 font: "Material Icons Outlined" size: 16 color: black))))
 
 (arrow-out-btn/inactive) =>
   (align x: 0.5 y: 0.5
@@ -297,7 +297,7 @@
         radius-bl: (* 1)
         radius-br: (* 1))
       (padding pl: 5 pr: 5 pb: 5 pt: 5
-        (text caption: "\u00f8ce" z-index: 1 leading: 1 font: "Material Icons Outlined" size: 16 color: (oklch 0.8 0 0)))))
+        (text caption: "\uf8ce" z-index: 1 leading: 1 font: "Material Icons Outlined" size: 16 color: (oklch 0.8 0 0)))))
 
 (stat-card ¦ _ title_string stat_string badge_⋮ none comment_string active⋮ false) =>
   (z-stack z-index: local
@@ -435,7 +435,7 @@
         (^if selected
           (limit max-w: 16 max-h: 16
             (align x: 0.3 y: 0.9 lax: true
-              (text caption: "\u00e5ca" leading: 1 color: (oklch 0.9 0.15 270) font: "Material Icons Outlined" size: 32))))))
+              (text caption: "\ue5ca" leading: 1 color: (oklch 0.9 0.15 270) font: "Material Icons Outlined" size: 32))))))
     (group fr: 1
       (z-stack z-index: local
         (^if selected
@@ -487,32 +487,32 @@
               (selection-slot
                 selected: true
                 (project-card
-                  icon: "\u00e1b7"
+                  icon: "\ue1b7"
                   title: "Support search"
                   detail: "Lorem ipsum dolor sit amet, qui minim labore adipisicing minim sint cillum sint consectetur cupidatat."
                   progress: 0.7))
               (selection-slot
                 (project-card
-                  icon: "\u00e881"
+                  icon: "\ue881"
                   title: "Support replace"
                   detail: "Lorem ipsum dolor sit amet, qui minim labore adipisicing minim sint cillum sint consectetur cupidatat."
                   progress: 0.2))
               (selection-slot
                 (project-card
-                  icon: "\u00e3e4"
+                  icon: "\ue3e4"
                   title: "Support highlight"
                   detail: "Lorem ipsum dolor sit amet, qui minim labore adipisicing minim sint cillum sint consectetur cupidatat."
                   progress: 0.05))
               (selection-slot
                 selected: true
                 (project-card
-                  icon: "\u00ef4a"
+                  icon: "\uef4a"
                   title: "Support void"
                   detail: "Lorem ipsum dolor sit amet, qui minim labore adipisicing minim sint cillum sint consectetur cupidatat."
                   progress: 0))
               (selection-slot
                 (project-card
-                  icon: "\u00e58f"
+                  icon: "\ue58f"
                   title: "Support window"
                   detail: "Lorem ipsum dolor sit amet, qui minim labore adipisicing minim sint cillum sint consectetur cupidatat."
                   progress: 1)))))
@@ -526,11 +526,11 @@
               (x-ratio/source
                 (viewport z-index: (local 0)
                   (x-stack gap: 8
-                    (group fr: 1 (selection-button icon: "\u00e14d" caption: "Copy"))
-                    (group fr: 1 (selection-button icon: "\u00e14e" caption: "Cut"))
-                    (group fr: 1 (selection-button icon: "\u00e872" caption: "Delete"))
-                    (group fr: 1 (selection-button icon: "\u00e6b8" caption: "Share"))
-                    (group fr: 1 (selection-button icon: "\u00e0b8" caption: "Clear selection")))))
+                    (group fr: 1 (selection-button icon: "\ue14d" caption: "Copy"))
+                    (group fr: 1 (selection-button icon: "\ue14e" caption: "Cut"))
+                    (group fr: 1 (selection-button icon: "\ue872" caption: "Delete"))
+                    (group fr: 1 (selection-button icon: "\ue6b8" caption: "Share"))
+                    (group fr: 1 (selection-button icon: "\ue0b8" caption: "Clear selection")))))
               (x-ratio/sink
                 (align y: 1
                   (limit max-h: 5 z-index: 1
@@ -579,7 +579,7 @@
       (padding pl: 10 pr: 10 pt: 8
         (x-stack gap: 8
           (align y: 0.5
-            (text caption: "\u00ea25" leading: 1 font: "Material Icons Outlined" size: 16 color: white))
+            (text caption: "\uea25" leading: 1 font: "Material Icons Outlined" size: 16 color: white))
           (text fr: 1 wrap: true caption: "soma.dwuir.node.composite" size: 16 font: "IBM Plex Mono" weight: 800 color: white)))
       (hr (oklch 0.35 0 0))
       (padding pl: 10 pr: 10 pb: 10 pt: 10
@@ -598,7 +598,7 @@
     "Using" (code "composite") "is" "therefore" "different" "from" "setting"
     (emphasis "opacity") "of" "each" "individual" "child.")
 
-(figma-card ¦ _ hue_ icon⋮ "\u00e746" title_string subscript_string) =>
+(figma-card ¦ _ hue_ icon⋮ "\ue746" title_string subscript_string) =>
   (z-stack z-index: local
     (rect
       z-index: 1

@@ -838,6 +838,8 @@ module Ww
 
   # Misc
 
+  # TODO: convert these to iterative and use blocks!!!
+
   struct Term
     private def self.each_keypath_and_leaf?(node : Term::Dict, prefix : Stack(Term), fn : Stack(Term), Term -> Bool) : Bool
       # Empty dict literal `{}` is a (leaf).
@@ -871,9 +873,7 @@ module Ww
     def self.each_keypath_and_leaf(node : Term, &fn : Stack(Term), Term -> Bool) : Nil
       each_keypath_and_leaf?(node: node.downcast, prefix: Stack(Term).new, fn: fn)
     end
-  end
 
-  struct Term
     private def self.each_keypath_and_item?(node : Term::Dict, prefix : Stack(Term), fn : Stack(Term), Term -> Bool) : Bool
       node.items.each_with_index do |item, index|
         prefix.push(Term.of(index))
@@ -893,14 +893,28 @@ module Ww
     def self.each_keypath_and_item(node : Term, &fn : Stack(Term), Term -> Bool) : Nil
       each_keypath_and_item?(node: node.downcast, prefix: Stack(Term).new, fn: fn)
     end
-  end
 
-  struct Term
+    module Patch
+      alias Any = Skip | ReplaceSkip | ReplaceDescend
+
+      record Skip
+      record ReplaceSkip, rep : Term
+      record ReplaceDescend, rep : Term
+    end
+
+    # Thoroughly visits all nodes in the subtree of *term*, yielding each node
+    # to the block for replacement. If the block returns `nil`, the node is
+    # left unchanged; traversal will continue to its subtree, if any.
+    #
     # NOTE: If replacement occurs within a key, and it collides, with an existing
     # key, the replacement's value is preferred over the existing key's.
-    def self.patch(term : Term, &fn : Term -> Term?) : Term
-      if rep = fn.call(term)
-        return rep
+    def self.patch(term : Term, &fn : Term -> Patch::Any) : Term
+      case response = fn.call(term)
+      in Patch::Skip
+      in Patch::ReplaceDescend
+        term = response.rep
+      in Patch::ReplaceSkip
+        return response.rep
       end
 
       unless dict = term.as_d?
@@ -928,9 +942,56 @@ module Ww
       Term.of(dict1)
     end
 
-    # Thoroughly visits all leaves of *term*, and yields them to the block.
+    def self.keypath_to_stem(root : Term, keypath : Term::Dict) : Term::Dict
+      if keypath.empty?
+        return Term[]
+      end
+
+      node = root
+
+      Term::Dict.build do |commit|
+        keypath.items.each do |key|
+          node = node[key]
+          commit << node
+        end
+      end
+    end
+
+    {% begin %}
+      {% for subject in [:itemnode, :node] %}
+        private def self.each_keypath_and_{{subject.id}}(stack : Stack(Term), term : Term, fn : Stack(Term), Term -> Bool)
+          return unless dict = term.as_d?
+
+
+          {% if subject == :itemnode %}
+            dict.itemspart.each_entry do |key, value|
+          {% else %}
+            dict.each_entry do |key, value|
+          {% end %}
+            stack << key
+            if fn.call(stack, value)
+              each_keypath_and_{{subject.id}}(stack, value, fn)
+            end
+          ensure
+            stack.pop
+          end
+        end
+
+
+        def self.each_keypath_and_{{subject.id}}(term : Term, &fn : Stack(Term), Term -> Bool) : Nil
+          keypath = Stack(Term).new
+          return unless fn.call(keypath, term)
+
+          each_keypath_and_{{subject.id}}(keypath, term, fn)
+        end
+      {% end %}
+    {% end %}
+
+    # Thoroughly traverses all nodes in the subtree of *term*, and yields them
+    # to the block.
     #
-    # *Thoroughly* here means that both keys and values are visited recursively.
+    # *Thoroughly* here means that both keys and values are visited recursively
+    # (vs. e.g. `each_keypath_and_leaf` which visits values only).
     #
     # Dictionaries are emitted before their entries. For each entry, first, its
     # key is visited recursively; then, its value is visited recursively.
@@ -956,6 +1017,47 @@ module Ww
           stack << {state: rec[:state] + 1, term: rec[:term]}
           stack << {state: state_initial, term: value}
           stack << {state: state_initial, term: key}
+        end
+      end
+    end
+
+    # Yields each *itemspart stem* dict into the given *root*. The block should return `true`
+    # to continue descent into the stem tip's subtree; or `false` to abort descent and
+    # move to the non-descendant successor under traversal.
+    #
+    # A *stem* is an itemsonly dict whose last item is a node from the root's subtree;
+    # prefixed by its ancestor nodes all the way up to, but not including the root itself.
+    #
+    # Stems are used to turn tree traversal into declarative pattern matching.
+    #
+    # An *itemspart stem* is a *stem* restricted to the itemsparts of *root*'s subtree.
+    #
+    # For example, in the dict `(((a) b) (c d))`, one can identify the following
+    # itemspart stems:
+    #
+    # - `((a) b)`
+    # - `(c d)`
+    # - `((a) b) (a)`
+    # - `((a) b) b`
+    # - `(c d) c`
+    # - `(c d) d`
+    # - `((a) b) (a) a`
+    #
+    # NOTE: iteration order is implementation-defined. Clients should not rely on it.
+    def self.each_itemspart_stem(root : Term::Dict, & : Term::Dict -> Bool)
+      queue = Deque{Term[]}
+
+      while stem = queue.shift?
+        if stem.empty?
+          root.each_item_unordered do |item|
+            queue << stem.append(item)
+          end
+        elsif yield stem
+          next unless tip = stem.items.last.as_d?
+
+          tip.each_item_unordered do |item|
+            queue << stem.append(item)
+          end
         end
       end
     end

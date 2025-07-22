@@ -1964,7 +1964,7 @@
 
   ;; Match first person whose age is >= 40
   (pattern (%item (%layer _ "name": name_string "age": (%number _ >= 40)))
-    (= $$PEOPLE {name: "Fay Mcmahon"}))
+    (= <PEOPLE> {name: "Fay Mcmahon"}))
 
   ;; From doc
   (pattern (first-common ⟨x_⟩ ⟨x_⟩)
@@ -2009,7 +2009,7 @@
   (pattern (%item° (%layer _  "name": name_string
                               "friends": ()
                               "age": (%number _ >= 25)))
-    (= $$PEOPLE {name: "Herrera Price"}
+    (= <PEOPLE> {name: "Herrera Price"}
                 {name: "Addie Franco"}
                 {name: "Fay Mcmahon"}
                 {name: "Talley Jarvis"})))
@@ -2357,7 +2357,7 @@
 (pattern (%entries xs_ k_ v_symbol min: 0)
   (= () {xs: ()})
   (= (1 2 3) {xs: ()})
-  (= (1 2 x: 3 y : 4) {xs: ()})
+  (= (1 2 x: 3 y: 4) {xs: ()})
   (= (+ 1 x: 100 y: 200 z: xyzzy)
      {xs: ({k: 0, v: +} {k: z, v: xyzzy})}))
 

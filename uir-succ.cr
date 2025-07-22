@@ -35,7 +35,7 @@ module Ww::Soma::UIR
 
     backmapR = set_backmapr.call chainR(refR, evalR)
 
-    selector = ML.term(%[(%any° (rule pattern_ template_) (backmap pattern_ backspec_))])
+    selector = ML.term(%[(%any° [rule pattern_ template_] [backmap pattern_ backspec_])])
 
     dwuirR = callR do |term|
       Rewrite.one(DwUIR.reply(platform, term))

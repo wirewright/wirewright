@@ -7,7 +7,7 @@ alias UIR::Platform::Current = SFML
 pg_source = Atomic(String).new("")
 render_source = Atomic(String).new("")
 changed = Atomic(Bool).new(false)
-watch(Path["ui-pg1.wwml"]) do |updated|
+watch(Path["ui-pg2.wwml"]) do |updated|
   pg_source.set(updated.gets_to_end)
   changed.set(true)
 end
@@ -83,7 +83,7 @@ vw = frame[:"max-w"]
 vh = frame[:"max-h"]
 
 struct Renderer
-  SELECTOR = ML.term %{(rule pattern_ template_)}
+  SELECTOR = ML.term %{[rule pattern_ template_]}
 
   def initialize(@spec : Term)
     @ruleset = Ruleset.select(SELECTOR, @spec)

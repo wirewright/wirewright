@@ -20,7 +20,7 @@ def subsume(root, motion, edge)
 end
 
 def editR : Rewriter
-  selector = ML.term(%[(%any° (rule pattern_ template_) (backmap pattern_ backspec_))])
+  selector = ML.term(%[(%any° [rule pattern_ template_] [backmap pattern_ backspec_])])
 
   editor_base = ML.terms(File.read(RESOURCES / "editor.soma.wwml"))
   editor_ruleset = Ruleset.select(selector, editor_base)

@@ -8,7 +8,7 @@ module UIR2PPM
   extend self
 
   struct Renderer
-    SELECTOR = ML.term %{(rule pattern_ template_)}
+    SELECTOR = ML.term %{[rule pattern_ template_]}
 
     def initialize(@spec : Term)
       @ruleset = Ruleset.select(SELECTOR, @spec)

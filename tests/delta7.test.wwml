@@ -1143,9 +1143,9 @@
              (p ^title style: "w-max text-lg font-bold")
              (p ^body style: "w-max")))))
      (cell
-       {todos: {{title: "A", body: "Lorem ipsum"},
+       {todos: ({title: "A", body: "Lorem ipsum"},
                 {title: "B", body: "Dolor sit"},
-                {title: "C", body: "Sit amet"}}}
+                {title: "C", body: "Sit amet"})}
        @todos)
      (changes @todos to @todos/newest)
      (log @views in ()))
@@ -1156,9 +1156,9 @@
              (p ^title style: "w-max text-lg font-bold")
              (p ^body style: "w-max")))))
      (cell
-       {todos: {{title: "A", body: "Lorem ipsum"},
+       {todos: ({title: "A", body: "Lorem ipsum"},
                 {title: "B", body: "Dolor sit"},
-                {title: "C", body: "Sit amet"}}}
+                {title: "C", body: "Sit amet"})}
        @todos)
      (changes @todos to @todos/newest)
      (log @views in

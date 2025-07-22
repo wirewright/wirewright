@@ -167,10 +167,10 @@ def process(queue, testcase, ctx)
               end
             end
 
-            matchpi %[(= $$PEOPLE matches_*)] do
+            matchpi %[(= <PEOPLE> matches_*)] do
               envs = match.call(PEOPLE)
               next if envs.to_set == matches.items.to_set
-              ctx.failures << Term.of(:mismatch, pattern, exp, :"$$PEOPLE", envs)
+              ctx.failures << Term.of(:mismatch, pattern, exp, :"<PEOPLE>", envs)
             end
 
             matchpi %[(= matchee_ matches_*)] do

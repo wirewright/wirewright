@@ -259,7 +259,7 @@ struct ProcRuleset
       end
     end
 
-    selector = ML.term(%[(type←(%any rule backmap) index←(%number +i32) pattern_)])
+    selector = ML.term(%[[type←(%any rule backmap) index←(%number +i32) pattern_]])
 
     rules = backmaps = nil
 
