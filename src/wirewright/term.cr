@@ -942,26 +942,10 @@ module Ww
       Term.of(dict1)
     end
 
-    def self.keypath_to_stem(root : Term, keypath : Term::Dict) : Term::Dict
-      if keypath.empty?
-        return Term[]
-      end
-
-      node = root
-
-      Term::Dict.build do |commit|
-        keypath.items.each do |key|
-          node = node[key]
-          commit << node
-        end
-      end
-    end
-
     {% begin %}
       {% for subject in [:itemnode, :node] %}
         private def self.each_keypath_and_{{subject.id}}(stack : Stack(Term), term : Term, fn : Stack(Term), Term -> Bool)
           return unless dict = term.as_d?
-
 
           {% if subject == :itemnode %}
             dict.itemspart.each_entry do |key, value|
@@ -976,7 +960,6 @@ module Ww
             stack.pop
           end
         end
-
 
         def self.each_keypath_and_{{subject.id}}(term : Term, &fn : Stack(Term), Term -> Bool) : Nil
           keypath = Stack(Term).new
