@@ -354,7 +354,7 @@ module Ww::Soma::DwUIR
     # Returns `true` if this rectangle intersects *all of* *quads*. Returns
     # `false` otherwise.
     def intersects?(quads : Slice(Quad)) : Bool
-      !empty? && quads.all? { |quad| intersects?(quad) }
+      quads.all? { |quad| intersects?(quad) }
     end
   end
 end
