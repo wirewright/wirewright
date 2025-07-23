@@ -17,18 +17,25 @@ module Ww::Soma::DwUIR
     end
 
     private def collinear?(point : Point) : Bool
-      Segment.new(@a, point).orientation(@b) == 0
+      Segment.new(@a, point).orientation(@b).collinear?
+    end
+
+    # See also: https://www.geeksforgeeks.org/dsa/orientation-3-ordered-points/
+    enum Orientation
+      Collinear
+      Clockwise
+      CounterClockwise
     end
 
     # Returns the orientation of this segment relative to *c*.
-    def orientation(c : Point) : Int32
+    def orientation(c : Point) : Orientation
       val = (@b - @a).x(c - @a)
 
       if val.abs < 1e-10 # ≈ 0
-        return 0
+        return Orientation::Collinear
       end
 
-      val.positive? ? 1 : -1
+      val.positive? ? Orientation::CounterClockwise : Orientation::Clockwise
     end
 
     # Returns `true` if this segment intersects *other*. Returns `false` otherwise.
