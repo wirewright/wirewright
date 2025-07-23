@@ -57,6 +57,29 @@ module Ww::Soma::DwUIR
       new(1, Math.tan(point.y), Math.tan(point.x), 1, 0, 0)
     end
 
+    private def det : Float32
+      @a*@d - @b*@c
+    end
+
+    # Returns the inverse transform.
+    def inverse : Tf
+      det = self.det
+      if det.zero?
+        raise ArgumentError.new("no inverse transform exists")
+      end
+
+      idet = 1.0f32/det
+
+      a = @a*idet
+      b = @b*idet
+      c = @c*idet
+      d = @d*idet
+      e = (@c*@f - @d*@e)*idet
+      f = (@b*@e - @a*@f)*idet
+
+      Tf.new(d, -b, -c, a, e, f)
+    end
+
     # Composes this and *other* transformations. Returns the resulting transformation.
     def append(other : Tf) : Tf
       Tf.new(
