@@ -98,6 +98,14 @@
 (text ⍊ dn-h: ±h ⋮final-h) <> {final-h: →h, (h): ()}
 
 ;;
+;; Sized nodes effectively request sizing (final-w/h) from UIR. This may be
+;; needed if they rely on sized DwUIR features such as `pivot: true`. Serve
+;; the sizing info.
+;;
+
+(sized _ ⍊ dn-w⫽h: ±λ ⋮final-w⫽h) <> {final-w⫽h: →λ}
+
+;;
 ;; rect, svg
 ;;
 (⟦rect,svg⟧ ⍊ dn-w⫽h: ±λ ⋮final-w⫽h) <> {final-w⫽h: →λ, (λ): ()}
