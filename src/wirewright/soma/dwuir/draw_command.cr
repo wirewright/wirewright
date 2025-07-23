@@ -316,11 +316,6 @@ module Ww::Soma::DwUIR
         fn.call(indent + 2, line)
       end
     end
-
-    # NOTE: Composites are not compared by their content (`picture`); only by opacity
-    # and layer (their own "contribution" so to speak rather than the contribution
-    # of their content).
-    def_equals_and_hash opacity, layer
   end
 
   # Lists the available ranks for a draw command. Most shapes are in the `Mid`
