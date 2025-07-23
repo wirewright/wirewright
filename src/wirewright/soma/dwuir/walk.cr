@@ -1,7 +1,7 @@
 module Ww::Soma::DwUIR
   # Represents the context of each node.
   defcase Context,
-    view : Slice(Quad),
+    view : View,
     layer : LayerRank,
     tf : Tf,
     opacity : Float32,

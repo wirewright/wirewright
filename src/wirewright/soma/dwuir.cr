@@ -27,6 +27,7 @@ require "./dwuir/font"
   require "./dwuir/picture"
   require "./dwuir/walk"
   require "./dwuir/render"
+  require "./dwuir/hit"
 
   require "./dwuir/pixel_rect"
   require "./dwuir/compositor"

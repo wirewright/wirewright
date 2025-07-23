@@ -1,4 +1,6 @@
 module Ww::Soma::DwUIR
+  alias View = Slice(Quad)
+
   # The *layer rank* of a draw command is an object which it uses to negotiate its
   # draw order among other draw commands. A layer rank is represented with a slice
   # of z-indices and a tip z-index. This helps create a crude kind of scope for
@@ -23,7 +25,7 @@ module Ww::Soma::DwUIR
     # the prefix size.
     #
     # If prefixes are equal, layer rank sizes are compared. Layer ranks with
-    # larger size draw before ones with a smaller size.
+    # larger size draw underneath ones with a smaller size.
     def <=>(other : LayerRank)
       min = {@zs.size, other.@zs.size}.min
       min.times do |i|

@@ -24,17 +24,30 @@ module Ww::Soma::DwUIR
     # Returns the top-left corner of the "box" where the next character will be put.
     abstract def origin : Point
 
-    # Measures the width of *string* by writing it using this pencil.
+    # Measures the width of *object* by writing it using this pencil.
     #
-    # NOTE: This method will raise `ArgumentError` if *string* contains newlines.
-    def measure(string : String) : Float32
-      pencil1 = after_writing(string)
+    # NOTE: This method will raise `ArgumentError` if *object* contains newlines.
+    def measure(object) : Float32
+      pencil1 = after_writing(object)
 
       unless pencil1.tip.y == tip.y
         raise ArgumentError.new
       end
 
-      pencil1.tip.x - tip.x
+      (pencil1.tip.x - tip.x).ceil
+    end
+
+    # Returns the bounding box of *object* with respect to this pencil.
+    #
+    # NOTE: This method will raise `ArgumentError` if *object* contains newlines.
+    def after_writing_with_bounds(object) : {IPencil, Rect}
+      pencil1 = after_writing(object)
+
+      unless pencil1.tip.y == tip.y
+        raise ArgumentError.new
+      end
+
+      {pencil1, Rect.new(origin, pencil1.origin + Point[0, line_height])}
     end
 
     # Measures and returns the line height for this pencil.
@@ -46,8 +59,7 @@ module Ww::Soma::DwUIR
     # Measures and returns the width of the ASCII whitespace character for
     # this pencil.
     def space_width : Float32
-      pencil1 = after_writing(' ')
-      (pencil1.tip.x - tip.x).ceil
+      measure(' ')
     end
 
     # Returns the location of this pencil's tip.
