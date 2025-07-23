@@ -6,7 +6,8 @@ module Ww::Soma::DwUIR
     tf : Tf,
     opacity : Float32,
     pivot : Point,
-    bounds : Rect
+    bounds : Rect,
+    keypath : Term::Dict?
 
   # Returns `true` if *bounds* are going to be seen by the user after all
   # transformations based on *context*. Returns `false` otherwise.
@@ -24,7 +25,9 @@ module Ww::Soma::DwUIR
   # Calls *fn* with each node of *dwuir* and its corresponding `Context`.
   #
   # *fn* must in turn respond whether to recurse into the node or not.
-  def walk(dwuir : Term, *, viewport : Rect, &fn : Context, Term -> WalkFlow) : Nil
+  #
+  # *keypath* can be assigned to enable node keypath tracking (see `Context`).
+  def walk(dwuir : Term, *, viewport : Rect, keypath : Term::Dict? = nil, &fn : Context, Term -> WalkFlow) : Nil
     context = Context.new(
       view: viewport.inf? ? Slice(Quad).empty : Slice[viewport.quad],
       layer: LayerRank[],
@@ -32,6 +35,7 @@ module Ww::Soma::DwUIR
       opacity: 1.0f32,
       pivot: Point.new(0, 0),
       bounds: Rect.empty,
+      keypath: keypath,
     )
 
     walk(context, dwuir, &fn)
@@ -330,8 +334,14 @@ module Ww::Soma::DwUIR
         in .recurse?
           next unless node.type.dict?
 
-          node.each_item_unordered do |child|
-            walk(context, child, &fn)
+          node.each_item_with_index do |child, index|
+            unless keypath = context.keypath
+              walk(context, child, &fn)
+              next
+            end
+
+            subcontext = context.copy_with(keypath: keypath.append(index))
+            walk(subcontext, child, &fn)
           end
         end
       end

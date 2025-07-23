@@ -63,8 +63,8 @@ module Ww::Soma::DwUIR
     # Represents "nothingness" as a wrap token. May be emitted by `partition`.
     record Empty
 
-    # Represents a *guaranteed inline* string view (i.e. does not contain
-    # newline characters).
+    # Represents a *guaranteed inline* string view into the original string
+    # (i.e. does not contain newline characters).
     record InlineText, view : StringView
 
     # Represents a space turned into a line break by the wrapping algorithm.
@@ -76,8 +76,8 @@ module Ww::Soma::DwUIR
     # Represents the client's newline character.
     record HardBreak
 
-    # Represents an omission when there's not enough space for the full text.
-    record Ellipsis, view : StringView
+    # Represents a character sequence that indicates omission.
+    record Ellipsis, string : String
 
     # Represents end-of-text.
     record Over
@@ -275,7 +275,7 @@ module Ww::Soma::DwUIR
 
         history.each { |_, token| sink.call(token) }
 
-        sink.call(Ellipsis.new(spec.ellipsis.view))
+        sink.call(Ellipsis.new(spec.ellipsis))
         sink.call(Over.new)
 
         return pencil0, false

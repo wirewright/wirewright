@@ -5,9 +5,10 @@ module Ww::Soma::DwUIR
   module TextCommand
     extend self
 
-    alias Any = WriteInline | NextLine | BeginSelection | EndSelection | PushInline | PutCursor
+    alias Any = WriteInline | NextLine | BeginSelection | EndSelection | PushInline | PushVirtual | PutCursor
 
-    # The client should "flush" all pushed inlines if it supports buffering.
+    # The client should "flush" all pushed inlines and virtuals
+    # in case it buffered them.
     record WriteInline
 
     # The client should move to a new line.
@@ -23,18 +24,25 @@ module Ww::Soma::DwUIR
     # that this command will only be issued following `BeginSelection`.
     record EndSelection
 
-    # The client should append *view* (a guaranteed inline string) to
-    # its buffer; or handle it immediately if the client does not
-    # support buffering.
-    record PushInline, view : StringView
+    # The client should append *view* (a guaranteed inline string view
+    # of the original string) to its buffer; or handle it immediately.
+    record PushInline, view : StringView do
+      # Constructs a string from `view` for compatibility with `PushVirtual`.
+      def string : String
+        view.to_s
+      end
+    end
 
-    # The client should display the cursor I-beam at this position.
+    # The client should append *string* to its buffer; or handle it immediately.
+    record PushVirtual, string : String
+
+    # The client should display the cursor I-beam at the current position.
     #
     # Note that this command is issued *before* the character pointed to by
-    # the cursor if reinterpreted as an index. If the client wishes to do
-    # something other than an I-beam, it is their responsibility to wait
-    # for the next character and highlight it (if any; the cursor may be
-    # located "before" a virtual end-of-string character, too.)
+    # the cursor if its position is interpreted as an index. If the client
+    # wishes to do something other than an I-beam, it is their responsibility
+    # to wait for the next character and highlight it (if any; the cursor
+    # may be located "before" the imaginary end-of-string character, too.)
     #
     # This command may be issued at any point and within any state;
     # it is the client's responsibility to handle that appropriately.
@@ -64,8 +72,11 @@ module Ww::Soma::DwUIR
 
           case token
           in WrapToken::Empty
-          in WrapToken::InlineText, WrapToken::Ellipsis
+          in WrapToken::InlineText
             sink.call(PushInline.new(token.view))
+            flush = true
+          in WrapToken::Ellipsis
+            sink.call(PushVirtual.new(token.string))
             flush = true
           in WrapToken::LineBreak
             if flush
@@ -91,7 +102,8 @@ module Ww::Soma::DwUIR
     # Calls *sink* with each text command, constructing an appropriate bounding
     # box for it.
     #
-    # - `PushInline` is put at the current position and sized according to its view.
+    # - `PushInline` and `PushVirtual` are put at the current position and sized
+    #    according to its content.
     # - `WriteInline` is put at the beginning of line or at the beginning of the previous
     #   `WriteInline`, and measured up to the current position.
     # - `NextLine` is put at the current position (not on the next line, i.e. you still
@@ -108,8 +120,8 @@ module Ww::Soma::DwUIR
 
       each(pencil, spec, string, selection) do |command|
         case command
-        in PushInline
-          finger1 = finger.after_writing(command.view)
+        in PushInline, PushVirtual
+          finger1 = finger.after_writing(command.string)
           bounds = Rect.new(tl: finger.origin, size: Point.new(finger1.origin.x - finger.origin.x, nlsize.y))
           finger = finger1
         in WriteInline

@@ -6,31 +6,53 @@ module Ww::Soma::DwUIR
 
     alias Any = InlineString | Selection
 
-    # Represents an optionally *selected*, inline *string*.
-    record InlineString, bounds : Rect, string : String, selected : Bool
+    # Represents an optionally *selected*, inline string.
+    #
+    # The raw *segments* are given to you so that you can extract the indices
+    # of non-virtual sequences of characters from the original string.
+    record InlineString, bounds : Rect, segments : Array(Segment), selected : Bool do
+      def string : String
+        segments.join
+      end
+    end
 
     # Represents a selection rectangle.
     record Selection, bounds : Rect, rank : Rank
 
     private alias Tcmd = TextCommand
 
+    alias Segment = VirtualSegment | InlineSegment
+
+    record VirtualSegment, string : String do
+      def to_s(io)
+        io << string
+      end
+    end
+
+    record InlineSegment, view : StringView do
+      def to_s(io)
+        io << view
+      end
+    end
+
     # Calls *sink* with each text drawable for *string*.
     def each(pencil : IPencil, spec : WrapSpec, string : String, selection : TextSelectionRange, &sink : Any ->)
-      buffer = [] of StringView
+      buffer = [] of Segment
       selected = false
       selrect = Rect.new(tl: Point.new(0, 0), size: Point.new(0, 0))
 
       Tcmd.each_with_bounds(pencil, spec, string, selection) do |command, bounds|
         case command
         in Tcmd::PushInline
-          buffer << command.view
+          buffer << InlineSegment.new(command.view)
           next unless selected
 
           selrect = selrect.grow(dw: bounds.w)
+        in Tcmd::PushVirtual
+          buffer << VirtualSegment.new(command.string)
         in Tcmd::WriteInline
-          bufstr = StringView.join(buffer).to_s
-          sink.call(InlineString.new(bounds, bufstr, selected))
-          buffer.clear
+          sink.call(InlineString.new(bounds, buffer, selected))
+          buffer = [] of Segment
         in Tcmd::NextLine
           next unless selected
 

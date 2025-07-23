@@ -21,10 +21,12 @@ module Ww::Soma::DwUIR
     underline : UnderlineSpec?
 
   class TextSpec
-    def each_text_drawable(pencils : PencilServer, *, origin = Point.new(0, 0), &sink : TextDrawable::Any ->)
-      pencil = pencils.call(PencilRequest.new(font, size, leading, tracking))
+    def pencil(pencils : PencilServer) : IPencil
+      pencils.call(PencilRequest.new(font, size, leading, tracking))
+    end
 
-      TextDrawable.each(pencil, wrap, caption, selection.try(&.range)) do |dw|
+    def each_text_drawable(pencils : PencilServer, *, origin = Point.new(0, 0), &sink : TextDrawable::Any ->)
+      TextDrawable.each(pencil(pencils), wrap, caption, selection.try(&.range)) do |dw|
         case dw
         in TextDrawable::InlineString
           dw = dw.copy_with(bounds: dw.bounds
