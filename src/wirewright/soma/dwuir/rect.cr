@@ -10,7 +10,7 @@ module Ww::Soma::DwUIR
     def initialize(@tl, @br)
     end
 
-    # Constructs a rectangle positioned at origin, with an infinite size.
+    # Constructs a rectangle positioned at (0;0), with an infinite size.
     def self.inf : Rect
       new(tl: Point.new(0, 0), size: Point.inf)
     end
@@ -20,7 +20,7 @@ module Ww::Soma::DwUIR
       new(tl, tl + size)
     end
 
-    # Constructs an empty rectangle at 0, 0.
+    # Constructs an empty rectangle at (0;0).
     def self.empty : Rect
       new(Point.new(0, 0), Point.new(0, 0))
     end

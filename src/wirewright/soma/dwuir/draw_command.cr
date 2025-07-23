@@ -222,7 +222,7 @@ module Ww::Soma::DwUIR
     # Returns the value that draw commands must be ordered (e.g. sorted) by.
     abstract def ord
 
-    # Returns the bounding box of this command after applying its `bounds_tf`.
+    # Returns the bounding box of this command after applying its bounds transform.
     abstract def tfbounds : Rect
 
     # Returns the damage bounding box for this command.
