@@ -2,7 +2,6 @@ module Ww::Soma::DwUIR
   # Represents the context of each node.
   defcase Context,
     view : Slice(Quad),
-    view_tf : Tf,
     layer : LayerRank,
     tf : Tf,
     opacity : Float32,
@@ -28,7 +27,6 @@ module Ww::Soma::DwUIR
   def walk(dwuir : Term, *, viewport : Rect, &fn : Context, Term -> WalkFlow) : Nil
     context = Context.new(
       view: viewport.inf? ? Slice(Quad).empty : Slice[viewport.quad],
-      view_tf: Tf.new,
       layer: LayerRank[],
       tf: Tf.new,
       opacity: 1.0f32,
