@@ -577,13 +577,9 @@ module Ww
       set(args)
     end
 
-    # :nodoc:
-    def self.of(object : Nil) : Nil
-    end
-
     # Same as `.[]` but upcasts to generic `Term` for you.
-    def self.of(*args, **kwargs) : Term
-      Term[*args, **kwargs].upcast
+    def self.of(*args, **kwargs)
+      Term[*args, **kwargs].try(&.upcast)
     end
   end
 
@@ -942,6 +938,11 @@ module Ww
       Term.of(dict1)
     end
 
+    # FIXME: don't use exceptions as control flow, rewrite to use blocks instead!
+    class EachKeypathEscape < Exception
+      @callstack = CallStack.empty
+    end
+
     {% begin %}
       {% for subject in [:itemnode, :node] %}
         private def self.each_keypath_and_{{subject.id}}(stack : Stack(Term), term : Term, fn : Stack(Term), Term -> Bool)
@@ -966,6 +967,7 @@ module Ww
           return unless fn.call(keypath, term)
 
           each_keypath_and_{{subject.id}}(keypath, term, fn)
+        rescue EachKeypathEscape
         end
       {% end %}
     {% end %}
