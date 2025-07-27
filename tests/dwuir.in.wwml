@@ -1771,7 +1771,7 @@ initial-h: 1000
     wrap: true
     pivot: true
     selection: true
-    selection-gap: 0.7
+    selection-extent: 0.7
     selection-anchor: 0
     selection-span: 50
     selection-radius: 4
@@ -1792,7 +1792,7 @@ initial-h: 1000
     final-w: 100
     final-h: 100))
 
-;; Text transform: downcase
+;; Text transform: dncase
 (group dl: 770 dt: 10
   (text
     caption: "HELLO WORLD"
@@ -1800,7 +1800,7 @@ initial-h: 1000
     color: black
     size: 14
     wrap: true
-    transform: {+ downcase}
+    transform: {+ dncase}
     final-w: 50
     final-h: 100))
 
@@ -1841,7 +1841,7 @@ initial-h: 1000
     final-w: 50
     final-h: 100))
 
-;; Text transform: collapse
+;; Text transform: pretty
 (group dl: 820 dt: 50
   (text
     caption: "\n   Lorem      ipsum   \n"
@@ -1850,7 +1850,7 @@ initial-h: 1000
     size: 14
     wrap: true
     wrap-on-words: false
-    transform: {+ collapse}
+    transform: {+ pretty}
     z-index: 1
     final-w: 50
     final-h: 100)
@@ -1960,7 +1960,7 @@ initial-h: 1000
       selection-fill: red
       wrap: true
       wrap-on-words: false
-      transform: {+ collapse}
+      transform: {+ pretty}
       z-index: 1
       final-w: 100
       final-h: 100)
@@ -1979,14 +1979,14 @@ initial-h: 1000
       selection-anchor: 0
       selection-span: 20
       selection-radius: 5
-      selection-gap: 0.5
+      selection-extent: 0.5
       selection-fill: violet
       selection-color: black
       pivot: true
       angle: -45
       wrap: true
       wrap-on-words: false
-      transform: {+ collapse}
+      transform: {+ pretty}
       z-index: 1
       final-w: 100
       final-h: 100)
@@ -2096,7 +2096,7 @@ initial-h: 1000
       selection: true
       selection-anchor: 3
       selection-span: 7
-      selection-gap: 0.5
+      selection-extent: 0.5
       selection-fill:
         (linear-gradient begin-l: 0
                          begin-t: 0.5

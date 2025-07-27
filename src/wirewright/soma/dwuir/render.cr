@@ -178,7 +178,7 @@ module Ww::Soma::DwUIR
           # would lead to multiple such rectangles, each of which will have this
           # corner radius set to this number).
           #
-          # |@key selection-gap -- Specifies how much the selection rect should *shrink*,
+          # |@key selection-extent -- Specifies how much the selection rect should *shrink*,
           # as a fraction of `leading`. Sometimes you don't want the selection rect
           # to span the whole line in height (e.g. in multiline texts with styled
           # selections). `0` means selection height equals baseline height. `1` means
@@ -190,13 +190,13 @@ module Ww::Soma::DwUIR
                selection-fill_⋮ (rgb 0 0 255)
                selection-color_⋮ (rgb 255 255 255)
                selection-radius⋮ 0
-               selection-gap: (%optional 1 selection-gap←(%number 0 <= _ <= 1))}
+               selection-extent: (%optional 1 selection-extent←(%number 0 <= _ <= 1))}
           WWML
           ) do
             anchor = selection_anchor.to(Int32)
             span = selection_span.to(Int32)
             range_b, range_e = {anchor, anchor + span}.minmax
-            height = pencil.tip.y + selection_gap.to(Float32)*(pencil.line_height - pencil.tip.y)
+            height = pencil.tip.y + selection_extent.to(Float32)*(pencil.line_height - pencil.tip.y)
 
             selection = SelectionSpec.new(
               range: range_b...range_e,
@@ -262,7 +262,7 @@ module Ww::Soma::DwUIR
           # vs. what the user actually sees.
           # |@endblock
 
-          # |@ soma.dwuir.node.text.transform.downcase
+          # |@ soma.dwuir.node.text.transform.upcase
           #
           # |@block
           # Transforms all letters in the caption to uppercase.
@@ -273,12 +273,12 @@ module Ww::Soma::DwUIR
             continue
           end
 
-          # |@ soma.dwuir.node.text.transform.downcase
+          # |@ soma.dwuir.node.text.transform.dncase
           #
           # |@block
           # Transforms all letters in the caption to lowercase.
           # |@endblock
-          matchpi %[{¦ transform: {+¦ downcase}}] do
+          matchpi %[{¦ transform: {+¦ dncase}}] do
             caption = caption.downcase
 
             continue
@@ -299,7 +299,7 @@ module Ww::Soma::DwUIR
             continue
           end
 
-          # |@ soma.dwuir.node.text.transform.collapse
+          # |@ soma.dwuir.node.text.transform.pretty
           #
           # |@block
           # Useful for "prettifying" horribly formatted caption somewhat. Do not rely
@@ -314,7 +314,7 @@ module Ww::Soma::DwUIR
           # NOTE: see `transform` to learn why this function cannot be used along
           # with `selection`.
           # |@endblock
-          matchpi %[{¦ -selection transform: {+¦ collapse}}] do
+          matchpi %[{¦ -selection transform: {+¦ pretty}}] do
             caption = caption.strip.squeeze(" \n")
 
             continue

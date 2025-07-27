@@ -293,7 +293,7 @@ module Ww::Soma::DwUIR
       # WARNING: Use the zoom factor with care. Zoom will trigger full repaint
       # at the resulting size. The resulting layer may occupy a lot of memory
       # (a lot compared to everything else; it's still usually in the range of
-      # some megabytes.) Be especially careful when zooming into very large nodes.
+      # several megabytes.) Be especially careful when zooming into very large nodes.
       # |@endblock
       #
       # |@key pan-l -- used as pivot left for zoom; and also as additional left
