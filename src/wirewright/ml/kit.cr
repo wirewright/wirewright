@@ -68,7 +68,7 @@ module Ww::ML
 
     # Parses a number written using the decimal form.
     #
-    # Raises `Error` on invalid input.
+    # Raises `SyntaxError` on invalid input.
     #
     # ```text
     # decimal

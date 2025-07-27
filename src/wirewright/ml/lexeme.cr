@@ -261,7 +261,7 @@ module Ww::ML
     # Determines the maximum *block arity*.
     #
     # See also: `arity`.
-    MAX_BLOCK_ARITY = 8
+    MAX_BLOCK_ARITY = 16
 
     # Returns the current delay and block arity of *block*.
     #

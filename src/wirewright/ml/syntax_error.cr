@@ -133,7 +133,7 @@ module Ww::ML
           end
 
           line.each_char_with_abs_byte_index do |chr, byte_index|
-            if byte_index.entering?(@text.byte_bounds)
+            if byte_index == @text.byte_start
               styles.push(:focus)
             end
 
@@ -155,7 +155,7 @@ module Ww::ML
               io << chr
             end
 
-            if byte_index.leaving?(@text.byte_bounds)
+            if byte_index.in?(@text.byte_bounds) && !(byte_index + chr.bytesize).in?(@text.byte_bounds)
               styles.pop(:focus)
             end
           end

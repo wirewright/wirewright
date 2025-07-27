@@ -996,7 +996,8 @@ module Ww::ML
         when ahead?(:rangle),
              ahead?(:rangle_source),
              ahead?(:ellipsis),
-             ahead?(:broken_bar)
+             ahead?(:broken_bar),
+             ahead?(:bar_underscore)
           if part.empty?
             unless postpart
               return failure("expected at least one item in split part", ahead.text.before_begin)
@@ -1020,6 +1021,12 @@ module Ww::ML
 
             # ⏏⟩
             # ⏏⟩°
+            postpart = true
+            next
+          when past?(:bar_underscore)
+            # ⍊ -> ¦ _
+            selection, _ = capture!(selectors { ahead?(:rangle) || ahead?(:rangle_source) }, expect: true)
+            decorate = ->(kernel : Term) { Term.of(:"%partition", kernel, Term.of(:"%layer", :_, selection)) }
             postpart = true
             next
           else

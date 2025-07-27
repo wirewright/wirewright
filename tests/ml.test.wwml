@@ -376,6 +376,8 @@
   (= ⎡⟨a b c⟩°⎤ ⎡(%item° a b c)⎤)
   (= ⎡⟨a b c ¦⟩⎤ ⎡(%partition (%item a b c) ())⎤)
   (= ⎡⟨a b c ¦⟩°⎤ ⎡(%partition (%item° a b c) ())⎤)
+  (= ⎡⟨a b c ⍊ x y z⟩⎤ ⎡(%partition (%item a b c) {¦ x y z})⎤)
+  (= ⎡⟨a b c ⍊ x y z⟩°⎤ ⎡(%partition (%item° a b c) {¦ x y z})⎤)
   (- ⎡⟨a (+ 1 2 c⏏⟩⎤ ⎡expected `)` to end the dict⎤)
   (- ⎡⟨a (+ 1 2) ⏏⎤ ⎡expected an item, `…`, `¦`, or `⟩` to end the split⎤))
 
