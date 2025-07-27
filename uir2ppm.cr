@@ -27,11 +27,11 @@ module UIR2PPM
     end
   end
 
-  protected def renderer(spec : Term)
+  def renderer(spec : Term)
     Renderer.new(spec)
   end
 
-  protected def render(ruleset : Ruleset, view : Term)
+  def render(ruleset : Ruleset, view : Term)
     unless view.type.dict? # base case
       return view
     end
@@ -156,7 +156,7 @@ module UIR2PPM
         begin
           uir = ML.terms(source)
         rescue e : ML::SyntaxError
-          e.humanize(STDERR, source)
+          e.humanize(STDERR)
 
           Log.fatal(exception: e)
 

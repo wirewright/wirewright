@@ -1,9 +1,3 @@
-;; TODO: UIR: size (dn-w+h) conditionals of some kind? branching?
-;;      ask the parent for the larger one's up-w/h. when the parent responds,
-;;      if that's less than a size bound of some kind, swap to the smaller one
-;;      and send the dn-w/h there. So in a sense, this "branch" node always
-;;      appears to the outside as the larger argument; but may choose to render
-;;      the smaller argument within its bounds instead, if it's given some size.
 ;; TODO: UIR: facilities for connecting viewport to scrollbar
 ;; TODO: DwUIR: align: left/center/right on text, then fix selection-button in uir.in
 ;; TODO: fix naming.
@@ -27,6 +21,39 @@
 ;; one can barely see why. This is the closest glyph I've found and perhaps
 ;; unsurprisingly it comes from APL!
 
+;; A BRIEF CONCEPTUAL OVERVIEW
+;;
+;; uiR is short and stylized name of *UIR Rewriter*. UIR is simply
+;; "UI Representation", a fairly generic name that nevertheless feels
+;; more lively and serious once abbreviated.
+;;
+;; - Sizes can move up and down. Literally. If you observe how uiR works,
+;;   you'd literally see `up-w/h` key-value pairs moving up and `dn-w/h`
+;;   moving down the tree.
+;;
+;; - Multi-child layout (x/y/z-stack and x/y-wrap) occurs often through
+;;   LEFT-TO-RIGHT / first-to-last / horizontal message flow. You'll see
+;;   parent stacks and wraps inject a message to their leftmost (first) child.
+;;   The child then reacts to this message. Afterwards, it forwards to
+;;   its successor sibling. Finally, the parent stack will collect the message
+;;   from the last child's outbox. This forms a logical circle where the parent
+;;   (stack or wrap) is the source and sink for all messages.
+;;
+;; - During horizontal flow, you will see each child use three *boxes:
+;;    mail/in  -- immediately receiving
+;;    mail/mid -- nominal handling
+;;    mail/out -- designated to the successor
+;;   If the child opts out of layout through a combination of a `floating`
+;;   child and `may-float`, a fourth box will be used -- `mail/float`; as
+;;   well as an intermediate `mail/float-buffer`.
+;;
+;; - uiR is often quite literal. Size flow is literal -- sizes literally move.
+;;   Something like an x/y-wrap is also quite literal. The wrapping algorithm
+;;   here is conceptually simple: uiR creates a cursor, types the nodes with
+;;   that cursor, one after another, using y-stacks (lines) and x-stacks.
+;;   uiR rules control the cursor so that it enters and leaves main and cross
+;;   axes appropriately. Finally, the cursor self-destructs.
+
 ;;
 ;; General
 ;;
@@ -36,8 +63,7 @@
 (_symbol {¦ -dn-w⫽h: λ'} ⍊ dn-w⫽h: ±λ) <> {λ': →λ, (λ): ()}
 
 ;; Horizontal message flow.
-⟨{¦ -l: λ'} {¦ l: λ←[M_*]}⟩ <> {λ': →M, (λ): ()}
-⟨{¦ r: λ←[M_*]} {¦ -r: λ'}⟩ <> {λ': →M, (λ): ()}
+⟨{¦ mail/out: M←[m_*]} {¦ -mail/in: m'}⟩ <> {m': →m, (M): ()}
 
 ;; Positioning trigger flows from the parent to the child.
 (_symbol {¦ -position_} ⍊ position) <> {position: true}
@@ -180,11 +206,69 @@
   <> {λ: $(round (* →λ →scale)), ◇: true}
 
 ;;
+;; x/y-branch
+;;
+
+;; We currently only support a binary branch; relying on the client's strategic
+;; placement of those for efficiency. Nesting branches or having huge lg/sm in
+;; branches is not expected to be efficient at the moment. The smaller lg/sm is,
+;; the better; clients should attempt to "lower" branches closer to leaves that
+;; are actually different between branches.
+
+;; Optimistic: assume lg as the primary mode.
+(x⫽y-branch `N ⍊ -mode_ lg_) <> {mode: lg, N: →lg}
+
+;; Save the child's latest up-w/h as lg-w/h for later use.
+(x⫽y-branch {¦ up-w⫽h: ±λ} ⍊ mode: lg ⋮lg-w⫽h -up-w⫽h: λ')
+  <> {λ': →λ, lg-w⫽h: →λ, (λ): ()}
+
+;; Intercept and release of dn-w/h.
+(x⫽y-branch _ ⍊ ±dn-w⫽h: λ) <> {λ: (arg →λ)}
+(x⫽y-branch {¦ -dn-w⫽h: λ'} ⍊ dn-w⫽h: Λ←[arg ±λ]) <> {λ': →λ, (Λ): ()}
+
+;; Evaluate whether the intercepted dn-w/h should trigger `sm`.
+;;
+;; - If `fitness: true`, also take into account whether `lg` would fit
+;;   into the bounds defined by dn-w/h. If it won't, trigger `sm`.
+;; - Otherwise, only trigger `sm` if dn-w/h is below a client-defined
+;;   pixel threshold.
+(x⫽y-branch _ ⍊ dn-w⫽h: (arg ±dn-w⫽h ⍊ -sm_) ±lg-w⫽h ±threshold fitness⋮ true)
+  <> {sm: $(or (<= →dn-w⫽h →threshold) (and →fitness (< →dn-w⫽h →lg-w⫽h)))}
+
+;; If triggered `sm`, replace child with sm child.
+(x⫽y-branch N_ ⍊ mode_: lg sm_ dn-w⫽h: (arg _ ⍊ sm: true))
+  <> {N: →sm, mode: sm}
+
+;; If we're in sm mode, see if dn-w/h that was given to us can possibly contain
+;; lg based on its last known lg-w/h. If it's worth trying, remember that.
+(x⫽y-branch _ ⍊ ±lg-w⫽h dn-w⫽h: (arg ±dn-w⫽h ⍊ sm: false -try-lg_))
+  <> {try-lg: $'(> →dn-w⫽h →lg-w⫽h)}
+
+;; If we've decided it's worth trying to switch to lg again, then do that.
+(x⫽y-branch N_ ⍊ mode_: sm lg_ dn-w⫽h: (arg _ ⍊ try-lg: true))
+  <> {N: →lg, mode: lg}
+
+;;
 ;; floating
 ;;
 
 [floating {¦ up-w⫽h: ±λ -dn-w⫽h: λ'}] <> {λ': →λ, (λ): ()}
 (floating _ ⍊ dn-w⫽h: ±λ) <> {(λ): ()}
+
+;; `floats/ping` moves down through single-child parents.
+(_ {¦ -floats/ping: f'} ⍊ floats/ping: f_)
+  <> {f': →f, (f): ()}
+
+;; `floats/ping` self-destructs once it reaches a multi-child parent or leaf.
+{¦ floats/ping_} <> {(floats/ping): ()}
+
+;; The `floating` node responds to `floats/ping`.
+(floating _ ⍊ -floats/pong_ floats/ping_)
+  <> {floats/pong: true, (floats/ping): ()}
+
+;; `floats/pong` moves up through single-child parents.
+(_ {¦ floats/pong: f_} ⍊ -floats/pong: f')
+  <> {f': →f, (f): ()}
 
 ;;
 ;; align
@@ -207,6 +291,61 @@
   <> {dl⫽t: $(+ →dl⫽t (round (- (* →out-w⫽h →x⫽y) (* →lax-w⫽h →x⫽y)))), ◇: true}
 
 ;;
+;; Message flow control
+;;
+
+;; As the universal default, simply forward any incoming messages
+;; to mail/mid.
+{¦ -may-float mail/in: M_ -mail/mid_} <> {mail/mid: →M, (M): ()}
+
+;; Once no rules remain that have something to do with mail/mid,
+;; we forward it to mail/out.
+{¦ mail/mid_ -mail/out_} <> {mail/out: →mail/mid, (mail/mid): ()}
+
+;;
+;; may-float
+;;
+;; `may-float` in combination with a floating node lets one opt-out
+;; of layout in x/y/z-stack. This is most useful with `fr` layouts
+;; which will float conditionally if there is not enough space.
+;;
+;; FIXME: this whole thing feels EXQUISITELY wrong. It is solving
+;; a real problem (conditionally opting out of `fr`) but in a REALLY
+;; wrong way.
+
+{¦ may-float mail/in: M_ -mail/float-buffer_ -floats/ping_}
+  <> {mail/float-buffer: →M, (M): (), floats/ping: true}
+
+;; Ping succeeded.
+;;
+;; FIXME: this is unlikely to be correct and must be reached with tests.
+;; We should probably instead invalidate metrics and trigger the parent
+;; x/y/z-stack to re-measure -- all while dodging infinite feedback. I don't
+;; think just removing det-w/h will produce correct behavior, but again,
+;; we must reach this with tests first.
+{¦ mail/float-buffer floats/pong: true det-w_} <> {(det-w): ()}
+{¦ mail/float-buffer floats/pong: true det-h_} <> {(det-h): ()}
+{¦ mail/float-buffer floats/pong_: true} <> {floats/pong: proceed}
+
+{¦ mail/float-buffer_ floats/pong_: proceed -mail/float_}
+  <> {mail/float: →mail/float-buffer, (mail/float-buffer): (), (floats/pong): ()}
+
+;; If we did not receive pong, forward to mid as usual.
+{¦ mail/float-buffer_ -floats/pong -mail/mid_}
+  <> {mail/mid: →mail/float-buffer, (mail/float-buffer): ()}
+
+;; Bounce up-w/h down as dn-w/h even if we're floating.
+{¦ mail/float: M←[x⫽y-⟦resize,expand⟧ _*] ±up-w⫽h -dn-w⫽h_ -mail/out_}
+  <> {dn-w⫽h: →up-w⫽h, (up-w⫽h): (), mail/out: →M, (M): ()}
+
+;; Position properly even if we're floating.
+{¦ mail/float: M←[x⫽y-place _*] -mail/mid_}
+  <> {mail/mid: →M, (M): ()}
+
+{¦ mail/float: M_ -mail/out_}
+  <> {mail/out: →M, (M): ()}
+
+;;
 ;; `metrics` event
 ;;
 ;; metrics events are sent by x/y/z-stack's to assess the state of their children.
@@ -214,34 +353,34 @@
 ;; of stacks at this point.
 
 ;; Update x/y-stride from up-w/h.
-{¦ r: [metrics _] ±up-w⫽h ⋮x⫽y-stride}
+{¦ mail/mid: [metrics _] ±up-w⫽h ⋮x⫽y-stride}
   <> {x⫽y-stride: →up-w⫽h, (up-w⫽h): ()}
 
 ;; Max of widths/heights.
-▪ {¦ r: (metrics {¦ w⫽h-max_: ?} ⍊ -▢_) -up-w⫽h shrink: (%- (%any true w⫽h)) ±x⫽y-stride}
+▪ {¦ mail/mid: (metrics {¦ w⫽h-max_: ?} ⍊ -▢_) -up-w⫽h shrink: (%- (%any true w⫽h)) ±x⫽y-stride}
     <> {w⫽h-max: →x⫽y-stride, ▢: true}
-  {¦ r: (metrics {¦ ±w⫽h-max} ⍊ -▢_) -up-w⫽h shrink: (%- (%any true w⫽h)) ±x⫽y-stride}
+  {¦ mail/mid: (metrics {¦ ±w⫽h-max} ⍊ -▢_) -up-w⫽h shrink: (%- (%any true w⫽h)) ±x⫽y-stride}
     <> {w⫽h-max: $'(max →w⫽h-max →x⫽y-stride), ▢: true}
 
 ;; Sum of widths/heights excluding fr children.
-▪ {¦ r: (metrics {¦ w⫽h-lo_: ?} ⍊ -▢_) -fr -up-w⫽h ±x⫽y-stride}
+▪ {¦ mail/mid: (metrics {¦ w⫽h-lo_: ?} ⍊ -▢_) -fr -up-w⫽h ±x⫽y-stride}
     <> {w⫽h-lo: →x⫽y-stride, ▢: true}
-  {¦ r: (metrics {¦ ±w⫽h-lo} ⍊ -▢_) -fr -up-w⫽h ±x⫽y-stride}
+  {¦ mail/mid: (metrics {¦ ±w⫽h-lo} ⍊ -▢_) -fr -up-w⫽h ±x⫽y-stride}
     <> {w⫽h-lo: $'(+ →w⫽h-lo →x⫽y-stride), ▢: true}
 
 ;; Sum of widths/heights including fr children.
-▪ {¦ r: (metrics {¦ w⫽h-hi_: ?} ⍊ -▢_) -up-w⫽h ±x⫽y-stride}
+▪ {¦ mail/mid: (metrics {¦ w⫽h-hi_: ?} ⍊ -▢_) -up-w⫽h ±x⫽y-stride}
     <> {w⫽h-hi: →x⫽y-stride, ▢: true}
-  {¦ r: (metrics {¦ w⫽h-hi_number} ⍊ -▢_) -up-w⫽h ±x⫽y-stride}
+  {¦ mail/mid: (metrics {¦ w⫽h-hi_number} ⍊ -▢_) -up-w⫽h ±x⫽y-stride}
     <> {w⫽h-hi: $'(+ →w⫽h-hi →x⫽y-stride), ▢: true}
 
 ;; Sum of frs.
-▪ {¦ r: (metrics {¦ fr-sum_number} ⍊ -▢_) ±fr}
+▪ {¦ mail/mid: (metrics {¦ ±fr-sum} ⍊ -▢_) ±fr}
     <> {fr-sum: $'(+ →fr-sum →fr), ▢: true}
 
 ;; No. of participants: if I modified the metrics then increment
 ;; the participants count.
-▪ {¦ r: (metrics {¦ N⋮ 0} ¦ (%not ()) -▢_)}
+▪ {¦ mail/mid: (metrics {¦ N⋮ 0} ¦ (%not ()) -▢_)}
     <> {N: $'(+ →N 1), ▢: true}
 
 ;;
@@ -250,46 +389,46 @@
 
 ;; If a child reports up-w/h that is exactly the same as the previous one,
 ;; x/y/z-stack won't reply to avoid infinite feedback. However, the child itself
-;; may rely on the parent replying to its up-w/h. Therefore, if the child sees
+;; may rely on the parent relaying the up-w/h. Therefore, if the child sees
 ;; that its x/y-stride is exactly the same as up-w/h that it reports, it will
 ;; reply to itself with det-w/h.
 {¦ x⫽y-stride: λ_ up-w⫽h_: λ_ ±det-w⫽h -dn-w⫽h_}
   <> {dn-w⫽h: →det-w⫽h, (up-w⫽h): ()}
 
-;; x-resize
+;; x/y-resize
 
 ;; Update det-w/h of fractionally-sized node.
-{¦ r: (x⫽y-resize {¦ fr-sum_number: (%not 0)} ±rem-w⫽h ⍊ -▢_) ⋮det-w⫽h ±fr}
+{¦ mail/mid: (x⫽y-resize {¦ fr-sum_number: (%not 0)} ±rem-w⫽h ⍊ -▢_) ⋮det-w⫽h ±fr}
   <> {det-w⫽h: $(round (* →rem-w⫽h (/ →fr →fr-sum))), ▢: true}
 ;; Update det-w/h of exact-sized node.
-{¦ r: (x⫽y-resize _ _ ⍊ -▢_) ±x⫽y-stride ⋮det-w⫽h}
-  <> {det-w⫽h: →x⫽y-stride, ▢: true}
+{¦ mail/mid: (x⫽y-resize {¦ ±x⫽y-limit} _ ⍊ -▢_) ±x⫽y-stride ⋮det-w⫽h}
+  <> {det-w⫽h: $'(min →x⫽y-limit →x⫽y-stride), ▢: true}
 ;; Send det-w/h as dn-w/h.
-{¦ r: (x⫽y-resize _ _ ⍊ ▢ -◇_) -dn-w⫽h_ ±det-w⫽h}
+{¦ mail/mid: (x⫽y-resize _ _ ⍊ ▢ -◇_) -dn-w⫽h_ ±det-w⫽h}
   <> {dn-w⫽h: →det-w⫽h, ◇: true}
 
 ;; x/y-expand
 
-{¦ r: (x⫽y-expand _ ±λ ⍊ -◇_) ⋮det-w⫽h -dn-w⫽h: det-w⫽h}
+{¦ mail/mid: (x⫽y-expand _ ±λ ⍊ -◇_) ⋮det-w⫽h -dn-w⫽h: det-w⫽h}
   <> {det-w⫽h: →λ, ◇: true}
 
 ;; x-place
 
 ;; If width/height is determinate on the child, use it to advance
 ;; delta; offset child by delta, and pass positioning trigger.
-{¦ r: [x⫽y-place ±l⫽t ±gap] ±det-w⫽h dl⫽t⋮ 0 -position_}
+{¦ mail/mid: [x⫽y-place ±l⫽t ±gap] ±det-w⫽h dl⫽t⋮ 0 -position_}
   <> {dl⫽t: $'(+ →l⫽t →dl⫽t), l⫽t: $'(+ →l⫽t →gap →det-w⫽h), position: true}
 
 ;; If width/height is indeterminate, simply offset the child by delta;
 ;; equip it with positioning trigger and move on.
-{¦ r: [x⫽y-place ±l⫽t _] dl⫽t⋮ 0 -position_}
-  <> {dl⫽t: →l⫽t, position: true}
+{¦ mail/mid: [x⫽y-place ±l⫽t _] dl⫽t⋮ 0 -position_}
+  <> {dl⫽t: $'(+ →l⫽t →dl⫽t), position: true}
 
 ;; z-place
-{¦ r: [z-place] -position_} <> {position: true}
+{¦ mail/mid: [z-place] -position_} <> {position: true}
 
 ;; Register it when a child has a width/height to tell.
-{¦ up-w⫽h r: [(%any x-resize y-resize x-expand y-expand) {¦ -invalid_} _*]}
+{¦ up-w⫽h mail/mid: [(%any x-resize y-resize x-expand y-expand) {¦ -invalid_} _*]}
   <> {invalid: true}
 
 ;;
@@ -299,21 +438,21 @@
 ;; can override them.
 
 ;; Place the metrics to the pairspart.
-((%any x-stack y-stack z-stack) _* {¦ r_: [metrics m_]} ⍊ metrics_)
-  <> {(r): (), metrics: →m}
+((%any x-stack y-stack z-stack) _* {¦ mail/out_: [metrics m_]} ⍊ metrics_)
+  <> {(mail/out): (), metrics: →m}
 
 ;; Invalidate metrics.
-((%any x-stack y-stack z-stack) _* {¦ r_: [_ {¦ invalid} _*]} ⍊ metrics_)
-  <> {(metrics): (), (r): ()}
-[(%any x-stack y-stack z-stack) _* {¦ r_}]
-  <> {(r): ()}
+((%any x-stack y-stack z-stack) _* {¦ mail/out_: [_ {¦ invalid} _*]} ⍊ metrics_)
+  <> {(metrics): (), (mail/out): ()}
+[(%any x-stack y-stack z-stack) _* {¦ mail/out_}]
+  <> {(mail/out): ()}
 
 ;;
 ;; Rules common to x/y-stack.
 ;;
 
 ;; Enhance resulting metrics with gap width sum.
-((%any x-stack y-stack) _* {¦ r: [metrics {¦ -gaps_ ±N}]} ⍊ gap⋮ 0)
+((%any x-stack y-stack) _* {¦ mail/out: [metrics {¦ -gaps_ ±N}]} ⍊ gap⋮ 0)
   <> {gaps: $(* (- →N 1) →gap)}
 
 ;;
@@ -321,64 +460,66 @@
 ;;
 
 ;; Request metrics for x-stack.
-(x-stack {¦ -r_} _+ ⍊ -metrics_)
-  <> {r: (metrics {w-lo: 0, w-hi: ?, h-max: ?, fr-sum: 0}), metrics: wait}
+(x-stack {¦ -mail/in_} _+ ⍊ -metrics_)
+  <> {mail/in: (metrics {w-lo: 0, w-hi: ?, h-max: ?, fr-sum: 0}), metrics: wait}
 
 ;; Request metrics for y-stack.
-(y-stack {¦ -r_} _+ ⍊ -metrics_)
-  <> {r: (metrics {w-max: ?, h-lo: 0, h-hi: ?, fr-sum: 0}), metrics: wait}
+(y-stack {¦ -mail/in_} _+ ⍊ -metrics_)
+  <> {mail/in: (metrics {w-max: ?, h-lo: 0, h-hi: ?, fr-sum: 0}), metrics: wait}
 
 ;; Calculate main candidate.
-(x⫽y-stack _* {¦ r: [metrics {¦ ±w⫽h-hi ±gaps}]} ⍊ -up-⸨w,h⸩/new: w⫽h)
+(x⫽y-stack _* {¦ mail/out: [metrics {¦ ±w⫽h-hi ±gaps}]} ⍊ -up-⸨w,h⸩/new: w⫽h)
   <> {w⫽h: $(+ →w⫽h-hi →gaps)}
 
 ;; Calculate cross candidate.
-(x⫽y-stack _* {¦ r: [metrics {¦ ±h⫽w-max}]} ⍊ -up-⸨h,w⸩/new: h⫽w)
+(x⫽y-stack _* {¦ mail/out: [metrics {¦ ±h⫽w-max}]} ⍊ -up-⸨h,w⸩/new: h⫽w)
   <> {h⫽w: →h⫽w-max}
 
 ;; Trigger main-resize once main is known.
-(x⫽y-stack {¦ -r_} ⁑ metrics_: {¦ ±w⫽h-lo ±gaps} ±dn-w⫽h)
-  <> {r: (x⫽y-resize →metrics $'(- →dn-w⫽h →w⫽h-lo →gaps)), (dn-w⫽h): ()}
+(x⫽y-stack {¦ -mail/in_} ⁑ metrics_: {¦ ±w⫽h-lo ±gaps} ±dn-w⫽h)
+  <> {mail/in: (x⫽y-resize $'(union →metrics {x⫽y-limit: →dn-w⫽h})
+                           $'(- →dn-w⫽h →w⫽h-lo →gaps)),
+      (dn-w⫽h): ()}
 
 ;; Trigger cross-expand once cross is known.
-(x⫽y-stack {¦ -r_} ⁑ metrics_ ±dn-h⫽w)
-  <> {r: (y⫽x-expand →metrics →dn-h⫽w), (dn-h⫽w): ()}
+(x⫽y-stack {¦ -mail/in_} ⁑ metrics_ ±dn-h⫽w)
+  <> {mail/in: (y⫽x-expand →metrics →dn-h⫽w), (dn-h⫽w): ()}
 
 ;; Trigger positioning of children.
-(x⫽y-stack {¦ -r_} ⁑ position⁺ gap⋮ 0)
-  <> {r: (x⫽y-place 0 →gap), position: false}
+(x⫽y-stack {¦ -mail/in_} ⁑ position⁺ gap⋮ 0)
+  <> {mail/in: (x⫽y-place 0 →gap), position: false}
 
 ;;
 ;; z-stack
 ;;
 
 ;; Request metrics.
-(z-stack {¦ -r_} _+ ⍊ -metrics_)
-  <> {r: (metrics {w-max: ?, h-max: ?}), metrics: wait}
+(z-stack {¦ -mail/in_} _+ ⍊ -metrics_)
+  <> {mail/in: (metrics {w-max: ?, h-max: ?}), metrics: wait}
 
 ;; Assign size candidate.
-(z-stack _* {¦ r: [metrics {¦ ±w⫽h-max}]} ⍊ -up-⸨w,h⸩/new: w⫽h)
+(z-stack _* {¦ mail/out: [metrics {¦ ±w⫽h-max}]} ⍊ -up-⸨w,h⸩/new: w⫽h)
   <> {w⫽h: →w⫽h-max}
 
 ;; Trigger expand once size is known.
-(z-stack {¦ -r_} ⁑ metrics_ ±dn-w⫽h)
-  <> {r: (x⫽y-expand →metrics →dn-w⫽h), (dn-w⫽h): ()}
+(z-stack {¦ -mail/in_} ⁑ metrics_ ±dn-w⫽h)
+  <> {mail/in: (x⫽y-expand →metrics →dn-w⫽h), (dn-w⫽h): ()}
 
 ;; Trigger positioning of children.
-(z-stack {¦ -r_} ⁑ position⁺)
-  <> {r: (z-place), position: false}
+(z-stack {¦ -mail/in_} ⁑ position⁺)
+  <> {mail/in: (z-place), position: false}
 
 ;;
 ;; x/y-log
 ;;
 
 ;; For children that know their up-w already, x-log simply records that up-w.
-{¦ r: (x⫽y-log (_* `T) ⍊ -▢_) ±up-w⫽h} <> {T: →up-w⫽h, ▢: true}
+{¦ mail/mid: (x⫽y-log (_* `T) ⍊ -▢_) ±up-w⫽h} <> {T: →up-w⫽h, ▢: true}
 ;; For children that tell they're fr but do not know their size, x-log
 ;; records that as flexible size, indicated by `~`.
-{¦ r: (x⫽y-log (_* `T) ⍊ -▢_) -up-w⫽h fr} <> {T: ~, ▢: true}
+{¦ mail/mid: (x⫽y-log (_* `T) ⍊ -▢_) -up-w⫽h fr} <> {T: ~, ▢: true}
 ;; For other children, x/y-log records unknown size, indicated by `?`.
-{¦ r: (x⫽y-log (_* `T) ⍊ -▢_)} <> {T: ?, ▢: true}
+{¦ mail/mid: (x⫽y-log (_* `T) ⍊ -▢_)} <> {T: ?, ▢: true}
 
 ;;
 ;; wrap-stat
@@ -402,10 +543,12 @@
 ;; their up-w (if they can of course).
 (x⫽y-wrap `T ⍊ -state_ nodes_: (_+)) <> {(T): →nodes, state: initial}
 
-(x⫽y-wrap {¦ -r_} _* ⍊ state_: initial) <> {r: (x⫽y-log ()), state: log}
+;; Once that is the case, initiate log.
+(x⫽y-wrap {¦ -mail/in_} _* ⍊ state_: initial)
+  <> {mail/in: (x⫽y-log ()), state: log}
 
 ;; After the log is known, stat it by instantiating the wrap-stat zipper.
-(x⫽y-wrap (%group children _* {¦ r_: [x⫽y-log log_]}) ⍊ state_: log)
+(x⫽y-wrap (%group children _* {¦ mail/out: [x⫽y-log log_]}) ⍊ state_: log)
   <> {children: (wrap-stat →log), state: stat}
 
 ;; NOTE: x/y-wrap must have at least one sized child for Sp/N to be defined,
@@ -497,6 +640,10 @@
 ;; If min unsat in declined, convert to accepted (aka force even if overflows
 ;; when min unsat).
 (wrapper ⍊ proposal: P←(declined p←{¦ min-sat: false})) <> {P: (accepted →p)}
+
+;; Force accept if span is 0 (the first item doesn't fit in the main axis).
+;; If we don't do this we'll loop forever if that happens.
+(wrapper ⍊ span: 0 proposal: P←(declined p_)) <> {P: (accepted →p)}
 
 ;; Merge accepted.
 C←(wrapper ⍊ proposal: P←(accepted {¦ rem: ±rem' span: ±span'}) ±rem ±span nodes: (N_ _*) log: (record_ _*))

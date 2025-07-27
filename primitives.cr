@@ -52,6 +52,7 @@ PRIMITIVES = ProcRuleset.build do
     bs.unsafe_as_d.items.all? { |b| a == b }
   end
 
+  # FIXME: WHY THE F*** IS THIS CALLED JOIN?!
   rulepi1 %[(join true a_ _)] do
     a
   end
@@ -68,6 +69,14 @@ PRIMITIVES = ProcRuleset.build do
     false
   end
 
+  rulepi1 %[(or false false)] do
+    false
+  end
+
+  rulepi1 %[(or _ _)] do
+    true
+  end
+
   # FIXME: remove this flag
   {% if flag?(:soma6) %}
     # Converts an arbitrary term into its D7VR (Microfold unit) -> UIR (thus D7UIR)
@@ -81,7 +90,7 @@ PRIMITIVES = ProcRuleset.build do
     end
   {% end %}
 
-  # E.g. (join {x: 1, y: 2} (entry z 3))
+  # E.g. (union {x: 1, y: 2} (entry z 3))
   rulepi1 %[(entry k_ v_)] do
     Term[].with(k, v)
   end
@@ -100,7 +109,7 @@ PRIMITIVES = ProcRuleset.build do
     end
   end
 
-  rulepi1 %[(join xs_dict ys_dict)] do
+  rulepi1 %[(union xs_dict ys_dict)] do
     xs | ys
   end
 
