@@ -395,8 +395,7 @@ module Ww::M1::Operator
       return Fb::Mismatch.new(behind0.env)
     end
 
-    a = op.min if a < op.min
-    a = op.max if a > op.max
+    a = Math.min(Math.max(a, op.min), op.max)
 
     match(behind0, op.successor, Term.of(a), ahead0)
   end
