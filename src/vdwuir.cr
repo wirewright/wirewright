@@ -88,7 +88,7 @@ module VDwUIR
         begin
           candidate = ML.terms(source)
         rescue e : ML::SyntaxError
-          e.humanize(STDOUT, source)
+          e.humanize(STDERR)
         end
       end
 
