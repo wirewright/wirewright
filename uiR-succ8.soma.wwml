@@ -518,6 +518,11 @@
 ;; their up-w (if they can of course).
 (x⫽y-wrap `T ⍊ -state_ nodes_: (_+)) <> {(T): →nodes, state: initial}
 
+;; If gap is given and no gap-x/y, assume the client wants both values
+;; to be the same.
+(x⫽y-wrap _* ⍊ state: initial ±gap -gap-x_ -gap-y_)
+  <> {gap-x: →gap, gap-y: →gap}
+
 ;; Once that is the case, initiate log.
 (x⫽y-wrap {¦ -mail/in_} _* ⍊ state_: initial)
   <> {mail/in: (x⫽y-log ()), state: log}
