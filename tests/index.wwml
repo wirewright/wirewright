@@ -11,7 +11,7 @@
    tags: (ml ml-corpus))
  (test "patterns.test.wwml"
    color: magenta
-   tags: (patterns))
+   tags: (patterns m1))
  (test "editor.test.wwml"
    color: lightpink
    tags: (editor))
