@@ -736,13 +736,6 @@
     fitness: false
     lg: (branch-sidebar-item-lg ^icon ^caption ^… pairs))
 
-(branch-sidebar) =>
-  (x-branch
-    sm: (branch-sidebar-sm)
-    threshold: 30
-    fitness: false
-    lg: (branch-sidebar-lg))
-
 (branch-sidebar-sm) =>
   (floating z-index: 100 dl: -15
     (z-stack z-index: local
@@ -768,11 +761,18 @@
         (branch-sidebar-item "\ue887" "Help"))))
 
 (branch-full-example) =>
-  (x-stack
-    (group fr: 3 may-float: true
-      (branch-sidebar))
-    (group fr: 9
-      (branch-content)))
+  (x-branch signal: sidebar-does-not-fit
+    sm:
+      (x-stack
+        (branch-sidebar-sm)
+        (branch-content))
+    lg:
+      (x-stack
+        (group fr: 3
+          (x-signal id: sidebar-does-not-fit fitness: false threshold: 40
+            (branch-sidebar-lg)))
+        (group fr: 9
+          (branch-content))))
 
 (branch-content) =>
   (z-stack z-index: local
@@ -958,7 +958,7 @@
           (branch-example))))
 
     ;; An example that tests large swathes of x/y-stack behavior,
-    ;; interior adaptation based on x-branch, and `may-float`.
+    ;; interior adaptation based on x-branch, and x-signal.
     (content root: true dl: 800 dt: 1800
       (y-stack gap: 10
         (limit min-w: 500 max-w: 500 min-h: 300 dl: -400

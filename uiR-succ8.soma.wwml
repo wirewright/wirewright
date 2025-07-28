@@ -1,4 +1,44 @@
-;; TODO: UIR: facilities for connecting viewport to scrollbar
+;; The name *uiR* is a short and stylized abbreviation for UIR Rewriter, where
+;; UIR stands simply for *UI Representation* (*User Interface Representation*).
+;;
+;; uiR is a kind of *abstract physics* for layouts, where:
+;;
+;; - Sizes flow up and down (literally).
+;; - Horizontal message flow occurs through rightward movement of messages from
+;;   `mail/in` through `mail/mid` to `mail/out`, and then to the successor sibling.
+;; - Multi-child nodes work by injecting horizontal messages into the leftmost
+;;   child and collecting them at the right child, forming a "circle" of decision-
+;;   making where both children and their parent participate.
+;;
+;; There are several major limitations:
+;;
+;; - uiR rev8 is not self-healing. This means it cannot detect and repair damage
+;;   to the underlying uiR. This requires one to recalculate the entire layout
+;;   on every change (caching saves us most of the trouble but even caching has limits).
+;; - The semantics of live size-change (when parent nodes "rethink" and decide
+;;   to alter the `dn-w/h` they have already confirmed and sent down) very hard
+;;   to impossible to implement. In practice, we solve this by saving the node
+;;   before any sizing has taken place in the pairspart of the node that may trigger
+;;   such "rethinking"; we replace the active child with the saved, unsized one
+;;   and send the new `dn-w/h` to it.
+;;
+;; None of these major limitations are seemingly reachable in practice, though.
+;; I was not yet able to reach buggy live size-change ("rethinking") with tests,
+;; although I know it is possible and the design must accommodate for that.
+;;
+;; It is important to note that uiR rev8 -- specifically, its ruleset -- is triggered
+;; by a rewriter circuit implemented as  *recursive exhR*. For the rules, this means
+;; that children nodes (itemspart dicts) are necessarily exhaustively rewritten
+;; before the parent is even matched (sometimes phrased as *before the parent
+;; receives control*). At the time the parent node receives control, it is sure
+;; that the children now everything they may ever know without the parent's help
+;; and modifications. Moreover, the slightest change in any child will trigger
+;; that child again. Thus, between each parent  rewrite step, there may be an arbitrary
+;; amount of child rewrite sub-steps, and so on to the leaves. Without caching, this
+;; is disastrous. With caching, it's bearable -- and sometimes feels surprisingly powerful
+;; to me; especially in terms of its guarantees.
+
+;; TODO: facilities for connecting viewport to scrollbar (?!)
 ;; TODO: DwUIR: align: left/center/right on text, then fix selection-button in uir.in
 ;; TODO: fix naming.
 ;;
@@ -20,39 +60,6 @@
 ;; shorthand glyphs ("ligatures") -- things like ⍊, which stands for `¦ _`; but
 ;; one can barely see why. This is the closest glyph I've found and perhaps
 ;; unsurprisingly it comes from APL!
-
-;; A BRIEF CONCEPTUAL OVERVIEW
-;;
-;; uiR is short and stylized name of *UIR Rewriter*. UIR is simply
-;; "UI Representation", a fairly generic name that nevertheless feels
-;; more lively and serious once abbreviated.
-;;
-;; - Sizes can move up and down. Literally. If you observe how uiR works,
-;;   you'd literally see `up-w/h` key-value pairs moving up and `dn-w/h`
-;;   moving down the tree.
-;;
-;; - Multi-child layout (x/y/z-stack and x/y-wrap) occurs often through
-;;   LEFT-TO-RIGHT / first-to-last / horizontal message flow. You'll see
-;;   parent stacks and wraps inject a message to their leftmost (first) child.
-;;   The child then reacts to this message. Afterwards, it forwards to
-;;   its successor sibling. Finally, the parent stack will collect the message
-;;   from the last child's outbox. This forms a logical circle where the parent
-;;   (stack or wrap) is the source and sink for all messages.
-;;
-;; - During horizontal flow, you will see each child use three *boxes:
-;;    mail/in  -- immediately receiving
-;;    mail/mid -- nominal handling
-;;    mail/out -- designated to the successor
-;;   If the child opts out of layout through a combination of a `floating`
-;;   child and `may-float`, a fourth box will be used -- `mail/float`; as
-;;   well as an intermediate `mail/float-buffer`.
-;;
-;; - uiR is often quite literal. Size flow is literal -- sizes literally move.
-;;   Something like an x/y-wrap is also quite literal. The wrapping algorithm
-;;   here is conceptually simple: uiR creates a cursor, types the nodes with
-;;   that cursor, one after another, using y-stacks (lines) and x-stacks.
-;;   uiR rules control the cursor so that it enters and leaves main and cross
-;;   axes appropriately. Finally, the cursor self-destructs.
 
 ;;
 ;; General
@@ -206,6 +213,34 @@
   <> {λ: $(round (* →λ →scale)), ◇: true}
 
 ;;
+;; x/y-signal
+;;
+
+;; Save up-w/h under desired-w/h.
+(x⫽y-signal {¦ up-w⫽h: ±λ} ⍊ ⋮desired-w⫽h -up-w⫽h: λ')
+  <> {λ': →λ, desired-w⫽h: →λ, (λ): ()}
+
+;; Intercept dn-w/h.
+(x⫽y-signal _ ⍊ ±dn-w⫽h: λ) <> {λ: (arg →λ)}
+(x⫽y-signal {¦ -dn-w⫽h: λ'} ⍊ dn-w⫽h: Λ←[arg ±λ]) <> {λ': →λ, (Λ): ()}
+
+;; Check if intercepted dn-w/h fits.
+(x⫽y-signal _ ⍊ dn-w⫽h: (arg ±dn-w⫽h ⍊ -fits_) ±desired-w⫽h fitness⋮ true ±threshold)
+  <> {fits: $(or (and →fitness (>= →dn-w⫽h →desired-w⫽h)) (>= →dn-w⫽h →threshold))}
+(x⫽y-signal _ ⍊ dn-w⫽h: (arg ±dn-w⫽h ⍊ -fits_) ±desired-w⫽h -threshold)
+  <> {fits: $'(>= →dn-w⫽h →desired-w⫽h)}
+
+;; If it does not fit, signal up but continue with dn-w/h anyway,
+;; because there may be no one above to catch the signal -- we'd
+;; want to draw something if that's the case.
+(x⫽y-signal _ ⍊ dn-w⫽h: A←(arg ±dn-w⫽h ⍊ fits: false) id_ -up-signal_)
+  <> {up-signal: →id}
+
+;; `up-signal`s flow up.
+⟨{¦ up-signal: sig_} ⍊ -up-signal: sig'⟩
+  <> {sig': →sig, (sig): ()}
+
+;;
 ;; x/y-branch
 ;;
 
@@ -214,6 +249,9 @@
 ;; branches is not expected to be efficient at the moment. The smaller lg/sm is,
 ;; the better; clients should attempt to "lower" branches closer to leaves that
 ;; are actually different between branches.
+
+;; TODO: x/y-branch picks `sm` irrevokably. This should be fixed once it
+;; is reachable with tests & practically significant.
 
 ;; Optimistic: assume lg as the primary mode.
 (x⫽y-branch `N ⍊ -mode_ lg_) <> {mode: lg, N: →lg}
@@ -232,21 +270,16 @@
 ;;   into the bounds defined by dn-w/h. If it won't, trigger `sm`.
 ;; - Otherwise, only trigger `sm` if dn-w/h is below a client-defined
 ;;   pixel threshold.
-(x⫽y-branch _ ⍊ dn-w⫽h: (arg ±dn-w⫽h ⍊ -sm_) ±lg-w⫽h ±threshold fitness⋮ true)
+(x⫽y-branch _ ⍊ -signal dn-w⫽h: (arg ±dn-w⫽h ⍊ -sm_) ±lg-w⫽h ±threshold fitness⋮ true)
   <> {sm: $(or (<= →dn-w⫽h →threshold) (and →fitness (< →dn-w⫽h →lg-w⫽h)))}
 
 ;; If triggered `sm`, replace child with sm child.
-(x⫽y-branch N_ ⍊ mode_: lg sm_ dn-w⫽h: (arg _ ⍊ sm: true))
+(x⫽y-branch N_ ⍊ -signal mode_: lg sm_ dn-w⫽h: (arg _ ⍊ sm: true))
   <> {N: →sm, mode: sm}
 
-;; If we're in sm mode, see if dn-w/h that was given to us can possibly contain
-;; lg based on its last known lg-w/h. If it's worth trying, remember that.
-(x⫽y-branch _ ⍊ ±lg-w⫽h dn-w⫽h: (arg ±dn-w⫽h ⍊ sm: false -try-lg_))
-  <> {try-lg: $'(> →dn-w⫽h →lg-w⫽h)}
-
-;; If we've decided it's worth trying to switch to lg again, then do that.
-(x⫽y-branch N_ ⍊ mode_: sm lg_ dn-w⫽h: (arg _ ⍊ try-lg: true))
-  <> {N: →lg, mode: lg}
+;; An x/y-branch catches up signals and switches to `sm`.
+(x⫽y-branch N_ ⍊ mode_: lg sm_ signal: id_ up-signal: sig←id_)
+  <> {N: →sm, mode: sm, (sig): ()}
 
 ;;
 ;; floating
@@ -254,21 +287,6 @@
 
 [floating {¦ up-w⫽h: ±λ -dn-w⫽h: λ'}] <> {λ': →λ, (λ): ()}
 (floating _ ⍊ dn-w⫽h: ±λ) <> {(λ): ()}
-
-;; `floats/ping` moves down through single-child parents.
-(_ {¦ -floats/ping: f'} ⍊ floats/ping: f_)
-  <> {f': →f, (f): ()}
-
-;; `floats/ping` self-destructs once it reaches a multi-child parent or leaf.
-{¦ floats/ping_} <> {(floats/ping): ()}
-
-;; The `floating` node responds to `floats/ping`.
-(floating _ ⍊ -floats/pong_ floats/ping_)
-  <> {floats/pong: true, (floats/ping): ()}
-
-;; `floats/pong` moves up through single-child parents.
-(_ {¦ floats/pong: f_} ⍊ -floats/pong: f')
-  <> {f': →f, (f): ()}
 
 ;;
 ;; align
@@ -296,54 +314,11 @@
 
 ;; As the universal default, simply forward any incoming messages
 ;; to mail/mid.
-{¦ -may-float mail/in: M_ -mail/mid_} <> {mail/mid: →M, (M): ()}
+{¦ mail/in: M_ -mail/mid_} <> {mail/mid: →M, (M): ()}
 
 ;; Once no rules remain that have something to do with mail/mid,
 ;; we forward it to mail/out.
 {¦ mail/mid_ -mail/out_} <> {mail/out: →mail/mid, (mail/mid): ()}
-
-;;
-;; may-float
-;;
-;; `may-float` in combination with a floating node lets one opt-out
-;; of layout in x/y/z-stack. This is most useful with `fr` layouts
-;; which will float conditionally if there is not enough space.
-;;
-;; FIXME: this whole thing feels EXQUISITELY wrong. It is solving
-;; a real problem (conditionally opting out of `fr`) but in a REALLY
-;; wrong way.
-
-{¦ may-float mail/in: M_ -mail/float-buffer_ -floats/ping_}
-  <> {mail/float-buffer: →M, (M): (), floats/ping: true}
-
-;; Ping succeeded.
-;;
-;; FIXME: this is unlikely to be correct and must be reached with tests.
-;; We should probably instead invalidate metrics and trigger the parent
-;; x/y/z-stack to re-measure -- all while dodging infinite feedback. I don't
-;; think just removing det-w/h will produce correct behavior, but again,
-;; we must reach this with tests first.
-{¦ mail/float-buffer floats/pong: true det-w_} <> {(det-w): ()}
-{¦ mail/float-buffer floats/pong: true det-h_} <> {(det-h): ()}
-{¦ mail/float-buffer floats/pong_: true} <> {floats/pong: proceed}
-
-{¦ mail/float-buffer_ floats/pong_: proceed -mail/float_}
-  <> {mail/float: →mail/float-buffer, (mail/float-buffer): (), (floats/pong): ()}
-
-;; If we did not receive pong, forward to mid as usual.
-{¦ mail/float-buffer_ -floats/pong -mail/mid_}
-  <> {mail/mid: →mail/float-buffer, (mail/float-buffer): ()}
-
-;; Bounce up-w/h down as dn-w/h even if we're floating.
-{¦ mail/float: M←[x⫽y-⟦resize,expand⟧ _*] ±up-w⫽h -dn-w⫽h_ -mail/out_}
-  <> {dn-w⫽h: →up-w⫽h, (up-w⫽h): (), mail/out: →M, (M): ()}
-
-;; Position properly even if we're floating.
-{¦ mail/float: M←[x⫽y-place _*] -mail/mid_}
-  <> {mail/mid: →M, (M): ()}
-
-{¦ mail/float: M_ -mail/out_}
-  <> {mail/out: →M, (M): ()}
 
 ;;
 ;; `metrics` event
