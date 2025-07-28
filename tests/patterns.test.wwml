@@ -130,6 +130,37 @@
      (qux x: 1 y: 1)
      1 "John Doe" qux true))
 
+;; %-keypool
+(group
+  (pattern (%-keypool)
+    (+ () (x: 1) (y: 2) (x: 1 y: 2)) ;; etc.
+    (- 1 "John Doe" qux true))
+
+  (pattern (%-keypool x y)
+    (- () {x: 1} {y: 1} {x: 1, y: 1} 1 "John Doe" qux true)
+    (+ {z: 1}
+       {x: 1, z: 1}
+       {y: 1, z: 1}
+       {x: 1, y: 1, z: 1}
+       (qux x: 1 y: 1))))
+
+;; %keytest
+(group
+  (pattern (%keytest)
+    (+ () (x: 1) (y: 2) (x: 1 y: 2)) ;; etc.
+    (- 1 "John Doe" qux true))
+
+  (pattern (%keytest x y)
+    (- () (z) {z: 3} 1 "John Doe" qux true)
+    (+ {x: 1}
+       {y: 2}
+       {x: 1, y: 2}
+       {x: 1, z: 2}
+       {x: 1, y: 2, z: 3}
+       (+ x: 1)
+       (+ y: 2)
+       (+ x: 1 y: 2))))
+
 ;; %nonself
 (group
   ;; The following pattern matches itself:
@@ -3920,9 +3951,9 @@
 ;; Specificity of a keypool with more keys is higher than that of a keypool
 ;; with less keys.
 (specificity
-  (level (%keypool a))
-  (level (%keypool a b))
-  (level (%keypool a b c)))
+  (level (%keypool a) (%-keypool a) (%keytest a))
+  (level (%keypool a b) (%-keypool a b) (%keytest a b))
+  (level (%keypool a b c) (%-keypool a b c) (%keytest a b c)))
 
 (specificity
   (level (_* ¦ _ max-h: mh_number content-h: ch_number h: h←content))
@@ -4003,7 +4034,11 @@
   (specificity
     (level
       (%keypool (%all (%any 1 2)))
-      (%keypool (%all 1 2 3 4 5))))
+      (%-keypool (%all (%any 1 2)))
+      (%keytest (%all (%any 1 2)))
+      (%keypool (%all 1 2 3 4 5))
+      (%-keypool (%all 1 2 3 4 5))
+      (%keytest (%all 1 2 3 4 5))))
 
   (specificity
     (level (%-value x qux) (%-value x (%any 1 2))))

@@ -255,18 +255,38 @@ module Ww::M1::Operator
     match(behind0, op.a, matchee, ahead1)
   end
 
-  def match(behind0, op : Keypool, matchee : Term, ahead0)
+  def match(behind0, op : Keytest, matchee : Term, ahead0)
     unless dict = matchee.as_d?
       return Fb::Mismatch.new(behind0.env)
     end
 
-    pruned = op.keys.reduce(dict) { |memo, key| memo.without(key) }
-    unless pruned.empty?
-      return Fb::Mismatch.new(behind0.env)
+    # Match if any key is in dict.
+    op.keys.each do |key|
+      if key.in?(dict)
+        return Ahead.tr(behind0, ahead0)
+      end
     end
 
-    Ahead.tr(behind0, ahead0)
+    Fb::Mismatch.new(behind0.env)
   end
+
+  {% for cfg in { {"Keypool", true}, {"NegativeKeypool", false} } %}
+    {% cls, empty = cfg %}
+
+    def match(behind0, op : {{cls.id}}, matchee : Term, ahead0)
+      unless dict = matchee.as_d?
+        return Fb::Mismatch.new(behind0.env)
+      end
+
+      pruned = op.keys.reduce(dict) { |memo, key| memo.without(key) }
+
+      if pruned.empty? == {{empty}}
+        Ahead.tr(behind0, ahead0)
+      else
+        Fb::Mismatch.new(behind0.env)
+      end
+    end
+  {% end %}
 
   def match(behind0, op : Not, matchee : Term, ahead0)
     if matchee.in?(op.blacklist)

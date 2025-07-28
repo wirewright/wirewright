@@ -17,6 +17,8 @@
 # │ %any°                    │   ~   │   ~     │   ~   │            │    ~     │       │   ~
 # │ %all                     │   ~   │   ~     │   ~   │            │    ~     │       │   ~
 # │ %keypool                 │   +   │   +     │   +   │            │    ·     │       │   ~
+# │ %-keypool                │       │         │       │            │          │       │
+# │ %keytest                 │       │         │       │            │          │       │
 # │ %not                     │   +   │   +     │   +   │            │    ·     │       │   ~
 # │ %layer                   │   +   │   +     │   +   │            │    ~     │       │
 # │ %number                  │   +   │   +     │   +   │            │    ·     │       │   ~
@@ -388,7 +390,7 @@ end
 #   are not, fix that. In fact, Operator should probably be renamed to Subject or something
 #   like that. Not sure how large of a refactor that is, and how much point is there in it.
 module ::Ww::M1::Operator
-  alias Any = Pass | Never | Num | Sym | SymBlank | SymNonblank | Boolean | Dict | Itemsonly | Pairsonly | SketchSubset | Bounds | BoundsGuard | MaxDepth | DictGuard | Literal | Capture | CaptureItemsonly | ItemSeq | ItemFirst | ItemLast | SingularSeq | Partition | Edge | LiteralChoices | SourceChoice | ValueLiteral | Keypool | Span | Tally | Type | ParseML | Clamp | Bin | Both | Not | Layer | ScanFirst | ScanSource | ScanAll | ScanAllIsolated | DfsFirst | DfsSource | DfsAllIsolated | DfsAll | BfsFirst | BfsAllIsolated | BfsAll | Value | NegativeValue | NegativeValueKeypath | EntriesFirst | EntriesSource | EntriesAllIsolated | EntriesAll | Str | New | KeypathCapture
+  alias Any = Pass | Never | Num | Sym | SymBlank | SymNonblank | Boolean | Dict | Itemsonly | Pairsonly | SketchSubset | Bounds | BoundsGuard | MaxDepth | DictGuard | Literal | Capture | CaptureItemsonly | ItemSeq | ItemFirst | ItemLast | SingularSeq | Partition | Edge | LiteralChoices | SourceChoice | ValueLiteral | Keypool | Span | Tally | Type | ParseML | Clamp | Bin | Both | Not | Layer | ScanFirst | ScanSource | ScanAll | ScanAllIsolated | DfsFirst | DfsSource | DfsAllIsolated | DfsAll | BfsFirst | BfsAllIsolated | BfsAll | Value | NegativeValue | NegativeValueKeypath | EntriesFirst | EntriesSource | EntriesAllIsolated | EntriesAll | Str | New | KeypathCapture | NegativeKeypool | Keytest
 
   alias Bin = Add | Sub | Mul | Div | Idiv | Mod | Pow | Map
 
@@ -2442,8 +2444,10 @@ module ::Ww::M1
         # Mark %keypool and %not as %terminal so that walk doesn't walk inside them.
         matchpi(
           %[(%keypool _ _*)],
+          %[(%-keypool _*)],
+          %[(%keytest _*)],
           %[(%not _ _*)],
-          cues: {:"%keypool", :"%not"}
+          cues: {:"%keypool", :"%-keypool", :"%keytest", :"%not"}
         ) { {:"%terminal", pattern} }
 
         matchpi %[(%keypath capture_)], cue: :"%keypath" do
@@ -3761,6 +3765,26 @@ module ::Ww::M1
         keys = node.items.move(1)
 
         Operator::Keypool.new(keys.to_readonly_slice(&.itself))
+      end
+
+      matchpi %[(%-keypool)], cue: :"%-keypool" do
+        Operator::INSTANCE_DICT
+      end
+
+      matchpi %[(%-keypool _*)], cue: :"%-keypool" do
+        keys = node.items.move(1)
+
+        Operator::NegativeKeypool.new(keys.to_readonly_slice(&.itself))
+      end
+
+      matchpi %[(%keytest)], cue: :"%keytest" do
+        Operator::INSTANCE_DICT
+      end
+
+      matchpi %[(%keytest _*)], cue: :"%keytest" do
+        keys = node.items.move(1)
+
+        Operator::Keytest.new(keys.to_readonly_slice(&.itself))
       end
 
       match({ {:"%literal", :"%layer"}, :below_, :side_ }, cue: :"%layer") do |below, side|
@@ -5554,7 +5578,7 @@ module ::Ww::M1
           WalkDecision::Skip
         end
 
-        matchpi %[(%'%keypool keys_+)] do
+        matchpi %[(%'%keypool keys_+)], %[(%'%-keypool keys_*)], %[(%'%keytest keys_*)] do
           restrictions += keys.size
 
           WalkDecision::Continue
