@@ -656,7 +656,7 @@
         (wrap-card hue: pink))))
 
 (branch) =>
-  (x-branch
+  (switch signal: text-overflows
     sm:
       (text
         caption: "Short lorem"
@@ -664,14 +664,14 @@
         font: "IBM Plex Sans"
         size: 14
         color: white)
-    threshold: 100
     lg:
-      (text
-        caption: "Lorem ipsum dolor sit amet"
-        font: "IBM Plex Sans"
-        wrap: true
-        size: 14
-        color: white))
+      (x-signal id: text-overflows threshold: 100
+        (text
+          caption: "Lorem ipsum dolor sit amet"
+          font: "IBM Plex Sans"
+          wrap: true
+          size: 14
+          color: white)))
 
 (branch-example) =>
   (z-stack z-index: local
@@ -730,11 +730,13 @@
             color: ^color)))))
 
 (branch-sidebar-item icon_ caption_ ¦ pairs_) =>
-  (x-branch
+  (switch signal: sidebar-overflows
     sm: (branch-sidebar-item-sm ^icon ^caption ^… pairs)
-    threshold: 50
-    fitness: false
-    lg: (branch-sidebar-item-lg ^icon ^caption ^… pairs))
+    lg:
+      (x-signal id: sidebar-overflows
+                threshold: 50
+                fitness: false
+        (branch-sidebar-item-lg ^icon ^caption ^… pairs)))
 
 (branch-sidebar-sm) =>
   (floating z-index: 100 dl: -15
@@ -761,7 +763,7 @@
         (branch-sidebar-item "\ue887" "Help"))))
 
 (branch-full-example) =>
-  (x-branch signal: sidebar-does-not-fit
+  (switch signal: sidebar-does-not-fit
     sm:
       (x-stack
         (branch-sidebar-sm)
@@ -939,7 +941,7 @@
               (rect up-w: 30 up-h: 30 fill: yellow)
               (rect up-w: 30 up-h: 30 fill: darkorange))))))
 
-    ;; x-branch'es inside x-wrap
+    ;; switch'es inside x-wrap
     (content root: true dl: 50 dt: 1800
       (y-stack gap: 10
         (limit min-w: 100 max-w: 100
@@ -958,7 +960,7 @@
           (branch-example))))
 
     ;; An example that tests large swathes of x/y-stack behavior,
-    ;; interior adaptation based on x-branch, and x-signal.
+    ;; interior adaptation based on switch, and x-signal.
     (content root: true dl: 800 dt: 1800
       (y-stack gap: 10
         (limit min-w: 500 max-w: 500 min-h: 300 dl: -400

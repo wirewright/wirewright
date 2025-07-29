@@ -226,59 +226,36 @@
 
 ;; Check if intercepted dn-w/h fits.
 (x⫽y-signal _ ⍊ dn-w⫽h: (arg ±dn-w⫽h ⍊ -fits_) ±desired-w⫽h fitness⋮ true ±threshold)
-  <> {fits: $(or (and →fitness (>= →dn-w⫽h →desired-w⫽h)) (>= →dn-w⫽h →threshold))}
+  <> {fits: $(and (>= →dn-w⫽h →desired-w⫽h) (>= →dn-w⫽h →threshold))}
+(x⫽y-signal _ ⍊ dn-w⫽h: (arg ±dn-w⫽h ⍊ -fits_) ±desired-w⫽h fitness: false ±threshold)
+  <> {fits: $'(>= →dn-w⫽h →threshold)}
 (x⫽y-signal _ ⍊ dn-w⫽h: (arg ±dn-w⫽h ⍊ -fits_) ±desired-w⫽h -threshold)
   <> {fits: $'(>= →dn-w⫽h →desired-w⫽h)}
 
-;; If it does not fit, signal up but continue with dn-w/h anyway,
-;; because there may be no one above to catch the signal -- we'd
-;; want to draw something if that's the case.
+;; If it does not fit, signal up and reject dn-w/h.
 (x⫽y-signal _ ⍊ dn-w⫽h: A←(arg ±dn-w⫽h ⍊ fits: false) id_ -up-signal_)
-  <> {up-signal: →id}
+  <> {up-signal: →id, (A): ()}
 
 ;; `up-signal`s flow up.
 ⟨{¦ up-signal: sig_} ⍊ -up-signal: sig'⟩
   <> {sig': →sig, (sig): ()}
 
 ;;
-;; x/y-branch
+;; switch
 ;;
 
-;; We currently only support a binary branch; relying on the client's strategic
-;; placement of those for efficiency. Nesting branches or having huge lg/sm in
-;; branches is not expected to be efficient at the moment. The smaller lg/sm is,
-;; the better; clients should attempt to "lower" branches closer to leaves that
-;; are actually different between branches.
+;; We currently only support a binary switch; relying on the client's strategic
+;; placement of those for efficiency. Nesting switches or having huge lg/sm in
+;; switches is not expected to be particularly efficient at the moment.
 
-;; TODO: x/y-branch picks `sm` irrevokably. This should be fixed once it
+;; TODO: switch picks `sm` irrevokably. This should be fixed once it
 ;; is reachable with tests & practically significant.
 
 ;; Optimistic: assume lg as the primary mode.
-(x⫽y-branch `N ⍊ -mode_ lg_) <> {mode: lg, N: →lg}
+(switch `N ⍊ -mode_ lg_) <> {mode: lg, N: →lg}
 
-;; Save the child's latest up-w/h as lg-w/h for later use.
-(x⫽y-branch {¦ up-w⫽h: ±λ} ⍊ mode: lg ⋮lg-w⫽h -up-w⫽h: λ')
-  <> {λ': →λ, lg-w⫽h: →λ, (λ): ()}
-
-;; Intercept and release of dn-w/h.
-(x⫽y-branch _ ⍊ ±dn-w⫽h: λ) <> {λ: (arg →λ)}
-(x⫽y-branch {¦ -dn-w⫽h: λ'} ⍊ dn-w⫽h: Λ←[arg ±λ]) <> {λ': →λ, (Λ): ()}
-
-;; Evaluate whether the intercepted dn-w/h should trigger `sm`.
-;;
-;; - If `fitness: true`, also take into account whether `lg` would fit
-;;   into the bounds defined by dn-w/h. If it won't, trigger `sm`.
-;; - Otherwise, only trigger `sm` if dn-w/h is below a client-defined
-;;   pixel threshold.
-(x⫽y-branch _ ⍊ -signal dn-w⫽h: (arg ±dn-w⫽h ⍊ -sm_) ±lg-w⫽h ±threshold fitness⋮ true)
-  <> {sm: $(or (<= →dn-w⫽h →threshold) (and →fitness (< →dn-w⫽h →lg-w⫽h)))}
-
-;; If triggered `sm`, replace child with sm child.
-(x⫽y-branch N_ ⍊ -signal mode_: lg sm_ dn-w⫽h: (arg _ ⍊ sm: true))
-  <> {N: →sm, mode: sm}
-
-;; An x/y-branch catches up signals and switches to `sm`.
-(x⫽y-branch N_ ⍊ mode_: lg sm_ signal: id_ up-signal: sig←id_)
+;; A switch catches up signals and switches to `sm`.
+(switch N_ ⍊ mode_: lg sm_ signal: id_ up-signal: sig←id_)
   <> {N: →sm, mode: sm, (sig): ()}
 
 ;;
