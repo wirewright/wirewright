@@ -190,7 +190,7 @@ module Rtk
     Rtk.save(r) { Rtk.view(r) { Rtk.forward(r) } }
   end
 
-  def feed(r)
+  def rest(r)
     b = r.value.pos
     e = r.value.max_pos
 

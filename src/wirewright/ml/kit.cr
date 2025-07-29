@@ -97,7 +97,7 @@ module Ww::ML
         n, _ = digits_to_number(digits)
 
         if Rtk.past?(r, '/')
-          densrc = Rtk.feed(r)
+          densrc = Rtk.rest(r)
 
           if densrc.empty?
             raise SyntaxError.new("expected at least one digit for the denominator", densrc)
@@ -136,7 +136,7 @@ module Ww::ML
             sign = Term[-1]
           end
 
-          mantissasrc = Rtk.feed(r)
+          mantissasrc = Rtk.rest(r)
           if mantissasrc.empty?
             raise SyntaxError.new("expected at least one digit for the exponent", mantissasrc)
           end
