@@ -303,7 +303,8 @@ module Ww::ML
       end
 
       # Prepend to cache.
-      @as_key_cache[2] = @as_key_cache[3]
+      @as_key_cache[3] = @as_key_cache[2]
+      @as_key_cache[2] = @as_key_cache[1]
       @as_key_cache[1] = @as_key_cache[0]
       @as_key_cache[0] = {key, to}
 
@@ -320,8 +321,8 @@ module Ww::ML
       ok(datum.term)
     end
 
-    # Parses non-datum symbols, which may originate for instance from templating
-    # (as in `px⫽y`).
+    # Parses a WwML symbol; standard such as `px-10`, or arising from templating
+    # such as in `px⫽y-10`.
     private def symbol : Π
       # Treat standalone `+`, `-`, etc. as a symbol in symbol context: in `(⏏+⏏ 1 2)`,
       # `+` is a symbol.
