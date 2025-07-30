@@ -133,7 +133,7 @@ module Ww::ML
           end
 
           line.each_char_with_abs_byte_index do |chr, byte_index|
-            if byte_index == @text.byte_start
+            if !@text.empty? && byte_index == @text.byte_start
               styles.push(:focus)
             end
 
