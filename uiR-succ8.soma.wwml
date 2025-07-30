@@ -248,15 +248,14 @@
 ;; placement of those for efficiency. Nesting switches or having huge lg/sm in
 ;; switches is not expected to be particularly efficient at the moment.
 
-;; TODO: switch picks `sm` irrevokably. This should be fixed once it
+;; TODO: switch picks `to` irrevokably. This should be fixed once it
 ;; is reachable with tests & practically significant.
 
-;; Optimistic: assume lg as the primary mode.
-(switch `N ⍊ -mode_ lg_) <> {mode: lg, N: →lg}
+(switch `N ⍊ -mode_ from_) <> {mode: from, N: →from}
 
-;; A switch catches up signals and switches to `sm`.
-(switch N_ ⍊ mode_: lg sm_ signal: id_ up-signal: sig←id_)
-  <> {N: →sm, mode: sm, (sig): ()}
+;; A switch catches up signals and switches to `to`.
+(switch N_ ⍊ mode_: from to_ on: id_ up-signal: sig←id_)
+  <> {N: →to, mode: to, (sig): ()}
 
 ;;
 ;; floating

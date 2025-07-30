@@ -656,22 +656,22 @@
         (wrap-card hue: pink))))
 
 (branch) =>
-  (switch signal: text-overflows
-    sm:
-      (text
-        caption: "Short lorem"
-        wrap: true
-        font: "IBM Plex Sans"
-        size: 14
-        color: white)
-    lg:
+  (switch on: text-overflows
+    from:
       (x-signal id: text-overflows threshold: 100
         (text
           caption: "Lorem ipsum dolor sit amet"
           font: "IBM Plex Sans"
           wrap: true
           size: 14
-          color: white)))
+          color: white))
+    to:
+      (text
+        caption: "Short lorem"
+        wrap: true
+        font: "IBM Plex Sans"
+        size: 14
+        color: white))
 
 (branch-example) =>
   (z-stack z-index: local
@@ -730,13 +730,13 @@
             color: ^color)))))
 
 (branch-sidebar-item icon_ caption_ ¦ pairs_) =>
-  (switch signal: sidebar-overflows
-    sm: (branch-sidebar-item-sm ^icon ^caption ^… pairs)
-    lg:
+  (switch on: sidebar-overflows
+    from:
       (x-signal id: sidebar-overflows
                 threshold: 50
                 fitness: false
-        (branch-sidebar-item-lg ^icon ^caption ^… pairs)))
+        (branch-sidebar-item-lg ^icon ^caption ^… pairs))
+    to: (branch-sidebar-item-sm ^icon ^caption ^… pairs))
 
 (branch-sidebar-sm) =>
   (floating z-index: 100 dl: -15
@@ -763,18 +763,18 @@
         (branch-sidebar-item "\ue887" "Help"))))
 
 (branch-full-example) =>
-  (switch signal: sidebar-does-not-fit
-    sm:
-      (x-stack
-        (branch-sidebar-sm)
-        (branch-content))
-    lg:
+  (switch on: sidebar-does-not-fit
+    from:
       (x-stack
         (group fr: 3
           (x-signal id: sidebar-does-not-fit fitness: false threshold: 40
             (branch-sidebar-lg)))
         (group fr: 9
-          (branch-content))))
+          (branch-content)))
+    to:
+      (x-stack
+        (branch-sidebar-sm)
+        (branch-content)))
 
 (branch-content) =>
   (z-stack z-index: local
