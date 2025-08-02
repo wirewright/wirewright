@@ -105,7 +105,7 @@ module Ww::ML
         new(:vspace, chr)
       when .in_set?("'$%+\\-\\^<=>")
         new(:symbolic_weak, chr)
-      when .in_set?("_!&*./#?~|∞°∈⊆⊂\\")
+      when .in_set?("_!&*./#?~|∞°∈∉⊆⊂∪∩\\")
         new(:symbolic_strong_misc, chr)
       when .in_set?("0-9")
         new(:symbolic_strong_digit, chr)
