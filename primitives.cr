@@ -109,9 +109,10 @@ PRIMITIVES = ProcRuleset.build do
     end
   end
 
-  rulepi1 %[(union xs_dict ys_dict)] do
-    xs | ys
-  end
+  rulepi1 %[(union xs_dict ys_dict)] { xs | ys }
+  rulepi1 %[(∪ xs_dict ys_dict)] { xs | ys }
+
+  rulepi1 %[(∩ xs_dict ys_dict)] { xs.unsafe_as_d.msect(ys.unsafe_as_d) }
 
   rulepi1 %[(merge xs_dict ys_dict)] do
     xs & ys
