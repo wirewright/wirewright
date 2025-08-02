@@ -1360,6 +1360,21 @@ module Ww
       end
     end
 
+    # Dict entry mask intersection. Leaves keys common to `self` and *other*,
+    # their values set to `true`.
+    def msect(other : Dict) : Dict
+      Term::Dict.build do |commit|
+        each_entry do |k, _|
+          next unless k.in?(other)
+          commit.with(k, true)
+        end
+        other.each_entry do |k, _|
+          next unless k.in?(self)
+          commit.with(k, true)
+        end
+      end
+    end
+
     # Dict set subtraction. Values are ignored; only key presence/absence is taken
     # into account.
     def sub(other : Dict) : Dict
