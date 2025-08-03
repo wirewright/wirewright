@@ -284,16 +284,23 @@ module Ww
     end
 
     def as_itemsonly_d? : Dict?
-      return unless tag.dict?
-      dict = unsafe_as_d
+      return unless dict = as_d?
       return unless dict.itemsonly?
+
       dict
     end
 
     def as_itemspart_d? : Dict?
-      return unless tag.dict?
+      return unless dict = as_d?
 
-      unsafe_as_d.itemspart
+      dict.itemspart
+    end
+
+    def as_nonempty_d? : Dict?
+      return unless dict = as_d?
+      return if dict.empty?
+
+      dict
     end
 
     # Attempts to cast this term into a number term `Term::Num`.
@@ -335,6 +342,15 @@ module Ww
     def as_d : Dict
       tag.dict? ? unsafe_as_d : raise TypeCastError.new
     end
+
+    {% for method in %w[as_n as_s as_b as_sym as_d] %}
+      def {{method.id}}(&) : Term
+        return self unless input = {{method.id}}?
+
+        output = yield input
+        output.upcast
+      end
+    {% end %}
 
     # Returns a dictionary where *key* is bound to `self`, followed by
     # key-value pairs from *rest* (if any).
@@ -392,6 +408,10 @@ module Ww
 
     def hash(hasher)
       downcast.hash(hasher)
+    end
+
+    def clone : Term
+      self
     end
 
     # Automatically downcasts `self` to one of `ITerm` includers and tries to
@@ -834,6 +854,88 @@ module Ww
 
   # Misc
 
+  struct Term
+    # Yields each keypath and item node starting at *root*.
+    #
+    # The block should return `true` if it wishes to continue descent; `false`
+    # if it wishes to skip descent.
+    #
+    # Traversal proceeds left-to-right, parent before children. *root* is
+    # yielded first.
+    def self.each_keypath_and_itemnode(root : Term, & : Stack(Term), Term -> Bool) : Nil
+      nodes = Stack{root}
+      keypath = Stack(Term).new
+
+      while node = nodes.pop?
+        descend = yield keypath, node
+
+        # Descend
+        if descend && (dict = node.as_d?) && (dict.itemsize > 0)
+          keypath << Term.of(0)
+          nodes << node << dict[0]
+          next
+        end
+
+        # Ascend
+        loop do
+          return unless parent = nodes.pop?
+
+          index = keypath.pop
+          next unless successor = parent[index + 1]?
+
+          nodes << parent << successor
+          keypath << Term.of(index + 1)
+          break
+        end
+      end
+    end
+
+    # Traversal proceeds left-to-right, children before parents. *root* is
+    # yielded last.
+    def self.each_keypath_bottom_up(root : Term, & : Stack(Term) ->) : Nil
+      nodes = Stack{root}
+      keypath = Stack(Term).new
+
+      while node = nodes.pop?
+        # Descend
+        if (dict = node.as_d?) && (dict.itemsize > 0)
+          keypath << Term.of(0)
+          nodes << node << dict[0]
+          next
+        end
+
+        yield keypath
+
+        # Ascend
+        loop do
+          return unless parent = nodes.pop?
+
+          index = keypath.pop
+          unless successor = parent[index + 1]?
+            yield keypath
+            next
+          end
+
+          nodes << parent << successor
+          keypath << Term.of(index + 1)
+          break
+        end
+      end
+    end
+
+    def self.ancestors(root : Term, keypath : Indexable(Term)) : Stack(Term)
+      ancestors = Stack(Term).new(keypath.size - 1)
+      parent = root
+
+      keypath.each do |key|
+        ancestors << parent
+        parent = parent[key]
+      end
+
+      ancestors
+    end
+  end
+
   # TODO: convert these to iterative and use blocks!!!
 
   struct Term
@@ -943,34 +1045,26 @@ module Ww
       @callstack = CallStack.empty
     end
 
-    {% begin %}
-      {% for subject in [:itemnode, :node] %}
-        private def self.each_keypath_and_{{subject.id}}(stack : Stack(Term), term : Term, fn : Stack(Term), Term -> Bool)
-          return unless dict = term.as_d?
+    private def self.each_keypath_and_node(stack : Stack(Term), term : Term, fn : Stack(Term), Term -> Bool)
+      return unless dict = term.as_d?
 
-          {% if subject == :itemnode %}
-            dict.itemspart.each_entry do |key, value|
-          {% else %}
-            dict.each_entry do |key, value|
-          {% end %}
-            stack << key
-            if fn.call(stack, value)
-              each_keypath_and_{{subject.id}}(stack, value, fn)
-            end
-          ensure
-            stack.pop
-          end
+      dict.each_entry do |key, value|
+        stack << key
+        if fn.call(stack, value)
+          each_keypath_and_node(stack, value, fn)
         end
+      ensure
+        stack.pop
+      end
+    end
 
-        def self.each_keypath_and_{{subject.id}}(term : Term, &fn : Stack(Term), Term -> Bool) : Nil
-          keypath = Stack(Term).new
-          return unless fn.call(keypath, term)
+    def self.each_keypath_and_node(term : Term, &fn : Stack(Term), Term -> Bool) : Nil
+      keypath = Stack(Term).new
+      return unless fn.call(keypath, term)
 
-          each_keypath_and_{{subject.id}}(keypath, term, fn)
-        rescue EachKeypathEscape
-        end
-      {% end %}
-    {% end %}
+      each_keypath_and_node(keypath, term, fn)
+    rescue EachKeypathEscape
+    end
 
     # Thoroughly traverses all nodes in the subtree of *term*, and yields them
     # to the block.
