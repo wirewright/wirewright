@@ -19,3 +19,4 @@ module Ww::Soma
 end
 
 require "./soma/dwuir"
+require "./soma/microfold"

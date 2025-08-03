@@ -487,19 +487,21 @@ def itemdfsR(successor : Rewriter) : Rewriter
 end
 
 # :nodoc:
-def exhR(ctx, term, successor)
+def exhR(ctx, term, successor, limit)
   state = Rewrite.one(term)
   changed = false
 
-  while true
+  (0...limit).each do
     case rewrite = successor.call(ctx, state)
     in Rewrite::Some
       state = rewrite
       changed = true
     in Rewrite::None
-      return changed ? state : Rewrite.none
+      break
     end
   end
+
+  changed ? state : Rewrite.none
 end
 
 # Absolute rewriter. Performs absolute rewriting of a term using *successor*.
@@ -543,9 +545,9 @@ end
 # to do. The resulting term is an *exhaustively rewritten term*. If *memoize* is set
 # to `true` (it is by default), this exhaustively rewritten term is stored so that
 # further rewrites with the same exhR instance are a noop.
-def exhR(successor : Rewriter) : Rewriter
+def exhR(successor : Rewriter, *, limit = nil) : Rewriter
   Rewriter.new do |ctx, staging|
-    staging.reduce { |term| exhR(ctx, term, successor) }
+    staging.reduce { |term| exhR(ctx, term, successor, limit) }
   end
 end
 
@@ -724,7 +726,7 @@ end
 # *callable* must respond to `#call(Rewrite::Any)`.
 #
 # See `EffectEdge` to learn about the available edges.
-def effectR(successor : Rewriter, callable, *, edge = EffectEdge::In) : Rewriter
+def effectR(successor : Rewriter, callable, *, edge = EffectEdge::In | EffectEdge::Out) : Rewriter
   edge = EffectEdge.new(edge)
 
   Rewriter.new do |ctx, staging|
@@ -738,8 +740,8 @@ def effectR(successor : Rewriter, callable, *, edge = EffectEdge::In) : Rewriter
 end
 
 # See the other overload.
-def effectR(successor : Rewriter, *, edge = EffectEdge::In, &effect : EffectEdge, Rewrite::Any ->) : Rewriter
-  effectR(successor, effect, edge: edge)
+def effectR(successor : Rewriter, **kwargs, &effect : EffectEdge, Rewrite::Any ->) : Rewriter
+  effectR(successor, effect, **kwargs)
 end
 
 # :nodoc:

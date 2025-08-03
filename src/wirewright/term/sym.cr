@@ -282,6 +282,10 @@ module Ww
     # I.e. note how <BYTE START>:◇_ is a real blank! Thus if we separate into
     # entities we must also support parsing blanks -- `#blank` must be aware
     # of some entities but not others!
+    #
+    # NOTE: It appears that some Entity symbols can be *parsed* from normal
+    # ones, such as µ-* symbols for microfold; whereas others must be constructed
+    # by hand in the native code, such as rule id/rule group id/etc.
 
     def self.rule_id(byte_start, *, blank : Bool) : Sym
       name = String.build do |io|
@@ -409,6 +413,12 @@ module Ww
 
       start, _, _ = name.partition(':')
       RuleBlockIdBlank.new(start.to_i(base: 16))
+    end
+
+    # Returns `true` if this symbol is reserved for Microfold. Returns
+    # `false` otherwise.
+    def microfold? : Bool
+      to(String).prefixed_by?("µ-")
     end
 
     def to(type : String.class) : String

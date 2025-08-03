@@ -1,0 +1,1153 @@
+;;
+;; Validation
+;;
+
+(µfold
+  (µ-xyz "Hello" style: "p-5")
+  (µ-xyz "Hello" style: "p-5")
+  problems:
+    ((fatal "symbols prefixed with `µ-` are reserved for Microfold and must not appear in the input tree")))
+(µfold
+  (foo "Hello" µ-qux: 123 style: "p-5")
+  (foo "Hello" µ-qux: 123 style: "p-5")
+  problems:
+    ((fatal "symbols prefixed with `µ-` are reserved for Microfold and must not appear in the input tree")))
+
+;;
+;; Dynamic styling
+;;
+
+(group
+  ;; One
+  (µfold
+    (n x style: "{foo}" foo: bg-neutral-500)
+    (n x style: "bg-neutral-500" foo: bg-neutral-500))
+  (µfold
+    (n x style: "bg-neutral-{foo}" foo: 500)
+    (n x style: "bg-neutral-500" foo: 500))
+  (µfold
+    (n x style: "bg-neutral-{foo}" foo: "500")
+    (n x style: "bg-neutral-500" foo: "500"))
+  (µfold
+    (n x style: "{foo}" foo: "bg-neutral-500 p-5")
+    (n x style: "bg-neutral-500 p-5" foo: "bg-neutral-500 p-5"))
+  ;; Many
+  (µfold
+    (n x style: "{foo} {bar}" foo: "bg-neutral-500" bar: "p-5")
+    (n x style: "bg-neutral-500 p-5" foo: "bg-neutral-500" bar: "p-5"))
+  ;; Basic parsing
+  (µfold
+    (n x style: "{foo} p-5" foo: "bg-neutral-500")
+    (n x style: "p-5 {foo}" foo: "bg-neutral-500")
+    (n x style: "bg-neutral-500 p-5" foo: "bg-neutral-500"))
+  ;; Errors
+  (µfold
+    (n x style: "{foo p-5" foo: "bg-neutral-500")
+    (n x style: "bg-neutral-500 p-5" foo: "bg-neutral-500")
+    problems:
+      ((minor "continuing despite missing `}`")))
+  (µfold
+    (n x style: "{(foo)} p-5")
+    (n x style: "p-5")
+    problems:
+      ((minor "`(foo)` is not a valid symbol")))
+  (µfold
+    (n x style: "{foo} p-5")
+    (n x style: "p-5")
+    problems:
+      ((minor "ignoring `{foo}` because it is missing from the pairspart")))
+  (µfold
+    (n x style: "{foo} p-5" foo: (+ 1 2))
+    (n x style: "p-5" foo: (+ 1 2))
+    problems:
+      ((major "ignoring `{foo}`: only string, symbol, and number values allowed"))))
+
+;;
+;; General pseudo-utilities
+;;
+
+(group
+  ;; items-*
+  (µfold
+    (n x style: "items-present")
+    problems:
+      ((major "cannot prefix a pseudo-utility with `items-`")))
+  (µfold
+    (n style: "items-text-neutral-300"
+      (m (p "Text 1"))
+      (m (p "Text 2"))
+      (m (p "Text 3")))
+    (n style: "" ;; enables Microfold on the node
+      (m (p "Text 1") style: "text-neutral-300")
+      (m (p "Text 2") style: "text-neutral-300")
+      (m (p "Text 3") style: "text-neutral-300"))
+    (n style: "" ;; enables Microfold on the node
+      (m (p "Text 1" style: "text-neutral-300"))
+      (m (p "Text 2" style: "text-neutral-300"))
+      (m (p "Text 3" style: "text-neutral-300"))))
+  ;; Multiple items-*
+  (µfold
+    (n style: "p-5 items-center items-bg-neutral-500"
+      (p "Text 1")
+      (p "Text 2")
+      (p "Text 3"))
+    (n style: "p-5"
+      (p "Text 1" style: "center bg-neutral-500")
+      (p "Text 2" style: "center bg-neutral-500")
+      (p "Text 3" style: "center bg-neutral-500")))
+
+  ;; Present and absent pseudo-utilities
+  (µfold
+    (n
+      (p "Text 1" style: "present absent")
+      (p "Text 2" style: "present")
+      (p "Text 3" style: "absent present")
+      (p "Text 4" style: "absent"))
+    (n
+      (p "Text 2")
+      (p "Text 3"))))
+
+;;
+;; Conditions
+;;
+
+(group
+  ;; Pseudo-conditions
+  (group
+    ;; alone
+    (group
+      (µfold
+        (n style: "(alone):bg-neutral-500")
+        (n style: "bg-neutral-500"))
+      (µfold
+        (group (n style: "(alone):bg-neutral-500"))
+        (group (n style: "bg-neutral-500")))
+      (µfold
+        (group
+          (n style: "(alone):bg-neutral-500")
+          (n style: "(alone):bg-neutral-500"))
+        (group
+          (n)
+          (n)))
+      (µfold
+        (group
+          (n style: "bg-red-500 (alone):bg-neutral-500")
+          (n style: "bg-green-500 (alone):bg-neutral-500")
+          (n style: "bg-blue-500 (alone):bg-neutral-500"))
+        (group
+          (n style: "bg-red-500")
+          (n style: "bg-green-500")
+          (n style: "bg-blue-500"))))
+
+    ;; first
+    (group
+      (µfold
+        ;; there is an implcit parent, µ, of which we are the first child
+        (n style: "(first):bg-neutral-500")
+        (n style: "bg-neutral-500"))
+      (µfold
+        (group (n style: "(first):bg-neutral-500"))
+        (group (n style: "bg-neutral-500")))
+      (µfold
+        (group
+          (n style: "(first):bg-neutral-500")
+          (n style: "(first):bg-neutral-500"))
+        (group
+          (n style: "bg-neutral-500")
+          (n)))
+      (µfold
+        (group
+          (n style: "bg-red-500 (first):bg-neutral-500")
+          (n style: "bg-green-500 (first):bg-neutral-500")
+          (n style: "bg-blue-500 (first):bg-neutral-500"))
+        (group
+          (n style: "bg-neutral-500")
+          (n style: "bg-green-500")
+          (n style: "bg-blue-500"))))
+
+    ;; first-N
+    (group
+      (µfold
+        ;; there is an implcit parent, µ, of which we are the first child
+        (n style: "(first-2):bg-neutral-500")
+        (n style: "bg-neutral-500"))
+      (µfold
+        (group (n style: "(first-2):bg-neutral-500"))
+        (group (n style: "bg-neutral-500")))
+      (µfold
+        (group
+          (n style: "(first-2):bg-neutral-500")
+          (n style: "(first-2):bg-neutral-500"))
+        (group
+          (n style: "bg-neutral-500")
+          (n style: "bg-neutral-500")))
+      (µfold
+        (group
+          (n style: "bg-red-500 (first-2):bg-neutral-500")
+          (n style: "bg-green-500 (first-2):bg-neutral-500")
+          (n style: "bg-blue-500 (first-2):bg-neutral-500")
+          (n style: "bg-yellow-500 (first-2):bg-neutral-500"))
+        (group
+          (n style: "bg-neutral-500")
+          (n style: "bg-neutral-500")
+          (n style: "bg-blue-500")
+          (n style: "bg-yellow-500"))))
+
+    ;; last
+    (group
+      (µfold
+        ;; there is an implcit parent, µ, of which we are the last child
+        (n style: "(last):bg-neutral-500")
+        (n style: "bg-neutral-500"))
+      (µfold
+        (group (n style: "(last):bg-neutral-500"))
+        (group (n style: "bg-neutral-500")))
+      (µfold
+        (group
+          (n style: "(last):bg-neutral-500")
+          (n style: "(last):bg-neutral-500"))
+        (group
+          (n)
+          (n style: "bg-neutral-500")))
+      (µfold
+        (group
+          (n style: "bg-red-500 (last):bg-neutral-500")
+          (n style: "bg-green-500 (last):bg-neutral-500")
+          (n style: "bg-blue-500 (last):bg-neutral-500"))
+        (group
+          (n style: "bg-red-500")
+          (n style: "bg-green-500")
+          (n style: "bg-neutral-500"))))
+
+    ;; last-N
+    (group
+      (µfold
+        ;; there is an implcit parent, µ, of which we are the last child
+        (n style: "(last-2):bg-neutral-500")
+        (n style: "bg-neutral-500"))
+      (µfold
+        (group (n style: "(last-2):bg-neutral-500"))
+        (group (n style: "bg-neutral-500")))
+      (µfold
+        (group
+          (n style: "(last-2):bg-neutral-500")
+          (n style: "(last-2):bg-neutral-500"))
+        (group
+          (n style: "bg-neutral-500")
+          (n style: "bg-neutral-500")))
+      (µfold
+        (group
+          (n style: "bg-red-500 (last-2):bg-neutral-500")
+          (n style: "bg-green-500 (last-2):bg-neutral-500")
+          (n style: "bg-blue-500 (last-2):bg-neutral-500")
+          (n style: "bg-yellow-500 (last-2):bg-neutral-500"))
+        (group
+          (n style: "bg-red-500")
+          (n style: "bg-green-500")
+          (n style: "bg-neutral-500")
+          (n style: "bg-neutral-500"))))
+
+    ;; period-N
+    (group
+      (µfold
+        (n style: "(period-2):bg-neutral-500")
+        (n style: "bg-neutral-500"))
+      (µfold
+        (group (n style: "(period-2):bg-neutral-500"))
+        (group (n style: "bg-neutral-500")))
+      (µfold
+        (group
+          (n style: "(period-2):bg-neutral-500")
+          (n style: "(period-2):bg-neutral-500")
+          (n style: "(period-2):bg-neutral-500")
+          (n style: "(period-2):bg-neutral-500"))
+        (group
+          (n style: "bg-neutral-500")
+          (n)
+          (n style: "bg-neutral-500")
+          (n)))
+      (µfold
+        (group
+          (n style: "bg-red-500 (period-3):bg-neutral-500")
+          (n style: "bg-green-500 (period-3):bg-neutral-500")
+          (n style: "bg-blue-500 (period-3):bg-neutral-500")
+          (n style: "bg-yellow-500 (period-3):bg-neutral-500")
+          (n style: "bg-purple-500 (period-3):bg-neutral-500")
+          (n style: "bg-pink-500 (period-3):bg-neutral-500"))
+        (group
+          (n style: "bg-neutral-500")
+          (n style: "bg-green-500")
+          (n style: "bg-blue-500")
+          (n style: "bg-neutral-500")
+          (n style: "bg-purple-500")
+          (n style: "bg-pink-500"))))
+
+    ;; period-1
+    (group
+      (µfold
+        (n style: "(period-1):bg-neutral-500")
+        (n style: "bg-neutral-500"))
+      (µfold
+        (group (n style: "(period-1):bg-neutral-500"))
+        (group (n style: "bg-neutral-500")))
+      (µfold
+        (group
+          (n style: "(period-1):bg-neutral-500")
+          (n style: "(period-1):bg-neutral-500")
+          (n style: "(period-1):bg-neutral-500"))
+        (group
+          (n style: "bg-neutral-500")
+          (n style: "bg-neutral-500")
+          (n style: "bg-neutral-500")))
+      (µfold
+        (group
+          (n style: "bg-red-500 (period-1):bg-neutral-500")
+          (n style: "bg-green-500 (period-1):bg-neutral-500")
+          (n style: "bg-blue-500 (period-1):bg-neutral-500"))
+        (group
+          (n style: "bg-neutral-500")
+          (n style: "bg-neutral-500")
+          (n style: "bg-neutral-500"))))
+
+    ;; period-0
+    (group
+      (µfold
+        (n style: "(period-0):bg-neutral-500")
+        (n))
+      (µfold
+        (group (n style: "(period-0):bg-neutral-500"))
+        (group (n)))
+      (µfold
+        (group
+          (n style: "(period-0):bg-neutral-500")
+          (n style: "(period-0):bg-neutral-500")
+          (n style: "(period-0):bg-neutral-500"))
+        (group
+          (n)
+          (n)
+          (n)))
+      (µfold
+        (group
+          (n style: "bg-red-500 (period-0):bg-neutral-500")
+          (n style: "bg-green-500 (period-0):bg-neutral-500")
+          (n style: "bg-blue-500 (period-0):bg-neutral-500"))
+        (group
+          (n style: "bg-red-500")
+          (n style: "bg-green-500")
+          (n style: "bg-blue-500"))))
+
+    ;; combining alone, first, and last
+    (group
+      (µfold
+        ;; there is an implcit parent, µ, of which we are the last child
+        (n style: "(first):bg-red-500 (last):bg-blue-500 (alone):bg-green-500")
+        (n style: "bg-green-500"))
+      (µfold
+        (group (n style: "(first):bg-red-500 (last):bg-blue-500 (alone):bg-green-500"))
+        (group (n style: "bg-green-500")))
+      ;; For simplicity, there is no specificity -- so order matters for conflicting
+      ;; pseudo-conditions.
+      (µfold
+        (group (n style: "(first):bg-red-500 (alone):bg-green-500 (last):bg-blue-500"))
+        (group (n style: "bg-blue-500")))
+      (µfold
+        (group
+          (n style: "(first):bg-red-500 (alone):bg-green-500 (last):bg-blue-500")
+          (n style: "(first):bg-red-500 (alone):bg-green-500 (last):bg-blue-500"))
+        (group
+          (n style: "bg-red-500")
+          (n style: "bg-blue-500")))
+      (µfold
+        (group
+          (n style: "p-1 (first):bg-red-500 (alone):bg-green-500 (last):bg-blue-500")
+          (n style: "p-2 (first):bg-red-500 (alone):bg-green-500 (last):bg-blue-500")
+          (n style: "p-3 (first):bg-red-500 (alone):bg-green-500 (last):bg-blue-500"))
+        (group
+          (n style: "p-1 bg-red-500")
+          (n style: "p-2")
+          (n style: "p-3 bg-blue-500"))))
+
+    ;; Combining pseudo-conditions
+    (group
+      (µfold
+        (p "Qux" style: "(first):bg-red-500 (last):bg-blue-500 (alone):bg-green-500 (last-2):p-2 (first-2):p-1 (period-2):underline")
+        (p "Qux" style: "bg-green-500 p-1 underline"))
+      (µfold
+        (group
+          (p "Qux" style: "(first):bg-red-500 (last):bg-blue-500 (alone):bg-green-500 (first-2):p-1 (last-2):p-2 (period-2):underline"))
+        (group
+          (p "Qux" style: "bg-green-500 p-2 underline")))
+      (µfold
+        (group
+          (p "Qux 1" style: "m-1 (first):bg-red-500 (last):bg-blue-500 (alone):bg-green-500 (first-2):p-1 (last-2):p-2 (period-2):underline")
+          (p "Qux 2" style: "m-2 (first):bg-red-500 (last):bg-blue-500 (alone):bg-green-500 (first-2):p-1 (last-2):p-2 (period-2):underline")
+          (p "Qux 3" style: "m-3 (first):bg-red-500 (last):bg-blue-500 (alone):bg-green-500 (first-2):p-1 (last-2):p-2 (period-2):underline")
+          (p "Qux 4" style: "m-4 (first):bg-red-500 (last):bg-blue-500 (alone):bg-green-500 (first-2):p-1 (last-2):p-2 (period-2):underline")
+          (p "Qux 5" style: "m-5 (first):bg-red-500 (last):bg-blue-500 (alone):bg-green-500 (first-2):p-1 (last-2):p-2 (period-2):underline")
+          (p "Qux 6" style: "m-6 (first):bg-red-500 (last):bg-blue-500 (alone):bg-green-500 (first-2):p-1 (last-2):p-2 (period-2):underline"))
+        (group
+          (p "Qux 1" style: "m-1 bg-red-500 p-1 underline")
+          (p "Qux 2" style: "m-2 p-1")
+          (p "Qux 3" style: "m-3 underline")
+          (p "Qux 4" style: "m-4")
+          (p "Qux 5" style: "m-5 p-2 underline")
+          (p "Qux 6" style: "m-6 bg-blue-500 p-2"))))
+
+    ;; Invalid
+    (µfold
+      (n style: "(foo):bg-neutral-500")
+      problems:
+        ((major "invalid pseudo-condition `foo`"))))
+
+  ;; Pair conditions
+  (group
+    ;; One
+    (group
+      (µfold
+        (n style: "bg-red-500 foo:bg-green-500")
+        (n style: "bg-red-500"))
+      (µfold
+        (n style: "bg-red-500 foo:bg-green-500" foo: true)
+        (n style: "bg-green-500" foo: true))
+      (µfold
+        (n style: "bg-red-500 foo:bg-green-500" foo: "hello world")
+        (n style: "bg-green-500" foo: "hello world"))
+      (µfold
+        (n style: "bg-red-500 foo:bg-green-500" foo: false)
+        (n style: "bg-red-500" foo: false)))
+
+    ;; Many distinct
+    (group
+      (µfold
+        (n style: "bg-red-500 foo:bg-green-500 bar:bg-blue-500")
+        (n style: "bg-red-500"))
+      (µfold
+        (n style: "bg-red-500 foo:bg-green-500 bar:bg-blue-500" foo: true)
+        (n style: "bg-green-500" foo: true))
+      (µfold
+        (n style: "bg-red-500 foo:bg-green-500 bar:bg-blue-500" bar: true)
+        (n style: "bg-blue-500" bar: true))
+      (µfold
+        (n style: "bg-red-500 foo:bg-green-500 bar:bg-blue-500" foo: true bar: true)
+        (n style: "bg-blue-500" foo: true bar: true))
+      (µfold
+        (n style: "bg-red-500 foo:bg-green-500 bar:bg-blue-500" foo: false bar: true)
+        (n style: "bg-blue-500" foo: false bar: true))
+      (µfold
+        (n style: "bg-red-500 foo:bg-green-500 bar:bg-blue-500" foo: true bar: false)
+        (n style: "bg-green-500" foo: true bar: false))
+      ;; order matters
+      (µfold
+        (n style: "bg-red-500 bar:bg-blue-500 foo:bg-green-500" foo: true bar: true)
+        (n style: "bg-green-500" foo: true bar: true))
+      (µfold
+        (n style: "bg-red-500 foo:bg-green-500 bar:bg-blue-500" foo: true bar: true)
+        (n style: "bg-blue-500" foo: true bar: true)))
+
+    ;; Many combined (AND)
+    (group
+      (µfold
+        (n style: "bg-red-500 foo:bar:bg-green-500")
+        (n style: "bg-red-500"))
+      (µfold
+        (n style: "bg-red-500 foo:bar:bg-green-500" foo: true)
+        (n style: "bg-red-500" foo: true))
+      (µfold
+        (n style: "bg-red-500 foo:bar:bg-green-500" foo: true bar: true)
+        (n style: "bg-green-500" foo: true bar: true)))
+
+    ;; Many combined with pseudo-conditions
+    (group
+      (µfold
+        (group
+          (n style: "bg-red-500 foo:bar:(first):bg-green-500")
+          (n style: "bg-red-500 foo:bar:(first):bg-green-500"))
+        (group
+          (n style: "bg-red-500")
+          (n style: "bg-red-500")))
+      (µfold
+        (group
+          (n style: "bg-red-500 foo:bar:(first):bg-green-500" foo: true)
+          (n style: "bg-red-500 foo:bar:(first):bg-green-500" foo: true))
+        (group
+          (n style: "bg-red-500" foo: true)
+          (n style: "bg-red-500" foo: true)))
+      (µfold
+        (group
+          (n style: "bg-red-500 foo:bar:(first):bg-green-500" foo: true bar: true)
+          (n style: "bg-red-500 foo:bar:(first):bg-green-500" foo: true bar: true))
+        (group
+          (n style: "bg-green-500" foo: true bar: true)
+          (n style: "bg-red-500" foo: true bar: true))))
+
+    ;; Many distinct, combined with pseudo-conditions
+    (group
+      (µfold
+        (group
+          (n style: "bg-red-500 foo:(last):bg-green-500 bar:(first):bg-blue-500" foo: true)
+          (n style: "bg-red-500 foo:(last):bg-green-500 bar:(first):bg-blue-500" foo: true))
+        (group
+          (n style: "bg-red-500" foo: true)
+          (n style: "bg-green-500" foo: true)))
+      (µfold
+        (group
+          (n style: "bg-red-500 foo:(last):bg-green-500 bar:(first):bg-blue-500" bar: true)
+          (n style: "bg-red-500 foo:(last):bg-green-500 bar:(first):bg-blue-500" bar: true))
+        (group
+          (n style: "bg-blue-500" bar: true)
+          (n style: "bg-red-500" bar: true)))
+      (µfold
+        (group
+          (n style: "bg-red-500 foo:(last):bg-green-500 bar:(first):bg-blue-500" foo: true bar: true)
+          (n style: "bg-red-500 foo:(last):bg-green-500 bar:(first):bg-blue-500" foo: true bar: true))
+        (group
+          (n style: "bg-blue-500" foo: true bar: true)
+          (n style: "bg-green-500" foo: true bar: true))))
+
+    ;; Chain match
+    (group
+      ;; Chain resolves via direct argument form
+      (µfold
+        (n style: "bg-red-500 foo-bar:bg-green-500" foo: bar)
+        (n style: "bg-green-500" foo: bar))
+      (µfold
+        (n style: "bg-red-500 foo-bar:bg-green-500" foo: baz)
+        (n style: "bg-red-500" foo: baz))
+
+      ;; Chain resolves via nested mapping form
+      (µfold
+        (n style: "bg-red-500 foo-bar:bg-green-500" foo: {bar: true})
+        (n style: "bg-green-500" foo: {bar: true}))
+      (µfold
+        (n style: "bg-red-500 foo-bar:bg-green-500" foo: {baz: true})
+        (n style: "bg-red-500" foo: {baz: true}))
+
+      ;; Longer chain via direct argument at final step
+      (µfold
+        (n style: "bg-red-500 foo-bar-baz:bg-green-500" foo: {bar: baz})
+        (n style: "bg-green-500" foo: {bar: baz}))
+      (µfold
+        (n style: "bg-red-500 foo-bar-baz:bg-green-500" foo: {bar: {baz: true}})
+        (n style: "bg-green-500" foo: {bar: {baz: true}}))
+      (µfold
+        (n style: "bg-red-500 foo-bar-baz:bg-green-500" foo: {bar: true})
+        (n style: "bg-red-500" foo: {bar: true}))
+
+      (µfold
+        (n style: "bg-red-500 foo-bar:bg-green-500 foo-baz:bg-blue-500" foo: {quux: true})
+        (n style: "bg-red-500" foo: {quux: true}))
+      (µfold
+        (n style: "bg-red-500 foo-bar:bg-green-500 foo-baz:bg-blue-500" foo: {bar: true})
+        (n style: "bg-green-500" foo: {bar: true}))
+      (µfold
+        (n style: "bg-red-500 foo-bar-qux:bg-green-500 foo-baz-qux:bg-blue-500" foo: {baz: qux})
+        (n style: "bg-blue-500" foo: {baz: qux}))
+
+      ;; Both keys match - order in style string determines which wins
+      (µfold
+        (n style: "bg-red-500 foo-bar:bg-green-500 foo-baz:bg-blue-500" foo: {bar: true, baz: qux})
+        (n style: "bg-blue-500" foo: {bar: true, baz: qux}))
+      (µfold
+        (n style: "bg-red-500 foo-bar:bg-green-500 foo-baz-qux:bg-blue-500" foo: {bar: true, baz: qux})
+        (n style: "bg-blue-500" foo: {bar: true, baz: qux}))
+      (µfold
+        (n style: "bg-red-500 foo-baz:bg-blue-500 foo-bar:bg-green-500" foo: {bar: true, baz: qux})
+        (n style: "bg-green-500" foo: {bar: true, baz: qux}))
+
+      ;; Mismatch on one, match on the other
+      (µfold
+        (n style: "bg-red-500 foo-bar-qux:bg-green-500 foo-baz-qux:bg-blue-500" foo: {bar: nope, baz: qux})
+        (n style: "bg-blue-500" foo: {bar: nope, baz: qux}))
+      (µfold
+        (n style: "bg-red-500 foo-bar-nope:bg-green-500 foo-baz-nope:bg-blue-500" foo: {bar: nope, baz: qux})
+        (n style: "bg-green-500" foo: {bar: nope, baz: qux}))
+
+      ;; No foo dict present - no match
+      (µfold
+        (n style: "bg-red-500 foo-bar:bg-green-500 foo-baz:bg-blue-500")
+        (n style: "bg-red-500"))
+
+      (µfold
+        (n style: "bg-red-500 foo-3:bg-green-500" foo: 3)
+        (n style: "bg-green-500" foo: 3))
+      (µfold
+        (n style: "bg-red-500 foo-3:bg-green-500" foo: 4)
+        (n style: "bg-red-500" foo: 4))
+
+      (µfold
+        (n style: "bg-red-500 foo-1/3:bg-green-500" foo: 1/3)
+        (n style: "bg-green-500" foo: 1/3))
+      (µfold
+        (n style: "bg-red-500 foo-1/3:bg-green-500" foo: 2/3)
+        (n style: "bg-red-500" foo: 2/3))
+
+      (µfold
+        (n style: "bg-red-500 foo-1.23:bg-green-500" foo: 1.23)
+        (n style: "bg-green-500" foo: 1.23))
+      (µfold
+        (n style: "bg-red-500 foo-1.23:bg-green-500" foo: 1.24)
+        (n style: "bg-red-500" foo: 1.24))
+
+      (µfold
+        (n style: "bg-red-500 foo-bar-42:bg-green-500" foo: {bar: 42})
+        (n style: "bg-green-500" foo: {bar: 42}))
+      (µfold
+        (n style: "bg-red-500 foo-bar-42:bg-green-500" foo: {bar: 7})
+        (n style: "bg-red-500" foo: {bar: 7}))
+
+      (µfold
+        (n style: "bg-red-500 foo-bar-2/5:bg-green-500" foo: {bar: 2/5})
+        (n style: "bg-green-500" foo: {bar: 2/5}))
+      (µfold
+        (n style: "bg-red-500 foo-bar-2/5:bg-green-500" foo: {bar: 3/5})
+        (n style: "bg-red-500" foo: {bar: 3/5}))
+
+      (µfold
+        (n style: "bg-red-500 foo-bar-0.75:bg-green-500" foo: {bar: 0.75})
+        (n style: "bg-green-500" foo: {bar: 0.75}))
+      (µfold
+        (n style: "bg-red-500 foo-bar-0.75:bg-green-500" foo: {bar: 0.8})
+        (n style: "bg-red-500" foo: {bar: 0.8}))
+
+      ;; Combining with pseudo-conditions
+      (µfold
+        (group
+          (n style: "foo-bar-baz:bg-green-500 (first):bg-red-500" foo: {bar: baz})
+          (n style: "foo-bar-baz:bg-green-500 (first):bg-red-500" foo: {bar: baz}))
+        (group
+          (n style: "bg-red-500" foo: {bar: baz})
+          (n style: "bg-green-500" foo: {bar: baz})))
+      (µfold
+        (group
+          (n style: "(first):bg-red-500 foo-bar-baz:bg-green-500" foo: {bar: qux})
+          (n style: "(first):bg-red-500 foo-bar-baz:bg-green-500" foo: {bar: qux}))
+        (group
+          (n style: "bg-red-500" foo: {bar: qux})
+          (n foo: {bar: qux})))
+      (µfold
+        (group
+          (n style: "foo-bar-baz:bg-green-500 (last):bg-blue-500" foo: {bar: baz})
+          (n style: "foo-bar-baz:bg-green-500 (last):bg-blue-500" foo: {bar: baz}))
+        (group
+          (n style: "bg-green-500" foo: {bar: baz})
+          (n style: "bg-blue-500" foo: {bar: baz})))
+
+      ;; Combined
+      (µfold
+        (group
+          (n style: "(first):bg-red-500 foo-bar-baz-2:p-1 (last):bg-blue-500" foo: {bar: {baz: 2}})
+          (n style: "(first):bg-red-500 foo-bar-baz-2:p-1 (last):bg-blue-500" foo: {bar: {baz: 1}}))
+        (group
+          (n style: "bg-red-500 p-1" foo: {bar: {baz: 2}})
+          (n style: "bg-blue-500" foo: {bar: {baz: 1}})))
+
+      ;; Combining pair conditions with pseudo-utilities `present` and `absent`
+      (µfold
+        (n
+          (p "Item A" style: "absent foo:present")
+          (p "Item B" style: "present foo:absent")
+          (p "Item C" style: "foo:absent present")
+          (p "Item D" style: "foo:present absent"))
+        (n
+          (p "Item B")
+          (p "Item C")))
+      (µfold
+        (n
+          (p "Item A" style: "absent foo:present" foo: true)
+          (p "Item B" style: "present foo:absent" foo: true)
+          (p "Item C" style: "foo:absent present" foo: true)
+          (p "Item D" style: "foo:present absent" foo: true))
+        (n
+          (p "Item A" foo: true)
+          (p "Item C" foo: true)))
+
+      ;; Combining pseudo-conditions with pseudo-utilities `present` and `absent`.
+      (µfold
+        (n
+          (p "Item A" style: "absent (period-2):present")
+          (p "Item B" style: "present (period-2):absent")
+          (p "Item C" style: "(period-2):absent present")
+          (p "Item D" style: "(period-2):present absent"))
+        (n
+          (p "Item A")
+          (p "Item B")
+          (p "Item C"))))))
+
+;;
+;; Cue flow essentials
+;;
+
+(group
+  (µfold
+    (group style: "cue-foo has-x:has-z:has-y:cue-xyz has-qux:m-5"
+      (p "Foo" style: "is-x in-xyz:text-blue-300 p-5 in-foo:bg-neutral-500")
+      (p "Bar" style: "is-y in-xyz:text-blue-300 in-xyz:is-qux p-5 in-foo:bg-blue-500")
+      (p "Baz" style: "is-z in-xyz:text-blue-300 p-5 in-foo:bg-blue-600"))
+    (group style: "m-5"
+      (p "Foo" style: "text-blue-300 p-5 bg-neutral-500")
+      (p "Bar" style: "text-blue-300 p-5 bg-blue-500")
+      (p "Baz" style: "text-blue-300 p-5 bg-blue-600")))
+
+  ;; Sealing off parts of the subtree with `membrane`.
+  (µfold
+    (group style: "cue-outer has-qux:m-5"
+      ;; Top-down
+      (group style: "membrane in-outer:cue-inner"
+        (p "One" style: "in-inner:bg-red-500 in-outer:bg-green-500"))
+      ;; Bottom-up
+      (group style: "membrane has-qux:p-3"
+        (p "Two" style: "is-qux"))
+      ;; Top-bottom-top
+      (group style: "membrane in-outer:cue-inner has-qux:p-3"
+        (p "Three" style: "in-inner:is-qux"))
+      ;; Bottom-up-bottom
+      (group style: "membrane has-qux:cue-inner"
+        (p "Four" style: "is-qux in-inner:text-blue-300")))
+    (group
+      (group (p "One" style: "bg-red-500"))
+      (group style: "p-3"
+        (p "Two"))
+      (group style: "p-3"
+        (p "Three"))
+      (group
+        (p "Four" style: "text-blue-300"))))
+
+  ;; Component is tagged with validity, triggers a chain reaction disabling
+  ;; another one if invalid.
+  (group
+    ;; Both valid
+    (µfold
+      (group style: "membrane flow-col gap-3 has-invalid:cue-invalid"
+        (foo style: "flow-col p-1 bg-neutral-200 in-invalid:bg-red-200"
+          (some-input "John Doe" style: "valid-false:is-invalid" valid: true)
+          (p "Username is required" style: "text-red-300 absent in-invalid:present"))
+        (foo style: "flow-col p-1 bg-neutral-200 in-invalid:bg-red-200"
+          (some-input "jd@mail.com" style: "valid-false:is-invalid" valid: true)
+          (p "Email is required" style: "text-red-300 absent in-invalid:present")))
+      (group style: "membrane flow-col gap-3"
+        (foo style: "flow-col p-1 bg-neutral-200"
+          (some-input "John Doe" valid: true))
+        (foo style: "flow-col p-1 bg-neutral-200"
+          (some-input "jd@mail.com" valid: true))))
+
+    ;; Only first valid
+    (µfold
+      (group style: "membrane flow-col gap-3 has-invalid:cue-invalid"
+        (foo style: "p-1 bg-neutral-200 in-invalid:bg-red-200"
+          (some-input "John Doe" style: "valid-false:is-invalid" valid: true)
+          (p "Username is required" style: "text-red-300 absent in-invalid:present"))
+        (foo style: "p-1 bg-neutral-200 in-invalid:bg-red-200"
+          ;; This one fires is-invalid, which triggers a chain reaction to show both
+          ;; messages as invalid.
+          (some-input "jd@mail" style: "valid-false:is-invalid" valid: false)
+          (p "Email is required" style: "text-red-300 absent in-invalid:present")))
+      (group style: "flow-col gap-3"
+        (foo style: "p-1 bg-red-200"
+          (some-input "John Doe" valid: true)
+          (p "Username is required" style: "text-red-300"))
+        (foo style: "p-1 bg-red-200"
+          (some-input "jd@mail" valid: false)
+          (p "Email is required" style: "text-red-300"))))
+
+    ;; Only second valid
+    (µfold
+      (group style: "membrane flow-col gap-3 has-invalid:cue-invalid"
+        (foo style: "p-1 bg-neutral-200 in-invalid:bg-red-200"
+          ;; This one fires is-invalid, which triggers a chain reaction to show both
+          ;; messages as invalid.
+          (some-input "" style: "valid-false:is-invalid" valid: false)
+          (p "Username is required" style: "text-red-300 absent in-invalid:present"))
+        (foo style: "p-1 bg-neutral-200 in-invalid:bg-red-200"
+          (some-input "jd@mail.com" style: "valid-false:is-invalid" valid: true)
+          (p "Email is required" style: "text-red-300 absent in-invalid:present")))
+      (group style: "flow-col gap-3"
+        (foo style: "p-1 bg-red-200"
+          (some-input "" valid: false)
+          (p "Username is required" style: "text-red-300"))
+        (foo style: "p-1 bg-red-200"
+          (some-input "jd@mail.com" valid: true)
+          (p "Email is required" style: "text-red-300"))))
+
+    ;; Both invalid
+    (µfold
+      (group style: "membrane flow-col gap-3 has-invalid:cue-invalid"
+        (foo style: "p-1 bg-neutral-200 in-invalid:bg-red-200"
+          ;; This one fires is-invalid, which triggers a chain reaction to show both
+          ;; messages as invalid.
+          (some-input "" style: "valid-false:is-invalid" valid: false)
+          (p "Username is required" style: "text-red-300 absent in-invalid:present"))
+        (foo style: "p-1 bg-neutral-200 in-invalid:bg-red-200"
+          (some-input "jd@mail" style: "valid-false:is-invalid" valid: false)
+          (p "Email is required" style: "text-red-300 absent in-invalid:present")))
+      (group style: "flow-col gap-3"
+        (foo style: "p-1 bg-red-200"
+          (some-input "" valid: false)
+          (p "Username is required" style: "text-red-300"))
+        (foo style: "p-1 bg-red-200"
+          (some-input "jd@mail" valid: false)
+          (p "Email is required" style: "text-red-300")))))
+
+  ;; Special handling of the `icon` node.
+  (group
+    ;; Found
+    (µfold
+      (icon "account_circle" foo: 123 bar: 456)
+      ;; We have to hard-code this unfortunately; there is no equivalent to `icon`
+      ;; in Microfold.
+      (icon foo: 123 bar: 456
+        (text
+          caption: "\u{E853}"
+          font: "Material Icons Outlined"
+          size: 16
+          leading: 1
+          weight: 400
+          color: (oklch 0.556 0 0))))
+    ;; Not found
+    (µfold
+      (icon "foobar")
+      (icon
+        (text
+          caption: "▨"
+          font: "IBM Plex Sans"
+          size: 16
+          leading: 1
+          weight: 400
+          color: (oklch 0.556 0 0)))
+      problems:
+        ((minor "icon `foobar` not found in the font `Material Icons Outlined` with weight `Regular`")))))
+
+;;
+;; Utility essentials
+;;
+
+(group
+  ;; Parsing short-for and nested short-for: `rounded`
+  (µfold
+    (n x style: "rounded")
+    (n x style: "rounded-tl-md rounded-tr-md rounded-bl-md rounded-br-md"))
+
+  ;; Parsing short-for with argument, parsing `real`, multiplication by spacing: `p`, `m`
+  (group
+    (µfold
+      (n x style: "p-3")
+      (n x style: "pl-3 pr-3 pt-3 pb-3")
+      (n (padding x pl: 12 pr: 12 pt: 12 pb: 12)))
+    (µfold
+      (n x style: "p-1/3")
+      (n x style: "pl-1/3 pr-1/3 pt-1/3 pb-1/3")
+      (n (padding x pl: 4/3 pr: 4/3 pt: 4/3 pb: 4/3)))
+    (µfold
+      (n x style: "p-2.5")
+      (n x style: "pl-2.5 pr-2.5 pt-2.5 pb-2.5")
+      (n (padding x pl: 10 pr: 10 pt: 10 pb: 10)))
+    (µfold
+      (n x style: "-m-3")
+      (n x style: "-ml-3 -mr-3 -mt-3 -mb-3")
+      (n (padding x pl: -12 pr: -12 pt: -12 pb: -12)))
+    (µfold
+      (n x style: "p-foo")
+      (n x)
+      problems: ((major "utility `p-foo` does not exist")))
+    (µfold
+      (n x style: "p-2.")
+      (n x)
+      problems:
+        ((minor "syntax error while parsing decimal argument: expected at least one fractional part digit after `.`; did you mean `2.0`? (`2.⏏`)")
+         (major "utility `p-2.` does not exist")))
+    (µfold
+      (n x style: "p-2/")
+      (n x)
+      problems:
+      ((minor "syntax error while parsing decimal argument: expected at least one digit for the denominator (`2/⏏`)")
+       (major "utility `p-2/` does not exist")))
+    (µfold
+      (n x style: "p-/")
+      (n x)
+      problems: ((major "utility `p-/` does not exist")))
+    (µfold
+      (n x style: "p-3e+10")
+      (n x)
+      problems:
+        ((minor "only fractions and decimal notation allowed, but got `(sci 3 10)`")
+         (major "utility `p-3e+10` does not exist"))))
+
+  ;; (one-of _) parsing: `bg`
+  (group
+    (µfold
+      (n x style: "bg-red-500")
+      (n
+        (z-stack z-index: local
+          (rect fill: (oklch 0.637 0.237 25.331) z-index: -1)
+          x)))
+    (µfold
+      (n x style: "bg-does-not-exist")
+      (n x)
+      problems:
+        ((minor "argument not found in the table `colors`")
+         (major "utility `bg-does-not-exist` does not exist"))))
+
+  ;; `try` (underline)
+  (group
+    (µfold
+      (n "Hi" style: "underline")
+      (n (text caption: "Hi" underline: true)))
+    (µfold
+      (n "Hi" style: "underline-3")
+      (n "Hi" style: "underline-thickness-3"))
+    (µfold
+      (n "Hi" style: "underline-blue-500")
+      (n "Hi" style: "underline-color-blue-500"))
+    (µfold
+      (n "Hi" style: "underline-foo")
+      (n "Hi")
+      problems:
+        ((major "utility `underline-foo` does not exist"))))
+
+  ;; String parsing through wrap-ellipsis property.
+  (group
+    (µfold
+      (n "Hi" style: "" wrap-ellipsis: "foo")
+      (n
+        (text
+          caption: "Hi"
+          wrap-ellipsis: "foo")))
+    (µfold
+      (n "Hi" style: "" wrap-ellipsis: 123)
+      (n "Hi" style: "")
+      problems:
+        ((major "invalid argument"))))
+
+  ;; Integer parsing through selection-anchor property.
+  (group
+    (µfold
+      (n "Hi" style: "font-sans" selection-anchor: 0)
+      (n
+        (text
+          caption: "Hi"
+          font: "IBM Plex Sans"
+          selection-anchor: 0)))
+    (µfold
+      (n "Hi" style: "font-sans" selection-anchor: 0.123)
+      (n (text caption: "Hi" font: "IBM Plex Sans"))
+      problems:
+        ((major "invalid argument")))
+    (µfold
+      (n "Hi" style: "font-sans" selection-anchor: 1/3)
+      (n (text caption: "Hi" font: "IBM Plex Sans"))
+      problems:
+        ((major "invalid argument"))))
+
+  ;; Test unsetting through `text-none`
+  (group
+    (µfold
+      (n "Hi" style: "font-sans text-blue-300")
+      (n (text caption: "Hi" font: "IBM Plex Sans" color: (oklch 0.809 0.105 251.813))))
+    (µfold
+      (n "Hi" style: "font-sans text-blue-300 text-none")
+      (n (text caption: "Hi" font: "IBM Plex Sans")))
+    (µfold
+      (n "Hi" style: "font-sans text-blue-300 text-none text-green-300")
+      (n (text caption: "Hi" font: "IBM Plex Sans" color: (oklch 0.871 0.15 154.449)))))
+
+  ;; Unchecked argument
+  (group
+    (µfold
+      (n x style: "bg-[fill]" fill: (oklch 0.3 0 0))
+      (n fill: (oklch 0.3 0 0)
+        (z-stack z-index: local
+          (rect fill: (oklch 0.3 0 0) z-index: -1)
+          x)))
+    (µfold
+      (n x style: "bg-[fill] border-color-[stroke]" fill: (oklch 0.3 0 0) stroke: (oklch 0.5 0 0))
+      (n fill: (oklch 0.3 0 0) stroke: (oklch 0.5 0 0)
+        (z-stack z-index: local
+          (rect
+            fill: (oklch 0.3 0 0)
+            stroke: (oklch 0.5 0 0)
+            z-index: -1)
+          x)))
+    (µfold
+      (n "Hi" style: "bg-[fill]")
+      (n "Hi" style: "")
+      problems:
+        ((minor "key `fill` not found in node pairspart")
+         (major "utility `bg-[fill]` does not exist")))))
+
+;;
+;; Box hierarchy
+;;
+
+(group
+  ;; Outermost box
+  (group
+    (µfold
+      (n x style: "bg-[a] z-10" a: foo)
+      (n a: foo z-index: 10
+        (z-stack z-index: local
+          (rect fill: foo z-index: -1)
+          x)))
+    ;; By itself
+    (µfold
+      (n x z-index: 123 style: "z-10")
+      (n (box x z-index: 10) z-index: 123))
+    ;; No conflict
+    (µfold
+      (n x style: "bg-[a] m-1 z-10" a: foo)
+      (n a: foo z-index: 10
+        (padding pl: 4 pr: 4 pt: 4 pb: 4
+          (z-stack z-index: local
+            (rect fill: foo z-index: -1)
+            x))))
+    ;; By itself
+    (µfold
+      (n x style: "z-10")
+      (n x z-index: 10)))
+
+  ;; Flow box.
+  (group
+    (µfold
+      (n a b c style: "")
+      (n a b c style: "flow-row")
+      (n (x-stack a b c)))
+    (µfold
+      (n a b c style: "flow-col")
+      (n (y-stack a b c)))
+    (µfold
+      (n a b c style: "flow-none")
+      (n (z-stack a b c)))
+    (µfold
+      (n a b c style: "flow-wrap")
+      (n a b c style: "flow-wrap-x")
+      (n (x-wrap nodes: (a b c))))
+    (µfold
+      (n a b c style: "flow-wrap-y")
+      (n (y-wrap nodes: (a b c))))))
+
+  ;; Exercise the entire box hierarchy.
+  (µfold
+    (group style: "flow-col gap-3 text-blue-500 content-clip content-center p-3 bg-neutral-100 m-5 sized cover-x-50 cover-y-50 max-w-sm right content floating isolate z-100" pan-l: 10
+      "A"
+      "B"
+      "C")
+     (group z-index: 100
+      (composite
+       (floating
+        (content
+         (viewport
+          (align
+           (limit
+            (percents
+             (sized
+              (padding
+               (z-stack
+                (rect fill: (oklch 0.97 0 0) z-index: -1)
+                (padding
+                 (align
+                  (viewport
+                   (y-stack
+                    (text
+                     caption: "A"
+                     color: (oklch 0.623 0.214 259.815))
+                    (text
+                     caption: "B"
+                     color: (oklch 0.623 0.214 259.815))
+                    (text
+                     caption: "C"
+                     color: (oklch 0.623 0.214 259.815))
+                    gap: 12))
+                  x: 0.5
+                  y: 0.5)
+                 pb: 12
+                 pl: 12
+                 pr: 12
+                 pt: 12)
+                z-index: local)
+               pb: 20
+               pl: 20
+               pr: 20
+               pt: 20))
+             h: 0.5
+             w: 0.5)
+            max-w: 384)
+           x: 1)
+          pan-l: 10))))))
+
+;;
+;; Cascade
+;;
+
+(group
+  ;; To items
+  (µfold
+    (group style: "text-blue-500"
+      (p "Line 1")
+      (p "Line 2")
+      (p "Line 3"))
+    (group
+      (p "Line 1" style: "text-blue-500")
+      (p "Line 2" style: "text-blue-500")
+      (p "Line 3" style: "text-blue-500")))
+  ;; Through non-administered parents
+  (µfold
+    (group style: "text-blue-500"
+      (foo (p "Line 1"))
+      (foo (bar (p "Line 2") (p "Line 3")))
+      (p "Line 4"))
+    (group
+      (foo (p "Line 1" style: "text-blue-500"))
+      (foo (bar (p "Line 2" style: "text-blue-500") (p "Line 3" style: "text-blue-500")))
+      (p "Line 4" style: "text-blue-500")))
+  ;; Through administered parents.
+  (µfold
+    (group style: "text-blue-500"
+      (group (p "Line 1"))
+      (group (group (p "Line 2") (p "Line 3")))
+      (p "Line 4"))
+    (group
+      (group (p "Line 1" style: "text-blue-500"))
+      (group (group (p "Line 2" style: "text-blue-500") (p "Line 3" style: "text-blue-500")))
+      (p "Line 4" style: "text-blue-500")))
+  ;; Cascaded override by parent.
+  (µfold
+    (group style: "text-blue-500"
+      (group (p "Line 1"))
+      (group style: "text-red-500" (group (p "Line 2") (p "Line 3")))
+      (p "Line 4"))
+    (group
+      (group (p "Line 1" style: "text-blue-500"))
+      (group (group (p "Line 2" style: "text-red-500") (p "Line 3" style: "text-red-500")))
+      (p "Line 4" style: "text-blue-500")))
+  ;; Cascaded override by child.
+  (µfold
+    (group style: "text-blue-500"
+      (group (p "Line 1" style: "text-red-500"))
+      (group (group (p "Line 2") (p "Line 3" style: "text-green-500")))
+      (p "Line 4"))
+    (group
+      (group (p "Line 1" style: "text-red-500"))
+      (group (group (p "Line 2" style: "text-blue-500") (p "Line 3" style: "text-green-500")))
+      (p "Line 4" style: "text-blue-500"))))
+
+;; Test `presence: true` and `presence: false` on some boxes, how they interact
+;; with conditions.
+(group
+  (µfold
+    (n x style: "content")
+    (n x style: "max content")
+    (n (content x)))
+  (µfold
+    (n x style: "content max")
+    (n x style: "max")
+    (n x))
+  (µfold
+    (n x style: "max cond:content" cond: true)
+    (n (content x) cond: true))
+  (µfold
+    (n x style: "max cond:content")
+    (n x))
+  (µfold
+    (n x style: "content cond:max" cond: true)
+    (n x cond: true))
+  (µfold
+    (n x style: "content cond:max")
+    (n (content x))))

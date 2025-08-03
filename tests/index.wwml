@@ -26,4 +26,7 @@
    tags: (ui dwuir))
  (comparison "UIR regressions"
    (uir "uir.in.wwml") (ppm "uir.expected.ppm")
-   tags: (ui uir)))
+   tags: (ui uir))
+ (test "ufold.test.wwml"
+   color: (oklch 0.7 0.13 290)
+   tags: (ufold)))

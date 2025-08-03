@@ -8,7 +8,7 @@ module Ww
   module Omega
     extend self
 
-    alias Element = Text | Row | Col | Padding | Paint | Flip
+    alias Element = Text | Row | Col | Padding | Paint | Flip | LinePrefix | LineFrags
 
     # :nodoc:
     record Frag, caption : String, style : Style
@@ -66,11 +66,16 @@ module Ww
       Success
       Info
       Error
+      ErrorEmphasis
       Failure
+      FailureEmphasis
+      Italic
     end
 
     # :nodoc:
     defcase Text, caption : String, style : Style
+    # :nodoc:
+    defcase LineFrags, line : Line
     # :nodoc:
     defcase Row, children : Array(Element), gap : Int32
     # :nodoc:
@@ -79,6 +84,8 @@ module Ww
     defcase Flip, children : Array(Element), threshold : Int32, gap_x : Int32, gap_y : Int32
     # :nodoc:
     defcase Padding, child : Element, pt : Int32, pb : Int32, pl : Int32, pr : Int32
+    # :nodoc:
+    defcase LinePrefix, prefix : Element, child : Element
     # :nodoc:
     defcase Paint, child : Element, style : Style
 
@@ -95,6 +102,11 @@ module Ww
     # :ditto:
     def text(caption : StringView, style : Style = :normal, **kwargs)
       text(caption.to_s, style, **kwargs)
+    end
+
+    # :nodoc:
+    def line_frags(line : Line)
+      LineFrags.new(line)
     end
 
     # Paints the output of *child* using *style*.
@@ -123,9 +135,20 @@ module Ww
       Padding.new(child, pt: py + pt, pb: py + pb, pl: px + pl, pr: px + pr)
     end
 
+    # Prefixes each line produced by *child* with an element *prefix*.
+    def line_prefix(prefix, child)
+      LinePrefix.new(prefix, child)
+    end
+
     # Displays a row of elements with the given *gap* between them.
     def row(*els, gap = 0)
-      Row.new([*els] of Element, gap)
+      children = [] of Element
+      els.each do |el|
+        next if el.nil?
+        children << el
+      end
+
+      Row.new(children, gap)
     end
 
     # :ditto:
@@ -133,14 +156,34 @@ module Ww
       Row.new(els, gap)
     end
 
+    # :ditto:
+    def row(els : Array(T), **kwargs, & : T -> Ω::Element) forall T
+      row(els.map { |object| (yield object).as(Ω::Element) }, **kwargs)
+    end
+
     # Displays a column of elements with the given *gap* between them.
     def col(*els, gap = 0)
-      Col.new([*els] of Element, gap)
+      children = [] of Element
+      els.each do |el|
+        next if el.nil?
+        children << el
+      end
+
+      Col.new(children, gap)
     end
 
     # :ditto:
     def col(els : Array(Element), gap = 0)
       Col.new(els, gap)
+    end
+
+    # :ditto:
+    def col(els : Array(T), **kwargs, & : T -> Ω::Element) forall T
+      col(els.map { |object| (yield object).as(Ω::Element) }, **kwargs)
+    end
+
+    private def each_line(el : LineFrags, &sink : Line ->)
+      sink.call(el.line)
     end
 
     private def each_line(el : Text, &sink : Line ->)
@@ -155,6 +198,12 @@ module Ww
       end
 
       el.pb.times { sink.call(Line.new("", :normal)) }
+    end
+
+    private def each_line(el : LinePrefix, &sink : Line ->)
+      each_line(el.child) do |line|
+        each_line(row(el.prefix, line_frags(line)), &sink)
+      end
     end
 
     private def each_line(el : Col, &sink : Line ->)
@@ -254,6 +303,8 @@ module Ww
           in .normal?
           in .emphasis?
             io << "\e[0;1;97m" # reset, bold, white
+          in .italic?
+            io << "\e[0;3m" # reset, italic
           in .dim?
             io << "\e[0;90m" # reset, dark gray
           in .code?
@@ -262,8 +313,12 @@ module Ww
             io << "\e[0;32m" # reset, green
           in .failure?
             io << "\e[0;31m" # reset, red
+          in .failure_emphasis?
+            io << "\e[0;1;31m" # reset, bold, red
           in .error?
             io << "\e[0;93m" # reset, dark yellow
+          in .error_emphasis?
+            io << "\e[0;1;93m" # reset, bold, dark yellow
           in .info?
             io << "\e[0;34m" # reset, blue
           in .link?

@@ -83,9 +83,18 @@ module Component
       pb: 1,
     )
   end
+
+  def processing(item)
+    Ω.row(
+      Ω.text("Processing"),
+      Ω.painted(Ω.text(ML.compact(item), wrap: false), :italic),
+      gap: 1
+    )
+  end
 end
 
 alias MM = Meridium
+alias Mf = Soma::Microfold
 alias Cell = Char, Color ->
 alias Color = Soma::DwUIR::Color
 
@@ -200,7 +209,7 @@ class TestHarness
       yield({ncols, nrows})
 
       Termbox.write(
-        "All tests complete. Press any key to view results.",
+        "All tests complete.",
         x: 2,
         y: nrows + 2,
         fg: PREVIEW_FG | Termbox::Color::Bold,
@@ -208,7 +217,8 @@ class TestHarness
       )
 
       Termbox.present
-      Termbox.poll
+
+      sleep 1.second
     end
   end
 
@@ -373,7 +383,7 @@ class TestGroup
       if complaints.present?
         cell.call('X', Color.named("red"))
       else
-        cell.call('•', @color)
+        cell.call('·', @color)
       end
 
       TestContrib.new(path, text, dt, complaints)
@@ -562,7 +572,9 @@ def tspace(flow : Term::Dict, & : Term, Term ->)
   end
 end
 
-def test(test, path, keypath, stem, srcmap, text) : Bool
+defcase TestContext, theme : Mf::Theme
+
+def test(ctx, test, path, keypath, stem, srcmap, text) : Bool
   Term.case(stem) do
     # Descend into (group _*)
     givenpi %[_* (group _*) node] { true }
@@ -1063,6 +1075,62 @@ def test(test, path, keypath, stem, srcmap, text) : Bool
       false # no descend
     end
 
+    # Microfold tests
+    givenpi %[_* testcase←(µfold variants_+ ⍊ problems⋮ ()) node] do
+      test.short(path, text) do |complaints|
+        any_failed = false
+
+        results = variants.items.map do |variant|
+          render, bts = Mf.render(ctx.theme, variant, severity: :minor)
+          any_failed ||= bts.present?
+
+          bts.each do |bt|
+            dense = Term.of(Term::Sym.new(bt.severity.to_s.underscore), bt.detail)
+
+            unless dense.in?(problems.items)
+              complaints << Component.complaint(
+                title: "Unexected Microfold render problem",
+                sections: [
+                  {"TEST CASE", testcase},
+                  {"PROBLEM", dense},
+                ],
+              )
+            end
+          end
+
+          render
+        end
+
+        if !any_failed && problems.items.present?
+          complaints << Component.complaint(
+            title: "Microfold render did not detect any problems",
+            sections: [
+              {"TEST CASE", testcase},
+            ],
+          )
+        end
+
+        expected = results[0]
+        (1...results.size).each do |index|
+          result = results[index]
+          next if expected == result
+
+          complaints << Component.complaint(
+            title: "Microfold render mismatch",
+            sections: [
+              {"TEST CASE", testcase},
+              {"REFERENCE RENDER", expected},
+              {"GOT RENDER", result},
+            ],
+          )
+        end
+      end
+
+      false # no descend
+    end
+
+    # TODO: maybe notify of reachable-invalid test cases?
+
     otherwise do
       false # no descend
     end
@@ -1070,15 +1138,15 @@ def test(test, path, keypath, stem, srcmap, text) : Bool
 end
 
 # Runs a generic test.
-def test(test, path, content, srcmap)
+def test(ctx, test, path, content, srcmap)
   Term.each_itemspart_stem(content.as_d) do |keypath, stem|
     location = srcmap[keypath]
-    test(test, path, keypath, stem, srcmap, location)
+    test(ctx, test, path, keypath, stem, srcmap, location)
   end
 end
 
 # Runs a comparison test.
-def compare(test, specpath, title, a, b, text)
+def compare(ctx, test, specpath, title, a, b, text)
   Term.case({a, b}) do
     # Compares WwML source code to gzipped WwLR.
     givenpi %[(ml apath_string) (lr.gz bpath_string)] do
@@ -1183,7 +1251,9 @@ args.each do |arg|
   end
 end
 
-Ω.render(STDOUT, Ω.text("Wirewright tests tool", style: :emphasis))
+Ω.render(STDOUT, Ω.text("Wirewright tests tool", style: :emphasis), styled: styled)
+
+ctx = TestContext.new(theme: Mf.theme(ML.document(File.read("./theme.ufold.wwml")).as_d, rem: Term[16]))
 
 success = TestHarness.new(preview: preview, styled: styled) do |harness|
   specpath = Path["tests"] / "index.wwml"
@@ -1198,19 +1268,13 @@ success = TestHarness.new(preview: preview, styled: styled) do |harness|
           enabled = tags.items.any?(&.in?(focused)) || (focused.empty? && tags.items.none?(&.in?(disabled)))
           next unless enabled
 
-          Ω.render(STDOUT,
-            Ω.row(
-              Ω.text("Processing"),
-              Ω.painted(Ω.padding(Ω.text(ML.compact(item), wrap: false), pl: 2, pr: 2), :code),
-              gap: 1
-            )
-          )
+          Ω.render(STDOUT, Component.processing(item), styled: styled)
 
           path = Path["tests"] / file.to(String)
           source = File.read(path)
 
           harness.group(Color.term(color)) do |test|
-            test(test, path, *ML.terms_and_srcmap(source, filename: path.to_s))
+            test(ctx, test, path, *ML.terms_and_srcmap(source, filename: path.to_s))
           end
         end
 
@@ -1218,16 +1282,10 @@ success = TestHarness.new(preview: preview, styled: styled) do |harness|
           enabled = tags.items.any?(&.in?(focused)) || (focused.empty? && tags.items.none?(&.in?(disabled)))
           next unless enabled
 
-          Ω.render(STDOUT,
-            Ω.row(
-              Ω.text("Processing"),
-              Ω.painted(Ω.padding(Ω.text(ML.compact(item), wrap: false), pl: 2, pr: 2), :code),
-              gap: 1
-            )
-          )
+          Ω.render(STDOUT, Component.processing(item), styled: styled)
 
           harness.group(Color.term(color)) do |test|
-            compare(test, specpath, title, left, right, text)
+            compare(ctx, test, specpath, title, left, right, text)
           end
         end
 
