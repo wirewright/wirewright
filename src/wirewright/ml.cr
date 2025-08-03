@@ -94,6 +94,31 @@ module Ww::ML
     end
   end
 
+  # Constructs a document term from the given WwML *source* string.
+  #
+  # Raises `SyntaxError` on invalid input.
+  def document(source : String, *, filename : String = "scratch", addons : Addons = Addons.recommended) : Term
+    begin
+      atoms = Lexeme.atoms(source)
+    rescue e : SyntaxError
+      # Lexical error
+      e.filename = filename
+      raise e
+    end
+
+    reader = Reader.new(atoms, addons: addons)
+
+    case π = Reader.validated(source, reader.document)
+    in Reader::Parseout::Ok
+      π.term
+    in Reader::Parseout::Err
+      # Parse error
+      raise SyntaxError.new(π.detail, π.text, filename: filename)
+    end
+  end
+
+  alias SrcMap = Hash(Term::Dict, StringView)
+
   {% for method in %w[term terms document] %}
     # Same as `{{method.id}}`, but also builds a *source map*. The source map
     # maps keypaths into the returned term to corresponding views of *source*.
@@ -102,7 +127,7 @@ module Ww::ML
     # that if you must.
     #
     # NOTE: this method is not expected to be fast.
-    def {{method.id}}_and_srcmap(source : String, **kwargs) : {Term, Hash(Term::Dict, StringView)}
+    def {{method.id}}_and_srcmap(source : String, **kwargs) : {Term, SrcMap}
       addons = kwargs[:addons]? || Addons.recommended
       if addons.location?
         raise ArgumentError.new("use of location addon conflicts with `term_and_srcmap`")
@@ -149,29 +174,6 @@ module Ww::ML
     end
 
     {term, srcmap}
-  end
-
-  # Constructs a document term from the given WwML *source* string.
-  #
-  # Raises `SyntaxError` on invalid input.
-  def document(source : String, *, filename : String = "scratch", addons : Addons = Addons.recommended) : Term
-    begin
-      atoms = Lexeme.atoms(source)
-    rescue e : SyntaxError
-      # Lexical error
-      e.filename = filename
-      raise e
-    end
-
-    reader = Reader.new(atoms, addons: addons)
-
-    case π = Reader.validated(source, reader.document)
-    in Reader::Parseout::Ok
-      π.term
-    in Reader::Parseout::Err
-      # Parse error
-      raise SyntaxError.new(π.detail, π.text, filename: filename)
-    end
   end
 
   # :nodoc:
