@@ -740,6 +740,12 @@ class Stack(T)
     end
   end
 
+  def clone
+    reduce(Stack(T).new(size)) do |copy, value|
+      copy << value.clone
+    end
+  end
+
   def slice : Slice(T)
     @stack.to_slice(@size)
   end
@@ -1255,12 +1261,16 @@ struct StringView
     true
   end
 
-  def prefixed_by?(ch : Char) : Bool
-    bytesize > ch.bytesize && starts_with?(ch)
+  def prefixed_by?(object) : Bool
+    bytesize > object.bytesize && starts_with?(object)
   end
 
-  def postfixed_by?(ch : Char) : Bool
-    bytesize > ch.bytesize && starts_with?(ch)
+  def postfixed_by?(object) : Bool
+    bytesize > object.bytesize && ends_with?(object)
+  end
+
+  def surrounded_by?(l, r) : Bool
+    prefixed_by?(l) && postfixed_by?(r)
   end
 
   def starts_with?(range : Range(Char, Char)) : Bool
@@ -1369,6 +1379,14 @@ struct StringView
     StringView.new(@string, other.@byte_start, @byte_start, ascii_only?)
   end
 
+  def []?(byte_range : Range)
+    return unless response = Indexable.range_to_index_and_count(byte_range, bytesize)
+
+    byte_offset, byte_count = response
+
+    StringView.new(@string, @byte_start + byte_offset, @byte_start + byte_offset + byte_count, ascii_only?)
+  end
+
   def []?(index : Int32) : Char?
     if index == 0
       return first_char?
@@ -1383,8 +1401,8 @@ struct StringView
     @string[offset + index]?
   end
 
-  def [](index : Int32) : Char
-    self[index]? || raise IndexError.new
+  def [](object)
+    self[object]? || raise IndexError.new
   end
 
   # NOTE: this is probably not what you want. You probably want `lskip`
@@ -1731,12 +1749,51 @@ struct StringView
     partition { |ch| ch == separator }
   end
 
+  def rpartition(& : Char -> Bool)
+    reader = Char::Reader.new(@string, pos: byte_end)
+
+    single_bytes = true
+
+    loop do
+      # Not found
+      if reader.pos == byte_start
+        return before_begin, before_begin, self
+      end
+
+      reader.previous_char
+      if yield reader.current_char
+        l = StringView.new(@string, @byte_start, reader.pos, ascii_only?)
+        m = StringView.new(@string, reader.pos, reader.pos + reader.current_char_width, reader.current_char_width == 1)
+        r = StringView.new(@string, reader.pos + reader.current_char_width, byte_end, single_bytes)
+        return l, m, r
+      end
+
+      single_bytes &&= reader.current_char_width == 1
+    end
+  end
+
+  def rpartition(separator : Char)
+    rpartition { |ch| ch == separator }
+  end
+
+  def split(separator : Char)
+    segments = [] of StringView
+    split(separator) do |segment|
+      segments << segment
+    end
+    segments
+  end
+
   def split(separator : Char, &)
+    split_and_rest(separator) { |segment, _| yield segment }
+  end
+
+  def split_and_rest(separator : Char, &)
     lhs = self
 
     until lhs.empty?
       lhs, _, rest = lhs.partition(separator)
-      yield lhs
+      yield lhs, rest
       lhs = rest
     end
   end
@@ -1989,6 +2046,34 @@ struct StringView
     super
   end
 
+  def show(io : IO, view : StringView) : Nil
+    unless @string.same?(view.@string)
+      raise ArgumentError.new
+    end
+
+    each_char_with_abs_byte_index do |chr, byte_index|
+      if view.empty?
+        if byte_index == view.byte_start
+          io << '⏏'
+        end
+        io << chr
+        next
+      end
+
+      io << '⏏' if byte_index.entering?(view.byte_bounds)
+      io << chr
+      io << '⏏' if byte_index.leaving?(view.byte_bounds, size: chr.bytesize)
+    end
+
+    if view.empty? && view.byte_start == byte_end
+      io << '⏏'
+    end
+  end
+
+  def show(view : StringView) : String
+    String.build { |io| show(io, view) }
+  end
+
   def to_slice : Bytes
     @string.to_slice[@byte_start, byte_end - @byte_start]
   end
@@ -2009,8 +2094,16 @@ struct StringView
     io << "\"…"
   end
 
+  def ==(other : String)
+    to_slice == other.to_slice
+  end
+
   def ==(other : Char)
-    starts_with?(other)
+    bytesize == other.bytesize && starts_with?(other)
+  end
+
+  def clone
+    self
   end
 
   def_equals_and_hash to_slice
@@ -2136,8 +2229,12 @@ class String
     bytesize > object.bytesize && starts_with?(object)
   end
 
-  def postfixed_by?(char : Char)
-    size > 1 && ends_with?(char)
+  def postfixed_by?(object)
+    bytesize > object.bytesize && ends_with?(char)
+  end
+
+  def surrounded_by?(l, r)
+    prefixed_by?(l) && postfixed_by?(r)
   end
 
   def rcut(search : Char) : Tuple(Bytes, Bytes?)
@@ -3150,6 +3247,10 @@ module Indexable(T)
 
     true
   end
+
+  def starts_with?(other : Indexable)
+    starts_with?(other) { |a, b| a == b }
+  end
 end
 
 struct Slice(T)
@@ -3324,22 +3425,27 @@ struct Time::Span
 
     k1 = 1000u64
 
-    if nanos < k1**1
-      io << (nanos/k1**0).round(2) << "ns"
+    if self < 1.nanosecond
+      io << total_nanoseconds.round(2) << "ns"
       return
     end
 
-    if nanos < k1**2
-      io << (nanos/k1**1).round(2) << "µs"
+    if self < 1.millisecond
+      io << total_microseconds.round(2) << "µs"
       return
     end
 
-    if nanos < k1**3
-      io << (nanos/k1**2).round(2) << "ms"
+    if self < 1.second
+      io << total_milliseconds.round(2) << "ms"
       return
     end
 
-    io << (nanos/k1**3).round(2) << "s"
+    if self < 1.minute
+      io << total_seconds.round(2) << "s"
+      return
+    end
+
+    io << total_minutes.round(2) << "m"
   end
 
   def humanize
@@ -3525,8 +3631,8 @@ struct Int
     !range.includes?(self - 1) && range.includes?(self)
   end
 
-  def leaving?(range : Range(Int32, Int32)) : Bool
-    range.includes?(self) && !range.includes?(self + 1)
+  def leaving?(range : Range(Int32, Int32), size = 1) : Bool
+    range.includes?(self) && !range.includes?(self + size)
   end
 
   def self.min
@@ -3675,15 +3781,15 @@ struct SyncCache(K, V)
       @data = {} of K => V
     end
     @data.compare_by_identity if byref
-    @lock = Mutex.new
+    @lock = Sync::RWLock.new
   end
 
   def load?(key : K) : V?
-    @lock.synchronize { @data[key]? }
+    @lock.read { @data[key]? }
   end
 
   def store(key : K, value : V) : Nil
-    @lock.synchronize do
+    @lock.write do
       if @data.size > @capacity
         @data.delete(@data.first_key)
       end
