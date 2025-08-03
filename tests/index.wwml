@@ -4,22 +4,22 @@
 ;;
 
 ((test "ml.test.wwml"
-   color: orange
+   color: (oklch 0.7 0.13 30)
    tags: (ml))
  (comparison "WwML Corpus"
    (ml "corpus.in.wwml") (lr.gz "corpus.expected.wwlr.gz")
    tags: (ml ml-corpus))
  (test "patterns.test.wwml"
-   color: magenta
+   color: (oklch 0.7 0.13 140)
    tags: (patterns m1))
  (test "editor.test.wwml"
-   color: lightpink
+   color: (oklch 0.7 0.13 250)
    tags: (editor))
  (test "delta7.test.wwml"
-   color: lightgreen
+   color: (oklch 0.7 0.13 70)
    tags: (d7))
  (test "tspace.test.wwml"
-   color: white
+   color: (oklch 0.7 0.13 180)
    tags: (tspace))
  (comparison "DwUIR regressions"
    (dwuir "dwuir.in.wwml") (ppm "dwuir.expected.ppm")
