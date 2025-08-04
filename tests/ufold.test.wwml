@@ -903,6 +903,11 @@
       problems:
         ((major "utility `underline-foo` does not exist"))))
 
+  ;; `try` of `short-for`s (border)
+  (µfold
+    (n x style: "border-1 border-blue-500")
+    (n x style: "border-x-1 border-y-1 border-color-blue-500"))
+
   ;; String parsing through wrap-ellipsis property.
   (group
     (µfold

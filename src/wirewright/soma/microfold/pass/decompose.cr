@@ -116,6 +116,25 @@ module Ww::Soma::Microfold::Pass
             end
           end
 
+          # |@ soma.microfold.theme.utility-spec.try
+          #
+          # |@block
+          # Picks the first successful branch.
+          #
+          # NOTE: You are recommended to define a separate utility for each leaf branch
+          # in addition to the group shorthand `try`; otherwise, it will be impossible
+          # to target any branch past the first one with the `utility-[*]` form (aka
+          # unchecked argument). Unchecked arguments are not parsed or validated;
+          # thus, the first branch will always succeed for them.
+          # |@endblock
+          matchpi %[(try branches_+)] do
+            issues.suppress do
+              branches.items.each do |branch|
+                return if committed?(ctx.sink) { utility(ctx, branch, rest, issues) }
+              end
+            end
+          end
+
           # |@ soma.microfold.theme.utility-spec.leaf
           #
           # |@block
@@ -155,25 +174,6 @@ module Ww::Soma::Microfold::Pass
             ctx.sink << Term.of(:mixin, rank: Rank::Style, box: box, plus: instance, minus: unset.as_nonempty_d?)
           end
 
-          # |@ soma.microfold.theme.utility-spec.try
-          #
-          # |@block
-          # Picks the first successful branch.
-          #
-          # NOTE: You are recommended to define a separate utility for each leaf branch
-          # in addition to the group shorthand `try`; otherwise, it will be impossible
-          # to target any branch past the first one with the `utility-[*]` form (aka
-          # unchecked argument). Unchecked arguments are not parsed or validated;
-          # thus, the first branch will always succeed for them.
-          # |@endblock
-          matchpi %[(try branches_+)] do
-            branches.items.each do |branch|
-              issues.suppress do
-                return if committed?(ctx.sink) { utility(ctx, branch, rest, issues) }
-              end
-            end
-          end
-
           otherwise do
             issues.severe("unrecognized utility spec #{spec}")
           end
@@ -203,8 +203,8 @@ module Ww::Soma::Microfold::Pass
           # See `soma.microfold.theme.utility-spec.try`.
           # |@endblock
           matchpi %[(try branches_+)] do
-            branches.items.each do |branch|
-              issues.suppress do
+            issues.suppress do
+              branches.items.each do |branch|
                 return if committed?(ctx.sink) { prop(ctx, branch, arg, issues) }
               end
             end
