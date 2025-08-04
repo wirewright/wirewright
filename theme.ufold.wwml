@@ -628,7 +628,7 @@ button: "font-sans font-normal text-sm bg-neutral-700 text-neutral-200 hover:bg-
 ;;
 ;; Reference: https://tailwindcss.com/docs/opacity
 
-"opacity": (outermost-box real {opacity: $(* (local arg) percents)})
+"opacity": (composite-box real {opacity: $(* (local arg) percents)})
 
 ;; Cursor utilities.
 ;;
