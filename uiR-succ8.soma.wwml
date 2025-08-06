@@ -139,6 +139,17 @@
 (sized _ ⍊ dn-w⫽h: ±λ ⋮final-w⫽h) <> {final-w⫽h: →λ}
 
 ;;
+;; window
+;;
+
+;; The window node will force a certain width/height, presumably the actual
+;; (system) window size. You can always opt out by making the content node
+;; a descendant; if not for this rule, there would have been no way to
+;; "opt in" otherwise.
+(window {¦ up-w⫽h: ±λ -dn-w⫽h_} ⍊ ±⸨width,height⸩)
+  <> {dn-w⫽h: →⸨width,height⸩, (λ): ()}
+
+;;
 ;; rect, svg
 ;;
 (⟦rect,svg⟧ ⍊ dn-w⫽h: ±λ ⋮final-w⫽h) <> {final-w⫽h: →λ, (λ): ()}
