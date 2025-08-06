@@ -19,7 +19,7 @@ struct Ww::Term
     PATTERN_TERM_ID = [0u32]
 
     # :nodoc:
-    PATTERN_TERM_CACHE = Sync::Map(UInt32, Term).new
+    PATTERN_TERM_CACHE = SyncCache(UInt32, Term).new(16_384, preallocate: true)
 
     # :nodoc:
     def reflect(ml : String) : Nil

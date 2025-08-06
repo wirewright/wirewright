@@ -4382,7 +4382,7 @@ module ::Ww::M1
     storage
   end
 
-  PATTERN_CACHE = Sync::Map(Term, Operator::Any).new
+  PATTERN_CACHE = SyncCache(Term, Operator::Any).new(16_384, preallocate: true)
 
   {% if flag?(:popt_0) %}
     DEFAULT_OPT_LEVEL = O0
@@ -4406,17 +4406,12 @@ module ::Ww::M1
       return operator0(pattern, **kwargs)
     end
 
-    # Optimistic fast path: fetch from cache
-    if operator = PATTERN_CACHE[pattern]?
-      return operator
+    PATTERN_CACHE.put_if_absent(pattern) do
+      # Slow path: compile and add to cache. Sometimes multiple threads will do
+      # multiple times the work; that's fine. We cannot block because that'd cause
+      # a deadlock -- operator0() may in turn call operator() at some point and so on.
+      operator0(pattern, **kwargs)
     end
-
-    # Slow path: compile and add to cache. Sometimes multiple threads will do
-    # multiple times the work; that's fine. We cannot block because that'd cause
-    # a deadlock -- operator0() may in turn call operator() at some point and so on.
-    operator = operator0(pattern, **kwargs)
-
-    PATTERN_CACHE.put_if_absent(pattern, operator)
   end
 
   def self.matches(pattern : Term, matchee : Term, *, env : Term::Dict = Term[], opt = DEFAULT_OPT_LEVEL, **kwargs) : Array(Term::Dict)

@@ -2230,7 +2230,7 @@ class String
   end
 
   def postfixed_by?(object)
-    bytesize > object.bytesize && ends_with?(char)
+    bytesize > object.bytesize && ends_with?(object)
   end
 
   def surrounded_by?(l, r)
@@ -3507,11 +3507,20 @@ struct Bag(T)
     end
   end
 
+  def delete_all(object)
+    @storage.delete(object)
+    self
+  end
+
   def each(& : T ->)
+    each_with_tally do |object, tally|
+      tally.times { yield object }
+    end
+  end
+
+  def each_with_tally(& : T, Int32 ->)
     @storage.each do |object, tally|
-      tally.times do
-        yield object
-      end
+      yield object, tally.to_i
     end
   end
 
@@ -3558,6 +3567,10 @@ struct Bag(T)
     Bag.new(difference)
   end
 
+  def dup
+    Bag.new(@storage.dup)
+  end
+
   def set : Set(T)
     set = Set(T).new(@storage.size)
     @storage.each do |object, _|
@@ -3575,14 +3588,24 @@ struct Bag(T)
   end
 
   def inspect(io)
-    io << "{"
+    io << "Bag{"
     @storage.join(io, ", ") do |(object, tally)|
       if tally > 1
-        io << tally << " x "
+        io << tally << "×"
       end
       object.inspect(io)
     end
     io << "}"
+  end
+end
+
+module Enumerable(T)
+  def to_bag(& : T -> U) : Bag(U) forall U
+    bag = Bag(U).new
+    each do |object|
+      bag << yield object
+    end
+    bag
   end
 end
 
@@ -3773,7 +3796,10 @@ end
 # But then finding the node to delete would be clumsy. We can do it as HAMT to
 # map key to index + Binary Tree but this requires balancing in any case if we
 # want some kind of order -- which is tough...
-struct SyncCache(K, V)
+#
+# TODO: lots of very hot places rely on this. split into buckets & in general
+# see SOTA parallel hashes !!! Sync Map is buggy and causes occasional deadlocks.
+class SyncCache(K, V)
   def initialize(@capacity : Int32, *, preallocate : Bool, byref : Bool = false)
     if preallocate
       @data = Hash(K, V).new(initial_capacity: @capacity)
@@ -4234,9 +4260,13 @@ module Digest::CRC16
   end
 end
 
+# TODO: lots of very hot places rely on this. split into buckets & in general
+# see SOTA parallel hashes !!! Sync Map is buggy and causes occasional deadlocks.
 struct SyncHash(K, V)
-  @hash = {} of K => V
-  @lock = Sync::RWLock.new
+  def initialize(initial_capacity : Int32? = nil)
+    @hash = Hash(K, V).new(initial_capacity: initial_capacity)
+    @lock = Sync::RWLock.new
+  end
 
   def size : Int32
     @lock.read { @hash.size }

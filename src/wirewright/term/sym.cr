@@ -63,7 +63,7 @@ module Ww
       end
     end
 
-    @@encode = Sync::Map(Bytes, UInt32).new(initial_capacity: 1024)
+    @@encode = SyncHash(Bytes, UInt32).new(1024)
     @@decode = Sync::Shared(Array(Bytes)).new(Array(Bytes).new(initial_capacity: 1024))
 
     # Ref used for symbols such as `_`, `_number`, `_string`, etc. that have
