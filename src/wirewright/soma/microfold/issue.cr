@@ -54,7 +54,7 @@ module Ww::Soma::Microfold::Issue
           view = srcmap[copy]?
         end
 
-        omega = Ω.row(Ω.text("node with keypath"), Ω.text(copy.items.join(":"), :emphasis), gap: 1)
+        omega = Ω.row(Ω.text("node with keypath"), Ω.text(keypath.join(":"), :emphasis), gap: 1)
 
         if view
           _, line, column = ML::SyntaxError.lookaround(view)
