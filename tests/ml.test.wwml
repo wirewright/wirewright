@@ -180,10 +180,10 @@
   ;; TODO
 
   ;; Interpolation in strings.
-  (= ⎡"⸢100⸣"⎤ ⎡100⎤)
-  (= ⎡"⸢(+ 1 2)⸣"⎤ ⎡(+ 1 2)⎤)
+  (= ⎡"⸢100⸣"⎤ ⎡(~ 100)⎤)
+  (= ⎡"⸢(+ 1 2)⸣"⎤ ⎡(~ (+ 1 2))⎤)
   (= ⎡"⸢"hello world"⸣"⎤ ⎡"hello world"⎤)
-  (= ⎡"⸢"hello ⸢qux⸣ world"⸣"⎤ ⎡(~ "hello " qux " world")⎤)
+  (= ⎡"⸢"hello ⸢qux⸣ world"⸣"⎤ ⎡(~ (~ "hello " qux " world"))⎤)
   (= ⎡"foo ⸢"hello ⸢qux⸣ world"⸣ bar"⎤ ⎡(~ "foo " (~ "hello " qux " world") " bar")⎤)
   (= ⎡"Your name is ⸢name⸣"⎤ ⎡(~ "Your name is " name)⎤)
 

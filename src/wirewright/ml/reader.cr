@@ -412,8 +412,13 @@ module Ww::ML
         # ""
         ok("")
       when {Term, .nil?}
-        # "foo"
-        ok(segment0)
+        if segment0.type.string?
+          # "foo"
+          ok(segment0)
+        else
+          # "⸢x⸣"
+          ok(Term.of(:~, segment0))
+        end
       when {Term, Array(Term)}
         # "foo ⸢bar⸣ baz"
         stitch = Term::Dict.build do |commit|
