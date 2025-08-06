@@ -1,5 +1,10 @@
 require "./src/wirewright"
 
+# FIXME: this impl of alloy is falling apart & is too slow, it must be rewritten
+# FIXME: we must pay extreme amounts of attention to injection semantics. Alloy
+#  is a templating engine that is sometimes nestedly used. Everything must be
+#  one-off unless the user says otherwise, or recursive rewriting is obviously needed.
+
 module Alloy
   extend self
 
@@ -217,7 +222,7 @@ module Alloy
     end
   end
 
-  # Attempts to parse *term* as `^each` expression.
+  # Attempts to parse *term* as `aeach` expression.
   private def meach(ctx : Context, term : Term) : Rewrite::Any
     variants = [] of String
 
@@ -317,7 +322,7 @@ module Alloy
     variants = [] of String
 
     Term.case(term, patterns: variants) do
-      matchpi %{(^extend template_dict extension_)} do
+      matchpi %{(^extend template_ extension_)} do
         result = rewrite(extension, ctx.exprR)
         unless result = result.as_d?
           ctx.error { "^extend expected the result of extension to be a dict, but got: #{result}" }
@@ -325,7 +330,17 @@ module Alloy
           return Rewrite.one(template)
         end
 
-        Rewrite.one(template.unsafe_as_d | result)
+        if rewrite = rewrite0(template, ctx.templateR).as?(Rewrite::Some)
+          replacement = rewrite.term?
+        else
+          replacement = template
+        end
+
+        if result.type.dict?
+          Rewrite.one(replacement | result)
+        else
+          Rewrite.one(replacement)
+        end
       end
 
       otherwise do
@@ -397,8 +412,8 @@ module Alloy
       { %{rewritee←[^if _*]}, chainR(callR(->mif(Context, Term).partial(ctx)), rec_template) },
       { %{rewritee←[^unless _*]}, chainR(callR(->munless(Context, Term).partial(ctx)), rec_template) },
       { %{rewritee←[^each _*]}, callR(->meach(Context, Term).partial(ctx)) },
-      { %{rewritee←[^ _*]}, chainR(callR(->expr(Context, Term).partial(ctx)), rec_template) },
-      { %{rewritee←[^extend _*]}, chainR(callR(->mextend(Context, Term).partial(ctx)), rec_template) },
+      { %{rewritee←[^ _*]}, callR(->expr(Context, Term).partial(ctx)) },
+      { %{rewritee←[^extend _*]}, callR(->mextend(Context, Term).partial(ctx)) },
       { %{rewritee←[^fallback _*]}, callR(->fallback(Context, Term).partial(ctx)) },
       { %{rewritee←[^verbatim _*]}, callR(->verbatim(Context, Term).partial(ctx)) },
       { %{rewritee_dict}, entriesR(rec_template) },
