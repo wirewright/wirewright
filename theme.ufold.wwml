@@ -495,12 +495,19 @@ button: "font-sans font-normal text-sm bg-neutral-700 text-neutral-200 hover:bg-
 ;;
 
 "d": (short-for "dl" "dt")
+"sd": (short-for "sdl" "sdt")
 
 "dl": (outermost-box real {dl: $(* (local arg) (global rem))})
 "dt": (outermost-box real {dt: $(* (local arg) (global rem))})
 
+"sdl": (outermost-box real {dl: $(* (local arg) (global spacing))})
+"sdt": (outermost-box real {dt: $(* (local arg) (global spacing))})
+
 "-dl": (outermost-box real {dl: $(* (local arg) (global -rem))})
 "-dt": (outermost-box real {dt: $(* (local arg) (global -rem))})
+
+"-sdl": (outermost-box real {dl: $(* (local arg) (global -spacing))})
+"-sdt": (outermost-box real {dt: $(* (local arg) (global -spacing))})
 
 ;;
 ;; Center node utilities.
@@ -516,8 +523,8 @@ button: "font-sans font-normal text-sm bg-neutral-700 text-neutral-200 hover:bg-
 "center-x": (align-box {x: 0.5})
 "center-y": (align-box {y: 0.5})
 
-"align-x": (align-box real {x: $(* (local arg) percents)})
-"align-y": (align-box real {y: $(* (local arg) percents)})
+"x": (align-box real {x: $(* (local arg) percents)})
+"y": (align-box real {y: $(* (local arg) percents)})
 
 "content-top": (content-align-box {y: 0})
 "content-bottom": (content-align-box {y: 1})
@@ -646,7 +653,7 @@ button: "font-sans font-normal text-sm bg-neutral-700 text-neutral-200 hover:bg-
 "cursor-resize-bl-tr": (outermost-box {cursor: resize-bl-tr})
 "cursor-resize-x": (outermost-box {cursor: resize-x})
 "cursor-resize-y": (outermost-box {cursor: resize-y})
-"cursor-resize-all": (outermost-box {cursor: resize-all})
+"cursor-resize": (outermost-box {cursor: resize})
 "cursor-not-allowed": (outermost-box {cursor: not-allowed})
 
 ;;
@@ -711,7 +718,7 @@ button: "font-sans font-normal text-sm bg-neutral-700 text-neutral-200 hover:bg-
 ;;     "Line 2"
 ;;     "Line 3")
 ;;
-;; Use $(value pattern_) to refer to the value (`0` in the example above).
+;; Use $(local arg) to refer to the value (`0` in the example above).
 ;;
 ;; By default, µfold will keep these properties on the box, making it outermost.
 ;; However, this makes no sense for some properties. We opt out of the default
