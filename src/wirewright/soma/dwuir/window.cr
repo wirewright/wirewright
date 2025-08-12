@@ -50,7 +50,7 @@ module Ww::Soma::DwUIR
         # - `resize-x` shows a horizontal resize cursor.
         # - `resize-y` shows a vertical resize cursor.
         # - `resize` shows a four-way resize cursor.
-        # - `not-allowed` shows a “no” symbol for unavailable actions.
+        # - `not-allowed` shows a "no" symbol for unavailable actions.
         # |@endblock
 
         case term
