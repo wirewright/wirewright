@@ -35,12 +35,20 @@ module Ww::Alpha48
     "fk", "fm", "fn", "fo", "fp", "fq",
   ]
 
-  # Appends the base alpha-48 representation of *object* to *io*.
-  def encode(io, object) : Nil
+  def encode(io, object : UInt8) : Nil
+    io << TABLE.unsafe_fetch(object)
+  end
+
+  def encode(io, object : Bytes) : Nil
+    object.each { |byte| encode(io, byte) }
+  end
+
+  # Appends the base alpha-48 representation of *object* to *io* (Big Endian).
+  def encode(io, object : Int) : Nil
     bytesize = (object.bit_length + 7) // 8
 
     until bytesize.zero?
-      io << TABLE.unsafe_fetch((object >> bytesize) & 0xff)
+      encode(io, ((object >> bytesize) & 0xff).to_u8!)
       bytesize -= 1
     end
   end
