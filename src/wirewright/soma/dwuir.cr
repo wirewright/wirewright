@@ -36,4 +36,6 @@ require "./dwuir/font"
   require "./dwuir/replier"
 
   require "./dwuir/pvg"
+
+  require "./dwuir/window"
 {% end %}
