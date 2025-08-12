@@ -356,7 +356,7 @@ module Ww
 
     {% for method in %w[as_n as_s as_b as_sym as_d] %}
       # Same as `{{method.id}}?`, but raises `TypeCastError` instead of returning `nil`.
-      def {{method.id}} : Num
+      def {{method.id}}
         {{method.id}}? || raise TypeCastError.new
       end
 
