@@ -27,14 +27,20 @@ struct Ww::Term
     end
 
     # :nodoc:
-    def match?(pid : UInt32, pattern : -> Term, cue cues = Tuple.new, default = nil, &)
+    def match?(pid : UInt32, pattern : -> Term, *, location : String, cue cues = Tuple.new, default = nil, &)
       if (mdict = @matchee.as_d?) && !cues.all? { |cue| mdict.probably_includes?(Term[cue]) }
         @stats.try &.rejected_by_cue
 
         return default
       end
 
-      pterm = PATTERN_TERM_CACHE.put_if_absent(pid, &pattern)
+      pterm = PATTERN_TERM_CACHE.put_if_absent(pid) do
+        pattern.call
+      rescue e : ML::SyntaxError
+        e.filename = "[#{location}]"
+        e.humanize(STDERR)
+        raise "syntax error in match"
+      end
 
       unless env = Engine.match?(pterm, @matchee, env: @env)
         @stats.try &.rejected(pterm)
@@ -72,9 +78,9 @@ struct Ww::Term
       {% pid = ::Ww::Term::CaseContext::PATTERN_TERM_ID[0] %}
       {% ::Ww::Term::CaseContext::PATTERN_TERM_ID[0] += 1 %}
 
-      %result = match?({{pid}}, {{pattern}}, cue: { {{cue}} }.flatten.compact, default: ::Ww::Term::CaseContext::Continue) do |%env|
+      %result = match?({{pid}}, {{pattern}}, cue: { {{cue}} }.flatten.compact, location: {{location}}, default: ::Ww::Term::CaseContext::Continue) do |%env|
         {% for icap in icaps %}
-          {% icap_id = icap.id.gsub(/-/, "_") %}
+          {% icap_id = icap.id.gsub(/-/, "_").gsub(/#/, "") %}
 
           {% unless block.args.any? { |arg| arg.id == icap_id } %}
             {{icap_id}} = (%env[{{icap.id.symbolize}}]? || raise "case: #{ {{location}} }: missing capture '{{icap.id}}'")
@@ -122,7 +128,7 @@ struct Ww::Term
       match!(->{ ::Ww::ML.term({{ml}}) }, location: {{location}}, {{kwargs.double_splat}}) {{block}}
     end
 
-    RE_CAPTURES = /([a-zA-Z_][\w-]*?)(?:_(?:any|number|symbol|string|boolean|dict)?[+*⋮]?\b|←|⋮)|[±](\w+)|\((?:%let)\s+([a-zA-Z][\w-]*)/
+    RE_CAPTURES = /([#a-zA-Z_][\w-]*?)(?:_(?:any|number|symbol|string|boolean|dict)?[+*⋮]?\b|←|⋮)|[±](\w+)|\((?:%let)\s+([a-zA-Z][\w-]*)/
 
     # `matchp` that can infer basic captures (such as `x_`) from *ml* source
     # at compile-time.
