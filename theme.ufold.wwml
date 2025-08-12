@@ -467,10 +467,25 @@ button: "font-sans font-normal text-sm bg-neutral-700 text-neutral-200 hover:bg-
 "border-x": (short-for "border-l" "border-r")
 "border-y": (short-for "border-t" "border-b")
 
-"border-l": (back-box real {thickness-l: $(local arg)})
-"border-r": (back-box real {thickness-r: $(local arg)})
-"border-t": (back-box real {thickness-t: $(local arg)})
-"border-b": (back-box real {thickness-b: $(local arg)})
+"border-l":
+  (try
+    (back-box real {thickness-l: $(local arg)})
+    (back-box {thickness-l: 1}))
+
+"border-r":
+  (try
+    (back-box real {thickness-r: $(local arg)})
+    (back-box {thickness-r: 1}))
+
+"border-t":
+  (try
+    (back-box real {thickness-t: $(local arg)})
+    (back-box {thickness-t: 1}))
+
+"border-b":
+  (try
+    (back-box real {thickness-b: $(local arg)})
+    (back-box {thickness-b: 1}))
 
 ;;
 ;; Flow utilities.
