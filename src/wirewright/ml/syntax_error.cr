@@ -7,7 +7,7 @@ module Ww::ML
     # Returns the offending text -- a view of the original source string.
     getter text : StringView
 
-    # Accesses the name of the file associated with the offending text.
+    # Gets or sets the name of the file associated with the offending text.
     property? filename : String?
 
     # :nodoc:
