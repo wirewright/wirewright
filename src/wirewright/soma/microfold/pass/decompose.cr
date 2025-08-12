@@ -70,7 +70,7 @@ module Ww::Soma::Microfold::Pass
         matchpi %[(utility id_string)] do
           view = id.to(StringView)
 
-          issues.adjoin(Issue::Spot::Detail.new("utility", view)) do |issues|
+          issues.adjoin("utility", view) do |issues|
             utility(ctx, view, issues)
           end
         end
@@ -98,7 +98,7 @@ module Ww::Soma::Microfold::Pass
     end
 
     private def utility(ctx, spec, rest : StringView, issues)
-      issues.adjoin(Issue::Spot::TermDetail.new("utility spec", spec)) do |issues|
+      issues.adjoin("utility spec", spec) do |issues|
         Term.case(spec) do
           # |@ soma.microfold.theme.utility-spec.short-for
           #
@@ -183,7 +183,7 @@ module Ww::Soma::Microfold::Pass
 
     # Decomposes a Microfold-administered property, as in `wrap-ellipsis: "<..>"`.
     def prop(ctx : Context, spec : Term, arg : Term, issues : Issue::Sink)
-      issues.adjoin(Issue::Spot::TermDetail.new("property spec", spec)) do |issues|
+      issues.adjoin("property spec", spec) do |issues|
         Term.case(spec) do
           # |@ soma.microfold.theme.property-spec.leaf
           #
@@ -255,7 +255,7 @@ module Ww::Soma::Microfold::Pass
     end
 
     private def eval?(theme, env : Term::Dict, expr : Term, issues) : Term?
-      issues.adjoin(Issue::Spot::TermDetail.new("expression", expr)) do |issues|
+      issues.adjoin("expression", expr) do |issues|
         Term.of_case(expr) do
           # |@ soma.microfold.theme.expr.global
           #

@@ -1,32 +1,33 @@
-# Hosts Microfold issue-reporting machinery.
-#
-# You generally shouldn't be interested in anything other than `Severity`
-# and `Backtrace`.
-module Ww::Soma::Microfold::Issue
+# Hosts issue-reporting machinery that is used by multiple subsystems of Wirewright,
+# for instance by `Microfold` and `Alloy`.
+module Ww::Issue
   extend self
 
   # Lists the available issue severity levels. Each level can also serve
-  # as a cutoff -- including that level and higher.
+  # as a cutoff -- only issues on that level and higher will be stored,
+  # processed, and displayed later on.
   enum Severity
     # Matches all severities (lowest threshold).
     ANY
 
-    # Messages about the algorithm's decision-making.
+    # Messages about an algorithm's decision-making.
     Note
 
-    # Unexpected but possibly recovered-from issue.
+    # User issue with low emphasis. Perhaps caused by another issue.
     Minor
 
-    # Non-recoverable or otherwise important issue in this branch.
+    # User issue with high emphasis. Perhaps can trigger a cascade of issues.
     Major
 
-    # Reserved for errors in the theme or environment.
+    # System/internal issue -- issue in a system resource (e.g. invalid rule
+    # system, error in theme).
     Severe
 
-    # Reserved for validation errors.
+    # An issue that terminates execution immediately and jumps back to
+    # the calling/tracing point.
     Fatal
 
-    # Suppresses all output.
+    # Suppresses all severities.
     QUIET
   end
 
@@ -36,17 +37,12 @@ module Ww::Soma::Microfold::Issue
     # Formats this spot using the internal `Ww::Ω` terminal/stringformatting framework.
     abstract def to_omega(root : Term, srcmap : ML::SrcMap, filename : String) : Ω::Element
 
-    # Keypath into root.
+    # Keypath into the root term passed to `to_omega`.
     record Keypath, keypath : Stack(Term) do
       include Spot
 
       def to_omega(root : Term, srcmap : ML::SrcMap, filename : String) : Ω::Element
-        copy = Term::Dict.build do |commit|
-          (1...keypath.size).each do |index|
-            commit << keypath[index]
-          end
-        end
-
+        copy = Term[keypath]
         view = srcmap[copy]?
 
         until view || copy.empty?
@@ -54,9 +50,11 @@ module Ww::Soma::Microfold::Issue
           view = srcmap[copy]?
         end
 
-        omega = Ω.row(Ω.text("node with keypath"), Ω.text(keypath.join(":"), :emphasis), gap: 1)
-
         if view
+          if keypath.size > copy.itemsize
+            omega = Ω.row(Ω.text("subnode with keypath"), Ω.text(keypath.skip(copy.size).join(":"), :emphasis), gap: 1)
+          end
+
           _, line, column = ML::SyntaxError.lookaround(view)
 
           omega = Ω.col(
@@ -67,26 +65,67 @@ module Ww::Soma::Microfold::Issue
             ),
             omega
           )
+        else
+          omega = Ω.row(Ω.text("node with keypath"), Ω.text(keypath.join(":"), :emphasis), gap: 1)
         end
 
         omega
       end
     end
 
-    # No assumptions are made about where *text* points to.
-    record Detail, detail : String, text : StringView do
+    # :nodoc:
+    struct KeypathView
       include Spot
 
+      @size : Int32
+
+      def initialize(@keypath : Stack(Term))
+        @size = @keypath.size
+      end
+
       def to_omega(root : Term, srcmap : ML::SrcMap, filename : String) : Ω::Element
-        Ω.row(Ω.text(detail), Ω.text(text, :emphasis), gap: 1)
+        spot = Keypath.new(@keypath)
+        spot.to_omega(root, srcmap, filename)
+      end
+
+      def clone
+        keypath1 = Stack(Term).new
+
+        @keypath.each_with_index do |key, index|
+          break if index >= @size
+          keypath1 << key
+        end
+
+        KeypathView.new(keypath1)
       end
     end
 
+    # An emphasized string view *text* annotated with a *detail* string.
+    #
+    # No assumptions are made about where *text* points to.
+    record StringDetail, detail : String, text : StringView do
+      include Spot
+
+      def to_omega(root : Term, srcmap : ML::SrcMap, filename : String) : Ω::Element
+        Ω.flip(Ω.text(detail), Ω.text(text, :emphasis), threshold: 60, gap_x: 1)
+      end
+    end
+
+    # An emphasized *term* annotated with a *detail* string.
     record TermDetail, detail : String, term : Term do
       include Spot
 
       def to_omega(root : Term, srcmap : ML::SrcMap, filename : String) : Ω::Element
-        Ω.row(Ω.text(detail), Ω.text(ML.compact(term), :emphasis), gap: 1)
+        Ω.flip(Ω.text(detail), Ω.text(ML.compact(term), :emphasis), threshold: 60, gap_x: 1)
+      end
+    end
+
+    # A static *string*.
+    record Text, string : String do
+      include Spot
+
+      def to_omega(root : Term, srcmap : ML::SrcMap, filename : String) : Ω::Element
+        Ω.text(string, :emphasis)
       end
     end
   end
@@ -196,6 +235,21 @@ module Ww::Soma::Microfold::Issue
       end
     end
 
+    # Shorthand for adjoining `Spot::Text`.
+    def adjoin(text : String, &)
+      adjoin(Spot::Text.new(text)) { |sink| yield sink }
+    end
+
+    # Shorthand for adjoining `Spot::TermDetail`.
+    def adjoin(detail : String, term : Term, &)
+      adjoin(Spot::TermDetail.new(detail, term)) { |sink| yield sink }
+    end
+
+    # Shorthand for adjoining `Spot::StringDetail`.
+    def adjoin(detail : String, view : StringView, &)
+      adjoin(Spot::StringDetail.new(detail, view)) { |sink| yield sink }
+    end
+
     # Reports a issue with the given *severity*.
     #
     # This is the `Issue` equivalent of a `raise`, which potentially
@@ -224,17 +278,20 @@ module Ww::Soma::Microfold::Issue
     {% end %}
   end
 
-  # Sets up the issue-reporting machinery. Yields a sink to report issues to,
-  # and an array which will be populated with backtraces as issues are encountered.
+  # Sets up the issue-reporting machinery. Yields a sink to report issues to.
+  # Returns the block's result along with an array which will be populated
+  # with backtraces for issues that were encountered (if any).
   #
   # WARNING: the yielded issue sink is allocated on the stack inside this method;
   # it **must not** under any circumstance outlive the block.
-  def setup(*, severity : Severity, & : Issue::Sink, Array(Backtrace) ->)
+  def setup(*, severity : Severity, & : Issue::Sink -> T) : {T, Array(Backtrace)} forall T
     backtraces = [] of Issue::Backtrace
 
     buffer = uninitialized ReferenceStorage(Issue::Sink)
     issues = Issue::Sink.unsafe_construct(pointerof(buffer), severity, backtraces, Issue::None.new)
 
-    yield issues, backtraces
+    result = yield issues
+
+    {result, backtraces}
   end
 end

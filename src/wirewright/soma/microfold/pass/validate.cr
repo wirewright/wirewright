@@ -8,7 +8,7 @@ module Ww::Soma::Microfold::Pass
       next unless symbol = leaf.as_sym?
       next unless symbol.microfold?
 
-      issues.adjoin(Issue::Spot::TermDetail.new("symbol", leaf)) do |issues|
+      issues.adjoin("symbol", leaf) do |issues|
         issues.fatal("symbols prefixed with `µ-` are reserved for Microfold and must not appear in the input tree")
       end
 

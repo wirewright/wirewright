@@ -60,7 +60,7 @@ module Ww::Soma::Microfold::Parse
       src.split(' ') do |phrase|
         next if phrase.empty?
 
-        issues.adjoin(Issue::Spot::Detail.new("phrase", phrase)) do |issues|
+        issues.adjoin("phrase", phrase) do |issues|
           parts = phrase.split(':').to_readonly_slice
 
           # We know for sure that the last part is a utility.
@@ -101,7 +101,7 @@ module Ww::Soma::Microfold::Parse
   # NOTE: parsing a utility is not the same as "resolving" it into constituent mixins --
   # *decomposition* must follow parsing. See also: `Microfold.decompose`.
   def utility(src : StringView, issues : Issue::Sink) : Term | Err
-    issues.adjoin(Issue::Spot::Detail.new("utility", src)) do |issues|
+    issues.adjoin("utility", src) do |issues|
       src.reader do |r|
         case
         when Rtk.pastsequ?(r, "items-")
@@ -118,7 +118,7 @@ module Ww::Soma::Microfold::Parse
             end
 
             otherwise do
-              issues.adjoin(Issue::Spot::Detail.new("pseudo-utility", Rtk.rest(r))) do |issues|
+              issues.adjoin("pseudo-utility", Rtk.rest(r)) do |issues|
                 issues.major("cannot prefix a pseudo-utility with `items-`")
               end
 
@@ -153,7 +153,7 @@ module Ww::Soma::Microfold::Parse
   #
   # Reports any issues to *issues*.
   def condition(locus : Locus, pairs : Term::Dict, src : StringView, child : Term, issues : Issue::Sink) : Term | Reject | Err
-    issues.adjoin(Issue::Spot::Detail.new("condition", src)) do |issues|
+    issues.adjoin("condition", src) do |issues|
       pick!(
         pseudo_condition(locus, pairs, src, issues),
         cue_condition(src, child, issues),
@@ -184,7 +184,7 @@ module Ww::Soma::Microfold::Parse
 
     src = src[1...-1]
 
-    issues.adjoin(Issue::Spot::Detail.new("pseudo-condition", src)) do |issues|
+    issues.adjoin("pseudo-condition", src) do |issues|
       src.reader do |r|
         case
         when Rtk.pastsequ?(r, "alone\0")

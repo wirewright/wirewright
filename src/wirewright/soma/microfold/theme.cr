@@ -50,7 +50,7 @@ module Ww::Soma::Microfold
     end
 
     def preset?(tag : Term, issues) : Term?
-      issues.adjoin(Issue::Spot::TermDetail.new("preset for", tag)) do |issues|
+      issues.adjoin("preset for", tag) do |issues|
         return unless preset = @spec[:presets, tag]?
 
         unless preset.type.string?

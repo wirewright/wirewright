@@ -88,14 +88,13 @@ module Ww::Soma::Microfold
   # severe. At no point would Microfold give up, however; it is but one participant
   # shaping the given *root*, so it cannot just explode.
   def render(theme : Theme, root : Term, *, severity : Issue::Severity = :minor) : {Term, Array(Issue::Backtrace)}
-    Issue.setup(severity: severity) do |issues, backtraces|
-      {Pass.render(theme, root, issues), backtraces}
+    Issue.setup(severity: severity) do |issues|
+      Pass.render(theme, root, issues)
     end
   end
 end
 
 require "./microfold/theme"
-require "./microfold/issue"
 require "./microfold/locus"
 require "./microfold/parse"
 require "./microfold/pass"
