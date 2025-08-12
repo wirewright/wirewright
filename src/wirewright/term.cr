@@ -120,6 +120,10 @@ module Ww
       Term.hashcode(self).hash(hasher)
     end
 
+    def clone : ITerm
+      self
+    end
+
     # Automatically upcasts `self` to `Term` and tries to run *call* on it.
     macro method_missing(call)
       {% unless Term.has_method?(call.name) %}
@@ -149,6 +153,22 @@ module Ww
   # All terms (including dictionary terms `Term::Dict`) are persistent, thread-safe,
   # and immutable.
   struct Term
+    # TODO: by being smarter with tagging we can cram many more term shapes in here.
+    #
+    # For instance:
+    #  - `0` marks a pointer, leaving us with two bits `00` (4 pointer tags). Currently
+    #    we only need three: dict, rational number, and string.
+    #  - `1` marks an immediate (i.e. value type). Since we're a runtime, we can
+    #    cram a huge lot of shapes in there structurally, at least those we can
+    #    cheaply recognize; saving us some extra pointer hops we'd need otherwise.
+    #    We can reserve 7 bits for a type and the rest of 7 bytes we'd have available
+    #    as payload. Short strings (e.g. unicode codepoints), numbers of up to 7 bytes,
+    #    booleans (only type -- true or false), and so on all go here.
+    #  - Moreover, it's stupid to think of individual elements when it comes to optimization.
+    #    One could imagine a TermArray that will use `1`-tagging and perhaps some kind of *mode*
+    #    tagging as well, so that it can claim the 7 bytes for itself. Thus, we'd have stuff
+    #    like compact strings stored immediately across multiple term-sized cells by TermArray.
+
     enum Tag : UInt8
       Dict    = 0u8 # << MUST be here
       NumRat  = 1u8
@@ -163,6 +183,7 @@ module Ww
     def initialize(@mem : Void*)
     end
 
+    # Returns the underlying tagged pointer.
     def unsafe_repr : Void*
       @mem
     end
@@ -172,7 +193,7 @@ module Ww
       Term.new(Pointer(Void).new(term.@k.@mem.address))
     end
 
-    # :nodoc:
+    # Downcasts this term to a number term without performing any checks.
     def unsafe_as_n : Num
       Num.new(Num::Kernel.new(@mem))
     end
@@ -182,7 +203,7 @@ module Ww
       Term.new(Pointer(Void).new(term.as(Void*).address | Tag::Str.value))
     end
 
-    # :nodoc:
+    # Downcasts this term to a string term without performing any checks.
     def unsafe_as_s : Str
       Pointer(Void).new(@mem.address >> 3 << 3).as(Str)
     end
@@ -193,7 +214,7 @@ module Ww
       Term.new(Pointer(Void).new(((data << 3) | Tag::Sym.value).to_u64))
     end
 
-    # :nodoc:
+    # Downcasts this term to a symbol term without performing any checks.
     def unsafe_as_sym : Sym
       data = @mem.address >> 3
       Sym.new(data.to_u32)
@@ -208,7 +229,7 @@ module Ww
       end
     end
 
-    # :nodoc:
+    # Downcasts this term to a boolean term without performing any checks.
     def unsafe_as_b : Boolean
       Boolean.new((@mem.address >> 3) == 1)
     end
@@ -218,12 +239,12 @@ module Ww
       Term.new(term.as(Void*))
     end
 
-    # :nodoc:
+    # Downcasts this term to a dictionary term without performing any checks.
     def unsafe_as_d : Dict
       @mem.as(Dict)
     end
 
-    # :nodoc:
+    # Returns the pointer tag of this term.
     def tag : Tag
       Tag.new((@mem.address & 0b111).to_u8)
     end
@@ -256,10 +277,13 @@ module Ww
       end
     end
 
+    # Converts this term to an object of the given *type*, if possible.
+    # Raises `TypeCastError` otherwise.
     def to(type : T.class) : T forall T
       downcast.to(type)
     end
 
+    # Attempts to downcast this term to a number term. Returns `nil` if impossible.
     def as_n? : Num?
       case tag
       when .num_int?, .num_rat?
@@ -267,22 +291,28 @@ module Ww
       end
     end
 
+    # Attempts to downcast this term to a string term. Returns `nil` if impossible.
     def as_s? : Str?
       tag.str? ? unsafe_as_s : nil
     end
 
+    # Attempts to downcast this term to a boolean term. Returns `nil` if impossible.
     def as_b? : Boolean?
       tag.boolean? ? unsafe_as_b : nil
     end
 
+    # Attempts to downcast this term to a symbol term. Returns `nil` if impossible.
     def as_sym? : Sym?
       tag.sym? ? unsafe_as_sym : nil
     end
 
+    # Attempts to downcast this term to a dictionary term. Returns `nil` if impossible.
     def as_d? : Dict?
       tag.dict? ? unsafe_as_d : nil
     end
 
+    # Attempts to downcast this term to an itemsonly dictionary term. Returns
+    # `nil` if impossible.
     def as_itemsonly_d? : Dict?
       return unless dict = as_d?
       return unless dict.itemsonly?
@@ -290,12 +320,17 @@ module Ww
       dict
     end
 
-    def as_itemspart_d? : Dict?
+    # Attempts to downcast this term to a pairsonly dictionary term. Returns
+    # `nil` if impossible.
+    def as_pairsonly_d? : Dict?
       return unless dict = as_d?
+      return unless dict.pairsonly?
 
-      dict.itemspart
+      dict
     end
 
+    # Attempts to downcast this term to a nonempty dictionary term. Returns
+    # `nil` if impossible.
     def as_nonempty_d? : Dict?
       return unless dict = as_d?
       return if dict.empty?
@@ -303,47 +338,30 @@ module Ww
       dict
     end
 
-    # Attempts to cast this term into a number term `Term::Num`.
-    #
-    # Raises `TypeCastError` if the cast cannot be performed.
-    def as_n : Num
-      case tag
-      when .num_int?, .num_rat?
-        unsafe_as_n
-      else
-        raise TypeCastError.new
-      end
+    # Attempts to downcast this term to a dictionary term. Returns the dictionary's
+    # itemspart if succeeded. Returns `nil` otherwise.
+    def as_itemspart_d? : Dict?
+      return unless dict = as_d?
+
+      dict.itemspart
     end
 
-    # Attempts to cast this term into a string term `Term::Str`.
-    #
-    # Raises `TypeCastError` if the cast cannot be performed.
-    def as_s : Str
-      tag.str? ? unsafe_as_s : raise TypeCastError.new
-    end
+    # Attempts to downcast this term to a dictionary term. Returns the dictionary's
+    # pairspart if succeeded. Returns `nil` otherwise.
+    def as_pairspart_d? : Dict?
+      return unless dict = as_d?
 
-    # Attempts to cast this term into a boolean term `Term::Boolean`.
-    #
-    # Raises `TypeCastError` if the cast cannot be performed.
-    def as_b : Boolean
-      tag.boolean? ? unsafe_as_b : raise TypeCastError.new
-    end
-
-    # Attempts to cast this term into a symbol term `Term::Sym`.
-    #
-    # Raises `TypeCastError` if the cast cannot be performed.
-    def as_sym : Sym
-      tag.sym? ? unsafe_as_sym : raise TypeCastError.new
-    end
-
-    # Attempts to cast this term into a dictionary term `Term::Dict`.
-    #
-    # Raises `TypeCastError` if the cast cannot be performed.
-    def as_d : Dict
-      tag.dict? ? unsafe_as_d : raise TypeCastError.new
+      dict.pairspart
     end
 
     {% for method in %w[as_n as_s as_b as_sym as_d] %}
+      # Same as `{{method.id}}?`, but raises `TypeCastError` instead of returning `nil`.
+      def {{method.id}} : Num
+        {{method.id}}? || raise TypeCastError.new
+      end
+
+      # Map-like function to transform terms that downcast using `{{method.id}}?`
+      # successfully. Other terms are returned unchanged.
       def {{method.id}}(&) : Term
         return self unless input = {{method.id}}?
 
@@ -364,10 +382,6 @@ module Ww
 
     def &-(other : Term) : Term?
       (downcast &- other.downcast).try(&.upcast)
-    end
-
-    def each_prefix(&fn : BiList(Term), Term ->) : Nil
-      type.dict? ? unsafe_as_d.each_prefix(&fn) : fn.call(BiList(Term)[], self)
     end
 
     # Computes and returns the hexdigest of this term using the given *algorithm*.
@@ -507,6 +521,11 @@ module Ww
       Term[object.to_s]
     end
 
+    # Constructs a string term from the given 256-bit term hash *object*.
+    def self.[](object : H256) : Str
+      Term[object.to_s]
+    end
+
     # Constructs an indexed dictionary from the given enumerable *object*.
     # Elements of *object* receive successive keys 0, 1, 2, etc.
     #
@@ -595,6 +614,21 @@ module Ww
     # Constructs a dict set containing the terms provided in *args*.
     def self.set(*args) : Dict
       set(args)
+    end
+
+    # Constructs a dict; each tuple in *args* provides an object for the key followed
+    # by one for the value. The resulting dict is also extended with **kwargs**, if they
+    # are provided.
+    def self.entries(*args : {_, _}, **kwargs) : Dict
+      Dict.build do |commit|
+        args.each { |key, value| commit.with(key, value) }
+        kwargs.each { |key, value| commit.with(key, value) }
+      end
+    end
+
+    # Shorthand for `of(entries(*args, **kwargs))`.
+    def self.of_entries(*args, **kwargs) : Term
+      of(entries(*args, **kwargs))
     end
 
     # Same as `.[]` but upcasts to generic `Term` for you.
@@ -766,6 +800,44 @@ module Ww
     end
   end
 
+  # Digest
+
+  struct Term
+    # Represents a 256-bit hash of a term using four 64-bit blocks.
+    record H256, blk0 : UInt64, blk1 : UInt64, blk2 : UInt64, blk3 : UInt64 do
+      def inspect(io)
+        io << "H256("
+        to_s(io)
+        io << ")"
+      end
+
+      def to_s(io)
+        Alpha48.encode(io, blk0)
+        io << "-"
+        Alpha48.encode(io, blk1)
+        io << "-"
+        Alpha48.encode(io, blk2)
+        io << "-"
+        Alpha48.encode(io, blk3)
+      end
+    end
+
+    # Returns the 256-bit hash of *term*, calculated using *digester*.
+    def self.hashcode256(term : Term | ITerm, *, digester = Digest::Blake3) : H256
+      digest = digester.new
+      io = IO::ByteStream.new { |slice| digest.update(slice) }
+
+      ML.compact(io, term)
+
+      scratch = uninitialized UInt8[32]
+      digest.final(scratch.to_slice)
+
+      blks = scratch.to_unsafe.as(UInt64*)
+
+      H256.new(blks[0], blks[1], blks[2], blks[3])
+    end
+  end
+
   # Pattern matching entrypoints
 
   struct Term
@@ -796,8 +868,8 @@ module Ww
     #   otherwise { }
     # end
     # ```
-    macro matchpi?(term, pattern, &block)
-      ::Ww::Term.case({{term}}) do
+    macro matchpi?(term, pattern, **kwargs, &block)
+      ::Ww::Term.case({{term}}, {{kwargs.double_splat}}) do
         matchpi({{pattern}}) {{block}}
         otherwise { }
       end
@@ -812,8 +884,8 @@ module Ww
     #   end
     # end
     # ```
-    macro matchpi(term, pattern, &block)
-      ::Ww::Term.case({{term}}) do
+    macro matchpi(term, pattern, **kwargs, &block)
+      ::Ww::Term.case({{term}}, {{kwargs.double_splat}}) do
         matchpi({{pattern}}) {{block}}
       end
     end
@@ -829,8 +901,8 @@ module Ww
     #   otherwise { }
     # end
     # ```
-    macro givenpi?(term, pattern, &block)
-      ::Ww::Term.case({{term}}) do
+    macro givenpi?(term, pattern, **kwargs, &block)
+      ::Ww::Term.case({{term}}, {{kwargs.double_splat}}) do
         givenpi({{pattern}}) {{block}}
         otherwise { }
       end
@@ -845,8 +917,8 @@ module Ww
     #   end
     # end
     # ```
-    macro givenpi(term, pattern, &block)
-      ::Ww::Term.case({{term}}) do
+    macro givenpi(term, pattern, **kwargs, &block)
+      ::Ww::Term.case({{term}}, {{kwargs.double_splat}}) do
         givenpi({{pattern}}) {{block}}
       end
     end

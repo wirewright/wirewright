@@ -217,6 +217,26 @@ module Ww
         concat(ee, &.itself)
       end
 
+      def selected(ee : Enumerable(T), & : T -> Bool) : self forall T
+        ee.each do |object|
+          next unless yield object
+
+          append(object)
+        end
+
+        self
+      end
+
+      def rejected(ee : Enumerable(T), & : T -> Bool) : self forall T
+        ee.each do |object|
+          next if yield object
+
+          append(object)
+        end
+
+        self
+      end
+
       # :nodoc:
       def resolve
         raise Pf::ResolvedError.new if @resolved
@@ -1304,20 +1324,6 @@ module Ww
       end
     end
 
-    def each_prefix(prefix : BiList(Term), term : Term::Dict, &fn : BiList(Term), Term ->)
-      term.each_entry do |k, v|
-        each_prefix(prefix.append(k), v.downcast, &fn)
-      end
-    end
-
-    def each_prefix(prefix : BiList(Term), term : ITerm, &fn : BiList(Term), Term ->)
-      fn.call(prefix, term.upcast)
-    end
-
-    def each_prefix(&fn : BiList(Term), Term ->)
-      each_prefix(BiList(Term)[], self, &fn)
-    end
-
     # Dict set intersection. Values are ignored; only key presence/absence is taken
     # into account. May mix keys/values from `self`/*other* for additional speedup
     # (set *mix* to `false` to disallow).
@@ -1528,40 +1534,6 @@ module Ww
     # Deep diff. Returns `{present in self but absent in other, absent in self but present in other}`.
     def diff(older) : {Dict, Dict}
       Dict.diff(older.as_d, newer: self)
-
-      # seen0 = {} of BiList(Term) => Term
-      # seen1 = {} of BiList(Term) => Term
-
-      # each_prefix do |prefix, value|
-      #   seen0.put_if_absent(prefix) { value }
-      # end
-
-      # other.each_prefix do |prefix, value|
-      #   seen1.put_if_absent(prefix) { value }
-      # end
-
-      # lhs = seen0.reduce(Term[]) do |added, (prefix, v0)|
-      #   if (v1 = seen1[prefix]?) && v0 == v1
-      #     added
-      #   else
-      #     added.where(prefix, eq: v0)
-      #   end
-      # end
-
-      # rhs = seen1.reduce(Term[]) do |removed, (prefix, v1)|
-      #   if seen0.has_key?(prefix)
-      #     removed
-      #   else
-      #     removed.where(prefix, eq: v1)
-      #   end
-      # end
-
-      # {lhs, rhs}
-      # lhs = seen0 - seen1
-      # rhs = seen1 - seen0
-
-      # {lhs.reduce(Term[]) { |delta, (prefix, value)| delta.where(prefix, value) },
-      #  rhs.reduce(Term[]) { |delta, (prefix, value)| delta.where(prefix, value) }}
     end
 
     # In practice `partition` and `pairs` are called very often. Therefore by
