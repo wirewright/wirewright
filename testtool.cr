@@ -192,7 +192,7 @@ class TestHarness
     end
 
     Termbox.init do
-      ncols = (2/3 * Termbox.width).to_i
+      ncols = Termbox.width.to_i
       nrows = (@schedule.size/ncols).to_i
 
       Termbox.output_mode = :truecolor
