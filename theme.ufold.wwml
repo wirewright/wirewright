@@ -647,10 +647,14 @@ button: "font-sans font-normal text-sm bg-neutral-700 text-neutral-200 hover:bg-
 "-z": (outermost-box real {z-index: $(* (local arg) -1)})
 
 ;; Opacity
-;;
-;; Reference: https://tailwindcss.com/docs/opacity
 
 "opacity": (composite-box real {opacity: $(* (local arg) percents)})
+
+;; NOTE: We also have the "present" and "absent" pseudo-utilities to remove
+;; the node from the tree; they are *pseudo*-utilities for a reason, and
+;; thus they are defined not here but rather in the Crystal source.
+"opaque": (composite-box {} unset: {+ opacity})
+"transparent": (composite-box {opacity: 0})
 
 ;; Cursor utilities.
 ;;
@@ -696,12 +700,6 @@ button: "font-sans font-normal text-sm bg-neutral-700 text-neutral-200 hover:bg-
 "shrink-w": (outermost-box {shrink: w})
 "shrink-h": (outermost-box {shrink: h})
 "no-shrink": (outermost-box {shrink: false})
-
-;; NOTE: We also have the "present" and "absent" pseudo-utilities to remove
-;; the node from the tree; they are *pseudo*-utilities for a reason, and
-;; thus they are defined not here but rather in the Crystal source.
-"visible": (outermost-box {} unset: {+ opacity})
-"hidden": (outermost-box {opacity: 0})
 
 "root": (outermost-box {root: true})
 
