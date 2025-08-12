@@ -288,11 +288,11 @@
   <> {out-w⫽h: →dn-w⫽h, strict-w⫽h: $'(min →lax-w⫽h →dn-w⫽h), (dn-w⫽h): ()}
 
 ;; Strict positioning.
-(align {¦ dl⫽t⋮ 0} ⍊ -◇_ position x⫽y_number ±strict-w⫽h ±out-w⫽h)
+(align {¦ dl⫽t⋮ 0} ⍊ -◇_ position ±x⫽y ±strict-w⫽h ±out-w⫽h)
   <> {dl⫽t: $(+ →dl⫽t (round (- (* →out-w⫽h →x⫽y) (* →strict-w⫽h →x⫽y)))), ◇: true}
 
 ;; Lax positioning.
-(align {¦ dl⫽t⋮ 0} ⍊ -◇_ position lax x⫽y_number ±lax-w⫽h ±out-w⫽h)
+(align {¦ dl⫽t⋮ 0} ⍊ -◇_ position lax ±x⫽y ±lax-w⫽h ±out-w⫽h)
   <> {dl⫽t: $(+ →dl⫽t (round (- (* →out-w⫽h →x⫽y) (* →lax-w⫽h →x⫽y)))), ◇: true}
 
 ;;
@@ -333,7 +333,7 @@
 ;; Sum of widths/heights including fr children.
 ▪ {¦ mail/mid: (metrics {¦ w⫽h-hi_: ?} ⍊ -▢_) -up-w⫽h ±x⫽y-stride}
     <> {w⫽h-hi: →x⫽y-stride, ▢: true}
-  {¦ mail/mid: (metrics {¦ w⫽h-hi_number} ⍊ -▢_) -up-w⫽h ±x⫽y-stride}
+  {¦ mail/mid: (metrics {¦ ±w⫽h-hi} ⍊ -▢_) -up-w⫽h ±x⫽y-stride}
     <> {w⫽h-hi: $'(+ →w⫽h-hi →x⫽y-stride), ▢: true}
 
 ;; Sum of frs.
@@ -493,7 +493,7 @@
 [wrap-stat `L R←(_*)] <> {L: ()}
 (wrap-stat (_* `l) (r←~ _*) ⍊ Np⋮ 0) <> {Np: $'(+ →Np 1), l: →r, (r): ()}
 [wrap-stat (_* `l) (r←? _*)] <> {l: →r, (r): ()}
-(wrap-stat (_* `l) (w_number _*) ⍊ Np⋮ 0 Sp⋮ 0)
+(wrap-stat (_* `l) (±w _*) ⍊ Np⋮ 0 Sp⋮ 0)
   <> {Np: $'(+ →Np 1), Sp: $'(+ →Sp →w), l: →w, (w): ()}
 
 ;;
@@ -524,7 +524,7 @@
   <> {(N): (), log-dst: →log, stats-dst: →stats, state: sizing}
 
 ;; Calculate up-w/h.
-(x⫽y-wrap ⍊ state_: sizing gap-x⫽y⋮ 0 stats: {¦ Sp_number Np_number} -up-w⫽h_)
+(x⫽y-wrap ⍊ state_: sizing gap-x⫽y⋮ 0 stats: {¦ ±Sp ±Np} -up-w⫽h_)
   <> {state: sized, up-w⫽h: $(+ →Sp (* →gap-x⫽y (- →Np 1)))}
 
 ;; Consume dn-w/h until in sized state.
