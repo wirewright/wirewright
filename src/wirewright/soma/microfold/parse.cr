@@ -55,7 +55,7 @@ module Ww::Soma::Microfold::Parse
   end
 
   # Parses a Microfold style string *src*. Reports any issues to *issues*.
-  def style(locus : NodeLocus, pairs : Term::Dict, src : StringView, issues : Issue::Sink) : Term
+  def style(locus : Locus, pairs : Term::Dict, src : StringView, issues : Issue::Sink) : Term
     style = Term::Dict.build do |commit|
       src.split(' ') do |phrase|
         next if phrase.empty?
@@ -152,7 +152,7 @@ module Ww::Soma::Microfold::Parse
   # returning `Reject`.
   #
   # Reports any issues to *issues*.
-  def condition(locus : NodeLocus, pairs : Term::Dict, src : StringView, child : Term, issues : Issue::Sink) : Term | Reject | Err
+  def condition(locus : Locus, pairs : Term::Dict, src : StringView, child : Term, issues : Issue::Sink) : Term | Reject | Err
     issues.adjoin(Issue::Spot::Detail.new("condition", src)) do |issues|
       pick!(
         pseudo_condition(locus, pairs, src, issues),
@@ -177,7 +177,7 @@ module Ww::Soma::Microfold::Parse
   # Indicates acception or rejection by returning a boolean in the happy path.
   #
   # Reports any issues to *issues*.
-  def pseudo_condition(locus : NodeLocus, pairs : Term::Dict, src : StringView, issues : Issue::Sink) : Bool | Err
+  def pseudo_condition(locus : Locus, pairs : Term::Dict, src : StringView, issues : Issue::Sink) : Bool | Err
     unless src.surrounded_by?('(', ')')
       return refusal
     end

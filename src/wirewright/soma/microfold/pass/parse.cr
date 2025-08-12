@@ -13,7 +13,7 @@ module Ww::Soma::Microfold::Pass
 
       # WARNING: locus must not be persisted, because keypath will mutate.
       # Its lifetime must not exceed `Parse.style`.
-      locus = NodeLocus.new(root, keypath)
+      locus = Locus.new(root, keypath)
 
       Parse.style(locus, pairs, style.to(StringView), issues)
     end

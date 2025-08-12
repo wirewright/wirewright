@@ -1,6 +1,6 @@
 module Ww::Soma::Microfold
   # Responds to queries about a node's location in the tree.
-  struct NodeLocus
+  struct Locus
     @parent : Term
 
     def initialize(@root : Term, @keypath : Stack(Term))

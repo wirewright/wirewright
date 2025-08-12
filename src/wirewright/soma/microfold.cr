@@ -26,8 +26,8 @@
 #
 # - *Utilities* target boxes with style mixins. `text-neutral-500`, as defined
 #   in the default theme, will target `text-box` with an additive style mixin
-#   `{color: (oklch ...)}`. Some utilities may be subtractive: `visible` will
-#   *remove* opacity from an element.
+#   `{color: (oklch ...)}`. Some utilities may be subtractive; for instance,
+#   `opaque` will *remove* opacity from an element.
 #
 # - *Conditions* allow the `style: "..."` to look at its "neighboring" pairs
 #   and enable utilities on that basis. `style: "hover:bg-blue-500" hover: true`
@@ -96,6 +96,6 @@ end
 
 require "./microfold/theme"
 require "./microfold/issue"
-require "./microfold/node_locus"
+require "./microfold/locus"
 require "./microfold/parse"
 require "./microfold/pass"
