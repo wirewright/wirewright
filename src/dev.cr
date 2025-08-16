@@ -8,10 +8,10 @@ module DevTool
   DEVPATH = Path[Dir.current]
 
   # :nodoc:
-  SRC_BASE = "dev.base.wwml"
+  SRC_BASE = "base.dev.wwml"
 
   # :nodoc:
-  SRC_ACTIVE = "dev.active.wwml"
+  SRC_ACTIVE = "active.dev.wwml"
 
   # :nodoc:
   #
@@ -27,12 +27,12 @@ module DevTool
 
   Its state is stored on the disk, in two files:
 
-    * dev.active.wwml: gitignored current state. This is the file you make
+    * #{SRC_ACTIVE}: gitignored current state. This is the file you make
       changes to with this tool.
 
-    * dev.base.wwml: git-tracked base state. It is initially copied to produce
+    * #{SRC_BASE}: git-tracked base state. It is initially copied to produce
       dev.active.wwml. You can sync individual presets from `dev.active.wwml`
-      to `dev.base.wwml` using the `dev sync` command.
+      to `#{SRC_BASE}` using the `dev sync` command.
 
   USAGE
 
