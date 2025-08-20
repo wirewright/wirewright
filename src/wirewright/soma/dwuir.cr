@@ -34,6 +34,7 @@ require "./dwuir/font"
   require "./dwuir/platform"
   require "./dwuir/viewer"
   require "./dwuir/replier"
+  require "./dwuir/snap"
 
   require "./dwuir/pvg"
 
