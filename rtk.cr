@@ -72,7 +72,7 @@ module Rtk
     yield
     e = r.value.pos
 
-    StringView.new(r.value.string, b, e, r.value.string.ascii_only?)
+    StringView.new(r.value.string, b, e, r.value.string.single_byte_optimizable?)
   end
 
   def view2(r, &)
@@ -80,7 +80,7 @@ module Rtk
     result = yield
     e = r.value.pos
 
-    {result, StringView.new(r.value.string, b, e, r.value.string.ascii_only?)}
+    {result, StringView.new(r.value.string, b, e, r.value.string.single_byte_optimizable?)}
   end
 
   def capture(r, io, &)
@@ -194,7 +194,7 @@ module Rtk
     b = r.value.pos
     e = r.value.max_pos
 
-    StringView.new(r.value.string, b, e, r.value.string.ascii_only?)
+    StringView.new(r.value.string, b, e, r.value.string.single_byte_optimizable?)
   end
 
   def hexdigit?(r) : Int32?
