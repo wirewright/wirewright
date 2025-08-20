@@ -60,7 +60,7 @@ module Ww::Soma::DwUIR
       matchpi %{(svg ¦ _ src_ dw-request: (measure wout_symbol hout_symbol ¦ _ status_symbol))} do
         begin
           image = platform.images.load(src)
-        rescue e : ImageServerException
+        rescue e : ImageServerError
           Log.debug(exception: e) { "failed to measure svg at #{src}" }
 
           next subject.morph({:"dw-request", nil}, {status, {:err, e.message}})
@@ -80,7 +80,7 @@ module Ww::Soma::DwUIR
       matchpi %{(rect ¦ _ fill_: [image src_] dw-request: (measure wout_symbol hout_symbol ¦ _ status_symbol))} do
         begin
           image = platform.images.load(src)
-        rescue e : ImageServerException
+        rescue e : ImageServerError
           Log.debug(exception: e) { "failed to measure rect image at #{src}" }
 
           next subject.morph({:"dw-request", nil}, {status, {:err, e.message}})

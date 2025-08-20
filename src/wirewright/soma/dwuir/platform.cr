@@ -20,7 +20,7 @@ module Ww::Soma::DwUIR
   module ImageServer
     # Loads the image at *src* into memory. Returns the resulting `Image`.
     #
-    # Raises `ImageServerException` if something went wrong.
+    # Raises `ImageServerError` if something went wrong.
     abstract def load(src : Term) : Image
 
     # Unloads the image at *src* from memory if it was loaded.
@@ -28,7 +28,7 @@ module Ww::Soma::DwUIR
   end
 
   # Raised when the image server cannot load an image.
-  class ImageServerException < Exception
+  class ImageServerError < Exception
   end
 
   # Represents an image response returned by an `ImageServer`. Specific

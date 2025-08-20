@@ -145,9 +145,9 @@ module Ww::Soma::DwUIR
         svg = @images.load(shape.src)
 
         unless svg.is_a?(PvgSvgImage)
-          raise ImageServerException.new("expected an SVG image")
+          raise ImageServerError.new("expected an SVG image")
         end
-      rescue e : ImageServerException
+      rescue e : ImageServerError
         Log.warn(exception: e) { "failed to load SVG #{shape.src}" }
         return
       end
@@ -281,9 +281,9 @@ module Ww::Soma::DwUIR
         image = @images.load(paint.src)
 
         unless image.is_a?(PvgRasterImage)
-          raise ImageServerException.new("expected a raster image to paint with")
+          raise ImageServerError.new("expected a raster image to paint with")
         end
-      rescue e : ImageServerException
+      rescue e : ImageServerError
         Log.warn(exception: e) { "could not paint with image" }
 
         return set_paint(Paint::Invalid.new, bounds)

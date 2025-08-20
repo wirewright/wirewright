@@ -1,13 +1,13 @@
 module Ww
   # Raised when a file server fails to operate on a file.
-  class FileServerException < Exception
+  class FileServerError < Exception
   end
 
   # Includers can operate on a file given its path.
   module FileServer
     # Returns the content of the file at *path*.
     #
-    # Raises `FileServerException` if the file cannot be read.
+    # Raises `FileServerError` if the file cannot be read.
     abstract def read(path : Path) : Bytes
   end
 
@@ -18,7 +18,7 @@ module Ww
     def self.read(path : Path) : Bytes
       File.open(path, "rb", &.getb_to_end)
     rescue e : File::Error
-      raise FileServerException.new("unable to load file at #{path}", cause: e)
+      raise FileServerError.new("unable to load file at #{path}", cause: e)
     end
   end
 end

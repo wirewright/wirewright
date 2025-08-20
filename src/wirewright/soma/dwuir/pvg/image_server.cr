@@ -22,14 +22,14 @@ module Ww::Soma::DwUIR
 
           begin
             data = @files.read(path)
-          rescue e : FileServerException
-            raise ImageServerException.new("could not read image file", cause: e)
+          rescue e : FileServerError
+            raise ImageServerError.new("could not read image file", cause: e)
           end
 
           case path.extension
           when ".svg"
             unless document0 = PlutoSVG.document_load_from_data(data, data.size, @vwh.x, @vwh.y, nil, nil)
-              raise ImageServerException.new("image file found does not appear to be (a supported kind of) SVG")
+              raise ImageServerError.new("image file found does not appear to be (a supported kind of) SVG")
             end
 
             documents = -> do
@@ -59,17 +59,17 @@ module Ww::Soma::DwUIR
             # |@endblock
 
             unless surface = PlutoVG.surface_load_from_image_data(data, data.size)
-              raise ImageServerException.new("image file found but its content appears to be malformed (could not load)")
+              raise ImageServerError.new("image file found but its content appears to be malformed (could not load)")
             end
 
             PvgRasterImage.new(surface)
           else
-            raise ImageServerException.new("invalid or unsupported file extension: #{path.extension}")
+            raise ImageServerError.new("invalid or unsupported file extension: #{path.extension}")
           end
         end
 
         otherwise do
-          raise ImageServerException.new("invalid or unsupported image src: #{src}")
+          raise ImageServerError.new("invalid or unsupported image src: #{src}")
         end
       end
     end
