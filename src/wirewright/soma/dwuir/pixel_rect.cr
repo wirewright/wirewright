@@ -91,6 +91,17 @@ module Ww::Soma::DwUIR
     protected def fill_row(argb : UInt32, x : Int32, y : Int32, w : Int32) : Nil
       @pixels.fill(argb, @width * y + x, w)
     end
+
+    def inspect(io)
+      io << "PixelRect([" << @width << "x" << @height
+
+      if @x > 0 || @y > 0
+        io << ", x=" << @x
+        io << ", y=" << @y
+      end
+
+      io << "])"
+    end
   end
 
   # Defines sub-areas of a `PixelRect`, still using absolute coordinates, and
