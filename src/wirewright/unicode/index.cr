@@ -52,6 +52,7 @@ module Ww::Unicode::Index
   {% end %}
 
   {% begin %}
+    # :nodoc:
     EMOJI2CODE = {
       {% for line in read_file("#{__DIR__}/emoji.txt").lines %}
         {% name, emoji = line.split(";") %}
