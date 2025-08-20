@@ -10,6 +10,30 @@ module Ww::Soma::DwUIR
   module Window
     extend self
 
+    alias Any = None | Some
+
+    # Represents a null or uninitialized window safely. Participates in transitions
+    # from a closed window to an open one (`Some`); and vice versa, from an open
+    # one to a closed one (i.e., the transition `Some` -> `None` represents
+    # window closure).
+    record None
+
+    # Represents an open window.
+    #
+    # NOTE: We assume implicitly that this module has **zero or one** includers
+    # (implementations). Expect compile errors otherwise. That is, you are expected
+    # to `require` one of window display platforms (currently there's just the SDL
+    # one); it will then define some type `T` by including `Some`, containing custom,
+    # implementation-specific objects. It is then allowed and expected to treat `Some`
+    # as an alias to `T`, which only works in Crystal if `Some` has one includer -- `T`.
+    module Some
+      # Returns an application-unique object identifing the window.
+      abstract def id
+
+      # Open windows are compared and hashed by their id.
+      def_equals_and_hash id
+    end
+
     # Mouse cursors supported by Soma/DwUIR.
     enum Cursor
       None
@@ -201,6 +225,7 @@ module Ww::Soma::DwUIR
 
         # Misc
 
+        Space
         Backquote
         Up
         Dn
@@ -208,6 +233,7 @@ module Ww::Soma::DwUIR
         Right
         Tab
         Enter
+        Esc
         Insert
         Delete
         Backspace
@@ -233,12 +259,13 @@ module Ww::Soma::DwUIR
       record MouseMotion, device : UInt32, x : Int32, y : Int32
       record MouseDn, device : UInt32, button : MouseButton, x : Int32, y : Int32, n : Int32
       record MouseUp, device : UInt32, button : MouseButton, x : Int32, y : Int32, n : Int32
+      record MouseWheel, device : UInt32, dx : Int32, dy : Int32
       record WindowResized, w : Int32, h : Int32
       record KeyInput, rune : String
       record KeyUp, key : Key, ctrl : Bool, shift : Bool, alt : Bool
       record KeyDn, key : Key, ctrl : Bool, shift : Bool, alt : Bool
 
-      def term(button : MouseButton, & : Term ->) : Nil
+      def term(button : MouseButton, &fn : Term ->) : Nil
         # |@ soma.dwuir.window.event.mouse.button.name
         #
         # |@block
@@ -260,15 +287,17 @@ module Ww::Soma::DwUIR
           in .backward? then Term.of(:backward)
           end
 
-        yield term
+        fn.call(term)
       end
 
-      def term(key : Key, & : Term ->) : Nil
+      def term(key : Key, &fn : Term ->) : Nil
+        typeof(fn) # Crystal issue #15940: https://github.com/crystal-lang/crystal/issues/15940
+
         # |@ soma.dwuir.window.event.keyboard.key
         #
         # |@block
-        # Both left and right variants of Ctrl, Shift, and Alt keys count toward
-        # `ctrl`/`shift`/`alt` when used in combination with another key.
+        # Both left and right variants of Ctrl, Shift, and Alt keys (modifier keys)
+        # count toward `ctrl`/`shift`/`alt` when used in combination with another key.
         #
         # Modifier keys emit their own up/dn events: `Al⫽r` for Alt, `Cl⫽r` for
         # Ctrl, `Sl⫽r` for Shift.
@@ -278,45 +307,47 @@ module Ww::Soma::DwUIR
           case key
           {% for n in 0..9 %}
           in .digit{{n.id}}?
-            yield Term.of(:"digit/{{n.id}}")
-            yield Term.of(:digit, {{n}})
+            fn.call(Term.of(:"digit/{{n.id}}"))
+            fn.call(Term.of(:digit, {{n}}))
           in .np{{n.id}}?
-            yield Term.of(:"np/{{n.id}}")
-            yield Term.of(:digit, {{n}})
+            fn.call(Term.of(:"np/{{n.id}}"))
+            fn.call(Term.of(:digit, {{n}}))
           {% end %}
           {% for n in 1..12 %}
           in .f{{n.id}}?
-            yield Term.of(:"f{{n.id}}")
+            fn.call(Term.of(:"f{{n.id}}"))
           {% end %}
           {% for key in "abcdefghijklmnopqrstuvwxyz".chars %}
           in .{{key.id}}?
-            yield Term.of({{key.id.symbolize}})
+            fn.call(Term.of({{key.id.symbolize}}))
           {% end %}
-          in .backquote? then yield Term.of(:backquote)
-          in .up?        then yield Term.of(:up)
-          in .dn?        then yield Term.of(:dn)
-          in .left?      then yield Term.of(:left)
-          in .right?     then yield Term.of(:right)
-          in .tab?       then yield Term.of(:tab)
-          in .enter?     then yield Term.of(:enter)
-          in .insert?    then yield Term.of(:insert)
-          in .delete?    then yield Term.of(:delete)
-          in .backspace? then yield Term.of(:backspace)
-          in .home?      then yield Term.of(:home)
-          in .end?       then yield Term.of(:end)
-          in .pg_up?     then yield Term.of(:pgup)
-          in .pg_dn?     then yield Term.of(:pgdn)
-          in .cl?        then yield Term.of(:Cl)
-          in .cr?        then yield Term.of(:Cr)
-          in .sl?        then yield Term.of(:Sl)
-          in .sr?        then yield Term.of(:Sr)
-          in .al?        then yield Term.of(:Al)
-          in .ar?        then yield Term.of(:Ar)
+          in .backquote? then fn.call(Term.of(:backquote))
+          in .up?        then fn.call(Term.of(:up))
+          in .dn?        then fn.call(Term.of(:dn))
+          in .left?      then fn.call(Term.of(:left))
+          in .right?     then fn.call(Term.of(:right))
+          in .tab?       then fn.call(Term.of(:tab))
+          in .enter?     then fn.call(Term.of(:enter))
+          in .esc?       then fn.call(Term.of(:esc))
+          in .insert?    then fn.call(Term.of(:insert))
+          in .delete?    then fn.call(Term.of(:delete))
+          in .space?     then fn.call(Term.of(:space))
+          in .backspace? then fn.call(Term.of(:backspace))
+          in .home?      then fn.call(Term.of(:home))
+          in .end?       then fn.call(Term.of(:end))
+          in .pg_up?     then fn.call(Term.of(:pgup))
+          in .pg_dn?     then fn.call(Term.of(:pgdn))
+          in .cl?        then fn.call(Term.of(:Cl))
+          in .cr?        then fn.call(Term.of(:Cr))
+          in .sl?        then fn.call(Term.of(:Sl))
+          in .sr?        then fn.call(Term.of(:Sr))
+          in .al?        then fn.call(Term.of(:Al))
+          in .ar?        then fn.call(Term.of(:Ar))
           end
         {% end %}
       end
 
-      def term(e : MouseMotion, & : Term ->) : Nil
+      def term(e : MouseMotion, &fn : Term ->) : Nil
         # |@ soma.dwuir.window.event.mouse.motion
         #
         # |@block
@@ -325,10 +356,10 @@ module Ww::Soma::DwUIR
         # - *x* is the X-position of the mouse at the time of the event.
         # - *y* is the Y-position of the mouse at the time of the event.
         # |@endblock
-        yield Term.of(:mouse, e.device, :motion, x: e.x, y: e.y)
+        fn.call(Term.of(:mouse, e.device, :motion, x: e.x, y: e.y))
       end
 
-      def term(e : MouseDn, & : Term ->) : Nil
+      def term(e : MouseDn, &fn : Term ->) : Nil
         # |@ soma.dwuir.window.event.mouse.button.dn
         #
         # |@block
@@ -343,11 +374,11 @@ module Ww::Soma::DwUIR
         # For example, an event could be: `(mouse 0 left button dn x: 100 y: 100 n: 1)`.
         # |@endblock
         term(e.button) do |button|
-          yield Term.of(:mouse, e.device, button, :button, :dn, x: e.x, y: e.y, n: e.n)
+          fn.call(Term.of(:mouse, e.device, button, :button, :dn, x: e.x, y: e.y, n: e.n))
         end
       end
 
-      def term(e : MouseUp, & : Term ->) : Nil
+      def term(e : MouseUp, &fn : Term ->) : Nil
         # |@ soma.dwuir.window.event.mouse.button.up
         #
         # |@block
@@ -362,20 +393,33 @@ module Ww::Soma::DwUIR
         # For example, an event could be: `(mouse 0 left button up x: 100 y: 100 n: 1)`.
         # |@endblock
         term(e.button) do |button|
-          yield Term.of(:mouse, e.device, button, :button, :up, x: e.x, y: e.y, n: e.n)
+          fn.call(Term.of(:mouse, e.device, button, :button, :up, x: e.x, y: e.y, n: e.n))
         end
       end
 
-      def term(e : WindowResized, & : Term ->) : Nil
+      def term(e : MouseWheel, &fn : Term ->) : Nil
+        # |@ soma.dwuir.window.event.mouse.wheel
+        #
+        # |@block
+        # Mouse wheel events are of the form `(mouse device_ dx: _number dy: _number)`.
+        #
+        # - *device* identifies the mouse device (if there are multiple of them).
+        # - *dx* is the amount of horizontal scroll; negative if scrolling left, positive if scrolling right.
+        # - *dy* is the amount of vertical scroll; negative if scrolling up, positive if scrolling down.
+        # |@endblock
+        fn.call(Term.of(:mouse, e.device, :wheel, dx: e.dx, dy: e.dy))
+      end
+
+      def term(e : WindowResized, &fn : Term ->) : Nil
         # |@ soma.dwuir.window.event.window.resized
         #
         # |@block
         # Window resize events are of the form `(window resized w: _number h: _number)`.
         # |@endblock
-        yield Term.of(:window, :resized, w: e.w, h: e.h)
+        fn.call(Term.of(:window, :resized, w: e.w, h: e.h))
       end
 
-      def term(e : KeyInput, & : Term ->) : Nil
+      def term(e : KeyInput, &fn : Term ->) : Nil
         # |@ soma.dwuir.window.event.keyboard.input
         #
         # |@block
@@ -383,10 +427,10 @@ module Ww::Soma::DwUIR
         # where *rune* is the input text such as `"a"` or `"ä"` etc. (i.e. possibly
         # long and possibly Unicode).
         # |@endblock
-        yield Term.of(:keyboard, :input, e.rune)
+        fn.call(Term.of(:keyboard, :input, e.rune))
       end
 
-      def term(e : KeyUp, & : Term ->) : Nil
+      def term(e : KeyUp, &fn : Term ->) : Nil
         # |@ soma.dwuir.window.event.keyboard.key.up
         #
         # |@block
@@ -398,11 +442,11 @@ module Ww::Soma::DwUIR
         # For example, `(keyboard key left up ctrl: true)`
         # |@endblock
         term(e.key) do |key|
-          yield Term.of(:keyboard, :key, key, :up, ctrl: e.ctrl || nil, shift: e.shift || nil, alt: e.alt || nil)
+          fn.call(Term.of(:keyboard, :key, key, :up, ctrl: e.ctrl || nil, shift: e.shift || nil, alt: e.alt || nil))
         end
       end
 
-      def term(e : KeyDn, & : Term ->) : Nil
+      def term(e : KeyDn, &fn : Term ->) : Nil
         # |@ soma.dwuir.window.event.keyboard.key.dn
         #
         # |@block
@@ -414,7 +458,7 @@ module Ww::Soma::DwUIR
         # For example, `(keyboard key home dn)`
         # |@endblock
         term(e.key) do |key|
-          yield Term.of(:keyboard, :key, key, :dn, ctrl: e.ctrl || nil, shift: e.shift || nil, alt: e.alt || nil)
+          fn.call(Term.of(:keyboard, :key, key, :dn, ctrl: e.ctrl || nil, shift: e.shift || nil, alt: e.alt || nil))
         end
       end
     end

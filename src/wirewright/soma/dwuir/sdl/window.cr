@@ -9,15 +9,14 @@ module Ww::Soma::DwUIR
     class Frame
       def initialize(
         renderer : SDL::Renderer,
-        compositor : Compositor,
-        platform : Platform,
+        viewer_context : Viewer::Context,
         width : Int32,
         height : Int32,
         @backdrop : Color,
       )
         @buffer = SDL::Texture.new(renderer, width, height, LibSDL::PixelFormatEnum::ARGB8888)
         @screen = PixelRect.new(0, 0, width, height)
-        @viewer = Viewer.new(@screen, compositor, platform)
+        @viewer = Viewer.new(@screen, viewer_context)
       end
 
       def show(content : Term)
@@ -45,25 +44,16 @@ module Ww::Soma::DwUIR
       end
     end
 
-    alias Any = None | Some
+    record State, sys : SDL::Window, renderer : SDL::Renderer, frame : Frame, conf : Conf do
+      include Some
 
-    # Represents a null or uninitialized window safely. Participates in transitions
-    # from a closed window to an open one (`Some`); and vice versa, from an open
-    # one to a closed one (i.e., the transition `Some` -> `None` represents
-    # window closure).
-    record None
-
-    # Represents an open window.
-    record Some, sys : SDL::Window, renderer : SDL::Renderer, frame : Frame, conf : Conf do
-      # Open windows are compared and hashed by their SDL (`sys`) window id.
-      def_equals_and_hash sys.id
+      def id
+        sys.id
+      end
     end
 
-    # Holds the objects shared between windows and window transitions.
-    defcase Context,
-      platform : Platform,
-      compositor : Compositor,
-      cursors : CursorStore
+    # :nodoc:
+    defcase Context, viewer : Viewer::Context, cursors : CursorStore
 
     # Stores SDL system cursor instances.
     class CursorStore
@@ -89,11 +79,8 @@ module Ww::Soma::DwUIR
     end
 
     # Constructs a window context object.
-    #
-    # *platform* and *compositor* will be reused by all windows & between
-    # window transitions.
-    def context(platform : Platform, compositor : Compositor) : Context
-      Context.new(platform, compositor, cursors: CursorStore.new)
+    def context(viewer_context : Viewer::Context) : Context
+      Context.new(viewer_context, cursors: CursorStore.new)
     end
 
     # Performs a window state transition: transitions from an existing state
@@ -123,10 +110,10 @@ module Ww::Soma::DwUIR
 
         renderer = SDL::Renderer.new(sys, SDL::Renderer::Flags::ACCELERATED)
 
-        frame = Frame.new(renderer, ctx.compositor, ctx.platform, conf1.width, conf1.height, conf1.backdrop)
+        frame = Frame.new(renderer, ctx.viewer, conf1.width, conf1.height, conf1.backdrop)
         frame.show(conf1.content)
 
-        Some.new(sys, renderer, frame, conf1)
+        State.new(sys, renderer, frame, conf1)
       in Some
         conf0 = window.conf
 
@@ -150,9 +137,15 @@ module Ww::Soma::DwUIR
 
         # Change of certain properties invalidates the frame.
         unless {conf0.width, conf0.height, conf0.backdrop} == {conf1.width, conf1.height, conf1.backdrop}
-          frame = Frame.new(window.renderer, ctx.compositor, ctx.platform, conf1.width, conf1.height, conf1.backdrop)
+          frame = Frame.new(window.renderer, ctx.viewer, conf1.width, conf1.height, conf1.backdrop)
           window = window.copy_with(frame: frame)
-          window.sys.size = {conf1.width, conf1.height}
+
+          # Sync window geometry *but avoid noop overwrites* -- in my case XFCE
+          # doesn't seem happy about them and drops some resize events.
+          unless window.sys.size == {conf1.width, conf1.height}
+            window.sys.size = {conf1.width, conf1.height}
+          end
+
           redraw = true
         end
 
@@ -194,10 +187,154 @@ module Ww::Soma::DwUIR
       some(window, &.sys.hide)
     end
 
+    private def dispatch(live : Set(Some), event : SDL::Event::Quit, fn)
+      live.each { |window| hide(window) }
+      live.clear
+    end
+
+    private def dispatch(live : Set(Some), event : SDL::Event::MouseMotion, fn)
+      return unless target = target?(live, event)
+
+      Event.term(Event::MouseMotion.new(event.which, event.x, event.y)) do |term|
+        fn.call(target, term)
+      end
+    end
+
+    private def dispatch(live : Set(Some), event : SDL::Event::MouseButton, fn)
+      return unless target = target?(live, event)
+
+      case event.button
+      when LibSDL::BUTTON_LEFT
+        button = Event::MouseButton::Left
+      when LibSDL::BUTTON_MIDDLE
+        button = Event::MouseButton::Middle
+      when LibSDL::BUTTON_RIGHT
+        button = Event::MouseButton::Right
+      when LibSDL::BUTTON_X1
+        button = Event::MouseButton::Backward
+      when LibSDL::BUTTON_X2
+        button = Event::MouseButton::Forward
+      else
+        Log.debug { "unhandled SDL mouse button id #{event.button}" }
+        return
+      end
+
+      case event
+      when .pressed?
+        Event.term(Event::MouseDn.new(event.which, button, event.x, event.y, event.clicks)) do |term|
+          fn.call(target, term)
+        end
+      when .released?
+        Event.term(Event::MouseUp.new(event.which, button, event.x, event.y, event.clicks)) do |term|
+          fn.call(target, term)
+        end
+      end
+    end
+
+    private def dispatch(live : Set(Some), event : SDL::Event::MouseWheel, fn)
+      return unless target = target?(live, event)
+
+      Event.term(Event::MouseWheel.new(event.which, event.x, event.y*-1)) do |term|
+        fn.call(target, term)
+      end
+    end
+
+    private def dispatch(live : Set(Some), event : SDL::Event::Keyboard, fn)
+      return unless target = target?(live, event)
+
+      key = nil
+
+      {% begin %}
+        case scancode = event.keysym.scancode
+        {% for key in "0123456789".chars %}
+        when .key_{{key.id}}?
+          key = Event::Key::Digit{{key.id}}
+        when .kp_{{key.id}}?
+          key = Event::Key::Np{{key.id}}
+        {% end %}
+        {% for key in %w[f1 f2 f3 f4 f5 f6 f7 f8 f9 f10 f11 f12] %}
+        when .{{key.id}}?
+          key = Event::Key::{{key.id.upcase}}
+        {% end %}
+        {% for key in "abcdefghijklmnopqrstuvwxyz".chars %}
+        when .{{key.id}}?
+          key = Event::Key::{{key.id.upcase}}
+        {% end %}
+        when .space?     then key = Event::Key::Space
+        when .grave?     then key = Event::Key::Backquote
+        when .up?        then key = Event::Key::Up
+        when .down?      then key = Event::Key::Dn
+        when .left?      then key = Event::Key::Left
+        when .right?     then key = Event::Key::Right
+        when .tab?       then key = Event::Key::Tab
+        when .escape?    then key = Event::Key::Esc
+        when .return?    then key = Event::Key::Enter
+        when .insert?    then key = Event::Key::Insert
+        when .delete?    then key = Event::Key::Delete
+        when .backspace? then key = Event::Key::Backspace
+        when .home?      then key = Event::Key::Home
+        when .end?       then key = Event::Key::End
+        when .pageup?    then key = Event::Key::PgUp
+        when .pagedown?  then key = Event::Key::PgDn
+        when .lctrl?     then key = Event::Key::Cl
+        when .rctrl?     then key = Event::Key::Cr
+        when .lshift?    then key = Event::Key::Sl
+        when .rshift?    then key = Event::Key::Sr
+        when .lalt?      then key = Event::Key::Al
+        when .ralt?      then key = Event::Key::Ar
+        else
+          Log.debug { "unhandled SDL scancode #{scancode}" }
+          return
+        end
+      {% end %}
+
+      ctrl = event.keysym.mod.lctrl? || event.keysym.mod.rctrl?
+      shift = event.keysym.mod.lshift? || event.keysym.mod.rshift?
+      alt = event.keysym.mod.lalt? || event.keysym.mod.ralt?
+
+      case event.type
+      when .keyup?
+        Event.term(Event::KeyUp.new(key, ctrl, shift, alt)) do |term|
+          fn.call(target, term)
+        end
+      when .keydown?
+        Event.term(Event::KeyDn.new(key, ctrl, shift, alt)) do |term|
+          fn.call(target, term)
+        end
+      end
+    end
+
+    private def dispatch(live : Set(Some), event : SDL::Event::TextInput, fn)
+      return unless target = target?(live, event)
+
+      Event.term(Event::KeyInput.new(String.new(event.text.to_slice, truncate_at_null: true))) do |term|
+        fn.call(target, term)
+      end
+    end
+
+    private def dispatch(live : Set(Some), event : SDL::Event::Window, fn)
+      return unless target = target?(live, event)
+
+      case SDL::Window::Event.new(event.event)
+      when .resized?
+        # NOTE: resized is only triggered on user resize, programmatic
+        # resize doesn't trigger it which is actually what we want here!
+        Event.term(Event::WindowResized.new(event.data1, event.data2)) do |term|
+          fn.call(target, term)
+        end
+      when .close?
+        hide(target)
+        live.delete(target.sys.id)
+      end
+    end
+
+    private def dispatch(live : Set(Some), event, fn)
+    end
+
     # Polls and yields events from each open window of *windows*. Since this method
     # also handles window closure, a set of live (open) windows is returned for
     # the caller to sync with.
-    def poll(windows : Enumerable(Any), & : Some, Term ->) : Set(Some)
+    def poll(windows : Enumerable(Any), &fn : Some, Term ->) : Set(Some)
       live = Set(Some).new
 
       windows.each do |window|
@@ -210,125 +347,7 @@ module Ww::Soma::DwUIR
         break unless live.present?
         break unless event = SDL::Event.poll
 
-        case event
-        when SDL::Event::Quit
-          windows.each { |window| hide(window) }
-          live.clear
-        when SDL::Event::MouseMotion
-          next unless target = target?(windows, event)
-
-          Event.term(Event::MouseMotion.new(event.which, event.x, event.y)) do |term|
-            yield target, term
-          end
-        when SDL::Event::MouseButton
-          next unless target = target?(windows, event)
-
-          case event.button
-          when LibSDL::BUTTON_LEFT
-            button = Event::MouseButton::Left
-          when LibSDL::BUTTON_MIDDLE
-            button = Event::MouseButton::Middle
-          when LibSDL::BUTTON_RIGHT
-            button = Event::MouseButton::Right
-          when LibSDL::BUTTON_X1
-            button = Event::MouseButton::Backward
-          when LibSDL::BUTTON_X2
-            button = Event::MouseButton::Forward
-          else
-            Log.debug { "unhandled SDL mouse button id #{event.button}" }
-            next
-          end
-
-          case event
-          when .pressed?
-            Event.term(Event::MouseDn.new(event.which, button, event.x, event.y, event.clicks)) do |term|
-              yield target, term
-            end
-          when .released?
-            Event.term(Event::MouseUp.new(event.which, button, event.x, event.y, event.clicks)) do |term|
-              yield target, term
-            end
-          end
-        when SDL::Event::Keyboard
-          next unless target = target?(windows, event)
-
-          key = nil
-
-          {% begin %}
-            case scancode = event.keysym.scancode
-            {% for key in "0123456789".chars %}
-            when .key_{{key.id}}?
-              key = Event::Key::Digit{{key.id}}
-            when .kp_{{key.id}}?
-              key = Event::Key::Np{{key.id}}
-            {% end %}
-            {% for key in %w[f1 f2 f3 f4 f5 f6 f7 f8 f9 f10 f11 f12] %}
-            when .{{key.id}}?
-              key = Event::Key::{{key.id.upcase}}
-            {% end %}
-            {% for key in "abcdefghijklmnopqrstuvwxyz".chars %}
-            when .{{key.id}}?
-              key = Event::Key::{{key.id.upcase}}
-            {% end %}
-            when .grave?     then key = Event::Key::Backquote
-            when .up?        then key = Event::Key::Up
-            when .down?      then key = Event::Key::Dn
-            when .left?      then key = Event::Key::Left
-            when .right?     then key = Event::Key::Right
-            when .tab?       then key = Event::Key::Tab
-            when .return?    then key = Event::Key::Enter
-            when .insert?    then key = Event::Key::Insert
-            when .delete?    then key = Event::Key::Delete
-            when .backspace? then key = Event::Key::Backspace
-            when .home?      then key = Event::Key::Home
-            when .end?       then key = Event::Key::End
-            when .pageup?    then key = Event::Key::PgUp
-            when .pagedown?  then key = Event::Key::PgDn
-            when .lctrl?     then key = Event::Key::Cl
-            when .rctrl?     then key = Event::Key::Cr
-            when .lshift?    then key = Event::Key::Sl
-            when .rshift?    then key = Event::Key::Sr
-            when .lalt?      then key = Event::Key::Al
-            when .ralt?      then key = Event::Key::Ar
-            else
-              Log.debug { "unhandled SDL scancode #{scancode}" }
-              next
-            end
-          {% end %}
-
-          ctrl = event.keysym.mod.lctrl? || event.keysym.mod.rctrl?
-          shift = event.keysym.mod.lshift? || event.keysym.mod.rshift?
-          alt = event.keysym.mod.lalt? || event.keysym.mod.ralt?
-
-          case event.type
-          when .keyup?
-            Event.term(Event::KeyUp.new(key, ctrl, shift, alt)) do |term|
-              yield target, term
-            end
-          when .keydown?
-            Event.term(Event::KeyDn.new(key, ctrl, shift, alt)) do |term|
-              yield target, term
-            end
-          end
-        when SDL::Event::TextInput
-          next unless target = target?(windows, event)
-
-          Event.term(Event::KeyInput.new(String.new(event.text.to_slice, truncate_at_null: true))) do |term|
-            yield target, term
-          end
-        when SDL::Event::Window
-          next unless target = target?(windows, event)
-
-          case SDL::Window::Event.new(event.event)
-          when .resized?
-            Event.term(Event::WindowResized.new(event.data1, event.data2)) do |term|
-              yield target, term
-            end
-          when .close?
-            hide(target)
-            live.delete(target.sys.id)
-          end
-        end
+        dispatch(live, event, fn)
       end
 
       live
