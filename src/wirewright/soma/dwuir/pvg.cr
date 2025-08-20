@@ -5,9 +5,13 @@ module Ww::Soma::DwUIR
   struct PvgPlatform
     include Platform
 
-    def initialize(files : FileServer, vwh : Point)
+    def initialize(@files : FileServer, vwh : Point)
       @fonts = PvgFontFaceStore.new
       @images = PvgImageServer.new(files, vwh)
+    end
+
+    def files : FileServer
+      @files
     end
 
     def pencils : PencilServer
