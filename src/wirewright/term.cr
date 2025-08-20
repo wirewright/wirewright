@@ -805,6 +805,52 @@ module Ww
   struct Term
     # Represents a 256-bit hash of a term using four 64-bit blocks.
     record H256, blk0 : UInt64, blk1 : UInt64, blk2 : UInt64, blk3 : UInt64 do
+      ALGORITHM = Digest::Blake3
+
+      # :nodoc:
+      def self.new(term : Term)
+        digest = ALGORITHM.new
+        io = IO::ByteStream.new { |slice| digest.update(slice) }
+
+        ML.compact(io, term)
+
+        scratch = uninitialized UInt8[32]
+        blks = scratch.to_slice.unsafe_slice_of(UInt64)
+
+        digest.final(scratch.to_slice)
+
+        H256.new(blks[0], blks[1], blks[2], blks[3])
+      end
+
+      # Ordered combination of *hashes*.
+      def self.combine(hashes : Enumerable(H256)) : H256
+        digest = ALGORITHM.new
+
+        scratch = uninitialized UInt8[32]
+        blks = scratch.to_slice.unsafe_slice_of(UInt64)
+
+        hashes.each do |hash|
+          blks[0] = hash.blk0
+          blks[1] = hash.blk1
+          blks[2] = hash.blk2
+          blks[3] = hash.blk3
+          digest.update(scratch.to_slice)
+        end
+
+        digest.final(scratch.to_slice)
+
+        H256.new(blks[0], blks[1], blks[2], blks[3])
+      end
+
+      # Returns an indexable of blocks `blk0-3`.
+      def blks : Indexable(UInt64)
+        {blk0, blk1, blk2, blk3}
+      end
+
+      def <=>(other : H256)
+        blks <=> other.blks
+      end
+
       def inspect(io)
         io << "H256("
         to_s(io)
@@ -822,19 +868,9 @@ module Ww
       end
     end
 
-    # Returns the 256-bit hash of *term*, calculated using *digester*.
-    def self.hashcode256(term : Term | ITerm, *, digester = Digest::Blake3) : H256
-      digest = digester.new
-      io = IO::ByteStream.new { |slice| digest.update(slice) }
-
-      ML.compact(io, term)
-
-      scratch = uninitialized UInt8[32]
-      digest.final(scratch.to_slice)
-
-      blks = scratch.to_unsafe.as(UInt64*)
-
-      H256.new(blks[0], blks[1], blks[2], blks[3])
+    # Returns the 256-bit hash of *term* calculated using `H256::ALGORITHM`.
+    def self.hashcode256(term : Term | ITerm) : H256
+      H256.new(Term.of(term))
     end
   end
 
