@@ -5816,8 +5816,50 @@ end
 # around `M1::Operator`) and organizing them for efficient response
 # to matchees.
 class PatternSet
+  alias Bucket = Slice(Pattern)
+
+  # Includers are used to determine the indexing key; such a key must be something
+  # that a pattern and all its possible matchees *necessarily share*. If the key is
+  # indeterminate for a matchee, patterns requiring that key are not going to
+  # be tested.
+  module Key
+    # Extracts a key term from a pattern. Both its original (*pattern*) and
+    # normal-form (*normp*) version are given. Returns `nil` if indeterminate;
+    # in such case the pattern will be tested on all matchees.
+    abstract def of_pattern?(pattern : Term, normp : Term) : Term?
+
+    # Extracts a key term from a matchee. If indeterminate, patterns with
+    # a determinate key are all going to be skipped.
+    abstract def of_matchee?(matchee : Term) : Term?
+  end
+
+  # The default key implementation, uses `M1.head?`.
+  module Key::Head
+    extend Key
+
+    def self.of_pattern?(pattern : Term, normp : Term) : Term?
+      M1.head?(normp)
+    end
+
+    def self.of_matchee?(matchee : Term) : Term?
+      matchee.as_d?.try(&.items.first?)
+    end
+  end
+
   # :nodoc:
-  def initialize(@headed : Hash(Term, Slice(Pattern)), @headless : Slice(Pattern))
+  struct KeyedMap
+    def initialize(@map : Hash(Term, Bucket), @key : Key)
+    end
+
+    def bucket?(matchee : Term) : Bucket?
+      return unless key = @key.of_matchee?(matchee)
+
+      @map[key]?
+    end
+  end
+
+  # :nodoc:
+  def initialize(@keyed : KeyedMap, @unkeyed : Bucket)
   end
 
   # Constructs a pattern set by extracting patterns from *base* using *selector*.
@@ -5843,10 +5885,10 @@ class PatternSet
   #   true # E.g. body is valid
   # end
   # ```
-  def self.select(selector : Term, base : Term, & : Term, Term::Dict -> Bool?) : PatternSet
+  def self.select(selector : Term, base : Term, *, key keymod : Key = Key::Head, & : Term, Term::Dict -> Bool?) : PatternSet
     seen = Set(Term).new
 
-    headed = {} of Term => Array(Int32)
+    keyed = {} of Term => Array(Int32)
     headless = [] of Int32
 
     patterns = [] of Pattern
@@ -5871,13 +5913,13 @@ class PatternSet
           Profile.optop[operator] = pattern
         {% end %}
 
-        pattern = Pattern.new(index.to_u32, operator)
+        pattern_object = Pattern.new(index.to_u32, operator)
         next unless yield normp, env
 
-        patterns << pattern
+        patterns << pattern_object
 
-        if head = M1.head?(normp)
-          neighbors = headed.put_if_absent(head) { [] of Int32 }
+        if key = keymod.of_pattern?(pattern, normp)
+          neighbors = keyed.put_if_absent(key) { [] of Int32 }
           neighbors << index
         else
           headless << index
@@ -5885,20 +5927,20 @@ class PatternSet
       end
     end
 
-    # Now that we have everything neatly organized, sort headed and headless
+    # Now that we have everything neatly organized, sort keyed and headless
     # patterns by specificity, descending.
     headless.sort! { |a, b| specificities.unsafe_fetch(b) <=> specificities.unsafe_fetch(a) }
-    headed.each do |_, neighbors|
+    keyed.each do |_, neighbors|
       neighbors.sort! { |a, b| specificities.unsafe_fetch(b) <=> specificities.unsafe_fetch(a) }
     end
 
-    oheaded = headed.transform_values do |indices|
+    okeyed = keyed.transform_values do |indices|
       indices.to_readonly_slice.map(read_only: true) { |index| patterns[index] }
     end
 
     oheadless = headless.to_readonly_slice.map(read_only: true) { |index| patterns[index] }
 
-    new(oheaded, oheadless)
+    new(KeyedMap.new(okeyed, keymod), oheadless)
   end
 
   # Block-less version of `select`.
@@ -5914,20 +5956,20 @@ class PatternSet
   struct Candidates
     include ICursor
 
-    def initialize(@headed : Slice(Pattern), @headless : Slice(Pattern), @index = 0)
+    def initialize(@keyed : Bucket, @unkeyed : Bucket, @index = 0)
     end
 
     def current? : Pattern?
-      if 0 <= @index < @headed.size
-        @headed[@index]
-      elsif 0 <= @headed.size <= @index < @headed.size + @headless.size
-        @headless[@index - @headed.size]
+      if 0 <= @index < @keyed.size
+        @keyed[@index]
+      elsif 0 <= @keyed.size <= @index < @keyed.size + @unkeyed.size
+        @unkeyed[@index - @keyed.size]
       end
     end
 
     def next? : Candidates?
-      if @index + 1 < @headed.size + @headless.size
-        Candidates.new(@headed, @headless, @index + 1)
+      if @index + 1 < @keyed.size + @unkeyed.size
+        Candidates.new(@keyed, @unkeyed, @index + 1)
       end
     end
   end
@@ -5957,13 +5999,10 @@ class PatternSet
   end
 
   def candidates(matchee : Term) : Candidates
-    bucket = matchee.as_d?
-      .try { |dict| dict.items.first? }
-      .try { |head| @headed[head]? }
+    bucket = @keyed.bucket?(matchee)
+    bucket ||= Bucket.empty
 
-    bucket ||= Slice(Pattern).empty
-
-    Candidates.new(bucket, @headless, index: 0)
+    Candidates.new(bucket, @unkeyed, index: 0)
   end
 
   def responses(matchee : Term, *, env = Term[]) : Responses
@@ -6040,6 +6079,10 @@ class ::Ww::Term::Dict
   # Lets the block replace items in the given *range* with zero or more items
   # by appending to the commit. Returns the modified copy of `self`.
   def replace(range : Range(Term::Num, Term::Num), & : Term::Dict::Commit ->) : Term::Dict
+    unless range.exclusive?
+      raise ArgumentError.new("expected an exclusive range")
+    end
+
     pairspart.transaction do |commit|
       # Copy before
       (Term[0]...range.begin).each do |index|
