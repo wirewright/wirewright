@@ -38,4 +38,28 @@ require "./dwuir/font"
   require "./dwuir/pvg"
 
   require "./dwuir/window"
+
+  module Ww::Soma::DwUIR
+    # Groups configuration for the `show` shorthand function.
+    #
+    # - *width* is the width of the resulting image, in pixels.
+    # - *height* is the height of the resulting image, in pixels.
+    # - *backdrop* is the clear color of the resulting image.
+    # - *content* is the DwUIR to make a snapshot of.
+    record ShowConf,
+      width : Int32,
+      height : Int32,
+      backdrop : Color,
+      content : Term
+
+    # A shorthand function to perform a single, one-off draw of *content*.
+    # Returns the resulting pixel rectangle `PixelRect`.
+    def show(ctx : Viewer::Context, conf : ShowConf)
+      screen = PixelRect.new(0, 0, conf.width, conf.height)
+      viewer = Viewer.new(screen, ctx)
+      viewer.show(conf.content, bg: conf.backdrop)
+
+      screen
+    end
+  end
 {% end %}

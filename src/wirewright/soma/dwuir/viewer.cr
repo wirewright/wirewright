@@ -4,12 +4,21 @@ module Ww::Soma::DwUIR
   # the other auxiliary objects. So you're free to do whatever you want with it,
   # before or after `show`ing your DwUIR.
   class Viewer
+    # Represents the context of a DwUIR viewer `Viewer`.
+    record Context,
+      compositor : Compositor,
+      platform : Platform
+
     @picture : Picture?
 
     def initialize(@screen : PixelRect, @compositor : Compositor, @platform : Platform)
       unless @screen.bounds.xy == {0, 0}
         raise ArgumentError.new("expected a pixel rect with x=0 y=0")
       end
+    end
+
+    def self.new(screen, ctx : Context)
+      new(screen, ctx.compositor, ctx.platform) # ?!
     end
 
     # :nodoc:
