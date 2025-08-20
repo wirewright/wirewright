@@ -157,7 +157,7 @@ module Ww
     end
 
     # :ditto:
-    def row(els : Array(T), **kwargs, & : T -> Ω::Element) forall T
+    def row(els : Enumerable(T), **kwargs, & : T -> Ω::Element) forall T
       row(els.map { |object| (yield object).as(Ω::Element) }, **kwargs)
     end
 
@@ -178,7 +178,7 @@ module Ww
     end
 
     # :ditto:
-    def col(els : Array(T), **kwargs, & : T -> Ω::Element) forall T
+    def col(els : Enumerable(T), **kwargs, & : T -> Ω::Element) forall T
       col(els.map { |object| (yield object).as(Ω::Element) }, **kwargs)
     end
 
