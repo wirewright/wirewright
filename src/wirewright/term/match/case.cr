@@ -1,4 +1,28 @@
 struct Ww::Term
+  # Case sessions logically wrap each `match[p][i]` or `given[p][i]` (branch)
+  # in a `Term.case`. They may allow or deny entrance given a branch's program-
+  # unique id (`enter?`). They are also notified about matches of branches
+  # (`matched`).
+  #
+  # The original use case is to disable branches once they were matched. `enter?`
+  # checks the set of visited branches; `matched` adds to that set.
+  module CaseSession
+    abstract def enter?(pattern_id : UInt32) : Bool
+    abstract def matched(pattern_id : UInt32) : Nil
+
+    # The default, noop case session.
+    module None
+      extend CaseSession
+
+      def self.enter?(pattern_id : UInt32) : Bool
+        true
+      end
+
+      def self.matched(pattern_id : UInt32) : Nil
+      end
+    end
+  end
+
   struct CaseContext(Engine)
     # See `continue`.
     module Continue
@@ -10,6 +34,7 @@ struct Ww::Term
       @env = Term[],
       @stats : CaseStatistics? = nil,
       @patterns : IStack(String)? = nil,
+      @session : CaseSession = CaseSession::None,
     )
     end
 
@@ -28,6 +53,10 @@ struct Ww::Term
 
     # :nodoc:
     def match?(pid : UInt32, pattern : -> Term, *, location : String, cue cues = Tuple.new, default = nil, &)
+      unless @session.enter?(pid)
+        return default
+      end
+
       if (mdict = @matchee.as_d?) && !cues.all? { |cue| mdict.probably_includes?(Term[cue]) }
         @stats.try &.rejected_by_cue
 
@@ -48,6 +77,7 @@ struct Ww::Term
         return default
       end
 
+      @session.matched(pid)
       @stats.try &.accepted(pterm)
 
       yield env
