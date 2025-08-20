@@ -299,9 +299,7 @@ struct ProcRuleset
     in Pr::One
       if rule = rule?(pr.pattern.index)
         offspring = rule.call(pr.env)
-      end
-
-      if backmap = backmap?(pr.pattern.index)
+      elsif backmap = backmap?(pr.pattern.index)
         unless pr.env.includes?(:"(backpaths)")
           pr = pr.pattern.response(matchee0, backpaths: true).as(Pr::One)
         end
@@ -347,10 +345,10 @@ struct Ruleset
 
   # - Capture `template` in *selector* forms a template rule.
   # - Capture `backspec` in *selector* forms a backmap rule.
-  def self.select(selector, base)
+  def self.select(selector, base, **kwargs)
     rules = [] of Rule::Any
 
-    pset = PatternSet.select(selector, base) do |normp, env|
+    pset = PatternSet.select(selector, base, **kwargs) do |normp, env|
       if template = env[:template]?
         rule = Rule::Template.new(template)
       elsif backspec = env[:backspec]?
@@ -393,7 +391,7 @@ struct Ruleset
     Responses.new(@pset.responses(matchee, env: env), @rules)
   end
 
-  def call(matchee : Term) : {Pr::Pos, Rule::Any}?
+  def call?(matchee : Term) : {Pr::Pos, Rule::Any}?
     case res = @pset.response(matchee)
     in Pr::Pos
       {res, @rules[res.pattern.index]}
