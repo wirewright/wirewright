@@ -31,7 +31,7 @@ module Ww::Issue
     QUIET
   end
 
-  # Includers are different *issues spots*. A issue spot is roughly
+  # Includers are different *issues spots*. An issue spot is roughly
   # the location part of a backtrace entry.
   module Spot
     # Formats this spot using the internal `Ww::Ω` terminal/stringformatting framework.
@@ -250,7 +250,7 @@ module Ww::Issue
       adjoin(Spot::StringDetail.new(detail, view)) { |sink| yield sink }
     end
 
-    # Reports a issue with the given *severity*.
+    # Reports an issue with the given *severity*.
     #
     # This is the `Issue` equivalent of a `raise`, which potentially
     # similar expenses.
