@@ -335,7 +335,7 @@ module Ww::Soma::DwUIR
     end
   end
 
-  private def render(picture : Picture, pencils : PencilServer, context : Context, node : Term) : WalkFlow
+  private def render(picture : Picture, pencils : PencilServer, context : WalkContext, node : Term) : WalkFlow
     Term.case(node) do
       # |@ soma.dwuir.node.composite
       #

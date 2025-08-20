@@ -1,6 +1,6 @@
 module Ww::Soma::DwUIR
   # Represents the context of each node.
-  defcase Context,
+  defcase WalkContext,
     view : View,
     layer : LayerRank,
     tf : Tf,
@@ -11,7 +11,7 @@ module Ww::Soma::DwUIR
 
   # Returns `true` if *bounds* are going to be seen by the user after all
   # transformations based on *context*. Returns `false` otherwise.
-  def visible?(context : Context, bounds : Rect = context.bounds) : Bool
+  def visible?(context : WalkContext, bounds : Rect = context.bounds) : Bool
     tfbounds = context.tf.map(bounds)
     tfbounds.intersects?(context.view)
   end
@@ -22,13 +22,13 @@ module Ww::Soma::DwUIR
     Next
   end
 
-  # Calls *fn* with each node of *dwuir* and its corresponding `Context`.
+  # Calls *fn* with each node of *dwuir* and its corresponding `WalkContext`.
   #
   # *fn* must in turn respond whether to recurse into the node or not.
   #
-  # *keypath* can be assigned to enable node keypath tracking (see `Context`).
-  def walk(dwuir : Term, *, viewport : Rect, keypath : Term::Dict? = nil, &fn : Context, Term -> WalkFlow) : Nil
-    context = Context.new(
+  # *keypath* can be assigned to enable node keypath tracking (see `WalkContext`).
+  def walk(dwuir : Term, *, viewport : Rect, keypath : Term::Dict? = nil, &fn : WalkContext, Term -> WalkFlow) : Nil
+    context = WalkContext.new(
       view: viewport.inf? ? Slice(Quad).empty : Slice[viewport.quad],
       layer: LayerRank[],
       tf: Tf.new,
@@ -42,7 +42,7 @@ module Ww::Soma::DwUIR
   end
 
   # :nodoc:
-  def walk(context, node, &fn : Context, Term -> WalkFlow) : Nil
+  def walk(context, node, &fn : WalkContext, Term -> WalkFlow) : Nil
     Term.case(node) do
       # NOTE: the order of matchpis here is important for some nodes but
       # not others; try not to shuffle them too much.
