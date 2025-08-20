@@ -789,6 +789,17 @@ module ::Ww::M1::Operator
     match(behind0.backpath(&.delete_keys(op.side, &.key)), op.below, Term.of(residue), ahead2)
   end
 
+  # TODO: First, Source, and especially All and AllIsolated have *extremely* degenerate
+  # implementations right now. The latter two barely work. They must be rewritten to use
+  # the "stringing" approach (as above with EntrySeq). This requires pulling (i.e. .next)
+  # traversal rather than pushing one we're using here. Push-based traversal (`Search`) is totally
+  # against the way M1 is implemented. The stringing approach would probably be slower
+  # until we figure backjumping out. Backjumping is hard as far as I understand it, because
+  # we must know *where* to backjump without reducing search generality, and that presumably
+  # requires tracking dependencies and so on, and I'm too stupid to do that right now. SAT/
+  # constraint solver guys are not so I should probably learn some of their stuff in
+  # the meantime. I remember them doing numerous other tricks, too.
+
   def match(behind0, op : First, matchee : Term, ahead0)
     memo = Fb::Mismatch.new(behind0.env)
 
@@ -4364,6 +4375,8 @@ module ::Ww::M1
     walk(root) do |node|
       Term.case(node, engine: M0) do
         matchpi %{[%capture capture_]} do
+          next if capture.type.symbol? && capture.unsafe_as_sym.m1_private_capture?
+
           storage << capture
         end
 

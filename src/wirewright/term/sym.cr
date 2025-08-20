@@ -286,6 +286,14 @@ module Ww
     # NOTE: It appears that some Entity symbols can be *parsed* from normal
     # ones, such as µ-* symbols for microfold; whereas others must be constructed
     # by hand in the native code, such as rule id/rule group id/etc.
+    #
+    # NOTE: we should probably claim more than 4 bytes; if term tagging fix
+    # happens we'd get 7 bytes. at least 1 byte we can use for flags: is it a
+    # rule id, rule block id, m1 private capture, etc. Then the rest of the 6
+    # bytes are for the usual stuff (symbol id + blank config or nonblank symbol id)
+    # The flags should probably be on the high(er) end -- the rarer they are, the
+    # higher they should be. This is because we want the majority of symbols to
+    # fit into u8 or u16, so that Dicts and TermArrays can pack them in the future.
 
     def self.rule_id(byte_start, *, blank : Bool) : Sym
       name = String.build do |io|
@@ -418,7 +426,13 @@ module Ww
     # Returns `true` if this symbol is reserved for Microfold. Returns
     # `false` otherwise.
     def microfold? : Bool
-      to(String).prefixed_by?("µ-")
+      name = to(String)
+      name.prefixed_by?("µ-")
+    end
+
+    def m1_private_capture? : Bool
+      name = to(String)
+      name.prefixed_by?("\\")
     end
 
     def to(type : String.class) : String
