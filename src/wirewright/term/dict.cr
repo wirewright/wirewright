@@ -877,7 +877,7 @@ module Ww
       end
     end
 
-    def where(prefix : ItemsView, eq value) : Dict
+    def where(prefix : ItemsView | Slice(Term), eq value) : Dict
       case prefix.size
       when 0
         raise ArgumentError.new
@@ -896,7 +896,7 @@ module Ww
           value0 = Term[]
         end
 
-        self.with(key, value0.where(prefix.move(1), value))
+        self.with(key, value0.where(prefix + 1, value))
       end
     end
 
