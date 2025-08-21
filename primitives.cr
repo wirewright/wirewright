@@ -166,6 +166,43 @@ PRIMITIVES = ProcRuleset.build do
     end
   end
 
+  rulepi1 %{(subseq whole_dict (pattern selector_))} do
+    Term::Dict.build do |commit|
+      commit.selected(whole.items) do |item|
+        M1.probe?(selector, item)
+      end
+    end
+  end
+
+  # TODO: we must use this under `complement` somehow!!!!
+  rulepi1 %{(-subseq whole_dict (pattern selector_))} do
+    Term::Dict.build do |commit|
+      commit.rejected(whole.items) do |item|
+        M1.probe?(selector, item)
+      end
+    end
+  end
+
+  rulepi1 %{(part whole_dict (key key_))} do
+    whole.pluck(key)
+  end
+
+  rulepi1 %{(part whole_dict items)} do
+    whole.itemspart
+  end
+
+  rulepi1 %{(part whole_dict pairs)} do
+    whole.pairspart
+  end
+
+  rulepi1 %{(complement universe_dict subset_dict)} do
+    universe.transaction do |commit|
+      subset.each_entry do |key, _|
+        commit.without(key)
+      end
+    end
+  end
+
   rulepi1 %[(tally xs_dict)] do
     xs.unsafe_as_d.size
   end
