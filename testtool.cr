@@ -1146,7 +1146,7 @@ end
 def rack_image(ctx, rack : Term, needle : Term) : Soma::DwUIR::PixelRect
   files = Disk
   # These aren't thread safe so we cannot reuse them!
-  platform = Soma::DwUIR::PvgPlatform.new(files, Soma::DwUIR::Point[800, 600])
+  platform = Soma::DwUIR::PvgPlatform.new(files)
   compositor = Soma::DwUIR::Compositor.new
   viewer_context = Soma::DwUIR::Viewer::Context.new(compositor, platform)
 

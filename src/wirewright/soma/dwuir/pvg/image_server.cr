@@ -7,11 +7,9 @@ module Ww::Soma::DwUIR
 
     # Constructs an image server.
     #
-    # - The file server at *files* lets the image server read the paths that
-    #   the user provides.
-    # - *vwh* sets the viewport width and height; as far as I understand, this is
-    #   necessary for PlutoSVG to be able to resolve percent (root size?) of SVG.
-    def initialize(@files : FileServer, @vwh : Point)
+    # The file server at *files* lets the image server read the paths that
+    # the user provides.
+    def initialize(@files : FileServer)
       @cache = {} of Term => PvgImage
     end
 
@@ -28,15 +26,7 @@ module Ww::Soma::DwUIR
 
           case path.extension
           when ".svg"
-            unless document0 = PlutoSVG.document_load_from_data(data, data.size, @vwh.x, @vwh.y, nil, nil)
-              raise ImageServerError.new("image file found does not appear to be (a supported kind of) SVG")
-            end
-
-            documents = -> do
-              PlutoSVG.document_load_from_data(data, data.size, @vwh.x, @vwh.y, nil, nil) || unreachable
-            end
-
-            PvgSvgImage.new(document0, documents)
+            PvgSvgImage.new(data)
           when ".png", ".jpg", ".jpeg", ".bmp", ".psd", ".gif", ".ppm"
             # |@ soma.dwuir.paint.image.plutovg
             #
@@ -92,6 +82,7 @@ module Ww::Soma::DwUIR
 
     getter size : Point
 
+    # :nodoc:
     def initialize(@surface : PlutoVG::Surface)
       @size = Point[
         PlutoVG.surface_get_width(surface),
@@ -116,18 +107,30 @@ module Ww::Soma::DwUIR
   class PvgSvgImage
     include Image
 
-    getter size : Point
+    # :nodoc:
+    def initialize(@data : Bytes)
+    end
 
-    def initialize(document0 : PlutoSVG::Document, @documents : -> PlutoSVG::Document)
-      PlutoSVG.document_extents(document0, nil, out extents)
+    getter size : Point do
+      # This looks really really expensive...
 
-      @size = Point.new(extents.w, extents.h)
+      unless document = PlutoSVG.document_load_from_data(@data, @data.size, 0, 0, nil, nil)
+        raise ImageServerError.new("image file does not appear to be (a supported kind of) SVG")
+      end
+
+      unless PlutoSVG.document_extents(document, nil, out extents)
+        return Point[0, 0]
+      end
+
+      Point.new(extents.w, extents.h)
     end
 
     # WARNING: you **must not** retain the yielded document. It is freed
     # after the block.
-    def document(& : PlutoSVG::Document ->)
-      document = @documents.call
+    def document(vwh : Point, & : PlutoSVG::Document ->)
+      unless document = PlutoSVG.document_load_from_data(@data, @data.size, vwh.x, vwh.y, nil, nil)
+        raise ImageServerError.new("image file does not appear to be (a supported kind of) SVG")
+      end
 
       begin
         yield document

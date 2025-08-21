@@ -152,7 +152,7 @@ module Ww::Soma::DwUIR
         return
       end
 
-      svg.document do |document|
+      svg.document(bounds.size) do |document|
         PlutoSVG.document_extents(document, nil, out svg_extents)
 
         svgbounds = Rect[svg_extents.x, svg_extents.y, svg_extents.w, svg_extents.h]

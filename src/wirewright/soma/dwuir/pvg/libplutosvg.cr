@@ -7,5 +7,5 @@ lib PlutoSVG
 
   fun document_render = plutosvg_document_render(document : Document, id : UInt8*, canvas : PlutoVG::Canvas, current_color : PlutoVG::Color*, palette_func : Void*, closure : Void*) : Bool
   fun document_destroy = plutosvg_document_destroy(document : Document)
-  fun document_extents = plutosvg_document_extents(document : Document, id : UInt8*, extents : PlutoVG::Rect*)
+  fun document_extents = plutosvg_document_extents(document : Document, id : UInt8*, extents : PlutoVG::Rect*) : Bool
 end
