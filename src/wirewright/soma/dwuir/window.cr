@@ -27,11 +27,6 @@ module Ww::Soma::DwUIR
     # implementation-specific objects. It is then allowed and expected to treat `Some`
     # as an alias to `T`, which only works in Crystal if `Some` has one includer -- `T`.
     module Some
-      # Returns an application-unique object identifing the window.
-      abstract def id
-
-      # Open windows are compared and hashed by their id.
-      def_equals_and_hash id
     end
 
     # Mouse cursors supported by Soma/DwUIR.

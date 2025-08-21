@@ -47,13 +47,11 @@ module Ww::Soma::DwUIR
     record State, sys : SDL::Window, renderer : SDL::Renderer, frame : Frame, conf : Conf do
       include Some
 
-      def id
-        sys.id
-      end
+      def_equals_and_hash sys.id, conf
     end
 
     # :nodoc:
-    defcase Context, viewer : Viewer::Context, cursors : CursorStore
+    record Context, viewer : Viewer::Context, cursors : CursorStore
 
     # Stores SDL system cursor instances.
     class CursorStore
