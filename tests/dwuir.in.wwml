@@ -1,6 +1,7 @@
 title: "Hello DwUIR"
 initial-w: 1800
 initial-h: 1000
+backdrop: (oklch 0.9 0 0)
 
 ;; Test the various color spaces / ways to write colors. All of these rects
 ;; must have the same color (or in the worst case, approximately the same color --

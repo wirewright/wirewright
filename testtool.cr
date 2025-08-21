@@ -1,6 +1,4 @@
 require "./src/wirewright"
-require "./src/dwuir2ppm"
-require "./uir2ppm"
 require "./libtermbox2"
 
 require "compress/gzip"
@@ -572,7 +570,7 @@ def tspace(flow : Term::Dict, & : Term, Term ->)
   end
 end
 
-defcase TestContext, theme : Mf::Theme
+defcase TestContext, theme : Mf::Theme, rack_base : Term::Dict
 
 def test(ctx, test, path, keypath, stem, srcmap, text) : Bool
   Term.case(stem) do
@@ -1145,6 +1143,33 @@ def test(ctx, test, path, content, srcmap)
   end
 end
 
+def rack_image(ctx, rack : Term, needle : Term) : Soma::DwUIR::PixelRect
+  files = Disk
+  # These aren't thread safe so we cannot reuse them!
+  platform = Soma::DwUIR::PvgPlatform.new(files, Soma::DwUIR::Point[800, 600])
+  compositor = Soma::DwUIR::Compositor.new
+  viewer_context = Soma::DwUIR::Viewer::Context.new(compositor, platform)
+
+  env = Rack.env(
+    rack: rack,
+    base: ctx.rack_base,
+    agents: [
+      Rack.uir(platform),
+      Rack.snap(viewer_context),
+      Rack.file_server(files),
+    ] of Rack::Agent::Any,
+  )
+
+  image = env.states.each
+    .map { |_, state| state }
+    .select(Rack::State::Image::InMemory)
+    .select { |img| img.id == needle }
+    .map(&.data)
+    .first
+
+  image || raise KeyError.new("rack did not define image `#{needle}`")
+end
+
 # Runs a comparison test.
 def compare(ctx, test, specpath, title, a, b, text)
   Term.case({a, b}) do
@@ -1172,53 +1197,76 @@ def compare(ctx, test, specpath, title, a, b, text)
       end
     end
 
+    givenpi %{(rack/image rackpath_string id_) (ppm imgpath_string)} do
+      rack = ML.document(File.read(Path["tests"] / rackpath.to(String)))
+      expected = File.open(Path["tests"] / imgpath.to(String), "rb", &.getb_to_end)
+
+      test.long(specpath, text) do |complaints|
+        actual = IO::Memory.new
+
+        img = rack_image(ctx, rack, id)
+        ppm = Soma::DwUIR::SnapFormat["ppm"]
+        ppm.call(actual, img)
+
+        next if expected.to_slice == actual.to_slice
+
+        complaints << Component.complaint(
+          title: "#{title.to(String)} comparison test failed. Terms derived from these files are different, which is unexpected.",
+          sections: [
+            {"DwUIR rack", rackpath.to(String)},
+            {"PPM", imgpath.to(String)},
+          ]
+        )
+      end
+    end
+
     # Compares DwUIR to PPM.
-    givenpi %[(dwuir dwpath_string) (ppm imgpath_string)] do
-      dwuir = ML.terms(File.read(Path["tests"] / dwpath.to(String)))
-      expected = File.open(Path["tests"] / imgpath.to(String), "rb", &.getb_to_end)
+    # givenpi %[(dwuir dwpath_string) (ppm imgpath_string)] do
+    #   dwuir = ML.terms(File.read(Path["tests"] / dwpath.to(String)))
+    #   expected = File.open(Path["tests"] / imgpath.to(String), "rb", &.getb_to_end)
 
-      iw = dwuir[:"initial-w"]?.try(&.to?(Int32)) || raise ArgumentError.new("DwUIR file must define initial-w")
-      ih = dwuir[:"initial-h"]?.try(&.to?(Int32)) || raise ArgumentError.new("DwUIR file must define initial-h")
+    #   iw = dwuir[:"initial-w"]?.try(&.to?(Int32)) || raise ArgumentError.new("DwUIR file must define initial-w")
+    #   ih = dwuir[:"initial-h"]?.try(&.to?(Int32)) || raise ArgumentError.new("DwUIR file must define initial-h")
 
-      test.long(specpath, text) do |complaints|
-        actual = IO::Memory.new
+    #   test.long(specpath, text) do |complaints|
+    #     actual = IO::Memory.new
 
-        DwUIR2PPM.dwuir2ppm(actual, dwuir, iw, ih)
+    #     DwUIR2PPM.dwuir2ppm(actual, dwuir, iw, ih)
 
-        next if expected.to_slice == actual.to_slice
+    #     next if expected.to_slice == actual.to_slice
 
-        complaints << Component.complaint(
-          title: "#{title.to(String)} comparison test failed. Terms derived from these files are different, which is unexpected.",
-          sections: [
-            {"DwUIR", dwpath.to(String)},
-            {"PPM", imgpath.to(String)},
-          ]
-        )
-      end
-    end
+    #     complaints << Component.complaint(
+    #       title: "#{title.to(String)} comparison test failed. Terms derived from these files are different, which is unexpected.",
+    #       sections: [
+    #         {"DwUIR", dwpath.to(String)},
+    #         {"PPM", imgpath.to(String)},
+    #       ]
+    #     )
+    #   end
+    # end
 
-    # Compares UIR to PPM.
-    givenpi %[(uir uipath_string) (ppm imgpath_string)] do
-      uir = ML.terms(File.read(Path["tests"] / uipath.to(String)))
+    # # Compares UIR to PPM.
+    # givenpi %[(uir uipath_string) (ppm imgpath_string)] do
+    #   uir = ML.terms(File.read(Path["tests"] / uipath.to(String)))
 
-      expected = File.open(Path["tests"] / imgpath.to(String), "rb", &.getb_to_end)
+    #   expected = File.open(Path["tests"] / imgpath.to(String), "rb", &.getb_to_end)
 
-      test.long(specpath, text) do |complaints|
-        actual = IO::Memory.new
+    #   test.long(specpath, text) do |complaints|
+    #     actual = IO::Memory.new
 
-        UIR2PPM.uir2ppm(actual, uir)
+    #     UIR2PPM.uir2ppm(actual, uir)
 
-        next if expected.to_slice == actual.to_slice
+    #     next if expected.to_slice == actual.to_slice
 
-        complaints << Component.complaint(
-          title: "#{title.to(String)} comparison test failed. Terms derived from these files are different, which is unexpected.",
-          sections: [
-            {"UIR", uipath.to(String)},
-            {"PPM", imgpath.to(String)},
-          ]
-        )
-      end
-    end
+    #     complaints << Component.complaint(
+    #       title: "#{title.to(String)} comparison test failed. Terms derived from these files are different, which is unexpected.",
+    #       sections: [
+    #         {"UIR", uipath.to(String)},
+    #         {"PPM", imgpath.to(String)},
+    #       ]
+    #     )
+    #   end
+    # end
 
     otherwise do
       test.complain(specpath, text) do |complaints|
@@ -1253,7 +1301,10 @@ end
 
 Ω.render(STDOUT, Ω.text("Wirewright tests tool", style: :emphasis), styled: styled)
 
-ctx = TestContext.new(theme: Mf.theme(ML.document(File.read("./theme.ufold.wwml")).as_d, rem: Term[16]))
+ctx = TestContext.new(
+  theme: Mf.theme(ML.document(File.read("./theme.ufold.wwml")).as_d, rem: Term[16]),
+  rack_base: ML.document(File.read("./runtime/base.rack.wwml")).as_d,
+)
 
 success = TestHarness.new(preview: preview, styled: styled) do |harness|
   specpath = Path["tests"] / "index.wwml"

@@ -1,0 +1,263 @@
+--- inference
+
+;; The majority of rules here don't *do* anything in the usual sense of the word.
+;; Instead, they are pattern matching the device and adding *proposals for computation*
+;; for the corresponding values into the workspace; and, once all such proposals
+;; have been satisfied, they issue `(native _)` calls built from the values computed.
+;;
+;; Some rules delegate their action to the Crystal side entirely and implicitly
+;; (i.e. not even through `native` calls); only their "proposals for computation"
+;; side is present here (see, e.g., `src`). The Crystal side then looks at the computed
+;; values and runs whatever Crystal code to compute the result and plug it into
+;; the workspace.
+;;
+;; Some rules are completely absent from here, and are fully implemented in Crystal
+;; (e.g. `dwuir/window`, `note`).
+
+;;
+;; const
+;;
+
+([const @edge_ value_] (%value edge ?))
+  => (proposal ^edge (currently ^value))
+
+;;
+;; src
+;;
+
+([src @queries_ @contents_] (%all (%value queries (currently _)) (%-value contents)))
+  => (proposal ^contents ?)
+
+;; If srcs is absent (i.e. not updated) but contents is unknown, that's handled
+;; by the Crystal side.
+
+;;
+;; ml
+;;
+
+([ml @srcs_ @terms_] (%all (%-value srcs) (%value terms ?)))
+  => (proposal ^srcs ?)
+([ml @srcs_ @terms_] (%all (%value srcs (currently _)) (%-value terms)))
+  => (proposal ^terms ?)
+
+;;
+;; microfold/theme
+;;
+
+;; If either of them is known theme must be known.
+([microfold/theme (@documents_ @rems_) @themes_] (%all (%value ⸨rems,documents⸩ (currently _)) (%-value themes)))
+  => (proposal ^themes ?)
+
+;; If either of them is known the other one must be known. The case when
+;; both are unknown is handled by the Crystal side, loading from memory.
+([microfold/theme (@documents_ @rems_) @themes_] (%all (%value ⸨rems,documents⸩ (currently _)) (%-value ⸨documents,rems⸩) (%value themes ?)))
+  => (proposal ^⸨documents,rems⸩ ?)
+
+;;
+;; microfold
+;;
+
+([microfold [@themes_ @nodes_] @uirs_] (%all (%value ⸨themes,nodes⸩ (currently _)) (%-value uirs)))
+  => (proposal ^uirs ?)
+([microfold [@themes_ @nodes_] @uirs_] (%all (%-value ⸨themes,nodes⸩) (%value uirs ?)))
+  => (proposal ^⸨themes,nodes⸩ ?)
+
+;; |@ rack.device.uir
+;;
+;; |@pattern
+;; [uir @uirs_ @dwuirs_]
+;;
+;; |@block
+;; Use `uir` to convert UIR terms to DwUIR terms using the uiR rewriter.
+;; |@endblock
+
+([uir @uirs_ @dwuirs_] (%all (%-value uirs) (%value dwuirs ?)))
+  => (proposal ^uirs ?)
+([uir @uirs_ @dwuirs_] (%all (%value uirs (currently _)) (%-value dwuirs)))
+  => (proposal ^dwuirs ?)
+
+;; TODO: uiR is a rewriter. Once the rewriters framework is there there
+;; would be no need for a special `uir` node. Instead, it would be declared
+;; just as any other rewriter in the rack, using the currently missing
+;; `rewriter` node.
+
+;;
+;; link
+;;
+
+;; Link is bidi so we have to handle `?` cases along with `currently`;
+;; either side can lead to inference of the other so we must always
+;; compute both.
+
+([link @a_ @b_] (%all (%value a⫽b (currently _)) (%-value b⫽a)))
+  => (proposal ^b⫽a ?)
+([link @a_ @b_] (%all (%-value a⫽b) (%value b⫽a ?)))
+  => (proposal ^a⫽b ?)
+
+([link @a_ @b_] (%all (%value a⫽b value←(currently _)) (%value b⫽a ?)))
+  => (proposal ^b⫽a ^value)
+
+;;
+;; combined
+;;
+
+;; TODO: although in principle `combined` could be implemented with M1, even now,
+;; the parts it requires to function are so badly bugged we have to resort to Crystal.
+
+;;
+;; m1/ruleset
+;;
+
+([m1/ruleset (@bases_ @selectors_) @rulesets_] (%all (%-value ⸨bases,selectors⸩) (%value rulesets ?)))
+  => (proposal ^⸨bases,selectors⸩ ?)
+
+;; If we know bases but don't know rulesets, that's handled by the Crystal
+;; side so that we load the ruleset from memory (if possible).
+
+;;
+;; m1/pattern
+;;
+
+([m1/pattern (@patterns_ @matchees_) @envs_] (%all (%-value ⸨patterns,matchees⸩) (%value envs ?)))
+  => (proposal ^⸨patterns,matchees⸩ ?)
+([m1/pattern (@patterns_ @matchees_) @envs_] (%all (%value ⸨patterns,matchees⸩ (currently _)) (%-value envs)))
+  => (proposal ^envs ?)
+
+((m1/pattern (@patterns_ @matchees_) @envs_ ⍊ matchlist: (%optional false false)) (%all (%value patterns (currently pattern_)) (%value matchees (currently matchee_)) (%value envs ?)))
+  => (proposal ^envs (native (m1.match ^pattern ^matchee)))
+((m1/pattern (@patterns_ @matchees_) @envs_ ⍊ matchlist: true) (%all (%value patterns (currently pattern_)) (%value matchees (currently matchee_)) (%value envs ?)))
+  => (proposal ^envs (native (m1.matches ^pattern ^matchee)))
+
+;;
+;; m1/backmap
+;;
+
+([m1/backmap (@patterns_ @backspecs_ @matchees_) @envs_] (%all (%-value ⸨patterns,backspecs,matchees⸩) (%value envs ?)))
+  => (proposal ^⸨patterns,backspecs,matchees⸩ ?)
+([m1/backmap (@patterns_ @backspecs_ @matchees_) @envs_] (%all (%value ⸨patterns,backspecs,matchees⸩ (currently _)) (%-value envs)))
+  => (proposal ^envs ?)
+
+((m1/backmap (@patterns_ @backspecs_ @matchees_) @envs_ ⍊ matchlist: (%optional false false)) (%all (%value patterns (currently pattern_)) (%value backspecs (currently backspec_)) (%value matchees (currently matchee_)) (%value envs ?)))
+  => (proposal ^envs (native (m1.backmap ^pattern ^backspec ^matchee)))
+((m1/backmap (@patterns_ @backspecs_ @matchees_) @envs_ ⍊ matchlist: true) (%all (%value patterns (currently pattern_)) (%value backspecs (currently backspec_)) (%value matchees (currently matchee_)) (%value envs ?)))
+  => (proposal ^envs (native (m1.backmaps ^pattern ^backspec ^matchee)))
+
+;;
+;; alloy/template
+;;
+
+([alloy/template (@envs_ @templates_) @instances_] (%all (%-value ⸨envs,templates⸩) (%value instances ?)))
+  => (proposal ^⸨envs,templates⸩ ?)
+([alloy/template (@envs_ @templates_) @instances_] (%all (%value ⸨envs,templates⸩ (currently _)) (%-value instances)))
+  => (proposal ^instances ?)
+
+;;
+;; alloy/document
+;;
+
+([alloy/document (@rulesets_ @templates_) @instances_] (%all (%-value ⸨rulesets,templates⸩) (%value instances ?)))
+  => (proposal ^⸨rulesets,templates⸩ ?)
+([alloy/document (@rulesets_ @templates_) @instances_] (%all (%value ⸨rulesets,templates⸩ (currently _)) (%-value instances)))
+  => (proposal ^instances ?)
+
+;; |@ rack.device.dwuir/image
+;;
+;; |@pattern
+;; [dwuir/image @specs_ @targets_]
+;;
+;; |@block
+;; Use a `dwuir/image` device to draw an image of DwUIR *specs* to a *target*
+;; of some sort.
+;; |@endblock
+;;
+;; |@key specs rack.device.dwuir/image.spec -- Describes the image to draw.
+;;
+;; |@key targets rack.device.dwuir/image.target -- Describes where the image should be saved.
+
+([dwuir/image @specs_ @targets_] (%all (%value specs (currently _)) (%-value targets)))
+  => (proposal ^targets ?)
+
+;; If we know both specs and dsts, that's handled by the Crystal side.
+
+--- shorthands
+
+;; Stock devices are very general but require lots of boilerplate --
+;; especially `const`s -- for each specific use case. We solve this by
+;; introducing an additional preprocessing layer using Alloy. The sources
+;; of rules for Alloy to use are this `shorthands` section and `rule`s
+;; defined in a rack.
+
+(ml (src spec_) @term_ ¦ pairs_)
+  => (module {@term: ^term}
+       (const @spec ^spec)
+       (src @spec @src)
+       (ml @src @terms ^… pairs)
+       ;; ML will only change on push (e.g. when file changes); to prevent
+       ;; needless reparsing, we'll cache the parsed terms using `latest`
+       ;; so that pulls are a cheap read from memory.
+       (latest @terms @term))
+
+(m1/backmap ((const pattern_) (const backspec_) @matchees_) @results_)
+  => (module {@matchees: ^matchees, @results: ^results}
+       (const @pattern ^pattern)
+       (const @backspec ^backspec)
+       (m1/backmap (@pattern @backspec @matchees) @results))
+
+(m1/ruleset @wholes_ (@rulesets_ @extras_) ⍊ selector_⋮ (rule pattern_ template_))
+  => (module {@wholes: ^wholes, @rulesets: ^rulesets, @extras: ^extras}
+       (const @selector ^selector)
+       (const @get-extra (^verbatim ^(merge (-subseq whole (pattern selector)) (part whole pairs))))
+       (combined {whole: @wholes, selector: @selector} @envs)
+       (alloy/template (@envs @get-extra) @extras)
+       (m1/ruleset (@wholes @selector) @rulesets))
+
+(repr (@matchees_ pattern_ as @values_) template_)
+  => (module {@matchees: ^matchees, @values: ^values}
+       (const @pattern ^pattern)
+       (const @template ^template)
+       (m1/pattern (@pattern @matchees) @envs)
+       (alloy/template (@envs @template) @values))
+
+[microfold ((theme @themes_ ⍊ rem⋮ 16) @nodes_) @uirs_]
+  => (module {@themes: ^themes, @nodes: ^nodes, @uirs: ^uirs}
+       (const @rem ^rem)
+       (microfold/theme (@themes @rem) @theme)
+       (microfold (@theme @nodes) @uirs))
+
+[alloy/template @templates_ @instances_]
+  => (module {@templates: ^templates, @instances: ^instances}
+       (const @env {})
+       (alloy/template (@env @templates) @instances))
+
+[alloy/document @terms_ @renders_]
+  => (module {@terms: ^terms, @renders: ^renders}
+       (m1/ruleset @terms (@ruleset @extra))
+       (alloy/document (@ruleset @extra) @renders')
+       ;; Cache the render so it is recomputed on push only.
+       (latest @renders' @renders))
+
+[dwuir/image @specs_ (const dst_)]
+  => (module {@specs: ^specs}
+       (const @dst ^dst)
+       (dwuir/image @specs @dst))
+
+(latest @source_ @sink_ ¦ () initial: @initial_)
+  => (module {@source: ^source, @sink: ^sink, @initial: ^initial}
+       (latest @initial @sink')
+       (latest @source @sink')
+       (latest @sink' @sink))
+
+(latest @source_ @sink_ ¦ () initial: (const initial_))
+  => (module {@source: ^source, @sink: ^sink}
+       (const @initial ^initial)
+       (latest @source @sink initial: @initial))
+
+(sample (@state'_ during @trigger_) @sink_)
+  => (module {@trigger: ^trigger, @state': ^state', @sink: ^sink}
+       (sample (@state' along @trigger) @frame)
+       (repr (@frame (state_ _) as @sink) ^state))
+
+(sample (@state'_ along @trigger_) @sink_)
+  => (module {@trigger: ^trigger, @state': ^state', @sink: ^sink}
+       (latest @state' @state)
+       (combined (@state @trigger) @sink))

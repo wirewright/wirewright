@@ -8,6 +8,7 @@ require "blake3"
 require "colorize"
 require "permafrost"
 require "wait_group"
+require "compress/gzip"
 require "semantic_version"
 
 require "../util"
@@ -28,6 +29,7 @@ require "../baz5"
 require "../delta7_proto2"
 require "../primitives"
 require "../templ"
+require "./wirewright/rack"
 
 {% if flag?(:release) %}
   Log.setup_from_env(default_level: :warn)

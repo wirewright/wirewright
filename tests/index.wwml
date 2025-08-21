@@ -22,10 +22,12 @@
    color: (oklch 0.7 0.13 180)
    tags: (tspace))
  (comparison "DwUIR regressions"
-   (dwuir "dwuir.in.wwml") (ppm "dwuir.expected.ppm")
+   (rack/image "dwuir.rack.wwml" tests-image-out)
+   (ppm "dwuir.expected.ppm")
    tags: (ui dwuir))
  (comparison "UIR regressions"
-   (uir "uir.in.wwml") (ppm "uir.expected.ppm")
+   (rack/image "uir.rack.wwml" tests-image-out)
+   (ppm "uir.expected.ppm")
    tags: (ui uir))
  (test "ufold.test.wwml"
    color: (oklch 0.7 0.13 290)

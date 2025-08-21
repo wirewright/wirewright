@@ -1010,6 +1010,6 @@ fill: (oklch 0.13 0 0)
 (^match uir2ppm
   (when true (main))
   (when _
-    (viewport final-w: 1900 final-h: 1000 pan-t: (^verbatim ^(- -1000 page))
+    (viewport final-w: 1900 final-h: 1000 pan-t: ^(- -1000 page)
       (main))))
 

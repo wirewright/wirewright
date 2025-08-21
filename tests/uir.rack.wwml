@@ -1,0 +1,41 @@
+(ml (src (file "tests/uir.in.wwml")) @test entity: document)
+(latest @env' @env initial: (const {uir2ppm: false, page: 0}))
+
+(alloy/document @test @test')
+(alloy/template (@env @test') @test'')
+
+(const @shot-env {uir2ppm: true})
+(alloy/template (@shot-env @test') @shot)
+(uir @shot @image-dwuir)
+
+(uir @test'' @dwuir)
+
+;; Translate the ad-hoc window definition thing we have for historical
+;; reasons in uir.in.wwml into a proper DwUIR window spec.
+(repr (@dwuir (content_* ⍊ title_string ±width ±height fill_⋮ white) as @window)
+  (window (group ^*content) title: ^title width: ^width height: ^height backdrop: ^fill))
+
+;; Ditto for images/screenshots, but use content-w/h for width/height instead.
+(repr (@image-dwuir (content_* ⍊ content-w: ±width content-h: ±height fill_⋮ white) as @image)
+  (window (group ^*content) width: ^width height: ^height backdrop: ^fill))
+
+(sample (@image during @screenshot) @screenshot-image)
+
+(dwuir/window @window @event)
+(dwuir/image @image (const (memory tests-image-out))) ;; For tests
+(dwuir/image @screenshot-image (const (file "uir.out.ppm")))
+
+(sample (@env along @event) @frame)
+
+;; Handle Page Up to scroll up.
+(repr (@frame (env←{¦ ±page} (keyboard key pgup dn)) as @env')
+  ^(∪ env {page: (- page 50)}))
+
+;; Handle Page Dn to scroll down.
+(repr (@frame (env←{¦ ±page} (keyboard key pgdn dn)) as @env')
+  ^(∪ env {page: (+ page 50)}))
+
+;; Handle Ctrl-Enter to make a screenshot.
+(repr (@frame (_ (keyboard key enter dn ctrl: true)) as @screenshot)
+  true)
+

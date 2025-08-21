@@ -1,0 +1,29 @@
+(ml (src (file "tests/dwuir.in.wwml")) @test entity: document)
+(latest @env' @env initial: (const {mouse-x: 0, mouse-y: 0, wheel: 0}))
+
+(alloy/template (@env @test) @test')
+
+;; Translate the ad-hoc window definition thing we have in dwuir.in.wwml
+;; into a DwUIR window.
+(repr (@test' (content_* ⍊ title_string initial-w: ±width initial-h: ±height backdrop_⋮ white) as @window)
+  (window (group ^*content) title: ^title width: ^width height: ^height backdrop: ^backdrop))
+
+(dwuir/window @window @event)
+(dwuir/image @window (const (memory tests-image-out))) ;; For tests
+(dwuir/image @image (const (file "dwuir.out.ppm")))
+
+(sample (@env along @event) @frame+env)
+(sample (@window along @event) @frame+window)
+
+;; Handle mouse motion.
+(repr (@frame+env (env_dict (mouse _ motion ⍊ ±x ±y)) as @env')
+  ^(∪ env {mouse-x: x, mouse-y: y}))
+
+;; Handle mouse wheel.
+(repr (@frame+env (env←{¦ ±wheel} (mouse _ wheel ⍊ ±dy)) as @env')
+  ^(∪ env {wheel: (+ wheel dy)}))
+
+;; Handle Ctrl-Enter to make a screenshot.
+(repr (@frame+window (window_ (keyboard key enter dn ctrl: true)) as @image)
+  ^window)
+
