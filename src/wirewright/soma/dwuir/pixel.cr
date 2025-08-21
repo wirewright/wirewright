@@ -1,6 +1,6 @@
 module Ww::Soma::DwUIR
-  # Pixels are represented with a 32-bit unsigned integer, representing
-  # a premultiplied ARGB color.
+  # A DwUIR *pixel* is a 32-bit unsigned integer representing a premultiplied
+  # ARGB color.
   record Pixel, argb : UInt32 do
     # Alias of `new`.
     @[AlwaysInline]

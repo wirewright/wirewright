@@ -10,6 +10,14 @@ module Ww::Soma::DwUIR
   # the user's alpha is one of these sentinel values, we increment it by one.
   # Such a small change is not expected to be perceptible by the user; serving
   # as the main motivation for this minor optimization.
+  #
+  # TODO: I think compression here was a very very bad design choice and we're
+  # partly suffering from it in terms of performance!!! I am very unexperienced
+  # in these things!!
+  # Memory is cheap, and we can represent regions with solid fills with Tiles to avoid the overhead
+  # of RLE pack/unpack in the hot path while having fast SIMD interior blending loops!!!
+  # Each tile should be: Empty, Solid (just one pixel), NonSolid (AoS premultiplied u8 r,g,b,a).
+  # Then use SIMD to blend the latter two over a pixel rect: Solid is "fill", NonSolid is "blend-over".
   class Layer
     # Returns the width of this layer.
     getter width : Int32
@@ -66,7 +74,6 @@ module Ww::Soma::DwUIR
             @data << ((pixel & 0x00ffffff) | (SENTINEL4 << 24))
             next
           end
-          # If alpha=255, alpha is not one of the sentinels. Fall through.
         elsif alpha > 0u32 && alpha.in?(SENTINEL0, SENTINEL1, SENTINEL2, SENTINEL3, SENTINEL4)
           alpha += 1
           pixel = (pixel & 0x00ffffff) | (alpha << 24)

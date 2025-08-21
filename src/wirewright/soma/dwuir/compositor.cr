@@ -19,7 +19,7 @@ module Ww::Soma::DwUIR
       @curr, @succ = @succ, @curr
       @succ.clear
 
-      Log.debug { "raster cache size is #{@curr.sum { |_, v| v.bytesize }.humanize_bytes}" }
+      Log.debug { "raster cache size is #{@curr.sum { |_, v| v.bytesize }.humanize_bytes} (#{@curr.sum { |_, v| v.fullsize }.humanize_bytes} unpacked)" }
     end
 
     # Composites *picture* over *dst*, thereby modifying *dst*.
