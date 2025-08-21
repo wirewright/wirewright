@@ -1155,7 +1155,7 @@ def rack_image(ctx, rack : Term, needle : Term) : Soma::DwUIR::PixelRect
     base: ctx.rack_base,
     agents: [
       Rack.uir(platform),
-      Rack.snap(viewer_context),
+      Rack.snapper(viewer_context),
       Rack.file_server(files),
     ] of Rack::Agent::Any,
   )

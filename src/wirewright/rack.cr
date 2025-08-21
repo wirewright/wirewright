@@ -1483,7 +1483,7 @@ module Ww::Rack
   #
   # `dwuir/image` devices depend on this agent's presence (otherwise, they
   # are going to be ignored).
-  def snap(ctx : D::Viewer::Context) : Agent::Server
+  def snapper(ctx : D::Viewer::Context) : Agent::Server
     Agent::Server.new do |states|
       states.map do |device_addr, state0|
         case state0
@@ -1514,7 +1514,7 @@ module Ww::Rack
   #
   # `ticker` devices depend on this agent's presence (otherwise, they are
   # going to be ignored).
-  def schedule(&fn : Time::Span, Term::Dict -> (->)) : Agent::Server
+  def scheduler(&fn : Time::Span, Term::Dict -> (->)) : Agent::Server
     Agent::Server.new do |states|
       states.map do |device_addr, state0|
         if state0.is_a?(State::Ticker::ReplacedBy)
@@ -1650,8 +1650,8 @@ module Ww::Rack
     end
   end
 
-  # Constructs an environment client that performs event polling on open windows,
-  # handles window closure, and redraws window content based on state content.
+  # Constructs an environment client that performs event polling on open windows
+  # and handles window closure.
   #
   # The returned client must be called periodically with an environment so that it
   # can send it some events. How often (and whether) this happens depends
@@ -1659,10 +1659,12 @@ module Ww::Rack
   #
   # `dwuir/window` devices depend on this client's presence (otherwise they are
   # going to be ignored).
-  def wm(ctx : D::Window::Context) : Client
+  def window_poller : Client
     Client.new do |env|
+      open = open_window_set(env.states).to_set
+
       # Handle input events.
-      survived = D::Window.poll(open_window_set(env.states)) do |target, event|
+      survived = D::Window.poll(open) do |target, event|
         env.states.each do |device_addr, state|
           next unless state.is_a?(State::Window::Open)
           next unless events = state.events
@@ -1676,14 +1678,22 @@ module Ww::Rack
       # Handle window closure.
       states1 = env.states.map do |device_addr, state0|
         next unless state0.is_a?(State::Window::Open)
-        next if state0.window.is_a?(D::Window::None)
-        next if state0.window.in?(survived)
+        next unless state0.window.in?(open) && !state0.window.in?(survived)
 
         State::Window::Closed.new(state0.spec, state0.events)
       end
       env.submit(states1)
+    end
+  end
 
-      states1 = env.states.map do |device_addr, state0|
+  # Constructs an agent that keeps windows in sync and redraws window content
+  # on change. This agent is expected to be run along with `window_poller`.
+  #
+  # `dwuir/window` devices depend on this client's presence (otherwise they are
+  # going to be ignored).
+  def window_presenter(ctx : D::Window::Context) : Agent::Server
+    Agent::Server.new do |states0|
+      states0.map do |device_addr, state0|
         next unless state0.is_a?(State::Window::Open)
 
         window1 = D::Window.next(ctx, state0.window, state0.spec)
@@ -1691,7 +1701,6 @@ module Ww::Rack
 
         state0.copy_with(window: window1)
       end
-      env.submit(states1)
     end
   end
 
