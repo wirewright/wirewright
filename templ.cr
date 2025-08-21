@@ -439,6 +439,40 @@ module Alloy
 
     {rewrite.term? || template, errors}
   end
+
+  def render(ruleset : Ruleset, view : Term) : Term
+    responses = ruleset.responses(view)
+    responses.each do |response|
+      pr, rule = response
+
+      case pr
+      in Pr::One  then env = pr.env
+      in Pr::Many then env = pr.envs[0]
+      end
+
+      next unless rule.is_a?(Rule::Template)
+
+      instance, complaints = render_with_complaints(env, rule.body)
+
+      if view == instance # base case
+        return instance
+      end
+
+      return render(ruleset, instance)
+    end
+
+    unless view.type.dict?
+      return view
+    end
+
+    view = Term::Dict.build do |commit|
+      view.each_entry do |key, value|
+        commit.with(key, render(ruleset, value))
+      end
+    end
+
+    Term.of(view)
+  end
 end
 
 # {% skip_file %}
