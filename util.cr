@@ -222,6 +222,12 @@ macro def_change_eq
 end
 
 struct Set(T)
+  def take? : T?
+    return unless object = first?
+    delete(object)
+    object
+  end
+
   def shift : T
     object = first
     delete(object)
@@ -709,7 +715,7 @@ class Stack(T)
     pop? || raise IndexError.new
   end
 
-  def push(value : T, & : -> U) : U forall U
+  def push(value : T, &)
     push(value)
     begin
       yield
@@ -719,10 +725,10 @@ class Stack(T)
   end
 
   # Pops for the duration of the block.
-  def pop(& : -> U) : U forall U
+  def pop(&)
     value = pop
     begin
-      yield
+      yield value
     ensure
       push(value)
     end
@@ -750,13 +756,17 @@ class Stack(T)
     @stack.to_slice(@size)
   end
 
+  def to_readonly_slice
+    Slice.new(@stack, @size, read_only: true)
+  end
+
   def pretty_print(pp)
     pp.list("Stack[", self, "]")
   end
 
   def inspect(io)
     io << "Stack["
-    slice.join(", ") do |el|
+    slice.join(io, ", ") do |el|
       el.inspect(io)
     end
     io << "]"
@@ -3336,6 +3346,10 @@ macro expect(x)
   raise AssertionError.new unless {{x}}
 end
 
+macro assert(x)
+  raise AssertionError.new unless {{x}}
+end
+
 module Append
 end
 
@@ -3846,6 +3860,17 @@ class SyncCache(K, V)
   end
 end
 
+module Iterator(T)
+  def next! : T
+    object = self.next
+    if object.is_a?(Iterator::Stop)
+      raise IndexError.new
+    end
+
+    object
+  end
+end
+
 module IStack(T)
   abstract def empty? : Bool
   abstract def push(value : T)
@@ -4203,6 +4228,14 @@ struct Time
     result = yield
     e = Time.monotonic
     {e - b, result}
+  end
+
+  def self.measure(sink : Time::Span ->, & : -> T) : T forall T
+    b = Time.monotonic
+    result = yield
+    e = Time.monotonic
+    sink.call(e - b)
+    result
   end
 end
 
