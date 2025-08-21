@@ -29,7 +29,10 @@ require "../baz5"
 require "../delta7_proto2"
 require "../primitives"
 require "../templ"
-require "./wirewright/rack"
+
+{% if flag?(:newsoma) %}
+  require "./wirewright/rack"
+{% end %}
 
 {% if flag?(:release) %}
   Log.setup_from_env(default_level: :warn)
