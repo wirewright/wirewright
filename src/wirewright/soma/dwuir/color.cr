@@ -152,7 +152,7 @@ module Ww::Soma::DwUIR
     # values for *term*.
     #
     # *fallback* is returned when *term* cannot be parsed.
-    def self.term(term : Term, fallback : Color = rgba(0, 0, 0)) : Color
+    def self.term(term : Term, fallback = rgba(0, 0, 0))
       Term.case(term) do
         # |@ soma.dwuir.color.oklch
         #
