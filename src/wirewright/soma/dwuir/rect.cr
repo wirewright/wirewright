@@ -72,7 +72,7 @@ module Ww::Soma::DwUIR
     # Returns `true` if this rectangle has zero width or height. Returns
     # `false` otherwise.
     def empty? : Bool
-      w.zero? || h.zero?
+      w <= 0 || h <= 0
     end
 
     # Returns `true` if this rectangle includes *object*.
