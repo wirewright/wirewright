@@ -31,61 +31,48 @@ module Ww::Issue
     QUIET
   end
 
-  # Includers are different *issues spots*. An issue spot is roughly
-  # the location part of a backtrace entry.
+  # Includers are different *issues spots*.
+  #
+  # One constructs chains of spots to point to the location of an issue.
+  #
+  # Spots are freely extensible (you can include `Spot` anytime). They do not
+  # have any implementation requirements.
+  #
+  # We do not recommend filling spots with context that is usually available
+  # anyway at backtrack printing-time. In other words, we recommend you to think
+  # of spots as "instructions" to a "machine" that will read them left-to-right,
+  # on error; spots are *not* ready and fully informative backtrace entries.
+  # Then, make sure to give enough context to this "matchine", which should be
+  # pretty straightforward; and use spots to "navigate" into different parts
+  # of that context, collect info, and finally produce an actual, information-
+  # saturated backtrace entry.
+  #
+  # Since such a "machine" -- a *spot printer* -- is usually very context-dependent,
+  # we do not provide general-purpose printing; and instead expect clients to print
+  # whichever spots they want to, and in ways they see fit. In other words, spot printing
+  # is out of scope for `Ww::Issue` and `Spot` in particular.
   module Spot
-    # Formats this spot using the internal `Ww::Ω` terminal/stringformatting framework.
-    abstract def to_omega(root : Term, srcmap : ML::SrcMap, filename : String) : Ω::Element
-
-    # Keypath into the root term passed to `to_omega`.
+    # Keypath into some term.
+    #
+    # NOTE: Unless you have an immutable *keypath* right away, please use `KeypathRef`
+    # instead. `KeypathRef`s will be expanded into `Keypath` on clone.
     record Keypath, keypath : Stack(Term) do
       include Spot
-
-      def to_omega(root : Term, srcmap : ML::SrcMap, filename : String) : Ω::Element
-        copy = Term[keypath]
-        view = srcmap[copy]?
-
-        until view || copy.empty?
-          copy = copy.without(copy.itemsize - 1)
-          view = srcmap[copy]?
-        end
-
-        if view
-          if keypath.size > copy.itemsize
-            omega = Ω.row(Ω.text("subnode with keypath"), Ω.text(keypath.skip(copy.size).join(":"), :emphasis), gap: 1)
-          end
-
-          _, line, column = ML::SyntaxError.lookaround(view)
-
-          omega = Ω.col(
-            Ω.row(
-              Ω.text("dict at"),
-              Ω.text("#{filename}:#{line}:#{column}", :link),
-              gap: 1,
-            ),
-            omega
-          )
-        else
-          omega = Ω.row(Ω.text("node with keypath"), Ω.text(keypath.join(":"), :emphasis), gap: 1)
-        end
-
-        omega
-      end
     end
 
-    # :nodoc:
-    struct KeypathView
+    # A reference to a mutable keypath.
+    #
+    # NOTE: This spot stores a reference to a mutable keypath, and its size
+    # at the time of `KeypathRef`'s construction. Thus, it will only work if
+    # the keypath never underflows that size while the spot is active, which
+    # is usually the case since mutable keypaths behave much like call stacks.
+    struct KeypathRef
       include Spot
 
       @size : Int32
 
       def initialize(@keypath : Stack(Term))
         @size = @keypath.size
-      end
-
-      def to_omega(root : Term, srcmap : ML::SrcMap, filename : String) : Ω::Element
-        spot = Keypath.new(@keypath)
-        spot.to_omega(root, srcmap, filename)
       end
 
       def clone
@@ -96,7 +83,7 @@ module Ww::Issue
           keypath1 << key
         end
 
-        KeypathView.new(keypath1)
+        Keypath.new(keypath1)
       end
     end
 
@@ -105,28 +92,16 @@ module Ww::Issue
     # No assumptions are made about where *text* points to.
     record StringDetail, detail : String, text : StringView do
       include Spot
-
-      def to_omega(root : Term, srcmap : ML::SrcMap, filename : String) : Ω::Element
-        Ω.flip(Ω.text(detail), Ω.text(text, :emphasis), threshold: 60, gap_x: 1)
-      end
     end
 
     # An emphasized *term* annotated with a *detail* string.
     record TermDetail, detail : String, term : Term do
       include Spot
-
-      def to_omega(root : Term, srcmap : ML::SrcMap, filename : String) : Ω::Element
-        Ω.flip(Ω.text(detail), Ω.text(ML.compact(term), :emphasis), threshold: 60, gap_x: 1)
-      end
     end
 
     # A static *string*.
     record Text, string : String do
       include Spot
-
-      def to_omega(root : Term, srcmap : ML::SrcMap, filename : String) : Ω::Element
-        Ω.text(string, :emphasis)
-      end
     end
   end
 
@@ -135,50 +110,7 @@ module Ww::Issue
   # *spots* enhance *severity* and *detail* with contextual metadata. The leftmost
   # spot is the root-most spot and the rightmost spot is closest to the place where
   # the error occurred.
-  record Backtrace, spots : Array(Spot), severity : Severity, detail : String do
-    # Formats this backtrace using the internal `Ww::Ω` terminal/string
-    # formatting framework.
-    def to_omega(root : Term, srcmap : ML::SrcMap, filename : String) : Ω::Element
-      icon, title, style =
-        case severity
-        when .note?   then {"\ueb26", "NOTE", Ω::Style::Emphasis}
-        when .minor?  then {"\uea6c", "MINOR", Ω::Style::Error}
-        when .major?  then {"\uea87", "MAJOR", Ω::Style::ErrorEmphasis}
-        when .severe? then {"\uea87", "SEVERE", Ω::Style::Failure}
-        when .fatal?  then {"\uee15", "FATAL", Ω::Style::FailureEmphasis}
-        else
-          unreachable("unrecognized severity")
-        end
-
-      Ω.col(
-        Ω.text("╻", style),
-        Ω.line_prefix(
-          Ω.text("┃", style),
-          Ω.padding(
-            Ω.col(
-              Ω.row(Ω.text(icon, style), Ω.text(title, style), gap: 1),
-              if spots.present?
-                Ω.col(
-                  Ω.text("Backtrace (closest to error is last):"),
-                  Ω.padding(
-                    Ω.col(spots) do |spot|
-                      Ω.row(Ω.text("in", :dim), spot.to_omega(root, srcmap, filename), gap: 1)
-                    end,
-                    pl: 1,
-                  ),
-                  gap: 1,
-                )
-              end,
-              Ω.row(Ω.text(detail), gap: 1),
-              gap: 1,
-            ),
-            pl: 1
-          ),
-        ),
-        Ω.text("╹", style)
-      )
-    end
-  end
+  record Backtrace, spots : Array(Spot), severity : Severity, detail : String
 
   # :nodoc:
   alias TraceEdge = None | Some

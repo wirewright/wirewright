@@ -45,7 +45,7 @@ module Ww::Soma::Microfold::Pass
                 node1 = node1.morph({key, nil})
 
                 spots = {
-                  Issue::Spot::Keypath.new(keypath),
+                  Issue::Spot::KeypathRef.new(keypath),
                   Issue::Spot::TermDetail.new("property", key),
                   Issue::Spot::TermDetail.new("property value", value),
                 }

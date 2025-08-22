@@ -27,7 +27,7 @@ module Ww::Soma::Microfold::Pass
       Term.of_case(node) do
         matchpi %[(tag_ _* ¦ pairs_ µ-preset: preset0_ µ-style: style0_)] do
           location = {
-            Issue::Spot::Keypath.new(keypath),
+            Issue::Spot::KeypathRef.new(keypath),
             Issue::Spot::TermDetail.new("preset for", tag),
             Issue::Spot::TermDetail.new("style", preset0),
           }
@@ -37,7 +37,7 @@ module Ww::Soma::Microfold::Pass
           end
 
           location = {
-            Issue::Spot::Keypath.new(keypath),
+            Issue::Spot::KeypathRef.new(keypath),
             Issue::Spot::TermDetail.new("style", style0),
           }
 

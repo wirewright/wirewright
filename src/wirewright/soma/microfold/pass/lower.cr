@@ -7,7 +7,7 @@ module Ww::Soma::Microfold::Pass
   # Reports any issues that arise during the pass to *issues*.
   def lower(root : Term, issues : Issue::Sink) : Term
     mapwalk(root) do |node, keypath|
-      issues.adjoin(Issue::Spot::Keypath.new(keypath)) do |issues|
+      issues.adjoin(Issue::Spot::KeypathRef.new(keypath)) do |issues|
         Term.case(node) do
           # |@ soma.microfold.node.icon
           #

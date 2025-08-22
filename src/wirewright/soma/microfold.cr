@@ -81,7 +81,7 @@ module Ww::Soma::Microfold
   # - *severity* specifies severity cutoff.
   #
   # Returns the resulting root term, and an array of issue backtraces if any
-  # issues were noted in *root*.
+  # issues were found in *root*.
   #
   # Microfold does not fail (unless there is an implementation bug, of course);
   # instead, it points out issues, some of them minor, others major; others --
