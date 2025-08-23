@@ -951,16 +951,16 @@ module Rhodium
             end
           end
 
-          instance, complaints = Alloy.render_with_complaints(vars, template)
+          instance, issues = Alloy.render_with_issues(vars, template)
 
           if (complout = node0[:complaints]?) && ML.edge?(complout)
-            complaints.each do |complaint|
-              e.event :pulse, complout, complaint
+            issues.each do |backtrace|
+              e.event :pulse, complout, backtrace.detail
             end
           end
 
           # TODO: have the node "tell" about errors in the template when strict: false!!!
-          if strict.false? || complaints.empty?
+          if strict.false? || issues.empty?
             e.event :pulse, pout, instance
           end
 
@@ -1186,7 +1186,7 @@ module Rhodium
 
           givenpi %{[latest (@pin_ pattern_ @cout_) template_] (pulse @pin_ vin_)} do
             if env = M1.match?(pattern, vin)
-              e.event :assign, cout, Alloy.render(env, template, strict: false)
+              e.event :assign, cout, Alloy.render(env, template)
             end
 
             false
@@ -1224,7 +1224,7 @@ module Rhodium
           ) do
             envs = M1.matches(pattern, vin)
             envs.each do |env|
-              e.event :pulse, pout, Alloy.render(env, template, strict: false)
+              e.event :pulse, pout, Alloy.render(env, template)
             end
 
             false
@@ -1269,7 +1269,7 @@ module Rhodium
           ) do
             envs = M1.matches(pattern, vin)
             envs.each do |env|
-              e.event :pulse, pout, Alloy.render(env, template, strict: false)
+              e.event :pulse, pout, Alloy.render(env, template)
             end
             if envs.present?
               e.change "#fired": true

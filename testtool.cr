@@ -1127,6 +1127,55 @@ def test(ctx, test, path, keypath, stem, srcmap, text) : Bool
       false # no descend
     end
 
+    # Alloy tests
+    givenpi %[_* testcase←(alloy vars_dict template_ expansion_ ¦ () issues_dict⋮ issues←(_*)) node] do
+      test.short(path, text) do |complaints|
+        actual, actual_issues = Alloy.render_with_issues(vars.unsafe_as_d, template)
+
+        unless actual == expansion
+          complaints << Component.complaint(
+            title: "Alloy template expansion mismatch",
+            sections: [
+              {"VARS", vars},
+              {"TEMPLATE", template},
+              {"EXPECTED EXPANSION", expansion},
+              {"GOT EXPANSION", actual},
+            ],
+          )
+        end
+
+        actual_issues.each do |actual_issue|
+          next if issues.items.any? { |issue| Term.of(actual_issue.detail) == issue }
+
+          complaints << Component.complaint(
+            title: "Unexpected Alloy issue in template",
+            sections: [
+              {"VARS", vars},
+              {"TEMPLATE", template},
+              {"EXPANSION", expansion},
+              {"ISSUE", Term.of(actual_issue.detail)},
+            ],
+          )
+        end
+
+        issues.items.each do |issue|
+          next if actual_issues.any? { |actual_issue| Term.of(actual_issue.detail) == issue }
+
+          complaints << Component.complaint(
+            title: "Missing Alloy issue in template",
+            sections: [
+              {"VARS", vars},
+              {"TEMPLATE", template},
+              {"EXPANSION", expansion},
+              {"ISSUE", issue},
+            ],
+          )
+        end
+      end
+
+      false # no descend
+    end
+
     # TODO: maybe notify of reachable-invalid test cases?
 
     otherwise do
@@ -1150,7 +1199,7 @@ def rack_image(ctx, rack : Term, needle : Term) : Soma::DwUIR::PixelRect
   compositor = Soma::DwUIR::Compositor.new
   viewer_context = Soma::DwUIR::Viewer::Context.new(compositor, platform)
 
-  env = Rack.env(
+  env, retire = Rack.env(
     rack: rack,
     base: ctx.rack_base,
     agents: [
@@ -1160,14 +1209,18 @@ def rack_image(ctx, rack : Term, needle : Term) : Soma::DwUIR::PixelRect
     ] of Rack::Agent::Any,
   )
 
-  image = env.states.each
-    .map { |_, state| state }
-    .select(Rack::State::Image::InMemory)
-    .select { |img| img.id == needle }
-    .map(&.data)
-    .first
+  begin
+    image = env.states.each
+      .map { |_, state| state }
+      .select(Rack::State::Image::InMemory)
+      .select { |img| img.id == needle }
+      .map(&.data)
+      .first
 
-  image || raise KeyError.new("rack did not define image `#{needle}`")
+    image || raise KeyError.new("rack did not define image `#{needle}`")
+  ensure
+    retire.call
+  end
 end
 
 # Runs a comparison test.
@@ -1219,54 +1272,6 @@ def compare(ctx, test, specpath, title, a, b, text)
         )
       end
     end
-
-    # Compares DwUIR to PPM.
-    # givenpi %[(dwuir dwpath_string) (ppm imgpath_string)] do
-    #   dwuir = ML.terms(File.read(Path["tests"] / dwpath.to(String)))
-    #   expected = File.open(Path["tests"] / imgpath.to(String), "rb", &.getb_to_end)
-
-    #   iw = dwuir[:"initial-w"]?.try(&.to?(Int32)) || raise ArgumentError.new("DwUIR file must define initial-w")
-    #   ih = dwuir[:"initial-h"]?.try(&.to?(Int32)) || raise ArgumentError.new("DwUIR file must define initial-h")
-
-    #   test.long(specpath, text) do |complaints|
-    #     actual = IO::Memory.new
-
-    #     DwUIR2PPM.dwuir2ppm(actual, dwuir, iw, ih)
-
-    #     next if expected.to_slice == actual.to_slice
-
-    #     complaints << Component.complaint(
-    #       title: "#{title.to(String)} comparison test failed. Terms derived from these files are different, which is unexpected.",
-    #       sections: [
-    #         {"DwUIR", dwpath.to(String)},
-    #         {"PPM", imgpath.to(String)},
-    #       ]
-    #     )
-    #   end
-    # end
-
-    # # Compares UIR to PPM.
-    # givenpi %[(uir uipath_string) (ppm imgpath_string)] do
-    #   uir = ML.terms(File.read(Path["tests"] / uipath.to(String)))
-
-    #   expected = File.open(Path["tests"] / imgpath.to(String), "rb", &.getb_to_end)
-
-    #   test.long(specpath, text) do |complaints|
-    #     actual = IO::Memory.new
-
-    #     UIR2PPM.uir2ppm(actual, uir)
-
-    #     next if expected.to_slice == actual.to_slice
-
-    #     complaints << Component.complaint(
-    #       title: "#{title.to(String)} comparison test failed. Terms derived from these files are different, which is unexpected.",
-    #       sections: [
-    #         {"UIR", uipath.to(String)},
-    #         {"PPM", imgpath.to(String)},
-    #       ]
-    #     )
-    #   end
-    # end
 
     otherwise do
       test.complain(specpath, text) do |complaints|
@@ -1325,7 +1330,14 @@ success = TestHarness.new(preview: preview, styled: styled) do |harness|
           source = File.read(path)
 
           harness.group(Color.term(color)) do |test|
-            test(ctx, test, path, *ML.terms_and_srcmap(source, filename: path.to_s))
+            begin
+              test_terms, test_srcmap = ML.terms_and_srcmap(source, filename: path.to_s)
+            rescue e : ML::SyntaxError
+              e.humanize(STDOUT)
+              break
+            end
+
+            test(ctx, test, path, test_terms, test_srcmap)
           end
         end
 

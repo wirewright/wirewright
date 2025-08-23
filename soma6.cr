@@ -810,7 +810,7 @@ ui = UIR::Reducers.microfold(Term.of(frame)) do |current, drawable, event|
     next current
   end
 
-  instance = Alloy.render(vars: frame[:".model"].as_d, template: Term.of(frame.without(:".model")), strict: true).as_d
+  instance = Alloy.render(vars: frame[:".model"].as_d, template: Term.of(frame.without(:".model"))).as_d
 
   # Send instance to drawing
   Term.of(instance)

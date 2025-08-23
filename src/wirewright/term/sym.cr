@@ -430,6 +430,11 @@ module Ww
       name.prefixed_by?("µ-")
     end
 
+    def alloy? : Bool
+      name = to(String)
+      name.prefixed_by?("^")
+    end
+
     def m1_private_capture? : Bool
       name = to(String)
       name.prefixed_by?("\\")

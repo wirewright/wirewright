@@ -328,14 +328,15 @@ struct ProcRuleset
   end
 end
 
+# NOTE: `pattern` is provided for info, you will usually not match it.
 module Rule
   extend self
 
   alias Any = Template | BackmapOne | BackmapMany
 
-  record Template, body : Term
-  record BackmapOne, backspec : Term
-  record BackmapMany, toplevel : Term, backspec : Term
+  record Template, pattern : Term, body : Term
+  record BackmapOne, pattern : Term, backspec : Term
+  record BackmapMany, pattern : Term, toplevel : Term, backspec : Term
 end
 
 struct Ruleset
@@ -350,11 +351,11 @@ struct Ruleset
 
     pset = PatternSet.select(selector, base, **kwargs) do |normp, env|
       if template = env[:template]?
-        rule = Rule::Template.new(template)
+        rule = Rule::Template.new(env[:pattern], template)
       elsif backspec = env[:backspec]?
         rule = Term.case(normp) do
-          matchpi %[(%'%let (%capture toplevel_) _)] { Rule::BackmapMany.new(toplevel, backspec) }
-          otherwise { Rule::BackmapOne.new(backspec) }
+          matchpi %[(%'%let (%capture toplevel_) _)] { Rule::BackmapMany.new(env[:pattern], toplevel, backspec) }
+          otherwise { Rule::BackmapOne.new(env[:pattern], backspec) }
         end
       else
         next

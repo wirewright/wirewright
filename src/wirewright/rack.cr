@@ -50,18 +50,26 @@ module Ww::Rack
       self[addr]? || raise KeyError.new
     end
 
-    # Yields addresses and states of devices in this map.
+    # Yields addresses and device states in this map.
     def each(& : Int32, State::Any ->) : Nil
       @map.each { |addr, state| yield addr, state }
     end
 
-    # Returns an iterator over addresses and states of devices in this map.
+    # Yields only addresses and device states of type `T`.
+    def each(cls : T.class, & : Int32, T ->) : Nil forall T
+      each do |addr, state|
+        next unless state.is_a?(T)
+        yield addr, state
+      end
+    end
+
+    # Returns an iterator over addresses and device states in this map.
     def each : Iterator({Int32, State::Any})
       (0...@map.size).each.map { |n| @map.nth?(n) || raise IndexError.new }
     end
 
-    # Transforms states of devices in this map using the block. The block can
-    # return `nil` for cheap skip/ignore. Returns a modified copy of this map.
+    # Transforms device states using the block. The block can return `nil`
+    # for cheap skip/ignore. Returns a modified copy of this map.
     def map(& : Int32, State::Any -> State::Any?) : StateMap
       map1 = @map.transaction do |commit|
         @map.each do |addr, state0|
@@ -72,6 +80,15 @@ module Ww::Rack
       end
 
       StateMap.new(@family, map1)
+    end
+
+    # Transforms only device states of type `T` using the block. The block can
+    # return `nil` for cheap skip/ignore. Returns a modified copy of this map.
+    def map(cls : T.class, & : Int32, T -> State::Any?) : StateMap forall T
+      map do |addr, state0|
+        next unless state0.is_a?(T)
+        yield addr, state0
+      end
     end
 
     # Sets the state of a device with the given address *addr* to *state*.
@@ -119,7 +136,7 @@ module Ww::Rack
     # automatic cleanup of certain states after the current workspace retires.
     module Transient
       # Returns the stable form of this state.
-      abstract def decayed
+      abstract def stable
     end
 
     # :nodoc:
@@ -131,7 +148,7 @@ module Ww::Rack
     module TransientPrior(Stable)
       include Transient
 
-      def decayed
+      def stable
         Stable.new
       end
     end
@@ -146,10 +163,15 @@ module Ww::Rack
 
     # Associated with an `alloy/template` or `alloy/document` device.
     module Alloy
-      alias Any = Ok | Issues
+      alias Any = Ok | TemplateIssues | ViewIssues
 
       record Ok
-      record Issues, vars : Term::Dict, template : Term, complaints : Array(String) do
+
+      record TemplateIssues, vars : Term::Dict, template : Term, issues : Array(Issue::Backtrace) do
+        include TransientPrior(Ok)
+      end
+
+      record ViewIssues, ruleset : ::Ruleset, view : Term, issues : Array(Issue::Backtrace) do
         include TransientPrior(Ok)
       end
     end
@@ -195,7 +217,7 @@ module Ww::Rack
       alias Any = Ok | Issues
 
       record Ok
-      record Issues, node : Term, backtraces : Array(Issue::Backtrace) do
+      record Issues, node : Term, issues : Array(Issue::Backtrace) do
         include TransientPrior(Ok)
       end
     end
@@ -525,6 +547,11 @@ module Ww::Rack
         yield device
       end
     end
+
+    # Yields all edges referenced in the rack.
+    def each_edge(& : Term ->) : Nil
+      @clusters.each { |edge, _| yield edge }
+    end
   end
 
   # Constructs an index for the given *rack*.
@@ -844,10 +871,10 @@ module Ww::Rack
             next
           end
 
-          uir, backtraces = Soma::Microfold.render(theme_state.theme, node)
+          uir, issues = Soma::Microfold.render(theme_state.theme, node)
 
-          if backtraces.present?
-            state1 = State::MuRender::Issues.new(node, backtraces)
+          if issues.present?
+            state1 = State::MuRender::Issues.new(node, issues)
           else
             state1 = State::MuRender::Ok.new
           end
@@ -877,10 +904,10 @@ module Ww::Rack
         givenpi %{[alloy/template (@envs_ @templates_) @instances_] (%all (%value envs (currently env_dict)) (%value templates (currently template_)) (%value instances ?))} do
           assert state0.is_a?(State::Alloy::Any)
 
-          instance, complaints = Alloy.render_with_complaints(env.unsafe_as_d, template)
+          instance, issues = Alloy.render_with_issues(env.unsafe_as_d, template)
 
-          if complaints.present?
-            state1 = State::Alloy::Issues.new(env.unsafe_as_d, template, complaints.to_a)
+          if issues.present?
+            state1 = State::Alloy::TemplateIssues.new(env.unsafe_as_d, template, issues)
           else
             state1 = State::Alloy::Ok.new
           end
@@ -898,11 +925,14 @@ module Ww::Rack
             next
           end
 
-          instance = Alloy.render(ruleset_state.rules, template)
+          instance, issues = Alloy.render_with_issues(ruleset_state.rules, template)
 
-          # TODO: render() currently does not produce complaints; it should, but that's
-          # a TODO. So we always resolve to State::Alloy::Ok for now.
-          state1 = State::Alloy::Ok.new
+          if issues.present?
+            state1 = State::Alloy::ViewIssues.new(ruleset_state.rules, template, issues)
+          else
+            state1 = State::Alloy::Ok.new
+          end
+
           workspace = workspace.with(instances, {:currently, instance})
         end
 
@@ -1285,7 +1315,7 @@ module Ww::Rack
     # Narrators are "orthogonal" to the environment and cannot affect it
     # in any way.
     struct Narrator
-      def initialize(&@fn : Index, StateMap, StateMap ->)
+      def initialize(&@fn : Term, State::Any, State::Any ->)
       end
 
       delegate :call, to: @fn
@@ -1344,11 +1374,25 @@ module Ww::Rack
       self
     end
 
+    private def narrate(states0 : StateMap, states1 : StateMap, &)
+      states1.each do |device_addr, state1|
+        state0 = states0[device_addr]
+        next if state0 == state1
+        yield @index.device(device_addr), state0, state1
+      end
+    end
+
+    private def narrate(states0 : StateMap, states1 : StateMap)
+      narrate(states0, states1) do |device, state0, state1|
+        @narrators.each &.call(device, state0, state1)
+      end
+    end
+
     private def submit0(states1 : StateMap)
-      @narrators.each &.call(@index, @states, states1)
+      narrate(@states, states1)
       @states = states1
       @servers.each { |r| @states = r.call(@states) }
-      @narrators.each &.call(@index, states1, @states)
+      narrate(states1, @states)
     end
 
     private def review(workspace : Term::Dict = Term[]) : Nil
@@ -1357,7 +1401,7 @@ module Ww::Rack
       @peers.each do |agent|
         states1, proposals = agent.call(@states, @index)
 
-        @narrators.each &.call(@index, @states, states1)
+        narrate(@states, states1)
         @states = states1
 
         proposals.each do |proposal|
@@ -1384,6 +1428,16 @@ module Ww::Rack
       review
     end
 
+    # Shorthand for `StateMap#each`.
+    def each(*args, **kwargs, &) : Nil
+      @states.each(*args, **kwargs) { |*yargs| yield *yargs }
+    end
+
+    # Shorthand for `submit` of `StateMap#map`.
+    def map(*args, **kwargs, &) : Nil
+      submit(@states.map(*args, **kwargs) { |*yargs| yield *yargs })
+    end
+
     # Sends *workspace* to the environment. Agents and the rack of this environment
     # will communicate through *workspace* and `states`, filling them with
     # information until fixpoint.
@@ -1402,13 +1456,15 @@ module Ww::Rack
     #
     # Edges not mentioned and not reachable through mentioned ones, will not be
     # inspected, recomputed, or touched in any other way.
-    def send(workspace workspace0 : Term::Dict) : self
+    #
+    # Returns the resulting workspace for possible inspection by the caller.
+    def send(workspace workspace0 : Term::Dict) : Term::Dict
       unless @seeders.empty?
         states0 = @states
         @seeders.each do |agent|
           @states = agent.call(@states)
         end
-        @narrators.each &.call(@index, states0, @states)
+        narrate(states0, @states)
         @seeders.clear
       end
 
@@ -1423,7 +1479,7 @@ module Ww::Rack
 
       review(workspace1)
 
-      self
+      workspace1
     end
   end
 
@@ -1451,11 +1507,7 @@ module Ww::Rack
   # Replaces `State::Transient` states in *states* with their successors.
   # Returns a modified copy of *states*.
   private def decay(states : StateMap) : StateMap
-    states.map do |device_addr, state0|
-      next unless state0.is_a?(State::Transient)
-
-      state0.decayed
-    end
+    states.map(State::Transient) { |_, state0| state0.stable }
   end
 
   # **Entry point to Rack**: Constructs an environment for *rack*.
@@ -1468,15 +1520,29 @@ module Ww::Rack
   #
   # If possible, this function will also "ignite" the rack, meaning it may
   # not return as quickly as one would expect from a constructor.
-  def env(rack : Term, base : Term::Dict, agents : Array(Agent::Any)) : Env
+  #
+  # Returns a proc to "retire" the environment.
+  #
+  # NOTE: You must call the retire proc for cleanup if necessary (e.g. before
+  # replacing with another env). Otherwise, there is the possibility of "zombie"
+  # OS state remaining after the returned environment's disappearance -- since
+  # with another env (or no env), we'll no longer have any way of reaching
+  # the corresponding management code.
+  #
+  # NOTE: The retire proc can be called multiple times, although it would be
+  # strange for you to do that. It simply transitions the rack into the after-
+  # boot state, letting agents & devices in the rack handle that as they may.
+  def env(rack : Term, base : Term::Dict, agents : Array(Agent::Any)) : {Env, (->)}
     rack, inference = instance(rack, base)
     rack = flatten(rack)
     index = index(rack)
-    states, query = boot(index)
+    states0, query = boot(index)
 
-    env = Env.new(index, states, inference)
+    env = Env.new(index, states0, inference)
     env << agents
     env.send(query)
+
+    {env, -> { env.submit(states0) }}
   end
 
   # Constructs a server agent that handles images (in-memory and file-backed).
@@ -1516,7 +1582,7 @@ module Ww::Rack
   # going to be ignored).
   def scheduler(&fn : Time::Span, Term::Dict -> (->)) : Agent::Server
     Agent::Server.new do |states|
-      states.map do |device_addr, state0|
+      states.map do |_, state0|
         if state0.is_a?(State::Ticker::ReplacedBy)
           state0.current.cancel.call
           state0 = state0.succ
@@ -1537,9 +1603,7 @@ module Ww::Rack
     Agent::Peer.new do |states0, index|
       proposals = [] of Term
 
-      states1 = states0.map do |device_addr, state0|
-        next unless state0.is_a?(State::Source::FilePending)
-
+      states1 = states0.map(State::Source::FilePending) do |device_addr, state0|
         device = index.device(device_addr)
 
         begin
@@ -1619,9 +1683,7 @@ module Ww::Rack
     Agent::Peer.new do |states0, _|
       proposals = [] of Term
 
-      states1 = states0.map do |device_addr, state0|
-        next unless state0.is_a?(State::UIR::Pending)
-
+      states1 = states0.map(State::UIR::Pending) do |_, state0|
         dwuir = rewrite(state0.uir, uiR)
         proposals << Term.of(:proposal, state0.dst, {:currently, dwuir})
 
@@ -1650,67 +1712,77 @@ module Ww::Rack
     end
   end
 
-  # Constructs an environment client that performs event polling on open windows
-  # and handles window closure.
+  # Rack window management client and agents.
   #
-  # The returned client must be called periodically with an environment so that it
-  # can send it some events. How often (and whether) this happens depends
-  # on the caller.
-  #
-  # `dwuir/window` devices depend on this client's presence (otherwise they are
-  # going to be ignored).
-  def window_poller : Client
-    Client.new do |env|
-      open = open_window_set(env.states).to_set
+  # `dwuir/window` devices depend on these agents' presence. Otherwise they
+  # are going to function partially (if some of these agents are active)
+  # or not function at all (if none of them are).
+  module WM
+    extend self
 
-      # Handle input events.
-      survived = D::Window.poll(open) do |target, event|
-        env.states.each do |device_addr, state|
-          next unless state.is_a?(State::Window::Open)
-          next unless events = state.events
+    # Constructs an environment client that performs periodic event polling;
+    # perturbing the environment with some events, and handlng others. Namely,
+    # window closure events are handled by the client, triggering the transition
+    # `State::Window::Open` -> `State::Window::Closed`.
+    def poll : Client
+      Client.new do |env|
+        open = open_window_set(env.states).to_set
 
-          query = Term.entries({events, {:currently, event}})
+        # Handle input events.
+        survived = D::Window.poll(open) do |target, event|
+          env.each(State::Window::Open) do |device_addr, state|
+            next unless events = state.events
 
-          env.send(query)
+            query = Term.entries({events, {:currently, event}})
+            env.send(query)
+          end
+        end
+
+        # Handle window closure.
+        env.map(State::Window::Open) do |device_addr, state0|
+          next unless state0.window.in?(open) && !state0.window.in?(survived)
+
+          State::Window::Closed.new(state0.spec, state0.events)
         end
       end
-
-      # Handle window closure.
-      states1 = env.states.map do |device_addr, state0|
-        next unless state0.is_a?(State::Window::Open)
-        next unless state0.window.in?(open) && !state0.window.in?(survived)
-
-        State::Window::Closed.new(state0.spec, state0.events)
-      end
-      env.submit(states1)
     end
-  end
 
-  # Constructs an agent that keeps windows in sync and redraws window content
-  # on change. This agent is expected to be run along with `window_poller`.
-  #
-  # `dwuir/window` devices depend on this client's presence (otherwise they are
-  # going to be ignored).
-  def window_presenter(ctx : D::Window::Context) : Agent::Server
-    Agent::Server.new do |states0|
-      states0.map do |device_addr, state0|
-        next unless state0.is_a?(State::Window::Open)
+    private def open_window_set(states : StateMap) : Set(D::Window::Some)
+      states.each
+        .map { |_, state| state }
+        .select(State::Window::Open)
+        .map(&.window)
+        .select(D::Window::Some)
+        .to_set
+    end
 
-        window1 = D::Window.next(ctx, state0.window, state0.spec)
-        D::Window.present(window1)
+    # Constructs an agent that handles synchronization of OS windows with internal
+    # window state on change of the latter. See also: `Soma::DwUIR::Window.next`.
+    def sync(ctx : D::Window::Context) : Agent::Server
+      Agent::Server.new do |states0|
+        states0.map(State::Window::Open) do |device_addr, state0|
+          window1 = D::Window.next(ctx, state0.window, state0.spec)
 
-        state0.copy_with(window: window1)
+          state0.copy_with(window: window1)
+        end
       end
     end
-  end
 
-  private def open_window_set(states : StateMap) : Set(D::Window::Some)
-    states.each
-      .map { |_, state| state }
-      .select(State::Window::Open)
-      .map(&.window)
-      .select(D::Window::Some)
-      .to_set
+    # Constructs an agent that "narrates" window changes by updating the corresponding
+    # window's visibility (open/closed); and by redrawing window content to reflect
+    # the latest synced state.
+    def display : Agent::Narrator
+      Agent::Narrator.new do |device, state0, state1|
+        case {state0, state1}
+        when {State::Window::Open, State::Window::NotOpen}
+          D::Window.hide(state0.window)
+        when {State::Window::NotOpen, State::Window::Open}
+          D::Window.show(state1.window)
+        when {State::Window::Open, State::Window::Open}
+          D::Window.present(state1.window)
+        end
+      end
+    end
   end
 
   # Constructs an environment client that performs a watch step for file-

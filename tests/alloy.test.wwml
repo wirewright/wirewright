@@ -1,0 +1,514 @@
+;; Variables
+(group
+  (alloy {x: 100} ^x 100)
+  (alloy {x: 100} ^\x "100")
+  (alloy {x: 100} ^*x () issues: ("value must be a dict"))
+
+  (alloy {x: (1 2 3)} ^x (1 2 3))
+  (alloy {x: (1 2 3)} ^\x "(1 2 3)")
+  (alloy {x: (1 2 3)} ^*x (1 2 3))
+
+  (alloy {x: 100, y: (1 2 3), z: "hello world"}
+    (^x ^y ^z)
+    (100 (1 2 3) "hello world"))
+  (alloy {x: 100, y: (1 2 3), z: "hello world"}
+    (^*x ^*y ^*z)
+    (1 2 3) ;; ^*X and ^*z were omitted
+    issues: ("value must be a dict"))
+  (alloy {x: 100, y: (1 2 3), z: "hello world"}
+    (^\x ^\y ^\z)
+    ("100" "(1 2 3)" "\"hello world\""))
+
+  (alloy {} ^x () issues: ("variable `x` does not exist"))
+  (alloy {} ^*x () issues: ("variable `x` does not exist"))
+
+  (alloy {x: 100}
+    (^let x: 200
+      ^x)
+    200)
+
+  ;; Lets can shadow
+  (alloy {x: 100, y: 200, z: 300}
+    (^let x: "hello"
+          z: (1 2 3)
+      (^let y: (+ y 5)
+        (^x ^y ^z)))
+    ("hello" 205 (1 2 3)))
+
+  ;; Something like each would equate though!
+  (alloy {first-name: "John"}
+    (^each (({first-name: "John", last-name: "Doe"}
+             {first-name: "Susan", last-name: "Doe"}
+             {first-name: "John", last-name: "Poe"})
+            as
+            {¦ first-name_ last-name_})
+      (^first-name ^last-name))
+    (("John" "Doe")
+     ("John" "Poe")))
+
+  ;; no eval
+  (alloy {x: ^y} ^x ^y))
+
+;; ^if
+(group
+  (alloy {x: 10}
+    (^if (< x 50))
+    ())
+  (alloy {x: 100}
+    (^if (< x 50))
+    ())
+
+  (alloy {x: 10}
+    (^if (< x 50) a)
+    a)
+
+  (alloy {x: 10}
+    (foo (^if (< x 50) a b c) bar)
+    (foo a b c bar))
+
+  (alloy {x: 100}
+    (^if (< x 50) a)
+    ())
+
+  (alloy {x: 100}
+    (foo (^if (< x 50) a b c) bar)
+    (foo bar)))
+
+;; ^unless
+(group
+  (alloy {x: 10}
+    (^unless (< x 50))
+    ())
+  (alloy {x: 100}
+    (^unless (< x 50))
+    ())
+
+  (alloy {x: 10}
+    (^unless (< x 50) a)
+    ())
+
+  (alloy {x: 10}
+    (foo (^unless (< x 50) a b c) bar)
+    (foo bar))
+
+  (alloy {x: 100}
+    (^unless (< x 50) a)
+    a)
+
+  (alloy {x: 100}
+    (foo (^unless (< x 50) a b c) bar)
+    (foo a b c bar)))
+
+;; ^case (value _), aka match
+(group
+  ;; no cases
+  (alloy {x: a} (foo (^match x) bar) (foo bar))
+
+  ;; empty body, match
+  (alloy {x: a} (foo (^match x (when a)) bar) (foo bar))
+
+  ;; empty body, mismatch
+  (alloy {x: b} (foo (^match x (when a)) bar) (foo bar))
+
+  ;; match
+  (alloy {x: a}
+    (^match x
+      (when a 100)
+      (when b 200)
+      (when a 300)
+      (when c 400))
+    100)
+  (alloy {x: b}
+    (^match x
+      (when a 100)
+      (when b 200)
+      (when a 300)
+      (when c 400))
+    200)
+  (alloy {x: c}
+    (^match x
+      (when a 100)
+      (when b 200)
+      (when a 300)
+      (when c 400))
+    400)
+
+  ;; mismatch
+  (alloy {x: missing}
+    (^match x
+      (when a 100)
+      (when b 200)
+      (when a 300)
+      (when c 400))
+    ())
+  (alloy {x: missing}
+    (foo
+     (^match x
+       (when a 100)
+       (when b 200)
+       (when a 300)
+       (when c 400))
+     bar)
+    (foo bar))
+
+  ;; catch-all _
+  (alloy {x: missing}
+    (^match x
+      (when a 100)
+      (when b 200)
+      (when a 300)
+      (when _ "missing"))
+    "missing")
+
+  ;; captures
+  (alloy {article: {title: "Title", body: "Lorem ipsum"}}
+    (^match article
+      (when {¦ title_ body_} (article ^title ^body))
+      (when _ "missing"))
+    (article "Title" "Lorem ipsum"))
+  (alloy {article: not-available}
+    (^match article
+      (when {¦ title_ body_} (article ^title ^body))
+      (when _ "missing"))
+    "missing")
+
+  (alloy {article: {title: "Title", body: "Lorem ipsum"}}
+    (foo
+     (^match article
+       (when {¦ title_ body_} ^title ^body)
+       (when _ "missing"))
+     bar)
+    (foo "Title" "Lorem ipsum" bar))
+
+  ;; source patterns
+  (alloy {xs: (1 a 2 b c 3)}
+    (^match xs
+      (when ⟨±x⟩° (number ^x)))
+    ((number 1)
+     (number 2)
+     (number 3)))
+  (alloy {xs: (1 a 2 b c 3)}
+    (foo
+     (^match xs
+       (when ⟨±x⟩° (number ^x)))
+     bar)
+    (foo
+     (number 1)
+     (number 2)
+     (number 3)
+     bar)))
+
+;; ^case vars
+(group
+  (alloy {}
+    (^case vars
+      (when {¦ x} ^"X=⸢x⸣")
+      (when {¦ y} ^"Y=⸢y⸣")
+      (when vars_ ^"vars=⸢vars⸣"))
+    "vars=()")
+  (alloy {x: 100}
+    (^case vars
+      (when {¦ x} ^"X=⸢x⸣")
+      (when {¦ y} ^"Y=⸢y⸣")
+      (when vars_ ^"vars=⸢vars⸣"))
+    "X=100")
+  (alloy {y: 200}
+    (^case vars
+      (when {¦ x} ^"X=⸢x⸣")
+      (when {¦ y} ^"Y=⸢y⸣")
+      (when vars_ ^"vars=⸢vars⸣"))
+    "Y=200")
+  ;; order matters
+  (alloy {x: 100, y: 200}
+    (^case vars
+      (when {¦ x} ^"X=⸢x⸣")
+      (when {¦ y} ^"Y=⸢y⸣")
+      (when vars_ ^"vars=⸢vars⸣"))
+    "X=100")
+  (alloy {y: 200, z: 300}
+    (^case vars
+      (when {¦ x} ^"X=⸢x⸣")
+      (when {¦ y} ^"Y=⸢y⸣")
+      (when vars_ ^"vars=⸢vars⸣"))
+    "Y=200")
+  (alloy {z: 300}
+    (^case vars
+      (when {¦ x} ^"X=⸢x⸣")
+      (when {¦ y} ^"Y=⸢y⸣")
+      (when vars_ ^"vars=⸢vars⸣"))
+    "vars={z: 300}"))
+
+;; ^each
+(group
+  ;; empty body
+  (alloy {xs: (1 2 3)}
+    (foo (^each (xs as x_)) bar)
+    (foo bar))
+
+  ;; empty list
+  (alloy {xs: ()}
+    (foo (^each (xs as x_) ^x) bar)
+    (foo bar))
+
+  ;; one
+  (alloy {xs: (100)}
+    (^each (xs as x_) ^x)
+    100)
+
+  (alloy {xs: (100)}
+    (foo (^each (xs as x_) ^x) bar)
+    (foo 100 bar))
+
+  ;; many
+  (alloy {xs: (100 200 300)}
+    (foo (^each (xs as x_) ^x) bar)
+    (foo 100 200 300 bar))
+
+  ;; entries
+  (alloy {xs: (100 200 300 x: "Hello" y: "World")}
+    (foo (^each (xs as x_) ^x) bar)
+    (foo 100 200 300 bar))
+
+  ;; item as
+  (alloy {xs: (100 200 300 x: "Hello" y: "World")}
+    (foo (^each (xs item as (x_ i_)) (item ^x index ^i)) bar)
+    (foo (item 100 index 0) (item 200 index 1) (item 300 index 2) bar))
+
+  ;; entry as
+  (alloy {xs: (100 200 300 x: "Hello" y: "World")}
+    (foo (^each (xs entry as (k_ v_)) (key ^k value ^v)) bar)
+    (foo
+     (key 0 value 100)
+     (key 1 value 200)
+     (key 2 value 300)
+     (key x value "Hello")
+     (key y value "World")
+     bar))
+
+  ;; pattern rejects stuff
+  (alloy {xs: ({title: "Hello"}
+               {body: "World"}
+               {title: "Art", body: whatever}
+               {title: "Hello World", body: "Lorem"})}
+    (^each (xs as {¦ title_string body_string})
+      (article title: ^title body: ^body))
+    (article title: "Hello World" body: "Lorem"))
+
+  ;; source pattern
+  (alloy {xs: ((1 a 2 b c 3) (d 4 5 e 6 7) () (8) junk ())}
+    (foo
+     (^each (xs as ⟨±x⟩°)
+       (number ^x becomes ^(* x 2)))
+     bar)
+    (foo
+     (number 1 becomes 2)
+     (number 2 becomes 4)
+     (number 3 becomes 6)
+     (number 4 becomes 8)
+     (number 5 becomes 10)
+     (number 6 becomes 12)
+     (number 7 becomes 14)
+     (number 8 becomes 16)
+     bar)))
+
+;; ^paste index
+(group
+  ;; positive
+  (alloy {xs: (x y z)} (foo (^paste xs 0) bar) (foo x bar))
+  (alloy {xs: (x y z)} (foo (^paste xs 1) bar) (foo y bar))
+  (alloy {xs: (x y z)} (foo (^paste xs 2) bar) (foo z bar))
+
+  ;; negative
+  (alloy {xs: (x y z)} (foo (^paste xs -1) bar) (foo z bar))
+  (alloy {xs: (x y z)} (foo (^paste xs -2) bar) (foo y bar))
+  (alloy {xs: (x y z)} (foo (^paste xs -3) bar) (foo x bar))
+
+  ;; positive oob
+  (alloy {xs: (x y z)}
+    (foo (^paste xs 100) bar)
+    (foo bar)
+    issues: ("dict does not have an item with index 100"))
+
+  ;; negative oob
+  (alloy {xs: (x y z)}
+    (foo (^paste xs -100) bar)
+    (foo bar)
+    issues: ("dict does not have an item with index -100"))
+
+  ;; no eval
+  (alloy {xs: (^x ^y ^z)} (^paste xs 0) ^x))
+
+;; ^paste range
+(group
+  ;; positive positive
+  (alloy {xs: (1 2 3)} (^paste xs 0 ..= 2) (1 2 3))
+  (alloy {xs: (1 2 3)} (^paste xs 0 ..= 1) (1 2))
+  (alloy {xs: (1 2 3)} (^paste xs 1 ..= 2) (2 3))
+  (alloy {xs: (1 2 3)} (^paste xs 1 ..= 1) (2))
+
+  (alloy {xs: (1 2 3)} (^paste xs 0 ..< 3) (1 2 3))
+  (alloy {xs: (1 2 3)} (^paste xs 0 ..< 2) (1 2))
+  (alloy {xs: (1 2 3)} (^paste xs 0 ..< 1) (1))
+  (alloy {xs: (1 2 3)} (^paste xs 0 ..< 0) ())
+
+  (alloy {xs: (1 2 3)} (^paste xs 1 ..< 3) (2 3))
+  (alloy {xs: (1 2 3)} (^paste xs 1 ..< 2) (2))
+  (alloy {xs: (1 2 3)} (^paste xs 1 ..< 1) ())
+
+  ;; positive negative
+  (alloy {xs: (1 2 3)} (^paste xs 0 ..= -1) (1 2 3))
+  (alloy {xs: (1 2 3)} (^paste xs 0 ..= -2) (1 2))
+  (alloy {xs: (1 2 3)} (^paste xs 0 ..= -3) (1))
+
+  (alloy {xs: (1 2 3)} (^paste xs 1 ..= -1) (2 3))
+  (alloy {xs: (1 2 3)} (^paste xs 1 ..= -2) (2))
+  (alloy {xs: (1 2 3)} (^paste xs 1 ..= -3) ())
+
+  ;; negative negative
+  (alloy {xs: ()} (^paste xs -3 ..= -1) ())
+  (alloy {xs: (1)} (^paste xs -3 ..= -1) (1))
+  (alloy {xs: (1 2)} (^paste xs -3 ..= -1) (1 2))
+  (alloy {xs: (1 2 3)} (^paste xs -3 ..= -1) (1 2 3))
+  (alloy {xs: (1 2 3 4)} (^paste xs -3 ..= -1) (2 3 4))
+  (alloy {xs: (1 2 3 4 5)} (^paste xs -3 ..= -1) (3 4 5))
+  (alloy {xs: (1 2 3 4 5 6)} (^paste xs -3 ..= -1) (4 5 6))
+
+  ;; clamp
+  (alloy {xs: (1 2 3)} (^paste xs 0 ..= 100) (1 2 3))
+  (alloy {xs: (1 2 3)} (^paste xs -100 ..= 100) (1 2 3))
+  (alloy {xs: (1 2 3)} (^paste xs -200 ..= -100) ())
+  (alloy {xs: (1 2 3)} (^paste xs -4 ..< 0) ())
+
+  ;; no eval
+  (alloy {xs: (^x ^y ^z)} (^paste xs 0 ..< 3) (^x ^y ^z))
+
+  ;; out of order
+  (alloy {xs: (1 2 3)} (^paste xs 0 ..= -100) () issues: ("begin and end indices are out of order"))
+  (alloy {xs: (1 2 3)} (^paste xs 1 ..< 0) () issues: ("begin and end indices are out of order"))
+  (alloy {xs: (1 2 3)} (^paste xs 0 ..< -4) () issues: ("begin and end indices are out of order"))
+  (alloy {xs: (1 2 3)} (^paste xs -100 ..= -200) () issues: ("begin and end indices are out of order")))
+
+;; ^let
+(alloy {x: 100, y: 200}
+  (^let z: (+ x y)
+        x': x
+        ref: z ;; must not be available yet!
+        x: "We're looking at ⸢x⸣ and ⸢y⸣ here"
+    (sum ^z)
+    (msg ^x)
+    (vars ^x' ^y ^ref))
+  ((sum 300)
+   (msg "We're looking at 100 and 200 here")
+   (vars 100 200 z))
+  issues: ("symbol `z` is not an Alloy variable"))
+
+;; ^ (expr)
+(group
+  (alloy {x: 100, y: 200} ^(+ x y) 300)
+  ;; subtree before node
+  (alloy {x: foo, ys: {x: 100, foo: "qux"}} ^(part ys (key x)) {foo: "qux"}))
+
+;; ^extend
+(group
+  (alloy {xs: (100 200 300), ys: {a: 100, b: 200, c: 300}}
+    (^xs ^… ys)
+    ((100 200 300) a: 100 b: 200 c: 300))
+  (alloy {xs: (100 200 300), ys: {a: 100, b: 200, c: 300}}
+    (^*xs ^… ys)
+    (100 200 300 a: 100 b: 200 c: 300))
+  (alloy {xs: (100 200 300), ys: {a: 100, b: 200, c: 300}}
+    (^*xs a: "hello" ^… ys)
+    (100 200 300 a: 100 b: 200 c: 300))
+  (alloy {xs: (100 200 300), ys: {b: 200, c: 300}}
+    (^*xs a: "hello" ^… ys)
+    (100 200 300 a: "hello" b: 200 c: 300))
+  ;; shallow merge
+  (alloy {xs: {a: (1 2 3), b: (4 5 6)}}
+    (a: ("Hello") b: ("World") c: "Bye" ^… xs)
+    {a: (1 2 3), b: (4 5 6), c: "Bye"}))
+
+;; ^verbatim
+(group
+  (alloy {} (^verbatim) ())
+  (alloy {} (^verbatim ^x ^y ^z) (^x ^y ^z))
+  (alloy {} (^verbatim (^x ^y ^z)) (^x ^y ^z))
+  ;; nested
+  (alloy {} (^verbatim ((^x) ((^y)) ^z)) ((^x) ((^y)) ^z))
+  ;; key-value pair
+  (alloy {} (^verbatim (^x y: ^y z: (^z))) (^x y: ^y z: (^z))))
+
+;; escaping ^ with ^^, ^^^, etc.
+(group
+  (alloy {} ^^x ^x)
+  (alloy {} ^^^x ^^x))
+
+;; ^render
+(group
+  (alloy {xs: (1 2 3), x: 2}
+    (^render (rendered_ {xs: xs})
+      (^each (xs as x_) ;; x is undefined here, we've only imported xs, so this isn't an equality constraint
+        (foo ^x))
+      (^each (rendered as r_)
+        (rendered ^r)))
+    ((rendered (foo 1))
+     (rendered (foo 2))
+     (rendered (foo 3))))
+
+  ;; ^render vars
+  (alloy {xs: (1 2 3), x: 2}
+    (^render (rendered_ vars)
+      (^each (xs as x_) ;; x is now imported, and this turns into an equality constraint
+        (foo ^x))
+      (^each (rendered as r_)
+        (rendered ^r)))
+    (rendered (foo 2)))
+
+  ;; usage of pattern to extract first render
+  (alloy {xs: (1 2 3)}
+    (^render ((fst_ _*) vars)
+      (^each (xs as x_)
+        (foo ^x))
+      ^fst)
+    (foo 1))
+  (alloy {xs: (1 2 3)}
+    (^render ((fst_) vars)
+      (^each (xs as x_)
+        (foo ^x))
+      ^fst)
+    ())
+  (alloy {xs: (1)}
+    (^render ((fst_) vars)
+      (^each (xs as x_)
+        (foo ^x))
+      ^fst)
+    (foo 1))
+  (alloy {xs: (1 2 3), x: 2}
+    (^render ((fst_) vars)
+      (^each (xs as x_)
+        (foo ^x))
+      ^fst)
+    (foo 2))
+
+  ;; pattern source: no filter
+  (alloy {xs: (1 a 2 b c 3)}
+    (^render (⟨x_⟩° vars)
+      (^each (xs as x_)
+        (foo ^x))
+      ^x) ;; not the same x!
+    ((foo 1)
+     (foo a)
+     (foo 2)
+     (foo b)
+     (foo c)
+     (foo 3)))
+
+  ;; pattern source: filter
+  (alloy {xs: (1 a 2 b c 3)}
+    (^render (⟨(foo ±n)⟩° vars)
+      (^each (xs as x_)
+        (foo ^x))
+      (foo number ^n))
+    ((foo number 1)
+     (foo number 2)
+     (foo number 3))))
+

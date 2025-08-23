@@ -1071,16 +1071,7 @@
      (delay 1 (event (pulse @envs {a: 100})))
      (delay 2 (event (pulse @envs {a: 100, b: 200, c: 300}))))
     ((alloy (@envs to @instances) (^a ^b ^c))
-     (log @instances in ((^a ^b ^c) (100 ^b ^c) (100 200 300)))))
-  ;; With strict: true it won't generate if something is missing
-  (d7
-    ((alloy (@envs to @instances) (^a ^b ^c) strict: true)
-     (log @instances in ())
-     (delay 0 (event (pulse @envs qux)))
-     (delay 1 (event (pulse @envs {a: 100})))
-     (delay 2 (event (pulse @envs {a: 100, b: 200, c: 300}))))
-    ((alloy (@envs to @instances) (^a ^b ^c) strict: true)
-     (log @instances in ((100 200 300)))))
+     (log @instances in (() (100) (100 200 300)))))
   ;; With complaints: @pout it will send complaints there but still generate.
   (d7
     ((alloy (@envs to @instances) (^a ^b ^c) complaints: @complaints)
@@ -1091,12 +1082,12 @@
      (delay 2 (event (pulse @envs {a: 100, b: 200, c: 300}))))
     ((alloy (@envs to @instances) (^a ^b ^c) complaints: @complaints)
      (log @complaints in
-       ("variable 'c' does not exist"
-        "variable 'b' does not exist"
-        "variable 'a' does not exist"
-        "variable 'c' does not exist"
-        "variable 'b' does not exist"))
-     (log @instances in ((^a ^b ^c) (100 ^b ^c) (100 200 300)))))
+       ("variable `a` does not exist"
+        "variable `b` does not exist"
+        "variable `c` does not exist"
+        "variable `b` does not exist"
+        "variable `c` does not exist"))
+     (log @instances in (() (100) (100 200 300)))))
   ;; With both it won't generate and also send complaints
   (d7
     ((alloy (@envs to @instances) (^a ^b ^c) complaints: @complaints strict: true)
@@ -1107,21 +1098,21 @@
      (delay 2 (event (pulse @envs {a: 100, b: 200, c: 300}))))
     ((alloy (@envs to @instances) (^a ^b ^c) complaints: @complaints strict: true)
      (log @complaints in
-       ("variable 'c' does not exist"
-        "variable 'b' does not exist"
-        "variable 'a' does not exist"
-        "variable 'c' does not exist"
-        "variable 'b' does not exist"))
+       ("variable `a` does not exist"
+        "variable `b` does not exist"
+        "variable `c` does not exist"
+        "variable `b` does not exist"
+        "variable `c` does not exist"))
      (log @instances in ((100 200 300)))))
-  ;; We can use fallback on the alloy side as well, perhaps in combination so that
+  ;; We can use ^case vars on the alloy side as well, perhaps in combination so that
   ;; there is always something up-to-date to display.
   (d7
-    ((alloy (@envs to @instances) (^fallback (^a ^b ^c) "missing or invalid data"))
+    ((alloy (@envs to @instances) (^case vars (when {¦ a b c} (^a ^b ^c)) (when _ "missing or invalid data")))
      (log @instances in ())
      (delay 0 (event (pulse @envs qux)))
      (delay 1 (event (pulse @envs {a: 100})))
      (delay 2 (event (pulse @envs {a: 100, b: 200, c: 300}))))
-    ((alloy (@envs to @instances) (^fallback (^a ^b ^c) "missing or invalid data"))
+    ((alloy (@envs to @instances) (^case vars (when {¦ a b c} (^a ^b ^c)) (when _ "missing or invalid data")))
      (log @instances in ("missing or invalid data" "missing or invalid data" (100 200 300)))))
   ;; Ability to pass const as template
   (d7

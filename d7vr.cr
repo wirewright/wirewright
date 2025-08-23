@@ -135,7 +135,7 @@ module D7VR
           "Showing " ^begin ".." ^end " out of " ^total ". Use PgUp/Dn to scroll")
         (group style: "w-max h-content flow-row fr"
           (list style: "w-fr h-content flow-col text-sm leading-sm font-mono font-text text-neutral-200 gap-2"
-            (^*paste names 0 ..= -1))
+            (^paste names 0 ..= -1))
           (^if (< scroll-offset 1)
             (scroll style: "w-3 h-max pr-1"
               ((self y-translate) offset: (* ^scroll-offset) style: "max"
