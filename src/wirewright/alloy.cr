@@ -835,6 +835,8 @@ module Ww::Alloy
   #
   # NOTE: this is public API, but it offers more control than is usually necessary.
   # Consider non-X overloads (e.g. `render`) before use.
+  #
+  # TODO: limit recursion depth.
   def renderX(ruleset : Ruleset, keypath : Stack(Term), view : Term, issues : Issue::Sink) : Expansion
     responses = ruleset.responses(view)
     responses.each do |response|
