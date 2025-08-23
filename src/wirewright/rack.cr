@@ -1597,33 +1597,6 @@ module Ww::Rack
     end
   end
 
-  # Constructs an agent that finds pending files in the state map, and proposes
-  # their content to the workspace (caching it in the state map for future reference).
-  def file_server(files : FileServer) : Agent::Peer
-    Agent::Peer.new do |states0, index|
-      proposals = [] of Term
-
-      states1 = states0.map(State::Source::FilePending) do |device_addr, state0|
-        device = index.device(device_addr)
-
-        begin
-          data = files.read(state0.path)
-        rescue e : FileServerError
-          Log.debug(exception: e) { "could not read file #{state0.path}" }
-          next
-        end
-
-        content = String.new(data)
-
-        proposals << Term.of(:proposal, state0.dst, {:currently, content})
-
-        State::Source::FileLoaded.new(state0.path, state0.dst, content, instant: Time.local)
-      end
-
-      {states1, proposals}
-    end
-  end
-
   private def mkuiR(platform : D::Platform)
     cache = SyncCache(Term, Rewrite::Any).new(capacity: 2**16, preallocate: true)
 
@@ -1785,82 +1758,114 @@ module Ww::Rack
     end
   end
 
-  # Constructs an environment client that performs a watch step for file-
-  # backed `src` devices against *files*. This client will send appropriate
-  # queries to the environment when a file dependency is created, removed,
-  # or modified.
-  def file_monitor(files : FileServer) : Client
-    Client.new do |env|
-      alert = Set(Int32).new
+  # File system agents.
+  module FS
+    extend self
 
-      states0 = states1 = env.states
-      states0.each do |device_addr, state0|
-        case state0
-        when State::Source::FilePending
-        when State::Source::FileLoaded
-          t0 = state0.instant
-        else
-          next
-        end
+    # Constructs an agent that finds pending files in the state map, and proposes
+    # their content to the workspace (caching it in the state map for future reference).
+    def server(files : FileServer) : Agent::Peer
+      Agent::Peer.new do |states0, index|
+        proposals = [] of Term
 
-        path = state0.path
+        states1 = states0.map(State::Source::FilePending) do |device_addr, state0|
+          device = index.device(device_addr)
 
-        loop do
-          t1 = files.modification_time?(path)
-
-          case {t0, t1}
-          in {nil, nil}
-            # Did not and does not exist.
-            state1 = state0
-            break
-          in {_, nil}
-            # Removed.
-            state1 = State::Source::FilePending.new(path, state0.dst)
-            states1 = states1.assoc(device_addr, state1)
-            alert << device_addr
-            break
-          in {nil, _}
-            # Created.
-          in {_, _}
-            # Exists.
-            break if t0 == t1
-          end
-
-          # Modified.
           begin
-            content = files.read(path)
-          rescue FileServerError
-            t1 = nil
+            data = files.read(state0.path)
+          rescue e : FileServerError
+            Log.debug(exception: e) { "could not read file #{state0.path}" }
             next
           end
 
-          state1 = State::Source::FileLoaded.new(path, state0.dst, String.new(content), t1)
-          states1 = states1.assoc(device_addr, state1)
-          alert << device_addr
-          break
+          content = String.new(data)
+
+          proposals << Term.of(:proposal, state0.dst, {:currently, content})
+
+          State::Source::FileLoaded.new(state0.path, state0.dst, content, instant: Time.local)
         end
+
+        {states1, proposals}
       end
+    end
 
-      env.submit(states1)
+    # Constructs an environment client that performs a watch step for file-
+    # backed `src` devices against *files*. This client will send appropriate
+    # queries to the environment when a file dependency is created, removed,
+    # or modified.
+    def monitor(files : FileServer) : Client
+      Client.new do |env|
+        alert = Set(Int32).new
 
-      next if alert.empty?
+        states0 = states1 = env.states
+        states0.each do |device_addr, state0|
+          case state0
+          when State::Source::FilePending
+          when State::Source::FileLoaded
+            t0 = state0.instant
+          else
+            next
+          end
 
-      query = Term[]
+          path = state0.path
 
-      alert.each do |device_addr|
-        state0, state1 = states0[device_addr], states1[device_addr]
+          loop do
+            t1 = files.modification_time?(path)
 
-        case {state0, state1}
-        when {State::Source::FileLoaded, State::Source::FilePending}
-          # Removed
-          query = query.with(state1.dst, :"?")
-        when {State::Source::FileLoaded, State::Source::FileLoaded}, # Modified
-             {State::Source::FilePending, State::Source::FileLoaded} # Created
-          query = query.with(state1.dst, {:currently, state1.content})
+            case {t0, t1}
+            in {nil, nil}
+              # Did not and does not exist.
+              state1 = state0
+              break
+            in {_, nil}
+              # Removed.
+              state1 = State::Source::FilePending.new(path, state0.dst)
+              states1 = states1.assoc(device_addr, state1)
+              alert << device_addr
+              break
+            in {nil, _}
+              # Created.
+            in {_, _}
+              # Exists.
+              break if t0 == t1
+            end
+
+            # Modified.
+            begin
+              content = files.read(path)
+            rescue FileServerError
+              t1 = nil
+              next
+            end
+
+            state1 = State::Source::FileLoaded.new(path, state0.dst, String.new(content), t1)
+            states1 = states1.assoc(device_addr, state1)
+            alert << device_addr
+            break
+          end
         end
-      end
 
-      env.send(query)
+        env.submit(states1)
+
+        next if alert.empty?
+
+        query = Term[]
+
+        alert.each do |device_addr|
+          state0, state1 = states0[device_addr], states1[device_addr]
+
+          case {state0, state1}
+          when {State::Source::FileLoaded, State::Source::FilePending}
+            # Removed
+            query = query.with(state1.dst, :"?")
+          when {State::Source::FileLoaded, State::Source::FileLoaded}, # Modified
+               {State::Source::FilePending, State::Source::FileLoaded} # Created
+            query = query.with(state1.dst, {:currently, state1.content})
+          end
+        end
+
+        env.send(query)
+      end
     end
   end
 end
