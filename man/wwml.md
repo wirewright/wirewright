@@ -56,7 +56,7 @@ able to type them (e.g. using the Compose key).
 
 At first, I was very reluctant to use Unicode characters. They obviously make WwML look cryptic
 and perhaps, APL-like; obscuring the simplicity of WwML's core. They can also be quite clumsy to
-type, until you've accustomed to them;  then, it's as easy as typing anything else.
+type, until you're accustomed to them; then, it's as easy as typing anything else.
 
 The amounts of compression these characters provide, are sometimes substantial; and
 worth the trade-off in my opinion. For example, `⁑` generally stands for the character sequence
@@ -159,11 +159,10 @@ Here are the XCompose mappings for the table above. This should be put in `.XCom
 
 ## What fonts you are recommended to use with WwML
 
-- [Julia Mono](https://juliamono.netlify.app/) has all of the glyphs that WwML uses, and more! You
-  are highly recommended to use it for WwML.
-- [Fira Code](https://github.com/tonsky/FiraCode) appears to miss some but is usable otherwise.
+- [Julia Mono](https://juliamono.netlify.app/) and [DejaVu Sans Mono] have all of the glyphs that WwML needs.
+- [Fira Code](https://github.com/tonsky/FiraCode) appears to be missing some but is usable otherwise.
 - [IBM Plex](https://github.com/IBM/plex) and its Mono variant misses lots of the glyphs; on the other
-  hand, the Plex family is an "official" font for Wirewright (in a sense); in addition, IBM Plex Mono
+  hand, the Plex family is the "official" font for Wirewright (in a sense); in addition, IBM Plex Mono
   has neat italics.
 
 ## Comma
@@ -171,12 +170,9 @@ Here are the XCompose mappings for the table above. This should be put in `.XCom
 The comma character is treated as whitespace and can be used where whitespace
 can be used. E.g. `x,y` is the same as `x y`.
 
-## Lexical choice over symbolics
+## Lexical choice over symbols
 
-WwML provides several lexical choice operators over *symbolics*.
-
-A *symbolic* is the common, "undifferentiated" lexeme type from which symbols,
-booleans, and numbers are produced later on.
+WwML provides several lexical choice operators over symbols.
 
 Lexical choice can be of two general forms:
 
@@ -184,17 +180,17 @@ Lexical choice can be of two general forms:
 - `⸨⸩` specifies a comma-separated choice between symbolics
 
 Both forms operate on *blocks*. Blocks are regions of source code delimited by
-one or more blank lines, or terminating with end-of-input.
+one or more blank lines, the document section delimiter `---`, or end-of-input.
 
-> ![NOTE]
+> [!IMPORTANT]
 > All choices in a block must have the same *arity* -- the same number of options.
 
 For example, the following: `x⫽y` is the same as writing `x y`. `dn-w⫽h` is the same
 as writing `dn-w dn-h`. Similarly, `pos-x⫽y⫽z` is the same as writing `pos-x pos-y pos-z`,
 and `pl⫽r⫽t⫽b` is the same as writing `pl pr pt pb`.
 
-Use the double parens to alternate over symbolics rather than individual symbolic
-characters: `⸨padding,margin⸩-top` is the same as writing `padding-top margin-top`.
+Use the double parens to alternate over sequences of characters:
+`⸨padding,margin⸩-top` is the same as writing `padding-top margin-top`.
 
 Here is a (much?) more sophisticated example:
 
@@ -212,12 +208,14 @@ Here is a (much?) more sophisticated example:
   <> {dst: $'(+ →src →py), (src): ()}
 ```
 
+Instead of paying attention to the cryptic glyphs, note instead how `⫽` is treated.
+
 ### Delayed choice
 
 WwML supports *1-delayed choice* form of `⸨⸩`: `⟦⟧`. On the first expansion pass, `⫽` and `⸨⸩`
 instantiate the block they are in; and `⟦⟧` is replaced with `⸨⸩`. On the second pass,
 `⸨⸩` instantiates the block instances from the previous pass. This may lead to situations
-on the farther end of brevity, so to speak, such as in the following rule:
+on the extreme end of brevity, so to speak, such as in the following rule:
 
 ```wwml
 (limit _ ⍊ up-w⫽h: (arg ±n ⍊ -◇_) ±⟦min,max⟧-w⫽h)
@@ -304,14 +302,14 @@ This demonstrates -- one may say *"very neatly"* -- just how much compression Ww
 Thanks to WwML, you will rarely, if ever, even *see* terms as scary as this; let alone write
 them by hand. But remember always, that *this* is how most of them look like when expanded.
 
-> ![NOTE]
+> [!NOTE]
 > At the moment, 2-delayed choices and so on are *not* supported.
 
 ## Comments
 
 ### Lexical comments
 
-Inline comments start with `;;` and extend to the end of the line or EOF.
+Inline comments start with `;;` and extend to the end of the line or end-of-input.
 
 ```wwml
 ;; Lorem ipsum dolor sit amet
@@ -322,10 +320,10 @@ Inline comments start with `;;` and extend to the end of the line or EOF.
 
 ### Structural comments
 
-A single term or an entry can be commented out using the `;` prefix.
+An entry (item or pair) can be commented out using the `;` prefix.
 
 > [!NOTE]
-> The commented-out term or entry **must** be a syntactically valid.
+> The commented-out entry **must** be a syntactically valid.
 
 Structural comments are very useful for experimentation, e.g. to disable test cases
 or arguments quickly.
@@ -344,11 +342,11 @@ or arguments quickly.
 > [!NOTE]
 > Structural comments work where whitespace works. Note, however, that you can only
 > comment out *terms* or *entries*, as in `;x: 100` or `;:x`. You cannot comment
-> selectors, items, keys, etc. structurally. Use inline comments for this.
+> selectors, keys, etc. structurally. Use inline comments for this.
 
 ### Selection comments
 
-Selection comments are analogous to a structural comment, except this time you're
+Selection comments are analogous to structural comments, except this time you're
 not commenting a specific term out; but rather, commenting *all other terms* out.
 This can be done using the `;,` prefix.
 
@@ -372,16 +370,16 @@ a matter of a few keystrokes rather than painful commenting. Importantly, this d
 require the test suite (if any!) to support isolation.
 
 > [!NOTE]
-> Selection comments are currently only supported in dictionaries of the general form.
-> They can be placed before their items and pairs.
+> Selection comments are currently only supported in dictionaries of the general form
+> and section dicts. They can be placed before their items and pairs.
 >
 > Selection comments cannot be "commented out" with structural ones because selection
 > comments aren't terms. They are interpreted by the dictionary that you place them
 > in, because only that dictionary knows which items to leave out.
 
-- If a selection comment is used in the itemspart, the pairspart is kept intact.
-- If a selection comment is used in the pairspart, the itemspart is kept intact.
-- If a selection comment is used in both, the selected entries are kept.
+> [!IMPORTANT]
+> Selection comments operate within the following groups: itemspart, pairspart, and rules. In other
+> words, if you select an item, all pairs and rules will be kept.
 
 ## Boolean terms
 
@@ -393,7 +391,7 @@ false ;; boolean false
 ## Symbol terms
 
 Symbol terms are represented by combinations of one or more characters from
-the set `0-9_'!$%&*+\-\^./#<=>?~|∞°∈⊆⊂\`, union Unicode letters (Unicode General Category L).
+the set `0-9_'!$%&*+\-\^./#<=>?~|∞°∈⊆⊂∪∩\`, union Unicode letters (Unicode General Category L).
 The characters in this set are called *symbolic*. Symbol terms that contain
 characters outside of this set cannot be represented with WwML.
 
@@ -422,10 +420,8 @@ show up in practice outside of Wirewright internals.
   In Wirewright, we often use the prime symbol to "version" names, i.e. to denote
   successors: `x` means the first or base x, `x'` means its successor, `x''` means
   the successor of `x'` and so on.
-- Symbols are not allowed to start with `+` or `-`. However, a `+` or `-` by itself
-  is an allowed symbol.
-- Symbols can start with `^` or `$`. `^` and `$` are otherwise prefix
-  operators -- i.e., they become ones unless immediately followed by a symbolic.
+- Symbols can start with `+`, `-`, `^`, and `$`. They are simultaneously prefix operators.
+  They are known internally as *ambiguous prefixes*.
 
 ## Number terms
 
@@ -564,7 +560,7 @@ Escape sequences are initiated by `\`.
 
 ### Multiline form
 
-> ![TODO]
+> [!TODO]
 > Multiline form is planned but not implemented at the moment. Use the backslash-newline
 > escape sequence detailed below.
 
@@ -593,11 +589,11 @@ Escape sequences are initiated by `\`.
 "\u{0157}"
 ;; ŗ
 
-\u[LATIN SMALL leTter R with CEDILLA]
+"\u[LATIN SMALL leTter R with CEDILLA]"
 ;; ŗ
 
-\u[:poop:]
-;;
+"\u[:poop:]"
+;; 💩
 ```
 
 You can escape newline *and the following horizontal whitespace* using `\␤`, as in:
@@ -627,14 +623,6 @@ Interpolation is syntactic sugar for dictionaries of the form `(~ s1 s2 ... sn)`
 "1 + 1 = ⸢(+ 1 1)⸣"
 ;; is the same as writing: (~ "1 + 1 =" (+ 1 1))
 ```
-
-> [!NOTE]
-> When you use interpolation WwML will be conservative in terms of the amount
-> of work it *itself* will do. Speaking less cryptically, it will *not* concatenate
-> your escape sequences and Unicode insertions et cetera to the string; but rather,
-> will leave it to the client which will interpret `~` anyway. For example, if you
-> write `"\u[alpha] + 5 = ⸢(+ alpha 5)⸣"`, WwML will parse this as `(~ "α" " + 5 =" (+ alpha 5))`.
-> Note how it did not concatenate `"α"` and `" + 5 ="`.
 
 ### Raw strings
 
@@ -843,9 +831,6 @@ you're looking at has something to do with the pairspart and/or selectors.
 
 Selectors expand to `%layer` in general.
 
-A dictionary with existing pairs cannot contain a pairspattern. In other words, either a dictionary
-has pairs; or the pairspattern does.
-
 A pairspart can be empty, as in `(_* ¦)`. If interpreted as an M1 pattern, it would match
 an itemsonly dictionary; this is because its expansion is `(%partition (_*) (%layer () ()))`.
 
@@ -916,8 +901,6 @@ is available.
 - `⁰⁻⁰x` is the same as writing `((x _*) _*)`, `¹⁻⁰x` is `(_ (x _*) _*)`, `¹⁻²x` is
   `(_ (_ _ x _*) _*)` and so on. Nesting can proceed indefinitely. For example, `⁰⁻¹⁻²x`
   is the same as writing `((_ (_ _ x _*) _*) _*)`.
-
-Shorthand: `⁰x -> (x _*), ¹x -> (_ x _*), ²x -> (_ _ x _*), etc.`
 
 ### Dictionary set and multiset
 
