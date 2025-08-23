@@ -152,12 +152,12 @@
   => (proposal ^instances ?)
 
 ;;
-;; alloy/document
+;; alloy/view
 ;;
 
-([alloy/document (@rulesets_ @templates_) @instances_] (%all (%-value ⸨rulesets,templates⸩) (%value instances ?)))
+([alloy/view (@rulesets_ @templates_) @instances_] (%all (%-value ⸨rulesets,templates⸩) (%value instances ?)))
   => (proposal ^⸨rulesets,templates⸩ ?)
-([alloy/document (@rulesets_ @templates_) @instances_] (%all (%value ⸨rulesets,templates⸩ (currently _)) (%-value instances)))
+([alloy/view (@rulesets_ @templates_) @instances_] (%all (%value ⸨rulesets,templates⸩ (currently _)) (%-value instances)))
   => (proposal ^instances ?)
 
 ;; |@ rack.device.dwuir/image
@@ -229,10 +229,10 @@
        (const @env {})
        (alloy/template (@env @templates) @instances))
 
-[alloy/document @terms_ @renders_]
+[alloy/view @terms_ @renders_]
   => (module {@terms: ^terms, @renders: ^renders}
        (m1/ruleset @terms (@ruleset @extra))
-       (alloy/document (@ruleset @extra) @renders')
+       (alloy/view (@ruleset @extra) @renders')
        ;; Cache the render so it is recomputed on push only.
        (latest @renders' @renders))
 

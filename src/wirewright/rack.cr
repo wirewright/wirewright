@@ -161,7 +161,7 @@ module Ww::Rack
       record Err, e : ::Ww::ML::SyntaxError { include TransientPrior(Ok) }
     end
 
-    # Associated with an `alloy/template` or `alloy/document` device.
+    # Associated with an `alloy/template` or `alloy/view` device.
     module Alloy
       alias Any = Ok | TemplateIssues | ViewIssues
 
@@ -622,7 +622,7 @@ module Ww::Rack
             commit.assoc(device_addr, State::Ruleset::None.new)
           end
 
-          matchpi %{[alloy/template (@_ @_) @_]}, %{[alloy/document (@_ @_) @_]} do
+          matchpi %{[alloy/template (@_ @_) @_]}, %{[alloy/view (@_ @_) @_]} do
             commit.assoc(device_addr, State::Alloy::Ok.new)
           end
 
@@ -915,7 +915,7 @@ module Ww::Rack
           workspace = workspace.with(instances, {:currently, instance})
         end
 
-        givenpi %{[alloy/document (@rulesets_ @templates_) @instances_] (%all (%value rulesets (currently (handle ownerT←(%number +i32)))) (%value templates (currently template_)) (%value instances ?))} do
+        givenpi %{[alloy/view (@rulesets_ @templates_) @instances_] (%all (%value rulesets (currently (handle ownerT←(%number +i32)))) (%value templates (currently template_)) (%value instances ?))} do
           assert state0.is_a?(State::Alloy::Any)
 
           owner = ownerT.to(Int32)
