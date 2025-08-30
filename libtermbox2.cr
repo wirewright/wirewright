@@ -1,6 +1,6 @@
 @[Link(ldflags: "#{__DIR__}/libtermbox2.a")]
 lib LibTermbox2
-  TB_ERR_NO_EVENT = -6
+  TB_ERR_NO_EVENT =  -6
   TB_ERR_POLL     = -14
 
   enum EventType : UInt8
@@ -673,4 +673,3 @@ module Termbox
     end
   end
 end
-
