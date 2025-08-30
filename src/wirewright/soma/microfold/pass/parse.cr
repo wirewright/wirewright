@@ -3,7 +3,7 @@ module Ww::Soma::Microfold::Pass
   #
   # During the parsing pass, Microfold:
   #
-  # - Identifies utilities (but not look into the theme just yet!).
+  # - Identifies utilities (but does not look into the theme just yet!).
   # - Identifies pseudo-utilities (e.g. `present`, `absent`, `is-*`, `has-*`).
   # - Identifies cue conditionals.
   # - Identifies and evaluate conditionals and pseudo-conditionals.
