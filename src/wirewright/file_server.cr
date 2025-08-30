@@ -54,6 +54,13 @@ module Ww
     # Raises `FileServerError` if the file cannot be read.
     abstract def read(path : Path) : Bytes
 
+    # Returns the content of the file at *path* as a `String`.
+    #
+    # Raises `FileServerError` if the file cannot be read.
+    def read_string(path : Path) : String
+      String.new(read(path))
+    end
+
     # Writes to the file at *path* using the block, optionally compressing
     # whatever is written.
     #

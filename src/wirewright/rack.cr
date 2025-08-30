@@ -1772,13 +1772,11 @@ module Ww::Rack
           device = index.device(device_addr)
 
           begin
-            data = files.read(state0.path)
+            content = files.read_string(state0.path)
           rescue e : FileServerError
             Log.debug(exception: e) { "could not read file #{state0.path}" }
             next
           end
-
-          content = String.new(data)
 
           proposals << Term.of(:proposal, state0.dst, {:currently, content})
 
@@ -1832,13 +1830,13 @@ module Ww::Rack
 
             # Modified.
             begin
-              content = files.read(path)
+              content = files.read_string(path)
             rescue FileServerError
               t1 = nil
               next
             end
 
-            state1 = State::Source::FileLoaded.new(path, state0.dst, String.new(content), t1)
+            state1 = State::Source::FileLoaded.new(path, state0.dst, content, t1)
             states1 = states1.assoc(device_addr, state1)
             alert << device_addr
             break
