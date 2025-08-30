@@ -5891,7 +5891,7 @@ class PatternSet
   #   true # E.g. body is valid
   # end
   # ```
-  def self.select(selector : Term, base : Term, *, key keymod : Key = Key::Head, & : Term, Term::Dict -> Bool?) : PatternSet
+  def self.select(selector : Term, bases : Enumerable(Term), key keymod : Key = Key::Head, & : Term, Term::Dict -> Bool?) : PatternSet
     seen = Set(Term).new
 
     keyed = {} of Term => Array(Int32)
@@ -5900,35 +5900,37 @@ class PatternSet
     patterns = [] of Pattern
     specificities = [] of M1::Specificity
 
-    base.each_item_unordered do |item|
-      envs = Term.matches(selector, item)
-      envs.each do |env|
-        next unless pattern = env[:pattern]?
-        next unless seen.add?(pattern)
+    bases.each do |base|
+      base.each_item_unordered do |item|
+        envs = Term.matches(selector, item)
+        envs.each do |env|
+          next unless pattern = env[:pattern]?
+          next unless seen.add?(pattern)
 
-        index = seen.size - 1
+          index = seen.size - 1
 
-        normp = M1.normal(pattern)
+          normp = M1.normal(pattern)
 
-        specificity = M1.specificity(normp, toplevel: true)
-        specificities << specificity
+          specificity = M1.specificity(normp, toplevel: true)
+          specificities << specificity
 
-        operator = M1.operator(normp, normalize: false)
+          operator = M1.operator(normp, normalize: false)
 
-        {% if flag?(:profile) %}
-          Profile.optop[operator] = pattern
-        {% end %}
+          {% if flag?(:profile) %}
+            Profile.optop[operator] = pattern
+          {% end %}
 
-        pattern_object = Pattern.new(index.to_u32, operator)
-        next unless yield normp, env
+          pattern_object = Pattern.new(index.to_u32, operator)
+          next unless yield normp, env
 
-        patterns << pattern_object
+          patterns << pattern_object
 
-        if key = keymod.of_pattern?(pattern, normp)
-          neighbors = keyed.put_if_absent(key) { [] of Int32 }
-          neighbors << index
-        else
-          headless << index
+          if key = keymod.of_pattern?(pattern, normp)
+            neighbors = keyed.put_if_absent(key) { [] of Int32 }
+            neighbors << index
+          else
+            headless << index
+          end
         end
       end
     end
@@ -5949,14 +5951,13 @@ class PatternSet
     new(KeyedMap.new(okeyed, keymod), oheadless)
   end
 
-  # Block-less version of `select`.
-  def self.select(selector : Term, base : Term) : PatternSet
-    self.select(selector, base) { true }
+  def self.select(selector : Term, *bases : Term, **kwargs, &) : PatternSet
+    self.select(selector, bases, **kwargs) { |*args| yield *args }
   end
 
-  # Same as `select`, but parses *selector* and *base* for you.
-  def self.selectp(selector : String, base : String) : PatternSet
-    self.select(ML.term(selector), ML.terms(base))
+  # Block-less version of `select`.
+  def self.select(*args, **kwargs) : PatternSet
+    self.select(*args, **kwargs) { true }
   end
 
   struct Candidates

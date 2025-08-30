@@ -346,10 +346,10 @@ struct Ruleset
 
   # - Capture `template` in *selector* forms a template rule.
   # - Capture `backspec` in *selector* forms a backmap rule.
-  def self.select(selector, base, **kwargs)
+  def self.select(selector, *bases, **kwargs)
     rules = [] of Rule::Any
 
-    pset = PatternSet.select(selector, base, **kwargs) do |normp, env|
+    pset = PatternSet.select(selector, *bases, **kwargs) do |normp, env|
       if template = env[:template]?
         rule = Rule::Template.new(env[:pattern], template)
       elsif backspec = env[:backspec]?
@@ -367,6 +367,20 @@ struct Ruleset
     end
 
     new(pset, rules.to_readonly_slice.dup)
+  end
+
+  def self.ruleset_and_rest(selector, base, **kwargs) : {Ruleset, Term::Dict}
+    ruleset = self.select(selector, base)
+
+    unless base.type.dict?
+      return ruleset, Term[]
+    end
+
+    rest = base.pairspart.transaction do |commit|
+      commit.rejected(base.items) { |item| M1.probe?(selector, item) }
+    end
+
+    {ruleset, rest}
   end
 
   struct Responses
