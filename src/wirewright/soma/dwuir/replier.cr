@@ -9,6 +9,10 @@ module Ww::Soma::DwUIR
   #
   # See `soma.dwuir.replier` in the doctool to learn more.
   def reply(platform : Platform, subject : Term) : Term
+    # Fast paths for the vast majority of subjectss
+    return subject unless subject.type.dict?
+    return subject unless subject.includes?(:"dw-request")
+
     Term.of_case(subject) do
       # |@ soma.dwuir.replier.text
       #
@@ -17,7 +21,7 @@ module Ww::Soma::DwUIR
       # |@endblock
       #
       # TODO: cache
-      matchpi %{(text ¦ _ dw-request: (measure w_number kout_symbol ¦ _ status_symbol))} do
+      matchpi %{(text ⍊ dw-request: (measure w_number kout_symbol ⍊ status_symbol))} do
         wrap_extent = Point.new(w.to(Float32), Float32::INFINITY)
 
         continue unless spec = text_spec?(subject, platform.pencils, wrap_extent)
@@ -37,7 +41,7 @@ module Ww::Soma::DwUIR
       # |@endblock
       #
       # TODO: cache
-      matchpi %{(text ¦ _ dw-request: (measure wout_symbol hout_symbol ¦ _ status_symbol))} do
+      matchpi %{(text ⍊ dw-request: (measure wout_symbol hout_symbol ⍊ status_symbol))} do
         wrap_extent = Point.inf
 
         continue unless spec = text_spec?(subject, platform.pencils, wrap_extent)
@@ -57,7 +61,7 @@ module Ww::Soma::DwUIR
       # |@endblock
       #
       # TODO: cache
-      matchpi %{(svg ¦ _ src_ dw-request: (measure wout_symbol hout_symbol ¦ _ status_symbol))} do
+      matchpi %{(svg ⍊ src_ dw-request: (measure wout_symbol hout_symbol ⍊ status_symbol))} do
         begin
           image = platform.images.load(src)
         rescue e : ImageServerError
@@ -77,7 +81,7 @@ module Ww::Soma::DwUIR
       # Answers `rect`'s query about its width and height if its fill is an image.
       # The image's dimensions will be retrieved and used to answer the query.
       # |@endblock
-      matchpi %{(rect ¦ _ fill_: [image src_] dw-request: (measure wout_symbol hout_symbol ¦ _ status_symbol))} do
+      matchpi %{(rect ⍊ fill_: [image src_] dw-request: (measure wout_symbol hout_symbol ⍊ status_symbol))} do
         begin
           image = platform.images.load(src)
         rescue e : ImageServerError
