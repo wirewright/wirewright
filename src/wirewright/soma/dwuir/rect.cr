@@ -33,6 +33,24 @@ module Ww::Soma::DwUIR
       new(tl: Point[x, y], size: Point[w, h])
     end
 
+    # Returns the union of *quads*' bounding boxes.
+    def self.union(quads : Enumerable(Quad)) : Rect
+      bounds = Rect.empty
+      quads.each do |quad|
+        bounds |= quad.bounds
+      end
+      bounds
+    end
+
+    # Returns the intersection of *quads*' bounding boxes.
+    def self.xsect(quads : Enumerable(Quad)) : Rect
+      bounds = Rect.inf
+      quads.each do |quad|
+        bounds &= quad.bounds
+      end
+      bounds
+    end
+
     # Returns the size (width and height) of this rectangle.
     def size : Point
       br - tl
@@ -108,43 +126,34 @@ module Ww::Soma::DwUIR
       includes_y?(object.to_point.y)
     end
 
-    # Returns flattened `xy`, `wh`.
+    # Shorthand for flattened `xy`, `wh`.
     def xywh : {Float32, Float32, Float32, Float32}
       {*xy, *wh}
     end
 
-    # Returns flattened `ixy`, `iwh`.
+    # Shorthand for flattened `ixy`, `iwh`.
     def ixywh : {Int32, Int32, Int32, Int32}
       {*ixy, *iwh}
     end
 
-    # Returns four floats: two zeros representing the origin, followed by this
-    # rectangle's width and height.
-    def wh00 : {Float32, Float32, Float32, Float32}
-      {0.0f32, 0.0f32, *size.xy}
-    end
-
-    # Returns two floats representing the x and y coordinates of this rectangle's
-    # top-left point.
+    # Shorthand for a tuple `{x, y}`.
     def xy : {Float32, Float32}
       {x, y}
     end
 
-    # Returns two integers representing the x and y coordinates of this rectangle's
-    # top-left point. The ceiling function is used to remove the fractional part.
+    # Shorthand for a tuple `{ix, iy}`.
     def ixy : {Int32, Int32}
-      tl.ixy
+      {ix, iy}
     end
 
-    # Returns two floats representing the width and height of this rectangle.
+    # Shorthand for a tuple `{w, h}`.
     def wh : {Float32, Float32}
       {w, h}
     end
 
-    # Returns two integers representing the width and height of this rectangle.
-    # The ceiling function is used to remove the fractional part.
+    # Shorthand for a tuple `{iw, ih}`.
     def iwh : {Int32, Int32}
-      size.ixy
+      {iw, ih}
     end
 
     # Returns the x coordinate of this rectangle's top-left point.
@@ -152,9 +161,21 @@ module Ww::Soma::DwUIR
       tl.x
     end
 
+    # Returns the x coordinate of this rectangle's top-left point as an integer.
+    # Removes the fractional part using the ceiling function.
+    def ix : Int32
+      tl.ix
+    end
+
     # Returns the y coordinate of this rectangle's top-left point.
     def y : Float32
       tl.y
+    end
+
+    # Returns the y coordinate of this rectangle's top-left point as an integer.
+    # Removes the fractional part using the ceiling function.
+    def iy : Int32
+      tl.iy
     end
 
     # Returns the width of this rectangle.
@@ -162,14 +183,31 @@ module Ww::Soma::DwUIR
       size.x
     end
 
+    # Returns the width of this rectangle as an integer. Removes the fractional
+    # part using the ceiling function.
+    def iw : Int32
+      size.ix
+    end
+
     # Returns the height of this rectangle.
     def h : Float32
       size.y
     end
 
+    # Returns the height of this rectangle as an integer. Removes the fractional
+    # part using the ceiling function.
+    def ih : Int32
+      size.iy
+    end
+
     # Returns the size of this rectangle's diagonal.
     def diagonal : Float32
       Math.hypot(w, h)
+    end
+
+    # Returns the area of this rectangle.
+    def area : Float32
+      w * h
     end
 
     # Calculates the A point for this rectangle and *radii*.
@@ -267,6 +305,12 @@ module Ww::Soma::DwUIR
       Rect.new(tl: tl.ceil, size: size.ceil)
     end
 
+    # Returns a new rectangle aligned to the integer grid that fully encloses
+    # this one.
+    def snap : Rect
+      Rect.new(tl: tl.floor, br: br.ceil)
+    end
+
     # Returns a copy of this rectangle padded by *n*.
     def pad(n : Float32) : Rect
       Rect.new(tl: tl + n, br: br - n)
@@ -309,10 +353,12 @@ module Ww::Soma::DwUIR
       Rect.new(Point.new(tl.x, (yield tl.y)), Point.new(br.x, (yield br.y)))
     end
 
+    # Maps a point from rectangle space into [0,1]x[0,1].
     def normalize(point : Point) : Point
       (point - tl) * size.normalized
     end
 
+    # Maps a point from [0,1]x[0,1] back into rectangle space.
     def denormalize(point : Point) : Point
       tl + point * size
     end
