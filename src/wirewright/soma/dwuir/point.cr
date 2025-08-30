@@ -73,8 +73,7 @@ module Ww::Soma::DwUIR
       x * other.y - y * other.x
     end
 
-    # Divides the unit range into `x` and `y` equally sized buckets, and returns
-    # the size of one bucket.
+    # Returns the per-axis scale factors that map this size into the unit square.
     def normalized : Point
       Point.new(1 / x, 1 / y)
     end
