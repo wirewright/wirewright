@@ -108,6 +108,11 @@ module Ww::Soma::DwUIR
       mv(x: (x * grain.x).round / grain.x, y: (y * grain.y).round / grain.y)
     end
 
+    # Rounds this point's x and y components using the floor function.
+    def floor : Point
+      mv(x: x.floor, y: y.floor)
+    end
+
     # Rounds this point's x and y components using the ceiling function.
     def ceil : Point
       mv(x: x.ceil, y: y.ceil)
@@ -119,16 +124,24 @@ module Ww::Soma::DwUIR
       x == Float32::INFINITY || y == Float32::INFINITY
     end
 
-    # Returns the x and y components as a tuple of floats.
+    # Shorthand for a tuple of `{x, y}`.
     def xy : {Float32, Float32}
       {x, y}
     end
 
-    # Returns the x and y components as a tuple of ints; uses `ceil` to
-    # remove the fractional part.
+    # Shorthand for a tuple of `{ix, iy}`.
     def ixy : {Int32, Int32}
-      x, y = ceil.xy
-      {x.to_i, y.to_i}
+      {ix, iy}
+    end
+
+    # Returns the x component as an int; uses `ceil` to remove the fractional part.
+    def ix : Int32
+      x.ceil.to_i
+    end
+
+    # Returns the y component as an int; uses `ceil` to remove the fractional part.
+    def iy : Int32
+      y.ceil.to_i
     end
   end
 end
