@@ -57,7 +57,7 @@ module Ww::ML
 
     reader = Reader.new(atoms, addons: addons)
 
-    case π = Reader.validated(source, reader.section)
+    case π = reader.toplevel(source, reader.section)
     in Reader::Parseout::Ok
       π.term
     in Reader::Parseout::Err
@@ -85,7 +85,7 @@ module Ww::ML
 
     reader = Reader.new(atoms, addons: addons)
 
-    case π = Reader.validated(source, reader.item)
+    case π = reader.toplevel(source, reader.item)
     in Reader::Parseout::Ok
       π.term
     in Reader::Parseout::Err
@@ -108,7 +108,7 @@ module Ww::ML
 
     reader = Reader.new(atoms, addons: addons)
 
-    case π = Reader.validated(source, reader.document)
+    case π = reader.toplevel(source, reader.document)
     in Reader::Parseout::Ok
       π.term
     in Reader::Parseout::Err

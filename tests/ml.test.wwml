@@ -845,12 +845,12 @@
 
 ;; Test how the shorthands interact with each other
 (ml
-  (= ⎡(z-stack ⁑ w⫽h: max in: ⁰(dn-w⫽h ±n ⍊ -flag_)↢`T)
-        <> {T: (dn-w⫽h →n broadcast: true), flag: true}⎤
-     ⎡(z-stack _* ¦ _ w: max in: ((dn-w ±n ¦ _ -flag_) _* `T))
-        <> {T: (dn-w →n broadcast: true), flag: true}
-      (z-stack _* ¦ _ h: max in: ((dn-h ±n ¦ _ -flag_) _* `T))
-        <> {T: (dn-h →n broadcast: true), flag: true}⎤))
+  (doc= ⎡(z-stack ⁑ w⫽h: max in: ⁰(dn-w⫽h ±n ⍊ -flag_)↢`T)
+          <> {T: (dn-w⫽h →n broadcast: true), flag: true}⎤
+        ⎡(z-stack _* ¦ _ w: max in: ((dn-w ±n ¦ _ -flag_) _* `T))
+           <> {T: (dn-w →n broadcast: true), flag: true}
+         (z-stack _* ¦ _ h: max in: ((dn-h ±n ¦ _ -flag_) _* `T))
+           <> {T: (dn-h →n broadcast: true), flag: true}⎤))
 
 ;; Parentheses
 (ml
@@ -955,3 +955,9 @@
          qux⎤
         ⎡default: (), a: (qux), b: (qux), c: (qux)⎤))
 
+;; Bugfixes
+(group
+  ;; Extra input must terminate parsing.
+  (ml
+    (- ⎡hello ⏏100⎤ ⎡unexpected input⎤)
+    (doc- ⎡hello⏏) world⎤ ⎡unexpected input⎤)))

@@ -17,7 +17,7 @@ module Ww::ML
   # parseout = reader.document
   #
   # # You MUST run post-validation for everything to be appropriate!
-  # case π = ML::Reader.validated(source, parseout)
+  # case π = reader.toplevel(source, parseout)
   # in Reader::Parseout::Ok
   #   # ...
   # in Reader::Parseout::Err
@@ -1635,7 +1635,11 @@ module Ww::ML
     end
 
     # :nodoc:
-    def self.validated(source : String, parseout π : Parseout::Ok) : Π
+    def toplevel(source : String, parseout π : Parseout::Ok) : Π
+      unless ahead?(:eoi)
+        return failure("unexpected input", ahead.text.before_begin)
+      end
+
       Term.each_leaf_thorough(π.term) do |leaf|
         next unless symbol = leaf.as_sym?
 
@@ -1650,14 +1654,14 @@ module Ww::ML
 
         view = source.view(id.byte_start, byte_size: id.name.bytesize)
 
-        return Parseout::Failure.new("cannot use `#{id.name}` outside of a #{container}", view)
+        return failure("cannot use `#{id.name}` outside of a #{container}", view)
       end
 
       π
     end
 
     # :nodoc:
-    def self.validated(source : String, parseout π : Parseout::Err) : Π
+    def toplevel(source : String, parseout π : Parseout::Err) : Π
       π
     end
 
@@ -1665,7 +1669,7 @@ module Ww::ML
       # Performs post-validation of the given *parseout*.
       #
       # - Catches invalid instances of `◇` and `▢`.
-      def self.validated(source : String, parseout : Π) : Π
+      def toplevel(source : String, parseout : Π) : Π
       end
     {% end %}
   end
