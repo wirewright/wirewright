@@ -158,7 +158,7 @@ struct Ww::Term
       match!(->{ ::Ww::ML.term({{ml}}) }, location: {{location}}, {{kwargs.double_splat}}) {{block}}
     end
 
-    RE_CAPTURES = /([#a-zA-Z_][\w-]*?)(?:_(?:any|number|symbol|string|boolean|dict)?[+*⋮]?\b|←|⋮)|[±](\w+)|\((?:%let)\s+([a-zA-Z][\w-]*)/
+    RE_CAPTURES = /([#a-zA-Z_][\w-]*?)(?:_(?:any|number|symbol|string|boolean|dict)?[+*⋮]?\b|←|⋮)|[±]([\w-]+)|\((?:%let)\s+([a-zA-Z][\w-]*)/
 
     # `matchp` that can infer basic captures (such as `x_`) from *ml* source
     # at compile-time.
