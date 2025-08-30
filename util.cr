@@ -77,11 +77,11 @@ macro defcase(cls, *typedecls, inherit = false, equality = true, &)
                      }})
     end
 
-    {{yield}}
-
     {% if equality %}
       def_equals_and_hash {{typedecls.map { |typedecl| "@#{typedecl.var}".id }.splat}}
     {% end %}
+
+    {{yield}}
   end
 end
 
@@ -1159,43 +1159,34 @@ struct StringView
     {% end %}
   end
 
-  private def self.join_copy(views : Enumerable(StringView)) : StringView
-    ascii_only = true
-
-    sum = String.build do |io|
-      views.each do |view|
-        ascii_only &&= view.ascii_only?
-        io << view
-      end
-    end
-
-    StringView.new(sum, 0, sum.bytesize, ascii_only)
+  def self.join(views : Enumerable(StringView)) : StringView
+    views.reduce? { |memo, view| memo + view } || "".view
   end
 
-  def self.join(views : Enumerable(StringView)) : StringView
-    view_head = view_tail = nil
-    ascii_only = true
+  def self.join(*views : StringView)
+    join(*views)
+  end
 
-    views.each do |view|
-      ascii_only &&= view.ascii_only?
-
-      unless view_tail
-        view_head = view_tail = view
-        next
-      end
-
-      unless view_tail.precedes?(view)
-        return join_copy(views)
-      end
-
-      view_tail = view
+  def self.intersection(a : StringView, b : StringView) : StringView
+    unless a.string.same?(b.string)
+      raise ArgumentError.new("cannot intersect string views whose underlying strings compare different by reference")
     end
 
-    unless view_head && view_tail
-      raise Enumerable::EmptyError.new
-    end
+    xb = Math.max(a.byte_start, b.byte_start)
+    xe = Math.min(a.byte_end, b.byte_end)
 
-    StringView.new(view_head.string, view_head.byte_start, view_tail.byte_end, ascii_only)
+    StringView.new(a.string, xb, xe, ascii_only: a.ascii_only?)
+  end
+
+  def self.intersection(views : Enumerable(StringView)) : StringView
+    result = views.reduce? do |memo, view|
+      StringView.intersection(memo, view)
+    end
+    result || "".view
+  end
+
+  def self.intersection(*views : StringView) : StringView
+    intersection(views)
   end
 
   def self.cat(*args) : StringView
@@ -1344,6 +1335,10 @@ struct StringView
   end
 
   def +(other : StringView) : StringView
+    if empty?
+      return other
+    end
+
     ascii_only = ascii_only? && other.ascii_only?
 
     if precedes?(other)
@@ -1795,15 +1790,15 @@ struct StringView
   end
 
   def split(separator : Char, &)
-    split_and_rest(separator) { |segment, _| yield segment }
+    split_and_rest(separator) { |segment, _, _| yield segment }
   end
 
   def split_and_rest(separator : Char, &)
     lhs = self
 
     until lhs.empty?
-      lhs, _, rest = lhs.partition(separator)
-      yield lhs, rest
+      lhs, sep, rest = lhs.partition(separator)
+      yield lhs, sep, rest
       lhs = rest
     end
   end
@@ -1905,6 +1900,65 @@ struct StringView
 
       index += 1
     end
+  end
+
+  class LineIterator
+    include Iterator(StringView)
+
+    def initialize(@view : StringView)
+      @state = :normal
+    end
+
+    def next : StringView | Stop
+      case @state
+      when :exhausted
+        Iterator.stop
+      when :endl
+        @state = :exhausted
+        @view
+      when :normal
+        l, sep, @view = @view.partition('\n')
+
+        if sep.empty? && @view.empty?
+          @state = :exhausted
+        elsif @view.empty?
+          @state = :endl
+        end
+
+        l + sep
+      else
+        unreachable
+      end
+    end
+  end
+
+  class ReverseLineIterator
+    include Iterator(StringView)
+
+    @endl : StringView?
+
+    def initialize(@view : StringView)
+    end
+
+    def next : StringView | Stop
+      endl0 = @endl
+
+      if endl0 && endl0.empty? && @view.empty?
+        return Iterator.stop
+      end
+
+      @view, @endl, r = @view.rpartition('\n')
+
+      endl0 ? r + endl0 : r
+    end
+  end
+
+  def lines : Iterator(StringView)
+    LineIterator.new(self)
+  end
+
+  def rlines : Iterator(StringView)
+    ReverseLineIterator.new(self)
   end
 
   def each_line(& : StringView ->)
@@ -3857,6 +3911,20 @@ class SyncCache(K, V)
 
   def put_if_absent(key, &)
     fetch(key) { yield }
+  end
+end
+
+struct Cache(K, V)
+  def initialize(@capacity : Int32, *, preallocate : Bool)
+    if preallocate
+      @data = Hash(K, V).new(initial_capacity: @capacity)
+    else
+      @data = {} of K => V
+    end
+  end
+
+  def put_if_absent(key, &)
+    @data.put_if_absent(key) { yield }
   end
 end
 
