@@ -84,17 +84,19 @@ module Ww::Soma::Microfold::Pass
 
   private def each_cascaded_mixin(theme : Theme, root : Term, keypath : Stack(Term), & : Term ->) : Nil
     ancestors = Term.ancestors(root, keypath)
-    ancestors.each do |ancestor|
-      Term.matchpi?(ancestor, %[{¦ µ-preset: preset_ µ-style: style_}]) do
-        {preset, style}.each do |up|
-          up.items.each do |item|
-            Term.matchpi?(item, %[(mixin ⍊ box_)]) do
+
+    {% for source in %w[preset style] %}
+      ancestors.each do |ancestor|
+        Term.matchpi?(ancestor, %[{¦ µ-{{source.id}}: mixins_dict}]) do
+          mixins.items.each do |mixin|
+            Term.matchpi?(mixin, %[(mixin ⍊ box_)]) do
               next unless theme.cascade?(box)
-              yield item.as_d(&.with(:rank, Rank::Cascade))
+
+              yield mixin.as_d(&.with(:rank, Rank::Cascade))
             end
           end
         end
       end
-    end
+    {% end %}
   end
 end
