@@ -138,6 +138,12 @@ module Ww::Issue
     def initialize(@severity : Severity, @backtraces : Array(Backtrace), @edge : TraceEdge)
     end
 
+    def version : Int32
+      # Since @backtraces is append-only, we can use its size as a sink-unique
+      # version number.
+      @backtraces.size
+    end
+
     # Suppresses issue emission for the duration of the block.
     def suppress(&)
       tmp, @severity = @severity, Severity::QUIET

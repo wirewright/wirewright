@@ -5,6 +5,9 @@ module Ww::Soma::Microfold
     getter rem
     getter box_ruleset
 
+    DESIGNATION_CACHE_CAPACITY   = 512
+    DECOMPOSITION_CACHE_CAPACITY = 512
+
     # :nodoc:
     def initialize(
       @spec : Term::Dict,
@@ -13,6 +16,8 @@ module Ww::Soma::Microfold
       @box_ranks : Hash(Term, Int32),
       @box_ruleset : Ruleset,
     )
+      @decompositions = Hash({Term::Dict, Term}, Term::Dict).new(initial_capacity: DECOMPOSITION_CACHE_CAPACITY)
+      @designations = Hash({Term::Dict, Term::Dict}, Term::Dict).new(initial_capacity: DESIGNATION_CACHE_CAPACITY)
     end
 
     def self.new(document : Term::Dict, rem : Term::Num) : Theme
@@ -74,6 +79,38 @@ module Ww::Soma::Microfold
       keys = @spec[:flow, :prune]?.try(&.as_d?) || Term[]
       keys.each_entry do |key, _|
         yield key
+      end
+    end
+
+    def decomposition_of(pairs : Term::Dict, style : Term, & : Term::Dict -> {Bool, Term::Dict}) : Term::Dict
+      if decomposition = @decompositions[{pairs, style}]?
+        return decomposition
+      end
+
+      ok, decomposition = yield pairs
+      unless ok
+        # If it's not ok, this means it has issues. If it has issues, that's
+        # a side effect; we cannot cache, because subsequent decompositions will
+        # be quiet about those.
+        return decomposition
+      end
+
+      if @decompositions.size >= DECOMPOSITION_CACHE_CAPACITY
+        # Evict oldest.
+        @decompositions.delete(@decompositions.first_key)
+      end
+
+      @decompositions[{pairs, style}] = decomposition
+    end
+
+    def designations_of(preset : Term::Dict, style : Term::Dict, & : Term::Dict, Term::Dict -> Term::Dict) : Term::Dict
+      if @designations.size >= DESIGNATION_CACHE_CAPACITY
+        # Evict oldest.
+        @designations.delete(@designations.first_key)
+      end
+
+      @designations.put_if_absent({preset, style}) do
+        yield preset, style
       end
     end
   end

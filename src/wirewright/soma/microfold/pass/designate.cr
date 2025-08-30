@@ -5,20 +5,24 @@ module Ww::Soma::Microfold::Pass
 
     record Cmd, rank : Int32, box : Term, key : Term, value : Term?
 
-    def designate(root : Term) : Term
+    def designate(root : Term, theme : Theme) : Term
       Pass.mapwalk(root) do |node|
         Term.of_case(node) do
           matchpi %[{¦ µ-preset: preset_dict µ-style: style_dict}] do
-            commands = [] of {Int32, Cmd}
+            designations = theme.designations_of(preset.unsafe_as_d, style.unsafe_as_d) do |preset, style|
+              commands = [] of {Int32, Cmd}
 
-            each_cmd(preset.unsafe_as_d) { |command| commands << {0, command} }
-            each_cmd(style.unsafe_as_d) { |command| commands << {1, command} }
+              each_cmd(preset) { |command| commands << {0, command} }
+              each_cmd(style) { |command| commands << {1, command} }
 
-            designations = Term[]
+              result = Term[]
 
-            commands.sort_by! { |ord, cmd| {ord, cmd.rank} }
-            commands.each do |_, command|
-              designations = designations.morph({command.box, command.key, command.value})
+              commands.sort_by! { |ord, cmd| {ord, cmd.rank} }
+              commands.each do |_, command|
+                result = result.morph({command.box, command.key, command.value})
+              end
+
+              result
             end
 
             # Force flow-box if the number of children exceeds 1. We're saying `2`
@@ -42,7 +46,7 @@ module Ww::Soma::Microfold::Pass
     private def each_cmd(mixins : Term::Dict, &) : Nil
       mixins.items.each do |mixin|
         Term.case(mixin) do
-          matchpi %[(mixin ⍊ box_ rank_: (%number +i32) plus⋮ {} minus⋮ {}))] do
+          matchpi %[(mixin ⍊ box_ rank_: (%number +i32) plus⋮ {} minus⋮ {})] do
             minus.each_entry do |key, _|
               yield Cmd.new(rank.to(Int32), box, key, nil)
             end
@@ -64,7 +68,9 @@ module Ww::Soma::Microfold::Pass
   # mixins are converted to `µ-designations`, a dict mapping boxes to their fully
   # computed "styles" (i.e. full and properly ordered "mix" from mixins in
   # the node's preset and style).
-  def designate(root : Term) : Term
-    Designate.designate(root)
+  def designate(root : Term, theme : Theme) : Term
+    Designate.designate(root, theme)
   end
 end
+
+# 10%

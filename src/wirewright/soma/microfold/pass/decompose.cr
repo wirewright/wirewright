@@ -18,12 +18,23 @@ module Ww::Soma::Microfold::Pass
     # Decomposes utilities in `style: "..."`.
     def styles(root : Term, theme : Theme, issues : Issue::Sink) : Term
       Pass.mapwalk_preset_and_style(root, issues) do |_, pairs, style, issues|
-        Term::Dict.build do |commit|
-          ctx = Context.new(theme, pairs, commit)
+        theme.decomposition_of(pairs, style) do
+          version0 = issues.version
 
-          style.items.each do |utility|
-            utility(ctx, utility, issues)
+          decomposition = Term::Dict.build do |commit|
+            ctx = Context.new(theme, pairs, commit)
+
+            style.items.each do |utility|
+              utility(ctx, utility, issues)
+            end
           end
+
+          version1 = issues.version
+
+          # If versions are the same, this means decomposition did not contain any issues;
+          # we may proceed and cache. Otherwise, do not cache, since we'd want the issues
+          # to show up every time one runs Microfold on the offending style string.
+          {version0 == version1, decomposition}
         end
       end
     end

@@ -86,7 +86,7 @@ module Ww::Soma::Microfold::Pass
       decompose(theme, issues),
       lookabove,
       cascade(theme),
-      designate,
+      designate(theme),
       lower(issues),
       unfold(theme, issues),
       unwrap,
