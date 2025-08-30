@@ -40,9 +40,9 @@ require "./wirewright/alloy"
 # {% end %}
 
 {% if flag?(:release) %}
-  Log.setup_from_env(default_level: :warn)
+  Log.setup_from_env(default_level: :warn, backend: Log::IOBackend.new(STDERR))
 {% else %}
-  Log.setup_from_env(default_level: :debug)
+  Log.setup_from_env(default_level: :debug, backend: Log::IOBackend.new(STDERR))
 {% end %}
 
 module Ww
