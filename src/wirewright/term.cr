@@ -516,15 +516,14 @@ module Ww
       Num.new(object.value)
     end
 
-    # Constructs a string term from the given UUID *object*.
-    def self.[](object : UUID) : Str
-      Term[object.to_s]
-    end
+    {% for spec in { {:UUID, "UUID"}, {:H256, "256-bit term hash"}, {:Path, "path"} } %}
+      {% type, name = spec %}
 
-    # Constructs a string term from the given 256-bit term hash *object*.
-    def self.[](object : H256) : Str
-      Term[object.to_s]
-    end
+      # Constructs a string term from the given {{name.id}} *object*.
+      def self.[](object : {{type.id}}) : Str
+        Term[object.to_s]
+      end
+    {% end %}
 
     # Constructs an indexed dictionary from the given enumerable *object*.
     # Elements of *object* receive successive keys 0, 1, 2, etc.
