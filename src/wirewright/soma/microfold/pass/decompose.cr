@@ -426,6 +426,15 @@ module Ww::Soma::Microfold::Pass
 
     private def argcheck?(theme, pairs, argspec : Term, arg : Term, issues)
       Term.case({argspec, arg}) do
+        # |@ soma.microfold.theme.argspec.any
+        #
+        # |@block
+        # Matches any argument.
+        # |@endblock
+        givenpi %[any _] do
+          arg
+        end
+
         # |@ soma.microfold.theme.argspec.real
         #
         # |@block
