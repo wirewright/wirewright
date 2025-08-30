@@ -66,9 +66,9 @@ struct Ww::Term
       pterm = PATTERN_TERM_CACHE.put_if_absent(pid) do
         pattern.call
       rescue e : ML::SyntaxError
-        e.filename = "[#{location}]"
-        e.humanize(STDERR)
-        raise "syntax error in match"
+        preview, line, column = ML::SyntaxError.lookaround(e.text)
+
+        raise "syntax error in match #{location}, #{line}:#{column}, preview: `#{preview}`"
       end
 
       unless env = Engine.match?(pterm, @matchee, env: @env)
