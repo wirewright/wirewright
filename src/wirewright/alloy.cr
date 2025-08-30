@@ -89,13 +89,28 @@ module Ww::Alloy
           in Splice
             # We're in a pair, as in:
             #
-            #   x: (^* a b c)
+            #   x: (^* (1 2 3))
             #
-            # Obviously splicing won't make any sense here so we just wrap
-            # whatever is spliced in a dict. Thus the above becomes:
+            # There are only two possible states for a pair if it is treated like
+            # a container:
             #
-            #   x: (a b c)
-            commit.with(key, expansion.offspring)
+            #   zero terms -- as in an empty splice or an error
+            #   one term   -- as in Assign
+            #
+            # A splice with more than one term does not fit in a pair -- the extra terms
+            # have nowhere to go. We handle this by wrapping such cases in `()`,
+            # but, unfortunately, just like at the top-level, this generates a nasty,
+            # unpredictable interface; not something as clean as zero/one/many.
+            # Anything else would be worse, though; we do normalize e.g. in `^render`,
+            # but here, there'd be no easy way to extract vs `^render` (besides, all
+            # Alloy templates written so far would be broken!) I am therefore in favor
+            # of this behavior as it is an OK compromise between purity and practice.
+            case expansion.offspring.size
+            when 0 then commit.without(key)
+            when 1 then commit.with(key, expansion.offspring[0])
+            else
+              commit.with(key, expansion.offspring)
+            end
           end
         end
       end
@@ -353,6 +368,60 @@ module Ww::Alloy
             commit << :"^case" << {:value, expr}
             commit.concat(branches.items)
           end
+
+          renderX(ctx, keypath, Term.of(expansion), issues)
+        end
+      end
+
+      # |@ alloy.template.^match'
+      #
+      # |@block
+      # `^match'` is a shorthand for a single-branch `^match`, as in:
+      # `(^match expr_ (when pattern_ body_*))`.
+      #
+      # On mismatch, `^match'` expands into nothing (disappears).
+      # |@endblock
+      #
+      # |@key expr alloy.expr -- Value expression to match on.
+      #
+      # |@key pattern m1 -- An M1 pattern to match the value of *expr* against.
+      # Alloy vars are available in the pattern. Captures made in the pattern
+      # are exposed to the body.
+      matchpi %{(^match' (expr_ pattern_) body_*)} do
+        issues.adjoin("`^match'` shorthand for `(^match _ (when _ _*))`") do |issues|
+          branch = Term::Dict.build do |commit|
+            commit << :when << pattern
+            commit.concat(body.items)
+          end
+
+          expansion = Term.of(:"^match", expr, branch)
+
+          renderX(ctx, keypath, Term.of(expansion), issues)
+        end
+      end
+
+      # |@ alloy.template.^case'
+      #
+      # |@block
+      # `^case'` is a shorthand for a single-branch `^case`, as in:
+      # `(^case expr_ (when pattern_ body_*))`.
+      #
+      # On mismatch, `^case'` expands into nothing (disappears).
+      # |@endblock
+      #
+      # |@key expr alloy.expr -- Value expression to match on.
+      #
+      # |@key pattern m1 -- An M1 pattern to match the value of *expr* against.
+      # Alloy vars are available in the pattern. Captures made in the pattern
+      # are exposed to the body.
+      matchpi %{(^case' (expr_ pattern_) body_*)} do
+        issues.adjoin("`^case'` shorthand for `(^case _ (when _ _*))`") do |issues|
+          branch = Term::Dict.build do |commit|
+            commit << :when << pattern
+            commit.concat(body.items)
+          end
+
+          expansion = Term.of(:"^case", expr, branch)
 
           renderX(ctx, keypath, Term.of(expansion), issues)
         end
@@ -652,6 +721,24 @@ module Ww::Alloy
         end
       end
 
+      # |@ alloy.template.^*
+      #
+      # |@block
+      # Splices the result of an Alloy value expression *expr*, expected to be a dict.
+      # |@endblock
+      #
+      # |@key expr alloy.expr -- Alloy value expression to obtain the dict to splice.
+      matchpi %{(^* expr_)} do
+        value = eval(ctx, expr, issues)
+
+        unless value.type.dict?
+          issues.adjoin("spliced value", value, &.major("expected a dict value"))
+          return Err.new
+        end
+
+        Splice.new(value.itemspart)
+      end
+
       # |@ alloy.template.^render
       #
       # |@block
@@ -736,12 +823,17 @@ module Ww::Alloy
 
         id = id.to(String).view
         continue unless id = id.lchop?('^')
+        continue unless id.size > 0
 
         case
         when suffix = id.lchop?('\\')
+          continue unless id.size > 0
+
           kind = :ml
           name = Term::Sym.new(suffix.to_s)
         when suffix = id.lchop?('*')
+          continue unless id.size > 0
+
           kind = :splice
           name = Term::Sym.new(suffix.to_s)
         else
