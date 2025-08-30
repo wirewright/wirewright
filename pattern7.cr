@@ -5488,6 +5488,12 @@ module ::Ww::M1
           WalkDecision::Continue
         end
 
+        matchpi %[(%'%literal ())] do
+          literals += 1
+
+          WalkDecision::Continue
+        end
+
         matchpi %[(%'%literal d_dict)] do
           literals += d.population.total
 

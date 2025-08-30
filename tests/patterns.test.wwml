@@ -3959,6 +3959,10 @@
   (level (_* ¦ _ max-h: mh_number content-h: ch_number h: h←content))
   (level (text _ ¦ _ max-h: mh_number wrap-h: wh_number h: h←content)))
 
+(specificity
+  (level ([_ | _] (`>U (goto line start) _*)))
+  (level ([() | _] (U←(goto line start) _*))))
+
 ;; Head
 ;; Make sure pattern head is determined properly.
 (head
