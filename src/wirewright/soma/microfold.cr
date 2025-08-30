@@ -92,6 +92,13 @@ module Ww::Soma::Microfold
       Pass.render(theme, root, issues)
     end
   end
+
+  # Alias of the main overload of `render`. The arguments are flipped to enable
+  # piping: e.g. `pipe(..., Microfold.render(theme), ...)`. Errors are suppressed.
+  def render(root : Term, theme : Theme, **kwargs) : Term
+    renderout, _ = render(theme, root, severity: :quiet)
+    renderout
+  end
 end
 
 require "./microfold/theme"
