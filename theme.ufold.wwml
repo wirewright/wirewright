@@ -70,7 +70,7 @@ h2: "font-sans font-semibold text-3xl text-neutral-500 wrap"
 h3: "font-sans font-medium text-2xl text-neutral-500 wrap"
 h4: "font-sans font-medium text-xl text-neutral-500 wrap"
 h5: "font-sans font-medium text-lg text-neutral-500 wrap"
-h6: "font-sans font-semibold text-xs text-neutral-500 uppercase wrap"
+h6: "font-sans font-semibold text-xs text-neutral-500 upcase wrap"
 p: "font-sans font-text font-base text-neutral-500 wrap"
 icon: "font-icons font-normal icon-fallback-sans icon-fallback-square font-base leading-none text-neutral-500"
 group: "flow-row"
@@ -294,7 +294,9 @@ button: "font-sans font-normal text-sm bg-neutral-700 text-neutral-200 hover:bg-
 "leading-8xl": (text-box {leading: 1})
 "leading-9xl": (text-box {leading: 1})
 
+;;
 ;; Font family utilities.
+;;
 
 "font-icons": (text-box {font: $(global font-icons)})
 "font-condensed": (text-box {font: $(global font-condensed)})
@@ -302,7 +304,9 @@ button: "font-sans font-normal text-sm bg-neutral-700 text-neutral-200 hover:bg-
 "font-serif": (text-box {font: $(global font-serif)})
 "font-mono": (text-box {font: $(global font-mono)})
 
-;; Icon fallback utilities (for internal use only).
+;;
+;; Icon utilities (for internal use only).
+;;
 
 "icon-fallback-sans": (text-box {icon-font-fallback: $(global font-sans)})
 "icon-fallback-square": (text-box {icon-fallback: "▨"})
@@ -335,8 +339,6 @@ button: "font-sans font-normal text-sm bg-neutral-700 text-neutral-200 hover:bg-
 "font-7xl": (text-box {size: $(global font-7xl)})
 "font-8xl": (text-box {size: $(global font-8xl)})
 "font-9xl": (text-box {size: $(global font-9xl)})
-
-;; Text size utilities.
 
 "text-xs": (short-for "font-xs" "leading-xs")
 "text-sm": (short-for "font-sm" "leading-sm")
@@ -380,7 +382,7 @@ button: "font-sans font-normal text-sm bg-neutral-700 text-neutral-200 hover:bg-
 ;; web browsers. Browsers have the much more sophisticated
 ;; text-decoration -- we don't.
 
-;; As in `underline-1 underline-blue-500`. You can then do e.g. `hover:no-underline`.
+;; As in `underline-1 underline-blue-500`. You can then do e.g. `hover:underline-none`.
 "underline":
   (try
     (short-for "underline-thickness")
@@ -418,23 +420,25 @@ button: "font-sans font-normal text-sm bg-neutral-700 text-neutral-200 hover:bg-
 "selection-radius-2xl": (text-box {selection-radius: $(* 0.8 (global spacing))})
 "selection-radius-3xl": (text-box {selection-radius: $(* 1 (global spacing))})
 
+;;
 ;; Text wrap utilities.
+;;
 
 "wrap": (text-box {wrap: true})
-"wrap-off": (text-box {wrap: false})
+"no-wrap": (text-box {wrap: false})
 
 "word-wrap": (text-box {wrap-on-words: true})
+"no-word-wrap": (text-box {wrap-on-words: false})
+
 "letter-wrap": (text-box {wrap-on-letters: true})
+"no-letter-wrap": (text-box {wrap-on-letters: false})
 
-"word-wrap-off": (text-box {wrap-on-words: false})
-"letter-wrap-off": (text-box {wrap-on-letters: false})
-
+;;
 ;; Text transform utilities.
 ;;
-;; Reference: https://tailwindcss.com/docs/text-transform
 
-"uppercase": (text-box {transform: {+ upcase}})
-"lowercase": (text-box {transform: {+ dncase}})
+"upcase": (text-box {transform: {+ upcase}})
+"dncase": (text-box {transform: {+ dncase}})
 "capitalize": (text-box {transform: {+ capitalize}})
 "strip": (text-box {transform: {+ strip}})
 "pretty": (text-box {transform: {+ pretty}})
@@ -626,7 +630,7 @@ button: "font-sans font-normal text-sm bg-neutral-700 text-neutral-200 hover:bg-
 "content-align-x": (content-align-box real {x: $(* (local arg) percents)})
 "content-align-y": (content-align-box real {y: $(* (local arg) percents)})
 
-;; Min width
+;; Min width.
 ;;
 ;; Reference: https://tailwindcss.com/docs/min-width
 
@@ -647,7 +651,7 @@ button: "font-sans font-normal text-sm bg-neutral-700 text-neutral-200 hover:bg-
 "min-w-7xl": (limit-box {min-w: $(global limit-7xl)})
 
 ;;
-;; Min height
+;; Min height.
 ;;
 
 "min-h": (limit-box real {min-h: $(local arg)})
@@ -666,7 +670,7 @@ button: "font-sans font-normal text-sm bg-neutral-700 text-neutral-200 hover:bg-
 "min-h-6xl": (limit-box {min-h: $(global limit-6xl)})
 "min-h-7xl": (limit-box {min-h: $(global limit-7xl)})
 
-;; Max width
+;; Max width.
 ;;
 ;; Reference: https://tailwindcss.com/docs/max-width
 
@@ -687,7 +691,7 @@ button: "font-sans font-normal text-sm bg-neutral-700 text-neutral-200 hover:bg-
 "max-w-7xl": (limit-box {max-w: $(global limit-7xl)})
 
 ;;
-;; Max height
+;; Max height.
 ;;
 
 "max-h": (limit-box real {max-h: $(local arg)})
@@ -707,14 +711,14 @@ button: "font-sans font-normal text-sm bg-neutral-700 text-neutral-200 hover:bg-
 "max-h-7xl": (limit-box {max-h: $(global limit-7xl)})
 
 ;;
-;; Cover (width and/or height in percents)
+;; Cover (width and/or height in percents).
 ;;
 
 "cover": (short-for "cover-x" "cover-y")
 "cover-x": (percents-box real {w: $(* (local arg) percents)})
 "cover-y": (percents-box real {h: $(* (local arg) percents)})
 
-;; Z-index
+;; Z-index.
 ;;
 ;; Reference: https://tailwindcss.com/docs/z-index
 
@@ -726,7 +730,9 @@ button: "font-sans font-normal text-sm bg-neutral-700 text-neutral-200 hover:bg-
 "z": (outermost-box real {z-index: $(local arg)})
 "-z": (outermost-box real {z-index: $(* (local arg) -1)})
 
-;; Opacity
+;;
+;; Opacity.
+;;
 
 "opacity": (composite-box real {opacity: $(* (local arg) percents)})
 
@@ -756,7 +762,7 @@ button: "font-sans font-normal text-sm bg-neutral-700 text-neutral-200 hover:bg-
 "cursor-not-allowed": (outermost-box {cursor: not-allowed})
 
 ;;
-;; Rotation
+;; Rotation.
 ;;
 
 "angle": (sized-box real {angle: $(* (local arg) degrees)})
@@ -765,7 +771,7 @@ button: "font-sans font-normal text-sm bg-neutral-700 text-neutral-200 hover:bg-
 "pivot-t": (sized-box real {pivot-t: $(* (local arg) percents)})
 
 ;;
-;; Origin
+;; Origin.
 ;;
 
 "origin": (sized-box {origin: true})
@@ -773,7 +779,7 @@ button: "font-sans font-normal text-sm bg-neutral-700 text-neutral-200 hover:bg-
 "origin-t": (sized-box real {origin-t: $(* (local arg) percents)})
 
 ;;
-;; Pan
+;; Pan.
 ;;
 
 "pan-l": (viewport-box {pan-x-side: left})
@@ -787,7 +793,7 @@ button: "font-sans font-normal text-sm bg-neutral-700 text-neutral-200 hover:bg-
 "content-pan-b": (content-viewport-box {pan-y-side: bottom})
 
 ;;
-;; Misc
+;; Misc.
 ;;
 
 "shrink": (outermost-box {shrink: true})
@@ -1176,7 +1182,8 @@ prune:
 ;;      (p "Line 2")
 ;;      (p "Line 3"))
 ;;
-;; One would expect each of the lines to assume `text-red-500` (even if obstructed -- arguably).
+;; One would expect each of the lines to assume `text-red-500` (even if obstructed
+;; by non-µfold-administered nodes -- arguably).
 cascade: {+ text-box}
 
 ;; This is the box hierarchy of µfold. Here we list boxes from lowest-rank
@@ -1209,7 +1216,9 @@ hierarchy:
 ;; Note how we "bubble up" the client's *head* and *attrs* in all of these rules.
 ;; This "bubbling up" avoids (or rather, divides evenly) the conceptual complexity
 ;; of having to merge them with the outermost box later on. Instead, we simply keep
-;; the client node.
+;; the client node intact. This continues the general line of keeping the client's
+;; nodes and annotations intact; allowing the client to e.g. tag their nodes and observe
+;; how they evolve through µfold -> UIR -> DwUIR, perhaps for feedback.
 ;;
 ;; These rules are *always* run only on nodes that explicitly opt into µfold;
 ;; that is, nodes with a style property, or ones with a default style defined in
@@ -1274,7 +1283,9 @@ hierarchy:
 ;; `outermost-box` is a virtual box that styles like `z` or `fr` target.
 (outermost-box node←(head_ children_* ¦ attrs_) ¦ styles_)
   => (^match (∩ attrs styles)
+       ;; If the *real* outermost box doesn't conflict with styles targeting
+       ;; outermost-box, just add them to the real outermost box.
        (when {} ^(∪ node styles))
+       ;; Otherwise, craft a box specifically for outermost-box styles.
        (when _ (^head (box ^*children ^… styles) ^… attrs)))
-
 
