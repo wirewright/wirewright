@@ -148,6 +148,15 @@ module Ww::Alloy
   private def eval(ctx : Context, expr : Term, issues : Issue::Sink) : Term
     issues.adjoin("value expression", expr) do |issues|
       Term.case(expr) do
+        # |@ alloy.expr.literal
+        #
+        # |@block
+        # Returns *term* without further evaluation.
+        # |@endblock
+        matchpi %{(literal term_)} do
+          term
+        end
+
         matchpi %{(_ args_* ¦ kwargs_)}, %{(args_* ¦ kwargs_)} do
           # On the way in.
           expr = expr.transaction do |commit|
