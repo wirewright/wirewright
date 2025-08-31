@@ -7,11 +7,13 @@ module Ww::Soma::DwUIR
     fill : Paint::Any,
     color : Paint::Any,
     radius : Float32,
-    height : Float32
+    extent : Float32
 
   defcase TextSpec,
     caption : String,
-    font : Path,
+    family : String,
+    weight : FontWeight,
+    italic : Bool,
     size : Float32,
     color : Paint::Any,
     leading : Magn,
@@ -21,12 +23,13 @@ module Ww::Soma::DwUIR
     underline : UnderlineSpec?
 
   class TextSpec
-    def pencil(pencils : PencilServer) : IPencil
-      pencils.call(PencilRequest.new(font, size, leading, tracking))
+    # Tries to find the font referenced in this text spec using `FontIndex`.
+    getter? font : Path? do
+      FontIndex.path_to?(family, weight, italic: italic)
     end
 
-    def each_text_drawable(pencils : PencilServer, *, origin = Point.new(0, 0), &sink : TextDrawable::Any ->)
-      TextDrawable.each(pencil(pencils), wrap, caption, selection.try(&.range)) do |dw|
+    def each_text_drawable(pencil : IPencil, *, origin = Point.new(0, 0), &sink : TextDrawable::Any ->)
+      TextDrawable.each(pencil, wrap, caption, selection.try(&.range)) do |dw|
         case dw
         in TextDrawable::InlineString
           dw = dw.copy_with(bounds: dw.bounds
@@ -36,8 +39,10 @@ module Ww::Soma::DwUIR
         in TextDrawable::Selection
           next unless sel = selection
 
+          sel_height = pencil.tip.y + sel.extent*(pencil.line_height - pencil.tip.y)
+
           dw = dw.copy_with(bounds: dw.bounds
-            .resize(h: sel.height)
+            .resize(h: sel_height)
             .translate(origin)
             .mapx(&.round)
             .mapy(&.ceil))
@@ -48,16 +53,12 @@ module Ww::Soma::DwUIR
     end
   end
 
-  # :nodoc:
-  #
   # Attempts to recognize and parse a text node in *node*. Returns the resulting
   # `TextSpec` if recognized. Returns `nil` otherwise.
   #
-  # - *pencils* specifies the pencil server to use (used here for calculating
-  #   line height etc.)
-  # - *wrap extent* specifies the width/height of text to wrap at/until. Points
-  #   with infinite width, height, or both are allowed as well.
-  def text_spec?(node : Term, pencils : PencilServer, wrap_extent : Point) : TextSpec?
+  # *space* specifies the width/height of text to wrap at/until for the wrap
+  # spec. Points with infinite width, height, or both are allowed as well.
+  def text_spec?(node : Term, space : Point) : TextSpec?
     Term.case(node) do
       # |@ soma.dwuir.node.text
       #
@@ -100,20 +101,13 @@ module Ww::Soma::DwUIR
           color_⋮ (rgb 0 0 0))
       WWML
       ) do |caption|
-        text_font = FontIndex.path_to?(
-          family: font.to(String),
-          weight: FontWeight.parse(weight.to(Int32)),
-          italic: italic.true?,
-        )
-
-        return unless text_font
-
+        text_family = font.to(String)
+        text_weight = FontWeight.parse(weight.to(Int32))
+        text_italic = italic.true?
         text_size = size.to(Float32)
         text_color = Paint.term(color)
         text_leading = Magn.relt(leading, Magn.rel(0))
         text_tracking = Magn.relt(tracking, Magn.rel(1))
-
-        pencil = pencils.call(PencilRequest.new(text_font, text_size, text_leading, text_tracking))
 
         wrap = WrapSpec.nowrap
         selection = nil
@@ -197,14 +191,13 @@ module Ww::Soma::DwUIR
             anchor = selection_anchor.to(Int32)
             span = selection_span.to(Int32)
             range_b, range_e = {anchor, anchor + span}.minmax
-            height = pencil.tip.y + selection_extent.to(Float32)*(pencil.line_height - pencil.tip.y)
 
             selection = SelectionSpec.new(
               range: range_b...range_e,
               fill: Paint.term(selection_fill),
               color: Paint.term(selection_color),
               radius: selection_radius.to(Float32),
-              height: height,
+              extent: selection_extent.to(Float32),
             )
 
             continue
@@ -242,7 +235,7 @@ module Ww::Soma::DwUIR
               ellipsis: wrap_ellipsis.to(String),
               on_words: wrap_on_words.true?,
               on_letters: wrap_on_letters.true?,
-              bounds: Rect.new(Point.new(0, 0), wrap_extent),
+              bounds: Rect.new(Point.new(0, 0), space),
               history: wrap_history == Term[:auto] ? WrapHistory::INFINITE : wrap_history.to(Int32),
             )
 
@@ -325,10 +318,16 @@ module Ww::Soma::DwUIR
         end
 
         TextSpec.new(caption,
-          text_font, text_size,
+          text_family,
+          text_weight,
+          text_italic,
+          text_size,
           text_color,
-          text_leading, text_tracking,
-          wrap, selection, underline,
+          text_leading,
+          text_tracking,
+          wrap,
+          selection,
+          underline,
         )
       end
 
@@ -463,18 +462,24 @@ module Ww::Soma::DwUIR
       # to allow the other methods (`hit`, `measure`, etc.) have access to it
       # as well.
       matchpi %{[text]} do
-        unless spec = text_spec?(node, pencils, wrap_extent: context.bounds.size)
+        unless spec = text_spec?(node, space: context.bounds.size)
           return WalkFlow::Next
         end
 
-        spec.each_text_drawable(pencils, origin: context.bounds.tl) do |dw|
+        unless font = spec.font?
+          return WalkFlow::Next
+        end
+
+        pencil = pencils.call(PencilRequest.new(font, spec.size, spec.leading, spec.tracking))
+
+        spec.each_text_drawable(pencil, origin: context.bounds.tl) do |dw|
           case dw
           in TextDrawable::InlineString
             next unless visible?(context, dw.bounds)
 
             shape = FragShape.new(
               string: dw.string,
-              font: spec.font,
+              font: font,
               size: spec.size,
               tracking: spec.tracking,
               underline: spec.underline,

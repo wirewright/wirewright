@@ -345,6 +345,16 @@ module Ww::Soma::DwUIR
       {ur, ug, ub, ua}
     end
 
+    # Shorthand for a tuple of `{r, g, b}`.
+    def rgb : {UInt8, UInt8, UInt8}
+      {r, g, b}
+    end
+
+    # Shorthand for a tuple of `{r, g, b, a}`.
+    def rgba : {UInt8, UInt8, UInt8, UInt8}
+      {*rgb, a}
+    end
+
     # Returns `true` if this color is *fully* transparent; meaning its alpha value
     # is exactly `0`. Returns `false` otherwise.
     def transparent? : Bool

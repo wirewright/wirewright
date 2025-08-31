@@ -34,7 +34,12 @@ module Ww::Soma::DwUIR
     end
 
     # The client should append *string* to its buffer; or handle it immediately.
-    record PushVirtual, string : String
+    record PushVirtual, string : String do
+      # Constructs a vie from `string` for compatibility with `PushInline`.
+      def view : StringView
+        string.view
+      end
+    end
 
     # The client should display the cursor I-beam at the current position.
     #

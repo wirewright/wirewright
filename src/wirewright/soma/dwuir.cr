@@ -40,6 +40,8 @@ require "./dwuir/font"
 
   require "./dwuir/window"
 
+  require "./dwuir/textual"
+
   module Ww::Soma::DwUIR
     # Groups configuration for the `show` shorthand function.
     #

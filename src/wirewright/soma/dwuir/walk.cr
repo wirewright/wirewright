@@ -42,7 +42,7 @@ module Ww::Soma::DwUIR
   end
 
   # :nodoc:
-  def walk(context, node, &fn : WalkContext, Term -> WalkFlow) : Nil
+  def walk(context : WalkContext, node : Term, &fn : WalkContext, Term -> WalkFlow) : Nil
     Term.case(node) do
       # NOTE: the order of matchpis here is important for some nodes but
       # not others; try not to shuffle them too much.

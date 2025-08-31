@@ -17,9 +17,9 @@ module Ww::Soma::DwUIR
 
     # A node was hit.
     #
-    # - *keypath* specifies its keypath, to enable potential modification.
-    # - *node* specifies the node itself, to enable convenient
-    #   inspection without having to follow the keypath.
+    # - *keypath* specifies its keypath.
+    # - *node* specifies the node itself, to enable convenient inspection
+    #   without having to follow the keypath on the caller's end.
     record Node, keypath : Term::Dict, node : Term
 
     # A text node was hit.
@@ -110,17 +110,21 @@ module Ww::Soma::DwUIR
   # width and height (`final-w`, `final-h`).
   #
   # Only sized leaves are inspected and can be hit. The resulting hit object includes
-  # a keypath which you can use to nodes along the path to the leaf (hit parents).
+  # a keypath which you can use to get nodes along the path to the leaf (hit parents).
   def hit?(root : Term, pencils : PencilServer, point : Point) : Hit::Any?
     return unless target = target?(root, point)
 
     Term.case(target.node) do
       matchpi %[(text ⍊ final-w: ±w final-h: ±h)] do
-        spec = text_spec?(target.node, pencils, Point[w.to(Float32), h.to(Float32)])
-        continue unless spec
+        extent = Point[w.to(Float32), h.to(Float32)]
+
+        continue unless spec = text_spec?(target.node, extent)
+        continue unless font = spec.font?
+
+        pencil = pencils.call(PencilRequest.new(font, spec.size, spec.leading, spec.tracking))
 
         begin
-          spec.each_text_drawable(pencils, origin: target.origin) do |dw|
+          spec.each_text_drawable(pencil, origin: target.origin) do |dw|
             next unless dw.is_a?(TextDrawable::InlineString)
             next unless hit?(target.view, target.tf, dw.bounds, point)
 
@@ -128,8 +132,6 @@ module Ww::Soma::DwUIR
           end
         rescue e : FoundWord
           word = e.word
-          pencil = spec.pencil(pencils)
-
           word.segments.each do |segment|
             case segment
             in TextDrawable::InlineSegment

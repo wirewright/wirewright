@@ -321,10 +321,15 @@ module Ww::Soma::DwUIR
       Rect.new(tl: tl, size: Point.new(w, h))
     end
 
+    # Returns a copy of this rectangle with size increased by *delta*.
+    def grow(delta : Point) : Rect
+      Rect.new(tl, br + delta)
+    end
+
     # Returns a copy of this rectangle with width and height increased by
-    # *dw* and *dh* respectively.
+    # *dw* and *dh*, respectively.
     def grow(*, dw : Float32 = 0, dh : Float32 = 0) : Rect
-      Rect.new(tl, br + Point.new(dw, dh))
+      grow(Point[dw, dh])
     end
 
     # Returns a copy of this rectangle translated (moved) by *delta*.

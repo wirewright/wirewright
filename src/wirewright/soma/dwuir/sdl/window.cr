@@ -199,6 +199,13 @@ module Ww::Soma::DwUIR
       windows.each { |window| present(window) }
     end
 
+    # Closes *window* if it is open.
+    #
+    # WARNING: this method destroys the OS window handle; it will be
+    # impossible to reopen *the same OS window* in any way. You can still
+    # reuse the spec of course, passing it to `next`. This will open
+    # a new OS window barely distinguishable from the old one since they
+    # have the same spec.
     def close(window : Any) : Nil
       some(window, &.close)
     end

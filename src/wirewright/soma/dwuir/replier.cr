@@ -22,12 +22,14 @@ module Ww::Soma::DwUIR
       #
       # TODO: cache
       matchpi %{(text ⍊ dw-request: (measure w_number kout_symbol ⍊ status_symbol))} do
-        wrap_extent = Point.new(w.to(Float32), Float32::INFINITY)
+        space = Point.new(w.to(Float32), Float32::INFINITY)
 
-        continue unless spec = text_spec?(subject, platform.pencils, wrap_extent)
+        continue unless spec = text_spec?(subject, space)
+        continue unless font = spec.font?
 
         size = Rect[0, 0, 0, spec.leading.resolve(spec.size)]
-        spec.each_text_drawable(platform.pencils) do |dw|
+        pencil = platform.pencils.call(PencilRequest.new(font, spec.size, spec.leading, spec.tracking))
+        spec.each_text_drawable(pencil) do |dw|
           size |= dw.bounds
         end
 
@@ -42,12 +44,14 @@ module Ww::Soma::DwUIR
       #
       # TODO: cache
       matchpi %{(text ⍊ dw-request: (measure wout_symbol hout_symbol ⍊ status_symbol))} do
-        wrap_extent = Point.inf
+        space = Point.inf
 
-        continue unless spec = text_spec?(subject, platform.pencils, wrap_extent)
+        continue unless spec = text_spec?(subject, space)
+        continue unless font = spec.font?
 
         size = Rect[0, 0, 0, spec.leading.resolve(spec.size)]
-        spec.each_text_drawable(platform.pencils) do |dw|
+        pencil = platform.pencils.call(PencilRequest.new(font, spec.size, spec.leading, spec.tracking))
+        spec.each_text_drawable(pencil) do |dw|
           size |= dw.bounds
         end
 
