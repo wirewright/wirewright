@@ -187,6 +187,10 @@ PRIMITIVES = ProcRuleset.build do
     whole.pluck(key)
   end
 
+  rulepi1 %{(part whole_dict (key key_ ¦ () default_))} do
+    whole[key]? || default
+  end
+
   rulepi1 %{(part whole_dict items)} do
     whole.itemspart
   end
@@ -211,6 +215,28 @@ PRIMITIVES = ProcRuleset.build do
     xs.items.sum(0, &.unsafe_as_s.charcount)
   end
 
+  rulepi1 %[(chunks arg_dict (pattern criterion_))] do
+    chunk = nil
+    chunks = Term[]
+
+    arg.items.each do |item|
+      unless M1.probe?(criterion, item)
+        if chunk
+          chunks = chunks.append(chunk)
+          chunk = nil
+        end
+        chunks = chunks.append({:item, item})
+        next
+      end
+
+      chunk ||= Term[{:chunk}]
+      chunk = chunk.append(item)
+    end
+
+    chunks = chunks.append(chunk) if chunk
+    chunks
+  end
+
   rulepi1 %[(sum ())] { 0 }
   rulepi1 %[(sum (args_number+))] { args.items.reduce { |a, b| a.unsafe_as_n + b.unsafe_as_n } }
 
@@ -225,6 +251,7 @@ PRIMITIVES = ProcRuleset.build do
   rulepi1 %[(round arg_number)] { arg.unsafe_as_n.round }
 
   rulepi1 %[(upcase arg_string)] { arg.upcase }
+  # TODO: downcase -> dncase for symmetry
   rulepi1 %[(downcase arg_string)] { arg.downcase }
 
   rulepi1 %[(take s_string o←(%number +i32) span←(%number i32))] do
@@ -237,8 +264,22 @@ PRIMITIVES = ProcRuleset.build do
     {l, m, r}
   end
 
+  # TODO: these should be under `substring`, e.g. `(substring s (rune B) (word E))`.
+
   rulepi1 %[(runes s_string b←(%number i32) to e←(%number i32))] do
     Term::Str::Substring.runes(s.unsafe_as_s, b.to(Int32), e.to(Int32))
+  end
+  # alias
+  rulepi1 %[(runes s_string b←(%number i32) ..= e←(%number i32))] do
+    Term::Str::Substring.runes(s.unsafe_as_s, b.to(Int32), e.to(Int32))
+  end
+
+  rulepi1 %[(runes s_string b←(%number +i32) ..< e←(%number +i32))] do
+    if b == e
+      Term.of("")
+    else
+      Term::Str::Substring.runes(s.unsafe_as_s, b.to(Int32), e.to(Int32) - 1)
+    end
   end
 
   rulepi1 %[(rune s_string b←e←(%number i32))] do
@@ -248,17 +289,59 @@ PRIMITIVES = ProcRuleset.build do
   rulepi1 %[(words s_string b←(%number i32) to e←(%number i32))] do
     Term::Str::Substring.words(s.unsafe_as_s, b.to(Int32), e.to(Int32))
   end
+  # alias
+  rulepi1 %[(words s_string b←(%number i32) ..= e←(%number i32))] do
+    Term::Str::Substring.words(s.unsafe_as_s, b.to(Int32), e.to(Int32))
+  end
 
   rulepi1 %[(word s_string b←e←(%number i32))] do
     Term::Str::Substring.words(s.unsafe_as_s, b.to(Int32), e.to(Int32))
   end
 
+  # FIXME: this is too lame
+  rulepi1 %[(wordwise s_string)] do
+    Term::Dict.build do |commit|
+      s.to(StringView).split_and_rest(' ') do |segment, sep, _|
+        commit << segment
+        commit << sep unless sep.empty?
+      end
+    end
+  end
+
   rulepi1 %[(lines s_string b←(%number i32) to e←(%number i32))] do
+    Term::Str::Substring.lines(s.unsafe_as_s, b.to(Int32), e.to(Int32))
+  end
+  # alias
+  rulepi1 %[(lines s_string b←(%number i32) ..= e←(%number i32))] do
     Term::Str::Substring.lines(s.unsafe_as_s, b.to(Int32), e.to(Int32))
   end
 
   rulepi1 %[(line s_string b←e←(%number i32))] do
     Term::Str::Substring.lines(s.unsafe_as_s, b.to(Int32), e.to(Int32))
+  end
+
+  rulepi1 %[(line/stem s_string)] do
+    view = s.to(StringView)
+    l, sep, r = view.partition('\n')
+    l
+  end
+
+  rulepi1 %[(line/rest s_string)] do
+    view = s.to(StringView)
+    l, sep, r = view.partition('\n')
+    sep + r
+  end
+
+  rulepi1 %[(rline/stem s_string)] do
+    view = s.to(StringView)
+    l, sep, r = view.rpartition('\n')
+    r
+  end
+
+  rulepi1 %[(rline/rest s_string)] do
+    view = s.to(StringView)
+    l, sep, r = view.rpartition('\n')
+    l + sep
   end
 
   # S₁S₂S₃S₄

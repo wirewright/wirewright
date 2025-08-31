@@ -103,11 +103,11 @@
 ;;
 
 ;; Bounce back up-w/h as dn-w/h.
-(content {¦ up-w⫽h: ±λ -dn-w⫽h: λ'} ⍊ -up-w⫽h: λ') <> {λ': →λ, (λ): ()}
+(content {¦ up-w⫽h: ±λ -dn-w⫽h: λ'} ⍊ x⫽y -up-w⫽h: λ') <> {λ': →λ, (λ): ()}
 
 ;; Reject dn-w/h since `content` is used to force content-sizing even if
 ;; the parent disagrees.
-(content _ ⍊ dn-w⫽h: ±λ) <> {(λ): ()}
+(content _ ⍊ x⫽y dn-w⫽h: ±λ) <> {(λ): ()}
 
 ;;
 ;; text
@@ -173,6 +173,14 @@
 ;; viewport
 ;;
 
+;; Save up-w/h under content-w/h for DwUIR. Properties like pan-x-side
+;; require us to know the size of what's inside the viewport so that we can
+;; adjust the pan.
+(viewport {¦ up-w⫽h: ±λ} ⍊ -up-w⫽h: λ' ⋮content-w⫽h)
+  <> {up-w⫽h: →λ, content-w⫽h: →λ, λ': →λ, (λ): ()}
+
+;; Save dn-w/h under final-w/h for DwUIR. Viewports need to know their
+;; "outer" size to build the clipping rect.
 (viewport _ ⍊ dn-w⫽h: ±λ ⋮final-w⫽h) <> {final-w⫽h: →λ}
 
 ;;

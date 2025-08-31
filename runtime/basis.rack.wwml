@@ -255,7 +255,7 @@
 (sample (@state'_ during @trigger_) @sink_)
   => (module {@trigger: ^trigger, @state': ^state', @sink: ^sink}
        (sample (@state' along @trigger) @frame)
-       (repr (@frame (state_ _) as @sink) ^state))
+       (repr (@frame (state_ _) as @sink) ^^state))
 
 (sample (@state'_ along @trigger_) @sink_)
   => (module {@trigger: ^trigger, @state': ^state', @sink: ^sink}

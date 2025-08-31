@@ -570,7 +570,7 @@ def tspace(flow : Term::Dict, & : Term, Term ->)
   end
 end
 
-defcase TestContext, theme : Mf::Theme, rack_base : Term::Dict
+defcase TestContext, theme : Mf::Theme, rack_basis : Term::Dict, uiR_base : Term
 
 def test(ctx, test, path, keypath, stem, srcmap, text) : Bool
   Term.case(stem) do
@@ -956,7 +956,8 @@ def test(ctx, test, path, keypath, stem, srcmap, text) : Bool
                 title: "Specificity levels out of order",
                 sections: [
                   {"LEVEL", level},
-                  {"FAILED CONSTRAINT", Term.of(:>, level, spec_prev)},
+                  {"PREVIOUS LEVEL SPECIFICITY", spec_prev},
+                  {"LEVEL SPECIFICITY", spec_level},
                 ],
               )
             end
@@ -1199,25 +1200,20 @@ def rack_image(ctx, rack : Term, needle : Term) : Soma::DwUIR::PixelRect
   compositor = Soma::DwUIR::Compositor.new
   viewer_context = Soma::DwUIR::Viewer::Context.new(compositor, platform)
 
+  image = nil
+
   env, retire = Rack.env(
     rack: rack,
-    base: ctx.rack_base,
+    basis: ctx.rack_basis,
     agents: [
-      Rack.uir(platform),
-      Rack.snapper(viewer_context),
+      Rack.uir(platform, rulebase: ctx.uiR_base),
+      Rack::Image.slot(viewer_context, needle) { |pixel_rect| image = pixel_rect },
       Rack::FS.server(files),
     ] of Rack::Agent::Any,
   )
 
   begin
-    image = env.states.each
-      .map { |_, state| state }
-      .select(Rack::State::Image::InMemory)
-      .select { |img| img.id == needle }
-      .map(&.data)
-      .first
-
-    image || raise KeyError.new("rack did not define image `#{needle}`")
+    image.not_nil!("rack did not define image `#{needle}`")
   ensure
     retire.call
   end
@@ -1308,7 +1304,8 @@ end
 
 ctx = TestContext.new(
   theme: Mf.theme(ML.document(File.read("./theme.ufold.wwml")).as_d, rem: Term[16]),
-  rack_base: ML.document(File.read("./runtime/base.rack.wwml")).as_d,
+  rack_basis: ML.document(File.read("./runtime/basis.rack.wwml")).as_d,
+  uiR_base: ML.document(File.read(RESOURCES / (ENV["RSET"]? || "uiR-succ8.soma.wwml"))),
 )
 
 success = TestHarness.new(preview: preview, styled: styled) do |harness|

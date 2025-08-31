@@ -296,22 +296,87 @@ module Ww::Soma::DwUIR
       # several megabytes.) Be especially careful when zooming into very large nodes.
       # |@endblock
       #
-      # |@key pan-l -- used as pivot left for zoom; and also as additional left
-      # offset for nodes in the viewport.
+      # |@key pan-x -- Used as pivot left for zoom; and also as additional left
+      # offset for nodes in the viewport. Relative values are treated as fractions
+      # of content width if `content-w` is defined.
       #
-      # |@key pan-t -- used as pivot top for zoom; and also as additional top
-      # offset for nodes in the viewport.
+      # |@key pan-y -- Used as pivot top for zoom; and also as additional top
+      # offset for nodes in the viewport. Relative values are treated as fractions
+      # of content height if `content-h` is defined.
       #
-      # |@key zoom -- zoom factor (`> 1` to zoom in, `< 1` to zoom out).
+      # |@key zoom -- Zoom factor (`> 1` to zoom in, `< 1` to zoom out).
       matchpi(<<-WWML
-        (viewport _ ¦ _ pan-l⋮ 0
-                        pan-t⋮ 0
+        (viewport _ ¦ _ pan-x_⋮ 0
+                        pan-y_⋮ 0
                         zoom: (%optional 1 (%pipe (clamp 0.1 to 8) zoom_)))
       WWML
       ) do
         return unless visible?(context)
 
-        pan = Point.new(pan_l.to(Float32), pan_t.to(Float32))
+        pan_l = pan_t = nil
+
+        Term.case(node) do
+          # |@ soma.dwuir.node.viewport
+          #
+          # |@key content-w -- Specifies the width of the viewport's content. Defining
+          # this unlocks viewport features such as relative `pan-x` and `pan-y-side`.
+          #
+          # |@key content-h -- Specifies the height of the viewport's content. Defining
+          # this unlocks viewport features such as relative `pan-x` and `pan-y-side`.
+
+          matchpi %[{¦ ±content-w}] do
+            pan_l = Magn.abst(pan_x, fallback: Magn.abs(0)).resolve(content_w.to(Float32))
+
+            continue
+          end
+
+          matchpi %[{¦ ±content-h}] do
+            pan_t = Magn.abst(pan_y, fallback: Magn.abs(0)).resolve(content_h.to(Float32))
+
+            continue
+          end
+
+          otherwise { }
+        end
+
+        # If we do not know content-w/h, default to raw, absolute number value.
+        pan_l ||= pan_x.to(Float32) if pan_x.type.number?
+        pan_t ||= pan_y.to(Float32) if pan_y.type.number?
+
+        pan = Point[pan_l || 0.0f32, pan_t || 0.0f32]
+
+        Term.case(node) do
+          # |@ soma.dwuir.node.viewport
+          #
+          # |@key pan-x-side -- Defines the reference edge for horizontal panning.
+          # Can be `left` (default) or `right`. When set to `right`, the value of
+          # `pan-l` is measured from the right edge of the viewport instead of the left.
+          # E.g. `pan-l: 0` means rightmost end of content touches rightmost end
+          # of viewport.
+          #
+          # |@key pan-y-side -- Defines the reference edge for vertical panning.
+          # Can be `top` (default) or `bottom`. When set to `bottom`, the value
+          # of `pan-y` is measured from the bottom edge of the viewport instead
+          # of the top.
+
+          # We don't have to do anything if pan-x-side: left, pan-y-side: top.
+          # They're default, implicit; and are effectively ways to guarantee
+          # the following rules do not run.
+
+          matchpi %[{¦ pan-x-side: right final-w ±content-w}] do
+            pan = Point[(context.bounds.w - content_w.to(Float32)) - pan.x, pan.y]
+
+            continue
+          end
+
+          matchpi %[{¦ pan-y-side: bottom final-h ±content-h}] do
+            pan = Point[pan.x, (context.bounds.h - content_h.to(Float32)) - pan.y]
+
+            continue
+          end
+
+          otherwise { }
+        end
 
         action = Tf[
           Tf.translate(context.bounds.tl + pan),

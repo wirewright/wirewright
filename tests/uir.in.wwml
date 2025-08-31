@@ -332,7 +332,7 @@
             (when false (arrow-out-btn/inactive))))
         (text caption: ^stat font: "IBM Plex Sans" size: 36 color: white weight: 600)
         (x-stack gap: 10
-          (^unless (= badge none)
+          (^unless (= badge (literal none))
             (align x: 0 y: 0
               ^badge))
           (align y: 0.5
@@ -373,7 +373,7 @@
           (x-stack gap: 3
             (text caption: "Working on" font: "IBM Plex Sans" size: 11 color: (oklch 0.7 0 0))
             (text caption: ^task font: "IBM Plex Sans" size: 11 weight: 500 color: (oklch 0.9 0 0))))
-        (^unless (= badge none)
+        (^unless (= badge (literal none))
           (align x: 0.5 y: 0.5
             ^badge)))))
 
@@ -729,14 +729,14 @@
             leading: 1
             color: ^color)))))
 
-(branch-sidebar-item icon_ caption_ ¦ pairs_) =>
+(branch-sidebar-item icon_ caption_ ¦ foobars_) =>
   (switch on: sidebar-overflows
     from:
       (x-signal id: sidebar-overflows
                 threshold: 50
                 fitness: false
-        (branch-sidebar-item-lg ^icon ^caption ^… pairs))
-    to: (branch-sidebar-item-sm ^icon ^caption ^… pairs))
+        (branch-sidebar-item-lg ^icon ^caption ^… foobars))
+    to: (branch-sidebar-item-sm ^icon ^caption ^… foobars))
 
 (branch-sidebar-sm) =>
   (floating z-index: 100 dl: -15
@@ -798,7 +798,7 @@
 (main) =>
   (group
     ;; Banner
-    (content root: true dl: 1650
+    (content x: true y: true root: true dl: 1650
       (padding pl: 10 pr: 10 pt: 10 pb: 10
         (limit max-w: 200
           (z-stack z-index: (local 1000)
@@ -809,14 +809,14 @@
     ;; A regression/z-index/floating test: Branches menu
     ;;
     ;; Reference: https://github.com/
-    (content root: true dl: 950 dt: 10
+    (content x: true y: true root: true dl: 950 dt: 10
       (padding pl: 10 pr: 10 pt: 10 pb: 10
         (branches-card ((active "alpha") "beta" "gamma" (active "delta") "kappa" "foo" (active "bar")))))
 
     ;; A regression test: Dashboard design
     ;;
     ;; Reference: https://dribbble.com/shots/25241984-Task-Management-Dashboard
-    (content root: true dl: 10 dt: 10
+    (content x: true y: true root: true dl: 10 dt: 10
       (limit max-w: 900
         (z-stack z-index: local
           (rect fill: (oklch 0.15 0 0))
@@ -860,7 +860,7 @@
                   (projects-card))))))))
 
     ;; Test x-wrap with a text-like example.
-    (content root: true dl: 950 dt: 400
+    (content x: true y: true root: true dl: 950 dt: 400
       (x-wrapped gap-x: 30
         (limit max-w: 200 (suggestion-card/composite))
         (limit dt: -20 max-w: 250 (suggestion-card/composite))
@@ -869,7 +869,7 @@
     ;; Test x-wrap with a cards example.
     ;;
     ;; Reference: https://figma.com
-    (content root: true dl: 10 dt: 1000
+    (content x: true y: true root: true dl: 10 dt: 1000
       (limit max-w: 850
         (z-stack z-index: local
           (rect z-index: -1 fill: (oklch 0.2 0 0))
@@ -892,7 +892,7 @@
                   (figma-card hue: violet title: "Untitled 5" subscript: "Drafts · Edited 6 hours ago"))))))))
 
     ;; Test x-wrap with min-span and max-span.
-    (content root: true dl: 900 dt: 1000
+    (content x: true y: true root: true dl: 900 dt: 1000
       (y-stack gap: 20
         (y-stack
           (text shrink: true wrap: true caption: "NOTE: Since max-span: 5, only 5 cards are going to be placed on the main axis" font: "IBM Plex Sans" size: 11 color: (oklch 0.8 0 0))
@@ -905,7 +905,7 @@
           (limit max-w: 50 (wrap-cards x-wrapped)))))
 
     ;; Test y-wrap with min-span and max-span.
-    (content root: true dl: 1500 dt: 800
+    (content x: true y: true root: true dl: 1500 dt: 800
       (y-stack gap: 20
         (y-stack
           (text shrink: true wrap: true caption: "NOTE: Since max-span: 5, only 5 cards are going to be placed on the main axis" font: "IBM Plex Sans" size: 11 color: (oklch 0.8 0 0))
@@ -918,7 +918,7 @@
           (limit max-h: 50 (wrap-cards y-wrapped)))))
 
     ;; Test x-wrap and y-wrap alongside each other.
-    (content root: true dl: 1100 dt: 1300
+    (content x: true y: true root: true dl: 1100 dt: 1300
       (x-stack gap: 30
         (limit max-w: 100 max-h: 100
           (x-wrap gap-x: 5 gap-y: 5
@@ -942,7 +942,7 @@
               (rect up-w: 30 up-h: 30 fill: darkorange))))))
 
     ;; switch'es inside x-wrap
-    (content root: true dl: 50 dt: 1800
+    (content x: true y: true root: true dl: 50 dt: 1800
       (y-stack gap: 10
         (limit min-w: 100 max-w: 100
           (rect fill: (oklch 0.5 0.2 red) up-h: 3))
@@ -961,7 +961,7 @@
 
     ;; An example that tests large swathes of x/y-stack behavior,
     ;; interior adaptation based on switch, and x-signal.
-    (content root: true dl: 800 dt: 1800
+    (content x: true y: true root: true dl: 800 dt: 1800
       (y-stack gap: 10
         (limit min-w: 500 max-w: 500 min-h: 300 dl: -400
           (y-stack gap: 5
@@ -1010,6 +1010,6 @@ fill: (oklch 0.13 0 0)
 (^match uir2ppm
   (when true (main))
   (when _
-    (viewport final-w: 1900 final-h: 1000 pan-t: ^(- -1000 page)
+    (viewport final-w: 1900 final-h: 1000 pan-y: ^(- -1000 page)
       (main))))
 

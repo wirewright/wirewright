@@ -1030,14 +1030,14 @@
 
   ;; Exercise the entire box hierarchy.
   (µfold
-    (group style: "flow-col gap-3 text-blue-500 content-clip content-center p-3 bg-neutral-100 m-5 sized cover-x-50 cover-y-50 max-w-sm right content floating isolate z-100" pan-l: 10
+    (group style: "flow-col gap-3 text-blue-500 content-clip content-center p-3 bg-neutral-100 m-5 sized cover-x-50 cover-y-50 max-w-sm right content floating isolate z-100" pan-x: 10
       "A"
       "B"
       "C")
      (group z-index: 100
       (composite
        (floating
-        (content
+        (content x: true y: true
          (viewport
           (align
            (limit
@@ -1075,7 +1075,7 @@
              w: 0.5)
             max-w: 384)
            x: 1)
-          pan-l: 10))))))
+          pan-x: 10))))))
 
 ;;
 ;; Cascade
@@ -1139,14 +1139,14 @@
   (µfold
     (n x style: "content")
     (n x style: "max content")
-    (n (content x)))
+    (n (content x: true y: true x)))
   (µfold
     (n x style: "content max")
     (n x style: "max")
     (n x))
   (µfold
     (n x style: "max cond:content" cond: true)
-    (n (content x) cond: true))
+    (n (content x: true y: true x) cond: true))
   (µfold
     (n x style: "max cond:content")
     (n x))
@@ -1155,4 +1155,4 @@
     (n x cond: true))
   (µfold
     (n x style: "content cond:max")
-    (n (content x))))
+    (n (content x: true y: true x))))

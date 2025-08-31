@@ -511,9 +511,25 @@ module Ww
       Boolean.new(object)
     end
 
-    # Constructs a number term from the given enum *object*.
-    def self.[](object : Enum) : Num
-      Num.new(object.value)
+    # Constructs a term from the given enum *object*.
+    #
+    # - `Issue::Severity` is encoded with a symbol.
+    # - All other enums are encoded using their numeric value.
+    def self.[](object : Enum) : Sym | Num
+      case object
+      when Issue::Severity
+        case object
+        when .note?   then Term[:note]
+        when .minor?  then Term[:minor]
+        when .major?  then Term[:major]
+        when .severe? then Term[:severe]
+        when .fatal?  then Term[:fatal]
+        else
+          raise ArgumentError.new("no term representation for severity #{object}")
+        end
+      else
+        Num.new(object.value)
+      end
     end
 
     {% for spec in { {:UUID, "UUID"}, {:H256, "256-bit term hash"}, {:Path, "path"} } %}

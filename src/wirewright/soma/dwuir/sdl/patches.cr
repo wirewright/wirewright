@@ -16,3 +16,35 @@ class SDL::Window
     value
   end
 end
+
+class SDL::Window::WithDestroy < SDL::Window
+  @destroyed = false
+
+  def destroy
+    return if @destroyed
+
+    @destroyed = true
+
+    LibSDL.destroy_window(self)
+  end
+
+  def finalize
+    destroy
+  end
+end
+
+class SDL::Renderer::WithDestroy < SDL::Renderer
+  @destroyed = false
+
+  def destroy
+    return if @destroyed
+
+    @destroyed = true
+
+    LibSDL.destroy_renderer(self)
+  end
+
+  def finalize
+    destroy
+  end
+end

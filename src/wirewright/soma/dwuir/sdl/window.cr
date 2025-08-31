@@ -44,8 +44,35 @@ module Ww::Soma::DwUIR
       end
     end
 
-    record State, sys : SDL::Window, renderer : SDL::Renderer, frame : Frame, conf : Conf do
+    defcase State, sys : SDL::Window::WithDestroy, renderer : SDL::Renderer::WithDestroy, frame : Frame, conf : Conf do
       include Some
+
+      @valid = true
+
+      def sys : SDL::Window
+        unless @valid
+          raise "BUG: access to expended state"
+        end
+
+        @sys
+      end
+
+      def renderer : SDL::Renderer
+        unless @valid
+          raise "BUG: access to expended state"
+        end
+
+        @renderer
+      end
+
+      def close : Nil
+        return unless @valid
+
+        @renderer.destroy
+        @sys.destroy
+
+        @valid = false
+      end
 
       def_equals_and_hash sys.id, conf
     end
@@ -89,10 +116,7 @@ module Ww::Soma::DwUIR
       unless conf1 = conf?(spec)
         case window
         in None
-        in Some
-          # Drop the window it. Let the GC do cleanup. On our end we simply
-          # hide it from the user.
-          hide(window)
+        in Some then close(window)
         end
 
         return None.new
@@ -101,12 +125,12 @@ module Ww::Soma::DwUIR
       case window
       in None
         # Window did not exist and only now assumed valid form. Construct.
-        sys = SDL::Window.new(conf1.title, conf1.width, conf1.height)
+        sys = SDL::Window::WithDestroy.new(conf1.title, conf1.width, conf1.height)
         sys.resizable = conf1.resizable
 
         change_cursor(ctx, sys, :arrow, conf1.cursor)
 
-        renderer = SDL::Renderer.new(sys, SDL::Renderer::Flags::ACCELERATED)
+        renderer = SDL::Renderer::WithDestroy.new(sys, SDL::Renderer::Flags::ACCELERATED)
 
         frame = Frame.new(renderer, ctx.viewer, conf1.width, conf1.height, conf1.backdrop)
         frame.show(conf1.content)
@@ -175,19 +199,8 @@ module Ww::Soma::DwUIR
       windows.each { |window| present(window) }
     end
 
-    # Shows *window* if it is hidden.
-    def show(window : Any) : Nil
-      some(window, &.sys.show)
-    end
-
-    # Hides *window* if it is shown.
-    def hide(window : Any) : Nil
-      some(window, &.sys.hide)
-    end
-
-    private def dispatch(live : Set(Some), event : SDL::Event::Quit, fn)
-      live.each { |window| hide(window) }
-      live.clear
+    def close(window : Any) : Nil
+      some(window, &.close)
     end
 
     private def dispatch(live : Set(Some), event : SDL::Event::MouseMotion, fn)
@@ -321,8 +334,9 @@ module Ww::Soma::DwUIR
           fn.call(target, term)
         end
       when .close?
-        hide(target)
-        live.delete(target.sys.id)
+        live.delete(target)
+      when .exposed?
+        present(target)
       end
     end
 

@@ -2267,7 +2267,7 @@ backdrop: (oklch 0.9 0 0)
 ;; Image paint on text, rounded rect, selection, underline.
 
 ;; Essential viewport: pan, zoom
-(viewport zoom: 2.3 final-w: 100 final-h: 100 pan-l: 10 pan-t: -10 dl: 950 dt: 800
+(viewport zoom: 2.3 final-w: 100 final-h: 100 pan-x: 10 pan-y: -10 dl: 950 dt: 800
   (text caption: "Lorem\n\nipsum"
     font: "IBM Plex Sans"
     size: 14
@@ -2287,7 +2287,7 @@ backdrop: (oklch 0.9 0 0)
 ;; Rotate within viewport
 (group dl: 900 dt: 600 final-w: 300 final-h: 100
   (rect z-index: 0 final-w: 300 final-h: 100 fill: (oklch 0.8 0 0))
-  (viewport zoom: 1.5 pan-l: 0 pan-t: 0 final-w: 300 final-h: 100
+  (viewport zoom: 1.5 pan-x: 0 pan-y: 0 final-w: 300 final-h: 100
     (group final-w: 300 final-h: 100 pivot: true angle: -10
       (rect
         fill: (oklch 0.8 0.05 0)
@@ -2315,7 +2315,7 @@ backdrop: (oklch 0.9 0 0)
 ;; Rotate viewport itself
 (group dl: 1100 dt: 500 final-w: 300 final-h: 100 pivot: true angle: 45
   (rect z-index: 0 final-w: 300 final-h: 100 fill: (oklch 0.8 0 0))
-  (viewport zoom: 1.5 pan-l: 0 pan-t: 0 final-w: 300 final-h: 100
+  (viewport zoom: 1.5 pan-x: 0 pan-y: 0 final-w: 300 final-h: 100
     (group final-w: 300 final-h: 100
       (rect
         fill: (oklch 0.8 0.05 0)
@@ -2343,7 +2343,7 @@ backdrop: (oklch 0.9 0 0)
 ;; Rotate within viewport & viewport itself, zoom, pan
 (group dl: 1200 dt: 400 final-w: 300 final-h: 100 pivot: true angle: 45
   (rect z-index: 0 final-w: 300 final-h: 100 fill: (oklch 0.8 0 0))
-  (viewport zoom: 1.5 pan-l: 50 pan-t: 100 final-w: 300 final-h: 100
+  (viewport zoom: 1.5 pan-x: 50 pan-y: 100 final-w: 300 final-h: 100
     (group final-w: 300 final-h: 100 pivot: true angle: 40
       (rect
         fill: (oklch 0.8 0.05 0)
@@ -2396,10 +2396,10 @@ backdrop: (oklch 0.9 0 0)
     final-w: 200
     final-h: 200
     fill: lightgray)
-  (viewport zoom: 0.5 pan-l: 10 pan-t: 80 final-w: 200 final-h: 200
+  (viewport zoom: 0.5 pan-x: 10 pan-y: 80 final-w: 200 final-h: 200
     (group final-w: 300 final-h: 100 pivot: true angle: 45
       (rect z-index: 0 final-w: 200 final-h: 100 fill: orange)
-      (viewport z-index: 1 zoom: 1.8 pan-l: 0 pan-t: -100 final-w: 200 final-h: 100
+      (viewport z-index: 1 zoom: 1.8 pan-x: 0 pan-y: -100 final-w: 200 final-h: 100
         (group final-w: 300 final-h: 100 pivot: true angle: -40
           (rect
             fill: darkgray
@@ -2511,8 +2511,8 @@ backdrop: (oklch 0.9 0 0)
     z-index: -1
     fill: pink)
   (viewport
-   pan-l: 20
-   pan-t: 10
+   pan-x: 20
+   pan-y: 10
    zoom: 1.5
     (group
      pivot: true
@@ -2589,3 +2589,14 @@ backdrop: (oklch 0.9 0 0)
     radius-tr: (* 1)
     radius-bl: (* 1)
     radius-br: (* 1)))
+
+;; viewport pan-x-side: right, pan-y-side: right
+(group z-index: local dl: 1650 dt: 10
+  (rect final-w: 100 final-h: 100 fill: lightgray z-index: -1)
+  (viewport final-w: 100 final-h: 100 content-w: 10 content-h: 10 pan-x-side: right pan-y-side: bottom
+    (rect final-w: 10 final-h: 10 fill: green)))
+
+(group z-index: local dl: 1650 dt: 120
+  (rect final-w: 100 final-h: 100 fill: lightgray z-index: -1)
+  (viewport final-w: 100 final-h: 100 content-w: 10 content-h: 10 pan-x: 20 pan-y: 30 pan-x-side: right pan-y-side: bottom
+    (rect final-w: 10 final-h: 10 fill: green)))

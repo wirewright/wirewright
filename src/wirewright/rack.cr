@@ -1,13 +1,38 @@
-# Racks are networks of devices wired together by logical edges.
+# Racks are networks of devices connected by hyperedges.
 #
-# Each device has an immutable state, and the rack as a whole evolves by
-# applying inference rules and exchanging proposals in a workspace until
-# a consistent state is reached.
+# Each device has a piece of immutable state. The rack is used to evolve
+# a *workspace* and a *state map*, the latter being a map of immutable
+# device states. Each time step results in a new, modified workspace, and
+# a new, modified state map.
 #
-# Rather than direct mutation, all updates flow through this exchange-and-
-# inference process.
+# Immutable state is used to maintain Crystal objects, mostly for cache.
 #
-# Racks are similar in spirit to logic circuits and networks of constraints.
+# Workspaces are used for inference, and as a communication medium for
+# the rack.
+#
+# Compared to something like D7, an important assumption with racks is
+# that racks must not change throughout evolution and inference. They
+# remain a static asset.
+#
+# Devices copying data from the workspace to the states map is known as
+# *exchange*, and is done once after each inference loop. During inference,
+# the rack tells/learns as much as it can; saturating the workspace with
+# info if possible. Finally, during exchange, each device modifies its Crystal-
+# side state based on the workspace; effectively, copying info from the workspace
+# to the state.
+#
+# Racks either interact with, or are observed by *agents*.
+#
+# The inference- and-exhcange process may interact with Crystal code
+# through `Agent::Peer`, which has access to both of states and
+# the workspace.
+#
+# *Narrator* agents are pure observers when it comes to the environment.
+# All they see is state transitions; they are also given some info about
+# rack contents and the device(s) involved. Narrators may maintain side
+# state, which lets them e.g. manage windows, draw images, print messages
+# and so on based on effectively assertions made in device state. Narrators
+# are triggered on each and every state transition.
 #
 # Racks are designed to be the primary interface to Wirewright-as-a-system;
 # so, a *general-purpose* interface. There's also µsoma which is a GUI to
@@ -132,8 +157,14 @@ module Ww::Rack
 
     # Transient states have their lifetime equal to the lifetime of the active
     # workspace. When the active workspace is expended, all transient states
-    # will be converted into their stable forms. This is a shorthand to simplify
-    # automatic cleanup of certain states after the current workspace retires.
+    # will be converted into their stable forms. This is a shorthand/convenience
+    # to simplify automatic cleanup of certain states after the current workspace
+    # retires. Transients underpin behavior such as logging (e.g. `log`, `note` devices).
+    #
+    # Without transients and their decay, one would only see different messages,
+    # which may not be desired if one is using e.g. a ticker printing the same message.
+    # Thanks to transient state decay, after each workspace, the message is effectively
+    # forgotten; and observers may print again.
     module Transient
       # Returns the stable form of this state.
       abstract def stable
@@ -158,7 +189,7 @@ module Ww::Rack
       alias Any = Ok | Err
 
       record Ok
-      record Err, e : ::Ww::ML::SyntaxError { include TransientPrior(Ok) }
+      record Err, exception : ::Ww::ML::SyntaxError { include TransientPrior(Ok) }
     end
 
     # Associated with an `alloy/template` or `alloy/view` device.
@@ -224,16 +255,18 @@ module Ww::Rack
 
     # Associated with a `ticker` device.
     module Ticker
-      alias Any = ReplacedBy | Running | NotRunning
-      alias NotRunning = Pending | BadPeriodSpec | None
+      alias Any = Running | NotRunning
+      alias NotRunning = BadPeriodSpec | None
 
-      record None
+      record None, id : Int32
+      record Running, id : Int32, period : Time::Span, query : Term::Dict
+      record BadPeriodSpec, id : Int32, spec : Term do
+        include Transient
 
-      record ReplacedBy, current : Running, succ : NotRunning
-      record Running, period : Time::Span, cancel : ->
-      record Pending, period : Time::Span, query : Term::Dict
-
-      record BadPeriodSpec, spec : Term { include TransientPrior(None) }
+        def stable
+          None.new(id)
+        end
+      end
     end
 
     # Associated with a `uir` device.
@@ -251,21 +284,19 @@ module Ww::Rack
       alias Any = Open | NotOpen
       alias NotOpen = Closed | None
 
-      record Open, window : D::Window::Any, spec : Term, events : Term?
-      record Closed, spec : Term, events : Term?
-      record None, events : Term?
+      record Open, id : Int32, spec : Term, events : Term?
+      record Closed, id : Int32, spec : Term, events : Term?
+      record None, id : Int32, events : Term?
     end
 
     # Associated with a `dwuir/image` device.
     module Image
-      alias Any = InMemory | FilePending | InMemoryPending | BadSpec | BadTarget | None
+      alias Any = File | InMemory | BadSpec | BadTarget | None
 
       record None
 
-      record InMemory, conf : D::ShowConf, id : Term, data : D::PixelRect
-
-      record FilePending, conf : D::ShowConf, path : Path
-      record InMemoryPending, conf : D::ShowConf, id : Term
+      record File, conf : D::ShowConf, path : Path
+      record InMemory, conf : D::ShowConf, id : Term
 
       record BadSpec, spec : Term { include TransientPrior(None) }
       record BadTarget, target : Term { include TransientPrior(None) }
@@ -460,13 +491,13 @@ module Ww::Rack
   end
 
   # Returns an instantiated copy of *rack* and the inference ruleset
-  # extracted from *base*.
+  # extracted from *basis*.
   #
-  # *base* is assumed to be a document dict, containing at least two sections:
+  # *basis* is assumed to be a document dict, containing at least two sections:
   # `inference` with inference rules selectable using *selector*; and `shorthands`
   # with shorthand rules selectable using *selector*.
-  private def instance(rack : Term, base : Term::Dict, *, selector : Term = ML.term(%{[rule pattern_ template_]})) : {Term, Ruleset}
-    rack, inference, shorthands = separate(rack, selector, base)
+  private def instance(rack : Term, basis : Term::Dict, *, selector : Term = ML.term(%{[rule pattern_ template_]})) : {Term, Ruleset}
+    rack, inference, shorthands = separate(rack, selector, basis)
 
     {Alloy.render(shorthands, rack), inference}
   end
@@ -505,8 +536,8 @@ module Ww::Rack
     end
   end
 
-  private def separate(rack : Term, selector : Term, base : Term::Dict) : {Term, Ruleset, Ruleset}
-    Term.matchpi(base, %[{¦ inference⋮ {} shorthands⋮ {}}]) do |shorthands|
+  private def separate(rack : Term, selector : Term, basis : Term::Dict) : {Term, Ruleset, Ruleset}
+    Term.matchpi(basis, %[{¦ inference⋮ {} shorthands⋮ {}}]) do |shorthands|
       # Extend shorthands by appending whatever rules we find in
       # the rack itself.
       shorthands = shorthands.transaction do |commit|
@@ -530,8 +561,13 @@ module Ww::Rack
     end
 
     # Returns the device at the given device address *addr*.
-    def device(addr : Int32) : Term
+    def device?(addr : Int32) : Term?
       @devices[addr]
+    end
+
+    # Returns the device at the given device address *addr*.
+    def device(addr : Int32) : Term
+      device?(addr) || raise KeyError.new("invalid device address #{addr}")
     end
 
     # Yields devices and their device addresses.
@@ -599,11 +635,11 @@ module Ww::Rack
           end
 
           matchpi %{[dwuir/window @_ @events_]} do
-            commit.assoc(device_addr, State::Window::None.new(events))
+            commit.assoc(device_addr, State::Window::None.new(device_addr, events))
           end
 
           matchpi %{[dwuir/window @_]} do
-            commit.assoc(device_addr, State::Window::None.new(events: nil))
+            commit.assoc(device_addr, State::Window::None.new(device_addr, events: nil))
           end
 
           matchpi %{[dwuir/image @_ @_]} do
@@ -636,7 +672,7 @@ module Ww::Rack
 
           matchpi %{[ticker @specs_ @_]} do
             query = query.with(specs, :"?")
-            commit.assoc(device_addr, State::Ticker::None.new)
+            commit.assoc(device_addr, State::Ticker::None.new(device_addr))
           end
 
           # |@ rack.device.args
@@ -770,15 +806,16 @@ module Ww::Rack
 
   # During exchange, data is copied from *workspace* to *states*, and vice versa,
   # based on demands in *workspace*.
-  private def exchange(workspace : Term::Dict, index : Index, states states0 : StateMap, seen : ExchangeSeenSet) : {Term::Dict, StateMap}
+  private def exchange(workspace0 : Term::Dict, index : Index, states states0 : StateMap, seen : ExchangeSeenSet) : {Term::Dict, StateMap}
     states1 = states0
+    workspace1 = workspace0
 
     index.each_device_with_addr do |device, device_addr|
       next unless state0 = states0[device_addr]?
 
       state1 = state0
 
-      Term.case({device, workspace}, session: ExchangeSession.new(seen, device_addr)) do
+      Term.case({device, workspace0}, session: ExchangeSession.new(seen, device_addr)) do
         {% for conf, index in { {"(%optional term term)", :term}, {"terms", :terms}, {"document", :document} } %}
           {% entity, method = conf %}
 
@@ -792,7 +829,7 @@ module Ww::Rack
               begin
                 term = ML.{{method.id}}(src.to(String))
                 state1 = State::ML::Ok.new
-                workspace = workspace.with(terms, {:currently, term})
+                workspace1 = workspace1.with(terms, {:currently, term})
               rescue e : ML::SyntaxError
                 state1 = State::ML::Err.new(e)
               end
@@ -808,10 +845,10 @@ module Ww::Rack
             unreachable
           in State::Source::None
             # Propose to infer query.
-            workspace = workspace.with(queries, :"?")
+            workspace1 = workspace1.with(queries, :"?")
           in State::Source::FilePending
           in State::Source::FileLoaded
-            workspace = workspace.with(contents, {:currently, state0.content})
+            workspace1 = workspace1.with(contents, {:currently, state0.content})
           end
         end
 
@@ -828,7 +865,7 @@ module Ww::Rack
               in State::Source::None, State::Source::FilePending
               in State::Source::FileLoaded
                 if state0.path == path
-                  workspace = workspace.with(contents, {:currently, state0.content})
+                  workspace1 = workspace1.with(contents, {:currently, state0.content})
                   next
                 end
               end
@@ -847,18 +884,18 @@ module Ww::Rack
 
           case state0
           in State::MuTheme::None
-            workspace = workspace.with(rems, :"?").with(documents, :"?")
+            workspace1 = workspace1.with(rems, :"?").with(documents, :"?")
           in State::MuTheme::Some
-            workspace = workspace.with(themes, {:currently, {:handle, device_addr}})
+            workspace1 = workspace1.with(themes, {:currently, {:handle, device_addr}})
           end
         end
 
-        givenpi %{[microfold/theme (@documents_ @rems_) @themes_] (%all (%value documents (currently document_dict)) (%value rems (currently ±rem)) (%value themes ?)))} do
+        givenpi %{[microfold/theme (@documents_ @rems_) @themes_] (%all (%value documents (currently document_dict)) (%value rems (currently ±rem)) (%value themes ?))} do
           assert state0.is_a?(State::MuTheme::Any)
 
           theme = Soma::Microfold.theme(document.unsafe_as_d, rem.unsafe_as_n)
           state1 = State::MuTheme::Some.new(theme)
-          workspace = workspace.with(themes, {:currently, {:handle, device_addr}})
+          workspace1 = workspace1.with(themes, {:currently, {:handle, device_addr}})
         end
 
         givenpi %{[microfold (@themes_ @nodes_) @uirs_] (%all (%value themes (currently (handle ownerT←(%number +i32)))) (%value nodes (currently node_)) (%value uirs ?))} do
@@ -879,7 +916,7 @@ module Ww::Rack
             state1 = State::MuRender::Ok.new
           end
 
-          workspace = workspace.with(uirs, {:currently, uir})
+          workspace1 = workspace1.with(uirs, {:currently, uir})
         end
 
         givenpi %{[m1/ruleset (@bases_ @selectors_) @rulesets_] (%all (%-value rulesets) (%-value selectors) (%value bases ?))} do
@@ -887,18 +924,18 @@ module Ww::Rack
 
           case state0
           in State::Ruleset::None
-            workspace = workspace.with(rulesets, :"?")
+            workspace1 = workspace1.with(rulesets, :"?")
           in State::Ruleset::Some
-            workspace = workspace.with(rulesets, {:currently, {:handle, device_addr}})
+            workspace1 = workspace1.with(rulesets, {:currently, {:handle, device_addr}})
           end
         end
 
-        givenpi %{[m1/ruleset (@bases_ @selectors_) @rulesets_] (%all (%value bases (currently base_dict)) (%value selectors (currently selector_)) (%value rulesets ?)))} do
+        givenpi %{[m1/ruleset (@bases_ @selectors_) @rulesets_] (%all (%value bases (currently base_dict)) (%value selectors (currently selector_)) (%value rulesets ?))} do
           assert state0.is_a?(State::Ruleset::Any)
 
           ruleset = Ruleset.select(selector, base)
           state1 = State::Ruleset::Some.new(ruleset)
-          workspace = workspace.with(rulesets, {:currently, {:handle, device_addr}})
+          workspace1 = workspace1.with(rulesets, {:currently, {:handle, device_addr}})
         end
 
         givenpi %{[alloy/template (@envs_ @templates_) @instances_] (%all (%value envs (currently env_dict)) (%value templates (currently template_)) (%value instances ?))} do
@@ -912,7 +949,7 @@ module Ww::Rack
             state1 = State::Alloy::Ok.new
           end
 
-          workspace = workspace.with(instances, {:currently, instance})
+          workspace1 = workspace1.with(instances, {:currently, instance})
         end
 
         givenpi %{[alloy/view (@rulesets_ @templates_) @instances_] (%all (%value rulesets (currently (handle ownerT←(%number +i32)))) (%value templates (currently template_)) (%value instances ?))} do
@@ -933,7 +970,7 @@ module Ww::Rack
             state1 = State::Alloy::Ok.new
           end
 
-          workspace = workspace.with(instances, {:currently, instance})
+          workspace1 = workspace1.with(instances, {:currently, instance})
         end
 
         givenpi %{[uir @uirs_ @dwuirs_] (%all (%value uirs (currently uir_)) (%value dwuirs ?))} do
@@ -956,7 +993,7 @@ module Ww::Rack
             assert state0.is_a?(State::Cell::Any)
 
             state1 = State::Cell::Some.new(term)
-            workspace = workspace.with(memos, {:currently, term})
+            workspace1 = workspace1.with(memos, {:currently, term})
           end
 
           givenpi %{[latest @terms_ @memos_] (%all (%-value terms) (%value memos ?))} do
@@ -964,9 +1001,9 @@ module Ww::Rack
 
             case state0
             in State::Cell::None
-              workspace = workspace.with(terms, :"?")
+              workspace1 = workspace1.with(terms, :"?")
             in State::Cell::Some
-              workspace = workspace.with(memos, {:currently, state0.value})
+              workspace1 = workspace1.with(memos, {:currently, state0.value})
             end
           end
         end
@@ -995,8 +1032,9 @@ module Ww::Rack
 
           case state0
           in State::Window::None
-            state1 = State::Window::Open.new(D::Window::None.new, spec, state0.events)
-          in State::Window::Open, State::Window::Closed
+            state1 = State::Window::Open.new(state0.id, spec, state0.events)
+          in State::Window::Open,
+             State::Window::Closed
             state1 = state0.copy_with(spec: spec)
           end
         end
@@ -1033,14 +1071,12 @@ module Ww::Rack
           end
 
           case state0
-          in State::Image::None
-          in State::Image::FilePending,
-             State::Image::InMemoryPending,
-             State::Image::BadSpec,
+          in State::Image::None,
+             State::Image::File,
+             State::Image::InMemory
+          in State::Image::BadSpec,
              State::Image::BadTarget
-            next
-          in State::Image::InMemory
-            next if state0.conf == conf
+            unreachable
           end
 
           Term.case(target) do
@@ -1054,10 +1090,10 @@ module Ww::Rack
             # |@endblock
             matchpi %{(file filename_string)} do
               path = Path[filename.to(String)].normalize
-              state1 = State::Image::FilePending.new(conf, path)
+              state1 = State::Image::File.new(conf, path)
             end
 
-            # |@ rack.device.dwuir/image.target.file
+            # |@ rack.device.dwuir/image.target.memory
             #
             # |@block
             # Use `memory` to write an image to an in-memory buffer. This is mainly
@@ -1065,7 +1101,7 @@ module Ww::Rack
             # only reachable from the Crystal side.
             # |@endblock
             matchpi %{(memory id_)} do
-              state1 = State::Image::InMemoryPending.new(conf, id)
+              state1 = State::Image::InMemory.new(conf, id)
             end
 
             otherwise do
@@ -1091,18 +1127,9 @@ module Ww::Rack
           assert state0.is_a?(State::Ticker::Any)
 
           if period = period?(spec)
-            succ = State::Ticker::Pending.new(period, Term.entries({ticks, {:currently, true}}))
+            state1 = State::Ticker::Running.new(state0.id, period, Term.entries({ticks, {:currently, true}}))
           else
-            succ = State::Ticker::BadPeriodSpec.new(spec)
-          end
-
-          case state0
-          in State::Ticker::NotRunning
-            state1 = succ
-          in State::Ticker::Running
-            state1 = State::Ticker::ReplacedBy.new(state0, succ)
-          in State::Ticker::ReplacedBy
-            state1 = state0.copy_with(succ: succ)
+            state1 = State::Ticker::BadPeriodSpec.new(state0.id, spec)
           end
         end
 
@@ -1163,7 +1190,7 @@ module Ww::Rack
         # Use an `err` device to print the value at *msgs* to console using
         # the `error` style.
         # |@endblock
-        givenpi %{[err @msg_] (%value msgs (currently msg_))} do
+        givenpi %{[err @msgs_] (%value msgs (currently msg_))} do
           assert state0.is_a?(State::Log::Any)
           next unless state0.is_a?(State::Log::NoMessage)
 
@@ -1176,7 +1203,7 @@ module Ww::Rack
       states1 = states1.assoc(device_addr, state1)
     end
 
-    {workspace, states1}
+    {workspace1, states1}
   end
 
   # Runs the inference loop on *workspace1*, using devices in *index*.
@@ -1287,15 +1314,7 @@ module Ww::Rack
 
   # Extension points for different roles in an environment.
   module Agent
-    alias Any = Seeder | Narrator | Server | Peer
-
-    # Seeders run before anything else in an environment, once.
-    struct Seeder
-      def initialize(&@fn : StateMap -> StateMap)
-      end
-
-      delegate :call, to: @fn
-    end
+    alias Any = Narrator | Peer
 
     # Peers may modify the environment's state map and issue proposals.
     #
@@ -1312,22 +1331,16 @@ module Ww::Rack
     # file-none transitioning to file-pending (such a transition may be
     # commented as "loading file").
     #
-    # Narrators are "orthogonal" to the environment and cannot affect it
-    # in any way.
-    struct Narrator
-      def initialize(&@fn : Term, State::Any, State::Any ->)
-      end
-
-      delegate :call, to: @fn
-    end
-
-    # Servers modify some states in the state map -- effectively "serving"
-    # some functionality to the workspace/devices.
+    # **Narrators are guaranteed to be called with states that compare
+    # not equal.** `==` is used to check for equality.
     #
-    # Servers cannot initiate workspace processing; they can only participate
-    # in workspace processing initiated by something else.
-    struct Server
-      def initialize(&@fn : StateMap -> StateMap)
+    # Narrators are "orthogonal" to the environment and cannot affect it
+    # in any way. However, they may maintain their own, internal state
+    # based on their observation, and thus, accomplish tasks like window
+    # management (see `Rack::WM`), scheduling (see `Rack.scheduler`),
+    # imaging (see `Rack::Image`), etc.
+    struct Narrator
+      def initialize(&@fn : Env, Int32, Term, State::Any, State::Any ->)
       end
 
       delegate :call, to: @fn
@@ -1346,13 +1359,11 @@ module Ww::Rack
     getter index : Index
 
     def initialize(@index : Index, @states : StateMap, @inference : Ruleset)
-      @seeders = [] of Agent::Seeder
       @peers = [] of Agent::Peer
-      @servers = [] of Agent::Server
       @narrators = [] of Agent::Narrator
     end
 
-    {% for word in %w[seeder server narrator peer] %}
+    {% for word in %w[narrator peer] %}
       # :nodoc:
       def <<(agent : Agent::{{word.id.titleize}}) : self
         @{{word.id}}s << agent
@@ -1378,20 +1389,19 @@ module Ww::Rack
       states1.each do |device_addr, state1|
         state0 = states0[device_addr]
         next if state0 == state1
-        yield @index.device(device_addr), state0, state1
+        yield device_addr, @index.device(device_addr), state0, state1
       end
     end
 
     private def narrate(states0 : StateMap, states1 : StateMap)
-      narrate(states0, states1) do |device, state0, state1|
-        @narrators.each &.call(device, state0, state1)
+      narrate(states0, states1) do |device_addr, device, state0, state1|
+        @narrators.each &.call(self, device_addr, device, state0, state1)
       end
     end
 
     private def submit0(states1 : StateMap)
       narrate(@states, states1)
       @states = states1
-      @servers.each { |r| @states = r.call(@states) }
       narrate(states1, @states)
     end
 
@@ -1459,15 +1469,6 @@ module Ww::Rack
     #
     # Returns the resulting workspace for possible inspection by the caller.
     def send(workspace workspace0 : Term::Dict) : Term::Dict
-      unless @seeders.empty?
-        states0 = @states
-        @seeders.each do |agent|
-          @states = agent.call(@states)
-        end
-        narrate(states0, @states)
-        @seeders.clear
-      end
-
       workspace1, _ = Rack.cycle(@index, @inference, workspace0, @states) do |states1|
         submit0(states1)
 
@@ -1513,9 +1514,9 @@ module Ww::Rack
   # **Entry point to Rack**: Constructs an environment for *rack*.
   #
   # - *rack* is the rack, a dict of `rack.device`s.
-  # - *base* is a document containing inference (section `inference`) and
+  # - *basis* is a document containing inference (section `inference`) and
   #   shorthand (section `shorthand`) rules. You most likely want to parse
-  #   and give `runtime/base.rack.wwml` as *base*.
+  #   and give `runtime/basis.rack.wwml` as *basis*.
   # - *agents* is an array of agents the environment should be populated with.
   #
   # If possible, this function will also "ignite" the rack, meaning it may
@@ -1532,8 +1533,12 @@ module Ww::Rack
   # NOTE: The retire proc can be called multiple times, although it would be
   # strange for you to do that. It simply transitions the rack into the after-
   # boot state, letting agents & devices in the rack handle that as they may.
-  def env(rack : Term, base : Term::Dict, agents : Array(Agent::Any)) : {Env, (->)}
-    rack, inference = instance(rack, base)
+  #
+  # WARNING: Rack environments and most agents (e.g. `WM`) are not expected to
+  # run in a concurrent setting; and are thus thread-unsafe. Make sure to
+  # construct an env per fiber.
+  def env(rack : Term, basis : Term::Dict, agents : Array(Agent::Any)) : {Env, (->)}
+    rack, inference = instance(rack, basis)
     rack = flatten(rack)
     index = index(rack)
     states0, query = boot(index)
@@ -1545,104 +1550,134 @@ module Ww::Rack
     {env, -> { env.submit(states0) }}
   end
 
-  # Constructs a server agent that handles images (in-memory and file-backed).
+  def walk?(index : Index, edge : Term, path : Term::Dict) : Term::Dict?
+    walk?(index, Set(Term).new, Term[], edge, path.items)
+  end
+
+  private def walk?(index : Index, seen : Set(Term), env0 : Term::Dict, edge : Term, path : Term::Dict::ItemsView) : Term::Dict?
+    follow?(index, seen, edge) do |device|
+      next unless env1 = M1.match?(path.first, device, env: env0)
+
+      path = path.move(1)
+
+      # Nothing ahead, we're at the end.
+      if path.empty?
+        next env1
+      end
+
+      # If something is ahead, treat it as a key.
+      unless successor = env1[path.first]
+        raise ArgumentError.new("match env does not contain capture #{path.first}")
+      end
+
+      unless ML.edge?(successor)
+        raise ArgumentError.new("term captured by #{path.first} is not an edge")
+      end
+
+      walk?(index, seen, env1, successor, path.move(1))
+    end
+  end
+
+  private def follow?(index : Index, seen : Set(Term), edge : Term, &fn : Term -> T?) : T? forall T
+    return unless seen.add?(edge)
+
+    index.each_device_at_edge(edge) do |device|
+      Term.case(device) do
+        # Follow links.
+        matchpi %{[link @a_ @b_]} do
+          if edge == a
+            next unless object = follow?(index, seen, b, &fn)
+          elsif edge == b
+            next unless object = follow?(index, seen, a, &fn)
+          end
+
+          return object
+        end
+
+        # Follow `latest`.
+        matchpi %{[latest @pred_ @sink_]} do
+          next unless edge == sink
+          next unless object = follow?(index, seen, pred, &fn)
+          return object
+        end
+
+        otherwise do
+          next unless object = fn.call(device)
+          return object
+        end
+      end
+    end
+  end
+
+  # Rack imaging agency.
   #
-  # `dwuir/image` devices depend on this agent's presence (otherwise, they
-  # are going to be ignored).
-  def snapper(ctx : D::Viewer::Context) : Agent::Server
-    Agent::Server.new do |states|
-      states.map do |device_addr, state0|
-        case state0
-        when State::Image::FilePending
+  # `dwuir/image` devices depend on this agency's presence. They are
+  # not going to function otherwise.
+  module Image
+    extend self
+
+    # Constructs a narrator agent that draws DwUIR images from observed specs,
+    # capturing and storing them on disk using a selected format (e.g. PPM, PNG, JPEG).
+    #
+    # *ctx* is a viewer context that should be used in the process of
+    # drawing an image (see for example `Soma::DwUIR.snap`).
+    def file_snapper(ctx : D::Viewer::Context) : Agent::Narrator
+      Agent::Narrator.new do |_, _, _, state0, state1|
+        case {state0, state1}
+        when {_, State::Image::File}
           begin
-            D.snap(ctx, state0.conf, state0.path)
+            D.snap(ctx, state1.conf, state1.path)
           rescue e : D::SnapError
             Log.error(exception: e) { e.message }
           end
+        end
+      end
+    end
 
-          State::Image::None.new
-        when State::Image::InMemoryPending
-          data = D.show(ctx, state0.conf)
+    # Constructs a narrator agent that draws DwUIR image(s) with the given *id*
+    # from observed specs, calling *fn* with their resulting pixel rect(s).
+    def slot(ctx : D::Viewer::Context, id : Term, &fn : D::PixelRect ->) : Agent::Narrator
+      Agent::Narrator.new do |_, _, _, state0, state1|
+        case {state0, state1}
+        when {_, State::Image::InMemory}
+          next unless state1.id == id
 
-          State::Image::InMemory.new(state0.conf, state0.id, data)
-        else
-          next
+          image = D.show(ctx, state1.conf)
+          fn.call(image)
         end
       end
     end
   end
 
-  # Constructs a server agent that schedules periodic ticking using *fn*.
+  # Constructs a narrator agent that schedules periodic ticking using *fn*.
   #
   # - The first argument of *fn* is period (e.g. every `100.milliseconds`).
   # - The second argument is a query dict that should be sent (`Env#send`)
-  #   to the environment on each tick.
+  #   to the environment to execute a tick.
   #
   # `ticker` devices depend on this agent's presence (otherwise, they are
   # going to be ignored).
-  def scheduler(&fn : Time::Span, Term::Dict -> (->)) : Agent::Server
-    Agent::Server.new do |states|
-      states.map do |_, state0|
-        if state0.is_a?(State::Ticker::ReplacedBy)
-          state0.current.cancel.call
-          state0 = state0.succ
+  def scheduler(&fn : Time::Span, Term::Dict -> (->)) : Agent::Narrator
+    cancels = {} of Int32 => (->)
+
+    Agent::Narrator.new do |_, _, _, state0, state1|
+      case {state0, state1}
+      when {State::Ticker::Running, State::Ticker::NotRunning}
+        next unless cancel = cancels.delete(state0.id)
+
+        cancel.call
+      when {State::Ticker::NotRunning, State::Ticker::Running}
+        cancels[state1.id] = fn.call(state1.period, state1.query)
+      when {State::Ticker::Running, State::Ticker::Running}
+        # TODO: maybe we should tell the thing to change period instead of
+        # throwing it away?
+        if cancel = cancels.delete(state0.id)
+          cancel.call
         end
 
-        next unless state0.is_a?(State::Ticker::Pending)
-
-        cancel = fn.call(state0.period, state0.query)
-
-        State::Ticker::Running.new(state0.period, cancel)
+        cancels[state1.id] = fn.call(state1.period, state1.query)
       end
     end
-  end
-
-  private def mkuiR(platform : D::Platform)
-    cache = SyncCache(Term, Rewrite::Any).new(capacity: 2**16, preallocate: true)
-
-    base_main = File.read(RESOURCES / (ENV["RSET"]? || "uiR-succ8.soma.wwml"))
-
-    onceR = callR(PRIMITIVES)
-
-    # First rewrite entries, then rewrite self.
-    set, exhevalR = recR
-    set.call chainR(entriesR(exhevalR), onceR)
-
-    evalR = dfsR(
-      switchR(
-        { %[($ rewritee_)], exhevalR },
-        { %[($once rewritee_)], onceR },
-      )
-    )
-
-    set_backmapr, rec_backmapr = recR
-
-    refR = dfsR(
-      switchR(
-        { %[($my rewritee←($ _))], chainR(rec_backmapr, envR(Term.of(:"$my"))) },
-        { %[($my rewritee_)], envR(Term.of(:"$my")) },
-        { %[($up rewritee_)], choiceR(envR(Term.of(:"$up")), envR(Term.of(:"$my"))) },
-        { %[($down rewritee_)], choiceR(envR(Term.of(:"$down")), envR(Term.of(:"$my"))) },
-      )
-    )
-
-    backmapR = set_backmapr.call chainR(refR, evalR)
-
-    selector = ML.term(%[(%any° [rule pattern_ template_] [backmap pattern_ backspec_])])
-
-    dwuirR = callR do |term|
-      Rewrite.one(Soma::DwUIR.reply(platform, term))
-    end
-
-    # recursive exhR
-    set_main, rec_main = recR
-    set_main.call(memoR(cache, exhR(choiceR(
-      itemsR(rec_main),
-      chainR(
-        rulesetR(Ruleset.select(selector, ML.terms(base_main)), noR, backmapR, noR),
-        dwuirR,
-      ),
-    ))))
   end
 
   # Constructs an agent that finds and handles requests for UIR rewriting using
@@ -1650,8 +1685,11 @@ module Ww::Rack
   #
   # TODO: this is a hack. uiR is no different from any other *rewriter circuit*,
   # but we do not have them implemented at the moment.
-  def uir(platform : D::Platform) : Agent::Peer
-    uiR = mkuiR(platform)
+  def uir(platform : D::Platform, rulebase : Term) : Agent::Peer
+    uiR = Soma.uiR(
+      replier: ->(term : Term) { D.reply(platform, term) },
+      rulebase: rulebase,
+    )
 
     Agent::Peer.new do |states0, _|
       proposals = [] of Term
@@ -1685,26 +1723,34 @@ module Ww::Rack
     end
   end
 
-  # Rack window management client and agents.
+  # Rack window management agency.
   #
-  # `dwuir/window` devices depend on these agents' presence. Otherwise they
-  # are going to function partially (if some of these agents are active)
-  # or not function at all (if none of them are).
-  module WM
-    extend self
+  # `dwuir/window` devices depend on this agency's presence. Otherwise they
+  # are going to function partially (if parts of this agency are active) or
+  # not function at all (if this agency is missing entirely).
+  struct WM
+    def initialize
+      @windows = {} of Int32 => D::Window::Any
+    end
 
     # Constructs an environment client that performs periodic event polling;
-    # perturbing the environment with some events, and handlng others. Namely,
-    # window closure events are handled by the client, triggering the transition
-    # `State::Window::Open` -> `State::Window::Closed`.
+    # perturbing the environment to handle some events, and handling others
+    # completely by itself. Namely, window closure events are handled by this
+    # client, triggering the transition from `State::Window::Open` to
+    # `State::Window::Closed`.
     def poll : Client
       Client.new do |env|
-        open = open_window_set(env.states).to_set
+        open_windows = @windows
+          .each_value
+          .select(D::Window::Some)
+          .to_set
 
         # Handle input events.
-        survived = D::Window.poll(open) do |target, event|
-          env.each(State::Window::Open) do |device_addr, state|
+        survived_windows = D::Window.poll(open_windows) do |target, event|
+          env.each(State::Window::Open) do |_, state|
             next unless events = state.events
+            next unless window = @windows[state.id]?
+            next unless window == target
 
             query = Term.entries({events, {:currently, event}})
             env.send(query)
@@ -1712,47 +1758,32 @@ module Ww::Rack
         end
 
         # Handle window closure.
-        env.map(State::Window::Open) do |device_addr, state0|
-          next unless state0.window.in?(open) && !state0.window.in?(survived)
+        env.map(State::Window::Open) do |device_addr, state|
+          window = @windows[state.id]
 
-          State::Window::Closed.new(state0.spec, state0.events)
+          if window.in?(open_windows) && !window.in?(survived_windows)
+            State::Window::Closed.new(state.id, state.spec, state.events)
+          end
         end
       end
     end
 
-    private def open_window_set(states : StateMap) : Set(D::Window::Some)
-      states.each
-        .map { |_, state| state }
-        .select(State::Window::Open)
-        .map(&.window)
-        .select(D::Window::Some)
-        .to_set
-    end
-
-    # Constructs an agent that handles synchronization of OS windows with internal
-    # window state on change of the latter. See also: `Soma::DwUIR::Window.next`.
-    def sync(ctx : D::Window::Context) : Agent::Server
-      Agent::Server.new do |states0|
-        states0.map(State::Window::Open) do |device_addr, state0|
-          window1 = D::Window.next(ctx, state0.window, state0.spec)
-
-          state0.copy_with(window: window1)
-        end
-      end
-    end
-
-    # Constructs an agent that "narrates" window changes by updating the corresponding
-    # window's visibility (open/closed); and by redrawing window content to reflect
-    # the latest synced state.
-    def display : Agent::Narrator
-      Agent::Narrator.new do |device, state0, state1|
+    # Constructs an agent that performs window synchronization of internal window
+    # specs with actual OS windows. This is the agent that opens and closes windows,
+    # presents their content on spec change, etc.
+    def sync(ctx : D::Window::Context) : Agent::Narrator
+      Agent::Narrator.new do |_, _, _, state0, state1|
         case {state0, state1}
         when {State::Window::Open, State::Window::NotOpen}
-          D::Window.hide(state0.window)
-        when {State::Window::NotOpen, State::Window::Open}
-          D::Window.show(state1.window)
-        when {State::Window::Open, State::Window::Open}
-          D::Window.present(state1.window)
+          next unless window = @windows.delete(state0.id)
+
+          D::Window.close(window)
+        when {State::Window::Any, State::Window::Open}
+          window0 = @windows[state1.id]? || D::Window::None.new
+          window1 = D::Window.next(ctx, window0, state1.spec)
+          D::Window.present(window1)
+
+          @windows[state1.id] = window1
         end
       end
     end

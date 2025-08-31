@@ -487,12 +487,82 @@ button: "font-sans font-normal text-sm bg-neutral-700 text-neutral-200 hover:bg-
     (back-box real {thickness-b: $(local arg)})
     (back-box {thickness-b: 1}))
 
+;; These border utilities are compatible with both TUI and GUI. TUI supports 8 border
+;; modes (0-7). On the GUI side, we're using pixels. Notably, all these values make
+;; sense as well.
+
+"border-none": (short-for "border-x-none" "border-y-none")
+"border-xs": (short-for "border-x-xs" "border-y-xs")
+"border-sm": (short-for "border-x-sm" "border-y-sm")
+"border-md": (short-for "border-x-md" "border-y-md")
+"border-lg": (short-for "border-x-lg" "border-y-lg")
+"border-xl": (short-for "border-x-xl" "border-y-xl")
+"border-2xl": (short-for "border-x-2xl" "border-y-2xl")
+"border-3xl": (short-for "border-x-3xl" "border-y-3xl")
+
+"border-x-none": (short-for "border-l-none" "border-r-none")
+"border-x-xs": (short-for "border-l-xs" "border-r-xs")
+"border-x-sm": (short-for "border-l-sm" "border-r-sm")
+"border-x-md": (short-for "border-l-md" "border-r-md")
+"border-x-lg": (short-for "border-l-lg" "border-r-lg")
+"border-x-xl": (short-for "border-l-xl" "border-r-xl")
+"border-x-2xl": (short-for "border-l-2xl" "border-r-2xl")
+"border-x-3xl": (short-for "border-l-3xl" "border-r-3xl")
+
+"border-y-none": (short-for "border-t-none" "border-b-none")
+"border-y-xs": (short-for "border-t-xs" "border-b-xs")
+"border-y-sm": (short-for "border-t-sm" "border-b-sm")
+"border-y-md": (short-for "border-t-md" "border-b-md")
+"border-y-lg": (short-for "border-t-lg" "border-b-lg")
+"border-y-xl": (short-for "border-t-xl" "border-b-xl")
+"border-y-2xl": (short-for "border-t-2xl" "border-b-2xl")
+"border-y-3xl": (short-for "border-t-3xl" "border-b-3xl")
+
+"border-l-none": (back-box {thickness-l: 0})
+"border-l-xs": (back-box {thickness-l: 1})
+"border-l-sm": (back-box {thickness-l: 2})
+"border-l-md": (back-box {thickness-l: 3})
+"border-l-lg": (back-box {thickness-l: 4})
+"border-l-xl": (back-box {thickness-l: 5})
+"border-l-2xl": (back-box {thickness-l: 6})
+"border-l-3xl": (back-box {thickness-l: 7})
+
+"border-t-none": (back-box {thickness-t: 0})
+"border-t-xs": (back-box {thickness-t: 1})
+"border-t-sm": (back-box {thickness-t: 2})
+"border-t-md": (back-box {thickness-t: 3})
+"border-t-lg": (back-box {thickness-t: 4})
+"border-t-xl": (back-box {thickness-t: 5})
+"border-t-2xl": (back-box {thickness-t: 6})
+"border-t-3xl": (back-box {thickness-t: 7})
+
+"border-r-none": (back-box {thickness-r: 0})
+"border-r-xs": (back-box {thickness-r: 1})
+"border-r-sm": (back-box {thickness-r: 2})
+"border-r-md": (back-box {thickness-r: 3})
+"border-r-lg": (back-box {thickness-r: 4})
+"border-r-xl": (back-box {thickness-r: 5})
+"border-r-2xl": (back-box {thickness-r: 6})
+"border-r-3xl": (back-box {thickness-r: 7})
+
+"border-b-none": (back-box {thickness-b: 0})
+"border-b-xs": (back-box {thickness-b: 1})
+"border-b-sm": (back-box {thickness-b: 2})
+"border-b-md": (back-box {thickness-b: 3})
+"border-b-lg": (back-box {thickness-b: 4})
+"border-b-xl": (back-box {thickness-b: 5})
+"border-b-2xl": (back-box {thickness-b: 6})
+"border-b-3xl": (back-box {thickness-b: 7})
+
 ;;
 ;; Flow utilities.
 ;;
 
 ;; Fractional size.
-"fr": (outermost-box real {fr: $(local arg)})
+"fr":
+  (try
+    (outermost-box real {fr: $(local arg)})
+    (outermost-box {fr: 1}))
 
 ;; Selection of flow type.
 "flow-row": (flow-box {node: x-stack})
@@ -504,6 +574,8 @@ button: "font-sans font-normal text-sm bg-neutral-700 text-neutral-200 hover:bg-
 
 ;; Gap size.
 "gap": (flow-box real {gap: $(* (local arg) (global spacing))})
+"gap-x": (flow-box real {gap-x: $(* (local arg) (global spacing))})
+"gap-y": (flow-box real {gap-y: $(* (local arg) (global spacing))})
 
 ;;
 ;; Translation utilities.
@@ -541,11 +613,11 @@ button: "font-sans font-normal text-sm bg-neutral-700 text-neutral-200 hover:bg-
 "x": (align-box real {x: $(* (local arg) percents)})
 "y": (align-box real {y: $(* (local arg) percents)})
 
-"content-top": (content-align-box {y: 0})
-"content-bottom": (content-align-box {y: 1})
+"content-t": (content-align-box {y: 0})
+"content-b": (content-align-box {y: 1})
 
-"content-left": (content-align-box {x: 0})
-"content-right": (content-align-box {x: 1})
+"content-l": (content-align-box {x: 0})
+"content-r": (content-align-box {x: 1})
 
 "content-center": (short-for "content-center-x" "content-center-y")
 "content-center-x": (content-align-box {x: 0.5})
@@ -557,6 +629,8 @@ button: "font-sans font-normal text-sm bg-neutral-700 text-neutral-200 hover:bg-
 ;; Min width
 ;;
 ;; Reference: https://tailwindcss.com/docs/min-width
+
+"min-w": (limit-box real {min-w: $(local arg)})
 
 "min-w-3xs": (limit-box {min-w: $(global limit-3xs)})
 "min-w-2xs": (limit-box {min-w: $(global limit-2xs)})
@@ -576,6 +650,8 @@ button: "font-sans font-normal text-sm bg-neutral-700 text-neutral-200 hover:bg-
 ;; Min height
 ;;
 
+"min-h": (limit-box real {min-h: $(local arg)})
+
 "min-h-3xs": (limit-box {min-h: $(global limit-3xs)})
 "min-h-2xs": (limit-box {min-h: $(global limit-2xs)})
 "min-h-xs": (limit-box {min-h: $(global limit-xs)})
@@ -594,6 +670,8 @@ button: "font-sans font-normal text-sm bg-neutral-700 text-neutral-200 hover:bg-
 ;;
 ;; Reference: https://tailwindcss.com/docs/max-width
 
+"max-w": (limit-box real {max-w: $(local arg)})
+
 "max-w-3xs": (limit-box {max-w: $(global limit-3xs)})
 "max-w-2xs": (limit-box {max-w: $(global limit-2xs)})
 "max-w-xs": (limit-box {max-w: $(global limit-xs)})
@@ -611,6 +689,8 @@ button: "font-sans font-normal text-sm bg-neutral-700 text-neutral-200 hover:bg-
 ;;
 ;; Max height
 ;;
+
+"max-h": (limit-box real {max-h: $(local arg)})
 
 "max-h-3xs": (limit-box {max-h: $(global limit-3xs)})
 "max-h-2xs": (limit-box {max-h: $(global limit-2xs)})
@@ -693,6 +773,20 @@ button: "font-sans font-normal text-sm bg-neutral-700 text-neutral-200 hover:bg-
 "origin-t": (sized-box real {origin-t: $(* (local arg) percents)})
 
 ;;
+;; Pan
+;;
+
+"pan-l": (viewport-box {pan-x-side: left})
+"pan-r": (viewport-box {pan-x-side: right})
+"pan-t": (viewport-box {pan-y-side: top})
+"pan-b": (viewport-box {pan-y-side: bottom})
+
+"content-pan-l": (content-viewport-box {pan-x-side: left})
+"content-pan-r": (content-viewport-box {pan-x-side: right})
+"content-pan-t": (content-viewport-box {pan-y-side: top})
+"content-pan-b": (content-viewport-box {pan-y-side: bottom})
+
+;;
 ;; Misc
 ;;
 
@@ -703,7 +797,9 @@ button: "font-sans font-normal text-sm bg-neutral-700 text-neutral-200 hover:bg-
 
 "root": (outermost-box {root: true})
 
-"content": (content-box {presence: true})
+"content": (content-box {presence: true, x: true, y: true})
+"x-content": (content-box {presence: true, x: true})
+"y-content": (content-box {presence: true, y: true})
 "max": (content-box {presence: false})
 
 "sized": (sized-box {presence: true})
@@ -720,6 +816,11 @@ button: "font-sans font-normal text-sm bg-neutral-700 text-neutral-200 hover:bg-
 
 "isolate": (composite-box {presence: true})
 "no-isolate": (composite-box {presence: false})
+
+;; Backdrop is used to specify background/clear color for windows and images
+;; in DwUIR, make sure to have it available as well.
+"backdrop": (outermost-box (one-of colors) {backdrop: $(local arg)})
+
 
 --- properties
 
@@ -743,9 +844,14 @@ selection-span: (text-box integer {selection-span: $(local arg)})
 wrap-ellipsis: (text-box string {wrap-ellipsis: $(local arg)})
 wrap-history: (text-box integer {wrap-history: $(local arg)})
 
-pan-l: (viewport-box real {pan-l: $(local arg)})
-pan-t: (viewport-box real {pan-t: $(local arg)})
+pan-x: (viewport-box any {pan-x: $(local arg)})
+pan-y: (viewport-box any {pan-y: $(local arg)})
+
+content-pan-x: (content-viewport-box any {pan-x: $(local arg)})
+content-pan-y: (content-viewport-box any {pan-y: $(local arg)})
+
 zoom: (viewport-box real {zoom: $(local arg)})
+content-zoom: (content-viewport-box real {zoom: $(local arg)})
 
 
 --- colors
@@ -1070,7 +1176,7 @@ prune:
 ;;      (p "Line 2")
 ;;      (p "Line 3"))
 ;;
-;; One would expect each of lines to assume `text-red-500` (even if obstructed -- arguably).
+;; One would expect each of the lines to assume `text-red-500` (even if obstructed -- arguably).
 cascade: {+ text-box}
 
 ;; This is the box hierarchy of µfold. Here we list boxes from lowest-rank
@@ -1145,7 +1251,18 @@ hierarchy:
   => (^head
         (z-stack z-index: local
           (rect z-index: -1 ^… styles)
-          ^child)
+          (^match styles
+            (when (%keytest thickness-l thickness-r thickness-t thickness-b)
+              ;; If we have some thickness set up, create a padding node around
+              ;; the child for insets.
+              (^match' (styles {¦ thickness-l⋮ 0 thickness-r⋮ 0 thickness-t⋮ 0 thickness-b⋮ 0})
+                (padding pl: (^if (> thickness-l 0) ^thickness-l)
+                         pr: (^if (> thickness-r 0) ^thickness-r)
+                         pt: (^if (> thickness-t 0) ^thickness-t)
+                         pb: (^if (> thickness-b 0) ^thickness-b)
+                         inset: true
+                  ^child)))
+            (when _ ^child)))
       ^… attrs)
 
 (margin-box (head_ child_ ¦ attrs_) ¦ styles_ ml⋮ 0 mr⋮ 0 mt⋮ 0 mb⋮ 0)

@@ -50,7 +50,8 @@ module Ww::Soma::DwUIR
 
   # :nodoc:
   #
-  # Parses a pontential text *node* and returns the corresponding `TextSpec`.
+  # Attempts to recognize and parse a text node in *node*. Returns the resulting
+  # `TextSpec` if recognized. Returns `nil` otherwise.
   #
   # - *pencils* specifies the pencil server to use (used here for calculating
   #   line height etc.)

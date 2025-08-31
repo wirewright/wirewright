@@ -1,0 +1,225 @@
+--- keys
+
+(event M←[keyboard input rune_string] _*)
+  <> {M: (type →rune)}
+
+(event M←[keyboard key ⸨left,right⸩ dn] _*)
+  <> {M: (goto rune ⸨left,right⸩)}
+
+(event M←(keyboard key ⸨left,right⸩ dn ⍊ ctrl) _*)
+  <> {M: (goto word ⸨left,right⸩)}
+
+(event M←[keyboard key ⸨home,end⸩ dn] _*)
+  <> {M: (goto line ⸨left,right⸩)}
+
+(event M←(keyboard key ⸨home,end⸩ dn ⍊ ctrl) _*)
+  <> {M: (goto text ⸨left,right⸩)}
+
+(event M←[keyboard key ⸨backspace,delete⸩ dn] _*)
+  <> {M: (remove rune ⸨left,right⸩)}
+
+(event M←(keyboard key ⸨backspace,delete⸩ dn ⍊ ctrl) _*)
+  <> {M: (remove word ⸨left,right⸩)}
+
+(event M←[keyboard key ⸨up,dn⸩ dn] _*)
+  <> {M: (goto (line ⸨above,below⸩) anchor)}
+
+(event M←[keyboard key shift ⸨dn,up⸩] _*)
+  <> {M: (⸨enable,disable⸩ selection)}
+
+(event M←(keyboard key a dn ⍊ ctrl) _*)
+  <> {M: (select all)}
+
+(event M←[keyboard key enter dn] _*)
+  <> {M: (break line left)}
+
+(event M←(keyboard key enter dn ⍊ shift) _*)
+  <> {M: (break line right)}
+
+(instant [<|> [l_string | _string]] (M←(keyboard key up dn ⍊ -on-first-line_) _*))
+  <> {on-first-line: $(= (rline/rest →l) "")}
+
+(instant [<|> [_string | r_string]] (M←(keyboard key dn dn ⍊ -on-last-line_) _*))
+  <> {on-last-line: $(= (line/rest →r) "")}
+
+(event M←(keyboard key up dn ⍊ on-first-line: true) _*)
+  <> {M: (goto history previous)}
+
+(event M←(keyboard key dn dn ⍊ on-last-line: true) _*)
+  <> {M: (goto history next)}
+
+(instant [<|> [_string | ""]] (M←[keyboard key enter dn] _*))
+  <> {M: (submit)}
+
+--- cursor-utilities
+
+(instant [l_string | _string] (U←(type text_string) _*))
+  <> {(U): (), l: $'(~ →l →text)}
+
+(instant [l_string | _string] (U←(break line left) _*))
+  <> {(U): (), l: $'(~ →l "\n")}
+
+(instant [_string | r_string] (U←(break line right) _*))
+  <> {(U): (), r: $'(~ "\n" →r)}
+
+(instant [l_string | r_string] (U←(goto ⸨rune,word⸩ left) _*))
+  <> {(U): (), l: $'(⸨rune,word⸩s →l 0 ..= -2), r: $(~ (⸨rune,word⸩ →l -1) →r)}
+
+(instant [l_string | r_string] (U←(goto ⸨rune,word⸩ right) _*))
+  <> {(U): (), l: $(~ →l (⸨rune,word⸩ →r 0)), r: $'(⸨rune,word⸩s →r 1 ..= -1)}
+
+(instant [l_string | r_string] (U←(goto text left) _*))
+  <> {(U): (), l: "", r: $(~ →l →r)}
+
+(instant [l_string | r_string] (U←(goto text right) _*))
+  <> {(U): (), l: $(~ →l →r), r: ""}
+
+(instant [l_string | r_string] (U←(goto line left) _*))
+  <> {(U): (), l: $'(rline/rest →l), r: $(~ (rline/stem →l) →r)}
+
+(instant [l_string | r_string] (U←(goto line right) _*))
+  <> {(U): (), l: $(~ →l (line/stem →r)), r: $'(line/rest →r)}
+
+(instant [l_string | _string] (U←(remove ⸨rune,word⸩ left) _*))
+  <> {(U): (), l: $'(⸨rune,word⸩s →l 0 ..= -2)}
+
+(instant [_string | r_string] (U←(remove ⸨rune,word⸩ right) _*))
+  <> {(U): (), r: $'(⸨rune,word⸩s →r 1 ..= -1)}
+
+(event U←(goto (line ⸨above,below⸩) ⸨right,left⸩) _*)
+  <> {(U): ((goto line ⸨left,right⸩) (goto rune ⸨left,right⸩))}
+
+(event U←(goto (line ⸨above,below⸩) ⸨left,right⸩) _*)
+  <> {(U): ((goto (line ⸨above,below⸩) ⸨right,left⸩) (goto line ⸨left,right⸩))}
+
+(event U←(goto (line ⸨above,below⸩) (column N_)) _*)
+  <> {(U): ((goto (line ⸨above,below⸩) left) (goto rune (→N right)))}
+
+(instant [l_string | _] ((goto (line ⸨above,below⸩) A←anchor) _*))
+  <> {A: (column $(charcount (rline/stem →l)))}
+
+(instant [_string | _string] (`>U (goto rune (±N right)) _*))
+  <> {>U: (reveal inline)}
+
+(instant [l_string | r_string] (U←(reveal inline) _*))
+  <> {(U): (), l: ($'(rline/rest →l) $'(rline/stem →l)), r: ($'(line/stem →r) $'(line/rest →r))}
+
+(instant [L'←(L_string l_string) | R'←(r_string R_string)] (U←(conceal inline) _*))
+  <> {(U): (), L': $'(~ →L →l), R': $'(~ →r →R)}
+
+(instant [(_ l_string) | (r_string _)] (U←(goto rune (±N right)) _*))
+  <> {U: (conceal inline) l: $(~ →l (runes →r 0 ..< →N)), r: $'(runes →r →N ..= -1)}
+
+--- selection-utilities
+
+(instant [⸨<->,<\>⸩ _*] (`>U (submit) _*))
+  <> {>U: (collapse selection right)}
+
+(instant [<|> [l_string | r_string]] (U←(submit) _*))
+  <> {U: (submission $'(~ →l →r)), l: "", r: ""}
+
+(instant [<|> [l_string | r_string]] (U←(edit text_string) _*))
+  <> {(U): (), l: →text, r: ""}
+
+(instant [H←<\> _*] (U←(enable selection) _*)) <> {(U): (), H: <->}
+(instant [H←<-> _*] (U←(disable selection) _*)) <> {(U): (), H: <\>}
+
+(instant [H←<|> C←[_string | r_string] `>r] (U←(enable selection) _*))
+  <> {(U): (), H: <->, r: "", >r: →r}
+
+(instant [H←<|> C←[l_string | r_string] `>r] (U←(select all) _*))
+  <> {(U): (), H: <->, l: "", r: $'(~ →l →r), >r: ""}
+
+(instant [H←<-> [_string | m←""] r_string] (U←(disable selection) _*))
+  <> {(U): (), H: <|>, m: →r, (r): ()}
+(instant [H←<-> l_string [m←"" | r_string]] (U←(disable selection) _*))
+  <> {(U): (), H: <|>, (l): (), m: →l}
+
+(instant [<\> [_string | m_string] _string] (U←(type text_string) _*))
+  <> {U: (collapse selection right), m: →text}
+(instant [<\> _string [m_string | _string]] (U←(type text_string) _*))
+  <> {U: (collapse selection right), m: →text}
+
+(instant [<\> [_string | m_string] _string] (U←(remove _ _) _*))
+  <> {U: (collapse selection right), m: ""}
+(instant [<\> _string [m_string | _string]] (U←(remove _ _) _*))
+  <> {U: (collapse selection right), m: ""}
+
+(instant [<\> _*] (U←(goto _ ⸨left,right⸩) _*))
+  <> {U: (collapse selection ⸨left,right⸩)}
+
+(instant [H←<\> l_string [m_string | r_string]] (U←(collapse selection left) _*))
+  <> {(U): (), H: <|>, (l): (), m: →l, r: $'(~ →m →r)}
+(instant [H←<\> l_string [m_string | _string]] (U←(collapse selection right) _*))
+  <> {(U): (), H: <|>, (l): (), m: $'(~ →l →m)}
+
+(instant [H←<\> [l_string | m_string] r_string] (U←(collapse selection left) _*))
+  <> {(U): (), H: <|>, m: $'(~ →m →r), (r): ()}
+(instant [H←<\> [l_string | m_string] r_string] (U←(collapse selection right) _*))
+  <> {(U): (), H: <|>, l: $'(~ →l →m), m: →r, (r): ()}
+
+(instant [<-> _*] (`>U (goto _ _) `>V _*))
+  <> {>U: (conceal selection), >V: (reveal selection)}
+
+(instant [H←<-> [l_string | m_string] r_string] (U←(conceal selection) _*))
+  <> {(U): (), m: $'(~ →m →r), H: (<?> $'(charcount →l →m)), (r): ()}
+
+(instant [H←<-> l_string [m_string | r_string]] (U←(conceal selection) _*))
+  <> {(U): (), (l): (), H: (<?> $'(charcount →l)), m: $'(~ →l →m)}
+
+(instant [H←(<?> A←(%number +i32)) [(%group C l_string | r_string)]] ((reveal selection `>A `>A') _*))
+  <> {>A: →A, (C): (| $'(~ →l →r)) >A': $'(charcount →l), H: <->}
+
+(instant [<-> [| _string]] ((reveal selection `>dir A←(%number +i32) A'←(%number +i32)) _*))
+  <> {>dir: $(join (< →A' →A) left right), A: $'(min →A →A'), A': $'(max →A →A')}
+
+(instant [<-> [| T_string]] ((reveal selection _ L←(%number +i32) `>M R←(%number +i32)) _*))
+  <> {L: $'(runes →T 0 ..< →L), >M: $'(runes →T →L ..< →R), R: $'(runes →T →R ..= -1)}
+
+(instant [<-> [(%group C | _string)] `>R] (U←(reveal selection left L_string M_string R_string) _*))
+  <> {(U): (), (C): (→L | →M), >R: →R}
+
+(instant [<-> `>L [(%group C | _string)]] (U←(reveal selection right L_string M_string R_string) _*))
+  <> {(U): (), >L: →L, (C): (→M | →R)}
+
+--- history
+
+(instant [(_* P_) _ -|- (`>P _*) (_*)] (E←(goto history previous) _*))
+  <> {E: (history motion back), (P): (), >P: →P}
+
+(instant [(_* `>S) _ -|- (S_ _*) (_*)] (E←(goto history next) _*))
+  <> {E: (history motion forward), >S: →S, (S): ()}
+
+(instant [(_*) C_ -|- (_*) (`>C)] ((history motion back) _*))
+  <> {>C: (suspended →C)}
+
+(instant [(_*) C_ -|- () (S←(suspended C'_))] (U←(history motion forward) _*))
+  <> {(U): (), C: →C', (S): ()}
+
+(instant [(_*) _ -|- (S_string _*) (_)] (U←(history motion _) _*))
+  <> {U: (edit →S)}
+
+(instant [(_* `>F) _ -|- (F_+) (_*)] ([submission _string] _*))
+  <> {(>F): →F, (F): ()}
+
+(instant [(_* `>F) _ -|- () (T_)] ([submission _string] _*))
+  <> {(T): ()}
+
+(instant [(_* S_) _ -|- () ()] (U←[submission S_] _*))
+  <> {(U): ()}
+
+(instant [(_* `>S) _ -|- () ()] (U←[submission S_string] _*))
+  <> {(U): (), >S: →S}
+
+(instant [submissions _ (_* `>S)] ((submission S_string ⍊ -◇_) _*))
+  <> {>S: →S, ◇: true}
+
+--- initial
+
+(submissions (() (<|> ("" | "")) -|- () ()) ())
+
+--- events
+
+(keyboard key end dn)
+(keyboard key enter dn)
+
