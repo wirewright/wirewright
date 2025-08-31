@@ -4,10 +4,10 @@ module Ww::Rack
   #
   # A rack server instantiates rack environments, provides narration events
   # for state transitions, and drives the control loop that mediates between
-  # a client and the rack environment.
+  # a client and a rack environment.
   #
-  # NOTE: Rack servers assume one-to-one relationship with the client: each
-  # client has one and only one associated client, and vice versa. There is no
+  # NOTE: Rack servers assume one-to-one relationship with their client: each
+  # server has one and only one associated client, and vice versa. There is no
   # support for multiplexing; that is entirely the caller's concern.
   #
   # ```
