@@ -42,8 +42,13 @@ module Ww::Rack
 
   private alias D = Soma::DwUIR
 
-  # Maps device addresses (indices into the rack) to the corresponding
-  # Crystal-side state, if any. See also: `State`.
+  # Represents the address of a device in the rack. We use indices of devices
+  # in the rack as device addresses.
+  alias DeviceAddr = Int32
+
+  # Maps device addresses to the corresponding Crystal-side state, if any.
+  #
+  # See also: `DeviceAddr`, `State`.
   struct StateMap
     # Returns the family id of this state map.
     #
@@ -65,23 +70,23 @@ module Ww::Rack
 
     # Returns the state of a device with the given address *addr*. Returns
     # `nil` if such a device does not exist.
-    def []?(addr : Int32) : State::Any?
+    def []?(addr : DeviceAddr) : State::Any?
       @map[addr]?
     end
 
     # Returns the state of a device with the given address *addr*. Raises
     # `KeyError` if such a device does not exist.
-    def [](addr : Int32) : State::Any
+    def [](addr : DeviceAddr) : State::Any
       self[addr]? || raise KeyError.new
     end
 
     # Yields addresses and device states in this map.
-    def each(& : Int32, State::Any ->) : Nil
+    def each(& : DeviceAddr, State::Any ->) : Nil
       @map.each { |addr, state| yield addr, state }
     end
 
     # Yields only addresses and device states of type `T`.
-    def each(cls : T.class, & : Int32, T ->) : Nil forall T
+    def each(cls : T.class, & : DeviceAddr, T ->) : Nil forall T
       each do |addr, state|
         next unless state.is_a?(T)
         yield addr, state
@@ -89,13 +94,13 @@ module Ww::Rack
     end
 
     # Returns an iterator over addresses and device states in this map.
-    def each : Iterator({Int32, State::Any})
+    def each : Iterator({DeviceAddr, State::Any})
       (0...@map.size).each.map { |n| @map.nth?(n) || raise IndexError.new }
     end
 
     # Transforms device states using the block. The block can return `nil`
     # for cheap skip/ignore. Returns a modified copy of this map.
-    def map(& : Int32, State::Any -> State::Any?) : StateMap
+    def map(& : DeviceAddr, State::Any -> State::Any?) : StateMap
       map1 = @map.transaction do |commit|
         @map.each do |addr, state0|
           next unless state1 = yield addr, state0
@@ -109,7 +114,7 @@ module Ww::Rack
 
     # Transforms only device states of type `T` using the block. The block can
     # return `nil` for cheap skip/ignore. Returns a modified copy of this map.
-    def map(cls : T.class, & : Int32, T -> State::Any?) : StateMap forall T
+    def map(cls : T.class, & : DeviceAddr, T -> State::Any?) : StateMap forall T
       map do |addr, state0|
         next unless state0.is_a?(T)
         yield addr, state0
@@ -120,7 +125,7 @@ module Ww::Rack
     # Returns a modified copy of this map.
     #
     # Raises `KeyError` if a device with the given *addr* does not exist.
-    def assoc(addr : Int32, state : State::Any) : StateMap
+    def assoc(addr : DeviceAddr, state : State::Any) : StateMap
       map1 = @map.assoc(addr, state)
 
       if map1.size > @map.size
@@ -295,8 +300,8 @@ module Ww::Rack
 
       record None
 
-      record File, conf : D::ShowConf, path : Path
-      record InMemory, conf : D::ShowConf, id : Term
+      record File, version : UInt32, conf : D::ShowConf, path : Path
+      record InMemory, version : UInt32, conf : D::ShowConf, id : Term
 
       record BadSpec, spec : Term { include TransientPrior(None) }
       record BadTarget, target : Term { include TransientPrior(None) }
@@ -561,17 +566,17 @@ module Ww::Rack
     end
 
     # Returns the device at the given device address *addr*.
-    def device?(addr : Int32) : Term?
+    def device?(addr : DeviceAddr) : Term?
       @devices[addr]
     end
 
     # Returns the device at the given device address *addr*.
-    def device(addr : Int32) : Term
+    def device(addr : DeviceAddr) : Term
       device?(addr) || raise KeyError.new("invalid device address #{addr}")
     end
 
     # Yields devices and their device addresses.
-    def each_device_with_addr(& : Term, Int32 ->) : Nil
+    def each_device_with_addr(& : Term, DeviceAddr ->) : Nil
       @devices.each_with_index { |device, addr| yield device, addr }
     end
 
@@ -786,13 +791,13 @@ module Ww::Rack
   end
 
   # :nodoc:
-  alias ExchangeSeenSet = Set({Int32, UInt32})
+  alias ExchangeSeenSet = Set({DeviceAddr, UInt32})
 
   # :nodoc:
   struct ExchangeSession
     include Term::CaseSession
 
-    def initialize(@seen : ExchangeSeenSet, @device_addr : Int32)
+    def initialize(@seen : ExchangeSeenSet, @device_addr : DeviceAddr)
     end
 
     def enter?(pattern_id : UInt32) : Bool
@@ -901,7 +906,7 @@ module Ww::Rack
         givenpi %{[microfold (@themes_ @nodes_) @uirs_] (%all (%value themes (currently (handle ownerT←(%number +i32)))) (%value nodes (currently node_)) (%value uirs ?))} do
           assert state0.is_a?(State::MuRender::Any)
 
-          owner = ownerT.to(Int32)
+          owner = ownerT.to(DeviceAddr)
 
           unless theme_state = states0[owner]?.as?(State::MuTheme::Some)
             Log.debug { "ignoring invalid Microfold theme owner device id: `#{owner}`" }
@@ -955,7 +960,7 @@ module Ww::Rack
         givenpi %{[alloy/view (@rulesets_ @templates_) @instances_] (%all (%value rulesets (currently (handle ownerT←(%number +i32)))) (%value templates (currently template_)) (%value instances ?))} do
           assert state0.is_a?(State::Alloy::Any)
 
-          owner = ownerT.to(Int32)
+          owner = ownerT.to(DeviceAddr)
 
           unless ruleset_state = states0[owner]?.as?(State::Ruleset::Some)
             Log.debug { "ignoring invalid ruleset owner device id: `#{owner}`" }
@@ -1071,9 +1076,18 @@ module Ww::Rack
           end
 
           case state0
-          in State::Image::None,
-             State::Image::File,
-             State::Image::InMemory
+          in State::Image::None
+            version1 = 0u32
+          in State::Image::File
+            # NOTE: we currently force redraw even if spec did not change -- we
+            # don't know what happened on the disk, maybe the file was removed and
+            # the user wants to re-create it. Thus simply bump up version to force
+            # a redraw.
+            version1 = state0.version + 1
+          in State::Image::InMemory
+            next if state0.conf == conf
+
+            version1 = state0.version + 1
           in State::Image::BadSpec,
              State::Image::BadTarget
             unreachable
@@ -1090,7 +1104,7 @@ module Ww::Rack
             # |@endblock
             matchpi %{(file filename_string)} do
               path = Path[filename.to(String)].normalize
-              state1 = State::Image::File.new(conf, path)
+              state1 = State::Image::File.new(version1, conf, path)
             end
 
             # |@ rack.device.dwuir/image.target.memory
@@ -1101,7 +1115,7 @@ module Ww::Rack
             # only reachable from the Crystal side.
             # |@endblock
             matchpi %{(memory id_)} do
-              state1 = State::Image::InMemory.new(conf, id)
+              state1 = State::Image::InMemory.new(version1, conf, id)
             end
 
             otherwise do
@@ -1340,7 +1354,7 @@ module Ww::Rack
     # management (see `Rack::WM`), scheduling (see `Rack.scheduler`),
     # imaging (see `Rack::Image`), etc.
     struct Narrator
-      def initialize(&@fn : Env, Int32, Term, State::Any, State::Any ->)
+      def initialize(&@fn : Env, DeviceAddr, Term, State::Any, State::Any ->)
       end
 
       delegate :call, to: @fn
@@ -1550,31 +1564,54 @@ module Ww::Rack
     {env, -> { env.submit(states0) }}
   end
 
-  def walk?(index : Index, edge : Term, path : Term::Dict) : Term::Dict?
-    walk?(index, Set(Term).new, Term[], edge, path.items)
+  # Traverses the device/edge graph encoded in *index* according to a
+  # sequence of pattern-capture name steps given in *qpath*.
+  #
+  # A *qpath* is an alternating sequence of patterns and capture names. At
+  # each step, the algorithm finds a device that matches the current pattern,
+  # then uses the corresponding capture name to obtain the next edge to follow.
+  # This continues until the final pattern in the path is reached.
+  #
+  # Captures made in previous patterns are available in subsequent ones
+  # to enable constraints.
+  #
+  # Returns the match env of the final pattern if the full path can be followed.
+  # Returns `nil` otherwise.
+  #
+  # Raises `ArgumentError` if a pattern in *qpath* matched but is missing
+  # the corresponding capture; or if the capture value does not resolve to an edge.
+  #
+  # ```wwml
+  # ;; The following qpath can be used to find e.g. the file from which nodes
+  # ;; coming to [microfold (@_ @nodes_) @_] originate. Setting *origin* = <nodes>
+  # ;; and following this qpath will give one a match env containing path: "path/to/file":
+  # [ml @srcs_ @_] srcs [src @specs_ @_] specs [const @specs_ (file path_string)]
+  # ```
+  def query?(index : Index, origin : Term, qpath : Term::Dict) : Term::Dict?
+    query?(index, Set(Term).new, Term[], origin, qpath.items)
   end
 
-  private def walk?(index : Index, seen : Set(Term), env0 : Term::Dict, edge : Term, path : Term::Dict::ItemsView) : Term::Dict?
+  private def query?(index : Index, seen : Set(Term), env0 : Term::Dict, edge : Term, qpath : Term::Dict::ItemsView) : Term::Dict?
     follow?(index, seen, edge) do |device|
-      next unless env1 = M1.match?(path.first, device, env: env0)
+      next unless env1 = M1.match?(qpath.first, device, env: env0)
 
-      path = path.move(1)
+      qpath = qpath.move(1)
 
       # Nothing ahead, we're at the end.
-      if path.empty?
+      if qpath.empty?
         next env1
       end
 
       # If something is ahead, treat it as a key.
-      unless successor = env1[path.first]
-        raise ArgumentError.new("match env does not contain capture #{path.first}")
+      unless successor = env1[qpath.first]
+        raise ArgumentError.new("match env does not contain capture #{qpath.first}")
       end
 
       unless ML.edge?(successor)
-        raise ArgumentError.new("term captured by #{path.first} is not an edge")
+        raise ArgumentError.new("term captured by #{qpath.first} is not an edge")
       end
 
-      walk?(index, seen, env1, successor, path.move(1))
+      query?(index, seen, env1, successor, qpath.move(1))
     end
   end
 
@@ -1608,293 +1645,7 @@ module Ww::Rack
       end
     end
   end
-
-  # Rack imaging agency.
-  #
-  # `dwuir/image` devices depend on this agency's presence. They are
-  # not going to function otherwise.
-  module Image
-    extend self
-
-    # Constructs a narrator agent that draws DwUIR images from observed specs,
-    # capturing and storing them on disk using a selected format (e.g. PPM, PNG, JPEG).
-    #
-    # *ctx* is a viewer context that should be used in the process of
-    # drawing an image (see for example `Soma::DwUIR.snap`).
-    def file_snapper(ctx : D::Viewer::Context) : Agent::Narrator
-      Agent::Narrator.new do |_, _, _, state0, state1|
-        case {state0, state1}
-        when {_, State::Image::File}
-          begin
-            D.snap(ctx, state1.conf, state1.path)
-          rescue e : D::SnapError
-            Log.error(exception: e) { e.message }
-          end
-        end
-      end
-    end
-
-    # Constructs a narrator agent that draws DwUIR image(s) with the given *id*
-    # from observed specs, calling *fn* with their resulting pixel rect(s).
-    def slot(ctx : D::Viewer::Context, id : Term, &fn : D::PixelRect ->) : Agent::Narrator
-      Agent::Narrator.new do |_, _, _, state0, state1|
-        case {state0, state1}
-        when {_, State::Image::InMemory}
-          next unless state1.id == id
-
-          image = D.show(ctx, state1.conf)
-          fn.call(image)
-        end
-      end
-    end
-  end
-
-  # Constructs a narrator agent that schedules periodic ticking using *fn*.
-  #
-  # - The first argument of *fn* is period (e.g. every `100.milliseconds`).
-  # - The second argument is a query dict that should be sent (`Env#send`)
-  #   to the environment to execute a tick.
-  #
-  # `ticker` devices depend on this agent's presence (otherwise, they are
-  # going to be ignored).
-  def scheduler(&fn : Time::Span, Term::Dict -> (->)) : Agent::Narrator
-    cancels = {} of Int32 => (->)
-
-    Agent::Narrator.new do |_, _, _, state0, state1|
-      case {state0, state1}
-      when {State::Ticker::Running, State::Ticker::NotRunning}
-        next unless cancel = cancels.delete(state0.id)
-
-        cancel.call
-      when {State::Ticker::NotRunning, State::Ticker::Running}
-        cancels[state1.id] = fn.call(state1.period, state1.query)
-      when {State::Ticker::Running, State::Ticker::Running}
-        # TODO: maybe we should tell the thing to change period instead of
-        # throwing it away?
-        if cancel = cancels.delete(state0.id)
-          cancel.call
-        end
-
-        cancels[state1.id] = fn.call(state1.period, state1.query)
-      end
-    end
-  end
-
-  # Constructs an agent that finds and handles requests for UIR rewriting using
-  # the uiR rewriter.
-  #
-  # TODO: this is a hack. uiR is no different from any other *rewriter circuit*,
-  # but we do not have them implemented at the moment.
-  def uir(platform : D::Platform, rulebase : Term) : Agent::Peer
-    uiR = Soma.uiR(
-      replier: ->(term : Term) { D.reply(platform, term) },
-      rulebase: rulebase,
-    )
-
-    Agent::Peer.new do |states0, _|
-      proposals = [] of Term
-
-      states1 = states0.map(State::UIR::Pending) do |_, state0|
-        dwuir = rewrite(state0.uir, uiR)
-        proposals << Term.of(:proposal, state0.dst, {:currently, dwuir})
-
-        State::UIR::None.new
-      end
-
-      {states1, proposals}
-    end
-  end
-
-  # Constructs an agent that finds and handles requests for process arguments
-  # and environment.
-  #
-  # `args` and `env` devices depend on this agent's presence (otherwise they
-  # are going to be ignored)
-  def process(*, args : Array(String), env : Hash(String, String)) : Agent::Provider
-    Agent::Provider.new do |states|
-      states.map do |state0|
-        case state0
-        when State::ProcessArgs::None
-          State::ProcessArgs::Some.new(args)
-        when State::ProcessEnv::None
-          State::ProcessEnv::Some.new(env)
-        end
-      end
-    end
-  end
-
-  # Rack window management agency.
-  #
-  # `dwuir/window` devices depend on this agency's presence. Otherwise they
-  # are going to function partially (if parts of this agency are active) or
-  # not function at all (if this agency is missing entirely).
-  struct WM
-    def initialize
-      @windows = {} of Int32 => D::Window::Any
-    end
-
-    # Constructs an environment client that performs periodic event polling;
-    # perturbing the environment to handle some events, and handling others
-    # completely by itself. Namely, window closure events are handled by this
-    # client, triggering the transition from `State::Window::Open` to
-    # `State::Window::Closed`.
-    def poll : Client
-      Client.new do |env|
-        open_windows = @windows
-          .each_value
-          .select(D::Window::Some)
-          .to_set
-
-        # Handle input events.
-        survived_windows = D::Window.poll(open_windows) do |target, event|
-          env.each(State::Window::Open) do |_, state|
-            next unless events = state.events
-            next unless window = @windows[state.id]?
-            next unless window == target
-
-            query = Term.entries({events, {:currently, event}})
-            env.send(query)
-          end
-        end
-
-        # Handle window closure.
-        env.map(State::Window::Open) do |device_addr, state|
-          window = @windows[state.id]
-
-          if window.in?(open_windows) && !window.in?(survived_windows)
-            State::Window::Closed.new(state.id, state.spec, state.events)
-          end
-        end
-      end
-    end
-
-    # Constructs an agent that performs window synchronization of internal window
-    # specs with actual OS windows. This is the agent that opens and closes windows,
-    # presents their content on spec change, etc.
-    def sync(ctx : D::Window::Context) : Agent::Narrator
-      Agent::Narrator.new do |_, _, _, state0, state1|
-        case {state0, state1}
-        when {State::Window::Open, State::Window::NotOpen}
-          next unless window = @windows.delete(state0.id)
-
-          D::Window.close(window)
-        when {State::Window::Any, State::Window::Open}
-          window0 = @windows[state1.id]? || D::Window::None.new
-          window1 = D::Window.next(ctx, window0, state1.spec)
-          D::Window.present(window1)
-
-          @windows[state1.id] = window1
-        end
-      end
-    end
-  end
-
-  # File system agents.
-  module FS
-    extend self
-
-    # Constructs an agent that finds pending files in the state map, and proposes
-    # their content to the workspace (caching it in the state map for future reference).
-    def server(files : FileServer) : Agent::Peer
-      Agent::Peer.new do |states0, index|
-        proposals = [] of Term
-
-        states1 = states0.map(State::Source::FilePending) do |device_addr, state0|
-          device = index.device(device_addr)
-
-          begin
-            content = files.read_string(state0.path)
-          rescue e : FileServerError
-            Log.debug(exception: e) { "could not read file #{state0.path}" }
-            next
-          end
-
-          proposals << Term.of(:proposal, state0.dst, {:currently, content})
-
-          State::Source::FileLoaded.new(state0.path, state0.dst, content, instant: Time.local)
-        end
-
-        {states1, proposals}
-      end
-    end
-
-    # Constructs an environment client that performs a watch step for file-
-    # backed `src` devices against *files*. This client will send appropriate
-    # queries to the environment when a file dependency is created, removed,
-    # or modified.
-    def monitor(files : FileServer) : Client
-      Client.new do |env|
-        alert = Set(Int32).new
-
-        states0 = states1 = env.states
-        states0.each do |device_addr, state0|
-          case state0
-          when State::Source::FilePending
-          when State::Source::FileLoaded
-            t0 = state0.instant
-          else
-            next
-          end
-
-          path = state0.path
-
-          loop do
-            t1 = files.modification_time?(path)
-
-            case {t0, t1}
-            in {nil, nil}
-              # Did not and does not exist.
-              state1 = state0
-              break
-            in {_, nil}
-              # Removed.
-              state1 = State::Source::FilePending.new(path, state0.dst)
-              states1 = states1.assoc(device_addr, state1)
-              alert << device_addr
-              break
-            in {nil, _}
-              # Created.
-            in {_, _}
-              # Exists.
-              break if t0 == t1
-            end
-
-            # Modified.
-            begin
-              content = files.read_string(path)
-            rescue FileServerError
-              t1 = nil
-              next
-            end
-
-            state1 = State::Source::FileLoaded.new(path, state0.dst, content, t1)
-            states1 = states1.assoc(device_addr, state1)
-            alert << device_addr
-            break
-          end
-        end
-
-        env.submit(states1)
-
-        next if alert.empty?
-
-        query = Term[]
-
-        alert.each do |device_addr|
-          state0, state1 = states0[device_addr], states1[device_addr]
-
-          case {state0, state1}
-          when {State::Source::FileLoaded, State::Source::FilePending}
-            # Removed
-            query = query.with(state1.dst, :"?")
-          when {State::Source::FileLoaded, State::Source::FileLoaded}, # Modified
-               {State::Source::FilePending, State::Source::FileLoaded} # Created
-            query = query.with(state1.dst, {:currently, state1.content})
-          end
-        end
-
-        env.send(query)
-      end
-    end
-  end
 end
+
+require "./rack/agents"
+require "./rack/server"
