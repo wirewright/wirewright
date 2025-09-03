@@ -7,16 +7,17 @@
 ;; - Submission
 ;;
 ;; There is no intrinsic support for copy-paste. We expect an observer to
-;; implement it by pattern matching against an input field.
+;; implement it by pattern matching against an input field on key press or
+;; any other copy-paste trigger.
 ;;
-;; They are mainly served through *utilities*, which are bound to *keys*.
+;; Features are mainly served through *utilities*, which are bound to *keys*.
 ;;
 ;; Although the `utilities` rule system is monolithic, the input field itself is
 ;; naturally modular. In order to have history, you will have to have structure
-;; around the input field that can maintain history; structure that the rule
-;; system will recognize. You will also have to bind keys to trigger history
-;; utilities. Similar things can be said about inline input, multiline input,
-;; and selections.
+;; around the cursor or selection that can maintain history; structure that
+;; the rule system will recognize and operate on. You will also have to bind
+;; keys to trigger history utilities. Similar things can be said about inline
+;; input, multiline input, and selections.
 ;;
 ;; For example, to have an input field that can only edit inline, only enable
 ;; keys for inline editing (`keys.inline`); do not wrap it in submission or
@@ -38,20 +39,25 @@
 ;; Since you will most likely need to pattern match against input fields and construct/
 ;; synthesize them, here are the relevant structures:
 ;;
+;;
 ;;  # Cursor
 ;;
 ;;   [L_string | R_string]
 ;;
 ;;     The most bare-bones you can get with this rule system. A basic cursor that
 ;;     responds to most primitive edits.
+;;
 ;;       L - text before the cursor
 ;;       R - text after the cursor
 ;;
+;;
 ;;  # Selection
 ;;
-;;          left leaning                              right leaning
-;;   [ · [L_string | M_string] R_string]   [ · L_string [M_string | R_string]]
-;;    <|> cursor                            <|> cursor
+;;                              cursor selection
+;;                         [<|> [L_string | M_string]]
+;;
+;;          left leaning selection              right leaning selection
+;;   [ ⏏ [L_string | M_string] R_string]   [ ⏏ L_string [M_string | R_string]]
 ;;    <\> passive                           <\> passive
 ;;    <-> active                            <-> active
 ;;
@@ -59,19 +65,22 @@
 ;;      the kind of selection that you get after you release the Shift key. Active
 ;;      selection is the kind of selection that you get when you are holding
 ;;      the Shift key.
+;;
 ;;        L -- text to the left of the selection
 ;;        M -- selected text
 ;;        R -- text to the right of the selection
+;;
 ;;
 ;;  # History
 ;;
 ;;   [(_*) <active cursor/selection> -|- () ()]
 ;;
+;;
 ;; # Submission
 ;;
-;;   (submission <input field> · )
-;;                             (proposal S_string)
-;;                             ready
+;;  (submission <input field> ⏏ )
+;;                    (proposal S_string)
+;;                          ready
 ;;
 ;;    With submissions, you should pattern match for `proposal`s and handle
 ;;    whatever S is proposed; when you're done, emit `(submission accepted)`
