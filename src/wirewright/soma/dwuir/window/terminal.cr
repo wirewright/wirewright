@@ -317,7 +317,7 @@ module Ww::Soma::DwUIR
         # Unambiguous general keys with modifiers.
         when .space?
           dispatch(Event::KeyInput.new(" "), syn: true, &fn)
-          dispatch(Event::Key::Space, ctrl: true, alt: event.mod.alt?, &fn)
+          dispatch(Event::Key::Space, alt: event.mod.alt?, &fn)
         {% for n in 1..12 %}
         when .f{{n.id}}?
           dispatch(Event::Key::F{{n.id}}, ctrl: event.mod.ctrl?, shift: event.mod.shift?, alt: event.mod.alt?, &fn)
