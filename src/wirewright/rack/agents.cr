@@ -11,13 +11,13 @@ module Ww::Rack
     #
     # *ctx* is a viewer context that should be used in the process of
     # drawing an image (see for example `Soma::DwUIR.snap`).
-    def file_snapper(ctx : D::Viewer::Context) : Agent::Narrator
+    def file_snapper(ctx : DwUIR::Viewer::Context) : Agent::Narrator
       Agent::Narrator.new do |_, _, _, state0, state1|
         case {state0, state1}
         when {_, State::Image::File}
           begin
-            D.snap(ctx, state1.conf, state1.path)
-          rescue e : D::SnapError
+            DwUIR.snap(ctx, state1.conf, state1.path)
+          rescue e : DwUIR::SnapError
             Log.error(exception: e) { e.message }
           end
         end
@@ -26,13 +26,13 @@ module Ww::Rack
 
     # Constructs a narrator agent that draws DwUIR image(s) with the given *id*
     # from observed specs, calling *fn* with their resulting pixel rect(s).
-    def slot(ctx : D::Viewer::Context, id : Term, &fn : D::PixelRect ->) : Agent::Narrator
+    def slot(ctx : DwUIR::Viewer::Context, id : Term, &fn : DwUIR::PixelRect ->) : Agent::Narrator
       Agent::Narrator.new do |_, _, _, state0, state1|
         case {state0, state1}
         when {_, State::Image::InMemory}
           next unless state1.id == id
 
-          image = D.show(ctx, state1.conf)
+          image = DwUIR.show(ctx, state1.conf)
           fn.call(image)
         end
       end
@@ -75,9 +75,9 @@ module Ww::Rack
   #
   # TODO: this is a hack. uiR is no different from any other *rewriter circuit*,
   # but we do not have them implemented at the moment.
-  def uir(platform : D::Platform, rulebase : Term) : Agent::Peer
+  def uir(platform : DwUIR::Platform, rulebase : Term) : Agent::Peer
     uiR = Soma.uiR(
-      replier: ->(term : Term) { D.reply(platform, term) },
+      replier: ->(term : Term) { DwUIR.reply(platform, term) },
       rulebase: rulebase,
     )
 
@@ -113,14 +113,16 @@ module Ww::Rack
     end
   end
 
-  # Rack window management agency.
+  # Rack SDL window management agency.
   #
   # `dwuir/window` devices depend on this agency's presence. Otherwise they
   # are going to function partially (if parts of this agency are active) or
   # not function at all (if this agency is missing entirely).
-  struct WM
+  struct SDLWM
+    private alias Window = DwUIR::Window::SDL
+
     def initialize
-      @windows = {} of Int32 => D::Window::Any
+      @windows = {} of Int32 => Window::Any
     end
 
     # Constructs an environment client that performs periodic event polling;
@@ -132,11 +134,11 @@ module Ww::Rack
       Client.new do |env|
         open_windows = @windows
           .each_value
-          .select(D::Window::Some)
+          .select(Window::Some)
           .to_set
 
         # Handle input events.
-        survived_windows = D::Window.poll(open_windows) do |target, event|
+        survived_windows = Window.poll(open_windows) do |target, event|
           env.each(State::Window::Open) do |_, state|
             next unless events = state.events
             next unless window = @windows[state.id]?
@@ -161,17 +163,18 @@ module Ww::Rack
     # Constructs an agent that performs window synchronization of internal window
     # specs with actual OS windows. This is the agent that opens and closes windows,
     # presents their content on spec change, etc.
-    def sync(ctx : D::Window::Context) : Agent::Narrator
+    def sync(ctx : Window::Context) : Agent::Narrator
       Agent::Narrator.new do |_, _, _, state0, state1|
         case {state0, state1}
         when {State::Window::Open, State::Window::NotOpen}
-          next unless window = @windows.delete(state0.id)
+          next unless window0 = @windows.delete(state0.id)
 
-          D::Window.close(window)
+          window1 = Window.next(ctx, window0, spec: nil)
+          assert window1.is_a?(Window::None)
         when {State::Window::Any, State::Window::Open}
-          window0 = @windows[state1.id]? || D::Window::None.new
-          window1 = D::Window.next(ctx, window0, state1.spec)
-          D::Window.present(window1)
+          window0 = @windows[state1.id]? || Window::None.new
+          window1 = Window.next(ctx, window0, state1.spec)
+          Window.present(window1)
 
           @windows[state1.id] = window1
         end

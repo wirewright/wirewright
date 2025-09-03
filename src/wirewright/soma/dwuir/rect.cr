@@ -299,13 +299,19 @@ module Ww::Soma::DwUIR
       Rect.new(tl: tl.round(grain: grain), size: size.round(grain: grain))
     end
 
-    # Removes the fractional part from the points defining this rectangle
-    # using the ceiling function. Returns the resulting rectangle.
+    # Returns a copy of this rectangle after removing fractional parts
+    # using the ceiling function.
     def ceil : Rect
       Rect.new(tl: tl.ceil, size: size.ceil)
     end
 
-    # Returns a new rectangle aligned to the integer grid that fully encloses
+    # Returns a copy of this rectangle after removing fractional parts
+    # using the floor function.
+    def floor : Rect
+      Rect.new(tl: tl.floor, size: size.floor)
+    end
+
+    # Returns a rectangle aligned to the integer grid that fully encloses
     # this one.
     def snap : Rect
       Rect.new(tl: tl.floor, br: br.ceil)
@@ -335,6 +341,12 @@ module Ww::Soma::DwUIR
     # Returns a copy of this rectangle translated (moved) by *delta*.
     def translate(delta : Point) : Rect
       Rect.new(tl + delta, br + delta)
+    end
+
+    # Returns a copy of this rectangle moved by *dx* on the X axis and by *dy*
+    # on the Y axis.
+    def translate(*, dx : Float32 = 0, dy : Float32 = 0) : Rect
+      translate(Point[dx, dy])
     end
 
     # Converts *point* (whose components normally are, but not restricted to,

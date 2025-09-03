@@ -975,6 +975,85 @@ module Ww
     end
   end
 
+  # Morph API
+  #
+  # TODO: Morph API should gradually replace the huge zoo of inconsistent keypath-
+  # following methods such as `follow`, `where`, and `more` that we have on Dict
+  # at the moment.
+
+  struct Term
+    def self.morph(term root : Term::Dict, keypath : Enumerable(Term), & : Term -> Term) : Term::Dict
+      stack = Stack({Term::Dict, Term}).new
+      tip = Term.of(root)
+
+      keypath.each do |key|
+        unless tip.type.dict?
+          # Abort, keypath points into something we can't deal with.
+          return root
+        end
+
+        node = tip.unsafe_as_d
+        unless value = node[key]?
+          # Abort, value does not exist.
+          return root
+        end
+
+        stack << {node, key}
+        tip = value
+      end
+
+      if stack.empty?
+        # Keypath is empty. Abort, nothing to do. This is the Dict overload, so
+        # we cannot run the block on root itself.
+        return root
+      end
+
+      tip = yield tip
+
+      while entry = stack.pop?
+        parent, key = entry
+        tip = Term.of(parent.with(key, tip))
+      end
+
+      tip.unsafe_as_d
+    end
+
+    def self.morph(term, *args, &)
+      morph(term, args.map { |arg| Term.of(arg) }) do |leaf|
+        Term.of(yield leaf)
+      end
+    end
+
+    # TODO: block-less morph on dict (creates intermediate dicts if missing)
+
+    # TODO: block morph on term
+    # TODO: block-less morph on term (creates intermediate dicts if missing)
+
+    # TODO: instead of Enumerable(Term) work on an enumerable which can include sentinels.
+    #     Sentinel: first and last item of dict
+    #
+    # TODO: Allow block variants and setter variants to return sentinel for
+    # removal and recursive removal (two different sentinels). The dict morph
+    # API does'nt do this cleanly: it only supports nils, and removes recursively
+    # on them.
+
+    # Executes a sequence of `morph` *steps* on *term*. Each step is a tuple
+    # of arguments to `morph`.
+    def self.morphseq(term, *steps : Tuple)
+      steps.reduce(term) do |memo, step|
+        Term.morph(memo, *step)
+      end
+    end
+
+    # Executes a sequence of `morph` *steps* on *term*, using the same block
+    # for all `morph`s.
+    def self.morphseq(term, *steps : Tuple, &)
+      steps.reduce(term) do |memo, step|
+        Term.morph(memo, *step) { |leaf| yield leaf }
+      end
+    end
+  end
+
   # Misc
 
   struct Term

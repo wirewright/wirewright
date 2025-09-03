@@ -1,6 +1,76 @@
+require "sdl"
+
+# Patches to SDL
+
+lib LibSDL
+  fun set_window_resizable = SDL_SetWindowResizable(window : Window*, resizable : Bool) : Bool
+  fun get_window_id = SDL_GetWindowID(window : Window*) : UInt32
+end
+
+class SDL::Window
+  alias Event = LibSDL::WindowEventID
+
+  def id : UInt32
+    LibSDL.get_window_id(@window)
+  end
+
+  def resizable=(value : Bool) : Bool
+    LibSDL.set_window_resizable(@window, value)
+
+    value
+  end
+end
+
+class SDL::Window::WithDestroy < SDL::Window
+  @destroyed = false
+
+  def destroy
+    return if @destroyed
+
+    @destroyed = true
+
+    LibSDL.destroy_window(self)
+  end
+
+  def finalize
+    destroy
+  end
+end
+
+class SDL::Renderer::WithDestroy < SDL::Renderer
+  @destroyed = false
+
+  def destroy
+    return if @destroyed
+
+    @destroyed = true
+
+    LibSDL.destroy_renderer(self)
+  end
+
+  def finalize
+    destroy
+  end
+end
+
 module Ww::Soma::DwUIR
-  module Window
+  # Window implementation to display DwUIR in an OS window.
+  #
+  # NOTE: You must explicitly initialize SDL first, by wrapping your code
+  # in `setup`. You will normally do this somewhere near the top-level, or
+  # at the top-level.
+  module Window::SDL
+    extend self
+
     Log = ::Log.for(self)
+
+    alias Any = None | Some
+
+    # Represents a null or uninitialized window safely. Participates in transitions
+    # from a closed window to an open one (`Some`); and vice versa, from an open
+    # one to a closed one (i.e., the transition `Some` -> `None` represents
+    # window closure).
+    record None
 
     # :nodoc:
     #
@@ -8,13 +78,13 @@ module Ww::Soma::DwUIR
     # changes cause this object to be recreated from scratch.
     class Frame
       def initialize(
-        renderer : SDL::Renderer,
+        renderer : ::SDL::Renderer,
         viewer_context : Viewer::Context,
         width : Int32,
         height : Int32,
         @backdrop : Color,
       )
-        @buffer = SDL::Texture.new(renderer, width, height, LibSDL::PixelFormatEnum::ARGB8888)
+        @buffer = ::SDL::Texture.new(renderer, width, height, LibSDL::PixelFormatEnum::ARGB8888)
         @screen = PixelRect.new(0, 0, width, height)
         @viewer = Viewer.new(@screen, viewer_context)
       end
@@ -33,9 +103,9 @@ module Ww::Soma::DwUIR
       end
 
       def present(renderer)
-        renderer.draw_color = SDL::Color[255, 255, 255, 255]
+        renderer.draw_color = ::SDL::Color.new(255, 255, 255, 255)
         renderer.clear
-        renderer.copy(@buffer, SDL::Rect[0, 0, @buffer.width, @buffer.height], SDL::Rect[0, 0, @buffer.width, @buffer.height])
+        renderer.copy(@buffer, ::SDL::Rect.new(0, 0, @buffer.width, @buffer.height), ::SDL::Rect.new(0, 0, @buffer.width, @buffer.height))
         renderer.present
       end
 
@@ -44,12 +114,76 @@ module Ww::Soma::DwUIR
       end
     end
 
-    defcase State, sys : SDL::Window::WithDestroy, renderer : SDL::Renderer::WithDestroy, frame : Frame, conf : Conf do
-      include Some
+    # Represents the pieces of window configuration relevant to graphical
+    # Soma/DwUIR.
+    #
+    # *backdrop* is the background color (clear color) of the window. You
+    # are advised to use it instead of a large background rectangle; the current
+    # compositor/rerender machinery yields degenerate performance and damage
+    # contagion on large rects at the moment.
+    defcase Conf,
+      title : String,
+      width : Int32,
+      height : Int32,
+      resizable : Bool,
+      cursor : Cursor,
+      backdrop : Color,
+      content : Term
 
+    # Parses a window spec *spec* and returns the corresponding `Conf`, or `nil`
+    # if parsing failed.
+    #
+    # See also: `soma.dwuir.window.graphical` in doctool.
+    private def conf?(spec : Term) : Conf?
+      # |@ soma.dwuir.window.graphical
+      #
+      # |@block
+      # Defines the properties of a system window to display *content*.
+      # |@endblock
+      #
+      # |@key title -- Sets the title of the window.
+      #
+      # |@key width -- Sets the width of the window (in pixels).
+      #
+      # |@key height -- Sets the height of the window (in pixels).
+      #
+      # |@key resizable -- Determines whether window resizing should be allowed.
+      #
+      # |@key cursor soma.dwuir.cursor -- Sets the current mouse cursor.
+      #
+      # |@key backdrop soma.dwuir.color -- Sets the background color (clear color)
+      # of the window.
+      Term.matchpi?(spec,
+        <<-WWML
+          (window content_*
+            ⍊ title_string
+              width_: (%number +i16)
+              height_: (%number +i16)
+              resizable⋮ true
+              cursor⋮ arrow
+              backdrop_⋮ white)
+        WWML
+      ) do
+        Conf.new(
+          title: title.to(String),
+          width: width.to(Int32),
+          height: height.to(Int32),
+          resizable: resizable.to(Bool),
+          cursor: Cursor.parse(cursor),
+          backdrop: Color.term(backdrop, fallback: Color.named("white")),
+          content: content,
+        )
+      end
+    end
+
+    private def conf?(spec : Nil) : Conf?
+    end
+
+    # Represents an open window.
+    defcase Some, sys : ::SDL::Window::WithDestroy, renderer : ::SDL::Renderer::WithDestroy, frame : Frame, conf : Conf do
       @valid = true
 
-      def sys : SDL::Window
+      def sys : ::SDL::Window
         unless @valid
           raise "BUG: access to expended state"
         end
@@ -57,7 +191,7 @@ module Ww::Soma::DwUIR
         @sys
       end
 
-      def renderer : SDL::Renderer
+      def renderer : ::SDL::Renderer
         unless @valid
           raise "BUG: access to expended state"
         end
@@ -77,6 +211,34 @@ module Ww::Soma::DwUIR
       def_equals_and_hash sys.id, conf
     end
 
+    @@ready = false
+
+    # Initializes SDL. You **must** wrap your code in this before working with
+    # `Window::SDL`.
+    def setup(&)
+      if @@ready
+        raise "attempt to initialize Window::SDL multiple times"
+      end
+
+      ::SDL.set_hint("SDL_NO_SIGNAL_HANDLERS", "1")
+      ::SDL.set_hint("SDL_QUIT_ON_LAST_WINDOW_CLOSE", "0")
+      ::SDL.init(::SDL::Init::VIDEO)
+
+      @@ready = true
+
+      yield
+    ensure
+      @@ready = false
+
+      ::SDL.quit
+    end
+
+    private def check_ready! : Nil
+      return if @@ready
+
+      raise "use `Window::SDL.setup(&) to initialize before calling this method"
+    end
+
     # :nodoc:
     record Context, viewer : Viewer::Context, cursors : CursorStore
 
@@ -94,17 +256,21 @@ module Ww::Soma::DwUIR
       end
 
       {% for cursor in %w[ibeam wait sizeall arrow hand wait crosshair sizenwse sizenesw sizewe sizens sizeall no] %}
-      # Returns the *{{cursor.id}}* SDL system cursor.
-      def {{cursor.id}} : Cursor
-        @cursors.put_if_absent({{cursor.id.symbolize}}) do
-          LibSDL.create_system_cursor(LibSDL::SystemCursor::{{cursor.id.upcase}})
+        # Returns the *{{cursor.id}}* SDL system cursor.
+        def {{cursor.id}} : Cursor
+          @cursors.put_if_absent({{cursor.id.symbolize}}) do
+            LibSDL.create_system_cursor(LibSDL::SystemCursor::{{cursor.id.upcase}})
+          end
         end
-      end
-    {% end %}
+      {% end %}
     end
 
     # Constructs a window context object.
+    #
+    # NOTE: do not forget to wrap in `setup`!
     def context(viewer_context : Viewer::Context) : Context
+      check_ready!
+
       Context.new(viewer_context, cursors: CursorStore.new)
     end
 
@@ -112,11 +278,11 @@ module Ww::Soma::DwUIR
     # *window* to the next state defined by a DwUIR window *spec*.
     #
     # See also: `soma.dwuir.window` in the doctool.
-    def next(context ctx : Context, window : Any, spec : Term) : Any
+    def next(context ctx : Context, window : Any, spec : Term?) : Any
       unless conf1 = conf?(spec)
         case window
         in None
-        in Some then close(window)
+        in Some then window.close
         end
 
         return None.new
@@ -125,17 +291,17 @@ module Ww::Soma::DwUIR
       case window
       in None
         # Window did not exist and only now assumed valid form. Construct.
-        sys = SDL::Window::WithDestroy.new(conf1.title, conf1.width, conf1.height)
+        sys = ::SDL::Window::WithDestroy.new(conf1.title, conf1.width, conf1.height)
         sys.resizable = conf1.resizable
 
         change_cursor(ctx, sys, :arrow, conf1.cursor)
 
-        renderer = SDL::Renderer::WithDestroy.new(sys, SDL::Renderer::Flags::ACCELERATED)
+        renderer = ::SDL::Renderer::WithDestroy.new(sys, ::SDL::Renderer::Flags::ACCELERATED)
 
         frame = Frame.new(renderer, ctx.viewer, conf1.width, conf1.height, conf1.backdrop)
         frame.show(conf1.content)
 
-        State.new(sys, renderer, frame, conf1)
+        Some.new(sys, renderer, frame, conf1)
       in Some
         conf0 = window.conf
 
@@ -182,35 +348,27 @@ module Ww::Soma::DwUIR
       end
     end
 
-    private def some(window : Some, &)
-      yield window
+    # :nodoc:
+    def present(window : Some) : Nil
+      window.frame.present(window.renderer)
     end
 
-    private def some(window : None, &)
+    # :nodoc:
+    def present(window : None) : Nil
     end
 
-    # Syncs the SDL window content and frame content of *window*.
-    def present(window : Any) : Nil
-      some(window) { |it| it.frame.present(it.renderer) }
-    end
+    {% if flag?(:docs) %}
+      # Syncs the OS window content and frame content of *window*.
+      def present(window : Any) : Nil
+      end
+    {% end %}
 
-    # Syncs the SDL window content and frame content of all of *windows*.
+    # Syncs the OS window content and frame content of all of *windows*.
     def present(windows : Enumerable(Any)) : Nil
       windows.each { |window| present(window) }
     end
 
-    # Closes *window* if it is open.
-    #
-    # WARNING: this method destroys the OS window handle; it will be
-    # impossible to reopen *the same OS window* in any way. You can still
-    # reuse the spec of course, passing it to `next`. This will open
-    # a new OS window barely distinguishable from the old one since they
-    # have the same spec.
-    def close(window : Any) : Nil
-      some(window, &.close)
-    end
-
-    private def dispatch(live : Set(Some), event : SDL::Event::MouseMotion, fn)
+    private def dispatch(live : Set(Some), event : ::SDL::Event::MouseMotion, fn)
       return unless target = target?(live, event)
 
       Event.term(Event::MouseMotion.new(event.which, event.x, event.y)) do |term|
@@ -218,7 +376,7 @@ module Ww::Soma::DwUIR
       end
     end
 
-    private def dispatch(live : Set(Some), event : SDL::Event::MouseButton, fn)
+    private def dispatch(live : Set(Some), event : ::SDL::Event::MouseButton, fn)
       return unless target = target?(live, event)
 
       case event.button
@@ -249,7 +407,7 @@ module Ww::Soma::DwUIR
       end
     end
 
-    private def dispatch(live : Set(Some), event : SDL::Event::MouseWheel, fn)
+    private def dispatch(live : Set(Some), event : ::SDL::Event::MouseWheel, fn)
       return unless target = target?(live, event)
 
       Event.term(Event::MouseWheel.new(event.which, event.x, event.y*-1)) do |term|
@@ -257,7 +415,7 @@ module Ww::Soma::DwUIR
       end
     end
 
-    private def dispatch(live : Set(Some), event : SDL::Event::Keyboard, fn)
+    private def dispatch(live : Set(Some), event : ::SDL::Event::Keyboard, fn)
       return unless target = target?(live, event)
 
       key = nil
@@ -278,6 +436,16 @@ module Ww::Soma::DwUIR
         when .{{key.id}}?
           key = Event::Key::{{key.id.upcase}}
         {% end %}
+        when .leftbracket? then key = Event::Key::Lsqb
+        when .rightbracket? then key = Event::Key::Rsqb
+        when .semicolon? then key = Event::Key::Semicolon
+        when .apostrophe? then key = Event::Key::Quote
+        when .comma? then key = Event::Key::Comma
+        when .period? then key = Event::Key::Period
+        when .slash? then key = Event::Key::Slash
+        when .minus? then key = Event::Key::Minus
+        when .equals? then key = Event::Key::Equals
+        when .backslash? then key = Event::Key::Backslash
         when .space?     then key = Event::Key::Space
         when .grave?     then key = Event::Key::Backquote
         when .up?        then key = Event::Key::Up
@@ -322,7 +490,7 @@ module Ww::Soma::DwUIR
       end
     end
 
-    private def dispatch(live : Set(Some), event : SDL::Event::TextInput, fn)
+    private def dispatch(live : Set(Some), event : ::SDL::Event::TextInput, fn)
       return unless target = target?(live, event)
 
       Event.term(Event::KeyInput.new(String.new(event.text.to_slice, truncate_at_null: true))) do |term|
@@ -330,10 +498,10 @@ module Ww::Soma::DwUIR
       end
     end
 
-    private def dispatch(live : Set(Some), event : SDL::Event::Window, fn)
+    private def dispatch(live : Set(Some), event : ::SDL::Event::Window, fn)
       return unless target = target?(live, event)
 
-      case SDL::Window::Event.new(event.event)
+      case ::SDL::Window::Event.new(event.event)
       when .resized?
         # NOTE: resized is only triggered on user resize, programmatic
         # resize doesn't trigger it which is actually what we want here!
@@ -350,9 +518,9 @@ module Ww::Soma::DwUIR
     private def dispatch(live : Set(Some), event, fn)
     end
 
-    # Polls and yields events from each open window of *windows*. Since this method
-    # also handles window closure, a set of live (open) windows is returned for
-    # the caller to sync with.
+    # Polls and calls *fn* with events from each open window in *windows*.
+    # Since this method also handles window closure, a set of live (open)
+    # windows is returned for the caller to sync with.
     def poll(windows : Enumerable(Any), &fn : Some, Term ->) : Set(Some)
       live = Set(Some).new
 
@@ -364,7 +532,7 @@ module Ww::Soma::DwUIR
 
       loop do
         break unless live.present?
-        break unless event = SDL::Event.poll
+        break unless event = ::SDL::Event.poll
 
         dispatch(live, event, fn)
       end
@@ -383,7 +551,7 @@ module Ww::Soma::DwUIR
       windows.leftmost? { |window| target?(window, event.window_id) }
     end
 
-    private def change_cursor(ctx, sys : SDL::Window, cursor0 : Cursor, cursor1 : Cursor)
+    private def change_cursor(ctx, sys : ::SDL::Window, cursor0 : Cursor, cursor1 : Cursor)
       return if cursor0 == cursor1
 
       if !cursor0.none? && cursor1.none?

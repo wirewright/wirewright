@@ -3,31 +3,8 @@ module Ww::Soma::DwUIR
   #
   # This module defines methods for reuse by specific implementations of
   # window management.
-  #
-  # Currently, only one such implementation is available: the SDL one. Use
-  # `require "wirewright/soma/sdl"` to extend this module with window management
-  # methods backed by SDL.
   module Window
     extend self
-
-    alias Any = None | Some
-
-    # Represents a null or uninitialized window safely. Participates in transitions
-    # from a closed window to an open one (`Some`); and vice versa, from an open
-    # one to a closed one (i.e., the transition `Some` -> `None` represents
-    # window closure).
-    record None
-
-    # Represents an open window.
-    #
-    # NOTE: We assume implicitly that this module has **zero or one** includers
-    # (implementations). Expect compile errors otherwise. That is, you are expected
-    # to `require` one of window display platforms (currently there's just the SDL
-    # one); it will then define some type `T` by including `Some`, containing custom,
-    # implementation-specific objects. It is then allowed and expected to treat `Some`
-    # as an alias to `T`, which only works in Crystal if `Some` has one includer -- `T`.
-    module Some
-    end
 
     # Mouse cursors supported by Soma/DwUIR.
     enum Cursor
@@ -114,69 +91,6 @@ module Ww::Soma::DwUIR
       end
     end
 
-    # Represents the pieces of window configuration relevant to Soma/DwUIR.
-    #
-    # *backdrop* is the background color (clear color) of the window. You
-    # are advised to use it instead of a large background rectangle; the current
-    # compositor/rerender machinery yields degenerate performance and damage
-    # contagion on large rects at the moment.
-    defcase Conf,
-      title : String,
-      width : Int32,
-      height : Int32,
-      resizable : Bool,
-      cursor : Cursor,
-      backdrop : Color,
-      content : Term
-
-    # Parses a window spec *spec* and returns the corresponding `Conf`, or `nil`
-    # if parsing failed.
-    #
-    # See also: `soma.dwuir.window` in doctool.
-    def conf?(spec : Term) : Conf?
-      Term.case(spec) do
-        # |@ soma.dwuir.window
-        #
-        # |@block
-        # Defines the properties of a system window to display *content*.
-        # |@endblock
-        #
-        # |@key title -- Sets the title of the window.
-        #
-        # |@key width -- Sets the width of the window (in pixels).
-        #
-        # |@key height -- Sets the height of the window (in pixels).
-        #
-        # |@key resizable -- Determines whether window resizing should be allowed.
-        #
-        # |@key cursor soma.dwuir.cursor -- Sets the current mouse cursor.
-        #
-        # |@key backdrop soma.dwuir.color -- Sets the background color (clear color)
-        # of the window.
-        matchpi %{
-          (window content_
-            ⍊ title_string
-              width_: (%number +i16)
-              height_: (%number +i16)
-              resizable⋮ true
-              cursor⋮ arrow
-              backdrop_⋮ white)
-        } do
-          Conf.new(
-            title: title.to(String),
-            width: width.to(Int32),
-            height: height.to(Int32),
-            resizable: resizable.to(Bool),
-            cursor: Cursor.parse(cursor),
-            backdrop: Color.term(backdrop, fallback: Color.named("white")),
-            content: content,
-          )
-        end
-
-        otherwise { }
-      end
-    end
-
     # An internal, intermediate event representation; stands between a particular
     # window management implementation (e.g. SDL) and the term representation
     # of events. You can convert the structures defined here to their term
@@ -220,6 +134,16 @@ module Ww::Soma::DwUIR
 
         # Misc
 
+        Lsqb
+        Rsqb
+        Semicolon
+        Quote
+        Comma
+        Period
+        Slash
+        Minus
+        Equals
+        Backslash
         Space
         Backquote
         Up
@@ -294,8 +218,9 @@ module Ww::Soma::DwUIR
         # Both left and right variants of Ctrl, Shift, and Alt keys (modifier keys)
         # count toward `ctrl`/`shift`/`alt` when used in combination with another key.
         #
-        # Modifier keys emit their own up/dn events: `Al⫽r` for Alt, `Cl⫽r` for
-        # Ctrl, `Sl⫽r` for Shift.
+        # Modifier keys emit their own up/dn events: `(alt ⸨left,right⸩)` for Alt;
+        # similarly, (ctrl _) for Ctrl; and `(shift _)` for Shift. This way, you can
+        # either ignore the key's side using `(shift _)`, or match it, e.g. `(shift left)`.
         # |@endblock
 
         {% begin %}
@@ -316,6 +241,16 @@ module Ww::Soma::DwUIR
           in .{{key.id}}?
             fn.call(Term.of({{key.id.symbolize}}))
           {% end %}
+          in .lsqb?      then fn.call(Term.of(:lsqb))
+          in .rsqb?      then fn.call(Term.of(:rsqb))
+          in .semicolon? then fn.call(Term.of(:semicolon))
+          in .quote?     then fn.call(Term.of(:quote))
+          in .comma?     then fn.call(Term.of(:comma))
+          in .period?    then fn.call(Term.of(:period))
+          in .slash?     then fn.call(Term.of(:slash))
+          in .backslash? then fn.call(Term.of(:backslash))
+          in .minus?     then fn.call(Term.of(:minus))
+          in .equals?    then fn.call(Term.of(:equals))
           in .backquote? then fn.call(Term.of(:backquote))
           in .up?        then fn.call(Term.of(:up))
           in .dn?        then fn.call(Term.of(:dn))
@@ -332,12 +267,12 @@ module Ww::Soma::DwUIR
           in .end?       then fn.call(Term.of(:end))
           in .pg_up?     then fn.call(Term.of(:pgup))
           in .pg_dn?     then fn.call(Term.of(:pgdn))
-          in .cl?        then fn.call(Term.of(:Cl))
-          in .cr?        then fn.call(Term.of(:Cr))
-          in .sl?        then fn.call(Term.of(:Sl))
-          in .sr?        then fn.call(Term.of(:Sr))
-          in .al?        then fn.call(Term.of(:Al))
-          in .ar?        then fn.call(Term.of(:Ar))
+          in .cl?        then fn.call(Term.of(:ctrl, :left))
+          in .cr?        then fn.call(Term.of(:ctrl, :right))
+          in .sl?        then fn.call(Term.of(:shift, :left))
+          in .sr?        then fn.call(Term.of(:shift, :right))
+          in .al?        then fn.call(Term.of(:alt, :left))
+          in .ar?        then fn.call(Term.of(:alt, :right))
           end
         {% end %}
       end
@@ -459,3 +394,6 @@ module Ww::Soma::DwUIR
     end
   end
 end
+
+require "./window/sdl"
+require "./window/terminal"

@@ -50,7 +50,7 @@
         radius-tr: 5
         radius-bl: 5
         radius-br: 5)
-      (floating
+      (floating x: true y: true
         (rect z-index: -1
           fill: (oklch 0.4 0 0)
           angle: 45
@@ -100,7 +100,7 @@
 (branch (active name_string)) =>
   (y-stack gap: 10 z-index: local
     (branch-btn ^name)
-    (floating z-index: 10
+    (floating x: true y: true z-index: 10
       (branch-menu ^name)))
 
 (branch-row (branches_*)) =>
@@ -739,7 +739,7 @@
     to: (branch-sidebar-item-sm ^icon ^caption ^… foobars))
 
 (branch-sidebar-sm) =>
-  (floating z-index: 100 dl: -15
+  (floating x: true y: true z-index: 100 dl: -15
     (z-stack z-index: local
       (rect fill: (oklch 0.3 0 0) radius-tl: (* 1) radius-tr: (* 1) radius-bl: (* 1) radius-br: (* 1))
       (padding pl: 5 pr: 5 pt: 5 pb: 5

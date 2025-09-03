@@ -9,7 +9,7 @@ module Ww::Soma::DwUIR
   #
   # See `soma.dwuir.replier` in the doctool to learn more.
   def reply(platform : Platform, subject : Term) : Term
-    # Fast paths for the vast majority of subjectss
+    # Fast paths for the vast majority of subjects.
     return subject unless subject.type.dict?
     return subject unless subject.includes?(:"dw-request")
 
@@ -58,7 +58,7 @@ module Ww::Soma::DwUIR
         subject.morph({wout, size.w}, {hout, size.h}, {status, :ok}, {:"dw-request", nil})
       end
 
-      # |@ soma.dwuir.replier.text
+      # |@ soma.dwuir.replier.svg
       #
       # |@block
       # Answers `svg`'s query about its width and height.

@@ -364,13 +364,13 @@ module Ww::Soma::DwUIR
           # the following rules do not run.
 
           matchpi %[{¦ pan-x-side: right final-w ±content-w}] do
-            pan = Point[(context.bounds.w - content_w.to(Float32)) - pan.x, pan.y]
+            pan = Point[context.bounds.w - content_w.to(Float32) - pan.x, pan.y]
 
             continue
           end
 
           matchpi %[{¦ pan-y-side: bottom final-h ±content-h}] do
-            pan = Point[pan.x, (context.bounds.h - content_h.to(Float32)) - pan.y]
+            pan = Point[pan.x, context.bounds.h - content_h.to(Float32) - pan.y]
 
             continue
           end

@@ -268,19 +268,19 @@ module Ww::Rack
       hub : Hub,
       basis : Term::Dict,
       uir_base : Term,
-      compositor : D::Compositor,
-      platform : D::Platform,
+      compositor : DwUIR::Compositor,
+      platform : DwUIR::Platform,
       *,
       frametime : Time::Span = 1.second / 60,
       fstime : Time::Span = 500.milliseconds,
     ) : Conf
       files = platform.files
 
-      viewer_context = D::Viewer::Context.new(compositor, platform)
-      window_context = D::Window.context(viewer_context)
+      viewer_context = DwUIR::Viewer::Context.new(compositor, platform)
+      window_context = DwUIR::Window::SDL.context(viewer_context)
 
       mki = ->(path : Path, rack : Term) do
-        wm = Rack::WM.new
+        wm = Rack::SDLWM.new
 
         wmon = wm.poll
         fsmon = Rack::FS.monitor(files)
@@ -306,20 +306,18 @@ module Ww::Rack
       basis = ML.document(files.read_string(basis_path))
       uir_base = ML.document(files.read_string(uir_path))
 
-      conf(hub, basis.as_d, uir_base, D::Compositor.new, D::PvgPlatform.new(files), **kwargs)
+      conf(hub, basis.as_d, uir_base, DwUIR::Compositor.new, DwUIR::PvgPlatform.new(files), **kwargs)
     end
 
-    # Represents a rack instance: the set of handles associated with an initialized
+    # Represents a rack instance: a group of handles associated with an initialized
     # rack environment.
     module Instance
-      alias Any = Locked | Unlocked
-      alias Unlocked = Some | Nil
+      alias Any = Some | Nil
 
       record Some, path : Path, wmon : Client, fsmon : Client, env : Env, unload : (->)
-      record Locked, unlocked : Unlocked
     end
 
-    private def load(conf : Conf, instance : Instance::Unlocked, path : Path, responses : Channel(Term)) : Instance::Unlocked
+    private def load(conf : Conf, instance : Instance::Any, path : Path, responses : Channel(Term)) : Instance::Any
       begin
         source = conf.files.read_string(path)
       rescue e : FileServerError
@@ -371,20 +369,8 @@ module Ww::Rack
     WWML
 
     # Handles a single request.
-    private def handle(conf : Conf, instance : Instance::Unlocked, request : Term, responses : Channel(Term)) : Instance::Any
+    private def handle(conf : Conf, instance : Instance::Any, request : Term, responses : Channel(Term)) : Instance::Any
       Term.case(request) do
-        # The idea is for the client to send `lock` before sending anything else.
-        # The server responds with `locked`. The client responds with whatever it
-        # wanted to send in the first place. This way, the server can postpone
-        # expensive operations to remain reachable; and the client will know whether
-        # the server is busy by assuming the time after `lock` and until `locked`
-        # as busy.
-        matchpi %{lock} do
-          responses.send(Term.of(:locked))
-
-          Instance::Locked.new(instance)
-        end
-
         matchpi %{(load path_string)} do
           load(conf, instance, Path[path.to(String)], responses)
         end
@@ -583,15 +569,6 @@ module Ww::Rack
       end
     end
 
-    # Unlock a locked instance on request. The idea with locking an instance is that
-    # we block all processes that want to touch it until a request arrives. Now is
-    # that time, so unlock. Note that the other processes will still have to wait
-    # until we handle *request* before they have a chance at touching whatever
-    # instance comes out in the end.
-    private def handle(conf : Conf, instance : Instance::Locked, request : Term, responses : Channel(Term)) : Instance::Any
-      handle(conf, instance.unlocked, request, responses)
-    end
-
     # Spawns the tick fiber containing the tick loop. The tick loop
     # will send *query* to *queries* for every *period*.
     private def tick(period : Time::Span, query : Term::Dict, queries : Channel(Term::Dict)) : (->)
@@ -726,7 +703,19 @@ module Ww::Rack
           when request = hub.requests.receive?
             break unless request
 
-            instance = handle(conf, instance, request, hub.responses)
+            Term.case(request) do
+              matchpi %{(txn id←(%number +i32) seq_*)} do
+                seq.items.each do |item|
+                  instance = handle(conf, instance, item, hub.responses)
+                end
+
+                hub.responses.send(Term.of(:done, id))
+              end
+
+              otherwise do
+                instance = handle(conf, instance, request, hub.responses)
+              end
+            end
           when workspace = hub.workspaces.receive
             next unless instance.is_a?(Instance::Some)
 
@@ -740,8 +729,6 @@ module Ww::Rack
         fstick.close
         wmtick.close
       end
-    ensure
-      hub.close
     end
 
     # Constructs and yields a `Hub`, spawning a pair of fibers to bridge between
@@ -791,7 +778,11 @@ module Ww::Rack
         hub.close
       end
 
-      yield hub
+      DwUIR::Window::SDL.setup do
+        yield hub
+      ensure
+        hub.close
+      end
     end
   end
 end

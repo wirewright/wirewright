@@ -24,7 +24,7 @@
 (event M←[keyboard key ⸨up,dn⸩ dn] _*)
   <> {M: (goto (line ⸨above,below⸩) anchor)}
 
-(event M←[keyboard key shift ⸨dn,up⸩] _*)
+(event M←[keyboard key (shift _) ⸨dn,up⸩] _*)
   <> {M: (⸨enable,disable⸩ selection)}
 
 (event M←(keyboard key a dn ⍊ ctrl) _*)
@@ -116,7 +116,10 @@
   <> {>U: (collapse selection right)}
 
 (instant [<|> [l_string | r_string]] (U←(submit) _*))
-  <> {U: (submission $'(~ →l →r)), l: "", r: ""}
+  <> {U: (request submission $'(~ →l →r))}
+
+(instant [<|> [l_string | r_string]] (U←(ack submission S_string) _*))
+  <> {U: (commit submission →S), l: "", r: ""}
 
 (instant [<|> [l_string | r_string]] (U←(edit text_string) _*))
   <> {(U): (), l: →text, r: ""}
@@ -199,24 +202,30 @@
 (instant [(_*) _ -|- (S_string _*) (_)] (U←(history motion _) _*))
   <> {U: (edit →S)}
 
-(instant [(_* `>F) _ -|- (F_+) (_*)] ([submission _string] _*))
+(instant [(_* `>F) _ -|- (F_+) (_*)] ([commit submission _] _*))
   <> {(>F): →F, (F): ()}
 
-(instant [(_* `>F) _ -|- () (T_)] ([submission _string] _*))
+(instant [(_* `>F) _ -|- () (T_)] ([commit submission _] _*))
   <> {(T): ()}
 
-(instant [(_* S_) _ -|- () ()] (U←[submission S_] _*))
+(instant [(_* S_) _ -|- () ()] (U←[commit submission _] _*))
   <> {(U): ()}
 
-(instant [(_* `>S) _ -|- () ()] (U←[submission S_string] _*))
+(instant [(_* `>S) _ -|- () ()] (U←[commit submission S_string] _*))
   <> {(U): (), >S: →S}
 
-(instant [submissions _ (_* `>S)] ((submission S_string ⍊ -◇_) _*))
-  <> {>S: →S, ◇: true}
+(instant [submission _ slot←ready] (U←(request submission S_string) _*))
+  <> {(U): (), slot: (proposal →S)}
+
+(instant [submission _ slot←(proposal S_string)] (U←(submission accepted) _*))
+  <> {U: (ack submission →S), slot: ready}
+
+(instant [submission _ slot←(proposal S_string)] (U←(submission rejected) _*))
+  <> {(U): (), slot: ready}
 
 --- initial
 
-(submissions (() (<|> ("" | "")) -|- () ()) ())
+(submission (() (<|> ("" | "")) -|- () ()) ready)
 
 --- events
 

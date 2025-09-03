@@ -237,6 +237,45 @@ PRIMITIVES = ProcRuleset.build do
     chunks
   end
 
+  rulepi1 %[(chunks arg_dict (group precursor_ member_))] do
+    chunks = Term[]
+
+    i = 0
+    while i < arg.itemsize
+      head = arg[i]
+      unless M1.probe?(precursor, head)
+        chunks = chunks.append({:item, head})
+        i += 1
+        next
+      end
+
+      i += 1
+      n = 0
+      (i...arg.itemsize).each do |j|
+        jth = arg[j]
+        break if M1.probe?(precursor, jth)
+        break unless M1.probe?(member, jth)
+
+        n += 1
+      end
+
+      if n.zero?
+        chunks = chunks.append({:item, head})
+        next
+      end
+
+      chunk = Term::Dict.build do |commit|
+        commit << :chunk << head
+        commit.concat(arg.items.move(i).begin.grow(n))
+      end
+
+      i += n
+      chunks = chunks.append(chunk)
+    end
+
+    chunks
+  end
+
   rulepi1 %[(sum ())] { 0 }
   rulepi1 %[(sum (args_number+))] { args.items.reduce { |a, b| a.unsafe_as_n + b.unsafe_as_n } }
 

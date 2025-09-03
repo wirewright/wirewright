@@ -817,8 +817,10 @@ button: "font-sans font-normal text-sm bg-neutral-700 text-neutral-200 hover:bg-
 "content-clip": (content-viewport-box {presence: true})
 "content-overflow": (content-viewport-box {presence: false})
 
-"floating": (floating-box {presence: true})
-"static": (floating-box {presence: false})
+"floating": (short-for "floating-x" "floating-y")
+"floating-x": (floating-box {x: true})
+"floating-y": (floating-box {y: true})
+"static": (floating-box {x: false, y: false})
 
 "isolate": (composite-box {presence: true})
 "no-isolate": (composite-box {presence: false})

@@ -280,8 +280,8 @@
 ;; floating
 ;;
 
-[floating {¦ up-w⫽h: ±λ -dn-w⫽h: λ'}] <> {λ': →λ, (λ): ()}
-(floating _ ⍊ dn-w⫽h: ±λ) <> {(λ): ()}
+(floating {¦ up-w⫽h: ±λ -dn-w⫽h: λ'} ⍊ x⫽y) <> {λ': →λ, (λ): ()}
+(floating _ ⍊ x⫽y dn-w⫽h: ±λ) <> {(λ): ()}
 
 ;;
 ;; align

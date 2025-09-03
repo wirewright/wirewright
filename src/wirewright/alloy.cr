@@ -388,7 +388,7 @@ module Ww::Alloy
       # `^match'` is a shorthand for a single-branch `^match`, as in:
       # `(^match expr_ (when pattern_ body_*))`.
       #
-      # On mismatch, `^match'` expands into nothing (disappears).
+      # On mismatch, `^match'` replaces itself with nothing (disappears).
       # |@endblock
       #
       # |@key expr alloy.expr -- Value expression to match on.
@@ -415,7 +415,7 @@ module Ww::Alloy
       # `^case'` is a shorthand for a single-branch `^case`, as in:
       # `(^case expr_ (when pattern_ body_*))`.
       #
-      # On mismatch, `^case'` expands into nothing (disappears).
+      # On mismatch, `^case'` replaces itself with nothing (disappears).
       # |@endblock
       #
       # |@key expr alloy.expr -- Value expression to match on.
@@ -748,6 +748,40 @@ module Ww::Alloy
         Splice.new(value.itemspart)
       end
 
+      # |@ alloy.template.^splice
+      #
+      # |@block
+      # Inserts the renders of multiple nodes at the point where it is used.
+      #
+      # This template expression is particularly useful when you want to "return"
+      # multiple nodes from e.g. an Alloy view component.
+      # |@endblock
+      #
+      # |@key nodes alloy.template -- Nodes to render and insert.
+      matchpi %{(^splice nodes_*)} do
+        render_many(keypath, issues) do |submit|
+          nodes.items.each_with_index(offset: 1) do |node, index|
+            submit.call(ctx, node, index)
+          end
+        end
+      end
+
+      # |@ alloy.template.^\.
+      #
+      # |@block
+      # Follows a keypath into the variables dict, replacing itself with the value
+      # thus reached. For example, with vars `{screen: {width: 500, height: 400}}`,
+      # you can reach width using `(^. viewport width)` and height `(^. viewport height)`.
+      # |@endblock
+      matchpi %{(^. keys_+)} do
+        unless value = ctx.vars.follow?(keys.items)
+          issues.adjoin("keypath", keys, &.major("no value at keypath"))
+          return Err.new
+        end
+
+        Assign.new(value)
+      end
+
       # |@ alloy.template.^render
       #
       # |@block
@@ -836,12 +870,12 @@ module Ww::Alloy
 
         case
         when suffix = id.lchop?('\\')
-          continue unless id.size > 0
+          continue unless suffix.size > 0
 
           kind = :ml
           name = Term::Sym.new(suffix.to_s)
         when suffix = id.lchop?('*')
-          continue unless id.size > 0
+          continue unless suffix.size > 0
 
           kind = :splice
           name = Term::Sym.new(suffix.to_s)
@@ -926,19 +960,7 @@ module Ww::Alloy
     end
   end
 
-  # Renders an Alloy *view*, using *ruleset* as a component database. Only
-  # template rules are supported; other rules are ignored. Returns
-  # the resulting expansion.
-  #
-  # *keypath* specifies a keypath prefix to use.
-  #
-  # Reports any issues found during expansion to *issues*.
-  #
-  # NOTE: this is public API, but it offers more control than is usually necessary.
-  # Consider non-X overloads (e.g. `render`) before use.
-  #
-  # TODO: limit recursion depth.
-  def renderX(ruleset : Ruleset, keypath : Stack(Term), view : Term, issues : Issue::Sink) : Expansion
+  private def renderX0(ruleset : Ruleset, cache : ICache(Term, Expansion), keypath : Stack(Term), view : Term, issues : Issue::Sink) : Expansion
     responses = ruleset.responses(view)
     responses.each do |response|
       pr, rule = response
@@ -965,7 +987,7 @@ module Ww::Alloy
           return Assign.new(view)
         end
 
-        return renderX(ruleset, keypath, expansion.term, issues)
+        return renderX(ruleset, cache, keypath, expansion.term, issues)
       in Splice
         children = Term::Dict.build do |commit|
           expansion.offspring.items.each do |item|
@@ -974,7 +996,7 @@ module Ww::Alloy
               next
             end
 
-            case item_expansion = renderX(ruleset, keypath, item, issues)
+            case item_expansion = renderX(ruleset, cache, keypath, item, issues)
             in Err # omit
             in Assign then commit << item_expansion.term
             in Splice then commit.concat(item_expansion.offspring.items)
@@ -993,8 +1015,43 @@ module Ww::Alloy
     end
 
     flat_map(keypath, view.unsafe_as_d) do |value|
-      renderX(ruleset, keypath, value, issues)
+      renderX(ruleset, cache, keypath, value, issues)
     end
+  end
+
+  # Renders an Alloy *view*, using *ruleset* as a component database. Only
+  # template rules are supported; other rules are ignored. Returns the
+  # resulting expansion. Uses *cache* to cache expansions that do not contain
+  # any issues.
+  #
+  # *keypath* specifies a keypath prefix to use.
+  #
+  # Reports any issues found during expansion to *issues*.
+  #
+  # NOTE: this is public API, but it offers more control than is usually necessary.
+  # Consider non-X overloads (e.g. `render`) before use.
+  #
+  # TODO: limit recursion depth.
+  def renderX(
+    ruleset : Ruleset,
+    cache : ICache(Term, Expansion),
+    keypath : Stack(Term),
+    view : Term,
+    issues : Issue::Sink,
+  ) : Expansion
+    if memo = cache[view]?
+      return memo
+    end
+
+    version0 = issues.version
+    expansion = renderX0(ruleset, cache, keypath, view, issues)
+    version1 = issues.version
+
+    if version0 == version1
+      cache[view] = expansion
+    end
+
+    expansion
   end
 
   # Renders an Alloy *view*, using *ruleset* as a component database. Only
@@ -1006,10 +1063,15 @@ module Ww::Alloy
   #
   # NOTE: this is public API, but it offers more control than is usually necessary.
   # Consider non-X overloads (e.g. `render`) before use.
-  def renderX(ruleset : Ruleset, view : Term, *, severity : Issue::Severity) : {Expansion, Array(Issue::Backtrace)}
+  def renderX(
+    ruleset : Ruleset,
+    cache : ICache(Term, Expansion),
+    view : Term, *,
+    severity : Issue::Severity,
+  ) : {Expansion, Array(Issue::Backtrace)}
     Issue.setup(severity: severity) do |issues|
       issues.adjoin(Spot::View.new) do |issues|
-        renderX(ruleset, Stack(Term).new, view, issues)
+        renderX(ruleset, cache, Stack(Term).new, view, issues)
       end
     end
   end
@@ -1020,7 +1082,11 @@ module Ww::Alloy
   # issues that were found during expansion (if any).
   #
   # *severity* specifies severity cutoff.
-  def render_with_issues(vars : Term::Dict, template : Term, *, severity : Issue::Severity = :minor) : {Term, Array(Issue::Backtrace)}
+  def render_with_issues(
+    vars : Term::Dict,
+    template : Term, *,
+    severity : Issue::Severity = :minor,
+  ) : {Term, Array(Issue::Backtrace)}
     expansion, issues = renderX(vars, template, severity: severity)
 
     case expansion
@@ -1036,8 +1102,13 @@ module Ww::Alloy
   # found during expansion (if any).
   #
   # *severity* specifies severity cutoff.
-  def render_with_issues(ruleset : Ruleset, view : Term, *, severity : Issue::Severity = :minor) : {Term, Array(Issue::Backtrace)}
-    expansion, issues = renderX(ruleset, view, severity: severity)
+  def render_with_issues(
+    ruleset : Ruleset,
+    view : Term, *,
+    severity : Issue::Severity = :minor,
+    cache : ICache(Term, Expansion) = Uncached(Term, Expansion).new,
+  ) : {Term, Array(Issue::Backtrace)}
+    expansion, issues = renderX(ruleset, cache, view, severity: severity)
 
     case expansion
     in Err    then {Term.of, issues} # Toplevel err resolves to ()
@@ -1050,17 +1121,27 @@ module Ww::Alloy
   #
   # Shorthand for a similar overload of `render_with_issues`, with severity
   # set to `quiet`.
-  def render(vars : Term::Dict, template : Term) : Term
-    renderout, _ = render_with_issues(vars, template, severity: :quiet)
+  def render(vars : Term::Dict, template : Term, **kwargs) : Term
+    renderout, _ = render_with_issues(vars, template, **kwargs, severity: :quiet)
     renderout
+  end
+
+  # Reverses the order of arguments to support `pipe`.
+  def render(template : Term, vars : Term::Dict, **kwargs) : Term
+    render(vars, template, **kwargs)
   end
 
   # Renders an Alloy *view* while suppressing all issues.
   #
   # Shorthand for a similar overload of `render_with_issues`, with severity
   # set to `quiet`.
-  def render(ruleset : Ruleset, view : Term) : Term
-    renderout, _ = render_with_issues(ruleset, view, severity: :quiet)
+  def render(ruleset : Ruleset, view : Term, **kwargs) : Term
+    renderout, _ = render_with_issues(ruleset, view, **kwargs, severity: :quiet)
     renderout
+  end
+
+  # Reverses the order of arguments to support `pipe`.
+  def render(view : Term, ruleset : Ruleset, **kwargs) : Term
+    render(ruleset, view, **kwargs)
   end
 end

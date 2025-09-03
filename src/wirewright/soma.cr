@@ -30,7 +30,7 @@ module Ww::Soma
   # uiR is a rewriter that is needed inside the system but at the same time, it is
   # implemented using that same system.
   def self.uiR(replier : Term -> Term, rulebase : Term)
-    cache = Cache(Term, Rewrite::Any).new(capacity: 2**16, preallocate: true)
+    cache = SyncCache(Term, Rewrite::Any).new(capacity: 2**16, preallocate: true)
     onceR = callR(PRIMITIVES)
 
     # First rewrite entries, then rewrite self.

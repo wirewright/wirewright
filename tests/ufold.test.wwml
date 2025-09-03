@@ -1036,7 +1036,7 @@
       "C")
      (group z-index: 100
       (composite
-       (floating
+       (floating x: true y: true
         (content x: true y: true
          (viewport
           (align

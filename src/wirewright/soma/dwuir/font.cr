@@ -108,7 +108,7 @@ module Ww::Soma::DwUIR
   # weight (e.g. `FontWeight::Bold`), and whether it's italic or not. The result
   # is an absolute path to the font file (TTF, OTF, etc.)
   #
-  # Font index also allows to map of human-readable codepoint names to the actual
+  # Font index also allows to map human-readable codepoint names to the actual
   # numeric codepoints; assuming the font has a corresponding `.codepoints` file.
   #
   # See: `path_to?`, `codepoint?`.

@@ -9,7 +9,7 @@ module Ww::Soma::DwUIR
   #
   # Textual DwUIR is *a small subset of graphical DwUIR*. This means that
   # anything that textual DwUIR can draw, graphical DwUIR will draw; on
-  # the other hand, some things that graphical DwUIR can draw, text DwUIR
+  # the other hand, some things that graphical DwUIR can draw, textual DwUIR
   # cannot draw (e.g. images).
   #
   # Textual DwUIR provides a lossier, but compatible, way of visualizing
@@ -97,16 +97,26 @@ module Ww::Soma::DwUIR
     # we can draw any amounts of quite easily.
     record IBeam, point : Point
 
+    # Groups a drawable and its corresponding view.
+    #
+    # NOTE: since we do not support things like rotation of viewports in text,
+    # `view` is simply a rect.
+    record DrawableView, dw : Drawable, view : Rect do
+      def self.new(dw : Drawable, view : View)
+        new(dw, Rect.xsect(view))
+      end
+    end
+
     # Drawables in a picture are guaranteed to be sorted in draw order.
-    alias Picture = Array(Drawable)
+    alias Picture = Array(DrawableView)
 
     # Converts *dwuir* to a picture.
     def picture(dwuir : Term, viewport : Rect = Rect.inf) : Picture
-      drawables = [] of {LayerRank, Rank, Drawable}
+      drawables = [] of {LayerRank, Rank, DrawableView}
 
       DwUIR.walk(dwuir, viewport: viewport) do |ctx, node|
         drawables(ctx, node) do |layer, rank, drawable|
-          drawables << {layer, rank, drawable}
+          drawables << {layer, rank, DrawableView.new(drawable, ctx.view)}
         end
       end
 
@@ -142,11 +152,11 @@ module Ww::Soma::DwUIR
           selection = false
 
           TextCommand.each_with_bounds(Pencil.new, spec.wrap, spec.caption, selection: spec.selection.try(&.range)) do |command, bounds_rel|
-            bounds_abs = bounds_rel.translate(ctx.bounds.tl)
-            next unless DwUIR.visible?(ctx, bounds_abs)
-
             case command
             in TextCommand::PushInline, TextCommand::PushVirtual
+              bounds_abs = bounds_rel.translate(ctx.bounds.tl)
+              next unless DwUIR.visible?(ctx, bounds_abs)
+
               unless selection
                 span = Span.new(bounds_abs, command.view, fg, decoration)
                 sink.call(ctx.layer, Rank::Mid, span)
@@ -164,6 +174,9 @@ module Ww::Soma::DwUIR
               sink.call(ctx.layer, Rank::Mid, span)
             in TextCommand::NextLine
             in TextCommand::PutCursor
+              bounds_abs = bounds_rel.translate(ctx.bounds.tl)
+              next unless DwUIR.visible?(ctx, bounds_abs)
+
               beam = IBeam.new(bounds_abs.tl)
               sink.call(ctx.layer, Rank::Front, beam)
             in TextCommand::BeginSelection
@@ -180,18 +193,19 @@ module Ww::Soma::DwUIR
         matchpi(<<-WWML
         (rect
           ⍊ fill_⋮ (rgba 0 0 0 0)
-            thickness-l_⋮ 0
-            thickness-r_⋮ 0
-            thickness-t_⋮ 0
-            thickness-b_⋮ 0
+            thickness-l⋮ 0
+            thickness-r⋮ 0
+            thickness-t⋮ 0
+            thickness-b⋮ 0
             stroke_⋮ (rgba 0 0 0 0)
             radius-tl_⋮ 0
             radius-tr_⋮ 0
             radius-bl_⋮ 0
             radius-br_⋮ 0)
-      WWML
+        WWML
         ) do
           fill_color = to_solid_color(Paint.term(fill))
+          stroke_color = to_solid_color(Paint.term(stroke))
 
           thicknesses = {
             l: thickness_l.to(Float32).ceil.clamp(0.0..7.0).to_i,
@@ -200,72 +214,87 @@ module Ww::Soma::DwUIR
             b: thickness_b.to(Float32).ceil.clamp(0.0..7.0).to_i,
           }
 
-          if thicknesses.values.all?(1)
-            stroke_color = to_solid_color(Paint.term(stroke))
+          if stroke_color.transparent? || thicknesses.values.all?(0)
+            sink.call(ctx.layer, Rank::Mid, Fill.new(ctx.bounds, fill_color))
+            return WalkFlow::Next
+          end
 
-            # Use rounded corner glyph for nonzero radius corner.
-            corner_tl = radius_tl.zero? ? '┌' : '╭'
-            corner_tr = radius_tr.zero? ? '┐' : '╮'
-            corner_bl = radius_bl.zero? ? '└' : '╰'
-            corner_br = radius_br.zero? ? '┘' : '╯'
+          # We have some borders. We have to figure out which glyphs to use now.
 
-            sides = Stroke::Sides.new(
-              l: Stroke::Side.new('│', stroke_color),
-              r: Stroke::Side.new('│', stroke_color),
-              t: Stroke::Side.new('─', stroke_color),
-              b: Stroke::Side.new('─', stroke_color),
-              tl: Stroke::Side.new(corner_tl, stroke_color),
-              tr: Stroke::Side.new(corner_tr, stroke_color),
-              bl: Stroke::Side.new(corner_bl, stroke_color),
-              br: Stroke::Side.new(corner_br, stroke_color),
-            )
+          rmax = {ctx.bounds.w, ctx.bounds.h}.max
 
-            interior_rect = ctx.bounds.pad(1)
+          radii = {
+            tl: Magn.abst(radius_tl, Magn.abs(0)).resolve(rmax),
+            tr: Magn.abst(radius_tr, Magn.abs(0)).resolve(rmax),
+            bl: Magn.abst(radius_bl, Magn.abs(0)).resolve(rmax),
+            br: Magn.abst(radius_br, Magn.abs(0)).resolve(rmax),
+          }
 
-            sink.call(ctx.layer, Rank::Mid, Fill.new(interior_rect, fill_color))
-            sink.call(ctx.layer, Rank::Front, Stroke.new(ctx.bounds, sides))
-          elsif thicknesses.values.any? { |thickness| thickness > 0 }
-            stroke_color = to_solid_color(Paint.term(stroke))
+          has_x = thicknesses[:l] > 0 || thicknesses[:r] > 0
+          has_y = thicknesses[:t] > 0 || thicknesses[:b] > 0
+
+          has_tl = thicknesses[:l] > 0 && thicknesses[:t] > 0
+          has_tr = thicknesses[:r] > 0 && thicknesses[:t] > 0
+          has_bl = thicknesses[:l] > 0 && thicknesses[:b] > 0
+          has_br = thicknesses[:r] > 0 && thicknesses[:b] > 0
+
+          has_rounded = radii.values.any? { |radius| radius > 0 }
+
+          fill_rect = ctx.bounds
+
+          if {has_tl, has_tr, has_bl, has_br, has_rounded}.any?
+            tl = Stroke::Side.new(radius_tl.zero? ? '┌' : '╭', stroke_color)
+            tr = Stroke::Side.new(radius_tr.zero? ? '┐' : '╮', stroke_color)
+            bl = Stroke::Side.new(radius_bl.zero? ? '└' : '╰', stroke_color)
+            br = Stroke::Side.new(radius_br.zero? ? '┘' : '╯', stroke_color)
 
             if thicknesses[:l] > 0
-              l = Stroke::Side.new(BORDER_X[thicknesses[:l]], stroke_color)
+              l = Stroke::Side.new('│', stroke_color)
+              fill_rect = fill_rect.grow(dw: -1).translate(dx: 1)
             end
 
             if thicknesses[:r] > 0
-              r = Stroke::Side.new(BORDER_X[thicknesses[:r]], stroke_color)
+              r = Stroke::Side.new('│', stroke_color)
+              fill_rect = fill_rect.grow(dw: -1)
             end
 
             if thicknesses[:t] > 0
-              t = Stroke::Side.new(BORDER_Y[thicknesses[:t]], stroke_color)
+              t = Stroke::Side.new('─', stroke_color)
+              fill_rect = fill_rect.grow(dh: -1).translate(dy: 1)
             end
 
             if thicknesses[:b] > 0
-              b = Stroke::Side.new(BORDER_Y[thicknesses[:b]], stroke_color)
+              b = Stroke::Side.new('─', stroke_color)
+              fill_rect = fill_rect.grow(dh: -1)
+            end
+          else
+            # Arrange it so that the top border and the right border "float" over
+            # backdrop, and left and bottom border "float" over fill color. Thus
+            # they will be properly blended.
+
+            if thicknesses[:l] > 0
+              l = tl = bl = Stroke::Side.new(BORDER_X[thicknesses[:l] - 1], stroke_color)
             end
 
-            # We will draw what corners we can, but there are no good glyphs for
-            # the corners, so the full stroke box would look quite ugly with
-            # thickness over 1.
-            sides = Stroke::Sides.new(l, r, t, b,
-              tl: t || l,
-              tr: r && !t ? r : nil,
-              bl: l,
-              br: r,
-            )
+            if thicknesses[:r] > 0
+              r = tr = br = Stroke::Side.new(BORDER_X[thicknesses[:r] - 1], stroke_color)
+              fill_rect = fill_rect.grow(dw: -1)
+            end
 
-            # Shrink the interior rect we're going to fill so that the top border
-            # and the right border "float" over backdrop and thus have the proper
-            # background. We don't want them colored with the fill color because
-            # their unfilled part points outside of the rect.
-            interior_rect = ctx.bounds
-              .grow(-Point[thicknesses[:r], thicknesses[:t]].min(Point[1, 1]))
-              .translate(Point[0, Math.min(1, thicknesses[:t])])
+            if thicknesses[:t] > 0
+              t = tl = tr = Stroke::Side.new(BORDER_Y[thicknesses[:t] - 1], stroke_color)
+              fill_rect = fill_rect.grow(dh: -1).translate(dy: 1)
+            end
 
-            sink.call(ctx.layer, Rank::Mid, Fill.new(interior_rect, fill_color))
-            sink.call(ctx.layer, Rank::Front, Stroke.new(ctx.bounds, sides))
-          else
-            sink.call(ctx.layer, Rank::Mid, Fill.new(ctx.bounds, fill_color))
+            if thicknesses[:b] > 0
+              b = bl = br = Stroke::Side.new(BORDER_Y[thicknesses[:b] - 1], stroke_color)
+            end
           end
+
+          sides = Stroke::Sides.new(l, r, t, b, tl, tr, bl, br)
+
+          sink.call(ctx.layer, Rank::Mid, Fill.new(fill_rect, fill_color))
+          sink.call(ctx.layer, Rank::Front, Stroke.new(ctx.bounds, sides))
 
           WalkFlow::Next
         end
@@ -276,8 +305,65 @@ module Ww::Soma::DwUIR
       end
     end
 
-    # :nodoc:
-    def to_solid_color(paint : Paint::Solid)
+    # DwUIR replier that should be used with the textual front-end.
+    def reply(subject : Term) : Term
+      # Fast paths for the vast majority of subjects.
+      return subject unless subject.type.dict?
+      return subject unless subject.includes?(:"dw-request")
+
+      Term.of_case(subject) do
+        matchpi %{(text ⍊ dw-request: (measure ±width oheight_symbol ⍊ status_symbol))} do
+          space = Point.new(width.to(Float32), Float32::INFINITY)
+
+          continue unless spec = DwUIR.text_spec?(subject, space)
+          continue unless font = spec.font?
+
+          size = Rect.empty
+          TextCommand.each_with_bounds(Pencil.new, spec.wrap, spec.caption, selection: nil) do |command, bounds|
+            case command
+            when TextCommand::PushInline, TextCommand::PushVirtual
+              size |= bounds
+            when TextCommand::NextLine
+              size = size.grow(dh: 1)
+            end
+          end
+
+          subject.morph(
+            {status, :ok},
+            {oheight, size.h.floor},
+            {:"dw-request", nil},
+          )
+        end
+
+        matchpi %{(text ⍊ dw-request: (measure owidth_symbol oheight_symbol ⍊ status_symbol))} do
+          space = Point.inf
+
+          continue unless spec = DwUIR.text_spec?(subject, space)
+          continue unless font = spec.font?
+
+          size = Rect.empty
+          TextCommand.each_with_bounds(Pencil.new, spec.wrap, spec.caption, selection: nil) do |command, bounds|
+            case command
+            when TextCommand::PushInline, TextCommand::PushVirtual
+              size |= bounds
+            when TextCommand::NextLine
+              size = size.grow(dh: 1)
+            end
+          end
+
+          subject.morph(
+            {status, :ok},
+            {owidth, size.w.floor},
+            {oheight, size.h.floor},
+            {:"dw-request", nil},
+          )
+        end
+
+        otherwise { subject }
+      end
+    end
+
+    private def to_solid_color(paint : Paint::Solid) : Color
       paint.color
     end
 
@@ -285,102 +371,155 @@ module Ww::Soma::DwUIR
     # so we simply convert any paint to a solid color, if possible.
     #
     # TODO: Linear gradient and radial gradient -- we can use one of the steps.
-    def to_solid_color(paint : Paint::Any)
+    private def to_solid_color(paint : Paint::Any) : Color
       Color.named("red")
     end
 
-    # A screen consists of two layers: a `backdrop` layer, which stores background
-    # colors of cells; and a `content` layer, which stores the `Rune`s to display
-    # on top of the background.
+    # Represents a terminal cell: either a pure character cell, a color cell,
+    # or a character cell on top of a color cell (character with a background).
+    alias Cell = Rune | Color | {Rune, Color}
+
+    # Groups objects related to the console screen.
     class Screen
-      # Readable and writable.
-      getter backdrop = {} of {UInt16, UInt16} => Color
+      # Points to a hash mapping arbitrary cell coordinates to cells
+      # currently occupying those.
+      getter cells = {} of {Int16, Int16} => Cell
 
-      # Readable and writable.
-      getter content = {} of {UInt16, UInt16} => Rune
+      # Stores the cursor I-beam position. The cursor is hidden if `nil`.
+      property? beam : {Int16, Int16}? = nil
 
-      # Readable and writable I-beam cursor position.
-      property? beam : {UInt16, UInt16}? = nil
+      # Stores a rectangle that defines which cells are visible. Can be
+      # infinite: this means all cells will be drawn.
+      property view : Rect = Rect.inf
     end
 
-    private def draw(dst, ix : Int32, iy : Int32, object)
-      dst[{ix.to_u16, iy.to_u16}] = object
+    # Write color on top of rune.
+    private def blend(cell0 : Rune, cell1 : Color) : Cell
+      cell1.a < 255 ? {cell0, cell1} : cell1
     end
 
-    private def draw(dst, ix : Int32, iy : Int32, object : Stroke::Side)
-      draw(dst, ix, iy, Rune.new(object.chr, object.color))
+    # Write rune on top of color.
+    private def blend(cell0 : Color, cell1 : Rune) : Cell
+      {cell1, cell0}
     end
 
-    private def draw(screen : Screen, span : Span)
+    # Change rune (I'm not sure how correct this behavior is).
+    private def blend(cell0 : {Rune, Color}, cell1 : Rune) : Cell
+      {cell1, cell0[1]}
+    end
+
+    private def blend(cell0, cell1) : Cell
+      cell1
+    end
+
+    private def draw(screen, ix : Int32, iy : Int32, object : Cell) : Nil
+      return if (Rect[ix, iy, 1, 1] & screen.view).empty?
+
+      ix16 = ix.to_i16
+      iy16 = iy.to_i16
+      cell0 = screen.cells[{ix16, iy16}]?
+
+      screen.cells[{ix16, iy16}] = blend(cell0, cell1: object)
+    end
+
+    private def draw(screen, ix : Int32, iy : Int32, object : Stroke::Side) : Nil
+      draw(screen, ix, iy, Rune.new(object.chr, object.color))
+    end
+
+    private def draw(screen : Screen, span : Span) : Nil
       span.caption.each_char_with_index do |chr, index|
-        ix, iy = span.bounds.snap.ixy
+        ix, iy = span.bounds.floor.ixy
 
-        draw(screen.content, ix + index, iy, Rune.new(chr, span.fg, span.decoration))
+        draw(screen, ix + index, iy, Rune.new(chr, span.fg, span.decoration))
       end
     end
 
-    private def draw(screen : Screen, fill : Fill)
+    private def draw(screen : Screen, fill : Fill) : Nil
+      return if fill.bg.transparent?
+
       ix, iy, iw, ih = fill.bounds.snap.ixywh
 
       (ix...ix + iw).each do |i|
         (iy...iy + ih).each do |j|
-          draw(screen.backdrop, i, j, fill.bg)
+          draw(screen, i, j, fill.bg)
         end
       end
     end
 
-    private def draw(screen : Screen, box : Stroke)
+    private def draw(screen : Screen, box : Stroke) : Nil
       ix, iy, iw, ih = box.bounds.snap.ixywh
 
-      # Draw corners.
-      if iw >= 2 && ih >= 2
-        if corner = box.sides.tl
-          draw(screen.content, ix, iy, corner)
+      if iw < 3 && ih < 3
+        # Too small, noop.
+        return
+      end
+
+      # Draw left side.
+      if iw >= 2
+        if corner = box.sides.tl || box.sides.l
+          draw(screen, ix, iy, corner)
         end
-        if corner = box.sides.tr
-          draw(screen.content, ix + iw - 1, iy, corner)
+
+        if (side = box.sides.l) && ih >= 3
+          (iy + 1...iy + ih - 1).each do |y|
+            draw(screen, ix, y, side)
+          end
         end
-        if corner = box.sides.br
-          draw(screen.content, ix + iw - 1, iy + ih - 1, corner)
-        end
-        if corner = box.sides.bl
-          draw(screen.content, ix, iy + ih - 1, corner)
+
+        if corner = box.sides.bl || box.sides.l
+          draw(screen, ix, iy + ih - 1, corner)
         end
       end
 
-      # Draw left edge.
-      if (side = box.sides.l) && ih >= 3
-        (iy + 1...iy + ih - 1).each do |y|
-          draw(screen.content, ix, y, side)
+      # Draw right side.
+      if iw >= 2
+        if corner = box.sides.tr || box.sides.r
+          draw(screen, ix + iw - 1, iy, corner)
+        end
+
+        if (side = box.sides.r) && ih >= 3
+          (iy + 1...iy + ih - 1).each do |y|
+            draw(screen, ix + iw - 1, y, side)
+          end
+        end
+
+        if corner = box.sides.br || box.sides.r
+          draw(screen, ix + iw - 1, iy + ih - 1, corner)
         end
       end
 
-      # Draw top edge.
-      if (side = box.sides.t) && iw >= 3
+      # Draw top side.
+      if iw >= 3 && ih >= 2 && (side = box.sides.t)
         (ix + 1...ix + iw - 1).each do |x|
-          draw(screen.content, x, iy, side)
+          draw(screen, x, iy, side)
         end
       end
 
-      # Draw right edge.
-      if (side = box.sides.r) && ih >= 3
-        (iy + 1...iy + ih - 1).each do |y|
-          draw(screen.content, ix + iw - 1, y, side)
-        end
-      end
-
-      # Draw bottom edge.
-      if (side = box.sides.b) && iw >= 3
+      # Draw bottom side.
+      if iw >= 3 && ih >= 2 && (side = box.sides.b)
         (ix + 1...ix + iw - 1).each do |x|
-          draw(screen.content, x, iy + ih - 1, side)
+          draw(screen, x, iy + ih - 1, side)
         end
       end
     end
 
-    private def draw(screen : Screen, cursor : IBeam)
+    private def draw(screen : Screen, cursor : IBeam) : Nil
       ix, iy = cursor.point.floor.ixy
 
-      screen.beam = {ix.to_u16, iy.to_u16}
+      screen.beam = {ix.to_i16, iy.to_i16}
+    end
+
+    private def draw(screen : Screen, dwv : DrawableView) : Nil
+      view0 = screen.view
+      view1 = dwv.view
+
+      screen.view = view1
+
+      begin
+        draw(screen, dwv.dw)
+      ensure
+        screen.view = view0
+      end
     end
 
     # Returns a screen with *picture* drawn on it.

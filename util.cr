@@ -3854,51 +3854,18 @@ def oklch(l : Float64, c : Float64, h : Float64)
   Oklch.to_rgb(l, c, h)
 end
 
-# FIFO fixed-capacity cache.
-#
-# TODO: this will obviously "leak" memory, in the sense that it keeps
-# pointers to K/V, and thus very large caches will keep in memory something
-# that may have been collected by the GC already. We need a WeakRef impl
-# of this, but as far as I understand, Hash based stuff is very clumsy with
-# WeakRef; so we'll probably have to consider a hand-written HAMT based solution.
-# But then finding the node to delete would be clumsy. We can do it as HAMT to
-# map key to index + Binary Tree but this requires balancing in any case if we
-# want some kind of order -- which is tough...
-#
-# TODO: lots of very hot places rely on this. split into buckets & in general
-# see SOTA parallel hashes !!! Sync Map is buggy and causes occasional deadlocks.
-class SyncCache(K, V)
-  def initialize(@capacity : Int32, *, preallocate : Bool, byref : Bool = false)
-    if preallocate
-      @data = Hash(K, V).new(initial_capacity: @capacity)
-    else
-      @data = {} of K => V
-    end
-    @data.compare_by_identity if byref
-    @lock = Sync::RWLock.new
-  end
-
-  def load?(key : K) : V?
-    @lock.read { @data[key]? }
-  end
-
-  def store(key : K, value : V) : Nil
-    @lock.write do
-      if @data.size > @capacity
-        @data.delete(@data.first_key)
-      end
-      @data[key] = value
-    end
-  end
+module ICache(K, V)
+  abstract def []?(key : K) : V?
+  abstract def []=(key : K, value : V) : V
 
   def fetch?(key : K, &) : {Bool, V}
-    if value = load?(key)
+    if value = self[key]?
       return true, value
     end
 
     value = yield
 
-    store(key, value)
+    self[key] = value
 
     {false, value}
   end
@@ -3914,17 +3881,54 @@ class SyncCache(K, V)
   end
 end
 
-struct Cache(K, V)
-  def initialize(@capacity : Int32, *, preallocate : Bool)
+# FIFO fixed-capacity cache.
+#
+# TODO: this will obviously "leak" memory, in the sense that it keeps
+# pointers to K/V, and thus very large caches will keep in memory something
+# that may have been collected by the GC already. We need a WeakRef impl
+# of this, but as far as I understand, Hash based stuff is very clumsy with
+# WeakRef; so we'll probably have to consider a hand-written HAMT based solution.
+# But then finding the node to delete would be clumsy. We can do it as HAMT to
+# map key to index + Binary Tree but this requires balancing in any case if we
+# want some kind of order -- which is tough...
+#
+# TODO: lots of very hot places rely on this. split into buckets & in general
+# see SOTA parallel hashes !!! Sync Map is buggy and causes occasional deadlocks.
+class SyncCache(K, V)
+  include ICache(K, V)
+
+  def initialize(@capacity : Int32, *, preallocate : Bool, byref : Bool = false)
     if preallocate
       @data = Hash(K, V).new(initial_capacity: @capacity)
     else
       @data = {} of K => V
     end
+    @data.compare_by_identity if byref
+    @lock = Sync::RWLock.new
   end
 
-  def put_if_absent(key, &)
-    @data.put_if_absent(key) { yield }
+  def []?(key : K) : V?
+    @lock.read { @data[key]? }
+  end
+
+  def []=(key : K, value : V) : V
+    @lock.write do
+      if @data.size > @capacity
+        @data.delete(@data.first_key)
+      end
+      @data[key] = value
+    end
+  end
+end
+
+struct Uncached(K, V)
+  include ICache(K, V)
+
+  def []?(key : K) : V?
+  end
+
+  def []=(key : K, value : V) : V
+    value
   end
 end
 

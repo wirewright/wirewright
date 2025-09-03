@@ -40,7 +40,7 @@
 module Ww::Rack
   extend self
 
-  private alias D = Soma::DwUIR
+  private alias DwUIR = Soma::DwUIR
 
   # Represents the address of a device in the rack. We use indices of devices
   # in the rack as device addresses.
@@ -300,8 +300,8 @@ module Ww::Rack
 
       record None
 
-      record File, version : UInt32, conf : D::ShowConf, path : Path
-      record InMemory, version : UInt32, conf : D::ShowConf, id : Term
+      record File, version : UInt32, conf : DwUIR::ShowConf, path : Path
+      record InMemory, version : UInt32, conf : DwUIR::ShowConf, id : Term
 
       record BadSpec, spec : Term { include TransientPrior(None) }
       record BadTarget, target : Term { include TransientPrior(None) }
@@ -1061,11 +1061,11 @@ module Ww::Rack
           #
           # |@key backdrop soma.dwuir.color -- Determines the background (clear)
           # color of the resulting image.
-          conf = Term.matchpi?(spec, %{(window content_ ⍊ width_: (%number +i16) height_: (%number +i16) backdrop_⋮ white)}) do
-            D::ShowConf.new(
+          conf = Term.matchpi?(spec, %{(window content_* ⍊ width_: (%number +i16) height_: (%number +i16) backdrop_⋮ white)}) do
+            DwUIR::ShowConf.new(
               width: width.to(Int32),
               height: height.to(Int32),
-              backdrop: D::Color.term(backdrop, fallback: D::Color.named("white")),
+              backdrop: DwUIR::Color.term(backdrop, fallback: DwUIR::Color.named("white")),
               content: content,
             )
           end
