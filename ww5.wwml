@@ -202,7 +202,7 @@ states: {
 ;;
 
 (control-log {¦ log_dict ±scroll})
-  => (group style: "flow-col clip pan-b items-y-content gap-1" pan-y: ^scroll
+  => (group style: "clip pan-b" pan-y: ^scroll
        (group style: "flow-col y-content items-y-content gap-1"
          (^each ((chunks log (group [thread _string] _)) as chunk_)
            (control-log-entry
@@ -327,13 +327,14 @@ states: {
          (event-log-narration ^N)))
 
 (event-log {¦ log_dict ±scroll})
-  => (group style: "flow-col clip pan-b items-y-content gap-1 pb-1" pan-y: ^scroll
-       (^each ((chunks log (pattern [narration _])) as chunk_)
-         (^match chunk
-           (when (chunk children_*)
-             (event-log-narration-chunk ^*children))
-           (when (item entry_)
-             (event-log-entry ^entry)))))
+  => (group style: "clip pan-b" pan-y: ^scroll
+       (group style: "flow-col y-content items-y-content"
+         (^each ((chunks log (pattern [narration _])) as chunk_)
+           (^match chunk
+             (when (chunk children_*)
+               (event-log-narration-chunk ^*children))
+             (when (item entry_)
+               (event-log-entry ^entry))))))
 
 ;;
 ;; main
@@ -373,7 +374,7 @@ states: {
 (header info_dict)
   => (group style: "bg-neutral-800"
        (header-status ^info)
-       (group style: "fr content-r clip"
+       (group style: "fr content-r clip items-x-content"
          (header-device-brief ^info)))
 
 (header-device-brief info_dict)
