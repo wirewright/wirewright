@@ -19,6 +19,10 @@ I am working hard to package the hundreds of thousands of lines of "all over the
 
 https://github.com/user-attachments/assets/e86cb81d-67d7-45b8-8a68-7399e4fe367e
 
+### Frontend: Wirewright Rack
+
+<img width="1804" height="961" alt="Screenshot showing Wirewright Rack terminal UI atop UIR tests" src="https://github.com/user-attachments/assets/975fd033-b2d0-4745-827e-cb30ffd5a6f3" />
+
 ## Okay, but what *is* Wirewright?
 
 The short answer is, I don't know. Rephrased slightly, *Wirewright is a rewrite environment for self-embodied programs*.
