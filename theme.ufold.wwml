@@ -804,8 +804,8 @@ button: "font-sans font-normal text-sm bg-neutral-700 text-neutral-200 hover:bg-
 "root": (outermost-box {root: true})
 
 "content": (content-box {presence: true, x: true, y: true})
-"x-content": (content-box {presence: true, x: true})
-"y-content": (content-box {presence: true, y: true})
+"content-x": (content-box {presence: true, x: true})
+"content-y": (content-box {presence: true, y: true})
 "max": (content-box {presence: false})
 
 "sized": (sized-box {presence: true})
