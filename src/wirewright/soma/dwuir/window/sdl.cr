@@ -133,9 +133,9 @@ module Ww::Soma::DwUIR
     # Parses a window spec *spec* and returns the corresponding `Conf`, or `nil`
     # if parsing failed.
     #
-    # See also: `soma.dwuir.window.graphical` in doctool.
+    # See also: `soma.dwuir.window.os` in doctool.
     private def conf?(spec : Term) : Conf?
-      # |@ soma.dwuir.window.graphical
+      # |@ soma.dwuir.window.os
       #
       # |@block
       # Defines the properties of a system window to display *content*.

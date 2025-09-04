@@ -32,7 +32,13 @@ presets:
     {"execution_context": true,
      "newsoma": true,
      "preview_mt": true},
-   source: "src/vdwuir.cr"}}
+   source: "src/vdwuir.cr"},
+ "ww":
+  {flags:
+    {"execution_context": true,
+     "newsoma": true,
+     "preview_mt": true},
+   source: "src/ww.cr"}}
 
 protocol:
 "dev 0"

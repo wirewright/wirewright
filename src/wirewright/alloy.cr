@@ -14,6 +14,8 @@ module Ww::Alloy
   # templates or views into your term-of-choice.
   alias Expansion = Assign | Splice | Err
 
+  alias ExpansionCache = ICache(Term, Expansion)
+
   # Represents the expansion of the current term into one offspring term
   # (possibly the same term).
   record Assign, term : Term
@@ -960,7 +962,7 @@ module Ww::Alloy
     end
   end
 
-  private def renderX0(ruleset : Ruleset, cache : ICache(Term, Expansion), keypath : Stack(Term), view : Term, issues : Issue::Sink) : Expansion
+  private def renderX0(ruleset : Ruleset, cache : ExpansionCache, keypath : Stack(Term), view : Term, issues : Issue::Sink) : Expansion
     responses = ruleset.responses(view)
     responses.each do |response|
       pr, rule = response
@@ -1034,7 +1036,7 @@ module Ww::Alloy
   # TODO: limit recursion depth.
   def renderX(
     ruleset : Ruleset,
-    cache : ICache(Term, Expansion),
+    cache : ExpansionCache,
     keypath : Stack(Term),
     view : Term,
     issues : Issue::Sink,
@@ -1065,7 +1067,7 @@ module Ww::Alloy
   # Consider non-X overloads (e.g. `render`) before use.
   def renderX(
     ruleset : Ruleset,
-    cache : ICache(Term, Expansion),
+    cache : ExpansionCache,
     view : Term, *,
     severity : Issue::Severity,
   ) : {Expansion, Array(Issue::Backtrace)}
@@ -1106,7 +1108,7 @@ module Ww::Alloy
     ruleset : Ruleset,
     view : Term, *,
     severity : Issue::Severity = :minor,
-    cache : ICache(Term, Expansion) = Uncached(Term, Expansion).new,
+    cache : ExpansionCache = Uncached(Term, Expansion).new,
   ) : {Term, Array(Issue::Backtrace)}
     expansion, issues = renderX(ruleset, cache, view, severity: severity)
 

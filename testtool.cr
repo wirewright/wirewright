@@ -1,7 +1,4 @@
 require "./src/wirewright"
-require "./libtermbox2"
-
-require "compress/gzip"
 
 PEOPLE = Term.of(JSON.parse(File.read("data/people.json")))
 

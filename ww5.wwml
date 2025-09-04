@@ -1,0 +1,430 @@
+--- model
+
+;; This will be populated at runtime, but let's keep them for a reminder
+;; that they exist.
+viewport: {
+  width: 80,
+  height: 24,
+}
+
+focus: {
+  targets: (input control-pane events-pane),
+  index: 0,
+}
+
+help:
+  (section "General"
+    (table
+      ("help" "Shows this message")
+      ("rack" "Addresses the rack. Use `rack help` for help")))
+
+states: {
+  header: {},
+  control-pane: {
+    log: ((banner)),
+    scroll: 0,
+  },
+  events-pane: {
+    log: (),
+    scroll: 0,
+  },
+  command-input: {
+    model: (submission (() (<|> ("" | "")) -|- () ()) ready),
+    state: unlocked,
+  },
+}
+
+
+--- view
+
+;;
+;; Icons
+;;
+
+(icon ok) => "\ueab2"
+(icon warning) =>  "\u{f06bd}"
+(icon comment) => "\uf0e5"
+(icon error) => "\uea87"
+(icon note) => "\uf24a"
+(icon rack) => "\u{eabe}"
+(icon help) => "\u{f078b}"
+(icon image) => "\uf03e"
+(icon window) => "\ueb7f"
+(icon ticker) => "\u{f051b}"
+(icon file) => "\uf0c5"
+(icon scroll-up) => "\uf102"
+(icon scroll-dn) => "\uf103"
+(icon checkmark) => "\uf05d"
+(icon hourglass) => "\uf252"
+(icon keyboard) => "\uf11c"
+(icon circle-outline) => "\uf10c"
+(icon circle) => "\uf111"
+
+
+;;
+;; input-area
+;;
+
+;; Handle submission wrapper.
+(input-area [submission child_ _])
+ => (input-area ^child)
+
+;; Handle history.
+(input-area [(_*) current_ -|- (_*) (_*)])
+  => (input-area ^current)
+
+;; Handle active or inactive selection with left or right bearing.
+(input-area [(%any <-> <\>) l_string [m_string | r_string]])
+  => (p ^(~ l m r) selection-anchor: ^(charcount l) selection-span: ^(charcount m))
+(input-area [(%any <-> <\>) [l_string | m_string] r_string])
+  => (p ^(~ l m r) selection-anchor: ^(charcount l) selection-span: ^(charcount m))
+
+;; Handle cursor.
+(input-area [<|> [l_string | r_string]])
+  => (p ^(~ l r) selection-anchor: ^(charcount l) selection-span: 0)
+
+;; Fallback.
+(input-area model_)
+  => (p ^\model)
+
+
+;;
+;; control-log-entry
+;;
+
+(control-log-entry (banner))
+  => (group style: "flow-col border-l-sm border-neutral-600 text-neutral-400 px-1"
+       (p (icon help) "Wirewright Rack" style: "text-neutral-400 font-bold gap-1")
+       (p style: "pretty"
+         "Rack is a general-purpose tool to make Wirewright subsystems talk to each other.
+          • Hit Ctrl-C to quit.
+          • Type `help` and `rack help` to learn more.
+          • Use Tab and Shift-Tab to cycle through focus targets."))
+
+(control-log-entry (thread command_string replies_*))
+  => (group style: "flow-col gap-1"
+       (group style: "gap-1 font-bold text-neutral-100"
+         (p ">")
+         (p ^command))
+       (group style: "flow-col text-neutral-200"
+         (^each (replies as reply_)
+           (control-log-reply ^reply))))
+
+;; Fallback.
+(control-log-entry term_)
+  => (p ^\term)
+
+
+;;
+;; control-log-reply
+;;
+
+(control-log-reply (error ⍊ title_ traceback⋮ () detail_))
+  => (group style: "flow-col px-1 border-l-lg border-red-500"
+       (p "\uea87" ^title style: "font-bold gap-1 text-red-300 upcase")
+       (group style: "flow-col text-neutral-200"
+         (^match traceback
+           (when ()
+             (p ^detail))
+           (when _
+             "Traceback:"
+             (^each (traceback as entry_)
+                (p "in" (p ^entry style: "font-bold text-neutral-100") style: "gap-1"))
+             ^detail))))
+
+(control-log-reply (help desc_*))
+  => (control-log-help ^desc)
+
+(control-log-reply (list items_*))
+  => (group style: "flow-col"
+       (^each (items as item_)
+         (group style: "gap-1"
+           (p "-" style: "text-neutral-600")
+           (control-log-reply ^item))))
+
+(control-log-reply (%'edge name_))
+  => (p ^"@⸢name⸣" style: "text-blue-300")
+
+(control-log-reply (device type_symbol ⍊ ±addr status_))
+  => (group style: "gap-1"
+       (p style: "gap-1"
+         (icon ^type) ^\type (p ^\addr style: "font-bold"))
+       (^match status
+         (when none
+           (p style: "text-neutral-600"
+             (icon circle-outline)))
+         (when _
+           (p style: "text-neutral-600 status-active:text-green-500"
+              status: ^status
+             (icon circle)))))
+
+;; Fallback.
+(control-log-reply term_)
+  => (p ^\term)
+
+
+;;
+;; control-log-help
+;;
+
+(control-log-help items_dict)
+  => (group style: "flow-col gap-1"
+       (^each (items as item_)
+         (control-log-help ^item)))
+
+(control-log-help (section title_string child_))
+  => (group style: "flow-col"
+       (p ^title style: "border-l border-blue-300 px-1 upcase text-blue-300")
+       (group style: "px-2"
+         (control-log-help ^child)))
+
+;; I tried printing it as an actual table but that looks very bad, esp.
+;; with longer commands or description.
+(control-log-help (table commands_*))
+  => (group style: "flow-col"
+       (^each (commands as (command_string description_string))
+         (p ^command style: "text-neutral-100 font-bold")
+         (p ^description style: "text-neutral-300 ml-1")))
+
+;; Fallback.
+(control-log-help term_)
+  => (p ^\term)
+
+
+;;
+;; control-log
+;;
+
+(control-log {¦ log_dict ±scroll})
+  => (group style: "flow-col clip pan-b items-y-content gap-1" pan-y: ^scroll
+       (group style: "flow-col y-content items-y-content gap-1"
+         (^each ((chunks log (group [thread _string] _)) as chunk_)
+           (control-log-entry
+             (^match chunk
+               (when (chunk leader←[thread _string] followers_*)
+                 ^(cat leader followers))
+               (when (item entry_) ^entry))))))
+
+
+;;
+;; event-log-narration
+;;
+
+(narration-entry children_*)
+  => (p style: "text-neutral-300 flow-wrap"
+       (^each (children as child_)
+         (^match child
+           (when _string (^* (wordwise child)))
+           (when _ ^child))))
+
+(event-log-narration (rack activated path_string))
+  => (narration-entry (icon rack) " Rack " (p ^path style: "underline") " is currently active.")
+
+(event-log-narration (rack deactivated path_string))
+  => (narration-entry (icon rack) " Deactivated rack " (p ^path style: "underline") ".")
+
+(event-log-narration (window open addr_))
+  => (narration-entry (icon window) ^" Window owned by device#⸢addr⸣ is now open.")
+
+(event-log-narration (window closed addr_))
+  => (narration-entry (icon window) ^" Window owned by device#⸢addr⸣ is now closed.")
+
+(event-log-narration (file pending addr_ path_string))
+  => (narration-entry (icon file) " File " (p ^path style: "underline") " is pending, as requested by device#" ^\addr ".")
+
+(event-log-narration (file loaded addr_ path_string))
+  => (narration-entry (icon file) " File " (p ^path style: "underline") " was loaded successfully, as requested by device#" ^\addr ".")
+
+(event-log-narration (file reloaded addr_ path_string))
+  => (narration-entry (icon file) " File " (p ^path style: "underline") ", owned by device#" ^\addr ", was reloaded due to changes on disk.")
+
+(event-log-narration (file unloaded _ path_string))
+  => (narration-entry (icon file) " File " (p ^path style: "underline") " was unloaded.")
+
+(event-log-narration (ticker running addr_))
+  => (narration-entry (icon ticker) ^" Ticker device#⸢addr⸣ is running.")
+
+(event-log-narration (ticker not-running addr_))
+  => (narration-entry (icon ticker) ^" Ticker device#⸢addr⸣ is not running anymore.")
+
+(event-log-narration (image drawing addr_ path_string))
+  => (narration-entry (icon image) " Image " (p ^path style: "underline") " is being drawn, as requested by device#" ^\addr ".")
+
+(event-log-narration (image drawn addr_ path_string))
+  => (narration-entry (icon image) " Image " (p ^path style: "underline") " was successfully drawn, as requested by device#" ^\addr ".")
+
+
+;;
+;; event-log-entry
+;;
+
+(log-print-card ⍊ icon_ title_string body_string accent_)
+  => (group style: "border-l-sm border-{accent}-500 px-1 flow-col" accent: ^accent
+       (p ^icon ^title style: "font-bold text-{accent}-400 flow-row gap-1" accent: ^accent)
+       (p ^body style: "text-neutral-300"))
+
+(event-log-entry (comment body_string))
+  => (p (icon comment) ^body style: "text-neutral-300 flow-row gap-1")
+
+(event-log-entry (note body_string))
+  => (log-print-card icon: (icon note) title: "NOTE" body: ^body accent: blue)
+
+(event-log-entry (warning body_string))
+  => (log-print-card icon: (icon warning) title: "WARNING" body: ^body accent: orange)
+
+(event-log-entry (error body_string))
+  => (log-print-card icon: (icon error) title: "ERROR" body: ^body accent: red)
+
+;; Fallback
+(event-log-entry term_)
+  => (p ^\term)
+
+
+;;
+;; event-log
+;;
+
+(event-log-narration-chunk narrations_*)
+  => (group style: "border-l-sm border-neutral-600 flow-col px-1"
+       (^each (narrations as (narration N_))
+         (event-log-narration ^N)))
+
+(event-log {¦ log_dict ±scroll})
+  => (group style: "flow-col clip pan-b items-y-content gap-1 pb-1" pan-y: ^scroll
+       (^each ((chunks log (pattern [narration _])) as chunk_)
+         (^match chunk
+           (when (chunk children_*)
+             (event-log-narration-chunk ^*children))
+           (when (item entry_)
+             (event-log-entry ^entry)))))
+
+;; --------------
+
+(pane title_string content_)
+  => (group style: "flow-col border-xs rounded border-neutral-800 in-focused:border-green-900"
+       (p ^title style: "z-10 floating-y -dt-1 center text-neutral-400 font-bold bg-neutral-800 in-focused:bg-green-900 in-focused:text-green-100 upcase px-1")
+       (group style: "fr px-2"
+         ^content))
+
+(prompt model_)
+  => (group style: "membrane in-focused:cue-active"
+       (group style: "border-xs border-neutral-700 in-active:border-green-700 gap-2 px-2 rounded"
+         (p ">" style: "text-neutral-700 in-active:text-green-600 font-bold")
+         (group style: "fr text-neutral-400 in-active:text-neutral-100 in-active:selection selection-text-neutral-300 selection-neutral-800 in-active:selection-green-900 in-active:selection-text-white"
+           (input-area ^model))))
+
+(command-input {¦ state: unlocked model_ })
+  => (prompt ^model)
+
+(command-input {¦ state: locked})
+  => (p style: "px-2 py-1 bg-neutral-800 text-neutral-300 font-bold content-center gap-1"
+       (icon hourglass) "Input is locked while the rack responds...")
+
+(header-status info_dict)
+  => (group style: "gap-1 membrane has-loaded:cue-loaded"
+       (p (icon checkmark) style: "px-1 text-green-950 bg-green-300 absent in-loaded:present cue-loaded:in-busy:absent")
+       (p (icon hourglass) style: "px-1 text-orange-950 bg-orange-300 absent in-loaded:in-busy:present")
+       (p (icon warning) style: "px-1 font-bold text-red-950 bg-red-500 present in-loaded:absent")
+       (^match info
+         (when {¦ rackpath_string}
+           (p ^rackpath style: "is-loaded text-neutral-300"))
+         (when _
+           (p "Rack not loaded" style: "upcase font-bold text-red-300"))))
+
+(header info_dict)
+  => (group style: "bg-neutral-800"
+       (header-status ^info)
+       (group style: "fr content-r clip"
+         (header-device-brief ^info)))
+
+(header-device-brief info_dict)
+  => (group
+       (header-windows-brief ^info)
+       (header-files-brief ^info))
+
+(header-badge icon_ caption_ ¦ props_)
+  => (group style: "flow-row gap-1 text-neutral-400 highlight:font-bold highlight:text-neutral-100 px-1"
+       (p ^icon)
+       (p ^caption)
+       ^… props)
+
+(files-badge ±n ¦ props_)
+  => (header-badge (icon file) ^"⸢n⸣ file(s)" ^… props)
+
+(header-item item_)
+  => (^splice (p "|" style: "present (first):absent") ^item)
+
+(header-windows-brief {¦ agents: {¦ windows: (%entry° ±addr status←(%any open closed))}})
+  => (header-item (header-badge (icon window) ^\addr highlight: ^(= status open)))
+
+(header-files-brief {¦ agents: {¦ files_}})
+  => (header-item (files-badge ^(tally files) highlight: true))
+
+(sep-list separator_ data_*)
+  => (group
+       (^each (data item as (datum_ index_))
+          (group
+            (^if (> index 0)
+              ^separator)
+            ^datum)))
+
+(main target_ states_ ⍊ layout⋮ vertical)
+  => (group style: "gap-1 flow-col layout-horizontal:flow-row fr" layout: ^layout
+       (group style: "fr-2 focused:cue-focused" focused: ^(= target (literal events-pane))
+         (pane "Events"
+           (event-log (^. states events-pane))))
+       (group style: "fr-3 focused:cue-focused" focused: ^(= target (literal control-pane))
+         (pane "Control"
+           (group style: "flow-col gap-1"
+             (group style: "fr"
+               (control-log (^. states control-pane)))
+             (group style: "membrane focused:cue-focused" focused: ^(= target (literal input))
+               (command-input (^. states command-input)))))))
+
+(hint-card ⍊ title_string description_string keys_dict)
+  => (group style: "flow-col text-neutral-200"
+       (p (icon help) ^title style: "font-bold text-neutral-100 gap-1")
+       (p ^description)
+       (p (icon keyboard) "Keys" style: "mt-1 gap-1")
+       (^each (keys as (key_string action_string))
+         (p "- Use " (p ^key style: "underline") " to " ^(downcase action) style: "flow-wrap")))
+
+(hint-for events-pane)
+  => (hint-card
+       title: "Events pane"
+       description: "This pane shows events and narrations coming from the Rack Server process."
+       keys:
+        (("Up Arrow" "Scroll up")
+         ("Down Arrow" "Scroll down")
+         ("Page Dn" "Scroll to bottom")
+         ("Backspace" "Clear")))
+
+(hint-for control-pane)
+  => (hint-card
+       title: "Control pane"
+       description: "This pane shows the commands you've entered and Rack's replies to them."
+       keys:
+        (("Up Arrow" "Scroll up")
+         ("Down Arrow" "Scroll down")
+         ("Page Dn" "Scroll to bottom")
+         ("Backspace" "Clear")))
+
+(window style: "root backdrop-neutral-900 clip flow-col px-2 pt-1 z-scope"
+        width: (^. viewport width)
+        height: (^. viewport height)
+  (^match' (focus {¦ ±index targets_dict})
+    (^let target: (part targets (key index default: (literal none)))
+      (group style: "flow-col gap-1 fr"
+        (header (^. states header))
+        (group style: "fr flow-col"
+          (^match viewport
+            (when {¦ width: (%number _ < 120)}
+              (main ^target ^states layout: vertical))
+            (when _
+              (^unless (= target input)
+                (group style: "floating-y content-r -dt-3 dl-2 z-1"
+                  (group style: "max-w-2xl bg-neutral-700 border-r-3xl border-neutral-600 px-2 py-1"
+                    (hint-for ^target))))
+              (group style: "fr"
+                (main ^target ^states layout: horizontal)))))))))
+

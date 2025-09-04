@@ -28,16 +28,14 @@ require "../pattern7"
 require "../baz5"
 require "../delta7_proto2"
 require "../primitives"
+require "../libtermbox2"
+require "../inputrewr"
 
 {% if flag?(:newsoma) %}
   require "./wirewright/rack"
 {% end %}
 
-# {% if flag?(:alloy) %}
 require "./wirewright/alloy"
-# {% else %}
-#   require "../templ"
-# {% end %}
 
 {% if flag?(:release) %}
   Log.setup_from_env(default_level: :warn, backend: Log::IOBackend.new(STDERR))
@@ -46,7 +44,24 @@ require "./wirewright/alloy"
 {% end %}
 
 module Ww
+  VERSION = "0.0.0-kappa"
+
+  # TODO: move resources into runtime
+
   RESOURCES = Path[ENV["SOMA_RESOURCES_DIR"]? || Dir.current]
+
+  # TODO: This is lame!! We must have much more control over when all these
+  # checks happen.
+  RUNTIME_PATH = begin
+    candidates = {
+      ENV["WW_RUNTIME"]?.try { |string| Path[string] },
+      Process.executable_path.try { |string| Path[string].parent / "runtime" },
+      Path[Dir.current] / "runtime",
+    }
+
+    rtpath = candidates.find { |candidate| candidate && Dir.exists?(candidate) }
+    rtpath || abort "Wirewright runtime directory not found"
+  end
 
   MT = Fiber::ExecutionContext::MultiThreaded.new("Wirewright", System.cpu_count.to_i)
 

@@ -396,4 +396,4 @@ module Ww::Soma::DwUIR
 end
 
 require "./window/sdl"
-require "./window/terminal"
+require "./window/console"

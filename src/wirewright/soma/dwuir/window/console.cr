@@ -1,10 +1,10 @@
 module Ww::Soma::DwUIR
   # Window implementation to display textual DwUIR in a terminal.
   #
-  # NOTE: You must explicitly initialize `Terminal` first, by wrapping your
+  # NOTE: You must explicitly initialize `Console` first, by wrapping your
   # code in `setup`. You will normally do this somewhere near the top-level,
   # or at the top-level.
-  module Window::Terminal
+  module Window::Console
     extend self
 
     alias Any = None | Some
@@ -16,7 +16,7 @@ module Ww::Soma::DwUIR
     defcase Conf, backdrop : Color, content : Term
 
     private def conf?(spec : Term) : Conf?
-      # |@ soma.dwuir.window.textual
+      # |@ soma.dwuir.window.console
       #
       # |@block
       # Defines the properties of the terminal that will display *content*.
@@ -155,7 +155,7 @@ module Ww::Soma::DwUIR
     # Sets up exit and interrupt handlers to shutdown Termbox properly.
     def setup(&) : Nil
       if @@ready
-        raise "Attempt to initialize Window::Terminal twice"
+        raise "Attempt to initialize Window::Console twice"
       end
 
       shutdown = -> do
@@ -186,7 +186,7 @@ module Ww::Soma::DwUIR
     private def check_ready! : Nil
       return if @@ready
 
-      raise "use `Window::Terminal.setup(&) to initialize before calling this method"
+      raise "use `Window::Console.setup(&) to initialize before calling this method"
     end
 
     # Whether the Shift key was pressed in the previous event.
