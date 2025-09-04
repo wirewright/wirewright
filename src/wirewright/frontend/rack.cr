@@ -1,5 +1,4 @@
-# Wirewright Rack frontend to Wirewright. Consists of the Rack server and
-# a terminal UI client app.
+# Wirewright Rack command-line interface.
 module Ww::Frontend::Rack
   private alias Textual = Soma::DwUIR::Textual
   private alias Console = Soma::DwUIR::Window::Console
@@ -391,33 +390,28 @@ module Ww::Frontend::Rack
       events = Channel(Term).new
       requests = Channel(Term).new
       responses = Channel(Term).new
-      close = Channel(Exception?).new
+      terminate = Channel(Exception?).new
 
       # This fiber will listen for terminal events.
       spawn do
         loop do
-          Console.wait { |event| events.send(event) }
+          # NOTE: Console.wait appears to freeze everything periodically, or at least I am
+          # suspecting it to.
+          Console.poll { |event| events.send(event) }
+          sleep 30.milliseconds
         end
-      rescue Channel::ClosedError
-        try_send(close, nil)
       rescue e
-        try_send(close, e)
-      else
-        try_send(close, nil)
+        try_send(terminate, e)
       end
 
       # This fiber will encode and send requests to the server process.
       spawn do
-        while request = requests.receive?
+        while request = requests.receive
           server.input.puts ML.compact(request)
           server.input.flush
         end
-      rescue Channel::ClosedError
-        try_send(close, nil)
       rescue e
-        try_send(close, e)
-      else
-        try_send(close, nil)
+        try_send(terminate, e)
       end
 
       # This fiber will receive and decode responses from the server process.
@@ -425,12 +419,10 @@ module Ww::Frontend::Rack
         while input = server.output.gets
           responses.send(ML.term(input))
         end
-      rescue Channel::ClosedError
-        try_send(close, nil)
       rescue e
-        try_send(close, e)
+        try_send(terminate, e)
       else
-        try_send(close, nil)
+        try_send(terminate, nil)
       end
 
       state = boot(files,
@@ -439,27 +431,32 @@ module Ww::Frontend::Rack
         console: Console::None.new,
       )
 
-      if initial
-        state = request(state, Term.of(initial), Term.of(:load, initial))
-      end
-
-      loop do
-        state = self.next(state)
-
-        select
-        when event = events.receive
-          break unless event
-
-          state = self.next(state, event: event)
-        when response = responses.receive
-          state = self.next(state, response: response)
-        when reason = close.receive
-          break unless reason
-
-          raise reason
+      begin
+        if initial
+          state = request(state, Term.of(initial), Term.of(:load, initial))
         end
 
-        break if state.console.is_a?(Console::None)
+        loop do
+          state = self.next(state)
+
+          select
+          when event = events.receive
+            state = self.next(state, event: event)
+          when response = responses.receive
+            state = self.next(state, response: response)
+          when reason = terminate.receive
+            break unless reason
+
+            raise reason
+          end
+
+          break if state.console.is_a?(Console::None)
+        end
+      ensure
+        terminate.close
+        events.close
+        requests.close
+        responses.close
       end
     end
 

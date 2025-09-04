@@ -145,6 +145,12 @@ states: {
 (control-log-reply (%'edge name_))
   => (p ^"@⸢name⸣" style: "text-blue-300")
 
+(control-log-reply (device-at addr←(%number +i32) device_))
+  => (group
+       (p ^\addr style: "text-blue-300")
+       (p "|" style: "text-neutral-500")
+       (p ^\device style: "ml-1 text-neutral-300"))
+
 (control-log-reply (device type_symbol ⍊ ±addr status_))
   => (group style: "gap-1"
        (p style: "gap-1"
@@ -275,6 +281,37 @@ states: {
 (event-log-entry (error body_string))
   => (log-print-card icon: (icon error) title: "ERROR" body: ^body accent: red)
 
+(log-error-card title_string ¦ rest_ severity⋮ major ±addr detail_string)
+  => (group style: "border-l-sm border-red-500 severity-minor:border-orange-500 severity-note:border-blue-500 px-1 flow-col gap-1 text-neutral-400" severity: ^severity
+       (p (icon error) ^"⸢title⸣ in device#⸢addr⸣" style: "font-bold text-red-400 severity-minor:text-orange-400 severity-note:text-blue-400 flow-row gap-1" severity: ^severity)
+       (group style: "flow-col"
+         (^match severity
+           (when minor (p "* This issue's severity is `minor`, meaning it may be a false positive."))
+           (when note (p "* This issue's severity is `note`, meaning it is a comment about the algorithm's decision of some kind.")))
+         ;; File module.
+         (^match rest
+           ;; Print path, line, and column, if they are all available.
+           (when {¦ path_string ±line ±column}
+             (p style: "flow-wrap gap-x-1"
+               "In file"
+               (p ^path ":" ^\line ":" ^\column style: "flow-row underline font-bold text-neutral-200")))
+            ;; Print path if only path is available.
+           (when {¦ path_string}
+             (p style: "flow-wrap gap-x-1"
+               "In file"
+               (p ^path style: "flow-row underline font-bold text-neutral-200"))))
+         ;; Code module: print code if available.
+         (^match' (rest {¦ code_string})
+           (p ^code style: "pretty px-2 py-1 mt-1 (first):mt-0 bg-neutral-950")))
+       (p ^detail style: "text-neutral-300 capitalize"))
+
+(event-log-entry (error ml ¦ rest_)) => (log-error-card "Syntax error" ^… rest)
+(event-log-entry (error microfold ¦ rest_)) => (log-error-card "Microfold issue" ^… rest)
+(event-log-entry (error alloy ¦ rest_)) => (log-error-card "Alloy issue" ^… rest)
+(event-log-entry (error source ¦ rest_)) => (log-error-card "Source error" ^… rest)
+(event-log-entry (error ticker ¦ rest_)) => (log-error-card "Ticker error" ^… rest)
+(event-log-entry (error image ¦ rest_)) => (log-error-card "Image error" ^… rest)
+
 ;; Fallback
 (event-log-entry term_)
   => (p ^\term)
@@ -298,7 +335,9 @@ states: {
            (when (item entry_)
              (event-log-entry ^entry)))))
 
-;; --------------
+;;
+;; main
+;;
 
 (pane title_string content_)
   => (group style: "flow-col border-xs rounded border-neutral-800 in-focused:border-green-900"
@@ -370,10 +409,10 @@ states: {
 
 (main target_ states_ ⍊ layout⋮ vertical)
   => (group style: "gap-1 flow-col layout-horizontal:flow-row fr" layout: ^layout
-       (group style: "fr-2 focused:cue-focused" focused: ^(= target (literal events-pane))
+       (group style: "fr-6 focused:cue-focused" focused: ^(= target (literal events-pane))
          (pane "Events"
            (event-log (^. states events-pane))))
-       (group style: "fr-3 focused:cue-focused" focused: ^(= target (literal control-pane))
+       (group style: "fr-7 focused:cue-focused" focused: ^(= target (literal control-pane))
          (pane "Control"
            (group style: "flow-col gap-1"
              (group style: "fr"
