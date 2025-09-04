@@ -5,13 +5,6 @@ presets:
 {"dev":
   {flags: {"execution_context": true, "preview_mt": true},
    source: "src/dev.cr"},
- "dwuir2ppm":
-  {flags:
-    {"dwuir2ppm": true,
-     "execution_context": true,
-     "newsoma": true,
-     "preview_mt": true},
-   source: "src/dwuir2ppm.cr"},
  "mt":
   {flags: {"execution_context": true, "preview_mt": true}},
  "soma":
@@ -27,12 +20,6 @@ presets:
      "newsoma": true,
      "preview_mt": true},
    source: "testtool.cr"},
- "vdwuir":
-  {flags:
-    {"execution_context": true,
-     "newsoma": true,
-     "preview_mt": true},
-   source: "src/vdwuir.cr"},
  "ww":
   {flags:
     {"execution_context": true,
