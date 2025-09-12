@@ -358,9 +358,10 @@ module Ww
     end
 
     {% for method in %w[as_n as_s as_b as_sym as_d] %}
-      # Same as `{{method.id}}?`, but raises `TypeCastError` instead of returning `nil`.
-      def {{method.id}}
-        {{method.id}}? || raise TypeCastError.new
+      # Same as `{{method.id}}?`, but raises `TypeCastError` with *detail*
+      # instead of returning `nil`.
+      def {{method.id}}(detail : String? = nil)
+        {{method.id}}? || raise TypeCastError.new(detail)
       end
 
       # Map-like function to transform terms that downcast using `{{method.id}}?`
@@ -900,7 +901,7 @@ module Ww
     end
 
     def self.case(matchee, *, engine : Engine.class = M1, **kwargs, &) forall Engine
-      context = CaseContext(Engine).new(Term.of(matchee), **kwargs)
+      context = CaseContext(Engine).new(Term.of(matchee), **kwargs).as(CaseContext(Engine))
 
       with context yield context
 
@@ -922,9 +923,9 @@ module Ww
     #   otherwise { }
     # end
     # ```
-    macro matchpi?(term, pattern, **kwargs, &block)
+    macro matchpi?(term, *patterns, **kwargs, &block)
       ::Ww::Term.case({{term}}, {{kwargs.double_splat}}) do
-        matchpi({{pattern}}) {{block}}
+        matchpi({{patterns.splat}}) {{block}}
         otherwise { }
       end
     end
@@ -938,9 +939,9 @@ module Ww
     #   end
     # end
     # ```
-    macro matchpi(term, pattern, **kwargs, &block)
+    macro matchpi(term, *patterns, **kwargs, &block)
       ::Ww::Term.case({{term}}, {{kwargs.double_splat}}) do
-        matchpi({{pattern}}) {{block}}
+        matchpi({{patterns.splat}}) {{block}}
       end
     end
 
@@ -955,9 +956,9 @@ module Ww
     #   otherwise { }
     # end
     # ```
-    macro givenpi?(term, pattern, **kwargs, &block)
+    macro givenpi?(term, *patterns, **kwargs, &block)
       ::Ww::Term.case({{term}}, {{kwargs.double_splat}}) do
-        givenpi({{pattern}}) {{block}}
+        givenpi({{patterns.splat}}) {{block}}
         otherwise { }
       end
     end
@@ -971,9 +972,9 @@ module Ww
     #   end
     # end
     # ```
-    macro givenpi(term, pattern, **kwargs, &block)
+    macro givenpi(term, *patterns, **kwargs, &block)
       ::Ww::Term.case({{term}}, {{kwargs.double_splat}}) do
-        givenpi({{pattern}}) {{block}}
+        givenpi({{patterns.splat}}) {{block}}
       end
     end
   end
@@ -985,7 +986,20 @@ module Ww
   # at the moment.
 
   struct Term
-    def self.morph(term root : Term::Dict, keypath : Enumerable(Term), & : Term -> Term) : Term::Dict
+    module Last
+    end
+
+    module AfterLast
+    end
+
+    alias Anchor = Last.class | AfterLast.class
+
+    module Absent
+    end
+
+    alias Action = Absent.class
+
+    def self.morph(term root : Term::Dict, keypath : Indexable, & : Term -> Term | Action) : Term::Dict
       stack = Stack({Term::Dict, Term}).new
       tip = Term.of(root)
 
@@ -996,6 +1010,15 @@ module Ww
         end
 
         node = tip.unsafe_as_d
+
+        case key
+        in Term
+        in Last.class
+          key = Term.of(node.itemsize - 1)
+        in AfterLast.class
+          key = Term.of(node.itemsize)
+        end
+
         unless value = node[key]?
           # Abort, value does not exist.
           return root
@@ -1015,15 +1038,39 @@ module Ww
 
       while entry = stack.pop?
         parent, key = entry
-        tip = Term.of(parent.with(key, tip))
+
+        case tip
+        in Term
+          tip = Term.of(parent.with(key, tip))
+        in Absent.class
+          tip = Term.of(parent.without(key))
+        end
       end
 
-      tip.unsafe_as_d
+      tip.as(Term).unsafe_as_d
+    end
+
+    def self.morph(term : Term, keypath : Indexable, &) : Term
+      if keypath.empty?
+        result = yield term
+        if result.is_a?(Action)
+          raise ArgumentError.new("cannot execute action on the toplevel term")
+        end
+        return result
+      end
+
+      term.as_d do |dict|
+        morph(dict, keypath) { |value| yield value }
+      end
     end
 
     def self.morph(term, *args, &)
-      morph(term, args.map { |arg| Term.of(arg) }) do |leaf|
-        Term.of(yield leaf)
+      morph(term, args.map { |arg| arg.is_a?(Anchor) ? arg : Term.of(arg) }) do |leaf|
+        result = yield leaf
+        unless result.is_a?(Action)
+          result = Term.of(result)
+        end
+        result
       end
     end
 
@@ -1177,11 +1224,11 @@ module Ww
       each_keypath_and_leaf?(node: node.downcast, prefix: Stack(Term).new, fn: fn)
     end
 
-    private def self.each_keypath_and_item?(node : Term::Dict, prefix : Stack(Term), fn : Stack(Term), Term -> Bool) : Bool
+    private def self.each_keypath_and_item_leaf?(node : Term::Dict, prefix : Stack(Term), fn : Stack(Term), Term -> Bool) : Bool
       node.items.each_with_index do |item, index|
         prefix.push(Term.of(index))
 
-        break unless each_keypath_and_item?(item.downcast, prefix, fn)
+        break unless each_keypath_and_item_leaf?(item.downcast, prefix, fn)
       ensure
         prefix.pop
       end
@@ -1189,12 +1236,12 @@ module Ww
       true
     end
 
-    private def self.each_keypath_and_item?(node, prefix : Stack(Term), fn : Stack(Term), Term -> Bool) : Bool
+    private def self.each_keypath_and_item_leaf?(node, prefix : Stack(Term), fn : Stack(Term), Term -> Bool) : Bool
       fn.call(prefix, node.upcast)
     end
 
-    def self.each_keypath_and_item(node : Term, &fn : Stack(Term), Term -> Bool) : Nil
-      each_keypath_and_item?(node: node.downcast, prefix: Stack(Term).new, fn: fn)
+    def self.each_keypath_and_item_leaf(node : Term, &fn : Stack(Term), Term -> Bool) : Nil
+      each_keypath_and_item_leaf?(node: node.downcast, prefix: Stack(Term).new, fn: fn)
     end
 
     module Patch

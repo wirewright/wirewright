@@ -158,7 +158,7 @@ PRIMITIVES = ProcRuleset.build do
   # Flattens itemspart of *xs*, its items and so on, recursively.
   rulepi1 %[(flatten xs_)] do
     Term::Dict.build do |commit|
-      Term.each_keypath_and_item(xs) do |_, leaf|
+      Term.each_keypath_and_item_leaf(xs) do |_, leaf|
         commit << leaf
 
         true # Continue
