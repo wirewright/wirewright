@@ -181,6 +181,9 @@ module Ww
 
     # :nodoc:
     def initialize(@mem : Void*)
+      if @mem.null?
+        raise ArgumentError.new
+      end
     end
 
     # Returns the underlying tagged pointer.
