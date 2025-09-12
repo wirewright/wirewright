@@ -72,7 +72,7 @@ module Ww::Soma::DwUIR
 
       screen = window.screen
 
-      if beam = screen.beam?
+      if (beam = screen.beam?) && beam[0].in?(0...maxx) && beam[1].in?(0...maxy)
         LibTermbox2.tb_set_cursor(*beam)
       else
         LibTermbox2.tb_hide_cursor
