@@ -217,6 +217,16 @@ module Ww
         concat(ee, &.itself)
       end
 
+      def selected(ee : Enumerable(T), cls : U.class, & : U -> _) : self forall T, U
+        ee.each do |object|
+          next unless object.is_a?(U)
+
+          append(yield object)
+        end
+
+        self
+      end
+
       def selected(ee : Enumerable(T), & : T -> Bool) : self forall T
         ee.each do |object|
           next unless yield object
