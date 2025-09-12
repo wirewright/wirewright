@@ -269,12 +269,12 @@ module Ww::Soma::DwUIR
 
       {% begin %}
         if @@shift && !event.mod.shift?
-          dispatch(Event::KeyUp.new(Event::Key::Sl, ctrl: false, shift: true, alt: false), syn: true, &ambiguous(fn))
-          dispatch(Event::KeyUp.new(Event::Key::Sr, ctrl: false, shift: true, alt: false), syn: true, &ambiguous(fn))
+          dispatch(Event::KeyUp.new(Event::Key::Sl, ctrl: false, shift: false, alt: false), syn: true, &ambiguous(fn))
+          dispatch(Event::KeyUp.new(Event::Key::Sr, ctrl: false, shift: false, alt: false), syn: true, &ambiguous(fn))
           @@shift = false
         elsif !@@shift && event.mod.shift?
-          dispatch(Event::KeyDn.new(Event::Key::Sl, ctrl: false, shift: true, alt: false), syn: true, &ambiguous(fn))
-          dispatch(Event::KeyDn.new(Event::Key::Sr, ctrl: false, shift: true, alt: false), syn: true, &ambiguous(fn))
+          dispatch(Event::KeyDn.new(Event::Key::Sl, ctrl: false, shift: false, alt: false), syn: true, &ambiguous(fn))
+          dispatch(Event::KeyDn.new(Event::Key::Sr, ctrl: false, shift: false, alt: false), syn: true, &ambiguous(fn))
           @@shift = true
         end
 

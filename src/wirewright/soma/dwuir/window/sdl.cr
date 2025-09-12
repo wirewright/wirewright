@@ -436,38 +436,38 @@ module Ww::Soma::DwUIR
         when .{{key.id}}?
           key = Event::Key::{{key.id.upcase}}
         {% end %}
-        when .leftbracket? then key = Event::Key::Lsqb
+        when .leftbracket?  then key = Event::Key::Lsqb
         when .rightbracket? then key = Event::Key::Rsqb
-        when .semicolon? then key = Event::Key::Semicolon
-        when .apostrophe? then key = Event::Key::Quote
-        when .comma? then key = Event::Key::Comma
-        when .period? then key = Event::Key::Period
-        when .slash? then key = Event::Key::Slash
-        when .minus? then key = Event::Key::Minus
-        when .equals? then key = Event::Key::Equals
-        when .backslash? then key = Event::Key::Backslash
-        when .space?     then key = Event::Key::Space
-        when .grave?     then key = Event::Key::Backquote
-        when .up?        then key = Event::Key::Up
-        when .down?      then key = Event::Key::Dn
-        when .left?      then key = Event::Key::Left
-        when .right?     then key = Event::Key::Right
-        when .tab?       then key = Event::Key::Tab
-        when .escape?    then key = Event::Key::Esc
-        when .return?    then key = Event::Key::Enter
-        when .insert?    then key = Event::Key::Insert
-        when .delete?    then key = Event::Key::Delete
-        when .backspace? then key = Event::Key::Backspace
-        when .home?      then key = Event::Key::Home
-        when .end?       then key = Event::Key::End
-        when .pageup?    then key = Event::Key::PgUp
-        when .pagedown?  then key = Event::Key::PgDn
-        when .lctrl?     then key = Event::Key::Cl
-        when .rctrl?     then key = Event::Key::Cr
-        when .lshift?    then key = Event::Key::Sl
-        when .rshift?    then key = Event::Key::Sr
-        when .lalt?      then key = Event::Key::Al
-        when .ralt?      then key = Event::Key::Ar
+        when .semicolon?    then key = Event::Key::Semicolon
+        when .apostrophe?   then key = Event::Key::Quote
+        when .comma?        then key = Event::Key::Comma
+        when .period?       then key = Event::Key::Period
+        when .slash?        then key = Event::Key::Slash
+        when .minus?        then key = Event::Key::Minus
+        when .equals?       then key = Event::Key::Equals
+        when .backslash?    then key = Event::Key::Backslash
+        when .space?        then key = Event::Key::Space
+        when .grave?        then key = Event::Key::Backquote
+        when .up?           then key = Event::Key::Up
+        when .down?         then key = Event::Key::Dn
+        when .left?         then key = Event::Key::Left
+        when .right?        then key = Event::Key::Right
+        when .tab?          then key = Event::Key::Tab
+        when .escape?       then key = Event::Key::Esc
+        when .return?       then key = Event::Key::Enter
+        when .insert?       then key = Event::Key::Insert
+        when .delete?       then key = Event::Key::Delete
+        when .backspace?    then key = Event::Key::Backspace
+        when .home?         then key = Event::Key::Home
+        when .end?          then key = Event::Key::End
+        when .pageup?       then key = Event::Key::PgUp
+        when .pagedown?     then key = Event::Key::PgDn
+        when .lctrl?        then key = Event::Key::Cl
+        when .rctrl?        then key = Event::Key::Cr
+        when .lshift?       then key = Event::Key::Sl
+        when .rshift?       then key = Event::Key::Sr
+        when .lalt?         then key = Event::Key::Al
+        when .ralt?         then key = Event::Key::Ar
         else
           Log.debug { "unhandled SDL scancode #{scancode}" }
           return
@@ -477,6 +477,12 @@ module Ww::Soma::DwUIR
       ctrl = event.keysym.mod.lctrl? || event.keysym.mod.rctrl?
       shift = event.keysym.mod.lshift? || event.keysym.mod.rshift?
       alt = event.keysym.mod.lalt? || event.keysym.mod.ralt?
+
+      # Disable modifiers on modifier keys themselves since this would make
+      # little sense, at least it makes little sense to me.
+      if key.cl? || key.cr? || key.sl? || key.sr? || key.al? || key.ar?
+        ctrl = shift = alt = false
+      end
 
       case event.type
       when .keyup?
