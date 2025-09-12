@@ -280,8 +280,11 @@ module Ww::Soma::DwUIR
       def term(e : MouseMotion, &fn : Term ->) : Nil
         # |@ soma.dwuir.window.event.mouse.motion
         #
+        # |@pattern
+        # (mouse device_ motion x: _number y: _number)
+        #
         # |@block
-        # Mouse motion events are of the form `(mouse device_ motion x: _number y: _number)`.
+        # Represents a mouse motion event.
         #
         # - *x* is the X-position of the mouse at the time of the event.
         # - *y* is the Y-position of the mouse at the time of the event.
@@ -292,8 +295,11 @@ module Ww::Soma::DwUIR
       def term(e : MouseDn, &fn : Term ->) : Nil
         # |@ soma.dwuir.window.event.mouse.button.dn
         #
+        # |@pattern
+        # (mouse device_ btn_ button dn x: _number y: _number n: _number)
+        #
         # |@block
-        # Mouse button pressed events are of the form `(mouse device_ btn_ button dn x: _number y: _number n: _number)`.
+        # Represents a mouse button pressed event.
         #
         # - *device* identifies the mouse device (if there are multiple of them).
         # - *btn* is the mouse button name (see `soma.dwuir.window.event.mouse.button.name`).
@@ -311,8 +317,11 @@ module Ww::Soma::DwUIR
       def term(e : MouseUp, &fn : Term ->) : Nil
         # |@ soma.dwuir.window.event.mouse.button.up
         #
+        # |@pattern
+        # (mouse device_ btn_ button up x: _number y: _number n: _number)
+        #
         # |@block
-        # Mouse button released events are of the form `(mouse device_ btn_ button up x: _number y: _number n: _number)`.
+        # Represents a mouse button released event.
         #
         # - *device* identifies the mouse device (if there are multiple of them).
         # - *btn* is the mouse button name (see `soma.dwuir.window.event.mouse.button.name`).
@@ -330,8 +339,11 @@ module Ww::Soma::DwUIR
       def term(e : MouseWheel, &fn : Term ->) : Nil
         # |@ soma.dwuir.window.event.mouse.wheel
         #
+        # |@pattern
+        # (mouse device_ dx: _number dy: _number)
+        #
         # |@block
-        # Mouse wheel events are of the form `(mouse device_ dx: _number dy: _number)`.
+        # Represents a mouse wheel event.
         #
         # - *device* identifies the mouse device (if there are multiple of them).
         # - *dx* is the amount of horizontal scroll; negative if scrolling left, positive if scrolling right.
@@ -343,8 +355,11 @@ module Ww::Soma::DwUIR
       def term(e : WindowResized, &fn : Term ->) : Nil
         # |@ soma.dwuir.window.event.window.resized
         #
+        # |@pattern
+        # (window resized w: _number h: _number)
+        #
         # |@block
-        # Window resize events are of the form `(window resized w: _number h: _number)`.
+        # Represents a window resize event.
         # |@endblock
         fn.call(Term.of(:window, :resized, w: e.w, h: e.h))
       end
@@ -352,9 +367,13 @@ module Ww::Soma::DwUIR
       def term(e : KeyInput, &fn : Term ->) : Nil
         # |@ soma.dwuir.window.event.keyboard.input
         #
+        # |@pattern
+        # (keyboard input _string)
+        #
         # |@block
-        # Keyboard input events are of the form `(keyboard input _string)`,
-        # where *rune* is the input text such as `"a"` or `"ä"` etc. (i.e. possibly
+        # Represents a Keyboard input event.
+        #
+        # *rune* is the input text such as `"a"` or `"ä"` etc. (i.e. possibly
         # long and possibly Unicode).
         # |@endblock
         fn.call(Term.of(:keyboard, :input, e.rune))
@@ -363,32 +382,54 @@ module Ww::Soma::DwUIR
       def term(e : KeyUp, &fn : Term ->) : Nil
         # |@ soma.dwuir.window.event.keyboard.key.up
         #
+        # |@pattern
+        # (keyboard key code_ up ctrl: _boolean shift: _boolean alt: _boolean mod: _boolean)
+        #
         # |@block
-        # Key release events are of the form `(keyboard key code_ up ctrl: _boolean shift: _boolean alt: _boolean)`.
+        # Represents a key release event.
         #
         # NOTE: *ctrl*, *shift*, and *alt* are going to be defined only if `true`.
-        # In other words, they are set pairs.
+        # In other words, they are set pairs. `mod` is going to be defined if any
+        # of them is `true`.
         #
-        # For example, `(keyboard key left up ctrl: true)`
+        # For example, `(keyboard key left up ctrl: true mod: true)`
         # |@endblock
         term(e.key) do |key|
-          fn.call(Term.of(:keyboard, :key, key, :up, ctrl: e.ctrl || nil, shift: e.shift || nil, alt: e.alt || nil))
+          fn.call(
+            Term.of(:keyboard, :key, key, :up,
+              ctrl: e.ctrl || nil,
+              shift: e.shift || nil,
+              alt: e.alt || nil,
+              mod: e.ctrl || e.shift || e.alt || nil,
+            )
+          )
         end
       end
 
       def term(e : KeyDn, &fn : Term ->) : Nil
         # |@ soma.dwuir.window.event.keyboard.key.dn
         #
+        # |@pattern
+        # (keyboard key code_ dn ctrl: _boolean shift: _boolean alt: _boolean mod: _boolean)
+        #
         # |@block
-        # Key press events are of the form `(keyboard key code_ dn ctrl: _boolean shift: _boolean alt: _boolean)`.
+        # Represents a key press event.
         #
         # NOTE: *ctrl*, *shift*, and *alt* are going to be defined only if `true`.
-        # In other words, they are set pairs.
+        # In other words, they are set pairs. `mod` is going to be defined if any of
+        # them is `true`.
         #
         # For example, `(keyboard key home dn)`
         # |@endblock
         term(e.key) do |key|
-          fn.call(Term.of(:keyboard, :key, key, :dn, ctrl: e.ctrl || nil, shift: e.shift || nil, alt: e.alt || nil))
+          fn.call(
+            Term.of(:keyboard, :key, key, :dn,
+              ctrl: e.ctrl || nil,
+              shift: e.shift || nil,
+              alt: e.alt || nil,
+              mod: e.ctrl || e.shift || e.alt || nil,
+            )
+          )
         end
       end
     end
