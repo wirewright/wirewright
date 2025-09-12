@@ -413,6 +413,10 @@ struct Ruleset
     in Pr::Neg
     end
   end
+
+  def to_s(io)
+    io << "Ruleset(<" << @rules.size << " rule(s)>)"
+  end
 end
 
 def orthor1(parent0, phase, child0, callable)
