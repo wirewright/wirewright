@@ -26,10 +26,12 @@ require "./wirewright/lr"
 
 require "../pattern7"
 require "../baz5"
-require "../delta7_proto2"
+{% unless flag?(:newd7) %}
+  require "../delta7_proto2"
+{% end %}
 require "../primitives"
 require "../libtermbox2"
-require "../inputrewr"
+require "../inputr"
 
 {% if flag?(:newsoma) %}
   require "./wirewright/rack"

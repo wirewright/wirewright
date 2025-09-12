@@ -1,5 +1,6 @@
 PRIMITIVES = ProcRuleset.build do
   rulepi1 %[(+ args_number+)] { args.items.reduce { |a, b| a + b } }
+  rulepi1 %[(- arg_number)] { -arg.unsafe_as_n }
   rulepi1 %[(- args_number+)] { args.items.reduce { |a, b| a - b } }
   rulepi1 %[(* args_number+)] { args.items.reduce { |a, b| a * b } }
 
@@ -21,12 +22,16 @@ PRIMITIVES = ProcRuleset.build do
 
   rulepi1 %[(ml->term ml_string ¦ () shadow⋮ true)] do
     term = ML.term(ml.to(String))
-    if shadow.false? && (symbol = term.as_sym?) && Rhodium.shadow?(symbol)
-      # TODO: line col message
-      {:"ml/err"}
-    else
+    {% if flag?(:newd7) %}
       {:"ml/ok", term}
-    end
+    {% else %}
+      if shadow.false? && (symbol = term.as_sym?) && Rhodium.shadow?(symbol)
+        # TODO: line col message
+        {:"ml/err"}
+      else
+        {:"ml/ok", term}
+      end
+    {% end %}
   rescue ML::SyntaxError
     # TODO: line col message
     {:"ml/err"}
@@ -138,6 +143,11 @@ PRIMITIVES = ProcRuleset.build do
     else
       Term.of({:none})
     end
+  end
+
+  rulepi1 %[(key xs←(%pipe tally 1))] do
+    key, _ = xs.nth(0)
+    key
   end
 
   rulepi1 %[(nth (range b_number e_number points: m_number) n_number)] do |n, m|

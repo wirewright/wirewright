@@ -715,12 +715,17 @@ class Stack(T)
     pop? || raise IndexError.new
   end
 
-  def push(value : T, &)
-    push(value)
+  def push(*objects : T, &)
+    objects.each do |object|
+      push(object)
+    end
+
     begin
       yield
     ensure
-      pop
+      objects.size.times do
+        pop
+      end
     end
   end
 
@@ -3300,6 +3305,22 @@ class Channel
 end
 
 module Indexable(T)
+  def compare(other : Indexable, &)
+    min_size = Math.min(size, other.size)
+
+    0.upto(min_size - 1) do |i|
+      n = yield unsafe_fetch(i), other.unsafe_fetch(i)
+      next if n == 0 # equal
+      return n
+    end
+
+    size <=> other.size
+  end
+
+  def compare(other : Indexable)
+    compare(other) { |a, b| a <=> b }
+  end
+
   def starts_with?(other : Indexable(U), & : T, U -> Bool) : Bool forall U
     return false unless size >= other.size
 

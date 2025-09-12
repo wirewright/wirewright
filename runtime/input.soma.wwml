@@ -1,575 +1,861 @@
-;; This rule system implements a basic multiline input field, its behavior copied
-;; primarily from browser textareas (mostly Firefox). It supports:
-;;
-;; - Multiline editing
-;; - Selections
-;; - History (as in command-line shells)
-;; - Submission
-;;
-;; There is no intrinsic support for copy-paste. We expect an observer to
-;; implement it by pattern matching against an input field on key press or
-;; any other copy-paste trigger.
-;;
-;; Features are mainly served through *utilities*, which are bound to *keys*.
-;;
-;; Although the `utilities` rule system is monolithic, the input field itself is
-;; naturally modular. In order to have history, you will have to have structure
-;; around the cursor or selection that can maintain history; structure that
-;; the rule system will recognize and operate on. You will also have to bind
-;; keys to trigger history utilities. Similar things can be said about inline
-;; input, multiline input, and selections.
-;;
-;; For example, to have an input field that can only edit inline, only enable
-;; keys for inline editing (`keys.inline`); do not wrap it in submission or
-;; history structure; and sanitize your data to exclude newlines when constructing
-;; the input field (or handle newlines during presentation).
-;;
-;; General info:
-;;
-;; - `event` rules match and transform events. They are consulted last, after
-;;   all `instant` rules show no interest in the term and event at hand.
-;; - `instant` rules match structure-event queue pairs, and are thus an example of
-;;   *event-driven rewriting*. These rules can transform the structure, the event,
-;;   or both; they can also emit events by appending or prepending to the queue
-;;   (the latter is much more common here since we are in effect emulating a "call stack";
-;;   most often, we want to completely handle the current event first before handling
-;;   the next ones, and if handling means emission of events, then those events must
-;;   be prepended).
-;;
-;; Since you will most likely need to pattern match against input fields and construct/
-;; synthesize them, here are the relevant structures:
-;;
-;;
-;;  # Cursor
-;;
-;;   [L_string | R_string]
-;;
-;;     The most bare-bones you can get with this rule system. A basic cursor that
-;;     responds to most primitive edits.
-;;
-;;       L - text before the cursor
-;;       R - text after the cursor
-;;
-;;
-;;  # Selection
-;;
-;;                              cursor selection
-;;                         [<|> [L_string | M_string]]
-;;
-;;          left leaning selection              right leaning selection
-;;   [ ⏏ [L_string | M_string] R_string]   [ ⏏ L_string [M_string | R_string]]
-;;    <\> passive                           <\> passive
-;;    <-> active                            <-> active
-;;
-;;      Cursor selection is no selection (collapsed selection). Passive selection is
-;;      the kind of selection that you get after you release the Shift key. Active
-;;      selection is the kind of selection that you get when you are holding
-;;      the Shift key.
-;;
-;;        L -- text to the left of the selection
-;;        M -- selected text
-;;        R -- text to the right of the selection
-;;
-;;
-;;  # History
-;;
-;;   [(_*) <active cursor/selection> -|- () ()]
-;;
-;;
-;; # Submission
-;;
-;;  (submission <input field> ⏏ )
-;;                    (proposal S_string)
-;;                          ready
-;;
-;;    With submissions, you should pattern match for `proposal`s and handle
-;;    whatever S is proposed; when you're done, emit `(submission accepted)`
-;;    or `(submission rejected)`.
+--- rules
 
---- keys.editing
+[| M_ _*] <> {(M): ()}
 
-(event M←[keyboard input rune_string] _*)
-  <> {M: (type →rune)}
+(| M←[keyboard input rune_string] _* ⍊ modify⁺)
+  <> {M: (insert (rune →rune) left)}
 
-(event M←[keyboard key ⸨backspace,delete⸩ dn] _*)
+(| M←[keyboard key enter dn] _* ⍊ multiline⁺ modify⁺)
+  <> {M: (insert (rune "\n") left)}
+
+(| M←[keyboard key ⸨backspace,delete⸩ dn] _* ⍊ modify⁺)
   <> {M: (remove rune ⸨left,right⸩)}
 
-(event M←(keyboard key ⸨backspace,delete⸩ dn ⍊ ctrl) _*)
+(| M←(keyboard key ⸨backspace,delete⸩ dn ⍊ ctrl) _* ⍊ modify⁺)
   <> {M: (remove word ⸨left,right⸩)}
 
-(event M←[keyboard key enter dn] _*)
-  <> {M: (break line left)}
-
-(event M←(keyboard key enter dn ⍊ shift) _*)
-  <> {M: (break line right)}
-
-
---- keys.inline
-
-(event M←[keyboard key ⸨left,right⸩ dn] _*)
+[| M←[keyboard key ⸨left,right⸩ dn] _*]
   <> {M: (goto rune ⸨left,right⸩)}
 
-(event M←(keyboard key ⸨left,right⸩ dn ⍊ ctrl) _*)
+[| M←(keyboard key ⸨left,right⸩ dn ⍊ ctrl) _*]
   <> {M: (goto word ⸨left,right⸩)}
 
-(event M←[keyboard key ⸨home,end⸩ dn] _*)
-  <> {M: (goto line ⸨left,right⸩)}
+[| M←[keyboard key ⸨left,right⸩ dn] _*]
+  <> {M: (goto rune ⸨left,right⸩)}
 
-(event M←(keyboard key ⸨home,end⸩ dn ⍊ ctrl) _*)
+[| M←(keyboard key ⸨left,right⸩ dn ⍊ ctrl) _*]
+  <> {M: (goto word ⸨left,right⸩)}
+  
+[| M←[keyboard key ⸨home,end⸩ dn] _*]
   <> {M: (goto text ⸨left,right⸩)}
 
+(| M←[keyboard key ⸨home,end⸩ dn] _* ⍊ multiline⁺)
+  <> {M: (goto line ⸨left,right⸩)}
 
---- keys.multiline
+(| M←(keyboard key ⸨home,end⸩ dn ⍊ ctrl) _* ⍊ multiline⁺)
+  <> {M: (goto text ⸨left,right⸩)}
 
-(event M←[keyboard key ⸨up,dn⸩ dn] _*)
+[l_string (%plural type: _string min: 0 max: 1) [| (keyboard key ⸨up,dn⸩ dn ⍊ -top_ -bot_) _*] (%plural type: _string min: 0 max: 1) r_string]
+  <> {top: $(= (rline/rest →l) ""), bot: $(= (line/rest →r) "")}
+
+[| M←(keyboard key ⸨up,dn⸩ dn ⍊ ⸨top,bot⸩: true) _*]
+  <> {M: (goto text ⸨left,right⸩)}
+
+(| M←(keyboard key ⸨up,dn⸩ dn ⍊ ⸨top,bot⸩: false) _* ⍊ multiline⁺)
   <> {M: (goto (line ⸨above,below⸩) anchor)}
 
+[| M←[keyboard key escape dn] _*]
+  <> {M: (dismiss)}
 
---- keys.selection
+;; NOTE: unfortunately, it seems that the best option is to hard-code keys
+;; here that will promote cursor to selection. Anything smarter would
+;; misfire occasionally.
+[_string [| `>M (keyboard key ⸨left,right,up,dn,home,end⸩ dn ⍊ shift -◇_) _*] _string]
+  <> {>M: (promote selection), ◇: true}
+(| M←[keyboard key (shift _) dn] _* ⍊ selection: passive)
+  <> {M: (promote selection)}
 
-(event M←[keyboard key (shift _) ⸨dn,up⸩] _*)
-  <> {M: (make selection ⸨active,passive⸩)}
+[_string [| M←(keyboard key a dn ⍊ ctrl) _*] _string]
+  <> {(M): ((promote selection) (select text) (demote selection))}
 
-(event M←(keyboard key a dn ⍊ ctrl) _*)
-  <> {M: (select text)}
-
-
---- keys.history
-
-(event M←(keyboard key up dn ⍊ first-line: (%- false)) _*)
-  <> {M: (goto history previous)}
-
-(event M←(keyboard key dn dn ⍊ last-line: (%- false)) _*)
-  <> {M: (goto history next)}
-
-
---- keys.submission
-
-(event M←(keyboard key enter dn ⍊ at-end: (%- false)) _*)
-  <> {M: (submit)}
+(| M←[keyboard key (shift _) up] _* ⍊ selection: active)
+  <> {M: (demote selection)}
 
 
---- utilities
+;; ---
+;; Compose
+;; ---
 
-;; Tag keys with some text position info for smarter dispatch.
-
-(instant [_string | r_string] ((keyboard key _ dn ⍊ -at-end_) _*))
-  <> {at-end: $'(= →r "")}
-
-(instant [l_string | _string] (M←(keyboard key _ dn ⍊ -first-line_) _*))
-  <> {first-line: $(= (rline/rest →l) "")}
-
-(instant [_string | r_string] (M←(keyboard key _ dn ⍊ -last-line_) _*))
-  <> {last-line: $(= (line/rest →r) "")}
-
-
-;; |@ soma.input.type
 ;;
-;; |@pattern
-;; (type text_string)
+;; Keys
 ;;
-;; |@block
-;; Inserts *text* before the cursor, or if in selection mode, replaces
-;; selection with *text*.
-;; |@endblock
+;; NOTE: we reuse some keys from the main input field.
 
-(instant [l_string | _string] (U←(type text_string) _*))
-  <> {(U): (), l: $'(~ →l →text)}
+(| M←[keyboard key insert dn] _* ⍊ compose⁺)
+  <> {M: (summon compose)}
 
-(instant [<⸨-,\⸩> [_string | m_string] _string] (U←(type text_string) _*))
-  <> {U: (collapse selection right), m: →text}
-(instant [<⸨-,\⸩> _string [m_string | _string]] (U←(type text_string) _*))
-  <> {U: (collapse selection right), m: →text}
+[compose _string [| M←[keyboard key insert dn] _*]]
+  <> {M: (dismiss)}
 
+[compose in_string [| M←[insert (rune rune_string) left] _*]]
+  <> {M: (search), in: $'(~ →in →rune)}
 
-;; |@ soma.input.break
+[compose in←(%string nonempty) [| M←[remove rune left] _*]]
+  <> {(M): (), in: $'(runes →in 0 ..= -2)}
+
+[compose "" [| M←[remove rune left] _*]]
+  <> {M: (dismiss compose)}
+
+[compose _string [| M←[dismiss] _*]]
+  <> {M: (dismiss compose)}
+
+C←[compose _string C'←[| M←[dismiss compose] _*]]
+  <> {(M): (), C: ↑C'}
+
+;; Found.
+C←[compose in_string C'←[| M←[found composite_string] _*]]
+  <> {M: (insert (text →composite) left), C: ↑C'}
+
+;; Not found.
+[compose in_string [| M←[search] _*]]
+  <> {(M): ()}
+
 ;;
-;; |@pattern
-;; (break line ⸨left,right⸩)
+;; Compose lookup table. Feel free to add your own keys here.
 ;;
-;; |@block
-;; Inserts a line break before (left) or after (right) the cursor.
-;; |@endblock
 
-(instant [l_string | _string] (U←(break line left) _*))
-  <> {(U): (), l: $'(~ →l "\n")}
+[compose "oo" [| M←[search] _*]] <> {M: (found "°")}
 
-(instant [_string | r_string] (U←(break line right) _*))
-  <> {(U): (), r: $'(~ "\n" →r)}
+[compose "^0" [| M←[search] _*]] <> {M: (found "⁰")}
+[compose "^1" [| M←[search] _*]] <> {M: (found "¹")}
+[compose "^2" [| M←[search] _*]] <> {M: (found "²")}
+[compose "^3" [| M←[search] _*]] <> {M: (found "³")}
+[compose "^4" [| M←[search] _*]] <> {M: (found "⁴")}
+[compose "^5" [| M←[search] _*]] <> {M: (found "⁵")}
+[compose "^6" [| M←[search] _*]] <> {M: (found "⁶")}
+[compose "^7" [| M←[search] _*]] <> {M: (found "⁷")}
+[compose "^8" [| M←[search] _*]] <> {M: (found "⁸")}
+[compose "^9" [| M←[search] _*]] <> {M: (found "⁹")}
 
+[compose "_0" [| M←[search] _*]] <> {M: (found "₀")}
+[compose "_1" [| M←[search] _*]] <> {M: (found "₁")}
+[compose "_2" [| M←[search] _*]] <> {M: (found "₂")}
+[compose "_3" [| M←[search] _*]] <> {M: (found "₃")}
+[compose "_4" [| M←[search] _*]] <> {M: (found "₄")}
+[compose "_5" [| M←[search] _*]] <> {M: (found "₅")}
+[compose "_6" [| M←[search] _*]] <> {M: (found "₆")}
+[compose "_7" [| M←[search] _*]] <> {M: (found "₇")}
+[compose "_8" [| M←[search] _*]] <> {M: (found "₈")}
+[compose "_9" [| M←[search] _*]] <> {M: (found "₉")}
 
-;; |@ soma.input.goto
-;;
-;; |@pattern
-;; (goto ⟦rune,word,line,text⟧ ⸨left,right⸩)
-;;
-;; |@block
-;; Moves the cursor or active selection focus by one designated
-;; text object left or right.
-;; |@endblock
+[compose "^+" [| M←[search] _*]] <> {M: (found "⁺")}
+[compose "^-" [| M←[search] _*]] <> {M: (found "⁻")}
 
-(instant [l_string | r_string] (U←(goto ⸨rune,word⸩ left) _*))
-  <> {(U): (), l: $'(⸨rune,word⸩s →l 0 ..= -2), r: $(~ (⸨rune,word⸩ →l -1) →r)}
+[compose "_+" [| M←[search] _*]] <> {M: (found "₊")}
+[compose "_-" [| M←[search] _*]] <> {M: (found "₋")}
 
-(instant [l_string | r_string] (U←(goto ⸨rune,word⸩ right) _*))
-  <> {(U): (), l: $(~ →l (⸨rune,word⸩ →r 0)), r: $'(⸨rune,word⸩s →r 1 ..= -1)}
+[compose "sm"  [| M←[search] _*]] <> {M: (found "∈")}
+[compose "/sm" [| M←[search] _*]] <> {M: (found "∉")}
+[compose "s="  [| M←[search] _*]] <> {M: (found "⊆")}
+[compose "s<"  [| M←[search] _*]] <> {M: (found "⊂")}
 
-(instant [l_string | r_string] (U←(goto text left) _*))
-  <> {(U): (), l: "", r: $(~ →l →r)}
+[compose "^[" [| M←[search] _*]] <> {M: (found "\⸢")}
+[compose "^]" [| M←[search] _*]] <> {M: (found "⸣")}
 
-(instant [l_string | r_string] (U←(goto text right) _*))
-  <> {(U): (), l: $(~ →l →r), r: ""}
+[compose "_[" [| M←[search] _*]] <> {M: (found "⸤")}
+[compose "_]" [| M←[search] _*]] <> {M: (found "⸥")}
 
-(instant [l_string | r_string] (U←(goto line left) _*))
-  <> {(U): (), l: $'(rline/rest →l), r: $(~ (rline/stem →l) →r)}
+[compose "{{" [| M←[search] _*]] <> {M: (found "⟨")}
+[compose "}}" [| M←[search] _*]] <> {M: (found "⟩")}
 
-(instant [l_string | r_string] (U←(goto line right) _*))
-  <> {(U): (), l: $(~ →l (line/stem →r)), r: $'(line/rest →r)}
+[compose "||" [| M←[search] _*]] <> {M: (found "¦")}
+[compose "::" [| M←[search] _*]] <> {M: (found "⋮")}
+[compose "==" [| M←[search] _*]] <> {M: (found "≡")}
+[compose ".." [| M←[search] _*]] <> {M: (found "…")}
+[compose "xx" [| M←[search] _*]] <> {M: (found "×")}
 
+[compose "<-" [| M←[search] _*]] <> {M: (found "←")}
+[compose "->" [| M←[search] _*]] <> {M: (found "→")}
+[compose "^|" [| M←[search] _*]] <> {M: (found "↑")}
+[compose "|v" [| M←[search] _*]] <> {M: (found "↓")}
 
-;; |@ soma.input.goto
-;;
-;; |@pattern
-;; (goto (line ⟦above,below⟧) ⸨left,right⸩)
-;;
-;; |@block
-;; Moves the cursor to the beginning (left) or the end (right) of the line
-;; above or below.
-;; |@endblock
+[compose "|[" [| M←[search] _*]] <> {M: (found "⎡")}
+[compose "|]" [| M←[search] _*]] <> {M: (found "⎤")}
 
-(event U←(goto (line ⸨above,below⸩) ⸨right,left⸩) _*)
-  <> {(U): ((goto line ⸨left,right⸩) (goto rune ⸨left,right⸩))}
+[compose "((" [| M←[search] _*]] <> {M: (found "⸨")}
+[compose "))" [| M←[search] _*]] <> {M: (found "⸩")}
 
-(event U←(goto (line ⸨above,below⸩) ⸨left,right⸩) _*)
-  <> {(U): ((goto (line ⸨above,below⸩) ⸨right,left⸩) (goto line ⸨left,right⸩))}
+[compose "[[" [| M←[search] _*]] <> {M: (found "⟦")}
+[compose "]]" [| M←[search] _*]] <> {M: (found "⟧")}
 
-;; |@ soma.input.goto
-;;
-;; |@pattern
-;; (goto (line ⟦above,below⟧) (column ±N))
-;;
-;; |@block
-;; Moves the cursor to the Nth column in the line above or below. Halts
-;; on end-of-line if N overshoots.
-;; |@endblock
+[compose "//" [| M←[search] _*]] <> {M: (found "⫽")}
+[compose "**" [| M←[search] _*]] <> {M: (found "⁑")}
+[compose "|_" [| M←[search] _*]] <> {M: (found "⍊")}
 
-(event U←(goto (line ⸨above,below⸩) (column ±N)) _*)
-  <> {(U): ((goto (line ⸨above,below⸩) left) (goto rune (→N right)))}
+[compose "<>" [| M←[search] _*]] <> {M: (found "◇")}
+[compose "[]" [| M←[search] _*]] <> {M: (found "▢")}
 
+[compose "*(" [| M←[search] _*]] <> {M: (found "⟅")}
+[compose "*)" [| M←[search] _*]] <> {M: (found "⟆")}
 
-;; |@ soma.input.goto
-;;
-;; |@pattern
-;; (goto (line ⟦above,below⟧) anchor)
-;;
-;; |@block
-;; Finds out what the cursor is anchored to (e.g. column, line start,
-;; line end), and jumps to that in the line above or below.
-;;
-;; NOTE: at the moment, only column anchors are implemented.
-;; |@endblock
+[compose "<|" [| M←[search] _*]] <> {M: (found "↢")}
+[compose "|>" [| M←[search] _*]] <> {M: (found "↣")}
 
-(instant [l_string | _] ((goto (line ⸨above,below⸩) A←anchor) _*))
+[compose "^^" [| M←[search] _*]] <> {M: (found "⏏")}
+
+[l_string [| M←[insert (text text_string) left] _*] _string]
+  <> {(M): (), l: $'(~ →l →text)}
+
+[_string [| M←[insert (text text_string) right] _*] r_string]
+  <> {(M): (), r: $'(~ →text →r)}
+
+[l_string [| M←[insert (rune rune_string) left] _*] _string]
+  <> {(M): (), l: $'(~ →l →rune)}
+
+[_string [| M←[insert (rune rune_string) right] _*] r_string]
+  <> {(M): (), l: $'(~ →rune →r)}
+
+[_string [| M←[select (term term_)] _*] _string]
+  <> {(M): ((edit (term →term) right) (promote selection) (select text) (demote selection))}
+
+[_string [| M←[edit (term term_) hdg_] _*] _string]
+  <> {M: (edit (text $'(term->ml →term)) →hdg)}
+
+[l_string [| M←[edit (text text_string) left] _*] r_string]
+  <> {(M): (), l: "", r: →text}
+
+[l_string [| M←[edit (text text_string) right] _*] r_string]
+  <> {(M): (), l: →text, r: ""}
+
+;; Do it the lazy way: via selection. This does mean removal of even a single
+;; character is quite "verbose" and expensive. Whatever, genericity for the win!
+[_string [| M←[remove ⸨rune,word,line⸩ hdg_] _*] _string]
+  <> {(M): ((promote selection)
+            (goto ⸨rune,word,line⸩ →hdg)
+            (clear selection)
+            (demote selection))}
+
+[l_string [| M←[goto ⸨rune,word⸩ left] _*] r_string]
+  <> {(M): (), l: $'(⸨rune,word⸩s →l 0 ..= -2), r: $(~ (⸨rune,word⸩ →l -1) →r)}
+
+[l_string [| M←[goto ⸨rune,word⸩ right] _*] r_string]
+  <> {(M): (), l: $(~ →l (⸨rune,word⸩ →r 0)), r: $'(⸨rune,word⸩s →r 1 ..= -1)}
+
+[l_string [| M←[goto line left] _*] r_string]
+  <> {(M): (), l: $'(rline/rest →l), r: $(~ (rline/stem →l) →r)}
+
+[l_string [| M←[goto line right] _*] r_string]
+  <> {(M): (), l: $(~ →l (line/stem →r)), r: $'(line/rest →r)}
+
+[l_string [| M←[goto text left] _*] r_string]
+  <> {(M): (), l: "", r: $(~ →l →r)}
+
+[l_string [| M←[goto text right] _*] r_string]
+  <> {(M): (), l: $(~ →l →r), r: ""}
+
+[l_string [| M←[goto (line ⸨above,below⸩) A←anchor] _*] r_string]
   <> {A: (column $(charcount (rline/stem →l)))}
 
+[_string [| M←[goto (line ⸨above,below⸩) (column ±col)] _*] _string]
+  <> {(M): ((goto (line ⸨above,below⸩) left) (goto rune (→col right)))}
 
-;; |@ soma.input.goto
+[_string [| M←[goto (line ⸨above,below⸩) ⸨right,left⸩] _*] _string]
+  <> {(M): ((goto line ⸨left,right⸩) (goto rune ⸨left,right⸩))}
+
+[_string [| M←[goto (line ⸨above,below⸩) ⸨left,right⸩] _*] _string]
+  <> {(M): ((goto (line ⸨above,below⸩) ⸨right,left⸩) (goto line ⸨left,right⸩))}
+
+[_string [| `>M (goto rune (±n right) ⍊ -▢_) `>N _*] _string]
+  <> {>M: (summon line), >N: (dismiss line), ▢: true}
+[l_string [| M←(goto rune (±n right) ⍊ ▢) _*] r_string]
+  <> {(M): (), l: $(~ →l (runes →r 0 ..< →n)), r: $'(runes →r →n ..= -1)}
+
+[l_string C←[| M←[summon line] _*] r_string]
+  <> {(M): (), l: $'(rline/rest →l), C: ($'(rline/stem →l) ↑C $'(line/stem →r)), r: $'(line/rest →r)}
+
+[L_string C←[l_string C'←[| M←[dismiss line] _*] r_string] R_string]
+  <> {(M): (), L: $'(~ →L →l), C: ↑C', R: $'(~ →r →R)}
+
+C←[| M←[summon compose] _*]
+  <> {(M): (), C: (compose "" ↑C)}
+
+;; To activate a selection, replace the cursor with the selection
+;; structure and mark as active in workspace. 
+["" C←[| M←[promote selection] _*] ""]
+  <> {(M): ()}
+[_string C←(| M←[promote selection] _* ⍊ selection_: (%optional true true)) _string]
+  <> {(M): (), (C): ("" ↑C), selection: active}
+
+(| M←[promote selection] _* ⍊ selection_: passive)
+  <> {(M): (), selection: active}
+
+;; Demoting an empty selection in any state will turn it into a cursor.
+[_string m←"" C←(| M←[demote selection] _* ⍊ selection_) _string]
+  <> {(M): (), (m): (), selection: true}
+[_string C←(| M←[demote selection] _* ⍊ selection_) m←"" _string]
+  <> {(M): (), (m): (), selection: true}
+
+;; Demoting a passive selection will turn it into a cursor.
+[_string _string C←(| M←[demote selection] _* ⍊ selection: passive) _string]
+  <> {M: (collapse selection right)}
+[_string C←(| M←[demote selection] _* ⍊ selection: passive) _string _string]
+  <> {M: (collapse selection left)}
+
+[_string m_string C←(| M←[collapse selection left] _* ⍊ selection_) r_string]
+  <> {(M): (), (m): (), r: $'(~ →m →r), selection: true}
+[_string C←(| M←[collapse selection left] _* ⍊ selection_) m_string r_string]
+  <> {(M): (), (m): (), r: $'(~ →m →r), selection: true}
+
+[l_string m_string C←(| M←[collapse selection right] _* ⍊ selection_) _string]
+  <> {(M): (), l: $'(~ →l →m), (m): (), selection: true}
+[l_string C←(| M←[collapse selection right] _* ⍊ selection_) m_string _string]
+  <> {(M): (), l: $'(~ →l →m), (m): (), selection: true}
+
+[_string m_string [| M←[clear selection] _*] _string]
+  <> {(M): (), m: ""}
+[_string [| M←[clear selection] _*] m_string _string]
+  <> {(M): (), m: ""}
+
+;; Demoting an active, nonempty selection means switching from active
+;; to passive selection state.
+[_string (%string nonempty) C←(| M←[demote selection] _* ⍊ selection_: active) _string]
+  <> {(M): (), selection: passive}
+[_string C←(| M←[demote selection] _* ⍊ selection_: active) (%string nonempty) _string]
+  <> {(M): (), selection: passive}
+
+[l_string m_string C←[| M←[select text] _*] r_string]
+  <> {(M): (), l: "", m: $'(~ →l →m →r), r: ""}
+[l_string C←[| M←[select text] _*] m_string r_string]
+  <> {(M): (), l: "", m: $'(~ →l →m →r), r: ""}
+
+[l_string C←[| M←[select text (delta anchor←(%number +i32) delta←(%number -i32))] _*] r_string]
+  <> {M: (select (text range $'(+ →anchor →delta) →anchor) left)}
+
+[l_string C←[| M←[select text (delta anchor←(%number +i32) delta←(%number +i32))] _*] r_string]
+  <> {M: (select (text range →anchor $'(+ →anchor →delta)) right)}
+
+[l_string C←[| M←[select (text range i←(%number +i32) j←(%number +i32)) ⸨left,right⸩] _*] r_string]
+  <> {M: (select (triple $(runes (~ →l →r) 0 ..< →i)
+                         $(runes (~ →l →r) →i ..< →j)
+                         $(runes (~ →l →r) →j ..= -1)) ⸨left,right⸩)}
+
+[l_string C←[| M←[select (triple l'_string m'_string r'_string) left] _*] r_string]
+  <> {(M): (), l: →l', (C): (↑C →m'), r: →r'}
+
+[l_string C←[| M←[select (triple l'_string m'_string r'_string) right] _*] r_string]
+  <> {(M): (), l: →l', (C): (→m' ↑C), r: →r'}
+
+[l_string [| M←[render selection anchor←(%number +i32)] _*] _string]
+  <> {M: (select text (delta →anchor $(- (charcount →l) →anchor)))}
+
+;; We have four main things to handle in each selection state: insertion,
+;; removal, goto, and summon.
+
+;; Active selection
+
+;; Goto in active selection will briefly dismiss the selection and let
+;; the cursor do the goto in any way it wants. We'll then render the selection
+;; back. This is stupid, sort of; but on the other hand, we and most importantly
+;; our clients get to avoid all the range math; they can simply pattern match on
+;; the input field to e.g. see what is selected without needing any sort of
+;; computation in between.
+[l_string m_string (| [goto _ _] `>M _* ⍊ selection: active) _string]
+  <> {l: $'(~ →l →m), (m): (), >M: (render selection $'(charcount →l))}
+[l_string (| [goto _ _] `>M _* ⍊ selection: active) m_string r_string]
+  <> {(m): (), r: $'(~ →m →r), >M: (render selection $'(charcount →l →m))}
+
+;; Insert and remove in active selection is bizarre (e.g. typing or pressing
+;; backspace while shift is pressed and selection is active), so we'll demote
+;; and let the passive state handle that. That's what browsers appear to do.
+(| `>M [⸨insert,remove,summon⸩ _*] _* ⍊ selection: active)
+  <> {>M: (demote selection)}
+
+;; Passive selection
+
+;; Goto in passive selection collapses it to the heading of that goto.
+;; We do not care about the subject of the goto.
+(| M←[goto ⟦rune,word⟧ ⸨left,right⸩] _* ⍊ selection: passive)
+  <> {M: (collapse selection ⸨left,right⸩)}
+
+;; Goto will otherwise collapse the selection in that direction, and will
+;; be retried.
+(| `>M [goto _ ⸨left,right⸩] _* ⍊ selection: passive)
+  <> {>M: (collapse selection ⸨left,right⸩)}
+
+;; Insert should clear the selection and be retried.
+(| `>M [insert _*] _* ⍊ selection: passive)
+  <> {(>M): ((clear selection) (demote selection))}
+
+;; Remove in passive selection clears that selection and demotes it
+;; to a cursor. Remove itself should not be retried.
+(| M←[remove _ _] _* ⍊ selection: passive)
+  <> {(M): ((clear selection) (demote selection))}
+
+
+;; ------------------
+;; Structural editing
+;; ------------------
+
 ;;
-;; |@pattern
-;; (goto rune (±N right))
+;; Keys
 ;;
-;; |@block
-;; Moves the cursor right by N runes, *halting on end-of-line*.
-;; |@endblock
 
-(instant [_string | _string] (`>U (goto rune (±N right)) _*))
-  <> {>U: (reveal inline)}
+;; Pressing left, right, backspace, delete means inspect in that direction.
+["" (| M←[keyboard key ⸨left,right,backspace,delete⸩ dn] _* ⍊ structural⁺) ""]
+  <> {M: (inspect item ⸨left,right,left,right⸩)}
 
-(instant [(_ l_string) | (r_string _)] (U←(goto rune (±N right)) _*))
-  <> {U: (conceal inline) l: $(~ →l (runes →r 0 ..< →N)), r: $'(runes →r →N ..= -1)}
+;; Pressing C-left or C-right means force edit in that direction.
+["" (| M←(keyboard key ⸨left,right⸩ dn ⍊ ctrl) _* ⍊ structural⁺) ""]
+  <> {M: (edit item ⸨left,right⸩)}
 
+;; Presiing C-backspace or C-delete means remove item in that direction.
+["" (| M←(keyboard key ⸨backspace,delete⸩ dn ⍊ ctrl) _* ⍊ structural⁺) ""]
+  <> {M: (remove item ⸨left,right⸩)}
 
-;; |@ soma.input.goto
+;; Pressing right at end-of-text means try to submit and if successful,
+;; move cursor after submission.  
+[(%string nonempty) (| M←[keyboard key right dn] _* ⍊ structural⁺) ""]
+  <> {M: (submit item left)}
+
+;; Pressing left at begin-of-text means try to submit and if successful,
+;; move cursor before submission.
+["" (| M←[keyboard key left dn] _* ⍊ structural⁺) (%string nonempty)]
+  <> {M: (submit item right)}
+
+;; Pressing whitespace at end-of-text means try to submit, else
+;; try another interpretation of whitespace.
+[(%string nonempty) (| M←(keyboard input " " ⍊ -◇_) _* ⍊ structural⁺) ""]
+  <> {M: ((submit item left) else ↑M), ◇: true}
+
+;; Pressing whitespace with empty cursor means go to next spot.
+["" (| M←[keyboard input " "] _* ⍊ structural⁺) ""]
+  <> {M: (goto spot right enter: false)}
+
+;; Pressing '(' should nest the cursor in a dict.
+["" (| M←[keyboard input "("] _* ⍊ structural⁺) ""]
+  <> {M: (nest cursor)}
+
+;; Pressing ')' should append then try to submit.
+[(%string nonempty) (| M←(keyboard input ")" ⍊ -◇_) `>M _* ⍊ structural⁺) ""]
+  <> {M: ((submit item left) else ↑M), ◇: true}
+
+;; Pressing ')' should otherwise escape dict right. 
+["" (| M←[keyboard input ")"] `>M _* ⍊ structural⁺) ""]
+  <> {M: (escape dict right)}
+
+;; Pressing up/down means go to previous/next item.
+["" (| M←[keyboard key ⸨up,dn⸩ dn] _* ⍊ structural⁺) ""]
+  <> {M: (goto item ⸨left,right⸩)}
+
+;; Pressing up at begin-of-text means try to submit; if succeeded, inspect
+;; the previous item.
+["" (| M←[keyboard key up dn] _* ⍊ structural⁺) (%string nonempty)]
+  <> {M: ((submit item right) then (inspect item left))}
+
+⟨_dict [["" (| M←[keyboard key up dn] _* ⍊ structural⁺) ""] _*]⟩
+  <> {(M): ((escape dict left) (enter dict left))}
+
+[["" (| M←[keyboard key up dn] _* ⍊ structural⁺) ""] _*]
+  <> {M: (escape dict left)}
+
+⟨["" (| M←(keyboard key a dn ⍊ ctrl) _* ⍊ structural⁺) ""]⟩
+  <> {M: (edit dict)}
+
+;; C-enter at cursor should trigger submission.
+[_string (| M←(keyboard key enter dn ⍊ ctrl) _* ⍊ structural⁺) _string]
+  <> {M: (submit item left)}
+
+;; C-enter in selection should collapse that selection and submit.
+[_string _string (| `>M (keyboard key enter dn ⍊ ctrl) _* ⍊ structural⁺) _string]
+  <> {>M: (collapse selection right)}
+[_string (| `>M (keyboard key enter dn ⍊ ctrl) _* ⍊ structural⁺) _string _string]
+  <> {>M: (collapse selection left)}
+
+;; Pressing down at end-of-text means try to submit; if succeeded, inspect
+;; the next item.
+[(%string nonempty) (| M←[keyboard key dn dn] _* ⍊ structural⁺) ""]
+  <> {M: ((submit item left) then (inspect item right))}
+
+⟨[_* ["" (| M←[keyboard key dn dn] _* ⍊ structural⁺) ""]] _dict⟩
+  <> {(M): ((escape dict right) (enter dict right))}
+
+[_* ["" (| M←[keyboard key dn dn] _* ⍊ structural⁺) ""]]
+  <> {M: (escape dict right)}
+
+;; Pressing home or end means go to dict left/right.
+⟨["" (| M←[keyboard key ⸨home,end⸩ dn] _* ⍊ structural⁺) ""]⟩
+  <> {M: (goto dict ⸨left,right⸩)}
+
+;; Pressing home or end at begin/end-of-dict means go to begin/end
+;; of enclosing dict.
+[["" (| M←[keyboard key home dn] _* ⍊ structural⁺) ""] _*]
+  <> {(M): ((escape dict left) (goto dict left))}
+[_* ["" (| M←[keyboard key end dn] _* ⍊ structural⁺) ""]]
+  <> {(M): ((escape dict right) (goto dict right))}
+
+;; Pressing home at begin-of-text means try to submit and go to dict left.
+⟨["" (| M←[keyboard key home dn] _* ⍊ structural⁺) (%string nonempty)]⟩
+  <> {M: ((submit item right) then (goto dict left))}
+
+;; Pressing end at end-of-text means try to submit and go to dict right.
+⟨[(%string nonempty) (| M←[keyboard key end dn] _* ⍊ structural⁺) ""]⟩
+  <> {M: ((submit item left) then (goto dict right))}
+
+;; Pressing Enter means escape right.
+["" (| M←[keyboard key enter dn] _* ⍊ structural⁺) ""]
+  <> {M: (escape dict right)}
+
+;; Pressing S-enter means escape left.
+["" (| M←(keyboard key enter dn ⍊ shift) _* ⍊ structural⁺) ""]
+  <> {M: (escape dict left)}
+
+;; Pressing Alt means carry parent in cursor.
+⟨⟨["" (| M←(keyboard key _symbol dn ⍊ alt_) _* ⍊ structural⁺) ""]⟩⟩
+  <> {M: (carry dict ↑M), (alt): ()}
+
+;; Pressing backspace or delete in an empty dict should remove that dict.
+(["" (| M←[keyboard key ⸨backspace,delete⸩ dn] _* ⍊ structural⁺) ""])
+  <> {M: (unnest cursor)}
+
+;; Pressing C-backspace or C-delete at the begin or end of itemsonly
+;; dict will "spill" the itemspart.
+D←(["" (| M←(keyboard key backspace dn ⍊ ctrl) _* ⍊ structural⁺) ""] _*)
+  <> {(M): (), (D): ↑D}
+D←(_* ["" (| M←(keyboard key delete dn ⍊ ctrl) _* ⍊ structural⁺) ""])
+  <> {(M): (), (D): ↑D}
+
+;; Pressing C-S-backspace at begin-of-dict, or C-S-delete anywhere in a dict,
+;; means delete that dict.
+["" (| M←(keyboard key ⸨backspace,delete⸩ dn ⍊ ctrl shift) _* ⍊ structural⁺) ""]
+  <> {M: (unnest cursor)}
+
+⟨_ ["" (| M←(keyboard key left dn ⍊ shift) _* ⍊ structural⁺) ""]⟩
+  <> {(M): ((nest cursor) (capture item left))}
+
+⟨["" (| M←(keyboard key right dn ⍊ shift) _* ⍊ structural⁺) ""] _⟩
+  <> {(M): ((nest cursor) (capture item right))}
+
+⟨_ [["" (| M←(keyboard key ⸨left,up⸩ dn ⍊ shift) _* ⍊ structural⁺) ""] _*]⟩
+  <> {M: (capture item left)}
+⟨[_* ["" (| M←(keyboard key ⸨right,dn⸩ dn ⍊ shift) _* ⍊ structural⁺) ""]] _⟩
+  <> {M: (capture item right)}
+
+[_* _ ["" (| M←(keyboard key up dn ⍊ shift) _* ⍊ structural⁺) ""]]
+  <> {M: (release item right)}
+
+[["" (| M←(keyboard key dn dn ⍊ shift) _* ⍊ structural⁺) ""] _ _*]
+  <> {M: (release item left)}
+
+⟨["" (| M←(keyboard key ⸨home,end⸩ dn ⍊ shift) _* ⍊ structural⁺) ""]⟩
+  <> {M: (nest parent ⸨left,right⸩)}
+
+⟨[(%string nonempty) (| M←(keyboard input ":" ⍊ -◇_) _* ⍊ structural⁺) ""]⟩
+  <> {M: (if (submit item left) (edit pair left) ↑M), ◇: true}
+  
+;; Pressing any of these keys will delete a no-value pair with the cursor,
+;; and move the cursor to the end of the dict's itemspart.
+(_* ¦ (%entry _ C←["" [| M←[keyboard key ⸨left,backspace,delete,end⸩ dn] _*] ""]))
+  <> {M: (erase pair right)}
+
+;; Pressing Home in the same position should move the cursor to the beginning
+;; of the dict's itemspart.
+(_* ¦ (%entry _ C←["" [| M←[keyboard key home dn] _*] ""]))
+  <> {M: (erase pair left)}
+
+;; Pressing Right should move the cursor out of the dict since "right" is
+;; visually there, so the user likely wants to go there.
+(_* ¦ (%entry _ C←["" [| M←[keyboard key right dn] _*] ""]))
+  <> {(M): ((erase pair right) (escape dict right))}
+
 ;;
-;; |@pattern
-;; (goto history ⸨previous,next⸩)
+;; Commands
 ;;
-;; |@block
-;; Moves backward or forward in history.
-;; |@endblock
 
-(instant [(_* P_) _ -|- (`>P _*) (_*)] (U←(goto history previous) _*))
-  <> {U: (history moved back), (P): (), >P: →P}
+⟨_ [l←"," (| M←[keyboard input "d"] _* ⍊ structural⁺) ""]⟩
+  <> {M: (dup item left), l: ""}
 
-(instant [(_* `>S) _ -|- (S_ _*) (_*)] (U←(goto history next) _*))
-  <> {U: (history moved forward), >S: →S, (S): ()}
+⟨[l←"," (| M←[keyboard input "D"] _* ⍊ structural⁺) ""] _⟩
+  <> {M: (dup item right), l: ""}
 
+⟨_ _ [l←"," (| M←[keyboard input "s"] _* ⍊ structural⁺) ""]⟩
+  <> {M: (swap item left), l: ""}
 
-;; NOTE: `suspended` is a special construct provided to us by the rewriter,
-;; which acts as a dead-end for search. Thus, the copy of the cursor we'll
-;; store in >C will not receive and handle events.
-(instant [(_*) C_ -|- (_*) (`>C)] ((history moved back) _*))
-  <> {>C: (suspended →C)}
+⟨[l←"," (| M←[keyboard input "S"] _* ⍊ structural⁺) ""] _ _⟩
+  <> {M: (swap item right), l: ""}
 
-;; Un-suspend when we've moved all the way down after
-;; exploring history.
-(instant [(_*) C_ -|- () (S←(suspended C'_))] (U←(history moved forward) _*))
-  <> {(U): (), C: →C', (S): ()}
+⟨[l←"," (| M←[keyboard input "/"] _* ⍊ structural⁺) ""]⟩
+  <> {M: (split dict here), l: ""}
 
-;; Sync the cursor with the active history entry.
-(instant [(_*) _ -|- (S_string _*) (_)] (U←(history moved _) _*))
-  <> {U: (edit →S)}
+⟨[l←"," (| M←[keyboard input "\\"] _* ⍊ structural⁺) ""]⟩
+  <> {M: (partition dict here), l: ""}
 
+⟨_dict [l←"," (| M←[keyboard input "j"] _* ⍊ structural⁺) ""] _dict⟩
+  <> {M: (join item here), l: ""}
 
-;; Just like the browsers do this: on any kind of text object, if
-;; selection is passive, collapse it in that direction. E.g. pressing
-;; Left arrow on a passive selection would collapse it to the left.
-(instant [<\> _*] (U←(goto _ ⸨left,right⸩) _*))
-  <> {U: (collapse selection ⸨left,right⸩)}
+⟨_ [l←"," (| M←[keyboard input "x"] _* ⍊ structural⁺) ""]⟩
+  <> {M: (cut item left), l: ""}
 
-;; On the other hand, in an active selection, a goto utility must
-;; conceal the selection and actually navigate somewhere (where exactly
-;; depends on the kind of goto we get).
-(instant [<-> _*] (`>U (goto _ _) `>V _*))
-  <> {>U: (conceal selection), >V: (reveal selection)}
+⟨[l←"," (| M←[keyboard input "X"] _* ⍊ structural⁺) ""] _⟩
+  <> {M: (cut item right), l: ""}
 
+⟨_ [l←"," (| M←[keyboard input "y"] _* ⍊ structural⁺) ""]⟩
+  <> {M: (yank item left), l: ""}
 
-;; |@ soma.input.remove
+⟨[l←"," (| M←[keyboard input "Y"] _* ⍊ structural⁺) ""] _⟩
+  <> {M: (yank item right), l: ""}
+
+[l←"," (| M←[keyboard input "p"] _* ⍊ structural⁺) ""]
+  <> {M: (paste item left), l: ""}
+
+[l←"," (| M←[keyboard input "P"] _* ⍊ structural⁺) ""]
+  <> {M: (paste item right), l: ""}
+
+[l←"." (| M←[keyboard input "."] _* ⍊ structural⁺) ""]
+  <> {M: (escape dict left), l: ""}
+
 ;;
-;; |@pattern
-;; (remove ⟦rune,word⟧ ⸨left,right⸩)
+;; Utilities
 ;;
-;; |@block
-;; Removes one designated text object to the left or to the right.
-;; |@endblock
 
-(instant [l_string | _string] (U←(remove ⸨rune,word⸩ left) _*))
-  <> {(U): (), l: $'(⸨rune,word⸩s →l 0 ..= -2)}
+;; NOTE: the only place where the rewriter cannot go is keys.
+D←⟨C←[_string (| M←[carry dict V_] _* ⍊ -pocket_) _string]⟩
+  <> {(M): (→V (uncarry dict)), (V): (), D: ↑C, pocket: $'(entry ↑D true)}
 
-(instant [_string | r_string] (U←(remove ⸨rune,word⸩ right) _*))
-  <> {(U): (), r: $'(⸨rune,word⸩s →r 1 ..= -1)}
+C←[_string (| M←[uncarry dict] _* ⍊ pocket_dict) _string]
+  <> {C: $'(key →pocket)}
 
-;; Any kind of removal should collapse a selection destructively. The direction
-;; of collapse doesn't matter here since the middle will end up empty.
-(instant [<⸨-,\⸩> [_string | m_string] _string] (U←(remove _ _) _*))
-  <> {U: (collapse selection right), m: ""}
-(instant [<⸨-,\⸩> _string [m_string | _string]] (U←(remove _ _) _*))
-  <> {U: (collapse selection right), m: ""}
+⟨(%any° _symbol _string _number _boolean (edge _)) [_string [| M←[inspect item left] _*] _string]⟩
+  <> {M: (edit item left)}
 
+⟨[_string [| M←[inspect item right] _*] _string] (%any° _symbol _string _number _boolean (edge _))⟩
+  <> {M: (edit item right)}
 
-;; |@ soma.input.edit
+[_string [| M←[inspect item left] _*] _string]
+  <> {M: (goto spot left)}
+
+[_string [| M←[inspect item right] _*] _string]
+  <> {M: (goto spot right)}
+
+⟨_dict [_string [| M←(goto spot left ⍊ enter: (%- false)) _*] _string]⟩
+  <> {M: (enter dict left)}
+
+[[_string [| M←[goto spot left] _*] _string] _*]
+  <> {M: (escape dict left)}
+
+[_string [| M←[goto spot left] _*] _string]
+  <> {M: (goto item left)}
+
+⟨[_string [| M←(goto spot right ⍊ enter: (%- false)) _*] _string] _dict⟩
+  <> {M: (enter dict right)}
+
+[_* [_string [| M←[goto spot right] _*] _string]]
+  <> {M: (escape dict right)}
+
+[_string [| M←[goto spot right] _*] _string]
+  <> {M: (goto item right)}
+
+D←⟨C←[_string (| [edit dict] _* ⍊ -pocket) _string]⟩
+  <> {(C): (), D: $'(merge →C {1: {1: (select (term ↑D))}})}
+
+⟨I_ C←[_string (| M←[edit item left] _* ⍊ -pocket) _string]⟩
+  <> {M: (edit (term →I) right), (I): ()}
+
+⟨C←[_string (| M←[edit item right] _* ⍊ -pocket) _string] I_⟩
+  <> {M: (edit (term →I) left), (I): ()}
+
+⟨I_ C←[_string [| M←[remove item left] _*] _string]⟩
+  <> {(M): (), (I): ()}
+
+⟨C←[_string [| M←[remove item right] _*] _string] I_⟩
+  <> {(M): (), (I): ()}
+
+[l_string [| M←[submit item ⸨left,right⸩] _*] r_string]
+  <> {M: (submit (ml $'(~ →l →r)) ⸨left,right⸩)}
+
+[_string [| [submit result←(ml ml_string) _] _*] _string]
+  <> {result: $'(ml->term →ml)}
+
+[l_string [| M←[submit (ml/ok term_) ⸨left,right⸩] _*] r_string]
+  <> {(M): ((submit (term →term) ⸨left,right⸩) ok), l: "", r: ""}
+
+;; TODO: jump to error
+;; TODO: store error on cursor until modify
+C←[l_string [| M←[submit (ml/err) _] _*] r_string]
+  <> {M: err}
+
+⟨C←[_string [| M←[submit (term T_) left] _*] _string]⟩
+  <> {(M): (), (C): (→T ↑C)}
+
+⟨C←[_string [| M←[submit (term T_) right] _*] _string]⟩
+  <> {(M): (), (C): (↑C ↑T)}
+
+(_* `>C ¦ (%entry _ C←[_string [| M←[submit (term T_) ⸨left,right⸩] _*] _string]))
+  <> {(M): (), C: →T, >C: ↑C}
+
+⟨I_ C←[_string [| M←[goto item left] _*] _string]⟩
+  <> {(M): (), C: →I, I: ↑C}
+
+⟨C←[_string [| M←[goto item right] _*] _string] I_⟩
+  <> {(M): (), C: →I, I: ↑C}
+
+[`>C _* C←[_string [| M←[goto dict left] _*] _string] _*]
+  <> {(M): (), >C: ↑C, (C): ()}
+
+[_* C←[_string [| M←[goto dict right] _*] _string] _* `>C]
+  <> {(M): (), >C: ↑C, (C): ()}
+
+⟨[_* `>C] C←[_string [| M←[enter dict left] _*] _string]⟩
+  <> {(M): (), >C: ↑C, (C): ()}
+
+⟨C←[_string [| M←[enter dict right] _*] _string] [`>C _*]⟩
+  <> {(M): (), >C: ↑C, (C): ()}
+
+⟨D←⟨C←[_string [| M←[escape dict left] _*] _string]⟩⟩
+  <> {(M): (), (D): (↑C' ↑D), (C): ($tr C' ())}
+
+⟨D←⟨C←[_string [| M←[escape dict right] _*] _string]⟩⟩
+  <> {(M): (), (D): (↑D ↑C'), (C): ($tr C' ())}
+
+C←[_string [| M←[nest cursor] _*] _string]
+  <> {(M): (), C: (↑C)}
+
+P←⟨C←[_string [| M←[nest parent left] _*] _string]⟩
+  <> {(M): (), (C): ($tr C' ()), P: (↑C' ↑P)}
+
+P←⟨C←[_string [| M←[nest parent right] _*] _string]⟩
+  <> {(M): (), (C): ($tr C' ()), P: (↑P ↑C')}
+
+D←⟨C←[_string [| M←[unnest cursor] _*] _string]⟩
+  <> {(M): (), D: ↑C}
+
+⟨I_ [[_string [| M←[capture item left] _*] _string] `>I _*]⟩
+  <> {(M): (), (I): (), >I: →I}
+
+⟨[_* `>I [_string [| M←[capture item right] _*] _string]] I_⟩
+  <> {(M): (), (I): (), >I: →I}
+
+⟨D←[[_string [| M←[release item left] _*] _string] I_ _*]⟩
+  <> {(M): (), (D): (↑I' ↑D), (I): ($tr I' ())}
+
+⟨D←[_* I_ [_string [| M←[release item right] _*] _string]]⟩
+  <> {(M): (), (D): (↑D ↑I'), (I): ($tr I' ())}
+
+⟨I_ [_string [| M←[dup item left] _*] _string]⟩
+  <> {(M): (), (I): (→I →I)}
+
+⟨[_string [| M←[dup item right] _*] _string] I_⟩
+  <> {(M): (), (I): (→I →I)}
+
+⟨I0_ I1_ [_string [| M←[swap item left] _*] _string]⟩
+  <> {(M): (), I0: →I1, I1: →I0}
+
+⟨[_string [| M←[swap item right] _*] _string] I0_ I1_⟩
+  <> {(M): (), I0: →I1, I1: →I0}
+
+D←(l_* C←[_string [| M←[split dict here] _*] _string] r_* ¦ pairs_)
+  <> {(M): (), (D): (↑l ↑C $(∪ ↑r →pairs))}
+
+D←⟨C←[_string [| M←[partition dict here] _*] _string]⟩
+  <> {(M): (), (C): ($tr C' ()), (D): ($'(part ↑D items) ↑C' $'(part ↑D pairs))}
+
+⟨X_dict C←[_string [| M←[join item here] _*] _string] Y_dict⟩
+  <> {(M): (), (X): (), (Y): (), C: $'(cat →X (↑C) →Y)}
+
+⟨I_ [_string (| M←[cut item left] _* ⍊ ⋮clipboard) _string]⟩
+  <> {(M): (), (I): (), clipboard: $'(entry →I true)}
+
+⟨[_string (| M←[cut item right] _* ⍊ ⋮clipboard) _string] I_⟩
+  <> {(M): (), (I): (), clipboard: $'(entry →I true)}
+
+⟨I_ [_string (| M←[yank item left] _* ⍊ ⋮clipboard) _string]⟩
+  <> {(M): (), clipboard: $'(entry →I true)}
+
+⟨[_string (| M←[yank item right] _* ⍊ ⋮clipboard) _string] I_⟩
+  <> {(M): (), clipboard: $'(entry →I true)}
+
+C←[_string (| M←[paste item left] _* ⍊ clipboard_: (%pipe tally 1)) _string]
+  <> {(M): (), (C): ($'(key →clipboard) ↑C)}
+
+C←[_string (| M←[paste item right] _* ⍊ clipboard_: (%pipe tally 1)) _string]
+  <> {(M): (), (C): (↑C $'(key →clipboard))}
+
+;; When we enter a pair that exists, we edit it, and rely on rules
+;; that deal with editing to let the user enter the pair if it is
+;; a dictionary.
+⟨K←Kq_ C←[_string [| M←[edit pair left] _*] _string] ¦ (%value K V_)⟩
+  <> {M: (select (term →V)), (Kq): (), (C): (), V: ↑C}
+⟨K_ C←[_string [| M←[edit pair left] _*] _string] ¦ (%-value K V)⟩
+  <> {(M): (), (K): (), (C): (), V: ↑C}
+
+(`>C _* ¦ (%entry _ C←[_string [| M←[erase pair left] _*] _string]))
+  <> {(M): (), >C: ↑C, (C): ()}
+(_* `>C ¦ (%entry _ C←[_string [| M←[erase pair right] _*] _string]))
+  <> {(M): (), >C: ↑C, (C): ()}
+
+;;;
+
+[| M←[if cond_ ok_ err_] _*]
+  <> {(M): (→cond (br →ok →err))}
+
+[| M←⸨ok,err⸩ V←[br ok_ err_] _*]
+  <> {M: →⸨ok,err⸩, (V): ()}
+
+[| M←[br _ _] _*]
+  <> {(M): ()}
+
+;; TODO: use if _ _ and unless _ _ instead !
+[| M←[a_ ⸨then,else⸩ b_] _*]
+  <> {(M): (→a (⸨then,else⸩ →b))}
+
+[| M←ok V←[then a_] _*]
+  <> {M: →a, (V): ()}
+
+[| M←⸨ok,err⸩ V←[⸨then,else⸩ a_] _*]
+  <> {M: →a, (V): ()}
+
+[| M←⸨err,ok⸩ V←[⸨then,else⸩ a_] _*]
+  <> {(M): (), (V): ()}
+
+;; -----
+;; Prompt
+;; -----
+
 ;;
-;; |@pattern
-;; (edit text_string)
+;; Keys
 ;;
-;; |@block
-;; Replaces the content of the input field with text, removing its previous
-;; content and canceling selection, if any.
-;; |@endblock
 
-(instant [l_string | r_string] (U←(edit text_string) _*))
-  <> {(U): (), l: →text, r: ""}
+;; Hit Enter to submit an entry to history.
+[prompt (_*) [l←(%string nonempty) (| M←[keyboard key enter dn] _* ⍊ prompt⁺) ""] (_*)]
+  <> {(M): ((goto history right)
+            ((submit (reply →l) left) then (edit (text "") right)))}
 
-(instant [<⸨\,-⸩> _*] (`>U (edit _) _*))
-  <> {>U: (collapse selection right)}
+;; Hit Up and Down keys on top/bottom line to navigate between history entries.
+[prompt (_*) [_string (| M←(keyboard key ⸨up,dn⸩ dn ⍊ -mod ⸨top,bot⸩: true) _* ⍊ prompt⁺) _string] (_*)]
+  <> {M: (goto reply ⸨left,right⸩)}
 
-
-;; |@ soma.input.make
 ;;
-;; |@pattern
-;; (make selection active)
+;; Utilities
 ;;
-;; |@block
-;; Transforms the cursor into an active empty selection.
-;; |@endblock
 
-(instant [H←<|> C←[_string | r_string] `>r] (U←(make selection active) _*))
-  <> {(U): (), H: <->, r: "", >r: →r}
+[prompt (_* `>ahead) [_string [| M←[goto history right] _*] _string] (ahead_* tip_)]
+  <> {(M): (), (>ahead): →ahead, (ahead): (), (tip): ()}
 
+;; Mark as pending.
+[prompt (_*) [_string [C←| [submit (reply _string) _] _*] _string] (_*)]
+  <> {C: (pending |)}
 
-;; |@ soma.input.make
-;;
-;; |@pattern
-;; (make selection passive)
-;;
-;; |@block
-;; Transforms an active selection into a passive one. Transforms an empty
-;; active selection into a cursor.
-;; |@endblock
+;; React to status: accepted by adding to history.
+[prompt (_*) [_string [C←(accepted |) M←[submit (reply entry_string) left] _*] _string] (_*)]
+  <> {(M): ((append (history →entry) left) ok), C: |}
+;; React to status: rejected by doing nothing through emission of `err`.
+[prompt (_*) [_string [C←(rejected |) M←[submit (reply _string) _] _*] _string] (_*)]
+  <> {M: err, C: |}
 
-(instant [H←<-> [_string | m←""] r_string] (U←(make selection passive) _*))
-  <> {(U): (), H: <|>, m: →r, (r): ()}
+;; Do not append identical history entries.
+[prompt (_* entry_) [_string [| M←[append (history entry_string) left] _*] _string] (_*)]
+  <> {(M): ()}
+[prompt (_* `>entry) [_string [| M←[append (history entry_string) left] _*] _string] (_*)]
+  <> {(M): (), >entry: →entry}
 
-(instant [H←<⸨\,-⸩> l_string [m←"" | r_string]] (U←(make selection passive) _*))
-  <> {(U): (), H: <|>, (l): (), m: →l}
+[prompt (_* entry_string) [l_string [| M←[goto reply left] _*] r_string] (`>entry _+)]
+  <> {M: (edit (text →entry) right), (entry): (), >entry: →entry}
+[prompt (_* entry_string) [l_string [| M←[goto reply left] _*] r_string] (`>entry)]
+  <> {M: (edit (text →entry) right), (entry): (), (>entry): (→entry $'(~ →l →r))}
 
+[prompt (_* `>entry) [_string [| M←[goto reply right] _*] _string] (entry_string ahead_string _+)]
+  <> {M: (edit (text →ahead) right), >entry: →entry, (entry): ()}
+[prompt (_* `>entry) [_string [| M←[goto reply right] _*] _string] (entry_string home_string)]
+  <> {M: (edit (text →home) right), >entry: →entry, (entry): (), (home): ()}
 
-;; This rule lets us switch between the two in the general case.
-(instant [H←<⸨\,-⸩> _*] (U←(make selection ⸨active,passive⸩) _*))
-  <> {(U): (), H: <⸨-,\⸩>}
+--- seed
 
+;; (a b ("" (| (keyboard key backspace dn ctrl: true) (keyboard key delete dn ctrl: true)  modify: true goto: true structural: true) "") c d)
+;; ("hello\nwo" (| (keyboard key up dn) multiline: true compose: true modify: true structural: true) "rld")
 
-;; |@ soma.input.select
-;;
-;; |@pattern
-;; (select text)
-;;
-;; |@block
-;; Transforms the cursor into a passive selection of the entire edited text.
-;; |@endblock
+(prompt
+  ()
+  ("hello" (| multiline: true compose: true modify: true prompt: true) "")
+  ())
 
-(instant [H←<|> C←[l_string | r_string] `>r] (U←(select text) _*))
-  <> {(U): (), H: <\>, l: "", r: $'(~ →l →r), >r: ""}
-
-(instant [<⸨\,-⸩> _*] (`>U (select text) _*))
-  <> {>U: (collapse selection right)}
-
-
-;; |@ soma.input.collapse
-;;
-;; |@pattern
-;; (collapse selection ⸨left,right⸩)
-;;
-;; |@block
-;; Transforms an active or passive selection into a cursor on its left
-;; or right.
-;; |@endblock
-
-(instant [H←<⸨-,\⸩> l_string [m_string | r_string]] (U←(collapse selection left) _*))
-  <> {(U): (), H: <|>, (l): (), m: →l, r: $'(~ →m →r)}
-(instant [H←<⸨-,\⸩> [l_string | m_string] r_string] (U←(collapse selection left) _*))
-  <> {(U): (), H: <|>, m: $'(~ →m →r), (r): ()}
-
-(instant [H←<⸨-,\⸩> l_string [m_string | _string]] (U←(collapse selection right) _*))
-  <> {(U): (), H: <|>, (l): (), m: $'(~ →l →m)}
-(instant [H←<⸨-,\⸩> [l_string | m_string] r_string] (U←(collapse selection right) _*))
-  <> {(U): (), H: <|>, l: $'(~ →l →m), m: →r, (r): ()}
-
-
-;; |@ soma.input.conceal
-;;
-;; |@pattern
-;; (conceal inline)
-;;
-;; |@block
-;; Converts an inline cursor form back into a multiline cursor.
-;; |@endblock
-
-(instant [L'←(L_string l_string) | R'←(r_string R_string)] (U←(conceal inline) _*))
-  <> {(U): (), L': $'(~ →L →l), R': $'(~ →r →R)}
-
-
-;; |@ soma.input.reveal
-;;
-;; |@pattern
-;; (reveal inline)
-;;
-;; |@block
-;; Transforms a cursor into an inline cursor form. This can simplify some
-;; rules and editing operations, freeing them of line boundary tracking;
-;; they only have to wrap themselves in `(reveal inline)` and `(conceal inline)`.
-;; |@endblock
-
-(instant [l_string | r_string] (U←(reveal inline) _*))
-  <> {(U): (), l: ($'(rline/rest →l) $'(rline/stem →l)), r: ($'(line/stem →r) $'(line/rest →r))}
-
-
-;; |@ soma.input.conceal
-;;
-;; |@pattern
-;; (conceal selection)
-;;
-;; |@block
-;; Transforms an active selection into a "concealed" one, storing positional
-;; information as an integer rather than structurally.
-;; |@endblock
-
-(instant [H←<-> [l_string | m_string] r_string] (U←(conceal selection) _*))
-  <> {(U): (), m: $'(~ →m →r), H: (<?> $'(charcount →l →m)), (r): ()}
-
-(instant [H←<-> l_string [m_string | r_string]] (U←(conceal selection) _*))
-  <> {(U): (), (l): (), H: (<?> $'(charcount →l)), m: $'(~ →l →m)}
-
-
-;; |@ soma.input.reveal
-;;
-;; |@pattern
-;; (reveal selection)
-;;
-;; |@block
-;; Transforms concealed selection back into structural form, possibly
-;; incorporating cursor movement that happened in the interim.
-;; |@endblock
-
-(instant [H←(<?> A←(%number +i32)) [(%group C l_string | r_string)]] ((reveal selection `>A `>A') _*))
-  <> {>A: →A, (C): (| $'(~ →l →r)) >A': $'(charcount →l), H: <->}
-
-(instant [<-> [| _string]] ((reveal selection `>dir A←(%number +i32) A'←(%number +i32)) _*))
-  <> {>dir: $(join (< →A' →A) left right), A: $'(min →A →A'), A': $'(max →A →A')}
-
-(instant [<-> [| T_string]] ((reveal selection _ L←(%number +i32) `>M R←(%number +i32)) _*))
-  <> {L: $'(runes →T 0 ..< →L), >M: $'(runes →T →L ..< →R), R: $'(runes →T →R ..= -1)}
-
-(instant [<-> [(%group C | _string)] `>R] (U←(reveal selection left L_string M_string R_string) _*))
-  <> {(U): (), (C): (→L | →M), >R: →R}
-
-(instant [<-> `>L [(%group C | _string)]] (U←(reveal selection right L_string M_string R_string) _*))
-  <> {(U): (), >L: →L, (C): (→M | →R)}
-
-
-;; |@ soma.input.submit
-;;
-;; |@pattern
-;; (submit)
-;;
-;; |@block
-;; Initiates submission. This requires the observer of the input field to
-;; be aware of submissions, and to be able to respond to them with either
-;; `(submission accepted)` or `(submission rejected)`.
-;; |@endblock
-
-(instant [l_string | r_string] (U←(submit) _*))
-  <> {U: (request submission $'(~ →l →r))}
-
-(instant [<⸨-,\⸩> _*] (`>U (submit) _*))
-  <> {>U: (collapse selection right)}
-
-(instant [submission _ slot←ready] (U←(request submission S_string) _*))
-  <> {(U): (), slot: (proposal →S)}
-
-(instant [submission _ slot←(proposal S_string)] (U←(submission accepted) _*))
-  <> {U: (ack submission →S), slot: ready}
-
-(instant [submission _ slot←(proposal S_string)] (U←(submission rejected) _*))
-  <> {(U): (), slot: ready}
-
-(instant [l_string | r_string] (U←(ack submission S_string) _*))
-  <> {U: (append history →S), l: "", r: ""}
-
-
-;; |@ soma.input.append
-;;
-;; |@pattern
-;; (append history S_string)
-;;
-;; |@block
-;; Navigates to the end of history and appends a string *S*.
-;; |@endblock
-
-(instant [(_* `>F) _ -|- (F_+) (_*)] ([append history _] _*))
-  <> {(>F): →F, (F): ()}
-
-(instant [(_* `>F) _ -|- () (T_)] ([append history _] _*))
-  <> {(T): ()}
-
-;; Do not append duplicate entries.
-(instant [(_* S_) _ -|- () ()] (U←[append history S_] _*))
-  <> {(U): ()}
-
-;; Do not append empty entries.
-(instant [(_*) _ -|- () ()] (U←[append history ""] _*))
-  <> {(U): ()}
-
-(instant [(_* `>S) _ -|- () ()] (U←[append history S_string] _*))
-  <> {(U): (), >S: →S}
-
+;; TODO: org & tests. rule specificity is very nasty & relied upon here so we must have 100% coverage as in
+;;       all rules hit in some way, so that we know they're all reachable.

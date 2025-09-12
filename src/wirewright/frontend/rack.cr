@@ -48,7 +48,7 @@ module Ww::Frontend::Rack
       component_cache : Alloy::ExpansionCache,
       theme : Soma::Microfold::Theme,
       uiR : Rewriter,
-      inputR : (Term, Term -> Term),
+      input : Input::Context,
       console : Console::Any,
       env0 : Term::Dict?,
       env1 : Term::Dict
@@ -82,18 +82,10 @@ module Ww::Frontend::Rack
         rulebase: ML.document(files.read_string(UIR_PATH)),
       )
 
-      inputdoc = ML.document(files.read_string(INPUT_PATH))
-      inputR = Input.input(inputdoc,
-        Term.of(:"keys.editing"),
-        Term.of(:"keys.inline"),
-        Term.of(:"keys.multiline"),
-        Term.of(:"keys.selection"),
-        Term.of(:"keys.history"),
-        Term.of(:"keys.submission"),
-        Term.of(:utilities),
-      )
+      inputbase = ML.document(files.read_string(INPUT_PATH))
+      inputctx = Input.context(inputbase[:rules])
 
-      State.new(files, requests, window, components, component_cache, theme, uiR, inputR, console, env0: nil, env1: env)
+      State.new(files, requests, window, components, component_cache, theme, uiR, inputctx, console, env0: nil, env1: env)
     end
 
     # We need to clamp border insets to 1. Microfold normally insets by border width,
@@ -251,15 +243,12 @@ module Ww::Frontend::Rack
           return state unless state.env1[:focus, :targets, state.env1[:focus, :index]] == Term.of(:input)
 
           input0 = state.env1[:states, :"command-input", :model]
-          input1 = state.inputR.call(input0, Term.of({event}))
-
-          # Handle submissions.
-          Term.matchpi?(input1, %{(submission input_ (proposal submission_))}) do
+          input1 = Input.send(state.input, input0, event) do |submission|
             if state1 = submit?(state, submission)
-              input1 = state.inputR.call(input1, Term.of({ {:submission, :accepted} }))
               state = state1
+              true # accepted
             else
-              input1 = state.inputR.call(input1, Term.of({ {:submission, :rejected} }))
+              false # rejected
             end
           end
 
@@ -329,9 +318,9 @@ module Ww::Frontend::Rack
 
     # Handles a submission from the user. Returns `nil` if it must be rejected
     # on the input level.
-    private def submit?(state : State, submission : Term) : State?
+    private def submit?(state : State, submission : String) : State?
       begin
-        command = ML.terms(submission.to(String))
+        command = ML.terms(submission)
       rescue e : ML::SyntaxError
         return log(state,
           Term.of(:thread, submission),
@@ -348,11 +337,11 @@ module Ww::Frontend::Rack
         end
 
         givenpi %{rack} do
-          request(state, submission, Term.of({:help}))
+          request(state, Term.of(submission), Term.of({:help}))
         end
 
         givenpi %{rack subcommand_+} do
-          request(state, submission, subcommand)
+          request(state, Term.of(submission), subcommand)
         end
 
         otherwise do

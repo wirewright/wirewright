@@ -29,7 +29,7 @@ states: {
     scroll: 0,
   },
   command-input: {
-    model: (submission (() (<|> ("" | "")) -|- () ()) ready),
+    model: (prompt () ("" (| multiline: true select: true modify: true prompt: true compose: true) "") ()),
     state: unlocked,
   },
 }
@@ -64,24 +64,39 @@ states: {
 ;;
 ;; input-area
 ;;
-
-;; Handle submission wrapper.
-(input-area [submission child_ _])
- => (input-area ^child)
-
-;; Handle history.
-(input-area [(_*) current_ -|- (_*) (_*)])
-  => (input-area ^current)
-
-;; Handle active or inactive selection with left or right bearing.
-(input-area [(%any <-> <\>) l_string [m_string | r_string]])
-  => (p ^(~ l m r) selection-anchor: ^(charcount l) selection-span: ^(charcount m))
-(input-area [(%any <-> <\>) [l_string | m_string] r_string])
-  => (p ^(~ l m r) selection-anchor: ^(charcount l) selection-span: ^(charcount m))
-
-;; Handle cursor.
-(input-area [<|> [l_string | r_string]])
+ 
+;; Cursor.
+(input-area [l_string [| _*] r_string])
   => (p ^(~ l r) selection-anchor: ^(charcount l) selection-span: 0)
+
+;; Compose.
+(input-area [compose m_string [| _*]])
+  => (^match m
+       (when "" (p " " style: "underline font-bold text-neutral-50"))
+       (when _ (p ^m style: "underline font-bold text-neutral-50")))
+
+;; Compose in cursor.
+(input-area [l_string C←[compose _ [| _*]] r_string])
+  => (group (p ^l) (input-area ^C) (p ^r) style: "flow-wrap")
+
+;; Left and right-leaning selection.
+(input-area [l_string [| _*] m_string r_string])
+  => (p ^(~ l m r) selection-anchor: ^(charcount l) selection-span: ^(charcount m))
+(input-area [l_string m_string [| _*] r_string])
+  => (p ^(~ l m r) selection-anchor: ^(charcount l) selection-span: ^(charcount m))
+
+;; TODO: use strikethrough.
+
+;; Compose in left-leaning selection.
+(input-area [l_string C←[compose _ [| _*]] m_string r_string])
+  => (group (p ^l) (input-area ^C) (p ^m style: "italic text-red-500") (p ^r) style: "flow-wrap")
+;; Compose in right-leaning selection.
+(input-area [l_string m_string C←[compose _ [| _*]] r_string])
+  => (group (p ^l) (p ^m style: "italic text-red-500") (input-area ^C) (p ^r) style: "flow-wrap")
+
+;; Prompt.
+(input-area [prompt (_*) current_ (_*)])
+  => (input-area ^current)
 
 ;; Fallback.
 (input-area model_)
