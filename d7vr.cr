@@ -283,7 +283,7 @@ module D7VR
       (p ^desc style: "pl-3 text-neutral-500 bg-neutral-900 text-sm w-max leading-normal")))
   WWML
 
-  private def instance1(document0 : Term::Dict, node0 : Term, nodepath : Stack(Int32)) : Term
+  private def instance1(document0 : Term::Dict, node0 : Term, nodepath : ThinArray(Int32)) : Term
     if Rhodium.passable_node?(document0, node0)
       # If node is passable, remove only its own shadow attributes so that child
       # instantiations have a chance of seeing them.
@@ -452,7 +452,7 @@ module D7VR
   # addresses remembered, cells resolved, etc. The end result of instantiation
   # is ready for *printing*: see `printout`.
   def instance(document document0 : Term::Dict) : Term::Dict
-    nodepath = Stack(Int32).new
+    nodepath = ThinArray(Int32).new
     document1 = document0
 
     while Rhodium.successor?(document1, nodepath)

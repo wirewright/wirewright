@@ -32,12 +32,12 @@ module ::Ww::Keypath
     end
   end
 
-  def each_item(term : Term, &fn : Stack(Term), Term -> Bool?)
-    each_item_impl(term, fn, keypath: Stack(Term).new)
+  def each_item(term : Term, &fn : ThinArray(Term), Term -> Bool?)
+    each_item_impl(term, fn, keypath: ThinArray(Term).new)
   end
 
-  def ascend(root : Term, keypath : Stack(Term), & : Term::Dict -> Bool)
-    stack = Stack(Term::Dict).new
+  def ascend(root : Term, keypath : ThinArray(Term), & : Term::Dict -> Bool)
+    stack = ThinArray(Term::Dict).new
     tip = root
 
     keypath.each do |step|
@@ -59,7 +59,7 @@ module ::Ww::Keypath
     end
   end
 
-  def follow(root : Term, keypath : Stack(Term)) : Term
+  def follow(root : Term, keypath : ThinArray(Term)) : Term
     if keypath.empty?
       return root
     end
@@ -68,7 +68,7 @@ module ::Ww::Keypath
     root0.follow(keypath)
   end
 
-  def assign(root : Term, keypath : Stack(Term), value : Term) : Term
+  def assign(root : Term, keypath : ThinArray(Term), value : Term) : Term
     if keypath.empty?
       return value
     end
@@ -666,16 +666,16 @@ module UIR
     end
   end
 
-  def hit(*args, **kwargs, &predicate : Stack(Term), Term -> Bool) : Array(Stack(Term))
-    sink = [] of Stack(Term)
-    hit(*args, **kwargs, sink: sink, keypath: Stack(Term).new, predicate: predicate)
+  def hit(*args, **kwargs, &predicate : ThinArray(Term), Term -> Bool) : Array(ThinArray(Term))
+    sink = [] of ThinArray(Term)
+    hit(*args, **kwargs, sink: sink, keypath: ThinArray(Term).new, predicate: predicate)
     sink
   end
 
   # Returns a hash of strata under point *x*, *y*. Strata are sorted
   # by their Z-index. The highest Z-index goes first. Each stratum is
   # a list of keypaths for elements hit in that stratum.
-  def strata(dwuir : Term, x : Term::Num, y : Term::Num, &predicate : Stack(Term), Term -> Bool) : Hash(Term::Num, Array(Stack(Term)))
+  def strata(dwuir : Term, x : Term::Num, y : Term::Num, &predicate : ThinArray(Term), Term -> Bool) : Hash(Term::Num, Array(ThinArray(Term)))
     hits = hit(dwuir, x, y, &predicate)
     hits = hits.map { |keypath| {z_index(dwuir, keypath), keypath} }
 
@@ -683,9 +683,9 @@ module UIR
     hits.unstable_sort! { |(z0, _), (z1, _)| z1 <=> z0 }
 
     # NOTE: assumes Crystal hash tables are ordered (they are).
-    strata = {} of Term::Num => Array(Stack(Term))
+    strata = {} of Term::Num => Array(ThinArray(Term))
     hits.each do |z, keypath|
-      stratum = strata.put_if_absent(z) { [] of Stack(Term) }
+      stratum = strata.put_if_absent(z) { [] of ThinArray(Term) }
       stratum << keypath
     end
 
@@ -697,16 +697,16 @@ module UIR
   end
 
   # TODO: this is lame, optimize!!
-  def stratum(*args, **kwargs) : Array(Stack(Term))
+  def stratum(*args, **kwargs) : Array(ThinArray(Term))
     strata = strata(*args, **kwargs)
     unless row = strata.first?
-      return [] of Stack(Term)
+      return [] of ThinArray(Term)
     end
     _, stratum = row
     stratum
   end
 
-  def z_index(dwuir : Term, keypath : Stack(Term)) : Term::Num
+  def z_index(dwuir : Term, keypath : ThinArray(Term)) : Term::Num
     zmax = Term[0]
 
     Keypath.ascend(dwuir, keypath) do |node|

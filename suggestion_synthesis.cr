@@ -127,7 +127,7 @@ module NodeCompletion
   # Synthesizes a suggestion-triggering pattern based on *params*. *pivot*
   # specifies which parameter should be "active" in the suggestion.
   def pattern_and_cursorpath(name : Term, params : Term::Dict, pivot : Int32) : {Term, Term::Dict}
-    cursorpath = Stack(Int32).new
+    cursorpath = ThinArray(Int32).new
 
     pattern = Term::Dict.build do |commit|
       commit << name

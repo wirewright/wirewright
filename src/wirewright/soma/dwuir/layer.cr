@@ -49,7 +49,7 @@ module Ww::Soma::DwUIR
     # UInt32 is enough to convert them to `Pixel`s. This usually means premultiplied BGRA,
     # since we assume Wirewright only runs on little-endian machines.
     def initialize(pixels : UInt8*, @width, @height, stride : Int32)
-      @data = Stack(UInt32).new
+      @data = ThinArray(UInt32).new
 
       raw = pixels.to_slice(@height * stride)
 

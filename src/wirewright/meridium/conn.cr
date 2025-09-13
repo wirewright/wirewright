@@ -120,7 +120,7 @@ module Ww::Meridium
     end
 
     def meet(tspace : Tspace) : Nil
-      effects = Stack(Effect).new
+      effects = ThinArray(Effect).new
 
       @lock.write do
         Log.trace { "#{@staging.conid}: begin meeting for #{@baseline.state}->#{@staging.state}" }

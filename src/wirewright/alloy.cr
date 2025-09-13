@@ -67,7 +67,7 @@ module Ww::Alloy
   end
 
   # Base dictionary rewriting.
-  private def flat_map(keypath : Stack(Term), dict0 : Term::Dict, & : Term -> Expansion) : Expansion
+  private def flat_map(keypath : ThinArray(Term), dict0 : Term::Dict, & : Term -> Expansion) : Expansion
     dict1 = dict0.pairspart.transaction do |commit|
       # Recurse on items.
       dict0.items.each_with_index do |item, index|
@@ -207,7 +207,7 @@ module Ww::Alloy
     end
   end
 
-  private def render_many(keypath : Stack(Term), issues : Issue::Sink, &) : Assign | Splice
+  private def render_many(keypath : ThinArray(Term), issues : Issue::Sink, &) : Assign | Splice
     children = [] of Term
 
     submit = ->(ctx : Context, item : Term, index : Int32) do
@@ -234,7 +234,7 @@ module Ww::Alloy
   # Yields a dictionary and a proc. The block is expected to iterate through
   # the dict in whatever way it prefers; then, call the proc with each context
   # to use to evaluate *body*.
-  private def render_each(ctx : Context, keypath : Stack(Term), iteratee : Term, body : Term::Dict, issues : Issue::Sink, &) : Expansion
+  private def render_each(ctx : Context, keypath : ThinArray(Term), iteratee : Term, body : Term::Dict, issues : Issue::Sink, &) : Expansion
     issues.adjoin("`^each` items template expression") do |issues|
       iteratee_value = eval(ctx, iteratee, issues)
 
@@ -271,7 +271,7 @@ module Ww::Alloy
     end
   end
 
-  private def render0(ctx : Context, keypath : Stack(Term), template : Term, issues : Issue::Sink) : Expansion
+  private def render0(ctx : Context, keypath : ThinArray(Term), template : Term, issues : Issue::Sink) : Expansion
     Term.case(template) do
       # |@ alloy.template.^case
       #
@@ -939,7 +939,7 @@ module Ww::Alloy
   #
   # NOTE: this is public API, but it offers more control than is usually necessary.
   # Consider non-X overloads (e.g. `render`) before use.
-  def renderX(ctx : Context, keypath : Stack(Term), template : Term, issues : Issue::Sink) : Expansion
+  def renderX(ctx : Context, keypath : ThinArray(Term), template : Term, issues : Issue::Sink) : Expansion
     issues.adjoin(Issue::Spot::KeypathRef.new(keypath)) do |issues|
       render0(ctx, keypath, template, issues)
     end
@@ -957,12 +957,12 @@ module Ww::Alloy
   def renderX(vars : Term::Dict, template : Term, *, severity : Issue::Severity) : {Expansion, Array(Issue::Backtrace)}
     Issue.setup(severity: severity) do |issues|
       issues.adjoin(Spot::Template.new) do |issues|
-        render0(Context.new(vars), Stack(Term).new, template, issues)
+        render0(Context.new(vars), ThinArray(Term).new, template, issues)
       end
     end
   end
 
-  private def renderX0(ruleset : Ruleset, cache : ExpansionCache, keypath : Stack(Term), view : Term, issues : Issue::Sink) : Expansion
+  private def renderX0(ruleset : Ruleset, cache : ExpansionCache, keypath : ThinArray(Term), view : Term, issues : Issue::Sink) : Expansion
     responses = ruleset.responses(view)
     responses.each do |response|
       pr, rule = response
@@ -1037,7 +1037,7 @@ module Ww::Alloy
   def renderX(
     ruleset : Ruleset,
     cache : ExpansionCache,
-    keypath : Stack(Term),
+    keypath : ThinArray(Term),
     view : Term,
     issues : Issue::Sink,
   ) : Expansion
@@ -1073,7 +1073,7 @@ module Ww::Alloy
   ) : {Expansion, Array(Issue::Backtrace)}
     Issue.setup(severity: severity) do |issues|
       issues.adjoin(Spot::View.new) do |issues|
-        renderX(ruleset, cache, Stack(Term).new, view, issues)
+        renderX(ruleset, cache, ThinArray(Term).new, view, issues)
       end
     end
   end

@@ -337,14 +337,14 @@ class Document
 
   # Returns the nodepath of the topmost node that includes the point *x*, *y*,
   # if any. Returns `nil` otherwise.
-  private def below?(x : Term::Num, y : Term::Num) : Stack(Int32)?
+  private def below?(x : Term::Num, y : Term::Num) : ThinArray(Int32)?
     stratum = UIR.stratum(Term.of(@dwuir), x, y)
     stratum.leftmost? do |keypath|
       hit = @dwuir.follow(keypath)
       next unless backlink = hit[:"#backlink"]?
       next unless backlink = backlink.as_itemsonly_d?
 
-      nodepath = Stack(Int32).new(backlink.size)
+      nodepath = ThinArray(Int32).new(backlink.size)
 
       valid = backlink.items.all? do |index|
         nodepath << (index.to?(Int32) || next)
@@ -356,8 +356,8 @@ class Document
     end
   end
 
-  private def mark(& : Stack(Int32), Term -> Term) : Nil
-    nodepath = Stack(Int32).new
+  private def mark(& : ThinArray(Int32), Term -> Term) : Nil
+    nodepath = ThinArray(Int32).new
 
     while Rhodium.successor?(@document, nodepath)
       node0 = Rhodium.follow(@document, nodepath)
@@ -368,7 +368,7 @@ class Document
     end
   end
 
-  private def hover(nodepath : Stack(Int32), node : Term, mouseover : Stack(Int32)?) : Term
+  private def hover(nodepath : ThinArray(Int32), node : Term, mouseover : ThinArray(Int32)?) : Term
     unless Rhodium.active?(@document, nodepath, node)
       return node
     end

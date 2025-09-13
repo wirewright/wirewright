@@ -56,7 +56,7 @@ module Ww::Issue
     #
     # NOTE: Unless you have an immutable *keypath* right away, please use `KeypathRef`
     # instead. `KeypathRef`s will be expanded into `Keypath` on clone.
-    record Keypath, keypath : Stack(Term) do
+    record Keypath, keypath : ThinArray(Term) do
       include Spot
     end
 
@@ -71,12 +71,12 @@ module Ww::Issue
 
       @size : Int32
 
-      def initialize(@keypath : Stack(Term))
+      def initialize(@keypath : ThinArray(Term))
         @size = @keypath.size
       end
 
       def clone
-        keypath1 = Stack(Term).new
+        keypath1 = ThinArray(Term).new
 
         @keypath.each_with_index do |key, index|
           break if index >= @size

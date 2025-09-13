@@ -1000,7 +1000,7 @@ module Ww
     alias Action = Absent.class
 
     def self.morph(term root : Term::Dict, keypath : Indexable, & : Term -> Term | Action) : Term::Dict
-      stack = Stack({Term::Dict, Term}).new
+      stack = ThinArray({Term::Dict, Term}).new
       tip = Term.of(root)
 
       keypath.each do |key|
@@ -1114,9 +1114,9 @@ module Ww
     #
     # Traversal proceeds left-to-right, parent before children. *root* is
     # yielded first.
-    def self.each_keypath_and_itemnode(root : Term, & : Stack(Term), Term -> Bool) : Nil
-      nodes = Stack{root}
-      keypath = Stack(Term).new
+    def self.each_keypath_and_itemnode(root : Term, & : ThinArray(Term), Term -> Bool) : Nil
+      nodes = ThinArray{root}
+      keypath = ThinArray(Term).new
 
       while node = nodes.pop?
         descend = yield keypath, node
@@ -1144,9 +1144,9 @@ module Ww
 
     # Traversal proceeds left-to-right, children before parents. *root* is
     # yielded last.
-    def self.each_keypath_bottom_up(root : Term, & : Stack(Term) ->) : Nil
-      nodes = Stack{root}
-      keypath = Stack(Term).new
+    def self.each_keypath_bottom_up(root : Term, & : ThinArray(Term) ->) : Nil
+      nodes = ThinArray{root}
+      keypath = ThinArray(Term).new
 
       while node = nodes.pop?
         # Descend
@@ -1175,8 +1175,8 @@ module Ww
       end
     end
 
-    def self.ancestors(root : Term, keypath : Indexable(Term)) : Stack(Term)
-      ancestors = Stack(Term).new(keypath.size - 1)
+    def self.ancestors(root : Term, keypath : Indexable(Term)) : ThinArray(Term)
+      ancestors = ThinArray(Term).new(keypath.size - 1)
       parent = root
 
       keypath.each do |key|
@@ -1191,7 +1191,7 @@ module Ww
   # TODO: convert these to iterative and use blocks!!!
 
   struct Term
-    private def self.each_keypath_and_leaf?(node : Term::Dict, prefix : Stack(Term), fn : Stack(Term), Term -> Bool) : Bool
+    private def self.each_keypath_and_leaf?(node : Term::Dict, prefix : ThinArray(Term), fn : ThinArray(Term), Term -> Bool) : Bool
       # Empty dict literal `{}` is a (leaf).
       if node.empty?
         return fn.call(prefix, node.upcast)
@@ -1208,23 +1208,23 @@ module Ww
       true
     end
 
-    private def self.each_keypath_and_leaf?(node, prefix : Stack(Term), fn : Stack(Term), Term -> Bool) : Bool
+    private def self.each_keypath_and_leaf?(node, prefix : ThinArray(Term), fn : ThinArray(Term), Term -> Bool) : Bool
       fn.call(prefix, node.upcast)
     end
 
     # Calls *fn* with non-dictionary values along with key paths to them (which
     # keys to follow to get to the value), arbitrarily long.
     #
-    # WARNING: keypaths are contained within a mutable `Stack` for memory
+    # WARNING: keypaths are contained within a mutable `ThinArray` for memory
     # efficiency; you do not own the stack, for you the stack is read-only! Do not
     # mutate the key path stack, instead, make a copy of it (`dup`) and mutate
     # your copy instead. Or if you know what you're doing, make sure to return
     # the stack to valid condition after you've modified it.
-    def self.each_keypath_and_leaf(node : Term, &fn : Stack(Term), Term -> Bool) : Nil
-      each_keypath_and_leaf?(node: node.downcast, prefix: Stack(Term).new, fn: fn)
+    def self.each_keypath_and_leaf(node : Term, &fn : ThinArray(Term), Term -> Bool) : Nil
+      each_keypath_and_leaf?(node: node.downcast, prefix: ThinArray(Term).new, fn: fn)
     end
 
-    private def self.each_keypath_and_item_leaf?(node : Term::Dict, prefix : Stack(Term), fn : Stack(Term), Term -> Bool) : Bool
+    private def self.each_keypath_and_item_leaf?(node : Term::Dict, prefix : ThinArray(Term), fn : ThinArray(Term), Term -> Bool) : Bool
       node.items.each_with_index do |item, index|
         prefix.push(Term.of(index))
 
@@ -1236,12 +1236,12 @@ module Ww
       true
     end
 
-    private def self.each_keypath_and_item_leaf?(node, prefix : Stack(Term), fn : Stack(Term), Term -> Bool) : Bool
+    private def self.each_keypath_and_item_leaf?(node, prefix : ThinArray(Term), fn : ThinArray(Term), Term -> Bool) : Bool
       fn.call(prefix, node.upcast)
     end
 
-    def self.each_keypath_and_item_leaf(node : Term, &fn : Stack(Term), Term -> Bool) : Nil
-      each_keypath_and_item_leaf?(node: node.downcast, prefix: Stack(Term).new, fn: fn)
+    def self.each_keypath_and_item_leaf(node : Term, &fn : ThinArray(Term), Term -> Bool) : Nil
+      each_keypath_and_item_leaf?(node: node.downcast, prefix: ThinArray(Term).new, fn: fn)
     end
 
     module Patch
@@ -1297,7 +1297,7 @@ module Ww
       @callstack = CallStack.empty
     end
 
-    private def self.each_keypath_and_node(stack : Stack(Term), term : Term, fn : Stack(Term), Term -> Bool)
+    private def self.each_keypath_and_node(stack : ThinArray(Term), term : Term, fn : ThinArray(Term), Term -> Bool)
       return unless dict = term.as_d?
 
       dict.each_entry do |key, value|
@@ -1310,8 +1310,8 @@ module Ww
       end
     end
 
-    def self.each_keypath_and_node(term : Term, &fn : Stack(Term), Term -> Bool) : Nil
-      keypath = Stack(Term).new
+    def self.each_keypath_and_node(term : Term, &fn : ThinArray(Term), Term -> Bool) : Nil
+      keypath = ThinArray(Term).new
       return unless fn.call(keypath, term)
 
       each_keypath_and_node(keypath, term, fn)
@@ -1329,7 +1329,7 @@ module Ww
     def self.each_leaf_thorough(term : Term, & : Term ->) : Nil
       state_initial = -1 # const
 
-      stack = Stack{ {state: state_initial, term: term} }
+      stack = ThinArray{ {state: state_initial, term: term} }
 
       while rec = stack.pop?
         case rec[:state]

@@ -3,7 +3,7 @@ module Ww::Soma::Microfold::Pass
   extend self
 
   # :nodoc:
-  def mapwalk(node : Term, & : Term, Stack(Term) -> Term) : Term
+  def mapwalk(node : Term, & : Term, ThinArray(Term) -> Term) : Term
     # NOTE: keypaths are certainly not the fastest way to do this; note how
     # we require two deep `follow`s of the dict. Something like recursion would
     # be much faster. However, keypaths are much more flexible than recursion --

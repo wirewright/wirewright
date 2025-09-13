@@ -344,12 +344,12 @@ module Ww::Rack
   # Apart from ignoring the value of a `const` device, nothing smart is done
   # here; and edges are found on a purely literal basis (i.e. `(edge _)`).
   #
-  # NOTE: the keypath stack is reused. Make sure to make a copy if you want
+  # NOTE: the keypath array is reused. Make sure to make a copy if you want
   # to store it.
-  private def each_edge(device : Term, &fn : Stack(Term), Term ->) : Nil
+  private def each_edge(device : Term, &fn : ThinArray(Term), Term ->) : Nil
     # Special-case (const @_ _) so that we don't descend into its value.
     Term.matchpi?(device, %{[const @edge_ _]}) do
-      fn.call(Stack{Term.of(1)}, edge)
+      fn.call(ThinArray{Term.of(1)}, edge)
       return
     end
 
@@ -380,7 +380,7 @@ module Ww::Rack
     Term.of(device1)
   end
 
-  private alias Scope = Stack(Int32)
+  private alias Scope = ThinArray(Int32)
 
   # Resolves `module`s in *rack* by annotating edges with scope ids, and
   # connecting edges from different scopes with a `link` device. Returns
@@ -416,7 +416,7 @@ module Ww::Rack
 
     rack1 = Term::Dict.build do |commit|
       emit = ->(device : Term) { commit << device }
-      resolve = ->(scope : Stack(Int32), edge : Term) do
+      resolve = ->(scope : ThinArray(Int32), edge : Term) do
         Term.case(edge) do
           matchpi %{(%'edge name_)} do
             unless id = scopes[scope]?

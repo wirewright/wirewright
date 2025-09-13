@@ -664,38 +664,39 @@ struct Nil
   end
 end
 
-# Stack is a dynamic stack implementation. It grows by a factor of 1.5 when
-# it's full and does not reallocate when popping.
-class Stack(T)
+# Arrays from Crystal's standard library are fairly "fat" since they are intended
+# for general use. This, on the other hand, is a simple, small, stack-like dynamic
+# array implementation. It grows by a factor of 1.5 and will not shrink.
+class ThinArray(T)
   include Indexable::Mutable(T)
 
   getter size
 
-  # Initializes a new stack with the given *capacity*.
+  # Initializes a new array with the given *capacity*.
   def initialize(@capacity = 0)
-    @stack = Pointer(T).null
+    @mem = Pointer(T).null
     unless @capacity.zero?
-      @stack = @stack.realloc(@capacity)
+      @mem = @mem.realloc(@capacity)
     end
     @size = 0
   end
 
   def unsafe_fetch(index : Int)
-    @stack[index]
+    @mem[index]
   end
 
   def unsafe_put(index : Int, value : T)
-    @stack[index] = value
+    @mem[index] = value
   end
 
-  # Pushes *value* onto the stack. If the stack is full, increases the capacity
+  # Pushes *value* onto the array. If the array is full, increases the capacity
   # by a factor of 1.5.
   def push(value : T) : self
     if @size == @capacity
       @capacity = Math.max(2, @capacity * 1.5).ceil.to_i
-      @stack = @stack.realloc(@capacity)
+      @mem = @mem.realloc(@capacity)
     end
-    @stack[@size] = value
+    @mem[@size] = value
     @size += 1
     self
   end
@@ -704,11 +705,11 @@ class Stack(T)
     push(value)
   end
 
-  # Pops n value from the top of the stack. Returns `nil` if the stack is empty.
+  # Pops n value from the top of the array. Returns `nil` if the array is empty.
   def pop? : T?
     return if @size == 0
     @size -= 1
-    @stack[@size]
+    @mem[@size]
   end
 
   def pop : T
@@ -740,37 +741,37 @@ class Stack(T)
   end
 
   def clear : Nil
-    @stack.clear(@size)
+    @mem.clear(@size)
     @size = 0
   end
 
-  # Shallow copy: returns a copy of this stack object without copying its values.
-  def dup : Stack(T)
-    reduce(Stack(T).new(size)) do |copy, value|
+  # Shallow copy: returns a copy of this array without copying its values.
+  def dup : ThinArray(T)
+    reduce(ThinArray(T).new(size)) do |copy, value|
       copy << value
     end
   end
 
   def clone
-    reduce(Stack(T).new(size)) do |copy, value|
+    reduce(ThinArray(T).new(size)) do |copy, value|
       copy << value.clone
     end
   end
 
   def slice : Slice(T)
-    @stack.to_slice(@size)
+    @mem.to_slice(@size)
   end
 
   def to_readonly_slice
-    Slice.new(@stack, @size, read_only: true)
+    Slice.new(@mem, @size, read_only: true)
   end
 
   def pretty_print(pp)
-    pp.list("Stack[", self, "]")
+    pp.list("ThinArray[", self, "]")
   end
 
   def inspect(io)
-    io << "Stack["
+    io << "ThinArray["
     slice.join(io, ", ") do |el|
       el.inspect(io)
     end
@@ -781,7 +782,7 @@ class Stack(T)
     inspect(io)
   end
 
-  def ==(other : Stack(T)) : Bool
+  def ==(other : ThinArray(T)) : Bool
     equals?(other) { |a, b| a == b }
   end
 end
@@ -1004,7 +1005,7 @@ class List(T)
   end
 
   def each(& : T ->)
-    stack = Stack(T).new
+    stack = ThinArray(T).new
 
     node = self
     while node
@@ -3974,7 +3975,7 @@ class Array(T)
   include IStack(T)
 end
 
-class Stack(T)
+class ThinArray(T)
   include IStack(T)
 end
 
