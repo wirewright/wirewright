@@ -25,7 +25,7 @@
 
 [| M←(keyboard key ⸨left,right⸩ dn ⍊ ctrl) _*]
   <> {M: (goto word ⸨left,right⸩)}
-  
+
 [| M←[keyboard key ⸨home,end⸩ dn] _*]
   <> {M: (goto text ⸨left,right⸩)}
 
@@ -260,7 +260,7 @@ C←[| M←[summon compose] _*]
   <> {(M): (), C: (compose "" ↑C)}
 
 ;; To activate a selection, replace the cursor with the selection
-;; structure and mark as active in workspace. 
+;; structure and mark as active in workspace.
 ["" C←[| M←[promote selection] _*] ""]
   <> {(M): ()}
 [_string C←(| M←[promote selection] _* ⍊ selection_: (%optional true true)) _string]
@@ -393,7 +393,7 @@ C←[| M←[summon compose] _*]
   <> {M: (remove item ⸨left,right⸩)}
 
 ;; Pressing right at end-of-text means try to submit and if successful,
-;; move cursor after submission.  
+;; move cursor after submission.
 [(%string nonempty) (| M←[keyboard key right dn] _* ⍊ structural⁺) ""]
   <> {M: (submit item left)}
 
@@ -419,7 +419,7 @@ C←[| M←[summon compose] _*]
 [(%string nonempty) (| M←(keyboard input ")" ⍊ -◇_) `>M _* ⍊ structural⁺) ""]
   <> {M: ((submit item left) else ↑M), ◇: true}
 
-;; Pressing ')' should otherwise escape dict right. 
+;; Pressing ')' should otherwise escape dict right.
 ["" (| M←[keyboard input ")"] `>M _* ⍊ structural⁺) ""]
   <> {M: (escape dict right)}
 
@@ -531,7 +531,7 @@ D←(_* ["" (| M←(keyboard key delete dn ⍊ ctrl) _* ⍊ structural⁺) ""])
 
 ⟨[(%string nonempty) (| M←(keyboard input ":" ⍊ -◇_) _* ⍊ structural⁺) ""]⟩
   <> {M: (if (submit item left) (edit pair left) ↑M), ◇: true}
-  
+
 ;; Pressing any of these keys will delete a no-value pair with the cursor,
 ;; and move the cursor to the end of the dict's itemspart.
 (_* ¦ (%entry _ C←["" [| M←[keyboard key ⸨left,backspace,delete,end⸩ dn] _*] ""]))
