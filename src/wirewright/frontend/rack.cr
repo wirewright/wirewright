@@ -376,7 +376,7 @@ module Ww::Frontend::Rack
 
     # Rack client mainloop.
     private def run(files : FileServer, server : Process, initial : Path?, width : Int32, height : Int32) : Nil
-      events = Channel(Term).new
+      evtick = Channel(Bool).new
       requests = Channel(Term).new
       responses = Channel(Term).new
       terminate = Channel(Exception?).new
@@ -384,9 +384,7 @@ module Ww::Frontend::Rack
       # This fiber will listen for terminal events.
       spawn do
         loop do
-          # NOTE: Console.wait appears to freeze everything periodically, or at least I am
-          # suspecting it to.
-          Console.poll { |event| events.send(event) }
+          evtick.send(true)
           sleep 30.milliseconds
         end
       rescue e
@@ -429,8 +427,16 @@ module Ww::Frontend::Rack
           state = self.next(state)
 
           select
-          when event = events.receive
-            state = self.next(state, event: event)
+          when evtick.receive
+            # Let's not block for too long inside the poll loop.
+            events = Deque(Term).new
+            Console.poll do |event|
+              events << event
+            end
+
+            while event = events.shift?
+              state = self.next(state, event: event)
+            end
           when response = responses.receive
             state = self.next(state, response: response)
           when reason = terminate.receive
@@ -443,7 +449,7 @@ module Ww::Frontend::Rack
         end
       ensure
         terminate.close
-        events.close
+        evtick.close
         requests.close
         responses.close
       end
