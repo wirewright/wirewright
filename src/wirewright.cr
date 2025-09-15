@@ -41,11 +41,7 @@ require "../inputr"
 
 require "./wirewright/alloy"
 
-{% if flag?(:release) %}
-  Log.setup_from_env(default_level: :warn, backend: Log::IOBackend.new(STDERR))
-{% else %}
-  Log.setup_from_env(default_level: :debug, backend: Log::IOBackend.new(STDERR))
-{% end %}
+Log.setup_from_env(default_level: :warn, backend: Log::IOBackend.new(STDERR))
 
 module Ww
   VERSION = "0.0.0-kappa"
