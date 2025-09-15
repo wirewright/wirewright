@@ -762,7 +762,7 @@ module Ww::Alloy
         value = eval(ctx, expr, issues)
 
         unless value.type.dict?
-          issues.adjoin("spliced value", value, &.major("expected a dict value"))
+          issues.adjoin("spliced value", value, &.major("value must be a dict"))
           return Err.new
         end
 
