@@ -205,7 +205,7 @@
 ;;
 
 (split (log @msgs_ in @history_ ⍊ limit_: (%optional 8 (%number +i16!))))
-  => (module {@msgs: ^msgs, @history: ^history, @preview: ^preview}
+  => (module {@msgs: ^msgs, @history: ^history}
        (composite (@history (aux @msgs)) @frame)
        (latest (@frame to @history)
          (^^match frame
