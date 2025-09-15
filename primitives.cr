@@ -127,6 +127,14 @@ PRIMITIVES = ProcRuleset.build do
     xs[key]? || Term.of(:value, xs, key)
   end
 
+  rulepi1 %[(value? xs_dict key_)] do
+    if value = xs[key]?
+      Term.of(:some, value)
+    else
+      Term.of(:none)
+    end
+  end
+
   rulepi1 %[(hash term_)] do
     Term.hashcode(term)
   end

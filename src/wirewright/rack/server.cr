@@ -33,28 +33,30 @@ module Ww::Rack
     module Push
       extend self
 
-      def comment(console : Channel(Term), detail : String)
-        notify(console, Term.of(:comment, detail))
+      def comment(sink : Channel(Term), detail : String)
+        notify(sink, Term.of(:comment, detail))
       end
 
-      def warn(console : Channel(Term), detail : String)
-        notify(console, Term.of(:warning, detail))
+      def warn(sink : Channel(Term), detail : String)
+        notify(sink, Term.of(:warning, detail))
       end
 
-      def note(console : Channel(Term), detail : String)
-        notify(console, Term.of(:note, detail))
+      def note(sink : Channel(Term), detail : String)
+        notify(sink, Term.of(:note, detail))
       end
 
-      def err(console : Channel(Term), detail : String)
-        notify(console, Term.of(:error, detail))
+      def err(sink : Channel(Term), detail : String)
+        notify(sink, Term.of(:error, detail))
       end
 
-      def narrate(console : Channel(Term), term : Term)
-        notify(console, Term.of(:narration, term))
+      def narrate(sink : Channel(Term), term : Term)
+        notify(sink, Term.of(:narration, term))
       end
 
-      def notify(console : Channel(Term), term : Term)
-        console.send(Term.of(:event, term))
+      def notify(sink : Channel(Term), term : Term)
+        sink.send(Term.of(:event, term))
+      rescue e : Channel::ClosedError
+        Log.debug(exception: e) { "channel closed while running notify" }
       end
     end
 
@@ -64,12 +66,20 @@ module Ww::Rack
     module Reply
       extend self
 
-      def err(console : Channel(Term), title : String, detail : String?)
-        reply(console, Term.of(:error, title: title, detail: detail))
+      def err(sink : Channel(Term), title : String, detail : String?)
+        reply(sink, Term.of(:error, title: title, detail: detail))
       end
 
-      def reply(console : Channel(Term), item : Term)
-        console.send(Term.of(:reply, item))
+      def reply(sink : Channel(Term), item : Term)
+        sink.send(Term.of(:reply, item))
+      end
+
+      def console(sink : Channel(Term), id : Int32, window : Term)
+        sink.send(Term.of(:console, :update, id, window))
+      end
+
+      def console(sink : Channel(Term), id : Int32, window : Nil)
+        sink.send(Term.of(:console, :close, id))
       end
     end
 
@@ -77,42 +87,50 @@ module Ww::Rack
     module Narrator
       extend self
 
-      record Context, console : Channel(Term), env : Env, device_addr : DeviceAddr, device : Term
+      record Context, sink : Channel(Term), env : Env, device_addr : DeviceAddr, device : Term
 
       private def narrate(ctx : Context, state0 : State::Window::NotOpen, state1 : State::Window::Open)
-        Push.narrate(ctx.console, Term.of(:window, :open, ctx.device_addr))
+        Push.narrate(ctx.sink, Term.of(:window, :open, ctx.device_addr))
       end
 
       private def narrate(ctx : Context, state0 : State::Window::Open, state1 : State::Window::NotOpen)
-        Push.narrate(ctx.console, Term.of(:window, :closed, ctx.device_addr))
+        Push.narrate(ctx.sink, Term.of(:window, :closed, ctx.device_addr))
+      end
+
+      private def narrate(ctx : Context, state0 : State::Console::NotOpen, state1 : State::Console::Open)
+        Push.narrate(ctx.sink, Term.of(:console, :open, ctx.device_addr))
+      end
+
+      private def narrate(ctx : Context, state0 : State::Console::Open, state1 : State::Console::NotOpen)
+        Push.narrate(ctx.sink, Term.of(:console, :closed, ctx.device_addr))
       end
 
       private def narrate(ctx : Context, state0 : State::Source::None, state1 : State::Source::FilePending)
-        Push.narrate(ctx.console, Term.of(:file, :pending, ctx.device_addr, state1.path))
+        Push.narrate(ctx.sink, Term.of(:file, :pending, ctx.device_addr, state1.path))
       end
 
       private def narrate(ctx : Context, state0 : State::Source::FilePending, state1 : State::Source::FileLoaded)
-        Push.narrate(ctx.console, Term.of(:file, :loaded, ctx.device_addr, state1.path))
+        Push.narrate(ctx.sink, Term.of(:file, :loaded, ctx.device_addr, state1.path))
       end
 
       private def narrate(ctx : Context, state0 : State::Source::FileLoaded, state1 : State::Source::FileLoaded)
-        Push.narrate(ctx.console, Term.of(:file, :reloaded, ctx.device_addr, state1.path))
+        Push.narrate(ctx.sink, Term.of(:file, :reloaded, ctx.device_addr, state1.path))
       end
 
       private def narrate(ctx : Context, state0 : State::Source::FileLoaded | State::Source::FilePending, state1 : State::Source::None)
-        Push.narrate(ctx.console, Term.of(:file, :unloaded, ctx.device_addr, state0.path))
+        Push.narrate(ctx.sink, Term.of(:file, :unloaded, ctx.device_addr, state0.path))
       end
 
       private def narrate(ctx : Context, state0 : State::Ticker::NotRunning, state1 : State::Ticker::Running)
-        Push.narrate(ctx.console, Term.of(:ticker, :running, ctx.device_addr))
+        Push.narrate(ctx.sink, Term.of(:ticker, :running, ctx.device_addr))
       end
 
       private def narrate(ctx : Context, state0 : State::Ticker::Running, state1 : State::Ticker::NotRunning)
-        Push.narrate(ctx.console, Term.of(:ticker, :"not-running", ctx.device_addr))
+        Push.narrate(ctx.sink, Term.of(:ticker, :"not-running", ctx.device_addr))
       end
 
       private def narrate(ctx : Context, state0 : State::Image::None | State::Image::File, state1 : State::Image::File)
-        Push.narrate(ctx.console, Term.of(:image, :drawn, ctx.device_addr, state1.path))
+        Push.narrate(ctx.sink, Term.of(:image, :drawn, ctx.device_addr, state1.path))
       end
 
       # :nodoc:
@@ -141,7 +159,7 @@ module Ww::Rack
           env1[:path]
         end
 
-        Push.notify(ctx.console,
+        Push.notify(ctx.sink,
           Term.of(:error, :ml,
             addr: ctx.device_addr,
             detail: exception.detail,
@@ -155,7 +173,7 @@ module Ww::Rack
       # TODO: backtrace rendering
       private def narrate(ctx : Context, state0 : State::Alloy::ViewIssues, state1 : State::Alloy::Ok)
         state0.issues.each do |issue|
-          Push.notify(ctx.console,
+          Push.notify(ctx.sink,
             Term.of(:error, :alloy,
               addr: ctx.device_addr,
               detail: issue.detail,
@@ -167,7 +185,7 @@ module Ww::Rack
       # TODO: backtrace
       private def narrate(ctx : Context, state0 : State::Alloy::TemplateIssues, state1 : State::Alloy::Ok)
         state0.issues.each do |issue|
-          Push.notify(ctx.console,
+          Push.notify(ctx.sink,
             Term.of(:error, :alloy,
               addr: ctx.device_addr,
               detail: issue.detail,
@@ -188,7 +206,7 @@ module Ww::Rack
         end
 
         state0.issues.each do |issue|
-          Push.notify(ctx.console,
+          Push.notify(ctx.sink,
             Term.of(:error, :microfold,
               addr: ctx.device_addr,
               path: path,
@@ -198,7 +216,7 @@ module Ww::Rack
       end
 
       private def narrate(ctx : Context, state0 : State::Source::BadQuery, state1 : State::Source::None)
-        Push.notify(ctx.console,
+        Push.notify(ctx.sink,
           Term.of(:error, :source,
             addr: ctx.device_addr,
             detail: "bad source query",
@@ -206,7 +224,7 @@ module Ww::Rack
       end
 
       private def narrate(ctx : Context, state0 : State::Ticker::BadPeriodSpec, state1 : State::Ticker::None)
-        Push.notify(ctx.console,
+        Push.notify(ctx.sink,
           Term.of(:error, :ticker,
             addr: ctx.device_addr,
             detail: "bad period specification",
@@ -214,7 +232,7 @@ module Ww::Rack
       end
 
       private def narrate(ctx : Context, state0 : State::Image::BadSpec, state1 : State::Image::None)
-        Push.notify(ctx.console,
+        Push.notify(ctx.sink,
           Term.of(:error, :image,
             addr: ctx.device_addr,
             detail: "bad image specification",
@@ -222,7 +240,7 @@ module Ww::Rack
       end
 
       private def narrate(ctx : Context, state0 : State::Image::BadTarget, state1 : State::Image::None)
-        Push.notify(ctx.console,
+        Push.notify(ctx.sink,
           Term.of(:error, :image,
             addr: ctx.device_addr,
             detail: "bad image target specification",
@@ -231,10 +249,10 @@ module Ww::Rack
 
       private def narrate(ctx : Context, state0 : State::Log::Any, state1 : State::Log::Message)
         case state1.style
-        in .comment? then Push.comment(ctx.console, ML.compact(state1.term))
-        in .note?    then Push.note(ctx.console, ML.compact(state1.term))
-        in .warning? then Push.warn(ctx.console, ML.compact(state1.term))
-        in .error?   then Push.err(ctx.console, ML.compact(state1.term))
+        in .comment? then Push.comment(ctx.sink, ML.compact(state1.term))
+        in .note?    then Push.note(ctx.sink, ML.compact(state1.term))
+        in .warning? then Push.warn(ctx.sink, ML.compact(state1.term))
+        in .error?   then Push.err(ctx.sink, ML.compact(state1.term))
         end
       end
 
@@ -243,10 +261,10 @@ module Ww::Rack
       end
 
       # Constructs a server narrator agent that outputs narrations, events, logs,
-      # etc. into *console*.
-      def agent(console : Channel(Term)) : Agent::Narrator
+      # etc. into *sink*.
+      def agent(sink : Channel(Term)) : Agent::Narrator
         Agent::Narrator.new do |env, device_addr, device, state0, state1|
-          narrate(Context.new(console, env, device_addr, device), state0, state1)
+          narrate(Context.new(sink, env, device_addr, device), state0, state1)
         end
       end
     end
@@ -281,6 +299,7 @@ module Ww::Rack
 
       mki = ->(path : Path, rack : Term) do
         wm = Rack::SDLWM.new
+        twm = Rack::TWM.new
 
         wmon = wm.poll
         fsmon = Rack::FS.monitor(files)
@@ -291,11 +310,12 @@ module Ww::Rack
           Rack::Image.file_snapper(viewer_context),
           Rack.scheduler { |period, query| tick(period, query, hub.workspaces) },
           wm.sync(window_context),
+          twm.sync { |id, spec| Reply.console(hub.responses, id, spec) },
         ]
 
         env, unload = Rack.env(rack, basis, agents)
 
-        Instance::Some.new(path, wmon, fsmon, env, unload)
+        Instance::Some.new(path, twm, wmon, fsmon, env, unload)
       end
 
       Conf.new(basis, mki, files, frametime, fstime)
@@ -314,7 +334,13 @@ module Ww::Rack
     module Instance
       alias Any = Some | Nil
 
-      record Some, path : Path, wmon : Client, fsmon : Client, env : Env, unload : (->)
+      record Some,
+        path : Path,
+        twm : TWM,
+        wmon : Client,
+        fsmon : Client,
+        env : Env,
+        unload : (->)
     end
 
     private def load(conf : Conf, instance : Instance::Any, path : Path, responses : Channel(Term)) : Instance::Any
@@ -420,6 +446,10 @@ module Ww::Rack
                 commit << Term.of(:device, :window, addr: device_addr, status: :active)
               when State::Window::Closed
                 commit << Term.of(:device, :window, addr: device_addr, status: :passive)
+              when State::Console::Open
+                commit << Term.of(:device, :console, addr: device_addr, status: :active)
+              when State::Console::Closed
+                commit << Term.of(:device, :console, addr: device_addr, status: :passive)
               when State::Image::Any
                 commit << Term.of(:device, :image, addr: device_addr, status: :none)
               when State::Ticker::Any
@@ -479,10 +509,14 @@ module Ww::Rack
 
           env = instance.env
           env.map do |device_addr, state|
-            next unless state.is_a?(State::Window::Closed)
             next unless device_addr == addr.to(Int32)
 
-            State::Window::Open.new(state.id, state.spec, state.events)
+            case state
+            when State::Window::Closed
+              State::Window::Open.new(state.id, state.spec, state.events)
+            when State::Console::Closed
+              State::Console::Open.new(state.id, state.spec, state.events)
+            end
           end
 
           instance
@@ -496,10 +530,14 @@ module Ww::Rack
 
           env = instance.env
           env.map do |device_addr, state|
-            next unless state.is_a?(Rack::State::Window::Open)
             next unless device_addr == addr.to(Int32)
 
-            State::Window::Closed.new(state.id, state.spec, state.events)
+            case state
+            when State::Window::Open
+              State::Window::Closed.new(state.id, state.spec, state.events)
+            when State::Console::Open
+              State::Console::Closed.new(state.id, state.spec, state.events)
+            end
           end
 
           instance
@@ -559,6 +597,16 @@ module Ww::Rack
 
         matchpi %{(exit)} do
           raise Exit.new
+        end
+
+        matchpi %{(console event id←(%number +i32) event_)} do
+          unless instance
+            Reply.err(responses, "control error", "rack not loaded")
+            return instance
+          end
+
+          instance.twm.send(instance.env, id.to(Int32), event)
+          instance
         end
 
         otherwise do

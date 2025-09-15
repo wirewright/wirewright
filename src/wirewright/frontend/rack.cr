@@ -1,4 +1,7 @@
 # Wirewright Rack command-line interface.
+#
+# TODO: implement as a Rack. We almost have all the tools. I think we're only missing
+# some form of IPC in racks.
 module Ww::Frontend::Rack
   private alias Textual = Soma::DwUIR::Textual
   private alias Console = Soma::DwUIR::Window::Console
@@ -73,7 +76,7 @@ module Ww::Frontend::Rack
 
       # When setting up Microfold, remember we're in the terminal; so use `1`
       # for spacing and 1 for `rem`.
-      themedoc = ML.document(files.read_string(THEME_PATH)).as_d
+      themedoc = ML.document(files.read_string(THEME_PATH))
       themedoc = themedoc.morph({:globals, :spacing, 1})
       theme = Soma::Microfold.theme(themedoc, rem: Term[1])
 
@@ -176,83 +179,104 @@ module Ww::Frontend::Rack
           boot(state.files, state.requests, state.env1, state.console)
         end
 
-        matchpi %{(keyboard key up dn)} do
-          case state.env1[:focus, :targets, state.env1[:focus, :index]]
-          when Term.of(:"control-pane")
-            state.copy_with(env1: Term.morph(state.env1, :states, :"control-pane", :scroll) { |value| value - 1 })
-          when Term.of(:"events-pane")
-            state.copy_with(env1: Term.morph(state.env1, :states, :"events-pane", :scroll) { |value| value - 1 })
-          else
-            continue
-          end
+        matchpi %{[keyboard key escape dn]} do
+          state.copy_with(env1: state.env1.morph({:"screen-index", 0}))
         end
 
-        matchpi %{(keyboard key dn dn)} do
-          case state.env1[:focus, :targets, state.env1[:focus, :index]]
-          when Term.of(:"control-pane")
-            state.copy_with(env1: Term.morph(state.env1, :states, :"control-pane", :scroll) { |value| value + 1 })
-          when Term.of(:"events-pane")
-            state.copy_with(env1: Term.morph(state.env1, :states, :"events-pane", :scroll) { |value| value + 1 })
-          else
-            continue
-          end
+        matchpi %{(keyboard key p dn ⍊ ctrl)} do
+          state.copy_with(env1: state.env1.morph({:"screen-index", (state.env1[:"screen-index"] - 1) % state.env1[:"screens"].size}))
         end
 
-        matchpi %{[keyboard key pgdn dn]} do
-          case state.env1[:focus, :targets, state.env1[:focus, :index]]
-          when Term.of(:"control-pane")
-            state.copy_with(env1: state.env1.morph({:states, :"control-pane", :scroll, 0}))
-          when Term.of(:"events-pane")
-            state.copy_with(env1: state.env1.morph({:states, :"events-pane", :scroll, 0}))
-          else
-            continue
-          end
+        matchpi %{(keyboard key n dn ⍊ ctrl)} do
+          state.copy_with(env1: state.env1.morph({:"screen-index", (state.env1[:"screen-index"] + 1) % state.env1[:"screens"].size}))
         end
 
-        matchpi %{[keyboard key backspace dn]} do
-          case state.env1[:focus, :targets, state.env1[:focus, :index]]
-          when Term.of(:"control-pane")
-            state.copy_with(
-              env1: state.env1.morph(
-                {:states, :"control-pane", :log, Term[]},
-                {:states, :"control-pane", :scroll, 0},
-              )
-            )
-          when Term.of(:"events-pane")
-            state.copy_with(
-              env1: state.env1.morph(
-                {:states, :"events-pane", :log, Term[]},
-                {:states, :"events-pane", :scroll, 0},
-              )
-            )
-          else
-            continue
-          end
-        end
-
-        matchpi %{(keyboard key tab dn ⍊ shift)} do
-          state.copy_with(env1: Term.morph(state.env1, :focus, :index) { |index| (index - 1) % state.env1[:focus, :targets].itemsize })
-        end
-
-        matchpi %{[keyboard key tab dn]} do
-          state.copy_with(env1: Term.morph(state.env1, :focus, :index) { |index| (index + 1) % state.env1[:focus, :targets].itemsize })
-        end
-
-        otherwise do
-          return state unless state.env1[:states, :"command-input", :state] == Term.of(:unlocked)
-          return state unless state.env1[:focus, :targets, state.env1[:focus, :index]] == Term.of(:input)
-
-          input0 = state.env1[:states, :"command-input", :model]
-          input1 = Input.send(state.input, input0, event) do |submission|
-            if state1 = submit?(state, submission)
-              state = state1
-              true # accepted
+        if state.env1[:"screen-index"] == Term.of(0) # rack
+          matchpi %{(keyboard key up dn)} do
+            case state.env1[:focus, :targets, state.env1[:focus, :index]]
+            when Term.of(:"control-pane")
+              state.copy_with(env1: Term.morph(state.env1, :states, :"control-pane", :scroll) { |value| value - 1 })
+            when Term.of(:"events-pane")
+              state.copy_with(env1: Term.morph(state.env1, :states, :"events-pane", :scroll) { |value| value - 1 })
             else
-              false # rejected
+              continue
             end
           end
 
-          state.copy_with(env1: state.env1.morph({:states, :"command-input", :model, input1}))
+          matchpi %{(keyboard key dn dn)} do
+            case state.env1[:focus, :targets, state.env1[:focus, :index]]
+            when Term.of(:"control-pane")
+              state.copy_with(env1: Term.morph(state.env1, :states, :"control-pane", :scroll) { |value| value + 1 })
+            when Term.of(:"events-pane")
+              state.copy_with(env1: Term.morph(state.env1, :states, :"events-pane", :scroll) { |value| value + 1 })
+            else
+              continue
+            end
+          end
+
+          matchpi %{[keyboard key pgdn dn]} do
+            case state.env1[:focus, :targets, state.env1[:focus, :index]]
+            when Term.of(:"control-pane")
+              state.copy_with(env1: state.env1.morph({:states, :"control-pane", :scroll, 0}))
+            when Term.of(:"events-pane")
+              state.copy_with(env1: state.env1.morph({:states, :"events-pane", :scroll, 0}))
+            else
+              continue
+            end
+          end
+
+          matchpi %{[keyboard key backspace dn]} do
+            case state.env1[:focus, :targets, state.env1[:focus, :index]]
+            when Term.of(:"control-pane")
+              state.copy_with(
+                env1: state.env1.morph(
+                  {:states, :"control-pane", :log, Term[]},
+                  {:states, :"control-pane", :scroll, 0},
+                )
+              )
+            when Term.of(:"events-pane")
+              state.copy_with(
+                env1: state.env1.morph(
+                  {:states, :"events-pane", :log, Term[]},
+                  {:states, :"events-pane", :scroll, 0},
+                )
+              )
+            else
+              continue
+            end
+          end
+
+          matchpi %{(keyboard key tab dn ⍊ shift)} do
+            state.copy_with(env1: Term.morph(state.env1, :focus, :index) { |index| (index - 1) % state.env1[:focus, :targets].itemsize })
+          end
+
+          matchpi %{[keyboard key tab dn]} do
+            state.copy_with(env1: Term.morph(state.env1, :focus, :index) { |index| (index + 1) % state.env1[:focus, :targets].itemsize })
+          end
+
+          otherwise do
+            return state unless state.env1[:states, :"command-input", :state] == Term.of(:unlocked)
+            return state unless state.env1[:focus, :targets, state.env1[:focus, :index]] == Term.of(:input)
+
+            input0 = state.env1[:states, :"command-input", :model]
+            input1 = Input.send(state.input, input0, event) do |submission|
+              if state1 = submit?(state, submission)
+                state = state1
+                true # accepted
+              else
+                false # rejected
+              end
+            end
+
+            state.copy_with(env1: state.env1.morph({:states, :"command-input", :model, input1}))
+          end
+        else # screen-index > 0
+          otherwise do
+            if screen = state.env1[:screens, state.env1[:"screen-index"]]?
+              state.requests.channel.send(Term.of(:console, :event, screen[:id], event))
+            end
+            state
+          end
         end
       end
     end
@@ -274,6 +298,42 @@ module Ww::Frontend::Rack
 
         matchpi %{(reply entry_)} do
           log(state, entry)
+        end
+
+        matchpi %{(console update id←(%number +i32) window_)} do
+          # Find or create screen width id, update its content.
+          screens0 = screens1 = state.env1[:screens]
+          screens0.each_entry do |key, screen|
+            next unless screen.type.dict?
+            next unless screen[:id] == id
+
+            screens1 = screens1.with(key, screen.with(:window, window))
+          end
+
+          if screens0 == screens1
+            screens1 = screens1.append(Term[id: id, window: window])
+          end
+
+          state.copy_with(env1: state.env1.morph({:screens, screens1}))
+        end
+
+        matchpi %{(console close id←(%number +i32))} do
+          screens0 = state.env1[:screens]
+          screens1 = Term::Dict.build do |commit|
+            screens0.items.each do |screen|
+              unless screen.type.dict?
+                commit << screen
+                next
+              end
+              unless screen[:id] == id
+                commit << screen
+                next
+              end
+              # skip
+            end
+          end
+
+          state.copy_with(env1: state.env1.morph({:screens, screens1}))
         end
 
         matchpi %{(event (narration (rack deactivated path_string)))} do

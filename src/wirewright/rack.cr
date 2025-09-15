@@ -158,7 +158,7 @@ module Ww::Rack
   # well outside device states; and must occur through observation of such states
   # and consequent feedback through `StateMap` advancement.
   module State
-    alias Any = Source::Any | Cell::Any | Ruleset::Any | MuTheme::Any | MuRender::Any | Ticker::Any | UIR::Any | Window::Any | Image::Any | ProcessArgs::Any | ProcessEnv::Any | ML::Any | Alloy::Any | Log::Any
+    alias Any = Source::Any | Cell::Any | Ruleset::Any | MuTheme::Any | MuRender::Any | Ticker::Any | UIR::Any | Window::Any | Console::Any | Image::Any | ProcessArgs::Any | ProcessEnv::Any | ML::Any | Alloy::Any | Log::Any
 
     # Transient states have their lifetime equal to the lifetime of the active
     # workspace. When the active workspace is expended, all transient states
@@ -286,6 +286,16 @@ module Ww::Rack
 
     # Associated with a `dwuir/window` device.
     module Window
+      alias Any = Open | NotOpen
+      alias NotOpen = Closed | None
+
+      record Open, id : Int32, spec : Term, events : Term?
+      record Closed, id : Int32, spec : Term, events : Term?
+      record None, id : Int32, events : Term?
+    end
+
+    # Associated with a `dwuir/console` device.
+    module Console
       alias Any = Open | NotOpen
       alias NotOpen = Closed | None
 
@@ -647,6 +657,14 @@ module Ww::Rack
             commit.assoc(device_addr, State::Window::None.new(device_addr, events: nil))
           end
 
+          matchpi %{[dwuir/console @_ @events_]} do
+            commit.assoc(device_addr, State::Console::None.new(device_addr, events))
+          end
+
+          matchpi %{[dwuir/console @_]} do
+            commit.assoc(device_addr, State::Console::None.new(device_addr, events: nil))
+          end
+
           matchpi %{[dwuir/image @_ @_]} do
             commit.assoc(device_addr, State::Image::None.new)
           end
@@ -898,7 +916,7 @@ module Ww::Rack
         givenpi %{[microfold/theme (@documents_ @rems_) @themes_] (%all (%value documents (currently document_dict)) (%value rems (currently ±rem)) (%value themes ?))} do
           assert state0.is_a?(State::MuTheme::Any)
 
-          theme = Soma::Microfold.theme(document.unsafe_as_d, rem.unsafe_as_n)
+          theme = Soma::Microfold.theme(document, rem.unsafe_as_n)
           state1 = State::MuTheme::Some.new(theme)
           workspace1 = workspace1.with(themes, {:currently, {:handle, device_addr}})
         end
@@ -1026,7 +1044,7 @@ module Ww::Rack
         # Events from the window will be assigned to *events*.
         # |@endblock
         #
-        # |@key specs soma.dwuir.window -- Window spec.
+        # |@key specs soma.dwuir.window.os -- Window spec.
         #
         # |@key events soma.dwuir.window.event -- Edge for events.
         givenpi(
@@ -1040,6 +1058,42 @@ module Ww::Rack
             state1 = State::Window::Open.new(state0.id, spec, state0.events)
           in State::Window::Open,
              State::Window::Closed
+            state1 = state0.copy_with(spec: spec)
+          end
+        end
+
+        # |@ rack.device.dwuir/console
+        #
+        # |@pattern
+        # [dwuir/console @specs_ @events_]
+        #
+        # |@pattern
+        # [dwuir/console @specs_]
+        #
+        # |@block
+        # Use `dwuir/console` to display a subset of DwUIR, called textual DwUIR,
+        # in the terminal. Events from the terminal will be assigned to *events*.
+        #
+        # NOTE: even though there can be any number of `dwuir/console` devices,
+        # whether multiple console windows/tabs are going to be shown in the terminal
+        # depends completely on the multiplexing ability of the client that is
+        # handling `dwuir/console`.
+        # |@endblock
+        #
+        # |@key specs soma.dwuir.window.console -- Window spec.
+        #
+        # |@key events soma.dwuir.window.event -- Edge for events.
+        givenpi(
+          %{[dwuir/console @specs_ @_] (%value specs (currently spec_))},
+          %{[dwuir/console @specs_] (%value specs (currently spec_))},
+        ) do
+          assert state0.is_a?(State::Console::Any)
+
+          case state0
+          in State::Console::None
+            state1 = State::Console::Open.new(state0.id, spec, state0.events)
+          in State::Console::Open,
+             State::Console::Closed
             state1 = state0.copy_with(spec: spec)
           end
         end

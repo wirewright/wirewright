@@ -182,6 +182,51 @@ module Ww::Rack
     end
   end
 
+  # Terminal window management agency.
+  #
+  # We distinguish *terminals* from *consoles* from *windows*. A *window* is
+  # the content of a console. A *terminal* can show multiple *consoles* through
+  # multiplexing, or if it does not support multiplexing, it will show only
+  # one console.
+  #
+  # `dwuir/console` devices depend on this agency's presence. Otherwise they
+  # are going to function partially (if parts of this agency are active) or
+  # not function at all (if this agency is missing entirely).
+  struct TWM
+    def initialize
+      @events = {} of Int32 => Term
+    end
+
+    # Sends *event* to an events edge owned by a console with the given *id*.
+    def send(env : Env, id : Int32, event : Term)
+      return unless edge = @events[id]?
+
+      env.send(Term.entries({edge, {:currently, event}}))
+    end
+
+    # Constructs an agent that performs window synchronization of internal window
+    # specs with the terminal.
+    #
+    # *specs* is used to send console id, window spec pairs to the terminal. Window
+    # spec is nil if the window should be closed.
+    def sync(&specs : Int32, Term? ->) : Agent::Narrator
+      Agent::Narrator.new do |_, _, _, state0, state1|
+        case {state0, state1}
+        when {State::Console::Open, State::Console::NotOpen}
+          next unless @events.delete(state0.id)
+
+          specs.call(state0.id, nil)
+        when {State::Console::Any, State::Console::Open}
+          if edge = state1.events
+            @events[state1.id] = edge
+          end
+
+          specs.call(state1.id, state1.spec)
+        end
+      end
+    end
+  end
+
   # File system agents.
   module FS
     extend self

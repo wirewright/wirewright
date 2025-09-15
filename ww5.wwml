@@ -34,6 +34,9 @@ states: {
   },
 }
 
+;; A list of rack | {id: <console id>, window: _}
+screens: (rack)
+screen-index: 0
 
 --- view
 
@@ -59,12 +62,13 @@ states: {
 (icon keyboard) => "\uf11c"
 (icon circle-outline) => "\uf10c"
 (icon circle) => "\uf111"
+(icon screen) => "\uef8a"
 
 
 ;;
 ;; input-area
 ;;
- 
+
 ;; Cursor.
 (input-area [l_string [| _*] r_string])
   => (p ^(~ l r) selection-anchor: ^(charcount l) selection-span: 0)
@@ -249,6 +253,12 @@ states: {
 
 (event-log-narration (window closed addr_))
   => (narration-entry (icon window) ^" Window owned by device#⸢addr⸣ is now closed.")
+
+(event-log-narration (console open addr_))
+  => (narration-entry (icon screen) ^" Console owned by device#⸢addr⸣ is now open on screen ⸢addr⸣. Use Ctrl-P to cycle backward and Ctrl-N to cycle forward through screens.")
+
+(event-log-narration (console closed addr_))
+  => (narration-entry (icon screen) ^" Console owned by device#⸢addr⸣ is now closed.")
 
 (event-log-narration (file pending addr_ path_string))
   => (narration-entry (icon file) " File " (p ^path style: "underline") " is pending, as requested by device#" ^\addr ".")
@@ -464,22 +474,54 @@ states: {
          ("Page Dn" "Scroll to bottom")
          ("Backspace" "Clear")))
 
-(window style: "root backdrop-neutral-900 clip flow-col px-2 pt-1 z-scope"
+(tab caption_string ⍊ icon_⋮ (icon screen) active⋮ false)
+  => (p ^icon ^caption style: "gap-1 px-1 text-neutral-500 active:text-neutral-300 active:bg-neutral-900" active: ^active)
+
+(screen-tab rack ⍊ active⋮ false)
+  => (tab "Rack" icon: (icon rack) active: ^active)
+
+(screen-tab {¦ id_ window: {¦ title_string}} ⍊ active⋮ false)
+  => (tab ^"⸢title⸣ [⸢id⸣]" active: ^active)
+
+(screen-tab {¦ id_} ⍊ active⋮ false)
+  => (tab ^\id active: ^active)
+
+(window style: "root backdrop-neutral-950 clip flow-col z-scope"
         width: (^. viewport width)
         height: (^. viewport height)
-  (^match' (focus {¦ ±index targets_dict})
-    (^let target: (part targets (key index default: (literal none)))
-      (group style: "flow-col gap-1 fr"
-        (header (^. states header))
-        (group style: "fr flow-col"
-          (^match viewport
-            (when {¦ width: (%number _ < 120)}
-              (main ^target ^states layout: vertical))
-            (when _
-              (^unless (= target input)
-                (group style: "floating-y content-r -dt-3 dl-2 z-1"
-                  (group style: "max-w-2xl bg-neutral-700 border-r-3xl border-neutral-600 px-2 py-1"
-                    (hint-for ^target))))
-              (group style: "fr"
-                (main ^target ^states layout: horizontal)))))))))
+  (group style: "flow-row items-content-x clip-x"
+    (^each (screens item as (screen_ index_))
+      (^let active: (= index screen-index)
+        (screen-tab ^screen active: ^active))))
+  (group style: "flow-col fr bg-neutral-900"
+    (^let screen: (value? screens screen-index)
+      (^match screen
+        (when (some rack)
+          (^match' (focus {¦ ±index targets_dict})
+            (^let target: (part targets (key index default: (literal none)))
+              (group style: "flow-col gap-1 px-2 pt-1 fr"
+                (header (^. states header))
+                (group style: "fr flow-col"
+                  (^match viewport
+                    (when {¦ width: (%number _ < 120)}
+                      (main ^target ^states layout: vertical))
+                    (when _
+                      (^unless (= target input)
+                        (group style: "floating-y content-r -dt-3 dl-2 z-1"
+                          (group style: "max-w-2xl bg-neutral-700 border-r-3xl border-neutral-600 px-2 py-1"
+                            (hint-for ^target))))
+                      (group style: "fr"
+                        (main ^target ^states layout: horizontal)))))))))
+        (when (some {¦ window: (window body_* ⍊ backdrop_⋮ black)})
+          (group style: "bg-[backdrop]" backdrop: ^backdrop
+            (guard allow: {+ dwuir}
+              ^*body)))
+        (when none
+          (group style: "flow-col center max-w-2xl"
+            (p "Closed" style: "text-neutral-200")
+              (p style: "flow-wrap text-neutral-400"
+                (^* (wordwise "This screen is closed. Press "))
+                (p "Escape" style: "font-bold text-green-300")
+                (^* (wordwise " to go to the Rack screen.")))))))))
+
 
