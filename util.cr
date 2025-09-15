@@ -670,6 +670,8 @@ end
 class ThinArray(T)
   include Indexable::Mutable(T)
 
+  INITIAL_CAPACITY = 8
+
   getter size
 
   # Initializes a new array with the given *capacity*.
@@ -692,8 +694,12 @@ class ThinArray(T)
   # Pushes *value* onto the array. If the array is full, increases the capacity
   # by a factor of 1.5.
   def push(value : T) : self
-    if @size == @capacity
-      @capacity = Math.max(2, @capacity * 1.5).ceil.to_i
+    if @size + 1 > @capacity
+      if @capacity.zero?
+        @capacity = INITIAL_CAPACITY
+      else
+        @capacity = (@capacity * 1.5).to_i
+      end
       @mem = @mem.realloc(@capacity)
     end
     @mem[@size] = value
@@ -737,6 +743,18 @@ class ThinArray(T)
       yield value
     ensure
       push(value)
+    end
+  end
+
+  def concat(other : Indexable(T))
+    # Humpty dumpty
+    if @size + other.size > @capacity
+      @capacity = (@size + other.size) + (@size * 0.5).to_i
+      @mem = @mem.realloc(@capacity)
+    end
+
+    other.each do |object|
+      push(object)
     end
   end
 
@@ -784,6 +802,183 @@ class ThinArray(T)
 
   def ==(other : ThinArray(T)) : Bool
     equals?(other) { |a, b| a == b }
+  end
+end
+
+struct StaticRing(T, N)
+  def initialize
+    @bot = 0u32
+    @size = 0u32
+
+    @ring = uninitialized T[N]
+  end
+
+  private def slot_index : UInt32
+    (@bot &+ @size) % N
+  end
+
+  private def top_index : UInt32
+    (@bot &+ @size &- 1) % N
+  end
+
+  def top? : T?
+    return if @size.zero?
+
+    @ring.unsafe_fetch(top_index)
+  end
+
+  def each(& : T ->)
+    @size.times { |index| yield @ring.unsafe_fetch(index) }
+  end
+
+  def size : Int32
+    @size.to_i
+  end
+
+  def unsafe_fetch(index : Int)
+    @ring.unsafe_fetch(index)
+  end
+
+  def unsafe_put(index : Int, object : T)
+    @ring.unsafe_put(index, object)
+  end
+
+  def push(object : T, & : T ->) : Nil
+    if @size < N
+      @ring.unsafe_put(slot_index, object)
+      @size += 1
+    else
+      yield @ring[@bot]
+      @bot = (@bot + 1) % N # evict bottom
+      @ring.unsafe_put(top_index, object)
+    end
+  end
+
+  def pop? : T?
+    return if @size.zero?
+
+    object = @ring.unsafe_fetch(top_index)
+    @size -= 1
+    object
+  end
+
+  def unsafe_fill(src : T*, count : UInt32) : Nil
+    @bot = 0u32
+    @size = count
+
+    src.copy_to(@ring.to_unsafe, count)
+  end
+end
+
+struct StackArray(T, N)
+  include Indexable::Mutable(T)
+
+  INITIAL_SPILL_CAPACITY = 8
+
+  def initialize
+    {% if N == 0 %}
+      {% N.raise "StackArray with N=0 makes no sense, use an array or ThinArray" %}
+    {% end %}
+
+    @spill = Pointer(T).null
+
+    @spillcap = 0u32
+    @spillsize = 0u32
+
+    @ring = StaticRing(T, N).new
+  end
+
+  def size : Int32
+    (@spillsize.to_i + @ring.size)
+  end
+
+  def unsafe_fetch(index : Int) : T
+    if index < @spillsize
+      return @spill[index]
+    end
+
+    @ring.unsafe_fetch(index &- @spillsize)
+  end
+
+  def unsafe_put(index : Int, value : T) : Nil
+    if index < @spillsize
+      @spill[index] = value
+      return
+    end
+
+    @ring.unsafe_put(index &- @spillsize, value)
+  end
+
+  # Provides fast access to the top of the stack.
+  def top? : T?
+    @ring.top?
+  end
+
+  def each(& : T ->)
+    @spillsize.times do |index|
+      yield @spill[index]
+    end
+
+    @ring.each do |object|
+      yield object
+    end
+  end
+
+  def push(object : T) : Nil
+    @ring.push(object) do |front|
+      if (@spillsize &+ 1) > @spillcap
+        if @spillcap.zero?
+          @spillcap = INITIAL_SPILL_CAPACITY
+        else
+          @spillcap = (@spillcap * 1.5).to_u32!
+        end
+
+        @spill = @spill.realloc(@spillcap)
+      end
+
+      @spill[@spillsize] = front
+      @spillsize &+= 1
+    end
+  end
+
+  def <<(object : T) : Nil
+    push(object)
+  end
+
+  def pop? : T?
+    if object = @ring.pop?
+      return object
+    end
+
+    return if @spillsize.zero?
+
+    if @spillsize < N
+      @ring.unsafe_fill(@spill, @spillsize)
+      @spillsize = 0u32
+    else
+      @ring.unsafe_fill(@spill + (@spillsize &- N), N.to_u32)
+      @spillsize &-= N
+    end
+
+    @ring.pop?
+  end
+
+  def pop
+    pop? || raise IndexError.new
+  end
+
+  def inspect(io)
+    to_s(io)
+  end
+
+  def to_s(io : IO) : Nil
+    io << "StackArray{"
+    join(io, ", ", &.inspect(io))
+    io << '}'
+  end
+
+  def pretty_print(pp) : Nil
+    pp.list("StackArray{", self, "}")
   end
 end
 

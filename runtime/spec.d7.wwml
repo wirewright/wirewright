@@ -1,0 +1,225 @@
+;; D7 is a symbolic physics engine that implements computation as interleaving
+;; healing and damage. D7 programs heal in response to damage, including damage
+;; introduced by the healing process itself. "Damage" here refers to a violation
+;; of some sort of constraint, defined by the program's own shape. What kind of
+;; constraint is undefined at this level of discourse; and must be analyzed
+;; on a case-by-case basis.
+;;
+;; Most of this spec is about describing not exactly *how* healing and damage are
+;; done (that's on the Crystal side where one finds the D7 engine itself, under Ww::D7);
+;; but rather, *what* healing looks like for each kind of node, and whether any healing
+;; is necessary at all.
+;;
+;; As with some other subsystems in Wirewright, this spec is tighly coupled to the Crystal
+;; code it is used by. Some nodes may be defined part here, part in Crystal; others, entirely
+;; here; others, entirely in Crystal. What Wirewright does well -- here in particular it is
+;; term transformation -- we do with Wirewright, whereas the dirtiest and most load-intensive
+;; parts, or primitives, are implemented in Crystal.
+;;
+;; This spec also contains docs for all D7 nodes (TODO). I am a supporter of as much
+;; locality as one can allow, so this file holds most of what is associated with
+;; each D7 node.
+
+;;
+;; latest, map, ramp, fill
+;;
+
+(edges [⸨fill,latest,map,ramp⸩ (@a_ to @b_) _] (a b)
+  (⸨fill,latest,map,ramp⸩ (@x to @y) ^z))
+
+(edges [⸨latest,map,ramp⸩ (@a_ _ to @b_) _] (a b)
+  (⸨latest,map,ramp⸩ (@x _ to @y) ^z))
+
+(propose [[map (@a_ (%plural min: 0 max: 1) to @b_) _]] (%value a none) (%-value b))
+  => (proposal ^b none)
+
+;;
+;; composite
+;;
+
+(edges [composite (@a_ @b_) @ab_] (a b ab)
+  (composite (@x @y) @z))
+
+(edges [composite (@a_ (aux @b_)) @ab_] (a b ab)
+  (composite (@x (aux @y)) @z))
+
+(propose [[composite (@a_ @b_) @ab_]] (%all (%value a (some x_)) (%value b (some y_)) (%value ab none)))
+  => (proposal ^ab (some (^x ^y)))
+
+(propose [[composite (@a_ (aux @b_)) @ab_]] (%all (%value a (some x_)) (%value b (some y_)) (%value ab none)))
+  => (proposal ^ab (some (^x ^y)))
+
+(propose [[composite (@a_ @b_) @ab_]] (%all (%value a (some x_)) (%value b (some y_))) (%-value ab))
+  => (proposal ^ab (some (^x ^y)))
+
+(propose [[composite (@a_ (aux @b_)) @ab_]] (%all (%value a (some x_)) (%value b (some y_))) (%-value ab))
+  => (proposal ^ab (some (^x ^y)))
+
+(propose [[composite (@a_ @b_) @ab_]] (%value a⫽b none) (%-value ab))
+  => (proposal ^ab none)
+
+;; The only difference between composite and composite with aux b is that the absence
+;; of b won't trigger the absence of ab; only the absence of `a` would.
+(propose [[composite (@a_ (aux @b_)) @ab_]] (%value a none) (%-value ab))
+  => (proposal ^ab none)
+
+;;
+;; group
+;;
+
+(permeable [group _*] ((range (1 ..))))
+
+;;
+;; module
+;;
+
+(permeable [module bindings_dict _*] ((range (2 ..))) :bindings)
+
+;;
+;; cell, frag
+;;
+
+(edges [⸨cell,frag⸩ @a_] (a)
+  (⸨cell,frag⸩ @x))
+
+(edges [⸨cell,frag⸩ @a_ _] (a)
+  (⸨cell,frag⸩ @x 100))
+
+(permeable [frag @_ _] ((range (2 ..< 3))))
+
+(rating [frag @_ _] passable-dependent)
+(rating [cell @_ _] impassable-dependent)
+
+(propose [[⸨cell,frag⸩ @u_ term_]] (%value u none))
+  => (proposal ^u (some ^term))
+
+(fix [[⸨cell,frag⸩ @edge_ term0_]] (%value edge (some term1_)))
+  <> {term0: →term1}
+
+(fix [[⸨cell,frag⸩ @edge_ term_]] (%value edge none))
+  <> {(term): ()}
+
+(fix [[⸨cell,frag⸩ @edge_ `>term]] (%value edge (some term_)))
+  <> {>term: →term}
+
+;;
+;; wire
+;;
+;; Wire moves edge data across time frames.
+
+(edges [wire @a_ @b_] (a b)
+  (wire @x @y))
+(edges [wire (present @a_) (absent @b_)] (a b)
+  (wire (present @x) (absent @y)))
+(edges [wire (present @a_) @b_] (a b)
+  (wire (present @x) @y))
+
+(propose [[wire @u_ @v_]] (%value u x_) (%-value v))
+  => (proposal ^v ^x)
+(propose [[wire (present @u_) (absent @v_)]] (%all (%value u x←(some _)) (%value v none)) (%-value v))
+  => (proposal ^v ^x)
+(propose [[wire (present @u_) @v_]] (%value u x←(some _)) (%-value v))
+  => (proposal ^v ^x)
+
+;;
+;; delay
+;;
+
+(damage [(delay n←(%number +i32) _*)])
+  <> {n: $'(- →n 1)}
+
+(damage [node←(delay 0 offspring_*)])
+  <> {(node): →offspring}
+
+;;
+;; decay
+;;
+
+(permeable [decay (%number +i32!) _*] ((range (2 ..))))
+
+(damage [(decay n←(%number +i32) _*)])
+  <> {n: $'(- →n 1)}
+
+(damage [node←(decay 0 _*)])
+  <> {(node): ()}
+
+
+;;
+;; up-sensor, dn-sensor
+;; TODO: generalize into (path ... @x) which is a relative keypath!
+;; e.g. (path @x (up left left dn end dn))
+;;
+
+(edges [⸨up,dn⸩-sensor @a_] (a)
+  (⸨up,dn⸩-sensor @x))
+
+(propose ([⸨up,dn⸩-sensor @u_] ⍊ l⫽r_) _ (%-value u))
+  => (proposal ^u (some ^l⫽r))
+
+;;
+;; glider
+;;
+;; TODO: is this node really necessary? Can we implement it in some other, more
+;; robust/general way?
+
+;; TODO: up-in(?) dn-in(?) out
+
+(permeable [glider _ _*] ((range (2 ..))))
+
+(damage (g←[glider (up _*) _*] ⍊ l_)) <> {g: →l}
+(damage (g←[glider (dn _*) _*] ⍊ r_)) <> {g: →r}
+
+(damage (n_ ⍊ l_: [glider (a←dn _*) _*])) <> {(a): (), n: ↑l}
+(damage (n_ ⍊ r_: [glider (a←up _*) _*])) <> {(a): (), n: ↑r}
+
+;;
+;; h1-h6, button, p, code
+;;
+
+;; D7 treats these purely visual nodes as cells.
+
+(split (⸨h1,h2,h3,h4,h5,h6,button,p,code⸩ @u_ ⍊ caption_))
+  => (cell ^u ^caption)
+(split [⸨h1,h2,h3,h4,h5,h6,button,p,code⸩ @u_])
+  => (cell ^u)
+(mix ((⸨h1,h2,h3,h4,h5,h6,button,p,code⸩ @_ ⍊ ⋮caption)) ([cell @_ caption'_]))
+  <> {caption: →caption'}
+(mix ((⸨h1,h2,h3,h4,h5,h6,button,p,code⸩ @_ ⍊ caption_)) ([cell @_]))
+  <> {(caption): ()}
+
+;;
+;; ref
+;;
+
+(edges [ref @u_ _] (u)
+  (ref @x _))
+
+;;
+;; quote
+;;
+
+(permeable [quote _*] ((range (1 ..) quoted: true)))
+
+;;
+;; log
+;;
+
+(split (log @msgs_ in @history_ ⍊ limit_: (%optional 8 (%number +i16!))))
+  => (module {@msgs: ^msgs, @history: ^history, @preview: ^preview}
+       (composite (@history (aux @msgs)) @frame)
+       (latest (@frame to @history)
+         (^^match frame
+           (when (history←(_* msg_) msg_) ^^history)
+           (when (history_dict msg_)
+             (^match limit
+               (when 1 (^^msg)) ;; We only have room for one message
+               (when _
+                 ((^^paste history ^(- 1 limit) ..= -1) ^^msg)))))))
+
+(split (log @msgs_ in history←(_*) ¦ pairs_ -◇))
+  => (module {@msgs: ^msgs}
+       (cell @history ^history)
+       (log @msgs in @history ◇: true ^… pairs))
+
+(mix ([log @_ in history←(_*)]) (⟨[cell @history history'_dict]⟩))
+  <> {history: →history'}

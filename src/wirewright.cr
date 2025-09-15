@@ -26,7 +26,9 @@ require "./wirewright/lr"
 
 require "../pattern7"
 require "../baz5"
-{% unless flag?(:newd7) %}
+{% if flag?(:newd7) %}
+  require "./wirewright/d7"
+{% else %}
   require "../delta7_proto2"
 {% end %}
 require "../primitives"
