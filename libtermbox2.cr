@@ -571,7 +571,7 @@ module Termbox
 
   private macro assert!(call)
     %v = {{call}}
-    %v.negative? ? raise "termbox error: #{String.new(LibTermbox2.tb_strerror(%v))}" : %v
+    %v < -1 ? raise "termbox error: #{String.new(LibTermbox2.tb_strerror(%v))}" : %v
   end
 
   def init : Nil
@@ -646,30 +646,27 @@ module Termbox
     end
   end
 
-  def peek?(timeout = 0.milliseconds) : Event?
-    while true
-      result = LibTermbox2.tb_peek_event(out event, timeout.total_milliseconds.to_i)
+  def peek_impl?(timeout) : Event?
+    loop do
+      result = LibTermbox2.tb_peek_event(out event, timeout)
       if result == LibTermbox2::TB_ERR_NO_EVENT
         return
       end
-      unless result == LibTermbox2::TB_ERR_POLL
-        return event
+      if result == LibTermbox2::TB_ERR_POLL
+        if LibTermbox2.tb_last_errno.eintr?
+          next
+        end
       end
-      unless LibTermbox2.tb_last_errno.eintr?
-        raise "termbox error: poll error (errno != EINTR)"
-      end
+      assert! result
+      return event
     end
   end
 
+  def peek?(timeout = 0.milliseconds)
+    peek_impl?(timeout.total_milliseconds.to_i)
+  end
+
   def poll : Event
-    while true
-      result = LibTermbox2.tb_peek_event(out event, -1)
-      unless result == LibTermbox2::TB_ERR_POLL
-        return event
-      end
-      unless LibTermbox2.tb_last_errno.eintr?
-        raise "termbox error: poll error (errno != EINTR)"
-      end
-    end
+    peek_impl?(-1)
   end
 end
