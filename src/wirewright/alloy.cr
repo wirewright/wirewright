@@ -14,8 +14,6 @@ module Ww::Alloy
   # templates or views into your term-of-choice.
   alias Expansion = Assign | Splice | Err
 
-  alias ExpansionCache = ICache(Term, Expansion)
-
   # Represents the expansion of the current term into one offspring term
   # (possibly the same term).
   record Assign, term : Term
@@ -35,6 +33,19 @@ module Ww::Alloy
   # the `X` methods which return Expansions: `renderX`.
   record Err
 
+  # Toplevel err resolves to ()
+  private def toplevel(expansion : Err) : Term
+    Term.of
+  end
+
+  private def toplevel(expansion : Assign) : Term
+    expansion.term
+  end
+
+  private def toplevel(expansion : Splice) : Term
+    Term.of(expansion.offspring)
+  end
+
   # :nodoc:
   record Context, vars : Term::Dict
 
@@ -47,14 +58,16 @@ module Ww::Alloy
     end
 
     # Marks the beginning of an Alloy view. Keypaths and other spots
-    # below `ViewSpot` refer to the view passed to `Alloy.render`.
-    record View do
+    # below `ViewSpot` refer to *view*, the view that was passed
+    # to `Alloy.render`.
+    record View, view : Term do
       include Issue::Spot
     end
 
     # Marks the beginning of an Alloy template. Keypaths and other spots
-    # below `Template` refer to the template passed to `Alloy.render`.
-    record Template do
+    # below `Template` refer to *template*, the template that was passed
+    # to `Alloy.render`.
+    record Template, template : Term do
       include Issue::Spot
     end
 
@@ -62,6 +75,12 @@ module Ww::Alloy
     # below `Component` refer to *template*; with *pattern* provided as additional
     # information to search the ruleset, determine source location, or both.
     record Component, pattern : Term, template : Term do
+      include Issue::Spot
+    end
+
+    # Marks the beginning of a response to *query*, the query that was passed
+    # to `Alloy.response?`.
+    record Response, query : Term do
       include Issue::Spot
     end
   end
@@ -930,6 +949,13 @@ module Ww::Alloy
     end
   end
 
+  # :nodoc:
+  def renderX(ctx : Context, keypath : ThinArray(Term), template : Term, issues : Issue::Sink) : Expansion
+    issues.adjoin(Issue::Spot::KeypathRef.new(keypath)) do |issues|
+      render0(ctx, keypath, template, issues)
+    end
+  end
+
   # Renders an Alloy *template*. Returns its expansion.
   #
   # - *ctx* is the context for expansion.
@@ -939,13 +965,13 @@ module Ww::Alloy
   #
   # NOTE: this is public API, but it offers more control than is usually necessary.
   # Consider non-X overloads (e.g. `render`) before use.
-  def renderX(ctx : Context, keypath : ThinArray(Term), template : Term, issues : Issue::Sink) : Expansion
-    issues.adjoin(Issue::Spot::KeypathRef.new(keypath)) do |issues|
-      render0(ctx, keypath, template, issues)
+  def renderX(vars : Term::Dict, template : Term, issues : Issue::Sink) : Expansion
+    issues.adjoin(Spot::Template.new(template)) do |issues|
+      render0(Context.new(vars), ThinArray(Term).new, template, issues)
     end
   end
 
-  # Renders an Alloy *template*, using *vars* as an initial variables dict.
+  # Renders an Alloy *template*, using *vars* as the initial variables dict.
   #
   # Returns the expanded *template*, and an array of issue backtraces containing
   # issues that were found during expansion (if any).
@@ -956,10 +982,27 @@ module Ww::Alloy
   # Consider non-X overloads (e.g. `render`) before use.
   def renderX(vars : Term::Dict, template : Term, *, severity : Issue::Severity) : {Expansion, Array(Issue::Backtrace)}
     Issue.setup(severity: severity) do |issues|
-      issues.adjoin(Spot::Template.new) do |issues|
-        render0(Context.new(vars), ThinArray(Term).new, template, issues)
-      end
+      renderX(vars, template, issues)
     end
+  end
+
+  alias ExpansionCache = ICache(Term, Expansion)
+
+  private def cached(cache : ExpansionCache, key : Term, issues : Issue::Sink, & : -> Expansion) : Expansion
+    if memo = cache[key]?
+      return memo
+    end
+
+    version0 = issues.version
+    expansion = yield
+    version1 = issues.version
+
+    # Do not cache if there were any issues.
+    if version0 == version1
+      cache[key] = expansion
+    end
+
+    expansion
   end
 
   private def renderX0(ruleset : Ruleset, cache : ExpansionCache, keypath : ThinArray(Term), view : Term, issues : Issue::Sink) : Expansion
@@ -1041,19 +1084,9 @@ module Ww::Alloy
     view : Term,
     issues : Issue::Sink,
   ) : Expansion
-    if memo = cache[view]?
-      return memo
+    cached(cache, view, issues) do
+      renderX0(ruleset, cache, keypath, view, issues)
     end
-
-    version0 = issues.version
-    expansion = renderX0(ruleset, cache, keypath, view, issues)
-    version1 = issues.version
-
-    if version0 == version1
-      cache[view] = expansion
-    end
-
-    expansion
   end
 
   # Renders an Alloy *view*, using *ruleset* as a component database. Only
@@ -1072,13 +1105,78 @@ module Ww::Alloy
     severity : Issue::Severity,
   ) : {Expansion, Array(Issue::Backtrace)}
     Issue.setup(severity: severity) do |issues|
-      issues.adjoin(Spot::View.new) do |issues|
-        renderX(ruleset, cache, ThinArray(Term).new, view, issues)
+      issues.adjoin(Spot::View.new(view)) do |issues|
+        keypath = ThinArray(Term).new
+
+        renderX(ruleset, cache, keypath, view, issues)
       end
     end
   end
 
-  # Renders an Alloy *template*, using *vars* as an initial variables dict.
+  private def responseX0?(ruleset : Ruleset, query : Term, issues : Issue::Sink) : Expansion?
+    unless response = ruleset.call?(query)
+      issues.note("no response")
+      return
+    end
+
+    pr, rule = response
+
+    case pr
+    in Pr::One
+      vars = pr.env
+    in Pr::Many
+      issues.major("rule must emit zero or one match env")
+      return
+    end
+
+    case rule
+    in Rule::Template
+      template = rule.body
+    in Rule::BackmapOne, Rule::BackmapMany
+      issues.major("expected a template rule, but got a backmap")
+      return
+    end
+
+    renderX(vars, template, issues)
+  end
+
+  # Finds a template rule in *ruleset* that matches *query*, and renders its
+  # body using Alloy. Sets the initial variables dict is to the match env
+  # of the rule.
+  #
+  # Query-expansions are cached in *cache*.
+  #
+  # Issues are reported to *issues*.
+  #
+  # NOTE: this is public API, but it offers more control than is usually necessary.
+  # Consider non-X overloads (e.g. `response?`) before use.
+  def responseX?(
+    ruleset : Ruleset,
+    cache : ExpansionCache,
+    query : Term,
+    issues : Issue::Sink,
+  ) : Expansion?
+    cached(cache, query, issues) do
+      # We have no way nor need (?) to cache nils.
+      responseX0?(ruleset, query, issues) || return
+    end
+  end
+
+  # Wraps `responseX?` to constructs an issue sink for you.
+  def responseX?(
+    ruleset : Ruleset,
+    cache : ExpansionCache,
+    query : Term, *,
+    severity : Issue::Severity,
+  ) : {Expansion?, Array(Issue::Backtrace)}
+    Issue.setup(severity: severity) do |issues|
+      issues.adjoin(Spot::Response.new(query)) do |issues|
+        responseX?(ruleset, cache, query, issues)
+      end
+    end
+  end
+
+  # Renders an Alloy *template*, using *vars* as the initial variables dict.
   #
   # Returns the expanded *template*, and an array of issue backtraces containing
   # issues that were found during expansion (if any).
@@ -1091,11 +1189,7 @@ module Ww::Alloy
   ) : {Term, Array(Issue::Backtrace)}
     expansion, issues = renderX(vars, template, severity: severity)
 
-    case expansion
-    in Err    then {Term.of, issues} # Toplevel err resolves to ()
-    in Assign then {expansion.term, issues}
-    in Splice then {Term.of(expansion.offspring), issues}
-    end
+    {toplevel(expansion), issues}
   end
 
   # Renders an Alloy *view*, using *ruleset* as a component database. Only
@@ -1112,17 +1206,10 @@ module Ww::Alloy
   ) : {Term, Array(Issue::Backtrace)}
     expansion, issues = renderX(ruleset, cache, view, severity: severity)
 
-    case expansion
-    in Err    then {Term.of, issues} # Toplevel err resolves to ()
-    in Assign then {expansion.term, issues}
-    in Splice then {Term.of(expansion.offspring), issues}
-    end
+    {toplevel(expansion), issues}
   end
 
-  # Renders an Alloy *template* while suppressing all issues.
-  #
-  # Shorthand for a similar overload of `render_with_issues`, with severity
-  # set to `quiet`.
+  # Shorthand for `render_with_issues` with all issues suppressed.
   def render(vars : Term::Dict, template : Term, **kwargs) : Term
     renderout, _ = render_with_issues(vars, template, **kwargs, severity: :quiet)
     renderout
@@ -1133,10 +1220,7 @@ module Ww::Alloy
     render(vars, template, **kwargs)
   end
 
-  # Renders an Alloy *view* while suppressing all issues.
-  #
-  # Shorthand for a similar overload of `render_with_issues`, with severity
-  # set to `quiet`.
+  # Shorthand for `render_with_issues` with all issues suppressed.
   def render(ruleset : Ruleset, view : Term, **kwargs) : Term
     renderout, _ = render_with_issues(ruleset, view, **kwargs, severity: :quiet)
     renderout
@@ -1145,5 +1229,28 @@ module Ww::Alloy
   # Reverses the order of arguments to support `pipe`.
   def render(view : Term, ruleset : Ruleset, **kwargs) : Term
     render(ruleset, view, **kwargs)
+  end
+
+  # Finds a template rule in *ruleset* that matches *query*, and renders its
+  # body using Alloy.
+  #
+  # *severity* specifies severity cutoff.
+  #
+  # *cache* lets you cache query-expansions.
+  def response_with_issues?(
+    ruleset : Ruleset,
+    query : Term,
+    severity : Issue::Severity = :minor,
+    cache : ExpansionCache = Uncached(Term, Expansion).new,
+  ) : {Term?, Array(Issue::Backtrace)}
+    expansion, issues = responseX?(ruleset, cache, query, severity: :minor)
+
+    {expansion.try { |x| toplevel(x) }, issues}
+  end
+
+  # Shorthand for `response_with_issues?` with all issues suppressed.
+  def response?(ruleset : Ruleset, query : Term, **kwargs) : Term?
+    expansion, _ = response_with_issues?(ruleset, query, **kwargs, severity: :quiet)
+    expansion
   end
 end
