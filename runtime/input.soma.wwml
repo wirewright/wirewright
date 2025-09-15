@@ -104,6 +104,8 @@ C←[compose in_string C'←[| M←[found composite_string] _*]]
 ;; Compose lookup table. Feel free to add your own keys here.
 ;;
 
+[compose "(" [| M←[search] _*]] <> {M: (found "(")}
+
 [compose "oo" [| M←[search] _*]] <> {M: (found "°")}
 
 [compose "^0" [| M←[search] _*]] <> {M: (found "⁰")}
