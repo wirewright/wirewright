@@ -69,6 +69,11 @@ module Ww::Soma::Microfold
 
   # Constructs a Microfold theme from the given *document* and root em
   # size (root font size) *rem*.
+  def theme(document : Term, rem : Term::Num) : Theme
+    theme(document.as_d? || Term[], rem)
+  end
+
+  # :ditto:
   def theme(document : Term::Dict, rem : Term::Num) : Theme
     Theme.new(document, rem)
   end
