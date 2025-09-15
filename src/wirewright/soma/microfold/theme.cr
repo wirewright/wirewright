@@ -31,7 +31,7 @@ module Ww::Soma::Microfold
       end
 
       selector = ML.term %{[rule pattern_ template_]}
-      box_ruleset = Ruleset.select(selector, document[:boxes])
+      box_ruleset = Ruleset.select(selector, document[:boxes]? || Term.of)
 
       Theme.new(document, rem, flowR, ranks, box_ruleset)
     end
