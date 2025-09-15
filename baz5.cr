@@ -440,6 +440,21 @@ def selR(selector, successor)
   end
 end
 
+def rejR(ctx, term, selector, successor)
+  if M1::Operator.probe?(Term[], selector, term)
+    return Rewrite.none
+  end
+
+  successor.call(ctx, Rewrite.one(term))
+end
+
+# :nodoc:
+def rejR(selector, successor)
+  Rewriter.new do |ctx, staging|
+    staging.reduce { |term| rejR(ctx, term, selector, successor) }
+  end
+end
+
 # Selective rewriter.
 #
 # *selector* pattern is used to match a term, and if a match is found, the capture
@@ -448,11 +463,19 @@ def selR(selector : Term, successor : Rewriter) : Rewriter
   selR(M1.operator(selector), successor)
 end
 
+def rejR(selector : Term, successor : Rewriter) : Rewriter
+  rejR(M1.operator(selector), successor)
+end
+
 SELR_SELECTOR_CACHE = SyncCache(String, Term).new(1024, preallocate: true, byref: true)
 
 # See the main overload (`Term`) for more info.
 def selR(selector : String, successor : Rewriter) : Rewriter
   selR(SELR_SELECTOR_CACHE.fetch(selector) { ML.term(selector) }, successor)
+end
+
+def rejR(selector : String, successor : Rewriter) : Rewriter
+  rejR(SELR_SELECTOR_CACHE.fetch(selector) { ML.term(selector) }, successor)
 end
 
 # Generates a `choiceR` with more than two branches for you to reduce typing.

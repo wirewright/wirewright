@@ -44,34 +44,41 @@ module Ww::Soma
       )
     )
 
-    set_backmapr, rec_backmapr = recR
-
     refR = dfsR(
       switchR(
-        { %[($my rewritee←($ _))], chainR(rec_backmapr, envR(Term.of(:"$my"))) },
         { %[($my rewritee_)], envR(Term.of(:"$my")) },
         { %[($up rewritee_)], choiceR(envR(Term.of(:"$up")), envR(Term.of(:"$my"))) },
         { %[($down rewritee_)], choiceR(envR(Term.of(:"$down")), envR(Term.of(:"$my"))) },
       )
     )
 
-    backmapR = set_backmapr.call chainR(refR, evalR)
+    backmapR = chainR(refR, evalR)
 
-    selector = ML.term(%[(%any° [rule pattern_ template_] [backmap pattern_ backspec_])])
+    selector = ML.term(%{[backmap pattern_ backspec_]})
+    ruleset = Ruleset.select(selector, rulebase)
 
     replierR = callR do |term|
       Rewrite.one(replier.call(term))
     end
 
-    # recursive exhR
     set_main, rec_main = recR
-    set_main.call(memoR(cache, exhR(choiceR(
-      itemsR(rec_main),
-      chainR(
-        rulesetR(Ruleset.select(selector, rulebase), noR, backmapR, noR),
-        replierR,
-      ),
-    ))))
+
+    dictR = rejR(%{(guard _* ⍊ allow: {¦ -uir})}, itemsR(rec_main))
+
+    mainR = memoR(cache,
+      exhR(
+        choiceR(
+          dictR,
+          chainR(
+            rulesetR(ruleset, noR, backmapR, noR),
+            replierR,
+          ),
+        )
+      )
+    )
+
+    # recursive exhR
+    set_main.call(mainR)
   end
 end
 

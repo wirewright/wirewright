@@ -4,18 +4,30 @@ module Ww::Soma::Microfold::Pass
 
   # :nodoc:
   def mapwalk(node : Term, & : Term, ThinArray(Term) -> Term) : Term
-    # NOTE: keypaths are certainly not the fastest way to do this; note how
-    # we require two deep `follow`s of the dict. Something like recursion would
-    # be much faster. However, keypaths are much more flexible than recursion --
-    # allowing to look up the tree and inspect our parents during iteration, if
-    # necessary; and they are also much easier to understand and control
-    # in terms of modification (i.e. where it happens, why, and in what order).
-    Term.each_keypath_bottom_up(node) do |keypath|
-      node = node.as_d do |dict|
-        item0 = dict.follow(keypath)
-        item1 = yield item0, keypath
-        dict.follow(keypath) { item1 }
+    itempaths = ThinArray(ThinArray(Term)).new
+
+    Term.each_keypath_and_itemnode(node) do |keypath, item|
+      itempaths << keypath.dup
+
+      Term.case(item) do
+        matchpi %{(guard _* ⍊ allow: {¦ -ufold})} do
+          false # no descend
+        end
+
+        otherwise do
+          true # descend
+        end
       end
+    end
+
+    itempaths.unstable_sort! do |itempath0, itempath1|
+      itempath1.compare(itempath0) do |a, b|
+        a.as_n <=> b.as_n
+      end
+    end
+
+    itempaths.each do |itempath|
+      node = Term.morph(node, itempath) { |item| yield item, itempath }
     end
 
     node
