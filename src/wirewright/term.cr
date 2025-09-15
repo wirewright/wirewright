@@ -1107,6 +1107,50 @@ module Ww
   # Misc
 
   struct Term
+    # WARNING: keypaths are contained within a mutable `ThinArray` for memory
+    # efficiency; you do not own the stack, for you the stack is read-only! Do not
+    # mutate the key path stack, instead, make a copy of it (`dup`) and mutate
+    # your copy instead. Or if you know what you're doing, make sure to return
+    # the stack to valid condition after you've modified it.
+
+    # Traversal proceeds left-to-right, parent before children. *root* is
+    # yielded first.
+    def self.each_keypath_and_node(root : Term, & : ThinArray(Term), Term -> Bool) : Nil
+      ns = StackArray(Int32, 32).new
+      nodes = StackArray(Term, 32){root}
+      keypath = ThinArray(Term).new
+
+      while node = nodes.pop?
+        descend = yield keypath, node
+
+        # Descend
+        if descend && (dict = node.as_d?) && dict.size > 0
+          key, value = dict.nth(0)
+          ns << 0
+          nodes << node
+          nodes << value
+          keypath << key
+          next
+        end
+
+        # Ascend
+        loop do
+          return unless parent = nodes.pop?
+
+          n = ns.pop
+          keypath.pop
+          next unless successor = parent.nth?(n + 1)
+
+          key, value = successor
+          ns << n + 1
+          nodes << parent
+          nodes << value
+          keypath << key
+          break
+        end
+      end
+    end
+
     # Yields each keypath and item node starting at *root*.
     #
     # The block should return `true` if it wishes to continue descent; `false`
@@ -1139,6 +1183,32 @@ module Ww
           keypath << Term.of(index + 1)
           break
         end
+      end
+    end
+
+    def self.each_keypath_and_leaf(root : Term, & : ThinArray(Term), Term -> Bool) : Nil
+      each_keypath_and_node(root) do |keypath, node|
+        if (dict = node.as_d?) && !dict.empty?
+          next true # descend
+        end
+
+        # Either non-dict or empty dict -- leaves.
+        return unless yield keypath, node
+
+        false # no descend
+      end
+    end
+
+    def self.each_keypath_and_item_leaf(root : Term, & : ThinArray(Term), Term -> Bool) : Nil
+      each_keypath_and_itemnode(root) do |keypath, node|
+        if (dict = node.as_d?) && !dict.empty?
+          next true # descend
+        end
+
+        # Either non-dict or empty dict -- leaves.
+        return unless yield keypath, node
+
+        false # no descend
       end
     end
 
@@ -1191,59 +1261,6 @@ module Ww
   # TODO: convert these to iterative and use blocks!!!
 
   struct Term
-    private def self.each_keypath_and_leaf?(node : Term::Dict, prefix : ThinArray(Term), fn : ThinArray(Term), Term -> Bool) : Bool
-      # Empty dict literal `{}` is a (leaf).
-      if node.empty?
-        return fn.call(prefix, node.upcast)
-      end
-
-      node.each_entry do |key, value|
-        prefix.push(key)
-
-        break unless each_keypath_and_leaf?(value.downcast, prefix, fn)
-      ensure
-        prefix.pop
-      end
-
-      true
-    end
-
-    private def self.each_keypath_and_leaf?(node, prefix : ThinArray(Term), fn : ThinArray(Term), Term -> Bool) : Bool
-      fn.call(prefix, node.upcast)
-    end
-
-    # Calls *fn* with non-dictionary values along with key paths to them (which
-    # keys to follow to get to the value), arbitrarily long.
-    #
-    # WARNING: keypaths are contained within a mutable `ThinArray` for memory
-    # efficiency; you do not own the stack, for you the stack is read-only! Do not
-    # mutate the key path stack, instead, make a copy of it (`dup`) and mutate
-    # your copy instead. Or if you know what you're doing, make sure to return
-    # the stack to valid condition after you've modified it.
-    def self.each_keypath_and_leaf(node : Term, &fn : ThinArray(Term), Term -> Bool) : Nil
-      each_keypath_and_leaf?(node: node.downcast, prefix: ThinArray(Term).new, fn: fn)
-    end
-
-    private def self.each_keypath_and_item_leaf?(node : Term::Dict, prefix : ThinArray(Term), fn : ThinArray(Term), Term -> Bool) : Bool
-      node.items.each_with_index do |item, index|
-        prefix.push(Term.of(index))
-
-        break unless each_keypath_and_item_leaf?(item.downcast, prefix, fn)
-      ensure
-        prefix.pop
-      end
-
-      true
-    end
-
-    private def self.each_keypath_and_item_leaf?(node, prefix : ThinArray(Term), fn : ThinArray(Term), Term -> Bool) : Bool
-      fn.call(prefix, node.upcast)
-    end
-
-    def self.each_keypath_and_item_leaf(node : Term, &fn : ThinArray(Term), Term -> Bool) : Nil
-      each_keypath_and_item_leaf?(node: node.downcast, prefix: ThinArray(Term).new, fn: fn)
-    end
-
     module Patch
       alias Any = Skip | ReplaceSkip | ReplaceDescend
 
@@ -1290,32 +1307,6 @@ module Ww
       end
 
       Term.of(dict1)
-    end
-
-    # FIXME: don't use exceptions as control flow, rewrite to use blocks instead!
-    class EachKeypathEscape < Exception
-      @callstack = CallStack.empty
-    end
-
-    private def self.each_keypath_and_node(stack : ThinArray(Term), term : Term, fn : ThinArray(Term), Term -> Bool)
-      return unless dict = term.as_d?
-
-      dict.each_entry do |key, value|
-        stack << key
-        if fn.call(stack, value)
-          each_keypath_and_node(stack, value, fn)
-        end
-      ensure
-        stack.pop
-      end
-    end
-
-    def self.each_keypath_and_node(term : Term, &fn : ThinArray(Term), Term -> Bool) : Nil
-      keypath = ThinArray(Term).new
-      return unless fn.call(keypath, term)
-
-      each_keypath_and_node(keypath, term, fn)
-    rescue EachKeypathEscape
     end
 
     # Thoroughly traverses all nodes in the subtree of *term*, and yields them
