@@ -1012,15 +1012,8 @@ module Ww::D7
     instance_dict = instance.as_d
 
     if range.quoted
-      offspring = instance_dict.pairspart.transaction do |commit|
-        instance_dict.items.each_with_index do |item, index|
-          if index.in?(range.span)
-            subscope = Scope.append(scope, Scope::Qualifier.new(index))
-            commit << walkq1(subscope, item, fn)
-          else
-            commit << item
-          end
-        end
+      offspring = slide(scope, instance_dict, range.span) do |ctx, node|
+        walkq1(spec, ctx.scope, node, conf, fn)
       end
 
       return Term.of(offspring)
@@ -1033,23 +1026,24 @@ module Ww::D7
     Term.of(offspring_dict)
   end
 
-  private def walkq1(scope : Scope::Path, term : Term, fn : WalkFn) : Term
-    Term.of_case(term) do
+  private def walkq1(spec : Spec, scope : Scope::Path, term : Term, conf : WalkConf, fn : WalkFn) : Rep::Any
+    Term.case(term) do
       matchpi %{[unquote _*]} do
-        term.as_d { |dict| slide(scope, dict, 1...term.itemsize, &fn) }
+        ranges, subscope = Permeation.ranges(spec.permeation, scope, term)
+        if !conf.emit_edited? && editing?(ranges, term)
+          return Rep.none
+        end
+
+        Rep.one(slide(subscope, term.as_d, 1...term.itemsize, &fn))
       end
 
       matchpi %{_dict} do
-        term.pairspart.transaction do |commit|
-          term.items.each_with_index do |item, index|
-            subscope = Scope.append(scope, Scope::Qualifier.new(index))
-
-            commit << walkq1(subscope, item, fn)
-          end
-        end
+        Rep.one(slide(scope, term.as_d, 0...term.itemsize) do |ctx, item|
+          walkq1(spec, ctx.scope, item, conf, fn)
+        end)
       end
 
-      otherwise { term }
+      otherwise { Rep.none }
     end
   end
 

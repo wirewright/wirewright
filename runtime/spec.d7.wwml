@@ -76,30 +76,31 @@
 (permeable [module bindings_dict _*] ((range (2 ..))) :bindings)
 
 ;;
-;; cell, frag
+;; cell, frag, display
 ;;
 
-(edges [⸨cell,frag⸩ @a_] (a)
-  (⸨cell,frag⸩ @x))
+(edges [⸨cell,frag,display⸩ @a_] (a)
+  (⸨cell,frag,display⸩ @x))
 
-(edges [⸨cell,frag⸩ @a_ _] (a)
-  (⸨cell,frag⸩ @x 100))
+(edges [⸨cell,frag,display⸩ @a_ _] (a)
+  (⸨cell,frag,display⸩ @x 100))
 
 (permeable [frag @_ _] ((range (2 ..< 3))))
 
 (rating [frag @_ _] passable-dependent)
-(rating [cell @_ _] impassable-dependent)
+
+(rating [⸨cell,display⸩ @_ _] impassable-dependent)
 
 (propose [[⸨cell,frag⸩ @u_ term_]] (%value u none))
   => (proposal ^u (some ^term))
 
-(fix [[⸨cell,frag⸩ @edge_ term0_]] (%value edge (some term1_)))
+(fix [[⸨cell,frag,display⸩ @edge_ term0_]] (%value edge (some term1_)))
   <> {term0: →term1}
 
-(fix [[⸨cell,frag⸩ @edge_ term_]] (%value edge none))
+(fix [[⸨cell,frag,display⸩ @edge_ term_]] (%value edge none))
   <> {(term): ()}
 
-(fix [[⸨cell,frag⸩ @edge_ `>term]] (%value edge (some term_)))
+(fix [[⸨cell,frag,display⸩ @edge_ `>term]] (%value edge (some term_)))
   <> {>term: →term}
 
 ;;
