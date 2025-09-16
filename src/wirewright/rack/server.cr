@@ -306,7 +306,8 @@ module Ww::Rack
 
         agents = [
           Narrator.agent(hub.responses),
-          Rack.uir(platform, uir_base),
+          Rack.uir_graphics(platform, uir_base),
+          Rack.uir_text(uir_base),
           Rack::Image.file_snapper(viewer_context),
           Rack.scheduler { |period, query| tick(period, query, hub.workspaces) },
           wm.sync(window_context),

@@ -65,10 +65,11 @@
 ;; |@ rack.device.uir
 ;;
 ;; |@pattern
-;; [uir @uirs_ @dwuirs_]
+;; (uir @uirs_ @dwuirs_ ⍊ metrics: (%optional graphics (%any text graphics)))
 ;;
 ;; |@block
 ;; Use `uir` to convert UIR terms to DwUIR terms using the uiR rewriter.
+;; Set metrics to `text` for measuring nodes based on text content (e.g. for TUI).
 ;; |@endblock
 
 ([uir @uirs_ @dwuirs_] (%all (%-value uirs) (%value dwuirs ?)))

@@ -71,20 +71,35 @@ module Ww::Rack
   end
 
   # Constructs an agent that finds and handles requests for UIR rewriting using
-  # the uiR rewriter.
+  # the uiR rewriter, with metrics set to `graphics`.
   #
   # TODO: this is a hack. uiR is no different from any other *rewriter circuit*,
   # but we do not have them implemented at the moment.
-  def uir(platform : DwUIR::Platform, rulebase : Term) : Agent::Peer
+  def uir_graphics(platform : DwUIR::Platform, rulebase : Term) : Agent::Peer
     uiR = Soma.uiR(
       replier: ->(term : Term) { DwUIR.reply(platform, term) },
       rulebase: rulebase,
     )
 
+    uir(uiR, :graphics)
+  end
+
+  def uir_text(rulebase : Term) : Agent::Peer
+    uiR = Soma.uiR(
+      replier: ->(term : Term) { DwUIR::Textual.reply(term) },
+      rulebase: rulebase,
+    )
+
+    uir(uiR, :text)
+  end
+
+  private def uir(uiR : Rewriter, metrics : State::UIR::Metrics)
     Agent::Peer.new do |states0, _|
       proposals = [] of Term
 
       states1 = states0.map(State::UIR::Pending) do |_, state0|
+        next unless state0.metrics == metrics
+
         dwuir = rewrite(state0.uir, uiR)
         proposals << Term.of(:proposal, state0.dst, {:currently, dwuir})
 

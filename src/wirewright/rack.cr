@@ -280,7 +280,20 @@ module Ww::Rack
     module UIR
       alias Any = Pending | None
 
-      record Pending, uir : Term, dst : Term
+      # TODO: just like the uir device itself, this is a hack. Instead of hard-coding
+      # metrics, what metrics are is just another rewriter, that must be independent
+      # from uiR (right now calls to metrics are embedded in uiR). We must call them
+      # in turns: first, call uiR; then call metricsR, see if anything changed, and if
+      # it did, then run uiR again and so on until fixpoint. Note how this way, we
+      # basically have two distinct rewriters taking turns rewriting the underlying term,
+      # unaware of each other -- which fits exactly one of the core ideas of Wirewright,
+      # that of stigmergic interaction of its components.
+      enum Metrics
+        Text
+        Graphics
+      end
+
+      record Pending, uir : Term, dst : Term, metrics : Metrics
       record None
     end
 
@@ -996,12 +1009,19 @@ module Ww::Rack
           workspace1 = workspace1.with(instances, {:currently, instance})
         end
 
-        givenpi %{[uir @uirs_ @dwuirs_] (%all (%value uirs (currently uir_)) (%value dwuirs ?))} do
+        givenpi %{(uir @uirs_ @dwuirs_ ⍊ metrics_: (%optional graphics (%any text graphics))) (%all (%value uirs (currently uir_)) (%value dwuirs ?))} do
           assert state0.is_a?(State::UIR::Any)
 
           case state0
           in State::UIR::None, State::UIR::Pending
-            state1 = State::UIR::Pending.new(uir, dwuirs)
+            case metrics
+            when Term.of(:graphics)
+              state1 = State::UIR::Pending.new(uir, dwuirs, :graphics)
+            when Term.of(:text)
+              state1 = State::UIR::Pending.new(uir, dwuirs, :text)
+            else
+              unreachable
+            end
           end
         end
 

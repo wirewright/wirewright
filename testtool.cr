@@ -1203,7 +1203,7 @@ def rack_image(ctx, rack : Term, needle : Term) : Soma::DwUIR::PixelRect
     rack: rack,
     basis: ctx.rack_basis,
     agents: [
-      Rack.uir(platform, rulebase: ctx.uiR_base),
+      Rack.uir_graphics(platform, rulebase: ctx.uiR_base),
       Rack::Image.slot(viewer_context, needle) { |pixel_rect| image = pixel_rect },
       Rack::FS.server(files),
     ] of Rack::Agent::Any,
