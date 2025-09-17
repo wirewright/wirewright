@@ -70,6 +70,23 @@ module Ww::Rack
     end
   end
 
+  # An agent that manages a rewriter of the given *kind*.
+  def rewriter(kind : State::Rewriter::Kind, rewriter : Rewriter)
+    Agent::Peer.new do |states0, _|
+      proposals = [] of Term
+      states1 = states0.map(State::Rewriter::Pending) do |_, state0|
+        next unless state0.kind == kind
+
+        output = rewrite(state0.input, rewriter)
+        proposals << Term.of(:proposal, state0.dst, {:currently, output})
+
+        State::Rewriter::None.new(state0.kind)
+      end
+
+      {states1, proposals}
+    end
+  end
+
   # Constructs an agent that finds and handles requests for UIR rewriting using
   # the uiR rewriter, with metrics set to `graphics`.
   #
@@ -155,11 +172,10 @@ module Ww::Rack
         # Handle input events.
         survived_windows = Window.poll(open_windows) do |target, event|
           env.each(State::Window::Open) do |_, state|
-            next unless events = state.events
             next unless window = @windows[state.id]?
             next unless window == target
 
-            query = Term.entries({events, {:currently, event}})
+            query = Term.entries({state.events, {:currently, event}})
             env.send(query)
           end
         end
@@ -232,9 +248,7 @@ module Ww::Rack
 
           specs.call(state0.props.id, nil)
         when {State::Console::Any, State::Console::Open}
-          if edge = state1.props.events
-            @events[state1.props.id] = edge
-          end
+          @events[state1.props.id] = state1.props.events
 
           specs.call(state1.props.id, state1.spec)
         end

@@ -51,6 +51,7 @@ module Ww::Frontend::Rack
       component_cache : Alloy::ExpansionCache,
       theme : Soma::Microfold::Theme,
       uiR : Rewriter,
+      insetfixR : Rewriter,
       input : Input::Context,
       console : Console::Any,
       env0 : Term::Dict?,
@@ -86,53 +87,12 @@ module Ww::Frontend::Rack
         rulebase: ML.document(files.read_string(UIR_PATH)),
       )
 
+      insetfixR = Textual.insetfixR
+
       inputbase = ML.document(files.read_string(INPUT_PATH))
       inputctx = Input.context(inputbase[:rules])
 
-      State.new(files, requests, window, components, component_cache, theme, uiR, inputctx, console, env0: nil, env1: env, viewport: nil)
-    end
-
-    # We need to clamp border insets to 1. Microfold normally insets by border width,
-    # but that's not how it works in the terminal; border width determines the choice
-    # of a glyph, but it's always one glyph.
-    private def fix_insets(uir0 : Term) : Term
-      uir1 = uir0
-
-      Term.each_keypath_and_itemnode(uir0) do |keypath, node0|
-        node1 = node0
-
-        Term.case(node0) do
-          matchpi %[(padding _ ⍊ inset: true pl)] do
-            node1 = node1.morph({:pl, 1})
-            continue
-          end
-
-          matchpi %[(padding _ ⍊ inset: true pr)] do
-            node1 = node1.morph({:pr, 1})
-            continue
-          end
-
-          matchpi %[(padding _ ⍊ inset: true pt)] do
-            node1 = node1.morph({:pt, 1})
-            continue
-          end
-
-          matchpi %[(padding _ ⍊ inset: true pb)] do
-            node1 = node1.morph({:pb, 1})
-            continue
-          end
-
-          otherwise { }
-        end
-
-        unless node0 == node1
-          uir1 = uir1.as_d(&.where(keypath.to_readonly_slice, eq: node1))
-        end
-
-        true # descend
-      end
-
-      Term.of(uir1)
+      State.new(files, requests, window, components, component_cache, theme, uiR, insetfixR, inputctx, console, env0: nil, env1: env, viewport: nil)
     end
 
     # Renders and presents the next frame.
@@ -145,7 +105,7 @@ module Ww::Frontend::Rack
         Alloy.render(state.env1),
         Alloy.render(state.components, cache: state.component_cache),
         Soma::Microfold.render(state.theme),
-        fix_insets,
+        rewrite(state.insetfixR),
         rewrite(state.uiR),
       )
 

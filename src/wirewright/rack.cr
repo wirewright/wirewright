@@ -158,7 +158,7 @@ module Ww::Rack
   # well outside device states; and must occur through observation of such states
   # and consequent feedback through `StateMap` advancement.
   module State
-    alias Any = Source::Any | Cell::Any | Ruleset::Any | MuTheme::Any | MuRender::Any | Ticker::Any | UIR::Any | Window::Any | Console::Any | Image::Any | ProcessArgs::Any | ProcessEnv::Any | ML::Any | Alloy::Any | Log::Any
+    alias Any = Source::Any | Cell::Any | Ruleset::Any | MuTheme::Any | MuRender::Any | Ticker::Any | UIR::Any | Window::Any | Console::Any | Image::Any | ProcessArgs::Any | ProcessEnv::Any | ML::Any | Alloy::Any | Log::Any | Rewriter::Any
 
     # Transient states have their lifetime equal to the lifetime of the active
     # workspace. When the active workspace is expended, all transient states
@@ -302,9 +302,9 @@ module Ww::Rack
       alias Any = Open | NotOpen
       alias NotOpen = Closed | None
 
-      record Open, id : Int32, spec : Term, events : Term?
-      record Closed, id : Int32, spec : Term, events : Term?
-      record None, id : Int32, events : Term?
+      record None, id : Int32, events : Term
+      record Open, id : Int32, spec : Term, events : Term
+      record Closed, id : Int32, spec : Term, events : Term
     end
 
     # Associated with a `dwuir/console` device.
@@ -316,7 +316,7 @@ module Ww::Rack
       record Open, props : Properties, spec : Term
       record Closed, props : Properties, spec : Term
 
-      record Properties, id : Int32, sizes : Term, events : Term?
+      record Properties, id : Int32, sizes : Term, events : Term
     end
 
     # Associated with a `dwuir/image` device.
@@ -361,6 +361,20 @@ module Ww::Rack
 
       record NoMessage
       record Message, style : Style, term : Term { include TransientPrior(NoMessage) }
+    end
+
+    module Rewriter
+      alias Any = None | Pending
+
+      enum Kind
+        InsetfixR
+        # EditR
+        # MetricsR
+        # UiR
+      end
+
+      record None, kind : Kind
+      record Pending, kind : Kind, input : Term, dst : Term
     end
   end
 
@@ -668,18 +682,8 @@ module Ww::Rack
             commit.assoc(device_addr, State::Window::None.new(device_addr, events))
           end
 
-          matchpi %{[dwuir/window @_]} do
-            commit.assoc(device_addr, State::Window::None.new(device_addr, events: nil))
-          end
-
           matchpi %{[dwuir/console @_ (@sizes_ @events_)]} do
             props = State::Console::Properties.new(device_addr, sizes, events)
-
-            commit.assoc(device_addr, State::Console::None.new(props))
-          end
-
-          matchpi %{[dwuir/console @_ @sizes_]} do
-            props = State::Console::Properties.new(device_addr, sizes, events: nil)
 
             commit.assoc(device_addr, State::Console::None.new(props))
           end
@@ -743,6 +747,10 @@ module Ww::Rack
 
           matchpi %{[log @edge_]}, %{[note @edge_]}, %{[err @edge_]}, %{[warn @edge_]} do
             commit.assoc(device_addr, State::Log::NoMessage.new)
+          end
+
+          matchpi %{[rewriter (insetfixR @_) @_]} do
+            commit.assoc(device_addr, State::Rewriter::None.new(:insetfixR))
           end
 
           otherwise { }
@@ -1031,6 +1039,12 @@ module Ww::Rack
           end
         end
 
+        givenpi %{[rewriter (_ @inputs_) @outputs_] (%all (%value inputs (currently input_)) (%value outputs ?))} do
+          assert state0.is_a?(State::Rewriter::Any)
+
+          state1 = State::Rewriter::Pending.new(state0.kind, input, outputs)
+        end
+
         # |@ rack.device.latest
         #
         # |@block
@@ -1062,9 +1076,6 @@ module Ww::Rack
         # |@pattern
         # [dwuir/window @specs_ @events_]
         #
-        # |@pattern
-        # [dwuir/window @specs_]
-        #
         # |@block
         # Use `dwuir/window` to display an image of DwUIR *specs* in an OS window.
         # Events from the window will be assigned to *events*.
@@ -1073,10 +1084,7 @@ module Ww::Rack
         # |@key specs soma.dwuir.window.os -- Window spec.
         #
         # |@key events soma.dwuir.window.event -- Edge for events.
-        givenpi(
-          %{[dwuir/window @specs_ @_] (%value specs (currently spec_))},
-          %{[dwuir/window @specs_] (%value specs (currently spec_))},
-        ) do
+        givenpi %{[dwuir/window @specs_ @_] (%value specs (currently spec_))} do
           assert state0.is_a?(State::Window::Any)
 
           case state0
@@ -1093,9 +1101,6 @@ module Ww::Rack
         # |@pattern
         # [dwuir/console @specs_ (@sizes_ @events_)]
         #
-        # |@pattern
-        # [dwuir/console @specs_ @sizes_]
-        #
         # |@block
         # Use `dwuir/console` to display a subset of DwUIR, called textual DwUIR,
         # in the terminal. Events from the terminal will be assigned to *events*.
@@ -1110,10 +1115,7 @@ module Ww::Rack
         # |@key specs soma.dwuir.window.console -- Window spec.
         #
         # |@key events soma.dwuir.window.event -- Edge for events.
-        givenpi(
-          %{[dwuir/console @specs_ (@_ @_)] (%value specs (currently spec_))},
-          %{[dwuir/console @specs_ @_] (%value specs (currently spec_))},
-        ) do
+        givenpi %{[dwuir/console @specs_ (@_ @_)] (%value specs (currently spec_))} do
           assert state0.is_a?(State::Console::Any)
 
           case state0

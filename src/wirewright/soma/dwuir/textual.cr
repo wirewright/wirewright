@@ -530,5 +530,42 @@ module Ww::Soma::DwUIR
       end
       screen
     end
+
+    # We need to clamp border insets to 1. We normally inset by border width, but that's
+    # not how it works in the terminal; border width determines the choiceof a glyph,
+    # but it's always one glyph.
+    def insetfixR : Rewriter
+      fixR = callR do |node0|
+        node1 = node0
+
+        Term.case(node0) do
+          matchpi %[(padding _ ⍊ inset: true pl)] do
+            node1 = node1.morph({:pl, 1})
+            continue
+          end
+
+          matchpi %[(padding _ ⍊ inset: true pr)] do
+            node1 = node1.morph({:pr, 1})
+            continue
+          end
+
+          matchpi %[(padding _ ⍊ inset: true pt)] do
+            node1 = node1.morph({:pt, 1})
+            continue
+          end
+
+          matchpi %[(padding _ ⍊ inset: true pb)] do
+            node1 = node1.morph({:pb, 1})
+            continue
+          end
+
+          otherwise { }
+        end
+
+        Rewrite.one(node1)
+      end
+
+      itemdfsR(fixR)
+    end
   end
 end

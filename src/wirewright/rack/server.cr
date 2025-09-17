@@ -308,6 +308,7 @@ module Ww::Rack
           Narrator.agent(hub.responses),
           Rack.uir_graphics(platform, uir_base),
           Rack.uir_text(uir_base),
+          Rack.rewriter(:insetfixR, DwUIR::Textual.insetfixR),
           Rack::Image.file_snapper(viewer_context),
           Rack.scheduler { |period, query| tick(period, query, hub.workspaces) },
           wm.sync(window_context),

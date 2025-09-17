@@ -82,6 +82,11 @@
 ;; just as any other rewriter in the rack, using the currently missing
 ;; `rewriter` node.
 
+([rewriter (_ @inputs_) @outputs_] (%all (%-value inputs) (%value outputs ?)))
+  => (proposal ^inputs ?)
+([rewriter (_ @inputs_) @outputs_] (%all (%value inputs (currently _)) (%-value outputs)))
+  => (proposal ^outputs ?)
+
 ;;
 ;; link
 ;;
