@@ -211,32 +211,35 @@ module Ww::Soma::DwUIR
       def_equals_and_hash sys.id, conf
     end
 
-    @@ready = false
+    # An object issued by `setup`. It is a "capability"; the fact that you
+    # have an instance of it acts as a proof that you called `setup`, so that
+    # functions that rely on that can rely on that with a bit more confidence.
+    class SetupProof
+      # :nodoc:
+      property? valid : Bool = true
+    end
 
-    # Initializes SDL. You **must** wrap your code in this before working with
-    # `Window::SDL`.
-    def setup(&)
-      if @@ready
-        raise "attempt to initialize Window::SDL multiple times"
-      end
+    private def check(proof : SetupProof) : Nil
+      assert proof.valid?
+    end
 
+    # Initializes SDL. Gives you a proof object which you will have to pass
+    # to functions that depend on initialized SDL. The proof object must not
+    # outlive the block.
+    def setup(& : SetupProof ->)
       ::SDL.set_hint("SDL_NO_SIGNAL_HANDLERS", "1")
       ::SDL.set_hint("SDL_QUIT_ON_LAST_WINDOW_CLOSE", "0")
       ::SDL.init(::SDL::Init::VIDEO)
 
-      @@ready = true
+      proof = SetupProof.new
 
-      yield
-    ensure
-      @@ready = false
+      begin
+        yield proof
+      ensure
+        proof.valid = false
 
-      ::SDL.quit
-    end
-
-    private def check_ready! : Nil
-      return if @@ready
-
-      raise "use `Window::SDL.setup(&) to initialize before calling this method"
+        ::SDL.quit
+      end
     end
 
     # :nodoc:
@@ -265,11 +268,38 @@ module Ww::Soma::DwUIR
       {% end %}
     end
 
+    private def change_cursor(ctx, sys : ::SDL::Window, cursor0 : Cursor, cursor1 : Cursor)
+      return if cursor0 == cursor1
+
+      if !cursor0.none? && cursor1.none?
+        # Hide cursor.
+        LibSDL.show_cursor(0)
+      elsif cursor0.none? && !cursor1.none?
+        # Show cursor.
+        LibSDL.show_cursor(1)
+      end
+
+      case cursor1
+      in .none?
+      in .text?         then LibSDL.set_cursor(ctx.cursors.ibeam)
+      in .wait?         then LibSDL.set_cursor(ctx.cursors.wait)
+      in .grab?         then LibSDL.set_cursor(ctx.cursors.sizeall)
+      in .arrow?        then LibSDL.set_cursor(ctx.cursors.arrow)
+      in .pointer?      then LibSDL.set_cursor(ctx.cursors.hand)
+      in .progress?     then LibSDL.set_cursor(ctx.cursors.wait)
+      in .crosshair?    then LibSDL.set_cursor(ctx.cursors.crosshair)
+      in .resize_tl_br? then LibSDL.set_cursor(ctx.cursors.sizenwse)
+      in .resize_bl_tr? then LibSDL.set_cursor(ctx.cursors.sizenesw)
+      in .resize_x?     then LibSDL.set_cursor(ctx.cursors.sizewe)
+      in .resize_y?     then LibSDL.set_cursor(ctx.cursors.sizens)
+      in .resize?       then LibSDL.set_cursor(ctx.cursors.sizeall)
+      in .not_allowed?  then LibSDL.set_cursor(ctx.cursors.no)
+      end
+    end
+
     # Constructs a window context object.
-    #
-    # NOTE: do not forget to wrap in `setup`!
-    def context(viewer_context : Viewer::Context) : Context
-      check_ready!
+    def context(proof : SetupProof, viewer_context : Viewer::Context) : Context
+      check(proof)
 
       Context.new(viewer_context, cursors: CursorStore.new)
     end
@@ -278,7 +308,9 @@ module Ww::Soma::DwUIR
     # *window* to the next state defined by a DwUIR window *spec*.
     #
     # See also: `soma.dwuir.window` in the doctool.
-    def next(context ctx : Context, window : Any, spec : Term?) : Any
+    def next(proof : SetupProof, context ctx : Context, window : Any, spec : Term?) : Any
+      check(proof)
+
       unless conf1 = conf?(spec)
         case window
         in None
@@ -349,36 +381,37 @@ module Ww::Soma::DwUIR
     end
 
     # :nodoc:
-    def present(window : Some) : Nil
+    def present(proof : SetupProof, window : Some) : Nil
+      check(proof)
+
       window.frame.present(window.renderer)
     end
 
     # :nodoc:
-    def present(window : None) : Nil
+    def present(proof : SetupProof, window : None) : Nil
+      check(proof)
     end
 
     {% if flag?(:docs) %}
       # Syncs the OS window content and frame content of *window*.
-      def present(window : Any) : Nil
+      def present(proof : SetupProof, window : Any) : Nil
       end
     {% end %}
 
     # Syncs the OS window content and frame content of all of *windows*.
-    def present(windows : Enumerable(Any)) : Nil
-      windows.each { |window| present(window) }
+    def present(proof : SetupProof, windows : Enumerable(Any)) : Nil
+      windows.each { |window| present(proof, window) }
     end
 
-    private def dispatch(live : Set(Some), event : ::SDL::Event::MouseMotion, fn)
-      return unless target = target?(live, event)
+    private def dispatch(event : ::SDL::Event::MouseMotion, sink)
+      tr = Event::MouseMotion.new(event.which, event.x, event.y)
 
-      Event.term(Event::MouseMotion.new(event.which, event.x, event.y)) do |term|
-        fn.call(target, term)
+      Event.term(tr) do |term|
+        sink.call(Term.of(:event, event.window_id, term))
       end
     end
 
-    private def dispatch(live : Set(Some), event : ::SDL::Event::MouseButton, fn)
-      return unless target = target?(live, event)
-
+    private def dispatch(event : ::SDL::Event::MouseButton, sink)
       case event.button
       when LibSDL::BUTTON_LEFT
         button = Event::MouseButton::Left
@@ -397,27 +430,27 @@ module Ww::Soma::DwUIR
 
       case event
       when .pressed?
-        Event.term(Event::MouseDn.new(event.which, button, event.x, event.y, event.clicks)) do |term|
-          fn.call(target, term)
-        end
+        tr = Event::MouseDn.new(event.which, button, event.x, event.y, event.clicks)
       when .released?
-        Event.term(Event::MouseUp.new(event.which, button, event.x, event.y, event.clicks)) do |term|
-          fn.call(target, term)
-        end
+        tr = Event::MouseUp.new(event.which, button, event.x, event.y, event.clicks)
+      else
+        return
+      end
+
+      Event.term(tr) do |term|
+        sink.call(Term.of(:event, event.window_id, term))
       end
     end
 
-    private def dispatch(live : Set(Some), event : ::SDL::Event::MouseWheel, fn)
-      return unless target = target?(live, event)
+    private def dispatch(event : ::SDL::Event::MouseWheel, sink)
+      tr = Event::MouseWheel.new(event.which, event.x, event.y*-1)
 
-      Event.term(Event::MouseWheel.new(event.which, event.x, event.y*-1)) do |term|
-        fn.call(target, term)
+      Event.term(tr) do |term|
+        sink.call(Term.of(:event, event.window_id, term))
       end
     end
 
-    private def dispatch(live : Set(Some), event : ::SDL::Event::Keyboard, fn)
-      return unless target = target?(live, event)
-
+    private def dispatch(event : ::SDL::Event::Keyboard, sink)
       key = nil
 
       {% begin %}
@@ -486,103 +519,210 @@ module Ww::Soma::DwUIR
 
       case event.type
       when .keyup?
-        Event.term(Event::KeyUp.new(key, ctrl, shift, alt)) do |term|
-          fn.call(target, term)
-        end
+        tr = Event::KeyUp.new(key, ctrl, shift, alt)
       when .keydown?
-        Event.term(Event::KeyDn.new(key, ctrl, shift, alt)) do |term|
-          fn.call(target, term)
+        tr = Event::KeyDn.new(key, ctrl, shift, alt)
+      else
+        return
+      end
+
+      Event.term(tr) do |term|
+        sink.call(Term.of(:event, event.window_id, term))
+      end
+    end
+
+    private def dispatch(event : ::SDL::Event::TextInput, sink)
+      rune = String.new(event.text.to_slice, truncate_at_null: true)
+
+      tr = Event::KeyInput.new(rune)
+
+      Event.term(tr) do |term|
+        sink.call(Term.of(:event, event.window_id, term))
+      end
+    end
+
+    private def dispatch(event, sink)
+    end
+
+    # Starts an SDL event loop in an isolated fiber context. Calls *sink*
+    # with for each event received from SDL, and for each post received
+    # from *posts*. The loop ends when *posts* is closed.
+    #
+    # *posts* will be closed after this method returns, whether by you
+    # or by this method.
+    def evloop(proof : SetupProof, posts : Channel(Term), &sink : Term ->) : Nil
+      # FIXME: this will leak if evloop is called multiple times. Which doesn't
+      # happen in practice, but still...
+      posts_deq = LibSDL::EventType.register(2)
+      posts_closed = posts_deq + 1
+
+      postq = Deque(Term).new
+      postq_lock = Mutex.new
+
+      # This fiber will run in the `fibers` context. It will wait for posts on
+      # the posts channel, and add those to the posts queue postq. It will then
+      # possibly wake up the mainloop using `SDL_PushEvent`.
+      #
+      # We use a separate queue instead of directly passing term through PushEvent
+      # because I'm afraid of situations where the term will be lost to GC under strain,
+      # if the only remaining pointer is now given to C to go wherever. Instead, we keep
+      # terms entirely on the Crystal side, so that the GC can see them; and only
+      # use SDL's event queue for DEQ (aka "please dequeue") notifications.
+      spawn do
+        while post = posts.receive?
+          postq_lock.synchronize { postq << post }
+
+          event = ::SDL::Event::User.new(code: posts_deq)
+          if LibSDL.push_event(event) < 0
+            raise ::SDL::Error.new("PushEvent")
+          end
         end
-      end
-    end
 
-    private def dispatch(live : Set(Some), event : ::SDL::Event::TextInput, fn)
-      return unless target = target?(live, event)
-
-      Event.term(Event::KeyInput.new(String.new(event.text.to_slice, truncate_at_null: true))) do |term|
-        fn.call(target, term)
-      end
-    end
-
-    private def dispatch(live : Set(Some), event : ::SDL::Event::Window, fn)
-      return unless target = target?(live, event)
-
-      case ::SDL::Window::Event.new(event.event)
-      when .resized?
-        # NOTE: resized is only triggered on user resize, programmatic
-        # resize doesn't trigger it which is actually what we want here!
-        Event.term(Event::WindowResized.new(event.data1, event.data2)) do |term|
-          fn.call(target, term)
+        # The only way we can get an error above appears to be if push event fails;
+        # I guess we wouldn't want to push event in that case. So only send posts
+        # closed if we indeed detected that the posts channel was closed, without
+        # any kind of error.
+        event = ::SDL::Event::User.new(code: posts_closed)
+        if LibSDL.push_event(event) < 0
+          raise ::SDL::Error.new("PushEvent")
         end
-      when .close?
-        live.delete(target)
-      when .exposed?
-        present(target)
-      end
-    end
-
-    private def dispatch(live : Set(Some), event, fn)
-    end
-
-    # Polls and calls *fn* with events from each open window in *windows*.
-    # Since this method also handles window closure, a set of live (open)
-    # windows is returned for the caller to sync with.
-    def poll(windows : Enumerable(Any), &fn : Some, Term ->) : Set(Some)
-      live = Set(Some).new
-
-      windows.each do |window|
-        next unless window.is_a?(Some)
-
-        live << window
+      ensure
+        posts.close
       end
 
       loop do
-        break unless live.present?
-        break unless event = ::SDL::Event.poll
+        event = ::SDL::Event.wait
 
-        dispatch(live, event, fn)
+        case event
+        when ::SDL::Event::User
+          case event.code
+          when posts_deq.value
+            post = postq_lock.synchronize { postq.shift }
+            sink.call(post)
+          when posts_closed.value
+            break
+          end
+        when ::SDL::Event::Window
+          sysid = event.window_id
+
+          case ::SDL::Window::Event.new(event.event)
+          when .resized?
+            # NOTE: resized is only triggered on user resize, programmatic
+            # resize doesn't trigger it which is actually what we want here!
+            Event.term(Event::WindowResized.new(event.data1, event.data2)) do |term|
+              sink.call(Term.of(:event, sysid, term))
+            end
+          when .close?
+            Event.term(Event::WindowClosed.new) do |term|
+              sink.call(Term.of(:event, sysid, term))
+            end
+          when .exposed?
+            Event.term(Event::WindowExposed.new) do |term|
+              sink.call(Term.of(:event, sysid, term))
+            end
+          else
+            # Any other window event.
+            dispatch(event, sink)
+          end
+        else
+          # Any other event.
+          dispatch(event, sink)
+        end
       end
-
-      live
+    ensure
+      posts.close
     end
 
-    private def target?(window : Some, id : UInt32) : Some?
-      window.sys.id == id ? window : nil
-    end
+    # Provides window management on top of `evloop`.
+    #
+    # - Post `(window update key_ spec_)` to bind (if not bound already) a window
+    #   to *key* and update it according to *spec* (as in `next`).
+    # - Post `(window close key_)` to close the window bound to *key* if it is open.
+    #
+    # Events are given to *sink* like so: `(event key_ term_)`, where *term* is
+    # an event term.
+    #
+    # Note that the `(window close)` event will only be sent for OS window closure
+    # (as in, the X button was clicked).
+    def wmloop(proof : SetupProof, posts : Channel(Term), context : Context, &sink : Term ->)
+      windows = {} of Term => Some
+      sysid2key = {} of UInt32 => Term
 
-    private def target?(window : None, id : UInt32) : Some?
-    end
+      evloop(proof, posts) do |post|
+        Term.case(post) do
+          matchpi %{(window update key_ spec_)} do
+            window0 = windows[key]? || None.new
+            if window0.is_a?(Some)
+              sysid = window0.sys.id
+            end
 
-    private def target?(windows : Enumerable(Any), event) : Some?
-      windows.leftmost? { |window| target?(window, event.window_id) }
-    end
+            window1 = self.next(proof, context, window0, spec)
+            present(proof, window1)
 
-    private def change_cursor(ctx, sys : ::SDL::Window, cursor0 : Cursor, cursor1 : Cursor)
-      return if cursor0 == cursor1
+            case window1
+            in None
+              windows.delete(key)
+              sysid2key.delete(sysid) if sysid
+            in Some
+              windows[key] = window1
 
-      if !cursor0.none? && cursor1.none?
-        # Hide cursor.
-        LibSDL.show_cursor(0)
-      elsif cursor0.none? && !cursor1.none?
-        # Show cursor.
-        LibSDL.show_cursor(1)
-      end
+              assert sysid.in?(nil, window1.sys.id)
+              if sysid.nil?
+                sysid2key[window1.sys.id] = key
+              end
+            end
+          end
 
-      case cursor1
-      in .none?
-      in .text?         then LibSDL.set_cursor(ctx.cursors.ibeam)
-      in .wait?         then LibSDL.set_cursor(ctx.cursors.wait)
-      in .grab?         then LibSDL.set_cursor(ctx.cursors.sizeall)
-      in .arrow?        then LibSDL.set_cursor(ctx.cursors.arrow)
-      in .pointer?      then LibSDL.set_cursor(ctx.cursors.hand)
-      in .progress?     then LibSDL.set_cursor(ctx.cursors.wait)
-      in .crosshair?    then LibSDL.set_cursor(ctx.cursors.crosshair)
-      in .resize_tl_br? then LibSDL.set_cursor(ctx.cursors.sizenwse)
-      in .resize_bl_tr? then LibSDL.set_cursor(ctx.cursors.sizenesw)
-      in .resize_x?     then LibSDL.set_cursor(ctx.cursors.sizewe)
-      in .resize_y?     then LibSDL.set_cursor(ctx.cursors.sizens)
-      in .resize?       then LibSDL.set_cursor(ctx.cursors.sizeall)
-      in .not_allowed?  then LibSDL.set_cursor(ctx.cursors.no)
+          matchpi %{(window close key_)} do
+            next unless window = windows.delete(key)
+
+            _ = self.next(proof, context, window, spec: nil)
+          end
+
+          matchpi %{(event sysid←(%number u32) (window exposed))} do
+            unless key = sysid2key[sysid.to(UInt32)]?
+              Log.debug { "nonexistent window with sysid `#{sysid}` was exposed" }
+              next
+            end
+
+            unless window = windows[key]?
+              Log.debug { "nonexistent window with sysid `#{sysid}`, key `#{key}` was exposed" }
+              next
+            end
+
+            present(proof, window)
+          end
+
+          matchpi %{(event sysid←(%number u32) term←(window closed))} do
+            unless key = sysid2key[sysid.to(UInt32)]?
+              Log.debug { "nonexistent window with sysid `#{sysid}` was closed" }
+              next
+            end
+
+            unless window = windows.delete(key)
+              Log.debug { "nonexistent window with sysid `#{sysid}`, key `#{key}` was closed" }
+              next
+            end
+
+            _ = self.next(proof, context, window, spec: nil)
+
+            # Notify sink about OS-side window closure.
+            sink.call(Term.of(:event, key, term))
+          end
+
+          matchpi %{(event sysid←(%number u32) term_)} do
+            unless key = sysid2key[sysid.to(UInt32)]?
+              Log.debug { "nonexistent window with sysid `#{sysid}` was closed" }
+              next
+            end
+
+            sink.call(Term.of(:event, key, term))
+          end
+
+          otherwise do
+            sink.call(post)
+          end
+        end
       end
     end
   end

@@ -180,6 +180,8 @@ module Ww::Soma::DwUIR
       record MouseUp, device : UInt32, button : MouseButton, x : Int32, y : Int32, n : Int32
       record MouseWheel, device : UInt32, dx : Int32, dy : Int32
       record WindowResized, w : Int32, h : Int32
+      record WindowClosed
+      record WindowExposed
       record KeyInput, rune : String
       record KeyUp, key : Key, ctrl : Bool, shift : Bool, alt : Bool
       record KeyDn, key : Key, ctrl : Bool, shift : Bool, alt : Bool
@@ -362,6 +364,30 @@ module Ww::Soma::DwUIR
         # Represents a window resize event.
         # |@endblock
         fn.call(Term.of(:window, :resized, w: e.w, h: e.h))
+      end
+
+      def term(e : WindowClosed, &fn : Term ->) : Nil
+        # |@ soma.dwuir.window.event.window.closed
+        #
+        # |@pattern
+        # (window closed)
+        #
+        # |@block
+        # Represents a window closure event.
+        # |@endblock
+        fn.call(Term.of(:window, :closed))
+      end
+
+      def term(e : WindowExposed, &fn : Term ->) : Nil
+        # |@ soma.dwuir.window.event.window.exposed
+        #
+        # |@pattern
+        # (window exposed)
+        #
+        # |@block
+        # Emitted when a window is shown.
+        # |@endblock
+        fn.call(Term.of(:window, :exposed))
       end
 
       def term(e : KeyInput, &fn : Term ->) : Nil

@@ -80,6 +80,43 @@ module Ww::Soma
     # recursive exhR
     set_main.call(mainR)
   end
+
+  def self.uiR(rulebase : Term)
+    cache = SyncCache(Term, Rewrite::Any).new(capacity: 2**16, preallocate: true)
+    onceR = callR(PRIMITIVES)
+
+    # First rewrite entries, then rewrite self.
+    set, exhevalR = recR
+    set.call chainR(entriesR(exhevalR), onceR)
+
+    evalR = dfsR(
+      switchR(
+        { %[($ rewritee_)], exhevalR },
+        { %[($once rewritee_)], onceR },
+      )
+    )
+
+    refR = dfsR(
+      switchR(
+        { %[($my rewritee_)], envR(Term.of(:"$my")) },
+        { %[($up rewritee_)], choiceR(envR(Term.of(:"$up")), envR(Term.of(:"$my"))) },
+        { %[($down rewritee_)], choiceR(envR(Term.of(:"$down")), envR(Term.of(:"$my"))) },
+      )
+    )
+
+    backmapR = chainR(refR, evalR)
+
+    selector = ML.term(%{[backmap pattern_ backspec_]})
+    ruleset = Ruleset.select(selector, rulebase)
+
+    set_main, rec_main = recR
+
+    dictR = rejR(%{(guard _* ⍊ allow: {¦ -uir})}, itemsR(rec_main))
+    mainR = memoR(cache, exhR(choiceR(dictR, rulesetR(ruleset, noR, backmapR, noR))))
+
+    # recursive exhR
+    set_main.call(mainR)
+  end
 end
 
 require "./soma/dwuir"

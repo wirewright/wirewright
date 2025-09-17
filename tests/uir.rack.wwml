@@ -28,14 +28,14 @@
 (sample (@env along @event) @frame)
 
 ;; Handle Page Up to scroll up.
-(repr (@frame (env←{¦ ±page} (keyboard key pgup dn)) as @env')
+(repr (@frame (env←{¦ ±page} [keyboard key pgup dn]) as @env')
   ^(∪ env {page: (- page 50)}))
 
 ;; Handle Page Dn to scroll down.
-(repr (@frame (env←{¦ ±page} (keyboard key pgdn dn)) as @env')
+(repr (@frame (env←{¦ ±page} [keyboard key pgdn dn]) as @env')
   ^(∪ env {page: (+ page 50)}))
 
 ;; Handle Ctrl-Enter to make a screenshot.
-(repr (@frame (_ (keyboard key enter dn ctrl: true)) as @screenshot)
+(repr (@frame (_ (keyboard key enter dn ⍊ ctrl)) as @screenshot)
   true)
 

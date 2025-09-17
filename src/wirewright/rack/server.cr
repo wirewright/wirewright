@@ -74,14 +74,6 @@ module Ww::Rack
       def reply(sink : Channel(Term), item : Term)
         sink.send(Term.of(:reply, item))
       end
-
-      def console(sink : Channel(Term), id : Int32, window : Term)
-        sink.send(Term.of(:console, :update, id, window))
-      end
-
-      def console(sink : Channel(Term), id : Int32, window : Nil)
-        sink.send(Term.of(:console, :close, id))
-      end
     end
 
     # :nodoc:
@@ -270,18 +262,19 @@ module Ww::Rack
       end
     end
 
+    private alias Window = DwUIR::Window::SDL
+
     # Represents the configuration of a server. Prefer to obtain this object from
     # `conf` instead of constructing it by hand.
     defcase Conf,
       basis : Term::Dict,
       mki : Path, Term -> Instance::Some,
       files : FileServer,
-      frametime : Time::Span,
+      window_context : Window::Context,
       fstime : Time::Span
 
     # Extended constructor for a server configuration.
     #
-    # - *frametime* defines ideal duration of a single frame.
     # - *fstime* defines ideal file system polling period.
     def conf(
       hub : Hub,
@@ -289,24 +282,18 @@ module Ww::Rack
       uir_base : Term,
       edit_base : Term,
       compositor : DwUIR::Compositor,
-      platform : DwUIR::Platform,
-      *,
-      frametime : Time::Span = 1.second / 60,
+      platform : DwUIR::Platform, *,
       fstime : Time::Span = 500.milliseconds,
     ) : Conf
-      files = platform.files
-
       viewer_context = DwUIR::Viewer::Context.new(compositor, platform)
-      window_context = DwUIR::Window::SDL.context(viewer_context)
+      window_context = Window.context(hub.setup_proof, viewer_context)
 
       mki = ->(path : Path, rack : Term) do
-        wm = Rack::SDLWM.new
-        twm = Rack::TWM.new
-
-        wmon = wm.poll
-        fsmon = Rack::FS.monitor(files)
-
         editR = Input.inputR(edit_base)
+
+        uiR = Soma.uiR(uir_base)
+        text_metricsR = itemdfsR(callR { |term| Rewrite.one(DwUIR::Textual.reply(term)) })
+        graphics_metricsR = itemdfsR(callR { |term| Rewrite.one(DwUIR.reply(platform, term)) })
 
         agents = [
           Narrator.agent(hub.responses),
@@ -314,18 +301,128 @@ module Ww::Rack
           Rack.uir_text(uir_base),
           Rack.rewriter(:insetfixR, DwUIR::Textual.insetfixR),
           Rack.rewriter(:editR, editR),
+          Rack.rewriter(:uiR, uiR),
+          Rack.rewriter(:text_metricsR, text_metricsR),
+          Rack.rewriter(:graphics_metricsR, graphics_metricsR),
           Rack::Image.file_snapper(viewer_context),
-          Rack.scheduler { |period, query| tick(period, query, hub.workspaces) },
-          wm.sync(window_context),
-          twm.sync { |id, spec| Reply.console(hub.responses, id, spec) },
+          Rack.scheduler { |period, query| tick(period, query, hub.posts) },
+          wmsync(hub.posts),
+          tsync(hub.responses),
         ]
 
         env, unload = Rack.env(rack, basis, agents)
 
-        Instance::Some.new(path, twm, wmon, fsmon, env, unload)
+        Instance::Some.new(path, env, unload)
       end
 
-      Conf.new(basis, mki, files, frametime, fstime)
+      Conf.new(basis, mki, platform.files, window_context, fstime)
+    end
+
+    # WMsync narrator posts window content and state updates to *sink*.
+    #
+    # - `(window update id_ spec_)`
+    # - `(window close id_)`
+    private def wmsync(sink : Channel(Term)) : Agent::Narrator
+      Agent::Narrator.new do |_, _, _, state0, state1|
+        case {state0, state1}
+        when {State::Window::Open, State::Window::NotOpen}
+          sink.send(Term.of(:window, :close, state0.id))
+        when {State::Window::Any, State::Window::Open}
+          sink.send(Term.of(:window, :update, state1.id, state1.spec))
+        end
+      end
+    end
+
+    # Watch step for file-backed `src` devices against *files*. Sends appropriate
+    # queries to the environment when a file dependency is created, removed,
+    # or modified.
+    private def fsmon(files : FileServer, env : Env) : Nil
+      alert = Set(Int32).new
+
+      states0 = states1 = env.states
+      states0.each do |device_addr, state0|
+        case state0
+        when State::Source::FilePending
+        when State::Source::FileLoaded
+          t0 = state0.instant
+        else
+          next
+        end
+
+        path = state0.path
+
+        loop do
+          t1 = files.modification_time?(path)
+
+          case {t0, t1}
+          in {nil, nil}
+            # Did not and does not exist.
+            state1 = state0
+            break
+          in {_, nil}
+            # Removed.
+            state1 = State::Source::FilePending.new(path, state0.dst)
+            states1 = states1.assoc(device_addr, state1)
+            alert << device_addr
+            break
+          in {nil, _}
+            # Created.
+          in {_, _}
+            # Exists.
+            break if t0 == t1
+          end
+
+          # Modified.
+          begin
+            content = files.read_string(path)
+          rescue FileServerError
+            t1 = nil
+            next
+          end
+
+          state1 = State::Source::FileLoaded.new(path, state0.dst, content, t1)
+          states1 = states1.assoc(device_addr, state1)
+          alert << device_addr
+          break
+        end
+      end
+
+      env.submit(states1)
+
+      return if alert.empty?
+
+      query = Term::Dict.build do |commit|
+        alert.each do |device_addr|
+          state0, state1 = states0[device_addr], states1[device_addr]
+
+          case {state0, state1}
+          when {State::Source::FileLoaded, State::Source::FilePending}
+            # Removed
+            commit.with(state1.dst, :"?")
+          when {State::Source::FileLoaded, State::Source::FileLoaded}, # Modified
+               {State::Source::FilePending, State::Source::FileLoaded} # Created
+            commit.with(state1.dst, {:currently, state1.content})
+          end
+        end
+      end
+
+      env.send(query)
+    end
+
+    # Tsync narrator posts console content and existence updates to *sink*,
+    # to be reflected in the *t*erminal by the client.
+    #
+    # - `(console update id_ spec_)`
+    # - `(console close id_)`
+    private def tsync(sink : Channel(Term)) : Agent::Narrator
+      Agent::Narrator.new do |_, _, _, state0, state1|
+        case {state0, state1}
+        when {State::Console::Open, State::Console::NotOpen}
+          sink.send(Term.of(:console, :close, state0.props.id))
+        when {State::Console::Any, State::Console::Open}
+          sink.send(Term.of(:console, :update, state1.props.id, state1.spec))
+        end
+      end
     end
 
     # Shorthand constructor for a server configuration.
@@ -342,13 +439,7 @@ module Ww::Rack
     module Instance
       alias Any = Some | Nil
 
-      record Some,
-        path : Path,
-        twm : TWM,
-        wmon : Client,
-        fsmon : Client,
-        env : Env,
-        unload : (->)
+      record Some, path : Path, env : Env, unload : (->)
     end
 
     private def load(conf : Conf, instance : Instance::Any, path : Path, responses : Channel(Term)) : Instance::Any
@@ -607,13 +698,20 @@ module Ww::Rack
           raise Exit.new
         end
 
-        matchpi %{(console event id←(%number +i32) event_)} do
+        matchpi %{(console event key_ event_)} do
           unless instance
             Reply.err(responses, "control error", "rack not loaded")
             return instance
           end
 
-          instance.twm.send(instance.env, id.to(Int32), event)
+          instance.env.each(State::Console::Open) do |_, state|
+            next unless key == Term.of(state.props.id)
+
+            workspace = Term.entries({state.props.events, {:currently, event}})
+            instance.env.send(workspace)
+            break
+          end
+
           instance
         end
 
@@ -644,8 +742,8 @@ module Ww::Rack
     end
 
     # Spawns the tick fiber containing the tick loop. The tick loop
-    # will send *query* to *queries* for every *period*.
-    private def tick(period : Time::Span, query : Term::Dict, queries : Channel(Term::Dict)) : (->)
+    # will post *query* to *posts* for every *period*.
+    private def tick(period : Time::Span, query : Term::Dict, posts : Channel(Term)) : (->)
       cancel = Channel(Bool).new
 
       spawn do
@@ -660,7 +758,7 @@ module Ww::Rack
               break
             when timeout(period)
               select
-              when queries.send(query)
+              when posts.send(Term.of(:workspace, query))
               when cancel.receive?
                 break
               end
@@ -688,16 +786,12 @@ module Ww::Rack
     end
 
     # Groups input/output channels that the server mainloop works with.
-    record Hub,
-      requests = Channel(Term).new,
-      responses = Channel(Term).new,
-      workspaces = Channel(Term::Dict).new
+    record Hub, setup_proof : Window::SetupProof, posts = Channel(Term).new, responses = Channel(Term).new
 
     struct Hub
       def close : Nil
-        requests.close
+        posts.close
         responses.close
-        workspaces.close
       end
     end
 
@@ -707,102 +801,94 @@ module Ww::Rack
     class Exit < Exception
     end
 
-    # Runs the server mainloop, handling requests coming from *requests* and
-    # sending responding to or notifying the client through *responses*.
-    # Additionally, accepts workspaces/workspace queries on *workspaces*,
-    # which acts as a sink for e.g. tickers.
+    # Starts the Rack server event loop. Blocks until the event loop terminates.
+    # Even though the loop is "infinite", it may terminate due to an error or if
+    # the client asks it to, through `(exit)`.
+    #
+    # - *conf* is a server configuration constructed using `conf`.
+    # - *hub* is a communication hub constructed using `hub`.
     def serve(conf : Conf, hub : Hub) : Nil
       instance = nil
 
-      fstick = Channel(Bool).new
-      wmtick = Channel(Bool).new
-
-      spawn do
-        Log.trace { "wmtick: running" }
-
-        loop do
-          wmtick.send(true)
-
-          dt = Time.measure { wmtick.receive }
-          nap = conf.frametime - dt
-          if nap.positive?
-            sleep nap
-          end
-        end
-      rescue e : Channel::ClosedError
-        Log.trace { "wmtick: channel was closed" }
-      ensure
-        Log.trace { "wmtick: stopped" }
-
-        wmtick.close
-      end
-
+      # Sends periodic notifications to the main thread to check file dependencies.
       spawn do
         Log.trace { "fstick: running" }
 
         loop do
-          fstick.send(true)
-          fstick.receive
+          hub.posts.send(Term.of(:fstick))
 
           # We probably don't want to do anything smart or adaptive here, do we?
-          sleep(conf.fstime)
+          sleep conf.fstime
         end
       rescue e : Channel::ClosedError
         Log.trace { "fstick: channel was closed" }
       ensure
         Log.trace { "fstick: stopped" }
-
-        fstick.close
       end
 
-      begin
-        loop do
-          select
-          when wmtick.receive
-            begin
-              next unless instance.is_a?(Instance::Some)
+      Window.wmloop(hub.setup_proof, hub.posts, conf.window_context) do |post|
+        Term.case(post) do
+          # If window was closed (as in, the X button was clicked), we'd want
+          # to reflect that in the state map.
+          matchpi %{(event key_ (window closed))} do
+            next unless instance_ = instance.as?(Instance::Some)
 
-              instance.wmon.call(instance.env)
-            ensure
-              wmtick.send(true)
+            instance_.env.map(State::Window::Open) do |_, state|
+              next unless key == Term.of(state.id)
+
+              State::Window::Closed.new(state.id, state.spec, state.events)
             end
-          when fstick.receive
-            begin
-              next unless instance.is_a?(Instance::Some)
 
-              instance.fsmon.call(instance.env)
-            ensure
-              fstick.send(true)
+            continue
+          end
+
+          # A window event.
+          matchpi %{(event key_ term_)} do
+            next unless instance_ = instance.as?(Instance::Some)
+
+            instance_.env.each(State::Window::Some) do |_, state|
+              next unless key == Term.of(state.id)
+
+              workspace = Term.entries({state.events, {:currently, term}})
+              instance_.env.send(workspace)
             end
-          when request = hub.requests.receive?
-            break unless request
+          end
 
-            Term.case(request) do
-              matchpi %{(txn id←(%number +i32) seq_*)} do
-                seq.items.each do |item|
-                  instance = handle(conf, instance, item, hub.responses)
-                end
-
-                hub.responses.send(Term.of(:done, id))
-              end
-
-              otherwise do
-                instance = handle(conf, instance, request, hub.responses)
-              end
+          # Transaction request from the client.
+          matchpi %{(request (txn id_ seq_*))} do
+            seq.items.each do |item|
+              instance = handle(conf, instance, item, hub.responses)
             end
-          when workspace = hub.workspaces.receive
-            next unless instance.is_a?(Instance::Some)
 
-            env = instance.env
-            env.send(workspace)
+            hub.responses.send(Term.of(:done, id))
+          end
+
+          # Request from the client.
+          matchpi %{(request request_)} do
+            instance = handle(conf, instance, request, hub.responses)
+          end
+
+          # Workspace (most likely from a ticker).
+          matchpi %{(workspace workspace_dict)} do
+            next unless instance_ = instance.as?(Instance::Some)
+
+            instance_.env.send(workspace.as_d)
+          end
+
+          # File system check notification.
+          matchpi %{fstick} do
+            next unless instance_ = instance.as?(Instance::Some)
+
+            fsmon(conf.files, instance_.env)
+          end
+
+          otherwise do
+            Log.debug { "ignoring invalid post: #{ML.compact(post)}" }
           end
         end
-      rescue Exit
-        Log.info { "received an exit request, stopped the server mainloop" }
-      ensure
-        fstick.close
-        wmtick.close
       end
+    rescue Exit
+      Log.info { "received an exit request, stopped the server mainloop" }
     end
 
     # Constructs and yields a `Hub`, spawning a pair of fibers to bridge between
@@ -813,49 +899,51 @@ module Ww::Rack
     # We use the newline character `\n` to delimit requests and responses in
     # *source* and *sink*.
     def hub(source : IO, sink : IO, & : Hub ->) : Nil
-      hub = Hub.new
+      Window.setup do |proof|
+        hub = Hub.new(proof)
 
-      # This fiber will listen on *responses*, convert terms it receives to WwML
-      # using ML.compact, and finally output them to *sink* (which is most
-      # likely STDOUT).
-      spawn do
-        Log.trace { "response handler: running" }
+        # This fiber will listen on *responses*, convert terms it receives to WwML
+        # using ML.compact, and finally output them to *sink* (which is most
+        # likely STDOUT).
+        spawn do
+          Log.trace { "response handler: running" }
 
-        while response = hub.responses.receive?
-          sink.puts ML.compact(response)
-          sink.flush
-        end
-      ensure
-        Log.trace { "response handler: stopped, closing hub" }
-
-        hub.close
-      end
-
-      # This fiber will listen on *source* (most likely STDIN), parse ML it
-      # receives into terms, and forward to *requests*.
-      spawn do
-        Log.trace { "source handler: running" }
-
-        while line = source.gets
-          begin
-            command = ML.term(line)
-          rescue e : ML::SyntaxError
-            hub.responses.send(Term.of(:log, Term.of(:error, title: "BUG: protocol error", detail: e.detail)))
-            next
+          while response = hub.responses.receive?
+            sink.puts ML.compact(response)
+            sink.flush
           end
+        ensure
+          Log.trace { "response handler: stopped, closing hub" }
 
-          hub.requests.send(command)
+          hub.close
         end
-      ensure
-        Log.trace { "source handler: stopped, closing hub" }
 
-        hub.close
-      end
+        # This fiber will listen on *source* (most likely STDIN), parse ML it
+        # receives into terms, and forward to *posts*.
+        spawn do
+          Log.trace { "source handler: running" }
 
-      DwUIR::Window::SDL.setup do
-        yield hub
-      ensure
-        hub.close
+          while line = source.gets
+            begin
+              command = ML.term(line)
+            rescue e : ML::SyntaxError
+              hub.responses.send(Term.of(:log, Term.of(:error, title: "BUG: protocol error", detail: e.detail)))
+              next
+            end
+
+            hub.posts.send(Term.of(:request, command))
+          end
+        ensure
+          Log.trace { "source handler: stopped, closing hub" }
+
+          hub.close
+        end
+
+        begin
+          yield hub
+        ensure
+          hub.close
+        end
       end
     end
   end

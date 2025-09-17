@@ -300,6 +300,7 @@ module Ww::Rack
     # Associated with a `dwuir/window` device.
     module Window
       alias Any = Open | NotOpen
+      alias Some = Open | Closed
       alias NotOpen = Closed | None
 
       record None, id : Int32, events : Term
@@ -308,6 +309,11 @@ module Ww::Rack
     end
 
     # Associated with a `dwuir/console` device.
+    #
+    # We distinguish *terminals* from *consoles* from *windows*. A *window* is
+    # the content of a console. A *terminal* can show multiple *consoles* through
+    # multiplexing, or if it does not support multiplexing, it will show only
+    # one console.
     module Console
       alias Any = Open | NotOpen
       alias NotOpen = Closed | None
@@ -369,8 +375,9 @@ module Ww::Rack
       enum Kind
         InsetfixR
         EditR
-        # MetricsR
-        # UiR
+        UiR
+        TextMetricsR
+        GraphicsMetricsR
       end
 
       record None, kind : Kind
@@ -755,6 +762,18 @@ module Ww::Rack
 
           matchpi %{[rewriter (editR @_) @_]} do
             commit.assoc(device_addr, State::Rewriter::None.new(:editR))
+          end
+
+          matchpi %{[rewriter (uiR @_) @_]} do
+            commit.assoc(device_addr, State::Rewriter::None.new(:uiR))
+          end
+
+          matchpi %{[rewriter (metricsR/text @_) @_]} do
+            commit.assoc(device_addr, State::Rewriter::None.new(:text_metricsR))
+          end
+
+          matchpi %{[rewriter (metricsR/graphics @_) @_]} do
+            commit.assoc(device_addr, State::Rewriter::None.new(:graphics_metricsR))
           end
 
           otherwise { }
