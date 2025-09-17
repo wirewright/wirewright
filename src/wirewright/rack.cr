@@ -368,7 +368,7 @@ module Ww::Rack
 
       enum Kind
         InsetfixR
-        # EditR
+        EditR
         # MetricsR
         # UiR
       end
@@ -751,6 +751,10 @@ module Ww::Rack
 
           matchpi %{[rewriter (insetfixR @_) @_]} do
             commit.assoc(device_addr, State::Rewriter::None.new(:insetfixR))
+          end
+
+          matchpi %{[rewriter (editR @_) @_]} do
+            commit.assoc(device_addr, State::Rewriter::None.new(:editR))
           end
 
           otherwise { }
@@ -1397,12 +1401,12 @@ module Ww::Rack
   # :nodoc:
   def commit(workspace : Term::Dict, keypath : Term::Dict, value : Term) : {Term::Dict, Bool}
     case current = workspace.follow?(keypath.items)
+    when value # Consensus
+      {workspace, false}
     when .nil?, Term.of(:"?")
       # Defined or computed
       workspace = workspace.where(keypath.items, eq: value)
-      {workspace, current != value}
-    when value # Consensus
-      {workspace, false}
+      {workspace, true}
     else
       Log.error { "ignoring device commit due to conflict over `#{keypath.items.join(':')}`: `#{ML.compact(value)}` proposed over existing #{ML.compact(current)}" }
       {workspace, false}
@@ -1502,7 +1506,7 @@ module Ww::Rack
       narrate(states1, @states)
     end
 
-    private def review(workspace : Term::Dict = Term[]) : Nil
+    private def review(workspace : Term::Dict = Term[]) : Term::Dict
       changed = false
 
       @peers.each do |agent|
@@ -1519,7 +1523,9 @@ module Ww::Rack
         end
       end
 
-      return unless changed
+      unless changed
+        return workspace
+      end
 
       send(workspace)
     end
@@ -1576,8 +1582,6 @@ module Ww::Rack
       end
 
       review(workspace1)
-
-      workspace1
     end
   end
 

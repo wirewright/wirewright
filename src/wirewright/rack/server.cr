@@ -17,6 +17,7 @@ module Ww::Rack
   #   conf = Rack::Server.conf(hub, Disk,
   #     basis_path: Path["runtime", "basis.rack.wwml"],
   #     uir_path: Path["runtime", "uiR.soma.wwml"],
+  #     edit_path: Path["runtime", "input.soma.wwml"],
   #   )
   #
   #   Rack::Server.serve(conf, hub)
@@ -286,6 +287,7 @@ module Ww::Rack
       hub : Hub,
       basis : Term::Dict,
       uir_base : Term,
+      edit_base : Term,
       compositor : DwUIR::Compositor,
       platform : DwUIR::Platform,
       *,
@@ -304,11 +306,14 @@ module Ww::Rack
         wmon = wm.poll
         fsmon = Rack::FS.monitor(files)
 
+        editR = Input.inputR(edit_base)
+
         agents = [
           Narrator.agent(hub.responses),
           Rack.uir_graphics(platform, uir_base),
           Rack.uir_text(uir_base),
           Rack.rewriter(:insetfixR, DwUIR::Textual.insetfixR),
+          Rack.rewriter(:editR, editR),
           Rack::Image.file_snapper(viewer_context),
           Rack.scheduler { |period, query| tick(period, query, hub.workspaces) },
           wm.sync(window_context),
@@ -324,11 +329,12 @@ module Ww::Rack
     end
 
     # Shorthand constructor for a server configuration.
-    def conf(hub : Hub, files : FileServer, basis_path : Path, uir_path : Path, **kwargs) : Conf
+    def conf(hub : Hub, files : FileServer, basis_path : Path, uir_path : Path, edit_path : Path, **kwargs) : Conf
       basis = ML.document(files.read_string(basis_path))
       uir_base = ML.document(files.read_string(uir_path))
+      edit_base = ML.document(files.read_string(edit_path))[:rules]
 
-      conf(hub, basis.as_d, uir_base, DwUIR::Compositor.new, DwUIR::PvgPlatform.new(files), **kwargs)
+      conf(hub, basis.as_d, uir_base, edit_base, DwUIR::Compositor.new, DwUIR::PvgPlatform.new(files), **kwargs)
     end
 
     # Represents a rack instance: a group of handles associated with an initialized

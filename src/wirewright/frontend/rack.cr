@@ -12,6 +12,7 @@ module Ww::Frontend::Rack
 
     UIR_PATH        = Path["uiR-succ8.soma.wwml"]
     RACK_BASIS_PATH = RUNTIME_PATH / "basis.rack.wwml"
+    EDIT_PATH       = RUNTIME_PATH / "input.soma.wwml"
 
     # Starts a Rack server.
     def run(*, files = Disk) : Nil
@@ -20,6 +21,7 @@ module Ww::Frontend::Rack
           conf = ::Ww::Rack::Server.conf(hub, files,
             basis_path: RACK_BASIS_PATH,
             uir_path: UIR_PATH,
+            edit_path: EDIT_PATH,
           )
 
           ::Ww::Rack::Server.serve(conf, hub)
