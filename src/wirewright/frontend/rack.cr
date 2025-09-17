@@ -54,7 +54,8 @@ module Ww::Frontend::Rack
       input : Input::Context,
       console : Console::Any,
       env0 : Term::Dict?,
-      env1 : Term::Dict
+      env1 : Term::Dict,
+      viewport : Term::Dict?
 
     private def boot(files : FileServer, requests : Requests, env : Term::Dict, console : Console::Any) : State
       appspec = ML.document(files.read_string(APP_PATH))
@@ -88,7 +89,7 @@ module Ww::Frontend::Rack
       inputbase = ML.document(files.read_string(INPUT_PATH))
       inputctx = Input.context(inputbase[:rules])
 
-      State.new(files, requests, window, components, component_cache, theme, uiR, inputctx, console, env0: nil, env1: env)
+      State.new(files, requests, window, components, component_cache, theme, uiR, inputctx, console, env0: nil, env1: env, viewport: nil)
     end
 
     # We need to clamp border insets to 1. Microfold normally insets by border width,
@@ -134,29 +135,34 @@ module Ww::Frontend::Rack
       Term.of(uir1)
     end
 
-    # Renders the next frame.
-    private def next(state : State, console : Console::Any, env : Term::Dict) : Console::Any
-      dwuir = pipe(state.window,
-        Alloy.render(env),
-        Alloy.render(state.components, cache: state.component_cache),
-        Soma::Microfold.render(state.theme),
-        fix_insets,
-        rewrite(state.uiR),
-      )
-
-      Console.next(console, dwuir)
-    end
-
     # Renders and presents the next frame.
     private def next(state : State) : State
       if state.env0 == state.env1
         return state
       end
 
-      console1 = self.next(state, state.console, state.env1)
+      dwuir = pipe(state.window,
+        Alloy.render(state.env1),
+        Alloy.render(state.components, cache: state.component_cache),
+        Soma::Microfold.render(state.theme),
+        fix_insets,
+        rewrite(state.uiR),
+      )
+
+      viewport0 = state.viewport
+
+      Term.matchpi?(dwuir, %{(%leaf {¦ final-w: ±width, final-h: ±height, id: viewport})}) do
+        state = state.copy_with(viewport: Term[width: width, height: height])
+      end
+
+      console1 = Console.next(state.console, dwuir)
       Console.present(console1)
 
-      state.copy_with(console: console1, env0: state.env1)
+      unless viewport0 == state.viewport
+        state.requests.channel.send(Term.of(:console, :viewport, state.viewport))
+      end
+
+      state.copy_with(env0: state.env1, console: console1)
     end
 
     # Handles a console event.
@@ -165,8 +171,8 @@ module Ww::Frontend::Rack
         matchpi %{(window resized ⍊ w: ±width h: ±height)} do
           state.copy_with(
             env1: state.env1.morph(
-              {:viewport, :width, width},
-              {:viewport, :height, height},
+              {:terminal, :width, width},
+              {:terminal, :height, height},
             )
           )
         end
@@ -344,6 +350,12 @@ module Ww::Frontend::Rack
         end
 
         matchpi %{(event (narration (rack activated path_string)))} do
+          # When a rack is activated, we send console viewport size to it in case
+          # it needs it to continue.
+          if viewport = state.viewport
+            state.requests.channel.send(Term.of(:console, :viewport, viewport))
+          end
+
           state = state.copy_with(env1: state.env1.morph({:states, :header, :rackpath, path}))
           continue
         end
@@ -474,7 +486,7 @@ module Ww::Frontend::Rack
 
       state = boot(files,
         requests: Requests.new(requests, seq: 0),
-        env: Term[viewport: {width: width, height: height}],
+        env: Term[terminal: {width: width, height: height}],
         console: Console::None.new,
       )
 

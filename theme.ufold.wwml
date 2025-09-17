@@ -861,6 +861,8 @@ content-pan-y: (content-viewport-box any {pan-y: $(local arg)})
 zoom: (viewport-box real {zoom: $(local arg)})
 content-zoom: (content-viewport-box real {zoom: $(local arg)})
 
+sized-id: (sized-box any {id: $(local arg)})
+
 
 --- colors
 

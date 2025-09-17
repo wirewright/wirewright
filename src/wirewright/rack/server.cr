@@ -516,7 +516,7 @@ module Ww::Rack
             when State::Window::Closed
               State::Window::Open.new(state.id, state.spec, state.events)
             when State::Console::Closed
-              State::Console::Open.new(state.id, state.spec, state.events)
+              State::Console::Open.new(state.props, state.spec)
             end
           end
 
@@ -537,7 +537,7 @@ module Ww::Rack
             when State::Window::Open
               State::Window::Closed.new(state.id, state.spec, state.events)
             when State::Console::Open
-              State::Console::Closed.new(state.id, state.spec, state.events)
+              State::Console::Closed.new(state.props, state.spec)
             end
           end
 
@@ -607,6 +607,24 @@ module Ww::Rack
           end
 
           instance.twm.send(instance.env, id.to(Int32), event)
+          instance
+        end
+
+        matchpi %{(console viewport size←(¦ () width: (%number +i32) height: (%number +i32)))} do
+          unless instance
+            # We do not necessarily want to err if this is the case. The client is
+            # allowed to report console viewport sizes too early. They are expected
+            # to report console viewport size
+            return instance
+          end
+
+          query = Term::Dict.build do |commit|
+            instance.env.each(State::Console::Any) do |_, state|
+              commit.with(state.props.sizes, {:currently, size})
+            end
+          end
+
+          instance.env.send(query)
           instance
         end
 

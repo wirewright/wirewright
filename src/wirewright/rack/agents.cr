@@ -228,15 +228,15 @@ module Ww::Rack
       Agent::Narrator.new do |_, _, _, state0, state1|
         case {state0, state1}
         when {State::Console::Open, State::Console::NotOpen}
-          next unless @events.delete(state0.id)
+          next unless @events.delete(state0.props.id)
 
-          specs.call(state0.id, nil)
+          specs.call(state0.props.id, nil)
         when {State::Console::Any, State::Console::Open}
-          if edge = state1.events
-            @events[state1.id] = edge
+          if edge = state1.props.events
+            @events[state1.props.id] = edge
           end
 
-          specs.call(state1.id, state1.spec)
+          specs.call(state1.props.id, state1.spec)
         end
       end
     end

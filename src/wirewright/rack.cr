@@ -312,9 +312,11 @@ module Ww::Rack
       alias Any = Open | NotOpen
       alias NotOpen = Closed | None
 
-      record Open, id : Int32, spec : Term, events : Term?
-      record Closed, id : Int32, spec : Term, events : Term?
-      record None, id : Int32, events : Term?
+      record None, props : Properties
+      record Open, props : Properties, spec : Term
+      record Closed, props : Properties, spec : Term
+
+      record Properties, id : Int32, sizes : Term, events : Term?
     end
 
     # Associated with a `dwuir/image` device.
@@ -670,12 +672,16 @@ module Ww::Rack
             commit.assoc(device_addr, State::Window::None.new(device_addr, events: nil))
           end
 
-          matchpi %{[dwuir/console @_ @events_]} do
-            commit.assoc(device_addr, State::Console::None.new(device_addr, events))
+          matchpi %{[dwuir/console @_ (@sizes_ @events_)]} do
+            props = State::Console::Properties.new(device_addr, sizes, events)
+
+            commit.assoc(device_addr, State::Console::None.new(props))
           end
 
-          matchpi %{[dwuir/console @_]} do
-            commit.assoc(device_addr, State::Console::None.new(device_addr, events: nil))
+          matchpi %{[dwuir/console @_ @sizes_]} do
+            props = State::Console::Properties.new(device_addr, sizes, events: nil)
+
+            commit.assoc(device_addr, State::Console::None.new(props))
           end
 
           matchpi %{[dwuir/image @_ @_]} do
@@ -1085,14 +1091,15 @@ module Ww::Rack
         # |@ rack.device.dwuir/console
         #
         # |@pattern
-        # [dwuir/console @specs_ @events_]
+        # [dwuir/console @specs_ (@sizes_ @events_)]
         #
         # |@pattern
-        # [dwuir/console @specs_]
+        # [dwuir/console @specs_ @sizes_]
         #
         # |@block
         # Use `dwuir/console` to display a subset of DwUIR, called textual DwUIR,
         # in the terminal. Events from the terminal will be assigned to *events*.
+        # Console viewport size will be assigned to *sizes*.
         #
         # NOTE: even though there can be any number of `dwuir/console` devices,
         # whether multiple console windows/tabs are going to be shown in the terminal
@@ -1104,14 +1111,14 @@ module Ww::Rack
         #
         # |@key events soma.dwuir.window.event -- Edge for events.
         givenpi(
+          %{[dwuir/console @specs_ (@_ @_)] (%value specs (currently spec_))},
           %{[dwuir/console @specs_ @_] (%value specs (currently spec_))},
-          %{[dwuir/console @specs_] (%value specs (currently spec_))},
         ) do
           assert state0.is_a?(State::Console::Any)
 
           case state0
           in State::Console::None
-            state1 = State::Console::Open.new(state0.id, spec, state0.events)
+            state1 = State::Console::Open.new(state0.props, spec)
           in State::Console::Open,
              State::Console::Closed
             state1 = state0.copy_with(spec: spec)

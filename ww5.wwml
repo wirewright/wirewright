@@ -2,7 +2,7 @@
 
 ;; This will be populated at runtime, but let's keep them for a reminder
 ;; that they exist.
-viewport: {
+terminal: {
   width: 80,
   height: 24,
 }
@@ -487,13 +487,13 @@ screen-index: 0
   => (tab ^\id active: ^active)
 
 (window style: "root backdrop-neutral-950 clip flow-col z-scope"
-        width: (^. viewport width)
-        height: (^. viewport height)
+        width: (^. terminal width)
+        height: (^. terminal height)
   (group style: "flow-row items-content-x clip-x"
     (^each (screens item as (screen_ index_))
       (^let active: (= index screen-index)
         (screen-tab ^screen active: ^active))))
-  (group style: "flow-col fr bg-neutral-900"
+  (group style: "flow-col fr bg-neutral-900 sized" sized-id: viewport
     (^let screen: (value? screens screen-index)
       (^match screen
         (when (some rack)
@@ -502,10 +502,12 @@ screen-index: 0
               (group style: "flow-col gap-1 px-2 pt-1 fr"
                 (header (^. states header))
                 (group style: "fr flow-col"
-                  (^match viewport
+                  (^match terminal
                     (when {¦ width: (%number _ < 120)}
                       (main ^target ^states layout: vertical))
                     (when _
+                      ;; Show hint for all but input, show hint only if enough space
+                      ;; is available.
                       (^unless (= target input)
                         (group style: "floating-y content-r -dt-3 dl-2 z-1"
                           (group style: "max-w-2xl bg-neutral-700 border-r-3xl border-neutral-600 px-2 py-1"
