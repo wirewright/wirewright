@@ -85,7 +85,7 @@ module Ww::Frontend::Rack
       theme = Soma::Microfold.theme(themedoc, rem: Term[1])
 
       uiR = Soma.uiR(
-        replier: ->(term : Term) { Textual.reply(term) },
+        metricsR: callR { |term| Rewrite.one(Textual.reply(term)) },
         rulebase: ML.document(files.read_string(UIR_PATH)),
       )
 

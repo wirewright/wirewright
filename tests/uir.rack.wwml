@@ -6,9 +6,9 @@
 
 (const @shot-env {uir2ppm: true})
 (alloy/template (@shot-env @test') @shot)
-(uir @shot @image-dwuir)
+(rewriter ((uiR graphics) @shot) @image-dwuir)
 
-(uir @test'' @dwuir)
+(rewriter ((uiR graphics) @test'') @dwuir)
 
 ;; Translate the ad-hoc window definition thing we have for historical
 ;; reasons in uir.in.wwml into a proper DwUIR window spec.

@@ -158,7 +158,7 @@ module Ww::Rack
   # well outside device states; and must occur through observation of such states
   # and consequent feedback through `StateMap` advancement.
   module State
-    alias Any = Source::Any | Cell::Any | Ruleset::Any | MuTheme::Any | MuRender::Any | Ticker::Any | UIR::Any | Window::Any | Console::Any | Image::Any | ProcessArgs::Any | ProcessEnv::Any | ML::Any | Alloy::Any | Log::Any | Rewriter::Any
+    alias Any = Source::Any | Cell::Any | Ruleset::Any | MuTheme::Any | MuRender::Any | Ticker::Any | Window::Any | Console::Any | Image::Any | ProcessArgs::Any | ProcessEnv::Any | ML::Any | Alloy::Any | Log::Any | Rewriter::Any | Fixpoint::Any
 
     # Transient states have their lifetime equal to the lifetime of the active
     # workspace. When the active workspace is expended, all transient states
@@ -274,29 +274,6 @@ module Ww::Rack
       end
     end
 
-    # Associated with a `uir` device.
-    #
-    # TODO: This is a temporary hack until rewriter circuits are there.
-    module UIR
-      alias Any = Pending | None
-
-      # TODO: just like the uir device itself, this is a hack. Instead of hard-coding
-      # metrics, what metrics are is just another rewriter, that must be independent
-      # from uiR (right now calls to metrics are embedded in uiR). We must call them
-      # in turns: first, call uiR; then call metricsR, see if anything changed, and if
-      # it did, then run uiR again and so on until fixpoint. Note how this way, we
-      # basically have two distinct rewriters taking turns rewriting the underlying term,
-      # unaware of each other -- which fits exactly one of the core ideas of Wirewright,
-      # that of stigmergic interaction of its components.
-      enum Metrics
-        Text
-        Graphics
-      end
-
-      record Pending, uir : Term, dst : Term, metrics : Metrics
-      record None
-    end
-
     # Associated with a `dwuir/window` device.
     module Window
       alias Any = Open | NotOpen
@@ -375,13 +352,20 @@ module Ww::Rack
       enum Kind
         InsetfixR
         EditR
-        UiR
-        TextMetricsR
-        GraphicsMetricsR
+        TextUiR
+        GraphicsUiR
       end
 
       record None, kind : Kind
       record Pending, kind : Kind, input : Term, dst : Term
+    end
+
+    module Fixpoint
+      alias Any = None | Pending | Cycle
+
+      record None, seq : Int32
+      record Pending, seq : Int32, term : Term, source : Term
+      record Cycle, seq : Int32, term0 : Term
     end
   end
 
@@ -719,10 +703,6 @@ module Ww::Rack
             commit.assoc(device_addr, State::Cell::None.new)
           end
 
-          matchpi %{[uir @_ @_]} do
-            commit.assoc(device_addr, State::UIR::None.new)
-          end
-
           matchpi %{[ticker @specs_ @_]} do
             query = query.with(specs, :"?")
             commit.assoc(device_addr, State::Ticker::None.new(device_addr))
@@ -764,16 +744,16 @@ module Ww::Rack
             commit.assoc(device_addr, State::Rewriter::None.new(:editR))
           end
 
-          matchpi %{[rewriter (uiR @_) @_]} do
-            commit.assoc(device_addr, State::Rewriter::None.new(:uiR))
+          matchpi %{[rewriter ((uiR text) @_) @_]} do
+            commit.assoc(device_addr, State::Rewriter::None.new(:text_uiR))
           end
 
-          matchpi %{[rewriter (metricsR/text @_) @_]} do
-            commit.assoc(device_addr, State::Rewriter::None.new(:text_metricsR))
+          matchpi %{[rewriter ((uiR graphics) @_) @_]} do
+            commit.assoc(device_addr, State::Rewriter::None.new(:graphics_uiR))
           end
 
-          matchpi %{[rewriter (metricsR/graphics @_) @_]} do
-            commit.assoc(device_addr, State::Rewriter::None.new(:graphics_metricsR))
+          matchpi %{[fixpoint @_ (@_ @_) @_]} do
+            commit.assoc(device_addr, State::Fixpoint::None.new(seq: 0))
           end
 
           otherwise { }
@@ -1046,22 +1026,6 @@ module Ww::Rack
           workspace1 = workspace1.with(instances, {:currently, instance})
         end
 
-        givenpi %{(uir @uirs_ @dwuirs_ ⍊ metrics_: (%optional graphics (%any text graphics))) (%all (%value uirs (currently uir_)) (%value dwuirs ?))} do
-          assert state0.is_a?(State::UIR::Any)
-
-          case state0
-          in State::UIR::None, State::UIR::Pending
-            case metrics
-            when Term.of(:graphics)
-              state1 = State::UIR::Pending.new(uir, dwuirs, :graphics)
-            when Term.of(:text)
-              state1 = State::UIR::Pending.new(uir, dwuirs, :text)
-            else
-              unreachable
-            end
-          end
-        end
-
         givenpi %{[rewriter (_ @inputs_) @outputs_] (%all (%value inputs (currently input_)) (%value outputs ?))} do
           assert state0.is_a?(State::Rewriter::Any)
 
@@ -1315,6 +1279,32 @@ module Ww::Rack
           next unless state0.is_a?(State::Log::NoMessage)
 
           state1 = State::Log::Message.new(:error, msg)
+        end
+
+        givenpi %{[fixpoint @inputs_ (@source_ @_) @_] (%value inputs (currently term_))} do
+          assert state0.is_a?(State::Fixpoint::Any)
+
+          # Do not do anything if the term is the same. We increment seq below so
+          # we'd cause unnecessary work if we don't skip, since the underlying state
+          # would always change.
+          next if state0.is_a?(State::Fixpoint::Pending) && state0.term == term
+
+          state1 = State::Fixpoint::Pending.new(state0.seq + 1, term, source)
+        end
+
+        givenpi %{[fixpoint @_ (@source_ @sink_) @outputs_] (%value sink pout←(currently term1_))} do
+          assert state0.is_a?(State::Fixpoint::Any)
+
+          next unless state0.is_a?(State::Fixpoint::Cycle)
+
+          if state0.term0 == term1
+            # Reached fixpoint.
+            state1 = State::Fixpoint::None.new(state0.seq)
+            workspace1 = workspace1.with(outputs, pout)
+          else
+            # Not yet at fixpoint.
+            state1 = State::Fixpoint::Pending.new(state0.seq, term1, source)
+          end
         end
 
         otherwise { }

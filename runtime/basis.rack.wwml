@@ -185,6 +185,14 @@
 
 ;; If we know both specs and dsts, that's handled by the Crystal side.
 
+;;
+;; fixpoint
+;;
+
+([fixpoint @inputs_ (@_ @_) @outputs_] (%all (%-value inputs) (%value outputs ?)))
+  => (proposal ^inputs ?)
+
+
 --- shorthands
 
 ;; Stock devices are very general but require lots of boilerplate --
@@ -224,11 +232,11 @@
        (m1/pattern (@pattern @matchees) @envs)
        (alloy/template (@envs @template) @values))
 
-[microfold ((theme @themes_ ⍊ rem⋮ 16) @nodes_) @uirs_]
-  => (module {@themes: ^themes, @nodes: ^nodes, @uirs: ^uirs}
+[microfold ((theme @themedocs_ ⍊ rem⋮ 16) @nodes_) @uirs_]
+  => (module {@themedocs: ^themedocs, @nodes: ^nodes, @uirs: ^uirs}
        (const @rem ^rem)
-       (microfold/theme (@themes @rem) @theme)
-       (microfold (@theme @nodes) @uirs))
+       (microfold/theme (@themedocs @rem) @themes)
+       (microfold (@themes @nodes) @uirs))
 
 [alloy/template @templates_ @instances_]
   => (module {@templates: ^templates, @instances: ^instances}

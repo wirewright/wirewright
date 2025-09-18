@@ -291,23 +291,23 @@ module Ww::Rack
       mki = ->(path : Path, rack : Term) do
         editR = Input.inputR(edit_base)
 
-        uiR = Soma.uiR(uir_base)
-        text_metricsR = itemdfsR(callR { |term| Rewrite.one(DwUIR::Textual.reply(term)) })
-        graphics_metricsR = itemdfsR(callR { |term| Rewrite.one(DwUIR.reply(platform, term)) })
+        text_metricsR = callR { |term| Rewrite.one(DwUIR::Textual.reply(term)) }
+        graphics_metricsR = callR { |term| Rewrite.one(DwUIR.reply(platform, term)) }
+
+        text_uiR = Soma.uiR(text_metricsR, uir_base)
+        graphics_uiR = Soma.uiR(graphics_metricsR, uir_base)
 
         agents = [
           Narrator.agent(hub.responses),
-          Rack.uir_graphics(platform, uir_base),
-          Rack.uir_text(uir_base),
           Rack.rewriter(:insetfixR, DwUIR::Textual.insetfixR),
           Rack.rewriter(:editR, editR),
-          Rack.rewriter(:uiR, uiR),
-          Rack.rewriter(:text_metricsR, text_metricsR),
-          Rack.rewriter(:graphics_metricsR, graphics_metricsR),
+          Rack.rewriter(:text_uiR, text_uiR),
+          Rack.rewriter(:graphics_uiR, graphics_uiR),
           Rack::Image.file_snapper(viewer_context),
-          Rack.scheduler { |period, query| tick(period, query, hub.posts) },
+          Rack.scheduler { |period, workspace| tick(period, workspace, hub.posts) },
           wmsync(hub.posts),
           tsync(hub.responses),
+          fixpoint(hub.posts),
         ]
 
         env, unload = Rack.env(rack, basis, agents)
@@ -391,7 +391,7 @@ module Ww::Rack
 
       return if alert.empty?
 
-      query = Term::Dict.build do |commit|
+      workspace = Term::Dict.build do |commit|
         alert.each do |device_addr|
           state0, state1 = states0[device_addr], states1[device_addr]
 
@@ -406,7 +406,7 @@ module Ww::Rack
         end
       end
 
-      env.send(query)
+      env.send(workspace)
     end
 
     # Tsync narrator posts console content and existence updates to *sink*,
@@ -421,6 +421,16 @@ module Ww::Rack
           sink.send(Term.of(:console, :close, state0.props.id))
         when {State::Console::Any, State::Console::Open}
           sink.send(Term.of(:console, :update, state1.props.id, state1.spec))
+        end
+      end
+    end
+
+    # Fixpoint narrator posts rewrite requests for `fixpoint` nodes.
+    private def fixpoint(sink : Channel(Term)) : Agent::Narrator
+      Agent::Narrator.new do |_, device_addr, _, state0, state1|
+        case {state0, state1}
+        when {State::Fixpoint::Any, State::Fixpoint::Pending}
+          sink.send(Term.of(:rewrite, device_addr, state1.seq, state1.term))
         end
       end
     end
@@ -489,8 +499,8 @@ module Ww::Rack
     (section "Workspace"
       (table
         ("workspace edges" "Prints workspace edges in the rack")
-        ("workspace query @edge_" "Queries the rack about the value of computed <edge>")
-        ("workspace assign @edge_ value_" "Updates the value of computed <edge> to <value>, prints the resulting workspace")))
+        ("workspace trigger @edge_" "Triggers the rack at computed <edge>")
+        ("workspace trigger @edge_ value_" "Sets the value of computed <edge> to <value>, triggers the rack")))
     WWML
 
     # Handles a single request.
@@ -660,30 +670,26 @@ module Ww::Rack
           instance
         end
 
-        matchpi %{(workspace query @edge_)} do
+        matchpi %{(workspace trigger @edge_)} do
           unless instance
             Reply.err(responses, "control error", "rack not loaded")
             return instance
           end
 
           env = instance.env
-          workspace = env.send(Term.entries({edge, :"?"}))
-
-          Reply.reply(responses, Term.of(:term, workspace[edge]))
+          env.send(Term.entries({edge, :"?"}))
 
           instance
         end
 
-        matchpi %{(workspace assign @edge_ value_)} do
+        matchpi %{(workspace trigger @edge_ value_)} do
           unless instance
             Reply.err(responses, "control error", "rack not loaded")
             return instance
           end
 
           env = instance.env
-          workspace = env.send(Term.entries({edge, {:currently, value}}))
-
-          Reply.reply(responses, Term.of(:workspace, workspace))
+          env.send(Term.entries({edge, {:currently, value}}))
 
           instance
         end
@@ -723,13 +729,13 @@ module Ww::Rack
             return instance
           end
 
-          query = Term::Dict.build do |commit|
+          workspace = Term::Dict.build do |commit|
             instance.env.each(State::Console::Any) do |_, state|
               commit.with(state.props.sizes, {:currently, size})
             end
           end
 
-          instance.env.send(query)
+          instance.env.send(workspace)
           instance
         end
 
@@ -742,8 +748,8 @@ module Ww::Rack
     end
 
     # Spawns the tick fiber containing the tick loop. The tick loop
-    # will post *query* to *posts* for every *period*.
-    private def tick(period : Time::Span, query : Term::Dict, posts : Channel(Term)) : (->)
+    # will post *workspace* to *posts* for every *period*.
+    private def tick(period : Time::Span, workspace : Term::Dict, posts : Channel(Term)) : (->)
       cancel = Channel(Bool).new
 
       spawn do
@@ -758,7 +764,7 @@ module Ww::Rack
               break
             when timeout(period)
               select
-              when posts.send(Term.of(:workspace, query))
+              when posts.send(Term.of(:workspace, workspace))
               when cancel.receive?
                 break
               end
@@ -882,8 +888,29 @@ module Ww::Rack
             fsmon(conf.files, instance_.env)
           end
 
+          matchpi %{(rewrite device-addr←(%number +i32) seq←(%number +i32) term_)} do
+            next unless instance_ = instance.as?(Instance::Some)
+
+            states0 = instance_.env.states
+            next unless state0 = states0[device_addr.to(Int32)]?
+
+            case state0
+            when State::Fixpoint::Pending
+              # Proceed only if it wasn't invalidated. We'll presumably receive a new
+              # `rewrite` post in the future.
+              next unless state0.seq == seq.to(Int32)
+
+              state1 = State::Fixpoint::Cycle.new(state0.seq, state0.term)
+              states1 = states0.assoc(device_addr.to(Int32), state1)
+              instance_.env.submit(states1)
+
+              workspace = Term.entries({state0.source, {:currently, term}})
+              instance_.env.send(workspace)
+            end
+          end
+
           otherwise do
-            Log.debug { "ignoring invalid post: #{ML.compact(post)}" }
+            Log.warn { "ignoring invalid post: #{ML.compact(post)}" }
           end
         end
       end

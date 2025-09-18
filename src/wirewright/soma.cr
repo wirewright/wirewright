@@ -29,7 +29,7 @@ module Ww::Soma
   # everything while keeping uiR exposed to the internals of the system. In a sense,
   # uiR is a rewriter that is needed inside the system but at the same time, it is
   # implemented using that same system.
-  def self.uiR(replier : Term -> Term, rulebase : Term)
+  def self.uiR(metricsR : Rewriter, rulebase : Term)
     cache = SyncCache(Term, Rewrite::Any).new(capacity: 2**16, preallocate: true)
     onceR = callR(PRIMITIVES)
 
@@ -56,10 +56,6 @@ module Ww::Soma
 
     selector = ML.term(%{[backmap pattern_ backspec_]})
     ruleset = Ruleset.select(selector, rulebase)
-
-    replierR = callR do |term|
-      Rewrite.one(replier.call(term))
-    end
 
     set_main, rec_main = recR
 
@@ -71,48 +67,11 @@ module Ww::Soma
           dictR,
           chainR(
             rulesetR(ruleset, noR, backmapR, noR),
-            replierR,
+            metricsR,
           ),
         )
       )
     )
-
-    # recursive exhR
-    set_main.call(mainR)
-  end
-
-  def self.uiR(rulebase : Term)
-    cache = SyncCache(Term, Rewrite::Any).new(capacity: 2**16, preallocate: true)
-    onceR = callR(PRIMITIVES)
-
-    # First rewrite entries, then rewrite self.
-    set, exhevalR = recR
-    set.call chainR(entriesR(exhevalR), onceR)
-
-    evalR = dfsR(
-      switchR(
-        { %[($ rewritee_)], exhevalR },
-        { %[($once rewritee_)], onceR },
-      )
-    )
-
-    refR = dfsR(
-      switchR(
-        { %[($my rewritee_)], envR(Term.of(:"$my")) },
-        { %[($up rewritee_)], choiceR(envR(Term.of(:"$up")), envR(Term.of(:"$my"))) },
-        { %[($down rewritee_)], choiceR(envR(Term.of(:"$down")), envR(Term.of(:"$my"))) },
-      )
-    )
-
-    backmapR = chainR(refR, evalR)
-
-    selector = ML.term(%{[backmap pattern_ backspec_]})
-    ruleset = Ruleset.select(selector, rulebase)
-
-    set_main, rec_main = recR
-
-    dictR = rejR(%{(guard _* ⍊ allow: {¦ -uir})}, itemsR(rec_main))
-    mainR = memoR(cache, exhR(choiceR(dictR, rulesetR(ruleset, noR, backmapR, noR))))
 
     # recursive exhR
     set_main.call(mainR)
