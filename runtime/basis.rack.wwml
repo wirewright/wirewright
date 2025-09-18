@@ -107,10 +107,23 @@
 ;; flow
 ;;
 
-;; Flow is a unidirectional link with no backwards reasoning (push-only).
+;; Flow is a push-only unidirectional link.
 
 ([flow @a_ @b_] (%all (%value a value←(currently _)) (%-value b)))
   => (proposal ^b ^value)
+
+;;
+;; gate
+;;
+
+;; Gate is a pull-only unidirectional link.
+
+([gate @a_ @b_] (%all (%-value a) (%value b ?)))
+  => (proposal ^a ?)
+
+([gate @a_ @b_] (%all (%value a v←(currently _)) (%value b ?)))
+  => (proposal ^b ^v)
+
 
 ;;
 ;; combined
@@ -202,13 +215,19 @@
   => (proposal ^inputs ?)
 
 ;;
-;; d7/repair, d7/damage
+;; d7 nodes
 ;;
 
-([d7/⟦repair,damage⟧ (@specs_ @pins_) @pouts_] (%all (%value ⸨specs,pins⸩ (currently _)) (%-value pouts)))
+([d7⟦/spec,-editR/post⟧ @specdocs_ @specs_] (%all (%value specdocs (currently _)) (%-value specs)))
+  => (proposal ^specs ?)
+
+([d7⟦/spec,-editR/post⟧ @specdocs_ @specs_] (%all (%-value specdocs) (%value specs ?)))
+  => (proposal ^specdocs ?)
+
+([d7⟦/repair,/damage,-editR/repair⟧ (@specs_ @pins_) @pouts_] (%all (%value ⸨specs,pins⸩ (currently _)) (%-value pouts)))
   => (proposal ^pouts ?)
 
-([d7/⟦repair,damage⟧ (@specs_ @pins_) @pouts_] (%all (%-value ⸨specs,pins⸩) (%value pouts ?)))
+([d7⟦/repair,/damage,-editR/repair⟧ (@specs_ @pins_) @pouts_] (%all (%-value ⸨specs,pins⸩) (%value pouts ?)))
   => (proposal ^⸨specs,pins⸩ ?)
 
 

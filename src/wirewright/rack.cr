@@ -770,8 +770,16 @@ module Ww::Rack
           end
 
           {% if flag?(:newd7) %}
-            {% for word in %w[spec repair damage] %}
-              matchpi %{[d7/{{word.id}} @_ @_]} do
+            matchpi %{[d7/spec @_ @_]} do
+              commit.assoc(device_addr, State::D7::None.new)
+            end
+
+            matchpi %{[d7-editR/post @_ @_]} do
+              commit.assoc(device_addr, State::D7::None.new)
+            end
+
+            {% for suffix in %w[/repair /damage -editR/repair] %}
+              matchpi %{[d7{{suffix.id}} (@_ @_) @_]} do
                 commit.assoc(device_addr, State::D7::None.new)
               end
             {% end %}
@@ -1343,7 +1351,7 @@ module Ww::Rack
             end
           end
 
-          givenpi %{[d7/spec @specdocs_ @specs_] (%value specdocs (currently specdoc_dict))} do
+          givenpi %{[d7/spec @specdocs_ @specs_] (%all (%value specdocs (currently specdoc_dict)) (%value specs ?))} do
             assert state0.is_a?(State::D7::Any)
 
             spec = D7.spec(specdoc)
@@ -1351,17 +1359,39 @@ module Ww::Rack
             workspace1 = workspace1.with(specs, {:currently, {:handle, device_addr}})
           end
 
-          {% for word in %w[repair damage] %}
-            givenpi %{[d7/{{word.id}} (@specs_ @pins_) @pouts_] (%all (%value specs (currently (handle owner←(%number +i32)))) (%value pins (currently program0_)))} do
+          {% for suffix in %w[repair damage] %}
+            givenpi %{[d7/{{suffix.id}} (@specs_ @pins_) @pouts_] (%all (%value specs (currently (handle owner←(%number +i32)))) (%value pins (currently program0_)) (%value pouts ?))} do
               unless state = states0[owner.to(Int32)]?.as?(State::D7::Spec)
-                Log.debug { "ignoring invalid ruleset owner device id: `#{owner}`" }
+                Log.debug { "ignoring invalid D7 spec owner device id: `#{owner}`" }
                 next
               end
 
-              program1 = D7.{{word.id}}(state.spec, program0)
+              program1 = D7.{{suffix.id}}(state.spec, program0)
               workspace1 = workspace1.with(pouts, {:currently, program1})
             end
           {% end %}
+
+          givenpi %{[d7-editR/repair (@specs_ @pins_) @pouts_] (%all (%value specs (currently (handle owner←(%number +i32)))) (%value pins (currently program0_)) (%value pouts ?))} do
+            unless state = states0[owner.to(Int32)]?.as?(State::D7::Spec)
+              Log.debug { "ignoring invalid D7 spec owner device id: `#{owner}`" }
+              next
+            end
+
+            program1 = D7::Cursor.repair(state.spec, program0)
+            workspace1 = workspace1.with(pouts, {:currently, program1})
+          end
+
+          givenpi %([d7-editR/post @requests_ @programs_] (%all (%value requests (currently {¦ program_ motions_})) (%value programs ?))) do
+            program1 = program
+
+            motions.items.each do |motion|
+              Term.matchpi?(motion, %[{¦ edge: @edge_ motion_}]) do
+                program1 = D7::Cursor.post(program1, edge, motion)
+              end
+            end
+
+            workspace1 = workspace1.with(programs, {:currently, program1})
+          end
         {% end %}
 
         otherwise { }
