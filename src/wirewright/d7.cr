@@ -31,8 +31,8 @@
 # nodes to achieve "healing" of sorts (in simple cases; in more complex cases, there
 # may be multiple pathways to recompute one from the other and vice versa, perhaps of
 # varying length). `fill` nodes are friends of `map` nodes which do not introduce oscillation
-# on conflict. This way, as long as at least one cell contains information,
-# the other cell will be recomputed or "completed" based on that information.
+# on conflict. This way, as long as one cell contains information, the other cell will
+# be recomputed or "completed" based on that information.
 #
 # Cells are assumed not to conflict. How conflict will be resolved in practice
 # depends on how it is caused in the first place. Internally, D7 forbids conflict
