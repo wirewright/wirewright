@@ -361,9 +361,9 @@ module Ww::Rack
     end
 
     module Fixpoint
-      alias Any = None | Pending | Cycle
+      alias Any = Initial | Pending | Cycle
 
-      record None, seq : Int32
+      record Initial, seq : Int32
       record Pending, seq : Int32, term : Term, source : Term
       record Cycle, seq : Int32, term0 : Term
     end
@@ -766,7 +766,7 @@ module Ww::Rack
           end
 
           matchpi %{[fixpoint @_ (@_ @_) @_]} do
-            commit.assoc(device_addr, State::Fixpoint::None.new(seq: 0))
+            commit.assoc(device_addr, State::Fixpoint::Initial.new(seq: 0))
           end
 
           {% if flag?(:newd7) %}
@@ -1323,7 +1323,7 @@ module Ww::Rack
 
           if state0.term0 == term1
             # Reached fixpoint.
-            state1 = State::Fixpoint::None.new(state0.seq)
+            state1 = State::Fixpoint::Initial.new(state0.seq)
             workspace1 = workspace1.with(outputs, pout)
           else
             # Not yet at fixpoint.
