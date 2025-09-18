@@ -23,6 +23,7 @@ presets:
  "ww":
   {flags:
     {"execution_context": true,
+     "newd7": true,
      "newsoma": true,
      "preview_mt": true},
    source: "src/ww.cr"}}

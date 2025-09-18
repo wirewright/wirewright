@@ -158,7 +158,7 @@ module Ww::Rack
   # well outside device states; and must occur through observation of such states
   # and consequent feedback through `StateMap` advancement.
   module State
-    alias Any = Source::Any | Cell::Any | Ruleset::Any | MuTheme::Any | MuRender::Any | Ticker::Any | Window::Any | Console::Any | Image::Any | ProcessArgs::Any | ProcessEnv::Any | ML::Any | Alloy::Any | Log::Any | Rewriter::Any | Fixpoint::Any
+    alias Any = Source::Any | Cell::Any | Ruleset::Any | MuTheme::Any | MuRender::Any | Ticker::Any | Window::Any | Console::Any | Image::Any | ProcessArgs::Any | ProcessEnv::Any | ML::Any | Alloy::Any | Log::Any | Rewriter::Any | Fixpoint::Any | D7::Any
 
     # Transient states have their lifetime equal to the lifetime of the active
     # workspace. When the active workspace is expended, all transient states
@@ -367,6 +367,19 @@ module Ww::Rack
       record Pending, seq : Int32, term : Term, source : Term
       record Cycle, seq : Int32, term0 : Term
     end
+
+    {% if flag?(:newd7) %}
+      module D7
+        alias Any = None | Spec
+
+        record None
+        record Spec, spec : ::Ww::D7::Spec
+      end
+    {% else %}
+      module D7
+        alias Any = Union()
+      end
+    {% end %}
   end
 
   # Calls *fn* with keypaths and terms of edge literals found in *device*.
@@ -756,6 +769,14 @@ module Ww::Rack
             commit.assoc(device_addr, State::Fixpoint::None.new(seq: 0))
           end
 
+          {% if flag?(:newd7) %}
+            {% for word in %w[spec repair damage] %}
+              matchpi %{[d7/{{word.id}} @_ @_]} do
+                commit.assoc(device_addr, State::D7::None.new)
+              end
+            {% end %}
+          {% end %}
+
           otherwise { }
         end
       end
@@ -1042,6 +1063,9 @@ module Ww::Rack
           givenpi %{[latest @terms_ @memos_] (%value terms (currently term_))} do
             assert state0.is_a?(State::Cell::Any)
 
+            # Do nothing if the term did not change.
+            next if state0.is_a?(State::Cell::Some) && term == state0.value
+
             state1 = State::Cell::Some.new(term)
             workspace1 = workspace1.with(memos, {:currently, term})
           end
@@ -1306,6 +1330,39 @@ module Ww::Rack
             state1 = State::Fixpoint::Pending.new(state0.seq, term1, source)
           end
         end
+
+        {% if flag?(:newd7) %}
+          givenpi %{[d7/spec @specdocs_ @specs_] (%all (%-value specdocs) (%value specs ?))} do
+            assert state0.is_a?(State::D7::Any)
+
+            case state0
+            in State::D7::None
+              workspace1 = workspace1.with(specdocs, :"?")
+            in State::D7::Spec
+              workspace1 = workspace1.with(specs, {:currently, {:handle, device_addr}})
+            end
+          end
+
+          givenpi %{[d7/spec @specdocs_ @specs_] (%value specdocs (currently specdoc_dict))} do
+            assert state0.is_a?(State::D7::Any)
+
+            spec = D7.spec(specdoc)
+            state1 = State::D7::Spec.new(spec)
+            workspace1 = workspace1.with(specs, {:currently, {:handle, device_addr}})
+          end
+
+          {% for word in %w[repair damage] %}
+            givenpi %{[d7/{{word.id}} (@specs_ @pins_) @pouts_] (%all (%value specs (currently (handle owner←(%number +i32)))) (%value pins (currently program0_)))} do
+              unless state = states0[owner.to(Int32)]?.as?(State::D7::Spec)
+                Log.debug { "ignoring invalid ruleset owner device id: `#{owner}`" }
+                next
+              end
+
+              program1 = D7.{{word.id}}(state.spec, program0)
+              workspace1 = workspace1.with(pouts, {:currently, program1})
+            end
+          {% end %}
+        {% end %}
 
         otherwise { }
       end

@@ -104,6 +104,15 @@
   => (proposal ^b⫽a ^value)
 
 ;;
+;; flow
+;;
+
+;; Flow is a unidirectional link with no backwards reasoning (push-only).
+
+([flow @a_ @b_] (%all (%value a value←(currently _)) (%-value b)))
+  => (proposal ^b ^value)
+
+;;
 ;; combined
 ;;
 
@@ -189,8 +198,18 @@
 ;; fixpoint
 ;;
 
-([fixpoint @inputs_ (@_ @_) @outputs_] (%all (%-value inputs) (%value outputs ?)))
+([fixpoint @inputs_ (@source_ @_) @outputs_] (%all (%-value inputs) (%value ⸨source,outputs⸩ ?)))
   => (proposal ^inputs ?)
+
+;;
+;; d7/repair, d7/damage
+;;
+
+([d7/⟦repair,damage⟧ (@specs_ @pins_) @pouts_] (%all (%value ⸨specs,pins⸩ (currently _)) (%-value pouts)))
+  => (proposal ^pouts ?)
+
+([d7/⟦repair,damage⟧ (@specs_ @pins_) @pouts_] (%all (%-value ⸨specs,pins⸩) (%value pouts ?)))
+  => (proposal ^⸨specs,pins⸩ ?)
 
 
 --- shorthands
