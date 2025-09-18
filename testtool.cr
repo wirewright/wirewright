@@ -1197,13 +1197,18 @@ def rack_image(ctx, rack : Term, needle : Term) : Soma::DwUIR::PixelRect
   compositor = Soma::DwUIR::Compositor.new
   viewer_context = Soma::DwUIR::Viewer::Context.new(compositor, platform)
 
+  uiR = Soma.uiR(
+    metricsR: callR { |term| Rewrite.one(Soma::DwUIR.reply(platform, term)) },
+    rulebase: ctx.uiR_base,
+  )
+
   image = nil
 
   env, retire = Rack.env(
     rack: rack,
     basis: ctx.rack_basis,
     agents: [
-      Rack.uir_graphics(platform, rulebase: ctx.uiR_base),
+      Rack.rewriter(:graphics_uiR, uiR),
       Rack::Image.slot(viewer_context, needle) { |pixel_rect| image = pixel_rect },
       Rack::FS.server(files),
     ] of Rack::Agent::Any,
