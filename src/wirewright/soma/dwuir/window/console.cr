@@ -354,7 +354,7 @@ module Ww::Soma::DwUIR
           dispatch(Event::Key::Enter, alt: event.mod.alt?, amb: true, &fn)
           dispatch(Event::Key::M, ctrl: true, alt: event.mod.alt?, amb: true, &fn)
         when .esc? # .ctrl_lsq_bracket?, .ctrl_3?
-          dispatch(Event::Key::Esc, amb: true, &fn)
+          dispatch(Event::Key::Escape, amb: true, &fn)
           dispatch(Event::Key::Lsqb, ctrl: true, alt: event.mod.alt?, amb: true, &fn)
           dispatch(Event::Key::Digit3, ctrl: true, alt: event.mod.alt?, amb: true, &fn)
         when .ctrl_4? # .ctrl_backslash?

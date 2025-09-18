@@ -152,7 +152,7 @@ module Ww::Soma::DwUIR
         Right
         Tab
         Enter
-        Esc
+        Escape
         Insert
         Delete
         Backspace
@@ -260,7 +260,7 @@ module Ww::Soma::DwUIR
           in .right?     then fn.call(Term.of(:right))
           in .tab?       then fn.call(Term.of(:tab))
           in .enter?     then fn.call(Term.of(:enter))
-          in .esc?       then fn.call(Term.of(:esc))
+          in .escape?    then fn.call(Term.of(:escape))
           in .insert?    then fn.call(Term.of(:insert))
           in .delete?    then fn.call(Term.of(:delete))
           in .space?     then fn.call(Term.of(:space))

@@ -486,7 +486,7 @@ module Ww::Soma::DwUIR
         when .left?         then key = Event::Key::Left
         when .right?        then key = Event::Key::Right
         when .tab?          then key = Event::Key::Tab
-        when .escape?       then key = Event::Key::Esc
+        when .escape?       then key = Event::Key::Escape
         when .return?       then key = Event::Key::Enter
         when .insert?       then key = Event::Key::Insert
         when .delete?       then key = Event::Key::Delete
