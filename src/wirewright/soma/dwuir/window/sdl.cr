@@ -92,6 +92,8 @@ module Ww::Soma::DwUIR
       def show(content : Term)
         damage = @viewer.show(content, bg: @backdrop)
 
+        # FIXME: for some reason, this causes rare crashes with SDL: invalid
+        # texture error on `lock`.
         @buffer.lock do |pixels, pitch|
           damage.each do |rect|
             region = @screen.region(rect)
