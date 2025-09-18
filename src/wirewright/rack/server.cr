@@ -288,15 +288,13 @@ module Ww::Rack
       viewer_context = DwUIR::Viewer::Context.new(compositor, platform)
       window_context = Window.context(hub.setup_proof, viewer_context)
 
+      editR = Input.inputR(edit_base)
+      text_metricsR = callR { |term| Rewrite.one(DwUIR::Textual.reply(term)) }
+      graphics_metricsR = callR { |term| Rewrite.one(DwUIR.reply(platform, term)) }
+      text_uiR = Soma.uiR(text_metricsR, uir_base)
+      graphics_uiR = Soma.uiR(graphics_metricsR, uir_base)
+
       mki = ->(path : Path, rack : Term) do
-        editR = Input.inputR(edit_base)
-
-        text_metricsR = callR { |term| Rewrite.one(DwUIR::Textual.reply(term)) }
-        graphics_metricsR = callR { |term| Rewrite.one(DwUIR.reply(platform, term)) }
-
-        text_uiR = Soma.uiR(text_metricsR, uir_base)
-        graphics_uiR = Soma.uiR(graphics_metricsR, uir_base)
-
         agents = [
           Narrator.agent(hub.responses),
           Rack.rewriter(:insetfixR, DwUIR::Textual.insetfixR),
