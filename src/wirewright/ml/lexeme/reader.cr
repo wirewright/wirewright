@@ -568,7 +568,7 @@ module Ww::ML::Lexeme
             raise "whitespace after `⸢` not allowed"
           end
 
-          while lexeme = try? { top?.as(Lexeme::Any?) }
+          while lexeme = try? { top_non_eoi? }
             lexemes << lexeme
           end
 
@@ -918,6 +918,18 @@ module Ww::ML::Lexeme
       if lexeme = choice?(symbolic, vspace, string, raw_string, superscript, subscript)
         return lexeme
       end
+    end
+
+    private def top_non_eoi? : Lexeme::Any?
+      return unless lexeme = top?
+
+      unless lexeme.is_a?(Lexeme::Token)
+        return lexeme
+      end
+
+      return if lexeme.type.eoi?
+
+      lexeme
     end
 
     private def top : Lexeme::Any

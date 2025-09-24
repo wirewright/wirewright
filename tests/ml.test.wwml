@@ -188,6 +188,7 @@
   (= ⎡"Your name is ⸢name⸣"⎤ ⎡(~ "Your name is " name)⎤)
 
   ;; Interpolation errors.
+  (- ⎡"⸢⏏⎤ ⎡expected `⸣` to end string interpolation⎤)
   (- ⎡"hello ⸢⏏ ⏏qux⸣ world"⎤ ⎡whitespace after `⸢` not allowed⎤)
   (- ⎡"hello ⸢qux⏏ ⏏⸣ world"⎤ ⎡expected `⸣` to end string interpolation⎤)
   (- ⎡"hello ⸢⏏ ⏏qux ⸣ world"⎤ ⎡whitespace after `⸢` not allowed⎤)

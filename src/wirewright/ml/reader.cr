@@ -400,7 +400,7 @@ module Ww::ML
           end
 
           unless past?(:tr_half_bracket)
-            return failure("expected `⸣` to end interpolation", ahead.text.before_begin)
+            return failure("expected `⸣` to end string interpolation", ahead.text.before_begin)
           end
         else
           unreachable("unexpected lexeme after dquote_left")
