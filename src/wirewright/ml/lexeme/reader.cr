@@ -291,6 +291,12 @@ module Ww::ML::Lexeme
         else
           raise "whitespace after `#{text}` not allowed"
         end
+      elsif ahead.eoi?
+        if prefix
+          raise "unexpected end-of-input after prefix `#{text}`"
+        else
+          raise "unexpected end-of-input after `#{text}`"
+        end
       end
 
       yield

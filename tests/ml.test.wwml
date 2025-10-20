@@ -533,19 +533,19 @@
 (ml
   (= ⎡`x⎤ ⎡(%slot x)⎤)
   (= ⎡`(+ 1 2)⎤ ⎡(%slot (+ 1 2))⎤)
-  (- ⎡`⏏⎤ ⎡expected a term⎤)
+  (- ⎡`⏏⎤ ⎡unexpected end-of-input after prefix ```⎤)
   (- ⎡`⏏ ⏏x⎤ ⎡whitespace after prefix ``` not allowed⎤))
 
 (ml
   (= ⎡≡x⎤ ⎡(%nonself x)⎤)
   (= ⎡≡(+ 1 2)⎤ ⎡(%nonself (+ 1 2))⎤)
-  (- ⎡≡⏏⎤ ⎡expected a term⎤)
+  (- ⎡≡⏏⎤ ⎡unexpected end-of-input after prefix `≡`⎤)
   (- ⎡≡⏏ ⏏x⎤ ⎡whitespace after prefix `≡` not allowed⎤))
 
 (ml
   (= ⎡%'x⎤ ⎡(%literal x)⎤)
   (= ⎡%'(+ 1 2)⎤ ⎡(%literal (+ 1 2))⎤)
-  (- ⎡%'⏏⎤ ⎡expected a term⎤)
+  (- ⎡%'⏏⎤ ⎡unexpected end-of-input after prefix `%'`⎤)
   (- ⎡%'⏏ ⏏x⎤ ⎡whitespace after prefix `%'` not allowed⎤))
 
 (ml
@@ -566,7 +566,7 @@
   (- ⎡{# x y y 3×⏏ ⏏5}⎤ ⎡whitespace after `×` not allowed⎤)
   (- ⎡{# x y y 3⏏ ⏏× 5}⎤ ⎡whitespace before `×` not allowed⎤)
   (- ⎡{# x y z⏏:⏏ 100}⎤ ⎡cannot use pairs in dict multiset⎤)
-  (- ⎡{# x y y 3×⏏}⎤ ⎡expected a term⎤))
+  (- ⎡{# x y y 3×⏏⎤ ⎡unexpected end-of-input after `×`⎤))
 
 ;; Alloy shorthands
 
@@ -679,21 +679,21 @@
 (ml
   (= ⎡→x⎤ ⎡($my x)⎤)
   (= ⎡→(+ 1 2)⎤ ⎡($my (+ 1 2))⎤)
-  (- ⎡→⏏⎤ ⎡expected a term⎤)
+  (- ⎡→⏏⎤ ⎡unexpected end-of-input after prefix `→`⎤)
   (- ⎡→⏏ ⏏x⎤ ⎡whitespace after prefix `→` not allowed⎤))
 
 ;; $up
 (ml
   (= ⎡↑x⎤ ⎡($up x)⎤)
   (= ⎡↑(+ 1 2)⎤ ⎡($up (+ 1 2))⎤)
-  (- ⎡↑⏏⎤ ⎡expected a term⎤)
+  (- ⎡↑⏏⎤ ⎡unexpected end-of-input after prefix `↑`⎤)
   (- ⎡↑⏏ ⏏x⎤ ⎡whitespace after prefix `↑` not allowed⎤))
 
 ;; $down
 (ml
   (= ⎡↓x⎤ ⎡($down x)⎤)
   (= ⎡↓(+ 1 2)⎤ ⎡($down (+ 1 2))⎤)
-  (- ⎡↓⏏⎤ ⎡expected a term⎤)
+  (- ⎡↓⏏⎤ ⎡unexpected end-of-input after prefix `↓`⎤)
   (- ⎡↓⏏ ⏏x⎤ ⎡whitespace after prefix `↓` not allowed⎤))
 
 ;; $
@@ -714,7 +714,7 @@
 (ml
   (= ⎡$'x⎤ ⎡($once x)⎤)
   (= ⎡$'(+ 1 2)⎤ ⎡($once (+ 1 2))⎤)
-  (- ⎡$'⏏⎤ ⎡expected a term⎤)
+  (- ⎡$'⏏⎤ ⎡unexpected end-of-input after prefix `$'`⎤)
   (- ⎡$'⏏ ⏏x⎤ ⎡whitespace after prefix `$'` not allowed⎤))
 
 ;; Nitrene shorthands
@@ -725,7 +725,7 @@
   (= ⎡'x'⎤ ⎡(literal x')⎤)
   (= ⎡'"hello world"⎤ ⎡(literal "hello world")⎤)
   (= ⎡'(+ 1 '2)⎤ ⎡(literal (+ 1 (literal 2)))⎤)
-  (- ⎡'⏏⎤ ⎡expected a term⎤)
+  (- ⎡'⏏⎤ ⎡unexpected end-of-input after prefix `'`⎤)
   (- ⎡'⏏ ⏏x⎤ ⎡whitespace after prefix `'` not allowed⎤))
 
 ;; Delta7 shorthands
@@ -735,7 +735,7 @@
   (= ⎡@x⎤ ⎡(edge x)⎤)
   (= ⎡@"hello world"⎤ ⎡(edge "hello world")⎤)
   (= ⎡@(+ 1 @2)⎤ ⎡(edge (+ 1 (edge 2)))⎤)
-  (- ⎡@⏏⎤ ⎡expected a term⎤)
+  (- ⎡@⏏⎤ ⎡unexpected end-of-input after prefix `@`⎤)
   (- ⎡@⏏ ⏏x⎤ ⎡whitespace after prefix `@` not allowed⎤))
 
 ;; Precedence of %let, rule, and backmap
