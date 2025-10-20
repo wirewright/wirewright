@@ -63,7 +63,7 @@ module Ww
     rtpath || abort "Wirewright runtime directory not found"
   end
 
-  MT = Fiber::ExecutionContext::MultiThreaded.new("Wirewright", System.cpu_count.to_i)
+  MT = Fiber::ExecutionContext::Parallel.new("Wirewright", Fiber::ExecutionContext.default_workers_count)
 
   module Approx
     extend self
