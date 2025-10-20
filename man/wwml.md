@@ -913,6 +913,7 @@ is available.
 ### Alloy
 
 - `^<term>` is the same as writing `(^ <term>)`.
+- `^*<term>` is the same as writing `(^* <term>)`.
 - `(<term list> ^… <arg>)` is the same as writing `(^extend (<term list>) <arg>)`.
 
 ### Rulesets

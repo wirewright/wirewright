@@ -335,10 +335,13 @@ module Ww::ML
         return ok(:"$")
       when past?(:caret)
         return ok(:^)
+      when past?(:caret_star)
+        return ok(:"^*")
       when ahead?(:plus_left, :symbol),
            ahead?(:minus_left, :symbol),
            ahead?(:dollar_left, :symbol),
-           ahead?(:caret_left, :symbol)
+           ahead?(:caret_left, :symbol),
+           ahead?(:caret_star_left, :symbol)
         prefix = ahead.text
 
         forward
@@ -1188,6 +1191,8 @@ module Ww::ML
         wrap = ->(arg : Term) { Term.of(:"$my", arg) }
       when past?(:caret_left)
         wrap = ->(arg : Term) { Term.of(:^, arg) }
+      when past?(:caret_star_left)
+        wrap = ->(arg : Term) { Term.of(:"^*", arg) }
       when past?(:quote)
         wrap = ->(arg : Term) { Term.of(:literal, arg) }
       when past?(:dollar_left)

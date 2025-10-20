@@ -789,6 +789,8 @@ module Ww::ML::Lexeme
       when past?('}')  then return token(:rcurly)
       when past?('[')  then return token(:lbracket)
       when past?(']')  then return token(:rbracket)
+      when past?('⸤')  then return token(:bl_half_bracket)
+      when past?('⸥')  then return token(:br_half_bracket)
       when past?('…')  then return token(:ellipsis)
       when past?('@')  then return nows("@") { token(:at_sign) }
       when past?('±')  then return nows("±") { token(:plus_minus) }
@@ -798,8 +800,6 @@ module Ww::ML::Lexeme
       when past?('\'') then return nows("'") { token(:quote) }
       when past?('`')  then return nows("`") { token(:backquote) }
       when past?('≡')  then return nows("≡") { token(:triple_equals) }
-      when past?('⸤')  then return nows("⸤") { token(:bl_half_bracket) }
-      when past?('⸥')  then return nows("⸥") { token(:br_half_bracket) }
       when ahead == '⋮'
         if colon_ambiguous?(pred)
           # foo⋮⏏bar
@@ -870,14 +870,21 @@ module Ww::ML::Lexeme
           return token(:dollar)
         end
       when past?('^')
-        if past?('…')
+        case
+        when past?('…')
           return token(:caret_ellipsis)
-        end
-
-        if ahead.content?
-          return token(:caret_left)
+        when past?('*')
+          if ahead.content?
+            return token(:caret_star_left)
+          else
+            return token(:caret_star)
+          end
         else
-          return token(:caret)
+          if ahead.content?
+            return token(:caret_left)
+          else
+            return token(:caret)
+          end
         end
       when past?('<')
         if past?('>') && !ahead.symbolic?
@@ -889,10 +896,12 @@ module Ww::ML::Lexeme
         end
       when past?(';')
         case
-        when past?(',') then return token(:semicolon_comma)
-        when past?(';') then return comment
+        when past?(';')
+          return comment
+        when past?(',')
+          return nows(";,") { token(:semicolon_comma) }
         else
-          return token(:semicolon)
+          return nows(";") { token(:semicolon) }
         end
       when ahead == '⟦', ahead == '⸨'
         return template

@@ -66,8 +66,11 @@ module Ww::ML
         Plus
         MinusLeft
         Minus
-        CaretLeft
         Caret
+        CaretLeft
+        CaretEllipsis
+        CaretStar
+        CaretStarLeft
         DollarLeft
         Dollar
         Symbol
@@ -105,7 +108,6 @@ module Ww::ML
         Quote
         PercentQuote
         DollarQuote
-        CaretEllipsis
         SubPlusColonLeft
         SubPlusColonRight
         ColonSubPlusLeft
