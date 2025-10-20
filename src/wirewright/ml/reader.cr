@@ -1189,7 +1189,7 @@ module Ww::ML
       when past?(:caret_left)
         wrap = ->(arg : Term) { Term.of(:^, arg) }
       when past?(:quote)
-        wrap = ->(arg : Term) { Term.of(:leaf, arg) }
+        wrap = ->(arg : Term) { Term.of(:literal, arg) }
       when past?(:dollar_left)
         wrap = ->(arg : Term) { Term.of(:"$", arg) }
       when past?(:dollar_quote)

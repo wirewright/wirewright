@@ -976,6 +976,10 @@ generated specifically for the current *block*.
 
 - `@<term>` is the same as writing `(edge <term>)`
 
+### Nitrene
+
+- `'<term>` is the same as writing `(literal <term>)`.
+
 ## Precedence
 
 Most WwML operators are prefixes.

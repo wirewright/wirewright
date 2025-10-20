@@ -719,12 +719,12 @@
 
 ;; Nitrene shorthands
 
-;; leaf
+;; literal
 (ml
-  (= ⎡'x⎤ ⎡(leaf x)⎤)
-  (= ⎡'x'⎤ ⎡(leaf x')⎤)
-  (= ⎡'"hello world"⎤ ⎡(leaf "hello world")⎤)
-  (= ⎡'(+ 1 '2)⎤ ⎡(leaf (+ 1 (leaf 2)))⎤)
+  (= ⎡'x⎤ ⎡(literal x)⎤)
+  (= ⎡'x'⎤ ⎡(literal x')⎤)
+  (= ⎡'"hello world"⎤ ⎡(literal "hello world")⎤)
+  (= ⎡'(+ 1 '2)⎤ ⎡(literal (+ 1 (literal 2)))⎤)
   (- ⎡'⏏⎤ ⎡expected a term⎤)
   (- ⎡'⏏ ⏏x⎤ ⎡whitespace after prefix `'` not allowed⎤))
 
