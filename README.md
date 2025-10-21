@@ -11,7 +11,7 @@ Imagine, now, a programming environment that *runs around* passive programs, ins
 
 An environment that flows and adapts itself based on its population of programs, each one static -- a pile of symbols, that's it. Think HTML, but an actual general-purpose programming language. No `for`s, no `while`s, no `if`s.
 
-Remember the sculpture? Not only the sculptor crafts it, but also the wind -- the environment. The sculptor can be very smart and design their sculpture with the wind in mind.
+Remember the sculpture? Not only the sculptor crafts it, but also the wind -- the environment. The sculptor can be very smart and design their sculpture with that in mind.
 
 Sure.
 
@@ -35,13 +35,15 @@ So you set up a world and that world has a custom kind of physics running in it,
 
 That's roughly what I'm trying to implement here with Wirewright. An environment that adapts to programs, for programs that adapt to environments. No more clockwork!
 
+So that's roughly what I'm trying to implement here with Wirewright. An environment that adapts to programs, for programs that adapt to environments. No more clockwork!
+
+![D7, an experiment in symbolic physics](img/d7-circuit.gif)
+
 I'm working really hard on Wirewright, because I think this idea deserves to exist. It definitely has cons just as it has pros, of course. But before detailing them, it'd be nice for the thing to exist first.
 
 Documentation is scarce and the code is in flux. There are no version numbers yet. Everything is a prototype. Large parts of the project are being written and rewritten at the moment. I believe that if this thing is going to work, then its scope would be similar to web browsers (quite unfortunately for me!) And that's no easy task. The project is quite small at the moment (~40kloc-ish, depends on how you count) -- given the scope, that is. My expectation is that it will grow very much, because foundational things like terms are currently implemented in a very naive way, making the whole thing rather slow. They'd require data structures that are vastly smarter and more complex. Think of it this way: right now I have slow, stupid general paths for everything. In the future I'd like to have lots and lots of fast paths, and a smart general path. This is expected to grow out of control, unfortunately. But that's how things stand, don't they?
 
 On documentation, I'm part lying here. There's lots of docs, you just have to look for them. The levels of boredom I experienced while writing them you can't even imagine! User docs can be found by searching for `# |@ ` in the code; do a grep or something. I just don't have the time to write a front-end that would scrape and show them. Code docs (Crystal) are OK although I don't expect anyone other than myself to read and understand them.
-
-Please search for these very smart people to learn more about the ideas that are a constant inspiration for Wirewright: Francisco Varela, Humberto Maturana, Niklas Luhmann, Michael Levin, Bret Victor, ... (this list will grow as I remember more of them)
 
 ## Gallery
 
@@ -52,6 +54,19 @@ https://github.com/user-attachments/assets/e86cb81d-67d7-45b8-8a68-7399e4fe367e
 ### Frontend: Wirewright Rack
 
 <img width="1804" height="961" alt="Screenshot showing Wirewright Rack terminal UI atop UIR tests" src="https://github.com/user-attachments/assets/975fd033-b2d0-4745-827e-cb30ffd5a6f3" />
+
+## References
+
+Wirewright runs on the ideas inspired by or directly taken from: Francisco Varela, Humberto Maturana, Stephen Wolfram, Niklas Luhmann, Michael Levin, Bret Victor, ... (this list will grow as I remember more of them)
+
+Wirewright wouldn't be possible without these technologies:
+
+- [Crystal](https://github.com/crystal-lang/crystal)
+- [PlutoVG](https://github.com/sammycage/plutovg)
+- [PlutoSVG](https://github.com/sammycage/plutosvg)
+- [termbox2](https://github.com/termbox/termbox2)
+- [SDL](https://www.libsdl.org/)
+- [BLAKE3 hash function](https://github.com/BLAKE3-team/BLAKE3)
 
 ## Running
 
