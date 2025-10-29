@@ -3,8 +3,25 @@ module Ww
   class FileServerError < Exception
   end
 
+  class ::File
+    # https://github.com/crystal-lang/crystal/issues/16157
+    def self.tempfile(random : ::Random, mutex)
+      fileno, path, blocking = mutex.synchronize do
+        Crystal::System::File.mktemp(prefix: nil, suffix: nil, dir: Dir.tempdir, random: random)
+      end
+      new(path, fileno, blocking: blocking)
+    end
+  end
+
   # Includers can operate on a file given its path.
+  #
+  # All methods of a file server are (supposed to be) thread-safe.
   module FileServer
+    enum WriteMode
+      Overwrite
+      Append
+    end
+
     enum Compression
       None
       GzipFast
@@ -46,8 +63,12 @@ module Ww
       end
     end
 
+    # Converts *path* to an absolute path, taking into account the file server's
+    # own context (e.g. which path is set as base path).
+    abstract def resolve(path : Path) : Path
+
     # Returns the modification time of the file at *path*.
-    abstract def modification_time?(path : Path) : Time?
+    abstract def timestamp?(path : Path) : Time?
 
     # Returns the content of the file at *path*.
     #
@@ -61,47 +82,119 @@ module Ww
       String.new(read(path))
     end
 
-    # Writes to the file at *path* using the block, optionally compressing
-    # whatever is written.
+    # Writes to the file at *path* using the block (creating the file if necessary),
+    # possibly with compression.
     #
     # Raises `FileServerError` in case of an error.
-    abstract def write(path : Path, *, compression : Compression, & : IO ->) : Nil
+    abstract def write(path : Path, *, mode : WriteMode, compression : Compression, & : IO ->) : Nil
 
     # :ditto:
     def write(path : Path, & : IO ->) : Nil
-      write(path, compression: :none) { |io| yield io }
+      write(path, mode: :overwrite, compression: :none) { |io| yield io }
     end
+
+    # Removes the file at *path*.
+    #
+    # Raises `FileServerError` in case of an error. Noop if the file does not exist.
+    abstract def delete(path : Path) : Nil
   end
 
   # A crude implementation of `FileServer` that directly calls Crystal's `File` API.
-  module Disk
-    extend FileServer
+  struct Disk
+    include FileServer
 
     Log = ::Log.for(self)
 
-    def self.modification_time?(path : Path) : Time?
+    # *base* is the base path used to expand relative paths. It must be an absolute
+    # path, otherwise, `ArgumentError` is raised.
+    def initialize(@base : Path)
+      unless @base.absolute?
+        raise ArgumentError.new
+      end
+
+      @rng = Random::PCG32.new
+      @rng_mutex = Sync::Mutex.new
+    end
+
+    def resolve(path : Path) : Path
+      path.expand(@base, expand_base: false)
+    end
+
+    def timestamp?(path : Path) : Time?
+      path = resolve(path)
+
       if info = File.info?(path)
         info.modification_time
       end
     end
 
-    def self.read(path : Path) : Bytes
+    def read(path : Path) : Bytes
+      path = resolve(path)
+
       Log.debug { "read #{path}" }
 
       File.open(path, "rb", &.getb_to_end)
     rescue e : File::Error
-      raise FileServerError.new("unable to load file at #{path}", cause: e)
+      raise FileServerError.new("unable to load file: #{e.message}", cause: e)
     end
 
-    # TODO: copy over ".prev" if current exists to ensure transactionality
-    def self.write(path : Path, *, compression : FileServer::Compression, & : IO ->) : Nil
-      File.open(path, "w") do |io|
-        compression.sink(io) do |io|
-          yield io
+    def write(path : Path, *, mode : FileServer::WriteMode, compression : FileServer::Compression, & : IO ->) : Nil
+      path = resolve(path)
+
+      Log.debug { "write: path=`#{path}`, mode=`#{mode}`" }
+
+      case mode
+      in .append?
+        File.open(path, "a") do |io|
+          io.flock_exclusive do
+            Log.debug { "write: append: flock'd, appending" }
+            compression.sink(io) { |dst| yield dst }
+          end
+        end
+        Log.debug { "write: append: ok" }
+      in .overwrite?
+        tmp_file = File.tempfile(@rng, @rng_mutex)
+        tmp_path = tmp_file.path
+
+        begin
+          tmp_file.flock_exclusive do
+            Log.debug { "write: tmp #{tmp_path} flock'd, writing" }
+            compression.sink(tmp_file) { |dst| yield dst }
+            tmp_file.flush
+          end
+        rescue e
+          raise FileServerError.new("could not write to tmp file", cause: e)
+        ensure
+          # We're done doing anything content-related with it.
+          tmp_file.close
+        end
+
+        Log.debug { "write: rename tmp #{tmp_path} -> #{path}" }
+        begin
+          File.rename(tmp_path, path)
+        rescue e : File::Error
+          if e.os_error == Errno::EXDEV # EXDEV requires us to do a copy-delete
+            Log.debug { "write: EXDEV, copy tmp #{tmp_path} -> #{path}" }
+            File.copy(tmp_path, path)
+            Log.debug { "write: delete tmp after copy" }
+            File.delete?(tmp_path)
+          else
+            raise e
+          end
         end
       end
     rescue e : File::Error | IO::Error
-      raise FileServerError.new("error while writing to file at #{path}", cause: e)
+      raise FileServerError.new("unable to write file: #{e.message}", cause: e)
+    end
+
+    def delete(path : Path) : Nil
+      path = resolve(path)
+
+      Log.debug { "delete #{path}" }
+
+      File.delete?(path)
+    rescue e : File::Error
+      raise FileServerError.new("unable to delete file: #{e.message}", cause: e)
     end
   end
 end

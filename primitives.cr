@@ -20,18 +20,20 @@ PRIMITIVES = ProcRuleset.build do
     Term[ML.display(term, endl: false)]
   end
 
+  {% for entity in %w[term terms document] %}
+    rulepi1 %[(ml/{{entity.id}} ml_string)] do
+      Term.of(:ok, ML.{{entity.id}}(ml.to(String)))
+    rescue e : ML::SyntaxError
+      excerpt, line, column = ML::SyntaxError.lookaround(e.text)
+
+      Term.of(:err, detail: e.detail, excerpt: excerpt, line: line, column: column)
+    end
+  {% end %}
+
   rulepi1 %[(ml->term ml_string ¦ () shadow⋮ true)] do
     term = ML.term(ml.to(String))
-    {% if flag?(:newd7) %}
-      {:"ml/ok", term}
-    {% else %}
-      if shadow.false? && (symbol = term.as_sym?) && Rhodium.shadow?(symbol)
-        # TODO: line col message
-        {:"ml/err"}
-      else
-        {:"ml/ok", term}
-      end
-    {% end %}
+
+    {:"ml/ok", term}
   rescue ML::SyntaxError
     # TODO: line col message
     {:"ml/err"}
@@ -57,30 +59,11 @@ PRIMITIVES = ProcRuleset.build do
     bs.unsafe_as_d.items.all? { |b| a == b }
   end
 
-  # FIXME: WHY THE F*** IS THIS CALLED JOIN?!
-  rulepi1 %[(join true a_ _)] do
-    a
-  end
+  rulepi1 %[(and true true)] { true }
+  rulepi1 %[(and _ _)] { false }
 
-  rulepi1 %[(join false _ b_)] do
-    b
-  end
-
-  rulepi1 %[(and true true)] do
-    true
-  end
-
-  rulepi1 %[(and _ _)] do
-    false
-  end
-
-  rulepi1 %[(or false false)] do
-    false
-  end
-
-  rulepi1 %[(or _ _)] do
-    true
-  end
+  rulepi1 %[(or false false)] { false }
+  rulepi1 %[(or _ _)] { true }
 
   # FIXME: remove this flag
   {% if flag?(:soma6) %}
@@ -100,6 +83,28 @@ PRIMITIVES = ProcRuleset.build do
     Term[].with(k, v)
   end
 
+  rulepi1 %[(entries xs_dict)] do
+    Term[xs.ee(ordered: true)]
+  end
+
+  rulepi1 %[(dict entries list←((%past (_ _) min: 0)))] do
+    Term::Dict.build do |commit|
+      list.items.each do |(key, value)|
+        commit.with(key, value)
+      end
+    end
+  end
+
+  rulepi1 %[(append x_dict keypath_+ term_)] do
+    Term.morph(x, keypath.items) do |tip|
+      if tip.type.dict?
+        Term.of(tip.unsafe_as_d.append(term))
+      else
+        tip
+      end
+    end
+  end
+
   rulepi1 %[(cat xs_dict+)] do
     Term::Dict.build do |commit|
       xs.items.each do |x|
@@ -114,8 +119,14 @@ PRIMITIVES = ProcRuleset.build do
     end
   end
 
-  rulepi1 %[(union xs_dict ys_dict)] { xs | ys }
-  rulepi1 %[(∪ xs_dict ys_dict)] { xs | ys }
+  rulepi1 %[(union xs_dict*)] do
+    xs.items.reduce(Term[]) { |memo, dict| memo | dict }
+  end
+
+  # alias
+  rulepi1 %[(∪ xs_dict*)] do
+    xs.items.reduce(Term[]) { |memo, dict| memo | dict }
+  end
 
   rulepi1 %[(∩ xs_dict ys_dict)] { xs.unsafe_as_d.msect(ys.unsafe_as_d) }
 
@@ -137,10 +148,6 @@ PRIMITIVES = ProcRuleset.build do
 
   rulepi1 %[(hash term_)] do
     Term.hashcode(term)
-  end
-
-  rulepi1 %[(entries xs_dict)] do
-    Term[xs.ee(ordered: true)]
   end
 
   # TODO: remove!!!!!! this leaks the fact that we don't actually have proper entry order!!
@@ -181,6 +188,12 @@ PRIMITIVES = ProcRuleset.build do
 
         true # Continue
       end
+    end
+  end
+
+  rulepi1 %{(subseq whole_dict (from index←(%number +i32)))} do
+    Term::Dict.build do |commit|
+      commit.concat(whole.items.move(index.to(Int32)))
     end
   end
 
@@ -418,4 +431,50 @@ PRIMITIVES = ProcRuleset.build do
   rulepi1 %[(suffix s_string m_string)] do
     Term::Str::Substring.runes(s.unsafe_as_s, m.charcount, -1)
   end
+
+  rulepi1 %{(mask d_dict pattern_)} do
+    Term::Dict.build do |commit|
+      d.each_item_with_index do |item, index|
+        if M1.probe?(pattern, item)
+          commit.with(index, true)
+        end
+      end
+    end
+  end
+
+  # TODO: these are really just generic keysect / key complement followed by
+  # values perhaps. But currently there's hardly any way for us to do something
+  # as "advanced" as (intersection _ (keys _)) or (complement _ (keys _)) evaluation-wise.
+
+  rulepi1 %{(matches d_dict mask_dict)} do
+    Term::Dict.build do |commit|
+      d.items.each_with_index do |item, index|
+        next unless index.in?(mask)
+        commit << item
+      end
+      d.each_pair do |key, value|
+        next unless key.in?(mask)
+        commit.with(key, value)
+      end
+    end
+  end
+
+  rulepi1 %{(mismatches d_dict mask_dict)} do
+    Term::Dict.build do |commit|
+      d.items.each_with_index do |item, index|
+        next if index.in?(mask)
+        commit << item
+      end
+      d.each_pair do |key, value|
+        next if key.in?(mask)
+        commit.with(key, value)
+      end
+    end
+  end
+end
+
+PRIMITIVES_REWRITER = callR(PRIMITIVES)
+
+def primitivesR
+  PRIMITIVES_REWRITER
 end

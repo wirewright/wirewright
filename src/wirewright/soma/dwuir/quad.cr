@@ -1,8 +1,26 @@
 module Ww::Soma::DwUIR
   # Represents a quadrilateral.
   struct Quad
+    @rect : Bool
+
     # NOTE: points must be given in clockwise order.
     def initialize(@a : Point, @b : Point, @c : Point, @d : Point)
+      ab = b - a
+      bc = c - b
+      cd = d - c
+      da = a - d
+
+      right_angles =
+        Approx.equals?(ab.dot(da), 0.0f32) &&
+          Approx.equals?(bc.dot(ab), 0.0f32) &&
+          Approx.equals?(cd.dot(bc), 0.0f32) &&
+          Approx.equals?(da.dot(cd), 0.0f32)
+
+      equal_sides =
+        ab.length_squared == cd.length_squared &&
+          bc.length_squared == da.length_squared
+
+      @rect = right_angles && equal_sides
     end
 
     def points : {Point, Point, Point, Point}
@@ -26,6 +44,10 @@ module Ww::Soma::DwUIR
     # Returns `true` if *point* is located on the boundary or inside of
     # this quad. Returns `false` otherwise.
     def includes?(point : Point) : Bool
+      if @rect # Fast path
+        return Rect.new(tl: @a, br: @c).includes?(point)
+      end
+
       on_boundary?(point) || segments.count(&.intersects_horizontal_ray?(point)).odd?
     end
 

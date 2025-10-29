@@ -8,30 +8,25 @@ macro on_demand(typedecl)
   end
 end
 
-# consistency
-macro defrecord(cls, *typedecls, inherit = false, &)
-  {% header = "".id %}
-  {% if inherit && @type.module? %}
-    {% header = "include #{@type.id}".id %}
-  {% elsif inherit && @type.struct? && @type.abstract? %}
-    {% cls = "#{cls.id} < #{@type.id}".id %}
-  {% end %}
-
-  struct {{cls}}
-    {{header}}
-
-    {% for typedecl in typedecls %}
-      getter {{typedecl}}
+macro defrecord(name, *properties, includes = [] of ::NoReturn)
+  struct {{name.id}}
+    {% for dep in includes %}
+      include {{dep}}
     {% end %}
 
-    def initialize({{typedecls.map { |typedecl| "@#{typedecl}".id }.splat}})
+    {% for property in properties %}
+      {% if property.is_a?(Assign) %}
+        getter {{property.target.id}}
+      {% elsif property.is_a?(TypeDeclaration) %}
+        getter {{property}}
+      {% else %}
+        getter :{{property.id}}
+      {% end %}
+    {% end %}
+
+    def initialize({{ properties.map { |field| "@#{field.id}".id }.splat }})
+      {{yield}}
     end
-
-    def_change
-
-    {{yield}}
-
-    def_equals_and_hash {{typedecls.map { |typedecl| "@#{typedecl.var}".id }.splat}}
   end
 end
 
@@ -87,10 +82,6 @@ end
 
 macro subclass(*args, &block)
   defcase({{args.splat}}, inherit: true) {{ block }}
-end
-
-macro substruct(*args, &block)
-  defrecord({{args.splat}}, inherit: true) {{ block }}
 end
 
 class ::UnreachableException < Exception
@@ -624,6 +615,27 @@ abstract struct Int
   def nonzero?
     !zero?
   end
+
+  # Iteration order: LSB to MSB.
+  #
+  # Reference: https://lemire.me/blog/2018/02/21/iterating-over-set-bits-quickly/
+  def each_set_bit(&)
+    bitset = self
+
+    loop do
+      break if bitset.zero?
+
+      t = bitset & &-bitset
+      r = bitset.trailing_zeros_count
+      yield r
+
+      bitset ^= t
+    end
+  end
+
+  def lsb_set_index
+    trailing_zeros_count
+  end
 end
 
 struct ::BigInt < Int
@@ -681,6 +693,11 @@ class ThinArray(T)
       @mem = @mem.realloc(@capacity)
     end
     @size = 0
+  end
+
+  def self.new(other : Indexable(T)) forall T
+    copy = ThinArray(T).new(other.size)
+    copy.concat(other)
   end
 
   def unsafe_fetch(index : Int)
@@ -746,7 +763,7 @@ class ThinArray(T)
     end
   end
 
-  def concat(other : Indexable(T))
+  def concat(other : Indexable(T)) : self
     # Humpty dumpty
     if @size + other.size > @capacity
       @capacity = (@size + other.size) + (@size * 0.5).to_i
@@ -756,11 +773,14 @@ class ThinArray(T)
     other.each do |object|
       push(object)
     end
+
+    self
   end
 
-  def clear : Nil
+  def clear : self
     @mem.clear(@size)
     @size = 0
+    self
   end
 
   # Shallow copy: returns a copy of this array without copying its values.
@@ -868,16 +888,20 @@ struct StaticRing(T, N)
 
     src.copy_to(@ring.to_unsafe, count)
   end
+
+  def clear : Nil
+    @bot = @size = 0u32
+  end
 end
 
-struct StackArray(T, N)
+struct HybridArray(T, N)
   include Indexable::Mutable(T)
 
   INITIAL_SPILL_CAPACITY = 8
 
   def initialize
     {% if N == 0 %}
-      {% N.raise "StackArray with N=0 makes no sense, use an array or ThinArray" %}
+      {% N.raise "HybridArray with N=0 makes no sense, use an array or ThinArray" %}
     {% end %}
 
     @spill = Pointer(T).null
@@ -967,18 +991,24 @@ struct StackArray(T, N)
     pop? || raise IndexError.new
   end
 
+  def clear : Nil
+    @ring.clear
+    @spill.clear(@spillsize)
+    @spillsize = 0u32
+  end
+
   def inspect(io)
     to_s(io)
   end
 
   def to_s(io : IO) : Nil
-    io << "StackArray{"
+    io << "HybridArray{"
     join(io, ", ", &.inspect(io))
     io << '}'
   end
 
   def pretty_print(pp) : Nil
-    pp.list("StackArray{", self, "}")
+    pp.list("HybridArray{", self, "}")
   end
 end
 
@@ -1022,6 +1052,12 @@ end
 class IO
   def self.empty
     Empty::INSTANCE
+  end
+end
+
+class IO::Memory
+  def to_readonly_slice : Bytes
+    Slice.new(@buffer, @bytesize, read_only: true)
   end
 end
 
@@ -1075,6 +1111,23 @@ def wrap(text : String, maxwidth = 60) : String
 end
 
 class ::Hash
+  def inverted_index : Hash(V, Array(K))
+    hash = {} of K => Array(V)
+    each do |key, value|
+      bucket = hash.put_if_absent(key) { [] of V }
+      bucket << value
+    end
+    hash
+  end
+
+  def to_readonly_slice(& : {K, V} -> T) : Slice(T) forall T
+    ptr = Pointer(T).malloc(size)
+    each_with_index do |(key, value), index|
+      ptr[index] = yield({key, value})
+    end
+    Slice.new(ptr, size, read_only: true)
+  end
+
   def transform(key : K, default_value : V, & : V -> V) : V
     if entry_index = find_entry_with_index(key)
       entry, index = entry_index
@@ -1131,6 +1184,11 @@ class ::Hash
       value
     end
     result
+  end
+
+  def put_if_absent(key, *keys, &)
+    value = put_if_absent(key) { V.new }
+    value.put_if_absent(*keys) { yield }
   end
 end
 
@@ -2416,6 +2474,20 @@ struct StringView
 end
 
 class String
+  def brief(*, limit : Int = 60, ellipsis : String = "…") : String
+    return self if size <= limit
+
+    if limit <= ellipsis.size
+      return self[0, limit]
+    end
+
+    rem = limit - ellipsis.size
+    lsize = rem // 2
+    rsize = rem - lsize
+
+    "#{self[0, lsize]}#{ellipsis}#{self[-rsize, rsize]}"
+  end
+
   def fill(char : Char) : String
     String.build(bytesize) do |io|
       size.times do
@@ -3618,7 +3690,11 @@ macro expect(x)
 end
 
 macro assert(x)
-  raise AssertionError.new unless {{x}}
+  raise AssertionError.new({{x.id.stringify}}) unless {{x}}
+end
+
+macro assert(x, msg)
+  raise AssertionError.new({{msg}}) unless {{x}}
 end
 
 module Append
@@ -3770,12 +3846,23 @@ struct Bag(T)
     @storage[object]
   end
 
-  def add(object : T) : Nil
+  def add(object : T) : self
     @storage[object] = (@storage[object]? || 0u16) + 1
+
+    self
   end
 
-  def <<(object : T)
+  def <<(object : T) : self
     add(object)
+  end
+
+  def subset_of?(other : Bag) : Bool
+    each_with_tally do |x, n|
+      return false unless m = other.tally?(x)
+      return false if n > m
+    end
+
+    true
   end
 
   def delete?(object : T) : Bool
@@ -3885,6 +3972,15 @@ struct Bag(T)
 end
 
 module Enumerable(T)
+  def inverted_index : Hash(T, Array(Int32))
+    hash = {} of T => Array(Int32)
+    each_with_index do |key, index|
+      bucket = hash.put_if_absent(key) { [] of Int32 }
+      bucket << index
+    end
+    hash
+  end
+
   def to_bag(& : T -> U) : Bag(U) forall U
     bag = Bag(U).new
     each do |object|
@@ -3892,9 +3988,36 @@ module Enumerable(T)
     end
     bag
   end
+
+  def to_bag
+    to_bag(&.itself)
+  end
 end
 
 struct Range(B, E)
+  def segments(indices : Enumerable(Int32), &)
+    prev = 0
+
+    indices.each_with_index do |i, j|
+      unless prev <= i < size
+        raise IndexError.new
+      end
+
+      if prev < i
+        yield prev...i, nil
+      end
+
+      yield i...i + 1, j
+
+      prev = i + 1
+    end
+
+    # Remaining range after the last index
+    if prev < size
+      yield (prev...size), nil
+    end
+  end
+
   def subrange_of?(other : Range(B, E)) : Bool
     {% unless B < ::Int && E < ::Int %}
       {% raise "subrange_of? only supports integer ranges" %}
@@ -3905,6 +4028,10 @@ struct Range(B, E)
 
   def proper_subrange_of?(other : Range) : Bool
     subrange_of?(other) && size > other.size
+  end
+
+  def overlaps?(other : Range) : Bool
+    other.begin.in?(self) || other.end.in?(self) || self.begin.in?(other) || self.end.in?(other)
   end
 
   def in_subranges_of(size step : Int, & : Range(B, E) ->) : Nil
@@ -4071,6 +4198,12 @@ def oklch(l : Float64, c : Float64, h : Float64)
   Oklch.to_rgb(l, c, h)
 end
 
+struct Float32
+  def approx?(other : Float32, *, eps = 0.001f32)
+    (self - other).abs <= eps
+  end
+end
+
 module ICache(K, V)
   abstract def []?(key : K) : V?
   abstract def []=(key : K, value : V) : V
@@ -4122,6 +4255,10 @@ class SyncCache(K, V)
     end
     @data.compare_by_identity if byref
     @lock = Sync::RWLock.new
+  end
+
+  def size
+    @lock.read { @data.size }
   end
 
   def []?(key : K) : V?
@@ -4428,6 +4565,13 @@ struct Slice(T)
   def to_voidptr : Void*
     to_unsafe.as(Void*)
   end
+
+  # WARNING: expends `self`; no copy of self must outlive this call. Think
+  # of the returned slice as a replacement for `self`. `self` must be lost
+  # to this call or burned, forgotten, etc.
+  def read_only : Slice(T)
+    Slice(T).new(to_unsafe, size, read_only: true)
+  end
 end
 
 require "bit_array"
@@ -4618,19 +4762,19 @@ struct SyncHash(K, V)
     end
   end
 
-  def []=(key : K, value : V) : self
+  def []=(key : K, value : V)
     @lock.write { @hash[key] = value }
-
-    self
   end
 
-  def delete(key : K) : self
+  def []?(key : K) : V?
+    find(key) { |value| return value }
+  end
+
+  def delete(key : K)
     @lock.write { @hash.delete(key) }
-
-    self
   end
 
-  def find(key : K, & : V -> T) : T forall T
+  def find(key : K, &)
     @lock.read do
       return unless value = @hash[key]?
       yield value
@@ -4691,5 +4835,129 @@ class Log::AsyncInMemoryBackend < Log::Backend
 
   def write(entry : Log::Entry) : Nil
     @entries << entry
+  end
+end
+
+struct BlockingQueue(T)
+  def initialize
+    @queue = Deque(T).new
+    @mutex = Sync::Mutex.new
+    @cv = Sync::ConditionVariable.new(@mutex)
+  end
+
+  def interject(*objects : T) : Nil
+    @mutex.synchronize do
+      objects.reverse_each do |object|
+        @queue.unshift(object)
+      end
+      @cv.signal
+    end
+  end
+
+  def enqueue(*objects : T) : Nil
+    @mutex.synchronize do
+      objects.each do |object|
+        @queue << object
+      end
+      @cv.signal
+    end
+  end
+
+  def <<(object : T) : self
+    enqueue(object)
+
+    self
+  end
+
+  def shift : T
+    @mutex.synchronize do
+      loop do
+        unless @queue.empty? # remember we can send nils as well!!
+          return @queue.shift
+        end
+
+        @cv.wait
+      end
+    end
+  end
+
+  def lock(& : Deque(T) -> U) : U forall U
+    @mutex.synchronize do
+      yield @queue
+    end
+  end
+
+  def clear : Nil
+    lock(&.clear)
+  end
+end
+
+module Parseout
+  extend self
+
+  # :nodoc:
+  macro try(branch)
+      {{branch}}
+    end
+
+  # :nodoc:
+  macro try(branch, *branches)
+      {{@type}}.either({{branch}}) { {{@type}}.try({{branches.splat}}) }
+    end
+
+  # :nodoc:
+  def either(π, &)
+    π
+  end
+
+  # :nodoc:
+  def either(π : Rej, &)
+    yield
+  end
+
+  # :nodoc:
+  def map(π, &)
+    assert !π.is_a?(Nok)
+
+    yield π
+  end
+
+  # :nodoc:
+  def map(π : Nok, &)
+    π
+  end
+
+  # :nodoc:
+  def map(a, b, &)
+    map(a) do |x|
+      map(b) do |y|
+        yield x, y
+      end
+    end
+  end
+
+  alias Nok = Err | Rej
+
+  # Represents a failed parse. Issues were reported to the issue sink.
+  record Err
+
+  # Represents a rejection: not necessarily a failure, but rather, a failure
+  # to recognize that didn't generate any issues.
+  record Rej
+
+  def cached(cache : ICache, term : Term, issues : Issue::Sink, &)
+    if cached = cache[term]?
+      return cached
+    end
+
+    version0 = issues.version
+    π = yield
+    version1 = issues.version
+
+    if version0 == version1 && !π.is_a?(Nok)
+      cache[term] = π
+    end
+
+    π
   end
 end

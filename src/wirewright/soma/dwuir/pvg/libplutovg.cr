@@ -83,6 +83,7 @@ lib PlutoVG
   fun surface_load_from_image_data = plutovg_surface_load_from_image_data(data : Void*, length : LibC::Int) : Surface
   fun surface_destroy = plutovg_surface_destroy(surface : Surface)
   fun surface_write_to_png = plutovg_surface_write_to_png(surface : Surface, filename : UInt8*) : Bool
+  fun surface_create_for_data = plutovg_surface_create_for_data(data : UInt8*, width : LibC::Int, height : LibC::Int, stride : LibC::Int) : Surface
 
   fun surface_get_data = plutovg_surface_get_data(surface : Surface) : UInt8*
   fun surface_get_stride = plutovg_surface_get_stride(surface : Surface) : LibC::Int
@@ -91,6 +92,7 @@ lib PlutoVG
   fun surface_clear = plutovg_surface_clear(surface : Surface, color : Color*)
 
   fun face_from_file = plutovg_font_face_load_from_file(filename : UInt8*, ttcindex : LibC::Int) : FontFace
+  fun face_from_data = plutovg_font_face_load_from_data(data : UInt8*, length : LibC::Int, ttcindex : LibC::Int, destroy_func : Void*, closure : Void*) : FontFace
   fun face_destroy = plutovg_font_face_destroy(face : FontFace)
   fun face_get_glyph_metrics = plutovg_font_face_get_glyph_metrics(face : FontFace, size : LibC::Float, codepoint : UInt32, advance_width : Float32*, left_side_bearing : Float32*, extents : Rect*)
   fun face_get_kerning = plutovg_font_face_get_kerning(face : FontFace, size : LibC::Float, codepoint1 : UInt32, codepoint2 : UInt32, kerning : Int32*)
@@ -104,12 +106,14 @@ lib PlutoVG
   fun canvas_save = plutovg_canvas_save(canvas : Canvas)
   fun canvas_restore = plutovg_canvas_restore(canvas : Canvas)
   fun canvas_fill_text = plutovg_canvas_fill_text(canvas : Canvas, text : Void*, length : LibC::Int, encoding : TextEncoding, x : LibC::Float, y : LibC::Float) : LibC::Float
+  fun canvas_add_text = plutovg_canvas_add_text(canvas : Canvas, text : Void*, length : LibC::Int, encoding : TextEncoding, x : LibC::Float, y : LibC::Float) : LibC::Float
   fun canvas_set_font = plutovg_canvas_set_font(canvas : Canvas, face : FontFace, size : LibC::Float)
   fun canvas_set_paint = plutovg_canvas_set_paint(canvas : Canvas, paint : Paint)
   fun canvas_set_opacity = plutovg_canvas_set_opacity(canvas : Canvas, opacity : LibC::Float)
   fun canvas_scale = plutovg_canvas_scale(canvas : Canvas, sx : LibC::Float, sy : LibC::Float)
   fun canvas_translate = plutovg_canvas_translate(canvas : Canvas, tx : LibC::Float, ty : LibC::Float)
   fun canvas_add_path = plutovg_canvas_add_path(canvas : Canvas, path : Path)
+  fun canvas_add_rect = plutovg_canvas_rect(canvas : Canvas, x : LibC::Float, y : LibC::Float, w : LibC::Float, h : LibC::Float)
   fun canvas_add_glyph = plutovg_canvas_add_glyph(canvas : Canvas, codepoint : UInt32, x : LibC::Float, y : LibC::Float)
   fun canvas_set_color = plutovg_canvas_set_color(canvas : Canvas, color : Color*)
   fun canvas_set_fill_rule = plutovg_canvas_set_fill_rule(canvas : Canvas, winding : FillRule)
@@ -184,4 +188,30 @@ lib PlutoVG
   fun matrix_translate = plutovg_matrix_translate(matrix : Matrix*, tx : LibC::Float, ty : LibC::Float)
   fun matrix_init_identity = plutovg_matrix_init_identity(matrix : Matrix*)
   fun matrix_map_point = plutovg_matrix_map_point(matrix : Matrix*, src : Point*, dst : Point*)
+
+  fun paint_create_rgba = plutovg_paint_create_rgba(r : LibC::Float, g : LibC::Float, b : LibC::Float, a : LibC::Float) : Paint
+  fun paint_create_texture = plutovg_paint_create_texture(surface : Surface, type : TextureType, opacity : LibC::Float, matrix : Matrix*) : Paint
+  fun paint_create_linear_gradient = plutovg_paint_create_linear_gradient(
+    x1 : LibC::Float,
+    y1 : LibC::Float,
+    x2 : LibC::Float,
+    y2 : LibC::Float,
+    spread : SpreadMethod,
+    stops : GradientStop*,
+    nstops : LibC::Int,
+    matrix : Matrix*,
+  ) : Paint
+  fun paint_create_radial_gradient = plutovg_paint_create_radial_gradient(
+    cx : LibC::Float,
+    cy : LibC::Float,
+    cr : LibC::Float,
+    fx : LibC::Float,
+    fy : LibC::Float,
+    fr : LibC::Float,
+    spread : SpreadMethod,
+    stops : GradientStop*,
+    nstops : LibC::Int,
+    matrix : Matrix*,
+  ) : Paint
+  fun paint_destroy = plutovg_paint_destroy(paint : Paint)
 end

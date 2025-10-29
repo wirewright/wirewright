@@ -316,7 +316,6 @@ module Ww::Soma::DwUIR
           space = Point.new(width.to(Float32), Float32::INFINITY)
 
           continue unless spec = DwUIR.text_spec?(subject, space)
-          continue unless font = spec.font?
 
           size = Rect.empty
           TextCommand.each_with_bounds(Pencil.new, spec.wrap, spec.caption, selection: nil) do |command, bounds|
@@ -339,7 +338,6 @@ module Ww::Soma::DwUIR
           space = Point.inf
 
           continue unless spec = DwUIR.text_spec?(subject, space)
-          continue unless font = spec.font?
 
           size = Rect.empty
           TextCommand.each_with_bounds(Pencil.new, spec.wrap, spec.caption, selection: nil) do |command, bounds|
@@ -534,38 +532,34 @@ module Ww::Soma::DwUIR
     # We need to clamp border insets to 1. We normally inset by border width, but that's
     # not how it works in the terminal; border width determines the choiceof a glyph,
     # but it's always one glyph.
-    def insetfixR : Rewriter
-      fixR = callR do |node0|
-        node1 = node0
+    def insetfixR
+      callR { |node| Rewrite.one(insetfix(node)) }
+    end
 
-        Term.case(node0) do
-          matchpi %[(padding _ ⍊ inset: true pl)] do
-            node1 = node1.morph({:pl, 1})
-            continue
-          end
+    # :nodoc:
+    SYM_PADDING = Term[:padding]
+    # :nodoc:
+    SYM_INSET = Term[:inset]
 
-          matchpi %[(padding _ ⍊ inset: true pr)] do
-            node1 = node1.morph({:pr, 1})
-            continue
-          end
+    # :nodoc:
+    def insetfix(node : Term) : Term
+      return node unless node.type.dict?
+      return node unless node.probably_includes?(SYM_PADDING)
 
-          matchpi %[(padding _ ⍊ inset: true pt)] do
-            node1 = node1.morph({:pt, 1})
-            continue
-          end
-
-          matchpi %[(padding _ ⍊ inset: true pb)] do
-            node1 = node1.morph({:pb, 1})
-            continue
-          end
-
-          otherwise { }
+      result = node.transaction do |commit|
+        if node.itemsize == 2 && node.pairsize >= 2 && node[0] == SYM_PADDING && node[SYM_INSET]? == Term.of(true)
+          commit.with(:pl, 1) if node[:pl]?
+          commit.with(:pr, 1) if node[:pr]?
+          commit.with(:pt, 1) if node[:pt]?
+          commit.with(:pb, 1) if node[:pb]?
         end
 
-        Rewrite.one(node1)
+        node.each_item_with_index do |item, index|
+          commit.with(index, insetfix(item))
+        end
       end
 
-      itemdfsR(fixR)
+      Term.of(result)
     end
   end
 end

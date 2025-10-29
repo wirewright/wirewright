@@ -462,5 +462,9 @@ module Ww::Soma::DwUIR
   end
 end
 
-require "./window/sdl"
-require "./window/console"
+{% if flag?(:sdl) %}
+  require "./window/sdl"
+{% end %}
+{% if flag?(:tb2) %}
+  require "./window/console"
+{% end %}

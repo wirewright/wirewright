@@ -55,60 +55,10 @@ module Ww::Soma::DwUIR
       new(r.to_u8, g.to_u8, b.to_u8, a.to_u8)
     end
 
-    private def self.hexcolor?(r : Rtk::R)
-      Rtk.skip(r, " ")
-      return unless Rtk.ahead?(r, "#")
-
-      Rtk.forward(r)
-
-      # Try to read all the way up to RRGGBBAA.
-      d0 = Rtk.hexdigit?(r)
-      d1 = d0 && Rtk.hexdigit?(r)
-      d2 = d1 && Rtk.hexdigit?(r)
-      d3 = d2 && Rtk.hexdigit?(r)
-      d4 = d3 && Rtk.hexdigit?(r)
-      d5 = d4 && Rtk.hexdigit?(r)
-      d6 = d5 && Rtk.hexdigit?(r)
-      d7 = d6 && Rtk.hexdigit?(r)
-
-      Rtk.skip(r, " ")
-      return unless Rtk.at_end?(r)
-
-      if d0 && d1 && d2 && d4.nil?
-        r = (d0 << 4 | d0).to_u8
-        g = (d1 << 4 | d1).to_u8
-        b = (d2 << 4 | d2).to_u8
-        a = d3 ? (d3 << 4 | d3).to_u8 : 255u8
-        return r, g, b, a
-      end
-
-      if d0 && d1 && d2 && d3 && d4 && d5
-        r = (d0 << 4 | d1).to_u8
-        g = (d2 << 4 | d3).to_u8
-        b = (d4 << 4 | d5).to_u8
-        if d6.nil?
-          return r, g, b, 255u8
-        end
-        if d7
-          return r, g, b, (d6 << 4 | d7).to_u8
-        end
-      end
-    end
-
-    private def self.hexcolor?(string : String) : {UInt8, UInt8, UInt8, UInt8}?
-      reader = Char::Reader.new(string)
-
-      hexcolor?(pointerof(reader))
-    end
-
     # Constructs a color by parsing the given *string*. Hex colors and named
-    # colors (see `NAMED`) are supported.
+    # colors are supported.
     def self.named?(value : String) : Color?
-      if color = NAMED[value]?
-        return color
-      end
-
-      return unless rgba = hexcolor?(value)
+      return unless rgba = CSSColor.named?(value) || CSSColor.hexcolor?(value)
 
       rgba(*rgba)
     end
@@ -368,7 +318,3 @@ module Ww::Soma::DwUIR
     end
   end
 end
-
-require "./color/named"
-require "./color/hsl"
-require "./color/oklch"

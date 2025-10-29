@@ -45,6 +45,21 @@ module Ww::ML
       @text.byte_start
     end
 
+    def inline(io : IO) : Nil
+      b = text.char_start
+      e = text.char_end
+
+      if b == e
+        io << text.string.insert(b, "⏏")
+      else
+        io << text.string.insert(e, "⏏").insert(b, "⏏")
+      end
+    end
+
+    def inline : String
+      String.build { |io| inline(io) }
+    end
+
     # :nodoc:
     struct StyleStack
       def initialize(&@fn : Symbol, Symbol ->)

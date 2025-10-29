@@ -5,7 +5,7 @@ module Ww::Soma::UIR
 
   # Returns the UIR rewriter.
   #
-  # TODO: move to `uiR.soma.wwml` once the rewriter DSL is available.
+  # TODO: move to `uiR.soma.wwml` once rewriter circuits are available.
   def self.rewriter(platform : DwUIR::Platform) : Rewriter
     base_main = File.read(RESOURCES / (ENV["RSET"]? || "uiR-succ8.soma.wwml"))
 

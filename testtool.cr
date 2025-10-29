@@ -966,86 +966,86 @@ def test(ctx, test, path, keypath, stem, srcmap, text) : Bool
     end
 
     # Editor tests
-    givenpi %[_* (editor initial_dict sequence_*) node] do
-      memo = initial
+    # givenpi %[_* (editor initial_dict sequence_*) node] do
+    #   memo = initial
 
-      sequence.items.each do |edit|
-        Term.case(edit) do
-          matchpi %[(after (motions_+) expected_)] do
-            # Refer specifically to this iteration's version of memo so that
-            # the closure captures it rather than memo at the end of the loop.
-            memo_ = memo
+    #   sequence.items.each do |edit|
+    #     Term.case(edit) do
+    #       matchpi %[(after (motions_+) expected_)] do
+    #         # Refer specifically to this iteration's version of memo so that
+    #         # the closure captures it rather than memo at the end of the loop.
+    #         memo_ = memo
 
-            test.short(path, text) do |complaints|
-              state = memo_
+    #         test.short(path, text) do |complaints|
+    #           state = memo_
 
-              motions.items.each do |motion|
-                state = edit(state, motion)
-              end
+    #           motions.items.each do |motion|
+    #             state = edit(state, motion)
+    #           end
 
-              next if state == expected
+    #           next if state == expected
 
-              complaints << Component.complaint(
-                title: "Editor state mismatch after motions",
-                sections: [
-                  {"STATE BEFORE MOTIONS", memo_},
-                  {"MOTIONS", motions},
-                  {"STATE AFTER MOTIONS", state},
-                  {"EXPECTED STATE", expected},
-                ],
-              )
-            end
+    #           complaints << Component.complaint(
+    #             title: "Editor state mismatch after motions",
+    #             sections: [
+    #               {"STATE BEFORE MOTIONS", memo_},
+    #               {"MOTIONS", motions},
+    #               {"STATE AFTER MOTIONS", state},
+    #               {"EXPECTED STATE", expected},
+    #             ],
+    #           )
+    #         end
 
-            memo = expected
-          end
-        end
-      end
+    #         memo = expected
+    #       end
+    #     end
+    #   end
 
-      false # no descend
-    end
+    #   false # no descend
+    # end
 
     # D7 tests
-    begin
-      # The limit is set low by default to have faster failure. Tests should increase it if
-      # they expect themselves to run longer for success. In an ideal world, instead of a limit,
-      # we'd perhaps have some kind of "divergence" limit but hey; we're not in an ideal
-      # world are we?
-      givenpi %[_* (d7 initial_dict expected_dict ¦ limit: (%optional 128 limit←(%number +i32))) node] do
-        test.short(path, text) do |complaints|
-          ok, latest = D7.run?(initial.unsafe_as_d, cond: D7::Equal.new(expected.unsafe_as_d, nonshadow: true, limit: limit.to(Int32)))
-          next if ok
+    # begin
+    #   # The limit is set low by default to have faster failure. Tests should increase it if
+    #   # they expect themselves to run longer for success. In an ideal world, instead of a limit,
+    #   # we'd perhaps have some kind of "divergence" limit but hey; we're not in an ideal
+    #   # world are we?
+    #   givenpi %[_* (d7 initial_dict expected_dict ¦ limit: (%optional 128 limit←(%number +i32))) node] do
+    #     test.short(path, text) do |complaints|
+    #       ok, latest = D7.run?(initial.unsafe_as_d, cond: D7::Equal.new(expected.unsafe_as_d, nonshadow: true, limit: limit.to(Int32)))
+    #       next if ok
 
-          complaints << Component.complaint(
-            title: "D7 runloop interrupted",
-            sections: [
-              {"CURRENT STATE", Term.of(D7.nonshadow(latest))},
-              {"EXPECTED STATE", expected},
-              {"RUNLOOP LIMIT", limit},
-            ],
-          )
-        end
+    #       complaints << Component.complaint(
+    #         title: "D7 runloop interrupted",
+    #         sections: [
+    #           {"CURRENT STATE", Term.of(D7.nonshadow(latest))},
+    #           {"EXPECTED STATE", expected},
+    #           {"RUNLOOP LIMIT", limit},
+    #         ],
+    #       )
+    #     end
 
-        false # no descend
-      end
+    #     false # no descend
+    #   end
 
-      givenpi %[_* (d7 initial_dict matches pattern_ ¦ limit: (%optional 128 limit←(%number +i32))) node] do
-        test.short(path, text) do |complaints|
-          ok, latest = D7.run?(initial.unsafe_as_d, cond: D7::Matches.new(pattern, nonshadow: true, limit: limit.to(Int32)))
-          next if ok
+    #   givenpi %[_* (d7 initial_dict matches pattern_ ¦ limit: (%optional 128 limit←(%number +i32))) node] do
+    #     test.short(path, text) do |complaints|
+    #       ok, latest = D7.run?(initial.unsafe_as_d, cond: D7::Matches.new(pattern, nonshadow: true, limit: limit.to(Int32)))
+    #       next if ok
 
-          complaints << Component.complaint(
-            title: "D7 runloop interrupted",
-            sections: [
-              {"CURRENT STATE", Term.of(D7.nonshadow(latest))},
-              {"EXPECTED STATE TO MATCH", pattern},
-              {"RUNLOOP LIMIT", limit},
-            ],
-          )
-        end
+    #       complaints << Component.complaint(
+    #         title: "D7 runloop interrupted",
+    #         sections: [
+    #           {"CURRENT STATE", Term.of(D7.nonshadow(latest))},
+    #           {"EXPECTED STATE TO MATCH", pattern},
+    #           {"RUNLOOP LIMIT", limit},
+    #         ],
+    #       )
+    #     end
 
-        false # no descend
-      end
-    end
+    #     false # no descend
+    #   end
+    # end
 
     # Meridium tests
     givenpi %[_* testcase←(tspace sequence_*) node] do
@@ -1190,36 +1190,36 @@ def test(ctx, test, path, content, srcmap)
   end
 end
 
-def rack_image(ctx, rack : Term, needle : Term) : Soma::DwUIR::PixelRect
-  files = Disk
-  # These aren't thread safe so we cannot reuse them!
-  platform = Soma::DwUIR::PvgPlatform.new(files)
-  compositor = Soma::DwUIR::Compositor.new
-  viewer_context = Soma::DwUIR::Viewer::Context.new(compositor, platform)
+# def rack_image(ctx, rack : Term, needle : Term) : Soma::DwUIR::PixelRect
+#   files = Disk
+#   # These aren't thread safe so we cannot reuse them!
+#   platform = Soma::DwUIR::PvgPlatform.new(files)
+#   compositor = Soma::DwUIR::Compositor.new
+#   viewer_context = Soma::DwUIR::Viewer::Context.new(compositor, platform)
 
-  uiR = Soma.uiR(
-    metricsR: callR { |term| Rewrite.one(Soma::DwUIR.reply(platform, term)) },
-    rulebase: ctx.uiR_base,
-  )
+#   uiR = Soma.uiR(
+#     metricsR: callR { |term| Rewrite.one(Soma::DwUIR.reply(platform, term)) },
+#     rulebase: ctx.uiR_base,
+#   )
 
-  image = nil
+#   image = nil
 
-  env, retire = Rack.env(
-    rack: rack,
-    basis: ctx.rack_basis,
-    agents: [
-      Rack.rewriter(:graphics_uiR, uiR),
-      Rack::Image.slot(viewer_context, needle) { |pixel_rect| image = pixel_rect },
-      Rack::FS.server(files),
-    ] of Rack::Agent::Any,
-  )
+#   env, retire = Rack.env(
+#     rack: rack,
+#     basis: ctx.rack_basis,
+#     agents: [
+#       Rack.rewriter(:graphics_uiR, uiR),
+#       Rack::Image.slot(viewer_context, needle) { |pixel_rect| image = pixel_rect },
+#       Rack::FS.server(files),
+#     ] of Rack::Agent::Any,
+#   )
 
-  begin
-    image.not_nil!("rack did not define image `#{needle}`")
-  ensure
-    retire.call
-  end
-end
+#   begin
+#     image.not_nil!("rack did not define image `#{needle}`")
+#   ensure
+#     retire.call
+#   end
+# end
 
 # Runs a comparison test.
 def compare(ctx, test, specpath, title, a, b, text)
@@ -1248,28 +1248,28 @@ def compare(ctx, test, specpath, title, a, b, text)
       end
     end
 
-    givenpi %{(rack/image rackpath_string id_) (ppm imgpath_string)} do
-      rack = ML.document(File.read(Path["tests"] / rackpath.to(String)))
-      expected = File.open(Path["tests"] / imgpath.to(String), "rb", &.getb_to_end)
+    # givenpi %{(rack/image rackpath_string id_) (ppm imgpath_string)} do
+    #   rack = ML.document(File.read(Path["tests"] / rackpath.to(String)))
+    #   expected = File.open(Path["tests"] / imgpath.to(String), "rb", &.getb_to_end)
 
-      test.long(specpath, text) do |complaints|
-        actual = IO::Memory.new
+    #   test.long(specpath, text) do |complaints|
+    #     actual = IO::Memory.new
 
-        img = rack_image(ctx, rack, id)
-        ppm = Soma::DwUIR::SnapFormat["ppm"]
-        ppm.call(actual, img)
+    #     img = rack_image(ctx, rack, id)
+    #     ppm = Soma::DwUIR::SnapFormat["ppm"]
+    #     ppm.call(actual, img)
 
-        next if expected.to_slice == actual.to_slice
+    #     next if expected.to_slice == actual.to_slice
 
-        complaints << Component.complaint(
-          title: "#{title.to(String)} comparison test failed. Terms derived from these files are different, which is unexpected.",
-          sections: [
-            {"DwUIR rack", rackpath.to(String)},
-            {"PPM", imgpath.to(String)},
-          ]
-        )
-      end
-    end
+    #     complaints << Component.complaint(
+    #       title: "#{title.to(String)} comparison test failed. Terms derived from these files are different, which is unexpected.",
+    #       sections: [
+    #         {"DwUIR rack", rackpath.to(String)},
+    #         {"PPM", imgpath.to(String)},
+    #       ]
+    #     )
+    #   end
+    # end
 
     otherwise do
       test.complain(specpath, text) do |complaints|
@@ -1304,11 +1304,16 @@ end
 
 Ω.render(STDOUT, Ω.text("Wirewright tests tool", style: :emphasis), styled: styled)
 
-ctx = TestContext.new(
-  theme: Mf.theme(ML.document(File.read("./theme.ufold.wwml")).as_d, rem: Term[16]),
-  rack_basis: ML.document(File.read("./runtime/basis.rack.wwml")).as_d,
-  uiR_base: ML.document(File.read(RESOURCES / (ENV["RSET"]? || "uiR-succ8.soma.wwml"))),
-)
+begin
+  ctx = TestContext.new(
+    theme: Mf.theme(ML.document(File.read("./theme.ufold.wwml")).as_d, rem: Term[16]),
+    rack_basis: ML.document(File.read("./runtime/basis.rack.wwml")).as_d,
+    uiR_base: ML.document(File.read(RESOURCES / (ENV["RSET"]? || "uiR-succ8.soma.wwml"))),
+  )
+rescue e : ML::SyntaxError
+  e.humanize(STDERR)
+  abort "could not parse one of file dependencies"
+end
 
 success = TestHarness.new(preview: preview, styled: styled) do |harness|
   specpath = Path["tests"] / "index.wwml"

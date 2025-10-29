@@ -23,6 +23,18 @@ struct Ww::Term
     end
   end
 
+  # TODO: rewrite so that we pre-parse and pre-compile patterns. What we do now causes
+  # unnecessarily long startup. We really want to (A) compile all patterns at once in
+  # some determinate place, and (B) do that using all available threads. The majority
+  # of pattern compilation is local (minus allocations).
+  #
+  # The macros are also very poorly written here. We'd benefit from using macros instead
+  # of with ... yield although that may invalidate some code here and there (e.g. using
+  # ifs to disable some matchpis, I remember doing that somewhere...).
+  #
+  # TODO: instead of kwarg: Type support auto type conversion, e.g matchpit %{x_string} should
+  # automatically do x.to(String), `x←(%number [+/-/]i32)` should do .to(Int32) etc. Don't be
+  # too smart, just match the most common patterns like these on the string level.
   struct CaseContext(Engine)
     # See `continue`.
     module Continue
@@ -103,7 +115,7 @@ struct Ww::Term
     end
 
     # :nodoc:
-    macro match!(pattern, *, cue = nil, icaps = [] of ::NoReturn, location = nil, &block)
+    macro match!(pattern, *, cue = nil, icaps = [] of ::NoReturn, location = nil, **rest, &block)
       {% location ||= "#{block.filename.id}:#{block.line_number}:#{block.column_number}" %}
       {% pid = ::Ww::Term::CaseContext::PATTERN_TERM_ID[0] %}
       {% ::Ww::Term::CaseContext::PATTERN_TERM_ID[0] += 1 %}
@@ -114,6 +126,11 @@ struct Ww::Term
 
           {% unless block.args.any? { |arg| arg.id == icap_id } %}
             {{icap_id}} = (%env[{{icap.id.symbolize}}]? || raise "case: #{ {{location}} }: missing capture '{{icap.id}}'")
+          {% end %}
+
+
+          {% if (type = rest[icap_id.symbolize]) %}
+            {{icap_id}} = {{icap_id}}.to({{type}})
           {% end %}
         {% end %}
 

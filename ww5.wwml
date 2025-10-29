@@ -435,15 +435,15 @@ screen-index: 0
 
 (main target_ states_ ⍊ layout⋮ vertical)
   => (group style: "gap-1 flow-col layout-horizontal:flow-row fr" layout: ^layout
-       (group style: "fr-6 focused:cue-focused" focused: ^(= target (literal events-pane))
+       (group style: "fr-6 focused:cue-focused" focused: ^(= target 'events-pane)
          (pane "Events"
            (event-log (^. states events-pane))))
-       (group style: "fr-7 focused:cue-focused" focused: ^(= target (literal control-pane))
+       (group style: "fr-7 focused:cue-focused" focused: ^(= target 'control-pane)
          (pane "Control"
            (group style: "flow-col gap-1"
              (group style: "fr"
                (control-log (^. states control-pane)))
-             (group style: "membrane focused:cue-focused" focused: ^(= target (literal input))
+             (group style: "membrane focused:cue-focused" focused: ^(= target 'input)
                (command-input (^. states command-input)))))))
 
 (hint-card ⍊ title_string description_string keys_dict)
@@ -498,7 +498,7 @@ screen-index: 0
       (^match screen
         (when (some rack)
           (^match' (focus {¦ ±index targets_dict})
-            (^let target: (part targets (key index default: (literal none)))
+            (^let target: (part targets (key index default: 'none))
               (group style: "flow-col gap-1 px-2 pt-1 fr"
                 (header (^. states header))
                 (group style: "fr flow-col"

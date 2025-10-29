@@ -108,6 +108,8 @@ C←[compose in_string C'←[| M←[found composite_string] _*]]
 
 [compose "oo" [| M←[search] _*]] <> {M: (found "°")}
 
+[compose "+-" [| M←[search] _*]] <> {M: (found "±")}
+
 [compose "^0" [| M←[search] _*]] <> {M: (found "⁰")}
 [compose "^1" [| M←[search] _*]] <> {M: (found "¹")}
 [compose "^2" [| M←[search] _*]] <> {M: (found "²")}
@@ -362,6 +364,8 @@ C←[| M←[summon compose] _*]
 ;; Goto will otherwise collapse the selection in that direction, and will
 ;; be retried.
 (| `>M [goto _ ⸨left,right⸩] _* ⍊ selection: passive)
+  <> {>M: (collapse selection ⸨left,right⸩)}
+(| `>M [goto (line ⸨above,below⸩) _] _* ⍊ selection: passive)
   <> {>M: (collapse selection ⸨left,right⸩)}
 
 ;; Insert should clear the selection and be retried.
@@ -665,10 +669,10 @@ D←⟨C←[_string (| [edit dict] _* ⍊ -pocket) _string]⟩
 C←[l_string [| M←[submit (ml/err) _] _*] r_string]
   <> {M: err}
 
-⟨C←[_string [| M←[submit (term T_) left] _*] _string]⟩
+C←[_string [| M←[submit (term T_) left] _*] _string]
   <> {(M): (), (C): (→T ↑C)}
 
-⟨C←[_string [| M←[submit (term T_) right] _*] _string]⟩
+C←[_string [| M←[submit (term T_) right] _*] _string]
   <> {(M): (), (C): (↑C ↑T)}
 
 (_* `>C ¦ (%entry _ C←[_string [| M←[submit (term T_) ⸨left,right⸩] _*] _string]))

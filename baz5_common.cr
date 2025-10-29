@@ -238,7 +238,7 @@ struct ProcRuleset
 
   # :nodoc:
   def initialize(
-    @pset : PatternSet,
+    @pset : PatternSet(Term),
     @rules : Hash(UInt32, ProcRule)?,
     @backmaps : Hash(UInt32, ProcBackmap)?,
   )
@@ -264,7 +264,7 @@ struct ProcRuleset
     rules = backmaps = nil
 
     index = 0u32
-    pset = PatternSet.select(selector, Term.of(decls)) do |_, env|
+    pset = PatternSet(Term).select(selector, Term.of(decls)) do |_, env|
       _, proc = ruleary[env[:index].to(Int32)]
 
       case env[:type]
@@ -341,7 +341,7 @@ end
 
 struct Ruleset
   # :nodoc:
-  def initialize(@pset : PatternSet, @rules : Slice(Rule::Any))
+  def initialize(@pset : PatternSet(Term), @rules : Slice(Rule::Any))
   end
 
   # - Capture `template` in *selector* forms a template rule.
@@ -349,7 +349,7 @@ struct Ruleset
   def self.select(selector, *bases, **kwargs)
     rules = [] of Rule::Any
 
-    pset = PatternSet.select(selector, *bases, **kwargs) do |normp, env|
+    pset = PatternSet(Term).select(selector, *bases, **kwargs) do |normp, env|
       if template = env[:template]?
         rule = Rule::Template.new(env[:pattern], template)
       elsif backspec = env[:backspec]?
@@ -366,7 +366,7 @@ struct Ruleset
       true
     end
 
-    new(pset, rules.to_readonly_slice.dup)
+    new(pset, rules.to_readonly_slice(&.itself))
   end
 
   def self.ruleset_and_rest(selector, base, **kwargs) : {Ruleset, Term::Dict}
@@ -419,35 +419,30 @@ struct Ruleset
   end
 end
 
-def orthor1(parent0, phase, child0, callable)
-  while true
-    parent1, child1 = callable.call(parent0, phase, child0)
-    break if {parent0, child0} == {parent1, child1}
-    parent0, child0 = parent1, Term.of(child1)
-  end
+def backmapR(primitives = PRIMITIVES) : Rewriter
+  onceR = callR(primitives)
 
-  {parent0, child0}
-end
+  # First rewrite entries, then rewrite self.
+  set, exhevalR = recR
+  set.call choiceR(
+    selR(%{(literal rewritee_)}, callR { |term| Rewrite.one(term) }),
+    chainR(entriesR(exhevalR), onceR),
+  )
 
-def orthor(dict0 : Term::Dict, callable)
-  dict1 = dict0
-  dict0.items.each_with_index do |v0, k|
-    dict1, v0 = orthor1(dict1, Term.of(:teach), Term.of(v0), callable)
-    if vd = v0.as_d?
-      v0 = orthor(vd, callable)
-    end
-    dict1, v1 = orthor1(dict1, Term.of(:learn), Term.of(v0), callable)
-    dict1 = dict1.with(k, v1)
-  end
-  (0..).each do |i|
-    pre = dict1
-    dict1.items.each_with_index do |v0, k|
-      dict1, v1 = orthor1(dict1, Term.of(:refine, i), Term.of(v0), callable)
-      dict1 = dict1.with(k, v1)
-    end
-    if pre == dict1
-      break
-    end
-  end
-  dict1
+  evalR = dfsR(
+    switchR(
+      { %[($ rewritee_)], exhevalR },
+      { %[($once rewritee_)], onceR },
+    )
+  )
+
+  refR = dfsR(
+    switchR(
+      { %[($my rewritee_)], envR(Term.of(:"$my")) },
+      { %[($up rewritee_)], choiceR(envR(Term.of(:"$up")), envR(Term.of(:"$my"))) },
+      { %[($down rewritee_)], choiceR(envR(Term.of(:"$down")), envR(Term.of(:"$my"))) },
+    )
+  )
+
+  chainR(refR, evalR)
 end

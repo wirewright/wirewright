@@ -115,7 +115,7 @@ module Ww::Meridium
     private SK_DICT = Term.of({:"%dict"})
     private SK_BOOL = Term.of({:"%boolean"})
 
-    # Converts skeleton strand *bases* to a `Strand`.
+    # Converts shape strand *bases* to a `Strand`.
     private def self.strand(bases : Term::Dict) : Strand
       state = :start
       strand = Strand{Ubase::Begin.new}
@@ -197,20 +197,20 @@ module Ww::Meridium
       strands
     end
 
-    # Breaks *skeleton* down into its constituent branches and so on.
-    private def self.branch_list(skeleton : Term) : BranchList
+    # Breaks *shape* down into its constituent branches and so on.
+    private def self.branch_list(shape : Term) : BranchList
       branches = BranchList.new
-      M1.branches(skeleton) do |branch|
+      M1.branches(shape) do |branch|
         branches << strand_list(branch)
       end
       branches
     end
 
-    # Returns the skeleton of *pattern*.
+    # Returns the shape of *pattern*.
     #
-    # See also: `M1.skeleton`.
-    private def self.skeleton(pattern : Term) : Term
-      pipe(pattern, M1.normal, M1.skeleton)
+    # See also: `M1.shape`.
+    private def self.shape(pattern : Term) : Term
+      pipe(pattern, M1.normal, M1.shape)
     end
 
     # Constructs a sensor surface.
@@ -226,7 +226,7 @@ module Ww::Meridium
     #   periodically refreshes -- "relook"s -- itself to clean up appearances that
     #   exited without notice.
     def self.new(pattern : Term, secret : Term? = nil, relook : Time::Span? = nil) : Sensor
-      branches = pipe(pattern, skeleton, branch_list)
+      branches = pipe(pattern, shape, branch_list)
 
       new(pattern, secret, relook, branches)
     end

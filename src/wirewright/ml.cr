@@ -193,6 +193,8 @@ module Ww::ML
   # Returns `true` if *term* is a well-formed edge. Returns `false` otherwise.
   #
   # This is just a "hand-optimized" version of the pattern `(%'edge _)`.
+  #
+  # TODO: move to `Term.edge?`
   def edge?(term : Term, *, type : TermType = TermType::Any) : Bool
     return false unless term.type.dict?
 

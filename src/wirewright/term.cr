@@ -981,9 +981,33 @@ module Ww
 
   # Morph API
   #
-  # TODO: Morph API should gradually replace the huge zoo of inconsistent keypath-
-  # following methods such as `follow`, `where`, and `more` that we have on Dict
+  # TODO: Morph API should gradually replace the zoo of inconsistent keypath-
+  # following methods such as `follow`, `where`, and `morph` that we have on Dict
   # at the moment.
+  #
+  #  Morph is really a language for describing how to reach a leaf and how to rewrite it.
+  #
+  #  <expr>
+  #    <op>
+  #    Op(<leaf>)
+  #    Seq(<op>+)
+  #      E.g. Seq(Op(Item(0), AfterLast, One(100)), Op(Item(1), AfterLast, One(200)))
+  #
+  #  <op>
+  #    Op(<step>+, <leaf>)
+  #
+  #  <step>
+  #    Item(index : Int32)
+  #    Key(term)
+  #    Last()
+  #    AfterLast()
+  #
+  #  <leaf>
+  #    Zero()
+  #    One(term)
+  #    Many(term list)
+  #    Map(fn)
+  #
 
   struct Term
     module Last
@@ -1113,11 +1137,43 @@ module Ww
     # your copy instead. Or if you know what you're doing, make sure to return
     # the stack to valid condition after you've modified it.
 
+    def self.each_node(root : Term, & : Term -> Bool) : Nil
+      ns = HybridArray(Int32, 32).new
+      nodes = HybridArray(Term, 32){root}
+
+      while node = nodes.pop?
+        descend = yield node
+
+        # Descend
+        if descend && (dict = node.as_d?) && dict.size > 0
+          key, value = dict.nth(0)
+          ns << 0
+          nodes << node
+          nodes << value
+          next
+        end
+
+        # Ascend
+        loop do
+          return unless parent = nodes.pop?
+
+          n = ns.pop
+          next unless successor = parent.nth?(n + 1)
+
+          key, value = successor
+          ns << n + 1
+          nodes << parent
+          nodes << value
+          break
+        end
+      end
+    end
+
     # Traversal proceeds left-to-right, parent before children. *root* is
     # yielded first.
     def self.each_keypath_and_node(root : Term, & : ThinArray(Term), Term -> Bool) : Nil
-      ns = StackArray(Int32, 32).new
-      nodes = StackArray(Term, 32){root}
+      ns = HybridArray(Int32, 32).new
+      nodes = HybridArray(Term, 32){root}
       keypath = ThinArray(Term).new
 
       while node = nodes.pop?
@@ -1391,4 +1447,3 @@ require "./term/str"
 require "./term/sym"
 require "./term/boolean"
 require "./term/dict"
-require "./term/match"

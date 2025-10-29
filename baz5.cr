@@ -1081,14 +1081,22 @@ end
 # Must be put in "strategic" and, more importantly, *context-independent* places.
 # This usually means some kind of "master recursive step" somewhere in the rewriter
 # circuit.
-def memoR(memo, successor : Rewriter) : Rewriter
+def memoR(memo, successor : Rewriter, &predicate : Term -> Bool) : Rewriter
   Rewriter.new do |ctx, staging|
     staging.reduce do |term|
+      unless predicate.call(term)
+        next Rewrite.none
+      end
+
       memo.put_if_absent(term) do
         successor.call(ctx, Rewrite.one(term))
       end
     end
   end
+end
+
+def memoR(memo, successor : Rewriter) : Rewriter
+  memoR(memo, successor) { true }
 end
 
 def cueR(cues : Enumerable(Term::Sym), successor : Rewriter) : Rewriter

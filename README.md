@@ -3,6 +3,12 @@
 ![Wirewright Logo](https://github.com/user-attachments/assets/3e5dc602-9c8d-412d-a7fa-9e1a0c3b466e)
 </div>
 
+> [!WARNING]
+> You're looking at the development branch of Wirewright, `iota`. Most likely it won't
+> even compile; that's why I'm keeping it separate from the main branch, `kappa`. Once
+> it's ready, it's either going to be merged into kappa, or I'm going to make this branch
+> the main one.
+
 # Wirewright
 
 Imagine roads driving cars. Imagine a sculpture deliberately shaping the way the wind flows around it.
@@ -32,8 +38,6 @@ Instead of having a program in the usual sense, one that perhaps evaluates to `4
 So you set up a world and that world has a custom kind of physics running in it, *symbolic physics*. It detects "gaps" and fills them as necessary, but at no point would the world pop out of existence with the answer `42`. At most, you'd have a slot of some kind right there in the program show `42`, and if you change the inputs, you'd see a different number in that same slot.
 
 ![D7 feedback](img/d7-feedback.gif)
-
-That's roughly what I'm trying to implement here with Wirewright. An environment that adapts to programs, for programs that adapt to environments. No more clockwork!
 
 So that's roughly what I'm trying to implement here with Wirewright. An environment that adapts to programs, for programs that adapt to environments. No more clockwork!
 

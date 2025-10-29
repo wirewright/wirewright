@@ -385,6 +385,14 @@ module Ww
       index
     end
 
+    def item_at?(key : Int32) : Term?
+      return unless key < @items.size
+      return unless coat = @items.fetch?(Probes::FetchItem.new(key))
+
+      entry, *_ = coat
+      entry.value
+    end
+
     # :nodoc:
     def at?(key : Term::Num) : Term?
       return at_default?(key) unless key.natural?

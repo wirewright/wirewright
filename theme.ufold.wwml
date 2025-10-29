@@ -447,8 +447,13 @@ button: "font-sans font-normal text-sm bg-neutral-700 text-neutral-200 hover:bg-
 ;;
 ;; Reference: https://tailwindcss.com/docs/color
 
-"text": (text-box (one-of colors) {color: $(local arg)})
-"text-none": (text-box {} unset: {+ color})
+"text": (short-for "text-color")
+"text-none": (short-for "text-color-none")
+
+"text-color": (text-box (one-of colors) {color: $(local arg)})
+"text-color-none": (text-box {} unset: {+ color})
+
+"color": (outermost-box (one-of colors) {color: $(local arg)})
 
 ;; Background utilities.
 ;;
@@ -791,6 +796,13 @@ button: "font-sans font-normal text-sm bg-neutral-700 text-neutral-200 hover:bg-
 "content-pan-r": (content-viewport-box {pan-x-side: right})
 "content-pan-t": (content-viewport-box {pan-y-side: top})
 "content-pan-b": (content-viewport-box {pan-y-side: bottom})
+
+;;
+;; Foreground utilities. Tailwind doesn't appear to have these, they're a combo
+;; for text-* and border-* color.
+;;
+
+"fg": (short-for "text-color" "border-color")
 
 ;;
 ;; Misc.

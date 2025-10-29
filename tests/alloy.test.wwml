@@ -110,6 +110,10 @@
   ;; empty body, mismatch
   (alloy {x: b} (foo (^match x (when a)) bar) (foo bar))
 
+  ;; match'
+  (alloy {x: a} (foo (^match' (x a) bar)) (foo bar))
+  (alloy {x: b} (foo (^match' (x a) bar)) (foo))
+
   ;; match
   (alloy {x: a}
     (^match x
@@ -236,7 +240,16 @@
       (when {¦ x} ^"X=⸢x⸣")
       (when {¦ y} ^"Y=⸢y⸣")
       (when vars_ ^"vars=⸢vars⸣"))
-    "vars={z: 300}"))
+    "vars={z: 300}")
+  ;; ^case'
+  (alloy {foo: 100}
+    ((^case' (vars {¦ foo})
+       ^"Hello ⸢foo⸣"))
+    ("Hello 100"))
+  (alloy {bar: 200}
+    ((^case' (vars {¦ foo})
+       ^"Hello ⸢foo⸣"))
+    ()))
 
 ;; ^each
 (group
@@ -437,6 +450,36 @@
   ;; key-value pair
   (alloy {} (^verbatim (^x y: ^y z: (^z))) (^x y: ^y z: (^z))))
 
+;; ^membrane
+(group
+  ;; No vars
+  (alloy {} (^membrane) (^let))
+  (alloy {} (^membrane x y z) (^let x y z))
+  ;; Vars
+  (alloy {x: 100, y: 200}
+    (^membrane :x
+      ^x ^y)
+    (^let x: '100
+      ^x ^y))
+  (alloy {x: (+ 1 2), y: 200}
+    (^membrane :x
+      ^x ^y)
+    (^let x: '(+ 1 2)
+      ^x ^y))
+  (alloy {x: 100, y: 200}
+    (^membrane x: (+ x 1)
+      ^x ^y)
+    (^let x: '101
+      ^x ^y)))
+
+;; ^capsule
+(group
+  (alloy {} ((^capsule _)) ())
+  (alloy {} ((^capsule {¦ x})) ((^capsule {¦ x})))
+  (alloy {} ((^capsule {¦ x} ^x)) ((^capsule {¦ x} ^x)))
+  (alloy {x: 100} ((^capsule {¦ x} ^x)) (100))
+  (alloy {y: 200} ((^capsule {¦ x} ^x)) ((^capsule {¦ x} ^x))))
+
 ;; escaping ^ with ^^, ^^^, etc.
 (group
   (alloy {} ^^x ^x)
@@ -512,3 +555,29 @@
      (foo number 2)
      (foo number 3))))
 
+;; ^*
+(group
+  (alloy {} ((^* x)) () issues: ("symbol `x` is not an Alloy variable" "value must be a dict"))
+  (alloy {x: 100} ((^* x)) () issues: ("value must be a dict"))
+  (alloy {x: (1 2 3)} ((^* x)) (1 2 3))
+  (alloy {x: (1 2 3 4)}
+    ((^* (matches x (mask x '(%pipe (mod 2) 0)))))
+    (2 4))
+  ;; Shorthand
+  (alloy {x: (1 2 3 4)}
+    (^*(matches x (mask x '(%pipe (mod 2) 0))))
+    (2 4)))
+
+;; ^splice
+(group
+  (alloy {} ((^splice)) ())
+  (alloy {} ((^splice 1)) (1))
+  (alloy {} ((^splice 1 2 3)) (1 2 3))
+  (alloy {x: 100} ((^splice 1 ^x 3)) (1 100 3)))
+
+;; ^.
+(group
+  (alloy {} ((^. x y z)) () issues: ("no value at keypath"))
+  (alloy {x: 100} ((^. x y z)) () issues: ("no value at keypath"))
+  (alloy {x: {y: 100}} ((^. x y z)) () issues: ("no value at keypath"))
+  (alloy {x: {y: {z: 100}}} ((^. x y z)) (100)))

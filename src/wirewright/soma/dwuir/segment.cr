@@ -29,7 +29,7 @@ module Ww::Soma::DwUIR
 
     # Returns the orientation of this segment relative to *c*.
     def orientation(c : Point) : Orientation
-      val = (@b - @a).x(c - @a)
+      val = (@b - @a).cross(c - @a)
 
       if val.abs < 1e-10 # ≈ 0
         return Orientation::Collinear

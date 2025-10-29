@@ -5,6 +5,7 @@ require "json"
 require "sync"
 require "digest"
 require "blake3"
+require "inotify"
 require "colorize"
 require "permafrost"
 require "wait_group"
@@ -17,6 +18,7 @@ require "../rtk"
 require "./wirewright/misc/*"
 require "./wirewright/unicode"
 require "./wirewright/term"
+require "./wirewright/match"
 require "./wirewright/file_server"
 require "./wirewright/ml"
 require "./wirewright/issue"
@@ -35,11 +37,12 @@ require "../primitives"
 require "../libtermbox2"
 require "../inputr"
 
-{% if flag?(:newsoma) %}
-  require "./wirewright/rack"
-{% end %}
+# {% if flag?(:newsoma) %}
+#   require "./wirewright/rack"
+# {% end %}
 
 require "./wirewright/alloy"
+require "./wirewright/pigment"
 
 Log.setup_from_env(default_level: :warn, backend: Log::IOBackend.new(STDERR))
 

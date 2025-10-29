@@ -1,6 +1,6 @@
 module Ww::Soma::DwUIR
   # Platforms are "machines" that convert `DrawKey`s to raster images thereof,
-  # in the form of `Layer`s.
+  # returned as `Layer`s.
   #
   # Platforms also host / point to a suite of related objects, such as the pencil
   # server `pencils` or the image server `images`.

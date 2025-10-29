@@ -332,7 +332,7 @@
             (when false (arrow-out-btn/inactive))))
         (text caption: ^stat font: "IBM Plex Sans" size: 36 color: white weight: 600)
         (x-stack gap: 10
-          (^unless (= badge (literal none))
+          (^unless (= badge 'none)
             (align x: 0 y: 0
               ^badge))
           (align y: 0.5
@@ -373,7 +373,7 @@
           (x-stack gap: 3
             (text caption: "Working on" font: "IBM Plex Sans" size: 11 color: (oklch 0.7 0 0))
             (text caption: ^task font: "IBM Plex Sans" size: 11 weight: 500 color: (oklch 0.9 0 0))))
-        (^unless (= badge (literal none))
+        (^unless (= badge 'none)
           (align x: 0.5 y: 0.5
             ^badge)))))
 
@@ -686,12 +686,16 @@
   (z-stack z-index: local
     (^if active
       (rect
+        z-index: -1
         fill: (oklch 0.4 0 0)
         radius-tl: 5
         radius-tr: 5
         radius-bl: 5
         radius-br: 5))
-    (^let color: (join active (oklch 0.95 0 0) (oklch 0.85 0 0))
+    (^render ((color_) vars)
+      (^match active
+        (when true (oklch 0.95 0 0))
+        (when false (oklch 0.85 0 0)))
       (padding pl: 5 pr: 5 pt: 5 pb: 5
         (x-wrap gap-x: 5 gap-y: 5
           nodes:
@@ -719,7 +723,10 @@
         radius-tr: 5
         radius-bl: 5
         radius-br: 5))
-    (^let color: (join active (oklch 0.95 0 0) (oklch 0.85 0 0))
+    (^render ((color_) vars)
+      (^match active
+        (when true (oklch 0.95 0 0))
+        (when false (oklch 0.85 0 0)))
       (align x: 0.5 y: 0.5
         (padding pl: 5 pr: 5 pt: 5 pb: 5
           (text
@@ -729,14 +736,14 @@
             leading: 1
             color: ^color)))))
 
-(branch-sidebar-item icon_ caption_ ¦ foobars_) =>
+(branch-sidebar-item icon_ caption_ ¦ pairs_) =>
   (switch on: sidebar-overflows
     from:
       (x-signal id: sidebar-overflows
                 threshold: 50
                 fitness: false
-        (branch-sidebar-item-lg ^icon ^caption ^… foobars))
-    to: (branch-sidebar-item-sm ^icon ^caption ^… foobars))
+        ^(view (union ('branch-sidebar-item-lg icon caption) pairs)))
+    to: ^(view (union ('branch-sidebar-item-sm icon caption) pairs)))
 
 (branch-sidebar-sm) =>
   (floating x: true y: true z-index: 100 dl: -15

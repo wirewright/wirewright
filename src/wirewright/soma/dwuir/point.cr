@@ -69,8 +69,20 @@ module Ww::Soma::DwUIR
     end
 
     # Returns the 2D cross product of this point and *other* (as vectors from origin).
-    def x(other : Point) : Float32
+    def cross(other : Point) : Float32
       x * other.y - y * other.x
+    end
+
+    def dot(other : Point) : Float32
+      x * other.x + y * other.y
+    end
+
+    def length : Float32
+      Math.hypot(x, y)
+    end
+
+    def length_squared : Float32
+      x**2 + y**2
     end
 
     # Returns the per-axis scale factors that map this size into the unit square.

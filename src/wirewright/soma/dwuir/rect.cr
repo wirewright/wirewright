@@ -202,7 +202,7 @@ module Ww::Soma::DwUIR
 
     # Returns the size of this rectangle's diagonal.
     def diagonal : Float32
-      Math.hypot(w, h)
+      size.length
     end
 
     # Returns the area of this rectangle.

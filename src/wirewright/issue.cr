@@ -103,6 +103,11 @@ module Ww::Issue
     record Text, string : String do
       include Spot
     end
+
+    # A key into some structure, possibly detailed in the previous spot(s).
+    record Key, detail : String, key : Term do
+      include Spot
+    end
   end
 
   # Represents a backtrace.
@@ -188,11 +193,22 @@ module Ww::Issue
       adjoin(Spot::StringDetail.new(detail, view)) { |sink| yield sink }
     end
 
+    # Shorthand for adjoining `Spot::Key`.
+    #
+    # Uses `Term.of` to convert *key* to a term (if it's not a term already).
+    def adjoin(*, key, detail : String = "key", &)
+      adjoin(Spot::Key.new(detail, Term.of(key))) { |sink| yield sink }
+    end
+
     # Reports an issue with the given *severity*.
     #
     # This is the `Issue` equivalent of a `raise`, which potentially
     # similar expenses.
     def add(severity : Severity, detail : String) : Nil
+      add(severity) { detail }
+    end
+
+    def add(severity : Severity, & : -> String) : Nil
       return if severity < @severity
 
       backtrace = [] of Spot
@@ -203,7 +219,7 @@ module Ww::Issue
         node = issue.prev
       end
 
-      @backtraces << Backtrace.new(backtrace, severity, detail)
+      @backtraces << Backtrace.new(backtrace, severity, yield)
     end
 
     {% for const in Severity.constants %}
@@ -211,6 +227,11 @@ module Ww::Issue
         # Shorthand for `add({{const.id.underscore.symbolize}}, detail)`.
         def {{const.id.underscore}}(detail : String) : Nil
           add(Severity::{{const}}, detail)
+        end
+
+        # Shorthand for `add({{const.id.underscore.symbolize}}, &)`.
+        def {{const.id.underscore}}(&)
+          add(Severity::{{const}}) { yield }
         end
       {% end %}
     {% end %}

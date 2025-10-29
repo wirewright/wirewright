@@ -84,8 +84,8 @@
 
 # Having these in place, we'll be able to interop with the indexing infra & what would become Nitrene.
 #
-# - At this point we should be able to determine the pattern's *skeleton* from its normalized version.
-# - At this point we should be able to compile the skeleton to Ubases.
+# - At this point we should be able to determine the pattern's *shape* from its normalized version.
+# - At this point we should be able to compile the shape to Ubases.
 #
 #   The pattern's skeleton consists of literals reachable from the root of the pattern. it can also
 #   include types. I don't think there's a point in further overcomplicating the matter.
@@ -2466,7 +2466,7 @@ module ::Ww::M1
         end
 
         # %nonself is dissolved at normalization.
-        matchpi %[(%nonself arg_)], cue: :"%nonself" do
+        matchpi %{[%nonself arg_]}, cue: :"%nonself" do
           pattern(ctx, arg)
         end
 
@@ -4395,7 +4395,7 @@ module ::Ww::M1
     storage
   end
 
-  PATTERN_CACHE = SyncCache(Term, Operator::Any).new(16_384, preallocate: true)
+  PATTERN_CACHE = SyncCache({Term, Bool}, Operator::Any).new(16_384, preallocate: true)
 
   {% if flag?(:popt_0) %}
     DEFAULT_OPT_LEVEL = O0
@@ -4404,6 +4404,11 @@ module ::Ww::M1
   {% else %}
     DEFAULT_OPT_LEVEL = O2
   {% end %}
+
+  # TODO: can we please get rid of these flags!!!! The caller can chain the calls manually
+  # if they want to, we need to make that more comfortable than using this flags bullshit!!
+
+  # TODO: cache pattern -> normal, normal -> optimal, optimal -> operator
 
   def self.operator0(pattern : Term, *, normalize = true, optimize = true, opt = DEFAULT_OPT_LEVEL) : Operator::Any
     normal = normalize ? normal(pattern) : pattern
@@ -4414,16 +4419,16 @@ module ::Ww::M1
   end
 
   # TODO: overwrite in cache if higher opt level
-  def self.operator(pattern : Term, *, fresh = false, **kwargs) : Operator::Any
+  def self.operator(pattern : Term, *, fresh = false, normalize = true, **kwargs) : Operator::Any
     if fresh
-      return operator0(pattern, **kwargs)
+      return operator0(pattern, **kwargs, normalize: normalize)
     end
 
-    PATTERN_CACHE.put_if_absent(pattern) do
+    PATTERN_CACHE.put_if_absent({pattern, normalize}) do
       # Slow path: compile and add to cache. Sometimes multiple threads will do
       # multiple times the work; that's fine. We cannot block because that'd cause
       # a deadlock -- operator0() may in turn call operator() at some point and so on.
-      operator0(pattern, **kwargs)
+      operator0(pattern, **kwargs, normalize: normalize)
     end
   end
 
@@ -5821,27 +5826,27 @@ end
 # An object capable of parsing pattern terms into `Pattern`s (a thin wrapper
 # around `M1::Operator`) and organizing them for efficient response
 # to matchees.
-class PatternSet
+class PatternSet(T)
   alias Bucket = Slice(Pattern)
 
   # Includers are used to determine the indexing key; such a key must be something
   # that a pattern and all its possible matchees *necessarily share*. If the key is
   # indeterminate for a matchee, patterns requiring that key are not going to
   # be tested.
-  module Key
+  module Key(T)
     # Extracts a key term from a pattern. Both its original (*pattern*) and
     # normal-form (*normp*) version are given. Returns `nil` if indeterminate;
     # in such case the pattern will be tested on all matchees.
-    abstract def of_pattern?(pattern : Term, normp : Term) : Term?
+    abstract def of_pattern?(pattern : Term, normp : Term) : T?
 
     # Extracts a key term from a matchee. If indeterminate, patterns with
     # a determinate key are all going to be skipped.
-    abstract def of_matchee?(matchee : Term) : Term?
+    abstract def of_matchee?(matchee : Term) : T?
   end
 
   # The default key implementation, uses `M1.head?`.
   module Key::Head
-    extend Key
+    extend Key(Term)
 
     def self.of_pattern?(pattern : Term, normp : Term) : Term?
       M1.head?(normp)
@@ -5853,8 +5858,8 @@ class PatternSet
   end
 
   # :nodoc:
-  struct KeyedMap
-    def initialize(@map : Hash(Term, Bucket), @key : Key)
+  struct KeyedMap(T)
+    def initialize(@map : Hash(T, Bucket), @key : Key(T))
     end
 
     def bucket?(matchee : Term) : Bucket?
@@ -5865,7 +5870,7 @@ class PatternSet
   end
 
   # :nodoc:
-  def initialize(@keyed : KeyedMap, @unkeyed : Bucket)
+  def initialize(@keyed : KeyedMap(T), @unkeyed : Bucket)
   end
 
   # Constructs a pattern set by extracting patterns from *base* using *selector*.
@@ -5891,10 +5896,10 @@ class PatternSet
   #   true # E.g. body is valid
   # end
   # ```
-  def self.select(selector : Term, bases : Enumerable(Term), key keymod : Key = Key::Head, & : Term, Term::Dict -> Bool?) : PatternSet
+  def self.select(selector : Term, bases : Enumerable(Term), key keymod : Key(T) = Key::Head, & : Term, Term::Dict -> Bool?) : PatternSet(T) forall T
     seen = Set(Term).new
 
-    keyed = {} of Term => Array(Int32)
+    keyed = {} of T => Array(Int32)
     headless = [] of Int32
 
     patterns = [] of Pattern
@@ -5948,15 +5953,15 @@ class PatternSet
 
     oheadless = headless.to_readonly_slice.map(read_only: true) { |index| patterns[index] }
 
-    new(KeyedMap.new(okeyed, keymod), oheadless)
+    PatternSet(T).new(KeyedMap(T).new(okeyed, keymod), oheadless)
   end
 
-  def self.select(selector : Term, *bases : Term, **kwargs, &) : PatternSet
+  def self.select(selector : Term, *bases : Term, **kwargs, &)
     self.select(selector, bases, **kwargs) { |*args| yield *args }
   end
 
   # Block-less version of `select`.
-  def self.select(*args, **kwargs) : PatternSet
+  def self.select(*args, **kwargs)
     self.select(*args, **kwargs) { true }
   end
 
@@ -6127,11 +6132,11 @@ def all2(node) : Term
   end
 end
 
-# *Pattern skeleton* is a restricted, more open subset of pattern matching constructs
-# that we are able to index efficiently. Any M1 pattern can be converted into its skeleton
-# with more or less loss.
+# *Pattern shapes* are a restricted, more open subset of pattern matching constructs
+# that we are able to index efficiently. Any M1 pattern has an associated shape, which
+# can be more or less lossy.
 #
-# Pattern skeleton is guaranteed to consist only of the following nodes:
+# Pattern shapes are guaranteed to consist only of the following nodes:
 #
 # - `(%'%value (%'%literal _) _)`
 # - `(%'%any/source _+)`
@@ -6143,7 +6148,7 @@ end
 # - `%'(%dict)`
 # - `%'(%number _)`
 # - `(%'%literal X_)` with non-dict X or empty dict X
-module ::Ww::M1::Skeleton
+module ::Ww::M1::Shape
   extend self
 
   # Generates a sequence of *subject* itemseq calls repeated *n* times.
@@ -6159,7 +6164,7 @@ module ::Ww::M1::Skeleton
     itemseq(prefix, key, subject, ahead1, rear)
   end
 
-  # Returns the skeleton of an itemseq *item*.
+  # Returns the shape of an itemseq *item*.
   private def itemseq(prefix, key, item : Term, ahead, rear) : Term
     Term.of_case(item) do
       # Fetch successor.
@@ -6237,7 +6242,7 @@ module ::Ww::M1::Skeleton
     end
   end
 
-  # Returns the skeleton of an itemseq in *feed*.
+  # Returns the shape of an itemseq in *feed*.
   private def itemseq(prefix, key, feed : Term::Dict::ItemsView, ahead0, rear) : Term
     unless item = feed.first?
       return ahead0.call(prefix, key)
@@ -6250,7 +6255,7 @@ module ::Ww::M1::Skeleton
     itemseq(prefix, key, item, ahead1, rear)
   end
 
-  # Returns the skeleton of an itemseq *seq*.
+  # Returns the shape of an itemseq *seq*.
   def itemseq(seq : Term::Dict)
     rear = ->(prefix : Term::Dict) { all2(prefix) }
     ahead = ->(prefix : Term::Dict, key : Term::Num) { rear.call(prefix) }
@@ -6291,7 +6296,7 @@ module ::Ww::M1::Skeleton
     entry(prefix, *entry, ahead1)
   end
 
-  # Returns the skeleton of *entries*.
+  # Returns the shape of *entries*.
   def entries(entries : Term::Dict) : Term
     if entries.empty?
       return Term.of({:"%dict"})
@@ -6302,7 +6307,7 @@ module ::Ww::M1::Skeleton
     entries(Term.dict(:"%all"), 0, entries, ahead)
   end
 
-  # Returns the skeleton of a normal pattern *normp*.
+  # Returns the shape of a normal pattern *normp*.
   def pattern(normp : Term) : Term
     Term.of_case(normp) do
       matchpi %{(%'%pass)} { normp }
@@ -6316,6 +6321,10 @@ module ::Ww::M1::Skeleton
       matchpi %{(%'%literal x_dict)} { pattern(M1.normal_escaped(x)) }
       matchpi %{(%'%literal _)} { normp }
 
+      matchpi %{(%'%edge _)} do
+        Term.of(:"%value", {:"%literal", 0}, {:"%literal", :edge})
+      end
+
       matchpi %{(%'%let _ successor_)} do
         pattern(successor)
       end
@@ -6328,7 +6337,7 @@ module ::Ww::M1::Skeleton
         all2(Term.of(:"%all", pattern(itemspart), pattern(pairspart)))
       end
 
-      # In pattern skeleton, all layers are always open. So we cannot make
+      # In a pattern shape, all layers are always open. So we cannot make
       # literal belows closed. However we still account them during matching
       # for precision.
       begin
@@ -6404,15 +6413,15 @@ module ::Ww::M1::Skeleton
 end
 
 module ::Ww::M1
-  def self.skeleton(normp : Term)
-    Skeleton.pattern(normp)
+  def self.shape(normp : Term)
+    Shape.pattern(normp)
   end
 
-  private def self.branches(skeleton : Term, ahead0 : Term ->) : Nil
-    Term.case(skeleton) do
+  private def self.branches(shape : Term, ahead0 : Term ->) : Nil
+    Term.case(shape) do
       matchpi %{(%'%value (%'%literal _) value_)} do
         ahead1 = ->(branch : Term) do
-          ahead0.call(Term.of(skeleton.with(2, branch)))
+          ahead0.call(Term.of(shape.with(2, branch)))
         end
 
         branches(value, ahead1)
@@ -6437,19 +6446,19 @@ module ::Ww::M1
       end
 
       otherwise do
-        ahead0.call(skeleton)
+        ahead0.call(shape)
       end
     end
   end
 
-  # Normalizes pattern skeleton to DNF. Calls *sink* with each toplevel branch.
+  # Normalizes a pattern shape to DNF. Calls *sink* with each toplevel branch.
   #
-  # As long as *skeleton* is a pattern skeleton, branches given to *sink* are guaranteed
-  # to be pattern skeletons without `%any/source`.
+  # As long as *shape* is a pattern shape, branches given to *sink* are guaranteed
+  # to be pattern shapes without `%any/source`.
   #
-  # Non-skeleton nodes are unexpected and will not be processed.
-  def self.branches(skeleton : Term, &sink : Term ->) : Nil
-    branches(skeleton, sink)
+  # Non-shape nodes are unexpected and will not be processed.
+  def self.branches(shape : Term, &sink : Term ->) : Nil
+    branches(shape, sink)
   end
 
   private def self.strands(prefix : Term::Dict, branch : Term, sink) : Nil

@@ -11,7 +11,11 @@ class SDL::Window
   alias Event = LibSDL::WindowEventID
 
   def id : UInt32
-    LibSDL.get_window_id(@window)
+    id = LibSDL.get_window_id(@window)
+    if id.zero?
+      raise SDL::Error.new("SDL_GetWindowID")
+    end
+    id
   end
 
   def resizable=(value : Bool) : Bool
@@ -78,24 +82,23 @@ module Ww::Soma::DwUIR
     # changes cause this object to be recreated from scratch.
     class Frame
       def initialize(
-        renderer : ::SDL::Renderer,
-        viewer_context : Viewer::Context,
+        renderer : ::SDL::Renderer::WithDestroy,
+        @requests : Channel(Protocol::Request),
         width : Int32,
         height : Int32,
         @backdrop : Color,
       )
-        @buffer = ::SDL::Texture.new(renderer, width, height, LibSDL::PixelFormatEnum::ARGB8888)
         @screen = PixelRect.new(0, 0, width, height)
-        @viewer = Viewer.new(@screen, viewer_context)
+        @buffer = ::SDL::Texture.new(renderer, width, height, LibSDL::PixelFormatEnum::ARGB8888)
       end
 
       def show(content : Term)
-        damage = @viewer.show(content, bg: @backdrop)
+        response = Sync::Future(Protocol::FrameResponse).new
+        request = Protocol::FrameRequest.new(content, @screen, @backdrop, response)
+        @requests.send(request)
 
-        # FIXME: for some reason, this causes rare crashes with SDL: invalid
-        # texture error on `lock`.
         @buffer.lock do |pixels, pitch|
-          damage.each do |rect|
+          response.get.damage.each do |rect|
             region = @screen.region(rect)
             region.each_pixel_with_coords do |pixel, i, j|
               pixels[@screen.width * j + i] = pixel.argb
@@ -105,14 +108,14 @@ module Ww::Soma::DwUIR
       end
 
       def present(renderer)
-        renderer.draw_color = ::SDL::Color.new(255, 255, 255, 255)
+        renderer.draw_color = ::SDL::Color.new(*@backdrop.rgb, 255)
         renderer.clear
         renderer.copy(@buffer, ::SDL::Rect.new(0, 0, @buffer.width, @buffer.height), ::SDL::Rect.new(0, 0, @buffer.width, @buffer.height))
         renderer.present
       end
 
       def inspect(io)
-        io << "frame(" << @screen.width << "x" << @screen.height << ")"
+        io << "frame(" << @buffer.width << "x" << @buffer.height << ")"
       end
     end
 
@@ -158,9 +161,9 @@ module Ww::Soma::DwUIR
       Term.matchpi?(spec,
         <<-WWML
           (window content_*
-            ⍊ title_string
-              width_: (%number +i16)
+            ⍊ width_: (%number +i16)
               height_: (%number +i16)
+              title⋮ "Untitled"
               resizable⋮ true
               cursor⋮ arrow
               backdrop_⋮ white)
@@ -182,7 +185,13 @@ module Ww::Soma::DwUIR
     end
 
     # Represents an open window.
-    defcase Some, sys : ::SDL::Window::WithDestroy, renderer : ::SDL::Renderer::WithDestroy, frame : Frame, conf : Conf do
+    defcase Some,
+      sys : ::SDL::Window::WithDestroy,
+      renderer : ::SDL::Renderer::WithDestroy,
+      frame : Frame,
+      conf : Conf
+
+    class Some
       @valid = true
 
       def sys : ::SDL::Window
@@ -245,7 +254,7 @@ module Ww::Soma::DwUIR
     end
 
     # :nodoc:
-    record Context, viewer : Viewer::Context, cursors : CursorStore
+    record Context, requests : Channel(Protocol::Request), cursors : CursorStore
 
     # Stores SDL system cursor instances.
     class CursorStore
@@ -300,10 +309,10 @@ module Ww::Soma::DwUIR
     end
 
     # Constructs a window context object.
-    def context(proof : SetupProof, viewer_context : Viewer::Context) : Context
+    def context(proof : SetupProof, requests : Channel(Protocol::Request)) : Context
       check(proof)
 
-      Context.new(viewer_context, cursors: CursorStore.new)
+      Context.new(requests, cursors: CursorStore.new)
     end
 
     # Performs a window state transition: transitions from an existing state
@@ -316,8 +325,13 @@ module Ww::Soma::DwUIR
       unless conf1 = conf?(spec)
         case window
         in None
-        in Some then window.close
+        in Some
+          change_cursor(ctx, window.sys, window.conf.cursor, :arrow)
+
+          window.close
         end
+
+        GC.collect
 
         return None.new
       end
@@ -332,7 +346,7 @@ module Ww::Soma::DwUIR
 
         renderer = ::SDL::Renderer::WithDestroy.new(sys, ::SDL::Renderer::Flags::ACCELERATED)
 
-        frame = Frame.new(renderer, ctx.viewer, conf1.width, conf1.height, conf1.backdrop)
+        frame = Frame.new(renderer, ctx.requests, conf1.width, conf1.height, conf1.backdrop)
         frame.show(conf1.content)
 
         Some.new(sys, renderer, frame, conf1)
@@ -359,7 +373,7 @@ module Ww::Soma::DwUIR
 
         # Change of certain properties invalidates the frame.
         unless {conf0.width, conf0.height, conf0.backdrop} == {conf1.width, conf1.height, conf1.backdrop}
-          frame = Frame.new(window.renderer, ctx.viewer, conf1.width, conf1.height, conf1.backdrop)
+          frame = Frame.new(window.renderer, ctx.requests, conf1.width, conf1.height, conf1.backdrop)
           window = window.copy_with(frame: frame)
 
           # Sync window geometry *but avoid noop overwrites* -- in my case XFCE
@@ -513,7 +527,7 @@ module Ww::Soma::DwUIR
       shift = event.keysym.mod.lshift? || event.keysym.mod.rshift?
       alt = event.keysym.mod.lalt? || event.keysym.mod.ralt?
 
-      # Disable modifiers on modifier keys themselves since this would make
+      # Disable modifiers on modifier keys themselves since that would make
       # little sense, at least it makes little sense to me.
       if key.cl? || key.cr? || key.sl? || key.sr? || key.al? || key.ar?
         ctrl = shift = alt = false
@@ -548,48 +562,38 @@ module Ww::Soma::DwUIR
 
     # Starts an SDL event loop in an isolated fiber context. Calls *sink*
     # with for each event received from SDL, and for each post received
-    # from *posts*. The loop ends when *posts* is closed.
+    # from *posts*.
     #
-    # *posts* will be closed after this method returns, whether by you
-    # or by this method.
+    # Send `shutdown` to *posts* to terminate the event loop. We treat closure
+    # of *posts* as an error.
     def evloop(proof : SetupProof, posts : Channel(Term), &sink : Term ->) : Nil
       # FIXME: this will leak if evloop is called multiple times. Which doesn't
       # happen in practice, but still...
-      posts_deq = LibSDL::EventType.register(2)
-      posts_closed = posts_deq + 1
+      deq = LibSDL::EventType.register(2)
 
       postq = Deque(Term).new
       postq_lock = Mutex.new
 
-      # This fiber will run in the `fibers` context. It will wait for posts on
-      # the posts channel, and add those to the posts queue postq. It will then
-      # possibly wake up the mainloop using `SDL_PushEvent`.
+      # This fiber will wait for posts on the posts channel, and add those to
+      # the posts queue postq. It will then possibly wake the mainloop
+      # using `SDL_PushEvent`.
       #
-      # We use a separate queue instead of directly passing term through PushEvent
+      # We use a separate queue instead of directly passing terms through PushEvent
       # because I'm afraid of situations where the term will be lost to GC under strain,
       # if the only remaining pointer is now given to C to go wherever. Instead, we keep
       # terms entirely on the Crystal side, so that the GC can see them; and only
       # use SDL's event queue for DEQ (aka "please dequeue") notifications.
       spawn do
-        while post = posts.receive?
+        while post = posts.receive
           postq_lock.synchronize { postq << post }
 
-          event = ::SDL::Event::User.new(code: posts_deq)
+          event = ::SDL::Event::User.new(code: deq)
           if LibSDL.push_event(event) < 0
             raise ::SDL::Error.new("PushEvent")
           end
-        end
 
-        # The only way we can get an error above appears to be if push event fails;
-        # I guess we wouldn't want to push event in that case. So only send posts
-        # closed if we indeed detected that the posts channel was closed, without
-        # any kind of error.
-        event = ::SDL::Event::User.new(code: posts_closed)
-        if LibSDL.push_event(event) < 0
-          raise ::SDL::Error.new("PushEvent")
+          break if post == Term.of(:shutdown)
         end
-      ensure
-        posts.close
       end
 
       loop do
@@ -598,11 +602,11 @@ module Ww::Soma::DwUIR
         case event
         when ::SDL::Event::User
           case event.code
-          when posts_deq.value
+          when deq.value
             post = postq_lock.synchronize { postq.shift }
+            return if post == Term.of(:shutdown)
+
             sink.call(post)
-          when posts_closed.value
-            break
           end
         when ::SDL::Event::Window
           sysid = event.window_id
@@ -631,100 +635,142 @@ module Ww::Soma::DwUIR
           dispatch(event, sink)
         end
       end
-    ensure
-      posts.close
     end
 
     # Provides window management on top of `evloop`.
     #
-    # - Post `(window update key_ spec_)` to bind (if not bound already) a window
-    #   to *key* and update it according to *spec* (as in `next`).
-    # - Post `(window close key_)` to close the window bound to *key* if it is open.
+    # - Send `(wm open key_ spec_)` to *posts* to bind a window spec to *key*.
+    # - Send `(wm update key_ spec_)` to *posts* to update the spec of *key*. Note
+    #   that you must open it first using `(wm open ...)`. Invalid specs cause the window
+    #   to hide without ruining state. You can continue to update; once the spec is
+    #   valid the window will show again.
+    # - Send `(wm close key_)` to *posts* to close the window bound to *key* if it
+    #   is open. Window updates to *key* will be ignored until you `(wm open ...)`.
+    # - See also: `evloop`.
     #
     # Events are given to *sink* like so: `(event key_ term_)`, where *term* is
     # an event term.
-    #
-    # Note that the `(window close)` event will only be sent for OS window closure
-    # (as in, the X button was clicked).
     def wmloop(proof : SetupProof, posts : Channel(Term), context : Context, &sink : Term ->)
-      windows = {} of Term => Some
+      windows = {} of Term => Any
       sysid2key = {} of UInt32 => Term
 
-      evloop(proof, posts) do |post|
-        Term.case(post) do
-          matchpi %{(window update key_ spec_)} do
-            window0 = windows[key]? || None.new
-            if window0.is_a?(Some)
-              sysid = window0.sys.id
-            end
+      begin
+        evloop(proof, posts) do |post|
+          Term.case(post) do
+            matchpi %{(wm open key_ spec_)} do
+              next if windows.has_key?(key)
 
-            window1 = self.next(proof, context, window0, spec)
-            present(proof, window1)
+              window0 = None.new
+              window1 = self.next(proof, context, window0, spec)
+              present(proof, window1)
 
-            case window1
-            in None
-              windows.delete(key)
-              sysid2key.delete(sysid) if sysid
-            in Some
               windows[key] = window1
 
-              assert sysid.in?(nil, window1.sys.id)
-              if sysid.nil?
-                sysid2key[window1.sys.id] = key
+              next unless window1.is_a?(Some)
+
+              sysid2key[window1.sys.id] = key
+
+              sink.call(Term.of(:wm, :event, key, {:window, :updated, spec}))
+            end
+
+            matchpi %{(wm update key_ spec_)} do
+              next unless window0 = windows[key]?
+
+              if window0.is_a?(Some)
+                sysid = window0.sys.id
               end
-            end
-          end
 
-          matchpi %{(window close key_)} do
-            next unless window = windows.delete(key)
+              window1 = self.next(proof, context, window0, spec)
+              present(proof, window1)
 
-            _ = self.next(proof, context, window, spec: nil)
-          end
+              case window1
+              in None
+                sysid2key.delete(sysid) if sysid
+              in Some
+                windows[key] = window1
 
-          matchpi %{(event sysid←(%number u32) (window exposed))} do
-            unless key = sysid2key[sysid.to(UInt32)]?
-              Log.debug { "nonexistent window with sysid `#{sysid}` was exposed" }
-              next
-            end
+                assert sysid.in?(nil, window1.sys.id)
+                if sysid.nil?
+                  sysid2key[window1.sys.id] = key
+                end
+              end
 
-            unless window = windows[key]?
-              Log.debug { "nonexistent window with sysid `#{sysid}`, key `#{key}` was exposed" }
-              next
-            end
-
-            present(proof, window)
-          end
-
-          matchpi %{(event sysid←(%number u32) term←(window closed))} do
-            unless key = sysid2key[sysid.to(UInt32)]?
-              Log.debug { "nonexistent window with sysid `#{sysid}` was closed" }
-              next
+              sink.call(Term.of(:wm, :event, key, {:window, :updated, spec}))
             end
 
-            unless window = windows.delete(key)
-              Log.debug { "nonexistent window with sysid `#{sysid}`, key `#{key}` was closed" }
-              next
+            # Closure request on our side.
+            matchpi %{(wm close key_)} do
+              next unless window = windows.delete(key)
+              next unless window.is_a?(Some)
+
+              sysid2key.delete(window.sys.id)
+
+              _ = self.next(proof, context, window, spec: nil)
+
+              sink.call(Term.of(:wm, :event, key, {:window, :closed}))
             end
 
-            _ = self.next(proof, context, window, spec: nil)
-
-            # Notify sink about OS-side window closure.
-            sink.call(Term.of(:event, key, term))
-          end
-
-          matchpi %{(event sysid←(%number u32) term_)} do
-            unless key = sysid2key[sysid.to(UInt32)]?
-              Log.debug { "nonexistent window with sysid `#{sysid}` was closed" }
-              next
+            # These global events seem to be sent by SDL to give us consistent state
+            # even before any windows are created, e.g. if modifier keys are held
+            # before the program starts. On the other hand, when opening windows,
+            # we appear to receive the proper sequence of events anyway, so we appear
+            # to not need to handle these global ones.
+            matchpi %{(event 0 _)} do
             end
 
-            sink.call(Term.of(:event, key, term))
-          end
+            # User-side closure request (the user clicked "X")
+            matchpi %{(event sysid←(%number u32) term←(window closed))} do
+              unless key = sysid2key.delete(sysid.to(UInt32))
+                Log.warn { "BUG: nonexistent window with sysid `#{sysid}` was closed" }
+                next
+              end
 
-          otherwise do
-            sink.call(post)
+              unless window = windows.delete(key)
+                Log.warn { "BUG: nonexistent window with sysid `#{sysid}`, key `#{key}` was closed" }
+                next
+              end
+
+              _ = self.next(proof, context, window, spec: nil)
+
+              sink.call(Term.of(:wm, :event, key, term))
+            end
+
+            matchpi %{(event sysid←(%number u32) (window exposed))} do
+              unless key = sysid2key[sysid.to(UInt32)]?
+                Log.warn { "BUG: nonexistent window with sysid `#{sysid}` was exposed" }
+                next
+              end
+
+              unless window = windows[key]?
+                Log.warn { "BUG: nonexistent window with sysid `#{sysid}`, key `#{key}` was exposed" }
+                next
+              end
+
+              present(proof, window)
+            end
+
+            matchpi %{(event sysid←(%number u32) term_)} do
+              unless key = sysid2key[sysid.to(UInt32)]?
+                Log.warn { "BUG: nonexistent window with sysid `#{sysid}` received event: #{ML.compact(term)}" }
+                next
+              end
+
+              sink.call(Term.of(:wm, :event, key, term))
+            end
+
+            otherwise do
+              sink.call(post)
+            end
           end
         end
+      ensure
+        # Close all windows to free all associated SDL objects.
+        windows.each_value do |window|
+          _ = self.next(proof, context, window, spec: nil)
+        end
+
+        windows.clear
+        sysid2key.clear
       end
     end
   end

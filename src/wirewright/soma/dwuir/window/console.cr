@@ -36,6 +36,18 @@ module Ww::Soma::DwUIR
       spec
     end
 
+    # An object issued by `setup`. It is a "capability"; the fact that you
+    # have an instance of it acts as a proof that you called `setup`, so that
+    # functions that rely on that can rely on that with a bit more confidence.
+    class SetupProof
+      # :nodoc:
+      property? valid : Bool = true
+    end
+
+    private def check(proof : SetupProof) : Nil
+      assert proof.valid?
+    end
+
     # Performs a window state transition: transitions from an existing state
     # *window* to the next state defined by a DwUIR terminal window *spec*.
     def next(window : Any, spec : Term?) : Any
@@ -62,8 +74,8 @@ module Ww::Soma::DwUIR
     end
 
     # :nodoc:
-    def present(window : Some) : Nil
-      check_ready!
+    def present(proof : SetupProof, window : Some) : Nil
+      check(proof)
 
       maxx = Termbox.width
       maxy = Termbox.height
@@ -115,28 +127,28 @@ module Ww::Soma::DwUIR
     end
 
     # :nodoc:
-    def present(window : None) : Nil
+    def present(proof : SetupProof, window : None) : Nil
+      check(proof)
     end
 
     {% if flag?(:docs) %}
       # Syncs the Termbox buffer and content of *window*.
       #
       # NOTE: If *window* is `None`, this method is a noop.
-      def present(window : Any) : Nil
+      def present(proof : SetupProof, window : Any) : Nil
       end
     {% end %}
 
     # Waits for an event from the terminal, and calls *fn* with it.
-    def wait(&fn : Term ->) : Nil
-      check_ready!
-
+    def wait(proof : SetupProof, &fn : Term ->) : Nil
+      check(proof)
       dispatch(event: Termbox.poll, &fn)
     end
 
     # Calls *fn* with latest events from the terminal, if any. Does not block
     # if no events were received.
-    def poll(&fn : Term ->) : Nil
-      check_ready!
+    def poll(proof : SetupProof, &fn : Term ->) : Nil
+      check(proof)
 
       loop do
         break unless event = Termbox.peek?
@@ -150,16 +162,12 @@ module Ww::Soma::DwUIR
     # What you will see below is utterly deranged on so many levels!! Makes me
     # appreciate what SDL is doing.
 
-    @@ready = false
-
     # Sets up exit and interrupt handlers to shutdown Termbox properly.
-    def setup(&) : Nil
-      if @@ready
-        raise "Attempt to initialize Window::Console twice"
-      end
+    def setup(& : SetupProof ->) : Nil
+      proof = SetupProof.new
 
       shutdown = -> do
-        @@ready = false
+        proof.valid = false
         print "\e[2 q" # Set cursor to steady block
         Termbox.shutdown
       end
@@ -172,21 +180,14 @@ module Ww::Soma::DwUIR
       Termbox.init
       Termbox.input_mode = Termbox::InputMode::Alt | Termbox::InputMode::Mouse
       Termbox.output_mode = :truecolor
+
       print "\e[6 q" # Set cursor to vertical bar
 
-      @@ready = true
-
       begin
-        yield Termbox.width, Termbox.height
+        yield proof, Termbox.width, Termbox.height
       ensure
         shutdown.call
       end
-    end
-
-    private def check_ready! : Nil
-      return if @@ready
-
-      raise "use `Window::Console.setup(&) to initialize before calling this method"
     end
 
     # Whether the Shift key was pressed in the previous event.

@@ -519,7 +519,7 @@ module Ww::Soma::DwUIR
       #
       # |@key color soma.dwuir.color -- Controls the `currentColor` property#
       # in the document.
-      matchpi %{(svg ¦ _ src_ color⋮ black)} do
+      matchpi %{(svg ¦ _ src_ color_⋮ black)} do
         resize = SvgShape::Resize::Stretch
 
         Term.case(node) do

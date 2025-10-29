@@ -148,7 +148,7 @@ module Ww::D7
     private alias KeypathBucketArray = ThinArray(KeypathBucket)
 
     # :nodoc:
-    record Index, patterns : PatternSet, buckets : KeypathBucketArray
+    record Index, patterns : PatternSet(Term), buckets : KeypathBucketArray
 
     # :nodoc:
     EDGES_SELECTOR = ML.term(%{(edges pattern_ captures←(_*) example_)})
@@ -159,7 +159,7 @@ module Ww::D7
     def index(spec : Term) : Index
       buckets = KeypathBucketArray.new
 
-      patterns = PatternSet.select(EDGES_SELECTOR, spec) do |_, env|
+      patterns = PatternSet(Term).select(EDGES_SELECTOR, spec) do |_, env|
         pattern, captures, example = env[:pattern], env[:captures], env[:example]
         bucket = KeypathBucket.new
 
@@ -258,7 +258,7 @@ module Ww::D7
       bindings_capture : Term::Sym?
 
     # :nodoc:
-    record Index, patterns : PatternSet, decls : ThinArray(Decl)
+    record Index, patterns : PatternSet(Term), decls : ThinArray(Decl)
 
     # :nodoc:
     PERMEABLE_SELECTOR = ML.term(%{(permeable pattern_ parts←(_*) ¦ opts_)})
@@ -269,7 +269,7 @@ module Ww::D7
     def index(spec : Term) : Index
       decls = ThinArray(Decl).new
 
-      patterns = PatternSet.select(PERMEABLE_SELECTOR, spec) do |_, env|
+      patterns = PatternSet(Term).select(PERMEABLE_SELECTOR, spec) do |_, env|
         if (bindings_capture = env[:opts, :bindings]?) && (bindings_capture = bindings_capture.as_sym?).nil?
           raise SpecError.new("expected a symbol for bindings capture")
         end
@@ -361,7 +361,7 @@ module Ww::D7
     end
 
     # :nodoc:
-    record Index, patterns : PatternSet, ratings : ThinArray(Option)
+    record Index, patterns : PatternSet(Term), ratings : ThinArray(Option)
 
     # :nodoc:
     RATING_SELECTOR = ML.term(%{(rating pattern_ rating_)})
@@ -372,7 +372,7 @@ module Ww::D7
     def index(spec : Term) : Index
       ratings = ThinArray(Option).new
 
-      patterns = PatternSet.select(RATING_SELECTOR, spec) do |_, env|
+      patterns = PatternSet(Term).select(RATING_SELECTOR, spec) do |_, env|
         # TODO:
         # if M1.source?(normp)
         #   raise SpecError.new("source patterns disallowed in rating")
@@ -702,6 +702,7 @@ module Ww::D7
   # :nodoc:
   defcase Spec,
     proposals : Ruleset,
+    propose : (Term -> Term?),
     splits : Ruleset,
     split_cache : Alloy::ExpansionCache,
     mixR : Rewriter,
@@ -714,13 +715,14 @@ module Ww::D7
   # Parses *spec* into an internal D7 spec object.
   #
   # Raises `SpecError` if an error is found in *spec*.
-  def spec(spec : Term) : Spec
+  def spec(spec : Term, &propose : Term -> Term?) : Spec
     ruledbR = backmapR(Ruleset.select(ML.term(%{[backmap pattern_ backspec_]}), spec))
 
     Spec.new(
       proposals: Ruleset.select(ML.term(%{[rule (propose pattern_*) template_]}), spec),
+      propose: propose,
       splits: Ruleset.select(ML.term(%{[rule (split pattern_) template_]}), spec),
-      split_cache: SyncCache(Term, Alloy::Expansion).new(1024, preallocate: true),
+      split_cache: SyncCache(Term, Alloy::Ok).new(1024, preallocate: true),
       mixR: ruledbR,
       fixR: ruledbR,
       damageR: ruledbR,
@@ -730,29 +732,71 @@ module Ww::D7
     )
   end
 
+  # TODO: extract to call sites
+  def spec(spec : Term)
+    spec(spec) do |query|
+      Term.case(query) do
+        givenpi %{cycle ([fill (@a_ to @b_) body_] ⍊ m: [fill ((%'edge var_symbol) to _) _]) (%all (%value a (some x_)) (%value b none))} do
+          value = Alloy.render(Term.entries({var, x}), body)
+
+          Term.of(:proposal, b, {:some, value})
+        end
+
+        givenpi %{([(%any map latest) (@a_ to @b_) body_] ⍊ m: [(%any map latest) ((%'edge var_symbol) to _) _]) (%value a (some x_)) (%-value b)} do
+          value = Alloy.render(Term.entries({var, x}), body)
+
+          Term.of(:proposal, b, {:some, value})
+        end
+
+        givenpi %{[[map (@a_ pattern_ to @b_) body_]] (%value a (some x_)) (%-value b)} do
+          # TODO: if pattern is a source pattern (implement M1.source?(normp)), emit
+          # a possibly empty list with `body` for each match env
+          unless env = M1.match?(pattern, x)
+            next Term.of(:proposal, b, :none)
+          end
+
+          value = Alloy.render(env, body)
+
+          Term.of(:proposal, b, {:some, value})
+        end
+
+        givenpi %{[[latest (@a_ pattern_ to @b_) body_]] (%value a (some x_)) (%-value b)} do
+          # TODO: if pattern is a source pattern (implement M1.source?(normp)), emit
+          # a possibly empty list with `body` for each match env
+          next unless env = M1.match?(pattern, x)
+
+          value = Alloy.render(env, body)
+
+          Term.of(:proposal, b, {:some, value})
+        end
+
+        givenpi %{([ramp (@a_ to @b_) body_] ⍊ m: [ramp ((%'edge var_symbol) to _) _]) (%value a (some x_)) (%-value b)} do
+          value = Alloy.render(Term.entries({var, x}), body)
+
+          Term.of(:proposals,
+            Term.of(:proposal, a, :none),
+            Term.of(:proposal, b, {:some, value}))
+        end
+
+        givenpi %{[[ramp (@a_ pattern_ to @b_) body_]] (%value a (some x_)) (%-value b)} do
+          # TODO: if pattern is a source pattern (implement M1.source?(normp)), emit
+          # a possibly empty list with `body` for each match env
+          next unless env = M1.match?(pattern, x)
+
+          value = Alloy.render(env, body)
+
+          Term.of(:proposals,
+            Term.of(:proposal, a, :none),
+            Term.of(:proposal, b, {:some, value}))
+        end
+
+        otherwise { }
+      end
+    end
+  end
+
   private def backmapR(ruleset : Ruleset)
-    onceR = callR(PRIMITIVES)
-
-    # First rewrite entries, then rewrite self.
-    set, exhevalR = recR
-    set.call chainR(entriesR(exhevalR), onceR)
-
-    evalR = dfsR(
-      switchR(
-        { %[($ rewritee_)], exhevalR },
-        { %[($once rewritee_)], onceR },
-      )
-    )
-
-    refR = dfsR(
-      switchR(
-        { %[($my rewritee_)], envR(Term.of(:"$my")) },
-        { %[($up rewritee_)], choiceR(envR(Term.of(:"$up")), envR(Term.of(:"$my"))) },
-        { %[($down rewritee_)], choiceR(envR(Term.of(:"$down")), envR(Term.of(:"$my"))) },
-      )
-    )
-
-    rulesetR(ruleset, noR, chainR(refR, evalR), noR)
+    rulesetR(ruleset, noR, backmapR, noR)
   end
 
   # Replacement function for `walk`. It is called with a node context followed
@@ -780,8 +824,8 @@ module Ww::D7
     # Rep::Some is currently 16 bytes. 16 * 16 = 256 bytes of replacement
     # cache. Plus 16 * 4 = 64 bytes of indices. 320 bytes of stack memory
     # on these in total.
-    reps = StackArray(Rep::Some, 16).new
-    indices = StackArray(Int32, 16).new
+    reps = HybridArray(Rep::Some, 16).new
+    indices = HybridArray(Int32, 16).new
 
     all_assigns = true
 
@@ -864,7 +908,7 @@ module Ww::D7
   # its *instance*. Nodes that have no constituents (atomic) are
   # returned as-is.
   private def split(spec : Spec, node : Term) : Term
-    Alloy.response?(spec.splits, node, cache: spec.split_cache) || node
+    Alloy.respond?(spec.splits, node, cache: spec.split_cache) || node
   end
 
   # Instance was not modified, there is no reason node should get modified.
@@ -1048,71 +1092,11 @@ module Ww::D7
   end
 
   private def infer(spec : Spec, query : Term, workspace : Term::Dict) : Term::Dict
-    unless proposal = Alloy.response?(spec.proposals, query) || proposal?(query)
+    unless proposal = Alloy.respond?(spec.proposals, query) || spec.propose.call(query)
       return workspace
     end
 
     accept(workspace, proposal)
-  end
-
-  private def proposal?(query : Term) : Term?
-    Term.case(query) do
-      givenpi %{cycle ([fill (@a_ to @b_) body_] ⍊ m: [fill ((%'edge var_symbol) to _) _]) (%all (%value a (some x_)) (%value b none))} do
-        value = Alloy.render(Term.entries({var, x}), body)
-
-        Term.of(:proposal, b, {:some, value})
-      end
-
-      givenpi %{([(%any map latest) (@a_ to @b_) body_] ⍊ m: [(%any map latest) ((%'edge var_symbol) to _) _]) (%value a (some x_)) (%-value b)} do
-        value = Alloy.render(Term.entries({var, x}), body)
-
-        Term.of(:proposal, b, {:some, value})
-      end
-
-      givenpi %{[[map (@a_ pattern_ to @b_) body_]] (%value a (some x_)) (%-value b)} do
-        # TODO: if pattern is a source pattern (implement M1.source?(normp)), emit
-        # a possibly empty list with `body` for each match env
-        unless env = M1.match?(pattern, x)
-          next Term.of(:proposal, b, :none)
-        end
-
-        value = Alloy.render(env, body)
-
-        Term.of(:proposal, b, {:some, value})
-      end
-
-      givenpi %{[[latest (@a_ pattern_ to @b_) body_]] (%value a (some x_)) (%-value b)} do
-        # TODO: if pattern is a source pattern (implement M1.source?(normp)), emit
-        # a possibly empty list with `body` for each match env
-        next unless env = M1.match?(pattern, x)
-
-        value = Alloy.render(env, body)
-
-        Term.of(:proposal, b, {:some, value})
-      end
-
-      givenpi %{([ramp (@a_ to @b_) body_] ⍊ m: [ramp ((%'edge var_symbol) to _) _]) (%value a (some x_)) (%-value b)} do
-        value = Alloy.render(Term.entries({var, x}), body)
-
-        Term.of(:proposals,
-          Term.of(:proposal, a, :none),
-          Term.of(:proposal, b, {:some, value}))
-      end
-
-      givenpi %{[[ramp (@a_ pattern_ to @b_) body_]] (%value a (some x_)) (%-value b)} do
-        # TODO: if pattern is a source pattern (implement M1.source?(normp)), emit
-        # a possibly empty list with `body` for each match env
-        next unless env = M1.match?(pattern, x)
-
-        value = Alloy.render(env, body)
-
-        Term.of(:proposals,
-          Term.of(:proposal, a, :none),
-          Term.of(:proposal, b, {:some, value}))
-      end
-
-      otherwise { }
-    end
   end
 
   private def accept(workspace : Term::Dict, proposal : Term) : Term::Dict

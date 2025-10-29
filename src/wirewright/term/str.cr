@@ -38,6 +38,10 @@ module Ww
       @value
     end
 
+    def to?(type : Path.class) : Path
+      Path[@value]
+    end
+
     # Returns the number of characters in this string.
     def charcount : Int32
       @value.size
