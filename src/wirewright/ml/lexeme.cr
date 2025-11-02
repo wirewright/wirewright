@@ -125,6 +125,7 @@ module Ww::ML
         Diamond
         DiamondUnderscore
         Times
+        UnderscoreQuestion
       end
     end
 

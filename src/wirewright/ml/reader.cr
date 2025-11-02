@@ -1163,6 +1163,18 @@ module Ww::ML
          ysr.empty? ? r : ysr.append(r == Term[:_] ? :"_*" : {:"%group", r, :"_*"})}]
     end
 
+    UNDERSCORE_QUESTION = Term.of(:"%past", :_, min: 0, max: 1)
+
+    # Pure shorthands like `_?`.
+    private def shorthand : Π
+      case
+      when past?(:underscore_question)
+        ok(UNDERSCORE_QUESTION)
+      else
+        refusal("expected a shorthand", ahead.text.before_begin)
+      end
+    end
+
     private def term : Π
       choice(
         dict,
@@ -1176,6 +1188,7 @@ module Ww::ML
         mset,
         keypool,
         split,
+        shorthand,
       )
     end
 

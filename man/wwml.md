@@ -822,6 +822,10 @@ can for instance append or prepend to other shorthands, especially using the sub
 - `{+¦ <term list>}` is the same as writing `(%layer _ {<each term from term list>: true})`
 - `{-¦ <term list>}` is the same as writing `(%layer _ {<each term from term list>: false})`
 
+#### Shorthands for `%past`
+
+- `_?` is the same as writing `(%past _ min: 0 max: 1)`.
+
 #### Selectors
 
 *Selectors* are a group of syntactic shorthands for matching dictionary pairspart.

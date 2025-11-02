@@ -975,3 +975,10 @@
   (ml
     (- ⎡hello ⏏100⎤ ⎡unexpected input⎤)
     (doc- ⎡hello⏏) world⎤ ⎡unexpected input⎤)))
+
+;; _? shorthand
+(ml
+  (= ⎡_?⎤ ⎡(%past _ min: 0 max: 1)⎤)
+  (= ⎡(+ _?)⎤ ⎡(+ (%past _ min: 0 max: 1))⎤)
+  (+ ⎡(+ _ ?x)⎤ (+ _symbol _symbol))
+  (+ ⎡(+ _?x)⎤ ⎡(+ x_?)⎤ (+ _symbol)))

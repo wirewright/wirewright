@@ -903,6 +903,10 @@ module Ww::ML::Lexeme
         else
           return nows(";") { token(:semicolon) }
         end
+      when past?('_')
+        if past?('?') && !ahead.symbolic?
+          return token(:underscore_question)
+        end
       when ahead == '⟦', ahead == '⸨'
         return template
       when eoi?
@@ -922,7 +926,7 @@ module Ww::ML::Lexeme
       # Make sure horizontal whitespace is not included in text.
       hspaces
 
-      if ahead.symbolic_strong? && (lexeme = txn? { symbolic })
+      if ahead.symbolic_strong_letter? && (lexeme = txn? { symbolic })
         return lexeme
       end
 
