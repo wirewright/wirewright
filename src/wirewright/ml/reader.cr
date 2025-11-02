@@ -368,10 +368,6 @@ module Ww::ML
         end
       end
 
-      unless Term::Sym.valid?(name)
-        return failure("symbol `#{name}` has no representation in WwML", prefix.before_begin)
-      end
-
       ok(Term.of(Term::Sym.new(name)))
     end
 

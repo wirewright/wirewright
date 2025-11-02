@@ -218,16 +218,63 @@ module Ww::ML
     end
   end
 
-  # Returns `true` if a symbol with the given *name* has a representation in WwML.
-  # Returns `false` otherwise.
-  def can_represent_symbol?(name : String) : Bool
+  # Returns `true` if a symbol with the given *name* must be represented without using
+  # the raw symbol literal, `⸍...⸝`. Returns `false` if the raw string literal must be used.
+  def symbol_bare?(name : String) : Bool
+    # NOTE: Unfortunately, in WwML, symbols are *very* ambiguous in terms of parsing.
+    # So we have to resort to a series of fast paths which are hit maybe in 90% of
+    # the cases, if not more; followed by a general slow path: parse *name* and see
+    # if the result is a symbol with the same name.
+
     case name
+    when .empty?
+      false
     when "true", "false",
          .prefixed_by?('\''),
          .starts_with?('0'..'9')
       false
-    else
+    when "$", "%", "+", "-", "^", "<", ">", "="
       true
+    when "%-", "$my", "$up", "$down", "$once"
+      true
+    else
+      reader = Char::Reader.new(name)
+
+      # If it starts with symbolic strong, use bare.
+      if Rune.new(reader.current_char).symbolic_strong?
+        if reader.all? { |chr| Rune.new(chr).symbolic? }
+          return true
+        end
+
+        reader.pos = 0
+      end
+
+      # If it starts with '%' and consists of symbolic strong, use bare.
+      if reader.current_char == '%'
+        reader.next_char
+        if reader.all? { |chr| Rune.new(chr).symbolic_strong? }
+          return true
+        end
+
+        reader.pos = 0
+      end
+
+      # Slow path.
+      begin
+        atoms = Lexeme.atoms(name)
+      rescue e : SyntaxError
+        # Lexical error, can't go bare.
+        return false
+      end
+
+      reader = Reader.new(atoms, addons: Addons.recommended)
+
+      case π = reader.toplevel(name, reader.item)
+      in Reader::Parseout::Ok
+        π.term.type.symbol? && π.term.to(String) == name
+      in Reader::Parseout::Err
+        false
+      end
     end
   end
 end

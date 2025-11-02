@@ -631,7 +631,7 @@
   (= ⎡(foo ◇_) => ◇⎤ ⎡(foo cdegcXCbgcnezdJ_) => cdegcXCbgcnezdJ⎤)
   (= ⎡(foo ◇_: false) => {◇: true}⎤ ⎡(foo dbLbycYEbkcweV_: false) => (dbLbycYEbkcweV: true)⎤)
   (= ⎡{¦ flag x_ ◇_} <> {x: $'(+ →x 1), ◇: true}⎤
-     ⎡{¦ flag x_ jtNbBdeTbKdw_} <> {x: $'(+ →x 1), jtNbBdeTbKdw: true}⎤)
+     ⎡{¦ flag x_ bKdwbBdeTbLdxbD_} <> {x: $'(+ →x 1), bKdwbBdeTbLdxbD: true}⎤)
   (- ⎡(a ⏏◇⏏ b c d)⎤ ⎡cannot use `◇` outside of a rule⎤)
   (- ⎡(a ⏏◇_⏏ b c d)⎤ ⎡cannot use `◇_` outside of a rule⎤))
 
@@ -639,9 +639,9 @@
   (doc= ⎡(foo ¦ _ v_number -▢_) <> {v: $'(+ →v 1), ▢: true}
          (foo ¦ _ v_number -▢_) <> {v: $'(* →v 2), ▢: true}
          (foo ¦ _ v_number -▢_) <> {v: $'(/ →v 3), ▢: true}⎤
-        ⎡(foo ¦ _ v_number -PbDdjbdchepdobk_) <> {v: $'(+ →v 1), PbDdjbdchepdobk: true}
-         (foo ¦ _ v_number -PbDdjbdchepdobk_) <> {v: $'(* →v 2), PbDdjbdchepdobk: true}
-         (foo ¦ _ v_number -PbDdjbdchepdobk_) <> {v: $'(/ →v 3), PbDdjbdchepdobk: true}⎤)
+        ⎡(foo ¦ _ v_number -bocCfheZeGdZcFfo_) <> {v: $'(+ →v 1), bocCfheZeGdZcFfo: true}
+         (foo ¦ _ v_number -bocCfheZeGdZcFfo_) <> {v: $'(* →v 2), bocCfheZeGdZcFfo: true}
+         (foo ¦ _ v_number -bocCfheZeGdZcFfo_) <> {v: $'(/ →v 3), bocCfheZeGdZcFfo: true}⎤)
   ;; Multiple rule blocks
   (doc= ⎡(foo ◇ ▢) <> {▢: true}
          (foo ◇ bar ▢) <> {▢: true}
@@ -778,11 +778,11 @@
   (doc= ⎡qux-x⫽y-foo⎤ ⎡qux-x-foo qux-y-foo⎤)
   (doc= ⎡qux-x⫽y⫽z-foo⎤ ⎡qux-x-foo qux-y-foo qux-z-foo⎤)
   (doc= ⎡qux-⸨foo,bar,baz⸩-foo⎤ ⎡qux-foo-foo qux-bar-foo qux-baz-foo⎤)
-  (doc- ⎡⸨⏏tru,fals⸩e⎤ ⎡symbol `true` has no representation in WwML⎤)
-  (doc- ⎡⸨⏏fals,tru⸩e⎤ ⎡symbol `false` has no representation in WwML⎤)
-  (doc- ⎡⸨cu,⏏tru⸩e⎤ ⎡symbol `true` has no representation in WwML⎤)
-  (doc- ⎡⸨⏏1,2,3⸩bar⎤ ⎡symbol `1bar` has no representation in WwML⎤)
-  (doc- ⎡⸨a,b,⏏3⸩-bar⎤ ⎡symbol `3-bar` has no representation in WwML⎤))
+  (doc= ⎡⸨tru,fals⸩e⎤ ⎡⸍true⸝ ⸍false⸝⎤)
+  (doc= ⎡⸨fals,tru⸩e⎤ ⎡⸍false⸝ ⸍true⸝⎤)
+  (doc= ⎡⸨cu,tru⸩e⎤ ⎡⸍cue⸝ ⸍true⸝⎤)
+  (doc= ⎡⸨1,2,3⸩bar⎤ ⎡⸍1bar⸝ ⸍2bar⸝ ⸍3bar⸝⎤)
+  (doc= ⎡⸨a,b,3⸩-bar⎤ ⎡a-bar b-bar ⸍3-bar⸝⎤))
 
 ;; Rule expansion
 (ml
@@ -982,3 +982,17 @@
   (= ⎡(+ _?)⎤ ⎡(+ (%past _ min: 0 max: 1))⎤)
   (+ ⎡(+ _ ?x)⎤ (+ _symbol _symbol))
   (+ ⎡(+ _?x)⎤ ⎡(+ x_?)⎤ (+ _symbol)))
+
+;; Raw symbol literal
+(ml
+  (= ⎡hello⎤ ⎡⸍hello⸝⎤)
+  (+ ⎡⸍⸝⎤ ⎡⸍123⸝⎤ ⎡⸍:⸝⎤ ⎡⸍hello: world⸝⎤ ⎡⸍true⸝⎤ ⎡⸍false⸝⎤
+     ⎡⸍"John Doe was here"⸝⎤
+     ⎡⸍⸍abc⸝ (+ def) ⸍qux⸝⎡q⎤⸝⎤
+     ⎡⸍   ⸝⎤
+     ⎡⸍
+     ⸝⎤
+     _symbol)
+  (- ⎡⸍⏏⎤ ⎡improperly terminated raw symbol literal⎤)
+  (- ⎡⸍hello ⸍⸝⏏⎤ ⎡improperly terminated raw symbol literal⎤))
+

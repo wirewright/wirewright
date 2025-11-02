@@ -64,8 +64,8 @@ module Ww::ML::Formatter
         end
       end
 
-      matchpi %((%any° _number _string _boolean _symbol)) do
-        pp.text(term)
+      otherwise do
+        pp.text(ML.compact(term))
       end
     end
   end
@@ -111,6 +111,17 @@ module Ww::ML
   # :nodoc:
   def compact(io : IO, term : ITerm) : Nil
     term.inspect(io)
+  end
+
+  # :nodoc:
+  def compact(io : IO, term : Term::Sym) : Nil
+    name = term.to(String)
+
+    if ML.symbol_bare?(name)
+      io << name
+    else
+      io << "⸍" << name << "⸝"
+    end
   end
 
   # Appends the compact WwML representation of *term* to *io*.

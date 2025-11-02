@@ -344,12 +344,6 @@ module Ww::Soma::Microfold::Parse
   #
   # Reports any issues to *issues*.
   def symbol(src : StringView, issues : Issue::Sink) : Term::Sym | Err
-    id = src.to_s
-    unless Term::Sym.valid?(id)
-      issues.minor("`#{id}` is not a valid symbol")
-      return failure
-    end
-
-    Term::Sym.new(id)
+    Term::Sym.new(src.to_s)
   end
 end

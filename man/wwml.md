@@ -115,8 +115,10 @@ own complications.
 | `▢`       |                   | <kbd>Compose</kbd> + <kbd>(</kbd> + <kbd>)</kbd>              | **no**                               |
 | `⟅`       |                   | <kbd>Compose</kbd> + <kbd>*</kbd> + <kbd>(</kbd>              | **no**                               |
 | `⟆`       |                   | <kbd>Compose</kbd> + <kbd>*</kbd> + <kbd>)</kbd>              | **no**                               |
-| `↢`       |                   | <kbd>Compose</kbd> + <kbd><</kbd> + <kbd>\|</kbd>              | **no**                               |
-| `↣`       |                   | <kbd>Compose</kbd> + <kbd>\|</kbd> + <kbd>></kbd>              | **no**                               |
+| `↢`       |                   | <kbd>Compose</kbd> + <kbd><</kbd> + <kbd>\|</kbd>             | **no**                               |
+| `↣`       |                   | <kbd>Compose</kbd> + <kbd>\|</kbd> + <kbd>></kbd>             | **no**                               |
+| `⸍`       |                   | <kbd>Compose</kbd> + <kbd>^</kbd> + <kbd>/</kbd>              | **no**
+| `⸝`       |                   | <kbd>Compose</kbd> + <kbd>_</kbd> + <kbd>/</kbd>              | **no**
 
 
 ### XCompose
@@ -152,6 +154,8 @@ Here are the XCompose mappings for the table above. This should be put in `.XCom
 <Multi_key> <asterisk> <parenright> : "⟆"
 <Multi_key> <less> <bar> : "↢"
 <Multi_key> <bar> <greater> : "↣"
+<Multi_key> <asciicircum> <slash> : "⸍"
+<Multi_key> <underscore> <slash> : "⸝"
 
 # Used sometimes in docs and comments. Not used in WwML.
 <Multi_key> <asciicircum> <asciicircum> : "⏏"
@@ -392,8 +396,7 @@ false ;; boolean false
 
 Symbol terms are represented by combinations of one or more characters from
 the set `0-9_'!$%&*+\-\^./#<=>?~|∞°∈⊆⊂∪∩\`, union Unicode letters (Unicode General Category L).
-The characters in this set are called *symbolic*. Symbol terms that contain
-characters outside of this set cannot be represented with WwML.
+The characters in this set are called *symbolic*.
 
 ```wwml
 abc
@@ -422,6 +425,33 @@ show up in practice outside of Wirewright internals.
   the successor of `x'` and so on.
 - Symbols can start with `+`, `-`, `^`, and `$`. They are simultaneously prefix operators.
   They are known internally as *ambiguous prefixes*.
+
+### Raw symbol literal
+
+Use the raw symbol literal to represent terms that contain characters outside of the set
+of symbolic characters, or to guarantee symbol treatment in case the symbol is read
+ambiguously as a prefix followed by symbol etc.
+
+```wwml
+⸍hello⸝ ;; is the same as writing: hello
+⸍123⸝   ;; symbol 123, not number
+⸍%'qux⸝ ;; symbol %'qux, not prefix %' followed by symbol qux
+```
+
+You can use any character in the raw symbol literal, including properly
+matched ⸍⸝:
+
+```wwml
+⸍⸍nested⸝ raw symbol brackets and
+newline⸝
+
+⸍(qux)⸝
+⸍a: b⸝
+⸍   ⸝
+⸍⸝
+```
+
+These are all treated as symbols if written using the raw symbol literal.
 
 ## Number terms
 

@@ -144,6 +144,7 @@ module Ww::ML
         Number
         Boolean
         RawString
+        RawSymbol
         Substring
       end
     end

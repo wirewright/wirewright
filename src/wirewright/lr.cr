@@ -307,10 +307,6 @@ module Ww::LR
       when {:base, "chrcat16"}
         @state = :chrcat16
       when {:sym, _}
-        unless Term::Sym.valid?(command)
-          raise DecodeError.new("sym: invalid symbol")
-        end
-
         @stack << Term.of(Term::Sym.new(command))
         @state = :base
       when {:int, _}

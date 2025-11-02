@@ -503,8 +503,8 @@ module Ww::ML::Lexeme
       unreachable("subscript must be called with at least one subscript rune")
     end
 
-    private def raw_string : TxnResponse
-      unless past?('⎡')
+    private def raw(lparen : Char, rparen : Char, *, caption : String, & : StringView -> TxnResponse) : TxnResponse
+      unless past?(lparen)
         return revert
       end
 
@@ -512,14 +512,14 @@ module Ww::ML::Lexeme
         nesting = 1
 
         loop do
-          unless skip { |rune| !rune.in?('⎡', '⎤') }
-            raise "improperly terminated raw string literal"
+          unless skip { |rune| !rune.in?(lparen, rparen) }
+            raise "improperly terminated #{caption}"
           end
 
           case
-          when past?('⎡')
+          when past?(lparen)
             nesting += 1
-          when ahead == '⎤'
+          when ahead == rparen
             nesting -= 1
             break if nesting.zero?
             forward
@@ -529,11 +529,21 @@ module Ww::ML::Lexeme
         end
       end
 
-      unless past?('⎤')
-        unreachable
-      end
+      assert past?(rparen)
 
-      ready(Lexeme::Datum.new(:raw_string, Term.of(text), text))
+      yield text
+    end
+
+    private def raw_string : TxnResponse
+      raw('⎡', '⎤', caption: "raw string literal") do |text|
+        ready(Lexeme::Datum.new(:raw_string, Term.of(text), text))
+      end
+    end
+
+    private def raw_symbol : TxnResponse
+      raw('⸍', '⸝', caption: "raw symbol literal") do |text|
+        ready(Lexeme::Datum.new(:raw_symbol, Term.of(Term::Sym.new(text.to_s)), text))
+      end
     end
 
     private def string : TxnResponse
@@ -934,7 +944,7 @@ module Ww::ML::Lexeme
         return lexeme
       end
 
-      if lexeme = choice?(symbolic, vspace, string, raw_string, superscript, subscript)
+      if lexeme = choice?(symbolic, vspace, string, raw_string, raw_symbol, superscript, subscript)
         return lexeme
       end
     end

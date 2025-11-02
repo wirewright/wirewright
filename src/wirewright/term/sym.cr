@@ -68,23 +68,19 @@ module Ww
 
     # Ref used for symbols such as `_`, `_number`, `_string`, etc. that have
     # an empty name component.
-    EMPTY_BLANK_REF = 0u32
+    EMPTY_NAME_REF = 0u32
 
     # :nodoc:
     def self.encode(bytes : Bytes, *, blank : Bool) : UInt32
       if bytes.empty?
-        unless blank
-          raise ArgumentError.new("cannot encode empty nonblank")
-        end
-
         # Empty blank is always unambiguous!
-        return EMPTY_BLANK_REF
+        return EMPTY_NAME_REF
       end
 
       @@encode.put_if_absent(bytes) do
         ref = @@decode.write do |ary|
           ary << bytes
-          # Store ref + 1 to avoid ref = 0 which we use for EMPTY_BLANK_REF.
+          # Store ref + 1 to avoid ref = 0 which we use for EMPTY_NAME_REF.
           ary.size.to_u32 << 1
         end
 
@@ -102,7 +98,7 @@ module Ww
 
     # :nodoc:
     def self.decode(ref : UInt32) : Bytes
-      if ref == EMPTY_BLANK_REF
+      if ref == EMPTY_NAME_REF
         return Bytes.empty
       end
 
@@ -158,7 +154,7 @@ module Ww
     # Constructs a symbol term from the given *source* string.
     def self.new(source : String) : Sym
       if source.empty?
-        raise ArgumentError.new
+        return new(EMPTY_NAME_REF, type: TermType::Any, blank: false, poly: false, named: true)
       end
 
       # Boo!
@@ -321,26 +317,6 @@ module Ww
 
     def self.byte_end : Sym
       new("(byte_end)")
-    end
-
-    # Validates a symbol *name*. If this method returns `true`, you are safe to
-    # call `new` with *name*; safe not in the sense of memory safety etc., but
-    # in the sense of being able to give the symbol to any subsystem of Wirewright
-    # and expect it to work, pretty-print, etc.
-    def self.valid?(name : String) : Bool
-      if name.empty?
-        return false
-      end
-
-      name.each_char do |chr|
-        rune = ML::Rune.new(chr)
-
-        unless rune.symbolic?
-          return false
-        end
-      end
-
-      ML.can_represent_symbol?(name)
     end
 
     private def ref : UInt32
