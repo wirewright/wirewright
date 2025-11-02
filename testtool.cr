@@ -336,7 +336,7 @@ class TestHarness
       markup = Ω.col(
         complaint_list(errs),
         Ω.col(
-          Component.fatal(Ω.text("Ran #{oks + errs.size} test case(s) in #{duration.humanize}.")),
+          Component.fatal(Ω.text("Ran #{oks + errs.size} assertion(s) in #{duration.humanize}.")),
           Ω.padding(Ω.text("Registered #{errs.size} unexpected result(s)."), pl: 2),
         ),
         gap: 1
