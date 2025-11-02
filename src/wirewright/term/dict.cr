@@ -573,6 +573,36 @@ module Ww
       @items.each { |entry| yield entry.value, entry.index }
     end
 
+    # :nodoc:
+    #
+    # Ratio of itemsize to range size to begin scanning the dict instead of looking
+    # up when iterating over items in range.
+    SCAN_THRESHOLD = 0.6
+
+    def each_item_with_index(*, within range : Range(Int32, Int32), & : Term, Int32 ->) : Nil
+      assert range.exclusive?
+
+      if range.empty?
+        return
+      end
+
+      assert range.subrange_of?(0...itemsize)
+
+      if itemsize / range.size >= SCAN_THRESHOLD
+        # Better to iterate over dict in memory-order and check if item is in range.
+        each_item_with_index do |item, index|
+          next unless index.in?(range)
+          yield item, index
+        end
+      else
+        # Better to iterate over range and lookup each item.
+        range.each do |index|
+          assert item = item_at?(index)
+          yield item, index
+        end
+      end
+    end
+
     def each_item_unordered(& : Term ->) : Nil
       @items.each { |entry| yield entry.value }
     end
