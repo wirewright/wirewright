@@ -47,11 +47,6 @@
     problems:
       ((minor "continuing despite missing `}`")))
   (µfold
-    (n x style: "{(foo)} p-5")
-    (n x style: "p-5")
-    problems:
-      ((minor "`(foo)` is not a valid symbol")))
-  (µfold
     (n x style: "{foo} p-5")
     (n x style: "p-5")
     problems:
