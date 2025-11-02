@@ -1024,7 +1024,7 @@ module Ww
     alias Action = Absent.class
 
     def self.morph(term root : Term::Dict, keypath : Indexable, & : Term -> Term | Action) : Term::Dict
-      stack = ThinArray({Term::Dict, Term}).new
+      stack = [] of {Term::Dict, Term}
       tip = Term.of(root)
 
       keypath.each do |key|
@@ -1131,7 +1131,7 @@ module Ww
   # Misc
 
   struct Term
-    # WARNING: keypaths are contained within a mutable `ThinArray` for memory
+    # WARNING: keypaths are contained within a mutable `Array` for memory
     # efficiency; you do not own the stack, for you the stack is read-only! Do not
     # mutate the key path stack, instead, make a copy of it (`dup`) and mutate
     # your copy instead. Or if you know what you're doing, make sure to return
@@ -1171,10 +1171,10 @@ module Ww
 
     # Traversal proceeds left-to-right, parent before children. *root* is
     # yielded first.
-    def self.each_keypath_and_node(root : Term, & : ThinArray(Term), Term -> Bool) : Nil
+    def self.each_keypath_and_node(root : Term, & : Array(Term), Term -> Bool) : Nil
       ns = HybridArray(Int32, 32).new
       nodes = HybridArray(Term, 32){root}
-      keypath = ThinArray(Term).new
+      keypath = [] of Term
 
       while node = nodes.pop?
         descend = yield keypath, node
@@ -1214,9 +1214,9 @@ module Ww
     #
     # Traversal proceeds left-to-right, parent before children. *root* is
     # yielded first.
-    def self.each_keypath_and_itemnode(root : Term, & : ThinArray(Term), Term -> Bool) : Nil
-      nodes = ThinArray{root}
-      keypath = ThinArray(Term).new
+    def self.each_keypath_and_itemnode(root : Term, & : Array(Term), Term -> Bool) : Nil
+      nodes = [root]
+      keypath = [] of Term
 
       while node = nodes.pop?
         descend = yield keypath, node
@@ -1242,7 +1242,7 @@ module Ww
       end
     end
 
-    def self.each_keypath_and_leaf(root : Term, & : ThinArray(Term), Term -> Bool) : Nil
+    def self.each_keypath_and_leaf(root : Term, & : Array(Term), Term -> Bool) : Nil
       each_keypath_and_node(root) do |keypath, node|
         if (dict = node.as_d?) && !dict.empty?
           next true # descend
@@ -1255,7 +1255,7 @@ module Ww
       end
     end
 
-    def self.each_keypath_and_item_leaf(root : Term, & : ThinArray(Term), Term -> Bool) : Nil
+    def self.each_keypath_and_item_leaf(root : Term, & : Array(Term), Term -> Bool) : Nil
       each_keypath_and_itemnode(root) do |keypath, node|
         if (dict = node.as_d?) && !dict.empty?
           next true # descend
@@ -1270,9 +1270,9 @@ module Ww
 
     # Traversal proceeds left-to-right, children before parents. *root* is
     # yielded last.
-    def self.each_keypath_bottom_up(root : Term, & : ThinArray(Term) ->) : Nil
-      nodes = ThinArray{root}
-      keypath = ThinArray(Term).new
+    def self.each_keypath_bottom_up(root : Term, & : Array(Term) ->) : Nil
+      nodes = [root]
+      keypath = [] of Term
 
       while node = nodes.pop?
         # Descend
@@ -1301,8 +1301,8 @@ module Ww
       end
     end
 
-    def self.ancestors(root : Term, keypath : Indexable(Term)) : ThinArray(Term)
-      ancestors = ThinArray(Term).new(keypath.size - 1)
+    def self.ancestors(root : Term, keypath : Indexable(Term)) : Array(Term)
+      ancestors = Array(Term).new(keypath.size - 1)
       parent = root
 
       keypath.each do |key|
@@ -1376,7 +1376,7 @@ module Ww
     def self.each_leaf_thorough(term : Term, & : Term ->) : Nil
       state_initial = -1 # const
 
-      stack = ThinArray{ {state: state_initial, term: term} }
+      stack = [{state: state_initial, term: term}]
 
       while rec = stack.pop?
         case rec[:state]

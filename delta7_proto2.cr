@@ -3,8 +3,8 @@ require "./baz5"
 require "./baz5_editor"
 require "./suggestion_synthesis"
 
-# TODO: "arbitrary keypath" ThinArray(Int32) must be called "docpath" (as in "path into a document")
-# TODO: nodepath ThinArray(Int32) is emitted by successor? and is "path into a document that is proven to point to a node"
+# TODO: "arbitrary keypath" Array(Int32) must be called "docpath" (as in "path into a document")
+# TODO: nodepath Array(Int32) is emitted by successor? and is "path into a document that is proven to point to a node"
 module Rhodium
   extend self
 
@@ -40,7 +40,7 @@ module Rhodium
   # node or `nil` if the keypath is invalid. This does not take into account
   # the passability of nodes (use `passable?` to check if the keypath is
   # passable beforehand if you need that).
-  def follow?(document : Term::Dict, keypath : ThinArray(Int32)) : Term?
+  def follow?(document : Term::Dict, keypath : Array(Int32)) : Term?
     node = Term.of(document)
 
     keypath.each do |step|
@@ -52,7 +52,7 @@ module Rhodium
   end
 
   # Same as `follow?`, but raises `KeypathError` if *keypath* is invalid.
-  def follow(document : Term::Dict, keypath : ThinArray(Int32)) : Term
+  def follow(document : Term::Dict, keypath : Array(Int32)) : Term
     follow?(document, keypath) || raise KeypathError.new
   end
 
@@ -88,7 +88,7 @@ module Rhodium
   # that is, a keypath to a valid nodes. The terms are used somewhat interchangeably
   # throughout the code, but in theory there is a distinction. A *keypath* is
   # an arbitrary keypath whereas a *nodepath* points to a node exclusively.
-  def successor?(document : Term::Dict, keypath : ThinArray(Int32), *, descend : Bool = true, only_active : Bool = true) : Bool
+  def successor?(document : Term::Dict, keypath : Array(Int32), *, descend : Bool = true, only_active : Bool = true) : Bool
     return false unless focus = follow?(document, keypath)
 
     # We're at the root.
@@ -153,7 +153,7 @@ module Rhodium
   #
   # NOTE: this does not mean that the pointed-to node is a valid node! Check
   # that yourself if you care.
-  def passable?(document : Term::Dict, keypath : ThinArray(Int32)) : Bool
+  def passable?(document : Term::Dict, keypath : Array(Int32)) : Bool
     node = Term.of(document)
 
     keypath.each do |step|
@@ -173,14 +173,14 @@ module Rhodium
   end
 
   # Returns `true` if the node pointed to by *nodepath* has an observer parent.
-  def observed?(document : Term::Dict, nodepath : ThinArray(Int32)) : Bool
+  def observed?(document : Term::Dict, nodepath : Array(Int32)) : Bool
     !!enclosing?(document, nodepath) { |parent| observer?(Term.of(parent)) }
   end
 
   # Rewrites the term at an arbitrary *keypath* into *document* using the block.
   # Returns the rewritten copy of *document*, or `nil` if *keypath* is invalid.
-  def rewrite?(document : Term::Dict, keypath : ThinArray(Int32), & : Term -> Rewrite::Any) : Term::Dict?
-    stack = ThinArray(Term::Dict).new
+  def rewrite?(document : Term::Dict, keypath : Array(Int32), & : Term -> Rewrite::Any) : Term::Dict?
+    stack = [] of Term::Dict
     tip = Term.of(document)
 
     keypath.each do |step|
@@ -225,24 +225,24 @@ module Rhodium
   end
 
   # Same as `rewrite?`, but raises `KeypathError` if *keypath* is invalid.
-  def rewrite(document : Term::Dict, keypath : ThinArray(Int32), & : Term -> Rewrite::Any) : Term::Dict
+  def rewrite(document : Term::Dict, keypath : Array(Int32), & : Term -> Rewrite::Any) : Term::Dict
     rewrite?(document, keypath) { |term| yield term } || raise KeypathError.new
   end
 
   # Shorthand for `rewrite` that does not depend on the term being rewritten.
-  def rewrite(document : Term::Dict, keypath : ThinArray(Int32), rewrite : Rewrite::Any) : Term::Dict
+  def rewrite(document : Term::Dict, keypath : Array(Int32), rewrite : Rewrite::Any) : Term::Dict
     rewrite(document, keypath) { rewrite }
   end
 
   # Shorthand for `rewrite` with `Rewrite::One` of *term*.
-  def assign(document : Term::Dict, keypath : ThinArray(Int32), term : Term) : Term::Dict
+  def assign(document : Term::Dict, keypath : Array(Int32), term : Term) : Term::Dict
     rewrite(document, keypath, Rewrite.one(term))
   end
 
   # Returns the nearest ancestor (parent) of the term pointed to by *keypath*
   # that satisfies the block.
-  def enclosing?(document : Term::Dict, keypath : ThinArray(Int32), & : Term::Dict -> Bool) : Term::Dict?
-    stack = ThinArray(Term::Dict).new
+  def enclosing?(document : Term::Dict, keypath : Array(Int32), & : Term::Dict -> Bool) : Term::Dict?
+    stack = [] of Term::Dict
     tip = Term.of(document)
 
     keypath.each do |step|
@@ -262,14 +262,14 @@ module Rhodium
   end
 
   # Same as `enclosing?`, but raises `KeypathError` if *keypath* is invalid.
-  def enclosing(document : Term::Dict, keypath : ThinArray(Int32), & : Term::Dict -> Bool) : Term::Dict
+  def enclosing(document : Term::Dict, keypath : Array(Int32), & : Term::Dict -> Bool) : Term::Dict
     enclosing?(document, keypath) { |parent| yield parent } || raise KeypathError.new
   end
 
   # Converts relative *edge* into an absolute edge.
   #
   # An absolute edge incorporates all scopes that *edge* is embedded in.
-  def abs(document : Term::Dict, nodepath : ThinArray(Int32), edge : Term) : Term
+  def abs(document : Term::Dict, nodepath : Array(Int32), edge : Term) : Term
     unless ML.edge?(edge)
       return edge
     end
@@ -301,7 +301,7 @@ module Rhodium
   # Edges that are "out of scope" (cannot be expressed relative to *nodepath*)
   # are returned without change. It is expected that the caller will simply ignore
   # them, assuming there are no local facilities to handle absolute edges.
-  def rel(document : Term::Dict, nodepath : ThinArray(Int32), edge : Term) : Term
+  def rel(document : Term::Dict, nodepath : Array(Int32), edge : Term) : Term
     unless ML.edge?(edge)
       return edge # Not an edge!
     end
@@ -320,7 +320,7 @@ module Rhodium
   end
 
   struct Scope
-    def initialize(@document : Term::Dict, @nodepath : ThinArray(Int32))
+    def initialize(@document : Term::Dict, @nodepath : Array(Int32))
     end
 
     def ref(edge : Term) : Term
@@ -333,7 +333,7 @@ module Rhodium
   #
   # NOTE: *event* is assumed to have been `localized`.
   # NOTE: *event* must be one of recognized events for this to work.
-  def globalized(document : Term::Dict, nodepath : ThinArray(Int32), event : Term) : Term
+  def globalized(document : Term::Dict, nodepath : Array(Int32), event : Term) : Term
     unless event.type.dict? # Fast path
       return event
     end
@@ -359,7 +359,7 @@ module Rhodium
   #
   # NOTE: *event* is assumed to have been `globalized`.
   # NOTE: *event* must be one of recognized events for this to work.
-  def localized(document : Term::Dict, nodepath : ThinArray(Int32), event : Term) : Term
+  def localized(document : Term::Dict, nodepath : Array(Int32), event : Term) : Term
     unless event.type.dict? # Fast path
       return event
     end
@@ -383,11 +383,11 @@ module Rhodium
 
   # Returns the cell value of a localized *edge* in *document* at the given
   # *nodepath*. Returns `nil` if no such cell exists.
-  def cell?(document : Term::Dict, nodepath : ThinArray(Int32), edge : Term) : Term?
+  def cell?(document : Term::Dict, nodepath : Array(Int32), edge : Term) : Term?
     document[Cells, abs(document, nodepath, edge)]?
   end
 
-  def const?(document : Term::Dict, nodepath : ThinArray(Int32), value : Term) : Term?
+  def const?(document : Term::Dict, nodepath : Array(Int32), value : Term) : Term?
     ML.edge?(value) ? cell?(document, nodepath, value) : value
   end
 
@@ -408,8 +408,8 @@ module Rhodium
   # Converts *source* indexable of terms to a keypath into *document*. Returns
   # `nil` if the resulting keypath is invalid. Guarantees to return a valid
   # keypath into *document*.
-  def keypath?(document : Term::Dict, steps : Indexable(Term)) : ThinArray(Int32)?
-    keypath = ThinArray(Int32).new(steps.size)
+  def keypath?(document : Term::Dict, steps : Indexable(Term)) : Array(Int32)?
+    keypath = Array(Int32).new(steps.size)
 
     current = document
 
@@ -425,7 +425,7 @@ module Rhodium
 
   # Same as `keypath?`, but raises `KeypathError` if the resulting keypath
   # is invalid.
-  def keypath(document : Term::Dict, steps : Indexable(Term)) : ThinArray(Int32)
+  def keypath(document : Term::Dict, steps : Indexable(Term)) : Array(Int32)
     keypath?(document, steps) || raise KeypathError.new
   end
 
@@ -520,7 +520,7 @@ module Rhodium
     getter appearances = [] of {Term, Term}
     getter? disappear = false
 
-    def initialize(@document : Term::Dict, @nodepath : ThinArray(Int32), @node : Term)
+    def initialize(@document : Term::Dict, @nodepath : Array(Int32), @node : Term)
     end
 
     def disappear : Nil
@@ -590,7 +590,7 @@ module Rhodium
 
     def initialize(@document0)
       @document1 = @document0
-      @rewrites = [] of {ThinArray(Int32), Rewrite::Some}
+      @rewrites = [] of {Array(Int32), Rewrite::Some}
     end
 
     # NOTE: this method must only be used for document pairspart assignments! Anything else
@@ -614,12 +614,12 @@ module Rhodium
     end
 
     # Schedules a rewrite at *nodepath*.
-    def at(nodepath : ThinArray(Int32), rewrite : Rewrite::Some) : Nil
+    def at(nodepath : Array(Int32), rewrite : Rewrite::Some) : Nil
       @rewrites << {nodepath.dup, rewrite}
     end
 
     # :ditto:
-    def at(nodepath : ThinArray(Int32), rewrite : Rewrite::None) : Nil
+    def at(nodepath : Array(Int32), rewrite : Rewrite::None) : Nil
     end
 
     # Finalizes & collects all changes and returns the next version of the document.
@@ -635,7 +635,7 @@ module Rhodium
 
   # TODO: rename keypath to nodepath in Rhodium
 
-  def effect(txn : DocumentTxn, nodepath : ThinArray(Int32), node : Term, & : EffectBuilder -> Bool) : Bool
+  def effect(txn : DocumentTxn, nodepath : Array(Int32), node : Term, & : EffectBuilder -> Bool) : Bool
     builder = EffectBuilder.new(txn.document0, nodepath, node)
 
     transition_vote = yield builder
@@ -689,7 +689,7 @@ module Rhodium
   #   And I'm not talking about all the parse-backmap calls, that's the least stupid
   #   thing here. Small backmaps should be pretty efficient, a few microseconds perhaps.
 
-  def handlepp(txn : DocumentTxn, nodepath : ThinArray(Int32), node0 : Term, event : Term) : Bool
+  def handlepp(txn : DocumentTxn, nodepath : Array(Int32), node0 : Term, event : Term) : Bool
     effect(txn, nodepath, node0) do |e|
       Term.case({node0, event}) do
         # TODO: ditch UUID in favor of a simple monotonic counter on the document!! It is
@@ -779,7 +779,7 @@ module Rhodium
     end
   end
 
-  def handleip(txn : DocumentTxn, nodepath : ThinArray(Int32), node0 : Term, event : Term) : Bool
+  def handleip(txn : DocumentTxn, nodepath : Array(Int32), node0 : Term, event : Term) : Bool
     effect(txn, nodepath, node0) do |e|
       Term.case({node0, event}) do
         # cell
@@ -1600,7 +1600,7 @@ module Rhodium
     end
   end
 
-  def handle(txn : DocumentTxn, nodepath : ThinArray(Int32), event : Term) : Bool
+  def handle(txn : DocumentTxn, nodepath : Array(Int32), event : Term) : Bool
     node0 = follow(txn.document0, nodepath)
 
     unless active?(txn.document0, nodepath, node0)
@@ -1679,7 +1679,7 @@ module Rhodium
   # Yields identities of *node*, if any.
   #
   # Nodes with identity are interested in receiving initialize events.
-  def classify(document : Term::Dict, nodepath : ThinArray(Int32), node : Term, & : Term ->) : Nil
+  def classify(document : Term::Dict, nodepath : Array(Int32), node : Term, & : Term ->) : Nil
     return unless active?(document, nodepath, node)
 
     # TODO:
@@ -1812,7 +1812,7 @@ module Rhodium
   end
 
   def step(txn : DocumentTxn, event : Term) : Bool
-    nodepath = ThinArray(Int32).new
+    nodepath = [] of Int32
 
     # All nodes must unanimously vote `false` for us to vote `false` on transition.
     transition_vote = false
@@ -1927,7 +1927,7 @@ module Rhodium
   # "Temporal" aspects have their origin here, such as "cell/created".
   def transition(document0 : Term::Dict, document1 : Term::Dict) : Term::Dict
     # Common nodepath stack we will reuse.
-    nodepath = ThinArray(Int32).new
+    nodepath = [] of Int32
 
     # PASS 1.
     #
@@ -2155,7 +2155,7 @@ module Rhodium
   def cursors(document : Term::Dict) : Array(Cursor)
     descend = true
     cursors = [] of Cursor
-    nodepath = ThinArray(Int32).new
+    nodepath = [] of Int32
 
     while successor?(document, nodepath, descend: descend, only_active: false)
       descend = true
@@ -2235,7 +2235,7 @@ module Rhodium
   #
   # WARNING: you must pass the document through `cursorfind` at some point before
   # using this method.
-  def active?(document : Term::Dict, nodepath : ThinArray(Int32), node : Term) : Bool
+  def active?(document : Term::Dict, nodepath : Array(Int32), node : Term) : Bool
     children = passable_range?(document, node)
 
     cursors = document[Cursors]? || Term[]
@@ -2274,7 +2274,7 @@ module Rhodium
   #
   # WARNING: you must pass the document through `cursorfind` at some point before
   # using this method.
-  def has_cursor_at_depth?(document : Term::Dict, nodepath : ThinArray(Int32), node : Term, & : Int32 -> Bool) : Bool
+  def has_cursor_at_depth?(document : Term::Dict, nodepath : Array(Int32), node : Term, & : Int32 -> Bool) : Bool
     cursors = document[Cursors]? || Term[]
     cursors.each_entry do |_, cursorpaths|
       cursorpaths.each_entry do |cursorpath, _|
@@ -2299,7 +2299,7 @@ module Rhodium
   #
   # WARNING: you must pass the document through `cursorfind` at some point before
   # using this method.
-  def has_cursor_at_any_depth?(document : Term::Dict, nodepath : ThinArray(Int32), node : Term) : Bool
+  def has_cursor_at_any_depth?(document : Term::Dict, nodepath : Array(Int32), node : Term) : Bool
     has_cursor_at_depth?(document, nodepath, node) { |depth| depth > 0 }
   end
 end
@@ -2865,34 +2865,34 @@ end
 #   (log @xs in ()))
 # WWML
 
-# ge0 = Rhodium.globalized(doc0, ThinArray{0}, Term.of(:pulse, {:edge, :x}, 100))
-# ge1 = Rhodium.globalized(doc0, ThinArray{0, 3, 3, 2}, Term.of(:pulse, {:edge, :x}, 100))
-# ge2 = Rhodium.globalized(doc0, ThinArray{0, 3, 3, 2}, Term.of(:pulse, {:edge, :y}, 100))
+# ge0 = Rhodium.globalized(doc0, [0], Term.of(:pulse, {:edge, :x}, 100))
+# ge1 = Rhodium.globalized(doc0, [0, 3, 3, 2], Term.of(:pulse, {:edge, :x}, 100))
+# ge2 = Rhodium.globalized(doc0, [0, 3, 3, 2], Term.of(:pulse, {:edge, :y}, 100))
 
 # pp! ge0
 # pp! ge1
 # pp! ge2
 
-# pp! Rhodium.localized(doc0, ThinArray{0}, ge0)
-# pp! Rhodium.localized(doc0, ThinArray{0, 3, 3, 2}, ge1)
-# pp! Rhodium.localized(doc0, ThinArray{0, 3, 3, 2}, ge2)
-# pp! Rhodium.localized(doc0, ThinArray{0}, ge1)
-# pp! Rhodium.localized(doc0, ThinArray{0}, ge2)
+# pp! Rhodium.localized(doc0, [0], ge0)
+# pp! Rhodium.localized(doc0, [0, 3, 3, 2], ge1)
+# pp! Rhodium.localized(doc0, [0, 3, 3, 2], ge2)
+# pp! Rhodium.localized(doc0, [0], ge1)
+# pp! Rhodium.localized(doc0, [0], ge2)
 # require "benchmark"
 
-# S = ThinArray{0, 3, 3, 2}
+# S = [0, 3, 3, 2]
 # E = Term.of(:edge, :x)
 # Benchmark.ips do |x|
 #   x.report("np 2 mp") do
 #     Rhodium.ref(doc0, S, E)
 #   end
 # end
-# pp! Rhodium.np2mp(doc0, ThinArray{0, 1})
-# pp! Rhodium.np2mp(doc0, ThinArray{0, 2})
-# pp! Rhodium.np2mp(doc0, ThinArray{0, 2, 1})
-# pp! Rhodium.np2mp(doc0, ThinArray{0, 2, 2})
+# pp! Rhodium.np2mp(doc0, [0, 1])
+# pp! Rhodium.np2mp(doc0, [0, 2])
+# pp! Rhodium.np2mp(doc0, [0, 2, 1])
+# pp! Rhodium.np2mp(doc0, [0, 2, 2])
 # pp!
-# # pp! Rhodium.np2mp(doc0, ThinArray{0, 3})
+# # pp! Rhodium.np2mp(doc0, [0, 3])
 
 # # # nctx = Nitrene::StepContext.new
 # initial = true
@@ -2911,7 +2911,7 @@ end
 #   # break unless nctx.wait?
 # end
 # pp doc0
-# pp Rhodium.cursordepth_in_node(doc0, ThinArray(Int32).new)
+# pp Rhodium.cursordepth_in_node(doc0, [] of Int32)
 
 # puts D7.run_until_equal?(doc0.as_d, doc1.as_d, log: D7::Log::Fn.new(observe), limit: 128)
 
@@ -2957,12 +2957,12 @@ end
 #   gets
 # end
 
-# pp Rhodium.passable?(doc, ThinArray{0, 1})
+# pp Rhodium.passable?(doc, [0, 1])
 
 # n = 0
 # Benchmark.ips do |x|
 #   x.report("time") do
-#  keypath = ThinArray(Int32).new
+#  keypath = [] of Int32
 # while Rhodium.successor?(doc, keypath)
 #   # pp keypath
 # end

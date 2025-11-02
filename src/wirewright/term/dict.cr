@@ -526,9 +526,8 @@ module Ww
 
       return if itemsonly?
 
-      # Collect pairs in a buffer. Use ThinArray for to have very light-weight
-      # methods/allocations compared to e.g. Array.
-      buffer = ThinArray(Pair).new(@pairs.size)
+      # Collect pairs in a buffer.
+      buffer = Array(Pair).new(@pairs.size)
       @pairs.each do |pair|
         buffer << pair
       end

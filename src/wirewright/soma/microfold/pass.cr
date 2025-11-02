@@ -3,8 +3,8 @@ module Ww::Soma::Microfold::Pass
   extend self
 
   # :nodoc:
-  def mapwalk(node : Term, & : Term, ThinArray(Term) -> Term) : Term
-    itempaths = ThinArray(ThinArray(Term)).new
+  def mapwalk(node : Term, & : Term, Array(Term) -> Term) : Term
+    itempaths = [] of Array(Term)
 
     Term.each_keypath_and_itemnode(node) do |keypath, item|
       itempaths << keypath.dup

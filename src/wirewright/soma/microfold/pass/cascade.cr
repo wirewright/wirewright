@@ -82,7 +82,7 @@ module Ww::Soma::Microfold::Pass
     root1
   end
 
-  private def each_cascaded_mixin(theme : Theme, root : Term, keypath : ThinArray(Term), & : Term ->) : Nil
+  private def each_cascaded_mixin(theme : Theme, root : Term, keypath : Array(Term), & : Term ->) : Nil
     ancestors = Term.ancestors(root, keypath)
 
     {% for source in %w[preset style] %}

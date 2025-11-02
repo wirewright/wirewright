@@ -69,7 +69,7 @@ module Ww::Meridium
 
     # Converts *keypath* and *leaf* (produced by e.g. `Term.each_keypath_and_leaf`)
     # to a strand of ubases.
-    def strand(keypath : ThinArray(Term), leaf : Term) : Strand
+    def strand(keypath : Array(Term), leaf : Term) : Strand
       strand = [] of Ubase::Any
       strand << Ubase::Begin.new
 

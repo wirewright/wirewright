@@ -676,155 +676,6 @@ struct Nil
   end
 end
 
-# Arrays from Crystal's standard library are fairly "fat" since they are intended
-# for general use. This, on the other hand, is a simple, small, stack-like dynamic
-# array implementation. It grows by a factor of 1.5 and will not shrink.
-class ThinArray(T)
-  include Indexable::Mutable(T)
-
-  INITIAL_CAPACITY = 8
-
-  getter size
-
-  # Initializes a new array with the given *capacity*.
-  def initialize(@capacity = 0)
-    @mem = Pointer(T).null
-    unless @capacity.zero?
-      @mem = @mem.realloc(@capacity)
-    end
-    @size = 0
-  end
-
-  def self.new(other : Indexable(T)) forall T
-    copy = ThinArray(T).new(other.size)
-    copy.concat(other)
-  end
-
-  def unsafe_fetch(index : Int)
-    @mem[index]
-  end
-
-  def unsafe_put(index : Int, value : T)
-    @mem[index] = value
-  end
-
-  # Pushes *value* onto the array. If the array is full, increases the capacity
-  # by a factor of 1.5.
-  def push(value : T) : self
-    if @size + 1 > @capacity
-      if @capacity.zero?
-        @capacity = INITIAL_CAPACITY
-      else
-        @capacity = (@capacity * 1.5).to_i
-      end
-      @mem = @mem.realloc(@capacity)
-    end
-    @mem[@size] = value
-    @size += 1
-    self
-  end
-
-  def <<(value : T)
-    push(value)
-  end
-
-  # Pops n value from the top of the array. Returns `nil` if the array is empty.
-  def pop? : T?
-    return if @size == 0
-    @size -= 1
-    @mem[@size]
-  end
-
-  def pop : T
-    pop? || raise IndexError.new
-  end
-
-  def push(*objects : T, &)
-    objects.each do |object|
-      push(object)
-    end
-
-    begin
-      yield
-    ensure
-      objects.size.times do
-        pop
-      end
-    end
-  end
-
-  # Pops for the duration of the block.
-  def pop(&)
-    value = pop
-    begin
-      yield value
-    ensure
-      push(value)
-    end
-  end
-
-  def concat(other : Indexable(T)) : self
-    # Humpty dumpty
-    if @size + other.size > @capacity
-      @capacity = (@size + other.size) + (@size * 0.5).to_i
-      @mem = @mem.realloc(@capacity)
-    end
-
-    other.each do |object|
-      push(object)
-    end
-
-    self
-  end
-
-  def clear : self
-    @mem.clear(@size)
-    @size = 0
-    self
-  end
-
-  # Shallow copy: returns a copy of this array without copying its values.
-  def dup : ThinArray(T)
-    reduce(ThinArray(T).new(size)) do |copy, value|
-      copy << value
-    end
-  end
-
-  def clone
-    reduce(ThinArray(T).new(size)) do |copy, value|
-      copy << value.clone
-    end
-  end
-
-  def slice : Slice(T)
-    @mem.to_slice(@size)
-  end
-
-  def to_readonly_slice
-    Slice.new(@mem, @size, read_only: true)
-  end
-
-  def pretty_print(pp)
-    pp.list("ThinArray[", self, "]")
-  end
-
-  def inspect(io)
-    io << "ThinArray["
-    slice.join(io, ", ") do |el|
-      el.inspect(io)
-    end
-    io << "]"
-  end
-
-  def to_s(io)
-    inspect(io)
-  end
-
-  def ==(other : ThinArray(T)) : Bool
-    equals?(other) { |a, b| a == b }
-  end
-end
-
 struct StaticRing(T, N)
   def initialize
     @bot = 0u32
@@ -901,7 +752,7 @@ struct HybridArray(T, N)
 
   def initialize
     {% if N == 0 %}
-      {% N.raise "HybridArray with N=0 makes no sense, use an array or ThinArray" %}
+      {% N.raise "HybridArray with N=0 makes no sense, use an array" %}
     {% end %}
 
     @spill = Pointer(T).null
@@ -1258,7 +1109,7 @@ class List(T)
   end
 
   def each(& : T ->)
-    stack = ThinArray(T).new
+    stack = [] of T
 
     node = self
     while node
@@ -4304,10 +4155,6 @@ module IStack(T)
 end
 
 class Array(T)
-  include IStack(T)
-end
-
-class ThinArray(T)
   include IStack(T)
 end
 

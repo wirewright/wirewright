@@ -63,7 +63,7 @@ module Ww::ML
     # :nodoc:
     struct StyleStack
       def initialize(&@fn : Symbol, Symbol ->)
-        @stack = ThinArray(Symbol).new
+        @stack = [] of Symbol
       end
 
       def push(style style1 : Symbol)

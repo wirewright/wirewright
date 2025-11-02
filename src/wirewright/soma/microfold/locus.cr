@@ -3,7 +3,7 @@ module Ww::Soma::Microfold
   struct Locus
     @parent : Term
 
-    def initialize(@root : Term, @keypath : ThinArray(Term))
+    def initialize(@root : Term, @keypath : Array(Term))
       if @keypath.empty?
         raise ArgumentError.new
       end

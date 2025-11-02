@@ -209,7 +209,7 @@ module Ww::LR
   struct Decoder
     def initialize
       @state = :initial
-      @stack = ThinArray(Term).new
+      @stack = [] of Term
     end
 
     def next(command : String) : Nil
