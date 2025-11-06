@@ -4,11 +4,8 @@ module Ww
   end
 
   class ::File
-    # https://github.com/crystal-lang/crystal/issues/16157
-    def self.tempfile(random : ::Random, mutex)
-      fileno, path, blocking = mutex.synchronize do
-        Crystal::System::File.mktemp(prefix: nil, suffix: nil, dir: Dir.tempdir, random: random)
-      end
+    def self.tempfile(random : ::Random)
+      fileno, path, blocking = Crystal::System::File.mktemp(prefix: nil, suffix: nil, dir: Dir.tempdir, random: random)
       new(path, fileno, blocking: blocking)
     end
   end
@@ -99,7 +96,7 @@ module Ww
     abstract def delete(path : Path) : Nil
   end
 
-  # A crude implementation of `FileServer` that directly calls Crystal's `File` API.
+  # Thread-unsafe `FileServer` implemented using Crystal's `File` API.
   struct Disk
     include FileServer
 
@@ -113,7 +110,6 @@ module Ww
       end
 
       @rng = Random::PCG32.new
-      @rng_mutex = Sync::Mutex.new
     end
 
     def resolve(path : Path) : Path
@@ -153,14 +149,14 @@ module Ww
         end
         Log.debug { "write: append: ok" }
       in .overwrite?
-        tmp_file = File.tempfile(@rng, @rng_mutex)
+        tmp_file = File.tempfile(@rng)
         tmp_path = tmp_file.path
 
         begin
           tmp_file.flock_exclusive do
             Log.debug { "write: tmp #{tmp_path} flock'd, writing" }
             compression.sink(tmp_file) { |dst| yield dst }
-            tmp_file.flush
+            tmp_file.fsync
           end
         rescue e
           raise FileServerError.new("could not write to tmp file", cause: e)
@@ -195,6 +191,42 @@ module Ww
       File.delete?(path)
     rescue e : File::Error
       raise FileServerError.new("unable to delete file: #{e.message}", cause: e)
+    end
+  end
+
+  # Thread-safe wrapper around `Disk`.
+  #
+  # Access to the server is synchronized using a lock.
+  struct SyncDisk
+    include FileServer
+
+    def initialize(base : Path)
+      @disk = Disk.new(base)
+      @lock = Sync::Mutex.new
+    end
+
+    def resolve(path : Path) : Path
+      @lock.synchronize { @disk.resolve(path) }
+    end
+
+    def timestamp?(path : Path) : Time?
+      @lock.synchronize { @disk.timestamp?(path) }
+    end
+
+    def read(path : Path) : Bytes
+      @lock.synchronize { @disk.read(path) }
+    end
+
+    def write(path : Path, *, mode : FileServer::WriteMode, compression : FileServer::Compression, & : IO ->) : Nil
+      @lock.synchronize do
+        @disk.write(path, mode: mode, compression: compression) do |io|
+          yield io
+        end
+      end
+    end
+
+    def delete(path : Path) : Nil
+      @lock.synchronize { @disk.delete(path) }
     end
   end
 end
