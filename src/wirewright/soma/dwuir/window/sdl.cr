@@ -536,7 +536,7 @@ module Ww::Soma::DwUIR
       when .keyup?
         dispatch(event.window_id, up, sink)
       when .keydown?
-        if event.repeat
+        if event.repeat > 0
           # Repeats are mapped to up-dn for consistency.
           dispatch(event.window_id, up, sink)
           dispatch(event.window_id, dn, sink)
