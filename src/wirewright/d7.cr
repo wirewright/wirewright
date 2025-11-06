@@ -1,1307 +1,780 @@
-# Wirewright Delta7 (D7) is a symbolic physics engine that is at its core my
-# humble attempt to model *autopoiesis* as described by Maturana, Varela, and others.
+# Wirewright Delta7 (D7 for short) is a *symbolic physics engine*. In a sense,
+# it is just like a *physics engine* (think Box2D), but instead of working with
+# bodies, it works on *symbols*. Rather than solving equations, D7 searches for
+# relationships between symbols according to constraints. Instead of manipualting
+# velocity and position, D7 *rewrites*.
 #
-# There's section 9, "Key", from *Autopoiesis: the organization of living systems,
-# its characterization and a model* by Varela, Maturana & Uribe (1974). D7 appears
-# to pass points 1 and 2. Point 3 we seem to pass -- D7 programs are mechanistic
-# systems, with the note that they require custom physics to run (D7 itself is
-# such physics). Points 4-6 I fail to parse, but let's say we appear to pass
-# them as well :^).
+# At its core, D7 is an attempt to model *autopoiesis* as described by Maturana,
+# Varela, and others.
 #
-# From the user's point of view, the main interface to D7 is its `repair` and
-# `damage` functions. For interactive editing, there are also `Cursor.repair`
-# and `Cursor.post`. For traversal over D7 programs, there's `walk`.
+# See, for instance, *Autopoiesis: the organization of living systems, its
+# characterization and a model* by Varela, Maturana & Uribe (1974). D7 is trying
+# to check all the boxes in section 9, "Key".
 #
-# *Nodes* in D7 programs specify how other nodes must be fixed. In other words,
-# nodes in a D7 program fix each other through a network of interactions instantiated
-# by D7 hyperdges, known simply as *edges*. As long as enough connections and
-# information is available, D7 will be able to "heal" the program to a computed state.
+# I think autopoiesis can be modeled in any "physical simulator". The only problem
+# is that in practice, the physical simulators we build are too unstructured. It's
+# "perceptually hard" to extract useful info from it, both for us as observers and
+# for the entities within the simulation. Imagine how much intrinsic structure
+# a particle simulator would require to start recognizing or matching on its own
+# configuration or its parts? With D7, it's as simple as a pattern match on a fragment.
 #
-# The core idea with D7 is that it is a network of bindings between places in
-# the program itself. You can "fence off" and name parts of the program with `cell`
-# or `frag`, creating a kind of "membrane" around them. This lets other nodes such
-# as `map` assign or observe their content.
+# Imagine a game. How hard would it be to get a car to drive itself in that game, given
+# only the game's visual output and keyboard input, that is, "as an outside agent"?
 #
-# More importantly, nodes like `map` can serve as "bridges" between parts of the same
-# program. A `map` can translate the content of one cell in the program in such a way
-# that another cell picks it up. This means that with nodes like `map`, `wire`, and
-# others, you can establish bindings between parts of the same program.
+# We know the answer: very hard. That's why people resort to black box (ish) methods
+# like neural networks.
 #
-# You can establish bidirectional bindings between two cells with two reciprocal `fill`
-# nodes to achieve "healing" of sorts (in simple cases; in more complex cases, there
-# may be multiple pathways to recompute one from the other and vice versa, perhaps of
-# varying length). `fill` nodes are friends of `map` nodes which do not introduce oscillation
-# on conflict. This way, as long as one cell contains information, the other cell will
-# be recomputed or "completed" based on that information.
+# If only we had a *symbolic* physics simulator, with the same or similar kinds
+# of behaviors, but with structures easy to pattern match and construct
+# programmatically, "as an outside agent"...
 #
-# Cells are assumed not to conflict. How conflict will be resolved in practice
-# depends on how it is caused in the first place. Internally, D7 forbids conflict
-# by preventing overwrite of successful cell proposals.
+# D7 is an attempt to build such a simulator.
 #
-# I'm bored, so this is where this description is going to end. Read the code if
-# you're interested.
+# With D7, a *symbol* is an identity or a composition thereof. Such symbols are
+# represented meaningfully with `Term`s.
 #
-# On the API end, the main functions are all public. You create a spec, and then you
-# call in your mainloop, or in a loop somewhere else, the function `repair`, followed
-# by rounds of damage, including D7's own `damage`.
+# D7 programs -- called *circuits* -- form a hypergraph. A hypergraph is a graph
+# whose edges -- hyperedges -- are *sets*. You can imagine a hyperedge as a group.
+# Each node in a hypergraph participates in zero or more such groups.
 #
-# ```
-# # specdoc : Term, most likely you want `runtime/spec.d7.wwml`
-# spec = D7.spec(specdoc)
+# In D7, there is no difference between *running* a circuit and *building* it. There
+# is no "runtime", nor is there "compile-time". D7 is more like a game, which you
+# can pause, save, and return to in the future. Since D7 hypergraphs are persistent
+# and immutable (they are `Term`s), you get time travel for free, too, which is
+# very useful for debugging. Branching and other features come for free, too
+# (think Git or rather, something crude and Git-like).
 #
-# program0 : Term
+# A *D7 engine* to a D7 circuit is like a browser to a web page.
 #
-# loop do
-#   program1 = D7.repair(spec, program0)
+# D7 introduces the notion of *entanglement*. Entanglement is how D7 circuits interact
+# with the outside world. The circuit may include symbolic objects recognized
+# by the engine. Those objects are synced by the engine to their "outside-world"
+# counterparts. In a sense, such objects are *percepts* (internal, inbound
+# representations of outside-world entities) and *goals* (internal, outbound
+# representations of outside-world actions or transformations).
 #
-#   # Show program1 to the user.
-#   puts ML.display(program1)
+# With entanglement, D7 lets you access files, communicate with processes,
+# build server, graphical, and terminal apps and so on.
 #
-#   # Apply rounds of damage to program1:
-#   program1 = D7.damage(spec, program1)
+# Alongside edges, D7 also has *surfaces*: *sensors* and *appearances*.
+# A sensor senses zero or more appearances. An appearance excites zero or more
+# sensors. Surfaces live in a *termspace*. D7 circuits can include zero or more
+# termspaces. A termspace can be local or global. A local termspace is bounded by
+# the circuit. A global termspace is either circuit-global or remote. A remote
+# termspace is like a multiplayer game, where each sensor and appearance is a tiny
+# "player" and the termspace itself is like a world (think Minecraft).
 #
-#   # Stop on fixpoint.
-#   break if program0 == program1
+# Surfaces complement hyperedges in that hyperedges are hard-coded connectivity
+# (even if dynamically generated, especially with the help of D7 modules); whereas
+# for surfaces, whether they are "connected" is highly dynamic and depends
+# on the content itself.
 #
-#   program0 = program1
-# end
-# ```
+# D7 circuits are graphs whose edges are *sets*; D7 termspaces are graphs whose
+# edges are *functions*, or more specifically, *predicates*.
 module Ww::D7
-  extend self
+  # :nodoc:
+  alias NodeId = UInt32
 
-  Log = ::Log.for(self)
-
-  # Raised on errors in spec. Currently we're supposed to crash on those
-  # since the spec is assumed to be non-user-editable.
-  class SpecError < Exception
-  end
-
-  # Represents a replacement.
-  module Rep
-    alias Any = None | Some
-    alias Some = Zero | One | Many
-
-    # Do not replace.
-    struct None
+  # A hypergraph is a graph whose edges can include any number of nodes; each edge
+  # is a subset of the set of nodes in that graph. It's easier to think of a hypergraph
+  # as a community of nodes. Each node can participate in zero or more groups, each
+  # group formed from other nodes in the community.
+  struct Hypergraph
+    # - *nodemap* maps nodes to node ids (implcit, array index).
+    # - *edgemap* maps node ids (implicit, array index) to hyperedges that node
+    #   is participating in.
+    # - *trmap* maps node ids (implicit, array index) to node qualpaths.
+    def initialize(@nodemap : Array(Term), @edgemap : Array(Slice(Term)))
     end
 
-    # Replace with nothing.
-    struct Zero
+    # Returns the node associated with the given *id*.
+    def [](id : NodeId) : Term
+      @nodemap[id]
     end
 
-    # Replace with *term*.
-    struct One
-      getter term : Term
-
-      # :nodoc:
-      def initialize(@term : Term)
+    # Yields nodes of this hypergraph.
+    def each_node_with_id(&) : Nil
+      @nodemap.each_with_index do |node, id|
+        yield node, NodeId.new(id)
       end
     end
 
-    # Replace with many *terms*.
-    struct Many
-      getter terms : ThinArray(Term)
-
-      # :nodoc:
-      def initialize(@terms : ThinArray(Term))
-      end
-    end
-
-    # Shorthand for constructing `None`.
-    def self.none : None
-      None.new
-    end
-
-    # Shorthand for constructing `One`.
-    def self.one(object)
-      One.new(Term.of(object))
-    end
-
-    # Shorthand for constructing one of `Some` based on an indexable of *terms*.
-    #
-    # WARNING: *terms* will be reused if it is a `ThinArray` of two or
-    # more elements.
-    def self.some(terms : Indexable(Term)) : Some
-      case terms.size
-      when 0 then Zero.new
-      when 1 then One.new(terms.unsafe_fetch(0))
-      else
-        if terms.is_a?(ThinArray(Term))
-          return Many.new(terms)
-        end
-
-        ary = ThinArray(Term).new(capacity: terms.size)
-        ary.concat(terms)
-
-        Many.new(ary)
-      end
+    # Yields hyperedges of a node with the given node *id* (as yielded
+    # by `each_node`).
+    def each_edge(id : NodeId, &) : Nil
+      edges = @edgemap[id]
+      edges.each { |edge| yield edge }
     end
   end
 
-  # Hosts functions to transform and iterate over node edges based on edge
-  # declarations extracted from the spec.
-  module EdgeDetection
-    extend self
+  struct RegimeIndex
+    defcase Pattern,
+      index : Int32,
+      term : Term,
+      specificity : M1::Specificity
 
-    private alias Keypath = ThinArray(Term)
-    private alias KeypathBucket = ThinArray(Keypath)
-    private alias KeypathBucketArray = ThinArray(KeypathBucket)
+    defrecord Recipe,
+      ingredients : Bag(UInt32),
+      order : Array(UInt32),
+      pattern : Pattern
 
     # :nodoc:
-    record Index, patterns : PatternSet(Term), buckets : KeypathBucketArray
+    def initialize(@ingredients : M1::ShapeIndex, @recipes : Array(Recipe))
+    end
 
-    # :nodoc:
-    EDGES_SELECTOR = ML.term(%{(edges pattern_ captures←(_*) example_)})
-
-    # Constructs an index object from a D7 *spec*.
+    # Constructs a regime index based on an indexable of *patterns*.
     #
-    # Raises `SpecError` on error in the spec.
-    def index(spec : Term) : Index
-      buckets = KeypathBucketArray.new
+    # NOTE: *patterns* is stored internally and is assumed to be immutable at this point.
+    def self.build(patterns : Indexable(Term)) : RegimeIndex
+      singulars = [] of {Term, Pattern}
 
-      patterns = PatternSet(Term).select(EDGES_SELECTOR, spec) do |_, env|
-        pattern, captures, example = env[:pattern], env[:captures], env[:example]
-        bucket = KeypathBucket.new
+      # Collect N-tuple elements and which pattern they come from to *singulars*.
+      patterns.each_with_index do |pattern, index|
+        normp = M1.normal(pattern)
 
-        envs = M1.matches(pattern, example, backpaths: true)
-        unless envs.size == 1
-          raise SpecError.new("spec: example #{example} does not match #{pattern} or is a source pattern (source patterns are not allowed)")
-        end
+        Term.case(normp) do
+          matchpi(
+            %{(%'%literal (_+))},
+            %{(%'%itemseq (%past (%'%singular _) min: 1))},
+          ) do
+            object = Pattern.new(index, pattern, M1.specificity(normp, toplevel: true))
 
-        env = envs[0]
-
-        captures.items.each do |capture|
-          backpaths = env[:"(backpaths)", capture]
-          unless backpaths.size == 1
-            raise SpecError.new("spec: capture #{capture} in #{pattern} must have exactly one backpath")
-          end
-
-          # Convert backpath to keypath.
-          backpath, _ = backpaths.nth(0)
-          keypath = Keypath.new
-          backpath.items.each do |step|
-            Term.case(step) do
-              matchpi %{value} { }
-              matchpi %{(pair key_)} { keypath << key }
+            pattern.items.each do |element|
+              singulars << {element, object}
             end
           end
-
-          bucket << keypath
-        end
-
-        buckets << bucket
-
-        true # add to set
-      end
-
-      Index.new(patterns, buckets)
-    end
-
-    private def bucket?(index : Index, node : Term) : KeypathBucket?
-      return unless node.type.dict?
-
-      case pr = index.patterns.response(node)
-      in Pr::Neg
-      in Pr::One  then index.buckets[pr.pattern.index]
-      in Pr::Many then unreachable
-      end
-    end
-
-    # Transforms edges in *node* using the block.
-    def map(index : Index, node : Term, & : Term -> Term) : Term
-      return node unless bucket = bucket?(index, node)
-
-      bucket.reduce(node) do |memo, keypath|
-        Term.morph(memo, keypath) { |tip| yield tip }
-      end
-    end
-
-    # Yields edges in *node* to the block.
-    def each(index : Index, node : Term, & : Term ->) : Nil
-      return node unless bucket = bucket?(index, node)
-
-      bucket.each do |keypath|
-        yield node.follow(keypath)
-      end
-    end
-  end
-
-  # Represents the context of a node.
-  #
-  # - *scope* is the node's scope.
-  # - *l* is the node located at the passable spot to the left, if any.
-  # - *r* is the node located at the passable spot to the right, if any.
-  record NodeContext, scope : Scope::Path, l : Term?, r : Term?
-
-  # Permeation aka *passability* refers to the act of finding and replacing
-  # passable or *permeable* child nodes of a parent node.
-  #
-  # A node can have *impassable* children which the D7 engine does not descend
-  # into; and *passable* ones, which are found and handled by functions found
-  # in this module.
-  #
-  # Permeability is declared for each interested node in the spec.
-  module Permeation
-    extend self
-
-    # Represents a passable range, which is a range of node items D7 is allowed
-    # to descend into.
-    record PassableRange,
-      span : Range(Int32, Nil) | Range(Int32, Int32),
-      quoted : Bool
-
-    alias PassableRangeArray = ThinArray(PassableRange)
-
-    # :nodoc:
-    record Decl,
-      ranges : PassableRangeArray,
-      bindings_capture : Term::Sym?
-
-    # :nodoc:
-    record Index, patterns : PatternSet(Term), decls : ThinArray(Decl)
-
-    # :nodoc:
-    PERMEABLE_SELECTOR = ML.term(%{(permeable pattern_ parts←(_*) ¦ opts_)})
-
-    # Constructs an index object from a D7 *spec*.
-    #
-    # Raises `SpecError` on error in the spec.
-    def index(spec : Term) : Index
-      decls = ThinArray(Decl).new
-
-      patterns = PatternSet(Term).select(PERMEABLE_SELECTOR, spec) do |_, env|
-        if (bindings_capture = env[:opts, :bindings]?) && (bindings_capture = bindings_capture.as_sym?).nil?
-          raise SpecError.new("expected a symbol for bindings capture")
-        end
-
-        ranges = PassableRangeArray.new
-
-        env[:parts].items.each do |part|
-          Term.case(part) do
-            matchpi %{(range (b←(%number i32) ..) ¦ () quoted⋮ false)} do
-              ranges << PassableRange.new(b.to(Int32)..., quoted: quoted.to(Bool))
-            end
-
-            matchpi %{(range (b←(%number i32) ..< e←(%number i32)) ¦ () quoted⋮ false)} do
-              ranges << PassableRange.new(b.to(Int32)...e.to(Int32), quoted: quoted.to(Bool))
-            end
-
-            otherwise do
-              raise SpecError.new("spec: invalid permeable part spec #{part}")
-            end
-          end
-        end
-
-        decls << Decl.new(ranges, bindings_capture)
-
-        true # add to set
-      end
-
-      Index.new(patterns, decls)
-    end
-
-    private def decl_and_env?(index : Index, node : Term) : {Decl, Term::Dict}?
-      return unless node.type.dict?
-
-      case pr = index.patterns.response(node)
-      in Pr::Neg
-      in Pr::One  then {index.decls[pr.pattern.index], pr.env}
-      in Pr::Many then unreachable
-      end
-    end
-
-    # Returns an array of passable ranges in *node*.
-    def ranges(index : Index, node : Term) : PassableRangeArray
-      unless decl_and_env = decl_and_env?(index, node)
-        return PassableRangeArray.new
-      end
-
-      decl, _ = decl_and_env
-      decl.ranges
-    end
-
-    # Returns an array of passable ranges in *node*, followed by *scope* extended
-    # with bindings according to *node* (if necessary).
-    def ranges(index : Index, scope : Scope::Path, node : Term) : {PassableRangeArray, Scope::Path}
-      unless decl_and_env = decl_and_env?(index, node)
-        return PassableRangeArray.new, scope
-      end
-
-      decl, env = decl_and_env
-
-      unless bindings_capture = decl.bindings_capture
-        return decl.ranges, scope
-      end
-
-      unless bindings = env[bindings_capture]?
-        Log.error { "invalid spec: bindings capture `#{bindings_capture}` not found" }
-        return PassableRangeArray.new, scope
-      end
-
-      unless bindings = bindings.as_d?
-        Log.error { "invalid spec: cannot use non-dict capture `#{bindings_capture}` for bindings" }
-        return PassableRangeArray.new, scope
-      end
-
-      {decl.ranges, Scope.append(scope, Scope::Module.new(bindings))}
-    end
-  end
-
-  # Place(ment) rating machinery.
-  module Rating
-    extend self
-
-    # Lists the available placement ratings, ordered worst (least preferred) to
-    # best (most preferred).
-    enum Option
-      ImpassableDependent
-      PassableDependent
-      Impassable
-      PassableIndependent
-    end
-
-    # :nodoc:
-    record Index, patterns : PatternSet(Term), ratings : ThinArray(Option)
-
-    # :nodoc:
-    RATING_SELECTOR = ML.term(%{(rating pattern_ rating_)})
-
-    # Constructs an index object from a D7 *spec*.
-    #
-    # Raises `SpecError` on error in the spec.
-    def index(spec : Term) : Index
-      ratings = ThinArray(Option).new
-
-      patterns = PatternSet(Term).select(RATING_SELECTOR, spec) do |_, env|
-        # TODO:
-        # if M1.source?(normp)
-        #   raise SpecError.new("source patterns disallowed in rating")
-        # end
-
-        rating = Term.case(env[:rating]) do
-          matchpi %{impassable-dependent} { Option::ImpassableDependent }
-          matchpi %{passable-dependent} { Option::PassableDependent }
-          matchpi %{impassable} { Option::Impassable }
-          matchpi %{passable-independent} { Option::PassableIndependent }
 
           otherwise do
-            raise SpecError.new("invalid rating #{env[:rating]}")
+            raise ArgumentError.new("unrecognized pattern, expected a singular-only itemseq: `#{ML.compact(pattern)}`")
           end
         end
-
-        ratings << rating
-
-        true # confirm
       end
 
-      Index.new(patterns, ratings)
+      recipes = {} of Int32 => Recipe
+
+      # Build a shape index for *singulars*.
+      ingredients, transcript = M1::ShapeIndex.build(singulars.map { |ingredient, _| ingredient })
+
+      # Associate pattern indices with conjunctions of ingredients that we'll refer to as *recipes*.
+      singulars.zip(transcript) do |(singular, pattern), ingredient|
+        recipe = recipes.put_if_absent(pattern.index) { Recipe.new(Bag(UInt32).new, [] of UInt32, pattern) }
+        recipe.ingredients << ingredient
+        recipe.order << ingredient
+      end
+
+      new(ingredients, recipes.to_a { |_, recipe| recipe })
     end
 
-    # Returns the rating of a cursor found inside *node*.
-    def rating?(index : Index, node : Term) : Option?
-      case pr = index.patterns.response(node)
-      in Pr::Neg
-      in Pr::One  then index.ratings[pr.pattern.index]
-      in Pr::Many then unreachable
+    # A *reaction* is a conjunction of nodes from the hypergraph that satisfies
+    # a *recipe* stored in the regime index. Effectively, `Recipe` represents
+    # a hypergraph pattern match.
+    #
+    # - *index* is the index of the pattern that matched in the indexable of patterns
+    #   passed to `build`.
+    # - *pattern* is the M1 pattern term itself.
+    # - *matchee* is a synthesized matchee to which the pattern should be
+    #   applied for further checking.
+    # - *participants* is a read-only slice of nodes from the hypergraph that
+    #   participate in the reaction.
+    #
+    # NOTE: Like with `M1::ShapeIndex`, that a reaction was emitted does not
+    # necessarily mean *pattern* will match *matchee*. The fact that a reaction
+    # occured is a pre-match step to prune outright wrong (wrt the hypergraph)
+    # node combinations early.
+    defrecord Reaction,
+      pattern : Pattern,
+      matchee : Term,
+      participants : Slice(NodeId)
+
+    # :nodoc:
+    class Assignment
+      K_UNDEFINED = UInt32::MAX
+
+      EMPTY = new(Pf::Map(UInt32, UInt32).new, vs: Pf::USet32.new)
+
+      def initialize(@map : Pf::Map(UInt32, UInt32), @vs : Pf::USet32)
+      end
+
+      def self.new
+        EMPTY
+      end
+
+      def uniq? : Bool
+        @vs.size >= @map.size
+      end
+
+      def includes?(key : UInt32) : Bool
+        @map.includes?(key)
+      end
+
+      def each(& : UInt32, UInt32 ->) : Nil
+        @map.each { |key, value| yield key, value }
+      end
+
+      def invert : Hash(UInt32, UInt32)
+        @map.to_h { |value, key| {key, value} }
+      end
+
+      def inverted_index : Hash(UInt32, Array(UInt32))
+        index = Hash(UInt32, Array(UInt32)).new(initial_capacity: @vs.size)
+
+        each do |node, ingredient|
+          ingredients = index.put_if_absent(ingredient) { [] of UInt32 }
+          ingredients << node
+        end
+
+        index
+      end
+
+      def assoc(key : UInt32, value : UInt32) : Assignment
+        Assignment.new(@map.assoc(key, value), @vs.add(value))
+      end
+
+      def_equals_and_hash @map
+    end
+
+    # Prunes *recipes* based on an assignment. Yields final assignments.
+    private def prune(recipes : Array(Recipe), assignment : Assignment, & : Recipe, Assignment ->) : Array(Recipe)
+      ingredients = Bag(UInt32).new
+      assignment.each do |_, ingredient|
+        ingredients << ingredient
+      end
+
+      recipes.select do |recipe|
+        subset = ingredients.subset_of?(recipe.ingredients)
+
+        if subset && ingredients.size == recipe.ingredients.size
+          yield recipe, assignment
+          false # reject final
+        elsif subset
+          true # select valid
+        else
+          false # reject invalid
+        end
+      end
+    end
+
+    private def search(seen, recipes0, graph, ingredients, pivot, field, assignment0, sink)
+      return if pivot.in?(assignment0) # Already assigned
+
+      ingredients[pivot].each do |ingredient|
+        assignment1 = assignment0.assoc(pivot, ingredient)
+        next unless seen.add?(assignment1)
+
+        recipes1 = prune(recipes0, assignment1, &sink)
+        next if recipes1.empty?
+
+        field.each do |relative|
+          search(seen, recipes1, graph, ingredients, relative, field | graph[relative], assignment1, sink)
+        end
+      end
+    end
+
+    private def accept(hg, sink)
+      ->(recipe : Recipe, a : Assignment) do
+        # Fast path that's taken very frequently: all assignment values are
+        # unique, no need for Cartesian product.
+        if a.uniq?
+          options = a.invert
+          argmt = recipe.order.to_readonly_slice { |ingredient| options[ingredient] }
+          matchee = Term::Dict.build &.concat(argmt) { |participant| hg[participant] }
+          reaction = Reaction.new(recipe.pattern, Term.of(matchee), argmt)
+          sink.call(reaction)
+          return
+        end
+
+        # TODO: use our own each cartesian here to avoid allocating arrays
+        options = a.inverted_index
+        palette = recipe.order.map { |ingredient| options[ingredient] }
+
+        Indexable.each_cartesian(palette, reuse: true) do |argmt|
+          matchee = Term::Dict.build do |commit|
+            commit.concat(argmt) { |participant| hg[participant] }
+          end
+
+          reaction = Reaction.new(recipe.pattern, Term.of(matchee), argmt.to_readonly_slice)
+
+          sink.call(reaction)
+        end
+      end
+    end
+
+    private def ingredients_and_graph(hg : Hypergraph)
+      groups = {} of Term => Pf::USet32
+      ingredients = {} of NodeId => Pf::USet32
+
+      hg.each_node_with_id do |node, id|
+        ingredients[id] = @ingredients.decompose(node)
+
+        hg.each_edge(id) do |edge|
+          groups[edge] = (groups[edge]? || Pf::USet32.new).add(id)
+        end
+      end
+
+      # Compute an unordered, clique-expanded graph from the *circuit* hypergraph:
+      # nodes that share a hyperedge are connected, and each unordered edge is
+      # represented with a pair of edges going in opposite directions.
+      graph = {} of NodeId => Pf::USet32
+
+      groups.each do |_, members|
+        members.each do |u|
+          members.each do |v|
+            next if u == v
+
+            vs = graph[u]? || Pf::USet32.new
+            next if v.in?(vs)
+
+            graph[u] = vs.add(v)
+          end
+        end
+      end
+
+      {ingredients, graph}
+    end
+
+    # Calls *sink* with reactions found in the hypergraph *hg*.
+    def solve(hg : Hypergraph, &sink : Reaction ->) : Nil
+      ingredients, graph = ingredients_and_graph(hg)
+      handler = accept(hg, sink)
+      seen = Set(Assignment).new
+      graph.each do |pivot, field|
+        search(seen, @recipes, graph, ingredients, pivot, field, Assignment.new, handler)
       end
     end
   end
 
-  # Hosts functions related to self-editing/cursor support in D7. This is where
-  # most of "stigmeric" communication between D7 and inputR is implemented.
-  module Cursor
-    extend self
+  alias Feature = Inert | Gnd | Mixture | Scope | Parent | Subcircuit
 
-    # Replaces input kernels found in *node* and controlled by *edge* using *fn*.
-    # *edge* can be omitted to run on all input kernels.
-    #
-    # Returns a modified copy of *node*.
-    #
-    # *fn* is called with each input kernel and its hitcount, and is expected to return
-    # a replacement term.
-    def replace(node : Term, edge : Term? = nil, &fn : Term, Int32, Int32 -> Rep::None | Rep::One) : Term
-      case rep = replace0(node, edge, fn, depth: 0)
-      in Rep::None then node
-      in Rep::One  then rep.term
-      end
-    end
+  # Represents an inert (data) node.
+  defcase Inert, node : Term
 
-    private def replace0(node0 : Term, edge : Term?, fn, depth : Int32)
-      return Rep.none unless node0.type.dict?
-      return Rep.none unless node0.probably_includes?(Input::CUE)
-
-      if Input.kernel?(node0)
-        Term.matchpi?(node0, %[{¦ control: @control_ hitcount_: (%optional 0 (%number +i32))}]) do
-          if edge.nil? || edge == control
-            return fn.call(node0, depth, hitcount.to(Int32))
-          end
-        end
-      end
-
-      # Do not count nesting into input structure as depth.
-      unless Input.input?(node0)
-        depth += 1
-      end
-
-      replaced = false
-
-      node1 = node0.transaction do |commit|
-        node0.each_entry do |key, value|
-          case rep = replace0(value, edge, fn, depth)
-          in Rep::None
-          in Rep::Some
-            replaced = true
-            commit.with(key, rep.term)
-          end
-        end
-      end
-
-      replaced ? Rep.one(node1) : Rep.none
-    end
-
-    # Returns `true` if *term* contains a cursor. Returns `false` otherwise.
-    #
-    # *only_active* must be set to determine whether this function should search
-    # only for active cursors (the ones that the user or D7 can interact with),
-    # or any cursors (any term that looks like a cursor).
-    def in?(term : Term, *, only_active : Bool) : Bool
-      Term.each_keypath_and_node(term) do |_, node|
-        next false unless dict = node.as_d?
-        next false unless dict.probably_includes?(Input::CUE)
-        next true unless Input.kernel?(node)
-        next false if only_active && dict[:active]? != Term.of(true)
-        return true # found
-      end
-
-      false # not found
-    end
-
-    # Represents a cursor rank.
-    #
-    # A cursor with the highest hitcount is a hard win. We treat such cursors as ones
-    # with most interaction history, and therefore, they are presumably the most expected
-    # ones to win from the user's perspective.
-    #
-    # If hitcount is the same (most likely due to cursor duplication, e.g. the cursor
-    # was logged so there are two cursors now), use place rating.
-    #
-    # If place ratings are the same, we have distance. For distance, the closer the cursor
-    # is, the better it is. The physical analogy is clear here to help us resolve which
-    # cursor to pick; we want to pick the cursor "closest" to us in space -- in the most
-    # abstract sense.
-    #
-    # If all three are the same, which cursor will be picked is implementation-defined.
-    # Only one will be picked, but which one we do not know.
-    record Rank, id : Int32, hitcount : Int32, rating : Rating::Option, distance : Int32 do
-      include Comparable(Rank)
-
-      def <=>(other : Rank)
-        {hitcount, rating, -distance} <=> {other.hitcount, other.rating, -other.distance}
-      end
-    end
-
-    # Repairs cursors and other nodes administered by `Cursor` in a D7 *program*.
-    # *Repair* here means mainly annotation with up-to-date data. Repair is necessary
-    # to react to perturbations around the cursor term and to the cursor term itself
-    # that happend "while the engine wasn't looking".
-    #
-    # NOTE: You **must** call `repair` on a D7 program before `post`ing a motion. Otherwise,
-    # you risk getting into an out of sync mess. Visually, if you do not `repair` before
-    # `post`ing, there is the chance of damaging the program so much it will not recover.
-    def repair(spec : Spec, program : Term) : Term
-      seq = 0
-      ranks = {} of Term => Rank
-
-      program = D7.walk(spec, program, conf: DEFAULT_WALK_CONF | WalkConf::EmitEdited) do |ctx, node0|
-        qualdepth = Scope.qualdepth(ctx.scope)
-        scope_rating = Scope.rating(ctx.scope)
-
-        node1 = replace(node0) do |cursor, depth, hitcount|
-          next Rep.none if cursor[:id]? # seen
-
-          unless control = cursor[:control]?
-            # Make sure to clear active! Maybe it lost its control.
-            next Rep.one(cursor.without(:active))
-          end
-
-          rating = scope_rating
-          if scope_rating.passable_independent? && depth > 0
-            # No way. Either the recursive walk() marked it properly with `id`
-            # so this is not reached, or the cursor is at an impassable spot.
-            rating = Rating::Option::Impassable
-          end
-
-          id = seq
-          seq += 1
-
-          rank1 = Rank.new(id, hitcount, rating, distance: qualdepth + depth)
-
-          if rank0 = ranks[control]?
-            if rank1 > rank0
-              ranks[control] = rank1
-            end
-          else
-            ranks[control] = rank1
-          end
-
-          Rep.one(cursor.with(:id, id).without(:active))
-        end
-
-        Rep.some({node1})
-      end
-
-      program = D7.walk(spec, program, conf: DEFAULT_WALK_CONF | WalkConf::EmitEdited) do |ctx, node0|
-        node1 = replace(node0) do |kernel, _|
-          next Rep.none if kernel[:active]? # seen
-          next Rep.none unless id = kernel[:id]?
-
-          kernel = Term.of(kernel.without(:id))
-          next Rep.one(kernel) unless control = kernel[:control]?
-          next Rep.one(kernel) unless best = ranks[control]?
-          next Rep.one(kernel) unless id == Term.of(best.id)
-
-          ranks.delete(control)
-
-          Rep.one(kernel.with(:active, true))
-        end
-
-        Rep.some({node1})
-      end
-
-      program
-    end
-
-    # Sends *motion* to cursors in *program* that are controlled at *edge*.
-    # This function only considers visible cursors, that is, cursors that
-    # appear immediately in *program* and not through expansion. This is done
-    # to simplify implementation and also to provide sensible behavior, with
-    # no hidden effects.
-    #
-    # NOTE: You must always call `repair` before calling `post`.
-    def post(program : Term, edge : Term, motion : Term) : Term
-      replace(program) do |kernel, _|
-        next Rep.none unless kernel[:active]? == Term.of(true)
-        next Rep.none unless kernel[:control]? == edge
-
-        hitcount = kernel[:hitcount]?.try(&.as_n?) || Term[0]
-        hitcount += Term[1]
-
-        Rep.one(kernel.append(motion).with(:hitcount, hitcount))
-      end
-    end
+  # Constructs a no-operation or inert data node.
+  def inert(node : Term) : Inert
+    Inert.new(node)
   end
 
-  # Hosts functions for manipulating and resolving edge scopes in a D7 document.
+  # Represents a grounded node: a node to which no further recursive evaluation
+  # should apply; a node which is part of the hypergraph that should be solved
+  # by D7.
+  defcase Gnd, node : Term, edges : Slice(Edge)
+
+  # Constructs a grounded node from an enumerable of edges *ee*.
+  def gnd(node : Term, ee : Enumerable(Edge)) : Gnd
+    Gnd.new(node, edges: ee.to_readonly_slice(&.itself))
+  end
+
+  # Constructs a grounded node with the given *edges*. You can use `edge` to
+  # construct edges.
+  def gnd(node : Term, *edges : Edge) : Gnd
+    gnd(node, edges)
+  end
+
+  # Constructs a grounded node without edges.
+  def gnd(node : Term) : Gnd
+    Gnd.new(node, edges: Slice(Edge).empty)
+  end
+
+  # Represents a node edge. *term* is the edge term itself, e.g. `@x`,
+  # and *path* is the itempath from node to that edge. It must be a valid
+  # itempath, otherwise, the solver will raise at runtime.
+  defcase Edge, term : Term, path : Slice(Int32)
+
+  # Constructs an edge object.
+  def edge(term : Term, *path : Int32) : Edge
+    Edge.new(term, path.to_readonly_slice(&.itself))
+  end
+
+  # A decomposition of *node* into a definition *defn* with a *mix* function
+  # to compose rewritten *defn* back into the next version of *node*.
+  defcase Mixture, node : Term, defn : Term, mix : Term, Term -> Term
+
+  # Constructs a mixture feature.
+  def mixture(node : Term, defn, &mix : Term, Term -> Term) : Mixture
+    Mixture.new(node, Term.of(defn), mix)
+  end
+
+  # Represents a lexical scope binding. Attaches bindings to a continuation
+  # feature *cont*.
+  defcase Scope, bindings : Term::Dict, cont : Feature
+
+  # Constructs a scope feature.
+  def scope(bindings : Term | ITerm, cont : Feature) : Scope
+    Scope.new(bindings.as_d, cont)
+  end
+
+  # Represents the children nodes of *node* found within an exclusive positive
+  # range of its items.
   #
-  # Conceptually, all edges are global, or, more precisely, they are *unscoped*.
-  # But by tweaking edge names, namely by making a part of the edge's name hold
-  # a scope label, we are able to emulate local scopes that are good enough, or
-  # even indistinguishable, from traditional scoping.
-  module Scope
-    extend self
+  # Used by e.g. `group`, `module`.
+  defcase Parent, node : Term::Dict, range : Range(Int32, Int32)
 
-    alias Path = Slice(Item)
-    alias Item = Qualifier | Rating::Option | Module
+  # Constructs a parent feature.
+  def parent(node : Term, range : Range(Int32, Int32)) : Parent
+    assert range.exclusive? && range.begin.positive? && range.end.positive?
+    assert node.type.dict?
 
-    # Represents a part of the qualified path to a node in a D7 document.
-    record Qualifier, id : Int32
+    Parent.new(node.as_d, range)
+  end
 
-    # Represents an embedding of a bindings table right in the path
-    # to a node.
-    record Module, bindings : Term::Dict
+  # Represents the subcircuit nodes of *node* found within an exclusive positive
+  # range of its items.
+  #
+  # Used by e.g. `frag`.
+  defcase Subcircuit, node : Term::Dict, range : Range(Int32, Int32), cont : Term -> Feature
 
-    # Returns the root scope marker, represented by an empty path.
-    def toplevel : Path
-      Path.empty
+  # Constructs a subcircuit feature.
+  def subcircuit(node : Term, range : Range(Int32, Int32), &cont : Term -> Feature) : Subcircuit
+    assert range.exclusive? && range.subrange_of?(0...node.itemsize)
+    assert node.type.dict?
+
+    Subcircuit.new(node.as_d, range, cont)
+  end
+
+  # :nodoc:
+  alias NodeAddr = Slice(Int32)
+
+  # :nodoc:
+  alias NodeScope = Slice({NodeAddr, Term::Dict})
+
+  # :nodoc:
+  defrecord Leaf, addr : NodeAddr, node : Term, edges : Slice(Term)
+
+  private def solve(regime : Regime, &)
+    nodemap = [] of Term
+    edgemap = [] of Slice(Term)
+    trmap = [] of NodeAddr
+
+    frep = ->(leaf : Leaf) do
+      trmap << leaf.addr
+      nodemap << leaf.node
+      edgemap << leaf.edges
+
+      leaf.node # Leave unchanged.
     end
 
-    # Returns the path to the innermost scope for *path*.
-    def current(path : Path) : Path
-      loop do
-        break unless tip = path[-1]?
-        break if tip.is_a?(Module)
+    result = yield frep
 
-        path = path[...-1]
-      end
+    if nodemap.empty?
+      assert edgemap.empty?
+      assert trmap.empty?
 
-      path
+      return result, nil
     end
 
-    # Extends a scope path with an additional item. Used to build the path
-    # to a node.
-    def append(path : Path, item : Item) : Path
-      path.append(item)
+    hg = Hypergraph.new(nodemap, edgemap)
+
+    patches = regime.patch(hg)
+    if patches.empty?
+      return result, nil
     end
 
-    # Returns the scope path where *edge* is defined, followed by the corresponding
-    # edge in that scope. Although we do not have the concept of "bound" or "unbound"
-    # edges, in practice, "unbound" edges will be scoped locally (in the enclosing scopes).
-    def find(path : Path, edge : Term) : {Path, Term}
-      # Pop until we see a bindings table (aka a scope delimiter).
-      loop do
-        case tip = path[-1]?
-        in Nil
-          # We're scoped under toplevel, there is nothing to do.
-          return path, edge
-        in Module
-          # We've found a scope. Let's see if edge is in there and thus escapes.
-          if exterior = tip.bindings[edge]?
-            # It escapes into the outer scope.
-            return find(path[...-1], exterior)
+    patches = patches.transform_keys { |key| trmap[key] }
+    patch = ->(addr : NodeAddr, scope : NodeScope, gnd : Gnd) do
+      patches[addr]? || gnd.node
+    end
+
+    {result, patch}
+  end
+
+  # Steps *circuit* forward one step in time. *regime* is the regime to use
+  # for rewriting, classification, etc.
+  def step(regime : Regime, circuit : Term) : Term
+    grp(circuit) do |grp0|
+      grp1, patch = solve(regime) { |frep| step0(regime, grp0, frep) }
+      patch ? walk0(regime, grp1, patch) : grp1
+    end
+  end
+
+  # Traverses a circuit term applying a user-supplied replacement function to
+  # every grounded node.
+  def walk(regime : Regime, circuit : Term, &frep : Term -> Term) : Term
+    grp(circuit) { |grp| walk0(regime, grp, walkf(frep)) }
+  end
+
+  private def walkf(frep : Term -> Term)
+    ->(_addr : NodeAddr, _scope : NodeScope, gnd : Gnd) do
+      frep.call(gnd.node)
+    end
+  end
+
+  # Encloses the items of *term* (a dictionary) in a `group` for the duration
+  # of the block. The group is yielded and a modified group is expected back.
+  private def grp(term : Term, & : Term -> Term) : Term
+    unless term.type.dict?
+      return term
+    end
+
+    grp0 = Term.of(term.itemspart.prepend(:group))
+    grp1 = yield grp0
+
+    Term.matchpi(grp1, %{[group children_*]}) do
+      Term.of(children | term.pairspart)
+    end
+  end
+
+  private def step0(regime : Regime, root : Term, frep) : Term
+    fold(regime, root, &step0f(frep))
+  end
+
+  private def step0f(frep : Leaf -> Term)
+    ->(ctx : FoldContext, feature : Gnd | Subcircuit) do
+      case feature
+      in Gnd
+        node0, edges = scoped(ctx.scope, feature.node, feature.edges)
+        node1 = frep.call(Leaf.new(ctx.addr, node0, edges))
+
+        # It's not much, but skip doing the unscoping fold() if the node did
+        # not change.
+        if node0 == node1
+          return feature.node
+        end
+
+        unscope = ->(_addr : NodeAddr, _scope : NodeScope, gnd : Gnd) do
+          unscoped(gnd.node, gnd.edges)
+        end
+
+        fold(ctx.copy_with(frep: walk0f(unscope)), node1)
+      in Subcircuit
+        result = flattenT(feature.node, range: feature.range) do |child0, index|
+          # NOTE: we pass scope as-is into subcircuits just in case. I'm not sure whether
+          # this is correct but it's definitely not incorrect.
+          subctx = ctx.copy_with(addr: ctx.addr.append(index))
+
+          child1, patch = solve(ctx.regime) do |frep|
+            fold(subctx.copy_with(frep: step0f(frep)), child0)
           end
 
-          # It doesn't escape, then, path is its scope.
-          return path, edge
-        in Qualifier, Rating::Option
-          path = path[...-1]
-        end
-      end
-    end
-
-    # Resolves *edge* against the given scope *path*. Returns the resulting
-    # *qualified edge*.
-    def resolve(path : Path, edge : Term) : Term
-      qualified(*find(path, edge))
-    end
-
-    # Attaches the qualpath to *edge*.
-    private def qualified(path : Path, edge : Term) : Term
-      Term.case(edge) do
-        matchpi %{(%'edge name_)} do
-          qualpath = Term::Dict.build do |commit|
-            commit.selected(path, Qualifier, &.id)
-            commit << name
+          if patch
+            child1 = fold(subctx.copy_with(frep: walk0f(patch)), child1)
           end
 
-          Term.of(:edge, qualpath)
+          child1
         end
 
-        otherwise { edge }
+        fold(ctx, feature.cont.call(result))
       end
     end
+  end
 
-    # Returns the placement rating of *path*.
-    #
-    # NOTE: we assume this function is called with a known passable path.
-    def rating(path : Path) : Rating::Option
-      path.reverse_each do |item|
-        next unless item.is_a?(Rating::Option)
-        return item
+  private def walk0(regime : Regime, root : Term, frep)
+    fold(regime, root, &walk0f(frep))
+  end
+
+  private def walk0f(frep : NodeAddr, NodeScope, Gnd -> Term)
+    ->(ctx : FoldContext, feature : Gnd | Subcircuit) do
+      case feature
+      in Gnd
+        frep.call(ctx.addr, ctx.scope, feature)
+      in Subcircuit
+        # Reinterpret Subcircuit as Parent because the logic is exactly the same. We don't
+        # have a solve step at walk()-time.
+        node1 = fold(ctx, Parent.new(feature.node, feature.range))
+        fold(ctx, feature.cont.call(node1))
       end
-
-      Rating::Option::PassableIndependent
-    end
-
-    # Retunrs the qualifier depth of *path*. This is used in D7 as
-    # a "distance metric".
-    def qualdepth(path : Path) : Int32
-      path.count(&.is_a?(Qualifier))
     end
   end
 
   # :nodoc:
-  defcase Spec,
-    proposals : Ruleset,
-    propose : (Term -> Term?),
-    splits : Ruleset,
-    split_cache : Alloy::ExpansionCache,
-    mixR : Rewriter,
-    fixR : Rewriter,
-    damageR : Rewriter,
-    edges : D7::EdgeDetection::Index,
-    permeation : D7::Permeation::Index,
-    ratings : D7::Rating::Index
+  record FoldContext,
+    regime : Regime,
+    addr : NodeAddr,
+    scope : NodeScope,
+    frep : FoldContext, Subcircuit | Gnd -> Term
 
-  # Parses *spec* into an internal D7 spec object.
-  #
-  # Raises `SpecError` if an error is found in *spec*.
-  def spec(spec : Term, &propose : Term -> Term?) : Spec
-    ruledbR = backmapR(Ruleset.select(ML.term(%{[backmap pattern_ backspec_]}), spec))
+  private def subscope(ctx : FoldContext, bindings : Term::Dict) : NodeScope
+    ctx.scope.append({ctx.addr, bindings})
+  end
 
-    Spec.new(
-      proposals: Ruleset.select(ML.term(%{[rule (propose pattern_*) template_]}), spec),
-      propose: propose,
-      splits: Ruleset.select(ML.term(%{[rule (split pattern_) template_]}), spec),
-      split_cache: SyncCache(Term, Alloy::Ok).new(1024, preallocate: true),
-      mixR: ruledbR,
-      fixR: ruledbR,
-      damageR: ruledbR,
-      edges: EdgeDetection.index(spec),
-      permeation: Permeation.index(spec),
-      ratings: Rating.index(spec),
+  private def fold(regime : Regime, node : Term, &frep : FoldContext, Subcircuit | Gnd -> Term) : Term
+    fold(FoldContext.new(regime, NodeAddr.empty, NodeScope.empty, frep), node)
+  end
+
+  private def fold(ctx : FoldContext, node : Term) : Term
+    fold(ctx, ctx.regime.classify(node))
+  end
+
+  private def fold(ctx : FoldContext, feature : Inert) : Term
+    feature.node
+  end
+
+  private def fold(ctx : FoldContext, feature : Gnd) : Term
+    ctx.frep.call(ctx, feature)
+  end
+
+  private def fold(ctx : FoldContext, feature : Parent) : Term
+    flattenT(feature.node, range: feature.range) do |child, index|
+      fold(ctx.copy_with(addr: ctx.addr.append(index)), child)
+    end
+  end
+
+  private def fold(ctx : FoldContext, feature : Scope) : Term
+    fold(ctx.copy_with(scope: subscope(ctx, feature.bindings)), feature.cont)
+  end
+
+  private def fold(ctx : FoldContext, feature : Mixture) : Term
+    feature.mix.call(feature.node, fold(ctx, feature.defn))
+  end
+
+  private def fold(ctx : FoldContext, feature : Subcircuit) : Term
+    ctx.frep.call(ctx, feature)
+  end
+
+  private def flattenT(dict : Term::Dict, range : Range(Int32, Int32), &) : Term
+    Term.of(flatten(dict, range) { |item, index| yield item, index })
+  end
+
+  private def flatten(dict : Term::Dict, range : Range(Int32, Int32), &) : Term::Dict
+    dict.transaction do |commit|
+      dict.each_item_with_index(within: range) do |item0, index|
+        commit.with(index, (yield item0, index))
+      end
+    end
+  end
+
+  # Removes scope annotations from *edges* of *node*.
+  private def unscoped(node : Term, edges : Slice(Edge))
+    edges.each do |edge|
+      unscoped = unscoped(edge.term)
+      next if edge.term == unscoped
+
+      node = Term.morph(node, edge.path.to_readonly_slice { |i| Term.of(i) }) { unscoped }
+    end
+
+    node
+  end
+
+  # Adds *scope* to *edges* of *node*.
+  private def scoped(scope : NodeScope, node : Term, edges : Slice(Edge))
+    scopedlst = edges.to_readonly_slice { |edge| scoped(scope, edge.term) }
+    scopedlst.zip(edges) do |scoped, edge|
+      node = Term.morph(node, edge.path.to_readonly_slice { |i| Term.of(i) }) { scoped }
+    end
+
+    {node, scopedlst}
+  end
+
+  private def unscoped(edge : Term) : Term
+    Term.case(edge) do
+      matchpi %{(%'edge (#scope _ name_))} { Term.of(:edge, name) }
+      otherwise { edge }
+    end
+  end
+
+  private def scoped(scope : NodeScope, edge : Term) : Term
+    while entry = scope.last?
+      addr, bindings = entry
+
+      unless exterior = bindings[edge]?
+        return annotated(addr, edge)
+      end
+
+      edge = exterior
+      scope = scope[...-1]
+    end
+
+    edge
+  end
+
+  private def annotated(addr : NodeAddr, edge : Term) : Term
+    Term.case(edge) do
+      matchpi %{(%'edge name_)} { Term.of(:edge, {:"#scope", addr, name}) }
+      otherwise { edge }
+    end
+  end
+
+  # Represents a *rewrite regime*. A rewrite regime encapsulates the rules of
+  # rewriting and recognition
+  class Regime
+    # :nodoc:
+    def initialize(
+      @classify : Term -> Feature,
+      @index : RegimeIndex,
+      @handle : Int32, Term::Dict -> Slice(Term),
+      @dump : Int32 -> String,
     )
-  end
-
-  # TODO: extract to call sites
-  def spec(spec : Term)
-    spec(spec) do |query|
-      Term.case(query) do
-        givenpi %{cycle ([fill (@a_ to @b_) body_] ⍊ m: [fill ((%'edge var_symbol) to _) _]) (%all (%value a (some x_)) (%value b none))} do
-          value = Alloy.render(Term.entries({var, x}), body)
-
-          Term.of(:proposal, b, {:some, value})
-        end
-
-        givenpi %{([(%any map latest) (@a_ to @b_) body_] ⍊ m: [(%any map latest) ((%'edge var_symbol) to _) _]) (%value a (some x_)) (%-value b)} do
-          value = Alloy.render(Term.entries({var, x}), body)
-
-          Term.of(:proposal, b, {:some, value})
-        end
-
-        givenpi %{[[map (@a_ pattern_ to @b_) body_]] (%value a (some x_)) (%-value b)} do
-          # TODO: if pattern is a source pattern (implement M1.source?(normp)), emit
-          # a possibly empty list with `body` for each match env
-          unless env = M1.match?(pattern, x)
-            next Term.of(:proposal, b, :none)
-          end
-
-          value = Alloy.render(env, body)
-
-          Term.of(:proposal, b, {:some, value})
-        end
-
-        givenpi %{[[latest (@a_ pattern_ to @b_) body_]] (%value a (some x_)) (%-value b)} do
-          # TODO: if pattern is a source pattern (implement M1.source?(normp)), emit
-          # a possibly empty list with `body` for each match env
-          next unless env = M1.match?(pattern, x)
-
-          value = Alloy.render(env, body)
-
-          Term.of(:proposal, b, {:some, value})
-        end
-
-        givenpi %{([ramp (@a_ to @b_) body_] ⍊ m: [ramp ((%'edge var_symbol) to _) _]) (%value a (some x_)) (%-value b)} do
-          value = Alloy.render(Term.entries({var, x}), body)
-
-          Term.of(:proposals,
-            Term.of(:proposal, a, :none),
-            Term.of(:proposal, b, {:some, value}))
-        end
-
-        givenpi %{[[ramp (@a_ pattern_ to @b_) body_]] (%value a (some x_)) (%-value b)} do
-          # TODO: if pattern is a source pattern (implement M1.source?(normp)), emit
-          # a possibly empty list with `body` for each match env
-          next unless env = M1.match?(pattern, x)
-
-          value = Alloy.render(env, body)
-
-          Term.of(:proposals,
-            Term.of(:proposal, a, :none),
-            Term.of(:proposal, b, {:some, value}))
-        end
-
-        otherwise { }
-      end
-    end
-  end
-
-  private def backmapR(ruleset : Ruleset)
-    rulesetR(ruleset, noR, backmapR, noR)
-  end
-
-  # Replacement function for `walk`. It is called with a node context followed
-  # by the node itself. It is expected to return a replacement -- one of `Rep::Any`.
-  alias WalkFn = NodeContext, Term -> Rep::Any
-
-  # Iterates over a sub-*range* of items of *dict*, constructing the appropriate
-  # node context, and replacing items using the block (see `Rep::Any`). Returns
-  # the modified copy of *dict*.
-  #
-  # This is the core of `D7.walk`.
-  #
-  # This function cannot give you absolute guarantees that you will get reference-
-  # equal *dict* back if you make no replacements; however, in practice, this will
-  # almost always be the case.
-  #
-  # *range* must be exclusive.
-  private def slide(scope : Scope::Path, dict : Term::Dict, range : Range, &) : Term::Dict
-    assert range.exclusive?
-
-    if dict.items.empty?
-      return dict
     end
 
-    # Rep::Some is currently 16 bytes. 16 * 16 = 256 bytes of replacement
-    # cache. Plus 16 * 4 = 64 bytes of indices. 320 bytes of stack memory
-    # on these in total.
-    reps = HybridArray(Rep::Some, 16).new
-    indices = HybridArray(Int32, 16).new
+    def classify(node : Term) : Feature
+      @classify.call(node)
+    end
 
-    all_assigns = true
-
-    dict.items.each_with_index do |node, index|
-      next unless index.in?(range)
-
-      l = (index - 1).in?(range) ? dict[index - 1]? : nil
-      r = (index + 1).in?(range) ? dict[index + 1]? : nil
-      subscope = Scope.append(scope, Scope::Qualifier.new(index))
-
-      rep = yield NodeContext.new(subscope, l, r), node
-
-      case rep
-      in Rep::None
-        next
-      in Rep::One
-      in Rep::Some
-        all_assigns = false
+    def patch(hg : Hypergraph) : Hash(NodeId, Term)
+      # Collect reactions.
+      reactions = [] of RegimeIndex::Reaction
+      @index.solve(hg) do |reaction|
+        reactions << reaction
       end
 
-      reps << rep
-      indices << index
-    end
+      # Prefer reactions with most participants. Prefer reactions that are
+      # more specific. If both are the same, use randomness.
+      reactions.sort_by! { |r| {-r.participants.size, r.pattern.specificity, rand} }
 
-    # Fast path: no changes.
-    if reps.empty?
-      return dict
-    end
+      # Collect patches to nodes.
+      patches = {} of NodeId => Term
 
-    # Slower path: all replacements are assigns.
-    if all_assigns
-      dict1 = dict.transaction do |commit|
-        reps.zip(indices) do |rep, index|
-          commit.with(index, rep.as(Rep::One).term)
-        end
-      end
+      _ = Pf::USet32.transaction do |used|
+        reactions.each do |reaction|
+          next if reaction.participants.any? &.in?(used)
 
-      return dict1
-    end
+          # NOTE: we must give the regime plenty of chances to back away. Pattern mismatch
+          # is the obvious way; a less obvious way is "no change". The latter is used deliberately
+          # on the regime side as a kind of "continue", as in: ignore me, some interior constraints
+          # did not match, move on.
+          next unless env = M1.match?(reaction.pattern.term, reaction.matchee)
 
-    # Slow path: some replacements aren't assigns.
-    Term::Dict.build do |commit|
-      dict.items.each_with_index do |item, index|
-        # This search right here could be expensive -- O(N) -- but only in theory.
-        # In practice, we rarely expect this path to be hit; even tinier is the chance
-        # of a dict hitting this that contains so many replacements that calling `index`
-        # becomes expensive!
-        unless rep_index = indices.index(index)
-          commit << item
-          next
-        end
+          reps = @handle.call(reaction.pattern.index, env)
+          assert reps.size == reaction.participants.size, @dump.call(reaction.pattern.index)
 
-        case rep = reps[rep_index]
-        in Rep::Zero
-        in Rep::One  then commit << rep.term
-        in Rep::Many then commit.concat(rep.terms)
-        end
-      end
-    end
-  end
+          reaction.participants.zip(reaction.matchee.items, reps) do |participant, orig, rep|
+            next if orig == rep
 
-  # Split-rewrite-mix of *node*.
-  private def expand(spec : Spec, node : Term, & : Term -> Rep::Any)
-    instance = split(spec, node)
+            assert patches.put?(participant, rep)
 
-    rep = yield instance
-
-    # If splitting didn't change anything, mixing won't, either. Moreover,
-    # mixing would be faulty since mix with no difference gives us the original
-    # node, not its possibly modified instance which we actually want in
-    # this case.
-    if node == instance
-      return rep
-    end
-
-    mix(spec, node, rep)
-  end
-
-  # Breaks *node* apart into its constituents, collectively known as
-  # its *instance*. Nodes that have no constituents (atomic) are
-  # returned as-is.
-  private def split(spec : Spec, node : Term) : Term
-    Alloy.respond?(spec.splits, node, cache: spec.split_cache) || node
-  end
-
-  # Instance was not modified, there is no reason node should get modified.
-  private def mix(spec : Spec, node : Term, offspring : Rep::None)
-    Rep.none
-  end
-
-  # Strange, offspring annihilated itself. Keep node unchanged.
-  private def mix(spec : Spec, node : Term, offspring : Rep::Zero)
-    Rep.none
-  end
-
-  private def mix(spec : Spec, node : Term, offspring : Rep::One) : Rep::Any
-    mix(spec, node, {offspring.term})
-  end
-
-  private def mix(spec : Spec, node : Term, offspring : Rep::Many) : Rep::Any
-    mix(spec, node, offspring.terms)
-  end
-
-  # Mixing is the inverse of splitting. We try to assemble a node from
-  # its modified constituents. If we fail, we leave the original node
-  # rather than its constituents.
-  private def mix(spec : Spec, node : Term, offspring : Indexable(Term))
-    case r = rewrite0(Term.of(:mix, {node}, offspring), spec.mixR)
-    in Rewrite::None
-      Rep.none
-    in Rewrite::Many
-      Log.error { "confused: mix rule was rewritten to multiple offspring" }
-      Rep.none
-    in Rewrite::One
-      Term.case(r.term) do
-        matchpi %{(mix (product_*) _)} do
-          Rep.some(product.items)
-        end
-
-        otherwise do
-          Log.error { "confused: mix rule was rewritten to `#{ML.compact(r.term)}` which is meaningless" }
-          Rep.none
-        end
-      end
-    end
-  end
-
-  private def editing?(ranges : Permeation::PassableRangeArray, instance : Term) : Bool
-    # Fast path
-    unless instance.probably_includes?(Input::CUE)
-      return false # not editing
-    end
-
-    # Cursors in passable spots should not count as editing. So first,
-    # check if we have permeation ranges aka passable spots.
-
-    if ranges.empty?
-      # If we have no permeation ranges, then simply delegate the remainder
-      # of checks to `Cursor.in?`.
-      return Cursor.in?(instance, only_active: true)
-    end
-
-    # If we have some permeation ranges aka passable spots, skip them
-    # and check for cursors in all other items.
-    instance.each_item_with_index do |item, index|
-      next if ranges.any? { |range| range.span.includes?(index) }
-      next unless Cursor.in?(item, only_active: true)
-      return true # editing
-    end
-
-    false # not editing
-  end
-
-  # Filter configuration for `D7.walk`.
-  @[Flags]
-  enum WalkConf
-    # If present, enables emission of parent nodes, i.e., nodes whose passable
-    # children were emitted already.
-    EmitParents
-
-    # If present, enables emission of nodes that are currently being edited.
-    EmitEdited
-  end
-
-  DEFAULT_WALK_CONF = WalkConf::EmitParents
-
-  # Traverses a D7 *program*: allows the caller to inspect, replace, or modify
-  # nodes using *fn*, according to permeability, split, mix, and other rules
-  # defined in *spec*.
-  def walk(spec : Spec, program : Term, conf : WalkConf = DEFAULT_WALK_CONF, &fn : WalkFn) : Term
-    program.as_d { |dict| walk(spec, dict, conf, &fn) }
-  end
-
-  # :ditto:
-  def walk(spec : Spec, program : Term::Dict, conf : WalkConf = DEFAULT_WALK_CONF, &fn : WalkFn) : Term::Dict
-    slide(Scope.toplevel, program, 0...program.itemsize) do |ctx, node|
-      walk(spec, ctx, node, conf, fn)
-    end
-  end
-
-  private def walk(spec : Spec, ctx : NodeContext, node : Term, conf : WalkConf, fn : WalkFn) : Rep::Any
-    # Cursor in pairspart is a hard no because we don't know what kind of
-    # abomination it would expand into.
-    if node.type.dict? && Cursor.in?(Term.of(node.pairspart), only_active: false)
-      if conf.emit_edited?
-        return fn.call(ctx, node)
-      end
-      return Rep.none
-    end
-
-    expand(spec, node) do |instance|
-      walk1(spec, ctx, instance, conf, fn)
-    end
-  end
-
-  private def walk1(spec : Spec, ctx : NodeContext, instance : Term, conf : WalkConf, fn : WalkFn) : Rep::Any
-    subscope = ctx.scope
-
-    if rating = Rating.rating?(spec.ratings, instance)
-      subscope = Scope.append(subscope, rating)
-    end
-
-    ctx = ctx.copy_with(scope: subscope)
-
-    unless instance.type.dict?
-      return fn.call(ctx, instance)
-    end
-
-    ranges, subscope = Permeation.ranges(spec.permeation, subscope, instance)
-
-    # If the caller does not want edited nodes, let's filter those out.
-    if !conf.emit_edited? && editing?(ranges, instance)
-      return Rep.none
-    end
-
-    offspring = ranges.reduce(instance) do |memo, range|
-      walk1(spec, subscope, memo, range, conf, fn)
-    end
-
-    if conf.emit_parents? || ranges.empty?
-      fn.call(ctx, offspring)
-    else
-      Rep::One.new(offspring)
-    end
-  end
-
-  private def walk1(spec : Spec, scope : Scope::Path, instance : Term, range : Permeation::PassableRange, conf : WalkConf, fn : WalkFn) : Term
-    instance_dict = instance.as_d
-
-    if range.quoted
-      offspring = slide(scope, instance_dict, range.span) do |ctx, node|
-        walkq1(spec, ctx.scope, node, conf, fn)
-      end
-
-      return Term.of(offspring)
-    end
-
-    offspring_dict = slide(scope, instance_dict, range.span) do |ctx, node|
-      walk(spec, ctx, node, conf, fn)
-    end
-
-    Term.of(offspring_dict)
-  end
-
-  private def walkq1(spec : Spec, scope : Scope::Path, term : Term, conf : WalkConf, fn : WalkFn) : Rep::Any
-    Term.case(term) do
-      matchpi %{[unquote _*]} do
-        ranges, subscope = Permeation.ranges(spec.permeation, scope, term)
-        if !conf.emit_edited? && editing?(ranges, term)
-          return Rep.none
-        end
-
-        Rep.one(slide(subscope, term.as_d, 1...term.itemsize, &fn))
-      end
-
-      matchpi %{_dict} do
-        Rep.one(slide(scope, term.as_d, 0...term.itemsize) do |ctx, item|
-          walkq1(spec, ctx.scope, item, conf, fn)
-        end)
-      end
-
-      otherwise { Rep.none }
-    end
-  end
-
-  private def infer(spec : Spec, query : Term, workspace : Term::Dict) : Term::Dict
-    unless proposal = Alloy.respond?(spec.proposals, query) || spec.propose.call(query)
-      return workspace
-    end
-
-    accept(workspace, proposal)
-  end
-
-  private def accept(workspace : Term::Dict, proposal : Term) : Term::Dict
-    Term.case(proposal) do
-      matchpi %{(proposal @edge_ v←(some _))}, %{(proposal @edge_ v←none)} do
-        u = workspace[edge]?
-
-        if u.in?(nil, Term.of(:none))
-          workspace.with(edge, v)
-        else
-          workspace
-        end
-      end
-
-      matchpi %{(proposals proposals_*)} do
-        proposals.items.reduce(workspace) do |memo, item|
-          accept(memo, item)
-        end
-      end
-
-      otherwise do
-        Log.error { "invalid proposal #{ML.compact(proposal)}" }
-        workspace
-      end
-    end
-  end
-
-  private def boot(spec, program : Term) : Term::Dict
-    workspace0 = Term[]
-
-    refs = [] of {Scope::Path, Term, Term}
-    matches = {} of Term => Array(Term::Dict)
-
-    walk(spec, program) do |ctx, node|
-      Term.case(node) do
-        matchpi %{[ref @edge_ pattern_]} do
-          qualedge = Scope.resolve(ctx.scope, edge)
-          refs << {ctx.scope, qualedge, pattern}
-          workspace0 = workspace0.with(qualedge, :none)
-        end
-
-        otherwise do
-          EdgeDetection.each(spec.edges, node) do |edge|
-            qualedge = Scope.resolve(ctx.scope, edge)
-            workspace0 = workspace0.with(qualedge, :none)
+            used << participant
           end
         end
       end
 
-      Rep.none
+      patches
     end
 
-    walk(spec, program) do |ctx, node|
-      scope0 = Scope.current(ctx.scope)
+    Term::Case.defcase build(classify) do |id, branches, sink|
+      {% begin %}
+        {% if sink %}
+          {% sink.raise "`otherwise` makes no sense in Regime" %}
+        {% end %}
 
-      refs.each do |refscope, edge, pattern|
-        # Queries have the same scope as their edge.
-        scope1, _ = Scope.find(refscope, edge)
-        next unless scope0 == scope1
+        pass do
+          %index = RegimeIndex.build([{{branches.map { |branch| branch[:pattern][:call] }.splat}}] of Term)
 
-        envs = M1.matches(pattern, node)
-        next if envs.empty?
+          %handle = ->(%index : Int32, %env : Term::Dict) do
+            case %index
+            {% for branch, i in branches %}
+            when {{i}}
+              pass do
+                {% for capture, var, j in branch[:captures] %}\
+                  %value{i, j} = %env[{{capture}}]? || raise("#{ {{branch[:location]}} }: missing capture `{{capture.id}}`")
+                  {% if type = branch[:cast][var] %}\
+                    {{var.id}} = %value{i, j}.to({{type}})
+                  {% else %}\
+                    {{var.id}} = %value{i, j}
+                  {% end %}\
+                {% end %}\
+                {{branch[:body]}}
+              end
+            {% end %}
+            else
+              unreachable
+            end
+          end
 
-        bucket = matches.put_if_absent(edge) { [] of Term::Dict }
-        bucket.concat(envs)
-      end
+          %dump = ->(%index : Int32) do
+            { {{ branches.map { |branch| branch[:pattern][:src] }.splat }} }[%index]
+          end
 
-      Rep.none
-    end
-
-    refs.each do |_, target, _|
-      if bucket = matches[target]?
-        workspace0 = workspace0.with(target, {:some, bucket})
-      else
-        workspace0 = workspace0.with(target, {:some, Term[]})
-      end
-    end
-
-    workspace0
-  end
-
-  private def saturate(spec, program : Term, workspace0 : Term::Dict, cycle : Bool) : Term::Dict
-    loop do
-      workspace1 = workspace0
-
-      walk(spec, program) do |ctx, node|
-        scoped = EdgeDetection.map(spec.edges, node) do |edge|
-          Scope.resolve(ctx.scope, edge)
+          {{@type}}.new({{classify}}, %index, %handle, %dump)
         end
-
-        query = Term.of(scoped, l: ctx.l, m: node, r: ctx.r)
-        workspace1 = infer(spec, cycle ? Term.of(:cycle, query, workspace1) : Term.of(query, workspace1), workspace1)
-
-        Rep.none
-      end
-
-      break if workspace0 == workspace1
-
-      workspace0 = workspace1
-    end
-
-    workspace0
-  end
-
-  private def saturate(spec, program : Term, workspace0 : Term::Dict) : Term::Dict
-    cycle = false
-
-    loop do
-      workspace1 = saturate(spec, program, workspace0, cycle)
-      break if cycle && workspace0 == workspace1
-
-      cycle = !cycle
-      workspace0 = workspace1
-    end
-
-    workspace0
-  end
-
-  private def transfer(spec, program : Term, workspace0 : Term::Dict) : Term::Dict
-    workspace1 = Term[]
-
-    walk(spec, program) do |ctx, node|
-      scoped = EdgeDetection.map(spec.edges, node) do |edge|
-        Scope.resolve(ctx.scope, edge)
-      end
-
-      query = Term.of(scoped, l: ctx.l, m: node, r: ctx.r)
-      workspace1 = infer(spec, Term.of(query, workspace0, workspace1), workspace1)
-
-      Rep.none
-    end
-
-    workspace1
-  end
-
-  private def fix(spec, program : Term, workspace0 : Term::Dict, workspace1 : Term::Dict) : Term
-    walk(spec, program) do |ctx, node|
-      locals = Term[]
-
-      EdgeDetection.each(spec.edges, node) do |edge|
-        qualedge = Scope.resolve(ctx.scope, edge)
-        next unless value = workspace1[qualedge]? || workspace0[qualedge]?
-
-        locals = locals.with(edge, value)
-      end
-
-      query = Term.of(:fix, Term.of(node, l: ctx.l, m: node, r: ctx.r), locals)
-      response = rewrite(query, spec.fixR)
-
-      Term.case(response) do
-        matchpi %{(fix [offspring_*] _)} do
-          Rep.some(offspring.items)
-        end
-
-        otherwise do
-          Log.error { "meaningless response to (fix _*): #{ML.compact(response)}" }
-          Rep.none
-        end
-      end
-    end
-  end
-
-  # Applies a round of repair to a D7 *program*. The repair rules are given
-  # by *spec*. Returns a modified copy of *program*.
-  #
-  # You are recommended to show repaired versions of *program* to the user
-  # (i.e., the results of running this function). Show damaged versions only if
-  # you absolutely cannot get a repaired one. This is because damaged versions
-  # can cause (significant) confusion, since they may consist of parts that
-  # are out of date relative to each other, i.e., constraints defined by the program
-  # may be violated and that would look strange.
-  #
-  # NOTE: you must call `repair` before every round of damage (your own or
-  # D7's own `damage`).
-  def repair(spec : Spec, program : Term) : Term
-    workspace0 = boot(spec, program)
-    workspace0 = saturate(spec, program, workspace0)
-    workspace1 = transfer(spec, program, workspace0)
-
-    fix(spec, program, workspace0, workspace1)
-  end
-
-  # Applies a round of D7's own damage rules to *program*. The damage rules
-  # are given by *spec*. Returns a modified copy of *program*.
-  #
-  # The order of your own damage functions and this one is generally not
-  # important, as long as there are no clashes (as in, you do not damage
-  # e.g. `decay` nodes yourself, which you probably wouldn't do).
-  #
-  # NOTE: you must only call damage after *program* was `repair`ed.
-  def damage(spec : Spec, program : Term) : Term
-    walk(spec, program) do |ctx, node|
-      query = Term.of(:damage, Term.of(node, l: ctx.l, m: node, r: ctx.r))
-      response = rewrite(query, spec.damageR)
-
-      Term.case(response) do
-        matchpi %{(damage [offspring_*])} do
-          Rep.some(offspring.items)
-        end
-
-        otherwise do
-          Log.error { "meaningless response to (damage _*): #{ML.compact(response)}" }
-          Rep.none
-        end
-      end
+      {% end %}
     end
   end
 end

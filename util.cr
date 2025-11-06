@@ -3707,6 +3707,12 @@ struct Bag(T)
     add(object)
   end
 
+  def add?(object : T) : Bool
+    @storage[object] = tally = (@storage[object]? || 0u16) + 1
+
+    tally == 1
+  end
+
   def subset_of?(other : Bag) : Bool
     each_with_tally do |x, n|
       return false unless m = other.tally?(x)
@@ -4214,6 +4220,14 @@ class Bimap(L, R)
     @l.each { |key, value| yield({key, value}) }
   end
 
+  def includes?(object : L)
+    @l.has_key?(object)
+  end
+
+  def includes?(object : R)
+    @r.has_key?(object)
+  end
+
   # Returns the object of type `R` associated with the object of type `L`.
   # Returns `nil` if no such association exists.
   def []?(object : L) : R?
@@ -4258,6 +4272,15 @@ class Bimap(L, R)
     end
 
     self[key] = yield
+  end
+
+  def put?(key : L, value : R) : Bool
+    if includes?(key)
+      return false
+    end
+
+    self[key] = value
+    true
   end
 
   # Removes the association between the object of type `L` and an object of
