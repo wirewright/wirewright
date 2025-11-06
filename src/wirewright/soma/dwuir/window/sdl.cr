@@ -419,12 +419,14 @@ module Ww::Soma::DwUIR
       windows.each { |window| present(proof, window) }
     end
 
-    private def dispatch(event : ::SDL::Event::MouseMotion, sink)
-      tr = Event::MouseMotion.new(event.which, event.x, event.y)
-
-      Event.term(tr) do |term|
-        sink.call(Term.of(:event, event.window_id, term))
+    private def dispatch(window_id, event, sink)
+      Event.term(event) do |term|
+        sink.call(Term.of(:event, window_id, term))
       end
+    end
+
+    private def dispatch(event : ::SDL::Event::MouseMotion, sink)
+      dispatch(event.window_id, Event::MouseMotion.new(event.which, event.x, event.y), sink)
     end
 
     private def dispatch(event : ::SDL::Event::MouseButton, sink)
@@ -453,17 +455,11 @@ module Ww::Soma::DwUIR
         return
       end
 
-      Event.term(tr) do |term|
-        sink.call(Term.of(:event, event.window_id, term))
-      end
+      dispatch(event.window_id, tr, sink)
     end
 
     private def dispatch(event : ::SDL::Event::MouseWheel, sink)
-      tr = Event::MouseWheel.new(event.which, event.x, event.y*-1)
-
-      Event.term(tr) do |term|
-        sink.call(Term.of(:event, event.window_id, term))
-      end
+      dispatch(event.window_id, Event::MouseWheel.new(event.which, event.x, event.y*-1), sink)
     end
 
     private def dispatch(event : ::SDL::Event::Keyboard, sink)
@@ -533,28 +529,43 @@ module Ww::Soma::DwUIR
         ctrl = shift = alt = false
       end
 
+      up = Event::KeyUp.new(key, ctrl, shift, alt)
+      dn = Event::KeyDn.new(key, ctrl, shift, alt)
+
       case event.type
       when .keyup?
-        tr = Event::KeyUp.new(key, ctrl, shift, alt)
+        dispatch(event.window_id, up, sink)
       when .keydown?
-        tr = Event::KeyDn.new(key, ctrl, shift, alt)
-      else
-        return
-      end
-
-      Event.term(tr) do |term|
-        sink.call(Term.of(:event, event.window_id, term))
+        if event.repeat
+          # Repeats are mapped to up-dn for consistency.
+          dispatch(event.window_id, up, sink)
+          dispatch(event.window_id, dn, sink)
+        else
+          dispatch(event.window_id, dn, sink)
+        end
       end
     end
 
     private def dispatch(event : ::SDL::Event::TextInput, sink)
       rune = String.new(event.text.to_slice, truncate_at_null: true)
 
-      tr = Event::KeyInput.new(rune)
+      dispatch(event.window_id, Event::KeyInput.new(rune), sink)
+    end
 
-      Event.term(tr) do |term|
-        sink.call(Term.of(:event, event.window_id, term))
+    private def dispatch(event : ::SDL::Event::Window, sink)
+      # NOTE: resized is only triggered on user resize, programmatic
+      # resize doesn't trigger it which is actually what we want here!
+      case ::SDL::Window::Event.new(event.event)
+      when .resized? then tr = Event::WindowResized.new(event.data1, event.data2)
+      when .close?   then tr = Event::WindowClosed.new
+      when .exposed? then tr = Event::WindowExposed.new
+      when .enter?   then tr = Event::MouseIn.new
+      when .leave?   then tr = Event::MouseOut.new
+      else
+        return
       end
+
+      dispatch(event.window_id, tr, sink)
     end
 
     private def dispatch(event, sink)
@@ -607,28 +618,6 @@ module Ww::Soma::DwUIR
             return if post == Term.of(:shutdown)
 
             sink.call(post)
-          end
-        when ::SDL::Event::Window
-          sysid = event.window_id
-
-          case ::SDL::Window::Event.new(event.event)
-          when .resized?
-            # NOTE: resized is only triggered on user resize, programmatic
-            # resize doesn't trigger it which is actually what we want here!
-            Event.term(Event::WindowResized.new(event.data1, event.data2)) do |term|
-              sink.call(Term.of(:event, sysid, term))
-            end
-          when .close?
-            Event.term(Event::WindowClosed.new) do |term|
-              sink.call(Term.of(:event, sysid, term))
-            end
-          when .exposed?
-            Event.term(Event::WindowExposed.new) do |term|
-              sink.call(Term.of(:event, sysid, term))
-            end
-          else
-            # Any other window event.
-            dispatch(event, sink)
           end
         else
           # Any other event.
