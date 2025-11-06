@@ -1,7 +1,7 @@
 # Wirewright Delta7 (D7 for short) is a *symbolic physics engine*. In a sense,
 # it is just like a *physics engine* (think Box2D), but instead of working with
-# bodies, it works on *symbols*. Rather than solving equations, D7 searches for
-# relationships between symbols according to constraints. Instead of manipualting
+# bodies, it works with *symbols*. Rather than solving equations, D7 searches for
+# relationships between symbols according to constraints. Instead of manipulating
 # velocity and position, D7 *rewrites*.
 #
 # At its core, D7 is an attempt to model *autopoiesis* as described by Maturana,
@@ -11,22 +11,24 @@
 # characterization and a model* by Varela, Maturana & Uribe (1974). D7 is trying
 # to check all the boxes in section 9, "Key".
 #
-# I think autopoiesis can be modeled in any "physical simulator". The only problem
-# is that in practice, the physical simulators we build are too unstructured. It's
+# I think autopoiesis can be modeled in any "physics simulator". The only problem
+# is that in practice, the physics simulators we build are too unstructured. It's
 # "perceptually hard" to extract useful info from it, both for us as observers and
 # for the entities within the simulation. Imagine how much intrinsic structure
 # a particle simulator would require to start recognizing or matching on its own
 # configuration or its parts? With D7, it's as simple as a pattern match on a fragment.
 #
-# Imagine a game. How hard would it be to get a car to drive itself in that game, given
-# only the game's visual output and keyboard input, that is, "as an outside agent"?
+# Imagine a game. How hard would it be to make a car drive itself in that game, given
+# only the game's visuals as output and keyboard press states as input -- that is,
+# "from an outside agent's point of view"?
 #
 # We know the answer: very hard. That's why people resort to black box (ish) methods
-# like neural networks.
+# like neural networks. In the worst case, you'd need a human -- an intricate
+# apparatus indeed.
 #
 # If only we had a *symbolic* physics simulator, with the same or similar kinds
 # of behaviors, but with structures easy to pattern match and construct
-# programmatically, "as an outside agent"...
+# programmatically, "from an outside agent's point of view"...
 #
 # D7 is an attempt to build such a simulator.
 #
@@ -311,9 +313,9 @@ module Ww::D7
         end
       end
 
-      # Compute an unordered, clique-expanded graph from the *circuit* hypergraph:
-      # nodes that share a hyperedge are connected, and each unordered edge is
-      # represented with a pair of edges going in opposite directions.
+      # Compute an unordered, clique-expanded graph from *hg*: nodes that share
+      # a hyperedge are connected, and each unordered edge is represented with
+      # a pair of edges going in opposite directions.
       graph = {} of NodeId => Pf::USet32
 
       groups.each do |_, members|
