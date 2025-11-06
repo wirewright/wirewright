@@ -3846,6 +3846,20 @@ module Enumerable(T)
 end
 
 struct Range(B, E)
+  def to_readonly_slice(&)
+    {% unless B == E %}
+      {% raise "cannot call #to_readonly_slice on ranges whose B != E" %}
+    {% end %}
+
+    {% unless B < ::Int && E < ::Int %}
+      {% raise "expected Range(_ < Int, _ < Int)" %}
+    {% end %}
+
+    Slice((typeof (yield @begin))).new(size) do |index|
+      yield @begin + index
+    end
+  end
+
   def segments(indices : Enumerable(Int32), &)
     prev = 0
 
@@ -3871,7 +3885,7 @@ struct Range(B, E)
 
   def subrange_of?(other : Range(B, E)) : Bool
     {% unless B < ::Int && E < ::Int %}
-      {% raise "subrange_of? only supports integer ranges" %}
+      {% raise "expected Range(_ < Int, _ < Int)" %}
     {% end %}
 
     @begin.in?(other) && (exclusive? ? (@end - 1).in?(other) : @end.in?(other))
@@ -3909,6 +3923,34 @@ struct Range(B, E)
     return false unless other.size == 1
 
     other.first_char.in?(self)
+  end
+
+  def split(n : Int, & : Range(B, E) ->)
+    {% unless B < ::Int && E < ::Int %}
+      {% raise "expected Range(_ < Int, _ < Int)" %}
+    {% end %}
+
+    unless n.positive?
+      raise ArgumentError.new
+    end
+
+    unless exclusive?
+      raise ArgumentError.new("expected an exclusive rangej")
+    end
+
+    if size < n
+      yield self
+      return
+    end
+
+    step, rem = size.divmod(n)
+    from = @begin
+    n.times do |i|
+      to = from + step - 1
+      to += 1 if i < rem
+      yield (from...to + 1), i
+      from = to + 1
+    end
   end
 end
 
@@ -4575,7 +4617,7 @@ end
 
 # TODO: lots of very hot places rely on this. split into buckets & in general
 # see SOTA parallel hashes !!! Sync Map is buggy and causes occasional deadlocks.
-struct SyncHash(K, V)
+class SyncHash(K, V)
   def initialize(initial_capacity : Int32? = nil)
     @hash = Hash(K, V).new(initial_capacity: initial_capacity)
     @lock = Sync::RWLock.new
@@ -4600,12 +4642,14 @@ struct SyncHash(K, V)
     end
 
     # Slow path: probably does not exist
+    computed = yield
+
     @lock.write do
       if value = @hash[key]?
         return value
       end
 
-      @hash[key] = yield
+      @hash[key] = computed
     end
   end
 
@@ -4806,5 +4850,11 @@ module Parseout
     end
 
     π
+  end
+end
+
+class ::Sync::Future
+  def inspect(io)
+    io << "Sync::Future(...)"
   end
 end

@@ -4299,8 +4299,8 @@ module ::Ww::M1
 
   def self.walk(root : Term, mode : WalkMode::NonItemSeq.class, callable, *, itemseq : Bool = false, keypath = nil) : WalkDecision
     walk(root, mode: WalkMode::Thorough, keypath: keypath) do |node|
-      Term.case(node, engine: M0) do
-        if itemseq
+      if itemseq
+        Term.case(node, engine: M0) do
           # Recurse into M1 non-item sequence children with itemseq flag off.
           matchpi(
             %{[%singular child_]},
@@ -4331,7 +4331,9 @@ module ::Ww::M1
 
           # Avoid all other item sequence nodes.
           otherwise { WalkDecision::Skip }
-        else
+        end
+      else
+        Term.case(node, engine: M0) do
           matchpi %{[%itemseq _*]}, cue: :"%itemseq" do
             decision = callable.call(node)
 

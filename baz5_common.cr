@@ -198,7 +198,7 @@ struct ProcRuleset
 
     # :nodoc:
     macro pi(methodp, ml, &block)
-      {% icaps = ml.scan(::Ww::Term::CaseContext::RE_CAPTURES).map { |match| (match[1] || match[2]).id }.uniq %}
+      {% icaps = ml.scan(::Ww::Term::Case::RE_CAPTURES).map { |match| (match[1] || match[2]).id }.uniq %}
       {% location = "#{block.filename.id}:#{block.line_number}:#{block.column_number}" %}
 
       {{methodp}}({{ml}}) do |%env|

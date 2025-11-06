@@ -54,6 +54,11 @@ module Ww
     end
   end
 
+  # TODO: remove in favor of Term::Any
+  # TODO: refactor autocast to use AoT introspection + annotations instead of method_missing.
+  #  Autocast is a huge wart on the face of the project the way it is implemented right now.
+  #  You can get infinite loops, at runtime, out of nowhere, just because you've called the
+  #  wrong method, and if you're lucky to get a compile error, it points to nowhere in particular.
   module ITerm
     def to_json(builder : JSON::Builder)
       upcast.to_json(builder)
@@ -144,12 +149,6 @@ module Ww
     end
   end
 
-  # Terms are thread-safe values, the primary operand in Wirewright. Sometimes
-  # they are passed around as comprehensible *messages*, sometimes they are
-  # serialized, packed and sent over the network, sometimes indexed, and sometimes
-  # manipulated as data. Terms are also the code and data for WwML, a language
-  # with S-expression-like syntax used to program nodes.
-  #
   # All terms (including dictionary terms `Term::Dict`) are persistent, thread-safe,
   # and immutable.
   struct Term
@@ -900,23 +899,70 @@ module Ww
       engine.matches(Term.of(pattern), Term.of(matchee), env: env)
     end
 
-    def self.case(matchee, *, engine : Engine.class = M1, **kwargs, &) forall Engine
-      context = CaseContext(Engine).new(Term.of(matchee), **kwargs).as(CaseContext(Engine))
+    # :nodoc:
+    MATCHERS = SyncCache(UInt32, Case::Matcher).new(capacity: 512, preallocate: true)
 
-      with context yield context
-
-      raise ArgumentError.new("no match found for #{matchee}")
+    # Advanced: Direct form of `Term.case` allowing explicit control over the matcher
+    # instance and the initial environment.
+    #
+    # See also: `Case.defcase`, `Case.scan`.
+    macro case(matchee, *, matcher, env = Term[], &block)
+      {{@type}}::Case.scan({{@type}}::MATCHERS, {{matcher}}, Term.of({{matchee}}), {{env}}) {{block}}
     end
 
+    # Advanced: Lets you pick an engine explicitly (e.g. `M0`, `M1`), constructing
+    # an appropriate matcher
+    macro case(matchee, *, engine, **kwargs, &block)
+      {{@type}}.case({{matchee}}, matcher: {{@type}}::Case::MM({{engine}}), {{kwargs.double_splat}}) {{block}}
+    end
+
+    # Structural pattern matching DSL over `Term`s.
+    #
+    # `case` expands to efficient pattern matching code that uses one of the matchers
+    # provided by `Case` (see `Case::Matcher`).
+    #
+    # - *matchee* is the term to match.
+    # - *env* can be provided as a keyword argument, to be used as the initial
+    #   match env for all patterns.
+    #
+    # ```
+    # def calc(expr : Term) : Term
+    #   Term.of_case(expr) do
+    #     matchpiT %{(+ a←(%number i32) b←(%number i32))} do
+    #       typeof(a) # => Int32
+    #       typeof(b) # => Int32
+    #       a + b
+    #     end
+    #     matchpiT %{(- a←(%number i32) b←(%number i32))} { a - b }
+    #     matchpiT %{(* a←(%number i32) b←(%number i32))} { a * b }
+    #     matchpiT %{(/ a←(%number i32) b←(%number i32))} { a // b }
+    #     otherwise { expr }
+    #   end
+    # end
+    #
+    # calc(ML.term(%{(+ 1 2)})) # => 3
+    # calc(ML.term(%{(- 1 2)})) # => -1
+    # calc(ML.term(%{(* 2 2)})) # => 4
+    # calc(ML.term(%{(/ 4 2)})) # => 2
+    #
+    # calc(ML.term(%{abc})) # => abc
+    # ```
+    #
+    # See `Case` for details on syntax.
+    macro case(matchee, **kwargs, &block)
+      {{@type}}.case({{matchee}}, matcher: {{@type}}::Case::MM1, {{kwargs.double_splat}}) {{block}}
+    end
+
+    # A shorthand for wrapping `Term.case` in `Term.of`.
     macro of_case(*args, **kwargs, &block)
-      ::Ww::Term.of(::Ww::Term.case({{args.splat}}, {{kwargs.double_splat}}) {{block}})
+      {{@type}}.of({{@type}}.case({{args.splat}}, {{kwargs.double_splat}}) {{block}})
     end
 
     # Shorthand for a single-`matchpi` call to `Term.case`:
     #
     # ```
-    # Term.case(term) do
-    #   matchpi pattern do
+    # Term.case(term, **kwargs) do
+    #   matchpi *patterns do
     #     # Block
     #   end
     #
@@ -924,7 +970,7 @@ module Ww
     # end
     # ```
     macro matchpi?(term, *patterns, **kwargs, &block)
-      ::Ww::Term.case({{term}}, {{kwargs.double_splat}}) do
+      {{@type}}.case({{term}}, {{kwargs.double_splat}}) do
         matchpi({{patterns.splat}}) {{block}}
         otherwise { }
       end
@@ -933,14 +979,14 @@ module Ww
     # Shorthand for a single-`matchpi` call to `Term.case`:
     #
     # ```
-    # Term.case(term) do
-    #   matchpi pattern do
+    # Term.case(term, **kwargs) do
+    #   matchpi *patterns do
     #     # Block
     #   end
     # end
     # ```
     macro matchpi(term, *patterns, **kwargs, &block)
-      ::Ww::Term.case({{term}}, {{kwargs.double_splat}}) do
+      {{@type}}.case({{term}}, {{kwargs.double_splat}}) do
         matchpi({{patterns.splat}}) {{block}}
       end
     end
@@ -948,8 +994,8 @@ module Ww
     # Shorthand for a single-`givenpi` call to `Term.case`:
     #
     # ```
-    # Term.case(term) do
-    #   givenpi pattern do
+    # Term.case(term, **kwargs) do
+    #   givenpi *patterns do
     #     # Block
     #   end
     #
@@ -957,7 +1003,7 @@ module Ww
     # end
     # ```
     macro givenpi?(term, *patterns, **kwargs, &block)
-      ::Ww::Term.case({{term}}, {{kwargs.double_splat}}) do
+      {{@type}}.case({{term}}, {{kwargs.double_splat}}) do
         givenpi({{patterns.splat}}) {{block}}
         otherwise { }
       end
@@ -966,14 +1012,14 @@ module Ww
     # Shorthand for a single-`givenpi` call to `Term.case`:
     #
     # ```
-    # Term.case(term) do
-    #   givenpi pattern do
+    # Term.case(term, **kwargs) do
+    #   givenpi *patterns do
     #     # Block
     #   end
     # end
     # ```
     macro givenpi(term, *patterns, **kwargs, &block)
-      ::Ww::Term.case({{term}}, {{kwargs.double_splat}}) do
+      {{@type}}.case({{term}}, {{kwargs.double_splat}}) do
         givenpi({{patterns.splat}}) {{block}}
       end
     end

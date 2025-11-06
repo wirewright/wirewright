@@ -570,6 +570,7 @@ end
 defcase TestContext, theme : Mf::Theme, rack_basis : Term::Dict, uiR_base : Term
 
 def test(ctx, test, path, keypath, stem, srcmap, text) : Bool
+  {% begin %}
   Term.case(stem) do
     # Descend into (group _*)
     givenpi %[_* (group _*) node] { true }
@@ -1180,6 +1181,7 @@ def test(ctx, test, path, keypath, stem, srcmap, text) : Bool
       false # no descend
     end
   end
+  {% end %}
 end
 
 # Runs a generic test.
