@@ -39,7 +39,7 @@ module Ww
     end
 
     def to?(type : Path.class) : Path
-      Path[@value]
+      Path[@value.to_s]
     end
 
     # Returns the number of characters in this string.

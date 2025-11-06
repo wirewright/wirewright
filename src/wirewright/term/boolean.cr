@@ -20,8 +20,7 @@ module Ww
       @value
     end
 
-    # Returns Crystal `false` if this boolean is Wirewright `false`. Effectively,
-    # converts this boolean to a Crystal boolean.
+    # Returns Crystal `true` if this boolean is Wirewright `false`.
     @[AlwaysInline]
     def false? : Bool
       !@value
