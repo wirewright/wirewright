@@ -1184,8 +1184,8 @@ module Ww
     # the stack to valid condition after you've modified it.
 
     def self.each_node(root : Term, & : Term -> Bool) : Nil
-      ns = HybridArray(Int32, 32).new
-      nodes = HybridArray(Term, 32){root}
+      ns = Pf::Kit::HybridArray(Int32, 32).new
+      nodes = Pf::Kit::HybridArray(Term, 32){root}
 
       while node = nodes.pop?
         descend = yield node
@@ -1218,8 +1218,8 @@ module Ww
     # Traversal proceeds left-to-right, parent before children. *root* is
     # yielded first.
     def self.each_keypath_and_node(root : Term, & : Array(Term), Term -> Bool) : Nil
-      ns = HybridArray(Int32, 32).new
-      nodes = HybridArray(Term, 32){root}
+      ns = Pf::Kit::HybridArray(Int32, 32).new
+      nodes = Pf::Kit::HybridArray(Term, 32){root}
       keypath = [] of Term
 
       while node = nodes.pop?

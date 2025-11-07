@@ -1,8 +1,8 @@
 module Ww::Alloy
   # Base dictionary rewriting.
   private def flatten(dict0 : Term::Dict, issues : Issue::Sink, & : Term, Issue::Sink -> _) : Expansion
-    indices = HybridArray(Int32, 64).new
-    expansions = HybridArray(Expansion, 64).new
+    indices = Pf::Kit::HybridArray(Int32, 64).new
+    expansions = Pf::Kit::HybridArray(Expansion, 64).new
     rebuild = false
 
     # Process items.

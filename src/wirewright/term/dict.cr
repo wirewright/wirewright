@@ -35,7 +35,7 @@
 #       diffing, which are depended on by Soma and the higher-level.
 #    7. The memory layout and general design of permafrost is OK for a general-purpose HAMT,
 #       but here we have a lot of packing/inlining opportunities; and we're a dict, whereas
-#       Pf::Core::Node assumes a set (roughly). We lose a lot of copy reduction opportunities
+#       Pf::Kit::Node assumes a set (roughly). We lose a lot of copy reduction opportunities
 #       by not storing keys and values separately. I also believe we should somehow use variably
 #       sized but fixed-bytesize nodes. I think we should fix the bytesize at 64 bytes, since this
 #       is a cache line size so we'll get the stuff around-ish for free.
@@ -91,10 +91,10 @@ module Ww
     include ITerm
 
     # :nodoc:
-    alias ItemNode = Pf::Core::Node(Item)
+    alias ItemNode = Pf::Kit::Node(Item)
 
     # :nodoc:
-    alias PairNode = Pf::Core::Node(Pair)
+    alias PairNode = Pf::Kit::Node(Pair)
 
     # :nodoc:
     struct Item
@@ -115,7 +115,7 @@ module Ww
     # Commits allow you to compose multiple edits into one, big edit of a dict.
     # Thus you avoid having to create many useless intermediate copies.
     class Commit
-      @@id : Atomic(Pf::Core::AuthorId) = Atomic(Pf::Core::AuthorId).new(Pf::Core::AUTHOR_FIRST)
+      @@id : Atomic(Pf::Kit::AuthorId) = Atomic(Pf::Kit::AuthorId).new(Pf::Kit::AUTHOR_FIRST)
 
       # :nodoc:
       def self.genid
@@ -125,7 +125,7 @@ module Ww
       @dict : Dict?
 
       protected def initialize(@parent : Dict, @fiber : UInt64)
-        @id = Pf::Core::AuthorId.new(Commit.genid)
+        @id = Pf::Kit::AuthorId.new(Commit.genid)
         @resolved = false
       end
 
@@ -1821,7 +1821,7 @@ module Ww
 
     # Includers are fetch probes with stored entry type `E` and key type `K`.
     module Fetch(E, K)
-      include Pf::Core::IProbeFetch(E)
+      include Pf::Kit::IProbeFetch(E)
 
       def initialize(@key : K)
       end
@@ -1839,7 +1839,7 @@ module Ww
 
     # Includers are add probes with stored entry type `E` and key type `K`.
     module Assoc(E, K)
-      include Pf::Core::IProbeAdd(E)
+      include Pf::Kit::IProbeAdd(E)
 
       getter path : UInt64
 
@@ -1863,7 +1863,7 @@ module Ww
 
     # Includers are delete probes with stored entry type `E` and key type `K`.
     module Dissoc(E, K)
-      include Pf::Core::IProbeDelete(E)
+      include Pf::Kit::IProbeDelete(E)
 
       getter path : UInt64
 
@@ -1879,8 +1879,8 @@ module Ww
     # Includers do not have authorship rights, therefore they always copy
     # the underlying nodes before changing them.
     module NoAuthor
-      def author : Pf::Core::AuthorId
-        Pf::Core::AUTHOR_NONE
+      def author : Pf::Kit::AuthorId
+        Pf::Kit::AUTHOR_NONE
       end
     end
 
@@ -1888,7 +1888,7 @@ module Ww
     # nodes only once before changing them, and then can change them without
     # copying forever.
     module Authored
-      getter author : Pf::Core::AuthorId
+      getter author : Pf::Kit::AuthorId
     end
 
     module PairStored
