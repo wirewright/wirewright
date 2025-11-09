@@ -74,6 +74,8 @@
 # D7 circuits are graphs whose edges are *sets*; D7 termspaces are graphs whose
 # edges are *functions*, or more specifically, *predicates*.
 module Ww::D7
+  extend self
+
   # :nodoc:
   alias NodeId = UInt32
 
@@ -82,11 +84,16 @@ module Ww::D7
   # as a community of nodes. Each node can participate in zero or more groups, each
   # group formed from other nodes in the community.
   struct Hypergraph
-    # - *nodemap* maps nodes to node ids (implcit, array index).
+    # - *nodemap* maps nodes to node ids (implicit, array index).
     # - *edgemap* maps node ids (implicit, array index) to hyperedges that node
     #   is participating in.
     # - *trmap* maps node ids (implicit, array index) to node qualpaths.
     def initialize(@nodemap : Array(Term), @edgemap : Array(Slice(Term)))
+    end
+
+    # Returns the number of nodes in this graph.
+    def order
+      @nodemap.size
     end
 
     # Returns the node associated with the given *id*.
@@ -107,223 +114,38 @@ module Ww::D7
       edges = @edgemap[id]
       edges.each { |edge| yield edge }
     end
-  end
 
-  struct RegimeIndex
-    defcase Pattern,
-      index : Int32,
-      term : Term,
-      specificity : M1::Specificity
+    # Returns `true` if *id* participates in the given hyperedge *edge*. Returns
+    # `false` otherwise.
+    def member?(id : NodeId, edge needle : Term) : Bool
+      each_edge(id) do |edge|
+        next unless edge == needle
+        return true
+      end
 
-    defrecord Recipe,
-      ingredients : Bag(UInt32),
-      order : Array(UInt32),
-      pattern : Pattern
-
-    # :nodoc:
-    def initialize(@ingredients : M1::ShapeIndex, @recipes : Array(Recipe))
+      false
     end
 
-    # Constructs a regime index based on an indexable of *patterns*.
-    #
-    # NOTE: *patterns* is stored internally and is assumed to be immutable at this point.
-    def self.build(patterns : Indexable(Term)) : RegimeIndex
-      singulars = [] of {Term, Pattern}
-
-      # Collect N-tuple elements and which pattern they come from to *singulars*.
-      patterns.each_with_index do |pattern, index|
-        normp = M1.normal(pattern)
-
-        Term.case(normp) do
-          matchpi(
-            %{(%'%literal (_+))},
-            %{(%'%itemseq (%past (%'%singular _) min: 1))},
-          ) do
-            object = Pattern.new(index, pattern, M1.specificity(normp, toplevel: true))
-
-            pattern.items.each do |element|
-              singulars << {element, object}
-            end
-          end
-
-          otherwise do
-            raise ArgumentError.new("unrecognized pattern, expected a singular-only itemseq: `#{ML.compact(pattern)}`")
-          end
-        end
-      end
-
-      recipes = {} of Int32 => Recipe
-
-      # Build a shape index for *singulars*.
-      ingredients, transcript = M1::ShapeIndex.build(singulars.map { |ingredient, _| ingredient })
-
-      # Associate pattern indices with conjunctions of ingredients that we'll refer to as *recipes*.
-      singulars.zip(transcript) do |(singular, pattern), ingredient|
-        recipe = recipes.put_if_absent(pattern.index) { Recipe.new(Bag(UInt32).new, [] of UInt32, pattern) }
-        recipe.ingredients << ingredient
-        recipe.order << ingredient
-      end
-
-      new(ingredients, recipes.to_a { |_, recipe| recipe })
-    end
-
-    # A *reaction* is a conjunction of nodes from the hypergraph that satisfies
-    # a *recipe* stored in the regime index. Effectively, `Recipe` represents
-    # a hypergraph pattern match.
-    #
-    # - *index* is the index of the pattern that matched in the indexable of patterns
-    #   passed to `build`.
-    # - *pattern* is the M1 pattern term itself.
-    # - *matchee* is a synthesized matchee to which the pattern should be
-    #   applied for further checking.
-    # - *participants* is a read-only slice of nodes from the hypergraph that
-    #   participate in the reaction.
-    #
-    # NOTE: Like with `M1::ShapeIndex`, that a reaction was emitted does not
-    # necessarily mean *pattern* will match *matchee*. The fact that a reaction
-    # occured is a pre-match step to prune outright wrong (wrt the hypergraph)
-    # node combinations early.
-    defrecord Reaction,
-      pattern : Pattern,
-      matchee : Term,
-      participants : Slice(NodeId)
-
-    # :nodoc:
-    class Assignment
-      K_UNDEFINED = UInt32::MAX
-
-      EMPTY = new(Pf::Map(UInt32, UInt32).new, vs: Pf::USet32.new)
-
-      def initialize(@map : Pf::Map(UInt32, UInt32), @vs : Pf::USet32)
-      end
-
-      def self.new
-        EMPTY
-      end
-
-      def uniq? : Bool
-        @vs.size >= @map.size
-      end
-
-      def includes?(key : UInt32) : Bool
-        @map.includes?(key)
-      end
-
-      def each(& : UInt32, UInt32 ->) : Nil
-        @map.each { |key, value| yield key, value }
-      end
-
-      def invert : Hash(UInt32, UInt32)
-        @map.to_h { |value, key| {key, value} }
-      end
-
-      def inverted_index : Hash(UInt32, Array(UInt32))
-        index = Hash(UInt32, Array(UInt32)).new(initial_capacity: @vs.size)
-
-        each do |node, ingredient|
-          ingredients = index.put_if_absent(ingredient) { [] of UInt32 }
-          ingredients << node
-        end
-
-        index
-      end
-
-      def assoc(key : UInt32, value : UInt32) : Assignment
-        Assignment.new(@map.assoc(key, value), @vs.add(value))
-      end
-
-      def_equals_and_hash @map
-    end
-
-    # Prunes *recipes* based on an assignment. Yields final assignments.
-    private def prune(recipes : Array(Recipe), assignment : Assignment, & : Recipe, Assignment ->) : Array(Recipe)
-      ingredients = Bag(UInt32).new
-      assignment.each do |_, ingredient|
-        ingredients << ingredient
-      end
-
-      recipes.select do |recipe|
-        subset = ingredients.subset_of?(recipe.ingredients)
-
-        if subset && ingredients.size == recipe.ingredients.size
-          yield recipe, assignment
-          false # reject final
-        elsif subset
-          true # select valid
-        else
-          false # reject invalid
-        end
-      end
-    end
-
-    private def search(seen, recipes0, graph, ingredients, pivot, field, assignment0, sink)
-      return if pivot.in?(assignment0) # Already assigned
-
-      ingredients[pivot].each do |ingredient|
-        assignment1 = assignment0.assoc(pivot, ingredient)
-        next unless seen.add?(assignment1)
-
-        recipes1 = prune(recipes0, assignment1, &sink)
-        next if recipes1.empty?
-
-        field.each do |relative|
-          search(seen, recipes1, graph, ingredients, relative, field | graph[relative], assignment1, sink)
-        end
-      end
-    end
-
-    private def accept(hg, sink)
-      ->(recipe : Recipe, a : Assignment) do
-        # Fast path that's taken very frequently: all assignment values are
-        # unique, no need for Cartesian product.
-        if a.uniq?
-          options = a.invert
-          argmt = recipe.order.to_readonly_slice { |ingredient| options[ingredient] }
-          matchee = Term::Dict.build &.concat(argmt) { |participant| hg[participant] }
-          reaction = Reaction.new(recipe.pattern, Term.of(matchee), argmt)
-          sink.call(reaction)
-          return
-        end
-
-        # TODO: use our own each cartesian here to avoid allocating arrays
-        options = a.inverted_index
-        palette = recipe.order.map { |ingredient| options[ingredient] }
-
-        Indexable.each_cartesian(palette, reuse: true) do |argmt|
-          matchee = Term::Dict.build do |commit|
-            commit.concat(argmt) { |participant| hg[participant] }
-          end
-
-          reaction = Reaction.new(recipe.pattern, Term.of(matchee), argmt.to_readonly_slice)
-
-          sink.call(reaction)
-        end
-      end
-    end
-
-    private def ingredients_and_graph(hg : Hypergraph)
+    # Converts `self` to an unordered graph through clique expansion: nodes that
+    # share a hyperedge are connected; each unordered edge is represented with
+    # a pair of edges going in opposite directions.
+    def graph : Slice(Pf::USet32)
       groups = {} of Term => Pf::USet32
-      ingredients = {} of NodeId => Pf::USet32
 
-      hg.each_node_with_id do |node, id|
-        ingredients[id] = @ingredients.decompose(node)
-
-        hg.each_edge(id) do |edge|
+      each_node_with_id do |node, id|
+        each_edge(id) do |edge|
           groups[edge] = (groups[edge]? || Pf::USet32.new).add(id)
         end
       end
 
-      # Compute an unordered, clique-expanded graph from *hg*: nodes that share
-      # a hyperedge are connected, and each unordered edge is represented with
-      # a pair of edges going in opposite directions.
-      graph = {} of NodeId => Pf::USet32
+      graph = Slice(Pf::USet32).new(order) { Pf::USet32.new }
 
       groups.each do |_, members|
         members.each do |u|
           members.each do |v|
             next if u == v
 
-            vs = graph[u]? || Pf::USet32.new
+            vs = graph[u]
             next if v.in?(vs)
 
             graph[u] = vs.add(v)
@@ -331,20 +153,16 @@ module Ww::D7
         end
       end
 
-      {ingredients, graph}
-    end
-
-    # Calls *sink* with reactions found in the hypergraph *hg*.
-    def solve(hg : Hypergraph, &sink : Reaction ->) : Nil
-      ingredients, graph = ingredients_and_graph(hg)
-      handler = accept(hg, sink)
-      seen = Set(Assignment).new
-      graph.each do |pivot, field|
-        search(seen, @recipes, graph, ingredients, pivot, field, Assignment.new, handler)
-      end
+      graph.readonly
     end
   end
 
+  # A classifier function "looks" at a circuit node term (more or less literally,
+  # but using pattern matching rather "eyes"); and decides what its semantic
+  # function is (what the node "means"), represented as one of `Feature`s.
+  alias Classifier = Term -> Feature
+
+  # Nodes from a circuit are *classified* into *features*.
   alias Feature = Inert | Gnd | Mixture | Scope | Parent | Subcircuit
 
   # Represents an inert (data) node.
@@ -465,7 +283,7 @@ module Ww::D7
 
     hg = Hypergraph.new(nodemap, edgemap)
 
-    patches = regime.patch(hg)
+    patches = regime.patches(hg)
     if patches.empty?
       return result, nil
     end
@@ -480,17 +298,17 @@ module Ww::D7
 
   # Steps *circuit* forward one step in time. *regime* is the regime to use
   # for rewriting, classification, etc.
-  def step(regime : Regime, circuit : Term) : Term
+  def step(clf : Classifier, regime : Regime, circuit : Term) : Term
     grp(circuit) do |grp0|
-      grp1, patch = solve(regime) { |frep| step0(regime, grp0, frep) }
-      patch ? walk0(regime, grp1, patch) : grp1
+      grp1, patch = solve(regime) { |frep| step0(clf, regime, grp0, frep) }
+      patch ? walk0(clf, regime, grp1, patch) : grp1
     end
   end
 
   # Traverses a circuit term applying a user-supplied replacement function to
   # every grounded node.
-  def walk(regime : Regime, circuit : Term, &frep : Term -> Term) : Term
-    grp(circuit) { |grp| walk0(regime, grp, walkf(frep)) }
+  def walk(clf : Classifier, regime : Regime, circuit : Term, &frep : Term -> Term) : Term
+    grp(circuit) { |grp| walk0(clf, regime, grp, walkf(frep)) }
   end
 
   private def walkf(frep : Term -> Term)
@@ -514,8 +332,8 @@ module Ww::D7
     end
   end
 
-  private def step0(regime : Regime, root : Term, frep) : Term
-    fold(regime, root, &step0f(frep))
+  private def step0(clf : Classifier, regime : Regime, root : Term, frep) : Term
+    fold(clf, regime, root, &step0f(frep))
   end
 
   private def step0f(frep : Leaf -> Term)
@@ -525,9 +343,10 @@ module Ww::D7
         node0, edges = scoped(ctx.scope, feature.node, feature.edges)
         node1 = frep.call(Leaf.new(ctx.addr, node0, edges))
 
-        # It's not much, but skip doing the unscoping fold() if the node did
-        # not change.
-        if node0 == node1
+        # No need to unscope if we are at toplevel or node did not change.
+        if ctx.scope.empty?
+          return node1
+        elsif node0 == node1
           return feature.node
         end
 
@@ -558,15 +377,29 @@ module Ww::D7
     end
   end
 
-  private def walk0(regime : Regime, root : Term, frep)
-    fold(regime, root, &walk0f(frep))
+  private def walk0(clf : Classifier, regime : Regime, root : Term, frep)
+    fold(clf, regime, root, &walk0f(frep))
   end
 
   private def walk0f(frep : NodeAddr, NodeScope, Gnd -> Term)
     ->(ctx : FoldContext, feature : Gnd | Subcircuit) do
       case feature
       in Gnd
-        frep.call(ctx.addr, ctx.scope, feature)
+        node0 = feature.node
+        node1 = frep.call(ctx.addr, ctx.scope, feature)
+
+        # No need to unscope if we are at toplevel or node did not change.
+        if ctx.scope.empty?
+          return node1
+        elsif node0 == node1
+          return feature.node
+        end
+
+        unscope = ->(_addr : NodeAddr, _scope : NodeScope, gnd : Gnd) do
+          unscoped(gnd.node, gnd.edges)
+        end
+
+        fold(ctx.copy_with(frep: walk0f(unscope)), node1)
       in Subcircuit
         # Reinterpret Subcircuit as Parent because the logic is exactly the same. We don't
         # have a solve step at walk()-time.
@@ -578,6 +411,7 @@ module Ww::D7
 
   # :nodoc:
   record FoldContext,
+    clf : Classifier,
     regime : Regime,
     addr : NodeAddr,
     scope : NodeScope,
@@ -587,12 +421,12 @@ module Ww::D7
     ctx.scope.append({ctx.addr, bindings})
   end
 
-  private def fold(regime : Regime, node : Term, &frep : FoldContext, Subcircuit | Gnd -> Term) : Term
-    fold(FoldContext.new(regime, NodeAddr.empty, NodeScope.empty, frep), node)
+  private def fold(clf : Classifier, regime : Regime, node : Term, &frep : FoldContext, Subcircuit | Gnd -> Term) : Term
+    fold(FoldContext.new(clf, regime, NodeAddr.empty, NodeScope.empty, frep), node)
   end
 
   private def fold(ctx : FoldContext, node : Term) : Term
-    fold(ctx, ctx.regime.classify(node))
+    fold(ctx, ctx.clf.call(node))
   end
 
   private def fold(ctx : FoldContext, feature : Inert) : Term
@@ -645,8 +479,13 @@ module Ww::D7
     node
   end
 
-  # Adds *scope* to *edges* of *node*.
-  private def scoped(scope : NodeScope, node : Term, edges : Slice(Edge))
+  # Adds *scope* to *edges* of *node*. Returns *node* whose edges
+  # are annotated with a scope, and a list of scoped edges.
+  def scoped(scope : NodeScope, node : Term, edges : Slice(Edge)) : {Term, Slice(Term)}
+    if scope.empty?
+      return node, edges.to_readonly_slice(&.term)
+    end
+
     scopedlst = edges.to_readonly_slice { |edge| scoped(scope, edge.term) }
     scopedlst.zip(edges) do |scoped, edge|
       node = Term.morph(node, edge.path.to_readonly_slice { |i| Term.of(i) }) { scoped }
@@ -655,10 +494,24 @@ module Ww::D7
     {node, scopedlst}
   end
 
+  # Removes scope info from *edge*.
+  #
+  # NOTE: this is purely convention-based. Nothing stops the user from forging
+  # these. You can validate-out edges that look like these upfront though. Use
+  # `scoped?`.
   private def unscoped(edge : Term) : Term
     Term.case(edge) do
-      matchpi %{(%'edge (#scope _ name_))} { Term.of(:edge, name) }
+      matchpi %{(%'edge (_string name_))} { Term.of(:edge, name) }
       otherwise { edge }
+    end
+  end
+
+  # Returns `true` if *edge* is of the conventional scoped form. Returns
+  # `false` otherwise.
+  private def scoped?(edge : Term) : Bool
+    Term.case(edge) do
+      matchpi %{(%'edge (_string name_))} { true }
+      otherwise { false }
     end
   end
 
@@ -678,105 +531,602 @@ module Ww::D7
   end
 
   private def annotated(addr : NodeAddr, edge : Term) : Term
-    Term.case(edge) do
-      matchpi %{(%'edge name_)} { Term.of(:edge, {:"#scope", addr, name}) }
-      otherwise { edge }
+    hasher = Term::Hasher.new
+    addr.each do |id|
+      hasher << id
+    end
+
+    # We use Alpha48 because it is used pretty much everywhere else so clients should
+    # find it "familiar".
+    scope_id = Alpha48.encode(hasher.result)
+
+    Term.matchpi(edge, %{(%'edge name_)}) do
+      Term.of(:edge, {scope_id, name})
     end
   end
 
   # Represents a *rewrite regime*. A rewrite regime encapsulates the rules of
-  # rewriting and recognition
-  class Regime
+  # rewriting and recognition as well as the indices required to do
+  # that efficiently.
+  struct Regime
+    # Raised when `build` detects an invalid query.
+    class QueryError < Exception
+    end
+
     # :nodoc:
-    def initialize(
-      @classify : Term -> Feature,
-      @index : RegimeIndex,
-      @handle : Int32, Term::Dict -> Slice(Term),
-      @dump : Int32 -> String,
-    )
+    alias Step = Append | Follow | Return | FollowMany
+
+    # :nodoc:
+    #
+    # Go to node labeled with *label* and matching *pattern* in context. Store
+    # *pattern*'s match env along with the node itself in captures.
+    defrecord Append, key : Term, pattern : Term, label : UInt32
+
+    # :nodoc:
+    #
+    # Follow all links captured by the origin node's *capture*. Do not accumulate
+    # solutions: search should preceed independently in each successor found.
+    defrecord Follow, capture : Term
+
+    # :nodoc:
+    #
+    # Follow all links captured by the origin node's *capture*. Accumulate
+    # and merge solutions.
+    defrecord FollowMany, capture : Term
+
+    # :nodoc:
+    #
+    # Return to the predecessor in search (e.g. after following a link). Keep
+    # search progress. This step functions like "lookbehind" except while looking
+    # behind, you can follow more links etc.
+    defrecord Return
+
+    # :nodoc:
+    #
+    # Rule search plan.
+    #
+    # - *steps* is the sequence of `Step`s to follow if this plan is feasible.
+    # - *demands* specifies which labels must be present in a circuit for this
+    #   plan to be feasible.
+    defrecord Plan, steps : Slice(Step), demands : Pf::USet32 do
+      assert steps.size > 0
+      assert demands.size > 0
     end
 
-    def classify(node : Term) : Feature
-      @classify.call(node)
+    # :nodoc:
+    NOP_CACHE_SIZE = 256
+
+    # :nodoc:
+    def initialize(@labeler : M1::ShapeIndex, @plans : Slice(Plan), @bodies : Slice(Body))
+      assert @plans.size == @bodies.size
+
+      @nop = Set(Term::H256).new(NOP_CACHE_SIZE)
     end
 
-    def patch(hg : Hypergraph) : Hash(NodeId, Term)
-      # Collect reactions.
-      reactions = [] of RegimeIndex::Reaction
-      @index.solve(hg) do |reaction|
-        reactions << reaction
+    private def self.bridge(a : Term, b : Term) : Term
+      mid = edges(a) & edges(b)
+      unless mid.size == 1
+        raise QueryError.new(
+          "linked subqueries #{ML.compact(a)} and #{ML.compact(b)} must share exactly \
+         one edge, but they share #{mid.size} edge(s)")
       end
 
-      # Prefer reactions with most participants. Prefer reactions that are
-      # more specific. If both are the same, use randomness.
-      reactions.sort_by! { |r| {-r.participants.size, r.pattern.specificity, rand} }
+      mid.first
+    end
 
-      # Collect patches to nodes.
+    # Returns a set of capture names of edges captured in *pattern*.
+    private def self.edges(pattern : Term) : Set(Term)
+      edges = Set(Term).new
+      edges(pattern) do |edge|
+        edges << edge
+      end
+      edges
+    end
+
+    private def self.edges(pattern : Term, &sink : Term ->) : Nil
+      edges(pattern, sink)
+    end
+
+    private def self.edges(pattern : Term, sink : Term ->) : Nil
+      normp = M1.normal(pattern)
+
+      M1.walk(normp) do |x|
+        Term.case(x) do
+          matchpi %{(%'%let (%'%capture id_) (%'%edge _))} do
+            sink.call(id)
+
+            M1::WalkDecision::Skip
+          end
+
+          otherwise { M1::WalkDecision::Continue }
+        end
+      end
+    end
+
+    private def self.compile(query : Term, plan : Term::Dict::Commit, origin : Term?) : Nil
+      Term.case(query) do
+        matchpi %{(one key_ pattern_)} do
+          plan << {:follow, origin} if origin
+          plan << {:append, key, pattern}
+        end
+
+        matchpi %{(many key_ pattern_)} do
+          unless origin
+            raise QueryError.new("`many` without a predecessor makes no sense (many where?)")
+          end
+
+          plan << {:"follow+", origin}
+          plan << {:append, key, pattern}
+        end
+
+        matchpi %{(link head_ deps_+)} do
+          compile(head, plan, origin)
+
+          deps.items.each do |dep|
+            compile(dep, plan, bridge(head, dep))
+
+            plan << {:return}
+          end
+        end
+
+        otherwise do
+          raise QueryError.new("invalid query: `#{ML.compact(query)}`")
+        end
+      end
+    end
+
+    private def self.compile(query : Term) : Term::Dict
+      unless query.type.dict?
+        raise QueryError.new("query must be a dict")
+      end
+
+      Term::Dict.build do |commit|
+        compile(Term.of(query.prepend(:link)), plan: commit, origin: nil)
+      end
+    end
+
+    private def self.compile(queries : Slice(Term)) : Slice(Term::Dict)
+      queries.to_readonly_slice { |query| compile(query) }
+    end
+
+    private def self.plans(cqueries : Slice(Term::Dict), transcript : Slice(UInt32)) : Slice(Plan)
+      cursor = 0
+
+      cqueries.to_readonly_slice do |cquery|
+        demands = Pf::USet32.new
+
+        steps = cquery.items.to_readonly_slice do |step|
+          Term.case(step) do
+            matchpi %{(append name_ pattern_)} do
+              label = transcript[cursor]
+              demands = demands.add(label)
+              cursor += 1
+
+              Append.new(name, pattern, label)
+            end
+
+            matchpi %{(return)} { Return.new }
+            matchpi %{(follow capture_)} { Follow.new(capture) }
+            matchpi %{(follow+ capture_)} { FollowMany.new(capture) }
+          end
+        end
+
+        Plan.new(steps, demands)
+      end
+    end
+
+    # Constructs a regime and the associated indices based on *queries*
+    # and their corresponding *bodies*.
+    #
+    # You most likely want `D7.regime` which is a DSL for calling this method.
+    # Refer to `D7.regime` for info on how *queries* are written etc.
+    def self.build(queries : Slice(Term), bodies : Slice(Body)) : Regime
+      assert queries.size == bodies.size
+
+      patterns = [] of {Term, Int32}
+
+      cqueries = compile(queries)
+      cqueries.each_with_index do |cquery, id|
+        cquery.items.compact_map do |step|
+          Term.matchpi?(step, %{(append _ pattern_)}) do
+            patterns << {pattern, id}
+          end
+        end
+      end
+
+      labeler, transcript = M1::ShapeIndex.build(patterns.map { |pattern, _| pattern })
+      plans = plans(cqueries, transcript)
+
+      new(labeler, plans, bodies)
+    end
+
+    # Represents the body associated with a query. It receives a solution and
+    # must produce a patch. The patch it produces can be empty (signifying
+    # no change). The size of the patch must not exceed the number of nodes
+    # participating in the solution. The patch is only allowed to modify
+    # participating nodes.
+    alias Body = Soln -> Patch
+
+    # Represents a replacement of some node. Each entry is `{<node id>, <node'>}`,
+    # where `<node'>` is the replacement node.
+    alias Patch = Slice({NodeId, Term})
+
+    # - *node* is the node term from the circuit.
+    # - *env* is the match env of the part of the query associated with
+    #   the capture (i.e. `one` or `many`).
+    defrecord NodeCapture, node : Term, env : Term::Dict
+
+    # Maps participant node ids to their corresponding captures.
+    alias NodeCaptureGroup = Pf::Map(NodeId, NodeCapture)
+
+    # Represents a solution to a query. A solution associates captures made
+    # in a query, identified with their respective *key*, to a `NodeCaptureGroup`.
+    class Soln
+      include Enumerable({Term, NodeCaptureGroup})
+
+      # :nodoc:
+      EMPTY = new(Pf::Map(Term, NodeCaptureGroup).new, Macc256.new)
+
+      # :nodoc:
+      def initialize(@groups : Pf::Map(Term, NodeCaptureGroup), @composition : Macc256)
+      end
+
+      # Constructs an empty solution.
+      def self.new
+        EMPTY
+      end
+
+      # A hash identifying the *composition* of this solution, i.e. its node
+      # population (a bag aka multiset). This is effectively a hash of the bag
+      # of nodes in this solution, except computed online with no actual bag
+      # stored anywhere.
+      #
+      # Used for caching solutions irrespective of participant node ids.
+      def composition : Term::H256
+        @composition.h256
+      end
+
+      def each(& : {Term, NodeCaptureGroup} ->) : Nil
+        @groups.each { |key, group| yield({key, group}) }
+      end
+
+      def [](key : Term) : NodeCaptureGroup
+        @groups[key]
+      end
+
+      # :nodoc:
+      def add(key : Term, id : NodeId, capture : NodeCapture) : Soln
+        Soln.new(
+          groups: @groups.extend(key, NodeCaptureGroup.new, &.assoc(id, capture)),
+          composition: @composition.add(capture.node),
+        )
+      end
+
+      # TODO: pass specificity to initialize from origin query
+      def specificity
+        0
+      end
+
+      # :nodoc:
+      #
+      # 1. Prefer solutions with most participants.
+      # 2. Prefer solutions whose queries are more specific.
+      def rank
+        {-sum { |_, vs| vs.size }, specificity}
+      end
+
+      def_equals_and_hash @groups
+    end
+
+    # :nodoc:
+    #
+    # Continuation used for implementing `Return`.
+    alias Ret = Slice(Step), Soln, Sink ->
+
+    # :nodoc:
+    alias Sink = Soln ->
+
+    # :nodoc:
+    defcase SearchContext,
+      hg : Hypergraph,
+      graph : Slice(Pf::USet32),
+      decmap : Slice(Pf::USet32),
+      idecmap : Hash(UInt32, Pf::USet32)
+
+    # :nodoc:
+    defcase Locus,
+      node : UInt32,
+      env : Term::Dict,
+      adj : Pf::USet32
+
+    private def locus(pivot : UInt32, adj : Pf::USet32) : Locus
+      Locus.new(pivot, Term[], adj)
+    end
+
+    private def locus(ctx : SearchContext, pivot : UInt32) : Locus
+      locus(pivot, ctx.graph[pivot])
+    end
+
+    # :nodoc:
+    record Ahead,
+      steps : Slice(Step),
+      ret : Ret,
+      sink : Sink
+
+    private def forward(ahead : Ahead) : {Step, Ahead}
+      {ahead.steps[0], ahead.copy_with(steps: ahead.steps[1..])}
+    end
+
+    private def search(ctx, locus, step : Append, soln, ahead)
+      return unless step.label.in?(ctx.decmap[locus.node])
+      return if soln.any? { |_, nodes| locus.node.in?(nodes) }
+      return unless env = M1.match?(step.pattern, term = ctx.hg[locus.node])
+
+      capture = NodeCapture.new(term, env)
+
+      search(ctx, locus.copy_with(env: env), soln.add(step.key, locus.node, capture), ahead)
+    end
+
+    private def search(ctx, locus, step : Follow, soln, ahead)
+      edge = locus.env[step.capture]
+
+      ret = Ret.new do |steps, soln, sink|
+        search(ctx, locus, soln, ahead.copy_with(steps: steps, sink: sink))
+      end
+
+      locus.adj.each do |neighbor|
+        next unless ctx.hg.member?(neighbor, edge)
+
+        search(ctx, locus(ctx, neighbor), soln, ahead.copy_with(ret: ret))
+      end
+    end
+
+    private def search(ctx, locus, step : FollowMany, soln, ahead)
+      edge = locus.env[step.capture]
+
+      ret = Ret.new do |steps, soln, sink|
+        search(ctx, locus, soln, ahead.copy_with(steps: steps, sink: sink))
+      end
+
+      solns = [] of Soln
+
+      locus.adj.each do |neighbor|
+        next unless ctx.hg.member?(neighbor, edge)
+
+        sink = Sink.new { |fsoln| solns << fsoln }
+
+        search(ctx, locus(ctx, neighbor), soln, ahead.copy_with(sink: sink, ret: ret))
+      end
+
+      return if solns.empty?
+
+      palette = Soln.new
+
+      solns.each do |soln|
+        soln.each do |key, nodes|
+          nodes.each do |node, capture|
+            # TODO: assert that `merge` does not collide
+            # TODO: more efficient impl: can't we reuse *something*?
+            palette = palette.add(key, node, capture)
+          end
+        end
+      end
+
+      ahead.sink.call(palette)
+    end
+
+    private def search(ctx, locus, step : Return, soln, ahead)
+      ahead.ret.call(ahead.steps, soln, ahead.sink)
+    end
+
+    private def search(ctx, locus, soln, ahead)
+      if ahead.steps.empty?
+        ahead.sink.call(soln)
+        return
+      end
+
+      step, ahead1 = forward(ahead)
+
+      search(ctx, locus, step, soln, ahead1)
+    end
+
+    private def search(ctx : SearchContext, plan : Plan, sink : Sink) : Nil
+      ret = Ret.new do
+        raise "BUG: Return without a predecessor"
+      end
+
+      # Optimization: start at appropriately labeled nodes right away.
+      step = plan.steps[0]
+      if step.is_a?(Append)
+        nodes = ctx.idecmap[step.label]
+        nodes.each do |pivot|
+          search(ctx, locus(ctx, pivot), step, Soln.new, Ahead.new(plan.steps[1..], ret, sink))
+        end
+        return
+      end
+
+      ctx.graph.each_with_index do |adj, pivot|
+        search(ctx, locus(pivot.to_u32, adj), step, Soln.new, Ahead.new(plan.steps[1..], ret, sink))
+      end
+    end
+
+    private def original?(soln : Soln, id : NodeId) : Term?
+      soln.each do |_, captures|
+        next unless capture = captures[id]?
+        return capture.node
+      end
+    end
+
+    private def original(soln : Soln, id : NodeId) : Term
+      original?(soln, id) || raise KeyError.new
+    end
+
+    private def patches(solns : Array({Soln, Body})) : Hash(NodeId, Term)
       patches = {} of NodeId => Term
 
-      _ = Pf::USet32.transaction do |used|
-        reactions.each do |reaction|
-          next if reaction.participants.any? &.in?(used)
+      used = Pf::USet32.new
 
-          # NOTE: we must give the regime plenty of chances to back away. Pattern mismatch
-          # is the obvious way; a less obvious way is "no change". The latter is used deliberately
-          # on the regime side as a kind of "continue", as in: ignore me, some interior constraints
-          # did not match, move on.
-          next unless env = M1.match?(reaction.pattern.term, reaction.matchee)
+      solns.each do |soln, body|
+        composition = soln.composition
+        next if composition.in?(@nop)
 
-          reps = @handle.call(reaction.pattern.index, env)
-          assert reps.size == reaction.participants.size, @dump.call(reaction.pattern.index)
+        arity = soln.sum { |_, grp| grp.size }
+        patch = body.call(soln)
+        assert patch.size <= arity, "patch-solution arity mismatch (#{patch.size} > #{arity})"
 
-          reaction.participants.zip(reaction.matchee.items, reps) do |participant, orig, rep|
-            next if orig == rep
+        modifies = Pf::USet32.transaction do |commit|
+          patch.each do |node, rep|
+            next if original(soln, node) == rep
 
-            assert patches.put?(participant, rep)
-
-            used << participant
+            commit << node
           end
+        end
+
+        # Cache nop solutions so that we can skip them for some time in
+        # the future.
+        if modifies.empty?
+          if @nop.size > NOP_CACHE_SIZE
+            @nop.delete(@nop.first)
+          end
+          @nop << composition
+        end
+
+        # Abort transaction if any node modified by the rule was modified by
+        # someone else already.
+        next if modifies.intersects?(used)
+
+        # Commit.
+        used |= modifies
+        patch.each do |(node, rep)|
+          assert patches.put?(node, rep)
         end
       end
 
       patches
     end
 
-    Term::Case.defcase build(classify) do |id, branches, sink|
-      {% begin %}
-        {% if sink %}
-          {% sink.raise "`otherwise` makes no sense in Regime" %}
-        {% end %}
+    private def patches(ctx : SearchContext, candidates : Array({Plan, Body})) : Hash(NodeId, Term)
+      if candidates.empty?
+        return {} of NodeId => Term
+      end
 
-        pass do
-          %index = RegimeIndex.build([{{branches.map { |branch| branch[:pattern][:call] }.splat}}] of Term)
+      solns = [] of {Soln, Body}
 
-          %handle = ->(%index : Int32, %env : Term::Dict) do
-            case %index
-            {% for branch, i in branches %}
-            when {{i}}
-              pass do
-                {% for capture, var, j in branch[:captures] %}\
-                  %value{i, j} = %env[{{capture}}]? || raise("#{ {{branch[:location]}} }: missing capture `{{capture.id}}`")
-                  {% if type = branch[:cast][var] %}\
-                    {{var.id}} = %value{i, j}.to({{type}})
-                  {% else %}\
-                    {{var.id}} = %value{i, j}
-                  {% end %}\
-                {% end %}\
-                {{branch[:body]}}
-              end
-            {% end %}
-            else
-              unreachable
-            end
-          end
-
-          %dump = ->(%index : Int32) do
-            { {{ branches.map { |branch| branch[:pattern][:src] }.splat }} }[%index]
-          end
-
-          {{@type}}.new({{classify}}, %index, %handle, %dump)
+      candidates.each do |plan, body|
+        sink = Sink.new do |soln|
+          solns << {soln, body}
         end
-      {% end %}
+
+        search(ctx, plan, sink)
+      end
+
+      solns.sort_by! { |soln, _| soln.rank }
+
+      patches(solns)
     end
+
+    # Returns the patches (node assignments) to apply to nodes in *hg* in
+    # its current state, according to this rewrite regime, to transition it
+    # into the next time-step.
+    #
+    # This method performs one rewrite tick of this regime. The caller is
+    # responsbile for actually merging changes back into the circuit, based
+    # on node id correspondence etc.
+    def patches(hg : Hypergraph) : Hash(NodeId, Term)
+      decmap = Slice(Pf::USet32).new(hg.order) { Pf::USet32.new }
+      idecmap = {} of UInt32 => Pf::USet32
+      population = Pf::USet32.new
+
+      hg.each_node_with_id do |node, id|
+        decmap[id] = decomp = @labeler.decompose(node)
+        population |= decomp
+
+        decomp.each do |label|
+          idecmap[label] = (idecmap[label]? || Pf::USet32.new).add(id)
+        end
+      end
+
+      candidates = [] of {Plan, Body}
+
+      @plans.zip(@bodies) do |plan, body|
+        next unless plan.demands.subset_of?(population)
+
+        candidates << {plan, body}
+      end
+
+      ctx = SearchContext.new(hg, hg.graph, decmap.readonly, idecmap)
+
+      patches(ctx, candidates)
+    end
+  end
+
+  # DSL for constructing a rewrite regime, `Regime`.
+  #
+  # ```
+  # D7.regime do
+  #   rule %{(one dev [discard @tgt_]) (many tgt [cell @tgt_ _])} do
+  #     patch(tgt, &.morph({2, nil}))
+  #   end
+  # end
+  # ```
+  #
+  # TODO: document query format.
+  macro regime(&block)
+    {%
+      unless block
+        raise "regime expects a block containing `rule` branches"
+      end
+
+      stmts = block.body
+      if stmts.is_a?(Expressions)
+        stmts = stmts.expressions
+      elsif stmts.is_a?(Nop)
+        stmts = [] of ::NoReturn
+      else
+        stmts = [stmts]
+      end
+
+      branches = [] of ::NoReturn
+
+      stmts.each do |stmt|
+        unless stmt.is_a?(Call) && stmt.name == :rule && stmt.args.size >= 1 && stmt.block
+          stmt.raise "regime: expected a call to `rule(*patterns : String, &)`"
+        end
+
+        stmt.args.each do |pattern|
+          matches = pattern.scan(/\((?:one|many)\s(\w+)/)
+          participants = matches.map { |match| match[1].id }
+          branches << {pattern: pattern, participants: participants, body: stmt.block.body}
+        end
+      end
+
+      if branches.empty?
+        block.raise "expected at least one `rule` branch"
+      end
+    %}\
+
+    %queries = [
+      {% for branch in branches %}\
+        ::Ww::ML.terms({{branch[:pattern]}}),
+      {% end %}\
+    ]
+
+    %bodies = [
+      {% for branch in branches %}\
+        {{@type}}::Regime::Body.new do |%soln|
+          {% for participant in branch[:participants] %}\
+            {{participant}} = %soln[Term.of({{participant.symbolize}})]
+          {% end %}\
+
+          %result = pass do
+            {{branch[:body]}}
+          end
+
+          %result || Slice({UInt32, Term}).empty
+        end,
+      {% end %}\
+    ]
+
+    {{@type}}::Regime.build(%queries.to_readonly_slice(&.itself), %bodies.to_readonly_slice(&.itself))
   end
 end

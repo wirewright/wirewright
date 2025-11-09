@@ -252,6 +252,8 @@ module Enumerable(T)
     set
   end
 
+  # FIXME: Maybe more idiomatically: first_of? / last_of?
+
   def leftmost?(& : T -> U?) : U? forall U
     each do |object0|
       next unless object1 = yield object0
@@ -4291,10 +4293,7 @@ struct Slice(T)
     to_unsafe.as(Void*)
   end
 
-  # WARNING: expends `self`; no copy of self must outlive this call. Think
-  # of the returned slice as a replacement for `self`. `self` must be lost
-  # to this call or burned, forgotten, etc.
-  def read_only : Slice(T)
+  def readonly : Slice(T)
     Slice(T).new(to_unsafe, size, read_only: true)
   end
 end

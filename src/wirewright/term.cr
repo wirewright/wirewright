@@ -735,6 +735,11 @@ module Ww
           @state &*= FNV_PRIME
         end
       end
+
+      # Alias of `append`.
+      def <<(object) : Nil
+        append(object)
+      end
     end
 
     # Returns the hashcode of *object*. See `hashcode(hasher, object)` overloads
@@ -863,6 +868,19 @@ module Ww
       # Returns an indexable of blocks `blk0-3`.
       def blks : Indexable(UInt64)
         {blk0, blk1, blk2, blk3}
+      end
+
+      # Returns an indexable of blocks `blk0-1` as `UInt128`s.
+      def blks128 : Indexable(UInt128)
+        scratch = uninitialized UInt128[2]
+
+        blks = scratch.to_slice.unsafe_slice_of(UInt64)
+        blks[0] = blk0
+        blks[1] = blk1
+        blks[2] = blk2
+        blks[3] = blk3
+
+        {scratch[0], scratch[1]}
       end
 
       def <=>(other : H256)

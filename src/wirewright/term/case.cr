@@ -588,14 +588,15 @@ module Ww::Term::Case
         {{matcher}}.compile(%specs)
       end
 
+      %matchee = {{matchee}}
       %cursor = 0
 
       loop do
-        unless %row = %matcher.scan?(%cursor, {{matchee}}, env: {{env}})
+        unless %row = %matcher.scan?(%cursor, %matchee, env: {{env}})
           {% if sink %}\
             break(pass {{sink}})
           {% else %}\
-            raise ArgumentError.new
+            raise ArgumentError.new("unhandled case: #{ML.compact(%matchee)}")
           {% end %}\
         end
 
