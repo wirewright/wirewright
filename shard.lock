@@ -10,7 +10,7 @@ shards:
 
   permafrost:
     git: https://github.com/homonoidian/permafrost.git
-    version: 0.7.0
+    version: 0.7.1
 
   sdl:
     git: https://github.com/ysbaddaden/sdl.cr.git
@@ -18,5 +18,5 @@ shards:
 
   sync:
     git: https://github.com/ysbaddaden/sync.git
-    version: 0.1.0+git.commit.e2bbaf07e95dd2b63d1ad23d26a7abca78f212fc
+    version: 0.1.0+git.commit.2b8a3b2a9ee563c10cdfdd953356c2182b079e32
 
