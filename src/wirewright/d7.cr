@@ -41,7 +41,7 @@
 #
 # In D7, there is no difference between *running* a circuit and *building* it. There
 # is no "runtime", nor is there "compile-time". D7 is more like a game, which you
-# can pause, save, and return to in the future. Since D7 hypergraphs are persistent
+# can pause, save, and return to in the future. Since D7 circuits are persistent
 # and immutable (they are `Term`s), you get time travel for free, too, which is
 # very useful for debugging. Branching and other features come for free, too
 # (think Git or rather, something crude and Git-like).
@@ -51,9 +51,9 @@
 # D7 introduces the notion of *entanglement*. Entanglement is how D7 circuits interact
 # with the outside world. The circuit may include symbolic objects recognized
 # by the engine. Those objects are synced by the engine to their "outside-world"
-# counterparts. In a sense, such objects are *percepts* (internal, inbound
-# representations of outside-world entities) and *goals* (internal, outbound
-# representations of outside-world actions or transformations).
+# counterparts. Such objects are called *percepts* (internal, inbound representations
+# of outside-world entities) and *effects* (internal, outbound representations of
+# outside-world actions or transformations).
 #
 # With entanglement, D7 lets you access files, communicate with processes,
 # build server, graphical, and terminal apps and so on.
@@ -158,7 +158,7 @@ module Ww::D7
   end
 
   # A classifier function "looks" at a circuit node term (more or less literally,
-  # but using pattern matching rather "eyes"); and decides what its semantic
+  # but using pattern matching rather than "eyes"); and decides what its semantic
   # function is (what the node "means"), represented as one of `Feature`s.
   alias Classifier = Term -> Feature
 
