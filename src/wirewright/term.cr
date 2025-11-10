@@ -707,6 +707,11 @@ module Ww
       end
 
       # :ditto:
+      def blast(object : Int32, & : UInt8 ->) : Nil
+        blast(object.to_u32) { |byte| yield byte }
+      end
+
+      # :ditto:
       def blast(object : UInt64, & : UInt8 ->) : Nil
         bytes = object.unsafe_as(StaticArray(UInt8, 8))
         bytes.each { |byte| yield byte }
@@ -751,41 +756,41 @@ module Ww
 
     # Fast path for itemspart keys (indices).
     def self.hashcode(hasher : Hasher, object : Int32) : Hasher
-      hasher.append(object)
+      hasher << object
       hasher
     end
 
     # Appends the hash of a symbol term *object* to *hasher*.
     def self.hashcode(hasher : Hasher, object : Term::Sym) : Hasher
-      hasher.append(TermType::Symbol)
-      hasher.append(object.@spec)
+      hasher << TermType::Symbol
+      hasher << object.@spec
       hasher
     end
 
     # Appends the hash of a string term *object* to *hasher*.
     def self.hashcode(hasher : Hasher, object : Term::Str) : Hasher
-      hasher.append(TermType::String)
+      hasher << TermType::String
       object.each_byte do |byte|
-        hasher.append(byte)
+        hasher << byte
       end
       hasher
     end
 
     # Appends the hash of a number term *object* to *hasher*.
     def self.hashcode(hasher : Hasher, object : Term::Num) : Hasher
-      hasher.append(TermType::Number)
-      hasher.append(object.to_f64)
+      hasher << TermType::Number
+      hasher << object.to_f64 # ?!
       hasher
     end
 
     # Appends the hash of a boolean term *object* to *hasher*.
     def self.hashcode(hasher : Hasher, object : Term::Boolean) : Hasher
+      hasher << TermType::Boolean
+
       if object.true?
-        hasher.append(TermType::Boolean)
-        hasher.append(1u8)
+        hasher << 1u8
       else
-        hasher.append(TermType::Boolean)
-        hasher.append(0u8)
+        hasher << 0u8
       end
 
       hasher
@@ -794,7 +799,7 @@ module Ww
     # :nodoc:
     HASHCODE_DICT_TYPE = begin
       hasher = Hasher.new
-      hasher.append(TermType::Dict)
+      hasher << TermType::Dict
       hasher.result
     end
 
@@ -813,7 +818,7 @@ module Ww
         memo
       end
 
-      hasher.append(hashcode)
+      hasher << hashcode
       hasher
     end
 

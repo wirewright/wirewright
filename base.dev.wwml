@@ -17,7 +17,9 @@ presets:
  "tests":
   {flags:
     {"execution_context": true,
+     "newd7": true,
      "newsoma": true,
+     "no_number_autocast": true,
      "preview_mt": true},
    source: "testtool.cr"},
  "ww":

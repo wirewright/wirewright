@@ -250,12 +250,12 @@ module Search
     index = 0
 
     while spec.stride <= feed.size
-      window = feed.begin.grow(spec.stride)
+      window = feed.begin.grow(spec.stride.to_i)
       item = Result::ItemStrip.new(window, backpath: backpath0 ? backpath0.update_value(index) : nil)
 
       case fn.call(item)
       in Accept.class
-        feed = feed.move(spec.stride)
+        feed = feed.move(spec.stride.to_i)
         index += spec.stride
       in Reject.class
         feed = feed.move(1)
@@ -1515,7 +1515,7 @@ module ::Ww::M1::Operator::Ahead
       aheadptr = node0.successor
     end
 
-    ahead = Forward.new(node0.delta, aheadptr)
+    ahead = Forward.new(node0.delta.to_i, aheadptr)
 
     Operator.match(behind0, node0.ops[node0.i], node0.matchees[node0.j], ahead)
   end
