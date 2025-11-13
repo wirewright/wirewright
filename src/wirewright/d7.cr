@@ -30,7 +30,14 @@
 # of behaviors, but with structures easy to pattern match and construct
 # programmatically, "from an outside agent's point of view"...
 #
-# D7 is an attempt to build such a simulator.
+# In fact, what D7 does, at its core, is it attempts to internalize observation and
+# intervention. Normally, that's what humans do: they observe how their programs behave,
+# intervene, and sometimes change the behavior. The program itself cannot do that, not really.
+# D7, on the other hand, lets the program observe and intervene, too. At least in terms of
+# "ways of influence", D7 places the program and the programmer on equal footing; what one
+# can do the other can, and vice versa. The above is, really, an implementation detail
+# necessary to support this "embedding": symbolic worlds and pattern matching for
+# interpretability, rewriting, etc.
 #
 # With D7, a *symbol* is an identity or a composition thereof. Such symbols are
 # represented meaningfully with `Term`s.
@@ -87,8 +94,8 @@ module Ww::D7
     # - *nodemap* maps nodes to node ids (implicit, array index).
     # - *edgemap* maps node ids (implicit, array index) to hyperedges that node
     #   is participating in.
-    # - *trmap* maps node ids (implicit, array index) to node qualpaths.
-    def initialize(@nodemap : Array(Term), @edgemap : Array(Slice(Term)))
+    # - *trmap* maps node ids (implicit, array index) to node addresses (from `fold`).
+    def initialize(@nodemap : Array(Term), @edgemap : Array(Slice(Edge)), @trmap : Array(NodeAddr))
     end
 
     # Returns the number of nodes in this graph.
@@ -101,6 +108,11 @@ module Ww::D7
       @nodemap[id]
     end
 
+    # Returns the `fold`-address of the node associated with the given *id*.
+    def addr(id : NodeId) : NodeAddr
+      @trmap[id]
+    end
+
     # Yields nodes of this hypergraph.
     def each_node_with_id(&) : Nil
       @nodemap.each_with_index do |node, id|
@@ -110,7 +122,7 @@ module Ww::D7
 
     # Yields hyperedges of a node with the given node *id* (as yielded
     # by `each_node`).
-    def each_edge(id : NodeId, &) : Nil
+    def each_edge(id : NodeId, & : Edge ->) : Nil
       edges = @edgemap[id]
       edges.each { |edge| yield edge }
     end
@@ -119,7 +131,7 @@ module Ww::D7
     # `false` otherwise.
     def member?(id : NodeId, edge needle : Term) : Bool
       each_edge(id) do |edge|
-        next unless edge == needle
+        next unless edge.term == needle
         return true
       end
 
@@ -134,7 +146,7 @@ module Ww::D7
 
       each_node_with_id do |node, id|
         each_edge(id) do |edge|
-          groups[edge] = (groups[edge]? || Pf::USet32.new).add(id)
+          groups[edge.term] = (groups[edge.term]? || Pf::USet32.new).add(id)
         end
       end
 
@@ -197,7 +209,7 @@ module Ww::D7
   # Represents a node edge. *term* is the edge term itself, e.g. `@x`,
   # and *path* is the itempath from node to that edge. It must be a valid
   # itempath, otherwise, the solver will raise at runtime.
-  defcase Edge, term : Term, path : Slice(Int32)
+  record Edge, term : Term, path : Slice(Int32)
 
   # Constructs an edge object.
   def edge(term : Term, *path : Int32) : Edge
@@ -257,11 +269,11 @@ module Ww::D7
   alias NodeScope = Slice({NodeAddr, Term::Dict})
 
   # :nodoc:
-  defrecord Leaf, addr : NodeAddr, node : Term, edges : Slice(Term)
+  defrecord Leaf, addr : NodeAddr, node : Term, edges : Slice(Edge)
 
   private def solve(regime : Regime, &)
     nodemap = [] of Term
-    edgemap = [] of Slice(Term)
+    edgemap = [] of Slice(Edge)
     trmap = [] of NodeAddr
 
     frep = ->(leaf : Leaf) do
@@ -281,7 +293,7 @@ module Ww::D7
       return result, nil
     end
 
-    hg = Hypergraph.new(nodemap, edgemap)
+    hg = Hypergraph.new(nodemap, edgemap, trmap)
 
     patches = regime.patches(hg)
     if patches.empty?
@@ -296,25 +308,35 @@ module Ww::D7
     {result, patch}
   end
 
+  enum Phase
+    Pre
+    Post
+  end
+
+  alias CircuitProcessor = Phase, Term -> Term
+
+  # TODO: instead of nondescriptive step0, walk0 use step/walk(..., subject : Circuit, ...) and
+  # step/walk(..., subject : Node, ...).
+
   # Steps *circuit* forward one step in time. *regime* is the regime to use
   # for rewriting, classification, etc.
-  def step(clf : Classifier, regime : Regime, circuit : Term) : Term
-    grp(circuit) do |grp0|
-      grp1, patch = solve(regime) { |frep| step0(clf, regime, grp0, frep) }
-      patch ? walk0(clf, regime, grp1, patch) : grp1
+  def step(clf : Classifier, regime : Regime, circuit : Term, *, recursive : Bool = true, &processor : CircuitProcessor) : Term
+    grp(circuit) do |grp|
+      grp0 = processor.call(Phase::Pre, grp)
+      grp1, patch = solve(regime) { |frep| step0(clf, regime, grp0, processor, frep, recursive: recursive) }
+      grp2 = patch ? walk0(clf, grp1, patch, recursive: recursive) : grp1
+      processor.call(Phase::Post, grp2)
     end
   end
 
-  # Traverses a circuit term applying a user-supplied replacement function to
+  # Traverses a circuit term, applying a user-supplied replacement function to
   # every grounded node.
-  def walk(clf : Classifier, regime : Regime, circuit : Term, &frep : Term -> Term) : Term
-    grp(circuit) { |grp| walk0(clf, regime, grp, walkf(frep)) }
+  def walk(clf : Classifier, circuit : Term, *, recursive : Bool = true, &frep : NodeAddr, NodeScope, Gnd -> Term) : Term
+    grp(circuit) { |grp| walk0(clf, grp, frep, recursive: recursive) }
   end
 
-  private def walkf(frep : Term -> Term)
-    ->(_addr : NodeAddr, _scope : NodeScope, gnd : Gnd) do
-      frep.call(gnd.node)
-    end
+  def walk0(clf : Classifier, node : Term, *, recursive : Bool = true, &frep : NodeAddr, NodeScope, Gnd -> Term) : Term
+    walk0(clf, node, frep, recursive: recursive)
   end
 
   # Encloses the items of *term* (a dictionary) in a `group` for the duration
@@ -332,11 +354,11 @@ module Ww::D7
     end
   end
 
-  private def step0(clf : Classifier, regime : Regime, root : Term, frep) : Term
-    fold(clf, regime, root, &step0f(frep))
+  private def step0(clf : Classifier, regime : Regime, root : Term, processor, frep, *, recursive : Bool) : Term
+    fold(clf, root, &step0f(regime, processor, frep, recursive: recursive))
   end
 
-  private def step0f(frep : Leaf -> Term)
+  private def step0f(regime : Regime, processor : CircuitProcessor, frep : Leaf -> Term, *, recursive : Bool)
     ->(ctx : FoldContext, feature : Gnd | Subcircuit) do
       case feature
       in Gnd
@@ -354,22 +376,27 @@ module Ww::D7
           unscoped(gnd.node, gnd.edges)
         end
 
-        fold(ctx.copy_with(frep: walk0f(unscope)), node1)
+        fold(ctx.copy_with(frep: walk0f(unscope, recursive: true)), node1)
       in Subcircuit
-        result = flattenT(feature.node, range: feature.range) do |child0, index|
-          # NOTE: we pass scope as-is into subcircuits just in case. I'm not sure whether
-          # this is correct but it's definitely not incorrect.
-          subctx = ctx.copy_with(addr: ctx.addr.append(index))
+        if recursive
+          result = flattenT(feature.node, range: feature.range) do |child0, index|
+            # NOTE: we pass scope as-is into subcircuits just in case. I'm not sure whether
+            # this is correct but it's definitely not incorrect.
+            subctx = ctx.copy_with(addr: ctx.addr.append(index))
 
-          child1, patch = solve(ctx.regime) do |frep|
-            fold(subctx.copy_with(frep: step0f(frep)), child0)
+            child1 = processor.call(Phase::Pre, child0)
+            child2, patch = solve(regime) do |frep|
+              fold(subctx.copy_with(frep: step0f(regime, processor, frep, recursive: true)), child1)
+            end
+
+            if patch
+              child2 = fold(subctx.copy_with(frep: walk0f(patch, recursive: true)), child2)
+            end
+
+            processor.call(Phase::Post, child2)
           end
-
-          if patch
-            child1 = fold(subctx.copy_with(frep: walk0f(patch)), child1)
-          end
-
-          child1
+        else # Not recursive
+          result = Term.of(feature.node)
         end
 
         fold(ctx, feature.cont.call(result))
@@ -377,11 +404,11 @@ module Ww::D7
     end
   end
 
-  private def walk0(clf : Classifier, regime : Regime, root : Term, frep)
-    fold(clf, regime, root, &walk0f(frep))
+  private def walk0(clf : Classifier, root : Term, frep, *, recursive : Bool)
+    fold(clf, root, &walk0f(frep, recursive: recursive))
   end
 
-  private def walk0f(frep : NodeAddr, NodeScope, Gnd -> Term)
+  private def walk0f(frep : NodeAddr, NodeScope, Gnd -> Term, *, recursive : Bool)
     ->(ctx : FoldContext, feature : Gnd | Subcircuit) do
       case feature
       in Gnd
@@ -399,11 +426,16 @@ module Ww::D7
           unscoped(gnd.node, gnd.edges)
         end
 
-        fold(ctx.copy_with(frep: walk0f(unscope)), node1)
+        fold(ctx.copy_with(frep: walk0f(unscope, recursive: true)), node1)
       in Subcircuit
-        # Reinterpret Subcircuit as Parent because the logic is exactly the same. We don't
-        # have a solve step at walk()-time.
-        node1 = fold(ctx, Parent.new(feature.node, feature.range))
+        if recursive
+          # Reinterpret Subcircuit as Parent because the logic is exactly the same. We don't
+          # have a solve step at walk()-time.
+          node1 = fold(ctx, Parent.new(feature.node, feature.range))
+        else
+          node1 = Term.of(feature.node)
+        end
+
         fold(ctx, feature.cont.call(node1))
       end
     end
@@ -412,7 +444,6 @@ module Ww::D7
   # :nodoc:
   record FoldContext,
     clf : Classifier,
-    regime : Regime,
     addr : NodeAddr,
     scope : NodeScope,
     frep : FoldContext, Subcircuit | Gnd -> Term
@@ -421,8 +452,8 @@ module Ww::D7
     ctx.scope.append({ctx.addr, bindings})
   end
 
-  private def fold(clf : Classifier, regime : Regime, node : Term, &frep : FoldContext, Subcircuit | Gnd -> Term) : Term
-    fold(FoldContext.new(clf, regime, NodeAddr.empty, NodeScope.empty, frep), node)
+  private def fold(clf : Classifier, node : Term, &frep : FoldContext, Subcircuit | Gnd -> Term) : Term
+    fold(FoldContext.new(clf, NodeAddr.empty, NodeScope.empty, frep), node)
   end
 
   private def fold(ctx : FoldContext, node : Term) : Term
@@ -481,29 +512,50 @@ module Ww::D7
 
   # Adds *scope* to *edges* of *node*. Returns *node* whose edges
   # are annotated with a scope, and a list of scoped edges.
-  def scoped(scope : NodeScope, node : Term, edges : Slice(Edge)) : {Term, Slice(Term)}
+  private def scoped(scope : NodeScope, node : Term, edges : Slice(Edge)) : {Term, Slice(Edge)}
     if scope.empty?
-      return node, edges.to_readonly_slice(&.term)
+      return node, edges
     end
 
-    scopedlst = edges.to_readonly_slice { |edge| scoped(scope, edge.term) }
-    scopedlst.zip(edges) do |scoped, edge|
-      node = Term.morph(node, edge.path.to_readonly_slice { |i| Term.of(i) }) { scoped }
+    scoped = edges.to_readonly_slice do |edge|
+      term = scoped(scope, edge.term)
+      node = morphi(node, edge.path, term)
+
+      edge.copy_with(term: term)
     end
 
-    {node, scopedlst}
+    {node, scoped}
+  end
+
+  # Hand-rolled morph-item implementation for performance. scoped() is sometimes
+  # a hot method so we want it to be as stupid as possible, within limits.
+  private def morphi(node : Term, itempath : Slice(Int32), edge : Term) : Term
+    return edge unless index = itempath[0]?
+    return node unless dict0 = node.as_d?
+    return node unless item0 = dict0.item_at?(index)
+
+    item1 = morphi(item0, itempath[1..], edge)
+    dict1 = dict0.with(index, item1)
+
+    Term.of(dict1)
   end
 
   # Removes scope info from *edge*.
   #
-  # NOTE: this is purely convention-based. Nothing stops the user from forging
+  # NOTE: this is purely conventional. Nothing stops the user from forging
   # these. You can validate-out edges that look like these upfront though. Use
   # `scoped?`.
+  #
+  # NOTE: assumes *edge* is an edge without doing any checks.
   private def unscoped(edge : Term) : Term
-    Term.case(edge) do
-      matchpi %{(%'edge (_string name_))} { Term.of(:edge, name) }
-      otherwise { edge }
-    end
+    _, id = edge
+    return edge unless id = id.as_d?
+    return edge unless id.itemsonly? && id.size == 2
+
+    scope, name = id
+    return edge unless scope.type.string?
+
+    Term.of(:edge, name)
   end
 
   # Returns `true` if *edge* is of the conventional scoped form. Returns
@@ -530,6 +582,7 @@ module Ww::D7
     edge
   end
 
+  # NOTE: assumes *edge* is an edge term without any checks.
   private def annotated(addr : NodeAddr, edge : Term) : Term
     hasher = Term::Hasher.new
     addr.each do |id|
@@ -540,15 +593,13 @@ module Ww::D7
     # find it "familiar".
     scope_id = Alpha48.encode(hasher.result)
 
-    Term.matchpi(edge, %{(%'edge name_)}) do
-      Term.of(:edge, {scope_id, name})
-    end
+    Term.of(:edge, {scope_id, edge[1]})
   end
 
   # Represents a *rewrite regime*. A rewrite regime encapsulates the rules of
   # rewriting and recognition as well as the indices required to do
   # that efficiently.
-  struct Regime
+  class Regime
     # Raised when `build` detects an invalid query.
     class QueryError < Exception
     end
@@ -594,13 +645,8 @@ module Ww::D7
     end
 
     # :nodoc:
-    NOP_CACHE_SIZE = 256
-
-    # :nodoc:
     def initialize(@labeler : M1::ShapeIndex, @plans : Slice(Plan), @bodies : Slice(Body))
       assert @plans.size == @bodies.size
-
-      @nop = Set(Term::H256).new(NOP_CACHE_SIZE)
     end
 
     private def self.bridge(a : Term, b : Term) : Term
@@ -751,10 +797,11 @@ module Ww::D7
     # where `<node'>` is the replacement node.
     alias Patch = Slice({NodeId, Term})
 
+    # - *addr* is the address of the node.
     # - *node* is the node term from the circuit.
     # - *env* is the match env of the part of the query associated with
     #   the capture (i.e. `one` or `many`).
-    defrecord NodeCapture, node : Term, env : Term::Dict
+    defrecord NodeCapture, addr : NodeAddr, node : Term, env : Term::Dict
 
     # Maps participant node ids to their corresponding captures.
     alias NodeCaptureGroup = Pf::Map(NodeId, NodeCapture)
@@ -762,13 +809,14 @@ module Ww::D7
     # Represents a solution to a query. A solution associates captures made
     # in a query, identified with their respective *key*, to a `NodeCaptureGroup`.
     class Soln
-      include Enumerable({Term, NodeCaptureGroup})
+      # :nodoc:
+      EMPTY = new(groups: Pf::Map(Term, NodeCaptureGroup).new, participants: Pf::USet32.new)
+
+      getter groups : Pf::Map(Term, NodeCaptureGroup)
+      getter participants : Pf::USet32
 
       # :nodoc:
-      EMPTY = new(Pf::Map(Term, NodeCaptureGroup).new, Macc256.new)
-
-      # :nodoc:
-      def initialize(@groups : Pf::Map(Term, NodeCaptureGroup), @composition : Macc256)
+      def initialize(@groups : Pf::Map(Term, NodeCaptureGroup), @participants : Pf::USet32)
       end
 
       # Constructs an empty solution.
@@ -776,30 +824,33 @@ module Ww::D7
         EMPTY
       end
 
-      # A hash identifying the *composition* of this solution, i.e. its node
-      # population (a bag aka multiset). This is effectively a hash of the bag
-      # of nodes in this solution, except computed online with no actual bag
-      # stored anywhere.
-      #
-      # Used for caching solutions irrespective of participant node ids.
-      def composition : Term::H256
-        @composition.h256
+      def self.union(solns : Indexable(Soln)) : Soln
+        assert solns.present?
+
+        groups = solns[0].groups
+        participants = solns[0].participants
+
+        solns.each(within: 1...solns.size) do |soln|
+          # TODO: assert that `merge` does not collide
+          groups = groups.merge(soln.groups) { |_, group0, group1| group0.merge(group1) }
+          participants |= soln.participants
+        end
+
+        new(groups, participants)
       end
 
-      def each(& : {Term, NodeCaptureGroup} ->) : Nil
-        @groups.each { |key, group| yield({key, group}) }
-      end
-
-      def [](key : Term) : NodeCaptureGroup
-        @groups[key]
+      def includes?(node : NodeId) : Bool
+        participants.includes?(node)
       end
 
       # :nodoc:
       def add(key : Term, id : NodeId, capture : NodeCapture) : Soln
-        Soln.new(
-          groups: @groups.extend(key, NodeCaptureGroup.new, &.assoc(id, capture)),
-          composition: @composition.add(capture.node),
-        )
+        participants1, added = participants.add?(id)
+        unless added
+          raise ArgumentError.new("duplicate node assignment")
+        end
+
+        Soln.new(groups.extend(key, NodeCaptureGroup.new, &.assoc(id, capture)), participants1)
       end
 
       # TODO: pass specificity to initialize from origin query
@@ -812,7 +863,7 @@ module Ww::D7
       # 1. Prefer solutions with most participants.
       # 2. Prefer solutions whose queries are more specific.
       def rank
-        {-sum { |_, vs| vs.size }, specificity}
+        {-groups.sum { |_, vs| vs.size }, specificity}
       end
 
       def_equals_and_hash @groups
@@ -835,16 +886,13 @@ module Ww::D7
 
     # :nodoc:
     defcase Locus,
-      node : UInt32,
+      addr : NodeAddr,
+      node : NodeId,
       env : Term::Dict,
       adj : Pf::USet32
 
-    private def locus(pivot : UInt32, adj : Pf::USet32) : Locus
-      Locus.new(pivot, Term[], adj)
-    end
-
-    private def locus(ctx : SearchContext, pivot : UInt32) : Locus
-      locus(pivot, ctx.graph[pivot])
+    private def locus(ctx : SearchContext, pivot : NodeId) : Locus
+      Locus.new(addr: ctx.hg.addr(pivot), node: pivot, env: Term[], adj: ctx.graph[pivot])
     end
 
     # :nodoc:
@@ -859,10 +907,10 @@ module Ww::D7
 
     private def search(ctx, locus, step : Append, soln, ahead)
       return unless step.label.in?(ctx.decmap[locus.node])
-      return if soln.any? { |_, nodes| locus.node.in?(nodes) }
+      return if locus.node.in?(soln)
       return unless env = M1.match?(step.pattern, term = ctx.hg[locus.node])
 
-      capture = NodeCapture.new(term, env)
+      capture = NodeCapture.new(locus.addr, term, env)
 
       search(ctx, locus.copy_with(env: env), soln.add(step.key, locus.node, capture), ahead)
     end
@@ -900,19 +948,7 @@ module Ww::D7
 
       return if solns.empty?
 
-      palette = Soln.new
-
-      solns.each do |soln|
-        soln.each do |key, nodes|
-          nodes.each do |node, capture|
-            # TODO: assert that `merge` does not collide
-            # TODO: more efficient impl: can't we reuse *something*?
-            palette = palette.add(key, node, capture)
-          end
-        end
-      end
-
-      ahead.sink.call(palette)
+      ahead.sink.call(Soln.union(solns))
     end
 
     private def search(ctx, locus, step : Return, soln, ahead)
@@ -945,14 +981,17 @@ module Ww::D7
         return
       end
 
-      ctx.graph.each_with_index do |adj, pivot|
-        search(ctx, locus(pivot.to_u32, adj), step, Soln.new, Ahead.new(plan.steps[1..], ret, sink))
+      ctx.graph.each_with_index do |_adj, pivot|
+        # NOTE: even though we know adj here and could pass it to locus(), I don't
+        # think it's expensive to fetch it twice, and the benefit for us is not
+        # having odd locus() overloads.
+        search(ctx, locus(ctx, pivot.to_u32), step, Soln.new, Ahead.new(plan.steps[1..], ret, sink))
       end
     end
 
     private def original?(soln : Soln, id : NodeId) : Term?
-      soln.each do |_, captures|
-        next unless capture = captures[id]?
+      soln.groups.each do |_, group|
+        next unless capture = group[id]?
         return capture.node
       end
     end
@@ -967,12 +1006,8 @@ module Ww::D7
       used = Pf::USet32.new
 
       solns.each do |soln, body|
-        composition = soln.composition
-        next if composition.in?(@nop)
-
-        arity = soln.sum { |_, grp| grp.size }
         patch = body.call(soln)
-        assert patch.size <= arity, "patch-solution arity mismatch (#{patch.size} > #{arity})"
+        assert patch.size <= soln.participants.size, "patch-solution arity mismatch (#{patch.size} > #{soln.participants.size})"
 
         modifies = Pf::USet32.transaction do |commit|
           patch.each do |node, rep|
@@ -980,15 +1015,6 @@ module Ww::D7
 
             commit << node
           end
-        end
-
-        # Cache nop solutions so that we can skip them for some time in
-        # the future.
-        if modifies.empty?
-          if @nop.size > NOP_CACHE_SIZE
-            @nop.delete(@nop.first)
-          end
-          @nop << composition
         end
 
         # Abort transaction if any node modified by the rule was modified by
@@ -1034,7 +1060,7 @@ module Ww::D7
     # on node id correspondence etc.
     def patches(hg : Hypergraph) : Hash(NodeId, Term)
       decmap = Slice(Pf::USet32).new(hg.order) { Pf::USet32.new }
-      idecmap = {} of UInt32 => Pf::USet32
+      idecmap = {} of NodeId => Pf::USet32
       population = Pf::USet32.new
 
       hg.each_node_with_id do |node, id|
@@ -1115,18 +1141,21 @@ module Ww::D7
       {% for branch in branches %}\
         {{@type}}::Regime::Body.new do |%soln|
           {% for participant in branch[:participants] %}\
-            {{participant}} = %soln[Term.of({{participant.symbolize}})]
+            {{participant}} = %soln.groups[Term.of({{participant.symbolize}})]
           {% end %}\
 
           %result = pass do
             {{branch[:body]}}
           end
 
-          %result || Slice({UInt32, Term}).empty
+          %result || Slice({ {{@type}}::NodeId, ::Ww::Term }).empty
         end,
       {% end %}\
     ]
 
-    {{@type}}::Regime.build(%queries.to_readonly_slice(&.itself), %bodies.to_readonly_slice(&.itself))
+    {{@type}}::Regime.build(
+      queries: %queries.to_readonly_slice(&.itself),
+      bodies: %bodies.to_readonly_slice(&.itself),
+    )
   end
 end

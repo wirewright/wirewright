@@ -1,172 +1,196 @@
 ;; Feed: 1:1
 (d7
-  ((cell @x 0)
-   (feed @x @y)
-   (cell @y))
-  ((cell @x)
-   (feed @x @y)
-   (cell @y 0))
+  (frame
+    (cell @x 0)
+    (feed @x @y)
+    (cell @y))
+  (frame
+    (cell @x)
+    (feed @x @y)
+    (cell @y 0))
   end)
 
 ;; Copy: 1:1
 (d7
-  ((cell @x 0)
-   (feed (copy @x) @y)
-   (cell @y))
-  ((cell @x 0)
-   (feed (copy @x) @y)
-   (cell @y 0))
+  (frame
+    (cell @x 0)
+    (feed (copy @x) @y)
+    (cell @y))
+  (frame
+    (cell @x 0)
+    (feed (copy @x) @y)
+    (cell @y 0))
   end)
 
 ;; Feed: 1:1, dst full
 (d7
-  ((cell @x 0)
-   (feed @x @y)
-   (cell @y 100))
+  (frame
+    (cell @x 0)
+    (feed @x @y)
+    (cell @y 100))
   end)
 
 ;; Copy: 1:1, dst full [copy]
 (d7
-  ((cell @x 0)
-   (feed (copy @x) @y)
-   (cell @y 100))
+  (frame
+    (cell @x 0)
+    (feed (copy @x) @y)
+    (cell @y 100))
   end)
 
 ;; [copy-over]
 (d7
-  ((cell @x 0)
-   (feed (copy @x) (over @y))
-   (cell @y 100))
-  ((cell @x 0)
-   (feed (copy @x) (over @y))
-   (cell @y 0))
+  (frame
+    (cell @x 0)
+    (feed (copy @x) (over @y))
+    (cell @y 100))
+  (frame
+    (cell @x 0)
+    (feed (copy @x) (over @y))
+    (cell @y 0))
   end)
 
 ;; Feed: 1:M, all empty
 (d7
-  ((cell @x 0)
-   (feed @x @y)
-   (cell @y)
-   (cell @y)
-   (cell @y)
-   (cell @y))
-  ((cell @x)
-   (feed @x @y)
-   (cell @y 0)
-   (cell @y 0)
-   (cell @y 0)
-   (cell @y 0))
+  (frame
+    (cell @x 0)
+    (feed @x @y)
+    (cell @y)
+    (cell @y)
+    (cell @y)
+    (cell @y))
+  (frame
+    (cell @x)
+    (feed @x @y)
+    (cell @y 0)
+    (cell @y 0)
+    (cell @y 0)
+    (cell @y 0))
   end)
 
 ;; Copy: 1:M, all empty
 (d7
-  ((cell @x 0)
-   (feed (copy @x) @y)
-   (cell @y)
-   (cell @y)
-   (cell @y)
-   (cell @y))
-  ((cell @x 0)
-   (feed (copy @x) @y)
-   (cell @y 0)
-   (cell @y 0)
-   (cell @y 0)
-   (cell @y 0))
+  (frame
+    (cell @x 0)
+    (feed (copy @x) @y)
+    (cell @y)
+    (cell @y)
+    (cell @y)
+    (cell @y))
+  (frame
+    (cell @x 0)
+    (feed (copy @x) @y)
+    (cell @y 0)
+    (cell @y 0)
+    (cell @y 0)
+    (cell @y 0))
   end)
 
 ;; Feed: 1:M, some full
 (d7
-  ((cell @x 0)
-   (feed @x @y)
-   (cell @y)
-   (cell @y 100)
-   (cell @y)
-   (cell @y 100))
-  ((cell @x)
-   (feed @x @y)
-   (cell @y 0)
-   (cell @y 100)
-   (cell @y 0)
-   (cell @y 100))
+  (frame
+    (cell @x 0)
+    (feed @x @y)
+    (cell @y)
+    (cell @y 100)
+    (cell @y)
+    (cell @y 100))
+  (frame
+    (cell @x)
+    (feed @x @y)
+    (cell @y 0)
+    (cell @y 100)
+    (cell @y 0)
+    (cell @y 100))
   end)
 
 ;; Copy: 1:M, some full [copy]
 (d7
-  ((cell @x 0)
-   (feed (copy @x) @y)
-   (cell @y)
-   (cell @y 100)
-   (cell @y)
-   (cell @y 100))
-  ((cell @x 0)
-   (feed (copy @x) @y)
-   (cell @y 0)
-   (cell @y 100)
-   (cell @y 0)
-   (cell @y 100))
+  (frame
+    (cell @x 0)
+    (feed (copy @x) @y)
+    (cell @y)
+    (cell @y 100)
+    (cell @y)
+    (cell @y 100))
+  (frame
+    (cell @x 0)
+    (feed (copy @x) @y)
+    (cell @y 0)
+    (cell @y 100)
+    (cell @y 0)
+    (cell @y 100))
   end)
 
 ;; Copy: 1:M, some full [copy-over]
 (d7
-  ((cell @x 0)
-   (feed (copy @x) (over @y))
-   (cell @y)
-   (cell @y 100)
-   (cell @y)
-   (cell @y 100))
-  ((cell @x 0)
-   (feed (copy @x) (over @y))
-   (cell @y 0)
-   (cell @y 0)
-   (cell @y 0)
-   (cell @y 0))
+  (frame
+    (cell @x 0)
+    (feed (copy @x) (over @y))
+    (cell @y)
+    (cell @y 100)
+    (cell @y)
+    (cell @y 100))
+  (frame
+    (cell @x 0)
+    (feed (copy @x) (over @y))
+    (cell @y 0)
+    (cell @y 0)
+    (cell @y 0)
+    (cell @y 0))
   end)
 
 ;; Feed: 1:M, all full
 (d7
-  ((cell @x 0)
-   (feed @x @y)
-   (cell @y 100)
-   (cell @y 100)
-   (cell @y 100)
-   (cell @y 100))
+  (frame
+    (cell @x 0)
+    (feed @x @y)
+    (cell @y 100)
+    (cell @y 100)
+    (cell @y 100)
+    (cell @y 100))
   end)
 
 ;; Feed: M:1, dst empty
 (d7
-  ((cell @x 0)
-   (cell @x 1)
-   (cell @x 2)
-   (feed @x @y)
-   (cell @y))
-  ((cell @x)
-   (cell @x)
-   (cell @x)
-   (feed @x @y)
-   (cell @y {# 0 1 2}))
+  (frame
+    (cell @x 0)
+    (cell @x 1)
+    (cell @x 2)
+    (feed @x @y)
+    (cell @y))
+  (frame
+    (cell @x)
+    (cell @x)
+    (cell @x)
+    (feed @x @y)
+    (cell @y {# 0 1 2}))
   end)
 
 ;; Feed: M:1, some srcs empty, dst empty
 (d7
-  ((cell @x 0)
-   (cell @x)
-   (cell @x 2)
-   (feed @x @y)
-   (cell @y))
-  ((cell @x)
-   (cell @x)
-   (cell @x)
-   (feed @x @y)
-   (cell @y {# 0 2}))
+  (frame
+    (cell @x 0)
+    (cell @x)
+    (cell @x 2)
+    (feed @x @y)
+    (cell @y))
+  (frame
+    (cell @x)
+    (cell @x)
+    (cell @x)
+    (feed @x @y)
+    (cell @y {# 0 2}))
   end)
 
 ;; Feed: M:1, dst full
 (d7
-  ((cell @x 0)
-   (cell @x 1)
-   (cell @x 2)
-   (feed @x @y)
-   (cell @y 100))
+  (frame
+    (cell @x 0)
+    (cell @x 1)
+    (cell @x 2)
+    (feed @x @y)
+    (cell @y 100))
   end)
 
 ;; TODO: Feed M:M, all srcs full, all dsts empty
@@ -181,419 +205,1117 @@
 
 ;; Single tick parallelism.
 (d7
-  ((module {}
-     (cell @x 0)
-     (feed @x @y)
-     (cell @y))
+  (frame
+    (module {}
+      (cell @x 0)
+      (feed @x @y)
+      (cell @y))
    (module {}
-     (cell @x 0)
-     (feed @x @y)
-     (cell @y)))
-  ((module {}
-     (cell @x)
-     (feed @x @y)
-     (cell @y 0))
-   (module {}
-     (cell @x)
-     (feed @x @y)
-     (cell @y 0)))
+      (cell @x 0)
+      (feed @x @y)
+      (cell @y)))
+  (frame
+    (module {}
+      (cell @x)
+      (feed @x @y)
+      (cell @y 0))
+    (module {}
+      (cell @x)
+      (feed @x @y)
+      (cell @y 0)))
   end)
 
 ;; Waterfall.
 (d7
-  ((cell @0 0)
-   (cell @1)
-   (cell @2)
-   (cell @3)
-   (feed @0 @1 @2 @3))
-  ((cell @0)
-   (cell @1 0)
-   (cell @2)
-   (cell @3)
-   (feed @0 @1 @2 @3))
-  ((cell @0)
-   (cell @1)
-   (cell @2 0)
-   (cell @3)
-   (feed @0 @1 @2 @3))
-  ((cell @0)
-   (cell @1)
-   (cell @2)
-   (cell @3 0)
-   (feed @0 @1 @2 @3))
+  (frame
+    (cell @0 0)
+    (cell @1)
+    (cell @2)
+    (cell @3)
+    (feed @0 @1 @2 @3))
+  (frame
+    (cell @0)
+    (cell @1 0)
+    (cell @2)
+    (cell @3)
+    (feed @0 @1 @2 @3))
+  (frame
+    (cell @0)
+    (cell @1)
+    (cell @2 0)
+    (cell @3)
+    (feed @0 @1 @2 @3))
+  (frame
+    (cell @0)
+    (cell @1)
+    (cell @2)
+    (cell @3 0)
+    (feed @0 @1 @2 @3))
   end)
 
 ;; Waterfall with multiple items. Note how we don't pick conflicting rewrites
 ;; in the same step. This is why you see the "hole" between items: that cell
 ;; is "expended" for that tick.
 (d7
-  ((cell @0 0)
-   (cell @1 1)
-   (cell @2 2)
-   (cell @3)
-   (cell @4)
-   (cell @5)
-   (cell @6)
-   (feed @0 @1 @2 @3 @4 @5 @6))
-  ((cell @0 0)
-   (cell @1 1)
-   (cell @2)
-   (cell @3 2)
-   (cell @4)
-   (cell @5)
-   (cell @6)
-   (feed @0 @1 @2 @3 @4 @5 @6))
-  ((cell @0 0)
-   (cell @1)
-   (cell @2 1)
-   (cell @3)
-   (cell @4 2)
-   (cell @5)
-   (cell @6)
-   (feed @0 @1 @2 @3 @4 @5 @6))
-  ((cell @0)
-   (cell @1 0)
-   (cell @2)
-   (cell @3 1)
-   (cell @4)
-   (cell @5 2)
-   (cell @6)
-   (feed @0 @1 @2 @3 @4 @5 @6))
-  ((cell @0)
-   (cell @1)
-   (cell @2 0)
-   (cell @3)
-   (cell @4 1)
-   (cell @5)
-   (cell @6 2)
-   (feed @0 @1 @2 @3 @4 @5 @6))
-  ((cell @0)
-   (cell @1)
-   (cell @2)
-   (cell @3 0)
-   (cell @4)
-   (cell @5 1)
-   (cell @6 2)
-   (feed @0 @1 @2 @3 @4 @5 @6))
-  ((cell @0)
-   (cell @1)
-   (cell @2)
-   (cell @3)
-   (cell @4 0)
-   (cell @5 1)
-   (cell @6 2)
-   (feed @0 @1 @2 @3 @4 @5 @6))
+  (frame
+    (cell @0 0)
+    (cell @1 1)
+    (cell @2 2)
+    (cell @3)
+    (cell @4)
+    (cell @5)
+    (cell @6)
+    (feed @0 @1 @2 @3 @4 @5 @6))
+  (frame
+    (cell @0 0)
+    (cell @1 1)
+    (cell @2)
+    (cell @3 2)
+    (cell @4)
+    (cell @5)
+    (cell @6)
+    (feed @0 @1 @2 @3 @4 @5 @6))
+  (frame
+    (cell @0 0)
+    (cell @1)
+    (cell @2 1)
+    (cell @3)
+    (cell @4 2)
+    (cell @5)
+    (cell @6)
+    (feed @0 @1 @2 @3 @4 @5 @6))
+  (frame
+    (cell @0)
+    (cell @1 0)
+    (cell @2)
+    (cell @3 1)
+    (cell @4)
+    (cell @5 2)
+    (cell @6)
+    (feed @0 @1 @2 @3 @4 @5 @6))
+  (frame
+    (cell @0)
+    (cell @1)
+    (cell @2 0)
+    (cell @3)
+    (cell @4 1)
+    (cell @5)
+    (cell @6 2)
+    (feed @0 @1 @2 @3 @4 @5 @6))
+  (frame
+    (cell @0)
+    (cell @1)
+    (cell @2)
+    (cell @3 0)
+    (cell @4)
+    (cell @5 1)
+    (cell @6 2)
+    (feed @0 @1 @2 @3 @4 @5 @6))
+  (frame
+    (cell @0)
+    (cell @1)
+    (cell @2)
+    (cell @3)
+    (cell @4 0)
+    (cell @5 1)
+    (cell @6 2)
+    (feed @0 @1 @2 @3 @4 @5 @6))
   end)
 
 ;; Oscillation
 (d7
-  ((cell @0 100)
-   (feed @0 @1 @0)
-   (cell @1))
-  ((cell @0)
-   (feed @0 @1 @0)
-   (cell @1 100))
-  ((cell @0 100)
-   (feed @0 @1 @0)
-   (cell @1))
-  ((cell @0)
-   (feed @0 @1 @0)
-   (cell @1 100)))
+  (frame
+    (cell @0 100)
+    (feed @0 @1 @0)
+    (cell @1))
+  (frame
+    (cell @0)
+    (feed @0 @1 @0)
+    (cell @1 100))
+  (frame
+    (cell @0 100)
+    (feed @0 @1 @0)
+    (cell @1))
+  (frame
+    (cell @0)
+    (feed @0 @1 @0)
+    (cell @1 100)))
   ;; ...
 
 ;; 1:M -> discard
 (d7
-  ((cell @0 100)
-   (feed (copy @0) @v)
-   (feed @0 @1)
-   (cell @v)
-   (feed @v @0)
-   (cell @1)
-   (cell @1)
-   (cell @1)
-   (discard @1))
-  ((cell @0)
-   (feed (copy @0) @v)
-   (feed @0 @1)
-   (cell @v 100)
-   (feed @v @0)
-   (cell @1 100)
-   (cell @1 100)
-   (cell @1 100)
-   (discard @1))
-  ((cell @0 100)
-   (feed (copy @0) @v)
-   (feed @0 @1)
-   (cell @v)
-   (feed @v @0)
-   (cell @1)
-   (cell @1)
-   (cell @1)
-   (discard @1)))
+  (frame
+    (cell @0 100)
+    (feed (copy @0) @v)
+    (feed @0 @1)
+    (cell @v)
+    (feed @v @0)
+    (cell @1)
+    (cell @1)
+    (cell @1)
+    (discard @1))
+  (frame
+    (cell @0)
+    (feed (copy @0) @v)
+    (feed @0 @1)
+    (cell @v 100)
+    (feed @v @0)
+    (cell @1 100)
+    (cell @1 100)
+    (cell @1 100)
+    (discard @1))
+  (frame
+    (cell @0 100)
+    (feed (copy @0) @v)
+    (feed @0 @1)
+    (cell @v)
+    (feed @v @0)
+    (cell @1)
+    (cell @1)
+    (cell @1)
+    (discard @1)))
   ;; ...
 
 ;; Essential queue.
 (d7
-  ((cell @0 300)
-   (cell @1 200)
-   (cell @2 100)
-   (feed @0 @1 @2 @back)
-   (queue (@front @back) ())
-   (feed @front @preview)
-   (cell @preview)
-   (discard @preview))
-  ((cell @0 300)
-   (cell @1 200)
-   (cell @2)
-   (feed @0 @1 @2 @back)
-   (queue (@front @back) (100))
-   (feed @front @preview)
-   (cell @preview)
-   (discard @preview))
-  ((cell @0 300)
-   (cell @1)
-   (cell @2 200)
-   (feed @0 @1 @2 @back)
-   (queue (@front @back) ())
-   (feed @front @preview)
-   (cell @preview 100)
-   (discard @preview))
-  ((cell @0)
-   (cell @1 300)
-   (cell @2)
-   (feed @0 @1 @2 @back)
-   (queue (@front @back) (200))
-   (feed @front @preview)
-   (cell @preview)
-   (discard @preview))
-  ((cell @0)
-   (cell @1)
-   (cell @2 300)
-   (feed @0 @1 @2 @back)
-   (queue (@front @back) ())
-   (feed @front @preview)
-   (cell @preview 200)
-   (discard @preview))
-  ((cell @0)
-   (cell @1)
-   (cell @2)
-   (feed @0 @1 @2 @back)
-   (queue (@front @back) (300))
-   (feed @front @preview)
-   (cell @preview)
-   (discard @preview))
-  ((cell @0)
-   (cell @1)
-   (cell @2)
-   (feed @0 @1 @2 @back)
-   (queue (@front @back) ())
-   (feed @front @preview)
-   (cell @preview 300)
-   (discard @preview))
-  ((cell @0)
-   (cell @1)
-   (cell @2)
-   (feed @0 @1 @2 @back)
-   (queue (@front @back) ())
-   (feed @front @preview)
-   (cell @preview)
-   (discard @preview))
+  (frame
+    (cell @0 300)
+    (cell @1 200)
+    (cell @2 100)
+    (feed @0 @1 @2 @back)
+    (queue (@front @back) ())
+    (feed @front @preview)
+    (cell @preview)
+    (discard @preview))
+  (frame
+    (cell @0 300)
+    (cell @1 200)
+    (cell @2)
+    (feed @0 @1 @2 @back)
+    (queue (@front @back) (100))
+    (feed @front @preview)
+    (cell @preview)
+    (discard @preview))
+  (frame
+    (cell @0 300)
+    (cell @1)
+    (cell @2 200)
+    (feed @0 @1 @2 @back)
+    (queue (@front @back) ())
+    (feed @front @preview)
+    (cell @preview 100)
+    (discard @preview))
+  (frame
+    (cell @0)
+    (cell @1 300)
+    (cell @2)
+    (feed @0 @1 @2 @back)
+    (queue (@front @back) (200))
+    (feed @front @preview)
+    (cell @preview)
+    (discard @preview))
+  (frame
+    (cell @0)
+    (cell @1)
+    (cell @2 300)
+    (feed @0 @1 @2 @back)
+    (queue (@front @back) ())
+    (feed @front @preview)
+    (cell @preview 200)
+    (discard @preview))
+  (frame
+    (cell @0)
+    (cell @1)
+    (cell @2)
+    (feed @0 @1 @2 @back)
+    (queue (@front @back) (300))
+    (feed @front @preview)
+    (cell @preview)
+    (discard @preview))
+  (frame
+    (cell @0)
+    (cell @1)
+    (cell @2)
+    (feed @0 @1 @2 @back)
+    (queue (@front @back) ())
+    (feed @front @preview)
+    (cell @preview 300)
+    (discard @preview))
+  (frame
+    (cell @0)
+    (cell @1)
+    (cell @2)
+    (feed @0 @1 @2 @back)
+    (queue (@front @back) ())
+    (feed @front @preview)
+    (cell @preview)
+    (discard @preview))
   end)
 
 ;; Queue should not enqueue if destination is occupied -- this is the basic
 ;; principle behind emergent backpressure (something similar can be said about
 ;; feed + cell).
 (d7
-  ((cell @0 x)
-   (cell @1 y)
-   (feed @0 @1 @back)
-   (queue (@front @back) ())
-   (feed @front @occupied)
-   (cell @occupied "Busy!"))
-  ((cell @0 x)
-   (cell @1)
-   (feed @0 @1 @back)
-   (queue (@front @back) (y))
-   (feed @front @occupied)
-   (cell @occupied "Busy!"))
-  ((cell @0)
-   (cell @1 x)
-   (feed @0 @1 @back)
-   (queue (@front @back) (y))
-   (feed @front @occupied)
-   (cell @occupied "Busy!"))
-  ((cell @0)
-   (cell @1)
-   (feed @0 @1 @back)
-   (queue (@front @back) (y x))
-   (feed @front @occupied)
-   (cell @occupied "Busy!"))
+  (frame
+    (cell @0 x)
+    (cell @1 y)
+    (feed @0 @1 @back)
+    (queue (@front @back) ())
+    (feed @front @occupied)
+    (cell @occupied "Busy!"))
+  (frame
+    (cell @0 x)
+    (cell @1)
+    (feed @0 @1 @back)
+    (queue (@front @back) (y))
+    (feed @front @occupied)
+    (cell @occupied "Busy!"))
+  (frame
+    (cell @0)
+    (cell @1 x)
+    (feed @0 @1 @back)
+    (queue (@front @back) (y))
+    (feed @front @occupied)
+    (cell @occupied "Busy!"))
+  (frame
+    (cell @0)
+    (cell @1)
+    (feed @0 @1 @back)
+    (queue (@front @back) (y x))
+    (feed @front @occupied)
+    (cell @occupied "Busy!"))
   end)
 
 ;; Queue circulate one value.
 (d7
-  ((queue (@front @back) (100))
-   (feed @front @mid)
-   (cell @mid)
-   (transfer (@mid ±n @mid') ^(* n 2))
-   (cell @mid')
-   (feed @mid' @back))
-  ((queue (@front @back) ())
-   (feed @front @mid)
-   (cell @mid 100)
-   (transfer (@mid ±n @mid') ^(* n 2))
-   (cell @mid')
-   (feed @mid' @back))
-  ((queue (@front @back) ())
-   (feed @front @mid)
-   (cell @mid)
-   (transfer (@mid ±n @mid') ^(* n 2))
-   (cell @mid' 200)
-   (feed @mid' @back))
-  ((queue (@front @back) (200))
-   (feed @front @mid)
-   (cell @mid)
-   (transfer (@mid ±n @mid') ^(* n 2))
-   (cell @mid')
-   (feed @mid' @back))
-  ((queue (@front @back) ())
-   (feed @front @mid)
-   (cell @mid 200)
-   (transfer (@mid ±n @mid') ^(* n 2))
-   (cell @mid')
-   (feed @mid' @back))
-  ((queue (@front @back) ())
-   (feed @front @mid)
-   (cell @mid)
-   (transfer (@mid ±n @mid') ^(* n 2))
-   (cell @mid' 400)
-   (feed @mid' @back))
-  ((queue (@front @back) (400))
-   (feed @front @mid)
-   (cell @mid)
-   (transfer (@mid ±n @mid') ^(* n 2))
-   (cell @mid')
-   (feed @mid' @back)))
+  (frame
+    (queue (@front @back) (100))
+    (feed @front @mid)
+    (cell @mid)
+    (transfer (@mid ±n @mid') ^(* n 2))
+    (cell @mid')
+    (feed @mid' @back))
+  (frame
+    (queue (@front @back) ())
+    (feed @front @mid)
+    (cell @mid 100)
+    (transfer (@mid ±n @mid') ^(* n 2))
+    (cell @mid')
+    (feed @mid' @back))
+  (frame
+    (queue (@front @back) ())
+    (feed @front @mid)
+    (cell @mid)
+    (transfer (@mid ±n @mid') ^(* n 2))
+    (cell @mid' 200)
+    (feed @mid' @back))
+  (frame
+    (queue (@front @back) (200))
+    (feed @front @mid)
+    (cell @mid)
+    (transfer (@mid ±n @mid') ^(* n 2))
+    (cell @mid')
+    (feed @mid' @back))
+  (frame
+    (queue (@front @back) ())
+    (feed @front @mid)
+    (cell @mid 200)
+    (transfer (@mid ±n @mid') ^(* n 2))
+    (cell @mid')
+    (feed @mid' @back))
+  (frame
+    (queue (@front @back) ())
+    (feed @front @mid)
+    (cell @mid)
+    (transfer (@mid ±n @mid') ^(* n 2))
+    (cell @mid' 400)
+    (feed @mid' @back))
+  (frame
+    (queue (@front @back) (400))
+    (feed @front @mid)
+    (cell @mid)
+    (transfer (@mid ±n @mid') ^(* n 2))
+    (cell @mid')
+    (feed @mid' @back)))
   ;; ...
 
 ;; Queue circulate many values.
 (d7
-  ((queue (@front @back) (100 200 300))
-   (feed @front @mid)
-   (cell @mid)
-   (transfer (@mid ±n @mid') ^(* n 2))
-   (cell @mid')
-   (feed @mid' @back))
-  ((queue (@front @back) (200 300))
-   (feed @front @mid)
-   (cell @mid 100)
-   (transfer (@mid ±n @mid') ^(* n 2))
-   (cell @mid')
-   (feed @mid' @back))
-  ((queue (@front @back) (200 300))
-   (feed @front @mid)
-   (cell @mid)
-   (transfer (@mid ±n @mid') ^(* n 2))
-   (cell @mid' 200)
-   (feed @mid' @back))
-  ((queue (@front @back) (300 200))
-   (feed @front @mid)
-   (cell @mid 200)
-   (transfer (@mid ±n @mid') ^(* n 2))
-   (cell @mid')
-   (feed @mid' @back))
-  ((queue (@front @back) (300 200))
-   (feed @front @mid)
-   (cell @mid)
-   (transfer (@mid ±n @mid') ^(* n 2))
-   (cell @mid' 400)
-   (feed @mid' @back))
-  ((queue (@front @back) (200 400))
-   (feed @front @mid)
-   (cell @mid 300)
-   (transfer (@mid ±n @mid') ^(* n 2))
-   (cell @mid')
-   (feed @mid' @back))
-  ((queue (@front @back) (200 400))
-   (feed @front @mid)
-   (cell @mid)
-   (transfer (@mid ±n @mid') ^(* n 2))
-   (cell @mid' 600)
-   (feed @mid' @back))
-  ((queue (@front @back) (400 600))
-   (feed @front @mid)
-   (cell @mid 200)
-   (transfer (@mid ±n @mid') ^(* n 2))
-   (cell @mid')
-   (feed @mid' @back)))
+  (frame
+    (queue (@front @back) (100 200 300))
+    (feed @front @mid)
+    (cell @mid)
+    (transfer (@mid ±n @mid') ^(* n 2))
+    (cell @mid')
+    (feed @mid' @back))
+  (frame
+    (queue (@front @back) (200 300))
+    (feed @front @mid)
+    (cell @mid 100)
+    (transfer (@mid ±n @mid') ^(* n 2))
+    (cell @mid')
+    (feed @mid' @back))
+  (frame
+    (queue (@front @back) (200 300))
+    (feed @front @mid)
+    (cell @mid)
+    (transfer (@mid ±n @mid') ^(* n 2))
+    (cell @mid' 200)
+    (feed @mid' @back))
+  (frame
+    (queue (@front @back) (300 200))
+    (feed @front @mid)
+    (cell @mid 200)
+    (transfer (@mid ±n @mid') ^(* n 2))
+    (cell @mid')
+    (feed @mid' @back))
+  (frame
+    (queue (@front @back) (300 200))
+    (feed @front @mid)
+    (cell @mid)
+    (transfer (@mid ±n @mid') ^(* n 2))
+    (cell @mid' 400)
+    (feed @mid' @back))
+  (frame
+    (queue (@front @back) (200 400))
+    (feed @front @mid)
+    (cell @mid 300)
+    (transfer (@mid ±n @mid') ^(* n 2))
+    (cell @mid')
+    (feed @mid' @back))
+  (frame
+    (queue (@front @back) (200 400))
+    (feed @front @mid)
+    (cell @mid)
+    (transfer (@mid ±n @mid') ^(* n 2))
+    (cell @mid' 600)
+    (feed @mid' @back))
+  (frame
+    (queue (@front @back) (400 600))
+    (feed @front @mid)
+    (cell @mid 200)
+    (transfer (@mid ±n @mid') ^(* n 2))
+    (cell @mid')
+    (feed @mid' @back)))
   ;; ...
 
 ;; Queue feedback
 (d7
-  ((queue (@a @a) (100 200 300)))
+  (frame (queue (@a @a) (100 200 300)))
   end)
 
 ;; queue limit: N
 (d7
-  ((queue (@front0 @back0) (100 200 300 400 500 600))
-   (feed @front0 @back)
-   (queue (@front @back limit: 3) ()))
-  ((queue (@front0 @back0) (200 300 400 500 600))
-   (feed @front0 @back)
-   (queue (@front @back limit: 3) (100)))
-  ((queue (@front0 @back0) (300 400 500 600))
-   (feed @front0 @back)
-   (queue (@front @back limit: 3) (100 200)))
-  ((queue (@front0 @back0) (400 500 600))
-   (feed @front0 @back)
-   (queue (@front @back limit: 3) (100 200 300)))
+  (frame
+    (queue (@front0 @back0) (100 200 300 400 500 600))
+    (feed @front0 @back)
+    (queue (@front @back limit: 3) ()))
+  (frame
+    (queue (@front0 @back0) (200 300 400 500 600))
+    (feed @front0 @back)
+    (queue (@front @back limit: 3) (100)))
+  (frame
+    (queue (@front0 @back0) (300 400 500 600))
+    (feed @front0 @back)
+    (queue (@front @back limit: 3) (100 200)))
+  (frame
+    (queue (@front0 @back0) (400 500 600))
+    (feed @front0 @back)
+    (queue (@front @back limit: 3) (100 200 300)))
   end)
 
 ;; queue limit: 0
 (d7
-  ((queue (@front0 @back0) (100 200 300 400 500 600))
-   (feed @front0 @back)
-   (queue (@front @back limit: 0) ()))
+  (frame
+    (queue (@front0 @back0) (100 200 300 400 500 600))
+    (feed @front0 @back)
+    (queue (@front @back limit: 0) ()))
   end)
 
 ;; queue limit: 3.14
 (d7
-  ((queue (@front0 @back0) (100 200 300 400 500 600))
-   (feed @front0 @back)
-   (queue (@front @back limit: 3.14) ()))
+  (frame
+    (queue (@front0 @back0) (100 200 300 400 500 600))
+    (feed @front0 @back)
+    (queue (@front @back limit: 3.14) ()))
   end)
 
 ;; An observer can make decisions based on its children and feed them back.
 (d7
-  ((frag @x
-     (group
-       (cell @src 100)
-       (view (@src ±n @voice0) ^(+ n 2))
-       (view (@src ±n @voice1) ^(* n 2))
-       (cell @voice0)
-       (cell @voice1)))
-   (fb (@x (%all ⟨(cell @src n_)⟩ ⟨(cell @voice0 a_)⟩ ⟨(cell @voice1 b_)⟩))
-     {sum: ^(+ a b)}
-     {n: →sum}))
-  ((frag @x
-     (group
-       (cell @src 302)
-       (view (@src ±n @voice0) ^(+ n 2))
-       (view (@src ±n @voice1) ^(* n 2))
-       (cell @voice0 102)
-       (cell @voice1 200)))
-   (fb (@x (%all ⟨(cell @src n_)⟩ ⟨(cell @voice0 a_)⟩ ⟨(cell @voice1 b_)⟩))
-     {sum: ^(+ a b)}
-     {n: →sum}))
-  ((frag @x
-     (group
-       (cell @src 908)
-       (view (@src ±n @voice0) ^(+ n 2))
-       (view (@src ±n @voice1) ^(* n 2))
-       (cell @voice0 304)
-       (cell @voice1 604)))
-   (fb (@x (%all ⟨(cell @src n_)⟩ ⟨(cell @voice0 a_)⟩ ⟨(cell @voice1 b_)⟩))
-     {sum: ^(+ a b)}
-     {n: →sum})))
+  (frame
+    (frag @x
+      (group
+        (cell @src 100)
+        (view (@src ±n @voice0) ^(+ n 2))
+        (view (@src ±n @voice1) ^(* n 2))
+        (cell @voice0)
+        (cell @voice1)))
+    (fb (@x (%all ⟨(cell @src n_)⟩ ⟨(cell @voice0 a_)⟩ ⟨(cell @voice1 b_)⟩))
+      {sum: ^(+ a b)}
+      {n: →sum}))
+  (frame
+    (frag @x
+      (group
+        (cell @src 302)
+        (view (@src ±n @voice0) ^(+ n 2))
+        (view (@src ±n @voice1) ^(* n 2))
+        (cell @voice0 102)
+        (cell @voice1 200)))
+    (fb (@x (%all ⟨(cell @src n_)⟩ ⟨(cell @voice0 a_)⟩ ⟨(cell @voice1 b_)⟩))
+      {sum: ^(+ a b)}
+      {n: →sum}))
+  (frame
+    (frag @x
+      (group
+        (cell @src 908)
+        (view (@src ±n @voice0) ^(+ n 2))
+        (view (@src ±n @voice1) ^(* n 2))
+        (cell @voice0 304)
+        (cell @voice1 604)))
+    (fb (@x (%all ⟨(cell @src n_)⟩ ⟨(cell @voice0 a_)⟩ ⟨(cell @voice1 b_)⟩))
+      {sum: ^(+ a b)}
+      {n: →sum})))
   ;; ...
 
+;; Nested (observed) delays are decremented once per tick.
+(d7
+  (frame
+    (delay 3 "Foo")
+    (frag @x
+      (group
+        (delay 2 "Bar")
+        (delay 5 "Baz")
+        (frag @y
+          (delay 3 "boo")))))
+  (frame
+    (delay 2 "Foo")
+    (frag @x
+      (group
+        (delay 1 "Bar")
+        (delay 4 "Baz")
+        (frag @y
+          (delay 2 "boo")))))
+  (frame
+    (delay 1 "Foo")
+    (frag @x
+      (group
+        "Bar"
+        (delay 3 "Baz")
+        (frag @y
+          (delay 1 "boo")))))
+  (frame
+    "Foo"
+    (frag @x
+      (group
+        "Bar"
+        (delay 2 "Baz")
+        (frag @y
+          "boo"))))
+  (frame
+    "Foo"
+    (frag @x
+      (group
+        "Bar"
+        (delay 1 "Baz")
+        (frag @y
+          "boo"))))
+  (frame
+    "Foo"
+    (frag @x
+      (group
+        "Bar"
+        "Baz"
+        (frag @y
+          "boo")))))
+
+;; Ditto
+(d7
+  (frame
+    (delay 3 "Foo")
+    (cell @x-view)
+    (feed (copy @x) (over @x-view))
+    (frag @x
+      (group
+        (delay 3 "Bar")
+        (cell @y-view)
+        (feed (copy @y) (over @y-view))
+        (frag @y
+          (delay 3 "Baz")))))
+  (frame
+    (delay 2 "Foo")
+    (cell @x-view
+      (group
+        (delay 2 "Bar")
+        (cell @y-view (delay 2 "Baz"))
+        (feed (copy @y) (over @y-view))
+        (frag @y
+          (delay 2 "Baz"))))
+    (feed (copy @x) (over @x-view))
+    (frag @x
+      (group
+        (delay 2 "Bar")
+        (cell @y-view (delay 2 "Baz"))
+        (feed (copy @y) (over @y-view))
+        (frag @y
+          (delay 2 "Baz")))))
+  (frame
+    (delay 1 "Foo")
+    (cell @x-view
+      (group
+        (delay 1 "Bar")
+        (cell @y-view (delay 1 "Baz"))
+        (feed (copy @y) (over @y-view))
+        (frag @y
+          (delay 1 "Baz"))))
+    (feed (copy @x) (over @x-view))
+    (frag @x
+      (group
+        (delay 1 "Bar")
+        (cell @y-view (delay 1 "Baz"))
+        (feed (copy @y) (over @y-view))
+        (frag @y
+          (delay 1 "Baz")))))
+  (frame
+    "Foo"
+    (cell @x-view
+      (group
+        "Bar"
+        (cell @y-view "Baz")
+        (feed (copy @y) (over @y-view))
+        (frag @y
+          "Baz")))
+    (feed (copy @x) (over @x-view))
+    (frag @x
+      (group
+        "Bar"
+        (cell @y-view "Baz")
+        (feed (copy @y) (over @y-view))
+        (frag @y "Baz"))))
+  end)
+
+;; Sensor-appearance chan 1:1
+(d7
+  (frame
+    (module {}
+      (sensor (local x_ @val) ^x)
+      (cell @val)
+      (discard @val))
+    (module {}
+      (cell @val 100)
+      (appearance local @val)))
+  (frame
+    (module {}
+      (sensor (local x_ @val) ^x)
+      (cell @val 100)
+      (discard @val))
+    (module {}
+      (cell @val)
+      (appearance local @val)))
+  (frame
+    (module {}
+      (sensor (local x_ @val) ^x)
+      (cell @val)
+      (discard @val))
+    (module {}
+      (cell @val)
+      (appearance local @val)))
+  end)
+
+;; Sensor-appearance chan M:1
+(d7
+  (frame
+    (module {}
+      (sensor (local x_ @val) ^x)
+      (cell @val)
+      (discard @val))
+    (module {}
+      (sensor (local x_ @val) ^x)
+      (cell @val)
+      (discard @val))
+    (module {}
+      (cell @val 100)
+      (appearance local @val)))
+  (frame
+    (module {}
+      (sensor (local x_ @val) ^x)
+      (cell @val 100)
+      (discard @val))
+    (module {}
+      (sensor (local x_ @val) ^x)
+      (cell @val 100)
+      (discard @val))
+    (module {}
+      (cell @val)
+      (appearance local @val)))
+  (frame
+    (module {}
+      (sensor (local x_ @val) ^x)
+      (cell @val)
+      (discard @val))
+    (module {}
+      (sensor (local x_ @val) ^x)
+      (cell @val)
+      (discard @val))
+    (module {}
+      (cell @val)
+      (appearance local @val)))
+   end)
+
+;; Sensor-appearance chan all mismatch
+(d7
+  (frame
+    (module {}
+      (sensor (local ±n @val) ^n)
+      (cell @val))
+    (module {}
+      (appearance local @val)
+      (cell @val "Alice"))
+    (module {}
+      (appearance local @val)
+      (cell @val "Bob")))
+  end)
+
+;; Sensor-appearance chan some mismatch
+(d7
+  (frame
+    (module {}
+      (sensor (local ±n @val) ^n)
+      (cell @val))
+    (module {}
+      (appearance local @val)
+      (cell @val 100))
+    (module {}
+      (appearance local @val)
+      (cell @val "Bob")))
+  (frame
+    (module {}
+      (sensor (local ±n @val) ^n)
+      (cell @val 100))
+    (module {}
+      (appearance local @val)
+      (cell @val))
+    (module {}
+      (appearance local @val)
+      (cell @val "Bob")))
+  end)
+
+(d7
+  (frame
+    (module {}
+      (sensor (local ±n @val) ^n)
+      (cell @val))
+    (module {}
+      (appearance local @val)
+      (cell @val "Alice"))
+    (module {}
+      (appearance local @val)
+      (cell @val 200)))
+  (frame
+    (module {}
+      (sensor (local ±n @val) ^n)
+      (cell @val 200))
+    (module {}
+      (appearance local @val)
+      (cell @val "Alice"))
+    (module {}
+      (appearance local @val)
+      (cell @val)))
+  end)
+
+;; Sensor-appearance chan parallel match
+(d7
+  (frame
+    (module {}
+      (sensor (local ±n @val) ^n)
+      (cell @val))
+    (module {}
+      (sensor (local name_string @val) ^"Hi, ⸢name⸣!")
+      (cell @val))
+    (module {}
+      (appearance local @val)
+      (cell @val "Alice"))
+    (module {}
+      (appearance local @val)
+      (cell @val 200)))
+  (frame
+    (module {}
+      (sensor (local ±n @val) ^n)
+      (cell @val 200))
+    (module {}
+      (sensor (local name_string @val) ^"Hi, ⸢name⸣!")
+      (cell @val "Hi, Alice!"))
+    (module {}
+      (appearance local @val)
+      (cell @val))
+    (module {}
+      (appearance local @val)
+      (cell @val)))
+  end)
+
+;; Sensor-appearance chan conditional sense
+(d7
+  (frame
+    (module {}
+      (cell @val 100)
+      (appearance local @val))
+    (module {}
+      (cell @val (arg 50))
+      (appearance local @val))
+    (module {}
+      (cell @val (arg 150))
+      (appearance local @val))
+    (module {}
+      (frag @s)
+      (sensor (local ±n @s)
+        (group
+          (cell @v)
+          (sensor (local (arg x←(%number _ < ^n)) @v)
+            ^^(+ x 1))))))
+  (frame
+    (module {}
+      (cell @val)
+      (appearance local @val))
+    (module {}
+      (cell @val (arg 50))
+      (appearance local @val))
+    (module {}
+      (cell @val (arg 150))
+      (appearance local @val))
+    (module {}
+      (frag @s
+        (group
+          (cell @v)
+          (sensor (local (arg x←(%number _ < 100)) @v)
+            ^(+ x 1))))
+      (sensor (local ±n @s)
+        (group
+          (cell @v)
+          (sensor (local (arg x←(%number _ < ^n)) @v)
+            ^^(+ x 1))))))
+  (frame
+    (module {}
+      (cell @val)
+      (appearance local @val))
+    (module {}
+      (cell @val)
+      (appearance local @val))
+    (module {}
+      (cell @val (arg 150))
+      (appearance local @val))
+    (module {}
+      (frag @s
+        (group
+          (cell @v 51)
+          (sensor (local (arg x←(%number _ < 100)) @v)
+            ^(+ x 1))))
+      (sensor (local ±n @s)
+        (group
+          (cell @v)
+          (sensor (local (arg x←(%number _ < ^n)) @v)
+            ^^(+ x 1))))))
+  end)
+
+
+;; Sensor-appearance chan conditional receive
+(d7
+  (frame
+    (module {}
+      (delay 2 (cell @val 100))
+      (appearance local @val))
+    (module {}
+      (sensor (local ±n @x) (seen ^n))
+      (cell @x)
+      (appearance local @x))
+    (module {}
+      (sensor (local (seen x_) @x) ^(+ x 1))
+      (appearance local @x)
+      (cell @x)))
+  (frame
+    (module {}
+      (delay 1 (cell @val 100))
+      (appearance local @val))
+    (module {}
+      (sensor (local ±n @x) (seen ^n))
+      (cell @x)
+      (appearance local @x))
+    (module {}
+      (sensor (local (seen x_) @x) ^(+ x 1))
+      (appearance local @x)
+      (cell @x)))
+  (frame
+    (module {}
+      (cell @val 100)
+      (appearance local @val))
+    (module {}
+      (sensor (local ±n @x) (seen ^n))
+      (cell @x)
+      (appearance local @x))
+    (module {}
+      (sensor (local (seen x_) @x) ^(+ x 1))
+      (appearance local @x)
+      (cell @x)))
+  (frame
+    (module {}
+      (cell @val)
+      (appearance local @val))
+    (module {}
+      (sensor (local ±n @x) (seen ^n))
+      (cell @x (seen 100))
+      (appearance local @x))
+    (module {}
+      (sensor (local (seen x_) @x) ^(+ x 1))
+      (appearance local @x)
+      (cell @x)))
+  (frame
+    (module {}
+      (cell @val)
+      (appearance local @val))
+    (module {}
+      (sensor (local ±n @x) (seen ^n))
+      (cell @x)
+      (appearance local @x))
+    (module {}
+      (sensor (local (seen x_) @x) ^(+ x 1))
+      (appearance local @x)
+      (cell @x 101)))
+  (frame
+    (module {}
+      (cell @val)
+      (appearance local @val))
+    (module {}
+      (sensor (local ±n @x) (seen ^n))
+      (cell @x (seen 101))
+      (appearance local @x))
+    (module {}
+      (sensor (local (seen x_) @x) ^(+ x 1))
+      (appearance local @x)
+      (cell @x)))
+  (frame
+    (module {}
+      (cell @val)
+      (appearance local @val))
+    (module {}
+      (sensor (local ±n @x) (seen ^n))
+      (cell @x)
+      (appearance local @x))
+    (module {}
+      (sensor (local (seen x_) @x) ^(+ x 1))
+      (appearance local @x)
+      (cell @x 102))))
+  ;; ...
+
+;; Sensor-appearance chan queues sensor
+(d7
+  (frame
+    (module {}
+      (queue (@front @back) (1 2 3 4 5))
+      (appearance local @front))
+    (module {}
+      (delay 3 (discard @front))
+      (queue (@front @back) ())
+      (sensor (local ±n @back) ^n)))
+  (frame
+    (module {}
+      (queue (@front @back) (2 3 4 5))
+      (appearance local @front))
+    (module {}
+      (delay 2 (discard @front))
+      (queue (@front @back) (1))
+      (sensor (local ±n @back) ^n)))
+  (frame
+    (module {}
+      (queue (@front @back) (3 4 5))
+      (appearance local @front))
+    (module {}
+      (delay 1 (discard @front))
+      (queue (@front @back) (1 2))
+      (sensor (local ±n @back) ^n)))
+  (frame
+    (module {}
+      (queue (@front @back) (4 5))
+      (appearance local @front))
+    (module {}
+      (discard @front)
+      (queue (@front @back) (1 2 3))
+      (sensor (local ±n @back) ^n)))
+  (frame
+    (module {}
+      (queue (@front @back) (5))
+      (appearance local @front))
+    (module {}
+      (discard @front)
+      (queue (@front @back) (2 3 4))
+      (sensor (local ±n @back) ^n)))
+  (frame
+    (module {}
+      (queue (@front @back) ())
+      (appearance local @front))
+    (module {}
+      (discard @front)
+      (queue (@front @back) (3 4 5))
+      (sensor (local ±n @back) ^n)))
+  (frame
+    (module {}
+      (queue (@front @back) ())
+      (appearance local @front))
+    (module {}
+      (discard @front)
+      (queue (@front @back) (4 5))
+      (sensor (local ±n @back) ^n)))
+  (frame
+    (module {}
+      (queue (@front @back) ())
+      (appearance local @front))
+    (module {}
+      (discard @front)
+      (queue (@front @back) (5))
+      (sensor (local ±n @back) ^n)))
+  (frame
+    (module {}
+      (queue (@front @back) ())
+      (appearance local @front))
+    (module {}
+      (discard @front)
+      (queue (@front @back) ())
+      (sensor (local ±n @back) ^n)))
+  end)
+
+;; Sensor-appearance chan queues sensor limit
+(d7
+  (frame
+    (module {}
+      (queue (@front @back) (1 2 3 4 5 6))
+      (appearance local @front))
+    (module {}
+      (delay 5 (discard @front))
+      (queue (@front @back limit: 2) ())
+      (sensor (local ±n @back) ^n)))
+  (frame
+    (module {}
+      (queue (@front @back) (2 3 4 5 6))
+      (appearance local @front))
+    (module {}
+      (delay 4 (discard @front))
+      (queue (@front @back limit: 2) (1))
+      (sensor (local ±n @back) ^n)))
+  (frame
+    (module {}
+      (queue (@front @back) (3 4 5 6))
+      (appearance local @front))
+    (module {}
+      (delay 3 (discard @front))
+      (queue (@front @back limit: 2) (1 2))
+      (sensor (local ±n @back) ^n)))
+  (frame
+    (module {}
+      (queue (@front @back) (3 4 5 6))
+      (appearance local @front))
+    (module {}
+      (delay 2 (discard @front))
+      (queue (@front @back limit: 2) (1 2))
+      (sensor (local ±n @back) ^n)))
+  (frame
+    (module {}
+      (queue (@front @back) (3 4 5 6))
+      (appearance local @front))
+    (module {}
+      (delay 1 (discard @front))
+      (queue (@front @back limit: 2) (1 2))
+      (sensor (local ±n @back) ^n)))
+  (frame
+    (module {}
+      (queue (@front @back) (3 4 5 6))
+      (appearance local @front))
+    (module {}
+      (discard @front)
+      (queue (@front @back limit: 2) (1 2))
+      (sensor (local ±n @back) ^n)))
+  (frame
+    (module {}
+      (queue (@front @back) (4 5 6))
+      (appearance local @front))
+    (module {}
+      (discard @front)
+      (queue (@front @back limit: 2) (2 3))
+      (sensor (local ±n @back) ^n)))
+  (frame
+    (module {}
+      (queue (@front @back) (5 6))
+      (appearance local @front))
+    (module {}
+      (discard @front)
+      (queue (@front @back limit: 2) (3 4))
+      (sensor (local ±n @back) ^n)))
+  (frame
+    (module {}
+      (queue (@front @back) (6))
+      (appearance local @front))
+    (module {}
+      (discard @front)
+      (queue (@front @back limit: 2) (4 5))
+      (sensor (local ±n @back) ^n)))
+  (frame
+    (module {}
+      (queue (@front @back) ())
+      (appearance local @front))
+    (module {}
+      (discard @front)
+      (queue (@front @back limit: 2) (5 6))
+      (sensor (local ±n @back) ^n)))
+  (frame
+    (module {}
+      (queue (@front @back) ())
+      (appearance local @front))
+    (module {}
+      (discard @front)
+      (queue (@front @back limit: 2) (6))
+      (sensor (local ±n @back) ^n)))
+  (frame
+    (module {}
+      (queue (@front @back) ())
+      (appearance local @front))
+    (module {}
+      (discard @front)
+      (queue (@front @back limit: 2) ())
+      (sensor (local ±n @back) ^n)))
+  end)
+
+;; Sensor-appearance timing with frags.
+(d7
+  (frame
+    (frag @f
+      (group
+        (sensor (local x_ @v) ^x)
+        (cell @v)))
+    (delay 2 (cell @foo "Hello World"))
+    (appearance local @foo)
+    (view (@f ⟨node←(cell @v _*)⟩ @n) ^node)
+    (cell @n))
+  (frame
+    (frag @f
+      (group
+        (sensor (local x_ @v) ^x)
+        (cell @v)))
+    (delay 1 (cell @foo "Hello World"))
+    (appearance local @foo)
+    (view (@f ⟨node←(cell @v _*)⟩ @n) ^node)
+    (cell @n (cell @v)))
+  (frame
+    (frag @f
+      (group
+        (sensor (local x_ @v) ^x)
+        (cell @v)))
+    (cell @foo "Hello World")
+    (appearance local @foo)
+    (view (@f ⟨node←(cell @v _*)⟩ @n) ^node)
+    (cell @n (cell @v)))
+  (frame
+    (frag @f
+      (group
+        (sensor (local x_ @v) ^x)
+        (cell @v "Hello World")))
+    (cell @foo)
+    (appearance local @foo)
+    (view (@f ⟨node←(cell @v _*)⟩ @n) ^node)
+    (cell @n (cell @v "Hello World")))
+  end)
