@@ -14,6 +14,11 @@ module Ww::ML
     def initialize(@detail : String, @text : StringView, @filename : String? = nil)
     end
 
+    def message : String
+      _, line, column = SyntaxError.lookaround(@text)
+      "#{@detail} (#{@filename || "<unknown>"}:#{line}:#{column})"
+    end
+
     # Performs canonical ML lookaround, where *text* is the offending
     # snippet of source code.
     #
