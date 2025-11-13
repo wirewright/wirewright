@@ -581,3 +581,6 @@
   (alloy {x: 100} ((^. x y z)) () issues: ("no value at keypath"))
   (alloy {x: {y: 100}} ((^. x y z)) () issues: ("no value at keypath"))
   (alloy {x: {y: {z: 100}}} ((^. x y z)) (100)))
+
+;; ^ in expr expands to itself
+(alloy {} ^^(+ x 1) ^(+ x 1))

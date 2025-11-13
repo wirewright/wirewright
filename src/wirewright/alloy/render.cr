@@ -49,6 +49,15 @@ module Ww::Alloy
         # Returns *term* without further evaluation.
         matchpi %{'term_} { term }
 
+        # |@ alloy.expr.literal
+        #
+        # |@pattern
+        # (^ _)
+        #
+        # |@block
+        # Returns itself without further evaluation.
+        matchpi %{(^ _)} { expr }
+
         matchpi %{(pipe state_ seq_*)} do
           memo = eval(ctx, state, issues, index: 1)
 
