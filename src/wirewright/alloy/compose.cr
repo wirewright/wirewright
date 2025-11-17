@@ -25,7 +25,7 @@ module Ww::Alloy
       compose0?(ctx, term, issues) || Assign.new(term)
     end
 
-    render0(vars, template, issues, builtin: builtin, refine: refine).as?(Ok) || Splice.new(Term[])
+    render0(ctx.globals | vars, template, issues, builtin: builtin, refine: refine).as?(Ok) || Splice.new(Term[])
   end
 
   private def compose0?(ctx : ComposeContext, view : Term, issues : Issue::Sink) : Ok?
@@ -35,13 +35,13 @@ module Ww::Alloy
       when {Pr::One, Rule::Template}
         # Found.
         issues.adjoin(Spot::Component.new(rule.pattern, rule.body)) do |issues|
-          return compose0(ctx, ctx.globals | pr.env, rule.body, issues)
+          return compose0(ctx, pr.env, rule.body, issues)
         end
       when {Pr::Many, Rule::Template}
         offspring = Term::Dict.build do |commit|
           pr.envs.each do |env|
             issues.adjoin("match env", Term.of(env)) do |issues|
-              case expansion = compose0(ctx, ctx.globals | env, rule.body, issues)
+              case expansion = compose0(ctx, env, rule.body, issues)
               in Assign then commit << expansion.term
               in Splice then commit.concat(expansion.offspring.items)
               end
@@ -58,7 +58,7 @@ module Ww::Alloy
   end
 
   private def compose0(ctx : ComposeContext, view : Term, issues : Issue::Sink) : Ok
-    cached(ctx.cache, view, issues) do
+    cached(ctx.cache, Term.of(ctx.globals, view), issues) do
       compose0?(ctx, view, issues) || flatten(view, issues) { |*args| compose0(ctx, *args) }
     end
   end
