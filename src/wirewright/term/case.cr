@@ -623,9 +623,7 @@ module Ww::Term::Case
               {{branch[:body]}}
             end
           {% end %}\
-          unless %result{i}.is_a?({{@type}}::Continue.class)
-            break %result{i}
-          end
+          break %result{i} unless %result{i}.is_a?({{@type}}::Continue.class)
         {% end %}
         else
           unreachable
