@@ -7,19 +7,24 @@ module Ww::M1::Operator
 
   defcase Never
 
-  INSTANCE_NUM       = Num.new(min: nil, max: nil, options: :none)
-  INSTANCE_NUM_WHOLE = Num.new(min: nil, max: nil, options: :whole)
+  INSTANCE_NUM       = Num.new(min: Term[0], max: Term[0], spec: :none)
+  INSTANCE_NUM_WHOLE = Num.new(min: Term[0], max: Term[0], spec: :whole)
 
-  defcase Num, min : Term::Num?, max : Term::Num?, options : Options do
+  defcase Num, spec : Spec, min : Term::Num, max : Term::Num do
     @[Flags]
-    enum Options : UInt8
+    enum Spec : UInt32
+      MinPresent
+      MaxPresent
       MinExcluded
       MaxExcluded
       Whole
-    end
 
-    def self.new(min, max, options : Tuple)
-      new(min: min, max: max, options: Options.new(options))
+      {% for member in @type.constants %}
+        # Returns a copy of this spec with the `{{member}}` flag set.
+        def {{member.underscore}} : Spec
+          self | {{member}}
+        end
+      {% end %}
     end
   end
 

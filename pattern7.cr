@@ -763,7 +763,7 @@ module ::Ww::M1::Operator
     # Assume "residue" is larger than side.
     #
     # Note: but in fact, entry patterns do not care about the dict that we give to them;
-    # they only care about their respective key in that dict. So we do not need to make a
+    # they only care about their respective entry in that dict. So we do not need to make a
     # "selection" dict; we just give the matchee dict to entry patterns.
     case op.below
     when Pass, Pairsonly
@@ -4066,56 +4066,57 @@ module ::Ww::M1
         Operator::INSTANCE_NUM_WHOLE
       end
 
-      match({:"%number", :x_, :op_symbol, :b_number}, cue: :"%number") do |x, op, b|
-        b = b.unsafe_as_n
+      matchpiT %{(%number subject_ op_symbol a_number)}, cue: :"%number" do
+        spec = Operator::Num::Spec::None
 
-        case x
+        case subject
         when Term.of(:_)
-          options = {:none}
         when Term.of(:whole, :_)
-          options = {:whole}
+          spec = spec.whole
         else
           raise ArgumentError.new
         end
+
+        min = max = Term[0]
 
         case op
-        when SYM_LT  then Operator::Num.new(min: nil, max: b, options: {*options, :max_excluded})
-        when SYM_LTE then Operator::Num.new(min: nil, max: b, options: {*options, :none})
-        when SYM_GT  then Operator::Num.new(min: b, max: nil, options: {*options, :min_excluded})
-        when SYM_GTE then Operator::Num.new(min: b, max: nil, options: {*options, :none})
+        when SYM_GT  then min, spec = a, spec.min_present.min_excluded
+        when SYM_LT  then max, spec = a, spec.max_present.max_excluded
+        when SYM_GTE then min, spec = a, spec.min_present
+        when SYM_LTE then max, spec = a, spec.max_present
         else
           raise ArgumentError.new
         end
+
+        Operator::Num.new(spec, min, max)
       end
 
-      match({:"%number", :a_number, :lop_symbol, :x_, :rop_symbol, :b_number}, cue: :"%number") do |a, lop, x, rop, b|
-        a = a.unsafe_as_n
-        b = b.unsafe_as_n
+      matchpiT %{(%number a_number lop_symbol subject_ rop_symbol b_number)}, cue: :"%number" do
+        spec = Operator::Num::Spec::None
 
-        case x
+        case subject
         when Term.of(:_)
-          options = {:none}
         when Term.of(:whole, :_)
-          options = {:whole}
+          spec = spec.whole
         else
           raise ArgumentError.new
         end
 
         case lop
-        when SYM_LT  then options = {*options, :min_excluded}
-        when SYM_LTE then options = {*options, :none} # < Because Crystal doesn't like Tuple unions
+        when SYM_LT  then spec = spec.min_present.min_excluded
+        when SYM_LTE then spec = spec.min_present
         else
           raise ArgumentError.new
         end
 
         case rop
-        when SYM_LT  then options = {*options, :max_excluded}
-        when SYM_LTE then options = {*options, :none} # < Because Crystal doesn't like Tuple unions
+        when SYM_LT  then spec = spec.max_present.max_excluded
+        when SYM_LTE then spec = spec.max_present
         else
           raise ArgumentError.new
         end
 
-        Operator::Num.new(min: a, max: b, options: options)
+        Operator::Num.new(spec, min: a, max: b)
       end
 
       match({:"%new", :pattern_}, {:"%new", :_, :pattern_}, cue: :"%new") do |pattern|

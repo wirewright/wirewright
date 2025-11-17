@@ -21,18 +21,15 @@ module Ww::M1::Operator
       return Fb::Mismatch.new(behind0.env)
     end
 
-    if op.options.whole? && !n.whole?
+    if op.spec.whole? && !n.whole?
       return Fb::Mismatch.new(behind0.env)
     end
 
-    min = op.min
-    max = op.max
-
-    if min && !compare?(min, op.options.min_excluded? ? :lt : :lte, n)
+    if op.spec.min_present? && !compare?(op.min, op.spec.min_excluded? ? :lt : :lte, n)
       return Fb::Mismatch.new(behind0.env)
     end
 
-    if max && !compare?(n, op.options.max_excluded? ? :lt : :lte, max)
+    if op.spec.max_present? && !compare?(n, op.spec.max_excluded? ? :lt : :lte, op.max)
       return Fb::Mismatch.new(behind0.env)
     end
 
