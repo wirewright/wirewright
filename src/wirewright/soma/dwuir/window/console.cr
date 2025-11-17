@@ -94,7 +94,7 @@ module Ww::Soma::DwUIR
         next unless x.in?(0...maxx) && y.in?(0...maxy)
 
         if cell.is_a?(Color)
-          Termbox.set(' ', x: x, y: y, fg: Termbox::Color::White, bg: Termbox::Color.rgb(*cell.rgb))
+          Termbox.set(' ', x: x.to_i, y: y.to_i, fg: Termbox::Color::White, bg: Termbox::Color.rgb(*cell.rgb))
           next
         end
 
@@ -120,7 +120,7 @@ module Ww::Soma::DwUIR
           fg |= Termbox::Color::Underline
         end
 
-        Termbox.set(rune.chr, x: x, y: y, fg: fg, bg: bg)
+        Termbox.set(rune.chr, x: x.to_i, y: y.to_i, fg: fg, bg: bg)
       end
 
       Termbox.present
