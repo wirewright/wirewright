@@ -203,6 +203,72 @@
 
 ;; TODO: Feed M:M, some srcs full, all dsts full
 
+;; Feed: multiple writers.
+(d7
+  (frame
+    (cell @x a)
+    (delay 3 (cell @z c))
+    (delay 1 (cell @y b))
+    (feed @x @sink)
+    (feed @y @sink)
+    (feed @z @sink)
+    (cell @sink)
+    (delay 2 (discard @sink)))
+  (frame
+    (cell @x)
+    (delay 2 (cell @z c))
+    (cell @y b)
+    (feed @x @sink)
+    (feed @y @sink)
+    (feed @z @sink)
+    (cell @sink a)
+    (delay 1 (discard @sink)))
+  (frame
+    (cell @x)
+    (delay 1 (cell @z c))
+    (cell @y b)
+    (feed @x @sink)
+    (feed @y @sink)
+    (feed @z @sink)
+    (cell @sink a)
+    (discard @sink))
+  (frame
+    (cell @x)
+    (cell @z c)
+    (cell @y b)
+    (feed @x @sink)
+    (feed @y @sink)
+    (feed @z @sink)
+    (cell @sink)
+    (discard @sink))
+  (frame
+    (cell @x)
+    (cell @z c)
+    (cell @y)
+    (feed @x @sink)
+    (feed @y @sink)
+    (feed @z @sink)
+    (cell @sink b)
+    (discard @sink))
+  (frame
+    (cell @x)
+    (cell @z c)
+    (cell @y)
+    (feed @x @sink)
+    (feed @y @sink)
+    (feed @z @sink)
+    (cell @sink)
+    (discard @sink))
+  (frame
+    (cell @x)
+    (cell @z)
+    (cell @y)
+    (feed @x @sink)
+    (feed @y @sink)
+    (feed @z @sink)
+    (cell @sink c)
+    (discard @sink)))
+
 ;; Single tick parallelism.
 (d7
   (frame
@@ -604,40 +670,195 @@
   (frame (queue (@a @a) (100 200 300)))
   end)
 
-;; queue limit: N
+;; queue max: N
 (d7
   (frame
     (queue (@front0 @back0) (100 200 300 400 500 600))
     (feed @front0 @back)
-    (queue (@front @back limit: 3) ()))
+    (queue (@front @back max: 3) ()))
   (frame
     (queue (@front0 @back0) (200 300 400 500 600))
     (feed @front0 @back)
-    (queue (@front @back limit: 3) (100)))
+    (queue (@front @back max: 3) (100)))
   (frame
     (queue (@front0 @back0) (300 400 500 600))
     (feed @front0 @back)
-    (queue (@front @back limit: 3) (100 200)))
+    (queue (@front @back max: 3) (100 200)))
   (frame
     (queue (@front0 @back0) (400 500 600))
     (feed @front0 @back)
-    (queue (@front @back limit: 3) (100 200 300)))
+    (queue (@front @back max: 3) (100 200 300)))
   end)
 
-;; queue limit: 0
+;; queue min: N
+(d7
+  (frame
+    (queue (@front0 @back0) (1 2 3 4 5))
+    (feed @front0 @back1)
+    (queue (@front1 @back1 min: 2) ())
+    (discard @front1))
+  (frame
+    (queue (@front0 @back0) (2 3 4 5))
+    (feed @front0 @back1)
+    (queue (@front1 @back1 min: 2) (1))
+    (discard @front1))
+  (frame
+    (queue (@front0 @back0) (3 4 5))
+    (feed @front0 @back1)
+    (queue (@front1 @back1 min: 2) (1 2))
+    (discard @front1))
+  (frame
+    (queue (@front0 @back0) (4 5))
+    (feed @front0 @back1)
+    (queue (@front1 @back1 min: 2) (2 3))
+    (discard @front1))
+  (frame
+    (queue (@front0 @back0) (5))
+    (feed @front0 @back1)
+    (queue (@front1 @back1 min: 2) (3 4))
+    (discard @front1))
+  (frame
+    (queue (@front0 @back0) ())
+    (feed @front0 @back1)
+    (queue (@front1 @back1 min: 2) (4 5))
+    (discard @front1))
+  (frame
+    (queue (@front0 @back0) ())
+    (feed @front0 @back1)
+    (queue (@front1 @back1 min: 2) (5))
+    (discard @front1))
+  end)
+
+;; queue min: N max: M
+(d7
+  (frame
+    (queue (@front0 @back0) (1 2 3 4 5 6 7 8))
+    (queue (@front1 @back1 min: 2 max: 3) ())
+    (queue (@front2 @back2 max: 2) ())
+    (feed @front0 @back1)
+    (feed @front1 @back2)
+    (delay 8 (discard @front2)))
+  (frame
+    (queue (@front0 @back0) (2 3 4 5 6 7 8))
+    (queue (@front1 @back1 min: 2 max: 3) (1))
+    (queue (@front2 @back2 max: 2) ())
+    (feed @front0 @back1)
+    (feed @front1 @back2)
+    (delay 7 (discard @front2)))
+  (frame
+    (queue (@front0 @back0) (3 4 5 6 7 8))
+    (queue (@front1 @back1 min: 2 max: 3) (1 2))
+    (queue (@front2 @back2 max: 2) ())
+    (feed @front0 @back1)
+    (feed @front1 @back2)
+    (delay 6 (discard @front2)))
+  (frame
+    (queue (@front0 @back0) (4 5 6 7 8))
+    (queue (@front1 @back1 min: 2 max: 3) (2 3))
+    (queue (@front2 @back2 max: 2) (1))
+    (feed @front0 @back1)
+    (feed @front1 @back2)
+    (delay 5 (discard @front2)))
+  (frame
+    (queue (@front0 @back0) (5 6 7 8))
+    (queue (@front1 @back1 min: 2 max: 3) (3 4))
+    (queue (@front2 @back2 max: 2) (1 2))
+    (feed @front0 @back1)
+    (feed @front1 @back2)
+    (delay 4 (discard @front2)))
+  (frame
+    (queue (@front0 @back0) (6 7 8))
+    (queue (@front1 @back1 min: 2 max: 3) (3 4 5))
+    (queue (@front2 @back2 max: 2) (1 2))
+    (feed @front0 @back1)
+    (feed @front1 @back2)
+    (delay 3 (discard @front2)))
+  (frame
+    (queue (@front0 @back0) (6 7 8))
+    (queue (@front1 @back1 min: 2 max: 3) (3 4 5))
+    (queue (@front2 @back2 max: 2) (1 2))
+    (feed @front0 @back1)
+    (feed @front1 @back2)
+    (delay 2 (discard @front2)))
+  (frame
+    (queue (@front0 @back0) (6 7 8))
+    (queue (@front1 @back1 min: 2 max: 3) (3 4 5))
+    (queue (@front2 @back2 max: 2) (1 2))
+    (feed @front0 @back1)
+    (feed @front1 @back2)
+    (delay 1 (discard @front2)))
+  (frame
+    (queue (@front0 @back0) (6 7 8))
+    (queue (@front1 @back1 min: 2 max: 3) (3 4 5))
+    (queue (@front2 @back2 max: 2) (1 2))
+    (feed @front0 @back1)
+    (feed @front1 @back2)
+    (discard @front2))
+  (frame
+    (queue (@front0 @back0) (6 7 8))
+    (queue (@front1 @back1 min: 2 max: 3) (3 4 5))
+    (queue (@front2 @back2 max: 2) (2))
+    (feed @front0 @back1)
+    (feed @front1 @back2)
+    (discard @front2))
+  (frame
+    (queue (@front0 @back0) (6 7 8))
+    (queue (@front1 @back1 min: 2 max: 3) (4 5))
+    (queue (@front2 @back2 max: 2) (3))
+    (feed @front0 @back1)
+    (feed @front1 @back2)
+    (discard @front2))
+  (frame
+    (queue (@front0 @back0) (7 8))
+    (queue (@front1 @back1 min: 2 max: 3) (5 6))
+    (queue (@front2 @back2 max: 2) (4))
+    (feed @front0 @back1)
+    (feed @front1 @back2)
+    (discard @front2))
+  (frame
+    (queue (@front0 @back0) (8))
+    (queue (@front1 @back1 min: 2 max: 3) (6 7))
+    (queue (@front2 @back2 max: 2) (5))
+    (feed @front0 @back1)
+    (feed @front1 @back2)
+    (discard @front2))
+  (frame
+    (queue (@front0 @back0) ())
+    (queue (@front1 @back1 min: 2 max: 3) (7 8))
+    (queue (@front2 @back2 max: 2) (6))
+    (feed @front0 @back1)
+    (feed @front1 @back2)
+    (discard @front2))
+  (frame
+    (queue (@front0 @back0) ())
+    (queue (@front1 @back1 min: 2 max: 3) (8))
+    (queue (@front2 @back2 max: 2) (7))
+    (feed @front0 @back1)
+    (feed @front1 @back2)
+    (discard @front2))
+  (frame
+    (queue (@front0 @back0) ())
+    (queue (@front1 @back1 min: 2 max: 3) (8)) ;; < This one stalls because it has < 2 values
+    (queue (@front2 @back2 max: 2) ())
+    (feed @front0 @back1)
+    (feed @front1 @back2)
+    (discard @front2))
+  end)
+
+;; queue max: 0
 (d7
   (frame
     (queue (@front0 @back0) (100 200 300 400 500 600))
     (feed @front0 @back)
-    (queue (@front @back limit: 0) ()))
+    (queue (@front @back max: 0) ()))
   end)
 
-;; queue limit: 3.14
+;; queue max: 3.14
 (d7
   (frame
     (queue (@front0 @back0) (100 200 300 400 500 600))
     (feed @front0 @back)
-    (queue (@front @back limit: 3.14) ()))
+    (queue (@front @back max: 3.14) ()))
   end)
 
 ;; An observer can make decisions based on its children and feed them back.
@@ -1180,7 +1401,7 @@
       (sensor (local ±n @back) ^n)))
   end)
 
-;; Sensor-appearance chan queues sensor limit
+;; Sensor-appearance chan queues sensor max
 (d7
   (frame
     (module {}
@@ -1188,7 +1409,7 @@
       (appearance local @front))
     (module {}
       (delay 5 (discard @front))
-      (queue (@front @back limit: 2) ())
+      (queue (@front @back max: 2) ())
       (sensor (local ±n @back) ^n)))
   (frame
     (module {}
@@ -1196,7 +1417,7 @@
       (appearance local @front))
     (module {}
       (delay 4 (discard @front))
-      (queue (@front @back limit: 2) (1))
+      (queue (@front @back max: 2) (1))
       (sensor (local ±n @back) ^n)))
   (frame
     (module {}
@@ -1204,7 +1425,7 @@
       (appearance local @front))
     (module {}
       (delay 3 (discard @front))
-      (queue (@front @back limit: 2) (1 2))
+      (queue (@front @back max: 2) (1 2))
       (sensor (local ±n @back) ^n)))
   (frame
     (module {}
@@ -1212,7 +1433,7 @@
       (appearance local @front))
     (module {}
       (delay 2 (discard @front))
-      (queue (@front @back limit: 2) (1 2))
+      (queue (@front @back max: 2) (1 2))
       (sensor (local ±n @back) ^n)))
   (frame
     (module {}
@@ -1220,7 +1441,7 @@
       (appearance local @front))
     (module {}
       (delay 1 (discard @front))
-      (queue (@front @back limit: 2) (1 2))
+      (queue (@front @back max: 2) (1 2))
       (sensor (local ±n @back) ^n)))
   (frame
     (module {}
@@ -1228,7 +1449,7 @@
       (appearance local @front))
     (module {}
       (discard @front)
-      (queue (@front @back limit: 2) (1 2))
+      (queue (@front @back max: 2) (1 2))
       (sensor (local ±n @back) ^n)))
   (frame
     (module {}
@@ -1236,7 +1457,7 @@
       (appearance local @front))
     (module {}
       (discard @front)
-      (queue (@front @back limit: 2) (2 3))
+      (queue (@front @back max: 2) (2 3))
       (sensor (local ±n @back) ^n)))
   (frame
     (module {}
@@ -1244,7 +1465,7 @@
       (appearance local @front))
     (module {}
       (discard @front)
-      (queue (@front @back limit: 2) (3 4))
+      (queue (@front @back max: 2) (3 4))
       (sensor (local ±n @back) ^n)))
   (frame
     (module {}
@@ -1252,7 +1473,7 @@
       (appearance local @front))
     (module {}
       (discard @front)
-      (queue (@front @back limit: 2) (4 5))
+      (queue (@front @back max: 2) (4 5))
       (sensor (local ±n @back) ^n)))
   (frame
     (module {}
@@ -1260,7 +1481,7 @@
       (appearance local @front))
     (module {}
       (discard @front)
-      (queue (@front @back limit: 2) (5 6))
+      (queue (@front @back max: 2) (5 6))
       (sensor (local ±n @back) ^n)))
   (frame
     (module {}
@@ -1268,7 +1489,7 @@
       (appearance local @front))
     (module {}
       (discard @front)
-      (queue (@front @back limit: 2) (6))
+      (queue (@front @back max: 2) (6))
       (sensor (local ±n @back) ^n)))
   (frame
     (module {}
@@ -1276,7 +1497,7 @@
       (appearance local @front))
     (module {}
       (discard @front)
-      (queue (@front @back limit: 2) ())
+      (queue (@front @back max: 2) ())
       (sensor (local ±n @back) ^n)))
   end)
 

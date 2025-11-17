@@ -622,8 +622,9 @@ module Ww::D7
     # :nodoc:
     #
     # Follow all links captured by the origin node's *capture*. Accumulate
-    # and merge solutions.
-    defrecord FollowMany, capture : Term
+    # and merge solutions. *min* or more solutions are required,
+    # otherwise backtrack.
+    defrecord FollowMany, capture : Term, min : Int32
 
     # :nodoc:
     #
@@ -696,12 +697,12 @@ module Ww::D7
           plan << {:append, key, pattern}
         end
 
-        matchpi %{(many key_ pattern_)} do
+        matchpi %{(many key_ pattern_ ⍊ min_: (%optional 1 (%number +i32!)))} do
           unless origin
             raise QueryError.new("`many` without a predecessor makes no sense (many where?)")
           end
 
-          plan << {:"follow+", origin}
+          plan << {:"follow+", origin, min}
           plan << {:append, key, pattern}
         end
 
@@ -753,7 +754,7 @@ module Ww::D7
 
             matchpi %{(return)} { Return.new }
             matchpi %{(follow capture_)} { Follow.new(capture) }
-            matchpi %{(follow+ capture_)} { FollowMany.new(capture) }
+            matchpiT %{(follow+ capture_ min←(%number +i32!))} { FollowMany.new(capture, min) }
           end
         end
 
@@ -946,7 +947,7 @@ module Ww::D7
         search(ctx, locus(ctx, neighbor), soln, ahead.copy_with(sink: sink, ret: ret))
       end
 
-      return if solns.empty?
+      return if solns.size < step.min
 
       ahead.sink.call(Soln.union(solns))
     end
