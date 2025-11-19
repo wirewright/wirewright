@@ -111,43 +111,43 @@ module Ww::M1::Operator
       Expensive
     end
 
-    record Required, key : Term, value : Operator::Any do
+    defcase Required, key : Term, value : Operator::Any do
       def cost : Cost
         Cost::Moderate
       end
     end
 
-    record Optional, key : Term, default : Term, value : Operator::Any do
+    defcase Optional, key : Term, default : Term, value : Operator::Any do
       def cost : Cost
         Cost::Expensive
       end
     end
 
-    record Present, key : Term, type : TermType do
+    defcase Present, key : Term, type : TermType do
       def cost : Cost
         Cost::Cheap
       end
     end
 
-    record Absent, key : Term do
+    defcase Absent, key : Term do
       def cost : Cost
         Cost::VeryCheap
       end
     end
 
-    record AbsentKeypath, key : Term, name : Term do
+    defcase AbsentKeypath, key : Term, name : Term do
       def cost : Cost
         Cost::Expensive
       end
     end
 
-    record Negative, key : Term, positive : Operator::Any do
+    defcase Negative, key : Term, positive : Operator::Any do
       def cost : Cost
         Cost::Moderate
       end
     end
 
-    record NegativeKeypath, key : Term, positive : Operator::Any, name : Term do
+    defcase NegativeKeypath, key : Term, positive : Operator::Any, name : Term do
       def cost : Cost
         Cost::Expensive
       end
