@@ -5,6 +5,10 @@
 
 # Wirewright
 
+> [!WARNING]
+> All development happens on the [iota branch](https://github.com/wirewright/wirewright/tree/iota). This branch, kappa, is a snapshot of Wirewright before I nuked
+> it with changes incompatible with the old way of doing things.
+
 Imagine roads driving cars. Imagine a sculpture deliberately shaping the way the wind flows around it.
 
 Imagine, now, a programming environment that *runs around* passive programs, instead of active programs *running in it*.
