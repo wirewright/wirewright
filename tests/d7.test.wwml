@@ -1698,7 +1698,7 @@
 ;; Modules inside chats
 (d7
   (frame
-    (chat ()
+    ((async chat) ()
       (module {}
         (cell @x 0)
         (feed @x (pulse @xs))
@@ -1708,7 +1708,7 @@
         (feed @x (pulse @ys))
         (feed (pulse @ys) @x))))
   (frame
-    (chat ((pulse @ys 1) (pulse @xs 0)) ;; FIXME: order is currently implementation-defined
+    ((async chat) ((pulse @xs 0) (pulse @ys 1))
       (module {}
         (cell @x)
         (feed @x (pulse @xs))
@@ -1718,17 +1718,7 @@
         (feed @x (pulse @ys))
         (feed (pulse @ys) @x))))
   (frame
-    (chat ((pulse @xs 0))
-      (module {}
-        (cell @x)
-        (feed @x (pulse @xs))
-        (feed (pulse @xs) @x))
-      (module {}
-        (cell @x 1)
-        (feed @x (pulse @ys))
-        (feed (pulse @ys) @x))))
-  (frame
-    (chat ((pulse @ys 1))
+    ((async chat) ((pulse @ys 1))
       (module {}
         (cell @x 0)
         (feed @x (pulse @xs))
@@ -1738,13 +1728,23 @@
         (feed @x (pulse @ys))
         (feed (pulse @ys) @x))))
   (frame
-    (chat ((pulse @xs 0))
+    ((async chat) ((pulse @xs 0))
       (module {}
         (cell @x)
         (feed @x (pulse @xs))
         (feed (pulse @xs) @x))
       (module {}
         (cell @x 1)
+        (feed @x (pulse @ys))
+        (feed (pulse @ys) @x))))
+  (frame
+    ((async chat) ((pulse @ys 1))
+      (module {}
+        (cell @x 0)
+        (feed @x (pulse @xs))
+        (feed (pulse @xs) @x))
+      (module {}
+        (cell @x)
         (feed @x (pulse @ys))
         (feed (pulse @ys) @x)))))
   ;; ...
@@ -2032,70 +2032,70 @@
 ;; Queue + chat + backpressure
 (d7
   (frame
-    (chat ()
+    ((async chat) ()
       (queue (@front @back) (1 2 3))
       (feed @front (pulse @xs))
       (feed (pulse @xs) @x)
       (cell @x)
       (delay 4 (discard @x))))
   (frame
-    (chat ((pulse @xs 1))
+    ((async chat) ((pulse @xs 1))
       (queue (@front @back) (2 3))
       (feed @front (pulse @xs))
       (feed (pulse @xs) @x)
       (cell @x)
       (delay 3 (discard @x))))
   (frame
-    (chat ((pulse @xs 2))
+    ((async chat) ((pulse @xs 2))
       (queue (@front @back) (3))
       (feed @front (pulse @xs))
       (feed (pulse @xs) @x)
       (cell @x 1)
       (delay 2 (discard @x))))
   (frame
-    (chat ((pulse @xs 2) (pulse @xs 3))
+    ((async chat) ((pulse @xs 2) (pulse @xs 3))
       (queue (@front @back) ())
       (feed @front (pulse @xs))
       (feed (pulse @xs) @x)
       (cell @x 1)
       (delay 1 (discard @x))))
   (frame
-    (chat ((pulse @xs 2) (pulse @xs 3))
+    ((async chat) ((pulse @xs 2) (pulse @xs 3))
       (queue (@front @back) ())
       (feed @front (pulse @xs))
       (feed (pulse @xs) @x)
       (cell @x 1)
       (discard @x)))
   (frame
-    (chat ((pulse @xs 2) (pulse @xs 3))
+    ((async chat) ((pulse @xs 2) (pulse @xs 3))
       (queue (@front @back) ())
       (feed @front (pulse @xs))
       (feed (pulse @xs) @x)
       (cell @x)
       (discard @x)))
   (frame
-    (chat ((pulse @xs 3))
+    ((async chat) ((pulse @xs 3))
       (queue (@front @back) ())
       (feed @front (pulse @xs))
       (feed (pulse @xs) @x)
       (cell @x 2)
       (discard @x)))
   (frame
-    (chat ((pulse @xs 3))
+    ((async chat) ((pulse @xs 3))
       (queue (@front @back) ())
       (feed @front (pulse @xs))
       (feed (pulse @xs) @x)
       (cell @x)
       (discard @x)))
   (frame
-    (chat ()
+    ((async chat) ()
       (queue (@front @back) ())
       (feed @front (pulse @xs))
       (feed (pulse @xs) @x)
       (cell @x 3)
       (discard @x)))
   (frame
-    (chat ()
+    ((async chat) ()
       (queue (@front @back) ())
       (feed @front (pulse @xs))
       (feed (pulse @xs) @x)
@@ -2106,7 +2106,7 @@
 ;; `ml/term` device
 (d7
   (frame
-    (chat ()
+    ((async chat) ()
       (queue (@src @back) ("100" "200" "300" "(+ 1 2)" "(+ 1 2"))
       (feed @src (pulse @srcs))
       (ml/term @srcs (result @!terms))
@@ -2114,7 +2114,7 @@
       (cell @!term)
       (discard @!term)))
   (frame
-    (chat ((pulse @srcs "100"))
+    ((async chat) ((pulse @srcs "100"))
       (queue (@src @back) ("200" "300" "(+ 1 2)" "(+ 1 2"))
       (feed @src (pulse @srcs))
       (ml/term @srcs (result @!terms))
@@ -2122,7 +2122,7 @@
       (cell @!term)
       (discard @!term)))
   (frame
-    (chat ((pulse @srcs "200") (pulse @!terms (ok 100)))
+    ((async chat) ((pulse @!terms (ok 100)) (pulse @srcs "200"))
       (queue (@src @back) ("300" "(+ 1 2)" "(+ 1 2"))
       (feed @src (pulse @srcs))
       (ml/term @srcs (result @!terms))
@@ -2130,23 +2130,23 @@
       (cell @!term)
       (discard @!term)))
   (frame
-    (chat ((pulse @!terms (ok 100)) (pulse @srcs "300") (pulse @!terms (ok 200)))
+    ((async chat) ((pulse @srcs "200") (pulse @srcs "300"))
       (queue (@src @back) ("(+ 1 2)" "(+ 1 2"))
-      (feed @src (pulse @srcs))
-      (ml/term @srcs (result @!terms))
-      (feed (pulse @!terms) @!term)
-      (cell @!term)
-      (discard @!term)))
-  (frame
-    (chat ((pulse @srcs "300") (pulse @!terms (ok 200)) (pulse @srcs "(+ 1 2)"))
-      (queue (@src @back) ("(+ 1 2"))
       (feed @src (pulse @srcs))
       (ml/term @srcs (result @!terms))
       (feed (pulse @!terms) @!term)
       (cell @!term (ok 100))
       (discard @!term)))
   (frame
-    (chat ((pulse @!terms (ok 200)) (pulse @srcs "(+ 1 2)") (pulse @srcs "(+ 1 2") (pulse @!terms (ok 300)))
+    ((async chat) ((pulse @srcs "300") (pulse @!terms (ok 200)) (pulse @srcs "(+ 1 2)"))
+      (queue (@src @back) ("(+ 1 2"))
+      (feed @src (pulse @srcs))
+      (ml/term @srcs (result @!terms))
+      (feed (pulse @!terms) @!term)
+      (cell @!term)
+      (discard @!term)))
+  (frame
+    ((async chat) ((pulse @!terms (ok 200)) (pulse @srcs "(+ 1 2)") (pulse @!terms (ok 300)) (pulse @srcs "(+ 1 2"))
       (queue (@src @back) ())
       (feed @src (pulse @srcs))
       (ml/term @srcs (result @!terms))
@@ -2154,7 +2154,7 @@
       (cell @!term)
       (discard @!term)))
   (frame
-    (chat ((pulse @srcs "(+ 1 2)") (pulse @srcs "(+ 1 2") (pulse @!terms (ok 300)))
+    ((async chat) ((pulse @srcs "(+ 1 2)") (pulse @!terms (ok 300)) (pulse @srcs "(+ 1 2"))
       (queue (@src @back) ())
       (feed @src (pulse @srcs))
       (ml/term @srcs (result @!terms))
@@ -2162,23 +2162,15 @@
       (cell @!term (ok 200))
       (discard @!term)))
   (frame
-    (chat ((pulse @srcs "(+ 1 2") (pulse @!terms (ok 300)) (pulse @!terms (ok (+ 1 2))))
+    ((async chat) ((pulse @!terms (ok 300)) (pulse @srcs "(+ 1 2") (pulse @!terms (ok (+ 1 2))))
       (queue (@src @back) ())
       (feed @src (pulse @srcs))
       (ml/term @srcs (result @!terms))
       (feed (pulse @!terms) @!term)
       (cell @!term)
       (discard @!term)))
-  (frame m1: true
-    (chat ((pulse @!terms (ok 300)) (pulse @!terms (ok (+ 1 2))) (pulse @!terms [err]))
-      (queue (@src @back) ())
-      (feed @src (pulse @srcs))
-      (ml/term @srcs (result @!terms))
-      (feed (pulse @!terms) @!term)
-      (cell @!term)
-      (discard @!term)))
-  (frame m1: true
-    (chat ((pulse @!terms (ok (+ 1 2))) (pulse @!terms [err]))
+  (frame
+    ((async chat) ((pulse @srcs "(+ 1 2") (pulse @!terms (ok (+ 1 2))))
       (queue (@src @back) ())
       (feed @src (pulse @srcs))
       (ml/term @srcs (result @!terms))
@@ -2186,7 +2178,7 @@
       (cell @!term (ok 300))
       (discard @!term)))
   (frame m1: true
-    (chat ((pulse @!terms (ok (+ 1 2))) (pulse @!terms [err]))
+    ((async chat) ((pulse @!terms (ok (+ 1 2))) (pulse @!terms [err]))
       (queue (@src @back) ())
       (feed @src (pulse @srcs))
       (ml/term @srcs (result @!terms))
@@ -2194,7 +2186,7 @@
       (cell @!term)
       (discard @!term)))
   (frame m1: true
-    (chat ((pulse @!terms [err]))
+    ((async chat) ((pulse @!terms [err]))
       (queue (@src @back) ())
       (feed @src (pulse @srcs))
       (ml/term @srcs (result @!terms))
@@ -2202,7 +2194,7 @@
       (cell @!term (ok (+ 1 2)))
       (discard @!term)))
   (frame m1: true
-    (chat ((pulse @!terms [err]))
+    ((async chat) ((pulse @!terms [err]))
       (queue (@src @back) ())
       (feed @src (pulse @srcs))
       (ml/term @srcs (result @!terms))
@@ -2210,7 +2202,7 @@
       (cell @!term)
       (discard @!term)))
   (frame m1: true
-    (chat ()
+    ((async chat) ()
       (queue (@src @back) ())
       (feed @src (pulse @srcs))
       (ml/term @srcs (result @!terms))
@@ -2218,7 +2210,7 @@
       (cell @!term [err])
       (discard @!term)))
   (frame
-    (chat ()
+    ((async chat) ()
       (queue (@src @back) ())
       (feed @src (pulse @srcs))
       (ml/term @srcs (result @!terms))
@@ -2352,9 +2344,9 @@
 
 ;; Listing ML error details using the `ml/term` device and the `log` node.
 ;;
-;; NOTE: this is a very long regression test.
+;; NOTE: this is a *very* long regression test.
 (d7
-  (frame
+  (seed
     (frag @chat
       (chat ()
         (queue (@front @back) ("100" "200" "100" "100" "100" "(" ")" "(+ 1 2" "qux"))
@@ -2366,7 +2358,7 @@
         (feed (pulse @terms) @term)
         (cell @term)
         (discard @term)))
-    (log (@chat [chat ((err ⍊ detail_string) _*) _*] @details)
+    (log (@chat [_ ((err ⍊ detail_string) _*) _*] @details)
       ^detail)
     (cell @details ())
     (view (@details details_dict @view)
@@ -2375,588 +2367,203 @@
         (^each (details as detail_string)
           (p ^detail style: "text-red-500"))))
     (cell @view))
-  (frame
-    (frag @chat
-      (chat ()
-        (queue (@front @back) ("200" "100" "100" "100" "(" ")" "(+ 1 2" "qux"))
-        (feed @front (over @src))
-        (cell @src "100")
-        (uniq @src (pulse @srcs))
-        (ml/term @srcs (result @!terms))
-        (repr (result @!terms) (ok @terms))
-        (feed (pulse @terms) @term)
-        (cell @term)
-        (discard @term)))
-    (log (@chat [chat ((err ⍊ detail_string) _*) _*] @details)
-      ^detail)
-    (cell @details ())
-    (view (@details details_dict @view)
-      (group
-        (h1 "Most recent problems:")
-        (^each (details as detail_string)
-          (p ^detail style: "text-red-500"))))
-    (cell @view
-      (group
-        (h1 "Most recent problems:"))))
-  (frame
-    (frag @chat
-      (chat ((pulse @srcs "100"))
-        (queue (@front @back) ("100" "100" "100" "(" ")" "(+ 1 2" "qux"))
-        (feed @front (over @src))
-        (cell @src "200")
-        (uniq (@src "100") (pulse @srcs))
-        (ml/term @srcs (result @!terms))
-        (repr (result @!terms) (ok @terms))
-        (feed (pulse @terms) @term)
-        (cell @term)
-        (discard @term)))
-    (log (@chat [chat ((err ⍊ detail_string) _*) _*] @details)
-      ^detail)
-    (cell @details ())
-    (view (@details details_dict @view)
-      (group
-        (h1 "Most recent problems:")
-        (^each (details as detail_string)
-          (p ^detail style: "text-red-500"))))
-    (cell @view
-      (group
-        (h1 "Most recent problems:"))))
-  (frame
-    (frag @chat
-      (chat ((pulse @srcs "200") (pulse @!terms (ok 100)))
-        (queue (@front @back) ("100" "100" "(" ")" "(+ 1 2" "qux"))
-        (feed @front (over @src))
-        (cell @src "100")
-        (uniq (@src "200") (pulse @srcs))
-        (ml/term @srcs (result @!terms))
-        (repr (result @!terms) (ok @terms))
-        (feed (pulse @terms) @term)
-        (cell @term)
-        (discard @term)))
-    (log (@chat [chat ((err ⍊ detail_string) _*) _*] @details)
-      ^detail)
-    (cell @details ())
-    (view (@details details_dict @view)
-      (group
-        (h1 "Most recent problems:")
-        (^each (details as detail_string)
-          (p ^detail style: "text-red-500"))))
-    (cell @view
-      (group
-        (h1 "Most recent problems:"))))
-  (frame
-    (frag @chat
-      (chat ((pulse @!terms (ok 100)) (pulse @srcs "100") (pulse @!terms (ok 200)))
-        (queue (@front @back) ("100" "(" ")" "(+ 1 2" "qux"))
-        (feed @front (over @src))
-        (cell @src "100")
-        (uniq (@src "100") (pulse @srcs))
-        (ml/term @srcs (result @!terms))
-        (repr (result @!terms) (ok @terms))
-        (feed (pulse @terms) @term)
-        (cell @term)
-        (discard @term)))
-    (log (@chat [chat ((err ⍊ detail_string) _*) _*] @details)
-      ^detail)
-    (cell @details ())
-    (view (@details details_dict @view)
-      (group
-        (h1 "Most recent problems:")
-        (^each (details as detail_string)
-          (p ^detail style: "text-red-500"))))
-    (cell @view
-      (group
-        (h1 "Most recent problems:"))))
-  (frame
-    (frag @chat
-      (chat ((pulse @srcs "100") (pulse @!terms (ok 200)) (pulse @terms 100))
-        (queue (@front @back) ("(" ")" "(+ 1 2" "qux"))
-        (feed @front (over @src))
-        (cell @src "100")
-        (uniq (@src "100") (pulse @srcs))
-        (ml/term @srcs (result @!terms))
-        (repr (result @!terms) (ok @terms))
-        (feed (pulse @terms) @term)
-        (cell @term)
-        (discard @term)))
-    (log (@chat [chat ((err ⍊ detail_string) _*) _*] @details)
-      ^detail)
-    (cell @details ())
-    (view (@details details_dict @view)
-      (group
-        (h1 "Most recent problems:")
-        (^each (details as detail_string)
-          (p ^detail style: "text-red-500"))))
-    (cell @view
-      (group
-        (h1 "Most recent problems:"))))
-  (frame
-    (frag @chat
-      (chat ((pulse @!terms (ok 200)) (pulse @terms 100) (pulse @!terms (ok 100)))
-        (queue (@front @back) (")" "(+ 1 2" "qux"))
-        (feed @front (over @src))
-        (cell @src "(")
-        (uniq (@src "100") (pulse @srcs))
-        (ml/term @srcs (result @!terms))
-        (repr (result @!terms) (ok @terms))
-        (feed (pulse @terms) @term)
-        (cell @term)
-        (discard @term)))
-    (log (@chat [chat ((err ⍊ detail_string) _*) _*] @details)
-      ^detail)
-    (cell @details ())
-    (view (@details details_dict @view)
-      (group
-        (h1 "Most recent problems:")
-        (^each (details as detail_string)
-          (p ^detail style: "text-red-500"))))
-    (cell @view
-      (group
-        (h1 "Most recent problems:"))))
-  (frame
-    (frag @chat
-      (chat ((pulse @terms 100) (pulse @!terms (ok 100)) (pulse @srcs "(") (pulse @terms 200))
-        (queue (@front @back) ("(+ 1 2" "qux"))
-        (feed @front (over @src))
-        (cell @src ")")
-        (uniq (@src "(") (pulse @srcs))
-        (ml/term @srcs (result @!terms))
-        (repr (result @!terms) (ok @terms))
-        (feed (pulse @terms) @term)
-        (cell @term)
-        (discard @term)))
-    (log (@chat [chat ((err ⍊ detail_string) _*) _*] @details)
-      ^detail)
-    (cell @details ())
-    (view (@details details_dict @view)
-      (group
-        (h1 "Most recent problems:")
-        (^each (details as detail_string)
-          (p ^detail style: "text-red-500"))))
-    (cell @view
-      (group
-        (h1 "Most recent problems:"))))
-  (frame
-    (frag @chat
-      (chat ((pulse @!terms (ok 100)) (pulse @srcs "(") (pulse @terms 200) (pulse @srcs ")"))
-        (queue (@front @back) ("qux"))
-        (feed @front (over @src))
-        (cell @src "(+ 1 2")
-        (uniq (@src ")") (pulse @srcs))
-        (ml/term @srcs (result @!terms))
-        (repr (result @!terms) (ok @terms))
-        (feed (pulse @terms) @term)
-        (cell @term 100)
-        (discard @term)))
-    (log (@chat [chat ((err ⍊ detail_string) _*) _*] @details)
-      ^detail)
-    (cell @details ())
-    (view (@details details_dict @view)
-      (group
-        (h1 "Most recent problems:")
-        (^each (details as detail_string)
-          (p ^detail style: "text-red-500"))))
-    (cell @view
-      (group
-        (h1 "Most recent problems:"))))
-  (frame
-    (frag @chat
-      (chat ((pulse @srcs "(") (pulse @terms 200) (pulse @srcs ")") (pulse @srcs "(+ 1 2") (pulse @terms 100))
-        (queue (@front @back) ())
-        (feed @front (over @src))
-        (cell @src "qux")
-        (uniq (@src "(+ 1 2") (pulse @srcs))
-        (ml/term @srcs (result @!terms))
-        (repr (result @!terms) (ok @terms))
-        (feed (pulse @terms) @term)
-        (cell @term)
-        (discard @term)))
-    (log (@chat [chat ((err ⍊ detail_string) _*) _*] @details)
-      ^detail)
-    (cell @details ())
-    (view (@details details_dict @view)
-      (group
-        (h1 "Most recent problems:")
-        (^each (details as detail_string)
-          (p ^detail style: "text-red-500"))))
-    (cell @view
-      (group
-        (h1 "Most recent problems:"))))
-  (frame m1: true
-    (frag @chat
-      (chat ((pulse @terms 200) (pulse @srcs ")") (pulse @srcs "(+ 1 2") (pulse @terms 100) (pulse @srcs "qux") (pulse @!terms [err]))
-        (queue (@front @back) ())
-        (feed @front (over @src))
-        (cell @src "qux")
-        (uniq (@src "qux") (pulse @srcs))
-        (ml/term @srcs (result @!terms))
-        (repr (result @!terms) (ok @terms))
-        (feed (pulse @terms) @term)
-        (cell @term)
-        (discard @term)))
-    (log (@chat (%literal [chat ((err ⍊ detail_string) _*) _*]) @details)
-      ^detail)
-    (cell @details ())
-    (view (@details (%literal details_dict) @view)
-      (group
-        (h1 "Most recent problems:")
-        (^each (details as (%literal detail_string))
-          (p ^detail style: "text-red-500"))))
-    (cell @view
-      (group
-        (h1 "Most recent problems:"))))
-  (frame m1: true
-    (frag @chat
-      (chat ((pulse @srcs ")") (pulse @srcs "(+ 1 2") (pulse @terms 100) (pulse @srcs "qux") (pulse @!terms [err]))
-        (queue (@front @back) ())
-        (feed @front (over @src))
-        (cell @src "qux")
-        (uniq (@src "qux") (pulse @srcs))
-        (ml/term @srcs (result @!terms))
-        (repr (result @!terms) (ok @terms))
-        (feed (pulse @terms) @term)
-        (cell @term 200)
-        (discard @term)))
-    (log (@chat (%literal [chat ((err ⍊ detail_string) _*) _*]) @details)
-      ^detail)
-    (cell @details ())
-    (view (@details (%literal details_dict) @view)
-      (group
-        (h1 "Most recent problems:")
-        (^each (details as (%literal detail_string))
-          (p ^detail style: "text-red-500"))))
-    (cell @view
-      (group
-        (h1 "Most recent problems:"))))
-  (frame m1: true
-    (frag @chat
-      (chat ((pulse @srcs "(+ 1 2") (pulse @terms 100) (pulse @srcs "qux") (pulse @!terms [err]) (pulse @!terms [err]))
-        (queue (@front @back) ())
-        (feed @front (over @src))
-        (cell @src "qux")
-        (uniq (@src "qux") (pulse @srcs))
-        (ml/term @srcs (result @!terms))
-        (repr (result @!terms) (ok @terms))
-        (feed (pulse @terms) @term)
-        (cell @term)
-        (discard @term)))
-    (log (@chat (%literal [chat ((err ⍊ detail_string) _*) _*]) @details)
-      ^detail)
-    (cell @details ())
-    (view (@details (%literal details_dict) @view)
-      (group
-        (h1 "Most recent problems:")
-        (^each (details as (%literal detail_string))
-          (p ^detail style: "text-red-500"))))
-    (cell @view
-      (group
-        (h1 "Most recent problems:"))))
-  (frame m1: true
-    (frag @chat
-      (chat ((pulse @terms 100) (pulse @srcs "qux") (pulse @!terms [err]) (pulse @!terms [err]) (pulse @!terms [err]))
-        (queue (@front @back) ())
-        (feed @front (over @src))
-        (cell @src "qux")
-        (uniq (@src "qux") (pulse @srcs))
-        (ml/term @srcs (result @!terms))
-        (repr (result @!terms) (ok @terms))
-        (feed (pulse @terms) @term)
-        (cell @term)
-        (discard @term)))
-    (log (@chat (%literal [chat ((err ⍊ detail_string) _*) _*]) @details)
-      ^detail)
-    (cell @details ())
-    (view (@details (%literal details_dict) @view)
-      (group
-        (h1 "Most recent problems:")
-        (^each (details as (%literal detail_string))
-          (p ^detail style: "text-red-500"))))
-    (cell @view
-      (group
-        (h1 "Most recent problems:"))))
-  (frame m1: true
-    (frag @chat
-      (chat ((pulse @srcs "qux") (pulse @!terms [err]) (pulse @!terms [err]) (pulse @!terms [err]))
-        (queue (@front @back) ())
-        (feed @front (over @src))
-        (cell @src "qux")
-        (uniq (@src "qux") (pulse @srcs))
-        (ml/term @srcs (result @!terms))
-        (repr (result @!terms) (ok @terms))
-        (feed (pulse @terms) @term)
-        (cell @term 100)
-        (discard @term)))
-    (log (@chat (%literal [chat ((err ⍊ detail_string) _*) _*]) @details)
-      ^detail)
-    (cell @details ())
-    (view (@details (%literal details_dict) @view)
-      (group
-        (h1 "Most recent problems:")
-        (^each (details as (%literal detail_string))
-          (p ^detail style: "text-red-500"))))
-    (cell @view
-      (group
-        (h1 "Most recent problems:"))))
-  (frame m1: true
-    (frag @chat
-      (chat ((pulse @!terms [err]) (pulse @!terms [err]) (pulse @!terms [err]) (pulse @!terms (ok qux)))
-        (queue (@front @back) ())
-        (feed @front (over @src))
-        (cell @src "qux")
-        (uniq (@src "qux") (pulse @srcs))
-        (ml/term @srcs (result @!terms))
-        (repr (result @!terms) (ok @terms))
-        (feed (pulse @terms) @term)
-        (cell @term)
-        (discard @term)))
-    (log (@chat (%literal [chat ((err ⍊ detail_string) _*) _*]) @details)
-      ^detail)
-    (cell @details ())
-    (view (@details (%literal details_dict) @view)
-      (group
-        (h1 "Most recent problems:")
-        (^each (details as (%literal detail_string))
-          (p ^detail style: "text-red-500"))))
-    (cell @view
-      (group
-        (h1 "Most recent problems:"))))
-  (frame m1: true
-    (frag @chat
-      (chat ((pulse @!terms [err]) (pulse @!terms [err]) (pulse @!terms (ok qux)) [err])
-        (queue (@front @back) ())
-        (feed @front (over @src))
-        (cell @src "qux")
-        (uniq (@src "qux") (pulse @srcs))
-        (ml/term @srcs (result @!terms))
-        (repr (result @!terms) (ok @terms))
-        (feed (pulse @terms) @term)
-        (cell @term)
-        (discard @term)))
-    (log (@chat (%literal [chat ((err ⍊ detail_string) _*) _*]) @details)
-      ^detail)
-    (cell @details ())
-    (view (@details (%literal details_dict) @view)
-      (group
-        (h1 "Most recent problems:")
-        (^each (details as (%literal detail_string))
-          (p ^detail style: "text-red-500"))))
-    (cell @view
-      (group
-        (h1 "Most recent problems:"))))
-  (frame m1: true
-    (frag @chat
-      (chat ((pulse @!terms [err]) (pulse @!terms (ok qux)) [err] [err])
-        (queue (@front @back) ())
-        (feed @front (over @src))
-        (cell @src "qux")
-        (uniq (@src "qux") (pulse @srcs))
-        (ml/term @srcs (result @!terms))
-        (repr (result @!terms) (ok @terms))
-        (feed (pulse @terms) @term)
-        (cell @term)
-        (discard @term)))
-    (log (@chat (%literal [chat ((err ⍊ detail_string) _*) _*]) @details)
-      ^detail)
-    (cell @details ())
-    (view (@details (%literal details_dict) @view)
-      (group
-        (h1 "Most recent problems:")
-        (^each (details as (%literal detail_string))
-          (p ^detail style: "text-red-500"))))
-    (cell @view
-      (group
-        (h1 "Most recent problems:"))))
-  (frame m1: true
-    (frag @chat
-      (chat ((pulse @!terms (ok qux)) [err] [err] [err])
-        (queue (@front @back) ())
-        (feed @front (over @src))
-        (cell @src "qux")
-        (uniq (@src "qux") (pulse @srcs))
-        (ml/term @srcs (result @!terms))
-        (repr (result @!terms) (ok @terms))
-        (feed (pulse @terms) @term)
-        (cell @term)
-        (discard @term)))
-    (log (@chat (%literal [chat ((err ⍊ detail_string) _*) _*]) @details)
-      ^detail)
-    (cell @details ())
-    (view (@details (%literal details_dict) @view)
-      (group
-        (h1 "Most recent problems:")
-        (^each (details as (%literal detail_string))
-          (p ^detail style: "text-red-500"))))
-    (cell @view
-      (group
-        (h1 "Most recent problems:"))))
-  (frame m1: true
-    (frag @chat
-      (chat ([err] [err] [err] (pulse @terms qux))
-        (queue (@front @back) ())
-        (feed @front (over @src))
-        (cell @src "qux")
-        (uniq (@src "qux") (pulse @srcs))
-        (ml/term @srcs (result @!terms))
-        (repr (result @!terms) (ok @terms))
-        (feed (pulse @terms) @term)
-        (cell @term)
-        (discard @term)))
-    (log (@chat (%literal [chat ((err ⍊ detail_string) _*) _*]) @details)
-      ^detail)
-    (cell @details ("expected `)` to end the dict"))
-    (view (@details (%literal details_dict) @view)
-      (group
-        (h1 "Most recent problems:")
-        (^each (details as (%literal detail_string))
-          (p ^detail style: "text-red-500"))))
-    (cell @view
-      (group
-        (h1 "Most recent problems:"))))
-  (frame m1: true
-    (frag @chat
-      (chat ([err] [err] (pulse @terms qux))
-        (queue (@front @back) ())
-        (feed @front (over @src))
-        (cell @src "qux")
-        (uniq (@src "qux") (pulse @srcs))
-        (ml/term @srcs (result @!terms))
-        (repr (result @!terms) (ok @terms))
-        (feed (pulse @terms) @term)
-        (cell @term)
-        (discard @term)))
-    (log (@chat (%literal [chat ((err ⍊ detail_string) _*) _*]) @details)
-      ^detail)
-    (cell @details ("expected `)` to end the dict" "expected a term"))
-    (view (@details (%literal details_dict) @view)
-      (group
-        (h1 "Most recent problems:")
-        (^each (details as (%literal detail_string))
-          (p ^detail style: "text-red-500"))))
-    (cell @view
-      (group
-        (h1 "Most recent problems:")
-        (p "expected `)` to end the dict" style: "text-red-500"))))
-  (frame m1: true
-    (frag @chat
-      (chat ([err] (pulse @terms qux))
-        (queue (@front @back) ())
-        (feed @front (over @src))
-        (cell @src "qux")
-        (uniq (@src "qux") (pulse @srcs))
-        (ml/term @srcs (result @!terms))
-        (repr (result @!terms) (ok @terms))
-        (feed (pulse @terms) @term)
-        (cell @term)
-        (discard @term)))
-    (log (@chat (%literal [chat ((err ⍊ detail_string) _*) _*]) @details)
-      ^detail)
-    (cell @details
-      ("expected `)` to end the dict"
-       "expected a term"
-       "expected `)` to end the dict"))
-    (view (@details (%literal details_dict) @view)
-      (group
-        (h1 "Most recent problems:")
-        (^each (details as (%literal detail_string))
-          (p ^detail style: "text-red-500"))))
-    (cell @view
-      (group
-        (h1 "Most recent problems:")
-        (p "expected `)` to end the dict" style: "text-red-500")
-        (p "expected a term" style: "text-red-500"))))
-  (frame
-    (frag @chat
-      (chat ((pulse @terms qux))
-        (queue (@front @back) ())
-        (feed @front (over @src))
-        (cell @src "qux")
-        (uniq (@src "qux") (pulse @srcs))
-        (ml/term @srcs (result @!terms))
-        (repr (result @!terms) (ok @terms))
-        (feed (pulse @terms) @term)
-        (cell @term)
-        (discard @term)))
-    (log (@chat [chat ((err ⍊ detail_string) _*) _*] @details)
-      ^detail)
-    (cell @details
-      ("expected `)` to end the dict"
-       "expected a term"
-       "expected `)` to end the dict"))
-    (view (@details details_dict @view)
-      (group
-        (h1 "Most recent problems:")
-        (^each (details as detail_string)
-          (p ^detail style: "text-red-500"))))
-    (cell @view
-      (group
-        (h1 "Most recent problems:")
-        (p "expected `)` to end the dict" style: "text-red-500")
-        (p "expected a term" style: "text-red-500")
-        (p "expected `)` to end the dict" style: "text-red-500"))))
-  (frame
-    (frag @chat
-      (chat ()
-        (queue (@front @back) ())
-        (feed @front (over @src))
-        (cell @src "qux")
-        (uniq (@src "qux") (pulse @srcs))
-        (ml/term @srcs (result @!terms))
-        (repr (result @!terms) (ok @terms))
-        (feed (pulse @terms) @term)
-        (cell @term qux)
-        (discard @term)))
-    (log (@chat [chat ((err ⍊ detail_string) _*) _*] @details)
-      ^detail)
-    (cell @details
-      ("expected `)` to end the dict"
-       "expected a term"
-       "expected `)` to end the dict"))
-    (view (@details details_dict @view)
-      (group
-        (h1 "Most recent problems:")
-        (^each (details as detail_string)
-          (p ^detail style: "text-red-500"))))
-    (cell @view
-      (group
-        (h1 "Most recent problems:")
-        (p "expected `)` to end the dict" style: "text-red-500")
-        (p "expected a term" style: "text-red-500")
-        (p "expected `)` to end the dict" style: "text-red-500"))))
-  (frame
-    (frag @chat
-      (chat ()
-        (queue (@front @back) ())
-        (feed @front (over @src))
-        (cell @src "qux")
-        (uniq (@src "qux") (pulse @srcs))
-        (ml/term @srcs (result @!terms))
-        (repr (result @!terms) (ok @terms))
-        (feed (pulse @terms) @term)
-        (cell @term)
-        (discard @term)))
-    (log (@chat [chat ((err ⍊ detail_string) _*) _*] @details)
-      ^detail)
-    (cell @details
-      ("expected `)` to end the dict"
-       "expected a term"
-       "expected `)` to end the dict"))
-    (view (@details details_dict @view)
-      (group
-        (h1 "Most recent problems:")
-        (^each (details as detail_string)
-          (p ^detail style: "text-red-500"))))
-    (cell @view
-      (group
-        (h1 "Most recent problems:")
-        (p "expected `)` to end the dict" style: "text-red-500")
-        (p "expected a term" style: "text-red-500")
-        (p "expected `)` to end the dict" style: "text-red-500"))))
+  (fast-forward-to
+    (%all
+      (%leaf (cell @term 100))
+      ⟨(cell @view
+         (group
+           (h1 "Most recent problems:")))⟩))
+  (fast-forward-to
+    (%all
+      (%leaf (cell @term 200))
+      ⟨(cell @view
+         (group
+           (h1 "Most recent problems:")))⟩))
+  (fast-forward-to
+    (%all
+      (%leaf (cell @term 100))
+      ⟨(cell @view
+         (group
+           (h1 "Most recent problems:")))⟩))
+  (fast-forward-to
+    ⟨(cell @view
+       (group
+         (h1 "Most recent problems:")
+         (p "expected `)` to end the dict" style: "text-red-500")))⟩)
+  (fast-forward-to
+    ⟨(cell @view
+       (group
+         (h1 "Most recent problems:")
+         (p "expected `)` to end the dict" style: "text-red-500")
+         (p "expected a term" style: "text-red-500")))⟩)
+  (fast-forward-to
+    ⟨(cell @view
+       (group
+         (h1 "Most recent problems:")
+         (p "expected `)` to end the dict" style: "text-red-500")
+         (p "expected a term" style: "text-red-500")
+         (p "expected `)` to end the dict" style: "text-red-500")))⟩)
+  (fast-forward-to
+    (%all
+      (%leaf (cell @term qux))
+      ⟨(cell @view
+         (group
+           (h1 "Most recent problems:")
+           (p "expected `)` to end the dict" style: "text-red-500")
+           (p "expected a term" style: "text-red-500")
+           (p "expected `)` to end the dict" style: "text-red-500")))⟩))
+  (fast-forward-to
+    (%leaf (cell @term)))
   end)
 
-
 ;; `m1/pattern` device
+(d7
+  (frame
+    (cell @submission-list
+      ({pattern: ⟨±n⟩°, matchee: (1 x 2 3 y)}
+       {pattern: (point x_ y_), matchee: (point 100 200)}
+       {pattern: (point x_ y_), matchee: "hello"}
+       {pattern: (xyz x_), matchee: (xyz 1), env: {x: 1}}
+       {pattern: (xyz x_), matchee: (xyz 1), env: {x: 2}}))
+    (blast @submission-list (pulse @submissions))
+    (m1/pattern @submissions @envlists)
+    (feed (pulse @envlists) @envlist)
+    (cell @envlist)
+    (discard @envlist))
+  (frame
+    (cell @submission-list)
+    (blast @submission-list (pulse @submissions))
+    (m1/pattern @submissions @envlists)
+    (feed (pulse @envlists) @envlist)
+    (cell @envlist)
+    (discard @envlist))
+  ...
+  (frame
+    (cell @submission-list)
+    (blast @submission-list (pulse @submissions))
+    (m1/pattern @submissions @envlists)
+    (feed (pulse @envlists) @envlist)
+    (cell @envlist ({n: 1} {n: 2} {n: 3}))
+    (discard @envlist))
+  (frame
+    (cell @submission-list)
+    (blast @submission-list (pulse @submissions))
+    (m1/pattern @submissions @envlists)
+    (feed (pulse @envlists) @envlist)
+    (cell @envlist)
+    (discard @envlist))
+  ...
+  (frame
+    (cell @submission-list)
+    (blast @submission-list (pulse @submissions))
+    (m1/pattern @submissions @envlists)
+    (feed (pulse @envlists) @envlist)
+    (cell @envlist ({x: 100, y: 200}))
+    (discard @envlist))
+  (frame
+    (cell @submission-list)
+    (blast @submission-list (pulse @submissions))
+    (m1/pattern @submissions @envlists)
+    (feed (pulse @envlists) @envlist)
+    (cell @envlist)
+    (discard @envlist))
+  ...
+  (frame
+    (cell @submission-list)
+    (blast @submission-list (pulse @submissions))
+    (m1/pattern @submissions @envlists)
+    (feed (pulse @envlists) @envlist)
+    (cell @envlist ())
+    (discard @envlist))
+  (frame
+    (cell @submission-list)
+    (blast @submission-list (pulse @submissions))
+    (m1/pattern @submissions @envlists)
+    (feed (pulse @envlists) @envlist)
+    (cell @envlist)
+    (discard @envlist))
+  ...
+  (frame
+    (cell @submission-list)
+    (blast @submission-list (pulse @submissions))
+    (m1/pattern @submissions @envlists)
+    (feed (pulse @envlists) @envlist)
+    (cell @envlist ({x: 1}))
+    (discard @envlist))
+  (frame
+    (cell @submission-list)
+    (blast @submission-list (pulse @submissions))
+    (m1/pattern @submissions @envlists)
+    (feed (pulse @envlists) @envlist)
+    (cell @envlist)
+    (discard @envlist))
+  ...
+  (frame
+    (cell @submission-list)
+    (blast @submission-list (pulse @submissions))
+    (m1/pattern @submissions @envlists)
+    (feed (pulse @envlists) @envlist)
+    (cell @envlist ())
+    (discard @envlist))
+  (frame
+    (cell @submission-list)
+    (blast @submission-list (pulse @submissions))
+    (m1/pattern @submissions @envlists)
+    (feed (pulse @envlists) @envlist)
+    (cell @envlist)
+    (discard @envlist))
+  end)
 
 ;; `m1/backmap` device
+(d7
+  (frame
+    (cell @submission
+      {pattern: (+ x_ y_),
+       backspec: {x: (seen →x), y: (seen →y)},
+       matchee: (+ 1 2)})
+    (feed @submission (pulse @submissions))
+    (m1/backmap @submissions (optional @?terms))
+    (feed (pulse @?terms) @?term)
+    (cell @?term))
+  (frame
+    (cell @submission)
+    (feed @submission (pulse @submissions))
+    (m1/backmap @submissions (optional @?terms))
+    (feed (pulse @?terms) @?term)
+    (cell @?term))
+  ...
+  (frame
+    (cell @submission)
+    (feed @submission (pulse @submissions))
+    (m1/backmap @submissions (optional @?terms))
+    (feed (pulse @?terms) @?term)
+    (cell @?term (some (+ (seen 1) (seen 2)))))
+  end)
+(d7
+  (frame
+    (cell @submission
+      {pattern: (+ x_ y_),
+       backspec: {x: (seen →x), y: (seen →y)},
+       env: {x: 100},
+       matchee: (+ 200 300)})
+    (feed @submission (pulse @submissions))
+    (m1/backmap @submissions (optional @?terms))
+    (feed (pulse @?terms) @?term)
+    (cell @?term))
+  (frame
+    (cell @submission)
+    (feed @submission (pulse @submissions))
+    (m1/backmap @submissions (optional @?terms))
+    (feed (pulse @?terms) @?term)
+    (cell @?term))
+  ...
+  (frame
+    (cell @submission)
+    (feed @submission (pulse @submissions))
+    (m1/backmap @submissions (optional @?terms))
+    (feed (pulse @?terms) @?term)
+    (cell @?term none))
+  end)
 
 ;; `m1/ruleset` device
 
@@ -2971,5 +2578,261 @@
 ;; `rewriter` device
 
 ;; `rewrite` device
+
+;; Chats and surfaces
+(d7
+  (frame
+    (module {}
+      (chat ()
+        (sensor (local x_string @x) ^x)
+        (cell @x)
+        (feed @x (pulse @xs))
+        (delay 4 (ml/term @xs (result @!ys)))
+        (feed (pulse @!ys) @y)
+        (cell @y)
+        (discard @y)))
+    (module {}
+      (chat ()
+        (queue (@front @back) ("100" "200" "300" "400"))
+        (appearance local @front))))
+  (frame
+    (module {}
+      (chat ()
+        (sensor (local x_string @x) ^x)
+        (cell @x "100")
+        (feed @x (pulse @xs))
+        (delay 4 (ml/term @xs (result @!ys)))
+        (feed (pulse @!ys) @y)
+        (cell @y)
+        (discard @y)))
+    (module {}
+      (chat ()
+        (queue (@front @back) ("200" "300" "400"))
+        (appearance local @front))))
+  (frame
+    (module {}
+      (chat ((pulse @xs "100"))
+        (sensor (local x_string @x) ^x)
+        (cell @x)
+        (feed @x (pulse @xs))
+        (delay 3 (ml/term @xs (result @!ys)))
+        (feed (pulse @!ys) @y)
+        (cell @y)
+        (discard @y)))
+    (module {}
+      (chat ()
+        (queue (@front @back) ("200" "300" "400"))
+        (appearance local @front))))
+  (frame
+    (module {}
+      (chat ((pulse @xs "100"))
+        (sensor (local x_string @x) ^x)
+        (cell @x "200")
+        (feed @x (pulse @xs))
+        (delay 2 (ml/term @xs (result @!ys)))
+        (feed (pulse @!ys) @y)
+        (cell @y)
+        (discard @y)))
+    (module {}
+      (chat ()
+        (queue (@front @back) ("300" "400"))
+        (appearance local @front))))
+  (frame
+    (module {}
+      (chat ((pulse @xs "100"))
+        (sensor (local x_string @x) ^x)
+        (cell @x "200")
+        (feed @x (pulse @xs))
+        (delay 1 (ml/term @xs (result @!ys)))
+        (feed (pulse @!ys) @y)
+        (cell @y)
+        (discard @y)))
+    (module {}
+      (chat ()
+        (queue (@front @back) ("300" "400"))
+        (appearance local @front))))
+  (frame
+    (module {}
+      (chat ((pulse @xs "100"))
+        (sensor (local x_string @x) ^x)
+        (cell @x "200")
+        (feed @x (pulse @xs))
+        (ml/term @xs (result @!ys))
+        (feed (pulse @!ys) @y)
+        (cell @y)
+        (discard @y)))
+    (module {}
+      (chat ()
+        (queue (@front @back) ("300" "400"))
+        (appearance local @front))))
+  (frame
+    (module {}
+      (chat ((pulse @!ys (ok 100)))
+        (sensor (local x_string @x) ^x)
+        (cell @x "200")
+        (feed @x (pulse @xs))
+        (ml/term @xs (result @!ys))
+        (feed (pulse @!ys) @y)
+        (cell @y)
+        (discard @y)))
+    (module {}
+      (chat ()
+        (queue (@front @back) ("300" "400"))
+        (appearance local @front))))
+  (frame
+    (module {}
+      (chat ()
+        (sensor (local x_string @x) ^x)
+        (cell @x "200")
+        (feed @x (pulse @xs))
+        (ml/term @xs (result @!ys))
+        (feed (pulse @!ys) @y)
+        (cell @y (ok 100))
+        (discard @y)))
+    (module {}
+      (chat ()
+        (queue (@front @back) ("300" "400"))
+        (appearance local @front))))
+  (frame
+    (module {}
+      (chat ((pulse @xs "200"))
+        (sensor (local x_string @x) ^x)
+        (cell @x)
+        (feed @x (pulse @xs))
+        (ml/term @xs (result @!ys))
+        (feed (pulse @!ys) @y)
+        (cell @y)
+        (discard @y)))
+    (module {}
+      (chat ()
+        (queue (@front @back) ("300" "400"))
+        (appearance local @front))))
+  (frame
+    (module {}
+      (chat ((pulse @!ys (ok 200)))
+        (sensor (local x_string @x) ^x)
+        (cell @x "300")
+        (feed @x (pulse @xs))
+        (ml/term @xs (result @!ys))
+        (feed (pulse @!ys) @y)
+        (cell @y)
+        (discard @y)))
+    (module {}
+      (chat ()
+        (queue (@front @back) ("400"))
+        (appearance local @front))))
+  (frame
+    (module {}
+      (chat ()
+        (sensor (local x_string @x) ^x)
+        (cell @x "300")
+        (feed @x (pulse @xs))
+        (ml/term @xs (result @!ys))
+        (feed (pulse @!ys) @y)
+        (cell @y (ok 200))
+        (discard @y)))
+    (module {}
+      (chat ()
+        (queue (@front @back) ("400"))
+        (appearance local @front))))
+  (frame
+    (module {}
+      (chat ((pulse @xs "300"))
+        (sensor (local x_string @x) ^x)
+        (cell @x)
+        (feed @x (pulse @xs))
+        (ml/term @xs (result @!ys))
+        (feed (pulse @!ys) @y)
+        (cell @y)
+        (discard @y)))
+    (module {}
+      (chat ()
+        (queue (@front @back) ("400"))
+        (appearance local @front))))
+  (frame
+    (module {}
+      (chat ((pulse @!ys (ok 300)))
+        (sensor (local x_string @x) ^x)
+        (cell @x "400")
+        (feed @x (pulse @xs))
+        (ml/term @xs (result @!ys))
+        (feed (pulse @!ys) @y)
+        (cell @y)
+        (discard @y)))
+    (module {}
+      (chat ()
+        (queue (@front @back) ())
+        (appearance local @front))))
+  (frame
+    (module {}
+      (chat ()
+        (sensor (local x_string @x) ^x)
+        (cell @x "400")
+        (feed @x (pulse @xs))
+        (ml/term @xs (result @!ys))
+        (feed (pulse @!ys) @y)
+        (cell @y (ok 300))
+        (discard @y)))
+    (module {}
+      (chat ()
+        (queue (@front @back) ())
+        (appearance local @front))))
+  (frame
+    (module {}
+      (chat ((pulse @xs "400"))
+        (sensor (local x_string @x) ^x)
+        (cell @x)
+        (feed @x (pulse @xs))
+        (ml/term @xs (result @!ys))
+        (feed (pulse @!ys) @y)
+        (cell @y)
+        (discard @y)))
+    (module {}
+      (chat ()
+        (queue (@front @back) ())
+        (appearance local @front))))
+  (frame
+    (module {}
+      (chat ((pulse @!ys (ok 400)))
+        (sensor (local x_string @x) ^x)
+        (cell @x)
+        (feed @x (pulse @xs))
+        (ml/term @xs (result @!ys))
+        (feed (pulse @!ys) @y)
+        (cell @y)
+        (discard @y)))
+    (module {}
+      (chat ()
+        (queue (@front @back) ())
+        (appearance local @front))))
+  (frame
+    (module {}
+      (chat ()
+        (sensor (local x_string @x) ^x)
+        (cell @x)
+        (feed @x (pulse @xs))
+        (ml/term @xs (result @!ys))
+        (feed (pulse @!ys) @y)
+        (cell @y (ok 400))
+        (discard @y)))
+    (module {}
+      (chat ()
+        (queue (@front @back) ())
+        (appearance local @front))))
+  (frame
+    (module {}
+      (chat ()
+        (sensor (local x_string @x) ^x)
+        (cell @x)
+        (feed @x (pulse @xs))
+        (ml/term @xs (result @!ys))
+        (feed (pulse @!ys) @y)
+        (cell @y)
+        (discard @y)))
+    (module {}
+      (chat ()
+        (queue (@front @back) ())
+        (appearance local @front))))
+  end)
 
 ;; Scoped chats

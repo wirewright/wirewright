@@ -1,7 +1,7 @@
 module Ww::D7
   defrecord Top, queue : Term::Dict
 
-  def step(clf : Classifier, regime : Regime, top : Top, circuit : Term, **kwargs, &tick : Term, Term? -> Reaction) : {Top, Term}
+  def step(clf : Classifier, regime : Regime, top : Top, circuit : Term, **kwargs, &tick : Term, NodeChat -> Reaction) : {Top, Term}
     unit(top, circuit) do |unit|
       circuit = clf.call(unit)
       assert circuit.is_a?(Circuit)
@@ -10,7 +10,7 @@ module Ww::D7
     end
   end
 
-  def step(ctx : FoldContext, regime : Regime, circuit : Circuit, &tick : Term, Term? -> Reaction) : Reaction
+  def step(ctx : FoldContext, regime : Regime, circuit : Circuit, &tick : Term, NodeChat -> Reaction) : Reaction
     # Step nested circuits.
     top0 = parent(circuit.node, circuit.range)
     toprxn0 = fold(ctx, top0) do |ctx, feature, rec, default|
@@ -35,7 +35,7 @@ module Ww::D7
 
       unless rxn = reactions[ctx.addr]?
         scoped, _ = scoped(ctx.scope, feature.node, feature.edges)
-        rxn = tick.call(scoped, ctx.event)
+        rxn = tick.call(scoped, ctx.chat)
       end
 
       unscope(ctx, rxn)
@@ -50,7 +50,7 @@ module Ww::D7
     nodemap = [] of Term
     edgemap = [] of Slice(Edge)
     trmap = [] of NodeAddr
-    events = {} of NodeId => Term
+    chats = [] of NodeChat
 
     _ = fold(ctx, root) do |ctx, feature, rec, default|
       case feature
@@ -59,14 +59,11 @@ module Ww::D7
         nodemap << node
         edgemap << edges
         trmap << ctx.addr
-
-        if event = ctx.event
-          events[trmap.size.to_u32 - 1] = event
-        end
+        chats << ctx.chat
 
         default.call
       when Chat
-        fold(ctx.copy_with(event: feature.queue.items.first?), feature.cont, rec)
+        fold(ctx.copy_with(chat: NodeChat.new(msg: feature.queue.items.first? || Term.of(:cycle), enq: feature.enq)), feature.cont, rec)
       when Circuit
         if subcircuits
           fold(ctx, parent(feature.node, feature.range), rec)
@@ -87,7 +84,7 @@ module Ww::D7
 
     hg = Hypergraph.new(nodemap, edgemap, trmap)
 
-    rxns = regime.reactions(hg, events)
+    rxns = regime.reactions(hg, chats.to_readonly_slice)
     rxns.transform_keys { |key| trmap[key] }
   end
 
@@ -113,16 +110,16 @@ module Ww::D7
     # ... at the top-level.
 
     chat = Term::Dict.build do |commit|
-      commit << :chat << top.queue
+      commit << {:async, :chat} << top.queue
       commit.concat(circuit.items)
     end
 
     rxn = yield Term.of(:unit, chat)
 
-    # NOTE: rxn's emission can be nonempty if the user wishes events bubble up
-    # above the toplevel. We simply discard such events.
+    # NOTE: rxn's emission can be nonempty if the user wishes that messages
+    # bubble up above the toplevel. We simply discard such messages.
 
-    Term.matchpi(rxn.node, %{(unit (chat queue_dict nodes_*))}) do
+    Term.matchpi(rxn.node, %{(unit ((async chat) queue_dict nodes_*))}) do
       {Top.new(queue.as_d), Term.of(nodes | circuit.pairspart)}
     end
   end

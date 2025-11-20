@@ -1,3 +1,14 @@
+# TODO: this ruleset is a seed for something that will later be known as *Nitrene*.
+# Nitrene is a tiny embedded language for describing computations. I believe it
+# should *not* have loops, or conditionals. However, it should allow to construct
+# elaborate, long (or short!) "pipelines" from a vocabulary of extremely generic
+# concepts (map, reduce, fold, whatever). No functions, too. I also don't think
+# it should have lambdas. In a sense, it's supposed to be a "LEGO" for describing
+# arbitrary computations, transformations, whatever (of terms). Something
+# combinatorial if that's the right word, or maybe compositional; APL in spirit,
+# although APL, too, has functions -- as far as I remember. Perhaps Clojure could
+# serve as an inspiration, Rich Hickey and the Clojure communitiy appear to be doing
+# a lot of related work.
 PRIMITIVES = ProcRuleset.build do
   rulepi1 %[(+ args_number+)] { args.items.reduce { |a, b| a + b } }
   rulepi1 %[(- arg_number)] { -arg.unsafe_as_n }
@@ -10,6 +21,12 @@ PRIMITIVES = ProcRuleset.build do
 
   rulepi1 %[(~ args_+)] do
     args.items.reduce(Term[""]) do |prefix, arg|
+      suffix = arg.as_s? || Term[ML.display(arg, endl: false)]
+      prefix.stitch(suffix)
+    end
+  end
+  rulepi1 %[(~* arg_dict)] do
+    arg.items.reduce(Term[""]) do |prefix, arg|
       suffix = arg.as_s? || Term[ML.display(arg, endl: false)]
       prefix.stitch(suffix)
     end
@@ -58,6 +75,9 @@ PRIMITIVES = ProcRuleset.build do
   rulepi1 %[(= a_ bs_+)] do
     bs.unsafe_as_d.items.all? { |b| a == b }
   end
+
+  rulepi1 %[(not true)] { false }
+  rulepi1 %[(not false)] { true }
 
   rulepi1 %[(and true true)] { true }
   rulepi1 %[(and _ _)] { false }
@@ -238,10 +258,6 @@ PRIMITIVES = ProcRuleset.build do
     end
   end
 
-  rulepi1 %[(tally xs_dict)] do
-    xs.unsafe_as_d.size
-  end
-
   rulepi1 %[(charcount xs_string+)] do
     xs.items.sum(0, &.unsafe_as_s.charcount)
   end
@@ -320,9 +336,19 @@ PRIMITIVES = ProcRuleset.build do
   rulepi1 %[(ceil arg_number)] { arg.unsafe_as_n.ceil }
   rulepi1 %[(round arg_number)] { arg.unsafe_as_n.round }
 
+  # TODO: floor/ceil/round args_number+ is mass-floor
+  # TODO: floor/ceil/round on list of numbers
+
   rulepi1 %[(upcase arg_string)] { arg.upcase }
   # TODO: downcase -> dncase for symmetry
   rulepi1 %[(downcase arg_string)] { arg.downcase }
+
+  # TODO: upcase/dncase args_string is mass-upcase/dncase
+  # TODO: upcase/dncase on list of strings
+
+  rulepi1 %[(tally args_dict+)] do
+    args.items.reduce(0) { |memo, arg| memo + arg.size }
+  end
 
   rulepi1 %[(take s_string o←(%number +i32) span←(%number i32))] do
     mb, me = {o.to(Int32), (o + span).to(Int32)}.minmax

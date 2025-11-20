@@ -1,18 +1,27 @@
 module Ww::D7
+  alias NodeAddr = Slice(Int32)
+  alias NodeScope = Slice({NodeAddr, Term::Dict})
+
   alias FoldRep0 = FoldContext, Feature, FoldRep0, FoldDefault -> Reaction
   alias FoldRep = FoldRep0
   alias FoldDefault = -> Reaction
+
+  record NodeChat, msg : Term, enq : Bool do
+    def self.cycle
+      new(Term.of(:cycle), enq: true)
+    end
+  end
 
   # :nodoc:
   record FoldContext,
     clf : Classifier,
     addr : NodeAddr,
     scope : NodeScope,
-    event : Term?
+    chat : NodeChat
 
   # Constructs the initial fold context.
-  def fold_context(clf : Classifier, *, event : Term? = nil) : FoldContext
-    FoldContext.new(clf, NodeAddr.empty, NodeScope.empty, event)
+  def fold_context(clf : Classifier, *, chat : NodeChat = NodeChat.cycle) : FoldContext
+    FoldContext.new(clf, NodeAddr.empty, NodeScope.empty, chat)
   end
 
   def fold(ctx : FoldContext, node, &frep : FoldRep) : Reaction
@@ -39,9 +48,8 @@ module Ww::D7
         node1 = flattenT(feature.node, range: feature.range) do |child, index|
           rxn = fold(ctx.copy_with(addr: ctx.addr.append(index)), child, frep)
 
-          # NOTE: Events from children are concatenated in indeterminate order.
-          # This should probably be changed to something deterministic (e.g. sort
-          # events added during the same tick lexicographically).
+          # NOTE: Messages from children during the smae tick are concatenated in
+          # indeterminate order. The receiving chat will order them as it wishes.
           commit.concat(rxn.emission.items)
 
           rxn.node
@@ -86,57 +94,62 @@ module Ww::D7
   def fold(ctx : FoldContext, feature : Chat, frep : FoldRep) : Reaction
     default = -> do
       queue0 = feature.queue.items
-      event0 = queue0.first?
+      msg0 = queue0.first?
 
       upflow = Term[]
       dnflow = Term[]
 
-      if (event = ctx.event) && M1.probe?(feature.desc, event)
-        dnflow = dnflow.append(event)
+      if M1.probe?(feature.desc, ctx.chat.msg)
+        dnflow = dnflow.append(ctx.chat.msg)
 
-        # Remember to `ack` pulse events.
-        Term.matchpi?(event, %{(pulse @_ _)}) do
+        # Remember to `ack` pulse messages.
+        Term.matchpi?(ctx.chat.msg, %{(pulse @_ _)}) do
           upflow = upflow.append(:ack)
         end
       end
 
-      rxn = fold(ctx.copy_with(event: event0), feature.cont, frep)
+      rxn = fold(ctx.copy_with(chat: NodeChat.new(msg0 || Term.of(:cycle), enq: feature.enq)), feature.cont, frep)
 
-      # Sort events appended during one tick lexicographically, so that we have
+      # Sort messages appended during one tick lexicographically, so that we have
       # a deterministic order.
-      events = rxn.emission.items.to_a.sort_by! do |event|
+      msgs = rxn.emission.items.to_a.sort_by! do |msg|
         # FIXME: this is really inefficient!!! We should have Term.compare!!!!
-        ML.compact(event)
+        ML.compact(msg)
       end
 
-      # `ack` events provide a mechanism for backpressure. The queue will
+      # `ack` messages provide a mechanism for backpressure. The queue will
       # refuse to dequeue a `pulse` if it's not ack'd.
       #
-      # NOTE: we disallow sending non-dict events on the user side to prevent
+      # NOTE: we disallow sending non-dict messages on the user side to prevent
       # users from forging `ack`s.
       ackd = true
-      if event0
-        Term.matchpi?(event0, %{(pulse @_ _)}) do
-          ackd = events.any? { |event1| Term.matchpi?(event1, %{ack}) { true } }
+      if msg0
+        Term.matchpi?(msg0, %{(pulse @_ _)}) do
+          ackd = msgs.any? { |msg1| Term.matchpi?(msg1, %{ack}) { true } }
         end
       end
 
       queue1 = Term::Dict.build do |commit|
-        unless queue0.empty?
-          commit.concat(queue0.move(ackd ? 1 : 0))
+        if ackd
+          commit.concat(queue0.move(1))
+        else
+          commit.concat(queue0)
         end
 
         commit.concat(dnflow.items)
 
-        rxn.emission.items.each do |event|
-          next unless event.type.dict? # < Ignores e.g. `ack`
+        msgs.each do |msg|
+          next unless msg.type.dict? # < Ignores e.g. `ack`
 
-          if M1.probe?(feature.asc, event)
-            upflow = upflow.append(event)
+          if M1.probe?(feature.asc, msg)
+            upflow = upflow.append(msg)
             next
           end
 
-          commit << event
+          Term.case(msg) do
+            matchpi %{(group children_*)} { commit.concat(children.items) }
+            otherwise { commit << msg }
+          end
         end
       end
 

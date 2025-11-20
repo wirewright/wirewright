@@ -1,4 +1,14 @@
 module Ww::D7
+  # :nodoc:
+  alias NodeId = UInt32
+
+  defrecord Reaction, node : Term, emission : Term::Dict
+
+  # Constructs a reaction with *node* that has an empty emission.
+  def rxn(node, queue = Term[]) : Reaction
+    Reaction.new(Term.of(node), Term[queue])
+  end
+
   # Represents a *rewrite regime*. A rewrite regime encapsulates the rules of
   # rewriting and recognition as well as the indices required to do
   # that efficiently.
@@ -58,7 +68,7 @@ module Ww::D7
       unless mid.size == 1
         raise QueryError.new(
           "linked subqueries #{ML.compact(a)} and #{ML.compact(b)} must share exactly \
-         one edge, but they share #{mid.size} edge(s)")
+           one edge, but they share #{mid.size} edge(s)")
       end
 
       mid.first
@@ -203,7 +213,7 @@ module Ww::D7
     # - *node* is the node term from the circuit.
     # - *env* is the match env of the part of the query associated with
     #   the capture (i.e. `one` or `many`).
-    defrecord NodeCapture, addr : NodeAddr, node : Term, env : Term::Dict, event : Term?
+    defrecord NodeCapture, addr : NodeAddr, node : Term, env : Term::Dict, chat : NodeChat
 
     # Maps participant node ids to their corresponding captures.
     alias NodeCaptureGroup = Pf::Map(NodeId, NodeCapture)
@@ -285,7 +295,7 @@ module Ww::D7
       graph : Slice(Pf::USet32),
       decmap : Slice(Pf::USet32),
       idecmap : Hash(UInt32, Pf::USet32),
-      events : Hash(NodeId, Term)
+      chats : Slice(NodeChat)
 
     # :nodoc:
     defcase Locus,
@@ -313,8 +323,8 @@ module Ww::D7
       return if locus.node.in?(soln)
       return unless env = M1.match?(step.pattern, term = ctx.hg[locus.node])
 
-      event = ctx.events[locus.node]?
-      capture = NodeCapture.new(locus.addr, term, env, event)
+      chat = ctx.chats[locus.node]
+      capture = NodeCapture.new(locus.addr, term, env, chat)
 
       search(ctx, locus.copy_with(env: env), soln.add(step.key, locus.node, capture), ahead)
     end
@@ -460,7 +470,7 @@ module Ww::D7
     # This method performs one rewrite tick of this regime. The caller is
     # responsbile for actually merging changes back into the circuit, based
     # on node id correspondence etc.
-    def reactions(hg : Hypergraph, events : Hash(NodeId, Term)) : Hash(NodeId, Reaction)
+    def reactions(hg : Hypergraph, chats : Slice(NodeChat)) : Hash(NodeId, Reaction)
       decmap = Slice(Pf::USet32).new(hg.order) { Pf::USet32.new }
       idecmap = {} of NodeId => Pf::USet32
       population = Pf::USet32.new
@@ -482,7 +492,7 @@ module Ww::D7
         candidates << {plan, body}
       end
 
-      ctx = SearchContext.new(hg, hg.graph, decmap.readonly, idecmap, events)
+      ctx = SearchContext.new(hg, hg.graph, decmap.readonly, idecmap, chats)
 
       reactions(ctx, candidates)
     end

@@ -1,4 +1,9 @@
 module Ww::D7
+  # A classifier function "looks" at a circuit node term (more or less literally,
+  # but using pattern matching rather than "eyes"); and decides what its semantic
+  # function is (what the node "means"), represented as one of `Feature`s.
+  alias Classifier = Term -> Feature
+
   # Nodes from a circuit are *classified* into *features*.
   alias Feature = Inert | Gnd | Mixture | Scope | Parent | Chat | Circuit
 
@@ -92,9 +97,11 @@ module Ww::D7
   #
   # - *queue* is the message queue ("log of unread messages in the chat"; oldest
   #   unread message goes first).
+  # - *enq* determines whether enqueue is allowed.
   # - *cont* is the continuation feature for *node*.
   # - *submit* is used to morph *node* (first arg) into its next shape once
-  #   the updated message queue (second arg) is available.
+  #   the updated message queue (second arg) is available, possibly blocking (third arg)
+  #   the queue to prevent further enqueues for the time being.
   # - *asc* determines the ascent pattern. The chat will emit messages that match *asc*
   #   to the enclosing chat, letting them "bubble up".
   # - *desc* is, similarly, a pattern that accepts or declines a message from
@@ -104,16 +111,17 @@ module Ww::D7
   defcase Chat,
     node : Term,
     queue : Term::Dict,
+    enq : Bool,
     cont : Feature,
-    submit : (Term, Term::Dict) -> Term,
+    submit : (Term, Term::Dict -> Term),
     asc : Term,
     desc : Term
 
   # Constructs a chat feature.
   #
   # See `Chat`.
-  def chat(node : Term, queue : Term::Dict, cont : Feature, asc : Term, desc : Term, &submit : Term, Term::Dict -> Term) : Chat
-    Chat.new(node, queue, cont, submit, asc, desc)
+  def chat(node : Term, queue : Term::Dict, cont : Feature, asc : Term, desc : Term, *, enq : Bool, &submit : Term, Term::Dict -> Term) : Chat
+    Chat.new(node, queue, enq, cont, submit, asc, desc)
   end
 
   # Used by e.g. `frag`, `unit`, and at the top-level to represent and

@@ -82,27 +82,6 @@
 # edges are *functions*, or more specifically, *predicates*.
 module Ww::D7
   extend self
-
-  # :nodoc:
-  alias NodeId = UInt32
-
-  # A classifier function "looks" at a circuit node term (more or less literally,
-  # but using pattern matching rather than "eyes"); and decides what its semantic
-  # function is (what the node "means"), represented as one of `Feature`s.
-  alias Classifier = Term -> Feature
-
-  # :nodoc:
-  alias NodeAddr = Slice(Int32)
-
-  # :nodoc:
-  alias NodeScope = Slice({NodeAddr, Term::Dict})
-
-  defrecord Reaction, node : Term, emission : Term::Dict
-
-  # Constructs a reaction with *node* that has an empty emission.
-  def rxn(node, queue = Term[]) : Reaction
-    Reaction.new(Term.of(node), Term[queue])
-  end
 end
 
 require "./d7/hypergraph"
