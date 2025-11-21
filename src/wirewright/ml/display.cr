@@ -132,7 +132,7 @@ module Ww::ML
 
   # Appends the compact WwML representation of *term* to *io*.
   def compact(io : IO, term : Term) : Nil
-    compact(io, term.downcast)
+    compact(io, Term[term])
   end
 
   # Returns the compact WwML representation of *term*.

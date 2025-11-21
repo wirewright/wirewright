@@ -190,7 +190,7 @@ module Ww::LR
   end
 
   private def encode0(io, term : Term) : Nil
-    encode0(io, term.downcast)
+    encode0(io, Term[term])
   end
 
   # Appends the WwLR encoding of *term* to *io*.

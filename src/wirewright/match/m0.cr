@@ -42,8 +42,8 @@ module Ww::M0
       case {pattern[0], hi}
       when {SYM_PARTITION, 2}
         return false unless matchee.is_a?(Term::Dict)
-        return false unless match?(commit, pattern[1].downcast, matchee.itemspart)
-        return false unless match?(commit, pattern[2].downcast, matchee.pairspart)
+        return false unless match?(commit, Term[pattern[1]], matchee.itemspart)
+        return false unless match?(commit, Term[pattern[2]], matchee.pairspart)
         return true
       when {SYM_LITERAL, 1}
         return pattern[1] == matchee
@@ -51,7 +51,7 @@ module Ww::M0
         if matchee.is_a?(Term::Dict) && pattern[1] == Term[:_] && (selector = pattern[2].as_d?)
           selector.each_entry do |k, v0|
             return false unless v1 = matchee[k]?
-            return false unless match?(commit, v0.downcast, v1.downcast)
+            return false unless match?(commit, Term[v0], Term[v1])
           end
 
           return true
@@ -72,7 +72,7 @@ module Ww::M0
     return false unless pattern.size == matchee.size
 
     pattern.ee.all? do |k, v0|
-      (v1 = matchee[k]?) && match?(commit, v0.downcast, v1.downcast)
+      (v1 = matchee[k]?) && match?(commit, Term[v0], Term[v1])
     end
   end
 
@@ -117,7 +117,7 @@ module Ww::M0
   # much circularity anyway.
   def match?(pattern : Term, matchee : Term, *, env = Term[]) : Term::Dict?
     env.transaction do |commit|
-      return unless match?(commit, pattern.downcast, matchee.downcast)
+      return unless match?(commit, Term[pattern], Term[matchee])
     end
   end
 

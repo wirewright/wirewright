@@ -66,7 +66,7 @@ struct Ww::ML::Reader
     end
 
     private def to_hash_s(io, term : Term) : Nil
-      to_hash_s(io, term.downcast)
+      to_hash_s(io, Term[term])
     end
 
     private def to_hash_s(io, term : ITerm) : Nil

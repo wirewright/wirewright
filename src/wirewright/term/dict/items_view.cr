@@ -201,7 +201,7 @@ module Ww
     # returned `nil` (see `thru(&)` for details).
     def thru(cls : T.class, & : T -> U?) : {Array(U)?, ItemsView} forall T, U
       thru do |term|
-        next unless term = term.downcast.as?(T)
+        next unless term = Term[term].as?(T)
         yield term
       end
     end

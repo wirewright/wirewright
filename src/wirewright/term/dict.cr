@@ -967,7 +967,7 @@ module Ww
 
     # :nodoc:
     def without(key : Term) : Dict
-      without(key.downcast)
+      without(Term[key])
     end
 
     # Returns a copy of this dictionary that is guaranteed not to contain
@@ -1060,7 +1060,7 @@ module Ww
     end
 
     protected def without!(key : Term, author) : Dict
-      without!(key.downcast, author)
+      without!(Term[key], author)
     end
 
     protected def without!(key, author) : Dict
@@ -1478,12 +1478,12 @@ module Ww
 
       older.each_entry do |k, v0|
         v1 = newer[k]?
-        added, removed = diff(k, v0.downcast, v1.try(&.downcast), added, removed)
+        added, removed = diff(k, Term[v0], Term[v1], added, removed)
       end
 
       newer.each_entry do |k, v1|
         v0 = older[k]?
-        added, removed = diff(k, v0.try(&.downcast), v1.downcast, added, removed)
+        added, removed = diff(k, Term[v0], Term[v1], added, removed)
       end
 
       {added, removed}

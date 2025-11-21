@@ -60,10 +60,6 @@ module Ww
   #  You can get infinite loops, at runtime, out of nowhere, just because you've called the
   #  wrong method, and if you're lucky to get a compile error, it points to nowhere in particular.
   module ITerm
-    def downcast
-      self
-    end
-
     # Automatically upcasts `self` to `Term` and tries to run *call* on it.
     macro method_missing(call)
       {% unless Term.has_method?(call.name) %}
@@ -193,6 +189,23 @@ module Ww
       @mem
     end
 
+    # Returns the pointer tag of this term.
+    def tag : Tag
+      Tag.new((@mem.address & 0b111).to_u8)
+    end
+
+    # Returns the `TermType` corresponding to this term. Guarantees to never
+    # return `TermType::Any`.
+    def type : TermType
+      case tag
+      in .num_int?, .num_rat? then TermType::Number
+      in .str?                then TermType::String
+      in .sym?                then TermType::Symbol
+      in .boolean?            then TermType::Boolean
+      in .dict?               then TermType::Dict
+      end
+    end
+
     # Constructs a generic `Term` instance from the given number *term*.
     def self.of(term : Num) : Term
       Term.new(Pointer(Void).new(term.@k.@mem.address))
@@ -249,46 +262,15 @@ module Ww
       @mem.as(Dict)
     end
 
-    # Returns the pointer tag of this term.
-    def tag : Tag
-      Tag.new((@mem.address & 0b111).to_u8)
-    end
-
-    # Returns the `TermType` corresponding to this term. Guarantees to never
-    # return `TermType::Any`.
-    def type : TermType
-      case tag
-      in .num_int?, .num_rat? then TermType::Number
-      in .str?                then TermType::String
-      in .sym?                then TermType::Symbol
-      in .boolean?            then TermType::Boolean
-      in .dict?               then TermType::Dict
+    # Downcasts `Term` to one of term instance types.
+    def self.[](term : Term) : ITerm
+      case term.tag
+      in .num_int?, .num_rat? then term.unsafe_as_n
+      in .str?                then term.unsafe_as_s
+      in .boolean?            then term.unsafe_as_b
+      in .sym?                then term.unsafe_as_sym
+      in .dict?               then term.unsafe_as_d
       end
-    end
-
-    # Returns one of concrete structs corresponding to `Term`.
-    def downcast : ITerm
-      case tag
-      in .num_int?, .num_rat? then unsafe_as_n
-      in .str?                then unsafe_as_s
-      in .boolean?            then unsafe_as_b
-      in .sym?                then unsafe_as_sym
-      in .dict?               then unsafe_as_d
-      end
-    end
-
-    # Converts this term to an object of the given *type*, if possible.
-    # Returns `nil` if not.
-    def to?(type)
-      return unless instance = downcast.as?(TypeConversion) # supports
-
-      instance.to?(type)
-    end
-
-    # Converts this term to an object of the given *type*, if possible.
-    # Raises `TypeCastError` if not.
-    def to(type)
-      to?(type) || raise TypeCastError.new
     end
 
     # Attempts to downcast this term to a number term. Returns `nil` if impossible.
@@ -378,6 +360,20 @@ module Ww
       end
     {% end %}
 
+    # Converts this term to an object of the given *type*, if possible.
+    # Returns `nil` if not.
+    def to?(type)
+      return unless instance = Term[self].as?(TypeConversion) # supports
+
+      instance.to?(type)
+    end
+
+    # Converts this term to an object of the given *type*, if possible.
+    # Raises `TypeCastError` if not.
+    def to(type)
+      to?(type) || raise TypeCastError.new
+    end
+
     # Returns a dictionary where *key* is bound to `self`, followed by
     # key-value pairs from *rest* (if any).
     def pack(key, **rest) : Dict
@@ -397,7 +393,7 @@ module Ww
     end
 
     def inspect(io)
-      downcast.inspect(io)
+      Term[self].inspect(io)
     end
 
     # Returns `true` if this and *other* terms are equal by reference.
@@ -412,7 +408,7 @@ module Ww
 
     # Returns `true` if this and *other* terms are equal.
     def ==(other : Term) : Bool
-      @mem == other.@mem || downcast == other.downcast
+      @mem == other.@mem || Term[self] == Term[other]
     end
 
     # :ditto:
@@ -421,7 +417,7 @@ module Ww
     end
 
     def hash(hasher)
-      downcast.hash(hasher)
+      Term[self].hash(hasher)
     end
 
     def clone : Term
@@ -435,7 +431,7 @@ module Ww
       {% return_types = [] of ::NoReturn %}
 
       pass do
-        %instance = downcast
+        %instance = ::Ww::Term[self]
         {% for candidate in ITerm.includers %}
           {% for method in candidate.methods %}
             {% if method.name == call.name %}
@@ -472,11 +468,6 @@ module Ww
   # Smart constructors
 
   struct Term
-    # Downcasts `Term` for compatibility with other `[]` constructors.
-    def self.[](object : Term) : ITerm
-      object.downcast
-    end
-
     def self.[](object : ITerm) : ITerm
       object
     end
@@ -831,7 +822,7 @@ module Ww
 
     # Appends the hash of a term *object* to *hasher*.
     def self.hashcode(hasher : Hasher, object : Term) : Hasher
-      hashcode(hasher, object.downcast)
+      hashcode(hasher, Term[object])
     end
   end
 
@@ -1068,7 +1059,7 @@ module Ww
     end
 
     def self.merge(a : Term, b : Term) : Term
-      Term.of(merge(a.downcast, b.downcast))
+      Term.of(merge(Term[a], Term[b]))
     end
 
     # Deep merge.
