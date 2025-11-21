@@ -8,9 +8,6 @@ module Ww
     def initialize(@value : Bool)
     end
 
-    # :nodoc:
-    delegate :inspect, to: @value
-
     def to?(type : Bool.class) : Bool
       true?
     end
@@ -26,6 +23,15 @@ module Ww
     @[AlwaysInline]
     def false? : Bool
       !@value
+    end
+
+    # :nodoc:
+    #
+    # TODO: Move to `ML.compact`
+    delegate :inspect, to: @value
+
+    def to_s(io)
+      inspect(io)
     end
 
     def_equals @value

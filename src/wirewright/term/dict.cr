@@ -1589,24 +1589,11 @@ module Ww
     end
 
     def inspect(io)
-      if empty?
-        io << "{}"
-        return
-      end
+      ML.compact(io, self)
+    end
 
-      if pairspart.empty?
-        io << "["
-        items.join(io, ", ") { |item| io << item }
-        io << "]"
-      else
-        io << "{"
-        ee(ordered: true).join(io, ", ") do |(k, v)|
-          k.inspect(io)
-          io << ": "
-          v.inspect(io)
-        end
-        io << "}"
-      end
+    def to_s(io)
+      inspect(io)
     end
   end
 

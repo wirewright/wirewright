@@ -68,11 +68,6 @@ module Ww
       Term.of(self)
     end
 
-    # Writes a string representation of this term to *io*.
-    def to_s(io)
-      inspect(io)
-    end
-
     # Automatically upcasts `self` to `Term` and tries to run *call* on it.
     macro method_missing(call)
       {% unless Term.has_method?(call.name) %}

@@ -422,6 +422,7 @@ module Ww
       inspect
     end
 
+    # TODO: move to `ML.compact`
     def inspect(io)
       name = Sym.decode(ref)
 
@@ -431,6 +432,10 @@ module Ww
       end
 
       blank.inspect(io, name)
+    end
+
+    def to_s(io)
+      inspect(io)
     end
 
     def_equals @spec

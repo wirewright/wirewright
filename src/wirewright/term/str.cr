@@ -8,14 +8,6 @@ module Ww
     def initialize(@value : StringView)
     end
 
-    def inspect(io)
-      io << '"'
-      @value.each_char do |char|
-        ML::Kit.escape(io, char)
-      end
-      io << '"'
-    end
-
     def after_end : Str
       Str.new(@value.after_end)
     end
@@ -89,6 +81,19 @@ module Ww
 
     def last : Str
       Term[@value.last_or_empty]
+    end
+
+    # TODO: Move to `ML.compact`
+    def inspect(io)
+      io << '"'
+      @value.each_char do |char|
+        ML::Kit.escape(io, char)
+      end
+      io << '"'
+    end
+
+    def to_s(io)
+      inspect(io)
     end
 
     def_equals @value

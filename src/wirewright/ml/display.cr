@@ -93,7 +93,13 @@ module Ww::ML
 
   # :nodoc:
   def compact(io : IO, term : Term::Dict) : Nil
-    io << '('
+    lbracket, rbracket = '(', ')'
+
+    if !term.empty? && term.pairsonly?
+      lbracket, rbracket = '{', '}'
+    end
+
+    io << lbracket
 
     term.ee(ordered: true).join(io, ' ') do |(k, v)|
       if (i = k.to?(Int32)) && i < term.itemsize
@@ -105,7 +111,7 @@ module Ww::ML
       end
     end
 
-    io << ')'
+    io << rbracket
   end
 
   # :nodoc:
