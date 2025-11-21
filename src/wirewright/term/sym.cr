@@ -1,8 +1,10 @@
 module Ww
   # Represents a symbol. Mainly for use in WwML.
+  @[Term::Assoc(TermType::Symbol, :unsafe_as_sym)]
   struct Term::Sym
     include ITerm
     include Equality
+    include AutoUpcast
     include TypeConversion
 
     # Represents the result of a successful interpretation of a symbol as a blank.
@@ -335,12 +337,14 @@ module Ww
       Sym.new(ref, type: TermType::Any, poly: false, blank: false, named: true)
     end
 
+    @[Dncast]
     def blank?
       return unless @spec.bit(1) == 1
 
       Blank.new(TermType.new(@spec.bits(4...7).to_u8), name?, one: @spec.bit(3) == 1, poly: @spec.bit(2) == 1)
     end
 
+    @[Dncast]
     def blank
       blank? || raise "expected symbol to be a blank"
     end
@@ -369,6 +373,7 @@ module Ww
       end
     end
 
+    @[Dncast]
     def rule_id_sentinel? : RuleId?
       name = to(String)
       return unless name.ends_with?(":◇")
@@ -377,6 +382,7 @@ module Ww
       RuleId.new(start.to_i(base: 16))
     end
 
+    @[Dncast]
     def rule_id_blank_sentinel? : RuleIdBlank?
       name = to(String)
       return unless name.ends_with?(":◇_")
@@ -385,6 +391,7 @@ module Ww
       RuleIdBlank.new(start.to_i(base: 16))
     end
 
+    @[Dncast]
     def rule_block_id_sentinel? : RuleBlockId?
       name = to(String)
       return unless name.ends_with?(":▢")
@@ -393,6 +400,7 @@ module Ww
       RuleBlockId.new(start.to_i(base: 16))
     end
 
+    @[Dncast]
     def rule_block_id_blank_sentinel? : RuleBlockIdBlank?
       name = to(String)
       return unless name.ends_with?(":▢_")
@@ -403,16 +411,19 @@ module Ww
 
     # Returns `true` if this symbol is reserved for Microfold. Returns
     # `false` otherwise.
+    @[Dncast]
     def microfold? : Bool
       name = to(String)
       name.prefixed_by?("µ-")
     end
 
+    @[Dncast]
     def alloy? : Bool
       name = to(String)
       name.prefixed_by?("^")
     end
 
+    @[Dncast]
     def m1_private_capture? : Bool
       name = to(String)
       name.prefixed_by?("\\")

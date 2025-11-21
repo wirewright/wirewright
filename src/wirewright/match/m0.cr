@@ -11,7 +11,7 @@ module Ww::M0
       return pattern == matchee
     end
 
-    return false unless matchee.type.subtype?(blank.type)
+    return false unless Term.of(matchee).type.subtype?(blank.type)
     return true unless name = blank.name?
 
     unless prev = commit[name]?

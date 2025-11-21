@@ -81,8 +81,10 @@
 module Ww
   # Represents a dictionary: an immutable, persistent collection of key-value
   # pairs supporting efficient, near-O(1) insert, delete, and lookup.
+  @[Term::Assoc(TermType::Dict, :unsafe_as_d)]
   class Term::Dict
     include ITerm
+    include AutoUpcast
     include Equality
 
     # :nodoc:
@@ -330,56 +332,67 @@ module Ww
     end
 
     # Returns `true` if this dictionary contains items only.
+    @[Dncast]
     def itemsonly? : Bool
       @pairs.size.zero?
     end
 
     # Returns `true` if this dictionary contains pairs only.
+    @[Dncast]
     def pairsonly? : Bool
       @items.size.zero?
     end
 
     # Returns the number of entries in this dictionary.
+    @[Dncast]
     def size : Int32
       itemsize + pairsize
     end
 
+    @[Dncast]
     @[AlwaysInline]
     def itemsize
       @items.size
     end
 
+    @[Dncast]
     @[AlwaysInline]
     def pairsize
       @pairs.size
     end
 
+    @[Dncast]
     @[AlwaysInline]
     def hi
       itemsize - 1
     end
 
     # Returns `true` if this dictionary contains no entries.
+    @[Dncast]
     def empty? : Bool
       size.zero?
     end
 
     # Shorthand for `!empty?`.
+    @[Dncast]
     def nonempty? : Bool
       !empty?
     end
 
     # Returns `true` if this dictionary contains the given *key*.
+    @[Dncast]
     def includes?(key) : Bool
       !!self[key]?
     end
 
+    @[Dncast]
     def index?(term) : Term::Num?
       return unless index = Term[term].as?(Term::Num)
       return unless index.in?(Term[0]...Term[items.size])
       index
     end
 
+    @[Dncast]
     def item_at?(key : Int32) : Term?
       return unless key < @items.size
       return unless coat = @items.fetch?(Probes::FetchItem.new(key))
@@ -389,6 +402,7 @@ module Ww
     end
 
     # :nodoc:
+    @[Dncast]
     def at?(key : Term::Num) : Term?
       return at_default?(key) unless key.natural?
       return at_default?(key) unless index = key.to?(Int32)
@@ -400,6 +414,7 @@ module Ww
     end
 
     # :nodoc:
+    @[Dncast]
     def at?(key : ITerm) : Term?
       at_default?(key)
     end
@@ -412,6 +427,7 @@ module Ww
     end
 
     # O(1) Nth entry in `each_entry`-order (items unordered, pairs unordered).
+    @[Dncast]
     def nth?(index : Int32) : {Term, Term}?
       if 0 <= index < itemsize
         entry = @items.nth?(index) || return
@@ -424,12 +440,14 @@ module Ww
       end
     end
 
+    @[Dncast]
     def nth(index : Int32)
       nth?(index) || raise IndexError.new
     end
 
     # O(1) Nth entry in `items` followed by `each_pair`-order (items ordered,
     # pairs unordered).
+    @[Dncast]
     def ordnth?(index : Int32) : {Term, Term}?
       if 0 <= index < itemsize
         item = self[index]? || return
@@ -442,24 +460,28 @@ module Ww
       end
     end
 
+    @[Dncast]
     def ordnth(index : Int32) : {Term, Term}
       ordnth?(index) || raise IndexError.new
     end
 
     # Returns the value associated with the given *key*, or nil if *key*
     # is not associated with any value.
+    @[Dncast]
     def at?(key) : Term?
       at?(Term[key])
     end
 
     # Returns the value associated with the given *key*, or raises `KeyError`
     # if *key* is not associated with any value.
+    @[Dncast]
     def at(key) : Term
       at?(key) || raise KeyError.new
     end
 
     # Returns the value associated with the given *key*, or *default* if *key*
     # is not associated with any value.
+    @[Dncast]
     def at(key, *, default) : Term
       at?(key) || Term.of(default)
     end
@@ -467,6 +489,7 @@ module Ww
     # Transforms the value associated with the given *key* using the block, or
     # returns *orelse* without transforming it if *key* is not associated with
     # any value.
+    @[Dncast]
     def at(key, *, orelse, &) : Term
       return Term.of(orelse) unless value = at?(key)
 
@@ -474,39 +497,46 @@ module Ww
     end
 
     # Alias of `at`.
+    @[Dncast]
     def [](*args, **kwargs) : Term
       at(*args, **kwargs)
     end
 
     # Alias of `at?`.
+    @[Dncast]
     def []?(*args, **kwargs) : Term?
       at?(*args, **kwargs)
     end
 
     # Traverses nested dictionaries for each key in *keys*, returns the value that
     # was reached last. Returns `nil` if some key was not found during traversal.
+    @[Dncast]
     def dig?(*keys) : Term?
       keys.reduce(self) { |dict, key| dict.at?(key) || return }
     end
 
     # Same as `dig?`, but raises `KeyError` instead of returning `nil` if some key
     # was not found during traversal.
+    @[Dncast]
     def dig(*keys) : Term
       dig?(*keys) || raise KeyError.new("#{keys}")
     end
 
     # Alias of `dig`.
+    @[Dncast]
     def [](*keys) : Term
       dig(*keys)
     end
 
     # Alias of `dig?`.
+    @[Dncast]
     def []?(*keys) : Term?
       dig?(*keys)
     end
 
     # Yields each entry from this dictionary. **The order of entries is
     # implementation-defined.**
+    @[Dncast]
     def each_entry(& : Term, Term ->) : Nil
       @items.each { |entry| yield Term.of(entry.index), entry.value }
       @pairs.each { |entry| yield entry.key, entry.value }
@@ -514,6 +544,7 @@ module Ww
 
     # Yields each entry from this dictionary in stable order. Guarantees the order
     # of entries to be the same across all machines & runs.
+    @[Dncast]
     def each_entry_ord(& : Term, Term ->) : Nil
       unless pairsonly?
         items.each_with_index { |item, index| yield Term.of(index), item }
@@ -564,6 +595,7 @@ module Ww
 
     # Yields each item from this dictionary followed by its index. **Items are yielded
     # out of order**.
+    @[Dncast]
     def each_item_with_index(& : Term, Int32 ->) : Nil
       @items.each { |entry| yield entry.value, entry.index }
     end
@@ -574,6 +606,7 @@ module Ww
     # up when iterating over items in range.
     SCAN_THRESHOLD = 0.6
 
+    @[Dncast]
     def each_item_with_index(*, within range : Range(Int32, Int32), & : Term, Int32 ->) : Nil
       assert range.exclusive?
 
@@ -598,11 +631,13 @@ module Ww
       end
     end
 
+    @[Dncast]
     def each_item_unordered(& : Term ->) : Nil
       @items.each { |entry| yield entry.value }
     end
 
     # Yields each pair from this dictionary. **Pairs are yielded out of order**.
+    @[Dncast]
     def each_pair(& : Term, Term ->)
       pairspart.each_entry { |key, value| yield key, value }
     end
@@ -627,6 +662,7 @@ module Ww
 
     # Returns an enumerable based on `each_entry` (if *ordered* is `false`) or
     # `each_entry_ord` (if *ordered* is `true`).
+    @[Dncast]
     def ee(*, ordered = false) : Enumerable({Term, Term})
       EntryEnumerable.new(self, ordered)
     end
@@ -646,6 +682,7 @@ module Ww
     end
 
     # Returns an enumerable of values based on `each_entry`.
+    @[Dncast]
     def ve : Enumerable(Term)
       ValueEnumberable.new(self)
     end
@@ -669,28 +706,33 @@ module Ww
     # Returns an enumerable for items found in this dictionary.
     #
     # See also: `items`.
+    @[Dncast]
     def ie : Enumerable(Term)
       ItemEnumerable.new(self)
     end
 
     # Returns an enumerable based on `each_pair`. The pairs will be emitted
     # in order if *ordered* is set to `true`.
+    @[Dncast]
     def pe(*, ordered = false) : Enumerable({Term, Term})
       pairspart.ee(ordered: ordered)
     end
 
     # Returns `true` if this dict appears to be a *dict set*: it is nonempty,
     # and all entry values are `true`.
+    @[Dncast]
     def set? : Bool
       !empty? && ee.all? { |_, v| v.type.boolean? && v.unsafe_as_b.true? }
     end
 
     # Returns `true` if all entries of `self` are included in *other*.
+    @[Dncast]
     def subset_of?(other : Dict) : Bool
       other.size >= size && ee.all? { |k, v| other[k]? == v }
     end
 
     # Returns `true` if all entries of *other* are included in `self`.
+    @[Dncast]
     def superset_of?(other : Dict) : Bool
       other.subset_of?(self)
     end
@@ -703,6 +745,7 @@ module Ww
       (@sketch & subset) == subset
     end
 
+    @[Dncast]
     def probably_includes?(symbol : Term::Sym) : Bool
       Dict.probably_includes?(@sketch, symbol)
     end
@@ -733,6 +776,7 @@ module Ww
       end
     end
 
+    @[Dncast]
     def fresh_sketch
       sketch = Sketch.new(0)
       each_entry do |k, v|
@@ -779,6 +823,7 @@ module Ww
     #
     # If *value* is `nil` acts as `without`. This is mainly useful during
     # conversion from JSON (via `Term.[]`), treating `null` as absence.
+    @[Dncast]
     def with(key, value) : Dict
       if value.nil? || value.is_a?(JSON::Any) && value.raw.nil?
         return without(key)
@@ -788,15 +833,18 @@ module Ww
     end
 
     # TODO: have an optimized version of this
+    @[Dncast]
     def with(key, &)
       self.with(key, yield self[key]?)
     end
 
+    @[Dncast]
     def append(item)
       self.with(items.size, item)
     end
 
     # FIXME: this MUST NOT be O(n), WTF?
+    @[Dncast]
     def prepend(item)
       pairspart.transaction do |commit|
         commit.append(item)
@@ -806,12 +854,14 @@ module Ww
 
     # SAME
     # TODO: more idiomatic name
+    @[Dncast]
     def lshift
       pairspart.transaction do |commit|
         commit.concat(1...itemsize) { |index| self[index] }
       end
     end
 
+    @[Dncast]
     def rightmost(n : Int)
       return self unless 0 <= n <= itemsize
 
@@ -831,14 +881,17 @@ module Ww
       Dict.new(@items, pairs, Dict.mix(@sketch, value), Dict.mixdepth(@maxdepth, value))
     end
 
+    @[Dncast]
     def follow?(keys : Enumerable(Term)) : Term?
       Term.of(keys.reduce(self) { |dict, key| dict[key]? || return })
     end
 
+    @[Dncast]
     def follow(keys : Enumerable(Term)) : Term
       follow?(keys) || raise KeyError.new
     end
 
+    @[Dncast]
     def follow?(keys : Indexable(Term), *, __cursor = 0, &fn : Term -> Term?) : Term?
       case __cursor
       when keys.size
@@ -857,38 +910,46 @@ module Ww
       end
     end
 
+    @[Dncast]
     def follow(keys : Indexable(Term), &fn : Term -> Term) : Term
       follow?(keys, &fn) || raise KeyError.new
     end
 
+    @[Dncast]
     def where(key, eq fn : Term -> Term) : Dict
       return self unless v0 = self[key]?
 
       self.with(key, fn.call(v0))
     end
 
+    @[Dncast]
     def where(key, eq value) : Dict
       self.with(key, value)
     end
 
+    @[Dncast]
     def where(key, *keys, eq value) : Dict
       self.with(key, (self[key]? || Term[]).where(*keys, eq: value))
     end
 
+    @[Dncast]
     def where(key, *keys, eq value : Nil) : Dict
       return self unless v0 = self[key]?
       v1 = v0.where(*keys, eq: nil)
       v1.empty? ? without(key) : self.with(key, v1)
     end
 
+    @[Dncast]
     def morph(place)
       where(*place[...-1], eq: place[-1])
     end
 
+    @[Dncast]
     def morph(place, *places)
       morph(place).morph(*places)
     end
 
+    @[Dncast]
     def where(prefix : BiList(Term), eq value) : Dict
       case prefix
       when .empty?
@@ -912,7 +973,8 @@ module Ww
       end
     end
 
-    def where(prefix : ItemsView | Slice(Term), eq value) : Dict
+    @[Dncast]
+    def where(prefix : Dict::ItemsView | Slice(Term), eq value) : Dict
       case prefix.size
       when 0
         raise ArgumentError.new
@@ -937,6 +999,7 @@ module Ww
 
     # Removes the entry with the given *key* if present. Returns the modified
     # copy of this dict and the value associated with *key* (if any, else `nil`).
+    @[Dncast]
     def without?(key) : {Dict, Term?}
       dict1 = without(key)
 
@@ -972,12 +1035,14 @@ module Ww
 
     # Returns a copy of this dictionary that is guaranteed not to contain
     # an association with the given *key*.
+    @[Dncast]
     def without(key) : Dict
       without(Term.of(key))
     end
 
     # Returns a copy of this dictionary that is guaranteed not to contain
     # associations with any of the given *keys*.
+    @[Dncast]
     def without(*keys) : Dict
       transaction do |commit|
         keys.each { |key| commit.without(key) }
@@ -1083,7 +1148,8 @@ module Ww
     # Returns `self` if the transaction did not touch the dictionary at all. If
     # the dictionary was changed but then the changes were reverted, this method
     # will return a new dictionary.
-    def transaction(& : Commit ->) : Dict
+    @[Dncast]
+    def transaction(& : Dict::Commit ->) : Dict
       commit = self.commit
       yield commit
       commit.resolve
@@ -1093,6 +1159,7 @@ module Ww
       Commit.new(self, Pf.fiber_id)
     end
 
+    @[Dncast]
     def replace(& : Term, Term -> Term?) : Dict
       instance : Dict? = nil
       author = nil
@@ -1117,6 +1184,7 @@ module Ww
       instance
     end
 
+    @[Dncast]
     def subst1(term, replacement) : Dict
       term, replacement = Term.of(term), Term.of(replacement)
 
@@ -1124,6 +1192,7 @@ module Ww
     end
 
     # Recursive, depth-first substitution using the substitution table *subt*.
+    @[Dncast]
     def subst(subt) : Dict
       subt = subt.as_d
 
@@ -1147,6 +1216,7 @@ module Ww
     # *vsucc* is guaranteed to exist. However, if *key* is already present
     # in this dictionary but has a different value (`==`), then this method
     # returns `nil`.
+    @[Dncast]
     def unify?(key, vsucc) : Dict?
       unify?(Term.of(key), Term.of(vsucc))
     end
@@ -1177,6 +1247,7 @@ module Ww
     #
     # Term[x: 100, y: 200, z: 300].pluck({:z, :foo}, foobar: 4) # => Term[foo: 300, foobar: 4]
     # ```
+    @[Dncast]
     def pluck(*keys, **rest) : Term::Dict
       Dict.build do |commit|
         keys.each { |key| pluck(key, commit) }
@@ -1187,12 +1258,14 @@ module Ww
     # Returns a dictionary with entries whose keys are present in the enumerable *ee*.
     #
     # Keys present in *ee* but missing in `self` are skipped.
+    @[Dncast]
     def pluck(ee : Enumerable(Term)) : Term::Dict
       Dict.build do |commit|
         ee.each { |key| commit.with(key, self[key]?) }
       end
     end
 
+    @[Dncast]
     def separate(*args, **kwargs) : {Term::Dict, Term::Dict}
       plucked = pluck(*args, **kwargs)
 
@@ -1206,6 +1279,7 @@ module Ww
     end
 
     # Merge-concatenate.
+    @[Dncast]
     def mcat(other : Dict) : Dict
       # Fast path
       if itemsonly? && other.pairsonly?
@@ -1226,6 +1300,7 @@ module Ww
     #
     # Merges this dictionary with a *newer* one. If two keys are equal the value
     # from *newer* is preferred.
+    @[Dncast]
     def |(newer) : Dict
       newer = newer.as_d
 
@@ -1260,6 +1335,7 @@ module Ww
       end
     end
 
+    @[Dncast]
     def ^(older : Dict) : Dict
       transaction do |commit|
         older.each_entry do |k, v0|
@@ -1270,6 +1346,7 @@ module Ww
       end
     end
 
+    @[Dncast]
     def items(b : Num, e : Num) : Dict
       return Term[] if b == e
       return items.collect if b == Term[0] && e == Term[size]
@@ -1285,6 +1362,7 @@ module Ww
     # Dict set intersection. Values are ignored; only key presence/absence is taken
     # into account. May mix keys/values from `self`/*other* for additional speedup
     # (set *mix* to `false` to disallow).
+    @[Dncast]
     def xsect(other : Dict, *, mix = true) : Dict
       if empty? || other.empty?
         return Term[]
@@ -1308,6 +1386,7 @@ module Ww
     end
 
     # Dict entry intersection. Leaves entries common to `self` and *other*.
+    @[Dncast]
     def esect(other : Dict) : Dict
       Term::Dict.build do |commit|
         if size < other.size
@@ -1326,6 +1405,7 @@ module Ww
 
     # Dict entry mask intersection. Leaves keys common to `self` and *other*,
     # their values set to `true`.
+    @[Dncast]
     def msect(other : Dict) : Dict
       Term::Dict.build do |commit|
         each_entry do |k, _|
@@ -1341,6 +1421,7 @@ module Ww
 
     # Dict set subtraction. Values are ignored; only key presence/absence is taken
     # into account.
+    @[Dncast]
     def sub(other : Dict) : Dict
       if size < other.size
         transaction do |commit|
@@ -1358,7 +1439,8 @@ module Ww
       end
     end
 
-    # FIXME: extract into Nitrene
+    # TODO: remove
+    @[Dncast]
     def dfs(&fn : Term -> Bool) : Bool
       items.each do |item|
         return true if fn.call(item)
@@ -1375,7 +1457,8 @@ module Ww
       Bottom
     end
 
-    # FIXME: extract into Nitrene
+    # TODO: remove
+    @[Dncast]
     def bfs1(depth : Int, &fn : Term -> Bool) : BfsResponse
       if depth.zero?
         return items.any?(&fn) ? BfsResponse::Present : BfsResponse::Absent
@@ -1401,7 +1484,8 @@ module Ww
       items.size == bottom_votes ? BfsResponse::Bottom : BfsResponse::Absent
     end
 
-    # FIXME: extract into Nitrene
+    # TODO: remove
+    @[Dncast]
     def bfs(&fn : Term -> Bool) : Bool
       (0..).each do |depth|
         case bfs1(depth, &fn)
@@ -1415,6 +1499,8 @@ module Ww
     end
 
     # Shallow diff. Returns `{entries present in self but absent in other, entries absent in self but present in other}`.
+    # TODO: move to Term
+    @[Dncast]
     def diff1(other) : {Dict, Dict}
       added = Term::Dict.build do |commit|
         each_entry do |k, v1|
@@ -1433,6 +1519,8 @@ module Ww
       {added, removed}
     end
 
+    @[Dncast]
+    # TODO: move to Term
     def diff1x(other) : {Dict, Dict, Dict}
       added = Term[]
       changed = Term[]
@@ -1490,6 +1578,8 @@ module Ww
     end
 
     # Deep diff. Returns `{present in self but absent in other, absent in self but present in other}`.
+    # TODO: move to Term
+    @[Dncast]
     def diff(older) : {Dict, Dict}
       Dict.diff(older.as_d, newer: self)
     end
@@ -1512,6 +1602,7 @@ module Ww
     #   treated specially for efficiency, and are considered the best andmost efficient
     #   way to represent arrays in Term-land.
     # - *Pairs* are all other entries, i.e., all entries that are not items.
+    @[Dncast]
     def partition : {Dict, Dict}
       {itemspart, pairspart}
     end
@@ -1520,11 +1611,13 @@ module Ww
     #
     # This method is more efficient than using `partition` and discarding
     # the pairs part.
+    @[Dncast]
     def items : Dict::ItemsView
       ItemsView.new(@items, b: 0, e: @items.size, sketch0: @sketch, maxdepth0: @maxdepth)
     end
 
     # Returns the items part of `partition` (see the latter for more info).
+    @[Dncast]
     def itemspart : Dict
       if itemsonly?
         self
@@ -1534,6 +1627,7 @@ module Ww
     end
 
     # Returns the pairs part of `partition` (see the latter for more info).
+    @[Dncast]
     def pairspart : Dict
       if pairsonly?
         self

@@ -6038,6 +6038,7 @@ class ::Ww::Term::Dict
   # Recurses into entry values only.
   #
   # Counts itself too (smallest possible value is 1).
+  @[Dncast]
   def fresh_maxdepth : Magnitude
     maxdepth = Magnitude.new(1)
 
@@ -6092,12 +6093,14 @@ class ::Ww::Term::Dict
   end
 
   # TODO: cache on dicts
+  @[Dncast]
   def population
     ee.sum(Population.zero) { |_, v| v }
   end
 
   # Lets the block replace items in the given *range* with zero or more items
   # by appending to the commit. Returns the modified copy of `self`.
+  @[Dncast]
   def replace(range : Range(Term::Num, Term::Num), & : Term::Dict::Commit ->) : Term::Dict
     unless range.exclusive?
       raise ArgumentError.new("expected an exclusive range")
@@ -6118,6 +6121,7 @@ class ::Ww::Term::Dict
     end
   end
 
+  @[Dncast]
   def replace(index : Term::Num, &)
     replace(index...index + 1) { |commit| yield commit }
   end

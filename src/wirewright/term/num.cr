@@ -1,8 +1,10 @@
 module Ww
   # Represents a number. Uses `Int32` under the hood; when the value exceeds `Int32`'s
   # bounds or if it is not an integer, starts using `BigRational`.
+  @[Term::Assoc(TermType::Number, :unsafe_as_n)]
   struct Term::Num
     include ITerm
+    include AutoUpcast
     include TypeConversion
     include Comparable(Num)
     include Comparable(Number)
@@ -29,10 +31,12 @@ module Ww
       new(0)
     end
 
+    @[Dncast]
     def <=>(other : self)
       Kernel.cmp(@k, other.@k)
     end
 
+    @[Dncast]
     def <=>(other : Number)
       Kernel.cmp(@k, Kernel.from(other))
     end
@@ -48,16 +52,19 @@ module Ww
     # Tries to convert this number to an `Int32`.
     #
     # May raise `OverflowError` if the conversion overflows.
+    @[Dncast]
     def to_i : Int32
       Kernel.to_i(@k)
     end
 
     # Convert this number to a `Float64`.
+    @[Dncast]
     def to_f64 : Float64
       Kernel.to_f64(@k)
     end
 
     # Converts this number to a `BigRational`.
+    @[Dncast]
     def to_big_r : BigRational
       Kernel.to_big_r(@k)
     end
@@ -81,6 +88,7 @@ module Ww
     #
     # Prefer to use `to?(Int32)` unless it's a *very* internal and performance-
     # sensitive place.
+    @[Dncast]
     def fast_to_i32? : Int32?
       @k.int? ? @k.unsafe_as_i : nil
     end
@@ -91,6 +99,7 @@ module Ww
     end
 
     # Returns `true` if this number is zero.
+    @[Dncast]
     def zero? : Bool
       Kernel.zero?(@k)
     end
@@ -98,35 +107,42 @@ module Ww
     # Returns `true` if this number is positive.
     #
     # *Zero is considered positive.*
+    @[Dncast]
     def positive? : Bool
       self >= 0
     end
 
     # Returns `true` if this number is negative.
+    @[Dncast]
     def negative? : Bool
       self < 0
     end
 
     # Returns `true` if this number is a natural number.
+    @[Dncast]
     def natural? : Bool
       whole? && positive?
     end
 
+    @[Dncast]
     def natural_nonzero? : Bool
       natural? && !zero?
     end
 
     # Returns `true` if this number is an integer.
+    @[Dncast]
     def whole? : Bool
       Kernel.integer?(@k)
     end
 
     # Returns `true` if this number is finite.
+    @[Dncast]
     def finite? : Bool
       Kernel.finite?(@k)
     end
 
     # Returns `true` if this number is divisible by *other*.
+    @[Dncast]
     def divisible_by?(other) : Bool
       Kernel.divisible_by?(@k, norm(other).@k)
     end
@@ -134,16 +150,19 @@ module Ww
     # Returns `true` if this number is approximately equal to *other*.
     #
     # Epsilon (maximum distance) is given by *eps*.
+    @[Dncast]
     def approx?(other, eps : Num = EPS) : Bool
       (self - other).abs <= eps
     end
 
     # Returns the absolute value of this number.
+    @[Dncast]
     def abs : Num
       negative? ? self * -1 : self
     end
 
     # Returns the reciprocal (multiplicative inverse) of this number.
+    @[Dncast]
     def reciprocal : Num
       Num.new(Kernel.reciprocal(@k))
     end
@@ -151,30 +170,36 @@ module Ww
     # Yields each factor of this number in no particular order.
     #
     # Yields nothing if this number isn't an integer.
+    @[Dncast]
     def each_factor(& : Num ->) : Nil
       Kernel.each_factor(@k) { |factor| yield Num.new(factor) }
     end
 
     # Returns the sum of `self` and *other*.
+    @[Dncast]
     def +(other) : Num
       Num.new(Kernel.add(@k, norm(other).@k))
     end
 
     # Returns the negative of `self`.
+    @[Dncast]
     def - : Num
       Num.new(Kernel.neg(@k))
     end
 
     # Returns the difference between `self` and *other*.
+    @[Dncast]
     def -(other) : Num
       self + -norm(other)
     end
 
     # Returns the product of `self` and *other*.
+    @[Dncast]
     def *(other) : Num
       Num.new(Kernel.mul(@k, norm(other).@k))
     end
 
+    @[Dncast]
     def /(other) : Num
       other = norm(other)
       raise DivisionByZeroError.new if other.zero?
@@ -185,6 +210,7 @@ module Ww
     # Returns the quotient from the division of `self` by *other*
     #
     # If *other* is `0`, raises `DivisionByZeroError`.
+    @[Dncast]
     def //(other) : Num
       other = norm(other)
       raise DivisionByZeroError.new if other.zero?
@@ -195,6 +221,7 @@ module Ww
     # Returns the remainder from the division of `self` by *other*.
     #
     # If *other* is `0`, raises `DivisionByZeroError`.
+    @[Dncast]
     def %(other) : Num
       other = norm(other)
       raise DivisionByZeroError.new if other.zero?
@@ -205,16 +232,19 @@ module Ww
     # Raises `self` to *other* power.
     #
     # May raise `MathDomainError` if it is impossible to raise `self` to *other* power.
+    @[Dncast]
     def **(other) : Num
       Num.new(Kernel.pow(@k, norm(other).@k))
     end
 
     # Shorthand for `self + n`. Most useful when using the block shorthand syntax.
+    @[Dncast]
     def succ(n = 1) : Num
       self + n
     end
 
     # Shorthand for `self - n`. Most useful when using the block shorthand syntax.
+    @[Dncast]
     def pred(n = 1) : Num
       self - n
     end
@@ -222,6 +252,7 @@ module Ww
     # Returns the square root of `self`.
     #
     # If negative, raises `MathDomainError`.
+    @[Dncast]
     def sqrt : Num
       raise MathDomainError.new if negative?
 
@@ -229,24 +260,29 @@ module Ww
     end
 
     # Integer square root
+    @[Dncast]
     def isqrt : Num
       raise MathDomainError.new if negative?
 
       Num.new(Kernel.isqrt(@k))
     end
 
+    @[Dncast]
     def floor
       Num.new(Kernel.floor(@k))
     end
 
+    @[Dncast]
     def round
       Num.new(Kernel.round(@k))
     end
 
+    @[Dncast]
     def ceil
       Num.new(Kernel.ceil(@k))
     end
 
+    @[Dncast]
     def uszpair(other : Num)
       unless positive? && other.positive?
         raise ArgumentError.new
@@ -255,6 +291,7 @@ module Ww
       self >= other ? self**2 + self + other : self + other**2
     end
 
+    @[Dncast]
     def uszunpair : {Num, Num}
       unless positive?
         raise ArgumentError.new
@@ -265,18 +302,15 @@ module Ww
       t2 < t1 ? {t2, t1} : {t1, t2 - t1}
     end
 
-    # ???
-    def sigmoid(a : Float64)
-      Math.exp(-Math.exp(-a * to_f64))
-    end
-
     {% for name in %w(sin cos tan) %}
+      @[Dncast]
       def {{name.id}} : Num
         Num.new(Kernel.{{name.id}}(@k))
       end
     {% end %}
 
     # Appends *digit* in *radix* to a copy of this number. Returns the copy.
+    @[Dncast]
     def append(digit : Num, *, radix : Num) : Num
       self * radix + digit
     end

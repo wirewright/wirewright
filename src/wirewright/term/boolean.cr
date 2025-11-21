@@ -1,8 +1,10 @@
 module Ww
   # Represents a boolean.
+  @[Term::Assoc(TermType::Boolean, :unsafe_as_b)]
   struct Term::Boolean
     include ITerm
     include Equality
+    include AutoUpcast
     include TypeConversion
 
     def initialize(@value : Bool)
@@ -14,12 +16,14 @@ module Ww
 
     # Returns Crystal `true` if this boolean is Wirewright `true`. Effectively,
     # converts this boolean to a Crystal boolean.
+    @[Dncast]
     @[AlwaysInline]
     def true? : Bool
       @value
     end
 
     # Returns Crystal `true` if this boolean is Wirewright `false`.
+    @[Dncast]
     @[AlwaysInline]
     def false? : Bool
       !@value

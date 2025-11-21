@@ -55,29 +55,7 @@ module Ww
   end
 
   # TODO: remove in favor of Term::Any
-  # TODO: refactor autocast to use AoT introspection + annotations instead of method_missing.
-  #  Autocast is a huge wart on the face of the project the way it is implemented right now.
-  #  You can get infinite loops, at runtime, out of nowhere, just because you've called the
-  #  wrong method, and if you're lucky to get a compile error, it points to nowhere in particular.
   module ITerm
-    # Automatically upcasts `self` to `Term` and tries to run *call* on it.
-    macro method_missing(call)
-      {% unless Term.has_method?(call.name) %}
-        {% raise "#{call}: no such method in Term, cannot automatically upcast" %}
-      {% end %}
-
-      # Oh Crystal gods, just add Def#callable_by?(Call) or something...
-      {% candidate = Term.methods.find { |method| method.name == call.name && (method.args.size == call.args.size || method.splat_index) } %}
-      {% unless candidate %}
-        {% raise "#{call}: no such method in term, cannot automatically upcast" %}
-      {% end %}
-
-      {% if call.named_args && !candidate.double_splat %}
-        {% raise "#{call}: giving named arguments to a double-splatless method is unsupported during automatic upcast" %}
-      {% end %}
-
-      Term.of(self).{{call}}
-    end
   end
 
   # All terms (including dictionary terms `Term::Dict`) are persistent, thread-safe,
@@ -151,6 +129,49 @@ module Ww
       end
     end
 
+    # Connects a term instance (e.g., `Term::Sym`) to its term type (`TermType::Symbol`)
+    # and an unsafe cast method (`Term#unsafe_as_sym`).
+    #
+    # ```
+    # @[Term::Assoc(TermType::Symbol, :unsafe_as_sym)]
+    # struct Term::Sym
+    #   # ...
+    # end
+    # ```
+    annotation Assoc
+    end
+
+    # `Term` methods marked with this annotation are targets of automatic upcast
+    # (see e.g. `AutoUpcast`).
+    annotation Upcast
+    end
+
+    # `ITerm` includer methods marked with this annotation are targets of
+    # automatic downcast.
+    annotation Dncast
+    end
+
+    # This module implements automatic upcasting from term instances to `Term`s
+    # for calling `Term` methods annotated with `Upcast`.
+    module AutoUpcast
+      macro finished
+        {% for method in Term.methods %}\
+          {% if method.annotation(Upcast) %}\
+            # :nodoc:
+            {% if method.accepts_block? %}\
+              def {{method.name}}(*args, **kwargs, &)
+                ::Ww::Term.of(self).{{method.name}}(*args, **kwargs) { |*blkargs| yield *blkargs }
+              end
+            {% else %}\
+              def {{method.name}}(*args, **kwargs)
+                ::Ww::Term.of(self).{{method.name}}(*args, **kwargs)
+              end
+            {% end %}\
+          {% end %}\
+        {% end %}\
+      end
+    end
+
     # TODO: by being smarter with tagging we can cram many more term shapes in here.
     #
     # For instance:
@@ -196,6 +217,7 @@ module Ww
 
     # Returns the `TermType` corresponding to this term. Guarantees to never
     # return `TermType::Any`.
+    @[Upcast]
     def type : TermType
       case tag
       in .num_int?, .num_rat? then TermType::Number
@@ -212,6 +234,7 @@ module Ww
     end
 
     # Downcasts this term to a number term without performing any checks.
+    @[Upcast]
     def unsafe_as_n : Num
       Num.new(Num::Kernel.new(@mem))
     end
@@ -222,6 +245,7 @@ module Ww
     end
 
     # Downcasts this term to a string term without performing any checks.
+    @[Upcast]
     def unsafe_as_s : Str
       Pointer(Void).new(@mem.address >> 3 << 3).as(Str)
     end
@@ -233,6 +257,7 @@ module Ww
     end
 
     # Downcasts this term to a symbol term without performing any checks.
+    @[Upcast]
     def unsafe_as_sym : Sym
       data = @mem.address >> 3
       Sym.new(data.to_u32)
@@ -248,6 +273,7 @@ module Ww
     end
 
     # Downcasts this term to a boolean term without performing any checks.
+    @[Upcast]
     def unsafe_as_b : Boolean
       Boolean.new((@mem.address >> 3) == 1)
     end
@@ -258,6 +284,7 @@ module Ww
     end
 
     # Downcasts this term to a dictionary term without performing any checks.
+    @[Upcast]
     def unsafe_as_d : Dict
       @mem.as(Dict)
     end
@@ -274,6 +301,7 @@ module Ww
     end
 
     # Attempts to downcast this term to a number term. Returns `nil` if impossible.
+    @[Upcast]
     def as_n? : Num?
       case tag
       when .num_int?, .num_rat?
@@ -282,27 +310,32 @@ module Ww
     end
 
     # Attempts to downcast this term to a string term. Returns `nil` if impossible.
+    @[Upcast]
     def as_s? : Str?
       tag.str? ? unsafe_as_s : nil
     end
 
     # Attempts to downcast this term to a boolean term. Returns `nil` if impossible.
+    @[Upcast]
     def as_b? : Boolean?
       tag.boolean? ? unsafe_as_b : nil
     end
 
     # Attempts to downcast this term to a symbol term. Returns `nil` if impossible.
+    @[Upcast]
     def as_sym? : Sym?
       tag.sym? ? unsafe_as_sym : nil
     end
 
     # Attempts to downcast this term to a dictionary term. Returns `nil` if impossible.
+    @[Upcast]
     def as_d? : Dict?
       tag.dict? ? unsafe_as_d : nil
     end
 
     # Attempts to downcast this term to an itemsonly dictionary term. Returns
     # `nil` if impossible.
+    @[Upcast]
     def as_itemsonly_d? : Dict?
       return unless dict = as_d?
       return unless dict.itemsonly?
@@ -312,6 +345,7 @@ module Ww
 
     # Attempts to downcast this term to a pairsonly dictionary term. Returns
     # `nil` if impossible.
+    @[Upcast]
     def as_pairsonly_d? : Dict?
       return unless dict = as_d?
       return unless dict.pairsonly?
@@ -321,6 +355,7 @@ module Ww
 
     # Attempts to downcast this term to a nonempty dictionary term. Returns
     # `nil` if impossible.
+    @[Upcast]
     def as_nonempty_d? : Dict?
       return unless dict = as_d?
       return if dict.empty?
@@ -330,6 +365,7 @@ module Ww
 
     # Attempts to downcast this term to a dictionary term. Returns the dictionary's
     # itemspart if succeeded. Returns `nil` otherwise.
+    @[Upcast]
     def as_itemspart_d? : Dict?
       return unless dict = as_d?
 
@@ -338,6 +374,7 @@ module Ww
 
     # Attempts to downcast this term to a dictionary term. Returns the dictionary's
     # pairspart if succeeded. Returns `nil` otherwise.
+    @[Upcast]
     def as_pairspart_d? : Dict?
       return unless dict = as_d?
 
@@ -347,12 +384,14 @@ module Ww
     {% for method in %w[as_n as_s as_b as_sym as_d] %}
       # Same as `{{method.id}}?`, but raises `TypeCastError` with *detail*
       # instead of returning `nil`.
+      @[Upcast]
       def {{method.id}}(detail : String? = nil)
         {{method.id}}? || raise TypeCastError.new(detail)
       end
 
       # Map-like function to transform terms that downcast using `{{method.id}}?`
       # successfully. Other terms are returned unchanged.
+      @[Upcast]
       def {{method.id}}(&) : Term
         return self unless input = {{method.id}}?
 
@@ -372,12 +411,6 @@ module Ww
     # Raises `TypeCastError` if not.
     def to(type)
       to?(type) || raise TypeCastError.new
-    end
-
-    # Returns a dictionary where *key* is bound to `self`, followed by
-    # key-value pairs from *rest* (if any).
-    def pack(key, **rest) : Dict
-      Term[**rest].with(key, self)
     end
 
     # Computes and returns the hexdigest of this term using the given *algorithm*.
@@ -424,44 +457,67 @@ module Ww
       self
     end
 
-    # Automatically downcasts `self` to one of `ITerm` includers and tries to
-    # run *call* on it.
-    macro method_missing(call)
-      {% found_some = false %}
-      {% return_types = [] of ::NoReturn %}
+    # Reference: https://github.com/crystal-lang/crystal/issues/5735#issuecomment-367564550
+    macro finished
+      {% for includer in ITerm.includers %}\
+        {% unless ann = includer.annotation(Assoc) %}\
+          {% raise "#{includer} must be annotated with Term::Assoc(term type, unsafe downcast method name)" %}\
+        {% end %}\
+        {% query, dncast = ann %}\
+        {% for method in includer.methods %}\
+          {% if method.annotation(Dncast) %}\
+            {% splatidx = method.splat_index %}\
+            # :nodoc:
+            def {{ method.name }}(
+              {% for arg, i in method.args %}\
+                {% if i == splatidx %}*{% end %}{{ arg }},
+              {% end %}\
+              {% if double_splat = method.double_splat %}\
+                **{{ double_splat }},
+              {% end %}\
+              {% if (arg = method.block_arg) && arg.name %}\
+                &{{arg}}
+              {% elsif method.accepts_block? %}\
+                &
+              {% end %}\
+            ) {% if method.return_type %}: {{method.return_type}}{% end %}\
+              {% unless method.free_vars.empty? %} forall {{method.free_vars.splat}}{% end %}
+              unless type == {{query.id}}
+                {% if (rty = method.return_type) && method.name.ends_with?("?") %}\
+                  \{% begin %}
+                    \{% rty = parse_type({{rty.stringify}}).resolve %}
+                    \{% if rty == ::Bool %}\
+                       return false
+                    \{% elsif rty.nilable? %}\
+                       return
+                    \{% end %}\
+                  \{% end %}
+                {% end %}
 
-      pass do
-        %instance = ::Ww::Term[self]
-        {% for candidate in ITerm.includers %}
-          {% for method in candidate.methods %}
-            {% if method.name == call.name %}
-              {% found_some = true %}
-              {% if method.return_type %}
-                {% return_types << method.return_type.resolve %}
-              {% end %}
-              if %instance.is_a?({{candidate}})
-                break %instance.{{call}}
+                raise TypeCastError.new
               end
-            {% end %}
-          {% end %}
-        {% end %}
 
-        {% return_types = return_types.uniq %}
-
-        {% if found_some && !return_types.empty? && call.name.ends_with?("?") %} # Question-method
-          {% if return_types == [::Bool] %}
-            break false # Question method supposed to return bool, return false
-          {% elsif return_types[0].nilable? %}
-            break # Question method supposed to return nil, return nil
-          {% end %}
-        {% end %}
-
-        raise TypeCastError.new("method {{call}} not found on #{%instance.class}")
-      end
-
-      {% unless found_some %}
-        {% raise "no such method in any ITerm includer: #{call}, cannot autocast" %}
-      {% end %}
+              {{dncast.id}}.{{method.name}}(
+                {% for arg, i in method.args %}\
+                  {% if !splatidx || i < splatidx %}\
+                    {{arg.internal_name}},
+                  {% elsif i == splatidx %}\
+                    {% unless arg.name.empty? %}\
+                      *{{arg.name}},
+                    {% end %}\
+                  {% else %}\
+                    {{arg.name}}: {{arg.internal_name}},
+                  {% end %}\
+                {% end %}\
+                {% if double_splat = method.double_splat %}\
+                  **{{ double_splat }},
+                {% end %}\
+                {% if (arg = method.block_arg) && !arg.name.empty? %}&{{arg.name}}{% end %}\
+              ) {% if (arg = method.block_arg) && arg.name.empty? %}{ |*%args| yield *%args }{% end %}
+            end
+          {% end %}\
+        {% end %}\
+      {% end %}\
     end
   end
 
@@ -916,6 +972,7 @@ module Ww
   # Pattern matching
 
   struct Term
+    # TODO: does something actually call this?
     def self.matches(pattern, matchee, *, engine : Engine.class = M1, env = Term[]) : Array(Term::Dict) forall Engine
       engine.matches(Term.of(pattern), Term.of(matchee), env: env)
     end
