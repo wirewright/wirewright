@@ -276,7 +276,7 @@ module Ww::ML
     # This method is fairly cheap most of the time. We only store metadata on
     # dicts and key dicts are extremely rare in practice. Thus, this method fast
     # path-s almost all the time.
-    private def as_key(key : Term | ITerm) : Term
+    private def as_key(key : Term | Term::Any) : Term
       key = Term.of(key)
       return key unless @addons.location?
       return key unless key.type.dict?

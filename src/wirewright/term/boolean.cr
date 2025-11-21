@@ -2,7 +2,6 @@ module Ww
   # Represents a boolean.
   @[Term::Assoc(TermType::Boolean, :unsafe_as_b)]
   struct Term::Boolean
-    include ITerm
     include Equality
     include AutoUpcast
     include TypeConversion

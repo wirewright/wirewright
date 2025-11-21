@@ -54,13 +54,23 @@ module Ww
     end
   end
 
-  # TODO: remove in favor of Term::Any
-  module ITerm
-  end
-
   # All terms (including dictionary terms `Term::Dict`) are persistent, thread-safe,
   # and immutable.
   struct Term
+    macro finished
+      # Tagged union of term instance types.
+      #
+      # Internally, we store terms as *tagged pointers*. The three last bits of
+      # a pointer wrapped by the `Term` struct designate the stored type, and
+      # we can cast to it unsafely (*downcast*) and back (*upcast*, see `Term.of`),
+      # avoiding tagged unions.
+      #
+      # However, sometimes (e.g., for method overloading), we may want to "unpack"
+      # the tagged pointer to obtain a normal Crystal tagged union -- of type `Any`
+      # (see `Term.[]`).
+      alias Any = Sym | Num | Str | Boolean | Dict
+    end
+
     # This module implements the basics of type conversion using the `to?`, `to` methods.
     #
     # The `to` method is used to convert terms to Crystal objects of various types.
@@ -146,7 +156,7 @@ module Ww
     annotation Upcast
     end
 
-    # `ITerm` includer methods marked with this annotation are targets of
+    # Methods of `Any` members marked with this annotation are targets of
     # automatic downcast.
     annotation Dncast
     end
@@ -290,7 +300,7 @@ module Ww
     end
 
     # Downcasts `Term` to one of term instance types.
-    def self.[](term : Term) : ITerm
+    def self.[](term : Term) : Any
       case term.tag
       in .num_int?, .num_rat? then term.unsafe_as_n
       in .str?                then term.unsafe_as_s
@@ -435,7 +445,7 @@ module Ww
     end
 
     # :ditto:
-    def same?(other : ITerm) : Bool
+    def same?(other : Any) : Bool
       same?(Term.of(other))
     end
 
@@ -445,7 +455,7 @@ module Ww
     end
 
     # :ditto:
-    def ==(other : ITerm) : Bool
+    def ==(other : Any) : Bool
       self == Term.of(other) # Gives a chance to compare @mem first
     end
 
@@ -459,12 +469,12 @@ module Ww
 
     # Reference: https://github.com/crystal-lang/crystal/issues/5735#issuecomment-367564550
     macro finished
-      {% for includer in ITerm.includers %}\
-        {% unless ann = includer.annotation(Assoc) %}\
-          {% raise "#{includer} must be annotated with Term::Assoc(term type, unsafe downcast method name)" %}\
+      {% for member in Any.union_types %}\
+        {% unless ann = member.annotation(Assoc) %}\
+          {% raise "#{member} must be annotated with Term::Assoc(term type, unsafe downcast method name)" %}\
         {% end %}\
         {% query, dncast = ann %}\
-        {% for method in includer.methods %}\
+        {% for method in member.methods %}\
           {% if method.annotation(Dncast) %}\
             {% splatidx = method.splat_index %}\
             # :nodoc:
@@ -524,7 +534,7 @@ module Ww
   # Smart constructors
 
   struct Term
-    def self.[](object : ITerm) : ITerm
+    def self.[](object : Any) : Any
       object
     end
 
@@ -618,7 +628,7 @@ module Ww
     # Constructs a dictionary from the given `JSON::Any` *object*.
     #
     # Raises `ArgumentError` on `null`.
-    def self.[](object : JSON::Any) : ITerm
+    def self.[](object : JSON::Any) : Any
       if (value = object.as_f? || object.as_s? || object.as_a? || object.as_h? || object.as_bool?).nil?
         raise ArgumentError.new
       end
@@ -964,7 +974,7 @@ module Ww
     end
 
     # Returns the 256-bit hash of *term* calculated using `H256::ALGORITHM`.
-    def self.hashcode256(term : Term | ITerm) : H256
+    def self.hashcode256(term : Term | Any) : H256
       H256.new(Term.of(term))
     end
   end
@@ -1106,86 +1116,81 @@ module Ww
   # Utilities
 
   struct Term
-    def self.merge(a : Term, b : Term, *cs : Term) : Term
-      cs.reduce(merge(a, b)) { |memo, x| merge(memo, x) }
+    # Recursively merges two dictionaries *a* and *b*.
+    #
+    # If two keys are equal and both values are dictionaries, those dictionaries are
+    # recursively merged. Otherwise, prefers *b*'s values.
+    def self.merge(a : Dict, b : Dict) : Dict
+      return b if a.empty?
+      return a if b.empty?
+
+      # Don't waste on singleton dicts.
+      if a.size == 1
+        k, v0 = a.ee.first
+        unless v1 = b[k]?
+          return b.with(k, v0)
+        end
+        unless (v0d = v0.as_d?) && (v1d = v1.as_d?)
+          return b
+        end
+        return b.with(k, merge(v0d, v1d))
+      end
+
+      if b.size == 1
+        k, v1 = b.ee.first
+        unless (v0 = a[k]?) && (v0d = v0.as_d?) && (v1d = v1.as_d?)
+          return a.with(k, v1)
+        end
+        return a.with(k, merge(v0d, v1d))
+      end
+
+      # Use commits otherwise.
+      if a.size < b.size
+        b.transaction do |commit|
+          a.each_entry do |k, v0|
+            unless v1 = b[k]?
+              commit.with(k, v0)
+              next
+            end
+
+            next unless v0d = v0.as_d?
+            next unless v1d = v1.as_d?
+
+            commit.with(k, merge(v0d, v1d))
+          end
+        end
+      else
+        a.transaction do |commit|
+          b.each_entry do |k, v1|
+            if (v0 = a[k]?) && (v0d = v0.as_d?) && (v1d = v1.as_d?)
+              commit.with(k, merge(v0d, v1d))
+              next
+            end
+
+            commit.with(k, v1)
+          end
+        end
+      end
     end
 
-    # :ditto:
-    def self.merge(a : ITerm, b : ITerm, *cs : ITerm) : ITerm
-      cs.reduce(merge(a, b)) { |memo, x| merge(memo, x) }
+    # Returns *b* for any type other than a dictionary.
+    def self.merge(a : Any, b : Any) : Any
+      b
     end
 
+    # Shorthand for merging two `Term`s to obtain a `Term`.
     def self.merge(a : Term, b : Term) : Term
       Term.of(merge(Term[a], Term[b]))
     end
 
-    # Deep merge.
-    #
-    # Merges this dictionary with a *newer* one. If two keys are equal and both
-    # values are dictionaries, merging descends recursively. Otherwise, *newer*'s
-    # value is preferred.
-    def self.merge(a : ITerm, b : ITerm) : ITerm
-      case {a, b}
-      when {Dict, Dict}
-        # TODO: move to a separate method once ITerm is removed in favor of Term::Any.
-        # Crystal dispatch is being stupid on this and is upcasting the more specific
-        # Dict restriction to ITerm, which leads to invalid behavior.
-        #
-        # The doc belongs to the Dict,Dict method as well! Everything else is sugar,
-        # more or less.
-        return b if a.empty?
-        return a if b.empty?
+    # Shorthand for merging more than two `Any`s to obtain an `Any`.
+    def self.merge(a : Any, b : Any, *cs : Any) : Any
+      cs.reduce(merge(a, b)) { |memo, x| merge(memo, x) }
+    end
 
-        # Don't waste on singleton dicts.
-        if a.size == 1
-          k, v0 = a.ee.first
-          unless v1 = b[k]?
-            return b.with(k, v0)
-          end
-          unless (v0d = v0.as_d?) && (v1d = v1.as_d?)
-            return b
-          end
-          return b.with(k, merge(v0d, v1d))
-        end
-
-        if b.size == 1
-          k, v1 = b.ee.first
-          unless (v0 = a[k]?) && (v0d = v0.as_d?) && (v1d = v1.as_d?)
-            return a.with(k, v1)
-          end
-          return a.with(k, merge(v0d, v1d))
-        end
-
-        # Use commits otherwise.
-        if a.size < b.size
-          b.transaction do |commit|
-            a.each_entry do |k, v0|
-              unless v1 = b[k]?
-                commit.with(k, v0)
-                next
-              end
-
-              next unless v0d = v0.as_d?
-              next unless v1d = v1.as_d?
-
-              commit.with(k, merge(v0d, v1d))
-            end
-          end
-        else
-          a.transaction do |commit|
-            b.each_entry do |k, v1|
-              if (v0 = a[k]?) && (v0d = v0.as_d?) && (v1d = v1.as_d?)
-                commit.with(k, merge(v0d, v1d))
-                next
-              end
-
-              commit.with(k, v1)
-            end
-          end
-        end
-      else
-        b
-      end
+    # Shorthand for merging more than two `Term`s to obtain a `Term`.
+    def self.merge(a : Term, b : Term, *cs : Term) : Term
+      cs.reduce(merge(a, b)) { |memo, x| merge(memo, x) }
     end
 
     # Returns a copy of the dict *a* with all of *keys* removed. Missing keys are

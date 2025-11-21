@@ -79,7 +79,7 @@ module Ww::ML
     io.puts if endl
   end
 
-  def display(io : IO, term : ITerm, **kwargs)
+  def display(io : IO, term : Term::Any, **kwargs)
     display(io, Term.of(term), **kwargs)
   end
 
@@ -87,7 +87,7 @@ module Ww::ML
     String.build { |io| display(io, term, **kwargs) }
   end
 
-  def display(term : ITerm, **kwargs)
+  def display(term : Term::Any, **kwargs)
     display(Term.of(term), **kwargs)
   end
 
@@ -115,7 +115,7 @@ module Ww::ML
   end
 
   # :nodoc:
-  def compact(io : IO, term : ITerm) : Nil
+  def compact(io : IO, term : Term::Any) : Nil
     term.inspect(io)
   end
 
@@ -136,12 +136,12 @@ module Ww::ML
   end
 
   # Returns the compact WwML representation of *term*.
-  def compact(term : Term | ITerm) : String
+  def compact(term : Term | Term::Any) : String
     String.build { |io| compact(io, term) }
   end
 
   # Returns the bytesize of *term*'s compact WwML representation.
-  def compact_bytesize(term : Term | ITerm) : Int32
+  def compact_bytesize(term : Term | Term::Any) : Int32
     io = IO::BytesizeCounter.new
 
     compact(io, term)

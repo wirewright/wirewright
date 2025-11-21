@@ -2,7 +2,6 @@ module Ww
   # Represents a string.
   @[Term::Assoc(TermType::String, :unsafe_as_s)]
   class Term::Str
-    include ITerm
     include Equality
     include AutoUpcast
     include TypeConversion

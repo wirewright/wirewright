@@ -6,7 +6,7 @@ module Ww::M0
   extend self
 
   # :nodoc:
-  def match?(commit, pattern : Term::Sym, matchee : ITerm) : Bool
+  def match?(commit, pattern : Term::Sym, matchee : Term::Any) : Bool
     unless (blank = pattern.blank?) && blank.single?
       return pattern == matchee
     end
@@ -35,7 +35,7 @@ module Ww::M0
   SYM_BLANK_STAR = Term.of(:"_*")
 
   # :nodoc:
-  def match?(commit, pattern : Term::Dict, matchee : ITerm) : Bool
+  def match?(commit, pattern : Term::Dict, matchee : Term::Any) : Bool
     if pattern.itemsonly? && pattern.size > 1
       hi = pattern.size - 1
 
@@ -77,7 +77,7 @@ module Ww::M0
   end
 
   # :nodoc:
-  def match?(commit, pattern : ITerm, matchee : ITerm) : Bool
+  def match?(commit, pattern : Term::Any, matchee : Term::Any) : Bool
     pattern == matchee
   end
 

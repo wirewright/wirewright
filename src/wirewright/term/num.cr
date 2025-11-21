@@ -3,7 +3,6 @@ module Ww
   # bounds or if it is not an integer, starts using `BigRational`.
   @[Term::Assoc(TermType::Number, :unsafe_as_n)]
   struct Term::Num
-    include ITerm
     include AutoUpcast
     include TypeConversion
     include Comparable(Num)

@@ -72,7 +72,7 @@ module Ww::D7
   # Constructs a scope feature.
   #
   # See `Scope`.
-  def scope(bindings : Term | ITerm, cont : Feature) : Scope
+  def scope(bindings : Term | Term::Any, cont : Feature) : Scope
     Scope.new(bindings.as_d, cont)
   end
 

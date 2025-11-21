@@ -186,7 +186,7 @@ module Ww::ML
   end
 
   # :nodoc:
-  private def edge?(term : ITerm, type : TermType) : Bool
+  private def edge?(term : Term::Any, type : TermType) : Bool
     false
   end
 

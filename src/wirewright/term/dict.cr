@@ -83,7 +83,6 @@ module Ww
   # pairs supporting efficient, near-O(1) insert, delete, and lookup.
   @[Term::Assoc(TermType::Dict, :unsafe_as_d)]
   class Term::Dict
-    include ITerm
     include AutoUpcast
     include Equality
 
@@ -415,11 +414,11 @@ module Ww
 
     # :nodoc:
     @[Dncast]
-    def at?(key : ITerm) : Term?
+    def at?(key : Term::Any) : Term?
       at_default?(key)
     end
 
-    private def at_default?(key : ITerm) : Term?
+    private def at_default?(key : Term::Any) : Term?
       return unless coat = @pairs.fetch?(Probes::FetchPair.new(Term.of(key)))
 
       entry, *_ = coat
@@ -813,7 +812,7 @@ module Ww
     end
 
     # :nodoc:
-    def with(key : ITerm, value : Term) : Dict
+    def with(key : Term::Any, value : Term) : Dict
       with_default(key, value)
     end
 
@@ -872,7 +871,7 @@ module Ww
       end
     end
 
-    private def with_default(key : ITerm, value : Term) : Dict
+    private def with_default(key : Term::Any, value : Term) : Dict
       added, pairs = @pairs.add(Probes::AssocPairImm.new(Term.of(key), value))
       unless added # Overridden or completely unchanged
         return @pairs.same?(pairs) ? self : Dict.new(@items, pairs, Dict.mix(@sketch, value), Dict.mixdepth(@maxdepth, value))
@@ -1024,7 +1023,7 @@ module Ww
     end
 
     # :nodoc:
-    def without(key : ITerm) : Dict
+    def without(key : Term::Any) : Dict
       without_default(key)
     end
 
@@ -1049,7 +1048,7 @@ module Ww
       end
     end
 
-    private def without_default(key : ITerm) : Dict
+    private def without_default(key : Term::Any) : Dict
       removed, pairs = @pairs.delete(Probes::DissocPairImm.new(Term.of(key)))
       removed ? Dict.new(@items, pairs, @sketch, @maxdepth) : self
     end
@@ -1080,11 +1079,11 @@ module Ww
       self
     end
 
-    protected def with!(key : ITerm, value : Term, author) : Dict
+    protected def with!(key : Term::Any, value : Term, author) : Dict
       with_default!(key, value, author)
     end
 
-    protected def with_default!(key : ITerm, value : Term, author) : Dict
+    protected def with_default!(key : Term::Any, value : Term, author) : Dict
       _, @pairs = @pairs.add(Probes::AssocPairMut.new(Term.of(key), value, author: author))
 
       @sketch = Dict.mix(@sketch, value)
@@ -1114,11 +1113,11 @@ module Ww
       self
     end
 
-    protected def without!(key : ITerm, author) : Dict
+    protected def without!(key : Term::Any, author) : Dict
       without_default!(key, author)
     end
 
-    private def without_default!(key : ITerm, author) : Dict
+    private def without_default!(key : Term::Any, author) : Dict
       _, @pairs = @pairs.delete(Probes::DissocPairMut.new(Term.of(key), hole: Pointer(Term).null, author: author))
 
       self
@@ -1553,11 +1552,11 @@ module Ww
        removed.empty? ? removed0 : removed0.with(k, removed)}
     end
 
-    def self.diff(k : Term, older : ITerm?, newer : ITerm, added0, removed0) : {Dict, Dict}
+    def self.diff(k : Term, older : Term::Any?, newer : Term::Any, added0, removed0) : {Dict, Dict}
       older == newer ? {added0, removed0} : {added0.with(k, newer), removed0}
     end
 
-    def self.diff(k : Term, older : ITerm, newer : Nil, added0, removed0) : {Dict, Dict}
+    def self.diff(k : Term, older : Term::Any, newer : Nil, added0, removed0) : {Dict, Dict}
       {added0, removed0.with(k, older)}
     end
 

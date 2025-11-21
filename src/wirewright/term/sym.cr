@@ -2,7 +2,6 @@ module Ww
   # Represents a symbol. Mainly for use in WwML.
   @[Term::Assoc(TermType::Symbol, :unsafe_as_sym)]
   struct Term::Sym
-    include ITerm
     include Equality
     include AutoUpcast
     include TypeConversion

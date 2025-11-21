@@ -69,7 +69,7 @@ struct Ww::ML::Reader
       to_hash_s(io, Term[term])
     end
 
-    private def to_hash_s(io, term : ITerm) : Nil
+    private def to_hash_s(io, term : Term::Any) : Nil
       ML.compact(io, term)
     end
 
