@@ -2,6 +2,7 @@ module Ww
   # Represents a string.
   class Term::Str
     include ITerm
+    include TypeConversion
 
     def initialize(@value : StringView)
     end

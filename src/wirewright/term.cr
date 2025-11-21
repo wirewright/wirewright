@@ -60,26 +60,6 @@ module Ww
   #  You can get infinite loops, at runtime, out of nowhere, just because you've called the
   #  wrong method, and if you're lucky to get a compile error, it points to nowhere in particular.
   module ITerm
-    # Attempts to convert this term to the given Crystal *type*. If unsuccessful,
-    # returns `nil`.
-    def to?(type : T.class) : T? forall T
-    end
-
-    macro included
-      def to?(type : {{@type}}.class)
-        self
-      end
-    end
-
-    # Same as `to?`, but raises `TypeCastError` instead of returning `nil`.
-    def to(type : T.class) : T forall T
-      result = to?(type)
-      if result.nil?
-        raise TypeCastError.new
-      end
-      result
-    end
-
     def downcast
       self
     end
@@ -140,6 +120,42 @@ module Ww
   # All terms (including dictionary terms `Term::Dict`) are persistent, thread-safe,
   # and immutable.
   struct Term
+    # This module implements the basics of type conversion using the `to?`, `to` methods.
+    #
+    # The `to` method is used to convert terms to Crystal objects of various types.
+    #
+    # Includers are expected to define `to?(type : T.class) : T?` for each T they
+    # can be converted to.
+    #
+    # ```
+    # x = Term["hello"]
+    #
+    # x            # => "hello" : Term::Str
+    # x.to(String) # => "hello" : String
+    # ```
+    module TypeConversion
+      # Converts this term instance to an object of the given *type*, if possible.
+      # Returns `nil` if not.
+      def to?(type : T.class) : T? forall T
+      end
+
+      macro included
+        # Returns `self`.
+        def to?(type : {{@type}}.class)
+          self
+        end
+      end
+
+      # Same as `to?`, but raises `TypeCastError` instead of returning `nil`.
+      def to(type : T.class) : T forall T
+        result = to?(type)
+        if result.nil?
+          raise TypeCastError.new
+        end
+        result
+      end
+    end
+
     # TODO: by being smarter with tagging we can cram many more term shapes in here.
     #
     # For instance:
@@ -268,9 +284,17 @@ module Ww
     end
 
     # Converts this term to an object of the given *type*, if possible.
-    # Raises `TypeCastError` otherwise.
-    def to(type : T.class) : T forall T
-      downcast.to(type)
+    # Returns `nil` if not.
+    def to?(type)
+      return unless instance = downcast.as?(TypeConversion) # supports
+
+      instance.to?(type)
+    end
+
+    # Converts this term to an object of the given *type*, if possible.
+    # Raises `TypeCastError` if not.
+    def to(type)
+      to?(type) || raise TypeCastError.new
     end
 
     # Attempts to downcast this term to a number term. Returns `nil` if impossible.

@@ -2,6 +2,7 @@ module Ww
   # Represents a symbol. Mainly for use in WwML.
   struct Term::Sym
     include ITerm
+    include TypeConversion
 
     # Represents the result of a successful interpretation of a symbol as a blank.
     #
@@ -416,7 +417,7 @@ module Ww
       name.prefixed_by?("\\")
     end
 
-    def to(type : String.class) : String
+    def to?(type : String.class) : String?
       inspect
     end
 

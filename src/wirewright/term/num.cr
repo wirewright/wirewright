@@ -3,6 +3,7 @@ module Ww
   # bounds or if it is not an integer, starts using `BigRational`.
   struct Term::Num
     include ITerm
+    include TypeConversion
     include Comparable(Num)
     include Comparable(Number)
 
