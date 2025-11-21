@@ -151,7 +151,7 @@ PRIMITIVES = ProcRuleset.build do
   rulepi1 %[(∩ xs_dict ys_dict)] { xs.unsafe_as_d.msect(ys.unsafe_as_d) }
 
   rulepi1 %[(merge xs_dict ys_dict)] do
-    xs & ys
+    Term.merge(xs, ys)
   end
 
   rulepi1 %[(value xs_dict key_)] do

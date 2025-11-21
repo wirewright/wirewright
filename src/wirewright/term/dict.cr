@@ -804,6 +804,7 @@ module Ww
     end
 
     # SAME
+    # TODO: more idiomatic name
     def lshift
       pairspart.transaction do |commit|
         commit.concat(1...itemsize) { |index| self[index] }
@@ -1254,58 +1255,6 @@ module Ww
       else # Override by all from newer
         transaction do |commit|
           newer.each_entry { |k, v| commit.with(k, v) }
-        end
-      end
-    end
-
-    # Deep merge.
-    #
-    # Merges this dictionary with a *newer* one. If two keys are equal and both
-    # values are dictionaries, merging descends recursively. Otherwise, *newer*'s
-    # value is preferred.
-    def &(newer : Dict) : Dict
-      return newer if empty?
-      return self if newer.empty?
-
-      # Don't waste time allocating commits for singleton dicts.
-
-      if size == 1
-        k, v1 = ee.first
-        return newer.with(k, v1) unless v2 = newer[k]?
-        return newer unless v1.type.dict? && v2.type.dict?
-        return newer.with(k, v1.unsafe_as_d & v2.unsafe_as_d)
-      end
-
-      if newer.size == 1
-        k, v2 = newer.ee.first
-        unless (v1 = self[k]?) && v1.type.dict? && v2.type.dict?
-          return self.with(k, v2)
-        end
-        return self.with(k, v1.unsafe_as_d & v2.unsafe_as_d)
-      end
-
-      # Allocate commits otherwise.
-
-      if size < newer.size
-        newer.transaction do |commit|
-          each_entry do |k, v1|
-            unless v2 = newer[k]?
-              commit.with(k, v1)
-              next
-            end
-            next unless v1.type.dict? && v2.type.dict?
-            commit.with(k, v1.unsafe_as_d & v2.unsafe_as_d)
-          end
-        end
-      else
-        transaction do |commit|
-          newer.each_entry do |k, v2|
-            if (v1 = self[k]?) && v1.type.dict? && v2.type.dict?
-              commit.with(k, v1.unsafe_as_d & v2.unsafe_as_d)
-              next
-            end
-            commit.with(k, v2)
-          end
         end
       end
     end

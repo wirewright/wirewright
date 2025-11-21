@@ -92,10 +92,6 @@ module Ww
       Term.of(self)
     end
 
-    def &(newer : ITerm) : ITerm
-      newer
-    end
-
     def &-(other : ITerm) : ITerm?
       self == other ? nil : self
     end
@@ -377,10 +373,6 @@ module Ww
     # key-value pairs from *rest* (if any).
     def pack(key, **rest) : Dict
       Term[**rest].with(key, self)
-    end
-
-    def &(newer : Term) : Term
-      (downcast & newer.downcast).upcast
     end
 
     def &-(other : Term) : Term?
@@ -915,7 +907,7 @@ module Ww
     end
   end
 
-  # Pattern matching entrypoints
+  # Pattern matching
 
   struct Term
     def self.matches(pattern, matchee, *, engine : Engine.class = M1, env = Term[]) : Array(Term::Dict) forall Engine
@@ -1044,6 +1036,92 @@ module Ww
     macro givenpi(term, *patterns, **kwargs, &block)
       {{@type}}.case({{term}}, {{kwargs.double_splat}}) do
         givenpi({{patterns.splat}}) {{block}}
+      end
+    end
+  end
+
+  # Utilities
+
+  struct Term
+    def self.merge(a : Term, b : Term, *cs : Term) : Term
+      cs.reduce(merge(a, b)) { |memo, x| merge(memo, x) }
+    end
+
+    # :ditto:
+    def self.merge(a : ITerm, b : ITerm, *cs : ITerm) : ITerm
+      cs.reduce(merge(a, b)) { |memo, x| merge(memo, x) }
+    end
+
+    def self.merge(a : Term, b : Term) : Term
+      Term.of(merge(a.downcast, b.downcast))
+    end
+
+    # Deep merge.
+    #
+    # Merges this dictionary with a *newer* one. If two keys are equal and both
+    # values are dictionaries, merging descends recursively. Otherwise, *newer*'s
+    # value is preferred.
+    def self.merge(a : ITerm, b : ITerm) : ITerm
+      case {a, b}
+      when {Dict, Dict}
+        # TODO: move to a separate method once ITerm is removed in favor of Term::Any.
+        # Crystal dispatch is being stupid on this and is upcasting the more specific
+        # Dict restriction to ITerm, which leads to invalid behavior.
+        #
+        # The doc belongs to the Dict,Dict method as well! Everything else is sugar,
+        # more or less.
+        return b if a.empty?
+        return a if b.empty?
+
+        # Don't waste on singleton dicts.
+        if a.size == 1
+          k, v1 = a.ee.first
+          unless v2 = b[k]?
+            return b.with(k, v1)
+          end
+          unless (v1d = v1.as_d?) && (v2d = v2.as_d?)
+            return b
+          end
+          return b.with(k, merge(v1d, v2d))
+        end
+
+        if b.size == 1
+          k, v2 = b.ee.first
+          unless (v1 = a[k]?) && (v1d = v1.as_d?) && (v2d = v2.as_d?)
+            return a.with(k, v2)
+          end
+          return a.with(k, merge(v1d, v2d))
+        end
+
+        # Use commits otherwise.
+        if a.size < b.size
+          b.transaction do |commit|
+            a.each_entry do |k, v1|
+              unless v2 = b[k]?
+                commit.with(k, v1)
+                next
+              end
+
+              next unless v1d = v1.as_d?
+              next unless v2d = v2.as_d?
+
+              commit.with(k, merge(v1d, v2d))
+            end
+          end
+        else
+          a.transaction do |commit|
+            b.each_entry do |k, v2|
+              if (v1 = a[k]?) && (v1d = v1.as_d?) && (v2d = v2.as_d?)
+                commit.with(k, merge(v1d, v2d))
+                next
+              end
+
+              commit.with(k, v2)
+            end
+          end
+        end
+      else
+        b
       end
     end
   end
