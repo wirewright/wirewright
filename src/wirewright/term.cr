@@ -64,10 +64,6 @@ module Ww
       self
     end
 
-    def upcast : Term
-      Term.of(self)
-    end
-
     # Automatically upcasts `self` to `Term` and tries to run *call* on it.
     macro method_missing(call)
       {% unless Term.has_method?(call.name) %}
@@ -84,7 +80,7 @@ module Ww
         {% raise "#{call}: giving named arguments to a double-splatless method is unsupported during automatic upcast" %}
       {% end %}
 
-      upcast.{{call}}
+      Term.of(self).{{call}}
     end
   end
 
@@ -270,11 +266,6 @@ module Ww
       end
     end
 
-    # Returns `self`.
-    def upcast : Term
-      self
-    end
-
     # Returns one of concrete structs corresponding to `Term`.
     def downcast : ITerm
       case tag
@@ -383,8 +374,7 @@ module Ww
       def {{method.id}}(&) : Term
         return self unless input = {{method.id}}?
 
-        output = yield input
-        output.upcast
+        Term.of(yield input)
       end
     {% end %}
 
@@ -417,7 +407,7 @@ module Ww
 
     # :ditto:
     def same?(other : ITerm) : Bool
-      same?(other.upcast)
+      same?(Term.of(other))
     end
 
     # Returns `true` if this and *other* terms are equal.
@@ -427,7 +417,7 @@ module Ww
 
     # :ditto:
     def ==(other : ITerm) : Bool
-      self == other.upcast # Gives a chance to compare @mem first
+      self == Term.of(other) # Gives a chance to compare @mem first
     end
 
     def hash(hasher)
@@ -641,6 +631,11 @@ module Ww
       set(args)
     end
 
+    # Shorthand for `of(set(*args))`.
+    def self.of_set(*args) : Term
+      of(set(*args))
+    end
+
     # Constructs a dict; each tuple in *args* provides an object for the key followed
     # by one for the value. The resulting dict is also extended with **kwargs**, if they
     # are provided.
@@ -656,9 +651,14 @@ module Ww
       of(entries(*args, **kwargs))
     end
 
+    # Passes `nil` through so you can safely construct off nilable types
+    # and get a nilable term as the result.
+    def self.of(object : Nil) : Nil
+    end
+
     # Same as `.[]` but upcasts to generic `Term` for you.
     def self.of(*args, **kwargs)
-      Term[*args, **kwargs].try(&.upcast)
+      Term.of(Term[*args, **kwargs])
     end
   end
 

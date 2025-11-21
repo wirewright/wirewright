@@ -80,7 +80,7 @@ module Ww::ML
   end
 
   def display(io : IO, term : ITerm, **kwargs)
-    display(io, term.upcast, **kwargs)
+    display(io, Term.of(term), **kwargs)
   end
 
   def display(term : Term, **kwargs)
@@ -88,7 +88,7 @@ module Ww::ML
   end
 
   def display(term : ITerm, **kwargs)
-    display(term.upcast, **kwargs)
+    display(Term.of(term), **kwargs)
   end
 
   # :nodoc:

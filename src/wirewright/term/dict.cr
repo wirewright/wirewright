@@ -405,7 +405,7 @@ module Ww
     end
 
     private def at_default?(key : ITerm) : Term?
-      return unless coat = @pairs.fetch?(Probes::FetchPair.new(key.upcast))
+      return unless coat = @pairs.fetch?(Probes::FetchPair.new(Term.of(key)))
 
       entry, *_ = coat
       entry.value
@@ -823,7 +823,7 @@ module Ww
     end
 
     private def with_default(key : ITerm, value : Term) : Dict
-      added, pairs = @pairs.add(Probes::AssocPairImm.new(key.upcast, value))
+      added, pairs = @pairs.add(Probes::AssocPairImm.new(Term.of(key), value))
       unless added # Overridden or completely unchanged
         return @pairs.same?(pairs) ? self : Dict.new(@items, pairs, Dict.mix(@sketch, value), Dict.mixdepth(@maxdepth, value))
       end
@@ -985,7 +985,7 @@ module Ww
     end
 
     private def without_default(key : ITerm) : Dict
-      removed, pairs = @pairs.delete(Probes::DissocPairImm.new(key.upcast))
+      removed, pairs = @pairs.delete(Probes::DissocPairImm.new(Term.of(key)))
       removed ? Dict.new(@items, pairs, @sketch, @maxdepth) : self
     end
 
@@ -1020,7 +1020,7 @@ module Ww
     end
 
     protected def with_default!(key : ITerm, value : Term, author) : Dict
-      _, @pairs = @pairs.add(Probes::AssocPairMut.new(key.upcast, value, author: author))
+      _, @pairs = @pairs.add(Probes::AssocPairMut.new(Term.of(key), value, author: author))
 
       @sketch = Dict.mix(@sketch, value)
       @maxdepth = Dict.mixdepth(@maxdepth, value)
@@ -1054,7 +1054,7 @@ module Ww
     end
 
     private def without_default!(key : ITerm, author) : Dict
-      _, @pairs = @pairs.delete(Probes::DissocPairMut.new(key.upcast, hole: Pointer(Term).null, author: author))
+      _, @pairs = @pairs.delete(Probes::DissocPairMut.new(Term.of(key), hole: Pointer(Term).null, author: author))
 
       self
     end
@@ -1131,7 +1131,7 @@ module Ww
         if v1 = subt[v0]?
           v1
         elsif v0.type.dict?
-          v0.unsafe_as_d.subst(subt).upcast
+          Term.of(v0.unsafe_as_d.subst(subt))
         end
       end
     end

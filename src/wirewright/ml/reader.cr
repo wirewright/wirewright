@@ -1469,7 +1469,7 @@ module Ww::ML
         end
       end
 
-      rule = DictRule.new(rule_term, opsrc, doc.try(&.upcast), state)
+      rule = DictRule.new(rule_term, opsrc, Term.of(doc), state)
       rule.patched
     end
 
