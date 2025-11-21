@@ -5915,7 +5915,7 @@ class PatternSet(T)
 
     bases.each do |base|
       base.each_item_unordered do |item|
-        envs = Term.matches(selector, item)
+        envs = M1.matches(selector, item)
         envs.each do |env|
           next unless pattern = env[:pattern]?
           next unless seen.add?(pattern)

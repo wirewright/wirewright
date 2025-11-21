@@ -1,5 +1,4 @@
-# Structural pattern matching DSL over `Term`s, used in `Term.case`,
-# `D7::Regime.build`, and others.
+# Structural pattern matching DSL over `Term`s, used in `Term.case`.
 #
 # The `case` block contains one or more *branches*: `match`, `given`, and their
 # variants. It can contain zero or one catch-all `otherwise` clause as well.

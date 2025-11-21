@@ -982,11 +982,6 @@ module Ww
   # Pattern matching
 
   struct Term
-    # TODO: does something actually call this?
-    def self.matches(pattern, matchee, *, engine : Engine.class = M1, env = Term[]) : Array(Term::Dict) forall Engine
-      engine.matches(Term.of(pattern), Term.of(matchee), env: env)
-    end
-
     # :nodoc:
     MATCHERS = SyncCache(UInt32, Case::Matcher).new(capacity: 512, preallocate: true)
 
