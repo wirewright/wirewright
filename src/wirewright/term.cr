@@ -68,33 +68,9 @@ module Ww
       Term.of(self)
     end
 
-    def ==(other : Term) : Bool
-      self == other.downcast
-    end
-
-    def ===(other : Term) : Bool
-      self === other.downcast
-    end
-
     # Writes a string representation of this term to *io*.
     def to_s(io)
       inspect(io)
-    end
-
-    # Support for hashing terms on the Crystal side.
-    #
-    # Delegates actual hashing to `Term.hashcode` to obtain a globally stable hash.
-    #
-    # WARNING: the stable hash is then hashed using the default Crystal hasher, which
-    # is seeded randomly on startup. This means that this method will produce different
-    # hashes across runs despite the same `Term.hashcode`. Use `Term.hashcode` directly
-    # to avoid this.
-    def hash(hasher)
-      Term.hashcode(self).hash(hasher)
-    end
-
-    def clone : ITerm
-      self
     end
 
     # Automatically upcasts `self` to `Term` and tries to run *call* on it.
@@ -153,6 +129,38 @@ module Ww
           raise TypeCastError.new
         end
         result
+      end
+    end
+
+    # Implements equality methods for comparing term instances with `Term`s,
+    # hashing of term instances, and cloning (noop).
+    module Equality
+      # NOTE: we eqcast with an upcast to allow Term to compare @mem before doing value
+      # equality. See also: `Term#==`.
+
+      def ==(other : Term) : Bool
+        Term.of(self) == other
+      end
+
+      def ===(other : Term) : Bool
+        Term.of(self) === other
+      end
+
+      # Support for hashing terms on the Crystal side.
+      #
+      # Delegates actual hashing to `Term.hashcode` to obtain a globally stable hash.
+      #
+      # WARNING: the stable hash is then hashed using the default Crystal hasher, which
+      # is seeded randomly on startup. This means that this method will produce different
+      # hashes across runs despite the same `Term.hashcode`. Use `Term.hashcode` directly
+      # to avoid this.
+      def hash(hasher)
+        Term.hashcode(self).hash(hasher)
+      end
+
+      # Returns `self`, as all terms are immutable.
+      def clone
+        self
       end
     end
 

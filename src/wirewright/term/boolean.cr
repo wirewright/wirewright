@@ -2,6 +2,7 @@ module Ww
   # Represents a boolean.
   struct Term::Boolean
     include ITerm
+    include Equality
     include TypeConversion
 
     def initialize(@value : Bool)

@@ -2,6 +2,7 @@ module Ww
   # Represents a symbol. Mainly for use in WwML.
   struct Term::Sym
     include ITerm
+    include Equality
     include TypeConversion
 
     # Represents the result of a successful interpretation of a symbol as a blank.

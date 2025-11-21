@@ -83,6 +83,7 @@ module Ww
   # pairs supporting efficient, near-O(1) insert, delete, and lookup.
   class Term::Dict
     include ITerm
+    include Equality
 
     # :nodoc:
     alias ItemNode = Pf::Kit::Node(Item)
