@@ -1269,31 +1269,6 @@ module Ww
       end
     end
 
-    def &-(other : Dict) : Dict?
-      if empty? || other.empty?
-        return self
-      end
-
-      result = transaction do |commit|
-        other.each_entry do |k, v1|
-          next unless v0 = self[k]?
-          if v0.type.dict? && v1.type.dict? && !(v0.empty? && v1.empty?)
-            commit.with(k, v0 &- v1)
-          elsif v0 == v1
-            commit.without(k)
-          end
-        end
-      end
-
-      result.empty? ? nil : result
-    end
-
-    def &-(other : Enumerable(Term)) : Dict
-      transaction do |commit|
-        other.each { |key| commit.without(key) }
-      end
-    end
-
     def items(b : Num, e : Num) : Dict
       return Term[] if b == e
       return items.collect if b == Term[0] && e == Term[size]

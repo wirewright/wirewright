@@ -1165,6 +1165,11 @@ module ::Ww::M1::Operator
   struct Behind
     getter? probe : Bool
 
+    # TODO: just use predicates & predicate chains instead of this strange "domain"-
+    # "antidomain" stuff.
+
+    # TODO: store backpaths separately from captures!!!! This is sloppy AF!
+
     def initialize(
       @captures = Term[],
       @domains = Term[],
@@ -1276,9 +1281,9 @@ module ::Ww::M1::Operator
     end
 
     def partition(selector)
-      lcaptures = @captures &- selector
-      ldomains = @domains &- selector
-      lantidomains = @antidomains &- selector
+      lcaptures = Term.exclude(@captures, selector)
+      ldomains = Term.exclude(@domains, selector)
+      lantidomains = Term.exclude(@antidomains, selector)
 
       rcaptures = @captures.pluck(selector)
       rdomains = @domains.pluck(selector)
@@ -4562,7 +4567,7 @@ module ::Ww::Backpath::Word
 
   # :ditto:
   def checkout(word : Delete, matchee : Term, &) : Nil
-    yield Term.of(matchee &- word.keys.items)
+    yield Term.exclude(matchee, word.keys.items)
   end
 
   def terms(word : Create) : Enumerable(Term)
@@ -4638,7 +4643,7 @@ module ::Ww::M1
         end
 
         matchpi %[(residue keys←(_*))] do
-          ctx = reflect(ctx, successor.as_d, maxdepth - 1, Term.of(matchee &- keys.items))
+          ctx = reflect(ctx, successor.as_d, maxdepth - 1, Term.exclude(matchee, keys.items))
         end
 
         otherwise { }
@@ -4851,15 +4856,15 @@ module ::Ww::M1
             matchee = matchee.with(word.key, rewrite.list)
           end
         in Word::Delete
-          residue0 = matchee &- word.keys.items
+          residue0 = Term.exclude(Term.of(matchee), word.keys.items)
           if layer == 1
-            up1, residue1r = neighbor.as(BackmapTrie).morph0(up0, up1, down, backspec, Term.of(residue0), applier)
+            up1, residue1r = neighbor.as(BackmapTrie).morph0(up0, up1, down, backspec, residue0, applier)
             residue1 = residue1r.term? || residue0
           else
-            up1, residue1 = neighbor.as(BackmapTrie).morph(layer - 1, up0, up1, down, backspec, Term.of(residue0), applier)
+            up1, residue1 = neighbor.as(BackmapTrie).morph(layer - 1, up0, up1, down, backspec, residue0, applier)
           end
           matchee = matchee.transaction do |commit|
-            residue1 &-= word.keys.items
+            residue1 = Term.exclude(residue1, word.keys.items)
             residue0.each_entry { |k, _| commit.without(k) }
             residue1.each_entry { |k, v| commit.with(k, v) }
           end

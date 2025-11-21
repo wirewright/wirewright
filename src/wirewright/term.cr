@@ -92,10 +92,6 @@ module Ww
       Term.of(self)
     end
 
-    def &-(other : ITerm) : ITerm?
-      self == other ? nil : self
-    end
-
     def ==(other : Term) : Bool
       self == other.downcast
     end
@@ -373,10 +369,6 @@ module Ww
     # key-value pairs from *rest* (if any).
     def pack(key, **rest) : Dict
       Term[**rest].with(key, self)
-    end
-
-    def &-(other : Term) : Term?
-      (downcast &- other.downcast).try(&.upcast)
     end
 
     # Computes and returns the hexdigest of this term using the given *algorithm*.
@@ -1075,53 +1067,68 @@ module Ww
 
         # Don't waste on singleton dicts.
         if a.size == 1
-          k, v1 = a.ee.first
-          unless v2 = b[k]?
-            return b.with(k, v1)
+          k, v0 = a.ee.first
+          unless v1 = b[k]?
+            return b.with(k, v0)
           end
-          unless (v1d = v1.as_d?) && (v2d = v2.as_d?)
+          unless (v0d = v0.as_d?) && (v1d = v1.as_d?)
             return b
           end
-          return b.with(k, merge(v1d, v2d))
+          return b.with(k, merge(v0d, v1d))
         end
 
         if b.size == 1
-          k, v2 = b.ee.first
-          unless (v1 = a[k]?) && (v1d = v1.as_d?) && (v2d = v2.as_d?)
-            return a.with(k, v2)
+          k, v1 = b.ee.first
+          unless (v0 = a[k]?) && (v0d = v0.as_d?) && (v1d = v1.as_d?)
+            return a.with(k, v1)
           end
-          return a.with(k, merge(v1d, v2d))
+          return a.with(k, merge(v0d, v1d))
         end
 
         # Use commits otherwise.
         if a.size < b.size
           b.transaction do |commit|
-            a.each_entry do |k, v1|
-              unless v2 = b[k]?
-                commit.with(k, v1)
+            a.each_entry do |k, v0|
+              unless v1 = b[k]?
+                commit.with(k, v0)
                 next
               end
 
+              next unless v0d = v0.as_d?
               next unless v1d = v1.as_d?
-              next unless v2d = v2.as_d?
 
-              commit.with(k, merge(v1d, v2d))
+              commit.with(k, merge(v0d, v1d))
             end
           end
         else
           a.transaction do |commit|
-            b.each_entry do |k, v2|
-              if (v1 = a[k]?) && (v1d = v1.as_d?) && (v2d = v2.as_d?)
-                commit.with(k, merge(v1d, v2d))
+            b.each_entry do |k, v1|
+              if (v0 = a[k]?) && (v0d = v0.as_d?) && (v1d = v1.as_d?)
+                commit.with(k, merge(v0d, v1d))
                 next
               end
 
-              commit.with(k, v2)
+              commit.with(k, v1)
             end
           end
         end
       else
         b
+      end
+    end
+
+    # Returns a copy of the dict *a* with all of *keys* removed. Missing keys are
+    # skipped. Raises `TypeCastError` if *a* is not a dict. Upcasts the result
+    # back to `Term`.
+    def self.exclude(a : Term, keys : Enumerable(Term)) : Term
+      Term.of(exclude(a.as_d, keys))
+    end
+
+    # Returns a copy of the dict *a* with all of *keys* removed. Missing keys
+    # are skipped.
+    def self.exclude(a : Dict, keys : Enumerable(Term)) : Dict
+      a.transaction do |commit|
+        keys.each { |key| commit.without(key) }
       end
     end
   end
