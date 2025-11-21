@@ -60,10 +60,6 @@ module Ww
   #  You can get infinite loops, at runtime, out of nowhere, just because you've called the
   #  wrong method, and if you're lucky to get a compile error, it points to nowhere in particular.
   module ITerm
-    def to_json(builder : JSON::Builder)
-      upcast.to_json(builder)
-    end
-
     # Attempts to convert this term to the given Crystal *type*. If unsuccessful,
     # returns `nil`.
     def to?(type : T.class) : T? forall T
