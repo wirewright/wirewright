@@ -3856,9 +3856,9 @@ module Indexable(T)
     yield unsafe_fetch(size - 1), true
   end
 
-  def to_readonly_slice(& : T -> U) : Slice(U) forall U
+  def to_readonly_slice(& : T, Int32 -> U) : Slice(U) forall U
     Slice(U).new(size, read_only: true) do |index|
-      yield unsafe_fetch(index)
+      yield unsafe_fetch(index), index
     end
   end
 end

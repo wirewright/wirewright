@@ -448,9 +448,9 @@ module Ww::Soma::DwUIR
 
       case event
       when .pressed?
-        tr = Event::MouseDn.new(event.which, button, event.x, event.y, event.clicks)
+        tr = Event::MouseDn.new(event.which, button, event.x, event.y, event.clicks.to_i)
       when .released?
-        tr = Event::MouseUp.new(event.which, button, event.x, event.y, event.clicks)
+        tr = Event::MouseUp.new(event.which, button, event.x, event.y, event.clicks.to_i)
       else
         return
       end
@@ -555,7 +555,7 @@ module Ww::Soma::DwUIR
     private def dispatch(event : ::SDL::Event::Window, sink)
       # NOTE: resized is only triggered on user resize, programmatic
       # resize doesn't trigger it which is actually what we want here!
-      case ::SDL::Window::Event.new(event.event)
+      case ::SDL::Window::Event.new(event.event.to_i)
       when .resized? then tr = Event::WindowResized.new(event.data1, event.data2)
       when .close?   then tr = Event::WindowClosed.new
       when .exposed? then tr = Event::WindowExposed.new

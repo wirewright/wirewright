@@ -18,6 +18,15 @@ module Ww::D7
     end
 
     # :nodoc:
+    alias EdgeCapture = EdgeSingleton | EdgeList
+
+    # :nodoc:
+    defrecord EdgeSingleton, id : Term
+
+    # :nodoc:
+    defrecord EdgeList, id : Term
+
+    # :nodoc:
     alias Step = Append | Follow | Return | FollowMany
 
     # :nodoc:
@@ -30,14 +39,14 @@ module Ww::D7
     #
     # Follow all links captured by the origin node's *capture*. Do not accumulate
     # solutions: search should preceed independently in each successor found.
-    defrecord Follow, capture : Term
+    defrecord Follow, capture : EdgeCapture
 
     # :nodoc:
     #
     # Follow all links captured by the origin node's *capture*. Accumulate
     # and merge solutions. *min* or more solutions are required,
     # otherwise backtrack.
-    defrecord FollowMany, capture : Term, min : Int32
+    defrecord FollowMany, capture : EdgeCapture, min : Int32
 
     # :nodoc:
     #
@@ -64,22 +73,28 @@ module Ww::D7
     end
 
     private def self.bridge(a : Term, b : Term) : Term
-      mid = edges(a) & edges(b)
-      unless mid.size == 1
-        raise QueryError.new(
-          "linked subqueries #{ML.compact(a)} and #{ML.compact(b)} must share exactly \
-           one edge, but they share #{mid.size} edge(s)")
+      l = edges(a)
+      r = edges(b)
+
+      # Each edge is like (one <capture id>) or (list <capture id>), we intersect
+      # only based on capture id.
+      l.each do |capture|
+        _, id0 = capture
+        if r.any? { |(_, id1)| id0 == id1 }
+          return capture
+        end
       end
 
-      mid.first
+      raise QueryError.new(
+        "linked subqueries #{ML.compact(a)} and #{ML.compact(b)} must share exactly \
+         one edge, but they share no edges")
     end
 
-    # Returns a set of capture names of edges captured in *pattern*.
+    # Returns a set of edge captures for edges captured in *pattern* (`(one capture_)` for
+    # singular and `(list capture_)` for plural captures).
     private def self.edges(pattern : Term) : Set(Term)
       edges = Set(Term).new
-      edges(pattern) do |edge|
-        edges << edge
-      end
+      edges(pattern) { |edge| edges << edge }
       edges
     end
 
@@ -93,7 +108,13 @@ module Ww::D7
       M1.walk(normp) do |x|
         Term.case(x) do
           matchpi %{(%'%let (%'%capture id_) (%'%edge _))} do
-            sink.call(id)
+            sink.call(Term.of(:one, id))
+
+            M1::WalkDecision::Skip
+          end
+
+          matchpi %{(%'%let (%'%capture id_) (%'%itemseq (%'%past %'(%singular (%edge _)) ⍊ min: 1)))} do
+            sink.call(Term.of(:list, id))
 
             M1::WalkDecision::Skip
           end
@@ -165,9 +186,25 @@ module Ww::D7
               Append.new(name, pattern, label)
             end
 
-            matchpi %{(return)} { Return.new }
-            matchpi %{(follow capture_)} { Follow.new(capture) }
-            matchpiT %{(follow+ capture_ min←(%number +i32!))} { FollowMany.new(capture, min) }
+            matchpi %{(return)} do
+              Return.new
+            end
+
+            matchpi %{(follow (one capture_))} do
+              Follow.new(EdgeSingleton.new(capture))
+            end
+
+            matchpi %{(follow (list capture_))} do
+              Follow.new(EdgeList.new(capture))
+            end
+
+            matchpiT %{(follow+ (one capture_) min←(%number +i32!))} do
+              FollowMany.new(EdgeSingleton.new(capture), min)
+            end
+
+            matchpiT %{(follow+ (list capture_) min←(%number +i32!))} do
+              FollowMany.new(EdgeList.new(capture), min)
+            end
           end
         end
 
@@ -318,6 +355,14 @@ module Ww::D7
       {ahead.steps[0], ahead.copy_with(steps: ahead.steps[1..])}
     end
 
+    private def edge_ids(env : Term::Dict, capture : EdgeSingleton) : Indexable(Term)
+      {env[capture.id]}
+    end
+
+    private def edge_ids(env : Term::Dict, capture : EdgeList) : Indexable(Term)
+      env[capture.id].items
+    end
+
     private def search(ctx, locus, step : Append, soln, ahead)
       return unless step.label.in?(ctx.decmap[locus.node])
       return if locus.node.in?(soln)
@@ -330,21 +375,21 @@ module Ww::D7
     end
 
     private def search(ctx, locus, step : Follow, soln, ahead)
-      edge = locus.env[step.capture]
+      edges = edge_ids(locus.env, step.capture)
 
       ret = Ret.new do |steps, soln, sink|
         search(ctx, locus, soln, ahead.copy_with(steps: steps, sink: sink))
       end
 
       locus.adj.each do |neighbor|
-        next unless ctx.hg.member?(neighbor, edge)
+        next unless edges.any? { |edge| ctx.hg.member?(neighbor, edge) }
 
         search(ctx, locus(ctx, neighbor), soln, ahead.copy_with(ret: ret))
       end
     end
 
     private def search(ctx, locus, step : FollowMany, soln, ahead)
-      edge = locus.env[step.capture]
+      edges = edge_ids(locus.env, step.capture)
 
       ret = Ret.new do |steps, soln, sink|
         search(ctx, locus, soln, ahead.copy_with(steps: steps, sink: sink))
@@ -353,7 +398,7 @@ module Ww::D7
       solns = [] of Soln
 
       locus.adj.each do |neighbor|
-        next unless ctx.hg.member?(neighbor, edge)
+        next unless edges.any? { |edge| ctx.hg.member?(neighbor, edge) }
 
         sink = Sink.new { |fsoln| solns << fsoln }
 

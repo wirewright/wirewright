@@ -896,8 +896,16 @@ module Ww
 
   struct Term
     # Represents a 256-bit hash of a term using four 64-bit blocks.
-    record H256, blk0 : UInt64, blk1 : UInt64, blk2 : UInt64, blk3 : UInt64 do
+    struct H256
       ALGORITHM = Digest::Blake3
+
+      getter blk0 : UInt64
+      getter blk1 : UInt64
+      getter blk2 : UInt64
+      getter blk3 : UInt64
+
+      def initialize(@blk0, @blk1, @blk2, @blk3)
+      end
 
       # :nodoc:
       def self.new(term : Term)
@@ -964,11 +972,8 @@ module Ww
 
       def to_s(io)
         Alpha48.encode(io, blk0)
-        io << "-"
         Alpha48.encode(io, blk1)
-        io << "-"
         Alpha48.encode(io, blk2)
-        io << "-"
         Alpha48.encode(io, blk3)
       end
     end

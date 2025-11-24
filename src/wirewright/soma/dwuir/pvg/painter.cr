@@ -221,7 +221,7 @@ module Ww::Soma::DwUIR
     end
 
     private def set_paint(paint : Paint::LinearGradient, bounds : Rect)
-      stops = paint.stops.to_readonly_slice do |offset, color|
+      stops = paint.stops.to_readonly_slice do |(offset, color)|
         PlutoVG::GradientStop.new(
           offset: offset,
           color: PlutoVG::Color.new(
@@ -248,7 +248,7 @@ module Ww::Soma::DwUIR
     end
 
     private def set_paint(paint : Paint::RadialGradient, bounds : Rect)
-      stops = paint.stops.to_readonly_slice do |offset, color|
+      stops = paint.stops.to_readonly_slice do |(offset, color)|
         PlutoVG::GradientStop.new(
           offset: offset,
           color: PlutoVG::Color.new(

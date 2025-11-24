@@ -864,7 +864,7 @@
 ;; An observer can make decisions based on its children and feed them back.
 (d7
   (frame
-    (frag @x
+    (circuit @x
       (group
         (cell @src 100)
         (view (@src ±n @voice0) ^(+ n 2))
@@ -875,7 +875,7 @@
       {sum: ^(+ a b)}
       {n: →sum}))
   (frame
-    (frag @x
+    (circuit @x
       (group
         (cell @src 302)
         (view (@src ±n @voice0) ^(+ n 2))
@@ -886,7 +886,7 @@
       {sum: ^(+ a b)}
       {n: →sum}))
   (frame
-    (frag @x
+    (circuit @x
       (group
         (cell @src 908)
         (view (@src ±n @voice0) ^(+ n 2))
@@ -902,51 +902,51 @@
 (d7
   (frame
     (delay 3 "Foo")
-    (frag @x
+    (circuit @x
       (group
         (delay 2 "Bar")
         (delay 5 "Baz")
-        (frag @y
+        (circuit @y
           (delay 3 "boo")))))
   (frame
     (delay 2 "Foo")
-    (frag @x
+    (circuit @x
       (group
         (delay 1 "Bar")
         (delay 4 "Baz")
-        (frag @y
+        (circuit @y
           (delay 2 "boo")))))
   (frame
     (delay 1 "Foo")
-    (frag @x
+    (circuit @x
       (group
         "Bar"
         (delay 3 "Baz")
-        (frag @y
+        (circuit @y
           (delay 1 "boo")))))
   (frame
     "Foo"
-    (frag @x
+    (circuit @x
       (group
         "Bar"
         (delay 2 "Baz")
-        (frag @y
+        (circuit @y
           "boo"))))
   (frame
     "Foo"
-    (frag @x
+    (circuit @x
       (group
         "Bar"
         (delay 1 "Baz")
-        (frag @y
+        (circuit @y
           "boo"))))
   (frame
     "Foo"
-    (frag @x
+    (circuit @x
       (group
         "Bar"
         "Baz"
-        (frag @y
+        (circuit @y
           "boo")))))
 
 ;; Ditto
@@ -955,12 +955,12 @@
     (delay 3 "Foo")
     (cell @x-view)
     (feed (copy @x) (over @x-view))
-    (frag @x
+    (circuit @x
       (group
         (delay 3 "Bar")
         (cell @y-view)
         (feed (copy @y) (over @y-view))
-        (frag @y
+        (circuit @y
           (delay 3 "Baz")))))
   (frame
     (delay 2 "Foo")
@@ -969,15 +969,15 @@
         (delay 2 "Bar")
         (cell @y-view (delay 2 "Baz"))
         (feed (copy @y) (over @y-view))
-        (frag @y
+        (circuit @y
           (delay 2 "Baz"))))
     (feed (copy @x) (over @x-view))
-    (frag @x
+    (circuit @x
       (group
         (delay 2 "Bar")
         (cell @y-view (delay 2 "Baz"))
         (feed (copy @y) (over @y-view))
-        (frag @y
+        (circuit @y
           (delay 2 "Baz")))))
   (frame
     (delay 1 "Foo")
@@ -986,15 +986,15 @@
         (delay 1 "Bar")
         (cell @y-view (delay 1 "Baz"))
         (feed (copy @y) (over @y-view))
-        (frag @y
+        (circuit @y
           (delay 1 "Baz"))))
     (feed (copy @x) (over @x-view))
-    (frag @x
+    (circuit @x
       (group
         (delay 1 "Bar")
         (cell @y-view (delay 1 "Baz"))
         (feed (copy @y) (over @y-view))
-        (frag @y
+        (circuit @y
           (delay 1 "Baz")))))
   (frame
     "Foo"
@@ -1003,15 +1003,15 @@
         "Bar"
         (cell @y-view "Baz")
         (feed (copy @y) (over @y-view))
-        (frag @y
+        (circuit @y
           "Baz")))
     (feed (copy @x) (over @x-view))
-    (frag @x
+    (circuit @x
       (group
         "Bar"
         (cell @y-view "Baz")
         (feed (copy @y) (over @y-view))
-        (frag @y "Baz"))))
+        (circuit @y "Baz"))))
   end)
 
 ;; Sensor-appearance chan 1:1
@@ -1186,7 +1186,7 @@
       (cell @val (arg 150))
       (appearance local @val))
     (module {}
-      (frag @s)
+      (circuit @s)
       (sensor (local ±n @s)
         (group
           (cell @v)
@@ -1203,7 +1203,7 @@
       (cell @val (arg 150))
       (appearance local @val))
     (module {}
-      (frag @s
+      (circuit @s
         (group
           (cell @v)
           (sensor (local (arg x←(%number _ < 100)) @v)
@@ -1224,7 +1224,7 @@
       (cell @val (arg 150))
       (appearance local @val))
     (module {}
-      (frag @s
+      (circuit @s
         (group
           (cell @v 51)
           (sensor (local (arg x←(%number _ < 100)) @v)
@@ -1501,10 +1501,10 @@
       (sensor (local ±n @back) ^n)))
   end)
 
-;; Sensor-appearance timing with frags.
+;; Sensor-appearance timing with circuits.
 (d7
   (frame
-    (frag @f
+    (circuit @f
       (group
         (sensor (local x_ @v) ^x)
         (cell @v)))
@@ -1513,7 +1513,7 @@
     (view (@f ⟨node←(cell @v _*)⟩ @n) ^node)
     (cell @n))
   (frame
-    (frag @f
+    (circuit @f
       (group
         (sensor (local x_ @v) ^x)
         (cell @v)))
@@ -1522,7 +1522,7 @@
     (view (@f ⟨node←(cell @v _*)⟩ @n) ^node)
     (cell @n (cell @v)))
   (frame
-    (frag @f
+    (circuit @f
       (group
         (sensor (local x_ @v) ^x)
         (cell @v)))
@@ -1531,7 +1531,7 @@
     (view (@f ⟨node←(cell @v _*)⟩ @n) ^node)
     (cell @n (cell @v)))
   (frame
-    (frag @f
+    (circuit @f
       (group
         (sensor (local x_ @v) ^x)
         (cell @v "Hello World")))
@@ -1539,6 +1539,114 @@
     (appearance local @foo)
     (view (@f ⟨node←(cell @v _*)⟩ @n) ^node)
     (cell @n (cell @v "Hello World")))
+  end)
+
+;; Fused chan sensor-cell and appearance-cell
+(d7
+  (frame
+    ((fused appearance) (local @x) 100)
+    ((fused sensor) (local y_ @y)))
+  (frame
+    ((fused appearance) (local @x))
+    ((fused sensor) (local y_ @y) 100))
+  end)
+
+;; View sensor
+(d7
+  (frame
+    ((fused appearance) (local @a) 100)
+    ((fused appearance) (local @b) 200)
+    ((fused appearance) (local @c) 200)
+    ((fused appearance) (local @d) 300)
+    (delay 3 (discard @b))
+    (sensor* (local x_ @x) ^x)
+    (cell @x))
+  (frame
+    ((fused appearance) (local @a) 100)
+    ((fused appearance) (local @b) 200)
+    ((fused appearance) (local @c) 200)
+    ((fused appearance) (local @d) 300)
+    (delay 2 (discard @b))
+    (sensor* (local x_ @x) ^x)
+    (cell @x (100 200 200 300)))
+  (frame
+    ((fused appearance) (local @a) 100)
+    ((fused appearance) (local @b) 200)
+    ((fused appearance) (local @c) 200)
+    ((fused appearance) (local @d) 300)
+    (delay 1 (discard @b))
+    (sensor* (local x_ @x) ^x)
+    (cell @x (100 200 200 300)))
+  (frame
+    ((fused appearance) (local @a) 100)
+    ((fused appearance) (local @b) 200)
+    ((fused appearance) (local @c) 200)
+    ((fused appearance) (local @d) 300)
+    (discard @b)
+    (sensor* (local x_ @x) ^x)
+    (cell @x (100 200 200 300)))
+  (frame
+    ((fused appearance) (local @a) 100)
+    ((fused appearance) (local @b))
+    ((fused appearance) (local @c) 200)
+    ((fused appearance) (local @d) 300)
+    (discard @b)
+    (sensor* (local x_ @x) ^x)
+    (cell @x (100 200 200 300)))
+  (frame
+    ((fused appearance) (local @a) 100)
+    ((fused appearance) (local @b))
+    ((fused appearance) (local @c) 200)
+    ((fused appearance) (local @d) 300)
+    (discard @b)
+    (sensor* (local x_ @x) ^x)
+    (cell @x (100 200 300)))
+  end)
+
+;; Fused view sensor-cell
+(d7
+  (frame
+    ((fused appearance) (local @a) 100)
+    ((fused appearance) (local @b) 200)
+    ((fused appearance) (local @c) 200)
+    ((fused appearance) (local @d) 300)
+    (delay 3 (discard @b))
+    ((fused sensor*) (local x_ @x)))
+  (frame
+    ((fused appearance) (local @a) 100)
+    ((fused appearance) (local @b) 200)
+    ((fused appearance) (local @c) 200)
+    ((fused appearance) (local @d) 300)
+    (delay 2 (discard @b))
+    ((fused sensor*) (local x_ @x) (100 200 200 300)))
+  (frame
+    ((fused appearance) (local @a) 100)
+    ((fused appearance) (local @b) 200)
+    ((fused appearance) (local @c) 200)
+    ((fused appearance) (local @d) 300)
+    (delay 1 (discard @b))
+    ((fused sensor*) (local x_ @x) (100 200 200 300)))
+  (frame
+    ((fused appearance) (local @a) 100)
+    ((fused appearance) (local @b) 200)
+    ((fused appearance) (local @c) 200)
+    ((fused appearance) (local @d) 300)
+    (discard @b)
+    ((fused sensor*) (local x_ @x) (100 200 200 300)))
+  (frame
+    ((fused appearance) (local @a) 100)
+    ((fused appearance) (local @b))
+    ((fused appearance) (local @c) 200)
+    ((fused appearance) (local @d) 300)
+    (discard @b)
+    ((fused sensor*) (local x_ @x) (100 200 200 300)))
+  (frame
+    ((fused appearance) (local @a) 100)
+    ((fused appearance) (local @b))
+    ((fused appearance) (local @c) 200)
+    ((fused appearance) (local @d) 300)
+    (discard @b)
+    ((fused sensor*) (local x_ @x) (100 200 300)))
   end)
 
 ;; Cell to event and event to cell
@@ -2347,7 +2455,7 @@
 ;; NOTE: this is a *very* long regression test.
 (d7
   (seed
-    (frag @chat
+    (circuit @chat
       (chat ()
         (queue (@front @back) ("100" "200" "100" "100" "100" "(" ")" "(+ 1 2" "qux"))
         (feed @front (over @src))
@@ -2835,4 +2943,191 @@
         (appearance local @front))))
   end)
 
-;; Scoped chats
+;; TODO: Scoped chats
+
+;; View of N cells (ok)
+(d7
+  (frame
+    (cell @x 100)
+    (cell @y 200)
+    (view ((@x @y) values_ @z) ^values)
+    (cell @z))
+  (frame
+    (cell @x 100)
+    (cell @y 200)
+    (view ((@x @y) values_ (@z "HbrcHbcfkvbEdmbgcoeCdQcpeDdzbJdubxcXBbecieFdXcCfheZeGdYcD")) ^values)
+    (cell @z (100 200)))
+  end)
+
+;; View of N cells (missing)
+(d7
+  (frame
+    (cell @x 100)
+    (cell @y)
+    (view ((@x @y) values_ @z) ^values)
+    (cell @z))
+  end)
+
+;; View of N cells (delay, queue, mismatch)
+(d7
+  (frame
+    (queue (@command @back) (greet welcome greet))
+    (delay 2 (discard @command))
+    (cell @name "Mary")
+    (cell @age 26)
+    (view ((@command @name @age) (greet name_ age_) @output)
+      ^"Hi, ⸢name⸣ of age ⸢age⸣!")
+    (cell @output))
+  (frame
+    (queue (@command @back) (greet welcome greet))
+    (delay 1 (discard @command))
+    (cell @name "Mary")
+    (cell @age 26)
+    (view ((@command @name @age) (greet name_ age_) (@output "dkbeciesdubxcXCcBfeeResdubxcXCbYdWczfbeKefcUwjtMbAddQbGdp"))
+      ^"Hi, ⸢name⸣ of age ⸢age⸣!")
+    (cell @output "Hi, Mary of age 26!"))
+  (frame
+    (queue (@command @back) (greet welcome greet))
+    (discard @command)
+    (cell @name "Mary")
+    (cell @age 26)
+    (view ((@command @name @age) (greet name_ age_) (@output "dkbeciesdubxcXCcBfeeResdubxcXCbYdWczfbeKefcUwjtMbAddQbGdp"))
+      ^"Hi, ⸢name⸣ of age ⸢age⸣!")
+    (cell @output "Hi, Mary of age 26!"))
+  (frame
+    (queue (@command @back) (welcome greet))
+    (discard @command)
+    (cell @name "Mary")
+    (cell @age 26)
+    (view ((@command @name @age) (greet name_ age_) (@output "dkbeciesdubxcXCcBfeeResdubxcXCbYdWczfbeKefcUwjtMbAddQbGdp"))
+      ^"Hi, ⸢name⸣ of age ⸢age⸣!")
+    (cell @output "Hi, Mary of age 26!"))
+  (frame
+    (queue (@command @back) (greet))
+    (discard @command)
+    (cell @name "Mary")
+    (cell @age 26)
+    (view ((@command @name @age) (greet name_ age_) @output)
+      ^"Hi, ⸢name⸣ of age ⸢age⸣!")
+    (cell @output))
+  (frame
+    (queue (@command @back) ())
+    (discard @command)
+    (cell @name "Mary")
+    (cell @age 26)
+    (view ((@command @name @age) (greet name_ age_) (@output "dkbeciesdubxcXCcBfeeResdubxcXCbYdWczfbeKefcUwjtMbAddQbGdp"))
+      ^"Hi, ⸢name⸣ of age ⸢age⸣!")
+    (cell @output "Hi, Mary of age 26!"))
+  (frame
+    (queue (@command @back) ())
+    (discard @command)
+    (cell @name "Mary")
+    (cell @age 26)
+    (view ((@command @name @age) (greet name_ age_) @output)
+      ^"Hi, ⸢name⸣ of age ⸢age⸣!")
+    (cell @output))
+  end)
+
+;; Fb over N cells
+(d7
+  (frame
+    (cell @x 100)
+    (cell @y 200)
+    (fb ((@x @y) (x_ y_))
+      {x: →y, y: →x}))
+  (frame
+    (cell @x 200)
+    (cell @y 100)
+    (fb ((@x @y) (x_ y_))
+      {x: →y, y: →x}))
+  (frame
+    (cell @x 100)
+    (cell @y 200)
+    (fb ((@x @y) (x_ y_))
+      {x: →y, y: →x})))
+  ;; ...
+
+(d7
+  (frame
+    (cell @x 100)
+    (cell @y 200)
+    (fb ((@x @y) (x_ y_))
+      {sum: ^(+ x y), diff: ^(- x y)}
+      {x: →sum, y: →diff}))
+  (frame
+    (cell @x 300)
+    (cell @y -100)
+    (fb ((@x @y) (x_ y_))
+      {sum: ^(+ x y), diff: ^(- x y)}
+      {x: →sum, y: →diff}))
+  (frame
+    (cell @x 200)
+    (cell @y 400)
+    (fb ((@x @y) (x_ y_))
+      {sum: ^(+ x y), diff: ^(- x y)}
+      {x: →sum, y: →diff}))
+  (frame
+    (cell @x 600)
+    (cell @y -200)
+    (fb ((@x @y) (x_ y_))
+      {sum: ^(+ x y), diff: ^(- x y)}
+      {x: →sum, y: →diff}))
+  (frame
+    (cell @x 400)
+    (cell @y 800)
+    (fb ((@x @y) (x_ y_))
+      {sum: ^(+ x y), diff: ^(- x y)}
+      {x: →sum, y: →diff})))
+  ;; ...
+
+;; TODO: Fb over N cells: mismatch
+
+;; Fragment: like circuit but write-only and embeds, doesn't isolate.
+(d7
+  (frame
+    (cell @x (delay 3 (feed @a @b)))
+    (feed @x @y)
+    (frag @y)
+    (cell @a 100)
+    (cell @b))
+  (frame
+    (cell @x)
+    (feed @x @y)
+    (frag @y (delay 3 (feed @a @b)))
+    (cell @a 100)
+    (cell @b))
+  (frame
+    (cell @x)
+    (feed @x @y)
+    (frag @y (delay 2 (feed @a @b)))
+    (cell @a 100)
+    (cell @b))
+  (frame
+    (cell @x)
+    (feed @x @y)
+    (frag @y (delay 1 (feed @a @b)))
+    (cell @a 100)
+    (cell @b))
+  (frame
+    (cell @x)
+    (feed @x @y)
+    (frag @y (feed @a @b))
+    (cell @a 100)
+    (cell @b))
+  (frame
+    (cell @x)
+    (feed @x @y)
+    (frag @y (feed @a @b))
+    (cell @a)
+    (cell @b 100))
+  end)
+
+;; BUG: circuit must create a scope like a module, must not conflict
+;; with outer cells on fold() passes etc.
+(d7
+  (frame
+    (circuit @x
+      (cell @foo))
+    (sensor (local x_ @foo) ^x)
+    ((fused appearance) (local @bar) 100))
+  end)

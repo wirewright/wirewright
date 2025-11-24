@@ -23,8 +23,8 @@ module Ww::D7
   # Constructs a grounded node from an enumerable of edges *ee*.
   #
   # See `Gnd`.
-  def gnd(node : Term, ee : Enumerable(Edge)) : Gnd
-    Gnd.new(node, edges: ee.to_readonly_slice(&.itself))
+  def gnd(node : Term, edges : Enumerable(Edge)) : Gnd
+    Gnd.new(node, edges: edges.to_readonly_slice(&.itself))
   end
 
   # Constructs a grounded node with the given *edges*. You can use `edge` to

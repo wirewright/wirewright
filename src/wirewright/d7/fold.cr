@@ -85,6 +85,10 @@ module Ww::D7
 
   def fold(ctx : FoldContext, feature : Circuit, frep : FoldRep) : Reaction
     default = -> do
+      # NOTE: Circuit's exist in a scope to ensure they're isolated in
+      # all passes.
+      subscope = ctx.scope.append({ctx.addr, Term[]})
+
       fold(ctx, feature.cont.call(Term.of(feature.node)), frep)
     end
 

@@ -8,11 +8,35 @@ module ::Ww::D7::Codex
 
   def classify(node : Term) : Feature
     Term.case(node) do
-      matchpi %{[frag @_ _]} do
+      matchpi %{[circuit (@_ _) _]} do
+        D7.circuit(node, 2...3) do |node1|
+          _, cfg, value0 = node1
+          edge, pattern = cfg
+          _, capture = edge
+
+          next D7.inert(node1) unless env = M1.match?(pattern, value0, backpaths: true)
+          next D7.inert(node1) unless view0 = env[capture]?
+
+          D7.mixture(node1, Term.of(:cell, edge, view0)) do |orig, mix|
+            backspec = Term[]
+
+            Term.case(mix) do
+              matchpi %{(cell @_)} { backspec = Term.entries({ {capture}, Term[] }) }
+              matchpi %{(cell @_ view1_)} { backspec = Term.entries({capture, view1}) }
+            end
+
+            value1 = M1.backmap({env}, Term.of(backspec), value0)
+
+            Term.of(orig.morph({2, value1}))
+          end
+        end
+      end
+
+      matchpi %{[circuit @_ _]} do
         D7.circuit(node, 2...3) do |node1|
           _, edge, value0 = node1
 
-          D7.mixture(node, Term.of(:cell, edge, value0)) do |orig, view|
+          D7.mixture(node1, Term.of(:cell, edge, value0)) do |orig, view|
             Term.of_case(view) do
               matchpi %{(cell @_)} { orig.morph({2, nil}) }
               matchpi %{(cell @_ value1_)} { orig.morph({2, value1}) }
@@ -21,11 +45,25 @@ module ::Ww::D7::Codex
         end
       end
 
-      matchpi %{[frag @edge_]} do
+      matchpi %{[circuit @edge_]}, %{[frag @edge_]} do
         D7.mixture(node, Term.of(:cell, edge)) do |orig, view|
           Term.of_case(view) do
             matchpi %{(cell @_)} { orig }
             matchpi %{(cell @_ value1_)} { orig.morph({2, value1}) }
+          end
+        end
+      end
+
+      matchpi %{[frag @edge_ value_]} do
+        mix0 = Term.of(:group,
+          Term.of(:cell, edge),
+          Term.of(:group, value))
+
+        D7.mixture(node, mix0) do |node0, mix1|
+          Term.of_case(mix1) do
+            matchpi %{⟨(cell @_ value1_)⟩} { node0.morph({2, value1}) }
+            matchpi %{⟨(group)⟩} { node0.morph({2, nil}) }
+            matchpi %{⟨(group value1_)⟩} { node0.morph({2, value1}) }
           end
         end
       end
@@ -97,8 +135,44 @@ module ::Ww::D7::Codex
         D7.gnd(node, D7.edge(u, 1, 0), D7.edge(v, 1, 2))
       end
 
+      matchpi %{[view (us←((%past @_ min: 1)) _ @v_) _]} do
+        edges = [] of D7::Edge
+        us.items.each_with_index do |u, i|
+          edges << D7.edge(u, 1, 0, i)
+        end
+        edges << D7.edge(v, 1, 2)
+
+        D7.gnd(node, edges)
+      end
+
+      matchpi %{[view (us←((%past @_ min: 1)) _ (@v_ _)) _]} do
+        edges = [] of D7::Edge
+        us.items.each_with_index do |u, i|
+          edges << D7.edge(u, 1, 0, i)
+        end
+        edges << D7.edge(v, 1, 2, 0)
+
+        D7.gnd(node, edges)
+      end
+
       matchpi %{[view (@u_ _ (@v_ _)) _]} do
         D7.gnd(node, D7.edge(u, 1, 0), D7.edge(v, 1, 2, 0))
+      end
+
+      matchpi(
+        %{[view (ml @u_) (term @v_)]},
+        %{[view (ml @u_) (terms @v_)]},
+        %{[view (ml @u_) (document @v_)]},
+      ) do
+        D7.gnd(node, D7.edge(u, 1, 1), D7.edge(v, 2, 1))
+      end
+
+      matchpi %{[view [alloy @base_ @globals_ @vars_ @view_] (composite @comp_)]} do
+        D7.gnd(node, D7.edge(base, 1, 1), D7.edge(globals, 1, 2), D7.edge(vars, 1, 3), D7.edge(view, 1, 4), D7.edge(comp, 2, 1))
+      end
+
+      matchpi %{[view [alloy @vars_ @template_] (instance @instance_)]} do
+        D7.gnd(node, D7.edge(vars, 1, 1), D7.edge(template, 1, 2), D7.edge(instance, 2, 1))
       end
 
       matchpi %{[log (@u_ _ @v_) _]} do
@@ -107,6 +181,10 @@ module ::Ww::D7::Codex
 
       matchpi %{[fb (@edge_ _) _]}, %{[fb (@edge_ _) _ _]} do
         D7.gnd(node, D7.edge(edge, 1, 0))
+      end
+
+      matchpi %{[fb (us←((%past @_ min: 1)) _) _? _]} do
+        D7.gnd(node, edges: us.items.map_with_index { |u, i| D7.edge(u, 1, 0, i) })
       end
 
       matchpi %{[queue (@front_ @back_ ⍊ min_: (%optional 1 (%number +i32!)) max_: (%optional ∞ (%any° (%number +i32!) ∞))) queue_dict]}, min: Int32 do
@@ -152,12 +230,70 @@ module ::Ww::D7::Codex
         end
       end
 
+      # Chan sensor
       matchpi %{[sensor (_ _ @u_) _]} do
         D7.gnd(node, D7.edge(u, 1, 2))
       end
 
+      # Fused view sensor-cell
+      matchpi %{[(fused sensor*) (tspace_ pattern_ @edge_) _?]} do
+        value0 = node[2]?
+
+        mix0 = Term.of(:group,
+          Term.of(:cell, edge, value0),
+          Term.of(:"sensor*", {tspace, pattern, edge}, {:^, edge[1]}),
+        )
+
+        D7.mixture(node, mix0) do |orig, mix1|
+          Term.of_case(mix1) do
+            matchpi %{⟨(cell @_)⟩} { Term.of(orig.morph({2, nil})) }
+            matchpi %{⟨(cell @_ value1_)⟩} { Term.of(orig.morph({2, value1})) }
+          end
+        end
+      end
+
+      # View sensor
+      matchpi %{[sensor* (_ _ @u_) _]} do
+        D7.gnd(node, D7.edge(u, 1, 2))
+      end
+
+      # Fused chan sensor-cell
+      matchpi %{[(fused sensor) (tspace_ pattern_ @edge_) _?]} do
+        value0 = node[2]?
+
+        mix0 = Term.of(:group,
+          Term.of(:cell, edge, value0),
+          Term.of(:sensor, {tspace, pattern, edge}, {:^, edge[1]}),
+        )
+
+        D7.mixture(node, mix0) do |orig, mix1|
+          Term.of_case(mix1) do
+            matchpi %{⟨(cell @_)⟩} { Term.of(orig.morph({2, nil})) }
+            matchpi %{⟨(cell @_ value1_)⟩} { Term.of(orig.morph({2, value1})) }
+          end
+        end
+      end
+
+      # Appearance
       matchpi %{[appearance _ @u_]} do
         D7.gnd(node, D7.edge(u, 2))
+      end
+
+      # Fused appearance-cell
+      matchpi %{[(fused appearance) (tspace_ @edge_) _?]} do
+        value0 = node[2]?
+
+        mix0 = Term.of(:group,
+          Term.of(:cell, edge, value0),
+          Term.of(:appearance, tspace, edge),
+        )
+
+        D7.mixture(node, mix0) do |orig, mix1|
+          Term.of_case(mix1) do
+            matchpi %{⟨(cell @_)⟩} { Term.of(orig.morph({2, nil})) }
+            matchpi %{⟨(cell @_ value1_)⟩} { Term.of(orig.morph({2, value1})) }
+          end
+        end
       end
 
       # |@ d7.node.chat
@@ -238,8 +374,20 @@ module ::Ww::D7::Codex
         D7.gnd(node)
       end
 
+      # matchpi %{[m1/ruleset @_ @_]} do
+      #   D7.gnd(node)
+      # end
+
       matchpi %{[repr (result @_) (ok @_)]} do
         D7.gnd(node)
+      end
+
+      matchpi %{[path _string _?]} do
+        D7.gnd(node)
+      end
+
+      matchpi %{[window (@u_ _) _*]} do
+        D7.gnd(node, D7.edge(u, 1, 0))
       end
 
       otherwise { D7.inert(node) }
@@ -281,6 +429,22 @@ module ::Ww::D7::Codex
     end
 
     Slice({UInt32, Reaction}).new(mem, size, read_only: true)
+  end
+
+  def collate(grp : D7::Regime::NodeCaptureGroup, keys : Indexable(Term), selector : Term, value : Term) : Term
+    assert grp.size == keys.size
+
+    argmt = Term::Dict.build do |commit|
+      keys.each do |key|
+        grp.each do |_, node|
+          next unless node.env[selector] == key
+
+          commit << node.env[value]
+        end
+      end
+    end
+
+    Term.of(argmt)
   end
 
   def first(grp : D7::Regime::NodeCaptureGroup) : D7::Regime::NodeCapture
@@ -392,8 +556,9 @@ module ::Ww::D7::Codex
     end
   end
 
-  def tspace
+  def tspace : D7::Classifier, Term -> Term
     sensors = [] of {Term, D7::NodeAddr, (Term::Dict -> Term)}
+    view_sensors = [] of {Term, D7::NodeAddr, (Array(Term::Dict) -> Term)}
     appearances = [] of {Term, D7::NodeAddr, (-> Term)}
 
     regime = D7.regime do
@@ -410,6 +575,21 @@ module ::Ww::D7::Codex
         nil # No patches
       end
 
+      rule %{(one dev [sensor* (tspace_ pattern_ @edge_) template_]) (one mem [cell @edge_ _?])} do
+        tspace, pattern, template = first(dev, :tspace, :pattern, :template)
+        cell = first(mem)
+        patch = ->(envs : Array(Term::Dict)) do
+          values = envs.map do |env|
+            Alloy.render(env, template)
+          end
+          values.sort_by! { |value| ML.compact(value) }
+          Term.of(cell.node.morph({2, values}))
+        end
+        view_sensors << {pattern, cell.addr, patch}
+
+        nil # No patches
+      end
+
       # An appearance-cell complex acts as an "appearance channel", meaning the appearance
       # finds suitable sensor-cell complex(es) and moves its value to their cells.
       rule %{(one dev [appearance tspace_ @edge_]) (one mem [cell @edge_ value_])} do
@@ -417,11 +597,11 @@ module ::Ww::D7::Codex
         value = first(mem, :value)
         cell = first(mem)
 
-        patch = -> do
+        consume = -> do
           Term.of(cell.node.morph({2, nil}))
         end
 
-        appearances << {value, cell.addr, patch}
+        appearances << {value, cell.addr, consume}
 
         nil # No patches
       end
@@ -436,18 +616,26 @@ module ::Ww::D7::Codex
           patches = {} of D7::NodeAddr => Term
 
           appearances.each do |matchee, srcaddr, take|
-            sent = false
+            consumed = false
 
             sensors.each do |pattern, dstaddr, put|
               next unless env = M1.match?(pattern, matchee)
 
               patches[dstaddr] = put.call(env)
-              sent = true
+              consumed = true
             end
 
-            next unless sent
+            next unless consumed
 
             patches[srcaddr] = take.call
+          end
+
+          view_sensors.each do |pattern, dstaddr, put|
+            envs = appearances.compact_map do |matchee, srcaddr, _|
+              M1.match?(pattern, matchee)
+            end
+
+            patches[dstaddr] = put.call(envs)
           end
 
           D7.fold(D7.fold_context(clf), unit) do |ctx, feature, rec, default|
@@ -474,7 +662,23 @@ module ::Ww::D7::Codex
     end
   end
 
-  def regime
+  DEFAULT_SELECTOR = ML.term("(%any° [rule pattern_ template_] [backmap pattern_ backspec_])")
+
+  def err(e : ML::SyntaxError)
+    excerpt, line, column = ML::SyntaxError.lookaround(e.text)
+
+    Term.of(:err,
+      tags: {ml: true},
+      detail: e.detail,
+      excerpt: excerpt,
+      line: line,
+      column: column,
+      "byte-start": e.text.byte_start,
+      "byte-end": e.text.byte_end,
+    )
+  end
+
+  def regime : D7::Regime
     D7.regime do
       rule %{(one dev [feed @src_ (pulse @srcs_)]) (one src [cell @src_ x_])} do
         next unless chat(dev).enq
@@ -537,6 +741,67 @@ module ::Ww::D7::Codex
         next if entry == entries.items.last?
 
         patch(log, &.morph({2, entries.append(entry)}))
+      end
+
+      rule %{(one dev [view cfg←(alloy @base_ @globals_ @vars_ @view_ ¦ {% selector}) (composite @comp_)]) (one basesrc [cell @base_ term_]) (one globalsrc [cell @globals_ term_dict]) (one varsrc [cell @vars_ term_dict]) (one viewsrc [cell @view_ term_]) (one dst [cell @comp_ _?])} do
+        base, globals, vars, view = first(basesrc, :term), first(globalsrc, :term), first(varsrc, :term), first(viewsrc, :term)
+        selector = first(dev, :cfg)[:selector]? || DEFAULT_SELECTOR
+        ruleset = Ruleset.select(selector, base)
+
+        comp, issues = Alloy.compose_with_issues(ruleset, globals.as_d, vars.as_d, view)
+        # FIXME: issues must be sent as events
+
+        patch(dst, &.morph({2, comp}))
+      end
+
+      rule %{(one dev [view (alloy @vars_ @template_) (instance @instance_)]) (one varsrc [cell @vars_ term_dict]) (one templatesrc [cell @template_ term_]) (one dst [cell @instance_ _?])} do
+        vars, template = first(varsrc, :term), first(templatesrc, :term)
+        instance, issues = Alloy.render_with_issues(vars.as_d, template)
+        # FIXME: issues must be sent as events
+
+        patch(dst, &.morph({2, instance}))
+      end
+
+      rule %{(one dev [view (ml @src_) (term @dst_)]) (one src [cell @src_ ml_string]) (one dst [cell @dst_ _?])} do
+        ml = first(src, :ml)
+
+        begin
+          term = ML.term(ml.to(String))
+          patch(dst, &.morph({2, term}))
+        rescue e : ML::SyntaxError
+          patches(
+            emit(dev, {err(e)}),
+            patch(dst, &.morph({2, nil}))
+          )
+        end
+      end
+
+      rule %{(one dev [view (ml @src_) (terms @dst_)]) (one src [cell @src_ ml_string]) (one dst [cell @dst_ _?])} do
+        ml = first(src, :ml)
+
+        begin
+          terms = ML.terms(ml.to(String))
+          patch(dst, &.morph({2, terms}))
+        rescue e : ML::SyntaxError
+          patches(
+            emit(dev, {err(e)}),
+            patch(dst, &.morph({2, nil}))
+          )
+        end
+      end
+
+      rule %{(one dev [view (ml @src_) (document @dst_)]) (one src [cell @src_ ml_string]) (one dst [cell @dst_ _?])} do
+        ml = first(src, :ml)
+
+        begin
+          document = ML.document(ml.to(String))
+          patch(dst, &.morph({2, document}))
+        rescue e : ML::SyntaxError
+          patches(
+            emit(dev, {err(e)}),
+            patch(dst, &.morph({2, nil}))
+          )
+        end
       end
 
       # This rule handles the following situations:
@@ -659,21 +924,97 @@ module ::Ww::D7::Codex
         end
       end
 
-      # If src changes, calculate dst.
       rule %{(one dev [view (@src_ pattern_ @dst_) template_]) (one src [cell @src_ x_]) (one dst [cell @dst_ _?])} do
-        pattern, template = first(dev, :pattern, :template)
-        x = first(src, :x)
-        next unless vars = M1.match?(pattern, x)
+        pattern, template, dst_edge, x = {*first(dev, :pattern, :template, :dst), first(src, :x)}
+
+        # Dst disappears on pattern mismatch.
+        unless vars = M1.match?(pattern, x)
+          next patch(dst, &.morph({2, nil}))
+        end
 
         instance = Alloy.render(vars, template)
 
-        patch(dst, &.morph({2, instance}))
+        # TODO: errors as events
+        patches(
+          patch(dev, &.morph({1, 2, {dst_edge, Term.hashcode256(instance)}})),
+          patch(dst, &.morph({2, instance})),
+        )
       end
 
-      # If src disappears, dst disappears.
-      rule %{(one dev [view (@src_ _ @dst_) _]) (one src [cell @src_]) (one dst [cell @dst_ _])} do
-        patch(dst, &.morph({2, nil}))
+      rule %{(one dev [view (@src_ pattern_ (@dst_ state_)) template_]) (one src [cell @src_ x_]) (one dst [cell @dst_ _?])} do
+        pattern, template, dst_edge, state, x = {*first(dev, :pattern, :template, :dst, :state), first(src, :x)}
+
+        # Dst disappears on pattern mismatch.
+        unless vars = M1.match?(pattern, x)
+          next patches(
+            patch(dev, &.morph({1, 2, dst_edge})),
+            patch(dst, &.morph({2, nil})),
+          )
+        end
+
+        instance = Alloy.render(vars, template)
+        hash256 = Term.of(Term.hashcode256(instance))
+        next if state == hash256
+
+        # TODO: errors as events
+        patches(
+          patch(dev, &.morph({1, 2, {dst_edge, hash256}})),
+          patch(dst, &.morph({2, instance})),
+        )
       end
+
+      rule %{(one dev [view (@src_ _ (%any° @dst_ (@dst_ _))) _]) (one src [cell @src_]) (one dst [cell @dst_ _])} do
+        dst_edge = first(dev, :dst)
+
+        patches(
+          patch(dev, &.morph({1, 2, dst_edge})),
+          patch(dst, &.morph({2, nil})),
+        )
+      end
+
+      rule %{(one dst [cell @dst_ _?]) (link (one dev [view (src←((%past @_ min: 1)) pattern_ output←(%any° @dst_ (@dst_ _))) template_]) (many src [cell @src_ term_]))} do
+        pattern, template, src_edges, dst_edge, output = first(dev, :pattern, :template, :src, :dst, :output)
+        unless src_edges.size == src.size # Some cells missing or duplicated
+          next patches(
+            patch(dev, &.morph({1, 2, dst_edge})),
+            patch(dst, &.morph({2, nil})),
+          )
+        end
+
+        matchee = collate(src, src_edges.items, Term.of(:src), Term.of(:term))
+
+        unless vars = M1.match?(pattern, matchee)
+          next patches(
+            patch(dev, &.morph({1, 2, dst_edge})),
+            patch(dst, &.morph({2, nil})),
+          )
+        end
+
+        instance = Alloy.render(vars, template)
+        # TODO: errors as events
+
+        hash256 = Term.hashcode256(instance)
+
+        Term.case(output) do
+          matchpi %{(@_ state_)} do
+            next if state == hash256
+
+            patches(
+              patch(dev, &.morph({1, 2, {dst_edge, hash256}})),
+              patch(dst, &.morph({2, instance})),
+            )
+          end
+
+          matchpi %{@_} do
+            patches(
+              patch(dev, &.morph({1, 2, {dst_edge, hash256}})),
+              patch(dst, &.morph({2, instance})),
+            )
+          end
+        end
+      end
+
+      # TODO: handle src-itself-disappears
 
       rule %{(one dev [fb (@edge_ pattern_) backspec_]) (one tgt [cell @edge_ value0_])} do
         pattern, backspec = first(dev, :pattern, :backspec)
@@ -681,6 +1022,54 @@ module ::Ww::D7::Codex
         next unless value1 = M1.backmap?(pattern, backspec, value0)
 
         patch(tgt, &.morph({2, value1}))
+      end
+
+      rule %{(one dev [fb (tgt←((%past @_ min: 1)) pattern_) backspec_]) (many tgt [cell @tgt_ term_])} do
+        pattern, backspec, tgt_edges = first(dev, :pattern, :backspec, :tgt)
+        unless tgt_edges.size == tgt.size
+          next # Too many or too few associated cells
+        end
+
+        matchee = collate(tgt, tgt_edges.items, Term.of(:tgt), Term.of(:term))
+
+        next unless results = M1.backmap?(pattern, backspec, Term.of(matchee))
+
+        unless results.size == tgt_edges.size
+          next # The backmap mutilated our original matchee.
+        end
+
+        tgt_edges.items.to_readonly_slice do |tgt_edge, index|
+          id, capture = tgt.find! { |_, node| node.env[:tgt] == tgt_edge }
+
+          {id, D7.rxn(capture.node.morph({2, results[index]}))}
+        end
+      end
+
+      rule %{(one dev [fb (tgt←((%past @_ min: 1)) pattern_) template_ backspec_]) (many tgt [cell @tgt_ term_])} do
+        pattern, backspec, template, tgt_edges = first(dev, :pattern, :backspec, :template, :tgt)
+        unless tgt_edges.size == tgt.size
+          next # Too many or too few associated cells
+        end
+
+        matchee = collate(tgt, tgt_edges.items, Term.of(:tgt), Term.of(:term))
+
+        next unless env = M1.match?(pattern, matchee, backpaths: true)
+        next unless backpaths = env[:"(backpaths)"]?
+
+        env1 = Alloy.render(env.without(:"(backpaths)"), template)
+        next unless env1.type.dict?
+
+        results = M1.backmap({env1.with(:"(backpaths)", backpaths)}, backspec, matchee)
+
+        unless results.size == tgt_edges.size
+          next # The backmap mutilated our original matchee.
+        end
+
+        tgt_edges.items.to_readonly_slice do |tgt_edge, index|
+          id, capture = tgt.find! { |_, node| node.env[:tgt] == tgt_edge }
+
+          {id, D7.rxn(capture.node.morph({2, results[index]}))}
+        end
       end
 
       rule %{(one dev [fb (@edge_ pattern_) template_ backspec_]) (one tgt [cell @edge_ value0_])} do

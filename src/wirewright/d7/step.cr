@@ -1,4 +1,33 @@
 module Ww::D7
+  def walk(clf : Classifier, circuit : Term, **kwargs, &frep : FoldContext, Gnd -> Reaction) : Term
+    unit(circuit) do |unit|
+      walk(fold_context(clf), unit, **kwargs, &frep)
+    end
+  end
+
+  def walk(ctx : FoldContext, root : Term, **kwargs, &frep : FoldContext, Gnd -> Reaction) : Reaction
+    walk(ctx, ctx.clf.call(root), **kwargs, &frep)
+  end
+
+  def walk(ctx : FoldContext, root : Feature, subcircuits : Bool = true, &frep : FoldContext, Gnd -> Reaction) : Reaction
+    fold(ctx, root) do |ctx, feature, rec, default|
+      case feature
+      when Gnd
+        frep.call(ctx, feature)
+      when Chat
+        fold(ctx.copy_with(chat: NodeChat.new(msg: feature.queue.items.first? || Term.of(:cycle), enq: feature.enq)), feature.cont, rec)
+      when Circuit
+        if subcircuits
+          fold(ctx, scope(Term[], parent(feature.node, feature.range)), rec)
+        else
+          default.call
+        end
+      else
+        default.call
+      end
+    end
+  end
+
   defrecord Top, queue : Term::Dict
 
   def step(clf : Classifier, regime : Regime, top : Top, circuit : Term, **kwargs, &tick : Term, NodeChat -> Reaction) : {Top, Term}
@@ -52,27 +81,14 @@ module Ww::D7
     trmap = [] of NodeAddr
     chats = [] of NodeChat
 
-    _ = fold(ctx, root) do |ctx, feature, rec, default|
-      case feature
-      when Gnd
-        node, edges = scoped(ctx.scope, feature.node, feature.edges)
-        nodemap << node
-        edgemap << edges
-        trmap << ctx.addr
-        chats << ctx.chat
+    _ = walk(ctx, root, subcircuits: subcircuits) do |ctx, feature|
+      node, edges = scoped(ctx.scope, feature.node, feature.edges)
+      nodemap << node
+      edgemap << edges
+      trmap << ctx.addr
+      chats << ctx.chat
 
-        default.call
-      when Chat
-        fold(ctx.copy_with(chat: NodeChat.new(msg: feature.queue.items.first? || Term.of(:cycle), enq: feature.enq)), feature.cont, rec)
-      when Circuit
-        if subcircuits
-          fold(ctx, parent(feature.node, feature.range), rec)
-        else
-          default.call
-        end
-      else
-        default.call
-      end
+      D7.rxn(feature.node)
     end
 
     if nodemap.empty?
@@ -86,6 +102,41 @@ module Ww::D7
 
     rxns = regime.reactions(hg, chats.to_readonly_slice)
     rxns.transform_keys { |key| trmap[key] }
+  end
+
+  def unit(circuit : Term, & : Term -> Reaction) : Term
+    unless circuit.type.dict?
+      return circuit
+    end
+
+    # A circuit like:
+    #
+    #   (cell @x 100)
+    #   (cell @y)
+    #   (feed @x @y @x)
+    #
+    # ... turns into:
+    #
+    #   (unit
+    #     (cell @x 100)
+    #     (cell @y)
+    #     (feed @x @y @x))
+    #
+    # ... at the top-level.
+
+    unit = Term::Dict.build do |commit|
+      commit << :unit
+      commit.concat(circuit.items)
+    end
+
+    rxn = yield Term.of(unit)
+
+    # NOTE: rxn's emission can be nonempty if the user wishes that messages
+    # bubble up above the toplevel. We simply discard such messages.
+
+    Term.matchpi(rxn.node, %{(unit nodes_*)}) do
+      Term.of(nodes | circuit.pairspart)
+    end
   end
 
   def unit(top : Top, circuit : Term, & : Term -> Reaction) : {Top, Term}
