@@ -727,53 +727,117 @@ class IO::Memory
   end
 end
 
-# Performs word wrapping followed by character wrapping on *text*.
-#
-# - *maxwidth* is the maximum number of columns that the text should occupy (inclusive).
-#
-# Appends wrapped text to *io*.
-# FIXME: this is a very useful routine but it is broken in how it handles whitespace!!! It must keep all whitespace!!
-# I.e. we're not SPLITTING on whitespace we're DECIDING WHICH WHITESPACE TO CONVERT TO A BREAK!
-def wrap(io : IO, text : String, maxwidth = 60) : Nil
-  return unless maxwidth > 0
 
-  width = 0
+module TextWrap
+  extend self
 
-  text.each_line do |line|
-    line.split(' ') do |word|
-      while width + word.size >= maxwidth
-        # Insert soft breaks.
-        if width > 0
-          io.puts
+  private def scan(text : String, maxw : Int, maxh : Int, &) : Nil
+    w = 0
+    h = 1
+    wsidx = wsx = nil
+
+    text.view.each_line do |line|
+      line.each_char_with_abs_byte_index do |char, byte_index|
+        if w + 1 > maxw
+          next if char == ' ' # Ignore whitespace that we can't fit.
+
+          # Max height exceeded.
+          if h > maxh
+            yield :trunc_before, byte_index
+            return
+          end
+
+          # Reset width as if we're on a new line.
+
+          if wsidx && wsx # Whitespace available on the line
+            yield :br_at, wsidx
+            w = w - wsx
+          else # No whitespace on the line
+            yield :br_before, byte_index
+            w = 1
+          end
+
+          wsidx = wsx = nil
+          h += 1
+          next
         end
 
-        trunk = word[0, maxwidth]? || word
-        io << trunk
+        if char == ' '
+          wsx = w
+          wsidx = byte_index
+          w += 1
+          next
+        end
 
-        width = trunk.size
-        word = word[width..]
+        w += 1
       end
 
-      next if word.empty?
+      # EOI, no trailing newline
+      return unless line.ends_with?('\n')
 
-      if width > 0
-        io << ' '
-        width += 1
+      # Newline or trailing newline.
+      w = 0
+      wsidx = nil
+
+      # Max height exceeded
+      if h > maxh
+        yield :trunc_before, line.byte_end - 1
+        return
       end
 
-      io << word
-      width += word.size
+      h += 1
+    end
+  end
+
+  def wrap(io : IO, text : String, maxw : Int, maxh : Int, *, ellipsis : String = "…") : Nil
+    cursor = 0
+    truncated = false
+
+    scan(text, maxw, maxh) do |action, index|
+      prefix = text.view(byte_start: cursor, byte_end: index)
+      cursor += prefix.bytesize
+
+      io << prefix
+
+      case action
+      when :br_at
+        io << '\n'
+        cursor += 1 # Skip index-th char
+      when :br_before
+        io << '\n'
+      when :trunc_before
+        truncated = true
+
+        # Text was truncated. Replace N last chars with ellipsis to indicate
+        # truncation, if possible. If ellipsis does not fit, do not insert it.
+        if io.bytesize >= ellipsis.bytesize
+          io.back(ellipsis.bytesize)
+          io << ellipsis
+        end
+
+        break
+      end
     end
 
-    # Insert hard breaks.
-    io.puts
-    width = 0
+    return if truncated
+
+    remaining = text.view(byte_start: cursor, byte_end: text.bytesize)
+    io << remaining
+  end
+
+  def wrap(text : String, maxw : Int, maxh : Int, **kwargs)
+    String.build((text.bytesize * 1.33).to_i) do |io|
+      wrap(io, text, maxw, maxh, **kwargs)
+    end
   end
 end
 
-# Same as `wrap`, but builds a `String` instead of appending to an IO.
-def wrap(text : String, maxwidth = 60) : String
-  String.build { |io| wrap(io, text, maxwidth) }
+def wrap(io : IO, text : String, maxw : Int = 60, maxh = Int32::MAX, **kwargs)
+  TextWrap.wrap(io, text, maxw, maxh, **kwargs)
+end
+
+def wrap(text : String, maxw : Int = 60, maxh = Int32::MAX, **kwargs)
+  TextWrap.wrap(text, maxw, maxh, **kwargs)
 end
 
 class ::Hash
@@ -3079,24 +3143,6 @@ macro try?(head, *tail)
 end
 
 abstract struct Enum
-  def self.new(tuple : Tuple)
-    join(*tuple)
-  end
-
-  private def self.join(v : Symbol)
-    {% for member in @type.constants %}
-      if v == {{member.underscore.symbolize}}
-        return {{@type}}::{{member}}
-      end
-    {% end %}
-
-    raise ArgumentError.new("no such member: #{v}")
-  end
-
-  private def self.join(v1, v2, *vs)
-    join(v1) | join(v2, *vs)
-  end
-
   def symbolize : Symbol
     {% begin %}
       case self

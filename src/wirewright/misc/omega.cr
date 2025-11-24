@@ -91,7 +91,7 @@ module Ww
 
     # Displays as a string of text.
     def text(caption : String, style : Style = :normal, *, wrap = true)
-      lines = (wrap ? wrap(caption, maxwidth: 80) : caption).lines
+      lines = (wrap ? wrap(caption, maxw: 80) : caption).lines
       if lines.size == 1
         return Text.new(caption, style)
       end
