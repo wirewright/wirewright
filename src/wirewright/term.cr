@@ -523,7 +523,7 @@ module Ww
                   **{{ double_splat }},
                 {% end %}\
                 {% if (arg = method.block_arg) && !arg.name.empty? %}&{{arg.name}}{% end %}\
-              ) {% if (arg = method.block_arg) && arg.name.empty? %}{ |*%args| yield *%args }{% end %}
+              ) {% if (arg = method.block_arg) && arg.name.empty? %}{ |*%blkargs| yield *%blkargs }{% end %}
             end
           {% end %}\
         {% end %}\
