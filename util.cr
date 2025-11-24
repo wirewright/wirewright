@@ -4564,7 +4564,7 @@ class Log::AsyncInMemoryBackend < Log::Backend
   end
 end
 
-struct BlockingQueue(T)
+class BlockingQueue(T)
   def initialize
     @queue = Deque(T).new
     @mutex = Sync::Mutex.new
