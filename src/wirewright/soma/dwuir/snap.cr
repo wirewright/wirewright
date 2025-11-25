@@ -29,10 +29,27 @@ module Ww::Soma::DwUIR
       end
     end
 
+    private def rgb_zstd : Sink
+      ->(io : IO, screen : PixelRect) do
+        io << screen.width << ":" << screen.height << ":"
+
+        # level: -7 (fast) -> 22 (best)
+        Zstd::Compress::IO.open(io, level: 3) do |sink|
+          screen.region(screen.bounds).each_pixel_with_coords do |pixel, _, _|
+            r, g, b, _ = pixel.rgba8
+            sink.write_byte(r)
+            sink.write_byte(g)
+            sink.write_byte(b)
+          end
+        end
+      end
+    end
+
     # Returns a sink function for *format*, or `nil` if unsupported.
     def []?(format : String) : Sink?
       case format
-      when "ppm" then ppm
+      when "ppm"      then ppm
+      when "rgb-zstd" then rgb_zstd
       end
     end
 
@@ -43,7 +60,7 @@ module Ww::Soma::DwUIR
 
     # Returns a list of supported formats.
     def supported : Indexable(String)
-      {"ppm"}
+      {"ppm", "rgb-zstd"}
     end
   end
 

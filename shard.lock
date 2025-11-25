@@ -20,3 +20,7 @@ shards:
     git: https://github.com/ysbaddaden/sync.git
     version: 0.1.0+git.commit.2b8a3b2a9ee563c10cdfdd953356c2182b079e32
 
+  zstd:
+    git: https://github.com/didactic-drunk/zstd.cr.git
+    version: 1.2.0
+

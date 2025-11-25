@@ -22,6 +22,8 @@ dependencies:
     commit: d7ac0b7
   sync:
     github: ysbaddaden/sync
+  zstd:
+    github: didactic-drunk/zstd.cr
 # dependencies:
 #   pg:
 #     github: will/crystal-pg
