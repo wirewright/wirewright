@@ -2204,18 +2204,32 @@ struct StringView
 end
 
 class String
-  def brief(*, limit : Int = 60, ellipsis : String = "…") : String
+  alias Ellipsis = String | CharsOmitted
+
+  record CharsOmitted, l = "[…", r = "…]"
+
+  private def brief_render(ellipsis : String, limit : Int)
+    ellipsis
+  end
+
+  private def brief_render(ellipsis : CharsOmitted, limit : Int)
+    "#{ellipsis.l}#{size - limit} char(s)#{ellipsis.r}"
+  end
+
+  def brief(*, limit : Int = 60, ellipsis : Ellipsis = "…") : String
     return self if size <= limit
 
-    if limit <= ellipsis.size
+    rendered = brief_render(ellipsis, limit)
+
+    if limit <= rendered.size
       return self[0, limit]
     end
 
-    rem = limit - ellipsis.size
+    rem = limit - rendered.size
     lsize = rem // 2
     rsize = rem - lsize
 
-    "#{self[0, lsize]}#{ellipsis}#{self[-rsize, rsize]}"
+    "#{self[0, lsize]}#{rendered}#{self[-rsize, rsize]}"
   end
 
   def fill(char : Char) : String
