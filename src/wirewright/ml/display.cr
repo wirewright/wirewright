@@ -130,6 +130,14 @@ module Ww::ML
     end
   end
 
+  def compact(io : IO, term : Term::Num) : Nil
+    if term.approx?
+      io << "≈"
+    end
+
+    term.decimal(io)
+  end
+
   # Appends the compact WwML representation of *term* to *io*.
   def compact(io : IO, term : Term) : Nil
     compact(io, Term[term])

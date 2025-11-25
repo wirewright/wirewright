@@ -61,6 +61,7 @@
 # | `(_* A_string) cat ␤ B ␤`          | `(_* _string)` | Stitches strings `A` and `B`                                                                          |
 # | `(_* A_string) chrcat16 ␤ C ␤`     | `(_* _string)` | Stitches string `A` and a Unicode character given its hex codepoint `C`                               |
 # | `(_*) int ␤ L ␤`                   | `(_* _number)` | Pushes an arbitrarily sized base-10 integer literal `L`                                               |
+# | `(_*) hexfloat ␤ L ␤`              | `(_* _number)` | Pushes a hexfloat parsed from `L` (see `Float64.parse_hexfloat`)                                               |
 # | `(_* A_number B_number) ratio ␤`   | `(_* _number)` | Pushes the result of dividing `A` by `B`                                                              |
 # | `(_* A_number) negate ␤`           | `(_* _number)` | Multiplies `A` by `-1`                                                                                |
 # | `(_*) true ␤`                      | `(_* true)`    | Pushes boolean `true`                                                                                 |
@@ -75,7 +76,7 @@ module Ww::LR
   extend self
 
   # Defines the version of WwLR supported by this implementation.
-  VERSION = SemanticVersion.parse("1.0.0")
+  VERSION = SemanticVersion.parse("1.1.0")
 
   # Raised by `decode` on malformed input.
   class DecodeError < Exception
@@ -142,23 +143,33 @@ module Ww::LR
     end
   end
 
-  private def encode0int(io, int : Term::Num)
+  private def encode0int(io, n : Term::Num)
     io << "int\n"
-    each_base10_digit(int) do |digit|
-      io << digit
+    each_base10_digit(n) do |digit|
+      digit.decimal(io)
     end
     io << "\n"
   end
 
+  private def encode0float(io, n : Term::Num)
+    io << "hexfloat\n"
+    n.to(Float64).to_hexfloat(io)
+    io << "\n"
+  end
+
   private def encode0(io, term : Term::Num) : Nil
-    if term.whole?
-      encode0int(io, term.abs)
-    else
-      rat = term.abs.to(BigRational)
+    if term.exact_integer?
+      encode0int(io, term)
+    elsif term.exact?
+      rat = term.to(BigRational)
 
       encode0int(io, Term[rat.numerator])
       encode0int(io, Term[rat.denominator])
       io << "ratio\n"
+    elsif term.approx?
+      encode0float(io, term)
+    else
+      raise ArgumentError.new # ?!
     end
 
     if term.negative?
@@ -240,6 +251,8 @@ module Ww::LR
         @state = :sym
       when {:base, "int"}
         @state = :int
+      when {:base, "hexfloat"}
+        @state = :hexfloat
       when {:base, "ratio"}
         unless (b = @stack.pop?) && (a = @stack.pop?)
           raise DecodeError.new("ratio: expected >=1 items on the stack")
@@ -321,6 +334,15 @@ module Ww::LR
         end
 
         @stack << Term.of(value)
+        @state = :base
+      when {:hexfloat, _}
+        begin
+          float = Float64.parse_hexfloat(command)
+        rescue e : ArgumentError
+          raise DecodeError.new("hexfloat: #{e.message}")
+        end
+
+        @stack << Term.of(Term::Num.approx(float))
         @state = :base
       when {:cat, _}
         unless a = @stack.pop?

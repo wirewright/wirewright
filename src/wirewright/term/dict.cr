@@ -791,10 +791,10 @@ module Ww
 
     # :nodoc:
     def with(key : Term::Num, value : Term) : Dict
-      return with_default(key, value) unless key.whole? && key.positive?
+      return with_default(key, value) unless key.natural?
       return with_default(key, value) unless key <= Term[@items.size]
 
-      index = key.to_i
+      index = key.to(Int32)
 
       added, items = @items.add(Probes::AssocItemImm.new(index, value))
       unless added # Overridden or completely unchanged
@@ -1007,11 +1007,11 @@ module Ww
 
     # :nodoc:
     def without(key : Term::Num) : Dict
-      return without_default(key) unless key.whole? && key.positive?
+      return without_default(key) unless key.natural?
       return without_default(key) unless key < Term[@items.size]
 
       items, pairs, _, _ = Gap.demote(
-        end_exclusive: key.to_i,
+        end_exclusive: key.to(Int32),
         rdrop: true, # < will remove the item
         nitems: @items.size,
         npairs: @pairs.size,
@@ -1054,10 +1054,10 @@ module Ww
     end
 
     protected def with!(key : Term::Num, value : Term, author) : Dict
-      return with_default!(key, value, author) unless key.whole? && key.positive?
+      return with_default!(key, value, author) unless key.natural?
       return with_default!(key, value, author) unless key <= Term[@items.size]
 
-      index = key.to_i
+      index = key.to(Int32)
       added, @items = @items.add(Probes::AssocItemMut.new(index, value, author: author))
 
       if added # Try to promote successive (index + 1) pairs to items, if any.
@@ -1097,11 +1097,11 @@ module Ww
     end
 
     protected def without!(key : Term::Num, author) : Dict
-      return without_default!(key, author) unless key.whole? && key.positive?
+      return without_default!(key, author) unless key.natural?
       return without_default!(key, author) unless key < Term[@items.size]
 
       @items, @pairs, _, _ = Gap.demote(
-        end_exclusive: key.to_i,
+        end_exclusive: key.to(Int32),
         author: author,
         rdrop: true, # < will remove the item
         nitems: @items.size,

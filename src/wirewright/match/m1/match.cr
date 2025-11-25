@@ -21,7 +21,7 @@ module Ww::M1::Operator
       return Fb::Mismatch.new(behind0.env)
     end
 
-    if op.spec.whole? && !n.whole?
+    if op.spec.whole? && !n.integer?
       return Fb::Mismatch.new(behind0.env)
     end
 

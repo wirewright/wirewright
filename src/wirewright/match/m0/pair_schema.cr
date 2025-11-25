@@ -46,7 +46,7 @@ module Ww::M0
       def satisfied?(value : Term) : Bool
         return false unless n = value.as_n?
 
-        n.whole? && n.in?(min..max)
+        n.integer? && n.in?(min..max)
       end
     end
 
@@ -62,7 +62,7 @@ module Ww::M0
         {% for arg in block.args %}
           {{arg.id}} = %input[{{arg.symbolize}}]? || next true
         {% end %}
-  
+
         {{yield}}
       end
     end

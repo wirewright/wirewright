@@ -191,6 +191,12 @@ module Ww::ML::Lexeme
       @source.view(byte_start, byte_end: byte_end)
     end
 
+    private def view_and_object(& : -> T) : {StringView, T} forall T
+      object = nil
+      view = view { object = {yield} }
+      {view, *(object || unreachable)}
+    end
+
     # Returns the block's result. Additionally, if the result is `nil`, rolls
     # the reader back to the state before the block was called.
     #
@@ -773,6 +779,35 @@ module Ww::ML::Lexeme
       ready(Lexeme::Token.new(:symbol, text))
     end
 
+    private def number_approx : TxnResponse
+      text, n = view_and_object do
+        unless past?('≈')
+          return revert
+        end
+
+        positive = true
+
+        if past?('+')
+        elsif past?('-')
+          positive = false
+        end
+
+        suffix = view { skip(&.symbolic?) }
+        if suffix.empty?
+          raise "expected a decimal number after `≈`", suffix
+        end
+
+        magn = Kit.decimal(suffix, exact: false)
+        if magn.type.number?
+          Term.of(Term::Num.approx(positive ? magn.unsafe_as_n : Term[-1] * magn.unsafe_as_n))
+        else
+          Term.of(positive ? magn : Term.of(:-, magn))
+        end
+      end
+
+      ready(Lexeme::Datum.new(:number, n, text))
+    end
+
     private def colon_ambiguous?(rune : Rune) : Bool
       rune.symbolic? || rune.paired_right? || rune == '"'
     end
@@ -944,7 +979,7 @@ module Ww::ML::Lexeme
         return lexeme
       end
 
-      if lexeme = choice?(symbolic, vspace, string, raw_string, raw_symbol, superscript, subscript)
+      if lexeme = choice?(symbolic, vspace, string, raw_string, raw_symbol, number_approx, superscript, subscript)
         return lexeme
       end
     end

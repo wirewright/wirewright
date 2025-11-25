@@ -202,10 +202,12 @@ module Ww
       Dict    = 0u8 # << MUST be here
       NumRat  = 1u8
       NumInt  = 2u8
-      Str     = 3u8
-      Sym     = 4u8
-      Boolean = 5u8
-      # Left for future use: 6u8 7u8
+      NumFlt  = 3u8
+      Str     = 4u8
+      Sym     = 5u8
+      Boolean = 6u8
+
+      # Reserved for future use: 7u8
     end
 
     # :nodoc:
@@ -230,23 +232,56 @@ module Ww
     @[Upcast]
     def type : TermType
       case tag
-      in .num_int?, .num_rat? then TermType::Number
-      in .str?                then TermType::String
-      in .sym?                then TermType::Symbol
-      in .boolean?            then TermType::Boolean
-      in .dict?               then TermType::Dict
+      in .sym?
+        TermType::Symbol
+      in .dict?
+        TermType::Dict
+      in .num_int?, .num_rat?, .num_flt?
+        TermType::Number
+      in .str?
+        TermType::String
+      in .boolean?
+        TermType::Boolean
       end
     end
 
     # Constructs a generic `Term` instance from the given number *term*.
     def self.of(term : Num) : Term
-      Term.new(Pointer(Void).new(term.@k.@mem.address))
+      case a = term.@k
+      in Int64
+        bits = Num::Int61.bits(a) # 61 bit, 3 MSB clear
+        address = (bits << 3) | Tag::NumInt.value
+      in Float64
+        box = Pointer(Float64).malloc(1)
+        box.value = a
+        address = box.address | Tag::NumFlt.value
+      in Pointer(BigRational)
+        address = a.address | Tag::NumRat.value
+      end
+
+      Term.new(Pointer(Void).new(address))
     end
 
     # Downcasts this term to a number term without performing any checks.
     @[Upcast]
     def unsafe_as_n : Num
-      Num.new(Num::Kernel.new(@mem))
+      case tag
+      when .num_int?
+        bits = @mem.address >> 3
+        value = Num::Int61.value(bits)
+
+        Num.unsafe_new(value)
+      when .num_flt?
+        box = Pointer(Float64).new(@mem.address & ~0b111u64)
+
+        Num.unsafe_new(box.value)
+      when .num_rat?
+        box = Pointer(BigRational).new(@mem.address & ~0b111u64)
+
+        Num.unsafe_new(box)
+      else
+        raise TypeCastError.new
+      end
     end
 
     # Constructs a generic `Term` instance from the given string *term*.
@@ -263,6 +298,7 @@ module Ww
     # Constructs a generic `Term` from the given symbol *term*.
     def self.of(term : Sym) : Term
       data = term.@spec
+
       Term.new(Pointer(Void).new(((data << 3) | Tag::Sym.value).to_u64))
     end
 
@@ -270,6 +306,7 @@ module Ww
     @[Upcast]
     def unsafe_as_sym : Sym
       data = @mem.address >> 3
+
       Sym.new(data.to_u32)
     end
 
@@ -302,11 +339,16 @@ module Ww
     # Downcasts `Term` to one of term instance types.
     def self.[](term : Term) : Any
       case term.tag
-      in .num_int?, .num_rat? then term.unsafe_as_n
-      in .str?                then term.unsafe_as_s
-      in .boolean?            then term.unsafe_as_b
-      in .sym?                then term.unsafe_as_sym
-      in .dict?               then term.unsafe_as_d
+      in .sym?
+        term.unsafe_as_sym
+      in .dict?
+        term.unsafe_as_d
+      in .num_int?, .num_rat?, .num_flt?
+        term.unsafe_as_n
+      in .str?
+        term.unsafe_as_s
+      in .boolean?
+        term.unsafe_as_b
       end
     end
 
@@ -314,7 +356,7 @@ module Ww
     @[Upcast]
     def as_n? : Num?
       case tag
-      when .num_int?, .num_rat?
+      when .num_int?, .num_rat?, .num_flt?
         unsafe_as_n
       end
     end
@@ -540,7 +582,7 @@ module Ww
 
     # Constructs a number term from the given number *object*.
     def self.[](object : Number) : Num
-      Num.new(object)
+      Num.exact(object)
     end
 
     # Constructs a string term from the given string view *object*.
@@ -585,7 +627,7 @@ module Ww
           raise ArgumentError.new("no term representation for severity #{object}")
         end
       else
-        Num.new(object.value)
+        Num.exact(object.value)
       end
     end
 
@@ -843,7 +885,7 @@ module Ww
     # Appends the hash of a number term *object* to *hasher*.
     def self.hashcode(hasher : Hasher, object : Term::Num) : Hasher
       hasher << TermType::Number
-      hasher << object.to_f64 # ?!
+      hasher << object.to(Float64) # ?!
       hasher
     end
 

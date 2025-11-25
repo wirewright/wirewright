@@ -117,9 +117,9 @@ own complications.
 | `⟆`       |                   | <kbd>Compose</kbd> + <kbd>*</kbd> + <kbd>)</kbd>              | **no**                               |
 | `↢`       |                   | <kbd>Compose</kbd> + <kbd><</kbd> + <kbd>\|</kbd>             | **no**                               |
 | `↣`       |                   | <kbd>Compose</kbd> + <kbd>\|</kbd> + <kbd>></kbd>             | **no**                               |
-| `⸍`       |                   | <kbd>Compose</kbd> + <kbd>^</kbd> + <kbd>/</kbd>              | **no**
-| `⸝`       |                   | <kbd>Compose</kbd> + <kbd>_</kbd> + <kbd>/</kbd>              | **no**
-
+| `⸍`       |                   | <kbd>Compose</kbd> + <kbd>^</kbd> + <kbd>/</kbd>              | **no**                               |
+| `⸝`       |                   | <kbd>Compose</kbd> + <kbd>_</kbd> + <kbd>/</kbd>              | **no**                               |
+| `≈`       |                   | <kbd>Compose</kbd> + <kbd>~</kbd> + <kbd>~</kbd>              | yes                                  |
 
 ### XCompose
 
@@ -455,7 +455,20 @@ These are all treated as symbols if written using the raw symbol literal.
 
 ## Number terms
 
-Wirewright number terms are represented using rational numbers.
+Wirewright number terms can be *exact* or *approximate*.
+
+Exact numbers are represented using a rational. Approximate (inexact) numbers
+are represented using a 64-bit float.
+
+Some operations maintain exactness of their arguments (e.g. `+`, `*`), while
+others yield an approximate result (e.g. `sqrt`, rational raised to the power
+of rational).
+
+Approximate-ness is "contagious": any operation involving an approximate number
+will itself return an approximate number.
+
+Approximate numbers are prefixed with `≈` when displayed. Likewise, you can use
+prefix `≈` to denote approximate-ness manually.
 
 ### Basic numbers
 
@@ -546,7 +559,7 @@ Non-terminating fractions such as `1/3` will be printed using the fractional for
 ```wwml
 1e6          ;; scientific notation (1 million)
 -2.5e-3      ;; scientific notation (-0.0025)
-+4.0e+2       ;; scientific notation (400)
++4.0e+2      ;; scientific notation (400)
 ```
 
 **Retention**: Scientific notation is *retained* similarly to radix notation, represented
@@ -576,6 +589,27 @@ FFFF_FFFF₁₆
 100_000/200_000
 
 HELLO_world₆₂
+```
+
+### Denoting approximate numbers
+
+Use prefix `≈` to denote approximate numbers. This turns on approximate
+arithmetic immediately.
+
+```
+123   ;; 123
+≈123  ;; ≈123.0
+1/3   ;; 1/3
+≈1/3  ;; ≈0.3333333333333333
+
+;; Signed
+
+≈+123.456  ;; ≈123.456
+≈-1/3      ;; ≈-0.3333333333333333
+
+;; Scientific
+
+≈1.23e-4  ;; (sci ≈1.23 ≈-4)
 ```
 
 ## String terms

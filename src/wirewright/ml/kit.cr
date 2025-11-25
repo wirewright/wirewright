@@ -68,6 +68,8 @@ module Ww::ML
 
     # Parses a number written using the decimal form.
     #
+    # *exact* toggles between exact and approximate arithmetic.
+    #
     # Raises `SyntaxError` on invalid input.
     #
     # ```text
@@ -86,7 +88,7 @@ module Ww::ML
     # expn
     #   ("e" | "E") ("+" | "-" | "") nat
     # ```
-    def decimal(decsrc : StringView)
+    def decimal(decsrc : StringView, *, exact : Bool = true) : Term | Term::Num
       decsrc.reader do |r|
         if Rtk.at_end?(r)
           raise ArgumentError.new
@@ -94,7 +96,7 @@ module Ww::ML
 
         digits = Rtk.view(r) { Rtk.skip_to(r, "/eE.") }
 
-        n, _ = digits_to_number(digits)
+        n, _ = digits_to_number(digits, exact: exact)
 
         if Rtk.past?(r, '/')
           densrc = Rtk.rest(r)
@@ -103,7 +105,7 @@ module Ww::ML
             raise SyntaxError.new("expected at least one digit for the denominator", densrc)
           end
 
-          den, _ = digits_to_number(densrc)
+          den, _ = digits_to_number(densrc, exact: exact)
 
           if den.zero?
             raise SyntaxError.new("division by zero", densrc)
@@ -119,7 +121,7 @@ module Ww::ML
             raise SyntaxError.new("expected at least one fractional part digit after `.`; did you mean `#{ML.compact(n)}.0`?", frsrc)
           end
 
-          frpart, frlen = digits_to_number(frsrc)
+          frpart, frlen = digits_to_number(frsrc, exact: exact)
 
           # 123_456.789⏏
           n += frpart * Term[1]/(Term[10] ** frlen)
@@ -141,7 +143,7 @@ module Ww::ML
             raise SyntaxError.new("expected at least one digit for the exponent", mantissasrc)
           end
 
-          mantissa, _ = digits_to_number(mantissasrc)
+          mantissa, _ = digits_to_number(mantissasrc, exact: exact)
 
           n = Term.of(:sci, n, sign * mantissa)
         end
@@ -155,7 +157,7 @@ module Ww::ML
     # underscores this isn't simply `digitsrc.size`).
     #
     # Raises `SyntaxError` on invalid input.
-    def digits_to_number(digitsrc : StringView) : {Term::Num, Term::Num}
+    def digits_to_number(digitsrc : StringView, *, exact : Bool) : {Term::Num, Term::Num}
       # Validate
       digitsrc.each_split do |l, m, r|
         case m
@@ -177,7 +179,7 @@ module Ww::ML
         end
       end
 
-      n = Term[0]
+      n = exact ? Term::Num.exact(0) : Term::Num.approx(0.0f64)
       len = Term[0]
 
       digitsrc.each_char do |chr|
