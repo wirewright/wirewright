@@ -28,6 +28,72 @@ module Ww::D7
     end
   end
 
+  def walk(clf : Classifier, regime : Regime, top : D7::Top, circuit : Term, **kwargs) : {D7::Top, Term}
+    unit(top, circuit) do |unit|
+      feature = clf.call(unit)
+
+      walk(fold_context(clf), regime, feature.as(Circuit), **kwargs)
+    end
+  end
+
+  def walk(ctx : FoldContext, regime : Regime, circuit : Circuit, subcircuits : Bool = true) : Reaction
+    # Find and exercise relations.
+    top0 = parent(circuit.node, circuit.range)
+    reactions = relate(ctx, regime, top0, subcircuits: subcircuits)
+
+    # Replace participants with their resulting forms and unscope.
+    fold(ctx, top0) do |ctx, feature, rec, default|
+      case feature
+      when Gnd
+        unless rxn = reactions[ctx.addr]?
+          next D7.rxn(feature.node)
+        end
+
+        unscope(ctx, rxn)
+      when Chat
+        queue0 = feature.queue.items
+        msg0 = queue0.first?
+        upflow = Term[]
+        rxn = fold(ctx.copy_with(chat: NodeChat.new(msg0 || Term.of(:cycle), enq: feature.enq)), feature.cont, rec)
+
+        # Sort messages appended during one tick lexicographically, so that we have
+        # a deterministic order.
+        msgs = rxn.emission.items.to_a.sort_by! do |msg|
+          # FIXME: this is really inefficient!!! We should have Term.compare!!!!
+          ML.compact(msg)
+        end
+
+        queue1 = Term::Dict.build do |commit|
+          commit.concat(queue0)
+
+          msgs.each do |msg|
+            next unless msg.type.dict? # < Ignores e.g. `ack`
+
+            if M1.probe?(feature.asc, msg)
+              upflow = upflow.append(msg)
+              next
+            end
+
+            Term.case(msg) do
+              matchpi %{(group children_*)} { commit.concat(children.items) }
+              otherwise { commit << msg }
+            end
+          end
+        end
+
+        D7.rxn(feature.submit.call(rxn.node, queue1), upflow)
+      when Circuit
+        if subcircuits
+          fold(ctx, scope(Term[], parent(feature.node, feature.range)), rec)
+        else
+          default.call
+        end
+      else
+        default.call
+      end
+    end
+  end
+
   defrecord Top, queue : Term::Dict
 
   def step(clf : Classifier, regime : Regime, top : Top, circuit : Term, **kwargs, &tick : Term, NodeChat -> Reaction) : {Top, Term}

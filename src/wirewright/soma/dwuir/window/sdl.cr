@@ -83,7 +83,7 @@ module Ww::Soma::DwUIR
     class Frame
       def initialize(
         renderer : ::SDL::Renderer::WithDestroy,
-        @requests : Channel(Protocol::Request),
+        @requests : Channel(DwUIR::Request),
         width : Int32,
         height : Int32,
         @backdrop : Color,
@@ -93,8 +93,8 @@ module Ww::Soma::DwUIR
       end
 
       def show(content : Term)
-        response = Sync::Future(Protocol::FrameResponse).new
-        request = Protocol::FrameRequest.new(content, @screen, @backdrop, response)
+        response = Sync::Future(DwUIR::FrameResponse).new
+        request = DwUIR::FrameRequest.new(content, @screen, @backdrop, response)
         @requests.send(request)
 
         @buffer.lock do |pixels, pitch|
@@ -254,7 +254,7 @@ module Ww::Soma::DwUIR
     end
 
     # :nodoc:
-    record Context, requests : Channel(Protocol::Request), cursors : CursorStore
+    record Context, requests : Channel(DwUIR::Request), cursors : CursorStore
 
     # Stores SDL system cursor instances.
     class CursorStore
@@ -309,7 +309,7 @@ module Ww::Soma::DwUIR
     end
 
     # Constructs a window context object.
-    def context(proof : SetupProof, requests : Channel(Protocol::Request)) : Context
+    def context(proof : SetupProof, requests : Channel(DwUIR::Request)) : Context
       check(proof)
 
       Context.new(requests, cursors: CursorStore.new)

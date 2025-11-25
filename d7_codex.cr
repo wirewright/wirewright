@@ -390,6 +390,22 @@ module ::Ww::D7::Codex
         D7.gnd(node, D7.edge(u, 1, 0))
       end
 
+      matchpi %{[image @u_ @v_]} do
+        D7.gnd(node, D7.edge(u, 1), D7.edge(v, 2))
+      end
+
+      matchpi %{[image (@u_ _) @v_]} do
+        D7.gnd(node, D7.edge(u, 1, 0), D7.edge(v, 2))
+      end
+
+      matchpi %{[image @u_ (@v_ _)]} do
+        D7.gnd(node, D7.edge(u, 1), D7.edge(v, 2, 0))
+      end
+
+      matchpi %{[image (@u_ _) (@v_ _)]} do
+        D7.gnd(node, D7.edge(u, 1, 0), D7.edge(v, 2, 0))
+      end
+
       otherwise { D7.inert(node) }
     end
   end
@@ -414,6 +430,18 @@ module ::Ww::D7::Codex
     id, capture = grp.first
 
     Slice[{id, Reaction.new(capture.node, Term[msgs])}]
+  end
+
+  def patch_emit(grp : D7::Regime::NodeCaptureGroup, msgs : Enumerable(Term), &)
+    mem = Pointer({UInt32, Reaction}).malloc(grp.size)
+    cursor = 0
+
+    grp.each do |id, capture|
+      mem[cursor] = {id, Reaction.new(Term.of(yield capture.node), Term[msgs])}
+      cursor += 1
+    end
+
+    Slice({UInt32, Reaction}).new(mem, grp.size, read_only: true)
   end
 
   def patches(*lists)

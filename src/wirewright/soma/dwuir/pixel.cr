@@ -65,6 +65,10 @@ module Ww::Soma::DwUIR
       {r, g, b, a}
     end
 
+    def rgba8 : {UInt8, UInt8, UInt8, UInt8}
+      rgba.map(&.to_u8)
+    end
+
     # Formats the output of `rgba` as 32-bit integer in little endian order.
     def rgba_le : UInt32
       r, g, b, a = rgba

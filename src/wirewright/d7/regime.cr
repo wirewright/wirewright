@@ -27,7 +27,7 @@ module Ww::D7
     defrecord EdgeList, id : Term
 
     # :nodoc:
-    alias Step = Append | Follow | Return | FollowMany
+    alias Step = Append | Follow | Return
 
     # :nodoc:
     #
@@ -37,16 +37,10 @@ module Ww::D7
 
     # :nodoc:
     #
-    # Follow all links captured by the origin node's *capture*. Do not accumulate
-    # solutions: search should preceed independently in each successor found.
-    defrecord Follow, capture : EdgeCapture
-
-    # :nodoc:
-    #
     # Follow all links captured by the origin node's *capture*. Accumulate
-    # and merge solutions. *min* or more solutions are required,
-    # otherwise backtrack.
-    defrecord FollowMany, capture : EdgeCapture, min : Int32
+    # and merge solutions. *min* and *max* define bounds on the number of
+    # solutions that are required (both inclusive), otherwise backtrack.
+    defrecord Follow, capture : EdgeCapture, min : Int32, max : Int32
 
     # :nodoc:
     #
@@ -191,19 +185,19 @@ module Ww::D7
             end
 
             matchpi %{(follow (one capture_))} do
-              Follow.new(EdgeSingleton.new(capture))
+              Follow.new(EdgeSingleton.new(capture), min: 1, max: 1)
             end
 
             matchpi %{(follow (list capture_))} do
-              Follow.new(EdgeList.new(capture))
+              Follow.new(EdgeList.new(capture), min: 1, max: 1)
             end
 
             matchpiT %{(follow+ (one capture_) min←(%number +i32!))} do
-              FollowMany.new(EdgeSingleton.new(capture), min)
+              Follow.new(EdgeSingleton.new(capture), min, max: Int32::MAX)
             end
 
             matchpiT %{(follow+ (list capture_) min←(%number +i32!))} do
-              FollowMany.new(EdgeList.new(capture), min)
+              Follow.new(EdgeList.new(capture), min, max: Int32::MAX)
             end
           end
         end
@@ -381,20 +375,6 @@ module Ww::D7
         search(ctx, locus, soln, ahead.copy_with(steps: steps, sink: sink))
       end
 
-      locus.adj.each do |neighbor|
-        next unless edges.any? { |edge| ctx.hg.member?(neighbor, edge) }
-
-        search(ctx, locus(ctx, neighbor), soln, ahead.copy_with(ret: ret))
-      end
-    end
-
-    private def search(ctx, locus, step : FollowMany, soln, ahead)
-      edges = edge_ids(locus.env, step.capture)
-
-      ret = Ret.new do |steps, soln, sink|
-        search(ctx, locus, soln, ahead.copy_with(steps: steps, sink: sink))
-      end
-
       solns = [] of Soln
 
       locus.adj.each do |neighbor|
@@ -405,7 +385,7 @@ module Ww::D7
         search(ctx, locus(ctx, neighbor), soln, ahead.copy_with(sink: sink, ret: ret))
       end
 
-      return if solns.size < step.min
+      return unless step.min <= solns.size <= step.max
 
       ahead.sink.call(Soln.union(solns))
     end
