@@ -4798,11 +4798,6 @@ module ::Ww::M1
         in Rewrite::Many
           newvalue = Term.of(rewrite.list)
 
-          # Snap back to singular if the user did not specify plural explicitly.
-          unless plural
-            rewrite = Rewrite.one(newvalue)
-          end
-
           up1 = @captures.reduce(up1) { |up, capture| up.with(capture, newvalue) }
         end
       end
