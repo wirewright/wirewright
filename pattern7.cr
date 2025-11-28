@@ -5968,6 +5968,46 @@ class PatternSet(T)
     self.select(*args, **kwargs) { true }
   end
 
+  struct Matcher
+    include ::Ww::Term::Case::Matcher
+
+    def initialize(@pset : PatternSet(Term), @table : Slice(Int32))
+    end
+
+    def self.compile(specs : Slice(Term::Case::MatchSpec))
+      base = Term::Dict.build do |commit|
+        specs.each_with_index do |spec, index|
+          commit << {index, spec.pattern}
+        end
+      end
+
+      table = Slice(Int32).new(base.itemsize)
+
+      index = 0
+      pset = PatternSet(Term).select(ML.term(%{(index←(%number +i32) pattern_)}), Term.of(base)) do |_, env|
+        table[index] = env[:index].to(Int32)
+        index += 1
+
+        true # accept
+      end
+
+      new(pset, table)
+    end
+
+    def scan(matchee : Term, *, env : Term::Dict, & : Term::Dict, Int32 ->)
+      responses = @pset.responses(matchee, env: env)
+      responses.each do |response|
+        assert response.is_a?(Pr::One)
+
+        yield response.env, @table[response.pattern.index]
+      end
+    end
+  end
+
+  macro case(matchee, **kwargs, &block)
+    ::Ww::Term.case({{matchee}}, matcher: ::PatternSet::Matcher, {{kwargs.double_splat}}) {{block}}
+  end
+
   struct Candidates
     include ICursor
 
