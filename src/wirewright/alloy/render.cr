@@ -1,15 +1,23 @@
 module Ww::Alloy
-  # The builtin function attempts to evaluate an Alloy expression just before
+  # The eval function attempts to evaluate an Alloy expression just before
   # it is passed to `PRIMITIVES`. If the function succeeds, Alloy does not
   # evaluate the returned term any futher. If the function fails, Alloy proceeds
   # to `PRIMITIVES`.
-  alias Builtin = Term, Issue::Sink -> Term?
+
+  # The first argument is the expression to be evaluated. The second argument
+  # is a continuation which can be used for evaluating the original expression,
+  # for evaluating sub-expressions, or both. The third arg is an issue sink where
+  # issues must be sent.
+  alias Eval = Term, EvalDefault, EvalSubexpr, Issue::Sink -> Term
+
+  alias EvalDefault = Issue::Sink -> Term
+  alias EvalSubexpr = Term, Issue::Sink -> Term
 
   # The refine function runs on a node after it is recursively expanded by Alloy.
   alias Refine = Term, Issue::Sink -> Expansion
 
   # :nodoc:
-  record RenderContext, vars : Term::Dict, builtin : Builtin, refine : Refine
+  record RenderContext, vars : Term::Dict, eval : Eval, refine : Refine
 
   private def get_var(ctx : RenderContext, name : Term, issues : Issue::Sink, & : Term, Issue::Sink -> T) : T | Err forall T
     issues.adjoin("variable", Term.of(name)) do |issues|
@@ -82,54 +90,59 @@ module Ww::Alloy
         end
 
         matchpi %{(args_* ¦ kwargs_)} do
-          # On the way in.
-          value = expr.transaction do |commit|
-            # Eval arguments.
-            args.items.each_with_index do |arg, index|
-              commit.with(index, eval(ctx, arg, issues, index: index))
+          default = ->(issues : Issue::Sink) do
+            # On the way in.
+            value = expr.transaction do |commit|
+              # Eval arguments.
+              args.items.each_with_index do |arg, index|
+                commit.with(index, eval(ctx, arg, issues, index: index))
+              end
+
+              # Eval keyword arguments.
+              kwargs.each_entry do |key, value|
+                commit.with(key, eval(ctx, value, issues))
+              end
             end
 
-            # Eval keyword arguments.
-            kwargs.each_entry do |key, value|
-              commit.with(key, eval(ctx, value, issues))
+            value = Term.of(value)
+
+            case r = PRIMITIVES.call(value)
+            in Rewrite::None then value
+            in Rewrite::One  then r.term
+            in Rewrite::Many then Term.of(r.list)
             end
           end
 
-          value = Term.of(value)
-
-          # On the way out.
-          if result = ctx.builtin.call(value, issues)
-            return result
+          eval_subexpr = ->(subexpr : Term, issues : Issue::Sink) do
+            eval(ctx, subexpr, issues) # index: ???
           end
 
-          case r = PRIMITIVES.call(value)
-          in Rewrite::None then value
-          in Rewrite::One  then r.term
-          in Rewrite::Many then r.list
-          end
+          ctx.eval.call(expr, default, eval_subexpr, issues)
         end
 
         matchpi %{_symbol} do
-          unless value = ctx.vars[expr]?
-            # NOTE: Writing e.g. (^ ^x) is one of the valid ways of escaping. ML will
-            # read stuff like ^^^x  as (^ (^ ^x)), which evaluates here to (^ ^x),
-            # removing one level of escaping -- exactly what we want.
-            #
-            # NOTE: we avoid emitting an issue here if index=0, because most likely it's
-            # going to be the head of a primitive call. This is a compromise; *of course*
-            # we'd want something better. But since the primitives and this `eval` machinery
-            # is so hacky regardless, we're fine -- for now.
-            unless expr.alloy? || index == 0
-              # We can't say it's a major error because it might not be one; nor can we
-              # be completely silent because most of the time this branch is hit
-              # we're truly looking at a typo or something along those lines...
-              issues.minor("symbol `#{expr}` is not an Alloy variable")
-            end
+          if value = ctx.vars[expr]?
+            return value
+          end
 
+          # NOTE: Writing e.g. (^ ^x) is one of the valid ways of escaping. ML will
+          # read stuff like ^^^x  as (^ (^ ^x)), which evaluates here to (^ ^x),
+          # removing one level of escaping -- exactly what we want.
+          #
+          # NOTE: we avoid emitting an issue here if index=0, because most likely it's
+          # going to be the head of a primitive call. This is a compromise; *of course*
+          # we'd want something better. But since the primitives and this `eval` machinery
+          # is so hacky regardless, we're fine -- for now.
+          if expr.alloy? || index == 0
             return expr
           end
 
-          value
+          # We can't say it's a major error because it might not be one; nor can we
+          # be completely silent because most of the time this branch is hit
+          # we're truly looking at a typo or something along those lines...
+          issues.minor("symbol `#{expr}` is not an Alloy variable")
+
+          expr
         end
 
         otherwise { expr }
@@ -1023,8 +1036,8 @@ module Ww::Alloy
     end
   end
 
-  # Default value for the builtin function (noop).
-  DEFAULT_BUILTIN = Builtin.new { }
+  # Default value for the eval function (noop).
+  DEFAULT_EVAL = Eval.new { |expr, default, _, issues| default.call(issues) }
 
   # Default value for the refine function (noop).
   DEFAULT_REFINE = Refine.new { |term, _| Assign.new(term) }
@@ -1036,11 +1049,11 @@ module Ww::Alloy
     vars : Term::Dict,
     template : Term,
     issues : Issue::Sink, *,
-    builtin : Builtin = DEFAULT_BUILTIN,
+    eval : Eval = DEFAULT_EVAL,
     refine : Refine = DEFAULT_REFINE,
   ) : Expansion
     issues.adjoin(Spot::Template.new(template)) do |issues|
-      render0(RenderContext.new(vars, builtin, refine), template, issues)
+      render0(RenderContext.new(vars, eval, refine), template, issues)
     end
   end
 

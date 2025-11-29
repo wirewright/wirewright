@@ -6,18 +6,24 @@ module Ww::Alloy
     globals : Term::Dict
 
   private def compose0(ctx : ComposeContext, vars : Term::Dict, template : Term, issues : Issue::Sink) : Ok
-    builtin = ->(term : Term, issues : Issue::Sink) do
-      Term.matchpi?(term, %{(view arg_)}) do
-        case expansion = compose0(ctx, arg, issues)
-        in Assign
-          expansion.term
-        in Splice
-          if expansion.offspring.size == 1
-            expansion.offspring[0]
-          else
-            Term.of(expansion.offspring)
+    eval = Eval.new do |expr, default, _, issues|
+      value = default.call(issues)
+
+      Term.case(value) do
+        matchpi %{(view arg_)} do
+          case expansion = compose0(ctx, arg, issues)
+          in Assign
+            expansion.term
+          in Splice
+            if expansion.offspring.size == 1
+              expansion.offspring[0]
+            else
+              Term.of(expansion.offspring)
+            end
           end
         end
+
+        otherwise { value }
       end
     end
 
@@ -25,7 +31,7 @@ module Ww::Alloy
       compose0?(ctx, term, issues) || Assign.new(term)
     end
 
-    render0(ctx.globals | vars, template, issues, builtin: builtin, refine: refine).as?(Ok) || Splice.new(Term[])
+    render0(ctx.globals | vars, template, issues, eval: eval, refine: refine).as?(Ok) || Splice.new(Term[])
   end
 
   private def compose0?(ctx : ComposeContext, view : Term, issues : Issue::Sink) : Ok?
@@ -52,6 +58,8 @@ module Ww::Alloy
         # Found.
         return Splice.new(offspring)
       end
+
+      # TODO: Backmaps could run Alloy::Applier with (view _) available during eval.
 
       # Keep searching...
     end
