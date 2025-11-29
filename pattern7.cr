@@ -5974,7 +5974,7 @@ class PatternSet(T)
     def initialize(@pset : PatternSet(Term), @table : Slice(Int32))
     end
 
-    def self.compile(specs : Slice(Term::Case::MatchSpec))
+    def self.compile(specs : Slice(Term::Case::MatchSpec)) : Matcher
       base = Term::Dict.build do |commit|
         specs.each_with_index do |spec, index|
           commit << {index, spec.pattern}
@@ -5994,13 +5994,10 @@ class PatternSet(T)
       new(pset, table)
     end
 
-    def scan(matchee : Term, *, env : Term::Dict, & : Term::Dict, Int32 ->)
-      responses = @pset.responses(matchee, env: env)
-      responses.each do |response|
-        assert response.is_a?(Pr::One)
-
-        yield response.env, @table[response.pattern.index]
-      end
+    def scan(matchee : Term, *, env : Term::Dict) : Iterator({Term::Dict, Int32})
+      @pset.query(matchee, env: env)
+        .select(Pr::One)
+        .map { |pr| {pr.env, @table[pr.pattern.index]} }
     end
   end
 
@@ -6051,6 +6048,15 @@ class PatternSet(T)
         Responses.new(successor, @matchee, @env)
       end
     end
+  end
+
+  def query(matchee : Term, *, env : Term::Dict = Term[]) : Iterator(Pr::Pos)
+    bucket = @keyed.bucket?(matchee)
+    bucket ||= Bucket.empty
+    bucket.each
+      .chain(@unkeyed.each)
+      .map(&.response(matchee, env: env))
+      .select(Pr::Pos)
   end
 
   def candidates(matchee : Term) : Candidates

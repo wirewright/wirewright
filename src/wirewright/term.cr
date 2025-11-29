@@ -1246,6 +1246,47 @@ module Ww
         keys.each { |key| commit.without(key) }
       end
     end
+
+    # TODO: Introduce Term::Keypath, which should store keypaths (especially itempaths)
+    # very efficiently. Right now, Slice(Term) is a heap alloc + 8 bytes per index, this
+    # is nasty as hell. I'm saying index because it's most frequently the case. It could
+    # be a normal term, but that's actually rare, most often it's an index, and a very
+    # small one at that! <64, most likely <32. We can fit lots of those in 8 bytes.
+    # So Keypath internally could be a tagged pointer:
+    #
+    #   InlineIndexKeypath (8 bytes):  variable-length indices, however many we can fit.
+    #       |  promote if capacity exceeded
+    #       v
+    #   IndexKeypath: Slice(InlineIndexKeypath)
+    #       |  promote if non-index added
+    #       v
+    #   Keypath: A slice of terms (like we have now)
+
+    def self.content(term : Term, & : Array(Term), Term -> Bool) : Set({Slice(Term), Term})
+      content = Set({Slice(Term), Term}).new
+
+      each_keypath_and_leaf(term) do |keypath, leaf|
+        if yield keypath, leaf
+          content << {keypath.to_readonly_slice(&.itself), leaf}
+        end
+
+        true # continue
+      end
+
+      content
+    end
+
+    def self.content(term : Term, *, not_in other : Set({Slice(Term), Term}))
+      content(term) do |keypath, leaf|
+        !{keypath.to_readonly_slice, leaf}.in?(other)
+      end
+    end
+
+    # Returns the set of keypath-leaf pairs that comprise *term*, known as
+    # the *content* of *term*.
+    def self.content(term : Term)
+      content(term) { true }
+    end
   end
 
   # Morph API
