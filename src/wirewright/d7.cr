@@ -87,5 +87,4 @@ end
 require "./d7/hypergraph"
 require "./d7/feature"
 require "./d7/regime"
-require "./d7/fold"
 require "./d7/step"

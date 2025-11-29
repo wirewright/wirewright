@@ -1,17 +1,24 @@
 module Ww::D7
-  # :nodoc:
+  # An integer used to identify a node in a hypergraph. Node ids are
+  # usually hypergraph-bounded rendition of circuit-bounded `NodeAddr`.
   alias NodeId = UInt32
 
-  defrecord Reaction, node : Term, emission : Term::Dict
+  # Maps node ids to replacement terms. The granularity is a node; we
+  # do not go lower than that.
+  alias Patch = Hash(NodeId, Term)
 
-  # Constructs a reaction with *node* that has an empty emission.
-  def rxn(node, queue = Term[]) : Reaction
-    Reaction.new(Term.of(node), Term[queue])
-  end
+  # The address of a node in a circuit.
+  alias NodeAddr = Slice(Int32)
 
-  # Represents a *rewrite regime*. A rewrite regime encapsulates the rules of
-  # rewriting and recognition as well as the indices required to do
-  # that efficiently.
+  # Records the scopes that the traversal process passes through. The addr
+  # is that of the scope (e.g. `module`, but in general, see `Scope`), and
+  # the dict is its bindings dict.
+  alias NodeScope = Slice({NodeAddr, Term::Dict})
+
+  # Represents a *rewrite regime*.
+  #
+  # A rewrite regime is lots of black magic for searching in and rewriting
+  # hypergraphs according to a database of queries.
   class Regime
     # Raised when `build` detects an invalid query.
     class QueryError < Exception
@@ -33,7 +40,7 @@ module Ww::D7
     #
     # Go to node labeled with *label* and matching *pattern* in context. Store
     # *pattern*'s match env along with the node itself in captures.
-    defrecord Append, key : Term, pattern : Term, label : UInt32
+    defrecord Append, label : UInt32, key : Term, pattern : Term, edges : Set(EdgeCapture)
 
     # :nodoc:
     #
@@ -44,9 +51,8 @@ module Ww::D7
 
     # :nodoc:
     #
-    # Return to the predecessor in search (e.g. after following a link). Keep
-    # search progress. This step functions like "lookbehind" except while looking
-    # behind, you can follow more links etc.
+    # Return to the predecessor in search (e.g. after following a link), while
+    # keeping search progress.
     defrecord Return
 
     # :nodoc:
@@ -54,61 +60,64 @@ module Ww::D7
     # Rule search plan.
     #
     # - *steps* is the sequence of `Step`s to follow if this plan is feasible.
-    # - *demands* specifies which labels must be present in a circuit for this
-    #   plan to be feasible.
+    # - *demands* specifies which labels must be present in the matched hypergraph
+    #   for this plan to be feasible.
     defrecord Plan, steps : Slice(Step), demands : Pf::USet32 do
       assert steps.size > 0
       assert demands.size > 0
     end
 
     # :nodoc:
-    def initialize(@labeler : M1::ShapeIndex, @plans : Slice(Plan), @bodies : Slice(Body))
-      assert @plans.size == @bodies.size
+    def initialize(@labeler : M1::ShapeIndex, @plans : Slice(Plan))
     end
 
-    private def self.bridge(a : Term, b : Term) : Term
-      l = edges(a)
-      r = edges(b)
+    # :nodoc:
+    alias StepIR = Follow | AppendIR | Return
 
-      # Each edge is like (one <capture id>) or (list <capture id>), we intersect
-      # only based on capture id.
-      l.each do |capture|
-        _, id0 = capture
-        if r.any? { |(_, id1)| id0 == id1 }
-          return capture
-        end
+    # :nodoc:
+    #
+    # During the IR stage, we don't yet know the label.
+    defrecord AppendIR, key : Term, pattern : Term, edges : Set(EdgeCapture)
+
+    # :nodoc:
+    defrecord NodeAdded
+    # :nodoc:
+    defrecord LinkAdded
+
+    # Returns the associated with *query*.
+    private def self.pattern(query : Term) : Term
+      Term.case(query) do
+        matchpi %{[one _ pattern_]} { pattern }
+        matchpi %{[many _ pattern_]} { pattern }
+        matchpi %{[link head_ _+]} { pattern(head) }
       end
-
-      raise QueryError.new(
-        "linked subqueries #{ML.compact(a)} and #{ML.compact(b)} must share exactly \
-         one edge, but they share no edges")
     end
 
-    # Returns a set of edge captures for edges captured in *pattern* (`(one capture_)` for
-    # singular and `(list capture_)` for plural captures).
-    private def self.edges(pattern : Term) : Set(Term)
-      edges = Set(Term).new
-      edges(pattern) { |edge| edges << edge }
-      edges
+    private def self.edges(edgetab, pattern : Term) : Set(EdgeCapture)
+      edgetab.put_if_absent(pattern) do
+        edges = Set(EdgeCapture).new
+        edges(pattern) { |edge| edges << edge }
+        edges
+      end
     end
 
-    private def self.edges(pattern : Term, &sink : Term ->) : Nil
+    private def self.edges(pattern : Term, &sink : EdgeCapture ->) : Nil
       edges(pattern, sink)
     end
 
-    private def self.edges(pattern : Term, sink : Term ->) : Nil
+    private def self.edges(pattern : Term, sink : EdgeCapture ->) : Nil
       normp = M1.normal(pattern)
 
       M1.walk(normp) do |x|
         Term.case(x) do
           matchpi %{(%'%let (%'%capture id_) (%'%edge _))} do
-            sink.call(Term.of(:one, id))
+            sink.call(EdgeSingleton.new(id))
 
             M1::WalkDecision::Skip
           end
 
           matchpi %{(%'%let (%'%capture id_) (%'%itemseq (%'%past %'(%singular (%edge _)) ⍊ min: 1)))} do
-            sink.call(Term.of(:list, id))
+            sink.call(EdgeList.new(id))
 
             M1::WalkDecision::Skip
           end
@@ -118,11 +127,24 @@ module Ww::D7
       end
     end
 
-    private def self.compile(query : Term, plan : Term::Dict::Commit, origin : Term?) : Nil
+    private def self.bridge?(l : Set(EdgeCapture), r : Set(EdgeCapture)) : EdgeCapture?
+      l.each do |capture0|
+        if r.any? { |capture1| capture0.id == capture1.id }
+          return capture0
+        end
+      end
+    end
+
+    private def self.compile(edgetab, query : Term, steps : Array(StepIR), origin : EdgeCapture?) : NodeAdded | LinkAdded
       Term.case(query) do
         matchpi %{(one key_ pattern_)} do
-          plan << {:follow, origin} if origin
-          plan << {:append, key, pattern}
+          if origin
+            steps << Follow.new(origin, min: 1, max: 1)
+          end
+
+          steps << AppendIR.new(key, pattern, edges(edgetab, pattern))
+
+          NodeAdded.new
         end
 
         matchpi %{(many key_ pattern_ ⍊ min_: (%optional 1 (%number +i32!)))} do
@@ -130,18 +152,34 @@ module Ww::D7
             raise QueryError.new("`many` without a predecessor makes no sense (many where?)")
           end
 
-          plan << {:"follow+", origin, min}
-          plan << {:append, key, pattern}
+          steps << Follow.new(origin, min: 1, max: Int32::MAX)
+          steps << AppendIR.new(key, pattern, edges(edgetab, pattern))
+
+          NodeAdded.new
         end
 
         matchpi %{(link head_ deps_+)} do
-          compile(head, plan, origin)
-
-          deps.items.each do |dep|
-            compile(dep, plan, bridge(head, dep))
-
-            plan << {:return}
+          status = compile(edgetab, head, steps, origin)
+          unless status.is_a?(NodeAdded)
+            raise QueryError.new("`link` must have a node at its head (`one` or `many`)")
           end
+
+          edges0 = edges(edgetab, pattern(head))
+          deps.items.each do |dep|
+            edges1 = edges(edgetab, pattern(dep))
+
+            unless bridge = bridge?(edges0, edges1)
+              raise QueryError.new(
+                "linked queries #{ML.compact(head)} and #{ML.compact(dep)} must share exactly \
+                 one edge (bridging from one to the other), but they share no edges")
+            end
+
+            compile(edgetab, dep, steps, origin: bridge)
+
+            steps << Return.new
+          end
+
+          LinkAdded.new
         end
 
         otherwise do
@@ -150,101 +188,85 @@ module Ww::D7
       end
     end
 
-    private def self.compile(query : Term) : Term::Dict
+    private def self.compile(edgetab, query : Term)
       unless query.type.dict?
         raise QueryError.new("query must be a dict")
       end
 
-      Term::Dict.build do |commit|
-        compile(Term.of(query.prepend(:link)), plan: commit, origin: nil)
+      steps = [] of StepIR
+
+      if query.itemsize == 1
+        compile(edgetab, query[0], steps, origin: nil)
+      else
+        compile(edgetab, Term.of(query.prepend(:link)), steps, origin: nil)
       end
+
+      steps
     end
 
-    private def self.compile(queries : Slice(Term)) : Slice(Term::Dict)
-      queries.to_readonly_slice { |query| compile(query) }
+    private def self.compile(queries : Slice(Term))
+      edgetab = Hash(Term, Set(EdgeCapture)).new(initial_capacity: 16)
+
+      queries.to_readonly_slice { |query| compile(edgetab, query) }
     end
 
-    private def self.plans(cqueries : Slice(Term::Dict), transcript : Slice(UInt32)) : Slice(Plan)
+    # Constructs a regime and the associated indices based on *queries*
+    # and a corresponding *body*. *body* will receive indices of the matching
+    # query alongside the solution later on.
+    def self.build(queries : Slice(Term)) : Regime
+      patterns = [] of Term
+
+      cqueries = compile(queries)
+      cqueries.each do |cquery|
+        cquery.each do |step|
+          next unless step.is_a?(AppendIR)
+
+          patterns << step.pattern
+        end
+      end
+
+      labeler, transcript = M1::ShapeIndex.build(patterns)
+
       cursor = 0
-
-      cqueries.to_readonly_slice do |cquery|
+      plans = cqueries.to_readonly_slice do |cquery|
         demands = Pf::USet32.new
 
-        steps = cquery.items.to_readonly_slice do |step|
-          Term.case(step) do
-            matchpi %{(append name_ pattern_)} do
-              label = transcript[cursor]
-              demands = demands.add(label)
-              cursor += 1
+        steps = cquery.to_readonly_slice do |step|
+          case step
+          in AppendIR
+            label = transcript[cursor]
+            demands = demands.add(label)
+            cursor += 1 # Corresponds to additions to `patterns` above.
 
-              Append.new(name, pattern, label)
-            end
-
-            matchpi %{(return)} do
-              Return.new
-            end
-
-            matchpi %{(follow (one capture_))} do
-              Follow.new(EdgeSingleton.new(capture), min: 1, max: 1)
-            end
-
-            matchpi %{(follow (list capture_))} do
-              Follow.new(EdgeList.new(capture), min: 1, max: 1)
-            end
-
-            matchpiT %{(follow+ (one capture_) min←(%number +i32!))} do
-              Follow.new(EdgeSingleton.new(capture), min, max: Int32::MAX)
-            end
-
-            matchpiT %{(follow+ (list capture_) min←(%number +i32!))} do
-              Follow.new(EdgeList.new(capture), min, max: Int32::MAX)
-            end
+            Append.new(label, step.key, step.pattern, step.edges)
+          in Follow, Return
+            step
           end
         end
 
         Plan.new(steps, demands)
       end
+
+      new(labeler, plans)
     end
 
-    # Constructs a regime and the associated indices based on *queries*
-    # and their corresponding *bodies*.
-    #
-    # You most likely want `D7.regime` which is a DSL for calling this method.
-    # Refer to `D7.regime` for info on how *queries* are written etc.
-    def self.build(queries : Slice(Term), bodies : Slice(Body)) : Regime
-      assert queries.size == bodies.size
-
-      patterns = [] of {Term, Int32}
-
-      cqueries = compile(queries)
-      cqueries.each_with_index do |cquery, id|
-        cquery.items.compact_map do |step|
-          Term.matchpi?(step, %{(append _ pattern_)}) do
-            patterns << {pattern, id}
-          end
-        end
-      end
-
-      labeler, transcript = M1::ShapeIndex.build(patterns.map { |pattern, _| pattern })
-      plans = plans(cqueries, transcript)
-
-      new(labeler, plans, bodies)
-    end
-
-    # Represents the body associated with a query. It receives a solution and
-    # must produce a patch. The patch it produces can be empty (signifying no change).
-    # The size of the patch must not exceed the number of nodes participating in
-    # the solution. The patch is only allowed to modify participating nodes.
-    alias Body = Soln -> Patch
-
-    # Represents a replacement of some node.
-    alias Patch = Slice({NodeId, Reaction})
+    # Represents the body associated with a query. It receives a solution along
+    # with the index of the associated query, and must produce a patch. The patch
+    # can be empty (signifying no change). The size of the patch must not exceed
+    # the number of nodes participating in the solution. The patch is only allowed
+    # to modify participating nodes.
+    alias Body = Soln, Int32 -> Patch
 
     # - *addr* is the address of the node.
     # - *node* is the node term from the circuit.
     # - *env* is the match env of the part of the query associated with
     #   the capture (i.e. `one` or `many`).
-    defrecord NodeCapture, addr : NodeAddr, node : Term, env : Term::Dict, chat : NodeChat
+    # - *edges* is the edge population of *env*.
+    defrecord NodeCapture,
+      addr : NodeAddr,
+      node : Term,
+      env : Term::Dict,
+      edges : Set(EdgeCapture)
 
     # Maps participant node ids to their corresponding captures.
     alias NodeCaptureGroup = Pf::Map(NodeId, NodeCapture)
@@ -287,6 +309,28 @@ module Ww::D7
       end
 
       # :nodoc:
+      struct Captures
+        include Enumerable({EdgeCapture, Term})
+
+        def initialize(@soln : Soln)
+        end
+
+        def each(&) : Nil
+          @soln.groups.each do |_, group|
+            group.each do |_, nc|
+              nc.edges.each do |edge|
+                yield({edge, nc.env[edge.id]})
+              end
+            end
+          end
+        end
+      end
+
+      def captures : Enumerable({EdgeCapture, Term})
+        Captures.new(self)
+      end
+
+      # :nodoc:
       def add(key : Term, id : NodeId, capture : NodeCapture) : Soln
         participants1, added = participants.add?(id)
         unless added
@@ -301,12 +345,14 @@ module Ww::D7
         0
       end
 
-      # :nodoc:
+      # Returns the rank of this solution.
       #
       # 1. Prefer solutions with most participants.
       # 2. Prefer solutions whose queries are more specific.
+      #
+      # NOTE: assumes sort is ascending.
       def rank
-        {-groups.sum { |_, vs| vs.size }, specificity}
+        {-groups.sum { |_, group| group.size }, specificity}
       end
 
       def_equals_and_hash @groups
@@ -325,8 +371,7 @@ module Ww::D7
       hg : Hypergraph,
       graph : Slice(Pf::USet32),
       decmap : Slice(Pf::USet32),
-      idecmap : Hash(UInt32, Pf::USet32),
-      chats : Slice(NodeChat)
+      idecmap : Hash(UInt32, Pf::USet32)
 
     # :nodoc:
     defcase Locus,
@@ -340,10 +385,7 @@ module Ww::D7
     end
 
     # :nodoc:
-    record Ahead,
-      steps : Slice(Step),
-      ret : Ret,
-      sink : Sink
+    record Ahead, steps : Slice(Step), ret : Ret, sink : Sink
 
     private def forward(ahead : Ahead) : {Step, Ahead}
       {ahead.steps[0], ahead.copy_with(steps: ahead.steps[1..])}
@@ -357,31 +399,99 @@ module Ww::D7
       env[capture.id].items
     end
 
+    private def consistent?(a : EdgeSingleton, av : Term, b : EdgeSingleton, bv : Term) : Bool
+      a.id != b.id || av == bv
+    end
+
+    private def consistent?(a : EdgeSingleton, av : Term, b : EdgeList, bv : Term) : Bool
+      a.id != b.id || (bv.type.dict? && bv.items.any?(av)) # ?!
+    end
+
+    private def consistent?(a : EdgeList, av : Term, b : EdgeSingleton, bv : Term) : Bool
+      consistent?(b, bv, a, av)
+    end
+
+    private def consistent?(a : EdgeList, av : Term, b : EdgeList, bv : Term) : Bool
+      a.id != b.id || av == bv # ?!
+    end
+
     private def search(ctx, locus, step : Append, soln, ahead)
       return unless step.label.in?(ctx.decmap[locus.node])
       return if locus.node.in?(soln)
       return unless env = M1.match?(step.pattern, term = ctx.hg[locus.node])
 
-      chat = ctx.chats[locus.node]
-      capture = NodeCapture.new(locus.addr, term, env, chat)
+      # NOTE: In patterns such as:
+      #
+      #   (one (qux @a_)) (one (mid @a_ @b_)) (one (qux @b_))
+      #
+      # We require @a and @b to be constraint-checked for correctness. But we're not
+      # using M1 on the totality of the pattern, just on the pieces. Each `one`'s pattern
+      # is distrinct, so M1's constraint checking machinery is of no use to us here.
+      # We have to do it ourselves.
+      #
+      # Here we use info from the query compiler (mainly step.edges) to inspect each
+      # previous env, making sure decisions we've already made are consistent with
+      # the one we're about to make.
+      consistent = step.edges.all? do |capture1|
+        value1 = env[capture1.id]
+
+        soln.captures.all? do |capture0, value0|
+          consistent?(capture0, value0, capture1, value1)
+        end
+      end
+
+      return unless consistent
+
+      capture = NodeCapture.new(locus.addr, term, env, step.edges)
 
       search(ctx, locus.copy_with(env: env), soln.add(step.key, locus.node, capture), ahead)
     end
 
     private def search(ctx, locus, step : Follow, soln, ahead)
-      edges = edge_ids(locus.env, step.capture)
+      edge_ids = edge_ids(locus.env, step.capture)
 
+      # Find which hyperedges correspond to which captured edge ids for this
+      # particular node.
+      edges = edge_ids.to_readonly_slice do |edge_id|
+        needle = nil
+
+        ctx.hg.each_edge(locus.node) do |edge|
+          next unless edge_id == edge.term
+
+          needle = edge
+          break
+        end
+
+        needle || raise Enumerable::NotFoundError.new
+      end
+
+      # Determine viable successors. Simultaneously, make sure that all edges we
+      # want to Follow are present in neighbors, not just *some*.
+      successors = Pf::USet32.transaction do |commit|
+        edges.each do |edge|
+          found = false
+
+          locus.adj.each do |neighbor|
+            next if neighbor.in?(soln)
+            next unless ctx.hg.member?(neighbor, edge)
+
+            found = true
+            commit << neighbor
+          end
+
+          # We must have at least one neighbor on all edges that we want
+          # to follow.
+          return unless found
+        end
+      end
+
+      solns = [] of Soln
+      sink = Sink.new { |final| solns << final }
       ret = Ret.new do |steps, soln, sink|
         search(ctx, locus, soln, ahead.copy_with(steps: steps, sink: sink))
       end
 
-      solns = [] of Soln
-
-      locus.adj.each do |neighbor|
-        next unless edges.any? { |edge| ctx.hg.member?(neighbor, edge) }
-
-        sink = Sink.new { |fsoln| solns << fsoln }
-
+      successors.each do |neighbor|
         search(ctx, locus(ctx, neighbor), soln, ahead.copy_with(sink: sink, ret: ret))
       end
 
@@ -439,13 +549,13 @@ module Ww::D7
       original?(soln, id) || raise KeyError.new
     end
 
-    private def reactions(solns : Array({Soln, Body})) : Hash(NodeId, Reaction)
+    private def solve(solns : Array({Soln, Int32}), body : Body) : Patch
       used = Pf::USet32.new
-      reactions = {} of NodeId => Reaction
+      reactions = {} of NodeId => Term
 
-      solns.each do |soln, body|
-        patch = body.call(soln)
-        assert patch.size <= soln.participants.size, "patch-solution arity mismatch (#{patch.size} > #{soln.participants.size})"
+      solns.each do |soln, index|
+        patch = body.call(soln, index)
+        assert patch.size <= soln.participants.size, "size of patch exceeds the number of node participants (#{patch.size} > #{soln.participants.size} participants)"
 
         modifies = Pf::USet32.transaction do |commit|
           patch.each do |node, rep|
@@ -461,41 +571,38 @@ module Ww::D7
 
         # Commit.
         used |= modifies
-        patch.each do |(node, reaction)|
-          assert reactions.put?(node, reaction)
+        modifies.each do |node|
+          assert reactions.put?(node, patch[node])
         end
       end
 
       reactions
     end
 
-    private def reactions(ctx : SearchContext, candidates : Array({Plan, Body})) : Hash(NodeId, Reaction)
+    private def solve(ctx : SearchContext, candidates : Array({Plan, Int32}), body : Body) : Patch
       if candidates.empty?
-        return {} of NodeId => Reaction
+        return Patch.new
       end
 
-      solns = [] of {Soln, Body}
+      solns = [] of {Soln, Int32}
 
-      candidates.each do |plan, body|
-        sink = Sink.new do |soln|
-          solns << {soln, body}
-        end
-
-        search(ctx, plan, sink)
+      candidates.each do |plan, index|
+        search(ctx, plan, sink: Sink.new { |soln| solns << {soln, index} })
       end
 
       solns.sort_by! { |soln, _| soln.rank }
 
-      reactions(solns)
+      solve(solns, body)
     end
 
-    # Returns the reactions of nodes in *hg* in its current state, according to
-    # this rewrite regime, to transition it into the next time-step.
+    # Returns a `Patch` that should be applied to nodes in *hg*. The patch
+    # represents a transition to the next timestep, as defined by this rewrite
+    # regime and *body*.
     #
-    # This method performs one rewrite tick of this regime. The caller is
-    # responsbile for actually merging changes back into the circuit, based
+    # This method performs one "rewrite tick" of this regime. The caller is
+    # responsbile for actually merging the patch back into the circuit, based
     # on node id correspondence etc.
-    def reactions(hg : Hypergraph, chats : Slice(NodeChat)) : Hash(NodeId, Reaction)
+    def solve(hg : Hypergraph, body : Body) : Patch
       decmap = Slice(Pf::USet32).new(hg.order) { Pf::USet32.new }
       idecmap = {} of NodeId => Pf::USet32
       population = Pf::USet32.new
@@ -509,90 +616,17 @@ module Ww::D7
         end
       end
 
-      candidates = [] of {Plan, Body}
+      candidates = [] of {Plan, Int32}
 
-      @plans.zip(@bodies) do |plan, body|
+      @plans.each_with_index do |plan, index|
         next unless plan.demands.subset_of?(population)
 
-        candidates << {plan, body}
+        candidates << {plan, index}
       end
 
-      ctx = SearchContext.new(hg, hg.graph, decmap.readonly, idecmap, chats)
+      ctx = SearchContext.new(hg, hg.graph, decmap.readonly, idecmap)
 
-      reactions(ctx, candidates)
+      solve(ctx, candidates, body)
     end
-  end
-
-  # DSL for constructing a rewrite regime, `Regime`.
-  #
-  # ```
-  # D7.regime do
-  #   rule %{(one dev [discard @tgt_]) (many tgt [cell @tgt_ _])} do
-  #     patch(tgt, &.morph({2, nil}))
-  #   end
-  # end
-  # ```
-  #
-  # TODO: document query format.
-  macro regime(&block)
-    {%
-      unless block
-        raise "regime expects a block containing `rule` branches"
-      end
-
-      stmts = block.body
-      if stmts.is_a?(Expressions)
-        stmts = stmts.expressions
-      elsif stmts.is_a?(Nop)
-        stmts = [] of ::NoReturn
-      else
-        stmts = [stmts]
-      end
-
-      branches = [] of ::NoReturn
-
-      stmts.each do |stmt|
-        unless stmt.is_a?(Call) && stmt.name == :rule && stmt.args.size >= 1 && stmt.block
-          stmt.raise "regime: expected a call to `rule(*patterns : String, &)`"
-        end
-
-        stmt.args.each do |pattern|
-          matches = pattern.scan(/\((?:one|many)\s(\w+)/)
-          participants = matches.map { |match| match[1].id }
-          branches << {pattern: pattern, participants: participants, body: stmt.block.body}
-        end
-      end
-
-      if branches.empty?
-        block.raise "expected at least one `rule` branch"
-      end
-    %}\
-
-    %queries = [
-      {% for branch in branches %}\
-        ::Ww::ML.terms({{branch[:pattern]}}),
-      {% end %}\
-    ]
-
-    %bodies = [
-      {% for branch in branches %}\
-        {{@type}}::Regime::Body.new do |%soln|
-          {% for participant in branch[:participants] %}\
-            {{participant}} = %soln.groups[Term.of({{participant.symbolize}})]
-          {% end %}\
-
-          %result = pass do
-            {{branch[:body]}}
-          end
-
-          %result || {{@type}}::Regime::Patch.empty
-        end,
-      {% end %}\
-    ]
-
-    {{@type}}::Regime.build(
-      queries: %queries.to_readonly_slice(&.itself),
-      bodies: %bodies.to_readonly_slice(&.itself),
-    )
   end
 end

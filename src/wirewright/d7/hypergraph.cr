@@ -1,4 +1,9 @@
 module Ww::D7
+  # Represents a hyperedge.
+  #
+  # *mod* is the address of the module that defines the scope of the edge *term*.
+  defrecord Hyperedge, mod : NodeAddr, term : Term
+
   # A hypergraph is a graph whose edges can include any number of nodes; each edge
   # is a subset of the set of nodes in that graph. It's easier to think of a hypergraph
   # as a community of nodes. Each node can participate in zero or more groups, each
@@ -8,7 +13,7 @@ module Ww::D7
     # - *edgemap* maps node ids (implicit, array index) to hyperedges that node
     #   is participating in.
     # - *trmap* maps node ids (implicit, array index) to node addresses (from `fold`).
-    def initialize(@nodemap : Array(Term), @edgemap : Array(Slice(Edge)), @trmap : Array(NodeAddr))
+    def initialize(@nodemap : Array(Term), @edgemap : Array(Slice(Hyperedge)), @trmap : Array(NodeAddr))
     end
 
     # Returns the number of nodes in this graph.
@@ -35,16 +40,15 @@ module Ww::D7
 
     # Yields hyperedges of a node with the given node *id* (as yielded
     # by `each_node`).
-    def each_edge(id : NodeId, & : Edge ->) : Nil
-      edges = @edgemap[id]
-      edges.each { |edge| yield edge }
+    def each_edge(id : NodeId, & : Hyperedge ->) : Nil
+      @edgemap[id].each { |edge| yield edge }
     end
 
     # Returns `true` if *id* participates in the given hyperedge *edge*. Returns
     # `false` otherwise.
-    def member?(id : NodeId, edge needle : Term) : Bool
+    def member?(id : NodeId, edge needle : Hyperedge) : Bool
       each_edge(id) do |edge|
-        next unless edge.term == needle
+        next unless edge == needle
         return true
       end
 
@@ -55,11 +59,11 @@ module Ww::D7
     # share a hyperedge are connected; each unordered edge is represented with
     # a pair of edges going in opposite directions.
     def graph : Slice(Pf::USet32)
-      groups = {} of Term => Pf::USet32
+      groups = {} of Hyperedge => Pf::USet32
 
       each_node_with_id do |node, id|
         each_edge(id) do |edge|
-          groups[edge.term] = (groups[edge.term]? || Pf::USet32.new).add(id)
+          groups[edge] = (groups[edge]? || Pf::USet32.new).add(id)
         end
       end
 

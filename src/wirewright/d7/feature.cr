@@ -5,7 +5,7 @@ module Ww::D7
   alias Classifier = Term -> Feature
 
   # Nodes from a circuit are *classified* into *features*.
-  alias Feature = Inert | Gnd | Mixture | Scope | Parent | Chat | Circuit
+  alias Feature = Inert | Gnd | Mixture | Scope | Parent | Circuit
 
   # Represents an inert (data) node.
   defcase Inert, node : Term
@@ -18,20 +18,19 @@ module Ww::D7
   # Represents a grounded node: a node to which no further recursive evaluation
   # should apply; a node which is part of the hypergraph that should be solved
   # by D7.
-  defcase Gnd, node : Term, edges : Slice(Edge)
+  defcase Gnd, node : Term, edges : Slice(Term)
 
   # Constructs a grounded node from an enumerable of edges *ee*.
   #
   # See `Gnd`.
-  def gnd(node : Term, edges : Enumerable(Edge)) : Gnd
+  def gnd(node : Term, edges : Enumerable(Term)) : Gnd
     Gnd.new(node, edges: edges.to_readonly_slice(&.itself))
   end
 
-  # Constructs a grounded node with the given *edges*. You can use `edge` to
-  # construct edges.
+  # Constructs a grounded node with the given *edges*.
   #
   # See `Gnd`.
-  def gnd(node : Term, *edges : Edge) : Gnd
+  def gnd(node : Term, *edges : Term) : Gnd
     gnd(node, edges)
   end
 
@@ -39,19 +38,7 @@ module Ww::D7
   #
   # See `Gnd`.
   def gnd(node : Term) : Gnd
-    Gnd.new(node, edges: Slice(Edge).empty)
-  end
-
-  # Represents a node edge. *term* is the edge term itself, e.g. `@x`,
-  # and *path* is the itempath from node to that edge. It must be a valid
-  # itempath, otherwise, the solver will raise at runtime.
-  record Edge, term : Term, path : Slice(Int32)
-
-  # Constructs an edge object.
-  #
-  # See `Edge`.
-  def edge(term : Term, *path : Int32) : Edge
-    Edge.new(term, path.to_readonly_slice(&.itself))
+    Gnd.new(node, edges: Slice(Term).empty)
   end
 
   # A decomposition of *node* into a definition *defn* with a *mix* function
@@ -72,8 +59,8 @@ module Ww::D7
   # Constructs a scope feature.
   #
   # See `Scope`.
-  def scope(bindings : Term | Term::Any, cont : Feature) : Scope
-    Scope.new(bindings.as_d, cont)
+  def scope(bindings : Term::Dict, cont : Feature) : Scope
+    Scope.new(bindings, cont)
   end
 
   # Represents the children nodes of *node* found within an exclusive positive
@@ -85,43 +72,14 @@ module Ww::D7
   # Constructs a parent feature.
   #
   # See `Parent`.
-  def parent(node : Term | Term::Dict, range : Range(Int32, Int32)) : Parent
-    assert range.exclusive? && range.begin.positive? && range.end.positive?
-    assert node.type.dict?
+  def parent(node : Term::Dict, range : Range(Int32, Int32)) : Parent
+    assert range.exclusive? && range.begin >= 0 && range.end >= 0
 
-    Parent.new(node.as_d, range)
+    Parent.new(node, range)
   end
 
-  # Represents a node that offers a place where its children can "chat",
-  # being a kind of "chat room" for children.
-  #
-  # - *queue* is the message queue ("log of unread messages in the chat"; oldest
-  #   unread message goes first).
-  # - *enq* determines whether enqueue is allowed.
-  # - *cont* is the continuation feature for *node*.
-  # - *submit* is used to morph *node* (first arg) into its next shape once
-  #   the updated message queue (second arg) is available, possibly blocking (third arg)
-  #   the queue to prevent further enqueues for the time being.
-  # - *asc* determines the ascent pattern. The chat will emit messages that match *asc*
-  #   to the enclosing chat, letting them "bubble up".
-  # - *desc* is, similarly, a pattern that accepts or declines a message from
-  #   the enclosing chat to this chat. Matching messages are *enqueued*.
-  #
-  # *asc* and *desc* enable bidirectional message exchange between nested chats.
-  defcase Chat,
-    node : Term,
-    queue : Term::Dict,
-    enq : Bool,
-    cont : Feature,
-    submit : (Term, Term::Dict -> Term),
-    asc : Term,
-    desc : Term
-
-  # Constructs a chat feature.
-  #
-  # See `Chat`.
-  def chat(node : Term, queue : Term::Dict, cont : Feature, asc : Term, desc : Term, *, enq : Bool, &submit : Term, Term::Dict -> Term) : Chat
-    Chat.new(node, queue, enq, cont, submit, asc, desc)
+  def parent(node : Term::Dict)
+    parent(node, 0...node.itemsize)
   end
 
   # Used by e.g. `frag`, `unit`, and at the top-level to represent and
@@ -134,10 +92,13 @@ module Ww::D7
   # Constructs a circuit feature.
   #
   # See `Circuit`.
-  def circuit(node : Term, range : Range(Int32, Int32), &cont : Term -> Feature) : Circuit
+  def circuit(node : Term::Dict, range : Range(Int32, Int32), &cont : Term -> Feature) : Circuit
     assert range.exclusive? && range.subrange_of?(0...node.itemsize)
-    assert node.type.dict?
 
-    Circuit.new(node.as_d, range, cont)
+    Circuit.new(node, range, cont)
+  end
+
+  def circuit(node : Term::Dict) : Circuit
+    circuit(node, 0...node.itemsize) { |successor| inert(successor) }
   end
 end

@@ -1,365 +1,379 @@
 module Ww::D7
-  def walk(clf : Classifier, circuit : Term, **kwargs, &frep : FoldContext, Gnd -> Reaction) : Term
-    unit(circuit) do |unit|
-      walk(fold_context(clf), unit, **kwargs, &frep)
-    end
+  # :nodoc:
+  alias FoldRep0 = FoldContext, Feature, FoldRep0, FoldDefault -> Term
+
+  # :nodoc:
+  alias FoldRep = FoldRep0
+
+  # :nodoc:
+  alias FoldDefault = -> Term
+
+  # :nodoc:
+  record FoldContext,
+    clf : Classifier,
+    addr : NodeAddr,
+    scope : NodeScope
+
+  # Constructs the initial fold context.
+  private def fold_context(clf : Classifier) : FoldContext
+    FoldContext.new(clf, NodeAddr.empty, NodeScope.empty)
   end
 
-  def walk(ctx : FoldContext, root : Term, **kwargs, &frep : FoldContext, Gnd -> Reaction) : Reaction
-    walk(ctx, ctx.clf.call(root), **kwargs, &frep)
+  private def fold(ctx : FoldContext, node, &frep : FoldRep) : Term
+    fold(ctx, node, frep)
   end
 
-  def walk(ctx : FoldContext, root : Feature, subcircuits : Bool = true, &frep : FoldContext, Gnd -> Reaction) : Reaction
-    fold(ctx, root) do |ctx, feature, rec, default|
-      case feature
-      when Gnd
-        frep.call(ctx, feature)
-      when Chat
-        fold(ctx.copy_with(chat: NodeChat.new(msg: feature.queue.items.first? || Term.of(:cycle), enq: feature.enq)), feature.cont, rec)
-      when Circuit
-        if subcircuits
-          fold(ctx, scope(Term[], parent(feature.node, feature.range)), rec)
-        else
-          default.call
-        end
-      else
-        default.call
-      end
-    end
+  private def fold(ctx : FoldContext, node : Term, frep : FoldRep) : Term
+    fold(ctx, ctx.clf.call(node), frep)
   end
 
-  def walk(clf : Classifier, regime : Regime, top : D7::Top, circuit : Term, **kwargs) : {D7::Top, Term}
-    unit(top, circuit) do |unit|
-      feature = clf.call(unit)
-
-      walk(fold_context(clf), regime, feature.as(Circuit), **kwargs)
-    end
+  private def fold(ctx : FoldContext, feature : Inert, frep : FoldRep) : Term
+    feature.node
   end
 
-  def walk(ctx : FoldContext, regime : Regime, circuit : Circuit, subcircuits : Bool = true) : Reaction
-    # Find and exercise relations.
-    top0 = parent(circuit.node, circuit.range)
-    reactions = relate(ctx, regime, top0, subcircuits: subcircuits)
-
-    # Replace participants with their resulting forms and unscope.
-    fold(ctx, top0) do |ctx, feature, rec, default|
-      case feature
-      when Gnd
-        unless rxn = reactions[ctx.addr]?
-          next D7.rxn(feature.node)
-        end
-
-        unscope(ctx, rxn)
-      when Chat
-        queue0 = feature.queue.items
-        msg0 = queue0.first?
-        upflow = Term[]
-        rxn = fold(ctx.copy_with(chat: NodeChat.new(msg0 || Term.of(:cycle), enq: feature.enq)), feature.cont, rec)
-
-        # Sort messages appended during one tick lexicographically, so that we have
-        # a deterministic order.
-        msgs = rxn.emission.items.to_a.sort_by! do |msg|
-          # FIXME: this is really inefficient!!! We should have Term.compare!!!!
-          ML.compact(msg)
-        end
-
-        queue1 = Term::Dict.build do |commit|
-          commit.concat(queue0)
-
-          msgs.each do |msg|
-            next unless msg.type.dict? # < Ignores e.g. `ack`
-
-            if M1.probe?(feature.asc, msg)
-              upflow = upflow.append(msg)
-              next
-            end
-
-            Term.case(msg) do
-              matchpi %{(group children_*)} { commit.concat(children.items) }
-              otherwise { commit << msg }
-            end
-          end
-        end
-
-        D7.rxn(feature.submit.call(rxn.node, queue1), upflow)
-      when Circuit
-        if subcircuits
-          fold(ctx, scope(Term[], parent(feature.node, feature.range)), rec)
-        else
-          default.call
-        end
-      else
-        default.call
-      end
-    end
+  private def fold(ctx : FoldContext, feature : Gnd, frep : FoldRep) : Term
+    frep.call(ctx, feature, frep, -> { feature.node })
   end
 
-  defrecord Top, queue : Term::Dict
-
-  def step(clf : Classifier, regime : Regime, top : Top, circuit : Term, **kwargs, &tick : Term, NodeChat -> Reaction) : {Top, Term}
-    unit(top, circuit) do |unit|
-      circuit = clf.call(unit)
-      assert circuit.is_a?(Circuit)
-
-      step(fold_context(clf, **kwargs), regime, circuit, &tick)
-    end
-  end
-
-  def step(ctx : FoldContext, regime : Regime, circuit : Circuit, &tick : Term, NodeChat -> Reaction) : Reaction
-    # Step nested circuits.
-    top0 = parent(circuit.node, circuit.range)
-    toprxn0 = fold(ctx, top0) do |ctx, feature, rec, default|
-      case feature
-      when Chat    then fold(ctx, feature.cont, rec)
-      when Circuit then step(ctx, regime, feature, &tick)
-      else
-        default.call
+  private def fold(ctx : FoldContext, feature : Parent, frep : FoldRep) : Term
+    default = -> do
+      flattenT(feature.node, range: feature.range) do |child, index|
+        fold(ctx.copy_with(addr: ctx.addr.append(index)), child, frep)
       end
     end
 
-    top1 = parent(toprxn0.node, circuit.range)
+    frep.call(ctx, feature, frep, default)
+  end
 
-    # Find and execute relations.
-    reactions = relate(ctx, regime, top1, subcircuits: false)
+  private def fold(ctx : FoldContext, feature : Scope, frep : FoldRep) : Term
+    default = -> do
+      subscope = ctx.scope.append({ctx.addr, feature.bindings})
 
-    # Replace participants with their resulting forms and unscope.
-    fold(ctx, top1) do |ctx, feature, _, default|
-      unless feature.is_a?(Gnd)
-        next default.call
+      fold(ctx.copy_with(scope: subscope), feature.cont, frep)
+    end
+
+    frep.call(ctx, feature, frep, default)
+  end
+
+  private def fold(ctx : FoldContext, feature : Mixture, frep : FoldRep) : Term
+    default = -> do
+      feature.mix.call(feature.node, fold(ctx, feature.defn, frep))
+    end
+
+    frep.call(ctx, feature, frep, default)
+  end
+
+  # NOTE: The default handling for a circuit is to evaluate its continuation. For
+  # example, a `(circuit @x _)`'s default handling is `(cell @x _)`. Evaluation
+  # is non-default behavior. That is, most likely, the default handling is to stop
+  # at the circuit, without recursively folding it.
+  private def fold(ctx : FoldContext, feature : Circuit, frep : FoldRep) : Term
+    default = -> do
+      fold(ctx, feature.cont.call(Term.of(feature.node)), frep)
+    end
+
+    frep.call(ctx, feature, frep, default)
+  end
+
+  private def flattenT(dict : Term::Dict, range : Range(Int32, Int32), & : Term, Int32 -> Term) : Term
+    Term.of(flatten(dict, range) { |item, index| yield item, index })
+  end
+
+  private def flatten(dict : Term::Dict, range : Range(Int32, Int32), & : Term, Int32 -> Term) : Term::Dict
+    dict.transaction do |commit|
+      dict.each_item_with_index(within: range) do |item0, index|
+        item1 = yield item0, index
+        next if item0 == item1
+
+        commit.with(index, item1)
       end
-
-      unless rxn = reactions[ctx.addr]?
-        scoped, _ = scoped(ctx.scope, feature.node, feature.edges)
-        rxn = tick.call(scoped, ctx.chat)
-      end
-
-      unscope(ctx, rxn)
-    end
-  end
-
-  # Finds and executes all possible ground node relations in *root* according
-  # to *regime*. Returns a hash mapping each relation participant to its
-  # resulting `Reaction` to that participation. Nodes in the returned map
-  # are scoped.
-  def relate(ctx : FoldContext, regime : Regime, root : Feature, *, subcircuits : Bool) : Hash(NodeAddr, Reaction)
-    nodemap = [] of Term
-    edgemap = [] of Slice(Edge)
-    trmap = [] of NodeAddr
-    chats = [] of NodeChat
-
-    _ = walk(ctx, root, subcircuits: subcircuits) do |ctx, feature|
-      node, edges = scoped(ctx.scope, feature.node, feature.edges)
-      nodemap << node
-      edgemap << edges
-      trmap << ctx.addr
-      chats << ctx.chat
-
-      D7.rxn(feature.node)
-    end
-
-    if nodemap.empty?
-      assert edgemap.empty?
-      assert trmap.empty?
-
-      return {} of NodeAddr => Reaction
-    end
-
-    hg = Hypergraph.new(nodemap, edgemap, trmap)
-
-    rxns = regime.reactions(hg, chats.to_readonly_slice)
-    rxns.transform_keys { |key| trmap[key] }
-  end
-
-  def unit(circuit : Term, & : Term -> Reaction) : Term
-    unless circuit.type.dict?
-      return circuit
-    end
-
-    # A circuit like:
-    #
-    #   (cell @x 100)
-    #   (cell @y)
-    #   (feed @x @y @x)
-    #
-    # ... turns into:
-    #
-    #   (unit
-    #     (cell @x 100)
-    #     (cell @y)
-    #     (feed @x @y @x))
-    #
-    # ... at the top-level.
-
-    unit = Term::Dict.build do |commit|
-      commit << :unit
-      commit.concat(circuit.items)
-    end
-
-    rxn = yield Term.of(unit)
-
-    # NOTE: rxn's emission can be nonempty if the user wishes that messages
-    # bubble up above the toplevel. We simply discard such messages.
-
-    Term.matchpi(rxn.node, %{(unit nodes_*)}) do
-      Term.of(nodes | circuit.pairspart)
-    end
-  end
-
-  def unit(top : Top, circuit : Term, & : Term -> Reaction) : {Top, Term}
-    unless circuit.type.dict?
-      return top, circuit
-    end
-
-    # A circuit like:
-    #
-    #   (cell @x 100)
-    #   (cell @y)
-    #   (feed @x @y @x)
-    #
-    # ... turns into:
-    #
-    #   (unit
-    #     (chat <toplevel queue>
-    #       (cell @x 100)
-    #       (cell @y)
-    #       (feed @x @y @x)))
-    #
-    # ... at the top-level.
-
-    chat = Term::Dict.build do |commit|
-      commit << {:async, :chat} << top.queue
-      commit.concat(circuit.items)
-    end
-
-    rxn = yield Term.of(:unit, chat)
-
-    # NOTE: rxn's emission can be nonempty if the user wishes that messages
-    # bubble up above the toplevel. We simply discard such messages.
-
-    Term.matchpi(rxn.node, %{(unit ((async chat) queue_dict nodes_*))}) do
-      {Top.new(queue.as_d), Term.of(nodes | circuit.pairspart)}
-    end
-  end
-
-  def unscope(ctx : FoldContext, rxn : Reaction) : Reaction
-    rxn(unscope(ctx, rxn.node), rxn.emission)
-  end
-
-  def unscope(ctx : FoldContext, node : Term) : Term
-    if ctx.scope.empty?
-      return node
-    end
-
-    rxn = fold(ctx, node) do |ctx, feature, rec, default|
-      case feature
-      when Gnd  then rxn(unscope(feature.node, feature.edges))
-      when Chat then fold(ctx, feature.cont, rec)
-      else
-        default.call
-      end
-    end
-
-    assert rxn.emission.empty?
-
-    rxn.node
-  end
-
-  # Removes scope annotations from *edges* of *node*.
-  def unscope(node : Term, edges : Slice(Edge)) : Term
-    edges.each do |edge|
-      unscoped = unscope(edge.term)
-      next if edge.term == unscoped
-
-      node = Term.morph(node, edge.path.to_readonly_slice { |i| Term.of(i) }) { unscoped }
-    end
-
-    node
-  end
-
-  # Removes scope annotations from *edge*.
-  #
-  # NOTE: this is purely conventional. Nothing stops the user from forging
-  # these. You can validate-out edges that look like these upfront though. Use
-  # `scoped?`.
-  #
-  # NOTE: assumes *edge* is an edge without doing any checks.
-  def unscope(edge : Term) : Term
-    _, id = edge
-    return edge unless id = id.as_d?
-    return edge unless id.itemsonly? && id.size == 2
-
-    scope, name = id
-    return edge unless scope.type.string?
-
-    Term.of(:edge, name)
-  end
-
-  # Adds *scope* to *edges* of *node*. Returns *node* whose edges
-  # are annotated with a scope, and a list of scoped edges.
-  def scoped(scope : NodeScope, node : Term, edges : Slice(Edge)) : {Term, Slice(Edge)}
-    if scope.empty?
-      return node, edges
-    end
-
-    scoped = edges.to_readonly_slice do |edge|
-      term = scoped(scope, edge.term)
-      node = morphi(node, edge.path, term)
-
-      edge.copy_with(term: term)
-    end
-
-    {node, scoped}
-  end
-
-  # Custom morph-item implementation for performance. scoped() is sometimes
-  # a hot method so we want it to be as stupid as possible, within limits.
-  private def morphi(node : Term, itempath : Slice(Int32), edge : Term) : Term
-    return edge unless index = itempath[0]?
-    return node unless dict0 = node.as_d?
-    return node unless item0 = dict0.item_at?(index)
-
-    item1 = morphi(item0, itempath[1..], edge)
-    dict1 = dict0.with(index, item1)
-
-    Term.of(dict1)
-  end
-
-  # Returns `true` if *edge* is of the conventional scoped form. Returns
-  # `false` otherwise.
-  def scoped?(edge : Term) : Bool
-    Term.case(edge) do
-      matchpi %{(%'edge (_string name_))} { true }
-      otherwise { false }
     end
   end
 
   # Annotates *edge* with scope info based on the current *scope*.
-  def scoped(scope : NodeScope, edge : Term) : Term
+  private def hyperedge(scope : NodeScope, edge : Term) : Hyperedge
     while entry = scope.last?
       addr, bindings = entry
 
       unless exterior = bindings[edge]?
-        return annotated(addr, edge)
+        return Hyperedge.new(addr, edge)
       end
 
       edge = exterior
       scope = scope[...-1]
     end
 
-    edge
+    Hyperedge.new(NodeAddr.empty, edge)
   end
 
-  # NOTE: assumes *edge* is an edge term without any checks.
-  private def annotated(addr : NodeAddr, edge : Term) : Term
-    hasher = Term::Hasher.new
-    addr.each do |id|
-      hasher << id
+  # Constructs a hypergraph of *scoped* nodes from *root*, continuing the fold
+  # defined by *ctx*.
+  private def hypergraph(ctx : FoldContext, root : Feature) : Hypergraph
+    nodemap = [] of Term
+    edgemap = [] of Slice(Hyperedge)
+    trmap = [] of NodeAddr
+
+    _ = fold(ctx, root) do |ctx, feature, rec, default|
+      if feature.is_a?(Gnd)
+        nodemap << feature.node
+        edgemap << feature.edges.to_readonly_slice { |edge| hyperedge(ctx.scope, edge) }
+        trmap << ctx.addr
+      end
+
+      default.call
     end
 
-    # We use Alpha48 because it is used pretty much everywhere else so clients should
-    # find it "familiar".
-    scope_id = Alpha48.encode(hasher.result)
+    Hypergraph.new(nodemap, edgemap, trmap)
+  end
 
-    Term.of(:edge, {scope_id, edge[1]})
+  private def apply(ctx : FoldContext, hg : Hypergraph, root : Feature, patch : Patch) : Term
+    table = patch.transform_keys { |key| hg.addr(key) }
+
+    fold(ctx, root) do |ctx, feature, _, default|
+      feature.is_a?(Gnd) ? (table[ctx.addr]? || default.call) : default.call
+    end
+  end
+
+  # :nodoc:
+  def walk(clf : Classifier, regime : Regime, circuit : Term, &body : Regime::Body) : Term
+    walk(clf, circuit) { |hg| regime.solve(hg, body) }
+  end
+
+  # :nodoc:
+  def walk(clf : Classifier, circuit : Term, &propose : Hypergraph -> Patch)
+    unless circuit.type.dict?
+      return circuit
+    end
+
+    walk(fold_context(clf), circuit(circuit.as_d), propose)
+  end
+
+  private def walk(ctx : FoldContext, circuit : Circuit, propose : Hypergraph -> Patch)
+    root = parent(circuit.node, circuit.range)
+    hg = hypergraph(ctx, root)
+
+    patch = propose.call(hg)
+    result = patch.empty? ? root.node : apply(ctx, hg, root, patch)
+
+    root1 = parent(result.as_d, circuit.range)
+    fold(ctx, root1) do |ctx, feature, rec, default|
+      feature.is_a?(Circuit) ? walk(ctx, feature, propose) : default.call
+    end
+  end
+
+  # Calls *fn* with ground and inert nodes in *circuit* and their addresses.
+  #
+  # *mix* lets you disable node split-mix (`Mixture`). If false, mixture nodes
+  # are treated as inert nodes.
+  #
+  # NOTE: node addresses are linked to their location in *circuit*. It is not guaranteed
+  # that the same node (as perceived by an observer) has the same address between successive
+  # generations of a circuit.
+  def each_node_with_addr(clf : Classifier, circuit : Term, *, mix : Bool = true, &fn : Term, NodeAddr ->)
+    return unless circuit.type.dict?
+
+    fold(fold_context(clf), parent(circuit.as_d)) do |ctx, feature, rec, default|
+      case feature
+      when Gnd, Inert
+        fn.call(feature.node, ctx.addr)
+
+        feature.node
+      when Mixture
+        if mix
+          default.call
+        else
+          rec.call(ctx, inert(feature.node), rec, default)
+        end
+      when Circuit
+        fold(ctx, parent(feature.node, feature.range), rec)
+      else
+        default.call
+      end
+    end
+  end
+
+  # Returns a hash mapping addresses of nodes to those nodes in *circuit*. This
+  # effectively "flattens" the circuit.
+  def nodes(clf : Classifier, circuit : Term, **kwargs) : Hash(NodeAddr, Term)
+    nodes = {} of NodeAddr => Term
+    each_node_with_addr(clf, circuit, **kwargs) do |node, addr|
+      nodes[addr] = node
+    end
+    nodes
+  end
+
+  # :nodoc:
+  REGIMES = SyncHash(UInt32, Regime).new(initial_capacity: 32)
+
+  # :nodoc:
+  REGIME_ID = [0u32]
+
+  macro case(clf, circuit, &block)
+    {%
+      unless block
+        raise "`D7.case` expects a block containing `rule` branches"
+      end
+
+      id = REGIME_ID[0]
+      REGIME_ID[0] += 1
+
+      stmts = block.body
+      if stmts.is_a?(Expressions)
+        stmts = stmts.expressions
+      elsif stmts.is_a?(Nop)
+        stmts = [] of ::NoReturn
+      else
+        stmts = [stmts]
+      end
+
+      branches = [] of ::NoReturn
+
+      stmts.each do |stmt|
+        unless stmt.is_a?(Call) && stmt.name == :rule && stmt.args.size >= 1 && stmt.block
+          stmt.raise "regime: expected a call to `rule(*patterns : String, &)`"
+        end
+
+        stmt.args.each do |pattern|
+          matches = pattern.scan(/\((?:one|many)\s(\w+)/)
+          participants = matches.map { |match| match[1].id }
+          branches << {pattern: pattern, participants: participants, body: stmt.block.body}
+        end
+      end
+
+      if branches.empty?
+        block.raise "expected at least one `rule` branch"
+      end
+    %}\
+
+    %regime = {{@type}}::REGIMES.put_if_absent({{id}}) do
+      %queries = Pointer(Term).malloc({{branches.size}})
+      {% for branch, index in branches %}\
+        %queries[{{index}}] = ::Ww::ML.terms({{branch[:pattern]}})
+      {% end %}\
+
+      {{@type}}::Regime.build(Slice(Term).new(%queries, {{branches.size}}, read_only: true))
+    end
+
+    D7.walk({{clf}}, %regime, {{circuit}}) do |%soln, %index|
+      case %index
+      {% for branch, index in branches %}\
+      when {{index}}
+        %participants{index} = {
+          {% for participant in branch[:participants] %}\
+            %soln.groups[Term.of({{participant.symbolize}})],
+          {% end %}\
+        }
+
+        %result{index} = pass(*%participants{index}) do |{{branch[:participants].splat}}|
+          {{branch[:body]}}
+        end
+
+        %result{index} || {{@type}}::Patch.new
+      {% end %}\
+      else
+        raise ArgumentError.new
+      end
+    end
+  end
+
+  # Performs *subframe compaction*. *Subframe compaction* is a fancy way of saying
+  # "If the next frame has all changes that the current one has, then we don't need
+  # to show the current frame to the user; they'll see the changes in the next
+  # frame anyway". In other words, if the next frame subsumes the current one,
+  # the current one is skipped.
+  #
+  # Yields frames to show to the user.
+  #
+  # This method may yield duplicate consecutive frames, and it is the caller's
+  # responsibility to filter them out. We do not do it here because the caller is likely
+  # to do that at frame-level anyway, so there is no need to do the work on subframes.
+  #
+  # *seen* must be the last frame seen by the user. Usually this would be the last
+  # frame yielded by this method. Otherwise it would be the very first circuit,
+  # which the caller itself should show to the user as the first frame. This method
+  # will never yield *seen* (unless as a duplicate).
+  def squash(clf : Classifier, seen : Term, subframes : Indexable(Term), &) : Nil
+    if subframes.empty?
+      raise ArgumentError.new
+    end
+
+    changed = Set(NodeAddr).new
+
+    ahead = Deque(Term).new
+    ahead.concat(subframes)
+
+    a = seen
+    ns = nodes(clf, seen, mix: false)
+
+    while b = ahead.shift?
+      ms = nodes(clf, b, mix: false)
+
+      # Cut if:
+      # - New nodes were added or removed in the next subframe.
+      # - A node that was already modified was modified in the next subframe.
+      unless ns.size == ms.size && ns.all? { |addr, _| ms.has_key?(addr) } && ms.all? { |addr, m| !addr.in?(changed) || ns[addr] == m }
+        yield a
+        a = b
+        ns = ms
+        changed.clear
+        next
+      end
+
+      # Changes are disjoint. We can skip showing A because B has all
+      # the same changes.
+      ms.each do |addr, m|
+        n = ns[addr]?
+        next if n == m
+
+        changed << addr
+      end
+
+      a = b
+      ns = ms
+    end
+
+    yield a
+  end
+
+  alias Pass = Classifier, Term -> Term
+
+  # :nodoc:
+  class FrameIterator
+    include Iterator(Term)
+
+    def initialize(@clf : Classifier, @circuit : Term, @passes : Indexable(Pass))
+      @memo = @circuit
+      @ahead = Deque{@circuit}
+    end
+
+    def next
+      if circuit = @ahead.shift?
+        return circuit
+      end
+
+      state = @circuit
+      subframes = @passes.map { |pass| state = pass.call(@clf, state) }
+      if @circuit == state
+        return Iterator.stop
+      end
+
+      D7.squash(@clf, @memo, subframes) do |frame|
+        next if @memo == frame
+
+        @ahead << frame
+        @memo = frame
+      end
+
+      @circuit = state
+      @ahead.shift
+    end
+  end
+
+  def frames(clf : Classifier, circuit : Term, passes : Indexable(Pass)) : Iterator(Term)
+    FrameIterator.new(clf, circuit, passes)
+  end
+
+  def frames(clf : Classifier, circuit : Term, *passes : Pass) : Iterator(Term)
+    frames(clf, circuit, passes)
   end
 end
