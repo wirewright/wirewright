@@ -1,4 +1,9 @@
 module Ww
+  # Raised by `Term::Num` on certain math errors, such as taking the square
+  # root of a negative number.
+  class MathDomainError < Exception
+  end
+
   # Represents a number term.
   #
   # Wirewright's numbers can be *exact* or *approximate*. *Approximate*-ness (also
@@ -11,7 +16,7 @@ module Ww
   #
   # - *exact* 61-bit signed integer (known as `i61`, `Int61`, arithmetic done using `Int64`).
   # - *exact* rational (known as `rat`, arithmetic done using `BigRational`).
-  # - *approximate* float (known as `f64`, arithmetic done using `Float64`).
+  # - *approximate* 61-bit float (known as `f61`, arithmetic done using `Float64`).
   #
   # 61-bit signed integer is used because `Term` can only fit 61 bits in the pointer;
   # the three remaining bits it uses as a tag. See `Term` for more info on how term
@@ -19,7 +24,7 @@ module Ww
   #
   # Outside of `Term`, `Num` is a tagged union; it occupies 16 bytes (4 bytes for type
   # id, 4 bytes padding, and 8 bytes for the number itself). The number is stored as
-  # an `Int64`, `Float64`, or a pointer to `BigRational`.
+  # an `Int64`, a `Float64`, or a pointer to `BigRational`.
   #
   # `BigRational` is behind a pointer because it is a large struct, occupying 32 bytes.
   # Most numbers will never be rationals, so it would be a waste of space to include those
@@ -43,8 +48,13 @@ module Ww
 
     # Utilities and constants for working with i61 numbers.
     module Int61
+      # :nodoc:
+      #
       # Mask for bits 0...61 (61 is the sign bit)
       MASK = (1u64 << 61) &- 1
+
+      # :nodoc:
+      #
       # Mask for bit 61 (sign bit)
       SIGN = 1u64 << 60
 
@@ -53,7 +63,7 @@ module Ww
       # Maximum value for an `Int61`.
       MAX = 2i64**60 - 1
 
-      # Encodes an i61 as a u64.
+      # Returns i61 bits for an i64 *n*.
       #
       # Raises `OverflowError` in case of overflow.
       def self.bits(n : Int64) : UInt64
@@ -64,13 +74,43 @@ module Ww
         n.unsafe_as(UInt64) & MASK
       end
 
-      # Decodes a u64 as an i61.
-      def self.value(n : UInt64) : Int64
-        if (n & SIGN) > 0
-          return (n | ~MASK).unsafe_as(Int64)
+      # Returns an i64 decoded from u64 *n*.
+      def self.value(bits : UInt64) : Int64
+        if (bits & SIGN) > 0
+          return (bits | ~MASK).unsafe_as(Int64)
         end
 
-        n.unsafe_as(Int64)
+        bits.unsafe_as(Int64)
+      end
+    end
+
+    # Utilities and constants for working with f61 numbers.
+    #
+    # Three least significant bits of the mantissa are omitted, rounding to
+    # nearest, ties to even.
+    #
+    # NOTE: This was written based on suggestions from ChatGPT. I have absolutely
+    # no idea what I'm doing here wrt floating-point semantics.
+    module Float61
+      extend self
+
+      # Returns f61 bits for an f64 *n*.
+      def bits(value : Float64) : UInt64
+        raw = value.unsafe_as(UInt64)
+        trunk = raw & ~0b111u64
+        lost = raw & 0b111u64
+
+        # Round to nearest, ties to even.
+        if lost > 0b100u64 || (lost == 0b100 && ((trunk >> 3) & 1))
+          trunk &+= 0b1000
+        end
+
+        trunk >> 3
+      end
+
+      # Returns an f64 decoded from f61 *bits*.
+      def value(bits : UInt64) : Float64
+        (bits << 3).unsafe_as(Float64)
       end
     end
 

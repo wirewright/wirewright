@@ -1,7 +1,4 @@
 module Ww
-  class MathDomainError < Exception
-  end
-
   # Lists the possible types of terms.
   enum TermType : UInt8
     # WARNING! This enum is assumed to contain at most 8 values (0-7)
@@ -252,9 +249,8 @@ module Ww
         bits = Num::Int61.bits(a) # 61 bit, 3 MSB clear
         address = (bits << 3) | Tag::NumInt.value
       in Float64
-        box = Pointer(Float64).malloc(1)
-        box.value = a
-        address = box.address | Tag::NumFlt.value
+        bits = Num::Float61.bits(a)
+        address = (bits << 3) | Tag::NumFlt.value
       in Pointer(BigRational)
         address = a.address | Tag::NumRat.value
       end
@@ -272,9 +268,10 @@ module Ww
 
         Num.unsafe_new(value)
       when .num_flt?
-        box = Pointer(Float64).new(@mem.address & ~0b111u64)
+        bits = @mem.address >> 3
+        value = Num::Float61.value(bits)
 
-        Num.unsafe_new(box.value)
+        Num.unsafe_new(value)
       when .num_rat?
         box = Pointer(BigRational).new(@mem.address & ~0b111u64)
 
