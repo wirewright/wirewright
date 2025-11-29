@@ -186,6 +186,8 @@ module Ww::Soma::DwUIR
       defrecord KeyInput, rune : String
       defrecord KeyUp, key : Key, ctrl : Bool, shift : Bool, alt : Bool
       defrecord KeyDn, key : Key, ctrl : Bool, shift : Bool, alt : Bool
+      defrecord KeyOn, key : Key, ctrl : Bool, shift : Bool, alt : Bool
+      defrecord KeyOff, key : Key, ctrl : Bool, shift : Bool, alt : Bool
 
       def term(button : MouseButton, &fn : Term ->) : Nil
         # |@ soma.dwuir.window.event.mouse
@@ -418,57 +420,47 @@ module Ww::Soma::DwUIR
         fn.call(Term.of(:keyboard, :input, e.rune))
       end
 
-      def term(e : KeyUp, &fn : Term ->) : Nil
-        # |@ soma.dwuir.window.event.keyboard
-        #
-        # |@pattern
-        # (keyboard key code_ up ctrl: _boolean shift: _boolean alt: _boolean mod: _boolean)
-        #
-        # |@block  Key released
-        # Represents a key release event.
-        #
-        # NOTE: *ctrl*, *shift*, and *alt* are going to be defined only if `true`.
-        # In other words, they are set pairs. `mod` is going to be defined if any
-        # of them is `true`.
-        #
-        # For example, `(keyboard key left up ctrl: true mod: true)`
-        term(e.key) do |key|
-          fn.call(
-            Term.of(:keyboard, :key, key, :up,
-              ctrl: e.ctrl || nil,
-              shift: e.shift || nil,
-              alt: e.alt || nil,
-              mod: e.ctrl || e.shift || e.alt || nil,
-            )
-          )
-        end
-      end
+      # |@ soma.dwuir.window.event.keyboard
+      #
+      # |@pattern
+      # (keyboard key code_ ⸨up,dn,on,off⸩ ctrl: _boolean shift: _boolean alt: _boolean mod: _boolean)
+      #
+      # |@block  Key events
+      # Several key events are available.
+      #
+      # - *up* represents a key press event.
+      # - *dn* represents a key release event.
+      #
+      # Importantly, holding the same key for some time will initiate *key repeat*.
+      # Key repeat is represented as a sequence of `up - dn`, so in an event stream,
+      # you should expect `dn - (up - dn)* - up`. `(...)*` means zero or more.
+      #
+      # An alternative pair of events, *on* and *off*, avoid key repeats. When the user
+      # holds down a key, *on* is emitted, and when they release it, *off* is emitted,
+      # no matter how long the key was held.
+      #
+      # NOTE: *ctrl*, *shift*, and *alt* are going to be defined only if `true`.
+      # In other words, they are *set pairs*. `mod` is going to be defined if any
+      # of them is `true`.
+      #
+      # ```wwml
+      # (keyboard key left up ctrl: true mod: true)
+      # ```
 
-      def term(e : KeyDn, &fn : Term ->) : Nil
-        # |@ soma.dwuir.window.event.keyboard
-        #
-        # |@pattern
-        # (keyboard key code_ dn ctrl: _boolean shift: _boolean alt: _boolean mod: _boolean)
-        #
-        # |@block  Key pressed
-        # Represents a key press event.
-        #
-        # NOTE: *ctrl*, *shift*, and *alt* are going to be defined only if `true`.
-        # In other words, they are set pairs. `mod` is going to be defined if any of
-        # them is `true`.
-        #
-        # For example, `(keyboard key home dn)`
-        term(e.key) do |key|
-          fn.call(
-            Term.of(:keyboard, :key, key, :dn,
-              ctrl: e.ctrl || nil,
-              shift: e.shift || nil,
-              alt: e.alt || nil,
-              mod: e.ctrl || e.shift || e.alt || nil,
+      {% for word in %w[up dn on off] %}
+        def term(e : Key{{word.capitalize.id}}, &fn : Term ->) : Nil
+          term(e.key) do |key|
+            fn.call(
+              Term.of(:keyboard, :key, key, {{word.id.symbolize}},
+                ctrl: e.ctrl || nil,
+                shift: e.shift || nil,
+                alt: e.alt || nil,
+                mod: e.ctrl || e.shift || e.alt || nil,
+              )
             )
-          )
+          end
         end
-      end
+      {% end %}
     end
   end
 end

@@ -532,8 +532,12 @@ module Ww::Soma::DwUIR
       up = Event::KeyUp.new(key, ctrl, shift, alt)
       dn = Event::KeyDn.new(key, ctrl, shift, alt)
 
+      on = Event::KeyOn.new(key, ctrl, shift, alt)
+      off = Event::KeyOff.new(key, ctrl, shift, alt)
+
       case event.type
       when .keyup?
+        dispatch(event.window_id, off, sink)
         dispatch(event.window_id, up, sink)
       when .keydown?
         if event.repeat > 0
@@ -541,6 +545,7 @@ module Ww::Soma::DwUIR
           dispatch(event.window_id, up, sink)
           dispatch(event.window_id, dn, sink)
         else
+          dispatch(event.window_id, on, sink)
           dispatch(event.window_id, dn, sink)
         end
       end
@@ -659,7 +664,7 @@ module Ww::Soma::DwUIR
 
               sysid2key[window1.sys.id] = key
 
-              sink.call(Term.of(:wm, :event, key, {:window, :updated, spec}))
+              sink.call(Term.of(:wm, :event, key, Term.of(:window, :updated, spec, opened: true)))
             end
 
             matchpi %{(wm update key_ spec_)} do
