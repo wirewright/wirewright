@@ -1267,7 +1267,6 @@
             ^^(+ x 1))))))
   end)
 
-
 ;; Sensor-appearance chan conditional receive
 (d7
   (frame
@@ -1779,6 +1778,142 @@
       (discard @c)))
   end)
 
+;; Different local termspaces
+(d7
+  (frame
+    ((sensor* cell) (a x_ @x))
+    ((sensor* cell) (b y_ @y))
+    ((appearance cell) (a @p) 100)
+    ((appearance cell) (b @q) 200)
+    ((appearance cell) (c @r) 300))
+  (frame
+    ((sensor* cell) (a x_ @x) (100))
+    ((sensor* cell) (b y_ @y) (200))
+    ((appearance cell) (a @p) 100)
+    ((appearance cell) (b @q) 200)
+    ((appearance cell) (c @r) 300))
+  end)
+
+;; Dependent sensors and appearances
+(d7
+  (frame
+    ((sensor* cell) (local even←(%pipe (mod 2) 0) @even))
+    ((sensor* cell) (local odd←(%pipe (mod 2) (%not 0)) @odd))
+    ((appearance cell) (local @x) 100)
+    ((appearance cell) (local @y) 201)
+    ((appearance cell) (local @z) 300)
+    (fb (@x ±n) {n: ^(+ n 1)})
+    (fb (@y ±n) {n: ^(+ n 1)})
+    (fb (@z ±n) {n: ^(+ n 1)}))
+  (frame
+    ((sensor* cell) (local even←(%pipe (mod 2) 0) @even) (100 300))
+    ((sensor* cell) (local odd←(%pipe (mod 2) (%not 0)) @odd) (201))
+    ((appearance cell) (local @x) 101)
+    ((appearance cell) (local @y) 202)
+    ((appearance cell) (local @z) 301)
+    (fb (@x ±n) {n: ^(+ n 1)})
+    (fb (@y ±n) {n: ^(+ n 1)})
+    (fb (@z ±n) {n: ^(+ n 1)}))
+  (frame
+    ((sensor* cell) (local even←(%pipe (mod 2) 0) @even) (202))
+    ((sensor* cell) (local odd←(%pipe (mod 2) (%not 0)) @odd) (101 301))
+    ((appearance cell) (local @x) 102)
+    ((appearance cell) (local @y) 203)
+    ((appearance cell) (local @z) 302)
+    (fb (@x ±n) {n: ^(+ n 1)})
+    (fb (@y ±n) {n: ^(+ n 1)})
+    (fb (@z ±n) {n: ^(+ n 1)}))
+  (frame
+    ((sensor* cell) (local even←(%pipe (mod 2) 0) @even) (102 302))
+    ((sensor* cell) (local odd←(%pipe (mod 2) (%not 0)) @odd) (203))
+    ((appearance cell) (local @x) 103)
+    ((appearance cell) (local @y) 204)
+    ((appearance cell) (local @z) 303)
+    (fb (@x ±n) {n: ^(+ n 1)})
+    (fb (@y ±n) {n: ^(+ n 1)})
+    (fb (@z ±n) {n: ^(+ n 1)})))
+  ;; ...
+
+;; Independent sensors and appearances
+(d7
+  (frame
+    (module {}
+      ((sensor cell) (local (a ±x) @x))
+      (transfer (@x ±N @x') (a ^(+ N 1)))
+      ((appearance cell) (local @x') (a 100)))
+    (module {}
+      ((sensor cell) (local (b ±x) @x))
+      (transfer (@x ±N @x') (b ^(+ N 1)))
+      ((appearance cell) (local @x') (b 200)))
+    (module {}
+      ((sensor cell) (local (c ±x) @x))
+      (transfer (@x ±N @x') (c ^(+ N 1)))
+      ((appearance cell) (local @x') (c 300))))
+  (frame
+    (module {}
+      ((sensor cell) (local (a ±x) @x) 100)
+      (transfer (@x ±N @x') (a ^(+ N 1)))
+      ((appearance cell) (local @x')))
+    (module {}
+      ((sensor cell) (local (b ±x) @x) 200)
+      (transfer (@x ±N @x') (b ^(+ N 1)))
+      ((appearance cell) (local @x')))
+    (module {}
+      ((sensor cell) (local (c ±x) @x) 300)
+      (transfer (@x ±N @x') (c ^(+ N 1)))
+      ((appearance cell) (local @x'))))
+  (frame
+    (module {}
+      ((sensor cell) (local (a ±x) @x))
+      (transfer (@x ±N @x') (a ^(+ N 1)))
+      ((appearance cell) (local @x') (a 101)))
+    (module {}
+      ((sensor cell) (local (b ±x) @x))
+      (transfer (@x ±N @x') (b ^(+ N 1)))
+      ((appearance cell) (local @x') (b 201)))
+    (module {}
+      ((sensor cell) (local (c ±x) @x))
+      (transfer (@x ±N @x') (c ^(+ N 1)))
+      ((appearance cell) (local @x') (c 301))))
+  (frame
+    (module {}
+      ((sensor cell) (local (a ±x) @x) 101)
+      (transfer (@x ±N @x') (a ^(+ N 1)))
+      ((appearance cell) (local @x')))
+    (module {}
+      ((sensor cell) (local (b ±x) @x) 201)
+      (transfer (@x ±N @x') (b ^(+ N 1)))
+      ((appearance cell) (local @x')))
+    (module {}
+      ((sensor cell) (local (c ±x) @x) 301)
+      (transfer (@x ±N @x') (c ^(+ N 1)))
+      ((appearance cell) (local @x')))))
+  ;; ...
+
+;; Sensor chan must be confused by multiple matching appearances with
+;; different values, doing nothing.
+(d7
+  (frame
+    ((sensor cell) (local ±n @n))
+    ((appearance cell) (local @x) 100)
+    ((appearance cell) (local @y) 200)
+    ((appearance cell) (local @z) 300))
+  end)
+
+;; But if they have the same value it must accept.
+(d7
+  (frame
+    ((sensor cell) (local ±n @n))
+    ((appearance cell) (local @x) 100)
+    ((appearance cell) (local @y) 100)
+    ((appearance cell) (local @z) 100))
+  (frame
+    ((sensor cell) (local ±n @n) 100)
+    ((appearance cell) (local @x))
+    ((appearance cell) (local @y))
+    ((appearance cell) (local @z)))
+  end)
+
 ;; View of N cells (ok)
 (d7
   (frame
@@ -2106,1301 +2241,13 @@
       ((X_ _)) <> {X: qux}))
   end)
 
+;; Rulesys: insertion
+
+;; Rulesys: deletion
+
+;; Rulesys: insertions
+
+;; Rulesys: deletions
+
 ;; Rulesys: basic animal
 
-
-;;;; Cell to event and event to cell
-;;(d7
-;;  (frame
-;;    (cell @x 0)
-;;    (chat ()
-;;      (feed @x (pulse @xs))))
-;;  (frame
-;;    (cell @x)
-;;    (chat ((pulse @xs 0)) ;; < stalls because there's no one to consume it
-;;      (feed @x (pulse @xs))))
-;;  end)
-;;
-;;(d7
-;;  (frame
-;;    (cell @x)
-;;    (chat ((pulse @xs 100))
-;;      (feed (pulse @xs) @x)))
-;;  (frame
-;;    (cell @x 100)
-;;    (chat ()
-;;      (feed (pulse @xs) @x)))
-;;  end)
-;;
-;;(d7
-;;  (frame
-;;    (cell @x 100)
-;;    (chat ()
-;;      (feed @x (pulse @ys))
-;;      (feed (pulse @ys) @y)
-;;      (cell @y)))
-;;  (frame
-;;    (cell @x)
-;;    (chat ((pulse @ys 100))
-;;      (feed @x (pulse @ys))
-;;      (feed (pulse @ys) @y)
-;;      (cell @y)))
-;;  (frame
-;;    (cell @x)
-;;    (chat ()
-;;      (feed @x (pulse @ys))
-;;      (feed (pulse @ys) @y)
-;;      (cell @y 100)))
-;;  end)
-;;
-;;;; Multiple chats run in parallel and do not conflict.
-;;(d7
-;;  (frame
-;;    (chat ()
-;;      (cell @x 0)
-;;      (feed @x (pulse @xs))
-;;      (feed (pulse @xs) @x))
-;;    (chat ()
-;;      (cell @y 1)
-;;      (feed @y (pulse @ys))
-;;      (feed (pulse @ys) @y))
-;;    (chat ()
-;;      (cell @z 2)
-;;      (feed @z (pulse @zs))
-;;      (feed (pulse @zs) @z)))
-;;  (frame
-;;    (chat ((pulse @xs 0))
-;;      (cell @x)
-;;      (feed @x (pulse @xs))
-;;      (feed (pulse @xs) @x))
-;;    (chat ((pulse @ys 1))
-;;      (cell @y)
-;;      (feed @y (pulse @ys))
-;;      (feed (pulse @ys) @y))
-;;    (chat ((pulse @zs 2))
-;;      (cell @z)
-;;      (feed @z (pulse @zs))
-;;      (feed (pulse @zs) @z)))
-;;  (frame
-;;    (chat ()
-;;      (cell @x 0)
-;;      (feed @x (pulse @xs))
-;;      (feed (pulse @xs) @x))
-;;    (chat ()
-;;      (cell @y 1)
-;;      (feed @y (pulse @ys))
-;;      (feed (pulse @ys) @y))
-;;    (chat ()
-;;      (cell @z 2)
-;;      (feed @z (pulse @zs))
-;;      (feed (pulse @zs) @z))))
-;;  ;; ...
-;;
-;;;; Chats provide a rudimentary scope for events
-;;(d7
-;;  (frame
-;;    (chat ()
-;;      (cell @x 0)
-;;      (feed @x (pulse @xs))
-;;      (feed (pulse @xs) @x))
-;;    (chat ()
-;;      (cell @y 1)
-;;      (feed @y (pulse @xs))
-;;      (feed (pulse @xs) @y)))
-;;  (frame
-;;    (chat ((pulse @xs 0))
-;;      (cell @x)
-;;      (feed @x (pulse @xs))
-;;      (feed (pulse @xs) @x))
-;;    (chat ((pulse @xs 1))
-;;      (cell @y)
-;;      (feed @y (pulse @xs))
-;;      (feed (pulse @xs) @y)))
-;;  (frame
-;;    (chat ()
-;;      (cell @x 0)
-;;      (feed @x (pulse @xs))
-;;      (feed (pulse @xs) @x))
-;;    (chat ()
-;;      (cell @y 1)
-;;      (feed @y (pulse @xs))
-;;      (feed (pulse @xs) @y))))
-;;  ;; ...
-;;
-;;;; Chats inside modules
-;;(d7
-;;  (frame
-;;    (module {}
-;;      (chat ()
-;;        (cell @x 0)
-;;        (feed @x (pulse @xs))
-;;        (feed (pulse @xs) @x)))
-;;    (module {}
-;;      (chat ()
-;;        (cell @x 1)
-;;        (feed @x (pulse @xs))
-;;        (feed (pulse @xs) @x))))
-;;  (frame
-;;    (module {}
-;;      (chat ((pulse @xs 0))
-;;        (cell @x)
-;;        (feed @x (pulse @xs))
-;;        (feed (pulse @xs) @x)))
-;;    (module {}
-;;      (chat ((pulse @xs 1))
-;;        (cell @x)
-;;        (feed @x (pulse @xs))
-;;        (feed (pulse @xs) @x))))
-;;  (frame
-;;    (module {}
-;;      (chat ()
-;;        (cell @x 0)
-;;        (feed @x (pulse @xs))
-;;        (feed (pulse @xs) @x)))
-;;    (module {}
-;;      (chat ()
-;;        (cell @x 1)
-;;        (feed @x (pulse @xs))
-;;        (feed (pulse @xs) @x)))))
-;;
-;;;; Modules inside chats
-;;(d7
-;;  (frame
-;;    ((async chat) ()
-;;      (module {}
-;;        (cell @x 0)
-;;        (feed @x (pulse @xs))
-;;        (feed (pulse @xs) @x))
-;;      (module {}
-;;        (cell @x 1)
-;;        (feed @x (pulse @ys))
-;;        (feed (pulse @ys) @x))))
-;;  (frame
-;;    ((async chat) ((pulse @xs 0) (pulse @ys 1))
-;;      (module {}
-;;        (cell @x)
-;;        (feed @x (pulse @xs))
-;;        (feed (pulse @xs) @x))
-;;      (module {}
-;;        (cell @x)
-;;        (feed @x (pulse @ys))
-;;        (feed (pulse @ys) @x))))
-;;  (frame
-;;    ((async chat) ((pulse @ys 1))
-;;      (module {}
-;;        (cell @x 0)
-;;        (feed @x (pulse @xs))
-;;        (feed (pulse @xs) @x))
-;;      (module {}
-;;        (cell @x)
-;;        (feed @x (pulse @ys))
-;;        (feed (pulse @ys) @x))))
-;;  (frame
-;;    ((async chat) ((pulse @xs 0))
-;;      (module {}
-;;        (cell @x)
-;;        (feed @x (pulse @xs))
-;;        (feed (pulse @xs) @x))
-;;      (module {}
-;;        (cell @x 1)
-;;        (feed @x (pulse @ys))
-;;        (feed (pulse @ys) @x))))
-;;  (frame
-;;    ((async chat) ((pulse @ys 1))
-;;      (module {}
-;;        (cell @x 0)
-;;        (feed @x (pulse @xs))
-;;        (feed (pulse @xs) @x))
-;;      (module {}
-;;        (cell @x)
-;;        (feed @x (pulse @ys))
-;;        (feed (pulse @ys) @x)))))
-;;  ;; ...
-;;
-;;
-;;;; Toplevel (implicit) chat
-;;(d7
-;;  (frame
-;;    (cell @x 0)
-;;    (feed @x (pulse @xs))
-;;    (feed (pulse @xs) @x))
-;;  (frame
-;;    (cell @x)
-;;    (feed @x (pulse @xs))
-;;    (feed (pulse @xs) @x))
-;;  (frame
-;;    (cell @x 0)
-;;    (feed @x (pulse @xs))
-;;    (feed (pulse @xs) @x)))
-;;  ;; ...
-;;
-;;;; Communication between chats (ascent)
-;;(d7
-;;  (frame
-;;    (chat ()
-;;      (chat (asc: (pulse @xs _))
-;;        (cell @x 100)
-;;        (cell @y 200)
-;;        (feed @x (pulse @xs))
-;;        (feed @y (pulse @ys))
-;;        (feed (pulse @xs) @x)
-;;        (feed (pulse @ys) @y))
-;;      (cell @z)
-;;      (feed (pulse @xs) @z)))
-;;  (frame
-;;    (chat ((pulse @xs 100))
-;;      (chat ((pulse @ys 200) asc: (pulse @xs _))
-;;        (cell @x)
-;;        (cell @y)
-;;        (feed @x (pulse @xs))
-;;        (feed @y (pulse @ys))
-;;        (feed (pulse @xs) @x)
-;;        (feed (pulse @ys) @y))
-;;      (cell @z)
-;;      (feed (pulse @xs) @z)))
-;;  (frame
-;;    (chat ()
-;;      (chat (asc: (pulse @xs _))
-;;        (cell @x)
-;;        (cell @y 200)
-;;        (feed @x (pulse @xs))
-;;        (feed @y (pulse @ys))
-;;        (feed (pulse @xs) @x)
-;;        (feed (pulse @ys) @y))
-;;      (cell @z 100)
-;;      (feed (pulse @xs) @z)))
-;;  (frame
-;;    (chat ()
-;;      (chat ((pulse @ys 200) asc: (pulse @xs _))
-;;        (cell @x)
-;;        (cell @y)
-;;        (feed @x (pulse @xs))
-;;        (feed @y (pulse @ys))
-;;        (feed (pulse @xs) @x)
-;;        (feed (pulse @ys) @y))
-;;      (cell @z 100)
-;;      (feed (pulse @xs) @z)))
-;;  (frame
-;;    (chat ()
-;;      (chat (asc: (pulse @xs _))
-;;        (cell @x)
-;;        (cell @y 200)
-;;        (feed @x (pulse @xs))
-;;        (feed @y (pulse @ys))
-;;        (feed (pulse @xs) @x)
-;;        (feed (pulse @ys) @y))
-;;      (cell @z 100)
-;;      (feed (pulse @xs) @z))))
-;;  ;; ...
-;;
-;;;; Communication between chats (multicast descent)
-;;(d7
-;;  (frame
-;;    (chat ((pulse @xs 100) (pulse @ys 200))
-;;      (cell @y)
-;;      (feed (pulse @ys) @y)
-;;      (module {}
-;;        (chat (desc: (pulse @xs _))
-;;          (feed (pulse @xs) @x)
-;;          (cell @x)))
-;;      (module {}
-;;        (chat (desc: (pulse @xs _))
-;;          (feed (pulse @xs) @x)
-;;          (cell @x)))
-;;      (module {}
-;;        (chat (desc: (pulse @xs _))
-;;          (feed (pulse @xs) @x)
-;;          (cell @x)))))
-;;  (frame
-;;    (chat ((pulse @ys 200))
-;;      (cell @y)
-;;      (feed (pulse @ys) @y)
-;;      (module {}
-;;        (chat ((pulse @xs 100) desc: (pulse @xs _))
-;;          (feed (pulse @xs) @x)
-;;          (cell @x)))
-;;      (module {}
-;;        (chat ((pulse @xs 100) desc: (pulse @xs _))
-;;          (feed (pulse @xs) @x)
-;;          (cell @x)))
-;;      (module {}
-;;        (chat ((pulse @xs 100) desc: (pulse @xs _))
-;;          (feed (pulse @xs) @x)
-;;          (cell @x)))))
-;;  (frame
-;;    (chat ()
-;;      (cell @y 200)
-;;      (feed (pulse @ys) @y)
-;;      (module {}
-;;        (chat (desc: (pulse @xs _))
-;;          (feed (pulse @xs) @x)
-;;          (cell @x 100)))
-;;      (module {}
-;;        (chat (desc: (pulse @xs _))
-;;          (feed (pulse @xs) @x)
-;;          (cell @x 100)))
-;;      (module {}
-;;        (chat (desc: (pulse @xs _))
-;;          (feed (pulse @xs) @x)
-;;          (cell @x 100)))))
-;;  end)
-;;
-;;;; `blast` device, pulse backpressure
-;;(d7
-;;  (frame
-;;    (chat ()
-;;      (cell @xlist (1 2 3))
-;;      (blast @xlist (pulse @xs))
-;;      (cell @x)
-;;      (discard @x)
-;;      (feed (pulse @xs) @x)))
-;;  (frame
-;;    (chat ((pulse @xs 1) (pulse @xs 2) (pulse @xs 3))
-;;      (cell @xlist)
-;;      (blast @xlist (pulse @xs))
-;;      (cell @x)
-;;      (discard @x)
-;;      (feed (pulse @xs) @x)))
-;;  (frame
-;;    (chat ((pulse @xs 2) (pulse @xs 3))
-;;      (cell @xlist)
-;;      (blast @xlist (pulse @xs))
-;;      (cell @x 1)
-;;      (discard @x)
-;;      (feed (pulse @xs) @x)))
-;;  (frame
-;;    (chat ((pulse @xs 2) (pulse @xs 3)) ;; < xs=2 blocks here because no one can consume it
-;;      (cell @xlist)
-;;      (blast @xlist (pulse @xs))
-;;      (cell @x)
-;;      (discard @x)
-;;      (feed (pulse @xs) @x)))
-;;  (frame
-;;    (chat ((pulse @xs 3))
-;;      (cell @xlist)
-;;      (blast @xlist (pulse @xs))
-;;      (cell @x 2)
-;;      (discard @x)
-;;      (feed (pulse @xs) @x)))
-;;  (frame
-;;    (chat ((pulse @xs 3)) ;; < xs=3 blocks here because no one can consume it
-;;      (cell @xlist)
-;;      (blast @xlist (pulse @xs))
-;;      (cell @x)
-;;      (discard @x)
-;;      (feed (pulse @xs) @x)))
-;;  (frame
-;;    (chat ()
-;;      (cell @xlist)
-;;      (blast @xlist (pulse @xs))
-;;      (cell @x 3)
-;;      (discard @x)
-;;      (feed (pulse @xs) @x)))
-;;  (frame
-;;    (chat ()
-;;      (cell @xlist)
-;;      (blast @xlist (pulse @xs))
-;;      (cell @x)
-;;      (discard @x)
-;;      (feed (pulse @xs) @x)))
-;;  end)
-;;
-;;;; Pulse backpressure with multiple consumers
-;;(d7
-;;  (frame
-;;    (module {}
-;;      (chat ((pulse @xs 100))
-;;        (feed (pulse @xs) @x)
-;;        (feed (pulse @xs) @y)
-;;        (cell @x "busy")
-;;        (cell @y)))
-;;    (module {}
-;;      (chat ((pulse @xs 200))
-;;        (feed (pulse @xs) @x)
-;;        (feed (pulse @xs) @y)
-;;        (cell @x)
-;;        (cell @y "busy")))
-;;    (module {}
-;;      (chat ((pulse @xs 300) (pulse @xs 400))
-;;        (feed (pulse @xs) @x)
-;;        (feed (pulse @xs) @y)
-;;        (feed (pulse @xs) @z)
-;;        (delay 2 (cell @x))
-;;        (cell @x)
-;;        (cell @y "busy")
-;;        (cell @z))))
-;;  (frame
-;;    (module {}
-;;      (chat ()
-;;        (feed (pulse @xs) @x)
-;;        (feed (pulse @xs) @y)
-;;        (cell @x "busy")
-;;        (cell @y 100)))
-;;    (module {}
-;;      (chat ()
-;;        (feed (pulse @xs) @x)
-;;        (feed (pulse @xs) @y)
-;;        (cell @x 200)
-;;        (cell @y "busy")))
-;;    (module {}
-;;      (chat ((pulse @xs 400))
-;;        (feed (pulse @xs) @x)
-;;        (feed (pulse @xs) @y)
-;;        (feed (pulse @xs) @z)
-;;        (delay 1 (cell @x))
-;;        (cell @x 300)
-;;        (cell @y "busy")
-;;        (cell @z 300))))
-;;  (frame
-;;    (module {}
-;;      (chat ()
-;;        (feed (pulse @xs) @x)
-;;        (feed (pulse @xs) @y)
-;;        (cell @x "busy")
-;;        (cell @y 100)))
-;;    (module {}
-;;      (chat ()
-;;        (feed (pulse @xs) @x)
-;;        (feed (pulse @xs) @y)
-;;        (cell @x 200)
-;;        (cell @y "busy")))
-;;    (module {}
-;;      (chat ((pulse @xs 400))
-;;        (feed (pulse @xs) @x)
-;;        (feed (pulse @xs) @y)
-;;        (feed (pulse @xs) @z)
-;;        (cell @x)
-;;        (cell @x 300)
-;;        (cell @y "busy")
-;;        (cell @z 300))))
-;;  (frame
-;;    (module {}
-;;      (chat ()
-;;        (feed (pulse @xs) @x)
-;;        (feed (pulse @xs) @y)
-;;        (cell @x "busy")
-;;        (cell @y 100)))
-;;    (module {}
-;;      (chat ()
-;;        (feed (pulse @xs) @x)
-;;        (feed (pulse @xs) @y)
-;;        (cell @x 200)
-;;        (cell @y "busy")))
-;;    (module {}
-;;      (chat ()
-;;        (feed (pulse @xs) @x)
-;;        (feed (pulse @xs) @y)
-;;        (feed (pulse @xs) @z)
-;;        (cell @x 400)
-;;        (cell @x 300)
-;;        (cell @y "busy")
-;;        (cell @z 300))))
-;;  end)
-;;
-;;;; Queue + chat + backpressure
-;;(d7
-;;  (frame
-;;    ((async chat) ()
-;;      (queue (@front @back) (1 2 3))
-;;      (feed @front (pulse @xs))
-;;      (feed (pulse @xs) @x)
-;;      (cell @x)
-;;      (delay 4 (discard @x))))
-;;  (frame
-;;    ((async chat) ((pulse @xs 1))
-;;      (queue (@front @back) (2 3))
-;;      (feed @front (pulse @xs))
-;;      (feed (pulse @xs) @x)
-;;      (cell @x)
-;;      (delay 3 (discard @x))))
-;;  (frame
-;;    ((async chat) ((pulse @xs 2))
-;;      (queue (@front @back) (3))
-;;      (feed @front (pulse @xs))
-;;      (feed (pulse @xs) @x)
-;;      (cell @x 1)
-;;      (delay 2 (discard @x))))
-;;  (frame
-;;    ((async chat) ((pulse @xs 2) (pulse @xs 3))
-;;      (queue (@front @back) ())
-;;      (feed @front (pulse @xs))
-;;      (feed (pulse @xs) @x)
-;;      (cell @x 1)
-;;      (delay 1 (discard @x))))
-;;  (frame
-;;    ((async chat) ((pulse @xs 2) (pulse @xs 3))
-;;      (queue (@front @back) ())
-;;      (feed @front (pulse @xs))
-;;      (feed (pulse @xs) @x)
-;;      (cell @x 1)
-;;      (discard @x)))
-;;  (frame
-;;    ((async chat) ((pulse @xs 2) (pulse @xs 3))
-;;      (queue (@front @back) ())
-;;      (feed @front (pulse @xs))
-;;      (feed (pulse @xs) @x)
-;;      (cell @x)
-;;      (discard @x)))
-;;  (frame
-;;    ((async chat) ((pulse @xs 3))
-;;      (queue (@front @back) ())
-;;      (feed @front (pulse @xs))
-;;      (feed (pulse @xs) @x)
-;;      (cell @x 2)
-;;      (discard @x)))
-;;  (frame
-;;    ((async chat) ((pulse @xs 3))
-;;      (queue (@front @back) ())
-;;      (feed @front (pulse @xs))
-;;      (feed (pulse @xs) @x)
-;;      (cell @x)
-;;      (discard @x)))
-;;  (frame
-;;    ((async chat) ()
-;;      (queue (@front @back) ())
-;;      (feed @front (pulse @xs))
-;;      (feed (pulse @xs) @x)
-;;      (cell @x 3)
-;;      (discard @x)))
-;;  (frame
-;;    ((async chat) ()
-;;      (queue (@front @back) ())
-;;      (feed @front (pulse @xs))
-;;      (feed (pulse @xs) @x)
-;;      (cell @x)
-;;      (discard @x)))
-;;  end)
-;;
-;;;; `ml/term` device
-;;(d7
-;;  (frame
-;;    ((async chat) ()
-;;      (queue (@src @back) ("100" "200" "300" "(+ 1 2)" "(+ 1 2"))
-;;      (feed @src (pulse @srcs))
-;;      (ml/term @srcs (result @!terms))
-;;      (feed (pulse @!terms) @!term)
-;;      (cell @!term)
-;;      (discard @!term)))
-;;  (frame
-;;    ((async chat) ((pulse @srcs "100"))
-;;      (queue (@src @back) ("200" "300" "(+ 1 2)" "(+ 1 2"))
-;;      (feed @src (pulse @srcs))
-;;      (ml/term @srcs (result @!terms))
-;;      (feed (pulse @!terms) @!term)
-;;      (cell @!term)
-;;      (discard @!term)))
-;;  (frame
-;;    ((async chat) ((pulse @!terms (ok 100)) (pulse @srcs "200"))
-;;      (queue (@src @back) ("300" "(+ 1 2)" "(+ 1 2"))
-;;      (feed @src (pulse @srcs))
-;;      (ml/term @srcs (result @!terms))
-;;      (feed (pulse @!terms) @!term)
-;;      (cell @!term)
-;;      (discard @!term)))
-;;  (frame
-;;    ((async chat) ((pulse @srcs "200") (pulse @srcs "300"))
-;;      (queue (@src @back) ("(+ 1 2)" "(+ 1 2"))
-;;      (feed @src (pulse @srcs))
-;;      (ml/term @srcs (result @!terms))
-;;      (feed (pulse @!terms) @!term)
-;;      (cell @!term (ok 100))
-;;      (discard @!term)))
-;;  (frame
-;;    ((async chat) ((pulse @srcs "300") (pulse @!terms (ok 200)) (pulse @srcs "(+ 1 2)"))
-;;      (queue (@src @back) ("(+ 1 2"))
-;;      (feed @src (pulse @srcs))
-;;      (ml/term @srcs (result @!terms))
-;;      (feed (pulse @!terms) @!term)
-;;      (cell @!term)
-;;      (discard @!term)))
-;;  (frame
-;;    ((async chat) ((pulse @!terms (ok 200)) (pulse @srcs "(+ 1 2)") (pulse @!terms (ok 300)) (pulse @srcs "(+ 1 2"))
-;;      (queue (@src @back) ())
-;;      (feed @src (pulse @srcs))
-;;      (ml/term @srcs (result @!terms))
-;;      (feed (pulse @!terms) @!term)
-;;      (cell @!term)
-;;      (discard @!term)))
-;;  (frame
-;;    ((async chat) ((pulse @srcs "(+ 1 2)") (pulse @!terms (ok 300)) (pulse @srcs "(+ 1 2"))
-;;      (queue (@src @back) ())
-;;      (feed @src (pulse @srcs))
-;;      (ml/term @srcs (result @!terms))
-;;      (feed (pulse @!terms) @!term)
-;;      (cell @!term (ok 200))
-;;      (discard @!term)))
-;;  (frame
-;;    ((async chat) ((pulse @!terms (ok 300)) (pulse @srcs "(+ 1 2") (pulse @!terms (ok (+ 1 2))))
-;;      (queue (@src @back) ())
-;;      (feed @src (pulse @srcs))
-;;      (ml/term @srcs (result @!terms))
-;;      (feed (pulse @!terms) @!term)
-;;      (cell @!term)
-;;      (discard @!term)))
-;;  (frame
-;;    ((async chat) ((pulse @srcs "(+ 1 2") (pulse @!terms (ok (+ 1 2))))
-;;      (queue (@src @back) ())
-;;      (feed @src (pulse @srcs))
-;;      (ml/term @srcs (result @!terms))
-;;      (feed (pulse @!terms) @!term)
-;;      (cell @!term (ok 300))
-;;      (discard @!term)))
-;;  (frame m1: true
-;;    ((async chat) ((pulse @!terms (ok (+ 1 2))) (pulse @!terms [err]))
-;;      (queue (@src @back) ())
-;;      (feed @src (pulse @srcs))
-;;      (ml/term @srcs (result @!terms))
-;;      (feed (pulse @!terms) @!term)
-;;      (cell @!term)
-;;      (discard @!term)))
-;;  (frame m1: true
-;;    ((async chat) ((pulse @!terms [err]))
-;;      (queue (@src @back) ())
-;;      (feed @src (pulse @srcs))
-;;      (ml/term @srcs (result @!terms))
-;;      (feed (pulse @!terms) @!term)
-;;      (cell @!term (ok (+ 1 2)))
-;;      (discard @!term)))
-;;  (frame m1: true
-;;    ((async chat) ((pulse @!terms [err]))
-;;      (queue (@src @back) ())
-;;      (feed @src (pulse @srcs))
-;;      (ml/term @srcs (result @!terms))
-;;      (feed (pulse @!terms) @!term)
-;;      (cell @!term)
-;;      (discard @!term)))
-;;  (frame m1: true
-;;    ((async chat) ()
-;;      (queue (@src @back) ())
-;;      (feed @src (pulse @srcs))
-;;      (ml/term @srcs (result @!terms))
-;;      (feed (pulse @!terms) @!term)
-;;      (cell @!term [err])
-;;      (discard @!term)))
-;;  (frame
-;;    ((async chat) ()
-;;      (queue (@src @back) ())
-;;      (feed @src (pulse @srcs))
-;;      (ml/term @srcs (result @!terms))
-;;      (feed (pulse @!terms) @!term)
-;;      (cell @!term)
-;;      (discard @!term)))
-;;  end)
-;;
-;;(d7
-;;  (frame
-;;    (chat ((pulse @srcs "100 200 300"))
-;;      (ml/term @srcs (result @!terms))
-;;      (feed (pulse @!terms) @!term)
-;;      (cell @!term)))
-;;  (frame m1: true
-;;    (chat ((pulse @!terms [err]))
-;;      (ml/term @srcs (result @!terms))
-;;      (feed (pulse @!terms) @!term)
-;;      (cell @!term)))
-;;  (frame m1: true
-;;    (chat ()
-;;      (ml/term @srcs (result @!terms))
-;;      (feed (pulse @!terms) @!term)
-;;      (cell @!term [err])))
-;;  end)
-;;
-;;;; `ml/terms` device
-;;(d7
-;;  (frame
-;;    (chat ((pulse @srcs "100 200 300"))
-;;      (ml/terms @srcs (result @!terms))
-;;      (feed (pulse @!terms) @!term)
-;;      (cell @!term)))
-;;  (frame
-;;    (chat ((pulse @!terms (ok (100 200 300))))
-;;      (ml/terms @srcs (result @!terms))
-;;      (feed (pulse @!terms) @!term)
-;;      (cell @!term)))
-;;  (frame
-;;    (chat ()
-;;      (ml/terms @srcs (result @!terms))
-;;      (feed (pulse @!terms) @!term)
-;;      (cell @!term (ok (100 200 300)))))
-;;  end)
-;;
-;;(d7
-;;  (frame
-;;    (chat ((pulse @srcs "---\nx y z"))
-;;      (ml/terms @srcs (result @!terms))
-;;      (feed (pulse @!terms) @!term)
-;;      (cell @!term)))
-;;  (frame m1: true
-;;    (chat ((pulse @!terms [err]))
-;;      (ml/terms @srcs (result @!terms))
-;;      (feed (pulse @!terms) @!term)
-;;      (cell @!term)))
-;;  (frame m1: true
-;;    (chat ()
-;;      (ml/terms @srcs (result @!terms))
-;;      (feed (pulse @!terms) @!term)
-;;      (cell @!term [err])))
-;;  end)
-;;
-;;;; `ml/document` device
-;;(d7
-;;  (frame
-;;    (chat ((pulse @srcs "---\nx y z"))
-;;      (ml/document @srcs (result @!terms))
-;;      (feed (pulse @!terms) @!term)
-;;      (cell @!term)))
-;;  (frame
-;;    (chat ((pulse @!terms (ok {default: (), aux: (x y z)})))
-;;      (ml/document @srcs (result @!terms))
-;;      (feed (pulse @!terms) @!term)
-;;      (cell @!term)))
-;;  (frame
-;;    (chat ()
-;;      (ml/document @srcs (result @!terms))
-;;      (feed (pulse @!terms) @!term)
-;;      (cell @!term (ok {default: (), aux: (x y z)}))))
-;;  end)
-;;
-;;;; Make sure the test framework itself supports `...` which is handy
-;;;; when we're dealing with toplevel chats / many event-driven processors
-;;;; [in sequence].
-;;(d7
-;;  (frame
-;;    (cell @src "100")
-;;    (feed @src (pulse @srcs))
-;;    (ml/document @srcs (result @!docs))
-;;    (repr (result @!docs) (ok @docs))
-;;    (feed (pulse @docs) @doc)
-;;    (cell @doc))
-;;  (frame
-;;    (cell @src) ;; < Away processing...
-;;    (feed @src (pulse @srcs))
-;;    (ml/document @srcs (result @!docs))
-;;    (repr (result @!docs) (ok @docs))
-;;    (feed (pulse @docs) @doc)
-;;    (cell @doc))
-;;  ...
-;;  (frame
-;;    (cell @src)
-;;    (feed @src (pulse @srcs))
-;;    (ml/document @srcs (result @!docs))
-;;    (repr (result @!docs) (ok @docs))
-;;    (feed (pulse @docs) @doc)
-;;    (cell @doc (100)))
-;;  end)
-;;
-;;;; `repr ... result .. ok` device
-;;(d7
-;;  (frame
-;;    (chat ((pulse @srcs (ok 100)))
-;;      (repr (result @srcs) (ok @oks)))
-;;    (chat ((pulse @srcs (err detail: "hello world")))
-;;      (repr (result @srcs) (ok @oks))))
-;;  (frame
-;;    (chat ((pulse @oks 100))
-;;      (repr (result @srcs) (ok @oks)))
-;;    (chat ((err detail: "hello world"))
-;;      (repr (result @srcs) (ok @oks))))
-;;  (frame
-;;    (chat ((pulse @oks 100))
-;;      (repr (result @srcs) (ok @oks)))
-;;    (chat ()
-;;      ;;  ^ err isn't pulse so it doesn't require an ack from a consumer,
-;;      ;;    it is quickly destroyed. You must catch it in a single tick.
-;;      (repr (result @srcs) (ok @oks))))
-;;  end)
-;;
-;;;; Listing ML error details using the `ml/term` device and the `log` node.
-;;;;
-;;;; NOTE: this is a *very* long regression test.
-;;(d7
-;;  (seed
-;;    (circuit @chat
-;;      (chat ()
-;;        (queue (@front @back) ("100" "200" "100" "100" "100" "(" ")" "(+ 1 2" "qux"))
-;;        (feed @front (over @src))
-;;        (cell @src)
-;;        (uniq @src (pulse @srcs))
-;;        (ml/term @srcs (result @!terms))
-;;        (repr (result @!terms) (ok @terms))
-;;        (feed (pulse @terms) @term)
-;;        (cell @term)
-;;        (discard @term)))
-;;    (log (@chat [_ ((err ⍊ detail_string) _*) _*] @details)
-;;      ^detail)
-;;    (cell @details ())
-;;    (view (@details details_dict @view)
-;;      (group
-;;        (h1 "Most recent problems:")
-;;        (^each (details as detail_string)
-;;          (p ^detail style: "text-red-500"))))
-;;    (cell @view))
-;;  (fast-forward-to
-;;    (%all
-;;      (%leaf (cell @term 100))
-;;      ⟨(cell @view
-;;         (group
-;;           (h1 "Most recent problems:")))⟩))
-;;  (fast-forward-to
-;;    (%all
-;;      (%leaf (cell @term 200))
-;;      ⟨(cell @view
-;;         (group
-;;           (h1 "Most recent problems:")))⟩))
-;;  (fast-forward-to
-;;    (%all
-;;      (%leaf (cell @term 100))
-;;      ⟨(cell @view
-;;         (group
-;;           (h1 "Most recent problems:")))⟩))
-;;  (fast-forward-to
-;;    ⟨(cell @view
-;;       (group
-;;         (h1 "Most recent problems:")
-;;         (p "expected `)` to end the dict" style: "text-red-500")))⟩)
-;;  (fast-forward-to
-;;    ⟨(cell @view
-;;       (group
-;;         (h1 "Most recent problems:")
-;;         (p "expected `)` to end the dict" style: "text-red-500")
-;;         (p "expected a term" style: "text-red-500")))⟩)
-;;  (fast-forward-to
-;;    ⟨(cell @view
-;;       (group
-;;         (h1 "Most recent problems:")
-;;         (p "expected `)` to end the dict" style: "text-red-500")
-;;         (p "expected a term" style: "text-red-500")
-;;         (p "expected `)` to end the dict" style: "text-red-500")))⟩)
-;;  (fast-forward-to
-;;    (%all
-;;      (%leaf (cell @term qux))
-;;      ⟨(cell @view
-;;         (group
-;;           (h1 "Most recent problems:")
-;;           (p "expected `)` to end the dict" style: "text-red-500")
-;;           (p "expected a term" style: "text-red-500")
-;;           (p "expected `)` to end the dict" style: "text-red-500")))⟩))
-;;  (fast-forward-to
-;;    (%leaf (cell @term)))
-;;  end)
-;;
-;;;; `m1/pattern` device
-;;(d7
-;;  (frame
-;;    (cell @submission-list
-;;      ({pattern: ⟨±n⟩°, matchee: (1 x 2 3 y)}
-;;       {pattern: (point x_ y_), matchee: (point 100 200)}
-;;       {pattern: (point x_ y_), matchee: "hello"}
-;;       {pattern: (xyz x_), matchee: (xyz 1), env: {x: 1}}
-;;       {pattern: (xyz x_), matchee: (xyz 1), env: {x: 2}}))
-;;    (blast @submission-list (pulse @submissions))
-;;    (m1/pattern @submissions @envlists)
-;;    (feed (pulse @envlists) @envlist)
-;;    (cell @envlist)
-;;    (discard @envlist))
-;;  (frame
-;;    (cell @submission-list)
-;;    (blast @submission-list (pulse @submissions))
-;;    (m1/pattern @submissions @envlists)
-;;    (feed (pulse @envlists) @envlist)
-;;    (cell @envlist)
-;;    (discard @envlist))
-;;  ...
-;;  (frame
-;;    (cell @submission-list)
-;;    (blast @submission-list (pulse @submissions))
-;;    (m1/pattern @submissions @envlists)
-;;    (feed (pulse @envlists) @envlist)
-;;    (cell @envlist ({n: 1} {n: 2} {n: 3}))
-;;    (discard @envlist))
-;;  (frame
-;;    (cell @submission-list)
-;;    (blast @submission-list (pulse @submissions))
-;;    (m1/pattern @submissions @envlists)
-;;    (feed (pulse @envlists) @envlist)
-;;    (cell @envlist)
-;;    (discard @envlist))
-;;  ...
-;;  (frame
-;;    (cell @submission-list)
-;;    (blast @submission-list (pulse @submissions))
-;;    (m1/pattern @submissions @envlists)
-;;    (feed (pulse @envlists) @envlist)
-;;    (cell @envlist ({x: 100, y: 200}))
-;;    (discard @envlist))
-;;  (frame
-;;    (cell @submission-list)
-;;    (blast @submission-list (pulse @submissions))
-;;    (m1/pattern @submissions @envlists)
-;;    (feed (pulse @envlists) @envlist)
-;;    (cell @envlist)
-;;    (discard @envlist))
-;;  ...
-;;  (frame
-;;    (cell @submission-list)
-;;    (blast @submission-list (pulse @submissions))
-;;    (m1/pattern @submissions @envlists)
-;;    (feed (pulse @envlists) @envlist)
-;;    (cell @envlist ())
-;;    (discard @envlist))
-;;  (frame
-;;    (cell @submission-list)
-;;    (blast @submission-list (pulse @submissions))
-;;    (m1/pattern @submissions @envlists)
-;;    (feed (pulse @envlists) @envlist)
-;;    (cell @envlist)
-;;    (discard @envlist))
-;;  ...
-;;  (frame
-;;    (cell @submission-list)
-;;    (blast @submission-list (pulse @submissions))
-;;    (m1/pattern @submissions @envlists)
-;;    (feed (pulse @envlists) @envlist)
-;;    (cell @envlist ({x: 1}))
-;;    (discard @envlist))
-;;  (frame
-;;    (cell @submission-list)
-;;    (blast @submission-list (pulse @submissions))
-;;    (m1/pattern @submissions @envlists)
-;;    (feed (pulse @envlists) @envlist)
-;;    (cell @envlist)
-;;    (discard @envlist))
-;;  ...
-;;  (frame
-;;    (cell @submission-list)
-;;    (blast @submission-list (pulse @submissions))
-;;    (m1/pattern @submissions @envlists)
-;;    (feed (pulse @envlists) @envlist)
-;;    (cell @envlist ())
-;;    (discard @envlist))
-;;  (frame
-;;    (cell @submission-list)
-;;    (blast @submission-list (pulse @submissions))
-;;    (m1/pattern @submissions @envlists)
-;;    (feed (pulse @envlists) @envlist)
-;;    (cell @envlist)
-;;    (discard @envlist))
-;;  end)
-;;
-;;;; `m1/backmap` device
-;;(d7
-;;  (frame
-;;    (cell @submission
-;;      {pattern: (+ x_ y_),
-;;       backspec: {x: (seen →x), y: (seen →y)},
-;;       matchee: (+ 1 2)})
-;;    (feed @submission (pulse @submissions))
-;;    (m1/backmap @submissions (optional @?terms))
-;;    (feed (pulse @?terms) @?term)
-;;    (cell @?term))
-;;  (frame
-;;    (cell @submission)
-;;    (feed @submission (pulse @submissions))
-;;    (m1/backmap @submissions (optional @?terms))
-;;    (feed (pulse @?terms) @?term)
-;;    (cell @?term))
-;;  ...
-;;  (frame
-;;    (cell @submission)
-;;    (feed @submission (pulse @submissions))
-;;    (m1/backmap @submissions (optional @?terms))
-;;    (feed (pulse @?terms) @?term)
-;;    (cell @?term (some (+ (seen 1) (seen 2)))))
-;;  end)
-;;(d7
-;;  (frame
-;;    (cell @submission
-;;      {pattern: (+ x_ y_),
-;;       backspec: {x: (seen →x), y: (seen →y)},
-;;       env: {x: 100},
-;;       matchee: (+ 200 300)})
-;;    (feed @submission (pulse @submissions))
-;;    (m1/backmap @submissions (optional @?terms))
-;;    (feed (pulse @?terms) @?term)
-;;    (cell @?term))
-;;  (frame
-;;    (cell @submission)
-;;    (feed @submission (pulse @submissions))
-;;    (m1/backmap @submissions (optional @?terms))
-;;    (feed (pulse @?terms) @?term)
-;;    (cell @?term))
-;;  ...
-;;  (frame
-;;    (cell @submission)
-;;    (feed @submission (pulse @submissions))
-;;    (m1/backmap @submissions (optional @?terms))
-;;    (feed (pulse @?terms) @?term)
-;;    (cell @?term none))
-;;  end)
-
-;; `m1/ruleset` device
-
-;; `alloy/template` device
-
-;; `alloy/view` device
-
-;; `microfold/theme` device
-
-;; `microfold` device
-
-;; `rewriter` device
-
-;; `rewrite` device
-
-;; Chats and surfaces
-;;(d7
-;;  (frame
-;;    (module {}
-;;      (chat ()
-;;        (sensor (local x_string @x) ^x)
-;;        (cell @x)
-;;        (feed @x (pulse @xs))
-;;        (delay 4 (ml/term @xs (result @!ys)))
-;;        (feed (pulse @!ys) @y)
-;;        (cell @y)
-;;        (discard @y)))
-;;    (module {}
-;;      (chat ()
-;;        (queue (@front @back) ("100" "200" "300" "400"))
-;;        (appearance local @front))))
-;;  (frame
-;;    (module {}
-;;      (chat ()
-;;        (sensor (local x_string @x) ^x)
-;;        (cell @x "100")
-;;        (feed @x (pulse @xs))
-;;        (delay 4 (ml/term @xs (result @!ys)))
-;;        (feed (pulse @!ys) @y)
-;;        (cell @y)
-;;        (discard @y)))
-;;    (module {}
-;;      (chat ()
-;;        (queue (@front @back) ("200" "300" "400"))
-;;        (appearance local @front))))
-;;  (frame
-;;    (module {}
-;;      (chat ((pulse @xs "100"))
-;;        (sensor (local x_string @x) ^x)
-;;        (cell @x)
-;;        (feed @x (pulse @xs))
-;;        (delay 3 (ml/term @xs (result @!ys)))
-;;        (feed (pulse @!ys) @y)
-;;        (cell @y)
-;;        (discard @y)))
-;;    (module {}
-;;      (chat ()
-;;        (queue (@front @back) ("200" "300" "400"))
-;;        (appearance local @front))))
-;;  (frame
-;;    (module {}
-;;      (chat ((pulse @xs "100"))
-;;        (sensor (local x_string @x) ^x)
-;;        (cell @x "200")
-;;        (feed @x (pulse @xs))
-;;        (delay 2 (ml/term @xs (result @!ys)))
-;;        (feed (pulse @!ys) @y)
-;;        (cell @y)
-;;        (discard @y)))
-;;    (module {}
-;;      (chat ()
-;;        (queue (@front @back) ("300" "400"))
-;;        (appearance local @front))))
-;;  (frame
-;;    (module {}
-;;      (chat ((pulse @xs "100"))
-;;        (sensor (local x_string @x) ^x)
-;;        (cell @x "200")
-;;        (feed @x (pulse @xs))
-;;        (delay 1 (ml/term @xs (result @!ys)))
-;;        (feed (pulse @!ys) @y)
-;;        (cell @y)
-;;        (discard @y)))
-;;    (module {}
-;;      (chat ()
-;;        (queue (@front @back) ("300" "400"))
-;;        (appearance local @front))))
-;;  (frame
-;;    (module {}
-;;      (chat ((pulse @xs "100"))
-;;        (sensor (local x_string @x) ^x)
-;;        (cell @x "200")
-;;        (feed @x (pulse @xs))
-;;        (ml/term @xs (result @!ys))
-;;        (feed (pulse @!ys) @y)
-;;        (cell @y)
-;;        (discard @y)))
-;;    (module {}
-;;      (chat ()
-;;        (queue (@front @back) ("300" "400"))
-;;        (appearance local @front))))
-;;  (frame
-;;    (module {}
-;;      (chat ((pulse @!ys (ok 100)))
-;;        (sensor (local x_string @x) ^x)
-;;        (cell @x "200")
-;;        (feed @x (pulse @xs))
-;;        (ml/term @xs (result @!ys))
-;;        (feed (pulse @!ys) @y)
-;;        (cell @y)
-;;        (discard @y)))
-;;    (module {}
-;;      (chat ()
-;;        (queue (@front @back) ("300" "400"))
-;;        (appearance local @front))))
-;;  (frame
-;;    (module {}
-;;      (chat ()
-;;        (sensor (local x_string @x) ^x)
-;;        (cell @x "200")
-;;        (feed @x (pulse @xs))
-;;        (ml/term @xs (result @!ys))
-;;        (feed (pulse @!ys) @y)
-;;        (cell @y (ok 100))
-;;        (discard @y)))
-;;    (module {}
-;;      (chat ()
-;;        (queue (@front @back) ("300" "400"))
-;;        (appearance local @front))))
-;;  (frame
-;;    (module {}
-;;      (chat ((pulse @xs "200"))
-;;        (sensor (local x_string @x) ^x)
-;;        (cell @x)
-;;        (feed @x (pulse @xs))
-;;        (ml/term @xs (result @!ys))
-;;        (feed (pulse @!ys) @y)
-;;        (cell @y)
-;;        (discard @y)))
-;;    (module {}
-;;      (chat ()
-;;        (queue (@front @back) ("300" "400"))
-;;        (appearance local @front))))
-;;  (frame
-;;    (module {}
-;;      (chat ((pulse @!ys (ok 200)))
-;;        (sensor (local x_string @x) ^x)
-;;        (cell @x "300")
-;;        (feed @x (pulse @xs))
-;;        (ml/term @xs (result @!ys))
-;;        (feed (pulse @!ys) @y)
-;;        (cell @y)
-;;        (discard @y)))
-;;    (module {}
-;;      (chat ()
-;;        (queue (@front @back) ("400"))
-;;        (appearance local @front))))
-;;  (frame
-;;    (module {}
-;;      (chat ()
-;;        (sensor (local x_string @x) ^x)
-;;        (cell @x "300")
-;;        (feed @x (pulse @xs))
-;;        (ml/term @xs (result @!ys))
-;;        (feed (pulse @!ys) @y)
-;;        (cell @y (ok 200))
-;;        (discard @y)))
-;;    (module {}
-;;      (chat ()
-;;        (queue (@front @back) ("400"))
-;;        (appearance local @front))))
-;;  (frame
-;;    (module {}
-;;      (chat ((pulse @xs "300"))
-;;        (sensor (local x_string @x) ^x)
-;;        (cell @x)
-;;        (feed @x (pulse @xs))
-;;        (ml/term @xs (result @!ys))
-;;        (feed (pulse @!ys) @y)
-;;        (cell @y)
-;;        (discard @y)))
-;;    (module {}
-;;      (chat ()
-;;        (queue (@front @back) ("400"))
-;;        (appearance local @front))))
-;;  (frame
-;;    (module {}
-;;      (chat ((pulse @!ys (ok 300)))
-;;        (sensor (local x_string @x) ^x)
-;;        (cell @x "400")
-;;        (feed @x (pulse @xs))
-;;        (ml/term @xs (result @!ys))
-;;        (feed (pulse @!ys) @y)
-;;        (cell @y)
-;;        (discard @y)))
-;;    (module {}
-;;      (chat ()
-;;        (queue (@front @back) ())
-;;        (appearance local @front))))
-;;  (frame
-;;    (module {}
-;;      (chat ()
-;;        (sensor (local x_string @x) ^x)
-;;        (cell @x "400")
-;;        (feed @x (pulse @xs))
-;;        (ml/term @xs (result @!ys))
-;;        (feed (pulse @!ys) @y)
-;;        (cell @y (ok 300))
-;;        (discard @y)))
-;;    (module {}
-;;      (chat ()
-;;        (queue (@front @back) ())
-;;        (appearance local @front))))
-;;  (frame
-;;    (module {}
-;;      (chat ((pulse @xs "400"))
-;;        (sensor (local x_string @x) ^x)
-;;        (cell @x)
-;;        (feed @x (pulse @xs))
-;;        (ml/term @xs (result @!ys))
-;;        (feed (pulse @!ys) @y)
-;;        (cell @y)
-;;        (discard @y)))
-;;    (module {}
-;;      (chat ()
-;;        (queue (@front @back) ())
-;;        (appearance local @front))))
-;;  (frame
-;;    (module {}
-;;      (chat ((pulse @!ys (ok 400)))
-;;        (sensor (local x_string @x) ^x)
-;;        (cell @x)
-;;        (feed @x (pulse @xs))
-;;        (ml/term @xs (result @!ys))
-;;        (feed (pulse @!ys) @y)
-;;        (cell @y)
-;;        (discard @y)))
-;;    (module {}
-;;      (chat ()
-;;        (queue (@front @back) ())
-;;        (appearance local @front))))
-;;  (frame
-;;    (module {}
-;;      (chat ()
-;;        (sensor (local x_string @x) ^x)
-;;        (cell @x)
-;;        (feed @x (pulse @xs))
-;;        (ml/term @xs (result @!ys))
-;;        (feed (pulse @!ys) @y)
-;;        (cell @y (ok 400))
-;;        (discard @y)))
-;;    (module {}
-;;      (chat ()
-;;        (queue (@front @back) ())
-;;        (appearance local @front))))
-;;  (frame
-;;    (module {}
-;;      (chat ()
-;;        (sensor (local x_string @x) ^x)
-;;        (cell @x)
-;;        (feed @x (pulse @xs))
-;;        (ml/term @xs (result @!ys))
-;;        (feed (pulse @!ys) @y)
-;;        (cell @y)
-;;        (discard @y)))
-;;    (module {}
-;;      (chat ()
-;;        (queue (@front @back) ())
-;;        (appearance local @front))))
-;;  end)
-;;
-;; TODO: Scoped chats
