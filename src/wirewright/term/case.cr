@@ -176,10 +176,27 @@ module Ww::Term::Case
     cue1 : Term::Sym?,
     cue2 : Term::Sym?
 
-  # A matcher is, roughly, a collection of patterns associated with a *pattern
-  # matching engine* such as `M0` or `M1`. It offers an iterator-like method for
-  # querying, `scan?`.
+  # A case matcher, *matcher* for short, is a collection of patterns associated
+  # with a *pattern matching engine* such as `M0` or `M1`. A matcher is
+  # constructed and cached globally by `Term.case`; the latter then repeatedly
+  # calls `scan` on each new matchee.
+  #
+  # Due to caching, `scan` must be thread-safe.
+  #
+  # NOTE: this automatically makes the includer extend `MatcherClass`.
   module Matcher
+    macro included
+      extend ::Ww::Term::Case::MatcherClass
+    end
+
+    # The `Int32` emitted by the iterator is the index of the matching match spec
+    # in the slice passed to `MatcherClass.compile`.
+    abstract def scan(matchee : Term, *, env : Term::Dict) : Iterator({Term::Dict, Int32})
+  end
+
+  # Class-side requirements of `Matcher`.
+  module MatcherClass
+    abstract def compile(specs : Slice(MatchSpec)) : Matcher
   end
 
   # A case matcher that uses the M0 pattern matching engine, `Ww::M0`.
@@ -190,12 +207,12 @@ module Ww::Term::Case
     def initialize(@specs : Slice(MatchSpec))
     end
 
-    def self.compile(specs : Slice(MatchSpec))
+    def self.compile(specs : Slice(MatchSpec)) : Matcher
       new(specs)
     end
 
-    def scan(matchee : Term, *, env : Term::Dict, & : Term::Dict, Int32 ->) : Nil
-      @specs.each_with_index do |spec, index|
+    def scan(matchee : Term, *, env : Term::Dict) : Iterator({Term::Dict, Int32})
+      @specs.each_with_index.compact_map do |spec, index|
         if dict = matchee.as_d?
           next if (cue0 = spec.cue0) && !dict.probably_includes?(cue0)
           next if (cue1 = spec.cue1) && !dict.probably_includes?(cue1)
@@ -204,11 +221,12 @@ module Ww::Term::Case
 
         next unless env1 = Engine.match?(spec.pattern, matchee, env: env)
 
-        yield env1, index
+        {env1, index}
       end
     end
   end
 
+  # A case matcher that uses the M0 pattern matching engine, `Ww::M1`.
   alias MM0 = MM(M0)
 
   # A case matcher that uses the M1 pattern matching engine, `Ww::M1`.
@@ -267,12 +285,12 @@ module Ww::Term::Case
       new(specs, operators)
     end
 
-    def self.compile(specs : Slice(MatchSpec)) : MM1
+    def self.compile(specs : Slice(MatchSpec)) : Matcher
       specs.size <= 16 ? compile1(specs) : compileM(specs)
     end
 
-    def scan(matchee : Term, *, env : Term::Dict, & : Term::Dict, Int32 ->) : Nil
-      @operators.each_with_index do |operator, index|
+    def scan(matchee : Term, *, env : Term::Dict) : Iterator({Term::Dict, Int32})
+      @operators.each_with_index.compact_map do |operator, index|
         if dict = matchee.as_d?
           spec = @specs.unsafe_fetch(index)
           next if (cue0 = spec.cue0) && !dict.probably_includes?(cue0)
@@ -283,7 +301,7 @@ module Ww::Term::Case
         operator = @operators.unsafe_fetch(index)
         next unless env1 = M1::Operator.match?(env, operator, matchee)
 
-        yield env1, index
+        {env1, index}
       end
     end
   end
@@ -586,10 +604,22 @@ module Ww::Term::Case
       end
 
       %matchee = {{matchee}}
-      %output = ::Ww::Term::Case::Continue
+      %matches = %matcher.scan(%matchee, env: {{env}})
 
-      %matcher.scan(%matchee, env: {{env}}) do |%env, %index|
+      loop do
+        %match = %matches.next
+        if %match.is_a?(Iterator::Stop)
+          {% if sink %}\
+            break(pass {{sink}})
+          {% else %}\
+            raise ArgumentError.new("unhandled case: #{ML.compact(%matchee)}")
+          {% end %}\
+        end
+
+        %env, %index = %match
+
         case %index
+        when -1
         {% for branch, i in branches %}\
         when {{i}}
           {% if branch[:captures].empty? %}\
@@ -609,24 +639,13 @@ module Ww::Term::Case
               {{branch[:body]}}
             end
           {% end %}\
-          unless %result{i}.is_a?(::Ww::Term::Case::Continue.class)
-            %output = %result{i}
-            break
+          unless %result{i}.is_a?({{@type}}::Continue.class)
+            break %result{i}
           end
         {% end %}
         else
           unreachable
         end
-      end
-
-      if %output.is_a?(::Ww::Term::Case::Continue.class)
-        {% if sink %}\
-          pass {{sink}}
-        {% else %}\
-          raise ArgumentError.new("unhandled case: #{ML.compact(%matchee)}")
-        {% end %}\
-      else
-        %output
       end
     {% end %}
   end
