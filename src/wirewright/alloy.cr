@@ -135,6 +135,60 @@ module Ww::Alloy
       include Issue::Spot
     end
   end
+
+  # A backmap applier that supports Alloy.
+  #
+  # TODO: In the future, this will be the default applier for the backmap engine.
+  # To ensure a smooth transition, this applier will gradually replace `DefaultApplier`.
+  struct Applier
+    def apply(up, dn, my, body)
+      eval = Alloy::Eval.new do |expr, default, cont, issues|
+        Term.case(expr) do
+          matchpi %{(up capture_)} do
+            unless value = up[capture]? || my[capture]?
+              issues.major { "undefined capture #{capture}" }
+              value = body
+            end
+
+            value
+          end
+
+          matchpi %{(dn capture_)} do
+            unless value = up[capture]? || my[capture]?
+              issues.major { "undefined capture #{capture}" }
+              value = body
+            end
+
+            value
+          end
+
+          otherwise { default.call(issues) }
+        end
+      end
+
+      # FIXME: backmaps must support Issue::Sink I suppose. We can't just throw
+      # issues away like this.
+      expansion, _ = Alloy.render0(my, body, eval: eval, severity: :quiet)
+
+      case expansion
+      in Err    then Rewrite.one(body) # ?!
+      in Assign then Rewrite.one(expansion.term)
+      in Splice then Rewrite.many(expansion.offspring)
+      end
+    end
+
+    def call(up0, up1, down, my, matchee0 : Term?, body)
+      Term.case(body) do
+        matchpi %[($tr pred_ succ_)] do
+          {up1.with(pred, matchee0), apply(up0, down, my, succ)}
+        end
+
+        otherwise do
+          {up1, apply(up0, down, my, body)}
+        end
+      end
+    end
+  end
 end
 
 require "./alloy/flatten"
