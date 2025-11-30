@@ -179,32 +179,37 @@ module Ww
       end
     end
 
-    # TODO: by being smarter with tagging we can cram many more term shapes in here.
+    # :nodoc:
+    TAG_SYM_SUFFIX = 0b01u64
+
+    # Represents the pointer tag of a term.
     #
-    # For instance:
-    #  - `0` marks a pointer, leaving us with two bits `00` (4 pointer tags). Currently
-    #    we only need three: dict, rational number, and string.
-    #  - `1` marks an immediate (i.e. value type). Since we're a runtime, we can
-    #    cram a huge lot of shapes in there structurally, at least those we can
-    #    cheaply recognize; saving us some extra pointer hops we'd need otherwise.
-    #    We can reserve 7 bits for a type and the rest of 7 bytes we'd have available
-    #    as payload. Short strings (e.g. unicode codepoints), numbers of up to 7 bytes,
-    #    booleans (only type -- true or false), and so on all go here.
-    #  - Moreover, it's stupid to think of individual elements when it comes to optimization.
-    #    One could imagine a TermArray that will use `1`-tagging and perhaps some kind of *mode*
-    #    tagging as well, so that it can claim the 7 bytes for itself. Thus, we'd have stuff
-    #    like compact strings stored immediately across multiple term-sized cells by TermArray.
+    # NOTE: No more values can be added to this enum. Pointer tagging only
+    # allows 3 bits (8 values) on x86-64.
+    enum Tag : UInt64
+      # _00
 
-    enum Tag : UInt8
-      Dict    = 0u8 # << MUST be here
-      NumRat  = 1u8
-      NumInt  = 2u8
-      NumFlt  = 3u8
-      Str     = 4u8
-      Sym     = 5u8
-      Boolean = 6u8
+      Dict   = 0b000u64
+      NumRat = 0b100u64
 
-      # Reserved for future use: 7u8
+      # _01
+      #
+      # Symbols use the suffix _01: 001 or 101. This lets us have 62 bits
+      # for symbols instead of 61. This helps us have a 2-bit type field
+      # on symbols; giving us a whopping 60 bits for 10x 6-bit chars!
+
+      Sym0 = 0b001u64
+      Sym1 = 0b101u64
+
+      # _10
+
+      Str    = 0b010u64
+      NumFlt = 0b110u64
+
+      # _11
+
+      NumInt  = 0b011u64
+      Boolean = 0b111u64
     end
 
     # :nodoc:
@@ -221,7 +226,7 @@ module Ww
 
     # Returns the pointer tag of this term.
     def tag : Tag
-      Tag.new((@mem.address & 0b111).to_u8)
+      Tag.new(@mem.address & 0b111u64)
     end
 
     # Returns the `TermType` corresponding to this term. Guarantees to never
@@ -229,7 +234,7 @@ module Ww
     @[Upcast]
     def type : TermType
       case tag
-      in .sym?
+      in .sym0?, .sym1?
         TermType::Symbol
       in .dict?
         TermType::Dict
@@ -296,13 +301,13 @@ module Ww
     def self.of(term : Sym) : Term
       data = term.@spec
 
-      Term.new(Pointer(Void).new(((data << 3) | Tag::Sym.value).to_u64))
+      Term.new(Pointer(Void).new((data.to_u64 << 2) | TAG_SYM_SUFFIX))
     end
 
     # Downcasts this term to a symbol term without performing any checks.
     @[Upcast]
     def unsafe_as_sym : Sym
-      data = @mem.address >> 3
+      data = @mem.address >> 2
 
       Sym.new(data.to_u32)
     end
@@ -336,7 +341,7 @@ module Ww
     # Downcasts `Term` to one of term instance types.
     def self.[](term : Term) : Any
       case term.tag
-      in .sym?
+      in .sym0?, .sym1?
         term.unsafe_as_sym
       in .dict?
         term.unsafe_as_d
@@ -373,7 +378,7 @@ module Ww
     # Attempts to downcast this term to a symbol term. Returns `nil` if impossible.
     @[Upcast]
     def as_sym? : Sym?
-      tag.sym? ? unsafe_as_sym : nil
+      (tag.sym0? || tag.sym1?) ? unsafe_as_sym : nil
     end
 
     # Attempts to downcast this term to a dictionary term. Returns `nil` if impossible.
