@@ -951,12 +951,11 @@ module Ww
       def initialize(@blk0, @blk1, @blk2, @blk3)
       end
 
-      # :nodoc:
-      def self.new(term : Term)
+      def self.new(& : IO ->) : H256
         digest = ALGORITHM.new
         io = IO::ByteStream.new { |slice| digest.update(slice) }
 
-        ML.compact(io, term)
+        yield io
 
         scratch = uninitialized UInt8[32]
         blks = scratch.to_slice.unsafe_slice_of(UInt64)
@@ -964,6 +963,10 @@ module Ww
         digest.final(scratch.to_slice)
 
         H256.new(blks[0], blks[1], blks[2], blks[3])
+      end
+
+      def self.new(term : Term) : H256
+        new { |io| ML.compact(io, term) }
       end
 
       # Ordered combination of *hashes*.
