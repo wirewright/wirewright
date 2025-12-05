@@ -330,6 +330,24 @@ module Ww
       EMPTY.transaction { |commit| yield commit }
     end
 
+    # Compares this and *other* dictionaries.
+    #
+    # Comparison is performed recursively at the same position in both
+    # dictionaries using `Term.compare`, "position" being defined by `ordnth`.
+    #
+    # If all entries compared equal, the sizes of both dicts are compared to
+    # determine the winner (returns `0` if sizes are equal, too).
+    def <=>(other : Dict) : Int32
+      min_size = Math.min(size, other.size)
+      min_size.times do |i|
+        cmp = Term.compare(ordnth(i), other.ordnth(i))
+        next if cmp == 0 # equal
+        return cmp
+      end
+
+      size <=> other.size
+    end
+
     # Returns `true` if this dictionary contains items only.
     @[Dncast]
     def itemsonly? : Bool
@@ -553,42 +571,11 @@ module Ww
 
       # Collect pairs in a buffer.
       buffer = Array(Pair).new(@pairs.size)
-      @pairs.each do |pair|
-        buffer << pair
-      end
+      @pairs.each { |pair| buffer << pair }
 
-      # "Registers". Note that we're usually dealing with very small symbol keys.
-      # There's no need to allocate 64 bytes for that.
-      r0 = IO::Memory.new(8)
-      r1 = IO::Memory.new(8)
-
-      # Sort pairs in buffer by their compact byte reprs. Beware: this **will** recurse
-      # on dictionaries, since compact in turn relies on each_entry_ord to print
-      # dict entries.
-      buffer.unstable_sort! do |a, b|
-        r0.clear
-        r1.clear
-
-        ML.compact(r0, a.key)
-        ML.compact(r1, b.key)
-
-        {rank(a.key), r0.to_slice} <=> {rank(b.key), r1.to_slice}
-      end
-
+      buffer.sort! { |a, b| Term.compare({a.key, a.value}, {b.key, b.value}) }
       buffer.each do |pair|
         yield pair.key, pair.value
-      end
-    end
-
-    # The order is: number keys, symbol keys, string keys, boolean keys, dict keys.
-    private def rank(key : Term) : Int32
-      case key.type
-      in .number?  then 0
-      in .symbol?  then 1
-      in .string?  then 2
-      in .boolean? then 3
-      in .dict?    then 4
-      in .any?     then unreachable
       end
     end
 

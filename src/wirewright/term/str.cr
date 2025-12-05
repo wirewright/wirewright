@@ -9,14 +9,13 @@ module Ww
     def initialize(@value : StringView)
     end
 
-    @[Dncast]
-    def after_end : Str
-      Str.new(@value.after_end)
+    def <=>(other : Str) : Int32
+      @value <=> other.@value
     end
 
     @[Dncast]
-    def single_byte? : Bool
-      @value.bytesize == 1
+    def after_end : Str
+      Str.new(@value.after_end)
     end
 
     @[Dncast]

@@ -250,9 +250,18 @@ module Ww
     # - For inexact numbers, the result depends on the bits of the floating-point
     #   representation. Here in particular we use `Float64`. This method does *not*
     #   perform approximate equality.
-    @[Dncast]
-    def <=>(other : Num)
-      kmap { |a| other.kmap { |b| a <=> b } }
+    #
+    # This should never return `nil` since we guard against `NaN`s during
+    # construction; by the look of it, comparison appears fails with `nil` only
+    # on NaN floats.
+    def <=>(other : Num) : Int32
+      kmap do |a|
+        other.kmap do |b|
+          cmp = a <=> b
+          assert cmp, "NaN number found during comparison"
+          cmp
+        end
+      end
     end
 
     # Compares a number term and a Crystal number.

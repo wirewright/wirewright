@@ -763,7 +763,7 @@ module Ww
     end
   end
 
-  # Hashing
+  # Hashing, comparison
 
   struct Term
     # Term hasher object, similar in purpose to `Crystal::Hasher`.
@@ -933,6 +933,41 @@ module Ww
     # Appends the hash of a term *object* to *hasher*.
     def self.hashcode(hasher : Hasher, object : Term) : Hasher
       hashcode(hasher, Term[object])
+    end
+
+    # Compares two term instances. Comparison is performed on the `TermType` first,
+    # and then on the actual value using `<=>` if the types are equal. See `TermType`
+    # to learn about term type-order. See `Num#<=>(other : Num)`, `Boolean#<=>(other : Boolean)`,
+    # and others to learn more about same-type comparison.
+    def self.compare(a : Any, b : Any) : Int32
+      cmp = a.type <=> b.type
+
+      if cmp.zero?
+        case a
+        in Num     then return a <=> b.as(Num)
+        in Str     then return a <=> b.as(Str)
+        in Sym     then return a <=> b.as(Sym)
+        in Boolean then return a <=> b.as(Boolean)
+        in Dict    then return a <=> b.as(Dict)
+        end
+      end
+
+      cmp
+    end
+
+    # Compares two terms. This overload simply downcasts and calls the other
+    # overloads of `compare`.
+    #
+    # - Returns `-1` if *a* is less than *b*.
+    # - Returns `0` if *a* is equal to *b*.
+    # - Returns `+1` if *a* is greater than *b*.
+    def self.compare(a : Term, b : Term) : Int32
+      compare(Term[a], Term[b])
+    end
+
+    # Compares two entries (key-value tuples).
+    def self.compare(a : {Term, Term}, b : {Term, Term}) : Int32
+      a.compare(b) { |l, r| Term.compare(l, r) }
     end
   end
 

@@ -68,6 +68,13 @@ module Ww
       new(Spec.pack(Spec.blank(Spec.unpack(Spec::Repr, prev.@bits), type, mult)))
     end
 
+    # Compares this and *other* symbols.
+    #
+    # Comparison is performed on their string representation (`inspect`).
+    def <=>(other : Sym) : Int32
+      Spec.compare(Spec.unpack(Spec::Repr, @bits), Spec.unpack(Spec::Repr, other.@bits))
+    end
+
     # Returns `true` if this symbol is the empty symbol.
     def empty? : Bool
       self == Sym.empty

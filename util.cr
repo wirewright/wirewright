@@ -1175,6 +1175,14 @@ struct StringView
     {% end %}
   end
 
+  def <=>(other : StringView) : Int32
+    if string.same?(other.string) && {byte_start, byte_end} == {other.byte_start, other.byte_end}
+      return 0
+    end
+
+    (to_slice <=> other.to_slice).sign
+  end
+
   def self.join(views : Enumerable(StringView)) : StringView
     views.reduce? { |memo, view| memo + view } || "".view
   end
@@ -3821,6 +3829,22 @@ module Enumerable(T)
 
   def to_bag
     to_bag(&.itself)
+  end
+
+  def min(& : T, T -> Int32)
+    min = uninitialized T
+    found = false
+
+    each_with_index do |elem, i|
+      if i == 0 || yield(elem, min) < 0
+        min = elem
+      end
+      found = true
+    end
+
+    raise Enumerable::EmptyError.new unless found
+
+    min
   end
 end
 

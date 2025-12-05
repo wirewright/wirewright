@@ -69,6 +69,77 @@ struct Ww::Term::Sym
       @@ref2string.read { |ary| ary.unsafe_fetch(ref.index) }
     end
 
+    # Exceeding this number of bytes will cause `compare` to start allocating
+    # on the heap.
+    #
+    # 64 bytes is huge for symbols, so the heap alloc path is pessimized by
+    # an exception and some wasted work.
+    SYM_SMALL_BYTES = 64
+
+    # :nodoc:
+    class Sink(N)
+      class DoesNotFit < Exception
+        @callstack = CallStack.empty
+      end
+
+      def initialize
+        @pos = 0u32
+        @buffer = uninitialized UInt8[N]
+      end
+
+      def <<(object : Char) : Nil
+        if @pos &+ object.bytesize > N
+          raise DoesNotFit.new
+        end
+
+        object.each_byte do |byte|
+          @buffer.unsafe_put(@pos, byte)
+          @pos &+= 1
+        end
+      end
+
+      def <<(object : String) : Nil
+        if @pos &+ object.bytesize > N
+          raise DoesNotFit.new
+        end
+
+        (@buffer.to_unsafe + @pos).copy_from(object.to_unsafe, object.bytesize)
+        @pos &+= object.bytesize
+      end
+
+      def to_slice
+        Slice.new(@buffer.to_unsafe, @pos, read_only: true)
+      end
+    end
+
+    # Calls `write` on *a*, writing into possibly stack-allocated memory (fast path).
+    # If the number of bytes written exceeds `SYM_SMALL_BYTES`, aborts, and uses
+    # `IO::Memory` instead (slow path).
+    private def unsafe_write_to_slice(a : Repr, & : Bytes ->)
+      begin
+        sinkmem0 = uninitialized ReferenceStorage(Sink(SYM_SMALL_BYTES))
+        sink = Sink(SYM_SMALL_BYTES).unsafe_construct(pointerof(sinkmem0))
+        write(sink, a)
+
+        slice = sink.to_slice
+      rescue Sink::DoesNotFit
+        io = IO::Memory.new
+        write(io, a)
+
+        slice = io.to_slice
+      end
+
+      yield slice
+    end
+
+    def compare(a : Repr, b : Repr) : Int32
+      unsafe_write_to_slice(a) do |l|
+        unsafe_write_to_slice(b) do |r|
+          (l <=> r).sign
+        end
+      end
+    end
+
     # Constructs a blank repr for a blank with the given *name*. *type* sets
     # the blank's type (as in `x_number`), and *mult* its multiplicity (as in
     # `x_number` vs `x_number*` vs `x_number+`).
