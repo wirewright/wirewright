@@ -22,18 +22,11 @@ module Ww::ML
     # ```
     DocComment
 
-    # Attach location info under symbol keys `Term::Sym.byte_start` and `Term::Sym.byte_end`
-    # to all dictionary terms of the normal form except those found inside entry keys.
+    # Track locations of nodes. AST nodes will be wrapped in special location
+    # nodes. Usually this happens only during a reparse on syntax error, but
+    # with the `Location` addon, this will always happen.
     #
-    # If an interfix is used, location info is attached to the outer dict.
-    # For instance, in `(+ 1 2)`, one will have `(+ 1 2 <byte-start>: _ <byte-end>: _)`,
-    # but in `(+ 1 2 ¦ _)` one will have `(%partition (+ 1 2) _ <byte-start>: _ <byte-end>: _)`
-    #
-    # Locations are irrepresentible and intrusive symbols. ML assumes the client
-    # will first and foremost prune them from the term. The location addon is
-    # the most powerful and "bare bones" way to do this. Use e.g. `ML.term_and_srcmap`
-    # and related if you don't want to bother implementing location collection
-    # and pruning yourself.
+    # This addon is a pre-requisite for using `SrcMap`.
     Location
 
     # Returns the recommended set of addons.
@@ -42,138 +35,186 @@ module Ww::ML
     end
   end
 
+  # **The main interface to the WwML lexer**. Converts a source *string* to
+  # a read-only slice of lexical atoms, ready to be used by `Reader`.
+  #
+  # ```
+  # ML.lexemes("(+ 1 2)").map(&.text) # => Slice[…""…, …"("…, …"+"…, …"1"…, …"2"…, …")"…, …""…]
+  # ```
+  def lexemes(string : String) : Slice(Lexeme::Atom)
+    pipe(string, Lexeme.lexemes, Lexeme.atoms)
+  end
+
+  # **The main interface to the WwML reader (parser)**. Constructs a reader and
+  # yields it to the block, letting it read using its method of choice
+  # (e.g. `document`, `slot`, etc.) Returns the resulting tree. If parsing fails
+  # with `Err`, converts it to a `SyntaxError` and raises.
+  #
+  # ```
+  # lexemes = ML.lexemes("100")
+  # tree = ML.tree(lexemes, ML::Addons::None, &.slot)
+  # tree # => #<Ww::ML::Tree::Leaf:0x... @term=100>
+  # ```
+  def tree(lexemes : Slice(Lexeme::Atom), addons : Addons, & : Reader -> _)
+    reader = Reader.new(lexemes, addons)
+
+    π = reader.top { yield reader }
+    if π.is_a?(Reader::Err)
+      raise SyntaxError.new(π.detail, π.text)
+    end
+
+    π
+  end
+
+  # Shorthand for the sequence `lexemes` -> `tree`.
+  #
+  # ```
+  # tree = ML.tree("100", ML::Addons::None, &.slot)
+  # tree # => #<Ww::ML::Tree::Leaf:0x... @term=100>
+  # ```
+  def tree(source : String, addons : Addons, & : Reader -> _)
+    tree(lexemes(source), addons) { |reader| yield reader }
+  end
+
+  # Renders *node* (one of `Tree` nodes) without source-mapping. Returns
+  # the resulting term.
+  def render(node) : Term
+    tsrc = Renderer(UntrackedTsrc).render(node)
+    tsrc.term
+  end
+
+  # Renders *node* (one of `Tree` nodes) with source-mapping. Returns
+  # the resulting term and source map.
+  def render_with_srcmap(node) : {Term, SrcMap}
+    tsrc = Renderer(TrackedTsrc).render(node)
+
+    {tsrc.term, SrcMap.new(tsrc.srcmap)}
+  end
+
+  # Keyword arguments (configuration) shared between all of `term*`, `terms*`,
+  # `document*` and derived.
+  #
+  # - *filename* specifies the file name to use in syntax errors.
+  # - *doc* enables or disables doc parsing. This acts as a toggle for
+  #   `Addons::DocComment`. See `Addons::DocComment` for more info.
+  record Conf, filename = "scratch", doc = true do
+    # :nodoc:
+    def addons
+      doc ? Addons::DocComment | Addons::None : Addons::None
+    end
+  end
+
+  {% for suffix in ["", "_with_srcmap"] %}
+    private def parse{{suffix.id}}(filename : String, source : String, addons : Addons, &fn : Reader -> _)
+      {% if suffix == "_with_srcmap" %}
+        addons |= Addons::Location
+      {% end %}
+
+      tree = tree(source, addons, &fn)
+
+      begin
+        begin
+          render{{suffix.id}}(tree)
+        rescue e : Renderer::RenderError
+          raise SyntaxError.new(e.detail, e.text? || source.view)
+        end
+      rescue e : SyntaxError
+        # Re-parse with location turned on if it was turned off. This way, we'll get
+        # proper error message.
+        unless addons.location?
+          _ = parse(filename, source, addons | Addons::Location, &fn)
+          # ... Re-raises. We do not expect it to succeed. If it does, we
+          # re-raise `e`.
+        end
+
+        raise e
+      end
+    rescue e : SyntaxError
+      e.filename = filename
+      raise e
+    end
+
+    private def parse{{suffix.id}}(conf : Conf, source : String, &fn : Reader -> _)
+      parse{{suffix.id}}(conf.filename, source, conf.addons, &fn)
+    end
+  {% end %}
+
+  # Constructs a term from the given WwML *source* string.
+  #
+  # See `Conf` to learn about *kwargs*.
+  #
+  # Raises `SyntaxError` on invalid input.
+  def term(source : String, **kwargs) : Term
+    conf = Conf.new(**kwargs)
+    row = parse(conf, source, &.section(allow_empty: true))
+    unless row.itemsonly? && row.itemsize == 1
+      raise SyntaxError.new("expected a single top-level term", source.view, filename: conf.filename)
+    end
+
+    row[0]
+  end
+
+  # Constructs a term from the given WwML *source* string. Supplements it with
+  # a source map mapping termpaths into the returned term to corresponding views
+  # of *source* code.
+  #
+  # See `Conf` to learn about *kwargs*.
+  #
+  # Raises `SyntaxError` on invalid input.
+  def term_and_srcmap(source : String, **kwargs) : {Term, SrcMap}
+    conf = Conf.new(**kwargs)
+    row, srcmap = parse_with_srcmap(conf, source, &.section(allow_empty: true))
+    unless row.itemsonly? && row.itemsize == 1
+      raise SyntaxError.new("expected a single top-level term", source.view, filename: conf.filename)
+    end
+
+    {row[0], srcmap.cd(0)}
+  end
+
   # Constructs an itemsonly dict of terms read from the given WwML
   # *source* string.
   #
   # Raises `SyntaxError` on invalid input.
-  def terms(source : String, *, filename : String = "scratch", addons : Addons = Addons.recommended) : Term
-    begin
-      atoms = Lexeme.atoms(source)
-    rescue e : SyntaxError
-      # Lexical error
-      e.filename = filename
-      raise e
-    end
+  def terms(source : String, **kwargs) : Term
+    parse(Conf.new(**kwargs), source, &.section(allow_empty: true))
+  end
 
-    reader = Reader.new(atoms, addons: addons)
-
-    case π = reader.toplevel(source, reader.section)
-    in Reader::Parseout::Ok
-      π.term
-    in Reader::Parseout::Err
-      # Parse error
-      raise SyntaxError.new(π.detail, π.text, filename: filename)
-    end
+  # Constructs an itemsonly dict of terms read from the given WwML *source*
+  # string. Supplements it with a source map mapping termpaths into the returned
+  # term to corresponding views of *source* code.
+  #
+  # See `Conf` to learn about *kwargs*.
+  #
+  # Raises `SyntaxError` on invalid input.
+  def terms_and_srcmap(source : String, **kwargs) : {Term, SrcMap}
+    parse_with_srcmap(Conf.new(**kwargs), source, &.section(allow_empty: true))
   end
 
   # Same as `terms`, but downcasts the resulting term to a dictionary.
+  #
+  # See `Conf` to learn about *kwargs*.
   def dict(source : String, **kwargs) : Term::Dict
     terms(source, **kwargs).as_d
   end
 
-  # Constructs a term from the given WwML *source* string.
-  #
-  # Raises `SyntaxError` on invalid input.
-  def term(source : String, *, filename : String = "scratch", addons : Addons = Addons.recommended) : Term
-    begin
-      atoms = Lexeme.atoms(source)
-    rescue e : SyntaxError
-      # Lexical error
-      e.filename = filename
-      raise e
-    end
-
-    reader = Reader.new(atoms, addons: addons)
-
-    case π = reader.toplevel(source, reader.item)
-    in Reader::Parseout::Ok
-      π.term
-    in Reader::Parseout::Err
-      # Parse error
-      raise SyntaxError.new(π.detail, π.text, filename: filename)
-    end
-  end
-
   # Constructs a document term from the given WwML *source* string.
   #
+  # See `Conf` to learn about *kwargs*.
+  #
   # Raises `SyntaxError` on invalid input.
-  def document(source : String, *, filename : String = "scratch", addons : Addons = Addons.recommended) : Term
-    begin
-      atoms = Lexeme.atoms(source)
-    rescue e : SyntaxError
-      # Lexical error
-      e.filename = filename
-      raise e
-    end
-
-    reader = Reader.new(atoms, addons: addons)
-
-    case π = reader.toplevel(source, reader.document)
-    in Reader::Parseout::Ok
-      π.term
-    in Reader::Parseout::Err
-      # Parse error
-      raise SyntaxError.new(π.detail, π.text, filename: filename)
-    end
+  def document(source : String, **kwargs) : Term
+    parse(Conf.new(**kwargs), source, &.document)
   end
 
-  alias SrcMap = Hash(Term::Dict, StringView)
-
-  {% for method in %w[term terms document] %}
-    # Same as `{{method.id}}`, but also builds a *source map*. The source map
-    # maps keypaths into the returned term to corresponding views of *source*.
-    #
-    # NOTE: the source map may be missing some keypaths; be prepared to handle
-    # that if you must.
-    #
-    # NOTE: this method is not expected to be fast.
-    def {{method.id}}_and_srcmap(source : String, **kwargs) : {Term, SrcMap}
-      addons = kwargs[:addons]? || Addons.recommended
-      if addons.location?
-        raise ArgumentError.new("use of location addon conflicts with `term_and_srcmap`")
-      end
-      addons |= ML::Addons::Location
-
-      term = {{method.id}}(source, **kwargs.merge({addons: addons}))
-      term, srcmap = pruned_term_and_srcmap(source, term)
-
-      {term, srcmap}
-    end
-  {% end %}
-
-  private def pruned_term_and_srcmap(source : String, term : Term)
-    srcmap = {} of Term::Dict => StringView
-
-    # Read locations off the parsed term and bind under their corresponding keypath.
-    Term.each_keypath_and_node(term) do |keypath, node|
-      # Do not emit location for root, too coarse.
-      next true if keypath.empty?
-
-      next true unless nodedict = node.as_d?
-      next true unless b = nodedict[Term::Sym.byte_start]?
-      next true unless e = nodedict[Term::Sym.byte_end]?
-      next true unless b = b.to?(Int32)
-      next true unless e = e.to?(Int32)
-
-      srcmap[Term[keypath]] = source.view(b, byte_end: e)
-
-      true # continue
-    end
-
-    # Prune locations.
-    term = Term.patch(term) do |leaf|
-      unless leafdict = leaf.as_d?
-        next Term::Patch::Skip.new
-      end
-
-      rep = leafdict
-        .without(Term::Sym.byte_start)
-        .without(Term::Sym.byte_end)
-
-      Term::Patch::ReplaceDescend.new(Term.of(rep))
-    end
-
-    {term, srcmap}
+  # Constructs a document term from the given WwML *source* string. Supplements
+  # it with a source map mapping termpaths into the returned term to corresponding
+  # views of *source* code.
+  #
+  # See `Conf` to learn about *kwargs*.
+  #
+  # Raises `SyntaxError` on invalid input.
+  def document_and_srcmap(source : String, **kwargs) : Term
+    parse_with_srcmap(Conf.new(**kwargs), source, &.document)
   end
 
   # :nodoc:
@@ -261,20 +302,13 @@ module Ww::ML
 
       # Slow path.
       begin
-        atoms = Lexeme.atoms(name)
+        term = term(name)
       rescue e : SyntaxError
         # Lexical error, can't go bare.
         return false
       end
 
-      reader = Reader.new(atoms, addons: Addons.recommended)
-
-      case π = reader.toplevel(name, reader.item)
-      in Reader::Parseout::Ok
-        π.term.type.symbol? && π.term.to(String) == name
-      in Reader::Parseout::Err
-        false
-      end
+      term.type.symbol? && term.to(String) == name
     end
   end
 end
@@ -283,6 +317,10 @@ require "./ml/syntax_error"
 require "./ml/rune"
 require "./ml/kit"
 require "./ml/lexeme"
+require "./ml/lexer"
+require "./ml/tree"
 require "./ml/reader"
-
+require "./ml/srcmap"
+require "./ml/tsrc"
+require "./ml/renderer"
 require "./ml/display"

@@ -1237,7 +1237,7 @@ def compare(ctx, test, specpath, title, a, b, text)
       asrc = File.read(Path["tests"] / apath.to(String))
 
       test.long(specpath, text) do |complaints|
-        actual = ML.terms(asrc, addons: ML::Addons::None)
+        actual = ML.terms(asrc, doc: false)
         next if actual == expected
 
         complaints << Component.complaint(

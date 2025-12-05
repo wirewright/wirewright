@@ -100,5 +100,13 @@ struct Ww::ML::Reader
         yield @lexemes.unsafe_fetch(index)
       end
     end
+
+    def ignored?(& : Lexeme::Atom -> Bool) : Bool
+      each_previous_ignored do |lexeme|
+        return true if yield lexeme
+      end
+
+      false
+    end
   end
 end

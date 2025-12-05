@@ -1,7 +1,10 @@
 module Ww::ML
-  # A lexeme is, in the most general sense, an abstract lexical substructure
-  # identified in a string of WwML. Most likely it is, or corresponds to, a group
-  # of `Rune`s -- Unicode codepoints with lightweight WwML-specific tagging.
+  # A lexeme is, in the most general sense, a group of `Rune`s (Unicode
+  # codepoints with lightweight WwML-specific tagging). This grouping
+  # helps the reader, requiring less lookahead and repeated work. WwML's
+  # lexer also handles *lexical choice*, which is a way to compress repetition:
+  # `px⫽y-0` becomes `px-0 py-0`. See the WwML spec for more examples of
+  # lexical choice.
   module Lexeme
     extend self
 
@@ -34,8 +37,12 @@ module Ww::ML
         Lparen
         Rparen
         Langle
+        LangleCircledRing
         Rangle
         RangleSource
+        DoubleLangle
+        DoubleRangle
+        DoubleRangleSource
         Lbracket
         Rbracket
         Lcurly
@@ -68,6 +75,7 @@ module Ww::ML
         Minus
         Caret
         CaretLeft
+        CaretColon
         CaretEllipsis
         CaretStar
         CaretStarLeft
@@ -81,9 +89,7 @@ module Ww::ML
         TRHalfBracket
         RawString
         ArrowLeft
-        ArrowLeftTail
         ArrowRight
-        ArrowRightTail
         ArrowUp
         ArrowDn
         DoubleAsterisk
@@ -105,6 +111,7 @@ module Ww::ML
         SubMinusRight
         SubDigitsRight
         AtSign
+        AtSignColon
         Quote
         PercentQuote
         DollarQuote
@@ -175,11 +182,11 @@ module Ww::ML
     #
     # See also: `One`.
     def lexemes(string : String) : Slice(One)
-      reader = Reader.new(string)
-      lexemes = Array(One).new(reader.predicted_lexeme_count)
+      lexer = Lexer.new(string)
+      lexemes = Array(One).new(lexer.predicted_lexeme_count)
 
       loop do
-        lexeme = reader.next
+        lexeme = lexer.next
         push(lexemes, lexeme)
 
         break if lexeme.is_a?(Token) && lexeme.type.eoi?
@@ -201,7 +208,7 @@ module Ww::ML
     end
 
     # :nodoc:
-    def block_boundary?(lexeme : Lexeme::Token) : BlockBoundaryResponse
+    def block_boundary?(lexeme : Token) : BlockBoundaryResponse
       case lexeme.type
       when .blank_line?,
            .double_blank_line?,
@@ -226,8 +233,7 @@ module Ww::ML
     # by a blank line, a double blank line, etc. A lexical block is the unit of
     # choice instantiation for lexical `Choice`s found in it.
     #
-    # Delimiter lexemes are yielded as a separate block unless they are *inclusive*
-    # (e.g. `***`), in which case they attach to the end of the block they delimit.
+    # Delimiter lexemes are treated according to `BlockBoundaryResponse`.
     #
     # NOTE: May emit empty blocks.
     def each_block(lexemes : Slice(One), & : Slice(One) ->) : Nil
@@ -241,16 +247,16 @@ module Ww::ML
         in .exclusive?
           yield origin[0, size] # excluding delimiter
           yield origin[size, 1] # delimiter
-          origin += size + 1
+          origin += size + 1    # after delimiter
           size = 0
         in .front?
-          yield origin[0, size]
-          origin += size
-          size = 1
+          yield origin[0, size] # excluding delimiter
+          origin += size        # at delimiter
+          size = 1              # includes delimiter
         in .rear?
-          yield origin[0, size + 1]
-          origin += size + 1
-          size = 0
+          yield origin[0, size + 1] # including delimiter
+          origin += size + 1        # after delimiter
+          size = 0                  # empty
         end
       end
 
@@ -264,7 +270,7 @@ module Ww::ML
 
     # Determines the maximum *block arity*.
     #
-    # See also: `arity`.
+    # See also: `delay_and_arity?`.
     MAX_BLOCK_ARITY = 16
 
     # Returns the current delay and block arity of *block*.
@@ -273,13 +279,18 @@ module Ww::ML
     # operators `⸨⸩⟦⟧⫽`. In other words, block arity is the common *choice arity* --
     # the number of branches *all* choices in the block have.
     #
+    # Minimum delay is returned. `⸨⸩` and `⫽` have the delay of `0`, and `⟦⟧` has
+    # the delay of `1` (but generally, see `Choice#delay`).
+    #
+    # Returns `nil` if *block* has no choices.
+    #
     # If different choice arities are found in the same block, raises `SyntaxError`.
     def delay_and_arity?(block : Slice(One)) : {Int32, Int32}?
       # Find minimum delay.
       delay = nil
 
       block.each do |lexeme|
-        next unless lexeme.is_a?(Lexeme::Choice)
+        next unless lexeme.is_a?(Choice)
         next unless delay.nil? || lexeme.delay < delay
 
         delay = lexeme.delay
@@ -290,7 +301,7 @@ module Ww::ML
       arity0 = 0
 
       block.each do |lexeme|
-        next unless lexeme.is_a?(Lexeme::Choice)
+        next unless lexeme.is_a?(Choice)
         next unless lexeme.delay == delay
 
         arity1 = lexeme.options.size
@@ -312,7 +323,7 @@ module Ww::ML
       {delay, arity0}
     end
 
-    # See `arity(Slice(One))`.
+    # See `delay_and_arity?(Slice(One))`.
     def delay_and_arity?(block : Array(One)) : {Int32, Int32}?
       delay_and_arity?(block.to_readonly_slice)
     end
@@ -367,8 +378,8 @@ module Ww::ML
     end
 
     # Instantiates *lexemes*: removes `Choice`s through instantiation, thereby
-    # converting a slice of uninstantiated `Lexeme::One`s to one containing
-    # lexical atoms only -- thus ,ready for term reading.
+    # converting a slice of uninstantiated `One`s to one containing lexical
+    # atoms only -- thus ,ready for term reading.
     #
     # The returned slice is read-only.
     #
@@ -391,15 +402,5 @@ module Ww::ML
 
       atoms.to_readonly_slice
     end
-
-    # The front-end of WwML lexical analysis: converts a source *string* to
-    # a read-only slice of lexical atoms.
-    #
-    # See also: `Atom`.
-    def atoms(string : String) : Slice(Atom)
-      pipe(string, lexemes, atoms)
-    end
   end
 end
-
-require "./lexeme/reader"

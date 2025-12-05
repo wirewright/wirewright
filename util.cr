@@ -30,7 +30,14 @@ macro defrecord(name, *properties, includes = [] of ::NoReturn)
   end
 end
 
-macro defcase(cls, *typedecls, inherit = false, equality = true, &)
+annotation DefcaseField
+end
+
+macro defcase(cls, *typedecls, inherit = false, equality = :value, caches_hash = false, &)
+  {% unless equality == :value || equality == :ref %}
+    {% raise "equality must be :value or :ref"%}
+  {% end %}
+
   {% header = "".id %}
   {% if inherit && @type.module? %}
     {% header = "include #{@type.id}".id %}
@@ -42,7 +49,18 @@ macro defcase(cls, *typedecls, inherit = false, equality = true, &)
     {{header}}
 
     {% for typedecl in typedecls %}
-      getter {{typedecl}}
+      {% if typedecl.is_a?(Assign)
+           name = typedecl.target.id
+         elsif typedecl.is_a?(TypeDeclaration)
+           name = typedecl.var.id
+         else
+           name = typedecl.id
+         end %}
+
+      @[::DefcaseField]
+      def {{name}}
+        @{{name.id}}
+      end
     {% end %}
 
     def initialize({{typedecls.map { |typedecl| "@#{typedecl}".id }.splat}})
@@ -72,8 +90,17 @@ macro defcase(cls, *typedecls, inherit = false, equality = true, &)
                      }})
     end
 
-    {% if equality %}
+    {% if equality == :value %}
       def_equals_and_hash {{typedecls.map { |typedecl| "@#{typedecl.var}".id }.splat}}
+    {% end %}
+
+    @hash : UInt64?
+
+    {% if caches_hash && equality == :value %}
+      def hash(hasher)
+        h64 = @hash ||= previous_def(Crystal::Hasher.new).result
+        h64.hash(hasher)
+      end
     {% end %}
 
     {{yield}}
@@ -1212,6 +1239,20 @@ struct StringView
     @string.byte_index_to_char_index(byte_end).not_nil!
   end
 
+  def includes?(needle : Char) : Bool
+    each_char do |char|
+      return true if char == needle
+    end
+    false
+  end
+
+  def rincludes?(needle : Char) : Bool
+    reverse_each_char do |char|
+      return true if char == needle
+    end
+    false
+  end
+
   def empty? : Bool
     @byte_start == byte_end
   end
@@ -1305,6 +1346,12 @@ struct StringView
 
   def ends_with?(ch : Char)
     last_char? == ch
+  end
+
+  def ends_with?(postfix : String) : Bool
+    return false if postfix.bytesize > bytesize
+
+    (to_unsafe + @byte_start + bytesize - postfix.bytesize).memcmp(postfix.to_unsafe, postfix.bytesize) == 0
   end
 
   def precedes?(other : StringView)
@@ -1623,6 +1670,34 @@ struct StringView
     after_end
   end
 
+  def rskip(nchars : Int32, charset = nil) : StringView
+    return self if empty?
+
+    reader = Char::Reader.new(@string, pos: byte_end)
+    single_bytes = true
+
+    while reader.pos > @byte_start
+      if nchars.zero?
+        return StringView.new(@string, byte_start, reader.pos, single_bytes)
+      end
+
+      reader.previous_char
+      char = reader.current_char
+      if charset && !char.in?(charset)
+        return StringView.new(@string, byte_start, reader.pos + reader.current_char_width, single_bytes)
+      end
+
+      nchars -= 1
+      single_bytes &&= reader.current_char_width == 1
+    end
+
+    before_begin
+  end
+
+  def rchop
+    rskip(1)
+  end
+
   # Removes one leading character *ch* from this string view, if present.
   def lchop(ch : Char) : StringView
     starts_with?(ch) ? skip(ch.bytesize) : self
@@ -1743,14 +1818,14 @@ struct StringView
     partition { |ch| ch == separator }
   end
 
-  def rpartition(& : Char -> Bool)
+  def rpartition(*, limit : Int = Int32::MAX, & : Char -> Bool)
     reader = Char::Reader.new(@string, pos: byte_end)
 
     single_bytes = true
 
     loop do
       # Not found
-      if reader.pos == byte_start
+      if limit.zero? || reader.pos == byte_start
         return before_begin, before_begin, self
       end
 
@@ -1763,10 +1838,11 @@ struct StringView
       end
 
       single_bytes &&= reader.current_char_width == 1
+      limit -= 1
     end
   end
 
-  def rpartition(separator : Char)
+  def rpartition(separator : Char, **kwargs)
     rpartition { |ch| ch == separator }
   end
 
@@ -3406,6 +3482,28 @@ struct Slice(T)
 
     {self[...index], self[index + 1..]}
   end
+
+  def trim(newsize : Int) : Slice(T)
+    unless 0 <= newsize <= size
+      raise IndexError.new
+    end
+
+    Slice(T).new(@pointer, newsize, read_only: @read_only)
+  end
+
+  def rchop(*objects, &)
+    return if size < objects.size
+
+    newsize = size
+
+    objects.reverse_each do |char|
+      return unless unsafe_fetch(newsize - 1) === char
+
+      newsize -= 1
+    end
+
+    yield trim(newsize)
+  end
 end
 
 class AssertionError < Exception
@@ -4339,14 +4437,20 @@ struct StaticArray(T, N)
 end
 
 struct Slice(T)
+  def prepend(object : T) : Slice(T)
+    mem = Pointer(T).malloc(size + 1)
+    mem[0] = object
+    (mem + 1).copy_from(to_unsafe, size)
+
+    Slice.new(mem, size + 1)
+  end
+
   def append(object : T) : Slice(T)
-    Slice(T).new(size + 1) do |index|
-      if index < size
-        unsafe_fetch(index)
-      else
-        object
-      end
-    end
+    mem = Pointer(T).malloc(size + 1)
+    mem.copy_from(to_unsafe, size)
+    mem[size] = object
+
+    Slice.new(mem, size + 1)
   end
 
   def to_voidptr : Void*

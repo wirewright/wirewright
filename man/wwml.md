@@ -944,6 +944,7 @@ is available.
 - `⋮<name>` is the same as writing `<name>: (%- (%never) <name>)`.
 - `±<name>` is the same as writing `<name>: (%let <name> _number)`.
 - `±<key>: <name>` is the same as writing `<key>: (%let <name> _number)`.
+- `@<name>_` is the same as writing `<name>: @<name>_`.
 
 ###### Initial values
 

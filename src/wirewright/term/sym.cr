@@ -259,6 +259,10 @@ module Ww
       new(encode(source.to_slice, blank: false), type: TermType::Any, blank: false, poly: false, named: true)
     end
 
+    def self.blank(name : Sym, type : TermType) : Sym
+      new(String.build { |io| io << name.to(String) << type.blank })
+    end
+
     # Maybe:
     #
     # TAG
@@ -294,33 +298,33 @@ module Ww
     # higher they should be. This is because we want the majority of symbols to
     # fit into u8 or u16, so that Dicts and TermArrays can pack them in the future.
 
-    def self.rule_id(byte_start, *, blank : Bool) : Sym
-      name = String.build do |io|
-        byte_start.to_s(io, base: 16, upcase: true)
-        io << ":◇"
-        io << "_" if blank
-      end
+    # def self.rule_id(byte_start, *, blank : Bool) : Sym
+    #   name = String.build do |io|
+    #     byte_start.to_s(io, base: 16, upcase: true)
+    #     io << ":◇"
+    #     io << "_" if blank
+    #   end
 
-      new(name)
-    end
+    #   new(name)
+    # end
 
-    def self.rule_block_id(byte_start, *, blank : Bool) : Sym
-      name = String.build do |io|
-        byte_start.to_s(io, base: 16, upcase: true)
-        io << ":▢"
-        io << "_" if blank
-      end
+    # def self.rule_block_id(byte_start, *, blank : Bool) : Sym
+    #   name = String.build do |io|
+    #     byte_start.to_s(io, base: 16, upcase: true)
+    #     io << ":▢"
+    #     io << "_" if blank
+    #   end
 
-      new(name)
-    end
+    #   new(name)
+    # end
 
-    def self.byte_start : Sym
-      new("(byte_start)")
-    end
+    # def self.byte_start : Sym
+    #   new("(byte_start)")
+    # end
 
-    def self.byte_end : Sym
-      new("(byte_end)")
-    end
+    # def self.byte_end : Sym
+    #   new("(byte_end)")
+    # end
 
     private def ref : UInt32
       @spec.bits(7..)
@@ -348,65 +352,65 @@ module Ww
       blank? || raise "expected symbol to be a blank"
     end
 
-    record RuleId, byte_start : Int32 do
-      def name
-        "◇"
-      end
-    end
+    # record RuleId, byte_start : Int32 do
+    #   def name
+    #     "◇"
+    #   end
+    # end
 
-    record RuleIdBlank, byte_start : Int32 do
-      def name
-        "◇_"
-      end
-    end
+    # record RuleIdBlank, byte_start : Int32 do
+    #   def name
+    #     "◇_"
+    #   end
+    # end
 
-    record RuleBlockId, byte_start : Int32 do
-      def name
-        "▢"
-      end
-    end
+    # record RuleBlockId, byte_start : Int32 do
+    #   def name
+    #     "▢"
+    #   end
+    # end
 
-    record RuleBlockIdBlank, byte_start : Int32 do
-      def name
-        "▢_"
-      end
-    end
+    # record RuleBlockIdBlank, byte_start : Int32 do
+    #   def name
+    #     "▢_"
+    #   end
+    # end
 
-    @[Dncast]
-    def rule_id_sentinel? : RuleId?
-      name = to(String)
-      return unless name.ends_with?(":◇")
+    # @[Dncast]
+    # def rule_id_sentinel? : RuleId?
+    #   name = to(String)
+    #   return unless name.ends_with?(":◇")
 
-      start, _, _ = name.partition(':')
-      RuleId.new(start.to_i(base: 16))
-    end
+    #   start, _, _ = name.partition(':')
+    #   RuleId.new(start.to_i(base: 16))
+    # end
 
-    @[Dncast]
-    def rule_id_blank_sentinel? : RuleIdBlank?
-      name = to(String)
-      return unless name.ends_with?(":◇_")
+    # @[Dncast]
+    # def rule_id_blank_sentinel? : RuleIdBlank?
+    #   name = to(String)
+    #   return unless name.ends_with?(":◇_")
 
-      start, _, _ = name.partition(':')
-      RuleIdBlank.new(start.to_i(base: 16))
-    end
+    #   start, _, _ = name.partition(':')
+    #   RuleIdBlank.new(start.to_i(base: 16))
+    # end
 
-    @[Dncast]
-    def rule_block_id_sentinel? : RuleBlockId?
-      name = to(String)
-      return unless name.ends_with?(":▢")
+    # @[Dncast]
+    # def rule_block_id_sentinel? : RuleBlockId?
+    #   name = to(String)
+    #   return unless name.ends_with?(":▢")
 
-      start, _, _ = name.partition(':')
-      RuleBlockId.new(start.to_i(base: 16))
-    end
+    #   start, _, _ = name.partition(':')
+    #   RuleBlockId.new(start.to_i(base: 16))
+    # end
 
-    @[Dncast]
-    def rule_block_id_blank_sentinel? : RuleBlockIdBlank?
-      name = to(String)
-      return unless name.ends_with?(":▢_")
+    # @[Dncast]
+    # def rule_block_id_blank_sentinel? : RuleBlockIdBlank?
+    #   name = to(String)
+    #   return unless name.ends_with?(":▢_")
 
-      start, _, _ = name.partition(':')
-      RuleBlockIdBlank.new(start.to_i(base: 16))
-    end
+    #   start, _, _ = name.partition(':')
+    #   RuleBlockIdBlank.new(start.to_i(base: 16))
+    # end
 
     # Returns `true` if this symbol is reserved for Microfold. Returns
     # `false` otherwise.
@@ -462,3 +466,5 @@ module Ww
   SYM_BLANK_STRING  = Term[:_string]
   SYM_BLANK_BOOLEAN = Term[:_boolean]
 end
+
+require "./sym/symcode"

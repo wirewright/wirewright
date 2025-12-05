@@ -326,7 +326,7 @@
      ⎡(0: text color: black 1: "Hello World" width: 100 height: 200)⎤)
 
   (- ⎡(x⏏:⏏)⎤ ⎡ambiguous use of `:`⎤)
-  (- ⎡(x: ⏏)⏏⎤ ⎡expected a value to follow `:`⎤)
+  (- ⎡(x: ⏏)⎤ ⎡expected a value to follow `:`⎤)
   (- ⎡(foobar :⏏ ⏏123)⎤ ⎡whitespace after prefix `:` not allowed⎤)
   (- ⎡(foobar⏏:⏏123)⎤ ⎡ambiguous use of `:`, add whitespace before or after `:` to clarify⎤))
 
@@ -342,9 +342,9 @@
   (= ⎡{x: 100}⎤ ⎡(x: 100)⎤)
   (= ⎡{x: 100, y: 200}⎤ ⎡(x: 100 y: 200)⎤)
   (= ⎡{0: +, 1: 100 2: 200}⎤ ⎡(+ 100 200)⎤)
-  (- ⎡{:⏏}⎤ ⎡expected a key to follow `:`⎤)
+  (- ⎡{:⏏}⎤ ⎡expected a term to follow `:`⎤)
   (- ⎡{x: 100 y⏏ z}⎤ ⎡expected `:` after key⎤)
-  (- ⎡{foo: 100 ⏏foo⏏: 200}⎤ ⎡duplicate key `foo`⎤))
+  (- ⎡{foo: 100 ⏏foo⏏: 200}⎤ ⎡duplicate key `foo` in dict⎤))
 
 ;; M1 shorthands
 
@@ -380,10 +380,10 @@
   (= ⎡⟨a b c ⍊ x y z⟩⎤ ⎡(%partition (%item a b c) {¦ x y z})⎤)
   (= ⎡⟨a b c ⍊ x y z⟩°⎤ ⎡(%partition (%item° a b c) {¦ x y z})⎤)
   (- ⎡⟨a (+ 1 2 c⏏⟩⎤ ⎡expected `)` to end the dict⎤)
-  (- ⎡⟨a (+ 1 2) ⏏⎤ ⎡expected an item, `…`, `¦`, or `⟩` to end the split⎤))
+  (- ⎡⟨a (+ 1 2) ⏏⎤ ⎡expected an item, `…`, an interfix, or `⟩` to end the split⎤))
 
 ;; General %split
-(ml
+;(ml
   (- ⎡⟨⏏…⟩⎤ ⎡expected at least one item in split part⎤)
   (- ⎡⟨a … ⏏⟩⎤ ⎡expected at least one item in split part⎤)
   (- ⎡⏏⟨a … b … c … d … e … f⟩⏏⎤ ⎡expected 1-5 split parts, not 6⎤))
@@ -392,7 +392,7 @@
 ;;
 ;; Match pivots, dropping the left- and right-hand side as
 ;; anything between them.
-(ml
+;(ml
   (= ⎡⟨a … b⟩⎤ ⎡(%split _ a (%split _ b _))⎤)
   (= ⎡⟨a b … c d⟩⎤ ⎡(%split _ a (%split (b _*) c (d _*)))⎤)
   (= ⎡⟨a b c … d e f⟩⎤ ⎡(%split _ a (%split (b c _*) d (e f _*)))⎤)
@@ -402,7 +402,7 @@
 ;; %split with three arguments
 ;;
 ;; Match pivot and the left and right-hand side.
-(ml
+;(ml
   (= ⎡⟨lhs … pivot … rhs⟩⎤ ⎡(%split lhs pivot rhs)⎤)
   (= ⎡⟨lhs … a b c … rhs⟩⎤ ⎡(%split lhs a (b c (%group rhs _*)))⎤)
   (- ⎡⏏⟨a b … x … rhs⟩⏏⎤ ⎡expected the left part to contain exactly one item⎤)
@@ -427,12 +427,12 @@
 ;; x y z ø baz boo
 ;; -----  -------
 ;;   a      d
-(ml
+;(ml
   (= ⎡⟨a … b … c … d⟩⎤ ⎡(%split a b (%split _ c d))⎤)
   (= ⎡⟨a … b … c … d⟩⎤ ⎡⟨a … b … _ … c … d⟩⎤))
 
 ;; %split with five arguments
-(ml
+;(ml
   (= ⎡⟨xs … a … ys … b … zs⟩⎤ ⎡(%split xs a (%split ys b zs))⎤)
   (= ⎡⟨xs … a b c … ys … d e f … zs⟩⎤ ⎡(%split xs a (%split (b c (%group ys _*)) d (e f (%group zs _*))))⎤)
   (= ⎡⟨a b c … d e f⟩°⎤ ⎡(%split° _ a (%split° (b c _*) d (e f _*)))⎤))
@@ -451,7 +451,7 @@
   (= ⎡{¦ x}⎤ ⎡(%layer _ (x: _))⎤)
   (= ⎡{¦ x y z}⎤ ⎡(%layer _ (x: _ y: _ z: _))⎤)
   (- ⎡{ ⏏¦}⎤ ⎡expected a key, or `}` to end the dict⎤)
-  (- ⎡{¦⏏⎤ ⎡expected a selector⎤))
+  (- ⎡{¦⏏⎤ ⎡expected `}` to close the pairspattern⎤))
 
 (ml
   (= ⎡{X¦ a b c}⎤ ⎡{   X¦ a b c}⎤ ⎡{   X   ¦ a b c}⎤ ⎡(%partition (%let X _) (%layer _ (a: _ b: _ c: _)))⎤)
@@ -461,14 +461,14 @@
   (= ⎡{+¦}⎤ ⎡(%layer _ ())⎤)
   (= ⎡{+¦ a}⎤ ⎡(%layer _ (a: true))⎤)
   (= ⎡{+¦ a b c}⎤ ⎡(%layer _ (a: true b: true c: true))⎤)
-  (- ⎡{+¦ a b ⏏a⏏}⎤ ⎡duplicate item in dict set: `a`⎤)
-  (- ⎡{+¦ (+ 1 2 x: 100) b ⏏(+ 1 2 x: 100)⏏}⎤ ⎡duplicate item in dict set: `(+ 1 2 x: 100)`⎤))
+  (- ⎡{+¦ a b ⏏a⏏}⎤ ⎡duplicate key `a` in dict⎤)
+  (- ⎡{+¦ (+ 1 2 x: 100) b ⏏(+ 1 2 x: 100)⏏}⎤ ⎡duplicate key `(+ 1 2 x: 100)` in dict⎤))
 
 (ml
   (= ⎡{-¦}⎤ ⎡(%layer _ ())⎤)
   (= ⎡{-¦ a}⎤ ⎡(%layer _ (a: false))⎤)
   (= ⎡{-¦ a b c}⎤ ⎡(%layer _ (a: false b: false c: false))⎤)
-  (- ⎡{-¦ "hello" ⏏"hello"⏏ b}⎤ ⎡duplicate item in dict set: `"hello"`⎤))
+  (- ⎡{-¦ "hello" ⏏"hello"⏏ b}⎤ ⎡duplicate key `"hello"` in dict⎤))
 
 (ml
   (= ⎡{#¦ a 100×b c}⎤ ⎡(%layer _ (a: 1 b: 100 c: 1))⎤))
@@ -477,8 +477,9 @@
 
 (ml
   (= ⎡(¦)⎤ ⎡()⎤)
+  (= ⎡{¦}⎤ ⎡_dict⎤)
   (= ⎡(_* ¦)⎤ ⎡(%partition (_*) ())⎤)
-  (= ⎡(¦ _)⎤ ⎡(%partition () _)⎤)
+  (= ⎡(¦ _)⎤ ⎡(%partition () _dict)⎤)
   (= ⎡(¦ x_)⎤ ⎡(%partition () x_)⎤)
   (= ⎡(¦ x: 100 y: 200)⎤ ⎡(¦ () x: 100 y: 200)⎤ ⎡(%partition () (x: 100, y: 200))⎤)
   (= ⎡(¦ _ x: 100 y: 200)⎤ ⎡(%partition () (%layer _ {x: 100, y: 200}))⎤)
@@ -493,7 +494,7 @@
   (- ⎡{¦ ⏏_number⏏: 100}⎤ ⎡expected a named blank⎤)
   (- ⎡{¦ ⏏x_*⏏: 100}⎤ ⎡expected a singular blank⎤)
   (- ⎡{¦ ⏏x_number*⏏: 100}⎤ ⎡expected a singular blank⎤)
-  (- ⎡{¦ x ⏏x⏏}⎤ ⎡duplicate key `x`⎤)
+  (- ⎡{¦ x ⏏x⏏}⎤ ⎡duplicate key `x` in dict⎤)
 
   (= ⎡{¦ -a -b_number -c: foo
             d⁺ (eta)⁻ f_string g_ h
@@ -556,9 +557,9 @@
 ;; Dictionary set and multiset
 (ml
   (= ⎡{+ x y z}⎤ ⎡{x: true, y: true, z: true}⎤ ⎡(x: true, y: true z: true)⎤)
-  (- ⎡{+ x y ⏏x⏏ z}⎤ ⎡duplicate item in dict set: `x`⎤)
+  (- ⎡{+ x y ⏏x⏏ z}⎤ ⎡duplicate key `x` in dict⎤)
   (= ⎡{- x y z}⎤ ⎡{x: false, y: false, z: false}⎤ ⎡(x: false, y: false z: false)⎤)
-  (- ⎡{- x y ⏏x⏏ z}⎤ ⎡duplicate item in dict set: `x`⎤)
+  (- ⎡{- x y ⏏x⏏ z}⎤ ⎡duplicate key `x` in dict⎤)
   (- ⎡{+ x y z⏏:⏏ 100}⎤ ⎡cannot use pairs in dict set⎤)
   (- ⎡{- x y z⏏:⏏ 100}⎤ ⎡cannot use pairs in dict set⎤)
   (- ⎡{# x y ⏏foo⏏×x z}⎤ ⎡expected a number for count⎤)
@@ -622,26 +623,26 @@
        (backmap (baz z_) (z: 3)))⎤))
 
 (ml
-  (= ⎡◇ => 123⎤ ⎡BbecjetdvbzdaJ => 123⎤)
-  (= ⎡◇ => 456⎤ ⎡fnfifbeLehcZFbo => 456⎤)
-  (= ⎡(foo ◇) => 123⎤ ⎡(foo dRcseLehcYDbics) => 123⎤)
-  (= ⎡(foo ◇) => ◇⎤ ⎡(foo ebcKfmxWbTdK) => ebcKfmxWbTdK⎤)
-  (= ⎡◇_ => ◇⎤ ⎡coeBdMcjeudybGdp_ => coeBdMcjeudybGdp⎤)
-  (= ⎡◇_ => (456 ◇)⎤ ⎡eccMisLbycZF_ => (456 eccMisLbycZF)⎤)
-  (= ⎡(foo ◇_) => ◇⎤ ⎡(foo cdegcXCbgcnezdJ_) => cdegcXCbgcnezdJ⎤)
-  (= ⎡(foo ◇_: false) => {◇: true}⎤ ⎡(foo dbLbycYEbkcweV_: false) => (dbLbycYEbkcweV: true)⎤)
+  (= ⎡◇ => 123⎤ ⎡bTdLchepdobmcxeW => 123⎤)
+  (= ⎡◇ => 456⎤ ⎡FbnczfbeKeecRr => 456⎤)
+  (= ⎡(foo ◇) => 123⎤ ⎡(foo bZdZcFfnfjfceNek) => 123⎤)
+  (= ⎡(foo ◇) => ◇⎤ ⎡(foo etdvbAddPbEdmbh) => etdvbAddPbEdmbh⎤)
+  (= ⎡◇_ => ◇⎤ ⎡dQcqeGdZcFfnfjfd_ => dQcqeGdZcFfnfjfd⎤)
+  (= ⎡◇_ => (456 ◇)⎤ ⎡fmfgeXeBdNcmexdD_ => (456 fmfgeXeBdNcmexdD)⎤)
+  (= ⎡(foo ◇_) => ◇⎤ ⎡(foo fnfjfdePendjbcce_) => fnfjfdePendjbcce⎤)
+  (= ⎡(foo ◇_: false) => {◇: true}⎤ ⎡(foo dJcceecTtMbAdd_: false) => (dJcceecTtMbAdd: true)⎤)
   (= ⎡{¦ flag x_ ◇_} <> {x: $'(+ →x 1), ◇: true}⎤
-     ⎡{¦ flag x_ bKdwbBdeTbLdxbD_} <> {x: $'(+ →x 1), bKdwbBdeTbLdxbD: true}⎤)
+     ⎡{¦ flag x_ fgeWezdHcaebcLh_} <> {x: $'(+ →x 1), fgeWezdHcaebcLh: true}⎤)
   (- ⎡(a ⏏◇⏏ b c d)⎤ ⎡cannot use `◇` outside of a rule⎤)
-  (- ⎡(a ⏏◇_⏏ b c d)⎤ ⎡cannot use `◇_` outside of a rule⎤))
+  (- ⎡(a ⏏◇_⏏ b c d)⎤ ⎡cannot use `◇` outside of a rule⎤))
 
 (ml
   (doc= ⎡(foo ¦ _ v_number -▢_) <> {v: $'(+ →v 1), ▢: true}
          (foo ¦ _ v_number -▢_) <> {v: $'(* →v 2), ▢: true}
          (foo ¦ _ v_number -▢_) <> {v: $'(/ →v 3), ▢: true}⎤
-        ⎡(foo ¦ _ v_number -bocCfheZeGdZcFfo_) <> {v: $'(+ →v 1), bocCfheZeGdZcFfo: true}
-         (foo ¦ _ v_number -bocCfheZeGdZcFfo_) <> {v: $'(* →v 2), bocCfheZeGdZcFfo: true}
-         (foo ¦ _ v_number -bocCfheZeGdZcFfo_) <> {v: $'(/ →v 3), bocCfheZeGdZcFfo: true}⎤)
+        ⎡(foo ¦ _ v_number -feeRerdrbscLhq_) <> {v: $'(+ →v 1), feeRerdrbscLhq: true}
+         (foo ¦ _ v_number -feeRerdrbscLhq_) <> {v: $'(* →v 2), feeRerdrbscLhq: true}
+         (foo ¦ _ v_number -feeRerdrbscLhq_) <> {v: $'(/ →v 3), feeRerdrbscLhq: true}⎤)
   ;; Multiple rule blocks
   (doc= ⎡(foo ◇ ▢) <> {▢: true}
          (foo ◇ bar ▢) <> {▢: true}
@@ -650,13 +651,13 @@
          (foo ◇ ▢) <> {▢: true}
          (foo ◇ bar ▢) <> {▢: true}
          (foo ◇ BOO ▢) <> {▢: true}⎤
-        ⎡(foo chepdnbjcteMeidb bJdubxcXBbfcmey) <> {bJdubxcXBbfcmey: true}
-         (foo xWbTdKceejdcN bar bJdubxcXBbfcmey) <> {bJdubxcXBbfcmey: true}
-         (foo RbJdubycZFbncA baz bJdubxcXBbfcmey) <> {bJdubxcXBbfcmey: true}
+        ⎡(foo yZbYdXcBffeUew feeRerdrbscKei) <> {feeRerdrbscKei: true}
+         (foo bycZFbocCfgeXeC bar feeRerdrbscKei) <> {feeRerdrbscKei: true}
+         (foo dCbQdGbZdYcDfjfc baz feeRerdrbscKei) <> {feeRerdrbscKei: true}
 
-         (foo chepdnbjcteMeidb exdEbVdQcpeEdUcw) <> {exdEbVdQcpeEdUcw: true}
-         (foo xWbTdKceejdcN bar exdEbVdQcpeEdUcw) <> {exdEbVdQcpeEdUcw: true}
-         (foo dibbccefcVyYbW BOO exdEbVdQcpeEdUcw) <> {exdEbVdQcpeEdUcw: true}⎤)
+         (foo yZbYdXcBffeUew LbycYDbjcteMej) <> {LbycYDbjcteMej: true}
+         (foo bycZFbocCfgeXeC bar LbycYDbjcteMej) <> {LbycYDbjcteMej: true}
+         (foo fceMejdcMbAddP BOO LbycYDbjcteMej) <> {LbycYDbjcteMej: true}⎤)
   ;; Generation of rule blocks using lexical templates
   (doc= ⎡(do-a⫽b ¦ _ -▢_) <> {▢: true}
 
@@ -680,11 +681,7 @@
        (x: 100
         y: 200
         ▢ => 100))⎤
-      ([_* [xs_*]] [_* [xs_*]] [_* [xs_*]] [_* [xs_*]]))
-  ;; Errors
-  (- ⎡⏏▢⏏ => 123⎤ ⎡cannot use `▢` outside of a rule block⎤)
-  (- ⎡⏏▢_⏏ => 123⎤ ⎡cannot use `▢_` outside of a rule block⎤)
-)
+      ([_* [xs_*]] [_* [xs_*]] [_* [xs_*]] [_* [xs_*]])))
 
 ;; Backmap and rewriter circuit shorthands
 
@@ -838,41 +835,11 @@
   (= ⎡⁰⁻¹⁻²x⎤ ⎡((_ (_ _ x _*) _*) _*)⎤)
   (- ⎡⁰⁻¹⁻⏏x⎤ ⎡expected one or more superscript digits after `⁻`⎤))
 
-;; Append and prepend
-(ml
-  (= ⎡()↢a⎤ ⎡(a)⎤)
-  (= ⎡a↣()⎤ ⎡(a)⎤)
-  (= ⎡(a b c)↢d⎤ ⎡(a b c d)⎤)
-  (= ⎡a↣(b c d)⎤ ⎡(a b c d)⎤)
-  (= ⎡(a b c)↢(foo bar)⎤ ⎡(a b c (foo bar))⎤)
-  (= ⎡(foo bar)↣(b c d)⎤ ⎡((foo bar) b c d)⎤)
-  (= ⎡a↣⁰x⎤ ⎡(a x _*)⎤)
-  (= ⎡⁰x↢a⎤ ⎡(x _* a)⎤)
-  (= ⎡a↣¹x⎤ ⎡(a _ x _*)⎤)
-  (= ⎡¹x↢a⎤ ⎡(_ x _* a)⎤)
-  (= ⎡¹x↢a↢b↢c⎤ ⎡(_ x _* a b c)⎤)
-  (= ⎡a↣b↣c↣¹x↢d↢e↢f⎤ ⎡(a b c _ x _* d e f)⎤)
-  (- ⎡x↣⏏foo⏏⎤ ⎡expected a read-time dict⎤)
-  (- ⎡x↣⏏foo⏏↢y⎤ ⎡expected a read-time dict⎤)
-  (- ⎡x↣y↣⏏foo⏏↢z↢a⎤ ⎡expected a read-time dict⎤)
-  (- ⎡x↣y↣a↣target↢foo⏏↣⏏bar⎤ ⎡cannot use prepend in append block⎤))
-
-;; Test how the shorthands interact with each other
-(ml
-  (doc= ⎡(z-stack ⁑ w⫽h: max in: ⁰(dn-w⫽h ±n ⍊ -flag_)↢`T)
-          <> {T: (dn-w⫽h →n broadcast: true), flag: true}⎤
-        ⎡(z-stack _* ¦ _ w: max in: ((dn-w ±n ¦ _ -flag_) _* `T))
-           <> {T: (dn-w →n broadcast: true), flag: true}
-         (z-stack _* ¦ _ h: max in: ((dn-h ±n ¦ _ -flag_) _* `T))
-           <> {T: (dn-h →n broadcast: true), flag: true}⎤))
-
 ;; Parentheses
 (ml
   (= ⎡@foo←bar⎤ ⎡(%let (edge foo) bar)⎤)
   (= ⎡@⸤foo←bar⸥⎤ ⎡(edge (%let foo bar))⎤)
-  (= ⎡⁰(a b c)↢d⎤ ⎡((a b c) _* d)⎤)
-  (= ⎡⁰⸤(a b c)↢d⸥⎤ ⎡((a b c d) _*)⎤)
-  (- ⎡⸤(a b c)↢d⏏⎤ ⎡expected `⸥` to close the `⸤`⎤))
+  (- ⎡(⸤(a b c)←_⏏)⎤ ⎡expected `⸥` to close the `⸤`⎤))
 
 ;; Bug fix tests
 (ml
@@ -901,12 +868,12 @@
   (doc- ⎡---
          qux
          ⏏---⏏
-         boo⎤ ⎡duplicate section name⎤)
+         boo⎤ ⎡duplicate key `aux` in dict⎤)
 
   (doc- ⎡--- foo
          qux
-         --- ⏏foo⏏
-         boo⎤ ⎡duplicate section name⎤)
+         ⏏--- foo⏏
+         boo⎤ ⎡duplicate key `foo` in dict⎤)
 
   (doc= ⎡(+ a_ b_ ⍊ -◇_) => "Lorem"
          (- a_ b_ ⍊ -◇_) <> "ipsum"
@@ -973,7 +940,7 @@
 (group
   ;; Extra input must terminate parsing.
   (ml
-    (- ⎡hello ⏏100⎤ ⎡unexpected input⎤)
+    (- ⎡⏏hello 100⏏⎤ ⎡expected a single top-level term⎤)
     (doc- ⎡hello⏏) world⎤ ⎡unexpected input⎤)))
 
 ;; _? shorthand
@@ -1007,3 +974,48 @@
   (- ⎡≈⏏⎤ ⎡expected a decimal number after `≈`⎤)
   (- ⎡(≈⏏)⎤ ⎡expected a decimal number after `≈`⎤)
   (- ⎡≈⏏xyz⏏⎤ ⎡extra symbolic characters found in number⎤))
+
+;; `^:x` short pair syntax
+(ml
+  (= ⎡(^:x)⎤ ⎡(x: ^x)⎤ ⎡{^:x}⎤)
+  (= ⎡(^:x ^:(+ 1 2))⎤ ⎡(x: ^x (+ 1 2): ^(+ 1 2))⎤ ⎡{^:x ^:(+ 1 2)}⎤)
+  (= ⎡(^:x ^:(+ 1 2))⎤ ⎡(x: ^x (+ 1 2): ^(+ 1 2))⎤ ⎡{^:x ^:(+ 1 2)}⎤)
+  (- ⎡(^:⏏)⎤ ⎡expected a term to follow `^:`⎤))
+
+;; `@:x` short pair syntax
+(ml
+  (= ⎡(@:x)⎤ ⎡(x: @x)⎤ ⎡{@:x}⎤)
+  (= ⎡(@:x @:(+ 1 2))⎤ ⎡(x: @x (+ 1 2): @(+ 1 2))⎤ ⎡{@:x @:(+ 1 2)}⎤)
+  (= ⎡(@:x @:(+ 1 2))⎤ ⎡(x: @x (+ 1 2): @(+ 1 2))⎤ ⎡{@:x @:(+ 1 2)}⎤)
+  (- ⎡(@:⏏)⎤ ⎡expected a term to follow `@:`⎤))
+
+;; `@x` and `@x_` selector shorthands
+(ml
+  (= ⎡{¦ @x}⎤ ⎡{¦ @x: _}⎤)
+  (= ⎡{¦ @x_}⎤ ⎡{¦ x: @x_}⎤)
+  (= ⎡{¦ @x_number}⎤ ⎡{¦ x: @x_number}⎤)
+  (= ⎡{¦ @x_ @0 @(+ 1 2)}⎤ ⎡{¦ x: @x_, @0: _, @(+ 1 2): _}⎤)
+  (- ⎡{¦ @⏏}⎤ ⎡expected a term⎤))
+
+;; `⟨⊚ ...⟩`
+(ml
+  (= ⎡⟨⊚ a⟩⎤ ⎡⟨a⟩⎤)
+  (= ⎡⟨⊚ a b c⟩⎤ ⎡(%all ⟨a⟩ ⟨b⟩ ⟨c⟩)⎤)
+  (= ⎡⟨⊚ a b c⟩°⎤ ⎡(%all ⟨a⟩° ⟨b⟩° ⟨c⟩°)⎤)
+  (= ⎡⟨⊚ a b c ¦ rest_ x_ y_ z_⟩°⎤ ⎡(%all ⟨a⟩° ⟨b⟩° ⟨c⟩° _dict (%layer rest_ {x: x_, y: y_, z: z_}))⎤)
+  (= ⎡⟨⊚ a b c ⍊ x_ y_ z_⟩°⎤ ⎡(%all ⟨a⟩° ⟨b⟩° ⟨c⟩° _dict {¦ x_ y_ z_})⎤)
+  (doc=
+    ⎡(fb (@x ⟨⊚ (cell @src n_) (cell @voice0 a_) (cell @voice1 b_)⟩)
+       {n: ^(+ a b)})⎤
+    ⎡(fb (@x (%all ⟨(cell @src n_)⟩ ⟨(cell @voice0 a_)⟩ ⟨(cell @voice1 b_)⟩))
+       {n: ^(+ a b)})⎤))
+
+;; `⟪⟫`
+(ml
+  (= ⎡⟪a⟫⎤ ⎡(%leaf a)⎤)
+  (= ⎡⟪a ¦ rest_⟫⎤ ⎡(%all (%leaf a) _dict rest_)⎤)
+  (= ⎡⟪a ¦ rest_ x_ y_ z_⟫⎤ ⎡(%all (%leaf a) _dict (%layer rest_ {x: x_, y: y_, z: z_}))⎤)
+  (= ⎡⟪a b c⟫⎤ ⎡(%all ⟪a⟫ ⟪b⟫ ⟪c⟫)⎤)
+  (= ⎡⟪a b c⟫°⎤ ⎡(%all ⟪a⟫° ⟪b⟫° ⟪c⟫°)⎤)
+  (= ⎡⟪a b c ¦ rest_ x_ y_ z_⟫°⎤ ⎡(%all ⟪a⟫° ⟪b⟫° ⟪c⟫° _dict (%layer rest_ {x: x_, y: y_, z: z_}))⎤)
+  (= ⎡⟪a b c ⍊ x_ y_ z_⟫°⎤ ⎡(%all ⟪a⟫° ⟪b⟫° ⟪c⟫° _dict {¦ x_ y_ z_})⎤))

@@ -1,6 +1,6 @@
-module Ww::ML::Lexeme
-  # The WwML lexeme reader is an object capable of producing a stream of lexemes
-  # from a UTF-8-encoded string of WwML source code.
+module Ww::ML
+  # The WwML lexeme reader (*lexer*) is an object capable of producing a stream
+  # of `Lexeme`s from a UTF-8-encoded string of WwML source code.
   #
   # The lexeme reader is a fairly important part of reading WwML, because it resolves
   # many of the nasty ambiguities that WwML has evolved to have -- all while staying
@@ -15,7 +15,7 @@ module Ww::ML::Lexeme
   # of-lexemes).
   #
   # ```
-  # rr = ML::Lexeme::Reader.new("(+ 1 2)")
+  # rr = ML::Lexer.new("(+ 1 2)")
   # rr.next # => Lexeme::Token(:boi)
   # rr.next # => Lexeme::Token(:lparen)
   # rr.next # => Lexeme::Token(:symbol)
@@ -29,7 +29,7 @@ module Ww::ML::Lexeme
   # rr.next # => Lexeme::Token(:eoi)
   # rr.next # => Lexeme::Token(:eoi)
   # ```
-  class Reader
+  class Lexer
     # :nodoc:
     def initialize(@source : String, @runes : Slice(Rune))
       @boi = true
@@ -45,7 +45,7 @@ module Ww::ML::Lexeme
     # error message; than late and with an unhelpful one.
     #
     # Raises `SyntaxError` on invalid input.
-    def self.new(source : String, *, check_valid : Bool = true) : Reader
+    def self.new(source : String, *, check_valid : Bool = true) : Lexer
       if check_valid && !source.valid_encoding?
         raise SyntaxError.new("source must be valid UTF-8", source.view.before_begin)
       end
@@ -316,10 +316,6 @@ module Ww::ML::Lexeme
       case
       when past?('←')
         return nows("←", prefix: false) { token(:arrow_left) }
-      when past?('↢')
-        return nows("↢", prefix: false) { token(:arrow_left_tail) }
-      when past?('↣')
-        return nows("↣", prefix: false) { token(:arrow_right_tail) }
       when past?('×')
         return nows("×", prefix: false) { token(:times) }
       when past?(':')
@@ -837,7 +833,6 @@ module Ww::ML::Lexeme
       when past?('⸤')  then return token(:bl_half_bracket)
       when past?('⸥')  then return token(:br_half_bracket)
       when past?('…')  then return token(:ellipsis)
-      when past?('@')  then return nows("@") { token(:at_sign) }
       when past?('±')  then return nows("±") { token(:plus_minus) }
       when past?('→')  then return nows("→") { token(:arrow_right) }
       when past?('↑')  then return nows("↑") { token(:arrow_up) }
@@ -845,6 +840,13 @@ module Ww::ML::Lexeme
       when past?('\'') then return nows("'") { token(:quote) }
       when past?('`')  then return nows("`") { token(:backquote) }
       when past?('≡')  then return nows("≡") { token(:triple_equals) }
+      when past?('@')
+        if past?(':')
+          # @:⏏foo
+          return nows("@:") { token(:at_sign_colon) }
+        end
+
+        return nows("@") { token(:at_sign) }
       when ahead == '⋮'
         if colon_ambiguous?(pred)
           # foo⋮⏏bar
@@ -855,12 +857,24 @@ module Ww::ML::Lexeme
 
         return nows("⋮") { token(:triple_colon_left) }
       when past?('⟨')
-        return token(:langle)
+        if past?('⊚')
+          return token(:langle_circled_ring)
+        else
+          return token(:langle)
+        end
       when past?('⟩')
         if past?('°')
           return token(:rangle_source)
         else
           return token(:rangle)
+        end
+      when past?('⟪')
+        return token(:double_langle)
+      when past?('⟫')
+        if past?('°')
+          return token(:double_rangle_source)
+        else
+          return token(:double_rangle)
         end
       when past?('◇')
         if past?('_')
@@ -916,6 +930,9 @@ module Ww::ML::Lexeme
         end
       when past?('^')
         case
+        when past?(':')
+          # ^:⏏foo
+          return nows("^:") { token(:caret_colon) }
         when past?('…')
           return token(:caret_ellipsis)
         when past?('*')
