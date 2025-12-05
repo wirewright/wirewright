@@ -1021,7 +1021,7 @@ module Ww::ML
       # Match some presumably common errors to give useful error messages
       # instead of the generic "unexpected character".
       case ahead
-      when '←', '↢', '↣', '×'
+      when '←', '×'
         raise "whitespace before `#{ahead.chr}` not allowed", behind1
       end
 

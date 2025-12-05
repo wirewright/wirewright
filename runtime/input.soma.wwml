@@ -182,8 +182,10 @@ C←[compose in_string C'←[| M←[found composite_string] _*]]
 [compose "*(" [| M←[search] _*]] <> {M: (found "⟅")}
 [compose "*)" [| M←[search] _*]] <> {M: (found "⟆")}
 
-[compose "<|" [| M←[search] _*]] <> {M: (found "↢")}
-[compose "|>" [| M←[search] _*]] <> {M: (found "↣")}
+[compose "\"{" [| M←[search] _*]] <> {M: (found "⟪")}
+[compose "\"}" [| M←[search] _*]] <> {M: (found "⟫")}
+
+[compose "{o" [| M←[search] _*]] <> {M: (found "⟨⊚")}
 
 [compose "^^" [| M←[search] _*]] <> {M: (found "⏏")}
 
