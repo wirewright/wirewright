@@ -6,7 +6,7 @@ module Ww::Soma::Microfold::Pass
   def validate?(root : Term, issues : Issue::Sink) : Bool
     Term.each_leaf_thorough(root) do |leaf|
       next unless symbol = leaf.as_sym?
-      next unless symbol.microfold?
+      next unless symbol.prefixed_by?('µ', '-')
 
       issues.adjoin("symbol", leaf) do |issues|
         issues.fatal("symbols prefixed with `µ-` are reserved for Microfold and must not appear in the input tree")

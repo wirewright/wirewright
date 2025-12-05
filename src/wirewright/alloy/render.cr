@@ -133,7 +133,7 @@ module Ww::Alloy
           # going to be the head of a primitive call. This is a compromise; *of course*
           # we'd want something better. But since the primitives and this `eval` machinery
           # is so hacky regardless, we're fine -- for now.
-          if expr.alloy? || index == 0
+          if expr.as_sym.prefixed_by?('^') || index == 0
             return expr
           end
 
@@ -964,7 +964,7 @@ module Ww::Alloy
       # from a dictionary variable value.
       matchpi %{_symbol} do
         id = template.unsafe_as_sym
-        continue unless id.alloy? # Fast path
+        continue unless id.prefixed_by?('^') # Fast path
 
         id = id.to(String).view
         continue unless id = id.lchop?('^')

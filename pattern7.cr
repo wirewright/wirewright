@@ -2079,11 +2079,11 @@ module ::Ww::M1
       Term.of_case(node, engine: M0) do
         matchpi %[_symbol] do
           continue unless blank = node.blank?
-          continue unless blank.poly?
+          continue unless blank.plural?
 
           name = blank.name?
 
-          Term.of(:"%plural", name ? {:"%capture", name} : nil, type: typesym(blank), min: blank.one? ? 1 : 0, max: SYM_INF)
+          Term.of(:"%plural", name ? {:"%capture", name} : nil, type: typesym(blank), min: blank.mult.one_or_more? ? 1 : 0, max: SYM_INF)
         end
 
         # Fast path to %singular for literal terms.
@@ -2283,7 +2283,7 @@ module ::Ww::M1
           when SYM_BLANK_DICT    then BLANK_DICT
           else
             continue unless blank = pattern.unsafe_as_sym.blank?
-            continue unless blank.single?
+            continue unless blank.singular?
             continue unless name = blank.name?
 
             pattern(ctx, Term.of(:"%let", name, typesym(blank)))
@@ -2303,7 +2303,7 @@ module ::Ww::M1
         matchpi %[(edge arg_symbol)], cue: :edge do |arg|
           arg = arg.unsafe_as_sym
           continue unless blank = arg.blank?
-          continue unless blank.single?
+          continue unless blank.singular?
 
           case blank.type
           in .symbol?  then edge = EDGE_SYMBOL
@@ -4203,7 +4203,7 @@ module ::Ww::M1
           next
         end
 
-        if blank.poly? && (values = value.as_itemsonly_d?)
+        if blank.plural? && (values = value.as_itemsonly_d?)
           dict1.concat(values.items)
         else
           dict1 << value
@@ -4383,7 +4383,7 @@ module ::Ww::M1
     walk(root) do |node|
       Term.case(node, engine: M0) do
         matchpi %{[%capture capture_]} do
-          next if capture.type.symbol? && capture.unsafe_as_sym.m1_private_capture?
+          next if capture.type.symbol? && capture.unsafe_as_sym.prefixed_by?('\\')
 
           storage << capture
         end

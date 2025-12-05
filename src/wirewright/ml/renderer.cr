@@ -417,7 +417,7 @@ module Ww::ML
         raise "expected a named blank", blame
       end
 
-      unless blank.single?
+      unless blank.singular?
         raise "expected a singular blank (but what you've got here is a polyblank)", blame
       end
 

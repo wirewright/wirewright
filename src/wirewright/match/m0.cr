@@ -7,7 +7,7 @@ module Ww::M0
 
   # :nodoc:
   def match?(commit, pattern : Term::Sym, matchee : Term::Any) : Bool
-    unless (blank = pattern.blank?) && blank.single?
+    unless (blank = pattern.blank?) && blank.singular?
       return pattern == matchee
     end
 

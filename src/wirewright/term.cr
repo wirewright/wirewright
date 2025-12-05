@@ -1,9 +1,6 @@
 module Ww
   # Lists the possible types of terms.
   enum TermType : UInt8
-    # WARNING! This enum is assumed to contain at most 8 values (0-7)
-    # by the rest of the code.
-
     Any     = 0
     Number  = 1
     String  = 2
@@ -66,6 +63,14 @@ module Ww
       # the tagged pointer to obtain a normal Crystal tagged union -- of type `Any`
       # (see `Term.[]`).
       alias Any = Sym | Num | Str | Boolean | Dict
+
+      {% unless Tag.constants.size <= 8 %}
+        {% raise "enum #{Tag} must contain at most 8 values" %}
+      {% end %}
+
+      {% unless TermType.constants.size <= 8 %}
+        {% raise "enum #{TermType} must contain at most 8 values" %}
+      {% end %}
     end
 
     # This module implements the basics of type conversion using the `to?`, `to` methods.
@@ -183,9 +188,6 @@ module Ww
     TAG_SYM_SUFFIX = 0b01u64
 
     # Represents the pointer tag of a term.
-    #
-    # NOTE: No more values can be added to this enum. Pointer tagging only
-    # allows 3 bits (8 values) on x86-64.
     enum Tag : UInt64
       # _00
 
@@ -299,7 +301,7 @@ module Ww
 
     # Constructs a generic `Term` from the given symbol *term*.
     def self.of(term : Sym) : Term
-      data = term.@spec
+      data = term.@bits
 
       Term.new(Pointer(Void).new((data.to_u64 << 2) | TAG_SYM_SUFFIX))
     end
@@ -307,9 +309,7 @@ module Ww
     # Downcasts this term to a symbol term without performing any checks.
     @[Upcast]
     def unsafe_as_sym : Sym
-      data = @mem.address >> 2
-
-      Sym.new(data.to_u32)
+      Sym.new(@mem.address >> 2)
     end
 
     # Constructs a generic `Term` from the given boolean *term*.
@@ -871,7 +871,7 @@ module Ww
     # Appends the hash of a symbol term *object* to *hasher*.
     def self.hashcode(hasher : Hasher, object : Term::Sym) : Hasher
       hasher << TermType::Symbol
-      hasher << object.@spec
+      hasher << object.@bits
       hasher
     end
 
