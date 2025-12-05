@@ -115,11 +115,12 @@ own complications.
 | `▢`       |                   | <kbd>Compose</kbd> + <kbd>(</kbd> + <kbd>)</kbd>              | **no**                               |
 | `⟅`       |                   | <kbd>Compose</kbd> + <kbd>*</kbd> + <kbd>(</kbd>              | **no**                               |
 | `⟆`       |                   | <kbd>Compose</kbd> + <kbd>*</kbd> + <kbd>)</kbd>              | **no**                               |
-| `↢`       |                   | <kbd>Compose</kbd> + <kbd><</kbd> + <kbd>\|</kbd>             | **no**                               |
-| `↣`       |                   | <kbd>Compose</kbd> + <kbd>\|</kbd> + <kbd>></kbd>             | **no**                               |
 | `⸍`       |                   | <kbd>Compose</kbd> + <kbd>^</kbd> + <kbd>/</kbd>              | **no**                               |
 | `⸝`       |                   | <kbd>Compose</kbd> + <kbd>_</kbd> + <kbd>/</kbd>              | **no**                               |
 | `≈`       |                   | <kbd>Compose</kbd> + <kbd>~</kbd> + <kbd>~</kbd>              | yes                                  |
+| `⟨⊚`      |                   | <kbd>Compose</kbd> + <kbd>{</kbd> + <kbd>o</kbd>              | **no**                               |
+| `⟪`       |                   | <kbd>Compose</kbd> + <kbd>"</kbd> + <kbd>{</kbd>              | **no**                               |
+| `⟫`       |                   | <kbd>Compose</kbd> + <kbd>"</kbd> + <kbd>}</kbd>              | **no**                               |
 
 ### XCompose
 
@@ -152,10 +153,11 @@ Here are the XCompose mappings for the table above. This should be put in `.XCom
 <Multi_key> <bracketleft> <bracketright> : "▢"
 <Multi_key> <asterisk> <parenleft> : "⟅"
 <Multi_key> <asterisk> <parenright> : "⟆"
-<Multi_key> <less> <bar> : "↢"
-<Multi_key> <bar> <greater> : "↣"
 <Multi_key> <asciicircum> <slash> : "⸍"
 <Multi_key> <underscore> <slash> : "⸝"
+<Multi_key> <braceleft> <o> : "⟨⊚"
+<Multi_key> <quotedbl> <braceleft> : "⟪"
+<Multi_key> <quotedbl> <braceright> : "⟫"
 
 # Used sometimes in docs and comments. Not used in WwML.
 <Multi_key> <asciicircum> <asciicircum> : "⏏"
@@ -832,19 +834,6 @@ qoox
 
 ### General shorthands
 
-#### Append and prepend operators
-
-- `↢` is the read-time append operator. `(a b c)↢d` is the same as writing `(a b c d)`.
-- `↣` is the read-time prepend operator. `a↣(b c d)` is the same as writing `(a b c d)`.
-
-The append and prepend operators are useful to avoid having to lower other shorthands
-if you want to append or prepend something to their expansion. For example, if we have
-the shorthand `⁰x` -- which produces `(x _*)` -- but we want to write `(x _* foo)`, instead
-of lowering (going from `⁰x` to `(x _* foo)`) we may instead choose to write `⁰x↢foo`.
-Similarly, to prepend, we may use `foo↣⁰x`, which results in `(foo x _*)`. Similarly, one
-can for instance append or prepend to other shorthands, especially using the subslot brackets:
-`⸤x←y⸥↢z` results in `(%let x y z)` and so on.
-
 ### Key-value pair shorthands
 
 - `:<term>` is the same as writing `<term>: <term>`. E.g. `:foo` is the same as writing `foo: foo`. **The absence of
@@ -867,6 +856,16 @@ can for instance append or prepend to other shorthands, especially using the sub
 - `⟨<term list>⟩°` is the same as writing `(%item° <term list>)`.
 - `⟨<term list> ¦ <pairspattern>⟩` is the same as writing `(%all (%item <term list>) <pairspattern>)`.
 - `⟨<term list> ¦ <pairspattern>⟩°` is the same as writing `(%all (%item° <term list>) <pairspattern>)`.
+- `⟨⊚ x y z⟩` is the same as writing `(%all (%item x) (%item y) (%item z))`. Similarly to other forms,
+  you can do `⟨⊚ x y z⟩°` to use `%item°`: `(%all (%item° x) (%item° y) (%item° z))`. You can use pairside
+  forms as well: `⟨⊚ x y z ¦ rest_⟩`, `⟨⊚ x y z ⍊ a b⟩` etc. are the same as writing
+  `(%all (%item x) (%item y) (%item z) _dict rest_)` and `(%all (%item x) (%item y) (%item z) _dict (%layer _ {a: a_, b: b_}))`,
+  correspondingly.
+
+#### Shorthands for `%leaf` and `%leaf°`
+
+- `⟪x y z⟫` is the same as writing `(%all (%leaf x) (%leaf y) (%leaf z))`. Source `⟪x y z⟫°`
+  and pairside modifiers are supported as well (e.g. `⟪x y z ⍊ a b⟫`).
 
 #### Shorthands for `%split` and `%split°`
 
@@ -879,7 +878,7 @@ can for instance append or prepend to other shorthands, especially using the sub
 
 - `[<term list>]` is the same as writing `(%partition (<term list>) _)`.
 
-#### Shorthands for pairspart `%partition`
+#### Shorthands for `%layer`
 
 - `{¦ <selectors>}` is the same as writing `(%layer _ <selectors>)`.
 - `{<term>¦ <selectors>}` is the same as writing `(%partition (%let <term> _) <selectors>)`.
@@ -897,7 +896,7 @@ Selectors are associated with the character `¦`, called the "pairspart pipe" in
 WwML and Wirewright-related contexts. If you see the pairspart pipe, then the shorthand
 you're looking at has something to do with the pairspart and/or selectors.
 
-Selectors expand to `%layer` in general.
+Selectors expand to `%layer` or components of `%layer` in general.
 
 A pairspart can be empty, as in `(_* ¦)`. If interpreted as an M1 pattern, it would match
 an itemsonly dictionary; this is because its expansion is `(%partition (_*) (%layer () ()))`.
@@ -983,6 +982,9 @@ is available.
 - `^<term>` is the same as writing `(^ <term>)`.
 - `^*<term>` is the same as writing `(^* <term>)`.
 - `(<term list> ^… <arg>)` is the same as writing `(^extend (<term list>) <arg>)`.
+- `^:<term>` short pair syntax is the same as writing `<term>: ^<term>`. For example,
+  `{^:x ^:y ^:z}` is the same as writing `{x: ^x, y: ^y, z: ^z}`. Do not confuse with
+  `:^x`, which expands to `^x: ^x`.
 
 ### Rulesets
 
@@ -1043,7 +1045,10 @@ generated specifically for the current *block*.
 
 ### Delta7
 
-- `@<term>` is the same as writing `(edge <term>)`
+- `@<term>` is the same as writing `(edge <term>)`.
+- `@:<term>` is the same as writing `<term>: @<term>`. For example, `{@:x @:y @:z}`
+  is the same as writing `{x: @x, y: @y, z: @z}`. Do not confuse with `:@x`, which
+  expands to `@x: @x`.
 
 ### Nitrene
 

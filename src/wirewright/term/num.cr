@@ -151,7 +151,7 @@ module Ww
         # Even though it's rat, it fits, so let's use Int61 because it could
         # be cheaper in the long run, assuming we're not thrashing near
         # the threshold.
-        return new(n.to_i64)
+        return new(n.numerator.to_i64)
       end
 
       ratptr = Pointer(BigRational).malloc(1)
@@ -394,7 +394,7 @@ module Ww
     @[Dncast]
     def abs : Num
       case a = @k
-      in Int64                then self
+      in Int64                then Num.exact(a.abs)
       in Pointer(BigRational) then Num.exact(a.value.abs)
       in Float64              then Num.approx(a.abs)
       end
