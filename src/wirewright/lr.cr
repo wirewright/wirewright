@@ -159,15 +159,15 @@ module Ww::LR
 
   private def encode0(io, term : Term::Num) : Nil
     if term.exact_integer?
-      encode0int(io, term)
+      encode0int(io, term.abs)
     elsif term.exact?
       rat = term.to(BigRational)
 
-      encode0int(io, Term[rat.numerator])
-      encode0int(io, Term[rat.denominator])
+      encode0int(io, Term[rat.numerator].abs)
+      encode0int(io, Term[rat.denominator].abs)
       io << "ratio\n"
     elsif term.approx?
-      encode0float(io, term)
+      encode0float(io, term.abs)
     else
       raise ArgumentError.new # ?!
     end
