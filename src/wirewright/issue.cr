@@ -243,7 +243,7 @@ module Ww::Issue
   #
   # WARNING: the yielded issue sink is allocated on the stack inside this method;
   # it **must not** under any circumstance outlive the block.
-  def setup(*, severity : Severity, & : Issue::Sink -> T) : {T, Array(Backtrace)} forall T
+  def setup(*, severity : Severity, &)
     backtraces = [] of Issue::Backtrace
 
     buffer = uninitialized ReferenceStorage(Issue::Sink)
