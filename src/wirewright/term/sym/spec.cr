@@ -55,7 +55,7 @@ struct Ww::Term::Sym
       string = arg.is_a?(Bytes) ? String.new(arg) : arg
 
       index = @@string2ref.put_if_absent(string) do
-        @@ref2string.write do |ary|
+        @@ref2string.lock do |ary|
           ary << string
           ary.size.to_u32 - 1
         end
@@ -66,7 +66,7 @@ struct Ww::Term::Sym
 
     # Returns the symbol name that *ref* refers to, as a string.
     private def ref_string(ref : RefName) : String
-      @@ref2string.read { |ary| ary.unsafe_fetch(ref.index) }
+      @@ref2string.shared { |ary| ary.unsafe_fetch(ref.index) }
     end
 
     # Exceeding this number of bytes will cause `compare` to start allocating
