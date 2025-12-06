@@ -271,10 +271,8 @@ module Ww::ML
       end
 
       if pairside
-        # E.g. ⟪qux ¦ x_⟫ -> (%all (%leaf qux ...) _dict x_) prevents `qux` from
-        # matching. If we didn't have _dict, (%all (%leaf qux ...) x_) on `qux`
-        # would say `x=qux` which is invalid!
-        args << tsrc(ctx, :_dict) << pairside
+        # ⟪qux ¦ x_⟫ -> (%all (%leaf qux ...) (%partition _ x_))
+        args << tsrc(ctx, {:"%partition", :_, pairside})
       end
 
       # ⟪x⟫
