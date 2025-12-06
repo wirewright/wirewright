@@ -550,7 +550,7 @@ module Ww::ML
           return Tree::Split.new(parts, pairside: nil, source: true)
         end
 
-        case π = pairside(:rangle, :rangle_source)
+        case π = interfix(:rangle, :rangle_source)
         when Refusal
         when Err
           return π
@@ -609,7 +609,7 @@ module Ww::ML
           return Tree::AllFind.new(Term.of(:"%item°"), items, pairside: nil)
         end
 
-        case π = pairside(:rangle, :rangle_source)
+        case π = interfix(:rangle, :rangle_source)
         when Refusal
         when Err
           return π
@@ -649,7 +649,7 @@ module Ww::ML
           return Tree::AllFind.new(Term.of(:"%leaf°"), items, pairside: nil)
         end
 
-        case π = pairside(:double_rangle, :double_rangle_source)
+        case π = interfix(:double_rangle, :double_rangle_source)
         when Refusal
         when Err
           return π
@@ -699,7 +699,7 @@ module Ww::ML
         itemside = π
       end
 
-      case π = pairside(:rparen)
+      case π = interfix(:rparen)
       when Failure
         return π
       when Refusal
@@ -861,9 +861,11 @@ module Ww::ML
       Tree::Layer.new(residue, selection)
     end
 
+    # Pairspart interfix
+    #
     # (x y z ⏏¦ _ a b c)
     # (x y z ⏏⍊ a b c)
-    private def pairside(*delimiters : Lexeme::Token::Type)
+    private def interfix(*delimiters : Lexeme::Token::Type)
       case
       when past?(:broken_bar)
         # (x y z ¦⏏ _ a b c)
@@ -874,7 +876,7 @@ module Ww::ML
 
         Tree::Layer.new(residue: Tree::Leaf.new(Term.of(:_)), selection: selection)
       else
-        refusal("expected dict pairside", ahead.text.before_begin)
+        refusal("expected pairspart interfix", ahead.text.before_begin)
       end
     end
 
