@@ -62,7 +62,7 @@ module Ww::DwUIR
     # Runes are used to represent each individual character/cell on screen.
     record Rune,
       chr : Char,
-      fg : Color,
+      fg : Pigment::RGBA,
       decoration : TextDecoration = TextDecoration::None
 
     alias Drawable = Span | Fill | Stroke | IBeam
@@ -72,11 +72,11 @@ module Ww::DwUIR
     record Span,
       bounds : Rect,
       caption : String | StringView,
-      fg : Color,
+      fg : Pigment::RGBA,
       decoration : TextDecoration
 
     # Represents a rectangular fill.
-    record Fill, bounds : Rect, bg : Color
+    record Fill, bounds : Rect, bg : Pigment::RGBA
 
     # Represents a stroke box whose `Sides` can be characters of different color.
     record Stroke, bounds : Rect, sides : Sides do
@@ -84,7 +84,7 @@ module Ww::DwUIR
         l : Side?, r : Side?, t : Side?, b : Side?,
         tl : Side?, tr : Side?, bl : Side?, br : Side?
 
-      record Side, chr : Char, color : Color
+      record Side, chr : Char, color : Pigment::RGBA
     end
 
     # Represents an I-beam cursor.
@@ -361,7 +361,7 @@ module Ww::DwUIR
       end
     end
 
-    private def to_solid_color(paint : Paint::Solid) : Color
+    private def to_solid_color(paint : Paint::Solid) : Pigment::RGBA
       paint.color
     end
 
@@ -369,13 +369,13 @@ module Ww::DwUIR
     # so we simply convert any paint to a solid color, if possible.
     #
     # TODO: Linear gradient and radial gradient -- we can use one of the steps.
-    private def to_solid_color(paint : Paint::Any) : Color
-      Color.named("red")
+    private def to_solid_color(paint : Paint::Any) : Pigment::RGBA
+      Pigment.named("red")
     end
 
     # Represents a terminal cell: either a pure character cell, a color cell,
     # or a character cell on top of a color cell (character with a background).
-    alias Cell = Rune | Color | {Rune, Color}
+    alias Cell = Rune | Pigment::RGBA | {Rune, Pigment::RGBA}
 
     # Groups objects related to the console screen.
     class Screen
@@ -392,17 +392,17 @@ module Ww::DwUIR
     end
 
     # Write color on top of rune.
-    private def blend(cell0 : Rune, cell1 : Color) : Cell
+    private def blend(cell0 : Rune, cell1 : Pigment::RGBA) : Cell
       cell1.a < 255 ? {cell0, cell1} : cell1
     end
 
     # Write rune on top of color.
-    private def blend(cell0 : Color, cell1 : Rune) : Cell
+    private def blend(cell0 : Pigment::RGBA, cell1 : Rune) : Cell
       {cell1, cell0}
     end
 
     # Change rune (I'm not sure how correct this behavior is).
-    private def blend(cell0 : {Rune, Color}, cell1 : Rune) : Cell
+    private def blend(cell0 : {Rune, Pigment::RGBA}, cell1 : Rune) : Cell
       {cell1, cell0[1]}
     end
 

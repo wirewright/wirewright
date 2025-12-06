@@ -1,10 +1,24 @@
-# Pigment is a language for describing colors, reused by various parts
+# Pigment is a tiny language for describing colors, reused by various parts
 # of Wirewright's visual stack.
+#
+# ```wwml
+# (oklch 0.5 0.3 red)
+# (translucent (rgb 0 255 0) 0.3)
+# (mix (oklch 0.5 0.3 red) (translucent (oklch 0.2 0.1 green) 0.7) 0.4)
+# ```
 module Ww::Pigment
   extend self
 
   # Linear (0-1) RGBA color.
   record RGBA, r : Float32, g : Float32, b : Float32, a : Float32 do
+    def rgb : {Float32, Float32, Float32}
+      {r, g, b}
+    end
+
+    def rgba : {Float32, Float32, Float32, Float32}
+      {*rgb, a}
+    end
+
     def r8 : UInt8
       (r * 255).floor.to_u8
     end
@@ -21,12 +35,12 @@ module Ww::Pigment
       (a * 255).floor.to_u8
     end
 
-    def rgba
-      {r, g, b, a}
+    def rgb8 : {UInt8, UInt8, UInt8}
+      {r8, g8, b8}
     end
 
-    def rgba8
-      {r8, g8, b8, a8}
+    def rgba8 : {UInt8, UInt8, UInt8, UInt8}
+      {*rgb8, a8}
     end
 
     def transparent? : Bool
@@ -35,11 +49,26 @@ module Ww::Pigment
 
     def to_s(io)
       io << "rgba("
-      io << r << " " << g << " " << b
+      io << r << " " << g << " " << b << " " << a
       io << " / "
-      io << r8 << " " << g8 << " " << b8
+      io << r8 << " " << g8 << " " << b8 << " " << a8
       io << ")"
     end
+  end
+
+  # Constructs an `RGBA` color from 8-bit components *r*, *g*, *b*, *a*.
+  def rgba(r : UInt8, g : UInt8, b : UInt8, a : UInt8 = 255) : RGBA
+    RGBA.new(r / 255.0f32, g / 255.0f32, b / 255.0f32, a / 255.0f32)
+  end
+
+  # Constructs an `RGBA` color from a CSS named color *name*. Uses *fallback* if not
+  # found. See `CSSColor.named?`.
+  def named(name : String, *, fallback : RGBA = rgba(0, 0, 0)) : RGBA
+    unless rgba = CSSColor.named?(name)
+      return fallback
+    end
+
+    rgba(*rgba)
   end
 
   # Represents the result of parsing a color.
@@ -181,6 +210,35 @@ module Ww::Pigment
         RGBA.new(fr / 255, fg / 255, fb / 255, a: 1.0)
       end
 
+      matchpi %{(rgba ±r ±g ±b ±a)} do
+        fr = r.to(Float32)
+        fg = g.to(Float32)
+        fb = b.to(Float32)
+        fa = a.to(Float32)
+
+        unless fr.in?(0.0..255.0)
+          issues.major("rgb red out of range 0-255: #{r}")
+          fr = fr.clamp(0.0f32..255.0f32)
+        end
+
+        unless fg.in?(0.0..255.0)
+          issues.major("rgb green out of range 0-255: #{g}")
+          fg = fg.clamp(0.0f32..255.0f32)
+        end
+
+        unless fb.in?(0.0..255.0)
+          issues.major("rgb blue out of range 0-255: #{b}")
+          fb = fb.clamp(0.0f32..255.0f32)
+        end
+
+        unless fa.in?(0.0..255.0)
+          issues.major("rgb alpha out of range 0-255: #{a}")
+          fa = fa.clamp(0.0f32..255.0f32)
+        end
+
+        RGBA.new(fr / 255, fg / 255, fb / 255, fa / 255)
+      end
+
       matchpi %{(lrgb ±r ±g ±b)} do
         fr = r.to(Float32)
         fg = g.to(Float32)
@@ -224,10 +282,10 @@ module Ww::Pigment
 
         r, g, b, a = rgba
 
-        RGBA.new(r / 255.0f32, g / 255.0f32, b / 255.0f32, a: 1.0)
+        RGBA.new(r / 255.0f32, g / 255.0f32, b / 255.0f32, a / 255.0f32)
       end
 
-      matchpi %{(%number +u32)} do
+      matchpi %{(%number u32)} do
         u32 = term.to(UInt32)
 
         r = (u32 >> 24) & 0xff
@@ -235,7 +293,7 @@ module Ww::Pigment
         b = (u32 >> 8) & 0xff
         a = (u32 >> 0) & 0xff
 
-        RGBA.new(r / 255.0f32, g / 255.0f32, b / 255.0f32, a: 1.0)
+        RGBA.new(r / 255.0f32, g / 255.0f32, b / 255.0f32, a / 255.0f32)
       end
 
       otherwise { rej }
@@ -260,21 +318,21 @@ module Ww::Pigment
 
   # ```grammar:pigment
   # <transform>
-  #   (opacity <color> n_number)
+  #   (translucent <color> n_number)
   #   (mix <color₁> <color₂> ratio_number)
   # ```
   def transform(cache : Cache, term : Term, issues : Issue::Sink) : Π
     Term.case(term) do
-      matchpi %{(opacity arg_ ±n)} do
-        fn = n.to(Float32)
+      matchpi %{(translucent arg_ ±opacity)} do
+        fopacity = opacity.to(Float32)
 
-        unless fn.in?(0.0..1.0)
-          issues.major("opacity out of range 0-1: #{n}")
-          fn = fn.clamp(0.0f32..1.0f32)
+        unless fopacity.in?(0.0..1.0)
+          issues.major("opacity out of range 0-1: #{opacity}")
+          fopacity = fopacity.clamp(0.0f32..1.0f32)
         end
 
         Parseout.map(color(cache, arg, issues)) do |color|
-          color.copy_with(a: color.a * fn)
+          color.copy_with(a: color.a * fopacity)
         end
       end
 
@@ -318,5 +376,14 @@ module Ww::Pigment
   # on failure. Reports issues to *issues*. Supply *cache* to memoize.
   def rgba?(term : Term, issues : Issue::Sink, *, cache : Cache = Uncached(Term, RGBA).new) : RGBA?
     color(cache, term, issues).as?(RGBA)
+  end
+
+  # Runs Pigment on *term*. Returns the resulting `RGBA` color. Returns *fallback*
+  # on failure. Discards all issues. Supply *cache* to memoize.
+  def rgba(term : Term, *, cache : Cache = Uncached(Term, RGBA).new, fallback : RGBA = rgba(0, 0, 0)) : RGBA
+    rgba, _ = Issue.setup(severity: :quiet) do |sink|
+      rgba?(term, sink) || fallback
+    end
+    rgba
   end
 end

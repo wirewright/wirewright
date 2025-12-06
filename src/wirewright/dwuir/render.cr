@@ -566,7 +566,7 @@ module Ww::DwUIR
         end
 
         unless context.bounds.empty?
-          shape = SvgShape.new(src, Color.term(color), resize)
+          shape = SvgShape.new(src, Pigment.rgba(color), resize)
           command = DrawShape.new(context.view, context.bounds, context.tf, context.layer, :mid, shape)
           picture << command
         end

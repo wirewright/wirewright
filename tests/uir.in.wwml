@@ -439,7 +439,7 @@
     (group fr: 1
       (z-stack z-index: local
         (^if selected
-          (rect z-index: 1 fill: (oklch 0.7 0.2 270 0.3) radius-tl: 15 radius-tr: 15 radius-bl: 15 radius-br: 15))
+          (rect z-index: 1 fill: (translucent (oklch 0.7 0.2 270) 0.3) radius-tl: 15 radius-tr: 15 radius-bl: 15 radius-br: 15))
         (padding z-index: (local 0) pl: 10 pr: 10 pb: 10 pt: 10
           ^child))))
 
@@ -541,7 +541,7 @@
                       radius-tr: (* 1)
                       radius-bl: (* 1)
                       radius-br: (* 1)
-                      fill: (oklch 1 0 0 0.3))))))))))
+                      fill: (translucent (oklch 1 0 0) 0.3))))))))))
 
 (code caption_string ¦ _ fill_⋮ (oklch 0.1 0 0) color_⋮ (oklch 0.8 0 0)) =>
   (z-stack z-index: local
@@ -809,7 +809,7 @@
       (padding pl: 10 pr: 10 pt: 10 pb: 10
         (limit max-w: 200
           (z-stack z-index: (local 1000)
-            (rect z-index: -1 fill: (oklch 1 0 0 0.8) radius-tl: 10 radius-tr: 10 radius-bl: 10 radius-br: 10)
+            (rect z-index: -1 fill: (translucent (oklch 1 0 0) 0.8) radius-tl: 10 radius-tr: 10 radius-bl: 10 radius-br: 10)
             (padding pl: 7 pr: 7 pt: 7 pb: 7
               (text wrap: true caption: "This is a static test (result is an image) for UIR & DwUIR. Use Page Up/Page Dn to scroll." font: "IBM Plex Mono" size: 11 color: (oklch 0.2 0 0)))))))
 

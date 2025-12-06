@@ -89,8 +89,7 @@ module Component
 end
 
 alias MM = Meridium
-alias Cell = Char, Color ->
-alias Color = DwUIR::Color
+alias Cell = Char, Pigment::RGBA ->
 
 # Represents the contribution of a test to the harness.
 defcase TestContrib,
@@ -131,7 +130,7 @@ class TestHarness
   # Constructs and yields a new group under this harness. The block
   # is expected to populate the group with tests. Returns whatever
   # the block returns.
-  def group(color : Color, & : TestGroup ->)
+  def group(color : Pigment::RGBA, & : TestGroup ->)
     group = TestGroup.new(@next_group_id, self, color)
     @next_group_id += 1
 
@@ -219,7 +218,7 @@ class TestHarness
   private def set_cell(lock, x, y, chr, color)
     lock.synchronize do
       Termbox.write(chr, x: x, y: y,
-        fg: Termbox::Color.rgb(color.r, color.g, color.b),
+        fg: Termbox::Color.rgb(*color.rgb8),
         bg: PREVIEW_BG
       )
 
@@ -271,12 +270,12 @@ class TestHarness
               # Preview is enabled.
               ncols, _ = dimensions
               y, x = (base + offset).divmod(ncols)
-              cell = ->(chr : Char, color : Color) do
+              cell = ->(chr : Char, color : Pigment::RGBA) do
                 set_cell(lock_termbox, x, y, chr, color)
               end
             else
               # Preview is disabled.
-              cell = ->(chr : Char, color : Color) { }
+              cell = ->(chr : Char, color : Pigment::RGBA) { }
             end
 
             {test, cell}
@@ -353,7 +352,7 @@ end
 # An object that you can add related tests to.
 class TestGroup
   # :nodoc:
-  def initialize(@id : UInt32, @harness : TestHarness, @color : Color)
+  def initialize(@id : UInt32, @harness : TestHarness, @color : Pigment::RGBA)
     @contribs = [] of TestContrib
     @schedule = [] of Test
   end
@@ -375,7 +374,7 @@ class TestGroup
       end
 
       if complaints.present?
-        cell.call('X', Color.named("red"))
+        cell.call('X', Pigment.named("red"))
       else
         cell.call('·', @color)
       end
@@ -438,7 +437,7 @@ class TestGroup
       spins = LONG_SPINNER
       elapsed = 0.milliseconds
 
-      cell.call(spins[spin], Color.named("gray"))
+      cell.call(spins[spin], Pigment.named("gray"))
       spin += 1
 
       while true
@@ -448,7 +447,7 @@ class TestGroup
         end
 
         if elapsed > LONG_SPINNER_TICK
-          cell.call(spins[spin], Color.named("gray"))
+          cell.call(spins[spin], Pigment.named("gray"))
           spin = (spin + 1) % spins.size
           elapsed = 0.milliseconds
         end
@@ -1334,7 +1333,7 @@ success = TestHarness.new(preview: preview, styled: styled) do |harness|
           path = Path["tests"] / file.to(String)
           source = File.read(path)
 
-          harness.group(Color.term(color)) do |test|
+          harness.group(Pigment.rgba(color)) do |test|
             begin
               test_terms, test_srcmap = ML.terms_and_srcmap(source, filename: path.to_s)
             rescue e : ML::SyntaxError
@@ -1352,7 +1351,7 @@ success = TestHarness.new(preview: preview, styled: styled) do |harness|
 
           Ω.render(STDOUT, Component.processing(item), styled: styled)
 
-          harness.group(Color.term(color)) do |test|
+          harness.group(Pigment.rgba(color)) do |test|
             compare(ctx, test, specpath, title, left, right, text)
           end
         end

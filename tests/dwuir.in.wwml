@@ -105,7 +105,7 @@ backdrop: (oklch 0.9 0 0)
     final-w: 20
     final-h: 20)
   (rect
-    fill: (rgb 0 0 255 0.5)
+    fill: (translucent (rgb 0 0 255) 0.5)
     dl: 30
     z-index: 2
     final-w: 20
@@ -117,13 +117,13 @@ backdrop: (oklch 0.9 0 0)
     final-w: 20
     final-h: 20)
   (rect
-    fill: (hsl 339.21 0.87 0.37 0.7)
+    fill: (translucent (hsl 339.21 0.87 0.37) 0.7)
     dl: 65
     z-index: 4
     final-w: 20
     final-h: 20)
   (rect
-    fill: (oklch 0.8 0.1 200 0.5)
+    fill: (translucent (oklch 0.8 0.1 200) 0.5)
     dl: 80
     z-index: 5
     final-w: 20
@@ -600,8 +600,8 @@ backdrop: (oklch 0.9 0 0)
     z-index: 10
     stroke:
       (linear-gradient
-        (stop 0 (oklch 0.5 0.2 0 0.5))
-        (stop 1 (oklch 0.5 0.2 50 0.7)))
+        (stop 0 (translucent (oklch 0.5 0.2 0) 0.5))
+        (stop 1 (translucent (oklch 0.5 0.2 50) 0.7)))
     thickness-l: 10
     thickness-r: 10
     thickness-t: 10
@@ -1897,7 +1897,7 @@ backdrop: (oklch 0.9 0 0)
     angle: 250
     final-w: 3
     final-h: 40
-    fill: (oklch 0.5 0.2 0 0.5)
+    fill: (translucent (oklch 0.5 0.2 0) 0.5)
     z-index: 1)
   (rect
     dl: (* 0.5)
@@ -1910,7 +1910,7 @@ backdrop: (oklch 0.9 0 0)
     angle: 0
     final-w: 3
     final-h: 40
-    fill: (oklch 0.5 0.2 150 0.5)
+    fill: (translucent (oklch 0.5 0.2 150) 0.5)
     z-index: 1)
   (rect
     dl: (* 0.5)
@@ -1923,7 +1923,7 @@ backdrop: (oklch 0.9 0 0)
     angle: 80
     final-w: 4
     final-h: 40
-    fill: (oklch 0 0 0 0.5)
+    fill: (translucent (oklch 0 0 0) 0.5)
     z-index: 2))
 
 ;; Rotation of text
@@ -2142,9 +2142,9 @@ backdrop: (oklch 0.9 0 0)
     (radial-gradient
       center-radius: 0.5
       focus-radius: 0.1
-      (stop 0 (oklch 0.3 0 0 0.9))
-      (stop 0.5 (oklch 0.5 0 0 0.5))
-      (stop 1 (oklch 0 0 0 0))))
+      (stop 0 (translucent (oklch 0.3 0 0) 0.9))
+      (stop 0.5 (translucent (oklch 0.5 0 0) 0.5))
+      (stop 1 (translucent (oklch 0 0 0) 0))))
 
 ;; Radial gradient paint on text, rounded rect, selection rect, underline.
 
@@ -2436,7 +2436,7 @@ backdrop: (oklch 0.9 0 0)
    size: 11)
  (rect
    z-index: 1
-   fill: (rgb 0 0 0 0.5))
+   fill: (translucent (rgb 0 0 0) 0.5))
  (svg
    src: (file "data/soma-logo.svg")
    color: black
@@ -2455,7 +2455,7 @@ backdrop: (oklch 0.9 0 0)
    size: 11)
  (rect
    z-index: 1
-   fill: (rgb 0 0 0 0.5))
+   fill: (translucent (rgb 0 0 0) 0.5))
  (svg
    src: (file "data/soma-logo.svg")
    color: black
@@ -2474,7 +2474,7 @@ backdrop: (oklch 0.9 0 0)
    size: 11)
  (rect
    z-index: 1
-   fill: (rgb 0 0 0 0.5))
+   fill: (translucent (rgb 0 0 0) 0.5))
  (svg
    src: (file "data/soma-logo.svg")
    color: green
@@ -2495,7 +2495,7 @@ backdrop: (oklch 0.9 0 0)
    size: 11)
  (rect
    z-index: 1
-   fill: (rgb 0 0 0 0.5))
+   fill: (translucent (rgb 0 0 0) 0.5))
  (svg
    src: (file "data/soma-logo.svg")
    color: black
@@ -2526,7 +2526,7 @@ backdrop: (oklch 0.9 0 0)
        size: 11)
      (rect
        z-index: 1
-       fill: (rgb 0 0 0 0.5))
+       fill: (translucent (rgb 0 0 0) 0.5))
      (svg
        src: (file "data/soma-logo.svg")
        color: black
@@ -2566,7 +2566,7 @@ backdrop: (oklch 0.9 0 0)
   (rect
     final-w: 30
     final-h: 30
-    fill: (oklch 0.5 0.2 yellow 0.5)
+    fill: (translucent (oklch 0.5 0.2 yellow) 0.5)
     radius-tl: (* 1)
     radius-tr: (* 1)
     radius-bl: (* 1)
@@ -2575,7 +2575,7 @@ backdrop: (oklch 0.9 0 0)
     dl: 40
     final-w: 30
     final-h: 30
-    fill: (oklch 0.5 0.2 "violet" 0.8)
+    fill: (translucent (oklch 0.5 0.2 "violet") 0.8)
     radius-tl: (* 1)
     radius-tr: (* 1)
     radius-bl: (* 1)
@@ -2584,7 +2584,7 @@ backdrop: (oklch 0.9 0 0)
     dl: 80
     final-w: 30
     final-h: 30
-    fill: (oklch 0.5 0.2 cyan 0.6)
+    fill: (translucent (oklch 0.5 0.2 cyan) 0.6)
     radius-tl: (* 1)
     radius-tr: (* 1)
     radius-bl: (* 1)

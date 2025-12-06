@@ -13,7 +13,7 @@ module Ww::DwUIR
     record Some, screen : Textual::Screen, conf : Conf
 
     # :nodoc:
-    defcase Conf, backdrop : Color, content : Term
+    defcase Conf, backdrop : Pigment::RGBA, content : Term
 
     private def conf?(spec : Term) : Conf?
       # |@ soma.dwuir.window.console
@@ -26,7 +26,7 @@ module Ww::DwUIR
       # of the terminal.
       Term.matchpi?(spec, %{(window content_* ⍊ backdrop_⋮ black)}) do
         Conf.new(
-          backdrop: Color.term(backdrop, fallback: Color.named("black")),
+          backdrop: Pigment.rgba(backdrop, fallback: Pigment.named("black")),
           content: content,
         )
       end
@@ -93,7 +93,7 @@ module Ww::DwUIR
       screen.cells.each do |(x, y), cell|
         next unless x.in?(0...maxx) && y.in?(0...maxy)
 
-        if cell.is_a?(Color)
+        if cell.is_a?(Pigment::RGBA)
           Termbox.set(' ', x: x.to_i, y: y.to_i, fg: Termbox::Color::White, bg: Termbox::Color.rgb(*cell.rgb))
           next
         end
@@ -101,7 +101,7 @@ module Ww::DwUIR
         case cell
         in Textual::Rune
           rune, bg = cell, window.conf.backdrop
-        in Tuple(Textual::Rune, Color)
+        in Tuple(Textual::Rune, Pigment::RGBA)
           rune, bg = cell
         end
 

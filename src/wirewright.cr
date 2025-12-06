@@ -24,6 +24,7 @@ require "./wirewright/file_server"
 require "./wirewright/issue"
 require "./wirewright/ml"
 require "./wirewright/meridium"
+require "./wirewright/pigment"
 require "./wirewright/dwuir"
 require "./wirewright/microfold"
 require "./wirewright/soma"
@@ -37,7 +38,6 @@ require "../libtermbox2"
 require "../inputr"
 
 require "./wirewright/alloy"
-require "./wirewright/pigment"
 
 Log.setup_from_env(default_level: :warn, backend: Log::IOBackend.new(STDERR))
 

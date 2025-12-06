@@ -46,7 +46,7 @@ module Ww::DwUIR
     # Returns the array of damage rects.
     #
     # Yields `Picture` for inspection by the caller.
-    def show(dwuir : Term, bg : Color, *, dmgdbg = false, & : Picture ->) : Array(Rect)
+    def show(dwuir : Term, bg : Pigment::RGBA, *, dmgdbg = false, & : Picture ->) : Array(Rect)
       picture1 = DwUIR.picture(dwuir, @platform.pencils, viewport: @screen.bounds)
 
       yield picture1

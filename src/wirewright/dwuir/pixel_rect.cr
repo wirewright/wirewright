@@ -80,7 +80,7 @@ module Ww::DwUIR
     end
 
     # Clears this pixel rect with *color*.
-    def fill(color : Color) : Nil
+    def fill(color : Pigment::RGBA) : Nil
       fill(Pixel.of(color).argb)
     end
 
@@ -122,7 +122,7 @@ module Ww::DwUIR
     end
 
     # Clears this region with *color*.
-    def fill(color : Color) : Nil
+    def fill(color : Pigment::RGBA) : Nil
       argb = Pixel.of(color).argb
 
       (@y...@y + @height).each do |y|

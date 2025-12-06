@@ -182,10 +182,10 @@ module Ww::DwUIR
         PlutoVG.canvas_transform(@canvas, pointerof(tfmatrix))
 
         color = PlutoVG::Color.new(
-          r: shape.color.ur,
-          g: shape.color.ug,
-          b: shape.color.ub,
-          a: shape.color.ua,
+          r: shape.color.r,
+          g: shape.color.g,
+          b: shape.color.b,
+          a: shape.color.a,
         )
 
         unless PlutoSVG.document_render(document, nil, @canvas, pointerof(color), nil, nil)
@@ -213,11 +213,11 @@ module Ww::DwUIR
     end
 
     private def set_paint(paint : Paint::Invalid, bounds : Rect)
-      set_paint(Paint::Solid.new(Color.rgba(0xff, 0, 0)), bounds)
+      set_paint(Paint::Solid.new(Pigment.rgba(0xff, 0, 0)), bounds)
     end
 
     private def set_paint(paint : Paint::Solid, bounds : Rect)
-      PlutoVG.canvas_set_rgba(@canvas, *paint.color.urgba)
+      PlutoVG.canvas_set_rgba(@canvas, *paint.color.rgba)
     end
 
     private def set_paint(paint : Paint::LinearGradient, bounds : Rect)
@@ -225,10 +225,10 @@ module Ww::DwUIR
         PlutoVG::GradientStop.new(
           offset: offset,
           color: PlutoVG::Color.new(
-            r: color.ur,
-            g: color.ug,
-            b: color.ub,
-            a: color.ua,
+            r: color.r,
+            g: color.g,
+            b: color.b,
+            a: color.a,
           ),
         )
       end
@@ -252,10 +252,10 @@ module Ww::DwUIR
         PlutoVG::GradientStop.new(
           offset: offset,
           color: PlutoVG::Color.new(
-            r: color.ur,
-            g: color.ug,
-            b: color.ub,
-            a: color.ua,
+            r: color.r,
+            g: color.g,
+            b: color.b,
+            a: color.a,
           ),
         )
       end

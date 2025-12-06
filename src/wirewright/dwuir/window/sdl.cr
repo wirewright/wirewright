@@ -86,7 +86,7 @@ module Ww::DwUIR
         @requests : Channel(DwUIR::Request),
         width : Int32,
         height : Int32,
-        @backdrop : Color,
+        @backdrop : Pigment::RGBA,
       )
         @screen = PixelRect.new(0, 0, width, height)
         @buffer = ::SDL::Texture.new(renderer, width, height, LibSDL::PixelFormatEnum::ARGB8888)
@@ -132,7 +132,7 @@ module Ww::DwUIR
       height : Int32,
       resizable : Bool,
       cursor : Cursor,
-      backdrop : Color,
+      backdrop : Pigment::RGBA,
       content : Term
 
     # Parses a window spec *spec* and returns the corresponding `Conf`, or `nil`
@@ -175,7 +175,7 @@ module Ww::DwUIR
           height: height.to(Int32),
           resizable: resizable.to(Bool),
           cursor: Cursor.parse(cursor),
-          backdrop: Color.term(backdrop, fallback: Color.named("white")),
+          backdrop: Pigment.rgba(backdrop, fallback: Pigment.named("white")),
           content: content,
         )
       end

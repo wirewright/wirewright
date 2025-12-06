@@ -17,14 +17,14 @@ module Ww::DwUIR
     alias Any = Invalid | Solid | LinearGradient | RadialGradient | Image
 
     # Represents a list of gradient stops.
-    record GradientStopList, offsets : Slice(Float32), colors : Slice(Color) do
-      include Indexable({Float32, Color})
+    record GradientStopList, offsets : Slice(Float32), colors : Slice(Pigment::RGBA) do
+      include Indexable({Float32, Pigment::RGBA})
 
       def size : Int32
         @offsets.size
       end
 
-      def unsafe_fetch(index : Int) : {Float32, Color}
+      def unsafe_fetch(index : Int) : {Float32, Pigment::RGBA}
         {@offsets[index], @colors[index]}
       end
     end
@@ -35,7 +35,7 @@ module Ww::DwUIR
     record Invalid
 
     # Represents a solid color paint.
-    record Solid, color : Color
+    record Solid, color : Pigment::RGBA
 
     # Represents a linear gradient paint.
     record LinearGradient,
@@ -186,7 +186,7 @@ module Ww::DwUIR
         ) do
           stops = term.items.move(1)
 
-          colors = stops.to_readonly_slice { |(_, _, color)| Color.term(color) }
+          colors = stops.to_readonly_slice { |(_, _, color)| Pigment.rgba(color) }
           offsets = stops.to_readonly_slice { |(_, offset, _)| offset.to(Float32) }
 
           b = Point.new(begin_l.to(Float32), begin_t.to(Float32))
@@ -240,7 +240,7 @@ module Ww::DwUIR
         ) do
           stops = term.items.move(1)
 
-          colors = stops.to_readonly_slice { |(_, _, color)| Color.term(color) }
+          colors = stops.to_readonly_slice { |(_, _, color)| Pigment.rgba(color) }
           offsets = stops.to_readonly_slice { |(_, offset, _)| offset.to(Float32) }
 
           center = Point.new(center_l.to(Float32), center_t.to(Float32))
@@ -261,14 +261,14 @@ module Ww::DwUIR
         # See `soma.dwuir.color`.
         # |@endblock
         otherwise do
-          Solid.new(Color.term(term))
+          Solid.new(Pigment.rgba(term))
         end
       end
     end
 
     # Returns a transparent paint.
     def transparent : Solid
-      Solid.new(Color.rgba(0, 0, 0, 0))
+      Solid.new(Pigment.rgba(0, 0, 0, 0))
     end
 
     # :nodoc:
@@ -278,12 +278,12 @@ module Ww::DwUIR
 
     # :nodoc:
     def opacity(paint : Solid) : Float32
-      paint.color.ua
+      paint.color.a
     end
 
     # :nodoc:
     def opacity(stops : GradientStopList) : Float32
-      stops.colors.max_of(&.ua)
+      stops.colors.max_of(&.a)
     end
 
     # :nodoc:

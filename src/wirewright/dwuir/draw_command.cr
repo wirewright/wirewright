@@ -200,7 +200,7 @@ module Ww::DwUIR
   # - *resize* sets the resize mode (see `soma.dwuir.node.svg.resize` for more info).
   record SvgShape,
     src : Term,
-    color : Color,
+    color : Pigment::RGBA,
     resize : Resize
 
   struct SvgShape

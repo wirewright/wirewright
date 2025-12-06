@@ -4,7 +4,6 @@ module Ww::DwUIR
   Log = ::Log.for(self)
 end
 
-require "./dwuir/color"
 require "./dwuir/font"
 
 require "./dwuir/tf"
@@ -50,7 +49,7 @@ module Ww::DwUIR
   record ShowConf,
     width : Int32,
     height : Int32,
-    backdrop : Color,
+    backdrop : Pigment::RGBA,
     content : Term
 
   # A shorthand function to perform a single, one-off draw of *content*.
@@ -70,7 +69,7 @@ module Ww::DwUIR
   defcase FrameRequest,
     content : Term,
     pixels : PixelRect,
-    backdrop : Color,
+    backdrop : Pigment::RGBA,
     response : Sync::Future(FrameResponse)
 
   defcase FrameResponse, damage : Array(Rect)

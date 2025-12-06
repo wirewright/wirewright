@@ -12,8 +12,8 @@ module Ww::DwUIR
     #
     # Reference: https://github.com/sammycage/plutovg/blob/c6a1c3b7989cde72f21e09a74cfa6078528ff978/source/plutovg-paint.c#L79
     # Reference: https://github.com/sammycage/plutovg/blob/c6a1c3b7989cde72f21e09a74cfa6078528ff978/source/plutovg-utils.h#L57
-    def self.of(color : Color) : Pixel
-      r32, g32, b32, a32 = {color.r, color.g, color.b, color.a}.map(&.to_u32)
+    def self.of(color : Pigment::RGBA) : Pixel
+      r32, g32, b32, a32 = color.rgba8.map(&.to_u32)
 
       unless a32 == 255
         r32 = (r32 * a32) // 255
