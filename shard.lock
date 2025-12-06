@@ -4,10 +4,6 @@ shards:
     git: https://github.com/didactic-drunk/blake3.cr.git
     version: 1.1.0+git.commit.d7ac0b7ff8f766b528cc99170664402518dd78b4
 
-  crsfml:
-    git: https://github.com/oprypin/crsfml.git
-    version: 2.6.0+git.commit.e6f5102f37a107ccadb55c1bae6ffe427ddfba95
-
   permafrost:
     git: https://github.com/homonoidian/permafrost.git
     version: 0.8.0
@@ -18,7 +14,7 @@ shards:
 
   sync:
     git: https://github.com/ysbaddaden/sync.git
-    version: 0.1.0+git.commit.2b8a3b2a9ee563c10cdfdd953356c2182b079e32
+    version: 0.1.0+git.commit.389fc5b6da92f1a06faa4925cffb036322d0e0b5
 
   zstd:
     git: https://github.com/didactic-drunk/zstd.cr.git

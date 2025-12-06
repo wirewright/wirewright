@@ -53,9 +53,13 @@ On documentation, I'm part lying here. There's lots of docs, you just have to lo
 
 ### Frontend: soma6
 
+NOTE: this frontend is no longer supported on this branch. See kappa.
+
 https://github.com/user-attachments/assets/e86cb81d-67d7-45b8-8a68-7399e4fe367e
 
 ### Frontend: Wirewright Rack
+
+NOTE: this frontend is no longer supported on this branch. See kappa.
 
 <img width="1804" height="961" alt="Screenshot showing Wirewright Rack terminal UI atop UIR tests" src="https://github.com/user-attachments/assets/975fd033-b2d0-4745-827e-cb30ffd5a6f3" />
 
@@ -72,25 +76,50 @@ Wirewright wouldn't be possible without these technologies:
 - [SDL](https://www.libsdl.org/)
 - [BLAKE3 hash function](https://github.com/BLAKE3-team/BLAKE3)
 
-## Running
-
-> [!NOTE]
-> The µsoma frontend I am talking about here in this section is being slowly phased out in favor of Rack, which will be used to implement the new µsoma frontend. Rack is in active development at the moment. The newest rewrite is not yet available in the repo. Regardless, you are recommended to build from source.
-
-There's an AppImage build in the releases section. No idea whether it'll work on your machine, I'm a complete noob when it comes to software distribution. The AppImage only contains SFML shared objects, so when you run it, you may get some dependency-related errors. Try to google them and install the corresponding dependencies, I guess. I think it is too early to bother about properly distributing the thing, but I still wanted a way for people to try out µsoma without compiling anything. The AppImage may succeed in this on your machine, or it maybe it won't :^)
-
-Link so you don't have to scroll: https://github.com/wirewright/wirewright/releases/latest
-
 ## Building
 
-TODO: build instructions for the new part of the repo (e.g. rack)
+Wirewright can be built with Crystal 1.18.0 or later. If I forget to update the version number here, please
+remember that Wirewright more than likely depends on the newest features or bug-fixes in Crystal. So you are
+advised to build Wirewright with the latest version of Crystal.
 
-Wirewright can be built with Crystal 1.17.0 or later.
+### Building the dev tool
 
-0. You'd probably want to make `dev.sh` executable, if it's not already; something like `chmod +x dev.sh` should work.
-1. Run `dev.sh init`. This will run `shards install`; and also point CrSFML to the header files of SFML 2.6.0, found in ext/.
-2. Run `dev.sh soma --release` to *build* in release mode. Run `dev.sh soma` to *run* in debug mode.
-3. `dev.sh soma --release` will **hopefully** produce an executable named `soma`. That's it.
+Wirewright uses a custom dev tool to manage the various subprojects inside the repo. You can build
+the dev tool with:
+
+```text
+$ crystal build src/dev.cr --progress --release -Dpreview_mt -Dexecution_context 
+```
+
+### Using the dev tool
+
+After running the dev tool build command you should be able to run the `dev` executable:
+
+```text
+$ ./dev
+# Shows help for the dev tool ...
+```
+
+There are several *presets* available. You can print them with:
+
+```text
+$ ./dev g
+# Prints available presets ...
+```
+
+Right now, the only interesting preset is `tests`. Switch to it using:
+
+```text
+$ ./dev g tests
+```
+
+And build it with:
+
+```
+$ ./dev b
+```
+
+You should then have the `testtool` executable, which will run tests in the `tests/` directory.
 
 ## Want to learn more?
 

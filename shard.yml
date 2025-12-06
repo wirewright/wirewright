@@ -11,9 +11,6 @@ crystal: ">= 1.16.0"
 dependencies:
   permafrost:
     github: homonoidian/permafrost
-  crsfml:
-    github: oprypin/crsfml
-    commit: e6f5102
   sdl:
     github: ysbaddaden/sdl.cr
     commit: 5a22270
