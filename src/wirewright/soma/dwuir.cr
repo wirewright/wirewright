@@ -7,8 +7,6 @@ end
 require "./dwuir/color"
 require "./dwuir/font"
 
-{% skip_file unless flag?(:newsoma) %}
-
 require "./dwuir/tf"
 require "./dwuir/magn"
 require "./dwuir/pencil"

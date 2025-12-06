@@ -7,26 +7,15 @@ presets:
    source: "src/dev.cr"},
  "mt":
   {flags: {"execution_context": true, "preview_mt": true}},
- "soma":
-  {flags:
-    {"execution_context": true,
-     "preview_mt": true,
-     "soma6": true},
-   linkdirs: {"ext/sfml/lib": true},
-   source: "soma6.cr"},
  "tests":
   {flags:
     {"execution_context": true,
-     "newd7": true,
-     "newsoma": true,
      "no_number_autocast": true,
      "preview_mt": true},
    source: "testtool.cr"},
  "ww":
   {flags:
     {"execution_context": true,
-     "newd7": true,
-     "newsoma": true,
      "preview_mt": true},
    source: "src/ww.cr"}}
 

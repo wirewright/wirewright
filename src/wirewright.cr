@@ -29,18 +29,10 @@ require "./wirewright/lr"
 
 require "../pattern7"
 require "../baz5"
-{% if flag?(:newd7) %}
-  require "./wirewright/d7"
-{% else %}
-  require "../delta7_proto2"
-{% end %}
+require "./wirewright/d7"
 require "../primitives"
 require "../libtermbox2"
 require "../inputr"
-
-# {% if flag?(:newsoma) %}
-#   require "./wirewright/rack"
-# {% end %}
 
 require "./wirewright/alloy"
 require "./wirewright/pigment"
