@@ -24,6 +24,8 @@ require "./wirewright/file_server"
 require "./wirewright/issue"
 require "./wirewright/ml"
 require "./wirewright/meridium"
+require "./wirewright/dwuir"
+require "./wirewright/microfold"
 require "./wirewright/soma"
 require "./wirewright/lr"
 

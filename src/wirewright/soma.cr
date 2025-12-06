@@ -60,6 +60,3 @@ module Ww::Soma
     uiR(metricsR, ruleset)
   end
 end
-
-require "./soma/dwuir"
-require "./soma/microfold"

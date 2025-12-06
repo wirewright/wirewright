@@ -3,8 +3,8 @@
 # TODO: implement as a Rack. We almost have all the tools. I think we're only missing
 # some form of IPC in racks.
 module Ww::Frontend::Rack
-  private alias Textual = Soma::DwUIR::Textual
-  private alias Console = Soma::DwUIR::Window::Console
+  private alias Textual = DwUIR::Textual
+  private alias Console = DwUIR::Window::Console
 
   # Rack server frontend.
   module Server
@@ -51,7 +51,7 @@ module Ww::Frontend::Rack
       window : Term,
       components : Ruleset,
       component_cache : Alloy::ExpansionCache,
-      theme : Soma::Microfold::Theme,
+      theme : Microfold::Theme,
       uiR : Rewriter,
       insetfixR : Rewriter,
       input : Input::Context,
@@ -82,7 +82,7 @@ module Ww::Frontend::Rack
       # for spacing and 1 for `rem`.
       themedoc = ML.document(files.read_string(THEME_PATH))
       themedoc = themedoc.morph({:globals, :spacing, 1})
-      theme = Soma::Microfold.theme(themedoc, rem: Term[1])
+      theme = Microfold.theme(themedoc, rem: Term[1])
 
       uiR = Soma.uiR(
         metricsR: callR { |term| Rewrite.one(Textual.reply(term)) },
@@ -106,7 +106,7 @@ module Ww::Frontend::Rack
       dwuir = pipe(state.window,
         Alloy.render(state.env1),
         Alloy.render(state.components, cache: state.component_cache),
-        Soma::Microfold.render(state.theme),
+        Microfold.render(state.theme),
         rewrite(state.insetfixR),
         rewrite(state.uiR),
       )

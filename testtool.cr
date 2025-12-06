@@ -89,9 +89,8 @@ module Component
 end
 
 alias MM = Meridium
-alias Mf = Soma::Microfold
 alias Cell = Char, Color ->
-alias Color = Soma::DwUIR::Color
+alias Color = DwUIR::Color
 
 # Represents the contribution of a test to the harness.
 defcase TestContrib,
@@ -567,7 +566,7 @@ def tspace(flow : Term::Dict, & : Term, Term ->)
   end
 end
 
-defcase TestContext, theme : Mf::Theme, rack_basis : Term::Dict, uiR_base : Term
+defcase TestContext, theme : Microfold::Theme, rack_basis : Term::Dict, uiR_base : Term
 
 def test(ctx, test, path, keypath, stem, srcmap, text) : Bool
   {% begin %}
@@ -1078,7 +1077,7 @@ def test(ctx, test, path, keypath, stem, srcmap, text) : Bool
         any_failed = false
 
         results = variants.items.map do |variant|
-          render, bts = Mf.render(ctx.theme, variant, severity: :minor)
+          render, bts = Microfold.render(ctx.theme, variant, severity: :minor)
           any_failed ||= bts.present?
 
           bts.each do |bt|
@@ -1192,15 +1191,15 @@ def test(ctx, test, path, content, srcmap)
   end
 end
 
-# def rack_image(ctx, rack : Term, needle : Term) : Soma::DwUIR::PixelRect
+# def rack_image(ctx, rack : Term, needle : Term) : DwUIR::PixelRect
 #   files = Disk
 #   # These aren't thread safe so we cannot reuse them!
-#   platform = Soma::DwUIR::PvgPlatform.new(files)
-#   compositor = Soma::DwUIR::Compositor.new
-#   viewer_context = Soma::DwUIR::Viewer::Context.new(compositor, platform)
+#   platform = DwUIR::PvgPlatform.new(files)
+#   compositor = DwUIR::Compositor.new
+#   viewer_context = DwUIR::Viewer::Context.new(compositor, platform)
 
 #   uiR = Soma.uiR(
-#     metricsR: callR { |term| Rewrite.one(Soma::DwUIR.reply(platform, term)) },
+#     metricsR: callR { |term| Rewrite.one(DwUIR.reply(platform, term)) },
 #     rulebase: ctx.uiR_base,
 #   )
 
@@ -1258,7 +1257,7 @@ def compare(ctx, test, specpath, title, a, b, text)
     #     actual = IO::Memory.new
 
     #     img = rack_image(ctx, rack, id)
-    #     ppm = Soma::DwUIR::SnapFormat["ppm"]
+    #     ppm = DwUIR::SnapFormat["ppm"]
     #     ppm.call(actual, img)
 
     #     next if expected.to_slice == actual.to_slice
@@ -1308,7 +1307,7 @@ end
 
 begin
   ctx = TestContext.new(
-    theme: Mf.theme(ML.document(File.read("./theme.ufold.wwml")).as_d, rem: Term[16]),
+    theme: Microfold.theme(ML.document(File.read("./theme.ufold.wwml")).as_d, rem: Term[16]),
     rack_basis: ML.document(File.read("./runtime/basis.rack.wwml")).as_d,
     uiR_base: ML.document(File.read(RESOURCES / (ENV["RSET"]? || "uiR-succ8.soma.wwml"))),
   )

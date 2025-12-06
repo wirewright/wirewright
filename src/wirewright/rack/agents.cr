@@ -10,7 +10,7 @@ module Ww::Rack
     # capturing and storing them on disk using a selected format (e.g. PPM, PNG, JPEG).
     #
     # *ctx* is a viewer context that should be used in the process of
-    # drawing an image (see for example `Soma::DwUIR.snap`).
+    # drawing an image (see for example `DwUIR.snap`).
     def file_snapper(ctx : DwUIR::Viewer::Context) : Agent::Narrator
       Agent::Narrator.new do |_, _, _, state0, state1|
         case {state0, state1}
