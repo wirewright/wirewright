@@ -19,11 +19,15 @@ module Ww::ML
     def []?(path) : StringView?
       tpath = Tpath[path]
 
-      until tpath.empty? || (text = @hash[tpath]?)
+      loop do
+        if text = @hash[tpath]?
+          return text
+        end
+
+        return if tpath.empty?
+
         tpath = tpath[...-1]
       end
-
-      text
     end
 
     # Same as `[]?`, but raises `KeyError` if no view can be found.

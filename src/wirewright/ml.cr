@@ -213,7 +213,7 @@ module Ww::ML
   # See `Conf` to learn about *kwargs*.
   #
   # Raises `SyntaxError` on invalid input.
-  def document_and_srcmap(source : String, **kwargs) : Term
+  def document_and_srcmap(source : String, **kwargs) : {Term, SrcMap}
     parse_with_srcmap(Conf.new(**kwargs), source, &.document)
   end
 
