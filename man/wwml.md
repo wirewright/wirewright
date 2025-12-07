@@ -347,14 +347,19 @@ or arguments quickly.
 
 > [!NOTE]
 > Structural comments work where whitespace works. Note, however, that you can only
-> comment out *terms* or *entries*, as in `;x: 100` or `;:x`. You cannot comment
-> selectors, keys, etc. structurally. Use inline comments for this.
+> comment out *items*, *pairs*, or rules this way, as in `;x: 100`, or `;:x`, or
+> `;M_ <> {M: qux}` (comments the entire rule, since commenting just `M_` would be
+> syntactically invalid; it'd be a headless rule, and headless rules don't survive
+> for long!)
+>
+> You cannot comment selectors, keys, etc. structurally. Use inline comments for this.
 
 ### Selection comments
 
 Selection comments are analogous to structural comments, except this time you're
-not commenting a specific term out; but rather, commenting *all other terms* out.
-This can be done using the `;,` prefix.
+not commenting a specific entity out; but rather, commenting *all other entities* out.
+This is also referred to as *focusing* the entity, e.g., focusing an item. Selection
+comments are written using the `;,` prefix.
 
 ```wwml
 (+ ;,1 2 x: 100 y: 200)
@@ -367,25 +372,22 @@ This can be done using the `;,` prefix.
 ;; Same as: `(+ 2 x: 100 y: 200)`
 ```
 
-Similarly to structural comments, selection comments are useful for experimentation;
-especially isolation.
+Selection comments work on three distinct categories of entries: *rules*, *items*, and
+*pairs*. When you focus a rule, WwML will blur all other rules. Items and pairs will
+remain intact. Similarly for items and pairs.
 
-This might look like a weird feature to have, but if you have hundreds of test cases
-and want to isolate just a few -- this feature helps a lot with that, making it
-a matter of a few keystrokes rather than painful commenting. Importantly, this doesn't
-require the test suite (if any!) to support isolation.
+Just like structural comments, selection comments are useful for experimentation;
+especially isolation. Think isolating test cases: most often you don't need an entire
+harness for this; a tiny syntactic feature suffices.
 
 > [!NOTE]
 > Selection comments are currently only supported in dictionaries of the general form
-> and section dicts. They can be placed before their items and pairs.
+> (`(...)`) and sections (code between `---` in the document dict, or all code if the file
+> is parsed as one huge section).
 >
 > Selection comments cannot be "commented out" with structural ones because selection
 > comments aren't terms. They are interpreted by the dictionary that you place them
-> in, because only that dictionary knows which items to leave out.
-
-> [!IMPORTANT]
-> Selection comments operate within the following groups: itemspart, pairspart, and rules. In other
-> words, if you select an item, all pairs and rules will be kept.
+> in, because only that dictionary knows which entries to focus or blur.
 
 ## Boolean terms
 
@@ -626,7 +628,7 @@ Escape sequences are initiated by `\`.
 
 ### Multiline form
 
-> [!TODO]
+> [!NOTE]
 > Multiline form is planned but not implemented at the moment. Use the backslash-newline
 > escape sequence detailed below.
 
@@ -857,22 +859,23 @@ qoox
 - `⟨<term list> ¦ <pairspattern>⟩` is the same as writing `(%all (%item <term list>) <pairspattern>)`.
 - `⟨<term list> ¦ <pairspattern>⟩°` is the same as writing `(%all (%item° <term list>) <pairspattern>)`.
 - `⟨⊚ x y z⟩` is the same as writing `(%all (%item x) (%item y) (%item z))`. Similarly to other forms,
-  you can do `⟨⊚ x y z⟩°` to use `%item°`: `(%all (%item° x) (%item° y) (%item° z))`. You can use pairside
-  forms as well: `⟨⊚ x y z ¦ rest_⟩`, `⟨⊚ x y z ⍊ a b⟩` etc. are the same as writing
-  `(%all (%item x) (%item y) (%item z) _dict rest_)` and `(%all (%item x) (%item y) (%item z) _dict (%layer _ {a: a_, b: b_}))`,
+  you can do `⟨⊚ x y z⟩°` to use `%item°`: `(%all (%item° x) (%item° y) (%item° z))`. You can use interfixes
+  as well: `⟨⊚ x y z ¦ rest_⟩`, `⟨⊚ x y z ⍊ a b⟩` etc. are the same as writing
+  `(%all (%item x) (%item y) (%item z) (%partition _ rest_))` and `(%all (%item x) (%item y) (%item z) (%partition _ (%layer _ {a: a_, b: b_})))`,
   correspondingly.
 
 #### Shorthands for `%leaf` and `%leaf°`
 
 - `⟪x y z⟫` is the same as writing `(%all (%leaf x) (%leaf y) (%leaf z))`. Source `⟪x y z⟫°`
-  and pairside modifiers are supported as well (e.g. `⟪x y z ⍊ a b⟫`).
+  and interfixes are supported as well (e.g. `⟪x y z ⍊ a b⟫`).
 
 #### Shorthands for `%split` and `%split°`
 
-- `⟨<left term list> … <right term list>⟩` is the same as writing `(%split _ <first left term> (%all (<rest of left terms> _*) (%split _ <first right term> (<rest of right terms> _*))))`.
-- `⟨<> … <>⟩°` uses `%split°` instead of `%split`.
-- `⟨<> … <> ¦ <pairspattern>⟩` is the same as writing `(%all (%split ...) <pairspattern>)`.
-- `⟨<> … <> ¦ <pairspattern>⟩°` is the same as writing `(%all (%split° ...) <pairspattern>)`.
+> [!NOTE]
+> Not implemented
+
+`⟨x y z … a b c⟩` and so on with more *parts* (delimited by `…`). Similarly there exists the source
+version: `⟨x y z … a b c⟩°`. Interfixes are supported as well: `⟨x y z … a b c ¦ pairs_⟩`.
 
 #### Shorthands for itemspart `%partition`
 
@@ -919,9 +922,8 @@ The residue term is optional.
 > have to write the residue `()` explicitly despite its stated optionality and reasonability
 > of leaving it out. The ambiguity is resolved automatically in favor of the first expansion.
 > In other words, keep `x_` to get the first expansion; and use `() x_` to get
-> the second expansion. Thus `(+ a_ b_ ¦ x_)` in M1 will capture the pairspart under `x`; and
-> `(+ a_ b_ ¦ () x_)` will capture the value of `x` under `x`; and ensure the residual
-> pairspart is empty.
+> the second expansion. Thus `(+ a_ b_ ¦ x_)` makes M1 capture the pairspart under `x`; and
+> `(+ a_ b_ ¦ () x_)` makes M1 capture the value of key `x` under `x`; and ensure there are no other pairs.
 
 Selectors are generally key-value pairs: `<key>: <value>`. A variety of other shorthands
 is available.
@@ -1029,7 +1031,7 @@ generated specifically for the current *block*.
   of rules. A rule with exactly the same LHS and RHS as the original one will
   produce the same rule id, of course, but that's expected, and, in fact, intended
   in some way.
-- `▢` will be replaced by the current rule block's id, similarly.
+- `▢` will use the current rule block's hash in a similar manner.
 - Whereas `◇` or `▢` is going to be replaced with something like `84GieP0DeGk`,
   a symbol; `◇_` or `▢_` are going to be replaced by a blank: `84GieP0DeGk_`.
 - `◇_` and `▢_` are lexemes distinct from `◇` and `▢`.
@@ -1037,6 +1039,10 @@ generated specifically for the current *block*.
   Writing something like `◇-foo` **is wrong**, and will confusingly enough result in `◇ -foo`.
 
 ### Backmaps and rewriter circuits
+
+> [!NOTE]
+> These are scheduled for removal once all relevant rulesets are ported to
+> Alloy backmaps.
 
 - `→<term>` is the same as writing `($my <term>)`
 - `↑<term>` is the same as writing `($up <term>)`
@@ -1079,8 +1085,9 @@ Notably, `a←b => c` or `a←b <> c` means `(a←b) => c` or `(a←b) <> c`, co
 where parens indicate associativity.
 
 The default associativity of these operators is *extremely* unlikely to cause
-trouble. They are rarely seen in chains; let-chains are used sometimes, but the default
-associativity is exactly what is needed in that case. Therefore, WwML does not provide a way
-to change the default associativity (e.g. parentheses). Instead, if you for some reason need
-to change associativity, remember you can always lower to an operator's expanded form.
+trouble. They are rarely seen in chains; let-chains are used sometimes (e.g. in backmaps,
+to have two or more handles of something); but the default associativity is exactly
+what is needed in that case.
 
+WwML a way to indicate grouping: `⸤` and `⸥`. For example, whereas `a←b←c` produces `a←(b←c)`
+(parens indicate assoc), `⸤a←b⸥←c` produces `(a←b)←c`.
