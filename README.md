@@ -13,7 +13,7 @@
 
 Wirewright explores the idea of having entire *worlds* as first-class objects. With Wirewright, you can create worlds, and pass them around. You can then build higher-order worlds from a bunch of smaller worlds, each acting as an agent. You can have worlds creating and populating worlds. You can have worlds interacting with other worlds through something Wirewright calls *entanglement*.
 
-See [the wiki](https://github.com/wirewright/wirewright/wiki/First%E2%80%90class-worlds) to read more about Wirewright. I don't want to scare people off a wall of text.
+See [the wiki](https://github.com/wirewright/wirewright/wiki/First%E2%80%90class-worlds) to read more about Wirewright. I don't want to scare people off with a wall of text.
 
 ## Gallery
 
