@@ -10,7 +10,8 @@ module Ww::ML
                      SameValueSet |
                      Multiset |
                      Keypool |
-                     AllFind |
+                     AllItem |
+                     AllLeaf |
                      PairDict |
                      Split |
                      Dict |
@@ -61,7 +62,9 @@ module Ww::ML
     defcase MultisetEntryN, count : Expr, item : Expr
 
     defcase Keypool, items : Array(Expr)
-    defcase AllFind, head : Term, items : Array(Expr), pairside : Layer?
+
+    defcase AllItem, items : Array(Expr), pairside : Layer?, source : Bool
+    defcase AllLeaf, items : Array(Expr), pairside : Layer?, source : Bool
 
     defcase PairDict, pairs : Array(DictPair)
 

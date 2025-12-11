@@ -257,17 +257,52 @@ module Ww::ML
       end
     end
 
-    private def render0(ctx : RenderContext, node : Tree::AllFind) : Tsrc
+    private def render0(ctx : RenderContext, node : Tree::AllItem) : Tsrc
       if node.items.empty?
-        raise "empty all-find makes no sense", ctx.location
+        raise "empty all-item makes no sense", ctx.location
       end
 
       pairside = render(ctx, node.pairside)
 
+      head = node.source ? Term.of(:"%item°") : Term.of(:"%item")
       args = [] of Tsrc
 
       node.items.each do |item|
-        args << tsrc(ctx, {node.head, render(ctx, item)})
+        args << tsrc(ctx, {tsrc(ctx, head), render(ctx, item)})
+      end
+
+      if pairside
+        # ⟨⊚ qux ¦ x_⟩ -> (%all (%item qux ...) (%partition _ x_))
+        args << tsrc(ctx, {:"%partition", :_, pairside})
+      end
+
+      # ⟨⊚ x⟩
+      if args.size == 1
+        return args[0]
+      end
+
+      tsrc(ctx) do |commit|
+        commit << tsrc(ctx, :"%all")
+        commit.concat(args)
+      end
+    end
+
+    private def render0(ctx : RenderContext, node : Tree::AllLeaf) : Tsrc
+      if node.items.empty?
+        raise "empty all-leaf makes no sense", ctx.location
+      end
+
+      pairside = render(ctx, node.pairside)
+
+      head = node.source ? Term.of(:"%leaf°") : Term.of(:"%leaf")
+      args = [] of Tsrc
+
+      node.items.each do |item|
+        args << tsrc(ctx) do |commit|
+          commit << tsrc(ctx, head)
+          commit << render(ctx, item)
+          commit.with(:self, true)
+        end
       end
 
       if pairside

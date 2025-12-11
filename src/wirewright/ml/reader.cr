@@ -587,7 +587,7 @@ module Ww::ML
     end
 
     # ⏏⟨⊚ a b c⟩
-    private def all_items
+    private def all_item
       unless past?(:langle_circled_ring)
         return refusal("expected `⟨⊚`", ahead.text.before_begin)
       end
@@ -601,12 +601,12 @@ module Ww::ML
 
         # ⟨⊚ a b c⏏⟩
         if past?(:rangle)
-          return Tree::AllFind.new(Term.of(:"%item"), items, pairside: nil)
+          return Tree::AllItem.new(items, pairside: nil, source: false)
         end
 
         # ⟨⊚ a b c⏏⟩°
         if past?(:rangle_source)
-          return Tree::AllFind.new(Term.of(:"%item°"), items, pairside: nil)
+          return Tree::AllItem.new(items, pairside: nil, source: true)
         end
 
         case π = interfix(:rangle, :rangle_source)
@@ -616,12 +616,12 @@ module Ww::ML
         else
           # ⟨⊚ a b c ⍊ qux⏏⟩
           if past?(:rangle)
-            return Tree::AllFind.new(Term.of(:"%item"), items, pairside: π)
+            return Tree::AllItem.new(items, pairside: π, source: false)
           end
 
           # ⟨⊚ a b c ⍊ qux⏏⟩°
           if past?(:rangle_source)
-            return Tree::AllFind.new(Term.of(:"%item°"), items, pairside: π)
+            return Tree::AllItem.new(items, pairside: π, source: true)
           end
         end
 
@@ -631,7 +631,7 @@ module Ww::ML
     end
 
     # ⏏⟪a b c⟫
-    private def all_leaves
+    private def all_leaf
       unless past?(:double_langle)
         return refusal("expected `⟪`", ahead.text.before_begin)
       end
@@ -641,12 +641,12 @@ module Ww::ML
       loop do
         # ⟪a b c⏏⟫
         if past?(:double_rangle)
-          return Tree::AllFind.new(Term.of(:"%leaf"), items, pairside: nil)
+          return Tree::AllLeaf.new(items, pairside: nil, source: false)
         end
 
         # ⟪a b c⏏⟫°
         if past?(:double_rangle_source)
-          return Tree::AllFind.new(Term.of(:"%leaf°"), items, pairside: nil)
+          return Tree::AllLeaf.new(items, pairside: nil, source: true)
         end
 
         case π = interfix(:double_rangle, :double_rangle_source)
@@ -656,12 +656,12 @@ module Ww::ML
         else
           # ⟪a b c ⍊ qux⏏⟫
           if past?(:double_rangle)
-            return Tree::AllFind.new(Term.of(:"%leaf"), items, pairside: π)
+            return Tree::AllLeaf.new(items, pairside: π, source: false)
           end
 
           # ⟪a b c ⍊ qux⏏⟫°
           if past?(:double_rangle_source)
-            return Tree::AllFind.new(Term.of(:"%leaf°"), items, pairside: π)
+            return Tree::AllLeaf.new(items, pairside: π, source: true)
           end
         end
 
@@ -893,8 +893,8 @@ module Ww::ML
         mset,
         keypool,
         split,
-        all_items,
-        all_leaves,
+        all_item,
+        all_leaf,
         shorthand,
       )
     end
@@ -933,7 +933,7 @@ module Ww::ML
       when past?(:minus_left)
         Tree::Negative.new(value!(atom, expect: true))
       else
-        return refusal("expected a sigil", ahead.text.before_begin)
+        refusal("expected a sigil", ahead.text.before_begin)
       end
     end
 

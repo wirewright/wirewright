@@ -1000,6 +1000,8 @@
 ;; `⟨⊚ ...⟩`
 (ml
   (= ⎡⟨⊚ a⟩⎤ ⎡⟨a⟩⎤)
+  (= ⎡⟨⊚ a⟩°⎤ ⎡⟨a⟩°⎤)
+  (= ⎡⟨⊚ a ¦ rest_⟩°⎤ ⎡(%all ⟨a⟩° (%partition _ rest_))⎤)
   (= ⎡⟨⊚ a b c⟩⎤ ⎡(%all ⟨a⟩ ⟨b⟩ ⟨c⟩)⎤)
   (= ⎡⟨⊚ a b c⟩°⎤ ⎡(%all ⟨a⟩° ⟨b⟩° ⟨c⟩°)⎤)
   (= ⎡⟨⊚ a b c ¦ rest_ x_ y_ z_⟩°⎤ ⎡(%all ⟨a⟩° ⟨b⟩° ⟨c⟩° (%partition _ (%layer rest_ {x: x_, y: y_, z: z_})))⎤)
@@ -1012,9 +1014,11 @@
 
 ;; `⟪⟫`
 (ml
-  (= ⎡⟪a⟫⎤ ⎡(%leaf a)⎤)
-  (= ⎡⟪a ¦ rest_⟫⎤ ⎡(%all (%leaf a) (%partition _ rest_))⎤)
-  (= ⎡⟪a ¦ rest_ x_ y_ z_⟫⎤ ⎡(%all (%leaf a) (%partition _ (%layer rest_ {x: x_, y: y_, z: z_})))⎤)
+  (= ⎡⟪a⟫⎤ ⎡(%leaf a self: true)⎤)
+  (= ⎡⟪a⟫°⎤ ⎡(%leaf° a self: true)⎤)
+  (= ⎡⟪a ¦ rest_⟫⎤ ⎡(%all ⟪a⟫ (%partition _ rest_))⎤)
+  (= ⎡⟪a ¦ rest_⟫°⎤ ⎡(%all ⟪a⟫° (%partition _ rest_))⎤)
+  (= ⎡⟪a ¦ rest_ x_ y_ z_⟫⎤ ⎡(%all (%leaf a self: true) (%partition _ (%layer rest_ {x: x_, y: y_, z: z_})))⎤)
   (= ⎡⟪a b c⟫⎤ ⎡(%all ⟪a⟫ ⟪b⟫ ⟪c⟫)⎤)
   (= ⎡⟪a b c⟫°⎤ ⎡(%all ⟪a⟫° ⟪b⟫° ⟪c⟫°)⎤)
   (= ⎡⟪a b c ¦ rest_ x_ y_ z_⟫°⎤ ⎡(%all ⟪a⟫° ⟪b⟫° ⟪c⟫° (%partition _ (%layer rest_ {x: x_, y: y_, z: z_})))⎤)
