@@ -1191,6 +1191,29 @@ struct StringView
     join(*views)
   end
 
+  def self.between(a : StringView, b : StringView) : StringView
+    unless a.string.same?(b.string)
+      raise ArgumentError.new("cannot take a view between views whose underlying strings compare different by reference")
+    end
+
+    # Sort by endpoints
+    if a.byte_end > b.byte_end
+      a, b = b, a
+    end
+
+    assert a.byte_end <= b.byte_start
+
+    StringView.new(a.string, a.byte_end, b.byte_start, ascii_only: a.string.single_byte_optimizable?)
+  end
+
+  def self.difference(a : StringView, b : StringView) : StringView
+    unless a.string.same?(b.string)
+      raise ArgumentError.new("cannot take a difference of views whose underlying strings compare different by reference")
+    end
+
+    StringView.new(a.string, a.byte_start, Math.min(a.byte_end, b.byte_start), ascii_only: a.string.single_byte_optimizable?)
+  end
+
   def self.intersection(a : StringView, b : StringView) : StringView
     unless a.string.same?(b.string)
       raise ArgumentError.new("cannot intersect string views whose underlying strings compare different by reference")
@@ -1630,12 +1653,12 @@ struct StringView
     prior? || raise IndexError.new
   end
 
-  def prior_string
+  def prior_string : StringView
     StringView.new(@string, 0, @byte_start, @string.single_byte_optimizable?)
   end
 
-  def posterior_string
-    StringView.new(@string, @byte_end, @string.bytesize, @string.single_byte_optimizable?)
+  def posterior_string : StringView
+    StringView.new(@string, byte_end, @string.bytesize, @string.single_byte_optimizable?)
   end
 
   def count(&)
@@ -1892,11 +1915,17 @@ struct StringView
 
   # Yields each character in this string view, going from right to left.
   def reverse_each_char(& : Char ->) : Nil
+    reverse_each_char_with_abs_byte_index do |chr, _|
+      yield chr
+    end
+  end
+
+  def reverse_each_char_with_abs_byte_index(& : Char, Int32 ->) : Nil
     reader = Char::Reader.new(@string, pos: byte_end)
 
     until reader.pos <= @byte_start
       reader.previous_char # byte end must be skipped, we're exclusive!
-      yield reader.current_char
+      yield reader.current_char, reader.pos
     end
   end
 
@@ -2121,6 +2150,30 @@ struct StringView
       m = StringView.new(@string, byte_index, byte_index + 1, ascii_only: chr.ascii?)
       r = StringView.new(@string, byte_index + 1, byte_end, ascii_only: ascii_only?)
       yield l, m, r
+    end
+  end
+
+  def each_inflection(& : StringView, StringView ->)
+    each_char_with_abs_byte_index do |chr, byte_index|
+      l = StringView.new(@string, byte_start, byte_index, ascii_only: ascii_only?)
+      r = StringView.new(@string, byte_index, byte_end, ascii_only: ascii_only?)
+      yield l, r
+    end
+
+    l = StringView.new(@string, byte_start, byte_end, ascii_only: ascii_only?)
+    r = StringView.new(@string, byte_end, byte_end, ascii_only: ascii_only?)
+    yield l, r
+  end
+
+  def reverse_each_inflection(& : StringView, StringView ->)
+    l = StringView.new(@string, byte_start, byte_end, ascii_only: ascii_only?)
+    r = StringView.new(@string, byte_end, byte_end, ascii_only: ascii_only?)
+    yield l, r
+
+    reverse_each_char_with_abs_byte_index do |chr, byte_index|
+      l = StringView.new(@string, byte_start, byte_index, ascii_only: ascii_only?)
+      r = StringView.new(@string, byte_index, byte_end, ascii_only: ascii_only?)
+      yield l, r
     end
   end
 

@@ -1,3 +1,74 @@
+module StringSpan
+  extend self
+
+  def lwdrop(text : StringView) : StringView
+    initial = text
+
+    # Skip whitespace at which we're currently standing, if we are, as in
+    # `hello⏏    world` -> `hello    ⏏world`, or in `hel⏏lo world` this would
+    # be noop.
+    while text.nonempty? && text.first_char.whitespace?
+      text = text.rest
+    end
+
+    # Skip non-whitespace.
+    until text.empty? || text.first_char.whitespace?
+      text = text.rest
+    end
+
+    text
+  end
+
+  def rwdrop(text : StringView) : StringView
+    initial = text
+
+    # Skip whitespace at which we're currently standing, if we are, as in
+    # `hello    ⏏world` -> `hello⏏    world`, or in `hello wor⏏ld` this would
+    # be noop.
+    while text.nonempty? && text.last_char.whitespace?
+      text = text.prior
+    end
+
+    # Skip non-whitespace.
+    until text.empty? || text.last_char.whitespace?
+      text = text.prior
+    end
+
+    text
+  end
+
+  def lwdrop(text : StringView, n : Int) : StringView
+    n.times { text = lwdrop(text) }
+
+    text
+  end
+
+  def rwdrop(text : StringView, n : Int) : StringView
+    n.times { text = rwdrop(text) }
+
+    text
+  end
+
+  def lwtake(text : StringView, n : Int) : StringView
+    rest = lwdrop(text, n)
+
+    StringView.between(text.before_begin, rest.before_begin)
+  end
+
+  def rwtake(text : StringView, n : Int) : StringView
+    rest = rwdrop(text, n)
+
+    StringView.between(rest.after_end, text.after_end)
+  end
+
+  # NOTE: *e* is inclusive!
+  def words(text : StringView, b : Int, e : Int)
+    text = b.negative? ? rwtake(text, b.abs) : lwdrop(text, b)
+    text = e.negative? ? rwdrop(text, e.abs - 1) : lwtake(text, e - b + 1)
+    text
+  end
+end
+
 # TODO: this ruleset is a seed for something that will later be known as *Nitrene*.
 # Nitrene is a tiny embedded language for describing computations. I believe it
 # should *not* have loops, or conditionals. However, it should allow to construct
@@ -387,11 +458,11 @@ PRIMITIVES = ProcRuleset.build do
   end
   # alias
   rulepi1 %[(words s_string b←(%number i32) ..= e←(%number i32))] do
-    Term::Str::Substring.words(s.unsafe_as_s, b.to(Int32), e.to(Int32))
+    StringSpan.words(s.to(StringView), b.to(Int32), e.to(Int32))
   end
 
   rulepi1 %[(word s_string b←e←(%number i32))] do
-    Term::Str::Substring.words(s.unsafe_as_s, b.to(Int32), e.to(Int32))
+    StringSpan.words(s.to(StringView), b.to(Int32), e.to(Int32))
   end
 
   # FIXME: this is too lame
@@ -496,6 +567,10 @@ PRIMITIVES = ProcRuleset.build do
         commit.with(key, value)
       end
     end
+  end
+
+  rulepi1 %{(includes? haystack_string needle_string)} do
+    haystack.to(String).includes?(needle.to(String))
   end
 end
 

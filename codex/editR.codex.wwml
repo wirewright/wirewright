@@ -1,0 +1,820 @@
+;; The text editor is rendered as follows:
+;;
+;;             text lhs               anchor
+;;             -------            --------------
+;;    [[I _*] (_string * _string) (%number +i32)]
+;;     ------          ^ -------
+;;     input kernel    | text rhs
+;;                     |
+;;                     +---- growth point for nested zippers (marks "active" zipper)
+;;
+;;
+;; The input kernel hosts input config, state (such as the goal column), and is a consensus
+;; place (a kind of mailbox) where the outside world puts *motions*. A motion is simply
+;; a message -- a term of some sort. It will most probably be something standard like
+;; a keyboard event, e.g.: `(keyboard key left dn shift: true ctrl: true)`.
+;;
+;; The input is using the mailbox for internal comm, too. Whereas the outside world
+;; *enqueues*, the input *interjects*, i.e., internal motions that continue
+;; the computation are placed in the front so they are immediately executed.
+;; This is an approximate simulation of subroutines.
+;;
+;; Motions such as (goto rune left) work on the active zipper. This means you can
+;; compose operations such as (goto (line word) left). Here, `goto ...` refers to
+;; the toplevel zipper, `goto line` will create a nested one containing the current line.
+;; Finally, `goto word left` will select word left provided there is one within the bounds
+;; of the active zipper (so this motion won't cross line boundaries).
+;;
+;; NOTE:
+;; This is by no means a "perfect" solution. In fact, there is no perfect solution.
+;; My attempts to find a good, composable representation have mostly failed. The one idea
+;; worth exploring in the future is automatic (perhaps pattern-driven) translation between
+;; different representations of the same thing -- the same input, some kind of base
+;; representation, which could maybe be a pair of indices and a string. What you see here
+;; is a hybrid: we explicitly translate into different representations (and possibly back);
+;; see, for instance, `zip line`, `unzip`, `range`, `unrange`. Furthermore, it seems
+;; worthwhile to move events out of the kernel into a second dimension. It seems worthwhile
+;; to mark the top level with `I` instead of having it at the very bottom. This should relieve
+;; M1 somewhat.
+;;
+;; The biggest concern with this implementation (and most of my previous attempts) is that
+;; it requires absR, which is extremely inefficient. Each successful rule application leads
+;; to a re-visit of the entire tree. No, not only the rule-relevant tree -- the *entire* tree.
+;; The search process has to start from scratch, from point zero, from root. This is *extremely*
+;; expensive, even if one's brute performance is high, and ours isn't at the moment. This can
+;; be mitigated somewhat with relR, which sets a ceiling for absR, but the problem is it's
+;; hard to compute that ceiling automatically, and setting it by hand seems too hacky and
+;; error-prone.
+;;
+;; It would be nice, for a better implementation, to "ride along" with the search process somehow.
+;; Right now, we have `⟨...⟩` (sometimes nested!) on lots of rules. For a search process, this only
+;; means proceed with a "depth assertion" (i.e., "am I deep enough for this rule to apply?").
+;; For M1, however, this means a full pass over the underlying matchee -- if it's a dict -- which
+;; doesn't play nicely with absR, which is already inefficient. It's surprising all of this runs
+;; on the millisecond to second timescale at all. Of course the problem is not worth the time spent
+;; on it at the moment -- all these things should take well below 100µs. In the long run, we should
+;; be able to compete with imperative code; otherwise, all of this makes very little sense, aside
+;; from arguable purity.
+
+;; ------
+;; KERNEL
+;; ------
+
+[I M_ _*] <> {(M): ()}
+
+;; Esc is the universal cancel key.
+[I M←[keyboard key escape dn] _*]
+  <> {M: (cancel)}
+
+[I M←(cond cond_ ⍊ then_⋮ nop else_⋮ nop) _*]
+  <> {(M): (^cond (cond' ^then ^else))}
+
+[I M←⸨ok,err⸩ cont←[cond' then_ else_] _*]
+  <> {M: ^⸨then,else⸩, (cont): ()}
+
+[I M←[cond' _ _] _*]
+  <> {(M): ()}
+
+;; -----------
+;; TEXT EDITOR
+;; -----------
+
+;;
+;; Key bindings
+;;
+
+;; TODO: lots of symmetry here (esp. non-shift/shift/c/c-shift variants), there
+;; must be a way to compress these rules.
+
+(I M←[keyboard input text_string] _* ⍊ modify: true)
+  <> {M: (splice ^text left)}
+
+(I M←[keyboard key enter dn] _* ⍊ multiline: true modify: true)
+  <> {M: (splice "\n" left)}
+
+(I M←[keyboard key ⸨backspace,delete⸩ dn] _* ⍊ modify: true)
+  <> {M: (splice "" ⸨left,right⸩)}
+
+;; SELECTION Left and Right (collapse in that direction).
+[[I M←[keyboard key ⸨left,right⸩ dn] _*] (_string * _string) _]
+  <> {M: (collapse selection ⸨left,right⸩)}
+
+;; CURSOR Left and Right (move by rune).
+[[I M←(keyboard key ⸨left,right⸩ dn ⍊ -shift) _*] ((%pipe span A_) * _string) A_]
+  <> {(M): ((reset goal) (goto rune ⸨left,right⸩) (collapse selection ⸨left,right⸩))}
+
+;; CURSOR C-Left and C-Right (move by word).
+[[I M←(keyboard key ⸨left,right⸩ dn ⍊ -shift ctrl) _*] ((%pipe span A_) * _string) A_]
+  <> {(M): ((reset goal) (goto word ⸨left,right⸩) (collapse selection ⸨left,right⸩))}
+
+;; S-Left and S-Right (extend by rune).
+[[I M←(keyboard key ⸨left,right⸩ dn ⍊ shift) _*] (_string * _string) _]
+  <> {(M): ((reset goal) (goto rune ⸨left,right⸩))}
+
+;; C-S-Left and C-S-Right (extend by word).
+[[I M←(keyboard key ⸨left,right⸩ dn ⍊ shift ctrl) _*] (_string * _string) _]
+  <> {(M): ((reset goal) (goto word ⸨left,right⸩))}
+
+;; Home and End (go to start or end of text).
+[I M←(keyboard key ⸨home,end⸩ dn ⍊ -shift) _*]
+  <> {(M): ((reset goal) (goto text ⸨left,right⸩) (collapse selection ⸨left,right⸩))}
+
+;; S-Home and S-End (extend to start or end of text).
+[I M←(keyboard key ⸨home,end⸩ dn ⍊ shift) _*]
+  <> {(M): ((reset goal) (goto text ⸨left,right⸩))}
+
+;; Home and End in multiline (go to start or end of line).
+(I M←(keyboard key ⸨home,end⸩ dn ⍊ -shift) _* ⍊ multiline: true)
+  <> {(M): ((reset goal) (goto (line text) ⸨left,right⸩) (collapse selection ⸨left,right⸩))}
+
+;; S-Home and S-End in multiline (extend to start or end of line).
+(I M←(keyboard key ⸨home,end⸩ dn ⍊ shift) _* ⍊ multiline: true)
+  <> {(M): ((reset goal) (goto (line text) ⸨left,right⸩))}
+
+;; C-Home and C-End in multiline (go to start or end of text).
+(I M←(keyboard key ⸨home,end⸩ dn ⍊ -shift ctrl) _* ⍊ multiline: true)
+  <> {(M): ((reset goal) (goto text ⸨left,right⸩) (collapse selection ⸨left,right⸩))}
+
+;; C-S-Home and C-S-End in multiline (extend to start or end of text).
+(I M←(keyboard key ⸨home,end⸩ dn ⍊ shift ctrl) _* ⍊ multiline: true)
+  <> {(M): ((reset goal) (goto text ⸨left,right⸩))}
+
+;; Backspace and delete (remove rune behind or ahead).
+[(I M←[keyboard key ⸨backspace,delete⸩ dn] _* ⍊ modify: true) ((%pipe span A_) * _string) A_]
+  <> {(M): ((reset goal) (goto rune ⸨left,right⸩) (splice "" ⸨left,right⸩))}
+
+;; C-backspace and C-delete (remove word behind or ahead).
+[(I M←(keyboard key ⸨backspace,delete⸩ dn ⍊ ctrl) _* ⍊ modify: true) ((%pipe span A_) * _string) A_]
+  <> {(M): ((reset goal) (goto word ⸨left,right⸩) (splice "" ⸨left,right⸩))}
+
+;; Tag Up and Dn arrows according to whether they're pressed at the very
+;; top of the text.
+[[I (keyboard key ⸨up,dn⸩ dn ⍊ -top_ -bot_) _*] (l_string * r_string) _]
+  <> {top: ^(not (includes? l "\n")), bot: ^(not (includes? r "\n"))}
+
+;; CURSOR Up and Dn in multiline (go to goal column in line above or below).
+[(I M←(keyboard key ⸨up,dn⸩ dn ⍊ -shift ⸨top,bot⸩: false) _* ⍊ multiline: true) ((%pipe span A_) * _string) A_]
+  <> {(M): ((goto line ⸨up,dn⸩) (collapse selection ⸨left,right⸩))}
+
+;; SELECTION Up and Dn (collapse in that direction).
+[(I M←(keyboard key ⸨up,dn⸩ dn ⍊ -shift ⸨top,bot⸩: false) _* ⍊ multiline: true) (_string * _string) _]
+  <> {(M): ((reset goal) (collapse selection ⸨left,right⸩))}
+
+;; S-Up and S-Dn in multiline (extend to line above or below).
+[(I M←(keyboard key ⸨up,dn⸩ dn ⍊ shift ⸨top,bot⸩: false) _* ⍊ multiline: true) (_string * _string) _]
+  <> {M: (goto line ⸨up,dn⸩)}
+
+;; Up and Dn in multiline at top or bot is the same as Home/End.
+[(I M←(keyboard key ⸨up,dn⸩ dn ⍊ -shift ⸨top,bot⸩: true) _* ⍊ multiline: true) (_string * _string) _]
+  <> {(M): ((reset goal) (goto text ⸨left,right⸩) (collapse selection ⸨left,right⸩))}
+
+;; S-Up and S-Dn in multiline at top or bot is the same as S-Home/End.
+[(I M←(keyboard key ⸨up,dn⸩ dn ⍊ shift ⸨top,bot⸩: true) _* ⍊ multiline: true) (l_string * _string) _]
+  <> {(M): ((reset goal) (goto text ⸨left,right⸩))}
+
+;; C-a to select all.
+[[I M←(keyboard key a dn ⍊ ctrl) _*] (_string * _string) _]
+  <> {(M): ((reset goal) (goto text left) (collapse selection left) (goto text right))}
+
+;; C-c to copy selection, if any.
+[[I M←(keyboard key c dn ⍊ ctrl) _*] (l_string * _string) a_]
+  <> {(M): ((range) (copy) (unrange (^br (< (charcount l) a) left right)))}
+
+;; C-x to cut selection, if any.
+[[I M←(keyboard key x dn ⍊ ctrl) _*] (_string * _string) a_]
+  <> {(M): ((range) (copy) (replace "") (unrange (^br (< (charcount l) a) left right)))}
+
+;; C-v to replace selection with pasted.
+[[I M←(keyboard key v dn ⍊ ctrl) _*] (_string * _string) _]
+  <> {(M): ((range) (paste) (unrange right))}
+
+;; The input in particular interprets `cancel` as collapse selection (if any).
+[[I M←[cancel] _*] (_string * _string) _]
+  <> {M: (collapse selection)}
+
+;;
+;; Utilities
+;;
+
+[[I M←[goto line ⸨up,dn⸩] _*] (_string * _string) _]
+  <> {(M): ((zip line)
+            (update goal)
+            (goto text ⸨left,right⸩)
+            (unzip)
+            (goto rune ⸨left,right⸩)
+            (zip line)
+            (goto text left)
+            (goto goal)
+            (unzip))}
+
+[(I M←[reset goal] _* ⍊ goal_) x_ _]
+  <> {(M): (), (goal): ()}
+
+[(I M←[update goal] _* ⍊ -goal_) ⟪(l_string * _string)⟫ _]
+  <> {(M): (), goal: ^(charcount l)}
+
+[(I M←[goto goal] _* ⍊ goal_: (%number +i32)) ⟪(l←"" * r_string)⟫ _]
+  <> {(M): (),
+      l: ^(runes r 0 '..< goal),
+      r: ^(runes r goal '..= -1)}
+
+[[I M←[collapse selection] _*] (l_string * r_string) A←(%number +i32)]
+  <> {(M): (), A: ^(charcount l)}
+
+[[I M←[collapse selection ⸨left,right⸩] _*] (_string * _string) _]
+  <> {(M): ((range) (unrange ⸨left,right⸩))}
+
+[(I M←[copy] _* ⍊ ⋮clipboard) (_string m←(%string nonempty) _string)]
+  <> {(M): (), clipboard: (text ^m)}
+
+[(I M←[paste] _* ⍊ clipboard: (text text_string)) (_string m_string _string)]
+  <> {(M): (), m: ^text}
+[(I M←[paste] _* ⍊ clipboard: (term (%entry term_ _))) (_string m_string _string)]
+  <> {(M): (), m: ^(term->ml term)}
+
+[I M←[clear input] _*]
+  <> {(M): ((select text right) (splice "" left))}
+
+[I M←[select text ⸨left,right⸩] _*]
+  <> {(M): ((reset goal)
+            (goto text ⸨right,left⸩)
+            (collapse selection ⸨right,left⸩)
+            (goto text ⸨left,right⸩))}
+
+[I [goto arg←(focus_) _] `M' _*]
+  <> {arg: ^focus, M': (unzip)}
+
+[I `M [goto (focus_ _+) _] `M' _*]
+  <> {M: (zip ^focus), (focus): (), M': (unzip)}
+
+[[I M←[goto ⸨rune,word⸩ left] _*] ⟪(l_string * r_string)⟫ _]
+  <> {(M): (), l: ^(⸨rune,word⸩s l 0 ..= -2), r: ^(~ (⸨rune,word⸩ l -1) r)}
+
+[[I M←[goto ⸨rune,word⸩ right] _*] ⟪(l_string * r_string)⟫ _]
+  <> {(M): (), l: ^(~ l (⸨rune,word⸩ r 0)), r: ^(⸨rune,word⸩s r 1 ..= -1)}
+
+[[I M←[goto text left] _*] ⟪(l_string * r_string)⟫ _]
+  <> {(M): (), l: "", r: ^(~ l r)}
+
+[[I M←[goto text right] _*] ⟪(l_string * r_string)⟫ _]
+  <> {(M): (), l: ^(~ l r), r: ""}
+
+[[I M←[zip line] _*] ⟪[l_string m←* r_string]⟫ _]
+  <> {(M): (), l: ^(rline/rest l), m: ^((rline/stem l) * (line/stem r)), r: ^(line/rest r)}
+
+[[I M←[unzip] _*] ⟪[L_string m←[l_string * r_string] R_string]⟫ _]
+  <> {(M): (), L: ^(~ L l), m: *, R: ^(~ r R)}
+
+[[I M←[range] _*] s←(l_string * r_string) anchor←(%number +i32)]
+  <> {s: ^(~ l r), anchor: (^(charcount l) ^anchor)}
+
+[[I M←[range] _*] s_string (i←(%number +i32) `mark j←(%number +i32))]
+  <> {i: ^(min i j), mark: ..<, j: ^(max i j)}
+
+[[I M←[range] _*] s_string rng←(from←(%number +i32) ..< to←(%number +i32))]
+  <> {s: (^(runes s 0 ..< from) ^(runes s from ..< to) ^(runes s to ..= -1)), (rng): ()}
+
+[[I M←[unrange left] _*] (l_string m_string r_string) `anchor]
+  <> {(M): (), m: *, r: ^(~ m r), anchor: ^(charcount l)}
+
+[[I M←[unrange right] _*] (l_string m_string _string) `anchor]
+  <> {(M): (), l: ^(~ l m), m: *, anchor: ^(charcount l m)}
+
+;; NOTE: the flip here is because `unrange` takes the direction where the cursor
+;; should land. So if we insert *left* -- to the left of the cursor -- this means
+;; the cursor is "pushed" right, and therefore should end on the right edge of whatever
+;; was inserted. Symmetrically for the *right* case.
+[I M←[splice text_string ⸨left,right⸩] _*]
+  <> {(M): ((range) (replace ^text) (unrange ⸨right,left⸩))}
+
+[[I M←[replace text_string] _*] (_string m_string _string)]
+  <> {(M): (), m: ^text}
+
+[I M←[edit (term term_) ⸨left,right⸩] _*]
+  <> {(M): ((select text right) (splice ^(term->ml term) ⸨right,left⸩))}
+
+[I M←[select (term term_) ⸨left,right⸩] _*]
+  <> {(M): ((edit (term ^term) right) (select text ⸨left,right⸩))}
+
+;; -------
+;; COMPOSE
+;; -------
+
+;;
+;; Key bindings
+;;
+
+;; Insert enters compose mode.
+(I M←[keyboard key insert dn] _* ⍊ compose: true)
+  <> {M: (enter compose)}
+
+;; Keyboard input appends to the buffer and retries search.
+[[I M←[keyboard input rune_string] _*] compose buffer_string]
+  <> {M: (compose query), buffer: ^(~ buffer rune)}
+
+;; Backspace erases the previous rune in the buffer.
+[[I M←[keyboard key backspace dn] _*] compose buffer_string]
+  <> {(M): (), buffer: ^(runes buffer 0 '..= -2)}
+
+;; Insert in compose-mode is one of the ways to cancel.
+[[I M←[keyboard key insert dn] _*] compose _string]
+  <> {M: (cancel compose)}
+
+;; Hitting Esc produces `cancel`, which the compose mode interprets as
+;; `cancel compose`.
+[[I M←[cancel] _*] compose _string]
+  <> {M: (cancel compose)}
+
+;; Backspace in an empty compose acts as another escape hatch.
+[[I M←[keyboard key backspace dn] _*] compose ""]
+  <> {M: (cancel compose)}
+
+;;
+;; Utilities
+;;
+
+C←[I M←[enter compose] _*]
+  <> {(M): (), C: (^(up C) compose "")}
+
+C←[C'←[I M←[cancel compose] _*] compose _string]
+  <> {(M): (), C: ^C'}
+
+;; Lookup: found.
+[I M←[composite comp_string] _*]
+  <> {(M): ((cancel compose) (splice ^comp left))}
+
+;; Lookup: not found.
+[[I M←[compose query] _*] compose _string]
+  <> {(M): ()}
+
+;; Lookup table.
+;;
+;; You can add your own combos here.
+
+[[I M←[compose query] _*] compose "("] <> {M: (composite "(")}
+[[I M←[compose query] _*] compose ")"] <> {M: (composite ")")}
+[[I M←[compose query] _*] compose "oo"] <> {M: (composite "°")}
+[[I M←[compose query] _*] compose "+-"] <> {M: (composite "±")}
+[[I M←[compose query] _*] compose "^0"] <> {M: (composite "⁰")}
+[[I M←[compose query] _*] compose "^1"] <> {M: (composite "¹")}
+[[I M←[compose query] _*] compose "^2"] <> {M: (composite "²")}
+[[I M←[compose query] _*] compose "^3"] <> {M: (composite "³")}
+[[I M←[compose query] _*] compose "^4"] <> {M: (composite "⁴")}
+[[I M←[compose query] _*] compose "^5"] <> {M: (composite "⁵")}
+[[I M←[compose query] _*] compose "^6"] <> {M: (composite "⁶")}
+[[I M←[compose query] _*] compose "^7"] <> {M: (composite "⁷")}
+[[I M←[compose query] _*] compose "^8"] <> {M: (composite "⁸")}
+[[I M←[compose query] _*] compose "^9"] <> {M: (composite "⁹")}
+[[I M←[compose query] _*] compose "_0"] <> {M: (composite "₀")}
+[[I M←[compose query] _*] compose "_1"] <> {M: (composite "₁")}
+[[I M←[compose query] _*] compose "_2"] <> {M: (composite "₂")}
+[[I M←[compose query] _*] compose "_3"] <> {M: (composite "₃")}
+[[I M←[compose query] _*] compose "_4"] <> {M: (composite "₄")}
+[[I M←[compose query] _*] compose "_5"] <> {M: (composite "₅")}
+[[I M←[compose query] _*] compose "_6"] <> {M: (composite "₆")}
+[[I M←[compose query] _*] compose "_7"] <> {M: (composite "₇")}
+[[I M←[compose query] _*] compose "_8"] <> {M: (composite "₈")}
+[[I M←[compose query] _*] compose "_9"] <> {M: (composite "₉")}
+[[I M←[compose query] _*] compose "^+"] <> {M: (composite "⁺")}
+[[I M←[compose query] _*] compose "^-"] <> {M: (composite "⁻")}
+[[I M←[compose query] _*] compose "_+"] <> {M: (composite "₊")}
+[[I M←[compose query] _*] compose "_-"] <> {M: (composite "₋")}
+[[I M←[compose query] _*] compose "sm"] <> {M: (composite "∈")}
+[[I M←[compose query] _*] compose "/sm"] <> {M: (composite "∉")}
+[[I M←[compose query] _*] compose "s="] <> {M: (composite "⊆")}
+[[I M←[compose query] _*] compose "s<"] <> {M: (composite "⊂")}
+[[I M←[compose query] _*] compose "^["] <> {M: (composite "\⸢")}
+[[I M←[compose query] _*] compose "^]"] <> {M: (composite "⸣")}
+[[I M←[compose query] _*] compose "_["] <> {M: (composite "⸤")}
+[[I M←[compose query] _*] compose "_]"] <> {M: (composite "⸥")}
+[[I M←[compose query] _*] compose "{{"] <> {M: (composite "⟨")}
+[[I M←[compose query] _*] compose "}}"] <> {M: (composite "⟩")}
+[[I M←[compose query] _*] compose "||"] <> {M: (composite "¦")}
+[[I M←[compose query] _*] compose "::"] <> {M: (composite "⋮")}
+[[I M←[compose query] _*] compose "=="] <> {M: (composite "≡")}
+[[I M←[compose query] _*] compose ".."] <> {M: (composite "…")}
+[[I M←[compose query] _*] compose "xx"] <> {M: (composite "×")}
+[[I M←[compose query] _*] compose "<-"] <> {M: (composite "←")}
+[[I M←[compose query] _*] compose "->"] <> {M: (composite "→")}
+[[I M←[compose query] _*] compose "^|"] <> {M: (composite "↑")}
+[[I M←[compose query] _*] compose "|v"] <> {M: (composite "↓")}
+[[I M←[compose query] _*] compose "|["] <> {M: (composite "⎡")}
+[[I M←[compose query] _*] compose "|]"] <> {M: (composite "⎤")}
+[[I M←[compose query] _*] compose "(("] <> {M: (composite "⸨")}
+[[I M←[compose query] _*] compose "))"] <> {M: (composite "⸩")}
+[[I M←[compose query] _*] compose "[["] <> {M: (composite "⟦")}
+[[I M←[compose query] _*] compose "]]"] <> {M: (composite "⟧")}
+[[I M←[compose query] _*] compose "//"] <> {M: (composite "⫽")}
+[[I M←[compose query] _*] compose "**"] <> {M: (composite "⁑")}
+[[I M←[compose query] _*] compose "|_"] <> {M: (composite "⍊")}
+[[I M←[compose query] _*] compose "<>"] <> {M: (composite "◇")}
+[[I M←[compose query] _*] compose "[]"] <> {M: (composite "▢")}
+[[I M←[compose query] _*] compose "*("] <> {M: (composite "⟅")}
+[[I M←[compose query] _*] compose "*)"] <> {M: (composite "⟆")}
+[[I M←[compose query] _*] compose "\"{"] <> {M: (composite "⟪")}
+[[I M←[compose query] _*] compose "\"}"] <> {M: (composite "⟫")}
+[[I M←[compose query] _*] compose "{o"] <> {M: (composite "⟨⊚")}
+[[I M←[compose query] _*] compose "^^"] <> {M: (composite "⏏")}
+
+;; -----------------
+;; STRUCTURAL EDITOR
+;; -----------------
+
+;;
+;; Key bindings
+;;
+
+;; '(' should nest the cursor in a dict.
+[(I M←[keyboard input "("] _* ⍊ structural: true) ("" * "") _]
+  <> {M: (nest)}
+
+;; Whitespace at end-of-text means try to submit, else try another interpretation
+;; of whitespace.
+(%entry _ [(I M←(keyboard input " " ⍊ -◇_) _* ⍊ structural: true) ((%pipe span A←(%not 0)) * "") A_])
+  <> {M: (cond (submit item left) else: ^(up M)), ◇: true}
+
+;; Whitespace with empty cursor means go to next spot.
+⟨[(I M←[keyboard input " "] _* ⍊ structural: true) ("" * "") _]⟩
+  <> {M: (goto spot right enter: false)}
+
+;; ')' should append then try to submit.
+(%entry _ [(I (keyboard input ")" ⍊ -◇_) `M _* ⍊ structural: true) ((%pipe span A←(%not 0)) * "") A_])
+  <> {M: (submit item left), ◇: true}
+
+;; ')' should otherwise escape dict right.
+⟨[(I M←[keyboard input ")"] _* ⍊ structural: true) ("" * "") _]⟩
+  <> {M: (escape dict right)}
+
+;; Up/Down means go before previous/after next item.
+⟨[(I M←[keyboard key ⸨up,dn⸩ dn] _* ⍊ structural: true) ("" * "") _]⟩
+  <> {M: (goto item ⸨left,right⸩)}
+
+;; Up/Down with nonempty opposite side is the same as Home/End.
+(%entry _ [(I M←[keyboard key up dn] _* ⍊ structural: true) ("" * (%string nonempty)) 0])
+  <> {M: (submit item right)}
+(%entry _ [(I M←[keyboard key dn dn] _* ⍊ structural: true) ((%pipe span A←(%not 0)) * "") A_])
+  <> {M: (submit item left)}
+
+;; Up/Down at the beginning or end of dict means escape it in
+;; the appropriate direction.
+[[(I M←[keyboard key up dn] _* ⍊ structural: true) ("" * "") _] _*]
+  <> {M: (escape dict left)}
+[_* [(I M←[keyboard key dn dn] _* ⍊ structural: true) ("" * "") _]]
+  <> {M: (escape dict right)}
+
+;; Up at the beginning of a dict will move you to the end of the dict above.
+⟨_dict [[(I M←[keyboard key up dn] _* ⍊ structural: true) ("" * "") _] _*]⟩
+  <> {(M): ((escape dict left) (enter dict left))}
+
+;; Down at the end of a dict will move you to the beginning of the dict below.
+⟨[_* [(I M←[keyboard key dn dn] _* ⍊ structural: true) ("" * "") _]] _dict⟩
+  <> {(M): ((escape dict right) (enter dict right))}
+
+;; C-backspace or C-delete means remove item in that direction.
+[(I M←(keyboard key ⸨backspace,delete⸩ dn ⍊ ctrl) _* ⍊ structural: true) ("" * "") _]
+  <> {M: (remove item ⸨left,right⸩)}
+
+;; Backspace or delete in an empty dict should remove that dict.
+([(I M←[keyboard key ⸨backspace,delete⸩ dn] _* ⍊ structural: true) ("" * "") _])
+  <> {M: (unnest)}
+
+;; C-S-backspace or C-S-delete anywhere in a dict, means delete that dict.
+[(I M←(keyboard key ⸨backspace,delete⸩ dn ⍊ ctrl shift) _* ⍊ structural: true) ("" * "") _]
+  <> {M: (unnest)}
+
+;; Pressing C-backspace or C-delete at the begin or end of itemsonly
+;; dict will "spill" the itemspart into the parent dict.
+⟨D←([(I M←(keyboard key backspace dn ⍊ ctrl) _* ⍊ structural: true) ("" * "") _] _*)⟩
+  <> {(M): (), (D): ^(up D)}
+⟨D←(_* [(I M←(keyboard key delete dn ⍊ ctrl) _* ⍊ structural: true) ("" * "") _])⟩
+  <> {(M): (), (D): ^(up D)}
+
+;; Home or End means go to dict begin (left) or end (right). There are two cases: one
+;; with an empty input (which submit doesn't like)...
+⟨[(I M←[keyboard key ⸨home,end⸩ dn] _* ⍊ structural: true) ("" * "") _]⟩
+  <> {M: (goto dict ⸨left,right⸩)}
+
+;; ... and then one for a nonempty input opposite of the direction where the cursor
+;; wants to go. They are handed off to submit first, and if submission succeeds,
+;; we proceed.
+⟨[(I M←[keyboard key home dn] _* ⍊ structural: true) ("" * (%string nonempty)) 0]⟩
+  <> {M: (cond (submit item right) then: (goto dict left))}
+⟨[(I M←[keyboard key end dn] _* ⍊ structural: true) ((%pipe span A←(%not 0)) * "") A_]⟩
+  <> {M: (cond (submit item left) then: (goto dict right))}
+
+;; Home or End at begin/end-of-dict means go to begin/end of enclosing dict.
+⟨[[(I M←[keyboard key home dn] _* ⍊ structural: true) ("" * "") _] _*]⟩
+  <> {(M): ((escape dict left) (goto dict left))}
+⟨[_* [(I M←[keyboard key end dn] _* ⍊ structural: true) ("" * "") _]]⟩
+  <> {(M): ((escape dict right) (goto dict right))}
+
+;; S-Home or S-End surrounds the parent in a new dict and puts the cursor at
+;; its begin or end.
+⟨[(I M←(keyboard key ⸨home,end⸩ dn ⍊ shift) _* ⍊ structural: true) ("" * "") _]⟩
+  <> {M: (nest parent ⸨left,right⸩)}
+
+;; Enter means escape right.
+⟨[(I M←[keyboard key enter dn] _* ⍊ structural: true) ("" * "") _]⟩
+  <> {M: (escape dict right)}
+
+;; S-enter means escape left.
+⟨[(I M←(keyboard key enter dn ⍊ shift) _* ⍊ structural: true) ("" * "") _]⟩
+  <> {M: (escape dict left)}
+
+;; C-enter at cursor triggers submission left irrespective of cursor position.
+(%entry _ [(I M←(keyboard key enter dn ⍊ ctrl) _* ⍊ structural: true) (_string * _string) _])
+  <> {(M): ((collapse selection) (submit item left))}
+
+;; Left at begin-of-text means try to submit right (i.e., the cursor should
+;; land right).
+(%entry _ [(I M←[keyboard key left dn] _* ⍊ structural: true) ("" * (%string nonempty)) 0])
+  <> {M: (submit item right)}
+;; Right at end-of-text means try to submit left (i.e., the cursor should
+;; land left).
+(%entry _ [(I M←[keyboard key right dn] _* ⍊ structural: true) ((%pipe span A←(%not 0)) * "") A_])
+  <> {M: (submit item left)}
+
+;; C-left or C-right mean force edit in that direction.
+⟨_ [(I M←(keyboard key left dn ⍊ ctrl) _* ⍊ structural: true) ("" * "") _]⟩
+  <> {M: (edit item left)}
+⟨[(I M←(keyboard key right dn ⍊ ctrl) _* ⍊ structural: true) ("" * "") _] _⟩
+  <> {M: (edit item right)}
+
+;; S-left/up or S-right/dn means capture the item before. These look a bit like
+;; selections, so we use S-*, although somewhat inconsistently.
+⟨_ [(I M←(keyboard key ⸨left,up⸩ dn ⍊ shift) _* ⍊ structural: true) ("" * "") _]⟩
+  <> {(M): ((nest) (capture item left))}
+⟨[(I M←(keyboard key ⸨right,dn⸩ dn ⍊ shift) _* ⍊ structural: true) ("" * "") _] _⟩
+  <> {(M): ((nest) (capture item right))}
+
+;; S-left/up or S-right/dn at the begin/end of dict means "extend" the selection in
+;; the appropriate direction.
+⟨_ [[(I M←(keyboard key ⸨left,up⸩ dn ⍊ shift) _* ⍊ structural: true) ("" * "") _] _*]⟩
+  <> {M: (capture item left)}
+⟨[_* [(I M←(keyboard key ⸨right,dn⸩ dn ⍊ shift) _* ⍊ structural: true) ("" * "") _]] _⟩
+  <> {M: (capture item right)}
+
+;; S-left or S-right in the opposite direction at dict start means expel the item
+;; back out from the dict.
+[_* _ [(I M←(keyboard key left dn ⍊ shift) _* ⍊ structural: true) ("" * "") _]]
+  <> {M: (release item right)}
+
+[[(I M←(keyboard key right dn ⍊ shift) _* ⍊ structural: true) ("" * "") _] _ _*]
+  <> {M: (release item left)}
+
+;; C-S-left or C-S-right means force edit in that direction, select whole.
+⟨_ [(I M←(keyboard key left dn ⍊ ctrl shift) _* ⍊ structural: true) ("" * "") _]⟩
+  <> {(M): ((edit item left) (select text left))}
+⟨[(I M←(keyboard key right dn ⍊ ctrl shift) _* ⍊ structural: true) ("" * "") _] _⟩
+  <> {(M): ((edit item right) (select text right))}
+
+;; Left, right, backspace, delete means inspect in that direction.
+[(I M←[keyboard key ⸨left,right,backspace,delete⸩ dn] _* ⍊ structural: true) ("" * "") _]
+  <> {M: (inspect item ⸨left,right,left,right⸩)}
+
+;; C-a means edit the enclosing dict as text.
+⟨[(I M←(keyboard key a dn ⍊ ctrl) _* ⍊ structural: true) ("" * "") _]⟩
+  <> {M: (edit dict)}
+
+;; Typing `:` at the end will try to submit and edit pair with that key
+;; if submit succeeds.
+⟨[(I M←(keyboard input ":" ⍊ -◇_) _* ⍊ structural: true) ((%pipe span A←(%not 0)) * "") A_]⟩
+  <> {M: (cond (submit item left) then: (edit pair left) else: ^(up M)), ◇: true}
+
+;; Home/End in no-value pair move to the begin or end of the dict's itemspart,
+;; erasing the pair.
+(_* ¦ (%entry _ [[I M←[keyboard key home dn] _*] ("" * "") _]))
+  <> {M: (erase pair left)}
+
+;; Any of these keys work like `End`.
+(_* ¦ (%entry _ [[I M←[keyboard key ⸨left,backspace,delete,end⸩ dn] _*] ("" * "") _]))
+  <> {M: (erase pair right)}
+
+;; Right moves the input out of the dict since "right" is visually there, so
+;; the user likely wants to go there by hitting Right.
+(_* ¦ (%entry _ [[I M←[keyboard key right dn] _*] ("" * "") _]))
+  <> {(M): ((erase pair right) (escape dict right))}
+
+;; Alt means carry parent in cursor.
+⟨⟨[(I M←(keyboard key _symbol dn ⍊ alt_: true) _* ⍊ structural: true) ("" * "") _]⟩⟩
+  <> {M: (carry ^(up M)), (alt): ()}
+
+;;
+;; Commands
+;;
+
+;; `,d` duplicates the term before the input.
+⟨_ [(I M←[keyboard input "d"] _* ⍊ structural: true) ("," * "") 1]⟩
+  <> {(M): ((clear input) (dup item left))}
+
+;; `,D` duplicates the term after the input.
+⟨_ [(I M←[keyboard input "D"] _* ⍊ structural: true) ("," * "") 1]⟩
+  <> {(M): ((clear input) (dup item right))}
+
+;; `,s` swaps items before and after the input.
+⟨_ _ [(I M←[keyboard input "s"] _* ⍊ structural: true) ("," * "") 1]⟩
+  <> {(M): ((clear input) (swap item around))}
+
+;; `,x` cuts an item before the input.
+⟨_ [(I M←[keyboard input "x"] _* ⍊ structural: true) ("," * "") 1]⟩
+  <> {(M): ((clear input) (cut item left))}
+
+;; `,X` cuts an item after the input.
+⟨[(I M←[keyboard input "X"] _* ⍊ structural: true) ("," * "") 1] _⟩
+  <> {(M): ((clear input) (cut item right))}
+
+;; `,y` copies an item before the input.
+⟨_ [(I M←[keyboard input "y"] _* ⍊ structural: true) ("," * "") 1]⟩
+  <> {(M): ((clear input) (copy item left))}
+
+;; `,Y` copies an item before the input.
+⟨[(I M←[keyboard input "Y"] _* ⍊ structural: true) ("," * "") 1] _⟩
+  <> {(M): ((clear input) (copy item right))}
+
+;; `,p` pastes before the input.
+⟨[(I M←[keyboard input "p"] _* ⍊ structural: true) ("," * "") 1]⟩
+  <> {(M): ((clear input) (paste item left))}
+
+;; `,P` pastes after the input.
+⟨[(I M←[keyboard input "P"] _* ⍊ structural: true) ("," * "") 1]⟩
+  <> {(M): ((clear input) (paste item right))}
+
+;;
+;; Utilities
+;;
+
+⟨item_ C←[[I M←[goto item left] _*] _*]⟩
+  <> {(M): (), C: ^item, item: ^(up C)}
+
+⟨C←[[I M←[goto item right] _*] _*] item_⟩
+  <> {(M): (), C: ^item, item: ^(up C)}
+
+[`>C _* C←[[I M←[goto dict left] _*] _*] _*]
+  <> {(M): (), >C: ^(up C), (C): ()}
+
+[_* C←[[I M←[goto dict right] _*] _*] _* `>C]
+  <> {(M): (), >C: ^(up C), (C): ()}
+
+⟨_dict [[I M←(goto spot left ⍊ enter: (%- false)) _*] _*]⟩
+  <> {M: (enter dict left)}
+
+(%entry _ [[[I M←[goto spot left] _*] _*] _*])
+  <> {M: (escape dict left)}
+
+[I M←[goto spot left] _*]
+  <> {M: (goto item left)}
+
+⟨[[I M←(goto spot right ⍊ enter: (%- false)) _*] _*] _dict⟩
+  <> {M: (enter dict right)}
+
+(%entry _ [_* [[I M←[goto spot right] _*] _*]])
+  <> {M: (escape dict right)}
+
+[I M←[goto spot right] _*]
+  <> {M: (goto item right)}
+
+;; When we *inspect* an item, primitive items such as number terms are edited...
+⟨(%any° _symbol _string _number _boolean (edge _)) [(I M←[inspect item left] _* ⍊ -sack) _*]⟩
+  <> {M: (edit item left)}
+
+⟨[(I M←[inspect item right] _* ⍊ -sack) _*] (%any° _symbol _string _number _boolean (edge _))⟩
+  <> {M: (edit item right)}
+
+;; ...whereas for anything else, it's goto spot, meaning we'll enter dictionaries
+;; from the appropriate side and skip (like Up) anything else (although there isn't
+;; much of anything else).
+[I M←[inspect item ⸨left,right⸩] _*]
+  <> {M: (goto spot ⸨left,right⸩)}
+
+⟨item_ C←[[I M←[remove item left] _*] _*]⟩
+  <> {(M): (), (item): ()}
+
+⟨C←[[I M←[remove item right] _*] _*] item_⟩
+  <> {(M): (), (item): ()}
+
+C←[[I M←[nest] _*] _ _]
+  <> {(M): (), C: (^(up C))}
+
+P←⟨C←[[I M←[nest parent ⸨left,right⸩] _*] _*]⟩
+  <> {(M): (), (C): ($tr C' ()), P: (^(up ⸨C',P⸩) ^(up ⸨P,C'⸩))}
+
+D←⟨C←[[I M←[unnest] _*] _*]⟩
+  <> {(M): (), D: ^(up C)}
+
+⟨D←⟨C←[[I M←[escape dict ⸨left,right⸩] _*] _*]⟩⟩
+  <> {(M): (), (D): (^(up ⸨C',D⸩) ^(up ⸨D,C'⸩)), (C): ($tr C' ())}
+
+⟨item_ [(I M←[edit item left] _* ⍊ -sack) (_string * _string) _]⟩
+  <> {M: (edit (term ^item) right), (item): ()}
+⟨[(I M←[edit item right] _* ⍊ -sack) (_string * _string) _] item_⟩
+  <> {M: (edit (term ^item) left), (item): ()}
+
+⟨K←K0_ C←[[I M←[edit pair left] _*] _*] ¦ (%value K [`>C _*])⟩
+  <> {(M): (), (K0): (), (C): (), >C: ^(up C)}
+
+⟨K←K0_ C←[[I M←[edit pair left] _*] (_string * _string) _] ¦ (%value K V←(%any° _symbol _string _number _boolean (edge _)))⟩
+  <> {M: (select (term ^V) right), (K0): (), (C): (), V: ^(up C)}
+
+⟨K_ C←[[I M←[edit pair left] _*] (_string * _string) _] ¦ (%-value K V)⟩
+  <> {(M): (), (K): (), (C): (), V: ^(up C)}
+
+⟨[_* `>C] C←[[I M←[enter dict left] _*] _*]⟩
+  <> {(M): (), >C: ^(up C), (C): ()}
+
+⟨C←[[I M←[enter dict right] _*] _*] [`>C _*]⟩
+  <> {(M): (), >C: ^(up C), (C): ()}
+
+[[I M←[submit item ⸨left,right⸩] _*] (l_string * r_string) _]
+  <> {M: (submit (ml ^(~ l r)) ⸨left,right⸩)}
+
+[I [submit result←(ml ml_string) _] _*]
+  <> {result: ^(ml->term ml)}
+
+[[I M←[submit (ml/ok term_) ⸨left,right⸩] _*] (l_string * r_string) _]
+  <> {(M): ((clear input) (submit (term ^term) ⸨left,right⸩) ok)}
+
+[I M←[submit (ml/err) _] _*]
+  <> {M: err}
+
+C←[[I M←[submit (term T_) left] _*] _ _]
+  <> {(M): (), (C): (^T ^(up C))}
+
+C←[[I M←[submit (term T_) right] _*] _ _]
+  <> {(M): (), (C): (^(up C) ^(up T))}
+
+;; Both submit left and submit right in a pair go to the itemspart
+;; end afterwards.
+(_* `C' ¦ (%entry _ C←[[I M←[submit (term T_) ⸨left,right⸩] _*] (_string * _string) _]))
+  <> {(M): (), C: ^T, C': ^(up C)}
+
+D←⟨C←[[I [edit dict] _*] (l_string * r_string) _]⟩
+  <> {(C): (), D: ^(merge C ({1: ('select ('term (up D)) 'right)}))}
+
+(`C' _* ¦ (%entry _ C←[[I M←[erase pair left] _*] _*]))
+  <> {(M): (), C': ^(up C), (C): ()}
+(_* `C' ¦ (%entry _ C←[[I M←[erase pair right] _*] _*]))
+  <> {(M): (), C': ^(up C), (C): ()}
+
+(_* `C' ¦ (%entry _ ⟨C←[[I M←[escape dict ⸨left,right⸩] _*] _*]⟩))
+  <> {(M): (), C': ^(up C0), (C): ($tr C0 ())}
+
+⟨item_ [[[I M←[capture item left] _*] _*] `>item _*]⟩
+  <> {(M): (), (item): (), >item: ^item}
+
+⟨[_* `>item [[I M←[capture item right] _*] _*]] item_⟩
+  <> {(M): (), (item): (), >item: ^item}
+
+⟨D←[[[I M←[release item left] _*] _*] item_ _*]⟩
+  <> {(M): (), (D): (^(up item') ^(up D)), (item): ($tr item' ())}
+
+⟨D←[_* item_ [[I M←[release item right] _*] _*]]⟩
+  <> {(M): (), (D): (^(up D) ^(up item')), (item): ($tr item' ())}
+
+⟨item_ [[I M←[dup item left] _*] _*]⟩
+  <> {(M): (), (item): (^item ^item)}
+
+⟨[[I M←[dup item right] _*] _*] item_⟩
+  <> {(M): (), (item): (^item ^item)}
+
+⟨item0_ [[I M←[swap item around] _*] _*] item1_⟩
+  <> {(M): (), item0: ^item1, item1: ^item0}
+
+⟨item_ [(I M←[cut item left] _* ⍊ ⋮clipboard) _*]⟩
+  <> {(M): (), clipboard: (term ^(entry item true)), (item): ()}
+⟨[(I M←[cut item right] _* ⍊ ⋮clipboard) _*] item_⟩
+  <> {(M): (), clipboard: (term ^(entry item true)), (item): ()}
+
+⟨item_ [(I M←[copy item left] _* ⍊ ⋮clipboard) _*]⟩
+  <> {(M): (), clipboard: (term ^(entry item true))}
+⟨[(I M←[copy item right] _* ⍊ ⋮clipboard) _*] item_⟩
+  <> {(M): (), clipboard: (term ^(entry item true))}
+
+;; Paste term stored in the input's clipboard.
+⟨C←[(I M←[paste item left] _* ⍊ clipboard: (term (%entry term_ _))) _*]⟩
+  <> {(M): (), (C): (^term ^(up C))}
+⟨C←[(I M←[paste item right] _* ⍊ clipboard: (term (%entry term_ _))) _*]⟩
+  <> {(M): (), (C): (^(up C) ^term)}
+
+⟨[(I M←[clear clipboard] _* ⍊ clipboard_) _*]⟩
+  <> {(M): (), (clipboard): ()}
+
+;; If the input's clipboard contains text, then we try to parse it as ML. This
+;; happens if the user copy-pastes something from the system clipboard, which
+;; obviously arrives to us as text; or if they paste from the text input itself
+;; rather than `,x` or `,y`.
+[(I M←[paste item ⸨left,right⸩] _* ⍊ clipboard: (text text_string)) _*]
+  <> {M: (paste ^(ml->term text) ⸨left,right⸩)}
+
+;; Paste if parsed as ML successfully.
+⟨C←[[I M←[paste (ml/ok term_) left] _*] _*]⟩
+  <> {(M): (), (C): (^term ^(up C))}
+⟨C←[[I M←[paste (ml/ok term_) right] _*] _*]⟩
+  <> {(M): (), (C): (^(up C) ^term)}
+
+;; NOTE: the only place where the rewriter cannot go is keys. We use it as
+;; a save haven for the input while it's being carried around by its own spawn.
+D←⟨C←[(I M←(carry m_ ⍊ -◇_) _* ⍊ -sack_) _*]⟩
+  <> {(M): (^m (place)), D: ^(up C), sack: ^(entry (up D) true), ◇: true}
+
+C←[(I M←[place] _* ⍊ sack: (%entry D_ _)) _*]
+  <> {(M): (), C: ^D, (D): ()}

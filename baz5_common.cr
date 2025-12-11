@@ -339,7 +339,7 @@ module Rule
   record BackmapMany, pattern : Term, toplevel : Term, backspec : Term
 end
 
-struct Ruleset
+class Ruleset
   # :nodoc:
   def initialize(@pset : PatternSet(Term), @rules : Slice(Rule::Any))
   end

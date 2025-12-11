@@ -930,6 +930,85 @@ def rulesetR(ruleset, ruler, backmapr, elser, *, envopt : Term? = nil) : Rewrite
   end
 end
 
+def alloy_ruleR(term, pr : Pr::One, rule : Rule::Template)
+  Rewrite.one(Alloy.render(pr.env, rule.body)).diff(term)
+end
+
+def alloy_ruleR(term, pr : Pr::Many, rule : Rule::Template)
+  list = Term::Dict.build do |commit|
+    pr.envs.each do |env|
+      commit << Alloy.render(env, rule.body)
+    end
+  end
+
+  Rewrite.many(list)
+end
+
+def alloy_ruleR(term, pr : Pr::Pos, rule : Rule::BackmapOne)
+  unless pr.envs.all? &.includes?(:"(backpaths)")
+    pr = pr.pattern.response(term, backpaths: true).as(Pr::Pos)
+  end
+
+  M1.backmapr(pr.envs, rule.backspec, term, applier: Alloy::Applier.new).diff(term)
+end
+
+def alloy_ruleR(term, pr : Pr::Pos, rule : Rule::BackmapMany)
+  unless pr.envs.all? &.includes?(:"(backpaths)")
+    pr = pr.pattern.response(term, backpaths: true).as(Pr::Pos)
+  end
+
+  case pr
+  in Pr::One
+    rewrite = M1.backmapr(pr.envs, rule.backspec, term, applier: Alloy::Applier.new)
+
+    plural = rule.backspec.includes?({rule.toplevel})
+
+    case rewrite
+    in Rewrite::One
+      if plural && (list = rewrite.term.as_itemsonly_d?)
+        rewrite = Rewrite.many(list)
+      end
+    in Rewrite::Many
+      unless plural
+        rewrite = Rewrite.one(rewrite.list)
+      end
+    end
+  in Pr::Many
+    list = Term::Dict.build do |commit|
+      pr.ones do |one|
+        commit << M1.backmapr(one.envs, rule.backspec, term, applier: Alloy::Applier.new)
+      end
+    end
+
+    rewrite = Rewrite.many(list)
+  end
+
+  rewrite.diff(term)
+end
+
+def alloy_rulesetR(ctx, term, ruleset)
+  cursor = ruleset.responses(term)
+  cursor.each do |pr, rule|
+    rewrite = alloy_ruleR(term, pr, rule)
+
+    case rewrite
+    in Rewrite::Some
+      return rewrite
+    in Rewrite::None
+    end
+  end
+
+  Rewrite.none
+end
+
+def alloy_rulesetR(ruleset) : Rewriter
+  Rewriter.new do |ctx, staging|
+    staging.reduce do |term|
+      alloy_rulesetR(ctx, term, ruleset)
+    end
+  end
+end
+
 def metaR(ctx, term term0 : Term, primaryr, metar, successor)
   progress = Rewrite.one(term0)
 

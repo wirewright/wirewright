@@ -27,6 +27,10 @@ module Ww
       Tpath.new(Slice(Step).empty)
     end
 
+    def self.[](other : Tpath) : Tpath
+      other
+    end
+
     def self.[](keypath : Indexable(Term)) : Tpath
       new(keypath.to_readonly_slice { |key| value(key).as(Step) })
     end

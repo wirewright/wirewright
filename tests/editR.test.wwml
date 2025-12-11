@@ -1,0 +1,4684 @@
+
+(edit
+ ((I modify: true) ("lorem ipsum\ndolorem " * "replaced it!") 20)
+ ((keyboard input "hello"))
+ ((I modify: true) ("lorem ipsum\ndolorem hello" * "replaced it!") 25))
+
+(edit
+ ((I modify: true multiline: true)
+  ("lorem ipsum\ndolorem hello" * "replaced it!")
+  25)
+ ((keyboard key enter dn))
+ ((I modify: true multiline: true)
+  ("lorem ipsum\ndolorem hello\n" * "replaced it!")
+  26))
+
+(edit
+ ((I modify: true multiline: true)
+  ("lorem ipsum\ndolorem hello\n" * "replaced it!")
+  26)
+ ((keyboard key backspace dn))
+ ((I modify: true multiline: true)
+  ("lorem ipsum\ndolorem hello" * "replaced it!")
+  25))
+
+(edit
+ ((I modify: true multiline: true)
+  ("lorem ipsum\ndolorem hello" * "replaced it!")
+  25)
+ ((keyboard key backspace dn)
+  (keyboard key backspace dn)
+  (keyboard key delete dn)
+  (keyboard key delete dn))
+ ((I modify: true multiline: true)
+  ("lorem ipsum\ndolorem hel" * "placed it!")
+  23))
+
+(edit
+ ((I modify: true multiline: true)
+  ("lorem ipsum\ndolorem hel" * "placed it!")
+  23)
+ ((keyboard key right dn) (keyboard key delete dn ctrl: true))
+ ((I modify: true multiline: true) ("lorem ipsum\ndolorem help" * " it!") 24))
+
+(edit
+ ((I modify: true multiline: true) ("lorem ipsum\ndolorem help" * " it!") 24)
+ ((keyboard key backspace dn ctrl: true) (keyboard key backspace dn))
+ ((I modify: true multiline: true) ("lorem ipsum\ndolorem" * " it!") 19))
+
+(edit
+ ((I modify: true multiline: true) ("lorem ipsum\ndolorem" * " it!") 19)
+ ((keyboard key left dn ctrl: true))
+ ((I modify: true multiline: true) ("lorem ipsum\n" * "dolorem it!") 12))
+
+(edit
+ ((I modify: true multiline: true) ("lorem ipsum\n" * "dolorem it!") 12)
+ ((keyboard key left dn ctrl: true) (keyboard key left dn ctrl: true))
+ ((I modify: true multiline: true) ("" * "lorem ipsum\ndolorem it!") 0))
+
+(edit
+ ((I modify: true multiline: true) ("" * "lorem ipsum\ndolorem it!") 0)
+ ((keyboard key right dn ctrl: true))
+ ((I modify: true multiline: true) ("lorem" * " ipsum\ndolorem it!") 5))
+
+(edit
+ ((I modify: true multiline: true) ("lorem" * " ipsum\ndolorem it!") 5)
+ ((keyboard key right dn ctrl: true))
+ ((I modify: true multiline: true) ("lorem ipsum" * "\ndolorem it!") 11))
+
+(edit
+ ((I modify: true multiline: true) ("lorem ipsum" * "\ndolorem it!") 11)
+ ((keyboard key right dn ctrl: true))
+ ((I modify: true multiline: true) ("lorem ipsum\ndolorem" * " it!") 19))
+
+(edit
+ ((I modify: true multiline: true) ("lorem ipsum\ndolorem" * " it!") 19)
+ ((keyboard key right dn ctrl: true))
+ ((I modify: true multiline: true) ("lorem ipsum\ndolorem it!" * "") 23))
+
+(edit
+ ((I modify: true multiline: true) ("lorem ipsum\ndolorem it!" * "") 23)
+ ((keyboard key right dn ctrl: true))
+ ((I modify: true multiline: true) ("lorem ipsum\ndolorem it!" * "") 23))
+
+(edit
+ ((I modify: true multiline: true) ("lorem ipsum\ndolorem it!" * "") 23)
+ ((keyboard key left dn shift: true)
+  (keyboard key left dn shift: true)
+  (keyboard key left dn shift: true)
+  (keyboard key left dn shift: true))
+ ((I modify: true multiline: true) ("lorem ipsum\ndolorem" * " it!") 23))
+
+(edit
+ ((I modify: true multiline: true) ("lorem ipsum\ndolorem" * " it!") 23)
+ ((keyboard key left dn ctrl: true shift: true))
+ ((I modify: true multiline: true) ("lorem ipsum\n" * "dolorem it!") 23))
+
+(edit
+ ((I modify: true multiline: true) ("lorem ipsum\n" * "dolorem it!") 23)
+ ((keyboard key left dn ctrl: true shift: true))
+ ((I modify: true multiline: true) ("lorem " * "ipsum\ndolorem it!") 23))
+
+(edit
+ ((I modify: true multiline: true) ("lorem " * "ipsum\ndolorem it!") 23)
+ ((keyboard key home dn ctrl: true))
+ ((I modify: true multiline: true) ("" * "lorem ipsum\ndolorem it!") 0))
+
+(edit
+ ((I modify: true multiline: true) ("" * "lorem ipsum\ndolorem it!") 0)
+ ((keyboard key right dn ctrl: true)
+  (keyboard key right dn ctrl: true)
+  (keyboard key right dn ctrl: true)
+  (keyboard key left dn ctrl: true shift: true)
+  (keyboard input "dolor")
+  (keyboard key right dn)
+  (keyboard input "s"))
+ ((I modify: true multiline: true) ("lorem ipsum\ndolor s" * "it!") 19))
+
+(edit
+ ((I modify: true multiline: true) ("lorem ipsum\ndolor s" * "it!") 19)
+ ((keyboard key home dn))
+ ((I modify: true multiline: true) ("lorem ipsum\n" * "dolor sit!") 12))
+
+(edit
+ ((I modify: true multiline: true) ("lorem ipsum\n" * "dolor sit!") 12)
+ ((keyboard key home dn))
+ ((I modify: true multiline: true) ("lorem ipsum\n" * "dolor sit!") 12))
+
+(edit
+ ((I modify: true multiline: true) ("lorem ipsum\n" * "dolor sit!") 12)
+ ((keyboard key left dn)
+  (keyboard key home dn)
+  (keyboard key end dn)
+  (keyboard key end dn))
+ ((I modify: true multiline: true) ("lorem ipsum" * "\ndolor sit!") 11))
+
+(edit
+ ((I modify: true multiline: true) ("lorem ipsum" * "\ndolor sit!") 11)
+ ((keyboard key home dn ctrl: true shift: true)
+  (keyboard key left dn)
+  (keyboard key end dn ctrl: true shift: true)
+  (keyboard key right dn)
+  (keyboard key left dn)
+  (keyboard input " amet"))
+ ((I modify: true multiline: true) ("lorem ipsum\ndolor sit amet" * "!") 26))
+
+(edit
+ ((I modify: true multiline: true) ("lorem ipsum\ndolor sit amet" * "!") 26)
+ ((keyboard key left dn ctrl: true)
+  (keyboard key left dn ctrl: true)
+  (keyboard key home dn shift: true))
+ ((I modify: true multiline: true) ("lorem ipsum\n" * "dolor sit amet!") 18))
+
+(edit
+ ((I modify: true multiline: true) ("lorem ipsum\n" * "dolor sit amet!") 18)
+ ((keyboard key end dn shift: tru))
+ ((I modify: true multiline: true) ("lorem ipsum\ndolor sit amet!" * "") 18))
+
+(edit
+ ((I modify: true multiline: true) ("lorem ipsum\ndolor sit amet!" * "") 18)
+ ((keyboard key home dn) (keyboard key up dn))
+ ((I goal: 0 modify: true multiline: true)
+  ("" * "lorem ipsum\ndolor sit amet!")
+  0))
+
+(edit
+ ((I goal: 0 modify: true multiline: true)
+  ("" * "lorem ipsum\ndolor sit amet!")
+  0)
+ ((keyboard key dn dn))
+ ((I goal: 0 modify: true multiline: true)
+  ("lorem ipsum\n" * "dolor sit amet!")
+  12))
+
+(edit
+ ((I goal: 0 modify: true multiline: true)
+  ("lorem ipsum\n" * "dolor sit amet!")
+  12)
+ ((keyboard key right dn ctrl: true) (keyboard key up dn))
+ ((I goal: 5 modify: true multiline: true)
+  ("lorem" * " ipsum\ndolor sit amet!")
+  5))
+
+(edit
+ ((I goal: 5 modify: true multiline: true)
+  ("lorem" * " ipsum\ndolor sit amet!")
+  5)
+ ((keyboard key dn dn))
+ ((I goal: 5 modify: true multiline: true)
+  ("lorem ipsum\ndolor" * " sit amet!")
+  17))
+
+(edit
+ ((I goal: 5 modify: true multiline: true)
+  ("lorem ipsum\ndolor" * " sit amet!")
+  17)
+ ((keyboard key right dn ctrl: true))
+ ((I modify: true multiline: true) ("lorem ipsum\ndolor sit" * " amet!") 21))
+
+(edit
+ ((I modify: true multiline: true) ("lorem ipsum\ndolor sit" * " amet!") 21)
+ ((keyboard key up dn))
+ ((I goal: 9 modify: true multiline: true)
+  ("lorem ips" * "um\ndolor sit amet!")
+  9))
+
+(edit
+ ((I goal: 9 modify: true multiline: true)
+  ("lorem ips" * "um\ndolor sit amet!")
+  9)
+ ((keyboard key dn dn shift: true))
+ ((I goal: 9 modify: true multiline: true)
+  ("lorem ipsum\ndolor sit" * " amet!")
+  9))
+
+(edit
+ ((I goal: 9 modify: true multiline: true)
+  ("lorem ipsum\ndolor sit" * " amet!")
+  9)
+ ((keyboard key up dn shift: true))
+ ((I goal: 9 modify: true multiline: true)
+  ("lorem ips" * "um\ndolor sit amet!")
+  9))
+
+(edit
+ ((I goal: 9 modify: true multiline: true)
+  ("lorem ips" * "um\ndolor sit amet!")
+  9)
+ ((keyboard key home dn shift: true)
+  (keyboard key right dn shift: true)
+  (keyboard key right dn shift: tru)
+  (keyboard key dn dn shift: true))
+ ((I goal: 2 modify: true multiline: true)
+  ("lorem ipsum\ndo" * "lor sit amet!")
+  9))
+
+(edit
+ ((I goal: 2 modify: true multiline: true)
+  ("lorem ipsum\ndo" * "lor sit amet!")
+  9)
+ ((keyboard key up dn) (keyboard key up dn))
+ ((I modify: true multiline: true) ("" * "lorem ipsum\ndolor sit amet!") 0))
+
+(edit
+ ((I modify: true multiline: true) ("" * "lorem ipsum\ndolor sit amet!") 0)
+ ((keyboard key dn dn)
+  (keyboard key dn dn shift: true)
+  (keyboard key right dn)
+  (keyboard key left dn)
+  (keyboard input ", consectetur")
+  (keyboard key up dn)
+  (keyboard key dn dn))
+ ((I goal: 27 modify: true multiline: true)
+  ("lorem ipsum\ndolor sit amet, consectetur" * "!")
+  39))
+
+(edit
+ ((I goal: 27 modify: true multiline: true)
+  ("lorem ipsum\ndolor sit amet, consectetur" * "!")
+  39)
+ ((keyboard key home dn shift: true) (keyboard key escape dn))
+ ((I modify: true multiline: true)
+  ("lorem ipsum\n" * "dolor sit amet, consectetur!")
+  12))
+
+(edit
+ ((I modify: true multiline: true)
+  ("lorem ipsum\n" * "dolor sit amet, consectetur!")
+  12)
+ ((keyboard key up dn)
+  (keyboard key dn dn shift: true)
+  (keyboard key escape dn))
+ ((I goal: 0 modify: true multiline: true)
+  ("lorem ipsum\n" * "dolor sit amet, consectetur!")
+  12))
+
+(edit
+ ((I goal: 0 modify: true multiline: true)
+  ("lorem ipsum\n" * "dolor sit amet, consectetur!")
+  12)
+ ((keyboard key a dn ctrl: true))
+ ((I modify: true multiline: true)
+  ("lorem ipsum\ndolor sit amet, consectetur!" * "")
+  0))
+
+(edit
+ ((I modify: true multiline: true)
+  ("lorem ipsum\ndolor sit amet, consectetur!" * "")
+  0)
+ ((keyboard key right dn))
+ ((I modify: true multiline: true)
+  ("lorem ipsum\ndolor sit amet, consectetur!" * "")
+  40))
+
+(edit
+ ((I modify: true multiline: true)
+  ("lorem ipsum\ndolor sit amet, consectetur!" * "")
+  40)
+ ((keyboard key a dn ctrl: true) (keyboard key left dn))
+ ((I modify: true multiline: true)
+  ("" * "lorem ipsum\ndolor sit amet, consectetur!")
+  0))
+
+(edit
+ ((I compose: true modify: true multiline: true) ("" * "") 0)
+ ((keyboard key insert dn) (keyboard input "hello"))
+ (((I compose: true modify: true multiline: true) compose "hello") ("" * "") 0))
+
+(edit
+ (((I compose: true modify: true multiline: true) compose "hello") ("" * "") 0)
+ ((keyboard key insert dn))
+ ((I compose: true modify: true multiline: true) ("" * "") 0))
+
+(edit
+ ((I compose: true modify: true multiline: true) ("" * "") 0)
+ ((keyboard key insert dn) (keyboard key backspace dn))
+ ((I compose: true modify: true multiline: true) ("" * "") 0))
+
+(edit
+ ((I compose: true modify: true multiline: true) ("" * "") 0)
+ ((keyboard key insert dn)
+  (keyboard input "hello")
+  (keyboard key backspace dn)
+  (keyboard key backspace dn)
+  (keyboard key backspace dn))
+ (((I compose: true modify: true multiline: true) compose "he") ("" * "") 0))
+
+(edit
+ (((I compose: true modify: true multiline: true) compose "he") ("" * "") 0)
+ ((keyboard key backspace dn)
+  (keyboard key backspace dn)
+  (keyboard input r)
+  (keyboard input "o")
+  (keyboard input "o"))
+ ((I compose: true modify: true multiline: true) ("°" * "") 1))
+
+(edit
+ ((I compose: true modify: true multiline: true) ("°" * "") 1)
+ ((keyboard key backspace dn)
+  (keyboard input "Lorem ispum\ndolors it amet")
+  (keyboard key left dn ctrl: true shift: true)
+  (keyboard key left dn ctrl: true shift: true)
+  (keyboard key insert dn)
+  (keyboard input "{")
+  (keyboard input "o"))
+ ((I compose: true modify: true multiline: true)
+  ("Lorem ispum\ndolors ⟨⊚" * "")
+  21))
+
+(edit
+ ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+ ((keyboard input "("))
+ (((I compose: true modify: true multiline: true structural: true)
+   ("" * "")
+   0)))
+
+(edit
+ (((I compose: true modify: true multiline: true structural: true) ("" * "") 0))
+ ((keyboard input "hello") (keyboard input " "))
+ (hello
+  ((I compose: true modify: true multiline: true structural: true)
+   ("" * "")
+   0)))
+
+(edit
+ (hello
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0))
+ ((keyboard input "world")
+  (keyboard input " ")
+  (keyboard input "\"lorem")
+  (keyboard input " ")
+  (keyboard input "ipsum")
+  (keyboard input " ")
+  (keyboard input "dolor")
+  (keyboard input "\"")
+  (keyboard input " "))
+ (hello
+  world
+  "lorem ipsum dolor"
+  ((I compose: true modify: true multiline: true structural: true)
+   ("" * "")
+   0)))
+
+(edit
+ (hello
+  world
+  "lorem ipsum dolor"
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0))
+ ((keyboard key up dn)
+  (keyboard key up dn)
+  (keyboard key up dn)
+  (keyboard key up dn))
+ (((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  hello
+  world
+  "lorem ipsum dolor"))
+
+(edit
+ (((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  hello
+  world
+  "lorem ipsum dolor")
+ ((keyboard key dn dn) (keyboard key dn dn) (keyboard key dn dn))
+ (hello
+  world
+  "lorem ipsum dolor"
+  ((I compose: true modify: true multiline: true structural: true)
+   ("" * "")
+   0)))
+
+(edit
+ (hello
+  world
+  "lorem ipsum dolor"
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0))
+ ((keyboard key up dn) (keyboard key up dn) (keyboard key delete dn ctrl: true))
+ (hello
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  "lorem ipsum dolor"))
+
+(edit
+ (hello
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  "lorem ipsum dolor")
+ ((keyboard key backspace dn ctrl: true))
+ (((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  "lorem ipsum dolor"))
+
+(edit
+ (((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  "lorem ipsum dolor")
+ ((keyboard input "+")
+  (keyboard input " ")
+  (keyboard input "1")
+  (keyboard input " ")
+  (keyboard input "2")
+  (keyboard input " ")
+  (keyboard key up dn)
+  (keyboard key backspace dn ctrl: true)
+  (keyboard input "3")
+  (keyboard input " "))
+ (+
+  3
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  2
+  "lorem ipsum dolor"))
+
+(edit
+ (+
+  3
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  2
+  "lorem ipsum dolor")
+ ((keyboard key home dn))
+ (((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  +
+  3
+  2
+  "lorem ipsum dolor"))
+
+(edit
+ (((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  +
+  3
+  2
+  "lorem ipsum dolor")
+ ((keyboard key end dn))
+ (+
+  3
+  2
+  "lorem ipsum dolor"
+  ((I compose: true modify: true multiline: true structural: true)
+   ("" * "")
+   0)))
+
+(edit
+ (+
+  3
+  2
+  "lorem ipsum dolor"
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0))
+ ((keyboard input "foo") (keyboard key home dn) (keyboard key home dn))
+ (((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  +
+  3
+  2
+  "lorem ipsum dolor"
+  foo))
+
+(edit
+ (((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  +
+  3
+  2
+  "lorem ipsum dolor"
+  foo)
+ ((keyboard input "bar") (keyboard key end dn))
+ (bar
+  +
+  3
+  2
+  "lorem ipsum dolor"
+  foo
+  ((I compose: true modify: true multiline: true structural: true)
+   ("" * "")
+   0)))
+
+(edit
+ (bar
+  +
+  3
+  2
+  "lorem ipsum dolor"
+  foo
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0))
+ ((keyboard key enter dn ctrl: true))
+ (bar
+  +
+  3
+  2
+  "lorem ipsum dolor"
+  foo
+  ((I compose: true modify: true multiline: true structural: true)
+   ("" * "")
+   0)))
+
+(edit
+ (bar
+  +
+  3
+  2
+  "lorem ipsum dolor"
+  foo
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0))
+ ((keyboard input "hello") (keyboard key enter dn ctrl: true))
+ (bar
+  +
+  3
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  ((I compose: true modify: true multiline: true structural: true)
+   ("" * "")
+   0)))
+
+(edit
+ (bar
+  +
+  3
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0))
+ ((keyboard input "world")
+  (keyboard key left dn)
+  (keyboard key left dn)
+  (keyboard key left dn)
+  (keyboard key enter dn ctrl: true))
+ (bar
+  +
+  3
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  ((I compose: true modify: true multiline: true structural: true)
+   ("" * "")
+   0)))
+
+(edit
+ (bar
+  +
+  3
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0))
+ ((keyboard input "qux")
+  (keyboard key home dn)
+  (keyboard key enter dn ctrl: true))
+ (bar
+  +
+  3
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  ((I compose: true modify: true multiline: true structural: true)
+   ("" * "")
+   0)))
+
+(edit
+ (bar
+  +
+  3
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0))
+ ((keyboard input "foobar")
+  (keyboard key left dn)
+  (keyboard key left dn)
+  (keyboard key left dn)
+  (keyboard input " ")
+  (keyboard key right dn ctrl: true shift: true)
+  (keyboard key enter dn ctrl: true)
+  (keyboard key home dn)
+  (keyboard key delete dn ctrl: true)
+  (keyboard key right dn)
+  (keyboard key right dn)
+  (keyboard key right dn shift: true)
+  (keyboard key enter dn ctrl: true))
+ (bar
+  +
+  3
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar
+  ((I compose: true modify: true multiline: true structural: true)
+   ("" * "")
+   0)))
+
+(edit
+ (bar
+  +
+  3
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0))
+ ((keyboard key home dn) (keyboard input " "))
+ (bar
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  +
+  3
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar))
+
+(edit
+ (bar
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  +
+  3
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar)
+ ((keyboard input " ") (keyboard input " "))
+ (bar
+  +
+  3
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar)
+ ((keyboard input "(") (keyboard input " "))
+ (bar
+  +
+  3
+  ()
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar)
+ ((keyboard key up dn) (keyboard input " "))
+ (bar
+  +
+  3
+  ()
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar)
+ ((keyboard input "(") (keyboard key up dn))
+ (bar
+  +
+  3
+  (((I compose: true modify: true multiline: true structural: true) ("" * "") 0))
+  ()
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  ()
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar)
+ ((keyboard key delete dn ctrl: true) (keyboard input "(") (keyboard key dn dn))
+ (bar
+  +
+  3
+  ()
+  ()
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar)
+ ((keyboard input ")")
+  (keyboard input "(")
+  (keyboard input "+")
+  (keyboard input " ")
+  (keyboard input "1")
+  (keyboard input " ")
+  (keyboard input "2")
+  (keyboard input " ")
+  (keyboard key up dn)
+  (keyboard input ")"))
+ (bar
+  +
+  3
+  ()
+  ()
+  (+ 1 2)
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  (+ 1 2)
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar)
+ ((keyboard key insert dn)
+  (keyboard input "(")
+  (keyboard input "+ 1 2")
+  (keyboard input ")"))
+ (bar
+  +
+  3
+  ()
+  ()
+  (+ 1 2)
+  (+ 1 2)
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  (+ 1 2)
+  (+ 1 2)
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar)
+ ((keyboard input "\"hello")
+  (keyboard input "(")
+  (keyboard input "(")
+  (keyboard input "(")
+  (keyboard input ")")
+  (keyboard input ")")
+  (keyboard input ")")
+  (keyboard input "world")
+  (keyboard input "\"")
+  (keyboard input " "))
+ (bar
+  +
+  3
+  ()
+  ()
+  (+ 1 2)
+  (+ 1 2)
+  "hello((()))world"
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  (+ 1 2)
+  (+ 1 2)
+  "hello((()))world"
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar)
+ ((keyboard input "foobar") (keyboard key right dn))
+ (bar
+  +
+  3
+  ()
+  ()
+  (+ 1 2)
+  (+ 1 2)
+  "hello((()))world"
+  foobar
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  (+ 1 2)
+  (+ 1 2)
+  "hello((()))world"
+  foobar
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar)
+ ((keyboard input "qux") (keyboard key home dn) (keyboard key left dn))
+ (bar
+  +
+  3
+  ()
+  ()
+  (+ 1 2)
+  (+ 1 2)
+  "hello((()))world"
+  foobar
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  (+ 1 2)
+  (+ 1 2)
+  "hello((()))world"
+  foobar
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar)
+ ((keyboard input "(") (keyboard key enter dn))
+ (bar
+  +
+  3
+  ()
+  ()
+  (+ 1 2)
+  (+ 1 2)
+  "hello((()))world"
+  foobar
+  ()
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  (+ 1 2)
+  (+ 1 2)
+  "hello((()))world"
+  foobar
+  ()
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar)
+ ((keyboard key backspace dn ctrl: true)
+  (keyboard input "(")
+  (keyboard key enter dn shift: true))
+ (bar
+  +
+  3
+  ()
+  ()
+  (+ 1 2)
+  (+ 1 2)
+  "hello((()))world"
+  foobar
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  (+ 1 2)
+  (+ 1 2)
+  "hello((()))world"
+  foobar
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar)
+ ((keyboard key up dn)
+  (keyboard key up dn)
+  (keyboard input "(")
+  (keyboard key up dn)
+  (keyboard key up dn)
+  (keyboard key up dn)
+  (keyboard key up dn)
+  (keyboard key up dn)
+  (keyboard key up dn)
+  (keyboard key up dn)
+  (keyboard key up dn)
+  (keyboard key up dn)
+  (keyboard key up dn))
+ (bar
+  +
+  3
+  (((I compose: true modify: true multiline: true structural: true)
+    ("" * "")
+    0))
+  ()
+  (+ 1 2)
+  (+ 1 2)
+  ()
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  (((I compose: true modify: true multiline: true structural: true)
+    ("" * "")
+    0))
+  ()
+  (+ 1 2)
+  (+ 1 2)
+  ()
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar)
+ ((keyboard key dn dn)
+  (keyboard key dn dn)
+  (keyboard key dn dn)
+  (keyboard key dn dn)
+  (keyboard key dn dn)
+  (keyboard key dn dn)
+  (keyboard key dn dn)
+  (keyboard key dn dn)
+  (keyboard key dn dn)
+  (keyboard key dn dn))
+ (bar
+  +
+  3
+  ()
+  ()
+  (+ 1 2)
+  (+ 1 2)
+  (((I compose: true modify: true multiline: true structural: true)
+    ("" * "")
+    0))
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  (+ 1 2)
+  (+ 1 2)
+  (((I compose: true modify: true multiline: true structural: true)
+    ("" * "")
+    0))
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar)
+ ((keyboard key backspace dn))
+ (bar
+  +
+  3
+  ()
+  ()
+  (+ 1 2)
+  (+ 1 2)
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  (+ 1 2)
+  (+ 1 2)
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar)
+ ((keyboard input "(") (keyboard key delete dn))
+ (bar
+  +
+  3
+  ()
+  ()
+  (+ 1 2)
+  (+ 1 2)
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  (+ 1 2)
+  (+ 1 2)
+  (1
+   ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+   2
+   3)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar)
+ ((keyboard key backspace dn ctrl: true shift: true))
+ (bar
+  +
+  3
+  ()
+  ()
+  (+ 1 2)
+  (+ 1 2)
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  (+ 1 2)
+  (+ 1 2)
+  (1
+   ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+   2
+   3)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar)
+ ((keyboard key delete dn ctrl: true shift: true))
+ (bar
+  +
+  3
+  ()
+  ()
+  (+ 1 2)
+  (+ 1 2)
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  (+ 1 2)
+  (+ 1 2)
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar)
+ ((keyboard key insert dn)
+  (keyboard input "(")
+  (keyboard input "hello")
+  (keyboard key home dn)
+  (keyboard key right dn)
+  (keyboard key enter dn))
+ (bar
+  +
+  3
+  ()
+  ()
+  (+ 1 2)
+  (+ 1 2)
+  ((I compose: true modify: true multiline: true structural: true)
+   ("(\n" * "hello")
+   2)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  (+ 1 2)
+  (+ 1 2)
+  ((I compose: true modify: true multiline: true structural: true)
+   ("(\n" * "hello")
+   2)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar)
+ ((keyboard key end dn)
+  (keyboard key insert dn)
+  (keyboard input ")")
+  (keyboard key left dn)
+  (keyboard key left dn)
+  (keyboard key left dn))
+ (bar
+  +
+  3
+  ()
+  ()
+  (+ 1 2)
+  (+ 1 2)
+  ((I compose: true modify: true multiline: true structural: true)
+   ("(\nhel" * "lo)")
+   5)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  (+ 1 2)
+  (+ 1 2)
+  ((I compose: true modify: true multiline: true structural: true)
+   ("(\nhel" * "lo)")
+   5)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar)
+ ((keyboard key dn dn) (keyboard key dn dn))
+ (bar
+  +
+  3
+  ()
+  ()
+  (+ 1 2)
+  (+ 1 2)
+  (hello)
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  (+ 1 2)
+  (+ 1 2)
+  ((I compose: true modify: true multiline: true structural: true)
+   ("(\nhel" * "lo)")
+   5)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar)
+ ((keyboard key up dn) (keyboard key up dn) (keyboard key up dn))
+ (bar
+  +
+  3
+  ()
+  ()
+  (+ 1 2)
+  (+ 1 2)
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  (hello)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  (+ 1 2)
+  (+ 1 2)
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  (hello)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar)
+ ((keyboard key left dn ctrl: true))
+ (bar
+  +
+  3
+  ()
+  ()
+  (+ 1 2)
+  ((I compose: true modify: true multiline: true structural: true)
+   ("(+ 1 2)" * "")
+   7)
+  (hello)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  (+ 1 2)
+  ((I compose: true modify: true multiline: true structural: true)
+   ("(+ 1 2)" * "")
+   7)
+  (hello)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar)
+ ((keyboard key dn dn) (keyboard key right dn ctrl: true))
+ (bar
+  +
+  3
+  ()
+  ()
+  (+ 1 2)
+  (+ 1 2)
+  ((I compose: true modify: true multiline: true structural: true)
+   ("" * "(hello)")
+   0)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  (+ 1 2)
+  (+ 1 2)
+  ((I compose: true modify: true multiline: true structural: true)
+   ("" * "(hello)")
+   0)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar)
+ ((keyboard key up dn)
+  (keyboard key right dn ctrl: true shift: true)
+  (keyboard key dn dn)
+  (keyboard key dn dn))
+ (bar
+  +
+  3
+  ()
+  ()
+  (+ 1 2)
+  (+ 1 2)
+  (hello)
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  (+ 1 2)
+  (+ 1 2)
+  (hello)
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar)
+ ((keyboard key left dn ctrl: true shift: true)
+  (keyboard key up dn)
+  (keyboard key up dn))
+ (bar
+  +
+  3
+  ()
+  ()
+  (+ 1 2)
+  (+ 1 2)
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  (hello)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  (+ 1 2)
+  (+ 1 2)
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  (hello)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar)
+ ((keyboard key left dn)
+  (keyboard key left dn)
+  (keyboard key left dn)
+  (keyboard key left dn)
+  (keyboard key left dn)
+  (keyboard key left dn)
+  (keyboard key left dn)
+  (keyboard key left dn)
+  (keyboard key left dn)
+  (keyboard key left dn)
+  (keyboard key left dn))
+ (bar
+  +
+  3
+  ()
+  ()
+  (+ 1 2)
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  (+ 1 2)
+  (hello)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  (+ 1 2)
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  (+ 1 2)
+  (hello)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar)
+ ((keyboard key right dn)
+  (keyboard key right dn)
+  (keyboard key right dn)
+  (keyboard key right dn)
+  (keyboard key right dn)
+  (keyboard key right dn)
+  (keyboard key right dn)
+  (keyboard key right dn)
+  (keyboard key right dn)
+  (keyboard key right dn)
+  (keyboard key right dn))
+ (bar
+  +
+  3
+  ()
+  ()
+  (+ 1 2)
+  (+ 1 2)
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  (hello)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  (+ 1 2)
+  (+ 1 2)
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  (hello)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar)
+ ((keyboard key backspace dn)
+  (keyboard key backspace dn)
+  (keyboard key backspace dn)
+  (keyboard key backspace dn)
+  (keyboard key backspace dn)
+  (keyboard key backspace dn)
+  (keyboard key backspace dn)
+  (keyboard key backspace dn))
+ (bar
+  +
+  3
+  ()
+  ()
+  (+ 1 2)
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  (hello)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  (+ 1 2)
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  (hello)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar)
+ ((keyboard key up dn)
+  (keyboard key delete dn)
+  (keyboard key delete dn)
+  (keyboard key delete dn)
+  (keyboard key delete dn)
+  (keyboard key delete dn)
+  (keyboard key delete dn)
+  (keyboard key delete dn)
+  (keyboard key delete dn))
+ (bar
+  +
+  3
+  ()
+  ()
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  (hello)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  (hello)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar)
+ ((keyboard key right dn) (keyboard key home dn))
+ (((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  bar
+  +
+  3
+  ()
+  ()
+  (hello)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar))
+
+(edit
+ (((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  bar
+  +
+  3
+  ()
+  ()
+  (hello)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar)
+ ((keyboard key dn dn)
+  (keyboard key dn dn)
+  (keyboard key dn dn)
+  (keyboard key dn dn)
+  (keyboard key dn dn)
+  (keyboard key right dn)
+  (keyboard key end dn)
+  (keyboard key end dn))
+ (bar
+  +
+  3
+  ()
+  ()
+  (hello)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar
+  ((I compose: true modify: true multiline: true structural: true)
+   ("" * "")
+   0)))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  (hello
+   ((I compose: true modify: true multiline: true structural: true)
+    ("" * "")
+    0))
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar)
+ ((keyboard key a dn ctrl: true))
+ (bar
+  +
+  3
+  ()
+  ()
+  ((I compose: true modify: true multiline: true structural: true)
+   ("(hello)" * "")
+   0)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  ((I compose: true modify: true multiline: true structural: true)
+   ("(hello)" * "")
+   0)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar)
+ ((keyboard key right dn) (keyboard key right dn))
+ (bar
+  +
+  3
+  ()
+  ()
+  (hello)
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  (hello)
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar)
+ ((keyboard key left dn) (keyboard key delete dn ctrl: true))
+ (bar
+  +
+  3
+  ()
+  ()
+  hello
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  (hello)
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar)
+ ((keyboard key left dn)
+  (keyboard key home dn)
+  (keyboard key backspace dn ctrl: true))
+ (bar
+  +
+  3
+  ()
+  ()
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  hello
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  (hello)
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar)
+ ((keyboard key left dn) (keyboard key home dn shift: true))
+ (bar
+  +
+  3
+  ()
+  ()
+  (((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+   (hello))
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  (((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+   (hello))
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar)
+ ((keyboard key backspace dn ctrl: true)
+  (keyboard key right dn)
+  (keyboard key end dn shift: true))
+ (bar
+  +
+  3
+  ()
+  ()
+  ((hello)
+   ((I compose: true modify: true multiline: true structural: true)
+    ("" * "")
+    0))
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  ((hello)
+   ((I compose: true modify: true multiline: true structural: true)
+    ("" * "")
+    0))
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar)
+ ((keyboard input "p") (keyboard input ":"))
+ (bar
+  +
+  3
+  ()
+  ()
+  ((hello)
+   p:
+    ((I compose: true modify: true multiline: true structural: true)
+     ("" * "")
+     0))
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  ((hello)
+   p:
+    ((I compose: true modify: true multiline: true structural: true)
+     ("" * "")
+     0))
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar)
+ ((keyboard key home dn))
+ (bar
+  +
+  3
+  ()
+  ()
+  (((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+   (hello))
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  ((hello)
+   p:
+    ((I compose: true modify: true multiline: true structural: true)
+     ("" * "")
+     0))
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar)
+ ((keyboard key end dn))
+ (bar
+  +
+  3
+  ()
+  ()
+  ((hello)
+   ((I compose: true modify: true multiline: true structural: true)
+    ("" * "")
+    0))
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  ((hello)
+   p:
+    ((I compose: true modify: true multiline: true structural: true)
+     ("" * "")
+     0))
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar)
+ ((keyboard key backspace dn))
+ (bar
+  +
+  3
+  ()
+  ()
+  ((hello)
+   ((I compose: true modify: true multiline: true structural: true)
+    ("" * "")
+    0))
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  ((hello)
+   ((I compose: true modify: true multiline: true structural: true)
+    ("" * "")
+    0))
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar)
+ ((keyboard input "p") (keyboard input ":") (keyboard key right dn))
+ (bar
+  +
+  3
+  ()
+  ()
+  ((hello))
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  ((hello))
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar)
+ ((keyboard key left dn)
+  (keyboard input "p")
+  (keyboard input ":")
+  (keyboard input "100")
+  (keyboard input " "))
+ (bar
+  +
+  3
+  ()
+  ()
+  ((hello)
+   ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+   p: 100)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  ((hello)
+   ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+   p: 100)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar)
+ ((keyboard input "p") (keyboard input ":"))
+ (bar
+  +
+  3
+  ()
+  ()
+  ((hello)
+   p:
+    ((I compose: true modify: true multiline: true structural: true)
+     ("100" * "")
+     0))
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  ((hello)
+   p:
+    ((I compose: true modify: true multiline: true structural: true)
+     ("100" * "")
+     0))
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar)
+ ((keyboard input "200") (keyboard key right dn))
+ (bar
+  +
+  3
+  ()
+  ()
+  ((hello)
+   ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+   p: 200)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  ((hello)
+   ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+   p: 200)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar)
+ ((keyboard input "q")
+  (keyboard input ":")
+  (keyboard input "300")
+  (keyboard key home dn)
+  (keyboard key left dn))
+ (bar
+  +
+  3
+  ()
+  ()
+  ((hello)
+   ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+   p: 200
+   q: 300)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  ((hello)
+   ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+   p: 200
+   q: 300)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar)
+ ((keyboard input "q")
+  (keyboard input ":")
+  (keyboard key left dn)
+  (keyboard key left dn))
+ (bar
+  +
+  3
+  ()
+  ()
+  ((hello)
+   ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+   p: 200
+   q: 300)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  ((hello)
+   ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+   p: 200
+   q: 300)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar)
+ ((keyboard input "q")
+  (keyboard input ":")
+  (keyboard key right dn)
+  (keyboard key right dn))
+ (bar
+  +
+  3
+  ()
+  ()
+  ((hello)
+   ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+   p: 200
+   q: 300)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  ((hello) p: 200 q: 300)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar)
+ ((keyboard key left dn shift: true)
+  (keyboard key left dn shift: true)
+  (keyboard key left dn shift: true)
+  (keyboard key left dn shift: true))
+ (bar
+  (((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+   +
+   3
+   ()
+   ())
+  ((hello) p: 200 q: 300)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar))
+
+(edit
+ (bar
+  (((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+   +
+   3
+   ()
+   ())
+  ((hello) p: 200 q: 300)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar)
+ ((keyboard key right dn shift: true)
+  (keyboard key right dn shift: true)
+  (keyboard key right dn shift: true)
+  (keyboard key right dn shift: true))
+ (bar
+  +
+  3
+  ()
+  ()
+  (((I compose: true modify: true multiline: true structural: true)
+    ("" * "")
+    0))
+  ((hello) p: 200 q: 300)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  (((I compose: true modify: true multiline: true structural: true)
+    ("" * "")
+    0))
+  ((hello) p: 200 q: 300)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar)
+ ((keyboard key right dn shift: true)
+  (keyboard key right dn shift: true)
+  (keyboard key right dn shift: true)
+  (keyboard key right dn shift: true))
+ (bar
+  +
+  3
+  ()
+  ()
+  (((hello) p: 200 q: 300)
+   "hello((()))world"
+   foobar
+   ()
+   ((I compose: true modify: true multiline: true structural: true)
+    ("" * "")
+    0))
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  (((hello) p: 200 q: 300)
+   "hello((()))world"
+   foobar
+   ()
+   ((I compose: true modify: true multiline: true structural: true)
+    ("" * "")
+    0))
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar)
+ ((keyboard key left dn shift: true)
+  (keyboard key left dn shift: true)
+  (keyboard key left dn shift: true)
+  (keyboard key left dn shift: true)
+  (keyboard key left dn shift: true))
+ (bar
+  +
+  3
+  ()
+  (((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+   ())
+  ((hello) p: 200 q: 300)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  (((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+   ())
+  ((hello) p: 200 q: 300)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar)
+ ((keyboard key up dn shift: true)
+  (keyboard key up dn shift: true)
+  (keyboard key dn dn shift: true)
+  (keyboard key dn dn shift: true)
+  (keyboard key up dn shift: true))
+ (bar
+  +
+  ((3
+    (((I compose: true modify: true multiline: true structural: true)
+      ("" * "")
+      0)
+     ()))
+   ())
+  ((hello) p: 200 q: 300)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar))
+
+(edit
+ (bar
+  +
+  ((3
+    (((I compose: true modify: true multiline: true structural: true)
+      ("" * "")
+      0)
+     ()))
+   ())
+  ((hello) p: 200 q: 300)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar)
+ ((keyboard key backspace dn ctrl: true)
+  (keyboard key home dn ctrl: true)
+  (keyboard key backspace dn ctrl: true)
+  (keyboard key right dn shift: true)
+  (keyboard key right dn shift: true)
+  (keyboard key right dn shift: true)
+  (keyboard key backspace dn))
+ (bar
+  +
+  3
+  ()
+  ()
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  ((hello) p: 200 q: 300)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  ((hello) p: 200 q: 300)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  bar)
+ ((keyboard input ",") (keyboard input "d"))
+ (bar
+  +
+  3
+  ()
+  ()
+  ((hello) p: 200 q: 300)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  qux
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  ((hello) p: 200 q: 300)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  qux
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  bar)
+ ((keyboard input ",") (keyboard input "D"))
+ (bar
+  +
+  3
+  ()
+  ()
+  ((hello) p: 200 q: 300)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  world
+  qux
+  qux
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  bar
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  ((hello) p: 200 q: 300)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  qux
+  world
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  qux
+  bar
+  bar)
+ ((keyboard input ",")
+  (keyboard input "s")
+  (keyboard key up dn)
+  (keyboard key up dn)
+  (keyboard input ",")
+  (keyboard input "s"))
+ (bar
+  +
+  3
+  ()
+  ()
+  ((hello) p: 200 q: 300)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  qux
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  hello
+  qux
+  world
+  bar
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  ((hello) p: 200 q: 300)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  qux
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  hello
+  qux
+  world
+  bar
+  bar)
+ ((keyboard input ",") (keyboard input "s"))
+ (bar
+  +
+  3
+  ()
+  ()
+  ((hello) p: 200 q: 300)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  qux
+  qux
+  world
+  bar
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  ((hello) p: 200 q: 300)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  hello
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  qux
+  qux
+  world
+  bar
+  bar)
+ ((keyboard input ",")
+  (keyboard input "x")
+  (keyboard key dn dn)
+  (keyboard key dn dn)
+  (keyboard input ",")
+  (keyboard input "p"))
+ (bar
+  +
+  3
+  ()
+  ()
+  ((hello) p: 200 q: 300)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  qux
+  qux
+  hello
+  ((I
+    clipboard: (term {hello: true})
+    compose: true
+    modify: true
+    multiline: true
+    structural: true)
+   ("" * "")
+   0)
+  world
+  bar
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  ((hello) p: 200 q: 300)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  qux
+  qux
+  hello
+  ((I
+    clipboard: (term {hello: true})
+    compose: true
+    modify: true
+    multiline: true
+    structural: true)
+   ("" * "")
+   0)
+  world
+  bar
+  bar)
+ ((keyboard input ",") (keyboard input "P"))
+ (bar
+  +
+  3
+  ()
+  ()
+  ((hello) p: 200 q: 300)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  qux
+  qux
+  hello
+  ((I
+    clipboard: (term {hello: true})
+    compose: true
+    modify: true
+    multiline: true
+    structural: true)
+   ("" * "")
+   0)
+  hello
+  world
+  bar
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  ((hello) p: 200 q: 300)
+  "hello((()))world"
+  foobar
+  ()
+  qux
+  2
+  "lorem ipsum dolor"
+  ((I
+    clipboard: (term {hello: true})
+    compose: true
+    modify: true
+    multiline: true
+    structural: true)
+   ("" * "")
+   0)
+  foo
+  qux
+  qux
+  hello
+  hello
+  world
+  bar
+  bar)
+ ((keyboard input ",")
+  (keyboard input "y")
+  (keyboard key up dn)
+  (keyboard key up dn)
+  (keyboard key up dn)
+  (keyboard key left dn)
+  (keyboard input ",")
+  (keyboard input "p"))
+ (bar
+  +
+  3
+  ()
+  ()
+  ((hello) p: 200 q: 300)
+  "hello((()))world"
+  foobar
+  ("lorem ipsum dolor"
+   ((I
+     clipboard: (term {"lorem ipsum dolor": true})
+     compose: true
+     modify: true
+     multiline: true
+     structural: true)
+    ("" * "")
+    0))
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  qux
+  qux
+  hello
+  hello
+  world
+  bar
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  ((hello) p: 200 q: 300)
+  "hello((()))world"
+  foobar
+  ("lorem ipsum dolor"
+   ((I
+     clipboard: (term {"lorem ipsum dolor": true})
+     compose: true
+     modify: true
+     multiline: true
+     structural: true)
+    ("" * "")
+    0))
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  qux
+  qux
+  hello
+  hello
+  world
+  bar
+  bar)
+ ((keyboard key home dn)
+  (keyboard key left dn)
+  (keyboard input ",")
+  (keyboard input "X")
+  (keyboard key up dn)
+  (keyboard key up dn)
+  (keyboard input ",")
+  (keyboard input "P"))
+ (bar
+  +
+  3
+  ()
+  ()
+  ((hello) p: 200 q: 300)
+  ((I
+    clipboard: (term {("lorem ipsum dolor"): true})
+    compose: true
+    modify: true
+    multiline: true
+    structural: true)
+   ("" * "")
+   0)
+  ("lorem ipsum dolor")
+  "hello((()))world"
+  foobar
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  qux
+  qux
+  hello
+  hello
+  world
+  bar
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  ((hello) p: 200 q: 300)
+  ((I
+    clipboard: (term {("lorem ipsum dolor"): true})
+    compose: true
+    modify: true
+    multiline: true
+    structural: true)
+   ("" * "")
+   0)
+  ("lorem ipsum dolor")
+  "hello((()))world"
+  foobar
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  qux
+  qux
+  hello
+  hello
+  world
+  bar
+  bar)
+ ((keyboard input "hello")
+  (keyboard key left dn shift: true)
+  (keyboard key left dn shift: true)
+  (keyboard key left dn shift: true)
+  (keyboard key c dn ctrl: true)
+  (keyboard key home dn)
+  (keyboard key v dn ctrl: true))
+ (bar
+  +
+  3
+  ()
+  ()
+  ((hello) p: 200 q: 300)
+  ((I
+    clipboard: (text "llo")
+    compose: true
+    modify: true
+    multiline: true
+    structural: true)
+   ("llo" * "hello")
+   3)
+  ("lorem ipsum dolor")
+  "hello((()))world"
+  foobar
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  qux
+  qux
+  hello
+  hello
+  world
+  bar
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  ((hello) p: 200 q: 300)
+  ((I
+    clipboard: (text "llo")
+    compose: true
+    modify: true
+    multiline: true
+    structural: true)
+   ("llo" * "hello")
+   3)
+  ("lorem ipsum dolor")
+  "hello((()))world"
+  foobar
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  qux
+  qux
+  hello
+  hello
+  world
+  bar
+  bar)
+ ((keyboard key right dn shift: true)
+  (keyboard key right dn shift: true)
+  (keyboard key v dn ctrl: true))
+ (bar
+  +
+  3
+  ()
+  ()
+  ((hello) p: 200 q: 300)
+  ((I
+    clipboard: (text "llo")
+    compose: true
+    modify: true
+    multiline: true
+    structural: true)
+   ("llollo" * "llo")
+   6)
+  ("lorem ipsum dolor")
+  "hello((()))world"
+  foobar
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  qux
+  qux
+  hello
+  hello
+  world
+  bar
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  ((hello) p: 200 q: 300)
+  ((I
+    clipboard: (text "llo")
+    compose: true
+    modify: true
+    multiline: true
+    structural: true)
+   ("llollo" * "llo")
+   6)
+  ("lorem ipsum dolor")
+  "hello((()))world"
+  foobar
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  qux
+  qux
+  hello
+  hello
+  world
+  bar
+  bar)
+ ((keyboard key home dn shift: true)
+  (keyboard key x dn ctrl: true)
+  (keyboard key end dn)
+  (keyboard key right dn)
+  (keyboard key right dn)
+  (keyboard input ",")
+  (keyboard input "p"))
+ (bar
+  +
+  3
+  ()
+  ()
+  ((hello) p: 200 q: 300)
+  llo
+  (llollo
+   ((I
+     clipboard: (text "llollo")
+     compose: true
+     modify: true
+     multiline: true
+     structural: true)
+    ("" * "")
+    0)
+   "lorem ipsum dolor")
+  "hello((()))world"
+  foobar
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  qux
+  qux
+  hello
+  hello
+  world
+  bar
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  ((hello) p: 200 q: 300)
+  llo
+  (llollo
+   ((I
+     clipboard: (text "llollo")
+     compose: true
+     modify: true
+     multiline: true
+     structural: true)
+    ("" * "")
+    0)
+   "lorem ipsum dolor")
+  "hello((()))world"
+  foobar
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  qux
+  qux
+  hello
+  hello
+  world
+  bar
+  bar)
+ ((keyboard key end dn)
+  (keyboard key right dn)
+  (keyboard input ",")
+  (keyboard input "y")
+  (keyboard key v dn ctrl: true))
+ (bar
+  +
+  3
+  ()
+  ()
+  ((hello) p: 200 q: 300)
+  llo
+  (llollo "lorem ipsum dolor")
+  ((I
+    clipboard: (term {(llollo "lorem ipsum dolor"): true})
+    compose: true
+    modify: true
+    multiline: true
+    structural: true)
+   ("(llollo \"lorem ipsum dolor\")" * "")
+   28)
+  "hello((()))world"
+  foobar
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  qux
+  qux
+  hello
+  hello
+  world
+  bar
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  ((hello) p: 200 q: 300)
+  llo
+  (llollo "lorem ipsum dolor")
+  ((I
+    clipboard: (term {(llollo "lorem ipsum dolor"): true})
+    compose: true
+    modify: true
+    multiline: true
+    structural: true)
+   ("(llollo \"lorem ipsum dolor\")" * "")
+   28)
+  "hello((()))world"
+  foobar
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  qux
+  qux
+  hello
+  hello
+  world
+  bar
+  bar)
+ ((keyboard key backspace dn)
+  (keyboard key a dn ctrl: true)
+  (keyboard key x dn ctrl: true)
+  (keyboard input ",")
+  (keyboard input "p"))
+ (bar
+  +
+  3
+  ()
+  ()
+  ((hello) p: 200 q: 300)
+  llo
+  (llollo "lorem ipsum dolor")
+  ((I
+    clipboard: (text "(llollo \"lorem ipsum dolor\"")
+    compose: true
+    modify: true
+    multiline: true
+    structural: true)
+   ("" * "")
+   0)
+  "hello((()))world"
+  foobar
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  qux
+  qux
+  hello
+  hello
+  world
+  bar
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  ((hello) p: 200 q: 300)
+  llo
+  (llollo "lorem ipsum dolor")
+  ((I
+    clipboard: (text "(llollo \"lorem ipsum dolor\"")
+    compose: true
+    modify: true
+    multiline: true
+    structural: true)
+   ("" * "")
+   0)
+  "hello((()))world"
+  foobar
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  qux
+  qux
+  hello
+  hello
+  world
+  bar
+  bar)
+ ((keyboard key v dn ctrl: true) (keyboard input ")"))
+ (bar
+  +
+  3
+  ()
+  ()
+  ((hello) p: 200 q: 300)
+  llo
+  (llollo "lorem ipsum dolor")
+  (llollo "lorem ipsum dolor")
+  ((I
+    clipboard: (text "(llollo \"lorem ipsum dolor\"")
+    compose: true
+    modify: true
+    multiline: true
+    structural: true)
+   ("" * "")
+   0)
+  "hello((()))world"
+  foobar
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  qux
+  qux
+  hello
+  hello
+  world
+  bar
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  ((hello) p: 200 q: 300)
+  llo
+  (llollo "lorem ipsum dolor")
+  (llollo "lorem ipsum dolor")
+  ((I
+    clipboard: (text "(llollo \"lorem ipsum dolor\"")
+    compose: true
+    modify: true
+    multiline: true
+    structural: true)
+   ("" * "")
+   0)
+  "hello((()))world"
+  foobar
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  qux
+  qux
+  hello
+  hello
+  world
+  bar
+  bar)
+ ((clear clipboard))
+ (bar
+  +
+  3
+  ()
+  ()
+  ((hello) p: 200 q: 300)
+  llo
+  (llollo "lorem ipsum dolor")
+  (llollo "lorem ipsum dolor")
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  "hello((()))world"
+  foobar
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  qux
+  qux
+  hello
+  hello
+  world
+  bar
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  ((hello)
+   ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+   p: 200
+   q: 300)
+  llo
+  (llollo "lorem ipsum dolor")
+  (llollo "lorem ipsum dolor")
+  "hello((()))world"
+  foobar
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  qux
+  qux
+  hello
+  hello
+  world
+  bar
+  bar)
+ ((keyboard key delete dn ctrl: true)
+  (keyboard key up dn)
+  (keyboard key backspace dn ctrl: true))
+ (bar
+  +
+  3
+  ()
+  ()
+  (((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+   (hello)
+   p: 200
+   q: 300)
+  llo
+  (llollo "lorem ipsum dolor")
+  (llollo "lorem ipsum dolor")
+  "hello((()))world"
+  foobar
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  qux
+  qux
+  hello
+  hello
+  world
+  bar
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  (((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+   (hello)
+   p: 200
+   q: 300)
+  llo
+  (llollo "lorem ipsum dolor")
+  (llollo "lorem ipsum dolor")
+  "hello((()))world"
+  foobar
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  qux
+  qux
+  hello
+  hello
+  world
+  bar
+  bar)
+ ((keyboard key backspace dn ctrl: true shift: true))
+ (bar
+  +
+  3
+  ()
+  ()
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  llo
+  (llollo "lorem ipsum dolor")
+  (llollo "lorem ipsum dolor")
+  "hello((()))world"
+  foobar
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  qux
+  qux
+  hello
+  hello
+  world
+  bar
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+  llo
+  (llollo "lorem ipsum dolor")
+  (llollo "lorem ipsum dolor")
+  "hello((()))world"
+  foobar
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  qux
+  qux
+  hello
+  hello
+  world
+  bar
+  bar)
+ ((keyboard input "(")
+  (keyboard input "/")
+  (keyboard input " ")
+  (keyboard input "1")
+  (keyboard input "0")
+  (keyboard input "0")
+  (keyboard input " ")
+  (keyboard input "2")
+  (keyboard input "0")
+  (keyboard input "0")
+  (keyboard input " ")
+  (keyboard input "precision")
+  (keyboard input ":")
+  (keyboard input "(")
+  (keyboard input "foo")
+  (keyboard input " ")
+  (keyboard input "bar")
+  (keyboard input " ")
+  (keyboard input "baz")
+  (keyboard input " ")
+  (keyboard key dn dn))
+ (bar
+  +
+  3
+  ()
+  ()
+  (/
+   100
+   200
+   ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+   precision: (foo bar baz))
+  llo
+  (llollo "lorem ipsum dolor")
+  (llollo "lorem ipsum dolor")
+  "hello((()))world"
+  foobar
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  qux
+  qux
+  hello
+  hello
+  world
+  bar
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  (/
+   100
+   200
+   ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+   precision: (foo bar baz))
+  llo
+  (llollo "lorem ipsum dolor")
+  (llollo "lorem ipsum dolor")
+  "hello((()))world"
+  foobar
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  qux
+  qux
+  hello
+  hello
+  world
+  bar
+  bar)
+ ((keyboard input "precision") (keyboard input ":"))
+ (bar
+  +
+  3
+  ()
+  ()
+  (/
+   100
+   200
+   precision:
+    (((I compose: true modify: true multiline: true structural: true)
+      ("" * "")
+      0)
+     foo
+     bar
+     baz))
+  llo
+  (llollo "lorem ipsum dolor")
+  (llollo "lorem ipsum dolor")
+  "hello((()))world"
+  foobar
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  qux
+  qux
+  hello
+  hello
+  world
+  bar
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  (/
+   100
+   200
+   precision:
+    (((I compose: true modify: true multiline: true structural: true)
+      ("" * "")
+      0)
+     foo
+     bar
+     baz))
+  llo
+  (llollo "lorem ipsum dolor")
+  (llollo "lorem ipsum dolor")
+  "hello((()))world"
+  foobar
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  qux
+  qux
+  hello
+  hello
+  world
+  bar
+  bar)
+ ((keyboard key left dn))
+ (bar
+  +
+  3
+  ()
+  ()
+  (/
+   100
+   200
+   ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+   precision: (foo bar baz))
+  llo
+  (llollo "lorem ipsum dolor")
+  (llollo "lorem ipsum dolor")
+  "hello((()))world"
+  foobar
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  qux
+  qux
+  hello
+  hello
+  world
+  bar
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  (/
+   100
+   200
+   ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+   precision: (foo bar baz))
+  llo
+  (llollo "lorem ipsum dolor")
+  (llollo "lorem ipsum dolor")
+  "hello((()))world"
+  foobar
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  qux
+  qux
+  hello
+  hello
+  world
+  bar
+  bar)
+ ((keyboard key up dn alt: true)
+  (keyboard key home dn)
+  (keyboard key up dn alt: true))
+ (bar
+  +
+  3
+  (((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+   /
+   100
+   200
+   precision: (foo bar baz))
+  ()
+  ()
+  llo
+  (llollo "lorem ipsum dolor")
+  (llollo "lorem ipsum dolor")
+  "hello((()))world"
+  foobar
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  qux
+  qux
+  hello
+  hello
+  world
+  bar
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  (((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+   /
+   100
+   200
+   precision: (foo bar baz))
+  ()
+  ()
+  llo
+  (llollo "lorem ipsum dolor")
+  (llollo "lorem ipsum dolor")
+  "hello((()))world"
+  foobar
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  qux
+  qux
+  hello
+  hello
+  world
+  bar
+  bar)
+ ((keyboard key dn dn alt: true)
+  (keyboard key end dn)
+  (keyboard key dn dn alt: true))
+ (bar
+  +
+  3
+  ()
+  ()
+  (/
+   100
+   200
+   ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+   precision: (foo bar baz))
+  llo
+  (llollo "lorem ipsum dolor")
+  (llollo "lorem ipsum dolor")
+  "hello((()))world"
+  foobar
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  qux
+  qux
+  hello
+  hello
+  world
+  bar
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  (/
+   100
+   200
+   ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+   precision: (foo bar baz))
+  llo
+  (llollo "lorem ipsum dolor")
+  (llollo "lorem ipsum dolor")
+  "hello((()))world"
+  foobar
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  qux
+  qux
+  hello
+  hello
+  world
+  bar
+  bar)
+ ((keyboard key home dn alt: true))
+ ((/
+   100
+   200
+   ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+   precision: (foo bar baz))
+  bar
+  +
+  3
+  ()
+  ()
+  llo
+  (llollo "lorem ipsum dolor")
+  (llollo "lorem ipsum dolor")
+  "hello((()))world"
+  foobar
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  qux
+  qux
+  hello
+  hello
+  world
+  bar
+  bar))
+
+(edit
+ ((/
+   100
+   200
+   ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+   precision: (foo bar baz))
+  bar
+  +
+  3
+  ()
+  ()
+  llo
+  (llollo "lorem ipsum dolor")
+  (llollo "lorem ipsum dolor")
+  "hello((()))world"
+  foobar
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  qux
+  qux
+  hello
+  hello
+  world
+  bar
+  bar)
+ ((keyboard key end dn alt: true))
+ (bar
+  +
+  3
+  ()
+  ()
+  llo
+  (llollo "lorem ipsum dolor")
+  (llollo "lorem ipsum dolor")
+  "hello((()))world"
+  foobar
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  qux
+  qux
+  hello
+  hello
+  world
+  bar
+  bar
+  (/
+   100
+   200
+   ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+   precision: (foo bar baz))))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  llo
+  (llollo "lorem ipsum dolor")
+  (llollo "lorem ipsum dolor")
+  "hello((()))world"
+  foobar
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  qux
+  qux
+  hello
+  hello
+  world
+  bar
+  bar
+  (/
+   100
+   200
+   ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+   precision: (foo bar baz)))
+ ((keyboard key left dn alt: true)
+  (keyboard key left dn alt: true)
+  (keyboard key left dn alt: true))
+ (bar
+  +
+  3
+  ()
+  ()
+  llo
+  (llollo "lorem ipsum dolor")
+  (llollo "lorem ipsum dolor")
+  "hello((()))world"
+  foobar
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  qux
+  qux
+  hello
+  hello
+  (/
+   100
+   200
+   ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+   precision: (foo bar baz))
+  world
+  bar
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  llo
+  (llollo "lorem ipsum dolor")
+  (llollo "lorem ipsum dolor")
+  "hello((()))world"
+  foobar
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  qux
+  qux
+  hello
+  hello
+  (/
+   100
+   200
+   ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+   precision: (foo bar baz))
+  world
+  bar
+  bar)
+ ((keyboard key right dn alt: true)
+  (keyboard key right dn alt: true)
+  (keyboard key right dn alt: true))
+ (bar
+  +
+  3
+  ()
+  ()
+  llo
+  (llollo "lorem ipsum dolor")
+  (llollo "lorem ipsum dolor")
+  "hello((()))world"
+  foobar
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  qux
+  qux
+  hello
+  hello
+  world
+  bar
+  bar
+  (/
+   100
+   200
+   ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+   precision: (foo bar baz))))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  llo
+  (llollo "lorem ipsum dolor")
+  (llollo "lorem ipsum dolor")
+  "hello((()))world"
+  foobar
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  qux
+  qux
+  hello
+  hello
+  world
+  bar
+  bar
+  (/
+   100
+   200
+   ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+   precision: (foo bar baz)))
+ ((keyboard key home dn alt: true)
+  (keyboard key right dn alt: true)
+  (keyboard key right dn alt: true)
+  (keyboard key right dn alt: true)
+  (keyboard key right dn alt: true)
+  (keyboard key right dn alt: true)
+  (keyboard key right dn alt: true)
+  (keyboard key right dn alt: true)
+  (keyboard key right dn alt: true)
+  (keyboard key right dn alt: true)
+  (keyboard key right dn alt: true)
+  (keyboard key right dn alt: true)
+  (keyboard key right dn alt: true))
+ (bar
+  +
+  3
+  ()
+  ()
+  llo
+  (llollo "lorem ipsum dolor")
+  (/
+   100
+   200
+   ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+   precision: (foo bar baz))
+  (llollo "lorem ipsum dolor")
+  "hello((()))world"
+  foobar
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  qux
+  qux
+  hello
+  hello
+  world
+  bar
+  bar))
+
+(edit
+ (bar
+  +
+  3
+  ()
+  ()
+  llo
+  (llollo "lorem ipsum dolor")
+  (/
+   100
+   200
+   ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+   precision: (foo bar baz))
+  (llollo "lorem ipsum dolor")
+  "hello((()))world"
+  foobar
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  qux
+  qux
+  hello
+  hello
+  world
+  bar
+  bar)
+ ((keyboard key left dn alt: true)
+  (keyboard key left dn alt: true)
+  (keyboard key left dn alt: true)
+  (keyboard key left dn alt: true)
+  (keyboard key left dn alt: true)
+  (keyboard key left dn alt: true)
+  (keyboard key left dn alt: true)
+  (keyboard key left dn alt: true)
+  (keyboard key left dn alt: true)
+  (keyboard key left dn alt: true)
+  (keyboard key left dn alt: true)
+  (keyboard key left dn alt: true)
+  (keyboard key left dn alt: true))
+ ((/
+   100
+   200
+   ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+   precision: (foo bar baz))
+  bar
+  +
+  3
+  ()
+  ()
+  llo
+  (llollo "lorem ipsum dolor")
+  (llollo "lorem ipsum dolor")
+  "hello((()))world"
+  foobar
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  qux
+  qux
+  hello
+  hello
+  world
+  bar
+  bar))
+
+(edit
+ ((/
+   100
+   200
+   ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+   precision: (foo bar baz))
+  bar
+  +
+  3
+  ()
+  ()
+  llo
+  (llollo "lorem ipsum dolor")
+  (llollo "lorem ipsum dolor")
+  "hello((()))world"
+  foobar
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  qux
+  qux
+  hello
+  hello
+  world
+  bar
+  bar)
+ ((keyboard key end dn alt: true) (keyboard key right dn alt: true))
+ (bar
+  +
+  3
+  ()
+  ()
+  llo
+  (llollo "lorem ipsum dolor")
+  (llollo "lorem ipsum dolor")
+  "hello((()))world"
+  foobar
+  qux
+  2
+  "lorem ipsum dolor"
+  foo
+  qux
+  qux
+  hello
+  hello
+  world
+  bar
+  bar
+  (/
+   100
+   200
+   ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
+   precision: (foo bar baz))))
