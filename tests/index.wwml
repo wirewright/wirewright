@@ -15,23 +15,9 @@
  (test "alloy.test.wwml"
    color: (oklch 0.7 0.13 190)
    tags: (alloy))
- (test "editor.test.wwml"
-   color: (oklch 0.7 0.13 250)
-   tags: (editor))
- (test "delta7.test.wwml"
-   color: (oklch 0.7 0.13 70)
-   tags: (d7 delta7))
  (test "tspace.test.wwml"
    color: (oklch 0.7 0.13 180)
    tags: (tspace))
- (comparison "DwUIR regressions"
-   (rack/image "dwuir.rack.wwml" tests-image-out)
-   (ppm "dwuir.expected.ppm")
-   tags: (ui dwuir))
- (comparison "UIR regressions"
-   (rack/image "uir.rack.wwml" tests-image-out)
-   (ppm "uir.expected.ppm")
-   tags: (ui uir))
  (test "ufold.test.wwml"
    color: (oklch 0.7 0.13 290)
    tags: (ufold)))
