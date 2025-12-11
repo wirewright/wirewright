@@ -548,6 +548,26 @@ module Ww::Alloy
         end
       end
 
+      # |@ alloy.template.^br
+      #
+      # |@pattern
+      # (^br cond_ then_ else_)
+      #
+      # |@key cond alloy.expr
+      #
+      # |@block
+      # Replaces itself with *else* if the condition expression evaluates to `false`.
+      # Replaces itself with *then* otherwise.
+      matchpi %{(^br cond_ truthy_ falsey_)} do
+        issues.adjoin("`^br` template expression") do |issues|
+          if eval(ctx, cond, issues) == Term[false]
+            render0(ctx, falsey, issues)
+          else
+            render0(ctx, truthy, issues)
+          end
+        end
+      end
+
       # |@ alloy.template.^if
       #
       # |@pattern
