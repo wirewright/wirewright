@@ -94,9 +94,9 @@ macro defcase(cls, *typedecls, inherit = false, equality = :value, caches_hash =
       def_equals_and_hash {{typedecls.map { |typedecl| "@#{typedecl.var}".id }.splat}}
     {% end %}
 
-    @hash : UInt64?
-
     {% if caches_hash && equality == :value %}
+      @hash : UInt64?
+
       def hash(hasher)
         h64 = @hash ||= previous_def(Crystal::Hasher.new).result
         h64.hash(hasher)
