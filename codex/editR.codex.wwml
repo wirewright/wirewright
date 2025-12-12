@@ -1,4 +1,4 @@
-;; The text editor is rendered as follows:
+;; The text editor uses the following representation:
 ;;
 ;;             text lhs               anchor
 ;;             -------            --------------
@@ -125,11 +125,11 @@
 
 ;; Home and End in multiline (go to start or end of line).
 (I M←(keyboard key ⸨home,end⸩ dn ⍊ -shift) _* ⍊ multiline: true)
-  <> {(M): ((reset goal) (goto (line text) ⸨left,right⸩) (collapse selection ⸨left,right⸩))}
+  <> {(M): ((reset goal) (goto line ⸨left,right⸩) (collapse selection ⸨left,right⸩))}
 
 ;; S-Home and S-End in multiline (extend to start or end of line).
 (I M←(keyboard key ⸨home,end⸩ dn ⍊ shift) _* ⍊ multiline: true)
-  <> {(M): ((reset goal) (goto (line text) ⸨left,right⸩))}
+  <> {(M): ((reset goal) (goto line ⸨left,right⸩))}
 
 ;; C-Home and C-End in multiline (go to start or end of text).
 (I M←(keyboard key ⸨home,end⸩ dn ⍊ -shift ctrl) _* ⍊ multiline: true)
@@ -165,7 +165,7 @@
   <> {M: (goto line ⸨up,dn⸩)}
 
 ;; Up and Dn in multiline at top or bot is the same as Home/End.
-[(I M←(keyboard key ⸨up,dn⸩ dn ⍊ -shift ⸨top,bot⸩: true) _* ⍊ multiline: true) (_string * _string) _]
+[[I M←(keyboard key ⸨up,dn⸩ dn ⍊ -shift ⸨top,bot⸩: true) _*] (_string * _string) _]
   <> {(M): ((reset goal) (goto text ⸨left,right⸩) (collapse selection ⸨left,right⸩))}
 
 ;; S-Up and S-Dn in multiline at top or bot is the same as S-Home/End.
@@ -207,13 +207,15 @@
             (goto goal)
             (unzip))}
 
-[(I M←[reset goal] _* ⍊ goal_) x_ _]
+[(I M←[reset goal] _* ⍊ goal_) _ _]
   <> {(M): (), (goal): ()}
 
-[(I M←[update goal] _* ⍊ -goal_) ⟪(l_string * _string)⟫ _]
+;; WARNING: runs only within the line zipper.
+[(I M←[update goal] _* ⍊ -goal_) (_string (l_string * _string) _string) _]
   <> {(M): (), goal: ^(charcount l)}
 
-[(I M←[goto goal] _* ⍊ goal_: (%number +i32)) ⟪(l←"" * r_string)⟫ _]
+;; WARNING: runs only within the line zipper.
+[(I M←[goto goal] _* ⍊ goal_: (%number +i32)) (_string (l←"" * r_string) _string) _]
   <> {(M): (),
       l: ^(runes r 0 '..< goal),
       r: ^(runes r goal '..= -1)}
@@ -241,28 +243,48 @@
             (collapse selection ⸨right,left⸩)
             (goto text ⸨left,right⸩))}
 
-[I [goto arg←(focus_) _] `M' _*]
-  <> {arg: ^focus, M': (unzip)}
-
-[I `M [goto (focus_ _+) _] `M' _*]
-  <> {M: (zip ^focus), (focus): (), M': (unzip)}
-
+;; Runs within any zipper.
 [[I M←[goto ⸨rune,word⸩ left] _*] ⟪(l_string * r_string)⟫ _]
-  <> {(M): (), l: ^(⸨rune,word⸩s l 0 ..= -2), r: ^(~ (⸨rune,word⸩ l -1) r)}
+  <> {(M): (), l: ^(⸨rune,word⸩s l 0 '..= -2), r: ^(~ (⸨rune,word⸩ l -1) r)}
 
+;; Runs within any zipper.
 [[I M←[goto ⸨rune,word⸩ right] _*] ⟪(l_string * r_string)⟫ _]
-  <> {(M): (), l: ^(~ l (⸨rune,word⸩ r 0)), r: ^(⸨rune,word⸩s r 1 ..= -1)}
+  <> {(M): (), l: ^(~ l (⸨rune,word⸩ r 0)), r: ^(⸨rune,word⸩s r 1 '..= -1)}
 
+;; Runs within any zipper.
 [[I M←[goto text left] _*] ⟪(l_string * r_string)⟫ _]
   <> {(M): (), l: "", r: ^(~ l r)}
 
+;; Runs within any zipper.
 [[I M←[goto text right] _*] ⟪(l_string * r_string)⟫ _]
   <> {(M): (), l: ^(~ l r), r: ""}
 
-[[I M←[zip line] _*] ⟪[l_string m←* r_string]⟫ _]
+;; Runs only within the text zipper.
+[[I M←[goto line ⸨left,right⸩] _*] (_string * _string) _]
+  <> {(M): ((zip line) ^M (unzip))}
+
+;; Goto line left at the beginning of a line means go to line left
+;; of the previous line.
+;;
+;; WARNING: runs only within the line zipper.
+[[I M←[goto line left] _*] (_string ("" * _string) _string) _]
+  <> {(M): ((unzip) (goto rune left) (zip line) (goto text left))}
+
+;; Goto line right at the end of a line means go to line right
+;; of the next line.
+;;
+;; WARNING: runs only within the line zipper.
+[[I M←[goto line right] _*] (_string (_string * "") _string) _]
+  <> {(M): ((unzip) (goto rune right) (zip line) (goto text right))}
+
+;; WARNING: runs only within the line zipper.
+[[I M←[goto line ⸨left,right⸩] _*] (_string (_string * _string) _string) _]
+  <> {M: (goto text ⸨left,right⸩)}
+
+[[I M←[zip line] _*] (l_string m←* r_string) _]
   <> {(M): (), l: ^(rline/rest l), m: ^((rline/stem l) * (line/stem r)), r: ^(line/rest r)}
 
-[[I M←[unzip] _*] ⟪[L_string m←[l_string * r_string] R_string]⟫ _]
+[[I M←[unzip] _*] [L_string m←[l_string * r_string] R_string] _]
   <> {(M): (), L: ^(~ L l), m: *, R: ^(~ r R)}
 
 [[I M←[range] _*] s←(l_string * r_string) anchor←(%number +i32)]
@@ -272,7 +294,7 @@
   <> {i: ^(min i j), mark: ..<, j: ^(max i j)}
 
 [[I M←[range] _*] s_string rng←(from←(%number +i32) ..< to←(%number +i32))]
-  <> {s: (^(runes s 0 ..< from) ^(runes s from ..< to) ^(runes s to ..= -1)), (rng): ()}
+  <> {s: (^(runes s 0 '..< from) ^(runes s from '..< to) ^(runes s to '..= -1)), (rng): ()}
 
 [[I M←[unrange left] _*] (l_string m_string r_string) `anchor]
   <> {(M): (), m: *, r: ^(~ m r), anchor: ^(charcount l)}
@@ -419,6 +441,9 @@ C←[C'←[I M←[cancel compose] _*] compose _string]
 ;; -----------------
 ;; STRUCTURAL EDITOR
 ;; -----------------
+;;
+;; Tagging the kernel with structural: true lets the input field itself (i.e., `[[I _*] _*]`)
+;; move, create terms around itself, and so on.
 
 ;;
 ;; Key bindings
@@ -599,6 +624,10 @@ C←[C'←[I M←[cancel compose] _*] compose _string]
 ⟨⟨[(I M←(keyboard key _symbol dn ⍊ alt_: true) _* ⍊ structural: true) ("" * "") _]⟩⟩
   <> {M: (carry ^(up M)), (alt): ()}
 
+;; Integration with history: use pgup to navigate in history.
+[(I M←[keyboard key ⸨pgup,pgdn⸩ dn] _* ⍊ history: _dict structural: true) (_string * _string) _]
+  <> {M: (goto history ⸨left,right⸩)}
+
 ;;
 ;; Commands
 ;;
@@ -728,23 +757,23 @@ D←⟨C←[[I M←[unnest] _*] _*]⟩
   <> {M: (submit (ml ^(~ l r)) ⸨left,right⸩)}
 
 [I [submit result←(ml ml_string) _] _*]
-  <> {result: ^(ml->term ml)}
+  <> {(result): (^ml ^(ml->term ml))}
 
-[[I M←[submit (ml/ok term_) ⸨left,right⸩] _*] (l_string * r_string) _]
-  <> {(M): ((clear input) (submit (term ^term) ⸨left,right⸩) ok)}
+[[I M←[submit text_string (ml/ok term_) ⸨left,right⸩] _*] (l_string * r_string) _]
+  <> {(M): ((history add ^text) (clear input) (insert (term ^term) ⸨left,right⸩) ok)}
 
-[I M←[submit (ml/err) _] _*]
+[I M←[submit _string (ml/err) _] _*]
   <> {M: err}
 
-C←[[I M←[submit (term T_) left] _*] _ _]
+C←[[I M←[insert (term T_) left] _*] _ _]
   <> {(M): (), (C): (^T ^(up C))}
 
-C←[[I M←[submit (term T_) right] _*] _ _]
-  <> {(M): (), (C): (^(up C) ^(up T))}
+C←[[I M←[insert (term T_) right] _*] _ _]
+  <> {(M): (), (C): (^(up C) ^T)}
 
-;; Both submit left and submit right in a pair go to the itemspart
+;; Both insert left and insert right in a pair go to the itemspart
 ;; end afterwards.
-(_* `C' ¦ (%entry _ C←[[I M←[submit (term T_) ⸨left,right⸩] _*] (_string * _string) _]))
+(_* `C' ¦ (%entry _ C←[[I M←[insert (term T_) ⸨left,right⸩] _*] (_string * _string) _]))
   <> {(M): (), C: ^T, C': ^(up C)}
 
 D←⟨C←[[I [edit dict] _*] (l_string * r_string) _]⟩
@@ -818,3 +847,92 @@ D←⟨C←[(I M←(carry m_ ⍊ -◇_) _* ⍊ -sack_) _*]⟩
 
 C←[(I M←[place] _* ⍊ sack: (%entry D_ _)) _*]
   <> {(M): (), C: ^D, (D): ()}
+
+;; -------
+;; HISTORY
+;; -------
+;;
+;; Pluggable input history. Main interface is through `history add _string` and
+;; `goto history ⸨left,right⸩`.
+;;
+;; # Enabling history
+;;
+;; The kernel must be equipped with the "storage" box for history: `(.)`. `.` is
+;; the cursor mark; it is required, and will move to highlight the current entry:
+;; `history: ((. "hello") "world" "bye")` means `"hello"` is currently focused,
+;; whereas in `history: ("hello" "world" "bye" .)`, `.` means we're currently at
+;; the history's tail.
+;;
+;; Set `history/submit: true` in the kernel to intercept Enter at end and
+;; C-Enter anywhere (selection-inactive) to submit.
+;;
+;; Set `history/nav: true` in the kernel to intercept Up and Dn at top/bot
+;; to trigger `goto history left/right`, correspondingly.
+;;
+;; # Submissions box
+;;
+;; Submission can be handled by attaching a `submissions: ()` box to the kernel.
+;; The client of this codex is expected to look for submissions, and take them out
+;; in any way it wants. The client can suspend the input by "physically" obstructing
+;; the rules, e.g. by changing `I` in the kernel to something else.
+;;
+;; You do not need `history: (...)` to use `submissions: (...)`.
+
+;;
+;; Key bindings
+;;
+
+[(I M←(keyboard key enter dn ⍊ -shift) _* ⍊ history/submit: true) (l←(%pipe span A_) * "") A_]
+  <> {(M): ((clear input) (history add ^l))}
+[(I M←(keyboard key enter dn ⍊ ctrl) _* ⍊ history/submit: true) (l←(%pipe span A_) * r_string) A_]
+  <> {(M): ((clear input) (history add ^(~ l r)))}
+
+[(I M←(keyboard key ⸨up,dn⸩ dn ⍊ -mod ⸨top,bot⸩: true -◇_) _* ⍊ history/nav: true) (l←(%pipe span A_) * _string) A_]
+  <> {M: (goto history ⸨left,right⸩ fb: ^(up M)), ◇: true}
+
+;;
+;; Utilities
+;;
+
+;; Submit with history active deactivates history, retries.
+[(I M←[history add text_string] _* ⍊ history: (%all [_* tail_string] ⟨focus←(. entry_string)⟩)) _*]
+  <> {focus: ^entry, tail: .}
+;; Submit with history inactive simply appends, avoiding duplicates.
+[(I M←[history add text_string] _* ⍊ history: [_* text_string .]) _*]
+  <> {(M): ()}
+[(I M←[history add text_string] _* ⍊ history: [_* `>tail .]) _*]
+  <> {(M): (), >tail: ^text}
+
+;; Append to submissions, if enabled.
+[(I (history add text_string ⍊ -◇_) _* ⍊ submissions: (_* `>sub)) _*]
+  <> {>sub: ^text, ◇: true}
+
+;; History inactive, Up copies the current entry and puts it at the end
+;; of history, proceeds to focus the previous entry normally.
+[(I M←[goto history left] _* ⍊ history: [_* pred_string focus←.]) (l_string * r_string) _]
+  <> {(M): ((select text right) (splice ^pred left)), pred: (. ^pred), focus: ^(~ l r)}
+
+;; History active: Up focuses previous entry in history.
+[(I M←[goto history left] _* ⍊ history: ⟨pred_string focus←(. current_string)⟩) (_string * _string) _]
+  <> {(M): ((select text right) (splice ^pred left)), pred: (. ^pred), focus: ^current}
+
+;; Dn before bottom deactivates history.
+[(I M←[goto history right] _* ⍊ history: [_* focus←(. current_string) next_string]) (_string * _string) _]
+  <> {(M): ((select text right) (splice ^next right)), focus: ^current, (next): .}
+
+;; History active: Dn focuses next entry in history.
+[(I M←[goto history right] _* ⍊ history: ⟨focus←(. current_string) next_string _⟩) (_string * _string) _]
+  <> {(M): ((select text right) (splice ^next right)), next: (. ^next), focus: ^current}
+
+;; If none of these match emit the provided fallback, if any.
+;;
+;; SIDENOTE: I don't think we'd get backtracking search over sequences of rule
+;; applications. It could make these kinds of hacks -- "fallback messages" --
+;; unnecessary, since the system will be able to figure fallbacks on its own.
+;; The problem is it's hard to say what constitutes a goal -- which state are we
+;; searching towards? Experimentally, we can say the goal is defined by a pattern
+;; that extracts the features of a matchee that must change (the chaneg of *that*
+;; being the goal, thus). What if it cannot be achieved, though? Pick most specific
+;; rule that changed the matchee otherwise? Humph.
+[I M←(goto history ⸨left,right⸩ ⍊ fb_) _*]
+  <> {M: ^fb}

@@ -122,14 +122,8 @@
 
 (edit
  ((I modify: true multiline: true) ("lorem ipsum\n" * "dolor sit!") 12)
- ((keyboard key home dn))
- ((I modify: true multiline: true) ("lorem ipsum\n" * "dolor sit!") 12))
-
-(edit
- ((I modify: true multiline: true) ("lorem ipsum\n" * "dolor sit!") 12)
  ((keyboard key left dn)
   (keyboard key home dn)
-  (keyboard key end dn)
   (keyboard key end dn))
  ((I modify: true multiline: true) ("lorem ipsum" * "\ndolor sit!") 11))
 
@@ -4682,3 +4676,310 @@
    200
    ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
    precision: (foo bar baz))))
+
+(edit
+ ((I history: (.) modify: true multiline: true history/submit: true history/nav: true) ("" * "") 0)
+ ((keyboard input "hello") (keyboard key enter dn))
+ ((I history: ("hello" .) modify: true multiline: true history/submit: true history/nav: true)
+  ("" * "")
+  0))
+
+(edit
+ ((I history: ("hello" .) modify: true multiline: true history/submit: true history/nav: true)
+  ("" * "")
+  0)
+ ((keyboard input "world")
+  (keyboard key a dn ctrl: true)
+  (keyboard key enter dn))
+ ((I history: ("hello" .) modify: true multiline: true history/submit: true history/nav: true)
+  ("\n" * "")
+  1))
+
+(edit
+ ((I history: ("hello" .) modify: true multiline: true history/submit: true history/nav: true)
+  ("\n" * "")
+  1)
+ ((keyboard key backspace dn)
+  (keyboard input "world")
+  (keyboard key enter dn shift: true)
+  (keyboard input "bye")
+  (keyboard key left dn)
+  (keyboard key left dn)
+  (keyboard key enter dn shift: true))
+ ((I history: ("hello" .) modify: true multiline: true history/submit: true history/nav: true)
+  ("world\nb\n" * "ye")
+  8))
+
+(edit
+ ((I history: ("hello" .) modify: true multiline: true history/submit: true history/nav: true)
+  ("world\nb\n" * "ye")
+  8)
+ ((keyboard key end dn) (keyboard key dn dn))
+ ((I history: ("hello" .) modify: true multiline: true history/submit: true history/nav: true)
+  ("world\nb\nye" * "")
+  10))
+
+(edit
+ ((I history: ("hello" .) modify: true multiline: true history/submit: true history/nav: true)
+  ("world\nb\nye" * "")
+  10)
+ ((keyboard key up dn) (keyboard key up dn) (keyboard key up dn))
+ ((I
+   history: ((. "hello") "world\nb\nye")
+   modify: true
+   multiline: true
+   history/submit: true history/nav: true)
+  ("hello" * "")
+  5))
+
+(edit
+ ((I
+   history: ((. "hello") "world\nb\nye")
+   modify: true
+   multiline: true
+   history/submit: true history/nav: true)
+  ("hello" * "")
+  5)
+ ((keyboard key home dn) (keyboard key up dn) (keyboard key dn dn))
+ ((I history: ("hello" .) modify: true multiline: true history/submit: true history/nav: true)
+  ("" * "world\nb\nye")
+  0))
+
+(edit
+ ((I history: ("hello" .) modify: true multiline: true history/submit: true history/nav: true)
+  ("" * "world\nb\nye")
+  0)
+ ((keyboard key dn dn)
+  (keyboard key dn dn)
+  (keyboard key up dn)
+  (keyboard key up dn)
+  (keyboard key up dn)
+  (keyboard key dn dn))
+ ((I history: ("hello" .) modify: true multiline: true history/submit: true history/nav: true)
+  ("" * "world\nb\nye")
+  0))
+
+(edit
+ ((I history: ("hello" .) modify: true multiline: true history/submit: true history/nav: true)
+  ("" * "world\nb\nye")
+  0)
+ ((keyboard key up dn) (keyboard input "foobar") (keyboard key enter dn))
+ ((I
+   history: ("hello" "hellofoobar" .)
+   modify: true
+   multiline: true
+   history/submit: true history/nav: true)
+  ("" * "")
+  0))
+
+(edit
+ ((I
+   history: ("hello" "hellofoobar" .)
+   modify: true
+   multiline: true
+   history/submit: true history/nav: true)
+  ("" * "")
+  0)
+ ((keyboard input "saved")
+  (keyboard key up dn)
+  (keyboard key up dn)
+  (keyboard key up dn))
+ ((I
+   history: ((. "hello") "hellofoobar" "saved")
+   modify: true
+   multiline: true
+   history/submit: true history/nav: true)
+  ("" * "hello")
+  0))
+
+(edit
+ ((I
+   history: ((. "hello") "hellofoobar" "saved")
+   modify: true
+   multiline: true
+   history/submit: true history/nav: true)
+  ("" * "hello")
+  0)
+ ((keyboard key dn dn) (keyboard key dn dn) (keyboard key dn dn))
+ ((I
+   history: ("hello" "hellofoobar" .)
+   modify: true
+   multiline: true
+   history/submit: true history/nav: true)
+  ("saved" * "")
+  5))
+
+(edit
+ ((I
+   history: ("hello" "hellofoobar" .)
+   modify: true
+   multiline: true
+   history/submit: true history/nav: true)
+  ("saved" * "")
+  5)
+ ((keyboard key enter dn))
+ ((I
+   history: ("hello" "hellofoobar" "saved" .)
+   modify: true
+   multiline: true
+   history/submit: true history/nav: true)
+  ("" * "")
+  0))
+
+(edit
+ ((I
+   history: ("hello" "hellofoobar" "saved" .)
+   modify: true
+   multiline: true
+   history/submit: true history/nav: true)
+  ("" * "")
+  0)
+ ((keyboard key enter dn) (keyboard key enter dn) (keyboard key enter dn))
+ ((I
+   history: ("hello" "hellofoobar" "saved" "" .)
+   modify: true
+   multiline: true
+   history/submit: true history/nav: true)
+  ("" * "")
+  0))
+
+(edit
+ ((I
+   history: ("hello" "hellofoobar" "saved" "" .)
+   modify: true
+   multiline: true
+   history/submit: true history/nav: true)
+  ("" * "")
+  0)
+ ((keyboard input "bye") (keyboard key enter dn))
+ ((I
+   history: ("hello" "hellofoobar" "saved" "" "bye" .)
+   modify: true
+   multiline: true
+   history/submit: true history/nav: true)
+  ("" * "")
+  0))
+
+(edit
+ ((I modify: true multiline: true) ("" * "") 0)
+ ((keyboard input "hello")
+  (keyboard key enter dn)
+  (keyboard input "World")
+  (keyboard key enter dn)
+  (keyboard input "lorem ipsum dolor")
+  (keyboard key enter dn)
+  (keyboard input "sit amet")
+  (keyboard key home dn)
+  (keyboard key home dn)
+  (keyboard key home dn)
+  (keyboard key home dn))
+ ((I modify: true multiline: true)
+  ("" * "hello\nWorld\nlorem ipsum dolor\nsit amet")
+  0))
+
+(edit
+ ((I modify: true multiline: true)
+  ("" * "hello\nWorld\nlorem ipsum dolor\nsit amet")
+  0)
+ ((keyboard key end dn)
+  (keyboard key end dn)
+  (keyboard key end dn)
+  (keyboard key end dn))
+ ((I modify: true multiline: true)
+  ("hello\nWorld\nlorem ipsum dolor\nsit amet" * "")
+  38))
+
+(edit
+ ((I modify: true multiline: true)
+  ("hello\nWorld\nlorem ipsum dolor\nsit amet" * "")
+  38)
+ ((keyboard key home dn shift: true)
+  (keyboard key home dn shift: true)
+  (keyboard key home dn shift: true)
+  (keyboard key home dn shift: true))
+ ((I modify: true multiline: true)
+  ("" * "hello\nWorld\nlorem ipsum dolor\nsit amet")
+  38))
+
+(edit
+ ((I modify: true multiline: true)
+  ("" * "hello\nWorld\nlorem ipsum dolor\nsit amet")
+  38)
+ ((keyboard key left dn)
+  (keyboard key end dn shift: true)
+  (keyboard key end dn shift: true)
+  (keyboard key end dn shift: true)
+  (keyboard key end dn shift: true))
+ ((I modify: true multiline: true)
+  ("hello\nWorld\nlorem ipsum dolor\nsit amet" * "")
+  0))
+
+(edit
+ ((I history: (.) modify: true structural: true) ("" * "") 0)
+ ((keyboard input "(")
+  (keyboard input "+")
+  (keyboard input " ")
+  (keyboard input "1")
+  (keyboard input " ")
+  (keyboard key up dn)
+  (keyboard key dn dn)
+  (keyboard key pgup dn))
+ (+
+  1
+  ((I history: ("+" (. "1") "") modify: true structural: true) ("1" * "") 1)))
+
+(edit
+ (+
+  1
+  ((I history: ("+" (. "1") "") modify: true structural: true) ("1" * "") 1))
+ ((keyboard key pgup dn))
+ (+
+  1
+  ((I history: ((. "+") "1" "") modify: true structural: true) ("+" * "") 1)))
+
+(edit
+ (+
+  1
+  ((I history: ((. "+") "1" "") modify: true structural: true) ("+" * "") 1))
+ ((keyboard key pgdn dn))
+ (+
+  1
+  ((I history: ("+" (. "1") "") modify: true structural: true) ("" * "1") 0)))
+
+(edit
+ (+
+  1
+  ((I history: ("+" (. "1") "") modify: true structural: true) ("" * "1") 0))
+ ((keyboard key end dn) (keyboard input " "))
+ (+ 1 1 ((I history: ("+" "1" .) modify: true structural: true) ("" * "") 0)))
+
+(edit
+ (+ 1 1 ((I history: ("+" "1" .) modify: true structural: true) ("" * "") 0))
+ ((keyboard key pgup dn)
+  (keyboard key pgup dn)
+  (keyboard key enter dn ctrl: true))
+ (+
+  1
+  1
+  +
+  ((I history: ("+" "1" "+" .) modify: true structural: true) ("" * "") 0)))
+
+(edit
+ ((I history/submit: true modify: true submissions: ()) ("" * "") 0)
+ ((keyboard input "hello")
+  (keyboard key enter dn)
+  (keyboard input "hello")
+  (keyboard key enter dn)
+  (keyboard input "hello"))
+ ((I history/submit: true modify: true submissions: ("hello" "hello"))
+  ("hello" * "")
+  5))
+
+(edit
+ ((I history/submit: true modify: true submissions: ("hello" "hello"))
+  ("hello" * "")
+  5)
+ ((keyboard key up dn) (keyboard key dn dn))
+ ((I history/submit: true modify: true submissions: ("hello" "hello"))
+  ("hello" * "")
+  5))
