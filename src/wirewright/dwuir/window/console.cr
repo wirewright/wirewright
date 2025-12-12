@@ -80,7 +80,7 @@ module Ww::DwUIR
       maxx = Termbox.width
       maxy = Termbox.height
 
-      Termbox.clear(fg: Termbox::Color::White, bg: Termbox::Color.rgb(*window.conf.backdrop.rgb))
+      Termbox.clear(fg: Termbox::Color::White, bg: Termbox::Color.rgb(*window.conf.backdrop.rgb8))
 
       screen = window.screen
 
@@ -94,7 +94,7 @@ module Ww::DwUIR
         next unless x.in?(0...maxx) && y.in?(0...maxy)
 
         if cell.is_a?(Pigment::RGBA)
-          Termbox.set(' ', x: x.to_i, y: y.to_i, fg: Termbox::Color::White, bg: Termbox::Color.rgb(*cell.rgb))
+          Termbox.set(' ', x: x.to_i, y: y.to_i, fg: Termbox::Color::White, bg: Termbox::Color.rgb(*cell.rgb8))
           next
         end
 
@@ -105,8 +105,8 @@ module Ww::DwUIR
           rune, bg = cell
         end
 
-        fg = Termbox::Color.rgb(*rune.fg.rgb)
-        bg = Termbox::Color.rgb(*bg.rgb)
+        fg = Termbox::Color.rgb(*rune.fg.rgb8)
+        bg = Termbox::Color.rgb(*bg.rgb8)
 
         if rune.decoration.bold?
           fg |= Termbox::Color::Bold
