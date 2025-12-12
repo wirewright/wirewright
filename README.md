@@ -4,10 +4,29 @@
 </div>
 
 > [!WARNING]
-> You're looking at the development branch of Wirewright, `iota`. Most likely it won't
-> even compile; that's why I'm keeping it separate from the main branch, `kappa`. Once
-> it's ready, it's either going to be merged into kappa, or I'm going to make this branch
-> the main one.
+> You're looking at the development branch of Wirewright, `iota`. I've made `iota`
+> the main branch because the only alternative is to keep `kappa`, and `kappa` is
+> *very* outdated and won't receive updates anymore.
+>
+> Wirewright is currently lacking a *frontend*. This means that aside from tests
+> and custom code (i.e., using Wirewright as a library), there's no way for a user
+> (*you*) to interact with the system.
+>
+> This is *very* unfortunate, and a little bit funny, because what I'm saying here
+> is, basically, "here's my project but you can't use it". *Shrugs.*
+>
+> But I have other things to do first, and then there's only one of me. I'm already
+> working full-time on Wirewright, and that's not enough, not even *remotely*, considering
+> the scope of the project.
+>
+> Furthermore, this kind of thing -- Wirewright -- stems purely out of curiosity.
+> No money will ever be in this area, period. I mean, I'm 99% sure. It's too crank.
+>
+> If you're interested, the best strategy for you is to read about Wirewright over at
+> the Wiki page and wait. I don't know whether it'd take months or years to get
+> a usable frontend going (probably months).
+>
+> That's a big warning about nothing in particular, isn't it?
 
 # Wirewright
 
