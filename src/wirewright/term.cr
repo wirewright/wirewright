@@ -1076,7 +1076,10 @@ module Ww
     # instance and the initial environment.
     #
     # See also: `Case.defcase`, `Case.scan`.
-    macro case(matchee, *, matcher, env = Term[], &block)
+    macro case(matchee, *, matcher, env = Term[], **kwargs, &block)
+      {% unless kwargs.empty? %}\
+        {% raise "unrecognized keyword arguments passed to Term.case" %}
+      {% end %}\
       {{@type}}::Case.scan({{@type}}::MATCHERS, {{matcher}}, Term.of({{matchee}}), {{env}}) {{block}}
     end
 
