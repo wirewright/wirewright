@@ -53,7 +53,7 @@
 
 (edit
  ((I modify: true multiline: true) ("lorem ipsum\n" * "dolorem it!") 12)
- ((keyboard key left dn ctrl: true) (keyboard key left dn ctrl: true))
+ ((keyboard key left dn ctrl: true) (keyboard key left dn ctrl: true) (keyboard key left dn ctrl: true))
  ((I modify: true multiline: true) ("" * "lorem ipsum\ndolorem it!") 0))
 
 (edit
@@ -68,12 +68,12 @@
 
 (edit
  ((I modify: true multiline: true) ("lorem ipsum" * "\ndolorem it!") 11)
- ((keyboard key right dn ctrl: true))
+ ((keyboard key right dn ctrl: true) (keyboard key right dn ctrl: true))
  ((I modify: true multiline: true) ("lorem ipsum\ndolorem" * " it!") 19))
 
 (edit
  ((I modify: true multiline: true) ("lorem ipsum\ndolorem" * " it!") 19)
- ((keyboard key right dn ctrl: true))
+ ((keyboard key right dn ctrl: true) (keyboard key right dn ctrl: true))
  ((I modify: true multiline: true) ("lorem ipsum\ndolorem it!" * "") 23))
 
 (edit
@@ -96,7 +96,7 @@
 
 (edit
  ((I modify: true multiline: true) ("lorem ipsum\n" * "dolorem it!") 23)
- ((keyboard key left dn ctrl: true shift: true))
+ ((keyboard key left dn ctrl: true shift: true) (keyboard key left dn ctrl: true shift: true))
  ((I modify: true multiline: true) ("lorem " * "ipsum\ndolorem it!") 23))
 
 (edit
@@ -107,6 +107,7 @@
 (edit
  ((I modify: true multiline: true) ("" * "lorem ipsum\ndolorem it!") 0)
  ((keyboard key right dn ctrl: true)
+  (keyboard key right dn ctrl: true)
   (keyboard key right dn ctrl: true)
   (keyboard key right dn ctrl: true)
   (keyboard key left dn ctrl: true shift: true)
@@ -4983,3 +4984,111 @@
  ((I history/submit: true modify: true submissions: ("hello" "hello"))
   ("hello" * "")
   5))
+
+(edit
+ ((I indent: (1 x "\t") modify: true) ("" * "") 0)
+ ((keyboard key tab dn) (keyboard input "hello"))
+ ((I indent: (1 x "\t") modify: true) ("\thello" * "") 6))
+
+(edit
+ ((I indent: (1 x "\t") modify: true multiline: true) ("" * "") 0)
+ ((keyboard input "Hello")
+  (keyboard key enter dn)
+  (keyboard key tab dn)
+  (keyboard input "bye")
+  (keyboard key enter dn)
+  (keyboard input "qux")
+  (keyboard key enter dn)
+  (keyboard key backspace dn)
+  (keyboard input "world")
+  (keyboard key enter dn))
+ ((I indent: (1 x "\t") modify: true multiline: true)
+  ("Hello\n\tbye\n\tqux\nworld\n" * "")
+  22))
+
+(edit
+ ((I indent: (2 x " ") modify: true multiline: true) ("" * "") 0)
+ ((keyboard input "hello")
+  (keyboard key enter dn)
+  (keyboard key tab dn)
+  (keyboard input "lorem")
+  (keyboard key enter dn)
+  (keyboard input "ipsum")
+  (keyboard key enter dn)
+  (keyboard key backspace dn)
+  (keyboard key backspace dn)
+  (keyboard input "foobar")
+  (keyboard key enter dn))
+ ((I indent: (2 x " ") modify: true multiline: true)
+  ("hello\n  lorem\n  ipsum\nfoobar\n" * "")
+  29))
+
+(edit
+ ((I indent: (2 x " ") modify: true multiline: true)
+  ("hello\n  lorem\n  ipsum\nfoobar\n" * "")
+  29)
+ ((keyboard key tab dn) (keyboard key backspace dn ctrl: true))
+ ((I indent: (2 x " ") modify: true multiline: true)
+  ("hello\n  lorem\n  ipsum\nfoobar\n" * "")
+  29))
+
+(edit
+ ((I indent: (2 x " ") modify: true multiline: true)
+  ("hello\n  lorem\n  ipsum\nfoobar\n" * "")
+  29)
+ ((keyboard key backspace dn ctrl: true))
+ ((I indent: (2 x " ") modify: true multiline: true)
+  ("hello\n  lorem\n  ipsum\nfoobar" * "")
+  28))
+
+(edit
+ ((I indent: (2 x " ") modify: true multiline: true)
+  ("hello\n  lorem\n  ipsum\nfoobar" * "")
+  28)
+ ((keyboard key backspace dn ctrl: true) (keyboard key backspace dn ctrl: true))
+ ((I indent: (2 x " ") modify: true multiline: true)
+  ("hello\n  lorem\n  ipsum" * "")
+  21))
+
+(edit
+ ((I indent: (2 x " ") modify: true multiline: true)
+  ("hello\n  lorem\n  ipsum" * "")
+  21)
+ ((keyboard key backspace dn ctrl: true))
+ ((I indent: (2 x " ") modify: true multiline: true) ("hello\n  lorem\n  " * "") 16))
+
+(edit
+ ((I indent: (2 x " ") modify: true multiline: true) ("hello\n  lorem\n  " * "") 16)
+ ((keyboard key backspace dn ctrl: true))
+ ((I indent: (2 x " ") modify: true multiline: true) ("hello\n  lorem\n" * "") 14))
+
+(edit
+ ((I indent: (2 x " ") modify: true multiline: true)
+  ("hello\n  lorem\n" * "")
+  14)
+ ((keyboard key tab dn)
+  (keyboard input " ")
+  (keyboard input "hi")
+  (keyboard key enter dn)
+  (keyboard input "bye"))
+ ((I indent: (2 x " ") modify: true multiline: true)
+  ("hello\n  lorem\n   hi\n   bye" * "")
+  26))
+
+(edit
+ ((I indent: (2 x " ") modify: true multiline: true)
+  ("hello\n  lorem\n   hi\n   bye" * "")
+  26)
+ ((keyboard key left dn ctrl: true shift: true) (keyboard key c dn ctrl: true))
+ ((I clipboard: (text "bye") indent: (2 x " ") modify: true multiline: true)
+  ("hello\n  lorem\n   hi\n   " * "bye")
+  26))
+
+(edit
+ ((I clipboard: (text "bye") indent: (2 x " ") modify: true multiline: true)
+  ("hello\n  lorem\n   hi\n   " * "bye")
+  26)
+ ((keyboard key end dn) (keyboard key enter dn) (keyboard key v dn ctrl: true))
+ ((I clipboard: (text "bye") indent: (2 x " ") modify: true multiline: true)
+  ("hello\n  lorem\n   hi\n   bye\n   bye" * "")
+  33))

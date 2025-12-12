@@ -90,7 +90,7 @@
   <> {M: (splice ^text left)}
 
 (I M←[keyboard key enter dn] _* ⍊ multiline: true modify: true)
-  <> {M: (splice "\n" left)}
+  <> {M: (write-range (newline))}
 
 (I M←[keyboard key ⸨backspace,delete⸩ dn] _* ⍊ modify: true)
   <> {M: (splice "" ⸨left,right⸩)}
@@ -177,16 +177,20 @@
   <> {(M): ((reset goal) (goto text left) (collapse selection left) (goto text right))}
 
 ;; C-c to copy selection, if any.
-[[I M←(keyboard key c dn ⍊ ctrl) _*] (l_string * _string) a_]
-  <> {(M): ((range) (copy) (unrange (^br (< (charcount l) a) left right)))}
+[[I M←(keyboard key c dn ⍊ ctrl) _*] (_string * _string) _]
+  <> {M: (read-range (copy))}
 
 ;; C-x to cut selection, if any.
-[[I M←(keyboard key x dn ⍊ ctrl) _*] (_string * _string) a_]
-  <> {(M): ((range) (copy) (replace "") (unrange (^br (< (charcount l) a) left right)))}
+[(I M←(keyboard key x dn ⍊ ctrl) _* ⍊ modify: true) (_string * _string) _]
+  <> {M: (write-range (copy) (replace ""))}
 
 ;; C-v to replace selection with pasted.
-[[I M←(keyboard key v dn ⍊ ctrl) _*] (_string * _string) _]
-  <> {(M): ((range) (paste) (unrange right))}
+[(I M←(keyboard key v dn ⍊ ctrl) _* ⍊ modify: true) (_string * _string) _]
+  <> {(M): ((range) (paste) (unrange cursor right))}
+
+;; If indent is given, also handle Tab.
+[(I M←[keyboard key tab dn] _* ⍊ modify: true indent: (n←(%number +i32!) x rune_string)) (l_string * _string) _]
+  <> {M: (splice ^(x rune n) left)}
 
 ;; The input in particular interprets `cancel` as collapse selection (if any).
 [[I M←[cancel] _*] (_string * _string) _]
@@ -224,7 +228,7 @@
   <> {(M): (), A: ^(charcount l)}
 
 [[I M←[collapse selection ⸨left,right⸩] _*] (_string * _string) _]
-  <> {(M): ((range) (unrange ⸨left,right⸩))}
+  <> {(M): ((range) (unrange cursor ⸨left,right⸩))}
 
 [(I M←[copy] _* ⍊ ⋮clipboard) (_string m←(%string nonempty) _string)]
   <> {(M): (), clipboard: (text ^m)}
@@ -296,18 +300,35 @@
 [[I M←[range] _*] s_string rng←(from←(%number +i32) ..< to←(%number +i32))]
   <> {s: (^(runes s 0 '..< from) ^(runes s from '..< to) ^(runes s to '..= -1)), (rng): ()}
 
-[[I M←[unrange left] _*] (l_string m_string r_string) `anchor]
+[[I M←[unrange cursor left] _*] (l_string m_string r_string) `anchor]
   <> {(M): (), m: *, r: ^(~ m r), anchor: ^(charcount l)}
 
-[[I M←[unrange right] _*] (l_string m_string _string) `anchor]
+[[I M←[unrange cursor right] _*] (l_string m_string _string) `anchor]
   <> {(M): (), l: ^(~ l m), m: *, anchor: ^(charcount l m)}
+
+[[I M←[unrange selection left] _*] (l_string m_string r_string) `anchor]
+  <> {(M): (), m: *, r: ^(~ m r), anchor: ^(charcount l m)}
+
+[[I M←[unrange selection right] _*] (l_string m_string r_string) `anchor]
+  <> {(M): (), m: *, l: ^(~ l m), anchor: ^(charcount l)}
+
+;; When you read a range (as in, e.g., copy selection), you most likely
+;; want the final unrange to result in the same *selection*.
+;;
+;; When you write to a range (as in, e.g., replace the middle part), you most likely
+;; want the final unrange to result in a *cursor*.
+[[I M←[⸨read,write⸩-range motions_+] _*] (l_string * _string) anchor←(%number +i32)]
+  <> {(M): ((range)
+            ^*motions
+            (unrange ⸨selection,cursor⸩
+              (^br (< (charcount l) anchor) left right)))}
 
 ;; NOTE: the flip here is because `unrange` takes the direction where the cursor
 ;; should land. So if we insert *left* -- to the left of the cursor -- this means
 ;; the cursor is "pushed" right, and therefore should end on the right edge of whatever
 ;; was inserted. Symmetrically for the *right* case.
 [I M←[splice text_string ⸨left,right⸩] _*]
-  <> {(M): ((range) (replace ^text) (unrange ⸨right,left⸩))}
+  <> {(M): ((range) (replace ^text) (unrange cursor ⸨right,left⸩))}
 
 [[I M←[replace text_string] _*] (_string m_string _string)]
   <> {(M): (), m: ^text}
@@ -317,6 +338,13 @@
 
 [I M←[select (term term_) ⸨left,right⸩] _*]
   <> {(M): ((edit (term ^term) right) (select text ⸨left,right⸩))}
+
+[[I M←[newline] _*] (_string m_string _string)]
+  <> {(M): (), m: "\n"}
+
+;; Copy indentation from the previous line if possible.
+[(I M←[newline] _* ⍊ indent: (_ x rune_string)) (l_string m←"" _string)]
+  <> {(M): (), m: ^(~ "\n" (prefix-run (rline/stem l) rune))}
 
 ;; -------
 ;; COMPOSE

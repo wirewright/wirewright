@@ -344,6 +344,8 @@ class Ruleset
   def initialize(@pset : PatternSet(Term), @rules : Slice(Rule::Any))
   end
 
+  DEFAULT_SELECTOR = ML.term("(%any° [rule pattern_ template_] [backmap pattern_ backspec_])")
+
   # - Capture `template` in *selector* forms a template rule.
   # - Capture `backspec` in *selector* forms a backmap rule.
   def self.select(selector, *bases, **kwargs)

@@ -1,40 +1,57 @@
 module StringSpan
   extend self
 
-  def lwdrop(text : StringView) : StringView
+  # Reference: https://github.com/microsoft/vscode/blob/7dd556f54d68b8ac6c15ca27566acc6d0f3c1f9a/src/vs/editor/common/config/editorOptions.ts#L101
+  #
+  # Added WwML-specific delimiters.
+  #
+  # TODO: this set belongs to editR.codex.wwml, and must be read from the kernel
+  # and configurable.
+  def wsep?(char : Char)
+    char.in_set?("~!@#$%^&*()\\-=+[{]}\\|;:'\",.<>/?←→↑↓¦⍊⟨⟩⟪⟫")
+  end
+
+  def wdrop(text : StringView, head : StringView -> Char, tail : StringView -> StringView)
     initial = text
+
+    if text.nonempty? && head.call(text).vspace?
+      return tail.call(text)
+    end
 
     # Skip whitespace at which we're currently standing, if we are, as in
     # `hello⏏    world` -> `hello    ⏏world`, or in `hel⏏lo world` this would
     # be noop.
-    while text.nonempty? && text.first_char.whitespace?
-      text = text.rest
+    while text.nonempty? && head.call(text).hspace?
+      text = tail.call(text)
     end
 
-    # Skip non-whitespace.
-    until text.empty? || text.first_char.whitespace?
-      text = text.rest
+    wseps = false
+
+    # Like VSCode, skip word separators, if any.
+    while text.nonempty? && wsep?(head.call(text))
+      text = tail.call(text)
+      wseps = true
+    end
+
+    # If we managed to skip some word separators, that's it.
+    if wseps
+      return text
+    end
+
+    # Skip until word separator.
+    until text.empty? || (head.call(text).whitespace? || wsep?(head.call(text)))
+      text = tail.call(text)
     end
 
     text
   end
 
+  def lwdrop(text : StringView) : StringView
+    wdrop(text, head: ->(view : StringView) { view.first_char }, tail: ->(view : StringView) { view.rest })
+  end
+
   def rwdrop(text : StringView) : StringView
-    initial = text
-
-    # Skip whitespace at which we're currently standing, if we are, as in
-    # `hello    ⏏world` -> `hello⏏    world`, or in `hello wor⏏ld` this would
-    # be noop.
-    while text.nonempty? && text.last_char.whitespace?
-      text = text.prior
-    end
-
-    # Skip non-whitespace.
-    until text.empty? || text.last_char.whitespace?
-      text = text.prior
-    end
-
-    text
+    wdrop(text, head: ->(view : StringView) { view.last_char }, tail: ->(view : StringView) { view.prior })
   end
 
   def lwdrop(text : StringView, n : Int) : StringView
@@ -101,6 +118,10 @@ PRIMITIVES = ProcRuleset.build do
       suffix = arg.as_s? || Term[ML.display(arg, endl: false)]
       prefix.stitch(suffix)
     end
+  end
+
+  rulepi1 %[(x a_string n←(%number +i32))] do
+    a.to(String) * n.to(Int32)
   end
 
   rulepi1 %[(term->ml term_)] do
@@ -403,6 +424,8 @@ PRIMITIVES = ProcRuleset.build do
   rulepi1 %[(max args_number+)] { args.items.max_by(&.unsafe_as_n) }
   rulepi1 %[(max (args_number+))] { args.items.max_by(&.unsafe_as_n) }
 
+  rulepi1 %[(abs args_number+)] { args.items.reduce { |memo, arg| memo - arg }.abs }
+
   rulepi1 %[(floor arg_number)] { arg.unsafe_as_n.floor }
   rulepi1 %[(ceil arg_number)] { arg.unsafe_as_n.ceil }
   rulepi1 %[(round arg_number)] { arg.unsafe_as_n.round }
@@ -571,6 +594,20 @@ PRIMITIVES = ProcRuleset.build do
 
   rulepi1 %{(includes? haystack_string needle_string)} do
     haystack.to(String).includes?(needle.to(String))
+  end
+
+  rulepi1 %{(prefix-run matchee_string prefix_string)} do
+    matchee_ = matchee.to(StringView)
+    prefix_ = prefix.to(StringView)
+
+    run = String.build do |io|
+      while matchee_.starts_with?(prefix_)
+        matchee_ = matchee_.lskip(prefix_.size)
+        io << prefix_
+      end
+    end
+
+    Term.of(run)
   end
 end
 

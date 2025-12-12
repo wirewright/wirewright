@@ -1138,6 +1138,16 @@ struct Char
   def ===(other : StringView)
     other === self
   end
+
+  # Reference: https://github.com/rakudo/rakudo/blob/6b47541e27a4a0bcc9bbc07cdbf944b7174cc01c/src/Raku/ast/regex.rakumod#L715
+  def hspace? : Bool
+    ord.in?(0x09, 0x20, 0xa0, 0x1680, 0x180e, 0x2000, 0x2001, 0x2002, 0x2003, 0x2004, 0x2005, 0x2006, 0x2007, 0x2008, 0x2009, 0x200a, 0x202f, 0x205f, 0x3000)
+  end
+
+  # Reference: https://github.com/rakudo/rakudo/blob/6b47541e27a4a0bcc9bbc07cdbf944b7174cc01c/src/Raku/ast/regex.rakumod#L793
+  def vspace? : Bool
+    ord.in?(0x0a, 0x0b, 0x0c, 0x0d, 0x85, 0x2028, 0x2029)
+  end
 end
 
 # FIXME: I use `ascii_only?` but really I meant `single_byte_optimizable?`. Rename
@@ -1361,18 +1371,10 @@ struct StringView
     true
   end
 
-  def starts_with?(prefix : String) : Bool
+  def starts_with?(prefix : String | StringView) : Bool
     return false if bytesize < prefix.bytesize
 
-    (0...prefix.bytesize).each do |offset|
-      byte = prefix.byte_at(offset)
-
-      unless @string.byte_at(@byte_start + offset) == byte
-        return false
-      end
-    end
-
-    true
+    to_unsafe.memcmp(prefix.to_unsafe, prefix.bytesize) == 0
   end
 
   def ends_with?(ch : Char)
@@ -1382,7 +1384,7 @@ struct StringView
   def ends_with?(postfix : String) : Bool
     return false if postfix.bytesize > bytesize
 
-    (to_unsafe + @byte_start + bytesize - postfix.bytesize).memcmp(postfix.to_unsafe, postfix.bytesize) == 0
+    (to_unsafe + bytesize - postfix.bytesize).memcmp(postfix.to_unsafe, postfix.bytesize) == 0
   end
 
   def precedes?(other : StringView)
@@ -1523,7 +1525,7 @@ struct StringView
 
   @[AlwaysInline]
   private def first_char_ascii? : Char?
-    empty? ? nil : to_unsafe[@byte_start].unsafe_chr
+    empty? ? nil : to_unsafe[0].unsafe_chr
   end
 
   private def first_char_unicode? : Char?
@@ -2269,7 +2271,7 @@ struct StringView
   end
 
   def to_unsafe : UInt8*
-    @string.to_unsafe
+    @string.to_unsafe + @byte_start
   end
 
   def inspect(io)

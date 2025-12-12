@@ -4,10 +4,8 @@ def editR(ruleset : Ruleset)
   exhR(absR(alloy_rulesetR(ruleset)))
 end
 
-SELECTOR = ML.term(%[(%any° [rule pattern_ template_] [backmap pattern_ backspec_])])
-
 def editR(rulebase : Term)
-  editR(Ruleset.select(SELECTOR, rulebase))
+  editR(Ruleset.select(Ruleset::DEFAULT_SELECTOR, rulebase))
 end
 
 def dispatch(state : Term, msg : Term)
