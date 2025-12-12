@@ -163,9 +163,7 @@ module Ww::DwUIR
                 next
               end
 
-              unless selection_spec = spec.selection
-                unreachable("selection is on but selection spec is absent")
-              end
+              assert selection_spec = spec.selection
 
               rect = Fill.new(bounds_abs, to_solid_color(selection_spec.fill))
               sink.call(ctx.layer, Rank::Back, rect)
@@ -173,6 +171,15 @@ module Ww::DwUIR
               span = Span.new(bounds_abs, command.view, to_solid_color(selection_spec.color), decoration)
               sink.call(ctx.layer, Rank::Mid, span)
             in TextCommand::NextLine
+              next unless selection
+
+              bounds_abs = bounds_rel.translate(ctx.bounds.tl)
+              next unless DwUIR.visible?(ctx, bounds_abs)
+
+              assert selection_spec = spec.selection
+
+              rect = Fill.new(bounds_abs, to_solid_color(selection_spec.fill))
+              sink.call(ctx.layer, Rank::Back, rect)
             in TextCommand::PutCursor
               bounds_abs = bounds_rel.translate(ctx.bounds.tl)
               next unless DwUIR.visible?(ctx, bounds_abs)
