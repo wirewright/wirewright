@@ -532,7 +532,7 @@ C←[C'←[I M←[cancel compose] _*] compose _string]
   <> {M: (unnest)}
 
 ;; C-S-backspace or C-S-delete anywhere in a dict, means delete that dict.
-[(I M←(keyboard key ⸨backspace,delete⸩ dn ⍊ ctrl shift) _* ⍊ structural: true) ("" * "") _]
+⟨[(I M←(keyboard key ⸨backspace,delete⸩ dn ⍊ ctrl shift) _* ⍊ structural: true) ("" * "") _]⟩
   <> {M: (unnest)}
 
 ;; Pressing C-backspace or C-delete at the begin or end of itemsonly
@@ -578,12 +578,10 @@ C←[C'←[I M←[cancel compose] _*] compose _string]
 (%entry _ [(I M←(keyboard key enter dn ⍊ ctrl) _* ⍊ structural: true) (_string * _string) _])
   <> {(M): ((collapse selection) (submit item left))}
 
-;; Left at begin-of-text means try to submit right (i.e., the cursor should
-;; land right).
+;; Left at begin-of-text means try to submit right (i.e., the cursor ends up to the left of the submission).
 (%entry _ [(I M←[keyboard key left dn] _* ⍊ structural: true) ("" * (%string nonempty)) 0])
   <> {M: (submit item right)}
-;; Right at end-of-text means try to submit left (i.e., the cursor should
-;; land left).
+;; Right at end-of-text means try to submit left (i.e., the cursor ends up to the left of the submission).
 (%entry _ [(I M←[keyboard key right dn] _* ⍊ structural: true) ((%pipe span A←(%not 0)) * "") A_])
   <> {M: (submit item left)}
 
