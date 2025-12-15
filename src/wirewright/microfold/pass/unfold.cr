@@ -21,7 +21,18 @@ module Ww::Microfold::Pass
               node1 = unfold0(theme, box, designation, node1)
             end
 
-            node1
+            Term.case({node0, node1}) do
+              # If all attributes on a *preset* node were consumed, we do not carry
+              # it into UIR. It is very easy to prevent this rule from firing: just add
+              # an attribute that Microfold doesn't understand, e.g. `keep: true`.
+              givenpi %{[head_symbol _] (head_symbol child_)} do
+                continue unless theme.has_preset?(head)
+
+                child
+              end
+
+              otherwise { node1 }
+            end
           end
 
           otherwise { node0 }

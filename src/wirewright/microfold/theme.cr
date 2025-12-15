@@ -54,6 +54,10 @@ module Ww::Microfold
       !!@spec[:boxes, :cascade, box]?
     end
 
+    def has_preset?(tag : Term) : Bool
+      !!@spec[:presets, tag]?
+    end
+
     def preset?(tag : Term, issues) : Term?
       issues.adjoin("preset for", tag) do |issues|
         return unless preset = @spec[:presets, tag]?
