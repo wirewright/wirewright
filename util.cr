@@ -1740,6 +1740,25 @@ struct StringView
     starts_with?(ch) ? skip(ch.bytesize) : nil
   end
 
+  def subview(char_start : Int32, char_end : Int32) : StringView
+    if ascii_only?
+      return byte_subview(char_start, char_end)
+    end
+
+    start = self.char_start
+    b = @string.char_index_to_byte_index(start + char_start) || raise IndexError.new
+    e = @string.char_index_to_byte_index(start + char_end) || raise IndexError.new
+
+    StringView.new(@string, b, e, ascii_only: ascii_only?)
+  end
+
+  def subview(range : Range) : StringView
+    b = range.begin || 0
+    e = range.end || size
+
+    subview(b, e)
+  end
+
   def byte_subview(byte_start_rel : Int32, byte_end_rel : Int32)
     StringView.new(@string, byte_start + byte_start_rel, byte_start + byte_end_rel, ascii_only: ascii_only?)
   end
@@ -1758,6 +1777,21 @@ struct StringView
     end
 
     StringView.new(@string, byte_start, other.byte_start, ascii_only: ascii_only?)
+  end
+
+  def chomp : StringView
+    if ends_with?('\r')
+      rskip(1)
+    elsif ends_with?('\n')
+      prefix = rskip(1)
+      if prefix.ends_with?('\r') # \r\n
+        return prefix.rskip(1)
+      end
+
+      prefix
+    else
+      self
+    end
   end
 
   def lstrip(charset = "\n") : StringView
@@ -1903,6 +1937,15 @@ struct StringView
 
   def each_byte(& : UInt8 ->) : Nil
     to_slice.each { |byte| yield byte }
+  end
+
+  def each_char_view(& : StringView ->) : Nil
+    reader = Char::Reader.new(@string, pos: @byte_start)
+
+    until reader.pos == byte_end
+      yield StringView.new(@string, byte_start: reader.pos, byte_end: reader.pos + reader.current_char_width, ascii_only: reader.current_char.single_byte?)
+      reader.next_char
+    end
   end
 
   # Yields each character in this string view, going from left to right.
