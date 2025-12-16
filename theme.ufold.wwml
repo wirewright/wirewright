@@ -1168,15 +1168,15 @@ prune:
 ;; Move upward/downward cues from style to cues which acts like
 ;; an upward/downward slope.
 {¦ µ-cues_dict⋮ (_* `T) µ-⟦style,preset⟧: ⟨C←(cue-⸨up,dn⸩ id_)⟩}
-  <> {T: (⸨up,dn⸩-out →id), (C): ()}
+  <> {T: (⸨up,dn⸩-out ^id), (C): ()}
 
 ;; Send up-out to parent.
 ⟨{¦ µ-cues_dict⋮ (C←[up-out id_] _*)} ⍊ µ-cues_dict⋮ (_* `T)⟩
-  <> {T: (up-in ↓id), (C): ()}
+  <> {T: (up-in ^(dn id)), (C): ()}
 
 ;; Broadcast dn-out to all children.
 ⟨{¦ µ-cues_dict⋮ (_* `T)} ⍊ µ-cues: ((dn-out c_ ⍊ -◇_) _*)⟩°
-  <> {T: (dn-in →c), ◇: true}
+  <> {T: (dn-in ^c), ◇: true}
 
 ;; If child doesn't know what else to do with the cue, remove it.
 ⟨{¦ µ-cues: (C_ _*)}⟩° <> {(C): ()}
@@ -1188,12 +1188,12 @@ prune:
 ;; If we've received a cue that a condition depends on, resolve that condition.
 ;; This may in turn free other cues and so on.
 {¦ µ-cues-⸨up,dn⸩: (%value cue _), µ-⟦style,preset⟧: ⟨U←(on-cue-⸨up,dn⸩ cue_ u_)⟩}
-  <> {U: →u}
+  <> {U: ^u}
 
 ;; Convert dn-out to dn-in unless we're a membrane. Membranes should block
 ;; downward flow from above, and upward flow from below.
 ⟨{¦ -µ-membrane µ-cues: [C←[⸨up,dn⸩-in id_] _*]}⟩
-  <> {C: (⸨up,dn⸩-out →id)}
+  <> {C: (⸨up,dn⸩-out ^id)}
 
 --- boxes
 

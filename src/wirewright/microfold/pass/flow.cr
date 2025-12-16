@@ -7,40 +7,14 @@ module Ww::Microfold::Pass
     FLOWR_SELECTOR = ML.term(%[(%any° [rule pattern_ template_] [backmap pattern_ backspec_])])
 
     # :nodoc:
+    #
+    # TODO: this should be a rewriter circuit stored in the theme!
     def flowR(rulebase : Term) : Rewriter
-      # TODO: this should be a rewriter circuit stored in the theme!
-
       ruleset = Ruleset.select(FLOWR_SELECTOR, rulebase)
 
       # Clear cache so that if the theme is reloaded, we don't have stale
       # cache entries.
       cache = {} of Term => Rewrite::Any
-
-      onceR = callR(PRIMITIVES)
-
-      # First rewrite entries, then rewrite self.
-      set, exhevalR = recR
-      set.call chainR(entriesR(exhevalR), onceR)
-
-      evalR = dfsR(
-        switchR(
-          { %[($ rewritee_)], exhevalR },
-          { %[($once rewritee_)], onceR },
-        )
-      )
-
-      set, backmapR = recR
-
-      refR = dfsR(
-        switchR(
-          { %[($my rewritee←($ _))], chainR(backmapR, envR(Term.of(:"$my"))) },
-          { %[($my rewritee_)], envR(Term.of(:"$my")) },
-          { %[($up rewritee_)], choiceR(envR(Term.of(:"$up")), envR(Term.of(:"$my"))) },
-          { %[($down rewritee_)], choiceR(envR(Term.of(:"$down")), envR(Term.of(:"$my"))) },
-        )
-      )
-
-      set.call chainR(refR, evalR)
 
       # Optimization: Do not enter recursive exhR unless the node is tagged
       # with µ-flow.
@@ -59,7 +33,7 @@ module Ww::Microfold::Pass
           allR(
             guardR,
             exhR(
-              choiceR(itemsR(flowR), rulesetR(ruleset, noR, backmapR, noR)),
+              choiceR(itemsR(flowR), alloy_rulesetR(ruleset)),
               # Cap the number of exhR revolutions. This makes sure we will terminate, at
               # last in theory; note how this is recursive exhR, so each recursive step will
               # have 32 exhR revolutions at its disposal (for each such revolution, each child
