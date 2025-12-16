@@ -401,6 +401,7 @@ C←[C'←[I M←[cancel compose] _*] compose _string]
 ;;
 ;; You can add your own combos here.
 
+[[I M←[compose query] _*] compose " "] <> {M: (composite " ")}
 [[I M←[compose query] _*] compose "("] <> {M: (composite "(")}
 [[I M←[compose query] _*] compose ")"] <> {M: (composite ")")}
 [[I M←[compose query] _*] compose "oo"] <> {M: (composite "°")}
