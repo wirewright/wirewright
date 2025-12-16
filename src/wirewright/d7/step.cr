@@ -161,28 +161,28 @@ module Ww::D7
     end
   end
 
-  # Calls *fn* with ground and inert nodes in *circuit* and their addresses.
+  # Calls *fn* with features in *circuit* and their addresses.
   #
   # *mix* lets you disable node split-mix (`Mixture`). If false, mixture nodes
-  # are treated as inert nodes.
+  # are treated as ground nodes.
   #
-  # NOTE: node addresses are linked to their location in *circuit*. It is not guaranteed
-  # that the same node (as perceived by an observer) has the same address between successive
-  # generations of a circuit.
-  def each_node_with_addr(clf : Classifier, circuit : Term, *, mix : Bool = true, &fn : Term, NodeAddr ->)
+  # NOTE: If *mix* is `false`, a node address is equivalent to the itempath to that
+  # node starting from *circuit*. If *mix* is `true`, the address will still be fully
+  # qualified for a node, but it will not be a valid itempath.
+  def each_feature_with_addr(clf : Classifier, circuit : Term, *, mix : Bool = true, &fn : Feature, NodeAddr ->)
     return unless circuit.type.dict?
 
     fold(fold_context(clf), parent(circuit.as_d)) do |ctx, feature, rec, default|
+      fn.call(feature, ctx.addr)
+
       case feature
       when Gnd, Inert
-        fn.call(feature.node, ctx.addr)
-
-        feature.node
+        default.call
       when Mixture
         if mix
           default.call
         else
-          rec.call(ctx, inert(feature.node), rec, default)
+          fold(ctx, gnd(feature.node), rec)
         end
       when Circuit
         fold(ctx, parent(feature.node, feature.range), rec)
@@ -192,13 +192,33 @@ module Ww::D7
     end
   end
 
-  # Returns a hash mapping addresses of nodes to those nodes in *circuit*. This
-  # effectively "flattens" the circuit.
-  def nodes(clf : Classifier, circuit : Term, **kwargs) : Hash(NodeAddr, Term)
-    nodes = {} of NodeAddr => Term
-    each_node_with_addr(clf, circuit, **kwargs) do |node, addr|
-      nodes[addr] = node
+  # Returns a hash mapping addresses of nodes in *circuit* to identified features
+  # of those nodes.
+  #
+  # See `each_feature_with_addr` for info on *kwargs* and related.
+  def features(clf : Classifier, circuit : Term, **kwargs) : Hash(NodeAddr, Feature)
+    features = {} of NodeAddr => Feature
+
+    each_feature_with_addr(clf, circuit, **kwargs) do |feature, addr|
+      features[addr] = feature
     end
+
+    features
+  end
+
+  # Returns a hash mapping addresses of ground and inert nodes to those nodes
+  # in *circuit*. This effectively "flattens" *circuit*.
+  #
+  # See `each_feature_with_addr` for info on *kwargs* and related.
+  def leaves(clf : Classifier, circuit : Term, **kwargs) : Hash(NodeAddr, Term)
+    nodes = {} of NodeAddr => Term
+
+    each_feature_with_addr(clf, circuit, **kwargs) do |feature, addr|
+      next unless feature.is_a?(Gnd) || feature.is_a?(Inert)
+
+      nodes[addr] = feature.node
+    end
+
     nodes
   end
 
@@ -303,10 +323,10 @@ module Ww::D7
     ahead.concat(subframes)
 
     a = seen
-    ns = nodes(clf, seen, mix: false)
+    ns = leaves(clf, seen, mix: false)
 
     while b = ahead.shift?
-      ms = nodes(clf, b, mix: false)
+      ms = leaves(clf, b, mix: false)
 
       # Cut if:
       # - New nodes were added or removed in the next subframe.
