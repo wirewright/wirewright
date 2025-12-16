@@ -1293,7 +1293,7 @@ module Ww
       end
     end
 
-    # TODO: Introduce Term::Keypath, which should store keypaths (especially itempaths)
+    # TODO: Use Tpath, which should store keypaths (especially itempaths)
     # very efficiently. Right now, Slice(Term) is a heap alloc + 8 bytes per index, this
     # is nasty as hell. I'm saying index because it's most frequently the case. It could
     # be a normal term, but that's actually rare, most often it's an index, and a very
@@ -1308,6 +1308,7 @@ module Ww
     #       v
     #   Keypath: A slice of terms (like we have now)
 
+    # :nodoc:
     def self.content(term : Term, & : Array(Term), Term -> Bool) : Set({Slice(Term), Term})
       content = Set({Slice(Term), Term}).new
 
@@ -1322,6 +1323,9 @@ module Ww
       content
     end
 
+    # Returns the set of keypath-leaf pairs that comprise *term*, known as
+    # the *content* of *term*, excluding keypath-leaf terms already present
+    # in *other*.
     def self.content(term : Term, *, not_in other : Set({Slice(Term), Term}))
       content(term) do |keypath, leaf|
         !{keypath.to_readonly_slice, leaf}.in?(other)
@@ -1331,7 +1335,51 @@ module Ww
     # Returns the set of keypath-leaf pairs that comprise *term*, known as
     # the *content* of *term*.
     def self.content(term : Term)
-      content(term) { true }
+      content(term) do
+        true # accept
+      end
+    end
+
+    # Returns a dict that contains children terms of *term* found at a set *depth*,
+    # or its leaves if *depth* is `nil`.
+    #
+    # Traversal is performed in DFS-order. The resulting dict is ordered accordingly.
+    #
+    # - *depth* equal to `0` means *term* itself is returned.
+    # - *depth* equal to `1` means the items of *term* are returned.
+    #
+    # Ignores the pairspart of traversed dicts. For non-dictionary *term*, returns
+    # *term* if *depth* is nonzero.
+    def self.flatten(term : Term, *, depth : Int32?) : Term
+      return term unless dict = term.as_d?
+
+      Term.of(flatten(dict, depth: depth))
+    end
+
+    # Same as `flatten(term : Term, *, depth : Int32)`, but accepts a known dict
+    # and responds with a dict, too.
+    def self.flatten(term : Term::Dict, *, depth : Int32?) : Term::Dict
+      return term if depth == 0
+
+      Term::Dict.build do |commit|
+        flatten(commit, term, depth)
+      end
+    end
+
+    private def self.flatten(commit, term : Term::Dict, depth : Int32?) : Nil
+      if depth == 0
+        commit << term
+        return
+      end
+
+      term.items.each do |item|
+        unless dict = item.as_d?
+          commit << item
+          next
+        end
+
+        flatten(commit, dict, depth ? depth - 1 : nil)
+      end
     end
   end
 
