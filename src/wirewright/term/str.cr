@@ -9,6 +9,10 @@ module Ww
     def initialize(@value : StringView)
     end
 
+    def self.new(value : Escaped)
+      new(value.to_s.view)
+    end
+
     def <=>(other : Str) : Int32
       @value <=> other.@value
     end
@@ -97,13 +101,33 @@ module Ww
       Term[@value.last_or_empty]
     end
 
-    # TODO: Move to `ML.compact`
-    def inspect(io)
-      io << '"'
-      @value.each_char do |char|
-        ML::Kit.escape(io, char)
+    struct Escaped
+      def initialize(@value : StringView)
       end
-      io << '"'
+
+      def inspect(io)
+        io << "Escaped("
+        to_s(io)
+        io << ")"
+      end
+
+      # Writes an escaped representation of the string's content to *io*.
+      def to_s(io)
+        @value.each_char do |char|
+          ML::Kit.escape(io, char)
+        end
+      end
+    end
+
+    # Refers to the WwML-escaped content of this string.
+    #
+    # See also: `ML::Kit.escape`.
+    def escaped : Escaped
+      Escaped.new(@value)
+    end
+
+    def inspect(io)
+      ML.compact(io, self)
     end
 
     def to_s(io)

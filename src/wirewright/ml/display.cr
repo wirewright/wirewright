@@ -92,6 +92,42 @@ module Ww::ML
   end
 
   # :nodoc:
+  def compact(io : IO, term : Term::Num) : Nil
+    if term.approx?
+      io << "≈"
+    end
+
+    term.decimal(io)
+  end
+
+  # :nodoc:
+  def compact(io : IO, term : Term::Str) : Nil
+    io << '"'
+    term.escaped.to_s(io)
+    io << '"'
+  end
+
+  # :nodoc:
+  def compact(io : IO, term : Term::Sym) : Nil
+    name = term.to(String)
+
+    if ML.symbol_bare?(name)
+      io << name
+    else
+      io << "⸍" << name << "⸝"
+    end
+  end
+
+  # :nodoc:
+  def compact(io : IO, term : Term::Boolean) : Nil
+    if term.true?
+      io << "true"
+    else
+      io << "false"
+    end
+  end
+
+  # :nodoc:
   def compact(io : IO, term : Term::Dict) : Nil
     lbracket, rbracket = '(', ')'
 
@@ -114,36 +150,28 @@ module Ww::ML
     io << rbracket
   end
 
-  # :nodoc:
-  def compact(io : IO, term : Term::Any) : Nil
-    term.inspect(io)
-  end
-
-  # :nodoc:
-  def compact(io : IO, term : Term::Sym) : Nil
-    name = term.to(String)
-
-    if ML.symbol_bare?(name)
-      io << name
-    else
-      io << "⸍" << name << "⸝"
-    end
-  end
-
-  def compact(io : IO, term : Term::Num) : Nil
-    if term.approx?
-      io << "≈"
-    end
-
-    term.decimal(io)
-  end
-
   # Appends the compact WwML representation of *term* to *io*.
+  #
+  # See also: `compact(term : Term | Term::Any)`.
   def compact(io : IO, term : Term) : Nil
     compact(io, Term[term])
   end
 
   # Returns the compact WwML representation of *term*.
+  #
+  # `ML.compact` is a foundational printer for Wirewright terms.
+  #
+  # - It is slightly less fancier than `display`.
+  # - Its output is single-line. `ML.compact` guarantees to produce single-line
+  #   output. Therefore, it can be used on the write end of newline-delimited
+  #   text protocols.
+  # - The output of `ML.compact` is guaranteed to be valid `ML`; therefore,
+  #   it is also a way to serialize terms.
+  # - All `Term::Any#inspect`s delegate to `ML.compact` immediately. This is
+  #   done deliberately, respecting the design of Wirewright: `Term::Any` members
+  #   and `Term` itself are concerned with *in-memory representation of terms*
+  #   (how the bits and bytes are arranged). `ML`, in turn, is responsible for
+  #   representing terms using human-readable text.
   def compact(term : Term | Term::Any) : String
     String.build { |io| compact(io, term) }
   end

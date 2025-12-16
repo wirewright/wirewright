@@ -41,10 +41,9 @@ module Ww
       !@value
     end
 
-    # :nodoc:
-    #
-    # TODO: Move to `ML.compact`
-    delegate :inspect, to: @value
+    def inspect(io)
+      ML.compact(io, self)
+    end
 
     def to_s(io)
       inspect(io)
