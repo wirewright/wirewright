@@ -847,17 +847,6 @@ module Ww
       end
     end
 
-    @[Dncast]
-    def rightmost(n : Int)
-      return self unless 0 <= n <= itemsize
-
-      Term::Dict.build do |commit|
-        (itemsize - n...itemsize).each do |index|
-          commit << self[index]
-        end
-      end
-    end
-
     private def with_default(key : Term::Any, value : Term) : Dict
       added, pairs = @pairs.add(Probes::AssocPairImm.new(Term.of(key), value))
       unless added # Overridden or completely unchanged
@@ -1136,13 +1125,9 @@ module Ww
     # will return a new dictionary.
     @[Dncast]
     def transaction(& : Dict::Commit ->) : Dict
-      commit = self.commit
+      commit = Commit.new(self, Pf.fiber_id)
       yield commit
       commit.resolve
-    end
-
-    def commit : Commit
-      Commit.new(self, Pf.fiber_id)
     end
 
     @[Dncast]
@@ -1251,19 +1236,6 @@ module Ww
       end
     end
 
-    @[Dncast]
-    def separate(*args, **kwargs) : {Term::Dict, Term::Dict}
-      plucked = pluck(*args, **kwargs)
-
-      base = transaction do |commit|
-        plucked.each_entry do |key, _|
-          commit.without(key)
-        end
-      end
-
-      {base, plucked}
-    end
-
     # Merge-concatenate.
     @[Dncast]
     def mcat(other : Dict) : Dict
@@ -1322,17 +1294,6 @@ module Ww
     end
 
     @[Dncast]
-    def ^(older : Dict) : Dict
-      transaction do |commit|
-        older.each_entry do |k, v0|
-          next unless v0 == self[k]?
-
-          commit.without(k)
-        end
-      end
-    end
-
-    @[Dncast]
     def items(b : Num, e : Num) : Dict
       return Term[] if b == e
       return items.collect if b == Term[0] && e == Term[size]
@@ -1366,24 +1327,6 @@ module Ww
           other.each_entry do |k, _|
             next if k.in?(self)
             commit.without(k)
-          end
-        end
-      end
-    end
-
-    # Dict entry intersection. Leaves entries common to `self` and *other*.
-    @[Dncast]
-    def esect(other : Dict) : Dict
-      Term::Dict.build do |commit|
-        if size < other.size
-          each_entry do |k, v|
-            next unless other[k]? == v
-            commit.with(k, v)
-          end
-        else
-          other.each_entry do |k, v|
-            next unless self[k]? == v
-            commit.with(k, v)
           end
         end
       end
@@ -1423,151 +1366,6 @@ module Ww
           end
         end
       end
-    end
-
-    # TODO: remove
-    @[Dncast]
-    def dfs(&fn : Term -> Bool) : Bool
-      items.each do |item|
-        return true if fn.call(item)
-        next unless child = item.as_d?
-        return true if child.dfs(&fn)
-      end
-
-      false
-    end
-
-    enum BfsResponse : UInt8
-      Present
-      Absent
-      Bottom
-    end
-
-    # TODO: remove
-    @[Dncast]
-    def bfs1(depth : Int, &fn : Term -> Bool) : BfsResponse
-      if depth.zero?
-        return items.any?(&fn) ? BfsResponse::Present : BfsResponse::Absent
-      end
-
-      bottom_votes = 0
-
-      items.each do |item|
-        unless child = item.as_d?
-          bottom_votes += 1
-          next
-        end
-
-        case child.bfs1(depth - 1, &fn)
-        in .present?
-          return BfsResponse::Present
-        in .absent?
-        in .bottom?
-          bottom_votes += 1
-        end
-      end
-
-      items.size == bottom_votes ? BfsResponse::Bottom : BfsResponse::Absent
-    end
-
-    # TODO: remove
-    @[Dncast]
-    def bfs(&fn : Term -> Bool) : Bool
-      (0..).each do |depth|
-        case bfs1(depth, &fn)
-        in .present?
-          return true
-        in .absent?
-        in .bottom?
-          return false
-        end
-      end
-    end
-
-    # Shallow diff. Returns `{entries present in self but absent in other, entries absent in self but present in other}`.
-    # TODO: move to Term
-    @[Dncast]
-    def diff1(other) : {Dict, Dict}
-      added = Term::Dict.build do |commit|
-        each_entry do |k, v1|
-          next if (v0 = other[k]?) && v0 == v1
-          commit.with(k, v1)
-        end
-      end
-
-      removed = Term::Dict.build do |commit|
-        other.each_entry do |k, v0|
-          next if k.in?(self)
-          commit.with(k, v0)
-        end
-      end
-
-      {added, removed}
-    end
-
-    @[Dncast]
-    # TODO: move to Term
-    def diff1x(other) : {Dict, Dict, Dict}
-      added = Term[]
-      changed = Term[]
-      removed = Term[]
-
-      added = Term::Dict.build do |added|
-        changed = Term::Dict.build do |changed|
-          each_entry do |k, v1|
-            next if (v0 = other[k]?) && v0 == v1
-
-            (v0 ? changed : added).with(k, v1)
-          end
-        end
-      end
-
-      removed = Term::Dict.build do |commit|
-        other.each_entry do |k, v0|
-          next if k.in?(self)
-          commit.with(k, v0)
-        end
-      end
-
-      {added, changed, removed}
-    end
-
-    def self.diff(k : Term, older : Dict, newer : Dict, added0, removed0) : {Dict, Dict}
-      added, removed = diff(older, newer)
-
-      {added.empty? ? added0 : added0.with(k, added),
-       removed.empty? ? removed0 : removed0.with(k, removed)}
-    end
-
-    def self.diff(k : Term, older : Term::Any?, newer : Term::Any, added0, removed0) : {Dict, Dict}
-      older == newer ? {added0, removed0} : {added0.with(k, newer), removed0}
-    end
-
-    def self.diff(k : Term, older : Term::Any, newer : Nil, added0, removed0) : {Dict, Dict}
-      {added0, removed0.with(k, older)}
-    end
-
-    def self.diff(older : Dict, newer : Dict) : {Dict, Dict}
-      added, removed = Term[], Term[]
-
-      older.each_entry do |k, v0|
-        v1 = newer[k]?
-        added, removed = diff(k, Term[v0], Term[v1], added, removed)
-      end
-
-      newer.each_entry do |k, v1|
-        v0 = older[k]?
-        added, removed = diff(k, Term[v0], Term[v1], added, removed)
-      end
-
-      {added, removed}
-    end
-
-    # Deep diff. Returns `{present in self but absent in other, absent in self but present in other}`.
-    # TODO: move to Term
-    @[Dncast]
-    def diff(older) : {Dict, Dict}
-      Dict.diff(older.as_d, newer: self)
     end
 
     # In practice `partition` and `pairs` are called very often. Therefore by
