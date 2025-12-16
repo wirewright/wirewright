@@ -922,7 +922,7 @@ module Ww::Alloy
       #
       # NOTE: For consistent return results, the expansion of *subject* is always
       # a list. If *subject* expands to one term, that's a list of one term; if to
-      # zero or many terms, then the expansion is a list of those.
+      # zero terms, that's an empty list; if to many terms, a list of those terms.
       matchpi %{(^render (pattern_ bindings←(%any° vars _dict)) subject_ body_*)} do
         issues.adjoin("`^render` template expression") do |issues|
           # Determine interior vars.

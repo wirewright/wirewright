@@ -6,6 +6,17 @@
 # renderout = Alloy.render(vars, template)
 # renderout # => term (sum "of" 100 200 is 300)
 # ```
+#
+# FIXME: Currently Alloy uses the call stack for recursive rewriting, in both
+# `render` and `compose` (especially compose since it can be recursive, Alloy.render
+# by itself is guaranteed to terminate since its input is finite and it always does only
+# one pass). In practice, we'd like to avoid the call stack or at least "fence" it somehow.
+# This won't solve infinite recursion in principle but will at least prevent us from
+# segfaulting on it. To contain deep recursion we'd have to encode the notion of Aborted
+# (as in e.g. Mathematica) as one possible result of expansion along with Ok and Err.
+# We can abort when we exceed a certain "energy" budget (e.g. stack depth). Aborted
+# returns the original expression, effectively Alloy is saying: "I gave up, can't do
+# it, increase recursion limit and re-run *this* or give up too".
 module Ww::Alloy
   extend self
 
