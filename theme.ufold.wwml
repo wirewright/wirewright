@@ -590,14 +590,21 @@ button: "font-sans font-normal text-sm bg-neutral-700 text-neutral-200 hover:bg-
 ;; Translation utilities.
 ;;
 
+"px-d": (short-for "px-dl" "px-dt")
 "d": (short-for "dl" "dt")
 "sd": (short-for "sdl" "sdt")
+
+"px-dl": (outermost-box real {dl: $(local arg)})
+"px-dt": (outermost-box real {dt: $(local arg)})
 
 "dl": (outermost-box real {dl: $(* (local arg) (global rem))})
 "dt": (outermost-box real {dt: $(* (local arg) (global rem))})
 
 "sdl": (outermost-box real {dl: $(* (local arg) (global spacing))})
 "sdt": (outermost-box real {dt: $(* (local arg) (global spacing))})
+
+"-px-dl": (outermost-box real {dl: $(* (local arg) -1)})
+"-px-dt": (outermost-box real {dt: $(* (local arg) -1)})
 
 "-dl": (outermost-box real {dl: $(* (local arg) (global -rem))})
 "-dt": (outermost-box real {dt: $(* (local arg) (global -rem))})
