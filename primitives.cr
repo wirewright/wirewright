@@ -139,6 +139,10 @@ PRIMITIVES = ProcRuleset.build do
     end
   {% end %}
 
+  rulepi1 %[(escaped s_string)] do
+    Term::Str.new(s.as_s.escaped)
+  end
+
   rulepi1 %[(ml->term ml_string ¦ () shadow⋮ true)] do
     term = ML.term(ml.to(String))
 
@@ -176,19 +180,6 @@ PRIMITIVES = ProcRuleset.build do
 
   rulepi1 %[(or false false)] { false }
   rulepi1 %[(or _ _)] { true }
-
-  # FIXME: remove this flag
-  {% if flag?(:soma6) %}
-    # Converts an arbitrary term into its D7VR (Microfold unit) -> UIR (thus D7UIR)
-    # code-only representation.
-    #
-    # D7VR is what you convert a term into, to then feed that to Microfold, then UIR,
-    # then draw it, then paint the resulting draw commands using some kind of painting
-    # backend (e.g. sfpaint).
-    rulepi1 %[(d7uir term_ ¦ () rem_: (%number +i32) code-only: true)] do
-      pipe(term, D7VR.term_unit, D7VR.uir(rem: rem.unsafe_as_n))
-    end
-  {% end %}
 
   # E.g. (union {x: 1, y: 2} (entry z 3))
   rulepi1 %[(entry k_ v_)] do
@@ -258,7 +249,7 @@ PRIMITIVES = ProcRuleset.build do
     end
   end
 
-  rulepi1 %[(hash term_)] do
+  rulepi1 %[(hashcode term_)] do
     Term.hashcode(term)
   end
 
@@ -413,6 +404,8 @@ PRIMITIVES = ProcRuleset.build do
     chunks
   end
 
+  # TODO: sum, min, and max should probably ignore non-numbers, and they should operate
+  # on dicts (as in, on entry values, not just items),
   rulepi1 %[(sum ())] { 0 }
   rulepi1 %[(sum (args_number+))] { args.items.reduce { |a, b| a.unsafe_as_n + b.unsafe_as_n } }
 
@@ -451,8 +444,6 @@ PRIMITIVES = ProcRuleset.build do
 
     {l, m, r}
   end
-
-  # TODO: these should be under `substring`, e.g. `(substring s (rune B) (word E))`.
 
   rulepi1 %[(runes s_string b←(%number i32) to e←(%number i32))] do
     Term::Str::Substring.runes(s.unsafe_as_s, b.to(Int32), e.to(Int32))
@@ -496,18 +487,6 @@ PRIMITIVES = ProcRuleset.build do
     end
   end
 
-  rulepi1 %[(lines s_string b←(%number i32) to e←(%number i32))] do
-    Term::Str::Substring.lines(s.unsafe_as_s, b.to(Int32), e.to(Int32))
-  end
-  # alias
-  rulepi1 %[(lines s_string b←(%number i32) ..= e←(%number i32))] do
-    Term::Str::Substring.lines(s.unsafe_as_s, b.to(Int32), e.to(Int32))
-  end
-
-  rulepi1 %[(line s_string b←e←(%number i32))] do
-    Term::Str::Substring.lines(s.unsafe_as_s, b.to(Int32), e.to(Int32))
-  end
-
   rulepi1 %[(line/stem s_string)] do
     view = s.to(StringView)
     l, sep, r = view.partition('\n')
@@ -532,25 +511,7 @@ PRIMITIVES = ProcRuleset.build do
     l + sep
   end
 
-  # S₁S₂S₃S₄
-  # M₁M₂
-  # == S₁S₂
-  #
-  # S₁S₂S₃S₄
-  # M₁M₂M₃M₄M₅M₆
-  # == S₁S₂S₃S₄
-  rulepi1 %[(prefix s_string m_string)] do
-    Term::Str::Substring.runes(s.unsafe_as_s, 0, m.charcount - 1)
-  end
-  rulepi1 %[(prefix s_string "")] do
-    ""
-  end
-
-  rulepi1 %[(suffix s_string m_string)] do
-    Term::Str::Substring.runes(s.unsafe_as_s, m.charcount, -1)
-  end
-
-  rulepi1 %{(mask d_dict pattern_)} do
+  rulepi1 %{(mask pattern_ d_dict)} do
     Term::Dict.build do |commit|
       d.each_item_with_index do |item, index|
         if M1.probe?(pattern, item)
@@ -558,6 +519,20 @@ PRIMITIVES = ProcRuleset.build do
         end
       end
     end
+  end
+
+  rulepi1 %{(mask charset_string s_string)} do
+    set = charset.to(String)
+
+    mask = Term::Dict.build do |commit|
+      s.to(StringView).each_char_with_index do |chr, index|
+        next unless chr.in_set?(set)
+
+        commit.with(index, true)
+      end
+    end
+
+    {s, mask}
   end
 
   # TODO: these are really just generic keysect / key complement followed by
@@ -588,6 +563,132 @@ PRIMITIVES = ProcRuleset.build do
         commit.with(key, value)
       end
     end
+  end
+
+  rulepi1 %{(matches (d_dict mask_dict))} do
+    Term::Dict.build do |commit|
+      d.items.each_with_index do |item, index|
+        next unless index.in?(mask)
+        commit << item
+      end
+      d.each_pair do |key, value|
+        next unless key.in?(mask)
+        commit.with(key, value)
+      end
+    end
+  end
+
+  # TODO: better naming!
+  rulepi1 %{(pick d_dict key_)} do
+    Term::Dict.build do |commit|
+      d.each_entry do |_, value|
+        next unless value.type.dict?
+        next unless needle = value[key]?
+
+        commit << needle
+      end
+    end
+  end
+
+  rulepi1 %{(broadcast (d_dict mask_dict) value_)} do
+    d.transaction do |commit|
+      mask.each_entry do |key, _|
+        commit.with(key, value)
+      end
+    end
+  end
+
+  # Groups contiguous runs of masked values from left to right. Only item
+  # indices are considered.
+  rulepi1 %[(runs (d_dict mask_dict))] do
+    indices = [] of Int32
+
+    mask.each_entry do |key, _|
+      next unless index = d.index?(key)
+      next unless index32 = index.to?(Int32) # ?!
+
+      indices << index32
+    end
+
+    indices.sort!
+
+    Term::Dict.build do |groups|
+      while index = indices.shift?
+        group = Term::Dict.build do |commit|
+          commit << d[index]
+
+          while index + 1 == indices.first?
+            index = indices.shift
+            commit << d[index]
+          end
+        end
+
+        groups << group
+      end
+    end
+  end
+
+  rulepi1 %{(instances d_dict pattern_)} do
+    mask1 = Term::Dict.build do |commit|
+      d.each_entry do |key, value|
+        next unless M1.probe?(pattern, value)
+
+        commit.with(key, true)
+      end
+    end
+
+    {d, mask1}
+  end
+
+  # Gives dicts that contain items between masked values. Masked values
+  # are dropped.
+  rulepi1 %{(complement (d_dict mask_dict))} do
+    mask1 = Term::Dict.build do |commit|
+      d.each_entry do |key, value|
+        next if key.in?(mask)
+
+        commit.with(key, true)
+      end
+    end
+
+    {d, mask1}
+  end
+
+  # todo: segments dict
+
+  # Gives a list of unmasked substrings and delimiters (distinctly)
+  # from left-to-right.
+  rulepi1 %{(segments (s_string mask_dict))} do
+    view = s.to(StringView)
+
+    indices = [] of Int32
+
+    mask.each_entry do |index, _|
+      next unless index32 = index.to?(Int32) # ?!
+
+      indices << index32
+    end
+
+    indices.sort!
+
+    Term::Dict.build do |commit|
+      (0...view.size).segments(indices) do |range|
+        commit << view.subview(range)
+      end
+    end
+  end
+
+  rulepi1 %{(wrap s_string ¦ () max-w⋮ 60 ellipsis⋮ "…")} do
+    maxw32 = max_w.to(Float64).clamp(0..Int32::MAX).to_i
+
+    wrap(s.to(String), maxw: maxw32, ellipsis: ellipsis.to(String))
+  end
+
+  rulepi1 %{(wrap s_string ¦ () max-w⋮ 60 ±max-h ellipsis⋮ "…")} do
+    maxw32 = max_w.to(Float64).clamp(0..Int32::MAX).to_i
+    maxh32 = max_h.to(Float64).clamp(0..Int32::MAX).to_i
+
+    wrap(s.to(String), maxw: maxw32, maxh: maxh32, ellipsis: ellipsis.to(String))
   end
 
   rulepi1 %{(includes? haystack_string needle_string)} do

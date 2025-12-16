@@ -561,11 +561,11 @@
   (alloy {x: 100} ((^* x)) () issues: ("value must be a dict"))
   (alloy {x: (1 2 3)} ((^* x)) (1 2 3))
   (alloy {x: (1 2 3 4)}
-    ((^* (matches x (mask x '(%pipe (mod 2) 0)))))
+    ((^* (matches x (mask '(%pipe (mod 2) 0) x))))
     (2 4))
   ;; Shorthand
   (alloy {x: (1 2 3 4)}
-    (^*(matches x (mask x '(%pipe (mod 2) 0))))
+    (^*(matches x (mask '(%pipe (mod 2) 0) x)))
     (2 4)))
 
 ;; ^splice
