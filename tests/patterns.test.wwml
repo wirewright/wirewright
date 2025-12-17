@@ -2445,12 +2445,8 @@
 
 ;; Match all ks in arg0 for which a kv pair exists in arg1 whose v is a symbol
 (pattern ((%items ks_ k_) (%entries sub_ k_ v_symbol))
-  ;; We have to use subset here since the order is unspecified. It is deterministic
-  ;; but unspecified, in other words, an implementation detail; and it is not a good
-  ;; idea (as I've learned) to test implementation details, because they tend to change.
-  (⊆ ((0 a b c d) (a: 10, b: x, c: y, d: "hello", e: xyzzy))
-     ({ks: ({k: b} {k: c}), sub: ({k: c, v: y} {k: b, v: x})})
-     ({ks: ({k: b} {k: c}), sub: ({k: b, v: x} {k: c, v: y})})))
+  (= ((0 a b c d) (a: 10, b: x, c: y, d: "hello", e: xyzzy))
+     {ks: ({k: b} {k: c}), sub: ({k: b, v: x} {k: c, v: y})}))
 
 ;; Find KV pairs where V is a symbol
 (pattern (%entry° k_ v_symbol)

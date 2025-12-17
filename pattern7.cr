@@ -841,40 +841,47 @@ module ::Ww::M1::Operator
     Env.feedback(envs, fallback: behind0.env, more: true)
   end
 
+  # FIXME: AllIsolated vs. All was a big blunder. I've got absolutely no clue what's
+  # going on here after ~1y. Sad sad.
+
   def match(behind0, op : AllIsolated, matchee : Term, ahead0)
     kp0 = behind0.backpath?
 
     behind1 = behind0
 
-    captures = Term::Dict.build do |captures|
-      interrupt = nil
+    captures = [] of Term::Dict
+    interrupt = nil
 
-      Search.traverse(matchee, spec: search_spec(op), backpath: kp0) do |item|
-        case fb = Operator.match(behind0, op.needle, item, Ahead::MatchOne.new)
-        in Fb::Match
-          fb.envs.each do |env|
-            behind1 = behind1.import_backpaths(env)
-
-            captures.append(env.without(:"(backpaths)"))
-          end
-
-          Search::Accept
-        in Fb::Mismatch
-          Search::Reject
-        in Fb::Interrupt
-          interrupt = fb
-
-          Search::Stop
+    Search.traverse(matchee, spec: search_spec(op), backpath: kp0) do |item|
+      case fb = Operator.match(behind0, op.needle, item, Ahead::MatchOne.new)
+      in Fb::Match
+        fb.envs.each do |env|
+          behind1 = behind1.import_backpaths(env)
+          captures << env.without(:"(backpaths)")
         end
-      end
 
-      if interrupt_ = interrupt
-        return interrupt_
+        Search::Accept
+      in Fb::Mismatch
+        Search::Reject
+      in Fb::Interrupt
+        interrupt = fb
+
+        Search::Stop
       end
+    end
+
+    if interrupt_ = interrupt
+      return interrupt_
     end
 
     if captures.size < op.min || captures.size > op.max > 0
       return Fb::Mismatch.new(behind1.env)
+    end
+
+    # NOTE: Only dict entries do not have defined order. So we sort them using
+    # Term.compare.
+    if op.is_a?(EntriesAllIsolated)
+      captures.sort! { |a, b| Term.compare(a, b) }
     end
 
     ahead1 = Ahead::Goto.new(kp0, Ahead.stackptr(ahead0))
