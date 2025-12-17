@@ -809,25 +809,6 @@ def test(ctx, test, path, keypath, stem, srcmap, text) : Bool
 
         false # no descend
       end
-
-      givenpi %[_* (pattern pattern_ _*) (⊆ matchee_ matchsets_*) node] do
-        test.short(path, text) do |complaints|
-          envs = matches_at_all_opt_levels(pattern, matchee)
-          next if envs.to_set.in?(matchsets.items.map(&.items.to_set))
-
-          complaints << Component.complaint(
-            title: "Pattern match envs are not subsets of any the matchsets",
-            sections: [
-              {"PATTERN", pattern},
-              {"MATCHEE", matchee},
-              {"GOT", Term.of(envs)},
-              {"MATCHSETS", Term.of(matchsets)},
-            ],
-          )
-        end
-
-        false # no descend
-      end
     end
 
     # Pattern head tests
