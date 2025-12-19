@@ -99,7 +99,7 @@ module Ww::ML
       end
 
       def <<(object : TrackedTsrc)
-        subsume(Tpath.value(@commit.size), object.srcmap)
+        subsume(Tpath.value(@commit.itemsize), object.srcmap)
 
         @commit << object.term
 

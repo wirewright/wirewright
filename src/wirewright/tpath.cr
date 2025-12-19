@@ -44,7 +44,7 @@ module Ww
     end
 
     def self.[](*steps : Step) : Tpath
-      Tpath.new(Steps.new(steps.size) { |index| steps[index].as(Step) })
+      Tpath.new(Slice(Step).new(steps.size) { |index| steps[index].as(Step) })
     end
 
     # Constructs a key step. Uses `Term.of` on *object* to obtain a term.
