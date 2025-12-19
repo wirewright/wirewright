@@ -277,16 +277,13 @@
 
 ;; When the arg is random / otherwise unexpected, the %pipe is interpreted
 ;; as a dictionary match.
-(template binary-map-invalid-arg $op
-  (pattern (%pipe ($op qux) n_)
-    (= (%pipe ($op qux) 1) {n: 1})
-    (= (%pipe ($op qux) "John Doe") {n: "John Doe"})
-    (= (%pipe ($op qux) qux) {n: qux})
-    (= (%pipe ($op qux) true) {n: true})
-    (= (%pipe ($op qux) ()) {n: ()})
-    (- (%pipe ($op "John Doe") 1)))) ;; etc...
-
-(instance binary-map-invalid-arg + - * / ** div mod)
+(pattern (%pipe (⸨+,-,*,/,**,div,mod⸩ qux) n_)
+  (= (%pipe (⸨+,-,*,/,**,div,mod⸩ qux) 1) {n: 1})
+  (= (%pipe (⸨+,-,*,/,**,div,mod⸩ qux) "John Doe") {n: "John Doe"})
+  (= (%pipe (⸨+,-,*,/,**,div,mod⸩ qux) qux) {n: qux})
+  (= (%pipe (⸨+,-,*,/,**,div,mod⸩ qux) true) {n: true})
+  (= (%pipe (⸨+,-,*,/,**,div,mod⸩ qux) ()) {n: ()})
+  (- (%pipe (⸨+,-,*,/,**,div,mod⸩ "John Doe") 1))) ;; etc...
 
 ;; %pipe unary
 (group
@@ -1092,32 +1089,62 @@
 ;; %plural: min overflows u8
 ;;
 ;; Interpreted literally.
-(template literal-p $p
-  (pattern ($p)
-    (+ ($p))
-    (- () (x) (x y) (x y z)))) ;; etc...
+(group
+  (pattern ((%plural min: -1))
+    (+ ((%plural min: -1)))
+    (- () (x) (x y) (x y z)))
 
-(instance literal-p
-  (%plural min: -1)
-  (%plural min: -12345)
-  (%plural min: -1/3)
-  (%plural min: 1/3)
-  (%plural min: 256)
-  (%plural min: 12345))
+  (pattern ((%plural min: -12345))
+    (+ ((%plural min: -12345)))
+    (- () (x) (x y) (x y z)))
 
-;; %plural: max overflows u8
-(instance literal-p
-  (%plural max: -1)
-  (%plural max: -12345)
-  (%plural max: -1/3)
-  (%plural max: 0)
-  (%plural max: 1/3)
-  (%plural max: 256)
-  (%plural max: 12345))
+  (pattern ((%plural min: -1/3))
+    (+ ((%plural min: -1/3)))
+    (- () (x) (x y) (x y z)))
 
-;; %plural: min > max
-(instance literal-p
-  (%plural min: 3 max: 1))
+  (pattern ((%plural min: 1/3))
+    (+ ((%plural min: 1/3)))
+    (- () (x) (x y) (x y z)))
+
+  (pattern ((%plural min: 256))
+    (+ ((%plural min: 256)))
+    (- () (x) (x y) (x y z)))
+
+  (pattern ((%plural min: 12345))
+    (+ ((%plural min: 12345)))
+    (- () (x) (x y) (x y z)))
+
+  (pattern ((%plural max: -1))
+    (+ ((%plural max: -1)))
+    (- () (x) (x y) (x y z)))
+
+  (pattern ((%plural max: -12345))
+    (+ ((%plural max: -12345)))
+    (- () (x) (x y) (x y z)))
+
+  (pattern ((%plural max: -1/3))
+    (+ ((%plural max: -1/3)))
+    (- () (x) (x y) (x y z)))
+
+  (pattern ((%plural max: 0))
+    (+ ((%plural max: 0)))
+    (- () (x) (x y) (x y z)))
+
+  (pattern ((%plural max: 1/3))
+    (+ ((%plural max: 1/3)))
+    (- () (x) (x y) (x y z)))
+
+  (pattern ((%plural max: 256))
+    (+ ((%plural max: 256)))
+    (- () (x) (x y) (x y z)))
+
+  (pattern ((%plural max: 12345))
+    (+ ((%plural max: 12345)))
+    (- () (x) (x y) (x y z)))
+
+  (pattern ((%plural min: 3 max: 1))
+    (+ ((%plural min: 3 max: 1)))
+    (- () (x) (x y) (x y z))))
 
 ;; %plural: min = max
 (group
