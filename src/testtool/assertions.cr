@@ -1,0 +1,637 @@
+module Testtool
+  # Returns an array of assertions made in *test*.
+  def assertions(test : Test) : Array(Assertion(Test))
+    items = test.document.items
+    items.flat_map_with_index do |item, index|
+      itemsrc = test.srcmap.cd(index)
+
+      asns = assertions(Top.new(item), itemsrc)
+      asns.map { |asn| Assertion.new(loc(asn, itemsrc), test) }
+    end
+  end
+
+  # Returns an array of assertions made in *comparison*.
+  def assertions(comparison : Comparison) : Array(Assertion(Comparison))
+    assertions(comparison.op).map { |asn| Assertion.new(asn, comparison) }
+  end
+
+  defrecord Top, term : Term
+
+  def assertions(production : Top, srcmap : ML::SrcMap) : Array(AssertionNode)
+    top = production.term
+
+    Term.case(top, engine: M0) do
+      # |@ testtool.decl.group
+      #
+      # |@pattern
+      # (group children_*)
+      #
+      # |@key children testtool.decl
+      #
+      # |@block
+      # Use `group` to group zero or more tests together.
+      matchpi %{(group _*)} do
+        children = top.items.move(1)
+        children.flat_map_with_index(offset: 1) do |item, index|
+          assertions(Top.new(item), srcmap.cd(index))
+        end
+      end
+
+      # Everything else is a decl.
+      otherwise do
+        annotated(assertions(Decl.new(top), srcmap), top, srcmap)
+      end
+    end
+  end
+
+  defrecord Decl, term : Term
+
+  def assertions(production : Decl, srcmap : ML::SrcMap) : Array(AssertionNode)
+    decl = production.term
+
+    Term.case(decl, engine: M0) do
+      # |@ testtool.decl.alloy
+      #
+      # |@pattern
+      # (alloy vars_dict template_ expansion_ ¦ issues⋮ ())
+      #
+      # |@key vars
+      # Variables to instantiate the template with.
+      #
+      # |@key alloy.template
+      # Alloy template to instantiate.
+      #
+      # |@key expansion
+      # Expected expansion of the template.
+      #
+      # |@key issues
+      # Lists expected issues (strings). Issues not in this list (unexpected issues)
+      # will cause your test to fail.
+      #
+      # |@block
+      # Use `alloy` to test Alloy template expansion (Crystal-side `Alloy.render`).
+      matchpiT %{[alloy vars_dict template_ expansion_]} do
+        M0.schema(decl) do |s|
+          s.key :issues, value: Term::Dict, default: Term[]
+          s.mismatch { continue }
+
+          test = AlloyTest.new(vars, template, expansion, issues)
+          annotated(assertions(test), decl, srcmap)
+        end
+      end
+
+      # |@ testtool.decl.µfold, testtool.decl.microfold
+      #
+      # |@pattern
+      # (⸨µ,micro⸩fold variants_+ ¦ problems: ())
+      #
+      # |@key variants
+      # Variants whose equality should be checked.
+      #
+      # |@key problems
+      # Expected issues (strings). Applies to all of *variants*.
+      #
+      # |@block
+      # Use `microfold`/`µfold` to check for equality across one or more
+      # Microfold variants, possibly with issues.
+      matchpi %{[microfold _*]}, %{[µfold _*]} do
+        M0.schema(decl) do |s|
+          s.key :problems, value: Term::Dict, default: Term[]
+          s.mismatch { continue }
+
+          variants = decl.items.move(1)
+          continue if variants.empty?
+
+          test = MicrofoldTest.new(variants.to_a, problems)
+          annotated(assertions(test), decl, srcmap)
+        end
+      end
+
+      # |@ testtool.decl.ml
+      #
+      # |@pattern
+      # (ml children_*)
+      #
+      # |@key children testtool.ml
+      #
+      # |@block
+      # Use `ml` to introduce zero or more WwML tests.
+      matchpi %{(ml _*)} do
+        assertions(decl.as_d, srcmap, offset: 1) { |item| MLdecl.new(item) }
+      end
+
+      # |@ testtool.decl.backmap
+      #
+      # |@pattern
+      # (backmap (pattern pattern_ backspec_) children_*)
+      #
+      # |@key pattern m1.pattern
+      # |@key backspec m1.backspec
+      # |@key children testtool.pattern
+      #
+      # |@block
+      # Use `backmap` to introduce zero or more M1 backmap tests for the given
+      # *pattern* and *backspec*.
+      matchpi %{(backmap (pattern_ backspec_) _*)} do
+        assertions(decl.as_d, srcmap, offset: 2) { |item| BackmapDecl.new(pattern, backspec, item) }
+      end
+
+      # |@ testtool.decl.pattern
+      #
+      # |@pattern
+      # (pattern pattern_ children_*)
+      #
+      # |@key pattern m1.pattern
+      # |@key children testtool.backmap
+      #
+      # |@block
+      # Use `pattern` to introduce zero or more M1 pattern tests for
+      # the given *pattern*.
+      matchpi %{(pattern pattern_ _*)} do
+        assertions(decl.as_d, srcmap, offset: 2) { |item| PatternDecl.new(pattern, item) }
+      end
+
+      # |@ testtool.decl.head
+      #
+      # |@pattern
+      # (head children_*)
+      #
+      # |@key children testtool.head
+      #
+      # |@block
+      # Use `head` to introduce zero or more M1 pattern head tests (Crystal-
+      # side `M1.head?`).
+      matchpi %{(head _*)} do
+        assertions(decl.as_d, srcmap, offset: 1) { |item| HeadDecl.new(item) }
+      end
+
+      # |@ testtool.decl.bounds
+      #
+      # |@pattern
+      # (bounds children_*)
+      #
+      # |@key children testtool.bounds
+      #
+      # |@block
+      # Use `bounds` to introduce zero or more M1 pattern bounds tests (Crystal-
+      # side `M1.bounds`).
+      matchpi %{(bounds _*)} do
+        assertions(decl.as_d, srcmap, offset: 1) { |item| BoundsDecl.new(item) }
+      end
+
+      # |@ testtool.decl.depth
+      #
+      # |@pattern
+      # (depth children_*)
+      #
+      # |@key children testtool.depth
+      #
+      # |@block
+      # Use `depth` to introduce zero or more M1 pattern depth tests (Crystal-
+      # side `M1.depth`)
+      matchpi %{(depth _*)} do
+        assertions(decl.as_d, srcmap, offset: 1) { |item| DepthDecl.new(item) }
+      end
+
+      # |@ testtool.decl.specificity
+      #
+      # |@pattern
+      # (specificity levels_*)
+      #
+      # |@key levels
+      # - Each level is of the form `(level items_*)`.
+      # - Each *item* is an M1 pattern (`m1.pattern`).
+      # - All *items* of a level are asserted to have equal specificity.
+      # - Later levels are asserted to have higher specificity (they are "tighter")
+      #   than those above (they are "looser").
+      #
+      # |@block
+      # Use `specificity` to introduce an M1 specificity test (Crystal-side `M1.specificity`).
+      matchpi %{(specificity _*)} do
+        levels = decl.items.move(1)
+
+        valid = levels.compact_map do |level|
+          Term.matchpi?(level, %{(level _*)}, engine: M0) do
+            members = level.items.move(1)
+            members.to_set
+          end
+        end
+
+        continue unless levels.size == valid.size # All valid
+
+        test = SpecificityTest.new(valid)
+        annotated(assertions(test), decl, srcmap)
+      end
+
+      # |@ testtool.decl.d7
+      #
+      # |@pattern
+      # (d7 frames_*)
+      #
+      # |@key frames d7.circuit
+      # The expected time-sequence of D7 circuits. The first circuit acts as
+      # a "seed". The time-sequence may end with `end` to make sure rewriting
+      # terminates.
+      #
+      # |@block
+      # Use `d7` to introduce a D7/Rack time-sequence test.
+      matchpi %{(d7 (frame _*) _*)} do
+        seed = Term.of(decl[1].items.move(1))
+        frames = decl.items.move(2)
+
+        test = D7test.new(seed, frames.to_a)
+        annotated(assertions(test), decl, srcmap)
+      end
+
+      # |@ testtool.decl.edit
+      #
+      # |@pattern
+      # (edit seed_ motions←(_*) result_)
+      #
+      # |@key motions editR.motion
+      #
+      # |@block
+      # Use `edit` to introduce an editR test. All motions listed in *motions*
+      # are dispatched to *seed*, in sequence (not in bulk). The result is compared
+      # to *result* to determine whether the test passes.
+      matchpi %{(edit seed_ motions_dict result_)} do
+        continue unless motions.itemsonly?
+
+        test = EditTest.new(seed, motions.items.to_a, result)
+        annotated(assertions(test), decl, srcmap)
+      end
+
+      otherwise do
+        warn("Ignoring unrecognized decl: #{decl}")
+
+        [] of AssertionNode
+      end
+    end
+  end
+
+  def assertions(decl : Term::Dict, srcmap : ML::SrcMap, *, offset : Int, &) : Array(AssertionNode)
+    children = decl.items.move(offset)
+    children.flat_map_with_index(offset: offset) do |item, index|
+      itemsrc = srcmap.cd(index)
+      test = yield item
+
+      annotated(assertions(test, itemsrc), Term.of(decl), srcmap)
+    end
+  end
+
+  defrecord MLdecl, term : Term
+
+  def assertions(production : MLdecl, srcmap : ML::SrcMap) : Array(AssertionNode)
+    decl = production.term
+
+    {% begin %}
+      Term.case(decl, engine: M0) do
+        {% for row in { {"", :term}, {"doc", :document} } %}
+          {% prefix, entity = row %}
+
+          # |@ testtool.ml.=
+          #
+          # |@pattern
+          # (= sources_string+)
+          # (doc= sources_string+)
+          #
+          # |@block
+          # Use `=` or `doc=` to check for term or document source equivalence,
+          # correspondingly.
+          matchpi %{({{prefix.id}}= _*)} do
+            continue unless decl.itemsize >= 2
+
+            rest = decl.items.move(1)
+            continue unless rest.all?(&.type.string?)
+
+            sources = rest.map(&.to(String))
+            test = MLeq.new(sources, entity: {{entity}})
+
+            annotated(assertions(test), decl, srcmap)
+          end
+
+          # |@ testtool.ml.+
+          #
+          # |@pattern
+          # (+ sources_string+ pattern_)
+          # (doc+ sources_string+ pattern_)
+          #
+          # |@key pattern m1.pattern
+          #
+          # |@block
+          # Use `+` or `doc+` to make sure all of *sources* parsed into term or
+          # document, correspondingly, match the given *pattern*.
+          matchpi %{({{prefix.id}}+ _*)} do
+            continue unless decl.itemsize >= 3
+
+            rest = decl.items.move(1).grow(-1)
+            continue unless rest.all?(&.type.string?)
+
+            sources = rest.map(&.to(String))
+            pattern = decl.items.last
+            test = MLpos.new(sources, pattern, entity: {{entity}})
+
+            annotated(assertions(test), decl, srcmap)
+          end
+
+          # |@ testtool.ml.-
+          #
+          # |@pattern
+          # (- source_string detail_string)
+          # (doc- source_string detail_string)
+          #
+          # |@key source
+          # A source string, including error location or range highlighted using
+          # one or two `⏏`s, correspondingly.
+          #
+          # |@key detail
+          # Syntax error detail *substring*, i.e., you don't have to spell out
+          # the whole message. For example, one could write `"hello⏏\q⏏"` for
+          # invalid escape sequence or `[(1 2 3⏏]` for missing closing paren.
+          #
+          # |@block
+          # Use `-` or `doc-` to make sure *source* fails to parse, producing
+          # a syntax error including the given *detail*.
+          matchpi %{({{prefix.id}}- source_string detail_string)}, source: String, detail: String do
+            test = MLneg.new(source, detail, entity: {{entity}})
+
+            annotated(assertions(test), decl, srcmap)
+          end
+        {% end %}
+
+        otherwise do
+          warn("Ignoring unrecognized ML decl: #{decl}")
+
+          [] of AssertionNode
+        end
+      end
+    {% end %}
+  end
+
+  defrecord PatternDecl, pattern : Term, term : Term
+
+  def assertions(production : PatternDecl, srcmap : ML::SrcMap) : Array(AssertionNode)
+    pattern, decl = production.pattern, production.term
+
+    Term.case(decl, engine: M0) do
+      # |@ testtool.pattern.var=
+      #
+      # |@pattern
+      # (var= name_ envs_*)
+      #
+      # |@key name
+      # Name of the variable.
+      #
+      # |@key envs
+      # Zero or more expected match envs.
+      #
+      # |@block
+      # Variable match test. Variables point to external resources. They
+      # are defined in testtool's `index.wwml`.
+      matchpi %{(var= name_ _*)} do
+        envs = decl.items.move(2)
+        test = PatternVarEq.new(pattern, name, envs.to_set)
+
+        annotated(assertions(test), decl, srcmap)
+      end
+
+      # |@ testtool.pattern.=
+      #
+      # |@pattern
+      # (= matchee_ envs_*)
+      #
+      # |@key name
+      # Name of the variable.
+      #
+      # |@key envs
+      # Zero or more expected match envs.
+      #
+      # |@block
+      # Use `=` to assert that matching the current pattern produces zero
+      # or more listed match envs.
+      matchpi %{(= matchee_ _*)} do
+        matches = decl.items.move(2)
+        test = PatternEq.new(pattern, matchee, matches.to_set)
+
+        annotated(assertions(test), decl, srcmap)
+      end
+
+      # |@ testtool.pattern.+
+      #
+      # |@pattern
+      # (+ whitelist_*)
+      #
+      # |@block
+      # Use `+` to assert that all matchees in *whitelist* produce one or more
+      # match envs.
+      matchpi %{(+ _*)} do
+        whitelist = decl.items.move(1)
+        test = PatternPos.new(pattern, whitelist.to_set)
+
+        annotated(assertions(test), decl, srcmap)
+      end
+
+      # |@ testtool.pattern.-
+      #
+      # |@pattern
+      # (- blacklist_*)
+      #
+      # |@block
+      # Use `-` to assert that all matchees in *blacklist* produce zero match envs.
+      matchpi %{(- _*)} do
+        blacklist = decl.items.move(1)
+        test = PatternNeg.new(pattern, blacklist.to_set)
+
+        annotated(assertions(test), decl, srcmap)
+      end
+
+      otherwise do
+        warn("Ignoring unrecognized pattern decl: #{decl}")
+
+        [] of AssertionNode
+      end
+    end
+  end
+
+  defrecord BackmapDecl, pattern : Term, backspec : Term, term : Term
+
+  def assertions(production : BackmapDecl, srcmap : ML::SrcMap) : Array(AssertionNode)
+    decl, pattern, backspec = production.term, production.pattern, production.backspec
+
+    Term.case(decl, engine: M0) do
+      # |@ testtool.backmap.=
+      #
+      # |@pattern
+      # (= matchee_ whitelist_*)
+      #
+      # |@block
+      # Use `=` to assert that *matchee* matches the current pattern, and that
+      # applying the current backspec to it results in one of terms from *whitelist*.
+      matchpi %{(= matchee_ _*)} do
+        whitelist = decl.items.move(2)
+        test = BackmapEq.new(pattern, backspec, matchee, whitelist.to_set)
+
+        annotated(assertions(test), decl, srcmap)
+      end
+
+      # |@ testtool.backmap.-
+      #
+      # |@pattern
+      # (- blacklist_*)
+      #
+      # |@block
+      # Use `-` to assert that backmapping is noop for all terms in *blacklist*<
+      # given the current pattern and backspec.
+      matchpi %{(- _*)} do
+        blacklist = decl.items.move(1)
+        test = BackmapNeg.new(pattern, backspec, blacklist.to_set)
+
+        annotated(assertions(test), decl, srcmap)
+      end
+
+      otherwise do
+        warn("Ignoring unrecognized backmap decl: #{decl}")
+
+        [] of AssertionNode
+      end
+    end
+  end
+
+  defrecord HeadDecl, term : Term
+
+  def assertions(production : HeadDecl, srcmap : ML::SrcMap) : Array(AssertionNode)
+    decl = production.term
+
+    Term.case(decl, engine: M0) do
+      # |@ testtool.head.of
+      #
+      # |@pattern
+      # (of pattern_ head_)
+      #
+      # |@key pattern m1.pattern
+      #
+      # |@block
+      # Use `of` to assert that the head of the given *pattern* is *head*.
+      matchpi %{(of pattern_ head_)} do
+        test = HeadEq.new(pattern, head)
+
+        annotated(assertions(test), decl, srcmap)
+      end
+
+      # |@ testtool.head.-
+      #
+      # |@pattern
+      # (- patterns_*)
+      #
+      # |@key patterns m1.pattern
+      #
+      # |@block
+      # Use `-` to assert that none of *patterns* have a head.
+      matchpi %{(- _*)} do
+        blacklist = decl.items.move(1)
+        test = HeadAbsent.new(blacklist.to_set)
+
+        annotated(assertions(test), decl, srcmap)
+      end
+
+      otherwise do
+        warn("Ignoring unrecognized head decl: #{decl}")
+
+        [] of AssertionNode
+      end
+    end
+  end
+
+  defrecord BoundsDecl, term : Term
+
+  def assertions(production : BoundsDecl, srcmap : ML::SrcMap) : Array(AssertionNode)
+    decl = production.term
+
+    Term.case(decl, engine: M0) do
+      # |@ testtool.bounds.of
+      #
+      # |@pattern
+      # (of patterns_* ¦ bounds_dict)
+      #
+      # |@key patterns m1.pattern
+      #
+      # |@key bounds
+      # A dictionary matching one of:
+      # - `{}`, meaning bounds could not be determined.
+      # - `{min: (%number +i32)}`, meaning only the lower bound is known.
+      # - `{max: (%number +i32)}`, meaning only the higher bound is known.
+      # - `{min: (%number +i32), max: (%number +i32)}`, meaning both bounds are known.
+      #
+      # |@block
+      # Use `of` to assert that all of *patterns* have the given *bounds*.
+      matchpiT %{(of _* ¦ bounds_dict)} do
+        patterns = decl.items.move(1)
+        test = BoundsEq.new(patterns.to_set, bounds)
+
+        annotated(assertions(test), decl, srcmap)
+      end
+
+      otherwise do
+        warn("Ignoring unrecognized bounds decl: #{decl}")
+
+        [] of AssertionNode
+      end
+    end
+  end
+
+  defrecord DepthDecl, term : Term
+
+  def assertions(production : DepthDecl, srcmap : ML::SrcMap) : Array(AssertionNode)
+    decl = production.term
+
+    Term.case(decl, engine: M0) do
+      # |@ testtool.depth.of
+      #
+      # |@pattern
+      # (of patterns_* ¦ depth_dict)
+      #
+      # |@key patterns m1.pattern
+      #
+      # |@key depth
+      # A dictionary matching one of:
+      # - `{}`, meaning depth could not be determined.
+      # - `{min: (%number +i32)}`, meaning only the lower bound is known.
+      # - `{max: (%number +i32)}`, meaning only the higher bound is known.
+      # - `{min: (%number +i32), max: (%number +i32)}`, meaning both bounds are known.
+      #
+      # |@block
+      # Use `of` to assert that all of *patterns* have the given *depth*.
+      matchpiT %{(of _* ¦ depth_dict)} do
+        patterns = decl.items.move(1)
+        test = DepthEq.new(patterns.to_set, depth)
+
+        annotated(assertions(test), decl, srcmap)
+      end
+
+      otherwise do
+        warn("Ignoring unrecognized depth decl: #{decl}")
+
+        [] of AssertionNode
+      end
+    end
+  end
+
+  # Bridges between assertions() and run() overloads.
+  def assertions(leaf : Leaf) : Array(AssertionNode)
+    asn = ->(assets : AssertionAssets) do
+      mmts = Mmt.zero
+      complaints = [] of Complaint
+
+      stat = ->(mmt : Mmt) do
+        mmts += mmt
+        mmts
+      end
+
+      run(leaf, assets, stat, complaints)
+
+      AssertionResult.new(mmts, complaints)
+    end
+
+    [asn] of AssertionNode
+  end
+end

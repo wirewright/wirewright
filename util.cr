@@ -474,26 +474,24 @@ module Enumerable(T)
 
   def partition(*types : *U) forall U
     {% begin %}
-      {% for cls in U %}
-        {{ cls.id.downcase.gsub(/[^\w]/, "_") }} = [] of {{cls.instance}}
+      {% for cls, i in U %}
+        %tmp{i} = [] of {{cls.instance}}
       {% end %}
 
-      %others = [] of T
+      %rest = [] of T
 
       each do |object|
         case object
-        {% for cls in U %}
+        {% for cls, i in U %}
         when {{cls.instance}}
-          {{cls.id.downcase.gsub(/[^\w]/, "_")}} << object
+          %tmp{i} << object
         {% end %}
         else
-          %others << object
+          %rest << object
         end
       end
 
-      { {% for cls in U %}
-          {{ cls.id.downcase.gsub(/[^\w]/, "_") }},
-        {% end %} %others }
+      { {% for cls, i in U %} %tmp{i}, {% end %} %rest }
     {% end %}
   end
 end
@@ -3908,6 +3906,15 @@ struct Bag(T)
 end
 
 module Enumerable(T)
+  def flat_map_with_index(*, offset : Int = 0, &)
+    index = offset
+    flat_map do |item|
+      result = yield item, index
+      index += 1
+      result
+    end
+  end
+
   def inverted_index : Hash(T, Array(Int32))
     hash = {} of T => Array(Int32)
     each_with_index do |key, index|

@@ -12,11 +12,9 @@ presets:
     {"execution_context": true,
      "no_number_autocast": true,
      "preview_mt": true},
-   source: "testtool.cr"},
+   source: "src/testtool.cr"},
  "ww":
-  {flags:
-    {"execution_context": true,
-     "preview_mt": true},
+  {flags: {"execution_context": true, "preview_mt": true},
    source: "src/ww.cr"}}
 
 protocol:

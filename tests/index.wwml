@@ -1,23 +1,70 @@
 ;;
-;; The `tests` tool uses this file to figure out the tests it needs
-;; to run.
+;; `testtool` uses this file to figure out the tests it needs to run and
+;; their assets.
 ;;
 
-((test "ml.test.wwml"
-   color: (oklch 0.7 0.13 30)
-   tags: (ml))
- (comparison "WwML Corpus"
-   (ml "corpus.in.wwml") (lr.gz "corpus.expected.wwlr.gz")
-   tags: (ml ml-corpus))
- (test "patterns.test.wwml"
-   color: (oklch 0.7 0.13 140)
-   tags: (patterns m1))
- (test "alloy.test.wwml"
-   color: (oklch 0.7 0.13 190)
-   tags: (alloy))
- (test "tspace.test.wwml"
-   color: (oklch 0.7 0.13 180)
-   tags: (tspace))
- (test "ufold.test.wwml"
-   color: (oklch 0.7 0.13 290)
-   tags: (ufold)))
+;; Variables used in pattern tests: `(var= _ _*)`.
+;;
+;; Right now we only support (file path_string).
+vars: {
+  PEOPLE: (json (file "../data/people.json")),
+}
+
+;; Theme and rem that should be used for running Microfold tests.
+microfold: {
+  theme: "../theme.ufold.wwml",
+  rem: 16,
+}
+
+;; Path to editR codex.
+editR: {codex: "../codex/editR.codex.wwml"}
+
+;; Path to uiR codex>
+uiR: {codex: "../uiR-succ8.soma.wwml"}
+
+;; Tests are listed in loose dependency order: ML tests are the most "primitive"
+;; and depend on the least amount of further machinery, then go patterns and so on.
+;; This doesn't work as cleanly in practice because the whole idea of Wirewright on
+;; the implementation end is to have everything depend on (or at least accessible to)
+;; everything else, so most of these tests require some form of "bootstrapping", as in,
+;; "everything else must *mostly* work for this particular test to work". Apply this
+;; last phrase to all tests, and you'll get the idea. The project is well past "bootstrapping"
+;; though so don't lose sleep over any of this!
+
+(test "ml.test.wwml"
+  color: (oklch 0.7 0.1 orange)
+  tags: (ml))
+
+(comparison "WwML Corpus"
+  (ml "corpus.in.wwml") (lr.gz "corpus.expected.wwlr.gz")
+  tags: (ml ml-corpus))
+
+(test "patterns.test.wwml"
+  color: (oklch 0.7 0.1 green)
+  tags: (patterns m1))
+
+(test "alloy.test.wwml"
+  color: (oklch 0.7 0.1 yellow)
+  tags: (alloy))
+
+(test "ufold.test.wwml"
+  color: (oklch 0.7 0.1 blue)
+  tags: (ufold))
+
+(test "d7.test.wwml"
+  color: (oklch 0.7 0.1 violet)
+  tags: (d7 delta7))
+
+(test "editR.test.wwml"
+  color: (oklch 0.7 0.1 indigo)
+  tags: (edit))
+
+(comparison "DwUIR regressions"
+  (dwuir "dwuir.in.wwml" wheel: 0 mouse-x: 0 mouse-y: 0)
+  (ppm.gz "dwuir.expected.ppm.gz")
+  tags: (graphics dwuir))
+
+(comparison "UIR regressions (this may take a while)"
+  (uir "uir.in.wwml" uir2ppm: true)
+  (ppm.gz "uir.expected.ppm.gz")
+  tags: (graphics uir long))
