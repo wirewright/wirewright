@@ -16,6 +16,8 @@
 # that with Soma, we do not yet know what will do the window management and finally
 # render us (in the sense of SFML vs. SDL vs. GLFW + OpenGL etc. or even PNG or JPEG!)
 module Ww::Soma
+  extend self
+
   # Constructs a new instance of a UIR rewriter, along with cache.
   #
   # NOTE: this function allocates a whole lot of cache; otherwise, UIR would be
@@ -29,7 +31,7 @@ module Ww::Soma
   # everything while keeping uiR exposed to the internals of the system. In a sense,
   # uiR is a rewriter that is needed inside the system but at the same time, it is
   # implemented using that same system.
-  def self.uiR(metricsR : Rewriter, ruleset : Ruleset)
+  def uiR(metricsR : Rewriter, ruleset : Ruleset)
     cache = SyncCache(Term, Rewrite::Any).new(capacity: 2**16, preallocate: true)
 
     set_main, rec_main = recR
@@ -53,10 +55,38 @@ module Ww::Soma
     set_main.call(mainR)
   end
 
-  def self.uiR(metricsR : Rewriter, rulebase : Term)
+  def uiR(metricsR : Rewriter, rulebase : Term)
     selector = ML.term(%{[backmap pattern_ backspec_]})
     ruleset = Ruleset.select(selector, rulebase)
 
     uiR(metricsR, ruleset)
+  end
+
+  def editR(ruleset : Ruleset)
+    exhR(absR(alloy_rulesetR(ruleset)))
+  end
+
+  def editR(rulebase : Term)
+    editR(Ruleset.select(Ruleset::DEFAULT_SELECTOR, rulebase))
+  end
+
+  def dispatch(state : Term, msg : Term)
+    Term.each_keypath_and_node(state) do |keypath, node|
+      Term.case(node) do
+        matchpi %{[I _*]} do
+          state = Term.morph(state, keypath) do |cursor|
+            Term.of(cursor.append(msg))
+          end
+
+          false # no descend
+        end
+
+        otherwise do
+          true # descend
+        end
+      end
+    end
+
+    state
   end
 end

@@ -1,36 +1,8 @@
 require "./src/wirewright"
 
-def editR(ruleset : Ruleset)
-  exhR(absR(alloy_rulesetR(ruleset)))
-end
-
-def editR(rulebase : Term)
-  editR(Ruleset.select(Ruleset::DEFAULT_SELECTOR, rulebase))
-end
-
-def dispatch(state : Term, msg : Term)
-  Term.each_keypath_and_node(state) do |keypath, node|
-    Term.case(node) do
-      matchpi %{[I _*]} do
-        state = Term.morph(state, keypath) do |cursor|
-          Term.of(cursor.append(msg))
-        end
-
-        false # no descend
-      end
-
-      otherwise do
-        true # descend
-      end
-    end
-  end
-
-  state
-end
-
 # Load codex
 codex = ML.document(File.read("./codex/editR.codex.wwml"))
-editR = editR(codex)
+editR = Soma.editR(codex)
 
 failures = [] of {expected: Term, got: Term, text: StringView}
 
@@ -46,7 +18,7 @@ tests.items.each_with_index do |testcase, index|
       state = seed
       msgs.items.each do |msg|
         rwtime += Time.measure do
-          state = rewrite(dispatch(state, msg), editR)
+          state = rewrite(Soma.dispatch(state, msg), editR)
         end
       end
 
@@ -96,7 +68,7 @@ seed = state
 msgs = Term[]
 
 preview = -> do
-  msgs.items.reduce(seed) { |memo, msg| rewrite(dispatch(memo, msg), editR) }
+  msgs.items.reduce(seed) { |memo, msg| rewrite(Soma.dispatch(memo, msg), editR) }
 end
 
 show = ->(term : Term) do
@@ -243,7 +215,7 @@ loop do
     givenpi %{(%any ws write-steps)} do
       File.open("./tests/editR.test.wwml", "a") do |io|
         result = msgs.items.reduce(seed) do |memo, msg|
-          step_result = rewrite(dispatch(memo, msg), editR)
+          step_result = rewrite(Soma.dispatch(memo, msg), editR)
           testcase = Term.of(:edit, memo, Term[{msg}], step_result)
 
           io.puts
@@ -265,7 +237,7 @@ loop do
 
     givenpi %{(%any r reload)} do
       codex = ML.document(File.read("./codex/editR.codex.wwml"))
-      editR = editR(codex)
+      editR = Soma.editR(codex)
       puts "Reloaded codex from disk"
     end
 
