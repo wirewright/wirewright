@@ -425,105 +425,101 @@ module Ww::M1::Operator
     match(behind0, op.successor, v, ahead0)
   end
 
-  module Entry
-    extend self
-
-    def match(behind0, op : Required, matchee : Term, ahead0)
-      unless dict = matchee.as_d?
-        return Fb::Mismatch.new(behind0.env)
-      end
-
-      unless v = dict[op.key]?
-        return Fb::Mismatch.new(behind0.env)
-      end
-
-      ahead1 = Ahead::Goto.new(behind0.backpath?, Ahead.stackptr(ahead0))
-
-      Operator.match(behind0.value(key: op.key), op.value, v, ahead1)
+  def match(behind0, op : Entry::Required, matchee : Term, ahead0)
+    unless dict = matchee.as_d?
+      return Fb::Mismatch.new(behind0.env)
     end
 
-    def match(behind0, op : Present, matchee : Term, ahead0)
-      unless dict = matchee.as_d?
-        return Fb::Mismatch.new(behind0.env)
-      end
-
-      unless v = dict[op.key]?
-        return Fb::Mismatch.new(behind0.env)
-      end
-
-      unless v.type.subtype?(op.type)
-        return Fb::Mismatch.new(behind0.env)
-      end
-
-      Ahead.tr(behind0, ahead0)
+    unless v = dict[op.key]?
+      return Fb::Mismatch.new(behind0.env)
     end
 
-    def match(behind0, op : Optional, matchee : Term, ahead0)
-      unless dict = matchee.as_d?
-        return Fb::Mismatch.new(behind0.env)
-      end
+    ahead1 = Ahead::Goto.new(behind0.backpath?, Ahead.stackptr(ahead0))
 
-      ahead1 = Ahead::Goto.new(behind0.backpath?, Ahead.stackptr(ahead0))
+    match(behind0.value(key: op.key), op.value, v, ahead1)
+  end
 
-      if value = dict[op.key]?
-        behind1 = behind0.value(key: op.key)
-
-        # NOTE: Itemspart optional has different failure semantics vs. pairspart
-        # optional. In itemspart optional, if the body fails to match the item
-        # underneath, the default is tried. In pairspart optional, however,
-        # we fail to match rather than trying default. In pairspart optional,
-        # only absence counts toward default.
-        return Operator.match(behind1, op.value, value, ahead1)
-      end
-
-      behind1 = behind0.backpath(&.create_pair(op.key, value: op.default))
-
-      Operator.match(behind1, op.value, op.default, ahead1)
+  def match(behind0, op : Entry::Present, matchee : Term, ahead0)
+    unless dict = matchee.as_d?
+      return Fb::Mismatch.new(behind0.env)
     end
 
-    def match(behind0, op : Absent | AbsentKeypath, matchee : Term, ahead0)
-      unless dict = matchee.as_d?
-        return Fb::Mismatch.new(behind0.env)
-      end
-
-      if op.key.in?(dict)
-        return Fb::Mismatch.new(behind0.env)
-      end
-
-      case op
-      in Absent
-        behind1 = behind0
-      in AbsentKeypath
-        behind1 = behind0.mount(op.name, &.create_pair(op.key))
-      end
-
-      Ahead.tr(behind1, ahead0)
+    unless v = dict[op.key]?
+      return Fb::Mismatch.new(behind0.env)
     end
 
-    def match(behind0, op : Negative | NegativeKeypath, matchee : Term, ahead0)
-      unless dict = matchee.as_d?
-        return Fb::Mismatch.new(behind0.env)
-      end
-
-      if v = dict[op.key]?
-        case fb = Operator.match(behind0, op.positive, v, ahead0)
-        in Fb::Match # Positive example matches, nothing to do.
-          return Fb::Mismatch.new(behind0.env)
-        in Fb::Mismatch
-        in Fb::Interrupt
-          return fb
-        end
-      end
-
-      case op
-      in Negative
-        behind1 = behind0
-      in NegativeKeypath
-        behind1 = behind0.mount(op.name, &.create_pair(op.key))
-      end
-
-      Ahead.tr(behind1, ahead0)
+    unless v.type.subtype?(op.type)
+      return Fb::Mismatch.new(behind0.env)
     end
+
+    Ahead.tr(behind0, ahead0)
+  end
+
+  def match(behind0, op : Entry::Optional, matchee : Term, ahead0)
+    unless dict = matchee.as_d?
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    ahead1 = Ahead::Goto.new(behind0.backpath?, Ahead.stackptr(ahead0))
+
+    if value = dict[op.key]?
+      behind1 = behind0.value(key: op.key)
+
+      # NOTE: Itemspart optional has different failure semantics vs. pairspart
+      # optional. In itemspart optional, if the body fails to match the item
+      # underneath, the default is tried. In pairspart optional, however,
+      # we fail to match rather than trying default. In pairspart optional,
+      # only absence counts toward default.
+      return match(behind1, op.value, value, ahead1)
+    end
+
+    behind1 = behind0.backpath(&.create_pair(op.key, value: op.default))
+
+    match(behind1, op.value, op.default, ahead1)
+  end
+
+  def match(behind0, op : Entry::Absent | Entry::AbsentKeypath, matchee : Term, ahead0)
+    unless dict = matchee.as_d?
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    if op.key.in?(dict)
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    case op
+    in Entry::Absent
+      behind1 = behind0
+    in Entry::AbsentKeypath
+      behind1 = behind0.mount(op.name, &.create_pair(op.key))
+    end
+
+    Ahead.tr(behind1, ahead0)
+  end
+
+  def match(behind0, op : Entry::Negative | Entry::NegativeKeypath, matchee : Term, ahead0)
+    unless dict = matchee.as_d?
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    if v = dict[op.key]?
+      case fb = match(behind0, op.positive, v, ahead0)
+      in Fb::Match # Positive example matches, nothing to do.
+        return Fb::Mismatch.new(behind0.env)
+      in Fb::Mismatch
+      in Fb::Interrupt
+        return fb
+      end
+    end
+
+    case op
+    in Entry::Negative
+      behind1 = behind0
+    in Entry::NegativeKeypath
+      behind1 = behind0.mount(op.name, &.create_pair(op.key))
+    end
+
+    Ahead.tr(behind1, ahead0)
   end
 
   def match(behind0, op : CaptureItemsonly, matchee : Term, ahead0)

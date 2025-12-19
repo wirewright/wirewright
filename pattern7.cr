@@ -1539,7 +1539,7 @@ module ::Ww::M1::Operator::Ahead
 
     node1 = node0.copy_with(cursor: node0.cursor + 1)
 
-    Entry.match(behind0, entry, node0.matchee, node1)
+    Operator.match(behind0, entry, node0.matchee, node1)
   end
 
   def self.tr(behind0, node0 : ItemAdapter)
