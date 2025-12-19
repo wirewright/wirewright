@@ -100,7 +100,7 @@ module Ww::Alloy
   # Base dictionary rewriting. Passthrough for non-dictionary terms.
   private def flatten(term : Term, issues : Issue::Sink, & : Term, Issue::Sink -> _) : Expansion
     unless term.type.dict?
-      return Alloy::Assign.new(term)
+      return Assign.new(term)
     end
 
     flatten(term.as_d, issues) { |value, issues| yield value, issues }
