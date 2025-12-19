@@ -83,8 +83,9 @@ module Ww
   # pairs supporting efficient, near-O(1) insert, delete, and lookup.
   @[Term::Assoc(TermType::Dict, :unsafe_as_d)]
   class Term::Dict
-    include AutoUpcast
     include Equality
+    include AutoUpcast
+    include TypeConversion
 
     # :nodoc:
     alias ItemNode = Pf::Kit::Node(Item)
