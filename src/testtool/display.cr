@@ -219,6 +219,16 @@ module Testtool
     display(WarnMessage.new(message))
   end
 
+  # Displays a warning message pointing to *path* and *srcmap*'s root
+  def warn(message : String, path : Path, srcmap : ML::SrcMap) : Nil
+    unless text = srcmap[Tpath[]]?
+      return warn(message)
+    end
+
+    _, line, column = ML::SyntaxError.lookaround(text)
+    warn("#{message} (#{path.normalize}:#{line}:#{column})")
+  end
+
   # Displays an error message.
   def err(message : String) : Nil
     display(ErrMessage.new(message))

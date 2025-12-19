@@ -5,7 +5,7 @@ module Testtool
     items.flat_map_with_index do |item, index|
       itemsrc = test.srcmap.cd(index)
 
-      asns = assertions(Top.new(item), itemsrc)
+      asns = assertions(Top.new(test.path, item), itemsrc)
       asns.map { |asn| Assertion.new(loc(asn, itemsrc), test) }
     end
   end
@@ -15,7 +15,7 @@ module Testtool
     assertions(comparison.op).map { |asn| Assertion.new(asn, comparison) }
   end
 
-  defrecord Top, term : Term
+  defrecord Top, path : Path, term : Term
 
   def assertions(production : Top, srcmap : ML::SrcMap) : Array(AssertionNode)
     top = production.term
@@ -33,18 +33,18 @@ module Testtool
       matchpi %{(group _*)} do
         children = top.items.move(1)
         children.flat_map_with_index(offset: 1) do |item, index|
-          assertions(Top.new(item), srcmap.cd(index))
+          assertions(Top.new(production.path, item), srcmap.cd(index))
         end
       end
 
       # Everything else is a decl.
       otherwise do
-        annotated(assertions(Decl.new(top), srcmap), top, srcmap)
+        annotated(assertions(Decl.new(production.path, top), srcmap), top, srcmap)
       end
     end
   end
 
-  defrecord Decl, term : Term
+  defrecord Decl, path : Path, term : Term
 
   def assertions(production : Decl, srcmap : ML::SrcMap) : Array(AssertionNode)
     decl = production.term
@@ -117,7 +117,9 @@ module Testtool
       # |@block
       # Use `ml` to introduce zero or more WwML tests.
       matchpi %{(ml _*)} do
-        assertions(decl.as_d, srcmap, offset: 1) { |item| MLdecl.new(item) }
+        assertions(decl.as_d, srcmap, offset: 1) do |item|
+          MLdecl.new(production.path, item)
+        end
       end
 
       # |@ testtool.decl.backmap
@@ -133,7 +135,9 @@ module Testtool
       # Use `backmap` to introduce zero or more M1 backmap tests for the given
       # *pattern* and *backspec*.
       matchpi %{(backmap (pattern_ backspec_) _*)} do
-        assertions(decl.as_d, srcmap, offset: 2) { |item| BackmapDecl.new(pattern, backspec, item) }
+        assertions(decl.as_d, srcmap, offset: 2) do |item|
+          BackmapDecl.new(production.path, pattern, backspec, item)
+        end
       end
 
       # |@ testtool.decl.pattern
@@ -148,7 +152,9 @@ module Testtool
       # Use `pattern` to introduce zero or more M1 pattern tests for
       # the given *pattern*.
       matchpi %{(pattern pattern_ _*)} do
-        assertions(decl.as_d, srcmap, offset: 2) { |item| PatternDecl.new(pattern, item) }
+        assertions(decl.as_d, srcmap, offset: 2) do |item|
+          PatternDecl.new(production.path, pattern, item)
+        end
       end
 
       # |@ testtool.decl.head
@@ -162,7 +168,9 @@ module Testtool
       # Use `head` to introduce zero or more M1 pattern head tests (Crystal-
       # side `M1.head?`).
       matchpi %{(head _*)} do
-        assertions(decl.as_d, srcmap, offset: 1) { |item| HeadDecl.new(item) }
+        assertions(decl.as_d, srcmap, offset: 1) do |item|
+          HeadDecl.new(production.path, item)
+        end
       end
 
       # |@ testtool.decl.bounds
@@ -176,7 +184,9 @@ module Testtool
       # Use `bounds` to introduce zero or more M1 pattern bounds tests (Crystal-
       # side `M1.bounds`).
       matchpi %{(bounds _*)} do
-        assertions(decl.as_d, srcmap, offset: 1) { |item| BoundsDecl.new(item) }
+        assertions(decl.as_d, srcmap, offset: 1) do |item|
+          BoundsDecl.new(production.path, item)
+        end
       end
 
       # |@ testtool.decl.depth
@@ -190,7 +200,9 @@ module Testtool
       # Use `depth` to introduce zero or more M1 pattern depth tests (Crystal-
       # side `M1.depth`)
       matchpi %{(depth _*)} do
-        assertions(decl.as_d, srcmap, offset: 1) { |item| DepthDecl.new(item) }
+        assertions(decl.as_d, srcmap, offset: 1) do |item|
+          DepthDecl.new(production.path, item)
+        end
       end
 
       # |@ testtool.decl.specificity
@@ -262,7 +274,7 @@ module Testtool
       end
 
       otherwise do
-        warn("Ignoring unrecognized decl: #{decl}")
+        warn("Ignoring unrecognized decl: #{decl}", production.path, srcmap)
 
         [] of AssertionNode
       end
@@ -279,7 +291,7 @@ module Testtool
     end
   end
 
-  defrecord MLdecl, term : Term
+  defrecord MLdecl, path : Path, term : Term
 
   def assertions(production : MLdecl, srcmap : ML::SrcMap) : Array(AssertionNode)
     decl = production.term
@@ -360,7 +372,7 @@ module Testtool
         {% end %}
 
         otherwise do
-          warn("Ignoring unrecognized ML decl: #{decl}")
+          warn("Ignoring unrecognized ML decl: #{decl}", production.path, srcmap)
 
           [] of AssertionNode
         end
@@ -368,7 +380,7 @@ module Testtool
     {% end %}
   end
 
-  defrecord PatternDecl, pattern : Term, term : Term
+  defrecord PatternDecl, path : Path, pattern : Term, term : Term
 
   def assertions(production : PatternDecl, srcmap : ML::SrcMap) : Array(AssertionNode)
     pattern, decl = production.pattern, production.term
@@ -446,14 +458,14 @@ module Testtool
       end
 
       otherwise do
-        warn("Ignoring unrecognized pattern decl: #{decl}")
+        warn("Ignoring unrecognized pattern decl: #{decl}", production.path, srcmap)
 
         [] of AssertionNode
       end
     end
   end
 
-  defrecord BackmapDecl, pattern : Term, backspec : Term, term : Term
+  defrecord BackmapDecl, path : Path, pattern : Term, backspec : Term, term : Term
 
   def assertions(production : BackmapDecl, srcmap : ML::SrcMap) : Array(AssertionNode)
     decl, pattern, backspec = production.term, production.pattern, production.backspec
@@ -490,14 +502,14 @@ module Testtool
       end
 
       otherwise do
-        warn("Ignoring unrecognized backmap decl: #{decl}")
+        warn("Ignoring unrecognized backmap decl: #{decl}", production.path, srcmap)
 
         [] of AssertionNode
       end
     end
   end
 
-  defrecord HeadDecl, term : Term
+  defrecord HeadDecl, path : Path, term : Term
 
   def assertions(production : HeadDecl, srcmap : ML::SrcMap) : Array(AssertionNode)
     decl = production.term
@@ -535,14 +547,14 @@ module Testtool
       end
 
       otherwise do
-        warn("Ignoring unrecognized head decl: #{decl}")
+        warn("Ignoring unrecognized head decl: #{decl}", production.path, srcmap)
 
         [] of AssertionNode
       end
     end
   end
 
-  defrecord BoundsDecl, term : Term
+  defrecord BoundsDecl, path : Path, term : Term
 
   def assertions(production : BoundsDecl, srcmap : ML::SrcMap) : Array(AssertionNode)
     decl = production.term
@@ -572,14 +584,14 @@ module Testtool
       end
 
       otherwise do
-        warn("Ignoring unrecognized bounds decl: #{decl}")
+        warn("Ignoring unrecognized bounds decl: #{decl}", production.path, srcmap)
 
         [] of AssertionNode
       end
     end
   end
 
-  defrecord DepthDecl, term : Term
+  defrecord DepthDecl, path : Path, term : Term
 
   def assertions(production : DepthDecl, srcmap : ML::SrcMap) : Array(AssertionNode)
     decl = production.term
@@ -609,7 +621,7 @@ module Testtool
       end
 
       otherwise do
-        warn("Ignoring unrecognized depth decl: #{decl}")
+        warn("Ignoring unrecognized depth decl: #{decl}", production.path, srcmap)
 
         [] of AssertionNode
       end
