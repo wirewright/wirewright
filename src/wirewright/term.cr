@@ -1136,71 +1136,42 @@ module Ww
       {{@type}}.of({{@type}}.case({{args.splat}}, {{kwargs.double_splat}}) {{block}})
     end
 
-    # Shorthand for a single-`matchpi` call to `Term.case`:
-    #
-    # ```
-    # Term.case(term, **kwargs) do
-    #   matchpi *patterns do
-    #     # Block
-    #   end
-    #
-    #   otherwise { }
-    # end
-    # ```
-    macro matchpi?(term, *patterns, **kwargs, &block)
-      {{@type}}.case({{term}}, {{kwargs.double_splat}}) do
-        matchpi({{patterns.splat}}) {{block}}
-        otherwise { }
+    {% for name in %w[matchpi givenpi matchpiT givenpiT] %}
+      # Shorthand for a single-`{{name.id}}` call to `Term.case`. Raises
+      # `ArgumentError` on mismatch.
+      #
+      # ```
+      # Term.case(term, **kwargs) do
+      #   {{name.id}} *patterns do
+      #     # Block
+      #   end
+      # end
+      # ```
+      macro {{name.id}}(term, *patterns, **kwargs, &block)
+        \{{@type}}.case(\{{term}}, \{{kwargs.double_splat}}) do
+          {{name.id}}(\{{patterns.splat}}) \{{block}}
+        end
       end
-    end
 
-    # Shorthand for a single-`matchpi` call to `Term.case`:
-    #
-    # ```
-    # Term.case(term, **kwargs) do
-    #   matchpi *patterns do
-    #     # Block
-    #   end
-    # end
-    # ```
-    macro matchpi(term, *patterns, **kwargs, &block)
-      {{@type}}.case({{term}}, {{kwargs.double_splat}}) do
-        matchpi({{patterns.splat}}) {{block}}
+      # Shorthand for a single-`{{name.id}}` call to `Term.case`. Returns `nil`
+      # on mismatch.
+      #
+      # ```
+      # Term.case(term, **kwargs) do
+      #   {{name.id}} *patterns do
+      #     # Block
+      #   end
+      #
+      #   otherwise { }
+      # end
+      # ```
+      macro {{name.id}}?(term, *patterns, **kwargs, &block)
+        \{{@type}}.case(\{{term}}, \{{kwargs.double_splat}}) do
+          {{name.id}}(\{{patterns.splat}}) \{{block}}
+          otherwise { }
+        end
       end
-    end
-
-    # Shorthand for a single-`givenpi` call to `Term.case`:
-    #
-    # ```
-    # Term.case(term, **kwargs) do
-    #   givenpi *patterns do
-    #     # Block
-    #   end
-    #
-    #   otherwise { }
-    # end
-    # ```
-    macro givenpi?(term, *patterns, **kwargs, &block)
-      {{@type}}.case({{term}}, {{kwargs.double_splat}}) do
-        givenpi({{patterns.splat}}) {{block}}
-        otherwise { }
-      end
-    end
-
-    # Shorthand for a single-`givenpi` call to `Term.case`:
-    #
-    # ```
-    # Term.case(term, **kwargs) do
-    #   givenpi *patterns do
-    #     # Block
-    #   end
-    # end
-    # ```
-    macro givenpi(term, *patterns, **kwargs, &block)
-      {{@type}}.case({{term}}, {{kwargs.double_splat}}) do
-        givenpi({{patterns.splat}}) {{block}}
-      end
-    end
+    {% end %}
   end
 
   # Utilities
