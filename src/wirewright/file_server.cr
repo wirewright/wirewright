@@ -10,21 +10,58 @@ module Ww
     end
   end
 
-  # Includers can operate on a file given its path.
+  # Includers are *file servers*: they, well... *serve files*.
   #
-  # All methods of a file server are (supposed to be) thread-safe.
+  # Wirewright's file server abstraction is, in essence, about interacting
+  # with some underlying file system, or maybe the network, to read and
+  # write files.
+  #
+  # NOTE: This particular implementation is (by far) not the final one. We'd
+  # like to represent files more "algebraically". There are bits and pieces
+  # of this all over the code (esp. in Rack file server), which we'd like to
+  # unify eventually.
   module FileServer
     enum WriteMode
       Overwrite
       Append
     end
 
-    enum Compression
+    enum ReadCompression
+      None
+      Gzip
+
+      def self.from_file_extension(path : Path) : ReadCompression
+        from_file_extension(path.extension)
+      end
+
+      def self.from_file_extension(extension : String) : ReadCompression
+        case extension
+        when ".gz" then Gzip
+        else
+          None
+        end
+      end
+
+      def source(io : IO, & : IO ->)
+        case self
+        in .none?
+          yield io
+        in .gzip?
+          Compress::Gzip::Reader.open(io) { |gzip| yield gzip }
+        end
+      end
+    end
+
+    enum WriteCompression
       None
       GzipFast
       GzipBest
 
-      def self.from_file_extension(extension : String) : Compression
+      def self.from_file_extension(path : Path) : ReadCompression
+        from_file_extension(path.extension)
+      end
+
+      def self.from_file_extension(extension : String) : WriteCompression
         case extension
         when ".gz" then GzipFast
         else
@@ -32,7 +69,7 @@ module Ww
         end
       end
 
-      def fast : Compression
+      def fast : WriteCompression
         case self
         in .none?      then self
         in .gzip_fast? then self
@@ -40,7 +77,7 @@ module Ww
         end
       end
 
-      def best : Compression
+      def best : WriteCompression
         case self
         in .none?      then self
         in .gzip_fast? then GzipBest
@@ -53,9 +90,9 @@ module Ww
         in .none?
           yield io
         in .gzip_fast?
-          Compress::Gzip::Writer.open(io, level: Compress::Gzip::BEST_SPEED) { |io| yield io }
+          Compress::Gzip::Writer.open(io, level: Compress::Gzip::BEST_SPEED) { |gzip| yield gzip }
         in .gzip_best?
-          Compress::Gzip::Writer.open(io, level: Compress::Gzip::BEST_COMPRESSION) { |io| yield io }
+          Compress::Gzip::Writer.open(io, level: Compress::Gzip::BEST_COMPRESSION) { |gzip| yield gzip }
         end
       end
     end
@@ -69,25 +106,36 @@ module Ww
 
     # Returns the content of the file at *path*.
     #
+    # *compression* sets the compression algorithm.
+    #
     # Raises `FileServerError` if the file cannot be read.
-    abstract def read(path : Path) : Bytes
+    abstract def read(path : Path, *, compression : ReadCompression) : Bytes
+
+    # Calls `read` with no compression.
+    def read(path : Path) : Bytes
+      read(path, compression: :none)
+    end
 
     # Returns the content of the file at *path* as a `String`.
     #
     # Raises `FileServerError` if the file cannot be read.
-    def read_string(path : Path) : String
-      String.new(read(path))
+    def read_string(path : Path, **kwargs) : String
+      String.new(read(path, **kwargs))
     end
 
     # Writes to the file at *path* using the block (creating the file if necessary),
     # possibly with compression.
     #
     # Raises `FileServerError` in case of an error.
-    abstract def write(path : Path, *, mode : WriteMode, compression : Compression, & : IO ->) : Nil
+    abstract def write(path : Path, *, mode : WriteMode, compression : WriteCompression, & : IO ->) : Nil
 
     # :ditto:
     def write(path : Path, & : IO ->) : Nil
       write(path, mode: :overwrite, compression: :none) { |io| yield io }
+    end
+
+    def write(path : Path, content : Bytes, *, compression : WriteCompression = :none)
+      write(path, mode: :overwrite, compression: :none, &.write(content))
     end
 
     # Removes the file at *path*.
@@ -124,17 +172,25 @@ module Ww
       end
     end
 
-    def read(path : Path) : Bytes
+    def read(path : Path, *, compression : ReadCompression) : Bytes
       path = resolve(path)
 
       Log.debug { "read #{path}" }
 
-      File.open(path, "rb", &.getb_to_end)
+      File.open(path, "rb") do |io|
+        io.flock_exclusive do
+          Log.debug { "read: flock'd, reading" }
+
+          compression.source(io) do |src|
+            src.getb_to_end
+          end
+        end
+      end
     rescue e : File::Error
       raise FileServerError.new("unable to load file: #{e.message}", cause: e)
     end
 
-    def write(path : Path, *, mode : FileServer::WriteMode, compression : FileServer::Compression, & : IO ->) : Nil
+    def write(path : Path, *, mode : WriteMode, compression : WriteCompression, & : IO ->) : Nil
       path = resolve(path)
 
       Log.debug { "write: path=`#{path}`, mode=`#{mode}`" }
@@ -213,11 +269,11 @@ module Ww
       @lock.synchronize { @disk.timestamp?(path) }
     end
 
-    def read(path : Path) : Bytes
-      @lock.synchronize { @disk.read(path) }
+    def read(path : Path, *, compression : ReadCompression) : Bytes
+      @lock.synchronize { @disk.read(path, compression: compression) }
     end
 
-    def write(path : Path, *, mode : FileServer::WriteMode, compression : FileServer::Compression, & : IO ->) : Nil
+    def write(path : Path, *, mode : WriteMode, compression : WriteCompression, & : IO ->) : Nil
       @lock.synchronize do
         @disk.write(path, mode: mode, compression: compression) do |io|
           yield io

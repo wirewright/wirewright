@@ -75,7 +75,7 @@ module Ww::DwUIR
   # to *path* (accessed through the given file server *files*).
   def snap(ctx : Viewer::Context, conf : ShowConf, path : Path) : Nil
     extension = path.extension
-    compression = FileServer::Compression.from_file_extension(extension)
+    compression = FileServer::WriteCompression.from_file_extension(extension)
     unless compression.none?
       extension = Path[path.stem].extension
     end
