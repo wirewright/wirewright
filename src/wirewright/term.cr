@@ -97,6 +97,11 @@ module Ww
         def to?(type : {{@type}}.class)
           self
         end
+
+        # Returns `Term.of(self)`.
+        def to?(type : ::Ww::Term.class)
+          ::Ww::Term.of(self)
+        end
       end
 
       # Same as `to?`, but raises `TypeCastError` instead of returning `nil`.
