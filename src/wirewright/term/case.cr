@@ -612,7 +612,7 @@ module Ww::Term::Case
           {% if sink %}\
             break(pass {{sink}})
           {% else %}\
-            raise ArgumentError.new("unhandled case: #{ML.compact(%matchee)}")
+            raise ArgumentError.new("unrecognized term: #{ML.compact(%matchee)}")
           {% end %}\
         end
 
