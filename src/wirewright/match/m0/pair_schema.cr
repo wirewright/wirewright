@@ -5,6 +5,8 @@ module Ww::M0
   # be encoded in Crystal. PairSchema helps to automate that, and is in a sense in
   # between: you still encode the constraints in Crystal, but yet, declaratively rather
   # than imperatively; once and in a reusable manner. The rest is automated away.
+  #
+  # TODO: remove in favor of `M0.schema` DSL
   struct PairSchema
     # :nodoc:
     alias Pair = RequiredPair | OptionalPair

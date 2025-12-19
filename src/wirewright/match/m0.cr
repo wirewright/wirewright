@@ -6,6 +6,155 @@ module Ww::M0
   extend self
 
   # :nodoc:
+  def restrict?(term : Term, restriction : Term.class, type)
+    term.to?(type)
+  end
+
+  # :nodoc:
+  def restrict?(term : Term, restriction : T.class, type : Term.class) forall T
+    Term[term].as?(T)
+  end
+
+  # :nodoc:
+  def restrict?(term : Term, restriction : T.class, type) forall T
+    Term[term].as?(T).try(&.to?(type))
+  end
+
+  # :nodoc:
+  def restrict?(term : Term, restriction : Range, type : Int.class)
+    return unless n = term.as_n?
+    return unless n.integer?
+    return unless int = n.to?(type)
+
+    int.in?(restriction) ? int : nil
+  end
+
+  # :nodoc:
+  def restrict?(term : Term, restriction : Indexable, type)
+    return unless restriction.any? { |option| !!M0.match?(Term.of(option), term) }
+
+    term.to?(type)
+  end
+
+  # *open* allows pairs other than those specified in the schema.
+  macro schema(matchee, *, open = false, &block)
+    {%
+      unless block && block.args.size == 1
+        raise "expected a block with one argument"
+      end
+
+      keys = [] of ::NoReturn
+      others = [] of ::NoReturn
+      mismatch = nil
+
+      ref = block.args[0]
+
+      nodes = block.body.is_a?(Expressions) ? block.body.expressions : [block.body]
+      nodes.each do |node|
+        if node.is_a?(Call) && node.receiver && node.receiver.id == ref.id
+          if node.name == :key
+            # const
+            unrecognized = "unrecognized call, expected: key(name : MacroId, *, value : ASTNode = Term, type : ASTNode = Term, default : ASTNode? = nil)"
+
+            unless node.args.size == 1
+              node.raise unrecognized
+            end
+
+            name = node.args[0]
+
+            kw_value = node.named_args.find { |kwarg| kwarg.name == :value }
+            kw_type = node.named_args.find { |kwarg| kwarg.name == :type }
+            kw_default = node.named_args.find { |kwarg| kwarg.name == :default }
+
+            arity = 0
+            arity += 1 if kw_value
+            arity += 1 if kw_type
+            arity += 1 if kw_default
+
+            unless node.named_args.size == arity
+              node.raise unrecognized
+            end
+
+            keys << {
+              name:        name.id,
+              restriction: kw_value ? kw_value.value : Term,
+              type:        kw_type ? kw_type.value : Term,
+              default:     kw_default ? kw_default.value : nil,
+            }
+          elsif node.name == :mismatch
+            unless node.block
+              node.raise "expected a block"
+            end
+
+            if mismatch
+              node.raise "duplicate mismatch"
+            end
+
+            mismatch = node.block.body
+          else
+            node.raise "unrecognized schema call name: #{node.name}"
+          end
+        else
+          # Unrecognized node in the block.
+          others << node
+        end
+      end
+    %}
+
+    unless %matchee = ({{matchee}}).as_d?
+      {% if mismatch %}\
+        {{mismatch}}
+        unreachable("M0.schema's mismatch block must be NoReturn")
+      {% else %}\
+        next
+      {% end %}\
+    end
+
+    %arity = 0
+
+    {% for key, i in keys %}\
+      if %value{i} = %matchee[{{key[:name].symbolize}}]?
+        unless %value{i} = {{@type}}.restrict?(%value{i}, {{key[:restriction]}}, {{key[:type]}})
+          {% if mismatch %}\
+            {{mismatch}}
+            unreachable("M0.schema's mismatch block must be NoReturn")
+          {% else %}\
+            next
+          {% end %}\
+        end
+        %arity += 1
+      else
+        {% if default = key[:default] %}\
+          %value{i} = {{default}}
+        {% end %}\
+      end
+      unless {{key[:name]}} = %value{i}
+        {% if mismatch %}\
+          {{mismatch}}
+          unreachable("M0.schema's mismatch block must be NoReturn")
+        {% else %}\
+          next
+        {% end %}\
+      end
+    {% end %}\
+
+    {% unless open %}\
+      unless %arity == %matchee.pairsize
+        {% if mismatch %}\
+          {{mismatch}}
+          unreachable("M0.schema's mismatch block must be NoReturn")
+        {% else %}\
+          next
+        {% end %}\
+      end
+    {% end %}\
+
+    {% for node in others %}\
+      {{node}}
+    {% end %}\
+  end
+
+  # :nodoc:
   def match?(commit, pattern : Term::Sym, matchee : Term::Any) : Bool
     unless (blank = pattern.blank?) && blank.singular?
       return pattern == matchee
