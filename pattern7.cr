@@ -390,44 +390,40 @@ end
 #   are not, fix that. In fact, Operator should probably be renamed to Subject or something
 #   like that. Not sure how large of a refactor that is, and how much point is there in it.
 module ::Ww::M1::Operator
-  alias Any = Pass | Never | Num | Sym | SymBlank | SymNonblank | Boolean | Dict | Itemsonly | Pairsonly | SketchSubset | Bounds | BoundsGuard | MaxDepth | DictGuard | Literal | Capture | CaptureItemsonly | ItemSeq | ItemFirst | ItemLast | SingularSeq | Partition | Edge | LiteralChoices | SourceChoice | ValueLiteral | Keypool | Span | Tally | Type | ParseML | Clamp | Bin | Both | Not | Layer | ScanFirst | ScanSource | ScanAll | ScanAllIsolated | DfsFirst | DfsSource | DfsAllIsolated | DfsAll | BfsFirst | BfsAllIsolated | BfsAll | Value | NegativeValue | NegativeValueKeypath | EntriesFirst | EntriesSource | EntriesAllIsolated | EntriesAll | Str | New | KeypathCapture | NegativeKeypool | Keytest
+  alias Any = Pass | Never | Num | Sym | SymBlank | SymNonblank | Boolean | Dict | Itemsonly | Pairsonly | SketchSubset | Bounds | BoundsGuard | MaxDepth | DictGuard | Literal | Capture | CaptureItemsonly | ItemSeq | ItemFirst | ItemLast | SingularSeq | Partition | Edge | LiteralChoices | SourceChoice | ValueLiteral | Keypool | Span | Tally | Type | ParseML | Clamp | Bin | Both | Not | Layer | ScanFirst | ScanSource | ScanAll | DfsFirst | DfsSource | DfsAll | BfsFirst | BfsAll | Value | NegativeValue | NegativeValueKeypath | EntriesFirst | EntriesSource | EntriesAll | Str | New | KeypathCapture | NegativeKeypool | Keytest
 
   alias Bin = Add | Sub | Mul | Div | Idiv | Mod | Pow | Map
 
   alias First = ScanFirst | DfsFirst | BfsFirst | EntriesFirst
   alias Source = DfsSource | ScanSource | EntriesSource
-  alias AllIsolated = ScanAllIsolated | DfsAllIsolated | BfsAllIsolated | EntriesAllIsolated
   alias All = ScanAll | DfsAll | BfsAll | EntriesAll
 
   defcase ValueLiteral, key : Term, successor : Any
 
   defcase Layer, below : Any, side : Array(Entry::Any)
 
-  alias Scan = ScanFirst | ScanSource | ScanAllIsolated | ScanAll
+  alias Scan = ScanFirst | ScanSource | ScanAll
 
   defcase ScanFirst, needle : Slice(Any)
   defcase ScanSource, needle : Slice(Any)
-  defcase ScanAllIsolated, successor : Any, needle : Slice(Any), min : UInt8, max : UInt8
   defcase ScanAll, successor : Any, needle : Slice(Any), selector : Set(Term), exterior : Set(Term), min : UInt8, max : UInt8
 
   defcase Value, capture : Term, tail : Any
   defcase NegativeValue, capture : Term
   defcase NegativeValueKeypath, capture : Term, name : Term
 
-  alias Dfs = DfsFirst | DfsSource | DfsAllIsolated | DfsAll
+  alias Dfs = DfsFirst | DfsSource | DfsAll
 
   defcase DfsFirst, needle : Any, part : Search::Part, depth0 : Bool
   defcase DfsSource, needle : Any, part : Search::Part, depth0 : Bool
-  defcase DfsAllIsolated, successor : Any, needle : Any, part : Search::Part, min : UInt8, max : UInt8, depth0 : Bool
   defcase DfsAll, successor : Any, needle : Any, selector : Set(Term), exterior : Set(Term), part : Search::Part, min : UInt8, max : UInt8, depth0 : Bool
 
-  alias Bfs = BfsFirst | BfsAllIsolated | BfsAll
+  alias Bfs = BfsFirst | BfsAll
 
   defcase BfsFirst, needle : Any, part : Search::Part, depth0 : Bool
-  defcase BfsAllIsolated, successor : Any, needle : Any, part : Search::Part, min : UInt8, max : UInt8, depth0 : Bool
   defcase BfsAll, successor : Any, needle : Any, selector : Set(Term), exterior : Set(Term), part : Search::Part, min : UInt8, max : UInt8, depth0 : Bool
 
-  alias Entries = EntriesFirst | EntriesSource | EntriesAllIsolated | EntriesAll
+  alias Entries = EntriesFirst | EntriesSource | EntriesAll
 
   defcase EntriesFirst, kop : Any, vop : Any do
     def needle
@@ -436,12 +432,6 @@ module ::Ww::M1::Operator
   end
 
   defcase EntriesSource, kop : Any, vop : Any do
-    def needle
-      [kop, vop]
-    end
-  end
-
-  defcase EntriesAllIsolated, successor : Any, kop : Any, vop : Any, min : UInt8, max : UInt8 do
     def needle
       [kop, vop]
     end
@@ -789,8 +779,8 @@ module ::Ww::M1::Operator
     match(behind0.backpath(&.delete_keys(op.side, &.key)), op.below, Term.of(residue), ahead2)
   end
 
-  # TODO: First, Source, and especially All and AllIsolated have *extremely* degenerate
-  # implementations right now. The latter two barely work. They must be rewritten to use
+  # TODO: First, Source, and especially All have *extremely* degenerate implementations
+  # right now. The latter two barely work. They must be rewritten to use
   # the "stringing" approach (as above with EntrySeq). This requires pulling (i.e. .next)
   # traversal rather than pushing one we're using here. Push-based traversal (`Search`) is totally
   # against the way M1 is implemented. The stringing approach would probably be slower
@@ -841,54 +831,6 @@ module ::Ww::M1::Operator
     Env.feedback(envs, fallback: behind0.env, more: true)
   end
 
-  # FIXME: AllIsolated vs. All was a big blunder. I've got absolutely no clue what's
-  # going on here after ~1y. Sad sad.
-
-  def match(behind0, op : AllIsolated, matchee : Term, ahead0)
-    kp0 = behind0.backpath?
-
-    behind1 = behind0
-
-    captures = [] of Term::Dict
-    interrupt = nil
-
-    Search.traverse(matchee, spec: search_spec(op), backpath: kp0) do |item|
-      case fb = Operator.match(behind0, op.needle, item, Ahead::MatchOne.new)
-      in Fb::Match
-        fb.envs.each do |env|
-          behind1 = behind1.import_backpaths(env)
-          captures << env.without(:"(backpaths)")
-        end
-
-        Search::Accept
-      in Fb::Mismatch
-        Search::Reject
-      in Fb::Interrupt
-        interrupt = fb
-
-        Search::Stop
-      end
-    end
-
-    if interrupt_ = interrupt
-      return interrupt_
-    end
-
-    if captures.size < op.min || captures.size > op.max > 0
-      return Fb::Mismatch.new(behind1.env)
-    end
-
-    # NOTE: Only dict entries do not have defined order. So we sort them using
-    # Term.compare.
-    if op.is_a?(EntriesAllIsolated)
-      captures.sort! { |a, b| Term.compare(a, b) }
-    end
-
-    ahead1 = Ahead::Goto.new(kp0, Ahead.stackptr(ahead0))
-
-    match(behind1.backpathless, op.successor, Term.of(captures), ahead1)
-  end
-
   def match(behind0, op : All, matchee : Term, ahead0)
     envs = [] of Term::Dict
     interrupt = nil
@@ -911,6 +853,12 @@ module ::Ww::M1::Operator
 
         Search::Stop
       end
+    end
+
+    # NOTE: Only dict entries do not have defined order. So we sort them using
+    # Term.compare.
+    if op.is_a?(EntriesAll)
+      envs.sort! { |a, b| Term.compare(a, b) }
     end
 
     if interrupt_ = interrupt
@@ -3933,11 +3881,7 @@ module ::Ww::M1
 
         needle = sequence.to_readonly_slice { |item| operator(item, captures).as(Operator::Any) }
 
-        if exterior.empty?
-          Operator::ScanAllIsolated.new(operator(successor, captures), needle, min, max)
-        else
-          Operator::ScanAll.new(operator(successor, captures), needle, inner.set, exterior.set, min, max)
-        end
+        Operator::ScanAll.new(operator(successor, captures), needle, inner.set, exterior.set, min, max)
       end
 
       matchpi %{(%entries/all successor_ k_ v_ ¦ min: min0_ max: max0_)}, cue: :"%entries/all" do
@@ -3952,22 +3896,14 @@ module ::Ww::M1
 
         exterior = inner & (outer - inner)
 
-        if exterior.empty?
-          Operator::EntriesAllIsolated.new(operator(successor, captures),
-            kop: operator(k, captures),
-            vop: operator(v, captures),
-            min: min,
-            max: max)
-        else
-          Operator::EntriesAll.new(operator(successor, captures),
-            kop: operator(k, captures),
-            vop: operator(v, captures),
-            exterior: exterior.set,
-            selector: inner.set,
-            min: min,
-            max: max,
-          )
-        end
+        Operator::EntriesAll.new(operator(successor, captures),
+          kop: operator(k, captures),
+          vop: operator(v, captures),
+          exterior: exterior.set,
+          selector: inner.set,
+          min: min,
+          max: max,
+        )
       end
 
       match({:"%entries/first", :k_, :v_}, cue: :"%entries/first") do |k, v|
@@ -4008,11 +3944,7 @@ module ::Ww::M1
         min = min.to(UInt8)
         max = max == SYM_INF ? 0u8 : max.to(UInt8)
 
-        if exterior.empty?
-          Operator::DfsAllIsolated.new(operator(successor, captures), operator(body, captures), search_part(part), min, max, depth0.true?)
-        else
-          Operator::DfsAll.new(operator(successor, captures), operator(body, captures), inner.set, exterior.set, search_part(part), min, max, depth0.true?)
-        end
+        Operator::DfsAll.new(operator(successor, captures), operator(body, captures), inner.set, exterior.set, search_part(part), min, max, depth0.true?)
       end
 
       matchpi %{(%leaves/all successor_ body_ in: part_ min: min_ max: max_ order: bfs self: depth0_boolean)}, cue: {:"%leaves/all", :bfs} do |min, max|
@@ -4027,11 +3959,7 @@ module ::Ww::M1
         min = min.to(UInt8)
         max = max == SYM_INF ? 0u8 : max.to(UInt8)
 
-        if exterior.empty?
-          Operator::BfsAllIsolated.new(operator(successor, captures), operator(body, captures), search_part(part), min, max, depth0.true?)
-        else
-          Operator::BfsAll.new(operator(successor, captures), operator(body, captures), inner.set, exterior.set, search_part(part), min, max, depth0.true?)
-        end
+        Operator::BfsAll.new(operator(successor, captures), operator(body, captures), inner.set, exterior.set, search_part(part), min, max, depth0.true?)
       end
 
       match({:"%all", :a_, :b_}, cue: :"%all") do |a, b|

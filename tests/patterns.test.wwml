@@ -2470,6 +2470,14 @@
      {xs: ({k: 0, v: +} {k: z, v: xyzzy})})
   (- () (1 2 3) (1 2 x: 3 y: 4)))
 
+(pattern (%entries xs_ k_ v_)
+  (= (+ 1 2 x: 100 y: 200)
+     {xs: ({k: 0, v: +}
+           {k: 1, v: 1}
+           {k: 2, v: 2}
+           {k: x, v: 100}
+           {k: y, v: 200})}))
+
 ;; Match all ks in arg0 for which a kv pair exists in arg1 whose v is a symbol
 (pattern ((%items ks_ k_) (%entries sub_ k_ v_symbol))
   (= ((0 a b c d) (a: 10, b: x, c: y, d: "hello", e: xyzzy))
