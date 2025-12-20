@@ -39,7 +39,7 @@ module Ww::M0
     # :nodoc:
     record MatchesAny, options : Array(Term) do
       def satisfied?(value : Term) : Bool
-        options.any? { |option| !!M0.match?(option, value) }
+        options.any?(value)
       end
     end
 

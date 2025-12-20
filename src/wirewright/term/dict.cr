@@ -403,6 +403,20 @@ module Ww
       !!self[key]?
     end
 
+    # Returns `true` if *object* is the first item in this dict (checked with `==`).
+    def starts_with?(object) : Bool
+      return false if itemsize.zero?
+
+      items.first == Term.of(object)
+    end
+
+    # Returns `true` if *object* is the last item in this dict (checked with `==`).
+    def ends_with?(object) : Bool
+      return false if itemsize.zero?
+
+      items.last == Term.of(object)
+    end
+
     @[Dncast]
     def index?(term) : Term::Num?
       return unless index = Term[term].as?(Term::Num)

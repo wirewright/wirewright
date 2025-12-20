@@ -500,7 +500,23 @@ module Ww
 
     # Returns `true` if this and *other* terms are equal.
     def ==(other : Term) : Bool
-      @mem == other.@mem || Term[self] == Term[other]
+      return true if @mem == other.@mem
+
+      # Fast path.
+      if tag == other.tag
+        case tag
+        when .sym0?, .sym1?, .num_int?, .num_flt?
+          return false # @mem check fail is enough
+        end
+      end
+
+      # Another fast path.
+      unless type == other.type
+        return false
+      end
+
+      # Slow path.
+      Term[self] == Term[other]
     end
 
     # :ditto:
@@ -745,11 +761,16 @@ module Ww
     # Constructs a dict; each tuple in *args* provides an object for the key followed
     # by one for the value. The resulting dict is also extended with **kwargs**, if they
     # are provided.
-    def self.entries(*args : {_, _}, **kwargs) : Dict
+    def self.entries(args : Enumerable({_, _}), **kwargs) : Dict
       Dict.build do |commit|
         args.each { |key, value| commit.with(key, value) }
         kwargs.each { |key, value| commit.with(key, value) }
       end
+    end
+
+    # Shorthand for `of(entries(args, **kwargs))`.
+    def self.entries(*args : {_, _}, **kwargs) : Dict
+      entries(*args, **kwargs)
     end
 
     # Shorthand for `of(entries(*args, **kwargs))`.
@@ -1089,9 +1110,20 @@ module Ww
     end
 
     # Advanced: Lets you pick an engine explicitly (e.g. `M0`, `M1`), constructing
-    # an appropriate matcher
+    # an appropriate matcher.
+    #
+    # NOTE: You can use `engine: :m0` or `engine: :m1` in case Crystal fails to
+    # resolve *engine* at the call-site. `Case::MM` compile-time raises on M0/M1
+    # which actually helps you here.
     macro case(matchee, *, engine, **kwargs, &block)
-      {{@type}}.case({{matchee}}, matcher: {{@type}}::Case::MM({{engine}}), {{kwargs.double_splat}}) {{block}}
+      {% cls = engine.resolve? %}
+      {% if cls == M0 || engine.id.downcase == :m0 %}
+        {{@type}}.case({{matchee}}, matcher: {{@type}}::Case::MM0, {{kwargs.double_splat}}) {{block}}
+      {% elsif cls == M1 || engine.id.downcase == :m1 %}
+        {{@type}}.case({{matchee}}, matcher: {{@type}}::Case::MM1, {{kwargs.double_splat}}) {{block}}
+      {% else %}
+        {{@type}}.case({{matchee}}, matcher: {{@type}}::Case::MM({{engine}}), {{kwargs.double_splat}}) {{block}}
+      {% end %}
     end
 
     # Structural pattern matching DSL over `Term`s.
@@ -1128,7 +1160,7 @@ module Ww
     #
     # See `Case` for details on syntax.
     macro case(matchee, **kwargs, &block)
-      {{@type}}.case({{matchee}}, matcher: {{@type}}::Case::MM1, {{kwargs.double_splat}}) {{block}}
+      {{@type}}.case({{matchee}}, engine: M1, {{kwargs.double_splat}}) {{block}}
     end
 
     # A shorthand for wrapping `Term.case` in `Term.of`.

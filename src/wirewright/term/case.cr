@@ -176,6 +176,18 @@ module Ww::Term::Case
     cue1 : Term::Sym?,
     cue2 : Term::Sym?
 
+  struct MatchSpec
+    # Returns `true` if *dict* has all the cues from *spec*, meaning a match
+    # should be attempted.
+    def self.match_possible?(spec : MatchSpec, dict : Term::Dict) : Bool
+      return false if (cue0 = spec.cue0) && !dict.probably_includes?(cue0)
+      return false if (cue1 = spec.cue1) && !dict.probably_includes?(cue1)
+      return false if (cue2 = spec.cue2) && !dict.probably_includes?(cue2)
+
+      true
+    end
+  end
+
   # A case matcher, *matcher* for short, is a collection of patterns associated
   # with a *pattern matching engine* such as `M0` or `M1`. A matcher is
   # constructed and cached globally by `Term.case`; the latter then repeatedly
@@ -199,12 +211,17 @@ module Ww::Term::Case
     abstract def compile(specs : Slice(MatchSpec)) : Matcher
   end
 
-  # A case matcher that uses the M0 pattern matching engine, `Ww::M0`.
+  # A case matcher that uses *Engine*.
+  #
+  # *Engine* must respond to `match?(pattern : Term, matchee : Term, *, env : Term::Dict)`.
   class MM(Engine)
     include Matcher
 
     # :nodoc:
     def initialize(@specs : Slice(MatchSpec))
+      {% if Engine == M0 || Engine == M1 %}
+        {% raise "MM(M0)/MM(M1) not allowed, use MM0 and MM1" %}
+      {% end %}
     end
 
     def self.compile(specs : Slice(MatchSpec)) : Matcher
@@ -214,9 +231,8 @@ module Ww::Term::Case
     def scan(matchee : Term, *, env : Term::Dict) : Iterator({Term::Dict, Int32})
       @specs.each_with_index.compact_map do |spec, index|
         if dict = matchee.as_d?
-          next if (cue0 = spec.cue0) && !dict.probably_includes?(cue0)
-          next if (cue1 = spec.cue1) && !dict.probably_includes?(cue1)
-          next if (cue2 = spec.cue2) && !dict.probably_includes?(cue2)
+          spec = @specs.unsafe_fetch(index)
+          next unless MatchSpec.match_possible?(spec, dict)
         end
 
         next unless env1 = Engine.match?(spec.pattern, matchee, env: env)
@@ -226,8 +242,33 @@ module Ww::Term::Case
     end
   end
 
-  # A case matcher that uses the M0 pattern matching engine, `Ww::M1`.
-  alias MM0 = MM(M0)
+  # A case matcher that uses the M0 pattern matching engine, `Ww::M0`.
+  class MM0
+    include Matcher
+
+    # :nodoc:
+    def initialize(@specs : Slice(MatchSpec), @blocks : Slice(Slice(M0::Insn)))
+    end
+
+    def self.compile(specs : Slice(MatchSpec)) : MM0
+      operators = specs.to_readonly_slice { |spec| M0.compile(spec.pattern) }
+
+      new(specs, operators)
+    end
+
+    def scan(matchee : Term, *, env : Term::Dict) : Iterator({Term::Dict, Int32})
+      @blocks.each_with_index.compact_map do |insns, index|
+        if dict = matchee.as_d?
+          spec = @specs.unsafe_fetch(index)
+          next unless MatchSpec.match_possible?(spec, dict)
+        end
+
+        next unless env1 = M0.match?(env, insns, matchee)
+
+        {env1, index}
+      end
+    end
+  end
 
   # A case matcher that uses the M1 pattern matching engine, `Ww::M1`.
   class MM1
@@ -293,12 +334,9 @@ module Ww::Term::Case
       @operators.each_with_index.compact_map do |operator, index|
         if dict = matchee.as_d?
           spec = @specs.unsafe_fetch(index)
-          next if (cue0 = spec.cue0) && !dict.probably_includes?(cue0)
-          next if (cue1 = spec.cue1) && !dict.probably_includes?(cue1)
-          next if (cue2 = spec.cue2) && !dict.probably_includes?(cue2)
+          next unless MatchSpec.match_possible?(spec, dict)
         end
 
-        operator = @operators.unsafe_fetch(index)
         next unless env1 = M1::Operator.match?(env, operator, matchee)
 
         {env1, index}

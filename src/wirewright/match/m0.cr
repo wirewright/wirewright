@@ -1,26 +1,72 @@
-# `M0` is a tiny internal pattern matching engine we're using to implement
-# the main pattern matching engine `M1`.
+# `M0` is a small pattern matching engine. It is used to implement `M1`, which
+# is Wirewright's main pattern matching engine.
 #
-# See `match?` for more details.
+# A pattern matching engine in the realm of Wirewright is a bit like a sensory
+# organ. A sensory organ sometimes needs its own sensory organs, you see; its
+# own eyes and ears to do what it does -- to sense. So think of M0 as the eyes
+# and ears -- the sensory organ -- of M1, which is itself a (vastly more intricate)
+# pair of eyes and ears for the entirety of Wirewright. But rather than perceiving
+# pictures or sounds, M0 and M1 perceive symbols and symbolic structures.
+#
+# M0 implements a subset of constructs from M1. *All* patterns that M0 can match,
+# M1 will match; *some* patterns that M1 can match, M0 will match.
+#
+# The following constructs are supported in M0:
+#
+# - Literals: `100 "hello" xyzzy true ...`.
+# - Blanks (named, unnamed, typed, untyped): `_ _number x_number`.
+# - Partition: split a dictionary into its items and pairs partition, for
+#   example `(%partition itemspart_ pairspart_)`.
+# - Match p1-N on the first N items of an itemspart, correspondingly, possibly
+#   with a pairspart; for example `(a b c _*)`, `(+ a_ b_ _* precision: precision_)`.
+# - `(%layer _ {...})`: open dictionary entries match. Nothing fancy like optional
+#   pairs and the like; use `M0.schema` for more complex pairspart descriptions.
+# - `(%literal _)`: match literally, mainly for escaping the above and itself.
+# - Recursive application of all of the above and itself on dictionary items
+#   and pairs, for example: `(+ a_number 100 x: x_string)`.
+#
+# As usual, the returned match env contains blank names mapped to the term that
+# they have captured. E.g. `(+ a_ b_)` on `(+ 1 2)` will give the match env
+# `{a: 1, b: 2}`.
+#
+# The semantics of using the same-named blank across the pattern to make equality
+# constraints is preserved. So for instance matching the pattern `(+ a_ a_)` against
+# `(+ x y)` will fail; whereas running the same pattern on `(+ x x)` will succeed
+# with the match env `{a: x}`.
+#
+# M0 exists to simplify the implementation of the compiler for M1, since the latter
+# needs to do lots of `Term` pattern matching itself.
+#
+# As opposed to M1, which does backtracking search at its core, M0 patterns are
+# compiled to sequences of instructions that are executed on a tiny ("degenerate"!)
+# stack VM. The VM itself uses stack space (as in, vs. heap) for as long as it can,
+# leaking to heap only when it absolutely can't fit something on the stack. M0
+# mismatches rarely touch the heap even if intermediate captures were made.
+#
+# Expected runtime of `match?` after compilation is in low hundreds of ns, more
+# generally sub-microsecond. Similar runtime is expected of `compile` itself,
+# but you'd only need to run it once per pattern anyway, so its performance
+# doesn't matter as much.
 module Ww::M0
   extend self
 
-  # :nodoc:
+  # Matches a term, converts to *type* (see `TypeConversion`).
   def restrict?(term : Term, restriction : Term.class, type)
     term.to?(type)
   end
 
-  # :nodoc:
+  # Matches `Term::Any` of type *T*.
   def restrict?(term : Term, restriction : T.class, type : Term.class) forall T
     Term[term].as?(T)
   end
 
-  # :nodoc:
+  # Matches `Term::Any` of type *T*, converts to *type* (see `TypeConversion`).
   def restrict?(term : Term, restriction : T.class, type) forall T
     Term[term].as?(T).try(&.to?(type))
   end
 
-  # :nodoc:
+  # Matches an integer of the given *type* (via `TypeConversion`), making sure
+  # it fits in *range* (of the same integer type, preferably).
   def restrict?(term : Term, restriction : Range, type : Int.class)
     return unless n = term.as_n?
     return unless n.integer?
@@ -29,9 +75,10 @@ module Ww::M0
     int.in?(restriction) ? int : nil
   end
 
-  # :nodoc:
+  # Matches any term in *restriction* literally, converts to *type*
+  # (see `TypeConversion`).
   def restrict?(term : Term, restriction : Indexable, type)
-    return unless restriction.any? { |option| !!M0.match?(Term.of(option), term) }
+    return unless restriction.any? { |option| Term.of(option) == term }
 
     term.to?(type)
   end
@@ -155,124 +202,341 @@ module Ww::M0
   end
 
   # :nodoc:
-  def match?(commit, pattern : Term::Sym, matchee : Term::Any) : Bool
-    unless (blank = pattern.blank?) && blank.singular?
-      return pattern == matchee
-    end
+  alias Insn = AssertEqual |
+               Partition |
+               Fetch |
+               Drop |
+               AssertSubtype |
+               Assign |
+               AssertSize |
+               AssertItemsizeAtLeast |
+               AssertPairsizeAtLeast |
+               AssertPairsize
 
-    return false unless Term.of(matchee).type.subtype?(blank.type)
-    return true unless name = blank.name?
+  # :nodoc:
+  #
+  # Pop term, assert dict, push itemspart followed by pairspart.
+  defrecord Partition
 
-    unless prev = commit[name]?
-      commit.with(name, matchee)
-      return true
-    end
+  # :nodoc:
+  #
+  # Keep term, assert dict, assert has *key*, push value of *key*.
+  defrecord Fetch, key : Term
 
-    prev == matchee
+  # :nodoc:
+  #
+  # Pop term.
+  defrecord Drop
+
+  # :nodoc:
+  #
+  # Pop term, assert env *capture* absent or equal to term, add capture to env.
+  defrecord Assign, capture : Term::Sym
+
+  # :nodoc:
+  #
+  # Pop term, assert equal to *term*.
+  defrecord AssertEqual, term : Term
+
+  # :nodoc:
+  #
+  # Keep term, assert its type is subtype of *type*.
+  defrecord AssertSubtype, type : TermType
+
+  # :nodoc:
+  #
+  # Keep term, assert dict, assert size equal to *size*.
+  defrecord AssertSize, size : Int32
+
+  # :nodoc:
+  #
+  # Keep term, assert dict, assert itemsize greater than or equal to *itemsize*.
+  defrecord AssertItemsizeAtLeast, itemsize : Int32
+
+  # :nodoc:
+  #
+  # Keep term, assert dict, assert pairsize greater than or equal to *itemsize*.
+  defrecord AssertPairsizeAtLeast, pairsize : Int32
+
+  # :nodoc:
+  #
+  # Keep term, assert dict, assert pairsize equal to *pairsize*.
+  defrecord AssertPairsize, pairsize : Int32
+
+  # :nodoc:
+  SYM_LITERAL = Term[:"%literal"]
+
+  # :nodoc:
+  SYM_PARTITION = Term[:"%partition"]
+
+  # :nodoc:
+  SYM_LAYER = Term[:"%layer"]
+
+  # :nodoc:
+  SYM_UNDERSCORE = Term[:_]
+
+  # :nodoc:
+  SYM_UNDERSCORE_STAR = Term[:"_*"]
+
+  @[AlwaysInline]
+  private def emit(insnsptr, insn : Insn) : Nil
+    insnsptr.value << insn
   end
 
-  # :nodoc:
-  SYM_LITERAL = Term.of(:"%literal")
+  # Returns `true` if *term* is the pass blank `_`.
+  private def pass?(term : Term) : Bool
+    return false unless sym = term.as_sym?
+    return false unless blank = sym.blank?
+    return false unless blank.singular?
+    return false if blank.typed? || blank.named?
 
-  # :nodoc:
-  SYM_PARTITION = Term.of(:"%partition")
+    true
+  end
 
-  # :nodoc:
-  SYM_LAYER = Term.of(:"%layer")
+  # x_ x_string qux
+  private def compile(insnsptr, pattern : Term::Sym) : Nil
+    if (blank = pattern.blank?) && blank.singular?
+      # <matchee> ⏏
+      if blank.typed?
+        emit(insnsptr, AssertSubtype.new(blank.type))
+        # <matchee> ⏏
+      end
+      if name = blank.name?
+        emit(insnsptr, Assign.new(name))
+      else
+        # Pass (`_`)
+        emit(insnsptr, Drop.new)
+      end
+      # ⏏
+      return
+    end
 
-  # :nodoc:
-  SYM_BLANK_STAR = Term.of(:"_*")
+    # <matchee> ⏏
+    emit(insnsptr, AssertEqual.new(Term.of(pattern)))
+    # ⏏
+  end
 
-  # :nodoc:
-  def match?(commit, pattern : Term::Dict, matchee : Term::Any) : Bool
-    if pattern.itemsonly? && pattern.size > 1
-      hi = pattern.size - 1
+  # (+ a_ b_) (%literal 100)
+  private def compile(insnsptr, pattern : Term::Dict) : Nil
+    if pattern.itemsize > 0
+      case {pattern[0], pattern.itemsize - 1, pattern.pairsize}
+      when {SYM_LITERAL, 1, 0} # (%literal 123)
+        # <matchee> ⏏
+        emit(insnsptr, AssertEqual.new(pattern[1]))
+        # ⏏
+        return
+      when {SYM_PARTITION, 2, 0} # (%partition itemspart_ pairspart_)
+        # <matchee> ⏏
+        emit(insnsptr, Partition.new)
+        # <itemspart> <pairspart> ⏏
+        compile(insnsptr, pattern[2])
+        # <itemspart> ⏏
+        compile(insnsptr, pattern[1])
+        # ⏏
+        return
+      when {SYM_LAYER, 2, 0}
+        # <matchee> ⏏
+        if (pattern[1] == SYM_UNDERSCORE) && (selector = pattern[2].as_d?)
+          # <matchee> ⏏
+          emit(insnsptr, AssertPairsizeAtLeast.new(selector.size))
+          # <matchee> ⏏
 
-      case {pattern[0], hi}
-      when {SYM_PARTITION, 2}
-        return false unless matchee.is_a?(Term::Dict)
-        return false unless match?(commit, Term[pattern[1]], matchee.itemspart)
-        return false unless match?(commit, Term[pattern[2]], matchee.pairspart)
-        return true
-      when {SYM_LITERAL, 1}
-        return pattern[1] == matchee
-      when {SYM_LAYER, 2}
-        if matchee.is_a?(Term::Dict) && pattern[1] == Term[:_] && (selector = pattern[2].as_d?)
-          selector.each_entry do |k, v0|
-            return false unless v1 = matchee[k]?
-            return false unless match?(commit, Term[v0], Term[v1])
+          # (%layer _ {a: a_, b: 200})
+          selector.each_entry do |key, value|
+            # <matchee> ⏏
+            emit(insnsptr, Fetch.new(key))
+            # <matchee> <value of key> ⏏
+            compile(insnsptr, value)
+            # <matchee> ⏏
           end
 
-          return true
+          # <matchee> ⏏
+          emit(insnsptr, Drop.new)
+          # ⏏
+          return
         end
       end
 
-      if pattern[hi] == SYM_BLANK_STAR
-        return false unless matchee.is_a?(Term::Dict) && matchee.itemsonly?
-        return false if matchee.size < hi
+      if pattern.ends_with?(SYM_UNDERSCORE_STAR)
+        # (+ 1 2 _*)
+        # (+ 1 2 _* x: 100 y: y_)
+        prior = pattern.items.grow(-1)
 
-        # In practice `hi` is very small; most often it's 1.
-        matchee = matchee.items.begin.grow(hi).collect
-        pattern = pattern.without(hi)
+        # <matchee> ⏏
+        emit(insnsptr, AssertItemsizeAtLeast.new(prior.size))
+        # <matchee> ⏏
+
+        prior.each_with_index do |item, index|
+          next if pass?(item) # Don't waste resources on `_`
+
+          # <matchee> ⏏
+          emit(insnsptr, Fetch.new(Term.of(index)))
+          # <matchee> <value at index> ⏏
+          compile(insnsptr, item)
+          # <matchee> ⏏
+        end
+
+        if pattern.pairsize > 0
+          emit(insnsptr, AssertPairsize.new(pattern.pairsize))
+
+          pattern.each_pair do |key, value|
+            next if pass?(value) # Don't waste resources on `_`
+
+            # <matchee> ⏏
+            emit(insnsptr, Fetch.new(key))
+            # <matchee> <value of key> ⏏
+            compile(insnsptr, value)
+            # <matchee> ⏏
+          end
+        end
+
+        # <matchee> ⏏
+        emit(insnsptr, Drop.new)
+        # ⏏
+        return
       end
     end
 
-    return false unless matchee.is_a?(Term::Dict)
-    return false unless pattern.size == matchee.size
+    # <matchee> ⏏
+    emit(insnsptr, AssertSize.new(pattern.size))
+    # <matchee> ⏏
 
-    pattern.ee.all? do |k, v0|
-      (v1 = matchee[k]?) && match?(commit, Term[v0], Term[v1])
+    pattern.each_entry do |key, value|
+      next if pass?(value) # Don't waste resources on `_`
+
+      # <matchee> ⏏
+      emit(insnsptr, Fetch.new(key))
+      # <matchee> <value of key> ⏏
+      compile(insnsptr, value)
+      # <matchee> ⏏
     end
+
+    # <matchee>
+    emit(insnsptr, Drop.new)
+    # ⏏
+  end
+
+  # 100 "hello" true
+  private def compile(insnsptr, pattern : Term::Any) : Nil
+    # <matchee> ⏏
+    emit(insnsptr, AssertEqual.new(Term.of(pattern)))
+    # ⏏
+  end
+
+  private def compile(insnsptr, pattern : Term) : Nil
+    compile(insnsptr, Term[pattern])
   end
 
   # :nodoc:
-  def match?(commit, pattern : Term::Any, matchee : Term::Any) : Bool
-    pattern == matchee
-  end
+  CACHE = SyncCache(Term, Slice(Insn)).new(512, preallocate: true)
 
-  # Returns a match env if *pattern* matches *matchee*. Returns `nil` otherwise.
-  #
-  # M0 implements a tiny subset of constructs from the main pattern matching language
-  # `M1`: *all* patterns that M0 can match, M1 will match; and *some* patterns that M1
-  # can match, M0 will match.
-  #
-  # The following constructs are supported in M0:
-  #
-  # - Literals: `100 "hello" xyzzy true ...`.
-  # - Blanks (named, unnamed, typed, untyped): `_ _number x_number`.
-  # - Partition: split a dictionary into its items and pairs partition, for
-  #   example `(%partition itemspart_ pairspart_)`.
-  # - Match p1-N on the first N items of an itemspart, correspondingly, for
-  #   example `(a b c _*)`.
-  # - `(%layer _ {...})`: open dictionary entries match.
-  # - `(%literal _)`: match literally, mainly for escaping the above and itself.
-  # - Recursive application of all of the above and itself on dictionary items
-  #   and pairs, for example: `(+ a_number 100 x: x_string)`.
-  #
-  # The returned match env contains blank names mapped to the term that they have captured
-  #  E.g. `(+ a_ b_)` on `(+ 1 2)` will return the following match env: `{a: 1, b: 2}`.
-  #
-  # The semantics for using the same blank across the pattern is preserved, in that such
-  # uses would be treated as an assertion of equality. And for instance running `(+ a_ a_)`
-  # on `(+ x y)` will fail, whereas running the same pattern on `(+ x x)` will succeed with
-  # a match env `{a: x}`.
-  #
-  # M0 exists to simplify the implementation of the compiler for M1, since the latter
-  # needs to do lots of `Term` pattern matching itself.
-  #
-  # Since I did not want to run into the various paradoxes arising from self-reference,
-  # I've decided to have a separate, much dumber implementation of an entire engine.
-  # I could have made M1 depend on M1 with careful control flow etc.; but there's too
-  # much circularity anyway.
-  def match?(pattern : Term, matchee : Term, *, env = Term[]) : Term::Dict?
-    env.transaction do |commit|
-      return unless match?(commit, Term[pattern], Term[matchee])
+  # Compiles an M0 pattern into a sequence of M0 instructions.
+  def compile(pattern : Term) : Slice(Insn)
+    CACHE.put_if_absent(pattern) do
+      # There usually aren't a lot of instructions. So we can use stack space.
+      # This lets us know, later on, the exact amount of memory to allocate,
+      # which is neat.
+      insns = Pf::Kit::HybridArray(Insn, 64).new
+      compile(pointerof(insns), pattern)
+
+      insns.to_readonly_slice(&.itself)
     end
   end
 
-  # Exists for minor API compatibility with `M1`, simply wraps the result of
-  # `match?` in an array as if more than one match is possible (like in M1);
-  # even though only zero (mismatch) or one match is ever going to be returned.
+  # Matches *matchee* against a sequence of M0 instructions *insns* and
+  # a match *env*.
+  def match?(env : Term::Dict, insns : Slice(Insn), matchee matchee0 : Term) : Term::Dict?
+    stack = Pf::Kit::HybridArray(Term, 32).new
+    stack << matchee0
+
+    # NOTE: In practice, the amount of captures in a pattern is *tiny*. I mean it: 99%
+    # of the time it's <16, most of them well below 16, like, 2, 4, up to 8 if you're
+    # lucky. Only generated patterns could have more than 16, or very large hand-written
+    # ones whose performance will dwarf the overhead of heap alloc or GC.
+    captures = Pf::Kit::HybridArray({Term::Sym, Term}, 16).new
+
+    # Bloom filter for capture names.
+    filter = 0u64
+
+    insns.each do |insn|
+      case insn
+      in AssertEqual
+        matchee = stack.pop
+        return unless matchee == insn.term
+      in AssertSubtype
+        return unless stack.top.type.subtype?(insn.type)
+      in AssertSize
+        return unless dict = stack.top.as_d?
+        return unless dict.size == insn.size
+      in AssertItemsizeAtLeast
+        return unless dict = stack.top.as_d?
+        return unless dict.itemsize >= insn.itemsize
+      in AssertPairsizeAtLeast
+        return unless dict = stack.top.as_d?
+        return unless dict.pairsize >= insn.pairsize
+      in AssertPairsize
+        return unless dict = stack.top.as_d?
+        return unless dict.pairsize == insn.pairsize
+      in Assign
+        matchee = stack.pop
+
+        slot = Term.hashcode(insn.capture) % 64
+        mask = 1u64 << slot
+
+        if filter & mask == 0u64 # Definitely not in captures.
+          filter |= mask
+          captures << {insn.capture, matchee}
+          next
+        end
+
+        # Possibly in captures.
+        found = false
+        captures.reverse_each do |capture, value|
+          next unless capture == insn.capture
+
+          unless value == matchee
+            # As in `(+ a_ a_)`, `(+ 1 2)`.
+            return
+          end
+
+          found = true
+          break
+        end
+
+        next if found
+
+        captures << {insn.capture, matchee}
+      in Partition
+        matchee = stack.pop
+        return unless dict = matchee.as_d?
+
+        stack << Term.of(dict.itemspart)
+        stack << Term.of(dict.pairspart)
+      in Fetch
+        matchee = stack.top
+        return unless dict = matchee.as_d?
+        return unless value = dict[insn.key]?
+
+        stack << value
+      in Drop
+        _ = stack.pop
+      end
+    end
+
+    Term.entries(captures)
+  end
+
+  # Matches *pattern* against *matchee*. Returns the resulting match env on
+  # match. Returns `nil` on mismatch.
+  def match?(pattern : Term, matchee : Term, *, env = Term[]) : Term::Dict?
+    match?(env, compile(pattern), matchee)
+  end
+
+  # Wraps the output of `match?` in an array.
+  #
+  # M0 cannot give you more than one match env like M1 can, it can only give you zero
+  # or one. This function is simply a shim for API compatibility should one call
+  # `matches` instead of `match?`.
   def matches(pattern : Term, matchee : Term, *, env = Term[]) : Array(Term::Dict)
     env = match?(pattern, matchee, env: env)
     env ? [env] : [] of Term::Dict

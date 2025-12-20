@@ -141,6 +141,11 @@ module Ww
         name.empty? ? nil : name
       end
 
+      # Returns `true` if this blank has a name.
+      def named? : Bool
+        !name.empty?
+      end
+
       # Returns `true` if this blank has a type specified.
       def typed? : Bool
         !type.any?
