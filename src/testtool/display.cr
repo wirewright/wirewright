@@ -69,7 +69,7 @@ module Testtool
         to the provided path.
 
       --interactive, -i
-        Go through failures (if any) one-by-one instead of printing
+        Goes through failures (if any) one-by-one instead of printing
         them all at once.
 
       --help, -h
@@ -206,8 +206,6 @@ module Testtool
 
     display(ComplaintAttachment.new(text))
   end
-
-  # Shorthands.
 
   # Displays a log message.
   def log(message : String) : Nil

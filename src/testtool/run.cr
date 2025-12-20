@@ -350,10 +350,10 @@ module Testtool
   defrecord BoundsEq, patterns : Set(Term), bounds : Term::Dict
   defrecord DepthEq, patterns : Set(Term), depth : Term::Dict
 
-  {% for row in { {:BoundsEq, :bounds}, {:DepthEq, :depth} } %}
+  {% for row in { {BoundsEq, :bounds}, {DepthEq, :depth} } %}
     {% testcls, kind = row %}
 
-    def run(test : {{testcls.id}}, assets, stat, complaints) : Nil
+    def run(test : {{testcls}}, assets, stat, complaints) : Nil
       test.patterns.each do |pattern|
         normp = M1.normal(pattern)
         range = measure(stat) { M1.{{kind.id}}(normp) }

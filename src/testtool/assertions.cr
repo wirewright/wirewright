@@ -83,7 +83,7 @@ module Testtool
       # |@ testtool.decl.µfold, testtool.decl.microfold
       #
       # |@pattern
-      # (⸨µ,micro⸩fold variants_+ ¦ problems: ())
+      # (⸨µ,micro⸩fold variants_+ ¦ problems⋮ ())
       #
       # |@key variants
       # Variants whose equality should be checked.
@@ -354,12 +354,12 @@ module Testtool
           #
           # |@key source
           # A source string, including error location or range highlighted using
-          # one or two `⏏`s, correspondingly.
+          # one or two `⏏`s, correspondingly. For example, one could write `"hello⏏\q⏏"`
+          # for invalid escape sequence or `[(1 2 3⏏]` for missing closing paren.
           #
           # |@key detail
           # Syntax error detail *substring*, i.e., you don't have to spell out
-          # the whole message. For example, one could write `"hello⏏\q⏏"` for
-          # invalid escape sequence or `[(1 2 3⏏]` for missing closing paren.
+          # the whole message.
           #
           # |@block
           # Use `-` or `doc-` to make sure *source* fails to parse, producing

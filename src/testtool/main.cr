@@ -46,7 +46,7 @@ module Testtool
       if arg == "--stats"
         if (successor = argv[cursor]?).nil? || successor.starts_with?('-')
           # nil, -, or --, doesn't matter, it's not for us, but --stats is there.
-          stats_path = Path["/tmp/ww-testtool.stats.csv"]
+          stats_path = Path[Dir.tempdir] / Path["ww-testtool.stats.csv"]
           next
         end
         cursor += 1
@@ -268,13 +268,10 @@ module Testtool
 
       result
     end
-
     hr
 
     mmt = test_results.sum(&.mmt) + comparison_results.sum(&.mmt)
-
     display(Status.new(successes, failures, mmt))
-
     hr
 
     tests.zip(test_results) do |asn, result|
