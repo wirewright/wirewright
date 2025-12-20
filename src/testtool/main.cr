@@ -322,8 +322,8 @@ module Testtool
       Term.case(item, engine: M0) do
         matchpi %{[test path_string]}, path: Path do |path|
           M0.schema(item) do |s|
-            s.key :color, value: Term, default: Term.of(:white)
-            s.key :tags, value: Term::Dict, default: Term[]
+            color = s.key(:color, value: Term, default: Term.of(:white))
+            tags = s.key(:tags, value: Term::Dict, default: Term[])
             next unless enabled?(conf, tags)
 
             path = path.expand(conf.tests_path, expand_base: false)
@@ -349,8 +349,8 @@ module Testtool
 
         matchpi %{[comparison title_string a_ b_]}, title: String do
           M0.schema(item) do |s|
-            s.key :color, value: Term, default: Term.of(:white)
-            s.key :tags, value: Term::Dict, default: Term[]
+            color = s.key(:color, value: Term, default: Term.of(:white))
+            tags = s.key(:tags, value: Term::Dict, default: Term[])
             next unless enabled?(conf, tags)
 
             begin

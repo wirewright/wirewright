@@ -72,9 +72,9 @@ module Testtool
       # Use `alloy` to test Alloy template expansion (Crystal-side `Alloy.render`).
       matchpiT %{[alloy vars_dict template_ expansion_]} do
         M0.schema(decl) do |s|
-          s.key :issues, value: Term::Dict, default: Term[]
-          s.mismatch { continue }
+          s.on_mismatch { continue }
 
+          issues = s.key(:issues, value: Term::Dict, default: Term[])
           test = AlloyTest.new(vars, template, expansion, issues)
           annotated(assertions(test), decl, srcmap)
         end
@@ -96,9 +96,9 @@ module Testtool
       # Microfold variants, possibly with issues.
       matchpi %{[microfold _*]}, %{[µfold _*]} do
         M0.schema(decl) do |s|
-          s.key :problems, value: Term::Dict, default: Term[]
-          s.mismatch { continue }
+          s.on_mismatch { continue }
 
+          problems = s.key(:problems, value: Term::Dict, default: Term[])
           variants = decl.items.move(1)
           continue if variants.empty?
 

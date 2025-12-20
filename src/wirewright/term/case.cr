@@ -1,7 +1,7 @@
 # Structural pattern matching DSL over `Term`s, used in `Term.case`.
 #
 # The `case` block contains one or more *branches*: `match`, `given`, and their
-# variants. It can contain zero or one catch-all `otherwise` clause as well.
+# variants. It can contain zero or one catch-all `otherwise` clauses as well.
 #
 # Each branch matches the matchee term against one or more patterns. When a pattern
 # succeeds, any captured subterms are bound to local variables on the Crystal side,
@@ -74,7 +74,7 @@
 #     # x : Int32
 #   end
 #
-#   # Since WwML uses S-expressions, there's lots of parens, and that can get
+#   # Since WwML uses S-expressions, there's lots of parens, and this can get
 #   # intimidating. The less parens there are, the better; hence givenp*.
 #
 #   # Catch-all clause.

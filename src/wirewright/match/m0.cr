@@ -2,11 +2,13 @@
 # is Wirewright's main pattern matching engine.
 #
 # A pattern matching engine in the realm of Wirewright is a bit like a sensory
-# organ. A sensory organ sometimes needs its own sensory organs, you see; its
-# own eyes and ears to do what it does -- to sense. So think of M0 as the eyes
-# and ears -- the sensory organ -- of M1, which is itself a (vastly more intricate)
-# pair of eyes and ears for the entirety of Wirewright. But rather than perceiving
-# pictures or sounds, M0 and M1 perceive symbols and symbolic structures.
+# organ. A sensory organ sometimes needs its own eyes and ears to do what it
+# does -- to sense. So think of M0 as the eyes and ears -- the sensory organs --
+# of M1, which is itself a (vastly more intricate) sensory organ for the entirety
+# of Wirewright. Instead of perceiving images or sounds, M0 and M1 perceive
+# symbols and symbolic structure. They do that in different ways: M0 in a simple
+# way, and M1 in an (arguably) more complex way. But the underlying goal stays
+# the same: perception of symbolic structure.
 #
 # M0 implements a subset of constructs from M1. *All* patterns that M0 can match,
 # M1 will match; *some* patterns that M1 can match, M0 will match.
@@ -40,7 +42,7 @@
 # As opposed to M1, which does backtracking search at its core, M0 patterns are
 # compiled to sequences of instructions that are executed on a tiny ("degenerate"!)
 # stack VM. The VM itself uses stack space (as in, vs. heap) for as long as it can,
-# leaking to heap only when it absolutely can't fit something on the stack. M0
+# spilling to heap only when it absolutely can't fit something on the stack. M0
 # mismatches rarely touch the heap even if intermediate captures were made.
 #
 # Expected runtime of `match?` after compilation is in low hundreds of ns, more
@@ -50,7 +52,7 @@
 module Ww::M0
   extend self
 
-  # Matches a term, converts to *type* (see `TypeConversion`).
+  # Matches a term, converts to *type* (see `Term::TypeConversion`).
   def restrict?(term : Term, restriction : Term.class, type)
     term.to?(type)
   end
@@ -60,12 +62,12 @@ module Ww::M0
     Term[term].as?(T)
   end
 
-  # Matches `Term::Any` of type *T*, converts to *type* (see `TypeConversion`).
+  # Matches `Term::Any` of type *T*, converts to *type* (see `Term::TypeConversion`).
   def restrict?(term : Term, restriction : T.class, type) forall T
     Term[term].as?(T).try(&.to?(type))
   end
 
-  # Matches an integer of the given *type* (via `TypeConversion`), making sure
+  # Matches an integer of the given *type* (via `Term::TypeConversion`), making sure
   # it fits in *range* (of the same integer type, preferably).
   def restrict?(term : Term, restriction : Range, type : Int.class)
     return unless n = term.as_n?
@@ -76,18 +78,61 @@ module Ww::M0
   end
 
   # Matches any term in *restriction* literally, converts to *type*
-  # (see `TypeConversion`).
+  # (see `Term::TypeConversion`).
   def restrict?(term : Term, restriction : Indexable, type)
     return unless restriction.any? { |option| Term.of(option) == term }
 
     term.to?(type)
   end
 
-  # *open* allows pairs other than those specified in the schema.
+  # `M0.schema` is a DSL for matching and validating dict pairsparts.
+  #
+  # *block* requires one parameter, used to refer to the schema. It optionally
+  # accepts a second parameter, used to refer to *matchee* extended with defaults.
+  #
+  # Define expected keys with `var = key(name, value: ..., type?: ..., default?: ...)`
+  # anywhere at the block's top-level:
+  # - *name* is the name of the key in *matchee*.
+  # - *value* and *type* set the key's value restriction and its target type (see `restrict?`).
+  #   *value* is required. *type* is optional, its default value is `Term`.
+  # - *default* provides the default value. It is optional. If absent, absence of *key* will
+  #   result in mismatch. *defaulT* does not have to fulfill the restriction set by *value*;
+  #   it does not have to be of *type*.
+  # - *var* will store the resulting object. Its type is the union of *type* and *default*'s type.
+  #
+  # Use `_` instead of *var* to discard the value.
+  #
+  # Define a custom mismatch handler with `s.on_mismatch { ... }` anywhere at the block's
+  # top-level. The mismatch handler is executed in the block surrounding `M0.schema`, so
+  # any `next` or `break` is interpreted to the block surrounding `M0.schema` (i.e., `M0.schema`
+  # and `on_mismatch` are "expanded out of the way").
+  #
+  # The default mismatch handler is `on_mismatch { next }`.
+  #
+  # ```
+  # M0.schema(opts) do |s, ext|
+  #   s.on_mismatch do
+  #     raise "Mismatch!"
+  #   end
+  #
+  #   _ = s.key(:in, value: {:items, :keys, :values, :"pair/values"}, default: :items)
+  #   _ = s.key(:order, value: {:dfs, :bfs}, default: :dfs)
+  #   min = s.key(:min, type: UInt8, value: 0u8..UInt8::MAX, default: 0)
+  #   max = s.key(:max, type: UInt8, value: 1u8..UInt8::MAX, default: :infinity)
+  #   _ = s.key(:self, value: {true, false}, default: false)
+  #
+  #   pp typeof(min) # UInt8
+  #   pp typeof(max) # UInt8 | Symbol
+  #
+  #   pp ext # opts extended with defaults
+  # end
+  # ```
+  #
+  # *open* allows pairs other than those specified in the schema.)
   macro schema(matchee, *, open = false, &block)
     {%
-      unless block && block.args.size == 1
-        raise "expected a block with one argument"
+      unless block && {1, 2}.includes?(block.args.size)
+        raise "expected a block with one or two argument(s)"
       end
 
       keys = [] of ::NoReturn
@@ -95,40 +140,47 @@ module Ww::M0
       mismatch = nil
 
       ref = block.args[0]
+      extended = block.args[1]
 
       nodes = block.body.is_a?(Expressions) ? block.body.expressions : [block.body]
       nodes.each do |node|
-        if node.is_a?(Call) && node.receiver && node.receiver.id == ref.id
-          if node.name == :key
+        if node.is_a?(Assign) && node.value.is_a?(Call) && node.value.receiver.id == ref.id
+          call = node.value
+          if call.name == :key
             # const
             unrecognized = "unrecognized call, expected: key(name : MacroId, *, value : ASTNode = Term, type : ASTNode = Term, default : ASTNode? = nil)"
 
-            unless node.args.size == 1
-              node.raise unrecognized
+            unless call.args.size == 1
+              call.raise unrecognized
             end
 
-            name = node.args[0]
+            name = call.args[0]
 
-            kw_value = node.named_args.find { |kwarg| kwarg.name == :value }
-            kw_type = node.named_args.find { |kwarg| kwarg.name == :type }
-            kw_default = node.named_args.find { |kwarg| kwarg.name == :default }
+            kw_value = call.named_args.find { |kwarg| kwarg.name == :value }
+            kw_type = call.named_args.find { |kwarg| kwarg.name == :type }
+            kw_default = call.named_args.find { |kwarg| kwarg.name == :default }
 
             arity = 0
             arity += 1 if kw_value
             arity += 1 if kw_type
             arity += 1 if kw_default
 
-            unless node.named_args.size == arity
-              node.raise unrecognized
+            unless call.named_args.size == arity
+              call.raise unrecognized
             end
 
             keys << {
-              name:        name.id,
+              key:         name.id,
+              var:         node.target.is_a?(Underscore) ? nil : node.target.id,
               restriction: kw_value ? kw_value.value : Term,
               type:        kw_type ? kw_type.value : Term,
-              default:     kw_default ? kw_default.value : nil,
+              default:     kw_default ? {kw_default.value} : nil,
             }
-          elsif node.name == :mismatch
+          else
+            call.raise "unrecognized schema assign-call name: #{call.name}"
+          end
+        elsif node.is_a?(Call) && node.receiver && node.receiver.id == ref.id
+          if node.name == :on_mismatch
             unless node.block
               node.raise "expected a block"
             end
@@ -151,7 +203,7 @@ module Ww::M0
     unless %matchee = ({{matchee}}).as_d?
       {% if mismatch %}\
         {{mismatch}}
-        unreachable("M0.schema's mismatch block must be NoReturn")
+        unreachable("M0.schema's on_mismatch must be NoReturn")
       {% else %}\
         next
       {% end %}\
@@ -160,36 +212,45 @@ module Ww::M0
     %arity = 0
 
     {% for key, i in keys %}\
-      if %value{i} = %matchee[{{key[:name].symbolize}}]?
+      if %value{i} = %matchee[{{key[:key].symbolize}}]?
         unless %value{i} = {{@type}}.restrict?(%value{i}, {{key[:restriction]}}, {{key[:type]}})
           {% if mismatch %}\
             {{mismatch}}
-            unreachable("M0.schema's mismatch block must be NoReturn")
+            unreachable("M0.schema's on_mismatch must be NoReturn")
           {% else %}\
             next
           {% end %}\
         end
+        %value{i} = { %value{i} }
         %arity += 1
       else
         {% if default = key[:default] %}\
           %value{i} = {{default}}
+          {% if extended %}\
+            {{extended}} = {{extended}}.with({{key[:key].symbolize}}, *%value{i})
+          {% end %}\
         {% end %}\
       end
-      unless {{key[:name]}} = %value{i}
+
+      unless %value{i}
         {% if mismatch %}\
           {{mismatch}}
-          unreachable("M0.schema's mismatch block must be NoReturn")
+          unreachable("M0.schema's on_mismatch must be NoReturn")
         {% else %}\
           next
         {% end %}\
       end
+
+      {% if key[:var] %}\
+        {{key[:var]}}, *_ = %value{i}
+      {% end %}\
     {% end %}\
 
     {% unless open %}\
       unless %arity == %matchee.pairsize
         {% if mismatch %}\
           {{mismatch}}
-          unreachable("M0.schema's mismatch block must be NoReturn")
+          unreachable("M0.schema's on_mismatch must be NoReturn")
         {% else %}\
           next
         {% end %}\
@@ -542,5 +603,3 @@ module Ww::M0
     env ? [env] : [] of Term::Dict
   end
 end
-
-require "./m0/pair_schema"

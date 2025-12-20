@@ -1977,56 +1977,6 @@ module ::Ww::M1
   module Normal
     extend self
 
-    # Schemas used to validate options passed to various pattern matching constructs.
-    module Schemas
-    end
-
-    Schemas::LeafUnbounded = M0::PairSchema.build do
-      key :in, values: {:items, :keys, :values, :"pair/values"}, default: :items
-      key :order, values: {:dfs, :bfs}, default: :dfs
-      key :self, values: {true, false}, default: false
-    end
-
-    Schemas::LeafBounded = M0::PairSchema.build do
-      key :in, values: {:items, :keys, :values, :"pair/values"}, default: :items
-      key :order, values: {:dfs, :bfs}, default: :dfs
-      key :min, values: 0..UInt8::MAX, default: 0
-      key :max, values: 1..UInt8::MAX, default: SYM_INF
-      key :self, values: {true, false}, default: false
-      where { |min, max| min.as_n <= max.as_n }
-    end
-
-    Schemas::Items = M0::PairSchema.build do
-      key :min, values: 0..UInt8::MAX, default: 1
-      key :max, values: 1..UInt8::MAX, default: SYM_INF
-      where { |min, max| min.as_n <= max.as_n }
-    end
-
-    Schemas::Entries = M0::PairSchema.build do
-      key :min, values: 0..UInt8::MAX, default: 1
-      key :max, values: 1..UInt8::MAX, default: SYM_INF
-      where { |min, max| min.as_n <= max.as_n }
-    end
-
-    Schemas::Plural = M0::PairSchema.build do
-      key :min, values: 0..UInt8::MAX, default: 0
-      key :max, values: 1..UInt8::MAX, default: SYM_INF
-      key :type, values: {:_number, :_string, :_symbol, :_dict, :_}, default: :_
-      where { |min, max| min.as_n <= max.as_n }
-    end
-
-    Schemas::Many = M0::PairSchema.build do
-      key :min, values: 0..UInt8::MAX, default: 1
-      key :max, values: 1..UInt8::MAX, default: SYM_INF
-      where { |min, max| min.as_n <= max.as_n }
-    end
-
-    Schemas::Past = M0::PairSchema.build do
-      key :min, values: 0..UInt8::MAX, default: 0
-      key :max, values: 1..UInt8::MAX, default: SYM_INF
-      where { |min, max| min.as_n <= max.as_n }
-    end
-
     SYMS_CMP = {SYM_LT, SYM_GT, SYM_LTE, SYM_GTE}
     SYMS_LTX = {SYM_LT, SYM_LTE}
 
@@ -2103,10 +2053,17 @@ module ::Ww::M1
           %[(%plural/min ¦ opts_)],
           %[(%plural/max ¦ opts_)],
           cues: {:"%plural", :"%plural/min", :"%plural/max"},
-        ) do |opts|
-          continue unless opts = Schemas::Plural.enriched?(opts)
+        ) do
+          M0.schema(opts) do |s, opts|
+            s.on_mismatch { continue }
 
-          opts.morph({0, node[0]})
+            min = s.key(:min, type: UInt8, value: 0u8..UInt8::MAX, default: 0u8)
+            max = s.key(:max, type: UInt8, value: 1u8..UInt8::MAX, default: SYM_INF)
+            _ = s.key(:type, value: {:_number, :_string, :_symbol, :_dict, :_}, default: :_)
+            continue if min.is_a?(UInt8) && max.is_a?(UInt8) && min > max
+
+            opts.morph({0, node[0]})
+          end
         end
 
         matchpi(
@@ -2115,9 +2072,16 @@ module ::Ww::M1
           %[(%plural/max capture_ ¦ opts_)],
           cues: {:"%plural", :"%plural/min", :"%plural/max"},
         ) do |opts|
-          continue unless opts = Schemas::Plural.enriched?(opts)
+          M0.schema(opts) do |s, opts|
+            s.on_mismatch { continue }
 
-          opts.morph({0, node[0]}, {1, {:"%capture", capture}})
+            min = s.key(:min, type: UInt8, value: 0u8..UInt8::MAX, default: 0u8)
+            max = s.key(:max, type: UInt8, value: 1u8..UInt8::MAX, default: SYM_INF)
+            _ = s.key(:type, value: {:_number, :_string, :_symbol, :_dict, :_}, default: :_)
+            continue if min.is_a?(UInt8) && max.is_a?(UInt8) && min > max
+
+            opts.morph({0, node[0]}, {1, {:"%capture", capture}})
+          end
         end
 
         matchpi %[(%optional _ body_)], cue: :"%optional" do
@@ -2131,32 +2095,50 @@ module ::Ww::M1
           end
         end
 
-        matchpi %[(%many capture_ _ _* ¦ opts_)], cue: :"%many" do |opts|
-          continue unless opts = Schemas::Many.enriched?(opts)
+        matchpi %[(%many capture_ _ _* ¦ opts_)], cue: :"%many" do
+          M0.schema(opts) do |s, opts|
+            s.on_mismatch { continue }
 
-          opts.transaction do |commit|
-            commit << :"%many" << {:"%capture", capture}
-            commit.concat(node.items.move(2)) { |member| item(ctx, member) }
+            min = s.key(:min, type: UInt8, value: 0u8..UInt8::MAX, default: 1u8)
+            max = s.key(:max, type: UInt8, value: 1u8..UInt8::MAX, default: SYM_INF)
+            continue if min.is_a?(UInt8) && max.is_a?(UInt8) && min > max
+
+            opts.transaction do |commit|
+              commit << :"%many" << {:"%capture", capture}
+              commit.concat(node.items.move(2)) { |member| item(ctx, member) }
+            end
           end
         end
 
-        matchpi %[(%past _ _* ¦ opts_)], cue: :"%past" do |opts|
-          continue unless opts = Schemas::Past.enriched?(opts)
+        matchpi %[(%past _ _* ¦ opts_)], cue: :"%past" do
+          M0.schema(opts) do |s, opts|
+            s.on_mismatch { continue }
 
-          opts.transaction do |commit|
-            commit << :"%past"
-            commit.concat(node.items.move(1)) { |member| item(ctx, member) }
-            commit.with(:greedy, false)
+            min = s.key(:min, type: UInt8, value: 0u8..UInt8::MAX, default: 0u8)
+            max = s.key(:max, type: UInt8, value: 1u8..UInt8::MAX, default: SYM_INF)
+            continue if min.is_a?(UInt8) && max.is_a?(UInt8) && min > max
+
+            opts.transaction do |commit|
+              commit << :"%past"
+              commit.concat(node.items.move(1)) { |member| item(ctx, member) }
+              commit.with(:greedy, false)
+            end
           end
         end
 
         matchpi %[(%past/max _ _* ¦ opts_)], cue: :"%past/max" do |opts|
-          continue unless opts = Schemas::Past.enriched?(opts)
+          M0.schema(opts) do |s, opts|
+            s.on_mismatch { continue }
 
-          opts.transaction do |commit|
-            commit << :"%past"
-            commit.concat(node.items.move(1)) { |member| item(ctx, member) }
-            commit.with(:greedy, true)
+            min = s.key(:min, type: UInt8, value: 0u8..UInt8::MAX, default: 0u8)
+            max = s.key(:max, type: UInt8, value: 1u8..UInt8::MAX, default: SYM_INF)
+            continue if min.is_a?(UInt8) && max.is_a?(UInt8) && min > max
+
+            opts.transaction do |commit|
+              commit << :"%past"
+              commit.concat(node.items.move(1)) { |member| item(ctx, member) }
+              commit.with(:greedy, true)
+            end
           end
         end
 
@@ -2525,11 +2507,17 @@ module ::Ww::M1
         end
 
         matchpi %[(%items successor_ _ _* ¦ opts_)], cue: :"%items" do |opts|
-          continue unless opts = Schemas::Items.enriched?(opts)
+          M0.schema(opts) do |s, opts|
+            s.on_mismatch { continue }
 
-          opts.transaction do |commit|
-            commit << :"%items/all" << pattern(ctx, successor)
-            commit.concat(pattern.items.move(2)) { |item| pattern(ctx, item) }
+            min = s.key(:min, type: UInt8, value: 0u8..UInt8::MAX, default: 1u8)
+            max = s.key(:max, type: UInt8, value: 1u8..UInt8::MAX, default: SYM_INF)
+            continue if min.is_a?(UInt8) && max.is_a?(UInt8) && min > max
+
+            opts.transaction do |commit|
+              commit << :"%items/all" << pattern(ctx, successor)
+              commit.concat(pattern.items.move(2)) { |item| pattern(ctx, item) }
+            end
           end
         end
 
@@ -2542,36 +2530,64 @@ module ::Ww::M1
         end
 
         matchpi %[(%entries successor_ k_ v_ ¦ opts_)], cue: :"%entries" do |opts|
-          continue unless opts = Schemas::Entries.enriched?(opts)
+          M0.schema(opts) do |s, opts|
+            s.on_mismatch { continue }
 
-          opts.morph(
-            {0, :"%entries/all"},
-            {1, pattern(ctx, successor)},
-            {2, pattern(ctx, k)},
-            {3, pattern(ctx, v)},
-          )
+            min = s.key(:min, type: UInt8, value: 0u8..UInt8::MAX, default: 1u8)
+            max = s.key(:max, type: UInt8, value: 1u8..UInt8::MAX, default: SYM_INF)
+            continue if min.is_a?(UInt8) && max.is_a?(UInt8) && min > max
+
+            opts.morph(
+              {0, :"%entries/all"},
+              {1, pattern(ctx, successor)},
+              {2, pattern(ctx, k)},
+              {3, pattern(ctx, v)},
+            )
+          end
         end
 
-        matchpi %[(%leaf body_ ¦ opts_)], cue: :"%leaf" do |opts|
-          continue unless opts = Schemas::LeafUnbounded.enriched?(opts)
+        matchpi %[(%leaf body_ ¦ opts_)], cue: :"%leaf" do
+          M0.schema(opts) do |s, opts|
+            s.on_mismatch { continue }
 
-          opts.morph({0, :"%leaves/first"}, {1, pattern(ctx, body)})
+            _ = s.key(:in, value: {:items, :keys, :values, :"pair/values"}, default: :items)
+            _ = s.key(:order, value: {:dfs, :bfs}, default: :dfs)
+            _ = s.key(:self, value: {true, false}, default: false)
+
+            opts.morph({0, :"%leaves/first"}, {1, pattern(ctx, body)})
+          end
         end
 
-        matchpi %[(%leaf° body_ ¦ opts_)], cue: :"%leaf°" do |opts|
-          continue unless opts = Schemas::LeafUnbounded.enriched?(opts)
+        matchpi %[(%leaf° body_ ¦ opts_)], cue: :"%leaf°" do
+          M0.schema(opts) do |s, opts|
+            s.on_mismatch { continue }
 
-          opts.morph({0, :"%leaves/source"}, {1, pattern(ctx, body)})
+            _ = s.key(:in, value: {:items, :keys, :values, :"pair/values"}, default: :items)
+            _ = s.key(:order, value: {:dfs, :bfs}, default: :dfs)
+            _ = s.key(:self, value: {true, false}, default: false)
+
+            opts.morph({0, :"%leaves/source"}, {1, pattern(ctx, body)})
+          end
         end
 
         matchpi %[(%leaves successor_ body_ ¦ opts_)], cue: :"%leaves" do |opts|
-          continue unless opts = Schemas::LeafBounded.enriched?(opts)
+          M0.schema(opts) do |s, opts|
+            s.on_mismatch { continue }
 
-          opts.morph(
-            {0, :"%leaves/all"},
-            {1, pattern(ctx, successor)},
-            {2, pattern(ctx, body)},
-          )
+            _ = s.key(:in, value: {:items, :keys, :values, :"pair/values"}, default: :items)
+            _ = s.key(:order, value: {:dfs, :bfs}, default: :dfs)
+            min = s.key(:min, type: UInt8, value: 0u8..UInt8::MAX, default: 0)
+            max = s.key(:max, type: UInt8, value: 1u8..UInt8::MAX, default: SYM_INF)
+            _ = s.key(:self, value: {true, false}, default: false)
+
+            continue if min.is_a?(UInt8) && max.is_a?(UInt8) && min > max
+
+            opts.morph(
+              {0, :"%leaves/all"},
+              {1, pattern(ctx, successor)},
+              {2, pattern(ctx, body)},
+            )
+          end
         end
 
         # Leave %new's as-is. They are normalized and compiled when their
