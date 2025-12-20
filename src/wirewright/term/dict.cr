@@ -334,16 +334,76 @@ module Ww
     # Compares this and *other* dictionaries.
     #
     # Comparison is performed recursively at the same position in both
-    # dictionaries using `Term.compare`, "position" being defined by `ordnth`.
+    # dictionaries using `Term.compare`.
     #
     # If all entries compared equal, the sizes of both dicts are compared to
     # determine the winner (returns `0` if sizes are equal, too).
     def <=>(other : Dict) : Int32
-      min_size = Math.min(size, other.size)
-      min_size.times do |i|
-        cmp = Term.compare(ordnth(i), other.ordnth(i))
-        next if cmp == 0 # equal
-        return cmp
+      # NOTE: It's not super nice that we're reserving 512 bytes here, especially
+      # since <=> calls are often made deeply and recursively. But to my [inexperienced]
+      # eye, it seems better than going to the heap all the time on such a primitive
+      # operation as comparison.
+      l = Pf::Kit::HybridArray({Term, Term}, 16).new # 16 bytes x 16 = 256 bytes
+      r = Pf::Kit::HybridArray({Term, Term}, 16).new # 16 bytes x 16 = 256 bytes
+      minsize = Math.min(size, other.size)
+
+      each_entry do |k, v|
+        l << {k, v}
+        break if l.size == minsize
+      end
+
+      other.each_entry do |k, v|
+        r << {k, v}
+        break if r.size == minsize
+      end
+
+      # This... thing is faster than a pair of sort!'s by about 100ns on my machine
+      # on one micro-benchmark. It pessimizes near-equality and equality (i.e., many
+      # or all comparisons give `0`), while optimizing early inequality (early `-1`
+      # or `1` comparison results in little to no wasted work).
+      #
+      # We also do not touch the heap in the common case (<16 entries in dict). USet32's
+      # will not touch the heap until you have >64 entries (they're a pair of u64 bitmaps
+      # for <64 entries).
+      Pf::USet32.transaction do |lused|
+        Pf::USet32.transaction do |rused|
+          minsize.times do
+            # Find min unused in l.
+            lmin = nil
+            imin = 0u32
+            l.each_with_index do |pivot, i|
+              next if i.to_u32.in?(lused)
+
+              if lmin.nil? || Term.compare(pivot, lmin) < 0
+                lmin = pivot
+                imin = i.to_u32
+              end
+            end
+
+            # Find min unused in r.
+            rmin = nil
+            jmin = 0u32
+            r.each_with_index do |pivot, j|
+              next if j.to_u32.in?(rused)
+
+              if rmin.nil? || Term.compare(pivot, rmin) < 0
+                rmin = pivot
+                jmin = j.to_u32
+              end
+            end
+
+            assert lmin && rmin
+
+            cmp = Term.compare(lmin, rmin)
+            if cmp == 0 # equal
+              lused << imin
+              rused << jmin
+              next
+            end
+
+            return cmp
+          end
+        end
       end
 
       size <=> other.size
@@ -585,7 +645,7 @@ module Ww
       return if itemsonly?
 
       # Collect pairs in a buffer.
-      buffer = Array(Pair).new(@pairs.size)
+      buffer = Pf::Kit::HybridArray(Pair, 32).new # 16 bytes x 32 = 512 bytes
       @pairs.each { |pair| buffer << pair }
 
       buffer.sort! { |a, b| Term.compare({a.key, a.value}, {b.key, b.value}) }
