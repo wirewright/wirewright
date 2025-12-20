@@ -339,7 +339,7 @@
   (= "1.5" {x: 1.5}))
 
 ;; %pipe clamp
-(pattern (%pipe (clamp 0 to 10) x_number)
+(pattern (%pipe (clamp 0 ..= 10) x_number)
   (- "hello" (+ 1 2 3) foo true)
   (= -10 {x: 0})
   (= -1 {x: 0})
@@ -354,7 +354,7 @@
   (= 170141183460469231731687303715884105728 {x: 10}))
 
 ;; %pipe clamp with fractional begin
-(pattern (%pipe (clamp 0.25 to 10) x_number)
+(pattern (%pipe (clamp 0.25 ..= 10) x_number)
   (= -1 {x: 0.25})
   (= 0 {x: 0.25})
   (= 0.249999999999 {x: 0.25})
@@ -365,7 +365,7 @@
   (= 15 {x: 10}))
 
 ;; %pipe clamp with fractional end
-(pattern (%pipe (clamp 0 to 7.75) x_number)
+(pattern (%pipe (clamp 0 ..= 7.75) x_number)
   (= -5 {x: 0})
   (= 0 {x: 0})
   (= 3 {x: 3})
@@ -375,7 +375,7 @@
   (= 20 {x: 7.75}))
 
 ;; %pipe clamp with exact rational bounds (1/3 to 2/3)
-(pattern (%pipe (clamp 1/3 to 2/3) x_number)
+(pattern (%pipe (clamp 1/3 ..= 2/3) x_number)
   (= 0 {x: 1/3})
   (= 1/4 {x: 1/3})
   (= 1/3 {x: 1/3})

@@ -312,7 +312,7 @@ module Ww::DwUIR
       matchpi(<<-WWML
         (viewport _ ¦ _ pan-x_⋮ 0
                         pan-y_⋮ 0
-                        zoom: (%optional 1 (%pipe (clamp 0.1 to 8) zoom_)))
+                        zoom: (%optional 1 (%pipe (clamp 0.1 ..= 8) zoom_)))
       WWML
       ) do
         return unless visible?(context)

@@ -2397,7 +2397,7 @@ module ::Ww::M1
           %[(%pipe (div _number) successor_)],
           %[(%pipe (mod _number) successor_)],
           %[(%pipe (** _number) successor_)],
-          %[(%pipe (clamp _number to _number) successor_)],
+          %[(%pipe (clamp _number ..= _number) successor_)],
           %[(%pipe (map _dict) successor_)],
           %[(%pipe span successor_)],
           %[(%pipe tally successor_)],
@@ -3867,7 +3867,7 @@ module ::Ww::M1
         Operator::Pow.new(n.unsafe_as_n, operator(successor, captures))
       end
 
-      matchpi %[(%pipe (%barrier (clamp min_number to max_number)) successor_)], cue: {:"%pipe", :clamp, :to} do
+      matchpi %[(%pipe (%barrier (clamp min_number ..= max_number)) successor_)], cue: {:"%pipe", :clamp, :"..="} do
         Operator::Clamp.new(min.unsafe_as_n, max.unsafe_as_n, operator(successor, captures))
       end
 
@@ -6446,7 +6446,7 @@ module ::Ww::M1::Shape
         %{(%'%pipe (%barrier (div _number)) _)},
         %{(%'%pipe (%barrier (mod _number)) _)},
         %{(%'%pipe (%barrier (** _number)) _)},
-        %{(%'%pipe (%barrier (clamp _number to _number)) _)},
+        %{(%'%pipe (%barrier (clamp _number ..= _number)) _)},
       ) { M1::Normal::BLANK_NUMBER }
 
       matchpi(
