@@ -2498,7 +2498,7 @@ module ::Ww::M1
           M0.schema(opts) do |s, opts|
             s.on_mismatch { continue }
 
-            _ = s.key(:in, value: {:items, :keys, :values, :"pair/values"}, default: :items)
+            _ = s.key(:in, value: {:items, :pairs, :entries}, default: :items)
             _ = s.key(:order, value: {:dfs, :bfs}, default: :dfs)
             _ = s.key(:self, value: {true, false}, default: false)
 
@@ -2510,7 +2510,7 @@ module ::Ww::M1
           M0.schema(opts) do |s, opts|
             s.on_mismatch { continue }
 
-            _ = s.key(:in, value: {:items, :keys, :values, :"pair/values"}, default: :items)
+            _ = s.key(:in, value: {:items, :pairs, :entries}, default: :items)
             _ = s.key(:order, value: {:dfs, :bfs}, default: :dfs)
             _ = s.key(:self, value: {true, false}, default: false)
 
@@ -2522,7 +2522,7 @@ module ::Ww::M1
           M0.schema(opts) do |s, opts|
             s.on_mismatch { continue }
 
-            _ = s.key(:in, value: {:items, :keys, :values, :"pair/values"}, default: :items)
+            _ = s.key(:in, value: {:items, :pairs, :entries}, default: :items)
             _ = s.key(:order, value: {:dfs, :bfs}, default: :dfs)
             min = s.key(:min, type: UInt8, value: 0u8..UInt8::MAX, default: 0)
             max = s.key(:max, type: UInt8, value: 1u8..UInt8::MAX, default: SYM_INF)
@@ -3118,9 +3118,9 @@ module ::Ww::M1
                      %all
                      %entry/required)
                 _*]},
-            %{(%'%leaves/first _* ¦ _ in: (%not keys))},
-            %{(%'%leaves/source _* ¦ _ in: (%not keys))},
-            %{(%'%leaves/all _* ¦ _ in: (%not keys))},
+            %{(%'%leaves/first _* ¦ _)},
+            %{(%'%leaves/source _* ¦ _)},
+            %{(%'%leaves/all _* ¦ _)},
             cues: {nil, :"%leaves/first", :"%leaves/source", :"%leaves/all"}
           ) do
             WalkDecision::Continue
@@ -3150,9 +3150,9 @@ module ::Ww::M1
                      %entries/all
                      %all)
                 _*]},
-            %{(%'%leaves/first _* ¦ _ in: (%not keys))},
-            %{(%'%leaves/source _* ¦ _ in: (%not keys))},
-            %{(%'%leaves/all _* ¦ _ in: (%not keys))},
+            %{(%'%leaves/first _* ¦ _)},
+            %{(%'%leaves/source _* ¦ _)},
+            %{(%'%leaves/all _* ¦ _)},
             cues: {nil, :"%leaves/first", :"%leaves/source", :"%leaves/all"}
           ) do
             sketch = sketch(node)
@@ -3571,10 +3571,9 @@ module ::Ww::M1
 
   def self.search_part(term : Term) : Search::Part
     case term
-    when Term.of(:items)         then Search::Part::ItemsOrdered
-    when Term.of(:keys)          then Search::Part::Keys
-    when Term.of(:values)        then Search::Part::Values
-    when Term.of(:"pair/values") then Search::Part::PairValues
+    when Term.of(:items)   then Search::Part::ItemsOrdered
+    when Term.of(:pairs)   then Search::Part::PairValues
+    when Term.of(:entries) then Search::Part::Values
     else
       raise ArgumentError.new
     end
@@ -5140,9 +5139,6 @@ module ::Ww::M1
         %{[%gap/max _]},
         %{[%entry/negative _]},
         %{[%entry/negative _ _]},
-        %{(%leaves/first _ ¦ _ in: keys)},
-        %{(%leaves/source _ ¦ _ in: keys)},
-        %{(%leaves/all _ _ ¦ _ in: keys)},
         %{[%new _]},
         %{[%new _ _]},
         cues: {:"%gap",
@@ -5150,9 +5146,6 @@ module ::Ww::M1
                :"%gap/max",
                :"%entry/negative",
                :"%entry/negative",
-               :"%leaves/first",
-               :"%leaves/source",
-               :"%leaves/all",
                :"%new",
                :"%new"},
       ) do

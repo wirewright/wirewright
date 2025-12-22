@@ -1,5 +1,3 @@
-;; TODO: bring backmap & pattern tests on the same topic near each other
-
 ;; Literal equality
 (group
   (pattern 1 (+ 1) (- -1 "foo"))
@@ -2369,25 +2367,8 @@
         {x: 9} {x: 10} {x: 11}
         {x: 12}))
 
-  ;; In keys
-  (pattern (%leaf° x_ in: keys)
-    (= (+ 1 2 x: 100 y: 200 100: true)
-      {x: 0}
-      {x: 1}
-      {x: 2}
-      {x: x}
-      {x: y}
-      {x: 100}))
-
-  (pattern (%leaf° x_symbol in: keys)
-    (= (+ 1 2 x: 100 y: 200 (z: true a: x): true 100: true)
-      {x: x}
-      {x: y}
-      {x: z}
-      {x: a}))
-
-  ;; In values
-  (pattern (%leaf° x_ in: values)
+  ;; In entries
+  (pattern (%leaf° x_ in: entries)
     (= (+ 1 2 x: 100 y: 200 100: true)
       {x: +}
       {x: 1}
@@ -2396,8 +2377,8 @@
       {x: 200}
       {x: true}))
 
-  ;; In pair values
-  (pattern (%leaf° x_ in: pair/values)
+  ;; In pairs
+  (pattern (%leaf° x_ in: pairs)
     (= (+ 1 2 x: 100 y: 200 100: true)
       {x: 100}
       {x: 200}
@@ -2407,22 +2388,28 @@
   ;;
   ;; Nesting leaf sources with self: true on both of them is effectively an "or"
   ;; on the `in` section.
-  (pattern (%leaf° (%leaf° x_symbol in: keys self: true) in: values self: true)
+  (pattern (%leaf° (%leaf° x_symbol in: items self: true) in: pairs self: true)
     (= a {x: a})
-    (= {a: true, b: true, 2: true, "hello": true}
-      {x: a}
-      {x: b})
-    (= ({a: x, 2: y} {b: z} {c: {d: qux}, e: qyx})
-      {x: x}
-      {x: y}
-      {x: z}
-      {x: a}
-      {x: b}
-      {x: c}
-      {x: d}
-      {x: e}
-      {x: qux}
-      {x: qyx})))
+    (= (+ 1 2 a: x b: y)
+       {x: +}
+       {x: x}
+       {x: y})
+    (= (+ 1 2 a: (+ 1 x) b: (3 4 y z: qux))
+       {x: +}
+       {x: x}
+       {x: y}
+       {x: qux})) ;; qux matches because the outer %leaf follows b: _ -> z: _
+
+  (pattern (%leaf° (%leaf° x_symbol in: items self: true) in: pairs)
+    (- a)
+    (= (+ 1 2 a: x b: y)
+       {x: x}
+       {x: y})
+    (= (+ 1 2 a: (+ 1 x) b: (3 4 y z: qux))
+       {x: +}
+       {x: x}
+       {x: y}
+       {x: qux}))) ;; ditto
 
 ;; %leaf all
 (group
@@ -2898,15 +2885,22 @@
   (= ((a b) (c d e) (e f g h) ((k l))) ((c d e) (a b) ((k l)) (e f g h))))
 
 ;; nested %leaf source backmap
-(backmap ((%leaf° (%leaf° x_symbol in: keys self: true) in: values self: true)
-          {x: (seen ↓x)})
-  (= a (seen a))
-  (= {a: true, b: true, 2: true, "hello": true}
-     {(seen a): true, (seen b): true, 2: true, "hello": true})
-  (= ({a: x, 2: y} {b: z} {c: {d: qux}, e: qyx})
-     ({(seen a): (seen x), 2: (seen y)}
-      {(seen b): (seen z)}
-      {(seen c): {(seen d): (seen qux)}, (seen e): (seen qyx)})))
+(group
+  (backmap ((%leaf° (%leaf° x_symbol in: items self: true) in: pairs self: true)
+            {x: (seen ↓x)})
+    (= a (seen a))
+    (= (+ 1 2 a: x b: y)
+       ((seen +) 1 2 a: (seen x) b: (seen y)))
+    (= (+ 1 2 a: (+ 1 x) b: (3 4 x y: z))
+       ((seen +) 1 2 a: ((seen +) 1 (seen x)) b: (3 4 (seen x) y: (seen z)))))
+
+  (backmap ((%leaf° (%leaf° x_symbol in: items self: true) in: pairs)
+            {x: (seen ↓x)})
+    (- a (seen a))
+    (= (+ 1 2 a: x b: y)
+       (+ 1 2 a: (seen x) b: (seen y)))
+    (= (+ 1 2 a: (+ 1 x) b: (3 4 x y: z))
+       (+ 1 2 a: ((seen +) 1 (seen x)) b: (3 4 (seen x) y: (seen z))))))
 
 ;; %leaf bfs first replacement
 (backmap ((%leaf x_symbol order: bfs) {x: (seen ($my x))})
@@ -3548,7 +3542,7 @@
       y: ((pair 1) value),
       z: ((pair 2) value)}))
 
-(pattern (%leaf° (%all (%keypath x) _number) in: values)
+(pattern (%leaf° (%all (%keypath x) _number) in: entries)
   (= (a 0 b ((c 1) d 2 {e: 3}))
     {x: ((pair 1) value)}
     {x: ((pair 3) value (pair 0) value (pair 1) value)}
@@ -3873,7 +3867,6 @@
       min: 1)
   ;; %leaf invalidates max depth
   (of (%leaf a_) (%leaf° a_) (%leaves xs_ a_) min: 1)
-  (of (%leaf a_ in: keys) (%leaf° a_ in: keys) (%leaves xs_ a_ in: keys) min: 0)
   (of (%leaf a_ self: true) (%leaf° a_ self: true) (%leaves xs_ a_ self: true) min: 0)
   (of (%leaf a_number) (%leaf° a_number) (%leaves xs_ a_number) min: 1)
   (of (%leaf (a_)) (%leaf° (a_)) (%leaves xs_ (a_)) min: 2)
