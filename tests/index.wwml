@@ -43,6 +43,10 @@ uiR: {codex: "../uiR-succ8.soma.wwml"}
   color: (oklch 0.7 0.1 green)
   tags: (patterns m1))
 
+(test "backmaps.test.wwml"
+  color: (oklch 0.7 0.1 sky)
+  tags: (backmaps m1))
+
 (test "alloy.test.wwml"
   color: (oklch 0.7 0.1 yellow)
   tags: (alloy))
