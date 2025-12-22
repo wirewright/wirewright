@@ -1818,3 +1818,4 @@ module Ww
 end
 
 require "./dict/items_view"
+require "./dict/tour"
