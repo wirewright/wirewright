@@ -90,13 +90,14 @@ module Ww::M0
   # *block* requires one parameter, used to refer to the schema. It optionally
   # accepts a second parameter, used to refer to *matchee* extended with defaults.
   #
-  # Define expected keys with `var = key(name, value: ..., type?: ..., default?: ...)`
+  # Define expected keys with `var = schema.key(name, value: ..., type?: ..., default?: ...)`
   # anywhere at the block's top-level:
+  # - *schema* is the first parameter to *block*.
   # - *name* is the name of the key in *matchee*.
   # - *value* and *type* set the key's value restriction and its target type (see `restrict?`).
   #   *value* is required. *type* is optional, its default value is `Term`.
   # - *default* provides the default value. It is optional. If absent, absence of *key* will
-  #   result in mismatch. *defaulT* does not have to fulfill the restriction set by *value*;
+  #   result in mismatch. *default* does not have to fulfill the restriction set by *value*;
   #   it does not have to be of *type*.
   # - *var* will store the resulting object. Its type is the union of *type* and *default*'s type.
   #
@@ -104,7 +105,7 @@ module Ww::M0
   #
   # Define a custom mismatch handler with `s.on_mismatch { ... }` anywhere at the block's
   # top-level. The mismatch handler is executed in the block surrounding `M0.schema`, so
-  # any `next` or `break` is interpreted to the block surrounding `M0.schema` (i.e., `M0.schema`
+  # any `next` or `break` is interpreted by the block surrounding `M0.schema` (i.e., `M0.schema`
   # and `on_mismatch` are "expanded out of the way").
   #
   # The default mismatch handler is `on_mismatch { next }`.
@@ -115,7 +116,7 @@ module Ww::M0
   #     raise "Mismatch!"
   #   end
   #
-  #   _ = s.key(:in, value: {:items, :keys, :values, :"pair/values"}, default: :items)
+  #   _ = s.key(:in, value: {:items, :values, :pairs}, default: :items)
   #   _ = s.key(:order, value: {:dfs, :bfs}, default: :dfs)
   #   min = s.key(:min, type: UInt8, value: 0u8..UInt8::MAX, default: 0)
   #   max = s.key(:max, type: UInt8, value: 1u8..UInt8::MAX, default: :infinity)
