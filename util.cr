@@ -4571,7 +4571,7 @@ struct Slice(T)
     mem[0] = object
     (mem + 1).copy_from(to_unsafe, size)
 
-    Slice.new(mem, size + 1)
+    Slice.new(mem, size + 1, read_only: @read_only)
   end
 
   def append(object : T) : Slice(T)
@@ -4579,7 +4579,7 @@ struct Slice(T)
     mem.copy_from(to_unsafe, size)
     mem[size] = object
 
-    Slice.new(mem, size + 1)
+    Slice.new(mem, size + 1, read_only: @read_only)
   end
 
   def to_voidptr : Void*
