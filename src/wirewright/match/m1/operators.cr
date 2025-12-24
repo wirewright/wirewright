@@ -59,7 +59,7 @@ module Ww::M1::Operator
     successor : Any
 
   defcase Literal, term : Term
-  defcase LiteralChoices, choices : Set(Term)
+  defcase LiteralSet, choices : Set(Term)
 
   defcase Capture, capture : Term, successor : Any
 
@@ -70,7 +70,7 @@ module Ww::M1::Operator
   defcase ItemLast, successor : Any
   defcase SingularSeq, items : Slice(Any), exhaustive : Bool, reverse : Bool
 
-  defcase SourceChoice, a : Any, b : Any
+  defcase ChoiceSource, a : Any, b : Any
 
   defcase Both, a : Any, b : Any
 

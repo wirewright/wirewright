@@ -390,7 +390,7 @@ end
 #   are not, fix that. In fact, Operator should probably be renamed to Subject or something
 #   like that. Not sure how large of a refactor that is, and how much point is there in it.
 module ::Ww::M1::Operator
-  alias Any = Pass | Never | Num | Sym | SymBlank | SymNonblank | Boolean | Dict | Itemsonly | Pairsonly | SketchSubset | Bounds | BoundsGuard | MaxDepth | DictGuard | Literal | Capture | CaptureItemsonly | ItemSeq | ItemFirst | ItemLast | SingularSeq | Partition | Edge | LiteralChoices | SourceChoice | ValueLiteral | Keypool | Span | Tally | Type | ParseML | Clamp | Bin | Both | Not | Layer | ScanFirst | ScanSource | ScanAll | DfsFirst | DfsSource | DfsAll | BfsFirst | BfsAll | Value | NegativeValue | NegativeValueKeypath | EntriesFirst | EntriesSource | EntriesAll | Str | New | KeypathCapture | NegativeKeypool | Keytest
+  alias Any = Pass | Never | Num | Sym | SymBlank | SymNonblank | Boolean | Dict | Itemsonly | Pairsonly | SketchSubset | Bounds | BoundsGuard | MaxDepth | DictGuard | Literal | Capture | CaptureItemsonly | ItemSeq | ItemFirst | ItemLast | SingularSeq | Partition | Edge | LiteralSet | ChoiceSource | ValueLiteral | Keypool | Span | Tally | Type | ParseML | Clamp | Bin | Both | Not | Layer | ScanFirst | ScanSource | ScanAll | DfsFirst | DfsSource | DfsAll | BfsFirst | BfsAll | Value | NegativeValue | NegativeValueKeypath | EntriesFirst | EntriesSource | EntriesAll | Str | New | KeypathCapture | NegativeKeypool | Keytest
 
   alias Bin = Add | Sub | Mul | Div | Idiv | Mod | Pow | Map
 
@@ -3968,7 +3968,7 @@ module ::Ww::M1
       matchpi %[(%any/literal _*)], cue: :"%any/literal" do
         branches = node.items.move(1).to_set
 
-        Operator::LiteralChoices.new(branches)
+        Operator::LiteralSet.new(branches)
       end
 
       match({:"%any/source", :a_}, cue: :"%any/source") do |a|
@@ -3976,7 +3976,7 @@ module ::Ww::M1
       end
 
       match({:"%any/source", :a_, :b_}, cue: :"%any/source") do |a, b|
-        Operator::SourceChoice.new(operator(a, captures), operator(b, captures))
+        Operator::ChoiceSource.new(operator(a, captures), operator(b, captures))
       end
 
       match({:"%any/source", :a_, :_, :"_*"}, cue: :"%any/source") do |a|
@@ -3987,7 +3987,7 @@ module ::Ww::M1
           args.each { |item| commit << item }
         end
 
-        Operator::SourceChoice.new(operator(a, captures), operator(Term.of(rest), captures))
+        Operator::ChoiceSource.new(operator(a, captures), operator(Term.of(rest), captures))
       end
 
       matchpi %{(%edge _symbol)}, cue: :"%edge" do

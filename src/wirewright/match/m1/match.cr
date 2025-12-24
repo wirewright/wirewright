@@ -149,6 +149,14 @@ module Ww::M1::Operator
     Ahead.tr(behind0, ahead0)
   end
 
+  def match(behind0, op : LiteralSet, matchee : Term, ahead0)
+    unless matchee.in?(op.choices)
+      return Fb::Mismatch.new(behind0.env)
+    end
+
+    Ahead.tr(behind0, ahead0)
+  end
+
   def match(behind0, op : Capture, matchee : Term, ahead0)
     unless behind1 = behind0.propose?(op.capture, matchee)
       return Fb::Mismatch.new(behind0.env.with(op.capture, matchee))
@@ -157,14 +165,6 @@ module Ww::M1::Operator
     behind1 = behind1.mount(op.capture)
 
     match(behind1, op.successor, matchee, ahead0)
-  end
-
-  def match(behind0, op : LiteralChoices, matchee : Term, ahead0)
-    unless matchee.in?(op.choices)
-      return Fb::Mismatch.new(behind0.env)
-    end
-
-    Ahead.tr(behind0, ahead0)
   end
 
   def match(behind0, op : Edge, matchee : Term, ahead0)
@@ -232,7 +232,7 @@ module Ww::M1::Operator
     Item.match(behind0, op.items, dict.items, ahead0)
   end
 
-  def match(behind0, op : SourceChoice, matchee : Term, ahead0)
+  def match(behind0, op : ChoiceSource, matchee : Term, ahead0)
     a = match(behind0, op.a, matchee, ahead0)
     unless a.is_a?(Fb::Response)
       return a
