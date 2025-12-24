@@ -526,18 +526,18 @@ module Ww::M0
         matchee = stack.pop
         return unless matchee == insn.term
       in AssertSubtype
-        return unless stack.top.type.subtype?(insn.type)
+        return unless stack.last.type.subtype?(insn.type)
       in AssertSize
-        return unless dict = stack.top.as_d?
+        return unless dict = stack.last.as_d?
         return unless dict.size == insn.size
       in AssertItemsizeAtLeast
-        return unless dict = stack.top.as_d?
+        return unless dict = stack.last.as_d?
         return unless dict.itemsize >= insn.itemsize
       in AssertPairsizeAtLeast
-        return unless dict = stack.top.as_d?
+        return unless dict = stack.last.as_d?
         return unless dict.pairsize >= insn.pairsize
       in AssertPairsize
-        return unless dict = stack.top.as_d?
+        return unless dict = stack.last.as_d?
         return unless dict.pairsize == insn.pairsize
       in Assign
         matchee = stack.pop
@@ -575,7 +575,7 @@ module Ww::M0
         stack << Term.of(dict.itemspart)
         stack << Term.of(dict.pairspart)
       in Fetch
-        matchee = stack.top
+        matchee = stack.last
         return unless dict = matchee.as_d?
         return unless value = dict[insn.key]?
 

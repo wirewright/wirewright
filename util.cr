@@ -4987,8 +4987,3 @@ class ::Sync::Future
   end
 end
 
-struct Pf::Kit::HybridArray
-  def top
-    top? || raise IndexError.new
-  end
-end
