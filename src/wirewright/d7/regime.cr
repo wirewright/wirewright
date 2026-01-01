@@ -624,7 +624,7 @@ module Ww::D7
         candidates << {plan, index}
       end
 
-      ctx = SearchContext.new(hg, hg.graph, decmap.readonly, idecmap)
+      ctx = SearchContext.new(hg, hg.graph, decmap.read_only, idecmap)
 
       solve(ctx, candidates, body)
     end

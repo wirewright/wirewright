@@ -33,7 +33,7 @@ end
 annotation DefcaseField
 end
 
-macro defcase(cls, *typedecls, inherit = false, equality = :value, caches_hash = false, &)
+macro defcase(cls, *typedecls, inherit = false, equality = :value, caches_hash = false, copying = true, &)
   {% unless equality == :value || equality == :ref %}
     {% raise "equality must be :value or :ref"%}
   {% end %}
@@ -45,18 +45,22 @@ macro defcase(cls, *typedecls, inherit = false, equality = :value, caches_hash =
     {% cls = "#{cls.id} < #{@type.id}".id %}
   {% end %}
 
+  {%
+    names = typedecls.map do |typedecl|
+      if typedecl.is_a?(Assign)
+        typedecl.target.id
+      elsif typedecl.is_a?(TypeDeclaration)
+        typedecl.var.id
+      else
+        typedecl.id
+      end
+    end
+  %}
+
   class {{cls}}
     {{header}}
 
-    {% for typedecl in typedecls %}
-      {% if typedecl.is_a?(Assign)
-           name = typedecl.target.id
-         elsif typedecl.is_a?(TypeDeclaration)
-           name = typedecl.var.id
-         else
-           name = typedecl.id
-         end %}
-
+    {% for name in names %}
       @[::DefcaseField]
       def {{name}}
         @{{name.id}}
@@ -66,32 +70,34 @@ macro defcase(cls, *typedecls, inherit = false, equality = :value, caches_hash =
     def initialize({{typedecls.map { |typedecl| "@#{typedecl}".id }.splat}})
     end
 
-    def copy_with({{
-                    typedecls.map do |property|
-                      if property.is_a?(Assign)
-                        "#{property.target.id} _#{property.target.id} = @#{property.target.id}".id
-                      elsif property.is_a?(TypeDeclaration)
-                        "#{property.var.id} _#{property.var.id} = @#{property.var.id}".id
-                      else
-                        "#{property.id} _#{property.id} = @#{property.id}".id
-                      end
-                    end.splat
-                  }})
-      self.class.new({{
-                       typedecls.map do |property|
-                         if property.is_a?(Assign)
-                           "_#{property.target.id}".id
-                         elsif property.is_a?(TypeDeclaration)
-                           "_#{property.var.id}".id
-                         else
-                           "_#{property.id}".id
-                         end
-                       end.splat
-                     }})
-    end
+    {% if copying %}
+      def copy_with({{
+                      typedecls.map do |property|
+                        if property.is_a?(Assign)
+                          "#{property.target.id} _#{property.target.id} = @#{property.target.id}".id
+                        elsif property.is_a?(TypeDeclaration)
+                          "#{property.var.id} _#{property.var.id} = @#{property.var.id}".id
+                        else
+                          "#{property.id} _#{property.id} = @#{property.id}".id
+                        end
+                      end.splat
+                    }})
+        self.class.new({{
+                         typedecls.map do |property|
+                           if property.is_a?(Assign)
+                             "_#{property.target.id}".id
+                           elsif property.is_a?(TypeDeclaration)
+                             "_#{property.var.id}".id
+                           else
+                             "_#{property.id}".id
+                           end
+                         end.splat
+                       }})
+      end
+    {% end %}
 
     {% if equality == :value %}
-      def_equals_and_hash {{typedecls.map { |typedecl| "@#{typedecl.var}".id }.splat}}
+      def_equals_and_hash {{names.map { |name| "@#{name}".id }.splat}}
     {% end %}
 
     {% if caches_hash && equality == :value %}
@@ -947,179 +953,6 @@ class ::Hash
   end
 end
 
-class List(T)
-  def initialize(@head : List(T)?, @object : T)
-  end
-
-  def self.[](*objects : T)
-    objects.reduce(nil) { |head, object| new(head, object) }
-  end
-
-  def self.build(objects : Enumerable(T))
-    objects.reduce(nil) { |head, object| new(head, object) }
-  end
-
-  def self.add(a : Nil, b : T)
-    List(T)[b]
-  end
-
-  def self.add(a : List(T), b : T)
-    a.add(b)
-  end
-
-  def self.concat(a : Nil, b : Nil)
-  end
-
-  def self.concat(a : List(T), b : Nil) forall T
-    a
-  end
-
-  def self.concat(a : Nil, b : List(T)) forall T
-    b
-  end
-
-  def self.concat(a : List(T), b : List(T)) forall T, U
-    a + b
-  end
-
-  def includes?(object : T) : Bool
-    @object == object || @head.try(&.includes?(object)) || false
-  end
-
-  def prepend(other : List(T)) : List(T)
-    List.new(@head.try(&.prepend(other)) || other, @object)
-  end
-
-  def +(other : List(T))
-    other.prepend(self)
-  end
-
-  def add(object : T)
-    List(T).new(self, object)
-  end
-
-  def size
-    n = 0
-    reverse_each { n += 1 }
-    n
-  end
-
-  def last : T
-    @object
-  end
-
-  def pop? : {List(T)?, T}
-    {@head, @object}
-  end
-
-  def each(& : T ->)
-    stack = [] of T
-
-    node = self
-    while node
-      stack << node.@object
-      node = node.@head
-    end
-
-    stack.reverse_each do |object|
-      yield object
-    end
-  end
-
-  def reverse_each(& : T ->) : Nil
-    node = self
-    while node
-      yield node.@object
-      node = node.@head
-    end
-  end
-
-  # Returns an enumerable wrapper over this source.
-  def ee : Enumerable(T)
-    EE(T).new(self)
-  end
-
-  # :nodoc:
-  struct EE(T)
-    include Enumerable(T)
-
-    def initialize(@list : List(T))
-    end
-
-    def each(& : T ->) : Nil
-      @list.each { |datum| yield datum }
-    end
-  end
-
-  def reverse : List(T)
-    list = nil
-    reverse_each do |element|
-      list = List.new(list, element)
-    end
-    list || self
-  end
-
-  def pretty_print(pp)
-    index = 0
-    pp.group(2, "list(", ")") do
-      each do |object|
-        if index > 0
-          pp.text(",")
-          pp.breakable
-        end
-        object.pretty_print(pp)
-        index += 1
-      end
-    end
-  end
-
-  def inspect(io)
-    io << "list("
-    ee.join(io, ", ") do |el|
-      el.inspect(io)
-    end
-    io << ")"
-  end
-
-  def to_s(io)
-    inspect(io)
-  end
-
-  def_equals_and_hash @head, @object
-end
-
-struct Queue(T)
-  def initialize(@front : List(T)? = nil, @rear : List(T)? = nil)
-  end
-
-  def self.[](*objects : T) : Queue(T)
-    objects.reduce(Queue(T).new) { |q, object| q.add(object) }
-  end
-
-  def empty?
-    @front.nil? && @rear.nil?
-  end
-
-  def add(object : T) : Queue(T)
-    if rear = @rear
-      Queue(T).new(@front, rear.add(object))
-    else
-      Queue(T).new(@front, List(T).new(nil, object))
-    end
-  end
-
-  def shift? : {Queue(T), T}?
-    if front = @front
-      front, element = front.pop?
-      return Queue.new(front, @rear), element
-    end
-
-    return unless rear = @rear
-
-    Queue.new(rear.reverse).shift?
-  end
-end
-
 struct Char
   def single_byte? : Bool
     0 <= ord <= 0xff
@@ -1150,6 +983,10 @@ end
 
 # FIXME: I use `ascii_only?` but really I meant `single_byte_optimizable?`. Rename
 # and fix conditions!!!
+#
+# TODO: StringView should be implemented properly and moved to Permafrost. We can
+# copy some of Char::Reader's methods for .first, .rest, .prior, .last, and maybe &+
+# (aka join consecutive); everything else can be built on top of them.
 struct StringView
   # WARNING: This will return the original string into which the view
   # is pointing! You probably want `to_s`.
@@ -2308,7 +2145,7 @@ struct StringView
   end
 
   def to_slice : Bytes
-    @string.to_slice[@byte_start, byte_end - @byte_start]
+    Bytes.new(to_unsafe, byte_end - @byte_start, read_only: true)
   end
 
   def to_unsafe : UInt8*
@@ -3525,6 +3362,86 @@ struct Slice(T)
     size > other.size && self[0...other.size] == other
   end
 
+  def prepend(object : T) : Slice(T)
+    mem = Pointer(T).malloc(size + 1)
+    mem[0] = object
+    (mem + 1).copy_from(to_unsafe, size)
+
+    Slice.new(mem, size + 1, read_only: @read_only)
+  end
+
+  def prepend(object, & : T -> U) : Slice(U) forall U
+    mem = Pointer(U).malloc(size + 1) do |index|
+      if index.zero?
+        object
+      else
+        yield unsafe_fetch(index - 1)
+      end
+    end
+
+    Slice.new(mem, size + 1, read_only: @read_only)
+  end
+
+  def append(object : T) : Slice(T)
+    mem = Pointer(T).malloc(size + 1)
+    mem.copy_from(to_unsafe, size)
+    mem[size] = object
+
+    Slice.new(mem, size + 1, read_only: @read_only)
+  end
+
+  def append(object, & : T -> U) : Slice(U) forall U
+    mem = Pointer(U).malloc(size + 1) do |index|
+      if index < size
+        yield unsafe_fetch(index)
+      else
+        object
+      end
+    end
+
+    Slice.new(mem, size + 1, read_only: @read_only)
+  end
+
+  def prepend_many(objects : Slice(T), & : T -> U) : Slice(U) forall U
+    mem = Pointer(U).malloc(objects.size + size)
+
+    index = 0
+
+    objects.each do |object|
+      mem[index] = yield object
+      index += 1
+    end
+
+    each do |object|
+      mem[index] = yield object
+      index += 1
+    end
+
+    Slice.new(mem, objects.size + size, read_only: @read_only)
+  end
+
+  def append_many(objects : Slice(T), & : T -> U) : Slice(U) forall U
+    mem = Pointer(U).malloc(size + objects.size)
+
+    index = 0
+
+    each do |object|
+      mem[index] = yield object
+      index += 1
+    end
+
+    objects.each do |object|
+      mem[index] = yield object
+      index += 1
+    end
+
+    Slice.new(mem, size + objects.size, read_only: @read_only)
+  end
+
+  def read_only : Slice(T)
+    Slice(T).new(to_unsafe, size, read_only: true)
+  end
+
   private module NullState
   end
 
@@ -3593,6 +3510,10 @@ struct Slice(T)
     end
 
     Slice(T).new(@pointer, newsize, read_only: @read_only)
+  end
+
+  def -(n : Int) : Slice(T)
+    trim(size - n)
   end
 
   def rchop(*objects, &)
@@ -3951,6 +3872,12 @@ module Enumerable(T)
 
     min
   end
+
+  def quickselect(k : Int) : T
+    raise ArgumentError.new("k must be positive") if k < 0
+    data = self.is_a?(Array) ? self.dup : self.to_a
+    quickselect_internal(data, 0, data.size - 1, k)
+  end
 end
 
 struct Range(B, E)
@@ -4147,6 +4074,17 @@ module Indexable(T)
     Slice(U).new(size, read_only: true) do |index|
       yield unsafe_fetch(index), index
     end
+  end
+end
+
+module Enumerable(T)
+  def to_readonly_slice(& : T, Int32 -> U) : Slice(U) forall U
+    buffer = stack_alloc Pf::Kit::HybridArray(U, 32).new
+    each_with_index do |item, index|
+      buffer << (yield item, index)
+    end
+
+    buffer.to_readonly_slice(&.itself)
   end
 end
 
@@ -4565,32 +4503,6 @@ struct StaticArray(T, N)
   end
 end
 
-struct Slice(T)
-  def prepend(object : T) : Slice(T)
-    mem = Pointer(T).malloc(size + 1)
-    mem[0] = object
-    (mem + 1).copy_from(to_unsafe, size)
-
-    Slice.new(mem, size + 1, read_only: @read_only)
-  end
-
-  def append(object : T) : Slice(T)
-    mem = Pointer(T).malloc(size + 1)
-    mem.copy_from(to_unsafe, size)
-    mem[size] = object
-
-    Slice.new(mem, size + 1, read_only: @read_only)
-  end
-
-  def to_voidptr : Void*
-    to_unsafe.as(Void*)
-  end
-
-  def readonly : Slice(T)
-    Slice(T).new(to_unsafe, size, read_only: true)
-  end
-end
-
 require "bit_array"
 
 class BitList
@@ -4987,3 +4899,14 @@ class ::Sync::Future
   end
 end
 
+# Reference: https://github.com/crystal-lang/crystal/issues/13481#issuecomment-2603298285
+macro stack_alloc(call)
+ {% if call.is_a?(Assign) %}
+   {% target = call.target %}
+   {% call = call.value %}
+   {{ target }} = uninitialized ReferenceStorage({{ call.receiver }})
+   {{ call.receiver }}.unsafe_construct(pointerof({{ target }}), {% unless call.args.empty? %} {{ call.args.splat }}, {% end %}{% unless call.named_args.is_a?(Nop) %}{{ call.named_args.splat }}{% end %})
+ {% else %}
+   stack_alloc %storage = {{ call }}
+ {% end %}
+end

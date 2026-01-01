@@ -82,7 +82,7 @@ module Ww::D7
         end
       end
 
-      graph.readonly
+      graph.read_only
     end
   end
 end
