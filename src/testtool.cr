@@ -42,21 +42,22 @@ module Testtool
   defrecord AssertionResult, mmt : Mmt, complaints : Array(Complaint)
 end
 
-# Utility methods and data structures.
+# Utility functions and data structures.
 require "./testtool/kit"
 
-# Display methods. This file contains methods that write to STDERR/STDOUT. We
+# Display functions. This file contains functions that write to STDERR/STDOUT. We
 # use them all throughout the testtool.
 require "./testtool/display"
 
 # `Testtool.run` is the "meat" of testtool. Its various overloads run `Leaf` tests.
 require "./testtool/run"
 
-# Methods related to comparison tests (e.g. term to term or image to image).
+# Functions related to comparison tests (e.g. term to term or image to image).
 require "./testtool/comparison"
 
-# The overloads of `Testtool.assertions` descend recursively into `Test`s until
-# they hit `Leaf` tests, which are then passed to `Testtool.run`.
+# The overloads of `Testtool.assertions` look for assertions: they descend
+# recursively into `Test`s until they hit `Leaf` tests, which are then passed
+# to `Testtool.run`.
 require "./testtool/assertions"
 
 # Command-line interface.
