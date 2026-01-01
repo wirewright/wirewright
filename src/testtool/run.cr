@@ -367,6 +367,7 @@ module Testtool
         complaints << complaint("Pattern {{kind.id}} mismatch",
           "Pattern": pattern,
           "Normal pattern": normp,
+          "Expected": Term.of(test.{{kind.id}}),
           "Got": actual,
         )
       end
