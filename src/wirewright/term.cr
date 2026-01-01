@@ -472,6 +472,12 @@ module Ww
       to?(type) || raise TypeCastError.new
     end
 
+    # Compares this and *other* terms using `Term.compare`. This method mainly
+    # exists for interop with the Crystal stdlib.
+    def <=>(other : Term) : Int32
+      Term.compare(self, other)
+    end
+
     # Computes and returns the hexdigest of this term using the given *algorithm*.
     def hexdigest(*, algorithm : Digest = Digest::SHA256.new) : String
       digest = IO::Digest.new(IO::Empty.new, algorithm, mode: IO::Digest::DigestMode::Write)
@@ -1584,8 +1590,12 @@ module Ww
     # Traversal proceeds left-to-right, parent before children. *root* is
     # yielded first.
     def self.each_keypath_and_node(root : Term, & : Array(Term), Term -> Bool) : Nil
-      ns = Pf::Kit::HybridArray(Int32, 32).new
-      nodes = Pf::Kit::HybridArray(Term, 32){root}
+      nsbuf = uninitialized Int32[32]
+      nodesbuf = uninitialized Term[32]
+      ns = stack_alloc Pf::Kit::HybridArray(Int32, 32).new(nsbuf.to_unsafe)
+      nodes = stack_alloc Pf::Kit::HybridArray(Term, 32).new(nodesbuf.to_unsafe)
+      nodes << root
+
       keypath = [] of Term
 
       while node = nodes.pop?

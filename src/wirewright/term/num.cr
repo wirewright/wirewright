@@ -265,7 +265,6 @@ module Ww
     end
 
     # Compares a number term and a Crystal number.
-    @[Dncast]
     def <=>(other : Number)
       kmap { |a| a <=> other }
     end

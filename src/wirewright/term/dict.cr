@@ -343,8 +343,10 @@ module Ww
       # since <=> calls are often made deeply and recursively. But to my [inexperienced]
       # eye, it seems better than going to the heap all the time on such a primitive
       # operation as comparison.
-      l = Pf::Kit::HybridArray({Term, Term}, 16).new # 16 bytes x 16 = 256 bytes
-      r = Pf::Kit::HybridArray({Term, Term}, 16).new # 16 bytes x 16 = 256 bytes
+      lbuf = uninitialized {Term, Term}[16] # 16 bytes x 16 = 256 bytes
+      rbuf = uninitialized {Term, Term}[16] #
+      l = stack_alloc Pf::Kit::HybridArray({Term, Term}, 16).new(lbuf.to_unsafe)
+      r = stack_alloc Pf::Kit::HybridArray({Term, Term}, 16).new(rbuf.to_unsafe)
       minsize = Math.min(size, other.size)
 
       each_entry do |k, v|
@@ -634,6 +636,34 @@ module Ww
       @pairs.each { |entry| yield entry.key, entry.value }
     end
 
+    @pairsptr : Atomic({Term, Term}*) = Atomic.new(Pointer({Term, Term}).null)
+
+    @[Dncast]
+    def pairs_ord : Slice({Term, Term})
+      if pairsptr = @pairsptr.get(:acquire) # Not null
+        return Slice({Term, Term}).new(pairsptr, size)
+      end
+
+      # Null, calculate our own version.
+      pairsptr = Pointer({Term, Term}).malloc(size)
+      size = 0
+
+      each_pair do |key, value|
+        pairsptr[size] = {key, value}
+        size += 1
+      end
+
+      # NOTE: We're fine with unstable sort here because dict keys are never
+      # equal within the same dict.
+      pairs = Slice({Term, Term}).new(pairsptr, size)
+      pairs.unstable_sort! { |(k0, _), (k1, _)| Term.compare(k0, k1) }
+
+      # Make an attempt to publish.
+      @pairsptr.set(pairsptr, :release)
+
+      pairs
+    end
+
     # Yields each entry from this dictionary in stable order. Guarantees the order
     # of entries to be the same across all machines & runs.
     @[Dncast]
@@ -644,14 +674,7 @@ module Ww
 
       return if itemsonly?
 
-      # Collect pairs in a buffer.
-      buffer = Pf::Kit::HybridArray(Pair, 32).new # 16 bytes x 32 = 512 bytes
-      @pairs.each { |pair| buffer << pair }
-
-      buffer.sort! { |a, b| Term.compare({a.key, a.value}, {b.key, b.value}) }
-      buffer.each do |pair|
-        yield pair.key, pair.value
-      end
+      pairs_ord.each { |key, value| yield key, value }
     end
 
     # Yields each item from this dictionary followed by its index. **Items are yielded
@@ -667,6 +690,7 @@ module Ww
     # up when iterating over items in range.
     SCAN_THRESHOLD = 0.6
 
+    # TODO: We should probably remove this in favor of the built-in `ItemsView#each(within) < Indexable`
     @[Dncast]
     def each_item_with_index(*, within range : Range(Int32, Int32), & : Term, Int32 ->) : Nil
       assert range.exclusive?
@@ -700,7 +724,7 @@ module Ww
     # Yields each pair from this dictionary. **Pairs are yielded out of order**.
     @[Dncast]
     def each_pair(& : Term, Term ->)
-      pairspart.each_entry { |key, value| yield key, value }
+      @pairs.each { |entry| yield entry.key, entry.value }
     end
 
     # :nodoc:
@@ -743,6 +767,8 @@ module Ww
     end
 
     # Returns an enumerable of values based on `each_entry`.
+    #
+    # TODO: Probably remove this.
     @[Dncast]
     def ve : Enumerable(Term)
       ValueEnumberable.new(self)
@@ -767,6 +793,8 @@ module Ww
     # Returns an enumerable for items found in this dictionary.
     #
     # See also: `items`.
+    #
+    # TODO: Probably remove this in favor of `items`.
     @[Dncast]
     def ie : Enumerable(Term)
       ItemEnumerable.new(self)
@@ -774,6 +802,8 @@ module Ww
 
     # Returns an enumerable based on `each_pair`. The pairs will be emitted
     # in order if *ordered* is set to `true`.
+    #
+    # TODO: Probably remove this.
     @[Dncast]
     def pe(*, ordered = false) : Enumerable({Term, Term})
       pairspart.ee(ordered: ordered)
@@ -1126,6 +1156,7 @@ module Ww
       # will happen since the bit has already been set.
       @sketch = Dict.mix(@sketch, value)
       @maxdepth = Dict.mixdepth(@maxdepth, value)
+      @pairsptr.set(Pointer({Term, Term}).null, :release)
 
       self
     end
@@ -1139,6 +1170,7 @@ module Ww
 
       @sketch = Dict.mix(@sketch, value)
       @maxdepth = Dict.mixdepth(@maxdepth, value)
+      @pairsptr.set(Pointer({Term, Term}).null, :release)
 
       self
     end
@@ -1160,6 +1192,7 @@ module Ww
         items: @items,
         pairs: @pairs,
       )
+      @pairsptr.set(Pointer({Term, Term}).null, :release)
 
       self
     end
@@ -1170,6 +1203,7 @@ module Ww
 
     private def without_default!(key : Term::Any, author) : Dict
       _, @pairs = @pairs.delete(Probes::DissocPairMut.new(Term.of(key), hole: Pointer(Term).null, author: author))
+      @pairsptr.set(Pointer({Term, Term}).null, :release)
 
       self
     end
@@ -1369,7 +1403,7 @@ module Ww
     end
 
     @[Dncast]
-    def items(b : Num, e : Num) : Dict
+    def span(b : Num, e : Num) : Dict
       return Term[] if b == e
       return items.collect if b == Term[0] && e == Term[size]
       return Term[] unless b < e <= size
@@ -1473,6 +1507,11 @@ module Ww
     @[Dncast]
     def items : Dict::ItemsView
       ItemsView.new(@items, b: 0, e: @items.size, sketch0: @sketch, maxdepth0: @maxdepth)
+    end
+
+    @[Dncast]
+    def items(b : Int32, e : Int32) : Dict::ItemsView
+      ItemsView.new(@items, b, e, sketch0: @sketch, maxdepth0: @maxdepth)
     end
 
     # Returns the items part of `partition` (see the latter for more info).

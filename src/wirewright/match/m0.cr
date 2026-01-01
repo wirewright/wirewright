@@ -340,11 +340,6 @@ module Ww::M0
   # :nodoc:
   SYM_UNDERSCORE_STAR = Term[:"_*"]
 
-  @[AlwaysInline]
-  private def emit(insnsptr, insn : Insn) : Nil
-    insnsptr.value << insn
-  end
-
   # Returns `true` if *term* is the pass blank `_`.
   private def pass?(term : Term) : Bool
     return false unless sym = term.as_sym?
@@ -356,64 +351,64 @@ module Ww::M0
   end
 
   # x_ x_string qux
-  private def compile(insnsptr, pattern : Term::Sym) : Nil
+  private def compile(insns, pattern : Term::Sym) : Nil
     if (blank = pattern.blank?) && blank.singular?
       # <matchee> ⏏
       if blank.typed?
-        emit(insnsptr, AssertSubtype.new(blank.type))
+        insns << AssertSubtype.new(blank.type)
         # <matchee> ⏏
       end
       if name = blank.name?
-        emit(insnsptr, Assign.new(name))
+        insns << Assign.new(name)
       else
         # Pass (`_`)
-        emit(insnsptr, Drop.new)
+        insns << Drop.new
       end
       # ⏏
       return
     end
 
     # <matchee> ⏏
-    emit(insnsptr, AssertEqual.new(Term.of(pattern)))
+    insns << AssertEqual.new(Term.of(pattern))
     # ⏏
   end
 
   # (+ a_ b_) (%literal 100)
-  private def compile(insnsptr, pattern : Term::Dict) : Nil
+  private def compile(insns, pattern : Term::Dict) : Nil
     if pattern.itemsize > 0
       case {pattern[0], pattern.itemsize - 1, pattern.pairsize}
       when {SYM_LITERAL, 1, 0} # (%literal 123)
         # <matchee> ⏏
-        emit(insnsptr, AssertEqual.new(pattern[1]))
+        insns << AssertEqual.new(pattern[1])
         # ⏏
         return
       when {SYM_PARTITION, 2, 0} # (%partition itemspart_ pairspart_)
         # <matchee> ⏏
-        emit(insnsptr, Partition.new)
+        insns << Partition.new
         # <itemspart> <pairspart> ⏏
-        compile(insnsptr, pattern[2])
+        compile(insns, pattern[2])
         # <itemspart> ⏏
-        compile(insnsptr, pattern[1])
+        compile(insns, pattern[1])
         # ⏏
         return
       when {SYM_LAYER, 2, 0}
         # <matchee> ⏏
         if (pattern[1] == SYM_UNDERSCORE) && (selector = pattern[2].as_d?)
           # <matchee> ⏏
-          emit(insnsptr, AssertPairsizeAtLeast.new(selector.size))
+          insns << AssertPairsizeAtLeast.new(selector.size)
           # <matchee> ⏏
 
           # (%layer _ {a: a_, b: 200})
           selector.each_entry do |key, value|
             # <matchee> ⏏
-            emit(insnsptr, Fetch.new(key))
+            insns << Fetch.new(key)
             # <matchee> <value of key> ⏏
-            compile(insnsptr, value)
+            compile(insns, value)
             # <matchee> ⏏
           end
 
           # <matchee> ⏏
-          emit(insnsptr, Drop.new)
+          insns << Drop.new
           # ⏏
           return
         end
@@ -425,68 +420,68 @@ module Ww::M0
         prior = pattern.items.grow(-1)
 
         # <matchee> ⏏
-        emit(insnsptr, AssertItemsizeAtLeast.new(prior.size))
+        insns << AssertItemsizeAtLeast.new(prior.size)
         # <matchee> ⏏
 
         prior.each_with_index do |item, index|
           next if pass?(item) # Don't waste resources on `_`
 
           # <matchee> ⏏
-          emit(insnsptr, Fetch.new(Term.of(index)))
+          insns << Fetch.new(Term.of(index))
           # <matchee> <value at index> ⏏
-          compile(insnsptr, item)
+          compile(insns, item)
           # <matchee> ⏏
         end
 
         if pattern.pairsize > 0
-          emit(insnsptr, AssertPairsize.new(pattern.pairsize))
+          insns << AssertPairsize.new(pattern.pairsize)
 
           pattern.each_pair do |key, value|
             next if pass?(value) # Don't waste resources on `_`
 
             # <matchee> ⏏
-            emit(insnsptr, Fetch.new(key))
+            insns << Fetch.new(key)
             # <matchee> <value of key> ⏏
-            compile(insnsptr, value)
+            compile(insns, value)
             # <matchee> ⏏
           end
         end
 
         # <matchee> ⏏
-        emit(insnsptr, Drop.new)
+        insns << Drop.new
         # ⏏
         return
       end
     end
 
     # <matchee> ⏏
-    emit(insnsptr, AssertSize.new(pattern.size))
+    insns << AssertSize.new(pattern.size)
     # <matchee> ⏏
 
     pattern.each_entry do |key, value|
       next if pass?(value) # Don't waste resources on `_`
 
       # <matchee> ⏏
-      emit(insnsptr, Fetch.new(key))
+      insns << Fetch.new(key)
       # <matchee> <value of key> ⏏
-      compile(insnsptr, value)
+      compile(insns, value)
       # <matchee> ⏏
     end
 
     # <matchee>
-    emit(insnsptr, Drop.new)
+    insns << Drop.new
     # ⏏
   end
 
   # 100 "hello" true
-  private def compile(insnsptr, pattern : Term::Any) : Nil
+  private def compile(insns, pattern : Term::Any) : Nil
     # <matchee> ⏏
-    emit(insnsptr, AssertEqual.new(Term.of(pattern)))
+    insns << AssertEqual.new(Term.of(pattern))
     # ⏏
   end
 
-  private def compile(insnsptr, pattern : Term) : Nil
-    compile(insnsptr, Term[pattern])
+  private def compile(insns, pattern : Term) : Nil
+    compile(insns, Term[pattern])
   end
 
   # :nodoc:
@@ -498,8 +493,9 @@ module Ww::M0
       # There usually aren't a lot of instructions. So we can use stack space.
       # This lets us know, later on, the exact amount of memory to allocate,
       # which is neat.
-      insns = Pf::Kit::HybridArray(Insn, 64).new
-      compile(pointerof(insns), pattern)
+      insnbuf = uninitialized Insn[64]
+      insns = stack_alloc Pf::Kit::HybridArray(Insn, 64).new(insnbuf.to_unsafe)
+      compile(insns, pattern)
 
       insns.to_readonly_slice(&.itself)
     end
@@ -508,14 +504,16 @@ module Ww::M0
   # Matches *matchee* against a sequence of M0 instructions *insns* and
   # a match *env*.
   def match?(env : Term::Dict, insns : Slice(Insn), matchee matchee0 : Term) : Term::Dict?
-    stack = Pf::Kit::HybridArray(Term, 32).new
+    stackbuf = uninitialized Term[32]
+    stack = stack_alloc Pf::Kit::HybridArray(Term, 32).new(stackbuf.to_unsafe)
     stack << matchee0
 
     # NOTE: In practice, the amount of captures in a pattern is *tiny*. I mean it: 99%
     # of the time it's <16, most of them well below 16, like, 2, 4, up to 8 if you're
     # lucky. Only generated patterns could have more than 16, or very large hand-written
     # ones whose performance will dwarf the overhead of heap alloc or GC.
-    captures = Pf::Kit::HybridArray({Term::Sym, Term}, 16).new
+    capturesbuf = uninitialized {Term::Sym, Term}[16]
+    captures = stack_alloc Pf::Kit::HybridArray({Term::Sym, Term}, 16).new(capturesbuf.to_unsafe)
 
     # Bloom filter for capture names.
     filter = 0u64
