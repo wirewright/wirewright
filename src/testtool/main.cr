@@ -6,7 +6,8 @@ module Testtool
     focused : Set(Term),
     ignored : Set(Term),
     stats_path : Path?,
-    interactive : Bool
+    interactive : Bool,
+    display_assertion : Bool
 
   class ArgConf
     def tests_path
@@ -24,6 +25,7 @@ module Testtool
     focused = Set(Term).new
     ignored = Set(Term).new
     interactive = false
+    display_assertion = true
 
     cursor = 0
     while cursor < argv.size
@@ -54,8 +56,13 @@ module Testtool
         next
       end
 
-      if arg == "-i" || arg.starts_with?("--interactive")
+      if arg.in?("-i", "--interactive")
         interactive = true
+        next
+      end
+
+      if arg.in?("-A", "--assertion-visibility-none")
+        display_assertion = false
         next
       end
 
@@ -70,7 +77,7 @@ module Testtool
       end
     end
 
-    ArgConf.new(index_path, focused, ignored, stats_path, interactive)
+    ArgConf.new(index_path, focused, ignored, stats_path, interactive, display_assertion)
   end
 
   # Resolves variables defined in *index*.
@@ -280,9 +287,11 @@ module Testtool
       ref = location(asn)
 
       display(ComplaintRef.new(ref))
-      if term = term?(asn)
+
+      if conf.display_assertion && (term = term?(asn))
         display(AssertionReportHeader.new(term))
       end
+
       display(ComplaintList.new(result.complaints))
       hr
 
@@ -295,10 +304,14 @@ module Testtool
       next if result.complaints.empty?
 
       ref = location(asn)
-      term = term(asn)
 
       display(ComplaintRef.new(ref))
-      display(ComparisonReportHeader.new(term))
+
+      if conf.display_assertion
+        term = term(asn)
+        display(ComparisonReportHeader.new(term))
+      end
+
       display(ComplaintList.new(result.complaints))
       hr
 
