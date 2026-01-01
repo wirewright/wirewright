@@ -59,12 +59,14 @@ module Ww::M1::Operator
     successor : Any
 
   defcase Literal, term : Term
-  defcase LiteralSet, choices : Set(Term)
+  defcase LiteralWhitelist, whitelist : Set(Term)
+  defcase LiteralBlacklist, blacklist : Set(Term)
 
   defcase Capture, capture : Term, successor : Any
 
   defcase Edge, type : TermType
 
+  # TODO: remove items!!!
   defcase ItemSeq, items : Slice(Item::Any)
   defcase ItemFirst, successor : Any
   defcase ItemLast, successor : Any
@@ -78,7 +80,7 @@ module Ww::M1::Operator
   defcase Keypool, keys : Slice(Term)
   defcase NegativeKeypool, keys : Slice(Term)
 
-  defcase Not, blacklist : Term::Dict
+  defcase ValueLiteral, key : Term, successor : Any
 
   defcase Span, successor : Any
   defcase Tally, successor : Any
@@ -97,7 +99,7 @@ module Ww::M1::Operator
 
   defcase CaptureItemsonly, capture : Term
 
-  defcase Partition, itemspart : Any, pairspart : Any
+  defcase Partition, itemside : Any, pairside : Any
 
   module Entry
     alias Any = Required | Optional | Present | Absent | AbsentKeypath | Negative | NegativeKeypath
@@ -141,13 +143,13 @@ module Ww::M1::Operator
       end
     end
 
-    defcase Negative, key : Term, positive : Operator::Any do
+    defcase Negative, key : Term, barrier : Operator::Any do
       def cost : Cost
         Cost::Moderate
       end
     end
 
-    defcase NegativeKeypath, key : Term, positive : Operator::Any, name : Term do
+    defcase NegativeKeypath, key : Term, barrier : Operator::Any, name : Term do
       def cost : Cost
         Cost::Expensive
       end

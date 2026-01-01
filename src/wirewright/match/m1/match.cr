@@ -149,8 +149,8 @@ module Ww::M1::Operator
     Ahead.tr(behind0, ahead0)
   end
 
-  def match(behind0, op : LiteralSet, matchee : Term, ahead0)
-    unless matchee.in?(op.choices)
+  def match(behind0, op : LiteralWhitelist, matchee : Term, ahead0)
+    unless matchee.in?(op.whitelist)
       return Fb::Mismatch.new(behind0.env)
     end
 
@@ -285,7 +285,7 @@ module Ww::M1::Operator
     end
   {% end %}
 
-  def match(behind0, op : Not, matchee : Term, ahead0)
+  def match(behind0, op : LiteralBlacklist, matchee : Term, ahead0)
     if matchee.in?(op.blacklist)
       return Fb::Mismatch.new(behind0.env)
     end
@@ -503,8 +503,8 @@ module Ww::M1::Operator
     end
 
     if v = dict[op.key]?
-      case fb = match(behind0, op.positive, v, ahead0)
-      in Fb::Match # Positive example matches, nothing to do.
+      case fb = match(behind0, op.barrier, v, ahead0)
+      in Fb::Match # Barrier matches, nothing to do.
         return Fb::Mismatch.new(behind0.env)
       in Fb::Mismatch
       in Fb::Interrupt
@@ -543,8 +543,8 @@ module Ww::M1::Operator
 
     itemspart, pairspart = dict.partition
 
-    ahead1 = Ahead::Match.new(op.pairspart, Term.of(pairspart), Ahead.stackptr(ahead0))
+    ahead1 = Ahead::Match.new(op.pairside, Term.of(pairspart), Ahead.stackptr(ahead0))
 
-    match(behind0, op.itemspart, Term.of(itemspart), ahead1)
+    match(behind0, op.itemside, Term.of(itemspart), ahead1)
   end
 end

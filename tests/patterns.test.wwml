@@ -46,6 +46,8 @@
     (= +∞_number {name: +∞, type: _number})
     (- _ _number _symbol qux 100 "hello" true ()))
 
+  ;; TODO: nested name name
+
   (pattern ((%pipe type t_) (%symbol blank name_ t_))
     (= (x qux_symbol) {name: qux, t: _symbol})
     (= (100 foo_number) {name: foo, t: _number})
@@ -2785,6 +2787,8 @@
 ;; Depth
 ;;
 ;; Test min, max depth calculation from pattern.
+;;
+;; TODO: Move into a separate file and SPLIT per operator!!!!!
 (depth
   (of x min: 0 max: 0)
   (of x_ min: 0)
@@ -2921,6 +2925,9 @@
       (%leaf° (((a_) _*) _*) self: true)
       (%leaves xs_ (((a_) _*) _*) self: true)
       min: 3)
+  ;; %leaf sequ invalidates max depth, mix max min depth as min
+  (of (%leaf (a_) ((b_)) c_) (%leaf° (a_) ((b_)) c_) (%leaves ((((_)))) (a_) ((b_)) c_) min: 3)
+  (of (%leaf (a_) ((b_)) c_ self: true) min: 2)
   ;; %new invalidates max depth
   (of (%new a_) min: 0)
   (of ((%new a_) a_) min: 1)

@@ -22,6 +22,8 @@
     (= abc_number qux_number)
     (- abc))
 
+  ;; TODO: nested name name
+
   ;; Invalid name
   (backmap ((%symbol blank name_ _) {name: 123})
     (- _ abc_ abc_number abc))
