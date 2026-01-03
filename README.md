@@ -19,12 +19,19 @@
 > working full-time on Wirewright, and that's not enough, not even *remotely*, considering
 > the scope of the project.
 >
-> Furthermore, this kind of thing -- Wirewright -- stems purely out of curiosity.
-> No money will ever be in this area, period. I mean, I'm 99% sure. It's too crank.
+> Furthermore, this kind of thing -- Wirewright -- stems purely out of my curiosity.
+> There is no other incentive: no money will ever be in this area, period. Until the thing
+> works. Or maybe it doesn't, and I'm screwed :) On my end it's a big gamble, giving it
+> so much effort. On your, it's probably something feels just a little bit crank. But then
+> I run it, and it works, so who cares if it's crank!
 >
-> If you're interested, the best strategy for you is to read about Wirewright over at
-> the Wiki page and wait. I don't know whether it'd take months or years to get
-> a usable frontend going (probably months).
+> If you're interested, the best strategy for you right now is to read about ideas
+> related to Wirewright over at the Wiki page; there I'll dump the pieces as they
+> "come out of me" You can wait, too. I don't know whether it'd take months or years
+> to get a usable frontend going (probably months). Some prototypes exist already that
+> use all the new stuff, but they're too broken and slow to be usable in at the moment.
+> Right now, major work is ongoing on the components of Wirewright most under load,
+> to speed things up.
 >
 > That's a big warning about nothing in particular, isn't it?
 
@@ -50,7 +57,7 @@ NOTE: this frontend is no longer supported on this branch. See kappa.
 
 ## References
 
-Wirewright runs on the ideas inspired by or directly taken from: Francisco Varela, Humberto Maturana, Stephen Wolfram, Niklas Luhmann, Michael Levin, Bret Victor, ... (this list will grow as I remember more of them)
+Wirewright implements the ideas inspired by or directly taken from these amazing people: Francisco Varela, Humberto Maturana, Stephen Wolfram, Niklas Luhmann, Michael Levin, Bret Victor, ... (this list will grow, as there are many more of them!)
 
 Wirewright wouldn't be possible without these technologies:
 
