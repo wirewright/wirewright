@@ -343,10 +343,8 @@ module Ww
       # since <=> calls are often made deeply and recursively. But to my [inexperienced]
       # eye, it seems better than going to the heap all the time on such a primitive
       # operation as comparison.
-      lbuf = uninitialized {Term, Term}[16] # 16 bytes x 16 = 256 bytes
-      rbuf = uninitialized {Term, Term}[16] #
-      l = stack_alloc Pf::Kit::HybridArray({Term, Term}, 16).new(lbuf.to_unsafe)
-      r = stack_alloc Pf::Kit::HybridArray({Term, Term}, 16).new(rbuf.to_unsafe)
+      l = Pf::Kit.stack_array({Term, Term}, 16) # 16 bytes x 16 = 256 bytes
+      r = Pf::Kit.stack_array({Term, Term}, 16) #
       minsize = Math.min(size, other.size)
 
       each_entry do |k, v|

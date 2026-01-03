@@ -1,11 +1,8 @@
 module Ww::Alloy
   # Base dictionary rewriting.
   private def flatten(dict0 : Term::Dict, issues : Issue::Sink, & : Term, Issue::Sink -> _) : Expansion
-    indicesbuf = uninitialized Int32[64]
-    expansionsbuf = uninitialized Expansion[64]
-    indices = stack_alloc Pf::Kit::HybridArray(Int32, 64).new(indicesbuf.to_unsafe)
-    expansions = stack_alloc Pf::Kit::HybridArray(Expansion, 64).new(expansionsbuf.to_unsafe)
-
+    indices = Pf::Kit.stack_array(Int32, 64)
+    expansions = Pf::Kit.stack_array(Expansion, 64)
     rebuild = false
 
     # Process items.

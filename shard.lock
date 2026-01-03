@@ -6,7 +6,7 @@ shards:
 
   permafrost:
     git: https://github.com/homonoidian/permafrost.git
-    version: 0.11.0
+    version: 0.11.2
 
   sdl:
     git: https://github.com/ysbaddaden/sdl.cr.git

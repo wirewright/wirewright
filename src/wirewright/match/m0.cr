@@ -493,8 +493,7 @@ module Ww::M0
       # There usually aren't a lot of instructions. So we can use stack space.
       # This lets us know, later on, the exact amount of memory to allocate,
       # which is neat.
-      insnbuf = uninitialized Insn[64]
-      insns = stack_alloc Pf::Kit::HybridArray(Insn, 64).new(insnbuf.to_unsafe)
+      insns = Pf::Kit.stack_array(Insn, 64)
       compile(insns, pattern)
 
       insns.to_readonly_slice(&.itself)
@@ -504,16 +503,14 @@ module Ww::M0
   # Matches *matchee* against a sequence of M0 instructions *insns* and
   # a match *env*.
   def match?(env : Term::Dict, insns : Slice(Insn), matchee matchee0 : Term) : Term::Dict?
-    stackbuf = uninitialized Term[32]
-    stack = stack_alloc Pf::Kit::HybridArray(Term, 32).new(stackbuf.to_unsafe)
+    stack = Pf::Kit.stack_array(Term, 32)
     stack << matchee0
 
     # NOTE: In practice, the amount of captures in a pattern is *tiny*. I mean it: 99%
     # of the time it's <16, most of them well below 16, like, 2, 4, up to 8 if you're
     # lucky. Only generated patterns could have more than 16, or very large hand-written
     # ones whose performance will dwarf the overhead of heap alloc or GC.
-    capturesbuf = uninitialized {Term::Sym, Term}[16]
-    captures = stack_alloc Pf::Kit::HybridArray({Term::Sym, Term}, 16).new(capturesbuf.to_unsafe)
+    captures = Pf::Kit.stack_array({Term::Sym, Term}, 16)
 
     # Bloom filter for capture names.
     filter = 0u64
