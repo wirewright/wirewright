@@ -639,24 +639,22 @@ module Ww
     @[Dncast]
     def pairs_ord : Slice({Term, Term})
       if pairsptr = @pairsptr.get(:acquire) # Not null
-        return Slice({Term, Term}).new(pairsptr, size)
+        return Slice({Term, Term}).new(pairsptr, pairsize)
       end
 
-      # Null, calculate our own version.
-      pairsptr = Pointer({Term, Term}).malloc(size)
-      size = 0
-
+      pairsptr = Pointer({Term, Term}).malloc(pairsize)
+      index = 0
       each_pair do |key, value|
-        pairsptr[size] = {key, value}
-        size += 1
+        pairsptr[index] = {key, value}
+        index += 1
       end
 
       # NOTE: We're fine with unstable sort here because dict keys are never
       # equal within the same dict.
-      pairs = Slice({Term, Term}).new(pairsptr, size)
+      pairs = Slice({Term, Term}).new(pairsptr, pairsize)
       pairs.unstable_sort! { |(k0, _), (k1, _)| Term.compare(k0, k1) }
 
-      # Make an attempt to publish.
+      # Try to publish.
       @pairsptr.set(pairsptr, :release)
 
       pairs
