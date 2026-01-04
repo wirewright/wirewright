@@ -17,6 +17,7 @@
 #
 # - Literals: `100 "hello" xyzzy true ...`.
 # - Blanks (named, unnamed, typed, untyped): `_ _number x_number`.
+# - Let: `(%let capture_symbol pattern_)`.
 # - Partition: split a dictionary into its items and pairs partition, for
 #   example `(%partition itemspart_ pairspart_)`.
 # - Match p1-N on the first N items of an itemspart, correspondingly, possibly
@@ -267,6 +268,7 @@ module Ww::M0
   alias Insn = AssertEqual |
                Partition |
                Fetch |
+               Dup |
                Drop |
                AssertSubtype |
                Assign |
@@ -284,6 +286,11 @@ module Ww::M0
   #
   # Keep term, assert dict, assert has *key*, push value of *key*.
   defrecord Fetch, key : Term
+
+  # :nodoc:
+  #
+  # Copy top of the stack.
+  defrecord Dup
 
   # :nodoc:
   #
@@ -327,6 +334,9 @@ module Ww::M0
 
   # :nodoc:
   SYM_LITERAL = Term[:"%literal"]
+
+  # :nodoc:
+  SYM_LET = Term[:"%let"]
 
   # :nodoc:
   SYM_PARTITION = Term[:"%partition"]
@@ -382,6 +392,17 @@ module Ww::M0
         insns << AssertEqual.new(pattern[1])
         # ⏏
         return
+      when {SYM_LET, 2, 0} # (%let capture_symbol pattern_)
+        if capture = pattern[1].as_sym?
+          # <matchee> ⏏
+          insns << Dup.new
+          # <matchee> <matchee> ⏏
+          insns << Assign.new(capture)
+          # <matchee> ⏏
+          compile(insns, pattern[2])
+          # ⏏
+          return
+        end
       when {SYM_PARTITION, 2, 0} # (%partition itemspart_ pairspart_)
         # <matchee> ⏏
         insns << Partition.new
@@ -575,6 +596,8 @@ module Ww::M0
         return unless value = dict[insn.key]?
 
         stack << value
+      in Dup
+        stack << stack.last
       in Drop
         _ = stack.pop
       end

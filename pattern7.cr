@@ -3698,7 +3698,7 @@ module ::Ww::M1
 
   def self.operator(node : Term, captures : Bag(Term)) : Operator::Any
     Term.case(node, engine: M0) do
-      matchpi %[(%let (%capture capture_) successor_)], cue: :"%let" do
+      matchpi %[(%'%let (%capture capture_) successor_)], cue: :"%let" do
         Operator::Capture.new(capture, operator(successor, captures))
       end
 
@@ -5231,7 +5231,7 @@ module ::Ww::M1
       end
 
       matchpi(
-        %{[%let _ successor_]},
+        %{[%'%let _ successor_]},
         %{[%singular successor_]},
         %{[%entry/required successor_]},
         %{[%terminal successor_]},
