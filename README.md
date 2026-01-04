@@ -20,18 +20,31 @@
 > the scope of the project.
 >
 > Furthermore, this kind of thing -- Wirewright -- stems purely out of my curiosity.
-> There is no other incentive: no money will ever be in this area, period. Until the thing
-> works. Or maybe it doesn't, and I'm screwed :) On my end it's a big gamble, giving it
-> so much effort. On your, it's probably something feels just a little bit crank. But then
-> I run it, and it works, so who cares if it's crank!
+> There is no other incentive: no money will ever be in this area, period; so curiosity
+> is the only fuel we have here. Until the thing works. Or maybe it doesn't, and I'm screwed :)
+> On my end it's a big gamble, giving it so much effort. On your, it's probably something
+> that feels just a little bit crank. But then I run it, and it works, so who cares if
+> it's crank or not!
 >
 > If you're interested, the best strategy for you right now is to read about ideas
-> related to Wirewright over at the Wiki page; there I'll dump the pieces as they
-> "come out of me" You can wait, too. I don't know whether it'd take months or years
-> to get a usable frontend going (probably months). Some prototypes exist already that
-> use all the new stuff, but they're too broken and slow to be usable in at the moment.
-> Right now, major work is ongoing on the components of Wirewright most under load,
-> to speed things up.
+> related to Wirewright over at the Wiki page. Do not expect beautiful prose there:
+> these are dumps, unformatted, mostly unedited pieces that I publish there raw. Rather
+> than viewing them as pretense on truth, view them as progress dumps that are false
+> the moment they're out, because the very fact of writing them changed me somehow (or
+> maybe at least showed me how stup... undeveloped the ideas *really* are). The code
+> is much better, believe me. At least I hope so.
+>
+> You can wait, too. I don't know whether it'd take months or years to get a usable
+> frontend going (probably months). Some prototypes exist already that use all the new
+> stuff, but they're too broken and slow to be usable in at the moment.
+>
+> Right now, major work is ongoing on the components of Wirewright that receive the majority
+> of load. I am trying my best to speed them up. As a sidenote, it's nice to have modern CPUs
+> doing stuff worthy of their might, instead of sweating as they draw ads on the screen.
+> That the result of such workload is a button (one button!) anyway is funny, of course. But
+> if you open the hood of a browser, you'll see a mechanism; and if you open the hood of
+> Wirewright as it's drawing your button, you'll see tiny people running around like crazy,
+> moving pixels around. It's surprising such complexity can even run within semi-bearable time-budget!
 >
 > That's a big warning about nothing in particular, isn't it?
 
@@ -71,7 +84,7 @@ Wirewright wouldn't be possible without these technologies:
 ## Building
 
 Wirewright can be built with Crystal 1.18.0 or later. If I forget to update the version number here, please
-remember that Wirewright more than likely depends on the newest features or bug-fixes in Crystal. So you are
+remember that Wirewright more than likely depends on the newest features and bug-fixes in Crystal. So you are
 advised to build Wirewright with the latest version of Crystal.
 
 ### Building the dev tool
