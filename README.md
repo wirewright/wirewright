@@ -28,15 +28,15 @@
 >
 > If you're interested, the best strategy for you right now is to read about ideas
 > related to Wirewright over at the Wiki page. Do not expect beautiful prose there:
-> these are dumps, unformatted, mostly unedited pieces that I publish there raw. Rather
-> than viewing them as pretense on truth, view them as progress dumps that are false
-> the moment they're out, because the very fact of writing them changed me somehow (or
-> maybe at least showed me how stup... undeveloped the ideas *really* are). The code
-> is much better, believe me. At least I hope so.
+> those are dumps, unformatted, mostly unedited pieces that I publish raw. Rather
+> than considering them in any way related to truth, consider them as progress dumps
+> that are false the moment they're out, because the very fact of writing them changed
+> me somehow (or maybe at least showed me how stup... undeveloped the ideas *really* are).
+> The code is much better, believe me. At least I hope so.
 >
 > You can wait, too. I don't know whether it'd take months or years to get a usable
 > frontend going (probably months). Some prototypes exist already that use all the new
-> stuff, but they're too broken and slow to be usable in at the moment.
+> stuff, but they're too broken and slow to be usable at the moment.
 >
 > Right now, major work is ongoing on the components of Wirewright that receive the majority
 > of load. I am trying my best to speed them up. As a sidenote, it's nice to have modern CPUs
@@ -46,7 +46,7 @@
 > Wirewright as it's drawing your button, you'll see tiny people running around like crazy,
 > moving pixels around. It's surprising such complexity can even run within semi-bearable time-budget!
 >
-> That's a big warning about nothing in particular, isn't it?
+> That's a big warning about nothing in particular, huh?
 
 # Wirewright
 
