@@ -84,7 +84,7 @@ module Testtool
     AssertionLoc.new(asn, {line, col})
   end
 
-  # Enhances assertions from *object* with location and term info.
+  # Enhances assertions from *asns* with location and term info.
   def annotated(asns : Array(AssertionNode), term : Term, srcmap : ML::SrcMap) : Array(AssertionNode)
     asns.map do |asn|
       # NOTE: The order isn't relevant here.

@@ -277,9 +277,16 @@ module Testtool
     end
     hr
 
+    if stats_path = conf.stats_path
+      wstat(assets.files, stats_path, tests, test_results)
+    end
+
     mmt = test_results.sum(&.mmt) + comparison_results.sum(&.mmt)
-    display(Status.new(successes, failures, mmt))
-    hr
+
+    if conf.interactive
+      display(Status.new(successes, failures, mmt))
+      hr
+    end
 
     tests.zip(test_results) do |asn, result|
       next if result.complaints.empty?
@@ -295,9 +302,7 @@ module Testtool
       display(ComplaintList.new(result.complaints))
       hr
 
-      if conf.interactive
-        gets
-      end
+      gets if conf.interactive
     end
 
     comparisons.zip(comparison_results) do |asn, result|
@@ -315,13 +320,12 @@ module Testtool
       display(ComplaintList.new(result.complaints))
       hr
 
-      if conf.interactive
-        gets
-      end
+      gets if conf.interactive
     end
 
-    if stats_path = conf.stats_path
-      wstat(assets.files, stats_path, tests, test_results)
+    unless conf.interactive
+      display(Status.new(successes, failures, mmt))
+      hr
     end
   end
 
