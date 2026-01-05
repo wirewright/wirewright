@@ -91,7 +91,7 @@ module Ww::M1next
   # immediate mismatch.
   struct Context
     alias EnvMap = ListMap(Term, Tzip)
-    alias EnvMapArena = Arena(List({Term, Tzip}), 64)
+    alias EnvMapArena = Arena(List({Term, Tzip}), 32)
 
     alias CstMap = ListMap(Term, Cst::Any)
     alias CstMapArena = Arena(List({Term, Cst::Any}), 8)
@@ -105,7 +105,7 @@ module Ww::M1next
 
     # Plans are by far the thing we allocate the most, so we give them
     # plenty of stack-space.
-    alias PlanArena = Arena(List(Action::Any), 256)
+    alias PlanArena = Arena(List(Action::Any), 160)
 
     alias ContextArena = Arena(Context::Payload, 64)
 
@@ -134,6 +134,10 @@ module Ww::M1next
 
     def self.new(env : Term::Dict, & : Context ->) : Nil
       # Yeah, I know, this is horrible...
+      #
+      # NOTE: Right now, measuring with LLDB, release mode, this takes -- rounding upwards by
+      # a few KB to account for misunderstandings on my end -- about 32KB of stack memory.
+      # Which is OK, I guess. We normally have 8 MB in Linux so 32KB is fine.
       EnvMapArena.new do |envtabs|
         CstMapArena.new do |csttabs|
           RefMapArena.new do |reftabs|
@@ -141,8 +145,8 @@ module Ww::M1next
               PlanArena.new do |plans|
                 envtab = EnvMap.new
 
-                # NOTE: in the vast majority of cases *env0* is empty. No work is done here.
-                # Theo only major supplier of nonempty *env0*s is `Alloy.render`.
+                # NOTE: in the vast majority of cases *env* is empty. No work is done here.
+                # The only major supplier of nonempty *env*s is `Alloy.render`.
                 env.each_entry do |key, value|
                   envtab = EnvMap.assoc(envtabs, envtab, key, Tzip.new(value, Log.none))
                 end
@@ -156,7 +160,7 @@ module Ww::M1next
                   selector: false,
                 )
 
-                yield Context.new(cdata)
+                yield new(cdata)
               end
             end
           end

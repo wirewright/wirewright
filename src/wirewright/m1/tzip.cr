@@ -702,8 +702,7 @@ module Ww::M1next
       change(begin: @end, end: @tzip.term.itemsize.to_u32)
     end
 
-    # Changes the begin and end of this view to *begin1*, *end1*, within
-    # the bounds of the focused dict's itemspart.
+    # Changes the begin and end of this view to *begin1*, *end1* (in absolute coordinates).
     def reshape(begin1 : UInt32, end1 : UInt32) : ItemsView
       assert begin1 <= end1 <= @tzip.term.itemsize
 
@@ -747,21 +746,21 @@ module Ww::M1next
       change(end: @begin + newsize)
     end
 
-    # Returns the part of this view before *pivot*.
+    # Returns the part of this view before and excluding *pivot*.
     #
     # *pivot* is set in relative coordinates: min `0` means `begin`, max
     # is `end`.
-    def before(pivot : Int32) : ItemsView
+    def before(pivot : Int) : ItemsView
       assert 0 <= pivot <= size
 
       change(end: @begin + pivot.to_u32)
     end
 
-    # Returns the part of this view before *pivot*.
+    # Returns the part of this view after and including *pivot*.
     #
     # *pivot* is set in relative coordinates: min `0` means `begin`, max
     # is `end`.
-    def after(pivot : Int32) : ItemsView
+    def starting_at(pivot : Int) : ItemsView
       assert 0 <= pivot <= size
 
       change(begin: @begin + pivot.to_u32)
@@ -793,33 +792,33 @@ module Ww::M1next
 
     # Yields all splits of this view into two subviews, starting with
     # an empty view and consuming one item at a time until full.
-    def each_split_lazy(& : ItemsView, ItemsView ->)
+    def each_bisplit_lazy(& : ItemsView, ItemsView ->)
       (0..size).each do |size|
-        yield before(size), after(size)
+        yield before(size), starting_at(size)
       end
     end
 
     # Yields all splits of this view into two subviews, starting with
     # this view and releasing items until empty.
-    def each_split_greedy(& : ItemsView, ItemsView ->)
+    def each_bisplit_greedy(& : ItemsView, ItemsView ->)
       (0..size).reverse_each do |size|
-        yield before(size), after(size)
+        yield before(size), starting_at(size)
       end
     end
 
     # Yields all splits of this view into two subviews, starting at *pivot*
     # and swaying back and forth.
-    def each_split_sway(pivot : Int, & : ItemsView, ItemsView ->)
-      yield before(pivot), after(pivot)
+    def each_bisplit_sway(pivot : Int, & : ItemsView, ItemsView ->)
+      yield before(pivot), starting_at(pivot)
 
       # We then sway like pivot - 1, pivot + 1, pivot - 2, pivot + 2, etc...
       (1..size).each do |offset|
         if pivot - offset >= 0
-          yield before(pivot - offset), after(pivot - offset)
+          yield before(pivot - offset), starting_at(pivot - offset)
         end
 
         if pivot + offset <= size
-          yield before(pivot + offset), after(pivot + offset)
+          yield before(pivot + offset), starting_at(pivot + offset)
         end
       end
     end
@@ -843,6 +842,19 @@ module Ww::M1next
         yield change(begin: from, end: to), i
 
         from = to
+      end
+    end
+
+    # Yields each possible split of this view with focus (middle part) of
+    # size *n*. *n* can be zero, in which case the middle part will be empty
+    # (but properly positioned!). The first and last block args are the left
+    # and right parts (before and after mid), correspondingly.
+    def each_split(n : Int, & : ItemsView, ItemsView, ItemsView ->)
+      (@begin...@end).slide_subrange_of(n) do |subrange|
+        l = before(subrange.begin)
+        focus = reshape(subrange.begin, subrange.end)
+        r = starting_at(subrange.end)
+        yield l, focus, r
       end
     end
 

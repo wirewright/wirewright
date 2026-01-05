@@ -381,13 +381,13 @@ end
 #   are not, fix that. In fact, Operator should probably be renamed to Subject or something
 #   like that. Not sure how large of a refactor that is, and how much point is there in it.
 module ::Ww::M1::Operator
-  alias Any = Pass | Never | Num | Sym | SymBlank | SymNonblank | Boolean | Dict | Itemsonly | Pairsonly | SketchSubset | Bounds | BoundsGuard | MaxDepth | DictGuard | Literal | Capture | CaptureItemsonly | ItemSeq | ItemFirst | ItemLast | SingularSeq | Partition | Edge | LiteralWhitelist | ChoiceSource | Keypool | Span | Tally | Type | ParseML | Clamp | Bin | Both | LiteralBlacklist | Layer | ScanFirst | ScanSource | ScanAll | DfsFirst | DfsSource | DfsAll | BfsFirst | BfsAll | Value | NegativeValue | NegativeValueKeypath | EntriesFirst | EntriesSource | EntriesAll | Str | KeypathCapture | NegativeKeypool | Keytest | ValueLiteral | Filter | Pluck | Flat
+  alias Any = Pass | Never | Num | Sym | SymBlank | SymNonblank | Boolean | Dict | Itemsonly | Pairsonly | SketchSubset | Bounds | BoundsGuard | MaxDepth | DictGuard | Literal | Capture | CaptureItemsonly | ItemSeq | ItemFirst | ItemLast | SingularSeq | Partition | Edge | LiteralWhitelist | ChoiceSource | Keypool | Span | Tally | Type | ParseML | Clamp | Bin | Both | LiteralBlacklist | Layer | ScanFirst | ScanSource | ScanAll | DfsFirst | DfsSource | DfsAll | BfsFirst | BfsAll | Value | NegativeValue | NegativeValueKeypath | EntriesFirst | EntriesSource | EntriesAll | Str | KeypathCapture | NegativeKeypool | Keytest | ValueLiteral | Filter | Pluck | Flat | Split | Adjacent
 
   alias Bin = Add | Sub | Mul | Div | Idiv | Mod | Pow | Map
 
-  alias First = ScanFirst | DfsFirst | BfsFirst | EntriesFirst
-  alias Source = DfsSource | ScanSource | EntriesSource
-  alias All = ScanAll | DfsAll | BfsAll | EntriesAll
+  alias First = ScanFirst | DfsFirst | BfsFirst | EntriesFirst | SplitFirst
+  alias Source = DfsSource | ScanSource | EntriesSource | SplitSource
+  alias All = ScanAll | DfsAll | BfsAll | EntriesAll | SplitAll
 
   defcase Layer, below : Any, side : Slice(Entry::Any)
 
@@ -510,6 +510,22 @@ module ::Ww::M1::Operator
   defcase Filter, deps : Pf::Set(Term), selector : Any, successor : Any, min : Magnitude, max : Magnitude
   defcase Pluck, spec : M1next::Tzip::PluckSpec, successor : Any
   defcase Flat, spec : M1next::Tzip::FlatSpec, successor : Any
+
+  alias Split = SplitFirst | SplitSource | SplitAll
+
+  defcase Adjacent, members : Slice(Any)
+
+  defcase SplitFirst, lhs : Any, focus : Slice(Any), rhs : Any
+  defcase SplitSource, lhs : Any, focus : Slice(Any), rhs : Any
+  defcase SplitAll, lhs : Any, focus : Slice(Any), rhs : Any, successor : Any, min : Magnitude, max : Magnitude do
+    def minM
+      min
+    end
+
+    def maxM
+      max
+    end
+  end
 end
 
 alias Magnitude = Float32
@@ -842,15 +858,19 @@ end
 
 module ::Ww::M1::Operator
   def match(behind0, op : Filter, matchee : Term, ahead0)
-    raise "not implemented"
+    raise "not supported"
   end
 
   def match(behind0, op : Pluck, matchee : Term, ahead0)
-    raise "not implemented"
+    raise "not supported"
   end
 
   def match(behind0, op : Flat, matchee : Term, ahead0)
-    raise "not implemented"
+    raise "not supported"
+  end
+
+  def match(behind0, op : Adjacent, matchee : Term, ahead0)
+    raise "not supported"
   end
 
   def match(behind0, op : ValueLiteral, matchee : Term, ahead0)
@@ -912,6 +932,10 @@ module ::Ww::M1::Operator
   # the meantime. I remember them doing numerous other tricks, too.
 
   def match(behind0, op : First, matchee : Term, ahead0)
+    if op.is_a?(Split)
+      raise "not supported"
+    end
+
     memo = Fb::Mismatch.new(behind0.env)
 
     Search.traverse(matchee, spec: search_spec(op), backpath: behind0.backpath?) do |item|
@@ -927,6 +951,10 @@ module ::Ww::M1::Operator
   end
 
   def match(behind0, op : Source, matchee : Term, ahead0)
+    if op.is_a?(Split)
+      raise "not supported"
+    end
+
     envs = [] of Term::Dict
     interrupt = nil
 
@@ -953,6 +981,10 @@ module ::Ww::M1::Operator
   end
 
   def match(behind0, op : All, matchee : Term, ahead0)
+    if op.is_a?(Split)
+      raise "not supported"
+    end
+
     envs = [] of Term::Dict
     interrupt = nil
 
@@ -2620,6 +2652,69 @@ module ::Ww::M1
           {:"%flat", {:"%barrier", spec}, pattern(ctx, successor)}
         end
 
+        # TODO: %adjacent shouldn't be a separate operator. Instead, we should compile
+        # %split's that can be treated as adjacency checks into Operator::Adjacent. I don't
+        # want to leak performance reasons behind %adjacent to the user. Instead, since we
+        # always know better, we should pick %adjacent if possible during O2.
+        #
+        # Say, notice how (%split[°] _ x_ _) -> ⟨x_⟩[°]; notice also how (%split _ a_ ⟨b_⟩) ->
+        # (%adjacent a_ b_), and (%split _ a_ (%split _ b_ _)) -> (%split _ a_ ⟨b_⟩) -> (%adjacent a_ b_).
+        #
+        # Constructions such as (%split _ a_ (%split _ b_ ⟨c_⟩)) can be rewritten to
+        # (%split _ a_ (%adjacent b_ c_)) -> (%adjacent a_ b_ c_).
+        matchpi %[(%adjacent _ _ _*)], cue: :"%adjacent" do
+          mid = pattern.items.move(1)
+          midp = Term::Dict.build do |commit|
+            commit.concat(mid) { |item| pattern(ctx, item) }
+          end
+
+          {:"%adjacent", midp}
+        end
+
+        matchpi %[(%split lhs_ _ _*)], cue: :"%split" do
+          mid = pattern.items.move(2).grow(-1)
+          midp = Term::Dict.build do |commit|
+            commit.concat(mid) { |item| pattern(ctx, item) }
+          end
+
+          rhs = pattern.items.last
+
+          {:"%split/first", pattern(ctx, lhs), midp, pattern(ctx, rhs)}
+        end
+
+        matchpi %[(%split° lhs_ _ _*)], cue: :"%split°" do
+          mid = pattern.items.move(2).grow(-1)
+          midp = Term::Dict.build do |commit|
+            commit.concat(mid) { |item| pattern(ctx, item) }
+          end
+
+          rhs = pattern.items.last
+
+          {:"%split/source", pattern(ctx, lhs), midp, pattern(ctx, rhs)}
+        end
+
+        matchpi %[(%splits successor_ lhs_ _ _* ¦ opts_)], cue: :"%splits" do
+          M0.schema(opts) do |s, opts|
+            s.on_mismatch { continue }
+
+            _ = s.key(:min, type: UInt32, default: 1)
+            _ = s.key(:max, type: UInt32, default: SYM_INF)
+
+            mid = pattern.items.move(3).grow(-1)
+            midp = Term::Dict.build do |commit|
+              commit.concat(mid) { |item| pattern(ctx, item) }
+            end
+
+            rhs = pattern.items.last
+
+            opts.transaction do |commit|
+              commit << :"%split/all"
+              commit << pattern(ctx, successor)
+              commit << pattern(ctx, lhs) << midp << pattern(ctx, rhs)
+            end
+          end
+        end
+
         # NOTE: you should insert new matchpis here, especially if they are infrequent.
         # Below we have raw dict/literal treatment; if you put your matchpis below they
         # will probably not be reached. If your matchpi does not start with a %, make sure
@@ -4160,6 +4255,32 @@ module ::Ww::M1
 
       matchpi %{(%flat (%barrier spec_dict) successor_)}, cue: :"%flat" do
         Operator::Flat.new(flat_spec(spec.as_d), operator(successor, captures))
+      end
+
+      matchpi %{(%adjacent m←(_*))}, cue: :"%adjacent" do
+        ops = m.items.to_readonly_slice { |x| operator(x, captures) }
+
+        Operator::Adjacent.new(ops)
+      end
+
+      matchpi %{(%split/first lhs_ m←(_*) rhs_)}, cue: :"%split/first" do
+        mops = m.items.to_readonly_slice { |mp| operator(mp, captures) }
+
+        Operator::SplitFirst.new(operator(lhs, captures), mops, operator(rhs, captures))
+      end
+
+      matchpi %{(%split/source lhs_ m←(_*) rhs_)}, cue: :"%split/source" do
+        mops = m.items.to_readonly_slice { |mp| operator(mp, captures) }
+
+        Operator::SplitSource.new(operator(lhs, captures), mops, operator(rhs, captures))
+      end
+
+      matchpi %{(%split/all successor_ lhs_ m←(_*) rhs_ ¦ () min_ max_)}, cue: :"%split/all" do
+        minM = min.to(Magnitude)
+        maxM = max == SYM_INF ? Magnitude::INFINITY : max.to(Magnitude)
+        mops = m.items.to_readonly_slice { |mp| operator(mp, captures) }
+
+        Operator::SplitAll.new(operator(lhs, captures), mops, operator(rhs, captures), operator(successor, captures), minM, maxM)
       end
 
       # %terminal is used to mark terminal nodes for walk

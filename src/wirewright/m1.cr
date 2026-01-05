@@ -121,7 +121,7 @@ module Ww::M1next
   # Pairs in the returned slice are sorted using `Term.compare` on envs, to
   # avoid having their order be implementation-defined.
   def matches_and_logs(env : Term::Dict, op : O::Any, matchee : Term) : Slice({Term::Dict, LogList})
-    match(env, op, matchee) do |fb|
+    match(env, op, matchee, log: true) do |fb|
       buffer = Pf::Kit.stack_array({Term::Dict, LogList}, 16)
 
       fb.each do |response|

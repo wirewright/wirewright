@@ -3987,6 +3987,45 @@ struct Range(B, E)
       from = to + 1
     end
   end
+
+  # Slides a window of size *n* and yields the corresponding ranges while
+  # the window fits.
+  #
+  # This range must be an exclusive integer range. *n* must be zero or positive.
+  #
+  # ```text
+  #    0   1   2   3   4   5   6   7   8   9    0...10
+  # ^    ^   ^   ^   ^   ^   ^   ^   ^   ^   ^  N=0
+  #    -   -   -   -   -   -   -   -   -   -    N=1
+  #    -----   -----   -----   -----   -----    N=2
+  #    ---------   ---------   ----------       N=3
+  #    -------------   --------------           N=4
+  #
+  #    ... and so on
+  # ```
+  def slide_subrange_of(n : Int, & : Range(B, E) ->)
+    {% unless B < ::Int && E < ::Int %}
+      {% raise "expected Range(_ < Int, _ < Int)" %}
+    {% end %}
+
+    assert exclusive?
+    assert n.zero? || n.positive?
+
+    return if n > size
+
+    if n.zero?
+      (@begin..@end).each do |i|
+        yield i...i
+      end
+      return
+    end
+
+    i = @begin
+    while i + n <= @end
+      yield i...i + n
+      i += n
+    end
+  end
 end
 
 struct Int
@@ -4974,7 +5013,7 @@ class List(T)
 end
 
 class Arena(T, N)
-  MINCAP = 8
+  MINCAP = 16
 
   # @type_id : Int32
   @auxcap : Int32
@@ -5001,6 +5040,10 @@ class Arena(T, N)
     mem = uninitialized ReferenceStorage(T)[N]
     arena = stack_alloc self.new(mem.to_unsafe)
     yield arena
+  end
+
+  def size
+    @auxsize + @memsize
   end
 
   def construct(*args, **kwargs) : T

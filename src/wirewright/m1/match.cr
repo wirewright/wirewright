@@ -108,7 +108,7 @@ module Ww::M1next
   module Action
     extend self
 
-    alias Any = Lzip | Rzip | Match | MatchSeq | MatchCst | EntryBroadcast | MakeCapture
+    alias Any = Lzip | Rzip | Fzip | Match | MatchSeq | MatchCst | EntryBroadcast | MakeCapture
 
     # :nodoc:
     struct Lzip
@@ -117,17 +117,19 @@ module Ww::M1next
       end
 
       def call(ctx : Context, plan : Plan)
-        if @ops.empty? # @matchees.empty?
+        unless op = @ops.first?
+          # => @matchees.empty?
           return M1next.fb(ctx, plan)
         end
 
         ahead = ctx.interject(plan, Action.lzip(@ops + 1, @matchees + 1))
-
-        M1next.match(ctx, @ops.first, @matchees.first, ahead)
+        M1next.match(ctx, op, @matchees.first, ahead)
       end
     end
 
     # Left-to-right zip-match on operators and matchees.
+    #
+    # *ops*/*matchees* can be empty.
     def lzip(ops, matchees)
       Lzip.new(ops, matchees)
     end
@@ -139,19 +141,58 @@ module Ww::M1next
       end
 
       def call(ctx : Context, plan : Plan)
-        if @ops.empty? # @matchees.empty?
+        unless op = @ops.last?
+          # => @matchees.empty?
           return M1next.fb(ctx, plan)
         end
 
         ahead = ctx.interject(plan, Action.rzip(@ops - 1, @matchees - 1))
-
-        M1next.match(ctx, @ops.last, @matchees.last, ahead)
+        M1next.match(ctx, op, @matchees.last, ahead)
       end
     end
 
     # Right-to-left zip-match on operators and matchees.
+    #
+    # *ops*/*matchees* can be empty.
     def rzip(ops, matchees)
       Rzip.new(ops, matchees)
+    end
+
+    # :nodoc:
+    struct Fzip
+      def initialize(@ops : Slice(O::Any), @matchees : Tzip::ItemsView | Slice(Tzip))
+      end
+
+      def call(ctx : Context, plan : Plan)
+        unless op = @ops.first?
+          # Fzip allows any number of items ahead. Proceed with a match.
+          return M1next.fb(ctx, plan)
+        end
+
+        remaining = @matchees
+
+        loop do
+          unless matchee = remaining.first?
+            # Ran out of items but some operators left, mismatch.
+            return Fb[]
+          end
+
+          # On success, skip the current op and matchee and proceed further.
+          ahead = ctx.interject(plan, Action.fzip(@ops + 1, remaining + 1))
+          fb = M1next.eval(M1next.match(ctx, op, matchee, ahead))
+          return fb if fb.present?
+
+          # On failure, skip to the next matchee but keep the operator.
+          remaining += 1
+        end
+      end
+    end
+
+    # Find-zip.
+    #
+    # *ops*/*matchees* can be empty.
+    def fzip(ops, matchees)
+      Fzip.new(ops, matchees)
     end
 
     # :nodoc:
@@ -744,12 +785,20 @@ module Ww::M1next
     matchee.dict? && (op.minM.zero? || matchee.term.itemsize >= op.seq.size)
   end
 
+  private def eligible?(op : O::Dfs | O::Bfs, matchee : Tzip) : Bool
+    op.depth0 ? true : (matchee.dict? && matchee.term.size > 0)
+  end
+
   private def eligible?(op : O::Entries, matchee : Tzip) : Bool
     matchee.dict?
   end
 
-  private def eligible?(op : O::Dfs | O::Bfs, matchee : Tzip) : Bool
-    op.depth0 ? true : (matchee.dict? && matchee.term.size > 0)
+  private def eligible?(op : O::Split, matchee : Tzip) : Bool
+    matchee.dict? && matchee.term.itemsize >= op.focus.size
+  end
+
+  private def eligible?(op : O::SplitAll, matchee : Tzip) : Bool
+    matchee.dict? && (op.minM.zero? || matchee.term.itemsize >= op.focus.size)
   end
 
   private def search(op : O::Scan, matchee : Tzip, & : Tzip::ItemsView -> Bool) : Nil
@@ -815,20 +864,7 @@ module Ww::M1next
     end
   end
 
-  private def search(ctx, op : O::Entries, matchee : Tzip, plan, & : Fb -> Bool) : Nil
-    matchee.each_entry_ord do |key, value|
-      ahead = ctx.interject(plan, Action.match(op.vop, value))
-      yield eval(match(ctx, op.kop, key, ahead))
-    end
-  end
-
-  private def search_with_sealed_log(ctx, op : O::Scan | O::Dfs | O::Bfs, matchee : Tzip, plan, & : Fb, Log::Sealed | Log::None -> Bool) : Nil
-    # Logging is disabled. Do not waste time managing the log.
-    if matchee.log.is_a?(Log::None)
-      search(ctx, op, matchee, plan) { |fb| yield fb, Log.none }
-      return
-    end
-
+  private def search_with_sealed_log!(ctx, op : O::Scan | O::Dfs | O::Bfs, matchee : Tzip, plan, & : Fb, Log::Sealed | Log::None -> Bool) : Nil
     search(op, matchee) do |itemseq|
       action = Action.lzip(op.seq, itemseq)
       ahead = ctx.interject(plan, action)
@@ -836,15 +872,65 @@ module Ww::M1next
     end
   end
 
-  private def search_with_sealed_log(ctx, op : O::Entries, matchee : Tzip, plan, & : Fb, Log::Sealed | Log::None -> Bool) : Nil
+  private def search(ctx, op : O::Entries, matchee : Tzip, plan, & : Fb -> Bool) : Nil
+    matchee.each_entry_ord do |key, value|
+      ahead = ctx.interject(plan, Action.match(op.vop, value))
+      _ = yield eval(match(ctx, op.kop, key, ahead))
+    end
+  end
+
+  private def search_with_sealed_log!(ctx, op : O::Entries, matchee : Tzip, plan, & : Fb, Log::Sealed | Log::None -> Bool) : Nil
+    matchee.each_entry_ord do |key, value|
+      ahead = ctx.interject(plan, Action.match(op.vop, value))
+      _ = yield eval(match(ctx, op.kop, key, ahead)), Log.seal({key, value}, &.log)
+    end
+  end
+
+  private def search(ctx, op : O::Split, matchee : Tzip, plan, & : Fb -> Bool) : Nil
+    matchee.items.each_split(op.focus.size) do |l, focus, r|
+      ahead = ctx.interject(plan,
+        Action.lzip(op.focus, focus),
+        Action.match(op.lhs, l.collect),
+        Action.match(op.rhs, r.collect),
+      )
+      _ = yield eval(fb(ctx, ahead))
+    end
+  end
+
+  private def search_with_sealed_log!(ctx, op : O::Split, matchee : Tzip, plan, & : Fb, Log::Sealed | Log::None -> Bool) : Nil
+    matchee.items.each_split(op.focus.size) do |l, focus, r|
+      ahead = ctx.interject(plan,
+        Action.lzip(op.focus, focus),
+        Action.match(op.lhs, l.collect),
+        Action.match(op.rhs, r.collect),
+      )
+
+      # When you refer to an env in %splits, like here:
+      #
+      #   (%splits (⏏env0_⏏ _*) l_ qux r_)
+      #
+      # ... I think the only thing that makes sense for us to do is to use that to
+      # refer to the range of the focus (here it is just `qux`). Therefore referring
+      # to the envlist:
+      #
+      #   (%splits ⏏envs_⏏ l_ qux r_)
+      #
+      # ... means referring to all foci we've matched. Foci have the nice property
+      # that they cannot overlap (left/right halves may include the next/previous
+      # foci, but we  don't really care about that).
+      _ = yield eval(fb(ctx, ahead)), Log.seal(Log.simplify(focus.log))
+    end
+  end
+
+  private def search_with_sealed_log(ctx, op, matchee, plan, &) : Nil
+    # Logging is disabled. Do not waste time managing the log.
     if matchee.log.is_a?(Log::None)
-      search(ctx, op, matchee, plan) { |fb| yield eval(fb), Log.none }
+      search(ctx, op, matchee, plan) { |fb| yield fb, Log.none }
       return
     end
 
-    matchee.each_entry_ord do |key, value|
-      ahead = ctx.interject(plan, Action.match(op.vop, value))
-      yield eval(match(ctx, op.kop, key, ahead)), Log.seal({key, value}, &.log)
+    search_with_sealed_log!(ctx, op, matchee, plan) do |fb, fblog|
+      yield fb, fblog
     end
   end
 
@@ -1402,16 +1488,18 @@ module Ww::M1next
       fb = eval(match(ctx.sibling, op.selector, item, nil))
       fb.each do |response|
         op.deps.each do |dep|
-          options = choices.put_if_absent(dep) { Set(Term).new }
+          tmp = nil
 
           # Look at the captures.
           if value = response.capture?(dep)
-            options << value.term
+            tmp ||= choices.put_if_absent(dep) { Set(Term).new }
+            tmp << value.term
           end
 
           # Intersect with choice set as well.
           if choiceset = response.choices?(dep)
-            options = choiceset & options.to_pf_set
+            tmp ||= choices.put_if_absent(dep) { Set(Term).new }
+            tmp.reject! { |option| !option.in?(choiceset) }
           end
         end
       end
@@ -1419,7 +1507,9 @@ module Ww::M1next
 
     # Intersect our choices with existing choices.
     op.deps.each do |dep|
-      ctx = ctx.intersect(dep, choices[dep]? || Pf::Set(Term).new)
+      next unless choiceset = choices[dep]?
+
+      ctx = ctx.intersect(dep, choiceset)
     end
 
     # Run the rest of the pattern.
@@ -1479,6 +1569,15 @@ module Ww::M1next
     return Fb[] unless matchee.dict?
 
     cons(ctx, op.successor, matchee.flat(op.spec), plan)
+  end
+
+  # (%split _ a_ ⟨b_⟩)  (%split _ a_ (%split _ b_ _))  (%split (_ a_ (%split b_ ⟨c_⟩))) . . .
+  def match(ctx, op : O::Adjacent, matchee : Tzip, plan)
+    return Fb[] unless matchee.dict?
+    return Fb[] unless matchee.term.itemsize >= op.members.size
+
+    ahead = ctx.interject(plan, Action.fzip(op.members, matchee.items))
+    cons(ctx, ahead)
   end
 
   #
@@ -1703,17 +1802,17 @@ module Ww::M1next
     in .auto?
       raise ArgumentError.new
     in .sway?
-      items.each_split_sway(pivot) do |before, after|
+      items.each_bisplit_sway(pivot) do |before, after|
         fb = eval(match(ctx, op, ops, before, after, plan))
         return fb if fb.present?
       end
     in .lazy?
-      items.each_split_lazy do |before, after|
+      items.each_bisplit_lazy do |before, after|
         fb = eval(match(ctx, op, ops, before, after, plan))
         return fb if fb.present?
       end
     in .greedy?
-      items.each_split_greedy do |before, after|
+      items.each_bisplit_greedy do |before, after|
         fb = eval(match(ctx, op, ops, before, after, plan))
         return fb if fb.present?
       end
@@ -1730,17 +1829,17 @@ module Ww::M1next
     in .auto?
       raise ArgumentError.new
     in .sway?
-      items.each_split_sway(pivot) do |before, after|
+      items.each_bisplit_sway(pivot) do |before, after|
         fb = eval(match(ctx, op, ops, before, after, plan))
         fb.each { |response| sink << response }
       end
     in .lazy?
-      items.each_split_lazy do |before, after|
+      items.each_bisplit_lazy do |before, after|
         fb = eval(match(ctx, op, ops, before, after, plan))
         fb.each { |response| sink << response }
       end
     in .greedy?
-      items.each_split_greedy do |before, after|
+      items.each_bisplit_greedy do |before, after|
         fb = eval(match(ctx, op, ops, before, after, plan))
         fb.each { |response| sink << response }
       end
