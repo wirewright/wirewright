@@ -523,7 +523,7 @@
   <> {mail/in: (x⫽y-log ()), state: log}
 
 ;; After the log is known, stat it by instantiating the wrap-stat zipper.
-(x⫽y-wrap (%group children _* {¦ mail/out: [x⫽y-log log_]}) ⍊ state_: log)
+(x⫽y-wrap (%group children_ _* {¦ mail/out: [x⫽y-log log_]}) ⍊ state_: log)
   <> {children: (wrap-stat →log), state: stat}
 
 ;; NOTE: x/y-wrap must have at least one sized child for Sp/N to be defined,

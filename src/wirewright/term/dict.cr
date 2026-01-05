@@ -537,8 +537,7 @@ module Ww
       nth?(index) || raise IndexError.new
     end
 
-    # O(1) Nth entry in `items` followed by `each_pair`-order (items ordered,
-    # pairs unordered).
+    # O(1) Nth entry in `items` followed by `each_pair_ord`-order.
     @[Dncast]
     def ordnth?(index : Int32) : {Term, Term}?
       if 0 <= index < itemsize
@@ -546,9 +545,7 @@ module Ww
 
         {Term.of(index), item}
       elsif itemsize <= index < size
-        entry = @pairs.nth?(index - itemsize) || return
-
-        {entry.key, entry.value}
+        pairs_ord[index - itemsize]
       end
     end
 
@@ -636,8 +633,8 @@ module Ww
 
     @pairsptr : Atomic({Term, Term}*) = Atomic.new(Pointer({Term, Term}).null)
 
-    @[Dncast]
-    def pairs_ord : Slice({Term, Term})
+    # :nodoc:
+    private def pairs_ord : Slice({Term, Term})
       if pairsptr = @pairsptr.get(:acquire) # Not null
         return Slice({Term, Term}).new(pairsptr, pairsize)
       end
@@ -721,6 +718,11 @@ module Ww
     @[Dncast]
     def each_pair(& : Term, Term ->)
       @pairs.each { |entry| yield entry.key, entry.value }
+    end
+
+    @[Dncast]
+    def each_pair_ord(& : Term, Term ->)
+      pairs_ord.each { |key, value| yield key, value }
     end
 
     # :nodoc:

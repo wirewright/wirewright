@@ -660,6 +660,106 @@
       (+ 3 4 5)
       (- 0 29/9 a "foo" true ()))))
 
+;; %number _ <|<=|>|>= var known
+(group
+  ;; lt
+  (pattern (x_ (%number _ < (var x)))
+    (- (10 10) (10 10.0000000000000000000000000000000001) (10 100))
+    (+ (10 -10) (10 0) (10 1/3) (10 5) (10 9.9999999999999999999999999999999999)))
+  ;; lte
+  (pattern (x_ (%number _ <= (var x)))
+    (- (10 10.0000000000000000000000000000000001) (10 100))
+    (+ (10 10) (10 -10) (10 0) (10 1/3) (10 5) (10 9.9999999999999999999999999999999999)))
+  ;; gt
+  (pattern (x_ (%number _ > (var x)))
+    (- (10 10) (10 -10) (10 0) (10 1/3) (10 5) (10 9.9999999999999999999999999999999999))
+    (+ (10 10.0000000000000000000000000000000001) (10 100)))
+  ;; gte
+  (pattern (x_ (%number _ >= (var x)))
+    (- (10 -10) (10 0) (10 1/3) (10 5) (10 9.9999999999999999999999999999999999))
+    (+ (10 10) (10 10.0000000000000000000000000000000001) (10 100)))
+  ;; lt
+  (pattern (x_ (%number (whole _) < (var x)))
+    (- (10 9.9999999999999999999999999999999999) (10 1/3) (10 10) (10 10.0000000000000000000000000000000001) (10 100))
+    (+ (10 -10) (10 0) (10 5))))
+
+;; %number _ <|<=|>|>= var constraint
+(group
+  ;; lt
+  (pattern ((%number _ < (var x)) x_)
+    (- (10 10) (10.0000000000000000000000000000000001 10) (100 10))
+    (+ (-10 10) (0 10) (1/3 10) (5 10) (9.9999999999999999999999999999999999 10)))
+  ;; lte
+  (pattern ((%number _ <= (var x)) x_)
+    (- (10.0000000000000000000000000000000001 10) (100 10))
+    (+ (10 10) (-10 10) (0 10) (1/3 10) (5 10) (9.9999999999999999999999999999999999 10)))
+  ;; gt
+  (pattern ((%number _ > (var x)) x_)
+    (- (10 10) (-10 10) (0 10) (1/3 10) (5 10) (9.9999999999999999999999999999999999 10))
+    (+ (10.0000000000000000000000000000000001 10) (100 10)))
+  ;; gte
+  (pattern ((%number _ >= (var x)) x_)
+    (- (-10 10) (0 10) (1/3 10) (5 10) (9.9999999999999999999999999999999999 10))
+    (+ (10 10) (10.0000000000000000000000000000000001 10) (100 10)))
+  ;; lt
+  (pattern ((%number (whole _) < (var x)) x_)
+    (- (9.9999999999999999999999999999999999 10) (1/3 10) (10 10) (10.0000000000000000000000000000000001 10) (100 10))
+    (+ (-10 10) (0 10) (5 10))))
+
+;; %number <number> <|<= _ <|<= (var hi)
+(group
+  ;; lo < _ < hi
+  (pattern (hi_ (%number 0 < _ < (var hi)))
+    (- (10 0) (10 -1) (10 10) (10 10.0000000000000000000000000000000001))
+    (+ (10 1) (10 5) (10 9.9999999999999999999999999999999999)))
+  ;; lo <= _ <= hi
+  (pattern (hi_ (%number 0 <= _ <= (var hi)))
+    (- (10 -1) (10 10.0000000000000000000000000000000001))
+    (+ (10 0) (10 1) (10 5) (10 10)))
+  ;; constraint
+  (pattern ((%number 0 < _ < (var hi)) hi_)
+    (- (0 10) (-1 10) (10 10) (10.0000000000000000000000000000000001 10))
+    (+ (1 10) (5 10) (9.9999999999999999999999999999999999 10))))
+
+;; %number (var lo) <|<= _ <|<= <number>
+(group
+  (pattern (lo_ (%number (var lo) < _ < 10))
+    (- (0 0) (0 -1) (0 10) (0 10.0000000000000000000000000000000001))
+    (+ (0 1) (0 5) (0 9.9999999999999999999999999999999999)))
+  (pattern (lo_ (%number (var lo) <= _ <= 10))
+    (- (0 -1) (0 10.0000000000000000000000000000000001))
+    (+ (0 0) (0 1) (0 5) (0 10)))
+  ;; constraint
+  (pattern ((%number (var lo) < _ < 10) lo_)
+    (- (0 0) (-1 0) (10 0) (10.0000000000000000000000000000000001 0))
+    (+ (1 0) (5 0) (9.9999999999999999999999999999999999 0))))
+
+;; %number (var lo) <|<= _ <|<= (var hi)
+(group
+  (pattern (lo_ (%number (var lo) < _ < (var hi)) hi_)
+    (- (0 0 10) (0 -1 10) (0 10 10) (0 10.0000000000000000000000000000000001 10))
+    (+ (0 1 10) (0 5 10) (0 9.9999999999999999999999999999999999 10)))
+  (pattern (lo_ (%number (var lo) <= _ <= (var hi)) hi_)
+    (- (0 -1 10) (0 10.0000000000000000000000000000000001 10))
+    (+ (0 0 10) (0 1 10) (0 5 10) (0 10 10)))
+  ;; constraint
+  (pattern ((%number (var lo) < _ < (var hi)) lo_ hi_)
+    (- (0 0 10) (-1 0 10) (10 0 10) (10.0000000000000000000000000000000001 0 10))
+    (+ (1 0 10) (5 0 10) (9.9999999999999999999999999999999999 0 10))))
+
+;; %number (var lo) <|<= (whole _) <|<= (var hi)
+(group
+  (pattern (lo_ (%number (var lo) < (whole _) < (var hi)) hi_)
+    (- (0 0 10) (0 -1 10) (0 10 10)  (0 9.9999999999999999999999999999999999 10) (0 10.0000000000000000000000000000000001 10))
+    (+ (0 1 10) (0 5 10)))
+  (pattern (lo_ (%number (var lo) <= (whole _) <= (var hi)) hi_)
+    (- (0 -1 10) (0 10.0000000000000000000000000000000001 10))
+    (+ (0 0 10) (0 1 10) (0 5 10) (0 10 10)))
+  ;; constraint
+  (pattern ((%number (var lo) < (whole _) < (var hi)) lo_ hi_)
+    (- (0 0 10) (-1 0 10) (10 0 10) (9.9999999999999999999999999999999999 0 10) (10.0000000000000000000000000000000001 0 10))
+    (+ (1 0 10) (5 0 10))))
+
 ;; %all
 (group
   (pattern (%all _)
@@ -744,9 +844,9 @@
        {k: b, v: 3}
        {k: b, v: 4}))
 
-  (pattern (%all (%items decls_ decl k_)
-                 (%items sets_ set k_ v_)
-                 (%items gets_ get k_))
+  (pattern (%all (%items (%filter (k) {¦ k_} decls_) decl k_)
+                 (%items (%filter (k) {¦ k_ v_} sets_) set k_ v_)
+                 (%items (%filter (k) {¦ k_} gets_) get k_))
     (= (decl a
         decl b
         set a 1
@@ -759,7 +859,7 @@
        sets: ({k: a, v: 1} {k: a, v: 2} {k: a, v: 5})
        gets: ({k: a})}))
 
-  (pattern (%all (%item° decl k_) (%items stmts_ set k_ v_))
+  (pattern (%all (%item° decl k_) (%items (%filter (k) {¦ k_ v_} stmts_) set k_ v_))
     (= (decl a
         decl b
         set a 1
@@ -769,7 +869,7 @@
        {k: a, stmts: ({k: a, v: 1} {k: a, v: 3})}
        {k: b, stmts: ({k: b, v: 2})}))
 
-  (pattern (%all (%item° decl k_) (%items stmts_ set k_ v_ min: 2))
+  (pattern (%all (%item° decl k_) (%items (%filter (k) {¦ k_ v_} stmts_ min: 2) set k_ v_))
     (= (decl a
         decl b
         set a 1
@@ -779,7 +879,7 @@
        {k: a, stmts: ({k: a, v: 1} {k: a, v: 3})}))
 
   ;; Order must not matter!
-  (pattern (%all (%items stmts_ set k_ v_) (%item° decl k_))
+  (pattern (%all (%items (%filter (k) {¦ k_ v_} stmts_) set k_ v_) (%item° decl k_))
     (= (decl a
         decl b
         set a 1
@@ -789,7 +889,7 @@
        {k: a, stmts: ({k: a, v: 1} {k: a, v: 3})}
        {k: b, stmts: ({k: b, v: 2})}))
 
-  (pattern (%all (%items stmts_ set k_ v_ min: 2) (%item° decl k_))
+  (pattern (%all (%items (%filter (k) {¦ k_ v_} stmts_ min: 2) set k_ v_) (%item° decl k_))
     (= (decl a
         decl b
         set a 1
@@ -949,19 +1049,11 @@
          bar d 6
          bar c 7) qux)))
 
-  ;; TODO: I'm not sure about the expected behavior of this, and whether
-  ;; what we have right now can be called expected behavior. Such an arrangement
-  ;; is edge-casey enough that I wouldn't care about it too much, but still.
-  ;;
-  ;; Also, %any° will not cooperate with the captures bag here. That is,
-  ;; all of %items will see v_ as an exterior capture but that's not *really*
-  ;; valid. %items here will create a domain for each v too. Not sure whether
-  ;; this is expected or not, and anyway, I don't think this will influence
-  ;; what it matches and does not; but will influence **how** it does that,
-  ;; and to answer in two words, *very* slowly.
-  (pattern ((%any° (%items xs_ foo k_ v_)
-                   (%items xs_ bar k_ v_)
-                   (%items xs_ baz k_ (qux v_))) (%items ks_ k_))
+  ;; NOTE: Legacy. I have no idea what this test is supposed to test, but
+  ;; it's better to have it than not.
+  (pattern ((%any° (%items (%filter (k) {¦ k_ v_} xs_) foo k_ v_)
+                   (%items (%filter (k) {¦ k_ v_} xs_) bar k_ v_)
+                   (%items (%filter (k) {¦ k_ v_} xs_) baz k_ (qux v_))) (%items (%filter (k) {¦ k_} ks_) k_))
     (= ((foo a 1
          bar b 2
          baz c (qux 3)) (a b c))
@@ -1747,13 +1839,13 @@
        (a (x 2 0 -1 y) (3 5 a))))
 
   ;; %gap & %item: source
-  (pattern (((%gap skip_) x_ rhs_*) (%item° skip_))
+  (pattern (((%gap° skip_) x_ rhs_*) (%item° skip_))
     (= ((x y z a b c) (0 1 3))
       {x: x, skip: 0, rhs: (y z a b c)}
       {x: y, skip: 1, rhs: (z a b c)}
       {x: a, skip: 3, rhs: (b c)}))
 
-  (pattern ((%item° skip_) ((%gap skip_) x_ rhs_*))
+  (pattern ((%item° skip_) ((%gap° skip_) x_ rhs_*))
     (= ((0 1 3) (x y z a b c))
       {x: x, skip: 0, rhs: (y z a b c)}
       {x: y, skip: 1, rhs: (z a b c)}
@@ -1763,7 +1855,7 @@
   ;;
   ;; In essence what you see here is the cursor "radiating" gaps in both directions
   ;; up to some "distance" n.
-  (pattern (pre_* (%group l (%gap n_)) (| n_) (%group r (%gap n_)) post_*)
+  (pattern (pre_* (%group l_ (%gap n_)) (| n_) (%group r_ (%gap n_)) post_*)
     (= (a b c (| 0) d e f)
       {pre: (a b c), l: (), r: (), n: 0, post: (d e f)})
     (= (a b c (| 1) d e f)
@@ -1774,7 +1866,7 @@
       {pre: (), l: (a b c), r: (d e f), n: 3, post: ()})
     (- (a b c (| 4) d e f)))
 
-  (pattern ((%gap (%new (%number lo_ <= _ < hi_))) lo_ hi_)
+  (pattern ((%gap (%number (var lo) <= _ < (var hi))) lo_ hi_)
     (= (0 1) {lo: 0, hi: 1})
     (= (0 2) {lo: 0, hi: 2})
     (= (a 0 2) {lo: 0, hi: 2})
@@ -1790,9 +1882,9 @@
   ;; up to some "distance" n or lower. The "nudging" is to make sure the engine gives
   ;; way to the cursor.
   (pattern ((%plural/min pre)
-            (%group l (%gap/max (%new (%number _ <= n_))))
+            (%group l_ (%gap/max (%number _ <= (var n))))
             (| n_)
-            (%group r (%gap/max (%new (%number _ <= n_))))
+            (%group r_ (%gap/max (%number _ <= (var n))))
             (%plural/min post))
     (= (a b c (| 0) d e f)
       {pre: (a b c), l: (), r: (), n: 0, post: (d e f)})
@@ -1818,11 +1910,11 @@
       {pre: (a), l: (b c d e), r: (f g h i), n: 4, post: (j)})))
 
 ;; %group
-(pattern (foo (%group args x_ y_ zs_*) xs_*)
+(pattern (foo (%group args_ x_ y_ zs_*) xs_*)
   (= (foo 1 2 3 4 5 6 7 8 9)
     {x: 1, y: 2, zs: (3 4 5 6), xs: (7 8 9), args: (1 2 3 4 5 6)}))
 
-(pattern ((%group foo xs_* ys_* zs_*))
+(pattern ((%group foo_ xs_* ys_* zs_*))
   (= () {foo: (), xs: (), ys: (), zs: ()})
   (= (a) {foo: (a), xs: (a), ys: (), zs: ()})
   (= (a b) {foo: (a b), xs: (a), ys: (b), zs: ()})
@@ -1834,7 +1926,7 @@
   (= (a b c d e f g h) {foo: (a b c d e f g h), xs: (a b c), ys: (d e f), zs: (g h)})
   (= (a b c d e f g h i) {foo: (a b c d e f g h i), xs: (a b c), ys: (d e f), zs: (g h i)}))
 
-(pattern ((%group xs _*) (%group ys _*) (%group zs _*))
+(pattern ((%group xs_ _*) (%group ys_ _*) (%group zs_ _*))
   (= () {xs: (), ys: (), zs: ()})
   (= (a) {xs: (a), ys: (), zs: ()})
   (= (a b) {xs: (a), ys: (b), zs: ()})
@@ -1899,7 +1991,7 @@
   (= (a b c d e f) {xs: (a b), ys: (c d), zs: (e f)})
   (- (a b c d e f g) (a b c d e f g h) (a b c d e f g h i)))
 
-(pattern ((%group foo xs_* ys_* zs_*) and (%group bar as_* bs_* cs_*))
+(pattern ((%group foo_ xs_* ys_* zs_*) and (%group bar_ as_* bs_* cs_*))
   (= (and) {foo: (), bar: (), xs: (), ys: (), zs: (), as: (), bs: (), cs: ()})
   (= (a and) {foo: (a), bar: (), xs: (a), ys: (), zs: (), as: (), bs: (), cs: ()})
   (= (a and 1) {foo: (a), bar: (1), xs: (a), ys: (), zs: (), as: (1), bs: (), cs: ()})
@@ -1911,7 +2003,7 @@
   (= (a b c d and 1 2 3 4) {foo: (a b c d), bar: (1 2 3 4), xs: (a b), ys: (c), zs: (d), as: (1 2), bs: (3), cs: (4)}))
   ;; ...
 
-(pattern ((%group foo xs_* _* _*) and (%group bar _* _* cs_*))
+(pattern ((%group foo_ xs_* _* _*) and (%group bar_ _* _* cs_*))
   (= (and) {foo: (), bar: (), xs: (), cs: ()})
   (= (a and) {foo: (a), bar: (), xs: (a), cs: ()})
   (= (a and 1) {foo: (a), bar: (1), xs: (a), cs: ()})
@@ -1937,24 +2029,24 @@
 
 ;; %many
 (group
-  (pattern ((%many kvs k_ v_))
+  (pattern ((%many kvs_ k_ v_))
     (= (a 2 b 4 c 6)
       {kvs: ({k: a, v: 2}, {k: b, v: 4}, {k: c, v: 6})})
     (- () (a) (a 2 b) (a 2 b 4 c)))
 
-  (pattern (((%many kvs k_ v_)) k_)
+  (pattern (((%many (%all (%pipe tally n_) (%filter (k) {¦ k_ v_} (%all (%pipe tally n_) (%pluck (_ v) vs_)))) k_ v_)) k_)
     (= ((a 1 a 2 a 3) a)
-      {k: a, kvs: ({v: 1} {v: 2} {v: 3})})
+      {k: a, n: 3, vs: ({v: 1} {v: 2} {v: 3})})
     (- (() a)  ((a) a) ((a 2 a) a) ((a 2 a 4 a) a) ((a 1 b 2) a)))
 
   ;; Simulate find-first search
-  (pattern (((%many kvs _* k_ v_ _*)) k_)
-    (= ((a 1 b 2 c 3) a) {k: a, kvs: ({v: 1})})
-    (= ((a 1 b 2 c 3) 1) {k: 1, kvs: ({v: b})})
-    (= ((a 1 b 2 c 3) b) {k: b, kvs: ({v: 2})})
-    (= ((a 1 b 2 c 3) 2) {k: 2, kvs: ({v: c})})
-    (= ((a 1 b 2 c 3) c) {k: c, kvs: ({v: 3})})
-    (= ((a 1 b 2 c 3 c 5) c) {k: c, kvs: ({v: 3})})))
+  (pattern (((%many (%filter (k) {¦ k_ v_} (%pluck (_ v) ((%group vs_ _) _*))) (%plural/min) k_ v_ (%plural/min))) k_)
+    (= ((a 1 b 2 c 3) a) {k: a, vs: ({v: 1})})
+    (= ((a 1 b 2 c 3) 1) {k: 1, vs: ({v: b})})
+    (= ((a 1 b 2 c 3) b) {k: b, vs: ({v: 2})})
+    (= ((a 1 b 2 c 3) 2) {k: 2, vs: ({v: c})})
+    (= ((a 1 b 2 c 3) c) {k: c, vs: ({v: 3})})
+    (= ((a 1 b 2 c 3 c 5) c) {k: c, vs: ({v: 3})})))
 
 ;; %past
 (group
@@ -1993,7 +2085,7 @@
     (= (x y 1 z a b c) {n: 1, rest: (z a b c)})
     (- (a b c) (x 2 a b c)))
 
-  (pattern ((%gap n_) (%group skipped (%past _)) n_ rest_*)
+  (pattern ((%gap n_) (%group skipped_ (%past _)) n_ rest_*)
     (= (0) {n: 0, skipped: (), rest: ()})
     (= (0 a b c) {n: 0, skipped: (), rest: (a b c)})
     (= (x y z 0 a b c) {n: 0, skipped: (x y z), rest: (a b c)})
@@ -2013,6 +2105,24 @@
     (+ ())
     (+ (("a" "b")) (("a" "b") ("c" "d")) (("a" "b") ("c" "d") ("e" "f")))
     (- 123 qux (a) (a b c) ("a" "b" x: 100) (x: 100 y: 200))))
+
+;; BUG: %past slot must assert progress instead of crashing Wirewright with
+;; infinite recursion.
+(pattern ((%group G_ (⸨%past,%past/max⸩ `a)))
+  (= () {G: ()})
+  (- (1) (1 2) (1 2 3))) ;; ...
+(pattern ((%group G_ (⸨%past,%past/max⸩ `a)) x_)
+  (= (1) {G: (), x: 1})
+  (- () (1 2) (1 2 3))) ;; ...
+
+;; BUG: ((%past[/max] `a) (%past[/max] `b)) matches only empty dict with no slots!
+(pattern ((%group G0_ (⸨%past,%past/max⸩ `a)) (%group G1_ (⟦%past,%past/max⟧ `b)))
+  (= () {G0: (), G1: ()})
+  (- (1) (1 2) (1 2 3))) ;; ...
+
+;; BUG: (%past[/max] `a min: 1) should be a nevermatch
+(pattern ((⸨%past,%past/max⸩ `a min: 1))
+  (- () (1) (1 2) (1 2 3))) ;; ...
 
 ;; %item: match first
 (group
@@ -2100,9 +2210,11 @@
 
 ;; %items
 (group
-  ;; %items: unconstrained
   (pattern (%items xs_ x_number)
     (= (x 1 2 y 3 4 5) {xs: ({x: 1} {x: 2} {x: 3} {x: 4} {x: 5})}))
+
+  (pattern (%items xs_ x_number)
+    (= (x 1 2 y 3 4 5 name: "John" age: 30) {xs: ({x: 1} {x: 2} {x: 3} {x: 4} {x: 5})}))
 
   (pattern (%items xs_ x_ y_)
     (= (a b) {xs: ({x: a, y: b})})
@@ -2124,28 +2236,34 @@
     (= (1 2 3 4 5) {xs: ({x: 1, y: 2} {x: 3, y: 4})})
     (- (1 2 3 4 5 6)))
 
-  ;; %items: constrained
-  ;;
-  ;; %items must restrict each other regardless of the order
-  (pattern ((%items xs_ x_symbol) (%items ys_ x_ y_number))
+  (pattern (a_ (%items xs_ a_ b_) b_)
+    (- () (x y) (x () y) (x (1) y))
+    (= (x (1 2) y) {a: x, xs: ({a: 1, b: 2}) b: y})
+    (= (x (1 2 3) y) {a: x, xs: ({a: 1, b: 2}) b: y})
+    (= (x (1 2 3 4) y) {a: x, xs: ({a: 1, b: 2} {a: 3, b: 4}) b: y}))
+    ;; ...
+
+  (pattern ((%items (%filter (x) {¦ x_} xs_) x_symbol)
+            (%items (%filter (x) {¦ x_ y_} ys_) x_ y_number))
     (= ((a 1 b) (c 3 a 100 b "hello" b 200 a 300))
       {xs: ({x: a} {x: b})
-        ys: ({x: a, y: 100} {x: b, y: 200} {x: a, y: 300})}))
+       ys: ({x: a, y: 100} {x: b, y: 200} {x: a, y: 300})}))
 
-  (pattern ((%items ys_ x_ y_number) (%items xs_ x_symbol))
+  (pattern ((%items (%filter (x) {¦ x_ y_} ys_) x_ y_number)
+            (%items (%filter (x) {¦ x_} xs_) x_symbol))
     (= ((c 3 a 100 b "hello" b 200 a 300) (a 1 b))
       {xs: ({x: a} {x: b})
-        ys: ({x: a, y: 100} {x: b, y: 200} {x: a, y: 300})}))
+       ys: ({x: a, y: 100} {x: b, y: 200} {x: a, y: 300})}))
 
-  ;; %items: "all swaps" example
-  (pattern ((%items xs_ x_ y_) (%items ys_ y_ x_))
+  (pattern ((%items (%filter (x y) {¦ x_ y_} xs_) x_ y_)
+            (%items (%filter (x y) {¦ x_ y_} ys_) y_ x_))
     (= ((1 2) (2 1)) {xs: ({x: 1, y: 2}), ys: ({x: 1, y: 2})})
     (= ((1 2 3 4 5) (6 7 2 1 5 3 4 3))
        {xs: ({x: 1, y: 2} {x: 3, y: 4})
         ys: ({x: 1, y: 2} {x: 3, y: 4})})
     (- (() ()) ((1 2) (3 4))))
 
-  (pattern ((%items () n_ min: 0) n_)
+  (pattern ((%items (%filter (n) {¦ n_} () min: 0) n_) n_)
     (- ((1 2 3 2 4) 1) ((1 2 3 2 4) 2) ((1 2 3 2 4) 3) ((1 2 3 2 4) 4))
     (= ((1 2 3 2 4) 5) {n: 5})
     (= ((1 2 3 2 4) x) {n: x}))
@@ -2156,11 +2274,11 @@
     (= (x: 100 y: 200) {})
     (- (a) (a b c) (a x: 100) (a b c d)))
 
-  (pattern ((%items Bs_ {¦ a_ b_}) b_)
+  (pattern ((%items (%filter (b) {¦ a_ b_} Bs_) {¦ a_ b_}) b_)
     (= (({a: 100, b: 200} a b {a: 123, b: 456} c {a: 100, b: 200}) 200)
        {Bs: ({a: 100, b: 200} {a: 100, b: 200}), b: 200}))
 
-  (pattern ((%items ({¦ a_} {¦ a_}) {¦ a_ b_}) b_)
+  (pattern ((%items (%filter (b) {¦ a_ b_} ({¦ a_} {¦ a_})) {¦ a_ b_}) b_)
     (= (({a: 100, b: 200} a b {a: 123, b: 456} c {a: 100, b: 200}) 200)
        {a: 100, b: 200})
     ;; A mismatch
@@ -2191,7 +2309,58 @@
     (- (() 100)
        (({b: 200} qux) 100)
        (({a: 100, qux: 1} {b: 200} qux {a: 200, qyx: 2}) 100)
-       (({a: 100, qux: 1} {b: 200} qux {a: 100, qyx: 2} {a: 100, quz: 3}) 100))))
+       (({a: 100, qux: 1} {b: 200} qux {a: 100, qyx: 2} {a: 100, quz: 3}) 100)))
+
+  (pattern (%items (a_ b_) x_ y_ z_)
+    (- () (1) (1 2) (1 2 3) (1 2 3 4) (1 2 3 4 5))
+    (= (1 2 3 4 5 6) {a: {x: 1, y: 2, z: 3}, b: {x: 4, y: 5, z: 6}})
+    (= (1 2 3 4 5 6 7) {a: {x: 1, y: 2, z: 3}, b: {x: 4, y: 5, z: 6}})
+    (= (1 2 3 4 5 6 7 8) {a: {x: 1, y: 2, z: 3}, b: {x: 4, y: 5, z: 6}})
+    (- (1 2 3 4 5 6 7 8 9) (1 2 3 4 5 6 7 8 9 10) (1 2 3 4 5 6 7 8 9 10 11)))
+    ;; ...
+
+  (pattern ((%items ⟨{¦ fst: k_ snd: v_}⟩° fst_ snd_) k_)
+    (= ((a 100 b 200 c 300 d 400 c 500) a)
+       {k: a, v: 100})
+    (= ((a 100 b 200 c 300 d 400 c 500) b)
+       {k: b, v: 200})
+    (= ((a 100 b 200 c 300 d 400 c 500) c)
+       {k: c, v: 300}
+       {k: c, v: 500})
+    (= ((a 100 b 200 c 300 d 400 c 500) d)
+       {k: d, v: 400})
+    (- ((a 100 b 200 c 300 d 400 c 500) e)))
+
+  (pattern (%items ms←(a_ _* {¦ x: b_}) x_)
+    (- () (1))
+    (= (1 2) {a: {x: 1}, b: 2, ms: ({x: 1} {x: 2})})
+    (= (1 2 3) {a: {x: 1}, b: 3, ms: ({x: 1} {x: 2} {x: 3})})
+    (= (1 2 3 4) {a: {x: 1}, b: 4, ms: ({x: 1} {x: 2} {x: 3} {x: 4})})
+    (= (1 2 3 4 5) {a: {x: 1}, b: 5, ms: ({x: 1} {x: 2} {x: 3} {x: 4} {x: 5})}))
+    ;; ...
+
+  (pattern (%flat (_ k) (%items ({¦ k: k0_} _* {¦ k: kN_}) ±k))
+    (- () ({k: "hello"}) ({k: 1}))
+    (= ({k: 1} {k: 2}) {k0: 1, kN: 2})
+    (= ({k: 1} {k: 2} {k: 3}) {k0: 1, kN: 3})
+    (= ({k: 1} {k: "hello"} {k: 2} {k: 3}) {k0: 1, kN: 3})
+    (= ({k: 1} {k: "hello"} {k: 2} {k: 3} {k: "world"}) {k0: 1, kN: 3})
+    (= ({k: 1} {k: "hello"} {k: 2} {k: 3} {k: "world"} {k: 4}) {k0: 1, kN: 4})
+    (= ({k: 1, a: x} {k: "hello"} {k: 2} {k: 3} {k: "world"} {k: 4}) {k0: 1, kN: 4})
+    (= ({k: 1, a: x} {k: "hello"} {k: 2} {k: 3, b: y} {k: "world"} {k: 4}) {k0: 1, kN: 4}))
+
+  (pattern (%items (%flat (_ k) ks_) k_ v_)
+    (- () (x))
+    (= (x 100) {ks: (x)})
+    (= (x 100 y 200) {ks: (x y)})
+    (= (x 100 y 200 name "John Doe") {ks: (x y name)}))
+
+  (pattern (%items (%flat (_ k) ks_) k_ v_ min: 0)
+    (= () {ks: ()})
+    (= (x) {ks: ()})
+    (= (x 100) {ks: (x)})
+    (= (x 100 y 200) {ks: (x y)})
+    (= (x 100 y 200 name "John Doe") {ks: (x y name)})))
 
 ;; pair: required
 (group
@@ -2329,7 +2498,14 @@
 
   (pattern (%leaf x_symbol order: bfs)
     (= (((1 2) 3 (4 5) 6 (quux)) ((foo 7) bar (8) (baz)) (boo) 8 ((9) (10 11) ((12))))
-       {x: bar})))
+       {x: bar}))
+
+  (pattern ⟪(button (%group ⟪(mouse)⟫ _*) ⍊ id_)⟫
+    (= (foo
+         (a (button "Hello" id: a))
+         (b (button "Hello" (mouse) "World" id: b))
+         (c (button "Hello" id: c)))
+       {id: b})))
 
 ;; %leaf source
 (group
@@ -2391,7 +2567,15 @@
        {x: +}
        {x: x}
        {x: y}
-       {x: qux}))) ;; ditto
+       {x: qux})) ;; ditto
+
+  (pattern ⟪(button (%group ⟪(mouse)⟫ _*) ⍊ id_)⟫°
+    (= (foo
+         (a (button "Hello" id: a))
+         (b (button "Hello" (mouse) "World" id: b))
+         (c (button "Hello" (x (mouse) (mouse)) id: c)))
+       {id: b}
+       {id: c})))
 
 ;; %leaf all
 (group
@@ -2424,7 +2608,49 @@
              {x: boo}
              {x: quux}
              {x: foo}
-             {x: baz})})))
+             {x: baz})}))
+
+  (pattern (%leaves (%flat (_ v) vs_) (assoc k_ v_) order: dfs)
+    (- (assoc x 100))
+    (= (group
+         (assoc x 100)
+         (assoc y 200)
+         (group
+           (assoc first-name "John")
+           (assoc last-name "Doe"))
+         (assoc z 300))
+       {vs: (100 200 "John" "Doe" 300)}))
+
+  (pattern (%leaves (%flat (_ v) vs_) (assoc k_ v_) order: bfs)
+    (- (assoc x 100))
+    (= (group
+         (assoc x 100)
+         (assoc y 200)
+         (group
+           (assoc first-name "John")
+           (assoc last-name "Doe"))
+         (assoc z 300))
+       {vs: (100 200 300 "John" "Doe")}))
+
+  (pattern (%leaves (%flat (_ v) vs_) (assoc k_ v_) self: true)
+    (= (assoc x 100) {vs: (100)})
+    (= ((assoc x 100) (assoc y 200)) {vs: (100 200)}))
+
+  (pattern (%leaves (%flat (_ v) vs_) (assoc k_ v_) in: entries order: dfs)
+    (= (group a: ((assoc x 100) (assoc y 200)) b: (assoc z 300)
+         (assoc x "John")
+         (assoc y "Doe"))
+       ;; First items, then pairs (lexicographic order). Dfs means also
+       ;; recurse before proceeding to siblings.
+       {vs: ("John" "Doe" 100 200 300)}))
+
+  (pattern (%leaves (%flat (_ v) vs_) (assoc k_ v_) in: entries order: bfs)
+    (= (group a: ((assoc x 100) (assoc y 200)) b: (assoc z 300)
+         (assoc x "John")
+         (assoc y "Doe"))
+       ;; First items, then pairs (lexicographic order), emit all siblings
+       ;; before recursing.
+       {vs: ("John" "Doe" 300 100 200)})))
 
 ;; %entries
 (pattern (%entries xs_ k_ v_symbol min: 0)
@@ -2448,7 +2674,8 @@
            {k: y, v: 200})}))
 
 ;; Match all ks in arg0 for which a kv pair exists in arg1 whose v is a symbol
-(pattern ((%items ks_ k_) (%entries sub_ k_ v_symbol))
+(pattern ((%items (%filter (k) {¦ k_} ks_) k_)
+          (%entries (%filter (k) {¦ k_ v_} sub_) k_ v_symbol))
   (= ((0 a b c d) (a: 10, b: x, c: y, d: "hello", e: xyzzy))
      {ks: ({k: b} {k: c}), sub: ({k: b, v: x} {k: c, v: y})}))
 
@@ -2467,7 +2694,7 @@
 
 ;; For all Ns that are not in dict set, find the corresponding suffix of a list.
 (group
-  (pattern (((%gap n_) suffix_*) (%-value n) (%item° n_))
+  (pattern (((%gap° n_) suffix_*) (%-value n) (%item° n_))
     (= (() () (0))
        {n: 0, suffix: ()})
     (= ((a) () (0 1))
@@ -2484,7 +2711,7 @@
        ((a) (0: true 1: true) (0 1))))
 
   ;; Push %gap forward
-  (pattern ((%-value n) ((%gap n_) suffix_*) (%item° n_))
+  (pattern ((%-value n) ((%gap° n_) suffix_*) (%item° n_))
     (= (() () (0))
        {n: 0, suffix: ()})
     (= (() (a) (0 1))
@@ -2500,7 +2727,7 @@
     (- ((0: true) () (0))
        ((0: true 1: true) (a) (0 1))))
 
-  (pattern ((%-value n) (%item° n_) ((%gap n_) suffix_*))
+  (pattern ((%-value n) (%item° n_) ((%gap° n_) suffix_*))
     (= (() (0) ())
        {n: 0, suffix: ()})
     (= (() (0 1) (a))
@@ -2517,7 +2744,7 @@
        ((0: true 1: true) (0 1) (a))))
 
   ;; Push %value forward
-  (pattern (((%gap n_) suffix_*) (%item° n_) (%-value n))
+  (pattern (((%gap° n_) suffix_*) (%item° n_) (%-value n))
     (= (() (0) ())
        {n: 0, suffix: ()})
     (= ((a) (0 1) ())
@@ -2534,7 +2761,7 @@
        ((a) (0 1) (0: true 1: true))))
 
   ;; Push %item° back
-  (pattern ((%item° n_) ((%gap n_) suffix_*) (%-value n))
+  (pattern ((%item° n_) ((%gap° n_) suffix_*) (%-value n))
     (= ((0) () ())
        {n: 0, suffix: ()})
     (= ((0 1) (a) ())
@@ -2550,70 +2777,6 @@
     (- ((0) () (0: true))
        ((0 1) (a) (0: true 1: true)))))
 
-;; %new
-(group
-  (pattern (x_ (%new x_))
-    (= (a a) {x: a})
-    (- (a b)))
-
-  (pattern (x_ (%new (x_ y_)))
-    (= (a (a b)) {x: a, y: b})
-    (- (b (a b))))
-
-  (pattern ((%new x_) x_)
-    (= (a a) {x: a})
-    (- (a b)))
-
-  (pattern ((%new (x_ y_)) x_)
-    (= ((a b) a) {x: a, y: b})
-    (- ((a b) b)))
-
-  (pattern (n←(%new (%number min_ <= _ < max_)) (%item° min_ ... max_))
-    (= (0 (0 ... 3)) {min: 0, max: 3, n: 0})
-    (= (1 (0 ... 3)) {min: 0, max: 3, n: 1})
-    (= (2 (0 ... 3)) {min: 0, max: 3, n: 2})
-    (= (2 (0 ... 3, 5 ... 7)) {min: 0, max: 3, n: 2})
-    (= (5 (0 ... 3, 5 ... 7)) {min: 5, max: 7, n: 5})
-    (= (6 (0 ... 3, 5 ... 7)) {min: 5, max: 7, n: 6})
-    (= (2 (0 ... 4, 3 ... 7)) {min: 0, max: 4, n: 2})
-    (= (6 (0 ... 4, 3 ... 7)) {min: 3, max: 7, n: 6})
-    (= (3 (0 ... 4, 3 ... 7))
-       {min: 0, max: 4, n: 3}
-       {min: 3, max: 7, n: 3})
-    (- (-1 (0 ... 3))
-       (3 (0 ... 3))
-       (-1 (0 ... 3, 5 ... 7))
-       (3 (0 ... 3, 5 ... 7))
-       (7 (0 ... 3, 5 ... 7))
-       (8 (0 ... 3, 5 ... 7))))
-
-  (pattern (choice←(%new (%any $choices_*)) (%item° ($choices_*)))
-    (= (a ((a b) (c d))) {choice: a, $choices: (a b)})
-    (= (b ((a b) (c d))) {choice: b, $choices: (a b)})
-    (= (c ((a b) (c d))) {choice: c, $choices: (c d)})
-    (= (d ((a b) (c d))) {choice: d, $choices: (c d)})
-    (- (e ((a b) (c d)))))
-
-  ;; Order should not matter
-  (pattern ((%item° ($choices_*)) choice←(%new (%any $choices_*)))
-    (= (((a b) (c d)) a) {choice: a, $choices: (a b)})
-    (= (((a b) (c d)) b) {choice: b, $choices: (a b)})
-    (= (((a b) (c d)) c) {choice: c, $choices: (c d)})
-    (= (((a b) (c d)) d) {choice: d, $choices: (c d)})
-    (- (((a b) (c d)) e)))
-
-  ;; From docs: extended form explanation
-  (pattern (< (%new (%number _ < m_)) m_number)
-    (- (< 5 5) (< 100 5))
-    (= (< 5 100) {m: 100}))
-
-  (pattern (qux (%many xs x_) (%new v_) v_)
-    (= (qux a b c d x_) {x: d, v: x_, xs: ({x: a}, {x: b}, {x: c})}))
-
-  (pattern (qux (%many xs x_) (%new (x) v_) v_)
-    (= (qux d d d d x_) {x: d, v: x_, xs: ({}, {}, {})})
-    (- (qux a b c d x_))))
-
 ;; %keypath
 (pattern (%keypath x)
   (= 1/3 {x: ()})
@@ -2624,39 +2787,235 @@
   (= (a b c) {x: ()}))
 
 (pattern ((%keypath x) (%keypath y) (%keypath z))
-  (= (a b c)
-     {x: ((pair 0) value),
-      y: ((pair 1) value),
-      z: ((pair 2) value)}))
+  (= (a b c) {x: (0), y: (1), z: (2)}))
 
 (pattern (%leaf° (%all (%keypath x) _number) in: entries)
   (= (a 0 b ((c 1) d 2 {e: 3}))
-    {x: ((pair 1) value)}
-    {x: ((pair 3) value (pair 0) value (pair 1) value)}
-    {x: ((pair 3) value (pair 2) value)}
-    {x: ((pair 3) value (pair 3) value (pair e) value)}))
+    {x: (1)}
+    {x: (3 0 1)}
+    {x: (3 2)}
+    {x: (3 3 e)}))
 
 ;; Basic follow itemspart keypath
 (pattern ((%leaf° x←(%keypath kp) self: true) kp_)
-  (= (a ((pair 0) value)) {x: a, kp: ((pair 0) value)})
-  (= ((a b c) ((pair 0) value (pair 0) value)) {x: a, kp: ((pair 0) value (pair 0) value)})
-  (= ((a b c) ((pair 0) value (pair 1) value)) {x: b, kp: ((pair 0) value (pair 1) value)})
-  (= ((a b c) ((pair 0) value (pair 2) value)) {x: c, kp: ((pair 0) value (pair 2) value)}))
+  (= (a (0)) {x: a, kp: (0)})
+  (= ((a b c) (0 0)) {x: a, kp: (0 0)})
+  (= ((a b c) (0 1)) {x: b, kp: (0 1)})
+  (= ((a b c) (0 2)) {x: c, kp: (0 2)}))
 
 ;; %keypath in %many
-(pattern ((%many xs (%keypath x) min: 0))
+(pattern ((%many xs_ (%keypath x) min: 0))
   (= () {xs: ()})
-  (= (a) {xs: ({x: ((pair 0) value)})})
-  (= (a b c)
-     {xs: ({x: ((pair 0) value)}
-           {x: ((pair 1) value)}
-           {x: ((pair 2) value)})}))
+  (= (a) {xs: ({x: (0)})})
+  (= (a b c) {xs: ({x: (0)} {x: (1)} {x: (2)})}))
 
 (pattern (%items xs_ (%all x_symbol (%keypath path)))
   (= (a 1 2 b 3 c)
-     {xs: ({x: a, path: ((pair 0) value)}
-           {x: b, path: ((pair 3) value)}
-           {x: c, path: ((pair 5) value)})}))
+     {xs: ({x: a, path: (0)}
+           {x: b, path: (3)}
+           {x: c, path: (5)})}))
+
+;; %pluck
+(group
+  (pattern (%pluck () D_)
+    (- qux 100 "John Doe" true)
+    (= {} {D: ()})
+    (= {y: 200} {D: {y: 200}})
+    (= {x: 100} {D: {x: 100}})
+    (= {x: 100, y: 200} {D: {x: 100, y: 200}}))
+
+  (pattern (%pluck (x) D_)
+    (- qux 100 "John Doe" true)
+    (= {} {D: ()})
+    (= {y: 200} {D: ()})
+    (= {x: 100} {D: {x: 100}})
+    (= {x: 100, y: 200} {D: {x: 100}}))
+
+  (pattern (%pluck (x y) D_)
+    (= {} {D: ()})
+    (= {y: 1} {D: ()})
+    (= {x: {y: 1}} {D: {x: {y: 1}}})
+    (= {x: {y: 1, z: 2}} {D: {x: {y: 1}}})
+    (= {x: {y: 1, z: 2}, a: 3} {D: {x: {y: 1}}})
+    (= {x: {z: 2}} {D: ()}))
+
+  (pattern (%pluck ((keys x y)) D_)
+    (= {} {D: ()})
+    (= {z: 3} {D: ()})
+    (= {x: 1} {D: ()})
+    (= {y: 2} {D: ()})
+    (= {x: 1, y: 2} {D: {x: 1, y: 2}})
+    (= {x: 1, y: 2, z: 3} {D: {x: 1, y: 2}}))
+
+  (pattern (%pluck (*) D_)
+    (= {} {D: ()})
+    (= {a: 1} {D: {a: 1}})
+    (= {a: 1, b: 2} {D: {a: 1, b: 2}}))
+
+  (pattern (%pluck (_) D_)
+    (= {} {D: ()})
+    (= {a: 10} {D: ()})
+    (= {a: 10, b: 20} {D: ()})
+    (= (1) {D: (1)})
+    (= (1 2) {D: (1 2)})
+    (= (1 2 x: 100) {D: (1 2)})
+    (= (+ 1 2 x: 100 y: 200) {D: (+ 1 2)}))
+
+  (pattern (%pluck (.) D_)
+    (= {} {D: ()})
+    (= {a: 10} {D: {a: 10}})
+    (= {a: 10, b: 20} {D: {a: 10, b: 20}})
+    (= (1) {D: ()})
+    (= (1 2) {D: ()})
+    (= (1 2 x: 100) {D: {x: 100}})
+    (= (+ 1 2 x: 100 y: 200) {D: {x: 100, y: 200}}))
+
+  (pattern (%pluck (x _) D_)
+    (= {} {D: ()})
+    (= {x: {a: 1}} {D: ()})
+    (= {x: (+ 1 2 a: 1)} {D: {x: (+ 1 2)}})
+    (= {x: (+ 1 2 a: 1), y: 200} {D: {x: (+ 1 2)}}))
+
+  (pattern (%pluck (_ x) D_)
+    (= {} {D: ()})
+    (= {x: 100} {D: ()})
+    (= {x: (+ 1 2)} {D: ()})
+    (= ({x: 100}) {D: ({x: 100})})
+    (= ({x: 100} {x: 200}) {D: ({x: 100} {x: 200})})
+    (= ({x: 100, y: 200} {x: 300, z: 400}) {D: ({x: 100} {x: 300})})
+    (= ({x: 100, y: 200} {x: 300, z: 400} a: 100) {D: ({x: 100} {x: 300})})
+    (= (({x: 100, y: 200} {x: 300, z: 400} a: 100)) {D: ()}))
+
+  (pattern (%pluck (_ _ x) D_)
+    (= {} {D: ()})
+    (= {x: 100} {D: ()})
+    (= {x: (+ 1 2)} {D: ()})
+    (= ({x: 100}) {D: ()})
+    (= ({x: 100} {x: 200}) {D: ()})
+    (= ({x: 100, y: 200} {x: 300, z: 400}) {D: ()})
+    (= ({x: 100, y: 200} {x: 300, z: 400} a: 100) {D: ()})
+    (= (({x: 100, y: 200} {x: 300, z: 400} a: 100)) {D: (({x: 100} {x: 300}))})
+    (= (({x: 100, y: 200} {x: 300, z: 400} a: 100) ({x: "John"} {y: 23} {x: "Doe"}))
+       {D: (({x: 100} {x: 300}) ({x: "John"} {x: "Doe"}))}))
+
+  (pattern (%pluck (_ _ (keys x y)) D_)
+    (= {} {D: ()})
+    (= (({x: 100, y: 200} {x: 300, z: 400} a: 100)) {D: (({x: 100, y: 200}))})
+    (= (({x: 100, y: 200} {x: 300, z: 400}) ({x: a, y: b, z: c}))
+       {D: (({x: 100, y: 200}) ({x: a, y: b}))}))
+
+  ;; *
+  (pattern (%pluck (* x) D_)
+    (= {} {D: ()})
+    (= {foo: 100} {D: ()})
+    (= {foo: (+ 1 2)} {D: ()})
+    (= {foo: (+ 1 2 x: 100)} {D: (foo: {x: 100})})
+    (= {foo: (+ 1 2 x: 100), bar: {x: 200, y: 200}}
+       {D: (foo: {x: 100}, bar: {x: 200})})
+    (= (+ {x: a} {y: b} {x: c} foo: (+ 1 2 x: 100), bar: {x: 200, y: 200})
+       {D: ({x: a} {x: c} foo: {x: 100}, bar: {x: 200})}))
+
+  ;; escaping with (key X)
+  (pattern (%pluck ((key _)) D_)
+    (= {} {D: ()})
+    (= {_: 1} {D: {_: 1}})
+    (= {_: 1, b: 2, c: 3} {D: {_: 1}}))
+
+  (pattern (%pluck ((key (key x))) D_)
+    (= {} {D: ()})
+    (= {(key x): 1} {D: {(key x): 1}})
+    (= {(key x): 1, b: 2, c: 3} {D: {(key x): 1}})))
+
+
+;; %flat
+(group
+  (pattern (%flat () D_)
+    (- qux 100 "John Doe" true)
+    (= {} {D: ({})})
+    (= (+ 1 2 x: 100) {D: ((+ 1 2 x: 100))})
+    (= {x: 100} {D: ({x: 100})})
+    (= {y: 200} {D: ({y: 200})})
+    (= {x: 100, y: 200} {D: ({x: 100, y: 200})})
+    (= ({x: 100} {x: 200}) {D: (({x: 100} {x: 200}))}))
+
+  (pattern (%flat (x) D_)
+    (- qux 100 "John Doe" true)
+    (= {} {D: ()})
+    (= (+ 1 2 x: 100) {D: (100)})
+    (= {x: 100} {D: (100)})
+    (= {y: 200} {D: ()})
+    (= {x: 100, y: 200} {D: (100)})
+    (= ({x: 100} {x: 200}) {D: ()}))
+
+  (pattern (%flat (_ x) D_)
+    (= {} {D: ()})
+    (= (+ 1 2 x: 100) {D: ()})
+    (= ({x: 100} {x: 200}) {D: (100 200)})
+    (= ({x: 100} {x: 200} a: 100) {D: (100 200)})
+    (= ({x: 100} {x: 200} x: 300) {D: (100 200)})
+    (= ({x: 100} {x: 200, y: 300}) {D: (100 200)})
+    (= ({x: 100} ({x: 200}) {x: 300, y: 300}) {D: (100 300)}))
+
+  (pattern (%flat (_ _ x) D_)
+    (= (({x: 1} {x: 2, y: "A"}) ({x: 3} ({x: 4}) {x: 5}) () "John")
+       {D: (1 2 3 5)}))
+
+  (pattern (%flat (_ (merge (x) (y))) D_)
+    (= ({x: 1} {y: 2} {x: 3, y: 4} {y: 5})
+       {D: (1 2 3 4 5)}))
+
+  (pattern (%flat (_ (merge (y) (x))) D_)
+    (= ({x: 1} {y: 2} {x: 3, y: 4} {y: 5})
+       {D: (1 2 4 3 5)}))
+
+  (pattern (%flat (_ (merge (_ x) (y))) D_)
+    (= ({x: 1, y: 2} ({x: 2, y: 3} {x: 3, y: 4} y: 5) qux {y: 6})
+       {D: (2 2 3 5 6)}))
+
+  (pattern (%flat (_ (merge (x) (y)) a) D_)
+    (= ({x: {a: 1, b: 2, c: 3}, y: {a: 4, b: 5, c: 6}}
+        {z: 10}
+        {x: {b: 7}, y: {a: 8}}
+        {x: {a: 9}})
+       {D: (1 4 8 9)}))
+
+  (pattern (%flat (_ (keys x y)) D_)
+    (= ({x: 1, y: 2} {x: 3} {x: 4, y: 5, z: 6} {y: 7})
+       {D: (1 2 4 5)}))
+
+  (pattern (%flat (_ (key _)) D_)
+    (= ({_: 1, x: 2} {_: 3, x: 4} {_: 5, x: 6})
+       {D: (1 3 5)}))
+
+  (pattern (%flat (* x) D_)
+    (= {x: {x: 1}, y: {x: 2, y: 3}}
+       {D: (1 2)})
+    (= ({x: 10} {y: 20} {x: 30} x: {x: 1}, y: {x: 2, y: 3})
+       {D: (10 30 1 2)}))
+
+  (pattern (%flat (. x) D_)
+    (= {x: {x: 1}, y: {x: 2, y: 3}}
+       {D: (1 2)})
+    (= ({x: 10} {y: 20} {x: 30} x: {x: 1}, y: {x: 2, y: 3})
+       {D: (1 2)})))
+
+;; %filter
+(group
+  (pattern ((%filter (k) {¦ k_ v_} (%flat (_ v) vs_)) k_)
+    (- (() a))
+    (= (({k: a, v: 100}
+         {k: b, v: 200}
+         {k: c, v: 300}
+         {k: a, v: "Hello"}) a)
+       {k: a, vs: (100 "Hello")}))
+  (pattern ((%filter (k) {¦ k_ v_} (%flat (_ v) vs_) min: 0) k_)
+    (= (() a)
+       {k: a, vs: ()})
+    (= (({k: a, v: 100}
+         {k: b, v: 200}
+         {k: c, v: 300}
+         {k: a, v: "Hello"}) a)
+       {k: a, vs: (100 "Hello")})))
 
 ;; %itemseq bounds
 ;;
@@ -2690,27 +3049,27 @@
   (of ((%plural xs min: 1 max: 3) (%plural ys min: 1))
       ((%plural/min min: 1 max: 3) (%plural/max ys min: 1))
       min: 2)
-  (of ((%group xs a_ b_) (%group ys (%group zs c_) d_)) min: 4 max: 4)
-  (of ((%group xs a_ b_) (%group ys (%group zs c_) ds_*)) min: 3)
-  (of ((%group xs a_ b_) (%group ys (%group zs c_) ds_+)) min: 4)
-  (of ((%group xs a_ b_) and (%group ys (%group zs c_) ds_+)) min: 5)
-  (of ((%group xs a_ b_) and (%group ys (%group zs c_) d_ qux)) min: 6 max: 6)
+  (of ((%group xs_ a_ b_) (%group ys_ (%group zs c_) d_)) min: 4 max: 4)
+  (of ((%group xs_ a_ b_) (%group ys_ (%group zs c_) ds_*)) min: 3)
+  (of ((%group xs_ a_ b_) (%group ys_ (%group zs c_) ds_+)) min: 4)
+  (of ((%group xs_ a_ b_) and (%group ys_ (%group zs_ c_) ds_+)) min: 5)
+  (of ((%group xs_ a_ b_) and (%group ys_ (%group zs_ c_) d_ qux)) min: 6 max: 6)
   (of ((%optional 0 x_)) min: 0 max: 1)
   (of ((%optional 0 x_) (%optional 0 y_)) min: 0 max: 2)
   (of ((%optional 0 x_) . (%optional 0 y_)) min: 1 max: 3)
   (of (qux (%optional 0 x_) . (%optional 0 y_)) min: 2 max: 4)
   (of (qux (%optional 0 x_) xs_* (%optional 0 y_)) min: 1)
   (of (qux (%optional 0 x_) xs_+ (%optional 0 y_)) min: 2)
-  (of ((%many xs x_ y_)) min: 2)
-  (of ((%many xs x_ y_ min: 2)) min: 4)
-  (of ((%many xs x_ y_ min: 3)) min: 6)
-  (of ((%many xs x_ y_ min: 3 max: 5)) min: 6 max: 10)
-  (of ((%many xs x_ y_ zs_* min: 3 max: 5)) min: 6)
-  (of ((%many xs x_ y_ zs_* min: 3)) min: 6)
-  (of ((%many xs x_ y_ zs_+ min: 3)) min: 9)
-  (of ((%many xs x_ y_) (%many ys a_ b_)) min: 4)
-  (of ((%many xs x_ y_ max: 2) (%many ys a_ b_ max: 2)) min: 4 max: 8)
-  (of ((%many xs x_ y_ min: 0 max: 2) (%many ys a_ b_ min: 0 max: 2)) min: 0 max: 8)
+  (of ((%many xs_ x_ y_)) min: 2)
+  (of ((%many xs_ x_ y_ min: 2)) min: 4)
+  (of ((%many xs_ x_ y_ min: 3)) min: 6)
+  (of ((%many xs_ x_ y_ min: 3 max: 5)) min: 6 max: 10)
+  (of ((%many xs_ x_ y_ zs_* min: 3 max: 5)) min: 6)
+  (of ((%many xs_ x_ y_ zs_* min: 3)) min: 6)
+  (of ((%many xs_ x_ y_ zs_+ min: 3)) min: 9)
+  (of ((%many xs_ x_ y_) (%many ys a_ b_)) min: 4)
+  (of ((%many xs_ x_ y_ max: 2) (%many ys a_ b_ max: 2)) min: 4 max: 8)
+  (of ((%many xs_ x_ y_ min: 0 max: 2) (%many ys_ a_ b_ min: 0 max: 2)) min: 0 max: 8)
   (of ((%past _ _)) min: 0)
   (of ((%past _ _ min: 2)) ((%past/max _ _ min: 2)) min: 4)
   (of ((%past _ _ max: 3)) ((%past/max _ _ max: 3)) min: 0 max: 6)
@@ -2736,16 +3095,16 @@
   (of (qux (%past ignore _)
            `x
            (%gap n_)
-           (%many M (%optional 0 m0_) and (%optional 0 m1_))
-           (%group G n_ (%plural xs min: 2))
+           (%many M_ (%optional 0 m0_) and (%optional 0 m1_))
+           (%group G_ n_ (%plural xs min: 2))
            `y
            (%optional 0 p_)
            n_number)
     min: 6)
   (of (qux (%past ignore _ max: 3)
            `x
-           (%many M (%optional 0 m0_) and (%optional 0 m1_) max: 3)
-           (%group G n_ (%plural xs min: 2 max: 5))
+           (%many M_ (%optional 0 m0_) and (%optional 0 m1_) max: 3)
+           (%group G_ n_ (%plural xs min: 2 max: 5))
            `y
            (%optional 0 p_)
            n_number)
@@ -2826,33 +3185,33 @@
   (of ((%optional (0) (x_number))) min: 1 max: 2)
   (of ((%past (_ _) min: 0))
       ((%past/max (_ _) min: 0))
-      ((%many xs (_ _) min: 0))
+      ((%many xs_ (_ _) min: 0))
       min: 1)
   (of ((%past (_string _string) min: 0))
       ((%past/max (_string _string) min: 0))
-      ((%many xs (_string _string) min: 0))
+      ((%many xs_ (_string _string) min: 0))
       min: 1 max: 2)
   (of ((%past (_string _string) min: 1))
       ((%past/max (_string _string) min: 1))
-      ((%many xs (_string _string) min: 1))
+      ((%many xs_ (_string _string) min: 1))
       min: 2 max: 2)
   (of ((%past (_ _) min: 1))
       ((%past/max (_ _) min: 1))
-      ((%many xs (_ _) min: 1))
+      ((%many xs_ (_ _) min: 1))
       min: 2)
-  (of (qux (%many xs (a_number b_number)))
+  (of (qux (%many xs_ (a_number b_number)))
       (qux (%past (a_number b_number) min: 2))
       (qux (%past/max (a_number b_number) min: 1))
       min: 2 max: 2)
-  (of (qux (%many xs (a_ b_number)))
+  (of (qux (%many xs_ (a_ b_number)))
       (qux (%past (a_ b_number) min: 1))
       (qux (%past/max (a_ b_number) min: 1))
       min: 2)
-  (of (qux (%many xs (a_number b_)))
+  (of (qux (%many xs_ (a_number b_)))
       (qux (%past (a_number b_) min: 1))
       (qux (%past/max (a_number b_) min: 1))
       min: 2)
-  (of (qux (%many xs (a_ b_)))
+  (of (qux (%many xs_ (a_ b_)))
       (qux (%past (a_ b_) min: 3 max: 5))
       (qux (%past/max (a_ b_) min: 1 max: 3))
       min: 2)
@@ -2927,12 +3286,7 @@
       min: 3)
   ;; %leaf sequ invalidates max depth, mix max min depth as min
   (of (%leaf (a_) ((b_)) c_) (%leaf° (a_) ((b_)) c_) (%leaves ((((_)))) (a_) ((b_)) c_) min: 3)
-  (of (%leaf (a_) ((b_)) c_ self: true) min: 2)
-  ;; %new invalidates max depth
-  (of (%new a_) min: 0)
-  (of ((%new a_) a_) min: 1)
-  (of ((%new (a_)) a_) min: 1)
-  (of ((%new ((a_))) a_) min: 1))
+  (of (%leaf (a_) ((b_)) c_ self: true) min: 2))
 
 ;; Specificity (ascending, each dict is a level [i.e. same specificity])
 ;; Order/duplication in levels is irrelevant.
@@ -3064,10 +3418,10 @@
   (- (x←_) (x←(+ _ _)) ((+ _ _)))
   ;; The easy part is over :)
   ;; Plural
-  (- (_*) (xs_*) (xs_+ a) ((%many xs a)))
+  (- (_*) (xs_*) (xs_+ a) ((%many xs_ a)))
   ;; Group
-  (of ((%group xs a)) a)
-  (of ((%group xs a b c)) a)
+  (of ((%group xs_ a)) a)
+  (of ((%group xs_ a b c)) a)
   ;; Gap, optional
   (- ((%gap n_)) ((%optional 0 x_)))
   ;; Slot
@@ -3077,20 +3431,20 @@
   (of (`x `y a b c x: qux) a)
   (of (`x `y (%literal (+ _ _)) b c) (+ _ _))
   ;; Slot in group
-  (of ((%group xs `x a) b_ c_) a)
-  (of ((%group xs `x `y a) b_ c_) a)
-  (of ((%group xs `x `y) a b_ c_) a)
-  (of ((%group xs `x `y) (%group ys a b c) b_ c_) a)
-  (of ((%group xs `x `y) (%group ys `z `qux a) b_ c_) a)
-  (of ((%group xs `x `y) (%group ys `z `qux a) b_ c_ x: qux y: qyx) a)
+  (of ((%group xs_ `x a) b_ c_) a)
+  (of ((%group xs_ `x `y a) b_ c_) a)
+  (of ((%group xs_ `x `y) a b_ c_) a)
+  (of ((%group xs_ `x `y) (%group ys_ a b c) b_ c_) a)
+  (of ((%group xs_ `x `y) (%group ys_ `z `qux a) b_ c_) a)
+  (of ((%group xs_ `x `y) (%group ys_ `z `qux a) b_ c_ x: qux y: qyx) a)
   ;; Slot before group, in group
-  (of (`s0 `s1 `s2 (%group xs `x `y) (%group ys `z `qux a) b_ c_ x: qux y: qyx) a)
+  (of (`s0 `s1 `s2 (%group xs_ `x `y) (%group ys_ `z `qux a) b_ c_ x: qux y: qyx) a)
   ;; Nested group
-  (of ((%group xs (%group ys a))) a)
-  (of ((%group xs `x (%group ys a))) a)
-  (of ((%group xs `x `y (%group ys a))) a)
-  (of ((%group xs `x `y (%group ys `z a))) a)
-  (of ((%group xs `x `y (%group ys `z (%group zs `foo `bar) a) b c) d e) a)
+  (of ((%group xs_ (%group ys_ a))) a)
+  (of ((%group xs_ `x (%group ys_ a))) a)
+  (of ((%group xs_ `x `y (%group ys_ a))) a)
+  (of ((%group xs_ `x `y (%group ys_ `z a))) a)
+  (of ((%group xs_ `x `y (%group ys_ `z (%group zs_ `foo `bar) a) b c) d e) a)
   ;; Slot in nested group
   (- (`x) (`x `y) (`x a_) (`x `y (+ _ _) b c)))
 
@@ -3103,7 +3457,7 @@
 ;; Walk
 ;; With these tests we indirectly test M1.walk
 (group
-  (specificity (level _ (%new x_)))
+  (specificity (level _))
   (specificity (level x_dict (%pipe (map (x_ y_)) _)))
   (specificity (level (a b (%any (%any 1 2) 3))
                       (a b (%any 1 2 3))))

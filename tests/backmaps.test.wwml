@@ -205,7 +205,7 @@
     (= (a b c d) (a d b c a d))))
 
 ;; %many replacement
-(backmap (((%many xs x_ min: 0) n_) {n: (seen ↓n)})
+(backmap (((%many xs_ x_ min: 0) n_) {n: (seen ↓n)})
   (= (a) ((seen a)))
   (= (a b) (a (seen b)))
   (= (a b c) (a b (seen c))))
@@ -223,13 +223,13 @@
   (= (x y 1 z a b c) (x bound y (seen 1) (seen (z a b c)))))
 
 ;; %group replacement
-(backmap ((x_ (%group xs a_ b_) y_)
+(backmap ((x_ (%group xs_ a_ b_) y_)
           {a: ($up y), b: ($up x), x: ($up a), y: ($up b)})
   (= (a b c d) (b d a c)))
 
 ;; With $up, it's not going to see the updates because they're on
 ;; the same level. I'm not sure if it's a bug or a feature.
-(backmap ((x_ (%group xs a_ b_) y_)
+(backmap ((x_ (%group xs_ a_ b_) y_)
           {a: ($up y),
            b: ($up x),
            x: ($up a),
@@ -239,7 +239,7 @@
 
 ;; Similarly here, even with $down, because $down only looks downward,
 ;; and there's no downward with group to begin with.
-(backmap ((x_ (%group xs a_ b_) y_)
+(backmap ((x_ (%group xs_ a_ b_) y_)
           {a: ($down y),
            b: ($down x),
            x: ($down a),
@@ -249,7 +249,7 @@
 
 ;; The moment we introduce nesting however this problem (or non-problem?)
 ;; is immediately resolved:
-(backmap ((x_ (%group xs (a_ b_)) y_)
+(backmap ((x_ (%group xs_ (a_ b_)) y_)
           {a: ($down y),
            b: ($down x),
            x: ($down a),
@@ -264,7 +264,7 @@
 ;; Nesting is still necessary because the order in which mutations happen is
 ;; undefined on a single level; whereas with nesting the order is as clear as
 ;; expected -- bottom-up in this case.
-(backmap ((x_ (%group xs (a_ b_)) y_)
+(backmap ((x_ (%group xs_ (a_ b_)) y_)
           {a: ($tr a0 ($down y)),
            b: ($tr b0 ($down x)),
            x: ($down a0),
@@ -273,13 +273,13 @@
   (= (a (b c) d) (b (seen d a) c)))
 
 (group
-  (backmap ((x_ (%group xs a_ ys_* b_) y_)
+  (backmap ((x_ (%group xs_ a_ ys_* b_) y_)
             {x: ($up a), y: ($up b), (xs): ($up ys)})
     (= (a b c d e f) (b c d e))
     (= (b c d e) (c d)))
 
   ;; Empty group capture
-  (backmap (((%group foo xs_* ys_* zs_*) and (%group bar a_ b_))
+  (backmap (((%group foo_ xs_* ys_* zs_*) and (%group bar_ a_ b_))
             {(foo): (↑b ↑a), (bar): ↑ys})
     (= (and x y) (y x and))
     (= (1 and x y) (y x and))
@@ -290,7 +290,7 @@
     (= (1 2 3 4 5 6 and x y) (y x and 3 4)))
 
   ;; Nesting of groups
-  (backmap ((x_ (%group xs (%group ab a_ b_) (%group cd c_ d_)) y_)
+  (backmap ((x_ (%group xs_ (%group ab_ a_ b_) (%group cd_ c_ d_)) y_)
             {(x): (($up a) ($up ab)),
              (y): (($up cd) ($up d)),
              (xs): ()})
@@ -857,25 +857,25 @@
 
 ;; It is (currently?) impossible to refer to %many's interior. We can still
 ;; mass-replace, but not $down or $up or even $my to something inside %many.)
-(backmap (((%many xs x_ min: 0)) {x: seen})
+(backmap (((%many xs_ x_ min: 0)) {x: seen})
   (= () ())
   (= (1 2 3) (seen seen seen))
   (= (a b c) (seen seen seen)))
 
-(backmap (((%many xs x_ min: 0)) {(xs): (qux qix qyx)})
+(backmap (((%many xs_ x_ min: 0)) {(xs): (qux qix qyx)})
   (= () (qux qix qyx))
   (= (1 2 3) (qux qix qyx))
   (= (a b c) (qux qix qyx)))
 
 ;; However it still participates in the pattern (obviously!) And you can
 ;; be sure if something is equated outside %many, then it will be set.
-(backmap (((%many xs x_ min: 0) x_) {x: (seen ($down x))})
+(backmap (((%many xs_ x_ min: 0) x_) {x: (seen ($down x))})
   (= (a) ((seen a)))
   (= (1 1 1) ((seen 1) (seen 1) (seen 1)))
   (= (a a a) ((seen a) (seen a) (seen a)))
   (- ()))
 
-(backmap (((%many xs x_ min: 0) x_) {(xs): (qux qyx qix), x: (seen ($down x))})
+(backmap (((%many xs_ x_ min: 0) x_) {(xs): (qux qyx qix), x: (seen ($down x))})
   (= (a) (qux qyx qix (seen a)))
   (= (1 1 1) (qux qyx qix (seen 1)))
   (= (a a a) (qux qyx qix (seen a)))
@@ -918,38 +918,6 @@
   (backmap ((P←(x_ y_) a_) {x: ↓y, y: ↓x, a: (↑x ↑y ↑P)})
     (= ((a b) c) ((b a) (b a (b a))))))
 
-
-;; %new
-(backmap (((%new (qux $pattern_)) $pattern_)
-          {x: (seen x ↓x), y: (seen y ↓y), z: (seen z ↓z), $pattern: (seen ↓$pattern)})
-  (= ((qux foo) x_) ((qux (seen x foo)) (seen x_)))
-  (= ((qux foo) y_) ((qux (seen y foo)) (seen y_)))
-  (= ((qux foo) z_) ((qux (seen z foo)) (seen z_)))
-  (= ((qux a) (%any a b c)) ((qux a) (seen (%any a b c))))
-  (= ((qux b) (%any a b c)) ((qux b) (seen (%any a b c))))
-  (= ((qux c) (%any a b c)) ((qux c) (seen (%any a b c))))
-  (- ((qux d) (%any a b c))))
-
-  ;; From docs: the cursor backmap example.
-(backmap (((%plural/min pre)
-           (%group l (%gap/max (%new (%number _ <= n_))))
-           (I n_)
-           (%group r (%gap/max (%new (%number _ <= n_))))
-           (%plural/min post))
-          {(l): (), (r): ()})
-  (= (a b c (I 1) d e f) (a b (I 1) e f))
-  (= (a b (I 1) e f) (a (I 1) f))
-  (= (a (I 1) f) ((I 1)))
-  (= (a b (I 1) c d e f) (a (I 1) d e f))
-  (= (a (I 1) d e f) ((I 1) e f))
-  (= ((I 1) e f) ((I 1) f))
-  (= ((I 1) f) ((I 1)))
-  (= ((I 1)) ((I 1)))
-  (= (a b c (I 2) d e f) (a (I 2) f))
-  (= (a (I 2) f) ((I 2)))
-  (= (a b (I 2) c d e f) ((I 2) e f))
-  (= ((I 2) e f) ((I 2)))
-  (= ((I 2)) ((I 2))))
 
 ;; %entry
 (backmap ((_* `x ¦ (%entry k_ X←(qux (a_ b_)))) {x: ↑X, (k): (), a: ↓b, b: ↓a})

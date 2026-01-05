@@ -438,7 +438,7 @@ module DevTool
 
       matchp(<<-WWML
       ((%any "b" "build")
-       (%many options (%any° flag←(%any "--debug" "--native") target_string) min: 0))
+       (%many options_ (%any° flag←(%any "--debug" "--native") target_string) min: 0))
       WWML
       ) do |options|
         with_active_preset_and_conf(state) do |preset, conf|

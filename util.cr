@@ -4910,3 +4910,211 @@ macro stack_alloc(call)
    stack_alloc %storage = {{ call }}
  {% end %}
 end
+
+class List(T)
+  include Enumerable(T)
+
+  # @type_id : Int32
+
+  # Returns the size of this list.
+  getter size : Int32
+
+  # Returns a list containing all elements except the last one.
+  getter? prior : List(T)?
+
+  # Returns the last element in this list.
+  getter last : T
+
+  def initialize(@size, @prior, @last)
+  end
+
+  def self.append(arena : Arena(List(T), _), pred : List(T)?, object : T)
+    arena.construct(pred ? pred.size + 1 : 1, pred, object)
+  end
+
+  # Yields each element in this list back-to-front.
+  def reverse_each(& : T ->) : Nil
+    current = self
+    while current
+      yield current.last
+      current = current.prior?
+    end
+  end
+
+  # Yields each element in this list front-to-back.
+  def each(& : T ->) : Nil
+    objects = Pf::Kit.stack_array(T, 16)
+
+    reverse_each do |object|
+      objects << object
+    end
+
+    objects.reverse_each do |object|
+      yield object
+    end
+  end
+
+  def pretty_print(pp)
+    pp.list("List[", self, "]")
+  end
+
+  def inspect(io)
+    io << "List["
+    join(io, ", ", &.inspect(io))
+    io << "]"
+  end
+
+  def to_s(io)
+    io << "List["
+    join(io, ", ")
+    io << "]"
+  end
+
+  def_equals_and_hash @prior, @last
+end
+
+class Arena(T, N)
+  MINCAP = 8
+
+  # @type_id : Int32
+  @auxcap : Int32
+
+  @memsize : Int32
+  @auxsize : Int32
+
+  @mem : ReferenceStorage(T)*
+  @aux : ReferenceStorage(T)*
+
+  # :nodoc:
+  def initialize(@mem)
+    @aux = typeof(@aux).null
+    @memsize = 0
+    @auxsize = 0
+    @auxcap = 0
+  end
+
+  # Yields an arena whose lifetime is equal to the lifetime of the block.
+  #
+  # WARNING: No checks are done with respect to the lifetime: this is not Rust.
+  # It is entirely your responsibility to make sure memory stays tidy.
+  def self.new(&)
+    mem = uninitialized ReferenceStorage(T)[N]
+    arena = stack_alloc self.new(mem.to_unsafe)
+    yield arena
+  end
+
+  def construct(*args, **kwargs) : T
+    if @memsize + 1 > N
+      if @auxsize + 1 > @auxcap
+        @auxcap = Math.max(MINCAP, (@auxcap * 1.5).to_i)
+        @aux = typeof(@aux).malloc(@auxcap)
+        @auxsize = 0
+      end
+
+      dstptr = @aux + @auxsize
+      @auxsize += 1
+    else
+      dstptr = @mem + @memsize
+      @memsize += 1
+    end
+
+    T.unsafe_construct(dstptr, *args, **kwargs)
+  end
+end
+
+struct ListMap(K, V)
+  include Enumerable({K, V})
+
+  getter entries, filter
+
+  # :nodoc:
+  def initialize(@entries : List({K, V})?, @filter : UInt64)
+  end
+
+  def self.new : ListMap(K, V)
+    new(entries: nil, filter: 0u64)
+  end
+
+  # :nodoc:
+  def self.hash64(object : Term)
+    Term.hashcode(object)
+  end
+
+  # :nodoc:
+  def self.hash64(object)
+    object.hash
+  end
+
+  # :nodoc:
+  def self.fbit64(object)
+    hash64(object) % 64
+  end
+
+  # :nodoc:
+  def self.fset64?(filter : UInt64, object)
+    filter & (1u64 << fbit64(object)) > 0
+  end
+
+  # :nodoc:
+  def self.fmix64(filter : UInt64, key)
+    filter | (1u64 << fbit64(key))
+  end
+
+  @[AlwaysInline]
+  def self.assoc(arena : Arena, map : ListMap(K, V), key : K, value : V)
+    ListMap.new(List.append(arena, map.entries, {key, value}), fmix64(map.filter, key))
+  end
+
+  def probably_includes?(key : K) : Bool
+    ListMap.fset64?(@filter, key)
+  end
+
+  def has_key?(key : K) : Bool
+    !!self[key]?
+  end
+
+  def each(& : {K, V} ->)
+    return unless entries = @entries
+
+    seen = Pf::Kit.stack_array(K, 16)
+
+    entries.reverse_each do |(key, value)|
+      next if seen.any?(key)
+      yield({key, value})
+      seen << key
+    end
+  end
+
+  def fetch(key needle : K, & : -> W) : V | W forall W
+    return yield unless entries = @entries
+    return yield unless probably_includes?(needle)
+
+    entries.reverse_each do |key, value|
+      next unless key == needle
+      return value
+    end
+
+    yield
+  end
+
+  def []?(key : K) : V?
+    fetch(key) { nil }
+  end
+
+  def [](key : K) : V
+    fetch(key) { raise KeyError.new }
+  end
+
+  def pretty_print(pp) : Nil
+    pp.list("ListMap{", self, "}") do |key, value|
+      pp.group do
+        key.pretty_print(pp)
+        pp.text " =>"
+        pp.nest do
+          pp.breakable
+          value.pretty_print(pp)
+        end
+      end
+    end
+  end
+end

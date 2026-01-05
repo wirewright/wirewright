@@ -31,6 +31,7 @@ require "./wirewright/soma"
 require "./wirewright/lr"
 
 require "../pattern7"
+require "./wirewright/m1"
 require "../baz5"
 require "./wirewright/d7"
 require "../primitives"

@@ -63,7 +63,6 @@
 # │ dig first bfs            │   ~   │   ~     │   ~   │            │    ~     │       │
 # │ dig & store bfs          │   ~   │   ~     │   ~   │            │    ~     │       │
 # │ %keypath                 │   ~   │   ~     │   ~   │            │    ·     │       │
-# │ %new                     │   ~   │   ~     │   ~   │            │    ~     │       │   ~
 # └──────────────────────────┴───────┴─────────┴───────┴────────────┴──────────┴───────┘
 # + confident
 # ~ will do
@@ -382,7 +381,7 @@ end
 #   are not, fix that. In fact, Operator should probably be renamed to Subject or something
 #   like that. Not sure how large of a refactor that is, and how much point is there in it.
 module ::Ww::M1::Operator
-  alias Any = Pass | Never | Num | Sym | SymBlank | SymNonblank | Boolean | Dict | Itemsonly | Pairsonly | SketchSubset | Bounds | BoundsGuard | MaxDepth | DictGuard | Literal | Capture | CaptureItemsonly | ItemSeq | ItemFirst | ItemLast | SingularSeq | Partition | Edge | LiteralWhitelist | ChoiceSource | Keypool | Span | Tally | Type | ParseML | Clamp | Bin | Both | LiteralBlacklist | Layer | ScanFirst | ScanSource | ScanAll | DfsFirst | DfsSource | DfsAll | BfsFirst | BfsAll | Value | NegativeValue | NegativeValueKeypath | EntriesFirst | EntriesSource | EntriesAll | Str | New | KeypathCapture | NegativeKeypool | Keytest | ValueLiteral
+  alias Any = Pass | Never | Num | Sym | SymBlank | SymNonblank | Boolean | Dict | Itemsonly | Pairsonly | SketchSubset | Bounds | BoundsGuard | MaxDepth | DictGuard | Literal | Capture | CaptureItemsonly | ItemSeq | ItemFirst | ItemLast | SingularSeq | Partition | Edge | LiteralWhitelist | ChoiceSource | Keypool | Span | Tally | Type | ParseML | Clamp | Bin | Both | LiteralBlacklist | Layer | ScanFirst | ScanSource | ScanAll | DfsFirst | DfsSource | DfsAll | BfsFirst | BfsAll | Value | NegativeValue | NegativeValueKeypath | EntriesFirst | EntriesSource | EntriesAll | Str | KeypathCapture | NegativeKeypool | Keytest | ValueLiteral | Filter | Pluck | Flat
 
   alias Bin = Add | Sub | Mul | Div | Idiv | Mod | Pow | Map
 
@@ -407,6 +406,14 @@ module ::Ww::M1::Operator
   end
 
   defcase ScanAll, successor : Any, needle : Slice(Any), selector : Set(Term), exterior : Set(Term), min : UInt8, max : UInt8 do
+    def minM
+      Magnitude.new(min)
+    end
+
+    def maxM
+      max == 0 ? Magnitude::INFINITY : Magnitude.new(max)
+    end
+
     def seq
       needle
     end
@@ -435,6 +442,14 @@ module ::Ww::M1::Operator
   end
 
   defcase DfsAll, successor : Any, seq : Slice(Any), selector : Set(Term), exterior : Set(Term), part : Search::Part, min : UInt8, max : UInt8, depth0 : Bool do
+    def minM
+      Magnitude.new(min)
+    end
+
+    def maxM
+      max == 0 ? Magnitude::INFINITY : Magnitude.new(max)
+    end
+
     def needle
       seq.first
     end
@@ -449,6 +464,14 @@ module ::Ww::M1::Operator
   end
 
   defcase BfsAll, successor : Any, seq : Slice(Any), selector : Set(Term), exterior : Set(Term), part : Search::Part, min : UInt8, max : UInt8, depth0 : Bool do
+    def minM
+      Magnitude.new(min)
+    end
+
+    def maxM
+      max == 0 ? Magnitude::INFINITY : Magnitude.new(max)
+    end
+
     def needle
       seq.first
     end
@@ -469,19 +492,30 @@ module ::Ww::M1::Operator
   end
 
   defcase EntriesAll, successor : Any, kop : Any, vop : Any, exterior : Set(Term), selector : Set(Term), min : UInt8, max : UInt8 do
+    def minM
+      Magnitude.new(min)
+    end
+
+    def maxM
+      max == 0 ? Magnitude::INFINITY : Magnitude.new(max)
+    end
+
     def needle
       [kop, vop]
     end
   end
 
-  defcase New, subjects : Array(Term), pattern : Term
   defcase KeypathCapture, capture : Term
+
+  defcase Filter, deps : Pf::Set(Term), selector : Any, successor : Any, min : Magnitude, max : Magnitude
+  defcase Pluck, spec : M1next::Tzip::PluckSpec, successor : Any
+  defcase Flat, spec : M1next::Tzip::FlatSpec, successor : Any
 end
 
 alias Magnitude = Float32
 
 module ::Ww::M1::Operator::Item
-  alias Any = Singular | Slot | Plural | Group | Gap | Optional | Many | Past
+  alias Any = Singular | Slot | Plural | Group | GapFirst | GapSource | Optional | Many | Past
 
   record Singular, tail : Operator::Any
   record Slot, name : Term
@@ -517,10 +551,21 @@ module ::Ww::M1::Operator::Item
     end
   end
 
-  record Group, capture : Term, successor : Operator::Any, children : Slice(Any)
-  record Gap, measurer : Operator::Any, frac : UInt32, strategy : ExpandStrategy
+  record Group, successor : Operator::Any, children : Slice(Any) do
+    def capture
+      successor.as(Operator::Capture).capture
+    end
+  end
+
+  alias Gap = GapFirst | GapSource
+  record GapFirst, measurer : Operator::Any, frac : UInt32, strategy : ExpandStrategy
+  record GapSource, measurer : Operator::Any, frac : UInt32, strategy : ExpandStrategy
   record Optional, default : Term, body : Operator::Any
-  record Many, capture : Term, successor : Operator::Any, children : Slice(Any), interior : Set(Term), min : UInt8, max : UInt8 do
+  record Many, successor : Operator::Any, children : Slice(Any), interior : Set(Term), min : UInt8, max : UInt8 do
+    def capture
+      successor.as(Operator::Capture).capture
+    end
+
     def minM
       Magnitude.new(min)
     end
@@ -796,6 +841,18 @@ class ::Ww::Backpath::Appender
 end
 
 module ::Ww::M1::Operator
+  def match(behind0, op : Filter, matchee : Term, ahead0)
+    raise "not implemented"
+  end
+
+  def match(behind0, op : Pluck, matchee : Term, ahead0)
+    raise "not implemented"
+  end
+
+  def match(behind0, op : Flat, matchee : Term, ahead0)
+    raise "not implemented"
+  end
+
   def match(behind0, op : ValueLiteral, matchee : Term, ahead0)
     unless (dict = matchee.as_d?) && (value = dict[op.key]?)
       return Fb::Mismatch.new(behind0.env)
@@ -1087,67 +1144,6 @@ module ::Ww::M1::Operator
       end
 
       fb = Ahead.tr(behind2, ahead0)
-      unless fb.is_a?(Fb::Response)
-        return fb
-      end
-
-      Env.append(envs, feedback: fb)
-    end
-
-    Env.feedback(envs, fallback: behind0.env)
-  end
-
-  # TODO: cache on {op.pattern, subt} level when that's going to be cheap enough
-  def match(behind0, op : New, matchee : Term, ahead0)
-    # If we already know all the subjects, this is the best case and an immediate
-    # fast path toward instantiation.
-    if op.subjects.all?(&.in?(behind0.env))
-      subt = behind0.env.pluck(op.subjects)
-      successor = pipe(op.pattern, M1.bsubst(subt), M1.operator)
-
-      return match(behind0, successor, matchee, ahead0)
-    end
-
-    # If we do not, the process of learning begins. We learn partially,
-    # recursively, by first trying to invoke ahead, filling in the possible
-    # values for subjects, and recursively calling match(New) again with
-    # less subjects. If we did not learn anything (no reduction in the number
-    # of subjects) we give up with a Mismatch.
-    case fb = Ahead.tr(behind0, ahead0)
-    in Fb::Match
-      learned = fb.envs
-    in Fb::Mismatch
-      learned = {fb.env}
-    in Fb::Interrupt
-      return fb
-    end
-
-    envs = [] of Term::Dict
-
-    learned.each do |env|
-      behind1 = behind0
-      subjects1 = [] of Term
-
-      subt = Term::Dict.build do |subt|
-        op.subjects.each do |subject|
-          unless guess = env[subject]?
-            subjects1 << subject
-            next
-          end
-
-          next unless behind2 = behind1.propose?(subject, guess)
-
-          behind1 = behind2
-
-          subt.with(subject, guess)
-        end
-      end
-
-      next if op.subjects.size == subjects1.size # Did not learn anything
-
-      instance = M1.bsubst(op.pattern, subt)
-
-      fb = match(behind1, New.new(subjects1, instance), matchee, ahead0)
       unless fb.is_a?(Fb::Response)
         return fb
       end
@@ -1823,7 +1819,11 @@ module ::Ww::M1::Operator::Item
     sequence(progress, item.children, matchees, ahead1)
   end
 
-  def self.match(progress : Progress, item : Gap, matchees, ahead0)
+  def self.match(progress : Progress, item : GapSource, matchees, ahead0)
+    raise "not implemented"
+  end
+
+  def self.match(progress : Progress, item : GapFirst, matchees, ahead0)
     strategy = item.strategy.auto? ? ExpandStrategy::Sway : item.strategy
 
     envs = [] of Term::Dict
@@ -2092,14 +2092,15 @@ module ::Ww::M1
           node.morph({2, pattern(ctx, body)})
         end
 
-        matchpi %[(%group capture_ _ _*)], cue: :"%group" do
+        matchpi %[(%group successor_ _ _*)], cue: :"%group" do
           Term::Dict.build do |commit|
-            commit << :"%group" << {:"%capture", capture}
+            commit << :"%group"
+            commit << pattern(ctx, successor)
             commit.concat(node.items.move(2)) { |member| item(ctx, member) }
           end
         end
 
-        matchpi %[(%many capture_ _ _* ¦ opts_)], cue: :"%many" do
+        matchpi %[(%many successor_ _ _* ¦ opts_)], cue: :"%many" do
           M0.schema(opts) do |s, opts|
             s.on_mismatch { continue }
 
@@ -2108,7 +2109,8 @@ module ::Ww::M1
             continue if min.is_a?(UInt8) && max.is_a?(UInt8) && min > max
 
             opts.transaction do |commit|
-              commit << :"%many" << {:"%capture", capture}
+              commit << :"%many"
+              commit << pattern(ctx, successor)
               commit.concat(node.items.move(2)) { |member| item(ctx, member) }
             end
           end
@@ -2151,6 +2153,15 @@ module ::Ww::M1
           %[(%gap/min measurer_)],
           %[(%gap/max measurer_)],
           cues: {:"%gap", :"%gap/min", :"%gap/max"}
+        ) do
+          node.morph({1, pattern(ctx, measurer)})
+        end
+
+        matchpi(
+          %[(%gap° measurer_)],
+          %[(%gap/min° measurer_)],
+          %[(%gap/max° measurer_)],
+          cues: {:"%gap°", :"%gap/min°", :"%gap/max°"}
         ) do
           node.morph({1, pattern(ctx, measurer)})
         end
@@ -2352,25 +2363,8 @@ module ::Ww::M1
           {:"%terminal", normal}
         end
 
-        matchpi(
-          %[(%number %'_ op_symbol _number)],
-          %[(%number %'(whole _) op_symbol _number)],
-          cue: {:"%number", :_},
-          cues: {nil, :whole}
-        ) do |op|
-          continue unless op.in?(SYMS_CMP)
-
-          {:"%terminal", pattern}
-        end
-
-        matchpi(
-          %[(%number _number lop_symbol %'_ rop_symbol _number)],
-          %[(%number _number lop_symbol %'(whole _) rop_symbol _number)],
-          cue: {:"%number", :_},
-          cues: {nil, :whole}
-        ) do |lop, rop|
-          continue unless lop.in?(SYMS_LTX)
-          continue unless rop.in?(SYMS_LTX)
+        matchpi %{(%number _*)}, cue: :"%number" do
+          continue unless Operator::Num.parse?(pattern)
 
           {:"%terminal", pattern}
         end
@@ -2590,17 +2584,6 @@ module ::Ww::M1
           end
         end
 
-        # Leave %new's as-is. They are normalized and compiled when their
-        # dependencies are known.
-        matchpi %[(%new _)], cue: :"%new" do
-          {:"%terminal", pattern}
-        end
-
-        # Extended %new with the exports dict.
-        matchpi %[(%new (_ _*) _)], cue: :"%new" do
-          {:"%terminal", pattern}
-        end
-
         # Expand (%string nonempty) into (%all (%not "") _string)
         matchpi %[(%string nonempty)], cue: {:"%string", :nonempty} do
           pattern(ctx, Term.of(:"%all", {:"%not", ""}, :_string))
@@ -2612,6 +2595,29 @@ module ::Ww::M1
 
         matchpi %[(%symbol blank name_ type_)], cue: {:"%symbol", :blank} do
           {:"%symbol", :blank, pattern(ctx, name), pattern(ctx, type)}
+        end
+
+        matchpi %[(%filter deps←(_*) selector_ successor_ ¦ opts_)], cue: :"%filter" do
+          M0.schema(opts) do |s, opts|
+            s.on_mismatch { continue }
+
+            _ = s.key(:min, type: UInt32, default: 1)
+            _ = s.key(:max, type: UInt32, default: SYM_INF)
+
+            opts.transaction do |commit|
+              commit << :"%filter" << {:"%barrier", deps}
+              commit << pattern(ctx, selector)
+              commit << pattern(ctx, successor)
+            end
+          end
+        end
+
+        matchpi %[(%pluck spec←(_*) successor_)], cue: :"%pluck" do
+          {:"%pluck", {:"%barrier", spec}, pattern(ctx, successor)}
+        end
+
+        matchpi %[(%flat spec←(_*) successor_)], cue: :"%flat" do
+          {:"%flat", {:"%barrier", spec}, pattern(ctx, successor)}
         end
 
         # NOTE: you should insert new matchpis here, especially if they are infrequent.
@@ -2654,7 +2660,10 @@ module ::Ww::M1
           %{[%gap _]},
           %{[%gap/min _]},
           %{[%gap/max _]},
-          cues: {:"%gap", :"%gap/min", :"%gap/max"}
+          %{[%gap° _]},
+          %{[%gap/min° _]},
+          %{[%gap/max° _]},
+          cues: {:"%gap", :"%gap/min", :"%gap/max", :"%gap°", :"%gap/min°", :"%gap/max°"}
         ) do
           {Magnitude.new(0.0), Magnitude::INFINITY}
         end
@@ -2668,9 +2677,10 @@ module ::Ww::M1
           {minT.to(Magnitude), maxT == SYM_INF ? Magnitude::INFINITY : maxT.to(Magnitude)}
         end
 
-        matchpi %[(%many _ _* ¦ _ min: minT_ max: maxT_)], cue: :"%many" do
+        matchpi %[(%many _ _ _* ¦ _ min: minT_ max: maxT_)], cue: :"%many" do
           min0 = minT.to(Magnitude)
           max0 = maxT == SYM_INF ? Magnitude::INFINITY : maxT.to(Magnitude)
+          # [%many successor_ ⏏item0_ _*]
           min, max = items(item.items.move(2))
           {min0 * min, max0 * max}
         end
@@ -2688,7 +2698,8 @@ module ::Ww::M1
           end
         end
 
-        matchpi %{[%group _ _*]}, cue: :"%group" do
+        matchpi %{[%group _ _ _*]}, cue: :"%group" do
+          # [%group successor_ ⏏_ _*]
           items(item.items.move(2))
         end
 
@@ -2803,6 +2814,14 @@ module ::Ww::M1
   end
 
   module Item
+    # TODO: I think that instead of doing this crappy crap with lookahead functions
+    # I barely remember, we should just do a flattening pass before proceeding to
+    # itemseq and use that. This way to get our true follower (vs. e.g. %group) -- which
+    # is why we do this in the first place -- we only need to increment our index. Obviously
+    # something will have to advance the index but I think that's generally simpler to reason
+    # about. OR maybe we can make a MONAD that hides this stuff for us and lets us simply
+    # query follower as we go through the items!!!!
+
     alias Neighbor = {Term, NeighborFn}?
     alias NeighborFn = -> Neighbor
 
@@ -2813,7 +2832,8 @@ module ::Ww::M1
 
       Term.case(head, engine: M0) do
         # Dip into %group nodes. If failed, continue to the next item on the current level.
-        matchpi %[(%group _ _*)], cue: :"%group" do
+        matchpi %[(%group _ _ _*)], cue: :"%group" do
+          # (%group successor_ ⏏_ _*)
           neighbor?(head.items.move(2), -> { neighbor?(items.move(1), outside).as(Neighbor) })
         end
 
@@ -2889,21 +2909,22 @@ module ::Ww::M1
           {Operator::Item::Singular.new(M1.operator(child, captures)), feed.move(1)}
         end
 
-        match({:"%group", {:"%capture", :capture_}, :_, :"_*"}, cue: :"%group") do |capture|
+        matchpi %{(%group successor_ _ _*)}, cue: :"%group" do
           neighbor = -> { Item.neighbor?(feed.move(1), outside).as(Neighbor) }
 
           members = sequence(item.items.move(2), neighbor, captures)
 
-          {Operator::Item::Group.new(capture, Operator::Capture.new(capture, successor: Operator::INSTANCE_PASS), members.to_readonly_slice(&.itself)), feed.move(1)}
+          {Operator::Item::Group.new(M1.operator(successor, captures), members.to_readonly_slice(&.itself)), feed.move(1)}
         end
 
-        match({:"%partition", {:"%many", {:"%capture", :capture_}, :_, :"_*"}, {min: :min0_, max: :max0_}}, cue: :"%many") do |capture, min0, max0|
+        matchpi %{(%many successor_ _ _* ¦ min: min0_ max: max0_)}, cue: :"%many" do
           min = min0.to(UInt8)
           max = max0 == SYM_INF ? 0u8 : max0.to(UInt8)
 
           outer = captures
           inner = Bag(Term).new
 
+          # [%many successor_ ⏏_ _*]
           sequence = item.items.move(2)
           sequence.each { |node| M1.captures(node, storage: inner) }
 
@@ -2911,9 +2932,8 @@ module ::Ww::M1
           interior = inner - exterior
 
           members = sequence(item.items.move(2), -> { nil.as(Neighbor) }, captures)
-          successor = Operator::Capture.new(capture, Operator::INSTANCE_PASS)
 
-          {Operator::Item::Many.new(capture, successor, members.to_readonly_slice(&.itself), interior.set, min, max), feed.move(1)}
+          {Operator::Item::Many.new(M1.operator(successor, captures), members.to_readonly_slice(&.itself), interior.set, min, max), feed.move(1)}
         end
 
         match({:"%partition", {:"%past", :_, :"_*"}, {min: :min0_, max: :max0_, greedy: :greedy_boolean}}, cue: :"%past") do |min0, max0, greedy|
@@ -3027,21 +3047,42 @@ module ::Ww::M1
           neighbor = -> { Item.neighbor?(feed.move(1), outside).as(Neighbor) }
           frac = frac(neighbor)
 
-          {Operator::Item::Gap.new(M1.operator(measurer, captures), frac, strategy: :sway), feed.move(1)}
+          {Operator::Item::GapFirst.new(M1.operator(measurer, captures), frac, strategy: :sway), feed.move(1)}
         end
 
         match({:"%gap/min", :measurer_}, cue: :"%gap/max") do |measurer|
           neighbor = -> { Item.neighbor?(feed.move(1), outside).as(Neighbor) }
           frac = frac(neighbor)
 
-          {Operator::Item::Gap.new(M1.operator(measurer, captures), frac, strategy: :lazy), feed.move(1)}
+          {Operator::Item::GapFirst.new(M1.operator(measurer, captures), frac, strategy: :lazy), feed.move(1)}
         end
 
         match({:"%gap/max", :measurer_}, cue: :"%gap/max") do |measurer|
           neighbor = -> { Item.neighbor?(feed.move(1), outside).as(Neighbor) }
           frac = frac(neighbor)
 
-          {Operator::Item::Gap.new(M1.operator(measurer, captures), frac, strategy: :greedy), feed.move(1)}
+          {Operator::Item::GapFirst.new(M1.operator(measurer, captures), frac, strategy: :greedy), feed.move(1)}
+        end
+
+        match({:"%gap°", :measurer_}, cue: :"%gap°") do |measurer|
+          neighbor = -> { Item.neighbor?(feed.move(1), outside).as(Neighbor) }
+          frac = frac(neighbor)
+
+          {Operator::Item::GapSource.new(M1.operator(measurer, captures), frac, strategy: :sway), feed.move(1)}
+        end
+
+        match({:"%gap/min°", :measurer_}, cue: :"%gap/max°") do |measurer|
+          neighbor = -> { Item.neighbor?(feed.move(1), outside).as(Neighbor) }
+          frac = frac(neighbor)
+
+          {Operator::Item::GapSource.new(M1.operator(measurer, captures), frac, strategy: :lazy), feed.move(1)}
+        end
+
+        match({:"%gap/max°", :measurer_}, cue: :"%gap/max°") do |measurer|
+          neighbor = -> { Item.neighbor?(feed.move(1), outside).as(Neighbor) }
+          frac = frac(neighbor)
+
+          {Operator::Item::GapSource.new(M1.operator(measurer, captures), frac, strategy: :greedy), feed.move(1)}
         end
 
         match({:"%slot", :capture_}, cue: :"%slot") do |capture|
@@ -3158,12 +3199,17 @@ module ::Ww::M1
           # These have key as their first argument and we don't want to include the key
           # in the sketch.
           matchpi(
-            %{[%'%entries/first _ successor_]},
-            %{[%'%entries/source _ successor_]},
-            %{[%'%entries/all _ _ successor_]},
-            cues: {:"%entries/first", :"%entries/source", :"%entries/all"}
+            %{[%'%entries/first _ _*]},
+            %{[%'%entries/source _ _*]},
+            %{[%'%entries/all _ _ _*]},
+            %{[%'%items/all _ _ _*]},
+            %{[%'%leaves/all _ _ _*]},
+            cues: {:"%entries/first", :"%entries/source", :"%entries/all", :"%items/all", :"%leaves/all"}
           ) do
-            sketch |= sketch(successor)
+            successors = normp.items.move(2)
+            successors.each do |successor|
+              sketch |= sketch(successor)
+            end
 
             WalkDecision::Skip
           end
@@ -3171,20 +3217,17 @@ module ::Ww::M1
           matchpi(
             %{[(%any %layer
                      %singular
-                     %group
                      %partition
                      %itemseq
                      %items/first
                      %items/source
-                     %items/all
                      %let
                      %all
                      %entry/required)
                 _*]},
             %{(%'%leaves/first _* ¦ _)},
             %{(%'%leaves/source _* ¦ _)},
-            %{(%'%leaves/all _* ¦ _)},
-            cues: {nil, :"%leaves/first", :"%leaves/source", :"%leaves/all"}
+            cues: {nil, :"%leaves/first", :"%leaves/source"}
           ) do
             WalkDecision::Continue
           end
@@ -3444,9 +3487,9 @@ module ::Ww::M1
         # and a same-%bounds %postfix.
         matchp(
           %{[%bounds
-              (%itemseq (%group prefix (%past/max (%singular _) min: 1))
+              (%itemseq (%group prefix_ (%past/max (%singular _) min: 1))
                         (%plural min: 0 max: ∞ type: %'_)
-                        (%group postfix (%past/max (%singular _) min: 1)))]}
+                        (%group postfix_ (%past/max (%singular _) min: 1)))]}
         ) do |prefix, postfix|
           op_prefix = Term::Dict.build do |commit|
             commit << :"%prefix"
@@ -3477,7 +3520,7 @@ module ::Ww::M1
 
         # A %prefix inside %bounds that ends with some number of %passes should have those
         # passes omitted.
-        matchpi %{[%bounds ((%group successor %prefix (%plural/min min: 1)) (%past (%pass) min: 1))]} do |successor|
+        matchpi %{[%bounds ((%group successor_ %prefix (%plural/min min: 1)) (%past (%pass) min: 1))]} do |successor|
           normp.morph({1, successor})
         end
 
@@ -4092,61 +4135,8 @@ module ::Ww::M1
         Operator::INSTANCE_NUM_WHOLE
       end
 
-      matchpiT %{(%number subject_ op_symbol a_number)}, cue: :"%number" do
-        spec = Operator::Num::Spec::None
-
-        case subject
-        when Term.of(:_)
-        when Term.of(:whole, :_)
-          spec = spec.whole
-        else
-          raise ArgumentError.new
-        end
-
-        min = max = Term[0]
-
-        case op
-        when SYM_GT  then min, spec = a, spec.min_present.min_excluded
-        when SYM_LT  then max, spec = a, spec.max_present.max_excluded
-        when SYM_GTE then min, spec = a, spec.min_present
-        when SYM_LTE then max, spec = a, spec.max_present
-        else
-          raise ArgumentError.new
-        end
-
-        Operator::Num.new(spec, min, max)
-      end
-
-      matchpiT %{(%number a_number lop_symbol subject_ rop_symbol b_number)}, cue: :"%number" do
-        spec = Operator::Num::Spec::None
-
-        case subject
-        when Term.of(:_)
-        when Term.of(:whole, :_)
-          spec = spec.whole
-        else
-          raise ArgumentError.new
-        end
-
-        case lop
-        when SYM_LT  then spec = spec.min_present.min_excluded
-        when SYM_LTE then spec = spec.min_present
-        else
-          raise ArgumentError.new
-        end
-
-        case rop
-        when SYM_LT  then spec = spec.max_present.max_excluded
-        when SYM_LTE then spec = spec.max_present
-        else
-          raise ArgumentError.new
-        end
-
-        Operator::Num.new(spec, min: a, max: b)
-      end
-
-      match({:"%new", :pattern_}, {:"%new", :_, :pattern_}, cue: :"%new") do |pattern|
-        Operator::New.new((blanks(pattern) & captures).array, pattern)
+      matchpiT %{(%number _*)}, cue: :"%number" do
+        Operator::Num.parse?(node) || continue
       end
 
       matchpi %[(%symbol nonblank)], cue: {:"%symbol", :"nonblank"} do
@@ -4157,6 +4147,21 @@ module ::Ww::M1
         Operator::SymBlank.new(operator(name, captures), operator(type, captures))
       end
 
+      matchpi %{(%filter (%barrier deps_dict) selector_ successor_ ¦ () min_ max_)}, cue: :"%filter" do
+        minM = min.to(Magnitude)
+        maxM = max == SYM_INF ? Magnitude::INFINITY : max.to(Magnitude)
+
+        Operator::Filter.new(deps.items.to_pf_set, operator(selector, captures), operator(successor, captures), minM, maxM)
+      end
+
+      matchpi %{(%pluck (%barrier spec_dict) successor_)}, cue: :"%pluck" do
+        Operator::Pluck.new(pluck_spec(spec.as_d), operator(successor, captures))
+      end
+
+      matchpi %{(%flat (%barrier spec_dict) successor_)}, cue: :"%flat" do
+        Operator::Flat.new(flat_spec(spec.as_d), operator(successor, captures))
+      end
+
       # %terminal is used to mark terminal nodes for walk
       matchpi %[(%terminal subnode_)], cue: :"%terminal" do
         operator(subnode, captures)
@@ -4164,6 +4169,46 @@ module ::Ww::M1
 
       otherwise { raise ArgumentError.new("BUG: cannot compile #{node}") }
     end
+  end
+
+  def self.flat_spec(spec : Indexable(Term)) : M1next::Tzip::FlatSpec
+    spec.to_readonly_slice do |item|
+      Term.case(item, engine: M0) do
+        matchpi %{%'_} { M1next::Tzip::InItemsStep.new }
+        matchpi %{.} { M1next::Tzip::InPairsStep.new }
+        matchpi %{*} { M1next::Tzip::InEntriesStep.new }
+        matchpi %{(merge _ _ _*)} do
+          args = item.items.move(1)
+          continue unless args.all? { |term| term.type.dict? && term.itemsonly? }
+
+          M1next::Tzip::MergeStep.new(args.to_readonly_slice { |arg| flat_spec(arg.items) })
+        end
+        matchpi %{(keys _ _*)} { M1next::Tzip::KeyListStep.new(item.items.move(1).to_readonly_slice(&.itself)) }
+        matchpi %{(key term_)} { M1next::Tzip::KeyStep.new(term) }
+        otherwise { M1next::Tzip::KeyStep.new(item) }
+      end.as(M1next::Tzip::FlatStep)
+    end
+  end
+
+  def self.flat_spec(spec : Term::Dict) : M1next::Tzip::FlatSpec
+    flat_spec(spec.items)
+  end
+
+  def self.pluck_spec(spec : Indexable(Term)) : M1next::Tzip::PluckSpec
+    spec.to_readonly_slice do |item|
+      Term.case(item, engine: M0) do
+        matchpi %{%'_} { M1next::Tzip::InItemsStep.new }
+        matchpi %{.} { M1next::Tzip::InPairsStep.new }
+        matchpi %{*} { M1next::Tzip::InEntriesStep.new }
+        matchpi %{(keys _ _*)} { M1next::Tzip::KeyListStep.new(item.items.move(1).to_readonly_slice(&.itself)) }
+        matchpi %{(key term_)} { M1next::Tzip::KeyStep.new(term) }
+        otherwise { M1next::Tzip::KeyStep.new(item) }
+      end.as(M1next::Tzip::PluckStep)
+    end
+  end
+
+  def self.pluck_spec(spec : Term::Dict) : M1next::Tzip::PluckSpec
+    pluck_spec(spec.items)
   end
 
   private def self.blank_name?(term : Term) : Term?
@@ -4345,13 +4390,24 @@ module ::Ww::M1
             end
           end
 
+          matchpi(
+            %{[%many successor_ _ _*]},
+            %{[%group successor_ _ _*]},
+            cues: {:"%many", :"%group"}
+          ) do
+            case walk(successor, mode, callable, itemseq: false, keypath: keypath)
+            in .continue?, .skip?
+              WalkDecision::Continue
+            in .halt?
+              WalkDecision::Halt
+            end
+          end
+
           # Recurse into %group and %many with itemseq flag on.
           matchpi(
-            %{[%group _ _ _*]},
-            %{[%many _ _ _*]},
             %{[%past _ _*]},
             %{[%past/max _ _*]},
-            cues: {:"%group", :"%many", :"%past", :"%past/max"},
+            cues: {:"%past", :"%past/max"},
           ) do
             WalkDecision::Continue
           end
@@ -4407,12 +4463,6 @@ module ::Ww::M1
           next if capture.type.symbol? && capture.unsafe_as_sym.prefixed_by?('\\')
 
           storage << capture
-        end
-
-        matchpi %{[%new exports_dict _]} do
-          exports.items.each do |capture|
-            storage << capture
-          end
         end
 
         otherwise { }
@@ -5246,15 +5296,11 @@ module ::Ww::M1
         %{[%gap/max _]},
         %{[%entry/negative _]},
         %{[%entry/negative _ _]},
-        %{[%new _]},
-        %{[%new _ _]},
         cues: {:"%gap",
                :"%gap/min",
                :"%gap/max",
                :"%entry/negative",
-               :"%entry/negative",
-               :"%new",
-               :"%new"},
+               :"%entry/negative"},
       ) do
         {Magnitude.new(0), Magnitude::INFINITY}
       end
@@ -5430,7 +5476,7 @@ module ::Ww::M1
       end
 
       otherwise do
-        {Magnitude::INFINITY, Magnitude::INFINITY}
+        {Magnitude.new(0), Magnitude::INFINITY}
       end
     end
   end
@@ -5582,8 +5628,6 @@ module ::Ww::M1
           %[(%'%never)],
           %[(%'%let _ _)],
           %[(%'%not _+)],
-          %[(%'%new _)],
-          %[(%'%new _ _)],
         ) { WalkDecision::Continue }
 
         # %all sums the specificity of its offshoots.

@@ -148,12 +148,13 @@ module Testtool
     complaints << complaint("editR state mismatch", expected: test.result, got: state)
   end
 
-  def match(pattern : Term, matchee : Term) : Array(Term::Dict)
+  def match(pattern : Term, matchee : Term) : Slice(Term::Dict) # : Array(Term::Dict)
     matches = nil
 
     levels = {M1::O2, M1::O1, M1::O0}
     levels.each_with_index do |level, index|
-      envs = M1.matches(pattern, matchee, opt: level)
+      op = M1.operator(pattern, opt: level)
+      envs = M1next.matches(Term[], op, matchee)
 
       if index.zero?
         matches = envs
@@ -165,12 +166,7 @@ module Testtool
       end
     end
 
-    assert matches
-
-    # NOTE: It's very sloppy but currently we're storing backpaths in envs. Users
-    # can't (at least they shouldn't) match on them or even know about them. So we
-    # remove them from all envs.
-    matches.map!(&.without(:"(backpaths)"))
+    matches.not_nil!
   end
 
   defrecord PatternVarEq, pattern : Term, name : Term, matches : Set(Term)

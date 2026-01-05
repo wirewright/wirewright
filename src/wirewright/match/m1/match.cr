@@ -7,13 +7,17 @@ module Ww::M1::Operator
     Fb::Mismatch.new(behind0.env)
   end
 
-  private def compare?(a, op, b)
+  private def compare?(a : Term::Num, op, b : Term::Num)
     case op
     when :lt  then a < b
     when :lte then a <= b
     else
       unimplemented
     end
+  end
+
+  private def compare?(a, op, b)
+    raise "not implemented"
   end
 
   def match(behind0, op : Num, matchee : Term, ahead0)
@@ -25,11 +29,11 @@ module Ww::M1::Operator
       return Fb::Mismatch.new(behind0.env)
     end
 
-    if op.spec.min_present? && !compare?(op.min, op.spec.min_excluded? ? :lt : :lte, n)
+    if (min = op.min) && !compare?(min, op.spec.min_excluded? ? :lt : :lte, n)
       return Fb::Mismatch.new(behind0.env)
     end
 
-    if op.spec.max_present? && !compare?(n, op.spec.max_excluded? ? :lt : :lte, op.max)
+    if (max = op.max) && !compare?(n, op.spec.max_excluded? ? :lt : :lte, max)
       return Fb::Mismatch.new(behind0.env)
     end
 

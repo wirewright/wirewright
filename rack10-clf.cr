@@ -233,7 +233,7 @@ module ::Ww::Rack
         D7.gnd(node, u, v)
       end
 
-      matchpi %{[feed (%group edges (%past @_ min: 3))]} do |edges|
+      matchpi %{[feed (%group edges_ (%past @_ min: 3))]} do
         defn = Term::Dict.build do |commit|
           commit << :group
           edges.items.each_cons_pair do |a, b|

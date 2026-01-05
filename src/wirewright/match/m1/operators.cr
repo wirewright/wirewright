@@ -7,14 +7,125 @@ module Ww::M1::Operator
 
   defcase Never
 
-  INSTANCE_NUM       = Num.new(min: Term[0], max: Term[0], spec: :none)
-  INSTANCE_NUM_WHOLE = Num.new(min: Term[0], max: Term[0], spec: :whole)
+  INSTANCE_NUM       = Num.new(min: nil, max: nil, spec: :none)
+  INSTANCE_NUM_WHOLE = Num.new(min: nil, max: nil, spec: :whole)
 
-  defcase Num, spec : Spec, min : Term::Num, max : Term::Num do
+  defcase Num, spec : Spec, min : Arg, max : Arg do
+    # FIXME: Parsing should be defined in module M1 near normal()/operator(),
+    # not here!!!
+
+    def self.subject?(term : Term)
+      Term.case(term, engine: M0) do
+        matchpi %{(whole %'_)} do
+          Spec::Whole
+        end
+
+        matchpi %{%'_} do
+          Spec::None
+        end
+
+        otherwise { }
+      end
+    end
+
+    def self.arg?(term : Term)
+      Term.case(term, engine: M0) do
+        matchpi %{(var name_)} do
+          Var.new(name)
+        end
+
+        matchpi %{_number} do
+          term.as_n
+        end
+
+        otherwise { }
+      end
+    end
+
+    # top
+    #   (%number <subject> <cmp> <arg>)
+    #   (%number <arg> <ltx> <subject> <ltx> <arg>)
+    #
+    # subject
+    #   (whole %'_)
+    #   %'_
+    #
+    # arg
+    #   (var _)
+    #   _number
+    #
+    # <cmp>
+    #   <ltx>
+    #   <gtx>
+    #
+    # <ltx>
+    #   <
+    #   <=
+    #
+    # <gtx>
+    #   >
+    #   >=
+    def self.parse?(term : Term) : Num?
+      Term.case(term, engine: M0) do
+        matchpi %{(%number subject_ cmp_ arg_)} do
+          return unless spec = subject?(subject)
+          return unless r = arg?(arg)
+
+          case cmp
+          when SYM_LT
+            # _ < 100
+            spec = spec.max_excluded
+            max = r
+          when SYM_LTE
+            # _ <= 100
+            max = r
+          when SYM_GT
+            # _ > 100
+            spec = spec.min_excluded
+            min = r
+          when SYM_GTE
+            min = r
+          else
+            return
+          end
+
+          new(spec, min, max)
+        end
+
+        matchpi %{(%number larg_ lop_ subject_ rop_ rarg_)} do
+          return unless spec = subject?(subject)
+          return unless min = arg?(larg)
+          return unless max = arg?(rarg)
+
+          case lop
+          when SYM_LTE
+          when SYM_LT
+            spec = spec.min_excluded
+          else
+            return
+          end
+
+          case rop
+          when SYM_LTE
+          when SYM_LT
+            spec = spec.max_excluded
+          else
+            return
+          end
+
+          new(spec, min, max)
+        end
+
+        otherwise { }
+      end
+    end
+
+    alias Arg = Term::Num | Var | Nil
+
+    defrecord Var, name : Term
+
     @[Flags]
     enum Spec : UInt32
-      MinPresent
-      MaxPresent
       MinExcluded
       MaxExcluded
       Whole
