@@ -420,31 +420,3 @@ class Ruleset
     io << "Ruleset(<" << @rules.size << " rule(s)>)"
   end
 end
-
-def backmapR(primitives = PRIMITIVES) : Rewriter
-  onceR = callR(primitives)
-
-  # First rewrite entries, then rewrite self.
-  set, exhevalR = recR
-  set.call choiceR(
-    selR(%{(literal rewritee_)}, callR { |term| Rewrite.one(term) }),
-    chainR(entriesR(exhevalR), onceR),
-  )
-
-  evalR = dfsR(
-    switchR(
-      { %[($ rewritee_)], exhevalR },
-      { %[($once rewritee_)], onceR },
-    )
-  )
-
-  refR = dfsR(
-    switchR(
-      { %[($my rewritee_)], envR(Term.of(:"$my")) },
-      { %[($up rewritee_)], choiceR(envR(Term.of(:"$up")), envR(Term.of(:"$my"))) },
-      { %[($down rewritee_)], choiceR(envR(Term.of(:"$down")), envR(Term.of(:"$my"))) },
-    )
-  )
-
-  chainR(refR, evalR)
-end
