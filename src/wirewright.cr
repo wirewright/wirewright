@@ -18,11 +18,12 @@ require "../rtk"
 require "./wirewright/misc/*"
 require "./wirewright/unicode"
 require "./wirewright/term"
+require "./wirewright/m0"
 require "./wirewright/tpath"
-require "./wirewright/match"
 require "./wirewright/file_server"
 require "./wirewright/issue"
 require "./wirewright/ml"
+require "./wirewright/match"
 require "./wirewright/meridium"
 require "./wirewright/pigment"
 require "./wirewright/dwuir"
@@ -64,6 +65,7 @@ module Ww
 
   MT = Fiber::ExecutionContext::Parallel.new("Wirewright", Fiber::ExecutionContext.default_workers_count)
 
+  # FIXME: WTF is this? Seriously . . .
   module Approx
     extend self
 
