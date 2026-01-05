@@ -165,7 +165,7 @@ module Ww::Alloy
           end
 
           matchpi %{(dn capture_)} do
-            unless value = up[capture]? || my[capture]?
+            unless value = dn[capture]? || my[capture]?
               issues.major { "undefined capture #{capture}" }
               value = body
             end

@@ -217,8 +217,12 @@ module Testtool
   defrecord BackmapEq, pattern : Term, backspec : Term, matchee : Term, whitelist : Set(Term)
   defrecord BackmapNeg, pattern : Term, backspec : Term, blacklist : Set(Term)
 
+  private def backmap?(pattern : Term, backspec : Term, matchee : Term) : Term?
+    M1.backmap?(pattern, backspec, matchee, applier: Alloy::Applier.new)
+  end
+
   def run(test : BackmapEq, assets, stat, complaints) : Nil
-    result = measure(stat) { M1.backmap?(test.pattern, test.backspec, test.matchee) }
+    result = measure(stat) { backmap?(test.pattern, test.backspec, test.matchee) }
     return if result.in?(test.whitelist) # ok
 
     complaints << complaint("Backmapped term is not in whitelist", result: Term.of(result || "<none>"))
@@ -226,7 +230,7 @@ module Testtool
 
   def run(test : BackmapNeg, assets, stat, complaints) : Nil
     test.blacklist.each do |matchee|
-      next unless result = measure(stat) { M1.backmap?(test.pattern, test.backspec, matchee) } # ok
+      next unless result = measure(stat) { backmap?(test.pattern, test.backspec, matchee) } # ok
 
       complaints << complaint("Backmapped term found in blacklist", result: result)
     end

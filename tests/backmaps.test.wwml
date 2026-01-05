@@ -3,7 +3,7 @@
 ;; %symbol blank
 ;; TODO
 ;(group
-  (backmap ((new-name_symbol (%symbol blank name_ _)) {name: →new-name})
+  (backmap ((new-name_symbol (%symbol blank name_ _)) {name: ^new-name})
     (= (qux _) qux_)
     (= (qux _number) qux_number)
     (= (qux foobar_) qux_)
@@ -62,19 +62,19 @@
   (= (+ 1 2) 100)
   (= true 100))
 
-(backmap (x_ {x: ($up x)})
+(backmap (x_ {x: ^(up x)})
   (= 1 1)
   (= "foo" "foo")
   (= (+ 1 2) (+ 1 2))
   (= true true))
 
-(backmap (a←x_ {x: ($up a)})
+(backmap (a←x_ {x: ^(up a)})
   (= 1 1)
   (= "foo" "foo")
   (= (+ 1 2) (+ 1 2))
   (= true true))
 
-(backmap (a←x_ {a: ($up x)})
+(backmap (a←x_ {a: ^(up x)})
   (= 1 1)
   (= "foo" "foo")
   (= (+ 1 2) (+ 1 2))
@@ -102,34 +102,34 @@
   (= ((100) (200) (300)) ((a) (b) (c))))
 
 ;; Required pair replacement
-(backmap ((a_ x: b_) {b: ($my a)})
+(backmap ((a_ x: b_) {b: ^a})
   (= (a x: b) (a x: a)))
 
-(backmap ((a_ x: (b_)) {b: ($my a)})
+(backmap ((a_ x: (b_)) {b: ^a})
   (= (a x: (b)) (a x: (a))))
 
-(backmap ((x_ _* y_) {x: ($my y), y: ($my x)})
+(backmap ((x_ _* y_) {x: ^y, y: ^x})
   (= (a b) (b a))
   (= (a b c) (c b a))
   (= (a b c d) (d b c a))
   (- () (a)))
 
-(backmap ((quux a_ (x_ b: ((c: a_ d: a_)))) {a: ($my x)})
+(backmap ((quux a_ (x_ b: ((c: a_ d: a_)))) {a: ^x})
   (= (quux foo (bar b: ((c: foo d: foo))))
      (quux bar (bar b: ((c: bar d: bar))))))
 
 ;; Optional pair replacement
-(backmap ({x: (%optional qux x_), y: y_} {x: ($down y), y: ($down x)})
+(backmap ({x: (%optional qux x_), y: y_} {x: ^(dn y), y: ^(dn x)})
   (= {y: bar} {x: bar, y: qux})
   (= {x: foo, y: bar} {x: bar, y: foo}))
 
-(backmap ({x: (%optional (foo bar) (a_ b_)), y: (%optional (0) (y_ `z))} {b: ↑y, y: ↑b, z: ↑a})
+(backmap ({x: (%optional (foo bar) (a_ b_)), y: (%optional (0) (y_ `z))} {b: ^(up y), y: ^(up b), z: ^(up a)})
   (= {} {x: (foo 0), y: (bar foo)})
   (= {x: (a b)} {x: (a 0), y: (b a)})
   (= {y: (100)} {x: (foo 100), y: (bar foo)})
   (= {x: (a b), y: (100)} {x: (a 100), y: (b a)}))
 
-(backmap ((%layer (+ a_ b_) x: (%optional qux x_), y: y_) {a: ($down y), b: ($down x)})
+(backmap ((%layer (+ a_ b_) x: (%optional qux x_), y: y_) {a: ^(dn y), b: ^(dn x)})
   (= (+ a b y: bar) (+ bar qux y: bar))
   (= (+ a b x: foo y: bar) (+ bar foo x: foo y: bar)))
 
@@ -142,7 +142,7 @@
   (- (qux x: 100) (qux y: 200) (qux x: 100 y: 200)))
 
 ;; Negative value for learned keys
-(backmap ((plug k_ x_ (%-value k v)) {v: ↑x})
+(backmap ((plug k_ x_ (%-value k v)) {v: ^(up x)})
   (= (plug z qux {}) (plug z qux {z: qux}))
   (= (plug z qux {x: a, y: b}) (plug z qux {x: a, y: b, z: qux}))
   (- (plug x qux {x: a, y: b})))
@@ -166,7 +166,7 @@
     (= (foo bar) (foo a b c bar)))
 
   ;; Replace multiple slots simultaneously
-  (backmap ((xs_ `ys `ys) {(ys): ($my xs)})
+  (backmap ((xs_ `ys `ys) {(ys): ^xs})
     (= (a) (a a a)) ;; in (K): V, V is wrapped in dict if it is not a dict
     (= ((a)) ((a) a a))
     (= ((a b c)) ((a b c) a b c a b c))
@@ -192,26 +192,26 @@
     (= (a b) (x y z))
     (= (a b c) (x y z)))
 
-  (backmap ((x_ xs_* y_) {(xs): (($my y) ($my x))})
+  (backmap ((x_ xs_* y_) {(xs): (^y ^x)})
     (= (a b) (a b a b))
     (= (a b c) (a c a c))
     (= (a b c d) (a d a d))
     (= (a b c d e f) (a f a f))
     (- () (a)))
 
-  (backmap ((x_ `a _* `b y_) {a: ($my y), b: ($my x)})
+  (backmap ((x_ `a _* `b y_) {a: ^y, b: ^x})
     (= (a b) (a b a b))
     (= (a b c) (a c b a c))
     (= (a b c d) (a d b c a d))))
 
 ;; %many replacement
-(backmap (((%many xs_ x_ min: 0) n_) {n: (seen ↓n)})
+(backmap (((%many xs_ x_ min: 0) n_) {n: (seen ^(dn n))})
   (= (a) ((seen a)))
   (= (a b) (a (seen b)))
   (= (a b c) (a b (seen c))))
 
 ;; %past replacement
-(backmap (((%gap n_) `m (%past _) n_ rest_*) {n: (seen ↓n), rest: (seen ↓rest), m: bound})
+(backmap (((%gap n_) `m (%past _) n_ rest_*) {n: (seen ^(dn n)), rest: (seen ^(dn rest)), m: bound})
   (= (0) (bound (seen 0) (seen ())))
   (= (0 a b c) (bound (seen 0) (seen (a b c))))
   (= (x y z 0 a b c) (bound x y z (seen 0) (seen (a b c))))
@@ -224,37 +224,37 @@
 
 ;; %group replacement
 (backmap ((x_ (%group xs_ a_ b_) y_)
-          {a: ($up y), b: ($up x), x: ($up a), y: ($up b)})
+          {a: ^(up y), b: ^(up x), x: ^(up a), y: ^(up b)})
   (= (a b c d) (b d a c)))
 
-;; With $up, it's not going to see the updates because they're on
+;; With ^(up _), it's not going to see the updates because they're on
 ;; the same level. I'm not sure if it's a bug or a feature.
 (backmap ((x_ (%group xs_ a_ b_) y_)
-          {a: ($up y),
-           b: ($up x),
-           x: ($up a),
-           y: ($up b),
-           xs: (seen ($up xs))})
+          {a: ^(up y),
+           b: ^(up x),
+           x: ^(up a),
+           y: ^(up b),
+           xs: (seen ^(up xs))})
   (= (a b c d) (b (seen (b c)) c)))
 
-;; Similarly here, even with $down, because $down only looks downward,
+;; Similarly here, even with ^(dn _), because ^(dn _) only looks downward,
 ;; and there's no downward with group to begin with.
 (backmap ((x_ (%group xs_ a_ b_) y_)
-          {a: ($down y),
-           b: ($down x),
-           x: ($down a),
-           y: ($down b),
-           xs: (seen ($down a) ($down b))})
+          {a: ^(dn y),
+           b: ^(dn x),
+           x: ^(dn a),
+           y: ^(dn b),
+           xs: (seen ^(dn a) ^(dn b))})
   (= (a b c d) (b (seen b c) c)))
 
 ;; The moment we introduce nesting however this problem (or non-problem?)
 ;; is immediately resolved:
 (backmap ((x_ (%group xs_ (a_ b_)) y_)
-          {a: ($down y),
-           b: ($down x),
-           x: ($down a),
-           y: ($down b),
-           xs: (seen ($down a) ($down b))})
+          {a: ^(dn y),
+           b: ^(dn x),
+           x: ^(dn a),
+           y: ^(dn b),
+           xs: (seen ^(dn a) ^(dn b))})
   (= (a (b c) d) (d (seen d a) a)))
 
 ;; But note that x and y are on top now, and they aren't aware of a, b's
@@ -265,22 +265,22 @@
 ;; undefined on a single level; whereas with nesting the order is as clear as
 ;; expected -- bottom-up in this case.
 (backmap ((x_ (%group xs_ (a_ b_)) y_)
-          {a: ($tr a0 ($down y)),
-           b: ($tr b0 ($down x)),
-           x: ($down a0),
-           y: ($down b0),
-           xs: (seen ($down a) ($down b))})
+          {a: ($tr a0 ^(dn y)),
+           b: ($tr b0 ^(dn x)),
+           x: ^(dn a0),
+           y: ^(dn b0),
+           xs: (seen ^(dn a) ^(dn b))})
   (= (a (b c) d) (b (seen d a) c)))
 
 (group
   (backmap ((x_ (%group xs_ a_ ys_* b_) y_)
-            {x: ($up a), y: ($up b), (xs): ($up ys)})
+            {x: ^(up a), y: ^(up b), (xs): ^(up ys)})
     (= (a b c d e f) (b c d e))
     (= (b c d e) (c d)))
 
   ;; Empty group capture
   (backmap (((%group foo_ xs_* ys_* zs_*) and (%group bar_ a_ b_))
-            {(foo): (↑b ↑a), (bar): ↑ys})
+            {(foo): (^(up b) ^(up a)), (bar): ^(up ys)})
     (= (and x y) (y x and))
     (= (1 and x y) (y x and))
     (= (1 2 and x y) (y x and 2))
@@ -291,14 +291,14 @@
 
   ;; Nesting of groups
   (backmap ((x_ (%group xs_ (%group ab_ a_ b_) (%group cd_ c_ d_)) y_)
-            {(x): (($up a) ($up ab)),
-             (y): (($up cd) ($up d)),
+            {(x): (^(up a) ^(up ab)),
+             (y): (^(up cd) ^(up d)),
              (xs): ()})
     (= (a b c d e f) (b (b c) (d e) e))))
 
 ;; replacement through %optional
 (backmap ((x_ (%optional qux y_) z_)
-          {x: ($up z), y: ($up x), z: ($up y)})
+          {x: ^(up z), y: ^(up x), z: ^(up y)})
     (= (a c) (c a qux))
     (= (a b c) (c a b))
     (- ()))
@@ -310,7 +310,7 @@
   (= (1 2 a b c 3 4 5 d) (1 2 quux b c 3 4 5 d)))
 
 ;; %item first: replace with many
-(backmap ((%item x_symbol) {x: (x ($my x) z)})
+(backmap ((%item x_symbol) {x: (x ^x z)})
   (= (a) ((x a z)))
   (= (a b) ((x a z) b))
   (= (1 2 a b c 3 4 5 d) (1 2 (x a z) b c 3 4 5 d)))
@@ -318,40 +318,40 @@
 ;; %item source
 (group
   ;; %item source: replace sequence
-  (backmap ((%item° x_ y_) {x: ($my y), y: ($my x)})
+  (backmap ((%item° x_ y_) {x: ^y, y: ^x})
     (= (a b) (b a))
     (= (1 2 a b c 3 4 5 d) (2 1 b a 3 c 5 4 d)))
 
   ;; %item source replace with many
-  (backmap ((%item° x_) {(x): (($my x) and ($my x))})
+  (backmap ((%item° x_) {(x): (^x and ^x)})
     (= (a b c) (a and a
                 b and b
                 c and c)))
 
   ;; %item source: replace with many: simulate slot
-  (backmap ((%item° x_) {(x): (($my x) ,)})
-    (= (a b c) (a ,
-                b ,
-                c ,)))
+  (backmap ((%item° x_) {(x): (^x .)})
+    (= (a b c) (a .
+                b .
+                c .)))
 
   ;; %item source: replace sequence with many
-  (backmap ((%item° cmd←twice x_) {(cmd): (), (x): (($my x) ($my x))})
+  (backmap ((%item° cmd←twice x_) {(cmd): (), (x): (^x ^x)})
     (= (twice a) (a a))
     (= (twice a twice b) (a a b b))))
 
 ;; %leaf first replacement
-(backmap ((%leaf x_symbol) {x: (seen ($my x))})
+(backmap ((%leaf x_symbol) {x: (seen ^x)})
   (= (x) ((seen x)))
   (= (x y) ((seen x) y))
   (= (((x)) y) ((((seen x))) y)))
 
-(backmap ((%leaf x_symbol) {(x): (seen ($my x))})
+(backmap ((%leaf x_symbol) {(x): (seen ^x)})
   (= (x) (seen x))
   (= (x y) (seen x y))
   (= (((x)) y) (((seen x)) y)))
 
 ;; %leaf source replacement
-(backmap ((%leaf° x_symbol) {(x): (($my x) foo)})
+(backmap ((%leaf° x_symbol) {(x): (^x foo)})
   (= (x) (x foo))
   (= (x y z) (x foo y foo z foo))
   (= ((x) (y) (z)) ((x foo) (y foo) (z foo)))
@@ -359,13 +359,13 @@
 
 ;; %leaf source + %item source: replace deep item sequence
 (backmap ((%leaf° (%item° x_symbol y_symbol) self: true)
-          {x: ($my y), y: ($my x)})
+          {x: ^y, y: ^x})
   (= (x y) (y x))
   (= ((x y) (a b)) ((y x) (b a)))
   (= ((a b) (c d e) (e f g h) ((k l))) ((b a) (d c e) (f e h g) ((l k)))))
 
 (backmap ((%leaf° (%item° x_ y_) self: true)
-          {x: ($my y), y: ($my x)})
+          {x: ^y, y: ^x})
   (= (x y) (y x))
   (= ((x y) (a b)) ((a b) (x y)))
   (= ((a b) (c d e) (e f g h) ((k l))) ((c d e) (a b) ((k l)) (e f g h))))
@@ -373,7 +373,7 @@
 ;; nested %leaf source backmap
 (group
   (backmap ((%leaf° (%leaf° x_symbol in: items self: true) in: pairs self: true)
-            {x: (seen ↓x)})
+            {x: (seen ^(dn x))})
     (= a (seen a))
     (= (+ 1 2 a: x b: y)
        ((seen +) 1 2 a: (seen x) b: (seen y)))
@@ -381,7 +381,7 @@
        ((seen +) 1 2 a: ((seen +) 1 (seen x)) b: (3 4 (seen x) y: (seen z)))))
 
   (backmap ((%leaf° (%leaf° x_symbol in: items self: true) in: pairs)
-            {x: (seen ↓x)})
+            {x: (seen ^(dn x))})
     (- a (seen a))
     (= (+ 1 2 a: x b: y)
        (+ 1 2 a: (seen x) b: (seen y)))
@@ -389,70 +389,70 @@
        (+ 1 2 a: ((seen +) 1 (seen x)) b: (3 4 (seen x) y: (seen z))))))
 
 ;; %leaf bfs first replacement
-(backmap ((%leaf x_symbol order: bfs) {x: (seen ($my x))})
+(backmap ((%leaf x_symbol order: bfs) {x: (seen ^x)})
   (= (x) ((seen x)))
   (= (x y) ((seen x) y))
   (= (((x)) y) (((x)) (seen y))))
 
-(backmap ((%leaf x_symbol order: bfs) {(x): (seen ($my x))})
+(backmap ((%leaf x_symbol order: bfs) {(x): (seen ^x)})
   (= (x) (seen x))
   (= (x y) (seen x y))
   (= (((x)) y) (((x)) seen y))
   (= (((x)) y z) (((x)) seen y z)))
 
 ;; item %optional replacement
-(backmap ((x_ (%optional qux y_) z_) {x: ($up y), y: ($up z), z: ($up x)})
+(backmap ((x_ (%optional qux y_) z_) {x: ^(up y), y: ^(up z), z: ^(up x)})
   (= (a c) (qux c a))
   (= (a b c) (b c a)))
 
-(backmap ((x_ (%optional qux y_) z_) {x: ($down y), y: ($down z), z: ($down x)})
+(backmap ((x_ (%optional qux y_) z_) {x: ^(dn y), y: ^(dn z), z: ^(dn x)})
   (= (a c) (qux c a))
   (= (a b c) (b c a)))
 
 ;; Note: y is located deeper than x, z. it will be replaced first. Thus y = z,
 ;; then both x, z will pick up this nondefault value y = z.
-(backmap ((x_ (%optional (qux) (y_)) z_) {x: ($down y), y: ($down z), z: ($down x)})
+(backmap ((x_ (%optional (qux) (y_)) z_) {x: ^(dn y), y: ^(dn z), z: ^(dn x)})
   (= (a c) (c (c) a))
   (= (a (b) c) (c (c) a)))
 
 ;; ... we can prevent stomping over the default value with $tr on Y. $tr blocks
-;; Y from submitting its new value to the $down/$up context.
-(backmap ((x_ (%optional (qux) (y_)) z_) {x: ($down y0), y: ($tr y0 ($down z)), z: ($down x)})
+;; Y from submitting its new value to the down/up context.
+(backmap ((x_ (%optional (qux) (y_)) z_) {x: ^(dn y0), y: ($tr y0 ^(dn z)), z: ^(dn x)})
   (= (a c) (qux (c) a))
   (= (a (b) c) (b (c) a)))
 
 ;; ... or if we want to be completely sure and want complete control vs. the layering
-;; system, we can use $my.
-(backmap ((x_ (%optional (qux) (y_)) z_) {x: ($my y), y: ($my z), z: ($my x)})
+;; system, we can use ^my.
+(backmap ((x_ (%optional (qux) (y_)) z_) {x: ^y, y: ^z, z: ^x})
   (= (a c) (qux (c) a))
   (= (a (b) c) (b (c) a)))
 
 ;; %value replacement
-(backmap (((%value k v_) k_) {v: (seen ($down v))})
+(backmap (((%value k v_) k_) {v: (seen ^(dn v))})
   (= ({x: 1, y: 2, z: 3} x) ({x: (seen 1), y: 2, z: 3} x))
   (= ({x: 1, y: 2, z: 3} y) ({x: 1, y: (seen 2), z: 3} y))
   (= ({x: 1, y: 2, z: 3} z) ({x: 1, y: 2, z: (seen 3)} z)))
 
-(backmap (((%value k v_) k_) {k: (seen ($down k))})
+(backmap (((%value k v_) k_) {k: (seen ^(dn k))})
   (= ({x: 1, y: 2, z: 3} x) ({(seen x): 1, y: 2, z: 3} (seen x)))
   (= ({x: 1, y: 2, z: 3} y) ({x: 1, (seen y): 2, z: 3} (seen y)))
   (= ({x: 1, y: 2, z: 3} z) ({x: 1, y: 2, (seen z): 3} (seen z))))
 
-(backmap (((%value k v_) (%item° k_)) {v: (seen ($down v))})
+(backmap (((%value k v_) (%item° k_)) {v: (seen ^(dn v))})
   (= ({x: 1, y: 2, z: 3} (x)) ({x: (seen 1), y: 2, z: 3} (x)))
   (= ({x: 1, y: 2, z: 3} (y)) ({x: 1, y: (seen 2), z: 3} (y)))
   (= ({x: 1, y: 2, z: 3} (y z)) ({x: 1, y: (seen 2), z: (seen 3)} (y z)))
   (= ({x: 1, y: 2, z: 3} (x y z)) ({x: (seen 1), y: (seen 2), z: (seen 3)} (x y z)))
   (- ({x: 1, y: 2, z: 3} ())))
 
-(backmap (((%value k v_) (%item° k_)) {k: (seen ($down k))})
+(backmap (((%value k v_) (%item° k_)) {k: (seen ^(dn k))})
   (= ({x: 1, y: 2, z: 3} (x)) ({(seen x): 1, y: 2, z: 3} ((seen x))))
   (= ({x: 1, y: 2, z: 3} (y)) ({x: 1, (seen y): 2, z: 3} ((seen y))))
   (= ({x: 1, y: 2, z: 3} (y z)) ({x: 1, (seen y): 2, (seen z): 3} ((seen y) (seen z))))
   (= ({x: 1, y: 2, z: 3} (x y z)) ({(seen x): 1, (seen y): 2, (seen z): 3} ((seen x) (seen y) (seen z))))
   (- ({x: 1, y: 2, z: 3} ())))
 
-(backmap (((%value k v_) (%item° k_ v_)) {k: (seen ($down k)), v: (seen ($down v))})
+(backmap (((%value k v_) (%item° k_ v_)) {k: (seen ^(dn k)), v: (seen ^(dn v))})
   (= ({x: 1, y: 2, z: 3} (x 1 y qix z qyx))
      ({(seen x): (seen 1), y: 2, z: 3} ((seen x) (seen 1) y qix z qyx)))
   (= ({x: 1, y: 2, z: 3} (x qux y 2 z qyx))
@@ -487,13 +487,13 @@
        (seen x) (seen 1))))
   (- ({x: 1, y: 2, z: 3} (x qux y qix z qyx))))
 
-;; Replace with $up when multiple captures are referenced
-(backmap ((x_ x_ y_) {x: ($up y)})
+;; Replace with ^up when multiple captures are referenced
+(backmap ((x_ x_ y_) {x: ^(up y)})
   (= (a a b) (b b b)))
 
 ;; Replacement order: inside-out replacement & motion using layers.
 (backmap ((x_ y←(quux b_ c_))
-          {b: ($my c), c: ($my b), x: ($up y), y: ($up x)})
+          {b: ^c, c: ^b, x: ^(up y), y: ^(up x)})
   (= (x (quux a b)) ((quux b a) x)))
 
 ;; %edge replacement
@@ -509,10 +509,10 @@
   (backmap ((+ @x_) {(x): (a b c)})
     (= (+ @qux) (+ a b c)))
 
-  (backmap ((@x_) {(x): (I have seen ($my x))})
+  (backmap ((@x_) {(x): (I have seen ^x)})
     (= (@quux) (I have seen @quux)))
 
-  (backmap ((@x_) {(x): (I have seen ($up x))})
+  (backmap ((@x_) {(x): (I have seen ^(up x))})
     (= (@quux) (I have seen @quux))))
 
 ;; %layer replacement
@@ -521,15 +521,15 @@
     (= {x: 1, y: 2, z: 3} (qux qix x: a, y: 2)))
 
   (backmap ((%layer rest_ a: a_symbol b: b_symbol)
-            {a: ($up b), b: ($up a), rest: ()})
+            {a: ^(up b), b: ^(up a), rest: ()})
     (= {a: x, b: y, c: z} {a: y, b: x}))
 
   (backmap ((%layer rest_ a: a_dict b: b_number)
-            {a: ($up b), b: ($up rest), rest: ($up a)})
+            {a: ^(up b), b: ^(up rest), rest: ^(up a)})
     (= {a: {x: qux, y: qix}, b: 1/3, c: foo, d: bar}
        {a: 1/3, b: {c: foo, d: bar}, x: qux, y: qix}))
 
-  (backmap ((%layer (+ a_ b_) x: a_ y: b_) {b: ($up a), a: ($up b)})
+  (backmap ((%layer (+ a_ b_) x: a_ y: b_) {b: ^(up a), a: ^(up b)})
     (= (+ 1 2 x: 1 y: 2) (+ 2 1 x: 2 y: 1)))
 
   ;; %layer's "below" part (the one we label 'qux' here) is actually considered
@@ -538,7 +538,7 @@
   ;;
   ;; This appears to be the most intuitive behavior out of those I've considered
   ;; so far.
-  (backmap ((%layer qux←(+ a_ b_) x: a_ y: b_) {b: ($up a), a: ($up b), qux: (($up qux))})
+  (backmap ((%layer qux←(+ a_ b_) x: a_ y: b_) {b: ^(up a), a: ^(up b), qux: (^(up qux))})
     (= (+ 1 2 x: 1 y: 2) ((+ 2 1) x: 2 y: 1)))
 
   ;; %layer replacement **will** conflict with anything you put with %all. There is
@@ -548,7 +548,7 @@
 
   ;; This is on the "edge" of what you can do.
   (backmap ((%all (%layer _ x: x_) (%layer _ y: y_) (%layer _ z: z_))
-            {x: ↑z, y: ↑x, z: ↑y})
+            {x: ^(up z), y: ^(up x), z: ^(up y)})
     (= {x: a, y: b, z: c, qux: 1, qix: 2}
        {x: c, y: a, z: b, qux: 1, qix: 2}))
 
@@ -569,15 +569,15 @@
   ;; no difference between them here.
 
   ;; This lets %layer win:
-  (backmap ((%all [+ a_ b_] (%layer rest_ x: x_ y: y_)) {x: ↑y, y: ↓x})
+  (backmap ((%all [+ a_ b_] (%layer rest_ x: x_ y: y_)) {x: ^(up y), y: ^(dn x)})
     (= (+ 1 2 x: a y: b) (+ 1 2 x: b y: a)))
 
   ;; This lets dict itemspart win:
-  (backmap ((%all [+ a_ b_] (%layer rest_ x: x_ y: y_)) {a: ↑b, b: ↓a})
+  (backmap ((%all [+ a_ b_] (%layer rest_ x: x_ y: y_)) {a: ^(up b), b: ^(dn a)})
     (= (+ 1 2 x: a y: b) (+ 2 1 x: a y: b)))
 
   ;; This operates carefully with both:
-  (backmap ((%all [+ a_ b_] (%layer rest_ x: x_ y: y_)) {a: ↑x, x: ↓b})
+  (backmap ((%all [+ a_ b_] (%layer rest_ x: x_ y: y_)) {a: ^(up x), x: ^(dn b)})
     (= (+ 1 2 x: a y: b) (+ a 2 x: 2 y: b)))
 
   ;; But this will stomp over the itemspart:
@@ -591,22 +591,22 @@
     (= "Hello World" 1/3))
 
   (backmap ((%any° {x: x_, y: y_} {a: x_, b: y_})
-            {x: ($up y), y: ($up x)})
+            {x: ^(up y), y: ^(up x)})
     (= {x: a, y: b} {x: b, y: a})
     (= {a: qux, b: qix} {a: qix, b: qux}))
 
   (backmap ((%all x_dict {a: a_, b: b_})
-            {a: ($up b), b: ($up x), x: (seen ($up x))})
+            {a: ^(up b), b: ^(up x), x: (seen ^(up x))})
     (= {a: qux, b: qix} (seen {a: qix, b: {a: qux, b: qix}})))
 
   (backmap ((%all x_dict
                   (%pipe tally 2)
                   (%layer _ a: a_number))
-            {a: ($up x)})
+            {a: ^(up x)})
     (= {a: 100, b: 200} {a: {a: 100, b: 200}, b: 200})
     (- {} {a: 100} {a: quux} {a: qux, b: qix, c: qyx}))
 
-  (backmap (((%any° (%item° k_) ()) k_) {k: (seen ($down k))})
+  (backmap (((%any° (%item° k_) ()) k_) {k: (seen ^(dn k))})
     (= (() x) (() (seen x)))
     (= (() y) (() (seen y)))
     (= ((a b c) a) (((seen a) b c) (seen a)))
@@ -616,7 +616,7 @@
   (backmap (((%any° (%item° foo k_ v_)
                    (%item° bar k_ v_)
                    (%item° baz k_ (qux v_))) k_)
-            {k: (seen ($down k)), v: (seen ($down v))})
+            {k: (seen ^(dn k)), v: (seen ^(dn v))})
     (= ((foo a 1
          bar b 2
          bar a 3
@@ -707,7 +707,7 @@
   (backmap ((%all (%item° decl k_)
                   (%item° set k_ v_)
                   (%item° get k_))
-            {k: (seen ↓k), v: (seen ↓v)})
+            {k: (seen ^(dn k)), v: (seen ^(dn v))})
     (= (decl a
         decl b
         set a 1
@@ -731,7 +731,7 @@
   (backmap ((%all (%item° (decl k_))
                   (%item° (set k_ v_))
                   (%item° stmt←(get k_)))
-            {stmt: (value ↓k ↓v)})
+            {stmt: (value ^(dn k) ^(dn v))})
     (= ((decl a)
         (decl b)
         (set a 1)
@@ -780,22 +780,22 @@
 ;; %entries source replacement
 (group
   ;; Only keys 1:1
-  (backmap ((%entry° k_ v_) {k: (seen ($down k))})
+  (backmap ((%entry° k_ v_) {k: (seen ^(dn k))})
     (= {x: a, y: b, z: c}
        {(seen x): a, (seen y): b, (seen z): c}))
 
   ;; Only values 1:1
-  (backmap ((%entry° k_ v_) {v: (seen ($down v))})
+  (backmap ((%entry° k_ v_) {v: (seen ^(dn v))})
     (= {x: a, y: b, z: c}
        {x: (seen a), y: (seen b), z: (seen c)}))
 
   ;; Both keys and values 1:1 : swap keys and values
-  (backmap ((%entry° k_ v_) {k: ($down v), v: ($down k)})
+  (backmap ((%entry° k_ v_) {k: ^(dn v), v: ^(dn k)})
     (= {x: a, y: b, z: c}
        {a: x, b: y, c: z}))
 
   ;; Filter on dict sets
-  (backmap ((%entry° (qux x_) _) {x: (seen ($down x))})
+  (backmap ((%entry° (qux x_) _) {x: (seen ^(dn x))})
     (= {(qux a): true, (qux b): true, (qix c): true, (qyx d): 1/3}
        {(qux (seen a)): true,
         (qux (seen b)): true,
@@ -804,7 +804,7 @@
 
   ;; Nesting: basic
   (backmap ((%entry° (%entry° k_ v0_) v1_)
-            {k: (seen ($down k)), v0: (seen ($down v0)), v1: (seen ($down v1))})
+            {k: (seen ^(dn k)), v0: (seen ^(dn v0)), v1: (seen ^(dn v1))})
     (= {{a: 1, b: 2}: 3, {c: 4}: 5, {d: 6, e: 7}: 8}
        {{(seen a): (seen 1), (seen b): (seen 2)}: (seen 3),
         {(seen c): (seen 4)}: (seen 5),
@@ -812,14 +812,14 @@
 
   ;; Nesting: value equality across nesting boundary
   (backmap ((%entry° (%entry° k_ v_) v_)
-            {k: (seen ($down k)), v: (seen ($down v))})
+            {k: (seen ^(dn k)), v: (seen ^(dn v))})
     (= {{a: 1, b: 2}: 2, {c: 4}: 5, {d: 8, e: 8}: 8}
        {{a: 1, (seen b): (seen 2)}: (seen 2),
         {c: 4}: 5,
         {(seen d): (seen 8), (seen e): (seen 8)}: (seen 8)}))
 
   ;; Nesting: %item° inside %entry°
-  (backmap ((%entry° (%item° x_) x_) {x: (seen ($down x))})
+  (backmap ((%entry° (%item° x_) x_) {x: (seen ^(dn x))})
     (= {(): qux,
         (a): a,
         (b): a,
@@ -842,7 +842,7 @@
         (a b c 5): d}))
 
   ;; Collisions
-  (backmap ((%entry° k_ v_) {k: ($down v), v: ($down k)})
+  (backmap ((%entry° k_ v_) {k: ^(dn v), v: ^(dn k)})
     (= {a: x, b: x, c: y, d: z}
        ;; one of
        {x: a, y: c, z: d}
@@ -856,7 +856,7 @@
 ;; Misc
 
 ;; It is (currently?) impossible to refer to %many's interior. We can still
-;; mass-replace, but not $down or $up or even $my to something inside %many.)
+;; mass-replace, but not ^(dn _) or ^(up _) or even ^my to something inside %many.)
 (backmap (((%many xs_ x_ min: 0)) {x: seen})
   (= () ())
   (= (1 2 3) (seen seen seen))
@@ -869,13 +869,13 @@
 
 ;; However it still participates in the pattern (obviously!) And you can
 ;; be sure if something is equated outside %many, then it will be set.
-(backmap (((%many xs_ x_ min: 0) x_) {x: (seen ($down x))})
+(backmap (((%many xs_ x_ min: 0) x_) {x: (seen ^(dn x))})
   (= (a) ((seen a)))
   (= (1 1 1) ((seen 1) (seen 1) (seen 1)))
   (= (a a a) ((seen a) (seen a) (seen a)))
   (- ()))
 
-(backmap (((%many xs_ x_ min: 0) x_) {(xs): (qux qyx qix), x: (seen ($down x))})
+(backmap (((%many xs_ x_ min: 0) x_) {(xs): (qux qyx qix), x: (seen ^(dn x))})
   (= (a) (qux qyx qix (seen a)))
   (= (1 1 1) (qux qyx qix (seen 1)))
   (= (a a a) (qux qyx qix (seen a)))
@@ -896,31 +896,31 @@
   ;; etc...
 
   ;; Items exterior is visited & settable
-(backmap (((%items xs_ x_) x_) {x: (seen ↓x)})
+(backmap (((%items xs_ x_) x_) {x: (seen ^(dn x))})
   (= ((a) a) (((seen a)) (seen a)))
   (= ((a a a) a) (((seen a) (seen a) (seen a)) (seen a))))
   ;; etc...
 
 ;; Basic scoping
 (group
-  (backmap (((x_) x_) {x: (seen ↓x)})
+  (backmap (((x_) x_) {x: (seen ^(dn x))})
     (= ((a) a) (((seen a)) (seen a))))
 
-  ;; $my reads from the environment
-  (backmap ((P←(x_ y_) a_) {x: →y, y: →x, a: (→x →y →P)})
+  ;; ^my reads from the environment
+  (backmap ((P←(x_ y_) a_) {x: ^y, y: ^x, a: (^x ^y ^P)})
     (= ((a b) c) ((b a) (a b (a b)))))
 
-  ;; $down goes down from pivot
-  (backmap ((P←(x_ y_) a_) {x: ↓y, y: ↓x, a: (↓x ↓y ↓P)})
+  ;; ^(dn _) goes down from pivot
+  (backmap ((P←(x_ y_) a_) {x: ^(dn y), y: ^(dn x), a: (^(dn x) ^(dn y) ^(dn P))})
     (= ((a b) c) ((b a) (b a (a b)))))
 
-  ;; $up goes down from root
-  (backmap ((P←(x_ y_) a_) {x: ↓y, y: ↓x, a: (↑x ↑y ↑P)})
+  ;; ^(up _) goes down from root
+  (backmap ((P←(x_ y_) a_) {x: ^(dn y), y: ^(dn x), a: (^(up x) ^(up y) ^(up P))})
     (= ((a b) c) ((b a) (b a (b a))))))
 
 
 ;; %entry
-(backmap ((_* `x ¦ (%entry k_ X←(qux (a_ b_)))) {x: ↑X, (k): (), a: ↓b, b: ↓a})
+(backmap ((_* `x ¦ (%entry k_ X←(qux (a_ b_)))) {x: ^(up X), (k): (), a: ^(dn b), b: ^(dn a)})
   (= (x: (qux (a b)) y: c z: d)
      ((qux (b a)) y: c z: d))
   (= (x: (qux (a b)) y: (qux (c d)) z: e)
@@ -943,10 +943,10 @@
   (= (a b c x: 100 y: 200 z: 300) (a b c y: 200 z: 300)))
 
 ;; Make sure aliases work (do not stomp over each other).
-(backmap ((%all [k0←k1_ x_] (%value k1 v_)) {(k0): (), x: ↑v, v: ↑x})
+(backmap ((%all [k0←k1_ x_] (%value k1 v_)) {(k0): (), x: ^(up v), v: ^(up x)})
   (= (qux a qux: b) (b qux: a)))
 
-(backmap (((log (preds_* `tip)) x_) {(preds): (), tip: →x})
+(backmap (((log (preds_* `tip)) x_) {(preds): (), tip: ^x})
   (= ((log ()) a) ((log (a)) a))
   (= ((log (a)) b) ((log (b)) b))
   (= ((log (a b c)) d) ((log (d)) d)))
