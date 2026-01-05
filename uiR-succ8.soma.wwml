@@ -66,11 +66,11 @@
 ;;
 
 ;; Vertical message flow.
-(_symbol {¦ up-w⫽h: ±λ} ⍊ -up-w⫽h: λ') <> {λ': →λ, (λ): ()}
-(_symbol {¦ -dn-w⫽h: λ'} ⍊ dn-w⫽h: ±λ) <> {λ': →λ, (λ): ()}
+(_symbol {¦ up-w⫽h: ±λ} ⍊ -up-w⫽h: λ') <> {λ': ^λ, (λ): ()}
+(_symbol {¦ -dn-w⫽h: λ'} ⍊ dn-w⫽h: ±λ) <> {λ': ^λ, (λ): ()}
 
 ;; Horizontal message flow.
-⟨{¦ mail/out: M←[m_*]} {¦ -mail/in: m'}⟩ <> {m': →m, (M): ()}
+⟨{¦ mail/out: M←[m_*]} {¦ -mail/in: m'}⟩ <> {m': ^m, (M): ()}
 
 ;; Positioning trigger flows from the parent to the child.
 (_symbol {¦ -position_} ⍊ position) <> {position: true}
@@ -79,8 +79,8 @@
 ;; do so by submitting it through up-⸨w,h⸩/new. This rule system will
 ;; maintain the necessary state and do the comparisons.
 {¦ up-⸨w,h⸩/old: λ'_, up-⸨w,h⸩/new: λ←λ'_} <> {(λ): ()}
-{¦ up-⸨w,h⸩/old: λ'_, up-⸨w,h⸩/new: λ_, -up-w⫽h: λ'} <> {λ': →λ, (λ): ()}
-{¦ -up-⸨w,h⸩/old: λ', up-⸨w,h⸩/new: λ_, -up-w⫽h: λ'} <> {λ': →λ, (λ): ()}
+{¦ up-⸨w,h⸩/old: λ'_, up-⸨w,h⸩/new: λ_, -up-w⫽h: λ'} <> {λ': ^λ, (λ): ()}
+{¦ -up-⸨w,h⸩/old: λ', up-⸨w,h⸩/new: λ_, -up-w⫽h: λ'} <> {λ': ^λ, (λ): ()}
 
 ;;
 ;; root
@@ -103,7 +103,7 @@
 ;;
 
 ;; Bounce back up-w/h as dn-w/h.
-(content {¦ up-w⫽h: ±λ -dn-w⫽h: λ'} ⍊ x⫽y -up-w⫽h: λ') <> {λ': →λ, (λ): ()}
+(content {¦ up-w⫽h: ±λ -dn-w⫽h: λ'} ⍊ x⫽y -up-w⫽h: λ') <> {λ': ^λ, (λ): ()}
 
 ;; Reject dn-w/h since `content` is used to force content-sizing even if
 ;; the parent disagrees.
@@ -119,16 +119,16 @@
   <> {dw-request: (measure intrinsic-w intrinsic-h status: intrinsic-status)}
 
 ;; Propagate width from DwUIR's intrinsic-size as up-w unconditionally.
-(text ⍊ -up-w: λ' intrinsic-w: ±λ) <> {λ': →λ, (λ): ()}
+(text ⍊ -up-w: λ' intrinsic-w: ±λ) <> {λ': ^λ, (λ): ()}
 
 ;; Ask DwUIR to define up-h for us once dn-w is known. Now that we know
 ;; dn-w, we can define final-w of the text (a property required by DwUIR).
 (text ⍊ dn-w: ±w ⋮final-w -up-h -dw-request_)
-  <> {dw-request: (measure →w up-h status: intrinsic-status), final-w: →w, (w): ()}
+  <> {dw-request: (measure ^w up-h status: intrinsic-status), final-w: ^w, (w): ()}
 
 ;; Similarly, define final-h based on dn-h once it is know. final-h is also
 ;; a property required by DwUIR to draw text.
-(text ⍊ dn-h: ±h ⋮final-h) <> {final-h: →h, (h): ()}
+(text ⍊ dn-h: ±h ⋮final-h) <> {final-h: ^h, (h): ()}
 
 ;;
 ;; Sized nodes effectively request sizing (final-w/h) from UIR. This may be
@@ -136,7 +136,7 @@
 ;; the sizing info.
 ;;
 
-(sized _ ⍊ dn-w⫽h: ±λ ⋮final-w⫽h) <> {final-w⫽h: →λ}
+(sized _ ⍊ dn-w⫽h: ±λ ⋮final-w⫽h) <> {final-w⫽h: ^λ}
 
 ;;
 ;; window
@@ -147,12 +147,12 @@
 ;; a descendant; if not for this rule, there would have been no way to
 ;; "opt in" otherwise.
 (window {¦ up-w⫽h: ±λ -dn-w⫽h_} ⍊ ±⸨width,height⸩)
-  <> {dn-w⫽h: →⸨width,height⸩, (λ): ()}
+  <> {dn-w⫽h: ^⸨width,height⸩, (λ): ()}
 
 ;;
 ;; rect, svg
 ;;
-(⟦rect,svg⟧ ⍊ dn-w⫽h: ±λ ⋮final-w⫽h) <> {final-w⫽h: →λ, (λ): ()}
+(⟦rect,svg⟧ ⍊ dn-w⫽h: ±λ ⋮final-w⫽h) <> {final-w⫽h: ^λ, (λ): ()}
 
 ;; For rectangles with image fill, we will attempt to query the intrinsic
 ;; size of the image and use that as our up-w/h proposal.
@@ -167,7 +167,7 @@
 ;; DwUIR may very well return ugly floating point numbers for size; so we
 ;; use ceil to remove that.
 (⟦rect,svg⟧ ⍊ intrinsic-w: ±iw intrinsic-h: ±ih -up-w_ -up-h_)
-  <> {up-w: $'(ceil →iw), up-h: $'(ceil →ih), (iw): (), (ih): ()}
+  <> {up-w: ^(ceil iw), up-h: ^(ceil ih), (iw): (), (ih): ()}
 
 ;;
 ;; viewport
@@ -177,59 +177,59 @@
 ;; require us to know the size of what's inside the viewport so that we can
 ;; adjust the pan.
 (viewport {¦ up-w⫽h: ±λ} ⍊ -up-w⫽h: λ' ⋮content-w⫽h)
-  <> {up-w⫽h: →λ, content-w⫽h: →λ, λ': →λ, (λ): ()}
+  <> {up-w⫽h: ^λ, content-w⫽h: ^λ, λ': ^λ, (λ): ()}
 
 ;; Save dn-w/h under final-w/h for DwUIR. Viewports need to know their
 ;; "outer" size to build the clipping rect.
-(viewport _ ⍊ dn-w⫽h: ±λ ⋮final-w⫽h) <> {final-w⫽h: →λ}
+(viewport _ ⍊ dn-w⫽h: ±λ ⋮final-w⫽h) <> {final-w⫽h: ^λ}
 
 ;;
 ;; padding
 ;;
 
 ;; Initialize
-(padding _ ⍊ pl⫽t⋮ 0 pr⫽b⋮ 0 -px⫽y_) <> {px⫽y: $'(+ →pl⫽t →pr⫽b)}
+(padding _ ⍊ pl⫽t⋮ 0 pr⫽b⋮ 0 -px⫽y_) <> {px⫽y: ^(+ pl⫽t pr⫽b)}
 
 ;; Alter up-w/h flow.
-(padding {¦ up-w⫽h: ±λ} ⍊ ±px⫽y -up-w⫽h: λ') <> {λ': $'(+ →λ →px⫽y), (λ): ()}
-(padding {¦ -dn-w⫽h: λ'} ⍊ ±px⫽y dn-w⫽h: ±λ) <> {λ': $'(- →λ →px⫽y), (λ): ()}
+(padding {¦ up-w⫽h: ±λ} ⍊ ±px⫽y -up-w⫽h: λ') <> {λ': ^(+ λ px⫽y), (λ): ()}
+(padding {¦ -dn-w⫽h: λ'} ⍊ ±px⫽y dn-w⫽h: ±λ) <> {λ': ^(- λ px⫽y), (λ): ()}
 
 ;; Offset the child by pl/pt.
-(padding {¦ dl⫽t⋮ 0} ⍊ position ±pl⫽t -◇_) <> {dl⫽t: $'(+ →dl⫽t →pl⫽t), ◇: true}
+(padding {¦ dl⫽t⋮ 0} ⍊ position ±pl⫽t -◇_) <> {dl⫽t: ^(+ dl⫽t pl⫽t), ◇: true}
 
 ;;
 ;; limit
 ;;
 
 ;; Intercept and release up-w/h.
-(limit {¦ up-w⫽h: ±λ} ⍊ -up-w⫽h: λ') <> {λ': (arg →λ), (λ): ()}
-(limit _ ⍊ up-w⫽h: Λ←[arg ±λ]) <> {Λ: →λ}
+(limit {¦ up-w⫽h: ±λ} ⍊ -up-w⫽h: λ') <> {λ': (arg ^λ), (λ): ()}
+(limit _ ⍊ up-w⫽h: Λ←[arg ±λ]) <> {Λ: ^λ}
 
 ;; Intercept and release dn-w/h.
-(limit _ ⍊ dn-w⫽h: ±λ) <> {λ: (arg →λ)}
-(limit {¦ -dn-w⫽h: λ'} ⍊ dn-w⫽h: Λ←[arg ±λ]) <> {λ': →λ, (Λ): ()}
+(limit _ ⍊ dn-w⫽h: ±λ) <> {λ: (arg ^λ)}
+(limit {¦ -dn-w⫽h: λ'} ⍊ dn-w⫽h: Λ←[arg ±λ]) <> {λ': ^λ, (Λ): ()}
 
 ;; Apply constraints on up-w/h.
 (limit _ ⍊ up-w⫽h: (arg ±λ ⍊ -◇_) ±⟦min,max⟧-w⫽h)
-  <> {λ: $'(⟦max,min⟧ →⟦min,max⟧-w⫽h →λ), ◇: true}
+  <> {λ: ^(⟦max,min⟧ ⟦min,max⟧-w⫽h λ), ◇: true}
 
 ;; Apply max-w/h constraints on dn-w/h. This seems the right thing to do;
 ;; even if the parent gives us more size we'll still adhere to the child's
 ;; own max width restriction.
 (limit _ ⍊ dn-w⫽h: (arg ±λ ⍊ -◇) ±max-w⫽h)
-  <> {λ: $'(min →λ →max-w⫽h), ◇: true}
+  <> {λ: ^(min λ max-w⫽h), ◇: true}
 
 ;;
 ;; percents
 ;;
 
 ;; Intercept and release dn-w/h.
-(percents _ ⍊ ±dn-w⫽h: λ) <> {λ: (arg →λ)}
-(percents {¦ -dn-w⫽h: λ'} ⍊ dn-w⫽h: Λ←[arg ±λ]) <> {λ': →λ, (Λ): ()}
+(percents _ ⍊ ±dn-w⫽h: λ) <> {λ: (arg ^λ)}
+(percents {¦ -dn-w⫽h: λ'} ⍊ dn-w⫽h: Λ←[arg ±λ]) <> {λ': ^λ, (Λ): ()}
 
 ;; Scale.
 (percents _ ⍊ dn-w⫽h: (arg ±λ ⍊ -◇_) w⫽h: scale←(%number 0 <= _ <= 1))
-  <> {λ: $(round (* →λ →scale)), ◇: true}
+  <> {λ: ^(round (* λ scale)), ◇: true}
 
 ;;
 ;; x/y-signal
@@ -237,27 +237,27 @@
 
 ;; Save up-w/h under desired-w/h.
 (x⫽y-signal {¦ up-w⫽h: ±λ} ⍊ ⋮desired-w⫽h -up-w⫽h: λ')
-  <> {λ': →λ, desired-w⫽h: →λ, (λ): ()}
+  <> {λ': ^λ, desired-w⫽h: ^λ, (λ): ()}
 
 ;; Intercept dn-w/h.
-(x⫽y-signal _ ⍊ ±dn-w⫽h: λ) <> {λ: (arg →λ)}
-(x⫽y-signal {¦ -dn-w⫽h: λ'} ⍊ dn-w⫽h: Λ←[arg ±λ]) <> {λ': →λ, (Λ): ()}
+(x⫽y-signal _ ⍊ ±dn-w⫽h: λ) <> {λ: (arg ^λ)}
+(x⫽y-signal {¦ -dn-w⫽h: λ'} ⍊ dn-w⫽h: Λ←[arg ±λ]) <> {λ': ^λ, (Λ): ()}
 
 ;; Check if intercepted dn-w/h fits.
 (x⫽y-signal _ ⍊ dn-w⫽h: (arg ±dn-w⫽h ⍊ -fits_) ±desired-w⫽h fitness⋮ true ±threshold)
-  <> {fits: $(and (>= →dn-w⫽h →desired-w⫽h) (>= →dn-w⫽h →threshold))}
+  <> {fits: ^(and (>= dn-w⫽h desired-w⫽h) (>= dn-w⫽h threshold))}
 (x⫽y-signal _ ⍊ dn-w⫽h: (arg ±dn-w⫽h ⍊ -fits_) ±desired-w⫽h fitness: false ±threshold)
-  <> {fits: $'(>= →dn-w⫽h →threshold)}
+  <> {fits: ^(>= dn-w⫽h threshold)}
 (x⫽y-signal _ ⍊ dn-w⫽h: (arg ±dn-w⫽h ⍊ -fits_) ±desired-w⫽h -threshold)
-  <> {fits: $'(>= →dn-w⫽h →desired-w⫽h)}
+  <> {fits: ^(>= dn-w⫽h desired-w⫽h)}
 
 ;; If it does not fit, signal up and reject dn-w/h.
 (x⫽y-signal _ ⍊ dn-w⫽h: A←(arg ±dn-w⫽h ⍊ fits: false) id_ -up-signal_)
-  <> {up-signal: →id, (A): ()}
+  <> {up-signal: ^id, (A): ()}
 
 ;; `up-signal`s flow up.
 ⟨{¦ up-signal: sig_} ⍊ -up-signal: sig'⟩
-  <> {sig': →sig, (sig): ()}
+  <> {sig': ^sig, (sig): ()}
 
 ;;
 ;; switch
@@ -270,17 +270,17 @@
 ;; TODO: switch picks `to` irrevokably. This should be fixed once it
 ;; is reachable with tests & practically significant.
 
-(switch `N ⍊ -mode_ from_) <> {mode: from, N: →from}
+(switch `N ⍊ -mode_ from_) <> {mode: from, N: ^from}
 
 ;; A switch catches up signals and switches to `to`.
 (switch N_ ⍊ mode_: from to_ on: id_ up-signal: sig←id_)
-  <> {N: →to, mode: to, (sig): ()}
+  <> {N: ^to, mode: to, (sig): ()}
 
 ;;
 ;; floating
 ;;
 
-(floating {¦ up-w⫽h: ±λ -dn-w⫽h: λ'} ⍊ x⫽y) <> {λ': →λ, (λ): ()}
+(floating {¦ up-w⫽h: ±λ -dn-w⫽h: λ'} ⍊ x⫽y) <> {λ': ^λ, (λ): ()}
 (floating _ ⍊ x⫽y dn-w⫽h: ±λ) <> {(λ): ()}
 
 ;;
@@ -289,19 +289,19 @@
 
 ;; Update lax-w/h as up-w/h flows up from the child.
 (align {¦ ±up-w⫽h} ⍊ x⫽y: _number ⋮lax-w⫽h -up-w⫽h: lax-w⫽h)
-  <> {lax-w⫽h: →up-w⫽h, (up-w⫽h): ()}
+  <> {lax-w⫽h: ^up-w⫽h, (up-w⫽h): ()}
 
 ;; Update strict-w/h as dn-w/h flows down to the child.
 (align {¦ -dn-w⫽h: strict-w⫽h} ⍊ x⫽y: _number ±lax-w⫽h ±dn-w⫽h ⋮strict-w⫽h ⋮out-w⫽h)
-  <> {out-w⫽h: →dn-w⫽h, strict-w⫽h: $'(min →lax-w⫽h →dn-w⫽h), (dn-w⫽h): ()}
+  <> {out-w⫽h: ^dn-w⫽h, strict-w⫽h: ^(min lax-w⫽h dn-w⫽h), (dn-w⫽h): ()}
 
 ;; Strict positioning.
 (align {¦ dl⫽t⋮ 0} ⍊ -◇_ position ±x⫽y ±strict-w⫽h ±out-w⫽h)
-  <> {dl⫽t: $(+ →dl⫽t (round (- (* →out-w⫽h →x⫽y) (* →strict-w⫽h →x⫽y)))), ◇: true}
+  <> {dl⫽t: ^(+ dl⫽t (round (- (* out-w⫽h x⫽y) (* strict-w⫽h x⫽y)))), ◇: true}
 
 ;; Lax positioning.
 (align {¦ dl⫽t⋮ 0} ⍊ -◇_ position lax ±x⫽y ±lax-w⫽h ±out-w⫽h)
-  <> {dl⫽t: $(+ →dl⫽t (round (- (* →out-w⫽h →x⫽y) (* →lax-w⫽h →x⫽y)))), ◇: true}
+  <> {dl⫽t: ^(+ dl⫽t (round (- (* out-w⫽h x⫽y) (* lax-w⫽h x⫽y)))), ◇: true}
 
 ;;
 ;; Message flow control
@@ -309,11 +309,11 @@
 
 ;; As the universal default, simply forward any incoming messages
 ;; to mail/mid.
-{¦ mail/in: M_ -mail/mid_} <> {mail/mid: →M, (M): ()}
+{¦ mail/in: M_ -mail/mid_} <> {mail/mid: ^M, (M): ()}
 
 ;; Once no rules remain that have something to do with mail/mid,
 ;; we forward it to mail/out.
-{¦ mail/mid_ -mail/out_} <> {mail/out: →mail/mid, (mail/mid): ()}
+{¦ mail/mid_ -mail/out_} <> {mail/out: ^mail/mid, (mail/mid): ()}
 
 ;;
 ;; `metrics` event
@@ -324,34 +324,34 @@
 
 ;; Update x/y-stride from up-w/h.
 {¦ mail/mid: [metrics _] ±up-w⫽h ⋮x⫽y-stride}
-  <> {x⫽y-stride: →up-w⫽h, (up-w⫽h): ()}
+  <> {x⫽y-stride: ^up-w⫽h, (up-w⫽h): ()}
 
 ;; Max of widths/heights.
 ▪ {¦ mail/mid: (metrics {¦ w⫽h-max_: ?} ⍊ -▢_) -up-w⫽h shrink: (%- (%any true w⫽h)) ±x⫽y-stride}
-    <> {w⫽h-max: →x⫽y-stride, ▢: true}
+    <> {w⫽h-max: ^x⫽y-stride, ▢: true}
   {¦ mail/mid: (metrics {¦ ±w⫽h-max} ⍊ -▢_) -up-w⫽h shrink: (%- (%any true w⫽h)) ±x⫽y-stride}
-    <> {w⫽h-max: $'(max →w⫽h-max →x⫽y-stride), ▢: true}
+    <> {w⫽h-max: ^(max w⫽h-max x⫽y-stride), ▢: true}
 
 ;; Sum of widths/heights excluding fr children.
 ▪ {¦ mail/mid: (metrics {¦ w⫽h-lo_: ?} ⍊ -▢_) -fr -up-w⫽h ±x⫽y-stride}
-    <> {w⫽h-lo: →x⫽y-stride, ▢: true}
+    <> {w⫽h-lo: ^x⫽y-stride, ▢: true}
   {¦ mail/mid: (metrics {¦ ±w⫽h-lo} ⍊ -▢_) -fr -up-w⫽h ±x⫽y-stride}
-    <> {w⫽h-lo: $'(+ →w⫽h-lo →x⫽y-stride), ▢: true}
+    <> {w⫽h-lo: ^(+ w⫽h-lo x⫽y-stride), ▢: true}
 
 ;; Sum of widths/heights including fr children.
 ▪ {¦ mail/mid: (metrics {¦ w⫽h-hi_: ?} ⍊ -▢_) -up-w⫽h ±x⫽y-stride}
-    <> {w⫽h-hi: →x⫽y-stride, ▢: true}
+    <> {w⫽h-hi: ^x⫽y-stride, ▢: true}
   {¦ mail/mid: (metrics {¦ ±w⫽h-hi} ⍊ -▢_) -up-w⫽h ±x⫽y-stride}
-    <> {w⫽h-hi: $'(+ →w⫽h-hi →x⫽y-stride), ▢: true}
+    <> {w⫽h-hi: ^(+ w⫽h-hi x⫽y-stride), ▢: true}
 
 ;; Sum of frs.
 ▪ {¦ mail/mid: (metrics {¦ ±fr-sum} ⍊ -▢_) ±fr}
-    <> {fr-sum: $'(+ →fr-sum →fr), ▢: true}
+    <> {fr-sum: ^(+ fr-sum fr), ▢: true}
 
 ;; No. of participants: if I modified the metrics then increment
 ;; the participants count.
 ▪ {¦ mail/mid: (metrics {¦ N⋮ 0} ¦ (%not ()) -▢_)}
-    <> {N: $'(+ →N 1), ▢: true}
+    <> {N: ^(+ N 1), ▢: true}
 
 ;;
 ;; Stack events
@@ -363,36 +363,36 @@
 ;; that its x/y-stride is exactly the same as up-w/h that it reports, it will
 ;; reply to itself with det-w/h.
 {¦ x⫽y-stride: λ_ up-w⫽h_: λ_ ±det-w⫽h -dn-w⫽h_}
-  <> {dn-w⫽h: →det-w⫽h, (up-w⫽h): ()}
+  <> {dn-w⫽h: ^det-w⫽h, (up-w⫽h): ()}
 
 ;; x/y-resize
 
 ;; Update det-w/h of fractionally-sized node.
 {¦ mail/mid: (x⫽y-resize {¦ fr-sum_number: (%not 0)} ±rem-w⫽h ⍊ -▢_) ⋮det-w⫽h ±fr}
-  <> {det-w⫽h: $(round (* →rem-w⫽h (/ →fr →fr-sum))), ▢: true}
+  <> {det-w⫽h: ^(round (* rem-w⫽h (/ fr fr-sum))), ▢: true}
 ;; Update det-w/h of exact-sized node.
 {¦ mail/mid: (x⫽y-resize {¦ ±x⫽y-limit} _ ⍊ -▢_) ±x⫽y-stride ⋮det-w⫽h}
-  <> {det-w⫽h: $'(min →x⫽y-limit →x⫽y-stride), ▢: true}
+  <> {det-w⫽h: ^(min x⫽y-limit x⫽y-stride), ▢: true}
 ;; Send det-w/h as dn-w/h.
 {¦ mail/mid: (x⫽y-resize _ _ ⍊ ▢ -◇_) -dn-w⫽h_ ±det-w⫽h}
-  <> {dn-w⫽h: →det-w⫽h, ◇: true}
+  <> {dn-w⫽h: ^det-w⫽h, ◇: true}
 
 ;; x/y-expand
 
 {¦ mail/mid: (x⫽y-expand _ ±λ ⍊ -◇_) ⋮det-w⫽h -dn-w⫽h: det-w⫽h}
-  <> {det-w⫽h: →λ, ◇: true}
+  <> {det-w⫽h: ^λ, ◇: true}
 
 ;; x-place
 
 ;; If width/height is determinate on the child, use it to advance
 ;; delta; offset child by delta, and pass positioning trigger.
 {¦ mail/mid: [x⫽y-place ±l⫽t ±gap] ±det-w⫽h dl⫽t⋮ 0 -position_}
-  <> {dl⫽t: $'(+ →l⫽t →dl⫽t), l⫽t: $'(+ →l⫽t →gap →det-w⫽h), position: true}
+  <> {dl⫽t: ^(+ l⫽t dl⫽t), l⫽t: ^(+ l⫽t gap det-w⫽h), position: true}
 
 ;; If width/height is indeterminate, simply offset the child by delta;
 ;; equip it with positioning trigger and move on.
 {¦ mail/mid: [x⫽y-place ±l⫽t _] dl⫽t⋮ 0 -position_}
-  <> {dl⫽t: $'(+ →l⫽t →dl⫽t), position: true}
+  <> {dl⫽t: ^(+ l⫽t dl⫽t), position: true}
 
 ;; z-place
 {¦ mail/mid: [z-place] -position_} <> {position: true}
@@ -409,7 +409,7 @@
 
 ;; Place the metrics to the pairspart.
 ((%any x-stack y-stack z-stack) _* {¦ mail/out_: [metrics m_]} ⍊ metrics_)
-  <> {(mail/out): (), metrics: →m}
+  <> {(mail/out): (), metrics: ^m}
 
 ;; Invalidate metrics.
 ((%any x-stack y-stack z-stack) _* {¦ mail/out_: [_ {¦ invalid} _*]} ⍊ metrics_)
@@ -423,7 +423,7 @@
 
 ;; Enhance resulting metrics with gap width sum.
 ((%any x-stack y-stack) _* {¦ mail/out: [metrics {¦ -gaps_ ±N}]} ⍊ gap⋮ 0)
-  <> {gaps: $(* (- →N 1) →gap)}
+  <> {gaps: ^(* (- N 1) gap)}
 
 ;;
 ;; x/y-stack
@@ -439,25 +439,25 @@
 
 ;; Calculate main candidate.
 (x⫽y-stack _* {¦ mail/out: [metrics {¦ ±w⫽h-hi ±gaps}]} ⍊ -up-⸨w,h⸩/new: w⫽h)
-  <> {w⫽h: $(+ →w⫽h-hi →gaps)}
+  <> {w⫽h: ^(+ w⫽h-hi gaps)}
 
 ;; Calculate cross candidate.
 (x⫽y-stack _* {¦ mail/out: [metrics {¦ ±h⫽w-max}]} ⍊ -up-⸨h,w⸩/new: h⫽w)
-  <> {h⫽w: →h⫽w-max}
+  <> {h⫽w: ^h⫽w-max}
 
 ;; Trigger main-resize once main is known.
 (x⫽y-stack {¦ -mail/in_} ⁑ metrics_: {¦ ±w⫽h-lo ±gaps} ±dn-w⫽h)
-  <> {mail/in: (x⫽y-resize $'(union →metrics {x⫽y-limit: →dn-w⫽h})
-                           $'(- →dn-w⫽h →w⫽h-lo →gaps)),
+  <> {mail/in: (x⫽y-resize ^(union metrics {x⫽y-limit: dn-w⫽h})
+                           ^(- dn-w⫽h w⫽h-lo gaps)),
       (dn-w⫽h): ()}
 
 ;; Trigger cross-expand once cross is known.
 (x⫽y-stack {¦ -mail/in_} ⁑ metrics_ ±dn-h⫽w)
-  <> {mail/in: (y⫽x-expand →metrics →dn-h⫽w), (dn-h⫽w): ()}
+  <> {mail/in: (y⫽x-expand ^metrics ^dn-h⫽w), (dn-h⫽w): ()}
 
 ;; Trigger positioning of children.
 (x⫽y-stack {¦ -mail/in_} ⁑ position⁺ gap⋮ 0)
-  <> {mail/in: (x⫽y-place 0 →gap), position: false}
+  <> {mail/in: (x⫽y-place 0 ^gap), position: false}
 
 ;;
 ;; z-stack
@@ -469,11 +469,11 @@
 
 ;; Assign size candidate.
 (z-stack _* {¦ mail/out: [metrics {¦ ±w⫽h-max}]} ⍊ -up-⸨w,h⸩/new: w⫽h)
-  <> {w⫽h: →w⫽h-max}
+  <> {w⫽h: ^w⫽h-max}
 
 ;; Trigger expand once size is known.
 (z-stack {¦ -mail/in_} ⁑ metrics_ ±dn-w⫽h)
-  <> {mail/in: (x⫽y-expand →metrics →dn-w⫽h), (dn-w⫽h): ()}
+  <> {mail/in: (x⫽y-expand ^metrics ^dn-w⫽h), (dn-w⫽h): ()}
 
 ;; Trigger positioning of children.
 (z-stack {¦ -mail/in_} ⁑ position⁺)
@@ -484,7 +484,7 @@
 ;;
 
 ;; For children that know their up-w already, x-log simply records that up-w.
-{¦ mail/mid: (x⫽y-log (_* `T) ⍊ -▢_) ±up-w⫽h} <> {T: →up-w⫽h, ▢: true}
+{¦ mail/mid: (x⫽y-log (_* `T) ⍊ -▢_) ±up-w⫽h} <> {T: ^up-w⫽h, ▢: true}
 ;; For children that tell they're fr but do not know their size, x-log
 ;; records that as flexible size, indicated by `~`.
 {¦ mail/mid: (x⫽y-log (_* `T) ⍊ -▢_) -up-w⫽h fr} <> {T: ~, ▢: true}
@@ -499,10 +499,10 @@
 ;; the number of known-participant children (to calculate accumulated gap),
 ;; and Sp, the total size of participant children.
 [wrap-stat `L R←(_*)] <> {L: ()}
-(wrap-stat (_* `l) (r←~ _*) ⍊ Np⋮ 0) <> {Np: $'(+ →Np 1), l: →r, (r): ()}
-[wrap-stat (_* `l) (r←? _*)] <> {l: →r, (r): ()}
+(wrap-stat (_* `l) (r←~ _*) ⍊ Np⋮ 0) <> {Np: ^(+ Np 1), l: ^r, (r): ()}
+[wrap-stat (_* `l) (r←? _*)] <> {l: ^r, (r): ()}
 (wrap-stat (_* `l) (±w _*) ⍊ Np⋮ 0 Sp⋮ 0)
-  <> {Np: $'(+ →Np 1), Sp: $'(+ →Sp →w), l: →w, (w): ()}
+  <> {Np: ^(+ Np 1), Sp: ^(+ Sp w), l: ^w, (w): ()}
 
 ;;
 ;; x/y-wrap
@@ -511,12 +511,12 @@
 ;; Copy nodes out of the rewrite-protected pairspart into rewriteable
 ;; itemspart. Let nodes rewrite themselves until some of them can tell
 ;; their up-w (if they can of course).
-(x⫽y-wrap `T ⍊ -state_ nodes_: (_+)) <> {(T): →nodes, state: initial}
+(x⫽y-wrap `T ⍊ -state_ nodes_: (_+)) <> {(T): ^nodes, state: initial}
 
 ;; If gap is given and no gap-x/y, assume the client wants both values
 ;; to be the same.
 (x⫽y-wrap _* ⍊ state: initial ±gap -gap-x_ -gap-y_)
-  <> {gap-x: →gap, gap-y: →gap}
+  <> {gap-x: ^gap, gap-y: ^gap}
 
 ;; Once that is the case, initiate log.
 (x⫽y-wrap {¦ -mail/in_} _* ⍊ state_: initial)
@@ -524,83 +524,83 @@
 
 ;; After the log is known, stat it by instantiating the wrap-stat zipper.
 (x⫽y-wrap (%group children_ _* {¦ mail/out: [x⫽y-log log_]}) ⍊ state_: log)
-  <> {children: (wrap-stat →log), state: stat}
+  <> {children: (wrap-stat ^log), state: stat}
 
 ;; NOTE: x/y-wrap must have at least one sized child for Sp/N to be defined,
 ;; otherwise, x/y-wrap itself will be unsized (thus most likely floating).
 (x⫽y-wrap N←(wrap-stat log_ () ¦ stats_) ⍊ state_: stat -log: log-dst -stats: stats-dst)
-  <> {(N): (), log-dst: →log, stats-dst: →stats, state: sizing}
+  <> {(N): (), log-dst: ^log, stats-dst: ^stats, state: sizing}
 
 ;; Calculate up-w/h.
 (x⫽y-wrap ⍊ state_: sizing gap-x⫽y⋮ 0 stats: {¦ ±Sp ±Np} -up-w⫽h_)
-  <> {state: sized, up-w⫽h: $(+ →Sp (* →gap-x⫽y (- →Np 1)))}
+  <> {state: sized, up-w⫽h: ^(+ Sp (* gap-x⫽y (- Np 1)))}
 
 ;; Consume dn-w/h until in sized state.
 (x⫽y-wrap ⁑ ±dn-w⫽h) <> {(dn-w⫽h): ()}
 
 ;; Construct wrapper on dn-w/h in sized state.
 (x⫽y-wrap children_* ⍊ state: sized ⋮limit ±dn-w⫽h)
-  <> {children: (wrapper main: x⫽y-stack cross: y⫽x-stack), limit: →dn-w⫽h, (dn-w⫽h): ()}
+  <> {children: (wrapper main: x⫽y-stack cross: y⫽x-stack), limit: ^dn-w⫽h, (dn-w⫽h): ()}
 
 ;; Respond with limit to any up-w/h to avoid infinite loops (children
 ;; x/y-stack's reporting their size leads to rewrap leads to new x/y-stack's
 ;; reporting their sizes and so on).
-(x⫽y-wrap {¦ ±up-w⫽h -dn-w⫽h_} ⍊ ±limit) <> {dn-w⫽h: →limit, (up-w⫽h): ()}
+(x⫽y-wrap {¦ ±up-w⫽h -dn-w⫽h_} ⍊ ±limit) <> {dn-w⫽h: ^limit, (up-w⫽h): ()}
 
 ;;
 ;; wrapper
 ;;
 
 ;; Initialize from the enclosing x/y-wrap.
-(x⫽y-wrap (wrapper ⍊ -limit: limit') ⍊ ±limit) <> {limit': →limit}
-(x⫽y-wrap (wrapper ⍊ -log: log') ⍊ log_) <> {log': →log}
-(x⫽y-wrap (wrapper ⍊ -nodes: nodes') ⍊ nodes_) <> {nodes': →nodes}
-(x⫽y-wrap (wrapper ⍊ -min-span: min-span') ⍊ min-span_) <> {min-span': →min-span}
-(x⫽y-wrap (wrapper ⍊ -max-span: max-span') ⍊ max-span_) <> {max-span': →max-span}
+(x⫽y-wrap (wrapper ⍊ -limit: limit') ⍊ ±limit) <> {limit': ^limit}
+(x⫽y-wrap (wrapper ⍊ -log: log') ⍊ log_) <> {log': ^log}
+(x⫽y-wrap (wrapper ⍊ -nodes: nodes') ⍊ nodes_) <> {nodes': ^nodes}
+(x⫽y-wrap (wrapper ⍊ -min-span: min-span') ⍊ min-span_) <> {min-span': ^min-span}
+(x⫽y-wrap (wrapper ⍊ -max-span: max-span') ⍊ max-span_) <> {max-span': ^max-span}
 
 ;; Define gap-main and gap-cross.
-(x⫽y-wrap (wrapper ⍊ -gap-main_) ⍊ ±gap-x⫽y) <> {gap-main: →gap-x⫽y}
-(y⫽x-wrap (wrapper ⍊ -gap-cross_) ⍊ ±gap-x⫽y) <> {gap-cross: →gap-x⫽y}
+(x⫽y-wrap (wrapper ⍊ -gap-main_) ⍊ ±gap-x⫽y) <> {gap-main: ^gap-x⫽y}
+(y⫽x-wrap (wrapper ⍊ -gap-cross_) ⍊ ±gap-x⫽y) <> {gap-cross: ^gap-x⫽y}
 
 ;; Transition into an initialized state by defining rem (remainder)
 ;; and span (no. of nodes on the main axis).
-[x⫽y-wrap (wrapper ⍊ -rem_ -span_ ±limit)] <> {rem: →limit, span: 0}
+[x⫽y-wrap (wrapper ⍊ -rem_ -span_ ±limit)] <> {rem: ^limit, span: 0}
 
 ;; Sink rule that fires when there's nothing left to initialize.
 [x⫽y-wrap (wrapper ⍊ -ready_)] <> {ready: true}
 
 ;; Surround with cross axis.
 [x⫽y-wrap C←(wrapper ⍊ ready cross_ gap-cross⋮ 0)]
-  <> {C: (→cross →C gap: →gap-cross)}
+  <> {C: (^cross ^C gap: ^gap-cross)}
 
 ;; Surround with main axis.
 [cross_ _* C←(wrapper ⍊ main_ cross_ gap-main⋮ 0)]
-  <> {C: (→main →C gap: →gap-main)}
+  <> {C: (^main ^C gap: ^gap-main)}
 
 ;; Propose to expel left. This rule votes yes unconditionally.
 [main_ _* (wrapper ⍊ main_ ±rem ±span log: (±w _*) -proposal_)]
-  <> {proposal: (prepare {irem: $'(- →rem →w), span: $'(+ →span 1), accept: true})}
+  <> {proposal: (prepare {irem: ^(- rem w), span: ^(+ span 1), accept: true})}
 [main_ _* (wrapper ⍊ main_ ±span log: (~ _*) -proposal_)]
-  <> {proposal: (prepare {irem: →rem, span: $'(+ →span 1), accept: true})}
+  <> {proposal: (prepare {irem: ^rem, span: ^(+ span 1), accept: true})}
 [main_ _* (wrapper ⍊ main_ log: (? _*) -proposal_)]
   <> {proposal: (prepare {accept: true})}
 
 ;; Subtract gap-x if necessary from intrinsic rem to obtain rem.
 (wrapper ⍊ proposal: (prepare {¦ ±irem -rem_}) span: 0)
-  <> {rem: →irem}
+  <> {rem: ^irem}
 (wrapper ⍊ proposal: (prepare {¦ ±irem -rem_}) gap-main⋮ 0)
-  <> {rem: $'(- →irem →gap-main)}
+  <> {rem: ^(- irem gap-main)}
 
-(wrapper ⍊ proposal_: (prepare p_)) <> {proposal: →p}
+(wrapper ⍊ proposal_: (prepare p_)) <> {proposal: ^p}
 
 ;; These rules vote on the proposal to expel left also. Note how each
 ;; proceeds only if all other accepted with the `accept: true` constraint.
 (wrapper ⍊ proposal: {¦ ±rem accept⁺ -◇_})
-  <> {accept: $'(>= →rem 0), ◇: true}
+  <> {accept: ^(>= rem 0), ◇: true}
 (wrapper ⍊ proposal: {¦ ±span accept: true -min-sat_} min-span_: (%number (whole _) > 0))
-  <> {min-sat: $'(> →span →min-span)}
+  <> {min-sat: ^(> span min-span)}
 (wrapper ⍊ proposal: {¦ ±span accept: true -max-sat_} max-span_: (%number (whole _) > 0))
-  <> {max-sat: $'(<= →span →max-span)}
+  <> {max-sat: ^(<= span max-span)}
 
 ;; If min/max unsat, vote against proposal. Otherwise, either min/max
 ;; is missing or it is sat.
@@ -609,24 +609,24 @@
 
 ;; These rules have deliberately low specificity vs. the voting rules.
 ;; They announce the result of voting when no more voters remain.
-(wrapper ⍊ proposal: p←{¦ accept: true}) <> {p: (accepted →p)}
-(wrapper ⍊ proposal: p←{¦ accept: false}) <> {p: (declined →p)}
+(wrapper ⍊ proposal: p←{¦ accept: true}) <> {p: (accepted ^p)}
+(wrapper ⍊ proposal: p←{¦ accept: false}) <> {p: (declined ^p)}
 
 ;; If min unsat in declined, convert to accepted (aka force even if overflows
 ;; when min unsat).
-(wrapper ⍊ proposal: P←(declined p←{¦ min-sat: false})) <> {P: (accepted →p)}
+(wrapper ⍊ proposal: P←(declined p←{¦ min-sat: false})) <> {P: (accepted ^p)}
 
 ;; Force accept if span is 0 (the first item doesn't fit in the main axis).
 ;; If we don't do this we'll loop forever if that happens.
-(wrapper ⍊ span: 0 proposal: P←(declined p_)) <> {P: (accepted →p)}
+(wrapper ⍊ span: 0 proposal: P←(declined p_)) <> {P: (accepted ^p)}
 
 ;; Merge accepted.
 C←(wrapper ⍊ proposal: P←(accepted {¦ rem: ±rem' span: ±span'}) ±rem ±span nodes: (N_ _*) log: (record_ _*))
-  <> {(C): (↑N0 ↑C), (P): (), rem: →rem', span: →span', (N): ($tr N0 ()), (record): ()}
+  <> {(C): (^(up N0) ^(up C)), (P): (), rem: ^rem', span: ^span', (N): ($tr N0 ()), (record): ()}
 
 ;; Destroy declined and exit the main stack.
 S←[main_ _* C←(wrapper ⍊ main_ proposal: P←(declined _) ±rem ±span ±limit)]
-  <> {(P): (), rem: →limit, span: 0, (S): (↑S ↑C0), (C): ($tr C0 ())}
+  <> {(P): (), rem: ^limit, span: 0, (S): (^(up S) ^(up C0)), (C): ($tr C0 ())}
 
 ;; Self-destruct once exhausted.
 C←(wrapper ⍊ nodes: ()) <> {(C): ()}

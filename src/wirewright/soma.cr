@@ -43,7 +43,7 @@ module Ww::Soma
         choiceR(
           dictR,
           chainR(
-            rulesetR(ruleset, noR, backmapR, noR),
+            alloy_rulesetR(ruleset),
             metricsR,
           ),
         )
