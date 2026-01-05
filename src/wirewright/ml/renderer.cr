@@ -302,6 +302,9 @@ module Ww::ML
           commit << tsrc(ctx, head)
           commit << render(ctx, item)
           commit.with(:self, true)
+          unless node.source
+            commit.with(:order, :bfs)
+          end
         end
       end
 
