@@ -116,8 +116,14 @@ module Testtool
 
   def display(entity : TestSuccessPixel)
     # NOTE: I find it very tiring/headache-y when the same glyph (e.g. `.`) repeats
-    # over and over in peripheral vision, so let's add some texture.
-    glyph = {",", "'", "`", ".", "\"", ";"}.sample
+    # over and over in peripheral vision, so let's add some texture. Also, color is
+    # much easier to distinguish with texture.
+    glyph = {
+      "⠁", "⠂", "⠃", "⠄", "⠅", "⠆", "⠇", "⠈", "⠉", "⠊", "⠋", "⠌", "⠍", "⠎", "⠏",
+      "⠐", "⠑", "⠒", "⠓", "⠔", "⠕", "⠖", "⠗", "⠘", "⠙", "⠚", "⠛", "⠜", "⠝", "⠞", "⠟",
+      "⠠", "⠡", "⠢", "⠣", "⠤", "⠥", "⠦", "⠧", "⠨", "⠩", "⠪", "⠫", "⠬", "⠭", "⠮", "⠯",
+      "⠰", "⠱", "⠲", "⠳", "⠴", "⠵", "⠶", "⠷", "⠸", "⠹", "⠺", "⠻", "⠼", "⠽", "⠾", "⠿",
+    }.sample
 
     STDERR.print glyph.colorize.fore(*entity.color.rgb8)
   end
