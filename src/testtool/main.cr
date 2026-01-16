@@ -7,7 +7,8 @@ module Testtool
     ignored : Set(Term),
     stats_path : Path?,
     interactive : Bool,
-    display_assertion : Bool
+    display_assertion : Bool,
+    assets : Bool
 
   class ArgConf
     def tests_path
@@ -18,6 +19,59 @@ module Testtool
   defrecord ArgErr, detail : String
   defrecord ArgHelp
 
+  HELP = <<-'HELP'
+  SYNOPSIS
+
+  `testtool` lets you run the Wirewright tests.
+
+  USAGE
+
+    testtool [OPTIONS]
+
+  OPTIONS
+
+    +<tag>
+      Focus topics tagged with <tag>.
+
+    -<tag>
+      Ignore topics tagged with <tag>.
+
+    --index /path/to/index.wwml
+      Changes the path to tests index.
+      Default: tests/index.wwml.
+
+    --stats
+      Writes statistics (CPU and memory usage for each assertion)
+      to /tmp/ww-testtool.stats.csv.
+
+    --stats /path/to/stats.csv
+      Writes statistics (CPU and memory usage for each assertion)
+      to the provided path.
+
+    --interactive, -i
+      Goes through failures (if any) one-by-one instead of printing
+      them all at once.
+
+    --help, -h
+      Prints this message.
+
+    --assertion-visibility-none, -A
+      Prevents the testtool from showing full assertions for each complaint. This can
+      be useful if you have *a lot* of complaints, so many it's hard to scroll. Usually
+      the line number is all you need.
+
+    --assets-none
+      Prevents the testtool from loading heavy assets on startup. This improves DX if
+      you're working on a particular set of tests, unrelated to the heavy ones; loading
+      their associated resources takes time (especially in debug builds of Wirewright).
+
+  EXAMPLE
+
+    $ testtool --stats stats.csv -ufold -long
+    # Runs all tests except ufold and long(-running ones).
+    # Writes statistics to stats.csv.
+  HELP
+
   # Parses testtool command-line arguments provided in *argv*.
   def argparse(argv : Array(String)) : ArgParse
     index_path = Path["tests/index.wwml"]
@@ -26,6 +80,7 @@ module Testtool
     ignored = Set(Term).new
     interactive = false
     display_assertion = true
+    assets = true
 
     cursor = 0
     while cursor < argv.size
@@ -66,6 +121,11 @@ module Testtool
         next
       end
 
+      if arg.in?("-A", "--assets-none")
+        assets = false
+        next
+      end
+
       if name = arg.lchop?('+')
         focused << Term.of(Term::Sym.new(name))
         next
@@ -77,7 +137,7 @@ module Testtool
       end
     end
 
-    ArgConf.new(index_path, focused, ignored, stats_path, interactive, display_assertion)
+    ArgConf.new(index_path, focused, ignored, stats_path, interactive, display_assertion, assets)
   end
 
   # Resolves variables defined in *index*.
@@ -168,19 +228,21 @@ module Testtool
 
       vars = vars(files, index, base: conf.tests_path)
 
-      unless theme = theme?(files, index, base: conf.tests_path)
-        err("Microfold theme path and rem not recognized or undefined, aborting")
-        return
-      end
+      if conf.assets
+        unless theme = theme?(files, index, base: conf.tests_path)
+          err("Microfold theme path and rem not recognized or undefined, aborting")
+          return
+        end
 
-      unless editR = editR?(files, index, base: conf.tests_path)
-        err("editR codex not recognized or undefined, aborting")
-        return
-      end
+        unless editR = editR?(files, index, base: conf.tests_path)
+          err("editR codex not recognized or undefined, aborting")
+          return
+        end
 
-      unless uiR = uiR?(files, index, dw, base: conf.tests_path)
-        err("uiR codex not recognized or undefined, aborting")
-        return
+        unless uiR = uiR?(files, index, dw, base: conf.tests_path)
+          err("uiR codex not recognized or undefined, aborting")
+          return
+        end
       end
 
       yield AssertionAssets.new(vars, theme, editR, uiR, files, dw)

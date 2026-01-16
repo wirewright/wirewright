@@ -96,11 +96,16 @@ module Testtool
   defrecord MicrofoldTest, variants : Array(Term), problems : Term::Dict
 
   def run(test : MicrofoldTest, assets, stat, complaints) : Nil
+    unless theme = assets.theme
+      complaints << complaint("missing theme (did you run with `--assets-none`?)")
+      return
+    end
+
     ok = true
     renders = [] of Term
 
     test.variants.each do |variant|
-      render, issues = measure(stat) { Microfold.render(assets.theme, variant, severity: :minor) }
+      render, issues = measure(stat) { Microfold.render(theme, variant, severity: :minor) }
       if issues.present?
         ok = false
       end
@@ -138,9 +143,14 @@ module Testtool
   defrecord EditTest, seed : Term, msgs : Array(Term), result : Term
 
   def run(test : EditTest, assets, stat, complaints) : Nil
+    unless editR = assets.editR
+      complaints << complaint("missing editR (did you run with `--assets-none`?)")
+      return
+    end
+
     state = test.seed
     test.msgs.each do |msg|
-      state = measure(stat) { rewrite(Soma.dispatch(state, msg), assets.editR) }
+      state = measure(stat) { rewrite(Soma.dispatch(state, msg), editR) }
     end
 
     return if state == test.result # ok
@@ -148,7 +158,7 @@ module Testtool
     complaints << complaint("editR state mismatch", expected: test.result, got: state)
   end
 
-  def match(pattern : Term, matchee : Term) : Slice(Term::Dict) # : Array(Term::Dict)
+  def match(pattern : Term, matchee : Term) : Slice(Term::Dict)
     matches = nil
 
     levels = {M1::O2, M1::O1, M1::O0}

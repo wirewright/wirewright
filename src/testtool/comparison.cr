@@ -77,7 +77,7 @@ module Testtool
   # a "Frame", perhaps, that we can convert to various image formats and so on like normal
   # people. But currently that's only a far-away dream.
 
-  def ppmcmp(assets : AssertionAssets, comparand : DwDoc) : Bytes
+  def ppmcmp(dw, uiR, comparand : DwDoc) : Bytes
     doc = ML.document(comparand.source, doc: false)
     dwuir = Alloy.render(comparand.vars, doc)
 
@@ -89,15 +89,15 @@ module Testtool
     end
 
     data = Sync::Future(Bytes).new
-    assets.dw << DwUIR::SnapRequest.new(conf, DwUIR::SnapFormat["ppm"], data)
+    dw << DwUIR::SnapRequest.new(conf, DwUIR::SnapFormat["ppm"], data)
     data.get
   end
 
-  def ppmcmp(assets : AssertionAssets, comparand : UIRdoc) : Bytes
+  def ppmcmp(dw, uiR, comparand : UIRdoc) : Bytes
     doc = ML.document(comparand.source, doc: false)
     ruleset, rest = Ruleset.ruleset_and_rest(Ruleset::DEFAULT_SELECTOR, doc)
     uir = Alloy.compose(ruleset, comparand.globals, Alloy.template(Term[], Term.of(rest)))
-    dwuir = rewrite(uir, assets.uiR)
+    dwuir = rewrite(uir, uiR)
 
     conf = Term.matchpiT(dwuir, %[{¦ content-w: w←(%number +i32) content-h: h←(%number +i32) fill_}]) do
       DwUIR::ShowConf.new(w, h,
@@ -107,11 +107,11 @@ module Testtool
     end
 
     data = Sync::Future(Bytes).new
-    assets.dw << DwUIR::SnapRequest.new(conf, DwUIR::SnapFormat["ppm"], data)
+    dw << DwUIR::SnapRequest.new(conf, DwUIR::SnapFormat["ppm"], data)
     data.get
   end
 
-  def ppmcmp(assets : AssertionAssets, comparand : Ppm) : Bytes
+  def ppmcmp(dw, uiR, comparand : Ppm) : Bytes
     comparand.source
   end
 end

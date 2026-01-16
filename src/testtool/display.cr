@@ -39,48 +39,7 @@ module Testtool
   end
 
   def display(entity : Help)
-    puts <<-'HELP'
-    SYNOPSIS
-
-    `testtool` lets you run the Wirewright test suite.
-
-    USAGE
-
-      testtool [OPTIONS]
-
-    OPTIONS
-
-      +<tag>
-        Focus topics tagged with <tag>.
-
-      -<tag>
-        Ignore topics tagged with <tag>.
-
-      --index /path/to/index.wwml
-        Changes the path to tests index.
-        Default: tests/index.wwml.
-
-      --stats
-        Writes statistics (CPU and memory usage for each assertion)
-        to /tmp/ww-testtool.stats.csv.
-
-      --stats /path/to/stats.csv
-        Writes statistics (CPU and memory usage for each assertion)
-        to the provided path.
-
-      --interactive, -i
-        Goes through failures (if any) one-by-one instead of printing
-        them all at once.
-
-      --help, -h
-        Prints this message.
-
-    EXAMPLE
-
-      $ testtool --stats stats.csv -ufold -long
-      # Runs all tests except ufold and long(-running ones).
-      # Writes statistics to stats.csv.
-    HELP
+    puts HELP
   end
 
   def display(entity : LogMessage) : Nil
