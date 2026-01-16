@@ -163,6 +163,8 @@ module Ww::Alloy
       in Assign then children << expansion.term
       in Splice then children.concat(expansion.offspring.items)
       end
+
+      nil # NOTE: OR ELSE THE COMPILER CRASHES ...
     end
 
     yield submit
@@ -216,6 +218,80 @@ module Ww::Alloy
 
   private def render0(ctx : RenderContext, template : Term, issues : Issue::Sink) : Expansion
     Term.case(template) do
+      # |@ alloy.template.^var
+      #
+      # |@pattern
+      # _symbol
+      #
+      # |@block
+      # **Variable**
+      # Use the `^` prefix to replace the symbol with a variable's value.
+      #
+      # **String variable**
+      # Use the `^\` prefix to replace the symbol with a string of WwML
+      # for the variable's value.
+      #
+      # **Splice**
+      # Use the `^*` prefix to replace the symbol with the items and pairs
+      # from a dictionary variable value.
+      matchpi %{_symbol} do
+        id = template.unsafe_as_sym
+        continue unless id.prefixed_by?('^') # Fast path
+
+        case id
+        when .prefixed_by?('^', '\\')
+          # ^\qux
+          kind = :ml
+          name = id.ldrop(nchars: 2)
+        when .prefixed_by?('^', '*')
+          # ^*qux
+          kind = :splice
+          name = id.ldrop(nchars: 2)
+        else
+          # ^qux
+          kind = :var
+          name = id.ldrop(nchars: 1)
+        end
+
+        get_var(ctx, Term.of(name), issues) do |value, issues|
+          case kind
+          when :ml
+            Assign.new(Term.of(ML.compact(value)))
+          when :splice
+            unless value.type.dict?
+              issues.major("value must be a dict")
+              return Err.new
+            end
+
+            Splice.new(value.unsafe_as_d)
+          when :var
+            Assign.new(value)
+          else
+            unreachable
+          end
+        end
+      end
+
+      matchpi %{_symbol}, %{_number}, %{_string}, %{_boolean} do
+        ctx.refine.call(template, issues)
+      end
+
+      # |@ alloy.template.^
+      #
+      # |@pattern
+      # (^ expr_)
+      #
+      # |@key expr alloy.expr
+      # Value expression to evaluate.
+      #
+      # |@block
+      # Replaces itself with the result of evaluating an Alloy expression.
+      matchpi %{(^ expr_)} do
+        issues.adjoin(key: 1, detail: "value expression") do |issues|
+          Assign.new(eval(ctx, expr, issues))
+        end
+      end
+
       # |@ alloy.template.^case
       #
       # |@pattern
@@ -645,22 +721,6 @@ module Ww::Alloy
         end
       end
 
-      # |@ alloy.template.^
-      #
-      # |@pattern
-      # (^ expr_)
-      #
-      # |@key expr alloy.expr
-      # Value expression to evaluate.
-      #
-      # |@block
-      # Replaces itself with the result of evaluating an Alloy expression.
-      matchpi %{(^ expr_)} do
-        issues.adjoin(key: 1, detail: "value expression") do |issues|
-          Assign.new(eval(ctx, expr, issues))
-        end
-      end
-
       # |@ alloy.template.^extend
       #
       # |@pattern
@@ -969,65 +1029,6 @@ module Ww::Alloy
       # |@ alloy.template.^var
       #
       # |@pattern
-      # _symbol
-      #
-      # |@block
-      # **Variable**
-      # Use the `^` prefix to replace the symbol with a variable's value.
-      #
-      # **String variable**
-      # Use the `^\` prefix to replace the symbol with a string of WwML
-      # for the variable's value.
-      #
-      # **Splice**
-      # Use the `^*` prefix to replace the symbol with the items and pairs
-      # from a dictionary variable value.
-      matchpi %{_symbol} do
-        id = template.unsafe_as_sym
-        continue unless id.prefixed_by?('^') # Fast path
-
-        id = id.to(String).view
-        continue unless id = id.lchop?('^')
-        continue unless id.size > 0
-
-        case
-        when suffix = id.lchop?('\\')
-          continue unless suffix.size > 0
-
-          kind = :ml
-          name = Term::Sym.new(suffix.to_s)
-        when suffix = id.lchop?('*')
-          continue unless suffix.size > 0
-
-          kind = :splice
-          name = Term::Sym.new(suffix.to_s)
-        else
-          kind = :var
-          name = Term::Sym.new(id.to_s)
-        end
-
-        get_var(ctx, Term.of(name), issues) do |value, issues|
-          case kind
-          when :ml
-            Assign.new(Term.of(ML.compact(value)))
-          when :splice
-            unless value.type.dict?
-              issues.major("value must be a dict")
-              return Err.new
-            end
-
-            Splice.new(value.unsafe_as_d)
-          when :var
-            Assign.new(value)
-          else
-            unreachable
-          end
-        end
-      end
-
-      # |@ alloy.template.^var
-      #
-      # |@pattern
       # _dict
       #
       # |@block
@@ -1048,10 +1049,6 @@ module Ww::Alloy
         end
 
         ctx.refine.call(expansion.term, issues)
-      end
-
-      otherwise do
-        ctx.refine.call(template, issues)
       end
     end
   end
