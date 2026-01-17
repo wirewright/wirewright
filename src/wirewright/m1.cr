@@ -6,25 +6,25 @@
 #
 # A network packet, a user event -- all that does not really exist for Wirewright.
 # Rather, there are dedicated subsystems (e.g. the window manager) that "materialize"
-# them -- as in make them into "matter", into Wirewright-comprehensible `Term`s.
+# them -- as in turn them into "matter", into Wirewright-comprehensible `Term`s.
 #
 # Wirewright and most of its subsystems (e.g. `Alloy`, `DwUIR`, uiR) then require
 # a sensory organ to perceive parts of such matter. The backmapping engine, on the other
 # hand, is used for "actuation" -- to modify matter in response to perception.
 #
 # The processes of pattern matching and backmapping -- perception and actuation --
-# are so tighly linked and Wirewright that we group them under one subsystem, M1.
+# are so tighly coupled in Wirewright that we group them under one subsystem, M1.
 #
 # Underlying M1's pattern matching algorithm is a variation on backtracking search
 # with lightweight constraints (mostly equality constraints). The core idea is that
 # the pattern is "linearized" on the go (a bit like a train laying tracks in front
 # of itself); the current "match-point" (most likely an `Operator`) then asks
-# the rest of the pattern whether it approves whatever choice it makes. The current
-# "match-point" can do this any number of times; it can fork and collect answers,
-# or AND by introducing match-points further ahead, and so on.
+# the rest of the pattern whether they approves whatever choice the operator wants to
+# makes. The current "match-point" can do this any number of times; it can fork
+# and collect answers, AND them by introducing match-points further ahead, and so on.
 #
 # I suspect M1's pattern matching algorithm is NP in the worst case, although this
-# remains to be proven. For practical patterns NP, if it's there, would be very hard --
+# remains to be proven. For practical patterns, NP, if it's there, would be very hard --
 # if possible at all -- to hit. Most practical patterns have optimized (possibly sub-
 # microsecond) fast paths. The general expectation is that most patterns *match*
 # in <10 microseconds. These numbers vary with machine and environment, of course,
@@ -51,7 +51,7 @@
 # as *scrutinee* (see e.g. [Wikipedia, Pattern matching, Terminology of patterns]
 # (https://en.wikipedia.org/wiki/Pattern_matching#Terminology_of_patterns)).
 # I find *scrutinee* very hard to type, however, and the word *matchee*, although
-# a bit ugly and hard to pronounce, has long of history in Wirewright. It is
+# a bit ugly and hard to pronounce, has a long history in Wirewright. It is
 # therefore the preferred way of referring to the term being matched.
 #
 # NOTE: With M1, there's lots of "magic" involved, and even I can barely
@@ -69,7 +69,7 @@ module Ww::M1next
   # definitely does not match *matchee*.
   #
   # In other words, this function can give false positives but it will never
-  # get false negatives.
+  # give false negatives.
   #
   # This function is an extremely valuable asset for "defending" or "guarding"
   # expensive patterns (matched via e.g. `matches` or even `probe?`) -- but
@@ -84,7 +84,12 @@ module Ww::M1next
   # and so on, `probably_matches?` is a simple hierarchical matcher that walks *op*
   # as a tree. Think of it as your normal AST interpreter `eval` except the result
   # is `true` or `false` instead of a value, and it can be a false positive.
+  #
+  # NOTE: M1 won't call `probably_matches?` for you, you'll have to do that yourself.
+  # You always have more knowledge than M1, so you can choose whether and where
+  # to call it for best performance.
   def probably_matches?(op : O::Any, matchee : Term) : Bool
+    # The overloads are in m1/match.cr.
     true
   end
 
@@ -107,7 +112,7 @@ module Ww::M1next
     probably_matches?(M1.operator(pattern, **kwargs), matchee)
   end
 
-  # Returns `true` if *op* definitely matches *op*. Uses *env* as the prototype
+  # Returns `true` if *op* definitely matches *matchee*. Uses *env* as the prototype
   # match env.
   def probe?(env : Term::Dict, op : O::Any, matchee : Term) : Bool
     match(env, op, matchee, &.present?)
@@ -132,7 +137,7 @@ module Ww::M1next
     probe?(env, M1.operator(pattern, **kwargs), matchee)
   end
 
-  # Returns one of match envs of *op* against *matchee*. Returns `nil` if
+  # Returns one of match envs after matching *op* against *matchee*. Returns `nil` if
   # *op* does not match *mathee*.
   #
   # NOTE: "One of" is not the same as "first" nor "last" nor "middle". It's

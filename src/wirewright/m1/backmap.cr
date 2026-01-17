@@ -53,32 +53,33 @@ module Ww::M1next
   #   with our god's eye view -- know is the matchee. The backmap engine doesn't quite
   #   know this, though.
   # - Instead, it uses logs to materialize a term-like tree (see `Node`). Each log
-  #   is put somewhere in that tree, inserted into an endpoint. In a sense, the backmap
+  #   is a path through that tree (although not verbatim). In a sense, the backmap
   #   engine operates on a model of the matchee, built based on match logs. It does refer
   #   to the matchee afterwards, however, as it merges its response back where appropriate.
-  # - Mutations, too, are routed toward their corresponding endpoint (both logs and
-  #   mutations are associated with names; we use those to do the routing). We use
-  #   the term *mutation* (and derived) to refer to components of a backspec, as in
-  #   `{x: ⏏^y⏏, y: ⏏^x⏏}`. Mutations do not have a name; they are associated with
-  #   a name. However, among other metadata, they carry multiplicity, which is written
+  # - Logs must be normalized before giving them to the engine, see `Log.normalize`.
+  # - Mutations are routed toward their corresponding *endpoint* on backmap tree nodes
+  #   (both logs and mutations are associated with names; we use those to do the routing).
+  #   We use the term *mutation* (and derived) to refer to components of a backspec, as in
+  #   `{x: ⏏^y⏏, y: ⏏^x⏏}`. Mutations do not have a name; they are *associated* with
+  #   a name. Among other metadata, they carry e.g. multiplicity, which is written
   #   as `{⏏(x)⏏: ^y}`. This could be confusing because multiplicity is very close to
   #   the name while not actually being part of the mutation.
   # - We partition the tree into levels (each level populated/defined/delimited
   #   by `LevelNode`s), similar to breadth-first search.
-  # - The levels are traversed bottom up.
+  # - The levels are traversed bottom-up.
   # - When a level receives "attention" of the algorithm, each node in it computes
   #   its replacement proposal and attaches it to itself under `proposal`. The computation
   #   is strictly non-recursive: parents look at their children's attached `proposal`s
-  #   to figure out their own.
+  #   to figure out their own one.
   # - The loop that goes bottom to top, giving each layer attention, we refer to as
-  #   *backpropagation*, due to the way it superficially resembles neural nets.
+  #   *backpropagation*, because it superficially resembles neural nets.
   # - `up` and `dn` lookups work similarly by traversing the tree -- top-down, bottom-up,
-  #   etc. Their implementations can be somewhat confusing because for performance, we do
+  #   etc. Their implementations can be somewhat confusing, because for performance, we do
   #   lookups on the same tree that we're currently working on -- both lookup and backprop
   #   may change the tree. However, their changes are in a sense "disjoint", in that each
-  #   affects parts of the tree not yet reached by the other (`up`, operating above the current
-  #   level); or is a pure observer of work already done (`dn`, operating below
-  #   the current level).
+  #   affects parts of the tree not yet reached by the other (`up`, operating above
+  #   the current level); or is a pure observer of work already complete (`dn`, operating
+  #   below the current level).
   module Backmap
     extend self
 
