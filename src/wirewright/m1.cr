@@ -18,8 +18,8 @@
 # Underlying M1's pattern matching algorithm is a variation on backtracking search
 # with lightweight constraints (mostly equality constraints). The core idea is that
 # the pattern is "linearized" on the go (a bit like a train laying tracks in front
-# of itself); the current "match-point" (most likely an `Operator`) then asks
-# the rest of the pattern whether they approves whatever choice the operator wants to
+# of itself); the current "match-point" (most likely an `Op`) then asks the rest
+# of the pattern whether they approves whatever choice the operator wants to
 # makes. The current "match-point" can do this any number of times; it can fork
 # and collect answers, AND them by introducing match-points further ahead, and so on.
 #
@@ -62,9 +62,6 @@
 module Ww::M1next
   extend self
 
-  # :nodoc:
-  alias O = M1::Operator
-
   # Returns `true` if *op* probably matches *matchee*. Returns `false` if *op*
   # definitely does not match *matchee*.
   #
@@ -88,7 +85,7 @@ module Ww::M1next
   # NOTE: M1 won't call `probably_matches?` for you, you'll have to do that yourself.
   # You always have more knowledge than M1, so you can choose whether and where
   # to call it for best performance.
-  def probably_matches?(op : O::Any, matchee : Term) : Bool
+  def probably_matches?(op : Op::Any, matchee : Term) : Bool
     # The overloads are in m1/match.cr.
     true
   end
@@ -114,7 +111,7 @@ module Ww::M1next
 
   # Returns `true` if *op* definitely matches *matchee*. Uses *env* as the prototype
   # match env.
-  def probe?(env : Term::Dict, op : O::Any, matchee : Term) : Bool
+  def probe?(env : Term::Dict, op : Op::Any, matchee : Term) : Bool
     match(env, op, matchee, &.present?)
   end
 
@@ -145,7 +142,7 @@ module Ww::M1next
   # use this function only if you're fine with that (e.g. because you control
   # the pattern). Otherwise, just do `matches` and take the first match
   # (`matches` gives you lexicographic order).
-  def match?(env : Term::Dict, op : O::Any, matchee : Term) : Term::Dict?
+  def match?(env : Term::Dict, op : Op::Any, matchee : Term) : Term::Dict?
     match(env, op, matchee) do |fb|
       fb.each do |response|
         env = Term::Dict.build do |commit|
@@ -179,7 +176,7 @@ module Ww::M1next
   # M1::Operator.matches(Term[], op, matchee)
   # # => Slice[Term[n: 1], Term[n: 3], Term[n: 5], Term[n: 100]]
   # ```
-  def matches(env : Term::Dict, op : O::Any, matchee : Term) : Slice(Term::Dict)
+  def matches(env : Term::Dict, op : Op::Any, matchee : Term) : Slice(Term::Dict)
     match(env, op, matchee) do |fb|
       buffer = Pf::Kit.stack_array(Term::Dict, 16)
 
@@ -217,7 +214,7 @@ module Ww::M1next
   alias LogList = Slice({Term, Log::SealedOne})
 
   # :nodoc:
-  def matches_and_logs(env : Term::Dict, op : O::Any, matchee : Term, &)
+  def matches_and_logs(env : Term::Dict, op : Op::Any, matchee : Term, &)
     match(env, op, matchee, log: true) do |fb|
       buffer = Pf::Kit.stack_array({Term::Dict, LogList}, 16)
 
@@ -263,7 +260,7 @@ module Ww::M1next
   #
   # Pairs in the returned slice are sorted using `Term.compare` on envs, to
   # avoid having their order be implementation-defined.
-  def matches_and_logs(env : Term::Dict, op : O::Any, matchee : Term) : EnvLogList
+  def matches_and_logs(env : Term::Dict, op : Op::Any, matchee : Term) : EnvLogList
     matches_and_logs(env, op, matchee) do |buffer|
       # Sort buffer by envs so that the order is definite.
       buffer.sort! { |(a, _), (b, _)| Term.compare(a, b) }
@@ -303,7 +300,7 @@ module Ww::M1next
   #
   # Returns the resulting replacement (see `Rep`). Returns `nil` if *none*
   # of the operators matched *matchee*.
-  def backmapR?(backsys : Enumerable({O::Any, Term::Dict}), matchee : Term, *, env : Term::Dict = Term[]) : Rep::Any?
+  def backmapR?(backsys : Enumerable({Op::Any, Term::Dict}), matchee : Term, *, env : Term::Dict = Term[]) : Rep::Any?
     agents = Pf::Kit.stack_array(Backmap::Agent(EnvLogList), 8)
 
     backsys.each do |op, backspec|
@@ -331,7 +328,7 @@ module Ww::M1next
   # Returns the resulting replacement (see `Rep`), or `nil` if *none* of patterns
   # in *backspec* matched *matchee*.
   def backmapR?(backsys : Enumerable({Term, Term}), matchee : Term, *, env : Term::Dict = Term[], **kwargs) : Rep::Any?
-    ops = Pf::Kit.stack_array({O::Any, Term::Dict}, 8)
+    ops = Pf::Kit.stack_array({Op::Any, Term::Dict}, 8)
 
     backsys.each do |pattern, backspec|
       next unless backspec = backspec.as_d?
@@ -345,7 +342,7 @@ module Ww::M1next
   # An optimized overload of `backmapR?` for running just one backmap rather than
   # a backsystem. The backmap is specified by providing its operator *op*
   # and *backspec*.
-  def backmapR?(op : O::Any, backspec : Term, matchee : Term, *, env : Term::Dict = Term[]) : Rep::Any?
+  def backmapR?(op : Op::Any, backspec : Term, matchee : Term, *, env : Term::Dict = Term[]) : Rep::Any?
     return unless backspec = backspec.as_d?
 
     matches_and_logs(env, op, matchee) do |matches|
@@ -457,5 +454,6 @@ end
 require "./m1/log"
 require "./m1/tzip"
 require "./m1/context"
+require "./m1/op"
 require "./m1/match"
 require "./m1/backmap"

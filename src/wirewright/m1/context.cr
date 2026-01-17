@@ -9,7 +9,7 @@ module Ww::M1next
     alias Any = One | Many
     alias One = Lookup | NegLookup | NegLookupRef | Compares
 
-    defrecord Lookup, table : Tzip, op : O::Any
+    defrecord Lookup, table : Tzip, op : Op::Any
     defrecord NegLookup, table : Tzip
     defrecord NegLookupRef, table : Tzip, name : Term
     defrecord Many, children : Slice(One)

@@ -100,8 +100,15 @@
 
 require "./src/wirewright"
 
+# TODO: REMOVE (this particular include is a big wart on the face of the project!)
 include Ww
 
+# TODO: REMOVE
+module ::Ww::M1
+  alias Operator = M1next::Op
+end
+
+# TODO: REMOVE
 module ::Ww::M1::Search
   enum Part : UInt8
     Items
@@ -110,257 +117,8 @@ module ::Ww::M1::Search
   end
 end
 
-# TODO: the names of operators should be nouns. Currently some of them are and others
-#   are not, fix that. In fact, Operator should probably be renamed to Subject or something
-#   like that. Not sure how large of a refactor that is, and how much point is there in it.
-module ::Ww::M1::Operator
-  alias Any = Pass | Never | Num | Sym | SymBlank | SymNonblank | Boolean | Dict | Itemsonly | Pairsonly | SketchSubset | Bounds | BoundsGuard | MaxDepth | DictGuard | Literal | Capture | CaptureItemsonly | ItemSeq | ItemFirst | ItemLast | SingularSeq | Partition | Edge | LiteralWhitelist | ChoiceSource | Keypool | Span | Tally | Type | ParseML | Clamp | Bin | Both | LiteralBlacklist | Layer | ScanFirst | ScanSource | ScanAll | DfsFirst | DfsSource | DfsAll | BfsFirst | BfsAll | Value | NegativeValue | NegativeValueKeypath | EntriesFirst | EntriesSource | EntriesAll | Str | KeypathCapture | NegativeKeypool | Keytest | ValueLiteral | Filter | Pluck | Flat | Split | Adjacent | Untracked
-
-  alias Bin = Add | Sub | Mul | Div | Idiv | Mod | Pow | Map
-
-  alias First = ScanFirst | DfsFirst | BfsFirst | EntriesFirst | SplitFirst
-  alias Source = DfsSource | ScanSource | EntriesSource | SplitSource
-  alias All = ScanAll | DfsAll | BfsAll | EntriesAll | SplitAll
-
-  defcase Layer, below : Any, side : Slice(Entry::Any)
-
-  alias Scan = ScanFirst | ScanSource | ScanAll
-
-  defcase ScanFirst, needle : Slice(Any) do
-    def seq
-      needle
-    end
-  end
-
-  defcase ScanSource, needle : Slice(Any) do
-    def seq
-      needle
-    end
-  end
-
-  defcase ScanAll, successor : Any, needle : Slice(Any), selector : Set(Term), exterior : Set(Term), min : UInt8, max : UInt8 do
-    def minM
-      Magnitude.new(min)
-    end
-
-    def maxM
-      max == 0 ? Magnitude::INFINITY : Magnitude.new(max)
-    end
-
-    def seq
-      needle
-    end
-  end
-
-  defcase Value, capture : Term, tail : Any
-  defcase NegativeValue, capture : Term
-  defcase NegativeValueKeypath, capture : Term, name : Term
-
-  alias Dfs = DfsFirst | DfsSource | DfsAll
-
-  # TODO: It would be nice to unify Dfs and Bfs search under a single SearchFirst, SearchSource,
-  # SearchAll. The compiler (M1.operator) must then equip them with Tzip::Algorithm's instead of
-  # Tzip itself doing that at match-time.
-
-  defcase DfsFirst, seq : Slice(Any), part : Search::Part, depth0 : Bool do
-    def needle
-      seq.first
-    end
-  end
-
-  defcase DfsSource, seq : Slice(Any), part : Search::Part, depth0 : Bool do
-    def needle
-      seq.first
-    end
-  end
-
-  defcase DfsAll, successor : Any, seq : Slice(Any), selector : Set(Term), exterior : Set(Term), part : Search::Part, min : UInt8, max : UInt8, depth0 : Bool do
-    def minM
-      Magnitude.new(min)
-    end
-
-    def maxM
-      max == 0 ? Magnitude::INFINITY : Magnitude.new(max)
-    end
-
-    def needle
-      seq.first
-    end
-  end
-
-  alias Bfs = BfsFirst | BfsAll
-
-  defcase BfsFirst, seq : Slice(Any), part : Search::Part, depth0 : Bool do
-    def needle
-      seq.first
-    end
-  end
-
-  defcase BfsAll, successor : Any, seq : Slice(Any), selector : Set(Term), exterior : Set(Term), part : Search::Part, min : UInt8, max : UInt8, depth0 : Bool do
-    def minM
-      Magnitude.new(min)
-    end
-
-    def maxM
-      max == 0 ? Magnitude::INFINITY : Magnitude.new(max)
-    end
-
-    def needle
-      seq.first
-    end
-  end
-
-  alias Entries = EntriesFirst | EntriesSource | EntriesAll
-
-  defcase EntriesFirst, kop : Any, vop : Any do
-    def needle
-      [kop, vop]
-    end
-  end
-
-  defcase EntriesSource, kop : Any, vop : Any do
-    def needle
-      [kop, vop]
-    end
-  end
-
-  defcase EntriesAll, successor : Any, kop : Any, vop : Any, exterior : Set(Term), selector : Set(Term), min : UInt8, max : UInt8 do
-    def minM
-      Magnitude.new(min)
-    end
-
-    def maxM
-      max == 0 ? Magnitude::INFINITY : Magnitude.new(max)
-    end
-
-    def needle
-      [kop, vop]
-    end
-  end
-
-  defcase KeypathCapture, capture : Term
-
-  defcase Filter, deps : Pf::Set(Term), selector : Any, successor : Any, min : Magnitude, max : Magnitude
-  defcase Pluck, spec : M1next::Tzip::PluckSpec, successor : Any
-  defcase Flat, spec : M1next::Tzip::FlatSpec, successor : Any
-
-  alias Split = SplitFirst | SplitSource | SplitAll
-
-  defcase Adjacent, members : Slice(Any)
-
-  defcase SplitFirst, lhs : Any, focus : Slice(Any), rhs : Any
-  defcase SplitSource, lhs : Any, focus : Slice(Any), rhs : Any
-  defcase SplitAll, lhs : Any, focus : Slice(Any), rhs : Any, successor : Any, min : Magnitude, max : Magnitude do
-    def minM
-      min
-    end
-
-    def maxM
-      max
-    end
-  end
-end
-
 # FIXME: bad bad BAD idea
 alias Magnitude = Float32
-
-module ::Ww::M1::Operator::Item
-  alias Any = Singular | Slot | Plural | Group | GapFirst | GapSource | Optional | Many | Past
-
-  # wtf is it called TAIL?!?!?!
-  record Singular, tail : Operator::Any
-  record Slot, name : Term
-
-  record Plural, contenders : Slice(Term?), min1 : Magnitude, max1 : Magnitude, type : TermType, follower : Follower, frac : UInt32, strategy : ExpandStrategy do
-    def self.new(contender : Term?, min1, max1, type : TermType, follower : Follower, frac, strategy : ExpandStrategy)
-      new(Slice[contender.as(Term?)], min1, max1, type, follower, frac, strategy)
-    end
-
-    def min : Magnitude
-      min1 * contenders.size
-    end
-
-    def max : Magnitude
-      max1 * contenders.size
-    end
-
-    enum Follower : UInt8
-      {% for member in ::Ww::TermType.constants %}
-        {{member}}
-      {% end %}
-
-      # Indicates that the follower is absent.
-      None
-
-      def type : TermType
-        if none?
-          raise ArgumentError.new("cannot query .type of a missing follower")
-        end
-
-        TermType.new(value)
-      end
-    end
-  end
-
-  record Group, successor : Operator::Any, children : Slice(Any) do
-    def capture
-      successor.as(Operator::Capture).capture
-    end
-  end
-
-  alias Gap = GapFirst | GapSource
-  record GapFirst, measurer : Operator::Any, frac : UInt32, strategy : ExpandStrategy
-  record GapSource, measurer : Operator::Any, frac : UInt32, strategy : ExpandStrategy
-  record Optional, default : Term, body : Operator::Any
-  record Many, successor : Operator::Any, children : Slice(Any), interior : Set(Term), min : UInt8, max : UInt8 do
-    def capture
-      successor.as(Operator::Capture).capture
-    end
-
-    def minM
-      Magnitude.new(min)
-    end
-
-    def maxM
-      max == 0 ? Magnitude::INFINITY : Magnitude.new(max)
-    end
-  end
-
-  alias Past = PastGreedy | PastLazy
-
-  record PastGreedy, children : Slice(Any), min : UInt8, max : UInt8, n : Int32 = 0 do
-    # FIXME: Use magnitude instead of U8 in the first place!!!!!
-
-    def minM
-      Magnitude.new(min)
-    end
-
-    def maxM
-      max == 0 ? Magnitude::INFINITY : Magnitude.new(max)
-    end
-  end
-
-  record PastLazy, children : Slice(Any), min : UInt8, max : UInt8, n : Int32 = 0 do
-    # FIXME: Ditto!
-
-    def minM
-      Magnitude.new(min)
-    end
-
-    def maxM
-      max == 0 ? Magnitude::INFINITY : Magnitude.new(max)
-    end
-  end
-end
-
-module ::Ww::M1::Operator::Item
-  enum ExpandStrategy : UInt8
-    Auto
-    Sway
-    Lazy
-    Greedy
-  end
-end
 
 module ::Ww::M1
   SYM_LT  = Term.of(:<)
@@ -3452,17 +3210,15 @@ end
 
 # Represents a pattern within a `PatternSet`. Has no expected use outside of `PatternSet`.
 struct Pattern
-  private alias O = M1::Operator
-
   # Returns the index of this pattern. You are free to treat it as `PatternSet`-unique
   # identifier of this pattern.
   getter index : UInt32
 
   # Returns the underlying M1 operator.
-  getter operator : O::Any
+  getter operator : M1next::Op::Any
 
   # :nodoc:
-  def initialize(@index : UInt32, @operator : O::Any)
+  def initialize(@index : UInt32, @operator : M1next::Op::Any)
   end
 
   # Returns the response of this pattern to *matchee* (may be positive or negative).
