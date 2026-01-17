@@ -5,6 +5,8 @@
 # Clients and servers of the termspace, internal emergent entities such as
 # `Xgraph`, surfaces (`Sensor`s & `Appearance`s), and lots of other network-
 # related things are within the domain of Meridium.
+#
+# TODO: Remove (Meridium in the way it is implemented here is discontinued).
 module Ww::Meridium
   extend self
 
