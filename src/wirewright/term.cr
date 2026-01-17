@@ -32,6 +32,17 @@ module Ww
       TermType::Any
     end
 
+    def self.parse?(sym : Term::Sym)
+      case sym
+      when SYM_BLANK_ANY     then Any
+      when SYM_BLANK_NUMBER  then Number
+      when SYM_BLANK_STRING  then String
+      when SYM_BLANK_SYMBOL  then Symbol
+      when SYM_BLANK_BOOLEAN then Boolean
+      when SYM_BLANK_DICT    then Dict
+      end
+    end
+
     def subtype?(other : TermType)
       other.any? || self == other
     end
@@ -40,8 +51,8 @@ module Ww
       case self
       in .any?     then SYM_BLANK_ANY
       in .number?  then SYM_BLANK_NUMBER
-      in .symbol?  then SYM_BLANK_SYMBOL
       in .string?  then SYM_BLANK_STRING
+      in .symbol?  then SYM_BLANK_SYMBOL
       in .boolean? then SYM_BLANK_BOOLEAN
       in .dict?    then SYM_BLANK_DICT
       end

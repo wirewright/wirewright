@@ -381,7 +381,7 @@ end
 #   are not, fix that. In fact, Operator should probably be renamed to Subject or something
 #   like that. Not sure how large of a refactor that is, and how much point is there in it.
 module ::Ww::M1::Operator
-  alias Any = Pass | Never | Num | Sym | SymBlank | SymNonblank | Boolean | Dict | Itemsonly | Pairsonly | SketchSubset | Bounds | BoundsGuard | MaxDepth | DictGuard | Literal | Capture | CaptureItemsonly | ItemSeq | ItemFirst | ItemLast | SingularSeq | Partition | Edge | LiteralWhitelist | ChoiceSource | Keypool | Span | Tally | Type | ParseML | Clamp | Bin | Both | LiteralBlacklist | Layer | ScanFirst | ScanSource | ScanAll | DfsFirst | DfsSource | DfsAll | BfsFirst | BfsAll | Value | NegativeValue | NegativeValueKeypath | EntriesFirst | EntriesSource | EntriesAll | Str | KeypathCapture | NegativeKeypool | Keytest | ValueLiteral | Filter | Pluck | Flat | Split | Adjacent
+  alias Any = Pass | Never | Num | Sym | SymBlank | SymNonblank | Boolean | Dict | Itemsonly | Pairsonly | SketchSubset | Bounds | BoundsGuard | MaxDepth | DictGuard | Literal | Capture | CaptureItemsonly | ItemSeq | ItemFirst | ItemLast | SingularSeq | Partition | Edge | LiteralWhitelist | ChoiceSource | Keypool | Span | Tally | Type | ParseML | Clamp | Bin | Both | LiteralBlacklist | Layer | ScanFirst | ScanSource | ScanAll | DfsFirst | DfsSource | DfsAll | BfsFirst | BfsAll | Value | NegativeValue | NegativeValueKeypath | EntriesFirst | EntriesSource | EntriesAll | Str | KeypathCapture | NegativeKeypool | Keytest | ValueLiteral | Filter | Pluck | Flat | Split | Adjacent | Untracked
 
   alias Bin = Add | Sub | Mul | Div | Idiv | Mod | Pow | Map
 
@@ -533,6 +533,7 @@ alias Magnitude = Float32
 module ::Ww::M1::Operator::Item
   alias Any = Singular | Slot | Plural | Group | GapFirst | GapSource | Optional | Many | Past
 
+  # wtf is it called TAIL?!?!?!
   record Singular, tail : Operator::Any
   record Slot, name : Term
 
@@ -1377,49 +1378,49 @@ module ::Ww::M1::Operator
     match(behind0, op, matchee, Ahead::MatchEndpoint.new)
   end
 
-  def feedback(env : Term::Dict, op : Any, matchee : Term, *, backpaths : Bool = false) : Fb::Response
-    case fb = feedback0(env, op, matchee, mode: backpaths ? FeedbackMode::Backpath : FeedbackMode::Normal)
-    in Fb::Response
-      fb
-    in Fb::RequestBackpath
-      if backpaths
-        return Fb::Mismatch.new(env)
-      end
+  # def feedback(env : Term::Dict, op : Any, matchee : Term, *, backpaths : Bool = false) : Fb::Response
+  #   case fb = feedback0(env, op, matchee, mode: backpaths ? FeedbackMode::Backpath : FeedbackMode::Normal)
+  #   in Fb::Response
+  #     fb
+  #   in Fb::RequestBackpath
+  #     if backpaths
+  #       return Fb::Mismatch.new(env)
+  #     end
 
-      feedback(env, op, matchee, backpaths: true)
-    in Fb::ProbeTrue
-      raise "BUG: unexpected Fb::ProbeTrue response in normal/backpath mode"
-    end
-  end
+  #     feedback(env, op, matchee, backpaths: true)
+  #   in Fb::ProbeTrue
+  #     raise "BUG: unexpected Fb::ProbeTrue response in normal/backpath mode"
+  #   end
+  # end
 
-  def match?(env : Term::Dict, op : Any, matchee : Term, **kwargs) : Term::Dict?
-    case fb = feedback(env, op, matchee, **kwargs)
-    in Fb::MatchOne  then fb.env
-    in Fb::MatchMany then fb.envs[0]
-    in Fb::Mismatch  then nil
-    end
-  end
+  # def match?(env : Term::Dict, op : Any, matchee : Term, **kwargs) : Term::Dict?
+  #   case fb = feedback(env, op, matchee, **kwargs)
+  #   in Fb::MatchOne  then fb.env
+  #   in Fb::MatchMany then fb.envs[0]
+  #   in Fb::Mismatch  then nil
+  #   end
+  # end
 
-  def matches(env : Term::Dict, op : Any, matchee : Term, **kwargs) : Array(Term::Dict)
-    case fb = feedback(env, op, matchee, **kwargs)
-    in Fb::MatchOne  then [fb.env]
-    in Fb::MatchMany then fb.envs
-    in Fb::Mismatch  then [] of Term::Dict
-    end
-  end
+  # def matches(env : Term::Dict, op : Any, matchee : Term, **kwargs) : Array(Term::Dict)
+  #   case fb = feedback(env, op, matchee, **kwargs)
+  #   in Fb::MatchOne  then [fb.env]
+  #   in Fb::MatchMany then fb.envs
+  #   in Fb::Mismatch  then [] of Term::Dict
+  #   end
+  # end
 
-  def probe?(env : Term::Dict, op : Any, matchee : Term) : Bool
-    case feedback0(env, op, matchee, mode: FeedbackMode::Probe)
-    in Fb::Match, Fb::ProbeTrue
-      true
-    in Fb::Mismatch
-      false
-    in Fb::RequestBackpath
-      # If the pattern requests backpath, we switch to the slower feedback() version.
-      # Gains from using the probe mode are a speck compared to losses from backpath mode.
-      feedback(env, op, matchee, backpaths: true).is_a?(Fb::Match)
-    end
-  end
+  # def probe?(env : Term::Dict, op : Any, matchee : Term) : Bool
+  #   case feedback0(env, op, matchee, mode: FeedbackMode::Probe)
+  #   in Fb::Match, Fb::ProbeTrue
+  #     true
+  #   in Fb::Mismatch
+  #     false
+  #   in Fb::RequestBackpath
+  #     # If the pattern requests backpath, we switch to the slower feedback() version.
+  #     # Gains from using the probe mode are a speck compared to losses from backpath mode.
+  #     feedback(env, op, matchee, backpaths: true).is_a?(Fb::Match)
+  #   end
+  # end
 end
 
 module ::Ww::M1::Operator
@@ -2415,8 +2416,9 @@ module ::Ww::M1
           %[(%pipe tally successor_)],
           %[(%pipe type successor_)],
           %[(%pipe ml successor_)],
+          %[(%pipe untracked successor_)],
           cue: :"%pipe",
-          cues: {:+, :-, :*, :/, :div, :mod, :**, :clamp, :map, :span, :tally, :type, :ml}
+          cues: {:+, :-, :*, :/, :div, :mod, :**, :clamp, :map, :span, :tally, :type, :ml, :untracked}
         ) do
           pattern.morph(
             {1, ->(term : Term) { Term.of(:"%barrier", term) }},
@@ -3240,7 +3242,9 @@ module ::Ww::M1
       extend self
 
       def match?(pattern : Term, matchee : Term, *, env = Term[]) : Term::Dict?
-        M1.match?(pattern, matchee, opt: O0, env: env)
+        return unless M1next.probably_matches?(pattern, matchee, opt: O0)
+
+        M1next.match?(pattern, matchee, opt: O0, env: env)
       end
     end
 
@@ -3447,7 +3451,9 @@ module ::Ww::M1
   module O2
     module Engine
       def self.match?(pattern : Term, matchee : Term, *, env = Term[]) : Term::Dict?
-        M1.match?(pattern, matchee, opt: O1, env: env)
+        return unless M1next.probably_matches?(pattern, matchee, opt: O1)
+
+        M1next.match?(pattern, matchee, opt: O1, env: env)
       end
     end
 
@@ -4057,6 +4063,10 @@ module ::Ww::M1
         Operator::ParseML.new(operator(successor, captures))
       end
 
+      matchpi %[(%pipe (%barrier untracked) successor_)], cue: {:"%pipe", :untracked} do
+        Operator::Untracked.new(operator(successor, captures))
+      end
+
       match({:"%items/first", :_, :"_*"}, cue: :"%items/first") do
         sequence = node.items.move(1)
 
@@ -4414,7 +4424,7 @@ module ::Ww::M1
 
   # Returns `true` if *id* is probably a pattern engine node id.
   def self.probably_node?(id : Term::Sym) : Bool
-    id.to(String).prefixed_by?('%')
+    id.prefixed_by?('%')
   end
 
   # Used as a constant to indicate that `walk` should walk thoroughly,
@@ -4632,17 +4642,17 @@ module ::Ww::M1
     end
   end
 
-  def self.matches(pattern : Term, matchee : Term, *, env : Term::Dict = Term[], opt = DEFAULT_OPT_LEVEL, **kwargs) : Array(Term::Dict)
-    Operator.matches(env, operator(pattern, opt: opt), matchee, **kwargs)
-  end
+  # def self.matches(pattern : Term, matchee : Term, *, env : Term::Dict = Term[], opt = DEFAULT_OPT_LEVEL, **kwargs) : Array(Term::Dict)
+  #   Operator.matches(env, operator(pattern, opt: opt), matchee, **kwargs)
+  # end
 
-  def self.match?(pattern : Term, matchee : Term, *, env : Term::Dict = Term[], opt = DEFAULT_OPT_LEVEL, **kwargs)
-    Operator.match?(env, operator(pattern, opt: opt), matchee, **kwargs)
-  end
+  # def self.match?(pattern : Term, matchee : Term, *, env : Term::Dict = Term[], opt = DEFAULT_OPT_LEVEL, **kwargs)
+  #   Operator.match?(env, operator(pattern, opt: opt), matchee, **kwargs)
+  # end
 
-  def self.probe?(pattern : Term, matchee : Term, *, env : Term::Dict = Term[], opt = DEFAULT_OPT_LEVEL, **kwargs)
-    Operator.probe?(env, operator(pattern, opt: opt), matchee, **kwargs)
-  end
+  # def self.probe?(pattern : Term, matchee : Term, *, env : Term::Dict = Term[], opt = DEFAULT_OPT_LEVEL, **kwargs)
+  #   Operator.probe?(env, operator(pattern, opt: opt), matchee, **kwargs)
+  # end
 end
 
 module ::Ww::Backpath::Word
@@ -4791,494 +4801,494 @@ module ::Ww::Backpath::Word
   end
 end
 
-module ::Ww::M1
-  struct AttachMetadata
-    def initialize(@capture : Term, @body : Term?, @env : Term::Dict, @plural : Bool)
-    end
-
-    def call(node)
-      node.morph(
-        {:plural, @plural ? true : nil},
-        {:transform, @body},
-        {:env, @env},
-        {:aliases, @capture, true},
-      )
-    end
-  end
-
-  struct AttachAlias
-    def initialize(@capture : Term)
-    end
-
-    def call(node)
-      node.morph({:aliases, @capture, true})
-    end
-  end
-
-  def self.reflect1(ctx, meta : Term::Dict, matchee : Term)
-    return ctx unless aliases = meta[:aliases]?
-
-    aliases.ee.reduce(ctx) { |ctx, (capture, _)| ctx.with(capture, matchee) }
-  end
-
-  def self.reflect(ctx, node : Term::Dict, maxdepth : UInt32, matchee : Term)
-    if (self0 = node[:endpoint]?) && (metadata = self0.as_d?)
-      ctx = reflect1(ctx, metadata, matchee)
-    end
-
-    return ctx if maxdepth.zero?
-
-    node.each_entry do |word, successor|
-      Term.case(word) do
-        matchpi %[(value key_)] do
-          ctx = reflect(ctx, successor.as_d, maxdepth - 1, matchee[key])
-        end
-
-        matchpi %[(residue keys←(_*))] do
-          ctx = reflect(ctx, successor.as_d, maxdepth - 1, Term.exclude(matchee, keys.items))
-        end
-
-        otherwise { }
-      end
-    end
-
-    ctx
-  end
-
-  struct DefaultApplier
-    def apply(up0, down, my, body)
-      Term.case(body) do
-        matchpi %[($my capture_)] do
-          my[capture]? || body
-        end
-
-        matchpi %[($up capture_)] do
-          up0[capture]? || my[capture]? || body
-        end
-
-        matchpi %[($down capture_)] do
-          down[capture]? || my[capture]? || body
-        end
-
-        matchpi %[_dict] do
-          Term.of(body.unsafe_as_d.replace { |_, v| apply(up0, down, my, v) })
-        end
-
-        otherwise do
-          body
-        end
-      end
-    end
-
-    # Applier must respond to `call(up0 : Term::Dict, up1 : Term::Dict, down : Term::Dict, my : Term::Dict, matchee0 : Term?, body : Term) : {up1 : Term::Dict, matchee1 : Term}`
-    #
-    # `matchee0` is absent (`nil`) in ephemeral pairs with no default value,
-    # as in the following backmap:
-    #
-    # ```wwml
-    # {x: (%- _ x), y: y_} <> {x: ↑y}
-    # ```
-    #
-    # Running this backmap, `x` would be mounted as an ephemeral pair-value with
-    # no default value, and thus with no corresponding matchee. The transform `↑y`'s
-    # applier is then run with `nil` *matchee0*.
-    def call(up0, up1, down, my, matchee0 : Term?, body)
-      Term.case(body) do
-        matchpi %[($tr pred_ succ_)] do
-          {up1.with(pred, matchee0), Rewrite.one(apply(up0, down, my, succ))}
-        end
-
-        otherwise do
-          {up1, Rewrite.one(apply(up0, down, my, body))}
-        end
-      end
-    end
-  end
-
-  class BackmapTrie
-    # NOTE: @env, @body, @captures must only exist on a "tapped" BackmapTrie nodes.
-    # NOTE: @neighbors only exist on "fanout" BackmapTrie nodes.
-    # NOTE: The third type of backmaptrie node unifies both of them.
-
-    @env : Term::Dict?
-
-    alias Word = Backpath::Word
-
-    def initialize
-      @captures = [] of Term
-      @neighbors = {} of Word::Atomic => BackmapTrie | BackmapPair
-    end
-
-    def mentioned_in?(backspec)
-      @captures.any? { |capture| capture.in?(backspec) || Term.dict(capture).in?(backspec) }
-    end
-
-    def mount(backpath : Term::Dict::ItemsView, capture : Term, env : Term::Dict) : Nil
-      unless subject = backpath.first?
-        @env = env
-        @captures << capture
-        return
-      end
-
-      case word = Word.atomic(subject)
-      when Word::Pair
-        neighbor = @neighbors.put_if_absent(word) { BackmapPair.new }.as(BackmapPair)
-        neighbor.mount(backpath.move(1), capture, env)
-      else
-        neighbor = @neighbors.put_if_absent(word) { BackmapTrie.new }
-        neighbor.mount(backpath.move(1), capture, env)
-      end
-    end
-
-    def mount(backpath : Term, capture : Term, env : Term::Dict) : Nil
-      mount(backpath.items, capture, env)
-    end
-
-    def reflect(layer : Int, matchee : Term)
-      Term::Dict.build { |commit| reflect(layer, commit, matchee) }
-    end
-
-    def reflect(layer : Int, ctx : Term::Dict::Commit, matchee : Term)
-      # Take a snapshot of what the matchee looks like at this level if we have any
-      # captures at this level.
-      @captures.each { |capture| ctx.with(capture, matchee) }
-
-      return if layer.zero?
-
-      @neighbors.each do |word, neighbor|
-        case word
-        when Word::Pair
-          next unless value = matchee[word.key]?
-
-          neighbor.as(BackmapPair).reflect(layer - 1, ctx, word.key, value)
-        else
-          Word.checkout(word, matchee) do |substructure|
-            neighbor.as(BackmapTrie).reflect(layer - 1, ctx, substructure)
-          end
-        end
-      end
-    end
-
-    def morph0(up0, up1, down, backspec, matchee, applier) : {Term::Dict, Rewrite::Any}
-      plural = false
-      body = nil
-
-      @captures.each do |capture|
-        if body = backspec[capture]? # Singular
-          break
-        elsif body = backspec[{capture}]? # Plural
-          plural = true
-          break
-        end
-      end
-
-      rewrite = Rewrite.none
-
-      if body
-        up1, rewrite = applier.call(up0, up1, down, @env || Term[], matchee, body) # ?!
-
-        case rewrite
-        in Rewrite::One
-          newvalue = rewrite.term
-
-          # Go to plural mode if the user wishes so.
-          if plural && (list = newvalue.as_itemsonly_d?)
-            rewrite = Rewrite.many(list)
-          end
-
-          up1 = @captures.reduce(up1) { |up, capture| up.with(capture, newvalue) }
-        in Rewrite::Many
-          newvalue = Term.of(rewrite.list)
-
-          up1 = @captures.reduce(up1) { |up, capture| up.with(capture, newvalue) }
-        end
-      end
-
-      {up1, rewrite}
-    end
-
-    def morph(layer : Int, up0, up1, down, backspec, matchee : Term, applier) : {Term::Dict, Term}
-      if layer.zero?
-        return up1, matchee
-      end
-
-      relabel = nil
-      insertions = nil
-
-      @neighbors.each do |word, neighbor|
-        case word
-        in Word::Create
-          if layer == 1
-            up1, rewrite = neighbor.as(BackmapTrie).morph0(up0, up1, down, backspec, word.value, applier)
-
-            case rewrite
-            in Rewrite::None then value = word.value
-            in Rewrite::One  then value = rewrite.term
-            in Rewrite::Many then value = rewrite.list
-            end
-
-            # If there were no changes vs. the default, we do not output the optional.
-            #
-            # ?! This should be done, but whether or not this should depend on changes
-            #    is questionable.
-            next if word.initial == value
-
-            matchee = matchee.with(word.key, value)
-          else
-            up1, value = neighbor.as(BackmapTrie).morph(layer - 1, up0, up1, down, backspec, word.value, applier)
-
-            relabel ||= [] of {Word::Atomic, Word::Atomic?}
-            relabel << {word, word.copy_with(value: value)}
-          end
-        in Word::CreateLeaf
-          next unless layer == 1
-
-          up1, rewrite = neighbor.as(BackmapTrie).morph0(up0, up1, down, backspec, nil, applier)
-
-          case rewrite
-          in Rewrite::None
-          in Rewrite::One
-            matchee = matchee.with(word.key, rewrite.term)
-          in Rewrite::Many
-            matchee = matchee.with(word.key, rewrite.list)
-          end
-        in Word::Delete
-          residue0 = Term.exclude(Term.of(matchee), word.keys.items)
-          if layer == 1
-            up1, residue1r = neighbor.as(BackmapTrie).morph0(up0, up1, down, backspec, residue0, applier)
-            residue1 = residue1r.term? || residue0
-          else
-            up1, residue1 = neighbor.as(BackmapTrie).morph(layer - 1, up0, up1, down, backspec, residue0, applier)
-          end
-          matchee = matchee.transaction do |commit|
-            residue1 = Term.exclude(residue1, word.keys.items)
-            residue0.each_entry { |k, _| commit.without(k) }
-            residue1.each_entry { |k, v| commit.with(k, v) }
-          end
-        in Word::Insert
-          if layer == 1
-            up1, rewrite = neighbor.as(BackmapTrie).morph0(up0, up1, down, backspec, word.initial, applier)
-
-            case rewrite
-            in Rewrite::None then items1 = Term[{word.initial}]
-            in Rewrite::One  then items1 = Term[{rewrite.term}]
-            in Rewrite::Many then items1 = rewrite.list
-            end
-
-            insertions ||= [] of {Term::Num, Term::Num, Term::Num, Term::Dict}
-            insertions << {Term[word.index], Term[word.index], Term[word.ord], items1}
-          else
-            up1, value = neighbor.as(BackmapTrie).morph(layer - 1, up0, up1, down, backspec, word.initial, applier)
-
-            relabel ||= [] of {Word::Atomic, Word::Atomic?}
-            relabel << {word, word.copy_with(initial: value)}
-          end
-        in Word::Range
-          next unless layer == 1
-
-          unless (word.b..word.e).subrange_of?(0..matchee.items.size)
-            raise KeypathError.new
-          end
-
-          b = Term[word.b]
-          e = Term[word.e]
-          ord = Term[word.ord]
-
-          items0 = matchee.span(b, e)
-          up1, rewrite = neighbor.as(BackmapTrie).morph0(up0, up1, down, backspec, Term.of(items0), applier)
-
-          case rewrite
-          in Rewrite::None
-            next
-          in Rewrite::One
-            items1 = Term[{rewrite.term}]
-          in Rewrite::Many
-            items1 = rewrite.list
-          end
-
-          insertions ||= [] of {Term::Num, Term::Num, Term::Num, Term::Dict}
-          insertions << {b, e, ord, items1}
-        in Word::Pair
-          next unless value0 = matchee[key0 = word.key]?
-
-          up1, key1r, value1r = neighbor.as(BackmapPair).morph(layer - 1, up0, up1, down, backspec, key0, value0, applier)
-
-          value = matchee[key0]? || raise KeypathError.new
-
-          case key1r
-          in Rewrite::None
-            key1 = key0
-          in Rewrite::One
-            key1 = key1r.term
-          in Rewrite::Many
-            # One should be able to delete a key-value pair from a backmap with an empty
-            # plural **key** transform:
-            #
-            #   ;; Removes K from dict. Note the semi-necessary alias that prevents
-            #   ;; us from erasing without's k arg.
-            #   (without (%value K _) K←k_) <> {(K): ()}
-            #
-            #   ;; With alias:
-            #   (without {x: 100, y: 200} x) ;; => (without {y: 200} x)
-            #   ;; Without alias:
-            #   (without {x: 100, y: 200} x) ;; => (without {y: 200})
-            #
-            if key1r.list.empty? && layer == 1
-              matchee = matchee.without(key0)
-              next
-            end
-
-            key1 = Term.of(key1r.list)
-          end
-
-          unless key0 == key1
-            # NOTE: may collide
-            matchee = matchee.without(key0).with(key1, value)
-
-            if layer > 1
-              relabel ||= [] of {Word::Atomic, Word::Atomic?}
-              relabel << {word, word.copy_with(key: key1)} # NOTE: may collide
-            end
-          end
-
-          case value1r
-          in Rewrite::None
-          in Rewrite::One
-            matchee = matchee.with(key1, value1r.term)
-          in Rewrite::Many
-            if inspt = matchee.index?(key1)
-              insertions ||= [] of {Term::Num, Term::Num, Term::Num, Term::Dict}
-              insertions << {inspt, inspt + 1, Term[0], value1r.list}
-            elsif value1r.list.empty?
-              # One should be able to delete a key-value pair from a backmap with an empty
-              # plural **value** transform:
-              #
-              #   {x: x_, y: y_} <> {(x): ()} ;; Removes `x` pair
-              #
-              matchee = matchee.without(key1)
-            else
-              # Otherwise act the same as One.
-              matchee = matchee.with(key1, value1r.list)
-            end
-          end
-        end
-      end
-
-      # It is unwise to delete/insert while we're iterating over @neighbors, so
-      # we have a separate "relabel" step.
-      if relabel
-        relabel.each do |k0, k1|
-          v = @neighbors.delete(k0) || raise KeyError.new("attempt to relabel an absent label #{k0}")
-          next unless k1
-          @neighbors[k1] = v
-        end
-      end
-
-      if insertions
-        insertions.sort_by! { |b, _, ord, _| {-b, -ord} }
-        insertions.each do |b, e, _, replacement|
-          matchee = matchee.replace(b...e, &.concat(replacement.items))
-        end
-      end
-
-      {up1, Term.of(matchee)}
-    end
-  end
-
-  class BackmapPair
-    @k : BackmapTrie?
-    @v : BackmapTrie?
-
-    def mount(backpath : Term::Dict::ItemsView, capture : Term, env : Term::Dict) : Nil
-      case subject = backpath.first?
-      when Term.of(:key)   then neighbor = @k ||= BackmapTrie.new
-      when Term.of(:value) then neighbor = @v ||= BackmapTrie.new
-      else
-        raise KeypathError.new
-      end
-
-      neighbor.mount(backpath.move(1), capture, env)
-    end
-
-    def reflect(layer : Int, ctx : Term::Dict::Commit, key : Term, value : Term)
-      @k.try &.reflect(layer, ctx, key)
-      @v.try &.reflect(layer, ctx, value)
-    end
-
-    def morph(layer, up0, up1, down, backspec, key0, value0, applier)
-      if layer == 0
-        up1, key1r = @k.try &.morph0(up0, up1, down, backspec, key0, applier) || {up1, Rewrite.one(key0)}
-        up1, value1r = @v.try &.morph0(up0, up1, down, backspec, value0, applier) || {up1, Rewrite.one(value0)}
-        {up1, key1r, value1r}
-      else
-        up1, key1 = @k.try &.morph(layer, up0, up1, down, backspec, key0, applier) || {up1, key0}
-        up1, value1 = @v.try &.morph(layer, up0, up1, down, backspec, value0, applier) || {up1, value0}
-        {up1, Rewrite.one(key1), Rewrite.one(value1)}
-      end
-    end
-  end
-
-  def self.backmapr(envs : Enumerable(Term::Dict), backspec : Term, matchee : Term, *, applier = DefaultApplier.new) : Rewrite::Some
-    trie = BackmapTrie.new
-    depth = 0u32
-
-    envs.each do |env|
-      next unless backpaths = env[:"(backpaths)"]?
-
-      backpaths.each_entry do |capture, backpathset|
-        backpathset.each_entry do |backpath, _|
-          trie.mount(backpath, capture, env)
-
-          depth = Math.max(backpath.items.count { |x| !x.in?(Term.of(:key), Term.of(:value)) }.to_u32, depth)
-        end
-      end
-    end
-
-    ctx0 = Term[]
-
-    # pp trie
-    # pp depth
-
-    (1..depth).reverse_each do |layer|
-      # pp layer
-      upper = trie.reflect(layer, matchee)
-      lower = ctx0.sub(upper)
-      ctx0 |= upper
-      ctx0, matchee = trie.morph(layer, ctx0, ctx0, lower, backspec, matchee, applier)
-      # pp matchee
-    end
-
-    upper = trie.reflect(0, matchee)
-    lower = ctx0.sub(upper)
-    ctx0 |= upper
-    _, rewrite = trie.morph0(ctx0, ctx0, lower, backspec, matchee, applier)
-
-    rewrite.as?(Rewrite::Some) || Rewrite.one(matchee)
-  end
-
-  def self.backmap(envs : Enumerable(Term::Dict), backspec : Term, matchee : Term, **kwargs) : Term
-    rewrite = backmapr(envs, backspec, matchee, **kwargs)
-    rewrite.term?
-  end
-
-  def self.backmapr(operator : Operator::Any, backspec : Term, matchee : Term, *, env = Term[], **kwargs) : Rewrite::Any
-    case fb = Operator.feedback(env, operator, matchee, backpaths: true)
-    in Operator::Fb::Match
-      backmapr(fb.envs, backspec, matchee, **kwargs)
-    in Operator::Fb::Mismatch
-      Rewrite.none
-    end
-  end
-
-  def self.backmapr(pattern : Term, backspec : Term, matchee : Term, **kwargs) : Rewrite::Any
-    backmapr(operator(pattern), backspec, matchee, **kwargs)
-  end
-
-  def self.backmap?(pattern : Term | Operator::Any, backspec : Term, matchee : Term, **kwargs) : Term?
-    rewrite = backmapr(pattern, backspec, matchee, **kwargs)
-    rewrite.term?
-  end
-end
+# module ::Ww::M1
+#   struct AttachMetadata
+#     def initialize(@capture : Term, @body : Term?, @env : Term::Dict, @plural : Bool)
+#     end
+
+#     def call(node)
+#       node.morph(
+#         {:plural, @plural ? true : nil},
+#         {:transform, @body},
+#         {:env, @env},
+#         {:aliases, @capture, true},
+#       )
+#     end
+#   end
+
+#   struct AttachAlias
+#     def initialize(@capture : Term)
+#     end
+
+#     def call(node)
+#       node.morph({:aliases, @capture, true})
+#     end
+#   end
+
+#   def self.reflect1(ctx, meta : Term::Dict, matchee : Term)
+#     return ctx unless aliases = meta[:aliases]?
+
+#     aliases.ee.reduce(ctx) { |ctx, (capture, _)| ctx.with(capture, matchee) }
+#   end
+
+#   def self.reflect(ctx, node : Term::Dict, maxdepth : UInt32, matchee : Term)
+#     if (self0 = node[:endpoint]?) && (metadata = self0.as_d?)
+#       ctx = reflect1(ctx, metadata, matchee)
+#     end
+
+#     return ctx if maxdepth.zero?
+
+#     node.each_entry do |word, successor|
+#       Term.case(word) do
+#         matchpi %[(value key_)] do
+#           ctx = reflect(ctx, successor.as_d, maxdepth - 1, matchee[key])
+#         end
+
+#         matchpi %[(residue keys←(_*))] do
+#           ctx = reflect(ctx, successor.as_d, maxdepth - 1, Term.exclude(matchee, keys.items))
+#         end
+
+#         otherwise { }
+#       end
+#     end
+
+#     ctx
+#   end
+
+#   struct DefaultApplier
+#     def apply(up0, down, my, body)
+#       Term.case(body) do
+#         matchpi %[($my capture_)] do
+#           my[capture]? || body
+#         end
+
+#         matchpi %[($up capture_)] do
+#           up0[capture]? || my[capture]? || body
+#         end
+
+#         matchpi %[($down capture_)] do
+#           down[capture]? || my[capture]? || body
+#         end
+
+#         matchpi %[_dict] do
+#           Term.of(body.unsafe_as_d.replace { |_, v| apply(up0, down, my, v) })
+#         end
+
+#         otherwise do
+#           body
+#         end
+#       end
+#     end
+
+#     # Applier must respond to `call(up0 : Term::Dict, up1 : Term::Dict, down : Term::Dict, my : Term::Dict, matchee0 : Term?, body : Term) : {up1 : Term::Dict, matchee1 : Term}`
+#     #
+#     # `matchee0` is absent (`nil`) in ephemeral pairs with no default value,
+#     # as in the following backmap:
+#     #
+#     # ```wwml
+#     # {x: (%- _ x), y: y_} <> {x: ↑y}
+#     # ```
+#     #
+#     # Running this backmap, `x` would be mounted as an ephemeral pair-value with
+#     # no default value, and thus with no corresponding matchee. The transform `↑y`'s
+#     # applier is then run with `nil` *matchee0*.
+#     def call(up0, up1, down, my, matchee0 : Term?, body)
+#       Term.case(body) do
+#         matchpi %[($tr pred_ succ_)] do
+#           {up1.with(pred, matchee0), Rewrite.one(apply(up0, down, my, succ))}
+#         end
+
+#         otherwise do
+#           {up1, Rewrite.one(apply(up0, down, my, body))}
+#         end
+#       end
+#     end
+#   end
+
+# class BackmapTrie
+#   # NOTE: @env, @body, @captures must only exist on a "tapped" BackmapTrie nodes.
+#   # NOTE: @neighbors only exist on "fanout" BackmapTrie nodes.
+#   # NOTE: The third type of backmaptrie node unifies both of them.
+
+#   @env : Term::Dict?
+
+#   alias Word = Backpath::Word
+
+#   def initialize
+#     @captures = [] of Term
+#     @neighbors = {} of Word::Atomic => BackmapTrie | BackmapPair
+#   end
+
+#   def mentioned_in?(backspec)
+#     @captures.any? { |capture| capture.in?(backspec) || Term.dict(capture).in?(backspec) }
+#   end
+
+#   def mount(backpath : Term::Dict::ItemsView, capture : Term, env : Term::Dict) : Nil
+#     unless subject = backpath.first?
+#       @env = env
+#       @captures << capture
+#       return
+#     end
+
+#     case word = Word.atomic(subject)
+#     when Word::Pair
+#       neighbor = @neighbors.put_if_absent(word) { BackmapPair.new }.as(BackmapPair)
+#       neighbor.mount(backpath.move(1), capture, env)
+#     else
+#       neighbor = @neighbors.put_if_absent(word) { BackmapTrie.new }
+#       neighbor.mount(backpath.move(1), capture, env)
+#     end
+#   end
+
+#   def mount(backpath : Term, capture : Term, env : Term::Dict) : Nil
+#     mount(backpath.items, capture, env)
+#   end
+
+#   def reflect(layer : Int, matchee : Term)
+#     Term::Dict.build { |commit| reflect(layer, commit, matchee) }
+#   end
+
+#   def reflect(layer : Int, ctx : Term::Dict::Commit, matchee : Term)
+#     # Take a snapshot of what the matchee looks like at this level if we have any
+#     # captures at this level.
+#     @captures.each { |capture| ctx.with(capture, matchee) }
+
+#     return if layer.zero?
+
+#     @neighbors.each do |word, neighbor|
+#       case word
+#       when Word::Pair
+#         next unless value = matchee[word.key]?
+
+#         neighbor.as(BackmapPair).reflect(layer - 1, ctx, word.key, value)
+#       else
+#         Word.checkout(word, matchee) do |substructure|
+#           neighbor.as(BackmapTrie).reflect(layer - 1, ctx, substructure)
+#         end
+#       end
+#     end
+#   end
+
+#   def morph0(up0, up1, down, backspec, matchee, applier) : {Term::Dict, Rewrite::Any}
+#     plural = false
+#     body = nil
+
+#     @captures.each do |capture|
+#       if body = backspec[capture]? # Singular
+#         break
+#       elsif body = backspec[{capture}]? # Plural
+#         plural = true
+#         break
+#       end
+#     end
+
+#     rewrite = Rewrite.none
+
+#     if body
+#       up1, rewrite = applier.call(up0, up1, down, @env || Term[], matchee, body) # ?!
+
+#       case rewrite
+#       in Rewrite::One
+#         newvalue = rewrite.term
+
+#         # Go to plural mode if the user wishes so.
+#         if plural && (list = newvalue.as_itemsonly_d?)
+#           rewrite = Rewrite.many(list)
+#         end
+
+#         up1 = @captures.reduce(up1) { |up, capture| up.with(capture, newvalue) }
+#       in Rewrite::Many
+#         newvalue = Term.of(rewrite.list)
+
+#         up1 = @captures.reduce(up1) { |up, capture| up.with(capture, newvalue) }
+#       end
+#     end
+
+#     {up1, rewrite}
+#   end
+
+#   def morph(layer : Int, up0, up1, down, backspec, matchee : Term, applier) : {Term::Dict, Term}
+#     if layer.zero?
+#       return up1, matchee
+#     end
+
+#     relabel = nil
+#     insertions = nil
+
+#     @neighbors.each do |word, neighbor|
+#       case word
+#       in Word::Create
+#         if layer == 1
+#           up1, rewrite = neighbor.as(BackmapTrie).morph0(up0, up1, down, backspec, word.value, applier)
+
+#           case rewrite
+#           in Rewrite::None then value = word.value
+#           in Rewrite::One  then value = rewrite.term
+#           in Rewrite::Many then value = rewrite.list
+#           end
+
+#           # If there were no changes vs. the default, we do not output the optional.
+#           #
+#           # ?! This should be done, but whether or not this should depend on changes
+#           #    is questionable.
+#           next if word.initial == value
+
+#           matchee = matchee.with(word.key, value)
+#         else
+#           up1, value = neighbor.as(BackmapTrie).morph(layer - 1, up0, up1, down, backspec, word.value, applier)
+
+#           relabel ||= [] of {Word::Atomic, Word::Atomic?}
+#           relabel << {word, word.copy_with(value: value)}
+#         end
+#       in Word::CreateLeaf
+#         next unless layer == 1
+
+#         up1, rewrite = neighbor.as(BackmapTrie).morph0(up0, up1, down, backspec, nil, applier)
+
+#         case rewrite
+#         in Rewrite::None
+#         in Rewrite::One
+#           matchee = matchee.with(word.key, rewrite.term)
+#         in Rewrite::Many
+#           matchee = matchee.with(word.key, rewrite.list)
+#         end
+#       in Word::Delete
+#         residue0 = Term.exclude(Term.of(matchee), word.keys.items)
+#         if layer == 1
+#           up1, residue1r = neighbor.as(BackmapTrie).morph0(up0, up1, down, backspec, residue0, applier)
+#           residue1 = residue1r.term? || residue0
+#         else
+#           up1, residue1 = neighbor.as(BackmapTrie).morph(layer - 1, up0, up1, down, backspec, residue0, applier)
+#         end
+#         matchee = matchee.transaction do |commit|
+#           residue1 = Term.exclude(residue1, word.keys.items)
+#           residue0.each_entry { |k, _| commit.without(k) }
+#           residue1.each_entry { |k, v| commit.with(k, v) }
+#         end
+#       in Word::Insert
+#         if layer == 1
+#           up1, rewrite = neighbor.as(BackmapTrie).morph0(up0, up1, down, backspec, word.initial, applier)
+
+#           case rewrite
+#           in Rewrite::None then items1 = Term[{word.initial}]
+#           in Rewrite::One  then items1 = Term[{rewrite.term}]
+#           in Rewrite::Many then items1 = rewrite.list
+#           end
+
+#           insertions ||= [] of {Term::Num, Term::Num, Term::Num, Term::Dict}
+#           insertions << {Term[word.index], Term[word.index], Term[word.ord], items1}
+#         else
+#           up1, value = neighbor.as(BackmapTrie).morph(layer - 1, up0, up1, down, backspec, word.initial, applier)
+
+#           relabel ||= [] of {Word::Atomic, Word::Atomic?}
+#           relabel << {word, word.copy_with(initial: value)}
+#         end
+#       in Word::Range
+#         next unless layer == 1
+
+#         unless (word.b..word.e).subrange_of?(0..matchee.items.size)
+#           raise KeypathError.new
+#         end
+
+#         b = Term[word.b]
+#         e = Term[word.e]
+#         ord = Term[word.ord]
+
+#         items0 = matchee.span(b, e)
+#         up1, rewrite = neighbor.as(BackmapTrie).morph0(up0, up1, down, backspec, Term.of(items0), applier)
+
+#         case rewrite
+#         in Rewrite::None
+#           next
+#         in Rewrite::One
+#           items1 = Term[{rewrite.term}]
+#         in Rewrite::Many
+#           items1 = rewrite.list
+#         end
+
+#         insertions ||= [] of {Term::Num, Term::Num, Term::Num, Term::Dict}
+#         insertions << {b, e, ord, items1}
+#       in Word::Pair
+#         next unless value0 = matchee[key0 = word.key]?
+
+#         up1, key1r, value1r = neighbor.as(BackmapPair).morph(layer - 1, up0, up1, down, backspec, key0, value0, applier)
+
+#         value = matchee[key0]? || raise KeypathError.new
+
+#         case key1r
+#         in Rewrite::None
+#           key1 = key0
+#         in Rewrite::One
+#           key1 = key1r.term
+#         in Rewrite::Many
+#           # One should be able to delete a key-value pair from a backmap with an empty
+#           # plural **key** transform:
+#           #
+#           #   ;; Removes K from dict. Note the semi-necessary alias that prevents
+#           #   ;; us from erasing without's k arg.
+#           #   (without (%value K _) K←k_) <> {(K): ()}
+#           #
+#           #   ;; With alias:
+#           #   (without {x: 100, y: 200} x) ;; => (without {y: 200} x)
+#           #   ;; Without alias:
+#           #   (without {x: 100, y: 200} x) ;; => (without {y: 200})
+#           #
+#           if key1r.list.empty? && layer == 1
+#             matchee = matchee.without(key0)
+#             next
+#           end
+
+#           key1 = Term.of(key1r.list)
+#         end
+
+#         unless key0 == key1
+#           # NOTE: may collide
+#           matchee = matchee.without(key0).with(key1, value)
+
+#           if layer > 1
+#             relabel ||= [] of {Word::Atomic, Word::Atomic?}
+#             relabel << {word, word.copy_with(key: key1)} # NOTE: may collide
+#           end
+#         end
+
+#         case value1r
+#         in Rewrite::None
+#         in Rewrite::One
+#           matchee = matchee.with(key1, value1r.term)
+#         in Rewrite::Many
+#           if inspt = matchee.index?(key1)
+#             insertions ||= [] of {Term::Num, Term::Num, Term::Num, Term::Dict}
+#             insertions << {inspt, inspt + 1, Term[0], value1r.list}
+#           elsif value1r.list.empty?
+#             # One should be able to delete a key-value pair from a backmap with an empty
+#             # plural **value** transform:
+#             #
+#             #   {x: x_, y: y_} <> {(x): ()} ;; Removes `x` pair
+#             #
+#             matchee = matchee.without(key1)
+#           else
+#             # Otherwise act the same as One.
+#             matchee = matchee.with(key1, value1r.list)
+#           end
+#         end
+#       end
+#     end
+
+#     # It is unwise to delete/insert while we're iterating over @neighbors, so
+#     # we have a separate "relabel" step.
+#     if relabel
+#       relabel.each do |k0, k1|
+#         v = @neighbors.delete(k0) || raise KeyError.new("attempt to relabel an absent label #{k0}")
+#         next unless k1
+#         @neighbors[k1] = v
+#       end
+#     end
+
+#     if insertions
+#       insertions.sort_by! { |b, _, ord, _| {-b, -ord} }
+#       insertions.each do |b, e, _, replacement|
+#         matchee = matchee.replace(b...e, &.concat(replacement.items))
+#       end
+#     end
+
+#     {up1, Term.of(matchee)}
+#   end
+# end
+
+# class BackmapPair
+#   @k : BackmapTrie?
+#   @v : BackmapTrie?
+
+#   def mount(backpath : Term::Dict::ItemsView, capture : Term, env : Term::Dict) : Nil
+#     case subject = backpath.first?
+#     when Term.of(:key)   then neighbor = @k ||= BackmapTrie.new
+#     when Term.of(:value) then neighbor = @v ||= BackmapTrie.new
+#     else
+#       raise KeypathError.new
+#     end
+
+#     neighbor.mount(backpath.move(1), capture, env)
+#   end
+
+#   def reflect(layer : Int, ctx : Term::Dict::Commit, key : Term, value : Term)
+#     @k.try &.reflect(layer, ctx, key)
+#     @v.try &.reflect(layer, ctx, value)
+#   end
+
+#   def morph(layer, up0, up1, down, backspec, key0, value0, applier)
+#     if layer == 0
+#       up1, key1r = @k.try &.morph0(up0, up1, down, backspec, key0, applier) || {up1, Rewrite.one(key0)}
+#       up1, value1r = @v.try &.morph0(up0, up1, down, backspec, value0, applier) || {up1, Rewrite.one(value0)}
+#       {up1, key1r, value1r}
+#     else
+#       up1, key1 = @k.try &.morph(layer, up0, up1, down, backspec, key0, applier) || {up1, key0}
+#       up1, value1 = @v.try &.morph(layer, up0, up1, down, backspec, value0, applier) || {up1, value0}
+#       {up1, Rewrite.one(key1), Rewrite.one(value1)}
+#     end
+#   end
+# end
+
+# def self.backmapr(envs : Enumerable(Term::Dict), backspec : Term, matchee : Term, *, applier = DefaultApplier.new) : Rewrite::Some
+#   trie = BackmapTrie.new
+#   depth = 0u32
+
+#   envs.each do |env|
+#     next unless backpaths = env[:"(backpaths)"]?
+
+#     backpaths.each_entry do |capture, backpathset|
+#       backpathset.each_entry do |backpath, _|
+#         trie.mount(backpath, capture, env)
+
+#         depth = Math.max(backpath.items.count { |x| !x.in?(Term.of(:key), Term.of(:value)) }.to_u32, depth)
+#       end
+#     end
+#   end
+
+#   ctx0 = Term[]
+
+#   # pp trie
+#   # pp depth
+
+#   (1..depth).reverse_each do |layer|
+#     # pp layer
+#     upper = trie.reflect(layer, matchee)
+#     lower = ctx0.sub(upper)
+#     ctx0 |= upper
+#     ctx0, matchee = trie.morph(layer, ctx0, ctx0, lower, backspec, matchee, applier)
+#     # pp matchee
+#   end
+
+#   upper = trie.reflect(0, matchee)
+#   lower = ctx0.sub(upper)
+#   ctx0 |= upper
+#   _, rewrite = trie.morph0(ctx0, ctx0, lower, backspec, matchee, applier)
+
+#   rewrite.as?(Rewrite::Some) || Rewrite.one(matchee)
+# end
+
+# def self.backmap(envs : Enumerable(Term::Dict), backspec : Term, matchee : Term, **kwargs) : Term
+#   rewrite = backmapr(envs, backspec, matchee, **kwargs)
+#   rewrite.term?
+# end
+
+# def self.backmapr(operator : Operator::Any, backspec : Term, matchee : Term, *, env = Term[], **kwargs) : Rewrite::Any
+#   case fb = Operator.feedback(env, operator, matchee, backpaths: true)
+#   in Operator::Fb::Match
+#     backmapr(fb.envs, backspec, matchee, **kwargs)
+#   in Operator::Fb::Mismatch
+#     Rewrite.none
+#   end
+# end
+
+# def self.backmapr(pattern : Term, backspec : Term, matchee : Term, **kwargs) : Rewrite::Any
+#   backmapr(operator(pattern), backspec, matchee, **kwargs)
+# end
+
+# def self.backmap?(pattern : Term | Operator::Any, backspec : Term, matchee : Term, **kwargs) : Term?
+#   rewrite = backmapr(pattern, backspec, matchee, **kwargs)
+#   rewrite.term?
+# end
+# end
 
 class ::Ww::KeypathError < Exception
 end
@@ -5853,37 +5863,6 @@ module ::Ww::M1
   end
 end
 
-{% if flag?(:profile) %}
-  module Profile
-    class_getter rtime : Hash(M1::Operator::Any, Time::Span) do
-      hash = Hash(M1::Operator::Any, Time::Span).new
-      hash.compare_by_identity
-      hash
-    end
-
-    class_getter optop : Hash(M1::Operator::Any, Term) do
-      hash = Hash(M1::Operator::Any, Term).new
-      hash.compare_by_identity
-      hash
-    end
-
-    class_getter hits : Hash(M1::Operator::Any, Int32) do
-      hash = Hash(M1::Operator::Any, Int32).new
-      hash.compare_by_identity
-      hash
-    end
-
-    at_exit do
-      rtime.to_a.sort_by { |op, span| span * hits[op] }.each do |op, span|
-        hitcount = hits[op]
-        puts "Pattern".colorize.bold
-        puts ML.display(optop[op])
-        puts "Took: #{span.total_microseconds}µs × #{hitcount}".colorize.bold
-      end
-    end
-  end
-{% end %}
-
 # Represents a pattern within a `PatternSet`. Has no expected use outside of `PatternSet`.
 struct Pattern
   private alias O = M1::Operator
@@ -5900,38 +5879,19 @@ struct Pattern
   end
 
   # Returns the response of this pattern to *matchee* (may be positive or negative).
-  def response(matchee : Term, *, env = Term[], backpaths = false) : Pr::Any
-    fb = nil
+  def response(matchee : Term, *, env = Term[]) : Pr::Any
+    fb = M1next.matches(env, @operator, matchee)
 
-    # TODO: remove this or somehow make this "official"
-    {% if flag?(:profile) %}
-      if backpaths
-        fb = O.feedback(env, @operator, matchee, backpaths: backpaths)
-      else
-        took = Time.measure do
-          fb = O.feedback(env, @operator, matchee, backpaths: backpaths)
-        end
-        ca = Profile.rtime[@operator]? || 0.nanoseconds
-        hits = Profile.hits[@operator]? || 0
-
-        Profile.rtime[@operator] = ca + (took - ca)/(hits + 1)
-        Profile.hits[@operator] = hits + 1
-      end
-    {% else %}
-      fb = O.feedback(env, @operator, matchee, backpaths: backpaths)
-    {% end %}
-
-    fb = fb.not_nil!
-
-    case fb
-    in O::Fb::MatchOne  then Pr::One.new(self, fb.env)
-    in O::Fb::MatchMany then Pr::Many.new(self, fb.envs)
-    in O::Fb::Mismatch  then Pr::Neg.new
+    case fb.size
+    when 0 then Pr::Neg.new
+    when 1 then Pr::One.new(self, fb[0])
+    else
+      Pr::Many.new(self, fb)
     end
   end
 
   def probe?(matchee : Term, *, env = Term[]) : Bool
-    O.probe?(env, @operator, matchee)
+    M1next.probe?(env, @operator, matchee)
   end
 
   def_equals_and_hash @index
@@ -5951,7 +5911,7 @@ module Pr
   end
 
   # Positive response of *pattern* that resulted in multiple environments.
-  record Many, pattern : Pattern, envs : Array(Term::Dict) do
+  record Many, pattern : Pattern, envs : Slice(Term::Dict) do
     def ones(& : One ->)
       envs.each { |env| yield One.new(pattern, env) }
     end
@@ -6080,7 +6040,7 @@ class PatternSet(T)
 
     bases.each do |base|
       base.each_item_unordered do |item|
-        envs = M1.matches(selector, item)
+        envs = M1next.matches(selector, item)
         envs.each do |env|
           next unless pattern = env[:pattern]?
           next unless seen.add?(pattern)
@@ -6164,7 +6124,7 @@ class PatternSet(T)
       new(pset, table)
     end
 
-    def scan(matchee : Term, *, env : Term::Dict) : Iterator({Term::Dict, Int32})
+    def scan(matchee : Term, *, env : Term::Dict)
       @pset.query(matchee, env: env)
         .select(Pr::One)
         .map { |pr| {pr.env, @table[pr.pattern.index]} }
@@ -6173,6 +6133,14 @@ class PatternSet(T)
 
   macro case(matchee, **kwargs, &block)
     ::Ww::Term.case({{matchee}}, matcher: ::PatternSet::Matcher, {{kwargs.double_splat}}) {{block}}
+  end
+
+  def each_candidate(matchee : Term, & : M1::Operator::Any, UInt32 ->)
+    if bucket = @keyed.bucket?(matchee)
+      bucket.each { |pattern| yield pattern.operator, pattern.index }
+    end
+
+    @unkeyed.each { |pattern| yield pattern.operator, pattern.index }
   end
 
   struct Candidates
@@ -6307,34 +6275,6 @@ class ::Ww::Term::Dict
   @[Dncast]
   def population
     ee.sum(Population.zero) { |_, v| v }
-  end
-
-  # Lets the block replace items in the given *range* with zero or more items
-  # by appending to the commit. Returns the modified copy of `self`.
-  @[Dncast]
-  def replace(range : Range(Term::Num, Term::Num), & : Term::Dict::Commit ->) : Term::Dict
-    unless range.exclusive?
-      raise ArgumentError.new("expected an exclusive range")
-    end
-
-    pairspart.transaction do |commit|
-      # Copy before
-      (Term[0]...range.begin).each do |index|
-        commit.append(self[index])
-      end
-
-      yield commit
-
-      # Copy after
-      (range.end...itemsize).each do |index|
-        commit.append(self[index])
-      end
-    end
-  end
-
-  @[Dncast]
-  def replace(index : Term::Num, &)
-    replace(index...index + 1) { |commit| yield commit }
   end
 end
 

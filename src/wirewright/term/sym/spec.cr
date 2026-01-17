@@ -52,6 +52,8 @@ struct Ww::Term::Sym
 
       assert limit >= 32
 
+      # NOTE: We must always copy bytes when converting to String because we don't
+      # know where they come from, maybe they're even stored on the stack!
       string = arg.is_a?(Bytes) ? String.new(arg) : arg
 
       index = @@string2ref.put_if_absent(string) do
@@ -182,11 +184,10 @@ struct Ww::Term::Sym
       repr(datum)
     end
 
-    # Parses *string* as a symbol and returns the resulting bits.
-    def parse(string : String) : Repr
-      unless string.empty?
-        bytes = string.to_slice
-
+    # Parses *arg* as a symbol and returns the resulting bits.
+    def parse(arg : String | Bytes) : Repr
+      bytes = arg.is_a?(String) ? arg.to_slice : arg
+      if bytes.present?
         # ..._
         bytes.rchop('_') do |bytes|
           return blank(bytes, :any, :one)
@@ -254,7 +255,7 @@ struct Ww::Term::Sym
         end
       end
 
-      nonblank(string)
+      nonblank(arg)
     end
 
     def parse(name : RefName) : Repr

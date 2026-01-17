@@ -10,8 +10,8 @@ module Ww::M1next
     alias One = Lookup | NegLookup | NegLookupRef | Compares
 
     defrecord Lookup, table : Tzip, op : O::Any
-    defrecord NegLookup, table : Term::Dict
-    defrecord NegLookupRef, table : Term::Dict, name : Term, log : Log::Sealed
+    defrecord NegLookup, table : Tzip
+    defrecord NegLookupRef, table : Tzip, name : Term
     defrecord Many, children : Slice(One)
     defrecord Compares, op : Symbol, rhs : Term::Num
 
@@ -25,7 +25,19 @@ module Ww::M1next
     end
   end
 
-  # Refs are, roughly speaking, named logs. Whereas normally logs are associated
+  # :nodoc:
+  #
+  # ### Selector mode
+  #
+  # Outside of *selector mode*, captures refine choices but *do not* trigger
+  # mismatch if their proposal is not in the choice set.
+  #
+  # In selector mode, absence of proposal in the capture's choice set means
+  # immediate mismatch.
+  #
+  # ### Refs
+  #
+  # *Refs* are, roughly speaking, named logs. Whereas normally logs are associated
   # with parts of a matchee, refs exist primarily for consumption by the backmap
   # engine and lack corresponding term(s) in the underlying matchee.
   #
@@ -34,61 +46,6 @@ module Ww::M1next
   # there's no value for *a*. Something similar can be said about `{¦ -x_}`. There's
   # no value for *x*: in fact, that's exactly what the pattern is matching for. But
   # since we'd like to refer to "how to get to *x*" anyway, we have refs.
-  module Ref
-    extend self
-
-    alias Any = One | Many
-    alias One = Entry | Span
-
-    # Refers to an entry with *key* that may or may not exist.
-    defrecord Entry,
-      log : Log::Sealed,
-      key : Term
-
-    # Refers to a range of items between *begin* and *end*. *ord* is an integer
-    # that tie-breaks overlapping [empty] ranges.
-    #
-    # *ord* is especially useful for sequences of empty ranges: e.g. in
-    # `(x_ (%slot a) (%slot b) y_)`, both slots are assigned to the range 1..<1,
-    # which isn't nice because if you were to insert, you'd have a conflict:
-    # both ranges fighting over who gets to insert first.
-    #
-    # Specifying *ord* based on *operator* order (as opposed to item order)
-    # solves the conflict: *a* gets 1, *b* gets 2, and we end up with spans
-    # `(1..<1, 1)`, `(1..<1, 2)`, for which insertion order is well-defined.
-    defrecord Span,
-      log : Log::Sealed,
-      begin : UInt32,
-      end : UInt32,
-      ord : UInt32
-
-    defrecord Many, children : Slice(One)
-
-    def join(a : Any, b : Any) : Many
-      case {a, b}
-      in {One, One}   then Many.new(Slice[a.as(One), b.as(One)])
-      in {One, Many}  then Many.new(b.children.prepend(a))
-      in {Many, One}  then Many.new(a.children.append(b))
-      in {Many, Many} then Many.new(a.children + b.children)
-      end
-    end
-
-    def flatten(a : One, & : One ->) : Nil
-      yield a
-    end
-
-    def flatten(a : Many, & : One ->) : Nil
-      a.children.each { |child| yield child }
-    end
-  end
-
-  # :nodoc:
-  #
-  # Outside of selector mode, captures refine choices but *do not* trigger
-  # mismatch if their proposal is not in the choice set.
-  #
-  # In selector mode, absence of proposal in the capture's choice set means
-  # immediate mismatch.
   struct Context
     alias EnvMap = ListMap(Term, Tzip)
     alias EnvMapArena = Arena(List({Term, Tzip}), 32)
@@ -96,8 +53,8 @@ module Ww::M1next
     alias CstMap = ListMap(Term, Cst::Any)
     alias CstMapArena = Arena(List({Term, Cst::Any}), 8)
 
-    alias RefMap = ListMap(Term, Ref::Any)
-    alias RefMapArena = Arena(List({Term, Ref::Any}), 4)
+    alias RefMap = ListMap(Term, Log::Sealed)
+    alias RefMapArena = Arena(List({Term, Log::Sealed}), 4)
 
     # Choices are relatively rare in practice so we're just using Pf::Map/Set
     # for them instead of the fancy Arena stuff.
@@ -133,38 +90,28 @@ module Ww::M1next
     end
 
     def self.new(env : Term::Dict, & : Context ->) : Nil
-      # Yeah, I know, this is horrible...
-      #
       # NOTE: Right now, measuring with LLDB, release mode, this takes -- rounding upwards by
       # a few KB to account for misunderstandings on my end -- about 32KB of stack memory.
       # Which is OK, I guess. We normally have 8 MB in Linux so 32KB is fine.
-      EnvMapArena.new do |envtabs|
-        CstMapArena.new do |csttabs|
-          RefMapArena.new do |reftabs|
-            ContextArena.new do |cdatas|
-              PlanArena.new do |plans|
-                envtab = EnvMap.new
+      nested_scopes(EnvMapArena, CstMapArena, RefMapArena, ContextArena, PlanArena) do |envtabs, csttabs, reftabs, cdatas, plans|
+        envtab = EnvMap.new
 
-                # NOTE: in the vast majority of cases *env* is empty. No work is done here.
-                # The only major supplier of nonempty *env*s is `Alloy.render`.
-                env.each_entry do |key, value|
-                  envtab = EnvMap.assoc(envtabs, envtab, key, Tzip.new(value, Log.none))
-                end
-
-                arenas = stack_alloc ArenaRow.new(cdatas, plans, envtabs, csttabs, reftabs)
-
-                cdata = cdatas.construct(arenas, envtab,
-                  csttab: CstMap.new,
-                  reftab: RefMap.new,
-                  choicetab: ChoiceMap.new,
-                  selector: false,
-                )
-
-                yield new(cdata)
-              end
-            end
-          end
+        # NOTE: in the vast majority of cases *env* is empty. No work is done here.
+        # The only major supplier of nonempty *env*s is `Alloy.render`.
+        env.each_entry do |key, value|
+          envtab = EnvMap.assoc(envtabs, envtab, key, Tzip.new(value, Log.none))
         end
+
+        arenas = stack_alloc ArenaRow.new(cdatas, plans, envtabs, csttabs, reftabs)
+
+        cdata = cdatas.construct(arenas, envtab,
+          csttab: CstMap.new,
+          reftab: RefMap.new,
+          choicetab: ChoiceMap.new,
+          selector: false,
+        )
+
+        yield new(cdata)
       end
     end
 
@@ -263,10 +210,6 @@ module Ww::M1next
       csttab[capture]?
     end
 
-    def ref?(capture : Term) : Ref::Any?
-      reftab.fetch?(reftabs, capture)
-    end
-
     def update?(capture : Term, &) : {Context, Bool}
       value0 = envtab.fetch(capture) { return self, false }
       value1 = yield value0
@@ -293,12 +236,16 @@ module Ww::M1next
       change(csttab: CstMap.assoc(csttabs, csttab, key, cst1))
     end
 
-    def join(key : Term, ref : Ref::Any)
+    def join(key : Term, ref : Log::None)
+      self
+    end
+
+    def join(key : Term, ref : Log::Sealed)
       ref0 = reftab.fetch(key) do
         return change(reftab: RefMap.assoc(reftabs, reftab, key, ref))
       end
 
-      ref1 = Ref.join(ref0, ref)
+      ref1 = Log.seal(Log.join(ref0, ref))
 
       change(reftab: RefMap.assoc(reftabs, reftab, key, ref1))
     end

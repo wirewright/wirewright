@@ -32,7 +32,7 @@
 # they have captured. E.g. `(+ a_ b_)` on `(+ 1 2)` will give the match env
 # `{a: 1, b: 2}`.
 #
-# The semantics of using the same-named blank across the pattern to make equality
+# The semantics of using a same-named blank across the pattern to make equality
 # constraints is preserved. So for instance matching the pattern `(+ a_ a_)` against
 # `(+ x y)` will fail; whereas running the same pattern on `(+ x x)` will succeed
 # with the match env `{a: x}`.

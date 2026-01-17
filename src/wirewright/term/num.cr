@@ -331,12 +331,29 @@ module Ww
       @k.is_a?(Approx)
     end
 
+    # Returns this number as a u32 if it is representable with a u32. Otherwise,
+    # returns `nil`.
+    @[Dncast]
+    def index32? : UInt32?
+      if (a = @k.as?(Int64)) && 0 <= a <= UInt32::MAX
+        return a.to_u32
+      end
+
+      return unless natural?
+
+      to?(UInt32)
+    end
+
     # Returns `true` if this number term is a positive integer. Returns
     # `false` otherwise.
     #
     # NOTE: 0 is considered a natural number by this method.
     @[Dncast]
     def natural? : Bool
+      if a = @k.as?(Int64)
+        return a >= 0
+      end
+
       positive? && integer?
     end
 

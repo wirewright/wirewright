@@ -1172,7 +1172,7 @@ prune:
 
 ;; Send up-out to parent.
 ⟨{¦ µ-cues_dict⋮ (C←[up-out id_] _*)} ⍊ µ-cues_dict⋮ (_* `T)⟩
-  <> {T: (up-in ^(dn id)), (C): ()}
+  <> {T: (up-in ^id), (C): ()}
 
 ;; Broadcast dn-out to all children.
 ⟨{¦ µ-cues_dict⋮ (_* `T)} ⍊ µ-cues: ((dn-out c_ ⍊ -◇_) _*)⟩°

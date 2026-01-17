@@ -300,12 +300,7 @@ struct ProcRuleset
       if rule = rule?(pr.pattern.index)
         offspring = rule.call(pr.env)
       elsif backmap = backmap?(pr.pattern.index)
-        unless pr.env.includes?(:"(backpaths)")
-          pr = pr.pattern.response(matchee0, backpaths: true).as(Pr::One)
-        end
-        backspec = backmap.call(pr.env)
-        matchee1 = M1.backmap(pr.envs, Term.of(backspec), matchee0)
-        offspring = Rewrite::One.new(matchee1)
+        raise "not supported"
       end
 
       case offspring
@@ -379,7 +374,7 @@ class Ruleset
     end
 
     rest = base.pairspart.transaction do |commit|
-      commit.rejected(base.items) { |item| M1.probe?(selector, item) }
+      commit.rejected(base.items) { |item| M1next.probe?(selector, item) }
     end
 
     {ruleset, rest}
@@ -413,6 +408,12 @@ class Ruleset
     in Pr::Pos
       {res, @rules[res.pattern.index]}
     in Pr::Neg
+    end
+  end
+
+  def each_candidate(matchee : Term, & : M1::Operator::Any, Rule::Any ->)
+    @pset.each_candidate(matchee) do |candidate, index|
+      yield candidate, @rules[index]
     end
   end
 

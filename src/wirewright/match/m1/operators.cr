@@ -197,6 +197,7 @@ module Ww::M1::Operator
   defcase Tally, successor : Any
   defcase Type, successor : Any
   defcase ParseML, successor : Any
+  defcase Untracked, successor : Any
 
   defcase Add, arg : Term::Num, successor : Any
   defcase Sub, arg : Term::Num, successor : Any
@@ -210,7 +211,29 @@ module Ww::M1::Operator
 
   defcase CaptureItemsonly, capture : Term
 
-  defcase Partition, itemside : Any, pairside : Any
+  defcase Partition, itemside : Any, pairside : Any, seq : Bool do
+    private def self.seq?(op : Any) : Bool
+      case op
+      when ItemFirst,
+           ItemLast,
+           CaptureItemsonly,
+           SingularSeq,
+           ItemSeq
+        true
+      when BoundsGuard,
+           MaxDepth,
+           SketchSubset,
+           DictGuard
+        seq?(op.successor)
+      else
+        false
+      end
+    end
+
+    def self.new(itemside : Any, pairside : Any)
+      new(itemside, pairside, seq: seq?(itemside))
+    end
+  end
 
   module Entry
     alias Any = Required | Optional | Present | Absent | AbsentKeypath | Negative | NegativeKeypath

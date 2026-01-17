@@ -26,9 +26,9 @@ module Testtool
 
   defcase AssertionAssets,
     vars : Hash(Term, Term),
-    theme : Microfold::Theme,
-    editR : Rewriter,
-    uiR : Rewriter,
+    theme : Microfold::Theme?,
+    editR : Rewriter?,
+    uiR : Rewriter?,
     files : FileServer,
     dw : Channel(DwUIR::Request)
 

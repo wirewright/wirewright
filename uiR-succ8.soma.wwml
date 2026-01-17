@@ -216,7 +216,7 @@
 ;; Apply max-w/h constraints on dn-w/h. This seems the right thing to do;
 ;; even if the parent gives us more size we'll still adhere to the child's
 ;; own max width restriction.
-(limit _ ⍊ dn-w⫽h: (arg ±λ ⍊ -◇) ±max-w⫽h)
+(limit _ ⍊ dn-w⫽h: (arg ±λ ⍊ -◇_) ±max-w⫽h)
   <> {λ: ^(min λ max-w⫽h), ◇: true}
 
 ;;
@@ -622,11 +622,11 @@
 
 ;; Merge accepted.
 C←(wrapper ⍊ proposal: P←(accepted {¦ rem: ±rem' span: ±span'}) ±rem ±span nodes: (N_ _*) log: (record_ _*))
-  <> {(C): (^(up N0) ^(up C)), (P): (), rem: ^rem', span: ^span', (N): ($tr N0 ()), (record): ()}
+  <> {(C): (^(dn N) ^(up C)), (P): (), rem: ^rem', span: ^span', (N): (), (record): ()}
 
 ;; Destroy declined and exit the main stack.
 S←[main_ _* C←(wrapper ⍊ main_ proposal: P←(declined _) ±rem ±span ±limit)]
-  <> {(P): (), rem: ^limit, span: 0, (S): (^(up S) ^(up C0)), (C): ($tr C0 ())}
+  <> {(P): (), rem: ^limit, span: 0, (S): (^(up S) ^(dn C)), (C): ()}
 
 ;; Self-destruct once exhausted.
 C←(wrapper ⍊ nodes: ()) <> {(C): ()}

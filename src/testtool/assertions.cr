@@ -140,6 +140,18 @@ module Testtool
         end
       end
 
+      matchpi %{(backsys defn_dict _*)} do
+        backsys = defn.items.compact_map do |rule|
+          Term.matchpi?(rule, %{[backmap pattern_ backspec_dict]}, engine: M0) do
+            {pattern, backspec}
+          end
+        end
+
+        assertions(decl.as_d, srcmap, offset: 2) do |item|
+          BacksysDecl.new(production.path, backsys, item)
+        end
+      end
+
       # |@ testtool.decl.pattern
       #
       # |@pattern
@@ -503,6 +515,35 @@ module Testtool
 
       otherwise do
         warn("Ignoring unrecognized backmap decl: #{decl}", production.path, srcmap)
+
+        [] of AssertionNode
+      end
+    end
+  end
+
+  defrecord BacksysDecl, path : Path, backsys : Array({Term, Term}), term : Term
+
+  def assertions(production : BacksysDecl, srcmap : ML::SrcMap) : Array(AssertionNode)
+    decl, backsys = production.term, production.backsys
+
+    Term.case(decl, engine: M0) do
+      # |@ testtool.backsys.seq
+      #
+      # |@pattern
+      # (seq frames_*)
+      #
+      # |@block
+      # Use `seq` to assert that a sequence of *frames* is a valid evolution under
+      # the current backsystem.
+      matchpi %{(seq _*)} do
+        seq = decl.items.move(1).to_a
+        test = BacksysTest.new(backsys, seq)
+
+        annotated(assertions(test), decl, srcmap)
+      end
+
+      otherwise do
+        warn("Ignoring unrecognized backsys decl: #{decl}", production.path, srcmap)
 
         [] of AssertionNode
       end

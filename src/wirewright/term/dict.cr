@@ -477,11 +477,25 @@ module Ww
       items.last == Term.of(object)
     end
 
+    # If *term* exists in this dict's itemspart, returns it as a `UInt32`.
+    # Returns `nil` otherwise.
+    #
+    # NOTE: Dict itemspart does not include indices larger than `UInt32`.
+    @[Dncast]
+    def index32?(term) : UInt32?
+      return unless index = Term[term].as?(Term::Num)
+      return unless index32 = index.index32?
+
+      index32 < itemsize ? index32 : nil
+    end
+
+    # If *term* exists in this dict's itemspart, returns it as a `Term::Num`.
+    # Returns `nil` otherwise.
+    #
+    # NOTE: Dict itemspart does not include indices larger than `UInt32`.
     @[Dncast]
     def index?(term) : Term::Num?
-      return unless index = Term[term].as?(Term::Num)
-      return unless index.in?(Term[0]...Term[items.size])
-      index
+      Term[index32?(term)]
     end
 
     @[Dncast]
@@ -496,10 +510,8 @@ module Ww
     # :nodoc:
     @[Dncast]
     def at?(key : Term::Num) : Term?
-      return at_default?(key) unless key.natural?
-      return at_default?(key) unless index = key.to?(Int32)
-      return at_default?(key) unless index < @items.size
-      return at_default?(key) unless coat = @items.fetch?(Probes::FetchItem.new(index))
+      return at_default?(key) unless i = index32?(key)
+      return at_default?(key) unless coat = @items.fetch?(Probes::FetchItem.new(i.to_i))
 
       entry, *_ = coat
       entry.value
@@ -1086,11 +1098,10 @@ module Ww
 
     # :nodoc:
     def without(key : Term::Num) : Dict
-      return without_default(key) unless key.natural?
-      return without_default(key) unless key < Term[@items.size]
+      return without_default(key) unless index = index32?(key)
 
       items, pairs, _, _ = Gap.demote(
-        end_exclusive: key.to(Int32),
+        end_exclusive: index.to_i,
         rdrop: true, # < will remove the item
         nitems: @items.size,
         npairs: @pairs.size,
@@ -1122,6 +1133,10 @@ module Ww
     # associations with any of the given *keys*.
     @[Dncast]
     def without(*keys) : Dict
+      residue(keys)
+    end
+
+    def residue(keys : Enumerable)
       transaction do |commit|
         keys.each { |key| commit.without(key) }
       end
@@ -1178,11 +1193,10 @@ module Ww
     end
 
     protected def without!(key : Term::Num, author) : Dict
-      return without_default!(key, author) unless key.natural?
-      return without_default!(key, author) unless key < Term[@items.size]
+      return without_default!(key, author) unless index = index32?(key)
 
       @items, @pairs, _, _ = Gap.demote(
-        end_exclusive: key.to(Int32),
+        end_exclusive: index.to_i,
         author: author,
         rdrop: true, # < will remove the item
         nitems: @items.size,
@@ -1411,6 +1425,33 @@ module Ww
           commit.append(self[key])
         end
       end
+    end
+
+    # Lets the block replace items in the given *range* with zero or more items
+    # by appending to the commit. Returns the modified copy of `self`.
+    @[Dncast]
+    def replace(range : Range(Term::Num, Term::Num), & : Term::Dict::Commit ->) : Term::Dict
+      assert range.exclusive?
+      assert Term[0] <= range.begin <= Term[itemsize]
+
+      pairspart.transaction do |commit|
+        # Copy before
+        (Term[0]...range.begin).each do |index|
+          commit << self[index]
+        end
+
+        yield commit
+
+        # Copy after
+        (range.end...itemsize).each do |index|
+          commit << self[index]
+        end
+      end
+    end
+
+    @[Dncast]
+    def replace(index : Term::Num, &)
+      replace(index...index + 1) { |commit| yield commit }
     end
 
     # Dict set intersection. Values are ignored; only key presence/absence is taken

@@ -163,14 +163,20 @@ module Ww::M1next
       Tzip.new(Term.of(dict.pairspart), Log.append(@log, Log::ExaminePairspart.new))
     end
 
+    def ref(key : Term) : Log::Sealed | Log::None
+      log = Log.append(@log, Log::ExamineValue.new(key))
+
+      Log.seal(Log.simplify(log))
+    end
+
     enum Order : UInt16
       # Skips the entirety of items or pairs.
       Skip
 
       # Lexicographic (we use "lexical" because it's shorter) order. For items,
-      # this means index-order. Pairs are sorted by key and value using `Term.compare`.
+      # this means index-order. Pairs are sorted by key using `Term.compare`.
       #
-      # Can be slow for large dicts (> 10 000 pairs) due to the requirement of
+      # Can be slow for large dicts (maybe > 10 000 pairs) due to the requirement of
       # sorting and comparison (also may allocate memory). The cost is generally
       # one-time, however, so this is used as the default where possible to produce
       # human-comprehensible order.
@@ -183,12 +189,15 @@ module Ww::M1next
       # FIXME: Right now memory-order is not guaranteed to be stable. It looks stable in
       # practice, but the order of *collisions* is currently undefined, and thus depends
       # on insertion order. It remains future work to fix this by sorting collisions --
-      # the current implementation of Pf::Map does not support this.
+      # the current implementation of Pf::Map does not support this. Also, Pf::Map currently
+      # does not enforce structural equality and thus is generally insertion order-dependent
+      # as well: a group of insertions followed by a group of deletions, when mixing within
+      # the groups, may result in a different order of entries.
       Memory
     end
 
     # Returns *n*th value in the itemspart of this tzip. Desired value order
-    # as *n* increases is set by *order*. Returns `nil` if no such value exists.
+    # as *n* grows is determined by *order*. Returns `nil` if no such value exists.
     def nthvi?(order : Order, n : Int32) : Tzip?
       assert dict = term.as_d?
       return unless n < dict.itemsize
@@ -203,7 +212,7 @@ module Ww::M1next
     end
 
     # Returns *n*th value in the pairspart of this tzip. Desired value order
-    # as *n* increases is set by *order*. Returns `nil` if no such value exists.
+    # as *n* grows is determined by *order*. Returns `nil` if no such value exists.
     def nthvp?(order : Order, n : Int32) : Tzip?
       assert dict = term.as_d?
       return unless n < dict.pairsize
@@ -226,12 +235,12 @@ module Ww::M1next
 
       zname = Tzip.new(
         term: Term.of(blank.name),
-        log: pipe(@log, Log.append(Log::ExamineBlankName.new), Log.simplify, Log.seal),
+        log: Log.append(@log, Log::ExamineBlankName.new),
       )
 
       ztype = Tzip.new(
         term: Term.of(blank.type.blank),
-        log: pipe(@log, Log.append(Log::ExamineBlankType.new), Log.simplify, Log.seal),
+        log: Log.append(@log, Log::ExamineBlankType.new),
       )
 
       {zname, ztype}
@@ -289,7 +298,7 @@ module Ww::M1next
         return Tzip.new(Term.of(dict1), @log)
       end
 
-      action = Log::Remove.new(removed.to_readonly_slice(&.itself))
+      action = Log::ExamineResidue.new(removed.to_readonly_slice(&.itself))
 
       Tzip.new(Term.of(dict1), Log.append(@log, action))
     end
@@ -739,11 +748,18 @@ module Ww::M1next
       rskip(n)
     end
 
-    # Changes the size of this view to *newsize*.
-    def trim(newsize : Int32) : ItemsView
-      assert newsize <= size
+    # Returns a view of the first *n* items of this view.
+    def first(n : Int32) : ItemsView
+      assert n <= size
 
-      change(end: @begin + newsize)
+      change(end: @begin + n)
+    end
+
+    # Returns a view of the last *n* items of this view.
+    def last(n : Int32) : ItemsView
+      assert n <= size
+
+      change(begin: @end - n)
     end
 
     # Returns the part of this view before and excluding *pivot*.
@@ -769,16 +785,15 @@ module Ww::M1next
     # Constructs a log corresponding to this items view. The log stems
     # from `tzip`'s log and is annotated as `Log::ExamineRange`.
     def log : Log::Any
-      Log.append(@tzip.log, Log::ExamineRange.new(@begin.to_u32, @end.to_u32))
+      Log.append(@tzip.log, Log::ExamineRange.new(@begin.to_u32, @end.to_u32, ord: 0u32))
     end
 
     # Constructs a span reference (see `Ref::Span`) corresponding to this
     # items view.
-    def span?(*, ord : UInt32) : Ref::Span?
-      log = Log.seal(Log.simplify(@tzip.log))
-      return if log.is_a?(Log::None)
+    def ref(*, ord : UInt32) : Log::Sealed | Log::None
+      log = Log.append(@tzip.log, Log::ExamineRange.new(@begin.to_u32, @end.to_u32, ord: ord))
 
-      Ref::Span.new(log, @begin, @end, ord)
+      Log.seal(Log.simplify(log))
     end
 
     # Returns a tzip of the items in this view (as a dict).
@@ -792,7 +807,7 @@ module Ww::M1next
 
     # Yields all splits of this view into two subviews, starting with
     # an empty view and consuming one item at a time until full.
-    def each_bisplit_lazy(& : ItemsView, ItemsView ->)
+    def each_partition_lazy(& : ItemsView, ItemsView ->)
       (0..size).each do |size|
         yield before(size), starting_at(size)
       end
@@ -800,7 +815,7 @@ module Ww::M1next
 
     # Yields all splits of this view into two subviews, starting with
     # this view and releasing items until empty.
-    def each_bisplit_greedy(& : ItemsView, ItemsView ->)
+    def each_partition_greedy(& : ItemsView, ItemsView ->)
       (0..size).reverse_each do |size|
         yield before(size), starting_at(size)
       end
@@ -808,7 +823,7 @@ module Ww::M1next
 
     # Yields all splits of this view into two subviews, starting at *pivot*
     # and swaying back and forth.
-    def each_bisplit_sway(pivot : Int, & : ItemsView, ItemsView ->)
+    def each_partition_sway(pivot : Int, & : ItemsView, ItemsView ->)
       yield before(pivot), starting_at(pivot)
 
       # We then sway like pivot - 1, pivot + 1, pivot - 2, pivot + 2, etc...
@@ -850,9 +865,9 @@ module Ww::M1next
     # (but properly positioned!). The first and last block args are the left
     # and right parts (before and after mid), correspondingly.
     def each_split(n : Int, & : ItemsView, ItemsView, ItemsView ->)
-      (@begin...@end).slide_subrange_of(n) do |subrange|
+      (0...size).slide_subrange_of(n) do |subrange|
         l = before(subrange.begin)
-        focus = reshape(subrange.begin, subrange.end)
+        focus = reshape(@begin + subrange.begin, @begin + subrange.end)
         r = starting_at(subrange.end)
         yield l, focus, r
       end

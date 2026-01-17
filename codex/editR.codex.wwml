@@ -752,13 +752,13 @@ C←[[I M←[nest] _*] _ _]
   <> {(M): (), C: (^(up C))}
 
 P←⟨C←[[I M←[nest parent ⸨left,right⸩] _*] _*]⟩
-  <> {(M): (), (C): ($tr C' ()), P: (^(up ⸨C',P⸩) ^(up ⸨P,C'⸩))}
+  <> {(M): (), (C): (), P: (^(⸨dn,up⸩ ⸨C,P⸩) ^(⸨up,dn⸩ ⸨P,C⸩))}
 
 D←⟨C←[[I M←[unnest] _*] _*]⟩
   <> {(M): (), D: ^(up C)}
 
 ⟨D←⟨C←[[I M←[escape dict ⸨left,right⸩] _*] _*]⟩⟩
-  <> {(M): (), (D): (^(up ⸨C',D⸩) ^(up ⸨D,C'⸩)), (C): ($tr C' ())}
+  <> {(M): (), (D): (^(⸨dn,up⸩ ⸨C,D⸩) ^(⸨up,dn⸩ ⸨D,C⸩)), (C): ()}
 
 ⟨item_ [(I M←[edit item left] _* ⍊ -sack) (_string * _string) _]⟩
   <> {M: (edit (term ^item) right), (item): ()}
@@ -812,7 +812,7 @@ D←⟨C←[[I [edit dict] _*] (l_string * r_string) _]⟩
   <> {(M): (), C': ^(up C), (C): ()}
 
 (_* `C' ¦ (%entry _ ⟨C←[[I M←[escape dict ⸨left,right⸩] _*] _*]⟩))
-  <> {(M): (), C': ^(up C0), (C): ($tr C0 ())}
+  <> {(M): (), C': ^(dn C), (C): ()}
 
 ⟨item_ [[[I M←[capture item left] _*] _*] `>item _*]⟩
   <> {(M): (), (item): (), >item: ^item}
@@ -821,10 +821,10 @@ D←⟨C←[[I [edit dict] _*] (l_string * r_string) _]⟩
   <> {(M): (), (item): (), >item: ^item}
 
 ⟨D←[[[I M←[release item left] _*] _*] item_ _*]⟩
-  <> {(M): (), (D): (^(up item') ^(up D)), (item): ($tr item' ())}
+  <> {(M): (), (D): (^(dn item) ^(up D)), (item): ()}
 
 ⟨D←[_* item_ [[I M←[release item right] _*] _*]]⟩
-  <> {(M): (), (D): (^(up D) ^(up item')), (item): ($tr item' ())}
+  <> {(M): (), (D): (^(up D) ^(dn item)), (item): ()}
 
 ⟨item_ [[I M←[dup item left] _*] _*]⟩
   <> {(M): (), (item): (^item ^item)}

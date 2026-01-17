@@ -203,12 +203,41 @@ module Ww::Term::Case
 
     # The `Int32` emitted by the iterator is the index of the matching match spec
     # in the slice passed to `MatcherClass.compile`.
-    abstract def scan(matchee : Term, *, env : Term::Dict) : Iterator({Term::Dict, Int32})
+    abstract def scan(matchee : Term, *, env : Term::Dict)
   end
 
   # Class-side requirements of `Matcher`.
   module MatcherClass
     abstract def compile(specs : Slice(MatchSpec)) : Matcher
+  end
+
+  # :nodoc:
+  class ScanIterator(T)
+    include Iterator({Term::Dict, Int32})
+
+    def initialize(
+      @source : Slice(T),
+      @matchee : Term,
+      @env : Term::Dict,
+      @sink : T, Int32, Term, Term::Dict -> {Term::Dict, Int32}?,
+    )
+      @index = 0
+    end
+
+    def next
+      loop do
+        if @index == @source.size
+          return Iterator.stop
+        end
+
+        assert 0 <= @index < @source.size
+
+        object = @source.unsafe_fetch(@index)
+        result = @sink.call(object, @index, @matchee, @env)
+        @index += 1
+        return result if result
+      end
+    end
   end
 
   # A case matcher that uses *Engine*.
@@ -228,17 +257,20 @@ module Ww::Term::Case
       new(specs)
     end
 
-    def scan(matchee : Term, *, env : Term::Dict) : Iterator({Term::Dict, Int32})
-      @specs.each_with_index.compact_map do |spec, index|
+    private def sink
+      sink = ->(spec : MatchSpec, index : Int32, matchee : Term, env : Term::Dict) do
         if dict = matchee.as_d?
-          spec = @specs.unsafe_fetch(index)
-          next unless MatchSpec.match_possible?(spec, dict)
+          return unless MatchSpec.match_possible?(spec, dict)
         end
 
-        next unless env1 = Engine.match?(spec.pattern, matchee, env: env)
+        return unless env1 = Engine.match?(spec.pattern, matchee, env: env)
 
         {env1, index}
       end
+    end
+
+    def scan(matchee : Term, *, env : Term::Dict)
+      ScanIterator.new(@specs, matchee, env, sink)
     end
   end
 
@@ -247,26 +279,28 @@ module Ww::Term::Case
     include Matcher
 
     # :nodoc:
-    def initialize(@specs : Slice(MatchSpec), @blocks : Slice(Slice(M0::Insn)))
+    def initialize(@arms : Slice({Slice(M0::Insn), MatchSpec}))
     end
 
     def self.compile(specs : Slice(MatchSpec)) : MM0
-      operators = specs.to_readonly_slice { |spec| M0.compile(spec.pattern) }
-
-      new(specs, operators)
+      new(arms: specs.to_readonly_slice { |spec| {M0.compile(spec.pattern), spec} })
     end
 
-    def scan(matchee : Term, *, env : Term::Dict) : Iterator({Term::Dict, Int32})
-      @blocks.each_with_index.compact_map do |insns, index|
+    private def sink
+      ->(arm : {Slice(M0::Insn), MatchSpec}, index : Int32, matchee : Term, env : Term::Dict) do
+        insns, spec = arm
         if dict = matchee.as_d?
-          spec = @specs.unsafe_fetch(index)
-          next unless MatchSpec.match_possible?(spec, dict)
+          return unless MatchSpec.match_possible?(spec, dict)
         end
 
-        next unless env1 = M0.match?(env, insns, matchee)
+        return unless env1 = M0.match?(env, insns, matchee)
 
         {env1, index}
       end
+    end
+
+    def scan(matchee : Term, *, env : Term::Dict)
+      ScanIterator.new(@arms, matchee, env, sink)
     end
   end
 
@@ -275,72 +309,30 @@ module Ww::Term::Case
     include Matcher
 
     # :nodoc:
-    def initialize(@specs : Slice(MatchSpec), @operators : Slice(M1::Operator::Any))
+    def initialize(@arms : Slice({M1::Operator::Any, MatchSpec}))
     end
-
-    # :nodoc:
-    SPLIT_BUCKET_SIZE = Fiber::ExecutionContext.default_workers_count
 
     # Compiles *specs* in single-threaded mode.
-    private def self.compile1(specs : Slice(MatchSpec)) : MM1
-      operators = specs.to_readonly_slice { |spec| M1.operator(spec.pattern) }
-
-      new(specs, operators)
+    def self.compile(specs : Slice(MatchSpec)) : MM1
+      new(arms: specs.to_readonly_slice { |spec| {M1.operator(spec.pattern), spec} })
     end
 
-    # Compiles *specs* in multi-threaded mode.
-    #
-    # NOTE: it is unclear whether this is beneficial in any way. Multi-threading is hard even
-    # with seemingly independent tasks because at the end of the day, in the best-ever
-    # case, everybody will have to talk to the allocator anyway. Moreover, we don't have
-    # sufficiently complex Term.case workloads to prove or disprove the usefulness of
-    # this pathway.
-    private def self.compileM(specs : Slice(MatchSpec)) : MM1
-      wg = WaitGroup.new
-
-      submissions = [] of {Range(Int32, Int32), Slice(M1::Operator::Any)}
-      lock = Sync::Mutex.new
-
-      (0...specs.size).split(SPLIT_BUCKET_SIZE) do |subrange|
-        wg.spawn do
-          operators = subrange.to_readonly_slice { |index| M1.operator(specs[index].pattern) }
-          lock.synchronize do
-            submissions << {subrange, operators}
-          end
-        end
-      end
-
-      wg.wait
-
-      # Even though we have uninitialized memory under the slice let's still
-      # have it for index checks.
-      operators = Pointer(M1::Operator::Any).malloc(specs.size).to_slice(specs.size)
-
-      submissions.each do |range, submission|
-        range.each_with_index do |i, j|
-          operators[i] = submission[j]
-        end
-      end
-
-      # At this point all operators have been initialized.
-      new(specs, operators)
-    end
-
-    def self.compile(specs : Slice(MatchSpec)) : Matcher
-      specs.size <= 16 ? compile1(specs) : compileM(specs)
-    end
-
-    def scan(matchee : Term, *, env : Term::Dict) : Iterator({Term::Dict, Int32})
-      @operators.each_with_index.compact_map do |operator, index|
+    private def sink
+      ->(arm : {M1::Operator::Any, MatchSpec}, index : Int32, matchee : Term, env : Term::Dict) do
+        op, spec = arm
         if dict = matchee.as_d?
-          spec = @specs.unsafe_fetch(index)
-          next unless MatchSpec.match_possible?(spec, dict)
+          return unless MatchSpec.match_possible?(spec, dict)
         end
 
-        next unless env1 = M1::Operator.match?(env, operator, matchee)
+        return unless M1next.probably_matches?(op, matchee)
+        return unless env1 = M1next.match?(env, op, matchee)
 
         {env1, index}
       end
+    end
+
+    def scan(matchee : Term, *, env : Term::Dict)
+      ScanIterator.new(@arms, matchee, env, sink)
     end
   end
 
@@ -614,6 +606,16 @@ module Ww::Term::Case
     end
   end
 
+  # NOTE: The whole gymnastics with how ScanIterator/scan() and friends work is me trying to
+  # avoid what appears to be a codegen bug in Crystal. We don't need an iterator here. Moreover,
+  # it's malicious to have an iterator in such a hot path. But if I use a block instead of an iterator
+  # (i.e., `scan(..., & : <match env>, <index> ->)`), I get bizarre crashes under stress (but
+  # not generally). E.g. UIR crashes whereas everything else does not. It feels related somehow
+  # to Crystal "unifying" types to get the result type of a block, which results in some type
+  # being ignored or something along those lines, leading calling code to misinterpret and so on.
+  # But this is just a hunch. I've no idea how the thing actually works, and I'm not sure it's
+  # easy to repro the bug.
+
   # The implementation of `Term.case`.
   #
   # - *matchers* is an object that must respond to `put_if_absent`. It is used to cache
@@ -657,7 +659,6 @@ module Ww::Term::Case
         %env, %index = %match
 
         case %index
-        when -1
         {% for branch, i in branches %}\
         when {{i}}
           {% if branch[:captures].empty? %}\

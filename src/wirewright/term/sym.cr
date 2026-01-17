@@ -48,7 +48,7 @@ module Ww
     end
 
     # Constructs a symbol term from the given *source* string.
-    def self.new(string : String) : Sym
+    def self.new(string : String | Bytes) : Sym
       new(Spec.parse(string))
     end
 
@@ -64,6 +64,10 @@ module Ww
 
     # Constructs a blank from an existing symbol *prev*. In some code paths
     # this can skip work (especially encoding the name) vs. the other overload.
+    #
+    # NOTE: If *prev* is a blank, its *type* and *mult* will be changed instead of
+    # constructing a new symbol with *prev* as its name! Refer to the `String` overload
+    # for that, use also `prev.to(String)`.
     def self.blank(prev : Sym, type : TermType, mult : BlankMult = :one) : Sym
       new(Spec.pack(Spec.blank(Spec.unpack(Spec::Repr, prev.@bits), type, mult)))
     end
@@ -88,17 +92,79 @@ module Ww
       repr = Spec.unpack(Spec::Repr, @bits)
 
       index = 0
+      prefix = false
 
       Spec.each_name_char(repr) do |chr|
-        return true unless current = chars[index]?
-        return false unless current == chr
+        unless current = chars[index]?
+          # chars={'a', 'b'⏏}, ab⏏c
+          prefix = true
+          break
+        end
+
+        unless current == chr
+          return false
+        end
 
         index += 1
       end
 
+      if index < chars.size
+        # chars={'a', 'b'}, a
+        return false
+      end
+
+      assert index == chars.size
+
+      if prefix
+        # chars={'a', 'b'}, abc
+        return true
+      end
+
       !!Spec.blank?(repr)
-      # chars={'a','b'} ab⏏         -- nothing is "prefixed by" `ab`, return false
-      # chars={'a','b'} ab⏏_number  -- `_number` is "prefixed by" `ab`, return true
+      # chars={'a','b'}, ab⏏         -- nothing is "prefixed by" `ab`, return false
+      # chars={'a','b'}, ab⏏_number  -- `_number` is "prefixed by" `ab`, return true
+    end
+
+    # Drops at most *nchars* chars from this symbol's string representation,
+    # and reparses the resulting string as a symbol.
+    #
+    # Effectively, this is an optimized way to do something along the lines of:
+    # `Term::Sym.new(sym.to(StringView).ldrop(nchars).to_s)`.
+    #
+    # ```
+    # sym = Term[:"^\qux"]
+    # sym.ldrop(2)   # => qux
+    # sym.ldrop(123) # => ⸝⸍ (empty symbol)
+    # ```
+    def ldrop(nchars : Int) : Sym
+      assert nchars >= 0
+
+      bytes = uninitialized UInt8[64]
+      byteary = stack_alloc Pf::Kit::HybridArray(UInt8, 64).new(bytes.to_unsafe)
+
+      repr = Spec.unpack(Spec::Repr, @bits)
+
+      Spec.each_name_char(repr) do |chr|
+        unless nchars == 0
+          nchars -= 1
+          next
+        end
+
+        chr.each_byte do |byte|
+          byteary << byte
+        end
+      end
+
+      if byteary.size > 64
+        suffix = String.new(byteary.size) do |buffer|
+          byteary.unsafe_copy_to(buffer)
+          {byteary.size, 0} # 0 asks String to compute #size lazily
+        end
+      else
+        suffix = Slice.new(bytes.to_unsafe, byteary.size, read_only: true)
+      end
+
+      Sym.new(suffix)
     end
 
     # Returns the *name* of this symbol.
@@ -193,11 +259,13 @@ module Ww
     end
 
     def to?(type : String.class) : String
-      inspect
+      String.build do |io|
+        Spec.write(io, Spec.unpack(Spec::Repr, @bits))
+      end
     end
 
     def inspect(io)
-      Spec.write(io, Spec.unpack(Spec::Repr, @bits))
+      ML.compact(io, self)
     end
 
     def_equals @bits

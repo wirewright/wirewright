@@ -418,7 +418,10 @@ module Ww::D7
     private def search(ctx, locus, step : Append, soln, ahead)
       return unless step.label.in?(ctx.decmap[locus.node])
       return if locus.node.in?(soln)
-      return unless env = M1.match?(step.pattern, term = ctx.hg[locus.node])
+
+      term = ctx.hg[locus.node]
+      return unless M1next.probably_matches?(step.pattern, term)
+      return unless env = M1next.match?(step.pattern, term)
 
       # NOTE: In patterns such as:
       #

@@ -28,6 +28,24 @@ module Ww
       entry.value
     end
 
+    # Returns a view of first *n* items in this view.
+    #
+    # NOTE: *n* must fit.
+    def first(n : Int) : ItemsView
+      assert 0 <= n <= size
+
+      change(e: n)
+    end
+
+    # Returns a view of last *n* items in this view.
+    #
+    # NOTE: *n* must fit.
+    def last(n : Int) : ItemsView
+      assert 0 <= n <= size
+
+      change(b: @e - n)
+    end
+
     # Returns an empty items view pointing at the beginning of this items view.
     #
     # ```text
@@ -100,7 +118,7 @@ module Ww
     # Builds and returns an itemsonly dictionary with items from this items view.
     def collect : Dict
       if @b == 0 && @e == @node.size
-        return Dict.new(@node, PairNode.new, @sketch0, @maxdepth0)
+        return Dict.new(@node, EMPTY_PAIR_NODE, @sketch0, @maxdepth0)
       end
 
       Dict.build do |commit|

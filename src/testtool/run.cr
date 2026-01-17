@@ -6,6 +6,7 @@ module Testtool
                MLneg |
                BackmapEq |
                BackmapNeg |
+               BacksysTest |
                PatternVarEq |
                PatternEq |
                PatternPos |
@@ -28,7 +29,7 @@ module Testtool
       end
 
       matchpi %{(frame content_* ¦ () m1)} do
-        M1.probe?(content, actual)
+        M1next.probe?(content, actual)
       end
 
       matchpi %{end} do
@@ -226,24 +227,48 @@ module Testtool
 
   defrecord BackmapEq, pattern : Term, backspec : Term, matchee : Term, whitelist : Set(Term)
   defrecord BackmapNeg, pattern : Term, backspec : Term, blacklist : Set(Term)
-
-  private def backmap?(pattern : Term, backspec : Term, matchee : Term) : Term?
-    M1.backmap?(pattern, backspec, matchee, applier: Alloy::Applier.new)
-  end
+  defrecord BacksysTest, backsys : Array({Term, Term}), seq : Array(Term)
 
   def run(test : BackmapEq, assets, stat, complaints) : Nil
-    result = measure(stat) { backmap?(test.pattern, test.backspec, test.matchee) }
-    return if result.in?(test.whitelist) # ok
+    result = measure(stat) { M1next.backmap?(test.pattern, test.backspec, test.matchee) }
 
-    complaints << complaint("Backmapped term is not in whitelist", result: Term.of(result || "<none>"))
+    if test.whitelist.empty?
+      # Reuse empty whitelist for conflict-checking, which manifests as
+      # the backmap replying with the same matchee.
+      return if test.matchee == result # ok
+    else
+      return if result.in?(test.whitelist) # ok
+    end
+
+    complaints << complaint("Backmapped term is not in whitelist", result: Term.of(result || :MISMATCH))
   end
 
   def run(test : BackmapNeg, assets, stat, complaints) : Nil
     test.blacklist.each do |matchee|
-      next unless result = measure(stat) { backmap?(test.pattern, test.backspec, matchee) } # ok
+      next unless result = measure(stat) { M1next.backmap?(test.pattern, test.backspec, matchee) } # ok
 
       complaints << complaint("Backmapped term found in blacklist", result: result)
     end
+  end
+
+  def run(test : BacksysTest, assets, stat, complaints) : Nil
+    return unless state = test.seq.first? # ok, empty seq
+
+    test.seq.each(within: 1..) do |expected|
+      result = measure(stat) { M1next.backmap(test.backsys, state) }
+      unless result == expected
+        complaints << complaint("backsystem frame mismatch",
+          state: state,
+          frame: result,
+          expected: expected,
+        )
+        return
+      end
+
+      state = result
+    end
+
+    # ok
   end
 
   enum MLentity
@@ -287,7 +312,7 @@ module Testtool
     end
 
     subjects.each do |subject|
-      next if M1.probe?(test.pattern, subject) # ok
+      next if M1next.probe?(test.pattern, subject) # ok
 
       complaints << complaint("Term does not match pattern", term: subject)
     end
@@ -338,7 +363,7 @@ module Testtool
 
     complaints << complaint("Pattern head mismatch",
       "Normal pattern": normp,
-      "Got head": Term.of(head || "<none>"),
+      "Got head": Term.of(head || :MISMATCH),
     )
   end
 
@@ -442,8 +467,13 @@ module Testtool
     b : ImageComparand
 
   def run(test : ImageComparison, assets, stat, complaints) : Nil
+    unless uiR = assets.uiR
+      complaints << complaint("missing uiR (did you run with `--assets-none`?)")
+      return
+    end
+
     lhs, rhs = measure(stat) do
-      {ppmcmp(assets, test.a), ppmcmp(assets, test.b)}
+      {ppmcmp(assets.dw, uiR, test.a), ppmcmp(assets.dw, uiR, test.b)}
     end
 
     return if lhs == rhs # ok

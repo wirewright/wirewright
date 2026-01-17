@@ -301,7 +301,7 @@ PRIMITIVES = ProcRuleset.build do
   rulepi1 %{(subseq whole_dict (pattern selector_))} do
     Term::Dict.build do |commit|
       commit.selected(whole.items) do |item|
-        M1.probe?(selector, item)
+        M1next.probe?(selector, item)
       end
     end
   end
@@ -310,7 +310,7 @@ PRIMITIVES = ProcRuleset.build do
   rulepi1 %{(-subseq whole_dict (pattern selector_))} do
     Term::Dict.build do |commit|
       commit.rejected(whole.items) do |item|
-        M1.probe?(selector, item)
+        M1next.probe?(selector, item)
       end
     end
   end
@@ -348,7 +348,7 @@ PRIMITIVES = ProcRuleset.build do
     chunks = Term[]
 
     arg.items.each do |item|
-      unless M1.probe?(criterion, item)
+      unless M1next.probe?(criterion, item)
         if chunk
           chunks = chunks.append(chunk)
           chunk = nil
@@ -371,7 +371,7 @@ PRIMITIVES = ProcRuleset.build do
     i = 0
     while i < arg.itemsize
       head = arg[i]
-      unless M1.probe?(precursor, head)
+      unless M1next.probe?(precursor, head)
         chunks = chunks.append({:item, head})
         i += 1
         next
@@ -381,8 +381,8 @@ PRIMITIVES = ProcRuleset.build do
       n = 0
       (i...arg.itemsize).each do |j|
         jth = arg[j]
-        break if M1.probe?(precursor, jth)
-        break unless M1.probe?(member, jth)
+        break if M1next.probe?(precursor, jth)
+        break unless M1next.probe?(member, jth)
 
         n += 1
       end
@@ -514,7 +514,7 @@ PRIMITIVES = ProcRuleset.build do
   rulepi1 %{(mask pattern_ d_dict)} do
     Term::Dict.build do |commit|
       d.each_item_with_index do |item, index|
-        if M1.probe?(pattern, item)
+        if M1next.probe?(pattern, item)
           commit.with(index, true)
         end
       end
@@ -631,7 +631,7 @@ PRIMITIVES = ProcRuleset.build do
   rulepi1 %{(instances d_dict pattern_)} do
     mask1 = Term::Dict.build do |commit|
       d.each_entry do |key, value|
-        next unless M1.probe?(pattern, value)
+        next unless M1next.probe?(pattern, value)
 
         commit.with(key, true)
       end

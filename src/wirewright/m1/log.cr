@@ -4,19 +4,19 @@ module Ww::M1next
   # M1's logging isn't related in any way to logging as in printing to STDERR.
   # Instead, M1 logs explain how M1 got to a particular spot: which keys it
   # followed, which ranges it examined, which items it inserted, which entries
-  # it created or removed, etc. on the way to the spot.
+  # it created or removed, etc. on the way to that spot.
   #
-  # Logs are like breadcrumb trails that M1 generates to let clients re-trace
+  # Logs are like breadcrumb trails that M1 generates to let clients trace
   # the way later on, in case of a match.
   #
   # Logs are mainly constructed & maintained by `Tzip`, which is in turn used
   # by the rest of M1. Log correctness depends on whether the log is constructed
   # through Tzip (guaranteed correctness). Some logs that you can construct by
   # hand are nonsense, like "Colorless green ideas sleep furiously", but in
-  # Log-speak. On the other hand, when constructed through `Tzip`, the logs
-  # are guaranteed to make sense -- to be correct; since they're generation
-  # is synced carefully with the paired term, and operations on that term
-  # are guaranteed to be correct (or they raise, crashing the whole program!)
+  # Log-speak. On the other hand, logs constructed through `Tzip` are guaranteed
+  # to make sense, since their generation is synced carefully with the paired
+  # term, and operations on that term are guaranteed to be correct (or they
+  # raise, crashing the whole program!)
   #
   # NOTE: You aren't expected to construct logs yourself, only inspect them, and
   # even then, the backmap engine will inspect them for you; so logs are a deep
@@ -36,7 +36,7 @@ module Ww::M1next
                    ExamineItemspart |
                    ExaminePairspart |
                    ExamineRange |
-                   Remove |
+                   ExamineResidue |
                    InsertEntry |
                    InsertItem
 
@@ -68,7 +68,7 @@ module Ww::M1next
       end
     end
 
-    # M1 descended into the itemspart range defined by *begin* (inclusive)
+    # M1 descended into an itemspart range defined by *begin* (inclusive)
     # and *end* (exclusive). Further examinations refer to items in the range,
     # so their 0 means *begin*, adn max means *end*.
     #
@@ -77,11 +77,15 @@ module Ww::M1next
     # nested patterns as in `(_ (%group (a_ b_) _*) _)` are also under `ExamineRange`,
     # so the capture *a* would look like `examine range B..<E—examine key 0`, and
     # similarly for *b*.
-    defrecord ExamineRange, begin : UInt32, end : UInt32 do
+    defrecord ExamineRange, begin : UInt32, end : UInt32, ord : UInt32 do
       assert @begin <= @end
     end
 
     struct ExamineRange
+      def size : UInt32
+        @end - @begin
+      end
+
       def inspect(io)
         io << "examine range " << @begin << "..<" << @end
       end
@@ -139,15 +143,24 @@ module Ww::M1next
     #
     # This is emitted as M1 descends into `(%layer ⏏rest_⏏ {x: x_, y: y_})`
     # and related (in this example removing `x` and `y`).
-    defrecord Remove, keys : Slice(Term) do
-      assert @keys.size > 0
-      assert @keys.read_only?
+    defrecord ExamineResidue, removed : Slice(Term), part : Part = :any do
+      assert @removed.size > 0
+      assert @removed.read_only?
     end
 
-    struct Remove
+    struct ExamineResidue
+      enum Part
+        # Undifferentiated `ExamineResidue`,
+        Any
+        # Itemspart residue. E.g. `(%partition (%layer ⏏rest_⏏ (_ _)) _)`.
+        Itemspart
+        # Pairspart residue. E.g. `(_* ¦ ⏏rest_⏏ x y)`
+        Pairspart
+      end
+
       def inspect(io)
-        io << "remove keys "
-        keys.join(io, ", ")
+        io << "examine " << part << " residue after removing "
+        removed.join(io, ", ")
       end
     end
 
@@ -166,7 +179,8 @@ module Ww::M1next
       end
     end
 
-    # M1 inserted (pretended to insert) *item* before *index*.
+    # M1 inserted (pretended to insert) an item with the given *value*
+    # before *index*.
     #
     # *ord* is used to order insertions before the same *index*.
     #
@@ -176,11 +190,11 @@ module Ww::M1next
     # Note how both optionals can be inserted before the same index, `1`,
     # if both are missing. *ord* is needed to disambiguate (it is set based
     # on their position in the pattern).
-    defrecord InsertItem, index : UInt32, ord : UInt32, item : Term
+    defrecord InsertItem, index : UInt32, ord : UInt32, value : Term
 
     struct InsertItem
       def inspect(io)
-        io << "insert item " << item << " before " << index << "#" << ord
+        io << "insert item " << value << " before " << index << "#" << ord
       end
     end
 
@@ -212,7 +226,7 @@ module Ww::M1next
     end
 
     # General action storage.
-    defcase ActionSeq, actions : Slice(Action) do
+    record ActionSeq, actions : Slice(Action) do
       def inspect(io)
         io << "<"
         actions.join(io, "—")
@@ -221,7 +235,7 @@ module Ww::M1next
     end
 
     # Storage for multiple `SeqOne`s.
-    defcase SeqMany, children : Slice(One) do
+    record SeqMany, children : Slice(One) do
       def inspect(io)
         io << "["
         children.join(io, "|")
@@ -230,7 +244,7 @@ module Ww::M1next
     end
 
     # Sealed action storage.
-    defcase SealedOne, seq : SeqOne do
+    record SealedOne, seq : SeqOne do
       def inspect(io)
         io << "sealed"
         seq.inspect(io)
@@ -238,7 +252,7 @@ module Ww::M1next
     end
 
     # Storage for multiple `SealedOne`s.
-    defcase SealedMany, children : Slice(SealedOne) do
+    record SealedMany, children : Slice(SealedOne) do
       def inspect(io)
         io << "sealed["
         children.join(io, "|")
@@ -307,9 +321,8 @@ module Ww::M1next
 
     private def index?(term : Term) : UInt32?
       return unless n = term.as_n?
-      return unless n.natural?
 
-      n.to?(UInt32)
+      n.index32?
     end
 
     # :nodoc:
@@ -379,20 +392,31 @@ module Ww::M1next
 
     # :nodoc:
     #
-    # Support for things like (_ xs_*) on Mapping tzips.
+    # Support for things like (_ xs_*) or (l_* r_*) on Mapping tzips.
     def append(log : Mapping, action : ExamineRange)
       entries = Pf::Kit.stack_array({ExamineKey | ExamineValue, Some}, 4)
+      handle = Pf::Kit.stack_array(Log::One, 4)
 
       log.mapping.each do |step, value|
         next unless n = step.key.as_n?
-        next unless n.natural?
-        next unless i = n.to?(UInt32)
-        next unless action.begin <= i < action.end
+        next unless index = n.index32?
+        next unless action.begin <= index < action.end
 
-        entries << {step, value}
+        case step
+        in ExamineKey
+          entries << {ExamineKey.new(Term.of(index - action.begin)), value}
+        in ExamineValue
+          entries << {ExamineValue.new(Term.of(index - action.begin)), value}
+          flatten(simplify(value)) do |one|
+            handle << one
+          end
+        end
       end
 
-      Mapping.new(log.handle, entries.to_readonly_slice(&.itself))
+      Mapping.new(
+        handle: seal(SeqMany.new(handle.to_readonly_slice(&.itself))),
+        mapping: entries.to_readonly_slice(&.itself),
+      )
     end
 
     # :nodoc:
@@ -570,6 +594,169 @@ module Ww::M1next
     {% if flag?(:docs) %}
       # Converts *log* into a keypath if possible. Returns `nil` otherwise.
       def keypath?(log : IndexSeq | ActionSeq | SealedOne | Many) : Term::Dict?
+      end
+    {% end %}
+
+    # :nodoc:
+    def size(log : IndexSeq) : Int32
+      log.indices.size
+    end
+
+    # :nodoc:
+    def size(log : ActionSeq) : Int32
+      log.actions.size
+    end
+
+    {% if flag?(:docs) %}
+      # Returns the number of actions in *log*.
+      def size(log : SeqOne) : Int32
+      end
+    {% end %}
+
+    # :nodoc:
+    def nth(log : IndexSeq, n : Int32) : Action
+      ExamineValue.new(Term.of(log.indices[n]))
+    end
+
+    # :nodoc:
+    def nth(log : ActionSeq, n : Int32) : Action
+      log.actions[n]
+    end
+
+    {% if flag?(:docs) %}
+      # Returns the *n*th action in *log*. Raises `IndexError` if *n* is out
+      # of bounds.
+      def nth(log : SeqOne, n : Int32) : Action
+      end
+    {% end %}
+
+    # A Slice-like wrapper around `SeqOne` logs.
+    struct SeqSlice
+      include Indexable(Action)
+
+      def initialize(@log : SeqOne)
+        @begin = 0
+      end
+
+      # :nodoc:
+      def initialize(@log : SeqOne, @begin : Int32)
+      end
+
+      def size : Int32
+        Log.size(@log) - @begin
+      end
+
+      def unsafe_fetch(index : Int)
+        Log.nth(@log, @begin + index)
+      end
+
+      def +(offset : Int) : SeqSlice
+        assert 0 <= offset <= size
+
+        SeqSlice.new(@log, @begin + offset)
+      end
+    end
+
+    # :nodoc:
+    def normalize(log : IndexSeq) : SeqOne | None
+      log
+    end
+
+    # :nodoc:
+    def normalize(log : ActionSeq) : SeqOne | None
+      prior = Pf::Kit.stack_array(Action, 16)
+      last = nil
+      changed = false
+
+      log.actions.each do |action|
+        if last.nil?
+          last = action
+          next
+        end
+
+        case {last, action}
+        when {ExamineItemspart, ExamineItemspart}
+          # ExamineItemspart—ExamineItemspart -> ExamineItemspart
+          changed = true
+          next
+        when {ExaminePairspart, ExaminePairspart}
+          # ExaminePairspart—ExaminePairspart -> ExaminePairspart
+          changed = true
+          next
+        when {ExamineItemspart, ExaminePairspart}
+          # ExamineItemspart—ExaminePairspart -> abort with None
+          return none
+        when {ExaminePairspart, ExamineItemspart}
+          # ExaminePairspart—ExamineItemspart -> abort with None
+          return none
+        when {ExamineItemspart, ExamineResidue}
+          # ExamineItemspart—ExamineResidue(R) -> ExamineResidue(R, part: itemspart)
+          last = ExamineResidue.new(action.removed, part: :itemspart)
+          changed = true
+          next
+        when {ExaminePairspart, ExamineResidue}
+          # ExamineItemspart—ExamineResidue(R) -> ExamineResidue(R, part: pairspart)
+          last = ExamineResidue.new(action.removed, part: :pairspart)
+          changed = true
+          next
+        when {ExamineItemspart, _}, {ExaminePairspart, _}
+          # ExamineItemspart—X, ExaminePairspart—X
+          last = action
+          changed = true
+          next
+        when {ExamineRange, ExamineRange}
+          # ExamineRange(b0, e0, ord0)—ExamineRange(b1, e1, ord1) -> ExamineRange(b0 + b1, b0 + e1, ord0)
+          last = ExamineRange.new(
+            begin: last.begin + action.begin,
+            end: last.begin + action.end,
+            ord: last.ord,
+          )
+          changed = true
+          next
+        when {ExamineRange, ExamineValue}
+          # ExamineRange(b0, e0, ord0)—ExamineValue(key in b0...e0) -> ExamineValue(b0, e0)
+          if (index = action.key.index32?) && index < last.size
+            last = ExamineValue.new(Term.of(last.begin + index))
+            changed = true
+            next
+          end
+        end
+
+        prior << last
+        last = action
+      end
+
+      unless changed
+        return log
+      end
+
+      if last
+        prior << last
+      end
+
+      ActionSeq.new(prior.to_readonly_slice(&.itself))
+    end
+
+    {% if flag?(:docs) %}
+      # Normalizes the given *log*.
+      #
+      # Normalization is especially important for the backmap engine. It removes
+      # sequences of actions that are:
+      #
+      # - reduntant (e.g. `ExamineItemspart—ExamineItemspart`)
+      # - un-backmappable (e.g. `ExamineItemspart—ExaminePairspart`; although this log
+      #   makes sense in general, it does not make sense for the backmap engine).
+      # - cause surprising backmap behavior (e.g. nested `ExamineRange`s, as in
+      #   `ExamineRange(3..<10)—ExamineRange(0..<2)` or `ExamineRange(3..<10)—ExamineValue(0)`).
+      #
+      # #### On sequences like `ExamineItemspart—ExaminePairspart`
+      #
+      # It makes no sense to refer to the pairspart of an itemspart in logs, not
+      # because it's wrong (the pairspart of an itemspart is well-defined and is
+      # the empty dict); but because you can't *manipulate* the pairspart of
+      # an itemspart -- doing so would invalidate the itemspart'ness of
+      # the itemspart, and so, the very premise/subject of manipulation.
+      def normalize(log : SeqOne) : SeqOne | None
       end
     {% end %}
   end

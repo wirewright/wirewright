@@ -33,7 +33,7 @@ end
 annotation DefcaseField
 end
 
-macro defcase(cls, *typedecls, inherit = false, equality = :value, caches_hash = false, copying = true, &)
+macro defcase(cls, *typedecls, inherit = false, equality = :value, caches_hash = false, copying = true, mutation = false, &)
   {% unless equality == :value || equality == :ref %}
     {% raise "equality must be :value or :ref"%}
   {% end %}
@@ -65,6 +65,12 @@ macro defcase(cls, *typedecls, inherit = false, equality = :value, caches_hash =
       def {{name}}
         @{{name.id}}
       end
+
+      {% if mutation %}
+        def {{name}}=(object)
+          @{{name.id}} = object
+        end
+      {% end %}
     {% end %}
 
     def initialize({{typedecls.map { |typedecl| "@#{typedecl}".id }.splat}})
@@ -3918,6 +3924,15 @@ struct Range(B, E)
     end
   end
 
+  def intersects?(other : Range(B, E)) : Bool
+    assert @begin <= @end
+    assert other.begin <= other.end
+
+    left = Math.max(@begin, other.begin)
+    right = Math.min(@end, other.end)
+    left < right
+  end
+
   def subrange_of?(other : Range(B, E)) : Bool
     {% unless B < ::Int && E < ::Int %}
       {% raise "expected Range(_ < Int, _ < Int)" %}
@@ -4950,6 +4965,20 @@ macro stack_alloc(call)
  {% end %}
 end
 
+macro nested_scopes_rec(objects, types, &block)
+  {% if type = types[0] %}
+    {{type}}.scope do |%object|
+      nested_scopes_rec([{{objects.splat(",")}} %object], {{types[1..]}} of ::NoReturn) {{block}}
+    end
+  {% else %}
+    pass({{objects.splat}}) {{block}}
+  {% end %}
+end
+
+macro nested_scopes(*args, &block)
+  nested_scopes_rec([] of ::NoReturn, [{{args.splat}}] of ::NoReturn) {{block}}
+end
+
 class List(T)
   include Enumerable(T)
 
@@ -5036,7 +5065,7 @@ class Arena(T, N)
   #
   # WARNING: No checks are done with respect to the lifetime: this is not Rust.
   # It is entirely your responsibility to make sure memory stays tidy.
-  def self.new(&)
+  def self.scope(&)
     mem = uninitialized ReferenceStorage(T)[N]
     arena = stack_alloc self.new(mem.to_unsafe)
     yield arena
@@ -5103,9 +5132,8 @@ struct ListMap(K, V)
     filter | (1u64 << fbit64(key))
   end
 
-  @[AlwaysInline]
   def self.assoc(arena : Arena, map : ListMap(K, V), key : K, value : V)
-    ListMap.new(List.append(arena, map.entries, {key, value}), fmix64(map.filter, key))
+    new(List.append(arena, map.entries, {key, value}), fmix64(map.filter, key))
   end
 
   def probably_includes?(key : K) : Bool
@@ -5159,5 +5187,71 @@ struct ListMap(K, V)
         end
       end
     end
+  end
+end
+
+module Benchmark
+  def memory(cont : Int64 ->, &)
+    result = nil
+    mem = memory { result = {yield} }
+    cont.call(mem)
+    result.not_nil![0]
+  end
+end
+
+struct HybridMap(K, V)
+  # Size of the stack-allocated buffer.
+  N = 8
+
+  # :nodoc:
+  def initialize(@keys : Pf::Kit::HybridArray(K, N), @values : Pf::Kit::HybridArray(V, N))
+    assert @keys.empty? && @values.empty?
+  end
+
+  def self.scope(& : HybridMap(K, V) ->)
+    keys = Pf::Kit.stack_array(K, N)
+    values = Pf::Kit.stack_array(V, N)
+
+    yield new(keys, values)
+  end
+
+  def empty? : Bool
+    @keys.empty?
+  end
+
+  def fetch(key : K, &)
+    @keys.each_with_index do |candidate, index|
+      next unless candidate == key
+      return @values.unsafe_fetch(index)
+    end
+
+    yield
+  end
+
+  def []?(key : K) : V?
+    fetch(key) { }
+  end
+
+  def [](key : K) : V
+    fetch(key) { raise KeyError.new }
+  end
+
+  def []=(key : K, value : V) : V
+    @keys.each_with_index do |candidate, index|
+      next unless candidate == key
+      # Found
+      @values.unsafe_put(index, value)
+      return value
+    end
+
+    # Not found
+    @keys << key
+    @values << value
+    value
+  end
+
+  def clear : Nil
+    @keys.clear
+    @values.clear
   end
 end

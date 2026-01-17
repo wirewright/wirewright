@@ -285,10 +285,20 @@ module Ww::M1next
   end
 
   # :nodoc:
+  def probably_matches?(op : O::Pass, matchee : Term) : Bool
+    true
+  end
+
+  # :nodoc:
   #
   # (%never)
   def match(ctx, op : O::Never, matchee : Tzip, plan)
     Fb[]
+  end
+
+  # :nodoc:
+  def probably_matches?(op : O::Never, matchee : Term) : Bool
+    false
   end
 
   # :nodoc:
@@ -299,10 +309,20 @@ module Ww::M1next
   end
 
   # :nodoc:
+  def probably_matches?(op : O::Literal, matchee : Term) : Bool
+    matchee == op.term
+  end
+
+  # :nodoc:
   #
   # (%any a b c)
   def match(ctx, op : O::LiteralWhitelist, matchee : Tzip, plan)
     op.whitelist.includes?(matchee.term) ? cons(ctx, plan) : Fb[]
+  end
+
+  # :nodoc:
+  def probably_matches?(op : O::LiteralWhitelist, matchee : Term) : Bool
+    op.whitelist.includes?(matchee)
   end
 
   # :nodoc:
@@ -312,12 +332,22 @@ module Ww::M1next
     op.blacklist.includes?(matchee.term) ? Fb[] : cons(ctx, plan)
   end
 
+  # :nodoc:
+  def probably_matches?(op : O::LiteralBlacklist, matchee : Term) : Bool
+    !op.blacklist.includes?(matchee)
+  end
+
   {% for cls, type in {O::Str => :string, O::Sym => :symbol, O::Boolean => :boolean, O::Dict => :dict} %}
     # :nodoc:
     #
     # _string  _symbol
     def match(ctx, op : {{cls}}, matchee : Tzip, plan)
       matchee.{{type.id}}? ? cons(ctx, plan) : Fb[]
+    end
+
+    # :nodoc:
+    def probably_matches?(op : {{cls}}, matchee : Term) : Bool
+      matchee.type.{{type.id}}?
     end
   {% end %}
 
@@ -412,6 +442,11 @@ module Ww::M1next
   end
 
   # :nodoc:
+  def probably_matches?(op : O::Num, matchee : Term) : Bool
+    matchee.type.number?
+  end
+
+  # :nodoc:
   #
   # (%symbol blank name_ type_)
   def match(ctx, op : O::SymBlank, matchee : Tzip, plan)
@@ -428,6 +463,13 @@ module Ww::M1next
   end
 
   # :nodoc:
+  def probably_matches?(op : O::SymBlank, matchee : Term) : Bool
+    return false unless sym = matchee.as_sym?
+
+    !!sym.blank?
+  end
+
+  # :nodoc:
   #
   # (%symbol nonblank)
   def match(ctx, op : O::SymNonblank, matchee : Tzip, plan)
@@ -438,10 +480,22 @@ module Ww::M1next
   end
 
   # :nodoc:
+  def probably_matches?(op : O::SymNonblank, matchee : Term) : Bool
+    return false unless sym = matchee.as_sym?
+
+    !sym.blank?
+  end
+
+  # :nodoc:
   #
   # @x_  @x_number  (edge qux_dict)
   def match(ctx, op : O::Edge, matchee : Tzip, plan)
     ML.edge?(matchee.term, type: op.type) ? cons(ctx, plan) : Fb[]
+  end
+
+  # :nodoc:
+  def probably_matches?(op : O::Edge, matchee : Term) : Bool
+    ML.edge?(matchee)
   end
 
   # :nodoc:
@@ -455,6 +509,13 @@ module Ww::M1next
   end
 
   # :nodoc:
+  def probably_matches?(op : O::Itemsonly, matchee : Term) : Bool
+    return false unless dict = matchee.as_d?
+
+    dict.itemsonly?
+  end
+
+  # :nodoc:
   #
   # (¦ _)
   def match(ctx, op : O::Pairsonly, matchee : Tzip, plan)
@@ -465,24 +526,60 @@ module Ww::M1next
   end
 
   # :nodoc:
+  def probably_matches?(op : O::Pairsonly, matchee : Term) : Bool
+    return false unless dict = matchee.as_d?
+
+    dict.pairsonly?
+  end
+
+  # :nodoc:
   #
-  # (%partition items_ pairs_)  (items_* ¦ pairs_)
+  # (%partition items_ pairs_)
   def match(ctx, op : O::Partition, matchee : Tzip, plan)
-    return Fb[] unless matchee.dict?
+    return Fb[] unless dict = matchee.term.as_d?
+
+    if op.pairside.is_a?(O::Pass)
+      if op.seq && dict.itemsonly?
+        # E.g. [/ x_ y_] on (/ 1 2)
+        return match(ctx, op.itemside, matchee, plan)
+      end
+
+      # E.g. [x_ y_] on (/ 1 2 precision: 3)
+      return match(ctx, op.itemside, matchee.itemspart, plan)
+    end
 
     ahead = ctx.interject(plan, Action.match(op.pairside, matchee.pairspart))
     match(ctx, op.itemside, matchee.itemspart, ahead)
   end
 
   # :nodoc:
+  def probably_matches?(op : O::Partition, matchee : Term) : Bool
+    return false unless dict = matchee.as_d?
+
+    # Avoid allocation in the fast path. For editR, this branch is taken
+    # about ~60% of the time. Term::Dict#itemspart and Term::Dict#pairspart
+    # currently allocate, just as Tzip#itemspart and Tzip#pairspart, so we
+    # consider them expensive.
+    if op.pairside.is_a?(O::Pass) && op.seq && dict.itemsonly?
+      return probably_matches?(op.itemside, matchee)
+    end
+
+    probably_matches?(op.itemside, Term.of(matchee.itemspart)) && probably_matches?(op.pairside, Term.of(matchee.pairspart))
+  end
+
+  # :nodoc:
   #
   # Auxiliary operator emitted with optimization level O1 to check the bounds
-  # of a dict.
+  # of a dict without any further matching (e.g. `(_ _ _)` is simply size=?3).
   def match(ctx, op : O::Bounds, matchee : Tzip, plan)
-    return Fb[] unless dict = matchee.term.as_d?
-    return Fb[] unless op.min <= dict.size <= op.max
+    probably_matches?(op, matchee.term) ? fb(ctx, plan) : Fb[]
+  end
 
-    cons(ctx, plan)
+  # :nodoc:
+  def probably_matches?(op : O::Bounds, matchee : Term) : Bool
+    return false unless dict = matchee.as_d?
+
+    op.min <= dict.size <= op.max
   end
 
   # :nodoc:
@@ -492,7 +589,15 @@ module Ww::M1next
     return Fb[] unless dict = matchee.term.as_d?
     return Fb[] unless op.min <= dict.size <= op.max
 
-    cons(ctx, op.successor, matchee, plan)
+    match(ctx, op.successor, matchee, plan)
+  end
+
+  # :nodoc:
+  def probably_matches?(op : O::BoundsGuard, matchee : Term) : Bool
+    return false unless dict = matchee.as_d?
+    return false unless op.min <= dict.size <= op.max
+
+    probably_matches?(op.successor, matchee)
   end
 
   # :nodoc:
@@ -507,7 +612,16 @@ module Ww::M1next
     # too strict.
     return Fb[] unless op.min <= dict.maxdepth
 
-    cons(ctx, op.successor, matchee, plan)
+    match(ctx, op.successor, matchee, plan)
+  end
+
+  # :nodoc:
+  def probably_matches?(op : O::MaxDepth, matchee : Term) : Bool
+    return false unless dict = matchee.as_d?
+    # FIXME: Ditto
+    return false unless op.min <= dict.maxdepth
+
+    probably_matches?(op.successor, matchee)
   end
 
   # :nodoc:
@@ -534,7 +648,15 @@ module Ww::M1next
     return Fb[] unless dict = matchee.term.as_d?
     return Fb[] unless dict.sketch_superset_of?(op.sketch)
 
-    cons(ctx, op.successor, matchee, plan)
+    match(ctx, op.successor, matchee, plan)
+  end
+
+  # :nodoc:
+  def probably_matches?(op : O::SketchSubset, matchee : Term) : Bool
+    return false unless dict = matchee.as_d?
+    return false unless dict.sketch_superset_of?(op.sketch)
+
+    probably_matches?(op.successor, matchee)
   end
 
   # :nodoc:
@@ -550,7 +672,18 @@ module Ww::M1next
     # FIXME: Ditto the MaxDepth FIXME above, here it's op.depth[1].
     return Fb[] unless op.depth[0] <= dict.maxdepth
 
-    cons(ctx, op.successor, matchee, plan)
+    match(ctx, op.successor, matchee, plan)
+  end
+
+  # :nodoc:
+  def probably_matches?(op : O::DictGuard, matchee : Term) : Bool
+    return false unless dict = matchee.as_d?
+    return false unless dict.sketch_superset_of?(op.sketch)
+    return false unless op.bounds[0] <= dict.size <= op.bounds[1]
+    # FIXME: Ditto the MaxDepth FIXME above, here it's op.depth[1].
+    return false unless op.depth[0] <= dict.maxdepth
+
+    probably_matches?(op.successor, matchee)
   end
 
   # :nodoc:
@@ -558,6 +691,11 @@ module Ww::M1next
   # (%let x _)
   def match(ctx, op : O::Capture, matchee : Tzip, plan)
     capture(ctx, op.capture, matchee, op.successor, matchee, plan)
+  end
+
+  # :nodoc:
+  def probably_matches?(op : O::Capture, matchee : Term)
+    probably_matches?(op.successor, matchee)
   end
 
   # :nodoc:
@@ -645,6 +783,14 @@ module Ww::M1next
   end
 
   # :nodoc:
+  def probably_matches?(op : O::ItemFirst, matchee : Term) : Bool
+    return false unless dict = matchee.as_itemsonly_d?
+    return false unless dict.itemsize > 0
+
+    probably_matches?(op.successor, dict[0])
+  end
+
+  # :nodoc:
   #
   # (_* x_)
   def match(ctx, op : O::ItemLast, matchee : Tzip, plan)
@@ -655,12 +801,25 @@ module Ww::M1next
   end
 
   # :nodoc:
+  def probably_matches?(op : O::ItemLast, matchee : Term) : Bool
+    return false unless dict = matchee.as_itemsonly_d?
+    return false unless dict.itemsize > 0
+
+    probably_matches?(op.successor, dict[dict.hi])
+  end
+
+  # :nodoc:
   #
   # (xs_*)
   def match(ctx, op : O::CaptureItemsonly, matchee : Tzip, plan)
     return Fb[] unless matchee.term.as_itemsonly_d?
 
     capture(ctx, op.capture, Tzip.new(matchee.term, matchee.items.log), O::INSTANCE_PASS, matchee, plan)
+  end
+
+  # :nodoc:
+  def probably_matches?(op : O::CaptureItemsonly, matchee : Term) : Bool
+    !!matchee.as_itemsonly_d?
   end
 
   # :nodoc:
@@ -677,18 +836,37 @@ module Ww::M1next
     # exhaustive=false: (x_ y_ z_ _*) (_* x_ y_ z_)
     return Fb[] if op.exhaustive && op.items.size != dict.itemsize
 
-    items = matchee.items.trim(op.items.size)
-
     if op.reverse
       # (_* x_ y_)  (_* x_ y_ ⏏) (_* x_ ⏏ y_) (_* ⏏ x_ y_)
+      items = matchee.items.last(op.items.size)
       action = Action.rzip(op.items, items)
     else
       # (x_ y_ _*)  (⏏ x_ y_ _*) (x_ ⏏ y_ _*) (x_ y_ ⏏ _*)
+      items = matchee.items.first(op.items.size)
       action = Action.lzip(op.items, items)
     end
 
     ahead = ctx.interject(plan, action)
     cons(ctx, ahead)
+  end
+
+  # :nodoc:
+  def probably_matches?(op : O::SingularSeq, matchee : Term) : Bool
+    return false unless dict = matchee.as_itemsonly_d?
+    return false if op.items.size > dict.itemsize
+    return false if op.exhaustive && op.items.size != dict.itemsize
+
+    if op.reverse
+      items = matchee.items.last(op.items.size)
+    else
+      items = matchee.items.first(op.items.size)
+    end
+
+    op.items.zip(items) do |item_op, item|
+      return false unless probably_matches?(item_op, item)
+    end
+
+    true
   end
 
   # :nodoc:
@@ -699,11 +877,21 @@ module Ww::M1next
   end
 
   # :nodoc:
+  def probably_matches?(op : O::ChoiceSource, matchee : Term) : Bool
+    probably_matches?(op.a, matchee) || probably_matches?(op.b, matchee)
+  end
+
+  # :nodoc:
   #
   # (%all a_ b_)
   def match(ctx, op : O::Both, matchee : Tzip, plan)
     ahead = ctx.interject(plan, Action.match(op.b, matchee))
     match(ctx, op.a, matchee, ahead)
+  end
+
+  # :nodoc:
+  def probably_matches?(op : O::Both, matchee : Term) : Bool
+    probably_matches?(op.a, matchee) && probably_matches?(op.b, matchee)
   end
 
   # :nodoc:
@@ -777,35 +965,46 @@ module Ww::M1next
     end
   end
 
-  private def eligible?(op : O::Scan, matchee : Tzip) : Bool
-    matchee.dict? && matchee.term.itemsize >= op.seq.size
+  private def eligible?(op : O::Scan, matchee : Term) : Bool
+    return false unless dict = matchee.as_d?
+
+    dict.itemsize >= op.seq.size
   end
 
-  private def eligible?(op : O::ScanAll, matchee : Tzip) : Bool
-    matchee.dict? && (op.minM.zero? || matchee.term.itemsize >= op.seq.size)
+  private def eligible?(op : O::ScanAll, matchee : Term) : Bool
+    return false unless dict = matchee.as_d?
+
+    op.minM.zero? || matchee.itemsize >= op.seq.size
   end
 
-  private def eligible?(op : O::Dfs | O::Bfs, matchee : Tzip) : Bool
-    op.depth0 ? true : (matchee.dict? && matchee.term.size > 0)
+  private def eligible?(op : O::Dfs | O::Bfs, matchee : Term) : Bool
+    return true if op.depth0
+    return false unless dict = matchee.as_d?
+
+    dict.size > 0
   end
 
-  private def eligible?(op : O::Entries, matchee : Tzip) : Bool
-    matchee.dict?
+  private def eligible?(op : O::Entries, matchee : Term) : Bool
+    matchee.type.dict?
   end
 
-  private def eligible?(op : O::Split, matchee : Tzip) : Bool
-    matchee.dict? && matchee.term.itemsize >= op.focus.size
+  private def eligible?(op : O::Split, matchee : Term) : Bool
+    return false unless dict = matchee.as_d?
+
+    dict.itemsize >= op.focus.size
   end
 
-  private def eligible?(op : O::SplitAll, matchee : Tzip) : Bool
-    matchee.dict? && (op.minM.zero? || matchee.term.itemsize >= op.focus.size)
+  private def eligible?(op : O::SplitAll, matchee : Term) : Bool
+    return false unless dict = matchee.as_d?
+
+    op.minM.zero? || matchee.itemsize >= op.focus.size
   end
 
   private def search(op : O::Scan, matchee : Tzip, & : Tzip::ItemsView -> Bool) : Nil
     current = matchee.items
 
     while current.size >= op.seq.size
-      accepted = yield current.trim(op.seq.size)
+      accepted = yield current.first(op.seq.size)
       current += accepted ? op.seq.size : 1
     end
   end
@@ -886,14 +1085,37 @@ module Ww::M1next
     end
   end
 
+  # NOTE: "Cutting" on match (so that lhs is erased) seems to provide better semantics
+  # than simply iterating over splits left-to-right.
   private def search(ctx, op : O::Split, matchee : Tzip, plan, & : Fb -> Bool) : Nil
-    matchee.items.each_split(op.focus.size) do |l, focus, r|
-      ahead = ctx.interject(plan,
-        Action.lzip(op.focus, focus),
-        Action.match(op.lhs, l.collect),
-        Action.match(op.rhs, r.collect),
-      )
-      _ = yield eval(fb(ctx, ahead))
+    feed = matchee.items
+
+    loop do
+      running = false
+
+      feed.each_split(op.focus.size) do |l, focus, r|
+        ahead = ctx.interject(plan,
+          Action.lzip(op.focus, focus),
+          Action.match(op.lhs, l.collect),
+          Action.match(op.rhs, r.collect),
+        )
+
+        accepted = yield eval(fb(ctx, ahead))
+        next unless accepted
+
+        # We can't determine what's "before" and what's "after" focus when we have
+        # no focus. Leaving this out means the very first case degenerates to an infinite
+        # loop, with l=<empty view>, focus=<absent>, and r=<view>. Hard-coding r + 1 feels
+        # hacky and I think it violates the semantics of %split° in some way, although I
+        # can't articulate why.
+        next if op.focus.empty?
+
+        feed = r
+        running = true
+        break
+      end
+
+      break unless running
     end
   end
 
@@ -938,7 +1160,7 @@ module Ww::M1next
   #
   # ⟨x_⟩  ⟨x_ y_ z_⟩
   def match(ctx, op : O::First, matchee : Tzip, plan)
-    return Fb[] unless eligible?(op, matchee)
+    return Fb[] unless eligible?(op, matchee.term)
 
     # Fast log with less indirection specifically for ⟨_⟩, because it
     # is used quite a lot in very hot places.
@@ -964,10 +1186,44 @@ module Ww::M1next
   end
 
   # :nodoc:
+  def probably_matches?(op : O::ScanFirst, matchee : Term) : Bool
+    return false unless eligible?(op, matchee)
+
+    assert dict = matchee.as_d?
+
+    item_ops = op.seq
+    dict.items.each do |item|
+      next unless probably_matches?(item_ops.first, item)
+
+      item_ops += 1
+      if item_ops.empty?
+        return true
+      end
+    end
+
+    false
+  end
+
+  # :nodoc:
+  def probably_matches?(op : O::EntriesFirst, matchee : Term) : Bool
+    return false unless eligible?(op, matchee)
+
+    assert dict = matchee.as_d?
+
+    dict.each_entry do |key, value|
+      if probably_matches?(op.kop, key) && probably_matches?(op.vop, value)
+        return true
+      end
+    end
+
+    false
+  end
+
+  # :nodoc:
   #
   # ⟨x_⟩°  ⟨x_ y_ z_⟩°
   def match(ctx, op : O::Source, matchee : Tzip, plan)
-    return Fb[] unless eligible?(op, matchee)
+    return Fb[] unless eligible?(op, matchee.term)
 
     sink = Pf::Kit.stack_array(Context, 8)
 
@@ -983,7 +1239,7 @@ module Ww::M1next
   #
   # (%items xs_ _)  (%items (a_ b_) _)  (%items ms←(a_ _* {¦ x: b_}) x_)
   def match(ctx, op : O::All, matchee : Tzip, plan)
-    return Fb[] unless eligible?(op, matchee)
+    return Fb[] unless eligible?(op, matchee.term)
 
     successor = Envlist.new(op.successor, op.minM, op.maxM)
 
@@ -1147,7 +1403,7 @@ module Ww::M1next
 
     # Establish a constraint on future values of key for situations like
     # ((%-value k) k_).
-    subctx = ctx.join(op.capture, Cst::NegLookup.new(table))
+    subctx = ctx.join(op.capture, Cst::NegLookup.new(matchee))
     fb = eval(fb(subctx, plan)).select(&.has_capture?(op.capture))
     if fb.present?
       return fb # Some responses proposed a satisfactory key, nice!
@@ -1164,7 +1420,7 @@ module Ww::M1next
 
   # :nodoc:
   def match(ctx, capture : Term, cst : Cst::NegLookup, matchee : Tzip, plan)
-    cst.table.includes?(matchee.term) ? Fb[] : cons(ctx, plan)
+    cst.table.term.includes?(matchee.term) ? Fb[] : cons(ctx, plan)
   end
 
   # :nodoc:
@@ -1174,30 +1430,20 @@ module Ww::M1next
   def match(ctx, op : O::NegativeValueKeypath, matchee : Tzip, plan)
     return Fb[] unless table = matchee.term.as_d?
 
-    log = Log.seal(Log.simplify(matchee.log))
-
     # (k_ (%-value k kp))
     if key = ctx.capture?(op.capture)
+      ref = matchee.ref(key.term)
+
       if table.includes?(key.term)
         return Fb[] # Key found, value exists, %-value mismatch!
       end
 
-      if log.is_a?(Log::None)
-        return cons(ctx, plan)
-      end
-
       # Key not found, value does not exist, %-value match.
-      ref = Ref::Entry.new(log, key.term)
       return cons(ctx.join(op.name, ref), plan)
     end
 
     # ((%-value k kp) k_)
-
-    if log.is_a?(Log::None)
-      subctx = ctx.join(op.capture, Cst::NegLookup.new(table))
-    else
-      subctx = ctx.join(op.capture, Cst::NegLookupRef.new(table, op.name, log))
-    end
+    subctx = ctx.join(op.capture, Cst::NegLookupRef.new(matchee, op.name))
 
     fb = eval(fb(subctx, plan)).select(&.has_capture?(op.capture))
     if fb.present?
@@ -1209,9 +1455,9 @@ module Ww::M1next
 
   # :nodoc:
   def match(ctx, capture : Term, cst : Cst::NegLookupRef, matchee : Tzip, plan)
-    return Fb[] if cst.table.includes?(matchee.term)
+    return Fb[] if cst.table.term.includes?(matchee.term)
 
-    ref = Ref::Entry.new(cst.log, matchee.term)
+    ref = cst.table.ref(matchee.term)
     cons(ctx.join(cst.name, ref), plan)
   end
 
@@ -1223,6 +1469,14 @@ module Ww::M1next
     return Fb[] unless value = matchee[op.key]?
 
     cons(ctx, op.successor, value, plan)
+  end
+
+  # :nodoc:
+  def probably_matches?(op : O::ValueLiteral, matchee : Term) : Bool
+    return false unless dict = matchee.as_d?
+    return false unless value = dict[op.key]?
+
+    probably_matches?(op.successor, value)
   end
 
   # :nodoc:
@@ -1265,6 +1519,14 @@ module Ww::M1next
     end
 
     cons(ctx, op.successor, Tzip.new(result, Log.none), plan)
+  end
+
+  # :nodoc:
+  #
+  # (%pipe untracked x_) -- a utility operator used to remove log tracking. This lets
+  # you set up equality constraints while not having backmaps manipulate both parties.
+  def match(ctx, op : O::Untracked, matchee : Tzip, plan)
+    cons(ctx, op.successor, Tzip.new(matchee.term, Log.none), plan)
   end
 
   # :nodoc:
@@ -1406,6 +1668,34 @@ module Ww::M1next
   end
 
   # :nodoc:
+  def probably_matches?(op : O::ItemSeq, matchee : Term) : Bool
+    return false unless dict = matchee.as_d?
+    return false unless dict.itemsonly?
+
+    # Size is probably checked by Bounds or BoundsGuard or similar, one of our
+    # predecessors [in control flow]; don't bother checking size here.
+
+    # We won't do anything smart here. We just want to make sure that all
+    # Singulars can be found in the matchee, somewhere. Heavy work is left to
+    # the main algorithm.
+    op.items.each do |item_op|
+      next unless item_op.is_a?(O::Item::Singular)
+
+      found = false
+
+      dict.each_item_unordered do |item|
+        next unless probably_matches?(item_op.tail, item)
+        found = true
+        break
+      end
+
+      return false unless found
+    end
+
+    true
+  end
+
+  # :nodoc:
   #
   # {a: x_, b: y_} -> (%layer () {a: x_, b: y_})
   # {¦ a_ b_} -> (%layer _ {a: a_, b: b_})
@@ -1434,18 +1724,25 @@ module Ww::M1next
   end
 
   # :nodoc:
+  def probably_matches?(op : O::Layer, matchee : Term) : Bool
+    return false unless dict = matchee.as_d?
+
+    op.side.each do |entry|
+      return false unless probably_matches?(entry, dict)
+    end
+
+    true
+  end
+
+  # :nodoc:
   #
   # E.g., the pattern
   #
-  # ```wwml
-  # ((%filter (k) {¦ k_ v_} (%flat (_ v) vs_)) k_)
-  # ```
+  #   ((%filter (k) {¦ k_ v_} (%flat (_ v) vs_)) k_)
   #
   # ... with the following matchee:
   #
-  # ```wwml
-  # (({k: a, v: 100} {k: b, v: 200} {k: c, v: 300} {k: a, v: "Hello"}) a)
-  # ```
+  #   (({k: a, v: 100} {k: b, v: 200} {k: c, v: 300} {k: a, v: "Hello"}) a)
   #
   # ... gives the match env `{k: a, vs: (100 "Hello")}`
   #
@@ -1635,12 +1932,7 @@ module Ww::M1next
   #
   # (+ a_ b_ ⏏`c⏏)
   def match(ctx, op : O::Item::Slot, ops : Feed, items : Tzip::ItemsView, plan)
-    unless ref = items.before_begin.span?(ord: ops.ord - 1)
-      # This happens if logging is disabled, or if we have no info about where
-      # we are (for whatever reason :/).
-      return cons(ctx, ops, items, plan)
-    end
-
+    ref = items.before_begin.ref(ord: ops.ord - 1)
     cons(ctx.join(op.name, ref), ops, items, plan)
   end
 
@@ -1802,17 +2094,17 @@ module Ww::M1next
     in .auto?
       raise ArgumentError.new
     in .sway?
-      items.each_bisplit_sway(pivot) do |before, after|
+      items.each_partition_sway(pivot) do |before, after|
         fb = eval(match(ctx, op, ops, before, after, plan))
         return fb if fb.present?
       end
     in .lazy?
-      items.each_bisplit_lazy do |before, after|
+      items.each_partition_lazy do |before, after|
         fb = eval(match(ctx, op, ops, before, after, plan))
         return fb if fb.present?
       end
     in .greedy?
-      items.each_bisplit_greedy do |before, after|
+      items.each_partition_greedy do |before, after|
         fb = eval(match(ctx, op, ops, before, after, plan))
         return fb if fb.present?
       end
@@ -1829,17 +2121,17 @@ module Ww::M1next
     in .auto?
       raise ArgumentError.new
     in .sway?
-      items.each_bisplit_sway(pivot) do |before, after|
+      items.each_partition_sway(pivot) do |before, after|
         fb = eval(match(ctx, op, ops, before, after, plan))
         fb.each { |response| sink << response }
       end
     in .lazy?
-      items.each_bisplit_lazy do |before, after|
+      items.each_partition_lazy do |before, after|
         fb = eval(match(ctx, op, ops, before, after, plan))
         fb.each { |response| sink << response }
       end
     in .greedy?
-      items.each_bisplit_greedy do |before, after|
+      items.each_partition_greedy do |before, after|
         fb = eval(match(ctx, op, ops, before, after, plan))
         fb.each { |response| sink << response }
       end
@@ -1984,6 +2276,13 @@ module Ww::M1next
   end
 
   # :nodoc:
+  def probably_matches?(op : O::Entry::Required, matchee : Term::Dict) : Bool
+    return false unless value = matchee[op.key]?
+
+    probably_matches?(op.value, value)
+  end
+
+  # :nodoc:
   #
   # {¦ ⏏a⏏ ⏏b⏏} {⏏a: _⏏, ⏏b: _number⏏}
   def match(ctx, op : O::Entry::Present, matchee : Tzip, plan)
@@ -1999,6 +2298,11 @@ module Ww::M1next
     return Fb[] unless value.type.subtype?(op.type)
 
     cons(ctx, plan)
+  end
+
+  # :nodoc:
+  def probably_matches?(op : O::Entry::Present, matchee : Term::Dict) : Bool
+    matchee.includes?(op.key)
   end
 
   # :nodoc:
@@ -2018,14 +2322,13 @@ module Ww::M1next
     return Fb[] unless dict = matchee.term.as_d?
     return Fb[] if dict.includes?(op.key)
 
-    log = Log.seal(Log.simplify(matchee.log))
-
-    if log.is_a?(Log::None)
-      return cons(ctx, plan)
-    end
-
-    ref = Ref::Entry.new(log, op.key)
+    ref = matchee.ref(op.key)
     cons(ctx.join(op.name, ref), plan)
+  end
+
+  # :nodoc:
+  def probably_matches?(op : O::Entry::Absent | O::Entry::AbsentKeypath, matchee : Term::Dict) : Bool
+    !matchee.includes?(op.key)
   end
 
   # :nodoc:
@@ -2077,14 +2380,13 @@ module Ww::M1next
       return Fb[] if fb.present?
     end
 
-    log = Log.seal(Log.simplify(matchee.log))
-
-    if log.is_a?(Log::None)
-      return cons(ctx, plan)
-    end
-
-    ref = Ref::Entry.new(log, op.key)
+    ref = matchee.ref(op.key)
     cons(ctx.join(op.name, ref), plan)
+  end
+
+  # :nodoc:
+  def probably_matches?(op : O::Entry::Any, matchee : Term::Dict) : Bool
+    true
   end
 
   # :nodoc:
@@ -2209,8 +2511,7 @@ module Ww::M1next
           # `%keypath` is expected to RequestLog again if it's in an unreachable spot
           # (because it doesn't see the difference between log: false and unavailability
           # of the log at its particular spot). `%keypath` will never match when it's in
-          # an unreachable spot. So we trigger a mismatch immediately, while also preventing
-          # an infinite loop.
+          # an unreachable spot. So we trigger a mismatch immediately.
           fb = Fb[]
         end
 
