@@ -1686,49 +1686,6 @@ module Ww::M1next
 
             muts[name] = {template, adj, mult}
           end
-
-          # # Read adjective.
-          # adj = Mut::Adj::None
-          # loop do
-          #   running = false
-
-          #   Term.case(key) do
-          #     matchpi %{(post arg_)} do
-          #       adj |= Mut::Adj::Post
-          #       key = arg
-          #       running = true
-          #     end
-
-          #     matchpi %{(local arg_)} do
-          #       adj |= Mut::Adj::Local
-          #       key = arg
-          #       running = true
-          #     end
-
-          #     otherwise { }
-          #   end
-
-          #   break unless running
-          # end
-
-          # # Read rest and write to table.
-          # Term.case(key) do
-          #   matchpi %{(literal name_)} do
-          #   end
-
-          #   matchpi %{(forall names_*)} do
-          #     names.items.each do |name|
-          #       next if name.in?(backspec)
-
-          #       muts[name] = {template, adj, Mut::Mult::One}
-          #     end
-          #   end
-
-          #   otherwise do
-          #     # {(x y z): qux}
-          #     muts[key] = {template, adj, Mut::Mult::One}
-          #   end
-          # end
         end
 
         yield muts
@@ -1802,6 +1759,7 @@ module Ww::M1next
         return result # ok
       end
 
+      # Already sorted by id (thus by index in agents).
       result.agent_ids.each do |agent_id|
         next unless result = backmap?(agents, disabled.add(agent_id), matchee)
         return result # ok
