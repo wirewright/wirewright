@@ -113,7 +113,7 @@ module Ww::M1next
     match(env, op, matchee, &.present?)
   end
 
-  # Convenience function that calls `probe?(M1::Operator, Term)` after
+  # Convenience function that calls `probe?(Term::Dict, M1::Operator, Term)` after
   # compiling *pattern* for you.
   #
   # Routes *kwargs* to `M1.operator`.
@@ -128,8 +128,8 @@ module Ww::M1next
   # M1.probe?(ML.term(%{(+ a_ a_)}), Term.of(:-, 1, 2))
   # # => false (truth)
   # ```
-  def probe?(pattern : Term, matchee : Term, **kwargs) : Bool
-    probe?(M1.operator(pattern, **kwargs), matchee)
+  def probe?(pattern : Term, matchee : Term, *, env : Term::Dict = Term[], **kwargs) : Bool
+    probe?(env, M1.operator(pattern, **kwargs), matchee)
   end
 
   # Returns one of match envs of *op* against *matchee*. Returns `nil` if
