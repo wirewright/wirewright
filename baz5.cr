@@ -1,5 +1,303 @@
+# TODO: This file is a temporary historical crappy implementation of the rewriters
+# framework. Rewriters are a bit like parser combinators except for patterns: think
+# "pattern combinators". Here they're implemented as Crystal functions but in fact
+# they shouldn't be! They should be term-parsing, too, e.g. (dfsR x) so that we can
+# use/construct them at runtime. A proper rewriter framework remains future work.
+
 require "./src/wirewright"
 require "./baz5_common"
+
+module ::Ww::Backpath
+end
+
+class ::Ww::Backpath::Appender
+  # :nodoc:
+  def initialize(@preds : Term::Dict, @tip : Word::None | Word::Terminal | Word::Nonterminal)
+  end
+
+  # :nodoc:
+  EMPTY = Appender.new(preds: Term[], tip: Word::None.new)
+
+  # Constructs an empty backpath appender.
+  def self.new : Appender
+    EMPTY
+  end
+
+  private def push(tip1 : Word::Some) : Appender
+    Appender.new(backpath, tip1)
+  end
+
+  private def replace(tip1 : Word::Some) : Appender
+    Appender.new(@preds, tip1)
+  end
+
+  # The returned appender will update the key *term* of an existing entry. Its value
+  # is preserved. If the updated key collides with some existing key, the updated
+  # key's value wins.
+  def update_key(term) : Appender
+    case @tip
+    in Word::None, Word::Nonterminal
+      push Word::UpdateKey.new(Term.of(term))
+    in Word::Terminal
+      raise KeypathError.new
+    end
+  end
+
+  # The returned appender will update the value of an existing entry with the given *key*.
+  def update_value(key) : Appender
+    case @tip
+    in Word::None, Word::Nonterminal
+      push Word::UpdateValue.new(Term.of(key))
+    in Word::Terminal
+      raise KeypathError.new
+    end
+  end
+
+  # The returned appender will modify entries left after removing keys from *ee*. Each
+  # element of *ee* is converted to a Term using the block.
+  def delete_keys(ee : Enumerable(T), & : T -> Term) : Appender forall T
+    case @tip
+    in Word::None, Word::Nonterminal
+      keys = Term[].transaction do |commit|
+        ee.each { |object| commit << yield object }
+      end
+
+      push Word::Delete.new(keys)
+    in Word::Terminal
+      raise KeypathError.new
+    end
+  end
+
+  # Block-less variant of `delete_keys`.
+  def delete_keys(keys : Enumerable(Term)) : Appender
+    delete_keys(keys, &.itself)
+  end
+
+  # Block-less variant of `delete_keys`.
+  def delete_keys(keys : Term::Dict) : Appender
+    delete_keys(keys.items)
+  end
+
+  # Converts an `update` targeting one item into an update targeting a range of items.
+  # The size of the range is set by *size*. The returned appender is a **terminal** one:
+  # appending anything to it will fail.
+  def span(size, *, ord = 0u32) : Appender
+    case tip = @tip
+    when Word::UpdateValue
+      b = tip.key.to(Int32)
+      e = b + size
+      replace Word::Range.new(b, e, ord)
+    else
+      raise KeypathError.new
+    end
+  end
+
+  # Creates a pair with the given *key*. The returned appender is a **terminal** one:
+  # there is nothing to modify with it, since the value to be modified in fact does
+  # not exist.
+  def create_pair(key) : Appender
+    case @tip
+    in Word::None, Word::Nonterminal
+      push Word::CreateLeaf.new(Term.of(key))
+    in Word::Terminal
+      raise KeypathError.new
+    end
+  end
+
+  # Creates a pair with the given *key* and *value*. The returned appender will
+  # be modifying *value*.
+  def create_pair(key, *, value) : Appender
+    case @tip
+    in Word::None, Word::Nonterminal
+      push Word::Create.new(Term.of(key), Term.of(value), Term.of(value))
+    in Word::Terminal
+      raise KeypathError.new
+    end
+  end
+
+  # Converts an `update_value` of a single item into an insert of *value* before
+  # that item. The returned appender will be modifying *value*.
+  def insert_item(value, *, ord = 0) : Appender
+    case tip = @tip
+    when Word::UpdateValue
+      replace Word::Insert.new(tip.key.as_n, ord, Term.of(value))
+    else
+      raise KeypathError.new
+    end
+  end
+
+  # Shifts a numeric `update_value` *n* items forward.
+  def forward(n = 1) : Appender
+    case tip = @tip
+    when Word::UpdateValue
+      replace Word::UpdateValue.new(Term.of(tip.key + n))
+    else
+      raise KeypathError.new
+    end
+  end
+
+  # Shifts a numeric `update_value` *n* items backward.
+  def backward(n = 1) : Appender
+    forward(-n)
+  end
+
+  # Returns the backpath dict that this appender constructed so far.
+  def backpath : Term::Dict
+    case tip = @tip
+    in Word::None then @preds
+    in Word::Some then @preds.transaction &.concat(Word.terms(tip))
+    end
+  end
+end
+
+module ::Ww::Backpath::Word
+  extend self
+
+  alias Any = None | Some
+  alias Some = Atomic | Compound
+
+  # "Atomic" or "indivisible" words that actually exist in the trie.
+  alias Atomic = Create | CreateLeaf | Delete | Insert | Range | Pair
+
+  # "Compound words" are broken down into atomic words.
+  alias Compound = UpdateKey | UpdateValue
+
+  # Backpath words that do not have neighbors/successors in the trie (must stand at
+  # the end of a "sentence").
+  alias Terminal = CreateLeaf | Range
+
+  # Words that have neighbors/successors in the trie.
+  alias Nonterminal = Compound | Create | Delete | Insert
+
+  record UpdateKey, key : Term
+  record UpdateValue, key : Term
+
+  record None
+  record Create, key : Term, initial : Term, value : Term
+  record CreateLeaf, key : Term
+  record Insert, index : Term::Num, ord : UInt32, initial : Term
+  record Pair, key : Term
+  record Range, b : Int32, e : Int32, ord : UInt32
+  record Delete, keys : Term::Dict
+
+  record Key
+  record Value
+
+  # :nodoc:
+  SYM_PAIR = Term.of(:pair)
+
+  # :nodoc:
+  SYM_RESIDUE = Term.of(:residue)
+
+  # :nodoc:
+  SYM_RANGE = Term.of(:range)
+
+  # :nodoc:
+  SYM_CREATE_LEAF = Term.of(:"create-leaf")
+
+  # :nodoc:
+  SYM_CREATE = Term.of(:create)
+
+  # :nodoc:
+  SYM_INSERT = Term.of(:insert)
+
+  # Parses a subject term *subject* into an `Atomic` backpath word.
+  #
+  # Raises `KeypathError` if that cannot be done.
+  def atomic(subject : Term) : Atomic
+    raise KeypathError.new unless dict = subject.as_itemsonly_d?
+    raise KeypathError.new if dict.empty?
+
+    case {dict[0], dict.size - 1}
+    when {SYM_PAIR, 1}
+      _, key = dict
+
+      Pair.new(key)
+    when {SYM_RESIDUE, 1}
+      _, keys = dict
+
+      raise KeypathError.new unless keys = keys.as_d?
+
+      Delete.new(keys)
+    when {SYM_RANGE, 3}
+      _, b, e, ord = dict
+
+      raise KeypathError.new unless (b = b.as_n?) && (e = e.as_n?) && (ord = ord.as_n?)
+
+      Range.new(b.to(Int32), e.to(Int32), ord.to(UInt32))
+    when {SYM_CREATE_LEAF, 1}
+      _, key = dict
+
+      CreateLeaf.new(key)
+    when {SYM_CREATE, 2}
+      _, key, initial = dict
+
+      Create.new(key, initial, value: initial)
+    when {SYM_INSERT, 3}
+      _, index, ord, initial = dict
+
+      raise KeypathError.new unless (index = index.as_n?) && (ord = ord.as_n?)
+
+      Insert.new(index, ord.to(UInt32), initial)
+    else
+      raise KeypathError.new
+    end
+  end
+
+  # Yields substructure of *word* and/or *matchee* for the block to check out.
+  def checkout(word : Create, matchee : Term, &) : Nil
+    yield word.value
+  end
+
+  # :ditto:
+  def checkout(word : CreateLeaf, matchee : Term, &) : Nil
+  end
+
+  # :ditto:
+  def checkout(word : Insert, matchee : Term, &) : Nil
+    yield word.initial
+  end
+
+  # :ditto:
+  def checkout(word : Range, matchee : Term, &) : Nil
+  end
+
+  # :ditto:
+  def checkout(word : Delete, matchee : Term, &) : Nil
+    yield Term.exclude(matchee, word.keys.items)
+  end
+
+  def terms(word : Create) : Enumerable(Term)
+    {Term.of(:create, word.key, word.value)}
+  end
+
+  def terms(word : CreateLeaf) : Enumerable(Term)
+    {Term.of(:"create-leaf", word.key)}
+  end
+
+  def terms(word : Insert) : Enumerable(Term)
+    {Term.of(:insert, word.index, word.ord, word.initial)}
+  end
+
+  def terms(word : UpdateKey) : Enumerable(Term)
+    {Term.of(:pair, word.key), Term.of(:key)}
+  end
+
+  def terms(word : UpdateValue) : Enumerable(Term)
+    {Term.of(:pair, word.key), Term.of(:value)}
+  end
+
+  def terms(word : Range) : Enumerable(Term)
+    {Term.of(:range, word.b, word.e, word.ord)}
+  end
+
+  def terms(word : Delete) : Enumerable(Term)
+    {Term.of(:residue, word.keys)}
+  end
+end
+
+class ::Ww::KeypathError < Exception
+end
 
 alias Rewriter = RewriterContext, Rewrite::Any -> Rewrite::Any
 alias Observer = Backpath::Appender, String, Rewrite::Some ->
