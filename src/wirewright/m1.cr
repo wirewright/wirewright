@@ -1,22 +1,24 @@
-# Wirewright M1 is a pattern matching and backmapping engine, along with a suite
-# of related tools.
+# M1 is a subsystem of Wirewright. It is a pattern matching and backmapping engine,
+# and a suite of related tools.
 #
 # Metaphorically speaking, M1 is the sensory organ of Wirewright. All data Wirewright
-# knows (and cares) about is represented with `Term`s, which we consider the "matter".
+# knows (and cares) about is represented with `Term`s, which we consider "matter".
 #
-# A network packet, a user event -- all that does not really exist for Wirewright.
-# Rather, there are dedicated subsystems (e.g. the window manager) that "materialize"
-# them -- as in turn them into "matter", into Wirewright-comprehensible `Term`s.
+# A network packet, a user event, a file -- all that does not really exist for Wirewright.
+# Instead, there are dedicated subsystems (e.g. the window manager) that "materialize"
+# them -- as in, turn them into "matter" -- Wirewright-comprehensible `Term`s.
 #
 # Wirewright and most of its subsystems (e.g. `Alloy`, `DwUIR`, uiR) then require
-# a sensory organ to perceive parts of such matter. The backmapping engine, on the other
-# hand, is used for "actuation" -- to modify matter in response to perception.
+# a sensory organ to perceive parts of such matter and its various arrangements.
+#
+# The backmapping engine, on the other hand, is used for "actuation". In other words,
+# it is used to manipulate matter *in response to perception*.
 #
 # The processes of pattern matching and backmapping -- perception and actuation --
 # are so tighly coupled in Wirewright that we group them under one subsystem, M1.
 #
 # Underlying M1's pattern matching algorithm is a variation on backtracking search
-# with lightweight constraints (mostly equality constraints). The core idea is that
+# with lightweight constraints (mainly equality constraints). The core idea is that
 # the pattern is "linearized" on the go (a bit like a train laying tracks in front
 # of itself); the current "match-point" (most likely an `Op`) then asks the rest
 # of the pattern whether they approves whatever choice the operator wants to
@@ -25,37 +27,46 @@
 #
 # I suspect M1's pattern matching algorithm is NP in the worst case, although this
 # remains to be proven. For practical patterns, NP, if it's there, would be very hard --
-# if possible at all -- to hit. Most practical patterns have optimized (possibly sub-
-# microsecond) fast paths. The general expectation is that most patterns *match*
-# in <10 microseconds. These numbers vary with machine and environment, of course,
-# as well as with the underlying term. But I'm just giving some rough estimates here.
-# The simplest patterns match in <1 microsecond, possibly in <500ns.
+# if possible -- to hit. Most practical patterns have optimized (possibly sub-
+# microsecond) fast paths.
 #
-# I am emphasizing *match* because in fact, M1 is optimized for fast mismatches
-# (negatives, rejections), and matches (positives) are sometimes pessimized. When
-# you do backtracking search, rule search, etc., rejections are vastly more frequent
+# The general expectation is that most patterns *match* in under 10 microseconds. This
+# number varies with machine and environment, of course, and with the underlying term.
+# But I'm just giving some rough estimates here. The simplest patterns match in under
+# 1 microsecond, and if you're lucky in under 500ns.
+#
+# I am emphasizing *match* because M1 is actually optimized for fast *mismatches*
+# (negatives, rejections). In fact, matches (positives) are sometimes pessimized.
+#
+# When you do backtracking search, rule search, etc., rejections are vastly more frequent
 # than matches. Sometimes, for a thousand rules and a term, only a single rule or
-# no rules match. M1 tries to take every opportunity at skipping work, which may
-# make a genuine match slower, because of all the "tricky questions" the term would
-# have to answer first. But then, those "tricky questions" helped filter out maybe 90%
-# of other candidates, so overall time savings can be enormous. Most rejections in
-# practice are expected to be well under 100ns.
+# no rules match. With that in mind, M1 tries to take every opportunity at skipping
+# work. This may make a genuine match slower, because the matchee must answer a lot
+# of "tricky questions" first, before it gets to the "meat" of the matching algorithm.
 #
-# Refer to `m1.operator` in the doctool to read the docs for M1 operators.
+# But then, if the "tricky questions" help filter out maybe 90% of candidates that do
+# not match anyway, the overall time savings are expected to be enormous. So most
+# rejections in practice are expected to be well under 100ns.
 #
-# M1 uses the terminology of *pattern* (a description of what should be matched),
+# Again, the main thing to keep in mind is M1 is an extremely stupid backtracking
+# search "in disguise" of something much smarter. A stupid backtracking search is
+# expected to generate a ton of wrong answers before it gets something right. Thus,
+# again, figuratively speaking, we have 99% rejections; that's what we optimize for.
+#
+# Refer to `m1.operator` in the doctool to learn about the available M1 operators.
+#
+# M1 uses the terminology of *pattern* (roughly, a description of what should be matched),
 # *matchee* (the term being matched -- the current candidate term), and *match
 # environment* (more commonly referred to as *match env* or simply *env*).
 #
-# Note that what Wirewright/M1 calls *matchee* is more correctly referred to
-# as *scrutinee* (see e.g. [Wikipedia, Pattern matching, Terminology of patterns]
-# (https://en.wikipedia.org/wiki/Pattern_matching#Terminology_of_patterns)).
-# I find *scrutinee* very hard to type, however, and the word *matchee*, although
-# a bit ugly and hard to pronounce, has a long history in Wirewright. It is
-# therefore the preferred way of referring to the term being matched.
+# Note that what Wirewright/M1 calls *matchee* is more correctly called *scrutinee*
+# (see e.g. [Wikipedia, Pattern matching, Terminology of patterns](https://en.wikipedia.org/wiki/Pattern_matching#Terminology_of_patterns)).
+# However, I have a hard time typing the word *scrutinee*. Additionally, the word *matchee*,
+# although a bit ugly and hard to pronounce, has a long history in Wirewright. *Matchee*
+# is therefore the preferred way of referring to the term being matched.
 #
 # NOTE: With M1, there's lots of "magic" involved, and even I can barely
-# comprehend how it all works together (the parts are quite simple, however,
+# articulate how the thing works together (the parts are quite simple, however,
 # almost trivial -- that's kind of the point with this design). I try to leave
 # comments where appropriate -- meaning almost everywhere! -- so expect lots
 # of them in the code.

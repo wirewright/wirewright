@@ -1115,16 +1115,18 @@ module Ww::M1
   end
 
   # NOTE: "Cutting" on match (so that lhs is erased) seems to provide better semantics
-  # than simply iterating over splits left-to-right.
-  private def search(ctx, op : Op::Split, matchee : Tzip, plan, & : Fb -> Bool) : Nil
+  # than simply iterating over splits left-to-right. This is called "narrow" split and
+  # it's the default.
+  private def each_split_narrow(n : Int32, matchee : Tzip, & : Tzip::ItemsView, Tzip::ItemsView, Tzip::ItemsView -> Bool) : Nil
+    assert n >= 0
+
     feed = matchee.items
 
     loop do
       running = false
 
-      feed.each_split(op.focus.size) do |l, focus, r|
-        fb = eval(match(ctx, op, l, focus, r, plan))
-        accepted = yield fb
+      feed.each_split(n) do |l, focus, r|
+        accepted = yield l, focus, r
         next unless accepted
 
         # We can't determine what's "before" and what's "after" focus when we have
@@ -1135,7 +1137,7 @@ module Ww::M1
         #
         # Therefore, we don't drop "before" on successful match, as with nonempty
         # focus -- because, as I said above, we don't have a before!
-        next if op.focus.empty?
+        next if n.zero?
 
         feed = r
         running = true
@@ -1146,8 +1148,31 @@ module Ww::M1
     end
   end
 
+  private def each_split_wide(n : Int32, matchee : Tzip, & : Tzip::ItemsView, Tzip::ItemsView, Tzip::ItemsView -> Bool) : Nil
+    assert n >= 0
+
+    feed = matchee.items
+    feed.each_split(n) do |l, focus, r|
+      yield l, focus, r
+    end
+  end
+
+  private def each_split(n, matchee, *, wide : Bool, &) : Nil
+    if wide
+      each_split_wide(n, matchee) { |l, focus, r| yield l, focus, r }
+    else
+      each_split_narrow(n, matchee) { |l, focus, r| yield l, focus, r }
+    end
+  end
+
+  private def search(ctx, op : Op::Split, matchee : Tzip, plan, & : Fb -> Bool) : Nil
+    each_split(op.focus.size, matchee, wide: op.wide) do |l, focus, r|
+      yield eval(match(ctx, op, l, focus, r, plan))
+    end
+  end
+
   private def search_with_sealed_log!(ctx, op : Op::Split, matchee : Tzip, plan, & : Fb, Log::Sealed | Log::None -> Bool) : Nil
-    matchee.items.each_split(op.focus.size) do |l, focus, r|
+    each_split(op.focus.size, matchee, wide: op.wide) do |l, focus, r|
       fb = eval(match(ctx, op, l, focus, r, plan))
 
       # When you refer to an env in %splits, like here:

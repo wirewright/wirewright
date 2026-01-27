@@ -191,9 +191,9 @@ module Ww::M1
 
     alias Split = SplitFirst | SplitSource | SplitAll
 
-    defcase SplitFirst, lhs : Any, focus : Slice(Any), rhs : Any
-    defcase SplitSource, lhs : Any, focus : Slice(Any), rhs : Any
-    defcase SplitAll, successor : Any, lhs : Any, focus : Slice(Any), rhs : Any, min : Magnitude, max : Magnitude
+    defcase SplitFirst, lhs : Any, focus : Slice(Any), rhs : Any, wide : Bool
+    defcase SplitSource, lhs : Any, focus : Slice(Any), rhs : Any, wide : Bool
+    defcase SplitAll, successor : Any, lhs : Any, focus : Slice(Any), rhs : Any, min : Magnitude, max : Magnitude, wide : Bool
 
     defcase Matches, successor : Any, subpattern : Any, min : Magnitude, max : Magnitude
 

@@ -1915,21 +1915,27 @@ module Ww::M1
         end
       end
 
-      matchpi %{(head←%'%split _ _ _*)}, %{(head←%'%split° _ _ _*)}, cues: {:"%split", :"%split°"} do
-        members = pattern.items.move(1)
+      matchpi %{(head←%'%split _ _ _* ¦ opts_)}, %{(head←%'%split° _ _ _* ¦ opts_)}, cues: {:"%split", :"%split°"} do
+        M0.schema(opts) do |s, opts|
+          s.on_mismatch { continue }
 
-        normal = Term::Dict.build do |commit|
-          commit << head
-          commit.concat(members) { |member| normalize(Π.pattern(member)) }
+          wide = s.key(:wide, value: Term::Boolean, default: Term.of(false))
 
-          commit.with(:guarded, true)
-          commit.with(:bounds, {members.size - 2, :"..=", :∞})
-          # Split left-hand side and right-hand side are synthetic. Thus we can't
-          # have a depth guard for them, only for the middle part(s).
-          commit.with(:depth, {:+, {:max, {:members, 1, :"..<", members.size - 1}, :min}, 1})
+          members = pattern.items.move(1)
+
+          normal = opts.transaction do |commit|
+            commit << head
+            commit.concat(members) { |member| normalize(Π.pattern(member)) }
+
+            commit.with(:guarded, true)
+            commit.with(:bounds, {members.size - 2, :"..=", :∞})
+            # Split left-hand side and right-hand side are synthetic. Thus we can't
+            # have a depth guard for them, only for the middle part(s).
+            commit.with(:depth, {:+, {:max, {:members, 1, :"..<", members.size - 1}, :min}, 1})
+          end
+
+          Term.of(normal)
         end
-
-        Term.of(normal)
       end
 
       matchpi %{(%'%splits successor_ _ _ _* ¦ opts_)}, cue: :"%splits" do
@@ -1938,6 +1944,7 @@ module Ww::M1
 
           min = s.key(:min, type: UInt32, default: 1)
           max = s.key(:max, type: UInt32, default: Term.of(:∞))
+          wide = s.key(:wide, value: Term::Boolean, default: Term.of(false))
           continue if max.is_a?(UInt32) && min > max
 
           members = pattern.items.move(2)

@@ -687,7 +687,7 @@ module Ww::M1
         )
       end
 
-      matchpi %{[%'%split lhs_ _ _*]}, cue: :"%split" do
+      matchpi %{(%'%split lhs_ _ _* ⍊ wide_)}, cue: :"%split" do
         mid = pattern.items.move(2).grow(-1)
         rhs = pattern.items.last
 
@@ -695,10 +695,11 @@ module Ww::M1
           compile(Π.pattern(lhs)),
           compile(Π.patterns(mid)),
           compile(Π.pattern(rhs)),
+          wide: wide.true?,
         )
       end
 
-      matchpi %{[%'%split° lhs_ _ _*]}, cue: :"%split°" do
+      matchpi %{(%'%split° lhs_ _ _* ⍊ wide_)}, cue: :"%split°" do
         mid = pattern.items.move(2).grow(-1)
         rhs = pattern.items.last
 
@@ -706,10 +707,11 @@ module Ww::M1
           compile(Π.pattern(lhs)),
           compile(Π.patterns(mid)),
           compile(Π.pattern(rhs)),
+          wide: wide.true?,
         )
       end
 
-      matchpi %{(%'%splits successor_ lhs_ _ _* ⍊ min_ max_)}, cue: :"%splits" do
+      matchpi %{(%'%splits successor_ lhs_ _ _* ⍊ wide_ min_ max_)}, cue: :"%splits" do
         mid = pattern.items.move(3).grow(-1)
         rhs = pattern.items.last
 
@@ -719,6 +721,7 @@ module Ww::M1
           compile(Π.pattern(rhs)),
           min: Kit.magn(min),
           max: Kit.magn(max),
+          wide: wide.true?,
         )
       end
 
