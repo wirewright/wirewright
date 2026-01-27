@@ -64,6 +64,8 @@ module Ww
 
   MT = Fiber::ExecutionContext::Parallel.new("Wirewright", Fiber::ExecutionContext.default_workers_count)
 
+  alias Magnitude = Float32
+
   # FIXME: WTF is this? Seriously . . .
   module Approx
     extend self
