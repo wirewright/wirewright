@@ -491,7 +491,7 @@ module ::Ww::Rack
         D7.gnd(node, u)
       end
 
-      matchpi %{[rulesys us←((%past @_ min: 1)) _*]} do
+      matchpi %{[backsys us←((%past @_ min: 1)) _*]} do
         D7.gnd(node, us.items)
       end
 
@@ -826,96 +826,25 @@ module ::Ww::Rack
         end
       end
 
-      # FIXME: This implementation passes the current tests but is WRONG. It does not
-      # support insertion or deletion. For that we need backmaps to cooperate with us
-      # and give us raw patches. This adds priority to the backmap rewrite.
-      rule %{(one dev [rulesys tgt←((%past @_ min: 1)) rules_*]) (many tgt [cell @tgt_ term_])} do
-        # rules, tgt_edges = first(dev, :rules, :tgt)
-        # next unless tgt_edges.size == tgt.size # Confused: duplicate cells on @tgt?
-
-        # matchee = collate(tgt, tgt_edges.items, Term.of(:tgt), Term.of(:term))
-
-        # rules.items.each do |rule|
-        #   Term.case(rule) do
-        #     matchpi %{[backmap pattern_ backspec_]} do
-        #       next unless result = M1.backmap?(pattern, backspec, matchee, applier: Alloy::Applier.new)
-        #       next unless result.type.dict?
-        #       next unless result.itemsize == matchee.itemsize
-
-        #       matchee = result
-        #     end
-
-        #     matchpi %{[one-of options_*]} do
-        #       options.items.each do |option|
-        #         result = Term.matchpi?(option, %{[backmap pattern_ backspec_]}) do
-        #           next unless candidate = M1.backmap?(pattern, backspec, matchee, applier: Alloy::Applier.new)
-        #           next unless candidate.type.dict?
-        #           next unless candidate.itemsize == matchee.itemsize
-
-        #           candidate
-        #         end
-
-        #         next unless result
-
-        #         matchee = result
-        #         break
-        #       end
-        #     end
-
-        #     otherwise { }
-        #   end
-        # end
-
-        # patches(tgt_edges.items) do |tgt_edge, index|
-        #   id, capture = tgt.find! { |_, node| node.env[:tgt] == tgt_edge }
-
-        #   {id, capture.node.morph({2, matchee[index]})}
-        # end
-
+      rule %{(one dev [backsys tgt←((%past @_ min: 1)) rules_*]) (many tgt [cell @tgt_ term_])} do
         rules, tgt_edges = first(dev, :rules, :tgt)
         next unless tgt_edges.size == tgt.size # Confused: duplicate cells on @tgt?
 
-        matchee = collate(tgt, tgt_edges.items, Term.of(:tgt), Term.of(:term))
-        contents = matchee.items.map { |item| Term.content(item) }
-
-        results = [] of Term
-        buckets = Slice.new(matchee.itemsize) { [] of {Slice(Term), Term} }
-
-        rules.items.each do |rule|
+        backsys = rules.items.compact_map do |rule|
           Term.matchpi?(rule, %{[backmap pattern_ backspec_]}) do
-            next unless result = M1.backmap?(pattern, backspec, matchee)
-            next unless result.type.dict?
-            next unless result.itemsize == matchee.itemsize
-
-            result.items.each_with_index do |item, index|
-              delta = Term.content(item, not_in: contents[index])
-              delta.each do |entry|
-                buckets[index] << entry
-              end
-            end
+            {pattern, backspec}
           end
         end
 
-        # Descending, longest keypath first.
-        buckets.each do |bucket|
-          bucket.sort_by! { |keypath| -keypath.size }
-        end
+        matchee = collate(tgt, tgt_edges.items, Term.of(:tgt), Term.of(:term))
 
-        matchee.each_item_with_index do |item, index|
-          bucket = buckets[index]
-          bucket.each do |keypath, leaf|
-            if keypath.empty?
-              matchee = matchee.with(index, leaf)
-            else
-              matchee = matchee.with(index, matchee[index].where(keypath, eq: leaf))
-            end
-          end
-        end
+        result = M1.backmap(backsys, matchee)
+        next unless result.type.dict? && result.itemsize == matchee.itemsize
 
         patches(tgt_edges.items) do |tgt_edge, index|
           id, capture = tgt.find! { |_, node| node.env[:tgt] == tgt_edge }
 
-          {id, capture.node.morph({2, matchee[index]})}
+          {id, capture.node.morph({2, result[index]})}
         end
       end
 

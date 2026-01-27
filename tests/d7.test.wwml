@@ -2096,158 +2096,515 @@
     ((appearance cell) (local @bar) 100))
   end)
 
-;; Rulesys: increment one
+;; backsys: increment one
 (d7
   (frame
     (cell @x 100)
-    (rulesys (@x) (±N) <> {N: ^(+ N 1)}))
+    (backsys (@x) (±N) <> {N: ^(+ N 1)}))
   (frame
     (cell @x 101)
-    (rulesys (@x) (±N) <> {N: ^(+ N 1)}))
+    (backsys (@x) (±N) <> {N: ^(+ N 1)}))
   (frame
     (cell @x 102)
-    (rulesys (@x) (±N) <> {N: ^(+ N 1)})))
+    (backsys (@x) (±N) <> {N: ^(+ N 1)})))
   ;; ...
 
-;; Rulesys: increment many, same rule
+;; backsys: increment many, same rule
 (d7
   (frame
     (cell @x 100)
     (cell @y 200)
-    (rulesys (@x @y)
+    (backsys (@x @y)
       (±N ±M) <> {N: ^(+ N 1), M: ^(+ M 1)}))
   (frame
     (cell @x 101)
     (cell @y 201)
-    (rulesys (@x @y)
+    (backsys (@x @y)
       (±N ±M) <> {N: ^(+ N 1), M: ^(+ M 1)}))
   (frame
     (cell @x 102)
     (cell @y 202)
-    (rulesys (@x @y)
+    (backsys (@x @y)
       (±N ±M) <> {N: ^(+ N 1), M: ^(+ M 1)})))
   ;; ...
 
-;; Rulesys: increment many, different rules
+;; backsys: increment many, different rules
 (d7
   (frame
     (cell @x 100)
     (cell @y 200)
-    (rulesys (@x @y)
+    (backsys (@x @y)
       (±N _) <> {N: ^(+ N 1)}
       (_ ±M) <> {M: ^(+ M 1)}))
   (frame
     (cell @x 101)
     (cell @y 201)
-    (rulesys (@x @y)
+    (backsys (@x @y)
       (±N _) <> {N: ^(+ N 1)}
       (_ ±M) <> {M: ^(+ M 1)}))
   (frame
     (cell @x 102)
     (cell @y 202)
-    (rulesys (@x @y)
+    (backsys (@x @y)
       (±N _) <> {N: ^(+ N 1)}
       (_ ±M) <> {M: ^(+ M 1)})))
   ;; ...
 
-;; Rulesys: increment parts of one, same rule
+;; backsys: increment parts of one, same rule
 (d7
   (frame
     (cell @x (100 200))
-    (rulesys (@x)
+    (backsys (@x)
       ((±N ±M)) <> {N: ^(+ N 1), M: ^(+ M 1)}))
   (frame
     (cell @x (101 201))
-    (rulesys (@x)
+    (backsys (@x)
       ((±N ±M)) <> {N: ^(+ N 1), M: ^(+ M 1)}))
   (frame
     (cell @x (102 202))
-    (rulesys (@x)
+    (backsys (@x)
       ((±N ±M)) <> {N: ^(+ N 1), M: ^(+ M 1)})))
   ;; ...
 
-;; Rulesys: increment parts of one, different rules
+;; backsys: increment parts of one, different rules
 (d7
   (frame
     (cell @x (100 200))
-    (rulesys (@x)
+    (backsys (@x)
       ((±N _)) <> {N: ^(+ N 1)}
       ((_ ±M)) <> {M: ^(+ M 1)}))
   (frame
     (cell @x (101 201))
-    (rulesys (@x)
+    (backsys (@x)
       ((±N _)) <> {N: ^(+ N 1)}
       ((_ ±M)) <> {M: ^(+ M 1)}))
   (frame
     (cell @x (102 202))
-    (rulesys (@x)
+    (backsys (@x)
       ((±N _)) <> {N: ^(+ N 1)}
       ((_ ±M)) <> {M: ^(+ M 1)})))
   ;; ...
 
-;; Rulesys: increment-swap parts of many, same rule
+;; backsys: increment-swap parts of many, same rule
 (d7
   (frame
     (cell @x ((100) 200))
     (cell @y ((300) 400))
-    (rulesys (@x @y)
+    (backsys (@x @y)
       (((±N) _) (_ ±M)) <> {N: ^(+ M 1), M: ^(+ N 1)}))
   (frame
     (cell @x ((401) 200))
     (cell @y ((300) 101))
-    (rulesys (@x @y)
+    (backsys (@x @y)
       (((±N) _) (_ ±M)) <> {N: ^(+ M 1), M: ^(+ N 1)}))
   (frame
     (cell @x ((102) 200))
     (cell @y ((300) 402))
-    (rulesys (@x @y)
+    (backsys (@x @y)
       (((±N) _) (_ ±M)) <> {N: ^(+ M 1), M: ^(+ N 1)})))
   ;; ...
 
-;; Rulesys: increment-swap parts of many, different rules
+;; backsys: increment-swap parts of many, different rules
 (d7
   (frame
     (cell @x ((100) 200))
     (cell @y ((300) 400))
-    (rulesys (@x @y)
+    (backsys (@x @y)
       (((±N) _) (_ ±M)) <> {N: ^(+ M 1)}
       (((±N) _) (_ ±M)) <> {M: ^(+ N 1)}))
   (frame
     (cell @x ((401) 200))
     (cell @y ((300) 101))
-    (rulesys (@x @y)
+    (backsys (@x @y)
       (((±N) _) (_ ±M)) <> {N: ^(+ M 1)}
       (((±N) _) (_ ±M)) <> {M: ^(+ N 1)}))
   (frame
     (cell @x ((102) 200))
     (cell @y ((300) 402))
-    (rulesys (@x @y)
+    (backsys (@x @y)
       (((±N) _) (_ ±M)) <> {N: ^(+ M 1)}
       (((±N) _) (_ ±M)) <> {M: ^(+ N 1)})))
 
   ;; ...
 
-;; Rulesys: simple conflict
+;; backsys: simple conflict
 (d7
   (frame
     (cell @x ((100) 200))
-    (rulesys (@x)
+    (backsys (@x)
       (((±N) _)) <> {N: ^(+ N 1)}
       ((X_ _)) <> {X: qux}))
   (frame
     (cell @x (qux 200)) ;; < Qux wins because its modification is the shallowest.
-    (rulesys (@x)
+    (backsys (@x)
       (((±N) _)) <> {N: ^(+ N 1)}
       ((X_ _)) <> {X: qux}))
   end)
 
-;; Rulesys: insertion
+;; backsys: insertion
+(d7
+  (frame
+    (cell @x (a b c))
+    (backsys (@x)
+      ((`front _*)) <> {front: "First rule"}
+      ((_* `back)) <> {back: "Second rule"}
+      ((%split (_* `slot) b _)) <> {slot: "Slot before b"}))
+  (frame
+    (cell @x ("First rule" a "Slot before b" b c "Second rule"))
+    (backsys (@x)
+      ((`front _*)) <> {front: "First rule"}
+      ((_* `back)) <> {back: "Second rule"}
+      ((%split (_* `slot) b _)) <> {slot: "Slot before b"}))
+  (frame
+    (cell @x ("First rule" "First rule" a "Slot before b" "Slot before b" b c "Second rule" "Second rule"))
+    (backsys (@x)
+      ((`front _*)) <> {front: "First rule"}
+      ((_* `back)) <> {back: "Second rule"}
+      ((%split (_* `slot) b _)) <> {slot: "Slot before b"})))
+  ;; ...
 
-;; Rulesys: deletion
+;; backsys: deletion
+(group
+  (d7
+    ;; First rule marks even
+    ;; Second rule removes odd
+    (frame
+      (cell @x (a 1 2 b 3 4 c d 5 e 6 7 f 8 g h 9 i 10 11 12 j k l))
+      (backsys (@x)
+        (⟨n←(%pipe (mod 2) 0)⟩°) <> {n: (seen ^n)}
+        (⟨n←(%pipe (mod 2) (%not 0))⟩°) <> {(n): ()}))
+    (frame
+      (cell @x (a (seen 2) b (seen 4) c d e (seen 6) f (seen 8) g h i (seen 10) (seen 12) j k l))
+      (backsys (@x)
+        (⟨n←(%pipe (mod 2) 0)⟩°) <> {n: (seen ^n)}
+        (⟨n←(%pipe (mod 2) (%not 0))⟩°) <> {(n): ()}))
+    end)
 
-;; Rulesys: insertions
+  (d7
+    ;; First rule removes even
+    ;; Second rule removes odd
+    (frame
+      (cell @x (a 1 2 b 3 4 c d 5 e 6 7 f 8 g h 9 i 10 11 12 j k l))
+      (backsys (@x)
+        (⟨n←(%pipe (mod 2) 0)⟩°) <> {(n): ()}
+        (⟨n←(%pipe (mod 2) (%not 0))⟩°) <> {(n): ()}))
+    (frame
+      (cell @x (a b c d e f g h i j k l))
+      (backsys (@x)
+        (⟨n←(%pipe (mod 2) 0)⟩°) <> {(n): ()}
+        (⟨n←(%pipe (mod 2) (%not 0))⟩°) <> {(n): ()}))
+    end))
 
-;; Rulesys: deletions
+;; backsys: insertions and deletions
+(d7
+  ;; l's move left
+  ;; r's move right
+  ;; . represents an empty spot
+  ;; r collides with l, bounce, a wall with durability `(I ±D)` appears.
+  ;; l, r reflect off bounds and walls
+  ;; walls lose durability when someone hits them
+  ;; walls break when their durability is zero
+  (frame
+    (cell @x (r . . . l))
+    (backsys (@x)
+      (⟨a←. b←l⟩°) <> {a: ^b, b: ^a}
+      (⟨a←r b←.⟩°) <> {a: ^b, b: ^a}
+      (⟨a←r b←l⟩) <> {a: l, (b): ((I 3) r)}
+      ((a←l _*)) <> {a: r}
+      ((_* a←r)) <> {a: l}
+      ((%split° (_* a←r) (I D←(%number _ > 0)) _)) <> {a: l, D: ^(- D 1)}
+      ((%split° _ (I D←(%number _ > 0)) (a←l _*))) <> {a: r, D: ^(- D 1)}
+      (⟨W←(I 0)⟩°) <> {(W): ()}))
+  (frame m1: true
+    (cell @x (. r . l .))
+    _*)
+  (frame m1: true
+    (cell @x (. . r l .)) ;; r wins because its rule is defined later
+    _*)
+  (frame m1: true
+    (cell @x (. . l (I 3) r .))
+    _*)
+  (frame m1: true
+    (cell @x (. l . (I 3) . r))
+    _*)
+  (frame m1: true
+    (cell @x (l . . (I 3) . l))
+    _*)
+  (frame m1: true
+    (cell @x (r . . (I 3) l .))
+    _*)
+  (frame m1: true
+    (cell @x (. r . (I 2) r .))
+    _*)
+  (frame m1: true
+    (cell @x (. . r (I 2) . r))
+    _*)
+  (frame m1: true
+    (cell @x (. . l (I 1) . l))
+    _*)
+  (frame m1: true
+    (cell @x (. l . (I 1) l .))
+    _*)
+  (frame m1: true
+    (cell @x (l . . (I 0) r .))
+    _*)
+  (frame m1: true
+    (cell @x (r . . . r))
+    _*)
+  (frame m1: true
+    (cell @x (. r . . l))
+    _*)
+  (frame m1: true
+    (cell @x (. . r l .))
+    _*))
+  ;; ...
 
-;; Rulesys: basic animal
+;; backsys: pyramidal (bottom-up-bottom, presentational) feedback essentials
+;; with circuit
+(d7
+  (frame
+    (circuit @x
+      (group
+        (module {}
+          (cell @sum 1 output: true)
+          (cell @view0 input: true)
+          (view (@view0 v_ @sum) ^(sum v)))
+        (module {}
+          (cell @product 1 output: true)
+          (cell @view1 input: true)
+          (view (@view1 v_ @product) ^(product v)))))
+    (backsys (@x)
+      ((%all (%leaves (%flat (_ n) ns_) (cell @_ ±n ⍊ output))
+              ⟪(cell @_ (%group dst_ _?) ⍊ input)⟫°))
+        <> {dst: ^ns}))
+  (frame m1: true
+    ⟪[cell @sum 2]
+     [cell @view0 (1 1)]
+     [cell @product 1]
+     [cell @view1 (1 1)]⟫
+    _*)
+  (frame m1: true
+    ⟪[cell @sum 3]
+     [cell @view0 (2 1)]
+     [cell @product 2]
+     [cell @view1 (2 1)]⟫
+    _*)
+  (frame m1: true
+    ⟪[cell @sum 5]
+     [cell @view0 (3 2)]
+     [cell @product 6]
+     [cell @view1 (3 2)]⟫
+    _*)
+  (frame m1: true
+    ⟪[cell @sum 11]
+     [cell @view0 (5 6)]
+     [cell @product 30]
+     [cell @view1 (5 6)]⟫
+    _*)
+  (frame m1: true
+    ⟪[cell @sum 41]
+     [cell @view0 (11 30)]
+     [cell @product 330]
+     [cell @view1 (11 30)]⟫
+    _*))
+  ;; ...
 
+;; backsys: a very simple self-embodied program
+(d7
+  (frame
+    ;; "objective reality"
+    (circuit (@world (group world_*))
+      (group
+        food
+        .
+        .
+        (module {}
+          ;; "subjective reality" supplied by "sensory organs" (here the outer
+          ;; world just magically plugs things in)
+          (cell @behind behind: true)
+          (cell @ahead ahead: true)
+          ;; "laws of physics in the subjective reality"
+          ;; "brain"
+          (backsys (@behind @ahead @action)
+            (_ _ A←eat-above) <> {A: go-up}
+            (_ _ A←eat-below) <> {A: go-dn}
+            ((_* food) _ A←go-up) <> {A: eat-above}
+            (_ (food _*) A←go-dn) <> {A: eat-below}
+            (() _ A←go-up) <> {A: go-dn}
+            (_ () A←go-dn) <> {A: go-up})
+          ;; "body"/"muscle"
+          (cell @action go-dn action: true))
+        .
+        .
+        .))
+    ;; "laws of physics in the objective reality"
+    (backsys (@world)
+      ((%split° behind_ ⟨(cell @_ (%optional () dst_) ⍊ behind)⟩ _)) <> {dst: ^behind}
+      ((%split° _ ⟨(cell @_ (%optional () dst_) ⍊ ahead)⟩ ahead_)) <> {dst: ^ahead}
+      (⟨U_ ⟪(cell @_ eat-above ⍊ action)⟫⟩°) <> {(U): ()}
+      (⟨⟪(cell @_ eat-below ⍊ action)⟫ D_⟩°) <> {(D): ()}
+      (⟨U←. D←⟪(cell @_ go-up ⍊ action)⟫⟩°) <> {U: ^D, D: ^U}
+      (⟨U←⟪(cell @_ go-dn ⍊ action)⟫ D←.⟩°) <> {U: ^D, D: ^U}))
+  (frame m1: true
+    ⟪(group food . . . M_dict . .)⟫
+    _*)
+  (frame m1: true
+    ⟪(group food . . . . M_dict .)⟫
+    _*)
+  (frame m1: true
+    ⟪(group food . . . . . M_dict)⟫
+    _*)
+  (frame m1: true
+    ⟪(group food . . . . . M_dict)⟫ ;; go-dn -> go-up
+    _*)
+  (frame m1: true
+    ⟪(group food . . . . M_dict .)⟫
+    _*)
+  (frame m1: true
+    ⟪(group food . . . M_dict . .)⟫
+    _*)
+  (frame m1: true
+    ⟪(group food . . M_dict . . .)⟫
+    _*)
+  (frame m1: true
+    ⟪(group food . M_dict . . . .)⟫
+    _*)
+  (frame m1: true
+    ⟪(group food M_dict . . . . .)⟫
+    _*)
+  (frame m1: true
+    ⟪(group food M_dict . . . . .)⟫ ;; go-up -> eat-above
+    _*)
+  (frame m1: true
+    ⟪(group M_dict . . . . .)⟫ ;; eat-above -> go-up
+    _*)
+  (frame m1: true
+    ⟪(group M_dict . . . . .)⟫ ;; go-up -> go-dn
+    _*)
+  (frame m1: true
+    ⟪(group . M_dict . . . .)⟫
+    _*)
+  (frame m1: true
+    ⟪(group . . M_dict . . .)⟫
+    _*))
+
+;; Multiple agents
+(d7
+  (frame
+    (circuit (@world (group world_*))
+      (group
+        food
+        .
+        .
+        (module {}
+          (cell @behind behind: true)
+          (cell @ahead ahead: true)
+          (backsys (@behind @ahead @action)
+            (_ _ A←eat-above) <> {A: go-up}
+            (_ _ A←eat-below) <> {A: go-dn}
+            ((_* food) _ A←go-up) <> {A: eat-above}
+            (_ ((agent go-up) _*) A←go-dn) <> {A: go-up}
+            (_ (food _*) A←go-dn) <> {A: eat-below}
+            (() _ A←go-up) <> {A: go-dn}
+            (_ () A←go-dn) <> {A: go-up})
+          (cell @action go-up action: true))
+        .
+        .
+        .
+        (module {}
+          (cell @behind behind: true)
+          (cell @ahead ahead: true)
+          (backsys (@behind @ahead @action)
+            (_ _ A←eat-above) <> {A: go-up}
+            (_ _ A←eat-below) <> {A: go-dn}
+            ((_* food) _ A←go-up) <> {A: eat-above}
+            (_ ((agent go-up) _*) A←go-dn) <> {A: go-up}
+            (_ (food _*) A←go-dn) <> {A: eat-below}
+            (() _ A←go-up) <> {A: go-dn}
+            (_ () A←go-dn) <> {A: go-up})
+          (cell @action go-dn action: true))
+        .
+        .
+        .
+        .
+        food
+        .))
+    ;; gosh this looks awful ... we should probably do something about it should we?
+    (backsys (@world)
+      (W←(%split° behind_ ⟨(cell @_ (%optional () dst_) ⍊ behind)⟩ _ wide: true))
+        <> {dst: ^(backmap behind '⟨agent←⟨(cell _ action_ ⍊ action)⟩⟩ '{agent: (agent ^action)})}
+      ((%split° _ ⟨(cell @_ (%optional () dst_) ⍊ ahead)⟩ ahead_ wide: true))
+        <> {dst: ^(backmap ahead '⟨agent←⟨(cell _ action_ ⍊ action)⟩⟩ '{agent: (agent ^action)})}
+      (⟨U_ ⟪(cell @_ eat-above ⍊ action)⟫⟩°)
+        <> {(U): ()}
+      (⟨⟪(cell @_ eat-below ⍊ action)⟫ D_⟩°)
+        <> {(D): ()}
+      (⟨U←. D←⟪(cell @_ go-up ⍊ action)⟫⟩°)
+        <> {(post U): ^(up D), (post D): ^(up U)}
+      (⟨U←⟪(cell @_ go-dn ⍊ action)⟫ D←.⟩°)
+        <> {(post U): ^(up D), (post D): ^(up U)}))
+  (frame m1: true
+    ⟪(group food . M0_dict . . . . . M1_dict . . . food .)⟫
+    _*)
+  (frame m1: true
+    ⟪(group food M0_dict . . . . . . . M1_dict . . food .)⟫
+    _*)
+  (frame m1: true
+    ⟪(group food M0_dict . . . . . . . . M1_dict . food .)⟫ ;; M0: go-up -> eat-above
+    _*)
+  (frame m1: true
+    ⟪(group M0_dict . . . . . . . . . M1_dict food .)⟫ ;; M0: eat-above -> go-up
+    _*)
+  (frame m1: true
+    ⟪(group M0_dict . . . . . . . . . M1_dict food .)⟫ ;; M0: go-up -> go-dn, M1: go-dn -> eat-below
+    _*)
+  (frame m1: true
+    ⟪(group . M0_dict . . . . . . . . M1_dict .)⟫ ;; M1: eat-below->go-dn
+    _*)
+  (frame m1: true
+    ⟪(group . . M0_dict . . . . . . . . M1_dict)⟫
+    _*)
+  (frame m1: true
+    ⟪(group . . . M0_dict . . . . . . . M1_dict)⟫ ;; M1: go-dn->go-up
+    _*)
+  (frame m1: true
+    ⟪(group . . . . M0_dict . . . . . . M1_dict)⟫
+    _*)
+  (frame m1: true
+    ⟪(group . . . . . M0_dict . . . . M1_dict .)⟫
+    _*)
+  (frame m1: true
+    ⟪(group . . . . . . M0_dict . . M1_dict . .)⟫
+    _*)
+  (frame m1: true
+    ⟪(group . . . . . . . M0_dict M1_dict . . .)⟫
+    _*)
+  (frame m1: true
+    ⟪(group . . . . . . . M0_dict M1_dict . . .)⟫ ;; M0: go-dn->go-up
+    _*)
+  (frame m1: true
+    ⟪(group . . . . . . M0_dict . M1_dict . . .)⟫
+    _*)
+  (frame m1: true
+    ⟪(group . . . . . M0_dict . M1_dict . . . .)⟫
+    _*)
+  (frame m1: true
+    ⟪(group . . . . M0_dict . M1_dict . . . . .)⟫
+    _*)
+  (frame m1: true
+    ⟪(group . . . M0_dict . M1_dict . . . . . .)⟫
+    _*)
+  (frame m1: true
+    ⟪(group . . M0_dict . M1_dict . . . . . . .)⟫
+    _*)
+  (frame m1: true
+    ⟪(group . M0_dict . M1_dict . . . . . . . .)⟫
+    _*)
+  (frame m1: true
+    ⟪(group M0_dict . M1_dict . . . . . . . . .)⟫
+    _*)
+  (frame m1: true
+    ⟪(group M0_dict M1_dict . . . . . . . . . .)⟫ ;; M0: go-up->go-dn
+    _*))
+  ;; They're stuck now: M0 is go-dn, M1 is go-up.
+  ;; This is the point where the ruleset breaks.

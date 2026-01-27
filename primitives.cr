@@ -409,6 +409,9 @@ PRIMITIVES = ProcRuleset.build do
   rulepi1 %[(sum ())] { 0 }
   rulepi1 %[(sum (args_number+))] { args.items.reduce { |a, b| a.unsafe_as_n + b.unsafe_as_n } }
 
+  rulepi1 %[(product ())] { 0 }
+  rulepi1 %[(product (args_number+))] { args.items.reduce { |a, b| a.unsafe_as_n * b.unsafe_as_n } }
+
   rulepi1 %[(min args_number+)] { args.items.min_by(&.unsafe_as_n) }
   rulepi1 %[(min (args_number+))] { args.items.min_by(&.unsafe_as_n) }
 
@@ -596,6 +599,10 @@ PRIMITIVES = ProcRuleset.build do
         commit.with(key, value)
       end
     end
+  end
+
+  rulepi1 %{(backmap d_dict pattern_ backspec_)} do
+    M1.backmap(pattern, backspec, d)
   end
 
   # Groups contiguous runs of masked values from left to right. Only item
