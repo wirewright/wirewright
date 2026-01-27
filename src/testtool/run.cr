@@ -29,7 +29,7 @@ module Testtool
       end
 
       matchpi %{(frame content_* ¦ () m1)} do
-        M1next.probe?(content, actual)
+        M1.probe?(content, actual)
       end
 
       matchpi %{end} do
@@ -162,10 +162,10 @@ module Testtool
   def match(pattern : Term, matchee : Term) : Slice(Term::Dict)
     matches = nil
 
-    levels = {M1next::O2, M1next::O1, M1next::O0}
+    levels = {M1::O2, M1::O1, M1::O0}
     levels.each_with_index do |level, index|
-      op = M1next.operator(pattern, opt: level)
-      envs = M1next.matches(Term[], op, matchee)
+      op = M1.operator(pattern, opt: level)
+      envs = M1.matches(Term[], op, matchee)
 
       if index.zero?
         matches = envs
@@ -230,7 +230,7 @@ module Testtool
   defrecord BacksysTest, backsys : Array({Term, Term}), seq : Array(Term)
 
   def run(test : BackmapEq, assets, stat, complaints) : Nil
-    result = measure(stat) { M1next.backmap?(test.pattern, test.backspec, test.matchee) }
+    result = measure(stat) { M1.backmap?(test.pattern, test.backspec, test.matchee) }
 
     if test.whitelist.empty?
       # Reuse empty whitelist for conflict-checking, which manifests as
@@ -245,7 +245,7 @@ module Testtool
 
   def run(test : BackmapNeg, assets, stat, complaints) : Nil
     test.blacklist.each do |matchee|
-      next unless result = measure(stat) { M1next.backmap?(test.pattern, test.backspec, matchee) } # ok
+      next unless result = measure(stat) { M1.backmap?(test.pattern, test.backspec, matchee) } # ok
 
       complaints << complaint("Backmapped term found in blacklist", result: result)
     end
@@ -255,7 +255,7 @@ module Testtool
     return unless state = test.seq.first? # ok, empty seq
 
     test.seq.each(within: 1..) do |expected|
-      result = measure(stat) { M1next.backmap(test.backsys, state) }
+      result = measure(stat) { M1.backmap(test.backsys, state) }
       unless result == expected
         complaints << complaint("backsystem frame mismatch",
           state: state,
@@ -312,7 +312,7 @@ module Testtool
     end
 
     subjects.each do |subject|
-      next if M1next.probe?(test.pattern, subject) # ok
+      next if M1.probe?(test.pattern, subject) # ok
 
       complaints << complaint("Term does not match pattern", term: subject)
     end
@@ -357,8 +357,8 @@ module Testtool
   defrecord HeadEq, pattern : Term, head : Term
 
   def run(test : HeadEq, assets, stat, complaints) : Nil
-    normp = M1next.normal(test.pattern)
-    head = measure(stat) { M1next.head?(normp) }
+    normp = M1.normal(test.pattern)
+    head = measure(stat) { M1.head?(normp) }
     return if head == test.head # ok
 
     complaints << complaint("Pattern head mismatch",
@@ -371,8 +371,8 @@ module Testtool
 
   def run(test : HeadAbsent, assets, stat, complaints) : Nil
     test.patterns.each do |pattern|
-      normp = M1next.normal(pattern)
-      head = measure(stat) { M1next.head?(normp) }
+      normp = M1.normal(pattern)
+      head = measure(stat) { M1.head?(normp) }
       next if head.nil? # ok
 
       complaints << complaint("Pattern has head but it was not expected to",
@@ -390,8 +390,8 @@ module Testtool
 
     def run(test : {{testcls}}, assets, stat, complaints) : Nil
       test.patterns.each do |pattern|
-        normp = M1next.normal(pattern)
-        range = measure(stat) { M1next.{{kind.id}}(normp) }
+        normp = M1.normal(pattern)
+        range = measure(stat) { M1.{{kind.id}}(normp) }
         actual = Term.of(
           min: range[0] == Magnitude::INFINITY ? nil : range[0],
           max: range[1] == Magnitude::INFINITY ? nil : range[1],
@@ -418,8 +418,8 @@ module Testtool
       spec_level = nil
 
       level.each do |pattern|
-        normp = M1next.normal(pattern)
-        spec_pattern = measure(stat) { M1next.specificity(normp) }
+        normp = M1.normal(pattern)
+        spec_pattern = measure(stat) { M1.specificity(normp) }
         spec_level ||= spec_pattern
         next if spec_level == spec_pattern # ok
 

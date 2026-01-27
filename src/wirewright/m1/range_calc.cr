@@ -1,4 +1,4 @@
-module Ww::M1next
+module Ww::M1
   # :nodoc:
   #
   # A tiny language for doing arithmetic on ranges whose sides can be unknown.

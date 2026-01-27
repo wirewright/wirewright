@@ -161,8 +161,8 @@ module ::Ww::Rack
         D7.circuit(node.as_d, 2...3) do |node|
           _, _, value0 = node
           _, capture = edge
-          next D7.inert(node) unless M1next.probably_matches?(pattern, value0)
-          next D7.inert(node) unless env = M1next.match?(pattern, value0)
+          next D7.inert(node) unless M1.probably_matches?(pattern, value0)
+          next D7.inert(node) unless env = M1.match?(pattern, value0)
 
           unless view0 = env[capture]?
             next D7.inert(node)
@@ -178,7 +178,7 @@ module ::Ww::Rack
               matchpi %{(cell @_ view1_)} { backspec = Term.entries({capture, view1}) }
             end
 
-            value1 = M1next.backmap(pattern, Term.of(backspec), value0)
+            value1 = M1.backmap(pattern, Term.of(backspec), value0)
 
             Term.of(node0.morph({2, value1}))
           end
@@ -514,7 +514,7 @@ module ::Ww::Rack
     D7.case(clf, circuit) do
       rule %{(one dev [log (@src_ pattern_ @log_) template_]) (one src [cell @src_ input_]) (one log [cell @log_ entries_dict])} do
         pattern, template, input, entries = first(dev, :pattern), first(dev, :template), first(src, :input), first(log, :entries)
-        next unless vars = M1next.match?(pattern, input)
+        next unless vars = M1.match?(pattern, input)
 
         entry = Alloy.render(vars, template)
         next if entry == entries.items.last?
@@ -678,7 +678,7 @@ module ::Ww::Rack
         case {src.size, dst.size}
         when {1, _} # distribute
           x = first(src, :x)
-          next unless vars = M1next.match?(pattern, x)
+          next unless vars = M1.match?(pattern, x)
 
           instance = Alloy.render(vars, template)
 
@@ -688,7 +688,7 @@ module ::Ww::Rack
           )
         when {_, 1} # aggregate
           instances = collect(src, :x, Sink::Bag) do |x|
-            next unless vars = M1next.match?(pattern, x)
+            next unless vars = M1.match?(pattern, x)
 
             Alloy.render(vars, template)
           end
@@ -704,7 +704,7 @@ module ::Ww::Rack
         pattern, template, dst_edge, x = {*first(dev, :pattern, :template, :dst), first(src, :x)}
 
         # Dst disappears on pattern mismatch.
-        unless vars = M1next.match?(pattern, x)
+        unless vars = M1.match?(pattern, x)
           next patch(dst, &.morph({2, nil}))
         end
 
@@ -723,7 +723,7 @@ module ::Ww::Rack
         next if state == hashcode
 
         # Dst disappears on pattern mismatch.
-        unless vars = M1next.match?(pattern, x)
+        unless vars = M1.match?(pattern, x)
           next patches(
             patch(dev, &.morph({1, 2, dst_edge})),
             patch(dst, &.morph({2, nil})),
@@ -762,7 +762,7 @@ module ::Ww::Rack
         hashcode = Term.hashcode256(matchee)
 
         cont = -> do
-          unless vars = M1next.match?(pattern, matchee)
+          unless vars = M1.match?(pattern, matchee)
             return patches(
               patch(dev, &.morph({1, 2, dst_edge})),
               patch(dst, &.morph({2, nil})),
@@ -801,7 +801,7 @@ module ::Ww::Rack
       rule %{(one dev [fb (@edge_ pattern_) backspec_]) (one tgt [cell @edge_ value0_])} do
         pattern, backspec = first(dev, :pattern, :backspec)
         value0 = first(tgt, :value0)
-        next unless value1 = M1next.backmap?(pattern, backspec, value0)
+        next unless value1 = M1.backmap?(pattern, backspec, value0)
 
         patch(tgt, &.morph({2, value1}))
       end
@@ -814,7 +814,7 @@ module ::Ww::Rack
 
         matchee = collate(tgt, tgt_edges.items, Term.of(:tgt), Term.of(:term))
 
-        next unless results = M1next.backmap?(pattern, backspec, Term.of(matchee))
+        next unless results = M1.backmap?(pattern, backspec, Term.of(matchee))
 
         unless results.size == tgt_edges.size
           next # The backmap mutilated our original matchee.
@@ -883,7 +883,7 @@ module ::Ww::Rack
 
         rules.items.each do |rule|
           Term.matchpi?(rule, %{[backmap pattern_ backspec_]}) do
-            next unless result = M1next.backmap?(pattern, backspec, matchee)
+            next unless result = M1.backmap?(pattern, backspec, matchee)
             next unless result.type.dict?
             next unless result.itemsize == matchee.itemsize
 
@@ -1048,8 +1048,8 @@ module ::Ww::Rack
 
         appearances.each_with_index do |appearance|
           next unless sensor.tspace == appearance.tspace
-          next unless M1next.probably_matches?(sensor.pattern, appearance.matchee)
-          next unless env = M1next.match?(sensor.pattern, appearance.matchee)
+          next unless M1.probably_matches?(sensor.pattern, appearance.matchee)
+          next unless env = M1.match?(sensor.pattern, appearance.matchee)
 
           unless counterparts.empty? || counterparts.last[0] == env
             # Multiple different values competing. Sensor chan is confused about
@@ -1072,8 +1072,8 @@ module ::Ww::Rack
       in ViewSensor
         appearances.each do |appearance|
           next unless sensor.tspace == appearance.tspace
-          next unless M1next.probably_matches?(sensor.pattern, appearance.matchee)
-          next unless env = M1next.match?(sensor.pattern, appearance.matchee)
+          next unless M1.probably_matches?(sensor.pattern, appearance.matchee)
+          next unless env = M1.match?(sensor.pattern, appearance.matchee)
 
           envs ||= [] of Term::Dict
           envs << env

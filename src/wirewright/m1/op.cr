@@ -1,4 +1,4 @@
-module Ww::M1next
+module Ww::M1
   # Short for *operator*, this module holds data structures used to represent
   # compiled operators and associated groups/categories of operators (represented
   # using aliases).
@@ -202,8 +202,8 @@ module Ww::M1next
     defcase KeypathCapture, capture : Term
 
     defcase Filter, successor : Any, deps : Pf::Set(Term), selector : Any, min : Magnitude, max : Magnitude
-    defcase Pluck, spec : M1next::Tzip::PluckSpec, successor : Any
-    defcase Flat, spec : M1next::Tzip::FlatSpec, successor : Any
+    defcase Pluck, spec : Tzip::PluckSpec, successor : Any
+    defcase Flat, spec : Tzip::FlatSpec, successor : Any
   end
 
   # Compiled sequence operators such as `(⏏_⏏ ⏏(%optional 0 x_)⏏ ⏏y_⏏)`.

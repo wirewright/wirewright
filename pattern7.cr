@@ -130,15 +130,15 @@ struct Pattern
   getter index : UInt32
 
   # Returns the underlying M1 operator.
-  getter operator : M1next::Op::Any
+  getter operator : M1::Op::Any
 
   # :nodoc:
-  def initialize(@index : UInt32, @operator : M1next::Op::Any)
+  def initialize(@index : UInt32, @operator : M1::Op::Any)
   end
 
   # Returns the response of this pattern to *matchee* (may be positive or negative).
   def response(matchee : Term, *, env = Term[]) : Pr::Any
-    fb = M1next.matches(env, @operator, matchee)
+    fb = M1.matches(env, @operator, matchee)
 
     case fb.size
     when 0 then Pr::Neg.new
@@ -149,7 +149,7 @@ struct Pattern
   end
 
   def probe?(matchee : Term, *, env = Term[]) : Bool
-    M1next.probe?(env, @operator, matchee)
+    M1.probe?(env, @operator, matchee)
   end
 
   def_equals_and_hash @index
@@ -215,7 +215,7 @@ module ICursor
 end
 
 # An object capable of parsing pattern terms into `Pattern`s (a thin wrapper
-# around `M1next::Op`) and organizing them for efficient response
+# around `M1::Op`) and organizing them for efficient response
 # to matchees.
 class PatternSet(T)
   alias Bucket = Slice(Pattern)
@@ -228,19 +228,19 @@ class PatternSet(T)
     # Extracts a key term from a pattern. Both its original (*pattern*) and
     # normal-form (*normp*) version are given. Returns `nil` if indeterminate;
     # in such case the pattern will be tested on all matchees.
-    abstract def of_pattern?(pattern : Term, normp : M1next::Normp) : T?
+    abstract def of_pattern?(pattern : Term, normp : M1::Normp) : T?
 
     # Extracts a key term from a matchee. If indeterminate, patterns with
     # a determinate key are all going to be skipped.
     abstract def of_matchee?(matchee : Term) : T?
   end
 
-  # The default key implementation, uses `M1next.head?`.
+  # The default key implementation, uses `M1.head?`.
   module Key::Head
     extend Key(Term)
 
-    def self.of_pattern?(pattern : Term, normp : M1next::Normp) : Term?
-      M1next.head?(normp)
+    def self.of_pattern?(pattern : Term, normp : M1::Normp) : Term?
+      M1.head?(normp)
     end
 
     def self.of_matchee?(matchee : Term) : Term?
@@ -287,30 +287,30 @@ class PatternSet(T)
   #   true # E.g. body is valid
   # end
   # ```
-  def self.select(selector : Term, bases : Enumerable(Term), key keymod : Key(T) = Key::Head, & : M1next::Normp, Term::Dict -> Bool?) : PatternSet(T) forall T
+  def self.select(selector : Term, bases : Enumerable(Term), key keymod : Key(T) = Key::Head, & : M1::Normp, Term::Dict -> Bool?) : PatternSet(T) forall T
     seen = Set(Term).new
 
     keyed = {} of T => Array(Int32)
     headless = [] of Int32
 
     patterns = [] of Pattern
-    specificities = [] of M1next::Specificity
+    specificities = [] of M1::Specificity
 
     bases.each do |base|
       base.each_item_unordered do |item|
-        envs = M1next.matches(selector, item)
+        envs = M1.matches(selector, item)
         envs.each do |env|
           next unless pattern = env[:pattern]?
           next unless seen.add?(pattern)
 
           index = seen.size - 1
 
-          normp = M1next.normal(pattern)
+          normp = M1.normal(pattern)
 
-          specificity = M1next.specificity(normp)
+          specificity = M1.specificity(normp)
           specificities << specificity
 
-          operator = M1next.operator(normp)
+          operator = M1.operator(normp)
 
           pattern_object = Pattern.new(index.to_u32, operator)
           next unless yield normp, env
@@ -389,7 +389,7 @@ class PatternSet(T)
     ::Ww::Term.case({{matchee}}, matcher: ::PatternSet::Matcher, {{kwargs.double_splat}}) {{block}}
   end
 
-  def each_candidate(matchee : Term, & : M1next::Op::Any, UInt32 ->)
+  def each_candidate(matchee : Term, & : M1::Op::Any, UInt32 ->)
     if bucket = @keyed.bucket?(matchee)
       bucket.each { |pattern| yield pattern.operator, pattern.index }
     end
@@ -469,17 +469,17 @@ end
 
 module Ww::M1
   struct ShapeIndex
-    def initialize(@patterns : Slice(M1next::Op::Any))
+    def initialize(@patterns : Slice(M1::Op::Any))
     end
 
     def self.build(patterns : Enumerable(Term))
-      {new(patterns.to_readonly_slice { |pattern| M1next.operator(pattern) }), (0u32...patterns.size).to_a}
+      {new(patterns.to_readonly_slice { |pattern| M1.operator(pattern) }), (0u32...patterns.size).to_a}
     end
 
     def decompose(matchee : Term) : Pf::USet32
       Pf::USet32.transaction do |commit|
         @patterns.each_with_index do |pattern, index|
-          next unless M1next.probably_matches?(pattern, matchee)
+          next unless M1.probably_matches?(pattern, matchee)
 
           commit << index.to_u32
         end

@@ -1,4 +1,4 @@
-module Ww::M1next
+module Ww::M1
   # Backmap engine's representation of a *rep*lacement.
   module Rep
     extend self
@@ -774,7 +774,7 @@ module Ww::M1next
                 proposals << node.proposal
               end
 
-              M1next::Backmap.propose(µ: nil, node: node)
+              Backmap.propose(µ: nil, node: node)
 
               next unless node.is_a?(Node)
               next unless proposal = node.proposal

@@ -1,4 +1,4 @@
-module Ww::M1next
+module Ww::M1
   # :nodoc:
   #
   # *Π* is short for *production*, as in grammars. Due to its frequency I'm using

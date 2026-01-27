@@ -1,4 +1,4 @@
-module Ww::M1next
+module Ww::M1
   # :nodoc:
   def head?(prod : Π::Pattern(Term::Dict)) : Term?
     op = prod.pattern

@@ -59,7 +59,7 @@
 # almost trivial -- that's kind of the point with this design). I try to leave
 # comments where appropriate -- meaning almost everywhere! -- so expect lots
 # of them in the code.
-module Ww::M1next
+module Ww::M1
   extend self
 
   # :nodoc:

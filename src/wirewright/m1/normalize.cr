@@ -1,4 +1,4 @@
-module Ww::M1next
+module Ww::M1
   # :nodoc:
   NORMAL_PASS = Term.of_dict(:"%pass")
 
@@ -88,7 +88,7 @@ module Ww::M1next
 
     # Normalizes *prod* and marks it as sealed.
     def sealed(prod) : Term
-      sealed(M1next.normalize(prod))
+      sealed(M1.normalize(prod))
     end
 
     # Constructs a literal operator for *term*.

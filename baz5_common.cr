@@ -376,7 +376,7 @@ class Ruleset
     end
 
     rest = base.pairspart.transaction do |commit|
-      commit.rejected(base.items) { |item| M1next.probe?(selector, item) }
+      commit.rejected(base.items) { |item| M1.probe?(selector, item) }
     end
 
     {ruleset, rest}
@@ -413,7 +413,7 @@ class Ruleset
     end
   end
 
-  def each_candidate(matchee : Term, & : M1next::Op::Any, Rule::Any ->)
+  def each_candidate(matchee : Term, & : M1::Op::Any, Rule::Any ->)
     @pset.each_candidate(matchee) do |candidate, index|
       yield candidate, @rules[index]
     end

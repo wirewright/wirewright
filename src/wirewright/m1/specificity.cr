@@ -1,4 +1,4 @@
-module Ww::M1next
+module Ww::M1
   # At the most basic level, *specificity* tells one how *detailed* a pattern is --
   # how much the pattern knows about the matchee. This is particularly useful when
   # comparing two patterns to decide which one to try first. One expects the most

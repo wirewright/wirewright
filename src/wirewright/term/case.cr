@@ -309,23 +309,23 @@ module Ww::Term::Case
     include Matcher
 
     # :nodoc:
-    def initialize(@arms : Slice({M1next::Op::Any, MatchSpec}))
+    def initialize(@arms : Slice({M1::Op::Any, MatchSpec}))
     end
 
     # Compiles *specs* in single-threaded mode.
     def self.compile(specs : Slice(MatchSpec)) : MM1
-      new(arms: specs.to_readonly_slice { |spec| {M1next.operator(spec.pattern), spec} })
+      new(arms: specs.to_readonly_slice { |spec| {M1.operator(spec.pattern), spec} })
     end
 
     private def sink
-      ->(arm : {M1next::Op::Any, MatchSpec}, index : Int32, matchee : Term, env : Term::Dict) do
+      ->(arm : {M1::Op::Any, MatchSpec}, index : Int32, matchee : Term, env : Term::Dict) do
         op, spec = arm
         if dict = matchee.as_d?
           return unless MatchSpec.match_possible?(spec, dict)
         end
 
-        return unless M1next.probably_matches?(op, matchee)
-        return unless env1 = M1next.match?(env, op, matchee)
+        return unless M1.probably_matches?(op, matchee)
+        return unless env1 = M1.match?(env, op, matchee)
 
         {env1, index}
       end

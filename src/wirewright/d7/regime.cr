@@ -102,11 +102,11 @@ module Ww::D7
     end
 
     private def self.edges(pattern : Term, &sink : EdgeCapture ->) : Nil
-      edges(M1next.normal(pattern), sink)
+      edges(M1.normal(pattern), sink)
     end
 
-    private def self.edges(pattern : M1next::Normp, sink : EdgeCapture ->) : Nil
-      M1next.walk(pattern) do |normp|
+    private def self.edges(pattern : M1::Normp, sink : EdgeCapture ->) : Nil
+      M1.walk(pattern) do |normp|
         normp.unwrap do |op|
           Term.case(op) do
             matchpi %{[%'%let [%'%capture id_] [%'%edge _]]} do
@@ -118,7 +118,7 @@ module Ww::D7
             end
 
             matchpi %{{¦ disjunction}} do
-              M1next.each_member(normp) do |memberp|
+              M1.each_member(normp) do |memberp|
                 edges(memberp, sink)
               end
             end
@@ -422,8 +422,8 @@ module Ww::D7
       return if locus.node.in?(soln)
 
       term = ctx.hg[locus.node]
-      return unless M1next.probably_matches?(step.pattern, term)
-      return unless env = M1next.match?(step.pattern, term)
+      return unless M1.probably_matches?(step.pattern, term)
+      return unless env = M1.match?(step.pattern, term)
 
       # NOTE: In patterns such as:
       #

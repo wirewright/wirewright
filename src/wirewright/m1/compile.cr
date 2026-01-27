@@ -1,4 +1,4 @@
-module Ww::M1next
+module Ww::M1
   # :nodoc:
   def compile(prod : Π::ItemOrd(Term)) : Op::Item::Any
     ordsrc, item = prod.ordsrc, prod.item

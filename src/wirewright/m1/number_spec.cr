@@ -1,4 +1,4 @@
-module Ww::M1next
+module Ww::M1
   # :nodoc:
   #
   # Functions for parsing and working with the `(%number ...)` operator.

@@ -1,4 +1,4 @@
-module Ww::M1next
+module Ww::M1
   # A term plus a composable explanation of how that term was selected,
   # inspected, or synthesized (see `Log`).
   struct Tzip

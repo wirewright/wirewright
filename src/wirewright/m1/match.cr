@@ -1,4 +1,4 @@
-module Ww::M1next
+module Ww::M1
   # Short for *FeedBack*: represents match feedback.
   #
   # This object is meant to be viewed by clients simply as `Slice(Context)`,
@@ -119,11 +119,11 @@ module Ww::M1next
       def call(ctx : Context, plan : Plan)
         unless op = @ops.first?
           # => @matchees.empty?
-          return M1next.fb(ctx, plan)
+          return M1.fb(ctx, plan)
         end
 
         ahead = ctx.interject(plan, Action.lzip(@ops + 1, @matchees + 1))
-        M1next.match(ctx, op, @matchees.first, ahead)
+        M1.match(ctx, op, @matchees.first, ahead)
       end
     end
 
@@ -143,11 +143,11 @@ module Ww::M1next
       def call(ctx : Context, plan : Plan)
         unless op = @ops.last?
           # => @matchees.empty?
-          return M1next.fb(ctx, plan)
+          return M1.fb(ctx, plan)
         end
 
         ahead = ctx.interject(plan, Action.rzip(@ops - 1, @matchees - 1))
-        M1next.match(ctx, op, @matchees.last, ahead)
+        M1.match(ctx, op, @matchees.last, ahead)
       end
     end
 
@@ -166,7 +166,7 @@ module Ww::M1next
       def call(ctx : Context, plan : Plan)
         unless op = @ops.first?
           # Fzip allows any number of items ahead. Proceed with a match.
-          return M1next.fb(ctx, plan)
+          return M1.fb(ctx, plan)
         end
 
         remaining = @matchees
@@ -179,7 +179,7 @@ module Ww::M1next
 
           # On success, skip the current op and matchee and proceed further.
           ahead = ctx.interject(plan, Action.fzip(@ops + 1, remaining + 1))
-          fb = M1next.eval(M1next.match(ctx, op, matchee, ahead))
+          fb = M1.eval(M1.match(ctx, op, matchee, ahead))
           return fb if fb.present?
 
           # On failure, skip to the next matchee but keep the operator.
@@ -201,7 +201,7 @@ module Ww::M1next
       end
 
       def call(ctx : Context, plan : Plan)
-        M1next.match(ctx, @op, @matchee, plan)
+        M1.match(ctx, @op, @matchee, plan)
       end
     end
 
@@ -216,7 +216,7 @@ module Ww::M1next
       end
 
       def call(ctx : Context, plan : Plan)
-        M1next.match(ctx, @spine, plan)
+        M1.match(ctx, @spine, plan)
       end
     end
 
@@ -231,7 +231,7 @@ module Ww::M1next
       end
 
       def call(ctx : Context, plan : Plan)
-        M1next.match(ctx, @ops, @items, plan)
+        M1.match(ctx, @ops, @items, plan)
       end
     end
 
@@ -246,7 +246,7 @@ module Ww::M1next
       end
 
       def call(ctx : Context, plan : Plan)
-        M1next.match(ctx, @unit, @items, plan)
+        M1.match(ctx, @unit, @items, plan)
       end
     end
 
@@ -261,7 +261,7 @@ module Ww::M1next
       end
 
       def call(ctx : Context, plan : Plan)
-        M1next.match(ctx, @capture, @cst, @matchee, plan)
+        M1.match(ctx, @capture, @cst, @matchee, plan)
       end
     end
 
@@ -277,12 +277,12 @@ module Ww::M1next
 
       def call(ctx : Context, plan : Plan)
         unless entry = @entries.first?
-          return M1next.fb(ctx, plan)
+          return M1.fb(ctx, plan)
         end
 
         ahead = ctx.interject(plan, Action.entrybcast(@entries + 1, @matchee))
 
-        M1next.match(ctx, entry, @matchee, ahead)
+        M1.match(ctx, entry, @matchee, ahead)
       end
     end
 
@@ -297,11 +297,11 @@ module Ww::M1next
       end
 
       def call(ctx : Context, plan : Plan)
-        M1next.capture(ctx, @capture, @proposal, plan)
+        M1.capture(ctx, @capture, @proposal, plan)
       end
     end
 
-    # Direct call to `M1next.capture` for *capture* and *proposal*.
+    # Direct call to `M1.capture` for *capture* and *proposal*.
     def capture(capture : Term, proposal : Tzip)
       MakeCapture.new(capture, proposal)
     end

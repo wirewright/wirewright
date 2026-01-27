@@ -1,4 +1,4 @@
-module Ww::M1next
+module Ww::M1
   # Logging subsystem of M1.
   #
   # M1's logging isn't related in any way to logging as in printing to STDERR.

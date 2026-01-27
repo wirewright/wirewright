@@ -1,4 +1,4 @@
-module Ww::M1next
+module Ww::M1
   # The depth propagation algorithm, executed by every operator in the normal
   # pattern tree during the depth propagation pass.
   private def depthp1(op : Term::Dict) : Term::Dict

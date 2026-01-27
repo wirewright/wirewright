@@ -1,4 +1,4 @@
-module Ww::M1next
+module Ww::M1
   # Auxiliary functions for M1 (especially the M1 pattern compiler).
   module Kit
     extend self

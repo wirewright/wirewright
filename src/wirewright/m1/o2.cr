@@ -1,4 +1,4 @@
-module Ww::M1next
+module Ww::M1
   # :nodoc:
   def simplify(prod : Π::Normal(Term::Dict)) : Term::Dict
     op = prod.op

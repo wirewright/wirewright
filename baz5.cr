@@ -739,7 +739,7 @@ def selR(selector, successor)
 end
 
 def rejR(ctx, term, selector, successor)
-  if M1next.probe?(Term[], selector, term)
+  if M1.probe?(Term[], selector, term)
     return Rewrite.none
   end
 
@@ -758,11 +758,11 @@ end
 # *selector* pattern is used to match a term, and if a match is found, the capture
 # `rewritee` is passed to the *successor* rewriter.
 def selR(selector : Term, successor : Rewriter) : Rewriter
-  selR(M1next.operator(selector), successor)
+  selR(M1.operator(selector), successor)
 end
 
 def rejR(selector : Term, successor : Rewriter) : Rewriter
-  rejR(M1next.operator(selector), successor)
+  rejR(M1.operator(selector), successor)
 end
 
 SELR_SELECTOR_CACHE = SyncCache(String, Term).new(1024, preallocate: true, byref: true)
@@ -1008,7 +1008,7 @@ end
 
 # Check out the main `relR` overload (one for `M1::Operator::Any`) to learn more.
 def relR(bottom : Term, successor : Rewriter, **kwargs) : Rewriter
-  relR(M1next.operator(bottom), successor, **kwargs)
+  relR(M1.operator(bottom), successor, **kwargs)
 end
 
 # Check out the main `relR` overload (one for `M1::Operator::Any`) to learn more.
@@ -1290,12 +1290,12 @@ def alloy_rulesetR(ctx, term, ruleset)
     in Rule::Template
       raise "not implemented"
     in Rule::BackmapOne, Rule::BackmapMany
-      next unless M1next.probably_matches?(op, term)
-      next unless rep = M1next.backmapR?(op, rule.backspec, term)
+      next unless M1.probably_matches?(op, term)
+      next unless rep = M1.backmapR?(op, rule.backspec, term)
 
       case rep
-      in M1next::Rep::One  then rewrite = Rewrite.one(rep.term).diff(term)
-      in M1next::Rep::Many then rewrite = Rewrite.many(rep.terms).diff(term)
+      in M1::Rep::One  then rewrite = Rewrite.one(rep.term).diff(term)
+      in M1::Rep::Many then rewrite = Rewrite.many(rep.terms).diff(term)
       end
 
       next if rewrite.is_a?(Rewrite::None) # Interpret "no change" as "keep searching"
@@ -1404,7 +1404,7 @@ end
 
 # See the main overload.
 def wrapR(pdisasm : Term, reshape : Term, successor : Rewriter, punwrap : Term, assemble : Term) : Rewriter
-  wrapR(M1next.operator(pdisasm), reshape, successor, M1next.operator(punwrap), assemble)
+  wrapR(M1.operator(pdisasm), reshape, successor, M1.operator(punwrap), assemble)
 end
 
 # See the main overload.
@@ -1459,7 +1459,7 @@ end
 
 # See the main overload.
 def multipartR(pdisasm : Term, successors : Enumerable({Term, Rewriter}), assemble : Term) : Rewriter
-  multipartR(M1next.operator(pdisasm), successors, assemble)
+  multipartR(M1.operator(pdisasm), successors, assemble)
 end
 
 # See the main overload.

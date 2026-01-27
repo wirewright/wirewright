@@ -1,4 +1,4 @@
-module Ww::M1next
+module Ww::M1
   # :nodoc:
   #
   # We use *cst* as an abbreviation for *ConStrainT*. These objects are constraints
