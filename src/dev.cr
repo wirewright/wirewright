@@ -418,9 +418,9 @@ module DevTool
       matchpi(<<-WWML
       ((%any "r" "run")
        (%optional unset mode←(%any unset "--release"))
-       rest_string*)
+       (%plural/max rest type: _string))
       WWML
-      ) do
+      ) do |rest|
         with_active_preset_and_conf(state) do |preset, conf|
           unless source = conf[:source]?
             fatal "preset is missing a source file, use `dev src` to add a source file"
