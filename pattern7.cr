@@ -103,15 +103,6 @@ require "./src/wirewright"
 # TODO: REMOVE (this particular include is a big wart on the face of the project!)
 include Ww
 
-# TODO: REMOVE
-module ::Ww::M1::Search
-  enum Part : UInt8
-    Items
-    Pairs
-    Entries
-  end
-end
-
 # If a person has trouble understanding a metaphor and grasping its intended meaning,
 # they do not "crash"; they change their perspective and interpret it more literally.
 # This is a spectrum: from close-to-the-intended meaning to letter-by-letter or sound-

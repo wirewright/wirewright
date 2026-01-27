@@ -614,64 +614,76 @@ module Ww::M1next
       matchpi %{(%'%leaf _* ⍊ order: dfs in: part_ self: depth0_)}, cue: {:"%leaf", :dfs} do
         members = pattern.items.move(1)
 
-        Op::DfsFirst.new(
-          seq: compile(Π.patterns(members)),
-          part: search_part(part),
-          depth0: depth0.true?,
+        alg = Tzip::DfsPreorder.new(*Tzip::Order.parse(part),
+          mindepth: depth0.true? ? 0u32 : 1u32,
+          maxdepth: UInt32::MAX,
         )
+
+        Op::DfsFirst.new(alg, seq: compile(Π.patterns(members)))
       end
 
       matchpi %{(%'%leaf° _* ⍊ order: dfs in: part_ self: depth0_)}, cue: {:"%leaf°", :dfs} do
         members = pattern.items.move(1)
 
-        Op::DfsSource.new(
-          seq: compile(Π.patterns(members)),
-          part: search_part(part),
-          depth0: depth0.true?,
+        alg = Tzip::DfsPreorder.new(*Tzip::Order.parse(part),
+          mindepth: depth0.true? ? 0u32 : 1u32,
+          maxdepth: UInt32::MAX,
         )
+
+        Op::DfsSource.new(alg, seq: compile(Π.patterns(members)))
       end
 
       matchpi %{(%'%leaves successor_ _* ⍊ order: dfs in: part_ self: depth0_ min_ max_)}, cue: {:"%leaves", :dfs} do
         members = pattern.items.move(2)
 
-        Op::DfsAll.new(compile(Π.pattern(successor)),
+        alg = Tzip::DfsPreorder.new(*Tzip::Order.parse(part),
+          mindepth: depth0.true? ? 0u32 : 1u32,
+          maxdepth: UInt32::MAX,
+        )
+
+        Op::DfsAll.new(alg,
+          successor: compile(Π.pattern(successor)),
           seq: compile(Π.patterns(members)),
-          part: search_part(part),
           min: Kit.magn(min),
           max: Kit.magn(max),
-          depth0: depth0.true?,
         )
       end
 
       matchpi %{(%'%leaf _* ⍊ order: bfs in: part_ self: depth0_)}, cue: {:"%leaf", :bfs} do
         members = pattern.items.move(1)
 
-        Op::BfsFirst.new(
-          seq: compile(Π.patterns(members)),
-          part: search_part(part),
-          depth0: depth0.true?,
+        alg = Tzip::Bfs.new(*Tzip::Order.parse(part),
+          mindepth: depth0.true? ? 0u32 : 1u32,
+          maxdepth: UInt32::MAX,
         )
+
+        Op::BfsFirst.new(alg, seq: compile(Π.patterns(members)))
       end
 
       matchpi %{(%'%leaf° _* ⍊ order: bfs in: part_ self: depth0_)}, cue: {:"%leaf°", :bfs} do
         members = pattern.items.move(1)
 
-        Op::BfsSource.new(
-          seq: compile(Π.patterns(members)),
-          part: search_part(part),
-          depth0: depth0.true?,
+        alg = Tzip::Bfs.new(*Tzip::Order.parse(part),
+          mindepth: depth0.true? ? 0u32 : 1u32,
+          maxdepth: UInt32::MAX,
         )
+
+        Op::BfsSource.new(alg, seq: compile(Π.patterns(members)))
       end
 
       matchpi %{(%'%leaves successor_ _* ⍊ order: bfs in: part_ self: depth0_ min_ max_)}, cue: {:"%leaves", :bfs} do
         members = pattern.items.move(2)
 
-        Op::BfsAll.new(compile(Π.pattern(successor)),
+        alg = Tzip::Bfs.new(*Tzip::Order.parse(part),
+          mindepth: depth0.true? ? 0u32 : 1u32,
+          maxdepth: UInt32::MAX,
+        )
+
+        Op::BfsAll.new(alg,
+          successor: compile(Π.pattern(successor)),
           seq: compile(Π.patterns(members)),
-          part: search_part(part),
           min: Kit.magn(min),
           max: Kit.magn(max),
-          depth0: depth0.true?,
         )
       end
 
@@ -757,16 +769,6 @@ module Ww::M1next
   def compile(prod : Π::ItemOrdList) : Slice(Op::Item::Any)
     prod.items.to_readonly_slice do |item|
       compile(Π.item(prod.ordsrc, item))
-    end
-  end
-
-  private def search_part(part : Term)
-    case part
-    when Term.of(:items)   then M1::Search::Part::Items
-    when Term.of(:pairs)   then M1::Search::Part::Pairs
-    when Term.of(:entries) then M1::Search::Part::Entries
-    else
-      raise ArgumentError.new
     end
   end
 

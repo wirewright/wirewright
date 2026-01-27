@@ -173,19 +173,15 @@ module Ww::M1next
 
     alias Dfs = DfsFirst | DfsSource | DfsAll
 
-    # TODO: It would be nice to unify Dfs and Bfs search under a single SearchFirst, SearchSource,
-    # SearchAll. The compiler (M1.operator) must then equip them with Tzip::Algorithm's instead of
-    # Tzip itself doing that at match-time.
-
-    defcase DfsFirst, seq : Slice(Any), part : M1::Search::Part, depth0 : Bool
-    defcase DfsSource, seq : Slice(Any), part : M1::Search::Part, depth0 : Bool
-    defcase DfsAll, successor : Any, seq : Slice(Any), part : M1::Search::Part, min : Magnitude, max : Magnitude, depth0 : Bool
+    defcase DfsFirst, alg : Tzip::Dfs, seq : Slice(Any)
+    defcase DfsSource, alg : Tzip::Dfs, seq : Slice(Any)
+    defcase DfsAll, alg : Tzip::Dfs, successor : Any, seq : Slice(Any), min : Magnitude, max : Magnitude
 
     alias Bfs = BfsFirst | BfsSource | BfsAll
 
-    defcase BfsFirst, seq : Slice(Any), part : M1::Search::Part, depth0 : Bool
-    defcase BfsSource, seq : Slice(Any), part : M1::Search::Part, depth0 : Bool
-    defcase BfsAll, successor : Any, seq : Slice(Any), part : M1::Search::Part, min : Magnitude, max : Magnitude, depth0 : Bool
+    defcase BfsFirst, alg : Tzip::Bfs, seq : Slice(Any)
+    defcase BfsSource, alg : Tzip::Bfs, seq : Slice(Any)
+    defcase BfsAll, alg : Tzip::Bfs, successor : Any, seq : Slice(Any), min : Magnitude, max : Magnitude
 
     alias Entries = EntriesFirst | EntriesSource | EntriesAll
 

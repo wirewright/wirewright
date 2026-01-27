@@ -194,6 +194,57 @@ module Ww::M1next
       # as well: a group of insertions followed by a group of deletions, when mixing within
       # the groups, may result in a different order of entries.
       Memory
+
+      # Parses *term* and returns a pair containing the resulting items and
+      # pairs order (referred to as *itemsord* and *pairsord* elsewhere).
+      # Returns `nil` on invalid input.
+      #
+      # See also: `m1.operator.leaf.order` in the doctool.
+      def self.parse?(term : Term) : {Order, Order}?
+        Term.case(term, engine: M0) do
+          # |@ m1.operator.leaf.order
+          #
+          # |@pattern
+          # items
+          #
+          # |@block
+          # Searches in items in lexical key order, i.e., left to right (0 to itemsize).
+          matchpi %{items}, cue: :items do
+            {Lexical, Skip}
+          end
+
+          # |@ m1.operator.leaf.order
+          #
+          # |@pattern
+          # pairs
+          #
+          # |@block
+          # Searches in pairs in lexical order (sorted key order, lexically smallest
+          # to lexically largest).
+          matchpi %{pairs}, cue: :pairs do
+            {Skip, Lexical}
+          end
+
+          # |@ m1.operator.leaf.order
+          #
+          # |@pattern
+          # entries
+          #
+          # |@block
+          # Searches in both items and pairs in lexical order.
+          matchpi %{entries}, cue: :entries do
+            {Lexical, Lexical}
+          end
+
+          otherwise { }
+        end
+      end
+
+      # Same as `parse?`, but raises `ArgumentError` on invalid input instead
+      # of returning `nil`.
+      def self.parse(term : Term) : {Order, Order}
+        parse?(term) || raise ArgumentError.new
+      end
     end
 
     # Returns *n*th value in the itemspart of this tzip. Desired value order
@@ -319,7 +370,9 @@ module Ww::M1next
       ItemsView.new(self)
     end
 
-    alias WalkAlgorithm = DfsPreorder | DfsPostorder | Bfs
+    alias WalkAlgorithm = Dfs | Bfs
+
+    alias Dfs = DfsPreorder | DfsPostorder
 
     # Depth-first, myself first, children later.
     defrecord DfsPreorder,

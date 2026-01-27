@@ -996,27 +996,6 @@ module Ww::M1next
     cons(ctx, plan)
   end
 
-  # FIXME: Dfs/Bfs should already be equipped with alg, we shouldn't
-  # have to compute it! This should be done during compilation. This'd
-  # also give clients a lot more choice!
-  private def alg(op : Op::Dfs | Op::Bfs)
-    case op.part
-    in .items?   then opts = {itemsord: Tzip::Order::Lexical, pairsord: Tzip::Order::Skip}
-    in .pairs?   then opts = {itemsord: Tzip::Order::Skip, pairsord: Tzip::Order::Lexical}
-    in .entries? then opts = {itemsord: Tzip::Order::Lexical, pairsord: Tzip::Order::Lexical}
-    end
-
-    opts = opts.merge(
-      mindepth: op.depth0 ? 0u32 : 1u32,
-      maxdepth: UInt32::MAX,
-    )
-
-    case op
-    in Op::Dfs then Tzip::DfsPreorder.new(**opts)
-    in Op::Bfs then Tzip::Bfs.new(**opts)
-    end
-  end
-
   private def eligible?(op : Op::Scan, matchee : Term) : Bool
     return false unless dict = matchee.as_d?
 
@@ -1030,7 +1009,7 @@ module Ww::M1next
   end
 
   private def eligible?(op : Op::Dfs | Op::Bfs, matchee : Term) : Bool
-    return true if op.depth0
+    return true if op.alg.mindepth.zero?
     return false unless dict = matchee.as_d?
 
     dict.size > 0
@@ -1066,8 +1045,6 @@ module Ww::M1next
   private def search(op : Op::Dfs | Op::Bfs, matchee : Tzip, & : Slice(Tzip) -> Bool) : Nil
     assert op.seq.size > 0
 
-    alg = alg(op)
-
     # NOTE: HybridArray can't be used here because we need contiguous storage
     # to point to in our yields.
     if op.seq.size > 4
@@ -1079,7 +1056,7 @@ module Ww::M1next
 
     size = 0
 
-    matchee.walk(alg) do |leaf|
+    matchee.walk(op.alg) do |leaf|
       bufferptr[size] = leaf
       size += 1
       next unless size == op.seq.size

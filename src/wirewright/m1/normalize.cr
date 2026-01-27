@@ -681,6 +681,7 @@ module Ww::M1next
     end
   end
 
+  # :nodoc:
   def normalize(prod : Π::EntryKV) : Term
     key, value = prod.key, prod.value
 
@@ -1856,9 +1857,11 @@ module Ww::M1next
         M0.schema(opts) do |s, opts|
           s.on_mismatch { continue }
 
-          _ = s.key(:in, value: {:items, :pairs, :entries}, default: :items)
+          part = s.key(:in, value: Term, default: Term.of(:items))
           _ = s.key(:order, value: {:dfs, :bfs}, default: :dfs)
           depth0 = s.key(:self, value: {true, false}, default: false)
+
+          continue unless _ = Tzip::Order.parse?(part)
 
           members = pattern.items.move(1)
 
@@ -1882,12 +1885,14 @@ module Ww::M1next
         M0.schema(opts) do |s, opts|
           s.on_mismatch { continue }
 
-          _ = s.key(:in, value: {:items, :pairs, :entries}, default: :items)
+          part = s.key(:in, value: Term, default: Term.of(:items))
           _ = s.key(:order, value: {:dfs, :bfs}, default: :dfs)
           depth0 = s.key(:self, value: {true, false}, default: false)
 
           min = s.key(:min, type: UInt32, default: 1u32)
           max = s.key(:max, type: UInt32, default: Term.of(:∞))
+
+          continue unless _ = Tzip::Order.parse?(part)
           continue if max.is_a?(UInt32) && min > max
 
           members = pattern.items.move(2)
