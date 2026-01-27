@@ -1137,6 +1137,14 @@
   (= ({x: 1} {y: 2} {x: 3, y: 4} {x: 5})
      ({x: (seen 1)} {y: 2} {x: 3, y: 4} {x: (seen 5)})))
 
+(backmap ((%flat (_ n) ns_) {(ns): ()})
+  (= ({n: 1} {n: 2, foo: 3} {n: 4} {n: 5})
+     ({} {foo: 3} {} {})))
+
+(backmap ((%items (%flat (_ n) ns_) (foo n_)) {(ns): ()})
+  (= ((foo 1) (foo 2) (foo 3) (foo 4))
+     ((foo) (foo) (foo) (foo))))
+
 ;; %pluck replacement
 (backmap ((%pluck (_ x) ({¦ x: x0_} _* {¦ x: xN_})) {x0: (seen ^x0), xN: (seen ^xN)})
   (= ({x: 1} {y: 2} {x: 3, y: 4} {x: 5})

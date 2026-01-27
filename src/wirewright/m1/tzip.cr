@@ -559,7 +559,13 @@ module Ww::M1
       sink = Pf::Kit.stack_array(Tzip, 16)
       flat(sink, spec)
 
-      Tzip.mapping(sink, handle: Log.seal(Log.simplify(@log))) do |item, index|
+      # (%flat (_ n) ns_) <> {(ns): ()} means remove all pairs with key `n`.
+      case @log
+      in Log::Some then handle = Log.seal(sink, &.log)
+      in Log::None then handle = Log.none
+      end
+
+      Tzip.mapping(sink, handle: handle) do |item, index|
         {Term.of(index), item}
       end
     end
