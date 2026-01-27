@@ -1,32 +1,32 @@
 module Ww::M1next
   # :nodoc:
-  def compile(prod : Π::ItemOrd(Term)) : Op::ItemNext::Any
+  def compile(prod : Π::ItemOrd(Term)) : Op::Item::Any
     ordsrc, item = prod.ordsrc, prod.item
 
     Term.case(item, engine: M0) do
       matchpi %{[%'%singular successor_]}, cue: :"%singular" do
-        Op::ItemNext::Singular.new(compile(Π.pattern(successor)))
+        Op::Item::Singular.new(compile(Π.pattern(successor)))
       end
 
       matchpi %{[%'%flex successor_]}, cue: :"%flex" do
-        Op::ItemNext::FlexSingular.new(compile(Π.pattern(successor)))
+        Op::Item::FlexSingular.new(compile(Π.pattern(successor)))
       end
 
       matchpi %{[%'%slot [%'%ref name_]]}, cue: {:"%slot", :"%ref"} do
-        Op::ItemNext::Slot.new(ordsrc.call, name)
+        Op::Item::Slot.new(ordsrc.call, name)
       end
 
       matchpi %{[%'%group successor_ _*]}, cue: :"%group" do
         members = item.items.move(2)
 
-        Op::ItemNext::Group.new(ordsrc.call,
+        Op::Item::Group.new(ordsrc.call,
           compile(Π.pattern(successor)),
           compile(Π.items(ordsrc, members)),
         )
       end
 
       matchpi %{(%'%plural ⍊ type_symbol min_ max_)}, cue: :"%plural" do
-        Op::ItemNext::PluralDistrib.new(
+        Op::Item::PluralDistrib.new(
           capture: nil,
           type: TermType.parse(type.as_sym),
           min: Kit.magn(min),
@@ -35,7 +35,7 @@ module Ww::M1next
       end
 
       matchpi %{(%'%plural [%'%capture capture_] ⍊ type_symbol min_ max_)}, cue: {:"%plural", :"%capture"} do
-        Op::ItemNext::PluralDistrib.new(
+        Op::Item::PluralDistrib.new(
           capture: capture,
           type: TermType.parse(type.as_sym),
           min: Kit.magn(min),
@@ -44,7 +44,7 @@ module Ww::M1next
       end
 
       matchpi %{(%'%plural/min ⍊ type_symbol min_ max_)}, cue: :"%plural/min" do
-        Op::ItemNext::PluralMin.new(
+        Op::Item::PluralMin.new(
           capture: nil,
           type: TermType.parse(type.as_sym),
           min: Kit.magn(min),
@@ -53,7 +53,7 @@ module Ww::M1next
       end
 
       matchpi %{(%'%plural/min [%'%capture capture_] ⍊ type_symbol min_ max_)}, cue: {:"%plural/min", :"%capture"} do
-        Op::ItemNext::PluralMin.new(
+        Op::Item::PluralMin.new(
           capture: capture,
           type: TermType.parse(type.as_sym),
           min: Kit.magn(min),
@@ -62,7 +62,7 @@ module Ww::M1next
       end
 
       matchpi %{(%'%plural/max ⍊ type_symbol min_ max_)}, cue: :"%plural/max" do
-        Op::ItemNext::PluralMax.new(
+        Op::Item::PluralMax.new(
           capture: nil,
           type: TermType.parse(type.as_sym),
           min: Kit.magn(min),
@@ -71,7 +71,7 @@ module Ww::M1next
       end
 
       matchpi %{(%'%plural/max [%'%capture capture_] ⍊ type_symbol min_ max_)}, cue: {:"%plural/max", :"%capture"} do
-        Op::ItemNext::PluralMax.new(capture,
+        Op::Item::PluralMax.new(capture,
           type: TermType.parse(type.as_sym),
           min: Kit.magn(min),
           max: Kit.magn(max),
@@ -82,8 +82,8 @@ module Ww::M1next
         members = item.items.move(2)
         member_ops = compile(Π.items(ordsrc, members))
 
-        Op::ItemNext::ManyMax.new(compile(Π.pattern(successor)),
-          Op::ItemNext.spatial(member_ops),
+        Op::Item::ManyMax.new(compile(Π.pattern(successor)),
+          Op::Item.spatial(member_ops),
           min: Kit.magn(min),
           max: Kit.magn(max),
         )
@@ -93,7 +93,7 @@ module Ww::M1next
         members = item.items.move(1)
         member_ops = compile(Π.items(ordsrc, members))
 
-        Op::ItemNext::PastMin.new(Op::ItemNext.spatial(member_ops),
+        Op::Item::PastMin.new(Op::Item.spatial(member_ops),
           min: Kit.magn(min),
           max: Kit.magn(max),
         )
@@ -103,34 +103,34 @@ module Ww::M1next
         members = item.items.move(1)
         member_ops = compile(Π.items(ordsrc, members))
 
-        Op::ItemNext::PastMax.new(Op::ItemNext.spatial(member_ops),
+        Op::Item::PastMax.new(Op::Item.spatial(member_ops),
           min: Kit.magn(min),
           max: Kit.magn(max),
         )
       end
 
       matchpi %{[%'%optional [%'%payload default_] successor_]}, cue: :"%optional" do
-        Op::ItemNext::Optional.new(ordsrc.call, default, compile(Π.pattern(successor)))
+        Op::Item::Optional.new(ordsrc.call, default, compile(Π.pattern(successor)))
       end
 
       matchpi %{[%'%gap measurer_]}, cue: :"%gap" do
-        Op::ItemNext::GapFirstDistrib.new(compile(Π.pattern(measurer)))
+        Op::Item::GapFirstDistrib.new(compile(Π.pattern(measurer)))
       end
 
       matchpi %{[%'%gap/min measurer_]}, cue: :"%gap/min" do
-        Op::ItemNext::GapFirstMin.new(compile(Π.pattern(measurer)))
+        Op::Item::GapFirstMin.new(compile(Π.pattern(measurer)))
       end
 
       matchpi %{[%'%gap/min° measurer_]}, cue: :"%gap/min°" do
-        Op::ItemNext::GapSourceMin.new(compile(Π.pattern(measurer)))
+        Op::Item::GapSourceMin.new(compile(Π.pattern(measurer)))
       end
 
       matchpi %{[%'%gap/max measurer_]}, cue: :"%gap/max" do
-        Op::ItemNext::GapFirstMax.new(compile(Π.pattern(measurer)))
+        Op::Item::GapFirstMax.new(compile(Π.pattern(measurer)))
       end
 
       matchpi %{[%'%gap/max° measurer_]}, cue: :"%gap/max°" do
-        Op::ItemNext::GapSourceMax.new(compile(Π.pattern(measurer)))
+        Op::Item::GapSourceMax.new(compile(Π.pattern(measurer)))
       end
     end
   end
@@ -406,16 +406,16 @@ module Ww::M1next
       matchpi %{[%'%seq _*]} do
         members = pattern.items.move(1)
 
-        ord = Op::ItemNext::ORD_INITIAL
+        ord = Op::Item::ORD_INITIAL
         ordsrc = -> { ord, _ = ord + 1, ord }
 
         items = members.map do |member|
           compile(Π.item(ordsrc, member))
         end
 
-        singulars = items.compact_map { |op| op.as?(Op::ItemNext::Singular).try(&.successor) }
+        singulars = items.compact_map { |op| op.as?(Op::Item::Singular).try(&.successor) }
 
-        Op::Seq.new(Op::ItemNext.spatial(items), singulars)
+        Op::Seq.new(Op::Item.spatial(items), singulars)
       end
 
       matchpi %{[%'%any _*]}, cue: :"%any" do
@@ -754,7 +754,7 @@ module Ww::M1next
   end
 
   # :nodoc:
-  def compile(prod : Π::ItemOrdList) : Slice(Op::ItemNext::Any)
+  def compile(prod : Π::ItemOrdList) : Slice(Op::Item::Any)
     prod.items.to_readonly_slice do |item|
       compile(Π.item(prod.ordsrc, item))
     end

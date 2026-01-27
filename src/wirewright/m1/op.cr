@@ -93,7 +93,7 @@ module Ww::M1next
 
     defcase Edge, type : TermType
 
-    defcase Seq, items : ItemNext::Spatial, singulars : Array(Any)
+    defcase Seq, items : Item::Spatial, singulars : Array(Any)
 
     # TODO: remove!!!
     # defcase ItemSeq, items : Slice(Item::Any)
@@ -211,7 +211,7 @@ module Ww::M1next
   end
 
   # Compiled sequence operators such as `(⏏_⏏ ⏏(%optional 0 x_)⏏ ⏏y_⏏)`.
-  module Op::ItemNext
+  module Op::Item
     extend self
 
     ORD_FRONT   = 0u32
