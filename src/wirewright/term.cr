@@ -789,11 +789,6 @@ module Ww
       end
     end
 
-    # Shorthand for `of(entries(args, **kwargs))`.
-    def self.entries(*args : {_, _}, **kwargs) : Dict
-      entries(*args, **kwargs)
-    end
-
     # Shorthand for `of(entries(*args, **kwargs))`.
     def self.of_entries(*args, **kwargs) : Term
       of(entries(*args, **kwargs))

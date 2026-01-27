@@ -174,8 +174,8 @@ module ::Ww::Rack
             backspec = Term[]
 
             Term.case(mix1) do
-              matchpi %{(cell @_)} { backspec = Term.entries({ {capture}, Term[] }) }
-              matchpi %{(cell @_ view1_)} { backspec = Term.entries({capture, view1}) }
+              matchpi %{(cell @_)} { backspec = Term.entries({ { {capture}, Term[] } }) }
+              matchpi %{(cell @_ view1_)} { backspec = Term.entries({ { {capture}, view1 } }) }
             end
 
             value1 = M1.backmap(pattern, Term.of(backspec), value0)
