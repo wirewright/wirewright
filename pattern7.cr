@@ -104,11 +104,6 @@ require "./src/wirewright"
 include Ww
 
 # TODO: REMOVE
-module ::Ww::M1
-  alias Operator = M1next::Op
-end
-
-# TODO: REMOVE
 module ::Ww::M1::Search
   enum Part : UInt8
     Items
@@ -3479,7 +3474,7 @@ module ICursor
 end
 
 # An object capable of parsing pattern terms into `Pattern`s (a thin wrapper
-# around `M1::Operator`) and organizing them for efficient response
+# around `M1next::Op`) and organizing them for efficient response
 # to matchees.
 class PatternSet(T)
   alias Bucket = Slice(Pattern)
@@ -3653,7 +3648,7 @@ class PatternSet(T)
     ::Ww::Term.case({{matchee}}, matcher: ::PatternSet::Matcher, {{kwargs.double_splat}}) {{block}}
   end
 
-  def each_candidate(matchee : Term, & : M1::Operator::Any, UInt32 ->)
+  def each_candidate(matchee : Term, & : M1next::Op::Any, UInt32 ->)
     if bucket = @keyed.bucket?(matchee)
       bucket.each { |pattern| yield pattern.operator, pattern.index }
     end

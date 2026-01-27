@@ -413,7 +413,7 @@ class Ruleset
     end
   end
 
-  def each_candidate(matchee : Term, & : M1::Operator::Any, Rule::Any ->)
+  def each_candidate(matchee : Term, & : M1next::Op::Any, Rule::Any ->)
     @pset.each_candidate(matchee) do |candidate, index|
       yield candidate, @rules[index]
     end
