@@ -87,7 +87,7 @@ module Ww::M1next
       end
 
       def inspect(io)
-        io << "examine range " << @begin << "..<" << @end
+        io << "examine range" << @ord.subscript << " " << @begin << "..<" << @end
       end
     end
 
@@ -194,7 +194,7 @@ module Ww::M1next
 
     struct InsertItem
       def inspect(io)
-        io << "insert item " << value << " before " << index << "#" << ord
+        io << "insert item" << ord.subscript << " " << value << " before " << index
       end
     end
 

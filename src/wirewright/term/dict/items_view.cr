@@ -46,6 +46,18 @@ module Ww
       change(b: @e - n)
     end
 
+    # Alias of `first`. This is sometimes more readable, especially when paired
+    # with `starting_at`.
+    def before(n : Int) : ItemsView
+      first(n)
+    end
+
+    def starting_at(n : Int) : ItemsView
+      assert 0 <= n <= size
+
+      change(b: n)
+    end
+
     # Returns an empty items view pointing at the beginning of this items view.
     #
     # ```text

@@ -350,9 +350,11 @@ class Ruleset
       if template = env[:template]?
         rule = Rule::Template.new(env[:pattern], template)
       elsif backspec = env[:backspec]?
-        rule = Term.case(normp) do
-          matchpi %[(%'%let (%capture toplevel_) _)] { Rule::BackmapMany.new(env[:pattern], toplevel, backspec) }
-          otherwise { Rule::BackmapOne.new(env[:pattern], backspec) }
+        rule = normp.unwrap do |op|
+          Term.case(op) do
+            matchpi %[(%'%let (%capture toplevel_) _)] { Rule::BackmapMany.new(env[:pattern], toplevel, backspec) }
+            otherwise { Rule::BackmapOne.new(env[:pattern], backspec) }
+          end
         end
       else
         next

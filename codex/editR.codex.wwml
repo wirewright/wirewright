@@ -705,10 +705,10 @@ C←[C'←[I M←[cancel compose] _*] compose _string]
 ⟨C←[[I M←[goto item right] _*] _*] item_⟩
   <> {(M): (), C: ^item, item: ^(up C)}
 
-[`>C _* C←[[I M←[goto dict left] _*] _*] _*]
+(%split (`>C _*) C←[[I M←[goto dict left] _*] _*] _)
   <> {(M): (), >C: ^(up C), (C): ()}
 
-[_* C←[[I M←[goto dict right] _*] _*] _* `>C]
+(%split _ C←[[I M←[goto dict right] _*] _*] (_* `>C))
   <> {(M): (), >C: ^(up C), (C): ()}
 
 ⟨_dict [[I M←(goto spot left ⍊ enter: (%- false)) _*] _*]⟩

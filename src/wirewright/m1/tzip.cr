@@ -842,7 +842,7 @@ module Ww::M1next
     # subviews. Yields each subview followed by its index.
     #
     # *empty* can be specified to enable or disable emission of empty subviews.
-    def each_chunk_of(n : Int32, *, empty : Bool = false, & : ItemsView, Int32 ->) : Nil
+    def each_chunk(n : Int32, *, empty : Bool = false, & : ItemsView, Int32 ->) : Nil
       unless n.positive?
         raise ArgumentError.new
       end

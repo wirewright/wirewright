@@ -3408,7 +3408,7 @@ struct Slice(T)
     Slice.new(mem, size + 1, read_only: @read_only)
   end
 
-  def prepend_many(objects : Slice(T), & : T -> U) : Slice(U) forall U
+  def prepend_many(objects : Indexable(T), & : T -> U) : Slice(U) forall U
     mem = Pointer(U).malloc(objects.size + size)
 
     index = 0
@@ -3426,7 +3426,7 @@ struct Slice(T)
     Slice.new(mem, objects.size + size, read_only: @read_only)
   end
 
-  def append_many(objects : Slice(T), & : T -> U) : Slice(U) forall U
+  def append_many(objects : Indexable(T), & : T -> U) : Slice(U) forall U
     mem = Pointer(U).malloc(size + objects.size)
 
     index = 0
@@ -3535,6 +3535,7 @@ struct Slice(T)
 
     yield trim(newsize)
   end
+
 end
 
 class AssertionError < Exception
@@ -4044,6 +4045,10 @@ struct Range(B, E)
 end
 
 struct Int
+  def subscript
+    to_s.tr("0123456789", "₀₁₂₃₄₅₆₇₈₉")
+  end
+
   def entering?(range : Range(Int32, Int32)) : Bool
     !range.includes?(self - 1) && range.includes?(self)
   end

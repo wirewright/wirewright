@@ -3,7 +3,7 @@
 # the following characters:
 #
 # ```text
-# aeionst-bcdfghjklmpqruvwxyz0123456789\/?%^ABCXYZPQRUVWMDEFIJKGHLNOST<=>+*~!&$|ΛλΔδΠπµ°∪
+# aeionst-bcdfghjklmpqruvwxyz0123456789\/?%^ABCXYZPQRUVWMDEFIJKGHLNOST<=>+*~!&$|ΛλΔδ∞µ°∪∩
 # ```
 #
 # This encoding is preferred mainly beacuse it reduces contention: symbols that use it
@@ -20,7 +20,7 @@ struct Ww::Term::Sym
             0b0u64 => {1, 3, "\0aeionst"},                         # <
            0b01u64 => {2, 4, "-bcdfghjklmpqruv"},                  # < Must be single-byte
           0b011u64 => {3, 5, "wxyz0123456789\\/?%^ABCXYZPQRUVWM"}, # <
-          0b111u64 => {3, 5, "DEFIJKGHLNOST<=>+*~!&$| ΛλΔδΠπµ°∪"},
+          0b111u64 => {3, 5, "DEFIJKGHLNOST<=>+*~!&$| ΛλΔδ∞µ°∪∩"},
           #                                          ^ separates single-byte from Unicode
         }
 
@@ -213,8 +213,8 @@ struct Ww::Term::Sym
     BIT_LENGTH_NO_ENCODING = Int32::MAX
 
     # Returns the number of bits needed to store *string* using Symcode. Returns
-    # `BIT_LENGTH_NO_ENCODING` if one of its chars cannot be encoded, or if
-    # bit length exceeds *max*.
+    # `BIT_LENGTH_NO_ENCODING` if one of the string's chars cannot be encoded,
+    # or if the number of bits exceeds *max*.
     def bit_length(string : String, *, max : Int32) : Int32
       bit_length = 0
 
@@ -235,9 +235,9 @@ struct Ww::Term::Sym
 
     # Returns the number of bits needed to store *bytes* using Symcode. Returns
     # `BIT_LENGTH_NO_ENCODING` if one of the bytes cannot be encoded, or if
-    # bit length exceeds *max*. Returns `BIT_LENGTH_UNICODE` if *bytes* contains
-    # non-ASCII characters; in that case you should allocate a string and use
-    # the other overload.
+    # the number of bits exceeds *max*. Returns `BIT_LENGTH_UNICODE` if *bytes*
+    # contains non-ASCII characters; in that case you should allocate a string
+    # and use the other overload.
     def bit_length(bytes : Bytes, *, max : Int32) : Int32
       bit_length = 0
 
@@ -262,7 +262,7 @@ struct Ww::Term::Sym
 
     NO_ENCODING = UInt64::MAX
 
-    # Returns the Symcode encoding of UTF-8 *bytes* using up to *limit* bits.
+    # Returns the Symcode encoding of UTF-8 *bytes*, using up to *limit* bits.
     # Returns `NO_ENCODING` if *bytes* cannot be encoded using Symcode.
     def encode(bytes : Bytes, *, limit : Int32) : UInt64
       case bit_length(bytes, max: limit)
@@ -284,7 +284,7 @@ struct Ww::Term::Sym
       end
     end
 
-    # Returns the Symcode encoding of *string* using up to *limit* bits. Returns
+    # Returns the Symcode encoding of *string*, using up to *limit* bits. Returns
     # `NO_ENCODING` if *string* cannot be encoded using Symcode.
     def encode(string : String, *, limit = BIT_WIDTH) : UInt64
       if bit_length(string, max: limit) > limit
@@ -311,7 +311,7 @@ struct Ww::Term::Sym
     end
 
     private def each_code_inner(bits : UInt64, & : UInt64 ->)
-      16.times do # 64/4 = 16, 4 is the smallest char width.
+      16.times do # 64 bits/4 bits = 16, 4 bits is the smallest char width in Symcode.
         if (bits & 0b1u64) == 0u64
           # LSB 0xxx MSB
           yield bits & 0b1111u64

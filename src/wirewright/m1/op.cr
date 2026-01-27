@@ -3,7 +3,9 @@ module Ww::M1next
   # compiled operators and associated groups/categories of operators (represented
   # using aliases).
   module Op
-    alias Any = Pass | Never | Num | Sym | SymBlank | SymNonblank | Boolean | Dict | Itemsonly | Pairsonly | SketchSubset | Bounds | BoundsGuard | MaxDepth | DictGuard | Literal | Capture | CaptureItemsonly | ItemSeq | ItemFirst | ItemLast | SingularSeq | Partition | Edge | LiteralWhitelist | ChoiceSource | Keypool | Span | Tally | Type | ParseML | Clamp | Bin | Both | LiteralBlacklist | Layer | ScanFirst | ScanSource | ScanAll | DfsFirst | DfsSource | DfsAll | BfsFirst | BfsAll | Value | NegativeValue | NegativeValueKeypath | EntriesFirst | EntriesSource | EntriesAll | Str | KeypathCapture | NegativeKeypool | Keytest | ValueLiteral | Filter | Pluck | Flat | Split | Adjacent | Untracked
+    alias Any = Pass | Never | Num | Sym | SymBlank | SymNonblank | Boolean | Dict | Itemsonly | Pairsonly | SketchSubset | Bounds | BoundsGuard | MaxDepth | DictGuard | Literal | Capture | CaptureItemsonly | Seq | ItemSeq | ItemFirst | ItemLast | SingularSeq | Partition | Edge | LiteralWhitelist | ChoiceSource | Keypool | Span | Tally | Type | ParseML | Clamp | Bin | Both | LiteralBlacklist | Layer | ScanFirst | ScanSource | ScanAll | DfsFirst | DfsSource | DfsAll | BfsFirst | BfsSource | BfsAll | Value | NegativeValue | NegativeValueKeypath | EntriesFirst | EntriesSource | EntriesAll | Str | KeypathCapture | NegativeKeypool | Keytest | ValueLiteral | Filter | Pluck | Flat | Split | Adjacent | Untracked | Matches | FrontRef | BackRef
+
+    # TODO: Inline, this is not used anywhere!!
     alias Bin = Add | Sub | Mul | Div | Idiv | Mod | Pow | Map
 
     INSTANCE_PASS = Pass.new
@@ -18,115 +20,6 @@ module Ww::M1next
     INSTANCE_NUM_WHOLE = Num.new(min: nil, max: nil, spec: :whole)
 
     defcase Num, spec : Spec, min : Arg, max : Arg do
-      # FIXME: Parsing should be defined in module M1 near normal()/operator(),
-      # not here!!!
-
-      def self.subject?(term : Term)
-        Term.case(term, engine: M0) do
-          matchpi %{(whole %'_)} do
-            Spec::Whole
-          end
-
-          matchpi %{%'_} do
-            Spec::None
-          end
-
-          otherwise { }
-        end
-      end
-
-      def self.arg?(term : Term)
-        Term.case(term, engine: M0) do
-          matchpi %{(var name_)} do
-            Var.new(name)
-          end
-
-          matchpi %{_number} do
-            term.as_n
-          end
-
-          otherwise { }
-        end
-      end
-
-      # top
-      #   (%number <subject> <cmp> <arg>)
-      #   (%number <arg> <ltx> <subject> <ltx> <arg>)
-      #
-      # subject
-      #   (whole %'_)
-      #   %'_
-      #
-      # arg
-      #   (var _)
-      #   _number
-      #
-      # <cmp>
-      #   <ltx>
-      #   <gtx>
-      #
-      # <ltx>
-      #   <
-      #   <=
-      #
-      # <gtx>
-      #   >
-      #   >=
-      def self.parse?(term : Term) : Num?
-        Term.case(term, engine: M0) do
-          matchpi %{(%number subject_ cmp_ arg_)} do
-            return unless spec = subject?(subject)
-            return unless r = arg?(arg)
-
-            case cmp
-            when M1::SYM_LT
-              # _ < 100
-              spec = spec.max_excluded
-              max = r
-            when M1::SYM_LTE
-              # _ <= 100
-              max = r
-            when M1::SYM_GT
-              # _ > 100
-              spec = spec.min_excluded
-              min = r
-            when M1::SYM_GTE
-              min = r
-            else
-              return
-            end
-
-            new(spec, min, max)
-          end
-
-          matchpi %{(%number larg_ lop_ subject_ rop_ rarg_)} do
-            return unless spec = subject?(subject)
-            return unless min = arg?(larg)
-            return unless max = arg?(rarg)
-
-            case lop
-            when M1::SYM_LTE
-            when M1::SYM_LT
-              spec = spec.min_excluded
-            else
-              return
-            end
-
-            case rop
-            when M1::SYM_LTE
-            when M1::SYM_LT
-              spec = spec.max_excluded
-            else
-              return
-            end
-
-            new(spec, min, max)
-          end
-
-          otherwise { }
-        end
-      end
-
       alias Arg = Term::Num | Var | Nil
 
       defrecord Var, name : Term
@@ -138,11 +31,19 @@ module Ww::M1next
         Whole
 
         {% for member in @type.constants %}
-        # Returns a copy of this spec with the `{{member}}` flag set.
-        def {{member.underscore}} : Spec
-          self | {{member}}
+          # Returns a copy of this spec with the `{{member}}` flag set.
+          def {{member.underscore}} : Spec
+            self | {{member}}
+          end
+        {% end %}
+
+        def min_included? : Bool
+          !min_excluded?
         end
-      {% end %}
+
+        def max_included? : Bool
+          !max_excluded?
+        end
       end
     end
 
@@ -165,16 +66,24 @@ module Ww::M1next
 
     defcase SketchSubset, sketch : Term::Dict::Sketch, successor : Any
 
+    # *max* is inclusive.
     defcase Bounds, min : Magnitude, max : Magnitude
+
+    # *max* is inclusive.
     defcase BoundsGuard, min : Magnitude, max : Magnitude, successor : Any
 
+    # *max* is inclusive.
     defcase MaxDepth, min : Magnitude, max : Magnitude, successor : Any
 
+    # *bounds* and *depth* ranges are inclusive.
     defcase DictGuard,
       sketch : Term::Dict::Sketch,
       bounds : {Magnitude, Magnitude},
       depth : {Magnitude, Magnitude},
       successor : Any
+
+    defcase FrontRef, name : Term
+    defcase BackRef, name : Term
 
     defcase Literal, term : Term
     defcase LiteralWhitelist, whitelist : Set(Term)
@@ -184,8 +93,11 @@ module Ww::M1next
 
     defcase Edge, type : TermType
 
-    # TODO: remove items!!!
+    defcase Seq, items : ItemNext::Spatial, singulars : Array(Any)
+
+    # TODO: remove!!!
     defcase ItemSeq, items : Slice(Item::Any)
+
     defcase ItemFirst, successor : Any
     defcase ItemLast, successor : Any
     defcase SingularSeq, items : Slice(Any), exhaustive : Bool, reverse : Bool
@@ -230,7 +142,8 @@ module Ww::M1next
         when BoundsGuard,
              MaxDepth,
              SketchSubset,
-             DictGuard
+             DictGuard,
+             Capture
           seq?(op.successor)
         else
           false
@@ -245,36 +158,14 @@ module Ww::M1next
     defcase Layer, below : Any, side : Slice(Entry::Any)
 
     alias First = ScanFirst | DfsFirst | BfsFirst | EntriesFirst | SplitFirst
-    alias Source = DfsSource | ScanSource | EntriesSource | SplitSource
+    alias Source = DfsSource | BfsSource | ScanSource | EntriesSource | SplitSource
     alias All = ScanAll | DfsAll | BfsAll | EntriesAll | SplitAll
 
     alias Scan = ScanFirst | ScanSource | ScanAll
 
-    defcase ScanFirst, needle : Slice(Any) do
-      def seq
-        needle
-      end
-    end
-
-    defcase ScanSource, needle : Slice(Any) do
-      def seq
-        needle
-      end
-    end
-
-    defcase ScanAll, successor : Any, needle : Slice(Any), selector : Set(Term), exterior : Set(Term), min : UInt8, max : UInt8 do
-      def minM
-        Magnitude.new(min)
-      end
-
-      def maxM
-        max == 0 ? Magnitude::INFINITY : Magnitude.new(max)
-      end
-
-      def seq
-        needle
-      end
-    end
+    defcase ScanFirst, seq : Slice(Any)
+    defcase ScanSource, seq : Slice(Any)
+    defcase ScanAll, successor : Any, seq : Slice(Any), min : Magnitude, max : Magnitude
 
     defcase Value, capture : Term, tail : Any
     defcase NegativeValue, capture : Term
@@ -286,101 +177,291 @@ module Ww::M1next
     # SearchAll. The compiler (M1.operator) must then equip them with Tzip::Algorithm's instead of
     # Tzip itself doing that at match-time.
 
-    defcase DfsFirst, seq : Slice(Any), part : M1::Search::Part, depth0 : Bool do
-      def needle
-        seq.first
-      end
-    end
+    defcase DfsFirst, seq : Slice(Any), part : M1::Search::Part, depth0 : Bool
+    defcase DfsSource, seq : Slice(Any), part : M1::Search::Part, depth0 : Bool
+    defcase DfsAll, successor : Any, seq : Slice(Any), part : M1::Search::Part, min : Magnitude, max : Magnitude, depth0 : Bool
 
-    defcase DfsSource, seq : Slice(Any), part : M1::Search::Part, depth0 : Bool do
-      def needle
-        seq.first
-      end
-    end
+    alias Bfs = BfsFirst | BfsSource | BfsAll
 
-    defcase DfsAll, successor : Any, seq : Slice(Any), selector : Set(Term), exterior : Set(Term), part : M1::Search::Part, min : UInt8, max : UInt8, depth0 : Bool do
-      def minM
-        Magnitude.new(min)
-      end
-
-      def maxM
-        max == 0 ? Magnitude::INFINITY : Magnitude.new(max)
-      end
-
-      def needle
-        seq.first
-      end
-    end
-
-    alias Bfs = BfsFirst | BfsAll
-
-    defcase BfsFirst, seq : Slice(Any), part : M1::Search::Part, depth0 : Bool do
-      def needle
-        seq.first
-      end
-    end
-
-    defcase BfsAll, successor : Any, seq : Slice(Any), selector : Set(Term), exterior : Set(Term), part : M1::Search::Part, min : UInt8, max : UInt8, depth0 : Bool do
-      def minM
-        Magnitude.new(min)
-      end
-
-      def maxM
-        max == 0 ? Magnitude::INFINITY : Magnitude.new(max)
-      end
-
-      def needle
-        seq.first
-      end
-    end
+    defcase BfsFirst, seq : Slice(Any), part : M1::Search::Part, depth0 : Bool
+    defcase BfsSource, seq : Slice(Any), part : M1::Search::Part, depth0 : Bool
+    defcase BfsAll, successor : Any, seq : Slice(Any), part : M1::Search::Part, min : Magnitude, max : Magnitude, depth0 : Bool
 
     alias Entries = EntriesFirst | EntriesSource | EntriesAll
 
-    defcase EntriesFirst, kop : Any, vop : Any do
-      def needle
-        [kop, vop]
-      end
-    end
-
-    defcase EntriesSource, kop : Any, vop : Any do
-      def needle
-        [kop, vop]
-      end
-    end
-
-    defcase EntriesAll, successor : Any, kop : Any, vop : Any, exterior : Set(Term), selector : Set(Term), min : UInt8, max : UInt8 do
-      def minM
-        Magnitude.new(min)
-      end
-
-      def maxM
-        max == 0 ? Magnitude::INFINITY : Magnitude.new(max)
-      end
-
-      def needle
-        [kop, vop]
-      end
-    end
-
-    defcase KeypathCapture, capture : Term
-
-    defcase Filter, deps : Pf::Set(Term), selector : Any, successor : Any, min : Magnitude, max : Magnitude
-    defcase Pluck, spec : M1next::Tzip::PluckSpec, successor : Any
-    defcase Flat, spec : M1next::Tzip::FlatSpec, successor : Any
+    defcase EntriesFirst, kop : Any, vop : Any
+    defcase EntriesSource, kop : Any, vop : Any
+    defcase EntriesAll, successor : Any, kop : Any, vop : Any, min : Magnitude, max : Magnitude
 
     alias Split = SplitFirst | SplitSource | SplitAll
 
-    defcase Adjacent, members : Slice(Any)
-
     defcase SplitFirst, lhs : Any, focus : Slice(Any), rhs : Any
     defcase SplitSource, lhs : Any, focus : Slice(Any), rhs : Any
-    defcase SplitAll, lhs : Any, focus : Slice(Any), rhs : Any, successor : Any, min : Magnitude, max : Magnitude do
-      def minM
-        min
+    defcase SplitAll, successor : Any, lhs : Any, focus : Slice(Any), rhs : Any, min : Magnitude, max : Magnitude
+
+    defcase Matches, successor : Any, subpattern : Any, min : Magnitude, max : Magnitude
+
+    defcase Adjacent, members : Slice(Any)
+
+    defcase KeypathCapture, capture : Term
+
+    defcase Filter, successor : Any, deps : Pf::Set(Term), selector : Any, min : Magnitude, max : Magnitude
+    defcase Pluck, spec : M1next::Tzip::PluckSpec, successor : Any
+    defcase Flat, spec : M1next::Tzip::FlatSpec, successor : Any
+  end
+
+  module Op::ItemNext
+    extend self
+
+    ORD_FRONT   = 0u32
+    ORD_BACK    = UInt32::MAX
+    ORD_INITIAL = 1u32
+
+    defrecord Spatial, shape : Shape, refs : Array(Ref), flatcount : Int32
+
+    alias Any = Singular | FlexSingular | Slot | Plural | Group | Gap | GapSource | Optional | Many | Past
+
+    alias Past = PastMin | PastMax
+
+    defcase Singular, successor : Op::Any
+    defcase FlexSingular, successor : Op::Any
+    defcase Slot, ord : UInt32, name : Term
+
+    alias Plural = PluralDistrib | PluralMinMax
+    alias PluralMinMax = PluralMin | PluralMax
+
+    defcase PluralDistrib, capture : Term?, type : TermType, min : Magnitude, max : Magnitude
+    defcase PluralMin, capture : Term?, type : TermType, min : Magnitude, max : Magnitude
+    defcase PluralMax, capture : Term?, type : TermType, min : Magnitude, max : Magnitude
+
+    defcase Group, ord : UInt32, successor : Op::Any, members : Slice(Any)
+
+    alias Min = PastMin | PluralMin | GapMin
+    alias Max = PastMax | PluralMax | GapMax | ManyMax
+
+    alias Gap = GapFirstDistrib | GapMinMax
+    alias GapMinMax = GapMin | GapMax
+    alias GapMin = GapFirstMin | GapSourceMin
+    alias GapMax = GapFirstMax | GapSourceMax
+    alias GapFirstMinMax = GapFirstMin | GapFirstMax
+
+    alias GapFirst = GapFirstDistrib | GapFirstMin | GapFirstMax
+
+    defcase GapFirstDistrib, measurer : Op::Any
+    defcase GapFirstMin, measurer : Op::Any
+    defcase GapFirstMax, measurer : Op::Any
+
+    alias GapSource = GapSourceMin | GapSourceMax
+
+    defcase GapSourceMin, measurer : Op::Any
+    defcase GapSourceMax, measurer : Op::Any
+
+    defcase Optional, ord : UInt32, default : Term, successor : Op::Any
+
+    alias Many = ManyMax
+
+    defcase ManyMax, successor : Op::Any, members : Spatial, min : Magnitude, max : Magnitude
+
+    defcase PastMin, children : Spatial, min : Magnitude, max : Magnitude
+    defcase PastMax, children : Spatial, min : Magnitude, max : Magnitude
+
+    {% begin %}
+      alias Flat = Union({{ (Any.union_types - [Group, Slot]).splat }})
+    {% end %}
+
+    defrecord Ref, begin : Int32, end : Int32, ord : UInt32, item : Slot | Group
+
+    defcase Rigid, items : Array(Op::Any)
+
+    defcase Distrib, contenders : Array(Unit)
+
+    alias Distrib::Unit = PluralDistrib | GapFirstDistrib
+
+    defcase NonDistrib, items : Array(Unit)
+
+    {% begin %}
+      alias NonDistrib::Unit = Union({{ (Flat.union_types - Distrib::Unit.union_types - [Singular]).splat }})
+    {% end %}
+
+    alias Flex = Distrib | NonDistrib::Unit
+
+    defcase FlexRegion, items : Array(Distrib | NonDistrib)
+
+    def flatseq(items : Enumerable(Any)) : {Array(Flat), Array(Ref)}
+      # Since groups and slots can appear anywhere in the structure, without
+      # affecting the way it reads (they're "pure observers", so to speak),
+      # we have to eliminate them. We do this by moving info about groups and
+      # slots to the *refs* array.
+      units = [] of Flat
+      refs = [] of Ref
+      flatten(items, units, refs)
+
+      {units, refs}
+    end
+
+    private def flatten(items : Enumerable(Any), units, refs) : Nil
+      items.each { |item| flatten(item, units, refs) }
+    end
+
+    private def flatten(item : Flat, units, refs) : Nil
+      units << item
+    end
+
+    private def flatten(item : Slot, units, refs) : Nil
+      refs << Ref.new(units.size, units.size, item.ord, item)
+    end
+
+    private def flatten(item : Group, units, refs) : Nil
+      b = units.size
+      flatten(item.members, units, refs)
+      e = units.size
+
+      refs << Ref.new(b, e, item.ord, item)
+    end
+
+    def spatial(items : Enumerable(Any)) : Spatial
+      state, refs = flatseq(items)
+
+      flatcount = state.size
+
+      # Array(Flat) must now become Array(Rigid | Distrib | NonDistrib).
+      state = state.map_with_index do |unit, index|
+        refary = refs.select { |ref| index.in?(ref.begin, ref.end) }
+
+        case unit
+        in Singular         then Rigid.new([unit.successor])
+        in Distrib::Unit    then Distrib.new([unit])
+        in NonDistrib::Unit then NonDistrib.new([unit])
+        end
       end
 
-      def maxM
-        max
+      # Now we group adjacent Rigid's, Distrib's, and NonDistrib's together. The result
+      # is an alternating sequence of them.
+      state = birep(state) do |l, r|
+        case {l, r}
+        when {Rigid, Rigid}
+          l.items.concat(r.items)
+          false # pending
+        when {Distrib, Distrib}
+          l.contenders.concat(r.contenders)
+          false # pending
+        when {NonDistrib, NonDistrib}
+          l.items.concat(r.items)
+          false # pending
+        else
+          true # commit
+        end
+      end
+
+      # Now both Distrib's and NonDistrib's become FlexRegion's. The result is
+      # an array of Rigid's and FlexRegion's.
+      state = state.map do |unit|
+        case unit
+        in Rigid               then unit
+        in Distrib, NonDistrib then FlexRegion.new([unit])
+        end
+      end
+
+      # Adjacent flex's should be grouped as well.
+      state = birep(state) do |l, r|
+        case {l, r}
+        when {Rigid, Rigid}
+          l.items.concat(r.items)
+          false # pending
+        when {FlexRegion, FlexRegion}
+          l.items.concat(r.items)
+          false # pending
+        else
+          true # commit
+        end
+      end
+
+      # At this point, state is an array of alternating Rigid and FlexRegion
+      # nodes. We need to perform *recognition*, a process that identifies
+      # useful shapes in the alternation based on its content and size.
+      shape = recognize(state.to_readonly_slice)
+
+      Spatial.new(shape, refs, flatcount)
+    end
+
+    private def birep(array : Array(T), &) forall T
+      pending = nil
+      result = [] of T
+
+      array.each do |object|
+        if pending.nil?
+          pending = {object}
+          next
+        end
+
+        commit = yield pending[0], object
+        next unless commit
+
+        result << pending[0]
+        pending = {object}
+      end
+
+      if pending
+        result << pending[0]
+      end
+
+      result
+    end
+
+    alias Shape = Rigid | FlexShape
+    alias FlexShape = Empty | FlexRegion | PaddedRight | PaddedLeft | Padded | MidGap | PaddedMidGap
+
+    defcase Empty
+    defcase PaddedLeft, l : FlexShape, r : Rigid
+    defcase PaddedRight, l : Rigid, r : FlexShape
+
+    defcase Padded, l : FlexShape, m : Rigid, r : FlexShape
+    defcase MidGap, l : Rigid, m : FlexShape, r : Rigid
+    defcase PaddedMidGap, l : FlexShape, ml : Rigid, m : FlexShape, mr : Rigid, r : FlexShape
+
+    # *alt* is an alternating sequence of Rigid's and Flex's.
+    def recognize(alt : Slice(Rigid | FlexRegion)) : Shape
+      case alt.size
+      when 0
+        Empty.new
+      when 1
+        alt.first
+      when .even?
+        case head = alt.first
+        in Rigid then return PaddedRight.new(head, recognize(alt + 1).as(FlexShape))
+        in FlexRegion
+        end
+
+        case tail = alt.last
+        in Rigid then return PaddedLeft.new(recognize(alt - 1).as(FlexShape), tail)
+        in FlexRegion
+        end
+
+        raise ArgumentError.new
+      when .odd?
+        center = alt.size//2
+
+        case mid = alt[center]
+        in Rigid
+          Padded.new(recognize(alt[...center]).as(FlexShape), mid, recognize(alt[center + 1..]).as(FlexShape))
+        in FlexRegion
+          l = recognize(alt[...center])
+          r = recognize(alt[center + 1..])
+
+          case {l, r}
+          when {Rigid, Rigid}
+            MidGap.new(l, mid, r)
+          when {PaddedLeft, PaddedRight}
+            PaddedMidGap.new(l.l, l.r, mid, r.l, r.r)
+          else
+            # If you want to have some fun, you can try to prove this is unreachable.
+            #
+            # Or maybe it *is* reachable and I'm stupid . . .
+            raise ArgumentError.new
+          end
+        end
+      else
+        raise ArgumentError.new
       end
     end
   end

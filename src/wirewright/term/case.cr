@@ -314,7 +314,7 @@ module Ww::Term::Case
 
     # Compiles *specs* in single-threaded mode.
     def self.compile(specs : Slice(MatchSpec)) : MM1
-      new(arms: specs.to_readonly_slice { |spec| {M1.operator(spec.pattern), spec} })
+      new(arms: specs.to_readonly_slice { |spec| {M1next.operator(spec.pattern), spec} })
     end
 
     private def sink

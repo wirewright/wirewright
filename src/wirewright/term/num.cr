@@ -275,6 +275,10 @@ module Ww
     end
 
     # Converts this number term to a Crystal number.
+    #
+    # Conversion to integer types succeeds only if no information will be lost.
+    # That is, by saying `to?(UInt32)`, you're saying "convert to UInt32 if it's
+    # an integer in UInt32 bounds, otherwise fail".
     def to?(type : Number.class)
       to_number?(type)
     end
@@ -289,6 +293,10 @@ module Ww
     end
 
     private def to_number?(type : T.class) : T? forall T
+      {% if T < ::Int %}
+        return unless integer?
+      {% end %}
+
       kmap { |a| T.new(a) }
     rescue OverflowError
     end
@@ -371,6 +379,10 @@ module Ww
     # it is an integer (see also: `Float64#integer?`).
     @[Dncast]
     def integer? : Bool
+      if @k.is_a?(Int64)
+        return true
+      end
+
       kmap(&.integer?)
     end
 

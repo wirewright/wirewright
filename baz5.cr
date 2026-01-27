@@ -758,11 +758,11 @@ end
 # *selector* pattern is used to match a term, and if a match is found, the capture
 # `rewritee` is passed to the *successor* rewriter.
 def selR(selector : Term, successor : Rewriter) : Rewriter
-  selR(M1.operator(selector), successor)
+  selR(M1next.operator(selector), successor)
 end
 
 def rejR(selector : Term, successor : Rewriter) : Rewriter
-  rejR(M1.operator(selector), successor)
+  rejR(M1next.operator(selector), successor)
 end
 
 SELR_SELECTOR_CACHE = SyncCache(String, Term).new(1024, preallocate: true, byref: true)
@@ -1008,7 +1008,7 @@ end
 
 # Check out the main `relR` overload (one for `M1::Operator::Any`) to learn more.
 def relR(bottom : Term, successor : Rewriter, **kwargs) : Rewriter
-  relR(M1.operator(bottom), successor, **kwargs)
+  relR(M1next.operator(bottom), successor, **kwargs)
 end
 
 # Check out the main `relR` overload (one for `M1::Operator::Any`) to learn more.
@@ -1404,7 +1404,7 @@ end
 
 # See the main overload.
 def wrapR(pdisasm : Term, reshape : Term, successor : Rewriter, punwrap : Term, assemble : Term) : Rewriter
-  wrapR(M1.operator(pdisasm), reshape, successor, M1.operator(punwrap), assemble)
+  wrapR(M1next.operator(pdisasm), reshape, successor, M1next.operator(punwrap), assemble)
 end
 
 # See the main overload.
@@ -1459,7 +1459,7 @@ end
 
 # See the main overload.
 def multipartR(pdisasm : Term, successors : Enumerable({Term, Rewriter}), assemble : Term) : Rewriter
-  multipartR(M1.operator(pdisasm), successors, assemble)
+  multipartR(M1next.operator(pdisasm), successors, assemble)
 end
 
 # See the main overload.

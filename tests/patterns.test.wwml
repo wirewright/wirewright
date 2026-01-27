@@ -463,10 +463,9 @@
 
 ;; %not
 (group
-  ;; Interpreted literally!
+  ;; pass
   (pattern (%not)
-    (+ (%not))
-    (- () (%not 1) (%not x: 1) 1 "John Doe" qux true)) ;; etc...
+    (+ 1 "John Due" qux true ())) ;; etc...
 
   (pattern (%not a)
     (+ b c 1 "foo" true ()) ;; etc...
@@ -1091,465 +1090,649 @@
          baz c (qux 5)) (x y c))
        {xs: ({k: c, v: 5}), ks: ({k: c})})))
 
-;; %plural: without min, max
+;; %plural: Essentials
 (group
-  (pattern ((%plural))
-    (+ () (x) (x 1 z)))
-
-  (pattern ((%plural xs))
-    (= () {xs: ()})
-    (= (x) {xs: (x)})
-    (= (x 1 z) {xs: (x 1 z)}))
-
-  (pattern ((%plural xs type: _symbol))
-    (= () {xs: ()})
-    (= (x) {xs: (x)})
-    (= (x y z) {xs: (x y z)})
-    (- (1) (1 x) (x 1))))
-
-;; %plural: min
-(group
-  (pattern ((%plural xs min: 2))
-    (= (x y) {xs: (x y)})
-    (= (x y z) {xs: (x y z)})
-    (- () (x)))
-
-  (pattern ((%plural xs min: 2) (%plural min: 2))
-    (= (x y a b) {xs: (x y)})
-    (= (x y z a b c) {xs: (x y z)})
-    (- () (x) (x y) (x y a))))
-
-;; %plural: max
-(group
-  (pattern ((%plural xs max: 2))
-    (= () {xs: ()})
-    (= (x) {xs: (x)})
-    (= (x y) {xs: (x y)})
-    (- (x y z) (x y z a))) ;; etc...
-
-  (pattern ((%plural xs max: 2) (%plural max: 2))
-    (= () {xs: ()})
-    (= (x) {xs: (x)})
-    (= (x y) {xs: (x)})
-    (= (x y z) {xs: (x y)})
-    (= (x y z a) {xs: (x y)})
-    (- (x y z a b) (x y z a b c)))) ;; etc...
-
-;; %plural: min + max
-(group
-  (pattern ((%plural xs max: 3))
-    (= () {xs: ()})
-    (= (x) {xs: (x)})
-    (= (x y) {xs: (x y)})
-    (= (x y z) {xs: (x y z)})
-    (- (x y z a) {x: 100} (x y z: 1)))
-
-  (pattern ((%plural xs min: 2 max: 4))
-    (= (x y) {xs: (x y)})
-    (= (x y a) {xs: (x y a)})
-    (= (x y a b) {xs: (x y a b)})
-    (- () (x) (x y a b c) (x y a b c d) {x: 1, y: 2})) ;; etc...
-
-  (pattern ((%plural xs min: 2 max: 4) (%plural ys min: 1 max: 3))
-    (= (x y z) {xs: (x y), ys: (z)})
-    (= (x y z a) {xs: (x y), ys: (z a)})
-    (= (x y z a b) {xs: (x y z), ys: (a b)})
-    (= (x y z a b c) {xs: (x y z), ys: (a b c)})
-    (= (x y z a b c d) {xs: (x y z a), ys: (b c d)})
-    (- () (x) (x y) (x y z a b c d e))))
-
-;; %plural: min overflows u8
-;;
-;; Interpreted literally.
-(group
-  (pattern ((%plural min: -1))
-    (+ ((%plural min: -1)))
-    (- () (x) (x y) (x y z)))
-
-  (pattern ((%plural min: -12345))
-    (+ ((%plural min: -12345)))
-    (- () (x) (x y) (x y z)))
-
-  (pattern ((%plural min: -1/3))
-    (+ ((%plural min: -1/3)))
-    (- () (x) (x y) (x y z)))
-
-  (pattern ((%plural min: 1/3))
-    (+ ((%plural min: 1/3)))
-    (- () (x) (x y) (x y z)))
-
-  (pattern ((%plural min: 256))
-    (+ ((%plural min: 256)))
-    (- () (x) (x y) (x y z)))
-
-  (pattern ((%plural min: 12345))
-    (+ ((%plural min: 12345)))
-    (- () (x) (x y) (x y z)))
-
-  (pattern ((%plural max: -1))
-    (+ ((%plural max: -1)))
-    (- () (x) (x y) (x y z)))
-
-  (pattern ((%plural max: -12345))
-    (+ ((%plural max: -12345)))
-    (- () (x) (x y) (x y z)))
-
-  (pattern ((%plural max: -1/3))
-    (+ ((%plural max: -1/3)))
-    (- () (x) (x y) (x y z)))
-
-  (pattern ((%plural max: 0))
-    (+ ((%plural max: 0)))
-    (- () (x) (x y) (x y z)))
-
-  (pattern ((%plural max: 1/3))
-    (+ ((%plural max: 1/3)))
-    (- () (x) (x y) (x y z)))
-
-  (pattern ((%plural max: 256))
-    (+ ((%plural max: 256)))
-    (- () (x) (x y) (x y z)))
-
-  (pattern ((%plural max: 12345))
-    (+ ((%plural max: 12345)))
-    (- () (x) (x y) (x y z)))
-
-  (pattern ((%plural min: 3 max: 1))
-    (+ ((%plural min: 3 max: 1)))
-    (- () (x) (x y) (x y z))))
-
-;; %plural: min = max
-(group
-  (pattern ((%plural min: 2 max: 2))
-    (+ (x y))
-    (- () (x) (x y z) (x y z a))) ;; etc...
-
-  (pattern ((%plural xs min: 2 max: 2) (%plural ys min: 2 max: 2))
-    (= (x y a b) {xs: (x y), ys: (a b)})
-    (- () (x) (x y a) (x y a b c) (x y z b c d)))) ;; etc...
-
-;; %plural: untyped-typed edge with min, max
-(group
-  (pattern ((%plural xs max: 2) (%plural ys min: 1 type: _number))
-    (= (1) {xs: (), ys: (1)})
-    (= (1 2) {xs: (), ys: (1 2)})
-    (= (1 2 3) {xs: (), ys: (1 2 3)})
-    (= (x 1) {xs: (x), ys: (1)})
-    (= (x 1 2 3) {xs: (x), ys: (1 2 3)})
-    (= (x y 1 2 3) {xs: (x y), ys: (1 2 3)})
-    (= (x y 1 2 3 4) {xs: (x y), ys: (1 2 3 4)})
-    (- () (x) (x y) (x y z) (x y z 1 2 3)))
-
-  (pattern ((%plural xs min: 2 max: 2) (%plural ys min: 1 max: 2 type: _number))
-    (= (1 2 3) {xs: (1 2), ys: (3)})
-    (= (1 2 3 4) {xs: (1 2), ys: (3 4)})
-    (= (x y 1 2) {xs: (x y), ys: (1 2)})
-    (- () (1) (1 2) (x) (x y) (x y z) (1 2 3 4 5) (x y z 1 2))))
-
-;; %plural: typed-untyped edge with min, max
-(group
-  (pattern ((%plural xs max: 2 type: _number) (%plural ys min: 1))
-    (= (1) {xs: (), ys: (1)})
-    (= (1 2) {xs: (1), ys: (2)})
-    (= (1 2 3) {xs: (1 2), ys: (3)})
-    (= (1 2 3 4) {xs: (1 2), ys: (3 4)})
-    (= (x) {xs: (), ys: (x)})
-    (= (x y) {xs: (), ys: (x y)})
-    (= (1 x) {xs: (1), ys: (x)})
-    (= (1 x y) {xs: (1), ys: (x y)})
-    (= (1 2 x) {xs: (1 2), ys: (x)})
-    (= (1 2 x y) {xs: (1 2), ys: (x y)})
-    (= (1 2 3 x y) {xs: (1 2), ys: (3 x y)})
-    (- ()))
-
-  (pattern ((%plural xs min: 2 max: 2 type: _number) (%plural ys min: 1 max: 2))
-    (= (1 2 3) {xs: (1 2), ys: (3)})
-    (= (1 2 x) {xs: (1 2), ys: (x)})
-    (= (1 2 x y) {xs: (1 2), ys: (x y)})
-    (- () (1 2 3 x y) (1 2 x y z))))
-
-;; %plural: typed-typed edge with min, max
-(pattern ((%plural xs type: _symbol min: 2) (%plural ys type: _number max: 3))
-  (= (x y) {xs: (x y), ys: ()})
-  (= (x y z) {xs: (x y z), ys: ()})
-  (= (x y z 1) {xs: (x y z), ys: (1)})
-  (= (x y z 1 2) {xs: (x y z), ys: (1 2)})
-  (= (x y z 1 2 3) {xs: (x y z), ys: (1 2 3)})
-  (= (x y 1 2 3) {xs: (x y), ys: (1 2 3)})
-  (- () (x) (x 1) (x 1 2) (x 1 2 3) (x y 1 2 3 4) (x 1 y 3)))
-
-;; %plural: basic polyblank
-(group
-  (pattern (xs_+)
-    (= (x) {xs: (x)})
-    (= (x y "foo" 4) {xs: (x y "foo" 4)})
-    (- ()))
-
-  (pattern (xs_symbol+)
-    (= (x) {xs: (x)})
-    (= (x y z) {xs: (x y z)})
-    (- () (1) (x y 1)))
-
-  (pattern (xs_+ ys_+)
-    (= (x y) {xs: (x), ys: (y)})
-    (= (x y z) {xs: (x y), ys: (z)})
-    (= (x y z a) {xs: (x y), ys: (z a)})
-    (= (x y z a b) {xs: (x y z), ys: (a b)})
-    (= (x y z a b c) {xs: (x y z), ys: (a b c)})
-    (- () (1)))
-
-  (pattern (xs_number+)
-    (= (1) {xs: (1)})
-    (= (1 2 3) {xs: (1 2 3)})
-    (- () (a 2 3) (1 a 3) (1 2 a)))
-
-  (pattern (_number+)
-    (+ (1) (1 2 3))
-    (- () (a 2 3) (1 a 3) (1 2 a)))
-
-  (pattern (_* item_ foo)
-    (= (a b c foo) {item: c}))
-
-  ;; Test %bounds indirectly if in optimize mode
-
-  (pattern (_+)
-    (+ (1) (1 2 3) (x) (x y z) ("foo" x 1 2))
-    (- () (x: 100) (+ 1 2 x: 100 y: 200)))
-
-  (pattern ((%plural min: 2))
-    (+ (1 2) (1 2 3) (x y z) ("foo" x 1 2 3) (1 2 3 4 5))
-    (- () (1) (x) (x: 100) (x: 100 y: 200) (+ 1 2 x: 100 y: 200)))
-
-  (pattern ((%plural max: 3))
-    (+ () (1) (1 2) (1 2 3) (x) (x y z))
-    (- (1 2 3 4) ("foo" x 1 2 3) (1 2 3 4 5) (x: 100) (x: 100 y: 200) (+ 1 2 x: 100 y: 200)))
-
-  (pattern ((%plural min: 2 max: 4))
-    (+ (1 2) (1 2 3) (x y z) (1 2 3 4))
-    (- () (1) (x) ("foo" x 1 2 3) (x: 100) (x: 100 y: 200) (+ 1 2 x: 100 y: 200) (1 2 3 4 5)))
-
-  ;; Untyped-typed edge
-  (pattern (xs_+ ys_string+)
-    (= (1 2 "foo" "bar") {xs: (1 2), ys: ("foo" "bar")})
-    (= (1 2 "foo") {xs: (1 2), ys: ("foo")})
-    (= (1 "foo") {xs: (1), ys: ("foo")})
-    (- () (1) (1 2) ("foo") ("foo" 123)))
-
-  (pattern (xs_+ ys_number+)
-    (= (1 2 3 4) {xs: (1) ys: (2 3 4)})
-    (= (1 "foo" 3 4) {xs: (1 "foo") ys: (3 4)})
-    (= (1 2 3 "foo" 4) {xs: (1 2 3 "foo") ys: (4)})
-    (= (1 2 3 "foo" 4 5 6) {xs: (1 2 3 "foo") ys: (4 5 6)})
-    (= ("foo" 1 2 3 4 5 6) {xs: ("foo") ys: (1 2 3 4 5 6)})
-    (= (x y z "foo" 1 2 3 4 5 6) {xs: (x y z "foo") ys: (1 2 3 4 5 6)})
-    (= (x 1 y z "foo" 1 2 3 4 5 6) {xs: (x 1 y z "foo") ys: (1 2 3 4 5 6)}))
-
-  (pattern (xs_* ys_number+)
-    (= (1 2 3 4) {xs: () ys: (1 2 3 4)})
-    (= (1 "foo" 3 4) {xs: (1 "foo") ys: (3 4)})
-    (= (1 2 3 "foo" 4) {xs: (1 2 3 "foo") ys: (4)})
-    (= (1 2 3 "foo" 4 5 6) {xs: (1 2 3 "foo") ys: (4 5 6)})
-    (= ("foo" 1 2 3 4 5 6) {xs: ("foo") ys: (1 2 3 4 5 6)})
-    (= (x y z "foo" 1 2 3 4 5 6) {xs: (x y z "foo") ys: (1 2 3 4 5 6)})
-    (= (x 1 y z "foo" 1 2 3 4 5 6) {xs: (x 1 y z "foo") ys: (1 2 3 4 5 6)}))
-
-  ;; Typed-untyped edge
-  (pattern (xs_number+ ys_+)
-    (= (1 x) {xs: (1), ys: (x)})
-    (= (1 2) {xs: (1), ys: (2)})
-    (= (1 x 4) {xs: (1), ys: (x 4)})
-    (= (1 2 x 4) {xs: (1 2), ys: (x 4)})
-    (= (1 2 3 x) {xs: (1 2 3), ys: (x)})
-    (= (1 2 x y) {xs: (1 2), ys: (x y)})
-    (= (1 2 3 4) {xs: (1 2 3), ys: (4)})
-    (- () (1) (x) (x 1)))
-
-  (pattern (xs_number+ ys_*)
-    (= (1) {xs: (1), ys: ()})
-    (= (1 2 3) {xs: (1 2 3), ys: ()})
-    (= (1 2 3 x) {xs: (1 2 3), ys: (x)})
-    (= (1 2 3 x y z) {xs: (1 2 3), ys: (x y z)})
-    (- () (x) (x 1)))
-
-  ;; Typed-typed edge
-  (pattern (xs_number+ ys_symbol+)
-    (= (1 x) {xs: (1), ys: (x)})
-    (= (1 2 x) {xs: (1 2), ys: (x)})
-    (= (1 x y) {xs: (1), ys: (x y)})
-    (= (1 2 x y) {xs: (1 2), ys: (x y)})
-    (- () (x) (1) (1 x true) (true 1 x)))
-
-  ;; T-typed-T-typed edge
-  (pattern (xs_symbol+ ys_symbol+)
-    (= (a b) {xs: (a), ys: (b)})
-    (= (a b c) {xs: (a b), ys: (c)})
-    (= (a b c d) {xs: (a b), ys: (c d)})
-    (= (a b c d e) {xs: (a b c), ys: (d e)})
-    (- () (a) (1 a) (a 1) (1 2))))
-
-;; Polyblank triple
-(group
-  (pattern (xs_+ ys_+ zs_+)
-    (= (1 a "b") {xs: (1), ys: (a), zs: ("b")})
-    (= (1 2 a "b") {xs: (1 2), ys: (a), zs: ("b")})
-    (= (1 2 a b "b") {xs: (1 2), ys: (a b), zs: ("b")})
-    (= (1 2 a b "b" "c") {xs: (1 2), ys: (a b), zs: ("b" "c")})
-    (= (1 2 a b c "b" "c") {xs: (1 2 a), ys: (b c), zs: ("b" "c")})
-    (- () (a) (a b)))
-
-  (pattern (xs_number+ ys_+ zs_+)
-    (= (1 2 a b c "b" "c") {xs: (1 2), ys: (a b c), zs: ("b" "c")}))
-
-  (pattern (xs_+ ys_+ zs_+ as_string+)
-    (= (1 2 a b "c" "d" "e") {xs: (1 2), ys: (a), zs: (b), as: ("c" "d" "e")})
-    (= (1 2 a b "c" "d" "e" "f") {xs: (1 2), ys: (a), zs: (b), as: ("c" "d" "e" "f")})
-    (= (1 2 a b "c" "d" x "e" "f") {xs: (1 2 a), ys: (b "c"), zs: ("d" x), as: ("e" "f")})))
-
-;; Polyblank in nested list
-(pattern (foo (bar xs_+) (baz ys_+))
-  (= (foo (bar 1) (baz 2)) {xs: (1), ys: (2)})
-  (= (foo (bar 1 2) (baz 3 4)) {xs: (1 2), ys: (3 4)})
-  (- ()
-     (foo)
-     (foo (bar))
-     (foo (bar) (baz))
-     (foo (bar 1) (baz))
-     (foo (bar) (baz 2))))
-
-;; Polyblank unification in nested list
-(pattern (foo (bar xs_+) (baz xs_+))
-  (= (foo (bar 1) (baz 1)) {xs: (1)})
-  (= (foo (bar 1 x) (baz 1 x)) {xs: (1 x)})
-  (= (foo (bar x y z) (baz x y z)) {xs: (x y z)})
-  (- (foo (bar) (baz))
-     (foo (bar a) (baz 2))
-     (foo (bar 1) (baz a))
-     (foo (bar a 2) (baz 1 2))
-     (foo (bar 1 a) (baz 1 2))
-     (foo (bar 1 2) (baz a 2))
-     (foo (bar 1 2) (baz 1 a))))
-
-;; %plural: legacy: item sequence: head-tail
-(group
-  (pattern (x_ xs_+)
-    (= (a b) {x: a, xs: (b)})
-    (= (a b 1 -1 1/3) {x: a, xs: (b 1 -1 1/3)})
-    (- () (a)))
-
-  (pattern (x_ xs_*)
-    (= (a) {x: a, xs: ()})
-    (= (a b) {x: a, xs: (b)})
-    (= (a b 1 -1 1/3) {x: a, xs: (b 1 -1 1/3)})
-    (- ())))
-
-;; %plural: legacy: item sequence: prior-last
-(group
-  (pattern (xs_+ x_)
-    (= (a b) {xs: (a), x: b})
-    (= (a b 1 -1 1/3) {xs: (a b 1 -1), x: 1/3})
-    (- () (a)))
-
-  (pattern (xs_* x_)
-    (= (a) {x: a, xs: ()})
-    (= (a b) {xs: (a), x: b})
-    (= (a b 1 -1 1/3) {xs: (a b 1 -1), x: 1/3})
-    (- ())))
-
-;; First-last
-(pattern (x_ mid_* y_)
-  (= (a b) {x: a, mid: (), y: b})
-  (= (a b c) {x: a, mid: (b), y: c})
-  (= (a b c d e f g) {x: a, mid: (b c d e f), y: g})
-  (- () (a)))
-
-;; Middle...
-(pattern (l_* m_ r_*)
-  (= (a) {l: (), m: a, r: ()})
-  (= (a b) {l: (a), m: b, r: ()})
-  (= (a b c) {l: (a), m: b, r: (c)})
-  (= (a b c d) {l: (a b), m: c, r: (d)})
-  (= (a b c d e) {l: (a b), m: c, r: (d e)}))
-
-;; ... but can work like find.
-(pattern (l_* m←(%pipe (mod 2) 0) r_*)
-  (= (a 2 1 3 b c d) {l: (a), m: 2, r: (1 3 b c d)})
-  (= (a b c 2 1 3 b c d) {l: (a b c), m: 2, r: (1 3 b c d)})
-  (= (a b c 2 5 4 1 3 b 8 c d) {l: (a b c), m: 2, r: (5 4 1 3 b 8 c d)}))
-
-;; Check left-leaning-ness of polyblank sequences.
-(pattern (x_ xs_+ ys_+ y_)
-  (= (x_ 1 -1 "foo" true 1) {x: x_, xs: (1 -1), ys: ("foo" true), y: 1}))
-
-(pattern (x_ xs_+ ys_symbol+ y_)
-  (= (1 -1 1/3 a b c) {x: 1, xs: (-1 1/3), ys: (a b), y: c}))
-
-;; %plural: legacy: item sequence: zero or more polyblank
-(group
-  (pattern (xs_*)
-    (= () {xs: ()})
-    (= (1) {xs: (1)})
-    (= (1 -1 1/3) {xs: (1 -1 1/3)})
-    (- (k: 1) (x k: 1)))
-
-  (pattern (xs_* ys_*)
-    (= () {xs: (), ys: ()})
-    (= (1) {xs: (1), ys: ()})
-    (= (1 -1 1/3) {xs: (1 -1), ys: (1/3)}))
-
-  (pattern (xs_* ys_* zs_*)
-    (= () {xs: (), ys: (), zs: ()})
-    (= (1) {xs: (1), ys: (), zs: ()})
-    (= (1 -1) {xs: (1), ys: (-1), zs: ()})
-    (= (1 -1 1/3) {xs: (1), ys: (-1), zs: (1/3)})
-    (= (1 -1 1/3 a) {xs: (1 -1), ys: (1/3), zs: (a)})
-    (= (1 -1 1/3 a b) {xs: (1 -1), ys: (1/3 a), zs: (b)})
-    (= (1 -1 1/3 a b c) {xs: (1 -1), ys: (1/3 a), zs: (b c)})))
-
-;; Polyblanks before a typed polyblank give way to the typed polyblank.
-(pattern (xs_* ys_number* zs_*)
-  (= (1 2 3 4 5 6) {xs: (), ys: (1 2 3 4 5 6), zs: ()})
-  (= (1 2 "hello" 3 4 5 foo "world" 5 6 7) {xs: (1 2 "hello"), ys: (3 4 5), zs: (foo "world" 5 6 7)})
-  (= (x y 1 2 z 3 4 5 "a" 6) {xs: (x y), ys: (1 2), zs: (z 3 4 5 "a" 6)}))
-
-;; Typed polyblank before an untyped one must be greedy.
-(group
-  (pattern (xs_number* ys_*)
-    (= (1 -1 1/3) {xs: (1 -1 1/3), ys: ()})
-    (= (1 -1 1/3 a b c) {xs: (1 -1 1/3), ys: (a b c)})
-    (= (a b c) {xs: (), ys: (a b c)}))
-
-  (pattern (xs_number+ ys_*)
-    (= (1 -1 1/3) {xs: (1 -1 1/3), ys: ()})
-    (= (1 -1 1/3 a b c) {xs: (1 -1 1/3), ys: (a b c)})
-    (- (a b c)))
-
-  (pattern (xs_number+ ys_+)
-    (= (1 -1 1/3) {xs: (1 -1), ys: (1/3)})
-    (= (1 -1 1/3 a b c) {xs: (1 -1 1/3), ys: (a b c)})
-    (- (a b c))))
-
-;; %plural: legacy: item sequence: fractional unify
-(group
-  (pattern (xs_+ xs_+)
-    (= (1 1) {xs: (1)})
-    (= (1 2 1 2) {xs: (1 2)})
-    (= (1 "foo" 1 "foo") {xs: (1 "foo")})
-    (- () (1 2) (1 2 3) (1 2 3 4) (1 2 1 4)))
-
-  (pattern (xs_+ xs_+ xs_+)
-    (= (x x x) {xs: (x)})
-    (= (x y x y x y) {xs: (x y)})
-    (= (x y z x y z x y z) {xs: (x y z)})
+  ;; %plural: without min, max
+  (group
+    (pattern ((%plural))
+      (+ () (x) (x 1 z)))
+
+    (pattern ((%plural xs))
+      (= () {xs: ()})
+      (= (x) {xs: (x)})
+      (= (x 1 z) {xs: (x 1 z)})
+      (= (1 -1 1/3) {xs: (1 -1 1/3)})
+      (- (k: 1) (x k: 1)))
+
+    (pattern ((%plural xs type: _symbol))
+      (= () {xs: ()})
+      (= (x) {xs: (x)})
+      (= (x y z) {xs: (x y z)})
+      (- (1) (1 x) (x 1))))
+
+  ;; %plural: min
+  (group
+    (pattern ((%plural xs min: 2))
+      (= (x y) {xs: (x y)})
+      (= (x y z) {xs: (x y z)})
+      (- () (x)))
+
+    (pattern (xs_number+)
+      (= (1) {xs: (1)})
+      (= (1 2 3) {xs: (1 2 3)})
+      (- () (a 2 3) (1 a 3) (1 2 a)))
+
+    (pattern (_number+)
+      (+ (1) (1 2 3))
+      (- () (a 2 3) (1 a 3) (1 2 a)))
+
+    (pattern ((%plural xs min: 2) (%plural min: 2))
+      (= (x y a b) {xs: (x y)})
+      (= (x y z a b c) {xs: (x y z)})
+      (- () (x) (x y) (x y a))))
+
+  ;; %plural: max
+  (group
+    (pattern ((%plural xs max: 2))
+      (= () {xs: ()})
+      (= (x) {xs: (x)})
+      (= (x y) {xs: (x y)})
+      (- (x y z) (x y z a))) ;; etc...
+
+    (pattern ((%plural xs max: 2) (%plural max: 2))
+      (= () {xs: ()})
+      (= (x) {xs: (x)})
+      (= (x y) {xs: (x)})
+      (= (x y z) {xs: (x y)})
+      (= (x y z a) {xs: (x y)})
+      (- (x y z a b) (x y z a b c)))) ;; etc...
+
+  ;; %plural: min + max
+  (group
+    (pattern ((%plural xs max: 3))
+      (= () {xs: ()})
+      (= (x) {xs: (x)})
+      (= (x y) {xs: (x y)})
+      (= (x y z) {xs: (x y z)})
+      (- (x y z a) {x: 100} (x y z: 1)))
+
+    (pattern ((%plural xs min: 2 max: 4))
+      (= (x y) {xs: (x y)})
+      (= (x y a) {xs: (x y a)})
+      (= (x y a b) {xs: (x y a b)})
+      (- () (x) (x y a b c) (x y a b c d) {x: 1, y: 2})) ;; etc...
+
+    (pattern ((%plural xs min: 2 max: 4) (%plural ys min: 1 max: 3))
+      (= (x y z) {xs: (x y), ys: (z)})
+      (= (x y z a) {xs: (x y), ys: (z a)})
+      (= (x y z a b) {xs: (x y z), ys: (a b)})
+      (= (x y z a b c) {xs: (x y z), ys: (a b c)})
+      (= (x y z a b c d) {xs: (x y z a), ys: (b c d)})
+      (- () (x) (x y) (x y z a b c d e))))
+
+  ;; %plural: min, max out of bounds
+  ;;
+  ;; Interpreted literally.
+  (group
+    (pattern ((%plural min: -1))
+      (+ ((%plural min: -1)))
+      (- () (x) (x y) (x y z)))
+
+    (pattern ((%plural min: -12345))
+      (+ ((%plural min: -12345)))
+      (- () (x) (x y) (x y z)))
+
+    (pattern ((%plural min: -1/3))
+      (+ ((%plural min: -1/3)))
+      (- () (x) (x y) (x y z)))
+
+    (pattern ((%plural min: 1/3))
+      (+ ((%plural min: 1/3)))
+      (- () (x) (x y) (x y z)))
+
+    (pattern ((%plural max: -1))
+      (+ ((%plural max: -1)))
+      (- () (x) (x y) (x y z)))
+
+    (pattern ((%plural max: -12345))
+      (+ ((%plural max: -12345)))
+      (- () (x) (x y) (x y z)))
+
+    (pattern ((%plural max: -1/3))
+      (+ ((%plural max: -1/3)))
+      (- () (x) (x y) (x y z)))
+
+    (pattern ((%plural max: 1/3))
+      (+ ((%plural max: 1/3)))
+      (- () (x) (x y) (x y z)))
+
+    (pattern ((%plural min: 3 max: 1))
+      (+ ((%plural min: 3 max: 1)))
+      (- () (x) (x y) (x y z))))
+
+  ;; %plural: min = max
+  (group
+    (pattern ((%plural min: 2 max: 2))
+      (+ (x y))
+      (- () (x) (x y z) (x y z a))) ;; etc...
+
+    (pattern ((%plural xs min: 2 max: 2) (%plural ys min: 2 max: 2))
+      (= (x y a b) {xs: (x y), ys: (a b)})
+      (- () (x) (x y a) (x y a b c) (x y z b c d)))) ;; etc...
+
+  ;; Polyblank in nested list
+  (pattern (foo (bar xs_+) (baz ys_+))
+    (= (foo (bar 1) (baz 2)) {xs: (1), ys: (2)})
+    (= (foo (bar 1 2) (baz 3 4)) {xs: (1 2), ys: (3 4)})
     (- ()
-       (a x x)
-       (x a x)
-       (x x a)
-       (x y z)
-       (x a x y x y)
-       (x y x a x y)
-       (x y x y x a))))
+       (foo)
+       (foo (bar))
+       (foo (bar) (baz))
+       (foo (bar 1) (baz))
+       (foo (bar) (baz 2))))
 
-;; %plural: legacy: if polyblank referenced earlier in pattern as blank, do not treat it as fractional
+  ;; Polyblank unification in nested list
+  (pattern (foo (bar xs_+) (baz xs_+))
+    (= (foo (bar 1) (baz 1)) {xs: (1)})
+    (= (foo (bar 1 x) (baz 1 x)) {xs: (1 x)})
+    (= (foo (bar x y z) (baz x y z)) {xs: (x y z)})
+    (- (foo (bar) (baz))
+       (foo (bar a) (baz 2))
+       (foo (bar 1) (baz a))
+       (foo (bar a 2) (baz 1 2))
+       (foo (bar 1 a) (baz 1 2))
+       (foo (bar 1 2) (baz a 2))
+       (foo (bar 1 2) (baz 1 a)))))
+
+;; %plural: distributive
+(group
+  ;; Two
+  (group
+    ;; Basic
+    (pattern (xs_* ys_*)
+      (= () {xs: (), ys: ()})
+      (= (a) {xs: (a), ys: ()})
+      (= (a b) {xs: (a), ys: (b)})
+      (= (a b c) {xs: (a b), ys: (c)})
+      (= (a b c d) {xs: (a b), ys: (c d)})
+      (= (a b c d e) {xs: (a b c), ys: (d e)})
+      (= (1 -1 1/3) {xs: (1 -1), ys: (1/3)}))
+
+    ;; With limits
+    (pattern ((%plural xs min: 2) ys_*)
+      (- () (a) (a b))
+      (= (a b c) {xs: (a b), ys: (c)})
+      (= (a b c d) {xs: (a b), ys: (c d)})
+      (= (a b c d e) {xs: (a b c), ys: (d e)}))
+
+    (pattern (xs_* (%plural ys min: 2))
+      (- () (a) (a b) (a b c))
+      (= (a b c d) {xs: (a b), ys: (c d)})
+      (= (a b c d e) {xs: (a b c), ys: (d e)}))
+
+    (pattern (xs_+ ys_+)
+      (- () (x))
+      (= (x y) {xs: (x), ys: (y)})
+      (= (x y z) {xs: (x y), ys: (z)})
+      (= (x y z a) {xs: (x y), ys: (z a)})
+      (= (x y z a b) {xs: (x y z), ys: (a b)})
+      (= (x y z a b c) {xs: (x y z), ys: (a b c)}))
+
+    ;; With type constraint
+    (pattern (xs_number* ys_*)
+      (= () {xs: (), ys: ()})
+      (- (a))
+      (= (1) {xs: (1), ys: ()})
+      (= (1 2) {xs: (1), ys: (2)})
+      (= (1 2 a) {xs: (1 2), ys: (a)})
+      (= (1 2 a 3) {xs: (1 2), ys: (a 3)})
+      (- (1 2 a 3 4)) ;; {xs: (1 2 a), ys: (3 4)}
+      (= (1 2 3) {xs: (1 2), ys: (3)})
+      (= (1 2 3 a) {xs: (1 2), ys: (3 a)})
+      (= (1 2 3 a b) {xs: (1 2 3), ys: (a b)})
+      (= (1 2 3 a b c) {xs: (1 2 3), ys: (a b c)})
+      (- (1 2 3 a b c d))) ;; {xs: (1 2 3 a), ys: (b c d)}
+
+    (pattern (xs_* ys_number*)
+      (= () {xs: (), ys: ()})
+      (= (a) {xs: (a), ys: ()})
+      (= (1 2) {xs: (1), ys: (2)})
+      (- (1 2 a) (1 2 a 3))
+      (= (1 2 a 3 4) {xs: (1 2 a), ys: (3 4)})
+      (= (1 2 3) {xs: (1 2), ys: (3)})
+      (- (1 2 3 a) (1 2 3 a b) (1 2 3 a b c))
+      (= (a b c 1 2 3) {xs: (a b c), ys: (1 2 3)}))
+
+    (pattern (xs_number* ys_symbol*)
+      (= () {xs: (), ys: ()})
+      (= (1) {xs: (1), ys: ()})
+      (- (1 2)) ;; {xs: (1), ys: (2)}
+      (= (1 a) {xs: (1), ys: (a)})
+      (- (1 a b)) ;; {xs: (1 a), ys: (b)})
+      (= (1 2 a b) {xs: (1 2), ys: (a b)})
+      (= (1 2 3 a b) {xs: (1 2 3), ys: (a b)})
+      (= (1 2 3 a b c) {xs: (1 2 3), ys: (a b c)})
+      (- (1 2 3 a 4 c))) ;; {xs: (1 2 3), ys: (a 4 c)}
+
+    (pattern (xs_symbol* ys_symbol*)
+      (= () {xs: (), ys: ()})
+      (= (a) {xs: (a), ys: ()})
+      (= (a b) {xs: (a), ys: (b)})
+      (- (a 1 b) (a b 1))
+      (= (a b c) {xs: (a b), ys: (c)})
+      (= (a b c d) {xs: (a b), ys: (c d)})
+      (- (a b 1 c d) (a b c 1 d) (a b c d 1)))
+
+    ;; Unify
+    (pattern (xs_+ xs_+)
+      (= (1 1) {xs: (1)})
+      (= (1 2 1 2) {xs: (1 2)})
+      (= (1 "foo" 1 "foo") {xs: (1 "foo")})
+      (- () (1 2) (1 2 3) (1 2 3 4) (1 2 1 4))))
+
+  ;; Three
+  (group
+    ;; Basic
+    (pattern (xs_* ys_* zs_*)
+      (= () {xs: (), ys: (), zs: ()})
+      (= (a) {xs: (a), ys: (), zs: ()})
+      (= (a b) {xs: (a), ys: (b), zs: ()})
+      (= (a b c) {xs: (a), ys: (b), zs: (c)})
+      (= (a b c d) {xs: (a b), ys: (c), zs: (d)})
+      (= (a b c d e) {xs: (a b), ys: (c d), zs: (e)})
+      (= (a b c d e f) {xs: (a b), ys: (c d), zs: (e f)})
+      (= (a b c d e f g) {xs: (a b c), ys: (d e), zs: (f g)})
+      (= (1 -1 1/3 a b) {xs: (1 -1), ys: (1/3 a), zs: (b)}))
+
+    ;; With limits
+    (pattern (xs_+ ys_+ zs_+)
+      (= (1 a "b") {xs: (1), ys: (a), zs: ("b")})
+      (= (1 2 a "b") {xs: (1 2), ys: (a), zs: ("b")})
+      (= (1 2 a b "b") {xs: (1 2), ys: (a b), zs: ("b")})
+      (= (1 2 a b "b" "c") {xs: (1 2), ys: (a b), zs: ("b" "c")})
+      (= (1 2 a b c "b" "c") {xs: (1 2 a), ys: (b c), zs: ("b" "c")})
+      (- () (a) (a b)))
+
+    ;; With type constraint
+    (pattern (xs_* ys_symbol+ zs_+)
+      (= (a b c) {xs: (a), ys: (b), zs: (c)})
+      (= (1 b c d) {xs: (1 b), ys: (c), zs: (d)})
+      (- (a b 1 d))
+      (= (a b c d 2) {xs: (a b), ys: (c d), zs: (2)})
+      (= (a b c d e f) {xs: (a b), ys: (c d), zs: (e f)})
+      (- (a b 1 d e f) (a b c 2 e f))
+      (= (a b c d e f g) {xs: (a b c), ys: (d e), zs: (f g)}))
+      ;; ...
+
+    ;; Unify
+    (pattern (xs_+ xs_+ xs_+)
+      (= (x x x) {xs: (x)})
+      (= (x y x y x y) {xs: (x y)})
+      (= (x y z x y z x y z) {xs: (x y z)})
+      (- ()
+         (a x x)
+         (x a x)
+         (x x a)
+         (x y z)
+         (x a x y x y)
+         (x y x a x y)
+         (x y x y x a)))))
+
+;; Spatial shapes
+(group
+  ;; Padded left
+  (group
+    (pattern (xs_* x_)
+      (- ())
+      (= (a) {xs: (), x: a})
+      (= (a b) {xs: (a), x: b})
+      (= (a b c) {xs: (a b), x: c})
+      (= (a b c d) {xs: (a b c), x: d}))
+
+    (pattern ((%plural xs min: 2) x_)
+      (- () (a) (a b))
+      (= (a b c) {xs: (a b), x: c})
+      (= (a 1 c) {xs: (a 1), x: c})
+      (= (a b c d) {xs: (a b c), x: d}))
+
+    (pattern ((%plural xs min: 2 type: _symbol) x_)
+      (- () (a) (a b))
+      (= (a b c) {xs: (a b), x: c})
+      (- (a 1 c))
+      (= (a b c d) {xs: (a b c), x: d}))
+
+    ;; Many rigids
+    (pattern ((%plural xs min: 2 type: _symbol) x_ y_ z_)
+      (- () (a) (a b) (a b c) (a b c d))
+      (= (a b c d e) {xs: (a b), x: c, y: d, z: e})
+      (= (a b c d e f) {xs: (a b c), x: d, y: e, z: f})
+      (= (a b c d 1 f) {xs: (a b c), x: d, y: 1, z: f})
+      (- (a 1 c d e f)))
+
+    ;; Many plurals
+    (pattern (xs_* ys_* x_)
+      (- ())
+      (= (a) {xs: (), ys: (), x: a})
+      (= (a b) {xs: (a), ys: (), x: b})
+      (= (a b c) {xs: (a), ys: (b), x: c})
+      (= (a b c d) {xs: (a b), ys: (c), x: d})
+      (= (a b c d e) {xs: (a b), ys: (c d), x: e})
+      (= (a b c d e f) {xs: (a b c), ys: (d e), x: f})))
+
+  ;; Padded right
+  (group
+    (pattern (x_ xs_*)
+      (- ())
+      (= (a) {x: a, xs: ()})
+      (= (a b) {x: a, xs: (b)})
+      (= (a b c) {x: a, xs: (b c)})
+      (= (a b c d) {x: a, xs: (b c d)}))
+
+    (pattern (x_ (%plural xs min: 2))
+      (- () (a) (a b))
+      (= (a b c) {x: a, xs: (b c)})
+      (= (a 1 c) {x: a, xs: (1 c)})
+      (= (a b c d) {x: a, xs: (b c d)}))
+
+    (pattern (x_ (%plural xs min: 2 type: _symbol))
+      (- () (a) (a b))
+      (= (a b c) {x: a, xs: (b c)})
+      (- (a 1 c))
+      (= (a b c d) {x: a, xs: (b c d)}))
+
+    ;; Many rigids
+    (pattern (x_ y_ z_ (%plural xs min: 2 type: _symbol))
+      (- () (a) (a b) (a b c) (a b c d))
+      (= (a b c d e) {x: a, y: b, z: c, xs: (d e)})
+      (= (a b c d e f) {x: a, y: b, z: c, xs: (d e f)})
+      (= (a 1 c d e f) {x: a, y: 1, z: c, xs: (d e f)})
+      (- (a b c d 1 f)))
+
+    ;; Many plurals
+    (pattern (x_ xs_* ys_*)
+      (- ())
+      (= (a) {x: a, xs: (), ys: ()})
+      (= (a b) {x: a, xs: (b), ys: ()})
+      (= (a b c) {x: a, xs: (b), ys: (c)})
+      (= (a b c d) {x: a, xs: (b c), ys: (d)})
+      (= (a b c d e) {x: a, xs: (b c), ys: (d e)})
+      (= (a b c d e f) {x: a, xs: (b c d), ys: (e f)})
+      (= (a b c d e f g) {x: a, xs: (b c d), ys: (e f g)})))
+
+  ;; Padded
+  (group
+    ;; Middle
+    (pattern (l_* m_ r_*)
+      (- ())
+      (= (a) {l: (), m: a, r: ()})
+      (= (a b) {l: (a), m: b, r: ()})
+      (= (a b c) {l: (a), m: b, r: (c)})
+      (= (a b c d) {l: (a b), m: c, r: (d)})
+      (= (a b c d e) {l: (a b), m: c, r: (d e)})
+      (= (a b c d e f) {l: (a b c), m: d, r: (e f)})
+      (= (a b c d e f g) {l: (a b c), m: d, r: (e f g)}))
+
+    ;; Constrain left
+    (pattern ((%plural l min: 2) m_ r_*)
+      (- () (a) (a b) (a b c))
+      (= (a b c d) {l: (a b), m: c, r: (d)})
+      (= (a b c d e) {l: (a b), m: c, r: (d e)})
+      (= (a b c d e f) {l: (a b c), m: d, r: (e f)})
+      (= (a b c d e f g) {l: (a b c), m: d, r: (e f g)}))
+
+    ;; Constrain right
+    (pattern (l_* m_ (%plural r min: 2))
+      (- () (a) (a b) (a b c) (a b c d))
+      (= (a b c d e) {l: (a b), m: c, r: (d e)})
+      (= (a b c d e f) {l: (a b c), m: d, r: (e f)})
+      (= (a b c d e f g) {l: (a b c), m: d, r: (e f g)}))
+
+    ;; Constrain both
+    (pattern ((%plural l min: 3) m_ (%plural r min: 2))
+      (- () (a) (a b) (a b c) (a b c d) (a b c d e))
+      (= (a b c d e f) {l: (a b c), m: d, r: (e f)})
+      (= (a b c d e f g) {l: (a b c), m: d, r: (e f g)}))
+
+    ;; Many mid
+    (pattern (l_* x_ y_ r_*)
+      (- () (a))
+      (= (a b) {l: (), x: a, y: b, r: ()})
+      (= (a b c) {l: (a), x: b, y: c, r: ()})
+      (= (a b c d) {l: (a), x: b, y: c, r: (d)})
+      (= (a b c d e) {l: (a b), x: c, y: d, r: (e)})
+      (= (a b c d e f) {l: (a b), x: c, y: d, r: (e f)})
+      (= (a b c d e f g) {l: (a b c), x: d, y: e, r: (f g)}))
+
+    ;; Many left
+    (pattern (xs_* ys_* x_ r_*)
+      (- ())
+      (= (a) {xs: (), ys: (), x: a, r: ()})
+      (= (a b) {xs: (a), ys: (), x: b, r: ()})
+      (= (a b c) {xs: (a), ys: (), x: b, r: (c)})
+      (= (a b c d) {xs: (a), ys: (b), x: c, r: (d)})
+      (= (a b c d e) {xs: (a), ys: (b), x: c, r: (d e)})
+      (= (a b c d e f) {xs: (a b), ys: (c), x: d, r: (e f)})
+      (= (a b c d e f g) {xs: (a b), ys: (c), x: d, r: (e f g)})
+      (= (a b c d e f g h) {xs: (a b), ys: (c d), x: e, r: (f g h)})
+      (= (a b c d e f g h i) {xs: (a b), ys: (c d), x: e, r: (f g h i)}))
+
+    ;; Many right
+    (pattern (l_* x_ xs_* ys_*)
+      (- ())
+      (= (a) {l: (), x: a, xs: (), ys: ()})
+      (= (a b) {l: (a), x: b, xs: (), ys: ()})
+      (= (a b c) {l: (a), x: b, xs: (c), ys: ()})
+      (= (a b c d) {l: (a b), x: c, xs: (d), ys: ()})
+      (= (a b c d e) {l: (a b), x: c, xs: (d), ys: (e)})
+      (= (a b c d e f) {l: (a b c), x: d, xs: (e), ys: (f)})
+      (= (a b c d e f g) {l: (a b c), x: d, xs: (e f), ys: (g)})
+      (= (a b c d e f g h) {l: (a b c d), x: e, xs: (f g), ys: (h)})
+      (= (a b c d e f g h i) {l: (a b c d), x: e, xs: (f g), ys: (h i)}))
+
+    ;; Many left, many mid, many right
+    (pattern (as_* bs_* x_ y_ cs_* ds_*)
+      (- () (a))
+      (= (a b) {as: (), bs: (), x: a, y: b, cs: (), ds: ()})
+      (= (a b c) {as: (a), bs: (), x: b, y: c, cs: (), ds: ()})
+      (= (a b c d) {as: (a), bs: (), x: b, y: c, cs: (d), ds: ()})
+      (= (a b c d e) {as: (a), bs: (b), x: c, y: d, cs: (e), ds: ()})
+      (= (a b c d e f) {as: (a), bs: (b), x: c, y: d, cs: (e), ds: (f)})
+      (= (a b c d e f g) {as: (a b), bs: (c), x: d, y: e, cs: (f), ds: (g)})
+      (= (a b c d e f g h) {as: (a b), bs: (c), x: d, y: e, cs: (f g), ds: (h)})))
+
+  ;; Mid gap
+  (group
+    (pattern (x_ mid_* y_)
+      (- () (a))
+      (= (a b) {x: a, mid: (), y: b})
+      (= (a b c) {x: a, mid: (b), y: c})
+      (= (a b c d) {x: a, mid: (b c), y: d})
+      (= (a b c d e) {x: a, mid: (b c d), y: e})
+      (= (a b c d e f) {x: a, mid: (b c d e), y: f})
+      (= (a b c d e f g) {x: a, mid: (b c d e f), y: g}))
+
+    ;; Legacy
+    (pattern (x_ xs_+ ys_+ y_)
+      (= (x_ 1 -1 "foo" true 1) {x: x_, xs: (1 -1), ys: ("foo" true), y: 1}))
+    (pattern (x_ xs_+ ys_symbol+ y_)
+      (= (1 -1 1/3 a b c) {x: 1, xs: (-1 1/3), ys: (a b), y: c}))
+
+    ;; Many left
+    (pattern (x_ y_ mid_* z_)
+      (- () (a) (a b))
+      (= (a b c) {x: a, y: b, mid: (), z: c})
+      (= (a b c d) {x: a, y: b, mid: (c), z: d})
+      (= (a b c d e) {x: a, y: b, mid: (c d), z: e})
+      (= (a b c d e f) {x: a, y: b, mid: (c d e), z: f})
+      (= (a b c d e f g) {x: a, y: b, mid: (c d e f), z: g}))
+
+    ;; Many right
+    (pattern (x_ mid_* y_ z_)
+      (- () (a) (a b))
+      (= (a b c) {x: a, mid: (), y: b, z: c})
+      (= (a b c d) {x: a, mid: (b), y: c, z: d})
+      (= (a b c d e) {x: a, mid: (b c), y: d, z: e})
+      (= (a b c d e f) {x: a, mid: (b c d), y: e, z: f})
+      (= (a b c d e f g) {x: a, mid: (b c d e), y: f, z: g}))
+
+    ;; Many left, many mid, many right
+    (pattern (a_ b_ mid_* x_ y_)
+      (- () (a) (a b) (a b c))
+      (= (a b c d) {a: a, b: b, mid: (), x: c, y: d})
+      (= (a b c d e) {a: a, b: b, mid: (c), x: d, y: e})
+      (= (a b c d e f) {a: a, b: b, mid: (c d), x: e, y: f})
+      (= (a b c d e f g) {a: a, b: b, mid: (c d e), x: f, y: g}))
+
+    ;; Constraint on mid
+    (pattern (a_ b_ (%plural mid min: 2 type: _symbol) x_ y_)
+      (- () (a) (a b) (a b c) (a b c d) (a b c d e) (a b 1 d e f) (a b c 1 e f))
+      (= (a b c d e f) {a: a, b: b, mid: (c d), x: e, y: f})
+      (= (a b c d 1 f) {a: a, b: b, mid: (c d), x: 1, y: f})
+      (= (a b c d e f g) {a: a, b: b, mid: (c d e), x: f, y: g})))
+
+  ;; Padded mid gap
+  (group
+    (pattern (l_* ml_ m_* mr_ r_*)
+      (- () (a))
+      (= (a b) {l: (), ml: a, m: (), mr: b, r: ()})
+      (= (a b c) {l: (a), ml: b, m: (), mr: c, r: ()})
+      (= (a b c d) {l: (a), ml: b, m: (c), mr: d, r: ()})
+      (= (a b c d e) {l: (a), ml: b, m: (c), mr: d, r: (e)})
+      (= (a b c d e f) {l: (a b), ml: c, m: (d), mr: e, r: (f)})
+      (= (a b c d e f g) {l: (a b), ml: c, m: (d e), mr: f, r: (g)})
+      (= (a b c d e f g h) {l: (a b), ml: c, m: (d e), mr: f, r: (g h)})
+      (= (a b c d e f g h i) {l: (a b c), ml: d, m: (e f), mr: g, r: (h i)})
+      (= (a b c d e f g h i j) {l: (a b c), ml: d, m: (e f g), mr: h, r: (i j)})
+      (= (a b c d e f g h i j k) {l: (a b c), ml: d, m: (e f g), mr: h, r: (i j k)}))
+
+    ;; Constraints
+    (pattern ((%plural l min: 3) ml_ (%plural m min: 2) mr_ (%plural r min: 2))
+      (- () (a) (a b) (a b c) (a b c d) (a b c d e) (a b c d e f) (a b c d e f g) (a b c d e f g h))
+      (= (a b c d e f g h i) {l: (a b c), ml: d, m: (e f), mr: g, r: (h i)})
+      (= (a b c d e f g h i j) {l: (a b c), ml: d, m: (e f g), mr: h, r: (i j)})
+      (= (a b c d e f g h i j k) {l: (a b c), ml: d, m: (e f g), mr: h, r: (i j k)}))
+
+    ;; Two left mids, two rights
+    (pattern (l_* a_ b_ m_* x_ xs_* ys_*)
+      (- () (a) (a b))
+      (= (a b c) {l: (), a: a, b: b, m: (), x: c, xs: (), ys: ()})
+      (= (a b c d) {l: (a), a: b, b: c, m: (), x: d, xs: (), ys: ()})
+      (= (a b c d e) {l: (a), a: b, b: c, m: (d), x: e, xs: (), ys: ()})
+      (= (a b c d e f) {l: (a), a: b, b: c, m: (d), x: e, xs: (f), ys: ()})
+      (= (a b c d e f g) {l: (a b), a: c, b: d, m: (e), x: f, xs: (g), ys: ()})
+      (= (a b c d e f g h) {l: (a b), a: c, b: d, m: (e f), x: g, xs: (h), ys: ()})
+      (= (a b c d e f g h i) {l: (a b), a: c, b: d, m: (e f), x: g, xs: (h), ys: (i)})
+      (= (a b c d e f g h i j) {l: (a b c), a: d, b: e, m: (f g), x: h, xs: (i), ys: (j)})
+      (= (a b c d e f g h i j k) {l: (a b c), a: d, b: e, m: (f g h), x: i, xs: (j), ys: (k)}))
+
+    ;; Two right mids, two lefts
+    (pattern (xs_* ys_* x_ m_* y_ z_ r_*)
+      (- () (a) (a b))
+      (= (a b c) {xs: (), ys: (), x: a, m: (), y: b, z: c, r: ()})
+      (= (a b c d) {xs: (a), ys: (), x: b, m: (), y: c, z: d, r: ()})
+      (= (a b c d e) {xs: (a), ys: (), x: b, m: (c), y: d, z: e, r: ()})
+      (= (a b c d e f) {xs: (a), ys: (), x: b, m: (c), y: d, z: e, r: (f)})
+      (= (a b c d e f g) {xs: (a), ys: (b), x: c, m: (d), y: e, z: f, r: (g)})
+      (= (a b c d e f g h) {xs: (a), ys: (b), x: c, m: (d e), y: f, z: g, r: (h)})
+      (= (a b c d e f g h i) {xs: (a), ys: (b), x: c, m: (d e), y: f, z: g, r: (h i)})
+      (= (a b c d e f g h i j) {xs: (a b), ys: (c), x: d, m: (e f), y: g, z: h, r: (i j)})
+      (= (a b c d e f g h i j k) {xs: (a b), ys: (c), x: d, m: (e f g), y: h, z: i, r: (j k)}))
+
+    ;; Two mids
+    (pattern (l_* x_ xs_* ys_* y_ r_*)
+      (- () (a))
+      (= (a b) {l: (), x: a, xs: (), ys: (), y: b, r: ()})
+      (= (a b c) {l: (a), x: b, xs: (), ys: (), y: c, r: ()})
+      (= (a b c d) {l: (a), x: b, xs: (c), ys: (), y: d, r: ()})
+      (= (a b c d e) {l: (a), x: b, xs: (c), ys: (), y: d, r: (e)})
+      (= (a b c d e f) {l: (a b), x: c, xs: (d), ys: (), y: e, r: (f)})
+      (= (a b c d e f g) {l: (a b), x: c, xs: (d), ys: (e), y: f, r: (g)})
+      (= (a b c d e f g h) {l: (a b), x: c, xs: (d), ys: (e), y: f, r: (g h)})
+      (= (a b c d e f g h i) {l: (a b c), x: d, xs: (e), ys: (f), y: g, r: (h i)})
+      (= (a b c d e f g h i j) {l: (a b c), x: d, xs: (e f), ys: (g), y: h, r: (i j)})
+      (= (a b c d e f g h i j k) {l: (a b c), x: d, xs: (e f), ys: (g), y: h, r: (i j k)}))))
+
+;; Spatial: "Compartmentalization" with singulars
+(group
+  (pattern (xs_* ys_* zs_* and as_* bs_* cs_*)
+    (= (and) {xs: (), ys: (), zs: (), as: (), bs: (), cs: ()})
+    (= (a and) {xs: (a), ys: (), zs: (), as: (), bs: (), cs: ()})
+    (= (a and 1) {xs: (a), ys: (), zs: (), as: (1), bs: (), cs: ()})
+    (= (a b and 1) {xs: (a), ys: (b), zs: (), as: (1), bs: (), cs: ()})
+    (= (a b and 1 2) {xs: (a), ys: (b), zs: (), as: (1), bs: (2), cs: ()})
+    (= (a b c and 1 2) {xs: (a), ys: (b), zs: (c), as: (1), bs: (2), cs: ()})
+    (= (a b c and 1 2 3) {xs: (a), ys: (b), zs: (c), as: (1), bs: (2), cs: (3)})
+    (= (a b c d and 1 2 3) {xs: (a b), ys: (c), zs: (d), as: (1), bs: (2), cs: (3)})
+    (= (a b c d and 1 2 3 4) {xs: (a b), ys: (c), zs: (d), as: (1 2), bs: (3), cs: (4)})
+    (= (a b c d e and 1 2 3 4) {xs: (a b), ys: (c d), zs: (e), as: (1 2), bs: (3), cs: (4)})
+    (= (a b c d e and 1 2 3 4 5) {xs: (a b), ys: (c d), zs: (e), as: (1 2), bs: (3 4), cs: (5)})
+    (= (a b c d e f and 1 2 3 4 5) {xs: (a b), ys: (c d), zs: (e f), as: (1 2), bs: (3 4), cs: (5)})
+    (= (a b c d e f and 1 2 3 4 5 6) {xs: (a b), ys: (c d), zs: (e f), as: (1 2), bs: (3 4), cs: (5 6)}))
+
+  (pattern (xs_+ ys_+ zs_+ and as_+ bs_+ cs_+)
+    (- (and) (a and) (a and 1) (a b and 1) (a b and 1 2) (a b c and 1 2))
+    (= (a b c and 1 2 3) {xs: (a), ys: (b), zs: (c), as: (1), bs: (2), cs: (3)})
+    (= (a b c d and 1 2 3) {xs: (a b), ys: (c), zs: (d), as: (1), bs: (2), cs: (3)})
+    (= (a b c d and 1 2 3 4) {xs: (a b), ys: (c), zs: (d), as: (1 2), bs: (3), cs: (4)})
+    (= (a b c d e and 1 2 3 4) {xs: (a b), ys: (c d), zs: (e), as: (1 2), bs: (3), cs: (4)})
+    (= (a b c d e and 1 2 3 4 5) {xs: (a b), ys: (c d), zs: (e), as: (1 2), bs: (3 4), cs: (5)})
+    (= (a b c d e f and 1 2 3 4 5) {xs: (a b), ys: (c d), zs: (e f), as: (1 2), bs: (3 4), cs: (5)})
+    (= (a b c d e f and 1 2 3 4 5 6) {xs: (a b), ys: (c d), zs: (e f), as: (1 2), bs: (3 4), cs: (5 6)}))
+
+  (pattern (a_ l_* x_ y_ r_* b_)
+    (- () (a) (a b) (a b c))
+    (= (a b c d) {a: a, l: (), x: b, y: c, r: (), b: d})
+    (= (a b c d e) {a: a, l: (b), x: c, y: d, r: (), b: e})
+    (= (a b c d e f) {a: a, l: (b), x: c, y: d, r: (e), b: f})
+    (= (a b c d e f g) {a: a, l: (b c), x: d, y: e, r: (f), b: g})
+    (= (a b c d e f g h) {a: a, l: (b c), x: d, y: e, r: (f g), b: h}))
+
+  (pattern (a_ b_ l_* x_ y_ r_* c_)
+    (- () (a) (a b) (a b c) (a b c d))
+    (= (a b c d e) {a: a, b: b, l: (), x: c, y: d, r: (), c: e})
+    (= (a b c d e f) {a: a, b: b, l: (), x: c, y: d, r: (e), c: f})
+    (= (a b c d e f g) {a: a, b: b, l: (c), x: d, y: e, r: (f), c: g})
+    (= (a b c d e f g h) {a: a, b: b, l: (c), x: d, y: e, r: (f g), c: h})
+    (= (a b c d e f g h i) {a: a, b: b, l: (c d), x: e, y: f, r: (g h), c: i})))
+
+;; Spatial: Distributive group interacting with flex
+(pattern (xs_* ys_* (%plural/max zs min: 2))
+  (- () (a))
+  ;; Notice how it never gives zs more than two elements. This proves
+  ;; distributive group is greedy (eager).
+  (= (a b) {xs: (), ys: (), zs: (a b)})
+  (= (a b c) {xs: (a), ys: (), zs: (b c)})
+  (= (a b c d) {xs: (a), ys: (b), zs: (c d)})
+  (= (a b c d e) {xs: (a b), ys: (c), zs: (d e)})
+  (= (a b c d e f) {xs: (a b), ys: (c d), zs: (e f)}))
+
+;; Spatial: Groups and slots must not disrupt spatial structure
+(group
+  (pattern ((%group Gm_ `foo (%group G0_ a_ `bar b_ `baz l_* `qux x_) `tau (%group G1_ y_ `pi r_*) `delta) c_ `epsilon)
+    (- () (a) (a b) (a b c) (a b c d))
+    (= (a b c d e)
+       {G0: (a b c), G1: (d), Gm: (a b c d), a: a, b: b, l: (), x: c, y: d, r: (), c: e})
+    (= (a b c d e f)
+       {G0: (a b c), G1: (d e), Gm: (a b c d e), a: a, b: b, l: (), x: c, y: d, r: (e), c: f})
+    (= (a b c d e f g)
+       {G0: (a b c d), G1: (e f), Gm: (a b c d e f), a: a, b: b, l: (c), x: d, y: e, r: (f), c: g})
+    (= (a b c d e f g h)
+       {G0: (a b c d), G1: (e f g), Gm: (a b c d e f g), a: a, b: b, l: (c), x: d, y: e, r: (f g), c: h})
+    (= (a b c d e f g h i)
+       {G0: (a b c d e), G1: (f g h), Gm: (a b c d e f g h), a: a, b: b, l: (c d), x: e, y: f, r: (g h), c: i}))
+
+  ;; Group end touches seq end, make sure no bugs hide there.
+  (pattern (l_* (%group G_ m_ r_*))
+    (- ())
+    (= (a) {G: (a), l: (), m: a, r: ()})
+    (= (a b) {G: (b), l: (a), m: b, r: ()})
+    (= (a b c) {G: (b c), l: (a), m: b, r: (c)})
+    (= (a b c d) {G: (c d), l: (a b), m: c, r: (d)})
+    (= (a b c d e) {G: (c d e), l: (a b), m: c, r: (d e)})
+    (= (a b c d e f) {G: (d e f), l: (a b c), m: d, r: (e f)})
+    (= (a b c d e f g) {G: (d e f g), l: (a b c), m: d, r: (e f g)})))
+
+;; %plural: polyblank appears earlier in pattern as a blank
 (group
   (pattern (xs_ xs_+)
     (= ((x) x) {xs: (x)})
@@ -1580,16 +1763,19 @@
   (pattern (xs_ (xs_* ys_*))
     (= (() ()) {xs: (), ys: ()})
     (= ((x) (x)) {xs: (x), ys: ()})
-    (= ((x y) (x y)) {xs: (x y), ys: ()})
+    (- ((x y) (x y)))
+    (= ((x) (x y)) {xs: (x), ys: (y)})
+    (- ((x y) (x y)))
     (= ((x y) (x y z)) {xs: (x y), ys: (z)})
-    (= ((x y) (x y z a b c)) {xs: (x y), ys: (z a b c)}))
+    (= ((x y) (x y z a)) {xs: (x y), ys: (z a)}))
 
   (pattern (xs_ (xs_+ ys_+))
+    (- (() ()) ((x) (x)))
+    (- ((x y) (x y)))
     (= ((x) (x y)) {xs: (x), ys: (y)})
-    (= ((x) (x y z a b c)) {xs: (x), ys: (y z a b c)})
-    (= ((x y) (x y z a b c)) {xs: (x y), ys: (z a b c)})
-    (= ((x y z) (x y z a b c)) {xs: (x y z), ys: (a b c)})
-    (- (() (x y z a b c)) ((x) (y)) ((x) (x)) ((x) (y z))))
+    (- ((x y) (x y)))
+    (= ((x y) (x y z)) {xs: (x y), ys: (z)})
+    (= ((x y) (x y z a)) {xs: (x y), ys: (z a)}))
 
   (pattern (xs_ ys_ (xs_+ ys_+))
     (= ((x) (a) (x a)) {xs: (x), ys: (a)})
@@ -1599,7 +1785,8 @@
        (() (a) (a))
        ((x) (a) (a))
        ((x y) (a) (x y))
-       ((x) (a b) (a b))))
+       ((x) (a b) (a b))
+       ((x y) (a b) (x y z a b))))
 
   (pattern (xs_ ys_ (xs_+ x_ ys_+))
     (= ((x) (a) (x 1 a)) {xs: (x), x: 1, ys: (a)})
@@ -1612,10 +1799,12 @@
 
   (pattern (xs_ xs_* ys_* xs_*)
     (= (()) {xs: (), ys: ()})
-    (= (() a b c) {xs: (), ys: (a b c)})
-    (= ((x) x x) {xs: (x), ys: ()})
-    (= ((x) x a b c x) {xs: (x), ys: (a b c)})
-    (= ((x y) x y a b c x y) {xs: (x y), ys: (a b c)})))
+    (- (() a) ((a) a) ((a) a b))
+    (= ((a) a b a) {xs: (a), ys: (b)})
+    (- ((a b) a b a))
+    (- ((a b) a b a b))
+    (= ((a b) a b a b a b) {xs: (a b), ys: (a b)})
+    (= ((a b) a b 1 2 a b) {xs: (a b), ys: (1 2)})))
 
 ;; %plural: legacy: halves pattern
 (pattern (halves (list lhalf_+ rhalf_+))
@@ -1629,22 +1818,72 @@
 ;; %plural: legacy: polyblank usage with separators
 ;;
 ;; Separators go into their respective "section" immediately.
-(pattern (for xs_+ do ys_+ and as_+ bs_+)
-  (= (for a b c do x y and 1 2) {xs: (a b c), ys: (x y), as: (1), bs: (2)})
-  (= (for a b do c do x y and 1 2) {xs: (a b), ys: (c do x y), as: (1), bs: (2)})
-  (= (for a b do c do x and y and 1 2 3 4 5) {xs: (a b), ys: (c do x), as: (y and 1 2), bs: (3 4 5)}))
+(group
+  (pattern ((%flex for) xs_+ (%flex do) ys_+ (%flex and) as_+ bs_+)
+    (= (for a b c do x y and 1 2) {xs: (a b c), ys: (x y), as: (1), bs: (2)})
+    (= (for a b do c do x y and 1 2) {xs: (a b do c), ys: (x y), as: (1), bs: (2)})
+    (= (for a b do c do x and y and 1 2 3 4 5) {xs: (a b do c), ys: (x and y), as: (1 2 3), bs: (4 5)}))
 
-;; Separators go into their respective "section" if the future approves.
-(pattern (for xs_+ and y_ .)
-  (= (for a and b .) {xs: (a), y: b})
-  (= (for a b and d .) {xs: (a b), y: d})
-  (= (for a b and c d and e .) {xs: (a b and c d), y: e}))
+  ;; Separators go into their respective "section" if the future approves.
+  (pattern ((%flex for) xs_+ (%flex and) (%flex y_) (%flex .))
+    (= (for a and b .) {xs: (a), y: b})
+    (= (for a b and d .) {xs: (a b), y: d})
+    (= (for a b and c d and e .) {xs: (a b and c d), y: e}))
 
-;; ditto
-(pattern (for xs_+ and y_ then ys_+)
-  (= (for a and b then x) {xs: (a), y: b, ys: (x)})
-  (= (for a b and c then x y) {xs: (a b), y: c, ys: (x y)})
-  (= (for a b and c d and e then x y) {xs: (a b and c d), y: e, ys: (x y)}))
+  ;; ditto
+  (pattern ((%flex for) xs_+ (%flex and) (%flex y_) (%flex then) ys_+)
+    (= (for a and b then x) {xs: (a), y: b, ys: (x)})
+    (= (for a b and c then x y) {xs: (a b), y: c, ys: (x y)})
+    (= (for a b and c d and e then x y) {xs: (a b and c d), y: e, ys: (x y)})))
+
+;; %plural/min and %plural/max
+(group
+  (group
+    (pattern ((%plural/min xs max: 2) (%plural/max ys min: 1 type: _number))
+      (= (1) {xs: (), ys: (1)})
+      (= (1 2) {xs: (), ys: (1 2)})
+      (= (1 2 3) {xs: (), ys: (1 2 3)})
+      (= (x 1) {xs: (x), ys: (1)})
+      (= (x 1 2 3) {xs: (x), ys: (1 2 3)})
+      (= (x y 1 2 3) {xs: (x y), ys: (1 2 3)})
+      (= (x y 1 2 3 4) {xs: (x y), ys: (1 2 3 4)})
+      (- () (x) (x y) (x y z) (x y z 1 2 3)))
+
+    (pattern ((%plural/min xs min: 2 max: 2) (%plural/min ys min: 1 max: 2 type: _number))
+      (= (1 2 3) {xs: (1 2), ys: (3)})
+      (= (1 2 3 4) {xs: (1 2), ys: (3 4)})
+      (= (x y 1 2) {xs: (x y), ys: (1 2)})
+      (- () (1) (1 2) (x) (x y) (x y z) (1 2 3 4 5) (x y z 1 2))))
+
+  (group
+    (pattern ((%plural/max xs max: 2 type: _number) (%plural/max ys min: 1))
+      (= (1) {xs: (), ys: (1)})
+      (= (1 2) {xs: (1), ys: (2)})
+      (= (1 2 3) {xs: (1 2), ys: (3)})
+      (= (1 2 3 4) {xs: (1 2), ys: (3 4)})
+      (= (x) {xs: (), ys: (x)})
+      (= (x y) {xs: (), ys: (x y)})
+      (= (1 x) {xs: (1), ys: (x)})
+      (= (1 x y) {xs: (1), ys: (x y)})
+      (= (1 2 x) {xs: (1 2), ys: (x)})
+      (= (1 2 x y) {xs: (1 2), ys: (x y)})
+      (= (1 2 3 x y) {xs: (1 2), ys: (3 x y)})
+      (- ()))
+
+    (pattern ((%plural/max xs min: 2 max: 2 type: _number) (%plural/max ys min: 1 max: 2))
+      (= (1 2 3) {xs: (1 2), ys: (3)})
+      (= (1 2 x) {xs: (1 2), ys: (x)})
+      (= (1 2 x y) {xs: (1 2), ys: (x y)})
+      (- () (1 2 3 x y) (1 2 x y z))))
+
+  (pattern ((%plural/max xs type: _symbol min: 2) (%plural/max ys type: _number max: 3))
+    (= (x y) {xs: (x y), ys: ()})
+    (= (x y z) {xs: (x y z), ys: ()})
+    (= (x y z 1) {xs: (x y z), ys: (1)})
+    (= (x y z 1 2) {xs: (x y z), ys: (1 2)})
+    (= (x y z 1 2 3) {xs: (x y z), ys: (1 2 3)})
+    (= (x y 1 2 3) {xs: (x y), ys: (1 2 3)})
+    (- () (x) (x 1) (x 1 2) (x 1 2 3) (x y 1 2 3 4) (x 1 y 3))))
 
 ;; %gap
 (group
@@ -1721,47 +1960,32 @@
     (- ((1) (-1 1/3) a x: b)))
 
   ;; Skipping items
-  (pattern (x_ (%gap 3) y_ (%gap 3) z_)
+  (pattern (x_ (%gap/min 3) y_ (%gap/min 3) z_)
     (= (a 1 2 3 b 4 5 6 c) {x: a, y: b, z: c})
     (- (a 1 2 b 4 5 6 c)
        (a 1 2 3 b 4 5 c)
        (foo a 1 2 3 b 4 5 6 c)
        (a b c)))
 
-  (pattern ((%gap 2) x_ (%gap 3) y_ (%gap 3) z_)
+  (pattern ((%gap/min 2) (%flex x_) (%gap/min 3) (%flex y_) (%gap/min 3) (%flex z_))
     (= (1 2 a 1 2 3 b 1 2 3 c) {x: a, y: b, z: c})
     (- (a 1 2 3 b 1 2 3 c)
        (1 a 1 2 3 b 1 2 3 c)))
 
-  (pattern ((%gap 2) x_ (%gap 3) y_ (%gap 3) z_ (%gap 2))
+  (pattern ((%gap/min 2) (%flex x_) (%gap/min 3) (%flex y_) (%gap/min 3) (%flex z_) (%gap/min 2))
     (= (1 2 a 1 2 3 b 1 2 3 c 1 2) {x: a, y: b, z: c}))
 
-  (pattern ((%gap 0) x_ (%gap 3) y_ (%gap 3) z_ (%gap 2))
+  (pattern ((%gap/min 0) (%flex x_) (%gap/min 3) (%flex y_) (%gap/min 3) (%flex z_) (%gap/min 2))
     (= (a 1 2 3 b 1 2 3 c 1 2) {x: a, y: b, z: c})
     (- (1 2 a 1 2 3 b 1 2 3 c 1 2) {x: a, y: b, z: c}))
 
   ;; Measurement using gaps (left-leaning)
-  (pattern ((%gap a_) x_ (%gap b_) y_)
+  (pattern ((%gap/min a_) (%flex x_symbol) (%gap/min b_) (%flex y_symbol))
     (= (a b) {a: 0, x: a, b: 0, y: b})
     (= (1 a b) {a: 1, x: a, b: 0, y: b})
     (= (1 a 1/3 b) {a: 1, x: a, b: 1, y: b})
-    (= (1 a 1/3 -1 b) {a: 2, x: 1/3, b: 1, y: b})
+    (= (1 a 1/3 -1 b) {a: 1, x: a, b: 2, y: b})
     (= (1 -1 a 1/3 -1 b) {a: 2, x: a, b: 2, y: b}))
-
-  ;; Distribution
-  (pattern ((xs_* (%gap n_) ys_*) n_)
-    (= (() 0) {xs: (), ys: (), n: 0})
-    (= ((1) 0) {xs: (1), ys: (), n: 0})
-    (= ((1) 1) {xs: (), ys: (), n: 1})
-    (= ((1 2) 2) {xs: (), ys: (), n: 2})
-    (= ((1 2) 1) {xs: (1), ys: (), n: 1})
-    (= ((1 2 3) 1) {xs: (1), ys: (3), n: 1})
-    (= ((1 2 3) 2) {xs: (1), ys: (), n: 2})
-    (= ((1 2 3 4) 2) {xs: (1 2), ys: (), n: 2})
-    (= ((1 2 3 4 5) 2) {xs: (1 2), ys: (5), n: 2})
-    (= ((1 2 3 4 5 6) 2) {xs: (1 2), ys: (5 6), n: 2})
-    (= ((1 2 3 4 5 6 7 8) 2) {xs: (1 2 3), ys: (6 7 8), n: 2})
-    (= ((1 2 3 4 5 6 7 8) 3) {xs: (1 2 3), ys: (7 8), n: 3}))
 
   ;; Unify gaps
   (pattern ((%gap n_) (%gap n_))
@@ -1785,7 +2009,7 @@
        ((x y) (a b c))))
 
   ;; Unify map
-  (pattern ((%gap n_) (%gap (%pipe (* 2) n_)))
+  (pattern ((%gap/max n_) (%gap/max (%pipe (* 2) n_)))
     (= () {n: 0})
     (= (1 2 3) {n: 2})
     (= (1 2 3 4 5 6) {n: 4})
@@ -1832,7 +2056,7 @@
     (- (() (x 1 y 2 3 z 4)) ((a b c d e) (x 1 y 2 3 z 4))))
 
   ;; %gap & %item: first length lookahead
-  (pattern ((%gap n_) (%item n_) _*)
+  (pattern ((%gap/min n_) (%flex (%item n_)) (%plural/max))
     (= ((x 2 0 -1 y) (3 5 a)) {n: 0})
     (= (a b (x 2 0 -1 y) (3 5 a)) {n: 2})
     (= (a b (x quux 0 -1 y) (3 5 a)) {n: 3})
@@ -1842,13 +2066,13 @@
        (a (x 2 0 -1 y) (3 5 a))))
 
   ;; %gap & %item: source
-  (pattern (((%gap° skip_) x_ rhs_*) (%item° skip_))
+  (pattern (((%gap/min° skip_) (%flex x_) rhs_*) (%item° skip_))
     (= ((x y z a b c) (0 1 3))
       {x: x, skip: 0, rhs: (y z a b c)}
       {x: y, skip: 1, rhs: (z a b c)}
       {x: a, skip: 3, rhs: (b c)}))
 
-  (pattern ((%item° skip_) ((%gap° skip_) x_ rhs_*))
+  (pattern ((%item° skip_) ((%gap/min° skip_) (%flex x_) rhs_*))
     (= ((0 1 3) (x y z a b c))
       {x: x, skip: 0, rhs: (y z a b c)}
       {x: y, skip: 1, rhs: (z a b c)}
@@ -1858,7 +2082,7 @@
   ;;
   ;; In essence what you see here is the cursor "radiating" gaps in both directions
   ;; up to some "distance" n.
-  (pattern (pre_* (%group l_ (%gap n_)) (| n_) (%group r_ (%gap n_)) post_*)
+  (pattern (pre_* (%group l_ (%gap/max n_)) (%flex (| n_)) (%group r_ (%gap/max n_)) post_*)
     (= (a b c (| 0) d e f)
       {pre: (a b c), l: (), r: (), n: 0, post: (d e f)})
     (= (a b c (| 1) d e f)
@@ -1886,7 +2110,7 @@
   ;; way to the cursor.
   (pattern ((%plural/min pre)
             (%group l_ (%gap/max (%number _ <= (var n))))
-            (| n_)
+            (%flex (| n_))
             (%group r_ (%gap/max (%number _ <= (var n))))
             (%plural/min post))
     (= (a b c (| 0) d e f)
@@ -1910,7 +2134,57 @@
     (= (a b c d (| 4) e f g h i j)
       {pre: (), l: (a b c d), r: (e f g h), n: 4, post: (i j)})
     (= (a b c d e (| 4) f g h i j)
-      {pre: (a), l: (b c d e), r: (f g h i), n: 4, post: (j)})))
+      {pre: (a), l: (b c d e), r: (f g h i), n: 4, post: (j)}))
+
+  ;; Left skip
+  (pattern (((%gap/min n_) (%plural/min xs)) n_)
+    (= (() 0) {xs: (), n: 0})
+    (= ((a) 0) {xs: (a), n: 0})
+    (= ((a b c) 1) {xs: (b c), n: 1})
+    (= ((a b c) 2) {xs: (c), n: 2})
+    (= ((a b c) 3) {xs: (), n: 3})
+    (- ((a b c) 4))
+    (= ((a b c d e f) 3) {xs: (d e f), n: 3}))
+
+  ;; Left and right skip
+  (pattern (((%gap/min n_) (%plural/min xs) (%gap/min m_)) n_ m_)
+    (= (() 0 0) {xs: (), n: 0, m: 0})
+    (= ((a) 0 0) {xs: (a), n: 0, m: 0})
+    (= ((a) 1 0) {xs: (), n: 1, m: 0})
+    (= ((a) 0 1) {xs: (), n: 0, m: 1})
+    (= ((a b c) 0 0) {xs: (a b c), n: 0, m: 0})
+    (= ((a b c) 1 0) {xs: (b c), n: 1, m: 0})
+    (= ((a b c) 1 1) {xs: (b), n: 1, m: 1})
+    (= ((a b c d e f g) 2 3) {xs: (c d), n: 2, m: 3}))
+
+  ;; Grid navigation.
+  (pattern (((%gap/min y_) (%flex ((%gap/min x_) (%flex v_) (%plural/max))) (%plural/max)) x_ y_)
+    (- (() 0 0))
+    (= (((a b c)
+         (d e f)
+         (g h i))
+        0 0)
+       {x: 0, y: 0, v: a})
+    (= (((a b c)
+         (d e f)
+         (g h i))
+        1 0)
+       {x: 1, y: 0, v: b})
+    (= (((a b c)
+         (d e f)
+         (g h i))
+        2 0)
+       {x: 2, y: 0, v: c})
+    (= (((a b c)
+         (d e f)
+         (g h i))
+        1 1)
+       {x: 1, y: 1, v: e})
+    (= (((a b c)
+         (d e f)
+         (g h i))
+        2 2)
+       {x: 2, y: 2, v: i})))
 
 ;; %group
 (pattern (foo (%group args_ x_ y_ zs_*) xs_*)
@@ -1941,31 +2215,6 @@
   (= (a b c d e f g h) {xs: (a b c), ys: (d e f), zs: (g h)})
   (= (a b c d e f g h i) {xs: (a b c), ys: (d e f), zs: (g h i)}))
 
-(pattern (xs_* ys_* zs_* and as_* bs_* cs_*)
-  (= (and) {xs: (), ys: (), zs: (), as: (), bs: (), cs: ()})
-  (= (a and) {xs: (a), ys: (), zs: (), as: (), bs: (), cs: ()})
-  (= (a and 1) {xs: (a), ys: (), zs: (), as: (1), bs: (), cs: ()})
-  (= (a b and 1) {xs: (a), ys: (b), zs: (), as: (1), bs: (), cs: ()})
-  (= (a b and 1 2) {xs: (a), ys: (b), zs: (), as: (1), bs: (2), cs: ()})
-  (= (a b c and 1 2) {xs: (a), ys: (b), zs: (c), as: (1), bs: (2), cs: ()})
-  (= (a b c and 1 2 3) {xs: (a), ys: (b), zs: (c), as: (1), bs: (2), cs: (3)})
-  (= (a b c d and 1 2 3) {xs: (a b), ys: (c), zs: (d), as: (1), bs: (2), cs: (3)})
-  (= (a b c d and 1 2 3 4) {xs: (a b), ys: (c), zs: (d), as: (1 2), bs: (3), cs: (4)})
-  (= (a b c d e and 1 2 3 4) {xs: (a b), ys: (c d), zs: (e), as: (1 2), bs: (3), cs: (4)})
-  (= (a b c d e and 1 2 3 4 5) {xs: (a b), ys: (c d), zs: (e), as: (1 2), bs: (3 4), cs: (5)})
-  (= (a b c d e f and 1 2 3 4 5) {xs: (a b), ys: (c d), zs: (e f), as: (1 2), bs: (3 4), cs: (5)})
-  (= (a b c d e f and 1 2 3 4 5 6) {xs: (a b), ys: (c d), zs: (e f), as: (1 2), bs: (3 4), cs: (5 6)}))
-
-(pattern (xs_+ ys_+ zs_+ and as_+ bs_+ cs_+)
-  (- (and) (a and) (a and 1) (a b and 1) (a b and 1 2) (a b c and 1 2))
-  (= (a b c and 1 2 3) {xs: (a), ys: (b), zs: (c), as: (1), bs: (2), cs: (3)})
-  (= (a b c d and 1 2 3) {xs: (a b), ys: (c), zs: (d), as: (1), bs: (2), cs: (3)})
-  (= (a b c d and 1 2 3 4) {xs: (a b), ys: (c), zs: (d), as: (1 2), bs: (3), cs: (4)})
-  (= (a b c d e and 1 2 3 4) {xs: (a b), ys: (c d), zs: (e), as: (1 2), bs: (3), cs: (4)})
-  (= (a b c d e and 1 2 3 4 5) {xs: (a b), ys: (c d), zs: (e), as: (1 2), bs: (3 4), cs: (5)})
-  (= (a b c d e f and 1 2 3 4 5) {xs: (a b), ys: (c d), zs: (e f), as: (1 2), bs: (3 4), cs: (5)})
-  (= (a b c d e f and 1 2 3 4 5 6) {xs: (a b), ys: (c d), zs: (e f), as: (1 2), bs: (3 4), cs: (5 6)}))
-
 (pattern ((%plural xs max: 2) (%plural ys max: 2) (%plural zs max: 2))
   (= () {xs: (), ys: (), zs: ()})
   (= (a) {xs: (a), ys: (), zs: ()})
@@ -1994,7 +2243,7 @@
   (= (a b c d e f) {xs: (a b), ys: (c d), zs: (e f)})
   (- (a b c d e f g) (a b c d e f g h) (a b c d e f g h i)))
 
-(pattern ((%group foo_ xs_* ys_* zs_*) and (%group bar_ as_* bs_* cs_*))
+(pattern ((%group foo_ xs_* ys_* zs_*) (%flex and) (%group bar_ as_* bs_* cs_*))
   (= (and) {foo: (), bar: (), xs: (), ys: (), zs: (), as: (), bs: (), cs: ()})
   (= (a and) {foo: (a), bar: (), xs: (a), ys: (), zs: (), as: (), bs: (), cs: ()})
   (= (a and 1) {foo: (a), bar: (1), xs: (a), ys: (), zs: (), as: (1), bs: (), cs: ()})
@@ -2006,7 +2255,7 @@
   (= (a b c d and 1 2 3 4) {foo: (a b c d), bar: (1 2 3 4), xs: (a b), ys: (c), zs: (d), as: (1 2), bs: (3), cs: (4)}))
   ;; ...
 
-(pattern ((%group foo_ xs_* _* _*) and (%group bar_ _* _* cs_*))
+(pattern ((%group foo_ xs_* _* _*) (%flex and) (%group bar_ _* _* cs_*))
   (= (and) {foo: (), bar: (), xs: (), cs: ()})
   (= (a and) {foo: (a), bar: (), xs: (a), cs: ()})
   (= (a and 1) {foo: (a), bar: (1), xs: (a), cs: ()})
@@ -2020,13 +2269,13 @@
 
 ;; %optional
 (group
-  (pattern (xs_* (%optional 10 x_) sep_ ys_* sep_)
+  (pattern ((%plural/min xs) (%optional 10 x_) (%flex sep_) ys_* (%flex sep_))
     (= (is a b c is) {xs: (), x: 10, sep: is, ys: (a b c)})
     (= (x y z is a b c is) {xs: (x y), x: z, sep: is, ys: (a b c)}))
 
-  (pattern (xs_* (%optional 0 x_))
+  (pattern ((%plural/min xs) (%optional 0 x_))
     (= () {xs: (), x: 0})
-    (= (a) {xs: (a), x: 0}) ;; ?: is this expected? caused by fractioning
+    (= (a) {xs: () x: a})
     (= (a b) {xs: (a), x: b})
     (= (a b c) {xs: (a b), x: c})))
 
@@ -2043,7 +2292,7 @@
     (- (() a)  ((a) a) ((a 2 a) a) ((a 2 a 4 a) a) ((a 1 b 2) a)))
 
   ;; Simulate find-first search
-  (pattern (((%many (%filter (k) {¦ k_ v_} (%pluck (_ v) ((%group vs_ _) _*))) (%plural/min) k_ v_ (%plural/min))) k_)
+  (pattern (((%many (%filter (k) {¦ k_ v_} (%pluck (_ v) ((%group vs_ _) _*))) (%plural/min) (%flex k_) (%flex v_) (%plural/min))) k_)
     (= ((a 1 b 2 c 3) a) {k: a, vs: ({v: 1})})
     (= ((a 1 b 2 c 3) 1) {k: 1, vs: ({v: b})})
     (= ((a 1 b 2 c 3) b) {k: b, vs: ({v: 2})})
@@ -2053,30 +2302,30 @@
 
 ;; %past
 (group
-  (pattern ((%past x_) foo postfix_*)
+  (pattern ((%past x_) (%flex foo) postfix_*)
     (= (foo) {postfix: ()})
     (= (foo 1 2 3) {postfix: (1 2 3)})
     (= (a foo 1 2 3) {x: a, postfix: (1 2 3)})
     (= (a a a foo 1 2 3) {x: a, postfix: (1 2 3)})
     (- (a b foo 1 2 3) (a b c foo 1 2 3)))
 
-  (pattern ((%past x_ min: 1) foo postfix_*)
+  (pattern ((%past x_ min: 1) (%flex foo) postfix_*)
     (= (a foo 1 2 3) {x: a, postfix: (1 2 3)})
     (= (a a a foo 1 2 3) {x: a, postfix: (1 2 3)})
     (- (foo 1 2 3) (a b foo 1 2 3) (a b c foo 1 2 3)))
 
-  (pattern ((%past x_ max: 2) foo postfix_*)
+  (pattern ((%past x_ max: 2) (%flex foo) postfix_*)
     (= (foo 1 2 3) {postfix: (1 2 3)})
     (= (a foo 1 2 3) {x: a, postfix: (1 2 3)})
     (= (a a foo 1 2 3) {x: a, postfix: (1 2 3)})
     (- (a a a foo 1 2 3) (a b foo 1 2 3) (a b c foo 1 2 3)))
 
-  (pattern ((%past x_ min: 1 max: 2) foo postfix_*)
+  (pattern ((%past x_ min: 1 max: 2) (%flex foo) postfix_*)
     (= (a foo 1 2 3) {x: a, postfix: (1 2 3)})
     (= (a a foo 1 2 3) {x: a, postfix: (1 2 3)})
     (- (foo 1 2 3) (a a a foo 1 2 3) (a b foo 1 2 3) (a b c foo 1 2 3)))
 
-  (pattern ((%gap n_) (%past _) n_ rest_*)
+  (pattern ((%gap/max n_) (%past _) (%flex n_) rest_*)
     (= (0) {n: 0, rest: ()})
     (= (0 a b c) {n: 0, rest: (a b c)})
     (= (x y z 0 a b c) {n: 0, rest: (a b c)})
@@ -2088,7 +2337,7 @@
     (= (x y 1 z a b c) {n: 1, rest: (z a b c)})
     (- (a b c) (x 2 a b c)))
 
-  (pattern ((%gap n_) (%group skipped_ (%past _)) n_ rest_*)
+  (pattern ((%gap/max n_) (%group skipped_ (%past _)) (%flex n_) rest_*)
     (= (0) {n: 0, skipped: (), rest: ()})
     (= (0 a b c) {n: 0, skipped: (), rest: (a b c)})
     (= (x y z 0 a b c) {n: 0, skipped: (x y z), rest: (a b c)})
@@ -2697,7 +2946,7 @@
 
 ;; For all Ns that are not in dict set, find the corresponding suffix of a list.
 (group
-  (pattern (((%gap° n_) suffix_*) (%-value n) (%item° n_))
+  (pattern (((%gap/min° n_) suffix_*) (%-value n) (%item° n_))
     (= (() () (0))
        {n: 0, suffix: ()})
     (= ((a) () (0 1))
@@ -2714,7 +2963,7 @@
        ((a) (0: true 1: true) (0 1))))
 
   ;; Push %gap forward
-  (pattern ((%-value n) ((%gap° n_) suffix_*) (%item° n_))
+  (pattern ((%-value n) ((%gap/min° n_) suffix_*) (%item° n_))
     (= (() () (0))
        {n: 0, suffix: ()})
     (= (() (a) (0 1))
@@ -2730,7 +2979,7 @@
     (- ((0: true) () (0))
        ((0: true 1: true) (a) (0 1))))
 
-  (pattern ((%-value n) (%item° n_) ((%gap° n_) suffix_*))
+  (pattern ((%-value n) (%item° n_) ((%gap/min° n_) suffix_*))
     (= (() (0) ())
        {n: 0, suffix: ()})
     (= (() (0 1) (a))
@@ -2747,7 +2996,7 @@
        ((0: true 1: true) (0 1) (a))))
 
   ;; Push %value forward
-  (pattern (((%gap° n_) suffix_*) (%item° n_) (%-value n))
+  (pattern (((%gap/min° n_) suffix_*) (%item° n_) (%-value n))
     (= (() (0) ())
        {n: 0, suffix: ()})
     (= ((a) (0 1) ())
@@ -2764,7 +3013,7 @@
        ((a) (0 1) (0: true 1: true))))
 
   ;; Push %item° back
-  (pattern ((%item° n_) ((%gap° n_) suffix_*) (%-value n))
+  (pattern ((%item° n_) ((%gap/min° n_) suffix_*) (%-value n))
     (= ((0) () ())
        {n: 0, suffix: ()})
     (= ((0 1) (a) ())
@@ -3128,6 +3377,33 @@
        {src: y, dst: p}
        {src: y, dst: q})))
 
+;; %matches
+(group
+  ;; match mismatch
+  (pattern (%matches () ⟨_number⟩°)
+    (+ () (a) (a b c))
+    (- (1) (a 1) (a 1 b c) (a 1 b 2 c)))
+
+  ;; match match
+  (pattern (%matches ({¦ x: fst_} _* {¦ x: lst_}) ⟨±x⟩°)
+    (- () (1))
+    (= (1 2) {fst: 1, lst: 2})
+    (= (a b 1 2) {fst: 1, lst: 2})
+    (= (a b 1 c d 2) {fst: 1, lst: 2})
+    (= (a b 1 c d 2 e f) {fst: 1, lst: 2})
+    (= (a b 1 c d 2 e f 3) {fst: 1, lst: 3}))
+
+  ;; TODO: min bound
+
+  ;; TODO: max bound
+
+  ;; TODO: (%split l_ < (%split (%matches () <) > r_))
+)
+
+;; TODO: backmap: Referring to %matches successor refers to its matchee
+;; TODO: backmap: Referring to %matches env refers to its matchee
+;; TODO: backmap: Referecnes into %matches env work and modify the matchee
+
 ;; %itemseq bounds
 ;;
 ;; Make sure item sequence bounds are computed properly for the various item sequence operators.
@@ -3332,17 +3608,17 @@
   (of (qux (xyzzy) a: ((+ a b_) c_ d_) b: (foo_ bar_)) min: 3)
   (of (qux (xyzzy) a: ((+ a b_number) c_symbol d_string) b: (foo_boolean bar_string)) min: 3 max: 3)
   (of (%item x_) (%item° x_) (%items xs_ x_) min: 1)
-  (of (%item x_number) (%item° x_number) (%items xs_ x_number) min: 1 max: 1)
-  (of (%item (x_number) ((y_number))) min: 3 max: 3)
-  (of (%item (x_) ((y_number))) min: 3)
+  (of (%item x_number) (%item° x_number) (%items xs_ x_number) min: 1)
+  (of (%item (x_) ((y_number))) (%item (x_number) ((y_number))) min: 3)
   (of (%item (x_number) ((y_))) min: 3)
   (of (%item (x_) ((y_))) min: 3)
   (of (%item (+ a_ b_)) (%item° (+ a_ b_)) (%items xs_ (+ a_ b_)) min: 2)
   (of (%item (+ a_number b_number))
       (%item° (+ a_number b_number))
       (%items xs_ (+ a_number b_number))
-      min: 2 max: 2)
-  (of @x @x_ @x_string @x_symbol @x_number min: 1 max: 1)
+      min: 2)
+  (of @x  @x_string @x_symbol @x_number min: 1 max: 1)
+  (of @x_ min: 1)
   (of @() @(a b c) @(1 2 3) min: 2 max: 2)
   (of @((a b) (c d)) min: 3 max: 3)
   (of @(() a: (+ (3) 4)) min: 4 max: 4)
@@ -3403,8 +3679,9 @@
 ;; Order/duplication in levels is irrelevant.
 (specificity
   ;; Lowest specificity -- least specific
-  (level _ x_ x←_ (%not a b c))
-  (level x_number x_string x_boolean x_dict _number _string _boolean _dict)
+  (level _ x_ x←_)
+  (level (%not a b c))
+  (level _number _string _boolean _dict x_number x_string x_boolean x_dict)
   (level (+ _ _) (+ x_ _) (+ _ y_) (+ x_ y_))
   (level (+ _number y_) (+ x_ _number) (+ x_number y_) (+ x_ y_number))
   (level (+ x_number y_number))
@@ -3436,8 +3713,28 @@
 (specificity
   (level _number (%number _))
   (level (%number (whole _)) (%number _ < 10))
-  (level (%number 0 < _ < 10))
-  (level (%number 0 < (whole _) < 10) (%number u8) (%number i64)))
+  (level (%number _ <= 10) (%number 0 < _ < 10))
+  (level (%number (whole _) <= 10) (%number 0 < (whole _) < 10))
+  (level (%number 0 <= (whole _) < 10) (%number 0 < (whole _) <= 10))
+  (level (%number 0 <= (whole _) <= 10)))
+
+;; Receptive field in specificity
+(specificity
+  (level (%number +i8!))
+  (level (%number +i8) (%number -i8))
+  (level (%number i8) (%number u8))
+  (level (%number +i16!))
+  (level (%number +i16) (%number -i16))
+  (level (%number i16) (%number u16))
+  (level (%number +i32!))
+  (level (%number +i32) (%number -i32))
+  (level (%number i32) (%number u32))
+  (level (%number +i64!))
+  (level (%number +i64) (%number -i64))
+  (level (%number i64) (%number u64))
+  (level (%number +i128!))
+  (level (%number +i128) (%number -i128))
+  (level (%number i128) (%number u128)))
 
 ;; %any° takes minimum specificity of its branches
 (specificity
@@ -3529,7 +3826,7 @@
   (- (x←_) (x←(+ _ _)) ((+ _ _)))
   ;; The easy part is over :)
   ;; Plural
-  (- (_*) (xs_*) (xs_+ a) ((%many xs_ a)))
+  (- (_*) (xs_*) (xs_+ a))
   ;; Group
   (of ((%group xs_ a)) a)
   (of ((%group xs_ a b c)) a)
@@ -3557,41 +3854,12 @@
   (of ((%group xs_ `x `y (%group ys_ `z a))) a)
   (of ((%group xs_ `x `y (%group ys_ `z (%group zs_ `foo `bar) a) b c) d e) a)
   ;; Slot in nested group
-  (- (`x) (`x `y) (`x a_) (`x `y (+ _ _) b c)))
+  (- (`x) (`x `y) (`x a_) (`x `y (+ _ _) b c))
+  ;; Repeats with min: 1
+  (of ((%many xs_ a min: 1)) a)
+  (of ((%past x←a min: 1)) a)
+  (of (`x `y (%past/max x←a min: 1) z_) a))
 
 (head
   (of C←["" | "" ((m←edit [_* `target]) _*) @_] "")
   (of [lhs←"" | "" (M←(edit term_) _*) @_] ""))
-
-;; TODO: test empty %many, %group, %past
-
-;; Walk
-;; With these tests we indirectly test M1.walk
-(group
-  (specificity (level _))
-  (specificity (level x_dict (%pipe (map (x_ y_)) _)))
-  (specificity (level (a b (%any (%any 1 2) 3))
-                      (a b (%any 1 2 3))))
-
-  (specificity
-    (level
-      (%keypool (%all (%any 1 2)))
-      (%-keypool (%all (%any 1 2)))
-      (%keytest (%all (%any 1 2)))
-      (%keypool (%all 1 2 3 4 5))
-      (%-keypool (%all 1 2 3 4 5))
-      (%keytest (%all 1 2 3 4 5))))
-
-  (specificity
-    (level (%-value x qux) (%-value x (%any 1 2))))
-
-  (specificity
-    (level ((%literal qux)))
-    (level ((%literal (%any 1 2)))))
-
-  (specificity
-    (level {x: (%- _ ((%all (%any 1 2))))} {x: (%- _ (%all 1 2 3 4 5))})
-    (level {x: (%- _number (%all (%any 1 2)))} {x: (%- _number (%all 1 2 3 4 5))}))
-
-  (specificity
-    (level {x: (%optional ((%all (%any 1 2))) _)} {x: (%optional (%all 1 2 3 4 5) _)})))

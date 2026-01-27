@@ -6,6 +6,10 @@ module Ww
     include AutoUpcast
     include TypeConversion
 
+    # FIXME: Storing a StringView here is a bad bad bad idea!!!! Views point god knows
+    # where at this point -- most likely into the original source string, which could be HUGE,
+    # and therefore keep it alive & waste memory. Even an empty view would keep
+    # the parent string alive!!!
     def initialize(@value : StringView)
     end
 

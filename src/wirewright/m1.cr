@@ -62,6 +62,257 @@
 module Ww::M1next
   extend self
 
+  # :nodoc:
+  module Token
+    @dict : Term::Dict
+
+    def_change
+
+    def map(& : Term::Dict -> Term::Dict)
+      change(dict: yield @dict)
+    end
+
+    def unwrap(& : Term::Dict ->)
+      yield @dict
+    end
+  end
+
+  # Wraps a normal pattern term. `Normp` acts as a proof that you really did
+  # call `normal`: the only way to construct `Normp`s is through `normal(Term)`.
+  struct Normp
+    include Token
+
+    @[Flags]
+    enum Annotation
+      Depths
+      Bounds
+      Literals
+      Sketches
+    end
+
+    getter annotations : Annotation
+
+    # :nodoc:
+    def initialize(@dict, @annotations)
+    end
+
+    # :nodoc:
+    def with_annotation(ann : Annotation)
+      change(annotations: @annotations | ann)
+    end
+  end
+
+  # Wraps a guarded normal pattern term .`Guardedp` acts as a proof that you really
+  # did call `guard`. Notably, either with or without optimization passes that are
+  # necessary to produce the guards. So for instance, `optimal(_, O0)` just calls
+  # `guard` without doing the passes, whereas `O1` and above do the passes first.
+  struct Guardedp
+    include Token
+
+    # :nodoc:
+    def initialize(@dict : Term::Dict)
+    end
+  end
+
+  {% for cls in {Normp, Guardedp} %}
+    # See `Kit#ascend`.
+    def ascend(normp : {{cls}}, &fn : {{cls}} -> {{cls}}) : {{cls}}
+      normp.unwrap do |op|
+        Kit.ascend(op) do |member|
+          fn.call(normp.map { member })
+        end
+      end
+    end
+
+    # See `Kit#walk`.
+    def walk(normp : {{cls}}, &fn : {{cls}} ->) : Nil
+      normp.unwrap do |op|
+        Kit.walk(op) do |member|
+          fn.call(normp.map { member })
+        end
+      end
+    end
+
+    # See `Kit#member`.
+    def each_member(normp : {{cls}}, & : {{cls}} ->) : Nil
+      normp.unwrap do |op|
+        Kit.each_member(op) do |member|
+          yield normp.map { member }
+        end
+      end
+    end
+
+    # See `Kit#members`.
+    def members(normp : {{cls}}) : Array({{cls}})
+      normp.unwrap { |op| Kit.members(op) }
+    end
+  {% end %}
+
+  # Returns the normal form of an M1 *pattern*.
+  #
+  # - The normal form consists of operators. Each operator is a dictionary whose
+  #   first item is a symbol prefixed with `%`. For example, `100` becomes `(%literal 100)`.
+  # - All operators in the normal form are dictionaries. Among other things,
+  #   this lets us annotate normal operators arbitrarily, both from the child's
+  #   and parent's end.
+  # - Operators such as `(%let foo _)` or `(%item a_ b_ c_)` accept other operators
+  #   (here, `_`; `a_`, `b_`, `c_`, correspondingly). In the normal form, such argument
+  #   operators are generally referred to as *members* if there is a possibility for
+  #   zero (or one) or more of them: e.g., *members* of `%item`; or *successor* if
+  #   only one such operator is allowed (e.g., *successor* of `%let`).
+  # - `(%capture name_)` marks captures. For example, a `%let` normalizes
+  #   into `(%let (%capture name) value)`.
+  # - `(%ref name_)` marks references. References are different from captures in that
+  #   references do not have associated values at match-time. References are used
+  #   primarily in backmaps. For example, a slot normalizes into `(%slot (%ref name))`.
+  # - Item sequence (`%seq`) nodes are marked with `seq: true`.
+  # - Entry nodes in `%layer` are marked with `entry: true`.
+  # - `(%key name_)` marks dictionary keys expected in the current context.
+  # - `(%payload term_)` marks a term that is part of an operator, must not be evaluated
+  #   (i.e., marks it as a "non-member").
+  # - `(%literal term_)` nodes represent literal (exact) matches and must not be visited.
+  # - `sealed: true` on an operator means the operator and all its members must be
+  #   evaluated in a context fully isolated from the outside one. In effect,
+  #   `sealed: true` wraps the operator and its members in an impenetrable "membrane".
+  #   For example, for sketches, this means the sketch of the outer pattern must not
+  #   include (be union'd with) the sketch of the sealed operator and its members.
+  # - `terminal: true` on an operator means the operator's items and pairs must
+  #   not be evaluated.
+  # - `guarded: true` marks operators that want to be guarded (e.g. at O1 with sketch checks,
+  #   depth checks and so on).
+  #
+  # The normal form converts non-operators to operators ("normalizes" them; hence the name,
+  # although at this point it is only kept for historical reasons & brevity).
+  #
+  # The normal form enriches the pattern with info related to optimization and reasoning
+  # about the pattern. In general, the process of normalization is a bit like querying
+  # a "generative fact base" about a pattern; plus validation. Its response is the normal
+  # form of the pattern.
+  #
+  # As one of objectives in the design of the normal form, we want to have
+  # structural encoding of facts about the pattern. This lets us rewrite
+  # the pattern later on, at O2; annotate it with "features" such as its
+  # sketch, population, type population, and so on, at O1; calculate the pattern's
+  # specificity; and in general, reason about the pattern, and traverse it,
+  # without each such stage having to know about all the operators supported
+  # by M1.
+  #
+  # The normal form is an attempt to centralize both knowledge and docs for
+  # all M1 operators.
+  def normal(pattern : Term) : Normp
+    Normp.new(normalize(Π.pattern(pattern)).as_d, :none)
+  end
+
+  alias Opt = O0.class | O1.class | O2.class
+
+  # All optimizations are disabled.
+  module O0
+  end
+
+  # Runs the following passes and their dependencies:
+  #
+  # - `depthp`
+  # - `boundsp`
+  # - `sketchp`
+  #
+  # ... finally feeding them to `guard`, which uses info obtained from
+  # these passes to wrap `guarded: true` operators with guard operators
+  # that do the depth/bounds/sketch check(s).
+  #
+  # These are key optimizations, they have major impact on performance. This
+  # is because info from the leaves of the pattern propagates up, sometimes up
+  # to the root. This reduces the work needed for rejections (mismatches), which
+  # are much more frequent that matches in Wirewright (firstly, in general; and
+  # second, because M1 uses backtracking search, which is very stupid most of
+  # the times).
+  module O1
+  end
+
+  # Runs `simplifyp` on the guarded normal pattern after `O1` until fixpoint.
+  # Some simplifications are also made before `O1` (such as the `%split` ->
+  # `%adjacent` rewrite), because `O1` can mess the tree up with guards.
+  module O2
+  end
+
+  # Performs no optimizations.
+  def optimal(pattern : Normp, level : O0.class) : Guardedp
+    guard(pattern)
+  end
+
+  # Returns `O1`-optimized *pattern*.
+  def optimal(pattern : Normp, level : O1.class) : Guardedp
+    pipe(pattern, depthp, boundsp, literalp, sketchp, guard)
+  end
+
+  # Returns `O2`-optimized *pattern*.
+  def optimal(pattern : Normp | Guardedp, level : O2.class)
+    state0 = pattern
+
+    loop do
+      state1 = simplifyp(state0)
+      if state0 == state1
+        return state0
+      end
+
+      state0 = state1
+    end
+  end
+
+  # Compiles the given *pattern*. Returns the resulting operator.
+  def operator(pattern : Guardedp) : Op::Any
+    pattern.unwrap do |op|
+      compile(Π.pattern(Term.of(op)))
+    end
+  end
+
+  # :nodoc:
+  def operator(pattern : Normp, *, opt : O0.class) : Op::Any
+    pipe(pattern, optimal(O0), operator)
+  end
+
+  # :nodoc:
+  def operator(pattern : Normp, *, opt : O1.class) : Op::Any
+    pipe(pattern, optimal(O1), operator)
+  end
+
+  # :nodoc:
+  def operator(pattern : Normp, *, opt : O2.class) : Op::Any
+    pipe(pattern, optimal(O2), optimal(O1), optimal(O2), operator)
+  end
+
+  {% if flag?(:docs) %}
+    # Compiles the given normal *pattern* after optimizing it with the given
+    # optimization level *opt*.
+    def operator(pattern : Normp, *, opt : Opt) : Op::Any
+    end
+  {% end %}
+
+  # The default pattern optimization level.
+  DEFAULT_OPT = O2
+
+  # Compiles the given normal *pattern*.
+  #
+  # Uses the default optimization level (see `DEFAULT_OPT`).
+  def operator(pattern : Normp) : Op::Any
+    operator(pattern, opt: DEFAULT_OPT)
+  end
+
+  # :nodoc:
+  OPCACHE = SyncCache(Term, Op::Any).new(4096, preallocate: true)
+
+  # Compiles the given M1 *pattern* to an operator.
+  #
+  # This is the top-level function that calls the rest of the M1 pattern compiler
+  # for you. This function performs normalization (`normal`), optimization
+  # (`optimal`, *opt* sets the level), and finally the construction of an operator.
+  #
+  # Compilations are cached.
+  def operator(pattern : Term, *, opt : Opt = DEFAULT_OPT) : Op::Any
+    OPCACHE.put_if_absent(pattern) do
+      operator(normal(pattern), opt: opt)
+    end
+  end
+
   # Returns `true` if *op* probably matches *matchee*. Returns `false` if *op*
   # definitely does not match *matchee*.
   #
@@ -90,10 +341,10 @@ module Ww::M1next
     true
   end
 
-  # Convenience function that calls `probably_matches?(M1::Operator, Term)` after
+  # Convenience function that calls `probably_matches?(Op::Any, Term)` after
   # compiling *pattern* for you.
   #
-  # Routes *kwargs* to `M1.operator`.
+  # Routes *kwargs* to `operator`.
   #
   # ```
   # M1.probably_matches?(ML.term(%{(+ a_ b_)}), Term.of(:+, 1, 2))
@@ -106,7 +357,7 @@ module Ww::M1next
   # # => false (truth)
   # ```
   def probably_matches?(pattern : Term, matchee : Term, **kwargs) : Bool
-    probably_matches?(M1.operator(pattern, **kwargs), matchee)
+    probably_matches?(operator(pattern, **kwargs), matchee)
   end
 
   # Returns `true` if *op* definitely matches *matchee*. Uses *env* as the prototype
@@ -115,10 +366,10 @@ module Ww::M1next
     match(env, op, matchee, &.present?)
   end
 
-  # Convenience function that calls `probe?(Term::Dict, M1::Operator, Term)` after
+  # Convenience function that calls `probe?(Term::Dict, Op::Any, Term)` after
   # compiling *pattern* for you.
   #
-  # Routes *kwargs* to `M1.operator`.
+  # Routes *kwargs* to `operator`.
   #
   # ```
   # M1.probe?(ML.term(%{(+ a_ b_)}), Term.of(:+, 1, 2))
@@ -131,17 +382,12 @@ module Ww::M1next
   # # => false (truth)
   # ```
   def probe?(pattern : Term, matchee : Term, *, env : Term::Dict = Term[], **kwargs) : Bool
-    probe?(env, M1.operator(pattern, **kwargs), matchee)
+    probe?(env, operator(pattern, **kwargs), matchee)
   end
 
-  # Returns one of match envs after matching *op* against *matchee*. Returns `nil` if
-  # *op* does not match *mathee*.
-  #
-  # NOTE: "One of" is not the same as "first" nor "last" nor "middle". It's
-  # implementation-defined and depends on both *matchee* and *op*. You should
-  # use this function only if you're fine with that (e.g. because you control
-  # the pattern). Otherwise, just do `matches` and take the first match
-  # (`matches` gives you lexicographic order).
+  # Returns the first match env after matching *op* against *matchee*. Returns
+  # `nil` if *op* does not match *mathee*. See also `matches` to learn about
+  # env order.
   def match?(env : Term::Dict, op : Op::Any, matchee : Term) : Term::Dict?
     match(env, op, matchee) do |fb|
       fb.each do |response|
@@ -156,25 +402,27 @@ module Ww::M1next
     end
   end
 
-  # Convenience function that calls `match?(M1::Operator, Term)` after
+  # Convenience function that calls `match?(Op::Any, Term)` after
   # compiling *pattern* for you.
   #
-  # Routes *kwargs* to `M1.operator`.
+  # Routes *kwargs* to `operator`.
   def match?(pattern : Term, matchee : Term, *, env : Term::Dict = Term[], **kwargs) : Term::Dict?
-    match?(env, M1.operator(pattern, **kwargs), matchee)
+    match?(env, operator(pattern, **kwargs), matchee)
   end
 
   # Returns a read-only slice of match envs after showing *matchee* to *op*.
   # Uses *env* as the prototype match env. Empty slice means mismatch. Envs
-  # in the slice are sorted using `Term.compare` to avoid having their order
-  # be implementation-defined.
+  # in the slice are ordered according to source operators in the pattern,
+  # but generally, *left-to-right*, both in terms of operator position in
+  # the pattern, and in terms of how specific operators such as `%item°`
+  # traverse structure.
   #
   # ```
   # op = M1.operator(ML.term(%{⟨±n⟩°}))
   # matchee = Term.of(3, 5, 1, :x, :z, 100)
   #
-  # M1::Operator.matches(Term[], op, matchee)
-  # # => Slice[Term[n: 1], Term[n: 3], Term[n: 5], Term[n: 100]]
+  # M1.matches(Term[], op, matchee)
+  # # => Slice[Term[n: 3], Term[n: 5], Term[n: 1], Term[n: 100]]
   # ```
   def matches(env : Term::Dict, op : Op::Any, matchee : Term) : Slice(Term::Dict)
     match(env, op, matchee) do |fb|
@@ -190,17 +438,16 @@ module Ww::M1next
         buffer << env
       end
 
-      buffer.sort! { |a, b| Term.compare(a, b) }
       buffer.to_readonly_slice(&.itself)
     end
   end
 
-  # Convenience function that calls `matches(M1::Operator, Term)` after compiling
+  # Convenience function that calls `matches(Op::Any, Term)` after compiling
   # *pattern* for you.
   #
-  # Routes *kwargs* to `M1.operator`.
+  # Routes *kwargs* to `operator`.
   def matches(pattern : Term, matchee : Term, *, env : Term::Dict = Term[], **kwargs) : Slice(Term::Dict)
-    matches(env, M1.operator(pattern, **kwargs), matchee)
+    matches(env, operator(pattern, **kwargs), matchee)
   end
 
   # Each entry in the log list maps a name to its corresponding sealed log. The log
@@ -252,20 +499,13 @@ module Ww::M1next
   alias EnvLogList = Slice({Term::Dict, LogList})
 
   # Returns a read-only slice of match envs paired with their corresponding
-  # log lists.
+  # log lists. The order is as in `matches`.
   #
   # This function is the point of contact between the pattern matching part
   # of M1 and its backmap part. What this function returns is exactly what
   # a backmap engine needs as input.
-  #
-  # Pairs in the returned slice are sorted using `Term.compare` on envs, to
-  # avoid having their order be implementation-defined.
   def matches_and_logs(env : Term::Dict, op : Op::Any, matchee : Term) : EnvLogList
-    matches_and_logs(env, op, matchee) do |buffer|
-      # Sort buffer by envs so that the order is definite.
-      buffer.sort! { |(a, _), (b, _)| Term.compare(a, b) }
-      buffer.to_readonly_slice(&.itself)
-    end
+    matches_and_logs(env, op, matchee, &.to_readonly_slice(&.itself))
   end
 
   # Runs the backmap engine on the given backsystem *backsys* and *matchee*.
@@ -319,7 +559,7 @@ module Ww::M1next
   #
   # This overload lets you specify the backsystem as a list of associations
   # between a pattern term and a backspec term. Patterns are compiled using
-  # `M1.operator` (*kwargs* are routed to it), and matched (*env* is used as
+  # `operator` (*kwargs* are routed to it), and matched (*env* is used as
   # seed env).
   #
   # Non-dict backspecs count as mismatch and are ignored. Mismatches are
@@ -333,7 +573,7 @@ module Ww::M1next
     backsys.each do |pattern, backspec|
       next unless backspec = backspec.as_d?
 
-      ops << {M1.operator(pattern, **kwargs), backspec}
+      ops << {operator(pattern, **kwargs), backspec}
     end
 
     backmapR?(ops, matchee, env: env)
@@ -360,7 +600,7 @@ module Ww::M1next
   # The backmap is specified by providing its pattern term *pattern* and
   # a *backspec* term. Non-dict backspecs count as a mismatch.
   #
-  # *kwargs* are routed to `M1.operator`.
+  # *kwargs* are routed to `operator`.
   #
   # ```
   # pattern = ML.term(%{ g←(a_ b_) })
@@ -373,7 +613,7 @@ module Ww::M1next
   # pp result # => nil
   # ```
   def backmapR?(pattern : Term, backspec : Term, matchee : Term, *, env : Term::Dict = Term[], **kwargs) : Rep::Any?
-    backmapR?(M1.operator(pattern, **kwargs), backspec, matchee, env: env)
+    backmapR?(operator(pattern, **kwargs), backspec, matchee, env: env)
   end
 
   # Same as `backmapR?`, but collapses the resulting replacement to a term
@@ -455,5 +695,15 @@ require "./m1/log"
 require "./m1/tzip"
 require "./m1/context"
 require "./m1/op"
+require "./m1/production"
+require "./m1/kit"
+require "./m1/number_spec"
+require "./m1/normalize"
+require "./m1/range_calc"
+require "./m1/o1"
+require "./m1/o2"
+require "./m1/compile"
+require "./m1/head"
+require "./m1/specificity"
 require "./m1/match"
 require "./m1/backmap"

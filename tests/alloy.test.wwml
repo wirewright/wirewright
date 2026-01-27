@@ -539,11 +539,11 @@
         (foo ^x))
       ^x) ;; not the same x!
     ((foo 1)
-     (foo 2)
-     (foo 3)
      (foo a)
+     (foo 2)
      (foo b)
-     (foo c)))
+     (foo c)
+     (foo 3)))
 
   ;; pattern source: filter
   (alloy {xs: (1 a 2 b c 3)}

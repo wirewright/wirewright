@@ -877,6 +877,78 @@ module Ww
       end
     end
 
+    # Recurses into entry values only.
+    #
+    # Counts itself too (smallest possible value is 1).
+    @[Dncast]
+    def fresh_maxdepth : Magnitude
+      maxdepth = Magnitude.new(1)
+
+      each_entry do |k, v|
+        if vdict = v.as_d?
+          maxdepth = Math.max(maxdepth, vdict.fresh_maxdepth + 1)
+        end
+      end
+
+      maxdepth
+    end
+
+    @[Dncast]
+    def depth : UInt32
+      maxdepth = 0u32
+
+      each_entry do |k, v|
+        next unless child = v.as_d?
+
+        maxdepth = Math.max(maxdepth, child.depth)
+      end
+
+      1u32 + maxdepth
+    end
+
+    record Population, numbers : Magnitude, symbols : Magnitude, strings : Magnitude, booleans : Magnitude do
+      def self.zero
+        zero = Magnitude.new(0)
+        new(zero, zero, zero, zero)
+      end
+
+      def +(other : Population)
+        Population.new(
+          numbers + other.numbers,
+          symbols + other.symbols,
+          strings + other.strings,
+          booleans + other.booleans,
+        )
+      end
+
+      def +(other : Term)
+        case other.type
+        in .any?
+          unreachable
+        in .number?
+          copy_with(numbers: numbers + 1)
+        in .string?
+          copy_with(strings: strings + 1)
+        in .symbol?
+          copy_with(symbols: symbols + 1)
+        in .boolean?
+          copy_with(booleans: booleans + 1)
+        in .dict?
+          self + other.unsafe_as_d.population
+        end
+      end
+
+      def total : Magnitude
+        numbers + strings + symbols + booleans
+      end
+    end
+
+    # TODO: cache on dicts
+    @[Dncast]
+    def population
+      ee.sum(Population.zero) { |_, v| v }
+    end
+
     @[Dncast]
     def fresh_sketch
       sketch = Sketch.new(0)
@@ -1427,6 +1499,10 @@ module Ww
       end
     end
 
+    def without_item(index)
+      replace(Term[index]) { }
+    end
+
     # Lets the block replace items in the given *range* with zero or more items
     # by appending to the commit. Returns the modified copy of `self`.
     @[Dncast]
@@ -1450,7 +1526,7 @@ module Ww
     end
 
     @[Dncast]
-    def replace(index : Term::Num, &)
+    def replace(index : Term::Num, & : Term::Dict::Commit ->)
       replace(index...index + 1) { |commit| yield commit }
     end
 

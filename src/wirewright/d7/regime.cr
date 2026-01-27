@@ -102,27 +102,29 @@ module Ww::D7
     end
 
     private def self.edges(pattern : Term, &sink : EdgeCapture ->) : Nil
-      edges(pattern, sink)
+      edges(M1next.normal(pattern), sink)
     end
 
-    private def self.edges(pattern : Term, sink : EdgeCapture ->) : Nil
-      normp = M1.normal(pattern)
+    private def self.edges(pattern : M1next::Normp, sink : EdgeCapture ->) : Nil
+      M1next.walk(pattern) do |normp|
+        normp.unwrap do |op|
+          Term.case(op) do
+            matchpi %{[%'%let [%'%capture id_] [%'%edge _]]} do
+              sink.call(EdgeSingleton.new(id))
+            end
 
-      M1.walk(normp) do |x|
-        Term.case(x) do
-          matchpi %{(%'%let (%'%capture id_) (%'%edge _))} do
-            sink.call(EdgeSingleton.new(id))
+            matchpi %{[%'%let [%'%capture id_] [%'%seq ((%any %past/min %past/max) [%'%singular [%'%edge _]] ⍊ min: 1)]]} do
+              sink.call(EdgeList.new(id))
+            end
 
-            M1::WalkDecision::Skip
+            matchpi %{{¦ disjunction}} do
+              M1next.each_member(normp) do |memberp|
+                edges(memberp, sink)
+              end
+            end
+
+            otherwise { }
           end
-
-          matchpi %{(%'%let (%'%capture id_) (%'%itemseq (%'%past %'(%singular (%edge _)) ⍊ min: 1)))} do
-            sink.call(EdgeList.new(id))
-
-            M1::WalkDecision::Skip
-          end
-
-          otherwise { M1::WalkDecision::Continue }
         end
       end
     end

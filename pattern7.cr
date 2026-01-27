@@ -117,7 +117,6 @@ module ::Ww::M1::Search
   end
 end
 
-# FIXME: bad bad BAD idea
 alias Magnitude = Float32
 
 module ::Ww::M1
@@ -188,6 +187,7 @@ module ::Ww::M1
     # Returns the normal form of an item sequence *node*.
     def item(ctx : Context, node : Term) : Term
       Term.of_case(node, engine: M0) do
+        # x
         matchpi %[_symbol] do
           continue unless blank = node.blank?
           continue unless blank.plural?
@@ -197,11 +197,13 @@ module ::Ww::M1
           Term.of(:"%plural", name ? {:"%capture", name} : nil, type: typesym(blank), min: blank.mult.one_or_more? ? 1 : 0, max: SYM_INF)
         end
 
+        # x
         # Fast path to %singular for literal terms.
         matchpi %[_number], %[_string], %[_boolean] do
           {:"%singular", pattern(ctx, node)}
         end
 
+        # x
         matchpi(
           %[(%plural ¦ opts_)],
           %[(%plural/min ¦ opts_)],
@@ -220,6 +222,7 @@ module ::Ww::M1
           end
         end
 
+        # x
         matchpi(
           %[(%plural capture_ ¦ opts_)],
           %[(%plural/min capture_ ¦ opts_)],
@@ -238,10 +241,12 @@ module ::Ww::M1
           end
         end
 
+        # x
         matchpi %[(%optional _ body_)], cue: :"%optional" do
           node.morph({2, pattern(ctx, body)})
         end
 
+        # x
         matchpi %[(%group successor_ _ _*)], cue: :"%group" do
           Term::Dict.build do |commit|
             commit << :"%group"
@@ -250,6 +255,7 @@ module ::Ww::M1
           end
         end
 
+        # x
         matchpi %[(%many successor_ _ _* ¦ opts_)], cue: :"%many" do
           M0.schema(opts) do |s, opts|
             s.on_mismatch { continue }
@@ -266,6 +272,7 @@ module ::Ww::M1
           end
         end
 
+        # x
         matchpi %[(%past _ _* ¦ opts_)], cue: :"%past" do
           M0.schema(opts) do |s, opts|
             s.on_mismatch { continue }
@@ -282,6 +289,7 @@ module ::Ww::M1
           end
         end
 
+        # x
         matchpi %[(%past/max _ _* ¦ opts_)], cue: :"%past/max" do |opts|
           M0.schema(opts) do |s, opts|
             s.on_mismatch { continue }
@@ -298,6 +306,7 @@ module ::Ww::M1
           end
         end
 
+        # x
         matchpi(
           %[(%gap measurer_)],
           %[(%gap/min measurer_)],
@@ -307,6 +316,7 @@ module ::Ww::M1
           node.morph({1, pattern(ctx, measurer)})
         end
 
+        # x
         matchpi(
           %[(%gap° measurer_)],
           %[(%gap/min° measurer_)],
@@ -316,6 +326,7 @@ module ::Ww::M1
           node.morph({1, pattern(ctx, measurer)})
         end
 
+        # x
         # NOTE: Currently we do not register %slot as a capture. And I don't think
         # there is any point in doing so.
         matchpi %[(%slot _)], cue: :"%slot" do
@@ -329,18 +340,22 @@ module ::Ww::M1
     # Returns the normal form of a pairspart *key*-*value* pair.
     def pair(ctx : Context, key : Term, value : Term) : Term
       Term.of_case(value, engine: M0) do
+        # x
         matchpi %[(%optional default_ body_)], cue: :"%optional" do
           {:"%entry/optional", {:"%barrier", default}, pattern(ctx, body)}
         end
 
+        # x
         matchpi %[(%- positive_)], cue: :"%-" do
           {:"%entry/negative", pattern(ctx, positive)}
         end
 
+        # x
         matchpi %[(%- positive_ name_)], cue: :"%-" do
           {:"%entry/negative", pattern(ctx, positive), {:"%barrier", name}}
         end
 
+        # x
         otherwise do
           {:"%entry/required", pattern(ctx, value)}
         end
@@ -370,6 +385,7 @@ module ::Ww::M1
       end
     end
 
+    # x
     # Returns the normal form of a dictionary term *dict*.
     def dict(ctx : Context, dict : Term::Dict) : Term
       if literal?(dict)
@@ -396,6 +412,7 @@ module ::Ww::M1
     # Returns the normal form of *pattern*.
     def pattern(ctx : Context, pattern : Term) : Term
       Term.of_case(pattern, engine: M0) do
+        # x
         # NOTE: this is a fast path for itemsonly dictionaries. They'd otherwise be
         # at the very bottom, which isn't exactly a good choice due to their frequency
         # in practice. We do only the simplest, almost probabilistic checks here; if they
@@ -414,12 +431,14 @@ module ::Ww::M1
           dict(ctx, pdict)
         end
 
+        # x
         # Similarly, %let is very frequent (especially due to blanks such as x_)
         # compiling to e.g. (%let x _).
         matchpi %[(%'%let capture_ successor_)], cue: :"%let" do
           {:"%let", {:"%capture", capture}, pattern(ctx, successor)}
         end
 
+        # x
         # Blanks are also very frequent; as are symbols. We avoid using matchpis
         # for type-only blanks _number, _string, etc. so that this _symbol matchpi
         # is immediately reached.
@@ -444,11 +463,13 @@ module ::Ww::M1
           end
         end
 
+        # x
         # Literals are very frequent.
         matchpi %[_symbol], %[_number], %[_string], %[_boolean] do
           {:"%literal", pattern}
         end
 
+        # x
         # Edges are somewhat frequent in Soma-land.
         #
         # (edge ...) is the only pattern matching construct not prefixed with a %.
@@ -475,11 +496,13 @@ module ::Ww::M1
           edge
         end
 
+        # x
         # Partition is pretty frequent.
         matchpi %[(%'%partition itemspart_ pairspart_)], cue: :"%partition" do
           {:"%partition", pattern(ctx, itemspart), pattern(ctx, pairspart)}
         end
 
+        # x
         matchpi %[(%'%layer below_ side_dict)], cue: :"%layer" do
           pattern.transaction do |commit|
             commit.with(1, pattern(ctx, below))
@@ -494,16 +517,19 @@ module ::Ww::M1
           end
         end
 
+        # x
         # (%layer _ k1: v1 k2: v2 ...) is a shorthand for (%layer _ {k1: v1 k2: v2 ...}).
         matchpi %[(%'%layer below_ ¦ pairs_)], cue: :"%layer" do
           pattern(ctx, Term.of(:"%layer", below, pairs))
         end
 
+        # x
         # %number should be %terminal.
         matchpi %[(%number %'_)], %[(%number %'(whole _))], cue: {:"%number", :_}, cues: {nil, :whole} do
           {:"%terminal", pattern}
         end
 
+        # x
         # Compile fixed-width %number into the corresponding bounds check. We do not
         # actually have fixed-width numbers. These kinds of patterns are often used
         # on the Crystal side to ensure we can safely e.g. to(Int32).
@@ -513,12 +539,15 @@ module ::Ww::M1
           {:"%terminal", normal}
         end
 
+        # x
         matchpi %{(%number _*)}, cue: :"%number" do
           continue unless Operator::Num.parse?(pattern)
 
           {:"%terminal", pattern}
         end
 
+        # x
+        # NOTE: Pipe must be a dead end for %sketch and the like!!
         matchpi(
           %[(%pipe (+ _number) successor_)],
           %[(%pipe (- _number) successor_)],
@@ -543,6 +572,7 @@ module ::Ww::M1
           )
         end
 
+        # x
         matchpi %[(%pipe head_ _*)], cue: :"%pipe" do
           continue if pattern.size < 4 # %pipe + head_1 + head_2 + body
 
@@ -556,18 +586,22 @@ module ::Ww::M1
           pattern(ctx, Term.of(:"%pipe", head, body))
         end
 
+        # x
         matchpi %[(%all)], cue: :"%all" do
           PASS
         end
 
+        # x
         matchpi %[(%all a_)], cue: :"%all" do
           pattern(ctx, a)
         end
 
+        # x
         matchpi %[(%all a_ b_)], cue: :"%all" do
           {:"%all", pattern(ctx, a), pattern(ctx, b)}
         end
 
+        # x
         matchpi %[(%all a_ b_ _ _*)], cue: :"%all" do
           rewritten = Term::Dict.build do |commit|
             commit << :"%all" << {:"%all", a, b}
@@ -577,10 +611,12 @@ module ::Ww::M1
           pattern(ctx, Term.of(rewritten))
         end
 
+        # x
         matchpi %[(%any _*)], cue: :"%any" do
           {:"%terminal", pattern.morph({0, :"%any/literal"})}
         end
 
+        # x
         matchpi %[(%any° _*)], cue: :"%any°" do
           Term::Dict.build do |commit|
             commit << :"%any/source"
@@ -590,11 +626,13 @@ module ::Ww::M1
           end
         end
 
+        # x
         # Leave %literal as is.
         matchpi %[(%'%literal _)], cue: :"%literal" do
           pattern
         end
 
+        # x
         # Mark %keypool and %not as %terminal so that walk doesn't walk inside them.
         matchpi(
           %[(%keypool _ _*)],
@@ -604,15 +642,18 @@ module ::Ww::M1
           cues: {:"%keypool", :"%-keypool", :"%keytest", :"%not"}
         ) { {:"%terminal", pattern} }
 
+        # x
         matchpi %[(%keypath capture_)], cue: :"%keypath" do
           {:"%keypath", {:"%capture", capture}}
         end
 
+        # x
         # %nonself is dissolved at normalization.
         matchpi %{[%nonself arg_]}, cue: :"%nonself" do
           pattern(ctx, arg)
         end
 
+        # x
         # |@ patterns.operator.%never
         #
         # |@block
@@ -629,18 +670,22 @@ module ::Ww::M1
           pattern
         end
 
+        # x
         matchpi %[(%value capture_ body_)], cue: :"%value" do
           {:"%value", {:"%capture", capture}, pattern(ctx, body)}
         end
 
+        # x
         matchpi %[(%-value capture_)], cue: :"%-value" do
           {:"%-value", {:"%capture", capture}}
         end
 
+        # x
         matchpi %[(%-value capture_ name_)], cue: :"%-value" do
           {:"%-value", {:"%capture", capture}, {:"%barrier", name}}
         end
 
+        # x
         matchpi %[(%item _ _*)], cue: :"%item" do
           Term::Dict.build do |commit|
             commit << :"%items/first"
@@ -648,6 +693,7 @@ module ::Ww::M1
           end
         end
 
+        # x
         matchpi %[(%item° _ _*)], cue: :"%item°" do
           Term::Dict.build do |commit|
             commit << :"%items/source"
@@ -655,6 +701,7 @@ module ::Ww::M1
           end
         end
 
+        # x
         matchpi %[(%items successor_ _ _* ¦ opts_)], cue: :"%items" do |opts|
           M0.schema(opts) do |s, opts|
             s.on_mismatch { continue }
@@ -670,14 +717,17 @@ module ::Ww::M1
           end
         end
 
+        # x
         matchpi %[(%entry k_ v_)], cue: :"%entry" do
           {:"%entries/first", pattern(ctx, k), pattern(ctx, v)}
         end
 
+        # x
         matchpi %[(%entry° k_ v_)], cue: :"%entry°" do
           {:"%entries/source", pattern(ctx, k), pattern(ctx, v)}
         end
 
+        # x
         matchpi %[(%entries successor_ k_ v_ ¦ opts_)], cue: :"%entries" do |opts|
           M0.schema(opts) do |s, opts|
             s.on_mismatch { continue }
@@ -695,6 +745,7 @@ module ::Ww::M1
           end
         end
 
+        # x
         matchpi %{(%leaf _ _* ¦ opts_)}, %{(%leaf° _ _* ¦ opts_)}, cues: {:"%leaf", :"%leaf°"} do
           M0.schema(opts) do |s, opts|
             s.on_mismatch { continue }
@@ -715,6 +766,7 @@ module ::Ww::M1
           end
         end
 
+        # x
         matchpi %[(%leaves successor_ _ _* ¦ opts_)], cue: :"%leaves" do |opts|
           M0.schema(opts) do |s, opts|
             s.on_mismatch { continue }
@@ -735,19 +787,23 @@ module ::Ww::M1
           end
         end
 
+        # x
         # Expand (%string nonempty) into (%all (%not "") _string)
         matchpi %[(%string nonempty)], cue: {:"%string", :nonempty} do
           pattern(ctx, Term.of(:"%all", {:"%not", ""}, :_string))
         end
 
+        # x
         matchpi %[(%symbol nonblank)], cue: {:"%symbol", :nonblank} do
           {:"%terminal", pattern}
         end
 
+        # x
         matchpi %[(%symbol blank name_ type_)], cue: {:"%symbol", :blank} do
           {:"%symbol", :blank, pattern(ctx, name), pattern(ctx, type)}
         end
 
+        # x
         matchpi %[(%filter deps←(_*) selector_ successor_ ¦ opts_)], cue: :"%filter" do
           M0.schema(opts) do |s, opts|
             s.on_mismatch { continue }
@@ -763,10 +819,12 @@ module ::Ww::M1
           end
         end
 
+        # x
         matchpi %[(%pluck spec←(_*) successor_)], cue: :"%pluck" do
           {:"%pluck", {:"%barrier", spec}, pattern(ctx, successor)}
         end
 
+        # x
         matchpi %[(%flat spec←(_*) successor_)], cue: :"%flat" do
           {:"%flat", {:"%barrier", spec}, pattern(ctx, successor)}
         end
@@ -790,6 +848,7 @@ module ::Ww::M1
           {:"%adjacent", midp}
         end
 
+        # x
         matchpi %[(%split lhs_ _ _*)], cue: :"%split" do
           mid = pattern.items.move(2).grow(-1)
           midp = Term::Dict.build do |commit|
@@ -801,6 +860,7 @@ module ::Ww::M1
           {:"%split/first", pattern(ctx, lhs), midp, pattern(ctx, rhs)}
         end
 
+        # x
         matchpi %[(%split° lhs_ _ _*)], cue: :"%split°" do
           mid = pattern.items.move(2).grow(-1)
           midp = Term::Dict.build do |commit|
@@ -1119,10 +1179,12 @@ module ::Ww::M1
       item = feed.first
 
       Term.case(item, engine: M0) do
+        # x
         matchpi %[(%singular child_)], cue: :"%singular" do
           {Operator::Item::Singular.new(M1.operator(child, captures)), feed.move(1)}
         end
 
+        # x
         matchpi %{(%group successor_ _ _*)}, cue: :"%group" do
           neighbor = -> { Item.neighbor?(feed.move(1), outside).as(Neighbor) }
 
@@ -1131,6 +1193,7 @@ module ::Ww::M1
           {Operator::Item::Group.new(M1.operator(successor, captures), members.to_readonly_slice(&.itself)), feed.move(1)}
         end
 
+        # x
         matchpi %{(%many successor_ _ _* ¦ min: min0_ max: max0_)}, cue: :"%many" do
           min = min0.to(UInt8)
           max = max0 == SYM_INF ? 0u8 : max0.to(UInt8)
@@ -1150,6 +1213,7 @@ module ::Ww::M1
           {Operator::Item::Many.new(M1.operator(successor, captures), members.to_readonly_slice(&.itself), interior.set, min, max), feed.move(1)}
         end
 
+        # x
         match({:"%partition", {:"%past", :_, :"_*"}, {min: :min0_, max: :max0_, greedy: :greedy_boolean}}, cue: :"%past") do |min0, max0, greedy|
           min = min0.to(UInt8)
           max = max0 == SYM_INF ? 0u8 : max0.to(UInt8)
@@ -1163,10 +1227,12 @@ module ::Ww::M1
           end
         end
 
+        # x
         match({:"%optional", :default_, :body_}, cue: :"%optional") do |default, body|
           {Operator::Item::Optional.new(default, M1.operator(body, captures)), feed.move(1)}
         end
 
+        # x
         matchpi %[(%plural (%capture _) min: min0_ max: max0_ type: type0_)] do
           min = min0.to(Magnitude)
           max = max0 == SYM_INF ? Magnitude::INFINITY : max0.to(Magnitude)
@@ -1201,6 +1267,7 @@ module ::Ww::M1
           {Operator::Item::Plural.new(contenders.to_readonly_slice, min, max, type, follower, frac, strategy: :auto), feed}
         end
 
+        # x
         match(Term[:"%plural/min", {:"%capture", :capture_}, min: :min0_, max: :max0_, type: :type0_symbol], cue: {:"%plural/min", :"%capture"}) do |capture, min0, max0, type0|
           min = min0.to(Magnitude)
           max = max0 == SYM_INF ? Magnitude::INFINITY : max0.to(Magnitude)
@@ -1212,6 +1279,7 @@ module ::Ww::M1
           {Operator::Item::Plural.new(capture, min, max, type, follower, frac, strategy: :lazy), feed.move(1)}
         end
 
+        # x
         match(Term[:"%plural/max", {:"%capture", :capture_}, min: :min0_, max: :max0_, type: :type0_symbol], cue: {:"%plural/max", :"%capture"}) do |capture, min0, max0, type0|
           min = min0.to(Magnitude)
           max = max0 == SYM_INF ? Magnitude::INFINITY : max0.to(Magnitude)
@@ -1223,6 +1291,7 @@ module ::Ww::M1
           {Operator::Item::Plural.new(capture, min, max, type, follower, frac, strategy: :greedy), feed.move(1)}
         end
 
+        # x
         # FIXME: unify with %capture %plural case, tests
         match(Term[:"%plural", min: :min0_, max: :max0_, type: :type0_symbol], cue: :"%plural") do |min0, max0, type0|
           min = min0.to(Magnitude)
@@ -1235,6 +1304,7 @@ module ::Ww::M1
           {Operator::Item::Plural.new(nil, min, max, type, follower, frac, strategy: :auto), feed.move(1)}
         end
 
+        # x
         match(Term[:"%plural/min", min: :min0_, max: :max0_, type: :type0_symbol], cue: :"%plural/min") do |min0, max0, type0|
           min = min0.to(Magnitude)
           max = max0 == SYM_INF ? Magnitude::INFINITY : max0.to(Magnitude)
@@ -1246,6 +1316,7 @@ module ::Ww::M1
           {Operator::Item::Plural.new(nil, min, max, type, follower, frac, strategy: :lazy), feed.move(1)}
         end
 
+        # x
         match(Term[:"%plural/max", min: :min0_, max: :max0_, type: :type0_symbol], cue: :"%plural/max") do |min0, max0, type0|
           min = min0.to(Magnitude)
           max = max0 == SYM_INF ? Magnitude::INFINITY : max0.to(Magnitude)
@@ -1257,6 +1328,7 @@ module ::Ww::M1
           {Operator::Item::Plural.new(nil, min, max, type, follower, frac, strategy: :greedy), feed.move(1)}
         end
 
+        # x
         match({:"%gap", :measurer_}, cue: :"%gap") do |measurer|
           neighbor = -> { Item.neighbor?(feed.move(1), outside).as(Neighbor) }
           frac = frac(neighbor)
@@ -1264,6 +1336,7 @@ module ::Ww::M1
           {Operator::Item::GapFirst.new(M1.operator(measurer, captures), frac, strategy: :sway), feed.move(1)}
         end
 
+        # x
         match({:"%gap/min", :measurer_}, cue: :"%gap/max") do |measurer|
           neighbor = -> { Item.neighbor?(feed.move(1), outside).as(Neighbor) }
           frac = frac(neighbor)
@@ -1271,6 +1344,7 @@ module ::Ww::M1
           {Operator::Item::GapFirst.new(M1.operator(measurer, captures), frac, strategy: :lazy), feed.move(1)}
         end
 
+        # x
         match({:"%gap/max", :measurer_}, cue: :"%gap/max") do |measurer|
           neighbor = -> { Item.neighbor?(feed.move(1), outside).as(Neighbor) }
           frac = frac(neighbor)
@@ -1278,6 +1352,7 @@ module ::Ww::M1
           {Operator::Item::GapFirst.new(M1.operator(measurer, captures), frac, strategy: :greedy), feed.move(1)}
         end
 
+        # x
         match({:"%gap°", :measurer_}, cue: :"%gap°") do |measurer|
           neighbor = -> { Item.neighbor?(feed.move(1), outside).as(Neighbor) }
           frac = frac(neighbor)
@@ -1285,6 +1360,7 @@ module ::Ww::M1
           {Operator::Item::GapSource.new(M1.operator(measurer, captures), frac, strategy: :sway), feed.move(1)}
         end
 
+        # x
         match({:"%gap/min°", :measurer_}, cue: :"%gap/max°") do |measurer|
           neighbor = -> { Item.neighbor?(feed.move(1), outside).as(Neighbor) }
           frac = frac(neighbor)
@@ -1292,6 +1368,7 @@ module ::Ww::M1
           {Operator::Item::GapSource.new(M1.operator(measurer, captures), frac, strategy: :lazy), feed.move(1)}
         end
 
+        # x
         match({:"%gap/max°", :measurer_}, cue: :"%gap/max°") do |measurer|
           neighbor = -> { Item.neighbor?(feed.move(1), outside).as(Neighbor) }
           frac = frac(neighbor)
@@ -1299,6 +1376,7 @@ module ::Ww::M1
           {Operator::Item::GapSource.new(M1.operator(measurer, captures), frac, strategy: :greedy), feed.move(1)}
         end
 
+        # x
         match({:"%slot", :capture_}, cue: :"%slot") do |capture|
           {Operator::Item::Slot.new(capture), feed.move(1)}
         end
@@ -1321,9 +1399,9 @@ module ::Ww::M1
   # a hard rule. There must be no such thing as a "pattern matching engine crash" (minus the
   # inevitable implementation errors). Diagnostics can help the programmer find potential
   # mistakes at their level of reasoning.
-  def self.normal(pattern : Term, **kwargs) : Term
-    Normal.pattern(Normal::Context.new(**kwargs), pattern)
-  end
+  # def self.normal(pattern : Term, **kwargs) : Term
+  #   Normal.pattern(Normal::Context.new(**kwargs), pattern)
+  # end
 
   def self.normal_escaped(pattern : Term, **kwargs) : Term
     Term.of_case(pattern) do
@@ -1341,9 +1419,9 @@ module ::Ww::M1
     end
   end
 
-  def self.bounds(normp : Term) : {Magnitude, Magnitude}
-    Bounds.pattern(normp)
-  end
+  # def self.bounds(normp : Term) : {Magnitude, Magnitude}
+  #   Bounds.pattern(normp)
+  # end
 
   alias OptLevel = O0.class | O1.class | O2.class
 
@@ -1359,9 +1437,9 @@ module ::Ww::M1
       extend self
 
       def match?(pattern : Term, matchee : Term, *, env = Term[]) : Term::Dict?
-        return unless M1next.probably_matches?(pattern, matchee, opt: O0)
+        return unless M1next.probably_matches?(pattern, matchee, opt: M1next::O0)
 
-        M1next.match?(pattern, matchee, opt: O0, env: env)
+        M1next.match?(pattern, matchee, opt: M1next::O0, env: env)
       end
     end
 
@@ -1568,14 +1646,15 @@ module ::Ww::M1
   module O2
     module Engine
       def self.match?(pattern : Term, matchee : Term, *, env = Term[]) : Term::Dict?
-        return unless M1next.probably_matches?(pattern, matchee, opt: O1)
+        return unless M1next.probably_matches?(pattern, matchee, opt: M1next::O1)
 
-        M1next.match?(pattern, matchee, opt: O1, env: env)
+        M1next.match?(pattern, matchee, opt: M1next::O1, env: env)
       end
     end
 
     def self.optimized1(normp : Term, cycle : Int, *, recurse = true) : Term
       Term.of_case(normp, engine: Engine) do
+        # x
         # (%all) should be rewritten into (%pass).
         #
         # These are internal rewrites, the user cannot reach this from the outside since during
@@ -1584,6 +1663,7 @@ module ::Ww::M1
           {:"%pass"}
         end
 
+        # x
         # (%all X) should be rewritten into X.
         #
         # Ditto about reachability from the client-side.
@@ -1591,11 +1671,13 @@ module ::Ww::M1
           optimized1(successor, cycle)
         end
 
+        # x
         # (%all X X) should be rewritten into X.
         matchpi %[(%'%all successor_ successor_)] do
           optimized1(successor, cycle)
         end
 
+        # x
         # (%all X Y Zs) should be rewritten into (%all (%all X Y) Zs)
         #
         # This is unreachable from the client-side, and only reachable via emission from optimized1
@@ -1607,6 +1689,7 @@ module ::Ww::M1
           end
         end
 
+        # x
         # Fold %sketch -> %bounds -> %depth into a single operator, %dict-guard.
         matchpi(
           %[(%sketch
@@ -1621,32 +1704,38 @@ module ::Ww::M1
           Term.of(:"%dict-guard", successor, sketch: sketch, bounds: {min_b, max_b}, depth: {min_d, max_d})
         end
 
+        # x
         # Fold (_*) into an itemsonly check (which is vastly cheaper!)
         matchpi %[(%itemseq (%plural min: 0 max: ∞ type: %'_))] do
           {:"%itemsonly"}
         end
 
+        # x
         # Rewrite (xs_*) into %let/itemsonly (which is cheaper).
         matchpi %[(%itemseq (%plural capture_ min: 0 max: ∞ type: %'_))] do
           {:"%let/itemsonly", capture}
         end
 
+        # x
         # Rewrite bounds-checked plural such as (_+) similarly into an itemsonly check since
         # the bounds check already checks what the plural would have.
         matchpi %{[%bounds (%itemseq (%plural min: _ max: _ type: %'_))]} do
           normp.morph({1, {:"%itemsonly"}})
         end
 
+        # x
         # Ditto but for named plurals.
         matchpi %{[%bounds (%itemseq (%plural capture_ min: _ max: _ type: %'_))]} do
           normp.morph({1, {:"%let/itemsonly", capture}})
         end
 
+        # x
         # Rewrite (¦ _) = (%partition () _) into a pairsonly check (which is vastly cheaper!)
         matchpi %[(%'%partition (%'%literal ()) (%pass))] do
           {:"%pairsonly"}
         end
 
+        # x
         # Rewrite (¦ xs_) = (%partition () xs_) = (%partition () (%let xs _))
         # into xs←(%partition () _).
         matchpi %[(%'%partition (%'%literal ()) (%'%let capture_ (%pass)))] do
@@ -1662,6 +1751,7 @@ module ::Ww::M1
           normp.morph({1, {:"%itemsonly"}})
         end
 
+        # x
         # Fold e. g. (x_ y_ z_) into a singular-only itemspart. This lets us render it as
         # a more efficient Operator later on.
         matchpi %[(%itemseq (%past (%singular _) min: 1))] do
@@ -1675,6 +1765,7 @@ module ::Ww::M1
           end
         end
 
+        # x
         # Fold e.g. (_ _ ... _ _*) into a %prefix operator that skips matching `_*`,
         # a relatively expensive affair.
         matchpi %[(%itemseq (%past (%singular _) min: 1) (%plural min: 0 max: ∞ type: %'_))] do
@@ -1688,6 +1779,7 @@ module ::Ww::M1
           end
         end
 
+        # x
         # Fold e.g. (_* _ ... _ _) into a %postfix operator that skips matching `_*`,
         # a relatively expensive affair.
         matchpi %[(%itemseq (%plural min: 0 max: ∞ type: %'_) (%past (%singular _) min: 1))] do
@@ -1906,50 +1998,62 @@ module ::Ww::M1
   module Pair
     def self.operator(key, value, captures)
       Term.case(value, engine: M0) do
+        # x
         matchpi %{(%entry/required (%pass))}, cue: {:"%entry/required", :"%pass"} do
           Operator::Entry::Present.new(key, type: :any)
         end
 
+        # x
         matchpi %{(%entry/required (%number _))}, cue: {:"%entry/required", :"%number"} do
           Operator::Entry::Present.new(key, type: :number)
         end
 
+        # x
         matchpi %{(%entry/required (%symbol))}, cue: {:"%entry/required", :"%symbol"} do
           Operator::Entry::Present.new(key, type: :symbol)
         end
 
+        # x
         matchpi %{(%entry/required (%string))}, cue: {:"%entry/required", :"%string"} do
           Operator::Entry::Present.new(key, type: :string)
         end
 
+        # x
         matchpi %{(%entry/required (%boolean))}, cue: {:"%entry/required", :"%boolean"} do
           Operator::Entry::Present.new(key, type: :boolean)
         end
 
+        # x
         matchpi %{(%entry/required (%dict))}, cue: {:"%entry/required", :"%boolean"} do
           Operator::Entry::Present.new(key, type: :dict)
         end
 
+        # x
         match({:"%entry/required", :value_}, cue: :"%entry/required") do |value|
           Operator::Entry::Required.new(key, M1.operator(value, captures))
         end
 
+        # x
         match({:"%entry/optional", {:"%barrier", :default_}, :value_}, cue: :"%entry/optional") do |default, value|
           Operator::Entry::Optional.new(key, default, M1.operator(value, captures))
         end
 
+        # x
         match({:"%entry/negative", {:"%pass"}}, cue: :"%entry/negative") do
           Operator::Entry::Absent.new(key)
         end
 
+        # x
         match({:"%entry/negative", {:"%pass"}, {:"%barrier", :name_}}, cue: :"%entry/negative") do |name|
           Operator::Entry::AbsentKeypath.new(key, name)
         end
 
+        # x
         match({:"%entry/negative", :positive_}, cue: :"%entry/negative") do |positive|
           Operator::Entry::Negative.new(key, M1.operator(positive, captures))
         end
 
+        # x
         match({:"%entry/negative", :positive_, {:"%barrier", :name_}}, cue: :"%entry/negative") do |positive, name|
           Operator::Entry::NegativeKeypath.new(key, M1.operator(positive, captures), name)
         end
@@ -1959,10 +2063,12 @@ module ::Ww::M1
 
   def self.operator(node : Term, captures : Bag(Term)) : Operator::Any
     Term.case(node, engine: M0) do
+      # x
       matchpi %[(%'%let (%capture capture_) successor_)], cue: :"%let" do
         Operator::Capture.new(capture, operator(successor, captures))
       end
 
+      # x
       matchpi %[(%dict-guard successor_ sketch: sketch_ bounds: (min_b_ max_b_) depth: (min_d_ max_d_))], cue: :"%dict-guard" do
         Operator::DictGuard.new(
           sketch: sketch.to(Term::Dict::Sketch),
@@ -1978,10 +2084,12 @@ module ::Ww::M1
         )
       end
 
+      # x
       matchpi %[(%sketch successor_ sketch_number)], cue: :"%sketch" do
         Operator::SketchSubset.new(sketch.to(Term::Dict::Sketch), operator(successor, captures))
       end
 
+      # x
       matchpi %[(%bounds (%pass) min: min_b_ max: max_b_)], cue: {:"%bounds", :"%pass"} do
         min = min_b == SYM_INF ? Magnitude::INFINITY : min_b.to(Magnitude)
         max = max_b == SYM_INF ? Magnitude::INFINITY : max_b.to(Magnitude)
@@ -1989,6 +2097,7 @@ module ::Ww::M1
         Operator::Bounds.new(min, max)
       end
 
+      # x
       matchpi %[(%bounds successor_ min: min_b_ max: max_b_)], cue: :"%bounds" do
         min = min_b == SYM_INF ? Magnitude::INFINITY : min_b.to(Magnitude)
         max = max_b == SYM_INF ? Magnitude::INFINITY : max_b.to(Magnitude)
@@ -1996,6 +2105,7 @@ module ::Ww::M1
         Operator::BoundsGuard.new(min, max, operator(successor, captures))
       end
 
+      # x
       matchpi %[(%depth successor_ min: min_d_ max: max_d_)], cue: :"%depth" do
         min = min_d == SYM_INF ? Magnitude::INFINITY : min_d.to(Magnitude)
         max = max_d == SYM_INF ? Magnitude::INFINITY : max_d.to(Magnitude)
@@ -2003,32 +2113,38 @@ module ::Ww::M1
         Operator::MaxDepth.new(min, max, operator(successor, captures))
       end
 
+      # x
       matchpi %[(%itemseq/singular-only _ _*)], cue: :"%itemseq/singular-only" do
         items = node.items.move(1).to_readonly_slice { |item| operator(item, captures) }
 
         Operator::SingularSeq.new(items, exhaustive: true, reverse: false)
       end
 
+      # x
       matchpi %[(%prefix successor_)], cue: :"%prefix" do
         Operator::ItemFirst.new(operator(successor, captures))
       end
 
+      # x
       matchpi %[(%prefix _ _*)], cue: :"%prefix" do
         items = node.items.move(1).to_readonly_slice { |item| operator(item, captures) }
 
         Operator::SingularSeq.new(items, exhaustive: false, reverse: false)
       end
 
+      # x
       matchpi %[(%postfix successor_)], cue: :"%postfix" do
         Operator::ItemLast.new(operator(successor, captures))
       end
 
+      # x
       matchpi %[(%postfix _ _*)], cue: :"%postfix" do
         items = node.items.move(1).to_readonly_slice { |item| operator(item, captures) }
 
         Operator::SingularSeq.new(items, exhaustive: false, reverse: true)
       end
 
+      # x
       # TODO: rename itemseq to %seq, there is no non-item seq.
       matchpi %[(%itemseq _*)], cue: :"%itemseq" do
         items = Item.sequence(node.items.move(1), -> { nil.as(Item::Neighbor) }, captures)
@@ -2037,26 +2153,32 @@ module ::Ww::M1
         Operator::ItemSeq.new(slice)
       end
 
+      # x
       matchpi %[(%itemsonly)], cue: :"%itemsonly" do
         Operator::Itemsonly.new
       end
 
+      # x
       matchpi %[(%pairsonly)], cue: :"%pairsonly" do
         Operator::Pairsonly.new
       end
 
+      # x
       matchpi %[(%let/itemsonly (%capture capture_))], cue: :"%let/itemsonly" do
         Operator::CaptureItemsonly.new(capture)
       end
 
+      # x
       matchpi %[(%pass)], cue: :"%pass" do
         Operator::INSTANCE_PASS
       end
 
+      # x
       matchpi %[(%'%literal term_)], cue: :"%literal" do
         Operator::Literal.new(term)
       end
 
+      # x
       matchpi %[(%'%partition itemspart_ pairspart_)], cue: :"%partition" do
         Operator::Partition.new(
           operator(itemspart, captures),
@@ -2064,41 +2186,51 @@ module ::Ww::M1
         )
       end
 
+      # x
       match({:"%string"}, cue: :"%string") { Operator::INSTANCE_STR }
+      # x
       match({:"%symbol"}, cue: :"%symbol") { Operator::INSTANCE_SYM }
+      # x
       match({:"%boolean"}, cue: :"%boolean") { Operator::INSTANCE_BOOLEAN }
+      # x
       match({:"%dict"}, cue: :"%dict") { Operator::INSTANCE_DICT }
 
       match({:"%keypath", {:"%capture", :capture_}}, cue: :"%keypath") do |capture|
         Operator::KeypathCapture.new(capture)
       end
 
+      # x
       match({:"%keypool", :_, :"_*"}, cue: :"%keypool") do
         keys = node.items.move(1)
 
         Operator::Keypool.new(keys.to_readonly_slice(&.itself))
       end
 
+      # x
       matchpi %[(%-keypool)], cue: :"%-keypool" do
         Operator::INSTANCE_DICT
       end
 
+      # x
       matchpi %[(%-keypool _*)], cue: :"%-keypool" do
         keys = node.items.move(1)
 
         Operator::NegativeKeypool.new(keys.to_readonly_slice(&.itself))
       end
 
+      # x
       matchpi %[(%keytest)], cue: :"%keytest" do
         Operator::INSTANCE_DICT
       end
 
+      # x
       matchpi %[(%keytest _*)], cue: :"%keytest" do
         keys = node.items.move(1)
 
         Operator::Keytest.new(keys.to_readonly_slice(&.itself))
       end
 
+      # x
       match({ {:"%literal", :"%layer"}, :below_, :side_ }, cue: :"%layer") do |below, side|
         entries = Array(Operator::Entry::Any).new(side.size)
 
@@ -2112,129 +2244,150 @@ module ::Ww::M1
         Operator::Layer.new(operator(below, captures), entries.to_readonly_slice(&.itself))
       end
 
+      # x
       matchpi %[(%value (%'%literal key_) value_)], cue: {:"%value", :"%literal"} do
         Operator::ValueLiteral.new(key, operator(value, captures))
       end
 
+      # x
       match({:"%value", {:"%capture", :capture_}, :value_}, cue: :"%value") do |capture, value|
         Operator::Value.new(capture, operator(value, captures))
       end
 
+      # x
       match({:"%-value", {:"%capture", :capture_}}, cue: :"%-value") do |capture|
         Operator::NegativeValue.new(capture)
       end
 
+      # x
       match({:"%-value", {:"%capture", :capture_}, {:"%barrier", :name_}}, cue: :"%-value") do |capture, name|
         Operator::NegativeValueKeypath.new(capture, name)
       end
 
+      # x
       matchpi %[(%pipe (%barrier (+ n_number)) successor_)], cue: {:"%pipe", :+} do
         Operator::Add.new(n.unsafe_as_n, operator(successor, captures))
       end
 
+      # x
       matchpi %[(%pipe (%barrier (- n_number)) successor_)], cue: {:"%pipe", :-} do
         Operator::Sub.new(n.unsafe_as_n, operator(successor, captures))
       end
 
+      # x
       matchpi %[(%pipe (%barrier (* n_number)) successor_)], cue: {:"%pipe", :*} do
         Operator::Mul.new(n.unsafe_as_n, operator(successor, captures))
       end
 
+      # x
       matchpi %[(%pipe (%barrier (/ n_number)) successor_)], cue: {:"%pipe", :/} do
         Operator::Div.new(n.unsafe_as_n, operator(successor, captures))
       end
 
+      # x
       matchpi %[(%pipe (%barrier (div n_number)) successor_)], cue: {:"%pipe", :div} do
         Operator::Idiv.new(n.unsafe_as_n, operator(successor, captures))
       end
 
+      # x
       matchpi %[(%pipe (%barrier (mod n_number)) successor_)], cue: {:"%pipe", :mod} do
         Operator::Mod.new(n.unsafe_as_n, operator(successor, captures))
       end
 
+      # x
       matchpi %[(%pipe (%barrier (** n_number)) successor_)], cue: {:"%pipe", :**} do
         Operator::Pow.new(n.unsafe_as_n, operator(successor, captures))
       end
 
+      # x
       matchpi %[(%pipe (%barrier (clamp min_number ..= max_number)) successor_)], cue: {:"%pipe", :clamp, :"..="} do
         Operator::Clamp.new(min.unsafe_as_n, max.unsafe_as_n, operator(successor, captures))
       end
 
+      # x
       matchpi %[(%pipe (%barrier (map arg_dict)) successor_)], cue: {:"%pipe", :map} do
         Operator::Map.new(arg.unsafe_as_d, operator(successor, captures))
       end
 
+      # x
       matchpi %[(%pipe (%barrier span) successor_)], cue: {:"%pipe", :span} do
         Operator::Span.new(operator(successor, captures))
       end
 
+      # x
       matchpi %[(%pipe (%barrier tally) successor_)], cue: {:"%pipe", :tally} do
         Operator::Tally.new(operator(successor, captures))
       end
 
+      # x
       matchpi %[(%pipe (%barrier type) successor_)], cue: {:"%pipe", :type} do
         Operator::Type.new(operator(successor, captures))
       end
 
+      # x
       matchpi %[(%pipe (%barrier ml) successor_)], cue: {:"%pipe", :ml} do
         Operator::ParseML.new(operator(successor, captures))
       end
 
+      # x
       matchpi %[(%pipe (%barrier untracked) successor_)], cue: {:"%pipe", :untracked} do
         Operator::Untracked.new(operator(successor, captures))
       end
 
+      # x
       match({:"%items/first", :_, :"_*"}, cue: :"%items/first") do
         sequence = node.items.move(1)
 
         Operator::ScanFirst.new(sequence.to_readonly_slice { |item| operator(item, captures).as(Operator::Any) })
       end
 
+      # x
       match({:"%items/source", :_, :"_*"}, :"%items/source") do
         sequence = node.items.move(1)
 
         Operator::ScanSource.new(sequence.to_readonly_slice { |item| operator(item, captures).as(Operator::Any) })
       end
 
+      # x
       matchpi %{(%items/all successor_ _ _* ¦ min: min0_ max: max0_)}, cue: :"%items/all" do
-        min = min0.to(UInt8)
-        max = max0 == SYM_INF ? 0u8 : max0.to(UInt8)
+        min = min0.to(Magnitude)
+        max = max0 == SYM_INF ? Magnitude::INFINITY : max0.to(Magnitude)
 
-        outer = captures
-        inner = Bag(Term).new
+        # outer = captures
+        # inner = Bag(Term).new
 
         sequence = node.items.move(2)
-        sequence.each { |node| captures(node, storage: inner) }
+        # sequence.each { |node| captures(node, storage: inner) }
 
-        exterior = inner & (outer - inner)
+        # exterior = inner & (outer - inner)
 
         needle = sequence.to_readonly_slice { |item| operator(item, captures).as(Operator::Any) }
 
-        Operator::ScanAll.new(operator(successor, captures), needle, inner.set, exterior.set, min, max)
+        Operator::ScanAll.new(operator(successor, captures), needle, min, max)
       end
 
+      # x
       matchpi %{(%entries/all successor_ k_ v_ ¦ min: min0_ max: max0_)}, cue: :"%entries/all" do
-        min = min0.to(UInt8)
-        max = max0 == SYM_INF ? 0u8 : max0.to(UInt8)
+        min = min0.to(Magnitude)
+        max = max0 == SYM_INF ? Magnitude::INFINITY : max0.to(Magnitude)
 
-        outer = captures
-        inner = Bag(Term).new
+        # outer = captures
+        # inner = Bag(Term).new
 
-        sequence = node.items.move(2)
-        sequence.each { |node| captures(node, storage: inner) }
+        # sequence = node.items.move(2)
+        # sequence.each { |node| captures(node, storage: inner) }
 
-        exterior = inner & (outer - inner)
+        # exterior = inner & (outer - inner)
 
         Operator::EntriesAll.new(operator(successor, captures),
           kop: operator(k, captures),
           vop: operator(v, captures),
-          exterior: exterior.set,
-          selector: inner.set,
           min: min,
           max: max,
         )
       end
 
+      # x
       match({:"%entries/first", :k_, :v_}, cue: :"%entries/first") do |k, v|
         Operator::EntriesFirst.new(
           operator(k, captures),
@@ -2242,6 +2395,7 @@ module ::Ww::M1
         )
       end
 
+      # x
       match({:"%entries/source", :k_, :v_}, cue: :"%entries/source") do |k, v|
         Operator::EntriesSource.new(
           operator(k, captures),
@@ -2249,72 +2403,82 @@ module ::Ww::M1
         )
       end
 
+      # x
       matchpi %{(%leaves/first _ _* in: part_ order: dfs self: depth0_boolean)}, cue: {:"%leaves/first", :dfs} do
         seq = node.items.move(1).to_readonly_slice { |item| operator(item, captures).as(Operator::Any) }
 
         Operator::DfsFirst.new(seq, part: search_part(part), depth0: depth0.true?)
       end
 
+      # x
       matchpi %{(%leaves/source _ _* in: part_ order: dfs self: depth0_boolean)}, cue: {:"%leaves/source", :dfs} do
         seq = node.items.move(1).to_readonly_slice { |item| operator(item, captures).as(Operator::Any) }
 
         Operator::DfsSource.new(seq, part: search_part(part), depth0: depth0.true?)
       end
 
+      # x
       matchpi %{(%leaves/first _ _* in: part_ order: bfs self: depth0_boolean)}, cue: {:"%leaves/first", :bfs} do
         seq = node.items.move(1).to_readonly_slice { |item| operator(item, captures).as(Operator::Any) }
 
         Operator::BfsFirst.new(seq, part: search_part(part), depth0: depth0.true?)
       end
 
+      # x
       matchpi %{(%leaves/all successor_ _ _* ¦ in: part_ min: min_ max: max_ order: dfs self: depth0_boolean)}, cue: {:"%leaves/all", :dfs} do |min, max|
-        outer = captures
-        inner = Bag(Term).new
+        # outer = captures
+        # inner = Bag(Term).new
 
         sequence = node.items.move(2)
-        sequence.each { |node| captures(node, storage: inner) }
+        # sequence.each { |node| captures(node, storage: inner) }
 
-        exterior = inner & (outer - inner)
+        # exterior = inner & (outer - inner)
 
-        min = min.to(UInt8)
-        max = max == SYM_INF ? 0u8 : max.to(UInt8)
+        min = min.to(Magnitude)
+        max = max == SYM_INF ? Magnitude::INFINITY : max.to(Magnitude)
 
-        Operator::DfsAll.new(operator(successor, captures), sequence.to_readonly_slice { |item| operator(item, captures).as(Operator::Any) }, inner.set, exterior.set, search_part(part), min, max, depth0.true?)
+        Operator::DfsAll.new(operator(successor, captures), sequence.to_readonly_slice { |item| operator(item, captures).as(Operator::Any) }, search_part(part), min, max, depth0.true?)
       end
 
+      # x
       matchpi %{(%leaves/all successor_ _ _* in: part_ min: min_ max: max_ order: bfs self: depth0_boolean)}, cue: {:"%leaves/all", :bfs} do |min, max|
-        outer = captures
-        inner = Bag(Term).new
+        # outer = captures
+        # inner = Bag(Term).new
 
         sequence = node.items.move(2)
-        sequence.each { |node| captures(node, storage: inner) }
+        # sequence.each { |node| captures(node, storage: inner) }
 
-        exterior = inner & (outer - inner)
+        # exterior = inner & (outer - inner)
 
-        min = min.to(UInt8)
-        max = max == SYM_INF ? 0u8 : max.to(UInt8)
+        min = min.to(Magnitude)
+        max = max == SYM_INF ? Magnitude::INFINITY : max.to(Magnitude)
 
-        Operator::BfsAll.new(operator(successor, captures), sequence.to_readonly_slice { |item| operator(item, captures).as(Operator::Any) }, inner.set, exterior.set, search_part(part), min, max, depth0.true?)
+        Operator::BfsAll.new(operator(successor, captures), sequence.to_readonly_slice { |item| operator(item, captures).as(Operator::Any) }, search_part(part), min, max, depth0.true?)
       end
 
+      # x
       match({:"%all", :a_, :b_}, cue: :"%all") do |a, b|
         Operator::Both.new(operator(a, captures), operator(b, captures))
       end
 
+      # x
       matchpi %[(%any/literal _*)], cue: :"%any/literal" do
         branches = node.items.move(1).to_set
 
         Operator::LiteralWhitelist.new(branches)
       end
 
+      # x
       match({:"%any/source", :a_}, cue: :"%any/source") do |a|
         operator(a, captures)
       end
 
+      # x
       match({:"%any/source", :a_, :b_}, cue: :"%any/source") do |a, b|
         Operator::ChoiceSource.new(operator(a, captures), operator(b, captures))
       end
 
+      # x
       match({:"%any/source", :a_, :_, :"_*"}, cue: :"%any/source") do |a|
         rest = Term::Dict.build do |commit|
           commit << :"%any/source"
@@ -2326,6 +2490,7 @@ module ::Ww::M1
         Operator::ChoiceSource.new(operator(a, captures), operator(Term.of(rest), captures))
       end
 
+      # x
       matchpi %{(%edge _symbol)}, cue: :"%edge" do
         case node
         when Normal::EDGE_ANY     then Operator::Edge.new(:any)
@@ -2339,75 +2504,89 @@ module ::Ww::M1
         end
       end
 
+      # x
       match({:"%not", :_, :"_*"}, cue: :"%not") do
         blacklist = node.items.move(1)
 
         Operator::LiteralBlacklist.new(blacklist.to_set)
       end
 
+      # x
       matchpi %{(%never)}, cue: :"%never" do
         Operator::INSTANCE_NEVER
       end
 
+      # x
       match({:"%number", {:"%literal", :_}}, cue: :"%number") do
         Operator::INSTANCE_NUM
       end
 
+      # x
       match({:"%number", {:"%literal", {:whole, :_}}}, cue: {:"%number", :whole}) do
         Operator::INSTANCE_NUM_WHOLE
       end
 
+      # x
       matchpiT %{(%number _*)}, cue: :"%number" do
         Operator::Num.parse?(node) || continue
       end
 
+      # x
       matchpi %[(%symbol nonblank)], cue: {:"%symbol", :"nonblank"} do
         Operator::SymNonblank.new
       end
 
+      # x
       matchpi %[(%symbol blank name_ type_)], cue: {:"%symbol", :"blank"} do
         Operator::SymBlank.new(operator(name, captures), operator(type, captures))
       end
 
+      # x
       matchpi %{(%filter (%barrier deps_dict) selector_ successor_ ¦ () min_ max_)}, cue: :"%filter" do
         minM = min.to(Magnitude)
         maxM = max == SYM_INF ? Magnitude::INFINITY : max.to(Magnitude)
 
-        Operator::Filter.new(deps.items.to_pf_set, operator(selector, captures), operator(successor, captures), minM, maxM)
+        Operator::Filter.new(operator(successor, captures), deps.items.to_pf_set, operator(selector, captures), minM, maxM)
       end
 
+      # x
       matchpi %{(%pluck (%barrier spec_dict) successor_)}, cue: :"%pluck" do
         Operator::Pluck.new(pluck_spec(spec.as_d), operator(successor, captures))
       end
 
+      # x
       matchpi %{(%flat (%barrier spec_dict) successor_)}, cue: :"%flat" do
         Operator::Flat.new(flat_spec(spec.as_d), operator(successor, captures))
       end
 
+      # x
       matchpi %{(%adjacent m←(_*))}, cue: :"%adjacent" do
         ops = m.items.to_readonly_slice { |x| operator(x, captures) }
 
         Operator::Adjacent.new(ops)
       end
 
+      # x
       matchpi %{(%split/first lhs_ m←(_*) rhs_)}, cue: :"%split/first" do
         mops = m.items.to_readonly_slice { |mp| operator(mp, captures) }
 
         Operator::SplitFirst.new(operator(lhs, captures), mops, operator(rhs, captures))
       end
 
+      # x
       matchpi %{(%split/source lhs_ m←(_*) rhs_)}, cue: :"%split/source" do
         mops = m.items.to_readonly_slice { |mp| operator(mp, captures) }
 
         Operator::SplitSource.new(operator(lhs, captures), mops, operator(rhs, captures))
       end
 
+      # x
       matchpi %{(%split/all successor_ lhs_ m←(_*) rhs_ ¦ () min_ max_)}, cue: :"%split/all" do
         minM = min.to(Magnitude)
         maxM = max == SYM_INF ? Magnitude::INFINITY : max.to(Magnitude)
         mops = m.items.to_readonly_slice { |mp| operator(mp, captures) }
 
-        Operator::SplitAll.new(operator(lhs, captures), mops, operator(rhs, captures), operator(successor, captures), minM, maxM)
+        Operator::SplitAll.new(operator(successor, captures), operator(lhs, captures), mops, operator(rhs, captures), minM, maxM)
       end
 
       # %terminal is used to mark terminal nodes for walk
@@ -2672,18 +2851,18 @@ module ::Ww::M1
   end
 
   # TODO: overwrite in cache if higher opt level
-  def self.operator(pattern : Term, *, fresh = false, normalize = true, **kwargs) : Operator::Any
-    if fresh
-      return operator0(pattern, **kwargs, normalize: normalize)
-    end
+  # def self.operator(pattern : Term, *, fresh = false, normalize = true, **kwargs) : Operator::Any
+  #   if fresh
+  #     return operator0(pattern, **kwargs, normalize: normalize)
+  #   end
 
-    PATTERN_CACHE.put_if_absent({pattern, normalize}) do
-      # Slow path: compile and add to cache. Sometimes multiple threads will do
-      # multiple times the work; that's fine. We cannot block because that'd cause
-      # a deadlock -- operator0() may in turn call operator() at some point and so on.
-      operator0(pattern, **kwargs, normalize: normalize)
-    end
-  end
+  #   PATTERN_CACHE.put_if_absent({pattern, normalize}) do
+  #     # Slow path: compile and add to cache. Sometimes multiple threads will do
+  #     # multiple times the work; that's fine. We cannot block because that'd cause
+  #     # a deadlock -- operator0() may in turn call operator() at some point and so on.
+  #     operator0(pattern, **kwargs, normalize: normalize)
+  #   end
+  # end
 end
 
 module ::Ww::M1
@@ -3030,7 +3209,7 @@ module ::Ww::M1
         end
 
         matchpi %[(%'%literal d_dict)] do
-          literals += d.population.total
+          literals += d.population.total.clamp(0u32..UInt32::MAX).to_u32
 
           WalkDecision::Continue
         end
@@ -3047,7 +3226,7 @@ module ::Ww::M1
           WalkDecision::Continue
         end
 
-        # (%edge _) makes an (edge ...), see the literal, `edge`? Thus we count a literal
+        # (%edge _) matches an (edge ...), see the literal, `edge`? Thus we count a literal
         # match. If edge's type is restricted we count that as a restriction. Otherwise
         # we do not.
         matchpi %[(%'%edge %'_)] do
@@ -3313,19 +3492,19 @@ class PatternSet(T)
     # Extracts a key term from a pattern. Both its original (*pattern*) and
     # normal-form (*normp*) version are given. Returns `nil` if indeterminate;
     # in such case the pattern will be tested on all matchees.
-    abstract def of_pattern?(pattern : Term, normp : Term) : T?
+    abstract def of_pattern?(pattern : Term, normp : M1next::Normp) : T?
 
     # Extracts a key term from a matchee. If indeterminate, patterns with
     # a determinate key are all going to be skipped.
     abstract def of_matchee?(matchee : Term) : T?
   end
 
-  # The default key implementation, uses `M1.head?`.
+  # The default key implementation, uses `M1next.head?`.
   module Key::Head
     extend Key(Term)
 
-    def self.of_pattern?(pattern : Term, normp : Term) : Term?
-      M1.head?(normp)
+    def self.of_pattern?(pattern : Term, normp : M1next::Normp) : Term?
+      M1next.head?(normp)
     end
 
     def self.of_matchee?(matchee : Term) : Term?
@@ -3372,14 +3551,14 @@ class PatternSet(T)
   #   true # E.g. body is valid
   # end
   # ```
-  def self.select(selector : Term, bases : Enumerable(Term), key keymod : Key(T) = Key::Head, & : Term, Term::Dict -> Bool?) : PatternSet(T) forall T
+  def self.select(selector : Term, bases : Enumerable(Term), key keymod : Key(T) = Key::Head, & : M1next::Normp, Term::Dict -> Bool?) : PatternSet(T) forall T
     seen = Set(Term).new
 
     keyed = {} of T => Array(Int32)
     headless = [] of Int32
 
     patterns = [] of Pattern
-    specificities = [] of M1::Specificity
+    specificities = [] of M1next::Specificity
 
     bases.each do |base|
       base.each_item_unordered do |item|
@@ -3390,16 +3569,12 @@ class PatternSet(T)
 
           index = seen.size - 1
 
-          normp = M1.normal(pattern)
+          normp = M1next.normal(pattern)
 
-          specificity = M1.specificity(normp, toplevel: true)
+          specificity = M1next.specificity(normp)
           specificities << specificity
 
-          operator = M1.operator(normp, normalize: false)
-
-          {% if flag?(:profile) %}
-            Profile.optop[operator] = pattern
-          {% end %}
+          operator = M1next.operator(normp)
 
           pattern_object = Pattern.new(index.to_u32, operator)
           next unless yield normp, env
@@ -3556,714 +3731,670 @@ class PatternSet(T)
   end
 end
 
-class ::Ww::Term::Dict
-  # Recurses into entry values only.
-  #
-  # Counts itself too (smallest possible value is 1).
-  @[Dncast]
-  def fresh_maxdepth : Magnitude
-    maxdepth = Magnitude.new(1)
+# # Binarizes and simplifies nested/long `%all` *node*.
+# def all2(node) : Term
+#   Term.case(node) do
+#     matchpi %{(%'%all)} { M1::Normal::PASS }
+#     matchpi %{(%'%all a_)} { a }
+#     matchpi %{(%'%all a_ %'(%pass))} { a }
+#     matchpi %{(%'%all %'(%pass) b_)} { b }
+#     matchpi %{(%'%all _ _)} { Term.of(node) }
+#     matchpi %{(%'%all a_ b_ rest_+)} do
+#       a1 = Term.of(:"%all", a, b)
+#       b1 = rest.prepend(:"%all")
 
-    each_entry do |k, v|
-      if vdict = v.as_d?
-        maxdepth = Math.max(maxdepth, vdict.fresh_maxdepth + 1)
-      end
-    end
+#       all2(Term.of(:"%all", all2(a1), all2(b1)))
+#     end
+#   end
+# end
 
-    maxdepth
-  end
+# # *Pattern shapes* are a restricted, more open subset of pattern matching constructs
+# # that we are able to index efficiently. Any M1 pattern has an associated shape, which
+# # can be more or less lossy.
+# #
+# # Pattern shapes are guaranteed to consist only of the following nodes:
+# #
+# # - `(%'%value (%'%literal _) _)`
+# # - `(%'%any/source _+)`
+# # - `(%'%all a_ b_)`
+# # - `%'(%pass)`
+# # - `%'(%symbol)`
+# # - `%'(%string)`
+# # - `%'(%boolean)`
+# # - `%'(%dict)`
+# # - `%'(%number _)`
+# # - `(%'%literal X_)` with non-dict X or empty dict X
+# module ::Ww::M1::Shape
+#   extend self
 
-  # TODO: we should probably use Magnitude here. Float behavior with infinites may
-  # work just fine here. Although I'm not sure how tolerant to imprecision we are
-  # with .population, and what kinds of imprecision we'll get.
-  record Population, numbers : UInt16, symbols : UInt16, strings : UInt16, booleans : UInt16 do
-    def self.zero
-      new(0u16, 0u16, 0u16, 0u16)
-    end
+#   # Generates a sequence of *subject* itemseq calls repeated *n* times.
+#   private def repeated(prefix, key, subject, n, ahead0, rear) : Term
+#     if n.zero?
+#       return ahead0.call(prefix, key)
+#     end
 
-    def +(other : Population)
-      # TODO: overflow = max u16 = infinity
-      Population.new(
-        numbers + other.numbers,
-        symbols + other.symbols,
-        strings + other.strings,
-        booleans + other.booleans,
-      )
-    end
+#     ahead1 = ->(prefix : Term::Dict, key : Term::Num) do
+#       repeated(prefix, key, subject, n - 1, ahead0, rear)
+#     end
 
-    def +(other : Term)
-      # TODO: overflow = max u16 = infinity
-      case other.type
-      in .any?
-        unreachable
-      in .number?
-        copy_with(numbers: numbers + 1)
-      in .string?
-        copy_with(strings: strings + 1)
-      in .symbol?
-        copy_with(symbols: symbols + 1)
-      in .boolean?
-        copy_with(booleans: booleans + 1)
-      in .dict?
-        self + other.unsafe_as_d.population
-      end
-    end
+#     itemseq(prefix, key, subject, ahead1, rear)
+#   end
 
-    def total : UInt32
-      numbers.to_u32 + strings.to_u32 + symbols.to_u32 + booleans.to_u32
-    end
-  end
+#   # Returns the shape of an itemseq *item*.
+#   private def itemseq(prefix, key, item : Term, ahead, rear) : Term
+#     Term.of_case(item) do
+#       # Fetch successor.
+#       matchpi %{(%'%singular successor_)} do
+#         prefix = prefix.append({:"%value", {:"%literal", key}, pattern(successor)})
 
-  # TODO: cache on dicts
-  @[Dncast]
-  def population
-    ee.sum(Population.zero) { |_, v| v }
-  end
-end
+#         ahead.call(prefix, key + 1)
+#       end
 
-# Binarizes and simplifies nested/long `%all` *node*.
-def all2(node) : Term
-  Term.case(node) do
-    matchpi %{(%'%all)} { M1::Normal::PASS }
-    matchpi %{(%'%all a_)} { a }
-    matchpi %{(%'%all a_ %'(%pass))} { a }
-    matchpi %{(%'%all %'(%pass) b_)} { b }
-    matchpi %{(%'%all _ _)} { Term.of(node) }
-    matchpi %{(%'%all a_ b_ rest_+)} do
-      a1 = Term.of(:"%all", a, b)
-      b1 = rest.prepend(:"%all")
+#       # Expand small bounded %plural's into a disjunction with each possible length.
+#       matchpi(
+#         %{((%any %plural %plural/min %plural/max) (%optional untitled _) ¦
+#             min_: (%number 0 <= (whole _) <= 8)
+#             max_: (%number 1 <= (whole _) <= 8)
+#             type_symbol)}
+#       ) do
+#         case type.blank.type
+#         in .any?     then unit = M1::Normal::PASS
+#         in .number?  then unit = M1::Normal::BLANK_NUMBER
+#         in .string?  then unit = M1::Normal::BLANK_STRING
+#         in .symbol?  then unit = M1::Normal::BLANK_SYMBOL
+#         in .dict?    then unit = M1::Normal::BLANK_DICT
+#         in .boolean? then unit = M1::Normal::BLANK_BOOLEAN
+#         end
 
-      all2(Term.of(:"%all", all2(a1), all2(b1)))
-    end
-  end
-end
+#         Term::Dict.build do |disj|
+#           disj << :"%any/source"
 
-# *Pattern shapes* are a restricted, more open subset of pattern matching constructs
-# that we are able to index efficiently. Any M1 pattern has an associated shape, which
-# can be more or less lossy.
+#           (min.to(Int32)..max.to(Int32)).each do |hi|
+#             variant = prefix
+
+#             hi.times do |length|
+#               variant = variant.append({:"%value", {:"%literal", key + length}, unit})
+#             end
+
+#             disj << ahead.call(variant, key + hi + 1)
+#           end
+#         end
+#       end
+
+#       # Dive into %group's.
+#       matchpi %{(%'%group _ children_+)} do
+#         itemseq(prefix, key, children.items, ahead, rear)
+#       end
+
+#       # Expand small bounded %past and %many's into a disjunction with each
+#       # possible length.
+#       matchpi(
+#         %{(%'%past children_+ ¦
+#             min_: (%number 0 <= (whole _) <= 8)
+#             max_: (%number 1 <= (whole _) <= 8)
+#             greedy_boolean: _)},
+#         %{(%'%many _ children_+ ¦
+#             min_: (%number 0 <= (whole _) <= 8)
+#             max_: (%number 1 <= (whole _) <= 8))}
+#       ) do
+#         Term::Dict.build do |disj|
+#           disj << :"%any/source"
+
+#           (min.to(Int32)..max.to(Int32)).each do |hi|
+#             disj << repeated(prefix, key, children.items, hi, ahead, rear)
+#           end
+#         end
+#       end
+
+#       # Optionals expand into a disjunction with and without the item.
+#       matchpi %{(%'%optional _ body_)} do
+#         variant0 = ahead.call(prefix, key)
+#         variant1 = ahead.call(prefix.append({:"%value", {:"%literal", key}, pattern(body)}), key + 1)
+
+#         Term.of(:"%any/source", variant0, variant1)
+#       end
+
+#       otherwise { rear.call(prefix) }
+#     end
+#   end
+
+#   # Returns the shape of an itemseq in *feed*.
+#   private def itemseq(prefix, key, feed : Term::Dict::ItemsView, ahead0, rear) : Term
+#     unless item = feed.first?
+#       return ahead0.call(prefix, key)
+#     end
+
+#     ahead1 = ->(prefix : Term::Dict, key : Term::Num) do
+#       itemseq(prefix, key, feed.move(1), ahead0, rear)
+#     end
+
+#     itemseq(prefix, key, item, ahead1, rear)
+#   end
+
+#   # Returns the shape of an itemseq *seq*.
+#   def itemseq(seq : Term::Dict)
+#     rear = ->(prefix : Term::Dict) { all2(prefix) }
+#     ahead = ->(prefix : Term::Dict, key : Term::Num) { rear.call(prefix) }
+
+#     itemseq(Term.dict(:"%all"), Term[0], seq.items, ahead, rear)
+#   end
+
+#   private def entry(prefix, key, value, ahead) : Term
+#     Term.of_case(value) do
+#       matchpi %{(%'%entry/required successor_)} do
+#         prefix = prefix.append({:"%value", {:"%literal", key}, pattern(successor)})
+
+#         ahead.call(prefix)
+#       end
+
+#       matchpi %{(%'%entry/optional _ successor_)} do
+#         variant0 = ahead.call(prefix)
+#         variant1 = ahead.call(prefix.append({:"%value", {:"%literal", key}, pattern(successor)}))
+
+#         {:"%any/source", variant0, variant1}
+#       end
+
+#       otherwise do
+#         ahead.call(prefix)
+#       end
+#     end
+#   end
+
+#   private def entries(prefix : Term::Dict, n, entries, ahead0) : Term
+#     unless entry = entries.nth?(n)
+#       return ahead0.call(prefix)
+#     end
+
+#     ahead1 = ->(prefix : Term::Dict) do
+#       entries(prefix, n + 1, entries, ahead0)
+#     end
+
+#     entry(prefix, *entry, ahead1)
+#   end
+
+#   # Returns the shape of *entries*.
+#   def entries(entries : Term::Dict) : Term
+#     if entries.empty?
+#       return Term.of({:"%dict"})
+#     end
+
+#     ahead = ->(prefix : Term::Dict) { all2(prefix) }
+
+#     entries(Term.dict(:"%all"), 0, entries, ahead)
+#   end
+
+#   # Returns the shape of a normal pattern *normp*.
+#   def pattern(normp : Term) : Term
+#     Term.of_case(normp) do
+#       matchpi %{(%'%pass)} { normp }
+#       matchpi %{(%'%symbol)} { normp }
+#       matchpi %{(%'%string)} { normp }
+#       matchpi %{%'(%number _)} { normp }
+#       matchpi %{(%'%boolean)} { normp }
+#       matchpi %{(%'%dict)} { normp }
+
+#       matchpi %{(%'%literal ())} { normp }
+#       matchpi %{(%'%literal x_dict)} { pattern(M1.normal_escaped(x)) }
+#       matchpi %{(%'%literal _)} { normp }
+
+#       matchpi %{(%'%edge _)} do
+#         Term.of(:"%value", {:"%literal", 0}, {:"%literal", :edge})
+#       end
+
+#       matchpi %{(%'%let _ successor_)} do
+#         pattern(successor)
+#       end
+
+#       matchpi %{(%'%itemseq successors_+)} do
+#         itemseq(successors.unsafe_as_d)
+#       end
+
+#       matchpi %{(%'%partition itemspart_ pairspart_)} do
+#         all2(Term.of(:"%all", pattern(itemspart), pattern(pairspart)))
+#       end
+
+#       # In a pattern shape, all layers are always open. So we cannot make
+#       # literal belows closed. However we still account them during matching
+#       # for precision.
+#       begin
+#         # Do not emit useless %dict checks for below.
+#         matchpi %{(%'%layer (%'%literal ()) side_dict)} do
+#           entries(side.unsafe_as_d)
+#         end
+
+#         matchpi %{(%'%layer below_ side_dict)} do
+#           all2(Term.of(:"%all", pattern(below), entries(side.unsafe_as_d)))
+#         end
+#       end
+
+#       matchpi %{(%'%any/source successors_+)} do
+#         Term::Dict.build do |commit|
+#           commit << :"%any/source"
+
+#           successors.each_item_unordered do |item|
+#             commit << pattern(item)
+#           end
+#         end
+#       end
+
+#       matchpi %{(%'%any/literal options_+)} do
+#         Term::Dict.build do |commit|
+#           commit << :"%any/source"
+
+#           options.each_item_unordered do |item|
+#             commit << pattern(M1.normal_escaped(item))
+#           end
+#         end
+#       end
+
+#       matchpi %{(%'%all a_ b_)} do
+#         all2(Term.of(:"%all", pattern(a), pattern(b)))
+#       end
+
+#       matchpi(
+#         %{(%'%number %'(whole _))},
+#         %{(%'%number _ _ _)},
+#         %{(%'%number _ _ _ _ _)},
+#         %{(%'%pipe (%barrier (+ _number)) _)},
+#         %{(%'%pipe (%barrier (- _number)) _)},
+#         %{(%'%pipe (%barrier (* _number)) _)},
+#         %{(%'%pipe (%barrier (/ _number)) _)},
+#         %{(%'%pipe (%barrier (div _number)) _)},
+#         %{(%'%pipe (%barrier (mod _number)) _)},
+#         %{(%'%pipe (%barrier (** _number)) _)},
+#         %{(%'%pipe (%barrier (clamp _number ..= _number)) _)},
+#       ) { M1::Normal::BLANK_NUMBER }
+
+#       matchpi(
+#         %{(%'%pipe (map _) _)},
+#         %{(%'%pipe type _)},
+#       ) { M1::Normal::PASS }
+
+#       matchpi %{(%'%pipe span _)}, %{(%'%pipe ml _)} { M1::Normal::BLANK_STRING }
+#       matchpi %{(%'%pipe tally _)} { M1::Normal::BLANK_DICT }
+
+#       matchpi %{(%'%symbol nonblank)}, %{(%'%symbol blank _ _)} do
+#         M1::Normal::BLANK_SYMBOL
+#       end
+
+#       matchpi %{(%'%terminal node_)} do
+#         pattern(node)
+#       end
+
+#       otherwise do
+#         M1::Normal::PASS
+#       end
+#     end
+#   end
+# end
+
+# module ::Ww::M1
+#   def self.shape(normp : Term)
+#     Shape.pattern(normp)
+#   end
+
+#   private def self.branches(shape : Term, ahead0 : Term ->) : Nil
+#     Term.case(shape) do
+#       matchpi %{(%'%value (%'%literal _) value_)} do
+#         ahead1 = ->(branch : Term) do
+#           ahead0.call(Term.of(shape.with(2, branch)))
+#         end
+
+#         branches(value, ahead1)
+#       end
+
+#       matchpi %{(%'%all a_ b_)} do
+#         ahead2 = ->(branch0 : Term) do
+#           ahead1 = ->(branch1 : Term) do
+#             ahead0.call(all2(Term.of(:"%all", branch0, branch1)))
+#           end
+
+#           branches(b, ahead1)
+#         end
+
+#         branches(a, ahead2)
+#       end
+
+#       matchpi %{(%'%any/source children_+)} do
+#         children.items.each do |child|
+#           branches(child, ahead0)
+#         end
+#       end
+
+#       otherwise do
+#         ahead0.call(shape)
+#       end
+#     end
+#   end
+
+#   # Normalizes a pattern shape to DNF. Calls *sink* with each toplevel branch.
+#   #
+#   # As long as *shape* is a pattern shape, branches given to *sink* are guaranteed
+#   # to be pattern shapes without `%any/source`.
+#   #
+#   # Non-shape nodes are unexpected and will not be processed.
+#   def self.branches(shape : Term, &sink : Term ->) : Nil
+#     branches(shape, sink)
+#   end
+
+#   private def self.strands(prefix : Term::Dict, branch : Term, sink) : Nil
+#     Term.case(branch) do
+#       matchpi %{(%'%pass)} { sink.call(prefix) }
+
+#       matchpi %{%'(%number _)}, %{%'(%string)}, %{%'(%symbol)}, %{%'(%boolean)}, %{%'(%dict)} do
+#         sink.call(prefix.append(branch))
+#       end
+
+#       matchpi %{(%'%literal ())} do
+#         sink.call(prefix.append(M1::Normal::BLANK_DICT).append(branch))
+#       end
+
+#       matchpi %{(%'%literal _number)} do
+#         sink.call(prefix.append(M1::Normal::BLANK_NUMBER).append(branch))
+#       end
+
+#       matchpi %{(%'%literal _string)} do
+#         sink.call(prefix.append(M1::Normal::BLANK_STRING).append(branch))
+#       end
+
+#       matchpi %{(%'%literal _symbol)} do
+#         sink.call(prefix.append(M1::Normal::BLANK_SYMBOL).append(branch))
+#       end
+
+#       matchpi %{(%'%literal _boolean)} do
+#         sink.call(prefix.append(M1::Normal::BLANK_BOOLEAN).append(branch))
+#       end
+
+#       matchpi %{(%'%all a_ b_)} do
+#         strands(prefix, a, sink)
+#         strands(prefix, b, sink)
+#       end
+
+#       matchpi %{(%'%value (%'%literal _) successor_)} do
+#         prefix = prefix
+#           .append(M1::Normal::BLANK_DICT)
+#           .append(branch.without(2))
+
+#         strands(prefix, successor, sink)
+#       end
+#     end
+#   end
+
+#   # Calls *sink* with each strand (represented as an itemsonly dict) of *branch*.
+#   #
+#   # A strand is an exhaustive path through `%all` nodes in *branch*.
+#   #
+#   # Each strand consists of *bases*. The following list is an exhaustive list
+#   # of bases:
+#   #
+#   # - `(%'%value (%'%literal _))`
+#   # - `%'(%any)`
+#   # - `%'(%symbol)`
+#   # - `%'(%string)`
+#   # - `%'(%number _)`
+#   # - `%'(%boolean)`
+#   # - `%'(%dict)`
+#   # - `(%'%literal _)`
+#   def self.strands(branch : Term, &sink : Term::Dict ->)
+#     strands(Term.dict({:"%any"}), branch, sink)
+#   end
+# end
+
+# module Ww::M1
+# A pattern indexing data structure that uses `M1.shape`.
 #
-# Pattern shapes are guaranteed to consist only of the following nodes:
+# ```
+# idx, pattern2component = M1::ShapeIndex.build([
+#   ML.term(%{(+ _ _)}),
+#   ML.term(%{(- _ _)}),
+#   ML.term(%{_}),
+# ])
 #
-# - `(%'%value (%'%literal _) _)`
-# - `(%'%any/source _+)`
-# - `(%'%all a_ b_)`
-# - `%'(%pass)`
-# - `%'(%symbol)`
-# - `%'(%string)`
-# - `%'(%boolean)`
-# - `%'(%dict)`
-# - `%'(%number _)`
-# - `(%'%literal X_)` with non-dict X or empty dict X
-module ::Ww::M1::Shape
-  extend self
-
-  # Generates a sequence of *subject* itemseq calls repeated *n* times.
-  private def repeated(prefix, key, subject, n, ahead0, rear) : Term
-    if n.zero?
-      return ahead0.call(prefix, key)
-    end
-
-    ahead1 = ->(prefix : Term::Dict, key : Term::Num) do
-      repeated(prefix, key, subject, n - 1, ahead0, rear)
-    end
-
-    itemseq(prefix, key, subject, ahead1, rear)
-  end
-
-  # Returns the shape of an itemseq *item*.
-  private def itemseq(prefix, key, item : Term, ahead, rear) : Term
-    Term.of_case(item) do
-      # Fetch successor.
-      matchpi %{(%'%singular successor_)} do
-        prefix = prefix.append({:"%value", {:"%literal", key}, pattern(successor)})
-
-        ahead.call(prefix, key + 1)
-      end
-
-      # Expand small bounded %plural's into a disjunction with each possible length.
-      matchpi(
-        %{((%any %plural %plural/min %plural/max) (%optional untitled _) ¦
-            min_: (%number 0 <= (whole _) <= 8)
-            max_: (%number 1 <= (whole _) <= 8)
-            type_symbol)}
-      ) do
-        case type.blank.type
-        in .any?     then unit = M1::Normal::PASS
-        in .number?  then unit = M1::Normal::BLANK_NUMBER
-        in .string?  then unit = M1::Normal::BLANK_STRING
-        in .symbol?  then unit = M1::Normal::BLANK_SYMBOL
-        in .dict?    then unit = M1::Normal::BLANK_DICT
-        in .boolean? then unit = M1::Normal::BLANK_BOOLEAN
-        end
-
-        Term::Dict.build do |disj|
-          disj << :"%any/source"
-
-          (min.to(Int32)..max.to(Int32)).each do |hi|
-            variant = prefix
-
-            hi.times do |length|
-              variant = variant.append({:"%value", {:"%literal", key + length}, unit})
-            end
-
-            disj << ahead.call(variant, key + hi + 1)
-          end
-        end
-      end
-
-      # Dive into %group's.
-      matchpi %{(%'%group _ children_+)} do
-        itemseq(prefix, key, children.items, ahead, rear)
-      end
-
-      # Expand small bounded %past and %many's into a disjunction with each
-      # possible length.
-      matchpi(
-        %{(%'%past children_+ ¦
-            min_: (%number 0 <= (whole _) <= 8)
-            max_: (%number 1 <= (whole _) <= 8)
-            greedy_boolean: _)},
-        %{(%'%many _ children_+ ¦
-            min_: (%number 0 <= (whole _) <= 8)
-            max_: (%number 1 <= (whole _) <= 8))}
-      ) do
-        Term::Dict.build do |disj|
-          disj << :"%any/source"
-
-          (min.to(Int32)..max.to(Int32)).each do |hi|
-            disj << repeated(prefix, key, children.items, hi, ahead, rear)
-          end
-        end
-      end
-
-      # Optionals expand into a disjunction with and without the item.
-      matchpi %{(%'%optional _ body_)} do
-        variant0 = ahead.call(prefix, key)
-        variant1 = ahead.call(prefix.append({:"%value", {:"%literal", key}, pattern(body)}), key + 1)
-
-        Term.of(:"%any/source", variant0, variant1)
-      end
-
-      otherwise { rear.call(prefix) }
-    end
-  end
-
-  # Returns the shape of an itemseq in *feed*.
-  private def itemseq(prefix, key, feed : Term::Dict::ItemsView, ahead0, rear) : Term
-    unless item = feed.first?
-      return ahead0.call(prefix, key)
-    end
-
-    ahead1 = ->(prefix : Term::Dict, key : Term::Num) do
-      itemseq(prefix, key, feed.move(1), ahead0, rear)
-    end
-
-    itemseq(prefix, key, item, ahead1, rear)
-  end
-
-  # Returns the shape of an itemseq *seq*.
-  def itemseq(seq : Term::Dict)
-    rear = ->(prefix : Term::Dict) { all2(prefix) }
-    ahead = ->(prefix : Term::Dict, key : Term::Num) { rear.call(prefix) }
-
-    itemseq(Term.dict(:"%all"), Term[0], seq.items, ahead, rear)
-  end
-
-  private def entry(prefix, key, value, ahead) : Term
-    Term.of_case(value) do
-      matchpi %{(%'%entry/required successor_)} do
-        prefix = prefix.append({:"%value", {:"%literal", key}, pattern(successor)})
-
-        ahead.call(prefix)
-      end
-
-      matchpi %{(%'%entry/optional _ successor_)} do
-        variant0 = ahead.call(prefix)
-        variant1 = ahead.call(prefix.append({:"%value", {:"%literal", key}, pattern(successor)}))
-
-        {:"%any/source", variant0, variant1}
-      end
-
-      otherwise do
-        ahead.call(prefix)
-      end
-    end
-  end
-
-  private def entries(prefix : Term::Dict, n, entries, ahead0) : Term
-    unless entry = entries.nth?(n)
-      return ahead0.call(prefix)
-    end
-
-    ahead1 = ->(prefix : Term::Dict) do
-      entries(prefix, n + 1, entries, ahead0)
-    end
-
-    entry(prefix, *entry, ahead1)
-  end
-
-  # Returns the shape of *entries*.
-  def entries(entries : Term::Dict) : Term
-    if entries.empty?
-      return Term.of({:"%dict"})
-    end
-
-    ahead = ->(prefix : Term::Dict) { all2(prefix) }
-
-    entries(Term.dict(:"%all"), 0, entries, ahead)
-  end
-
-  # Returns the shape of a normal pattern *normp*.
-  def pattern(normp : Term) : Term
-    Term.of_case(normp) do
-      matchpi %{(%'%pass)} { normp }
-      matchpi %{(%'%symbol)} { normp }
-      matchpi %{(%'%string)} { normp }
-      matchpi %{%'(%number _)} { normp }
-      matchpi %{(%'%boolean)} { normp }
-      matchpi %{(%'%dict)} { normp }
-
-      matchpi %{(%'%literal ())} { normp }
-      matchpi %{(%'%literal x_dict)} { pattern(M1.normal_escaped(x)) }
-      matchpi %{(%'%literal _)} { normp }
-
-      matchpi %{(%'%edge _)} do
-        Term.of(:"%value", {:"%literal", 0}, {:"%literal", :edge})
-      end
-
-      matchpi %{(%'%let _ successor_)} do
-        pattern(successor)
-      end
-
-      matchpi %{(%'%itemseq successors_+)} do
-        itemseq(successors.unsafe_as_d)
-      end
-
-      matchpi %{(%'%partition itemspart_ pairspart_)} do
-        all2(Term.of(:"%all", pattern(itemspart), pattern(pairspart)))
-      end
-
-      # In a pattern shape, all layers are always open. So we cannot make
-      # literal belows closed. However we still account them during matching
-      # for precision.
-      begin
-        # Do not emit useless %dict checks for below.
-        matchpi %{(%'%layer (%'%literal ()) side_dict)} do
-          entries(side.unsafe_as_d)
-        end
-
-        matchpi %{(%'%layer below_ side_dict)} do
-          all2(Term.of(:"%all", pattern(below), entries(side.unsafe_as_d)))
-        end
-      end
-
-      matchpi %{(%'%any/source successors_+)} do
-        Term::Dict.build do |commit|
-          commit << :"%any/source"
-
-          successors.each_item_unordered do |item|
-            commit << pattern(item)
-          end
-        end
-      end
-
-      matchpi %{(%'%any/literal options_+)} do
-        Term::Dict.build do |commit|
-          commit << :"%any/source"
-
-          options.each_item_unordered do |item|
-            commit << pattern(M1.normal_escaped(item))
-          end
-        end
-      end
-
-      matchpi %{(%'%all a_ b_)} do
-        all2(Term.of(:"%all", pattern(a), pattern(b)))
-      end
-
-      matchpi(
-        %{(%'%number %'(whole _))},
-        %{(%'%number _ _ _)},
-        %{(%'%number _ _ _ _ _)},
-        %{(%'%pipe (%barrier (+ _number)) _)},
-        %{(%'%pipe (%barrier (- _number)) _)},
-        %{(%'%pipe (%barrier (* _number)) _)},
-        %{(%'%pipe (%barrier (/ _number)) _)},
-        %{(%'%pipe (%barrier (div _number)) _)},
-        %{(%'%pipe (%barrier (mod _number)) _)},
-        %{(%'%pipe (%barrier (** _number)) _)},
-        %{(%'%pipe (%barrier (clamp _number ..= _number)) _)},
-      ) { M1::Normal::BLANK_NUMBER }
-
-      matchpi(
-        %{(%'%pipe (map _) _)},
-        %{(%'%pipe type _)},
-      ) { M1::Normal::PASS }
-
-      matchpi %{(%'%pipe span _)}, %{(%'%pipe ml _)} { M1::Normal::BLANK_STRING }
-      matchpi %{(%'%pipe tally _)} { M1::Normal::BLANK_DICT }
-
-      matchpi %{(%'%symbol nonblank)}, %{(%'%symbol blank _ _)} do
-        M1::Normal::BLANK_SYMBOL
-      end
-
-      matchpi %{(%'%terminal node_)} do
-        pattern(node)
-      end
-
-      otherwise do
-        M1::Normal::PASS
-      end
-    end
-  end
-end
-
-module ::Ww::M1
-  def self.shape(normp : Term)
-    Shape.pattern(normp)
-  end
-
-  private def self.branches(shape : Term, ahead0 : Term ->) : Nil
-    Term.case(shape) do
-      matchpi %{(%'%value (%'%literal _) value_)} do
-        ahead1 = ->(branch : Term) do
-          ahead0.call(Term.of(shape.with(2, branch)))
-        end
-
-        branches(value, ahead1)
-      end
-
-      matchpi %{(%'%all a_ b_)} do
-        ahead2 = ->(branch0 : Term) do
-          ahead1 = ->(branch1 : Term) do
-            ahead0.call(all2(Term.of(:"%all", branch0, branch1)))
-          end
-
-          branches(b, ahead1)
-        end
-
-        branches(a, ahead2)
-      end
-
-      matchpi %{(%'%any/source children_+)} do
-        children.items.each do |child|
-          branches(child, ahead0)
-        end
-      end
-
-      otherwise do
-        ahead0.call(shape)
-      end
-    end
-  end
-
-  # Normalizes a pattern shape to DNF. Calls *sink* with each toplevel branch.
-  #
-  # As long as *shape* is a pattern shape, branches given to *sink* are guaranteed
-  # to be pattern shapes without `%any/source`.
-  #
-  # Non-shape nodes are unexpected and will not be processed.
-  def self.branches(shape : Term, &sink : Term ->) : Nil
-    branches(shape, sink)
-  end
-
-  private def self.strands(prefix : Term::Dict, branch : Term, sink) : Nil
-    Term.case(branch) do
-      matchpi %{(%'%pass)} { sink.call(prefix) }
-
-      matchpi %{%'(%number _)}, %{%'(%string)}, %{%'(%symbol)}, %{%'(%boolean)}, %{%'(%dict)} do
-        sink.call(prefix.append(branch))
-      end
-
-      matchpi %{(%'%literal ())} do
-        sink.call(prefix.append(M1::Normal::BLANK_DICT).append(branch))
-      end
-
-      matchpi %{(%'%literal _number)} do
-        sink.call(prefix.append(M1::Normal::BLANK_NUMBER).append(branch))
-      end
-
-      matchpi %{(%'%literal _string)} do
-        sink.call(prefix.append(M1::Normal::BLANK_STRING).append(branch))
-      end
-
-      matchpi %{(%'%literal _symbol)} do
-        sink.call(prefix.append(M1::Normal::BLANK_SYMBOL).append(branch))
-      end
-
-      matchpi %{(%'%literal _boolean)} do
-        sink.call(prefix.append(M1::Normal::BLANK_BOOLEAN).append(branch))
-      end
-
-      matchpi %{(%'%all a_ b_)} do
-        strands(prefix, a, sink)
-        strands(prefix, b, sink)
-      end
-
-      matchpi %{(%'%value (%'%literal _) successor_)} do
-        prefix = prefix
-          .append(M1::Normal::BLANK_DICT)
-          .append(branch.without(2))
-
-        strands(prefix, successor, sink)
-      end
-    end
-  end
-
-  # Calls *sink* with each strand (represented as an itemsonly dict) of *branch*.
-  #
-  # A strand is an exhaustive path through `%all` nodes in *branch*.
-  #
-  # Each strand consists of *bases*. The following list is an exhaustive list
-  # of bases:
-  #
-  # - `(%'%value (%'%literal _))`
-  # - `%'(%any)`
-  # - `%'(%symbol)`
-  # - `%'(%string)`
-  # - `%'(%number _)`
-  # - `%'(%boolean)`
-  # - `%'(%dict)`
-  # - `(%'%literal _)`
-  def self.strands(branch : Term, &sink : Term::Dict ->)
-    strands(Term.dict({:"%any"}), branch, sink)
-  end
-end
+# component2patterns = pattern2component.inverted_index
+#
+# components = idx.decompose(Term.of(:*, 1, 2, 3, 4))
+# components.each do |component|
+#   pp component2patterns[component]
+#   # => [2]
+# end
+#
+# components = idx.decompose(Term.of(:+, 1, 2, 3, 4))
+# components.each do |component|
+#   pp component2patterns[component]
+#   # => [0]
+#   # => [2]
+# end
+# ```
+# struct ShapeIndex
+#   # :nodoc:
+#   module Base
+#     extend self
+
+#     alias Any = Key | Literal | Subtype | Feature
+
+#     defrecord Feature
+#     defrecord Key, term : Term
+#     defrecord Literal, term : Term
+#     defrecord Subtype, type : TermType
+
+#     def parse(unit : Term) : Any
+#       Term.case(unit) do
+#         matchpi %{(%'%value (%'%literal key_))} { Key.new(key) }
+#         matchpi %{(%'%literal value_)} { Literal.new(value) }
+#         matchpi %{%'(%any)} { Subtype.new(:any) }
+#         matchpi %{%'(%symbol)} { Subtype.new(:symbol) }
+#         matchpi %{%'(%string)} { Subtype.new(:string) }
+#         matchpi %{%'(%number _)} { Subtype.new(:number) }
+#         matchpi %{%'(%boolean)} { Subtype.new(:boolean) }
+#         matchpi %{%'(%dict)} { Subtype.new(:dict) }
+#       end
+#     end
+#   end
+
+#   # :nodoc:
+#   alias Vertex = UInt32
+
+#   # :nodoc:
+#   TRIE_ROOT = Vertex.new(0)
+
+#   # :nodoc:
+#   TRIE_ZERO = TRIE_ROOT.succ
+
+#   # :nodoc:
+#   #
+#   # - *features* contains the features (feature trie vertices) of this complex.
+#   # - *includers* contains ids of components that include this complex.
+#   defrecord Complex, features : Pf::USet32, includers : Pf::USet32
+
+#   # :nodoc:
+#   def initialize(
+#     @features : Hash(Vertex, Hash(Base::Any, Vertex)),
+#     @complexes : Slice(Complex),
+#   )
+#   end
+
+#   # Constructs a pattern shape index for *patterns*. Returns the shape index and
+#   # a transcription map to convert component vertices from `decompose` to indices
+#   # into *patterns*. The transcription map maps pattern index to the corresponding
+#   # component vertex. Different patterns may map to the same component vertex if
+#   # `ShapeIndex` considers them equal.
+#   def self.build(patterns : Indexable(Term)) : {ShapeIndex, Slice(UInt32)}
+#     # Makes a new vertex id.
+#     fresh = TRIE_ZERO
+#     mkv = -> do
+#       fresh, _ = fresh.succ, fresh
+#     end
+
+#     features = {} of Vertex => Hash(Base::Any, Vertex)
+#     complexes = {} of Pf::USet32 => Vertex
+#     components = {} of Pf::USet32 => Vertex
+
+#     # Connects *pivot* through *base* to a new or existing vertex. Returns
+#     # its id.
+#     connect = ->(pivot : Vertex, base : Base::Any) do
+#       features.put_if_absent(pivot, base, &mkv)
+#     end
+
+#     # If that complex is found, then propose those components.
+#     includers = {} of Vertex => Pf::USet32
+
+#     transcript = patterns.to_readonly_slice do |pattern|
+#       normp = M1.normal(pattern)
+#       shape = M1.shape(normp)
+
+#       # A component is a disjunction of complexes. "If you are able to find any of
+#       # those complexes, then you have found that component."
+#       component = Pf::USet32.transaction do |component|
+#         M1.branches(shape) do |branch|
+#           # A complex is a conjunction of strands. A strand corresponds to a path
+#           # through the feature trie. "If you are able to follow all those strands,
+#           # then you have found that complex."
+#           complex = Pf::USet32.transaction do |complex|
+#             M1.strands(branch) do |strand|
+#               assert strand.items.present?
+
+#               final = nil
+#               pivot = TRIE_ROOT
+
+#               strand.items.each do |unit|
+#                 final = base = Base.parse(unit)
+#                 pivot = connect.call(pivot, base)
+#               end
+
+#               # Insert an explicit end marker, Feature, if the strand does not
+#               # end with Literal, which already acts as an end marker.
+#               unless final.is_a?(Base::Literal)
+#                 pivot = connect.call(pivot, Base::Feature.new)
+#               end
+
+#               complex << pivot
+#             end
+#           end
+
+#           component << complexes.put_if_absent(complex, &mkv)
+#         end
+#       end
+
+#       component_id = components.put_if_absent(component, &mkv)
+#       component.each do |complex_id|
+#         includers.update(complex_id, Pf::USet32.new, &.add(component_id))
+#       end
+
+#       component_id
+#     end
+
+#     instance = new(
+#       features: features,
+#       complexes: complexes.to_readonly_slice { |features, id| Complex.new(features, includers[id]) }
+#     )
+
+#     {instance, transcript}
+#   end
+
+#   private def populate(features : Pf::USet32::Commit, matchee : Term, pivot : Vertex) : Nil
+#     return unless successors = @features[pivot]?
+
+#     # Feature: any value, any type.
+#     if feature = successors[Base::Feature.new]?
+#       features << feature
+#     end
+
+#     return unless pivot = successors[Base::Subtype.new(matchee.type)]?
+
+#     successors = @features[pivot]
+
+#     # Feature: any value, of specific type.
+#     if feature = successors[Base::Feature.new]?
+#       features << feature
+#     end
+
+#     # Feature: literal value, of specific type.
+#     if feature = successors[Base::Literal.new(matchee)]?
+#       features << feature
+#     end
+
+#     return unless matchee.type.dict?
+
+#     # Have a fast path in case the trie has less entries (most likely it would!)
+#     if successors.size <= matchee.size
+#       successors.each do |base, successor|
+#         next unless base.is_a?(Base::Key)
+#         next unless value = matchee[base.term]?
+
+#         populate(features, value, successor)
+#       end
+#       return
+#     end
+
+#     matchee.each_entry do |key, value|
+#       next unless successor = successors[Base::Key.new(key)]?
+
+#       populate(features, value, successor)
+#     end
+#   end
+
+#   private def populate(features : Pf::USet32::Commit, matchee : Term) : Nil
+#     return unless successors = @features[TRIE_ROOT]?
+
+#     # All strands begin with (root) - Any - ...
+#     return unless pivot = successors[Base::Subtype.new(:any)]?
+
+#     populate(features, matchee, pivot: pivot)
+#   end
+
+#   # Yields vertices corresponding to components that *respond positively*
+#   # to *matchee*.
+#   #
+#   # `ShapeIndex.build` returns a transcription map; you can use it to convert
+#   # component vertices to pattern indices in the indexable you've passed
+#   # to `ShapeIndex.build`.
+#   #
+#   # A *positive response* does not mean a *match*. It simply means the caller
+#   # should move on to more expensive checks. At the end the caller will have to
+#   # call M1 itself, which will give a definitive answer (but one expensive to
+#   # compute, especially on collections of patterns).
+#   #
+#   # NOTE: this method is allowed to emit duplicate vertices!
+#   def decompose(matchee : Term, & : UInt32 ->) : Nil
+#     features = Pf::USet32.transaction do |commit|
+#       populate(commit, matchee)
+#     end
+
+#     @complexes.each do |complex|
+#       next unless complex.features.subset_of?(features)
+
+#       complex.includers.each do |includer|
+#         yield includer
+#       end
+#     end
+#   end
+
+#   # Returns a `Pf::USet32` containing the decomposition of *matchee*.
+#   def decompose(matchee : Term) : Pf::USet32
+#     Pf::USet32.transaction do |commit|
+#       decompose(matchee) do |proposition|
+#         commit << proposition
+#       end
+#     end
+#   end
+# end
+# end
 
 module Ww::M1
-  # A pattern indexing data structure that uses `M1.shape`.
-  #
-  # ```
-  # idx, pattern2component = M1::ShapeIndex.build([
-  #   ML.term(%{(+ _ _)}),
-  #   ML.term(%{(- _ _)}),
-  #   ML.term(%{_}),
-  # ])
-  #
-  # component2patterns = pattern2component.inverted_index
-  #
-  # components = idx.decompose(Term.of(:*, 1, 2, 3, 4))
-  # components.each do |component|
-  #   pp component2patterns[component]
-  #   # => [2]
-  # end
-  #
-  # components = idx.decompose(Term.of(:+, 1, 2, 3, 4))
-  # components.each do |component|
-  #   pp component2patterns[component]
-  #   # => [0]
-  #   # => [2]
-  # end
-  # ```
   struct ShapeIndex
-    # :nodoc:
-    module Base
-      extend self
-
-      alias Any = Key | Literal | Subtype | Feature
-
-      defrecord Feature
-      defrecord Key, term : Term
-      defrecord Literal, term : Term
-      defrecord Subtype, type : TermType
-
-      def parse(unit : Term) : Any
-        Term.case(unit) do
-          matchpi %{(%'%value (%'%literal key_))} { Key.new(key) }
-          matchpi %{(%'%literal value_)} { Literal.new(value) }
-          matchpi %{%'(%any)} { Subtype.new(:any) }
-          matchpi %{%'(%symbol)} { Subtype.new(:symbol) }
-          matchpi %{%'(%string)} { Subtype.new(:string) }
-          matchpi %{%'(%number _)} { Subtype.new(:number) }
-          matchpi %{%'(%boolean)} { Subtype.new(:boolean) }
-          matchpi %{%'(%dict)} { Subtype.new(:dict) }
-        end
-      end
+    def initialize(@patterns : Slice(M1next::Op::Any))
     end
 
-    # :nodoc:
-    alias Vertex = UInt32
-
-    # :nodoc:
-    TRIE_ROOT = Vertex.new(0)
-
-    # :nodoc:
-    TRIE_ZERO = TRIE_ROOT.succ
-
-    # :nodoc:
-    #
-    # - *features* contains the features (feature trie vertices) of this complex.
-    # - *includers* contains ids of components that include this complex.
-    defrecord Complex, features : Pf::USet32, includers : Pf::USet32
-
-    # :nodoc:
-    def initialize(
-      @features : Hash(Vertex, Hash(Base::Any, Vertex)),
-      @complexes : Slice(Complex),
-    )
+    def self.build(patterns : Enumerable(Term))
+      {new(patterns.to_readonly_slice { |pattern| M1next.operator(pattern) }), (0u32...patterns.size).to_a}
     end
 
-    # Constructs a pattern shape index for *patterns*. Returns the shape index and
-    # a transcription map to convert component vertices from `decompose` to indices
-    # into *patterns*. The transcription map maps pattern index to the corresponding
-    # component vertex. Different patterns may map to the same component vertex if
-    # `ShapeIndex` considers them equal.
-    def self.build(patterns : Indexable(Term)) : {ShapeIndex, Slice(UInt32)}
-      # Makes a new vertex id.
-      fresh = TRIE_ZERO
-      mkv = -> do
-        fresh, _ = fresh.succ, fresh
-      end
-
-      features = {} of Vertex => Hash(Base::Any, Vertex)
-      complexes = {} of Pf::USet32 => Vertex
-      components = {} of Pf::USet32 => Vertex
-
-      # Connects *pivot* through *base* to a new or existing vertex. Returns
-      # its id.
-      connect = ->(pivot : Vertex, base : Base::Any) do
-        features.put_if_absent(pivot, base, &mkv)
-      end
-
-      # If that complex is found, then propose those components.
-      includers = {} of Vertex => Pf::USet32
-
-      transcript = patterns.to_readonly_slice do |pattern|
-        normp = M1.normal(pattern)
-        shape = M1.shape(normp)
-
-        # A component is a disjunction of complexes. "If you are able to find any of
-        # those complexes, then you have found that component."
-        component = Pf::USet32.transaction do |component|
-          M1.branches(shape) do |branch|
-            # A complex is a conjunction of strands. A strand corresponds to a path
-            # through the feature trie. "If you are able to follow all those strands,
-            # then you have found that complex."
-            complex = Pf::USet32.transaction do |complex|
-              M1.strands(branch) do |strand|
-                assert strand.items.present?
-
-                final = nil
-                pivot = TRIE_ROOT
-
-                strand.items.each do |unit|
-                  final = base = Base.parse(unit)
-                  pivot = connect.call(pivot, base)
-                end
-
-                # Insert an explicit end marker, Feature, if the strand does not
-                # end with Literal, which already acts as an end marker.
-                unless final.is_a?(Base::Literal)
-                  pivot = connect.call(pivot, Base::Feature.new)
-                end
-
-                complex << pivot
-              end
-            end
-
-            component << complexes.put_if_absent(complex, &mkv)
-          end
-        end
-
-        component_id = components.put_if_absent(component, &mkv)
-        component.each do |complex_id|
-          includers.update(complex_id, Pf::USet32.new, &.add(component_id))
-        end
-
-        component_id
-      end
-
-      instance = new(
-        features: features,
-        complexes: complexes.to_readonly_slice { |features, id| Complex.new(features, includers[id]) }
-      )
-
-      {instance, transcript}
-    end
-
-    private def populate(features : Pf::USet32::Commit, matchee : Term, pivot : Vertex) : Nil
-      return unless successors = @features[pivot]?
-
-      # Feature: any value, any type.
-      if feature = successors[Base::Feature.new]?
-        features << feature
-      end
-
-      return unless pivot = successors[Base::Subtype.new(matchee.type)]?
-
-      successors = @features[pivot]
-
-      # Feature: any value, of specific type.
-      if feature = successors[Base::Feature.new]?
-        features << feature
-      end
-
-      # Feature: literal value, of specific type.
-      if feature = successors[Base::Literal.new(matchee)]?
-        features << feature
-      end
-
-      return unless matchee.type.dict?
-
-      # Have a fast path in case the trie has less entries (most likely it would!)
-      if successors.size <= matchee.size
-        successors.each do |base, successor|
-          next unless base.is_a?(Base::Key)
-          next unless value = matchee[base.term]?
-
-          populate(features, value, successor)
-        end
-        return
-      end
-
-      matchee.each_entry do |key, value|
-        next unless successor = successors[Base::Key.new(key)]?
-
-        populate(features, value, successor)
-      end
-    end
-
-    private def populate(features : Pf::USet32::Commit, matchee : Term) : Nil
-      return unless successors = @features[TRIE_ROOT]?
-
-      # All strands begin with (root) - Any - ...
-      return unless pivot = successors[Base::Subtype.new(:any)]?
-
-      populate(features, matchee, pivot: pivot)
-    end
-
-    # Yields vertices corresponding to components that *respond positively*
-    # to *matchee*.
-    #
-    # `ShapeIndex.build` returns a transcription map; you can use it to convert
-    # component vertices to pattern indices in the indexable you've passed
-    # to `ShapeIndex.build`.
-    #
-    # A *positive response* does not mean a *match*. It simply means the caller
-    # should move on to more expensive checks. At the end the caller will have to
-    # call M1 itself, which will give a definitive answer (but one expensive to
-    # compute, especially on collections of patterns).
-    #
-    # NOTE: this method is allowed to emit duplicate vertices!
-    def decompose(matchee : Term, & : UInt32 ->) : Nil
-      features = Pf::USet32.transaction do |commit|
-        populate(commit, matchee)
-      end
-
-      @complexes.each do |complex|
-        next unless complex.features.subset_of?(features)
-
-        complex.includers.each do |includer|
-          yield includer
-        end
-      end
-    end
-
-    # Returns a `Pf::USet32` containing the decomposition of *matchee*.
     def decompose(matchee : Term) : Pf::USet32
       Pf::USet32.transaction do |commit|
-        decompose(matchee) do |proposition|
-          commit << proposition
+        @patterns.each_with_index do |pattern, index|
+          next unless M1next.probably_matches?(pattern, matchee)
+
+          commit << index.to_u32
         end
       end
     end

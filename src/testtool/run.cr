@@ -162,9 +162,9 @@ module Testtool
   def match(pattern : Term, matchee : Term) : Slice(Term::Dict)
     matches = nil
 
-    levels = {M1::O2, M1::O1, M1::O0}
+    levels = {M1next::O2, M1next::O1, M1next::O0}
     levels.each_with_index do |level, index|
-      op = M1.operator(pattern, opt: level)
+      op = M1next.operator(pattern, opt: level)
       envs = M1next.matches(Term[], op, matchee)
 
       if index.zero?
@@ -357,12 +357,12 @@ module Testtool
   defrecord HeadEq, pattern : Term, head : Term
 
   def run(test : HeadEq, assets, stat, complaints) : Nil
-    normp = M1.normal(test.pattern)
-    head = measure(stat) { M1.head?(normp) }
+    normp = M1next.normal(test.pattern)
+    head = measure(stat) { M1next.head?(normp) }
     return if head == test.head # ok
 
     complaints << complaint("Pattern head mismatch",
-      "Normal pattern": normp,
+      "Normal pattern": Term.of(normp.unwrap(&.itself)),
       "Got head": Term.of(head || :MISMATCH),
     )
   end
@@ -371,12 +371,12 @@ module Testtool
 
   def run(test : HeadAbsent, assets, stat, complaints) : Nil
     test.patterns.each do |pattern|
-      normp = M1.normal(pattern)
-      head = measure(stat) { M1.head?(normp) }
+      normp = M1next.normal(pattern)
+      head = measure(stat) { M1next.head?(normp) }
       next if head.nil? # ok
 
       complaints << complaint("Pattern has head but it was not expected to",
-        "Normal pattern": normp,
+        "Normal pattern": Term.of(normp.unwrap(&.itself)),
         "Got head": head,
       )
     end
@@ -390,8 +390,8 @@ module Testtool
 
     def run(test : {{testcls}}, assets, stat, complaints) : Nil
       test.patterns.each do |pattern|
-        normp = M1.normal(pattern)
-        range = measure(stat) { M1.{{kind.id}}(normp) }
+        normp = M1next.normal(pattern)
+        range = measure(stat) { M1next.{{kind.id}}(normp) }
         actual = Term.of(
           min: range[0] == Magnitude::INFINITY ? nil : range[0],
           max: range[1] == Magnitude::INFINITY ? nil : range[1],
@@ -401,7 +401,7 @@ module Testtool
 
         complaints << complaint("Pattern {{kind.id}} mismatch",
           "Pattern": pattern,
-          "Normal pattern": normp,
+          "Normal pattern": Term.of(normp.unwrap(&.itself)),
           "Expected": Term.of(test.{{kind.id}}),
           "Got": actual,
         )
@@ -418,15 +418,15 @@ module Testtool
       spec_level = nil
 
       level.each do |pattern|
-        normp = M1.normal(pattern)
-        spec_pattern = measure(stat) { M1.specificity(normp, toplevel: true) }
+        normp = M1next.normal(pattern)
+        spec_pattern = measure(stat) { M1next.specificity(normp) }
         spec_level ||= spec_pattern
         next if spec_level == spec_pattern # ok
 
         complaints << complaint("Specificity mismatch",
           pattern: pattern,
-          expected: Term.of(spec_level),
-          got: Term.of(spec_pattern),
+          expected: Term.of(spec_level.to_s),
+          got: Term.of(spec_pattern.to_s),
         )
       end
 
@@ -444,8 +444,8 @@ module Testtool
 
       complaints << complaint("Specificity levels out of order",
         "Level": Term.of(level),
-        "Previous level specificity": Term.of(spec_prev),
-        "Current level specificity": Term.of(spec_level),
+        "Previous level specificity": Term.of(spec_prev.to_s),
+        "Current level specificity": Term.of(spec_level.to_s),
       )
     end
   end

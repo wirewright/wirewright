@@ -43,6 +43,10 @@ module Ww
       end
     end
 
+    def self.parse(sym : Term::Sym)
+      parse?(sym) || raise ArgumentError.new
+    end
+
     def subtype?(other : TermType)
       other.any? || self == other
     end

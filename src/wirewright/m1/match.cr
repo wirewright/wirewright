@@ -108,7 +108,7 @@ module Ww::M1next
   module Action
     extend self
 
-    alias Any = Lzip | Rzip | Fzip | Match | MatchSeq | MatchCst | EntryBroadcast | MakeCapture
+    alias Any = Lzip | Rzip | Fzip | Match | MatchSeq | MatchSeq2 | MatchCst | EntryBroadcast | MakeCapture | MatchShape | MatchSpatialSpine
 
     # :nodoc:
     struct Lzip
@@ -211,6 +211,21 @@ module Ww::M1next
     end
 
     # :nodoc:
+    struct MatchSpatialSpine
+      def initialize(@spine : SpatialSpine)
+      end
+
+      def call(ctx : Context, plan : Plan)
+        M1next.match(ctx, @spine, plan)
+      end
+    end
+
+    # Direct call to match overloads for *spine*.
+    def match(spine : SpatialSpine)
+      MatchSpatialSpine.new(spine)
+    end
+
+    # :nodoc:
     struct MatchSeq
       def initialize(@ops : Feed, @items : Tzip::ItemsView)
       end
@@ -223,6 +238,35 @@ module Ww::M1next
     # Direct call to match sequence overloads for *ops* and *items*.
     def match(ops : Feed, items : Tzip::ItemsView)
       MatchSeq.new(ops, items)
+    end
+
+    # :nodoc:
+    struct MatchSeq2
+      def initialize(@ops : FlexFeed, @items : Tzip::ItemsView)
+      end
+
+      def call(ctx : Context, plan : Plan)
+        M1next.match(ctx, @ops, @items, plan)
+      end
+    end
+
+    # Direct call to match sequence overloads for *ops* and *items*.
+    def match(ops : FlexFeed, items : Tzip::ItemsView)
+      MatchSeq2.new(ops, items)
+    end
+
+    # :nodoc:
+    struct MatchShape
+      def initialize(@shape : Op::ItemNext::Distrib::Unit, @items : Tzip::ItemsView)
+      end
+
+      def call(ctx : Context, plan : Plan)
+        M1next.match(ctx, @shape, @items, plan)
+      end
+    end
+
+    def match(shape : Op::ItemNext::Distrib::Unit, items : Tzip::ItemsView)
+      MatchShape.new(shape, items)
     end
 
     # :nodoc:
@@ -688,6 +732,28 @@ module Ww::M1next
 
   # :nodoc:
   #
+  # (`front _*)  (`front x_ y_ z_ _*)
+  def match(ctx, op : Op::FrontRef, matchee : Tzip, plan)
+    return Fb[] unless matchee.type.dict?
+
+    front = matchee.items.before_begin
+    ctx = ctx.join(op.name, front.ref(ord: Op::ItemNext::ORD_FRONT))
+    cons(ctx, plan)
+  end
+
+  # :nodoc:
+  #
+  # (_* `back)  (x_ y_ z_ _* `back)
+  def match(ctx, op : Op::BackRef, matchee : Tzip, plan)
+    return Fb[] unless matchee.type.dict?
+
+    back = matchee.items.after_end
+    ctx = ctx.join(op.name, back.ref(ord: Op::ItemNext::ORD_BACK))
+    cons(ctx, plan)
+  end
+
+  # :nodoc:
+  #
   # (%let x _)
   def match(ctx, op : Op::Capture, matchee : Tzip, plan)
     capture(ctx, op.capture, matchee, op.successor, matchee, plan)
@@ -974,7 +1040,7 @@ module Ww::M1next
   private def eligible?(op : Op::ScanAll, matchee : Term) : Bool
     return false unless dict = matchee.as_d?
 
-    op.minM.zero? || matchee.itemsize >= op.seq.size
+    op.min.zero? || matchee.itemsize >= op.seq.size
   end
 
   private def eligible?(op : Op::Dfs | Op::Bfs, matchee : Term) : Bool
@@ -997,7 +1063,7 @@ module Ww::M1next
   private def eligible?(op : Op::SplitAll, matchee : Term) : Bool
     return false unless dict = matchee.as_d?
 
-    op.minM.zero? || matchee.itemsize >= op.focus.size
+    op.min.zero? || matchee.itemsize >= op.focus.size
   end
 
   private def search(op : Op::Scan, matchee : Tzip, & : Tzip::ItemsView -> Bool) : Nil
@@ -1056,18 +1122,18 @@ module Ww::M1next
   end
 
   private def search(ctx, op : Op::Scan | Op::Dfs | Op::Bfs, matchee : Tzip, plan, & : Fb -> Bool) : Nil
-    search(op, matchee) do |itemseq|
-      action = Action.lzip(op.seq, itemseq)
+    search(op, matchee) do |chunk|
+      action = Action.lzip(op.seq, chunk)
       ahead = ctx.interject(plan, action)
       yield eval(fb(ctx, ahead))
     end
   end
 
   private def search_with_sealed_log!(ctx, op : Op::Scan | Op::Dfs | Op::Bfs, matchee : Tzip, plan, & : Fb, Log::Sealed | Log::None -> Bool) : Nil
-    search(op, matchee) do |itemseq|
-      action = Action.lzip(op.seq, itemseq)
+    search(op, matchee) do |chunk|
+      action = Action.lzip(op.seq, chunk)
       ahead = ctx.interject(plan, action)
-      yield eval(fb(ctx, ahead)), Log.seal(itemseq, &.log)
+      yield eval(fb(ctx, ahead)), Log.seal(chunk, &.log)
     end
   end
 
@@ -1094,20 +1160,18 @@ module Ww::M1next
       running = false
 
       feed.each_split(op.focus.size) do |l, focus, r|
-        ahead = ctx.interject(plan,
-          Action.lzip(op.focus, focus),
-          Action.match(op.lhs, l.collect),
-          Action.match(op.rhs, r.collect),
-        )
-
-        accepted = yield eval(fb(ctx, ahead))
+        fb = eval(match(ctx, op, l, focus, r, plan))
+        accepted = yield fb
         next unless accepted
 
         # We can't determine what's "before" and what's "after" focus when we have
         # no focus. Leaving this out means the very first case degenerates to an infinite
-        # loop, with l=<empty view>, focus=<absent>, and r=<view>. Hard-coding r + 1 feels
-        # hacky and I think it violates the semantics of %split° in some way, although I
-        # can't articulate why.
+        # loop, with l=<empty view>, focus=<absent>, and r=<full view>. Hard-coding r + 1 feels
+        # hacky and I feel it violates the semantics of %split°, although I can't
+        # articulate why.
+        #
+        # Therefore, we don't drop "before" on successful match, as with nonempty
+        # focus -- because, as I said above, we don't have a before!
         next if op.focus.empty?
 
         feed = r
@@ -1121,11 +1185,7 @@ module Ww::M1next
 
   private def search_with_sealed_log!(ctx, op : Op::Split, matchee : Tzip, plan, & : Fb, Log::Sealed | Log::None -> Bool) : Nil
     matchee.items.each_split(op.focus.size) do |l, focus, r|
-      ahead = ctx.interject(plan,
-        Action.lzip(op.focus, focus),
-        Action.match(op.lhs, l.collect),
-        Action.match(op.rhs, r.collect),
-      )
+      fb = eval(match(ctx, op, l, focus, r, plan))
 
       # When you refer to an env in %splits, like here:
       #
@@ -1140,7 +1200,7 @@ module Ww::M1next
       # ... means referring to all foci we've matched. Foci have the nice property
       # that they cannot overlap (left/right halves may include the next/previous
       # foci, but we  don't really care about that).
-      _ = yield eval(fb(ctx, ahead)), Log.seal(Log.simplify(focus.log))
+      _ = yield fb, Log.seal(Log.simplify(focus.log))
     end
   end
 
@@ -1154,6 +1214,29 @@ module Ww::M1next
     search_with_sealed_log!(ctx, op, matchee, plan) do |fb, fblog|
       yield fb, fblog
     end
+  end
+
+  # :nodoc:
+  def match(ctx, op : Op::Split, l : Tzip::ItemsView, focus : Tzip::ItemsView, r : Tzip::ItemsView, plan)
+    ahead = plan
+
+    # NOTE: order for sides doesn't matter; but maybe it should based on
+    # some sort of cost?..
+
+    case op.lhs
+    when Op::Pass, Op::Dict, Op::Itemsonly
+    else
+      ahead = ctx.interject(ahead, Action.match(op.lhs, l.collect))
+    end
+
+    case op.rhs
+    when Op::Pass, Op::Dict, Op::Itemsonly
+    else
+      ahead = ctx.interject(ahead, Action.match(op.rhs, r.collect))
+    end
+
+    ahead = ctx.interject(ahead, Action.lzip(op.focus, focus))
+    cons(ctx, ahead)
   end
 
   # :nodoc:
@@ -1241,7 +1324,7 @@ module Ww::M1next
   def match(ctx, op : Op::All, matchee : Tzip, plan)
     return Fb[] unless eligible?(op, matchee.term)
 
-    successor = Envlist.new(op.successor, op.minM, op.maxM)
+    successor = Envlist.new(op.successor, op.min, op.max)
 
     match(ctx, successor, plan) do |push|
       # In `(a_ (%items xs_ ⏏a_ b_⏏) b_)`, `a_ b_` matches unconstrained by
@@ -1260,10 +1343,29 @@ module Ww::M1next
   end
 
   # :nodoc:
+  #
+  # (%matches () ⟨_number⟩°)  (%matches ({¦ x_} _* lst_) ⟨±x⟩°)
+  def match(ctx, op : Op::Matches, matchee : Tzip, plan)
+    handle = Log.seal(Log.simplify(matchee.log))
+    successor = Envlist.new(op.successor, op.min, op.max, handle)
+
+    match(ctx, successor, plan) do |push|
+      # We evaluate the subpattern in an isolated context, with no plan ahead, but
+      # notice how *matchee* still carries the provenance.
+      fb = eval(match(ctx.sibling, op.subpattern, matchee, plan: nil))
+      fb.each do |response|
+        unless push.call?(Fb[response], handle)
+          return Fb[] # does not fit (max exceeded)
+        end
+      end
+    end
+  end
+
+  # :nodoc:
   class EnvlistPush(N)
     def initialize(
       @envs : Pf::Kit::HybridArray(Tzip, N),
-      @logs : Pf::Kit::HybridArray(Log::SealedOne, N),
+      @logs : Pf::Kit::HybridArray(Log::SealedOne, N)?,
       @capacity : Magnitude,
     )
     end
@@ -1292,8 +1394,10 @@ module Ww::M1next
         @envs << Tzip.mapping(response.envtab, fblog) { |entry, _| entry }
       end
 
-      Log.flatten(fblog) do |one|
-        @logs << Log.seal(one)
+      if logs = @logs
+        Log.flatten(fblog) do |one|
+          logs << Log.seal(one)
+        end
       end
 
       true # continue
@@ -1301,12 +1405,20 @@ module Ww::M1next
   end
 
   # :nodoc:
-  defrecord Envlist, op : Op::Any, min : Magnitude, max : Magnitude
+  defrecord Envlist,
+    op : Op::Any,
+    min : Magnitude,
+    max : Magnitude,
+    handle : Log::Sealed | Log::None? = nil
 
   # :nodoc:
   def match(ctx, mod : Envlist, plan, &)
     envs = Pf::Kit.stack_array(Tzip, 8)
-    logs = Pf::Kit.stack_array(Log::SealedOne, 8)
+    # If it doesn't specify a concrete handle, then its handle is the union of
+    # the handles of what it will push.
+    if mod.handle.nil?
+      logs = Pf::Kit.stack_array(Log::SealedOne, 8)
+    end
 
     push = stack_alloc EnvlistPush(8).new(envs, logs, mod.max)
     yield push
@@ -1321,7 +1433,11 @@ module Ww::M1next
     # environments in the envlist. So e.g. for %items, referring to `(%items ⏏xs_⏏ _number)`
     # means referring to all items that it matched (in this example, to all numbers
     # in the itemspart of the matchee).
-    envlist = Tzip.mapping(envs, handle: Log.seal(logs, &.itself)) do |env, index|
+    unless handle = mod.handle
+      assert logs
+      handle = Log.seal(logs, &.itself)
+    end
+    envlist = Tzip.mapping(envs, handle) do |env, index|
       {Term.of(index), env}
     end
 
@@ -1697,6 +1813,294 @@ module Ww::M1next
 
   # :nodoc:
   #
+  # (+ a_ b_)  (_* x_ _* y_ _*)  (xs_* ys_*)  (+ (%group (a_ _* b_) _*) _)
+  def match(ctx, op : Op::Seq, matchee : Tzip, plan)
+    return Fb[] unless _ = matchee.term.as_itemsonly_d?
+
+    match(ctx, op.items, matchee.items, plan)
+  end
+
+  # :nodoc:
+  def probably_matches?(op : Op::Seq, matchee : Term) : Bool
+    return false unless dict = matchee.as_d?
+    return false unless dict.itemsonly?
+
+    # Size is probably checked by Bounds or BoundsGuard or similar, one of our
+    # predecessors [in control flow]; don't bother checking size here.
+
+    # We won't do anything smart here. We just want to make sure that all
+    # Singulars can be found in the matchee, somewhere. Heavy work is left to
+    # the main algorithm.
+    op.singulars.each do |needle|
+      found = false
+
+      dict.each_item_unordered do |item|
+        next unless probably_matches?(needle, item)
+        found = true
+        break
+      end
+
+      return false unless found
+    end
+
+    true
+  end
+
+  # :nodoc:
+  #
+  # Represent an *assignment* -- the result of *distribution*.
+  alias SpatialEq = SingularEq | FlexRegionEq
+
+  # :nodoc:
+  #
+  # An assignment of one operator (a Singular) to one item, *item*. We store
+  # a view instead of the item itself (i.e., Tzip) to retain info about
+  # the beginning and end within the enclosing dict.
+  defrecord SingularEq, op : Op::Any, item : Tzip::ItemsView do
+    assert item.size == 1
+  end
+
+  # :nodoc:
+  #
+  # An assignment of a flexible region to zero or more *items*.
+  defrecord FlexRegionEq,
+    ops : Array(Op::ItemNext::Distrib | Op::ItemNext::NonDistrib),
+    items : Tzip::ItemsView
+
+  # :nodoc:
+  #
+  # Part iterator over assignments generated by `distribute?`, part a closure over
+  # *special* and *items*, part a record of claims over *items*.
+  defcase SpatialSpine,
+    spatial : Op::ItemNext::Spatial,
+    items : Tzip::ItemsView,
+    eqs : Slice(SpatialEq),
+    claims = Slice({UInt32, UInt32}).empty
+
+  class SpatialSpine
+    def claim(begin begin_ : UInt32, end end_ : UInt32)
+      copy_with(claims: @claims.append({begin_, end_}))
+    end
+
+    def claim(view : Tzip::ItemsView) : SpatialSpine
+      claim(view.begin, view.end)
+    end
+  end
+
+  # :nodoc:
+  #
+  # This function is the entry point to Spatial matching. Its main goal is to
+  # mechanically distribute *items* according to the shape in *spatial*; then,
+  # construct a SpatialSpine, containing assigments resulting from distribution.
+  # Finally, this function transfers control to SpatialSpine and lets assignments
+  # in it continue matching.
+  def match(ctx, spatial : Op::ItemNext::Spatial, items : Tzip::ItemsView, plan)
+    eqs = Pf::Kit.stack_array(SpatialEq, 8)
+    unless distribute?(spatial.shape, items, sink: eqs)
+      return Fb[]
+    end
+
+    spine = SpatialSpine.new(spatial, items, eqs: eqs.to_readonly_slice(&.itself))
+    match(ctx, spine, plan)
+  end
+
+  # :nodoc:
+  #
+  # Drives the iterator of assignments in *spine* until exhausted. Matches each
+  # assignment. When the iterator is exhausted, `commit`s claims.
+  def match(ctx, spine : SpatialSpine, plan)
+    unless eq = spine.eqs.first?
+      return commit(ctx, spine, plan)
+    end
+
+    match(ctx, eq, spine.copy_with(eqs: spine.eqs + 1), plan)
+  end
+
+  # :nodoc:
+  #
+  # Processes a singular assignment -- one operator to one item.
+  def match(ctx, eq : SingularEq, rest : SpatialSpine, plan)
+    item = eq.item.first
+
+    # Make a record about the range of the Singular. We'll need it later
+    # to resolve Slots and Groups.
+    rest = rest.claim(eq.item)
+
+    ahead = ctx.interject(plan,
+      Action.match(eq.op, item),
+      Action.match(rest),
+    )
+    cons(ctx, ahead)
+  end
+
+  # :nodoc:
+  #
+  # This function acts as an "adapter" between Spatial matching and flex region
+  # matching. Flex regions contain and handle things like %optional, %past/max,
+  # %many, and so on. Whereas Spatial matches have in a certain sense "hard-coded"
+  # meaning, and items are distributed mechanically (see `distribute?`), the distribution
+  # of items within FlexRegions is, wait for it... flexible. It is found using
+  # backtracking search.
+  def match(ctx, eq : FlexRegionEq, rest : SpatialSpine, plan)
+    match(ctx, FlexFeed.new(eq.ops.to_readonly_slice, rest), eq.items, plan)
+  end
+
+  # + a_ b_  a_ b_ c_
+  private def distribute?(op : Op::ItemNext::Rigid, items : Tzip::ItemsView, sink) : Bool
+    unless op.items.size == items.size
+      return false # mismatch
+    end
+
+    op.items.each_with_index do |item_op, index|
+      sink << SingularEq.new(item_op, (items + index).first(1))
+    end
+
+    true # proceed
+  end
+
+  # This is a special node emitted on e.g. (%past `x), (%many xs_ `x) etc., for which
+  # the only valid match is the empty match.
+  private def distribute?(op : Op::ItemNext::Empty, items : Tzip::ItemsView, sink) : Bool
+    unless items.empty?
+      return false # mismatch
+    end
+
+    true # proceed
+  end
+
+  # l_* m_* r_*  l_* (%optional 0 m_) r_*  . . .
+  private def distribute?(op : Op::ItemNext::FlexRegion, items : Tzip::ItemsView, sink) : Bool
+    sink << FlexRegionEq.new(op.items, items)
+
+    true # proceed
+  end
+
+  # _* a_  _* a_ b_  stem_* + a_ b_  . . .
+  private def distribute?(op : Op::ItemNext::PaddedLeft, items : Tzip::ItemsView, sink) : Bool
+    n = op.r.items.size
+    if items.size < n
+      return false # mismatch
+    end
+
+    l = items.before(items.size - n)
+    r = items.last(n)
+
+    distribute?(op.l, l, sink) && distribute?(op.r, r, sink)
+  end
+
+  # a_ _*  a_ b_ _*  + a_ b_ rest_*  . . .
+  private def distribute?(op : Op::ItemNext::PaddedRight, items : Tzip::ItemsView, sink) : Bool
+    n = op.l.items.size
+    if items.size < n
+      return false # mismatch
+    end
+
+    l = items.first(n)
+    r = items.starting_at(n)
+
+    distribute?(op.l, l, sink) && distribute?(op.r, r, sink)
+  end
+
+  # l_* a_ r_*  l_* a_ b_ r_*  . . .
+  private def distribute?(op : Op::ItemNext::Padded, items : Tzip::ItemsView, sink) : Bool
+    nm = op.m.items.size
+    if items.size < nm
+      return false # mismatch
+    end
+
+    spare = items.size - nm
+    quo, rem = spare.divmod(2)
+    nl = quo + (rem > 0 ? 1 : 0)
+    # cr = q
+
+    l = items.first(nl)
+    m = items.starting_at(nl).first(nm)
+    r = items.starting_at(nl + nm)
+
+    distribute?(op.l, l, sink) && distribute?(op.m, m, sink) && distribute?(op.r, r, sink)
+  end
+
+  # a_ _* b_  a_ l_* r_* b_  . . .
+  private def distribute?(op : Op::ItemNext::MidGap, items : Tzip::ItemsView, sink) : Bool
+    nl = op.l.items.size
+    nr = op.r.items.size
+    if items.size < nl + nr
+      return false # mismatch
+    end
+
+    l = items.first(nl)
+    m = items.starting_at(nl).first(items.size - nl - nr)
+    r = items.last(nr)
+
+    distribute?(op.l, l, sink) && distribute?(op.m, m, sink) && distribute?(op.r, r, sink)
+  end
+
+  # _* a_ _* b_ _*  l_* a_ b_ m_* c_ d_ r_*  . . .
+  private def distribute?(op : Op::ItemNext::PaddedMidGap, items : Tzip::ItemsView, sink) : Bool
+    nml = op.ml.items.size
+    nmr = op.mr.items.size
+    if items.size < nml + nmr
+      return false # mismatch
+    end
+
+    spare = items.size - nml - nmr
+    quo, rem = spare.divmod(3)
+    nl = quo + (rem > 0 ? 1 : 0)
+    nmm = quo + (rem > 1 ? 1 : 0)
+    # cr = q
+
+    l = items.first(nl)
+    ml = items.starting_at(nl).first(nml)
+    mm = items.starting_at(nl + nml).first(nmm)
+    mr = items.starting_at(nl + nml + nmm).first(nmr)
+    r = items.starting_at(nl + nml + nmm + nmr)
+
+    distribute?(op.l, l, sink) &&
+      distribute?(op.ml, ml, sink) &&
+      distribute?(op.m, mm, sink) &&
+      distribute?(op.mr, mr, sink) &&
+      distribute?(op.r, r, sink)
+  end
+
+  private def commit(ctx, spine : SpatialSpine, plan)
+    # SANITY: catch bugs where Singular or Flex operators forget to append
+    # their claim to `spine.claims`.
+    assert spine.claims.size == spine.spatial.flatcount
+
+    # SANITY: make claims are contiguous.
+    spine.claims.each_cons_pair do |(b0, e0), (b1, e1)|
+      assert b0 <= e0 && e0 == b1 && b1 <= e1
+    end
+
+    # This is very important for slots such as ``(+ a_ b_ ⏏`last⏏)``, or, say,
+    # ``(`a `b `c)``. This is also important for groups that end at the end of
+    # the pattern, e.g. `(+ (%group args_ a_ b_ c_))`. The Ref's end (or in case
+    # of Slot both its begin and end) must have something to point to after
+    # the end of the items.
+    spine = spine.claim(spine.items.after_end)
+
+    ahead = plan
+
+    spine.spatial.refs.each do |ref|
+      # ref.begin points at the item operator *before* which the ref begins.
+      # ref.end points at the item operator *before* which the ref ends.
+      b, _ = spine.claims[ref.begin]
+      e, _ = spine.claims[ref.end]
+      view = spine.items.reshape(b, e)
+
+      case item = ref.item
+      in Op::ItemNext::Slot
+        ctx = ctx.join(item.name, view.ref(ord: ref.ord))
+      in Op::ItemNext::Group
+        ahead = ctx.interject(ahead, Action.match(item.successor, view.collect))
+      end
+    end
+
+    cons(ctx, ahead)
+  end
+
+  # :nodoc:
+  #
   # {a: x_, b: y_} -> (%layer () {a: x_, b: y_})
   # {¦ a_ b_} -> (%layer _ {a: a_, b: b_})
   # (_ ¦ xs_ a b) -> (%layer xs_ {a: _, b: _})
@@ -1707,7 +2111,7 @@ module Ww::M1next
     ahead = ctx.interject(plan, Action.entrybcast(op.side, matchee))
 
     case op.below
-    when Op::Pass, Op::Pairsonly
+    when Op::Pass, Op::Dict, Op::Pairsonly
       # Match ahead immediately. Do not waste time on residue. Entry operators
       # don't care about entries other than themselves in the dict.
       #
@@ -1868,6 +2272,8 @@ module Ww::M1next
     cons(ctx, op.successor, matchee.flat(op.spec), plan)
   end
 
+  # :nodoc:
+  #
   # (%split _ a_ ⟨b_⟩)  (%split _ a_ (%split _ b_ _))  (%split (_ a_ (%split b_ ⟨c_⟩))) . . .
   def match(ctx, op : Op::Adjacent, matchee : Tzip, plan)
     return Fb[] unless matchee.dict?
@@ -1917,6 +2323,7 @@ module Ww::M1next
     end
   end
 
+  # x
   # :nodoc:
   #
   # (⏏+⏏ ⏏a_⏏ ⏏b_⏏) when running with optimization levels O0-O1. More generally
@@ -1928,6 +2335,7 @@ module Ww::M1next
     cons(ctx, op.tail, matchee, ahead)
   end
 
+  # x
   # :nodoc:
   #
   # (+ a_ b_ ⏏`c⏏)
@@ -1936,6 +2344,7 @@ module Ww::M1next
     cons(ctx.join(op.name, ref), ops, items, plan)
   end
 
+  # x
   # :nodoc:
   #
   # ((%past a_ b_) and _*)  ((%past _number min: 3 max: 5))
@@ -1963,6 +2372,7 @@ module Ww::M1next
     cons(ctx, successors, items, plan)
   end
 
+  # x
   # :nodoc:
   #
   # ((%past/max _ _ min: 2 max: 5))  (+ (%past/max _number min: 2))
@@ -1992,11 +2402,13 @@ module Ww::M1next
     cons(ctx, ops, items, plan)
   end
 
+  # x
   # :nodoc:
   def match(ctx, op : Feed::AssertAfter, ops : Feed, items : Tzip::ItemsView, plan)
     items.begin > op.index ? cons(ctx, ops, items, plan) : Fb[]
   end
 
+  # x
   # :nodoc:
   #
   # (%group xs_ x_ y_ _*)
@@ -2005,6 +2417,7 @@ module Ww::M1next
     cons(ctx, successors, items, plan)
   end
 
+  # x
   # :nodoc:
   def match(ctx, op : Feed::GroupStop, ops : Feed, items : Tzip::ItemsView, plan)
     content = items.reshape(op.begin, items.begin)
@@ -2014,6 +2427,7 @@ module Ww::M1next
     cons(ctx, op.successor, content.collect, ahead)
   end
 
+  # x
   # :nodoc:
   #
   # (%optional 0 x_)  (%optional (0 0) (x_ y_))
@@ -2030,6 +2444,7 @@ module Ww::M1next
     cons(ctx, ahead)
   end
 
+  # x
   # :nodoc:
   #
   # ⏏xs_*⏏ y_  xs_* xs_*   xs_* ys_*  xs_+ ys_number zs_*  (%plural/max xs)
@@ -2045,7 +2460,7 @@ module Ww::M1next
       unless op.follower.none?
         # xs_* ys_number*
         # xs_* (%group G_ ys_number*)
-        # xs_boolean_* ys_number*
+        # xs_boolean* ys_number*
         if !op.type.any? && op.follower.any?
           # xs_number* ys_*
           #
@@ -2075,6 +2490,7 @@ module Ww::M1next
     match(ctx, op, pivot, strategy, ops, items, plan)
   end
 
+  # x
   # :nodoc:
   def match(ctx, op : Op::Item::Gap, ops : Feed, items : Tzip::ItemsView, plan)
     pivot = (items.size / op.frac).ceil.to_i
@@ -2088,6 +2504,7 @@ module Ww::M1next
     match(ctx, op, pivot, strategy, ops, items, plan)
   end
 
+  # x
   # :nodoc:
   def match(ctx, op : Op::Item::Plural | Op::Item::GapFirst, pivot : Int32, strategy : Op::Item::ExpandStrategy, ops : Feed, items : Tzip::ItemsView, plan)
     case strategy
@@ -2113,6 +2530,7 @@ module Ww::M1next
     Fb[]
   end
 
+  # x
   # :nodoc:
   def match(ctx, op : Op::Item::GapSource, pivot : Int32, strategy : Op::Item::ExpandStrategy, ops : Feed, items : Tzip::ItemsView, plan)
     sink = Pf::Kit.stack_array(Context, 8)
@@ -2140,6 +2558,7 @@ module Ww::M1next
     Fb[sink]
   end
 
+  # x
   # :nodoc:
   #
   # NOTE: All contending plurals have the same min-max (here referred to
@@ -2152,7 +2571,7 @@ module Ww::M1next
 
     ahead = ctx.interject(plan, Action.match(ops, rest))
 
-    run.each_chunk_of(op.contenders.size, empty: op.min.zero?) do |chunk, index|
+    run.each_chunk(op.contenders.size, empty: op.min.zero?) do |chunk, index|
       return Fb[] unless op.min1 <= chunk.size <= op.max1
 
       # capture : Term if named, e.g. (%plural xs) aka xs_*
@@ -2165,6 +2584,7 @@ module Ww::M1next
     cons(ctx, ahead)
   end
 
+  # x
   # :nodoc:
   def match(ctx, op : Op::Item::Gap, ops : Feed, run : Tzip::ItemsView, rest : Tzip::ItemsView, plan)
     # NOTE: It makes no sense to refer to the gap's n, hence Log.none:
@@ -2178,6 +2598,7 @@ module Ww::M1next
     eval(match(ctx, op.measurer, n, ahead))
   end
 
+  # x
   # :nodoc:
   #
   # (_* x_ ⏏(%many {¦ x_ y_} _* x_ y_ _*)⏏ y_ _*)
@@ -2185,6 +2606,7 @@ module Ww::M1next
     match(ctx.sibling, Feed::ManyStop.new(ctx, op, plan, stops: Slice(UInt32).empty, envs: Slice(Tzip).empty), ops, items, plan: nil)
   end
 
+  # x
   # :nodoc:
   #
   # WARNING: this is called with ISOLATED ctx and plan. The original ctx and plan
@@ -2250,11 +2672,422 @@ module Ww::M1next
     cons(ctx.sibling, successors, items, plan)
   end
 
+  # x
   # :nodoc:
   def match(ctx, ops : Feed, items : Tzip::ItemsView, plan)
     op = ops.first?
     if op.nil? && items.empty? # Matched all items.
       return cons(ctx, plan)
+    end
+
+    return Fb[] if op.nil? # Ran out of items.
+
+    match(ctx, op, ops + 1, items, plan)
+  end
+
+  #
+  # Flex operators
+  #
+
+  # :nodoc:
+  record FlexFeed, ops : Slice(Any), spine : SpatialSpine do
+    alias Any = Op::ItemNext::Flex | AssertAfter | ManyStop | PastTail
+
+    record AssertAfter, index : UInt32
+    record ManyStop,
+      ctx : Context,
+      many : Op::ItemNext::ManyMax,
+      plan : Plan,
+      stops : Slice(UInt32),
+      envs : Slice(Tzip)
+
+    record PastTail, op : Op::ItemNext::Past, n : Int32, fst : UInt32
+
+    def self.new(ops : Indexable(Op::ItemNext::Distrib | Op::ItemNext::NonDistrib), spine : SpatialSpine)
+      new(Slice(Any).empty, spine).prepend(ops)
+    end
+
+    def first? : Any?
+      ops.first?
+    end
+
+    def +(offset : Int)
+      FlexFeed.new(ops + 1, spine)
+    end
+
+    def claim(*args)
+      copy_with(spine: spine.claim(*args))
+    end
+
+    def prepend(prefix : Indexable(Op::ItemNext::Distrib | Op::ItemNext::NonDistrib))
+      buffer = Pf::Kit.stack_array(Any, 16)
+
+      prefix.each do |op|
+        if op.is_a?(Op::ItemNext::NonDistrib)
+          op.items.each { |item| buffer << item }
+          next
+        end
+
+        buffer << op
+      end
+
+      FlexFeed.new(ops.prepend_many(buffer, &.itself), spine)
+    end
+
+    def prepend(op : Any)
+      FlexFeed.new(ops.prepend(op), spine)
+    end
+
+    # TODO: do it in a single allocation!!
+    def prepend_all(*args)
+      current = self
+      args.reverse_each { |arg| current = current.prepend(arg) }
+      current
+    end
+  end
+
+  # :nodoc:
+  def match(ctx, op : FlexFeed::AssertAfter, feed : FlexFeed, items : Tzip::ItemsView, plan)
+    if items.begin <= op.index
+      return Fb[] # No, not after!
+    end
+
+    # Yes, after, proceed.
+    ahead = ctx.interject(plan, Action.match(feed, items))
+    cons(ctx, ahead)
+  end
+
+  # :nodoc:
+  #
+  # (%flex a_)
+  def match(ctx, op : Op::ItemNext::FlexSingular, feed : FlexFeed, items : Tzip::ItemsView, plan)
+    return Fb[] unless item = items.first?
+
+    ahead = ctx.interject(plan,
+      Action.match(op.successor, item),
+      Action.match(feed.claim(items.first(1)), items + 1),
+    )
+    cons(ctx, ahead)
+  end
+
+  # :nodoc:
+  #
+  # Defines the behavior of distrib regions such as a_ ⏏l_* m_* r_*⏏ b_. When
+  # located alongside another Flex, as in a_ ⏏l_* m_* r_*⏏ (%past/max _ max: 3) b_,
+  # Distribs behave *greedily* (i.e., as max item operators do).
+  def match(ctx, op : Op::ItemNext::Distrib, feed : FlexFeed, items : Tzip::ItemsView, plan)
+    items.each_partition_greedy do |before, after|
+      fb = eval(match(ctx, op, feed, before, after, plan))
+      return fb if fb.present?
+    end
+
+    Fb[]
+  end
+
+  # :nodoc:
+  def match(ctx, op : Op::ItemNext::PluralMinMax | Op::ItemNext::GapFirstMinMax, feed : FlexFeed, items : Tzip::ItemsView, plan)
+    each_partition(op, items) do |before, after|
+      fb = eval(match(ctx, op, feed, before, after, plan))
+      return fb if fb.present?
+    end
+
+    Fb[]
+  end
+
+  # :nodoc:
+  def match(ctx, op : Op::ItemNext::GapSource, feed : FlexFeed, items : Tzip::ItemsView, plan)
+    sink = Pf::Kit.stack_array(Context, 8)
+
+    each_partition(op, items) do |before, after|
+      fb = eval(match(ctx, op, feed, before, after, plan))
+      fb.each { |response| sink << response }
+    end
+
+    Fb[sink]
+  end
+
+  private def each_partition(op : Op::ItemNext::Min, items : Tzip::ItemsView, &)
+    items.each_partition_lazy { |before, after| yield before, after }
+  end
+
+  private def each_partition(op : Op::ItemNext::Max, items : Tzip::ItemsView, &)
+    items.each_partition_greedy { |before, after| yield before, after }
+  end
+
+  # :nodoc:
+  def match(ctx, op : Op::ItemNext::Distrib, feed : FlexFeed, run : Tzip::ItemsView, rest : Tzip::ItemsView, plan)
+    run.each_chunk(op.contenders.size, empty: true) do |chunk, index|
+      feed = feed.claim(chunk)
+    end
+
+    ahead = ctx.interject(plan, Action.match(feed, rest))
+
+    run.each_chunk(op.contenders.size, empty: true) do |chunk, index|
+      contender = op.contenders[index]
+      ahead = ctx.interject(ahead, Action.match(contender, chunk))
+    end
+
+    cons(ctx, ahead)
+  end
+
+  # :nodoc:
+  #
+  # xs_*
+  def match(ctx, op : Op::ItemNext::PluralDistrib, run : Tzip::ItemsView, plan)
+    return Fb[] unless op.min <= run.size <= op.max
+    return Fb[] unless op.type.any? || run.all?(&.type.subtype?(op.type))
+
+    ahead = plan
+
+    # (%plural)  (%plural xs)  xs_*  _*
+    if capture = op.capture
+      # (%plural xs)  xs_*
+      ahead = ctx.interject(plan, Action.capture(capture, run.collect))
+    end
+
+    cons(ctx, ahead)
+  end
+
+  # :nodoc:
+  #
+  # (%plural/min xs max: 3)  (%plural/max)
+  def match(ctx, op : Op::ItemNext::PluralMinMax, feed : FlexFeed, run : Tzip::ItemsView, rest : Tzip::ItemsView, plan)
+    return Fb[] unless op.min <= run.size <= op.max
+    return Fb[] unless op.type.any? || run.all?(&.type.subtype?(op.type))
+
+    # Schedule matching the rest of items after claiming *run*.
+    feed = feed.claim(run)
+    ahead = ctx.interject(plan, Action.match(feed, rest))
+
+    # (%plural/max)  (%plural/max xs)  xs_*  _*
+    if capture = op.capture
+      # (%plural/max xs)  xs_*
+      ahead = ctx.interject(ahead, Action.capture(capture, run.collect))
+    end
+
+    cons(ctx, ahead)
+  end
+
+  # :nodoc:
+  #
+  # (%gap n_)
+  def match(ctx, op : Op::ItemNext::GapFirstDistrib, run : Tzip::ItemsView, plan)
+    # NOTE: It makes no sense to refer to the gap's n, hence Log.none:
+    #
+    #   ((%gap n_)) <> {n: 10}
+    #
+    # This backmap has no meaning.
+    n = Tzip.new(Term.of(run.size), Log.none)
+
+    ahead = ctx.interject(plan, Action.match(op.measurer, n))
+    cons(ctx, ahead)
+  end
+
+  # :nodoc:
+  #
+  # (%gap/min n_)  (%gap/max (%number _ < (var hi)))  (%gap/min° n_)
+  def match(ctx, op : Op::ItemNext::GapMinMax, feed : FlexFeed, run : Tzip::ItemsView, rest : Tzip::ItemsView, plan)
+    # Ditto: it makes no sense to refer to the gap's n.
+    n = Tzip.new(Term.of(run.size), Log.none)
+
+    feed = feed.claim(run)
+    ahead = ctx.interject(plan,
+      Action.match(op.measurer, n),
+      # Schedule matching the rest of items after claiming *run*.
+      Action.match(feed, rest),
+    )
+    cons(ctx, ahead)
+  end
+
+  # :nodoc:
+  def match(ctx, op : Op::ItemNext::Past, feed : FlexFeed, items : Tzip::ItemsView, plan)
+    match(ctx, FlexFeed::PastTail.new(op, 0, items.begin), feed, items, plan)
+  end
+
+  # :nodoc:
+  def match(ctx, tail : FlexFeed::PastTail, feed : FlexFeed, items : Tzip::ItemsView, plan)
+    match(ctx, tail.op, tail.n, tail.fst, feed, items, plan)
+  end
+
+  # :nodoc:
+  #
+  # ((%past a_ b_) and _*)  ((%past _number min: 3 max: 5))
+  #
+  # NOTE: One important edge case to keep in mind: (%past `slot) (i.e., slot
+  # matches zero elements, and %past is a looping construct -- hazardous!)
+  def match(ctx, op : Op::ItemNext::PastMin, n : Int32, fst : UInt32, feed : FlexFeed, items : Tzip::ItemsView, plan)
+    return Fb[] if n > op.max
+
+    # If this %past's min constraint is satisfied, then it can start removing
+    # itself from the pattern.
+    if n >= op.min
+      fb = eval(match(ctx, feed.claim(fst, items.begin), items, plan))
+      return fb if fb.present?
+    end
+
+    # If this %past's min constraint is unsatisfied, or if the pattern ahead
+    # does not match, %past tries to help by prepending its children followed
+    # by itself-advanced, taking as little items as possible.
+    each_partition(op, items) do |before, after|
+      successors = feed.prepend_all(
+        FlexFeed::AssertAfter.new(items.begin),
+        FlexFeed::PastTail.new(op, n + 1, fst),
+      )
+
+      ahead = ctx.interject(plan, Action.match(successors, after))
+      fb = eval(match(ctx, op.children, before, ahead))
+      return fb if fb.present?
+    end
+
+    Fb[]
+  end
+
+  # :nodoc:
+  #
+  # ((%past/max _ _ min: 2 max: 5))  (+ (%past/max _number min: 2))
+  #
+  # NOTE: One important edge case to keep in mind: (%past/max `slot) (i.e., slot
+  # matches zero elements, and %past/max is a looping construct -- hazardous!)
+  def match(ctx, op : Op::ItemNext::PastMax, n : Int32, fst : UInt32, feed : FlexFeed, items : Tzip::ItemsView, plan)
+    return Fb[] if n > op.max
+
+    # Greedy %past unconditionally prepends its children and then itself-advanced.
+    each_partition(op, items) do |before, after|
+      successors = feed.prepend_all(
+        FlexFeed::AssertAfter.new(items.begin),
+        FlexFeed::PastTail.new(op, n + 1, fst),
+      )
+
+      ahead = ctx.interject(plan, Action.match(successors, after))
+      fb = eval(match(ctx, op.children, before, ahead))
+      return fb if fb.present?
+    end
+
+    # If this %past's n is below min, it cannot help the matching process by removing
+    # itself from the pattern -- this will cause the min constraint to be violated,
+    # and %past doesn't want that.
+    return Fb[] if n < op.min
+
+    # This %past's n is above min -- its min constraint is satisfied. This means it
+    # can try to remove itself from the pattern to see if that leads to
+    # a successful match.
+    ahead = ctx.interject(plan, Action.match(feed.claim(fst, items.begin), items))
+    cons(ctx, ahead)
+  end
+
+  # :nodoc:
+  #
+  # (%optional 0 x_)  (%optional (0 0) (x_ y_))
+  def match(ctx, op : Op::ItemNext::Optional, feed : FlexFeed, items : Tzip::ItemsView, plan)
+    if items.present?
+      ahead = ctx.interject(plan,
+        Action.match(op.successor, items.first),
+        Action.match(feed.claim(items.first(1)), items + 1),
+      )
+      fb = eval(fb(ctx, ahead))
+      return fb if fb.present?
+    end
+
+    default = items.tzip.insert(op.default, before: items.begin, ord: op.ord)
+
+    ahead = ctx.interject(plan,
+      Action.match(op.successor, default),
+      Action.match(feed.claim(items.before_begin), items),
+    )
+    cons(ctx, ahead)
+  end
+
+  # :nodoc:
+  #
+  # (_* x_ ⏏(%many {¦ x_ y_} _* x_ y_ _*)⏏ y_ _*)
+  def match(ctx, op : Op::ItemNext::ManyMax, feed : FlexFeed, items : Tzip::ItemsView, plan)
+    match(ctx.sibling, FlexFeed::ManyStop.new(ctx, op, plan, stops: Slice(UInt32).empty, envs: Slice(Tzip).empty), feed, items, plan: nil)
+  end
+
+  # :nodoc:
+  #
+  # WARNING: this is called with ISOLATED ctx and plan. The original ctx and plan
+  # are stored in *op*.
+  def match(ctx, op : FlexFeed::ManyStop, feed : FlexFeed, items : Tzip::ItemsView, plan)
+    return Fb[] if op.stops.size > op.many.max
+
+    if b = op.stops.last?
+      content = items.reshape(b, items.begin)
+      handle = Log.seal(Log.simplify(content.log))
+
+      # Construct a mapping log for each match of children so that e.g. in:
+      #
+      #   (%many (env←{¦ x: K_} _*) x_ y_)
+      #
+      # ... K_ points to x_ in the respective match. We set the mapping's handle
+      # to the range matched by %many's current instance of children; each match's
+      # *env* should refer to that range:
+      #
+      #    K₀   K₁   K₂
+      #    v    v    v
+      #   (1 2  3 4  5 6)
+      #   [---][---][---]
+      #    env₀ env₁ env₂
+      #
+      # Please note that in this example, Ks and envs are later unified which
+      # leads to a mismatch. But at this point, we're looking at an array of
+      # envs (hence the use of subscript).
+      env = Tzip.mapping(ctx.envtab, handle, &.itself)
+      op = op.copy_with(envs: op.envs.append(env))
+    end
+
+    if op.stops.size >= op.many.min
+      # Construct the toplevel envs list lst←(env₀ env₁ ...) and its corresponding
+      # mapping. lst should refer to all items matched.
+      #
+      # Each env's log is a Mapping (see above): its handle refers to the range
+      # matched by env₀, env₁ and so on; we concatenate them to get a single handle.
+      handle = Log.seal(op.envs, &.log)
+      envlist = Tzip.mapping(op.envs, handle) { |env, index| {Term.of(index), env} }
+
+      if lbound = op.stops.first?
+        # Nonempty %many
+        successors = feed.claim(lbound, items.begin)
+      else
+        # Empty %many (valid with min: 0)
+        successors = feed.claim(items.before_begin)
+      end
+
+      # Run %many's successor and all the following items with the original context
+      # and plan. ctx and plan, on the other hand, refer to the isolated ones.
+      ahead = ctx.interject(op.plan,
+        Action.match(op.many.successor, envlist),
+        Action.match(successors, items),
+      )
+
+      fb = eval(fb(op.ctx, ahead))
+      return fb if fb.present?
+    end
+
+    successors = feed.prepend_all(
+      FlexFeed::AssertAfter.new(items.begin),
+      op.copy_with(stops: op.stops.append(items.begin))
+    )
+
+    assert plan.nil?
+
+    each_partition(op.many, items) do |before, after|
+      ahead = ctx.interject(plan, Action.match(successors, after))
+
+      # .sibling gives us a fresh empty context to use for the next run of children.
+      # We know that the plan is empty at this point so we can reuse it.
+      fb = eval(match(ctx.sibling, op.many.members, before, ahead))
+      return fb if fb.present?
+    end
+
+    Fb[]
+  end
+
+  # :nodoc:
+  def match(ctx, ops : FlexFeed, items : Tzip::ItemsView, plan)
+    op = ops.first?
+    if op.nil? && items.empty? # Matched all items, go back to spine.
+      return match(ctx, ops.spine, plan)
     end
 
     return Fb[] if op.nil? # Ran out of items.

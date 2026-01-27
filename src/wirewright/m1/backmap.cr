@@ -174,7 +174,7 @@ module Ww::M1next
         io << ":"
         if refs = @refs
           refs.join(io, ",") do |(name, sub)|
-            io << name << sub.to_s.tr("0123456789", "₀₁₂₃₄₅₆₇₈₉")
+            io << name << sub.subscript
           end
         end
         io << "]"

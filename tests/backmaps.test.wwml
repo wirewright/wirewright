@@ -318,8 +318,32 @@
     (= (x y k: v) (a b c k: v))
     (= (x y z k: v) (a b c k: v))))
 
+;; Spatial replacement
+(group
+  (backmap ((l_* (%group G_ m_ r_*)) {(G): ()})
+    (= (a b c d e) (a b)))
+
+  (backmap ((xs_* ys_* zs_* and as_* bs_* cs_*) {(bs): ()})
+    (= (a b c d e and 1 2 3 4 5) (a b c d e and 1 2 5)))
+
+  (backmap ((l_* a_ b_ m_* x_ xs_* ys_*) {b: (seen ^b), (xs): (foo ^xs bar)})
+    (= (a b c d e f g h i j k) (a b c d (seen e) f g h i foo (j) bar k)))
+
+  (backmap ((x_ y_ mid_* z_) {(mid): ()})
+    (= (a b c d e f g) (a b g)))
+
+  (backmap ((xs_* ys_* x_ r_*) {(xs): ^ys, (ys): ^xs})
+    (= (a b c d e f g h) (c d a b e f g h)))
+
+  (backmap ((x_ xs_* ys_*) {(xs): ^ys, (ys): ^xs})
+    (= (a b c d e f) (a e f b c d)))
+
+  (backmap ((xs_* ys_* x_) {(xs): ^ys, (ys): ^xs})
+    (= (a b c d e f) (d e a b c f))))
+
+
 ;; %past replacement
-(backmap (((%gap n_) `m (%past _) n_ rest_*) {n: (seen ^(dn n)), rest: (seen ^(dn rest)), m: bound})
+(backmap (((%gap/min n_) `m (%past _) (%flex n_) rest_*) {n: (seen ^(dn n)), rest: (seen ^(dn rest)), m: bound})
   (= (0) (bound (seen 0) (seen ())))
   (= (0 a b c) (bound (seen 0) (seen (a b c))))
   (= (x y z 0 a b c) (bound x y z (seen 0) (seen (a b c))))
@@ -916,6 +940,9 @@
 
 ;; Regressions
 (group
+  (backmap (C←({¦ -flag_} ⍊ -sack_) {sack: ^(up C), flag: true})
+    (= ((qux)) ((qux flag: true) sack: ((qux flag: true)))))
+
   (backmap (((log (preds_* `tip)) x_) {(preds): (), tip: ^x})
     (= ((log ()) a) ((log (a)) a))
     (= ((log (a)) b) ((log (b)) b))
@@ -1166,10 +1193,10 @@
 ;; Gliders that can "jump over" each other using %split° instead of %item°
 (backsys
   (;; Move all right
-   (%split° _ (src←(r _)) ((%plural/min) (`dst) (%plural/max)))
+   (%split° _ (src←(r _)) ((%plural/min) (%flex (`dst)) (%plural/max)))
      <> {(src): (), dst: ^src}
    ;; Move all left
-   (%split° ((%plural/max) (`dst) (%plural/min)) (src←(l _)) _)
+   (%split° ((%plural/max) (%flex (`dst)) (%plural/min)) (src←(l _)) _)
      <> {(src): (), dst: ^src})
   (seq
     (((r x)) ((r y)) () () ())
