@@ -3,7 +3,7 @@ module Ww::M1next
   # compiled operators and associated groups/categories of operators (represented
   # using aliases).
   module Op
-    alias Any = Pass | Never | Num | Sym | SymBlank | SymNonblank | Boolean | Dict | Itemsonly | Pairsonly | SketchSubset | Bounds | BoundsGuard | MaxDepth | DictGuard | Literal | Capture | CaptureItemsonly | Seq | ItemSeq | ItemFirst | ItemLast | SingularSeq | Partition | Edge | LiteralWhitelist | ChoiceSource | Keypool | Span | Tally | Type | ParseML | Clamp | Bin | Both | LiteralBlacklist | Layer | ScanFirst | ScanSource | ScanAll | DfsFirst | DfsSource | DfsAll | BfsFirst | BfsSource | BfsAll | Value | NegativeValue | NegativeValueKeypath | EntriesFirst | EntriesSource | EntriesAll | Str | KeypathCapture | NegativeKeypool | Keytest | ValueLiteral | Filter | Pluck | Flat | Split | Adjacent | Untracked | Matches | FrontRef | BackRef
+    alias Any = Pass | Never | Num | Sym | SymBlank | SymNonblank | Boolean | Dict | Itemsonly | Pairsonly | SketchSubset | Bounds | BoundsGuard | MaxDepth | DictGuard | Literal | Capture | CaptureItemsonly | Seq | ItemFirst | ItemLast | SingularSeq | Partition | Edge | LiteralWhitelist | ChoiceSource | Keypool | Span | Tally | Type | ParseML | Clamp | Bin | Both | LiteralBlacklist | Layer | ScanFirst | ScanSource | ScanAll | DfsFirst | DfsSource | DfsAll | BfsFirst | BfsSource | BfsAll | Value | NegativeValue | NegativeValueKeypath | EntriesFirst | EntriesSource | EntriesAll | Str | KeypathCapture | NegativeKeypool | Keytest | ValueLiteral | Filter | Pluck | Flat | Split | Adjacent | Untracked | Matches | FrontRef | BackRef
 
     # TODO: Inline, this is not used anywhere!!
     alias Bin = Add | Sub | Mul | Div | Idiv | Mod | Pow | Map
@@ -96,7 +96,7 @@ module Ww::M1next
     defcase Seq, items : ItemNext::Spatial, singulars : Array(Any)
 
     # TODO: remove!!!
-    defcase ItemSeq, items : Slice(Item::Any)
+    # defcase ItemSeq, items : Slice(Item::Any)
 
     defcase ItemFirst, successor : Any
     defcase ItemLast, successor : Any
@@ -137,7 +137,7 @@ module Ww::M1next
              ItemLast,
              CaptureItemsonly,
              SingularSeq,
-             ItemSeq
+             Seq
           true
         when BoundsGuard,
              MaxDepth,
@@ -210,6 +210,7 @@ module Ww::M1next
     defcase Flat, spec : M1next::Tzip::FlatSpec, successor : Any
   end
 
+  # Compiled sequence operators such as `(⏏_⏏ ⏏(%optional 0 x_)⏏ ⏏y_⏏)`.
   module Op::ItemNext
     extend self
 
@@ -462,108 +463,6 @@ module Ww::M1next
         end
       else
         raise ArgumentError.new
-      end
-    end
-  end
-
-  # Compiled sequence operators such as `(⏏_⏏ ⏏(%optional 0 x_)⏏ ⏏y_⏏)`.
-  module Op::Item
-    alias Any = Singular | Slot | Plural | Group | GapFirst | GapSource | Optional | Many | Past
-
-    enum ExpandStrategy : UInt8
-      Auto
-      Sway
-      Lazy
-      Greedy
-    end
-
-    # wtf is it called TAIL?!?!?!
-    defcase Singular, tail : Op::Any
-    defcase Slot, name : Term
-
-    defcase Plural, contenders : Slice(Term?), min1 : Magnitude, max1 : Magnitude, type : TermType, follower : Follower, frac : UInt32, strategy : ExpandStrategy do
-      def self.new(contender : Term?, min1, max1, type : TermType, follower : Follower, frac, strategy : ExpandStrategy)
-        new(Slice[contender.as(Term?)], min1, max1, type, follower, frac, strategy)
-      end
-
-      def min : Magnitude
-        min1 * contenders.size
-      end
-
-      def max : Magnitude
-        max1 * contenders.size
-      end
-
-      enum Follower : UInt8
-        {% for member in ::Ww::TermType.constants %}
-        {{member}}
-      {% end %}
-
-        # Indicates that the follower is absent.
-        None
-
-        def type : TermType
-          if none?
-            raise ArgumentError.new("cannot query .type of a missing follower")
-          end
-
-          TermType.new(value)
-        end
-      end
-    end
-
-    defcase Group, successor : Op::Any, children : Slice(Any) do
-      def capture
-        successor.as(Op::Capture).capture
-      end
-    end
-
-    alias Gap = GapFirst | GapSource
-
-    defcase GapFirst, measurer : Op::Any, frac : UInt32, strategy : ExpandStrategy
-    defcase GapSource, measurer : Op::Any, frac : UInt32, strategy : ExpandStrategy
-
-    defcase Optional, default : Term, body : Op::Any
-
-    defcase Many, successor : Op::Any, children : Slice(Any), interior : Set(Term), min : UInt8, max : UInt8 do
-      # FIXME: Use magnitude instead of U8 in the first place!!!!!
-
-      def capture
-        successor.as(Op::Capture).capture
-      end
-
-      def minM
-        Magnitude.new(min)
-      end
-
-      def maxM
-        max == 0 ? Magnitude::INFINITY : Magnitude.new(max)
-      end
-    end
-
-    alias Past = PastGreedy | PastLazy
-
-    defcase PastGreedy, children : Slice(Any), min : UInt8, max : UInt8, n : Int32 = 0 do
-      # FIXME: Use magnitude instead of U8 in the first place!!!!!
-
-      def minM
-        Magnitude.new(min)
-      end
-
-      def maxM
-        max == 0 ? Magnitude::INFINITY : Magnitude.new(max)
-      end
-    end
-
-    defcase PastLazy, children : Slice(Any), min : UInt8, max : UInt8, n : Int32 = 0 do
-      # FIXME: Ditto!
-
-      def minM
-        Magnitude.new(min)
-      end
-
-      def maxM
-        max == 0 ? Magnitude::INFINITY : Magnitude.new(max)
       end
     end
   end
