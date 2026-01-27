@@ -344,7 +344,7 @@ module Ww::M1next
   # Returns the specificity of the given normal pattern *normp*.
   #
   # See `Specificity` for general info.
-  def specificity(normp : Normp) : Specificity
-    normp.unwrap { |op| specificity(Π.toplevel(op)) }
+  def specificity(pattern : Normp) : Specificity
+    pattern.unwrap { |op| specificity(Π.toplevel(op)) }
   end
 end

@@ -12,7 +12,7 @@ module Ww::M1next
     end
   end
 
-  # Runs the depth propagation algorithm on operators in *normp*.
+  # Runs the depth propagation algorithm on operators in *pattern*.
   #
   # Each operator is annotated with `depth: expr_`, where *expr* is a range
   # expression evaluated against the operator and its children, using `RangeCalc`.
@@ -27,19 +27,19 @@ module Ww::M1next
   #
   # Non-dict operators have their `min-depth` and `max-depth` both set to `0`,
   # meaning only depth `0` (i.e., no depth) is acceptable.
-  def depthp(normp : Normp) : Normp
-    normp.map { |op| Kit.ascend(op, &->depthp1(Term::Dict)) }.with_annotation(:depths)
+  def depthp(pattern : Normp) : Normp
+    pattern.map { |op| Kit.ascend(op, &->depthp1(Term::Dict)) }.with_annotation(:depths)
   end
 
-  # Returns the dict depth bounds accepted by *normp*.
-  def depth(normp : Normp) : {Magnitude, Magnitude}
-    unless normp.annotations.depths?
-      normp = depthp(normp)
+  # Returns the dict depth bounds accepted by *pattern*.
+  def depth(pattern : Normp) : {Magnitude, Magnitude}
+    unless pattern.annotations.depths?
+      pattern = depthp(pattern)
     end
 
-    normp.unwrap do |norm|
-      min = norm[:"min-depth"]?
-      max = norm[:"max-depth"]?
+    pattern.unwrap do |op|
+      min = op[:"min-depth"]?
+      max = op[:"max-depth"]?
 
       {(min || Term.of(0)).to(Magnitude),
        (max.nil? || max == Term.of(:"∞")) ? Magnitude::INFINITY : max.to(Magnitude)}
@@ -59,7 +59,7 @@ module Ww::M1next
     end
   end
 
-  # Runs the bounds propagation algorithm on operators in *normp*.
+  # Runs the bounds propagation algorithm on operators in *pattern*.
   #
   # Each operator is annotated with `bounds: expr_`, where *expr* is a range
   # expression evaluated against the operator and its children, using `RangeCalc`.
@@ -74,19 +74,19 @@ module Ww::M1next
   #
   # Non-dict operators have their `min-bounds` and `max-bounds` both set to `0`,
   # meaning only size `0` (i.e., no bounds) is acceptable.
-  def boundsp(normp : Normp) : Normp
-    normp.map { |op| Kit.ascend(op, &->boundsp1(Term::Dict)) }.with_annotation(:bounds)
+  def boundsp(pattern : Normp) : Normp
+    pattern.map { |op| Kit.ascend(op, &->boundsp1(Term::Dict)) }.with_annotation(:bounds)
   end
 
   # Returns the dict size bounds accepted by *normp*.
-  def bounds(normp : Normp) : {Magnitude, Magnitude}
-    unless normp.annotations.bounds?
-      normp = boundsp(normp)
+  def bounds(pattern : Normp) : {Magnitude, Magnitude}
+    unless pattern.annotations.bounds?
+      pattern = boundsp(pattern)
     end
 
-    normp.unwrap do |norm|
-      min = norm[:"min-bounds"]?
-      max = norm[:"max-bounds"]?
+    pattern.unwrap do |op|
+      min = op[:"min-bounds"]?
+      max = op[:"max-bounds"]?
 
       {(min || Term.of(0)).to(Magnitude),
        (max.nil? || max == Term.of(:"∞")) ? Magnitude::INFINITY : max.to(Magnitude)}
@@ -118,13 +118,13 @@ module Ww::M1next
     end
   end
 
-  # Runs the literal propagation algorithm on operators in *normp*.
+  # Runs the literal propagation algorithm on operators in *pattern*.
   #
   # Literals flow up, from leaves to the root. After literal propagation, all
   # operators have a set `literals`. It is a dict set of literals required
   # by an operator and its non-sealed subtree.
-  def literalp(normp : Normp) : Normp
-    normp.map { |op| Kit.ascend(op, &->literalp1(Term::Dict)) }.with_annotation(:literals)
+  def literalp(pattern : Normp) : Normp
+    pattern.map { |op| Kit.ascend(op, &->literalp1(Term::Dict)) }.with_annotation(:literals)
   end
 
   # The sketch propagation algorithm, executed by every operator in the normal
@@ -147,29 +147,29 @@ module Ww::M1next
     op.with(:sketch, sketch)
   end
 
-  # Runs the sketch propagation algorithm on operators in *normp*.
+  # Runs the sketch propagation algorithm on operators in *pattern*.
   #
   # Sketch propagation depends on literal propagation. It currently takes
   # into account only symbol literals found in literal sets.
   #
-  # Thus, `sketchp` requires *normp* to have been processed by `literalp` first.
-  def sketchp(normp : Normp) : Normp
-    assert normp.annotations.literals?
+  # Thus, `sketchp` requires *pattern* to have been processed by `literalp` first.
+  def sketchp(pattern : Normp) : Normp
+    assert pattern.annotations.literals?
 
-    normp.map { |op| Kit.ascend(op, &->sketchp1(Term::Dict)) }.with_annotation(:sketches)
+    pattern.map { |op| Kit.ascend(op, &->sketchp1(Term::Dict)) }.with_annotation(:sketches)
   end
 
-  # Returns the dict sketch accepted by *normp*.
+  # Returns the dict sketch accepted by *pattern*.
   #
   # Dictionaries matched against the pattern are expected to be supersets of
   # the returned sketch.
-  def sketch(normp : Normp) : Term::Dict::Sketch
-    unless normp.annotations.sketches?
-      normp = sketchp(normp)
+  def sketch(pattern : Normp) : Term::Dict::Sketch
+    unless pattern.annotations.sketches?
+      pattern = sketchp(pattern)
     end
 
-    normp.unwrap do |norm|
-      if sketch = norm[:sketch]?
+    pattern.unwrap do |op|
+      if sketch = op[:sketch]?
         return sketch.to(Term::Dict::Sketch)
       end
 
@@ -223,23 +223,23 @@ module Ww::M1next
     end
   end
 
-  # Wraps `guarded: true` operators in *normp* with guard operators.
+  # Wraps `guarded: true` operators in *pattern* with guard operators.
   #
   # The result is a *guarded normal form* of the pattern: `Guardedp`. It is
   # no longer eligible for functions that want the normal form. On the other
   # hand, it becomes eligible for `operator`, `optimal`, and so on.
-  def guard(normp : Normp) : Guardedp
+  def guard(pattern : Normp) : Guardedp
     opts = {
-      normp.annotations.depths?,
-      normp.annotations.bounds?,
-      normp.annotations.sketches?,
+      pattern.annotations.depths?,
+      pattern.annotations.bounds?,
+      pattern.annotations.sketches?,
     }
 
     if opts.none?
-      return normp.unwrap { |op| Guardedp.new(op) }
+      return pattern.unwrap { |op| Guardedp.new(op) }
     end
 
-    normp.unwrap do |op|
+    pattern.unwrap do |op|
       rewritten = Kit.ascend(op, &->guarded1(Term::Dict))
 
       Guardedp.new(rewritten)

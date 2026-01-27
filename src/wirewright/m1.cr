@@ -116,35 +116,35 @@ module Ww::M1next
 
   {% for cls in {Normp, Guardedp} %}
     # See `Kit#ascend`.
-    def ascend(normp : {{cls}}, &fn : {{cls}} -> {{cls}}) : {{cls}}
-      normp.unwrap do |op|
+    def ascend(pattern : {{cls}}, &fn : {{cls}} -> {{cls}}) : {{cls}}
+      pattern.unwrap do |op|
         Kit.ascend(op) do |member|
-          fn.call(normp.map { member })
+          fn.call(pattern.map { member })
         end
       end
     end
 
     # See `Kit#walk`.
-    def walk(normp : {{cls}}, &fn : {{cls}} ->) : Nil
-      normp.unwrap do |op|
+    def walk(pattern : {{cls}}, &fn : {{cls}} ->) : Nil
+      pattern.unwrap do |op|
         Kit.walk(op) do |member|
-          fn.call(normp.map { member })
+          fn.call(pattern.map { member })
         end
       end
     end
 
     # See `Kit#member`.
-    def each_member(normp : {{cls}}, & : {{cls}} ->) : Nil
-      normp.unwrap do |op|
+    def each_member(pattern : {{cls}}, & : {{cls}} ->) : Nil
+      pattern.unwrap do |op|
         Kit.each_member(op) do |member|
-          yield normp.map { member }
+          yield pattern.map { member }
         end
       end
     end
 
     # See `Kit#members`.
-    def members(normp : {{cls}}) : Array({{cls}})
-      normp.unwrap { |op| Kit.members(op) }
+    def members(pattern : {{cls}}) : Array({{cls}})
+      pattern.unwrap { |op| Kit.members(op) }
     end
   {% end %}
 

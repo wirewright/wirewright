@@ -223,16 +223,27 @@ module Ww::M1next
     end
   end
 
-  def simplifyp(normp : Normp) : Normp
-    normp.map do |op|
+  # Performs a single bottom-up pass of simplification rewrites on the given
+  # normal *pattern*.
+  #
+  # Some simplification rewrites are only possible on normal patterns, as
+  # `guard`ing presents several obstructions to easy rewriting. Hence, the normal
+  # pattern simplifiction pass.
+  def simplifyp(pattern : Normp) : Normp
+    pattern.map do |op|
       Kit.ascend(op) do |member|
         simplify(Π.normal(member))
       end
     end
   end
 
-  def simplifyp(normp : Guardedp) : Guardedp
-    normp.map do |op|
+  # Performs a single bottom-up pass of simplification rewrites on the given
+  # guarded normal *pattern*.
+  #
+  # The majority of useful rewrites happen at this stage, including elimination
+  # of duplicate guards.
+  def simplifyp(pattern : Guardedp) : Guardedp
+    pattern.map do |op|
       Kit.ascend(op) do |member|
         simplify(Π.guarded(member))
       end

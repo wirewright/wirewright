@@ -31,7 +31,7 @@ module Ww::M1next
 
   # :nodoc:
   #
-  # Auxiliary functions for `normalize`. Since Crystal can't have nested defs,
+  # Auxiliary functions for `normalize`. Since Crystal doesn't support nested defs,
   # we have to do this nonsense. These are conceptually scoped under `normalize`.
   module Normalize
     extend self
@@ -225,7 +225,9 @@ module Ww::M1next
       # _number)`. For nameless polyblanks, the name is omitted, e.g. `_number*`
       # becomes `(%plural type: _number)`.
       #
-      # ### Essentials Smart plurals are the main components of *shapes*.
+      # ### Essentials
+      #
+      # Smart plurals are the main components of *shapes*.
       #
       # Each shape consists of *rigid* and *flexible* parts. Singulars
       # (`m1.operator.seq.singular`, e.g. `+`, `100`, `a_`) are rigid.
@@ -278,13 +280,14 @@ module Ww::M1next
       # recognizes:
       #
       # - `rigid-flex`: also known as *prefix* (we're rigid-centric), and
-      # internally as *padded-right*. Consider, for instance, `(x_ xs_*)`,
-      # `(+ x_ xs_*)` etc. - `flex-rigid`: also known as *suffix*, and internally as
-      # *padded-left*. Consider, for instance, `(xs_* x_)`, `(xs_* x_ y_)` etc.
+      #   internally as *padded-right*. Consider, for instance, `(x_ xs_*)`,
+      #   `(+ x_ xs_*)` etc.
+      # - `flex-rigid`: also known as *suffix*, and internally as *padded-left*.
+      #   Consider, for instance, `(xs_* x_)`, `(xs_* x_ y_)` etc.
       # - `rigid-flex-rigid`: also known as *midsection*, and internally as
-      # *midgap*. Consider, for instance, `(a_ mid_* b_)`. - `flex-rigid-flex`:
-      # also known as *circumfix*, and internally as *padded*. Consider, for
-      # instance, `(l_* m_ r_*)`.
+      #   *midgap*. Consider, for instance, `(a_ mid_* b_)`.
+      # - `flex-rigid-flex`: also known as *circumfix*, and internally as *padded*.
+      #   Consider, for instance, `(l_* m_ r_*)`.
       #
       # These can compose: for example, midsection composes with suffix on the
       # left and prefix on the right, i.e., `flex-rigid-flex-rigid-flex`.

@@ -64,7 +64,7 @@ module Ww::M1next
     end
   end
 
-  # Returns the *head* of a normal pattern *normp*.
+  # Returns the *head* of a normal pattern *pattern*.
   #
   # The head of a pattern is the first literal in an expected dictionary matchee.
   # For example, in `(+ a_ b_)` that would be `+`; and in `(`a `b x←qux x_ y_)` that
@@ -74,7 +74,7 @@ module Ww::M1next
   # On the other hand, for `qux` or `(xs_* qux)` the head is indeterminate: the first
   # isn't even a dict, and for the second, there's no first literal -- we'd have to match
   # *xs* first. For such cases, this function returns `nil`.
-  def head?(normp : Normp) : Term?
-    normp.unwrap { |op| head?(Π.toplevel(op)) }
+  def head?(pattern : Normp) : Term?
+    pattern.unwrap { |op| head?(Π.toplevel(op)) }
   end
 end
