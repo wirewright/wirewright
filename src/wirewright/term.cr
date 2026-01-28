@@ -808,20 +808,17 @@ module Ww
   # Hashing, comparison
 
   struct Term
-    # Term hasher object, similar in purpose to `Crystal::Hasher`.
+    # An object encapsulating hash function state, similar in purpose
+    # to `Crystal::Hasher`.
     #
-    # Currently implements 64-bit Fowler–Noll–Vo hash function.
+    # Currently implements the 64-bit Fowler–Noll–Vo hash function.
     #
-    # Wirewright is assumed to run on x86-64 only. This means system-endian is
-    # little-endian. Under this assumption we say that the hash is *globally
-    # stable*, meaning it stays the same across runs and machines for
-    # equal (or colliding!) values.
-    #
-    # Global stability is explicitly implemented despite susceptibility to
-    # HashDoS etc. This is because Wirewright's Terms are for use in a purely
-    # functional setting; randomly seeded hash functions lead to different dict
-    # entry order per run/machine => different return result for `(hashcode term_)`
-    # in particular, which we would consider as an implementation error.
+    # With hashes, we want global stability, meaning stability across all machines
+    # and runs; despite susceptibility to e.g. HashDoS. This is because Wirewright's
+    # Terms are for use in a purely functional setting; randomly seeded hash functions
+    # lead to different dict entry order per run/machine => different return result
+    # for `(hashcode term_)` in particular, which we would consider a bug -- not a feature,
+    # as conventional languages do.
     #
     # Note that due to hash collisions and the way symbols are implemented right now,
     # dictionaries have a special ordered variant of their `each_entry`, namely
@@ -858,7 +855,7 @@ module Ww
 
       # :ditto:
       def blast(object : Int32, & : UInt8 ->) : Nil
-        blast(object.to_u32) { |byte| yield byte }
+        blast(object.unsafe_as(UInt32)) { |byte| yield byte }
       end
 
       # :ditto:
