@@ -40,22 +40,24 @@ module ::Ww::D7::Kit
     keys.map { |key| first(grp, key) }
   end
 
-  module Sink::Bag
-  end
+  def collect(grp : Ngrp, key, & : Term -> Term?) : Term::Dict
+    buffer = Pf::Kit.stack_array(Term)
 
-  def collect(grp : Ngrp, key, sink : Sink::Bag.class, &)
-    Term::Dict.build do |commit|
-      grp.each do |_, capture|
-        orig = capture.env[key]
-        next unless value = yield orig
+    grp.each do |_, capture|
+      value0 = capture.env[key]
+      value1 = yield value0
+      next unless value1
 
-        commit.with(value, (commit[value]? || 0) + 1)
-      end
+      buffer << value1
     end
+
+    buffer.sort! { |a, b| Term.compare(a, b) }
+
+    Term[buffer]
   end
 
-  def collect(grp, key, sink)
-    collect(grp, key, sink, &.itself)
+  def collect(grp, key)
+    collect(grp, key, &.itself)
   end
 
   def patch(grp : Ngrp, &)
@@ -497,7 +499,6 @@ end
 module ::Ww::Rack
   VIEW_CACHE = SyncCache({Term, Term, Term}, Term).new(capacity: 128, preallocate: true)
 
-  # TODO: instead of using Sink::Bag emit Term.compare-ordered dicts.
   def master(clf : D7::Classifier, circuit : Term)
     D7.case(clf, circuit) do
       rule %{(one dev [log (@src_ pattern_ @log_) template_]) (one src [cell @src_ input_]) (one log [cell @log_ entries_dict])} do
@@ -603,11 +604,11 @@ module ::Ww::Rack
             patch(dst, &.morph({2, x})),
           )
         when {_, 1} # aggregate
-          x = collect(src, :x, Sink::Bag)
+          xs = collect(src, :x)
 
           patches(
             patch(src, &.morph({2, nil})),
-            patch(dst, &.morph({2, x})),
+            patch(dst, &.morph({2, xs})),
           )
         end
 
@@ -650,9 +651,9 @@ module ::Ww::Rack
 
           patch(dst, &.morph({2, x}))
         when {_, 1} # aggregate
-          x = collect(src, :x, Sink::Bag)
+          xs = collect(src, :x)
 
-          patch(dst, &.morph({2, x}))
+          patch(dst, &.morph({2, xs}))
         end
       end
 
@@ -675,7 +676,7 @@ module ::Ww::Rack
             patch(dst, &.morph({2, instance})),
           )
         when {_, 1} # aggregate
-          instances = collect(src, :x, Sink::Bag) do |x|
+          instances = collect(src, :x) do |x|
             next unless vars = M1.match?(pattern, x)
 
             Alloy.render(vars, template)

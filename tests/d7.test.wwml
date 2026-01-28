@@ -164,7 +164,7 @@
     (cell @x)
     (cell @x)
     (feed @x @y)
-    (cell @y {# 0 1 2}))
+    (cell @y (0 1 2)))
   end)
 
 ;; Feed: M:1, some srcs empty, dst empty
@@ -180,7 +180,7 @@
     (cell @x)
     (cell @x)
     (feed @x @y)
-    (cell @y {# 0 2}))
+    (cell @y (0 2)))
   end)
 
 ;; Feed: M:1, dst full
