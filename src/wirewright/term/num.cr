@@ -796,6 +796,15 @@ module Ww
     def inspect(io)
       ML.compact(io, self)
     end
+
+    def hashrepr : UInt64
+      case @k
+      in Int64, Float64
+        @k.unsafe_as(UInt64)
+      in Pointer(BigRational)
+        to(Float64).unsafe_as(UInt64)
+      end
+    end
   end
 end
 

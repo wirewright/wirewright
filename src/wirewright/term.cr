@@ -897,6 +897,14 @@ module Ww
       end
     end
 
+    # :nodoc:
+    @[Link("xxhash")]
+    lib LibXXH64
+      type State = Void*
+
+      fun hashcode = XXH3_64bits(input : Void*, length : LibC::SizeT) : UInt64
+    end
+
     # Returns the hashcode of *object*. See `hashcode(hasher, object)` overloads
     # to learn about supported types of *object*s.
     def self.hashcode(object) : UInt64
@@ -919,30 +927,27 @@ module Ww
 
     # Appends the hash of a string term *object* to *hasher*.
     def self.hashcode(hasher : Hasher, object : Term::Str) : Hasher
+      # Use XXHash for strings. They can be heavy. Everything else isn't so XXHash
+      # is an overkill versus a few multiplies and XORs.
+      bytes = object.to_slice
+      hashcode = LibXXH64.hashcode(bytes, bytes.size)
+
       hasher << TermType::String
-      object.each_byte do |byte|
-        hasher << byte
-      end
+      hasher << hashcode
       hasher
     end
 
     # Appends the hash of a number term *object* to *hasher*.
     def self.hashcode(hasher : Hasher, object : Term::Num) : Hasher
       hasher << TermType::Number
-      hasher << object.to(Float64) # ?!
+      hasher << object.hashrepr
       hasher
     end
 
     # Appends the hash of a boolean term *object* to *hasher*.
     def self.hashcode(hasher : Hasher, object : Term::Boolean) : Hasher
       hasher << TermType::Boolean
-
-      if object.true?
-        hasher << 1u8
-      else
-        hasher << 0u8
-      end
-
+      hasher << (object.true? ? 1u8 : 0u8)
       hasher
     end
 
@@ -956,16 +961,16 @@ module Ww
     # Appends the hash of a dict term *object* to *hasher*.
     def self.hashcode(hasher : Hasher, object : Term::Dict) : Hasher
       hashcode = object.hashcode do
-        memo = HASHCODE_DICT_TYPE
+        state = HASHCODE_DICT_TYPE
 
         object.each_entry do |key, value|
           pair_hasher = Hasher.new
           pair_hasher = hashcode(pair_hasher, key)
           pair_hasher = hashcode(pair_hasher, value)
-          memo &+= pair_hasher.result
+          state &+= pair_hasher.result
         end
 
-        memo
+        state
       end
 
       hasher << hashcode

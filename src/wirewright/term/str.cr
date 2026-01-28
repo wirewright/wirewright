@@ -26,14 +26,8 @@ module Ww
       Str.new(@value.after_end)
     end
 
-    @[Dncast]
-    def unsafe_byte : UInt8
-      @value.to_unsafe[0]
-    end
-
-    @[Dncast]
-    def each_byte(& : UInt8 ->) : Nil
-      @value.each_byte { |byte| yield byte }
+    def to_slice
+      @value.to_slice
     end
 
     def to?(type : String.class) : String
