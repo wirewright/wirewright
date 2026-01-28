@@ -691,7 +691,6 @@ module Ww
     def self.[](object : Enumerable) : Dict
       Dict.build do |commit|
         object.each_with_index do |el, i|
-          next if el.nil?
           commit.with(i, el)
         end
       end
@@ -704,7 +703,6 @@ module Ww
       def self.[](object : {{cls.id}}) : Dict
         Dict.build do |commit|
           object.each do |k, v|
-            next if v.nil?
             commit.with(k, v)
           end
         end
