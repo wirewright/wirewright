@@ -292,20 +292,6 @@ module ::Ww::Rack
         D7.gnd(node, edges)
       end
 
-      matchpi %{[view (us←((%past @_ min: 1)) _ (@v_ _)) _]} do
-        edges = [] of Term
-        us.items.each_with_index do |u, i|
-          edges << u
-        end
-        edges << v
-
-        D7.gnd(node, edges)
-      end
-
-      matchpi %{[view (@u_ _ (@v_ _)) _]} do
-        D7.gnd(node, u, v)
-      end
-
       matchpi(
         %{[view (ml @u_) (term @v_)]},
         %{[view (ml @u_) (terms @v_)]},
@@ -509,6 +495,8 @@ module ::Ww::Rack
 end
 
 module ::Ww::Rack
+  VIEW_CACHE = SyncCache({Term, Term, Term}, Term).new(capacity: 128, preallocate: true)
+
   # TODO: instead of using Sink::Bag emit Term.compare-ordered dicts.
   def master(clf : D7::Classifier, circuit : Term)
     D7.case(clf, circuit) do
@@ -700,100 +688,62 @@ module ::Ww::Rack
         end
       end
 
-      rule %{(one dev [view (@src_ pattern_ @dst_) template_]) (one src [cell @src_ x_]) (one dst [cell @dst_ _?])} do
-        pattern, template, dst_edge, x = {*first(dev, :pattern, :template, :dst), first(src, :x)}
+      rule %{(one dev [view (@src_ pattern_ @dst_) template_]) (one src [cell @src_ matchee_]) (one dst [cell @dst_ _?])} do
+        pattern, template, dst_edge, matchee = {*first(dev, :pattern, :template, :dst), first(src, :matchee)}
+
+        # TODO: this should probably be a local var passed in context, not a global!
+        if instance = VIEW_CACHE[{pattern, template, matchee}]?
+          next patch(dst, &.morph({2, instance}))
+        end
 
         # Dst disappears on pattern mismatch.
-        unless vars = M1.match?(pattern, x)
+        unless vars = M1.match?(pattern, matchee)
           next patch(dst, &.morph({2, nil}))
         end
 
         instance = Alloy.render(vars, template)
 
-        # TODO: errors as events
-        patches(
-          patch(dev, &.morph({1, 2, {dst_edge, Term.hashcode256(x)}})),
-          patch(dst, &.morph({2, instance})),
-        )
+        VIEW_CACHE[{pattern, template, matchee}] = instance
+
+        patch(dst, &.morph({2, instance}))
       end
 
-      rule %{(one dev [view (@src_ pattern_ (@dst_ state_)) template_]) (one src [cell @src_ x_]) (one dst [cell @dst_ _?])} do
-        pattern, template, dst_edge, state, x = {*first(dev, :pattern, :template, :dst, :state), first(src, :x)}
-        hashcode = Term.of(Term.hashcode256(x))
-        next if state == hashcode
-
-        # Dst disappears on pattern mismatch.
-        unless vars = M1.match?(pattern, x)
-          next patches(
-            patch(dev, &.morph({1, 2, dst_edge})),
-            patch(dst, &.morph({2, nil})),
-          )
-        end
-
-        instance = Alloy.render(vars, template)
-
-        # TODO: errors
-        patches(
-          patch(dev, &.morph({1, 2, {dst_edge, hashcode}})),
-          patch(dst, &.morph({2, instance})),
-        )
-      end
-
-      rule %{(one dev [view (@src_ _ (%any° @dst_ (@dst_ _))) _]) (one src [cell @src_]) (one dst [cell @dst_ _])} do
+      rule %{(one dev [view (@src_ _ @dst_) _]) (one src [cell @src_]) (one dst [cell @dst_ _])} do
         dst_edge = first(dev, :dst)
 
-        patches(
-          patch(dev, &.morph({1, 2, dst_edge})),
-          patch(dst, &.morph({2, nil})),
-        )
+        patch(dst, &.morph({2, nil}))
       end
 
-      rule %{(one dst [cell @dst_ _?]) (link (one dev [view (src←((%past @_ min: 1)) pattern_ output←(%any° @dst_ (@dst_ _))) template_]) (many src [cell @src_ term_]))} do
-        pattern, template, src_edges, dst_edge, output = first(dev, :pattern, :template, :src, :dst, :output)
+      rule %{(one dst [cell @dst_ _?]) (link (one dev [view (src←((%past @_ min: 1)) pattern_ @dst_) template_]) (many src [cell @src_ term_]))} do
+        pattern, template, src_edges, dst_edge = first(dev, :pattern, :template, :src, :dst)
 
         unless src_edges.size == src.size # Some cells missing or duplicated
-          next patches(
-            patch(dev, &.morph({1, 2, dst_edge})),
-            patch(dst, &.morph({2, nil})),
-          )
+          next patch(dst, &.morph({2, nil}))
         end
 
         matchee = collate(src, src_edges.items, Term.of(:src), Term.of(:term))
-        hashcode = Term.hashcode256(matchee)
 
-        cont = -> do
-          unless vars = M1.match?(pattern, matchee)
-            return patches(
-              patch(dev, &.morph({1, 2, dst_edge})),
-              patch(dst, &.morph({2, nil})),
-            )
-          end
-
-          expansion, _ = Alloy.render0(vars, template, severity: :quiet)
-          if expansion.is_a?(Alloy::Err) || (expansion.is_a?(Alloy::Splice) && expansion.offspring.empty?)
-            instance = nil
-          else
-            instance = Alloy.collapse(expansion)
-          end
-          # TODO: errors
-
-          patches(
-            patch(dev, &.morph({1, 2, {dst_edge, hashcode}})),
-            patch(dst, &.morph({2, instance})),
-          )
+        if instance = VIEW_CACHE[{pattern, template, matchee}]?
+          next patch(dst, &.morph({2, instance}))
         end
 
-        Term.case(output) do
-          matchpi %{(@_ state_)} do
-            next if state == hashcode
-
-            cont.call
-          end
-
-          matchpi %{@_} do
-            cont.call
-          end
+        unless vars = M1.match?(pattern, matchee)
+          next patch(dst, &.morph({2, nil}))
         end
+
+        expansion, _ = Alloy.render0(vars, template, severity: :quiet)
+        if expansion.is_a?(Alloy::Err) || (expansion.is_a?(Alloy::Splice) && expansion.offspring.empty?)
+          instance = nil
+        else
+          instance = Alloy.collapse(expansion)
+        end
+        # TODO: errors
+
+        if instance
+          VIEW_CACHE[{pattern, template, matchee}] = instance
+        end
+
+        patch(dst, &.morph({2, instance}))
       end
 
       # TODO: handle src-itself-disappears

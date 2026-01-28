@@ -877,8 +877,8 @@
     (circuit @x
       (group
         (cell @src 100)
-        (view (@src ±n (@voice0 "eqdqbpcEfkffeUewbPdDbTdLcgendjbdbkcweUewdCbPdDbRdFbXdUcveTetdwbB")) ^(+ n 2))
-        (view (@src ±n (@voice1 "eqdqbpcEfkffeUewbPdDbTdLcgendjbdbkcweUewdCbPdDbRdFbXdUcveTetdwbB")) ^(* n 2))
+        (view (@src ±n @voice0) ^(+ n 2))
+        (view (@src ±n @voice1) ^(* n 2))
         (cell @voice0 102)
         (cell @voice1 200)))
     (fb (@x (%all ⟨(cell @src n_)⟩ ⟨(cell @voice0 a_)⟩ ⟨(cell @voice1 b_)⟩))
@@ -887,8 +887,8 @@
     (circuit @x
       (group
         (cell @src 302)
-        (view (@src ±n (@voice0 "fmfgeXeBdNcmexdDbceirHbrcJepdnbicseLegcWAdTcteNekdeRbJdu")) ^(+ n 2))
-        (view (@src ±n (@voice1 "fmfgeXeBdNcmexdDbceirHbrcJepdnbicseLegcWAdTcteNekdeRbJdu")) ^(* n 2))
+        (view (@src ±n @voice0) ^(+ n 2))
+        (view (@src ±n @voice1) ^(* n 2))
         (cell @voice0 304)
         (cell @voice1 604)))
     (fb (@x (%all ⟨(cell @src n_)⟩ ⟨(cell @voice0 a_)⟩ ⟨(cell @voice1 b_)⟩))
@@ -897,8 +897,8 @@
     (circuit @x
       (group
         (cell @src 908)
-        (view (@src ±n (@voice0 "dubxcXCbgcoeCdQfheZeGdYcDfjfceMbPdDbTdLcgeodmbgcEfmfheYeEdUcweU")) ^(+ n 2))
-        (view (@src ±n (@voice1 "dubxcXCbgcoeCdQfheZeGdYcDfjfceMbPdDbTdLcgeodmbgcEfmfheYeEdUcweU")) ^(* n 2))
+        (view (@src ±n @voice0) ^(+ n 2))
+        (view (@src ±n @voice1) ^(* n 2))
         (cell @voice0 910)
         (cell @voice1 1816)))
     (fb (@x (%all ⟨(cell @src n_)⟩ ⟨(cell @voice0 a_)⟩ ⟨(cell @voice1 b_)⟩))
@@ -1597,7 +1597,7 @@
         (cell @v)))
     (delay 1 (cell @foo "Hello World"))
     (appearance local @foo)
-    (view (@f ⟨node←(cell @v _*)⟩ (@n "dkbecjetdvbzdbLdubycZFbocBffeVeVeydFbXdVcxeWeAexdEbVdQcpeEdUcv")) ^node)
+    (view (@f ⟨node←(cell @v _*)⟩ @n) ^node)
     (cell @n (cell @v)))
   (frame
     (circuit @f
@@ -1606,7 +1606,7 @@
         (cell @v)))
     (cell @foo "Hello World")
     (appearance local @foo)
-    (view (@f ⟨node←(cell @v _*)⟩ (@n "dkbecjetdvbzdbLdubycZFbocBffeVeVeydFbXdVcxeWeAexdEbVdQcpeEdUcv")) ^node)
+    (view (@f ⟨node←(cell @v _*)⟩ @n) ^node)
     (cell @n (cell @v)))
   (frame
     (circuit @f
@@ -1615,7 +1615,7 @@
         (cell @v "Hello World")))
     (cell @foo)
     (appearance local @foo)
-    (view (@f ⟨node←(cell @v _*)⟩ (@n "eGdZcFfnfifaeJececcNmxXbVdPcoepdnbicreJedcPnTbKdwbCdgXbVdP")) ^node)
+    (view (@f ⟨node←(cell @v _*)⟩ @n) ^node)
     (cell @n (cell @v "Hello World")))
   end)
 
@@ -1924,7 +1924,7 @@
   (frame
     (cell @x 100)
     (cell @y 200)
-    (view ((@x @y) values_ (@z "HbrcHbcfkvbEdmbgcoeCdQcpeDdzbJdubxcXBbecieFdXcCfheZeGdYcD")) ^values)
+    (view ((@x @y) values_ @z) ^values)
     (cell @z (100 200)))
   end)
 
@@ -1952,7 +1952,7 @@
     (delay 1 (discard @command))
     (cell @name "Mary")
     (cell @age 26)
-    (view ((@command @name @age) (greet name_ age_) (@output "cMisLbxcWAbceXeBdMcierdsbtcMeVeydGbYdXcCfheYeidbLbycZGbqcF"))
+    (view ((@command @name @age) (greet name_ age_) @output)
       ^"Hi, ⸢name⸣ of age ⸢age⸣!")
     (cell @output "Hi, Mary of age 26!"))
   (frame
@@ -1960,7 +1960,7 @@
     (discard @command)
     (cell @name "Mary")
     (cell @age 26)
-    (view ((@command @name @age) (greet name_ age_) (@output "cMisLbxcWAbceXeBdMcierdsbtcMeVeydGbYdXcCfheYeidbLbycZGbqcF"))
+    (view ((@command @name @age) (greet name_ age_) @output)
       ^"Hi, ⸢name⸣ of age ⸢age⸣!")
     (cell @output "Hi, Mary of age 26!"))
   (frame
@@ -1968,7 +1968,7 @@
     (discard @command)
     (cell @name "Mary")
     (cell @age 26)
-    (view ((@command @name @age) (greet name_ age_) (@output "cMisLbxcWAbceXeBdMcierdsbtcMeVeydGbYdXcCfheYeidbLbycZGbqcF"))
+    (view ((@command @name @age) (greet name_ age_) @output)
       ^"Hi, ⸢name⸣ of age ⸢age⸣!")
     (cell @output "Hi, Mary of age 26!"))
   (frame
@@ -1984,7 +1984,7 @@
     (discard @command)
     (cell @name "Mary")
     (cell @age 26)
-    (view ((@command @name @age) (greet name_ age_) (@output "cMisLbxcWAbceXeBdMcierdsbtcMeVeydGbYdXcCfheYeidbLbycZGbqcF"))
+    (view ((@command @name @age) (greet name_ age_) @output)
       ^"Hi, ⸢name⸣ of age ⸢age⸣!")
     (cell @output "Hi, Mary of age 26!"))
   (frame
