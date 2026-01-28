@@ -70,7 +70,8 @@
 (_symbol {¦ -dn-w⫽h: λ'} ⍊ dn-w⫽h: ±λ) <> {λ': ^λ, (λ): ()}
 
 ;; Horizontal message flow.
-⟨{¦ mail/out: M←[m_*]} {¦ -mail/in: m'}⟩ <> {m': ^m, (M): ()}
+(%split _ {¦ mail/out: M←[m_*]} ⟨{¦ -mail/in: m'}⟩)
+  <> {m': ^m, (M): ()}
 
 ;; Positioning trigger flows from the parent to the child.
 (_symbol {¦ -position_} ⍊ position) <> {position: true}
