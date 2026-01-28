@@ -79,7 +79,6 @@ Wirewright wouldn't be possible without these technologies:
 - [PlutoSVG](https://github.com/sammycage/plutosvg)
 - [termbox2](https://github.com/termbox/termbox2)
 - [SDL](https://www.libsdl.org/)
-- [BLAKE3 hash function](https://github.com/BLAKE3-team/BLAKE3)
 
 ## Building
 

@@ -1018,7 +1018,7 @@ module Ww
   struct Term
     # Represents a 256-bit hash of a term using four 64-bit blocks.
     struct H256
-      ALGORITHM = Digest::Blake3
+      ALGORITHM = Digest::SHA256
 
       getter blk0 : UInt64
       getter blk1 : UInt64

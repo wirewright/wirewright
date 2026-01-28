@@ -14,9 +14,6 @@ dependencies:
   sdl:
     github: ysbaddaden/sdl.cr
     commit: 5a22270
-  blake3:
-    github: didactic-drunk/blake3.cr
-    commit: d7ac0b7
   sync:
     github: ysbaddaden/sync
   zstd:
