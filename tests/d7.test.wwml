@@ -861,48 +861,29 @@
     (queue (@front @back max: 3.14) ()))
   end)
 
-;; An observer can make decisions based on its children and feed them back.
+;; circuit: An observer can make decisions based on its children and feed them back.
 (d7
   (frame
     (circuit @x
-      (group
-        (cell @src 100)
-        (view (@src ±n @voice0) ^(+ n 2))
-        (view (@src ±n @voice1) ^(* n 2))
-        (cell @voice0)
-        (cell @voice1)))
+      (cell @src 100)
+      (view (@src ±n @voice0) ^(+ n 2))
+      (view (@src ±n @voice1) ^(* n 2))
+      (cell @voice0)
+      (cell @voice1))
     (fb (@x (%all ⟨(cell @src n_)⟩ ⟨(cell @voice0 a_)⟩ ⟨(cell @voice1 b_)⟩))
       {n: ^(+ a b)}))
-  (frame
-    (circuit @x
-      (group
-        (cell @src 100)
-        (view (@src ±n @voice0) ^(+ n 2))
-        (view (@src ±n @voice1) ^(* n 2))
-        (cell @voice0 102)
-        (cell @voice1 200)))
-    (fb (@x (%all ⟨(cell @src n_)⟩ ⟨(cell @voice0 a_)⟩ ⟨(cell @voice1 b_)⟩))
-      {n: ^(+ a b)}))
-  (frame
-    (circuit @x
-      (group
-        (cell @src 302)
-        (view (@src ±n @voice0) ^(+ n 2))
-        (view (@src ±n @voice1) ^(* n 2))
-        (cell @voice0 304)
-        (cell @voice1 604)))
-    (fb (@x (%all ⟨(cell @src n_)⟩ ⟨(cell @voice0 a_)⟩ ⟨(cell @voice1 b_)⟩))
-      {n: ^(+ a b)}))
-  (frame
-    (circuit @x
-      (group
-        (cell @src 908)
-        (view (@src ±n @voice0) ^(+ n 2))
-        (view (@src ±n @voice1) ^(* n 2))
-        (cell @voice0 910)
-        (cell @voice1 1816)))
-    (fb (@x (%all ⟨(cell @src n_)⟩ ⟨(cell @voice0 a_)⟩ ⟨(cell @voice1 b_)⟩))
-      {n: ^(+ a b)})))
+  (frame pattern: true
+    ⟪[cell @src 100]
+     [cell @voice0 102]
+     [cell @voice1 200]⟫)
+  (frame pattern: true
+    ⟪[cell @src 302]
+     [cell @voice0 304]
+     [cell @voice1 604]⟫)
+  (frame pattern: true
+    ⟪[cell @src 908]
+     [cell @voice0 910]
+     [cell @voice1 1816]⟫))
   ;; ...
 
 ;; Nested (observed) delays are decremented once per tick.
@@ -910,51 +891,45 @@
   (frame
     (delay 3 "Foo")
     (circuit @x
-      (group
-        (delay 2 "Bar")
-        (delay 5 "Baz")
-        (circuit @y
-          (delay 3 "boo")))))
+      (delay 2 "Bar")
+      (delay 5 "Baz")
+      (circuit @y
+        (delay 3 "boo"))))
   (frame
     (delay 2 "Foo")
     (circuit @x
-      (group
-        (delay 1 "Bar")
-        (delay 4 "Baz")
-        (circuit @y
-          (delay 2 "boo")))))
+      (delay 1 "Bar")
+      (delay 4 "Baz")
+      (circuit @y
+        (delay 2 "boo"))))
   (frame
     (delay 1 "Foo")
     (circuit @x
-      (group
-        "Bar"
-        (delay 3 "Baz")
-        (circuit @y
-          (delay 1 "boo")))))
+      "Bar"
+      (delay 3 "Baz")
+      (circuit @y
+        (delay 1 "boo"))))
   (frame
     "Foo"
     (circuit @x
-      (group
-        "Bar"
-        (delay 2 "Baz")
-        (circuit @y
-          "boo"))))
+      "Bar"
+      (delay 2 "Baz")
+      (circuit @y
+        "boo")))
   (frame
     "Foo"
     (circuit @x
-      (group
-        "Bar"
-        (delay 1 "Baz")
-        (circuit @y
-          "boo"))))
+      "Bar"
+      (delay 1 "Baz")
+      (circuit @y
+        "boo")))
   (frame
     "Foo"
     (circuit @x
-      (group
-        "Bar"
-        "Baz"
-        (circuit @y
-          "boo")))))
+      "Bar"
+      "Baz"
+      (circuit @y
+        "boo"))))
 
 ;; Ditto
 (d7
@@ -963,86 +938,179 @@
     (cell @x-view)
     (feed (copy @x) (over @x-view))
     (circuit @x
-      (group
-        (delay 3 "Bar")
-        (cell @y-view)
-        (feed (copy @y) (over @y-view))
-        (circuit @y (delay 3 "Baz")))))
+      (delay 3 "Bar")
+      (cell @y-view)
+      (feed (copy @y) (over @y-view))
+      (circuit @y (delay 3 "Baz"))))
   (frame
     (delay 2 "Foo")
     (cell @x-view
-      (group
-        (delay 3 "Bar")
-        (cell @y-view)
-        (feed (copy @y) (over @y-view))
-        (circuit @y (delay 3 "Baz"))))
+      ((delay 3 "Bar")
+       (cell @y-view)
+       (feed (copy @y) (over @y-view))
+       (circuit @y (delay 3 "Baz"))))
     (feed (copy @x) (over @x-view))
     (circuit @x
-      (group
-        (delay 2 "Bar")
-        (cell @y-view (delay 3 "Baz"))
-        (feed (copy @y) (over @y-view))
-        (circuit @y (delay 2 "Baz")))))
+      (delay 2 "Bar")
+      (cell @y-view ((delay 3 "Baz")))
+      (feed (copy @y) (over @y-view))
+      (circuit @y (delay 2 "Baz"))))
   (frame
     (delay 1 "Foo")
     (cell @x-view
-      (group
-        (delay 2 "Bar")
-        (cell @y-view (delay 3 "Baz"))
-        (feed (copy @y) (over @y-view))
-        (circuit @y (delay 2 "Baz"))))
+      ((delay 2 "Bar")
+       (cell @y-view ((delay 3 "Baz")))
+       (feed (copy @y) (over @y-view))
+       (circuit @y (delay 2 "Baz"))))
     (feed (copy @x) (over @x-view))
     (circuit @x
-      (group
-        (delay 1 "Bar")
-        (cell @y-view (delay 2 "Baz"))
-        (feed (copy @y) (over @y-view))
-        (circuit @y (delay 1 "Baz")))))
+      (delay 1 "Bar")
+      (cell @y-view ((delay 2 "Baz")))
+      (feed (copy @y) (over @y-view))
+      (circuit @y (delay 1 "Baz"))))
   (frame
     "Foo"
     (cell @x-view
-      (group
-        (delay 1 "Bar")
-        (cell @y-view (delay 2 "Baz"))
-        (feed (copy @y) (over @y-view))
-        (circuit @y (delay 1 "Baz"))))
+      ((delay 1 "Bar")
+       (cell @y-view ((delay 2 "Baz")))
+       (feed (copy @y) (over @y-view))
+       (circuit @y (delay 1 "Baz"))))
     (feed (copy @x) (over @x-view))
     (circuit @x
-      (group
-        "Bar"
-        (cell @y-view (delay 1 "Baz"))
-        (feed (copy @y) (over @y-view))
-        (circuit @y "Baz"))))
+      "Bar"
+      (cell @y-view ((delay 1 "Baz")))
+      (feed (copy @y) (over @y-view))
+      (circuit @y "Baz")))
   (frame
     "Foo"
     (cell @x-view
-      (group
-        "Bar"
-        (cell @y-view (delay 1 "Baz"))
-        (feed (copy @y) (over @y-view))
-        (circuit @y "Baz")))
+      ("Bar"
+       (cell @y-view ((delay 1 "Baz")))
+       (feed (copy @y) (over @y-view))
+       (circuit @y "Baz")))
     (feed (copy @x) (over @x-view))
     (circuit @x
-      (group
-        "Bar"
-        (cell @y-view "Baz")
-        (feed (copy @y) (over @y-view))
-        (circuit @y "Baz"))))
+      "Bar"
+      (cell @y-view ("Baz"))
+      (feed (copy @y) (over @y-view))
+      (circuit @y "Baz")))
   (frame
     "Foo"
     (cell @x-view
-      (group
-        "Bar"
-        (cell @y-view "Baz")
-        (feed (copy @y) (over @y-view))
-        (circuit @y "Baz")))
+      ("Bar"
+       (cell @y-view ("Baz"))
+       (feed (copy @y) (over @y-view))
+       (circuit @y "Baz")))
     (feed (copy @x) (over @x-view))
     (circuit @x
-      (group
-        "Bar"
-        (cell @y-view "Baz")
-        (feed (copy @y) (over @y-view))
-        (circuit @y "Baz"))))
+      "Bar"
+      (cell @y-view ("Baz"))
+      (feed (copy @y) (over @y-view))
+      (circuit @y "Baz")))
+  end)
+
+;; circuit queue using filtered circuit
+(d7
+  (frame
+    (circuit (@front (front_ _*))
+      a b c)
+    (feed @front @foo)
+    (cell @foo)
+    (feed @foo @bar)
+    (cell @bar)
+    (discard @bar))
+  (frame
+    (circuit (@front (front_ _*))
+      b c)
+    (feed @front @foo)
+    (cell @foo a)
+    (feed @foo @bar)
+    (cell @bar)
+    (discard @bar))
+  (frame
+    (circuit (@front (front_ _*))
+      b c)
+    (feed @front @foo)
+    (cell @foo)
+    (feed @foo @bar)
+    (cell @bar a)
+    (discard @bar))
+  (frame
+    (circuit (@front (front_ _*))
+      c)
+    (feed @front @foo)
+    (cell @foo b)
+    (feed @foo @bar)
+    (cell @bar)
+    (discard @bar))
+  (frame
+    (circuit (@front (front_ _*))
+      c)
+    (feed @front @foo)
+    (cell @foo)
+    (feed @foo @bar)
+    (cell @bar b)
+    (discard @bar))
+  (frame
+    (circuit (@front (front_ _*)))
+    (feed @front @foo)
+    (cell @foo c)
+    (feed @foo @bar)
+    (cell @bar)
+    (discard @bar))
+  (frame
+    (circuit (@front (front_ _*)))
+    (feed @front @foo)
+    (cell @foo)
+    (feed @foo @bar)
+    (cell @bar c)
+    (discard @bar))
+  (frame
+    (circuit (@front (front_ _*)))
+    (feed @front @foo)
+    (cell @foo)
+    (feed @foo @bar)
+    (cell @bar)
+    (discard @bar))
+  end)
+
+;; cell queue using filtered cell
+(d7
+  (frame
+    (cell (@front (front_ _*)) (a b c))
+    (feed @front @foo)
+    (cell @foo)
+    (discard @foo))
+  (frame
+    (cell (@front (front_ _*)) (b c))
+    (feed @front @foo)
+    (cell @foo a)
+    (discard @foo))
+  (frame
+    (cell (@front (front_ _*)) (b c))
+    (feed @front @foo)
+    (cell @foo)
+    (discard @foo))
+  (frame
+    (cell (@front (front_ _*)) (c))
+    (feed @front @foo)
+    (cell @foo b)
+    (discard @foo))
+  (frame
+    (cell (@front (front_ _*)) (c))
+    (feed @front @foo)
+    (cell @foo)
+    (discard @foo))
+  (frame
+    (cell (@front (front_ _*)) ())
+    (feed @front @foo)
+    (cell @foo c)
+    (discard @foo))
+  (frame
+    (cell (@front (front_ _*)) ())
+    (feed @front @foo)
+    (cell @foo)
+    (discard @foo))
   end)
 
 ;; Sensor-appearance chan 1:1
@@ -1219,10 +1287,9 @@
     (module {}
       (circuit @s)
       (sensor (local ±n @s)
-        (group
-          (cell @v)
-          (sensor (local (arg x←(%number _ < ^n)) @v)
-            ^^(+ x 1))))))
+        ((cell @v)
+         (sensor (local (arg x←(%number _ < ^n)) @v)
+           ^^(+ x 1))))))
   (frame
     (module {}
       (cell @val)
@@ -1235,15 +1302,13 @@
       (appearance local @val))
     (module {}
       (circuit @s
-        (group
-          (cell @v)
-          (sensor (local (arg x←(%number _ < 100)) @v)
-            ^(+ x 1))))
+        (cell @v)
+        (sensor (local (arg x←(%number _ < 100)) @v)
+          ^(+ x 1)))
       (sensor (local ±n @s)
-        (group
-          (cell @v)
-          (sensor (local (arg x←(%number _ < ^n)) @v)
-            ^^(+ x 1))))))
+        ((cell @v)
+         (sensor (local (arg x←(%number _ < ^n)) @v)
+           ^^(+ x 1))))))
   (frame
     (module {}
       (cell @val)
@@ -1256,15 +1321,13 @@
       (appearance local @val))
     (module {}
       (circuit @s
-        (group
-          (cell @v 51)
-          (sensor (local (arg x←(%number _ < 100)) @v)
-            ^(+ x 1))))
+        (cell @v 51)
+        (sensor (local (arg x←(%number _ < 100)) @v)
+          ^(+ x 1)))
       (sensor (local ±n @s)
-        (group
-          (cell @v)
-          (sensor (local (arg x←(%number _ < ^n)) @v)
-            ^^(+ x 1))))))
+        ((cell @v)
+         (sensor (local (arg x←(%number _ < ^n)) @v)
+           ^^(+ x 1))))))
   end)
 
 ;; Sensor-appearance chan conditional receive
@@ -1583,36 +1646,32 @@
 (d7
   (frame
     (circuit @f
-      (group
-        (sensor (local x_ @v) ^x)
-        (cell @v)))
+      (sensor (local x_ @v) ^x)
+      (cell @v))
     (delay 2 (cell @foo "Hello World"))
     (appearance local @foo)
     (view (@f ⟨node←(cell @v _*)⟩ @n) ^node)
     (cell @n))
   (frame
     (circuit @f
-      (group
-        (sensor (local x_ @v) ^x)
-        (cell @v)))
+      (sensor (local x_ @v) ^x)
+      (cell @v))
     (delay 1 (cell @foo "Hello World"))
     (appearance local @foo)
     (view (@f ⟨node←(cell @v _*)⟩ @n) ^node)
     (cell @n (cell @v)))
   (frame
     (circuit @f
-      (group
-        (sensor (local x_ @v) ^x)
-        (cell @v)))
+      (sensor (local x_ @v) ^x)
+      (cell @v))
     (cell @foo "Hello World")
     (appearance local @foo)
     (view (@f ⟨node←(cell @v _*)⟩ @n) ^node)
     (cell @n (cell @v)))
   (frame
     (circuit @f
-      (group
-        (sensor (local x_ @v) ^x)
-        (cell @v "Hello World")))
+      (sensor (local x_ @v) ^x)
+      (cell @v "Hello World"))
     (cell @foo)
     (appearance local @foo)
     (view (@f ⟨node←(cell @v _*)⟩ @n) ^node)
@@ -2315,48 +2374,34 @@
       ((%split° (_* a←r) (I D←(%number _ > 0)) _)) <> {a: l, D: ^(- D 1)}
       ((%split° _ (I D←(%number _ > 0)) (a←l _*))) <> {a: r, D: ^(- D 1)}
       (⟨W←(I 0)⟩°) <> {(W): ()}))
-  (frame m1: true
-    (cell @x (. r . l .))
-    _*)
-  (frame m1: true
-    (cell @x (. . r l .)) ;; r wins because its rule is defined later
-    _*)
-  (frame m1: true
-    (cell @x (. . l (I 3) r .))
-    _*)
-  (frame m1: true
-    (cell @x (. l . (I 3) . r))
-    _*)
-  (frame m1: true
-    (cell @x (l . . (I 3) . l))
-    _*)
-  (frame m1: true
-    (cell @x (r . . (I 3) l .))
-    _*)
-  (frame m1: true
-    (cell @x (. r . (I 2) r .))
-    _*)
-  (frame m1: true
-    (cell @x (. . r (I 2) . r))
-    _*)
-  (frame m1: true
-    (cell @x (. . l (I 1) . l))
-    _*)
-  (frame m1: true
-    (cell @x (. l . (I 1) l .))
-    _*)
-  (frame m1: true
-    (cell @x (l . . (I 0) r .))
-    _*)
-  (frame m1: true
-    (cell @x (r . . . r))
-    _*)
-  (frame m1: true
-    (cell @x (. r . . l))
-    _*)
-  (frame m1: true
-    (cell @x (. . r l .))
-    _*))
+  (frame pattern: true
+    ⟨(cell @x (. r . l .))⟩)
+  (frame pattern: true
+    ⟨(cell @x (. . r l .))⟩) ;; r wins because its rule is defined later
+  (frame pattern: true
+    ⟨(cell @x (. . l (I 3) r .))⟩)
+  (frame pattern: true
+    ⟨(cell @x (. l . (I 3) . r))⟩)
+  (frame pattern: true
+    ⟨(cell @x (l . . (I 3) . l))⟩)
+  (frame pattern: true
+    ⟨(cell @x (r . . (I 3) l .))⟩)
+  (frame pattern: true
+    ⟨(cell @x (. r . (I 2) r .))⟩)
+  (frame pattern: true
+    ⟨(cell @x (. . r (I 2) . r))⟩)
+  (frame pattern: true
+    ⟨(cell @x (. . l (I 1) . l))⟩)
+  (frame pattern: true
+    ⟨(cell @x (. l . (I 1) l .))⟩)
+  (frame pattern: true
+    ⟨(cell @x (l . . (I 0) r .))⟩)
+  (frame pattern: true
+    ⟨(cell @x (r . . . r))⟩)
+  (frame pattern: true
+    ⟨(cell @x (. r . . l))⟩)
+  (frame pattern: true
+    ⟨(cell @x (. . r l .))⟩))
   ;; ...
 
 ;; backsys: pyramidal (bottom-up-bottom, presentational) feedback essentials
@@ -2377,66 +2422,60 @@
       ((%all (%leaves (%flat (_ n) ns_) (cell @_ ±n ⍊ output))
               ⟪(cell @_ (%group dst_ _?) ⍊ input)⟫°))
         <> {dst: ^ns}))
-  (frame m1: true
+  (frame pattern: true
     ⟪[cell @sum 2]
      [cell @view0 (1 1)]
      [cell @product 1]
-     [cell @view1 (1 1)]⟫
-    _*)
-  (frame m1: true
+     [cell @view1 (1 1)]⟫)
+  (frame pattern: true
     ⟪[cell @sum 3]
      [cell @view0 (2 1)]
      [cell @product 2]
-     [cell @view1 (2 1)]⟫
-    _*)
-  (frame m1: true
+     [cell @view1 (2 1)]⟫)
+  (frame pattern: true
     ⟪[cell @sum 5]
      [cell @view0 (3 2)]
      [cell @product 6]
-     [cell @view1 (3 2)]⟫
-    _*)
-  (frame m1: true
+     [cell @view1 (3 2)]⟫)
+  (frame pattern: true
     ⟪[cell @sum 11]
      [cell @view0 (5 6)]
      [cell @product 30]
-     [cell @view1 (5 6)]⟫
-    _*)
-  (frame m1: true
+     [cell @view1 (5 6)]⟫)
+  (frame pattern: true
     ⟪[cell @sum 41]
      [cell @view0 (11 30)]
      [cell @product 330]
-     [cell @view1 (11 30)]⟫
-    _*))
+     [cell @view1 (11 30)]⟫))
   ;; ...
 
 ;; backsys: a very simple self-embodied program
 (d7
   (frame
     ;; "objective reality"
-    (circuit (@world (group world_*))
-      (group
-        food
-        .
-        .
-        (module {}
-          ;; "subjective reality" supplied by "sensory organs" (here the outer
-          ;; world just magically plugs things in)
-          (cell @behind behind: true)
-          (cell @ahead ahead: true)
-          ;; "laws of physics in the subjective reality"
-          ;; "brain"
-          (backsys (@behind @ahead @action)
-            (_ _ A←eat-above) <> {A: go-up}
-            (_ _ A←eat-below) <> {A: go-dn}
-            ((_* food) _ A←go-up) <> {A: eat-above}
-            (_ (food _*) A←go-dn) <> {A: eat-below}
-            (() _ A←go-up) <> {A: go-dn}
-            (_ () A←go-dn) <> {A: go-up})
-          ;; "body"/"muscle"
-          (cell @action go-dn action: true))
-        .
-        .
-        .))
+    (circuit @world
+      food
+      .
+      .
+      (module {}
+        ;; "subjective reality" supplied by "sensory organs" (here the outer
+        ;; world just magically plugs things in)
+        (cell @behind behind: true)
+        (cell @ahead ahead: true)
+        ;; "laws of physics in the subjective reality"
+        ;; "brain"
+        (backsys (@behind @ahead @action)
+          (_ _ A←eat-above) <> {A: go-up}
+          (_ _ A←eat-below) <> {A: go-dn}
+          ((_* food) _ A←go-up) <> {A: eat-above}
+          (_ (food _*) A←go-dn) <> {A: eat-below}
+          (() _ A←go-up) <> {A: go-dn}
+          (_ () A←go-dn) <> {A: go-up})
+        ;; "body"/"muscle"
+        (cell @action go-dn action: true))
+      .
+      .
+      .)
     ;; "laws of physics in the objective reality"
     (backsys (@world)
       ((%split° behind_ ⟨(cell @_ (%optional () dst_) ⍊ behind)⟩ _)) <> {dst: ^behind}
@@ -2445,90 +2484,75 @@
       (⟨⟪(cell @_ eat-below ⍊ action)⟫ D_⟩°) <> {(D): ()}
       (⟨U←. D←⟪(cell @_ go-up ⍊ action)⟫⟩°) <> {U: ^D, D: ^U}
       (⟨U←⟪(cell @_ go-dn ⍊ action)⟫ D←.⟩°) <> {U: ^D, D: ^U}))
-  (frame m1: true
-    ⟪(group food . . . M_dict . .)⟫
-    _*)
-  (frame m1: true
-    ⟪(group food . . . . M_dict .)⟫
-    _*)
-  (frame m1: true
-    ⟪(group food . . . . . M_dict)⟫
-    _*)
-  (frame m1: true
-    ⟪(group food . . . . . M_dict)⟫ ;; go-dn -> go-up
-    _*)
-  (frame m1: true
-    ⟪(group food . . . . M_dict .)⟫
-    _*)
-  (frame m1: true
-    ⟪(group food . . . M_dict . .)⟫
-    _*)
-  (frame m1: true
-    ⟪(group food . . M_dict . . .)⟫
-    _*)
-  (frame m1: true
-    ⟪(group food . M_dict . . . .)⟫
-    _*)
-  (frame m1: true
-    ⟪(group food M_dict . . . . .)⟫
-    _*)
-  (frame m1: true
-    ⟪(group food M_dict . . . . .)⟫ ;; go-up -> eat-above
-    _*)
-  (frame m1: true
-    ⟪(group M_dict . . . . .)⟫ ;; eat-above -> go-up
-    _*)
-  (frame m1: true
-    ⟪(group M_dict . . . . .)⟫ ;; go-up -> go-dn
-    _*)
-  (frame m1: true
-    ⟪(group . M_dict . . . .)⟫
-    _*)
-  (frame m1: true
-    ⟪(group . . M_dict . . .)⟫
-    _*))
+  (frame pattern: true
+    ⟪(circuit @world food . . . M_dict . .)⟫)
+  (frame pattern: true
+    ⟪(circuit @world food . . . . M_dict .)⟫)
+  (frame pattern: true
+    ⟪(circuit @world food . . . . . M_dict)⟫)
+  (frame pattern: true
+    ⟪(circuit @world food . . . . . M_dict)⟫) ;; go-dn -> go-up
+  (frame pattern: true
+    ⟪(circuit @world food . . . . M_dict .)⟫)
+  (frame pattern: true
+    ⟪(circuit @world food . . . M_dict . .)⟫)
+  (frame pattern: true
+    ⟪(circuit @world food . . M_dict . . .)⟫)
+  (frame pattern: true
+    ⟪(circuit @world food . M_dict . . . .)⟫)
+  (frame pattern: true
+    ⟪(circuit @world food M_dict . . . . .)⟫)
+  (frame pattern: true
+    ⟪(circuit @world food M_dict . . . . .)⟫) ;; go-up -> eat-above
+  (frame pattern: true
+    ⟪(circuit @world M_dict . . . . .)⟫) ;; eat-above -> go-up
+  (frame pattern: true
+    ⟪(circuit @world M_dict . . . . .)⟫) ;; go-up -> go-dn
+  (frame pattern: true
+    ⟪(circuit @world . M_dict . . . .)⟫)
+  (frame pattern: true
+    ⟪(circuit @world . . M_dict . . .)⟫))
 
 ;; Multiple agents
 (d7
   (frame
-    (circuit (@world (group world_*))
-      (group
-        food
-        .
-        .
-        (module {}
-          (cell @behind behind: true)
-          (cell @ahead ahead: true)
-          (backsys (@behind @ahead @action)
-            (_ _ A←eat-above) <> {A: go-up}
-            (_ _ A←eat-below) <> {A: go-dn}
-            ((_* food) _ A←go-up) <> {A: eat-above}
-            (_ ((agent go-up) _*) A←go-dn) <> {A: go-up}
-            (_ (food _*) A←go-dn) <> {A: eat-below}
-            (() _ A←go-up) <> {A: go-dn}
-            (_ () A←go-dn) <> {A: go-up})
-          (cell @action go-up action: true))
-        .
-        .
-        .
-        (module {}
-          (cell @behind behind: true)
-          (cell @ahead ahead: true)
-          (backsys (@behind @ahead @action)
-            (_ _ A←eat-above) <> {A: go-up}
-            (_ _ A←eat-below) <> {A: go-dn}
-            ((_* food) _ A←go-up) <> {A: eat-above}
-            (_ ((agent go-up) _*) A←go-dn) <> {A: go-up}
-            (_ (food _*) A←go-dn) <> {A: eat-below}
-            (() _ A←go-up) <> {A: go-dn}
-            (_ () A←go-dn) <> {A: go-up})
-          (cell @action go-dn action: true))
-        .
-        .
-        .
-        .
-        food
-        .))
+    (circuit @world
+      food
+      .
+      .
+      (module {}
+        (cell @behind behind: true)
+        (cell @ahead ahead: true)
+        (backsys (@behind @ahead @action)
+          (_ _ A←eat-above) <> {A: go-up}
+          (_ _ A←eat-below) <> {A: go-dn}
+          ((_* food) _ A←go-up) <> {A: eat-above}
+          (_ ((agent go-up) _*) A←go-dn) <> {A: go-up}
+          (_ (food _*) A←go-dn) <> {A: eat-below}
+          (() _ A←go-up) <> {A: go-dn}
+          (_ () A←go-dn) <> {A: go-up})
+        (cell @action go-up action: true))
+      .
+      .
+      .
+      (module {}
+        (cell @behind behind: true)
+        (cell @ahead ahead: true)
+        (backsys (@behind @ahead @action)
+          (_ _ A←eat-above) <> {A: go-up}
+          (_ _ A←eat-below) <> {A: go-dn}
+          ((_* food) _ A←go-up) <> {A: eat-above}
+          (_ ((agent go-up) _*) A←go-dn) <> {A: go-up}
+          (_ (food _*) A←go-dn) <> {A: eat-below}
+          (() _ A←go-up) <> {A: go-dn}
+          (_ () A←go-dn) <> {A: go-up})
+        (cell @action go-dn action: true))
+      .
+      .
+      .
+      .
+      food
+      .)
     ;; gosh this looks awful ... we should probably do something about it should we?
     (backsys (@world)
       (W←(%split° behind_ ⟨(cell @_ (%optional () dst_) ⍊ behind)⟩ _ wide: true))
@@ -2543,68 +2567,47 @@
         <> {(post U): ^(up D), (post D): ^(up U)}
       (⟨U←⟪(cell @_ go-dn ⍊ action)⟫ D←.⟩°)
         <> {(post U): ^(up D), (post D): ^(up U)}))
-  (frame m1: true
-    ⟪(group food . M0_dict . . . . . M1_dict . . . food .)⟫
-    _*)
-  (frame m1: true
-    ⟪(group food M0_dict . . . . . . . M1_dict . . food .)⟫
-    _*)
-  (frame m1: true
-    ⟪(group food M0_dict . . . . . . . . M1_dict . food .)⟫ ;; M0: go-up -> eat-above
-    _*)
-  (frame m1: true
-    ⟪(group M0_dict . . . . . . . . . M1_dict food .)⟫ ;; M0: eat-above -> go-up
-    _*)
-  (frame m1: true
-    ⟪(group M0_dict . . . . . . . . . M1_dict food .)⟫ ;; M0: go-up -> go-dn, M1: go-dn -> eat-below
-    _*)
-  (frame m1: true
-    ⟪(group . M0_dict . . . . . . . . M1_dict .)⟫ ;; M1: eat-below->go-dn
-    _*)
-  (frame m1: true
-    ⟪(group . . M0_dict . . . . . . . . M1_dict)⟫
-    _*)
-  (frame m1: true
-    ⟪(group . . . M0_dict . . . . . . . M1_dict)⟫ ;; M1: go-dn->go-up
-    _*)
-  (frame m1: true
-    ⟪(group . . . . M0_dict . . . . . . M1_dict)⟫
-    _*)
-  (frame m1: true
-    ⟪(group . . . . . M0_dict . . . . M1_dict .)⟫
-    _*)
-  (frame m1: true
-    ⟪(group . . . . . . M0_dict . . M1_dict . .)⟫
-    _*)
-  (frame m1: true
-    ⟪(group . . . . . . . M0_dict M1_dict . . .)⟫
-    _*)
-  (frame m1: true
-    ⟪(group . . . . . . . M0_dict M1_dict . . .)⟫ ;; M0: go-dn->go-up
-    _*)
-  (frame m1: true
-    ⟪(group . . . . . . M0_dict . M1_dict . . .)⟫
-    _*)
-  (frame m1: true
-    ⟪(group . . . . . M0_dict . M1_dict . . . .)⟫
-    _*)
-  (frame m1: true
-    ⟪(group . . . . M0_dict . M1_dict . . . . .)⟫
-    _*)
-  (frame m1: true
-    ⟪(group . . . M0_dict . M1_dict . . . . . .)⟫
-    _*)
-  (frame m1: true
-    ⟪(group . . M0_dict . M1_dict . . . . . . .)⟫
-    _*)
-  (frame m1: true
-    ⟪(group . M0_dict . M1_dict . . . . . . . .)⟫
-    _*)
-  (frame m1: true
-    ⟪(group M0_dict . M1_dict . . . . . . . . .)⟫
-    _*)
-  (frame m1: true
-    ⟪(group M0_dict M1_dict . . . . . . . . . .)⟫ ;; M0: go-up->go-dn
-    _*))
+  (frame pattern: true
+    ⟪(circuit @world food . M0_dict . . . . . M1_dict . . . food .)⟫)
+  (frame pattern: true
+    ⟪(circuit @world food M0_dict . . . . . . . M1_dict . . food .)⟫)
+  (frame pattern: true
+    ⟪(circuit @world food M0_dict . . . . . . . . M1_dict . food .)⟫) ;; M0: go-up -> eat-above
+  (frame pattern: true
+    ⟪(circuit @world M0_dict . . . . . . . . . M1_dict food .)⟫) ;; M0: eat-above -> go-up
+  (frame pattern: true
+    ⟪(circuit @world M0_dict . . . . . . . . . M1_dict food .)⟫) ;; M0: go-up -> go-dn, M1: go-dn -> eat-below
+  (frame pattern: true
+    ⟪(circuit @world . M0_dict . . . . . . . . M1_dict .)⟫) ;; M1: eat-below->go-dn
+  (frame pattern: true
+    ⟪(circuit @world . . M0_dict . . . . . . . . M1_dict)⟫)
+  (frame pattern: true
+    ⟪(circuit @world . . . M0_dict . . . . . . . M1_dict)⟫) ;; M1: go-dn->go-up
+  (frame pattern: true
+    ⟪(circuit @world . . . . M0_dict . . . . . . M1_dict)⟫)
+  (frame pattern: true
+    ⟪(circuit @world . . . . . M0_dict . . . . M1_dict .)⟫)
+  (frame pattern: true
+    ⟪(circuit @world . . . . . . M0_dict . . M1_dict . .)⟫)
+  (frame pattern: true
+    ⟪(circuit @world . . . . . . . M0_dict M1_dict . . .)⟫)
+  (frame pattern: true
+    ⟪(circuit @world . . . . . . . M0_dict M1_dict . . .)⟫) ;; M0: go-dn->go-up
+  (frame pattern: true
+    ⟪(circuit @world . . . . . . M0_dict . M1_dict . . .)⟫)
+  (frame pattern: true
+    ⟪(circuit @world . . . . . M0_dict . M1_dict . . . .)⟫)
+  (frame pattern: true
+    ⟪(circuit @world . . . . M0_dict . M1_dict . . . . .)⟫)
+  (frame pattern: true
+    ⟪(circuit @world . . . M0_dict . M1_dict . . . . . .)⟫)
+  (frame pattern: true
+    ⟪(circuit @world . . M0_dict . M1_dict . . . . . . .)⟫)
+  (frame pattern: true
+    ⟪(circuit @world . M0_dict . M1_dict . . . . . . . .)⟫)
+  (frame pattern: true
+    ⟪(circuit @world M0_dict . M1_dict . . . . . . . . .)⟫)
+  (frame pattern: true
+    ⟪(circuit @world M0_dict M1_dict . . . . . . . . . .)⟫)) ;; M0: go-up->go-dn
   ;; They're stuck now: M0 is go-dn, M1 is go-up.
   ;; This is the point where the ruleset breaks.

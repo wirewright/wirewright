@@ -159,54 +159,70 @@ module ::Ww::Rack
   # :nodoc:
   def classify0(node : Term) : D7::Feature
     PatternSet.case(node) do
-      matchpi %{[circuit (@edge_ pattern_) _]} do
-        D7.circuit(node.as_d, 2...3) do |node|
-          _, _, value0 = node
-          _, capture = edge
-          next D7.inert(node) unless M1.probably_matches?(pattern, value0)
-          next D7.inert(node) unless env = M1.match?(pattern, value0)
+      matchpi %{[circuit (@edge_ pattern_) children0_*]} do
+        _, capture = edge
 
-          unless view0 = env[capture]?
+        D7.circuit(node.as_d, 2...node.itemsize) do
+          if children0.empty?
             next D7.inert(node)
           end
 
-          mix0 = Term.of(:cell, edge, view0)
+          next D7.inert(node) unless M1.probably_matches?(pattern, children0)
+          next D7.inert(node) unless env = M1.match?(pattern, children0)
 
-          D7.mixture(node, mix0) do |node0, mix1|
+          if view0 = env[capture]?
+            mix0 = Term.of(:cell, edge, view0)
+          else
+            mix0 = Term.of(:cell, edge)
+          end
+
+          D7.mixture(node, mix0) do |mix1|
             backspec = Term[]
 
             Term.case(mix1) do
-              matchpi %{(cell @_)} { backspec = Term.entries({ { {capture}, Term[] } }) }
-              matchpi %{(cell @_ view1_)} { backspec = Term.entries({ { {capture}, view1 } }) }
+              matchpi %{(cell @_)} do
+                backspec = Term.entries({ { {capture}, Term[] } })
+              end
+
+              matchpi %{(cell @_ value_)} do
+                backspec = Term.entries({ {capture, Term.of(:"^verbatim", value)} })
+              end
             end
 
-            value1 = M1.backmap(pattern, Term.of(backspec), value0)
+            children1 = M1.backmap(pattern, Term.of(backspec), children0)
 
-            Term.of(node0.morph({2, value1}))
+            Term.of(node.replace(Term[2]...Term[node.itemsize], &.concat(children1.items)))
           end
         end
       end
 
-      matchpi %{[circuit @edge_ _]} do
-        D7.circuit(node.as_d, 2...3) do |node1|
-          _, _, value0 = node
+      matchpi %{[circuit @edge_ children0_*]} do
+        D7.circuit(node.as_d, 2...node.itemsize) do
+          if children0.empty?
+            mix0 = Term.of(:cell, edge)
+          else
+            mix0 = Term.of(:cell, edge, children0)
+          end
 
-          mix0 = Term.of(:cell, edge, value0)
-
-          D7.mixture(node, mix0) do |node0, mix1|
+          D7.mixture(node, mix0) do |mix1|
             Term.of_case(mix1) do
-              matchpi %{(cell @_)} { node0.morph({2, nil}) }
-              matchpi %{(cell @_ value1_)} { node0.morph({2, value1}) }
+              matchpi %{(cell @_ children1←(_*))} do
+                node.replace(Term[2]...Term[node.itemsize], &.concat(children1.items))
+              end
+
+              otherwise do
+                node.replace(Term[2]...Term[node.itemsize]) { }
+              end
             end
           end
         end
       end
 
-      matchpi %{[circuit @edge_]}, %{[frag @edge_]} do
-        D7.mixture(node, Term.of(:cell, edge)) do |node0, view|
+      matchpi %{[frag @edge_]}, %{[cell (@edge_ _)]} do
+        D7.mixture(node, Term.of(:cell, edge)) do |view|
           Term.of_case(view) do
-            matchpi %{(cell @_)} { node0 }
-            matchpi %{(cell @_ value1_)} { node0.morph({2, value1}) }
+            matchpi %{(cell @_)} { node }
+            matchpi %{(cell @_ value1_)} { node.morph({2, value1}) }
           end
         end
       end
@@ -216,12 +232,37 @@ module ::Ww::Rack
           Term.of(:cell, edge),
           Term.of(:group, value))
 
-        D7.mixture(node, mix0) do |node0, mix1|
+        D7.mixture(node, mix0) do |mix1|
           Term.of_case(mix1) do
-            matchpi %{⟨(cell @_ value1_)⟩} { node0.morph({2, value1}) }
-            matchpi %{⟨(group)⟩} { node0.morph({2, nil}) }
-            matchpi %{⟨(group value1_)⟩} { node0.morph({2, value1}) }
+            matchpi %{⟨(cell @_ value1_)⟩} { node.morph({2, value1}) }
+            matchpi %{⟨(group value1_)⟩} { node.morph({2, value1}) }
           end
+        end
+      end
+
+      matchpi %{[cell (@edge_ pattern_) whole0_]} do
+        _, capture = edge
+
+        next D7.inert(node) unless M1.probably_matches?(pattern, whole0)
+        next D7.inert(node) unless env = M1.match?(pattern, whole0)
+        next D7.inert(node) unless part0 = env[capture]?
+
+        D7.mixture(node, Term.of(:cell, edge, part0)) do |mix1|
+          backspec = Term[]
+
+          Term.case(mix1) do
+            matchpi %{(cell @_)} do
+              backspec = Term.entries({ { {capture}, Term[] } })
+            end
+
+            matchpi %{(cell @_ part1_)} do
+              backspec = Term.entries({ {capture, Term.of(:"^verbatim", part1)} })
+            end
+          end
+
+          whole1 = M1.backmap(pattern, Term.of(backspec), whole0)
+
+          Term.of(node.morph({2, whole1}))
         end
       end
 
@@ -241,7 +282,7 @@ module ::Ww::Rack
           end
         end
 
-        D7.mixture(node, defn) { |orig, _| orig }
+        D7.mixture(node, defn) { node }
       end
 
       matchpi %{[feed @u_ (over @v_)]} do
@@ -265,7 +306,7 @@ module ::Ww::Rack
       end
 
       matchpi %{[unit _*]} do
-        D7.circuit(node.as_d, 1...node.itemsize) { |node1| D7.inert(node1) }
+        D7.circuit(node.as_d, 1...node.itemsize) { D7.inert(node) }
       end
 
       matchpi %{[delay (%number +i32) _]} do
@@ -337,7 +378,7 @@ module ::Ww::Rack
           end
         end
 
-        D7.mixture(node, Term.of(defn)) do |orig, view|
+        D7.mixture(node, Term.of(defn)) do |view|
           rest = queue
 
           Term.case(view) do
@@ -361,7 +402,7 @@ module ::Ww::Rack
             otherwise { }
           end
 
-          Term.of(orig.morph({2, rest}))
+          Term.of(node.morph({2, rest}))
         end
       end
 
@@ -384,10 +425,10 @@ module ::Ww::Rack
           Term.of(:sensor, {tspace, pattern, edge}, {:^, edge[1]}),
         )
 
-        D7.mixture(node, mix0) do |orig, mix1|
+        D7.mixture(node, mix0) do |mix1|
           Term.of_case(mix1) do
-            matchpi %{⟨(cell @_)⟩} { Term.of(orig.morph({2, nil})) }
-            matchpi %{⟨(cell @_ value1_)⟩} { Term.of(orig.morph({2, value1})) }
+            matchpi %{⟨(cell @_)⟩} { Term.of(node.morph({2, nil})) }
+            matchpi %{⟨(cell @_ value1_)⟩} { Term.of(node.morph({2, value1})) }
           end
         end
       end
@@ -401,10 +442,10 @@ module ::Ww::Rack
           Term.of(:"sensor*", {tspace, pattern, edge}, {:^, edge[1]}),
         )
 
-        D7.mixture(node, mix0) do |orig, mix1|
+        D7.mixture(node, mix0) do |mix1|
           Term.of_case(mix1) do
-            matchpi %{⟨(cell @_)⟩} { Term.of(orig.morph({2, nil})) }
-            matchpi %{⟨(cell @_ value1_)⟩} { Term.of(orig.morph({2, value1})) }
+            matchpi %{⟨(cell @_)⟩} { Term.of(node.morph({2, nil})) }
+            matchpi %{⟨(cell @_ value1_)⟩} { Term.of(node.morph({2, value1})) }
           end
         end
       end
@@ -423,10 +464,10 @@ module ::Ww::Rack
           Term.of(:appearance, tspace, edge),
         )
 
-        D7.mixture(node, mix0) do |orig, mix1|
+        D7.mixture(node, mix0) do |mix1|
           Term.of_case(mix1) do
-            matchpi %{⟨(cell @_)⟩} { Term.of(orig.morph({2, nil})) }
-            matchpi %{⟨(cell @_ value1_)⟩} { Term.of(orig.morph({2, value1})) }
+            matchpi %{⟨(cell @_)⟩} { Term.of(node.morph({2, nil})) }
+            matchpi %{⟨(cell @_ value1_)⟩} { Term.of(node.morph({2, value1})) }
           end
         end
       end
@@ -443,10 +484,10 @@ module ::Ww::Rack
           Term.of(:path, u, path),
         )
 
-        D7.mixture(node, mix0) do |orig, mix1|
+        D7.mixture(node, mix0) do |mix1|
           Term.of_case(mix1) do
-            matchpi %{⟨(cell @_)⟩} { Term.of(orig.morph({2, nil})) }
-            matchpi %{⟨(cell @_ value1_)⟩} { Term.of(orig.morph({2, value1})) }
+            matchpi %{⟨(cell @_)⟩} { Term.of(node.morph({2, nil})) }
+            matchpi %{⟨(cell @_ value1_)⟩} { Term.of(node.morph({2, value1})) }
           end
         end
       end

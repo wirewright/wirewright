@@ -28,8 +28,8 @@ module Testtool
         content == actual
       end
 
-      matchpi %{(frame content_* ¦ () m1)} do
-        M1.probe?(content, actual)
+      matchpi %{(frame pattern_ ¦ () pattern)} do
+        M1.probe?(pattern, actual)
       end
 
       matchpi %{end} do

@@ -57,7 +57,7 @@ module Ww::D7
 
   private def fold(ctx : FoldContext, feature : Mixture, frep : FoldRep) : Term
     default = -> do
-      feature.mix.call(feature.node, fold(ctx, feature.defn, frep))
+      feature.mix.call(fold(ctx, feature.defn, frep))
     end
 
     frep.call(ctx, feature, frep, default)
@@ -69,7 +69,7 @@ module Ww::D7
   # at the circuit, without recursively folding it.
   private def fold(ctx : FoldContext, feature : Circuit, frep : FoldRep) : Term
     default = -> do
-      fold(ctx, feature.cont.call(Term.of(feature.node)), frep)
+      fold(ctx, feature.cont.call, frep)
     end
 
     frep.call(ctx, feature, frep, default)

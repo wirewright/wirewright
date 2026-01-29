@@ -3939,6 +3939,10 @@ struct Range(B, E)
       {% raise "expected Range(_ < Int, _ < Int)" %}
     {% end %}
 
+    if empty?
+      return @begin.in?(other) || @begin == other.end
+    end
+
     @begin.in?(other) && (exclusive? ? (@end - 1).in?(other) : @end.in?(other))
   end
 

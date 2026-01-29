@@ -43,12 +43,12 @@ module Ww::D7
 
   # A decomposition of *node* into a definition *defn* with a *mix* function
   # to compose rewritten *defn* back into the next version of *node*.
-  defcase Mixture, node : Term, defn : Term, mix : Term, Term -> Term
+  defcase Mixture, node : Term, defn : Term, mix : Term -> Term
 
   # Constructs a mixture feature.
   #
   # See `Mixture`.
-  def mixture(node : Term, defn, &mix : Term, Term -> Term) : Mixture
+  def mixture(node : Term, defn, &mix : Term -> Term) : Mixture
     Mixture.new(node, Term.of(defn), mix)
   end
 
@@ -87,18 +87,18 @@ module Ww::D7
   defcase Circuit,
     node : Term::Dict,
     range : Range(Int32, Int32),
-    cont : Term -> Feature
+    cont : -> Feature
 
   # Constructs a circuit feature.
   #
   # See `Circuit`.
-  def circuit(node : Term::Dict, range : Range(Int32, Int32), &cont : Term -> Feature) : Circuit
+  def circuit(node : Term::Dict, range : Range(Int32, Int32), &cont : -> Feature) : Circuit
     assert range.exclusive? && range.subrange_of?(0...node.itemsize)
 
     Circuit.new(node, range, cont)
   end
 
   def circuit(node : Term::Dict) : Circuit
-    circuit(node, 0...node.itemsize) { |successor| inert(successor) }
+    circuit(node, 0...node.itemsize) { inert(Term.of(node)) }
   end
 end
