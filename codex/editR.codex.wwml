@@ -55,6 +55,24 @@
 ;; on it at the moment -- all these things should take well below 100µs. In the long run, we should
 ;; be able to compete with imperative code; otherwise, all of this makes very little sense, aside
 ;; from arguable purity.
+;;
+;; KERNEL FLAGS
+;; -----------
+;;
+;; modify
+;;  Enables keyboard keys that edit the text in the input
+;; multiline
+;;  Enables keyboard keys that perform multiline editing
+;; compose
+;;  Enables the insert key and related, for compose mode (character composition;
+;;  to enter things like ¦ or ⍊)
+;; structural
+;;  Enables keyboard keys for structural editing (the input itself is allowed
+;;  to move in surrounding structure)
+;;
+;; NOTE: These are only for keyboard keys! The *motions* themselves are enabled
+;; regardless (for example, `splice "hello" left` still modifies even if
+;; `modify` is unset; but `keyboard input "hello"` does not).
 
 ;; ------
 ;; KERNEL
