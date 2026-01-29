@@ -478,6 +478,18 @@ module Ww::M1
 
   # :nodoc:
   #
+  # (%atom)
+  def match(ctx, op : Op::Atom, matchee : Tzip, plan)
+    matchee.type.atom? ? cons(ctx, plan) : Fb[]
+  end
+
+  # :nodoc:
+  def probably_matches?(op : Op::Atom, matchee : Term) : Bool
+    matchee.type.atom?
+  end
+
+  # :nodoc:
+  #
   # (%symbol blank name_ type_)
   def match(ctx, op : Op::SymBlank, matchee : Tzip, plan)
     return Fb[] unless row = matchee.blank?

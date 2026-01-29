@@ -27,6 +27,11 @@
     (+ () (1) {x: "John Doe"} (qux 1 x: "John Doe"))
     (- 1 "John Doe" qux true)))
 
+;; %atom
+(pattern (%atom)
+  (+ 100 hello "John Doe" true)
+  (- () (+ 1 2) {x: "John Doe"} (qux 1 x: "John Doe")))
+
 ;; %symbol nonblank
 (pattern (%symbol nonblank)
   (+ qux john_doe)

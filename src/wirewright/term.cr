@@ -51,6 +51,10 @@ module Ww
       other.any? || self == other
     end
 
+    def atom? : Bool
+      !(any? || dict?)
+    end
+
     def blank : Term::Sym
       case self
       in .any?     then SYM_BLANK_ANY

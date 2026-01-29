@@ -351,6 +351,10 @@ module Ww::M1
         Op::INSTANCE_SYM
       end
 
+      matchpi %{[%'%atom]}, cue: {:"%atom"} do
+        Op::INSTANCE_ATOM
+      end
+
       matchpi %{[%'%symbol nonblank]}, cue: {:"%symbol", :"nonblank"} do
         Op::SymNonblank.new
       end

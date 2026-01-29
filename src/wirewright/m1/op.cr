@@ -3,7 +3,7 @@ module Ww::M1
   # compiled operators and associated groups/categories of operators (represented
   # using aliases).
   module Op
-    alias Any = Pass | Never | Num | Sym | SymBlank | SymNonblank | Boolean | Dict | Itemsonly | Pairsonly | SketchSubset | Bounds | BoundsGuard | MaxDepth | DictGuard | Literal | Capture | CaptureItemsonly | Seq | ItemFirst | ItemLast | SingularSeq | Partition | Edge | LiteralWhitelist | ChoiceSource | Keypool | Span | Tally | Type | ParseML | Clamp | Bin | Both | LiteralBlacklist | Layer | ScanFirst | ScanSource | ScanAll | DfsFirst | DfsSource | DfsAll | BfsFirst | BfsSource | BfsAll | Value | NegativeValue | NegativeValueKeypath | EntriesFirst | EntriesSource | EntriesAll | Str | KeypathCapture | NegativeKeypool | Keytest | ValueLiteral | Filter | Pluck | Flat | Split | Adjacent | Untracked | Matches | FrontRef | BackRef
+    alias Any = Pass | Never | Num | Sym | Atom | SymBlank | SymNonblank | Boolean | Dict | Itemsonly | Pairsonly | SketchSubset | Bounds | BoundsGuard | MaxDepth | DictGuard | Literal | Capture | CaptureItemsonly | Seq | ItemFirst | ItemLast | SingularSeq | Partition | Edge | LiteralWhitelist | ChoiceSource | Keypool | Span | Tally | Type | ParseML | Clamp | Bin | Both | LiteralBlacklist | Layer | ScanFirst | ScanSource | ScanAll | DfsFirst | DfsSource | DfsAll | BfsFirst | BfsSource | BfsAll | Value | NegativeValue | NegativeValueKeypath | EntriesFirst | EntriesSource | EntriesAll | Str | KeypathCapture | NegativeKeypool | Keytest | ValueLiteral | Filter | Pluck | Flat | Split | Adjacent | Untracked | Matches | FrontRef | BackRef
 
     # TODO: Inline, this is not used anywhere!!
     alias Bin = Add | Sub | Mul | Div | Idiv | Mod | Pow | Map
@@ -51,11 +51,14 @@ module Ww::M1
     INSTANCE_STR     = Str.new
     INSTANCE_BOOLEAN = Boolean.new
     INSTANCE_DICT    = Dict.new
+    INSTANCE_ATOM    = Atom.new
 
     defcase Sym
 
     defcase SymBlank, name : Any, type : Any
     defcase SymNonblank
+
+    defcase Atom
 
     defcase Str
     defcase Boolean

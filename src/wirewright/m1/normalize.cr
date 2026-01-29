@@ -1729,6 +1729,30 @@ module Ww::M1
         normalize(Π.pattern(STRING_NONEMPTY))
       end
 
+      # |@ m1.operator.atom
+      #
+      # |@pattern
+      # (%'%atom)
+      #
+      # |@block
+      # Matches a non-dictionary term.
+      #
+      # ```
+      # (atom? (%atom)) => true
+      # (atom? _) => true
+      #
+      # (atom? 100)        ;; => true
+      # (atom? hello)      ;; => true
+      # (atom? "John Doe") ;; => true
+      # (atom? true)       ;; => true
+      #
+      # (atom? ())         ;; => false
+      # (atom? (+ 1 2))    ;; => false
+      # ```
+      matchpi %{(%'%atom)}, cue: {:"%atom"} do
+        Term.of(:"%atom", depth: 0)
+      end
+
       matchpi %{(%'%symbol nonblank)}, cue: {:"%symbol", :nonblank} do
         Term.of(:"%symbol", :nonblank, depth: 0)
       end
