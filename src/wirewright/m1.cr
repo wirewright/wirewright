@@ -471,8 +471,7 @@ module Ww::M1
   # entries with the same name.
   alias LogList = Slice({Term, Log::SealedOne})
 
-  # :nodoc:
-  def matches_and_logs(env : Term::Dict, op : Op::Any, matchee : Term, &)
+  private def matches_and_logs(env : Term::Dict, op : Op::Any, matchee : Term, &)
     match(env, op, matchee, log: true) do |fb|
       buffer = Pf::Kit.stack_array({Term::Dict, LogList}, 16)
 
