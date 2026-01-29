@@ -291,6 +291,26 @@
       (cell @y 0)))
   end)
 
+;; feed - end
+(d7
+  (frame
+    (queue (@front @back) (a b c))
+    (feed @front (@list end))
+    (cell @list ()))
+  (frame
+    (queue (@front @back) (b c))
+    (feed @front (@list end))
+    (cell @list (a)))
+  (frame
+    (queue (@front @back) (c))
+    (feed @front (@list end))
+    (cell @list (a b)))
+  (frame
+    (queue (@front @back) ())
+    (feed @front (@list end))
+    (cell @list (a b c)))
+  end)
+
 ;; Waterfall.
 (d7
   (frame
@@ -668,6 +688,18 @@
 ;; Queue feedback
 (d7
   (frame (queue (@a @a) (100 200 300)))
+  end)
+
+;; queue bulk: true
+(d7
+  (frame
+    (cell @x (a b c))
+    (feed @x @back)
+    (queue (@front @back bulk: true) ()))
+  (frame
+    (cell @x)
+    (feed @x @back)
+    (queue (@front @back bulk: true) (a b c)))
   end)
 
 ;; queue max: N

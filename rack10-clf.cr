@@ -289,6 +289,10 @@ module ::Ww::Rack
         D7.gnd(node, u, v)
       end
 
+      matchpi %{[feed @u_ (@v_ end)]} do
+        D7.gnd(node, u, v)
+      end
+
       matchpi %{[feed (copy @u_) @v_]} do
         D7.gnd(node, u, v)
       end
@@ -363,7 +367,7 @@ module ::Ww::Rack
         D7.gnd(node, edges: us.items.map_with_index { |u, i| u })
       end
 
-      matchpi %{[queue (@front_ @back_ ⍊ min_: (%optional 1 (%number +i32!)) max_: (%optional ∞ (%any° (%number +i32!) ∞))) queue_dict]}, min: Int32 do
+      matchpi %{[queue (@front_ @back_ ⍊ min_: (%optional 1 (%number +i32!)) max_: (%optional ∞ (%any° (%number +i32!) ∞)) bulk⋮ false) queue_dict]}, min: Int32 do
         defn = Term::Dict.build do |commit|
           commit << :group
 
@@ -396,7 +400,11 @@ module ::Ww::Rack
 
             # Enqueue.
             matchpi %{⟨(cell @_ x_ ⍊ back)⟩} do
-              rest = rest.append(x)
+              if bulk.true? && (tail = x.as_d?)
+                rest = rest.transaction(&.concat(tail.items))
+              else
+                rest = rest.append(x)
+              end
             end
 
             otherwise { }
@@ -696,6 +704,15 @@ module ::Ww::Rack
 
           patch(dst, &.morph({2, xs}))
         end
+      end
+
+      rule %{(one dev [feed @src_ (@dst_ end)]) (one src [cell @src_ x_]) (one dst [cell @dst_ queue←(_*)])} do
+        x, queue = first(src, :x), first(dst, :queue)
+
+        patches(
+          patch(src, &.morph({2, nil})),
+          patch(dst, &.morph({2, queue.append(x)})),
+        )
       end
 
       rule %{(one dev [discard @tgt_]) (many tgt [cell @tgt_ _])} do
