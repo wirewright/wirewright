@@ -251,11 +251,9 @@ module Testtool
 
   # Returns `true` if one of *tags* is enabled according to *conf*.
   def enabled?(conf : ArgConf, tags : Term::Dict) : Bool
-    if conf.focused.empty?
-      tags.items.none?(&.in?(conf.ignored))
-    else
-      tags.items.any?(&.in?(conf.focused))
-    end
+    return false if tags.items.any?(&.in?(conf.ignored))
+
+    conf.focused.empty? || tags.items.any?(&.in?(conf.focused))
   end
 
   # **Entrypoint to testtool.** Returns when the testtool finishes.

@@ -295,7 +295,7 @@ module Testtool
     (1...subjects.size).each do |index|
       next if subjects[0] == subjects[index] # ok
 
-      complaints << complaint("Terms are not equal", expected: subjects[0], got: subjects[index])
+      complaints << complaint("Terms are not equal", expected: subjects[index], got: subjects[0])
     end
   end
 
