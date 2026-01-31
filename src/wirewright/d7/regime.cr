@@ -84,7 +84,7 @@ module Ww::D7
     # :nodoc:
     defrecord LinkAdded
 
-    # Returns the associated with *query*.
+    # Returns the pattern associated with *query*.
     private def self.pattern(query : Term) : Term
       Term.case(query) do
         matchpi %{[one _ pattern_]} { pattern }
@@ -154,7 +154,7 @@ module Ww::D7
             raise QueryError.new("`many` without a predecessor makes no sense (many where?)")
           end
 
-          steps << Follow.new(origin, min: 1, max: Int32::MAX)
+          steps << Follow.new(origin, min: min.to(Int32), max: Int32::MAX)
           steps << AppendIR.new(key, pattern, edges(edgetab, pattern))
 
           NodeAdded.new
@@ -608,8 +608,12 @@ module Ww::D7
     # responsbile for actually merging the patch back into the circuit, based
     # on node id correspondence etc.
     def solve(hg : Hypergraph, body : Body) : Patch
+      # Decomposition map (decompose hypergraph nodes into "components" -- each called
+      # a label).
       decmap = Slice(Pf::USet32).new(hg.order) { Pf::USet32.new }
+      # Inverse decomposition map.
       idecmap = {} of NodeId => Pf::USet32
+      # Labels found in the hypergraph.
       population = Pf::USet32.new
 
       hg.each_node_with_id do |node, id|
