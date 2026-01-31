@@ -72,5 +72,11 @@ module Ww::M1
     def guarded(op)
       Guarded.new(op)
     end
+
+    defrecord Quoted(T), term : T
+
+    def quoted(term)
+      Quoted.new(term)
+    end
   end
 end

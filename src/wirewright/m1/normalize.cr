@@ -103,12 +103,82 @@ module Ww::M1
       terminal(Term.of(:"%literal", term, depth: 0, bounds: 0))
     end
 
+    # Constructs a singular sequence operator around *successor*.
     def singular(successor : Term) : Term
       Term.of(:"%singular", successor,
         seq: true,
         depth: :envelope,
         bounds: 1,
       )
+    end
+
+    # Rewrites `%quote` operators like the one in:
+    #
+    # ```wwml
+    # (x_ (%quote (+ a_ b_ (%unquote x_))))
+    # ```
+    #
+    # ... into:
+    #
+    # ```wwml
+    # (x_ ((%literal +) (%literal a_) (%literal b_) x_))
+    # ```
+    def quote(term : Term) : Term
+      unless term.type.dict?
+        # (%quote x_)  (%quote "Hello World")  (%quote (⏏+⏏ ⏏a_⏏ ⏏b_⏏))
+        return Term.of(:"%literal", term)
+      end
+
+      Term.case(term, engine: M0) do
+        # |@ m1.quoted.unquote
+        #
+        # |@pattern
+        # (%'%unquote pattern_)
+        #
+        # |@key pattern m1.operator
+        #
+        # |@block
+        # Suspends literal treatment and matches an M1 *pattern*.
+        #
+        # See `m1.operator.quote` for examples.
+        matchpi %{(%'%unquote pattern_)}, cue: :"%unquote" do
+          pattern # Leave as-is; an outer normalize call will do the job
+        end
+
+        otherwise do
+          assert term.type.dict?
+
+          # Fast path: check if all entries are literals. If that's the case,
+          # do not recurse and simply wrap the dict itself in `%literal`.
+          literal = true
+
+          term.each_entry do |_, value|
+            next unless value.type.dict?
+
+            Term.case(value, engine: M0) do
+              matchpi %{(%'%unquote _)}, cue: :"%unquote" { literal = false }
+              otherwise { }
+            end
+
+            break unless literal # Do not waste time
+          end
+
+          if literal
+            # (%quote (⏏{x: a_ y: b_}⏏ (%unquote c_)))
+            return Term.of(:"%literal", term)
+          end
+
+          # Slow path: (%quote ⏏({x: a_ y: b_} (%unquote c_))⏏)
+
+          quoted = term.transaction do |commit|
+            term.each_entry do |key, value|
+              commit.with(key, quote(value))
+            end
+          end
+
+          Term.of(quoted)
+        end
+      end
     end
   end
 
@@ -909,13 +979,20 @@ module Ww::M1
   end
 
   # :nodoc:
+  def normalize(prod : Π::Quoted(Term)) : Term
+    quoted = Normalize.quote(prod.term)
+
+    normalize(Π.pattern(quoted))
+  end
+
+  # :nodoc:
   def normalize(prod : Π::Pattern(Term)) : Term
     pattern = prod.pattern
 
     Term.case(pattern, engine: M0) do
       matchpi %{_dict} do
         # NOTE: this is a fast path for itemsonly dictionaries. They'd otherwise be
-        # at the very bottom, which wouldn't be good because they're very frequent
+        # matched at the very bottom, which wouldn't be good because they're very frequent
         # in practice. We do only the simplest, almost probabilistic checks here; if they
         # fail, we will go with the longer but precise path.
         #
@@ -1341,6 +1418,7 @@ module Ww::M1
         Normalize.terminal(spec, depth: 0)
       end
 
+      # TODO: Document!!!!!
       # TODO: mark var's as %ref.
       matchpi %{(%'%number _*)}, cue: :"%number" do
         continue unless _ = NumberSpec.op?(pattern)
@@ -1651,7 +1729,8 @@ module Ww::M1
       # Lists the forbidden terms (treated literally).
       #
       # |@block
-      # Prevents select terms from matching: the matchee must **not** be one of *terms*.
+      # Prevents select terms from matching: the matchee must **not** be one
+      # of *terms*.
       #
       # ```wwml
       # (allow? _) => true
@@ -1673,7 +1752,10 @@ module Ww::M1
           commit.concat(arms) { |arm| Normalize.sealed(Π.pattern(arm)) }
 
           commit.with(:disjunction, true)
-          commit.with(:depth, {:∩, {:min, {:members, 0, :"..<", arms.size}, :min}, {:max, {:members, 0, :"..<", arms.size}, :max}})
+          commit.with(:depth,
+            {:∩,
+             {:min, {:members, 0, :"..<", arms.size}, :min},
+             {:max, {:members, 0, :"..<", arms.size}, :max}})
         end
 
         Term.of(normal)
@@ -1681,6 +1763,33 @@ module Ww::M1
 
       matchpi %{(%'%literal term_)}, cue: :"%literal" do
         Normalize.literal(term)
+      end
+
+      # |@ m1.operator.quote
+      #
+      # |@pattern
+      # (%'%quote term_)
+      #
+      # |@key term m1.quoted
+      # The quoted term. It is generally treated as a literal, with the exception
+      # of `%unquote`. See `m1.quoted.unquote`.
+      #
+      # |@block
+      # Allows you to match literally with "islands" of pattern-matching defined
+      # by `%unquote`.
+      #
+      # ```
+      # (match (%quote ((%unquote op_) a_ b_))) => ^op
+      #
+      # (match (+ a_ b_))          ;; => +
+      # (match (frobnicate a_ b_)) ;; => frobnicate
+      #
+      # (match (+ 1 2))
+      # ;; Mismatch. Notice how above, a_ and b_ belong to %quote, and thus
+      # ;; receive literal treatment.
+      # ```
+      matchpi %{(%'%quote term_)}, cue: :"%quote" do
+        normalize(Π.quoted(term))
       end
 
       matchpi %{(%'%keypool _*)}, cue: :"%keypool" do

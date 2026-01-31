@@ -180,6 +180,35 @@
   (- "a" 1 qux true () ""))
   ;; etc...
 
+;; %quote/%unquote
+(group
+  (pattern (%quote 1)
+    (- 100 "a" true () {name: "John"})
+    (+ 1))
+
+  (pattern (%quote (%unquote x_))
+    (= 100 {x: 100})
+    (= a {x: a})
+    (= {name: "John"} {x: {name: "John"}}))
+    ;; ...
+
+  (pattern (%quote (+ a_ b_ (%unquote c_)))
+    (= (+ a_ b_ 100) {c: 100})
+    (- (+ 100 200 300)))
+
+  (pattern (%quote (+ (%unquote a_) b_ (%unquote c_)))
+    (= (+ a_ b_ 100) {a: a_, c: 100})
+    (= (+ 100 b_ 200) {a: 100, c: 200})
+    (- (+ 100 200 300)))
+
+  (pattern (%quote (foo←{a: x_, b: y_} (%unquote z_)))
+    (= (foo←{a: x_, b: y_} 100) {z: 100})
+    (- ({a: 100, b: 200} 300)))
+
+  (pattern (%quote (+ a_ (%unquote x_) b_ (%unquote {¦ x_})))
+    (= (+ a_ 100 b_ {x: 100}) {x: 100})
+    (- (+ a_ 100 b_ {x: 200}) (+ 100 200 300 {x: 200}))))
+
 ;; %string nonempty
 (pattern (%string nonempty)
   (+ "a" "abc" "John Doe")
