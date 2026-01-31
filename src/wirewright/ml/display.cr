@@ -12,9 +12,61 @@ module Ww::ML::Formatter
 
   def format(pp, term : Term, style : Style)
     Term.case(term) do
-      matchp %[(edge _)] do
+      matchpi %[(^ arg_)] do
+        pp.text("^")
+        format(pp, arg, style)
+      end
+
+      matchpi %[(~ args_+)] do
+        continue unless args.items.count(&.type.string?) >= args.size*0.5 # ?!
+
+        pp.text("\"")
+
+        args.items.each do |arg|
+          if str = arg.as_s?
+            pp.text(str.escaped)
+          else
+            pp.text("⸢")
+            format(pp, arg, style)
+            pp.text("⸣")
+          end
+        end
+
+        pp.text("\"")
+      end
+
+      matchpi %[(%'edge arg_)] do
         pp.text("@")
-        format(pp, term[1], style)
+        format(pp, arg, style)
+      end
+
+      matchpi %[(literal arg_)] do
+        pp.text("'")
+        format(pp, arg, style)
+      end
+
+      matchpi %[(%'%let name_ successor_)] do
+        format(pp, name, style)
+        pp.text("←")
+        format(pp, successor, style)
+      end
+
+      matchpi %[(%'%item seq_+)] do
+        pp.group(style.indent, "⟨", "⟩") do
+          seq.items.each_with_index do |item, i|
+            pp.breakable if i > 0
+            format(pp, item, style)
+          end
+        end
+      end
+
+      matchpi %[(%'%item° seq_+)] do
+        pp.group(style.indent, "⟨", "⟩°") do
+          seq.items.each_with_index do |item, i|
+            pp.breakable if i > 0
+            format(pp, item, style)
+          end
+        end
       end
 
       matchpi %[()] do
