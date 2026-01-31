@@ -622,17 +622,21 @@
        (rule (bar y_) (y: 2))
        (backmap (baz z_) (z: 3)))⎤))
 
+;; NOTE: These following are very basic tests that we can't quite do with patterns.
+;; We have to hard-code hashes which are implementation-defined. I'm not particularly
+;; fond of this either.
+
 (ml
-  (= ⎡◇ => 123⎤ ⎡bTdLchepdobmcxeW => 123⎤)
-  (= ⎡◇ => 456⎤ ⎡FbnczfbeKeecRr => 456⎤)
-  (= ⎡(foo ◇) => 123⎤ ⎡(foo bZdZcFfnfjfceNek) => 123⎤)
-  (= ⎡(foo ◇) => ◇⎤ ⎡(foo etdvbAddPbEdmbh) => etdvbAddPbEdmbh⎤)
-  (= ⎡◇_ => ◇⎤ ⎡dQcqeGdZcFfnfjfd_ => dQcqeGdZcFfnfjfd⎤)
-  (= ⎡◇_ => (456 ◇)⎤ ⎡fmfgeXeBdNcmexdD_ => (456 fmfgeXeBdNcmexdD)⎤)
-  (= ⎡(foo ◇_) => ◇⎤ ⎡(foo fnfjfdePendjbcce_) => fnfjfdePendjbcce⎤)
-  (= ⎡(foo ◇_: false) => {◇: true}⎤ ⎡(foo dJcceecTtMbAdd_: false) => (dJcceecTtMbAdd: true)⎤)
+  (= ⎡◇ => 123⎤ ⎡YbWdRcreJeccNk => 123⎤)
+  (= ⎡◇ => 456⎤ ⎡dLcheqdqbqcFfnfj => 456⎤)
+  (= ⎡(foo ◇) => 123⎤ ⎡(foo fjfdeQeqdpbncAfc) => 123⎤)
+  (= ⎡(foo ◇) => ◇⎤ ⎡(foo MbAddPbEdmbgcn) => MbAddPbEdmbgcn⎤)
+  (= ⎡◇_ => ◇⎤ ⎡ceejdcNbCdgXbV_ => ceejdcNbCdgXbV⎤)
+  (= ⎡◇_ => (456 ◇)⎤ ⎡cAfceNemdhYbXdV_ => (456 cAfceNemdhYbXdV)⎤)
+  (= ⎡(foo ◇_) => ◇⎤ ⎡(foo bfckevdAbLdybGdp_) => bfckevdAbLdybGdp⎤)
+  (= ⎡(foo ◇_: false) => {◇: true}⎤ ⎡(foo aaabceir_: false) => (aaabceir: true)⎤)
   (= ⎡{¦ flag x_ ◇_} <> {x: $'(+ →x 1), ◇: true}⎤
-     ⎡{¦ flag x_ fgeWezdHcaebcLh_} <> {x: $'(+ →x 1), fgeWezdHcaebcLh: true}⎤)
+     ⎡{¦ flag x_ dbKbvcRrJbucQ_} <> {x: $'(+ →x 1), dbKbvcRrJbucQ: true}⎤)
   (- ⎡(a ⏏◇⏏ b c d)⎤ ⎡cannot use `◇` outside of a rule⎤)
   (- ⎡(a ⏏◇_⏏ b c d)⎤ ⎡cannot use `◇` outside of a rule⎤))
 
@@ -640,9 +644,9 @@
   (doc= ⎡(foo ¦ _ v_number -▢_) <> {v: $'(+ →v 1), ▢: true}
          (foo ¦ _ v_number -▢_) <> {v: $'(* →v 2), ▢: true}
          (foo ¦ _ v_number -▢_) <> {v: $'(/ →v 3), ▢: true}⎤
-        ⎡(foo ¦ _ v_number -feeRerdrbscLhq_) <> {v: $'(+ →v 1), feeRerdrbscLhq: true}
-         (foo ¦ _ v_number -feeRerdrbscLhq_) <> {v: $'(* →v 2), feeRerdrbscLhq: true}
-         (foo ¦ _ v_number -feeRerdrbscLhq_) <> {v: $'(/ →v 3), feeRerdrbscLhq: true}⎤)
+        ⎡(foo ¦ _ v_number -faeJeccNmyYbW_) <> {v: $'(+ →v 1), faeJeccNmyYbW: true}
+         (foo ¦ _ v_number -faeJeccNmyYbW_) <> {v: $'(* →v 2), faeJeccNmyYbW: true}
+         (foo ¦ _ v_number -faeJeccNmyYbW_) <> {v: $'(/ →v 3), faeJeccNmyYbW: true}⎤)
   ;; Multiple rule blocks
   (doc= ⎡(foo ◇ ▢) <> {▢: true}
          (foo ◇ bar ▢) <> {▢: true}
@@ -651,13 +655,13 @@
          (foo ◇ ▢) <> {▢: true}
          (foo ◇ bar ▢) <> {▢: true}
          (foo ◇ BOO ▢) <> {▢: true}⎤
-        ⎡(foo yZbYdXcBffeUew feeRerdrbscKei) <> {feeRerdrbscKei: true}
-         (foo bycZFbocCfgeXeC bar feeRerdrbscKei) <> {feeRerdrbscKei: true}
-         (foo dCbQdGbZdYcDfjfc baz feeRerdrbscKei) <> {feeRerdrbscKei: true}
+        ⎡(foo AbccfekdeRbJdu eudxbDdibbcceecT) <> {eudxbDdibbcceecT: true}
+         (foo eDdRcreJeccNmy bar eudxbDdibbcceecT) <> {eudxbDdibbcceecT: true}
+         (foo fheYeEdUcveTetdv baz eudxbDdibbcceecT) <> {eudxbDdibbcceecT: true}
 
-         (foo yZbYdXcBffeUew LbycYDbjcteMej) <> {LbycYDbjcteMej: true}
-         (foo bycZFbocCfgeXeC bar LbycYDbjcteMej) <> {LbycYDbjcteMej: true}
-         (foo fceMejdcMbAddP BOO LbycYDbjcteMej) <> {LbycYDbjcteMej: true}⎤)
+         (foo AbccfekdeRbJdu cLhpEbkcweVex) <> {cLhpEbkcweVex: true}
+         (foo eDdRcreJeccNmy bar cLhpEbkcweVex) <> {cLhpEbkcweVex: true}
+         (foo dubycYEbmcxeWeA BOO cLhpEbkcweVex) <> {cLhpEbkcweVex: true}⎤)
   ;; Generation of rule blocks using lexical templates
   (doc= ⎡(do-a⫽b ¦ _ -▢_) <> {▢: true}
 
@@ -786,6 +790,7 @@
   (doc=
     ⎡(padding {¦ ±up-w⫽h: src} ⍊ ±px⫽y -up-w⫽h: dst)
        <> {dst: $'(+ →src →px⫽y), (src): ()}⎤
+
     ⎡(padding {¦ ±up-w: src} ⍊ ±px -up-w: dst)
        <> {dst: $'(+ →src →px), (src): ()}
      (padding {¦ ±up-h: src} ⍊ ±py -up-h: dst)
@@ -794,10 +799,12 @@
   (doc=
     ⎡(limit _ ⍊ up-w⫽h: (arg ±n ⍊ -◇_) ±⟦min,max⟧-w⫽h)
        <> {n: $'(⟦max,min⟧ →⟦min,max⟧-w⫽h →n), ◇: true}⎤
+
     ⎡(limit _ ⍊ up-w: (arg ±n ⍊ -◇_) ±⸨min,max⸩-w)
        <> {n: $'(⸨max,min⸩ →⸨min,max⸩-w →n), ◇: true}
      (limit _ ⍊ up-h: (arg ±n ⍊ -◇_) ±⸨min,max⸩-h)
        <> {n: $'(⸨max,min⸩ →⸨min,max⸩-h →n), ◇: true}⎤
+
     ⎡(limit _ ⍊ up-w: (arg ±n ⍊ -◇_) ±min-w)
        <> {n: $'(max →min-w →n), ◇: true}
      (limit _ ⍊ up-h: (arg ±n ⍊ -◇_) ±min-h)
