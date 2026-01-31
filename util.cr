@@ -5209,6 +5209,8 @@ module Benchmark
 end
 
 struct HybridMap(K, V)
+  include Enumerable({K, V})
+
   # Size of the stack-allocated buffer.
   N = 8
 
@@ -5226,6 +5228,12 @@ struct HybridMap(K, V)
 
   def empty? : Bool
     @keys.empty?
+  end
+
+  def each(& : {K, V} ->)
+    @keys.zip(@values) do |key,value|
+      yield({key, value})
+    end
   end
 
   def fetch(key : K, &)
@@ -5262,5 +5270,18 @@ struct HybridMap(K, V)
   def clear : Nil
     @keys.clear
     @values.clear
+  end
+
+  def pretty_print(pp) : Nil
+    pp.list("HybridMap{", self, "}") do |key, value|
+      pp.group do
+        key.pretty_print(pp)
+        pp.text " =>"
+        pp.nest do
+          pp.breakable
+          value.pretty_print(pp)
+        end
+      end
+    end
   end
 end

@@ -1242,3 +1242,11 @@
   (seq
     (a qux 100)
     (seen (a qux 100))))
+
+;; BUG: Backsystems must discriminate by env id in addition to agent id.
+(backsys
+  ((%split° lhs_ (x←M) rhs_) <> {(x): (^*lhs M ^*rhs)}
+   ⟨A_ B←(M)⟩° <> {(post A): ^(up B), (post B): ^(up A)})
+  (seq
+    (a (M) b (M) c)
+    ((a M b (M) c) a (b M c) b c)))

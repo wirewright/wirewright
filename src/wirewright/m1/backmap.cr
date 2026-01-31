@@ -104,9 +104,24 @@ module Ww::M1
     # referring to the first backmap's *a*, *b* as *a₀*, *b₀*; and similarly,
     # *a₁*, *b₁* for the second backmap's *a*, *b*.
     #
-    # The scope id itself is actually rewrite agent id (effectively the index
-    # of the backmap from which the log originates, in the parent backsystem).
-    alias Ref = {Term, UInt32}
+    # That is, the first discriminatory component of a ref is the id of the agent
+    # in the backsystem. We currently use the agent's index in the backsystem as
+    # its id.
+    #
+    # Refs also include env ids, which let us distinguish different match envs
+    # coming from the same agent. Currently this happens only for source patterns,
+    # as in `⟨x_⟩° <> {...}` -- the agent is the same but each env is distinct.
+    # In a sense, we pretend as if distinct agents were making those changes.
+    defrecord Ref, name : Term, agent_id : UInt32, env_id : UInt32
+
+    struct Ref
+      # Constructs a reference into the same agent and env id as *proto*, but
+      # with a different name. This is used to refer to another capture within
+      # the same agent and env.
+      def self.sibling(proto : Ref, name : Term) : Ref
+        Ref.new(name, proto.agent_id, proto.env_id)
+      end
+    end
 
     # An endpoint is a mutable container for zero or more names and zero or one `Mut`s.
     struct Endpoint
@@ -148,18 +163,37 @@ module Ww::M1
 
       # Returns `true` if this endpoint has *ref* as one of its refs.
       def includes?(ref : Ref) : Bool
-        @refs.try(&.includes?(ref)) || false
+        if refs = @refs
+          if refs.includes?(ref)
+            return true
+          end
+        end
+
+        each_mut do |mut|
+          if mut.ref == ref
+            return true
+          end
+        end
+
+        false
       end
 
-      # Yields each ref associated with this endpoint.
+      # Yields refs associated with this endpoint.
       #
       # The order of refs is implementation-defined.
       def each_ref(& : Ref ->) : Nil
-        return unless refs = @refs
+        if refs = @refs
+          refs.reverse_each { |ref| yield ref }
+        end
 
-        refs.reverse_each { |ref| yield ref }
+        each_mut do |mut|
+          yield mut.ref
+        end
       end
 
+      # Yields mutations associated with this endpoint.
+      #
+      # Their order is implementation-defined.
       def each_mut(& : Mut ->) : Nil
         case muts = @muts
         in Nil
@@ -170,20 +204,26 @@ module Ww::M1
 
       def inspect(io)
         io << "Endpoint["
-        @muts.try(&.inspect(io))
+
+        if muts = @muts
+          muts.inspect(io)
+        end
+
         io << ":"
+
         if refs = @refs
-          refs.join(io, ",") do |(name, sub)|
-            io << name << sub.subscript
+          refs.join(io, ",") do |ref|
+            io << ref.name << ref.agent_id.subscript << "₋" << ref.env_id.subscript
           end
         end
+
         io << "]"
       end
     end
 
     # Short for *mutation*, `Mut` represents a rewrite intent attached to an `Endpoint`.
     # Endpoints, in turn, are attached to nodes (namely `LevelNode`s).
-    defcase Mut, adjs : Adj, mult : Mult, agent_id : UInt32, env : Term::Dict, template : Term do
+    defcase Mut, adjs : Adj, mult : Mult, ref : Ref, env : Term::Dict, template : Term do
       @[Flags]
       enum Adj
         Post
@@ -207,7 +247,7 @@ module Ww::M1
         in .many? then io << "*"
         end
 
-        io << "@" << agent_id << "(⸤"
+        io << "@" << ref << "(⸤"
         io << template
         io << "⸥ <- "
         io << env
@@ -335,24 +375,21 @@ module Ww::M1
 
     # Adds a `Mut` to the endpoint.
     struct MountMut
-      def initialize(@name : Term, @mut : Mut)
+      def initialize(@mut : Mut)
       end
 
       def call(ctx : Context, endpoint : Endpoint) : Endpoint
-        pipe(endpoint,
-          ctx.append({@name, @mut.agent_id}),
-          ctx.append(@mut),
-        )
+        ctx.append(endpoint, @mut)
       end
     end
 
-    # Adds a `Ref` (defined by its components) to the endpoint.
+    # Adds a `Ref` to the endpoint.
     struct MountRef
-      def initialize(@name : Term, @agent : UInt32)
+      def initialize(@ref : Ref)
       end
 
       def call(ctx : Context, endpoint : Endpoint) : Endpoint
-        ctx.append(endpoint, {@name, @agent})
+        ctx.append(endpoint, @ref)
       end
     end
 
@@ -546,7 +583,9 @@ module Ww::M1
     end
 
     private def agents0(node : Endpoint, sink) : Nil
-      node.each_mut { |mut| sink << mut.agent_id }
+      node.each_mut do |mut|
+        sink << mut.ref.agent_id
+      end
     end
 
     private def agents0(node : Slot, sink) : Nil
@@ -850,12 +889,20 @@ module Ww::M1
       end
 
       # Performs a full backpropagation pass over the tree.
-      def backprop : Proposed | Conflict
+      #
+      # NOTE: we provide *tree* for debugging purposes only: it is sometimes useful
+      # to print it here to see how backpropagation proceeds. Traversal of the tree
+      # occurs through `each_node`, which iterates over an array of nodes prepared
+      # ahead-of-time for proper ordering (bottom up breadth-first search).
+      def backprop(__tree) : Proposed | Conflict
         assert @depth == @maxdepth
         assert @ctx.lo.empty?
 
         loop do
           assert @ctx.hi.empty? && !@hiset
+
+          # pp __tree
+          # gets
 
           each_node(depth: @depth) do |node|
             case result = Backmap.propose(self, node)
@@ -884,6 +931,9 @@ module Ww::M1
           @hiset = false
         end
 
+        # pp __tree
+        # gets
+
         Proposed.new
       end
     end
@@ -892,7 +942,7 @@ module Ww::M1
       eval = Alloy::Eval.new do |expr, default, _, issues|
         Term.case(expr) do
           matchpi %{(up capture_)} do
-            unless value = µ.up?({capture, mut.agent_id}) || mut.env[capture]?
+            unless value = µ.up?(Ref.sibling(mut.ref, capture)) || mut.env[capture]?
               issues.major { "unrecognized capture #{capture} (top-down lookup)" }
               value = Term.of(:literal, expr)
             end
@@ -901,7 +951,7 @@ module Ww::M1
           end
 
           matchpi %{(dn capture_)} do
-            unless value = µ.dn?({capture, mut.agent_id}) || mut.env[capture]?
+            unless value = µ.dn?(Ref.sibling(mut.ref, capture)) || mut.env[capture]?
               issues.major { "unrecognized capture #{capture} (bottom-up lookup)" }
               value = Term.of(:literal, expr)
             end
@@ -984,7 +1034,7 @@ module Ww::M1
       memo = nil
       endpoint.each_mut do |mut|
         unless object = yield rep(µ, mut, this)
-          return conflict(mut.agent_id)
+          return conflict(mut.ref.agent_id)
         end
 
         if memo.nil?
@@ -994,7 +1044,7 @@ module Ww::M1
 
         prev_mut, prev_object = memo
         unless prev_object == object
-          return conflict(prev_mut.agent_id, mut.agent_id)
+          return conflict(prev_mut.ref.agent_id, mut.ref.agent_id)
         end
       end
 
@@ -1712,21 +1762,23 @@ module Ww::M1
           next if agent_id.in?(disabled)
 
           muttab(agent.backspec) do |muts|
-            agent.matches.each do |env, logs|
+            agent.matches.each_with_index do |(env, logs), env_id|
               logs.each do |name, log|
                 log = Log.normalize(log.seq)
                 next if log.is_a?(Log::None)
 
+                ref = Ref.new(name, agent_id, env_id.to_u32)
+
                 unless row = muts[name]?
-                  result = mount(ctx, tree, log, 0, MountRef.new(name, agent_id))
+                  result = mount(ctx, tree, log, 0, MountRef.new(ref))
                   assert result.is_a?(Mounted)
                   next
                 end
 
                 template, post, mult = row
-                mut = ctx.mut(post, mult, agent_id, env, template)
+                mut = ctx.mut(post, mult, ref, env, template)
 
-                result = mount(ctx, tree, log, 0, MountMut.new(name, mut))
+                result = mount(ctx, tree, log, 0, MountMut.new(mut))
                 assert result.is_a?(Mounted)
               end
             end
@@ -1737,7 +1789,7 @@ module Ww::M1
         # control flow], as the tree contains some important caches that we don't know
         # how to invalidate!
 
-        case result = ctx.µ(&.backprop)
+        case result = ctx.µ(&.backprop(tree))
         in Conflict then result
         in Proposed then tree.proposal || Rep::One.new(matchee)
         end
