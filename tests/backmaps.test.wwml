@@ -1250,3 +1250,13 @@
   (seq
     (a (M) b (M) c)
     ((a M b (M) c) a (b M c) b c)))
+
+;; BUG: %split must advance by 1 -- not N -- on mismatch.
+(backsys
+  ((%split ⟨g⟩ A←. B←m _) <> {A: ^B, B: ^A})
+  (seq
+    (g . . . . m . . . .)
+    (g . . . m . . . . .)
+    (g . . m . . . . . .)
+    (g . m . . . . . . .)
+    (g m . . . . . . . .)))

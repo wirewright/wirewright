@@ -2585,7 +2585,7 @@
       .
       food
       .)
-    ;; gosh this looks awful ... we should probably do something about it should we?
+    ;; gosh this looks awful ... we should probably do something about it shouldn't we?
     (backsys (@world)
       (W←(%split° behind_ ⟨(cell @_ (%optional () dst_) ⍊ behind)⟩ _ wide: true))
         <> {dst: ^(backmap behind '⟨agent←⟨(cell _ action_ ⍊ action)⟩⟩ '{agent: (agent ^action)})}
@@ -2616,11 +2616,11 @@
   (frame pattern: true
     ⟪(circuit @world . . . M0_dict . . . . . . . M1_dict)⟫) ;; M1: go-dn->go-up
   (frame pattern: true
-    ⟪(circuit @world . . . . M0_dict . . . . . . M1_dict)⟫)
+    ⟪(circuit @world . . . . M0_dict . . . . . M1_dict .)⟫)
   (frame pattern: true
-    ⟪(circuit @world . . . . . M0_dict . . . . M1_dict .)⟫)
+    ⟪(circuit @world . . . . . M0_dict . . . M1_dict . .)⟫)
   (frame pattern: true
-    ⟪(circuit @world . . . . . . M0_dict . . M1_dict . .)⟫)
+    ⟪(circuit @world . . . . . . M0_dict . M1_dict . . .)⟫)
   (frame pattern: true
     ⟪(circuit @world . . . . . . . M0_dict M1_dict . . .)⟫)
   (frame pattern: true

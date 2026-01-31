@@ -923,7 +923,13 @@ module Ww::M1
     # size *n*. *n* can be zero, in which case the middle part will be empty
     # (but properly positioned!). The first and last block args are the left
     # and right parts (before and after mid), correspondingly.
-    def each_split(n : Int, & : ItemsView, ItemsView, ItemsView ->)
+    #
+    # The block must return a boolean indicating whether the split was *accepted*
+    # (`true`; thus moving forward by *n* or by 1 if *n* is zero) or *rejected*
+    # (`false`; thus moving forward by 1). This powers subsequence search, whereby
+    # you find a sequence of elements and then look at elements to the left
+    # and right.
+    def each_split(n : Int, & : ItemsView, ItemsView, ItemsView -> Bool)
       (0...size).slide_subrange_of(n) do |subrange|
         l = before(subrange.begin)
         focus = reshape(@begin + subrange.begin, @begin + subrange.end)

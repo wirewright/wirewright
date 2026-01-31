@@ -1139,7 +1139,7 @@ module Ww::M1
 
       feed.each_split(n) do |l, focus, r|
         accepted = yield l, focus, r
-        next unless accepted
+        next false unless accepted
 
         # We can't determine what's "before" and what's "after" focus when we have
         # no focus. Leaving this out means the very first case degenerates to an infinite
@@ -1149,7 +1149,7 @@ module Ww::M1
         #
         # Therefore, we don't drop "before" on successful match, as with nonempty
         # focus -- because, as I said above, we don't have a before!
-        next if n.zero?
+        next true if n.zero?
 
         feed = r
         running = true

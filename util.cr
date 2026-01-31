@@ -4023,7 +4023,11 @@ struct Range(B, E)
   #
   #    ... and so on
   # ```
-  def slide_subrange_of(n : Int, & : Range(B, E) ->)
+  #
+  # The block must return a boolean indicating whether the subrange was accepted
+  # or not. If accepted, this method advances by *n* (if zero, by `1`). If it was
+  # rejected, this method advances by `1`.
+  def slide_subrange_of(n : Int, & : Range(B, E) -> Bool)
     {% unless B < ::Int && E < ::Int %}
       {% raise "expected Range(_ < Int, _ < Int)" %}
     {% end %}
@@ -4035,15 +4039,19 @@ struct Range(B, E)
 
     if n.zero?
       (@begin..@end).each do |i|
-        yield i...i
+        _ = yield i...i
       end
       return
     end
 
     i = @begin
     while i + n <= @end
-      yield i...i + n
-      i += n
+      accepted = yield i...i + n
+      if accepted
+        i += n
+      else
+        i += 1
+      end
     end
   end
 end
