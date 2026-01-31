@@ -1739,7 +1739,7 @@ module Ww::M1
       #
       # ```
       # (atom? (%atom)) => true
-      # (atom? _) => true
+      # (atom? _) => false
       #
       # (atom? 100)        ;; => true
       # (atom? hello)      ;; => true
