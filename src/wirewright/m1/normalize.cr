@@ -1771,8 +1771,8 @@ module Ww::M1
       # (%'%quote term_)
       #
       # |@key term m1.quoted
-      # The quoted term. It is generally treated as a literal, with the exception
-      # of `%unquote`. See `m1.quoted.unquote`.
+      # The quoted term. It is treated as a literal, with the exception of `%unquote`.
+      # See `m1.quoted.unquote`.
       #
       # |@block
       # Allows you to match literally with "islands" of pattern-matching defined
@@ -1788,10 +1788,46 @@ module Ww::M1
       # ;; Mismatch. Notice how above, a_ and b_ belong to %quote, and thus
       # ;; receive literal treatment.
       # ```
+      #
+      # To match literally without islands of pattern-matching, use `%literal`
+      # (`m1.operator.literal`). This is particularly important to prevent injection
+      # in patterns synthesized from user input (not that it would be dangerous; just
+      # unintended -- and remember, never trust user input!)
       matchpi %{(%'%quote term_)}, cue: :"%quote" do
         normalize(Π.quoted(term))
       end
 
+      # |@ m1.operator.keypool
+      #
+      # |@pattern
+      # (%'%keypool keys_*)
+      #
+      # |@key keys
+      # A list of keys (each key is treated literally).
+      #
+      # |@block
+      # Matches a dictionary whose set of keys is a subset of the given set
+      # of *keys*.
+      #
+      # The operator is named this way because the dictionary is basically
+      # allowed to draw its keys from the pool and from nowhere else. If
+      # a dict can't find one of its keys in the pool, this counts as
+      # a mismatch.
+      #
+      # ```
+      # (user? (%keypool username email age)) => true
+      # (user? _) => false
+      #
+      # (user? {})
+      # (user? {username: "alice", email: "alice@example.com"})
+      # (user? {username: "alice", age: 25})
+      # (user? {username: "alice", email: "alice@example.com", age: 25})
+      # ;; etc...
+      # ;; => true
+      #
+      # (user? {username: "bob", password: "passw0rd"})
+      # ;; => false, `password` is not in the pool of keys.
+      # ```
       matchpi %{(%'%keypool _*)}, cue: :"%keypool" do
         Normalize.terminal(pattern)
       end
@@ -1834,6 +1870,26 @@ module Ww::M1
         )
       end
 
+      # |@ m1.operator.string
+      #
+      # |@pattern
+      # (%'%string nonempty)
+      #
+      # |@block
+      # Matches a nonempty string.
+      #
+      # This is a shorthand for `(%all (%not "") _string)`.
+      #
+      # ```
+      # (username? (%string nonempty)) => true
+      # (username? _) => false
+      #
+      # (username? "john") ;; => true
+      # (username? "amy")  ;; => true
+      #
+      # (username? "")     ;; => false
+      # (username? qux)    ;; => false
+      # ```
       matchpi %{(%'%string nonempty)}, cue: {:"%string", :nonempty} do
         normalize(Π.pattern(STRING_NONEMPTY))
       end
