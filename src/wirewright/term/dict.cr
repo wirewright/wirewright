@@ -1385,6 +1385,26 @@ module Ww
       unify?(Term.of(key), Term.of(vsucc))
     end
 
+    # Returns `true` if all keys shared by `self` and *other* have equal values.
+    # If no keys are shared, returns `true`.
+    def agrees_with?(other : Dict) : Bool
+      if size < other.size
+        each_entry do |key, value0|
+          next unless value1 = other[key]?
+          next if value0 == value1
+          return false # disagrees
+        end
+      else
+        other.each_entry do |key, value0|
+          next unless value1 = self[key]?
+          next if value0 == value1
+          return false # disagrees
+        end
+      end
+
+      true # agrees
+    end
+
     private def pluck(key, commit : Commit)
       return unless value = at?(key)
 
@@ -1499,6 +1519,7 @@ module Ww
       end
     end
 
+    @[Dncast]
     def without_item(index)
       replace(Term[index]) { }
     end
