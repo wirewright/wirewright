@@ -138,6 +138,8 @@ struct Pattern
 
   # Returns the response of this pattern to *matchee* (may be positive or negative).
   def response(matchee : Term, *, env = Term[]) : Pr::Any
+    return Pr::Neg.new unless M1.probably_matches?(@operator, matchee)
+
     fb = M1.matches(env, @operator, matchee)
 
     case fb.size
