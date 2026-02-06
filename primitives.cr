@@ -237,6 +237,25 @@ PRIMITIVES = ProcRuleset.build do
     Term.merge(xs, ys)
   end
 
+  # multiset union
+  rulepi1 %[(mset/union a_dict b_dict)] do
+    if a.size < b.size
+      sm, lg = {a, b}
+    else
+      sm, lg = {b, a}
+    end
+
+    lg.transaction do |commit|
+      sm.each_entry do |key, sm_value|
+        next unless sm_count = sm_value.as_n?
+        next unless lg_count = lg[key]? || Term.of(0)
+        next unless lg_count = lg_count.as_n?
+
+        commit.with(key, sm_count + lg_count)
+      end
+    end
+  end
+
   rulepi1 %[(value xs_dict key_)] do
     xs[key]? || Term.of(:value, xs, key)
   end
@@ -714,6 +733,30 @@ PRIMITIVES = ProcRuleset.build do
     end
 
     Term.of(run)
+  end
+
+  # Converts *text* to a sequence of Unicode codepoints.
+  rulepi1 %{(codepoints text_string)} do
+    Term::Dict.build do |commit|
+      string = text.to(String)
+      string.each_char do |chr|
+        commit << chr.ord
+      end
+    end
+  end
+
+  rulepi1 %{(repr ns←((%past (%number (whole _)))) (digits ¦ () alphabet_string))} do
+    letters = alphabet.to(String)
+
+    Term::Dict.build do |commit|
+      ns.items.each do |n|
+        Int.each_digit(n, base: letters.size) do |digit|
+          assert digit.natural?
+
+          commit << letters[digit.to(Int32)]
+        end
+      end
+    end
   end
 end
 

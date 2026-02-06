@@ -560,26 +560,27 @@ abstract struct Int
     end
   end
 
-  def each_digit(base = 10, &) : Nil
-    if base < 2
-      raise ArgumentError.new("Invalid base #{base}")
-    end
+  def self.each_digit(object, *, base = 10, &) : Nil
+    assert base >= 1
+    assert object.zero? || object.positive?
 
-    if self < 0
-      raise ArgumentError.new("Can't request digits of negative number")
-    end
-
-    if self == 0
-      yield 0
+    if object.zero?
+      yield object
       return
     end
 
-    n = self
+    n = object
 
-    until n == 0
+    until n.zero?
       yield n % base
 
       n //= base
+    end
+  end
+
+  def each_digit(base = 10, &) : Nil
+    Int.each_digit(self, base: base) do |digit|
+      yield digit
     end
   end
 
