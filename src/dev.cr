@@ -47,7 +47,7 @@ module DevTool
       exist, and makes it the current.
 
     dev rm <preset>
-      Removes <preset>.
+      Removes <preset> from active and base states.
 
     dev p|preset
       Prints the current preset.
@@ -330,7 +330,7 @@ module DevTool
           fatal "preset #{preset} does not exist"
         end
 
-        # Leave preset if it's the one being removed.
+        # Exit preset if it's the one being removed.
         if state[:active, :preset]? == preset
           state = state.morph({:active, :preset, nil})
         end
