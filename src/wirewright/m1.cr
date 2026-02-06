@@ -554,6 +554,8 @@ module Ww::M1
     agents = Pf::Kit.stack_array(Backmap::Agent(EnvLogList), 8)
 
     backsys.each do |op, backspec|
+      next unless probably_matches?(op, matchee)
+
       matches = matches_and_logs(env, op, matchee)
       next if matches.empty?
 
