@@ -21,19 +21,41 @@ module Testtool
                TermComparison |
                ImageComparison
 
+  enum D7ComparisonResult
+    Match
+    Mismatch
+    More
+  end
+
   # Returns `true` if an expected D7 *frame* matches *actual*.
-  def d7matches?(frame : Term, actual : Term) : Bool
+  def d7cmp(frame : Term, actual : Term)
     Term.case(frame) do
       matchpi %{(frame content_*)} do
-        content == actual
+        if content == actual
+          D7ComparisonResult::Match
+        else
+          D7ComparisonResult::Mismatch
+        end
       end
 
       matchpi %{(frame pattern_ ¦ () pattern)} do
-        M1.probe?(pattern, actual)
+        if M1.probe?(pattern, actual)
+          D7ComparisonResult::Match
+        else
+          D7ComparisonResult::Mismatch
+        end
+      end
+
+      matchpi %{(frame pattern_ ¦ () pattern future)} do
+        if M1.probe?(pattern, actual)
+          return D7ComparisonResult::Match
+        end
+
+        D7ComparisonResult::More
       end
 
       matchpi %{end} do
-        false
+        D7ComparisonResult::Mismatch
       end
     end
   end
@@ -46,7 +68,7 @@ module Testtool
   defrecord D7test, seed : Term, frames : Array(Term)
 
   def run(test : D7test, assets, stat, complaints) : Nil
-    frames = D7.frames(Rack.clf, test.seed, Rack.tspace, Rack.master)
+    frames = D7.coarse_frames(Rack.clf, test.seed, Rack::Tspace.pass, Rack.pass)
 
     # Skip through seed.
     _ = frames.next
@@ -54,21 +76,25 @@ module Testtool
     before = test.seed
 
     test.frames.each do |after|
-      actual = measure(stat) { frames.next }
+      loop do
+        actual = measure(stat) { frames.next }
+        break if actual.is_a?(Iterator::Stop)
 
-      unless d7matches?(after, actual)
-        complaints << complaint("D7 frame mismatch",
-          before: before,
-          after: after,
-          got: actual.as?(Term) || Term.of(:end),
-        )
-
-        break
+        case d7cmp(after, actual)
+        in .match?
+          before = actual
+          break
+        in .mismatch?
+          complaints << complaint("D7 frame mismatch",
+            before: before,
+            after: after,
+            got: actual.as?(Term) || Term.of(:end),
+          )
+          break
+        in .more?
+          before = actual
+        end
       end
-
-      break if actual.is_a?(Iterator::Stop)
-
-      before = actual
     end
   end
 

@@ -1,11 +1,18 @@
 module Ww::D7
   # A classifier function "looks" at a circuit node term (more or less literally,
-  # but using pattern matching rather than "eyes"); and decides what its semantic
-  # function is (what the node "means"), represented as one of `Feature`s.
+  # but using pattern matching instead of a pair of "eyes"). It decides what
+  # the node's semantic function is (what the node "means"), primarily its
+  # *structural* function, and represents the decision using one of `Feature`s.
+  #
+  # By *structural function*, I mean an answer to questions such as "Should I descend
+  # here or leave it as-is?", "Should I ignore this or pass it to the solver?".
   alias Classifier = Term -> Feature
 
   # Nodes from a circuit are *classified* into *features*.
-  alias Feature = Inert | Gnd | Mixture | Scope | Parent | Circuit
+  alias Feature = Flat | Mixture | Scope | Parent | Circuit
+
+  # Features without a successor.
+  alias Flat = Gnd | Inert
 
   # Represents an inert (data) node.
   defcase Inert, node : Term
@@ -15,30 +22,39 @@ module Ww::D7
     Inert.new(node)
   end
 
-  # Represents a grounded node: a node to which no further recursive evaluation
-  # should apply; a node which is part of the hypergraph that should be solved
-  # by D7.
-  defcase Gnd, node : Term, edges : Slice(Term)
+  # Ground nodes form the hypergraph that is solved by a D7 `Regime`.
+  #
+  # Ground nodes can have a different, solver-oriented "look", defined
+  # by *defn*. This is similar to `Mixture`, except for two things.
+  #
+  # First, with `Gnd`, *defn* is discarded after use by a regime; whereas
+  # with Mixture, it is reinterpreted back into the original "look" by
+  # the mix function. Here, in `Gnd`, the original look is saved under *node*,
+  # and it is used on ascent without further processing.
+  #
+  # Second, `Gnd`'s *defn* is not treated any futher; whereas `Mixture`'s defn
+  # receives recursive treatment.
+  defcase Gnd, node : Term, defn : Term, edges : Slice(Term)
 
   # Constructs a grounded node from an enumerable of edges *ee*.
   #
   # See `Gnd`.
-  def gnd(node : Term, edges : Enumerable(Term)) : Gnd
-    Gnd.new(node, edges: edges.to_readonly_slice(&.itself))
+  def gnd(node : Term, edges : Enumerable(Term), *, defn : Term = node) : Gnd
+    Gnd.new(node, defn, edges.to_readonly_slice(&.itself))
   end
 
   # Constructs a grounded node with the given *edges*.
   #
   # See `Gnd`.
-  def gnd(node : Term, *edges : Term) : Gnd
-    gnd(node, edges)
+  def gnd(node : Term, *edges : Term, **kwargs) : Gnd
+    gnd(node, edges, **kwargs)
   end
 
   # Constructs a grounded node without edges.
   #
   # See `Gnd`.
-  def gnd(node : Term) : Gnd
-    Gnd.new(node, edges: Slice(Term).empty)
+  def gnd(node : Term, **kwargs) : Gnd
+    gnd(node, **kwargs, edges: Slice(Term).empty)
   end
 
   # A decomposition of *node* into a definition *defn* with a *mix* function
@@ -82,20 +98,33 @@ module Ww::D7
     parent(node, 0...node.itemsize)
   end
 
-  # Used by e.g. `frag`, `unit`, and at the top-level to represent and
-  # evaluate circuits.
+  # Used primarily by the `circuit` node; represents an isolated, nested
+  # circuit whose children (as defined by *range*) are evaluated using
+  # iterative deepening.
+  #
+  # *cont* defines leaf treatment, when this circuit is among the nodes
+  # at the target depth (so evaluation stops at it, without descending
+  # into *range*).
+  #
+  # Importantly, it makes no sense for *cont* to contain circuits, recursively,
+  # even though they are permitted by types and will work. The way they will work,
+  # though, is rather degenerate -- the evaluator will simply proceed into their
+  # *leaf*, recursively; never evaluating them as circuits. In other words, if
+  # *leaf* emits a circuit, that circuit is always a leaf, and so its *leaf* function
+  # is called, and so on, until some sort of base case where there is no circuit
+  # (or infinitely if there is no base case).
   defcase Circuit,
     node : Term::Dict,
     range : Range(Int32, Int32),
-    cont : -> Feature
+    leaf : -> Feature
 
   # Constructs a circuit feature.
   #
   # See `Circuit`.
-  def circuit(node : Term::Dict, range : Range(Int32, Int32), &cont : -> Feature) : Circuit
+  def circuit(node : Term::Dict, range : Range(Int32, Int32), &leaf : -> Feature) : Circuit
     assert range.exclusive? && range.subrange_of?(0...node.itemsize)
 
-    Circuit.new(node, range, cont)
+    Circuit.new(node, range, leaf)
   end
 
   def circuit(node : Term::Dict) : Circuit

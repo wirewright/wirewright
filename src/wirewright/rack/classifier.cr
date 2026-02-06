@@ -1,0 +1,338 @@
+module Ww::Rack
+  @@clf : D7::Classifier?
+  @@cache = SyncCache(Term, D7::Feature).new(512, preallocate: true)
+
+  # Returns the Rack classifier.
+  #
+  # See also: `D7::Classifier`.
+  def clf : D7::Classifier
+    @@clf ||= ->(node : Term) do
+      @@cache.put_if_absent(node) { classify(node) }
+    end
+  end
+
+  # :nodoc:
+  def classify(node : Term) : D7::Feature
+    PatternSet.case(node) do
+      matchpi %{[cell @u_ _?]} do
+        D7.gnd(node, u)
+      end
+
+      matchpi %{[feed _*]} do
+        continue unless spec = Feed.spec?(node)
+
+        D7.gnd(node, Feed.edges(spec), defn: Feed.render(spec))
+      end
+
+      matchpi %{[feed (%group edges_ (%past @_ min: 3))]} do
+        defn = Term::Dict.build do |commit|
+          commit << :group
+          edges.items.each_cons_pair do |a, b|
+            commit << Term.of(:feed, a, b)
+          end
+        end
+
+        D7.mixture(node, defn) { node }
+      end
+
+      matchpi %{[discard @u_]} do
+        D7.gnd(node, u)
+      end
+
+      matchpi %{[group _*]} do
+        D7.parent(node.as_d, 1...node.itemsize)
+      end
+
+      matchpi %{[module bindings_dict _*]} do
+        D7.scope(bindings.as_d, D7.parent(node.as_d, 2...node.itemsize))
+      end
+
+      matchpi %{[circuit @edge_ children0_*]} do
+        D7.circuit(node.as_d, 2...node.itemsize) do
+          if children0.empty?
+            mix0 = Term.of(:cell, edge)
+          else
+            mix0 = Term.of(:cell, edge, children0)
+          end
+
+          D7.mixture(node, mix0) do |mix1|
+            Term.of_case(mix1) do
+              matchpi %{(cell @_ children1←(_*))} do
+                node.replace(Term[2]...Term[node.itemsize], &.concat(children1.items))
+              end
+
+              otherwise do
+                node.replace(Term[2]...Term[node.itemsize]) { }
+              end
+            end
+          end
+        end
+      end
+
+      matchpi %{[circuit (edge←(%'edge capture_) pattern_) children0_*]} do
+        D7.circuit(node.as_d, 2...node.itemsize) do
+          next D7.inert(node) unless M1.probably_matches?(pattern, children0)
+          next D7.inert(node) unless env = M1.match?(pattern, children0)
+
+          if view0 = env[capture]?
+            mix0 = Term.of(:cell, edge, view0)
+          else
+            mix0 = Term.of(:cell, edge)
+          end
+
+          D7.mixture(node, mix0) do |mix1|
+            backspec = Term[]
+
+            Term.case(mix1) do
+              matchpi %{(cell @_)} do
+                backspec = Term.entries({ { {capture}, Term[] } })
+              end
+
+              matchpi %{(cell @_ value_)} do
+                backspec = Term.entries({ {capture, Term.of(:"^verbatim", value)} })
+              end
+            end
+
+            children1 = M1.backmap(pattern, Term.of(backspec), children0)
+
+            Term.of(node.replace(Term[2]...Term[node.itemsize], &.concat(children1.items)))
+          end
+        end
+      end
+
+      matchpi %{[frag @edge_ value_]} do
+        mix0 = Term.of(:group, {:cell, edge}, {:group, value})
+
+        D7.mixture(node, mix0) do |mix1|
+          Term.of_case(mix1) do
+            # New value arrived. Higher priority.
+            matchpi %{(_ (cell @_ value1_) _)} { node.morph({2, value1}) }
+            # New value computed.
+            matchpi %{(_ _ (group value1_))} { node.morph({2, value1}) }
+          end
+        end
+      end
+
+      matchpi %{[cell (edge←(%'edge capture_) pattern_) whole0_]} do
+        next D7.inert(node) unless M1.probably_matches?(pattern, whole0)
+        next D7.inert(node) unless env = M1.match?(pattern, whole0)
+        next D7.inert(node) unless part0 = env[capture]?
+
+        D7.mixture(node, Term.of(:cell, edge, part0)) do |mix1|
+          backspec = Term[]
+
+          Term.case(mix1) do
+            matchpi %{(cell @_)} do
+              backspec = Term.entries({ { {capture}, Term[] } })
+            end
+
+            matchpi %{(cell @_ part1_)} do
+              backspec = Term.entries({ {capture, Term.of(:"^verbatim", part1)} })
+            end
+          end
+
+          whole1 = M1.backmap(pattern, Term.of(backspec), whole0)
+
+          Term.of(node.morph({2, whole1}))
+        end
+      end
+
+      matchpi %{[frag @edge_]}, %{[cell (@edge_ _)]} do
+        D7.mixture(node, Term.of(:cell, edge)) do |view|
+          Term.of_case(view) do
+            matchpi %{(cell @_)} { node }
+            matchpi %{(cell @_ value1_)} { node.morph({2, value1}) }
+          end
+        end
+      end
+
+      matchpi %{[delay (%number +i32) _]} do
+        D7.gnd(node)
+      end
+
+      matchpi %{[transfer (@src_ pattern_ @dst_) template_]} do
+        D7.mixture(node, Term.of(:transfer, { {:not}, {src}, {pattern}, dst }, template)) { node }
+      end
+
+      matchpi %{[transfer (srcs←((%past @_ min: 1)) pattern_ @dst_) template_]} do
+        D7.mixture(node, Term.of(:transfer, { {:not}, srcs, pattern, dst }, template)) { node }
+      end
+
+      matchpi %{[transfer ((not (%group inhibitors_ (%past @_))) srcs←((%past @_ min: 1)) pattern_ @dst_) template_]} do
+        edges = [] of Term
+        edges.concat(inhibitors.items)
+        edges.concat(srcs.items)
+        edges << dst
+
+        D7.gnd(node, edges, defn: Term.of(:transfer, inhibitors, srcs, pattern, dst, template))
+      end
+
+      matchpi %{[backsys @src_ backmaps_*]} do
+        offspring = Term::Dict.build do |commit|
+          commit << :backsys << {src}
+
+          backmaps.items.each do |backmap|
+            Term.matchpi?(backmap, %{[backmap pattern_ backspec_]}) do
+              commit << Term.of(:backmap, {pattern}, backspec)
+            end
+          end
+        end
+
+        D7.mixture(node, offspring) { node }
+      end
+
+      matchpi %{[backsys ((%group srcs_ (%past @_ min: 0)) ¦ res_) backmaps_*]} do
+        edges = [] of Term
+        edges.concat(srcs.items)
+
+        res_edges, restab = Term::Dict.build do |res_edges, restab|
+          res.each_entry do |key, value|
+            # Ignore numbers to avoid tricky cases where the resources dict is like
+            # (@a @b @c), which would invalidate the disjointedness of
+            # <src values dict> | <res dict>.
+            next if key.type.number?
+            next unless Term.edge?(value)
+
+            edges << value
+            res_edges << value
+            restab.with(key, value)
+          end
+        end
+
+        D7.gnd(node, edges, defn: Term.of(:backsys, srcs, res_edges, restab, backmaps))
+      end
+
+      matchpi %{[queue (@front_ @back_ ⍊ min_: (%optional 1 (%number +i32!)) max_: (%optional ∞ (%any° (%number +i32!) ∞))) buffer_dict]}, min: Int32 do
+        defn = Term::Dict.build do |commit|
+          commit << :group
+
+          # Check if we are allowed to dequeue.
+          if 0 < min <= buffer.itemsize
+            commit << Term.of(:cell, front, buffer.items.first, front: true)
+          end
+
+          # Check if we are allowed to enqueue.
+          if max == Term.of(:∞) || buffer.itemsize < max.to(Int32)
+            commit << Term.of(:cell, back, back: true)
+          end
+        end
+
+        D7.mixture(node, Term.of(defn)) do |view|
+          rest = buffer
+
+          Term.case(view) do
+            # Dequeue.
+            matchpi %{⟨(cell @_ ⍊ front)⟩} do
+              rest = rest.lshift
+              continue
+            end
+
+            # Sync.
+            matchpi %{⟨(cell @_ x_ ⍊ front)⟩} do
+              rest = rest.morph({0, x})
+              continue
+            end
+
+            # Enqueue.
+            matchpi %{⟨(cell @_ x_ ⍊ back)⟩} do
+              rest = rest.append(x)
+            end
+
+            otherwise { }
+          end
+
+          Term.of(node.morph({2, rest}))
+        end
+      end
+
+      matchpi %{[view (@src_ src-pattern_ @dst_) template_]} do
+        D7.gnd(node, src, dst, defn: Term.of(:view, { {src}, {src_pattern}, dst }, template))
+      end
+
+      matchpi %{[view (@src_ src-pattern_ @dst_ dst-pattern_) template_]} do
+        D7.gnd(node, src, dst, defn: Term.of(:view, { {src}, {src_pattern}, dst, dst_pattern }, template))
+      end
+
+      matchpi(
+        %{[view (srcs←((%past @_ min: 1)) _ @dst_ _) _]},
+        %{[view (srcs←((%past @_ min: 1)) _ @dst_) _]},
+      ) do
+        edges = [] of Term
+        edges.concat(srcs.items)
+        edges << dst
+
+        D7.gnd(node, edges)
+      end
+
+      # Chan sensor
+      matchpi %{[sensor (_ _ @u_) _]} do
+        D7.gnd(node, u)
+      end
+
+      # View sensor
+      matchpi %{[sensor* (_ _ @u_) _]} do
+        D7.gnd(node, u)
+      end
+
+      # Fused chan sensor-cell
+      matchpi %{[(sensor cell) (tspace_ pattern_ @edge_) _?]} do
+        value0 = node[2]?
+
+        mix0 = Term.of(:group,
+          {:cell, edge, value0},
+          {:sensor, {tspace, pattern, edge}, {:^, edge[1]}},
+        )
+
+        D7.mixture(node, mix0) do |mix1|
+          Term.of_case(mix1) do
+            matchpi %{⟨(cell @_)⟩} { Term.of(node.morph({2, nil})) }
+            matchpi %{⟨(cell @_ value1_)⟩} { Term.of(node.morph({2, value1})) }
+          end
+        end
+      end
+
+      # Fused view sensor-cell
+      matchpi %{[(sensor* cell) (tspace_ pattern_ @edge_) _?]} do
+        value0 = node[2]?
+
+        mix0 = Term.of(:group,
+          {:cell, edge, value0},
+          {:"sensor*", {tspace, pattern, edge}, {:^, edge[1]}},
+        )
+
+        D7.mixture(node, mix0) do |mix1|
+          Term.of_case(mix1) do
+            matchpi %{⟨(cell @_)⟩} { Term.of(node.morph({2, nil})) }
+            matchpi %{⟨(cell @_ value1_)⟩} { Term.of(node.morph({2, value1})) }
+          end
+        end
+      end
+
+      # Appearance
+      matchpi %{[appearance _ @u_]} do
+        D7.gnd(node, u)
+      end
+
+      # Fused appearance-cell
+      matchpi %{[(appearance cell) (tspace_ @edge_) _?]} do
+        value0 = node[2]?
+
+        mix0 = Term.of(:group,
+          {:cell, edge, value0},
+          {:appearance, tspace, edge},
+        )
+
+        D7.mixture(node, mix0) do |mix1|
+          Term.of_case(mix1) do
+            matchpi %{⟨(cell @_)⟩} { Term.of(node.morph({2, nil})) }
+            matchpi %{⟨(cell @_ value1_)⟩} { Term.of(node.morph({2, value1})) }
+          end
+        end
+      end
+
+      otherwise do
+        D7.inert(node)
+      end
+    end
+  end
+end

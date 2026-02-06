@@ -55,9 +55,9 @@ uiR: {codex: "../uiR-succ8.soma.wwml"}
   color: (oklch 0.7 0.1 blue)
   tags: (ufold))
 
-(test "d7.test.wwml"
+(test "rack.test.wwml" ;; "d7.test.wwml"
   color: (oklch 0.7 0.1 violet)
-  tags: (d7 delta7))
+  tags: (d7 delta7 rack))
 
 (test "editR.test.wwml"
   color: (oklch 0.7 0.1 indigo)

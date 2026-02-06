@@ -1,90 +1,302 @@
-# Wirewright Delta7 (D7 for short) is a *symbolic physics engine*. In a sense,
-# it is just like a *physics engine* (think Box2D), but instead of working with
-# bodies, it works with *symbols*. Rather than solving equations, D7 searches for
-# relationships between symbols according to constraints. Instead of manipulating
-# velocity and position, D7 *rewrites*.
+# Wirewright Delta7 (D7 for short) is a rule search and application engine
+# which backs Wirewright's approach to *symbolic physics*. D7 implements
+# the machinery for *time-stepping* circuits. During a time-step, D7 finds
+# which laws can apply, and where; and applies them. The laws themselves
+# are provided in the form of *rewrite regimes*. Generic structure is
+# *classified* into `Feature`s which D7 understands, and can traverse
+# & search in.
 #
-# At its core, D7 is an attempt to model *autopoiesis* as described by Maturana,
-# Varela, and others.
+# ### General architecture
 #
-# See, for instance, *Autopoiesis: the organization of living systems, its
-# characterization and a model* by Varela, Maturana & Uribe (1974). D7 is trying
-# to check all the boxes in section 9, "Key".
+# If D7 was a language frontend (it is not!), `Classifier` and the whole
+# flatten`ing machinery would be the lexer.
 #
-# I think autopoiesis can be modeled in any "physics simulator". The only problem
-# is that in practice, the physics simulators we build are too unstructured. It's
-# "perceptually hard" to extract useful info from it, both for us as observers and
-# for the entities within the simulation. Imagine how much intrinsic structure
-# a particle simulator would require to start recognizing or matching on its own
-# configuration or its parts? With D7, it's as simple as a pattern match on a fragment.
+# If D7 was a language frontend (and it is not!), `Regime` would be
+# the parser, or, rather, a way to write parsers; a kind of parser combinator
+# framework that works not across sequences of tokens (features), but
+# across unstructured "bags" of them.
 #
-# Imagine a game. How hard would it be to make a car drive itself in that game, given
-# only the game's visuals as output and keyboard press states as input -- that is,
-# "from an outside agent's point of view"?
+# The interpreter part, if D7 was a language *backend*, is in user-supplied
+# bodies of rules. D7 does not define or restrict them in any way. Look for
+# examples of rule bodies in `Rack`. The interpreter part benefits greatly
+# from a number of helper functions, defined in d7/kit, and defined directly
+# under `D7` (such as `patch`, `patches`, `fetch`, and so on).
 #
-# We know the answer: very hard. That's why people resort to black box (ish) methods
-# like neural networks. In the worst case, you'd need a human -- an intricate
-# apparatus indeed.
+# One core difference that breaks this language analogy is D7 doesn't destroy
+# information as it "lexes", "parses", and "evaluates". Any change applied during
+# evaluation is merged back into the raw symbolic structure that D7 receives
+# as input. In that sense, D7 is a bit like a "language" whose evaluation produces
+# source code rather than "values", and those bits of source code it produces are
+# plugged back in.
 #
-# If only we had a *symbolic* physics simulator, with the same or similar kinds
-# of behaviors, but with structures easy to pattern match and construct
-# programmatically, "from an outside agent's point of view"...
+# ### Terminology
 #
-# In fact, what D7 does, at its core, is it attempts to internalize observation and
-# intervention. Normally, that's what humans do: they observe how their programs behave,
-# intervene, and sometimes change the behavior. The program itself cannot do that, not really.
-# D7, on the other hand, lets the program observe and intervene, too. At least in terms of
-# "ways of influence", D7 places the program and the programmer on equal footing; what one
-# can do the other can, and vice versa. The above is, really, an implementation detail
-# necessary to support this "embedding": symbolic worlds and pattern matching for
-# interpretability, rewriting, etc.
+# A *rewrite regime* is like a "chemistry" of features. Each rewrite
+# regime is a different kind of "chemistry".
 #
-# With D7, a *symbol* is an identity or a composition thereof. Such symbols are
-# represented meaningfully with `Term`s.
+# A *step* executes one tick of time for the rewrite regime. A step
+# takes the *previous frame* as input and outputs the *next frame*.
+# A *substep* is a partial frame. Time-stepping a frame F produces frame
+# F+1. Time-stepping a partial frame F+0.5 is not guaranteed to produce
+# the frame F+1. Substeps are mainly used for explanation and to trace
+# why certain things ended up where they did. A *pass* is a reified
+# time-step (see also: `Pass`).
 #
-# D7 programs -- called *circuits* -- form a hypergraph. A hypergraph is a graph
-# whose edges -- hyperedges -- are *sets*. You can imagine a hyperedge as a group.
-# Each node in a hypergraph participates in zero or more such groups.
+# Multiple passes (time-steps) can be chained to compose a larger,
+# *composite time-step*. The input of a composite time-step is still
+# the *previous frame*, and the output is still the *next frame*.
+# The intermediate frames (those each pass outputs which then are given
+# to the next pass) are known as *subframes*.
 #
-# In D7, there is no difference between *running* a circuit and *building* it. There
-# is no "runtime", nor is there "compile-time". D7 is more like a game, which you
-# can pause, save, and return to in the future. Since D7 circuits are persistent
-# and immutable (they are `Term`s), you get time travel for free, too, which is
-# very useful for debugging. Branching and other features come for free, too
-# (think Git or rather, something crude and Git-like).
+# At the level of composite time-steps, we can identify three granularities:
+# *coarse* (whereby a composite time-step produces exactly one frame,
+# the *next frame*); *subframe* (whereby a composite time-step produces
+# a sequence of subframes, the last of which is the next frame); and
+# *fine* (whereby a composite time-step produces a sequence of substeps,
+# the last of which is the next frame).
 #
-# A *D7 engine* to a D7 circuit is like a browser to a web page.
+# ### More concretely
+# Instead of building a general-purpose solver, which would necessarily be slow
+# (if done naively; plus, matching subgraphs is NP-hard, see e.g. [Wikipedia, Subgraph isomorphism problem](https://en.wikipedia.org/wiki/Subgraph_isomorphism_problem)),
+# I've identified the dominant rule shape in Rack through use. You can say we
+# bootstrapped from a naive solver to something that reflects the *actual* problem
+# well enough it's not NP. The rule shape looks like this:
 #
-# D7 introduces the notion of *entanglement*. Entanglement is how D7 circuits interact
-# with the outside world. The circuit may include symbolic objects recognized
-# by the engine. Those objects are synced by the engine to their "outside-world"
-# counterparts. Such objects are called *percepts* (internal, inbound representations
-# of outside-world entities) and *effects* (internal, outbound representations of
-# outside-world actions or transformations).
+# ```text
+# PIVOT
+#   -[edge0]-> dependency0
+#   -[edge1]-> dependency1
+#    .
+#    .
+#    .
+#   -[edgeN]-> dependencyN
+# ```
 #
-# With entanglement, D7 lets you access files, communicate with processes,
-# build server, graphical, and terminal apps and so on.
+# Here, `dependency` matches zero or more adjacent nodes at that edge. All
+# Rack nodes happen to conform to this shape: there is a "main" node, *the pivot*,
+# or *the query node*; and it has some number of *dependencies*.
 #
-# Alongside edges, D7 also has *surfaces*: *sensors* and *appearances*.
-# A sensor senses zero or more appearances. An appearance excites zero or more
-# sensors. Surfaces live in a *termspace*. D7 circuits can include zero or more
-# termspaces. A termspace can be local or global. A local termspace is bounded by
-# the circuit. A global termspace is either circuit-global or remote. A remote
-# termspace is like a multiplayer game, where each sensor and appearance is a tiny
-# "player" and the termspace itself is like a world (think Minecraft).
+# One can imagine defining this structure recursively, but since each
+# dependency matches zero-or-many, the definition would not be trivial,
+# and is an unnecessary complication in practice.
 #
-# Surfaces complement hyperedges in that hyperedges are hard-coded connectivity
-# (even if dynamically generated, especially with the help of D7 modules); whereas
-# for surfaces, whether they are "connected" is highly dynamic and depends
-# on the content itself.
+# See `D7.case` for the actual DSL/usage. The DSL looks as similar to the diagram
+# above as WwML can get.
 #
-# D7 circuits are graphs whose edges are *sets*; D7 termspaces are graphs whose
-# edges are *functions*, or more specifically, *predicates*.
+# D7 is basically a high-performance matcher for rules that have the shape above.
+# D7 does not support any other kind of rule shape -- specialization is a necessary
+# compromise in getting rid of NP.
+#
+# The high-performance part is mostly a TODO at the moment, by the way. It's fast
+# enough for this prototype stage; the problem is we lack heavy examples to benchmark
+# it with & profile under.
 module Ww::D7
   extend self
+
+  # :nodoc:
+  REGIMES = SyncHash(UInt32, Regime).new(initial_capacity: 32)
+
+  # :nodoc:
+  REGIME_ID = [0u32]
+
+  # Constructs a D7 regime using a `Term.case`-like query DSL. Returns a proc that
+  # should be passed as the block to `D7.step`.
+  #
+  # This macro is expected to be used the same way you use `Term.case`, i.e.,
+  # you can use it anywhere at all, sparingly. The regimes are cached. Rule bodies
+  # are blocks: using `return` in them returns out of the method or function
+  # that contains the `D7.case`.
+  #
+  # Grammar:
+  #
+  # ```text
+  # <query>
+  #   <query pattern> <query name>
+  #     -> <dep0>
+  #     -> <dep1>
+  #     .
+  #     .
+  #     .
+  #     -> <depN>
+  #
+  # <dep>
+  #   <link> <dependency pattern> <dependency options>
+  #
+  # <link>
+  #   (one <edge capture in query pattern>)
+  #     Follows an edge from a capture in the query pattern.
+  #   (each <edge list capture in query pattern>
+  #         <edge capture in dependency pattern>)
+  #     Follows each edge from a list of edges captured by the query pattern.
+  #
+  # <query pattern>, <dependency pattern>
+  #   <m1.operator>
+  #
+  # <dependency options>
+  #   {;; Required: specifies the name of the `MatchGroup` which will be
+  #    ;; populated with min to max `Match`es of this dependency.
+  #    name: _symbol,
+  #    ;; The minimum number of matches for this dependency (inclusive).
+  #    min: (%optional 1 (%number +i32)),
+  #    ;; The maximum number of matches for this dependency (inclusive).
+  #    ;; Use `∞` for unlimited.
+  #    max: (%optional 1 (%any° ∞ (%number +i32)))}
+  # ```
+  #
+  # Example usage:
+  #
+  # ```
+  # D7.case(clf, circuit) do
+  #   #   use block args to "import" match groups from query
+  #   #                 vvv  vvv  vvv
+  #   rule(<<-WWML) do |dev, src, dst|
+  #   [transfer inhibitors←((%past @_ min: 0)) srcs←((%past @_ min: 1)) pattern_ @dst_ template_] dev
+  #     -> (each inhibitors inhibitor) [cell @inhibitor_ _] {name: inhibitor, min: 0, max: 0}
+  #     -> (each srcs src) [cell @src_ value_] {name: src}
+  #     -> (one dst) cell←[cell @dst_] {name: dst}
+  #   WWML
+  #     # dev : MatchGroup
+  #     # src : MatchGroup
+  #     # dst : MatchGroup
+  #
+  #     # ...
+  #   end
+  # end
+  # ```
+  macro case(clf, circuit, &block)
+    {%
+      unless block
+        raise "expected a block containing one or more `rule`s"
+      end
+
+      id = REGIME_ID[0]
+      REGIME_ID[0] += 1
+
+      stmts = block.body
+      if stmts.is_a?(Expressions)
+        stmts = stmts.expressions
+      elsif stmts.is_a?(Nop)
+        stmts = [] of ::NoReturn
+      else
+        stmts = [stmts]
+      end
+
+      branches = [] of ::NoReturn
+
+      stmts.each do |stmt|
+        unless stmt.is_a?(Call) && stmt.name == :rule && stmt.args.size >= 1 && stmt.block
+          stmt.raise "regime: expected a call to `rule(*patterns : String, &)`"
+        end
+
+        stmt.args.each do |pattern|
+          imports = stmt.block.args
+          branches << {pattern: pattern, imports: imports, body: stmt.block.body}
+        end
+      end
+
+      if branches.empty?
+        block.raise "expected at least one `rule` branch"
+      end
+    %}
+
+    %regime = {{@type}}::REGIMES.put_if_absent({{id}}) do
+      %queries = Pointer({{@type}}::QueryIR).malloc({{branches.size}})
+      {% for branch, index in branches %}
+        %queries[{{index}}] = {{@type}}::QueryIR.parse(::Ww::ML.terms({{branch[:pattern]}}))
+      {% end %}
+
+      {{@type}}::Regime.new(Slice.new(%queries, {{branches.size}}, read_only: true))
+    end
+
+    {{@type}}.step({{clf}}, {{circuit}}) do |%hg|
+      %regime.solve(%hg) do |%match_table, %index|
+        case %index
+        {% for branch, index in branches %}
+        when {{index}}
+          %imports{index} = {
+            {% for name in branch[:imports] %}
+              %match_table[Term.of({{name.symbolize}})],
+            {% end %}
+          }
+
+          %result{index} = pass(*%imports{index}) do |{{branch[:imports].splat}}|
+            {{branch[:body]}}
+          end
+
+          %result{index}
+        {% end %}
+        else
+          raise ArgumentError.new
+        end
+      end
+    end
+  end
+
+  # A D7 pass takes a classifier and a circuit term (the previous *frame*),
+  # and returns some number of *substeps*. The last substep is the next *frame*.
+  #
+  # See `D7` for general explanation & terminology.
+  #
+  # - The resulting slice is read-only.
+  # - The resulting slice is guaranteed to contain at least one subframe.
+  # - Substeps may repeat. Thus, the next frame may be equal to the previous frame.
+  alias Pass = Classifier, Term -> Slice(Term)
+
+  private class CoarseFrameIterator
+    include Iterator(Term)
+
+    def initialize(@clf : Classifier, @circuit : Term, @passes : Indexable(Pass))
+      @memo = @circuit
+      @ahead = Deque{@circuit}
+    end
+
+    def next
+      if circuit = @ahead.shift?
+        return circuit
+      end
+
+      state = @circuit
+
+      subframes = @passes.map do |pass|
+        substeps = pass.call(@clf, state)
+        state = substeps.last # Coarse
+      end
+
+      if @circuit == state
+        return Iterator.stop
+      end
+
+      D7.fuse(@clf, @memo, subframes) do |frame|
+        next if @memo == frame
+
+        @ahead << frame
+        @memo = frame
+      end
+
+      @circuit = state
+      @ahead.shift
+    end
+  end
+
+  # Constructs an iterator for running a chain of *passes* in a single
+  # step, fusing their frames coarsely (i.e., discarding prior subframes)
+  # to obtain one or more "preview frames", which are subsequently produced
+  # by the iterator.
+  #
+  # NOTE: Whether the iterator terminates depends on the given *circuit*. E.g.
+  # if it oscillates, the iterator will not terminate.
+  def coarse_frames(clf : Classifier, circuit : Term, passes : Indexable(Pass)) : Iterator(Term)
+    CoarseFrameIterator.new(clf, circuit, passes)
+  end
+
+  # :ditto:
+  def coarse_frames(clf : Classifier, circuit : Term, *passes : Pass) : Iterator(Term)
+    coarse_frames(clf, circuit, passes)
+  end
 end
 
-require "./d7/hypergraph"
 require "./d7/feature"
+require "./d7/hypergraph"
+require "./d7/kit"
 require "./d7/regime"
 require "./d7/step"

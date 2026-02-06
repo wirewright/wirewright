@@ -1,7 +1,6 @@
 require "csv"
 require "benchmark"
 require "./wirewright"
-require "../rack10-clf"
 
 module Testtool
   include Ww

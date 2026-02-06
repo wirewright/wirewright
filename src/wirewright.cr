@@ -37,6 +37,7 @@ require "../libtermbox2"
 require "../inputr"
 
 require "./wirewright/alloy"
+require "./wirewright/rack"
 
 Log.setup_from_env(default_level: :warn, backend: Log::IOBackend.new(STDERR))
 
