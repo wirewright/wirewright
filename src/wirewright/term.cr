@@ -810,8 +810,7 @@ module Ww
   # Hashing, comparison
 
   struct Term
-    # An object encapsulating hash function state, similar in purpose
-    # to `Crystal::Hasher`.
+    # An object encapsulating hash function state, analogous to `Crystal::Hasher`.
     #
     # Currently implements the 64-bit Fowler–Noll–Vo hash function.
     #
@@ -874,6 +873,13 @@ module Ww
       # :ditto:
       def blast(object : Enum, & : UInt8 ->) : Nil
         blast(object.value) { |byte| yield byte }
+      end
+
+      # :ditto:
+      def blast(object : Enumerable, & : UInt8 ->) : Nil
+        object.each do |element|
+          blast(element) { |byte| yield byte }
+        end
       end
 
       # Returns the hashcode built so far.
