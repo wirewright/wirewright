@@ -69,6 +69,23 @@ module Ww::ML::Formatter
         end
       end
 
+      matchpi %[(%'%layer %'_ side_dict)] do
+        pp.group(style.indent, "{¦ ", "}") do
+          index = 0
+
+          side.each_entry_ord do |k, v|
+            pp.breakable if index > 0
+            format(pp, k, style)
+            pp.text(":")
+            pp.group(style.indent) do
+              pp.breakable
+              format(pp, v, style)
+            end
+            index += 1
+          end
+        end
+      end
+
       matchpi %[()] do
         pp.text("()")
       end
