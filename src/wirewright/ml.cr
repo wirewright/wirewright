@@ -217,31 +217,6 @@ module Ww::ML
     parse_with_srcmap(Conf.new(**kwargs), source, &.document)
   end
 
-  # :nodoc:
-  private def edge?(term : Term::Dict, type : TermType) : Bool
-    return false unless term.itemsonly?
-    return false unless term.size == 2
-    return false unless term.probably_includes?(SYM_EDGE)
-
-    term[0] == SYM_EDGE && term[1].type.subtype?(type)
-  end
-
-  # :nodoc:
-  private def edge?(term : Term::Any, type : TermType) : Bool
-    false
-  end
-
-  # Returns `true` if *term* is a well-formed edge. Returns `false` otherwise.
-  #
-  # This is just a "hand-optimized" version of the pattern `(%'edge _)`.
-  #
-  # TODO: move to `Term.edge?`
-  def edge?(term : Term, *, type : TermType = TermType::Any) : Bool
-    return false unless term.type.dict?
-
-    edge?(term.unsafe_as_d, type)
-  end
-
   # Returns the initial value for the given term *type*.
   #
   # See also the WwML spec, section "M1 Key-value pair shorthands", subsection

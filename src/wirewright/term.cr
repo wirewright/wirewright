@@ -1229,6 +1229,29 @@ module Ww
   # Utilities
 
   struct Term
+    # Returns `true` if *term* is a well-formed edge.
+    #
+    # This is just a "hand-optimized" version of the pattern `(%'edge _)`.
+    def self.edge?(term : Term::Dict, *, type : TermType) : Bool
+      return false unless term.itemsonly?
+      return false unless term.size == 2
+      return false unless term.probably_includes?(SYM_EDGE)
+
+      term[0] == SYM_EDGE && term[1].type.subtype?(type)
+    end
+
+    # :ditto:
+    def self.edge?(term : Term::Any, *, type : TermType) : Bool
+      false
+    end
+
+    # :ditto:
+    def self.edge?(term : Term, *, type : TermType = TermType::Any) : Bool
+      return false unless term.type.dict?
+
+      edge?(term.unsafe_as_d, type: type)
+    end
+
     # Recursively merges two dictionaries *a* and *b*.
     #
     # If two keys are equal and both values are dictionaries, those dictionaries are
