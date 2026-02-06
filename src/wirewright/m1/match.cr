@@ -532,12 +532,12 @@ module Ww::M1
   #
   # @x_  @x_number  (edge qux_dict)
   def match(ctx, op : Op::Edge, matchee : Tzip, plan)
-    ML.edge?(matchee.term, type: op.type) ? cons(ctx, plan) : Fb[]
+    Term.edge?(matchee.term, type: op.type) ? cons(ctx, plan) : Fb[]
   end
 
   # :nodoc:
   def probably_matches?(op : Op::Edge, matchee : Term) : Bool
-    ML.edge?(matchee)
+    Term.edge?(matchee)
   end
 
   # :nodoc:
