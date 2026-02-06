@@ -994,6 +994,9 @@ end
 # TODO: StringView should be implemented properly and moved to Permafrost. We can
 # copy some of Char::Reader's methods for .first, .rest, .prior, .last, and maybe &+
 # (aka join consecutive); everything else can be built on top of them.
+#
+# TODO: StringView is actually a *selection* in the text editor sense, and should
+# be renamed when I finally decide to move it to permafrost.
 struct StringView
   # WARNING: This will return the original string into which the view
   # is pointing! You probably want `to_s`.

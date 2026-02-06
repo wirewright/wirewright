@@ -633,14 +633,14 @@ module Ww
       Num.exact(object)
     end
 
-    # Constructs a string term from the given string view *object*.
-    def self.[](object : StringView) : Str
+    # Constructs a string term from the given string *object*.
+    def self.[](object : String) : Str
       Str.new(object)
     end
 
-    # Constructs a string term from the given string *object*.
-    def self.[](object : String) : Str
-      Term[object.view]
+    # Constructs a string term from the given string view *object*.
+    def self.[](object : StringView) : Str
+      Term[object.to_s]
     end
 
     # Constructs a string term from the given character *object*.

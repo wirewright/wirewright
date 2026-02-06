@@ -6,24 +6,15 @@ module Ww
     include AutoUpcast
     include TypeConversion
 
-    # FIXME: Storing a StringView here is a bad bad bad idea!!!! Views point god knows
-    # where at this point -- most likely into the original source string, which could be HUGE,
-    # and therefore keep it alive & waste memory. Even an empty view would keep
-    # the parent string alive!!!
-    def initialize(@value : StringView)
+    def initialize(@value : String)
     end
 
     def self.new(value : Escaped)
-      new(value.to_s.view)
+      new(value.to_s)
     end
 
     def <=>(other : Str) : Int32
       @value <=> other.@value
-    end
-
-    @[Dncast]
-    def after_end : Str
-      Str.new(@value.after_end)
     end
 
     def to_slice
@@ -31,15 +22,15 @@ module Ww
     end
 
     def to?(type : String.class) : String
-      @value.to_s
-    end
-
-    def to?(type : StringView.class) : StringView
       @value
     end
 
+    def to?(type : StringView.class) : StringView
+      @value.view
+    end
+
     def to?(type : Path.class) : Path
-      Path[@value.to_s]
+      Path[@value]
     end
 
     # Returns the number of characters in this string.
@@ -62,6 +53,9 @@ module Ww
     end
 
     # Concatenates ("stitches") this and *other* strings.
+    #
+    # Reference: It turns out the name *stitching* in the context of strings
+    # was borrowed by my unconscious from the depths of [Raku docs](https://docs.raku.org/language/rb-nutshell#+_String_concatenation).
     @[Dncast]
     def stitch(other) : Str
       stitch(Term.of(other).as_s)
@@ -70,37 +64,17 @@ module Ww
     # Returns an uppercase version of this string.
     @[Dncast]
     def upcase : Str
-      Term[@value.to_s.upcase]
+      Term[@value.upcase]
     end
 
     # Returns a lowercase version of this string.
     @[Dncast]
     def downcase : Str
-      Term[@value.to_s.downcase]
-    end
-
-    @[Dncast]
-    def first : Str
-      Term[@value.first_or_empty]
-    end
-
-    @[Dncast]
-    def rest : Str
-      Term[@value.rest_or_empty]
-    end
-
-    @[Dncast]
-    def prior : Str
-      Term[@value.prior_or_empty]
-    end
-
-    @[Dncast]
-    def last : Str
-      Term[@value.last_or_empty]
+      Term[@value.downcase]
     end
 
     struct Escaped
-      def initialize(@value : StringView)
+      def initialize(@value : String)
       end
 
       def inspect(io)
