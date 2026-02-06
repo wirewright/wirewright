@@ -1188,7 +1188,7 @@ module Ww
       {{@type}}.of({{@type}}.case({{args.splat}}, {{kwargs.double_splat}}) {{block}})
     end
 
-    {% for name in %w[matchpi givenpi matchpiT givenpiT] %}
+    {% for name in %w[matchp matchpi givenpi matchpiT givenpiT] %}
       # Shorthand for a single-`{{name.id}}` call to `Term.case`. Raises
       # `ArgumentError` on mismatch.
       #
