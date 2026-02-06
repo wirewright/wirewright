@@ -314,13 +314,13 @@ module Ww
 
     # Constructs a generic `Term` instance from the given string *term*.
     def self.of(term : Str) : Term
-      Term.new(Pointer(Void).new(term.as(Void*).address | Tag::Str.value))
+      Term.new(Pointer(Void).new(term.@value.as(Void*).address | Tag::Str.value))
     end
 
     # Downcasts this term to a string term without performing any checks.
     @[Upcast]
     def unsafe_as_s : Str
-      Pointer(Void).new(@mem.address >> 3 << 3).as(Str)
+      Str.new(Pointer(Void).new(@mem.address >> 3 << 3).as(String))
     end
 
     # Constructs a generic `Term` from the given symbol *term*.
