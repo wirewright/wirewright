@@ -1418,9 +1418,84 @@ module Ww::M1
         Normalize.terminal(spec, depth: 0)
       end
 
-      # TODO: Document!!!!!
-      # TODO: mark var's as %ref.
+      # |@ m1.operator.number
+      #
+      # |@pattern
+      # (%'%number spec_+)
+      #
+      # |@block
+      # A general-purpose operator for matching a number.
+      #
+      # *spec* contains an expression in a small language for describing numbers
+      # within the larger context of the pattern. Here is its grammar:
+      #
+      # ```text
+      # <spec>
+      #   <subject>
+      #     Examples: `(%number _)` to match any number (`_number` is a shorthand
+      #     for this); `(%number (whole _))` to match any integer number.
+      #   <subject> <cmp> <arg>
+      #     A binary comparison. Examples: `(%number _ < 100)`, `(%number (whole _) <= -10)`,
+      #     `(%number (whole _) < (var hi))`.
+      #   <bound> <lcmp> <subject> <lcmp> <bound>
+      #     A ternary comparison. Useful for defining ranges. Examples: `(%number 0 <= _ < 100)`,
+      #     `(%number (var lo) < _ <= 100)`, `(%number (var lo) < _ < (var hi))`.
+      #
+      # <subject>
+      #   _
+      #     Any number. For example, this matches: `1.23`, `1/3`, `100`, `-1`, `0`, etc.
+      #   (whole _)
+      #     Any whole (integer) number. For example, this matches:  `100`, `-1`, `0`, etc.
+      #
+      # <bound>
+      #   _number
+      #     A constant bound.
+      #   (var name_)
+      #     A constraint bound. *name* is the name of the capture whose value is
+      #     used as the bound. If its value is not a number, `%number` counts that
+      #     as a mismatch (as always, in the constraint sense; in that such mismatches
+      #     may drive further search).
+      #
+      # <cmp>
+      #   <
+      #   <=
+      #   >
+      #   >=
+      #
+      # <lcmp>
+      #   <
+      #   <=
+      # ```
+      #
+      # General usage:
+      #
+      # ```wwml
+      # ;; Constants
+      # (age? (%number 1 <= (whole _) <= 130)) => true
+      # (age? _) => false
+      #
+      # (age? 10) ;; => true
+      # (age? 25) ;; => true
+      # (age? 100) ;; => true
+      #
+      # (age? 0)   ;; => false
+      # (age? 0.5) ;; => false
+      # (age? 190) ;; => false
+      # (age? qux) ;; => false
+      #
+      # ;; Constraints
+      # (satisfied? {¦ salary: (%number _ >= (var min-salary)) min-salary_number}) => true
+      # (satisfied? _) => false
+      #
+      # (satisfied? {name: "Jane Doe", salary: 50_000, min-salary: 30_000})
+      # ;; => true
+      # (satisfied? {name: "Samuel Doe", salary: 100_000, min-salary: 100_000})
+      # ;; => true
+      # (satisfied? {name: "John Doe", salary: 100_000, min-salary: 500_000})
+      # ;; => false
+      # ```
       matchpi %{(%'%number _*)}, cue: :"%number" do
+        # TODO: mark var's as %ref.
         continue unless _ = NumberSpec.op?(pattern)
 
         Normalize.terminal(pattern, depth: 0)
@@ -1651,6 +1726,51 @@ module Ww::M1
         normalize(Π.pattern(Term.of(:"%pipe", head, cont)))
       end
 
+      # |@ m1.operator.literal
+      #
+      # |@pattern
+      # (%'%literal term_)
+      #
+      # |@key term
+      # Any term (treated literally).
+      #
+      # |@block
+      # Guarantees literal treatment of *term*. Matches only terms exactly
+      # equal to *term*, without further interpretation of *term*.
+      #
+      # There is an ML shorthand for `(%literal XYZ)`: `%'XYZ`. For example,
+      # writing `(%literal (+ a b))` is the same as writing `%'(+ a b)`. Notice
+      # how the `%'` shorthand continues the idea of the `'` shorthand for
+      # `(literal XYZ)`: when you write `'qux`, you get `(literal qux)`; when
+      # you write `%'qux`, you get `(%literal qux)`.
+      #
+      # This particular variant of `%literal` is useful for embedding data that
+      # looks like a pattern inside an actual pattern. Examples of this include
+      # embedding a pattern inside another pattern, matching patterns with a pattern
+      # (notice, for instance, how often patterns in `m1.operator` docs use `%'`,
+      # the `%literal` shorthand), or plugging in untrusted user data when synthesizing
+      # patterns from user input (directly or indirectly).
+      #
+      # ```
+      # (literal-pattern? ((%literal %literal) _)) => true
+      # (literal-pattern? false) => false
+      #
+      # ;; The above can be rewritten more neatly using the `%'` shorthand:
+      # (literal-pattern? (%'%literal _)) => true
+      # (literal-pattern? false) => false
+      #
+      # (literal-pattern? (+ 1 2))        ;; => false
+      # (literal-pattern? 100)            ;; => false
+      # (literal-pattern? (%literal 123)) ;; => true
+      # (literal-pattern? %'123)          ;; => true
+      # ;; The `%'` shorthand, just like most other ML shorthands, can be used
+      # ;; anywhere; that is, it does not matter whether it ends up being looked
+      # ;; at by M1 and interpreted as a pattern or not.
+      # ```
+      matchpi %{(%'%literal term_)}, cue: :"%literal" do
+        Normalize.literal(term)
+      end
+
       # |@ m1.operator.all
       #
       # |@pattern
@@ -1761,10 +1881,6 @@ module Ww::M1
         Term.of(normal)
       end
 
-      matchpi %{(%'%literal term_)}, cue: :"%literal" do
-        Normalize.literal(term)
-      end
-
       # |@ m1.operator.quote
       #
       # |@pattern
@@ -1811,7 +1927,7 @@ module Ww::M1
       #
       # The operator is named this way because the dictionary is basically
       # allowed to draw its keys from the pool and from nowhere else. If
-      # a dict can't find one of its keys in the pool, this counts as
+      # a dict couldn't find one of its keys in the pool, this counts as
       # a mismatch.
       #
       # ```
