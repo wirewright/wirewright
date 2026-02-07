@@ -62,8 +62,8 @@ module Ww::Rack
 
       rule(<<-WWML) do |dev, src, res|
       [backsys srcs←((%past @_ min: 0)) resources←((%past @_ min: 0)) restab_dict rules_dict] dev
-        -> (many srcs src) [cell @src_ value_] {name: src, min: 0}
-        -> (many resources resource) [cell @resource_ _?] {name: res}
+        -> (many srcs src) [cell @src_ value_] {name: src}
+        -> (many resources resource) [cell @resource_ _?] {name: res, min: 0}
       WWML
         src_edges, restab, rules = D7.fetch(dev, :srcs, :restab, :rules)
 

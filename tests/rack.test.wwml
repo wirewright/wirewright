@@ -1279,6 +1279,27 @@
         (front_ _* `back) <> {(front): (), back: ^front})))
     ;; ...
 
+  ;; Source cell empty must deactivate backsys.
+  (d7
+    (frame
+      (cell @x 100)
+      (cell @y)
+      (backsys (@x @y)
+        (x_ y_) <> {y: ^x, x: ^y}))
+    end)
+  (d7
+    (frame
+      (cell @x 100)
+      (cell @y 200)
+      (backsys (@x @y)
+        (x_ y_) <> {y: ^x, x: ^y}))
+    (frame
+      (cell @x 200)
+      (cell @y 100)
+      (backsys (@x @y)
+        (x_ y_) <> {y: ^x, x: ^y})))
+    ;; ...
+
   ;; Increment one
   (d7
     (frame

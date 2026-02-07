@@ -39,7 +39,10 @@ module Ww::D7
     captures.map { |capture| fetch(object, capture) }
   end
 
-  # Maps each term in *goal* to its index in *src*, assuming 1:1 correspondence.
+  # Maps each term in *goal* to its index in *src*.
+  #
+  # NOTE: Assumes 1:1 correspondence. Extra items in *src*, *goal*, or
+  # both raise.
   def permutation(src : MatchGroup, capture, goal : Indexable(Term)) : Slice(Int32) forall T
     assert src.size == goal.size
 
