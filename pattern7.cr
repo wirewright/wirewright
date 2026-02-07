@@ -468,24 +468,3 @@ class PatternSet(T)
     responses(matchee, env: env).first? || Pr::Neg.new
   end
 end
-
-module Ww::M1
-  struct ShapeIndex
-    def initialize(@patterns : Slice(M1::Op::Any))
-    end
-
-    def self.build(patterns : Enumerable(Term))
-      {new(patterns.to_readonly_slice { |pattern| M1.operator(pattern) }), (0u32...patterns.size).to_a}
-    end
-
-    def decompose(matchee : Term) : Pf::USet32
-      Pf::USet32.transaction do |commit|
-        @patterns.each_with_index do |pattern, index|
-          next unless M1.probably_matches?(pattern, matchee)
-
-          commit << index.to_u32
-        end
-      end
-    end
-  end
-end
