@@ -132,7 +132,7 @@ module Testtool
     renders = [] of Term
 
     test.variants.each do |variant|
-      render, issues = measure(stat) { Microfold.render(theme, variant, severity: :minor) }
+      render, issues = measure(stat) { Microfold.render_with_issues(theme, variant, severity: :minor) }
       if issues.present?
         ok = false
       end

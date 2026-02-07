@@ -92,16 +92,14 @@ module Ww::Microfold
   # instead, it points out issues, some of them minor, others major; others --
   # severe. At no point would Microfold give up, however; it is but one participant
   # shaping the given *root*, so it cannot just explode.
-  def render(theme : Theme, root : Term, *, severity : Issue::Severity = :minor) : {Term, Array(Issue::Backtrace)}
+  def render_with_issues(theme : Theme, root : Term, *, severity : Issue::Severity = :minor) : {Term, Array(Issue::Backtrace)}
     Issue.setup(severity: severity) do |issues|
       Pass.render(theme, root, issues)
     end
   end
 
-  # Alias of the main overload of `render`. The arguments are flipped to enable
-  # piping: e.g. `pipe(..., Microfold.render(theme), ...)`. Errors are suppressed.
-  def render(root : Term, theme : Theme, **kwargs) : Term
-    renderout, _ = render(theme, root, severity: :quiet)
+  def render(theme : Theme, root : Term) : Term
+    renderout, _ = render_with_issues(theme, root, severity: :quiet)
     renderout
   end
 end
