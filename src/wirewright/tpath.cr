@@ -1,8 +1,6 @@
 module Ww
   # Short for *termpath*. The set of termpaths is a superset of the set of
   # keypaths. The set of keypaths is a superset of the set of itempaths.
-  #
-  # TODO: Termpaths will eventually succede `Backpath`s.
   struct Tpath
     alias Step = Key | Value
 
@@ -102,6 +100,12 @@ module Ww
         Tpath.new(@steps.{{method.id}}(step))
       end
     {% end %}
+
+    def starts_with?(other : Tpath) : Bool
+      return false unless size >= other.size
+
+      @steps.starts_with?(other.@steps)
+    end
 
     def [](object) : Tpath
       Tpath.new(@steps[object])

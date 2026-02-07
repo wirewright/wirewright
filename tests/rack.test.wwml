@@ -3393,3 +3393,81 @@
     ⟨[cell @pool {"A": 56, "B": 132, "C": 96, "D": 50}]⟩)
   end)
 
+;; Handling of disjoint and non-disjoint writes to the same location.
+(group
+  ;; Disjoint writes must all succeed.
+  (d7
+    (frame
+      (cell @x {"A": 100, "B": 200, "C": 300})
+      (backsys @x
+        {¦ "A": ±n} <> {n: ^(- n 1)})
+      (backsys @x
+        {¦ "B": ±n} <> {n: ^(* n 2)})
+      (backsys @x
+        {¦ "C": ±n} <> {n: ^(+ n 1)}))
+    (frame
+      (cell @x {"A": 99, "B": 400, "C": 301})
+      (backsys @x
+        {¦ "A": ±n} <> {n: ^(- n 1)})
+      (backsys @x
+        {¦ "B": ±n} <> {n: ^(* n 2)})
+      (backsys @x
+        {¦ "C": ±n} <> {n: ^(+ n 1)}))
+    (frame
+      (cell @x {"A": 98, "B": 800, "C": 302})
+      (backsys @x
+        {¦ "A": ±n} <> {n: ^(- n 1)})
+      (backsys @x
+        {¦ "B": ±n} <> {n: ^(* n 2)})
+      (backsys @x
+        {¦ "C": ±n} <> {n: ^(+ n 1)})))
+    ;; ...
+
+  ;; Insertions in the middle conflict with other write(s).
+  ;;
+  ;; NOTE: Here we see the unconditional suppression of insertion which
+  ;; is supposed to be a deterministic, but not exactly human-
+  ;; comprehensible choice.
+  (d7
+    (frame
+      (cell @x (+ 1 2))
+      (backsys @x  {¦ -qux_} <> {qux: true})
+      (backsys @x  ⟨±n⟩° <> {n: ^(+ n 1)})
+      (backsys @x  [+ `x _ _] <> {x: "foo"}))
+    (frame
+      (cell @x (+ 2 3 qux: true))
+      (backsys @x  {¦ -qux_} <> {qux: true})
+      (backsys @x  ⟨±n⟩° <> {n: ^(+ n 1)})
+      (backsys @x  [+ `x _ _] <> {x: "foo"}))
+    (frame
+      (cell @x (+ 3 4 qux: true))
+      (backsys @x  {¦ -qux_} <> {qux: true})
+      (backsys @x  ⟨±n⟩° <> {n: ^(+ n 1)})
+      (backsys @x  [+ `x _ _] <> {x: "foo"})))
+    ;; ...
+
+  ;; We can "fix" conflicts like these with explicit staging. Rack
+  ;; won't be able to do anything about them on its own, because the
+  ;; conflicts above are, in a sense, as "pure" as conflicts go.
+  (d7
+    (frame
+      (cell @x (+ 1 2))
+      (backsys @x  {¦ -qux_} <> {qux: true})
+      (backsys @x  ⟨±n ¦ qux⟩° <> {n: ^(+ n 1)})
+      (backsys @x  (+ `x _ _ ⍊ -qux) <> {x: "foo"}))
+    (frame
+      (cell @x (+ "foo" 1 2 qux: true))
+      (backsys @x  {¦ -qux_} <> {qux: true})
+      (backsys @x  ⟨±n ¦ qux⟩° <> {n: ^(+ n 1)})
+      (backsys @x  (+ `x _ _ ⍊ -qux) <> {x: "foo"}))
+    (frame
+      (cell @x (+ "foo" 2 3 qux: true))
+      (backsys @x  {¦ -qux_} <> {qux: true})
+      (backsys @x  ⟨±n ¦ qux⟩° <> {n: ^(+ n 1)})
+      (backsys @x  (+ `x _ _ ⍊ -qux) <> {x: "foo"}))
+    (frame
+      (cell @x (+ "foo" 3 4 qux: true))
+      (backsys @x  {¦ -qux_} <> {qux: true})
+      (backsys @x  ⟨±n ¦ qux⟩° <> {n: ^(+ n 1)})
+      (backsys @x  (+ `x _ _ ⍊ -qux) <> {x: "foo"}))))
+    ;; ...

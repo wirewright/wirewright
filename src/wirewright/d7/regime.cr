@@ -354,11 +354,112 @@ module Ww::D7
       end
     end
 
+    private def compatible?(a : Tpath, b : Tpath) : Bool
+      if a.size == b.size
+        return a != b # if different, then they're compatible
+      end
+
+      short, long = {a, b}.minmax_by(&.size)
+      !long.starts_with?(short) # E.g. Tpath[2] and Tpath[2—1] are incompatible.
+    end
+
+    private def compatible?(ref : Term, successor : Term, &predicate : Tpath -> Bool) : Bool
+      compatible?(ref, successor, Tpath[], predicate)
+    end
+
+    private def compatible?(ref : Term, successor : Term, path, predicate) : Bool
+      if ref == successor
+        return true # compatible
+      end
+
+      unless (ref = ref.as_d?) && (successor = successor.as_d?)
+        return predicate.call(path)
+      end
+
+      ref.each_entry do |key, value0|
+        subpath = path.append(Tpath.value(key))
+        unless value1 = successor[key]?
+          # Successor removed *key*.
+          return false unless predicate.call(subpath)
+          next
+        end
+
+        # Successor possibly modified *key*.
+        unless compatible?(value0, value1, subpath, predicate)
+          return false
+        end
+      end
+
+      successor.each_entry do |key, _|
+        next if key.in?(ref)
+
+        # Successor added *key*.
+        subpath = path.append(Tpath.value(key))
+        return false unless predicate.call(subpath)
+      end
+
+      true # compatible
+    end
+
+    private def compatible?(orig : Term, rep0 : Term, rep1 : Term) : Bool
+      affected0 = Pf::Kit.stack_array(Tpath)
+
+      _ = compatible?(orig, rep0) do |path|
+        affected0 << path
+
+        true # continue
+      end
+
+      compatible?(orig, rep1) do |path1|
+        affected0.all? { |path0| compatible?(path0, path1) }
+      end
+    end
+
+    # Accumulates changes made by *successor* into *acc*. Changes are found
+    # by comparing *ref* and *successor*.
+    #
+    # WARNING: This method assumes implicitly that the changes of all *successors*
+    # accumulated into *acc* are disjoint. If they conflict, this method will
+    # break. You are expected to guard calls to this method with a disjointedness check.
+    private def overlay(acc : Term, ref : Term, successor : Term) : Term
+      unless (acc_dict = acc.as_d?) && (successor_dict = successor.as_d?)
+        return successor
+      end
+
+      assert ref_dict = ref.as_d?
+
+      result = acc_dict.transaction do |commit|
+        ref_dict.each_entry do |key, ref_value|
+          unless successor_value = successor_dict[key]?
+            # Successor removed *key*.
+            commit.without(key)
+            next
+          end
+
+          # We'd like to keep acc's values unless the successor modifies
+          # the entry.
+          next if successor_value == ref_value
+
+          # Successor modified *key*.
+          commit.with(key, overlay(acc_dict[key], ref_value, successor_value))
+        end
+
+        successor.each_entry do |key, successor_value|
+          next if key.in?(ref_dict)
+
+          # Successor created *key*.
+          commit.with(key, successor_value)
+        end
+      end
+
+      Term.of(result)
+    end
+
     def solve(hg : Hypergraph, & : MatchTable, Int32 -> Patch?) : Patch
       excitations = perceive(hg)
       supply = supply(excitations)
 
-      # As queries *demand* certain patterns, this lets us reject a great deal
+      # Since queries *demand* certain patterns, this lets us reject a great deal
       # of them before commencing more complex search.
       candidates = Pf::Kit.stack_array({Query, Int32})
       @queries.each_with_index do |query, query_index|
@@ -388,32 +489,99 @@ module Ww::D7
         {soln, proposal.as(Patch)} # (cast, otherwise Crystal crashes with a compiler bug!)
       end
 
+      merge(hg, proposals)
+    end
+
+    private def merge(hg : Hypergraph, proposals : Array({Soln, Patch})) : Patch
+      if proposals.empty?
+        return Patch.new
+      end
+
       proposals.sort_by! { |soln, _| soln }
 
-      used = Pf::USet32.new
+      # A table from node id to replacement proposals for that node along
+      # with proposal index (used for ranking).
+      #
+      # NOTE: Proposals are sorted by soln, and iteration is inorder, thus
+      # the arrays here are sorted as well by proposal index, asc, and
+      # therefore by soln, asc.
+      patchtab = {} of NodeId => Array({Term, UInt32})
+
+      probably_conflicts = false
+
+      proposals.each_with_index do |(_, proposal), proposal_index|
+        proposal.each do |node_id, rep|
+          reps = patchtab.put_if_absent(node_id) { [] of {Term, UInt32} }
+          reps << {rep, proposal_index.to_u32}
+
+          if reps.size > 1
+            probably_conflicts = true
+          end
+        end
+      end
+
+      proposals_declined = Pf::USet32[]
+      if probably_conflicts
+        proposals_declined = decline_set(hg, patchtab)
+      end
 
       Patch.transaction do |patch|
-        proposals.each do |_, proposal|
-          modifies = Pf::USet32.transaction do |commit|
-            proposal.each do |node_id, rep|
-              next if hg[node_id] == rep
+        patchtab.each do |node_id, reps|
+          ref = hg[node_id]
+          acc = ref
 
-              commit << node_id
-            end
+          reps.each do |rep, proposal_index|
+            next if proposal_index.in?(proposals_declined)
+
+            acc = overlay(acc, ref, rep)
           end
 
-          # Abort transaction if any node modified by the rule was modified by
-          # someone else already.
-          next if modifies.intersects?(used)
+          patch.assoc(node_id, acc)
+        end
+      end
+    end
 
-          # Commit.
-          used |= modifies
-          modifies.each do |node_id|
-            {% unless flag?(:release) %}
-              assert !node_id.in?(patch)
-            {% end %}
+    # Computes the proposal decline set for *patchtab*: declines proposals
+    # that conflict.
+    private def decline_set(hg : Hypergraph, patchtab : Hash(NodeId, Array({Term, UInt32}))) : Pf::USet32
+      Pf::USet32.transaction do |declined|
+        patchtab.each do |node_id, reps|
+          orig = hg[node_id]
 
-            patch.assoc(node_id, proposal[node_id])
+          reps.each_with_index do |(rep0, proposal_index0), i|
+            next if proposal_index0.in?(declined)
+
+            fits = true
+
+            reps.each_with_index do |(rep1, proposal_index1), j|
+              next if i == j
+              next if proposal_index1.in?(declined)
+
+              # If we (rep0) are less disliked than rep1, we won't disable ourselves
+              # in case of conflict. Thus there is little point in finding a conflict.
+              #
+              # If our (rep0's) proposal index is smaller, then we are more preferred,
+              # and thus we won't disable ourselves in case of conflict with rep1. This
+              # means there is little point in checking for conflict in the first place.
+              # rep1, who is less preferred, will do that instead.
+              next if proposal_index0 < proposal_index1
+
+              # We shouldn't have the same rule propose two versions for the same node.
+              # This can't happen because all rules return a Patch.
+              assert proposal_index0 != proposal_index1
+
+              next if compatible?(orig, rep0, rep1)
+
+              # We (rep0) are less preferred than rep1 and are also incompatible with
+              # with it. We are in conflict with rep1. We must abstain because we are
+              # less preferred.
+              fits = false
+              break
+            end
+
+            next if fits
+
+            declined << proposal_index0
           end
         end
       end

@@ -67,8 +67,7 @@ module Ww::D7
 
   # An immutable map of node ids to replacement terms.
   #
-  # The granularity is a node; we do not go lower than that. So conflicts
-  # occur at nodes, not their sub-terms.
+  # Disjoint changes to the same node are supported and will be properly merged.
   alias Patch = Pf::Map(NodeId, Term)
 
   # Constructs a patch that replaces all nodes in *object* with *term*.
