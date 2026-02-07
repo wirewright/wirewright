@@ -551,15 +551,12 @@ module Ww::D7
           reps.each_with_index do |(rep0, proposal_index0), i|
             next if proposal_index0.in?(declined)
 
-            fits = true
+            abstains = false
 
             reps.each_with_index do |(rep1, proposal_index1), j|
               next if i == j
               next if proposal_index1.in?(declined)
 
-              # If we (rep0) are less disliked than rep1, we won't disable ourselves
-              # in case of conflict. Thus there is little point in finding a conflict.
-              #
               # If our (rep0's) proposal index is smaller, then we are more preferred,
               # and thus we won't disable ourselves in case of conflict with rep1. This
               # means there is little point in checking for conflict in the first place.
@@ -567,19 +564,20 @@ module Ww::D7
               next if proposal_index0 < proposal_index1
 
               # We shouldn't have the same rule propose two versions for the same node.
-              # This can't happen because all rules return a Patch.
+              # This can't happen because all rules return a Patch, which is a hash table;
+              # its keys cannot repeat.
               assert proposal_index0 != proposal_index1
 
               next if compatible?(orig, rep0, rep1)
 
               # We (rep0) are less preferred than rep1 and are also incompatible with
-              # with it. We are in conflict with rep1. We must abstain because we are
-              # less preferred.
-              fits = false
+              # it. We are in conflict with rep1. We must abstain in favor of rep1
+              # because we are less preferred.
+              abstains = true
               break
             end
 
-            next if fits
+            next unless abstains
 
             declined << proposal_index0
           end
