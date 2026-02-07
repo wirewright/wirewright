@@ -1864,18 +1864,47 @@ module Ww::M1
         Normalize.terminal(pattern)
       end
 
+      # |@ m1.operator.any°
+      #
+      # |@pattern
+      # (%'%any° branches_*)
+      #
+      # |@key branches m1.operator
+      #
+      # |@block
+      # A general-purpose alternation operator. It works like `%any`, but its
+      # branches are *operators* rather than literal terms. `%any°` outputs
+      # the results from all successful branches exhaustively (hence it is
+      # a *source*, as the source mark `°` indicates).
+      #
+      # In other words, `%any°` is not "find the first branch that matches",
+      # but rather, "find all branches that match, allowing others to fail,
+      # and merge the resulting match envs into a stream of match envs ordered
+      # by branch index".
+      #
+      # Branches of `%any°` cannot "see" each other. As a consequence, for
+      # example, constraints do not work across an `%any°` boundary. Instead
+      # of trying to "equate", the matches that `%any°` finds are simply
+      # concatenated into a stream of alternative matches.
+      #
+      # ```wwml
+      # (find (%matches ms_ (%any° ⟨(even x_)⟩° ⟨(odd x_)⟩°))) => ^ms
+      #
+      # (find (even 2) (even 4) (odd 1) (odd 3) (qux 10) (qyx 20))
+      # ;; => ({x: 2} {x: 4} {x: 1} {x: 3})
+      # ```
       matchpi %{(%'%any° _*)}, cue: :"%any°" do
-        arms = pattern.items.move(1)
+        branches = pattern.items.move(1)
 
         normal = Term::Dict.build do |commit|
           commit << :"%any°"
-          commit.concat(arms) { |arm| Normalize.sealed(Π.pattern(arm)) }
+          commit.concat(branches) { |branch| Normalize.sealed(Π.pattern(branch)) }
 
           commit.with(:disjunction, true)
           commit.with(:depth,
             {:∩,
-             {:min, {:members, 0, :"..<", arms.size}, :min},
-             {:max, {:members, 0, :"..<", arms.size}, :max}})
+             {:min, {:members, 0, :"..<", branches.size}, :min},
+             {:max, {:members, 0, :"..<", branches.size}, :max}})
         end
 
         Term.of(normal)
