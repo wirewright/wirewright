@@ -994,20 +994,6 @@ module Ww::M1
     cons(ctx, plan)
   end
 
-  # :nodoc:
-  #
-  # (%-keypool a b c) -- dict has keys other than those listed (i.e., some extra keys)
-  def match(ctx, op : Op::NegativeKeypool, matchee : Tzip, plan)
-    return Fb[] unless dict = matchee.term.as_d?
-
-    n = op.keys.count(&.in?(dict))
-    if dict.size <= n
-      return Fb[] # Dict does not have extra keys.
-    end
-
-    cons(ctx, plan)
-  end
-
   private def eligible?(op : Op::Scan, matchee : Term) : Bool
     return false unless dict = matchee.as_d?
 

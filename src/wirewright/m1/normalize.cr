@@ -1954,13 +1954,23 @@ module Ww::M1
       # Matches a dictionary whose set of keys is a subset of the given set
       # of *keys*.
       #
+      # A keypool with no *keys* will only match an empty dict.
+      #
       # The operator is named this way because the dictionary is basically
       # allowed to draw its keys from the pool and from nowhere else. If
       # a dict couldn't find one of its keys in the pool, this counts as
       # a mismatch.
       #
+      # `%keypool` has a shorthand in WwML: `{% ...}`. Note that whitespace after
+      # `%` matters; otherwise, ML won't have a way to see whether  you're trying
+      # to say something like `{%x: 100}` (dict) or `{% x y z}` (keypool) *ahead-
+      # of-time*, as parsing proceeds.
+      #
       # ```
       # (user? (%keypool username email age)) => true
+      # ;; The above can be rewritten to `(user? {% username email age}) => true`
+      # ;; using the ML shorthand.
+      #
       # (user? _) => false
       #
       # (user? {})
@@ -1977,10 +1987,31 @@ module Ww::M1
         Normalize.terminal(pattern)
       end
 
-      matchpi %{(%'%-keypool _*)}, cue: :"%-keypool" do
-        Normalize.terminal(pattern)
-      end
-
+      # |@ m1.operator.keytest
+      #
+      # |@pattern
+      # (%'%keytest keys_*)
+      #
+      # |@key keys
+      # Key terms, treated literally.
+      #
+      # |@block
+      # Matches a dictionary that contains *any* key from the given set of *keys*.
+      #
+      # A keytest with no *keys* will match any dict.
+      #
+      # ```
+      # (matches? (%keytest x y z)) => true
+      # (matches? _) => false
+      #
+      # (matches? {x: 100})              ;; => true
+      # (matches? {x: 100, y: 200})      ;; => true
+      # (matches? {z: "John", a: "Doe"}) ;; => true
+      #
+      # (matches? {})               ;; => false
+      # (matches? {a: 100, b: 200}) ;; => false
+      # (matches? qux)              ;; => false
+      # ```
       matchpi %{(%'%keytest _*)}, cue: :"%keytest" do
         Normalize.terminal(pattern)
       end

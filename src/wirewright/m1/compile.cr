@@ -448,16 +448,6 @@ module Ww::M1
         Op::Keypool.new(keys.to_readonly_slice(&.itself))
       end
 
-      matchpi %{[%'%-keypool]}, cue: :"%-keypool" do
-        Op::INSTANCE_DICT
-      end
-
-      matchpi %{[%'%-keypool _*]}, cue: :"%-keypool" do
-        keys = pattern.items.move(1)
-
-        Op::NegativeKeypool.new(keys.to_readonly_slice(&.itself))
-      end
-
       matchpi %{[%'%keytest]}, cue: :"%keytest" do
         Op::INSTANCE_DICT
       end

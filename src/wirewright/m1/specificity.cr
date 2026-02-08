@@ -29,8 +29,8 @@ module Ww::M1
   #   count toward *constraints*. Min-included counts +1 detail, max-included
   #   counts +1 detail (e.g. `<=` is considered more detailed than `<`).
   # - `%any°` takes min of its branches as specificity.
-  # - `%keypool`, `%-keypool`, `%keytest` contribute +N *details*, where N is
-  #   the number of specified keys.
+  # - `%keypool`, `%keytest` contribute +N *details*, where N is the number of
+  #   specified keys.
   # - `%number`s bounded like `(%number 0 <= _ <= 10)` add their size to *rfield*
   #   (short for *receptive field*). The *smaller* the *rfield*, the more specific
   #   a pattern. For instance, `(%number 0 <= _ <= 3)` is more specific than
@@ -300,12 +300,7 @@ module Ww::M1
           end
         end
 
-        matchpi(
-          %{[%'%keypool _*]},
-          %{[%'%-keypool _*]},
-          %{[%'%keytest _*]},
-          cues: {:"%keypool", :"%-keypool", :"%keytest"},
-        ) do
+        matchpi %{[%'%keypool _*]}, %{[%'%keytest _*]}, cues: {:"%keypool", :"%keytest"} do
           keys = op.items.move(1)
           details += keys.size
         end

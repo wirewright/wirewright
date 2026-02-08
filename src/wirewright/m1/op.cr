@@ -3,7 +3,7 @@ module Ww::M1
   # compiled operators and associated groups/categories of operators (represented
   # using aliases).
   module Op
-    alias Any = Pass | Never | Num | Sym | Atom | SymBlank | SymNonblank | Boolean | Dict | Itemsonly | Pairsonly | SketchSubset | Bounds | BoundsGuard | MaxDepth | DictGuard | Literal | Capture | CaptureItemsonly | Seq | ItemFirst | ItemLast | SingularSeq | Partition | Edge | LiteralWhitelist | ChoiceSource | Keypool | Span | Tally | Type | ParseML | Clamp | Bin | Both | LiteralBlacklist | Layer | ScanFirst | ScanSource | ScanAll | DfsFirst | DfsSource | DfsAll | BfsFirst | BfsSource | BfsAll | Value | NegativeValue | NegativeValueKeypath | EntriesFirst | EntriesSource | EntriesAll | Str | KeypathCapture | NegativeKeypool | Keytest | ValueLiteral | Filter | Pluck | Flat | Split | Adjacent | Untracked | Matches | FrontRef | BackRef
+    alias Any = Pass | Never | Num | Sym | Atom | SymBlank | SymNonblank | Boolean | Dict | Itemsonly | Pairsonly | SketchSubset | Bounds | BoundsGuard | MaxDepth | DictGuard | Literal | Capture | CaptureItemsonly | Seq | ItemFirst | ItemLast | SingularSeq | Partition | Edge | LiteralWhitelist | ChoiceSource | Keypool | Span | Tally | Type | ParseML | Clamp | Bin | Both | LiteralBlacklist | Layer | ScanFirst | ScanSource | ScanAll | DfsFirst | DfsSource | DfsAll | BfsFirst | BfsSource | BfsAll | Value | NegativeValue | NegativeValueKeypath | EntriesFirst | EntriesSource | EntriesAll | Str | KeypathCapture | Keytest | ValueLiteral | Filter | Pluck | Flat | Split | Adjacent | Untracked | Matches | FrontRef | BackRef
 
     # TODO: Inline, this is not used anywhere!!
     alias Bin = Add | Sub | Mul | Div | Idiv | Mod | Pow | Map
@@ -98,9 +98,6 @@ module Ww::M1
 
     defcase Seq, items : Item::Spatial, singulars : Array(Any)
 
-    # TODO: remove!!!
-    # defcase ItemSeq, items : Slice(Item::Any)
-
     defcase ItemFirst, successor : Any
     defcase ItemLast, successor : Any
     defcase SingularSeq, items : Slice(Any), exhaustive : Bool, reverse : Bool
@@ -111,7 +108,6 @@ module Ww::M1
 
     defcase Keytest, keys : Slice(Term)
     defcase Keypool, keys : Slice(Term)
-    defcase NegativeKeypool, keys : Slice(Term)
 
     defcase ValueLiteral, key : Term, successor : Any
 

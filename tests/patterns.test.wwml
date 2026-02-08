@@ -123,28 +123,18 @@
   (- 1 "John Doe" qux true))
 
 ;; %keypool
-(pattern (%keypool x y)
-  (+ () {x: 1} {y: 1} {x: 1, y: 1})
-  (- {z: 1}
-     {x: 1, z: 1}
-     {y: 1, z: 1}
-     {x: 1, y: 1, z: 1}
-     (qux x: 1 y: 1)
-     1 "John Doe" qux true))
-
-;; %-keypool
 (group
-  (pattern (%-keypool)
-    (+ () (x: 1) (y: 2) (x: 1 y: 2)) ;; etc.
-    (- 1 "John Doe" qux true))
-
-  (pattern (%-keypool x y)
-    (- () {x: 1} {y: 1} {x: 1, y: 1} 1 "John Doe" qux true)
-    (+ {z: 1}
+  (pattern (%keypool)
+    (+ ())
+    (- {x: 1} {y: 1} {x: 1, y: 1} qux)) ;; ...
+  (pattern (%keypool x y)
+    (+ () {x: 1} {y: 1} {x: 1, y: 1})
+    (- {z: 1}
        {x: 1, z: 1}
        {y: 1, z: 1}
        {x: 1, y: 1, z: 1}
-       (qux x: 1 y: 1))))
+       (qux x: 1 y: 1)
+       1 "John Doe" qux true)))
 
 ;; %keytest
 (group
@@ -3820,9 +3810,9 @@
 ;; Specificity of a keypool with more keys is higher than that of a keypool
 ;; with less keys.
 (specificity
-  (level (%keypool a) (%-keypool a) (%keytest a))
-  (level (%keypool a b) (%-keypool a b) (%keytest a b))
-  (level (%keypool a b c) (%-keypool a b c) (%keytest a b c)))
+  (level (%keypool a) (%keytest a))
+  (level (%keypool a b) (%keytest a b))
+  (level (%keypool a b c) (%keytest a b c)))
 
 (specificity
   (level (_* ¦ _ max-h: mh_number content-h: ch_number h: h←content))
