@@ -404,10 +404,16 @@ module Ww::ML
             token(:lcurly_percent)
           end
 
-        if ahead.delimiter? && candidate
-          # {-⏏ x y z}
-          candidate
-        end
+        next unless candidate
+        # Reject on things like {-⏏x: 100}
+        next unless ahead.space? || ahead.paired_left? || ahead.paired_right? || ahead.eoi?
+
+        # Accept on things like:
+        # {-⏏ x y z}
+        # {-⏏(x) (y) (z)}
+        # {-⏏}
+        # {-⏏
+        candidate
       end
 
       response || token(:lcurly)

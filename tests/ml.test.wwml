@@ -342,6 +342,11 @@
   (= ⎡{x: 100}⎤ ⎡(x: 100)⎤)
   (= ⎡{x: 100, y: 200}⎤ ⎡(x: 100 y: 200)⎤)
   (= ⎡{0: +, 1: 100 2: 200}⎤ ⎡(+ 100 200)⎤)
+  ;; Make sure we can distinguish {+ ...} and {% ...} from {+: ...}, {+x: ...} etc.
+  (= ⎡{+: 100}⎤ ⎡(+: 100)⎤)
+  (= ⎡{%: 100}⎤ ⎡(%: 100)⎤)
+  (= ⎡{+qux: 100}⎤ ⎡(+qux: 100)⎤)
+  (= ⎡{%qux: 100}⎤ ⎡(%qux: 100)⎤)
   (- ⎡{:⏏}⎤ ⎡expected a term to follow `:`⎤)
   (- ⎡{x: 100 y⏏ z}⎤ ⎡expected `:` after key⎤)
   (- ⎡{foo: 100 ⏏foo⏏: 200}⎤ ⎡duplicate key `foo` in dict⎤))
