@@ -57,7 +57,7 @@ module Ww::D7
 
     assert depth > 0
 
-    # NOTE: Circuit's must create scopes to seal themselves from the outside
+    # NOTE: Circuits must create scopes to seal themselves from the outside
     # world completely. Otherwise, two circuits with the same depth could comm,
     # and that goes against our semantics.
     #

@@ -1495,7 +1495,7 @@ module Ww::M1
       # ;; => false
       # ```
       matchpi %{(%'%number _*)}, cue: :"%number" do
-        # TODO: mark var's as %ref.
+        # TODO: mark vars as %ref.
         continue unless _ = NumberSpec.op?(pattern)
 
         Normalize.terminal(pattern, depth: 0)

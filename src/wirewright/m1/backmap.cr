@@ -1283,7 +1283,7 @@ module Ww::M1
             patches << {Assoc.new(dst, value), entry.key}
           end
 
-          # If value also changed, then the Assoc's we've emitted above are enough.
+          # If value also changed, then the Assocs we've emitted above are enough.
           next
         end
 
@@ -1330,7 +1330,7 @@ module Ww::M1
             next unless p.ord == q.ord
           when {ReplaceRange, Replace}, {Replace, ReplaceRange}
             # These are never in conflict for a single agent because patch application
-            # is staged, so ReplaceRange's win over Replace's.
+            # is staged, so ReplaceRanges win over Replaces.
             next
           end
 

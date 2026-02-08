@@ -331,7 +331,7 @@ module Ww::M1
         end
       end
 
-      # Now we group adjacent Rigid's, Distrib's, and NonDistrib's together. The result
+      # Now we group adjacent Rigids, Distribs, and NonDistribs together. The result
       # is an alternating sequence of them.
       state = birep(state) do |l, r|
         case {l, r}
@@ -349,8 +349,8 @@ module Ww::M1
         end
       end
 
-      # Now both Distrib's and NonDistrib's become FlexRegion's. The result is
-      # an array of Rigid's and FlexRegion's.
+      # Now both Distribs and NonDistribs become FlexRegions. The result is
+      # an array of Rigids and FlexRegions.
       state = state.map do |unit|
         case unit
         in Rigid               then unit
@@ -358,7 +358,7 @@ module Ww::M1
         end
       end
 
-      # Adjacent flex's should be grouped as well.
+      # Adjacent flexes should be grouped as well.
       state = birep(state) do |l, r|
         case {l, r}
         when {Rigid, Rigid}
@@ -415,7 +415,7 @@ module Ww::M1
     defcase MidGap, l : Rigid, m : FlexShape, r : Rigid
     defcase PaddedMidGap, l : FlexShape, ml : Rigid, m : FlexShape, mr : Rigid, r : FlexShape
 
-    # *alt* is an alternating sequence of Rigid's and Flex's.
+    # *alt* is an alternating sequence of Rigids and Flexes.
     def recognize(alt : Slice(Rigid | FlexRegion)) : Shape
       case alt.size
       when 0

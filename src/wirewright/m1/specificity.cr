@@ -207,7 +207,7 @@ module Ww::M1
           literals += 1
         end
 
-        # Keys as in `{¦ x y}` arent's as valuable as literals but they're still
+        # Keys as in `{¦ x y}` aren't as valuable as literals but they're still
         # some "non-incidental" information, so they count as details.
         matchpi %{[%'%key _]}, cue: :"%key" do
           details += 1
