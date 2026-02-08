@@ -247,10 +247,6 @@ module Ww::ML
     end
 
     private def render0(ctx : RenderContext, node : Tree::Keypool) : Tsrc
-      if node.items.empty?
-        raise "empty %keypool makes no sense, did you mean `{}`?", ctx.location
-      end
-
       tsrc(ctx) do |commit|
         commit << tsrc(ctx, :"%keypool")
         commit.concat(node.items) { |item| render(ctx, item) }
