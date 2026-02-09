@@ -2,9 +2,9 @@ module Ww::D7
   # A classifier function "looks" at a circuit node term (more or less literally,
   # but using pattern matching instead of a pair of "eyes"). It decides what
   # the node's semantic function is (what the node "means"), primarily its
-  # *structural* function, and represents the decision using one of `Feature`s.
+  # *structural* role, and represents the decision using one of `Feature`s.
   #
-  # By *structural function*, I mean an answer to questions such as "Should I descend
+  # By *structural role*, I mean answers to questions such as "Should I descend
   # here or leave it as-is?", "Should I ignore this or pass it to the solver?".
   alias Classifier = Term -> Feature
 
@@ -15,11 +15,15 @@ module Ww::D7
   alias Flat = Gnd | Inert
 
   # Represents an inert (data) node.
-  defcase Inert, node : Term
+  defrecord Inert, node : Term, tag : Symbol
 
-  # Constructs a no-operation or inert data node.
-  def inert(node : Term) : Inert
-    Inert.new(node)
+  # Constructs a no-operation or *inert* data node -- with respect to the regime,
+  # which won't see such nodes. They may still carry useful info or be useful
+  # themselves -- for instance, all graphical nodes and surfaces end up as *inert*.
+  #
+  # *tag* can be used for semantic tagging.
+  def inert(node : Term, tag : Symbol = :data) : Inert
+    Inert.new(node, tag)
   end
 
   # Ground nodes form the hypergraph that is solved by a D7 `Regime`.
@@ -34,7 +38,7 @@ module Ww::D7
   #
   # Second, `Gnd`'s *defn* is not treated any futher; whereas `Mixture`'s defn
   # receives recursive treatment.
-  defcase Gnd, node : Term, defn : Term, edges : Slice(Term)
+  defrecord Gnd, node : Term, defn : Term, edges : Slice(Term)
 
   # Constructs a grounded node from an enumerable of edges *ee*.
   #
@@ -59,7 +63,7 @@ module Ww::D7
 
   # A decomposition of *node* into a definition *defn* with a *mix* function
   # to compose rewritten *defn* back into the next version of *node*.
-  defcase Mixture, node : Term, defn : Term, mix : Term -> Term
+  defrecord Mixture, node : Term, defn : Term, mix : Term -> Term
 
   # Constructs a mixture feature.
   #
@@ -70,20 +74,25 @@ module Ww::D7
 
   # Represents a lexical scope binding. Attaches bindings to a continuation
   # feature *cont*.
-  defcase Scope, bindings : Term::Dict, cont : Feature
+  defcase Scope, scope : NodeScope::Any, cont : Feature
 
   # Constructs a scope feature.
   #
   # See `Scope`.
-  def scope(bindings : Term::Dict, cont : Feature) : Scope
-    Scope.new(bindings, cont)
+  def scope(cont : Feature, *, bindings : Term::Dict) : Scope
+    Scope.new(NodeScope::ClosedExcept.new(bindings), cont)
+  end
+
+  # :ditto:
+  def scope(cont : Feature, *, locals : Indexable(Term)) : Scope
+    Scope.new(NodeScope::OpenExcept.new(locals.to_readonly_slice(&.itself)), cont)
   end
 
   # Represents the children nodes of *node* found within an exclusive positive
   # range of its items.
   #
   # Used by e.g. `group`, `module`.
-  defcase Parent, node : Term::Dict, range : Range(Int32, Int32)
+  defrecord Parent, node : Term::Dict, range : Range(Int32, Int32)
 
   # Constructs a parent feature.
   #
@@ -113,7 +122,7 @@ module Ww::D7
   # *leaf* emits a circuit, that circuit is always a leaf, and so its *leaf* function
   # is called, and so on, until some sort of base case where there is no circuit
   # (or infinitely if there is no base case).
-  defcase Circuit,
+  defrecord Circuit,
     node : Term::Dict,
     range : Range(Int32, Int32),
     leaf : -> Feature

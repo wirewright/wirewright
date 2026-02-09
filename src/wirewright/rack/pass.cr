@@ -1,7 +1,7 @@
 module Ww::Rack
   # Returns the main Rack pass.
   def pass : D7::Pass
-    D7::Pass.new { |clf, circuit| step(clf, circuit) }
+    D7::Pass.new { |clf, circuit| step(clf.call(circuit), circuit) }
   end
 
   private def step(clf : D7::Classifier, circuit : Term) : Slice(Term)

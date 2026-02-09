@@ -735,6 +735,179 @@
       (cell @y))
     end))
 
+;; locals
+(d7
+  (frame
+    (cell @x 100)
+    (cell @y)
+    (feed @x @z)
+    (discard @y)
+    (locals (@x)
+      (cell @x 200)
+      (feed @x @y)
+      (cell @z)))
+  (frame
+    (cell @x)
+    (cell @y 200)
+    (feed @x @z)
+    (discard @y)
+    (locals (@x)
+      (cell @x)
+      (feed @x @y)
+      (cell @z 100)))
+  (frame
+    (cell @x)
+    (cell @y)
+    (feed @x @z)
+    (discard @y)
+    (locals (@x)
+      (cell @x)
+      (feed @x @y)
+      (cell @z 100)))
+  end)
+
+;; device
+(group
+  ;; Basic
+  (d7
+    (frame
+      (cell @x "Hello World")
+      (device (@x (counter 0))
+        (backsys @x  (counter ±x) <> {x: ^(+ x 1)})))
+    (frame
+      (cell @x "Hello World")
+      (device (@x (counter 1))
+        (backsys @x  (counter ±x) <> {x: ^(+ x 1)})))
+    (frame
+      (cell @x "Hello World")
+      (device (@x (counter 2))
+        (backsys @x  (counter ±x) <> {x: ^(+ x 1)}))))
+    ;; ...
+
+  ;; Fully isolated scope
+  (d7
+    (frame
+      (cell @x 100)
+      (feed @x @y)
+      (device (@x (counter 0))
+        (cell @y)))
+    end)
+
+  ;; Check how the surface looks from the inside
+  (d7
+    (frame
+      (device (@surface (counter 0))
+        (backsys @surface  (counter ±x) <> {x: ^(+ x 1)})
+        (feed (copy @surface) (atop @display))
+        (cell @display))
+      (device (@surface (counter 100))
+        (backsys @surface  (counter ±x) <> {x: ^(+ x 1)})
+        (feed (copy @surface) (atop @display))
+        (cell @display)))
+    (frame
+      (device (@surface (counter 1))
+        (backsys @surface  (counter ±x) <> {x: ^(+ x 1)})
+        (feed (copy @surface) (atop @display))
+        (cell @display (counter 0)))
+      (device (@surface (counter 101))
+        (backsys @surface  (counter ±x) <> {x: ^(+ x 1)})
+        (feed (copy @surface) (atop @display))
+        (cell @display (counter 100))))
+    (frame
+      (device (@surface (counter 2))
+        (backsys @surface  (counter ±x) <> {x: ^(+ x 1)})
+        (feed (copy @surface) (atop @display))
+        (cell @display (counter 1)))
+      (device (@surface (counter 102))
+        (backsys @surface  (counter ±x) <> {x: ^(+ x 1)})
+        (feed (copy @surface) (atop @display))
+        (cell @display (counter 101)))))
+    ;; ...
+
+  ;; Removal and reinsertion
+  (d7
+    (frame
+      (device (@dst)
+        (cell @src (counter 0))
+        (feed @src @dst @src)))
+    (frame
+      (device (@dst (counter 0))
+        (cell @src)
+        (feed @src @dst @src)))
+    (frame
+      (device (@dst)
+        (cell @src (counter 0))
+        (feed @src @dst @src)))))
+    ;; ...
+
+;; Filtered device
+(group
+  ;; Basic
+  (d7
+    (frame
+      (device ((@x (counter ±x)) (counter 0))
+        (backsys @x  ±x <> {x: ^(+ x 1)})))
+    (frame
+      (device ((@x (counter ±x)) (counter 1))
+        (backsys @x  ±x <> {x: ^(+ x 1)})))
+    (frame
+      (device ((@x (counter ±x)) (counter 2))
+        (backsys @x  ±x <> {x: ^(+ x 1)}))))
+    ;; ...
+
+  ;; Removal
+  (d7
+    (frame
+      (cell @x 100)
+      (device ((@x (counter ±x)) (counter 0))
+        (feed @x @y @x)
+        (cell @y)))
+    (frame
+      (cell @x 100)
+      (device ((@x (counter ±x)) (counter))
+        (feed @x @y @x)
+        (cell @y 0)))
+    end)
+
+  ;; Queue
+  (d7
+    (frame
+      (device ((@x (q x_ _*)) (q 1 2 3))
+        (feed @x @y)
+        (cell @y)
+        (discard @y)))
+    (frame
+      (device ((@x (q x_ _*)) (q 2 3))
+        (feed @x @y)
+        (cell @y 1)
+        (discard @y)))
+    (frame
+      (device ((@x (q x_ _*)) (q 2 3))
+        (feed @x @y)
+        (cell @y)
+        (discard @y)))
+    (frame
+      (device ((@x (q x_ _*)) (q 3))
+        (feed @x @y)
+        (cell @y 2)
+        (discard @y)))
+    (frame
+      (device ((@x (q x_ _*)) (q 3))
+        (feed @x @y)
+        (cell @y)
+        (discard @y)))
+    (frame
+      (device ((@x (q x_ _*)) (q))
+        (feed @x @y)
+        (cell @y 3)
+        (discard @y)))
+    (frame
+      (device ((@x (q x_ _*)) (q))
+        (feed @x @y)
+        (cell @y)
+        (discard @y)))
+    end))
+
 ;; Queue
 (group
   ;; Basic

@@ -8,8 +8,8 @@
 #
 # ### General architecture
 #
-# If D7 was a language frontend (it is not!), `Classifier` and the whole
-# flatten`ing machinery would be the lexer.
+# If D7 was a language frontend (it is not!), `ClassifierFactory`, `Classifier`,
+# and the whole `replace`ment machinery would be the lexer.
 #
 # If D7 was a language frontend (and it is not!), `Regime` would be
 # the parser, or, rather, a way to write parsers; a kind of parser combinator
@@ -19,7 +19,7 @@
 # The interpreter part, if D7 was a language *backend*, is in user-supplied
 # bodies of rules. D7 does not define or restrict them in any way. Look for
 # examples of rule bodies in `Rack`. The interpreter part benefits greatly
-# from a number of helper functions, defined in d7/kit, and defined directly
+# from a number of helper functions, defined in d7/kit, namespaced directly
 # under `D7` (such as `patch`, `patches`, `fetch`, and so on).
 #
 # One core difference that breaks this language analogy is D7 doesn't destroy
@@ -240,12 +240,29 @@ module Ww::D7
   # - The resulting slice is read-only.
   # - The resulting slice is guaranteed to contain at least one subframe.
   # - Substeps may repeat. Thus, the next frame may be equal to the previous frame.
-  alias Pass = Classifier, Term -> Slice(Term)
+  alias Pass = ClassifierFactory, Term -> Slice(Term)
+
+  # A *classifier factory* constructs `Classifier` functions for particular
+  # circuits, or if a circuit is not provided (represented as `nil`), returns
+  # a general classifier, not tailored for a specific circuit.
+  #
+  # D7 itself does not define the difference between a circuit-specific and
+  # a general classifier.
+  #
+  # For the sake of understanding, however, let's see how Rack uses this,
+  # in particular `Rack.clf`.
+  #
+  # A circuit-specific classifier, in Rack, will find *components* defined
+  # in the circuit; the resulting classifier function will, in turn, instantiate
+  # those components as it classifies nodes. On the other hand, if you pass `nil`
+  # to the factory returned by `Rack.clf`, you'll get a general classifier, which
+  # doesn't know anything about components and won't instantiate them.
+  alias ClassifierFactory = Term? -> Classifier
 
   private class CoarseFrameIterator
     include Iterator(Term)
 
-    def initialize(@clf : Classifier, @circuit : Term, @passes : Indexable(Pass))
+    def initialize(@clf : ClassifierFactory, @circuit : Term, @passes : Indexable(Pass))
       @memo = @circuit
       @ahead = Deque{@circuit}
     end
@@ -266,7 +283,7 @@ module Ww::D7
         return Iterator.stop
       end
 
-      D7.fuse(@clf, @memo, subframes) do |frame|
+      D7.fuse(@clf.call(nil), @memo, subframes) do |frame|
         next if @memo == frame
 
         @ahead << frame
@@ -285,12 +302,12 @@ module Ww::D7
   #
   # NOTE: Whether the iterator terminates depends on the given *circuit*. E.g.
   # if it oscillates, the iterator will not terminate.
-  def coarse_frames(clf : Classifier, circuit : Term, passes : Indexable(Pass)) : Iterator(Term)
+  def coarse_frames(clf : ClassifierFactory, circuit : Term, passes : Indexable(Pass)) : Iterator(Term)
     CoarseFrameIterator.new(clf, circuit, passes)
   end
 
   # :ditto:
-  def coarse_frames(clf : Classifier, circuit : Term, *passes : Pass) : Iterator(Term)
+  def coarse_frames(clf : ClassifierFactory, circuit : Term, *passes : Pass) : Iterator(Term)
     coarse_frames(clf, circuit, passes)
   end
 end

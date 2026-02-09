@@ -1,18 +1,6 @@
 module Ww::Rack
-  @@clf : D7::Classifier?
-  @@cache = SyncCache(Term, D7::Feature).new(512, preallocate: true)
-
-  # Returns the Rack classifier.
-  #
-  # See also: `D7::Classifier`.
-  def clf : D7::Classifier
-    @@clf ||= ->(node : Term) do
-      @@cache.put_if_absent(node) { classify(node) }
-    end
-  end
-
   # :nodoc:
-  def classify(node : Term) : D7::Feature
+  def classify!(node : Term) : D7::Feature
     PatternSet.case(node) do
       matchpi %{[cell @u_ _?]} do
         D7.gnd(node, u)
@@ -39,12 +27,96 @@ module Ww::Rack
         D7.gnd(node, u)
       end
 
-      matchpi %{[group _*]} do
+      matchpi %{[group _*]}, %{[window _*]} do
         D7.parent(node.as_d, 1...node.itemsize)
       end
 
       matchpi %{[module bindings_dict _*]} do
-        D7.scope(bindings.as_d, D7.parent(node.as_d, 2...node.itemsize))
+        D7.scope(D7.parent(node.as_d, 2...node.itemsize), bindings: bindings.as_d)
+      end
+
+      matchpi %{[locals locals←((%past @_ min: 0)) _*]} do
+        D7.scope(D7.parent(node.as_d, 2...node.itemsize), locals: locals.items)
+      end
+
+      # A device is a module with an "appearance", called "surface". During printing,
+      # we prefer to hide children in favor of the surface, although the surface is
+      # styled differently to avoid confusion. Think of it this way: the surface
+      # of a device is its "control panel", an opaque "box" hiding the machinery
+      # inside (*children*). Both the outside and the inside have access to
+      # the surface; both can modify it (think display readouts and knobs).
+      matchpi %{[device (@edge_ _?) children0_*]} do
+        surface0 = node[1, 1]?
+
+        defn = Term::Dict.build do |commit|
+          commit << :module << Term[]
+          commit << {:cell, edge, surface0}
+          commit.concat(children0.items)
+        end
+
+        D7.mixture(node, defn) do |mix|
+          Term.case(mix) do
+            matchpi %{(module _ (cell @_ surface1_) children1_*)} do
+              result = node.pairspart.transaction do |commit|
+                commit << :device << {edge, surface1}
+                commit.concat(children1.items)
+              end
+
+              Term.of(result)
+            end
+
+            matchpi %{(module _ (cell @_) children1_*)} do
+              result = node.pairspart.transaction do |commit|
+                commit << :device << {edge}
+                commit.concat(children1.items)
+              end
+
+              Term.of(result)
+            end
+          end
+        end
+      end
+
+      matchpi %{[device head←((edge←(%'edge capture_) pattern_) surface0_) children_*]} do
+        continue unless M1.probably_matches?(pattern, surface0)
+
+        envlogs = M1.matches_and_logs(Term[], M1.operator(pattern), surface0)
+        continue if envlogs.empty?
+
+        env, logs = envlogs.first
+
+        value0 = env[capture]?
+
+        defn = Term::Dict.build do |commit|
+          commit << :device << {edge, value0}
+          commit.concat(children.items)
+        end
+
+        D7.mixture(node, defn) do |mix|
+          backspec =
+            Term.case(mix) do
+              matchpi %{(device (_ value1_) _*)} do
+                Term[].with(capture, {:"^verbatim", value1})
+              end
+
+              matchpi %{(device (_) _*)} do
+                Term[].with({capture}, Term[])
+              end
+            end
+
+          node1 = mix.morph({1, head}) | node.pairspart
+
+          case rep = M1.backmapR({ {envlogs.trim(1), backspec} }, surface0)
+          in M1::Rep::One
+            Term.of(node1.morph({1, 1, rep.term}))
+          in M1::Rep::Many
+            if rep.terms.empty?
+              Term.of(node1.morph({1, 1, nil}))
+            else
+              Term.of(node1.morph({1, 1, M1::Rep.collapse(rep)}))
+            end
+          end
+        end
       end
 
       matchpi %{[circuit @edge_ children0_*]} do
@@ -332,6 +404,96 @@ module Ww::Rack
 
       otherwise do
         D7.inert(node)
+      end
+    end
+  end
+
+  @@cache = SyncCache(Term, D7::Feature).new(512, preallocate: true)
+
+  # :nodoc:
+  def classify(node : Term) : D7::Feature
+    @@cache.put_if_absent(node) { classify!(node) }
+  end
+
+  defrecord Component,
+    pattern : M1::Op::Any,
+    body : Term
+
+  # :nodoc:
+  def instantiate(components : Indexable(Component), node : Term)
+    result = nil
+
+    components.each do |candidate|
+      next unless M1.probably_matches?(candidate.pattern, node)
+      next unless env = M1.match?(Term[], candidate.pattern, node)
+
+      unless result.nil?
+        # If two (or more) components match the inert node, we're confused
+        # and we won't instantiate anything.
+        return D7.inert(node)
+      end
+
+      result = {candidate, env}
+    end
+
+    if result.nil?
+      return D7.inert(node) # component not found
+    end
+
+    component, env = result
+
+    classify(Alloy.render(env, component.body))
+  end
+
+  # :nodoc:
+  COMPONENT_CACHE = SyncCache(Term, Component).new(64, preallocate: true)
+
+  # Returns the components defined in *circuit*.
+  def components(circuit : Term) : Array(Component)
+    # TODO: Store by head where possible!!
+    components = [] of Component
+
+    unless dict = circuit.as_d?
+      return components
+    end
+
+    dict.items.each do |item|
+      if component = COMPONENT_CACHE[item]?
+        components << component
+        next
+      end
+
+      Term.matchpi?(item, %{[rule pattern_ body_]}) do
+        op = M1.operator(pattern)
+
+        component = Component.new(op, body)
+        components << component
+
+        COMPONENT_CACHE[item] = component
+      end
+    end
+
+    components
+  end
+
+  # Returns the Rack classifier factory.
+  #
+  # See also: `D7::ClassifierFactory`.
+  def clf : D7::ClassifierFactory
+    ->(circuit : Term?) do
+      if circuit.nil?
+        return ->classify(Term)
+      end
+
+      components = components(circuit)
+
+      ->(node : Term) do
+        feature = classify(node)
+        if feature.is_a?(D7::Inert)
+          return instantiate(components, feature.node)
+        end
+
+        feature
       end
     end
   end

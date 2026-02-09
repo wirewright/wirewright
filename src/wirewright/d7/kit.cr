@@ -157,10 +157,10 @@ module Ww::D7
     ahead.concat(subframes)
 
     a = seen
-    ns = node_map(clf, seen, unmix: false)
+    ns = node_map(clf, seen, split: false)
 
     while b = ahead.shift?
-      ms = node_map(clf, b, unmix: false)
+      ms = node_map(clf, b, split: false)
 
       # Cut if:
       # - New nodes were added or removed in the next subframe.

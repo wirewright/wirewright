@@ -3,20 +3,12 @@ module Ww::D7
   # usually hypergraph-bounded rendition of circuit-bounded `NodeAddr`.
   alias NodeId = UInt32
 
-  # The address of a node in a circuit.
-  alias NodeAddr = Slice(Int32)
-
-  # Records the scopes that the traversal process passes through. The addr
-  # is that of the scope (e.g. `module`, but in general, see `Scope`), and
-  # the dict is its bindings dict.
-  alias NodeScope = Slice({NodeAddr, Term::Dict})
-
   defrecord Node, id : NodeId, term : Term
 
   # Represents a hyperedge.
   #
-  # *scope* is the address of the module that defines the scope of the edge *term*.
-  defrecord Hyperedge, scope : NodeAddr, term : Term
+  # *module* is the address of the module that defines the scope of the edge *term*.
+  defrecord Hyperedge, module : NodeAddr, term : Term
 
   # A hypergraph is a graph whose edges can include any number of nodes; each edge
   # is a subset of the set of nodes in that graph. It's easier to think of a hypergraph
@@ -77,12 +69,7 @@ module Ww::D7
     end
 
     def empty? : Bool
-      order.zero?
-    end
-
-    # Returns the number of nodes in this hypergraph.
-    def order
-      @node_terms.size
+      @node_terms.empty?
     end
 
     # Returns the node with the given *id*.
@@ -118,53 +105,6 @@ module Ww::D7
         yield Node.new(member_id, @node_terms[member_id])
         index += 1
       end
-    end
-
-    def each_edge_with_member(& : Hyperedge, NodeId ->)
-      @edge_nodes.each do |(edge, _), member|
-        yield edge, member
-      end
-    end
-
-    # Returns `true` if *id* participates in the given hyperedge *edge*. Returns
-    # `false` otherwise.
-    def member?(id : NodeId, edge needle : Hyperedge) : Bool
-      each_edge(id) do |edge|
-        next unless edge == needle
-        return true
-      end
-
-      false
-    end
-
-    # Converts `self` to an unordered graph through clique expansion: nodes that
-    # share a hyperedge are connected; each unordered edge is represented with
-    # a pair of edges going in opposite directions.
-    def graph : Slice(Pf::USet32)
-      groups = {} of Hyperedge => Pf::USet32
-
-      each_node_with_id do |node, id|
-        each_edge(id) do |edge|
-          groups[edge] = (groups[edge]? || Pf::USet32.new).add(id)
-        end
-      end
-
-      graph = Slice(Pf::USet32).new(order) { Pf::USet32.new }
-
-      groups.each do |_, members|
-        members.each do |u|
-          members.each do |v|
-            next if u == v
-
-            vs = graph[u]
-            next if v.in?(vs)
-
-            graph[u] = vs.add(v)
-          end
-        end
-      end
-
-      graph.read_only
     end
   end
 end
