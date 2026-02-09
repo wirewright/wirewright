@@ -99,6 +99,7 @@ module Ww::M1
       Bounds
       Literals
       Sketches
+      Captures
     end
 
     getter annotations : Annotation
@@ -530,7 +531,7 @@ module Ww::M1
   # in the UB sense, but in that it may or may not raise depending on how much logs
   # from *backsys* and *matchee* overlap).
   def backmapR(backsys : Enumerable({EnvLogList, Term::Dict}), matchee : Term) : Rep::Any
-    agents = Pf::Kit.stack_array(Backmap::Agent, 8)
+    agents = Pf::Kit.stack_array(Backmap::Agent(EnvLogList), 8)
 
     backsys.each do |matches, backspec|
       next if matches.empty?
