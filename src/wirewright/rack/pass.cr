@@ -104,7 +104,7 @@ module Ww::Rack
 
         # Generate patches for the itemspart.
         src_edges.items.zip(rep.items) do |edge, item|
-          dst = src.find! { |match| match.env[:src] == edge }
+          dst = D7.find(src, where: :src, eq: edge)
           patches << D7.patch(dst, {2, item})
         end
 
@@ -122,14 +122,28 @@ module Ww::Rack
           in {Nil, Nil}
             # No change
           in {Term, Nil}
-            # Empty cell
-            dst = res.find! { |match| match.env[:resource] == edge }
+            # It may happen that the resource cell does not actually exist, as in
+            # the example below:
+            #
+            #   (cell @x 100)
+            #   (backsys {@:x @:y}
+            #     {¦ x_ -y_} <> {y: ^x})
+            #
+            # Note how @y is absent, -y_ succeeds and sets y: 100 which we read with
+            # rep[key] above. However, we don't actually have anywhere to write! That's
+            # why we use a non-raising find here.
+            next unless dst = D7.find?(res, where: :resource, eq: edge)
+
+            # Clear cell
             patches << D7.patch(dst, {2, nil})
           in {Nil, Term}, {Term, Term}
             next if value0 == value1 # No change
 
+            # Ditto: the resource cell may not actually exist and we must handle
+            # that gracefully.
+            next unless dst = D7.find?(res, where: :resource, eq: edge)
+
             # Fill/modify cell
-            dst = res.find! { |match| match.env[:resource] == edge }
             patches << D7.patch(dst, {2, value1})
           end
         end

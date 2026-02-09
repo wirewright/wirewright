@@ -39,6 +39,21 @@ module Ww::D7
     captures.map { |capture| fetch(object, capture) }
   end
 
+  # Returns the first `Match` whose *capture* is equal to *needle*. Returns
+  # `nil` if not found.
+  def find?(match_group : MatchGroup, *, where capture, eq needle) : Match?
+    capture = Term.of(capture)
+    needle = Term.of(needle)
+
+    match_group.find { |match| fetch(match, capture) == needle }
+  end
+
+  # Same as `find?`, but raises `Enumerable::NotFoundError` if no matches
+  # were found.
+  def find(*args, **kwargs) : Match
+    find?(*args, **kwargs) || raise Enumerable::NotFoundError.new
+  end
+
   # Maps each term in *goal* to its index in *src*.
   #
   # NOTE: Assumes 1:1 correspondence. Extra items in *src*, *goal*, or

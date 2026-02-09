@@ -1473,6 +1473,14 @@
         (x_ y_) <> {y: ^x, x: ^y})))
     ;; ...
 
+  ;; Write to an absent resource cell is a noop
+  (d7
+    (frame
+      (cell @x 100)
+      (backsys {@:x @:y}
+        {¦ x_ -y_} <> {y: ^x}))
+    end)
+
   ;; Increment one
   (d7
     (frame
