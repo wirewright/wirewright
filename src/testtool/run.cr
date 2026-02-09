@@ -16,6 +16,7 @@ module Testtool
                BoundsEq |
                DepthEq |
                SpecificityTest |
+               CapturesEq |
                D7test |
                EditTest |
                TermComparison |
@@ -474,6 +475,30 @@ module Testtool
         "Current level specificity": Term.of(spec_level.to_s),
       )
     end
+  end
+
+  defrecord CapturesEq, pattern : Term, captures : Array({Term, Term})
+
+  def run(test : CapturesEq, assets, stat, complaints) : Nil
+    normp = M1.normal(test.pattern)
+    captures = measure(stat) { M1.captures(normp) }
+
+    ok = captures.all? do |(name, tags)|
+      test.captures.any? do |candidate, tagp|
+        next unless name == candidate
+
+        M1.probe?(tagp, tags)
+      end
+    end
+
+    return if ok
+
+    complaints << complaint("Pattern captures mismatch",
+      "Pattern": test.pattern,
+      "Normal pattern": Term.of(normp.unwrap(&.itself)),
+      "Expected": Term.of(test.captures),
+      "Got": Term.of(captures),
+    )
   end
 
   record TermComparison,

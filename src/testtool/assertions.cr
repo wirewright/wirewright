@@ -247,6 +247,22 @@ module Testtool
         annotated(assertions(test), decl, srcmap)
       end
 
+      # |@ testtool.decl.captures
+      #
+      # |@pattern
+      # (captures children_*)
+      #
+      # |@key children testtool.captures
+      #
+      # |@block
+      # Use `captures` to introduce zero or more M1 pattern depth tests (Crystal-
+      # side `M1.captures`)
+      matchpi %{(captures _*)} do
+        assertions(decl.as_d, srcmap, offset: 1) do |item|
+          CapturesDecl.new(production.path, item)
+        end
+      end
+
       # |@ testtool.decl.d7
       #
       # |@pattern
@@ -663,6 +679,51 @@ module Testtool
 
       otherwise do
         warn("Ignoring unrecognized depth decl: #{decl}", production.path, srcmap)
+
+        [] of AssertionNode
+      end
+    end
+  end
+
+  defrecord CapturesDecl, path : Path, term : Term
+
+  def assertions(production : CapturesDecl, srcmap : ML::SrcMap) : Array(AssertionNode)
+    decl = production.term
+
+    Term.case(decl, engine: M0) do
+      # |@ testtool.captures.of
+      #
+      # |@pattern
+      # (of pattern_ (captures_*))
+      #
+      # |@key pattern m1.pattern
+      #
+      # |@key captures
+      # A list of captures that *pattern* is expected to make.
+      #
+      # Each capture is of the form `(name_ tags-pattern_)`.
+      #
+      # |@block
+      # Use `of` to assert that *pattern* makes the given captures.
+      matchpi %{(of pattern_ captures←(_*))} do
+        valid = [] of {Term, Term}
+
+        captures.items.each do |capture|
+          Term.case(capture, engine: M0) do
+            matchpi %{(name_ tagp_)} { valid << {name, tagp} }
+            otherwise { }
+          end
+        end
+
+        continue unless valid.size == captures.size
+
+        test = CapturesEq.new(pattern, valid)
+
+        annotated(assertions(test), decl, srcmap)
+      end
+
+      otherwise do
+        warn("Ignoring unrecognized captures decl: #{decl}", production.path, srcmap)
 
         [] of AssertionNode
       end

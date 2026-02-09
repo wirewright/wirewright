@@ -112,6 +112,17 @@ module Ww::M1
       )
     end
 
+    # Constructs a normal `%let` around *capture* (the `%capture` node to use)
+    # and *successor* (a normalized successor operator).
+    def let(capture : Term, successor : Term) : Term
+      Term.of(:"%let", capture, successor,
+        depth: :envelope,
+        # %let has only one successor, so despite the wording, "sum" here really
+        # means "passthrough".
+        bounds: :sum,
+      )
+    end
+
     # Rewrites `%quote` operators like the one in:
     #
     # ```wwml
@@ -494,7 +505,7 @@ module Ww::M1
           normal = opts.transaction do |commit|
             commit << head
             if name = item[1]?
-              commit << {:"%capture", name}
+              commit << Term.of(:"%capture", name, tags: {:plural})
             end
 
             commit.with(:seq, true)
@@ -1067,12 +1078,7 @@ module Ww::M1
       #   (swap 100 200) ;; => (swap 200 100)
       #   ```
       matchpi %{(%'%let name_ successor_)}, cue: :"%let" do
-        Term.of(:"%let", {:"%capture", name}, normalize(Π.pattern(successor)),
-          depth: :envelope,
-          # %let has only one successor, so despite the wording, "sum" here really
-          # means "passthrough".
-          bounds: :sum,
-        )
+        Normalize.let(Term.of(:"%capture", name), normalize(Π.pattern(successor)))
       end
 
       # |@ m1.operator.blank
@@ -1257,19 +1263,21 @@ module Ww::M1
         continue unless blank = arg.blank?
         continue unless blank.singular?
 
-        if name = blank.name?
-          # (edge x_symbol) -> x←(edge _symbol)
-          return normalize(Π.pattern(Term.of(:"%let", name, {:edge, blank.type.blank})))
+        case blank.type
+        in .symbol?  then norm = NORMAL_EDGE_SYMBOL
+        in .string?  then norm = NORMAL_EDGE_STRING
+        in .number?  then norm = NORMAL_EDGE_NUMBER
+        in .dict?    then norm = NORMAL_EDGE_DICT
+        in .boolean? then norm = NORMAL_EDGE_BOOLEAN
+        in .any?     then norm = NORMAL_EDGE_ANY
         end
 
-        case blank.type
-        in .symbol?  then NORMAL_EDGE_SYMBOL
-        in .string?  then NORMAL_EDGE_STRING
-        in .number?  then NORMAL_EDGE_NUMBER
-        in .dict?    then NORMAL_EDGE_DICT
-        in .boolean? then NORMAL_EDGE_BOOLEAN
-        in .any?     then NORMAL_EDGE_ANY
+        if name = blank.name?
+          # (edge x_symbol) -> x←(edge _symbol)
+          return Normalize.let(Term.of(:"%capture", name, tags: {:edge}), norm)
         end
+
+        norm
       end
 
       # |@ m1.operator.layer
@@ -2017,7 +2025,7 @@ module Ww::M1
       end
 
       matchpi %{(%'%keypath capture_)}, cue: :"%keypath" do
-        Term.of(:"%keypath", {:"%capture", capture})
+        Term.of(:"%keypath", Term.of(:"%capture", capture, tags: {:keypath}))
       end
 
       # |@ m1.operator.nonself

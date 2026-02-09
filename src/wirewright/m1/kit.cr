@@ -73,7 +73,7 @@ module Ww::M1
       return false unless headsym = head.as_sym?
       return false unless headsym.prefixed_by?('%')
 
-      !!dict[:terminal]?
+      headsym.in?(HEADSYMS_NONMEMBER) || !!dict[:terminal]?
     end
 
     # Yields each member of a known normal operator *op*. Also yields the index
@@ -97,6 +97,26 @@ module Ww::M1
         members << member
       end
       members
+    end
+
+    # Returns `true` if *dict* is part of a normal operator's *fanout*. This
+    # is more relaxed than `member?`, and includes NONMEMBER head symbols.
+    def in_fanout?(dict : Term::Dict) : Bool
+      return false unless head = dict.items.first?
+      return false unless headsym = head.as_sym?
+      return false unless headsym.prefixed_by?('%')
+
+      true
+    end
+
+    def each_in_fanout(op : Term::Dict, & : Term::Dict, Int32 ->) : Nil
+      return if terminal?(op)
+
+      op.items.each_with_index do |item, index|
+        next unless dict = item.as_d?
+        next unless in_fanout?(dict)
+        yield dict, index
+      end
     end
 
     # A helper function to peform a single pass of bottom-up rewriting on a normal
@@ -126,15 +146,10 @@ module Ww::M1
     #   their branches. The disjunction itself *is* passed to *fn*.
     def walk(op : Term::Dict, &fn : Term::Dict ->) : Nil
       fn.call(op)
-      return if op[:disjunction]? || terminal?(op) || !member?(op)
+      return if op[:disjunction]? || terminal?(op)
 
-      op.items.each do |item|
-        next unless dict = item.as_d?
-        next unless head = dict.items.first?
-        next unless headsym = head.as_sym?
-        next unless headsym.prefixed_by?('%')
-
-        walk(dict, &fn)
+      each_in_fanout(op) do |successor|
+        walk(successor, &fn)
       end
     end
   end

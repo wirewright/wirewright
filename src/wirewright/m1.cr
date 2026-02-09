@@ -173,9 +173,10 @@ module Ww::M1
   #   zero (or one) or more of them: e.g., *members* of `%item`; or *successor* if
   #   only one such operator is allowed (e.g., *successor* of `%let`).
   # - `(%capture name_)` marks captures. For example, a `%let` normalizes
-  #   into `(%let (%capture name) value)`.
+  #   into `(%let (%capture name) value)`. Captures can have tags, which can be
+  #   subsequently picked up by `capturesp`: `(%capture foo tags: (a b c))`.
   # - `(%ref name_)` marks references. References are different from captures in that
-  #   references do not have associated values at match-time. References are used
+  #   they do not have associated values at match-time. References are used
   #   primarily in backmaps. For example, a slot normalizes into `(%slot (%ref name))`.
   # - Item sequence (`%seq`) nodes are marked with `seq: true`.
   # - Entry nodes in `%layer` are marked with `entry: true`.

@@ -28,7 +28,9 @@ module Ww::M1
   # Non-dict operators have their `min-depth` and `max-depth` both set to `0`,
   # meaning only depth `0` (i.e., no depth) is acceptable.
   def depthp(pattern : Normp) : Normp
-    pattern.map { |op| Kit.ascend(op, &->depthp1(Term::Dict)) }.with_annotation(:depths)
+    pattern
+      .map { |op| Kit.ascend(op, &->depthp1(Term::Dict)) }
+      .with_annotation(:depths)
   end
 
   # Returns the dict depth bounds accepted by *pattern*.
@@ -75,7 +77,9 @@ module Ww::M1
   # Non-dict operators have their `min-bounds` and `max-bounds` both set to `0`,
   # meaning only size `0` (i.e., no bounds) is acceptable.
   def boundsp(pattern : Normp) : Normp
-    pattern.map { |op| Kit.ascend(op, &->boundsp1(Term::Dict)) }.with_annotation(:bounds)
+    pattern
+      .map { |op| Kit.ascend(op, &->boundsp1(Term::Dict)) }
+      .with_annotation(:bounds)
   end
 
   # Returns the dict size bounds accepted by *normp*.
@@ -124,7 +128,9 @@ module Ww::M1
   # operators have a set `literals`. It is a dict set of literals required
   # by an operator and its non-sealed subtree.
   def literalp(pattern : Normp) : Normp
-    pattern.map { |op| Kit.ascend(op, &->literalp1(Term::Dict)) }.with_annotation(:literals)
+    pattern
+      .map { |op| Kit.ascend(op, &->literalp1(Term::Dict)) }
+      .with_annotation(:literals)
   end
 
   # The sketch propagation algorithm, executed by every operator in the normal
@@ -156,7 +162,9 @@ module Ww::M1
   def sketchp(pattern : Normp) : Normp
     assert pattern.annotations.literals?
 
-    pattern.map { |op| Kit.ascend(op, &->sketchp1(Term::Dict)) }.with_annotation(:sketches)
+    pattern
+      .map { |op| Kit.ascend(op, &->sketchp1(Term::Dict)) }
+      .with_annotation(:sketches)
   end
 
   # Returns the dict sketch accepted by *pattern*.
@@ -174,6 +182,99 @@ module Ww::M1
       end
 
       Term::Dict::Sketch.new(0)
+    end
+  end
+
+  # The capture propagation algorithm, executed by every operator in the normal
+  # pattern tree during the capture propagation pass.
+  private def capturesp1(op : Term::Dict) : Term::Dict
+    Term.case(op, engine: M0) do
+      # In things such as (%any° x_ y_ z_), the capture flow is altered a little
+      # bit in that %any° asks its members for captures, and picks only captures
+      # they *all* share.
+      matchpi %{{¦ disjunction}} do
+        intersection = nil
+
+        Kit.each_member(op) do |member|
+          Term.case(member, engine: M0) do
+            matchpi %{{¦ captures_: (_*)}} do
+              capture_set = captures.items.to_set
+
+              if intersection.nil?
+                intersection = capture_set
+                next
+              end
+
+              intersection &= capture_set
+            end
+
+            otherwise do
+              # One of our members (e.g. %any° branches) lacks captures for
+              # whatever reason. Thus, abort: we can't say anything definite.
+              return op
+            end
+          end
+        end
+
+        op.with(:captures, intersection)
+      end
+
+      otherwise do
+        capture_list = Term::Dict.build do |commit|
+          Kit.each_in_fanout(op) do |successor|
+            Term.case(successor, engine: M0) do
+              matchpi %{(%'%capture name_ ⍊ tags_: (_*))}, cue: :"%capture" do
+                commit << {name, tags}
+              end
+
+              matchpi %{[%'%capture name_]}, cue: :"%capture" do
+                commit << {name, Term[]}
+              end
+
+              matchpi %{{¦ captures_: (_*)}} do
+                commit.concat(captures.items)
+              end
+
+              otherwise { }
+            end
+          end
+        end
+
+        op.with(:captures, capture_list)
+      end
+    end
+  end
+
+  # Runs the sketch propagation algorithm on operators in *pattern*.
+  #
+  # This adds the `captures` entry to every operator, holding a list of captures
+  # that this operator and its members make.
+  #
+  # Each capture is of the form `(name_ (tags_*))`. *tags* is a list of tags
+  # associated with that capture.
+  #
+  # A capture that hits `%any°` on its way up is stopped for inspection. Only
+  # if all branches of `%any°` also make the same-named capture is it allowed
+  # to proceed flowing up.
+  def capturesp(pattern : Normp) : Normp
+    pattern
+      .map { |op| Kit.ascend(op, &->capturesp1(Term::Dict)) }
+      .with_annotation(:captures)
+  end
+
+  # Returns the set of captures that *pattern* makes.
+  #
+  # See `capturesp` for info on how captures are represented.
+  def captures(pattern : Normp) : Set(Term)
+    unless pattern.annotations.captures?
+      pattern = capturesp(pattern)
+    end
+
+    pattern.unwrap do |op|
+      next Set(Term).new unless captures = op[:captures]?
+      next Set(Term).new unless dict = captures.as_d?
+
+      dict.items.to_set
     end
   end
 
