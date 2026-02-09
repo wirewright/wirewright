@@ -2020,8 +2020,56 @@ module Ww::M1
         Term.of(:"%keypath", {:"%capture", capture})
       end
 
-      matchpi %{[%'%nonself arg_]}, cue: :"%nonself" do
-        normalize(Π.pattern(arg))
+      # |@ m1.operator.nonself
+      #
+      # |@pattern
+      # [%'%nonself successor_]
+      #
+      # |@key successor m1.operator
+      #
+      # |@block
+      # An auxiliary operator that wraps a *successor* operator. `%nonself` lets
+      # you associated metadata with *successor*, and also prevent *some* patterns
+      # from being confused by *successor* if it looks like what they're trying
+      # to match.
+      #
+      # `%nonself` is dissolved during pattern normalization and has no effect other
+      # than making the pattern "look" different, which is the whole point.
+      #
+      # For example, if a pattern wants to find `(I _*)`, and it sees the rule
+      # `(I rest_*) <> {(rest): ()}`, it fires on the rule. We may not want that.
+      # Rewriting the rule to `((%nonself I) rest_*) <> {(rest): ()}` does not change
+      # what it means. On the other hand, this rewrite changes how the rule *looks*.
+      # Thus, it prevents our pattern, `(I _*)`, from firing, because `(%nonself I)`
+      # does not look like `I`.
+      #
+      # `%nonself` has a shorthand in WwML: `≡...`. Writing `≡xyz` is the same as
+      # writing `(%nonself xyz)`.
+      #
+      # Another use for `%nonself` is for storing metadata right in the pattern.
+      #
+      # ```
+      # (+ (%nonself ±a kind: foo) (%nonself ±b kind: bar)) => ^(+ a b)
+      #
+      # (+ 100 200) ;; => 300
+      # ```
+      #
+      # In the example above, the presence of `%nonself` and annotations such as
+      # `kind: _` does not affect the meaning of the pattern.`
+      #
+      # The original reason for `%nonself`'s existence were cases where rule definitions
+      # and application of those rules coincide. Some rules may be confused by their own
+      # symbolic appearance, because it may look exactly the same as what they match.
+      # `%nonself` is more or less a hack, then. The proper solution would be to separate
+      # rules from content and apply rules on content only. However, sometimes, such as
+      # in a structural editor, this is undesirable, because we may sometimes want to
+      # edit the rules with a cursor that is driven by those very rules.
+      #
+      # This original reason is slowly fading away; we now recommend clear segregation,
+      # even if that means loss of such "reflexive" structural editing. The latter is
+      # hard to pull off anyway.
+      matchpi %{[%'%nonself successor_]}, cue: :"%nonself" do
+        normalize(Π.pattern(successor))
       end
 
       matchpi %{(%'%never)}, cue: :"%never" do
