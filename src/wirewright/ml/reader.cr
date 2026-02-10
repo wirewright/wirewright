@@ -604,10 +604,10 @@ module Ww::ML
       end
     end
 
-    # ⏏⟨⊚ a b c⟩
+    # ⏏⟨& a b c⟩
     private def all_item
-      unless past?(:langle_circled_ring)
-        return refusal("expected `⟨⊚`", ahead.text.before_begin)
+      unless past?(:langle_ampersand)
+        return refusal("expected `⟨&`", ahead.text.before_begin)
       end
 
       items = [] of Tree::Expr
@@ -617,12 +617,12 @@ module Ww::ML
           return failure("cannot use pairs in an all-items expression", ahead.text)
         end
 
-        # ⟨⊚ a b c⏏⟩
+        # ⟨& a b c⏏⟩
         if past?(:rangle)
           return Tree::AllItem.new(items, pairside: nil, source: false)
         end
 
-        # ⟨⊚ a b c⏏⟩°
+        # ⟨& a b c⏏⟩°
         if past?(:rangle_source)
           return Tree::AllItem.new(items, pairside: nil, source: true)
         end
@@ -632,18 +632,18 @@ module Ww::ML
         when Err
           return π
         else
-          # ⟨⊚ a b c ⍊ qux⏏⟩
+          # ⟨& a b c ⍊ qux⏏⟩
           if past?(:rangle)
             return Tree::AllItem.new(items, pairside: π, source: false)
           end
 
-          # ⟨⊚ a b c ⍊ qux⏏⟩°
+          # ⟨& a b c ⍊ qux⏏⟩°
           if past?(:rangle_source)
             return Tree::AllItem.new(items, pairside: π, source: true)
           end
         end
 
-        # ⟨⊚ a ⏏b c⟩
+        # ⟨& a ⏏b c⟩
         items << value!(slot, expect: "expected an item, an interfix, or `⟩` to end the all-items expression")
       end
     end

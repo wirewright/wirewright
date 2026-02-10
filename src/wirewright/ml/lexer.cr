@@ -406,7 +406,7 @@ module Ww::ML
 
         next unless candidate
         # Reject on things like {-⏏x: 100}
-        next unless ahead.space? || ahead.paired_left? || ahead.paired_right? || ahead.eoi?
+        next unless ahead.visual_boundary?
 
         # Accept on things like:
         # {-⏏ x y z}
@@ -452,7 +452,7 @@ module Ww::ML
         skip(&.superscript?)
 
         # abc¹²³⏏ xyz
-        ahead.delimiter?
+        !ahead.content?
       end
 
       if right && behind.space?
@@ -486,7 +486,7 @@ module Ww::ML
         skip(&.subscript?)
 
         # abc₁₂₃⏏ xyz
-        ahead.delimiter?
+        !ahead.content?
       end
 
       if right && behind.space?
@@ -722,7 +722,7 @@ module Ww::ML
       end
 
       radix = view { skip(&.sub_digit?) }
-      unless ahead.delimiter?
+      if ahead.content?
         return revert
       end
 
@@ -863,9 +863,13 @@ module Ww::ML
 
         return nows("⋮") { token(:triple_colon_left) }
       when past?('⟨')
-        if past?('⊚')
-          return token(:langle_circled_ring)
+        if try? { past?('&') && ahead.visual_boundary? }
+          # ⟨& ⏏
+          return token(:langle_ampersand)
         else
+          # ⟨⏏
+          # ⟨ ⏏&
+          # ⟨⏏&x
           return token(:langle)
         end
       when past?('⟩')

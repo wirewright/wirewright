@@ -1007,17 +1007,17 @@
   (= ⎡{¦ @x_ @0 @(+ 1 2)}⎤ ⎡{¦ x: @x_, @0: _, @(+ 1 2): _}⎤)
   (- ⎡{¦ @⏏}⎤ ⎡expected a term⎤))
 
-;; `⟨⊚ ...⟩`
+;; `⟨& ...⟩`
 (ml
-  (= ⎡⟨⊚ a⟩⎤ ⎡⟨a⟩⎤)
-  (= ⎡⟨⊚ a⟩°⎤ ⎡⟨a⟩°⎤)
-  (= ⎡⟨⊚ a ¦ rest_⟩°⎤ ⎡(%all ⟨a⟩° (%partition _ rest_))⎤)
-  (= ⎡⟨⊚ a b c⟩⎤ ⎡(%all ⟨a⟩ ⟨b⟩ ⟨c⟩)⎤)
-  (= ⎡⟨⊚ a b c⟩°⎤ ⎡(%all ⟨a⟩° ⟨b⟩° ⟨c⟩°)⎤)
-  (= ⎡⟨⊚ a b c ¦ rest_ x_ y_ z_⟩°⎤ ⎡(%all ⟨a⟩° ⟨b⟩° ⟨c⟩° (%partition _ (%layer rest_ {x: x_, y: y_, z: z_})))⎤)
-  (= ⎡⟨⊚ a b c ⍊ x_ y_ z_⟩°⎤ ⎡(%all ⟨a⟩° ⟨b⟩° ⟨c⟩° (%partition _ {¦ x_ y_ z_}))⎤)
+  (= ⎡⟨& a⟩⎤ ⎡⟨a⟩⎤)
+  (= ⎡⟨& a⟩°⎤ ⎡⟨a⟩°⎤)
+  (= ⎡⟨& a ¦ rest_⟩°⎤ ⎡(%all ⟨a⟩° (%partition _ rest_))⎤)
+  (= ⎡⟨& a b c⟩⎤ ⎡(%all ⟨a⟩ ⟨b⟩ ⟨c⟩)⎤)
+  (= ⎡⟨& a b c⟩°⎤ ⎡(%all ⟨a⟩° ⟨b⟩° ⟨c⟩°)⎤)
+  (= ⎡⟨& a b c ¦ rest_ x_ y_ z_⟩°⎤ ⎡(%all ⟨a⟩° ⟨b⟩° ⟨c⟩° (%partition _ (%layer rest_ {x: x_, y: y_, z: z_})))⎤)
+  (= ⎡⟨& a b c ⍊ x_ y_ z_⟩°⎤ ⎡(%all ⟨a⟩° ⟨b⟩° ⟨c⟩° (%partition _ {¦ x_ y_ z_}))⎤)
   (doc=
-    ⎡(fb (@x ⟨⊚ (cell @src n_) (cell @voice0 a_) (cell @voice1 b_)⟩)
+    ⎡(fb (@x ⟨& (cell @src n_) (cell @voice0 a_) (cell @voice1 b_)⟩)
        {n: ^(+ a b)})⎤
     ⎡(fb (@x (%all ⟨(cell @src n_)⟩ ⟨(cell @voice0 a_)⟩ ⟨(cell @voice1 b_)⟩))
        {n: ^(+ a b)})⎤))

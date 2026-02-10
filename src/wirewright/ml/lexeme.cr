@@ -37,7 +37,7 @@ module Ww::ML
         Lparen
         Rparen
         Langle
-        LangleCircledRing
+        LangleAmpersand
         Rangle
         RangleSource
         DoubleLangle

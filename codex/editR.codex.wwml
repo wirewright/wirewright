@@ -482,7 +482,6 @@ C←[C'←[I M←[cancel compose] _*] compose _string]
 [[I M←[compose query] _*] compose "*)"] <> {M: (composite "⟆")}
 [[I M←[compose query] _*] compose "\"{"] <> {M: (composite "⟪")}
 [[I M←[compose query] _*] compose "\"}"] <> {M: (composite "⟫")}
-[[I M←[compose query] _*] compose "{o"] <> {M: (composite "⟨⊚")}
 [[I M←[compose query] _*] compose "^^"] <> {M: (composite "⏏")}
 
 ;; -----------------

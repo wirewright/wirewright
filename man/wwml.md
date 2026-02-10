@@ -117,7 +117,6 @@ own complications.
 | `⸍`       |                   | <kbd>Compose</kbd> + <kbd>^</kbd> + <kbd>/</kbd>              | **no**                               |
 | `⸝`       |                   | <kbd>Compose</kbd> + <kbd>_</kbd> + <kbd>/</kbd>              | **no**                               |
 | `≈`       |                   | <kbd>Compose</kbd> + <kbd>~</kbd> + <kbd>~</kbd>              | yes                                  |
-| `⟨⊚`      |                   | <kbd>Compose</kbd> + <kbd>{</kbd> + <kbd>o</kbd>              | **no**                               |
 | `⟪`       |                   | <kbd>Compose</kbd> + <kbd>"</kbd> + <kbd>{</kbd>              | **no**                               |
 | `⟫`       |                   | <kbd>Compose</kbd> + <kbd>"</kbd> + <kbd>}</kbd>              | **no**                               |
 
@@ -154,7 +153,6 @@ Here are the XCompose mappings for the table above. This should be put in `.XCom
 <Multi_key> <asterisk> <parenright> : "⟆"
 <Multi_key> <asciicircum> <slash> : "⸍"
 <Multi_key> <underscore> <slash> : "⸝"
-<Multi_key> <braceleft> <o> : "⟨⊚"
 <Multi_key> <quotedbl> <braceleft> : "⟪"
 <Multi_key> <quotedbl> <braceright> : "⟫"
 
@@ -857,9 +855,9 @@ qoox
 - `⟨<term list>⟩°` is the same as writing `(%item° <term list>)`.
 - `⟨<term list> ¦ <pairspattern>⟩` is the same as writing `(%all (%item <term list>) <pairspattern>)`.
 - `⟨<term list> ¦ <pairspattern>⟩°` is the same as writing `(%all (%item° <term list>) <pairspattern>)`.
-- `⟨⊚ x y z⟩` is the same as writing `(%all (%item x) (%item y) (%item z))`. Similarly to other forms,
-  you can do `⟨⊚ x y z⟩°` to use `%item°`: `(%all (%item° x) (%item° y) (%item° z))`. You can use interfixes
-  as well: `⟨⊚ x y z ¦ rest_⟩`, `⟨⊚ x y z ⍊ a b⟩` etc. are the same as writing
+- `⟨& x y z⟩` is the same as writing `(%all (%item x) (%item y) (%item z))`. Similarly to other forms,
+  you can do `⟨& x y z⟩°` to use `%item°`: `(%all (%item° x) (%item° y) (%item° z))`. You can use interfixes
+  as well: `⟨& x y z ¦ rest_⟩`, `⟨& x y z ⍊ a b⟩` etc. are the same as writing
   `(%all (%item x) (%item y) (%item z) (%partition _ rest_))` and `(%all (%item x) (%item y) (%item z) (%partition _ (%layer _ {a: a_, b: b_})))`,
   correspondingly.
 

@@ -1929,7 +1929,7 @@
         (cell @voice0)
         (cell @voice1))
       (backsys @x
-        ⟨⊚ (cell @src n_) (cell @voice0 a_) (cell @voice1 b_)⟩
+        ⟨& (cell @src n_) (cell @voice0 a_) (cell @voice1 b_)⟩
           <> {n: ^(+ a b)}))
     (frame pattern: true
       ⟪[cell @src 100]

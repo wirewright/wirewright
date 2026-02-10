@@ -336,10 +336,10 @@
   (keyboard key left dn ctrl: true shift: true)
   (keyboard key insert dn)
   (keyboard input "{")
-  (keyboard input "o"))
+  (keyboard input "{"))
  ((I compose: true modify: true multiline: true)
-  ("Lorem ispum\ndolors ⟨⊚" * "")
-  21))
+  ("Lorem ispum\ndolors ⟨" * "")
+  20))
 
 (edit
  ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)

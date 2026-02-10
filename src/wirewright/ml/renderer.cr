@@ -268,11 +268,11 @@ module Ww::ML
       end
 
       if pairside
-        # ⟨⊚ qux ¦ x_⟩ -> (%all (%item qux ...) (%partition _ x_))
+        # ⟨& qux ¦ x_⟩ -> (%all (%item qux ...) (%partition _ x_))
         args << tsrc(ctx, {:"%partition", :_, pairside})
       end
 
-      # ⟨⊚ x⟩
+      # ⟨& x⟩
       if args.size == 1
         return args[0]
       end

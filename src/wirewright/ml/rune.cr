@@ -57,15 +57,14 @@ module Ww::ML
         hspace? || vspace?
       end
 
-      # Returns `true` if the character is a WwML delimiter character.
-      # Returns `false` otherwise.
-      def delimiter? : Bool
-        !(symbolic? || paired_left? || ideogram? || subscript? || superscript?)
+      # Returns `true` if the character is a WwML "content" character.
+      def content? : Bool
+        symbolic? || paired_left? || ideogram? || subscript? || superscript?
       end
 
-      # The opposite of `delimiter?`.
-      def content? : Bool
-        !delimiter?
+      # Returns `true` if the character is a WwML "visual boundary" character.
+      def visual_boundary? : Bool
+        space? || paired_left? || paired_right? || eoi?
       end
 
       # Returns `true` if the character is a subscript digit or symbol.
