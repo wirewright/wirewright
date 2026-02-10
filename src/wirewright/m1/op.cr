@@ -129,7 +129,7 @@ module Ww::M1
 
     defcase CaptureItemsonly, capture : Term
 
-    defcase Partition, itemside : Any, pairside : Any, seq : Bool do
+    defcase Partition, itemspart : Any, pairspart : Any, seq : Bool do
       private def self.seq?(op : Any) : Bool
         case op
         when ItemFirst,
@@ -149,8 +149,8 @@ module Ww::M1
         end
       end
 
-      def self.new(itemside : Any, pairside : Any)
-        new(itemside, pairside, seq: seq?(itemside))
+      def self.new(itemspart : Any, pairspart : Any)
+        new(itemspart, pairspart, seq: seq?(itemspart))
       end
     end
 

@@ -580,18 +580,18 @@ module Ww::M1
   def match(ctx, op : Op::Partition, matchee : Tzip, plan)
     return Fb[] unless dict = matchee.term.as_d?
 
-    if op.pairside.is_a?(Op::Pass)
+    if op.pairspart.is_a?(Op::Pass)
       if op.seq && dict.itemsonly?
         # E.g. [/ x_ y_] on (/ 1 2)
-        return match(ctx, op.itemside, matchee, plan)
+        return match(ctx, op.itemspart, matchee, plan)
       end
 
       # E.g. [x_ y_] on (/ 1 2 precision: 3)
-      return match(ctx, op.itemside, matchee.itemspart, plan)
+      return match(ctx, op.itemspart, matchee.itemspart, plan)
     end
 
-    ahead = ctx.interject(plan, Action.match(op.pairside, matchee.pairspart))
-    match(ctx, op.itemside, matchee.itemspart, ahead)
+    ahead = ctx.interject(plan, Action.match(op.pairspart, matchee.pairspart))
+    match(ctx, op.itemspart, matchee.itemspart, ahead)
   end
 
   # :nodoc:
@@ -602,11 +602,12 @@ module Ww::M1
     # about ~60% of the time. Term::Dict#itemspart and Term::Dict#pairspart
     # currently allocate, just as Tzip#itemspart and Tzip#pairspart, so we
     # consider them expensive.
-    if op.pairside.is_a?(Op::Pass) && op.seq && dict.itemsonly?
-      return probably_matches?(op.itemside, matchee)
+    if op.pairspart.is_a?(Op::Pass) && op.seq && dict.itemsonly?
+      return probably_matches?(op.itemspart, matchee)
     end
 
-    probably_matches?(op.itemside, Term.of(matchee.itemspart)) && probably_matches?(op.pairside, Term.of(matchee.pairspart))
+    probably_matches?(op.itemspart, Term.of(matchee.itemspart)) &&
+      probably_matches?(op.pairspart, Term.of(matchee.pairspart))
   end
 
   # :nodoc:
