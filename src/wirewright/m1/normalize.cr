@@ -2126,7 +2126,7 @@ module Ww::M1
       # Importantly, in such cases, you do not get to know the value of the entry,
       # since it may in fact not exist; you only get a handle to *set* it.
       #
-      # WwML has a shorthand for this. For example, `{| ⋮x}` expands to `{x: (%- (%never) x_)}`.
+      # WwML has a shorthand for this. For example, `{| ⋮x}` expands to `{x: (%- (%never) x)}`.
       # This lets you set x regardless of whether it exists in the original dict.
       matchpi %{(%'%never)}, cue: :"%never" do
         pattern
