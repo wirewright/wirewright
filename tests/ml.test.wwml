@@ -531,8 +531,7 @@
 
 ;; M1 interfix shorthands
 (ml
-  (= ⎡(a ⍊ b c)⎤ ⎡(a ¦ _ b c)⎤)
-  (= ⎡(a ⁑ b c)⎤ ⎡(a _* ¦ _ b c)⎤))
+  (= ⎡(a ⍊ b c)⎤ ⎡(a ¦ _ b c)⎤))
 
 ;; Misc M1 shorthands
 (ml

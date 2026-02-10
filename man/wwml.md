@@ -59,9 +59,8 @@ and perhaps, APL-like; obscuring the simplicity of WwML's core. They can also be
 type, until you're accustomed to them; then, it's as easy as typing anything else.
 
 The amounts of compression these characters provide, are sometimes substantial; and
-worth the trade-off in my opinion. For example, `⁑` generally stands for the character sequence
-`_* ⍊`, which in turn is the same as writing `_* ¦ _`. Moreover, this way, most of the easy-to-
-type ASCII character sequences are left for the user to define and use in their names.
+worth the trade-off in my opinion. Moreover, this way, most of the easy-to-type ASCII
+character sequences are left for the user to define and use in their names.
 
 Some of the characters were picked due to their similarity to the underlying concept. Others,
 like `◇`, are simply *ideograms* -- the glyphs themselves do not mean or remind one of anything

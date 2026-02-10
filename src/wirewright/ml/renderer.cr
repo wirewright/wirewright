@@ -706,23 +706,6 @@ module Ww::ML
       end
     end
 
-    private def render0(ctx : RenderContext, node : Tree::DictPrefixSelection)
-      # (circle x_ y_ ⁑ ±radius) -> (circle x_ y_ _* ¦ _ ±radius)
-      itemside = render(ctx, node.itemside)
-      itemside = itemside.append(tsrc(ctx, :"_*"))
-
-      selection = dict(ctx, node.selection) { |selector| render(ctx, selector) }
-
-      pairside = tsrc(ctx, {:"%layer", :_, selection})
-
-      if itemside.term.itemsonly?
-        tsrc(ctx, {:"%partition", itemside, pairside})
-      else
-        # (circle x_ y_ z: 100 ⁑ ±radius)
-        tsrc(ctx, {:"%all", itemside, pairside})
-      end
-    end
-
     private def render0(ctx : RenderContext, node : Tree::DictExtend)
       itemside = render(ctx, node.itemside)
       extra = render(ctx, node.extra)

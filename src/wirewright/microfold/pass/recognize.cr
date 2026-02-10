@@ -11,7 +11,7 @@ module Ww::Microfold::Pass
       Term.of_case(node) do
         # When the style string is present, Microfold will define µ-style even if there
         # is no preset for that node.
-        matchpi %[(tag_ ⁑ -µ-preset -µ-style style_string)] do
+        matchpi %[(tag_ _* ⍊ -µ-preset -µ-style style_string)] do
           node.morph(
             {:style, nil},
             {:"µ-preset", theme.preset?(tag, issues) || ""},
@@ -21,7 +21,7 @@ module Ww::Microfold::Pass
 
         # When the style string is absent, Microfold will not define µ-style unless
         # a preset exists for its tag.
-        matchpi %[(tag_ ⁑ -µ-preset)] do
+        matchpi %[(tag_ _* ⍊ -µ-preset)] do
           continue unless preset = theme.preset?(tag, issues)
 
           node.morph(

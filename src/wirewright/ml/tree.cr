@@ -16,7 +16,6 @@ module Ww::ML
                      PairDict |
                      Split |
                      Dict |
-                     DictPrefixSelection |
                      DictExtend |
                      Sigil |
                      Placeholder |
@@ -162,7 +161,6 @@ module Ww::ML
     defcase DictSection, blocks : Array(DictEntryBlock)
 
     defcase Dict, itemside : DictSection, pairside : Layer?
-    defcase DictPrefixSelection, itemside : DictSection, selection : Array(Selector)
     defcase DictExtend, itemside : DictSection, extra : Expr
 
     defcase DocumentDict, default : DictSection, sections : Array(DocumentSection)

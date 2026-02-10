@@ -722,10 +722,6 @@ module Ww::ML
         return π
       when Refusal
         case
-        when past?(:double_asterisk)
-          # (a b ⏏⁑ c)
-          pairside = value!(selectors(:rparen))
-          make = -> { Tree::DictPrefixSelection.new(itemside, pairside) }
         when past?(:caret_ellipsis)
           # (a b ⏏^… c)
           extra = value!(atom, expect: true)

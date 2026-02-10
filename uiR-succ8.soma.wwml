@@ -447,17 +447,17 @@
   <> {h⫽w: ^h⫽w-max}
 
 ;; Trigger main-resize once main is known.
-(x⫽y-stack {¦ -mail/in_} ⁑ metrics_: {¦ ±w⫽h-lo ±gaps} ±dn-w⫽h)
+(x⫽y-stack {¦ -mail/in_} _* ⍊ metrics_: {¦ ±w⫽h-lo ±gaps} ±dn-w⫽h)
   <> {mail/in: (x⫽y-resize ^(union metrics {x⫽y-limit: dn-w⫽h})
                            ^(- dn-w⫽h w⫽h-lo gaps)),
       (dn-w⫽h): ()}
 
 ;; Trigger cross-expand once cross is known.
-(x⫽y-stack {¦ -mail/in_} ⁑ metrics_ ±dn-h⫽w)
+(x⫽y-stack {¦ -mail/in_} _* ⍊ metrics_ ±dn-h⫽w)
   <> {mail/in: (y⫽x-expand ^metrics ^dn-h⫽w), (dn-h⫽w): ()}
 
 ;; Trigger positioning of children.
-(x⫽y-stack {¦ -mail/in_} ⁑ position⁺ gap⋮ 0)
+(x⫽y-stack {¦ -mail/in_} _* ⍊ position⁺ gap⋮ 0)
   <> {mail/in: (x⫽y-place 0 ^gap), position: false}
 
 ;;
@@ -473,11 +473,11 @@
   <> {w⫽h: ^w⫽h-max}
 
 ;; Trigger expand once size is known.
-(z-stack {¦ -mail/in_} ⁑ metrics_ ±dn-w⫽h)
+(z-stack {¦ -mail/in_} _* ⍊ metrics_ ±dn-w⫽h)
   <> {mail/in: (x⫽y-expand ^metrics ^dn-w⫽h), (dn-w⫽h): ()}
 
 ;; Trigger positioning of children.
-(z-stack {¦ -mail/in_} ⁑ position⁺)
+(z-stack {¦ -mail/in_} _* ⍊ position⁺)
   <> {mail/in: (z-place), position: false}
 
 ;;
@@ -537,7 +537,7 @@
   <> {state: sized, up-w⫽h: ^(+ Sp (* gap-x⫽y (- Np 1)))}
 
 ;; Consume dn-w/h until in sized state.
-(x⫽y-wrap ⁑ ±dn-w⫽h) <> {(dn-w⫽h): ()}
+(x⫽y-wrap _* ⍊ ±dn-w⫽h) <> {(dn-w⫽h): ()}
 
 ;; Construct wrapper on dn-w/h in sized state.
 (x⫽y-wrap children_* ⍊ state: sized ⋮limit ±dn-w⫽h)
