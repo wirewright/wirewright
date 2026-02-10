@@ -380,8 +380,8 @@ module Ww::ML
           case
           when past?('¦')
             token(:lcurly_broken_bar)
-          when past?('…')
-            token(:lcurly_ellipsis)
+          when past?('|')
+            token(:lcurly_bar)
           when past?('+')
             if past?('¦')
               token(:lcurly_plus_broken_bar)

@@ -46,8 +46,8 @@ module Ww::ML
         Lbracket
         Rbracket
         Lcurly
+        LcurlyBar
         LcurlyBrokenBar
-        LcurlyEllipsis
         LcurlyPlus
         LcurlyPlusBrokenBar
         LcurlyMinus

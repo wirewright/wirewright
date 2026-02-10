@@ -633,6 +633,16 @@ module Ww::ML
       tsrc(ctx, {:"%layer", :_, selection})
     end
 
+    private def render0(ctx : RenderContext, node : Tree::EntriesPattern) : Tsrc
+      # {|} -> {}
+      if node.selection.empty?
+        return tsrc(ctx, Term[])
+      end
+
+      # {| a_ b_}
+      dict(ctx, node.selection) { |selector| render(ctx, selector) }
+    end
+
     # NOTE: `Layer` always appears in (%partition _ ⏏) or similarly in other pairside
     # contexts; it is not a free-floating node. This is enforced by the type grammar.
     private def render0(ctx : RenderContext, node : Tree::Layer)

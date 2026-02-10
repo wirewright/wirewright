@@ -894,39 +894,52 @@ version: `⟨x y z … a b c⟩°`. Interfixes are supported as well: `⟨x y z 
 
 #### Selectors
 
-*Selectors* are a group of syntactic shorthands for matching dictionary pairspart.
-Selectors are associated with the character `¦`, called the "pairspart pipe" in
-WwML and Wirewright-related contexts. If you see the pairspart pipe, then the shorthand
-you're looking at has something to do with the pairspart and/or selectors.
+*Selectors* are a group of syntactic shorthands for matching dictionary entries.
 
-Selectors expand to `%layer` or components of `%layer` in general.
+Selectors are generally written as key-value pairs: `<key>: <value>`; or expand
+to key-value pairs. A variety of other shorthands is available.
 
-A pairspart can be empty, as in `(_* ¦)`. If interpreted as an M1 pattern, it would match
+##### Selectors in closed dict
+
+Selectors can be used to write patterns for matching a *closed* dict, meaning
+a dict that must not contain entries beyond those listed. The syntax is `{| ...}`.
+For instance, `{| -x_ y_ z_: 10}` expands to `{x: (%- _ x), y: y_, z: z←10}`.
+
+##### Selectors in open dict (`%layer`)
+
+Selectors can be used in `%layer` shorthand patterns such as `{¦ ...}`, `{xyz¦ ...}`
+and so on (see above).
+
+##### Selectors in pairside
+
+Selectors can be used after the `¦` interfix or the `⍊` interfix. Both divide
+the surrounding expression to an "itemside" and a "pairside". For example,
+`(+ a_ b_ ¦ <residue> <selectors here>)`, or `(+ a_ b_ ⍊ <selectors here>)`. `⍊`
+sets the residue to `_` automatically.
+
+A pairside can be empty, as in `(_* ¦)`. If interpreted as an M1 pattern, it would match
 an itemsonly dictionary; this is because its expansion is `(%partition (_*) (%layer () ()))`.
 
-Selectors optionally begin with a so-called *selection residue* term, which
+Pairside optionally begins with a so-called *selection residue* term, which
 corresponds to the first argument of `%layer`. If it is absent, it defaults to `()`.
 
-- `_` is the same as writing `(%layer _ {})`
-- `x_` is the same as writing `(%layer x_ {})`
-- `_ x: 100 y: 200` is the same as writing `(%layer _ {x: 100, y: 200})`
-- `() x: 100 y: 200` is the same as writing `(%layer () {x: 100, y: 200})`
-- `x: 100 y: 200` is the same as writing `(%layer () {x: 100, y: 200})`
-- `{% a b c} x: 100 y: 200` is the same as writing `(%layer (%keypool a b c) {x: 100, y: 200})`
+- Pairside `_` is the same as writing `(%layer _ {})`
+- Pairside `x_` is the same as writing `(%layer x_ {})`
+- Pairside `_ x: 100 y: 200` is the same as writing `(%layer _ {x: 100, y: 200})`
+- Pairside `() x: 100 y: 200` is the same as writing `(%layer () {x: 100, y: 200})`
+- Pairside `x: 100 y: 200` is the same as writing `(%layer () {x: 100, y: 200})`
+- Pairside `{% a b c} x: 100 y: 200` is the same as writing `(%layer (%keypool a b c) {x: 100, y: 200})`
 
 The residue term is optional.
 
 > [!WARNING]
-> Since there is no way WwML can tell whether e.g. the pairspattern `x_` means `(%layer x_ {})`
+> Since there is no way WwML can tell whether e.g. the pairside `x_` means `(%layer x_ {})`
 > or `(%layer () {x: x_})` -- as in `(+ a_ b_ ¦ x_)` -- this is a case where you would
 > have to write the residue `()` explicitly despite its stated optionality and reasonability
-> of leaving it out. The ambiguity is resolved automatically in favor of the first expansion.
+> of leaving it out. The ambiguity is otherwise resolved in favor of the first expansion.
 > In other words, keep `x_` to get the first expansion; and use `() x_` to get
 > the second expansion. Thus `(+ a_ b_ ¦ x_)` makes M1 capture the pairspart under `x`; and
 > `(+ a_ b_ ¦ () x_)` makes M1 capture the value of key `x` under `x`; and ensure there are no other pairs.
-
-Selectors are generally key-value pairs: `<key>: <value>`. A variety of other shorthands
-is available.
 
 ##### M1 Key-value pair shorthands
 

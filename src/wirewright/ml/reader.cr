@@ -409,6 +409,24 @@ module Ww::ML
       Tree::Pairspattern.new(itemsname, selection)
     end
 
+    # ⏏{| a b c}
+    private def entries_pattern
+      unless past?(:lcurly_bar)
+        return refusal("expected `{| ` to start an entries-pattern", ahead.text.before_begin)
+      end
+
+      # {| ⏏x y z}
+      selection = value!(selectors(:rcurly))
+
+      # {| x y z⏏}
+      unless past?(:rcurly)
+        return failure("expected `}` to close the entries-pattern", ahead.text.before_begin)
+      end
+
+      # {| x y z}⏏
+      Tree::EntriesPattern.new(selection)
+    end
+
     # ⏏{x: 100, y: 200}
     private def pairs
       unless past?(:lcurly)
@@ -888,6 +906,7 @@ module Ww::ML
         stringdq,
         itemspattern,
         pairspattern,
+        entries_pattern,
         pairs,
         set,
         mset,

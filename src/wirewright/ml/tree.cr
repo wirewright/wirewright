@@ -7,6 +7,7 @@ module Ww::ML
                      Stitch |
                      Itemspattern |
                      Pairspattern |
+                     EntriesPattern |
                      SameValueSet |
                      Multiset |
                      Keypool |
@@ -124,6 +125,8 @@ module Ww::ML
     defcase SelectorEdge, key : Expr
 
     defcase Pairspattern, itemsname : Expr?, selection : Array(Selector)
+
+    defcase EntriesPattern, selection : Array(Selector)
 
     defcase Layer, residue : Expr?, selection : Array(Selector)
     defcase LayerIgnoreResidue, child : Expr
