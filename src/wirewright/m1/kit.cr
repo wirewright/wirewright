@@ -138,9 +138,9 @@ module Ww::M1
     #
     # `walk` differs from other methods such as `ascend` in the following ways:
     #
-    # - `walk` is more relaxed than e.g. `ascend` in that it also emits non-member
-    #   children of operators (but does not descend further!) This means it also emits
-    #   non-member nodes such as `%ref`, `%capture`, etc.
+    # - `walk` is more relaxed than e.g. `ascend` in that it emits *fanout* nodes
+    #   rather than *member* nodes (but does not descend further!) See `in_fanout?`,
+    #   `each_in_fanout`.
     # - `walk` does not descend into operators marked as `disjunction: true` (such as `%any°`).
     #   You are expected to handle disjunctions yourself, possibly by recursing on
     #   their branches. The disjunction itself *is* passed to *fn*.

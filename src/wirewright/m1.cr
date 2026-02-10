@@ -173,7 +173,7 @@ module Ww::M1
   #   zero (or one) or more of them: e.g., *members* of `%item`; or *successor* if
   #   only one such operator is allowed (e.g., *successor* of `%let`).
   # - `(%capture name_)` marks captures. For example, a `%let` normalizes
-  #   into `(%let (%capture name) value)`. Captures can have tags, which can be
+  #   into `(%let (%capture name) value)`. Captures can have tags, which are
   #   subsequently picked up by `capturesp`: `(%capture foo tags: (a b c))`.
   # - `(%ref name_)` marks references. References are different from captures in that
   #   they do not have associated values at match-time. References are used

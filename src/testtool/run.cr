@@ -484,10 +484,10 @@ module Testtool
     captures = measure(stat) { M1.captures(normp) }
 
     ok = captures.all? do |(name, tags)|
-      test.captures.any? do |candidate, tagp|
+      test.captures.any? do |(candidate, tagsp)|
         next unless name == candidate
 
-        M1.probe?(tagp, tags)
+        M1.probe?(tagsp, tags)
       end
     end
 

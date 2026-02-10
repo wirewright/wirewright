@@ -255,7 +255,7 @@ module Testtool
       # |@key children testtool.captures
       #
       # |@block
-      # Use `captures` to introduce zero or more M1 pattern depth tests (Crystal-
+      # Use `captures` to introduce zero or more M1 pattern capture tests (Crystal-
       # side `M1.captures`)
       matchpi %{(captures _*)} do
         assertions(decl.as_d, srcmap, offset: 1) do |item|
@@ -710,7 +710,7 @@ module Testtool
 
         captures.items.each do |capture|
           Term.case(capture, engine: M0) do
-            matchpi %{(name_ tagp_)} { valid << {name, tagp} }
+            matchpi %{(name_ tagsp_)} { valid << {name, tagsp} }
             otherwise { }
           end
         end

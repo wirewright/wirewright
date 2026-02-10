@@ -9,7 +9,7 @@
 # ### General architecture
 #
 # If D7 was a language frontend (it is not!), `ClassifierFactory`, `Classifier`,
-# and the whole `replace`ment machinery would be the lexer.
+# and `update` machinery would be the lexer.
 #
 # If D7 was a language frontend (and it is not!), `Regime` would be
 # the parser, or, rather, a way to write parsers; a kind of parser combinator
