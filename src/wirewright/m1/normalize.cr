@@ -767,7 +767,7 @@ module Ww::M1
     key, value = prod.key, prod.value
 
     Term.case(value, engine: M0) do
-      # |@ m1.operator.pair.optional
+      # |@ m1.operator.entry.optional
       #
       # |@pattern
       # (%'%optional default_ successor_)
@@ -804,7 +804,7 @@ module Ww::M1
         )
       end
 
-      # |@ m1.operator.pair.negative
+      # |@ m1.operator.entry.negative
       #
       # |@pattern
       # (%'%- barrier_)
@@ -825,6 +825,12 @@ module Ww::M1
       # {y: 1}         ;; => {y: 2}
       # {x: qux, y: 1} ;; mismatch
       # ```
+      #
+      # A useful way to think about `%-` is that it matches lack of knowledge.
+      # In this sense, the barrier operator should show what "presence of knowledge"
+      # looks like. In backmaps, `%-` is often used to "fill" values in based on
+      # other data matched by the pattern. Thus, the barrier tells when **not**
+      # to fill.
       matchpi %{(%'%- barrier_)}, cue: :"%-" do
         normal = Term::Dict.build do |commit|
           commit << :"%entry/negative" << {:"%key", key} << Normalize.sealed(Π.pattern(barrier))
@@ -843,7 +849,7 @@ module Ww::M1
         Term.of(normal)
       end
 
-      # |@ m1.operator.pair.negative
+      # |@ m1.operator.entry.negative
       #
       # |@pattern
       # (%'%- barrier_ name_)
@@ -931,7 +937,7 @@ module Ww::M1
         Term.of(normal)
       end
 
-      # |@ m1.operator.pair.required
+      # |@ m1.operator.entry.required
       #
       # |@pattern
       # operator_
@@ -2080,6 +2086,48 @@ module Ww::M1
         normalize(Π.pattern(successor))
       end
 
+      # |@ m1.operator.never
+      #
+      # |@pattern
+      # (%'%never)
+      #
+      # |@block
+      # A dedicated *nevermatch* operator. Whereas anything can excite `_`, nothing
+      # can excite `%never`. In other words, `_` matches anything, and `%never`
+      # matches nothing. `%never` is the opposite of `_`.
+      #
+      # `%never` is most often used in combination with other operators. In particular,
+      # it is used with `%-` (see `m1.operator.entry.negative`).
+      #
+      # Looking at `%-`, we see that it matches an entry that does not exist, or,
+      # if it does exist, one whose value does not match `%-`'s *barrier* operator.
+      #
+      # If the barrier pattern is `_`, let's substitute, getting: an entry that
+      # does not exist, or one whose value does not match `_`. We know that all
+      # terms match `_`. Thus, the barrier will *always* trigger. This leaves only
+      # one clause active: an entry that does not exist. If one does exist, then any
+      # value at all will excite `_`, the barrier, and thus, fail `%-`.
+      #
+      # Thus, patterns such as `{x: (%- _)}` mean "an entry with key x must
+      # not exist".
+      #
+      # WwML has several shorthands for this: `{| -x}` emits `{x: (%- _)}`, and,
+      # say, `{| -x_}` emits `{x: (%- _ x)}` which lets you refer to the missing
+      # entry (to perhaps create it later if you're writing a backmap).
+      #
+      # On the other hand, what would `x: (%- (%never))` mean? Let's substitute again.
+      # We thus get a pattern that says the following: either x does not exist, or it
+      # does not match `(%never)`. All terms do not match `(%never)` -- it is a *nevermatch*,
+      # after all. The barrier will *never* trigger. Thus, the statement collapses to:
+      # either x does not match, or true.
+      #
+      # This matches absence or presence, letting one say, "I don't care whether it
+      # exists or not; in both cases, just give me a handle so that I can set it".
+      # Importantly, in such cases, you do not get to know the value of the entry,
+      # since it may in fact not exist; you only get a handle to *set* it.
+      #
+      # WwML has a shorthand for this. For example, `{| ⋮x}` expands to `{x: (%- (%never) x_)}`.
+      # This lets you set x regardless of whether it exists in the original dict.
       matchpi %{(%'%never)}, cue: :"%never" do
         pattern
       end
