@@ -472,7 +472,7 @@ module Ww::M1
       end
     {% end %}
 
-    # Concatenates two logs *a* and *b* in order. This returns `Many` in most
+    # Joins two logs *a* and *b* with an OR, in order. This returns `Many` in most
     # cases, unless one of *a* or *b* is `None`.
     def join(a : Any, b : Any) : Any
       # NOTE: Although I prefer overloads for this kind of stuff, here we'd spend
@@ -514,7 +514,7 @@ module Ww::M1
 
     {% if flag?(:docs) %}
       # Seals the given *log*. Sealing prevents the log from being appended to
-      # in the future: apepnds to a sealed log result in `None`.
+      # in the future: appends to a sealed log result in `None`.
       def seal(log : Simple) : Sealed | None
       end
     {% end %}
