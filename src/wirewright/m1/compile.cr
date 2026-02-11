@@ -530,6 +530,12 @@ module Ww::M1
         Op::Untracked.new(compile(Π.pattern(successor)))
       end
 
+      matchpi %{[%'%pipe [%'%payload fn←(prepend _*)] successor_]}, cue: {:"%pipe", :prepend} do
+        terms = fn.items.move(1).to_readonly_slice(&.itself)
+
+        Op::Prepend.new(terms, compile(Π.pattern(successor)))
+      end
+
       matchpi %{[%'%all]}, cue: :"%all" do
         Op::INSTANCE_PASS
       end

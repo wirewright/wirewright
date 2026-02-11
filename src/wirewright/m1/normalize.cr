@@ -1711,9 +1711,23 @@ module Ww::M1
         # (100 200) ;; mismatch
         # ```
         %{(%'%pipe fn←untracked successor_)},
+        # |@ m1.operator.pipe
+        #
+        # |@pattern
+        # (%'%pipe (prepend terms_*) _)
+        #
+        # |@key terms
+        # Zero or more terms, treated literally.
+        #
+        # |@block
+        # A utility function that prepends all of *terms* to a matchee dict.
+        #
+        # TODO: Backmaps currently can't modify the resulting dict. This should however
+        # be possible in the future, except for prepended terms.
+        %{(%'%pipe fn←(prepend _*) successor_)},
         cue: :"%pipe",
         cues: {:+, :-, :*, :/, :div, :mod, :**, :clamp, :map, :span, :tally,
-               :type, :ml, :untracked}
+               :type, :ml, :untracked, :prepend}
       ) do
         Normalize.sealed(Term.of(:"%pipe", {:"%payload", fn}, normalize(Π.pattern(successor))))
       end
@@ -2030,8 +2044,65 @@ module Ww::M1
         Normalize.terminal(pattern)
       end
 
-      matchpi %{(%'%keypath capture_)}, cue: :"%keypath" do
-        Term.of(:"%keypath", Term.of(:"%capture", capture, tags: {:keypath}))
+      # |@ m1.operator.keypath
+      #
+      # |@pattern
+      # (%'%keypath name_)
+      #
+      # |@key name
+      # The name of the capture for the keypath. Can be any term (just like in e.g. `%let`).
+      #
+      # |@block
+      # An operator that captures the current keypath.
+      #
+      # *Keypaths* are sequences of keys pointing into a tree of dictionaries.
+      # Keypaths are itemsonly dicts. For example, in `({name: "John"} {name: "Susan"})`,
+      # the keypath to `"John"` is `(0 name)`, and the keypath to `"Susan"` is
+      # `(0 age)`.
+      #
+      # NOTE: Keypaths are rooted at the root matchee.
+      #
+      # NOTE: Using `%keypath` in an inaccessible place (e.g. in an `%optional` that
+      # does not exist in the matchee) results in a mismatch: the pattern demands a keypath
+      # to proceed, the keypath is not available, so there is a mismatch.
+      #
+      # ```
+      # (names (%leaves matches_ {¦ name_: (%keypath path)} self: true)) => ^matches
+      #
+      # (names {name: "John Doe"})
+      # ;; => ({name: "John Doe", path: (1 name)})
+      #
+      # (names ({name: "John Doe"} {name: "Samantha Doe"}))
+      # ;; => ({name: "John Doe", path: (1 0 name)}
+      #        {name: "Samantha Doe", path: (1 1 name)})
+      #
+      # (names
+      #   (rows
+      #     (row {name: "John Doe"} {name: "Samantha Doe"})
+      #     (row {name: "David"} {name: "Sarah"})))
+      #
+      # ;; => ({name: "John Doe", path: (1 1 1 name)}
+      #        {name: "Samantha Doe", path: (1 1 2 name)}
+      #        {name: "David", path: (1 2 1 name)}
+      #        {name: "Sarah", path: (1 2 2 name)})
+      # ```
+      #
+      # It is possible to constrain keypaths by user input to perform search just
+      # like you can access user-specified keys with `%value`.
+      #
+      # ```
+      # (name? ⟪(%all (%keypath path) {¦ name_string})⟫ (%pipe (prepend 1) path_)) => (some ^name)
+      # (name? _ _) => none
+      #
+      # (name? ({name: "John Doe"} ({name: "Samantha Doe"})) (0))
+      # ;; => (some "John Doe")
+      # (name? ({name: "John Doe"} ({name: "Samantha Doe"})) (1))
+      # ;; => none
+      # (name? ({name: "John Doe"} ({name: "Samantha Doe"})) (1 0))
+      # ;; => "Samantha Doe"
+      # ```
+      matchpi %{(%'%keypath name_)}, cue: :"%keypath" do
+        Term.of(:"%keypath", Term.of(:"%capture", name, tags: {:keypath}))
       end
 
       # |@ m1.operator.nonself

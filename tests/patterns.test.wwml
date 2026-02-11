@@ -355,50 +355,64 @@
   (= "1.5" {x: 1.5}))
 
 ;; %pipe clamp
-(pattern (%pipe (clamp 0 ..= 10) x_number)
-  (- "hello" (+ 1 2 3) foo true)
-  (= -10 {x: 0})
-  (= -1 {x: 0})
-  (= -0.0000000001 {x: 0})
-  (= 0 {x: 0})
-  (= 5 {x: 5})
-  (= 10 {x: 10})
-  (= 10.0000000001 {x: 10})
-  (= 11 {x: 10})
-  (= 20 {x: 10})
-  (= -170141183460469231731687303715884105729 {x: 0})
-  (= 170141183460469231731687303715884105728 {x: 10}))
+(group
+  (pattern (%pipe (clamp 0 ..= 10) x_number)
+    (- "hello" (+ 1 2 3) foo true)
+    (= -10 {x: 0})
+    (= -1 {x: 0})
+    (= -0.0000000001 {x: 0})
+    (= 0 {x: 0})
+    (= 5 {x: 5})
+    (= 10 {x: 10})
+    (= 10.0000000001 {x: 10})
+    (= 11 {x: 10})
+    (= 20 {x: 10})
+    (= -170141183460469231731687303715884105729 {x: 0})
+    (= 170141183460469231731687303715884105728 {x: 10}))
 
-;; %pipe clamp with fractional begin
-(pattern (%pipe (clamp 0.25 ..= 10) x_number)
-  (= -1 {x: 0.25})
-  (= 0 {x: 0.25})
-  (= 0.249999999999 {x: 0.25})
-  (= 0.25 {x: 0.25})
-  (= 5 {x: 5})
-  (= 10 {x: 10})
-  (= 10.0000000001 {x: 10})
-  (= 15 {x: 10}))
+  ;; %pipe clamp with fractional begin
+  (pattern (%pipe (clamp 0.25 ..= 10) x_number)
+    (= -1 {x: 0.25})
+    (= 0 {x: 0.25})
+    (= 0.249999999999 {x: 0.25})
+    (= 0.25 {x: 0.25})
+    (= 5 {x: 5})
+    (= 10 {x: 10})
+    (= 10.0000000001 {x: 10})
+    (= 15 {x: 10}))
 
-;; %pipe clamp with fractional end
-(pattern (%pipe (clamp 0 ..= 7.75) x_number)
-  (= -5 {x: 0})
-  (= 0 {x: 0})
-  (= 3 {x: 3})
-  (= 7.7499999999 {x: 7.7499999999})
-  (= 7.75 {x: 7.75})
-  (= 7.75000001 {x: 7.75})
-  (= 20 {x: 7.75}))
+  ;; %pipe clamp with fractional end
+  (pattern (%pipe (clamp 0 ..= 7.75) x_number)
+    (= -5 {x: 0})
+    (= 0 {x: 0})
+    (= 3 {x: 3})
+    (= 7.7499999999 {x: 7.7499999999})
+    (= 7.75 {x: 7.75})
+    (= 7.75000001 {x: 7.75})
+    (= 20 {x: 7.75}))
 
-;; %pipe clamp with exact rational bounds (1/3 to 2/3)
-(pattern (%pipe (clamp 1/3 ..= 2/3) x_number)
-  (= 0 {x: 1/3})
-  (= 1/4 {x: 1/3})
-  (= 1/3 {x: 1/3})
-  (= 1/2 {x: 1/2})
-  (= 2/3 {x: 2/3})
-  (= 3/4 {x: 2/3})
-  (= 1 {x: 2/3}))
+  ;; %pipe clamp with exact rational bounds (1/3 to 2/3)
+  (pattern (%pipe (clamp 1/3 ..= 2/3) x_number)
+    (= 0 {x: 1/3})
+    (= 1/4 {x: 1/3})
+    (= 1/3 {x: 1/3})
+    (= 1/2 {x: 1/2})
+    (= 2/3 {x: 2/3})
+    (= 3/4 {x: 2/3})
+    (= 1 {x: 2/3})))
+
+;; %pipe prepend
+(group
+  (pattern (%pipe (prepend qux) a_)
+    (- qux 10 "hello" true)
+    (= () {a: (qux)})
+    (= (a) {a: (qux a)})
+    (= (a b c) {a: (qux a b c)}))
+
+  (pattern (%pipe (prepend foo bar baz) a_)
+    (= () {a: (foo bar baz)})
+    (= (a) {a: (foo bar baz a)})
+    (= (a b c) {a: (foo bar baz a b c)})))
 
 ;; %edge
 (group
@@ -3054,42 +3068,69 @@
        ((0 1) (a) (0: true 1: true)))))
 
 ;; %keypath
-(pattern (%keypath x)
-  (= 1/3 {x: ()})
-  (= qux {x: ()})
-  (= "Hello World" {x: ()})
-  (= true {x: ()})
-  (= () {x: ()})
-  (= (a b c) {x: ()}))
+(group
+  (pattern (%keypath x)
+    (= 1/3 {x: ()})
+    (= qux {x: ()})
+    (= "Hello World" {x: ()})
+    (= true {x: ()})
+    (= () {x: ()})
+    (= (a b c) {x: ()}))
 
-(pattern ((%keypath x) (%keypath y) (%keypath z))
-  (= (a b c) {x: (0), y: (1), z: (2)}))
+  (pattern ((%keypath x) (%keypath y) (%keypath z))
+    (= (a b c) {x: (0), y: (1), z: (2)}))
 
-(pattern (%leaf° (%all (%keypath x) _number) in: entries)
-  (= (a 0 b ((c 1) d 2 {e: 3}))
-    {x: (1)}
-    {x: (3 0 1)}
-    {x: (3 2)}
-    {x: (3 3 e)}))
+  (pattern (%leaf° (%all (%keypath x) _number) in: entries)
+    (= (a 0 b ((c 1) d 2 {e: 3}))
+      {x: (1)}
+      {x: (3 0 1)}
+      {x: (3 2)}
+      {x: (3 3 e)}))
 
-;; Basic follow itemspart keypath
-(pattern ((%leaf° x←(%keypath kp) self: true) kp_)
-  (= (a (0)) {x: a, kp: (0)})
-  (= ((a b c) (0 0)) {x: a, kp: (0 0)})
-  (= ((a b c) (0 1)) {x: b, kp: (0 1)})
-  (= ((a b c) (0 2)) {x: c, kp: (0 2)}))
+  ;; Basic follow itemspart keypath
+  (pattern ((%leaf° x←(%keypath kp) self: true) kp_)
+    (= (a (0)) {x: a, kp: (0)})
+    (= ((a b c) (0 0)) {x: a, kp: (0 0)})
+    (= ((a b c) (0 1)) {x: b, kp: (0 1)})
+    (= ((a b c) (0 2)) {x: c, kp: (0 2)}))
 
-;; %keypath in %many
-(pattern ((%many xs_ (%keypath x) min: 0))
-  (= () {xs: ()})
-  (= (a) {xs: ({x: (0)})})
-  (= (a b c) {xs: ({x: (0)} {x: (1)} {x: (2)})}))
+  ;; %keypath in %many
+  (pattern ((%many xs_ (%keypath x) min: 0))
+    (= () {xs: ()})
+    (= (a) {xs: ({x: (0)})})
+    (= (a b c) {xs: ({x: (0)} {x: (1)} {x: (2)})}))
 
-(pattern (%items xs_ (%all x_symbol (%keypath path)))
-  (= (a 1 2 b 3 c)
-     {xs: ({x: a, path: (0)}
-           {x: b, path: (3)}
-           {x: c, path: (5)})}))
+  (pattern (%items xs_ (%all x_symbol (%keypath path)))
+    (= (a 1 2 b 3 c)
+       {xs: ({x: a, path: (0)}
+             {x: b, path: (3)}
+             {x: c, path: (5)})}))
+
+  ;; Examples from docs
+  (pattern (names (%leaves matches_ {¦ name_: (%keypath path)} self: true))
+    (= (names {name: "John Doe"})
+       {matches: ({name: "John Doe", path: (1 name)})})
+    (= (names ({name: "John Doe"} {name: "Samantha Doe"}))
+       {matches: ({name: "John Doe", path: (1 0 name)}
+                  {name: "Samantha Doe", path: (1 1 name)})})
+    (= (names
+         (rows
+           (row {name: "John Doe"} {name: "Samantha Doe"})
+           (row {name: "David"} {name: "Sarah"})))
+       {matches:
+          ({name: "John Doe", path: (1 1 1 name)}
+           {name: "Samantha Doe", path: (1 1 2 name)}
+           {name: "David", path: (1 2 1 name)}
+           {name: "Sarah", path: (1 2 2 name)})}))
+
+  (pattern (name? ⟪(%all (%keypath path) {¦ name_string})⟫ (%pipe (prepend 1) path_))
+    (= (name? ({name: "John Doe"} ({name: "Samantha Doe"})) (0))
+       {name: "John Doe", path: (1 0)})
+    (- (name? ({name: "John Doe"} ({name: "Samantha Doe"})) (1)))
+    (= (name? ({name: "John Doe"} ({name: "Samantha Doe"})) (1 0))
+       {name: "Samantha Doe", path: (1 1 0)}))
+
+)
 
 ;; %pluck
 (group

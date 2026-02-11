@@ -1634,6 +1634,17 @@ module Ww::M1
 
   # :nodoc:
   #
+  # (%pipe (prepend a b c) x_)
+  def match(ctx, op : Op::Prepend, matchee : Tzip, plan)
+    return Fb[] unless dict0 = matchee.term.as_d?
+
+    dict1 = dict0.replace(Term[0]...Term[0], &.concat(op.terms))
+
+    cons(ctx, op.successor, Tzip.new(Term.of(dict1), Log.none), plan)
+  end
+
+  # :nodoc:
+  #
   # (%pipe (+ 100) x_)
   def match(ctx, op : Op::Add, matchee : Tzip, plan)
     return Fb[] unless a = matchee.term.as_n?
