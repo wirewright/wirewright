@@ -49,16 +49,18 @@ module Ww::D7
     max : Int32
 
   class Regime
+    alias PatternId = UInt32
+
     defcase Query,
       name : Term,
       demands : Pf::USet32,
-      pattern_id : UInt32,
+      pattern_id : PatternId,
       specificity : M1::Specificity,
       deps : Slice({Link, Dep})
 
     defrecord Dep,
       name : Term,
-      pattern_id : UInt32,
+      pattern_id : PatternId,
       min : Int32,
       max : Int32
 
@@ -111,14 +113,17 @@ module Ww::D7
       new(patterns.to_readonly_slice(&.itself), queries)
     end
 
+    alias Excitab = Hash(NodeId, Pf::USet32)
+
     # *Perception* is the first step: the "sensory heads" of rules look at
-    # the hypergraph and trigger, or don't. The result is a map of node
-    # ids to bit sets of rules they excite -- the *excitation map*.
+    # the hypergraph and trigger, or don't. The result is a table mapping node
+    # ids to bit sets of rules they excite -- the *excitation table*, *excitab*
+    # for short.
     #
     # NOTE: At this point, rules are allowed to misfire: false positives are
     # allowed (rule fires when it shouldn't); but false negatives are not.
-    private def perceive(hg : Hypergraph) : Hash(NodeId, Pf::USet32)
-      excitations = {} of NodeId => Pf::USet32
+    private def excitab(hg : Hypergraph) : Excitab
+      excitab = {} of NodeId => Pf::USet32
 
       hg.each_node do |node|
         @patterns.each_with_index do |pattern, index|
@@ -126,141 +131,122 @@ module Ww::D7
 
           pattern_id = index.to_u32
 
-          excites0 = excitations[node.id]? || Pf::USet32[]
+          excites0 = excitab[node.id]? || Pf::USet32[]
           excites1 = excites0.add(pattern_id)
 
-          excitations[node.id] = excites1
+          excitab[node.id] = excites1
         end
       end
 
-      excitations
+      excitab
     end
 
-    # From the excitation map, we compute a *supply* bit set. It tells us which
-    # rules are "supplied" in the hypergraph (but remember, perception is
-    # imprecise -- it may give us false positives).
-    private def supply(excitations)
-      excitations.reduce(Pf::USet32[]) do |supply, (_, excites)|
-        supply | excites
-      end
-    end
+    private def match?(excitab, pattern_id : PatternId, candidate : Node, & : -> Term::Dict) : Term::Dict?
+      return unless excites = excitab[candidate.id]?
+      return unless excites.includes?(pattern_id)
 
-    private def excites?(excitations, pattern_id : UInt32, node : Node) : Bool
-      unless excites = excitations[node.id]?
-        return false
-      end
-
-      excites.includes?(pattern_id)
-    end
-
-    private def match?(env : Term::Dict, pattern_id : UInt32, candidate : Node) : Term::Dict?
+      env = yield
       pattern = @patterns[pattern_id]
 
       M1.match?(env, pattern.op, candidate.term)
     end
 
-    private def fanout(env : Term::Dict, link : LinkOne) : Indexable({Term, Term})
-      unless edge = env[link.capture]?
-        raise KeyError.new("capture `#{link.capture}` not found")
-      end
-
-      {% unless flag?(:release) %}
-        assert Term.edge?(edge)
-      {% end %}
-
-      { {link.capture, edge} }
-    end
-
-    private def fanout(env : Term::Dict, link : LinkMany) : Indexable({Term, Term})
-      unless edges = env[link.capture]?
-        raise KeyError.new("capture `#{link.capture}` not found")
-      end
-
-      {% unless flag?(:release) %}
-        assert edges.items.all? { |edge| Term.edge?(edge) }
-      {% end %}
-
-      edges.items.to_readonly_slice { |edge| {link.dep_capture, edge} }
-    end
-
-    private def crawl(hg, excitations, node : Node, query : Query, & : MatchTable ->)
-      return unless excites?(excitations, query.pattern_id, node)
-      return unless query_env = match?(Term[], query.pattern_id, node)
+    private def crawl(hg, excitab, node : Node, query : Query, & : MatchTable ->)
+      return unless query_env = match?(excitab, query.pattern_id, node) { Term[] }
 
       seen = Pf::USet32[node.id]
-      match_table = MatchTable.assoc(query.name, MatchGroup[Match.new(node, query_env)])
+      responses = [] of MatchGroup | Slice(MatchGroup)
 
       query.deps.each do |link, dep|
-        fanout = fanout(query_env, link)
-        if fanout.empty?
-          # (qux ⏏us⏏←((%past @_ min: 0))) foo
-          #   -> (many ⏏us⏏ u) (cell @u_) {name: bar, min: 0, max: 0}
-          #
-          # Here, `us` could be empty. This is a perfectly legitimate kind of rule,
-          # so we must handle it properly.
-          assert !dep.name.in?(match_table)
-          match_table = match_table.assoc(dep.name, MatchGroup.empty)
-          next
-        end
-
-        fanout.each do |link_unit, link_edge|
-          neighbors = Pf::Kit.stack_array(Node)
-
-          hg.each_edge(node.id) do |edge|
-            # edge : Hyperedge
-            next unless link_edge == edge.term
-
-            hg.each_member(edge) do |neighbor|
-              next if neighbor.id.in?(seen) # Don't allow to depend on the same node twice.
-              next unless excites?(excitations, dep.pattern_id, neighbor)
-
-              neighbors << neighbor
-            end
-
-            break
+        case link
+        in LinkOne
+          unless link_edge = query_env[link.capture]?
+            raise KeyError.new("capture `#{link.capture}` not found")
           end
 
-          return if neighbors.size < dep.min
+          {% unless flag?(:release) %}
+            assert Term.edge?(link_edge)
+          {% end %}
 
           matches = Pf::Kit.stack_array(Match)
 
-          # Since dep patterns are "free-floating" with respect to the query
-          # pattern, we can't rely on M1 constraints and must instead provide
-          # an environment relating everything manually. Here, e.g., for @a:
-          #
-          # (qux @⏏a_⏏ @b_) foo
-          #   -> (one ⏏a⏏) (cell @⏏a_⏏ x_) {name: bar}
-          #   -> (one b) (cell @b_ y_) {name: baz}
-          dep_constraint = Term[].with(link_unit, link_edge)
+          link_edge_abs = hg.abs_edge(link_edge, wrt: node.id)
 
-          neighbors.each do |neighbor|
-            next unless dep_env = match?(dep_constraint, dep.pattern_id, neighbor)
+          hg.each_neighbor(of: node.id, on: link_edge_abs) do |neighbor|
+            next if neighbor.id.in?(seen) # Don't allow to depend on the same node twice.
+            next unless dep_env = match?(excitab, dep.pattern_id, neighbor) { Term[] }
 
+            # Since dep patterns are detached from the query pattern, we can't rely
+            # on M1 constraints and must instead provide an environment to relate
+            # everything manually. Here, e.g., for @a:
+            #
+            # (qux @⏏a_⏏ @b_) foo
+            #   -> (one ⏏a⏏) (cell @⏏a_⏏ x_) {name: bar}
+            #   -> (one b) (cell @b_ y_) {name: baz}
+            #
+            # We must also compare by *absolute* edges, meaning edges with scope info,
+            # rather than simply by names with whatever was captured. This handles
+            # more "obscure" edge cases such as the one shown here:
+            #
+            #  (cell @a)
+            #  (module {@b: @a}
+            #    (cell @a 100)
+            #    (feed @a @b))
+            #
+            # Notice how both cells have the same name. If we do not "normalize" both
+            # wrt. their scope, we'd think of them as the same cell, which leads to
+            # invalid behavior.
+            dep_edge = dep_env[link.capture]
+            dep_edge_abs = hg.abs_edge(dep_edge, wrt: neighbor.id)
+            next unless link_edge_abs == dep_edge_abs
+
+            seen = seen.add(neighbor.id)
             matches << Match.new(neighbor, dep_env)
           end
 
-          return unless dep.min <= matches.size <= dep.max
-
-          matches.each do |match|
-            seen = seen.add(match.node.id)
+          responses << matches.to_readonly_slice(&.itself)
+        in LinkMany
+          unless link_edges = query_env[link.capture]?
+            raise KeyError.new("capture `#{link.capture}` not found")
           end
 
-          match_group0 = match_table[dep.name]? || MatchGroup.empty
-          match_group1 = match_group0.append_many(matches, &.itself)
-          match_table = match_table.assoc(dep.name, match_group1)
+          {% unless flag?(:release) %}
+            assert link_edges.items.all? { |edge| Term.edge?(edge) }
+          {% end %}
+
+          response = link_edges.items.to_readonly_slice do |link_edge|
+            matches = Pf::Kit.stack_array(Match)
+
+            link_edge_abs = hg.abs_edge(link_edge, wrt: node.id)
+
+            hg.each_neighbor(of: node.id, on: link_edge_abs) do |neighbor|
+              next if neighbor.id.in?(seen) # Don't allow to depend on the same node twice.
+              next unless dep_env = match?(excitab, dep.pattern_id, neighbor) { Term[] }
+
+              dep_edge = dep_env[link.dep_capture]
+              dep_edge_abs = hg.abs_edge(dep_edge, wrt: neighbor.id)
+              next unless link_edge_abs == dep_edge_abs
+
+              seen = seen.add(neighbor.id)
+              matches << Match.new(neighbor, dep_env)
+            end
+
+            matches.to_readonly_slice(&.itself)
+          end
+
+          responses << response
         end
       end
 
-      assert match_table.size == 1 + query.deps.size
-
-      # Make sure that edges in dependencies agree with the query env.
+      # Enforce agreement: make sure that edges in dependencies agree with
+      # the query env. For example, in:
       #
       #   (qux @a_ @b_ @c_) qux
       #     -> (one a) (foo @a_ ⏏@b_⏏) {name: foo}
       #     -> (one b) (bar @b_ ⏏@c_⏏) {name: bar}
       #     -> (one c) (baz @c_ ⏏@a_⏏) {name: baz}
       #
-      # Here, the highlighted edges must be in agreement with the query env.
+      # ... the highlighted edges must be in agreement with the query env.
       #
       # We do not enforce agreement among dependencies *for captures absent in
       # the master env*. For example, in:
@@ -270,30 +256,44 @@ module Ww::D7
       #     -> (one b) (bar @b_ term_) {name: bar}
       #
       # ... both *term*s are matched independently.
-      query.deps.each do |_, dep|
-        filtered = Pf::Kit.stack_array(Match, 8)
-
-        match_group = match_table[dep.name]
-        match_group.each do |match|
-          next unless query_env.agrees_with?(match.env)
-          filtered << match
+      responses = responses.map do |response|
+        case response
+        in MatchGroup
+          D7.select(response, &.env.agrees_with?(query_env))
+        in Slice(MatchGroup) # children
+          response.map do |child|
+            D7.select(child, &.env.agrees_with?(query_env))
+          end
         end
-
-        next if match_group.size == filtered.size
-        return unless dep.min <= filtered.size <= dep.max
-
-        match_table = match_table.assoc(dep.name, filtered.to_readonly_slice(&.itself))
       end
 
-      assert match_table.size == 1 + query.deps.size
+      match_table = MatchTable.assoc(query.name, MatchGroup[Match.new(node, query_env)])
+
+      # Make sure dependency bounds are satisfied after agreement.
+      query.deps.zip(responses) do |(_, dep), response|
+        case response
+        in MatchGroup
+          return unless dep.min <= D7.degree(response) <= dep.max
+        in Slice(MatchGroup)
+          # All of groups must satisfy dep's bound.
+          return unless response.all? { |group| dep.min <= D7.degree(group) <= dep.max }
+
+          # Now that we've checked their bounds we can merge them into one
+          # big group.
+          response = Slice.join(response)
+          assert response.is_a?(MatchGroup)
+        end
+
+        match_table = match_table.assoc(dep.name, response)
+      end
 
       yield match_table
     end
 
-    private def crawl(hg : Hypergraph, excitations, candidates, &)
+    private def crawl(hg : Hypergraph, excitab, candidates, &)
       hg.each_node do |node|
         candidates.each do |query, query_index|
-          crawl(hg, excitations, node, query) do |match_table|
+          crawl(hg, excitab, node, query) do |match_table|
             yield match_table, query_index
           end
         end
@@ -308,7 +308,7 @@ module Ww::D7
 
       def degree : Int32
         if @degree == Int32::MAX
-          @degree = match_table.sum(&.size)
+          @degree = D7.degree(match_table)
         end
 
         assert 0 <= @degree < Int32::MAX
@@ -322,10 +322,8 @@ module Ww::D7
         @participants ||= begin
           participants = Pf::Kit.stack_array(Term, 8)
 
-          match_table.each do |_, match_group|
-            match_group.each do |match|
-              participants << match.node.term
-            end
+          D7.each_match(match_table) do |match|
+            participants << match.node.term
           end
 
           participants.sort! { |a, b| Term.compare(a, b) }
@@ -335,19 +333,20 @@ module Ww::D7
 
       # NOTE: the smallest rank is the most specific rank, it should be picked
       # the earliest.
-      def <=>(other : Soln) : Int32?
+      def <=>(other : Soln) : Int32
         # Prefer higher degree.
         cmp = other.degree <=> degree
         return cmp unless cmp == 0 # equal
 
         # Prefer higher query specificity.
         cmp = other.query.specificity <=> query.specificity
+        assert cmp, "NaNs found in specificity"
         return cmp unless cmp == 0 # equal
 
         # Prefer solutions for rules lower down (programmers usually read "X
         # below Y" as "X overrides Y").
         cmp = query_index <=> other.query_index
-        return unless cmp == 0 # equal
+        return cmp unless cmp == 0 # equal
 
         # Prefer lexicographically smallest solutions.
         participants <=> other.participants
@@ -456,8 +455,14 @@ module Ww::D7
     end
 
     def solve(hg : Hypergraph, & : MatchTable, Int32 -> Patch?) : Patch
-      excitations = perceive(hg)
-      supply = supply(excitations)
+      excitab = excitab(hg)
+
+      # From the excitation table, we compute a *supply* bit set. It tells us
+      # which patterns out of those we recognize exist in the hypergraph. Remember,
+      # however, that excitab is imprecise -- it may include false positives.
+      supply = excitab.reduce(Pf::USet32[]) do |memo, (_, excites)|
+        memo | excites
+      end
 
       # Since queries *demand* certain patterns, this lets us reject a great deal
       # of them before commencing more complex search.
@@ -471,7 +476,7 @@ module Ww::D7
       solns = [] of Soln
 
       # Next, we start `crawl`ing from each node.
-      crawl(hg, excitations, candidates) do |match_table, query_index|
+      crawl(hg, excitab, candidates) do |match_table, query_index|
         solns << Soln.new(match_table, @queries[query_index], query_index)
       end
 

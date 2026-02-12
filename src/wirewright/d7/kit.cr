@@ -1,5 +1,64 @@
 module Ww::D7
-  alias MatchTable = Pf::Map(Term, MatchGroup)
+  defcase MatchTable, groups : Pf::Map(Term, MatchGroup) do
+    # :nodoc:
+    EMPTY = new(groups: Pf::Map(Term, MatchGroup).new)
+
+    def self.new
+      EMPTY
+    end
+
+    def self.assoc(key, value) : MatchTable
+      EMPTY.assoc(key, value)
+    end
+
+    def assoc(key, object : MatchGroup) : MatchTable
+      {% unless flag?(:release) %}
+        assert !groups.has_key?(key)
+      {% end %}
+
+      copy_with(groups: groups.assoc(key, object))
+    end
+  end
+
+  def group?(table : MatchTable, name : Term) : MatchGroup?
+    table.groups[name]?
+  end
+
+  def group(table : MatchTable, name : Term) : MatchGroup
+    group?(table, name) || raise KeyError.new
+  end
+
+  def degree(object) : Int32
+    degree = 0
+    each_match(object) do
+      degree += 1
+    end
+    degree
+  end
+
+  def select(match_table : MatchTable, & : Match -> Bool) : MatchTable
+    groups1 = match_table.groups.map_value do |group|
+      self.select(group) { |match| yield match }
+    end
+
+    MatchTable.new(groups1)
+  end
+
+  def select(group : MatchGroup, & : Match -> Bool) : MatchGroup
+    filtered = Pf::Kit.stack_array(Match)
+
+    group.each do |match|
+      next unless yield match
+
+      filtered << match
+    end
+
+    if filtered.size == group.size
+      return group
+    end
+
+    filtered.to_readonly_slice(&.itself)
+  end
 
   alias MatchGroup = Slice(Match)
 
@@ -13,6 +72,20 @@ module Ww::D7
   # :ditto:
   def match(object : MatchGroup) : Match
     match(object.first)
+  end
+
+  def each_match(object : Match, &) : Nil
+    yield object
+  end
+
+  def each_match(object : MatchGroup, &) : Nil
+    object.each { |match| yield match }
+  end
+
+  def each_match(object : MatchTable, &) : Nil
+    object.groups.each do |_, group|
+      each_match(group) { |match| yield match }
+    end
   end
 
   # Returns the first node in *object*.

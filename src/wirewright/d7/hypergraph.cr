@@ -5,67 +5,82 @@ module Ww::D7
 
   defrecord Node, id : NodeId, term : Term
 
-  # Represents a hyperedge.
+  # Represents an absolute edge.
   #
-  # *module* is the address of the module that defines the scope of the edge *term*.
-  defrecord Hyperedge, module : NodeAddr, term : Term
+  # We differentiate between *absolute* and *relative* edges. When you see
+  # `edge : Term` and the like, that's a *relative* edge. Such edges must
+  # be resolved against the node they're taken from before doing most serious
+  # things (such as comparing two edges to check if e.g. two nodes are neighbors).
+  #
+  # The result of *resolution* of a relative edge *with respect to* a node is called
+  # an *absolute edge*.
+  #
+  # The main thing calculated during resolution is *module*, the address of
+  # the module that owns the edge; and its true *term* (as in `@x`, `@foo`)
+  # *under that module* (and NOT e.g. a nested module).
+  defrecord AbsEdge, module : NodeAddr, term : Term
 
   # A hypergraph is a graph whose edges can include any number of nodes; each edge
-  # is a subset of the set of nodes in that graph. It's easier to think of a hypergraph
-  # as a community of nodes. Each node can participate in zero or more groups, each
-  # group formed from other nodes in the community.
+  # is a subset of the set of nodes in the graph. It's easier to think of a hypergraph
+  # as a society of nodes, where each node can participate in zero or more groups,
+  # each group consisting of other nodes in the community.
   class Hypergraph
     alias EdgeId = UInt32
 
-    # - *nodemap* maps nodes to node ids (implicit, array index).
-    # - *edgemap* maps node ids (implicit, array index) to hyperedges that node
-    #   is participating in.
-    # - *trmap* maps node ids (implicit, array index) to node addresses (from `fold`).
-    def initialize(
-      @node_terms : Array(Term),
-      @node_addrs : Array(NodeAddr),
-      @node_edges : Hash({NodeId, Int32}, Hyperedge),
-      @edge_nodes : Hash({Hyperedge, Int32}, NodeId),
-    )
+    # :nodoc:
+    def initialize
+      @node_terms = [] of Term
+      @node_addrs = [] of NodeAddr
+
+      @node_scopes = [] of NodeScope
+
+      # TODO: I think we can actually try storing this in the good old
+      # array of arrays or something along those lines (aka edge array;
+      # for graphs it's a set of pairs and for hypergraphs it's a set
+      # of sets; the representation for either is a matter of artistry,
+      # so to speak). Probabilistic indexing can help us search without
+      # the overhead of hashing and so on, and ALSO without the overhead
+      # of linear scans. We'd also have high density/linear access pattern.
+      # Representing hypergraphs extremely efficiently is actually a very
+      # interesting problem, you see, and that's exactly NOT what we're
+      # doing here right now.
+      @node_edges = {} of NodeId => Array(AbsEdge)
+      @edge_nodes = {} of AbsEdge => Array(NodeId)
     end
 
-    struct Builder
-      def initialize
-        @node_terms = [] of Term
-        @node_addrs = [] of NodeAddr
-        @node_edges = {} of {NodeId, Int32} => Hyperedge
-        @edge_members = {} of {Hyperedge, Int32} => NodeId
+    def add(addr : NodeAddr, scope : NodeScope, node : Term, edges : Enumerable(T), & : T -> AbsEdge) : Nil forall T
+      node_id = @node_terms.size.to_u32
+
+      @node_terms << node
+      @node_addrs << addr
+      @node_scopes << scope
+
+      edges.each_with_index do |object, edge_index|
+        edge = yield object
+
+        # FIXME: WTF... we're running out of names aren't we?
+        memberships = @node_edges.put_if_absent(node_id) { [] of AbsEdge }
+        memberships << edge
+
+        member_ids = @edge_nodes.put_if_absent(edge) { [] of NodeId }
+        member_ids << node_id
       end
+    end
 
-      def submit(addr : NodeAddr, node : Term, edges : Enumerable(T), & : T -> Hyperedge) : Nil forall T
-        node_id = @node_terms.size.to_u32
+    def replace(node_id : NodeId, term : Term, & : AbsEdge -> Bool) : Nil
+      @node_terms[node_id] = term
+      return unless edges = @node_edges[node_id]?
 
-        @node_terms << node
-        @node_addrs << addr
-
-        edges.each_with_index do |object, edge_index|
-          edge = yield object
-
-          cardinality = 0
-          while @edge_members.has_key?({edge, cardinality})
-            cardinality += 1
-          end
-
-          @node_edges[{node_id, edge_index}] = edge
-          @edge_members[{edge, cardinality}] = node_id
+      edges.select! do |edge|
+        if yield edge
+          next true # Accepted
         end
+
+        # Rejected
+        nodes = @edge_nodes[edge]
+        nodes.delete(node_id)
+        false
       end
-
-      def hypergraph
-        Hypergraph.new(@node_terms, @node_addrs, @node_edges, @edge_members)
-      end
-    end
-
-    def self.build(& : Builder ->)
-      builder = Builder.new
-      yield builder
-
-      builder.hypergraph
     end
 
     def empty? : Bool
@@ -82,6 +97,12 @@ module Ww::D7
       @node_addrs[id]
     end
 
+    # Resolves the given *edge* term with respect to a node *wrt*.
+    def abs_edge(edge : Term, *, wrt : NodeId) : AbsEdge
+      scope = @node_scopes[wrt]
+      AbsEdge.new(*scope[edge])
+    end
+
     # Yields nodes of this hypergraph.
     def each_node(& : Node ->) : Nil
       @node_terms.each_with_index do |node, id|
@@ -89,21 +110,30 @@ module Ww::D7
       end
     end
 
-    # Yields hyperedges of a node with the given node *id* (as yielded
-    # by `each_node`).
-    def each_edge(id : NodeId, & : Hyperedge ->) : Nil
-      index = 0
-      while edge = @node_edges[{id, index}]?
-        yield edge
-        index += 1
+    # Yields absolute edges associated with a node with the given *id*.
+    def each_edge(id : NodeId, & : AbsEdge ->) : Nil
+      return unless memberships = @node_edges[id]?
+
+      memberships.each { |edge| yield edge }
+    end
+
+    # Yields nodes that are members of the given *edge*.
+    def each_member(edge : AbsEdge, & : Node ->) : Nil
+      return unless member_ids = @edge_nodes[edge]?
+
+      member_ids.each do |member_id|
+        yield Node.new(member_id, @node_terms[member_id])
       end
     end
 
-    def each_member(edge : Hyperedge, & : Node ->) : Nil
-      index = 0
-      while member_id = @edge_nodes[{edge, index}]?
-        yield Node.new(member_id, @node_terms[member_id])
-        index += 1
+    def each_neighbor(*, of id : NodeId, on edge : AbsEdge, & : Node ->) : Nil
+      each_edge(id) do |candidate_edge|
+        next unless edge == candidate_edge
+
+        each_member(candidate_edge) do |neighbor|
+          next if neighbor.id == id # Skip self
+          yield neighbor
+        end
       end
     end
   end

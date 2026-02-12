@@ -163,7 +163,7 @@ module Ww::D7
   #   end
   # end
   # ```
-  macro case(clf, circuit, &block)
+  macro case(clf, circuit, *, decorator = nil, &block)
     {%
       unless block
         raise "expected a block containing one or more `rule`s"
@@ -208,26 +208,38 @@ module Ww::D7
       {{@type}}::Regime.new(Slice.new(%queries, {{branches.size}}, read_only: true))
     end
 
-    {{@type}}.step({{clf}}, {{circuit}}) do |%hg|
-      %regime.solve(%hg) do |%match_table, %index|
-        case %index
-        {% for branch, index in branches %}
-        when {{index}}
-          %imports{index} = {
-            {% for name in branch[:imports] %}
-              %match_table[Term.of({{name.symbolize}})],
-            {% end %}
-          }
+    %clf = {{clf}}
 
-          %result{index} = pass(*%imports{index}) do |{{branch[:imports].splat}}|
-            {{branch[:body]}}
+    {{@type}}.step(%clf, {{circuit}}) do |%hg|
+      {% if decorator %}
+      {{decorator}}(%clf, %hg) do |%hg|
+      {% end %}
+        %regime.solve(%hg) do |%match_table, %index|
+          case %index
+          {% for branch, index in branches %}
+          when {{index}}
+            %imports{index} = {
+              {% for name in branch[:imports] %}
+                {% if name.ends_with?("_tree") %}
+                  {{@type}}.tree(%match_table, Term.of({{name[...-5].symbolize}})),
+                {% else %}
+                  {{@type}}.group(%match_table, Term.of({{name.symbolize}})),
+                {% end %}
+              {% end %}
+            }
+
+            %result{index} = pass(*%imports{index}) do |{{branch[:imports].splat}}|
+              {{branch[:body]}}
+            end
+
+            %result{index}
+          {% end %}
+          else
+            raise ArgumentError.new
           end
-
-          %result{index}
-        {% end %}
-        else
-          raise ArgumentError.new
+        {% if decorator %}
         end
+        {% end %}
       end
     end
   end

@@ -26,25 +26,21 @@ module Testtool
     Match
     Mismatch
     More
+
+    def self.new(bool : Bool)
+      bool ? Match : Mismatch
+    end
   end
 
   # Returns `true` if an expected D7 *frame* matches *actual*.
   def d7cmp(frame : Term, actual : Term)
     Term.case(frame) do
       matchpi %{(frame content_*)} do
-        if content == actual
-          D7ComparisonResult::Match
-        else
-          D7ComparisonResult::Mismatch
-        end
+        D7ComparisonResult.new(content == actual)
       end
 
       matchpi %{(frame pattern_ ¦ () pattern)} do
-        if M1.probe?(pattern, actual)
-          D7ComparisonResult::Match
-        else
-          D7ComparisonResult::Mismatch
-        end
+        D7ComparisonResult.new(M1.probe?(pattern, actual))
       end
 
       matchpi %{(frame pattern_ ¦ () pattern future)} do
@@ -62,8 +58,8 @@ module Testtool
   end
 
   # :ditto:
-  def d7matches?(frame : Term, actual : Iterator::Stop) : Bool
-    frame == Term.of(:end)
+  def d7cmp(frame : Term, actual : Iterator::Stop)
+    D7ComparisonResult.new(frame == Term.of(:end))
   end
 
   defrecord D7test, seed : Term, frames : Array(Term)
@@ -72,14 +68,16 @@ module Testtool
     frames = D7.coarse_frames(Rack.clf, test.seed, Rack::Tspace.pass, Rack.pass)
 
     # Skip through seed.
-    _ = frames.next
-
-    before = test.seed
+    before = frames.next
 
     test.frames.each do |after|
+      if before.is_a?(Iterator::Stop)
+        complaints << complaint("D7 stopped producing frames but a frame was expected", expected: after)
+        break
+      end
+
       loop do
         actual = measure(stat) { frames.next }
-        break if actual.is_a?(Iterator::Stop)
 
         case d7cmp(after, actual)
         in .match?
@@ -87,7 +85,7 @@ module Testtool
           break
         in .mismatch?
           complaints << complaint("D7 frame mismatch",
-            before: before,
+            before: before.as(Term),
             after: after,
             got: actual.as?(Term) || Term.of(:end),
           )

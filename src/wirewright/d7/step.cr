@@ -333,11 +333,6 @@ module Ww::D7
     map(clf, addr, clf.call(node), fn)
   end
 
-  # Annotates *edge* with scope info based on the current *scope*.
-  private def hyperedge(scope : NodeScope, edge : Term) : Hyperedge
-    Hyperedge.new(*scope[edge])
-  end
-
   # :nodoc:
   #
   # The iterative deepening process in `step` is restricted because in theory,
@@ -372,22 +367,22 @@ module Ww::D7
     MAX_SUBSTEPS.times do |depth|
       substeps << circuit
 
-      hg = Hypergraph.build do |builder|
-        # This update() can still do template expansion etc. -- even though
-        # *we* do not change the circuit, *clf* might.
-        circuit = update(clf, circuit, depth: depth) do |addr, scope, flat|
-          case flat
-          in Inert
-          in Gnd
-            # Use Gnd#defn (the node's definition) rather than #node here.
-            # The hypergraph should only ever see the defn.
-            builder.submit(addr, flat.defn, flat.edges) do |edge|
-              hyperedge(scope, edge)
-            end
-          end
+      hg = Hypergraph.new
 
-          flat.node # Leave unchanged
+      # This update() can still do template expansion etc. -- even though
+      # *we* do not change the circuit, *clf* might.
+      circuit = update(clf, circuit, depth: depth) do |addr, scope, flat|
+        case flat
+        in Inert
+        in Gnd
+          # Use Gnd#defn (the node's definition) rather than #node here.
+          # The hypergraph should only ever see the defn.
+          hg.add(addr, scope, flat.defn, flat.edges) do |edge|
+            AbsEdge.new(*scope[edge])
+          end
         end
+
+        flat.node # Leave unchanged
       end
 
       # No nodes in hypergraph => No nodes found at *depth* => We're done.

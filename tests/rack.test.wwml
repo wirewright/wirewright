@@ -707,6 +707,19 @@
 (group
   (d7
     (frame
+      (cell @a)
+      (module {@b: @a}
+        (cell @a 100)
+        (feed @a @b)))
+    (frame
+      (cell @a 100)
+      (module {@b: @a}
+        (cell @a)
+        (feed @a @b)))
+    end)
+
+  (d7
+    (frame
       (module {:@x}
         (cell @x 100)
         (cell @y))
@@ -839,74 +852,6 @@
         (cell @src (counter 0))
         (feed @src @dst @src)))))
     ;; ...
-
-;; Filtered device
-(group
-  ;; Basic
-  (d7
-    (frame
-      (device ((@x (counter ±x)) (counter 0))
-        (backsys @x  ±x <> {x: ^(+ x 1)})))
-    (frame
-      (device ((@x (counter ±x)) (counter 1))
-        (backsys @x  ±x <> {x: ^(+ x 1)})))
-    (frame
-      (device ((@x (counter ±x)) (counter 2))
-        (backsys @x  ±x <> {x: ^(+ x 1)}))))
-    ;; ...
-
-  ;; Removal
-  (d7
-    (frame
-      (cell @x 100)
-      (device ((@x (counter ±x)) (counter 0))
-        (feed @x @y @x)
-        (cell @y)))
-    (frame
-      (cell @x 100)
-      (device ((@x (counter ±x)) (counter))
-        (feed @x @y @x)
-        (cell @y 0)))
-    end)
-
-  ;; Queue
-  (d7
-    (frame
-      (device ((@x (q x_ _*)) (q 1 2 3))
-        (feed @x @y)
-        (cell @y)
-        (discard @y)))
-    (frame
-      (device ((@x (q x_ _*)) (q 2 3))
-        (feed @x @y)
-        (cell @y 1)
-        (discard @y)))
-    (frame
-      (device ((@x (q x_ _*)) (q 2 3))
-        (feed @x @y)
-        (cell @y)
-        (discard @y)))
-    (frame
-      (device ((@x (q x_ _*)) (q 3))
-        (feed @x @y)
-        (cell @y 2)
-        (discard @y)))
-    (frame
-      (device ((@x (q x_ _*)) (q 3))
-        (feed @x @y)
-        (cell @y)
-        (discard @y)))
-    (frame
-      (device ((@x (q x_ _*)) (q))
-        (feed @x @y)
-        (cell @y 3)
-        (discard @y)))
-    (frame
-      (device ((@x (q x_ _*)) (q))
-        (feed @x @y)
-        (cell @y)
-        (discard @y)))
-    end))
 
 ;; Queue
 (group
@@ -3655,21 +3600,549 @@
     (frame
       (cell @x (+ 1 2))
       (backsys @x  {¦ -qux_} <> {qux: true})
-      (backsys @x  ⟨±n ¦ qux⟩° <> {n: ^(+ n 1)})
+      (backsys @x  ⟨±n ⍊ qux⟩° <> {n: ^(+ n 1)})
       (backsys @x  (+ `x _ _ ⍊ -qux) <> {x: "foo"}))
     (frame
       (cell @x (+ "foo" 1 2 qux: true))
       (backsys @x  {¦ -qux_} <> {qux: true})
-      (backsys @x  ⟨±n ¦ qux⟩° <> {n: ^(+ n 1)})
+      (backsys @x  ⟨±n ⍊  qux⟩° <> {n: ^(+ n 1)})
       (backsys @x  (+ `x _ _ ⍊ -qux) <> {x: "foo"}))
     (frame
       (cell @x (+ "foo" 2 3 qux: true))
       (backsys @x  {¦ -qux_} <> {qux: true})
-      (backsys @x  ⟨±n ¦ qux⟩° <> {n: ^(+ n 1)})
+      (backsys @x  ⟨±n ⍊ qux⟩° <> {n: ^(+ n 1)})
       (backsys @x  (+ `x _ _ ⍊ -qux) <> {x: "foo"}))
     (frame
       (cell @x (+ "foo" 3 4 qux: true))
       (backsys @x  {¦ -qux_} <> {qux: true})
-      (backsys @x  ⟨±n ¦ qux⟩° <> {n: ^(+ n 1)})
+      (backsys @x  ⟨±n ⍊ qux⟩° <> {n: ^(+ n 1)})
       (backsys @x  (+ `x _ _ ⍊ -qux) <> {x: "foo"}))))
     ;; ...
+
+;; part
+(group
+  ;; Chain of length 1
+  (d7
+    (frame
+      (cell @top (qux (1 2) (3 4)))
+      (part (@top @a) (qux (_ a_) _))
+      (feed (copy @a) @b)
+      (cell @b))
+    (frame
+      (cell @top (qux (1 2) (3 4)))
+      (part (@top @a) (qux (_ a_) _))
+      (feed (copy @a) @b)
+      (cell @b 2))
+    end)
+
+  ;; Chain of length 2
+  (d7
+    (frame
+      (cell @top (qux (1 2) (3 4)))
+      (part (@top @a) (qux a_ _))
+      (part (@a @b) (_ b_))
+      (feed (copy @a) @a-view)
+      (feed (copy @b) @b-view)
+      (cell @a-view)
+      (cell @b-view))
+    (frame
+      (cell @top (qux (1 2) (3 4)))
+      (part (@top @a) (qux a_ _))
+      (part (@a @b) (_ b_))
+      (feed (copy @a) @a-view)
+      (feed (copy @b) @b-view)
+      (cell @a-view (1 2))
+      (cell @b-view 2))
+    end)
+
+  ;; Chain of length 3
+  (d7
+    (frame
+      (cell @top (qux (1 {name: "Samantha"}) (3 4)))
+      (part (@top @a) (qux a_ _))
+      (part (@a @b) (_ b_))
+      (part (@b @c) {¦ name: c_string})
+      (feed (copy @a) @a-view)
+      (feed (copy @b) @b-view)
+      (feed (copy @c) @c-view)
+      (cell @a-view)
+      (cell @b-view)
+      (cell @c-view))
+    (frame
+      (cell @top (qux (1 {name: "Samantha"}) (3 4)))
+      (part (@top @a) (qux a_ _))
+      (part (@a @b) (_ b_))
+      (part (@b @c) {¦ name: c_string})
+      (feed (copy @a) @a-view)
+      (feed (copy @b) @b-view)
+      (feed (copy @c) @c-view)
+      (cell @a-view (1 {name: "Samantha"}))
+      (cell @b-view {name: "Samantha"})
+      (cell @c-view "Samantha"))
+    end)
+
+  ;; Branching
+  (d7
+    (frame
+      (cell @root
+        {xs: (1 2 3), y: 4, zs: ({a: 5, b: 6} {a: 7, b: 8}), responses: ()})
+      (part (@root @xs) {¦ xs_})
+      (part (@root @y) {¦ y_})
+      (part (@root @zs) {¦ zs_})
+      (part (@root @responses) {¦ responses_})
+      (part (@xs @x) (x_ _*))
+      (part (@zs @z) (z_ _*))
+      (part (@z @a) {¦ a_})
+      (part (@z @b) {¦ b_})
+      (backsys {@:x @:y @:a @:b @:responses}
+        {¦ ±x ±y ±a ±b responses: (_* `back)}
+          <> {(x): (), back: {^:x ^:y ^:a ^:b}}))
+    (frame pattern: true
+      ⟪(cell @root
+         {xs: (2 3), y: 4, zs: ({a: 5, b: 6} {a: 7, b: 8}),
+          responses: ({x: 1, y: 4, a: 5, b: 6})})⟫)
+    (frame pattern: true
+      ⟪(cell @root
+         {xs: (3), y: 4, zs: ({a: 5, b: 6} {a: 7, b: 8}),
+          responses: ({x: 1, y: 4, a: 5, b: 6}
+                      {x: 2, y: 4, a: 5, b: 6})})⟫)
+    (frame pattern: true
+      ⟪(cell @root
+         {xs: (), y: 4, zs: ({a: 5, b: 6} {a: 7, b: 8}),
+          responses: ({x: 1, y: 4, a: 5, b: 6}
+                      {x: 2, y: 4, a: 5, b: 6}
+                      {x: 3, y: 4, a: 5, b: 6})})⟫)
+    end)
+
+  ;; Loop
+  (d7
+    (frame
+      (cell @top (foo 0))
+      (part (@top @a) (_ a_))
+      (part (@a @b) b_)
+      (part (@b @a) a_)
+      (feed (copy @a) @a-view)
+      (feed (copy @b) @b-view)
+      (cell @a-view)
+      (cell @b-view))
+    (frame
+      (cell @top (foo 0))
+      (part (@top @a) (_ a_))
+      (part (@a @b) b_)
+      (part (@b @a) a_)
+      (feed (copy @a) @a-view)
+      (feed (copy @b) @b-view)
+      (cell @a-view 0)
+      (cell @b-view 0))
+    end)
+
+  ;; Loop with branch
+
+  ;; Loop with branches
+
+  ;; Dyn mismatch manipulate
+  (d7
+    (frame
+      (cell @top (foo 0 0))
+      (part (@top @a) (foo a←(%number 3 <= _ <= 7) _))
+      (part (@top @b) (foo _ b←(%number 7 <= _ <= 11)))
+      (backsys {@:top @:a @:b}
+        {¦ top: (foo ±n _) -a} <> {n: ^(+ n 1)}
+        {¦ top: (foo _ ±n) -b} <> {n: ^(+ n 1)}))
+    (frame pattern: true
+      ⟪(foo 1 1)⟫)
+    (frame pattern: true
+      ⟪(foo 2 2)⟫)
+    (frame pattern: true
+      ⟪(foo 3 3)⟫)
+    (frame pattern: true
+      ⟪(foo 3 4)⟫)
+    (frame pattern: true
+      ⟪(foo 3 5)⟫)
+    (frame pattern: true
+      ⟪(foo 3 6)⟫)
+    (frame pattern: true
+      ⟪(foo 3 7)⟫)
+    end)
+
+  ;; Basic
+  (d7
+    (frame
+      (cell @top (qux (1 2) (3 4)))
+      (part (@top @a) (qux a_ _))
+      (part (@top @b) (qux _ b_))
+      (part (@a @x) (x_ _*))
+      (part (@b @y) (_* y_))
+      (backsys @x  ±n <> {n: ^(+ n 1)})
+      (backsys @y  ±n <> {n: ^(* n 2)}))
+    (frame
+      (cell @top (qux (2 2) (3 8)))
+      (part (@top @a) (qux a_ _))
+      (part (@top @b) (qux _ b_))
+      (part (@a @x) (x_ _*))
+      (part (@b @y) (_* y_))
+      (backsys @x  ±n <> {n: ^(+ n 1)})
+      (backsys @y  ±n <> {n: ^(* n 2)}))
+    (frame
+      (cell @top (qux (3 2) (3 16)))
+      (part (@top @a) (qux a_ _))
+      (part (@top @b) (qux _ b_))
+      (part (@a @x) (x_ _*))
+      (part (@b @y) (_* y_))
+      (backsys @x  ±n <> {n: ^(+ n 1)})
+      (backsys @y  ±n <> {n: ^(* n 2)})))
+    ;; ...
+
+  ;; Removal of item
+  (d7
+    (frame
+      (cell @top (qux (1 2 3) (4 5 6)))
+      (part (@top @a) (qux a_ _))
+      (part (@top @b) (qux _ b_))
+      (part (@a @x) (x_ _*))
+      (part (@b @y) (_* y_))
+      (feed (@x @y) @dst)
+      (cell @dst)
+      (discard @dst))
+    (frame
+      (cell @top (qux (2 3) (4 5)))
+      (part (@top @a) (qux a_ _))
+      (part (@top @b) (qux _ b_))
+      (part (@a @x) (x_ _*))
+      (part (@b @y) (_* y_))
+      (feed (@x @y) @dst)
+      (cell @dst (1 6))
+      (discard @dst))
+    (frame
+      (cell @top (qux (2 3) (4 5)))
+      (part (@top @a) (qux a_ _))
+      (part (@top @b) (qux _ b_))
+      (part (@a @x) (x_ _*))
+      (part (@b @y) (_* y_))
+      (feed (@x @y) @dst)
+      (cell @dst)
+      (discard @dst))
+    (frame
+      (cell @top (qux (3) (4)))
+      (part (@top @a) (qux a_ _))
+      (part (@top @b) (qux _ b_))
+      (part (@a @x) (x_ _*))
+      (part (@b @y) (_* y_))
+      (feed (@x @y) @dst)
+      (cell @dst (2 5))
+      (discard @dst))
+    (frame
+      (cell @top (qux (3) (4)))
+      (part (@top @a) (qux a_ _))
+      (part (@top @b) (qux _ b_))
+      (part (@a @x) (x_ _*))
+      (part (@b @y) (_* y_))
+      (feed (@x @y) @dst)
+      (cell @dst)
+      (discard @dst))
+    (frame
+      (cell @top (qux () ()))
+      (part (@top @a) (qux a_ _))
+      (part (@top @b) (qux _ b_))
+      (part (@a @x) (x_ _*))
+      (part (@b @y) (_* y_))
+      (feed (@x @y) @dst)
+      (cell @dst (3 4))
+      (discard @dst))
+    (frame
+      (cell @top (qux () ()))
+      (part (@top @a) (qux a_ _))
+      (part (@top @b) (qux _ b_))
+      (part (@a @x) (x_ _*))
+      (part (@b @y) (_* y_))
+      (feed (@x @y) @dst)
+      (cell @dst)
+      (discard @dst))
+    end)
+
+  ;; Removal of pair
+  (d7
+    (frame
+      (cell @top (qux 3 x: 100 y: 200 z: 300))
+      (part (@top @n) [qux n←(%number 1 < _ <= 3)])
+      (part (@top @x) (qux 1 ⍊ x_))
+      (part (@top @y) (qux 2 ⍊ y_))
+      (part (@top @z) (qux 3 ⍊ z_))
+      (backsys @n  ±n <> {n: ^(- n 1)})
+      (discard @x)
+      (discard @y)
+      (discard @z))
+    (frame
+      (cell @top (qux 2 x: 100 y: 200))
+      (part (@top @n) [qux n←(%number 1 < _ <= 3)])
+      (part (@top @x) (qux 1 ⍊ x_))
+      (part (@top @y) (qux 2 ⍊ y_))
+      (part (@top @z) (qux 3 ⍊ z_))
+      (backsys @n  ±n <> {n: ^(- n 1)})
+      (discard @x)
+      (discard @y)
+      (discard @z))
+    (frame
+      (cell @top (qux 1 x: 100))
+      (part (@top @n) [qux n←(%number 1 < _ <= 3)])
+      (part (@top @x) (qux 1 ⍊ x_))
+      (part (@top @y) (qux 2 ⍊ y_))
+      (part (@top @z) (qux 3 ⍊ z_))
+      (backsys @n  ±n <> {n: ^(- n 1)})
+      (discard @x)
+      (discard @y)
+      (discard @z))
+    (frame
+      (cell @top (qux 1))
+      (part (@top @n) [qux n←(%number 1 < _ <= 3)])
+      (part (@top @x) (qux 1 ⍊ x_))
+      (part (@top @y) (qux 2 ⍊ y_))
+      (part (@top @z) (qux 3 ⍊ z_))
+      (backsys @n  ±n <> {n: ^(- n 1)})
+      (discard @x)
+      (discard @y)
+      (discard @z))
+    end)
+
+  ;; Use with `feed...front`.
+  ;;
+  ;; NOTE: We're writing this in a very convoluted way with (module ...)
+  ;; because besides confusing *you*, it may also confuse the engine. What
+  ;; we're *really* to test here is the latter; we're trying to make sure
+  ;; the engine is *not* confused.
+  (d7
+    (frame
+      (queue (@mail @inbox) (a b c))
+      (cell @top {name: "Samantha", mail: ()})
+      (module {:@top, @msg: @mail}
+        (part (@top @mail) {¦ mail_})
+        (feed @msg (@mail front))))
+    (frame
+      (queue (@mail @inbox) (b c))
+      (cell @top {name: "Samantha", mail: (a)})
+      (module {:@top, @msg: @mail}
+        (part (@top @mail) {¦ mail_})
+        (feed @msg (@mail front))))
+    (frame
+      (queue (@mail @inbox) (c))
+      (cell @top {name: "Samantha", mail: (b a)})
+      (module {:@top, @msg: @mail}
+        (part (@top @mail) {¦ mail_})
+        (feed @msg (@mail front))))
+    (frame
+      (queue (@mail @inbox) ())
+      (cell @top {name: "Samantha", mail: (c b a)})
+      (module {:@top, @msg: @mail}
+        (part (@top @mail) {¦ mail_})
+        (feed @msg (@mail front))))
+    end)
+
+  ;; Scoping
+  (d7
+    (frame
+      (module {}
+        (cell @top (qux (1 2) (3 4)))
+        (part (@top @a) (qux (_ a_) _))
+        (backsys @a  ±n <> {n: ^(+ n 1)}))
+      (module {}
+        (cell @top (qux (5 6) (7 8)))
+        (part (@top @a) (qux (_ a_) _))
+        (backsys @a  ±n <> {n: ^(+ n 1)}))
+      (module {}
+        (cell @top (qux (9 10) (11 12)))
+        (part (@top @a) (qux (_ a_) _))
+        (backsys @a  ±n <> {n: ^(+ n 1)})))
+    (frame
+      (module {}
+        (cell @top (qux (1 3) (3 4)))
+        (part (@top @a) (qux (_ a_) _))
+        (backsys @a  ±n <> {n: ^(+ n 1)}))
+      (module {}
+        (cell @top (qux (5 7) (7 8)))
+        (part (@top @a) (qux (_ a_) _))
+        (backsys @a  ±n <> {n: ^(+ n 1)}))
+      (module {}
+        (cell @top (qux (9 11) (11 12)))
+        (part (@top @a) (qux (_ a_) _))
+        (backsys @a  ±n <> {n: ^(+ n 1)})))
+    (frame
+      (module {}
+        (cell @top (qux (1 4) (3 4)))
+        (part (@top @a) (qux (_ a_) _))
+        (backsys @a  ±n <> {n: ^(+ n 1)}))
+      (module {}
+        (cell @top (qux (5 8) (7 8)))
+        (part (@top @a) (qux (_ a_) _))
+        (backsys @a  ±n <> {n: ^(+ n 1)}))
+      (module {}
+        (cell @top (qux (9 12) (11 12)))
+        (part (@top @a) (qux (_ a_) _))
+        (backsys @a  ±n <> {n: ^(+ n 1)}))))
+    ;; ...
+  (d7
+    (frame
+      (cell @b (+ 1 2))
+      (module {@a: @b}
+        (part (@a @b) (+ _ b_))
+        (backsys @b  ±n <> {n: ^(+ n 1)})))
+    (frame
+      (cell @b (+ 1 3))
+      (module {@a: @b}
+        (part (@a @b) (+ _ b_))
+        (backsys @b  ±n <> {n: ^(+ n 1)})))
+    (frame
+      (cell @b (+ 1 4))
+      (module {@a: @b}
+        (part (@a @b) (+ _ b_))
+        (backsys @b  ±n <> {n: ^(+ n 1)}))))
+    ;; ...
+
+  ;; TODO: Also write a test similar to this:
+  ;;   (cell @a)
+  ;;   (module {@b: @a}
+  ;;     (cell @a 100)
+  ;;     (feed @a @b))
+  ;;
+  ;; But using parts. We need to make sure scoping doesn't ONLY rely on user-
+  ;; supplied edge but also on internal scoping info.
+
+  ;; Multiple roots in parallel
+  (d7
+    (frame
+      (cell @r0 (+ 1 2))
+      (part (@r0 @a) (+ a_ _))
+      (part (@r0 @b) (+ _ b_))
+      (cell @r1 (* 3 4))
+      (part (@r1 @x) (* x←(%number _ <= 5) _))
+      (backsys (@a @b @x)
+        (±a ±b ±x) <> {(local (forall a b x)): ^(+ it 1)}))
+    (frame
+      (cell @r0 (+ 2 3))
+      (part (@r0 @a) (+ a_ _))
+      (part (@r0 @b) (+ _ b_))
+      (cell @r1 (* 4 4))
+      (part (@r1 @x) (* x←(%number _ <= 5) _))
+      (backsys (@a @b @x)
+        (±a ±b ±x) <> {(local (forall a b x)): ^(+ it 1)}))
+    (frame
+      (cell @r0 (+ 3 4))
+      (part (@r0 @a) (+ a_ _))
+      (part (@r0 @b) (+ _ b_))
+      (cell @r1 (* 5 4))
+      (part (@r1 @x) (* x←(%number _ <= 5) _))
+      (backsys (@a @b @x)
+        (±a ±b ±x) <> {(local (forall a b x)): ^(+ it 1)}))
+    (frame
+      (cell @r0 (+ 4 5))
+      (part (@r0 @a) (+ a_ _))
+      (part (@r0 @b) (+ _ b_))
+      (cell @r1 (* 6 4))
+      (part (@r1 @x) (* x←(%number _ <= 5) _))
+      (backsys (@a @b @x)
+        (±a ±b ±x) <> {(local (forall a b x)): ^(+ it 1)}))
+    end)
+
+  ;; Multiple roots in sequence
+  (d7
+    (frame
+      (cell @r0 (+ (* 1 2) 3))
+      (part (@r0 @a) (+ a_ _))
+      (feed (copy @a) @r1)
+      (cell @r1)
+      (part (@r1 @b) (* _ b_))
+      (backsys @b  ±n <> {n: ^(+ n 1)})
+      (feed (copy @r1) (atop @a)))
+    (frame
+      (cell @r0 (+ (* 1 2) 3))
+      (part (@r0 @a) (+ a_ _))
+      (feed (copy @a) @r1)
+      (cell @r1 (* 1 2))
+      (part (@r1 @b) (* _ b_))
+      (backsys @b  ±n <> {n: ^(+ n 1)})
+      (feed (copy @r1) (atop @a)))
+    (frame
+      (cell @r0 (+ (* 1 2) 3))
+      (part (@r0 @a) (+ a_ _))
+      (feed (copy @a) @r1)
+      (cell @r1 (* 1 3))
+      (part (@r1 @b) (* _ b_))
+      (backsys @b  ±n <> {n: ^(+ n 1)})
+      (feed (copy @r1) (atop @a)))
+    (frame
+      (cell @r0 (+ (* 1 3) 3))
+      (part (@r0 @a) (+ a_ _))
+      (feed (copy @a) @r1)
+      (cell @r1 (* 1 4))
+      (part (@r1 @b) (* _ b_))
+      (backsys @b  ±n <> {n: ^(+ n 1)})
+      (feed (copy @r1) (atop @a)))
+    (frame
+      (cell @r0 (+ (* 1 4) 3))
+      (part (@r0 @a) (+ a_ _))
+      (feed (copy @a) @r1)
+      (cell @r1 (* 1 5))
+      (part (@r1 @b) (* _ b_))
+      (backsys @b  ±n <> {n: ^(+ n 1)})
+      (feed (copy @r1) (atop @a))))
+    ;; ...
+
+  ;; Parts hanging off duplicate roots are ignored
+
+  ;; Parts writing into the same edge are ignored
+
+  ;; Conflicting write (same keypath)
+
+  ;; Conflicting write (keypath prefix)
+
+  ;; Conflicting write: root modified, parts must be ignored.
+
+  ;; Part with missing capture
+
+  ;; Integration with sensors and appearances
+
+  ;; Integration with `device`: queue
+  (d7
+    (frame
+      (device (@x (q 1 2 3))
+        (part (@x @fst) (q fst_ _*))
+        (feed @fst @y)
+        (cell @y)
+        (discard @y)))
+    (frame
+      (device (@x (q 2 3))
+        (part (@x @fst) (q fst_ _*))
+        (feed @fst @y)
+        (cell @y 1)
+        (discard @y)))
+    (frame
+      (device (@x (q 2 3))
+        (part (@x @fst) (q fst_ _*))
+        (feed @fst @y)
+        (cell @y)
+        (discard @y)))
+    (frame
+      (device (@x (q 3))
+        (part (@x @fst) (q fst_ _*))
+        (feed @fst @y)
+        (cell @y 2)
+        (discard @y)))
+    (frame
+      (device (@x (q 3))
+        (part (@x @fst) (q fst_ _*))
+        (feed @fst @y)
+        (cell @y)
+        (discard @y)))
+    (frame
+      (device (@x (q))
+        (part (@x @fst) (q fst_ _*))
+        (feed @fst @y)
+        (cell @y 3)
+        (discard @y)))
+    (frame
+      (device (@x (q))
+        (part (@x @fst) (q fst_ _*))
+        (feed @fst @y)
+        (cell @y)
+        (discard @y)))
+    end)
+)

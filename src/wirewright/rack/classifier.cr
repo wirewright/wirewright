@@ -27,6 +27,10 @@ module Ww::Rack
         D7.gnd(node, u)
       end
 
+      matchpi %{[part (@src_ @dst_) _]} do
+        D7.gnd(node, src, dst)
+      end
+
       matchpi %{[group _*]}, %{[window _*]} do
         D7.parent(node.as_d, 1...node.itemsize)
       end
@@ -72,48 +76,6 @@ module Ww::Rack
               end
 
               Term.of(result)
-            end
-          end
-        end
-      end
-
-      matchpi %{[device head←((edge←(%'edge capture_) pattern_) surface0_) children_*]} do
-        continue unless M1.probably_matches?(pattern, surface0)
-
-        envlogs = M1.matches_and_logs(Term[], M1.operator(pattern), surface0)
-        continue if envlogs.empty?
-
-        env, logs = envlogs.first
-
-        value0 = env[capture]?
-
-        defn = Term::Dict.build do |commit|
-          commit << :device << {edge, value0}
-          commit.concat(children.items)
-        end
-
-        D7.mixture(node, defn) do |mix|
-          backspec =
-            Term.case(mix) do
-              matchpi %{(device (_ value1_) _*)} do
-                Term[].with(capture, {:"^verbatim", value1})
-              end
-
-              matchpi %{(device (_) _*)} do
-                Term[].with({capture}, Term[])
-              end
-            end
-
-          node1 = mix.morph({1, head}) | node.pairspart
-
-          case rep = M1.backmapR({ {envlogs.trim(1), backspec} }, surface0)
-          in M1::Rep::One
-            Term.of(node1.morph({1, 1, rep.term}))
-          in M1::Rep::Many
-            if rep.terms.empty?
-              Term.of(node1.morph({1, 1, nil}))
-            else
-              Term.of(node1.morph({1, 1, M1::Rep.collapse(rep)}))
             end
           end
         end
