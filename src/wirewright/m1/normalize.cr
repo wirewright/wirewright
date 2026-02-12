@@ -2269,10 +2269,62 @@ module Ww::M1
         Term.of(:"%atom", depth: 0)
       end
 
+      # |@ m1.operator.symbol
+      #
+      # |@pattern
+      # (%'%symbol nonblank)
+      #
+      # |@block
+      # Matches a nonblank symbol.
+      #
+      # ```
+      # (nonblank? (%symbol nonblank)) => true
+      # (nonblank? _) => false
+      #
+      # (nonblank? x)          ;; => true
+      # (nonblank? ⸍John Doe⸝) ;; => true
+      #
+      # (nonblank? x_)              ;; => false
+      # (nonblank? x_number)        ;; => false
+      # (nonblank? xs_+)            ;; => false
+      # (nonblank? x_number_number) ;; => false
+      # ```
       matchpi %{(%'%symbol nonblank)}, cue: {:"%symbol", :nonblank} do
         Term.of(:"%symbol", :nonblank, depth: 0)
       end
 
+      # |@ m1.operator.symbol
+      #
+      # |@pattern
+      # (%'%symbol blank name_ type_)
+      #
+      # |@key name m1.operator
+      # An operator that matches the name of the blank.
+      #
+      # |@key type m1.operator
+      # An operator that matches the type of the blank.
+      #
+      # |@block
+      # Matches a blank symbol (e.g. `foo_number`) by decomposing it into its name
+      # and type parts and matching on those in turn (here, `foo` is the name part
+      # and `_number` is the type part).
+      #
+      # TODO: Currently, this operator does not support and will not match polyblanks
+      # (e.g. `xs_+`, `names_string*`).
+      #
+      # ```
+      # (number-blank-name (%symbol name_ %'_number)) => (some ^name)
+      # (number-blank-name _) => none
+      #
+      # (number-blank-name x_number)   ;; => (some x)
+      # (number-blank-name foo_number) ;; => (some foo)
+      #
+      # (number-blank-name qux)         ;; => none
+      # (number-blank-name _number)     ;; => none
+      # (number-blank-name foo_)        ;; => none
+      # (number-blank-name foo_number+) ;; => none
+      # (number-blank-name qux_string)  ;; => none
+      # ```
       matchpi %{(%'%symbol blank name_ type_)}, cue: {:"%symbol", :blank} do
         Term.of(:"%symbol", :blank, Normalize.sealed(Π.pattern(name)), Normalize.sealed(Π.pattern(type)), depth: 0)
       end
