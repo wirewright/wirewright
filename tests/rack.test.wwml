@@ -3737,8 +3737,60 @@
     end)
 
   ;; Loop with branch
+  (d7
+    (frame
+      (cell @top (foo 0))
+      (part (@top @a) (_ a_))
+      (part (@a @b) b_)
+      (part (@b @a) a_)
+      (part (@b @c) c_)
+      (backsys @c  ±n <> {n: ^(+ n 1)}))
+    (frame
+      (cell @top (foo 1))
+      (part (@top @a) (_ a_))
+      (part (@a @b) b_)
+      (part (@b @a) a_)
+      (part (@b @c) c_)
+      (backsys @c  ±n <> {n: ^(+ n 1)}))
+    (frame
+      (cell @top (foo 2))
+      (part (@top @a) (_ a_))
+      (part (@a @b) b_)
+      (part (@b @a) a_)
+      (part (@b @c) c_)
+      (backsys @c  ±n <> {n: ^(+ n 1)})))
+    ;; ...
 
   ;; Loop with branches
+  (d7
+    (frame
+      (cell @top (foo (10 20)))
+      (part (@top @a) (_ a_))
+      (part (@a @b) b_)
+      (part (@b @a) a_)
+      (part (@b @x) (x_ _))
+      (part (@b @y) (_ y_))
+      (backsys @x  ±n <> {n: ^(+ n 1)})
+      (backsys @y  ±n <> {n: ^(+ n 1)}))
+    (frame
+      (cell @top (foo (11 21)))
+      (part (@top @a) (_ a_))
+      (part (@a @b) b_)
+      (part (@b @a) a_)
+      (part (@b @x) (x_ _))
+      (part (@b @y) (_ y_))
+      (backsys @x  ±n <> {n: ^(+ n 1)})
+      (backsys @y  ±n <> {n: ^(+ n 1)}))
+    (frame
+      (cell @top (foo (12 22)))
+      (part (@top @a) (_ a_))
+      (part (@a @b) b_)
+      (part (@b @a) a_)
+      (part (@b @x) (x_ _))
+      (part (@b @y) (_ y_))
+      (backsys @x  ±n <> {n: ^(+ n 1)})
+      (backsys @y  ±n <> {n: ^(+ n 1)})))
+    ;; ...
 
   ;; Dyn mismatch manipulate
   (d7
@@ -3997,15 +4049,6 @@
         (backsys @b  ±n <> {n: ^(+ n 1)}))))
     ;; ...
 
-  ;; TODO: Also write a test similar to this:
-  ;;   (cell @a)
-  ;;   (module {@b: @a}
-  ;;     (cell @a 100)
-  ;;     (feed @a @b))
-  ;;
-  ;; But using parts. We need to make sure scoping doesn't ONLY rely on user-
-  ;; supplied edge but also on internal scoping info.
-
   ;; Multiple roots in parallel
   (d7
     (frame
@@ -4087,18 +4130,150 @@
     ;; ...
 
   ;; Parts hanging off duplicate roots are ignored
+  (d7
+    (frame
+      (cell @x (+ 1 2))
+      (cell @x (+ 3 4))
+      (part (@x @a) (+ a_ _))
+      (backsys @a  ±n <> {n: ^(+ n 1)}))
+    end)
 
   ;; Parts writing into the same edge are ignored
+  (d7
+    (frame
+      (cell @x (+ 1 2))
+      (part (@x @a) (+ a_ _))
+      (part (@x @a) (+ _ a_))
+      (backsys @a  ±n <> {n: ^(+ n 1)}))
+    end)
 
   ;; Conflicting write (same keypath)
+  (d7
+    (frame
+      (cell @x (+ 1 2))
+      (part (@x @a) (+ a_ _))
+      (part (@x @b) (+ b_ _))
+      (part (@x @c) (+ _ c_))
+      (backsys @a  ±n <> {n: ^(+ n 1)})
+      (backsys @b  ±n <> {n: ^(+ n 2)}) ;; <<  notice the 2, so @a and @b propose diff values
+      (backsys @c  ±n <> {n: ^(+ n 1)}))
+    (frame
+      (cell @x (+ 1 3))
+      (part (@x @a) (+ a_ _))
+      (part (@x @b) (+ b_ _))
+      (part (@x @c) (+ _ c_))
+      (backsys @a  ±n <> {n: ^(+ n 1)})
+      (backsys @b  ±n <> {n: ^(+ n 2)})
+      (backsys @c  ±n <> {n: ^(+ n 1)})))
+    ;; ...
+
+  ;; Apparent conflicting write (same keypath), but values agree so it succeeds.
+  (d7
+    (frame
+      (cell @x (+ 1 2))
+      (part (@x @a) (+ a_ _))
+      (part (@x @b) (+ b_ _))
+      (part (@x @c) (+ _ c_))
+      (backsys @a  ±n <> {n: ^(+ n 1)})
+      (backsys @b  ±n <> {n: ^(+ n 1)})
+      (backsys @c  ±n <> {n: ^(+ n 1)}))
+    (frame
+      (cell @x (+ 2 3))
+      (part (@x @a) (+ a_ _))
+      (part (@x @b) (+ b_ _))
+      (part (@x @c) (+ _ c_))
+      (backsys @a  ±n <> {n: ^(+ n 1)})
+      (backsys @b  ±n <> {n: ^(+ n 1)})
+      (backsys @c  ±n <> {n: ^(+ n 1)})))
+    ;; ...
 
   ;; Conflicting write (keypath prefix)
+  ;;
+  ;; Currently we prefer the parent.
+  (d7
+    (frame
+      (cell @x (foo (+ 1 2) 3))
+      (part (@x @l) (foo l_ _))
+      (part (@x @r) (foo _ r_))
+      (part (@x @a) (foo (+ a_ _) _))
+      (backsys @a  ±n <> {n: ^(+ n 1)})
+      (backsys @r  ±n <> {n: ^(* n 2)})
+      (feed @l @bin)
+      (cell @bin)
+      (discard @bin))
+    (frame
+      (cell @x (foo 6))
+      (part (@x @l) (foo l_ _))
+      (part (@x @r) (foo _ r_))
+      (part (@x @a) (foo (+ a_ _) _))
+      (backsys @a  ±n <> {n: ^(+ n 1)})
+      (backsys @r  ±n <> {n: ^(* n 2)})
+      (feed @l @bin)
+      (cell @bin (+ 1 2))
+      (discard @bin))
+    (frame
+      (cell @x (foo 6))
+      (part (@x @l) (foo l_ _))
+      (part (@x @r) (foo _ r_))
+      (part (@x @a) (foo (+ a_ _) _))
+      (backsys @a  ±n <> {n: ^(+ n 1)})
+      (backsys @r  ±n <> {n: ^(* n 2)})
+      (feed @l @bin)
+      (cell @bin)
+      (discard @bin))
+    end)
 
   ;; Conflicting write: root modified, parts must be ignored.
+  (d7
+    (frame
+      (cell @root (+ 1 2))
+      (part (@root @a) (+ a_ _))
+      (backsys @a  ±n <> {n: ^(+ n 1)})
+      (backsys @root  (+ _ ±n) <> {n: ^(+ n 1)}))
+    (frame
+      (cell @root (+ 1 3))
+      (part (@root @a) (+ a_ _))
+      (backsys @a  ±n <> {n: ^(+ n 1)})
+      (backsys @root  (+ _ ±n) <> {n: ^(+ n 1)}))
+    (frame
+      (cell @root (+ 1 4))
+      (part (@root @a) (+ a_ _))
+      (backsys @a  ±n <> {n: ^(+ n 1)})
+      (backsys @root  (+ _ ±n) <> {n: ^(+ n 1)})))
+    ;; ...
 
   ;; Part with missing capture
+  (d7
+    (frame
+      (part (@root @a) (+ a_ _))
+      (feed (copy @a) @a-view)
+      (cell @a-view))
+    end)
 
-  ;; Integration with sensors and appearances
+  ;; Integration with tspace
+  (d7
+    (frame
+      (cell @expr (+ 1 2))
+      (part (@expr @x) (+ x_ _))
+      (backsys @x  ±n <> {n: ^(+ n 1)})
+      (appearance local @x)
+      (sensor* (local x_ @view) ^x)
+      (cell @view))
+    (frame
+      (cell @expr (+ 2 2))
+      (part (@expr @x) (+ x_ _))
+      (backsys @x  ±n <> {n: ^(+ n 1)})
+      (appearance local @x)
+      (sensor* (local x_ @view) ^x)
+      (cell @view (1)))
+    (frame
+      (cell @expr (+ 3 2))
+      (part (@expr @x) (+ x_ _))
+      (backsys @x  ±n <> {n: ^(+ n 1)})
+      (appearance local @x)
+      (sensor* (local x_ @view) ^x)
+      (cell @view (2))))
+    ;; ...
 
   ;; Integration with `device`: queue
   (d7

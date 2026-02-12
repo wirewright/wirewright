@@ -40,7 +40,7 @@ module Ww::Rack::Tspace
     appearances = [] of Appearance
 
     # Find candidates for an exchange.
-    _ = D7.case(clf, circuit) do
+    _ = D7.case(clf, circuit, decorator: Rack.prepass) do
       rule(<<-WWML) do |dev|
       [sensor (tspace_ pattern_ @dst_) template_] dev
         -> (one dst) [cell @dst_] {name: dst}
@@ -132,7 +132,7 @@ module Ww::Rack::Tspace
       stimuli[sensor.id] = expansions
     end
 
-    D7.case(clf, circuit) do
+    D7.case(clf, circuit, decorator: Rack.prepass) do
       rule(<<-WWML) do |dev, dst|
       [sensor (_ _ @dst_) _] dev
         -> (one dst) [cell @dst_] {name: dst}

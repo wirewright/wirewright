@@ -56,18 +56,33 @@ module Ww::Rack
     # NOTE: `nil` signifies removal. Think `(cell @x 100)` -> `(cell @x)`;
     # if you focus on `100` you get *term* `100` -> `nil`.
     def merge(tree : Tree, term : Term) : Term?
-      # If entries exist, then assume deeper proposals exist. If deeper proposals
-      # exist, then we are in conflict if we have proposals of our own. Thus, we
-      # refuse to merge this branch & deeper.
-      #
       # If neither entries nor proposals exist, then simply return term.
-      if (tree.entries && tree.proposals) || (tree.entries.nil? && tree.proposals.nil?)
+      if tree.entries.nil? && tree.proposals.nil?
         return term
       end
 
-      # If proposals exist, then entries do not exist. If there is more than
-      # proposal for the same spot, we decline all of them. If there is just
-      # one proposal for this spot, we accept it.
+      # If proposals exist, accept them. If there is more than proposal for
+      # the same spot, this is a conflict. If there is just one proposal
+      # for this spot, we accept it.
+      #
+      # NOTE: We'd actually like to conflict if there are nested proposals
+      # (in tree.entries). However, this creates a nasty problem of "dependent"
+      # proposals (namely removals). That is, say, we use a feed on the parent
+      # and move it somewhere. This emits a `nil` proposal on the parent.
+      # Simultaneously, we modify a child, say, increment it. Originally, we'd
+      # have a conflict: the parent wants to be modified in its entirety, and
+      # the child wants to be modified, too, assuming the parent remains intact.
+      # We'd like to reject both to keep everything in order. However, this is
+      # undesirable, since the parent's modification already affected the circuit!
+      # Thus, the rest of the circuit assumes the parent was modified.
+      #
+      # What we do here is thus prefer modifications of the parent. This is done
+      # under the assumption that modifying the parent "burns" info about the children.
+      # Thus, no one would be able to see that we've actually NOT applied the changes
+      # to children. To those children to which this recursively applies, we can say
+      # something similar. The updated parent can look visually identical to the previous
+      # one. However, we still assume information was lost. This seems to be the most
+      # coherent solution yet.
       if proposals = tree.proposals
         if proposals.size > 1
           return term
@@ -120,15 +135,15 @@ module Ww::Rack
   end
 
   def complete(hg : D7::Hypergraph, seen, root : D7::Node, edge_path, path, completer, sink) forall T
+    return if root.id.in?(seen)
+
+    seen << root.id
+
     completed = false
 
     src = edge_path.last
 
     hg.each_neighbor(of: root.id, on: src) do |candidate|
-      next if candidate.id.in?(seen)
-
-      seen << candidate.id
-
       # Hey fn, is this a valid completion?
       next unless response = completer.call(src, candidate)
 
@@ -175,72 +190,83 @@ module Ww::Rack
     endpoints = {} of D7::NodeId => Part::Tree
     replacements = [] of ->
 
-    # TODO: skip duplicate cells
-    # TODO: skip duplicate parts
-    # IN GENERAL: Do heavy prefiltering here, we're mutating the hypergraph after all!!!
+    # each_root_cell do |node, value|
+    #   ...
+    # end
+
+    buckets = {} of D7::AbsEdge => Array({D7::Node, Term})
+
     hg.each_node do |node|
       Term.matchpi?(node.term, %{[cell @src_ whole_]}) do
-        paths = complete(hg, node, hg.abs_edge(src, wrt: node.id)) do |from_abs, completion|
-          Term.matchpi?(completion.term, %{[part (@from_ to←(%'edge capture_)) pattern_]}) do
-            next unless from_abs == hg.abs_edge(from, wrt: completion.id)
+        edge = hg.abs_edge(src, wrt: node.id)
+        bucket = buckets.put_if_absent(edge) { [] of {D7::Node, Term} }
+        bucket << {node, whole}
+      end
+    end
 
-            to_abs = hg.abs_edge(to, wrt: completion.id)
-            {to_abs, {pattern, completion.id, to_abs, capture}}
-          end
+    buckets.each do |src, bucket|
+      next unless bucket.size == 1
+
+      node, whole = bucket.first
+
+      paths = complete(hg, node, src) do |from_abs, completion|
+        Term.matchpi?(completion.term, %{[part (@from_ to←(%'edge capture_)) pattern_]}) do
+          next unless from_abs == hg.abs_edge(from, wrt: completion.id)
+
+          to_abs = hg.abs_edge(to, wrt: completion.id)
+          {to_abs, {pattern, completion.id, to_abs, capture}}
         end
+      end
 
-        next if paths.empty?
+      next if paths.empty?
 
-        # pp paths
+      root = Part::Tree.new
+      roots[node.id] = {whole, ->(whole1 : Term?) { Term.of(node.term.morph({2, whole1})) }, root}
 
-        root = Part::Tree.new
-        roots[node.id] = {whole, ->(whole1 : Term?) { Term.of(node.term.morph({2, whole1})) }, root}
+      paths.each do |path|
+        matchee = whole
+        trace = root
 
-        paths.each do |path|
-          matchee = whole
-          trace = root
+        path.each do |pattern, part_id, target, capture|
+          break unless M1.probably_matches?(pattern, matchee)
 
-          path.each do |pattern, part_id, target, capture|
-            break unless M1.probably_matches?(pattern, matchee)
+          envlogs = M1.matches_and_logs(Term[], M1.operator(pattern), matchee)
+          break unless envlog = envlogs.first?
 
-            envlogs = M1.matches_and_logs(Term[], M1.operator(pattern), matchee)
-            break unless envlog = envlogs.first?
+          env, logs = envlog
+          break unless successor = env[capture]?
+          break unless found = logs.find { |name, _| capture }
 
-            env, logs = envlog
-            break unless successor = env[capture]?
-            break unless found = logs.find { |name, _| capture }
+          _, suffix = found
 
-            _, suffix = found
+          # Removes things like <examine itemspart>—<examine key 0> which lets
+          # us support patterns like [x_].
+          normal_suffix = M1::Log.normalize(suffix.seq)
+          break if normal_suffix.is_a?(M1::Log::None)
 
-            # Removes things like <examine itemspart>—<examine key 0> which lets
-            # us support patterns like [x_].
-            normal_suffix = M1::Log.normalize(suffix.seq)
-            break if normal_suffix.is_a?(M1::Log::None)
+          actions = M1::Log::SeqSlice.new(normal_suffix)
+          break unless actions.all?(M1::Log::ExamineValue)
 
-            actions = M1::Log::SeqSlice.new(normal_suffix)
-            break unless actions.all?(M1::Log::ExamineValue)
+          actions.each do |action|
+            assert action.is_a?(M1::Log::ExamineValue)
 
-            actions.each do |action|
-              assert action.is_a?(M1::Log::ExamineValue)
-
-              trace = Part.follow(trace, action.key)
-            end
-
-            endpoints[part_id] = trace
-
-            # Replace [part (@src @dst) ...] with (cell @dst <value>). Notice how
-            # we keep only @dst as the edge!
-            #
-            # NOTE: We delay replacements since they mutate the hypergraph, and we're
-            # iterating over it right now!
-            replacements << -> do
-              hg.replace(part_id, Term.of(:cell, target.term, successor)) do |edge|
-                edge == target
-              end
-            end
-
-            matchee = successor
+            trace = Part.follow(trace, action.key)
           end
+
+          endpoints[part_id] = trace
+
+          # Replace [part (@src @dst) ...] with (cell @dst <value>). Notice how
+          # we keep only @dst as the edge!
+          #
+          # NOTE: We delay replacements since they mutate the hypergraph, and we're
+          # iterating over it right now!
+          replacements << -> do
+            hg.replace(part_id, Term.of(:cell, target.term, successor)) do |edge|
+              edge == target
+            end
+          end
+
+          matchee = successor
         end
       end
     end
