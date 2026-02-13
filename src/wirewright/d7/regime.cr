@@ -52,8 +52,8 @@ module Ww::D7
     alias PatternId = UInt32
 
     defcase Query,
+      index : Int32,
       name : Term,
-      demands : Pf::USet32,
       pattern_id : PatternId,
       specificity : M1::Specificity,
       deps : Slice({Link, Dep})
@@ -61,6 +61,7 @@ module Ww::D7
     defrecord Dep,
       name : Term,
       pattern_id : PatternId,
+      head : Term,
       min : Int32,
       max : Int32
 
@@ -69,19 +70,19 @@ module Ww::D7
     defrecord LinkOne, capture : Term
     defrecord LinkMany, capture : Term, dep_capture : Term
 
-    defrecord Pattern, op : M1::Op::Any, head : Term
+    defrecord Pattern, op : M1::Op::Any
 
     # :nodoc:
-    def initialize(@patterns : Slice(Pattern), @queries : Slice(Query))
+    def initialize(@patterns : Slice(Pattern), @queries : Hash(Term, Array(Query)))
     end
 
     # Constructs a regime from the given list of query IR objects.
     def self.new(query_irs : Indexable(QueryIR)) : Regime
       patterns = Pf::Kit.stack_array(Pattern)
 
-      queries = query_irs.to_readonly_slice do |query_ir|
-        demands = Pf::USet32[]
+      queries = {} of Term => Array(Query)
 
+      query_irs.each_with_index do |query_ir, index|
         query_pattern_id = patterns.size.to_u32
         query_normp = M1.normal(query_ir.pattern)
         query_pattern = M1.operator(query_normp)
@@ -89,70 +90,36 @@ module Ww::D7
         query_head = M1.head?(query_normp)
         assert query_head, "Could not determine query pattern's head: #{query_ir.pattern}"
 
-        patterns << Pattern.new(query_pattern, query_head)
-        demands = demands.add(query_pattern_id)
+        patterns << Pattern.new(query_pattern)
 
         deps = query_ir.deps.to_readonly_slice do |(link, dep_ir)|
           dep_pattern_id = patterns.size.to_u32
           dep_normp = M1.normal(dep_ir.pattern)
           dep_pattern = M1.operator(dep_normp)
           dep_head = M1.head?(dep_normp)
-          assert dep_head, "Could not determine dependency's head: #{dep_ir.pattern}"
+          assert dep_head, "Could not determine query dependency's head: #{dep_ir.pattern}"
 
-          patterns << Pattern.new(dep_pattern, dep_head)
-          if dep_ir.min > 0
-            demands = demands.add(dep_pattern_id)
-          end
+          patterns << Pattern.new(dep_pattern)
 
-          {link, Dep.new(dep_ir.name, dep_pattern_id, dep_ir.min, dep_ir.max)}
+          {link, Dep.new(dep_ir.name, dep_pattern_id, dep_head, dep_ir.min, dep_ir.max)}
         end
 
-        Query.new(query_ir.name, demands, query_pattern_id, query_specificity, deps)
+        bucket = queries.put_if_absent(query_head) { [] of Query }
+        bucket << Query.new(index, query_ir.name, query_pattern_id, query_specificity, deps)
       end
 
       new(patterns.to_readonly_slice(&.itself), queries)
     end
 
-    alias Excitab = Hash(NodeId, Pf::USet32)
-
-    # *Perception* is the first step: the "sensory heads" of rules look at
-    # the hypergraph and trigger, or don't. The result is a table mapping node
-    # ids to bit sets of rules they excite -- the *excitation table*, *excitab*
-    # for short.
-    #
-    # NOTE: At this point, rules are allowed to misfire: false positives are
-    # allowed (rule fires when it shouldn't); but false negatives are not.
-    private def excitab(hg : Hypergraph) : Excitab
-      excitab = {} of NodeId => Pf::USet32
-
-      hg.each_node do |node|
-        @patterns.each_with_index do |pattern, index|
-          next unless M1.probably_matches?(pattern.op, node.term)
-
-          pattern_id = index.to_u32
-
-          excites0 = excitab[node.id]? || Pf::USet32[]
-          excites1 = excites0.add(pattern_id)
-
-          excitab[node.id] = excites1
-        end
-      end
-
-      excitab
-    end
-
-    private def match?(excitab, pattern_id : PatternId, candidate : Node, & : -> Term::Dict) : Term::Dict?
-      return unless excites = excitab[candidate.id]?
-      return unless excites.includes?(pattern_id)
-
-      env = yield
+    private def match?(pattern_id : PatternId, candidate : Node) : Term::Dict?
       pattern = @patterns[pattern_id]
+      return unless M1.probably_matches?(pattern.op, candidate.term)
 
-      M1.match?(env, pattern.op, candidate.term)
+      M1.match?(Term[], pattern.op, candidate.term)
     end
 
-    private def crawl(hg, excitab, node : Node, query : Query, & : MatchTable ->)
-      return unless query_env = match?(excitab, query.pattern_id, node) { Term[] }
+    private def crawl(hg, node : Node, query : Query, &fn : MatchTable ->)
+      return unless query_env = match?(query.pattern_id, node)
 
       seen = Pf::USet32[node.id]
       responses = [] of MatchGroup | Slice(MatchGroup)
@@ -174,7 +141,7 @@ module Ww::D7
 
           hg.each_neighbor(of: node.id, on: link_edge_abs) do |neighbor|
             next if neighbor.id.in?(seen) # Don't allow to depend on the same node twice.
-            next unless dep_env = match?(excitab, dep.pattern_id, neighbor) { Term[] }
+            next unless dep_env = match?(dep.pattern_id, neighbor)
 
             # Since dep patterns are detached from the query pattern, we can't rely
             # on M1 constraints and must instead provide an environment to relate
@@ -221,7 +188,7 @@ module Ww::D7
 
             hg.each_neighbor(of: node.id, on: link_edge_abs) do |neighbor|
               next if neighbor.id.in?(seen) # Don't allow to depend on the same node twice.
-              next unless dep_env = match?(excitab, dep.pattern_id, neighbor) { Term[] }
+              next unless dep_env = match?(dep.pattern_id, neighbor)
 
               dep_edge = dep_env[link.dep_capture]
               dep_edge_abs = hg.abs_edge(dep_edge, wrt: neighbor.id)
@@ -256,7 +223,7 @@ module Ww::D7
       #     -> (one b) (bar @b_ term_) {name: bar}
       #
       # ... both *term*s are matched independently.
-      responses = responses.map do |response|
+      responses.map! do |response|
         case response
         in MatchGroup
           D7.select(response, &.env.agrees_with?(query_env))
@@ -287,17 +254,7 @@ module Ww::D7
         match_table = match_table.assoc(dep.name, response)
       end
 
-      yield match_table
-    end
-
-    private def crawl(hg : Hypergraph, excitab, candidates, &)
-      hg.each_node do |node|
-        candidates.each do |query, query_index|
-          crawl(hg, excitab, node, query) do |match_table|
-            yield match_table, query_index
-          end
-        end
-      end
+      fn.call(match_table)
     end
 
     # :nodoc:
@@ -454,30 +411,27 @@ module Ww::D7
       Term.of(result)
     end
 
-    def solve(hg : Hypergraph, & : MatchTable, Int32 -> Patch?) : Patch
-      excitab = excitab(hg)
+    def solve(hg : Hypergraph, &fn : MatchTable, Int32 -> Patch?) : Patch
+      solns = Pf::Kit.stack_array(Soln)
 
-      # From the excitation table, we compute a *supply* bit set. It tells us
-      # which patterns out of those we recognize exist in the hypergraph. Remember,
-      # however, that excitab is imprecise -- it may include false positives.
-      supply = excitab.reduce(Pf::USet32[]) do |memo, (_, excites)|
-        memo | excites
+      hg.each_node_with_head do |node, head|
+        next unless queries = @queries[head]?
+
+        queries.each do |query|
+          maybe_matches = query.deps.all? do |_, dep|
+            dep.min.zero? || hg.has_head?(dep.head)
+          end
+
+          next unless maybe_matches
+
+          crawl(hg, node, query) do |match_table|
+            solns << Soln.new(match_table, query, query.index)
+          end
+        end
       end
 
-      # Since queries *demand* certain patterns, this lets us reject a great deal
-      # of them before commencing more complex search.
-      candidates = Pf::Kit.stack_array({Query, Int32})
-      @queries.each_with_index do |query, query_index|
-        next unless query.demands.subset_of?(supply)
-
-        candidates << {query, query_index}
-      end
-
-      solns = [] of Soln
-
-      # Next, we start `crawl`ing from each node.
-      crawl(hg, excitab, candidates) do |match_table, query_index|
-        solns << Soln.new(match_table, @queries[query_index], query_index)
+      if solns.empty?
+        return Patch.new
       end
 
       # TODO: In the future we'll have long computations emit a Sync::Future or
@@ -485,7 +439,7 @@ module Ww::D7
       # another fiber, and we'll be able to process more solutions concurrently
       # in the meantime. This is where the "scheduler" should go.
       proposals = solns.compact_map do |soln|
-        next unless proposal = yield soln.match_table, soln.query_index
+        next unless proposal = fn.call(soln.match_table, soln.query_index)
 
         assert proposal.size <= soln.degree,
           "size of proposal exceeds the number of node participants \

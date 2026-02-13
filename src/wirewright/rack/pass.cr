@@ -1,304 +1,40 @@
 module Ww::Rack
-  # The guts of the `part` node.
-  #
-  # The `part` node is a bit like the backmap engine `M1::Backmap`, except it's
-  # much simpler (it only handles keypaths; no refs, no optionals, no conflict
-  # resolution; no concept of agents, etc.; nothing of that sort).
-  #
-  # It's also important to say that it's not the part node that is like the backmap
-  # engine, but the entire tree of part nodes rooted at a `cell`. The entire tree --
-  # all `part` nodes collectively -- form something resembling a backmap, allowing
-  # one to modify the root cell's value.
-  #
-  # There can obviously be overlap. `part`s may be unaware of each other, and that's
-  # the whole point! Think `part`s corresponding to different *parts* of a device's
-  # surface (imagine displays, knobs; except they're symbolic).
-  #
-  # We say there is a *conflict* if two keypaths corresponding to different `part`
-  # nodes propose different values. We also consider as conflict cases where different
-  # `part` nodes target keypaths such that one is a prefix of the other.
-  #
-  # Conflict is resolved by ignoring changes from both conflicting parties. This is
-  # the strategy for `part`; the backmap engine uses a different strategy (backtracking
-  # search until a non-conflicting config is found, taking into account user-
-  # assigned priority).
-  #
-  # If the root cell itself was patched, its `part` node subtree refuses to touch it.
-  #
-  # `part` nodes are special in that they do not require intermediate cells for
-  # storing state. The literally modify the innards of a term after each tick. This
-  # leads to a very "baroque" implementation that decorates the main `pass` instead
-  # of being a neat rule in it, like e.g. `Feed`.
-  #
-  # `part` relies on trickery to convince the main pass that the `part`s are
-  # actually just `cell`s (extraction), and then after the main pass is complete,
-  # the implementation of `part` works hard to hide the fact there were any tricks
-  # at all, as it merges stuff back into the root cell (absorption).
-  module Part
-    extend self
-
-    defcase Tree,
-      entries : Hash(Term, Tree)? = nil,
-      proposals : Set(Term?)? = nil,
-      mutation: true
-
-    def follow(tree : Tree, key : Term) : Tree
-      entries = tree.entries ||= {} of Term => Tree
-      entries.put_if_absent(key) { Tree.new }
-    end
-
-    # NOTE: `nil` proposals signify removal. Think `(cell @x 100)` -> `(cell @x)`.
-    def propose(tree : Tree, proposal : Term?) : Nil
-      proposals = tree.proposals ||= Set(Term?).new
-      proposals << proposal
-    end
-
-    # NOTE: `nil` signifies removal. Think `(cell @x 100)` -> `(cell @x)`;
-    # if you focus on `100` you get *term* `100` -> `nil`.
-    def merge(tree : Tree, term : Term) : Term?
-      # If neither entries nor proposals exist, then simply return term.
-      if tree.entries.nil? && tree.proposals.nil?
-        return term
-      end
-
-      # If proposals exist, accept them. If there is more than proposal for
-      # the same spot, this is a conflict. If there is just one proposal
-      # for this spot, we accept it.
-      #
-      # NOTE: We'd actually like to conflict if there are nested proposals
-      # (in tree.entries). However, this creates a nasty problem of "dependent"
-      # proposals (namely removals). That is, say, we use a feed on the parent
-      # and move it somewhere. This emits a `nil` proposal on the parent.
-      # Simultaneously, we modify a child, say, increment it. Originally, we'd
-      # have a conflict: the parent wants to be modified in its entirety, and
-      # the child wants to be modified, too, assuming the parent remains intact.
-      # We'd like to reject both to keep everything in order. However, this is
-      # undesirable, since the parent's modification already affected the circuit!
-      # Thus, the rest of the circuit assumes the parent was modified.
-      #
-      # What we do here is thus prefer modifications of the parent. This is done
-      # under the assumption that modifying the parent "burns" info about the children.
-      # Thus, no one would be able to see that we've actually NOT applied the changes
-      # to children. To those children to which this recursively applies, we can say
-      # something similar. The updated parent can look visually identical to the previous
-      # one. However, we still assume information was lost. This seems to be the most
-      # coherent solution yet.
-      if proposals = tree.proposals
-        if proposals.size > 1
-          return term
-        end
-
-        assert proposals.size == 1
-        return proposals.first
-      end
-
-      assert entries = tree.entries
-
-      # If entries exist, then merge recursively each one of those entries,
-      # assuming respective keys exist.
-      assert dict0 = term.as_d?
-
-      removals = Pf::Kit.stack_array(Int32)
-
-      dict1 = dict0.transaction do |commit|
-        dict0.each_item_with_index do |item, index|
-          key = Term.of(index)
-          next unless successor = entries[key]?
-
-          unless result = merge(successor, item)
-            removals << index
-            next
-          end
-
-          commit.with(key, result)
-        end
-
-        dict0.each_pair do |key, value|
-          next unless successor = entries[key]?
-
-          commit.with(key, merge(successor, value))
-        end
-      end
-
-      removals.unstable_sort!
-      removals.reverse_each do |index|
-        dict1 = dict1.without_item(index)
-      end
-
-      Term.of(dict1)
-    end
-  end
-
   # Returns the main Rack pass.
   def pass : D7::Pass
     D7::Pass.new { |clf, circuit| step(clf.call(circuit), circuit) }
-  end
-
-  def complete(hg : D7::Hypergraph, seen, root : D7::Node, edge_path, path, completer, sink) forall T
-    return if root.id.in?(seen)
-
-    seen << root.id
-
-    completed = false
-
-    src = edge_path.last
-
-    hg.each_neighbor(of: root.id, on: src) do |candidate|
-      # Hey fn, is this a valid completion?
-      next unless response = completer.call(src, candidate)
-
-      # Yes, fn says it is. Proceed completing recursively.
-      dst, object = response
-
-      # Don't follow edges we already followed [TODO: why?]
-      next if dst.in?(edge_path)
-
-      completed = true
-
-      complete(hg, seen, candidate, edge_path.append(dst), path.append(object), completer, sink)
-    end
-
-    return if completed
-
-    sink.call(path)
-  end
-
-  def complete(hg, root : D7::Node, edge : D7::AbsEdge, &completer : D7::AbsEdge, D7::Node -> {D7::AbsEdge, T}) forall T
-    paths = [] of Slice(T)
-
-    _ = Pf::USet32.transaction do |seen|
-      sink = ->(path : Slice(T)) do
-        return if path.empty?
-
-        paths << path
-      end
-
-      complete(hg, seen, root, Slice[edge], Slice(T).empty, completer, sink)
-    end
-
-    paths
   end
 
   # :nodoc:
   #
   # *Prepass* is Rack's decorator over the general hypergraph solving process.
   # The most important thing it does is it walks the `part` subtree of root
-  # cells and constructs child `cell`s with appropriate values, if any; and
-  # then after the block runs, it merges those child cells back into the root.
-  def prepass(clf : D7::Classifier, hg : D7::Hypergraph, & : D7::Hypergraph -> D7::Patch) : D7::Patch
-    roots = {} of D7::NodeId => {Term, (Term? -> Term), Part::Tree}
-    endpoints = {} of D7::NodeId => Part::Tree
-    replacements = [] of ->
+  # cells and constructs child `cell`s with appropriate values, if possible; and
+  # then after *fn* runs, it absorbs & merges child cells back into the root.
+  def prepass(clf : D7::Classifier, hg : D7::Hypergraph, &fn : D7::Hypergraph -> D7::Patch) : D7::Patch
+    # Fast path for graphs that don't have both cells and parts. If one does,
+    # then we have no other option than executing the algorithm below.
+    unless Part.probably_exists_in?(hg)
+      return fn.call(hg)
+    end
 
-    # each_root_cell do |node, value|
-    #   ...
-    # end
+    # Generate a "forest" containing trees whose root is some [cell ...], whose
+    # nodes are `part`s, and whose leaves are "leaf parts", which are, together
+    # with the value on their output edge, known as "endpoints".
+    forest = Part.forest(hg)
 
-    buckets = {} of D7::AbsEdge => Array({D7::Node, Term})
+    # Replace endpoint [part (@src @dst) ...] with (cell @dst <endpoint value>).
+    forest.endpoints.each do |endpoint|
+      leaf = endpoint.leaf_part
 
-    hg.each_node do |node|
-      Term.matchpi?(node.term, %{[cell @src_ whole_]}) do
-        edge = hg.abs_edge(src, wrt: node.id)
-        bucket = buckets.put_if_absent(edge) { [] of {D7::Node, Term} }
-        bucket << {node, whole}
+      # Notice how we keep only @dst as the edge! @src is pruned.
+      hg.replace(leaf.node.id, Term.of(:cell, leaf.to.term, endpoint.value)) do |edge|
+        edge == leaf.to
       end
     end
 
-    buckets.each do |src, bucket|
-      next unless bucket.size == 1
+    patch = fn.call(hg)
 
-      node, whole = bucket.first
-
-      paths = complete(hg, node, src) do |from_abs, completion|
-        Term.matchpi?(completion.term, %{[part (@from_ to←(%'edge capture_)) pattern_]}) do
-          next unless from_abs == hg.abs_edge(from, wrt: completion.id)
-
-          to_abs = hg.abs_edge(to, wrt: completion.id)
-          {to_abs, {pattern, completion.id, to_abs, capture}}
-        end
-      end
-
-      next if paths.empty?
-
-      root = Part::Tree.new
-      roots[node.id] = {whole, ->(whole1 : Term?) { Term.of(node.term.morph({2, whole1})) }, root}
-
-      paths.each do |path|
-        matchee = whole
-        trace = root
-
-        path.each do |pattern, part_id, target, capture|
-          break unless M1.probably_matches?(pattern, matchee)
-
-          envlogs = M1.matches_and_logs(Term[], M1.operator(pattern), matchee)
-          break unless envlog = envlogs.first?
-
-          env, logs = envlog
-          break unless successor = env[capture]?
-          break unless found = logs.find { |name, _| capture }
-
-          _, suffix = found
-
-          # Removes things like <examine itemspart>—<examine key 0> which lets
-          # us support patterns like [x_].
-          normal_suffix = M1::Log.normalize(suffix.seq)
-          break if normal_suffix.is_a?(M1::Log::None)
-
-          actions = M1::Log::SeqSlice.new(normal_suffix)
-          break unless actions.all?(M1::Log::ExamineValue)
-
-          actions.each do |action|
-            assert action.is_a?(M1::Log::ExamineValue)
-
-            trace = Part.follow(trace, action.key)
-          end
-
-          endpoints[part_id] = trace
-
-          # Replace [part (@src @dst) ...] with (cell @dst <value>). Notice how
-          # we keep only @dst as the edge!
-          #
-          # NOTE: We delay replacements since they mutate the hypergraph, and we're
-          # iterating over it right now!
-          replacements << -> do
-            hg.replace(part_id, Term.of(:cell, target.term, successor)) do |edge|
-              edge == target
-            end
-          end
-
-          matchee = successor
-        end
-      end
-    end
-
-    replacements.each &.call
-
-    patch = yield hg
-
-    patch = patch.select do |node_id, rep|
-      unless endpoint = endpoints[node_id]?
-        next true
-      end
-
-      Term.case(rep) do
-        matchpi %{[cell @_ value_]} { Part.propose(endpoint, value) }
-        matchpi %{[cell @_]} { Part.propose(endpoint, nil) }
-        otherwise { }
-      end
-
-      false
-    end
-
-    roots.each do |root_id, (whole0, submit, tree)|
-      next if root_id.in?(patch)
-
-      whole1 = Part.merge(tree, whole0)
-      next if whole0 == whole1
-
-      patch = patch.assoc(root_id, submit.call(whole1))
-    end
-
-    patch
+    pipe(patch, Part.absorb(forest), Part.merge(forest))
   end
 
   private def step(clf : D7::Classifier, circuit : Term) : Slice(Term)

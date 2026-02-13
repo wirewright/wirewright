@@ -4250,6 +4250,36 @@
       (cell @a-view))
     end)
 
+  ;; Part with multiple captures
+  (d7
+    (frame
+      (cell @root (+ 1 2))
+      (part (@root @a) (+ a_ b_))
+      (part (@root @b) (+ a_ b_))
+      (backsys @a  ±n <> {n: ^(+ n 1)})
+      (backsys @b  ±n <> {n: ^(* n 2)}))
+    (frame
+      (cell @root (+ 2 4))
+      (part (@root @a) (+ a_ b_))
+      (part (@root @b) (+ a_ b_))
+      (backsys @a  ±n <> {n: ^(+ n 1)})
+      (backsys @b  ±n <> {n: ^(* n 2)}))
+    (frame
+      (cell @root (+ 3 8))
+      (part (@root @a) (+ a_ b_))
+      (part (@root @b) (+ a_ b_))
+      (backsys @a  ±n <> {n: ^(+ n 1)})
+      (backsys @b  ±n <> {n: ^(* n 2)})))
+    ;; ...
+
+  ;; Part with unsupported capture
+  (d7
+    (frame
+      (cell @root x_number)
+      (part (@root @a) (%symbol blank a_ _))
+      (backsys @a  N←x <> {N: y}))
+    end)
+
   ;; Integration with tspace
   (d7
     (frame

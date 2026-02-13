@@ -30,10 +30,9 @@ module Ww::D7
     # :nodoc:
     def initialize
       @node_terms = [] of Term
+      @head_index = {} of Term => Pf::USet32
       @node_addrs = [] of NodeAddr
-
       @node_scopes = [] of NodeScope
-
       # TODO: I think we can actually try storing this in the good old
       # array of arrays or something along those lines (aka edge array;
       # for graphs it's a set of pairs and for hypergraphs it's a set
@@ -50,7 +49,8 @@ module Ww::D7
 
     def add(addr : NodeAddr, scope : NodeScope, node : Term, edges : Enumerable(T), & : T -> AbsEdge) : Nil forall T
       node_id = @node_terms.size.to_u32
-
+      node_head = node[0]
+      @head_index[node_head] = (@head_index[node_head]? || Pf::USet32[]).add(node_id)
       @node_terms << node
       @node_addrs << addr
       @node_scopes << scope
@@ -67,8 +67,17 @@ module Ww::D7
       end
     end
 
-    def replace(node_id : NodeId, term : Term, & : AbsEdge -> Bool) : Nil
-      @node_terms[node_id] = term
+    def replace(node_id : NodeId, term1 : Term, & : AbsEdge -> Bool) : Nil
+      term0 = @node_terms[node_id]
+      @node_terms[node_id] = term1
+
+      head0 = term0[0]
+      head1 = term1[0]
+      unless head0 == head1
+        @head_index[head0] = @head_index[head0].delete(node_id)
+        @head_index[head1] = (@head_index[head1]? || Pf::USet32[])
+      end
+
       return unless edges = @node_edges[node_id]?
 
       edges.select! do |edge|
@@ -107,6 +116,26 @@ module Ww::D7
     def each_node(& : Node ->) : Nil
       @node_terms.each_with_index do |node, id|
         yield Node.new(NodeId.new(id), node)
+      end
+    end
+
+    def has_head?(head : Term) : Bool
+      @head_index.has_key?(head)
+    end
+
+    def each_node_with_head(& : Node ->) : Nil
+      @head_index.each do |head, bucket|
+        bucket.each do |node_id|
+          yield Node.new(node_id, @node_terms[node_id]), head
+        end
+      end
+    end
+
+    def each_node_with_head(head : Term, & : Node ->) : Nil
+      return unless bucket = @head_index[head]?
+
+      bucket.each do |node_id|
+        yield Node.new(node_id, @node_terms[node_id]), head
       end
     end
 
