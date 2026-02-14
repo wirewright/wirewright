@@ -293,6 +293,53 @@ module Ww::Rack
 
         D7.patch(dst, {2, instance})
       end
+
+      rule(<<-WWML) do |dev, src, ref, dst|
+      [view (srcs←((%past @_ min: 1)) pattern_ (@ref_ @dst_)) template_] dev
+        -> (many srcs src) [cell @src_ value_] {name: src, min: 0}
+        -> (one ref) [cell @ref_ _?] {name: ref}
+        -> (one dst) [cell @dst_ _?] {name: dst}
+      WWML
+        src_edges, pattern, template = D7.fetch(dev, :srcs, :pattern, :template)
+        if src.size < src_edges.size
+          # Less edges than we require. This means the view is invalid now
+          # now since some source cells have disappeared. So we empty the dst cell.
+          next D7.patches(D7.patch(ref, {2, nil}), D7.patch(dst, {2, nil}))
+        end
+
+        assert src.size == src_edges.size
+
+        # Fetch src values.
+        permutation = D7.permutation(src, :src, goal: src_edges.items)
+
+        src_values = Term::Dict.build do |commit|
+          permutation.each do |index|
+            commit << src[index].env[:value]
+          end
+        end
+
+        matchee = Term.of(src_values)
+        unless env = M1.match?(pattern, matchee)
+          # Pattern mismatch. Clear the dst cell: the view is invalid.
+          next D7.patches(D7.patch(ref, {2, nil}), D7.patch(dst, {2, nil}))
+        end
+
+        expansion, _ = Alloy.render0(env, template, severity: :quiet)
+        if expansion.is_a?(Alloy::Err)
+          # Alloy error. Clear the dst cell: the view is invalid.
+          next D7.patches(D7.patch(ref, {2, nil}), D7.patch(dst, {2, nil}))
+        end
+
+        unless expansion.is_a?(Alloy::Splice) && expansion.offspring.empty?
+          instance = Alloy.collapse(expansion)
+        end
+
+        next if instance == D7.node(ref).term[2]?
+
+        # instance : Term?
+
+        D7.patches(D7.patch(ref, {2, instance}), D7.patch(dst, {2, instance}))
+      end
     end
   end
 end

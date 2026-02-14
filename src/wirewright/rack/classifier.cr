@@ -298,6 +298,18 @@ module Ww::Rack
         D7.gnd(node, edges)
       end
 
+      matchpi %{[view (@src_ pattern_ dst←(@ref_ @view_)) template_]} do
+        D7.gnd(node, src, ref, view, defn: Term.of(:view, { {src}, {pattern}, dst }, template))
+      end
+
+      matchpi %{[view (srcs←((%past @_ min: 1)) _ (@ref_ @dst_)) _]} do
+        edges = [] of Term
+        edges.concat(srcs.items)
+        edges << ref << dst
+
+        D7.gnd(node, edges)
+      end
+
       # Chan sensor
       matchpi %{[sensor (_ _ @u_) _]} do
         D7.gnd(node, u)

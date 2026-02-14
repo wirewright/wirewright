@@ -2379,6 +2379,174 @@
         (cell @y "Samantha")))
     end))
 
+;; View with state
+(group
+  (d7
+    ;; Appeared
+    (frame
+      (cell @x 0)
+      (view (@x ±x (@x0 @x1)) ^x)
+      (cell @x0)
+      (cell @x1)
+      (backsys @x1  ±n <> {n: ^(+ n 1)}))
+    (frame
+      (cell @x 0)
+      (view (@x ±x (@x0 @x1)) ^x)
+      (cell @x0 0)
+      (cell @x1 0)
+      (backsys @x1  ±n <> {n: ^(+ n 1)}))
+    (frame
+      (cell @x 0)
+      (view (@x ±x (@x0 @x1)) ^x)
+      (cell @x0 0)
+      (cell @x1 1)
+      (backsys @x1  ±n <> {n: ^(+ n 1)}))
+    (frame
+      (cell @x 0)
+      (view (@x ±x (@x0 @x1)) ^x)
+      (cell @x0 0)
+      (cell @x1 2)
+      (backsys @x1  ±n <> {n: ^(+ n 1)})))
+    ;; ...
+
+  ;; Disappeared
+  (d7
+    (frame
+      (cell @x 0)
+      (discard @x)
+      (view (@x ±x (@x0 @x1)) ^x)
+      (cell @x0 0)
+      (cell @x1 10)
+      (backsys @x1  ±n <> {n: ^(+ n 1)}))
+    (frame
+      (cell @x)
+      (discard @x)
+      (view (@x ±x (@x0 @x1)) ^x)
+      (cell @x0 0)
+      (cell @x1 11)
+      (backsys @x1  ±n <> {n: ^(+ n 1)}))
+    (frame
+      (cell @x)
+      (discard @x)
+      (view (@x ±x (@x0 @x1)) ^x)
+      (cell @x0)
+      (cell @x1)
+      (backsys @x1  ±n <> {n: ^(+ n 1)}))
+    end)
+
+  ;; Changed
+  (d7
+    (frame
+      (cell @x 5)
+      (view (@x ±x (@x0 @x1)) ^x)
+      (cell @x0 0)
+      (cell @x1 10)
+      (backsys @x1  ±n <> {n: ^(+ n 1)}))
+    (frame
+      (cell @x 5)
+      (view (@x ±x (@x0 @x1)) ^x)
+      (cell @x0 5)
+      (cell @x1 5)
+      (backsys @x1  ±n <> {n: ^(+ n 1)}))
+    (frame
+      (cell @x 5)
+      (view (@x ±x (@x0 @x1)) ^x)
+      (cell @x0 5)
+      (cell @x1 6)
+      (backsys @x1  ±n <> {n: ^(+ n 1)}))
+    (frame
+      (cell @x 5)
+      (view (@x ±x (@x0 @x1)) ^x)
+      (cell @x0 5)
+      (cell @x1 7)
+      (backsys @x1  ±n <> {n: ^(+ n 1)})))
+    ;; ...
+
+  ;; Many sources through mismatch
+  (d7
+    (frame
+      (cell @x 0)
+      (cell @y 5)
+      (cell @z 10)
+      (backsys @x  ±n <> {n: ^(+ n 1)})
+      (backsys @y  ±n <> {n: ^(+ n 1)})
+      (view ((@x @y @z) (x←(%any° (%number 3 <= _ <= 5) (%number 7 <= _ <= 11)) y←(%not 14) z_) (@state @view))
+        ^z)
+      (cell @state)
+      (cell @view)
+      (backsys @view ±n <> {n: ^(* n 2)}))
+    (frame pattern: true
+      ⟨& (cell @x 1)
+         (cell @y 6)
+         (cell @state)
+         (cell @view)⟩)
+    (frame pattern: true
+      ⟨& (cell @x 2)
+         (cell @y 7)
+         (cell @state)
+         (cell @view)⟩)
+    (frame pattern: true
+      ⟨& (cell @x 3)
+         (cell @y 8)
+         (cell @state)
+         (cell @view)⟩)
+    (frame pattern: true
+      ⟨& (cell @x 4)
+         (cell @y 9)
+         (cell @state 10)
+         (cell @view 10)⟩)
+    (frame pattern: true
+      ⟨& (cell @x 5)
+         (cell @y 10)
+         (cell @state 10)
+         (cell @view 20)⟩)
+    (frame pattern: true
+      ⟨& (cell @x 6)
+         (cell @y 11)
+         (cell @state 10)
+         (cell @view 40)⟩)
+    (frame pattern: true
+      ⟨& (cell @x 7)
+         (cell @y 12)
+         (cell @state)
+         (cell @view)⟩)
+    (frame pattern: true
+      ⟨& (cell @x 8)
+         (cell @y 13)
+         (cell @state 10)
+         (cell @view 10)⟩)
+    (frame pattern: true
+      ⟨& (cell @x 9)
+         (cell @y 14)
+         (cell @state 10)
+         (cell @view 20)⟩)
+    (frame pattern: true
+      ⟨& (cell @x 10)
+         (cell @y 15)
+         (cell @state)
+         (cell @view)⟩)
+    (frame pattern: true
+      ⟨& (cell @x 11)
+         (cell @y 16)
+         (cell @state 10)
+         (cell @view 10)⟩)
+    (frame pattern: true
+      ⟨& (cell @x 12)
+         (cell @y 17)
+         (cell @state 10)
+         (cell @view 20)⟩)
+    (frame pattern: true
+      ⟨& (cell @x 13)
+         (cell @y 18)
+         (cell @state)
+         (cell @view)⟩)
+    (frame pattern: true
+      ⟨& (cell @x 14)
+         (cell @y 19)
+         (cell @state)
+         (cell @view)⟩)))
+    ;; ...
+
 ;; Termspace
 (group
   ;; Sensor-appearance chan 1:1
