@@ -263,23 +263,24 @@ module Testtool
         end
       end
 
-      # |@ testtool.decl.d7
+      # |@ testtool.decl.rack
       #
       # |@pattern
-      # (d7 frames_*)
+      # (rack frames_*)
       #
-      # |@key frames d7.circuit
-      # The expected time-sequence of D7 circuits. The first circuit acts as
+      # |@key frames rack.circuit
+      # The expected time-sequence of circuits. The first circuit acts as
       # a "seed". The time-sequence may end with `end` to make sure rewriting
       # terminates.
       #
       # |@block
-      # Use `d7` to introduce a D7/Rack time-sequence test.
-      matchpi %{(d7 (frame _*) _*)} do
+      # Use `rack` to introduce a Rack time-sequence test. This also tests D7,
+      # which is used to implement Rack.
+      matchpi %{(rack (frame _*) _*)} do
         seed = Term.of(decl[1].items.move(1))
         frames = decl.items.move(2)
 
-        test = D7test.new(seed, frames.to_a)
+        test = RackTest.new(seed, frames.to_a)
         annotated(assertions(test), decl, srcmap)
       end
 

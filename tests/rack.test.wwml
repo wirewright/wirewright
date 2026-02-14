@@ -1,6 +1,6 @@
 ;; Feed
 (group
-  (d7
+  (rack
     (frame
       (cell @a 100)
       (cell @b)
@@ -12,7 +12,7 @@
     end)
 
   ;; Inhibitor absent
-  (d7
+  (rack
     (frame
       (cell @a 100)
       (cell @b)
@@ -24,7 +24,7 @@
     end)
 
   ;; Inhibitor empty
-  (d7
+  (rack
     (frame
       (cell @a 100)
       (cell @b)
@@ -38,7 +38,7 @@
     end)
 
   ;; Inhibitor present
-  (d7
+  (rack
     (frame
       (cell @a 100)
       (cell @b)
@@ -47,7 +47,7 @@
     end)
 
   ;; Append
-  (d7
+  (rack
     (frame
       (cell @a 100)
       (cell @b (a b c))
@@ -59,7 +59,7 @@
     end)
 
   ;; Prepend
-  (d7
+  (rack
     (frame
       (cell @a 100)
       (cell @b (a b c))
@@ -71,7 +71,7 @@
     end)
 
   ;; Atop (absent)
-  (d7
+  (rack
     (frame
       (cell @a 100)
       (cell @b)
@@ -83,7 +83,7 @@
     end)
 
   ;; Atop (present)
-  (d7
+  (rack
     (frame
       (cell @a 100)
       (cell @b qux)
@@ -95,7 +95,7 @@
     end)
 
   ;; Atop...front
-  (d7
+  (rack
     (frame
       (cell @a 100)
       (cell @b (a b c))
@@ -107,7 +107,7 @@
     end)
 
   ;; Atop...back
-  (d7
+  (rack
     (frame
       (cell @a 100)
       (cell @b (a b c))
@@ -119,7 +119,7 @@
     end)
 
   ;; Dequeue
-  (d7
+  (rack
     (frame
       (cell @a (a b c))
       (cell @b)
@@ -131,7 +131,7 @@
     end)
 
   ;; Pop
-  (d7
+  (rack
     (frame
       (cell @a (a b c))
       (cell @b)
@@ -143,7 +143,7 @@
     end)
 
   ;; Dequeue + pop
-  (d7
+  (rack
     (frame
       (cell @a (a b c))
       (cell @b)
@@ -182,7 +182,7 @@
     ;; ...
 
   ;; Pop + Append
-  (d7
+  (rack
     (frame
       (cell @a (a b c))
       (feed (@a back) (@b back))
@@ -202,7 +202,7 @@
     end)
 
   ;; Enqueue + Append
-  (d7
+  (rack
     (frame
       (cell @a (a b c))
       (feed (@a front) (@b back))
@@ -222,7 +222,7 @@
     end)
 
   ;; Copy ... front
-  (d7
+  (rack
     (frame
       (cell @a (a b c))
       (feed (copy (@a front)) @b)
@@ -234,7 +234,7 @@
     end)
 
   ;; Copy ... back
-  (d7
+  (rack
     (frame
       (cell @a (a b c))
       (feed (copy (@a back)) @b)
@@ -246,7 +246,7 @@
     end)
 
   ;; Copy back ... front
-  (d7
+  (rack
     (frame
       (cell @a (a b c))
       (feed (copy (@a back)) (@b front))
@@ -266,7 +266,7 @@
     ;; ...
 
   ;; Copy ... back ... front observes, back ... front moves
-  (d7
+  (rack
     (frame
       (cell @a (a b c))
       (feed (@a back) (@c front))
@@ -294,7 +294,7 @@
     end)
 
   ;; Aggregate (basic)
-  (d7
+  (rack
     (frame
       (cell @a 100)
       (cell @b (a b c))
@@ -310,7 +310,7 @@
     end)
 
   ;; Aggregate ... back (basic)
-  (d7
+  (rack
     (frame
       (cell @a 100)
       (cell @b (a b c))
@@ -326,7 +326,7 @@
     end)
 
   ;; Aggregate ... back (queue)
-  (d7
+  (rack
     (frame
       (queue (@a @a') (100 200 300 400))
       (cell @b (a b c))
@@ -354,7 +354,7 @@
     end)
 
   ;; Aggregate: atop ... back
-  (d7
+  (rack
     (frame
       (cell @a 100)
       (cell @b (a b c))
@@ -370,7 +370,7 @@
     end)
 
   ;; Broadcast (basic)
-  (d7
+  (rack
     (frame
       (cell @a (200 100 300))
       (feed @a (@x @y @z))
@@ -386,7 +386,7 @@
     end)
 
   ;; Aggregate -> broadcast osc
-  (d7
+  (rack
     (frame
       (cell @a 100)
       (cell @b (a b c))
@@ -411,7 +411,7 @@
     ;; ...
 
   ;; Parallel transfer
-  (d7
+  (rack
     (frame
       (cell @a "foo")
       (cell @b "bar")
@@ -431,7 +431,7 @@
     end)
 
   ;; Feed should not work if duplicate input cells exist
-  (d7
+  (rack
     (frame
       (cell @x 100)
       (cell @x 200)
@@ -440,7 +440,7 @@
     end)
 
   ;; Feed should not work if duplicate output cells exist
-  (d7
+  (rack
     (frame
       (cell @x 100)
       (feed @x @y)
@@ -449,7 +449,7 @@
     end)
 
   ;; Feed should respect user-order
-  (d7
+  (rack
     (frame
       (cell @d 100)
       (cell @a 400)
@@ -476,7 +476,7 @@
       (feed @x (@a @b @c @d))))
     ;; ...
 
-  (d7
+  (rack
     (frame
       (cell @d 100)
       (cell @a 400)
@@ -506,7 +506,7 @@
   ;; Conflicts like this one rely on a lexicographic comparison of participants
   ;; deep in the guts of D7 to remain deterministic. The comparison is a method of
   ;; last resort when it comes to sorting solutions. Here we exercise it.
-  (d7
+  (rack
     (frame
       (cell @x a)
       (cell @y b)
@@ -545,7 +545,7 @@
     end))
 
 ;; Single tick parallelism.
-(d7
+(rack
   (frame
     (module {}
       (cell @x 0)
@@ -567,7 +567,7 @@
   end)
 
 ;; Waterfall.
-(d7
+(rack
   (frame
     (cell @0 0)
     (cell @1)
@@ -597,7 +597,7 @@
 ;; Waterfall with multiple items. Note how we don't pick conflicting rewrites
 ;; in the same step. This is why you see the "hole" between items: that cell
 ;; is "expended" in that tick because an item was moved FROM it.
-(d7
+(rack
   (frame
     (cell @0 0)
     (cell @1 1)
@@ -664,7 +664,7 @@
   end)
 
 ;; Oscillation
-(d7
+(rack
   (frame
     (cell @0 100)
     (feed @0 @1 @0)
@@ -684,7 +684,7 @@
   ;; ...
 
 ;; Group
-(d7
+(rack
   (frame
     (group
       (cell @a "foo")
@@ -705,7 +705,7 @@
 
 ;; Module
 (group
-  (d7
+  (rack
     (frame
       (cell @a)
       (module {@b: @a}
@@ -718,7 +718,7 @@
         (feed @a @b)))
     end)
 
-  (d7
+  (rack
     (frame
       (module {:@x}
         (cell @x 100)
@@ -733,7 +733,7 @@
       (cell @y 100))
     end)
 
-  (d7
+  (rack
     (frame
       (module {:@x}
         (cell @x 100)
@@ -749,7 +749,7 @@
     end))
 
 ;; locals
-(d7
+(rack
   (frame
     (cell @x 100)
     (cell @y)
@@ -782,7 +782,7 @@
 ;; device
 (group
   ;; Basic
-  (d7
+  (rack
     (frame
       (cell @x "Hello World")
       (device (@x (counter 0))
@@ -798,7 +798,7 @@
     ;; ...
 
   ;; Fully isolated scope
-  (d7
+  (rack
     (frame
       (cell @x 100)
       (feed @x @y)
@@ -807,7 +807,7 @@
     end)
 
   ;; Check how the surface looks from the inside
-  (d7
+  (rack
     (frame
       (device (@surface (counter 0))
         (backsys @surface  (counter ±x) <> {x: ^(+ x 1)})
@@ -838,7 +838,7 @@
     ;; ...
 
   ;; Removal and reinsertion
-  (d7
+  (rack
     (frame
       (device (@dst)
         (cell @src (counter 0))
@@ -856,7 +856,7 @@
 ;; device surface and control
 (group
   ;; Basic
-  (d7
+  (rack
     (frame
       (device (@surface (counter 0))
         (view (@surface (counter ±n) @view)
@@ -876,14 +876,14 @@
     ;; ...
 
   ;; No surface
-  (d7
+  (rack
     (frame
       (control @count (counter ±count))
       (backsys @count  ±n <> {n: ^(+ n 1)}))
     end)
 
   ;; More than one surface
-  (d7
+  (rack
     (frame
       (device (@surface (counter 0))
         (view (@surface (counter ±n) @view)
@@ -901,7 +901,7 @@
     end)
 
   ;; Edge not found (shouldn't crash or anything)
-  (d7
+  (rack
     (frame
       (device (@surface (counter 0)))
       (control @count (counter ±n))
@@ -909,7 +909,7 @@
     end)
 
   ;; More than one edge
-  (d7
+  (rack
     (frame
       (device (@surface (counter "My counter" 0))
         (view (@surface (counter _ ±n) @view)
@@ -931,7 +931,7 @@
   ;; Scoping
 
   ;; This shouldn't see anything yet.
-  (d7
+  (rack
     (frame
       (module {}
         (device (@surface (counter 0))
@@ -951,7 +951,7 @@
     end)
 
   ;; ... but controls embedded in those modules should:
-  (d7
+  (rack
     (frame
       (module {}
         (device (@surface (counter 0))
@@ -982,7 +982,7 @@
   ;; and the counter shows a count. We want the button to increment the count.
   ;; To make this a classic (albeit symbolic, at least *here*) counter example
   ;; let's say we'll also have another button which decrements the count.
-  (d7
+  (rack
     (frame
       (Button caption_string)
         => (device (@surface (button ^caption ()))
@@ -1055,7 +1055,7 @@
 ;; Queue
 (group
   ;; Basic
-  (d7
+  (rack
     (frame
       (cell @0 300)
       (cell @1 200)
@@ -1133,7 +1133,7 @@
   ;; Queue should not enqueue if destination is occupied -- this is the basic
   ;; principle behind emergent backpressure (something similar can be said about
   ;; feed + cell).
-  (d7
+  (rack
     (frame
       (cell @0 x)
       (cell @1 y)
@@ -1165,7 +1165,7 @@
     end)
 
   ;; Queue circulate one value.
-  (d7
+  (rack
     (frame
       (queue (@front @back) (100))
       (feed @front @mid)
@@ -1218,7 +1218,7 @@
     ;; ...
 
   ;; Queue circulate many values.
-  (d7
+  (rack
     (frame
       (queue (@front @back) (100 200 300))
       (feed @front @mid)
@@ -1278,12 +1278,12 @@
     ;; ...
 
   ;; Feedback deactivates since input & output collide
-  (d7
+  (rack
     (frame (queue (@a @a) (100 200 300)))
     end)
 
   ;; max: N
-  (d7
+  (rack
     (frame
       (queue (@front0 @back0) (100 200 300 400 500 600))
       (feed @front0 @back)
@@ -1303,7 +1303,7 @@
     end)
 
   ;; queue min: N
-  (d7
+  (rack
     (frame
       (queue (@front0 @back0) (1 2 3 4 5))
       (feed @front0 @back1)
@@ -1342,7 +1342,7 @@
     end)
 
   ;; queue max: 0
-  (d7
+  (rack
     (frame
       (queue (@front0 @back0) (100 200 300 400 500 600))
       (feed @front0 @back)
@@ -1350,7 +1350,7 @@
     end)
 
   ;; queue max: 3.14
-  (d7
+  (rack
     (frame
       (queue (@front0 @back0) (100 200 300 400 500 600))
       (feed @front0 @back)
@@ -1358,7 +1358,7 @@
     end)
 
   ;; queue min: N max: M [cascade, backpressure]
-  (d7
+  (rack
     (frame
       (cell (@in [in_ _*]) (a b c d e f g h id: in))
       (feed @in @x')
@@ -1476,7 +1476,7 @@
 ;; Transfer
 (group
   ;; Basic
-  (d7
+  (rack
     (frame
       (cell @x 1)
       (cell @y 2)
@@ -1490,7 +1490,7 @@
     end)
 
   ;; Inhibitor absent
-  (d7
+  (rack
     (frame
       (cell @x 1)
       (cell @y 2)
@@ -1504,7 +1504,7 @@
     end)
 
   ;; Inhibitor empty
-  (d7
+  (rack
     (frame
       (cell @x 1)
       (cell @y 2)
@@ -1520,7 +1520,7 @@
     end)
 
   ;; Inhibitor present
-  (d7
+  (rack
     (frame
       (cell @x 1)
       (cell @y 2)
@@ -1529,7 +1529,7 @@
       (cell @s))
     end)
 
-  (d7
+  (rack
     (frame
       (cell @x 1)
       (cell @y 2)
@@ -1577,7 +1577,7 @@
 ;; Backsys
 (group
   ;; Basic
-  (d7
+  (rack
     (frame
       (cell @world (a b c))
       (backsys @world
@@ -1597,14 +1597,14 @@
     ;; ...
 
   ;; Source cell empty must deactivate backsys.
-  (d7
+  (rack
     (frame
       (cell @x 100)
       (cell @y)
       (backsys (@x @y)
         (x_ y_) <> {y: ^x, x: ^y}))
     end)
-  (d7
+  (rack
     (frame
       (cell @x 100)
       (cell @y 200)
@@ -1618,7 +1618,7 @@
     ;; ...
 
   ;; Write to an absent resource cell is a noop
-  (d7
+  (rack
     (frame
       (cell @x 100)
       (backsys {@:x @:y}
@@ -1626,7 +1626,7 @@
     end)
 
   ;; Increment one
-  (d7
+  (rack
     (frame
       (cell @x 100)
       (backsys @x
@@ -1642,7 +1642,7 @@
     ;; ...
 
   ;; Increment many, same rule
-  (d7
+  (rack
     (frame
       (cell @x 100)
       (cell @y 200)
@@ -1661,7 +1661,7 @@
     ;; ...
 
   ;; Increment many, different rules
-  (d7
+  (rack
     (frame
       (cell @x 100)
       (cell @y 200)
@@ -1683,7 +1683,7 @@
     ;; ...
 
   ;; Increment parts of one, same rule
-  (d7
+  (rack
     (frame
       (cell @x (100 200))
       (backsys @x
@@ -1699,7 +1699,7 @@
     ;; ...
 
   ;; Increment parts of one, different rules
-  (d7
+  (rack
     (frame
       (cell @x (100 200))
       (backsys @x
@@ -1718,7 +1718,7 @@
     ;; ...
 
   ;; Increment-swap parts of many, same rule
-  (d7
+  (rack
     (frame
       (cell @x ((100) 200))
       (cell @y ((300) 400))
@@ -1737,7 +1737,7 @@
     ;; ...
 
   ;; Increment-swap parts of many, different rules
-  (d7
+  (rack
     (frame
       (cell @x ((100) 200))
       (cell @y ((300) 400))
@@ -1758,7 +1758,7 @@
         (((±N) _) (_ ±M)) <> {M: ^(+ N 1)})))
 
   ;; Simple conflict
-  (d7
+  (rack
     (frame
       (cell @x ((100) 200))
       (backsys (@x)
@@ -1772,7 +1772,7 @@
     end)
 
   ;; Basic insertion
-  (d7
+  (rack
     (frame
       (cell @x (a b c))
       (backsys (@x)
@@ -1794,7 +1794,7 @@
     ;; ...
 
   ;; Basic deletion
-  (d7
+  (rack
     ;; First rule marks even
     ;; Second rule removes odd
     (frame
@@ -1809,7 +1809,7 @@
         ⟨n←(%pipe (mod 2) (%not 0))⟩° <> {(n): ()}))
     end)
 
-  (d7
+  (rack
     ;; First rule removes even
     ;; Second rule removes odd
     (frame
@@ -1825,7 +1825,7 @@
     end)
 
   ;; With resource
-  (d7
+  (rack
     (frame
       (cell @world (a b c))
       (queue (@x @x') (100 200 300))
@@ -1849,7 +1849,7 @@
     end)
 
   ;; With many resources, initially unset: "peel from front and back"
-  (d7
+  (rack
     (frame
       (cell @world (a b c d e f))
       (cell @x)
@@ -1917,7 +1917,7 @@
 
 
   ;; backsys: insertions and deletions
-  (d7
+  (rack
     ;; l's move left
     ;; r's move right
     ;; . represents an empty spot
@@ -1969,7 +1969,7 @@
 
   ;; backsys: pyramidal (bottom-up-bottom, presentational, triangular, whatever)
   ;; feedback essentials with circuit
-  (d7
+  (rack
     (frame
       (circuit @x
         (group
@@ -2016,7 +2016,7 @@
 ;; Circuit
 (group
   ;; BUG: Circuits at the same depth must not see each other (proper scoping)
-  (d7
+  (rack
     (frame
       (circuit @0 (cell @x 100))
       (circuit @1 (cell @y))
@@ -2024,7 +2024,7 @@
     end)
 
   ;; Basic
-  (d7
+  (rack
     (frame
       (cell @a
         ((cell @x 0)
@@ -2064,7 +2064,7 @@
     end)
 
   ;; An observer can make decisions based on its children and feed them back.
-  (d7
+  (rack
     (frame
       (circuit @x
         (cell @src 100)
@@ -2090,7 +2090,7 @@
     ;; ...
 
   ;; Nested (observed) nodes are evaluated once per tick.
-  (d7
+  (rack
     (frame
       (delay 3 "Foo")
       (circuit @x
@@ -2135,7 +2135,7 @@
           "boo"))))
 
   ;; Ditto
-  (d7
+  (rack
     (frame
       (delay 3 "Foo")
       (cell @x-view)
@@ -2215,7 +2215,7 @@
 ;; Filtered circuit
 (group
   ;; Make sure setting works, also not susceptible to injection.
-  (d7
+  (rack
     (frame
       (circuit (@snd (fst_ snd_ _*))
         1 2 3 4 5 6)
@@ -2229,7 +2229,7 @@
     end)
 
   ;; Basic
-  (d7
+  (rack
     (frame
       (circuit (@x ⟪(cell @_ `x ⍊ x)⟫)
         (group
@@ -2252,7 +2252,7 @@
     end)
 
   ;; Queue using filtered circuit
-  (d7
+  (rack
     (frame
       (circuit (@front (front_ _*))
         a b c)
@@ -2319,7 +2319,7 @@
 ;; Filtered cell
 (group
   ;; Basic
-  (d7
+  (rack
     (frame
       (cell (@snd (_ snd_ _*)) (1 2 3 4 5 6))
       (feed @snd @back)
@@ -2347,7 +2347,7 @@
     end)
 
   ;; Make sure setting works, also not susceptible to injection.
-  (d7
+  (rack
     (frame
       (cell (@snd (fst_ snd_ _*)) (1 2 3 4 5 6))
       (cell @x qux)
@@ -2360,7 +2360,7 @@
 
 ;; Frag
 (group
-  (d7
+  (rack
     (frame
       (cell @x 0)
       (frag @bridge-dst)
@@ -2382,7 +2382,7 @@
     end)
 
   ;; Legacy: like circuit but write-only and embeds, doesn't isolate.
-  (d7
+  (rack
     (frame
       (cell @x (delay 3 (feed @a @b)))
       (feed @x @y)
@@ -2424,7 +2424,7 @@
 ;; View
 (group
   ;; Many sources, dst pattern `_`
-  (d7
+  (rack
     (frame
       (cell @x 1)
       (queue (@y @y') (2 3 4))
@@ -2452,7 +2452,7 @@
     end)
 
   ;; Ditto, dst unset
-  (d7
+  (rack
     (frame
       (cell @x 1)
       (cell @y 2)
@@ -2468,7 +2468,7 @@
     end)
 
   ;; No dst pattern
-  (d7
+  (rack
     (frame
       (cell @x 2)
       (queue (@y @y') (2 3 4))
@@ -2528,7 +2528,7 @@
     ;; ...
 
   ;; Shorthand variant for one input, no dst pattern
-  (d7
+  (rack
     (frame
       (queue (@x @x') (1 2 3))
       (discard @x)
@@ -2557,7 +2557,7 @@
     end)
 
   ;; Dst pattern constraint spans across to the source pattern
-  (d7
+  (rack
     (frame
       (module {}
         (cell @x x)
@@ -2580,7 +2580,7 @@
 
 ;; View with state
 (group
-  (d7
+  (rack
     ;; Appeared
     (frame
       (cell @x 0)
@@ -2609,7 +2609,7 @@
     ;; ...
 
   ;; Disappeared
-  (d7
+  (rack
     (frame
       (cell @x 0)
       (discard @x)
@@ -2634,7 +2634,7 @@
     end)
 
   ;; Changed
-  (d7
+  (rack
     (frame
       (cell @x 5)
       (view (@x ±x (@x0 @x1)) ^x)
@@ -2662,7 +2662,7 @@
     ;; ...
 
   ;; Many sources through mismatch
-  (d7
+  (rack
     (frame
       (cell @x 0)
       (cell @y 5)
@@ -2749,7 +2749,7 @@
 ;; Termspace
 (group
   ;; Sensor-appearance chan 1:1
-  (d7
+  (rack
     (frame
       (module {}
         (sensor (local x_ @val) ^x)
@@ -2777,7 +2777,7 @@
     end)
 
   ;; Sensor-appearance chan M:1
-  (d7
+  (rack
     (frame
       (module {}
         (sensor (local x_ @val) ^x)
@@ -2817,7 +2817,7 @@
      end)
 
   ;; Sensor-appearance chan all mismatch
-  (d7
+  (rack
     (frame
       (module {}
         (sensor (local ±n @val) ^n)
@@ -2831,7 +2831,7 @@
     end)
 
   ;; Sensor-appearance chan some mismatch
-  (d7
+  (rack
     (frame
       (module {}
         (sensor (local ±n @val) ^n)
@@ -2853,7 +2853,7 @@
         (appearance local @val)
         (cell @val "Bob")))
     end)
-  (d7
+  (rack
     (frame
       (module {}
         (sensor (local ±n @val) ^n)
@@ -2877,7 +2877,7 @@
     end)
 
   ;; Sensor-appearance chan parallel match
-  (d7
+  (rack
     (frame
       (module {}
         (sensor (local ±n @val) ^n)
@@ -2907,7 +2907,7 @@
     end)
 
   ;; Sensor-appearance chan conditional sense
-  (d7
+  (rack
     (frame
       (module {}
         (cell @val 100)
@@ -2965,7 +2965,7 @@
     end)
 
   ;; Sensor-appearance chan conditional receive
-  (d7
+  (rack
     (frame
       (module {}
         (delay 2 (cell @val 100))
@@ -3053,7 +3053,7 @@
     ;; ...
 
   ;; Sensor-appearance chan queues sensor
-  (d7
+  (rack
     (frame
       (module {}
         (queue (@front @back) (1 2 3 4 5))
@@ -3145,7 +3145,7 @@
     end)
 
   ;; Sensor-appearance chan queues sensor max
-  (d7
+  (rack
     (frame
       (module {}
         (queue (@front @back) (1 2 3 4 5 6))
@@ -3277,7 +3277,7 @@
     end)
 
   ;; Sensor-appearance timing with circuits.
-  (d7
+  (rack
     (frame
       (circuit @f
         (sensor (local x_ @v) ^x)
@@ -3313,7 +3313,7 @@
     end)
 
   ;; Fused chan sensor-cell and appearance-cell
-  (d7
+  (rack
     (frame
       ((appearance cell) (local @x) 100)
       ((sensor cell) (local y_ @y)))
@@ -3323,7 +3323,7 @@
     end)
 
   ;; View sensor
-  (d7
+  (rack
     (frame
       ((appearance cell) (local @a) 100)
       ((appearance cell) (local @b) 200)
@@ -3375,7 +3375,7 @@
     end)
 
   ;; Fused view sensor-cell
-  (d7
+  (rack
     (frame
       ((appearance cell) (local @a) 100)
       ((appearance cell) (local @b) 200)
@@ -3421,7 +3421,7 @@
     end)
 
   ;; Removing all appearances with view sensor must clear its view.
-  (d7
+  (rack
     (frame
       ((sensor* cell) (local x_ @x))
       ((appearance cell) (local @a) 100)
@@ -3472,7 +3472,7 @@
     end)
 
   ;; Different local termspaces
-  (d7
+  (rack
     (frame
       ((sensor* cell) (a x_ @x))
       ((sensor* cell) (b y_ @y))
@@ -3488,7 +3488,7 @@
     end)
 
   ;; Dependent sensors and appearances
-  (d7
+  (rack
     (frame
       ((sensor* cell) (local even←(%pipe (mod 2) 0) @even))
       ((sensor* cell) (local odd←(%pipe (mod 2) (%not 0)) @odd))
@@ -3528,7 +3528,7 @@
     ;; ...
 
   ;; Independent sensors and appearances
-  (d7
+  (rack
     (frame
       (module {}
         ((sensor cell) (local (a ±x) @x))
@@ -3585,7 +3585,7 @@
 
   ;; Sensor chan must be confused by multiple matching appearances with
   ;; different values, doing nothing.
-  (d7
+  (rack
     (frame
       ((sensor cell) (local ±n @n))
       ((appearance cell) (local @x) 100)
@@ -3594,7 +3594,7 @@
     end)
 
   ;; ... but if they have the same value it must accept.
-  (d7
+  (rack
     (frame
       ((sensor cell) (local ±n @n))
       ((appearance cell) (local @x) 100)
@@ -3608,7 +3608,7 @@
     end)
 
   ;; View of N cells (ok)
-  (d7
+  (rack
     (frame
       (cell @x 100)
       (cell @y 200)
@@ -3622,7 +3622,7 @@
     end)
 
   ;; View of N cells (missing)
-  (d7
+  (rack
     (frame
       (cell @x 100)
       (cell @y)
@@ -3631,7 +3631,7 @@
     end)
 
   ;; View of N cells (delay, queue, mismatch)
-  (d7
+  (rack
     (frame
       (queue (@command @back) (greet welcome greet))
       (delay 2 (discard @command))
@@ -3691,7 +3691,7 @@
     end)
 
   ;; Toplevel Alloy errors should prevent consumption
-  (d7
+  (rack
     (frame
       (sensor (local x_ @x) ^x)
       (cell @x)
@@ -3709,7 +3709,7 @@
       (cell @z 100)
       ((appearance cell) (local @m)))
     end)
-  (d7
+  (rack
     (frame
       (sensor (local x_ @x) ^foo)
       (cell @x)
@@ -3723,7 +3723,7 @@
 ;; Elementary 1D movement circuit
 (group
   ;; Basic
-  (d7
+  (rack
     (frame
       (circuit @world
         .
@@ -3782,7 +3782,7 @@
     ;; ...
 
   ;; Multiple modules
-  (d7
+  (rack
     (frame
       (circuit @world
         .
@@ -3854,7 +3854,7 @@
     ;; ...
 
 ;; Elementary breakdown (regression test)
-(d7
+(rack
   (frame
     (cell @mouth
       (module {}
@@ -3910,7 +3910,7 @@
 ;; Handling of disjoint and non-disjoint writes to the same location.
 (group
   ;; Disjoint writes must all succeed.
-  (d7
+  (rack
     (frame
       (cell @x {"A": 100, "B": 200, "C": 300})
       (backsys @x
@@ -3942,7 +3942,7 @@
   ;; NOTE: Here we see the unconditional suppression of insertion which
   ;; is supposed to be a deterministic, but not exactly human-
   ;; comprehensible choice.
-  (d7
+  (rack
     (frame
       (cell @x (+ 1 2))
       (backsys @x  {¦ -qux_} <> {qux: true})
@@ -3963,7 +3963,7 @@
   ;; We can "fix" conflicts like these with explicit staging. Rack
   ;; won't be able to do anything about them on its own, because the
   ;; conflicts above are, in a sense, as "pure" as conflicts go.
-  (d7
+  (rack
     (frame
       (cell @x (+ 1 2))
       (backsys @x  {¦ -qux_} <> {qux: true})
@@ -3989,7 +3989,7 @@
 ;; part
 (group
   ;; Chain of length 1
-  (d7
+  (rack
     (frame
       (cell @top (qux (1 2) (3 4)))
       (part (@top @a) (qux (_ a_) _))
@@ -4003,7 +4003,7 @@
     end)
 
   ;; Chain of length 2
-  (d7
+  (rack
     (frame
       (cell @top (qux (1 2) (3 4)))
       (part (@top @a) (qux a_ _))
@@ -4023,7 +4023,7 @@
     end)
 
   ;; Chain of length 3
-  (d7
+  (rack
     (frame
       (cell @top (qux (1 {name: "Samantha"}) (3 4)))
       (part (@top @a) (qux a_ _))
@@ -4049,7 +4049,7 @@
     end)
 
   ;; Branching
-  (d7
+  (rack
     (frame
       (cell @root
         {xs: (1 2 3), y: 4, zs: ({a: 5, b: 6} {a: 7, b: 8}), responses: ()})
@@ -4082,7 +4082,7 @@
     end)
 
   ;; Loop
-  (d7
+  (rack
     (frame
       (cell @top (foo 0))
       (part (@top @a) (_ a_))
@@ -4104,7 +4104,7 @@
     end)
 
   ;; Loop with branch
-  (d7
+  (rack
     (frame
       (cell @top (foo 0))
       (part (@top @a) (_ a_))
@@ -4129,7 +4129,7 @@
     ;; ...
 
   ;; Loop with branches
-  (d7
+  (rack
     (frame
       (cell @top (foo (10 20)))
       (part (@top @a) (_ a_))
@@ -4160,7 +4160,7 @@
     ;; ...
 
   ;; Dyn mismatch manipulate
-  (d7
+  (rack
     (frame
       (cell @top (foo 0 0))
       (part (@top @a) (foo a←(%number 3 <= _ <= 7) _))
@@ -4185,7 +4185,7 @@
     end)
 
   ;; Basic
-  (d7
+  (rack
     (frame
       (cell @top (qux (1 2) (3 4)))
       (part (@top @a) (qux a_ _))
@@ -4213,7 +4213,7 @@
     ;; ...
 
   ;; Removal of item
-  (d7
+  (rack
     (frame
       (cell @top (qux (1 2 3) (4 5 6)))
       (part (@top @a) (qux a_ _))
@@ -4280,7 +4280,7 @@
     end)
 
   ;; Removal of pair
-  (d7
+  (rack
     (frame
       (cell @top (qux 3 x: 100 y: 200 z: 300))
       (part (@top @n) [qux n←(%number 1 < _ <= 3)])
@@ -4329,7 +4329,7 @@
   ;; because besides confusing *you*, it may also confuse the engine. What
   ;; we're *really* to test here is the latter; we're trying to make sure
   ;; the engine is *not* confused.
-  (d7
+  (rack
     (frame
       (queue (@mail @inbox) (a b c))
       (cell @top {name: "Samantha", mail: ()})
@@ -4357,7 +4357,7 @@
     end)
 
   ;; Scoping
-  (d7
+  (rack
     (frame
       (module {}
         (cell @top (qux (1 2) (3 4)))
@@ -4398,7 +4398,7 @@
         (part (@top @a) (qux (_ a_) _))
         (backsys @a  ±n <> {n: ^(+ n 1)}))))
     ;; ...
-  (d7
+  (rack
     (frame
       (cell @b (+ 1 2))
       (module {@a: @b}
@@ -4417,7 +4417,7 @@
     ;; ...
 
   ;; Multiple roots in parallel
-  (d7
+  (rack
     (frame
       (cell @r0 (+ 1 2))
       (part (@r0 @a) (+ a_ _))
@@ -4453,7 +4453,7 @@
     end)
 
   ;; Multiple roots in sequence
-  (d7
+  (rack
     (frame
       (cell @r0 (+ (* 1 2) 3))
       (part (@r0 @a) (+ a_ _))
@@ -4497,7 +4497,7 @@
     ;; ...
 
   ;; Parts hanging off duplicate roots are ignored
-  (d7
+  (rack
     (frame
       (cell @x (+ 1 2))
       (cell @x (+ 3 4))
@@ -4506,7 +4506,7 @@
     end)
 
   ;; Parts writing into the same edge are ignored
-  (d7
+  (rack
     (frame
       (cell @x (+ 1 2))
       (part (@x @a) (+ a_ _))
@@ -4515,7 +4515,7 @@
     end)
 
   ;; Conflicting write (same keypath)
-  (d7
+  (rack
     (frame
       (cell @x (+ 1 2))
       (part (@x @a) (+ a_ _))
@@ -4535,7 +4535,7 @@
     ;; ...
 
   ;; Apparent conflicting write (same keypath), but values agree so it succeeds.
-  (d7
+  (rack
     (frame
       (cell @x (+ 1 2))
       (part (@x @a) (+ a_ _))
@@ -4557,7 +4557,7 @@
   ;; Conflicting write (keypath prefix)
   ;;
   ;; Currently we prefer the parent.
-  (d7
+  (rack
     (frame
       (cell @x (foo (+ 1 2) 3))
       (part (@x @l) (foo l_ _))
@@ -4591,7 +4591,7 @@
     end)
 
   ;; Conflicting write: root modified, parts must be ignored.
-  (d7
+  (rack
     (frame
       (cell @root (+ 1 2))
       (part (@root @a) (+ a_ _))
@@ -4610,7 +4610,7 @@
     ;; ...
 
   ;; Part with missing capture
-  (d7
+  (rack
     (frame
       (part (@root @a) (+ a_ _))
       (feed (copy @a) @a-view)
@@ -4618,7 +4618,7 @@
     end)
 
   ;; Part with multiple captures
-  (d7
+  (rack
     (frame
       (cell @root (+ 1 2))
       (part (@root @a) (+ a_ b_))
@@ -4640,7 +4640,7 @@
     ;; ...
 
   ;; Part with unsupported capture
-  (d7
+  (rack
     (frame
       (cell @root x_number)
       (part (@root @a) (%symbol blank a_ _))
@@ -4648,7 +4648,7 @@
     end)
 
   ;; Integration with tspace
-  (d7
+  (rack
     (frame
       (cell @expr (+ 1 2))
       (part (@expr @x) (+ x_ _))
@@ -4673,7 +4673,7 @@
     ;; ...
 
   ;; Integration with `device`: queue
-  (d7
+  (rack
     (frame
       (device (@x (q 1 2 3))
         (part (@x @fst) (q fst_ _*))

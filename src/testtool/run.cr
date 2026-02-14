@@ -17,12 +17,12 @@ module Testtool
                DepthEq |
                SpecificityTest |
                CapturesEq |
-               D7test |
+               RackTest |
                EditTest |
                TermComparison |
                ImageComparison
 
-  enum D7ComparisonResult
+  enum RackComparisonResult
     Match
     Mismatch
     More
@@ -32,45 +32,45 @@ module Testtool
     end
   end
 
-  # Returns `true` if an expected D7 *frame* matches *actual*.
-  def d7cmp(frame : Term, actual : Term)
+  # Returns `true` if an expected Rack *frame* matches *actual*.
+  def rack_compare(frame : Term, actual : Term)
     Term.case(frame) do
       matchpi %{(frame content_*)} do
-        D7ComparisonResult.new(content == actual)
+        RackComparisonResult.new(content == actual)
       end
 
       matchpi %{(frame pattern_ ¦ () pattern)} do
-        D7ComparisonResult.new(M1.probe?(pattern, actual))
+        RackComparisonResult.new(M1.probe?(pattern, actual))
       end
 
       matchpi %{(frame pattern_ ¦ () pattern future)} do
         if M1.probe?(pattern, actual)
-          return D7ComparisonResult::Match
+          return RackComparisonResult::Match
         end
 
-        D7ComparisonResult::More
+        RackComparisonResult::More
       end
 
       matchpi %{(visually content_*)} do
         visual = Rack.visualize(actual)
 
-        D7ComparisonResult.new(content == visual)
+        RackComparisonResult.new(content == visual)
       end
 
       matchpi %{end} do
-        D7ComparisonResult::Mismatch
+        RackComparisonResult::Mismatch
       end
     end
   end
 
   # :ditto:
-  def d7cmp(frame : Term, actual : Iterator::Stop)
-    D7ComparisonResult.new(frame == Term.of(:end))
+  def rack_compare(frame : Term, actual : Iterator::Stop)
+    RackComparisonResult.new(frame == Term.of(:end))
   end
 
-  defrecord D7test, seed : Term, frames : Array(Term)
+  defrecord RackTest, seed : Term, frames : Array(Term)
 
-  def run(test : D7test, assets, stat, complaints) : Nil
+  def run(test : RackTest, assets, stat, complaints) : Nil
     frames = D7.coarse_frames(Rack.clf, test.seed, Rack::Tspace.pass, Rack.pass)
 
     # Skip through seed.
@@ -78,19 +78,19 @@ module Testtool
 
     test.frames.each do |after|
       if before.is_a?(Iterator::Stop)
-        complaints << complaint("D7 stopped producing frames but a frame was expected", expected: after)
+        complaints << complaint("Rack stopped producing frames but a frame was expected", expected: after)
         break
       end
 
       loop do
         actual = measure(stat) { frames.next }
 
-        case d7cmp(after, actual)
+        case rack_compare(after, actual)
         in .match?
           before = actual
           break
         in .mismatch?
-          complaints << complaint("D7 frame mismatch",
+          complaints << complaint("Rack frame mismatch",
             before: before.as(Term),
             after: after,
             got: actual.as?(Term) || Term.of(:end),
