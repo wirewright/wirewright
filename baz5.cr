@@ -855,6 +855,8 @@ end
 # Where possible, we recommend using `absR` in combination with `relR`, which
 # allows to set a "ceiling"  for `absR` to backjump to based on some pattern
 # for the "bottom" and a numeric *ascent* -- the number of depth levels to climb.
+#
+# TODO: This should use a nonrandom right-to-left entryR()
 def absR(successor) : Rewriter
   set, rec = recR
   set.call choiceR(successor, entryR(rec))
@@ -1563,11 +1565,8 @@ def preview1(term, backpath : Term::Dict, leaf)
   preview1(term, backpath.items, leaf)
 end
 
-REWRITE_SEEDER      = Random::PCG32.new
-REWRITE_SEEDER_LOCK = Mutex.new
-
 def rewrite0(term : Term, rewriter : Rewriter, **options) : Rewrite::Any
-  seed = REWRITE_SEEDER_LOCK.synchronize { REWRITE_SEEDER.rand(UInt64) }
+  seed = sync_rand(UInt64)
   rng = Random::PCG32.new(seed)
   ctx = RewriterContext.new(rng, backpath: nil, options: Term[options])
   rewriter.call(ctx, Rewrite.one(term))

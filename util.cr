@@ -5297,3 +5297,12 @@ struct HybridMap(K, V)
     end
   end
 end
+
+SYNC_RAND      = Random::PCG32.new
+SYNC_RAND_LOCK = Sync::Mutex.new
+
+def sync_rand(arg)
+  SYNC_RAND_LOCK.synchronize do
+    SYNC_RAND.rand(arg)
+  end
+end
