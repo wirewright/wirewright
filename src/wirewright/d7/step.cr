@@ -368,10 +368,13 @@ module Ww::D7
       substeps << circuit
 
       hg = Hypergraph.new
+      running = false
 
       # This update() can still do template expansion etc. -- even though
       # *we* do not change the circuit, *clf* might.
       circuit = update(clf, circuit, depth: depth) do |addr, scope, flat|
+        running = true
+
         case flat
         in Inert
         in Gnd
@@ -386,7 +389,7 @@ module Ww::D7
       end
 
       # No nodes in hypergraph => No nodes found at *depth* => We're done.
-      break if hg.empty?
+      break unless running
 
       patch = yield hg
       next if patch.empty?
