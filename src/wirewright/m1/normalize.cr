@@ -2203,8 +2203,41 @@ module Ww::M1
         pattern
       end
 
-      matchpi %{(%'%value capture_ body_)}, cue: :"%value" do
-        Term.of(:"%value", {:"%capture", capture}, normalize(Π.pattern(body)),
+      # |@ m1.operator.value
+      #
+      # |@pattern
+      # (%'%value capture_ value_)
+      #
+      # |@key capture
+      # Capture name (constraining the choice of key or one that should be
+      # the source of such a constraint).
+      #
+      # |@key value m1.operator
+      # An operator for matching the value of candidate keys.
+      #
+      # |@pattern
+      # Matches the value of a key which is only known at match-time.
+      #
+      # *capture* is used to learn the key. Conceptually, this operator works
+      # by showing to the pattern every possible key from the current matchee
+      # dict (in lexicographical order). The first such key that the pattern
+      # approves (including approval by *value*) is chosen as the matching key.
+      #
+      # ```
+      # (value-of k_ (%value k v_)) => (some ^v)
+      # (value-of _ _) => none
+      #
+      # (value-of x {x: 100, y: 200}) ;; => (some 100)
+      # (value-of y {x: 100, y: 200}) ;; => (some 200)
+      # (value-of z {x: 100, y: 200}) ;; => none
+      #
+      # (first-k-lt-10 (%value k (%number _ < 10))) => ^k
+      #
+      # (first-k-lt-10 {x: 100, y: 5, z: 8})          ;; => y
+      # (first-k-lt-10 (100 3 50 x: 100, y: 5, z: 8)) ;; => 1
+      # ```
+      matchpi %{(%'%value capture_ value_)}, cue: :"%value" do
+        Term.of(:"%value", {:"%capture", capture}, normalize(Π.pattern(value)),
           depth: {:+, {:max, :member, :min}, 1},
         )
       end

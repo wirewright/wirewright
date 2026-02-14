@@ -2715,6 +2715,17 @@
 
 ;; pair: value
 (group
+  ;; From docs
+  (pattern (value-of k_ (%value k v_))
+    (= (value-of x {x: 100, y: 200}) {k: x, v: 100})
+    (= (value-of y {x: 100, y: 200}) {k: y, v: 200})
+    (- (value-of z {x: 100, y: 200})))
+
+  (pattern (first-k-lt-10 (%value k (%number _ < 10)))
+    (= (first-k-lt-10 {x: 100, y: 5, z: 8}) {k: y})
+    (= (first-k-lt-10 (100 3 50 x: 100, y: 5, z: 8)) {k: 1})
+    (- (first-k-lt-10 (100 20 50 x: 100, y: 70, z: 30))))
+
   ;; `k` is bound before pairspart
   (pattern (k_ ¦ (%value k v_))
     (= (x x: 100 y: 200) {k: x, v: 100})
