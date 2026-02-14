@@ -51,6 +51,12 @@ module Testtool
         D7ComparisonResult::More
       end
 
+      matchpi %{(visually content_*)} do
+        visual = Rack.visualize(actual)
+
+        D7ComparisonResult.new(content == visual)
+      end
+
       matchpi %{end} do
         D7ComparisonResult::Mismatch
       end

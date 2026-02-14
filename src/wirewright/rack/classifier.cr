@@ -43,24 +43,45 @@ module Ww::Rack
         D7.scope(D7.parent(node.as_d, 2...node.itemsize), locals: locals.items)
       end
 
-      # A device is a module with an "appearance", called "surface". During printing,
-      # we prefer to hide children in favor of the surface, although the surface is
-      # styled differently to avoid confusion. Think of it this way: the surface
-      # of a device is its "control panel", an opaque "box" hiding the machinery
-      # inside (*children*). Both the outside and the inside have access to
-      # the surface; both can modify it (think display readouts and knobs).
+      # A device is a unit (an edge-less circuit) with an "appearance", which is
+      # called ts "surface". During printing, we prefer to hide the children of
+      # `device` in favor of its surface, although the surface is styled differently
+      # to avoid confusion (a bit like a real device, where you see the box and the knobs
+      # but you also know there is something *inside* the box that's actually doing the work).
+      # Think of it this way: the surface of a device is its "control panel", an opaque "box"
+      # hiding the machinery inside (*children*). Both the outside and the inside
+      # have access to the surface; and both can modify it (think display readouts
+      # and knobs).
       matchpi %{[device (@edge_ _?) children0_*]} do
         surface0 = node[1, 1]?
 
-        defn = Term::Dict.build do |commit|
-          commit << :module << Term[]
+        unit = Term::Dict.build do |commit|
+          commit << :unit
           commit << {:cell, edge, surface0}
           commit.concat(children0.items)
         end
 
+        defn = Term.of(:group, {:surface, surface0}, unit)
+
         D7.mixture(node, defn) do |mix|
           Term.case(mix) do
-            matchpi %{(module _ (cell @_ surface1_) children1_*)} do
+            matchpi %{(group (surface surface1_) _)} do
+              # If we're evaluating the deeper (unit ...) right now, we will see
+              # surface0 == surface1. This means we should try to update from
+              # the inner cell instead.
+              continue if surface0 == surface1
+
+              Term.of(node.morph({1, 1, surface1}))
+            end
+
+            matchpi %{(group (surface) _)} do
+              # Ditto.
+              continue if surface0.nil?
+
+              Term.of(node.morph({1, 1, nil}))
+            end
+
+            matchpi %{(group _ (unit (cell @_ surface1_) children1_*))} do
               result = node.pairspart.transaction do |commit|
                 commit << :device << {edge, surface1}
                 commit.concat(children1.items)
@@ -69,7 +90,7 @@ module Ww::Rack
               Term.of(result)
             end
 
-            matchpi %{(module _ (cell @_) children1_*)} do
+            matchpi %{(group _ (unit (cell @_) children1_*))} do
               result = node.pairspart.transaction do |commit|
                 commit << :device << {edge}
                 commit.concat(children1.items)
@@ -79,6 +100,18 @@ module Ww::Rack
             end
           end
         end
+      end
+
+      matchpi %{[surface _]} do
+        D7.gnd(node)
+      end
+
+      matchpi %{[control @edge_ _]} do
+        D7.gnd(node, edge)
+      end
+
+      matchpi %{[unit _*]} do
+        D7.circuit(node.as_d, 1...node.itemsize) { D7.inert(node) }
       end
 
       matchpi %{[circuit @edge_ children0_*]} do
@@ -91,7 +124,7 @@ module Ww::Rack
 
           D7.mixture(node, mix0) do |mix1|
             Term.of_case(mix1) do
-              matchpi %{(cell @_ children1←(_*))} do
+              matchpi %{(cell @_ children1←[_*])} do
                 node.replace(Term[2]...Term[node.itemsize], &.concat(children1.items))
               end
 

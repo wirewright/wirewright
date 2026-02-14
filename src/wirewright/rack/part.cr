@@ -14,8 +14,7 @@
 # surface (imagine displays, knobs; except they're symbolic).
 #
 # We say there is a *conflict* if two keypaths corresponding to different `part`
-# nodes propose different values. We also consider as conflict cases where different
-# `part` nodes target keypaths such that one is a prefix of the other.
+# nodes propose different values.
 #
 # Conflict is resolved by ignoring changes from both conflicting parties. This is
 # the strategy for `part`; the backmap engine uses a different strategy (backtracking
@@ -366,5 +365,29 @@ module Ww::Rack::Part
     end
 
     patch
+  end
+
+  def prepass(hg : D7::Hypergraph, &fn : D7::Hypergraph -> D7::Patch) : D7::Patch
+    unless Part.probably_exists_in?(hg)
+      return fn.call(hg)
+    end
+
+    # Generate a "forest" containing trees whose root is some [cell ...], whose
+    # nodes are `part`s, and whose leaves are "leaf parts", which are, together
+    # with the value on their output edge, known as "endpoints".
+    forest = Part.forest(hg)
+
+    # Replace endpoint [part (@from @to) ...] with (cell @to <endpoint value>).
+    forest.endpoints.each do |endpoint|
+      leaf = endpoint.leaf_part
+
+      hg.replace!(leaf.node.id, Term.of(:cell, leaf.to.term, endpoint.value))
+      hg.leave!(leaf.node.id, leaf.from)
+      hg.join!(leaf.node.id, leaf.to)
+    end
+
+    patch = fn.call(hg)
+
+    pipe(patch, Part.absorb(forest), Part.merge(forest))
   end
 end

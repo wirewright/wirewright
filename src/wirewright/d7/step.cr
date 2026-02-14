@@ -380,8 +380,9 @@ module Ww::D7
         in Gnd
           # Use Gnd#defn (the node's definition) rather than #node here.
           # The hypergraph should only ever see the defn.
-          hg.add(addr, scope, flat.defn, flat.edges) do |edge|
-            AbsEdge.new(*scope[edge])
+          node_id = hg.add!(addr, scope, flat.defn)
+          flat.edges.each do |edge|
+            hg.join!(node_id, AbsEdge.new(*scope[edge]))
           end
         end
 

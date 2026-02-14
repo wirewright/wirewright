@@ -4,9 +4,10 @@
 # Edges are circuit-local; edge proximity is not semantic proximity. In a sense,
 # edge proximity is "proximity by construction", just like cells in a grid are
 # proximal to each other "by construction"; whereas in Termspaces, entities are
-# proximal by stimulus. In other words, adjacency in termspaces is defined by
-# content; whereas with edges, it is defined ahead-of-time, by design. These
-# two approaches are not competing but complementary.
+# proximal by stimulus (that is, one generates a stimulus for another, thus forming
+# an ephemeral "edge" or "hyperedge" if multiple entities respond to the stimulus).
+# In other words, adjacency in termspaces is defined by content; whereas with edges,
+# it is defined ahead-of-time, by design.
 #
 # Termspaces consist of *sensors* and *appearances*. Sensors see terms,
 # appearances show terms.

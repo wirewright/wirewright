@@ -853,6 +853,205 @@
         (feed @src @dst @src)))))
     ;; ...
 
+;; device surface and control
+(group
+  ;; Basic
+  (d7
+    (frame
+      (device (@surface (counter 0))
+        (view (@surface (counter ±n) @view)
+          ((h1 ^"⸢n⸣")))
+        (circuit @view))
+      (control @count (counter ±count))
+      (backsys @count  ±n <> {n: ^(+ n 1)}))
+    (frame pattern: true
+      ⟪(@surface (counter 1))
+       (circuit @view (h1 "1"))⟫)
+    (frame pattern: true
+      ⟪(@surface (counter 2))
+       (circuit @view (h1 "2"))⟫)
+    (frame pattern: true
+      ⟪(@surface (counter 3))
+       (circuit @view (h1 "3"))⟫))
+    ;; ...
+
+  ;; No surface
+  (d7
+    (frame
+      (control @count (counter ±count))
+      (backsys @count  ±n <> {n: ^(+ n 1)}))
+    end)
+
+  ;; More than one surface
+  (d7
+    (frame
+      (device (@surface (counter 0))
+        (view (@surface (counter ±n) @view)
+          ((h1 ^"⸢n⸣")))
+        (circuit @view a: true))
+      (device (@surface (counter 0))
+        (view (@surface (counter ±n) @view)
+          ((h1 ^"⸢n⸣")))
+        (circuit @view b: true))
+      (control @count (counter ±count))
+      (backsys @count  ±n <> {n: ^(+ n 1)}))
+    (frame pattern: true
+      ⟪(circuit @view (h1 "0") a: true)
+       (circuit @view (h1 "0") b: true)⟫)
+    end)
+
+  ;; Edge not found (shouldn't crash or anything)
+  (d7
+    (frame
+      (device (@surface (counter 0)))
+      (control @count (counter ±n))
+      (backsys @count  ±n <> {n: ^(+ n 1)}))
+    end)
+
+  ;; More than one edge
+  (d7
+    (frame
+      (device (@surface (counter "My counter" 0))
+        (view (@surface (counter _ ±n) @view)
+          ((h1 ^"⸢n⸣")))
+        (circuit @view))
+      (control @count (counter caption_ ±count))
+      (backsys @count  ±n <> {n: ^(+ n 1)}))
+    (frame pattern: true
+      ⟪(@surface (counter _ 1))
+       (circuit @view (h1 "1"))⟫)
+    (frame pattern: true
+      ⟪(@surface (counter _ 2))
+       (circuit @view (h1 "2"))⟫)
+    (frame pattern: true
+      ⟪(@surface (counter _ 3))
+       (circuit @view (h1 "3"))⟫))
+    ;; ...
+
+  ;; Scoping
+
+  ;; This shouldn't see anything yet.
+  (d7
+    (frame
+      (module {}
+        (device (@surface (counter 0))
+          (view (@surface (counter ±n) @view)
+            ((h1 ^"⸢n⸣")))
+          (circuit @view a: true)))
+      (module {}
+        (device (@surface (counter 0))
+          (view (@surface (counter ±n) @view)
+            ((h1 ^"⸢n⸣")))
+          (circuit @view b: true)))
+      (control @count (counter ±count))
+      (backsys @count  ±n <> {n: ^(+ n 1)}))
+    (frame pattern: true
+      ⟪(circuit @view (h1 "0") a: true)
+       (circuit @view (h1 "0") b: true)⟫)
+    end)
+
+  ;; ... but controls embedded in those modules should:
+  (d7
+    (frame
+      (module {}
+        (device (@surface (counter 0))
+          (view (@surface (counter ±n) @view)
+            ((h1 ^"⸢n⸣")))
+          (circuit @view a: true))
+        (control @count (counter ±count))
+        (backsys @count  ±n <> {n: ^(+ n 1)}))
+      (module {}
+        (device (@surface (counter 100))
+          (view (@surface (counter ±n) @view)
+            ((h1 ^"⸢n⸣")))
+          (circuit @view b: true))
+        (control @count (counter ±count))
+        (backsys @count  ±n <> {n: ^(+ n 1)})))
+    (frame pattern: true
+      ⟪(circuit @view (h1 "1") a: true)
+       (circuit @view (h1 "101") b: true)⟫)
+    (frame pattern: true
+      ⟪(circuit @view (h1 "2") a: true)
+       (circuit @view (h1 "102") b: true)⟫)
+    (frame pattern: true
+      ⟪(circuit @view (h1 "3") a: true)
+       (circuit @view (h1 "103") b: true)⟫))
+    ;; ...
+
+  ;; Now let's say we have a button and a counter. The button can emit signals
+  ;; and the counter shows a count. We want the button to increment the count.
+  ;; To make this a classic (albeit symbolic, at least *here*) counter example
+  ;; let's say we'll also have another button which decrements the count.
+  (d7
+    (frame
+      (Button caption_string)
+        => (device (@surface (button ^caption ()))
+             (^verbatim
+               (part (@surface @caption) (button caption_string _))
+               (part (@surface @actions) (button _ actions←(_*)))
+               (cell @ref-view)
+               (view (@caption caption_string (@ref-view @view))
+                 ((button ^caption clickable: true)))
+               (circuit @view)
+               (backsys {@:view @:caption @:actions}
+                {¦ view: ({¦ clicked_}) caption_ actions: (_* `back)}
+                  <> {(clicked): (), back: ^caption})))
+
+      (Counter ±initial)
+        => (device (@surface (counter ^initial))
+             (^verbatim
+               (cell @ref-view)
+               (view (@surface (counter ±n) (@ref-view @view))
+                 ((h1 ^"Count: ⸢n⸣")))
+               (circuit @view)))
+
+      (circuit @app
+        (Counter 0)
+        (Button "Increment")
+        (Button "Decrement")
+        (control @count (counter ±count))
+        (control @msg (button _ (msg_ _*)))
+        (backsys {@:count @:msg}
+          {¦ ±count msg_: "Increment"} <> {(msg): (), count: ^(+ count 1)}
+          {¦ ±count msg_: "Decrement"} <> {(msg): (), count: ^(- count 1)}))
+
+      (backsys @app
+        ⟪(circuit @view (h1 (%any "Count: 0" "Count: 1") ⍊ -seen_))
+         (circuit @view (button "Increment" ⍊ clickable -clicked_))⟫
+          <> {clicked: true, seen: true}
+        ⟪(circuit @view (h1 "Count: 2" ⍊ -seen_))
+         (circuit @view (button "Decrement" ⍊ clickable -clicked_))⟫
+          <> {clicked: true, seen: true}))
+  (visually
+    (h1 "Count: 0")
+    (button "Increment" clickable: true)
+    (button "Decrement" clickable: true))
+  (visually
+    (h1 "Count: 0" seen: true)
+    (button "Increment" clickable: true)
+    (button "Decrement" clickable: true))
+  (visually
+    (h1 "Count: 1")
+    (button "Increment" clickable: true)
+    (button "Decrement" clickable: true))
+  (visually
+    (h1 "Count: 1" seen: true)
+    (button "Increment" clickable: true)
+    (button "Decrement" clickable: true))
+  (visually
+    (h1 "Count: 2")
+    (button "Increment" clickable: true)
+    (button "Decrement" clickable: true))
+  (visually
+    (h1 "Count: 2" seen: true)
+    (button "Increment" clickable: true)
+    (button "Decrement" clickable: true))
+  (visually
+    (h1 "Count: 1")
+    (button "Increment" clickable: true)
+    (button "Decrement" clickable: true))))
+  ;; ...
+
 ;; Queue
 (group
   ;; Basic
@@ -4517,5 +4716,4 @@
         (feed @fst @y)
         (cell @y)
         (discard @y)))
-    end)
-)
+    end))

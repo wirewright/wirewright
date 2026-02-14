@@ -10,31 +10,10 @@ module Ww::Rack
   # The most important thing it does is it walks the `part` subtree of root
   # cells and constructs child `cell`s with appropriate values, if possible; and
   # then after *fn* runs, it absorbs & merges child cells back into the root.
-  def prepass(clf : D7::Classifier, hg : D7::Hypergraph, &fn : D7::Hypergraph -> D7::Patch) : D7::Patch
-    # Fast path for graphs that don't have both cells and parts. If one does,
-    # then we have no other option than executing the algorithm below.
-    unless Part.probably_exists_in?(hg)
-      return fn.call(hg)
+  def prepass(hg : D7::Hypergraph, &fn : D7::Hypergraph -> D7::Patch) : D7::Patch
+    ControlSpace.prepass(hg) do |hg|
+      Part.prepass(hg, &fn)
     end
-
-    # Generate a "forest" containing trees whose root is some [cell ...], whose
-    # nodes are `part`s, and whose leaves are "leaf parts", which are, together
-    # with the value on their output edge, known as "endpoints".
-    forest = Part.forest(hg)
-
-    # Replace endpoint [part (@src @dst) ...] with (cell @dst <endpoint value>).
-    forest.endpoints.each do |endpoint|
-      leaf = endpoint.leaf_part
-
-      # Notice how we keep only @dst as the edge! @src is pruned.
-      hg.replace(leaf.node.id, Term.of(:cell, leaf.to.term, endpoint.value)) do |edge|
-        edge == leaf.to
-      end
-    end
-
-    patch = fn.call(hg)
-
-    pipe(patch, Part.absorb(forest), Part.merge(forest))
   end
 
   private def step(clf : D7::Classifier, circuit : Term) : Slice(Term)
