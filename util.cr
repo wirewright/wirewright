@@ -4887,14 +4887,10 @@ class BlockingQueue(T)
     end
   end
 
-  def lock(& : Deque(T) -> U) : U forall U
+  def shift? : T?
     @mutex.synchronize do
-      yield @queue
+      @queue.shift?
     end
-  end
-
-  def clear : Nil
-    lock(&.clear)
   end
 end
 
