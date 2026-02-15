@@ -44,10 +44,6 @@ Log.setup_from_env(default_level: :warn, backend: Log::IOBackend.new(STDERR))
 module Ww
   VERSION = "0.0.0-kappa"
 
-  # TODO: move resources into runtime
-
-  RESOURCES = Path[ENV["SOMA_RESOURCES_DIR"]? || Dir.current]
-
   # TODO: This is lame!! We must have much more control over when all these
   # checks happen.
   RUNTIME_PATH = begin
