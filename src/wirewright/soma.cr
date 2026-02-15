@@ -62,6 +62,18 @@ module Ww::Soma
     uiR(metricsR, ruleset)
   end
 
+  def uiR(dw, rulebase : Term)
+    ruleset = Ruleset.select(Ruleset::DEFAULT_SELECTOR, rulebase)
+
+    metricsR = callR do |term|
+      reply = Sync::Future(Term).new
+      dw << DwUIR::GraphicsReplyRequest.new(term, reply)
+      Rewrite.one(reply.get)
+    end
+
+    uiR(metricsR, rulebase)
+  end
+
   def editR(ruleset : Ruleset)
     exhR(absR(alloy_rulesetR(ruleset)))
   end
