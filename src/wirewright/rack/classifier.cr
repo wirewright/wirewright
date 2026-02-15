@@ -71,14 +71,14 @@ module Ww::Rack
               # the inner cell instead.
               continue if surface0 == surface1
 
-              Term.of(node.morph({1, 1, surface1}))
+              Term.morph(node, {1, 1, surface1})
             end
 
             matchpi %{(group (surface) _)} do
               # Ditto.
               continue if surface0.nil?
 
-              Term.of(node.morph({1, 1, nil}))
+              Term.morph(node, {1, 1, nil})
             end
 
             matchpi %{(group _ (unit (cell @_ surface1_) children1_*))} do
@@ -173,9 +173,9 @@ module Ww::Rack
         D7.mixture(node, mix0) do |mix1|
           Term.of_case(mix1) do
             # New value arrived. Higher priority.
-            matchpi %{(_ (cell @_ value1_) _)} { node.morph({2, value1}) }
+            matchpi %{(_ (cell @_ value1_) _)} { Term.morph(node, {2, value1}) }
             # New value computed.
-            matchpi %{(_ _ (group value1_))} { node.morph({2, value1}) }
+            matchpi %{(_ _ (group value1_))} { Term.morph(node, {2, value1}) }
           end
         end
       end
@@ -200,7 +200,7 @@ module Ww::Rack
 
           whole1 = M1.backmap(pattern, Term.of(backspec), whole0)
 
-          Term.of(node.morph({2, whole1}))
+          Term.morph(node, {2, whole1})
         end
       end
 
@@ -208,7 +208,7 @@ module Ww::Rack
         D7.mixture(node, Term.of(:cell, edge)) do |view|
           Term.of_case(view) do
             matchpi %{(cell @_)} { node }
-            matchpi %{(cell @_ value1_)} { node.morph({2, value1}) }
+            matchpi %{(cell @_ value1_)} { Term.morph(node, {2, value1}) }
           end
         end
       end
@@ -269,46 +269,47 @@ module Ww::Rack
         D7.gnd(node, edges, defn: Term.of(:backsys, srcs, res_edges, restab, backmaps))
       end
 
-      matchpi %{[queue (@front_ @back_ ⍊ min_: (%optional 1 (%number +i32!)) max_: (%optional ∞ (%any° (%number +i32!) ∞))) buffer_dict]}, min: Int32 do
+      matchpi %{[queue (@front_ @back_ ⍊ min_: (%optional 1 (%number +i32!)) max_: (%optional ∞ (%any° (%number +i32!) ∞))) buffer0_dict]}, min: Int32 do
         defn = Term::Dict.build do |commit|
           commit << :group
 
-          # Check if we are allowed to dequeue.
-          if 0 < min <= buffer.itemsize
-            commit << Term.of(:cell, front, buffer.items.first, front: true)
+          # Check if we can dequeue.
+          if 0 < min <= buffer0.itemsize
+            commit << Term.of(:cell, front, buffer0.items.first, front: true)
           end
 
-          # Check if we are allowed to enqueue.
-          if max == Term.of(:∞) || buffer.itemsize < max.to(Int32)
+          # Check if we can enqueue.
+          if max == Term.of(:∞) || buffer0.itemsize < max.to(Int32)
             commit << Term.of(:cell, back, back: true)
           end
         end
 
         D7.mixture(node, Term.of(defn)) do |view|
-          rest = buffer
+          buffer1 = buffer0
 
           Term.case(view) do
             # Dequeue.
             matchpi %{⟨(cell @_ ⍊ front)⟩} do
-              rest = rest.lshift
+              buffer1 = buffer1.rest
               continue
             end
 
             # Sync.
             matchpi %{⟨(cell @_ x_ ⍊ front)⟩} do
-              rest = rest.morph({0, x})
+              buffer1 = Term.morph(buffer1, {0, x})
               continue
             end
 
             # Enqueue.
             matchpi %{⟨(cell @_ x_ ⍊ back)⟩} do
-              rest = rest.append(x)
+              buffer1 = buffer1.append(x)
+              continue
             end
 
             otherwise { }
           end
 
-          Term.of(node.morph({2, rest}))
+          Term.morph(node, {2, buffer1})
         end
       end
 
@@ -364,8 +365,8 @@ module Ww::Rack
 
         D7.mixture(node, mix0) do |mix1|
           Term.of_case(mix1) do
-            matchpi %{⟨(cell @_)⟩} { Term.of(node.morph({2, nil})) }
-            matchpi %{⟨(cell @_ value1_)⟩} { Term.of(node.morph({2, value1})) }
+            matchpi %{⟨(cell @_)⟩} { Term.morph(node, {2, nil}) }
+            matchpi %{⟨(cell @_ value1_)⟩} { Term.morph(node, {2, value1}) }
           end
         end
       end
@@ -381,8 +382,8 @@ module Ww::Rack
 
         D7.mixture(node, mix0) do |mix1|
           Term.of_case(mix1) do
-            matchpi %{⟨(cell @_)⟩} { Term.of(node.morph({2, nil})) }
-            matchpi %{⟨(cell @_ value1_)⟩} { Term.of(node.morph({2, value1})) }
+            matchpi %{⟨(cell @_)⟩} { Term.morph(node, {2, nil}) }
+            matchpi %{⟨(cell @_ value1_)⟩} { Term.morph(node, {2, value1}) }
           end
         end
       end
@@ -403,8 +404,8 @@ module Ww::Rack
 
         D7.mixture(node, mix0) do |mix1|
           Term.of_case(mix1) do
-            matchpi %{⟨(cell @_)⟩} { Term.of(node.morph({2, nil})) }
-            matchpi %{⟨(cell @_ value1_)⟩} { Term.of(node.morph({2, value1})) }
+            matchpi %{⟨(cell @_)⟩} { Term.morph(node, {2, nil}) }
+            matchpi %{⟨(cell @_ value1_)⟩} { Term.morph(node, {2, value1}) }
           end
         end
       end

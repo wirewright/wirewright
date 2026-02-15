@@ -63,7 +63,7 @@ module Ww::Microfold::Pass
     end
 
     def unfold1(theme, box : Term, designation : Term::Dict, node : Term)
-      request = Term.of(Term[box, node] | designation)
+      request = Term.of(Term.overlay(Term[box, node], designation))
       responses = theme.box_ruleset.responses(request)
       responses.each do |response|
         pr, rule = response

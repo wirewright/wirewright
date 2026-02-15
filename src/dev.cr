@@ -307,10 +307,10 @@ module DevTool
 
       matchpi %{((%any "g" "go") preset_string)} do
         unless state[:active, :presets, preset]?
-          state = state.morph({:active, :presets, preset, Term[]})
+          state = Term.morph(state, {:active, :presets, preset, Term[]})
         end
 
-        state = state.morph({:active, :preset, preset})
+        state = Term.morph(state, {:active, :preset, preset})
       end
 
       matchpi %{((%any "g" "go") prototype_string preset_string)} do
@@ -319,10 +319,10 @@ module DevTool
             fatal "prototype #{prototype} does not exist"
           end
 
-          state = state.morph({:active, :presets, preset, conf})
+          state = Term.morph(state, {:active, :presets, preset, conf})
         end
 
-        state = state.morph({:active, :preset, preset})
+        state = Term.morph(state, {:active, :preset, preset})
       end
 
       matchpi %{("rm" preset_string)} do
@@ -332,10 +332,10 @@ module DevTool
 
         # Exit preset if it's the one being removed.
         if state[:active, :preset]? == preset
-          state = state.morph({:active, :preset, nil})
+          state = Term.morph(state, {:active, :preset, nil})
         end
 
-        state = state.morph(
+        state = Term.morph(state,
           {:active, :presets, preset, nil},
           {:base, :presets, preset, nil},
         )
@@ -343,37 +343,37 @@ module DevTool
 
       matchpi %{("src" path_string)} do
         with_active_preset(state) do |preset|
-          state = state.morph({:active, :presets, preset, :source, path})
+          state = Term.morph(state, {:active, :presets, preset, :source, path})
         end
       end
 
       matchpi %{("log" level_string)} do
         with_active_preset(state) do |preset|
-          state = state.morph({:active, :presets, preset, :runvars, "LOG_LEVEL", level})
+          state = Term.morph(state, {:active, :presets, preset, :runvars, "LOG_LEVEL", level})
         end
       end
 
       matchpi %{("set" runvar_string value_string)} do
         with_active_preset(state) do |preset|
-          state = state.morph({:active, :presets, preset, :runvars, runvar, value})
+          state = Term.morph(state, {:active, :presets, preset, :runvars, runvar, value})
         end
       end
 
       matchpi %{("linkdir" dirpath_string)} do
         with_active_preset(state) do |preset|
-          state = state.morph({:active, :presets, preset, :linkdirs, dirpath, true})
+          state = Term.morph(state, {:active, :presets, preset, :linkdirs, dirpath, true})
         end
       end
 
       matchpi %{("flag" flag_string)} do
         with_active_preset(state) do |preset|
-          state = state.morph({:active, :presets, preset, :flags, flag, true})
+          state = Term.morph(state, {:active, :presets, preset, :flags, flag, true})
         end
       end
 
       matchpi %{("unflag" flag_string)} do
         with_active_preset(state) do |preset|
-          state = state.morph({:active, :presets, preset, :flags, flag, nil})
+          state = Term.morph(state, {:active, :presets, preset, :flags, flag, nil})
         end
       end
 
@@ -411,7 +411,7 @@ module DevTool
 
       matchpi %{("sync")} do
         with_active_preset(state) do |preset|
-          state = state.morph({:base, :presets, preset, state[:active, :presets, preset]?})
+          state = Term.morph(state, {:base, :presets, preset, state[:active, :presets, preset]?})
         end
       end
 

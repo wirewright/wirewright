@@ -27,7 +27,8 @@ module Ww::Microfold::Pass
     end
 
     itempaths.each do |itempath|
-      node = Term.morph(node, itempath) { |item| yield item, itempath }
+      item = node.follow(itempath)
+      node = Term.assign(node, itempath, to: (yield item, itempath))
     end
 
     node
@@ -57,7 +58,7 @@ module Ww::Microfold::Pass
             yield keypath, pairs.unsafe_as_d, style0, issues
           end
 
-          node.morph({:"µ-preset", preset1}, {:"µ-style", style1})
+          Term.morph(node, {:"µ-preset", preset1}, {:"µ-style", style1})
         end
 
         otherwise { node }

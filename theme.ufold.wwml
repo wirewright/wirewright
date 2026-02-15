@@ -1305,10 +1305,10 @@ hierarchy:
 
 ;; `outermost-box` is a virtual box that styles like `z` or `fr` target.
 (outermost-box node←(head_ children_* ¦ attrs_) ¦ styles_)
-  => (^match (∩ attrs styles)
+  => (^match (intersects? attrs styles)
        ;; If the *real* outermost box doesn't conflict with styles targeting
        ;; outermost-box, just add them to the real outermost box.
-       (when {} ^(∪ node styles))
+       (when false ^(∪ node styles))
        ;; Otherwise, craft a box specifically for outermost-box styles.
-       (when _ (^head (box ^*children ^… styles) ^… attrs)))
+       (when true (^head (box ^*children ^… styles) ^… attrs)))
 

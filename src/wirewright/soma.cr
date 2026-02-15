@@ -74,9 +74,7 @@ module Ww::Soma
     Term.each_keypath_and_node(state) do |keypath, node|
       Term.case(node) do
         matchpi %{[I _*]} do
-          state = Term.morph(state, keypath) do |cursor|
-            Term.of(cursor.append(msg))
-          end
+          state = Term.assign(state, keypath, to: node.append(msg))
 
           false # no descend
         end

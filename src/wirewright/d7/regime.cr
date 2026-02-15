@@ -315,8 +315,8 @@ module Ww::D7
         return a != b # if different, then they're compatible
       end
 
-      short, long = {a, b}.minmax_by(&.size)
-      !long.starts_with?(short) # E.g. Tpath[2] and Tpath[2—1] are incompatible.
+      sm, lg = a.size < b.size ? {a, b} : {b, a}
+      !lg.starts_with?(sm) # E.g. Tpath[2] and Tpath[2—1] are incompatible.
     end
 
     private def compatible?(ref : Term, successor : Term, &predicate : Tpath -> Bool) : Bool

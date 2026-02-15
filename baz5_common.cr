@@ -376,7 +376,11 @@ class Ruleset
     end
 
     rest = base.pairspart.transaction do |commit|
-      commit.rejected(base.items) { |item| M1.probe?(selector, item) }
+      base.items.each do |item|
+        next if M1.probe?(selector, item) # it is a rule
+
+        commit << item
+      end
     end
 
     {ruleset, rest}

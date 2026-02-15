@@ -34,7 +34,7 @@ module Ww::Alloy
       compose0?(ctx, term, issues) || Assign.new(term)
     end
 
-    render0(ctx.globals | vars, template, issues, eval: eval, refine: refine).as?(Ok) || Splice.new(Term[])
+    render0(Term.overlay(ctx.globals, vars), template, issues, eval: eval, refine: refine).as?(Ok) || Splice.new(Term[])
   end
 
   private def compose0?(ctx : ComposeContext, view : Term, issues : Issue::Sink) : Ok?

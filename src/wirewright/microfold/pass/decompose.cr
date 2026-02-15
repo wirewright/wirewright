@@ -53,7 +53,7 @@ module Ww::Microfold::Pass
               node0.each_pair do |key, value|
                 next unless spec = theme.property_spec?(key)
 
-                node1 = node1.morph({key, nil})
+                node1 = Term.morph(node1, {key, nil})
 
                 spots = {
                   Issue::Spot::KeypathRef.new(keypath),
@@ -67,7 +67,7 @@ module Ww::Microfold::Pass
               end
             end
 
-            node1.morph({:"µ-style", style1})
+            Term.morph(node1, {:"µ-style", style1})
           end
 
           otherwise { node0 }

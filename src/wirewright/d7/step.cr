@@ -192,6 +192,7 @@ module Ww::D7
   def update(dict : Term::Dict, range : Range(Int32, Int32), &) : Term::Dict
     assert range.exclusive?
 
+    # FIXME: None of this should be necessary. Dict#with[!]() should do these checks.
     changes = Pf::Kit.stack_array({Term, Int32}, 8)
 
     range.each do |index|

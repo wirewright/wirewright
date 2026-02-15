@@ -419,7 +419,7 @@
 (group
   (alloy {x: 100, y: 200} ^(+ x y) 300)
   ;; subtree before node
-  (alloy {x: foo, ys: {x: 100, foo: "qux"}} ^(part ys (key x)) {foo: "qux"}))
+  (alloy {x: foo, ys: {x: 100, foo: "qux"}} ^(charcount "XS=⸢x⸣") 6))
 
 ;; ^extend
 (group

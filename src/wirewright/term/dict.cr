@@ -1,82 +1,77 @@
-# SIMPLE DICTIONARIES ARE DICTIONARIES THAT DO NOT CONTAIN
-# SIMPLE DICTIONARIES.
-
-# Dictionaries should have small (8/16-element) short-term memory for which
-# patterns they were NOT matched by. However this would require some integration
-# on the pattern matching/PatternSet side. Doable though. PatternSet can assign
-# patterns application-unique ids, and so on. In some places we have redundant
-# pattern matching. This should eliminate that. Especially useful would be rejection.
-# E.g. to optimize FindFirst/FindSource, which are used extensively in the editor.
-# If every dictionary EntryNode remembers a tiny bit which patterns matched and which
-# did not in itself, that could help. Although a huge balance game, and I'm unsure
-# about how the communication would go between the two -- the pattern matching engine
-# and the dict impl.
-
 # TODO: our current dictionary implementation is very very bad. It has served
 # me for over a year with minor changes, but now it is becoming more and more
 # cumbersome to use and extend it. It isn't as simple as it should be, with a
 # lot of overcomplication; nor as fast as it should be. When I first wrote it
 # only a small portion of the system relied on Dicts. Now almost everything relies
 # on dicts.
-#    1. We need to have a dict implementation that is friendly towards caching. Any caching
-#       idea that comes to my mind, must be trivially implementable. Right now I stumble and
-#       fall every time I try to add something. I envision an event-like system where the dict
-#       has a part of itself that's consuming events (specifically, pair added, pair removed,
-#       item added, item removed). We can then have many such parts, each representing some kind
-#       of cache, such as sketch, population, max depth, bounds sketch.
-#    2. Perhaps instead, such an event-like system should be installed on item/pair nodes
-#       rather than dicts. This could give us a more predictable, mergeable, diffable cache.
-#    3. For the itemspart we must use finger trees.
-#    4. For the pairspart we should continue using HAMTs.
-#    5. The current dict impl is not aware of itself being a tree. Thus, we have an extremely
-#       inefficient, linear implementation of highly-depended upon `==`, `hash` (they are used
-#       by rewriters which treat them as very, very, very cheap functions to call -- but they are not)
-#    6. Similarly, we have inefficient, linear or worse, implementations of dict merging and
-#       diffing, which are depended on by Soma and the higher-level.
-#    7. The memory layout and general design of permafrost is OK for a general-purpose HAMT,
-#       but here we have a lot of packing/inlining opportunities; and we're a dict, whereas
-#       Pf::Kit::Node assumes a set (roughly). We lose a lot of copy reduction opportunities
-#       by not storing keys and values separately. I also believe we should somehow use variably
-#       sized but fixed-bytesize nodes. I think we should fix the bytesize at 64 bytes, since this
-#       is a cache line size so we'll get the stuff around-ish for free.
-#    8. The keys and values should be a special kind of array, a TermArray. The TermArray should somehow
-#       be able to manage the 64 bytes, trying to pack as many things in it as possible. We could have
-#       byte headers followed by payload. Something like a boolean is a byte header long; it does not
-#       need a payload. We can flatten small itemsonly dictionaries this way.
-#    9. The whole packing thing is an undeveloped, unnecessary idea right now. What is fairly clear is that
-#       again, we must have a finger tree itemspart and a HAMT pairspart with all copy reduction opportunities taken.
-#   10. It is in general hard to implement proper promotion/demotion for items to pairs and vice versa. The current
-#       algorithm is very bad and prevents us from saving time and space in several cases (mainly replace). Provided
-#       we have a fast itemspart split and merge functions (finger trees claim to have fast splits and merges)
-#       we could maintain a small, fixed-size toplevel array of "root nodes". Therefore our dict becomes a forest.
-#       When we delete in the middle of an itemspart, we split at that point (we'll have to split anyway), and if
-#       the rest is nonempty, we will add it to the toplevel root array. Only when the root array becomes full should
-#       we merge *the smallest* itemsroot into the HAMT pairspart; or alternatively, we can split work somehow among
-#       the calls to with()/without() so that the cost of many random itemspart deletes is amortized even further.
-#       Finally, we should keep the min index for the itemsarrays merged into the pairspart. Whenever an item is inserted,
-#       we should check if there are itemsnodes that succede the item's index, or if the pairspart contains a key that
-#       succedes the item's index. If so, we should "import" the split right-hand side back into the itemspart.
-#   11. ItemsView's #collect is a known performance pain point for the pattern matching engine. Polyblanks such as `xs_*`
-#       `collect` excessively almost by design, but never modify the collected itemsonly dict. A DictRef variant of Dict
-#       will solve this issue by being a Dict-side variant of ItemsView.
 #
-# A proper dictionary implementation would be very complex. Currently we are suffering a lot of performance issues
-# due to having an improper dict implementation. I would really like to have a dict impl that at least reduces
-# the copying overhead and has an event system for more robust caching; as well as one that has DictRef and that is
-# aware of its tree nature, implementing efficient deep/shallow diff, deep/shallow merge, equality, cached hash, etc.
-# This would be a good start even without finger trees and the other complexity. Trying to gradually ramp up complexity
-# is better than trying to tackle an extremely complex data structure like Dict should be head-on.
+# So, a quick and dirty "blueprint of a blueprint":
 #
-# ALSO: Gap promotion/demotion is opaque to any caching. Thus, I think it makes sense to install any caching on a level
-# lower than that of a Dict -- thus, on ItemNode and PairNode.
+#  - Finger trees for item-like storage (Pf::Vec)
+#  - USet32 for itemspart tracking. All item keys are stored in the finger tree, but
+#    we only consider as *itemspart* ones that start at 0 and continue until the first
+#    gap (aka USet32#prefix).
+#  - HAMT for pairspart (updated Pf::Map). Post-prefix USet32 is also pairspart.
 #
-# - If we have sketches on each Pair/Item node, we'll be able to support "symbol-guided descent", and in the future
-# perhaps also value-guided descent, which is especially important for the optimization of %item nodes and %leaf nodes.
-# Support on the level of dictionary nodes means we'll only have to go through nodes that probably contain the symbol,
-# instead of forced thorough iteration.
+# Both Pf::Map and Pf::Vec must support the same type of metadata object, which they place
+# on every node and which they let clients query later on. This enables something I call
+# "sketch-" or metadata-guided descent. This should speed up ⟨...⟩ which are e.g. heavily
+# used in editR; preventing a full scan every time. The pattern matching engine can tell us
+# a great deal about what the thing we're trying to find is "like", and the trees (finger tree
+# or HAMT) can help us get there.
 #
-# - It appears that we can try to use linear probing for the items array on HAMT nodes instead of Sparse32.
-#   If the key cannot be found, we proceed as usual into the Sparse32 children array.
+# Pf::Map should be implemented using 16-way branching instead of 32 at each node. This lets
+# us do some cool optimizations/bitwise trickery. Sparse16 must be paged, meaning we don't call
+# malloc() every time but instead refer to "pages" allocated ahead of time for each type of interest.
+# This is a trade-off: increased GC strain versus very fast (<~20ns with locks, ~10ns without locks
+# on my machine), and sometimes non-copying appends.
+#
+# - Pf::Map MUST be structural because we require cheap equality. That is, different order gives
+#   the same structure. Collisions are stored in a separate, lexicographically sorted slice, which
+#   is copied fully on each append.
+# - Pf::Map nodes and Pf::Vec nodes MUST be content-addressed (see also: hash-consing). We waste
+#   an enormous amount of memory constructing things that end up being the same. The same behavior
+#   also generates the worst case for equality for us: two dicts that are different objects but
+#   same by content. Content-addressing turns must comparisons to object address comparisons.
+#
+# As for per-node metadata, we must store:
+#  - Key sketch (64-bit Bloom filter containing keys in the node and its subtree)
+#  - Value sketch (64-bit Bloom filter containing string, number values in the node and its subtree; `true` and `false` both have a reserved bit)
+#  - Symbol sketch (64-bit Bloom filter containing symbols in the node and its subtree).
+#  - Population (64-bit: u16 nums, u16 strs, u16 syms, u8 trues, u8 falses); MAX of each is reserved for "infinity".
+#  - Depth (32-bit: maximum depth of node and its subtree)
+#  - Size (32-bit: number of items/entries in node and its subtree)
+#
+# This totals at 40 bytes of metadata per node. The cap is 64 bytes, so we still have some room left.
+# Although the less memory it uses, the better, of course.
+#
+# NOTE: Pf manages the hashcode since its semantics differ. Hashcode can be read
+#   off the node..
+#
+# Pf must update (recalculate) Metadata with each new update to the node. Each update
+# to a node must trigger the recalculation of metadata on the updated node.
+#
+# For content-addressing, we first simulate adding to the hash or removing from it instead
+# of allocating nodes etc. If the resulting hash's bucket exists in the cache and satisfies
+# the change we return that instead of allocating. Otherwise we construct a new node and update
+# the cache appropriately. It is important that the cache is thread-safe. A simple solution,
+# such as a RW lock, could work, although we'd have to "double tap": first take the R lock and
+# see if the thing exists, and then take a W lock and also check; and then, while having the W
+# lock, if the thing is missing, we construct and insert and return it.
+#
+# It would be nice for nodes to have the size cap of 64 bytes.
+#
+# It would be nice for small dictionaries (e.g. size < 16) to be optimized, and be e.g.
+# simply Slices under the hood. However, I'm not sure how nicely our Metadata will play
+# with this. If a 2-element Term::Dict takes 56 bytes (e.g. 40 Metadata + 8 bytes hashcode + 8 bytes ptr),
+# then is that *really* better than just nil-initializing some pointers and focusing instead
+# on the memory consumption of USet32, Vec, and Map *individually*? As in, *they* are the ones
+# doing the small-size opt, not Dict. Also, by doing small-size opt on Dict, we'll lose content-
+# addressing...The metadata problem still persists if we do small-size in Dict rather than on Dict,
+# but at least it is displaced somewhat manageably. In that case, Dict could simply be
+# USet32 + Vec + Map. All of them are still pretty large though. If we assume 24 + 16 + 16 then
+# it's still 56 bytes of control per dict (not even payload!!!) And then each node of Vec and Map
+# is maybe 64 bytes but probably more like 80-ish bytes!!! This is crazy huge!
 
 module Ww
   # Represents a dictionary: an immutable, persistent collection of key-value
@@ -214,36 +209,6 @@ module Ww
         concat(ee, &.itself)
       end
 
-      def selected(ee : Enumerable(T), cls : U.class, & : U -> _) : self forall T, U
-        ee.each do |object|
-          next unless object.is_a?(U)
-
-          append(yield object)
-        end
-
-        self
-      end
-
-      def selected(ee : Enumerable(T), & : T -> Bool) : self forall T
-        ee.each do |object|
-          next unless yield object
-
-          append(object)
-        end
-
-        self
-      end
-
-      def rejected(ee : Enumerable(T), & : T -> Bool) : self forall T
-        ee.each do |object|
-          next if yield object
-
-          append(object)
-        end
-
-        self
-      end
-
       # :nodoc:
       def resolve
         raise Pf::ResolvedError.new if @resolved
@@ -268,15 +233,6 @@ module Ww
 
     alias Sketch = UInt128
 
-    # Returns the maximum-ever depth of this dictionary.
-    #
-    # In other words, this method **does not** return the current maximum depth;
-    # it can be said to return the "maximum maximum depth", that is, the largest
-    # depth seen throughout the history of this dict.
-    def maxdepth : UInt32
-      @maxdepth + 1
-    end
-
     def initialize
       @items = EMPTY_ITEM_NODE
       @pairs = EMPTY_PAIR_NODE
@@ -292,6 +248,15 @@ module Ww
     # notice -- and stale cache will make the dictionary dysfunctional.
     protected def state
       {@items, @pairs, @sketch, @maxdepth}
+    end
+
+    # Returns the maximum-ever depth of this dictionary.
+    #
+    # In other words, this method **does not** return the current maximum depth;
+    # it can be said to return the "maximum maximum depth", that is, the largest
+    # depth seen throughout the history of this dict.
+    def maxdepth : UInt32
+      @maxdepth + 1
     end
 
     # Yields one or more `Commit` objects so that you can build one or more
@@ -439,12 +404,6 @@ module Ww
       @pairs.size
     end
 
-    @[Dncast]
-    @[AlwaysInline]
-    def hi
-      itemsize - 1
-    end
-
     # Returns `true` if this dictionary contains no entries.
     @[Dncast]
     def empty? : Bool
@@ -498,38 +457,6 @@ module Ww
       Term[index32?(term)]
     end
 
-    @[Dncast]
-    def item_at?(key : Int32) : Term?
-      return unless key < @items.size
-      return unless coat = @items.fetch?(Probes::FetchItem.new(key))
-
-      entry, *_ = coat
-      entry.value
-    end
-
-    # :nodoc:
-    @[Dncast]
-    def at?(key : Term::Num) : Term?
-      return at_default?(key) unless i = index32?(key)
-      return at_default?(key) unless coat = @items.fetch?(Probes::FetchItem.new(i.to_i))
-
-      entry, *_ = coat
-      entry.value
-    end
-
-    # :nodoc:
-    @[Dncast]
-    def at?(key : Term::Any) : Term?
-      at_default?(key)
-    end
-
-    private def at_default?(key : Term::Any) : Term?
-      return unless coat = @pairs.fetch?(Probes::FetchPair.new(Term.of(key)))
-
-      entry, *_ = coat
-      entry.value
-    end
-
     # O(1) Nth entry in `each_entry`-order (items unordered, pairs unordered).
     @[Dncast]
     def nth?(index : Int32) : {Term, Term}?
@@ -566,73 +493,64 @@ module Ww
       ordnth?(index) || raise IndexError.new
     end
 
+    private def at_default?(key : Term::Any) : Term?
+      # why the f is it called a COAT?
+      return unless coat = @pairs.fetch?(Probes::FetchPair.new(Term.of(key)))
+
+      entry, *_ = coat
+      entry.value
+    end
+
+    # :nodoc:
+    @[Dncast]
+    def []?(key : Term::Num) : Term?
+      return at_default?(key) unless i = index32?(key)
+      return at_default?(key) unless coat = @items.fetch?(Probes::FetchItem.new(i.to_i))
+
+      entry, *_ = coat
+      entry.value
+    end
+
+    # :nodoc:
+    @[Dncast]
+    def []?(key : Term::Any) : Term?
+      at_default?(key)
+    end
+
     # Returns the value associated with the given *key*, or nil if *key*
     # is not associated with any value.
     @[Dncast]
-    def at?(key) : Term?
-      at?(Term[key])
+    def []?(key) : Term?
+      self[Term[key]]?
     end
 
     # Returns the value associated with the given *key*, or raises `KeyError`
     # if *key* is not associated with any value.
     @[Dncast]
-    def at(key) : Term
-      at?(key) || raise KeyError.new
+    def [](key) : Term
+      self[key]? || raise KeyError.new
     end
 
-    # Returns the value associated with the given *key*, or *default* if *key*
-    # is not associated with any value.
     @[Dncast]
-    def at(key, *, default) : Term
-      at?(key) || Term.of(default)
+    def []?(*keys) : Term?
+      follow?(keys)
     end
 
-    # Transforms the value associated with the given *key* using the block, or
-    # returns *orelse* without transforming it if *key* is not associated with
-    # any value.
     @[Dncast]
-    def at(key, *, orelse, &) : Term
-      return Term.of(orelse) unless value = at?(key)
-
-      Term.of(yield value)
-    end
-
-    # Alias of `at`.
-    @[Dncast]
-    def [](*args, **kwargs) : Term
-      at(*args, **kwargs)
-    end
-
-    # Alias of `at?`.
-    @[Dncast]
-    def []?(*args, **kwargs) : Term?
-      at?(*args, **kwargs)
+    def [](*keys) : Term
+      follow(keys)
     end
 
     # Traverses nested dictionaries for each key in *keys*, returns the value that
     # was reached last. Returns `nil` if some key was not found during traversal.
     @[Dncast]
-    def dig?(*keys) : Term?
-      keys.reduce(self) { |dict, key| dict.at?(key) || return }
+    def follow?(keys : Enumerable) : Term?
+      Term.of(keys.reduce(self) { |dict, key| dict[key]? || return })
     end
 
-    # Same as `dig?`, but raises `KeyError` instead of returning `nil` if some key
-    # was not found during traversal.
     @[Dncast]
-    def dig(*keys) : Term
-      dig?(*keys) || raise KeyError.new("#{keys}")
-    end
-
-    # Alias of `dig`.
-    @[Dncast]
-    def [](*keys) : Term
-      dig(*keys)
-    end
-
-    # Alias of `dig?`.
-    @[Dncast]
-    def []?(*keys) : Term?
-      dig?(*keys)
+    def follow(keys : Enumerable) : Term
+      follow?(keys) || raise KeyError.new
     end
 
     # Yields each entry from this dictionary. **The order of entries is
@@ -689,38 +607,6 @@ module Ww
       @items.each { |entry| yield entry.value, entry.index }
     end
 
-    # :nodoc:
-    #
-    # Ratio of itemsize to range size to begin scanning the dict instead of looking
-    # up when iterating over items in range.
-    SCAN_THRESHOLD = 0.6
-
-    # TODO: We should probably remove this in favor of the built-in `ItemsView#each(within) < Indexable`
-    @[Dncast]
-    def each_item_with_index(*, within range : Range(Int32, Int32), & : Term, Int32 ->) : Nil
-      assert range.exclusive?
-
-      if range.empty?
-        return
-      end
-
-      assert range.subrange_of?(0...itemsize)
-
-      if itemsize / range.size >= SCAN_THRESHOLD
-        # Better to iterate over dict in memory-order and check if item is in range.
-        each_item_with_index do |item, index|
-          next unless index.in?(range)
-          yield item, index
-        end
-      else
-        # Better to iterate over range and lookup each item.
-        range.each do |index|
-          assert item = item_at?(index)
-          yield item, index
-        end
-      end
-    end
-
     @[Dncast]
     def each_item_unordered(& : Term ->) : Nil
       @items.each { |entry| yield entry.value }
@@ -760,70 +646,6 @@ module Ww
     @[Dncast]
     def ee(*, ordered = false) : Enumerable({Term, Term})
       EntryEnumerable.new(self, ordered)
-    end
-
-    # :nodoc:
-    #
-    # An enumerable over dictionary entry values.
-    struct ValueEnumberable
-      include Enumerable(Term)
-
-      def initialize(@dict : Dict)
-      end
-
-      def each(& : Term ->)
-        @dict.each_entry { |_, v| yield v }
-      end
-    end
-
-    # Returns an enumerable of values based on `each_entry`.
-    #
-    # TODO: Probably remove this.
-    @[Dncast]
-    def ve : Enumerable(Term)
-      ValueEnumberable.new(self)
-    end
-
-    # :nodoc:
-    #
-    # An enumerable over dictionary items (keys 0 through n where n is the size
-    # of the dictionary).
-    struct ItemEnumerable
-      include Enumerable(Term)
-
-      def initialize(dict : Dict)
-        @items = dict.items
-      end
-
-      def each(& : Term ->)
-        @items.each { |item| yield item }
-      end
-    end
-
-    # Returns an enumerable for items found in this dictionary.
-    #
-    # See also: `items`.
-    #
-    # TODO: Probably remove this in favor of `items`.
-    @[Dncast]
-    def ie : Enumerable(Term)
-      ItemEnumerable.new(self)
-    end
-
-    # Returns an enumerable based on `each_pair`. The pairs will be emitted
-    # in order if *ordered* is set to `true`.
-    #
-    # TODO: Probably remove this.
-    @[Dncast]
-    def pe(*, ordered = false) : Enumerable({Term, Term})
-      pairspart.ee(ordered: ordered)
-    end
-
-    # Returns `true` if this dict appears to be a *dict set*: it is nonempty,
-    # and all entry values are `true`.
-    @[Dncast]
-    def set? : Bool
-      !empty? && ee.all? { |_, v| v.type.boolean? && v.unsafe_as_b.true? }
     end
 
     # Returns `true` if all entries of `self` are included in *other*.
@@ -1007,7 +829,7 @@ module Ww
 
     # TODO: have an optimized version of this
     @[Dncast]
-    def with(key, &)
+    def with(key, & : Term? -> _)
       self.with(key, yield self[key]?)
     end
 
@@ -1025,13 +847,78 @@ module Ww
       end
     end
 
-    # SAME
-    # TODO: more idiomatic name
     @[Dncast]
-    def lshift
+    def prior
+      if itemsize.zero?
+        return self
+      end
+
+      without(itemsize - 1)
+    end
+
+    @[Dncast]
+    def rest
       pairspart.transaction do |commit|
         commit.concat(1...itemsize) { |index| self[index] }
       end
+    end
+
+    @[Dncast]
+    def span(b : Num, e : Num) : Dict
+      return Term[] if b == e
+      return items.collect if b == Term[0] && e == Term[size]
+      return Term[] unless b < e <= size
+
+      Term::Dict.build do |commit|
+        (b...e).each do |key|
+          commit.append(self[key])
+        end
+      end
+    end
+
+    @[Dncast]
+    def without_item(index)
+      replace(Term[index]) { }
+    end
+
+    @[Dncast]
+    def without_item(&)
+      dict = self
+
+      each_item_with_index do |item, index|
+        next unless yield item
+
+        dict = dict.without_item(index)
+      end
+
+      dict
+    end
+
+    # Lets the block replace items in the given *range* with zero or more items
+    # by appending to the commit. Returns the modified copy of `self`.
+    @[Dncast]
+    def replace(range : Range(Term::Num, Term::Num), & : Term::Dict::Commit ->) : Term::Dict
+      assert range.exclusive?
+      assert Term[0] <= range.begin <= Term[itemsize]
+
+      pairspart.transaction do |commit|
+        # Copy before
+        (Term[0]...range.begin).each do |index|
+          commit << self[index]
+        end
+
+        yield commit
+
+        # Copy after
+        (range.end...itemsize).each do |index|
+          commit << self[index]
+        end
+      end
+    end
+
+    @[Dncast]
+    def replace(index : Term::Num, & : Term::Dict::Commit ->)
+      replace(index...index + 1) { |commit| yield commit }
     end
 
     private def with_default(key : Term::Any, value : Term) : Dict
@@ -1041,131 +928,6 @@ module Ww
       end
 
       Dict.new(@items, pairs, Dict.mix(@sketch, value), Dict.mixdepth(@maxdepth, value))
-    end
-
-    @[Dncast]
-    def follow?(keys : Enumerable(Term)) : Term?
-      Term.of(keys.reduce(self) { |dict, key| dict[key]? || return })
-    end
-
-    @[Dncast]
-    def follow(keys : Enumerable(Term)) : Term
-      follow?(keys) || raise KeyError.new
-    end
-
-    @[Dncast]
-    def follow?(keys : Indexable(Term), *, __cursor = 0, &fn : Term -> Term?) : Term?
-      case __cursor
-      when keys.size
-        fn.call(Term.of(self))
-      when keys.size - 1
-        key = keys[__cursor]
-        return unless value0 = self[key]?
-        Term.of(self.with(key, fn.call(value0)))
-      else
-        key = keys[__cursor]
-        return unless value0 = self[key]?
-        return unless value0 = value0.as_d?
-        return unless value1 = value0.follow?(keys, __cursor: __cursor + 1, &fn)
-
-        Term.of(self.with(key, value1))
-      end
-    end
-
-    @[Dncast]
-    def follow(keys : Indexable(Term), &fn : Term -> Term) : Term
-      follow?(keys, &fn) || raise KeyError.new
-    end
-
-    @[Dncast]
-    def where(key, eq fn : Term -> Term) : Dict
-      return self unless v0 = self[key]?
-
-      self.with(key, fn.call(v0))
-    end
-
-    @[Dncast]
-    def where(key, eq value) : Dict
-      self.with(key, value)
-    end
-
-    @[Dncast]
-    def where(key, *keys, eq value) : Dict
-      self.with(key, (self[key]? || Term[]).where(*keys, eq: value))
-    end
-
-    @[Dncast]
-    def where(key, *keys, eq value : Nil) : Dict
-      return self unless v0 = self[key]?
-      v1 = v0.where(*keys, eq: nil)
-      v1.empty? ? without(key) : self.with(key, v1)
-    end
-
-    @[Dncast]
-    def morph(place)
-      where(*place[...-1], eq: place[-1])
-    end
-
-    @[Dncast]
-    def morph(place, *places)
-      morph(place).morph(*places)
-    end
-
-    @[Dncast]
-    def where(prefix : BiList(Term), eq value) : Dict
-      case prefix
-      when .empty?
-        raise ArgumentError.new
-      when .one?
-        self.with(prefix.first, value)
-      else
-        key = prefix.first
-
-        unless value0 = self[key]?
-          value0 = Term[]
-        end
-
-        unless value0.type.dict?
-          # Replace non-dictionary values with dictionaries if such a case ever
-          # occurs. It shouldn't.
-          value0 = Term[]
-        end
-
-        self.with(key, value0.where(prefix.rest, value))
-      end
-    end
-
-    @[Dncast]
-    def where(prefix : Dict::ItemsView | Slice(Term), eq value) : Dict
-      case prefix.size
-      when 0
-        raise ArgumentError.new
-      when 1
-        self.with(prefix.first, value)
-      else
-        key = prefix.first
-
-        unless value0 = self[key]?
-          value0 = Term[]
-        end
-
-        unless value0.type.dict?
-          # Replace non-dictionary values with dictionaries if such a case ever
-          # occurs. It shouldn't.
-          value0 = Term[]
-        end
-
-        self.with(key, value0.where(prefix + 1, value))
-      end
-    end
-
-    # Removes the entry with the given *key* if present. Returns the modified
-    # copy of this dict and the value associated with *key* (if any, else `nil`).
-    @[Dncast]
-    def without?(key) : {Dict, Term?}
-      dict1 = without(key)
-
-      {dict1, self[key]?}
     end
 
     # :nodoc:
@@ -1201,18 +963,19 @@ module Ww
       without(Term.of(key))
     end
 
-    # Returns a copy of this dictionary that is guaranteed not to contain
-    # associations with any of the given *keys*.
-    @[Dncast]
-    def without(*keys) : Dict
-      residue(keys)
-    end
+    # # Returns a copy of this dictionary that is guaranteed not to contain
+    # # associations with any of the given *keys*.
+    # @[Dncast]
+    # def without(*keys) : Dict
+    #   residue(keys)
+    # end
 
-    def residue(keys : Enumerable)
-      transaction do |commit|
-        keys.each { |key| commit.without(key) }
-      end
-    end
+    # # Returns a copy of this dictionary with all of *keys* removed (if present).
+    # def residue(keys : Enumerable)
+    #   transaction do |commit|
+    #     keys.each { |key| commit.without(key) }
+    #   end
+    # end
 
     private def without_default(key : Term::Any) : Dict
       removed, pairs = @pairs.delete(Probes::DissocPairImm.new(Term.of(key)))
@@ -1323,68 +1086,6 @@ module Ww
       commit.resolve
     end
 
-    @[Dncast]
-    def replace(& : Term, Term -> Term?) : Dict
-      instance : Dict? = nil
-      author = nil
-
-      each_entry do |k, v|
-        next unless rep = yield k, v
-        # Fast path. This would have been done anyway below, but let's have it.
-        if v.type.dict? && rep.type.dict?
-          next if v.unsafe_as_d.same?(rep.unsafe_as_d)
-        end
-        author ||= Commit.genid
-        instance ||= Dict.new(*state)
-        instance = instance.with!(k, rep, author)
-      end
-
-      # Throw away the copy if nothing changed, but prefer the copy if it has
-      # computed the hashcode.
-      return self unless instance
-      return instance if @hash.zero? && instance.@hash.nonzero?
-      return self if state == instance.state
-
-      instance
-    end
-
-    @[Dncast]
-    def subst1(term, replacement) : Dict
-      term, replacement = Term.of(term), Term.of(replacement)
-
-      replace { |_, v| v == term ? replacement : nil }
-    end
-
-    # Recursive, depth-first substitution using the substitution table *subt*.
-    @[Dncast]
-    def subst(subt) : Dict
-      subt = subt.as_d
-
-      replace do |_, v0|
-        if v1 = subt[v0]?
-          v1
-        elsif v0.type.dict?
-          Term.of(v0.unsafe_as_d.subst(subt))
-        end
-      end
-    end
-
-    # :nodoc:
-    def unify?(key : Term, vsucc : Term) : Dict?
-      return self.with(key, vsucc) unless vpred = self[key]?
-      return unless vpred == vsucc
-      self
-    end
-
-    # Returns a copy of this dictionary where an association between *key* and
-    # *vsucc* is guaranteed to exist. However, if *key* is already present
-    # in this dictionary but has a different value (`==`), then this method
-    # returns `nil`.
-    @[Dncast]
-    def unify?(key, vsucc) : Dict?
-      unify?(Term.of(key), Term.of(vsucc))
-    end
-
     # Returns `true` if all keys shared by `self` and *other* have equal values.
     # If no keys are shared, returns `true`.
     def agrees_with?(other : Dict) : Bool
@@ -1405,212 +1106,15 @@ module Ww
       true # agrees
     end
 
-    private def pluck(key, commit : Commit)
-      return unless value = at?(key)
-
-      commit.with(key, value)
-    end
-
-    private def pluck(orig, renamed, commit : Commit)
-      return unless value = at?(orig)
-
-      commit.with(renamed, value)
-    end
-
-    private def pluck(key : Tuple, commit : Commit)
-      pluck(*key, commit)
-    end
-
-    # Creates a dictionary that contains only entries with the given *keys*, and
-    # some additional *entries*.
-    #
-    # ```
-    # Term[x: 100, y: 200, z: 300].pluck(:x)           # => Term[x: 100]
-    # Term[x: 100, y: 200, z: 300].pluck({:x, :a})     # => Term[a: 100]
-    # Term[x: 100, y: 200, z: 300].pluck({:x, :a}, :y) # => Term[a: 100, y: 200]
-    #
-    # Term[x: 100, y: 200, z: 300].pluck({:z, :foo}, foobar: 4) # => Term[foo: 300, foobar: 4]
-    # ```
-    @[Dncast]
-    def pluck(*keys, **rest) : Term::Dict
-      Dict.build do |commit|
-        keys.each { |key| pluck(key, commit) }
-        rest.each { |k, v| commit.with(k, v) }
-      end
-    end
-
-    # Returns a dictionary with entries whose keys are present in the enumerable *ee*.
-    #
-    # Keys present in *ee* but missing in `self` are skipped.
-    @[Dncast]
-    def pluck(ee : Enumerable(Term)) : Term::Dict
-      Dict.build do |commit|
-        ee.each { |key| commit.with(key, self[key]?) }
-      end
-    end
-
-    # Merge-concatenate.
-    @[Dncast]
-    def mcat(other : Dict) : Dict
-      # Fast path
-      if itemsonly? && other.pairsonly?
-        return Dict.new(@items, other.@pairs, @sketch | other.@sketch, Math.max(@maxdepth, other.@maxdepth))
+    # Returns `true` if `self` and *other* share one or more keys.
+    def intersects?(other : Dict) : Bool
+      sm, lg = size < other.size ? {self, other} : {other, self}
+      sm.each_entry do |key, _|
+        next unless key.in?(lg)
+        return true # intersects
       end
 
-      # Slow path
-      transaction do |commit|
-        commit.concat(other.items)
-
-        other.each_pair do |key, value|
-          commit.with(key, value)
-        end
-      end
-    end
-
-    # Shallow merge.
-    #
-    # Merges this dictionary with a *newer* one. If two keys are equal the value
-    # from *newer* is preferred.
-    @[Dncast]
-    def |(newer) : Dict
-      newer = newer.as_d
-
-      return newer if empty?
-      return self if newer.empty?
-
-      # Don't waste time allocating commits for singleton dicts.
-
-      if size == 1 # Extend with missing
-        k, v = ee.first
-        return k.in?(newer) ? newer : newer.with(k, v)
-      end
-
-      if newer.size == 1 # Override by all from newer
-        return self.with(*newer.ee.first)
-      end
-
-      # Allocate commits otherwise. Now they're supposed to save time, sometimes
-      # (but actually almost always) drastically.
-
-      if size < newer.size # Extend with missing
-        newer.transaction do |commit|
-          each_entry do |k, v|
-            next if k.in?(newer)
-            commit.with(k, v)
-          end
-        end
-      else # Override by all from newer
-        transaction do |commit|
-          newer.each_entry { |k, v| commit.with(k, v) }
-        end
-      end
-    end
-
-    @[Dncast]
-    def span(b : Num, e : Num) : Dict
-      return Term[] if b == e
-      return items.collect if b == Term[0] && e == Term[size]
-      return Term[] unless b < e <= size
-
-      Term::Dict.build do |commit|
-        (b...e).each do |key|
-          commit.append(self[key])
-        end
-      end
-    end
-
-    @[Dncast]
-    def without_item(index)
-      replace(Term[index]) { }
-    end
-
-    # Lets the block replace items in the given *range* with zero or more items
-    # by appending to the commit. Returns the modified copy of `self`.
-    @[Dncast]
-    def replace(range : Range(Term::Num, Term::Num), & : Term::Dict::Commit ->) : Term::Dict
-      assert range.exclusive?
-      assert Term[0] <= range.begin <= Term[itemsize]
-
-      pairspart.transaction do |commit|
-        # Copy before
-        (Term[0]...range.begin).each do |index|
-          commit << self[index]
-        end
-
-        yield commit
-
-        # Copy after
-        (range.end...itemsize).each do |index|
-          commit << self[index]
-        end
-      end
-    end
-
-    @[Dncast]
-    def replace(index : Term::Num, & : Term::Dict::Commit ->)
-      replace(index...index + 1) { |commit| yield commit }
-    end
-
-    # Dict set intersection. Values are ignored; only key presence/absence is taken
-    # into account. May mix keys/values from `self`/*other* for additional speedup
-    # (set *mix* to `false` to disallow).
-    @[Dncast]
-    def xsect(other : Dict, *, mix = true) : Dict
-      if empty? || other.empty?
-        return Term[]
-      end
-
-      if size < other.size || !mix
-        transaction do |commit|
-          each_entry do |k, _|
-            next if k.in?(other)
-            commit.without(k)
-          end
-        end
-      else
-        other.transaction do |commit|
-          other.each_entry do |k, _|
-            next if k.in?(self)
-            commit.without(k)
-          end
-        end
-      end
-    end
-
-    # Dict entry mask intersection. Leaves keys common to `self` and *other*,
-    # their values set to `true`.
-    @[Dncast]
-    def msect(other : Dict) : Dict
-      Term::Dict.build do |commit|
-        each_entry do |k, _|
-          next unless k.in?(other)
-          commit.with(k, true)
-        end
-        other.each_entry do |k, _|
-          next unless k.in?(self)
-          commit.with(k, true)
-        end
-      end
-    end
-
-    # Dict set subtraction. Values are ignored; only key presence/absence is taken
-    # into account.
-    @[Dncast]
-    def sub(other : Dict) : Dict
-      if size < other.size
-        transaction do |commit|
-          each_entry do |k, _|
-            next unless k.in?(other)
-            commit.without(k)
-          end
-        end
-      else
-        transaction do |commit|
-          other.each_entry do |k, _|
-            commit.without(k)
-          end
-        end
-      end
+      false # does not intersect
     end
 
     # In practice `partition` and `pairs` are called very often. Therefore by

@@ -108,7 +108,7 @@ module Ww::ML::Formatter
 
       matchpi %[(_* ¦)] do
         pp.group(style.indent, "(", ")") do
-          term.ie.each_with_index do |item, index|
+          term.items.each_with_index do |item, index|
             pp.breakable if index > 0
             format(pp, item, style)
           end
@@ -117,11 +117,11 @@ module Ww::ML::Formatter
 
       matchpi %[_dict] do
         pp.group(style.indent, "(", ")") do
-          term.ie.each_with_index do |item, index|
+          term.items.each_with_index do |item, index|
             pp.breakable if index > 0
             format(pp, item, style)
           end
-          term.pe(ordered: true).each do |k, v|
+          term.each_pair_ord do |k, v|
             pp.breakable
             format(pp, k, style)
             pp.text(":")

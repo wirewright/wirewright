@@ -125,11 +125,11 @@ module Ww::Rack::ControlSpace
       surface, _, _ = cells[node_id]
       Term.case(rep) do
         matchpi %{(cell @_ value_)} do
-          patch = patch.assoc(node_id, Term.of(surface.node.term.morph({1, value})))
+          patch = patch.assoc(node_id, Term.morph(surface.node.term, {1, value}))
         end
 
         matchpi %{(cell @_)} do
-          patch = patch.assoc(node_id, Term.of(surface.node.term.morph({1, nil})))
+          patch = patch.assoc(node_id, Term.morph(surface.node.term, {1, nil}))
         end
       end
     end

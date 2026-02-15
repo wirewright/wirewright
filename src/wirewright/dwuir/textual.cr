@@ -318,7 +318,7 @@ module Ww::DwUIR
       return subject unless subject.type.dict?
       return subject unless subject.includes?(:"dw-request")
 
-      Term.of_case(subject) do
+      Term.case(subject) do
         matchpi %{(text ⍊ dw-request: (measure ±width oheight_symbol ⍊ status_symbol))} do
           space = Point.new(width.to(Float32), Float32::INFINITY)
 
@@ -334,7 +334,7 @@ module Ww::DwUIR
             end
           end
 
-          subject.morph(
+          Term.morph(subject,
             {status, :ok},
             {oheight, size.h.floor},
             {:"dw-request", nil},
@@ -356,7 +356,7 @@ module Ww::DwUIR
             end
           end
 
-          subject.morph(
+          Term.morph(subject,
             {status, :ok},
             {owidth, size.w.floor},
             {oheight, size.h.floor},

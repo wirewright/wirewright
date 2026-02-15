@@ -18,8 +18,8 @@ module Ww::Microfold::Pass
 
         next if style0 == style1
 
-        node1 = node0.as_d(&.morph({:"µ-style", style1}))
-        root1 = root1.as_d(&.follow(keypath) { node1 })
+        node1 = Term.morph(node0, {:"µ-style", style1})
+        root1 = Term.assign(root1, keypath, to: node1)
       end
 
       true # descend
@@ -71,8 +71,8 @@ module Ww::Microfold::Pass
         end
 
         unless style0 == style1
-          node1 = Term.of(node0.morph({:"µ-style", style1}))
-          root1 = root1.as_d(&.follow(keypath) { node1 })
+          node1 = Term.morph(node0, {:"µ-style", style1})
+          root1 = Term.assign(root1, keypath, to: node1)
         end
       end
 

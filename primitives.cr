@@ -198,16 +198,6 @@ PRIMITIVES = ProcRuleset.build do
     end
   end
 
-  rulepi1 %[(append x_dict keypath_+ term_)] do
-    Term.morph(x, keypath.items) do |tip|
-      if tip.type.dict?
-        Term.of(tip.unsafe_as_d.append(term))
-      else
-        tip
-      end
-    end
-  end
-
   rulepi1 %[(cat xs_dict+)] do
     Term::Dict.build do |commit|
       xs.items.each do |x|
@@ -223,15 +213,17 @@ PRIMITIVES = ProcRuleset.build do
   end
 
   rulepi1 %[(union xs_dict*)] do
-    xs.items.reduce(Term[]) { |memo, dict| memo | dict }
+    xs.items.reduce(Term.of) { |memo, dict| Term.overlay(memo, dict) }
   end
 
   # alias
   rulepi1 %[(∪ xs_dict*)] do
-    xs.items.reduce(Term[]) { |memo, dict| memo | dict }
+    xs.items.reduce(Term.of) { |memo, dict| Term.overlay(memo, dict) }
   end
 
-  rulepi1 %[(∩ xs_dict ys_dict)] { xs.unsafe_as_d.msect(ys.unsafe_as_d) }
+  rulepi1 %[(intersects? xs_dict ys_dict)] do
+    xs.as_d.intersects?(ys.as_d)
+  end
 
   rulepi1 %[(merge xs_dict ys_dict)] do
     Term.merge(xs, ys)
@@ -309,45 +301,6 @@ PRIMITIVES = ProcRuleset.build do
     else
       Term.flatten(xs, depth: depth.to(Int32))
     end
-  end
-
-  rulepi1 %{(subseq whole_dict (from index←(%number +i32)))} do
-    Term::Dict.build do |commit|
-      commit.concat(whole.items.move(index.to(Int32)))
-    end
-  end
-
-  rulepi1 %{(subseq whole_dict (pattern selector_))} do
-    Term::Dict.build do |commit|
-      commit.selected(whole.items) do |item|
-        M1.probe?(selector, item)
-      end
-    end
-  end
-
-  # TODO: we must use this under `complement` somehow!!!!
-  rulepi1 %{(-subseq whole_dict (pattern selector_))} do
-    Term::Dict.build do |commit|
-      commit.rejected(whole.items) do |item|
-        M1.probe?(selector, item)
-      end
-    end
-  end
-
-  rulepi1 %{(part whole_dict (key key_))} do
-    whole.pluck(key)
-  end
-
-  rulepi1 %{(part whole_dict (key key_ ¦ () default_))} do
-    whole[key]? || default
-  end
-
-  rulepi1 %{(part whole_dict items)} do
-    whole.itemspart
-  end
-
-  rulepi1 %{(part whole_dict pairs)} do
-    whole.pairspart
   end
 
   rulepi1 %{(complement universe_dict subset_dict)} do

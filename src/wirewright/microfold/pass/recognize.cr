@@ -12,7 +12,7 @@ module Ww::Microfold::Pass
         # When the style string is present, Microfold will define µ-style even if there
         # is no preset for that node.
         matchpi %[(tag_ _* ⍊ -µ-preset -µ-style style_string)] do
-          node.morph(
+          Term.morph(node,
             {:style, nil},
             {:"µ-preset", theme.preset?(tag, issues) || ""},
             {:"µ-style", style},
@@ -24,7 +24,7 @@ module Ww::Microfold::Pass
         matchpi %[(tag_ _* ⍊ -µ-preset)] do
           continue unless preset = theme.preset?(tag, issues)
 
-          node.morph(
+          Term.morph(node,
             {:"µ-preset", theme.preset?(tag, issues) || ""},
             {:"µ-style", ""},
           )

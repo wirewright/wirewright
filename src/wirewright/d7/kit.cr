@@ -179,11 +179,9 @@ module Ww::D7
   # Constructs a patch that morphs node terms in *object* according
   # to *morphseq*.
   #
-  # See also `Term::Dict#morph` (in the future `Term.morph`).
+  # See also `Term.morph`.
   def patch(object : Node, *morphseq) : Patch
-    result = object.term.morph(*morphseq)
-
-    Pf::Map.assoc(object.id, Term.of(result))
+    Pf::Map.assoc(object.id, Term.morph(object.term, *morphseq))
   end
 
   # :ditto:

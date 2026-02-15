@@ -28,28 +28,24 @@ module Ww::Microfold::Pass
                       icon-font-fallback: font-fallback_string
                       icon-fallback: fallback_string}})
           ]) do
-            node = node.as_d do |dict|
-              dict.morph(
-                {:"µ-designations", :"text-box", :"icon-font-fallback", nil},
-                {:"µ-designations", :"text-box", :"icon-fallback", nil},
-              )
-            end
+            node = Term.morph(node,
+              {:"µ-designations", :"text-box", :"icon-font-fallback", nil},
+              {:"µ-designations", :"text-box", :"icon-fallback", nil},
+            )
 
             font_weight = DwUIR::FontWeight.parse(weight.to(Int32))
 
             if char = DwUIR::FontIndex.codepoint?(name.to(String), font.to(String), font_weight)
-              node = node.as_d(&.morph({1, char}))
+              node = Term.morph(node, {1, char})
               next
             end
 
             issues.minor("icon `#{name.to(String)}` not found in the font `#{font.to(String)}` with weight `#{font_weight}`")
 
-            node = node.as_d do |dict|
-              dict.morph(
-                {1, fallback},
-                {:"µ-designations", :"text-box", :font, font_fallback},
-              )
-            end
+            node = Term.morph(node,
+              {1, fallback},
+              {:"µ-designations", :"text-box", :font, font_fallback},
+            )
           end
 
           otherwise { }

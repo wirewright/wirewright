@@ -87,7 +87,7 @@ module Ww::Microfold::Pass
         return node, false
       end
 
-      {node.as_d(&.morph({:"µ-flow", true})), true}
+      {Term.morph(node, {:"µ-flow", true}), true}
     end
 
     # Performs the flow evaluation pass -- the main flow pass on *root*.

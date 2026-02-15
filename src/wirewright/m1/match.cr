@@ -862,7 +862,7 @@ module Ww::M1
     return Fb[] unless dict = matchee.term.as_itemsonly_d?
     return Fb[] unless dict.itemsize > 0
 
-    cons(ctx, op.successor, matchee[dict.hi], plan)
+    cons(ctx, op.successor, matchee[dict.itemsize - 1], plan)
   end
 
   # :nodoc:
@@ -870,7 +870,7 @@ module Ww::M1
     return false unless dict = matchee.as_itemsonly_d?
     return false unless dict.itemsize > 0
 
-    probably_matches?(op.successor, dict[dict.hi])
+    probably_matches?(op.successor, dict[dict.itemsize - 1])
   end
 
   # :nodoc:

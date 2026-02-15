@@ -32,7 +32,7 @@ module Ww::M1
         # Insert *a* before `%adjacent`'s members: (%adjacent ⏏ _ _*).
         result = bs.replace(Term[1]...Term[1], &.append(a))
         # Increment its lower bound.
-        result.morph({:bounds, 0, lo + 1})
+        Term.morph(result, {:bounds, 0, lo + 1})
       end
 
       otherwise { op }
@@ -204,7 +204,7 @@ module Ww::M1
         cue: {:"%partition"},
         cues: {:"%dict-guard", :"%bounds", :"%depth", :"%sketch"},
       ) do
-        op.morph({1, 1, successor})
+        Term.morph(op, {1, 1, successor})
       end
 
       # Rewrite pointless nested guards in partition pairspart.
@@ -216,7 +216,7 @@ module Ww::M1
         cue: {:"%partition"},
         cues: {:"%dict-guard", :"%bounds", :"%depth", :"%sketch"},
       ) do
-        op.morph({1, 2, successor})
+        Term.morph(op, {1, 2, successor})
       end
 
       otherwise { op }

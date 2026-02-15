@@ -924,14 +924,14 @@ module Ww
     end
 
     # Appends the hash of a symbol term *object* to *hasher*.
-    def self.hashcode(hasher : Hasher, object : Term::Sym) : Hasher
+    def self.hashcode(hasher : Hasher, object : Sym) : Hasher
       hasher << TermType::Symbol
       hasher << object.@bits
       hasher
     end
 
     # Appends the hash of a string term *object* to *hasher*.
-    def self.hashcode(hasher : Hasher, object : Term::Str) : Hasher
+    def self.hashcode(hasher : Hasher, object : Str) : Hasher
       # Use XXHash for strings. They can be heavy. Everything else isn't so XXHash
       # is an overkill versus a few multiplies and XORs.
       bytes = object.to_slice
@@ -943,14 +943,14 @@ module Ww
     end
 
     # Appends the hash of a number term *object* to *hasher*.
-    def self.hashcode(hasher : Hasher, object : Term::Num) : Hasher
+    def self.hashcode(hasher : Hasher, object : Num) : Hasher
       hasher << TermType::Number
       hasher << object.hashrepr
       hasher
     end
 
     # Appends the hash of a boolean term *object* to *hasher*.
-    def self.hashcode(hasher : Hasher, object : Term::Boolean) : Hasher
+    def self.hashcode(hasher : Hasher, object : Boolean) : Hasher
       hasher << TermType::Boolean
       hasher << (object.true? ? 1u8 : 0u8)
       hasher
@@ -964,7 +964,7 @@ module Ww
     end
 
     # Appends the hash of a dict term *object* to *hasher*.
-    def self.hashcode(hasher : Hasher, object : Term::Dict) : Hasher
+    def self.hashcode(hasher : Hasher, object : Dict) : Hasher
       hashcode = object.hashcode do
         state = HASHCODE_DICT_TYPE
 
@@ -1238,7 +1238,7 @@ module Ww
     # Returns `true` if *term* is a well-formed edge.
     #
     # This is just a "hand-optimized" version of the pattern `(%'edge _)`.
-    def self.edge?(term : Term::Dict, *, type : TermType) : Bool
+    def self.edge?(term : Dict, *, type : TermType) : Bool
       return false unless term.itemsonly?
       return false unless term.size == 2
       return false unless term.probably_includes?(SYM_EDGE)
@@ -1247,7 +1247,7 @@ module Ww
     end
 
     # :ditto:
-    def self.edge?(term : Term::Any, *, type : TermType) : Bool
+    def self.edge?(term : Any, *, type : TermType) : Bool
       false
     end
 
@@ -1315,7 +1315,7 @@ module Ww
       end
     end
 
-    # Returns *b* for any type other than a dictionary.
+    # Returns *b* for terms with different types.
     def self.merge(a : Any, b : Any) : Any
       b
     end
@@ -1335,11 +1335,49 @@ module Ww
       cs.reduce(merge(a, b)) { |memo, x| merge(memo, x) }
     end
 
-    # Returns a copy of the dict *a* with all of *keys* removed. Missing keys are
-    # skipped. Raises `TypeCastError` if *a* is not a dict. Upcasts the result
-    # back to `Term`.
-    def self.exclude(a : Term, keys : Enumerable(Term)) : Term
-      Term.of(exclude(a.as_d, keys))
+    # Shallow merge of entries from *a* and *b*.
+    #
+    # TODO: This should be implemented by `Dict`/`Pf::Map`/etc., i.e., internally,
+    # with tree-specific optimizations, structurally.
+    def self.overlay(a : Dict, b : Dict) : Dict
+      return b if a.empty? || a.same?(b)
+      return a if b.empty?
+
+      assert a.nonempty? && b.nonempty?
+
+      if a.size < b.size
+        # Extend b with missing.
+        b.transaction do |commit|
+          a.each_entry do |k, v|
+            next if k.in?(b)
+
+            commit.with(k, v)
+          end
+        end
+      else
+        # Overwrite with values from b.
+        a.transaction do |commit|
+          b.each_entry do |k, v|
+            # FIXME: this shouldn't be necessary, Dict#with[!]() should do this
+            next if a[k]? == v
+
+            commit.with(k, v)
+          end
+        end
+      end
+    end
+
+    # Returns *b* for terms with different types.
+    def self.overlay(a : Any, b : Any) : Any
+      b
+    end
+
+    # Shallow merge.of two terms *a* and *b*.
+    #
+    # For *a* and *b* of different types, *b* is preferred.
+    # For *a* and *b* that are both a Dict, their entries are merged.
+    def self.overlay(a : Term, b : Term) : Term
+      Term.of(overlay(Term[a], Term[b]))
     end
 
     # Returns a copy of the dict *a* with all of *keys* removed. Missing keys
@@ -1348,6 +1386,13 @@ module Ww
       a.transaction do |commit|
         keys.each { |key| commit.without(key) }
       end
+    end
+
+    # Returns a copy of the dict *a* with all of *keys* removed. Missing keys are
+    # skipped. Raises `TypeCastError` if *a* is not a dict. Upcasts the result
+    # back to `Term`.
+    def self.exclude(a : Term, keys : Enumerable(Term)) : Term
+      Term.of(exclude(a.as_d, keys))
     end
 
     # Returns a dict that contains children terms of *term* found at a set *depth*,
@@ -1368,15 +1413,15 @@ module Ww
 
     # Same as `flatten(term : Term, *, depth : Int32)`, but accepts a known dict
     # and responds with a dict, too.
-    def self.flatten(term : Term::Dict, *, depth : Int32?) : Term::Dict
+    def self.flatten(term : Dict, *, depth : Int32?) : Dict
       return term if depth == 0
 
-      Term::Dict.build do |commit|
+      Dict.build do |commit|
         flatten(commit, term, depth)
       end
     end
 
-    private def self.flatten(commit, term : Term::Dict, depth : Int32?) : Nil
+    private def self.flatten(commit, term : Dict, depth : Int32?) : Nil
       if depth == 0
         commit << term
         return
@@ -1391,153 +1436,108 @@ module Ww
         flatten(commit, dict, depth ? depth - 1 : nil)
       end
     end
-  end
 
-  # Morph API
-  #
-  # TODO: Morph API should gradually replace the zoo of inconsistent keypath-
-  # following methods such as `follow`, `where`, and `morph` that we have on Dict
-  # at the moment.
-  #
-  #  Morph is really a language for describing how to reach a leaf and how to rewrite it.
-  #
-  #  <expr>
-  #    <op>
-  #    Op(<leaf>)
-  #    Seq(<op>+)
-  #      E.g. Seq(Op(Item(0), AfterLast, One(100)), Op(Item(1), AfterLast, One(200)))
-  #
-  #  <op>
-  #    Op(<step>+, <leaf>)
-  #
-  #  <step>
-  #    Item(index : Int32)
-  #    Key(term)
-  #    Last()
-  #    AfterLast()
-  #
-  #  <leaf>
-  #    Zero()
-  #    One(term)
-  #    Many(term list)
-  #    Map(fn)
-  #
-
-  struct Term
-    module Last
-    end
-
-    module AfterLast
-    end
-
-    alias Anchor = Last.class | AfterLast.class
-
-    module Absent
-    end
-
-    alias Action = Absent.class
-
-    def self.morph(term root : Term::Dict, keypath : Indexable, & : Term -> Term | Action) : Term::Dict
-      stack = [] of {Term::Dict, Term}
-      tip = Term.of(root)
-
-      keypath.each do |key|
-        unless tip.type.dict?
-          # Abort, keypath points into something we can't deal with.
-          return root
-        end
-
-        node = tip.unsafe_as_d
-
-        case key
-        in Term
-        in Last.class
-          key = Term.of(node.itemsize - 1)
-        in AfterLast.class
-          key = Term.of(node.itemsize)
-        end
-
-        unless value = node[key]?
-          # Abort, value does not exist.
-          return root
-        end
-
-        stack << {node, key}
-        tip = value
+    private def self.assign?(root : Term, keys : Indexable, rvalue : Term?, index : Int32)
+      if index == keys.size
+        return rvalue
       end
 
-      if stack.empty?
-        # Keypath is empty. Abort, nothing to do. This is the Dict overload, so
-        # we cannot run the block on root itself.
+      unless dict = root.as_d?
         return root
       end
 
-      tip = yield tip
+      key = Term.of(keys[index])
+      value0 = dict[key]?
+      value1 = assign?(value0 || Term.of, keys, rvalue, index + 1)
 
-      while entry = stack.pop?
-        parent, key = entry
-
-        case tip
-        in Term
-          tip = Term.of(parent.with(key, tip))
-        in Absent.class
-          tip = Term.of(parent.without(key))
-        end
+      if value1.nil? || (rvalue.nil? && value1.type.dict? && value1.unsafe_as_d.empty?)
+        return Term.of(dict.without(key))
       end
 
-      tip.as(Term).unsafe_as_d
+      Term.of(dict.with(key, value1))
     end
 
-    def self.morph(term : Term, keypath : Indexable, &) : Term
-      if keypath.empty?
-        result = yield term
-        if result.is_a?(Action)
-          raise ArgumentError.new("cannot execute action on the toplevel term")
-        end
-        return result
-      end
-
-      term.as_d do |dict|
-        morph(dict, keypath) { |value| yield value }
-      end
-    end
-
-    def self.morph(term, *args, &)
-      morph(term, args.map { |arg| arg.is_a?(Anchor) ? arg : Term.of(arg) }) do |leaf|
-        result = yield leaf
-        unless result.is_a?(Action)
-          result = Term.of(result)
-        end
-        result
-      end
-    end
-
-    # TODO: block-less morph on dict (creates intermediate dicts if missing)
-
-    # TODO: block morph on term
-    # TODO: block-less morph on term (creates intermediate dicts if missing)
-
-    # TODO: instead of Enumerable(Term) work on an enumerable which can include sentinels.
-    #     Sentinel: first and last item of dict
+    # *value* is converted to a term using `Term.of`.
     #
-    # TODO: Allow block variants and setter variants to return sentinel for
-    # removal and recursive removal (two different sentinels). The dict morph
-    # API does'nt do this cleanly: it only supports nils, and removes recursively
-    # on them.
-
-    # Executes a sequence of `morph` *steps* on *term*. Each step is a tuple
-    # of arguments to `morph`.
-    def self.morphseq(term, *steps : Tuple)
-      steps.reduce(term) do |memo, step|
-        Term.morph(memo, *step)
-      end
+    # If *value* is `nil`, this triggers removal. The leaf entry is removed,
+    # and parent dicts, if they become empty after recursive removal, are also
+    # removed.
+    #
+    # Each key in *keys* is converted to a term using `Term.of`.
+    #
+    # New dictionaries are created as needed as this function follows through *keys*.
+    # If this function hits a non-dict as it follows the keys, it aborts and returns
+    # *root* unchanged. For example, if we try to do `assign?(root, {:x, :y, :z}, to: 10}`
+    # but the value of `y` is a number, this function aborts and returns *root* unchanged.
+    def self.assign?(root : Term, keys : Indexable, *, to value) : Term?
+      assign?(root, keys, Term.of(value), index: 0)
     end
 
-    # Executes a sequence of `morph` *steps* on *term*, using the same block
-    # for all `morph`s.
-    def self.morphseq(term, *steps : Tuple, &)
-      steps.reduce(term) do |memo, step|
-        Term.morph(memo, *step) { |leaf| yield leaf }
+    # Same as `assign?`, but raises instead of returning `nil` when *root*
+    # itself is removed (i.e., *value* is `nil` and *keys* is empty).
+    #
+    # Since this function's return restriction is `Term`, it allows *keys*
+    # to be empty (and will thus return *value* as-is)..
+    def self.assign(root : Term, keys : Indexable, *, to value) : Term
+      assign?(root, keys, to: value) || raise ArgumentError.new("Term.assign() does not support removal of root")
+    end
+
+    # If you want the return type of `assign` to be restricted to `Dict`,
+    # you must pass a *root* dict to trigger this overload.
+    #
+    # This overload does not support empty *keys*, since that would mean *value*
+    # must be used, which isn't necessarily a dict.
+    def self.assign(root : Dict, keys : Indexable, *, to value) : Dict
+      assert keys.present?
+
+      assign(Term.of(root), keys, to: value).as_d
+    end
+
+    # A utility function to perform one or more assignments on root.
+    #
+    # Each assign in *assignments* is a tuple of the form: `{*keys, value}`. Here, *keys*
+    # represents one or more keys, and *value* is the target value, which could be any
+    # object including `nil`; the latter signifying removal. See also: `assign`.
+    #
+    # Like `assign`, this function keeps the type of *root* as the return type. If you
+    # give it a `root : Term`, it will return a `Term`; if you give it `root : Term::Dict`,
+    # it will return the modified `Term::Dict`.
+    #
+    # ```
+    # input = Term[x: {a: 100, b: 200}, c: 300]
+    #
+    # # input : Term::Dict
+    # Term.morph(input, {:x, :a, "Foo"}, {:c, "Bar"})
+    # # => {x: {a: "Foo", b: 200}, c: "Bar"} : Term::Dict
+    #
+    # input = Term.of(input)
+    #
+    # # input : Term
+    # Term.morph(input, {:x, :a, "Foo"}, {:c, "Bar"})
+    # # => {x: {a: "Foo", b: 200}, c: "Bar"} : Term
+    #
+    # state = Term[]
+    #
+    # Term.morph(state,
+    #   # Create keys
+    #   {:name, "Samuel Doe"},
+    #   # Create nested keys
+    #   {:born, :day, 10},
+    #   {:born, :month, "June"},
+    #   {:born, :year, 2000},
+    #   # Assignments are executed inorder, so this one will overwrite our previous
+    #   # assignment name: "Samuel Doe".
+    #   {:name, "Jane Doe"},
+    #   # Remove keys
+    #   {:born, :month, nil},
+    #   # Attempts to descend into non-dicts will abort (do nothing)
+    #   {:born, :day, :xyz, "Foobar"},
+    # )
+    # # => {born: {day: 10 year: 2000} name: "Jane Doe"}
+    # ```
+    def self.morph(root, *assignments)
+      assignments.reduce(root) do |memo, assignment|
+        Term.assign(memo, assignment[...-1], to: assignment[-1])
       end
     end
   end
@@ -1824,7 +1824,7 @@ module Ww
     # Stems are used to turn tree traversal into declarative pattern matching.
     #
     # An *itemspart stem* is a *stem* restricted to the itemsparts of *root*'s subtree.
-    def self.each_itemspart_stem(root : Term::Dict, & : Term::Dict, Term::Dict -> Bool)
+    def self.each_itemspart_stem(root : Dict, & : Dict, Dict -> Bool)
       queue = Deque{ {Term[], Term[]} }
 
       while entry = queue.shift?

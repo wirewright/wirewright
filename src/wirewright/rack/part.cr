@@ -360,7 +360,7 @@ module Ww::Rack::Part
         whole1 = Part.merge(tree.node, whole0)
         next if whole0 == whole1
 
-        patch = patch.assoc(tree.root.id, Term.of(cell.morph({2, whole1})))
+        patch = patch.assoc(tree.root.id, Term.morph(cell, {2, whole1}))
       end
     end
 

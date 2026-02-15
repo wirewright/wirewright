@@ -19,7 +19,7 @@ module Ww::Microfold::Pass
 
               commands.sort_by! { |ord, cmd| {ord, cmd.rank} }
               commands.each do |_, command|
-                result = result.morph({command.box, command.key, command.value})
+                result = Term.morph(result, {command.box, command.key, command.value})
               end
 
               result
@@ -28,10 +28,10 @@ module Ww::Microfold::Pass
             # Force flow-box if the number of children exceeds 1. We're saying `2`
             # here because there is also the tag.
             if node.itemsize > 2
-              designations = designations.morph({:"flow-box", designations[:"flow-box"]? || Term[]})
+              designations = Term.morph(designations, {:"flow-box", designations[:"flow-box"]? || Term[]})
             end
 
-            node.morph(
+            Term.morph(node,
               {:"µ-preset", nil},
               {:"µ-style", nil},
               {:"µ-designations", designations},

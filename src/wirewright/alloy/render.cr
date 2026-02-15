@@ -753,7 +753,7 @@ module Ww::Alloy
               return Err.new
             end
 
-            expansion.copy_with(term: Term.of(base_dict | extras_dict))
+            expansion.copy_with(term: Term.of(Term.overlay(base_dict, extras_dict)))
           in Splice
             dict = expansion.offspring.transaction do |commit|
               expansion.offspring.each_item_with_index do |item, index|
@@ -762,7 +762,7 @@ module Ww::Alloy
                   return Err.new
                 end
 
-                commit.with(index, Term.of(base_dict | extras_dict))
+                commit.with(index, Term.of(Term.overlay(base_dict, extras_dict)))
               end
             end
 

@@ -13,7 +13,7 @@ module Ww::DwUIR
     return subject unless subject.type.dict?
     return subject unless subject.includes?(:"dw-request")
 
-    Term.of_case(subject) do
+    Term.case(subject) do
       # |@ soma.dwuir.replier.text
       #
       # |@block
@@ -33,7 +33,7 @@ module Ww::DwUIR
           size |= dw.bounds
         end
 
-        subject.morph({kout, size.h}, {status, :ok}, {:"dw-request", nil})
+        Term.morph(subject, {kout, size.h}, {status, :ok}, {:"dw-request", nil})
       end
 
       # |@ soma.dwuir.replier.text
@@ -55,7 +55,7 @@ module Ww::DwUIR
           size |= dw.bounds
         end
 
-        subject.morph({wout, size.w}, {hout, size.h}, {status, :ok}, {:"dw-request", nil})
+        Term.morph(subject, {wout, size.w}, {hout, size.h}, {status, :ok}, {:"dw-request", nil})
       end
 
       # |@ soma.dwuir.replier.svg
@@ -71,12 +71,12 @@ module Ww::DwUIR
         rescue e : ImageServerError
           Log.debug(exception: e) { "failed to measure svg at #{src}" }
 
-          next subject.morph({:"dw-request", nil}, {status, {:err, e.message}})
+          next Term.morph(subject, {:"dw-request", nil}, {status, {:err, e.message}})
         end
 
         size = image.size
 
-        subject.morph({:"dw-request", nil}, {wout, size.x}, {hout, size.y}, {status, :ok})
+        Term.morph(subject, {:"dw-request", nil}, {wout, size.x}, {hout, size.y}, {status, :ok})
       end
 
       # |@ soma.dwuir.replier.rect
@@ -91,12 +91,12 @@ module Ww::DwUIR
         rescue e : ImageServerError
           Log.debug(exception: e) { "failed to measure rect image at #{src}" }
 
-          next subject.morph({:"dw-request", nil}, {status, {:err, e.message}})
+          next Term.morph(subject, {:"dw-request", nil}, {status, {:err, e.message}})
         end
 
         size = image.size
 
-        subject.morph({:"dw-request", nil}, {status, :ok}, {wout, size.x}, {hout, size.y})
+        Term.morph(subject, {:"dw-request", nil}, {status, :ok}, {wout, size.x}, {hout, size.y})
       end
 
       otherwise { subject }
