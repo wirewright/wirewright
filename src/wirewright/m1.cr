@@ -685,7 +685,7 @@ module Ww::M1
   # pp result # => qux
   # ```
   def backmap(backsys, matchee : Term, **kwargs) : Term
-    backmap?(backsys, matchee) || matchee
+    backmap?(backsys, matchee, **kwargs) || matchee
   end
 
   # Same as `backmap?`, but returns *matchee* on mismatch.
@@ -701,7 +701,7 @@ module Ww::M1
   # pp result # => qux
   # ```
   def backmap(pattern, backspec : Term, matchee : Term, **kwargs) : Term
-    backmap?(pattern, backspec, matchee) || matchee
+    backmap?(pattern, backspec, matchee, **kwargs) || matchee
   end
 end
 
