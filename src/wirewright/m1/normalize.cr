@@ -2209,19 +2209,27 @@ module Ww::M1
       # (%'%value capture_ value_)
       #
       # |@key capture
-      # Capture name (constraining the choice of key or one that should be
-      # the source of such a constraint).
+      # Capture name (constraining the choice of key, or one that should be
+      # the source of such a constraint for the rest of the pattern).
       #
       # |@key value m1.operator
-      # An operator for matching the value of candidate keys.
+      # An operator to try on the value of each candidate key.
       #
-      # |@pattern
-      # Matches the value of a key which is only known at match-time.
+      # |@block
+      # Matches the value of a key that is only known at match-time, and is
+      # captured by *capture*.
       #
-      # *capture* is used to learn the key. Conceptually, this operator works
-      # by showing to the pattern every possible key from the current matchee
-      # dict (in lexicographical order). The first such key that the pattern
-      # approves (including approval by *value*) is chosen as the matching key.
+      # *capture* is used to learn the key.
+      #
+      # *Conceptually*, this operator works by showing to the pattern every possible
+      # key from the current matchee dict (in lexicographical order). The first
+      # such key that the pattern approves (including approval by *value*) is
+      # chosen as the matching key.
+      #
+      # The word *conceptually* is emphasized because under the hood, this operator
+      # may pick more efficient pathways (as in, not scanning the dict), if possible.
+      # Scanning is only the most generic method, and one of last resort when absolutely
+      # no further info is available.
       #
       # ```
       # (value-of k_ (%value k v_)) => (some ^v)
@@ -2236,20 +2244,83 @@ module Ww::M1
       # (first-k-lt-10 {x: 100, y: 5, z: 8})          ;; => y
       # (first-k-lt-10 (100 3 50 x: 100, y: 5, z: 8)) ;; => 1
       # ```
+      #
+      # Consider also examining the examples in `%-value` for more info.
       matchpi %{(%'%value capture_ value_)}, cue: :"%value" do
         Term.of(:"%value", {:"%capture", capture}, normalize(Π.pattern(value)),
           depth: {:+, {:max, :member, :min}, 1},
         )
       end
 
+      # |@ m1.operator.-value
+      #
+      # |@pattern
+      # (%'%-value capture_)
+      #
+      # |@key capture
+      # Capture name constraining the choice of the key. Note that since we're
+      # matching *absence* here, `%-value` itself *cannot* propose a key,
+      # and thus, it cannot establish a restriction on *capture* all on its own;
+      # as it only knows about keys *present* in the underlying matchee.
+      #
+      # |@block
+      # Matches the absence of a key that is only known at match-time, and is
+      # captured by *capture*.
+      #
+      # See `%-value` with ref for more info and examples.
       matchpi %{(%'%-value capture_)}, cue: :"%-value" do
         Term.of(:"%-value", {:"%capture", capture},
           depth: {:min, 1},
         )
       end
 
-      matchpi %{(%'%-value capture_ name_)}, cue: :"%-value" do
-        Term.of(:"%-value", {:"%capture", capture}, {:"%ref", name},
+      # |@ m1.operator.-value
+      #
+      # |@pattern
+      # (%'%-value capture_ ref_)
+      #
+      # |@key capture
+      # Capture name constraining the choice of the key. Note that since we're
+      # matching *absence* here, `%-value` itself *cannot* propose a key,
+      # and thus, it cannot establish a restriction on *capture* all on its own;
+      # as it only knows about keys *present* in the underlying matchee.
+      #
+      # |@block
+      # Matches the absence of a key that is only known at match-time, and is
+      # captured by *capture*.
+      #
+      # The ref to the "hole" is saved under *ref* to use in backmaps.
+      #
+      # The whole `%value` family of operators is particularly useful for "workspace" /
+      # "blackboard" designs to match the presence or absence of facts, and calculate
+      # them if necessary. Consider the following backsystem (ibacksys):
+      #
+      # ```
+      # ;; Read as: if the key captured by `key` is absent, and an action demands
+      # ;; it to be assigned; then assign it to the target value and remove the action.
+      # ((%-value name K) action←(define name_ value_) _*)
+      #   <> {(action): (), K: ^value}
+      #
+      # ;; Read as: if the key captured by `Ka` is present, and similarly for, `Kb`, and
+      # ;; if the key captured by `Ksum` is absent, calculate the sum of Ka and Kb
+      # ;; and remove the action.
+      # ;;
+      # ;; In other words, this says: if the value of Ka is known, and the value of Kb
+      # ;; is known, and the value of Ksum is unknown, then calculate Ksum as the sum of
+      # ;; the values of Ka and Kb.
+      # ((%all (%value Ka a_) (%value Kb b_) (%-value Ksum sum)) action←(sum Ka_ Kb_ Ksum_) _*)
+      #   <> {(action): (), sum: ^(+ a b)}
+      #
+      # --- seed
+      #
+      # ;; You would use the backsystem like so:
+      # ({} (define a 10)
+      #     (define b 20)
+      #     (sum a b sum))
+      # ;; => {a: 10, b: 20, sum: 30}
+      # ```
+      matchpi %{(%'%-value capture_ ref_)}, cue: :"%-value" do
+        Term.of(:"%-value", {:"%capture", capture}, {:"%ref", ref},
           depth: {:min, 1},
         )
       end
