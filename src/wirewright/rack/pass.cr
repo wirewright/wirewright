@@ -16,7 +16,7 @@ module Ww::Rack
     end
   end
 
-  private def step(clf : D7::Classifier, circuit : Term) : Slice(Term)
+  def step(clf : D7::Classifier, circuit : Term) : Slice(Term)
     D7.case(clf, circuit, decorator: prepass) do
       rule(<<-WWML) do |tgt|
       [discard @u_] dev
