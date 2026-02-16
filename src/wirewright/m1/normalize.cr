@@ -2480,6 +2480,78 @@ module Ww::M1
         end
       end
 
+      # |@ m1.operator.item
+      #
+      # |@pattern
+      # (%item members_+)
+      # (%item° members_+)
+      #
+      # |@key members m1.operator
+      # Operators used to match each subsequence.
+      #
+      # |@block
+      # `%item` (read: first item [where]) matches a subsequence of dictionary items.
+      # `%item°` (read: item source) matches one or more non-overlapping sequences
+      # of items.
+      #
+      # `%item` and `%item°` have a shorthand syntax in WwML: `⟨members_+⟩` and
+      # `⟨members_+⟩°`, correspondingly. These shortands also support interfixes,
+      # e.g. `⟨members_+ ¦ () x y z⟩°`. That is, for example, `⟨x⟩`, `⟨x y z⟩`,
+      # `⟨l←. m←M r←.⟩°`, ⟨l←. m←M r←. ⍊ t: 1⟩°.
+      #
+      # As opposed to `%items`, both `%item` and `%item°` let the subsequence(s)
+      # matched constrain each other and the rest of the pattern. That is, e.g.,
+      # the pattern `(⟨x_⟩ x_)` means "find in the first item, which should be
+      # a dictionary, a term equal to *x*, where *x* is specified by the second item">
+      # Similarly, say, `(⟨x_⟩° ⟨x_⟩)` means "find all *x*s in the first list that
+      # are also present in the second list".
+      #
+      # Changing the second operator to `⟨x_⟩°` would make little sense here, since
+      # this is a basic presence check. Conceptually, imagine the first item source
+      # `⟨x_⟩°` "calling" the rest of the pattern; each such invokation would lead
+      # to a scan of the second list. With `⟨x_⟩`, the scan terminates early; we simply
+      # check for presence. With `⟨x_⟩°`, the scan is not given a chance to terminate early.
+      #
+      # Note, however, that while having both be a source is unimportant when matching,
+      # it becomes important when backmapping. In other words, `((x_⟩° ⟨x_⟩)` and
+      # `((x_⟩° ⟨x_⟩°)` are not the same thing for backmaps.
+      #
+      # For instance, `((x_⟩° ⟨x_⟩) <> {x: (seen ^x)}` will modify the first occurence
+      # of *x* in the second list for each occurrence of *x* in the first list (notice, by
+      # the way, how conflicts could arise if there are duplicate *x*s in the first list;
+      # for each such duplicate x, the same occurrence(s) in the second list will be modified,
+      # which could in some cases lead to a conflict).
+      #
+      # If you have duplicate equal *x*s in the second list for each *x* that is present
+      # in the first list, only the first occurrence will be modified. On the other hand,
+      # with `((x_⟩° ⟨x_⟩°)`, all such occurrences will be modified.
+      #
+      # ```
+      # (%item a m←b c) <> {m: (seen b)}
+      # ;; More often it's written like: ⟨a m←b c⟩
+      #
+      # (1 2 3)             ;; mismatch
+      # (1 a 2 b c 3)       ;; mismatch
+      # (1 a b c 2 a 3)     ;; => (1 a (seen b) c 2 a 3)
+      # (1 a b c 2 a b c 3) ;; => (1 a (seen b) c 2 a b c 3)
+      #
+      # ---
+      #
+      # (%item° a m←b c) <> {m: (seen b)}
+      # ;; More often it's written like: ⟨a m←b c⟩°
+      #
+      # (1 a b c 2 a b c 3) ;; => (1 a (seen b) c 2 a (seen b) c 3)
+      #
+      # ---
+      #
+      # (get-age ⟨{name_ age_}⟩ name_) => ^age
+      #
+      # (get-age ({name: "John", age: 35}
+      #           {name: "Sarah", age: 23}
+      #           {name: "David", age: 19})
+      #          "Sarah")
+      # ;; => 23
+      # ```
       matchpi %{(head←%'%item _ _*)}, %{(head←%'%item° _ _*)}, cues: {:"%item", :"%item°"} do
         members = pattern.items.move(1)
 
@@ -2495,6 +2567,59 @@ module Ww::M1
         Term.of(normal)
       end
 
+      # |@ m1.operator.item
+      #
+      # |@pattern
+      # (%items successor_ members_+ ¦ () min⋮ 1 max_⋮ ∞)
+      #
+      # |@key successor m1.operator
+      # Each subsequence matched by *members* produces a match env. The match env
+      # is added to a list. The list is matched by this operator -- the *successor*
+      # of `%items`. In other words, *successor* is the operator that matches
+      # the accumulated list of match envs.
+      #
+      # |@key members m1.operator
+      # Operators used to match subsequences. *members* are isolated from the rest
+      # of the pattern (i.e., subsequences as matched by *members* cannot constrain
+      # each other). To have subsequences constrain each other, use *successor*
+      # (possibly with the `%filter` operator).
+      #
+      # |@key min
+      # Minimum number of subsequences to count as a match.
+      #
+      # |@key max
+      # Maximum number of subsequences to count as a match.
+      #
+      # |@block
+      # Matches *min* to *max* subsequences of dictionary items.
+      #
+      # ```
+      # (%items xs_ x←(%pipe (mod 2) 0)) => ^xs
+      #
+      # (1 2 3 4 5) ;; => ({x: 2} {x: 4})
+      # ;; Notice how they do not constrain each other. Each member sequence
+      # ;; `x←...` is matched in isolation from the others.
+      #
+      # (1 3 5) ;; mismatch
+      # ()      ;; mismatch
+      #
+      # ---
+      #
+      # (%items xs_ x←(%pipe (mod 2) 0) min: 0) => ^xs
+      #
+      # ()      ;; => () [i.e., no matches]
+      # (1 3 5) ;; => ()
+      #
+      # ---
+      #
+      # (%items (%flat (_ x) xs_) x←(%pipe (mod 2) 0) min: 0 max: 3) => ^xs
+      #
+      # ()            ;; mismatch
+      # (1 3 5)       ;; mismatch
+      # (1 2 3 4 5)   ;; => (2 4)
+      # (1 2 4 5 6)   ;; => (2 4 6)
+      # (1 2 4 5 6 8) ;; mismatch [notice max: 3 in %items above]
+      # ```
       matchpi %{(%'%items successor_ _ _* ¦ opts_)}, cue: :"%items" do
         M0.schema(opts) do |s, opts|
           s.on_mismatch { continue }
