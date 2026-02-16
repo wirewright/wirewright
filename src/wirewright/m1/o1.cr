@@ -280,12 +280,18 @@ module Ww::M1
 
   private def guarded1(op : Term::Dict) : Term::Dict
     Term.case(op, engine: M0) do
-      matchpi %{{¦ guarded min-depth_ max-depth_ min-bounds_ max-bounds_ sketch_}} do
-        continue if sketch == Term.of(0)
-        continue if {min_depth, max_depth} == {Term.of(0), Term.of(:"∞")}
-        continue if {min_bounds, max_bounds} == {Term.of(0), Term.of(:"∞")}
+      matchpi %{{¦ guarded}} do
+        min_depth = op[:"min-depth"]? || Term.of(0)
+        max_depth = op[:"max-depth"]? || Term.of(:∞)
+        min_bounds = op[:"min-bounds"]? || Term.of(0)
+        max_bounds = op[:"max-bounds"]? || Term.of(:∞)
+        sketch = op[:sketch]? || Term.of(0)
 
-        Term[:"%dict-guard", op,
+        if sketch == Term.of(0) && {min_depth, max_depth} == {Term.of(0), Term.of(:"∞")} && {min_bounds, max_bounds} == {Term.of(0), Term.of(:"∞")}
+          return op
+        end
+
+        Term[:"%guard", op,
           "min-depth": min_depth,
           "max-depth": max_depth,
           "min-bounds": min_bounds,
@@ -294,37 +300,11 @@ module Ww::M1
         ]
       end
 
-      matchpi %{{¦ guarded min-depth: min_ max-depth: max_}} do
-        # With 0-∞, it's clear why we omit it. With 1-∞, in practice, it's almost
-        # always useless, because its member is almost always doing an "is dict"
-        # check anyway, and what 1-∞ %depth is is basically that check. It will
-        # give us little to no rejections in practice, in other words, as in, it won't
-        # do better than its successor in that regard. That's why we omit it.
-        continue if {min, max}.in?({Term.of(0), Term.of(:"∞")}, {Term.of(1), Term.of(:"∞")})
-
-        op = Term[:"%depth", op, min: min, max: max]
-        continue
-      end
-
-      matchpi %{{¦ guarded min-bounds: min_ max-bounds: max_}} do
-        continue if {min, max} == {Term.of(0), Term.of(:∞)}
-
-        op = Term[:"%bounds", op, min: min, max: max]
-        continue
-      end
-
-      matchpi %{{¦ guarded sketch_}} do
-        continue if sketch == Term.of(0)
-
-        op = Term[:"%sketch", sketch, op]
-        continue
-      end
-
       otherwise { op }
     end
   end
 
-  # Wraps `guarded: true` operators in *pattern* with guard operators.
+  # Wraps `guarded: true` operators in *pattern* with the guard operator `%guard`.
   #
   # The result is a *guarded normal form* of the pattern: `Guardedp`. It is
   # no longer eligible for functions that want the normal form. On the other

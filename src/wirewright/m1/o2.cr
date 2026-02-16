@@ -195,26 +195,22 @@ module Ww::M1
         end
       end
 
+      # NOTE: %guard's are synthetic and are inserted at the very end of O1, thus,
+      # they don't have the usual metadata junk in their pairspart; that is, we
+      # can compare their pairsparts [more or less] meaningfully.
+
       # Rewrite pointless nested guards in partition itemspart.
       matchpi(
-        %{(%'%dict-guard [%'%partition (%'%dict-guard successor_ ¦ opts_) _] ¦ opts_)},
-        %{(%'%bounds [%'%partition (%'%bounds successor_ ¦ opts_) _] ¦ opts_)},
-        %{(%'%depth [%'%partition (%'%depth successor_ ¦ opts_) _] ¦ opts_)},
-        %{(%'%sketch [%'%partition (%'%sketch successor_ ¦ opts_) _] ¦ opts_)},
-        cue: {:"%partition"},
-        cues: {:"%dict-guard", :"%bounds", :"%depth", :"%sketch"},
+        %{(%'%guard [%'%partition (%'%guard successor_ ¦ opts_) _] ¦ opts_)},
+        cue: {:"%partition", :"%guard"},
       ) do
         Term.morph(op, {1, 1, successor})
       end
 
       # Rewrite pointless nested guards in partition pairspart.
       matchpi(
-        %{(%'%dict-guard [%'%partition _ (%'%dict-guard successor_ ¦ opts_)] ¦ opts_)},
-        %{(%'%bounds [%'%partition _ (%'%bounds successor_ ¦ opts_)] ¦ opts_)},
-        %{(%'%depth [%'%partition _ (%'%depth successor_ ¦ opts_)] ¦ opts_)},
-        %{(%'%sketch [%'%partition _ (%'%sketch successor_ ¦ opts_)] ¦ opts_)},
-        cue: {:"%partition"},
-        cues: {:"%dict-guard", :"%bounds", :"%depth", :"%sketch"},
+        %{(%'%guard [%'%partition _ (%'%guard successor_ ¦ opts_)] ¦ opts_)},
+        cue: {:"%partition", :"%guard"},
       ) do
         Term.morph(op, {1, 2, successor})
       end

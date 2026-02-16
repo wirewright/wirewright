@@ -243,29 +243,13 @@ module Ww::M1
         Op::Literal.new(term)
       end
 
-      matchpi %{(%'%dict-guard successor_ ⍊ sketch_ min-depth_ max-depth_ min-bounds_ max-bounds_)}, cue: :"%dict-guard" do
-        Op::DictGuard.new(
+      matchpi %{(%'%guard successor_ ⍊ sketch_ min-depth_ max-depth_ min-bounds_ max-bounds_)}, cue: :"%guard" do
+        Op::Guard.new(
           sketch: sketch.to(Term::Dict::Sketch),
           bounds: {Kit.magn(min_bounds), Kit.magn(max_bounds)},
           depth: {Kit.magn(min_depth), Kit.magn(max_depth)},
           successor: compile(Π.pattern(successor)),
         )
-      end
-
-      matchpi %{[%'%sketch ±sketch successor_]}, cue: :"%sketch" do
-        Op::SketchSubset.new(sketch.to(Term::Dict::Sketch), compile(Π.pattern(successor)))
-      end
-
-      matchpi %{(%'%bounds [%'%pass] ⍊ min_ max_)}, cue: {:"%bounds", :"%pass"} do
-        Op::Bounds.new(Kit.magn(min), Kit.magn(max))
-      end
-
-      matchpi %{(%'%bounds successor_ ⍊ min_ max_)}, cue: :"%bounds" do
-        Op::BoundsGuard.new(Kit.magn(min), Kit.magn(max), compile(Π.pattern(successor)))
-      end
-
-      matchpi %{(%'%depth successor_ ⍊ min_ max_)}, cue: :"%depth" do
-        Op::MaxDepth.new(Kit.magn(min), Kit.magn(max), compile(Π.pattern(successor)))
       end
 
       matchpi %{[%'%layer below_ _*]} do

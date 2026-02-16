@@ -612,63 +612,6 @@ module Ww::M1
 
   # :nodoc:
   #
-  # Auxiliary operator emitted with optimization level O1 to check the bounds
-  # of a dict without any further matching (e.g. `(_ _ _)` is simply size=?3).
-  def match(ctx, op : Op::Bounds, matchee : Tzip, plan)
-    probably_matches?(op, matchee.term) ? fb(ctx, plan) : Fb[]
-  end
-
-  # :nodoc:
-  def probably_matches?(op : Op::Bounds, matchee : Term) : Bool
-    return false unless dict = matchee.as_d?
-
-    op.min <= dict.size <= op.max
-  end
-
-  # :nodoc:
-  #
-  # Same as Bounds but has a successor.
-  def match(ctx, op : Op::BoundsGuard, matchee : Tzip, plan)
-    return Fb[] unless dict = matchee.term.as_d?
-    return Fb[] unless op.min <= dict.size <= op.max
-
-    match(ctx, op.successor, matchee, plan)
-  end
-
-  # :nodoc:
-  def probably_matches?(op : Op::BoundsGuard, matchee : Term) : Bool
-    return false unless dict = matchee.as_d?
-    return false unless op.min <= dict.size <= op.max
-
-    probably_matches?(op.successor, matchee)
-  end
-
-  # :nodoc:
-  #
-  # Auxiliary operator emitted with optimization level O1 to check whether the dict's
-  # depth is in some expected depth range (the expected depth range is computed from
-  # the pattern).
-  def match(ctx, op : Op::MaxDepth, matchee : Tzip, plan)
-    return Fb[] unless dict = matchee.term.as_d?
-    # FIXME: currently we're unable to use #max of MaxDepth, since Dict#maxdepth
-    # is maximum-ever depth rather than current maximum depth, so #max is
-    # too strict.
-    return Fb[] unless op.min <= dict.maxdepth
-
-    match(ctx, op.successor, matchee, plan)
-  end
-
-  # :nodoc:
-  def probably_matches?(op : Op::MaxDepth, matchee : Term) : Bool
-    return false unless dict = matchee.as_d?
-    # FIXME: Ditto
-    return false unless op.min <= dict.maxdepth
-
-    probably_matches?(op.successor, matchee)
-  end
-
-  # :nodoc:
-  #
   # Auxiliary operator emitted with optimization level O1 to check whether
   # the dict, metaphorically speaking, "smells like" one that could match.
   #
@@ -687,39 +630,16 @@ module Ww::M1
   # search in absolutely terrific amounts of stored data, they can also be used
   # to help an absolutely terrible search algorithm avoid much of the repercussions
   # from its incorrect choices downstream.
-  def match(ctx, op : Op::SketchSubset, matchee : Tzip, plan)
-    return Fb[] unless dict = matchee.term.as_d?
-    return Fb[] unless dict.sketch_superset_of?(op.sketch)
-
-    match(ctx, op.successor, matchee, plan)
-  end
-
-  # :nodoc:
-  def probably_matches?(op : Op::SketchSubset, matchee : Term) : Bool
-    return false unless dict = matchee.as_d?
-    return false unless dict.sketch_superset_of?(op.sketch)
-
-    probably_matches?(op.successor, matchee)
-  end
-
-  # :nodoc:
   #
-  # Auxiliary operator emitted with optimization level O1. It is used, wherever
-  # possible, to fuse the checks defined separately above to ensure they're local,
-  # lack allocation overhead, and don't jump all over the place & call stuff
-  # recursively -- confusing the CPU very much. This is M1's "rejection highway".
-  def match(ctx, op : Op::DictGuard, matchee : Tzip, plan)
-    return Fb[] unless dict = matchee.term.as_d?
-    return Fb[] unless dict.sketch_superset_of?(op.sketch)
-    return Fb[] unless op.bounds[0] <= dict.size <= op.bounds[1]
-    # FIXME: Ditto the MaxDepth FIXME above, here it's op.depth[1].
-    return Fb[] unless op.depth[0] <= dict.maxdepth
+  # The bounds of a dict are checked. For example, `(_ _ _)` asks size=?3.
+  def match(ctx, op : Op::Guard, matchee : Tzip, plan)
+    return Fb[] unless probably_matches?(op, matchee.term)
 
     match(ctx, op.successor, matchee, plan)
   end
 
   # :nodoc:
-  def probably_matches?(op : Op::DictGuard, matchee : Term) : Bool
+  def probably_matches?(op : Op::Guard, matchee : Term) : Bool
     return false unless dict = matchee.as_d?
     return false unless dict.sketch_superset_of?(op.sketch)
     return false unless op.bounds[0] <= dict.size <= op.bounds[1]
