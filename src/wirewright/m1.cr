@@ -216,7 +216,7 @@ module Ww::M1
     Normp.new(normalize(Π.pattern(pattern)).as_d, :none)
   end
 
-  alias Opt = O0.class | O1.class | O2.class
+  alias Opt = O0.class | O1.class | O2.class | O2only.class
 
   # All optimizations are disabled.
   module O0
@@ -245,6 +245,12 @@ module Ww::M1
   # Some simplifications are also made before `O1` (such as the `%split` ->
   # `%adjacent` rewrite), because `O1` can mess the tree up with guards.
   module O2
+  end
+
+  # O2 without O1.
+  #
+  # This level exists for testing purposes. You shouldn't use it in practice.
+  module O2only
   end
 
   # Performs no optimizations.
@@ -291,6 +297,11 @@ module Ww::M1
   # :nodoc:
   def operator(pattern : Normp, *, opt : O2.class) : Op::Any
     pipe(pattern, optimal(O2), optimal(O1), optimal(O2), operator)
+  end
+
+  # :nodoc:
+  def operator(pattern : Normp, *, opt : O2only.class) : Op::Any
+    pipe(pattern, optimal(O2), operator)
   end
 
   {% if flag?(:docs) %}

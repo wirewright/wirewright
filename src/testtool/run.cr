@@ -193,7 +193,7 @@ module Testtool
   def match(pattern : Term, matchee : Term) : Slice(Term::Dict)
     matches = nil
 
-    levels = {M1::O2, M1::O1, M1::O0}
+    levels = {M1::O2, M1::O2only, M1::O1, M1::O0}
     levels.each_with_index do |level, index|
       op = M1.operator(pattern, opt: level)
       envs = M1.matches(Term[], op, matchee)
