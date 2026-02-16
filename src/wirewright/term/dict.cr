@@ -963,20 +963,6 @@ module Ww
       without(Term.of(key))
     end
 
-    # # Returns a copy of this dictionary that is guaranteed not to contain
-    # # associations with any of the given *keys*.
-    # @[Dncast]
-    # def without(*keys) : Dict
-    #   residue(keys)
-    # end
-
-    # # Returns a copy of this dictionary with all of *keys* removed (if present).
-    # def residue(keys : Enumerable)
-    #   transaction do |commit|
-    #     keys.each { |key| commit.without(key) }
-    #   end
-    # end
-
     private def without_default(key : Term::Any) : Dict
       removed, pairs = @pairs.delete(Probes::DissocPairImm.new(Term.of(key)))
       removed ? Dict.new(@items, pairs, @sketch, @maxdepth) : self
