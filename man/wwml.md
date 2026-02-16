@@ -955,7 +955,7 @@ The residue term is optional.
 - `<name>_<type>⋮ <value>` is the same as writing `<name>: (%optional <initial value of type> <value>)`.
 - `⋮<name>` is the same as writing `<name>: (%- (%never) <name>)`.
 - `±<name>` is the same as writing `<name>: (%let <name> _number)`.
-- `±<key>: <name>` is the same as writing `<key>: (%let <name> _number)`.
+- `±<key>: <name>` is the same as writing `<key>: (%let <name> _number)` (DEPRECATED: write `<key>: ±<name>` instead)
 - `@<name>_` is the same as writing `<name>: @<name>_`.
 
 ###### Initial values
