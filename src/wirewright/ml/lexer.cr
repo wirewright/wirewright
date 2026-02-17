@@ -660,8 +660,6 @@ module Ww::ML
 
             loop do
               option = view { skip(&.symbolic?) }
-              break if option.empty?
-
               options << option
               break unless past?(',')
             end
@@ -679,8 +677,6 @@ module Ww::ML
 
             loop do
               option = view { skip(&.symbolic?) }
-              break if option.empty?
-
               options << option
               break unless past?(',')
             end

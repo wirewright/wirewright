@@ -786,7 +786,11 @@
   (doc= ⎡⸨fals,tru⸩e⎤ ⎡⸍false⸝ ⸍true⸝⎤)
   (doc= ⎡⸨cu,tru⸩e⎤ ⎡⸍cue⸝ ⸍true⸝⎤)
   (doc= ⎡⸨1,2,3⸩bar⎤ ⎡⸍1bar⸝ ⸍2bar⸝ ⸍3bar⸝⎤)
-  (doc= ⎡⸨a,b,3⸩-bar⎤ ⎡a-bar b-bar ⸍3-bar⸝⎤))
+  (doc= ⎡⸨a,b,3⸩-bar⎤ ⎡a-bar b-bar ⸍3-bar⸝⎤)
+  (doc= ⎡⸨,a,b⸩⎤ ⎡⸍⸝ a b⎤)
+  (doc= ⎡⸨,a,b⸩bar⎤ ⎡bar abar bbar⎤)
+  (doc= ⎡b⸨a,,e⸩r⎤ ⎡bar br ber⎤)
+  (doc= ⎡b⟦a,,e⟧r⎤ ⎡bar br ber⎤))
 
 ;; Rule expansion
 (ml
