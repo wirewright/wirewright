@@ -368,7 +368,7 @@ module Ww::Term::Case
   #   ml/terms <arg: String>
   #     ML string that should be parsed using ML.terms.
   # ```
-  macro defcase(call, &cont)
+  macro def_caselike(call, &cont)
     {%
       unless call.is_a?(Call)
         call.raise "expected a call"
@@ -379,7 +379,7 @@ module Ww::Term::Case
       end
 
       unless cont.args.size == 3
-        raise "defcase() block takes exactly three arguments: id, branches, sink"
+        raise "def_caselike() block takes exactly three arguments: id, branches, sink"
       end
 
       id, branches, sink = cont.args
@@ -623,7 +623,7 @@ module Ww::Term::Case
   # - *matcher* is the case matcher *class* to use for compiling and matching patterns.
   # - *matchee* is the term to match.
   # - *env* is the base environment.
-  defcase scan(matchers, matcher, matchee, env) do |id, branches, sink|
+  def_caselike scan(matchers, matcher, matchee, env) do |id, branches, sink|
     {% begin %}
       {% if branches.empty? %}
         {% raise "empty case not allowed" %}
