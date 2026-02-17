@@ -327,11 +327,10 @@ end
 module Rule
   extend self
 
-  alias Any = Template | BackmapOne | BackmapMany
+  alias Any = Template | Backmap
 
   record Template, pattern : Term, body : Term
-  record BackmapOne, pattern : Term, backspec : Term
-  record BackmapMany, pattern : Term, toplevel : Term, backspec : Term
+  record Backmap, pattern : Term, backspec : Term
 end
 
 class Ruleset
@@ -351,10 +350,7 @@ class Ruleset
         rule = Rule::Template.new(env[:pattern], template)
       elsif backspec = env[:backspec]?
         rule = normp.unwrap do |op|
-          Term.case(op) do
-            matchpi %[(%'%let (%capture toplevel_) _)] { Rule::BackmapMany.new(env[:pattern], toplevel, backspec) }
-            otherwise { Rule::BackmapOne.new(env[:pattern], backspec) }
-          end
+          Rule::Backmap.new(env[:pattern], backspec)
         end
       else
         next

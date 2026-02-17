@@ -18,7 +18,7 @@ module Ww::Alloy
     case rule
     in Rule::Template
       template = rule.body
-    in Rule::BackmapOne, Rule::BackmapMany
+    in Rule::Backmap
       issues.major("expected a template rule, but got a backmap")
       return
     end
