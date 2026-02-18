@@ -231,7 +231,7 @@ module Ww
     # Cached hash code for this dict.
     @hash = 0u64
 
-    alias Sketch = UInt128
+    alias Sketch = UInt64
 
     def initialize
       @items = EMPTY_ITEM_NODE
@@ -674,14 +674,16 @@ module Ww
     end
 
     def self.probably_includes?(sketch : Sketch, symbol : Term::Sym) : Bool
-      bucket = Term.hashcode(symbol) % Sketch.width
+      bucket = Term.hashcode(symbol) % Sketch.bit_width
+
       sketch.bit(bucket) == 1
     end
 
     def self.mix(sketch : Sketch, value : Term)
       case value.type
       when .symbol?
-        bucket = Term.hashcode(value.unsafe_as_sym) % Sketch.width
+        bucket = Term.hashcode(value.unsafe_as_sym) % Sketch.bit_width
+
         sketch | (Sketch.new(1) << bucket)
       when .dict?
         sketch | value.unsafe_as_d.@sketch

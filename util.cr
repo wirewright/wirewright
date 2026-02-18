@@ -4114,13 +4114,13 @@ end
 
 {% for width in %w(8 16 32 64 128) %}
   struct UInt{{width.id}}
-    def self.width
+    def self.bit_width
       {{width.id}}
     end
   end
 
   struct Int{{width.id}}
-    def self.width
+    def self.bit_width
       {{width.id}}
     end
   end
