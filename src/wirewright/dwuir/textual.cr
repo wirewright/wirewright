@@ -386,16 +386,60 @@ module Ww::DwUIR
 
     # Groups objects related to the console screen.
     class Screen
-      # Points to a hash mapping arbitrary cell coordinates to cells
-      # currently occupying those.
-      getter cells = {} of {Int16, Int16} => Cell
-
       # Stores the cursor I-beam position. The cursor is hidden if `nil`.
       property? beam : {Int16, Int16}? = nil
 
-      # Stores a rectangle that defines which cells are visible. Can be
-      # infinite: this means all cells will be drawn.
-      property view : Rect = Rect.inf
+      def initialize
+        # TODO: Can't we just use a preallocated array instead of all of
+        # this hashmap business?
+        @cells = {} of {Int16, Int16} => Cell
+        @width = {} of Int16 => Int16
+        @height = 0i16
+      end
+
+      # Returns the final width.
+      def width : Int16
+        @width.max_of? { |_, w| w } || 0
+      end
+
+      def width(y : Int16) : Int16
+        @width[y]? || 0i16
+      end
+
+      # Returns the final height.
+      getter height : Int16
+
+      def []?(x : Int16, y : Int16) : Cell?
+        @cells[{x, y}]?
+      end
+
+      # :nodoc:
+      def []=(x : Int16, y : Int16, value : Cell) : Cell
+        @cells[{x, y}] = value
+        @width[y] = Math.max(@width[y]? || 0i16, x + 1)
+        @height = Math.max(@height, y + 1)
+
+        value
+      end
+
+      def each_cell_with_xy(& : Cell, Int16, Int16 ->)
+        @cells.each do |(x, y), cell|
+          yield cell, x, y
+        end
+      end
+    end
+
+    defrecord Newline
+    defrecord Space
+
+    def self.write(screen : Screen, & : Cell | Space | Newline ->)
+      screen.height.times do |y|
+        screen.width(y).times do |x|
+          yield screen[x, y]? || Space.new
+        end
+
+        yield Newline.new
+      end
     end
 
     # Write color on top of rune.
@@ -417,41 +461,41 @@ module Ww::DwUIR
       cell1
     end
 
-    private def draw(screen, ix : Int32, iy : Int32, object : Cell) : Nil
-      return if (Rect[ix, iy, 1, 1] & screen.view).empty?
+    private def draw(screen, view : Rect, ix : Int32, iy : Int32, object : Cell) : Nil
+      return if (Rect[ix, iy, 1, 1] & view).empty?
 
       ix16 = ix.to_i16
       iy16 = iy.to_i16
-      cell0 = screen.cells[{ix16, iy16}]?
+      cell0 = screen[ix16, iy16]?
 
-      screen.cells[{ix16, iy16}] = blend(cell0, cell1: object)
+      screen[ix16, iy16] = blend(cell0, cell1: object)
     end
 
-    private def draw(screen, ix : Int32, iy : Int32, object : Stroke::Side) : Nil
-      draw(screen, ix, iy, Rune.new(object.chr, object.color))
+    private def draw(screen, view : Rect, ix : Int32, iy : Int32, object : Stroke::Side) : Nil
+      draw(screen, view, ix, iy, Rune.new(object.chr, object.color))
     end
 
-    private def draw(screen : Screen, span : Span) : Nil
+    private def draw(screen : Screen, view : Rect, span : Span) : Nil
       span.caption.each_char_with_index do |chr, index|
         ix, iy = span.bounds.floor.ixy
 
-        draw(screen, ix + index, iy, Rune.new(chr, span.fg, span.decoration))
+        draw(screen, view, ix + index, iy, Rune.new(chr, span.fg, span.decoration))
       end
     end
 
-    private def draw(screen : Screen, fill : Fill) : Nil
+    private def draw(screen : Screen, view : Rect, fill : Fill) : Nil
       return if fill.bg.transparent?
 
       ix, iy, iw, ih = fill.bounds.snap.ixywh
 
       (ix...ix + iw).each do |i|
         (iy...iy + ih).each do |j|
-          draw(screen, i, j, fill.bg)
+          draw(screen, view, i, j, fill.bg)
         end
       end
     end
 
-    private def draw(screen : Screen, box : Stroke) : Nil
+    private def draw(screen : Screen, view : Rect, box : Stroke) : Nil
       ix, iy, iw, ih = box.bounds.snap.ixywh
 
       if iw < 3 && ih < 3
@@ -462,76 +506,67 @@ module Ww::DwUIR
       # Draw left side.
       if iw >= 2
         if corner = box.sides.tl || box.sides.l
-          draw(screen, ix, iy, corner)
+          draw(screen, view, ix, iy, corner)
         end
 
         if (side = box.sides.l) && ih >= 3
           (iy + 1...iy + ih - 1).each do |y|
-            draw(screen, ix, y, side)
+            draw(screen, view, ix, y, side)
           end
         end
 
         if corner = box.sides.bl || box.sides.l
-          draw(screen, ix, iy + ih - 1, corner)
+          draw(screen, view, ix, iy + ih - 1, corner)
         end
       end
 
       # Draw right side.
       if iw >= 2
         if corner = box.sides.tr || box.sides.r
-          draw(screen, ix + iw - 1, iy, corner)
+          draw(screen, view, ix + iw - 1, iy, corner)
         end
 
         if (side = box.sides.r) && ih >= 3
           (iy + 1...iy + ih - 1).each do |y|
-            draw(screen, ix + iw - 1, y, side)
+            draw(screen, view, ix + iw - 1, y, side)
           end
         end
 
         if corner = box.sides.br || box.sides.r
-          draw(screen, ix + iw - 1, iy + ih - 1, corner)
+          draw(screen, view, ix + iw - 1, iy + ih - 1, corner)
         end
       end
 
       # Draw top side.
       if iw >= 3 && ih >= 2 && (side = box.sides.t)
         (ix + 1...ix + iw - 1).each do |x|
-          draw(screen, x, iy, side)
+          draw(screen, view, x, iy, side)
         end
       end
 
       # Draw bottom side.
       if iw >= 3 && ih >= 2 && (side = box.sides.b)
         (ix + 1...ix + iw - 1).each do |x|
-          draw(screen, x, iy + ih - 1, side)
+          draw(screen, view, x, iy + ih - 1, side)
         end
       end
     end
 
-    private def draw(screen : Screen, cursor : IBeam) : Nil
+    private def draw(screen : Screen, view : Rect, cursor : IBeam) : Nil
       ix, iy = cursor.point.floor.ixy
 
       screen.beam = {ix.to_i16, iy.to_i16}
     end
 
-    private def draw(screen : Screen, dwv : DrawableView) : Nil
-      view0 = screen.view
-      view1 = dwv.view
-
-      screen.view = view1
-
-      begin
-        draw(screen, dwv.dw)
-      ensure
-        screen.view = view0
-      end
+    private def draw(screen : Screen, view : Rect, dwv : DrawableView) : Nil
+      draw(screen, dwv.view, dwv.dw)
     end
 
     # Returns a screen with *picture* drawn on it.
     def screen(picture : Picture) : Screen
       screen = Screen.new
       picture.each do |drawable|
-        draw(screen, drawable)
+        draw(screen, Rect.inf, drawable)
       end
       screen
     end

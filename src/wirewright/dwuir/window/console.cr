@@ -90,7 +90,7 @@ module Ww::DwUIR
         LibTermbox2.tb_hide_cursor
       end
 
-      screen.cells.each do |(x, y), cell|
+      screen.each_cell_with_xy do |cell, x, y|
         next unless x.in?(0...maxx) && y.in?(0...maxy)
 
         if cell.is_a?(Pigment::RGBA)
