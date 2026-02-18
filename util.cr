@@ -3326,6 +3326,27 @@ class Channel
 end
 
 module Indexable(T)
+  def singleton?(&)
+    result = nil
+
+    each do |object|
+      next unless candidate = yield object
+
+      if result.nil?
+        result = candidate
+        next
+      end
+
+      return
+    end
+
+    result
+  end
+
+  def singleton?(cls : U.class) : U? forall U
+    singleton?(&.as?(U)).as?(U)
+  end
+
   def compare(other : Indexable, &)
     min_size = Math.min(size, other.size)
 

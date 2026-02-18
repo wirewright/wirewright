@@ -985,25 +985,25 @@
   (rack
     (frame
       (Button caption_string)
-        => (device (@surface (button ^caption ()))
-             (^verbatim
-               (part (@surface @caption) (button caption_string _))
-               (part (@surface @actions) (button _ actions←(_*)))
-               (cell @ref-view)
-               (view (@caption caption_string (@ref-view @view))
-                 ((button ^caption clickable: true)))
-               (circuit @view)
-               (backsys {@:view @:caption @:actions}
-                {¦ view: ({¦ clicked_}) caption_ actions: (_* `back)}
-                  <> {(clicked): (), back: ^caption})))
+        => (component
+             (surface (@surface (button caption_string actions←(_*)))
+               (button ^caption ()))
+             (cell @ref-view)
+             (view (@caption caption_string (@ref-view @view))
+               (button ^caption clickable: true))
+             (node @view)
+             (backsys {@:view @:caption @:actions}
+              {¦ view: {¦ clicked_} caption_ actions: (_* `back)}
+                <> {(clicked): (), back: ^caption}))
 
       (Counter ±initial)
-        => (device (@surface (counter ^initial))
-             (^verbatim
-               (cell @ref-view)
-               (view (@surface (counter ±n) (@ref-view @view))
-                 ((h1 ^"Count: ⸢n⸣")))
-               (circuit @view)))
+        => (component
+             (surface (@surface (counter ±n))
+               (counter ^initial))
+             (cell @ref-view)
+             (view (@surface (counter ±n) (@ref-view @view))
+               (h1 ^"Count: ⸢n⸣"))
+             (node @view))
 
       (circuit @app
         (Counter 0)
@@ -1016,11 +1016,11 @@
           {¦ ±count msg_: "Decrement"} <> {(msg): (), count: ^(- count 1)}))
 
       (backsys @app
-        ⟪(circuit @view (h1 (%any "Count: 0" "Count: 1") ⍊ -seen_))
-         (circuit @view (button "Increment" ⍊ clickable -clicked_))⟫
+        ⟪(node @view (h1 (%any "Count: 0" "Count: 1") ⍊ -seen_))
+         (node @view (button "Increment" ⍊ clickable -clicked_))⟫
           <> {clicked: true, seen: true}
-        ⟪(circuit @view (h1 "Count: 2" ⍊ -seen_))
-         (circuit @view (button "Decrement" ⍊ clickable -clicked_))⟫
+        ⟪(node @view (h1 "Count: 2" ⍊ -seen_))
+         (node @view (button "Decrement" ⍊ clickable -clicked_))⟫
           <> {clicked: true, seen: true}))
   (visually
     (h1 "Count: 0")

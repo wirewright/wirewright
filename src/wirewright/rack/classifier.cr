@@ -440,38 +440,102 @@ module Ww::Rack
     @@cache.put_if_absent(node) { classify!(node) }
   end
 
-  defrecord Component,
+  alias Component = DeviceComponent | TemplateComponent
+
+  defrecord DeviceComponent,
     pattern : M1::Op::Any,
-    body : Term
+    surface : DeviceSurface,
+    recipe : DeviceRecipe
+
+  defrecord TemplateComponent,
+    pattern : M1::Op::Any,
+    template : Term
 
   # :nodoc:
   def instantiate(components : Indexable(Component), node : Term)
-    result = nil
-
-    components.each do |candidate|
+    result = components.singleton? do |candidate|
       next unless M1.probably_matches?(candidate.pattern, node)
       next unless env = M1.match?(Term[], candidate.pattern, node)
 
-      unless result.nil?
-        # If two (or more) components match the inert node, we're confused
-        # and we won't instantiate anything.
-        return D7.inert(node)
+      {candidate, env}
+    end
+
+    # If two (or more) components match the inert node, or no node is found,
+    # we're confused and won't instantiate anything.
+    if result.nil?
+      return D7.inert(node)
+    end
+
+    instantiate(*result)
+  end
+
+  def instantiate(component : DeviceComponent, env : Term::Dict)
+    # Instantiate surface template.
+    surface = Alloy.render(env, component.surface.template)
+
+    device = Term::Dict.build do |commit|
+      commit << :device << {component.surface.edge, surface}
+
+      # Generate parts, if any.
+      component.surface.captures.each do |name|
+        commit << Term.of(:part, {component.surface.edge, {:edge, name}}, component.surface.pattern)
       end
 
-      result = {candidate, env}
+      component.recipe.each do |ingredient|
+        case ingredient
+        in DeviceSurface
+        in DeviceTemplate
+          instance = Alloy.render(env, Term.of(ingredient.template))
+
+          # Since the input is a dict, the output must also be a dict. Alloy can't
+          # destroy enclosing dicts. It also can't create pairs.
+          assert instance = instance.as_d?
+
+          commit.concat(instance.items)
+        in DeviceNode
+          commit << ingredient.node
+        end
+      end
     end
 
-    if result.nil?
-      return D7.inert(node) # component not found
-    end
+    D7.nonready(Term.of(device))
+  end
 
-    component, env = result
-
-    D7.nonready(Alloy.render(env, component.body))
+  def instantiate(component : TemplateComponent, env : Term::Dict)
+    D7.nonready(Alloy.render(env, component.template))
   end
 
   # :nodoc:
   COMPONENT_CACHE = SyncCache(Term, Component).new(64, preallocate: true)
+
+  alias DeviceRecipe = Array(DeviceIngredient)
+  alias DeviceIngredient = DeviceSurface | DeviceTemplate | DeviceNode
+
+  defrecord DeviceSurface, edge : Term, pattern : Term, captures : Set(Term), template : Term
+  defrecord DeviceTemplate, template : Term::Dict
+  defrecord DeviceNode, node : Term
+
+  # Parses device component children in *children* into a "recipe".
+  def device_recipe(children : Indexable(Term)) : DeviceRecipe
+    children.map do |child|
+      Term.case(child) do
+        matchpi %{[surface (@edge_ pattern_) template_]} do
+          normp = M1.normal(pattern)
+          captures = M1.capture_names(normp)
+
+          DeviceSurface.new(edge, pattern, captures, template)
+        end
+
+        matchpi %{[template template_*]} do
+          DeviceTemplate.new(template.as_d)
+        end
+
+        otherwise do
+          DeviceNode.new(child)
+        end
+      end
+    end
+  end
 
   # Returns the components defined in *circuit*.
   def components(circuit : Term) : Array(Component)
@@ -488,13 +552,28 @@ module Ww::Rack
         next
       end
 
-      Term.matchpi?(item, %{[rule pattern_ body_]}) do
-        op = M1.operator(pattern)
+      Term.case(item) do
+        matchpi %{[rule pattern_ [component children_*]]} do
+          op = M1.operator(pattern)
+          recipe = device_recipe(children.items)
 
-        component = Component.new(op, body)
-        components << component
+          # Surfaces are required. Only one surface must be present. Everything
+          # else is optional.
+          next unless surface = recipe.singleton?(DeviceSurface)
 
-        COMPONENT_CACHE[item] = component
+          component = DeviceComponent.new(op, surface, recipe)
+          components << component
+
+          COMPONENT_CACHE[item] = component
+        end
+
+        matchpi %{[rule pattern_ template_]} do
+          op = M1.operator(pattern)
+          component = TemplateComponent.new(op, template)
+          components << component
+        end
+
+        otherwise { }
       end
     end
 
