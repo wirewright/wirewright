@@ -124,6 +124,10 @@ PRIMITIVES = ProcRuleset.build do
     a.to(String) * n.to(Int32)
   end
 
+  rulepi1 %[(ml/compact term_)] do
+    Term[ML.compact(term)]
+  end
+
   rulepi1 %[(term->ml term_)] do
     # TODO: use pretty print with forced inline
     Term[ML.display(term, endl: false)]
@@ -216,17 +220,12 @@ PRIMITIVES = ProcRuleset.build do
     xs.items.reduce(Term.of) { |memo, dict| Term.overlay(memo, dict) }
   end
 
-  # alias
-  rulepi1 %[(∪ xs_dict*)] do
-    xs.items.reduce(Term.of) { |memo, dict| Term.overlay(memo, dict) }
+  rulepi1 %[(merge xs_dict ys_dict)] do
+    Term.merge(xs, ys)
   end
 
   rulepi1 %[(intersects? xs_dict ys_dict)] do
     xs.as_d.intersects?(ys.as_d)
-  end
-
-  rulepi1 %[(merge xs_dict ys_dict)] do
-    Term.merge(xs, ys)
   end
 
   # multiset union
@@ -264,26 +263,12 @@ PRIMITIVES = ProcRuleset.build do
     Term.hashcode(term)
   end
 
-  # TODO: remove!!!!!! this leaks the fact that we don't actually have proper entry order!!
-  rulepi1 %[(nth xs_dict n←(%number +i32))] do
-    if response = xs.nth?(n.to(Int32))
-      key, value = response
-      Term.of(:some, {key, value})
-    else
-      Term.of({:none})
+  rulepi1 %[(iota n←(%number +i32))] do
+    Term::Dict.build do |commit|
+      (0...n.to(Int32)).each do |i|
+        commit << i
+      end
     end
-  end
-
-  rulepi1 %[(key xs←(%pipe tally 1))] do
-    key, _ = xs.nth(0)
-    key
-  end
-
-  rulepi1 %[(nth (range b_number e_number points: m_number) n_number)] do |n, m|
-    n = n.floor
-    m = m.floor
-    n %= m
-    b + n * ((e - b)/m)
   end
 
   rulepi1 %[(itemspart xs_dict)] do
@@ -303,77 +288,8 @@ PRIMITIVES = ProcRuleset.build do
     end
   end
 
-  rulepi1 %{(complement universe_dict subset_dict)} do
-    universe.transaction do |commit|
-      subset.each_entry do |key, _|
-        commit.without(key)
-      end
-    end
-  end
-
   rulepi1 %[(charcount xs_string+)] do
     xs.items.sum(0, &.unsafe_as_s.charcount)
-  end
-
-  rulepi1 %[(chunks arg_dict (pattern criterion_))] do
-    chunk = nil
-    chunks = Term[]
-
-    arg.items.each do |item|
-      unless M1.probe?(criterion, item)
-        if chunk
-          chunks = chunks.append(chunk)
-          chunk = nil
-        end
-        chunks = chunks.append({:item, item})
-        next
-      end
-
-      chunk ||= Term[{:chunk}]
-      chunk = chunk.append(item)
-    end
-
-    chunks = chunks.append(chunk) if chunk
-    chunks
-  end
-
-  rulepi1 %[(chunks arg_dict (group precursor_ member_))] do
-    chunks = Term[]
-
-    i = 0
-    while i < arg.itemsize
-      head = arg[i]
-      unless M1.probe?(precursor, head)
-        chunks = chunks.append({:item, head})
-        i += 1
-        next
-      end
-
-      i += 1
-      n = 0
-      (i...arg.itemsize).each do |j|
-        jth = arg[j]
-        break if M1.probe?(precursor, jth)
-        break unless M1.probe?(member, jth)
-
-        n += 1
-      end
-
-      if n.zero?
-        chunks = chunks.append({:item, head})
-        next
-      end
-
-      chunk = Term::Dict.build do |commit|
-        commit << :chunk << head
-        commit.concat(arg.items.move(i).begin.grow(n))
-      end
-
-      i += n
-      chunks = chunks.append(chunk)
-    end
-
-    chunks
   end
 
   # TODO: sum, min, and max should probably ignore non-numbers, and they should operate
@@ -410,56 +326,24 @@ PRIMITIVES = ProcRuleset.build do
     args.items.reduce(0) { |memo, arg| memo + arg.size }
   end
 
-  rulepi1 %[(take s_string o←(%number +i32) span←(%number i32))] do
-    mb, me = {o.to(Int32), (o + span).to(Int32)}.minmax
-
-    l = Term::Str::Substring.runes(s.unsafe_as_s, 0, mb)
-    m = Term::Str::Substring.runes(s.unsafe_as_s, mb, me)
-    r = Term::Str::Substring.runes(s.unsafe_as_s, me, s.charcount)
-
-    {l, m, r}
-  end
-
-  rulepi1 %[(runes s_string b←(%number i32) to e←(%number i32))] do
-    Term::Str::Substring.runes(s.unsafe_as_s, b.to(Int32), e.to(Int32))
-  end
-  # alias
   rulepi1 %[(runes s_string b←(%number i32) ..= e←(%number i32))] do
-    Term::Str::Substring.runes(s.unsafe_as_s, b.to(Int32), e.to(Int32))
+    s.to(String)[b.to(Int32)..e.to(Int32)]? || Term.of("")
   end
 
   rulepi1 %[(runes s_string b←(%number +i32) ..< e←(%number +i32))] do
-    if b == e
-      Term.of("")
-    else
-      Term::Str::Substring.runes(s.unsafe_as_s, b.to(Int32), e.to(Int32) - 1)
-    end
+    s.to(String)[b.to(Int32)...e.to(Int32)]? || Term.of("")
   end
 
-  rulepi1 %[(rune s_string b←e←(%number i32))] do
-    Term::Str::Substring.runes(s.unsafe_as_s, b.to(Int32), e.to(Int32))
+  rulepi1 %[(rune s_string i←(%number i32))] do
+    s.to(String)[i.to(Int32)]
   end
 
-  rulepi1 %[(words s_string b←(%number i32) to e←(%number i32))] do
-    Term::Str::Substring.words(s.unsafe_as_s, b.to(Int32), e.to(Int32))
-  end
-  # alias
   rulepi1 %[(words s_string b←(%number i32) ..= e←(%number i32))] do
     StringSpan.words(s.to(StringView), b.to(Int32), e.to(Int32))
   end
 
   rulepi1 %[(word s_string b←e←(%number i32))] do
     StringSpan.words(s.to(StringView), b.to(Int32), e.to(Int32))
-  end
-
-  # FIXME: this is too lame
-  rulepi1 %[(wordwise s_string)] do
-    Term::Dict.build do |commit|
-      s.to(StringView).split_and_rest(' ') do |segment, sep, _|
-        commit << segment
-        commit << sep unless sep.empty?
-      end
-    end
   end
 
   rulepi1 %[(line/stem s_string)] do
@@ -486,6 +370,66 @@ PRIMITIVES = ProcRuleset.build do
     l + sep
   end
 
+  rulepi1 %{(wrap s_string ¦ () max-w⋮ 60 ellipsis⋮ "…")} do
+    maxw32 = max_w.to(Float64).clamp(0..Int32::MAX).to_i
+
+    wrap(s.to(String), maxw: maxw32, ellipsis: ellipsis.to(String))
+  end
+
+  rulepi1 %{(wrap s_string ¦ () max-w⋮ 60 ±max-h ellipsis⋮ "…")} do
+    maxw32 = max_w.to(Float64).clamp(0..Int32::MAX).to_i
+    maxh32 = max_h.to(Float64).clamp(0..Int32::MAX).to_i
+
+    wrap(s.to(String), maxw: maxw32, maxh: maxh32, ellipsis: ellipsis.to(String))
+  end
+
+  rulepi1 %{(includes? haystack_string needle_string)} do
+    haystack.to(String).includes?(needle.to(String))
+  end
+
+  rulepi1 %{(prefix-run matchee_string prefix_string)} do
+    matchee_ = matchee.to(StringView)
+    prefix_ = prefix.to(StringView)
+
+    run = String.build do |io|
+      while matchee_.starts_with?(prefix_)
+        matchee_ = matchee_.lskip(prefix_.size)
+        io << prefix_
+      end
+    end
+
+    Term.of(run)
+  end
+
+  # Converts *text* to a sequence of Unicode codepoints.
+  rulepi1 %{(codepoints text_string)} do
+    Term::Dict.build do |commit|
+      string = text.to(String)
+      string.each_char do |chr|
+        commit << chr.ord
+      end
+    end
+  end
+
+  rulepi1 %{(repr ns←((%past (%number (whole _)))) (digits ¦ () alphabet_string))} do
+    letters = alphabet.to(String)
+
+    Term::Dict.build do |commit|
+      ns.items.each do |n|
+        Int.each_digit(n, base: letters.size) do |digit|
+          assert digit.natural?
+
+          commit << letters[digit.to(Int32)]
+        end
+      end
+    end
+  end
+
+  # TODO: Most of the functions below are ancestors of what I suspect will be
+  # the central data structure of Nitrene: (_string mask_dict) and (_dict mask_dict).
+  # Most stuff if not everything will be about this data structure (the former optimized
+  # for strings, the latter for general dicts).
+
   rulepi1 %{(mask pattern_ d_dict)} do
     Term::Dict.build do |commit|
       d.each_item_with_index do |item, index|
@@ -509,10 +453,6 @@ PRIMITIVES = ProcRuleset.build do
 
     {s, mask}
   end
-
-  # TODO: these are really just generic keysect / key complement followed by
-  # values perhaps. But currently there's hardly any way for us to do something
-  # as "advanced" as (intersection _ (keys _)) or (complement _ (keys _)) evaluation-wise.
 
   rulepi1 %{(matches d_dict mask_dict)} do
     Term::Dict.build do |commit|
@@ -635,8 +575,8 @@ PRIMITIVES = ProcRuleset.build do
 
   # todo: segments dict
 
-  # Gives a list of unmasked substrings and delimiters (distinctly)
-  # from left-to-right.
+  # Produces a list of substrings delimited by *mask*, including delimiters
+  # themselves as distinct substrings.
   rulepi1 %{(segments (s_string mask_dict))} do
     view = s.to(StringView)
 
@@ -657,57 +597,23 @@ PRIMITIVES = ProcRuleset.build do
     end
   end
 
-  rulepi1 %{(wrap s_string ¦ () max-w⋮ 60 ellipsis⋮ "…")} do
-    maxw32 = max_w.to(Float64).clamp(0..Int32::MAX).to_i
+  # Produces a list of substrings delimited by *mask*, excluding delimiters.
+  rulepi1 %{(splits (s_string mask_dict))} do
+    view = s.to(StringView)
 
-    wrap(s.to(String), maxw: maxw32, ellipsis: ellipsis.to(String))
-  end
+    indices = Pf::USet32.transaction do |commit|
+      mask.each_entry do |index, _|
+        next unless index32 = index.to?(UInt32) # ?!
 
-  rulepi1 %{(wrap s_string ¦ () max-w⋮ 60 ±max-h ellipsis⋮ "…")} do
-    maxw32 = max_w.to(Float64).clamp(0..Int32::MAX).to_i
-    maxh32 = max_h.to(Float64).clamp(0..Int32::MAX).to_i
-
-    wrap(s.to(String), maxw: maxw32, maxh: maxh32, ellipsis: ellipsis.to(String))
-  end
-
-  rulepi1 %{(includes? haystack_string needle_string)} do
-    haystack.to(String).includes?(needle.to(String))
-  end
-
-  rulepi1 %{(prefix-run matchee_string prefix_string)} do
-    matchee_ = matchee.to(StringView)
-    prefix_ = prefix.to(StringView)
-
-    run = String.build do |io|
-      while matchee_.starts_with?(prefix_)
-        matchee_ = matchee_.lskip(prefix_.size)
-        io << prefix_
+        commit << index32
       end
     end
 
-    Term.of(run)
-  end
-
-  # Converts *text* to a sequence of Unicode codepoints.
-  rulepi1 %{(codepoints text_string)} do
     Term::Dict.build do |commit|
-      string = text.to(String)
-      string.each_char do |chr|
-        commit << chr.ord
-      end
-    end
-  end
+      (0...view.size).segments(indices) do |range|
+        next if range.begin.to_u32.in?(indices)
 
-  rulepi1 %{(repr ns←((%past (%number (whole _)))) (digits ¦ () alphabet_string))} do
-    letters = alphabet.to(String)
-
-    Term::Dict.build do |commit|
-      ns.items.each do |n|
-        Int.each_digit(n, base: letters.size) do |digit|
-          assert digit.natural?
-
-          commit << letters[digit.to(Int32)]
-        end
+        commit << view.subview(range.begin.to_i, range.end.to_i)
       end
     end
   end
