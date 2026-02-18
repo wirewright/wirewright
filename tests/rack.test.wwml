@@ -2316,16 +2316,16 @@
       (discard @bar))
     end))
 
-;; Single-child circuit
+;; node
 (rack
   (frame
     (cell @foo (delay 2 (p "Hi")))
     (feed @foo @view)
-    (circuit (@view)))
+    (node @view))
   (frame
     (cell @foo)
     (feed @foo @view)
-    (circuit (@view) (delay 1 (p "Hi"))))
+    (node @view (delay 1 (p "Hi"))))
   (visually
     (p "Hi"))
   end)
