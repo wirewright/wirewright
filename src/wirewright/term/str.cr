@@ -109,5 +109,3 @@ module Ww
     def_equals @value
   end
 end
-
-require "./str/substring"
