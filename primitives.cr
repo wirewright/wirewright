@@ -335,7 +335,7 @@ PRIMITIVES = ProcRuleset.build do
   end
 
   rulepi1 %[(rune s_string i←(%number i32))] do
-    s.to(String)[i.to(Int32)]
+    s.to(String)[i.to(Int32)]? || Term.of("")
   end
 
   rulepi1 %[(words s_string b←(%number i32) ..= e←(%number i32))] do
