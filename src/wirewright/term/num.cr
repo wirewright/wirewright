@@ -301,7 +301,7 @@ module Ww
     rescue OverflowError
     end
 
-    # Returns `true` if this number term is zero. Returns `false` otherwise.
+    # Returns `true` if this number term is zero.
     #
     # See also: `#<=>(other : Num)`.
     @[Dncast]
@@ -310,7 +310,6 @@ module Ww
     end
 
     # Returns `true` if this number term is greater than or equal to zero.
-    # Returns `false` otherwise.
     #
     # NOTE: Zero is considered positive.
     @[Dncast]
@@ -326,14 +325,14 @@ module Ww
     end
 
     # Returns `true` if this number term uses an exact representation, and
-    # exact arithmetic is applied to it. Returns `false` otherwise.
+    # exact arithmetic is applied to it.
     @[Dncast]
     def exact? : Bool
       @k.is_a?(Exact)
     end
 
     # Returns `true` if this number term uses an approximate representation, and
-    # approximate arithmetic is applied to it. Returns `false` otherwise.
+    # approximate arithmetic is applied to it.
     @[Dncast]
     def approx? : Bool
       @k.is_a?(Approx)
@@ -366,7 +365,6 @@ module Ww
     end
 
     # Returns `true` if this number term is a positive nonzero integer.
-    # Returns `false` otherwise.
     @[Dncast]
     def natural_nonzero? : Bool
       natural? && !zero?
@@ -419,7 +417,7 @@ module Ww
     end
 
     # Returns `true` if the result of dividing this number by *other*
-    # is an integer. Returns `false` otherwise.
+    # is an integer.
     #
     # *other* is passed through `Term.[]` to obtain a number term.
     @[Dncast]

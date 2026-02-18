@@ -10,7 +10,7 @@ module Ww::DwUIR
     keypath : Term::Dict?
 
   # Returns `true` if *bounds* are going to be seen by the user after all
-  # transformations based on *context*. Returns `false` otherwise.
+  # transformations based on *context*.
   def visible?(context : WalkContext, bounds : Rect = context.bounds) : Bool
     tfbounds = context.tf.map(bounds)
     tfbounds.intersects?(context.view)

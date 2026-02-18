@@ -39,7 +39,7 @@ module Ww::Microfold
     end
 
     # Returns `true` if this node’s position is within the first *n* children
-    # of its parent. Returns `false` otherwise.
+    # of its parent.
     def first_child?(n : Term::Num) : Bool
       return false unless index = key.as_n?
 
@@ -47,7 +47,7 @@ module Ww::Microfold
     end
 
     # Returns `true` if this node’s position is within the last *n* children
-    # of its parent. Returns `false` otherwise.
+    # of its parent.
     def last_child?(n : Term::Num) : Bool
       return false unless index = key.as_n?
 
@@ -55,7 +55,6 @@ module Ww::Microfold
     end
 
     # Returns `true` if this node is the first in its periodic group of size *p*.
-    # Returns `false` otherwise.
     def child_of_period?(p : Term::Num) : Bool
       return false unless index = key.as_n?
 

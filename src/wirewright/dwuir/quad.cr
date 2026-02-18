@@ -1,5 +1,8 @@
 module Ww::DwUIR
   # Represents a quadrilateral.
+  #
+  # Written almost entirely by an LLM, with major refactors on my end (but
+  # with absolutely no understanding of the underlying math!)
   struct Quad
     @rect : Bool
 
@@ -36,13 +39,12 @@ module Ww::DwUIR
     end
 
     # Returns `true` if *point* is located on the boundary of this quad.
-    # Returns `false` otherwise.
     def on_boundary?(point : Point) : Bool
       segments.any?(&.includes?(point))
     end
 
     # Returns `true` if *point* is located on the boundary or inside of
-    # this quad. Returns `false` otherwise.
+    # this quad.
     def includes?(point : Point) : Bool
       if @rect # Fast path
         return Rect.new(tl: @a, br: @c).includes?(point)

@@ -1167,7 +1167,7 @@ module Ww
       @hash = hashcode
     end
 
-    # Returns `true` if this and *other* dictionaries are equal. Returns `false` otherwise.
+    # Returns `true` if this and *other* dictionaries are equal.
     def ==(other : Dict) : Bool
       return true if same?(other)
 

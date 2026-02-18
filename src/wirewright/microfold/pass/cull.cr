@@ -2,7 +2,7 @@ module Ww::Microfold::Pass
   # :nodoc:
   module Cull
     # Returns `true` if the `present`/`absent` pseudo-utilities in *node*'s style
-    # resolve to presence. Returns `false` otherwise.
+    # resolve to presence.
     def self.present?(node : Term) : Bool
       present = true
 

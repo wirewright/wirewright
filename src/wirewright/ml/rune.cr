@@ -28,31 +28,26 @@ module Ww::ML
       Ideogram
 
       # Returns `true` if the character is a non-digit subscript character.
-      # Returns `false` otherwise.
       def sub_symbol? : Bool
         sub_plus? || sub_minus?
       end
 
       # Returns `true` if the character is a non-digit superscript character.
-      # Returns `false` otherwise.
       def sup_symbol? : Bool
         sup_plus? || sup_minus?
       end
 
       # Returns `true` if the character is a strong symbolic character.
-      # Returns `false` otherwise.
       def symbolic_strong? : Bool
         symbolic_strong_letter? || symbolic_strong_digit? || symbolic_strong_misc?
       end
 
       # Returns `true` if the character is a weak or strong symbolic character.
-      # Returns `false` otherwise.
       def symbolic? : Bool
         symbolic_weak? || symbolic_strong?
       end
 
       # Returns `true` if the character is vertical or horizontal whitespace.
-      # Returns `false` otherwise.
       def space? : Bool
         hspace? || vspace?
       end
@@ -68,13 +63,11 @@ module Ww::ML
       end
 
       # Returns `true` if the character is a subscript digit or symbol.
-      # Returns `false` otherwise.
       def subscript? : Bool
         sub_digit? || sub_symbol?
       end
 
       # Returns `true` if the character is a superscript digit or symbol.
-      # Returns `false` otherwise.
       def superscript? : Bool
         sup_digit? || sup_symbol?
       end

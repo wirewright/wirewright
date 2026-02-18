@@ -114,7 +114,7 @@ module Ww::DwUIR
       )
     end
 
-    # Returns `true` if this border is transparent. Returns `false` otherwise.
+    # Returns `true` if this border is transparent.
     def transparent? : Bool
       return true if Approx.equals?(l + r + t + b, 0.0f32)
 

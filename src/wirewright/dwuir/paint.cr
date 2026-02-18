@@ -302,12 +302,12 @@ module Ww::DwUIR
       end
     {% end %}
 
-    # Returns `true` if *paint* is fully transparent. Returns `false` otherwise.
+    # Returns `true` if *paint* is fully transparent.
     def transparent?(paint : Any) : Bool
       Approx.equals?(opacity(paint), 0.0f32)
     end
 
-    # Returns `true` if *paint* is fully opaque. Returns `false` otherwise.
+    # Returns `true` if *paint* is fully opaque.
     def opaque?(paint : Any) : Bool
       Approx.equals?(opacity(paint), 1.0f32)
     end

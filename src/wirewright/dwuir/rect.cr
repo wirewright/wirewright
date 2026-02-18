@@ -399,7 +399,7 @@ module Ww::DwUIR
        Segment.new(bl, tl)}
     end
 
-    # Returns `true` if this rectangle intersects *quad*. Returns `false` otherwise.
+    # Returns `true` if this rectangle intersects *quad*.
     def intersects?(quad : Quad) : Bool
       return false if empty?
       return true if points.any? { |point| quad.includes?(point) }

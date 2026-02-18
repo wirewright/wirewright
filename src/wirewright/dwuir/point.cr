@@ -130,7 +130,6 @@ module Ww::DwUIR
     end
 
     # Returns `true` if either component of the point is set to positive infinity.
-    # Returns `false` otherwise.
     def inf? : Bool
       x == Float32::INFINITY || y == Float32::INFINITY
     end

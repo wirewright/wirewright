@@ -11,7 +11,7 @@ module Ww::DwUIR
       Rect.new(tl: @a.min(@b), br: @a.max(@b))
     end
 
-    # Returns `true` if *point* is located on this segment. Returns `false` otherwise.
+    # Returns `true` if *point* is located on this segment.
     def includes?(point : Point) : Bool
       bounds.includes?(point) && collinear?(point)
     end
@@ -38,7 +38,7 @@ module Ww::DwUIR
       val.positive? ? Orientation::CounterClockwise : Orientation::Clockwise
     end
 
-    # Returns `true` if this segment intersects *other*. Returns `false` otherwise.
+    # Returns `true` if this segment intersects *other*.
     def intersects?(other : Segment) : Bool
       o1 = orientation(other.@a)
       o2 = orientation(other.@b)
@@ -53,7 +53,7 @@ module Ww::DwUIR
     end
 
     # Returns `true` if this segment intersects with the horizontal ray
-    # originating from *point*. Returns `false` otherwise.
+    # originating from *point*.
     def intersects_horizontal_ray?(point : Point) : Bool
       straddles_y?(point) && intersection_x(point) > point.x
     end

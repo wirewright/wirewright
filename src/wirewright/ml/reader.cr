@@ -138,7 +138,7 @@ module Ww::ML
     end
 
     # Returns `true` if a sequence of lexical tokens of the given *types*
-    # is found after the cursor. Returns `false` otherwise.
+    # is found after the cursor.
     private def ahead?(*types : Lexeme::Token::Type) : Bool
       try? do
         return past?(*types) ? true : false
