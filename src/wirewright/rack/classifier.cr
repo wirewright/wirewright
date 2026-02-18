@@ -114,6 +114,23 @@ module Ww::Rack
         D7.circuit(node.as_d, 1...node.itemsize) { D7.inert(node) }
       end
 
+      matchpi %{[circuit (@edge_) _?]} do
+        D7.circuit(node.as_d, 2...node.itemsize) do
+          if child = node[2]?
+            mix0 = Term.of(:cell, edge, child)
+          else
+            mix0 = Term.of(:cell, edge)
+          end
+
+          D7.mixture(node, mix0) do |mix1|
+            Term.of_case(mix1) do
+              matchpi %{(cell @_ child1_)} { Term.morph(node, {2, child1}) }
+              otherwise { Term.morph(node, {2, nil}) }
+            end
+          end
+        end
+      end
+
       matchpi %{[circuit @edge_ children0_*]} do
         D7.circuit(node.as_d, 2...node.itemsize) do
           if children0.empty?
