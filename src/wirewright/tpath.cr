@@ -101,6 +101,21 @@ module Ww
       end
     {% end %}
 
+    # NOTE: When comparing `Key`s and `Value`s, `Key`s always go *before*
+    # `Value`s (i.e., type `Key` is less than type `Value`).
+    def <=>(other : Tpath)
+      @steps.compare(other.@steps) do |step0, step1|
+        case {step0, step1}
+        in {Key, Key}, {Value, Value}
+          Term.compare(step0.key, step1.key)
+        in {Key, Value}
+          -1
+        in {Value, Key}
+          1
+        end
+      end
+    end
+
     def starts_with?(other : Tpath) : Bool
       return false unless size >= other.size
 
