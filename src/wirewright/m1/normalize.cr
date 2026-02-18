@@ -95,7 +95,7 @@ module Ww::M1
     def literal(term : Term) : Term
       if dict = term.as_d?
         return terminal(Term.of(:"%literal", term,
-          depth: dict.depth,
+          depth: Term.depth(dict),
           bounds: dict.size,
         ))
       end
@@ -1862,8 +1862,8 @@ module Ww::M1
       matchpi %{(%'%any _*)}, cue: :"%any" do
         options = pattern.items.move(1)
 
-        mindepth = options.min_of? { |option| (dict = option.as_d?) ? dict.depth : 0 } || 0
-        maxdepth = options.max_of? { |option| (dict = option.as_d?) ? dict.depth : 0 } || 0
+        mindepth = options.min_of? { |option| Term.depth(option) } || 0
+        maxdepth = options.max_of? { |option| Term.depth(option) } || 0
 
         Normalize.terminal(pattern, depth: {mindepth, :"..=", maxdepth})
       end

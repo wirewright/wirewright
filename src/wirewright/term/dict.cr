@@ -717,19 +717,6 @@ module Ww
       maxdepth
     end
 
-    @[Dncast]
-    def depth : UInt32
-      maxdepth = 0u32
-
-      each_entry do |k, v|
-        next unless child = v.as_d?
-
-        maxdepth = Math.max(maxdepth, child.depth)
-      end
-
-      1u32 + maxdepth
-    end
-
     record Population, numbers : Magnitude, symbols : Magnitude, strings : Magnitude, booleans : Magnitude do
       def self.zero
         zero = Magnitude.new(0)

@@ -1258,6 +1258,30 @@ module Ww
       edge?(term.unsafe_as_d, type: type)
     end
 
+    # Returns the maximum depth of *term*.
+    #
+    # If *term* is a dict, its depth is `1` plus the maximum depth of its
+    # children. If *term* is a non-dict, its depth is always `0`.
+    def self.depth(term : Dict) : UInt32
+      depth = 0u32
+
+      term.each_entry do |key, value|
+        depth = Math.max(depth, depth(value))
+      end
+
+      1u32 + depth
+    end
+
+    # :ditto:
+    def self.depth(term : Any) : UInt32
+      0u32
+    end
+
+    # :ditto:
+    def self.depth(term : Term) : UInt32
+      depth(Term[term])
+    end
+
     # Recursively merges two dictionaries *a* and *b*.
     #
     # If two keys are equal and both values are dictionaries, those dictionaries are
