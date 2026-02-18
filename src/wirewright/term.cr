@@ -1461,8 +1461,8 @@ module Ww
       end
     end
 
-    private def self.assign?(root : Term, keys : Indexable, rvalue : Term?, index : Int32)
-      if index == keys.size
+    private def self.assign?(root : Term, keypath : Indexable, rvalue : Term?, index : Int32)
+      if index == keypath.size
         return rvalue
       end
 
@@ -1470,9 +1470,9 @@ module Ww
         return root
       end
 
-      key = Term.of(keys[index])
+      key = Term.of(keypath[index])
       value0 = dict[key]?
-      value1 = assign?(value0 || Term.of, keys, rvalue, index + 1)
+      value1 = assign?(value0 || Term.of, keypath, rvalue, index + 1)
 
       if value1.nil? || (rvalue.nil? && value1.type.dict? && value1.unsafe_as_d.empty?)
         return Term.of(dict.without(key))
@@ -1487,40 +1487,40 @@ module Ww
     # and parent dicts, if they become empty after recursive removal, are also
     # removed.
     #
-    # Each key in *keys* is converted to a term using `Term.of`.
+    # Each key in *keypath* is converted to a term using `Term.of`.
     #
-    # New dictionaries are created as needed as this function follows through *keys*.
-    # If this function hits a non-dict as it follows the keys, it aborts and returns
+    # New dictionaries are created as needed as this function follows through *keypath*.
+    # If this function hits a non-dict as it follows the keypath, it aborts and returns
     # *root* unchanged. For example, if we try to do `assign?(root, {:x, :y, :z}, to: 10}`
     # but the value of `y` is a number, this function aborts and returns *root* unchanged.
-    def self.assign?(root : Term, keys : Indexable, *, to value) : Term?
-      assign?(root, keys, Term.of(value), index: 0)
+    def self.assign?(root : Term, keypath : Indexable, *, to value) : Term?
+      assign?(root, keypath, Term.of(value), index: 0)
     end
 
     # Same as `assign?`, but raises instead of returning `nil` when *root*
-    # itself is removed (i.e., *value* is `nil` and *keys* is empty).
+    # itself is removed (i.e., *value* is `nil` and *keypath* is empty).
     #
-    # Since this function's return restriction is `Term`, it allows *keys*
+    # Since this function's return restriction is `Term`, it allows *keypath*
     # to be empty (and will thus return *value* as-is)..
-    def self.assign(root : Term, keys : Indexable, *, to value) : Term
-      assign?(root, keys, to: value) || raise ArgumentError.new("Term.assign() does not support removal of root")
+    def self.assign(root : Term, keypath : Indexable, *, to value) : Term
+      assign?(root, keypath, to: value) || raise ArgumentError.new("Term.assign() does not support removal of root")
     end
 
     # If you want the return type of `assign` to be restricted to `Dict`,
     # you must pass a *root* dict to trigger this overload.
     #
-    # This overload does not support empty *keys*, since that would mean *value*
+    # This overload does not support empty *keypath*, since that would mean *value*
     # must be used, which isn't necessarily a dict.
-    def self.assign(root : Dict, keys : Indexable, *, to value) : Dict
-      assert keys.present?
+    def self.assign(root : Dict, keypath : Indexable, *, to value) : Dict
+      assert keypath.present?
 
-      assign(Term.of(root), keys, to: value).as_d
+      assign(Term.of(root), keypath, to: value).as_d
     end
 
     # A utility function to perform one or more assignments on root.
     #
-    # Each assign in *assignments* is a tuple of the form: `{*keys, value}`. Here, *keys*
-    # represents one or more keys, and *value* is the target value, which could be any
+    # Each assign in *assignments* is a tuple of the form: `{*keypath, value}`. Here, *keypath*
+    # represents one or more keypath, and *value* is the target value, which could be any
     # object including `nil`; the latter signifying removal. See also: `assign`.
     #
     # Like `assign`, this function keeps the type of *root* as the return type. If you
