@@ -150,6 +150,7 @@ module Ww
           next
         end
 
+        # Start copying after we've depleted nchars.
         chr.each_byte do |byte|
           byteary << byte
         end
