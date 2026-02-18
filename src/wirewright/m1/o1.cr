@@ -262,7 +262,7 @@ module Ww::M1
       .with_annotation(:captures)
   end
 
-  # Returns the set of captures that *pattern* makes.
+  # Returns the set of captures made in *pattern*.
   #
   # See `capturesp` for info on how captures are represented.
   def captures(pattern : Normp) : Set(Term)
@@ -276,6 +276,11 @@ module Ww::M1
 
       dict.items.to_set
     end
+  end
+
+  # Returns the set of capture names of captures made in *pattern*.
+  def capture_names(pattern : Normp) : Set(Term)
+    captures(pattern).to_set { |(name, _)| name }
   end
 
   private def guarded1(op : Term::Dict) : Term::Dict
