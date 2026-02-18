@@ -467,7 +467,7 @@ module Ww::Rack
 
     component, env = result
 
-    classify(Alloy.render(env, component.body))
+    D7.nonready(Alloy.render(env, component.body))
   end
 
   # :nodoc:

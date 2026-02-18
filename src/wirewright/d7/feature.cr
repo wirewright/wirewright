@@ -9,7 +9,9 @@ module Ww::D7
   alias Classifier = Term -> Feature
 
   # Nodes from a circuit are *classified* into *features*.
-  alias Feature = Flat | Mixture | Scope | Parent | Circuit
+  alias Feature = Ready | Nonready
+
+  alias Ready = Flat | Mixture | Scope | Parent | Circuit
 
   # Features without a successor.
   alias Flat = Gnd | Inert
@@ -74,7 +76,7 @@ module Ww::D7
 
   # Represents a lexical scope binding. Attaches bindings to a continuation
   # feature *cont*.
-  defcase Scope, scope : NodeScope::Any, cont : Feature
+  defcase Scope, scope : NodeScope::Any, cont : Ready
 
   # Constructs a scope feature.
   #
@@ -125,12 +127,12 @@ module Ww::D7
   defrecord Circuit,
     node : Term::Dict,
     range : Range(Int32, Int32),
-    leaf : -> Feature
+    leaf : -> Ready
 
   # Constructs a circuit feature.
   #
   # See `Circuit`.
-  def circuit(node : Term::Dict, range : Range(Int32, Int32), &leaf : -> Feature) : Circuit
+  def circuit(node : Term::Dict, range : Range(Int32, Int32), &leaf : -> Ready) : Circuit
     assert range.exclusive? && range.subrange_of?(0...node.itemsize)
 
     Circuit.new(node, range, leaf)
@@ -138,5 +140,34 @@ module Ww::D7
 
   def circuit(node : Term::Dict) : Circuit
     circuit(node, 0...node.itemsize) { inert(Term.of(node)) }
+  end
+
+  # `Nonready` represents a thunk which must be further classified by the caller.
+  # `Nonready`s can be evaluated using `ready`.
+  defrecord Nonready, node : Term
+
+  # See `Nonready`.
+  def nonready(node : Term) : Nonready
+    Nonready.new(node)
+  end
+
+  # Classifies *node* using *clf*, evaluating `Nonready` thunks using *clf*
+  # until they are `Ready`.
+  #
+  # The separation between `Ready` and `Nonready` is useful when you want to
+  # wrap a classifier *clf* within another one. Especially during component
+  # expansion or recursive classification, the nested classifier cannot call
+  # the parent one to [tail-] recurse. To resolve this, we use `Nonready`
+  # thunks, which "bubble up" to the outermost classifier and are then classified
+  # by it, and so on down the chain if needed.
+  def ready(clf : Classifier, node : Term) : Ready
+    loop do
+      case result = clf.call(node)
+      in Ready
+        return result
+      in Nonready
+        node = result.node
+      end
+    end
   end
 end

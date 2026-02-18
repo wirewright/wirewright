@@ -185,7 +185,7 @@ module Ww::D7
 
   # :nodoc:
   def update(clf, addr, scope, depth, node : Term, sink) : Term
-    update(clf, addr, scope, depth, clf.call(node), sink)
+    update(clf, addr, scope, depth, ready(clf, node), sink)
   end
 
   # :nodoc:
@@ -230,6 +230,8 @@ module Ww::D7
     end
   end
 
+  alias ImageFn = NodeAddr, ParentImage | Inert | Gnd -> Slice(Term)
+
   # Returns the view of *circuit* as if seen through a "lens". The lens is defined
   # by *clf* and *fn*. Only that structure is preserved which is visible through
   # the lens; its image possibly altered by the lens.
@@ -243,31 +245,34 @@ module Ww::D7
   # the metaphor assumes those appearances are bidirectional: you can "poke" them
   # and the raw object responds. This isn't particularly relevant here, but it is
   # relevant otherwise.
-  def image(clf : Classifier, circuit : Term, &fn : NodeAddr, ParentImage | Inert | Gnd -> Slice(Term)) : Term
+  #
+  # Like in `each_feature_with_addr`, *split* enables descent into `Mixture`
+  # definitions; they are otherwise treated as `inert` nodes.
+  def image(clf : Classifier, circuit : Term, *, split : Bool = true, &fn : ImageFn) : Term
     unless nodes = circuit.as_d?
       return circuit
     end
 
-    Term.of(image(clf, NodeAddr.empty, parent(nodes), fn))
+    Term.of(image(clf, NodeAddr.empty, parent(nodes), split, fn))
   end
 
   # :nodoc:
-  def image(clf, addr, feature : Inert | Gnd, fn) : Slice(Term)
+  def image(clf, addr, feature : Inert | Gnd, split, fn) : Slice(Term)
     fn.call(addr, feature)
   end
 
   # :nodoc:
-  def image(clf, addr, feature : Circuit, fn) : Slice(Term)
-    image(clf, addr, parent(feature.node, feature.range), fn)
+  def image(clf, addr, feature : Circuit, split, fn) : Slice(Term)
+    image(clf, addr, parent(feature.node, feature.range), split, fn)
   end
 
   # :nodoc:
-  def image(clf, addr, feature : Parent, fn) : Slice(Term)
+  def image(clf, addr, feature : Parent, split, fn) : Slice(Term)
     children = Pf::Kit.stack_array(Term)
 
     feature.range.each do |index|
       child = feature.node[index]
-      image(clf, addr.append(index), child, fn).each do |seln|
+      image(clf, addr.append(index), child, split, fn).each do |seln|
         children << seln
       end
     end
@@ -277,18 +282,22 @@ module Ww::D7
   end
 
   # :nodoc:
-  def image(clf, addr, feature : Scope, fn) : Slice(Term)
-    image(clf, addr, feature.cont, fn)
+  def image(clf, addr, feature : Scope, split, fn) : Slice(Term)
+    image(clf, addr, feature.cont, split, fn)
   end
 
   # :nodoc:
-  def image(clf, addr, feature : Mixture, fn) : Slice(Term)
-    image(clf, addr, feature.defn, fn)
+  def image(clf, addr, feature : Mixture, split, fn) : Slice(Term)
+    if split
+      image(clf, addr, feature.defn, split, fn)
+    else
+      fn.call(addr, inert(feature.node))
+    end
   end
 
   # :nodoc:
-  def image(clf, addr, node : Term, fn) : Slice(Term)
-    image(clf, addr, clf.call(node), fn)
+  def image(clf, addr, node : Term, split, fn) : Slice(Term)
+    image(clf, addr, ready(clf, node), split, fn)
   end
 
   # Similar to `image`, but *replaces* nodes using *fn* instead.
@@ -331,7 +340,7 @@ module Ww::D7
 
   # :nodoc:
   def map(clf, addr, node : Term, fn) : Term
-    map(clf, addr, clf.call(node), fn)
+    map(clf, addr, ready(clf, node), fn)
   end
 
   # :nodoc:
@@ -415,7 +424,7 @@ module Ww::D7
   #
   # - Always descends into circuits (never runs their leaf function).
   # - Descends into `Mixture`'s definition if *split* is true, otherwise
-  #   treats `Mixture`s as `Gnd` nodes.
+  #   treats `Mixture`s as inert nodes.
   # - If *split* is `false`, the address of a node is guaranteed to be the itempath
   #   to that node starting at *circuit*. If *split* is `true`, on the other hand,
   #   the address is not guaranteed to be a valid itempath. In both cases, the addresses
@@ -436,9 +445,9 @@ module Ww::D7
   # :nodoc:
   def each_feature_with_addr(clf, addr, feature : Mixture, split : Bool, sink) : Nil
     if split
-      successor = clf.call(feature.defn)
+      successor = ready(clf, feature.defn)
     else
-      successor = gnd(feature.node)
+      successor = inert(feature.node)
     end
 
     each_feature_with_addr(clf, addr, successor, split, sink)
@@ -456,20 +465,18 @@ module Ww::D7
     feature.range.each do |index|
       item = items[index]
 
-      each_feature_with_addr(clf, addr.append(index), clf.call(item), split, sink)
+      each_feature_with_addr(clf, addr.append(index), ready(clf, item), split, sink)
     end
   end
 
-  # Returns a hash map of `Gnd` nodes in *circuit*.
+  # Returns a hash map of `Flat` nodes in *circuit*.
   #
   # See also: `each_feature_with_addr`.
   def node_map(clf : Classifier, circuit : Term, **kwargs) : Hash(NodeAddr, Term)
     node_map = {} of NodeAddr => Term
 
-    each_feature_with_addr(clf, circuit, **kwargs) do |feature, addr|
-      next unless feature.is_a?(Gnd)
-
-      node_map[addr] = feature.node
+    each_feature_with_addr(clf, circuit, **kwargs) do |flat, addr|
+      node_map[addr] = flat.node
     end
 
     node_map
