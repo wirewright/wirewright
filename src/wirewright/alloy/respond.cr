@@ -1,5 +1,5 @@
 module Ww::Alloy
-  private def respond0?(ruleset : Ruleset, query : Term, issues : Issue::Sink) : Expansion?
+  private def respond0?(ruleset : Ruleset, query : Term, issues : Issue::Sink) : Term::Rep?
     ruleset.each_response(query) do |envs, rule|
       unless vars = envs.single?
         issues.major("rule must emit zero or one match env")
@@ -30,7 +30,7 @@ module Ww::Alloy
     cache : ExpansionCache,
     query : Term,
     issues : Issue::Sink,
-  ) : Expansion?
+  ) : Term::Rep?
     cached(cache, query, issues) do
       # We have no way nor need (?) to cache nils.
       respond0?(ruleset, query, issues) || return
@@ -43,7 +43,7 @@ module Ww::Alloy
     cache : ExpansionCache,
     query : Term, *,
     severity : Issue::Severity,
-  ) : {Expansion?, Array(Issue::Backtrace)}
+  ) : {Term::Rep?, Array(Issue::Backtrace)}
     Issue.setup(severity: severity) do |issues|
       issues.adjoin(Spot::Response.new(query)) do |issues|
         respond0?(ruleset, cache, query, issues)

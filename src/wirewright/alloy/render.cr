@@ -14,16 +14,17 @@ module Ww::Alloy
   alias EvalSubexpr = Term, Issue::Sink -> Term
 
   # The refine function runs on a node after it is recursively expanded by Alloy.
-  alias Refine = Term, Issue::Sink -> Expansion
+  alias Refine = Term, Issue::Sink -> Term::Rep
 
   # :nodoc:
   record RenderContext, vars : Term::Dict, eval : Eval, refine : Refine
 
-  private def get_var(ctx : RenderContext, name : Term, issues : Issue::Sink, & : Term, Issue::Sink -> T) : T | Err forall T
+  # Returns an empty rep if no such var exists.
+  private def get_var(ctx : RenderContext, name : Term, issues : Issue::Sink, & : Term, Issue::Sink -> T) : T forall T
     issues.adjoin("variable", Term.of(name)) do |issues|
       unless value = ctx.vars[name]?
         issues.major("variable `#{name}` does not exist")
-        next Err.new
+        next Term.rep
       end
 
       issues.adjoin("variable value", value) do |issues|
@@ -32,11 +33,12 @@ module Ww::Alloy
     end
   end
 
-  private def get_var_dict(ctx : RenderContext, name : Term, issues : Issue::Sink, & : Term, Issue::Sink -> T) : T | Err forall T
+  # Returns an empty rep if no such var exists.
+  private def get_var_dict(ctx : RenderContext, name : Term, issues : Issue::Sink, & : Term, Issue::Sink -> T) : T forall T
     get_var(ctx, name, issues) do |value, issues|
       unless dict = value.as_d?
         issues.major("value must be a dict")
-        next Err.new
+        next Term.rep
       end
 
       yield value, issues
@@ -158,10 +160,7 @@ module Ww::Alloy
         render0(ctx, item, issues)
       end
 
-      case expansion
-      in Err # omit
-      in Term::Rep then expansion.each { |offspring| children << offspring }
-      end
+      expansion.each { |offspring| children << offspring }
 
       nil # OR ELSE THE COMPILER CRASHES ...
     end
@@ -174,14 +173,14 @@ module Ww::Alloy
   # Yields a dictionary and a proc. The block is expected to iterate through
   # the dict in whatever way it prefers; then, call the proc with each context
   # to use to evaluate *body*.
-  private def render_each(ctx : RenderContext, iteratee : Term, body : Term::Dict, issues : Issue::Sink, &) : Expansion
+  private def render_each(ctx : RenderContext, iteratee : Term, body : Term::Dict, issues : Issue::Sink, &) : Term::Rep
     issues.adjoin("`^each` template expression") do |issues|
       iteratee_value = eval(ctx, iteratee, issues)
 
       issues.adjoin("iteratee", iteratee_value) do |issues|
         unless iteratee_dict = iteratee_value.as_d?
           issues.major("iteratee must be a dict")
-          return Err.new
+          return Term.rep
         end
 
         children = Pf::Kit.stack_array(Term)
@@ -207,7 +206,7 @@ module Ww::Alloy
     end
   end
 
-  private def render0(ctx : RenderContext, template : Term, issues : Issue::Sink) : Expansion
+  private def render0(ctx : RenderContext, template : Term, issues : Issue::Sink) : Term::Rep
     Term.case(template) do
       # |@ alloy.template.^var
       #
@@ -251,7 +250,7 @@ module Ww::Alloy
           when :splice
             unless dict = value.as_d?
               issues.major("value must be a dict")
-              return Err.new
+              return Term.rep
             end
 
             Term.rep(dict.items)
@@ -552,7 +551,7 @@ module Ww::Alloy
           get_var_dict(ctx, var, issues) do |dict, issues|
             unless item = dict.items[index.to(Int32)]?
               issues.major("dict does not have an item with index #{index}")
-              return Err.new
+              return Term.rep
             end
 
             Term.rep(item)
@@ -728,21 +727,17 @@ module Ww::Alloy
             render0(ctx, child, issues)
           end
 
-          if expansion.is_a?(Err)
-            return expansion
-          end
-
           extras_value = eval(ctx, extras, issues)
 
           unless extras_dict = extras_value.as_pairsonly_d?
             issues.adjoin("extras", extras_value, &.major("expected a pairsonly dict"))
-            return Err.new
+            return Term.rep
           end
 
           if offspring = expansion.single?
             unless base_dict = offspring.as_d?
               issues.adjoin("^extend child", offspring, &.major("expected a dict child"))
-              return Err.new
+              return Term.rep
             end
 
             return Term.rep(Term.of(Term.union(base_dict, extras_dict)))
@@ -751,7 +746,7 @@ module Ww::Alloy
           unions = expansion.to_readonly_slice do |offspring, index|
             unless base_dict = offspring.as_d?
               issues.adjoin("spliced ^extend child", offspring, &.major("expected a dict child"))
-              return Err.new
+              return Term.rep
             end
 
             Term.of(Term.union(base_dict, extras_dict))
@@ -898,7 +893,7 @@ module Ww::Alloy
 
         unless dict = value.as_d?
           issues.adjoin("spliced value", value, &.major("value must be a dict"))
-          return Err.new
+          return Term.rep
         end
 
         Term.rep(dict.items)
@@ -937,7 +932,7 @@ module Ww::Alloy
       matchpi %{(^. keys_+)} do
         unless value = ctx.vars.follow?(keys.items)
           issues.adjoin("keypath", keys, &.major("no value at keypath"))
-          return Err.new
+          return Term.rep
         end
 
         Term.rep(value)
@@ -993,10 +988,7 @@ module Ww::Alloy
           end
 
           # Normalize expansion.
-          case expansion
-          in Err       then return Err.new
-          in Term::Rep then matchee = Term.of(expansion)
-          end
+          matchee = Term.of(expansion)
 
           render_many(issues) do |submit|
             # Filter on expansion.
@@ -1031,8 +1023,7 @@ module Ww::Alloy
       matchpi %{_dict} do
         expansion = Term.flatten(template, part: Term::Dict.entries) do |key, value|
           issues.adjoin(key: key, detail: "in key") do |issues|
-            offspring = render0(ctx, value, issues)
-            offspring.is_a?(Err) ? Term.rep : offspring
+            render0(ctx, value, issues)
           end
         end
 
@@ -1056,7 +1047,7 @@ module Ww::Alloy
     issues : Issue::Sink, *,
     eval : Eval = DEFAULT_EVAL,
     refine : Refine = DEFAULT_REFINE,
-  ) : Expansion
+  ) : Term::Rep
     issues.adjoin(Spot::Template.new(template)) do |issues|
       render0(RenderContext.new(vars, eval, refine), template, issues)
     end
@@ -1068,7 +1059,7 @@ module Ww::Alloy
   # issues that were found during expansion (if any).
   #
   # Suppresses issues below *severity*.
-  def render0(vars : Term::Dict, template : Term, *, severity : Issue::Severity, **kwargs) : {Expansion, Array(Issue::Backtrace)}
+  def render0(vars : Term::Dict, template : Term, *, severity : Issue::Severity, **kwargs) : {Term::Rep, Array(Issue::Backtrace)}
     Issue.setup(severity: severity) do |issues|
       render0(vars, template, issues, **kwargs)
     end
@@ -1076,7 +1067,7 @@ module Ww::Alloy
 
   # Renders an Alloy *template*, using *vars* as the initial variables dict.
   #
-  # Returns the collapsed expansion of *template* (see `collapse`), and an array
+  # Returns the collapsed expansion of *template* (see `Term.collapse`), and an array
   # of issue backtraces containing issues that were found during expansion (if any).
   #
   # Suppresses issues below *severity*.
@@ -1088,7 +1079,7 @@ module Ww::Alloy
   ) : {Term, Array(Issue::Backtrace)}
     expansion, issues = render0(vars, template, **kwargs, severity: severity)
 
-    {collapse(expansion), issues}
+    {Term.collapse(expansion), issues}
   end
 
   # Shorthand for `render_with_issues` that suppresses all issues.

@@ -927,16 +927,11 @@ module Ww::M1
       # FIXME: backmaps must support Issue::Sink I suppose. We can't just throw
       # issues out like this.
       expansion, _ = Alloy.render0(env, mut.template, eval: eval, severity: :quiet)
-      if expansion.is_a?(Alloy::Err)
-        expansion = Term.rep
-      end
 
       unless term = expansion.single?
         # (x_ _ _) <> {x: (^splice a b c)}, (100 200 300) -> (a b c 200 300)
         return expansion
       end
-
-      # expansion : Alloy::Assign
 
       if mut.mult.one?
         # (x_ _ _) <> {x: a}, (100 200 300) -> (a 200 300)

@@ -20,35 +20,10 @@
 module Ww::Alloy
   extend self
 
-  # Represents the result of template expansion. You usually do not have to
-  # deal with this unless you want to support splicing of top-level Alloy
-  # templates or views into your term-of-choice.
-  alias Expansion = Term::Rep | Err
-
-  # Represents the absence of an expansion due to an error (e.g. undefined variable).
-  # Alloy nodes may choose to handle this differently in principle; but in practice,
-  # for consistency, they *omit* them from the template. This has the nice property that
-  # if there is a chain of multiple Alloy passes, errors in the previous pass are not
-  # going to propagate into the next one and so on.
-  #
-  # See `collapse` for representatinal issues when used in practice.
-  record Err
-
-  # See `Term.collapse` for general info.
-  #
-  # `Err` collapses to `()`.
-  def collapse(expansion : Expansion) : Term
-    if expansion.is_a?(Err)
-      return Term.of
-    end
-
-    Term.collapse(expansion)
-  end
-
   alias ExpansionCache = ICache(Term, Term::Rep)
   alias ExpansionUncached = Uncached(Term, Term::Rep)
 
-  private def cached(cache : ExpansionCache, key : Term, issues : Issue::Sink, & : -> Expansion) : Expansion
+  private def cached(cache : ExpansionCache, key : Term, issues : Issue::Sink, & : -> Term::Rep) : Term::Rep
     if memo = cache[key]?
       return memo
     end

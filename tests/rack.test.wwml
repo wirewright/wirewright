@@ -3702,36 +3702,6 @@
       (view ((@command @name @age) (greet name_ age_) @output)
         ^"Hi, ⸢name⸣ of age ⸢age⸣!")
       (cell @output))
-    end)
-
-  ;; Toplevel Alloy errors should prevent consumption
-  (rack
-    (frame
-      (sensor (local x_ @x) ^x)
-      (cell @x)
-      (sensor (local y_ @y) ^qux)
-      (cell @y)
-      (sensor (local z_ @z) ^z)
-      (cell @z)
-      ((appearance cell) (local @m) 100))
-    (frame
-      (sensor (local x_ @x) ^x)
-      (cell @x 100)
-      (sensor (local y_ @y) ^qux)
-      (cell @y)
-      (sensor (local z_ @z) ^z)
-      (cell @z 100)
-      ((appearance cell) (local @m)))
-    end)
-  (rack
-    (frame
-      (sensor (local x_ @x) ^foo)
-      (cell @x)
-      (sensor (local y_ @y) ^bar)
-      (cell @y)
-      (sensor (local z_ @z) ^baz)
-      (cell @z)
-      ((appearance cell) (local @m) 100))
     end))
 
 ;; Elementary 1D movement circuit

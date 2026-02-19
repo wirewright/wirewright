@@ -159,7 +159,7 @@ module Ww::Alloy
     end
   end
 
-  # Shorthand for `compose0` which `collapse`s the resulting expansion.
+  # Shorthand for `compose0` which `Term.collapse`s the resulting expansion.
   def compose_with_issues(
     ruleset : Ruleset,
     globals : Term::Dict,
@@ -169,7 +169,7 @@ module Ww::Alloy
   ) : {Term, Array(Issue::Backtrace)}
     expansion, issues = compose0(ruleset, globals, view, **kwargs, severity: severity)
 
-    {collapse(expansion), issues}
+    {Term.collapse(expansion), issues}
   end
 
   # Shorthand for `compose_with_issues` that suppresses all issues.

@@ -58,8 +58,6 @@ module Ww::Rack
         next unless env = M1.match?(pattern, Term.of(matchee))
 
         expansion, _ = Alloy.render0(env, template, severity: :quiet)
-        next if expansion.is_a?(Alloy::Err)
-
         unless expansion.empty?
           instance = Term.collapse(expansion)
         end
@@ -207,11 +205,6 @@ module Ww::Rack
         end
 
         expansion, _ = Alloy.render0(env, template, severity: :quiet)
-        if expansion.is_a?(Alloy::Err)
-          # Alloy error. Clear the dst cell: the view is invalid.
-          next D7.patch(dst, {2, nil})
-        end
-
         unless expansion.empty?
           instance = Term.collapse(expansion)
         end
@@ -260,10 +253,6 @@ module Ww::Rack
         next unless env = M1.match?(pattern, Term.of(matchee))
 
         expansion, _ = Alloy.render0(env, template, severity: :quiet)
-        if expansion.is_a?(Alloy::Err)
-          next D7.patch(dst, {2, nil})
-        end
-
         unless expansion.empty?
           instance = Term.collapse(expansion)
         end
@@ -304,11 +293,6 @@ module Ww::Rack
         end
 
         expansion, _ = Alloy.render0(env, template, severity: :quiet)
-        if expansion.is_a?(Alloy::Err)
-          # Alloy error. Clear the dst cell: the view is invalid.
-          next D7.patches(D7.patch(ref, {2, nil}), D7.patch(dst, {2, nil}))
-        end
-
         unless expansion.empty?
           instance = Term.collapse(expansion)
         end
