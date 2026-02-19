@@ -238,7 +238,7 @@ struct ProcRuleset
 
   # :nodoc:
   def initialize(
-    @pset : PatternSet(Term),
+    @pset : M1::PatternSet(Term),
     @rules : Hash(UInt32, ProcRule)?,
     @backmaps : Hash(UInt32, ProcBackmap)?,
   )
@@ -264,7 +264,7 @@ struct ProcRuleset
     rules = backmaps = nil
 
     index = 0u32
-    pset = PatternSet(Term).select(selector, Term.of(decls)) do |_, env|
+    pset = M1::PatternSet(Term).select(selector, Term.of(decls)) do |_, env|
       _, proc = ruleary[env[:index].to(Int32)]
 
       case env[:type]
@@ -295,11 +295,12 @@ struct ProcRuleset
   end
 
   def call(matchee matchee0 : Term) : Rewrite::Any
-    case pr = @pset.response(matchee0)
-    in Pr::One
-      if rule = rule?(pr.pattern.index)
-        offspring = rule.call(pr.env)
-      elsif backmap = backmap?(pr.pattern.index)
+    @pset.query(matchee0) do |envs, index|
+      next unless env = envs.single?
+
+      if rule = rule?(index)
+        offspring = rule.call(env)
+      elsif backmap = backmap?(index)
         raise "not supported"
       end
 
@@ -314,16 +315,15 @@ struct ProcRuleset
         different = false
       end
 
-      different ? offspring : Rewrite::None.new
-    in Pr::Many
-      raise "pr::many not implemented"
-    in Pr::Neg
-      Rewrite::None.new
+      return different ? offspring : Rewrite::None.new
     end
+
+    Rewrite::None.new
   end
 end
 
-# NOTE: `pattern` is provided for info, you will usually not match it.
+# NOTE: `pattern` is provided for info, you will usually not need to match it;
+# the whole point of `Ruleset` and `M1::PatternSet` is that it matches it for you.
 module Rule
   extend self
 
@@ -335,7 +335,7 @@ end
 
 class Ruleset
   # :nodoc:
-  def initialize(@pset : PatternSet(Term), @rules : Slice(Rule::Any))
+  def initialize(@pset : M1::PatternSet(Term), @rules : Slice(Rule::Any))
   end
 
   DEFAULT_SELECTOR = ML.term("(%any° [rule pattern_ template_] [backmap pattern_ backspec_])")
@@ -345,7 +345,7 @@ class Ruleset
   def self.select(selector, *bases, **kwargs)
     rules = [] of Rule::Any
 
-    pset = PatternSet(Term).select(selector, *bases, **kwargs) do |normp, env|
+    pset = M1::PatternSet(Term).select(selector, *bases, **kwargs) do |normp, env|
       if template = env[:template]?
         rule = Rule::Template.new(env[:pattern], template)
       elsif backspec = env[:backspec]?
@@ -382,40 +382,15 @@ class Ruleset
     {ruleset, rest}
   end
 
-  struct Responses
-    include ICursor
-
-    def initialize(@responses : PatternSet::Responses, @rules : Slice(Rule::Any))
-    end
-
-    def current? : {Pr::Pos, Rule::Any}?
-      if response = @responses.current?
-        {response, @rules[response.pattern.index]}
-      end
-    end
-
-    def next? : Responses?
-      if successor = @responses.next?
-        Responses.new(successor, @rules)
-      end
-    end
-  end
-
-  def responses(matchee : Term, *, env : Term::Dict = Term[]) : Responses
-    Responses.new(@pset.responses(matchee, env: env), @rules)
-  end
-
-  def call?(matchee : Term) : {Pr::Pos, Rule::Any}?
-    case res = @pset.response(matchee)
-    in Pr::Pos
-      {res, @rules[res.pattern.index]}
-    in Pr::Neg
-    end
-  end
-
   def each_candidate(matchee : Term, & : M1::Op::Any, Rule::Any ->)
-    @pset.each_candidate(matchee) do |candidate, index|
-      yield candidate, @rules[index]
+    @pset.each_candidate(matchee) do |op, index|
+      yield op, @rules[index]
+    end
+  end
+
+  def query(matchee : Term, & : Indexable(Term::Dict), Rule::Any ->)
+    @pset.query(matchee) do |envs, index|
+      yield envs, @rules[index]
     end
   end
 

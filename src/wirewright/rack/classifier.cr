@@ -1,7 +1,7 @@
 module Ww::Rack
   # :nodoc:
   def classify!(node : Term) : D7::Feature
-    PatternSet.case(node) do
+    M1::PatternSet.case(node) do
       matchpi %{[cell @u_ _?]} do
         D7.gnd(node, u)
       end

@@ -28,7 +28,12 @@ require "./wirewright/microfold"
 require "./wirewright/soma"
 require "./wirewright/lr"
 
-require "../pattern7"
+module Ww
+end
+
+# TODO: REMOVE (this particular include is a big wart on the face of the project!)
+include Ww
+
 require "./wirewright/m1"
 require "../baz5"
 require "./wirewright/d7"

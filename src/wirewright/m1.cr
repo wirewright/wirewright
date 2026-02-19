@@ -23,7 +23,8 @@
 # of itself); the current "match-point" (most likely an `Op`) then asks the rest
 # of the pattern whether they approves whatever choice the operator wants to
 # makes. The current "match-point" can do this any number of times; it can fork
-# and collect answers, AND them by introducing match-points further ahead, and so on.
+# and collect answers, AND by scheduling match-points of itself with advanced state
+# in the future, and so on.
 #
 # I suspect M1's pattern matching algorithm is NP in the worst case, although this
 # remains to be proven. For practical patterns, NP, if it's there, would be very hard --
@@ -32,8 +33,9 @@
 #
 # The general expectation is that most patterns *match* in under 10 microseconds. This
 # number varies with machine and environment, of course, and with the underlying term.
-# But I'm just giving some rough estimates here. The simplest patterns match in under
-# 1 microsecond, and if you're lucky in under 500ns.
+# But I'm just giving some very rough estimates here. The simplest patterns match in under
+# 1 microsecond, and if you're lucky in under 500ns. At this point we're hitting very
+# close to Dict performance.
 #
 # I am emphasizing *match* because M1 is actually optimized for fast *mismatches*
 # (negatives, rejections). In fact, matches (positives) are sometimes pessimized.
@@ -53,6 +55,12 @@
 # expected to generate a ton of wrong answers before it gets something right. Thus,
 # again, figuratively speaking, we have 99% rejections; that's what we optimize for.
 #
+# Even then, do expect slow-downs. Although M1 is what I would consider well-tested,
+# it is still not extensively tested; and the kinds of patterns that would cause
+# bad performance are yet to be discovered, since, you know, I don't find myself
+# writing bad patterns very often... Anyway. I suspect the cases where M1 struggles
+# can be more or less trivially moved to rewriters or D7/Rack (for example deep search).
+#
 # Refer to `m1.operator` in the doctool to learn about the available M1 operators.
 #
 # M1 uses the terminology of *pattern* (roughly, a description of what should be matched),
@@ -70,6 +78,30 @@
 # almost trivial -- that's kind of the point with this design). I try to leave
 # comments where appropriate -- meaning almost everywhere! -- so expect lots
 # of them in the code.
+#
+# ### On invalid patterns
+#
+# If someone has trouble understanding a metaphor or a joke -- grasping its
+# intended meaning -- they do not "crash" or "raise an exception". They change
+# their perspective and interpret the metaphor or joke more literally. This works
+# like a spectrum: from close-to-the-intended meaning to letter-by-letter or
+# sound-by-sound. The latter is true for foreign languages: we can't recognize
+# the meaning, but we can still hear the sounds.
+#
+# Similarly, if the pattern engine cannot recognize the intended meaning of some
+# pattern term, it will simply go "one level of meaning down" and interpret the term
+# more literally; regardless of the amounts of confusion this creates (like in
+# the real world with metaphors). In some sense, invalid patterns "fail to fold";
+# an "emergent entity" is unable to appear, and we're left with the disorganized pieces.
+# `(%literal 100)`, interpreted as an "emergent" literal operator, becomes just a list
+# of symbols and numbers if we say `(%literal 100 200)`.
+#
+# Unfortunately, yes, this will inevitably cause problems at some point; and even bugs.
+# This can be fixed, however, by diagnostics during normalization. We plan on adding those.
+#
+# For M1, any pattern, even an invalid one from the human point-of view, is meaningful.
+# This is a hard rule. There must be no such thing as a "pattern matching engine crash"
+# (minus the inevitable implementation errors on my end).
 module Ww::M1
   extend self
 
@@ -732,3 +764,4 @@ require "./m1/head"
 require "./m1/specificity"
 require "./m1/match"
 require "./m1/backmap"
+require "./m1/pattern_set"

@@ -64,20 +64,12 @@ module Ww::Microfold::Pass
 
     def unfold1(theme, box : Term, designation : Term::Dict, node : Term)
       request = Term.of(Term.union(Term[box, node], designation))
-      responses = theme.box_ruleset.responses(request)
-      responses.each do |response|
-        pr, rule = response
 
-        case pr
-        in Pr::One  then env = pr.env
-        in Pr::Many then env = pr.envs[0]
-        end
+      theme.box_ruleset.query(request) do |envs, rule|
+        assert rule.is_a?(Rule::Template)
+        assert envs.present?
 
-        unless rule.is_a?(Rule::Template)
-          unreachable("unexpected rule type in ruleset selection")
-        end
-
-        return Alloy.render(env, rule.body)
+        return Alloy.render(envs.first, rule.body)
       end
 
       node

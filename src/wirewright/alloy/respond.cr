@@ -1,29 +1,21 @@
 module Ww::Alloy
   private def respond0?(ruleset : Ruleset, query : Term, issues : Issue::Sink) : Expansion?
-    unless response = ruleset.call?(query)
-      issues.note("no response")
-      return
+    ruleset.each_response(query) do |envs, rule|
+      unless vars = envs.single?
+        issues.major("rule must emit zero or one match env")
+        return
+      end
+
+      case rule
+      in Rule::Template
+        template = rule.body
+      in Rule::Backmap
+        issues.major("expected a template rule, but got a backmap")
+        return
+      end
+
+      render0(vars, template, issues)
     end
-
-    pr, rule = response
-
-    case pr
-    in Pr::One
-      vars = pr.env
-    in Pr::Many
-      issues.major("rule must emit zero or one match env")
-      return
-    end
-
-    case rule
-    in Rule::Template
-      template = rule.body
-    in Rule::Backmap
-      issues.major("expected a template rule, but got a backmap")
-      return
-    end
-
-    render0(vars, template, issues)
   end
 
   # Finds a template rule in *ruleset* that matches *query*, and renders its

@@ -1018,22 +1018,6 @@ def relR(bottom : String, successor : Rewriter, **kwargs) : Rewriter
   relR(ML.term(bottom), successor, **kwargs)
 end
 
-# :nodoc:
-def pbranchR(ctx, term, pset, a, b) : Rewrite::Any
-  case pset.response(term)
-  in Pr::Pos then a.call(ctx, Rewrite.one(term))
-  in Pr::Neg then b.call(ctx, Rewrite.one(term))
-  end
-end
-
-# Rewrites using *a* any term to which pattern set *pset* responds positively.
-# Rewrites using *b* any other term.
-def pbranchR(pset : PatternSet, a : Rewriter, b : Rewriter) : Rewriter
-  Rewriter.new do |ctx, staging|
-    staging.reduce { |term| pbranchR(ctx, term, pset, a, b) }
-  end
-end
-
 # Lists the call edges supported by `effectR`. Combining them will result
 # in multiple calls to the callable at the corresponding points in time.
 @[Flags]

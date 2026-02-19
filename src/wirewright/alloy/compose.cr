@@ -29,18 +29,19 @@ module Ww::Alloy
   end
 
   private def compose0?(ctx : ComposeContext, view : Term, issues : Issue::Sink) : Term::Rep?
-    responses = ctx.ruleset.responses(view)
-    responses.each do |(pr, rule)|
-      case {pr, rule}
-      when {Pr::One, Rule::Template}
+    ctx.ruleset.query(view) do |envs, rule|
+      assert envs.present?
+
+      case {envs.size, rule}
+      when {1, Rule::Template}
         # Found.
         issues.adjoin(Spot::Component.new(rule.pattern, rule.body)) do |issues|
-          return compose0(ctx, pr.env, rule.body, issues)
+          return compose0(ctx, envs.first, rule.body, issues)
         end
-      when {Pr::Many, Rule::Template}
+      when {_, Rule::Template}
         sink = Pf::Kit.stack_array(Term)
 
-        pr.envs.each do |env|
+        envs.each do |env|
           issues.adjoin("match env", Term.of(env)) do |issues|
             expansion = compose0(ctx, env, rule.body, issues)
             expansion.each { |offspring| sink << offspring }
