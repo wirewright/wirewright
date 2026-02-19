@@ -1290,7 +1290,7 @@ module Ww
       return b if a.empty?
       return a if b.empty?
 
-      # Don't waste on singleton dicts.
+      # Fast path for singleton dicts.
       if a.size == 1
         k, v0 = a.ee.first
         unless v1 = b[k]?
