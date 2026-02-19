@@ -2499,12 +2499,12 @@ module Ww::M1
       # e.g. `⟨members_+ ¦ () x y z⟩°`. That is, for example, `⟨x⟩`, `⟨x y z⟩`,
       # `⟨l←. m←M r←.⟩°`, ⟨l←. m←M r←. ⍊ t: 1⟩°.
       #
-      # As opposed to `%items`, both `%item` and `%item°` let the subsequence(s)
-      # matched constrain each other and the rest of the pattern. That is, e.g.,
-      # the pattern `(⟨x_⟩ x_)` means "find in the first item, which should be
-      # a dictionary, a term equal to *x*, where *x* is specified by the second item">
-      # Similarly, say, `(⟨x_⟩° ⟨x_⟩)` means "find all *x*s in the first list that
-      # are also present in the second list".
+      # Unlike `%items`, both `%item` and `%item°` let the subsequence(s) matched
+      # constrain each other and the rest of the pattern. That is, e.g., the pattern
+      # `(⟨x_⟩ x_)` means "find in the first item, which should be a dictionary, a term
+      # equal to *x*, where *x* is specified by the second item". Similarly, say,
+      # `(⟨x_⟩° ⟨x_⟩)` means "find all *x*s in the first list that are also present
+      # in the second list".
       #
       # Changing the second operator to `⟨x_⟩°` would make little sense here, since
       # this is a basic presence check. Conceptually, imagine the first item source
@@ -2570,7 +2570,7 @@ module Ww::M1
       # |@ m1.operator.item
       #
       # |@pattern
-      # (%items successor_ members_+ ¦ () min⋮ 1 max_⋮ ∞)
+      # (%items successor_ members_+ ¦ min⋮ 1 max_⋮ ∞)
       #
       # |@key successor m1.operator
       # Each subsequence matched by *members* produces a match env. The match env
@@ -2589,6 +2589,9 @@ module Ww::M1
       #
       # |@key max
       # Maximum number of subsequences to count as a match.
+      #
+      # NOTE: Infinity is shown for reference only. In practice, `max` accepts
+      # numbers only.
       #
       # |@block
       # Matches *min* to *max* subsequences of dictionary items.
@@ -2645,11 +2648,98 @@ module Ww::M1
         end
       end
 
+      # |@ m1.operator.entry
+      #
+      # |@pattern
+      # (%'%entry key_ value_)
+      # (%'%entry° key_ value_)
+      #
+      # |@key key m1.operator
+      # |@key value m1.operator
+      #
+      # |@block
+      # `%entry` (read: first entry [where]) matches a dictionary entry by subjecting
+      # both its key and value to the *key* and *value* patterns, correspondingly.
+      # `%entry°` (read: entry source) matches one or more dictionary entries in such
+      # a way.
+      #
+      # Entries are traversed in lexicographical order. But note that itemspart entries
+      # always come first.
+      #
+      # Unlike `%entries`, both `%entry` and `%entry°` let *key* and *value* constrain
+      # each other and the rest of the pattern.
+      #
+      # In backmaps, changing the key to one that already exists is a conflict that
+      # causes the backmap to abort all its changes and withdraw.
+      #
+      # See also `m1.operator.item` for general info.
+      #
+      # ```
+      # (%entry key_ (key_ name_)) => ^name
+      #
+      # {name: (name "John Doe"),
+      #  foo: (bar "Samantha Doe"),
+      #  baz: (baz "Hello World")}
+      # ;; => "Hello World" [baz is lexicographically first]
+      #
+      # ---
+      #
+      # (%entry° key_ (key_ _))
+      #   <> {key: (seen ^key)}
+      #
+      # {name: (name "John Doe"),
+      #  foo: (bar "Samantha Doe"),
+      #  baz: (baz "Hello World")}
+      #
+      # ;; => {(seen name): ((seen name) "John Doe"),
+      # ;;     foo: (bar "Samantha Doe"),
+      # ;;     (seen baz): ((seen baz) "Hello World")}
+      # ```
       matchpi %{(head←%'%entry key_ value_)}, %{(head←%'%entry° key_ value_)}, cues: {:"%entry", :"%entry°"} do
         Term.of(head, Normalize.sealed(Π.pattern(key)), normalize(Π.pattern(value)), depth: {:+, {:max, :member, :min}, 1})
       end
 
-      matchpi %{(%'%entries successor_ k_ v_ ¦ opts_)}, cue: :"%entries" do
+      # |@ m1.operator.entry
+      #
+      # |@pattern
+      # (%'%entries successor_ key_ value_ ¦ min⋮ 1 max⋮ ∞)
+      #
+      # |@key successor m1.operator
+      # |@key key m1.operator
+      # |@key value m1.operator
+      #
+      # |@key min
+      # Minimum number of subsequences to count as a match.
+      #
+      # |@key max
+      # Maximum number of subsequences to count as a match.
+      #
+      # NOTE: Infinity is shown for reference only. In practice, `max` accepts
+      # numbers only.
+      #
+      # |@block
+      # Matches *min* to *max* entries using *key* and *value* as in `%entry`,
+      # but isolated from the rest of the pattern. Captures their match envs
+      # in a list and passes the list to *successor*.
+      #
+      # The list is lexicographically ordered.
+      #
+      # See `%items` (`m1.operator.item`) for general info.
+      #
+      # ```
+      # (%entries Es_ k_ v_) => ^Es
+      #
+      # {x: 100, y: 200} ;; => ({k: x, v: 100} {k: y, v: 200})
+      #
+      # ---
+      #
+      # (%entries ({¦ k: k0_} _* {¦ k: kN_}) k_ v_)
+      #   <> {k0: (seen ^k0), kN: (seen ^kN)}
+      #
+      # {a: 1, b: 2, x: 3, y: 4}
+      # ;; => {(seen a): 1, b: 2, x: 3, (seen y): 4}
+      # ```
+      matchpi %{(%'%entries successor_ key_ value_ ¦ opts_)}, cue: :"%entries" do
         M0.schema(opts) do |s, opts|
           s.on_mismatch { continue }
 
@@ -2660,8 +2750,8 @@ module Ww::M1
           normal = opts.transaction do |commit|
             commit << :"%entries"
             commit << Normalize.sealed(Π.pattern(successor))
-            commit << Normalize.sealed(Π.pattern(k))
-            commit << normalize(Π.pattern(v))
+            commit << Normalize.sealed(Π.pattern(key))
+            commit << normalize(Π.pattern(value))
 
             commit.with(:depth, {:+, {:max, :member, :min}, 1})
           end

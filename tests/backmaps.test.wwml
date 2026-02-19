@@ -739,6 +739,12 @@
     (= {a: x, b: x, c: y, d: z})
     (= {a: x, b: x, c: x})))
 
+;; %entries replacement from docs
+(backmap ((%entries ({¦ k: k0_} _* {¦ k: kN_}) k_ v_)
+          {k0: (seen ^k0), kN: (seen ^kN)})
+  (= {a: 1, b: 2, x: 3, y: 4}
+     {(seen a): 1, b: 2, x: 3, (seen y): 4}))
+
 ;; %value replacement
 (group
   (backmap (((%value k v_) k_) {v: (seen ^(dn v))})
