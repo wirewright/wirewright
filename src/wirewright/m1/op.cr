@@ -67,12 +67,14 @@ module Ww::M1
     defcase Itemsonly
 
     defcase Pairsonly
+
     # *bounds* and *depth* ranges are inclusive.
     defcase Guard,
       sketch : Term::Dict::Sketch,
       bounds : {Magnitude, Magnitude},
       depth : {Magnitude, Magnitude},
-      successor : Any
+      successor : Any,
+      last_matched : Atomic(UInt64) = Atomic(UInt64).new(0u64)
 
     defcase FrontRef, name : Term
     defcase BackRef, name : Term

@@ -643,10 +643,32 @@ module Ww::M1
     return false unless dict = matchee.as_d?
     return false unless dict.sketch_superset_of?(op.sketch)
     return false unless op.bounds[0] <= dict.size <= op.bounds[1]
-    # FIXME: Ditto the MaxDepth FIXME above, here it's op.depth[1].
+    # FIXME: Use op.depth[1] (max bound) when we make dict recalculate
+    # its depth automatically! Right now op.depth[1] is too strict.
     return false unless op.depth[0] <= dict.maxdepth
 
-    probably_matches?(op.successor, matchee)
+    # NOTE: We *really* don't care about last_matched. If it happens to help
+    # us, we call ourselves lucky. If we mess up (esp. with others running
+    # simultaneously), that's fine, too. Going from seqcst -> relaxed gives
+    # us a slight performance boost, which is more valuable than the success
+    # rate of this shorthand as we're balancing the two.
+    #
+    # We have this as a "lucky path" alternative to a recursive probably_matches?
+    # call. We can't do it above since that'd be too slow: Guard provides millions
+    # of rejections really really quickly and we don't want to obstruct them, esp.
+    # with memory reads and writes! On the other hand once we're past Guard, it
+    # becomes worth something trying to save a recursive call.
+    if op.last_matched.get(:relaxed) == dict.object_id
+      return true
+    end
+
+    if probably_matches?(op.successor, matchee)
+      op.last_matched.set(dict.object_id, :relaxed)
+
+      return true
+    end
+
+    false
   end
 
   # :nodoc:

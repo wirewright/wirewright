@@ -357,9 +357,9 @@ module Ww::M1
   # as a tree. Think of it as your normal AST interpreter `eval` except the result
   # is `true` or `false` instead of a value, and it can be a false positive.
   #
-  # NOTE: M1 won't call `probably_matches?` for you, you'll have to do that yourself.
-  # You always have more knowledge than M1, so you can choose whether and where
-  # to call it for best performance.
+  # NOTE: M1 won't call `probably_matches?` for you at the top-level; you'll have
+  # to do it yourself. You always have more knowledge than M1, so you can choose
+  # whether and where to call it for best performance.
   def probably_matches?(op : Op::Any, matchee : Term) : Bool
     # The overloads are in m1/match.cr.
     true
