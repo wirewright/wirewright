@@ -2747,12 +2747,6 @@ module Ww::M1
     Cons.new(ctx, plan)
   end
 
-  # # :nodoc:
-  # def cons(ctx : Context, ops : Feed, items : Tzip::ItemsView, plan : Plan)
-  #   ahead = ctx.interject(plan, Action.match(ops, items))
-  #   cons(ctx, ahead)
-  # end
-
   # :nodoc:
   def cons(ctx : Context, op : Op::Any | Op::Entry::Any, matchee : Tzip, plan : Plan)
     ahead = ctx.interject(plan, Action.match(op, matchee))
