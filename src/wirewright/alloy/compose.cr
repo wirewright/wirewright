@@ -25,7 +25,7 @@ module Ww::Alloy
       compose0?(ctx, term, issues) || Term.rep(term)
     end
 
-    render0(Term.overlay(ctx.globals, vars), template, issues, eval: eval, refine: refine).as?(Term::Rep) || Term.rep
+    render0(Term.union(ctx.globals, vars), template, issues, eval: eval, refine: refine).as?(Term::Rep) || Term.rep
   end
 
   private def compose0?(ctx : ComposeContext, view : Term, issues : Issue::Sink) : Term::Rep?

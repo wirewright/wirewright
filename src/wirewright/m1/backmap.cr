@@ -1091,13 +1091,13 @@ module Ww::M1
         Render.one(interior)
       in {Render::None, Render::Some}
         # (%partition _ pairs_) <> {pairs: {x: 100, y: 200}}
-        Render.one(Term.overlay(interior.itemspart, pairspart.object))
+        Render.one(Term.union(interior.itemspart, pairspart.object))
       in {Render::Some, Render::None}
         # (%partition items_ _) <> {items: (1 2 3)}
-        Render.one(Term.overlay(itemspart.object, interior.pairspart))
+        Render.one(Term.union(itemspart.object, interior.pairspart))
       in {Render::Some, Render::Some}
         # (%partition items_ pairs_) <> {items: (1 2 3), pairs: {x: 100, y: 200}}
-        Render.one(Term.overlay(itemspart.object, pairspart.object))
+        Render.one(Term.union(itemspart.object, pairspart.object))
       end
     end
 

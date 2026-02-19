@@ -217,7 +217,7 @@ PRIMITIVES = ProcRuleset.build do
   end
 
   rulepi1 %[(union xs_dict*)] do
-    xs.items.reduce(Term.of) { |memo, dict| Term.overlay(memo, dict) }
+    xs.items.reduce(Term.of) { |memo, dict| Term.union(memo, dict) }
   end
 
   rulepi1 %[(merge xs_dict ys_dict)] do

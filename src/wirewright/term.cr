@@ -1363,7 +1363,7 @@ module Ww
     #
     # TODO: This should be implemented by `Dict`/`Pf::Map`/etc., i.e., internally,
     # with tree-specific optimizations, structurally.
-    def self.overlay(a : Dict, b : Dict) : Dict
+    def self.union(a : Dict, b : Dict) : Dict
       return b if a.empty? || a.same?(b)
       return a if b.empty?
 
@@ -1392,16 +1392,16 @@ module Ww
     end
 
     # Returns *b* for terms with different types.
-    def self.overlay(a : Any, b : Any) : Any
+    def self.union(a : Any, b : Any) : Any
       b
     end
 
-    # Shallow merge.of two terms *a* and *b*.
+    # Shallow merge of two terms *a* and *b*.
     #
     # For *a* and *b* of different types, *b* is preferred.
     # For *a* and *b* that are both a Dict, their entries are merged.
-    def self.overlay(a : Term, b : Term) : Term
-      Term.of(overlay(Term[a], Term[b]))
+    def self.union(a : Term, b : Term) : Term
+      Term.of(union(Term[a], Term[b]))
     end
 
     # Returns a copy of the dict *a* with all of *keys* removed. Missing keys

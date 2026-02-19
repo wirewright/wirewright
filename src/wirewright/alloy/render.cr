@@ -745,7 +745,7 @@ module Ww::Alloy
               return Err.new
             end
 
-            return Term.rep(Term.of(Term.overlay(base_dict, extras_dict)))
+            return Term.rep(Term.of(Term.union(base_dict, extras_dict)))
           end
 
           unions = expansion.to_readonly_slice do |offspring, index|
@@ -754,7 +754,7 @@ module Ww::Alloy
               return Err.new
             end
 
-            Term.of(Term.overlay(base_dict, extras_dict))
+            Term.of(Term.union(base_dict, extras_dict))
           end
 
           Term.rep(unions)
