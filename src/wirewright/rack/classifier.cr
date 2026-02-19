@@ -453,7 +453,7 @@ module Ww::Rack
 
   # :nodoc:
   def instantiate(components : Indexable(Component), node : Term)
-    result = components.singleton? do |candidate|
+    result = components.single? do |candidate|
       next unless M1.probably_matches?(candidate.pattern, node)
       next unless env = M1.match?(Term[], candidate.pattern, node)
 
@@ -559,7 +559,7 @@ module Ww::Rack
 
           # Surfaces are required. Only one surface must be present. Everything
           # else is optional.
-          next unless surface = recipe.singleton?(DeviceSurface)
+          next unless surface = recipe.single?(DeviceSurface)
 
           component = DeviceComponent.new(op, surface, recipe)
           components << component

@@ -1076,9 +1076,10 @@ def alloy_rulesetR(ctx, term, ruleset)
       next unless M1.probably_matches?(op, term)
       next unless rep = M1.backmapR?(op, rule.backspec, term)
 
-      case rep
-      in M1::Rep::One  then rewrite = Rewrite.one(rep.term).diff(term)
-      in M1::Rep::Many then rewrite = Rewrite.many(rep.terms).diff(term)
+      if rep.size == 1
+        rewrite = Rewrite.one(rep.first).diff(term)
+      else
+        rewrite = Rewrite.many(rep).diff(term)
       end
 
       next if rewrite.is_a?(Rewrite::None) # Interpret "no change" as "keep searching"

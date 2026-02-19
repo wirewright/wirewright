@@ -166,8 +166,8 @@ module Ww::D7
   # :nodoc:
   def update(clf, addr, scope, depth, feature : Parent, sink) : Term
     node0 = feature.node
-    node1 = update(node0, range: feature.range) do |child, index|
-      update(clf, addr.append(index), scope, depth, child, sink)
+    node1 = Term.flatten(node0, part: Term::Dict.items_range(feature.range)) do |key, child|
+      Term.rep(update(clf, addr.append(key.to(Int32)), scope, depth, child, sink))
     end
 
     Term.of(node1)
@@ -186,33 +186,6 @@ module Ww::D7
   # :nodoc:
   def update(clf, addr, scope, depth, node : Term, sink) : Term
     update(clf, addr, scope, depth, ready(clf, node), sink)
-  end
-
-  # :nodoc:
-  def update(dict : Term::Dict, range : Range(Int32, Int32), &) : Term::Dict
-    assert range.exclusive?
-
-    # FIXME: None of this should be necessary. Dict#with[!]() should do these checks.
-    changes = Pf::Kit.stack_array({Term, Int32}, 8)
-
-    range.each do |index|
-      item0 = dict[index]
-      item1 = yield item0, index
-      next if item0 == item1
-
-      changes << {item1, index}
-    end
-
-    # Fast, no-alloc path for cases when no changes were made to the dict.
-    if changes.empty?
-      return dict
-    end
-
-    dict.transaction do |commit|
-      changes.each do |item, index|
-        commit.with(index, item)
-      end
-    end
   end
 
   # Represents the three ways you can image a parent.
@@ -321,8 +294,8 @@ module Ww::D7
 
   # :nodoc:
   def map(clf, addr, feature : Parent, fn) : Term
-    result = update(feature.node, feature.range) do |child, index|
-      map(clf, addr.append(index), child, fn)
+    result = Term.flatten(feature.node, part: Term::Dict.items_range(feature.range)) do |key, child|
+      Term.rep(map(clf, addr.append(key.to(Int32)), child, fn))
     end
 
     fn.call(addr, parent(result, feature.range))

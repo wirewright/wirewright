@@ -60,8 +60,8 @@ module Ww::Rack
         expansion, _ = Alloy.render0(env, template, severity: :quiet)
         next if expansion.is_a?(Alloy::Err)
 
-        unless expansion.is_a?(Alloy::Splice) && expansion.offspring.empty?
-          instance = Alloy.collapse(expansion)
+        unless expansion.empty?
+          instance = Term.collapse(expansion)
         end
 
         # instance : Term?
@@ -212,8 +212,8 @@ module Ww::Rack
           next D7.patch(dst, {2, nil})
         end
 
-        unless expansion.is_a?(Alloy::Splice) && expansion.offspring.empty?
-          instance = Alloy.collapse(expansion)
+        unless expansion.empty?
+          instance = Term.collapse(expansion)
         end
 
         # instance : Term?
@@ -264,8 +264,8 @@ module Ww::Rack
           next D7.patch(dst, {2, nil})
         end
 
-        unless expansion.is_a?(Alloy::Splice) && expansion.offspring.empty?
-          instance = Alloy.collapse(expansion)
+        unless expansion.empty?
+          instance = Term.collapse(expansion)
         end
 
         # instance : Term?
@@ -309,8 +309,8 @@ module Ww::Rack
           next D7.patches(D7.patch(ref, {2, nil}), D7.patch(dst, {2, nil}))
         end
 
-        unless expansion.is_a?(Alloy::Splice) && expansion.offspring.empty?
-          instance = Alloy.collapse(expansion)
+        unless expansion.empty?
+          instance = Term.collapse(expansion)
         end
 
         next if instance == D7.node(ref).term[2]?

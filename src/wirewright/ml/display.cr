@@ -73,7 +73,7 @@ module Ww::ML::Formatter
         pp.group(style.indent, "{¦ ", "}") do
           index = 0
 
-          side.each_entry_ord do |k, v|
+          side.each_entry(in: Term::Dict.entries_ord) do |k, v|
             pp.breakable if index > 0
             format(pp, k, style)
             pp.text(":")
@@ -93,7 +93,7 @@ module Ww::ML::Formatter
       matchpi %[(¦ _)] do
         pp.group(style.indent, "{", "}") do
           index = 0
-          term.each_entry_ord do |k, v|
+          term.each_entry(in: Term::Dict.entries_ord) do |k, v|
             pp.comma if index > 0
             format(pp, k, style)
             pp.text(":")
@@ -121,7 +121,7 @@ module Ww::ML::Formatter
             pp.breakable if index > 0
             format(pp, item, style)
           end
-          term.each_pair_ord do |k, v|
+          term.each_entry(in: Term::Dict.pairspart_ord) do |k, v|
             pp.breakable
             format(pp, k, style)
             pp.text(":")

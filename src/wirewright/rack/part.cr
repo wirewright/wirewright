@@ -111,7 +111,7 @@ module Ww::Rack::Part
         commit.with(key, result)
       end
 
-      dict0.each_pair do |key, value|
+      dict0.each_entry(in: Term::Dict.pairspart) do |key, value|
         next unless successor = entries[key]?
 
         commit.with(key, merge(successor, value))

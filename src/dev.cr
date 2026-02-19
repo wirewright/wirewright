@@ -124,7 +124,7 @@ module DevTool
     io.puts ";; the `dev` tool to modify this file."
     io.puts
 
-    state.each_entry_ord do |key, value|
+    state.each_entry(in: Term::Dict.entries_ord) do |key, value|
       ML.compact(io, key)
       io.puts ":"
       ML.display(io, value)
@@ -293,7 +293,7 @@ module DevTool
         active = state[:active, :preset]?
 
         if presets = state[:active, :presets]?
-          presets.each_entry_ord do |preset, _|
+          presets.each_entry(in: Term::Dict.entries_ord) do |preset, _|
             if active == preset
               print "> "
             else

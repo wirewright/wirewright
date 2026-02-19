@@ -209,7 +209,7 @@ PRIMITIVES = ProcRuleset.build do
 
         commit.concat(x.items)
 
-        x.each_pair do |k, v|
+        x.each_entry(in: Term::Dict.pairspart) do |k, v|
           commit.with(k, v)
         end
       end
@@ -460,7 +460,7 @@ PRIMITIVES = ProcRuleset.build do
         next unless index.in?(mask)
         commit << item
       end
-      d.each_pair do |key, value|
+      d.each_entry(in: Term::Dict.pairspart) do |key, value|
         next unless key.in?(mask)
         commit.with(key, value)
       end
@@ -473,7 +473,7 @@ PRIMITIVES = ProcRuleset.build do
         next if index.in?(mask)
         commit << item
       end
-      d.each_pair do |key, value|
+      d.each_entry(in: Term::Dict.pairspart) do |key, value|
         next if key.in?(mask)
         commit.with(key, value)
       end
@@ -486,7 +486,7 @@ PRIMITIVES = ProcRuleset.build do
         next unless index.in?(mask)
         commit << item
       end
-      d.each_pair do |key, value|
+      d.each_entry(in: Term::Dict.pairspart) do |key, value|
         next unless key.in?(mask)
         commit.with(key, value)
       end

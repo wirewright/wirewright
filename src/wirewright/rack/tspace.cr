@@ -78,7 +78,7 @@ module Ww::Rack::Tspace
     end
 
     # Perform the exchange.
-    stimuli = Hash(D7::NodeId, Array(Alloy::Ok)).new(initial_capacity: sensors.size)
+    stimuli = Hash(D7::NodeId, Array(Term::Rep)).new(initial_capacity: sensors.size)
     consumed = Pf::USet32[]
 
     sensors.each do |sensor|
@@ -86,7 +86,7 @@ module Ww::Rack::Tspace
 
       case sensor
       in ChanSensor
-        counterparts = [] of {Alloy::Ok, Appearance}
+        counterparts = [] of {Term::Rep, Appearance}
 
         appearances.each_with_index do |appearance|
           next unless sensor.tspace == appearance.tspace
@@ -123,7 +123,7 @@ module Ww::Rack::Tspace
           expansion, _ = Alloy.render0(env, sensor.template, severity: :quiet)
           next if expansion.is_a?(Alloy::Err)
 
-          expansions ||= [] of Alloy::Ok
+          expansions ||= [] of Term::Rep
           expansions << expansion
         end
       end
@@ -142,8 +142,8 @@ module Ww::Rack::Tspace
         assert expansions.size == 1
 
         expansion = expansions.first
-        unless expansion.is_a?(Alloy::Splice) && expansion.offspring.empty?
-          instance = Alloy.collapse(expansion)
+        unless expansion.empty?
+          instance = Term.collapse(expansion)
         end
 
         # instance : Term?
@@ -162,12 +162,7 @@ module Ww::Rack::Tspace
         instances = [] of Term
 
         expansions.each do |expansion|
-          case expansion
-          in Alloy::Assign
-            instances << expansion.term
-          in Alloy::Splice
-            instances.concat(expansion.offspring.items)
-          end
+          instances.concat(expansion)
         end
 
         instances.sort! { |a, b| Term.compare(a, b) }

@@ -7,21 +7,12 @@ module Ww::Alloy
     globals : Term::Dict,
     hook : ComposeHook
 
-  private def compose0(ctx : ComposeContext, vars : Term::Dict, template : Term, issues : Issue::Sink) : Ok
+  private def compose0(ctx : ComposeContext, vars : Term::Dict, template : Term, issues : Issue::Sink) : Term::Rep
     eval = Eval.new do |expr, default, _, issues|
       value = default.call(issues)
 
       view = ->(ctx : ComposeContext, arg : Term) do
-        case expansion = compose0(ctx, arg, issues)
-        in Assign
-          expansion.term
-        in Splice
-          if expansion.offspring.size == 1
-            expansion.offspring[0]
-          else
-            Term.of(expansion.offspring)
-          end
-        end
+        Term.collapse(compose0(ctx, arg, issues))
       end
 
       Term.case(value) do
@@ -31,13 +22,13 @@ module Ww::Alloy
     end
 
     refine = Refine.new do |term, issues|
-      compose0?(ctx, term, issues) || Assign.new(term)
+      compose0?(ctx, term, issues) || Term.rep(term)
     end
 
-    render0(Term.overlay(ctx.globals, vars), template, issues, eval: eval, refine: refine).as?(Ok) || Splice.new(Term[])
+    render0(Term.overlay(ctx.globals, vars), template, issues, eval: eval, refine: refine).as?(Term::Rep) || Term.rep
   end
 
-  private def compose0?(ctx : ComposeContext, view : Term, issues : Issue::Sink) : Ok?
+  private def compose0?(ctx : ComposeContext, view : Term, issues : Issue::Sink) : Term::Rep?
     responses = ctx.ruleset.responses(view)
     responses.each do |(pr, rule)|
       case {pr, rule}
@@ -47,19 +38,17 @@ module Ww::Alloy
           return compose0(ctx, pr.env, rule.body, issues)
         end
       when {Pr::Many, Rule::Template}
-        offspring = Term::Dict.build do |commit|
-          pr.envs.each do |env|
-            issues.adjoin("match env", Term.of(env)) do |issues|
-              case expansion = compose0(ctx, env, rule.body, issues)
-              in Assign then commit << expansion.term
-              in Splice then commit.concat(expansion.offspring.items)
-              end
-            end
+        sink = Pf::Kit.stack_array(Term)
+
+        pr.envs.each do |env|
+          issues.adjoin("match env", Term.of(env)) do |issues|
+            expansion = compose0(ctx, env, rule.body, issues)
+            expansion.each { |offspring| sink << offspring }
           end
         end
 
         # Found.
-        return Splice.new(offspring)
+        return Term.rep(sink)
       end
 
       # TODO: Backmaps could run Alloy::Applier with (view _) available during eval.
@@ -68,8 +57,18 @@ module Ww::Alloy
     end
   end
 
-  private def compose0(ctx : ComposeContext, view : Term, issues : Issue::Sink) : Ok
-    compose0?(ctx, view, issues) || flatten(view, issues) { |*args| compose0(ctx, *args) }
+  private def compose0(ctx : ComposeContext, view : Term, issues : Issue::Sink) : Term::Rep
+    if expansion = compose0?(ctx, view, issues)
+      return expansion
+    end
+
+    result = Term.flatten(view, part: Term::Dict.entries) do |key, value|
+      issues.adjoin(key: key, detail: "in key") do |issues|
+        compose0(ctx, value, issues)
+      end
+    end
+
+    Term.rep(result)
   end
 
   alias View = Template | Component
@@ -101,7 +100,7 @@ module Ww::Alloy
     view : Template,
     issues : Issue::Sink,
     hook : ComposeHook,
-  ) : Ok
+  ) : Term::Rep
     issues.adjoin(Spot::View.new(view.template)) do |issues|
       compose0(ComposeContext.new(ruleset, globals, hook), view.vars, view.template, issues)
     end
@@ -114,7 +113,7 @@ module Ww::Alloy
     view : Component,
     issues : Issue::Sink,
     hook : ComposeHook,
-  ) : Ok
+  ) : Term::Rep
     issues.adjoin(Spot::View.new(view.component)) do |issues|
       compose0(ComposeContext.new(ruleset, globals, hook), view.component, issues)
     end
@@ -139,7 +138,7 @@ module Ww::Alloy
       view : View,
       issues : Issue::Sink,
       hook : ComposeHook,
-    ) : Ok
+    ) : Term::Rep
     end
   {% end %}
 
@@ -153,7 +152,7 @@ module Ww::Alloy
     view : View, *,
     severity : Issue::Severity,
     hook = ComposeHook.new { |_, _, value| value },
-  ) : {Ok, Array(Issue::Backtrace)}
+  ) : {Term::Rep, Array(Issue::Backtrace)}
     Issue.setup(severity: severity) do |issues|
       compose0(ruleset, globals, view, issues, hook)
     end

@@ -193,7 +193,7 @@ module Ww::LR
       io << "item\n"
     end
 
-    term.pairspart.each_entry_ord do |key, value|
+    term.pairspart.each_entry(in: Term::Dict.entries_ord) do |key, value|
       encode0(io, key)
       encode0(io, value)
       io << "pair\n"

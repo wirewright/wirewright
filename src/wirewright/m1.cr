@@ -535,14 +535,14 @@ module Ww::M1
   #
   # This overload lets you specify the backsystem as a list of associations between
   # an env log list (as emitted e.g. by `matches_and_logs`) and backspecs. Returns
-  # the resulting replacement (see `Rep`).
+  # the resulting replacement (see `Term::Rep`).
   #
   # WARNING: You are not advised to use this overload because it relies without any
   # checks on the fact that match log lists in *backsys* really are pointing into
   # *matchee*. If they are not, the behavior of this function is not specified (not
   # in the UB sense, but in that it may or may not raise depending on how much logs
   # from *backsys* and *matchee* overlap).
-  def backmapR(backsys : Enumerable({EnvLogList, Term::Dict}), matchee : Term) : Rep::Any
+  def backmapR(backsys : Enumerable({EnvLogList, Term::Dict}), matchee : Term) : Term::Rep
     agents = Pf::Kit.stack_array(Backmap::Agent(EnvLogList), 8)
 
     backsys.each do |matches, backspec|
@@ -561,9 +561,9 @@ module Ww::M1
   # matching operators for you. *env* is passed to the matching process as
   # the seed env.
   #
-  # Returns the resulting replacement (see `Rep`). Returns `nil` if *none*
+  # Returns the resulting replacement (see `Term::Rep`). Returns `nil` if *none*
   # of the operators matched *matchee*.
-  def backmapR?(backsys : Enumerable({Op::Any, Term::Dict}), matchee : Term, *, env : Term::Dict = Term[]) : Rep::Any?
+  def backmapR?(backsys : Enumerable({Op::Any, Term::Dict}), matchee : Term, *, env : Term::Dict = Term[]) : Term::Rep?
     agents = Pf::Kit.stack_array(Backmap::Agent(EnvLogList), 8)
 
     backsys.each do |op, backspec|
@@ -590,9 +590,9 @@ module Ww::M1
   # Non-dict backspecs count as mismatch and are ignored. Mismatches are
   # filtered out.
   #
-  # Returns the resulting replacement (see `Rep`), or `nil` if *none* of patterns
+  # Returns the resulting replacement (see `Term::Rep`), or `nil` if *none* of patterns
   # in *backspec* matched *matchee*.
-  def backmapR?(backsys : Enumerable({Term, Term}), matchee : Term, *, env : Term::Dict = Term[], **kwargs) : Rep::Any?
+  def backmapR?(backsys : Enumerable({Term, Term}), matchee : Term, *, env : Term::Dict = Term[], **kwargs) : Term::Rep?
     ops = Pf::Kit.stack_array({Op::Any, Term::Dict}, 8)
 
     backsys.each do |pattern, backspec|
@@ -607,7 +607,7 @@ module Ww::M1
   # An optimized overload of `backmapR?` for running just one backmap rather than
   # a backsystem. The backmap is specified by providing its operator *op*
   # and *backspec*.
-  def backmapR?(op : Op::Any, backspec : Term, matchee : Term, *, env : Term::Dict = Term[]) : Rep::Any?
+  def backmapR?(op : Op::Any, backspec : Term, matchee : Term, *, env : Term::Dict = Term[]) : Term::Rep?
     return unless backspec = backspec.as_d?
 
     matches_and_logs(env, op, matchee) do |matches|
@@ -632,17 +632,17 @@ module Ww::M1
   # backspec = ML.term(%{ {a: ^b, b: ^a, (g): (^(up g) ^(up g))} })
   #
   # result = M1.backmapR?(pattern, backspec, ML.term(%{ (100 200) }))
-  # pp result # => Rep::Many(@terms=Slice[(200 100), (200 100)])
+  # pp result # => Term::Rep[(200 100), (200 100)]
   #
   # result = M1.backmapR?(pattern, backspec, ML.term(%{ qux }))
   # pp result # => nil
   # ```
-  def backmapR?(pattern : Term, backspec : Term, matchee : Term, *, env : Term::Dict = Term[], **kwargs) : Rep::Any?
+  def backmapR?(pattern : Term, backspec : Term, matchee : Term, *, env : Term::Dict = Term[], **kwargs) : Term::Rep?
     backmapR?(operator(pattern, **kwargs), backspec, matchee, env: env)
   end
 
   # Same as `backmapR?`, but collapses the resulting replacement to a term
-  # using `Rep.collapse`.
+  # using `Term.collapse`.
   #
   # ```
   # backsys = Slice[
@@ -659,11 +659,11 @@ module Ww::M1
   def backmap?(backsys, matchee : Term, **kwargs) : Term?
     return unless rep = backmapR?(backsys, matchee, **kwargs)
 
-    Rep.collapse(rep)
+    Term.collapse(rep)
   end
 
   # Same as `backmapR?`, but collapses the resulting replacement to a term
-  # using `Rep.collapse`.
+  # using `Term.collapse`.
   #
   # ```
   # pattern = ML.term(%{ (a_ b_) })
@@ -678,7 +678,7 @@ module Ww::M1
   def backmap?(pattern, backspec : Term, matchee : Term, **kwargs) : Term?
     return unless rep = backmapR?(pattern, backspec, matchee, **kwargs)
 
-    Rep.collapse(rep)
+    Term.collapse(rep)
   end
 
   # Same as `backmap?`, but returns *matchee* on mismatch.

@@ -3326,7 +3326,7 @@ class Channel
 end
 
 module Indexable(T)
-  def singleton?(&)
+  def single?(&)
     result = nil
 
     each do |object|
@@ -3343,8 +3343,12 @@ module Indexable(T)
     result
   end
 
-  def singleton?(cls : U.class) : U? forall U
-    singleton?(&.as?(U)).as?(U)
+  def single?(cls : U.class) : U? forall U
+    single?(&.as?(U)).as?(U)
+  end
+
+  def single? : T?
+    size == 1 ? unsafe_fetch(0) : nil
   end
 
   def compare(other : Indexable, &)

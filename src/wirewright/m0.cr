@@ -457,7 +457,7 @@ module Ww::M0
         if pattern.pairsize > 0
           insns << AssertPairsize.new(pattern.pairsize)
 
-          pattern.each_pair do |key, value|
+          pattern.each_entry(in: Term::Dict.pairspart) do |key, value|
             next if pass?(value) # Don't waste resources on `_`
 
             # <matchee> ⏏

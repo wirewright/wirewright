@@ -823,8 +823,8 @@ module Ww
     #
     # Note that due to hash collisions and the way symbols are implemented right now,
     # dictionaries have a special ordered variant of their `each_entry`, namely
-    # `each_entry_ord`, that one must use if one wants to do globally stable, ordered
-    # pretty printing or entry iteration. This is because the moment we have a collision,
+    # `each_entry(Dict::EntriesOrd)`, that one must use if one wants to do globally stable,
+    # ordered pretty printing or entry iteration. This is because the moment we have a collision,
     # the hash function is of no use ordering entries. And with symbols -- the way we
     # implement them right now for efficiency -- their hash code roughly depends on
     # the time they were created at / the order in which they were created, which is
@@ -1566,6 +1566,293 @@ module Ww
     end
   end
 
+  # Replacement
+
+  struct Term
+    # Represents a *replacement*.
+    #
+    # A replacement is, for clients, like an `Array(Term)` or `Slice(Term)`. That
+    # is, `Rep` lets us say, "a term is replaced by zero or more of these
+    # *offspring* terms". Idiomatically, the elements or members of `Rep` are
+    # called *offspring*. You can call them any way you want, but you are
+    # recommended to use the word *offspring*  and derived.
+    #
+    # Internally, we provide non-allocating One variant and Many, which includes
+    # allocating and non-allocating variants to adapt to the situation at hand
+    # and avoid extra work.
+    #
+    # Several subsystems of Wirewright want to talk about replacements. `Alloy`,
+    # `M1::Backmap`, `D7`, `Rewriter` are among such subsystems. Thus, we centralize
+    # replacement logic in `Rep` and a suite of related functions defined on `Term`
+    # for brevity (such as constructors for `Rep`, `Term.rep`; `Term.subst`, some
+    # overloads of `Term.flatten` and so on.)
+    struct Rep
+      include Indexable(Term)
+
+      # :nodoc:
+      alias Any = One | Many
+
+      # :nodoc:
+      alias Many = ManySlice | ManyDict
+
+      # :nodoc:
+      defrecord One, offspring : Term
+
+      # :nodoc:
+      defrecord ManySlice, offspring : Slice(Term) do
+        assert offspring.size != 1
+      end
+
+      # :nodoc:
+      defrecord ManyDict, offspring : Term::Dict do
+        assert offspring.itemsize != 1
+      end
+
+      # :nodoc:
+      def initialize(@rep : Any)
+      end
+
+      def size : Int
+        case rep = @rep
+        in One       then 1
+        in ManySlice then rep.offspring.size
+        in ManyDict  then rep.offspring.itemsize
+        end
+      end
+
+      def unsafe_fetch(index : Int)
+        case rep = @rep
+        in One       then rep.offspring
+        in ManySlice then rep.offspring.unsafe_fetch(index)
+        in ManyDict  then rep.offspring[index]
+        end
+      end
+
+      # :nodoc:
+      def collapse
+        case rep = @rep
+        in One  then rep.offspring
+        in Many then Term.of(rep.offspring)
+        end
+      end
+    end
+
+    # Constructs an empty replacement.
+    def self.rep : Rep
+      Rep.new(Rep::ManySlice.new(Slice(Term).empty))
+    end
+
+    # Constructs a singleton replacement.
+    def self.rep(offspring : Term) : Rep
+      Rep.new(Rep::One.new(offspring))
+    end
+
+    # Constructs a replacement by two or more *offspring*.
+    def self.rep(*offspring : Term) : Rep
+      rep(offspring)
+    end
+
+    # Constructs a replacement by zero or more *offspring*.
+    def self.rep(offspring : Indexable(Term)) : Rep
+      if term = offspring.single?
+        return Rep.new(Rep::One.new(term))
+      end
+
+      if offspring.is_a?(Dict::ItemsView) && offspring.covers_fully?
+        return Rep.new(Rep::ManyDict.new(offspring.collect))
+      end
+
+      Rep.new(Rep::ManySlice.new(offspring.to_readonly_slice(&.itself)))
+    end
+
+    # Constructs a replacement by zero or more *offspring*.
+    #
+    # NOTE: if *offspring* is read-only, we use it as-is (i.e., without
+    # copying the slice).
+    def self.rep(offspring : Slice(Term)) : Rep
+      if term = offspring.single?
+        return Rep.new(Rep::One.new(term))
+      end
+
+      if offspring.read_only?
+        return Rep.new(Rep::ManySlice.new(offspring))
+      end
+
+      rep(offspring.to_readonly_slice(&.itself))
+    end
+
+    # We collapse *rep* to a term in the following way:
+    #
+    # - Replacement with one collapses to itself.
+    # - Replacement with zero or many collapses to a list term.
+    #
+    # This behavior is useful when the caller does not accept a `Rep`.
+    #
+    # Importantly, the above means that the empty dict `()` is highly ambiguous.
+    # It may result from either of the two. Normal dictionaries are ambiguous
+    # as well, because they may come from a replace-with-one, or they may represent
+    # a replace-with-many. In a sense, by calling `collapse`, you "burn" information
+    # about what kind of *rep* you had.
+    #
+    # This is dirty, but it works in practice -- most of the times, you just don't
+    # care. If clients want full information, they should accept `Rep` directly.
+    # The caller can also encode `Rep` itself, say, by always using a list. Zero then
+    # becomes `()`, replace-with-one `(x)`, replace-with-many `(x y z)`. This is as
+    # easy as just doing `Term.of(rep)` as opposed to `Term.collapse(rep)`.
+    def self.collapse(rep : Rep) : Term
+      rep.collapse
+    end
+
+    # Returns `true` if applying *rep0* would give a term different than *term0*.
+    def self.changes?(term0 : Term, *, after rep : Rep) : Bool
+      if term1 = rep.single?
+        return term0 != term1
+      end
+
+      true
+    end
+
+    private def self.subst(root : Term, keypath : Indexable, fn, index)
+      if index == keypath.size
+        return fn.call(root)
+      end
+
+      unless dict = root.as_d?
+        return rep(root)
+      end
+
+      key = keypath[index]
+      unless value = dict[key]?
+        return rep(root)
+      end
+
+      rep = subst(value, keypath, fn, index + 1)
+
+      rep(Term.of(subst(dict, key, value, rep)))
+    end
+
+    private def self.subst(dict : Dict, key : Term, value : Term, rep : Rep) : Dict
+      if offspring = rep.single?
+        if offspring == value # No change
+          return dict
+        end
+        return dict.with(key, rep)
+      end
+
+      if index = dict.index?(key)
+        return dict.replace(index, &.concat(rep))
+      end
+
+      # We're in a pair, as in:
+      #
+      #   x: (^* (1 2 3))
+      #
+      # There are only two possible states for a pair if it is treated like
+      # a container:
+      #
+      #   zero terms -- the pair does not exist
+      #   one term   -- the pair exists
+      #
+      # A replacement with more than one term does not fit in a pair -- the extra
+      # terms have nowhere to go. We handle this by wrapping such cases in `()`,
+      # but, unfortunately, just like at the top-level, this generates a nasty,
+      # unpredictable interface; not something with clean zero/one/many boundaries
+      # (as e.g. a list). Anything else would be inconvenient.
+
+      if rep.empty?
+        return dict.without(key)
+      end
+
+      assert rep.size > 1
+
+      dict.with(key, rep)
+    end
+
+    # Replaces the value at *keypath* using *fn*. Noop if could not
+    # follow *keypath*. Returns *rep* if *keypath* is empty. Noop if
+    # *root* is not a dict.
+    def self.subst(root : Term, keypath : Indexable, &fn : Term -> Rep) : Rep
+      subst(root, keypath, fn, index: 0)
+    end
+
+    # Replaces the value at *keypath* with *rep*. Noop if could not
+    # follow *keypath*. Returns *rep* if *keypath* is empty. Noop if
+    # *root* is not a dict.
+    def self.subst(root : Term, keypath : Indexable, rep : Rep) : Rep
+      subst(root, keypath) { rep }
+    end
+
+    # Replaces entry values in *root*'s *part* using the block.
+    #
+    # Yields each key and value in *root*'s *part* to the block. The replacement
+    # returned by the block is used to replace the value.
+    #
+    # See also `Dict#each_entry` overloads for info on *part*.
+    #
+    # In itemspart, zero or many replacements are handled as expected. Replacement
+    # with zero signifies removal of an item; with one, its replacement; with many,
+    # its substitution by many offspring.
+    #
+    # In pairspart, replacement with zero signifies the removal of the pair; with one,
+    # its replacement; with many, its replacement with a list of offspring.
+    def self.flatten(root dict : Dict, *, part = Dict.itemspart, & : Term, Term -> Rep) : Dict
+      changes = Pf::Kit.stack_array({Term, Term, Rep}, 8)
+
+      dict.each_entry(in: part) do |key, value|
+        rep = yield key, value
+        next unless changes?(value, after: rep)
+
+        changes << {key, value, rep}
+      end
+
+      # Fast, no-alloc path for cases when no changes were made to the dict.
+      if changes.empty?
+        return dict
+      end
+
+      multi = Pf::Kit.stack_array({Term, Term, Rep}, 4)
+
+      dict = dict.transaction do |commit|
+        changes.each do |key, value, rep|
+          unless term = rep.single?
+            multi << {key, value, rep}
+            next
+          end
+
+          commit.with(key, term)
+        end
+      end
+
+      if multi.empty?
+        return dict
+      end
+
+      multi.sort_by! { |index, _, _| index }
+      multi.reverse_each do |key, value, rep|
+        dict = subst(dict, key, value, rep)
+      end
+
+      dict
+    end
+
+    # Replaces entry values in *root* using the block.
+    #
+    # Passthrough if *root* is not a dictionary.
+    #
+    # See `flatten(Dict, **kwargs, &)` for more info.
+    def self.flatten(root term : Term, **kwargs, &) : Term
+      unless dict = term.as_d?
+        return term
+      end
+
+      dict = flatten(dict, **kwargs) do |item, index|
+        yield item, index
+      end
+
+      Term.of(dict)
+    end
+  end
+
   # Misc
 
   struct Term
@@ -1753,58 +2040,6 @@ module Ww
 
       ancestors
     end
-  end
-
-  # TODO: convert these to iterative and use blocks!!!
-
-  struct Term
-    module Patch
-      alias Any = Skip | ReplaceSkip | ReplaceDescend
-
-      record Skip
-      record ReplaceSkip, rep : Term
-      record ReplaceDescend, rep : Term
-    end
-
-    # Thoroughly visits all nodes in the subtree of *term*, yielding each node
-    # to the block for replacement. If the block returns `nil`, the node is
-    # left unchanged; traversal will continue to its subtree, if any.
-    #
-    # NOTE: If replacement occurs within a key, and it collides, with an existing
-    # key, the replacement's value is preferred over the existing key's.
-    def self.patch(term : Term, &fn : Term -> Patch::Any) : Term
-      case response = fn.call(term)
-      in Patch::Skip
-      in Patch::ReplaceDescend
-        term = response.rep
-      in Patch::ReplaceSkip
-        return response.rep
-      end
-
-      unless dict = term.as_d?
-        return term
-      end
-
-      dict1 = dict
-      dict.each_entry do |key0, value0|
-        key1 = patch(key0, &fn)
-        value1 = patch(value0, &fn)
-
-        # Key changed
-        unless key0.same?(key1)
-          dict1 = dict1.without(key0).with(key1, value1)
-          next
-        end
-
-        # Value changed
-        unless value0.same?(value1)
-          dict1 = dict1.with(key1, value1)
-          next
-        end
-      end
-
-      Term.of(dict1)
-    end
 
     # Thoroughly traverses all nodes in the subtree of *term*, and yields them
     # to the block.
@@ -1836,47 +2071,6 @@ module Ww
           stack << {state: rec[:state] + 1, term: rec[:term]}
           stack << {state: state_initial, term: value}
           stack << {state: state_initial, term: key}
-        end
-      end
-    end
-
-    # Yields keypath and *itemspart stem* into the given *root*.
-    #
-    # A *stem* is an itemsonly dict whose last item is a node from the root's subtree;
-    # prefixed by its ancestor nodes all the way up to, but not including the root itself.
-    #
-    # Stems are used to turn tree traversal into declarative pattern matching.
-    #
-    # An *itemspart stem* is a *stem* restricted to the itemsparts of *root*'s subtree.
-    def self.each_itemspart_stem(root : Dict, & : Dict, Dict -> Bool)
-      queue = Deque{ {Term[], Term[]} }
-
-      while entry = queue.shift?
-        keypath, stem = entry
-
-        if keypath.empty?
-          root.each_item_with_index do |item, index|
-            queue << {Term[{index}], stem.append(item)}
-          end
-        elsif yield keypath, stem.append(:node)
-          next unless tip = stem.items.last.as_d?
-
-          l = Term[]
-          r = tip.itemspart
-
-          while item = r.items.first?
-            if yield keypath, stem.append({l, :children, r})
-              # Block says to descend into rest.
-              break
-            end
-
-            l = l.append(item)
-            r = r.items.move(1).collect # FIXME: gosh this is inefficient!!
-          end
-
-          r.each_item_with_index do |item, index|
-            queue << {keypath.append(l.size + index), stem.append(item)}
-          end
         end
       end
     end

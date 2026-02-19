@@ -50,7 +50,7 @@ module Ww::Microfold::Pass
             style1 = style0.transaction do |commit|
               ctx = Context.new(theme, pairs.unsafe_as_d, commit)
 
-              node0.each_pair do |key, value|
+              node0.each_entry(in: Term::Dict.pairspart) do |key, value|
                 next unless spec = theme.property_spec?(key)
 
                 node1 = Term.morph(node1, {key, nil})

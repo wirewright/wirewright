@@ -124,18 +124,22 @@ module Ww::M1
       dict.each_entry { |key, value| yield *Tzip.entry(@log, key, value) }
     end
 
-    # Similar to `Term::Dict#each_entry_ord`.
+    # Similar to `Term::Dict#each_entry(Part::EntriesOrd)`.
     def each_entry_ord(& : Tzip, Tzip ->)
       assert dict = @term.as_d?
 
-      dict.each_entry_ord { |key, value| yield *Tzip.entry(@log, key, value) }
+      dict.each_entry(in: Term::Dict.entries_ord) do |key, value|
+        yield *Tzip.entry(@log, key, value)
+      end
     end
 
-    # Similar to `Term::Dict#each_pair_ord`.
+    # Similar to `Term::Dict#each_entry(PairsOrd)`.
     def each_pair_ord(& : Tzip, Tzip ->)
       assert dict = @term.as_d?
 
-      dict.each_pair_ord { |key, value| yield *Tzip.entry(@log, key, value) }
+      dict.each_entry(in: Term::Dict.pairspart_ord) do |key, value|
+        yield *Tzip.entry(@log, key, value)
+      end
     end
 
     # Same as `each_pair_ord`, but only yields pair values.
@@ -146,7 +150,9 @@ module Ww::M1
     def each_pair_value_ord(& : Tzip ->)
       assert dict = @term.as_d?
 
-      dict.each_pair_ord { |key, value| yield Tzip.value(@log, key, value) }
+      dict.each_entry(in: Term::Dict.pairspart_ord) do |key, value|
+        yield Tzip.value(@log, key, value)
+      end
     end
 
     # Similar to `Term::Dict.itemspart`.

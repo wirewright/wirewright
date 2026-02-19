@@ -1,48 +1,4 @@
 module Ww::M1
-  # Backmap engine's representation of a *rep*lacement.
-  module Rep
-    extend self
-
-    alias Any = One | Many
-
-    defrecord One, term : Term
-    defrecord Many, terms : Slice(Term)
-
-    # :nodoc:
-    def collapse(rep : One) : Term
-      rep.term
-    end
-
-    # :nodoc:
-    def collapse(rep : Many) : Term
-      Term.of(rep.terms)
-    end
-
-    {% if flag?(:docs) %}
-      # Similar to `Alloy.collapse`. Read it for caveats and general info.
-      def collapse(rep : Any) : Term
-      end
-    {% end %}
-
-    # :nodoc:
-    def normalize(rep : Nil)
-    end
-
-    # :nodoc:
-    def normalize(rep : One)
-      rep
-    end
-
-    # :nodoc:
-    def normalize(rep : Many) : Any
-      if rep.terms.size == 1
-        return One.new(rep.terms[0])
-      end
-
-      rep
-    end
-  end
-
   # Implementation of the backmap engine.
   #
   # NOTE: You most likely want one of the `M1.backmap` overloads.
@@ -262,7 +218,7 @@ module Ww::M1
       form : Dict | Blank | Nil,
       endpoint : Endpoint,
       depth : UInt32,
-      proposal : Rep::Any? = nil,
+      proposal : Term::Rep? = nil,
       mutates : Bool = false,
       agents : Pf::USet32? = nil,
       mutation: true
@@ -270,7 +226,7 @@ module Ww::M1
     defcase Leaf,
       endpoint : Endpoint,
       depth : UInt32,
-      proposal : Rep::Any? = nil,
+      proposal : Term::Rep? = nil,
       mutation: true
 
     # :nodoc:
@@ -644,7 +600,7 @@ module Ww::M1
     # Replaces a range of zero or more items with zero or more other items.
     # *end* is exclusive. *ord* defines ordering among ranges with the same
     # *begin* and *end*.
-    defrecord ReplaceRange, begin : UInt32, end : UInt32, ord : UInt32, rep : Rep::Any do
+    defrecord ReplaceRange, begin : UInt32, end : UInt32, ord : UInt32, rep : Term::Rep do
       assert @begin <= @end
     end
 
@@ -803,7 +759,7 @@ module Ww::M1
         unless @hiset
           assert hi.empty?
 
-          proposals = Pf::Kit.stack_array(Rep::Any | Term::Dict?, 8)
+          proposals = Pf::Kit.stack_array(Term::Rep | Term::Dict?, 8)
 
           (0..@depth).reverse_each do |depth|
             each_node(depth: depth) do |node|
@@ -818,7 +774,7 @@ module Ww::M1
               next unless node.is_a?(Node)
               next unless proposal = node.proposal
 
-              value = Rep.collapse(proposal)
+              value = Term.collapse(proposal)
 
               node.endpoint.each_ref do |ref|
                 hi[ref] = hi[ref]?.try(&.add(value)) || Consensus[value]
@@ -832,7 +788,7 @@ module Ww::M1
             if node.is_a?(DictInterior)
               node.proposal = proposals[index].as(Term::Dict?)
             else
-              node.proposal = proposals[index].as(Rep::Any?)
+              node.proposal = proposals[index].as(Term::Rep?)
             end
             index += 1
           end
@@ -858,7 +814,7 @@ module Ww::M1
         (@depth + 1..@maxdepth).reverse_each do |depth|
           needle = nil
 
-          proposals = Pf::Kit.stack_array(Rep::Any | Term::Dict?, 8)
+          proposals = Pf::Kit.stack_array(Term::Rep | Term::Dict?, 8)
 
           each_node(depth: depth) do |node|
             next unless node.is_a?(Node)
@@ -881,7 +837,7 @@ module Ww::M1
             # Give up if there are multiple proposals with the same name.
             return if needle
 
-            needle = Rep.collapse(proposal)
+            needle = Term.collapse(proposal)
           end
 
           return needle if needle
@@ -919,7 +875,7 @@ module Ww::M1
             next unless node.is_a?(Node)
             next unless proposal = node.proposal
 
-            value = Rep.collapse(proposal)
+            value = Term.collapse(proposal)
 
             node.endpoint.each_ref do |ref|
               @ctx.lo[ref] = @ctx.lo[ref]?.try(&.add(value)) || Consensus[value]
@@ -938,7 +894,7 @@ module Ww::M1
       end
     end
 
-    private def rep(µ : MutContext, mut : Mut, this : Term?) : Rep::Any
+    private def rep(µ : MutContext, mut : Mut, this : Term?) : Term::Rep
       eval = Alloy::Eval.new do |expr, default, _, issues|
         Term.case(expr) do
           matchpi %{(up capture_)} do
@@ -972,30 +928,30 @@ module Ww::M1
       # issues out like this.
       expansion, _ = Alloy.render0(env, mut.template, eval: eval, severity: :quiet)
       if expansion.is_a?(Alloy::Err)
-        expansion = Alloy::Splice.new(Term[])
+        expansion = Term.rep
       end
 
-      if expansion.is_a?(Alloy::Splice)
+      unless term = expansion.single?
         # (x_ _ _) <> {x: (^splice a b c)}, (100 200 300) -> (a b c 200 300)
-        return Rep::Many.new(expansion.offspring.items.to_readonly_slice(&.itself))
+        return expansion
       end
 
       # expansion : Alloy::Assign
 
       if mut.mult.one?
         # (x_ _ _) <> {x: a}, (100 200 300) -> (a 200 300)
-        return Rep::One.new(expansion.term)
+        return Term.rep(term)
       end
 
       assert mut.mult.many?
 
-      unless dict = expansion.term.as_d?
+      unless dict = term.as_d?
         # (x_ _ _) <> {(x): a}, (100 200 300) -> (a 200 300)
-        return Rep::Many.new(Slice[expansion.term])
+        return Term.rep(term)
       end
 
       # (x_ _ _) <> {(x): (a b c)}, (100 200 300) -> (a b c 200 300)
-      Rep::Many.new(dict.items.to_readonly_slice(&.itself))
+      Term.rep(dict.items)
     end
 
     # Holds the representations for the results of rendering, as well as auxiliary
@@ -1024,11 +980,11 @@ module Ww::M1
       end
 
       def one(object) : Some
-        some(Rep::One.new(Term.of(object)))
+        some(Term.rep(Term.of(object)))
       end
     end
 
-    def render(µ : MutContext?, endpoint : Endpoint, this : Term?, & : Rep::Any -> _)
+    def render(µ : MutContext?, endpoint : Endpoint, this : Term?, & : Term::Rep -> _)
       return Render.none unless µ
 
       memo = nil
@@ -1058,7 +1014,7 @@ module Ww::M1
       render(µ, endpoint, this, &.itself)
     end
 
-    alias RenderOut = Render::None | Render::Some(Rep::One) | Conflict
+    alias RenderOut = Render::None | Render::Some(Term::Rep) | Conflict
 
     # TODO: Right now we erase multiplicity, neither can we match on it; we must
     # not erase multiplicity and instead allow a three-argument form of (%symbol blank _ _ _),
@@ -1069,29 +1025,25 @@ module Ww::M1
       return Render.none unless namep = form.name.proposal
       return Render.none unless typep = form.type.proposal
 
-      case namep
-      in Rep::One
-        name = namep.term.as_sym?
-      in Rep::Many
-        if namep.terms.empty?
-          # {(name): ()} means remove name (make blank nameless).
-          name = Term::Sym.empty
-        end
+      case namep.size
+      when 0
+        # {(name): ()} means remove name (make blank nameless).
+        name = Term::Sym.empty
+      when 1
+        name = namep.first.as_sym?
       end
 
       return conflict(form.name) unless name
 
       # name : Term::Sym
 
-      case typep
-      in Rep::One
-        if typesym = typep.term.as_sym?
+      case typep.size
+      when 0
+        # {(type): ()} means remove type (turning blank into nonblank).
+        return Render.one(name)
+      when 1
+        if typesym = typep.first.as_sym?
           type = TermType.parse?(typesym)
-        end
-      in Rep::Many
-        if typep.terms.empty?
-          # {(type): ()} means remove type (turning blank into nonblank).
-          return Render.one(name)
         end
       end
 
@@ -1110,7 +1062,7 @@ module Ww::M1
       dict0 = form.interior.initial
 
       itemspart = render(µ, form.itemspart, this: Term.of(dict0.itemspart)) do |proposal|
-        term = Rep.collapse(proposal)
+        term = Term.collapse(proposal)
         next unless dict = term.as_d?
         next unless dict.itemsonly?
 
@@ -1118,7 +1070,7 @@ module Ww::M1
       end
 
       pairspart = render(µ, form.pairspart, this: Term.of(dict0.pairspart)) do |proposal|
-        term = Rep.collapse(proposal)
+        term = Term.collapse(proposal)
         next unless dict = term.as_d?
         next unless dict.pairsonly?
 
@@ -1189,7 +1141,7 @@ module Ww::M1
 
       case result
       in Conflict     then return result
-      in Render::None then node.proposal = Rep::One.new(node.initial)
+      in Render::None then node.proposal = Term.rep(node.initial)
       in Render::Some then node.proposal = result.object
       end
 
@@ -1252,34 +1204,30 @@ module Ww::M1
         # spurious conflicts, so we skip them.
         next unless mutates?(entry.key) || mutates?(entry.value)
 
-        keyp = Rep.normalize(entry.key.proposal)
-        valuep = Rep.normalize(entry.value.proposal)
+        keyp = entry.key.proposal
+        valuep = entry.value.proposal
 
-        if keyp && Rep::One.new(key0) != keyp
-          # Implement broadcast value behavior, as demonstrated by:
-          #
-          #   (%entry k_ foo) <> {(k): (a b c)}
-          #
-          # Running this on {x: foo, y: bar}, you get: {a: foo, b: foo, c: foo, y: bar}.
-          case keyp
-          in Rep::One  then keys = {keyp.term}
-          in Rep::Many then keys = keyp.terms
-          end
-
+        if keyp && Term.changes?(key0, after: keyp)
           # valuep : Nil  (%entry k_string _) <> {k: (seen ^k)}
           # valuep : Rep  (%entry k_string v_) <> {k: (seen ^k), v: (seen ^v)}
-          valuep ||= Rep::One.new(dict[key0])
-          if valuep.is_a?(Rep::Many) && valuep.terms.empty?
+          valuep ||= Term.rep(dict[key0])
+          if valuep.empty?
             # Removal wins: (%entry k_string v_) <> {k: (seen ^k), (v): ()}
             patches << {Dissoc.new(key0), entry.value}
             next
           end
 
-          value = Rep.collapse(valuep)
+          value = Term.collapse(valuep)
 
           # Key changed.
           patches << {Dissoc.new(key0), entry.key}
-          keys.each do |dst|
+
+          # Implement broadcast value behavior, as demonstrated by:
+          #
+          #   (%entry k_ foo) <> {(k): (a b c)}
+          #
+          # Running this on {x: foo, y: bar}, you get: {a: foo, b: foo, c: foo, y: bar}.
+          keyp.each do |dst|
             patches << {Assoc.new(dst, value), entry.key}
           end
 
@@ -1292,9 +1240,9 @@ module Ww::M1
         next unless valuep
 
         if index = dict.index32?(key0)
-          if valuep.is_a?(Rep::One)
+          if term = valuep.single?
             # (x_ _) <> {x: 100}
-            patches << {Replace.new(key0, valuep.term), entry.value}
+            patches << {Replace.new(key0, term), entry.value}
             next
           end
           # (x_ _) <> {(x): (a b c)}
@@ -1304,14 +1252,14 @@ module Ww::M1
           next
         end
 
-        if valuep.is_a?(Rep::Many) && valuep.terms.empty?
+        if valuep.empty?
           # {¦ x_} <> {(x): ()}
           patches << {Dissoc.new(key0), entry.value}
           next
         end
 
         # {¦ x_} <> {x: 100}  {¦ x_} <> {(x): (a b c)}
-        patches << {Replace.new(key0, Rep.collapse(valuep)), entry.value}
+        patches << {Replace.new(key0, Term.collapse(valuep)), entry.value}
       end
 
       patches.each_with_index do |(p, srcnode0), i|
@@ -1360,12 +1308,7 @@ module Ww::M1
       if replacements.present?
         replacements.unstable_sort_by! { |r| {r.begin, r.end, r.ord} }
         replacements.reverse_each do |r|
-          dict = dict.replace(Term[r.begin]...Term[r.end]) do |commit|
-            case rep = r.rep
-            in Rep::One  then commit << rep.term
-            in Rep::Many then commit.concat(rep.terms)
-            end
-          end
+          dict = dict.replace(Term[r.begin]...Term[r.end], &.concat(r.rep))
         end
       end
 
@@ -1374,14 +1317,14 @@ module Ww::M1
       Proposed.new
     end
 
-    def propose?(ctx, step : Log::ExamineRange, proposal : Rep::Any) : Bool
+    def propose?(ctx, step : Log::ExamineRange, proposal : Term::Rep) : Bool
       ctx.patches << {ReplaceRange.new(step.begin, step.end, step.ord, proposal), ctx.subtree}
 
       true # ok
     end
 
-    def propose?(ctx, step : Log::ExamineResidue, proposal : Rep::Any) : Bool
-      residue = Rep.collapse(proposal)
+    def propose?(ctx, step : Log::ExamineResidue, proposal : Term::Rep) : Bool
+      residue = Term.collapse(proposal)
       unless residue = residue.as_d?
         return false # error
       end
@@ -1417,7 +1360,7 @@ module Ww::M1
       true # ok
     end
 
-    def propose?(ctx, step : Log::InsertEntry, proposal : Rep::Any) : Bool
+    def propose?(ctx, step : Log::InsertEntry, proposal : Term::Rep) : Bool
       # The subtree of *step* must have at least one mutation, otherwise, the entry
       # is not inserted. See, for example:
       #
@@ -1445,16 +1388,16 @@ module Ww::M1
 
       # Quite rare but sometimes useful: {¦ x⋮ 100} <> {(x): ()}, it must not
       # create the entry.
-      if proposal.is_a?(Rep::Many) && proposal.terms.empty?
+      if proposal.empty?
         return true # ok
       end
 
-      ctx.patches << {Assoc.new(step.key, Rep.collapse(proposal)), ctx.subtree}
+      ctx.patches << {Assoc.new(step.key, Term.collapse(proposal)), ctx.subtree}
 
       true # ok
     end
 
-    def propose?(ctx, step : Log::InsertItem, proposal : Rep::Any) : Bool
+    def propose?(ctx, step : Log::InsertItem, proposal : Term::Rep) : Bool
       # Ditto as the above:
       #
       #   ((%optional 0 x_)) <> {x: 0}
@@ -1476,7 +1419,7 @@ module Ww::M1
       #   ((%optional 0 x_)) <> {(x): ()}
       #   ((%optional (1 2) x←(a_ b_))) <> {(x): ()}
       #   ... etc.
-      if proposal.is_a?(Rep::Many) && proposal.terms.empty?
+      if proposal.empty?
         return true # ok
       end
 
@@ -1749,9 +1692,9 @@ module Ww::M1
     # this function multiple times, *agents* must stay unchanged.
     #
     # Returns a replacement or a conflict (conflicts store ids of agents involved).
-    def backmap(agents : Indexable(Agent), disabled : Pf::USet32, matchee : Term) : Rep::Any | Conflict
+    def backmap(agents : Indexable(Agent), disabled : Pf::USet32, matchee : Term) : Term::Rep | Conflict
       if agents.empty? || agents.size == disabled.size
-        return Rep::One.new(matchee)
+        return Term.rep(matchee)
       end
 
       Context.scope do |ctx|
@@ -1791,7 +1734,7 @@ module Ww::M1
 
         case result = ctx.µ(&.backprop(tree))
         in Conflict then result
-        in Proposed then tree.proposal || Rep::One.new(matchee)
+        in Proposed then tree.proposal || Term.rep(matchee)
         end
       end
     end
@@ -1805,9 +1748,9 @@ module Ww::M1
     # by hand (e.g. by staging). The search here is really just a gesture of
     # last resort: us really wanting the client to get *some* result even if there
     # are conflicts.
-    private def backmap?(agents : Indexable(Agent), disabled : Pf::USet32, matchee : Term) : Rep::Any?
+    private def backmap?(agents : Indexable(Agent), disabled : Pf::USet32, matchee : Term) : Term::Rep?
       result = backmap(agents, disabled, matchee)
-      if result.is_a?(Rep::Any)
+      if result.is_a?(Term::Rep)
         return result # ok
       end
 
@@ -1824,8 +1767,8 @@ module Ww::M1
     #
     # This is the function all clients end up calling to work with the backmap
     # engine (most likely the caller is one of the functions defined under `M1`).
-    def backmap(agents : Indexable(Agent), matchee : Term) : Rep::Any
-      backmap?(agents, disabled: Pf::USet32[], matchee: matchee) || Rep::One.new(matchee)
+    def backmap(agents : Indexable(Agent), matchee : Term) : Term::Rep
+      backmap?(agents, disabled: Pf::USet32[], matchee: matchee) || Term.rep(matchee)
     end
   end
 end

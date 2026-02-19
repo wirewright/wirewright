@@ -219,6 +219,45 @@ module Ww
       end
     end
 
+    module Part
+      alias Any = ItemsRange | Items | Pairs | PairsOrd | Entries | EntriesOrd
+
+      defrecord ItemsRange, range : Range(Int32, Int32) do
+        assert range.exclusive?
+      end
+
+      defrecord Items
+      defrecord Pairs
+      defrecord PairsOrd
+      defrecord Entries
+      defrecord EntriesOrd
+    end
+
+    def self.itemspart : Part::Items
+      Part::Items.new
+    end
+
+    # NOTE: *range* must be exclusive.
+    def self.items_range(range : Range(Int32, Int32)) : Part::ItemsRange
+      Part::ItemsRange.new(range)
+    end
+
+    def self.pairspart : Part::Pairs
+      Part::Pairs.new
+    end
+
+    def self.pairspart_ord : Part::PairsOrd
+      Part::PairsOrd.new
+    end
+
+    def self.entries : Part::Entries
+      Part::Entries.new
+    end
+
+    def self.entries_ord : Part::EntriesOrd
+      Part::EntriesOrd.new
+    end
+
     # :nodoc:
     EMPTY = new
 
@@ -476,7 +515,7 @@ module Ww
       nth?(index) || raise IndexError.new
     end
 
-    # O(1) Nth entry in `items` followed by `each_pair_ord`-order.
+    # O(1) Nth entry in `items` followed by `Part::PairsOrd`-order.
     @[Dncast]
     def ordnth?(index : Int32) : {Term, Term}?
       if 0 <= index < itemsize
@@ -561,6 +600,67 @@ module Ww
       @pairs.each { |entry| yield entry.key, entry.value }
     end
 
+    # Yields each itemspart entry whose key is in range, ordered 0
+    # to itemsize.
+    @[Dncast]
+    def each_entry(*, in part : Dict::Part::ItemsRange, & : Term, Term ->)
+      from = Math.min(part.range.begin, itemsize)
+      to = Math.min(part.range.end, itemsize)
+
+      if to - from > itemsize * 0.5
+        # Scan
+        items.each_with_index do |item, index|
+          next unless from <= index < to
+          yield Term.of(index), item
+        end
+      else
+        # Fetch
+        (from...to).each do |index|
+          yield Term.of(index), self[index]
+        end
+      end
+    end
+
+    # Yields each itemspart entry, ordered 0 to itemsize.
+    @[Dncast]
+    def each_entry(*, in part : Dict::Part::Items, & : Term, Term ->)
+      items.each_with_index do |item, index|
+        yield Term.of(index), item
+      end
+    end
+
+    # Yields each pairspart entry, out of order.
+    @[Dncast]
+    def each_entry(*, in part : Dict::Part::Pairs, & : Term, Term ->)
+      @pairs.each { |entry| yield entry.key, entry.value }
+    end
+
+    # Yields each pairspart entry, ordered lexicographically.
+    @[Dncast]
+    def each_entry(*, in part : Dict::Part::PairsOrd, & : Term, Term ->)
+      pairs_ord.each { |key, value| yield key, value }
+    end
+
+    # Yields each entry, out of order.
+    @[Dncast]
+    def each_entry(*, in part : Dict::Part::Entries, & : Term, Term ->)
+      each_entry { |key, value| yield key, value }
+    end
+
+    # Yields each entry from this dictionary in lexicographical order.
+    # Guarantees the order of entries to be the same across all
+    # machines & runs.
+    @[Dncast]
+    def each_entry(*, in part : Dict::Part::EntriesOrd, & : Term, Term ->)
+      unless pairsonly?
+        items.each_with_index { |item, index| yield Term.of(index), item }
+      end
+
+      return if itemsonly?
+
+      pairs_ord.each { |key, value| yield key, value }
+    end
+
     @pairsptr : Atomic({Term, Term}*) = Atomic.new(Pointer({Term, Term}).null)
 
     # :nodoc:
@@ -571,7 +671,7 @@ module Ww
 
       pairsptr = Pointer({Term, Term}).malloc(pairsize)
       index = 0
-      each_pair do |key, value|
+      each_entry(in: Dict.pairspart) do |key, value|
         pairsptr[index] = {key, value}
         index += 1
       end
@@ -587,40 +687,16 @@ module Ww
       pairs
     end
 
-    # Yields each entry from this dictionary in stable order. Guarantees the order
-    # of entries to be the same across all machines & runs.
-    @[Dncast]
-    def each_entry_ord(& : Term, Term ->) : Nil
-      unless pairsonly?
-        items.each_with_index { |item, index| yield Term.of(index), item }
-      end
-
-      return if itemsonly?
-
-      pairs_ord.each { |key, value| yield key, value }
-    end
-
-    # Yields each item from this dictionary followed by its index. **Items are yielded
-    # out of order**.
+    # Yields itemspart entry values and keys (as Int32), out of order.
     @[Dncast]
     def each_item_with_index(& : Term, Int32 ->) : Nil
       @items.each { |entry| yield entry.value, entry.index }
     end
 
+    # Yields itemspart entry values, out of order.
     @[Dncast]
     def each_item_unordered(& : Term ->) : Nil
       @items.each { |entry| yield entry.value }
-    end
-
-    # Yields each pair from this dictionary. **Pairs are yielded out of order**.
-    @[Dncast]
-    def each_pair(& : Term, Term ->)
-      @pairs.each { |entry| yield entry.key, entry.value }
-    end
-
-    @[Dncast]
-    def each_pair_ord(& : Term, Term ->)
-      pairs_ord.each { |key, value| yield key, value }
     end
 
     # :nodoc:
@@ -634,7 +710,7 @@ module Ww
 
       def each(& : {Term, Term} ->)
         if @ord
-          @dict.each_entry_ord { |k, v| yield({k, v}) }
+          @dict.each_entry(in: Dict.entries_ord) { |k, v| yield({k, v}) }
         else
           @dict.each_entry { |k, v| yield({k, v}) }
         end
@@ -642,7 +718,7 @@ module Ww
     end
 
     # Returns an enumerable based on `each_entry` (if *ordered* is `false`) or
-    # `each_entry_ord` (if *ordered* is `true`).
+    # `each_entry(Part::EntriesOrd)` (if *ordered* is `true`).
     @[Dncast]
     def ee(*, ordered = false) : Enumerable({Term, Term})
       EntryEnumerable.new(self, ordered)
@@ -1121,12 +1197,12 @@ module Ww
     # the pairs part.
     @[Dncast]
     def items : Dict::ItemsView
-      ItemsView.new(@items, b: 0, e: @items.size, sketch0: @sketch, maxdepth0: @maxdepth)
+      ItemsView.new(self, b: 0, e: @items.size)
     end
 
     @[Dncast]
     def items(b : Int32, e : Int32) : Dict::ItemsView
-      ItemsView.new(@items, b, e, sketch0: @sketch, maxdepth0: @maxdepth)
+      ItemsView.new(self, b, e)
     end
 
     # Returns the items part of `partition` (see the latter for more info).

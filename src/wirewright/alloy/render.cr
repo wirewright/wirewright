@@ -150,8 +150,8 @@ module Ww::Alloy
     end
   end
 
-  private def render_many(issues : Issue::Sink, &) : Assign | Splice
-    children = [] of Term
+  private def render_many(issues : Issue::Sink, &) : Term::Rep
+    children = Pf::Kit.stack_array(Term)
 
     submit = ->(ctx : RenderContext, item : Term, index : Int32) do
       expansion = issues.adjoin(key: index, detail: "item") do |issues|
@@ -160,20 +160,15 @@ module Ww::Alloy
 
       case expansion
       in Err # omit
-      in Assign then children << expansion.term
-      in Splice then children.concat(expansion.offspring.items)
+      in Term::Rep then expansion.each { |offspring| children << offspring }
       end
 
-      nil # NOTE: OR ELSE THE COMPILER CRASHES ...
+      nil # OR ELSE THE COMPILER CRASHES ...
     end
 
     yield submit
 
-    if children.size == 1
-      return Assign.new(children.first)
-    end
-
-    Splice.new(Term[children])
+    Term.rep(children)
   end
 
   # Yields a dictionary and a proc. The block is expected to iterate through
@@ -189,7 +184,8 @@ module Ww::Alloy
           return Err.new
         end
 
-        children = [] of Term
+        children = Pf::Kit.stack_array(Term)
+
         submit = ->(item_ctx : RenderContext) do
           issues.adjoin(Spot::VarDelta.new(ctx.vars, item_ctx.vars)) do |issues|
             expansion = render_many(issues) do |submit_to_body|
@@ -198,20 +194,15 @@ module Ww::Alloy
               end
             end
 
-            case expansion
-            in Assign then children << expansion.term
-            in Splice then children.concat(expansion.offspring.items)
+            expansion.each do |offspring|
+              children << offspring
             end
           end
         end
 
         yield iteratee_dict, submit
 
-        if children.size == 1
-          return Assign.new(children.first)
-        end
-
-        Splice.new(Term[children])
+        Term.rep(children)
       end
     end
   end
@@ -256,16 +247,16 @@ module Ww::Alloy
         get_var(ctx, Term.of(name), issues) do |value, issues|
           case kind
           when :ml
-            Assign.new(Term.of(ML.compact(value)))
+            Term.rep(Term.of(ML.compact(value)))
           when :splice
-            unless value.type.dict?
+            unless dict = value.as_d?
               issues.major("value must be a dict")
               return Err.new
             end
 
-            Splice.new(value.unsafe_as_d)
+            Term.rep(dict.items)
           when :var
-            Assign.new(value)
+            Term.rep(value)
           else
             unreachable
           end
@@ -288,7 +279,7 @@ module Ww::Alloy
       # Replaces itself with the result of evaluating an Alloy expression.
       matchpi %{(^ expr_)} do
         issues.adjoin(key: 1, detail: "value expression") do |issues|
-          Assign.new(eval(ctx, expr, issues))
+          Term.rep(eval(ctx, expr, issues))
         end
       end
 
@@ -387,7 +378,7 @@ module Ww::Alloy
 
           issues.note("none of the branches matched")
 
-          Splice.new(Term[])
+          Term.rep
         end
       end
 
@@ -519,7 +510,7 @@ module Ww::Alloy
       # iteration is guaranteed to be stable across different runs and machines.
       matchpi %{(^each (iteratee_ entry as pattern_) body_*)} do
         render_each(ctx, iteratee, body.unsafe_as_d, issues) do |dict, submit|
-          dict.each_entry_ord do |key, value|
+          dict.each_entry(in: Term::Dict.entries_ord) do |key, value|
             matches = M1.matches(pattern, Term.of(key, value), env: ctx.vars)
             matches.each { |env| submit.call(ctx.copy_with(vars: env)) }
           end
@@ -564,7 +555,7 @@ module Ww::Alloy
               return Err.new
             end
 
-            Assign.new(item)
+            Term.rep(item)
           end
         end
       end
@@ -605,7 +596,7 @@ module Ww::Alloy
               # It's not super severe and () is more or less expected, but let
               # them know anyway.
               issues.minor("begin and end indices are out of order")
-              next Splice.new(Term[])
+              next Term.rep
             end
 
             bi = bi.clamp(0..dict.itemsize)
@@ -619,7 +610,7 @@ module Ww::Alloy
               .grow(count)
               .collect
 
-            Splice.new(Term[selection])
+            Term.rep(Term.of(selection))
           end
         end
       end
@@ -630,6 +621,8 @@ module Ww::Alloy
       # (^br cond_ then_ else_)
       #
       # |@key cond alloy.expr
+      # |@key then alloy.template
+      # |@key else alloy.template
       #
       # |@block
       # Replaces itself with *else* if the condition expression evaluates to `false`.
@@ -657,7 +650,7 @@ module Ww::Alloy
       matchpi %{(^if cond_ body_*)} do
         issues.adjoin("`^if` template expression") do |issues|
           if eval(ctx, cond, issues) == Term[false]
-            return Splice.new(Term[])
+            return Term.rep
           end
 
           render_many(issues) do |submit|
@@ -681,7 +674,7 @@ module Ww::Alloy
       matchpi %{(^unless cond_ body_*)} do
         issues.adjoin("`^unless` template expression") do |issues|
           unless eval(ctx, cond, issues) == Term[false]
-            return Splice.new(Term[])
+            return Term.rep
           end
 
           render_many(issues) do |submit|
@@ -703,7 +696,7 @@ module Ww::Alloy
       # value expression `alloy.expr`.
       matchpi %{[^let body_*]} do
         vars1 = ctx.vars.transaction do |commit|
-          template.each_pair do |key, expr|
+          template.each_entry(in: Term::Dict.pairspart) do |key, expr|
             value = issues.adjoin("`^let` definition for", key) do |issues|
               eval(ctx, expr, issues)
             end
@@ -746,28 +739,25 @@ module Ww::Alloy
             return Err.new
           end
 
-          case expansion
-          in Assign
-            unless base_dict = expansion.term.as_d?
-              issues.adjoin("^extend child", expansion.term, &.major("expected a dict child"))
+          if offspring = expansion.single?
+            unless base_dict = offspring.as_d?
+              issues.adjoin("^extend child", offspring, &.major("expected a dict child"))
               return Err.new
             end
 
-            expansion.copy_with(term: Term.of(Term.overlay(base_dict, extras_dict)))
-          in Splice
-            dict = expansion.offspring.transaction do |commit|
-              expansion.offspring.each_item_with_index do |item, index|
-                unless base_dict = item.as_d?
-                  issues.adjoin("spliced ^extend child", item, &.major("expected a dict child"))
-                  return Err.new
-                end
+            return Term.rep(Term.of(Term.overlay(base_dict, extras_dict)))
+          end
 
-                commit.with(index, Term.of(Term.overlay(base_dict, extras_dict)))
-              end
+          unions = expansion.to_readonly_slice do |offspring, index|
+            unless base_dict = offspring.as_d?
+              issues.adjoin("spliced ^extend child", offspring, &.major("expected a dict child"))
+              return Err.new
             end
 
-            expansion.copy_with(offspring: dict)
+            Term.of(Term.overlay(base_dict, extras_dict))
           end
+
+          Term.rep(unions)
         end
       end
 
@@ -795,11 +785,7 @@ module Ww::Alloy
       # x
       # ```
       matchpi %{(^verbatim body_*)} do
-        if body.size == 1
-          Assign.new(body[0])
-        else
-          Splice.new(body.unsafe_as_d)
-        end
+        Term.rep(body.items)
       end
 
       # |@ alloy.template.^membrane
@@ -848,7 +834,7 @@ module Ww::Alloy
             commit << :"^let"
             commit.concat(body.items)
 
-            template.each_pair do |key, value|
+            template.each_entry(in: Term::Dict.pairspart) do |key, value|
               issues.adjoin("binding", key) do |issues|
                 result = eval(ctx, value, issues)
 
@@ -857,7 +843,7 @@ module Ww::Alloy
             end
           end
 
-          Assign.new(Term.of(expansion))
+          Term.rep(Term.of(expansion))
         end
       end
 
@@ -893,7 +879,7 @@ module Ww::Alloy
             end
           end
         else
-          Assign.new(template)
+          Term.rep(template)
         end
       end
 
@@ -910,12 +896,12 @@ module Ww::Alloy
       matchpi %{(^* expr_)} do
         value = eval(ctx, expr, issues)
 
-        unless value.type.dict?
+        unless dict = value.as_d?
           issues.adjoin("spliced value", value, &.major("value must be a dict"))
           return Err.new
         end
 
-        Splice.new(value.itemspart)
+        Term.rep(dict.items)
       end
 
       # |@ alloy.template.^splice
@@ -954,7 +940,7 @@ module Ww::Alloy
           return Err.new
         end
 
-        Assign.new(value)
+        Term.rep(value)
       end
 
       # |@ alloy.template.^render
@@ -1008,9 +994,8 @@ module Ww::Alloy
 
           # Normalize expansion.
           case expansion
-          in Err    then return Err.new
-          in Assign then matchee = Term.of({expansion.term})
-          in Splice then matchee = Term.of(expansion.offspring)
+          in Err       then return Err.new
+          in Term::Rep then matchee = Term.of(expansion)
           end
 
           render_many(issues) do |submit|
@@ -1044,11 +1029,14 @@ module Ww::Alloy
       # (p "Hello World" style: "text-neutral-500")
       # ```
       matchpi %{_dict} do
-        expansion = flatten(template.unsafe_as_d, issues) do |value, issues|
-          render0(ctx, value, issues)
+        expansion = Term.flatten(template, part: Term::Dict.entries) do |key, value|
+          issues.adjoin(key: key, detail: "in key") do |issues|
+            offspring = render0(ctx, value, issues)
+            offspring.is_a?(Err) ? Term.rep : offspring
+          end
         end
 
-        ctx.refine.call(expansion.term, issues)
+        ctx.refine.call(expansion, issues)
       end
     end
   end
@@ -1057,7 +1045,7 @@ module Ww::Alloy
   DEFAULT_EVAL = Eval.new { |expr, default, _, issues| default.call(issues) }
 
   # Default value for the refine function (noop).
-  DEFAULT_REFINE = Refine.new { |term, _| Assign.new(term) }
+  DEFAULT_REFINE = Refine.new { |term, _| Term.rep(term) }
 
   # Renders an Alloy *template*. Returns its expansion.
   #

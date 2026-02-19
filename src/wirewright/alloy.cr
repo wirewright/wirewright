@@ -23,18 +23,7 @@ module Ww::Alloy
   # Represents the result of template expansion. You usually do not have to
   # deal with this unless you want to support splicing of top-level Alloy
   # templates or views into your term-of-choice.
-  alias Expansion = Ok | Err
-
-  # Successful expansion.
-  alias Ok = Assign | Splice
-
-  # Represents the expansion of the current term into one offspring term
-  # (possibly the same term).
-  record Assign, term : Term
-
-  # Represents the expansion of the current term into zero or more offspring
-  # terms (possibly containing the original term).
-  record Splice, offspring : Term::Dict
+  alias Expansion = Term::Rep | Err
 
   # Represents the absence of an expansion due to an error (e.g. undefined variable).
   # Alloy nodes may choose to handle this differently in principle; but in practice,
@@ -45,44 +34,19 @@ module Ww::Alloy
   # See `collapse` for representatinal issues when used in practice.
   record Err
 
-  # :nodoc:
-  def collapse(expansion : Err) : Term
-    Term.of
-  end
-
-  # :nodoc:
-  def collapse(expansion : Assign) : Term
-    expansion.term
-  end
-
-  # :nodoc:
-  def collapse(expansion : Splice) : Term
-    Term.of(expansion.offspring)
-  end
-
-  {% if flag?(:docs) %}
-    # We collapse *expansion* to a term representation in the following way:
-    #
-    # - An `Err` collapses to `()`.
-    # - An `Assign` collapses to its term.
-    # - A `Splice` collapses to its offspring list term.
-    #
-    # Most importantly, this means that the empty dict `()` is highly ambiguous.
-    # It may result from either of the three. Normal dictionaries are ambiguous
-    # as well, because they may come from both `Assign` and `Splice`. In a sense,
-    # by calling `collapse`, you "burn" information about what kind of *expansion*
-    # you had.
-    #
-    # This is dirty, but it works in practice -- most of the times, you just don't
-    # care. If you need full information, however, use `Expansion` as-is (each important
-    # method has a non-collapsing overload). You can also encode `Expansion` yourself,
-    # perhaps into something like `err/(assign _)/(splice _*)`.
-    def collapse(expansion : Expansion) : Term
+  # See `Term.collapse` for general info.
+  #
+  # `Err` collapses to `()`.
+  def collapse(expansion : Expansion) : Term
+    if expansion.is_a?(Err)
+      return Term.of
     end
-  {% end %}
 
-  alias ExpansionCache = ICache(Term, Ok)
-  alias ExpansionUncached = Uncached(Term, Ok)
+    Term.collapse(expansion)
+  end
+
+  alias ExpansionCache = ICache(Term, Term::Rep)
+  alias ExpansionUncached = Uncached(Term, Term::Rep)
 
   private def cached(cache : ExpansionCache, key : Term, issues : Issue::Sink, & : -> Expansion) : Expansion
     if memo = cache[key]?
@@ -91,7 +55,7 @@ module Ww::Alloy
 
     version0 = issues.version
     expansion = yield
-    unless expansion.is_a?(Ok)
+    unless expansion.is_a?(Term::Rep)
       return expansion
     end
     version1 = issues.version
@@ -202,7 +166,6 @@ module Ww::Alloy
   end
 end
 
-require "./alloy/flatten"
 require "./alloy/render"
 require "./alloy/respond"
 require "./alloy/compose"
