@@ -55,23 +55,27 @@ module Ww::Soma
     set_main.call(mainR)
   end
 
+  def text_metricsR(dw)
+    callR do |term|
+      reply = Sync::Future(Term).new
+      dw << DwUIR::TextReplyRequest.new(term, reply)
+      Rewrite.one(reply.get)
+    end
+  end
+
+  def metricsR(dw)
+    callR do |term|
+      reply = Sync::Future(Term).new
+      dw << DwUIR::GraphicsReplyRequest.new(term, reply)
+      Rewrite.one(reply.get)
+    end
+  end
+
   def uiR(metricsR : Rewriter, rulebase : Term)
     selector = ML.term(%{[backmap pattern_ backspec_]})
     ruleset = Ruleset.select(selector, rulebase)
 
     uiR(metricsR, ruleset)
-  end
-
-  def uiR(dw, rulebase : Term)
-    ruleset = Ruleset.select(Ruleset::DEFAULT_SELECTOR, rulebase)
-
-    metricsR = callR do |term|
-      reply = Sync::Future(Term).new
-      dw << DwUIR::GraphicsReplyRequest.new(term, reply)
-      Rewrite.one(reply.get)
-    end
-
-    uiR(metricsR, rulebase)
   end
 
   def editR(ruleset : Ruleset)
