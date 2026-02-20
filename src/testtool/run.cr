@@ -43,7 +43,7 @@ module Testtool
         RackComparisonResult.new(M1.probe?(pattern, actual))
       end
 
-      matchpi %{(frame pattern_ ¦ () pattern future)} do
+      matchpi %{(frame pattern_ ¦ () pattern fast-forward)} do
         if M1.probe?(pattern, actual)
           return RackComparisonResult::Match
         end

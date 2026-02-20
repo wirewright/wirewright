@@ -3739,7 +3739,7 @@
         {¦ base_ pool_dict}
           <> {(base): (), pool: ^(mset/union pool (entry base 1))}))
     (cell @pool ()))
-  (frame pattern: true future: true
+  (frame pattern: true fast-forward: true
     ⟨[cell @pool {"A": 56, "B": 132, "C": 96, "D": 50}]⟩)
   end)
 
