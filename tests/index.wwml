@@ -17,10 +17,10 @@ microfold: {
 }
 
 ;; Path to editR codex.
-editR: {codex: "../codex/editR.codex.wwml"}
+editR: {codex: "../runtime/codices/editR.codex.wwml"}
 
 ;; Path to uiR codex>
-uiR: {codex: "../uiR-succ8.soma.wwml"}
+uiR: {codex: "../runtime/codices/uiR.codex.wwml"}
 
 ;; Tests are listed in loose dependency order: ML tests are the most "primitive"
 ;; and depend on the least amount of further machinery, then go patterns and so on.

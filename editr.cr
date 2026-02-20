@@ -1,7 +1,7 @@
 require "./src/wirewright"
 
 # Load codex
-codex = ML.document(File.read("./codex/editR.codex.wwml"))
+codex = ML.document(File.read("./runtime/codices/editR.codex.wwml"))
 editR = Soma.editR(codex)
 
 failures = [] of {expected: Term, got: Term, text: StringView}
@@ -236,7 +236,7 @@ loop do
     end
 
     givenpi %{(%any r reload)} do
-      codex = ML.document(File.read("./codex/editR.codex.wwml"))
+      codex = ML.document(File.read("./runtime/codices/editR.codex.wwml"))
       editR = Soma.editR(codex)
       puts "Reloaded codex from disk"
     end
