@@ -1190,8 +1190,9 @@ prune:
 {¦ µ-cues-⸨up,dn⸩: (%value cue _), µ-⟦style,preset⟧: ⟨U←(on-cue-⸨up,dn⸩ cue_ u_)⟩}
   <> {U: ^u}
 
-;; Convert dn-out to dn-in unless we're a membrane. Membranes should block
-;; downward flow from above, and upward flow from below.
+;; Convert up/dn-in (cue received) to up/dn-out (cue outbound) unless we're
+;; a membrane. Membranes block downward flow from above, and upward
+;; flow from below.
 ⟨{¦ -µ-membrane µ-cues: [C←[⸨up,dn⸩-in id_] _*]}⟩
   <> {C: (⸨up,dn⸩-out ^id)}
 
