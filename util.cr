@@ -896,6 +896,13 @@ class ::Hash
     Slice.new(ptr, size, read_only: true)
   end
 
+  def try_update(key : K, & : V -> V) : Nil
+    return unless entry_index = find_entry_with_index(key)
+
+    entry, index = entry_index
+    set_entry(index, Entry(K, V).new(entry.hash, entry.key, yield entry.value))
+  end
+
   def transform(key : K, default_value : V, & : V -> V) : V
     if entry_index = find_entry_with_index(key)
       entry, index = entry_index
@@ -3931,8 +3938,12 @@ struct Range(B, E)
     end
   end
 
-  def segments(indices : Enumerable(Int32), &)
-    prev = 0
+  def segments(indices : Enumerable(T), &) forall T
+    {% unless T < ::Int %}
+      {% raise "unsupported type of indices: #{T}" %}
+    {% end %}
+
+    prev = T.new(0)
 
     indices.each_with_index do |i, j|
       unless prev <= i < size
@@ -4866,6 +4877,41 @@ class Log::AsyncInMemoryBackend < Log::Backend
 
   def write(entry : Log::Entry) : Nil
     @entries << entry
+  end
+end
+
+
+class BlockingSlot(T)
+  defrecord Empty
+  defrecord Nonempty(T), object : T
+
+  @slot : Empty | Nonempty(T)
+
+  def initialize
+    @slot = Empty.new
+    @mutex = Sync::Mutex.new
+    @cv = Sync::ConditionVariable.new(@mutex)
+  end
+
+  def set(object : T) : Nil
+    @mutex.synchronize do
+      @slot = Nonempty.new(object)
+      @cv.signal
+    end
+  end
+
+  def get : T
+    @mutex.synchronize do
+      loop do
+        if slot = @slot.as?(Nonempty)
+          object = slot.object
+          @slot = Empty.new
+          return object
+        end
+
+        @cv.wait
+      end
+    end
   end
 end
 
