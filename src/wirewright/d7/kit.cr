@@ -98,6 +98,11 @@ module Ww::D7
     node(object).id
   end
 
+  # Shorthand for running `Term::Dict#[]?(*args)`on the first term in *object*.
+  def part?(object, *args)
+    node(object).term[*args]?
+  end
+
   # Retrieves the value associated with *capture* in the first match env
   # in *object*.
   #

@@ -349,18 +349,6 @@ module Ww::Rack
         D7.gnd(node, edges)
       end
 
-      matchpi %{[view (@src_ pattern_ dst←(@ref_ @view_)) template_]} do
-        D7.gnd(node, src, ref, view, defn: Term.of(:view, { {src}, {pattern}, dst }, template))
-      end
-
-      matchpi %{[view (srcs←((%past @_ min: 1)) _ (@ref_ @dst_)) _]} do
-        edges = [] of Term
-        edges.concat(srcs.items)
-        edges << ref << dst
-
-        D7.gnd(node, edges)
-      end
-
       # Chan sensor
       matchpi %{[sensor (_ _ @u_) _]} do
         D7.gnd(node, u)
@@ -425,6 +413,31 @@ module Ww::Rack
             matchpi %{⟨(cell @_ value1_)⟩} { Term.morph(node, {2, value1}) }
           end
         end
+      end
+
+      matchpi %{[rewriter (@input_ -> @spec_ -> @output_) _*]} do
+        D7.gnd(node, input, spec, output)
+      end
+
+      matchpi %{[rewriter (@input_ - @spec_ - @output_) _*]} do
+        D7.gnd(node, input, spec, output)
+      end
+
+      matchpi(
+        %{[rewriter (@input_ -> spec_ -> @output_) _*]},
+        %{[rewriter (@input_ - spec_ - @output_) _*]},
+      ) do
+        bindings = Term[].with({:edge, :in}, input).with({:edge, :out}, output)
+        defn = Term.of(:module, bindings,
+          {:cell, {:edge, :spec}, spec},
+          Term.morph(node,
+            {1, 0, {:edge, :in}},
+            {1, 2, {:edge, :spec}},
+            {1, 4, {:edge, :out}},
+          ),
+        )
+
+        D7.mixture(node, defn) { node }
       end
 
       otherwise do

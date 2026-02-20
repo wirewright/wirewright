@@ -1137,26 +1137,6 @@ module Ww
       commit.resolve
     end
 
-    # Returns `true` if all keys shared by `self` and *other* have equal values.
-    # If no keys are shared, returns `true`.
-    def agrees_with?(other : Dict) : Bool
-      if size < other.size
-        each_entry do |key, value0|
-          next unless value1 = other[key]?
-          next if value0 == value1
-          return false # disagrees
-        end
-      else
-        other.each_entry do |key, value0|
-          next unless value1 = self[key]?
-          next if value0 == value1
-          return false # disagrees
-        end
-      end
-
-      true # agrees
-    end
-
     # Returns `true` if `self` and *other* share one or more keys.
     def intersects?(other : Dict) : Bool
       sm, lg = size < other.size ? {self, other} : {other, self}

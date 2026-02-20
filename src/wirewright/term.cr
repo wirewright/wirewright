@@ -1404,6 +1404,36 @@ module Ww
       Term.of(union(Term[a], Term[b]))
     end
 
+    # :nodoc:
+    def self.extension?(b : Dict, *, of a : Dict) : Bool
+      return false if a.size > b.size
+
+      a.each_entry do |key, value0|
+        unless value1 = b[key]?
+          return false # disagrees
+        end
+
+        unless extension?(value1, of: value0)
+          return false # disagrees
+        end
+      end
+
+      true # agrees
+    end
+
+    # :nodoc:
+    def self.extension?(b : Any, *, of a : Any) : Bool
+      a == b ? true : false
+    end
+
+    # All keys in *a* must exist in *b*, and their values in *b* must be
+    # an extension of the corresponding values in *a* (recursively), for
+    # *b* to extend *a*. For non-dictionary terms, *b* extends *a* only if
+    # *b* is equal to *a*.
+    def self.extension?(b : Term, *, of a : Term) : Bool
+      extension?(Term[b], of: Term[a])
+    end
+
     # Returns a copy of the dict *a* with all of *keys* removed. Missing keys
     # are skipped.
     def self.exclude(a : Dict, keys : Enumerable(Term)) : Dict
@@ -1850,6 +1880,23 @@ module Ww
       end
 
       Term.of(dict)
+    end
+
+    # Transforms offspring in *rep* using the block and flattens the reps
+    # it returns into a single rep.
+    def self.flatten(rep : Rep, & : Term -> Rep) : Rep
+      sink = Pf::Kit.stack_array(Term)
+      changed = false
+
+      rep.each do |offspring|
+        expansion = yield offspring
+        expansion.each { |member| sink << member }
+        changed ||= changes?(offspring, after: expansion)
+      end
+
+      return rep unless changed
+
+      rep(sink)
     end
   end
 

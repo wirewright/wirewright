@@ -988,8 +988,7 @@
         => (component
              (surface (@surface (button caption_string actions←(_*)))
                (button ^caption ()))
-             (cell @ref-view)
-             (view (@caption caption_string (@ref-view @view))
+             (view (@caption caption_string @view)
                (button ^caption clickable: true))
              (node @view)
              (backsys {@:view @:caption @:actions}
@@ -1000,8 +999,7 @@
         => (component
              (surface (@surface (counter ±n))
                (counter ^initial))
-             (cell @ref-view)
-             (view (@surface (counter ±n) (@ref-view @view))
+             (view (@surface (counter ±n) @view)
                (h1 ^"Count: ⸢n⸣"))
              (node @view))
 
@@ -2590,175 +2588,29 @@
         (cell @x b)
         (view (@x k_ @y (%value k v_string)) ^v)
         (cell @y "Samantha")))
-    end))
-
-;; View with state
-(group
-  (rack
-    ;; Appeared
-    (frame
-      (cell @x 0)
-      (view (@x ±x (@x0 @x1)) ^x)
-      (cell @x0)
-      (cell @x1)
-      (backsys @x1  ±n <> {n: ^(+ n 1)}))
-    (frame
-      (cell @x 0)
-      (view (@x ±x (@x0 @x1)) ^x)
-      (cell @x0 0)
-      (cell @x1 0)
-      (backsys @x1  ±n <> {n: ^(+ n 1)}))
-    (frame
-      (cell @x 0)
-      (view (@x ±x (@x0 @x1)) ^x)
-      (cell @x0 0)
-      (cell @x1 1)
-      (backsys @x1  ±n <> {n: ^(+ n 1)}))
-    (frame
-      (cell @x 0)
-      (view (@x ±x (@x0 @x1)) ^x)
-      (cell @x0 0)
-      (cell @x1 2)
-      (backsys @x1  ±n <> {n: ^(+ n 1)})))
-    ;; ...
-
-  ;; Disappeared
-  (rack
-    (frame
-      (cell @x 0)
-      (discard @x)
-      (view (@x ±x (@x0 @x1)) ^x)
-      (cell @x0 0)
-      (cell @x1 10)
-      (backsys @x1  ±n <> {n: ^(+ n 1)}))
-    (frame
-      (cell @x)
-      (discard @x)
-      (view (@x ±x (@x0 @x1)) ^x)
-      (cell @x0 0)
-      (cell @x1 11)
-      (backsys @x1  ±n <> {n: ^(+ n 1)}))
-    (frame
-      (cell @x)
-      (discard @x)
-      (view (@x ±x (@x0 @x1)) ^x)
-      (cell @x0)
-      (cell @x1)
-      (backsys @x1  ±n <> {n: ^(+ n 1)}))
     end)
 
-  ;; Changed
+  ;; Extension semantics
   (rack
     (frame
-      (cell @x 5)
-      (view (@x ±x (@x0 @x1)) ^x)
-      (cell @x0 0)
-      (cell @x1 10)
-      (backsys @x1  ±n <> {n: ^(+ n 1)}))
-    (frame
-      (cell @x 5)
-      (view (@x ±x (@x0 @x1)) ^x)
-      (cell @x0 5)
-      (cell @x1 5)
-      (backsys @x1  ±n <> {n: ^(+ n 1)}))
-    (frame
-      (cell @x 5)
-      (view (@x ±x (@x0 @x1)) ^x)
-      (cell @x0 5)
-      (cell @x1 6)
-      (backsys @x1  ±n <> {n: ^(+ n 1)}))
-    (frame
-      (cell @x 5)
-      (view (@x ±x (@x0 @x1)) ^x)
-      (cell @x0 5)
-      (cell @x1 7)
-      (backsys @x1  ±n <> {n: ^(+ n 1)})))
-    ;; ...
-
-  ;; Many sources through mismatch
-  (rack
-    (frame
-      (cell @x 0)
-      (cell @y 5)
-      (cell @z 10)
-      (backsys @x  ±n <> {n: ^(+ n 1)})
-      (backsys @y  ±n <> {n: ^(+ n 1)})
-      (view ((@x @y @z) (x←(%any° (%number 3 <= _ <= 5) (%number 7 <= _ <= 11)) y←(%not 14) z_) (@state @view))
-        ^z)
-      (cell @state)
+      (cell @x "hi")
+      (view (@x x_string @view)
+        (foo ^x flag: true))
       (cell @view)
-      (backsys @view ±n <> {n: ^(* n 2)}))
-    (frame pattern: true
-      ⟨& (cell @x 1)
-         (cell @y 6)
-         (cell @state)
-         (cell @view)⟩)
-    (frame pattern: true
-      ⟨& (cell @x 2)
-         (cell @y 7)
-         (cell @state)
-         (cell @view)⟩)
-    (frame pattern: true
-      ⟨& (cell @x 3)
-         (cell @y 8)
-         (cell @state)
-         (cell @view)⟩)
-    (frame pattern: true
-      ⟨& (cell @x 4)
-         (cell @y 9)
-         (cell @state 10)
-         (cell @view 10)⟩)
-    (frame pattern: true
-      ⟨& (cell @x 5)
-         (cell @y 10)
-         (cell @state 10)
-         (cell @view 20)⟩)
-    (frame pattern: true
-      ⟨& (cell @x 6)
-         (cell @y 11)
-         (cell @state 10)
-         (cell @view 40)⟩)
-    (frame pattern: true
-      ⟨& (cell @x 7)
-         (cell @y 12)
-         (cell @state)
-         (cell @view)⟩)
-    (frame pattern: true
-      ⟨& (cell @x 8)
-         (cell @y 13)
-         (cell @state 10)
-         (cell @view 10)⟩)
-    (frame pattern: true
-      ⟨& (cell @x 9)
-         (cell @y 14)
-         (cell @state 10)
-         (cell @view 20)⟩)
-    (frame pattern: true
-      ⟨& (cell @x 10)
-         (cell @y 15)
-         (cell @state)
-         (cell @view)⟩)
-    (frame pattern: true
-      ⟨& (cell @x 11)
-         (cell @y 16)
-         (cell @state 10)
-         (cell @view 10)⟩)
-    (frame pattern: true
-      ⟨& (cell @x 12)
-         (cell @y 17)
-         (cell @state 10)
-         (cell @view 20)⟩)
-    (frame pattern: true
-      ⟨& (cell @x 13)
-         (cell @y 18)
-         (cell @state)
-         (cell @view)⟩)
-    (frame pattern: true
-      ⟨& (cell @x 14)
-         (cell @y 19)
-         (cell @state)
-         (cell @view)⟩)))
-    ;; ...
+      (backsys @view  {¦ flag -seen_} <> {seen: true}))
+    (frame
+      (cell @x "hi")
+      (view (@x x_string @view)
+        (foo ^x flag: true))
+      (cell @view (foo "hi" flag: true))
+      (backsys @view  {¦ flag -seen_} <> {seen: true}))
+    (frame
+      (cell @x "hi")
+      (view (@x x_string @view)
+        (foo ^x flag: true))
+      (cell @view (foo "hi" flag: true seen: true))
+      (backsys @view  {¦ flag -seen_} <> {seen: true}))
+    end))
 
 ;; Termspace
 (group
@@ -4701,3 +4553,185 @@
         (cell @y)
         (discard @y)))
     end))
+
+;; rewriter
+(group
+  ;; rulesetR
+  (rack
+    (frame
+      (cell @x 0)
+      (rewriter (@x -> (rulesetR) -> @y)
+        _ => 100 ;; test if it is ordered by specificity
+        0 => 1
+        1 => 2
+        2 => 3)
+      (cell @y)
+      (feed @y @x))
+    (frame pattern: true
+      ⟨& (cell @x)
+         (cell @y 1)⟩)
+    (frame pattern: true
+      ⟨& (cell @x 1)
+         (cell @y)⟩)
+    (frame pattern: true
+      ⟨& (cell @x)
+         (cell @y 2)⟩)
+    (frame pattern: true
+      ⟨& (cell @x 2)
+         (cell @y)⟩)
+    (frame pattern: true
+      ⟨& (cell @x)
+         (cell @y 3)⟩)
+    (frame pattern: true
+      ⟨& (cell @x 3)
+         (cell @y)⟩)
+    (frame pattern: true
+      ⟨& (cell @x)
+         (cell @y 100)⟩)
+    (frame pattern: true
+      ⟨& (cell @x 100)
+         (cell @y)⟩)
+    (frame pattern: true
+      ⟨& (cell @x)
+         (cell @y 100)⟩))
+    ;; ...
+
+  ;; exh rulesetR
+  (rack
+    (frame
+      (cell @x 2)
+      (rewriter (@x -> (rulesetR exh: true) -> @y)
+        ±n => (e ^(+ n 1))
+        (e n_) => (e ^n ^(- n 1))
+        (e n_ m_number) => (e ^m ^(* n 2))
+        (e n_ m_) => (e ^m . ^n))
+      (cell @y))
+    (frame pattern: true
+      ⟨& (cell @x)
+         (cell @y (e 6 . 2))⟩)
+    end)
+
+  ;; ascR: elementary
+  (rack
+    (frame
+      (cell @x (0 0 0 0 0))
+      (rewriter (@x -> (ascR (rulesetR)) -> @y)
+        ±n => ^(+ n 1))
+      (cell @y)
+      (feed @y @x))
+    (frame pattern: true
+      ⟨& (cell @x)
+         (cell @y (1 1 1 1 1))⟩)
+    (frame pattern: true
+      ⟨& (cell @x (1 1 1 1 1))
+         (cell @y)⟩)
+    (frame pattern: true
+      ⟨& (cell @x)
+         (cell @y (2 2 2 2 2))⟩))
+    ;; ...
+
+  ;; ascR: make sure it really ascends
+  (rack
+    (frame
+      (cell @x (e (e 0) (e 1)))
+      (rewriter (@x - (ascR (rulesetR)) - @y)
+        ±n => ^(+ n 1)
+        (e ±n) => (p ^\n style: "text-blue-500")
+        (e a_ b_) => (group ^b ^a))
+      (cell @y)
+      (backsys @y  {¦ -seen_} <> {seen: true}))
+    (frame pattern: true
+      ⟨& (cell @x (e (e 0) (e 1)))
+         (cell @y
+           (group
+             (p "2" style: "text-blue-500")
+             (p "1" style: "text-blue-500")))⟩)
+    (frame pattern: true
+      ⟨& (cell @x (e (e 0) (e 1)))
+         (cell @y
+           (group seen: true
+             (p "2" style: "text-blue-500")
+             (p "1" style: "text-blue-500")))⟩)
+    end)
+
+  (rack
+    (frame
+      (cell @x (e (d 0) (e 1)))
+      (rewriter (@x - (ascR (rulesetR)) - @y)
+        ±n => ^(+ n 1)
+        (e n_) => ^\n
+        (e a_ b_string) <> {a: ^b, b: ^a})
+      (cell @y))
+    (frame pattern: true
+      ⟨& (cell @x (e (d 0) (e 1)))
+         (cell @y (e "2" (d 1)))⟩)
+    end)
+
+  ;; descR: elementary
+  (rack
+    (frame
+      (cell @x (e (d 0) (e 1)))
+      (rewriter (@x - (descR (rulesetR)) - @y)
+        ±n => ^(+ n 1)
+        (e n_) => ^\n
+        (e a_ b_string) <> {a: ^b, b: ^a})
+      (cell @y))
+    (frame pattern: true
+      ⟨& (cell @x (e (d 0) (e 1)))
+         (cell @y (e (d 1) "1"))⟩)
+    end)
+
+  ;; bidiR: elementary
+  (rack
+    (frame
+      (cell @x ((+ "1" (I "2")) ?))
+      (part (@x @in) (in_ _))
+      (part (@x @out) (_ out_))
+      (rewriter (@in - bidiR - @out)
+        x_string => (node (token ^x))
+        (I (node a_)) => (node (cursor ^a))
+        (+ (node a_) (node b_)) => (node (seq ^a "+" ^b))))
+    (frame pattern: true
+      ⟨& (cell @x ((+ "1" (I "2")) (node (seq (token "1") "+" (cursor (token "2"))))))⟩)
+    end)
+
+  ;; View
+  (rack
+    (frame
+      (cell @in ((x y) z))
+      (cell @out)
+      (rewriter (@in - ascR - @out)
+        x => 100
+        y => 200
+        (±a ±b) => (result ^(+ a b))
+        (a_dict b←z) <> {b: ^a, a: ^b})
+      (backsys @out
+        {¦ -seen_} <> {seen: true}))
+    (frame pattern: true
+      ⟨& (cell @in ((x y) z))
+         (cell @out (z (result 300)))⟩)
+    (frame pattern: true
+      ⟨& (cell @in ((x y) z))
+         (cell @out (z (result 300) seen: true))⟩)
+    end)
+
+  ;; Feed
+  (rack
+    (frame
+      (cell @in ((x y) z))
+      (cell @out)
+      (rewriter (@in -> ascR -> @out)
+        x => 100
+        y => 200
+        (±a ±b) => (result ^(+ a b))
+        (a_dict b←z) <> {b: ^a, a: ^b})
+      (backsys @out
+        {¦ -seen_} <> {seen: true}))
+    (frame pattern: true
+      ⟨& (cell @in)
+         (cell @out (z (result 300)))⟩)
+    (frame pattern: true
+      ⟨& (cell @in)
+         (cell @out (z (result 300) seen: true))⟩)
+    end))
+

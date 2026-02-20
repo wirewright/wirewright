@@ -205,35 +205,6 @@ module Ww::D7
         end
       end
 
-      # Enforce agreement: make sure that edges in dependencies agree with
-      # the query env. For example, in:
-      #
-      #   (qux @a_ @b_ @c_) qux
-      #     -> (one a) (foo @a_ ⏏@b_⏏) {name: foo}
-      #     -> (one b) (bar @b_ ⏏@c_⏏) {name: bar}
-      #     -> (one c) (baz @c_ ⏏@a_⏏) {name: baz}
-      #
-      # ... the highlighted edges must be in agreement with the query env.
-      #
-      # We do not enforce agreement among dependencies *for captures absent in
-      # the master env*. For example, in:
-      #
-      #   (qux @a_ @b_) qux
-      #     -> (one a) (foo @a_ term_) {name: foo}
-      #     -> (one b) (bar @b_ term_) {name: bar}
-      #
-      # ... both *term*s are matched independently.
-      responses.map! do |response|
-        case response
-        in MatchGroup
-          D7.select(response, &.env.agrees_with?(query_env))
-        in Slice(MatchGroup) # children
-          response.map do |child|
-            D7.select(child, &.env.agrees_with?(query_env))
-          end
-        end
-      end
-
       match_table = MatchTable.assoc(query.name, MatchGroup[Match.new(node, query_env)])
 
       # Make sure dependency bounds are satisfied after agreement.
@@ -418,11 +389,11 @@ module Ww::D7
         next unless queries = @queries[head]?
 
         queries.each do |query|
-          maybe_matches = query.deps.all? do |_, dep|
+          probably_matches = query.deps.all? do |_, dep|
             dep.min.zero? || hg.has_head?(dep.head)
           end
 
-          next unless maybe_matches
+          next unless probably_matches
 
           crawl(hg, node, query) do |match_table|
             solns << Soln.new(match_table, query, query.index)

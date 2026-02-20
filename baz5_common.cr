@@ -338,8 +338,6 @@ class Ruleset
   def initialize(@pset : M1::PatternSet(Term), @rules : Slice(Rule::Any))
   end
 
-  DEFAULT_SELECTOR = ML.term("(%any° [rule pattern_ template_] [backmap pattern_ backspec_])")
-
   # - Capture `template` in *selector* forms a template rule.
   # - Capture `backspec` in *selector* forms a backmap rule.
   def self.select(selector, *bases, **kwargs)
@@ -382,9 +380,21 @@ class Ruleset
     {ruleset, rest}
   end
 
+  DEFAULT_SELECTOR = ML.term("(%any° [rule pattern_ template_] [backmap pattern_ backspec_])")
+
+  def self.select(base : Term)
+    self.select(DEFAULT_SELECTOR, base)
+  end
+
   def each_candidate(matchee : Term, & : M1::Op::Any, Rule::Any ->)
     @pset.each_candidate(matchee) do |op, index|
       yield op, @rules[index]
+    end
+  end
+
+  def each_candidate_with_id(matchee : Term, & : {M1::Op::Any, Rule::Any}, UInt32 ->)
+    @pset.each_candidate(matchee) do |op, index|
+      yield({op, @rules[index]}, index)
     end
   end
 

@@ -35,6 +35,7 @@ end
 include Ww
 
 require "./wirewright/m1"
+require "./wirewright/rho"
 require "../baz5"
 require "./wirewright/d7"
 require "../primitives"

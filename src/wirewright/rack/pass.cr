@@ -51,7 +51,7 @@ module Ww::Rack
         matchee = Term::Dict.build do |commit|
           permutation.each do |index|
             src_match = src[index]
-            commit << src_match.env[:value]
+            commit << D7.fetch(src_match, :value)
           end
         end
 
@@ -81,7 +81,7 @@ module Ww::Rack
 
         matchee = Term::Dict.build do |commit|
           permutation.each do |index|
-            commit << src[index].env[:value]
+            commit << D7.fetch(src[index], :value)
           end
         end
 
@@ -177,7 +177,7 @@ module Ww::Rack
       # cell may be empty.
       rule(<<-WWML) do |dev, src, dst|
       [view (srcs←((%past @_ min: 1)) pattern_ @dst_) template_] dev
-        -> (many srcs src) [cell @src_ value_] {name: src, min: 0}
+        -> (many srcs src) [cell @src_ term_] {name: src, min: 0}
         -> (one dst) [cell @dst_ _?] {name: dst}
       WWML
         src_edges, pattern, template = D7.fetch(dev, :srcs, :pattern, :template)
@@ -192,13 +192,13 @@ module Ww::Rack
         # Fetch src values.
         permutation = D7.permutation(src, :src, goal: src_edges.items)
 
-        src_values = Term::Dict.build do |commit|
+        src_terms = Term::Dict.build do |commit|
           permutation.each do |index|
-            commit << src[index].env[:value]
+            commit << D7.fetch(src[index], :term)
           end
         end
 
-        matchee = Term.of(src_values)
+        matchee = Term.of(src_terms)
         unless env = M1.match?(pattern, matchee)
           # Pattern mismatch. Clear the dst cell: the view is invalid.
           next D7.patch(dst, {2, nil})
@@ -210,6 +210,8 @@ module Ww::Rack
         end
 
         # instance : Term?
+        dst_term = D7.part?(dst, 2)
+        next if instance && dst_term && Term.extension?(dst_term, of: instance)
 
         D7.patch(dst, {2, instance})
       end
@@ -217,8 +219,8 @@ module Ww::Rack
       # View with dst pattern. It requires an existing nonempty dst cell.
       rule(<<-WWML) do |dev, src, dst|
       [view (srcs←((%past @_ min: 1)) src-pattern_ @dst_ dst-pattern_) template_] dev
-        -> (many srcs src) [cell @src_ value_] {name: src, min: 0}
-        -> (one dst) [cell @dst_ value_] {name: dst}
+        -> (many srcs src) [cell @src_ term_] {name: src, min: 0}
+        -> (one dst) [cell @dst_ term_] {name: dst}
       WWML
         src_edges, src_pattern, dst_pattern, template = D7.fetch(dev, :srcs, :"src-pattern", :"dst-pattern", :template)
 
@@ -237,19 +239,19 @@ module Ww::Rack
         # Fetch src values.
         permutation = D7.permutation(src, :src, goal: src_edges.items)
 
-        src_values = Term::Dict.build do |commit|
+        src_terms = Term::Dict.build do |commit|
           permutation.each do |index|
-            commit << src[index].env[:value]
+            commit << D7.fetch(src[index], :term)
           end
         end
 
-        # Fetch dst value.
-        dst_value = D7.fetch(dst, :value)
+        # Fetch dst term.
+        dst_term = D7.fetch(dst, :term)
 
         # Combine them using %all. This lets src_pattern constrain/learn from
         # dst_pattern and vice versa.
         pattern = Term.of(src_pattern, dst_pattern)
-        matchee = Term.of(src_values, dst_value)
+        matchee = Term.of(src_terms, dst_term)
         next unless env = M1.match?(pattern, Term.of(matchee))
 
         expansion, _ = Alloy.render0(env, template, severity: :quiet)
@@ -258,50 +260,61 @@ module Ww::Rack
         end
 
         # instance : Term?
+        next if instance && Term.extension?(dst_term, of: instance)
 
         D7.patch(dst, {2, instance})
       end
 
-      rule(<<-WWML) do |dev, src, ref, dst|
-      [view (srcs←((%past @_ min: 1)) pattern_ (@ref_ @dst_)) template_] dev
-        -> (many srcs src) [cell @src_ value_] {name: src, min: 0}
-        -> (one ref) [cell @ref_ _?] {name: ref}
-        -> (one dst) [cell @dst_ _?] {name: dst}
+      # TODO: Right now we do not support infinite rewriters since we
+      # don't know whether they'll terminate. We should schedule a task
+      # of some sort here; i.e., the rewrite may or may not complete
+      # in a single tick. We only guarantee completion in one tick for
+      # finite rewriters.
+      rule(<<-WWML) do |dev, src, spec, dst|
+      [rewriter (@input_ -> @spec_ -> @output_) rules_*] dev
+        -> (one input) [cell @input_ term_] {name: src}
+        -> (one spec) [cell @spec_ term_] {name: spec}
+        -> (one output) [cell @output_] {name: dst}
       WWML
-        src_edges, pattern, template = D7.fetch(dev, :srcs, :pattern, :template)
-        if src.size < src_edges.size
-          # Less edges than we require. This means the view is invalid now
-          # now since some source cells have disappeared. So we empty the dst cell.
-          next D7.patches(D7.patch(ref, {2, nil}), D7.patch(dst, {2, nil}))
+        rules = D7.fetch(dev, :rules)
+        spec_term = D7.fetch(spec, :term)
+        src_term = D7.fetch(src, :term)
+
+        rewriter = Rho.rewriter(spec_term, rules)
+        next unless rewriter.finite?
+
+        out_term = Term.collapse(rewriter.call(src_term))
+
+        D7.patches(
+          D7.patch(src, {2, nil}),
+          D7.patch(dst, {2, out_term}),
+        )
+      end
+
+      rule(<<-WWML) do |dev, src, spec, dst|
+      [rewriter (@input_ - @spec_ -  @output_) rules_*] dev
+        -> (one input) [cell @input_ _?] {name: src, min: 0}
+        -> (one spec) [cell @spec_ _?] {name: spec, min: 0}
+        -> (one output) [cell @output_ _?] {name: dst}
+      WWML
+        rules = D7.fetch(dev, :rules)
+
+        src_term = src.present? ? D7.part?(src, 2) : nil
+        spec_term = spec.present? ? D7.part?(spec, 2) : nil
+
+        if src_term.nil? || spec_term.nil?
+          next D7.patch(dst, {2, nil})
         end
 
-        assert src.size == src_edges.size
+        rewriter = Rho.rewriter(spec_term, rules)
+        next unless rewriter.finite?
 
-        # Fetch src values.
-        permutation = D7.permutation(src, :src, goal: src_edges.items)
+        out_term = Term.collapse(rewriter.call(src_term))
 
-        src_values = Term::Dict.build do |commit|
-          permutation.each do |index|
-            commit << src[index].env[:value]
-          end
-        end
+        dst_term = D7.part?(dst, 2)
+        next if dst_term && Term.extension?(dst_term, of: out_term)
 
-        matchee = Term.of(src_values)
-        unless env = M1.match?(pattern, matchee)
-          # Pattern mismatch. Clear the dst cell: the view is invalid.
-          next D7.patches(D7.patch(ref, {2, nil}), D7.patch(dst, {2, nil}))
-        end
-
-        expansion, _ = Alloy.render0(env, template, severity: :quiet)
-        unless expansion.empty?
-          instance = Term.collapse(expansion)
-        end
-
-        next if instance == D7.node(ref).term[2]?
-
-        # instance : Term?
-
-        D7.patches(D7.patch(ref, {2, instance}), D7.patch(dst, {2, instance}))
+        D7.patch(dst, {2, out_term})
       end
     end
   end
