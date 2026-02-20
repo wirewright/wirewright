@@ -118,11 +118,11 @@
   <> {M: (collapse selection ⸨left,right⸩)}
 
 ;; CURSOR Left and Right (move by rune).
-[[I M←(keyboard key ⸨left,right⸩ dn ⍊ -shift) _*] ((%pipe span A_) * _string) A_]
+[[I M←(keyboard key ⸨left,right⸩ dn ⍊ -shift) _*] ((%pipe charcount A_) * _string) A_]
   <> {(M): ((reset goal) (goto rune ⸨left,right⸩) (collapse selection ⸨left,right⸩))}
 
 ;; CURSOR C-Left and C-Right (move by word).
-[[I M←(keyboard key ⸨left,right⸩ dn ⍊ -shift ctrl) _*] ((%pipe span A_) * _string) A_]
+[[I M←(keyboard key ⸨left,right⸩ dn ⍊ -shift ctrl) _*] ((%pipe charcount A_) * _string) A_]
   <> {(M): ((reset goal) (goto word ⸨left,right⸩) (collapse selection ⸨left,right⸩))}
 
 ;; S-Left and S-Right (extend by rune).
@@ -158,11 +158,11 @@
   <> {(M): ((reset goal) (goto text ⸨left,right⸩))}
 
 ;; Backspace and delete (remove rune behind or ahead).
-[(I M←[keyboard key ⸨backspace,delete⸩ dn] _* ⍊ modify: true) ((%pipe span A_) * _string) A_]
+[(I M←[keyboard key ⸨backspace,delete⸩ dn] _* ⍊ modify: true) ((%pipe charcount A_) * _string) A_]
   <> {(M): ((reset goal) (goto rune ⸨left,right⸩) (splice "" ⸨left,right⸩))}
 
 ;; C-backspace and C-delete (remove word behind or ahead).
-[(I M←(keyboard key ⸨backspace,delete⸩ dn ⍊ ctrl) _* ⍊ modify: true) ((%pipe span A_) * _string) A_]
+[(I M←(keyboard key ⸨backspace,delete⸩ dn ⍊ ctrl) _* ⍊ modify: true) ((%pipe charcount A_) * _string) A_]
   <> {(M): ((reset goal) (goto word ⸨left,right⸩) (splice "" ⸨left,right⸩))}
 
 ;; Tag Up and Dn arrows according to whether they're pressed at the very
@@ -171,7 +171,7 @@
   <> {top: ^(not (includes? l "\n")), bot: ^(not (includes? r "\n"))}
 
 ;; CURSOR Up and Dn in multiline (go to goal column in line above or below).
-[(I M←(keyboard key ⸨up,dn⸩ dn ⍊ -shift ⸨top,bot⸩: false) _* ⍊ multiline: true) ((%pipe span A_) * _string) A_]
+[(I M←(keyboard key ⸨up,dn⸩ dn ⍊ -shift ⸨top,bot⸩: false) _* ⍊ multiline: true) ((%pipe charcount A_) * _string) A_]
   <> {(M): ((goto line ⸨up,dn⸩) (collapse selection ⸨left,right⸩))}
 
 ;; SELECTION Up and Dn (collapse in that direction).
@@ -501,7 +501,7 @@ C←[C'←[I M←[cancel compose] _*] compose _string]
 
 ;; Whitespace at end-of-text means try to submit, else try another interpretation
 ;; of whitespace.
-(%entry _ [(I M←(keyboard input " " ⍊ -◇_) _* ⍊ structural: true) ((%pipe span A←(%not 0)) * "") A_])
+(%entry _ [(I M←(keyboard input " " ⍊ -◇_) _* ⍊ structural: true) ((%pipe charcount A←(%not 0)) * "") A_])
   <> {M: (cond (submit item left) else: ^(up M)), ◇: true}
 
 ;; Whitespace with empty cursor means go to next spot.
@@ -509,7 +509,7 @@ C←[C'←[I M←[cancel compose] _*] compose _string]
   <> {M: (goto spot right enter: false)}
 
 ;; ')' should append then try to submit.
-(%entry _ [(I (keyboard input ")" ⍊ -◇_) `M _* ⍊ structural: true) ((%pipe span A←(%not 0)) * "") A_])
+(%entry _ [(I (keyboard input ")" ⍊ -◇_) `M _* ⍊ structural: true) ((%pipe charcount A←(%not 0)) * "") A_])
   <> {M: (submit item left), ◇: true}
 
 ;; ')' should otherwise escape dict right.
@@ -523,7 +523,7 @@ C←[C'←[I M←[cancel compose] _*] compose _string]
 ;; Up/Down with nonempty opposite side is the same as Home/End.
 (%entry _ [(I M←[keyboard key up dn] _* ⍊ structural: true) ("" * (%string nonempty)) 0])
   <> {M: (submit item right)}
-(%entry _ [(I M←[keyboard key dn dn] _* ⍊ structural: true) ((%pipe span A←(%not 0)) * "") A_])
+(%entry _ [(I M←[keyboard key dn dn] _* ⍊ structural: true) ((%pipe charcount A←(%not 0)) * "") A_])
   <> {M: (submit item left)}
 
 ;; Up/Down at the beginning or end of dict means escape it in
@@ -570,7 +570,7 @@ C←[C'←[I M←[cancel compose] _*] compose _string]
 ;; we proceed.
 ⟨[(I M←[keyboard key home dn] _* ⍊ structural: true) ("" * (%string nonempty)) 0]⟩
   <> {M: (cond (submit item right) then: (goto dict left))}
-⟨[(I M←[keyboard key end dn] _* ⍊ structural: true) ((%pipe span A←(%not 0)) * "") A_]⟩
+⟨[(I M←[keyboard key end dn] _* ⍊ structural: true) ((%pipe charcount A←(%not 0)) * "") A_]⟩
   <> {M: (cond (submit item left) then: (goto dict right))}
 
 ;; Home or End at begin/end-of-dict means go to begin/end of enclosing dict.
@@ -600,7 +600,7 @@ C←[C'←[I M←[cancel compose] _*] compose _string]
 (%entry _ [(I M←[keyboard key left dn] _* ⍊ structural: true) ("" * (%string nonempty)) 0])
   <> {M: (submit item right)}
 ;; Right at end-of-text means try to submit left (i.e., the cursor ends up to the left of the submission).
-(%entry _ [(I M←[keyboard key right dn] _* ⍊ structural: true) ((%pipe span A←(%not 0)) * "") A_])
+(%entry _ [(I M←[keyboard key right dn] _* ⍊ structural: true) ((%pipe charcount A←(%not 0)) * "") A_])
   <> {M: (submit item left)}
 
 ;; C-left or C-right mean force edit in that direction.
@@ -647,7 +647,7 @@ C←[C'←[I M←[cancel compose] _*] compose _string]
 
 ;; Typing `:` at the end will try to submit and edit pair with that key
 ;; if submit succeeds.
-⟨[(I M←(keyboard input ":" ⍊ -◇_) _* ⍊ structural: true) ((%pipe span A←(%not 0)) * "") A_]⟩
+⟨[(I M←(keyboard input ":" ⍊ -◇_) _* ⍊ structural: true) ((%pipe charcount A←(%not 0)) * "") A_]⟩
   <> {M: (cond (submit item left) then: (edit pair left) else: ^(up M)), ◇: true}
 
 ;; Home/End in no-value pair move to the begin or end of the dict's itemspart,
@@ -926,12 +926,12 @@ C←[(I M←[place] _* ⍊ sack: (%entry D_ _)) _*]
 ;; Key bindings
 ;;
 
-[(I M←(keyboard key enter dn ⍊ -shift) _* ⍊ history/submit: true) (l←(%pipe span A_) * "") A_]
+[(I M←(keyboard key enter dn ⍊ -shift) _* ⍊ history/submit: true) (l←(%pipe charcount A_) * "") A_]
   <> {(M): ((clear input) (history add ^l))}
-[(I M←(keyboard key enter dn ⍊ ctrl) _* ⍊ history/submit: true) (l←(%pipe span A_) * r_string) A_]
+[(I M←(keyboard key enter dn ⍊ ctrl) _* ⍊ history/submit: true) (l←(%pipe charcount A_) * r_string) A_]
   <> {(M): ((clear input) (history add ^(~ l r)))}
 
-[(I M←(keyboard key ⸨up,dn⸩ dn ⍊ -mod ⸨top,bot⸩: true -◇_) _* ⍊ history/nav: true) (l←(%pipe span A_) * _string) A_]
+[(I M←(keyboard key ⸨up,dn⸩ dn ⍊ -mod ⸨top,bot⸩: true -◇_) _* ⍊ history/nav: true) (l←(%pipe charcount A_) * _string) A_]
   <> {M: (goto history ⸨left,right⸩ fb: ^(up M)), ◇: true}
 
 ;;

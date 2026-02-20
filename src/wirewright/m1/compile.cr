@@ -494,8 +494,8 @@ module Ww::M1
         Op::Map.new(arg.as_d, compile(Π.pattern(successor)))
       end
 
-      matchpi %{[%'%pipe [%'%payload span] successor_]}, cue: {:"%pipe", :span} do
-        Op::Span.new(compile(Π.pattern(successor)))
+      matchpi %{[%'%pipe [%'%payload charcount] successor_]}, cue: {:"%pipe", :charcount} do
+        Op::Charcount.new(compile(Π.pattern(successor)))
       end
 
       matchpi %{[%'%pipe [%'%payload tally] successor_]}, cue: {:"%pipe", :tally} do

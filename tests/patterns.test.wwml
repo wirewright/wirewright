@@ -303,7 +303,7 @@
 
 ;; %pipe unary
 (group
-  (pattern (%pipe span n_)
+  (pattern (%pipe charcount n_)
     (= "" {n: 0})
     (= "hello world" {n: 11})
     (= "Jöhn Doë É̩ is\the\nre\r\r" {n: 22})

@@ -1643,13 +1643,13 @@ module Ww::M1
         # |@ m1.operator.pipe
         #
         # |@pattern
-        # (%'%pipe span _)
+        # (%'%pipe charcount _)
         #
         # |@block
         # Transforms a string matchee into the number of characters in it: e.g.,
-        # `(%pipe span 1)` matches strings that contain exactly one character
+        # `(%pipe charcount 1)` matches strings that contain exactly one character
         # (Unicode codepoint).
-        %{(%'%pipe fn←span successor_)},
+        %{(%'%pipe fn←charcount successor_)},
         # |@ m1.operator.pipe
         #
         # |@pattern
@@ -1723,11 +1723,11 @@ module Ww::M1
         # A utility function that prepends all of *terms* to a matchee dict.
         #
         # TODO: Backmaps currently can't modify the resulting dict. This should however
-        # be possible in the future, except for prepended terms.
+        # be possible in the future, except for prepended terms themselves.
         %{(%'%pipe fn←(prepend _*) successor_)},
         cue: :"%pipe",
-        cues: {:+, :-, :*, :/, :div, :mod, :**, :clamp, :map, :span, :tally,
-               :type, :ml, :untracked, :prepend}
+        cues: {:+, :-, :*, :/, :div, :mod, :**, :clamp, :map, :charcount,
+               :tally, :type, :ml, :untracked, :prepend}
       ) do
         Normalize.sealed(Term.of(:"%pipe", {:"%payload", fn}, normalize(Π.pattern(successor))))
       end

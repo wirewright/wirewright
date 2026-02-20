@@ -1526,8 +1526,8 @@ module Ww::M1
 
   # :nodoc:
   #
-  # (%pipe span 3) -- match char count of string
-  def match(ctx, op : Op::Span, matchee : Tzip, plan)
+  # (%pipe charcount 3) -- match char count of string
+  def match(ctx, op : Op::Charcount, matchee : Tzip, plan)
     return Fb[] unless a = matchee.term.as_s?
 
     cons(ctx, op.successor, Tzip.new(Term.of(a.charcount), Log.none), plan)
