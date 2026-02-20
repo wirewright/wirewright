@@ -1057,7 +1057,6 @@ def alloy_rulesetR(ctx, term, ruleset)
     in Rule::Template
       raise "not implemented"
     in Rule::Backmap
-      next unless M1.probably_matches?(op, term)
       next unless rep = M1.backmapR?(op, rule.backspec, term)
 
       if rep.size == 1
