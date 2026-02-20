@@ -39,7 +39,6 @@ require "../baz5"
 require "./wirewright/d7"
 require "../primitives"
 require "../libtermbox2"
-require "../inputr"
 
 require "./wirewright/alloy"
 require "./wirewright/rack"
