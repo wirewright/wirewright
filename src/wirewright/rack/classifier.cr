@@ -35,6 +35,10 @@ module Ww::Rack
         D7.parent(node.as_d, 1...node.itemsize)
       end
 
+      matchpi %{[picture @_ _]} do
+        D7.parent(node.as_d, 2...node.itemsize)
+      end
+
       matchpi %{[module bindings_dict _*]} do
         D7.scope(D7.parent(node.as_d, 2...node.itemsize), bindings: bindings.as_d)
       end

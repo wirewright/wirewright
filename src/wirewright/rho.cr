@@ -267,13 +267,15 @@ module Ww
         end
 
         matchpi %{(rulesetR ⍊ exh⋮ false)} do
-          rewriter(Term.morph(spec, {1, Ruleset::DEFAULT_SELECTOR}), data)
-        end
+          selector = spec[:selector]? || Ruleset::DEFAULT_SELECTOR
+          if section = spec[:section]?
+            continue unless ruledoc = data.as_d?
+            continue unless rulebase = ruledoc[section]?
+          else
+            rulebase = data
+          end
 
-        matchpi %{(rulesetR selector_ ⍊ exh⋮ false)} do
-          ruleset = Ruleset.select(selector, data)
-
-          rulesetR(ruleset, exh: exh.true?)
+          rulesetR(Ruleset.select(selector, rulebase), exh: exh.true?)
         end
 
         matchpi %{[exhR successor_]} do
@@ -304,6 +306,15 @@ module Ww
       REWRITER_CACHE.put_if_absent({spec, data}) do
         rewriter!(spec, data)
       end
+    end
+
+    # TODO: add support for rules / rewriter definitions.
+    def rewriter(document : Term) : Rewriter
+      return noR unless dict = document.as_d?
+      return noR unless section = dict[:rewriter]?
+      return noR unless spec = section.items.last?
+
+      rewriter(spec, document)
     end
   end
 end
