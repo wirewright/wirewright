@@ -459,7 +459,7 @@ These are all treated as symbols if written using the raw symbol literal.
 Wirewright number terms can be *exact* or *approximate*.
 
 Exact numbers are represented using a rational. Approximate (inexact) numbers
-are represented using a 64-bit float.
+are represented using a 61-bit float.
 
 Some operations maintain exactness of their arguments (e.g. `+`, `*`), while
 others yield an approximate result (e.g. `sqrt`, rational raised to the power
