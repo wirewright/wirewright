@@ -35,7 +35,7 @@ module Ww::DwUIR
           dw = dw.copy_with(bounds: dw.bounds
             .grow(dh: underline.try { |u| u.offset + u.thickness } || 0.0f32)
             .translate(origin)
-            .ceil)
+            .snap)
         in TextDrawable::Selection
           next unless sel = selection
 
@@ -44,8 +44,7 @@ module Ww::DwUIR
           dw = dw.copy_with(bounds: dw.bounds
             .resize(h: sel_height)
             .translate(origin)
-            .mapx(&.round)
-            .mapy(&.ceil))
+            .snap)
         end
 
         sink.call(dw)

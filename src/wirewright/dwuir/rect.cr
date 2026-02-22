@@ -314,7 +314,7 @@ module Ww::DwUIR
     # Returns a rectangle aligned to the integer grid that fully encloses
     # this one.
     def snap : Rect
-      Rect.new(tl: tl.floor, br: br.ceil)
+      Rect.new(tl: tl.floor, size: size.ceil)
     end
 
     # Returns a copy of this rectangle padded by *n*.
@@ -356,18 +356,6 @@ module Ww::DwUIR
     # point (`mid`) of this rectangle.
     def map(point : Point) : Point
       Point.new(x + point.x * w, y + point.y * h)
-    end
-
-    # Changes the X components of the top-left and bottom-right corners using
-    # the block. Returns the resulting rectangle.
-    def mapx(& : Float32 -> Float32) : Rect
-      Rect.new(Point.new((yield tl.x), tl.y), Point.new((yield br.x), br.y))
-    end
-
-    # Changes the Y components of the top-left and bottom-right corners using
-    # the block. Returns the resulting rectangle.
-    def mapy(& : Float32 -> Float32) : Rect
-      Rect.new(Point.new(tl.x, (yield tl.y)), Point.new(br.x, (yield br.y)))
     end
 
     # Maps a point from rectangle space into [0,1]x[0,1].
