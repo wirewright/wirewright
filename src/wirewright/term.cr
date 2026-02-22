@@ -488,7 +488,12 @@ module Ww
     # Converts this term to an object of the given *type*, if possible.
     # Raises `TypeCastError` if not.
     def to(type)
-      to?(type) || raise TypeCastError.new
+      result = to?(type)
+      if result.nil?
+        raise TypeCastError.new
+      end
+
+      result
     end
 
     # Compares this and *other* terms using `Term.compare`. This method mainly
