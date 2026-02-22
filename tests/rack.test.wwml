@@ -4735,3 +4735,208 @@
          (cell @out (z (result 300) seen: true))⟩)
     end))
 
+;; Component instantiation
+(group
+  ;; Components are instantiated
+  (rack/instantiate
+    (seed
+      (Foo) => (Bar 0)
+      (node @x (Foo)))
+    (frame
+      (node @x (Bar 0))))
+
+  ;; Nested components are instantiated
+  (rack/instantiate
+    (seed
+      (Foo) => (Bar 0)
+      (Bar ±n) => (Qux ^(+ n 1))
+      (Qux n_) => (p ^"Hello World, ⸢n⸣")
+      (node @x (Foo)))
+    (frame
+      (node @x (p "Hello World, 1"))))
+
+  ;; Components are not instantiated recursively
+  (rack/instantiate
+    (seed
+      (Foo) => (Bar 0)
+      (Bar ±n) => (Bar ^(+ n 1))
+      (node @x (Foo)))
+    (frame
+      (node @x (Bar 1))))
+
+  ;; Specificity is taken into account
+  (rack/instantiate
+    (seed
+      (Foo ±a) => (cell @x ^a)
+      (Foo a_) => (cell @y ^a)
+      (Foo 100)
+      (Foo qux))
+    (frame
+      (cell @x 100)
+      (cell @y qux)))
+  (rack/instantiate
+    (seed
+      (Foo a_) => (cell @y ^a)
+      (Foo ±a) => (cell @x ^a)
+      (Foo 100)
+      (Foo qux))
+    (frame
+      (cell @x 100)
+      (cell @y qux)))
+
+  ;; Nested components are instantiated in device component body
+  (rack/instantiate
+    (seed
+      (Foo a_)
+        => (component
+             (template (Bar ^a))
+             (Baz)
+             (Boo))
+      (Bar ±n) => (cell @x ^n)
+      (Baz) => (feed @x @y)
+      (Boo) => (cell @y)
+
+      (Foo 123))
+    (frame
+      (module {}
+        (cell @x 123)
+        (feed @x @y)
+        (cell @y))))
+
+  ;; Only inert nodes are considered
+  (rack/instantiate
+    (seed
+      (cell @_ _) => "BOOM"
+      (cell @x 0))
+    (frame
+      (cell @x 0)))
+
+  ;; Only inert nodes are considered in device component body
+  (rack/instantiate
+    (seed
+      (cell @_ _) => "BOOM"
+      (Foo a_)
+        => (component
+             (template
+               (cell @x ^a))
+             (cell @y ^a))
+
+      (Foo 100))
+    (frame
+      (module {}
+        (cell @x 100)
+        (cell @y ^a))))
+
+  ;; Template can be used anywhere passable.
+  (rack/instantiate
+    (seed
+      (Counter value_)
+        => (component
+             (cell @picture
+               (template ^value))
+             (picture @picture
+               (group style: "bg-blue-500"
+                 (node @view
+                   (template (p ^\value))))))
+      (Counter 100))
+    (frame
+      (module {}
+        (cell @picture
+          (template ^value))
+        (picture @picture
+          (group style: "bg-blue-500"
+            (node @view
+              (p "100")))))))
+
+  ;; Templates with multiple children are instantiated as groups
+  (rack/instantiate
+    (seed
+      (Foo value_)
+        => (component
+             (template
+               (cell @a ^(+ value 0))
+               (cell @b ^(+ value 1))
+               (cell @c ^(+ value 2)))
+             (discard @a)
+             (discard @b))
+      (Foo 100))
+    (frame
+      (module {}
+        (group
+          (cell @a 100)
+          (cell @b 101)
+          (cell @c 102))
+        (discard @a)
+        (discard @b))))
+
+  ;; Surface in component
+  (rack/instantiate
+    (seed
+      (Counter ±initial)
+        => (component
+             (surface (@surface (counter ±count))
+               (counter ^initial))
+             (backsys @count
+               ±n <> {n: ^(+ n 1)}))
+      (Counter 123))
+    (frame
+      (device (@surface (counter 123))
+        (part (@surface @count) (counter ±count))
+        (backsys @count
+          ±n <> {n: ^(+ n 1)}))))
+
+  ;; Surfaces with multiple parts group those parts
+  (rack/instantiate
+    (seed
+      (Button caption_ action_)
+        => (component
+             (surface (@surface (button action_ actions←(_*)))
+               (button ^action ()))
+             (node @view
+               (template (p ^caption))))
+      (Button "Increment" inc))
+    (frame
+      (device (@surface (button inc ()))
+        (group
+          (part (@surface @action) (button action_ actions←(_*)))
+          (part (@surface @actions) (button action_ actions←(_*))))
+        (node @view
+          (p "Increment")))))
+
+  ;; If component has multiple surfaces, that is treated as no surfaces
+  (rack/instantiate
+    (seed
+      (Foo)
+        => (component
+             (surface (@first (foo a_))
+               (foo 100))
+             (surface (@second (bar b_))
+               (bar 200))
+             (discard @a)
+             (discard @b))
+      (Foo))
+    (frame
+      (module {}
+       ;; they're simply ignored
+       (surface (@first (foo a_))
+         (foo 100))
+       (surface (@second (bar b_))
+         (bar 200))
+        (discard @a)
+        (discard @b))))
+
+  ;; If surface has no captures, we handle that gracefully
+  (rack/instantiate
+    (seed
+      (Foo)
+        => (component
+             (cell @x 100)
+             (surface (@surface (button))
+               (button))
+             (discard @x))
+      (Foo))
+    (frame
+      (device (@surface (button))
+        (cell @x 100)
+        (group) ;; No parts
+        (discard @x)))))

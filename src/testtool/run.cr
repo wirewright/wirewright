@@ -18,6 +18,7 @@ module Testtool
                SpecificityTest |
                CapturesEq |
                RackTest |
+               RackInstantiateTest |
                EditTest |
                TermComparison |
                ImageComparison
@@ -71,7 +72,7 @@ module Testtool
   defrecord RackTest, seed : Term, frames : Array(Term)
 
   def run(test : RackTest, assets, stat, complaints) : Nil
-    frames = D7.coarse_frames(Rack.clf, test.seed, Rack::Tspace.pass, Rack.pass)
+    frames = D7.coarse_frames(Rack.clf, Rack.instantiate(test.seed), Rack::Tspace.pass, Rack.pass)
 
     # Skip through seed.
     before = frames.next
@@ -101,6 +102,33 @@ module Testtool
         end
       end
     end
+  end
+
+  defrecord RackInstantiateTest, seed : Term, instance : Term
+
+  def run(test : RackInstantiateTest, assets, stat, complaints) : Nil
+    actual = measure(stat) { Rack.instantiate(test.seed) }
+
+    # Convenience: ignore rules.
+    if dict = actual.as_d?
+      (0...dict.itemsize).reverse_each do |index|
+        item = dict[index]
+
+        Term.matchpi?(item, %{[rule _ _]}) do
+          dict = dict.without_item(index)
+        end
+      end
+
+      actual = Term.of(dict)
+    end
+
+    return if test.instance == actual
+
+    complaints << complaint("Rack instance mismatch",
+      before: test.seed,
+      after: test.instance,
+      got: actual,
+    )
   end
 
   defrecord AlloyTest, vars : Term::Dict, template : Term, expansion : Term, issues : Term::Dict

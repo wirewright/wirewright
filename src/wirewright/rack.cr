@@ -25,7 +25,7 @@ module Ww::Rack
   # loop is already closed: you can modify Microfold in response to changes in the symbolic
   # picture, which in turn changes the picture, and so on.
   def visualize(circuit : Term, *, blacklist : Set(Term) = Set{Term.of(:rule), Term.of(:backmap)}, strip : Set(Term) = Set(Term).new, addrs : Bool = false) : Term
-    D7.image(clf.call(circuit), circuit) do |addr, feature|
+    D7.image(clf, circuit) do |addr, feature|
       case feature
       in D7::ParentImage
         Term.case(feature.parent.node) do
