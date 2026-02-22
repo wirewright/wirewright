@@ -4697,16 +4697,16 @@ end
 
 struct Time
   def self.measured(& : -> T) : {Time::Span, T} forall T
-    b = Time.monotonic
+    b = Time.instant
     result = yield
-    e = Time.monotonic
+    e = Time.instant
     {e - b, result}
   end
 
   def self.measure(sink : Time::Span ->, & : -> T) : T forall T
-    b = Time.monotonic
+    b = Time.instant
     result = yield
-    e = Time.monotonic
+    e = Time.instant
     sink.call(e - b)
     result
   end
