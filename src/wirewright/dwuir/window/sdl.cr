@@ -537,8 +537,8 @@ module Ww::DwUIR
 
       case event.type
       when .keyup?
-        dispatch(event.window_id, off, sink)
         dispatch(event.window_id, up, sink)
+        dispatch(event.window_id, off, sink)
       when .keydown?
         if event.repeat > 0
           # Repeats are mapped to up-dn for consistency.
