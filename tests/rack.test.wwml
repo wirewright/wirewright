@@ -4667,6 +4667,48 @@
          (cell @y (e "2" (d 1)))⟩)
     end)
 
+  ;; ascR: impassable selector
+  (rack
+    (frame
+      (cell @x (+ (literal "100") (literal "200") "300"))
+      (rewriter (@x - ascR - @y)
+        (impassable '_)
+        x_string => (seen ^x)
+        'x_ => (leaf ^x))
+      (cell @y))
+    (frame pattern: true
+      ⟪(cell @y (+ (leaf "100") (leaf "200") (seen "300")))⟫)
+    end)
+
+  ;; ascR: passable
+  (rack
+    (frame
+      (cell @x
+        (+ (literal "100") (+ "a" "b") (literal "200") "300"))
+      (rewriter (@x - ascR - @y)
+        (passable (+ _*))
+        x_string => (seen ^x))
+      (cell @y))
+    (frame pattern: true
+      ⟪(cell @y
+         (+ (literal "100") (+ (seen "a") (seen "b")) (literal "200") (seen "300")))⟫)
+    end)
+
+  ;; ascR: passable + impassable
+  (rack
+    (frame
+      (cell @x
+        (+ (literal "100") (+ "a" "b") (literal "200") "300"))
+      (rewriter (@x - ascR - @y)
+        (passable (+ _*))
+        (impassable (+ _ _))
+        x_string => (seen ^x))
+      (cell @y))
+    (frame pattern: true
+      ⟪(cell @y
+         (+ (literal "100") (+ "a" "b") (literal "200") (seen "300")))⟫)
+    end)
+
   ;; descR: elementary
   (rack
     (frame

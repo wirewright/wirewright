@@ -123,6 +123,15 @@ module Ww
       end
     end
 
+    private def leaf?(passable, impassable, input : Term) : Bool
+      return true unless input.type.dict?
+
+      return true if passable && passable.present? && !passable.probe?(input)
+      return true if impassable && impassable.present? && impassable.probe?(input)
+
+      false
+    end
+
     # *Descending rewrite*: pre-order depth-first rewrite of a dictionary *part*.
     def descR(
       successor : Rewriter,
@@ -134,23 +143,20 @@ module Ww
     end
 
     private def descR(successor, part, passable, impassable, input : Term)
-      unless dict = input.as_d?
+      if leaf?(passable, impassable, input)
         return successor.call(input)
       end
-
-      return Term.rep(input) if passable && !passable.probe?(input)
-      return Term.rep(input) if impassable && impassable.probe?(input)
 
       rep = successor.call(input)
       if Term.changes?(input, after: rep)
         return rep
       end
 
-      output = Term.flatten(dict, part: part) do |_, value|
+      output = Term.flatten(input, part: part) do |_, value|
         descR(successor, part, passable, impassable, value)
       end
 
-      Term.rep(Term.of(output))
+      Term.rep(output)
     end
 
     # *Ascending rewrite*: post-order depth-first rewrite of a dictionary *part*.
@@ -164,10 +170,9 @@ module Ww
     end
 
     private def ascR(successor, part, passable, impassable, input : Term)
-      return successor.call(input) unless input.type.dict?
-
-      return Term.rep(input) if passable && !passable.probe?(input)
-      return Term.rep(input) if impassable && impassable.probe?(input)
+      if leaf?(passable, impassable, input)
+        return successor.call(input)
+      end
 
       output = Term.flatten(input, part: part) do |_, value|
         ascR(successor, part, passable, impassable, value)
@@ -190,12 +195,9 @@ module Ww
     end
 
     private def bidiR(successor, part, passable, impassable, input : Term)
-      unless input.type.dict?
+      if leaf?(passable, impassable, input)
         return successor.call(input)
       end
-
-      return Term.rep(input) if passable && !passable.probe?(input)
-      return Term.rep(input) if impassable && impassable.probe?(input)
 
       rep = successor.call(input)
       if Term.changes?(input, after: rep)
@@ -238,11 +240,39 @@ module Ww
     end
 
     # :nodoc:
-    SHORTHAND_ASCR = Term.of(:ascR, Term.of(:rulesetR, exh: true))
+    SHORTHAND_ASCR = ML.term(<<-WWML)
+    (ascR (rulesetR exh: true)
+      passable: [passable pattern_]
+      impassable: [impassable pattern_])
+    WWML
+
     # :nodoc:
-    SHORTHAND_DESCR = Term.of(:descR, Term.of(:rulesetR, exh: true))
+    SHORTHAND_DESCR = ML.term(<<-WWML)
+    (descR (rulesetR exh: true)
+      passable: [passable pattern_]
+      impassable: [impassable pattern_])
+    WWML
+
     # :nodoc:
-    SHORTHAND_BIDIR = Term.of(:bidiR, Term.of(:rulesetR, exh: true))
+    SHORTHAND_BIDIR = ML.term(<<-WWML)
+    (bidiR (rulesetR exh: true)
+      passable: [passable pattern_]
+      impassable: [impassable pattern_])
+    WWML
+
+    private def dirR(spec : Term, data : Term, &) : Rewriter
+      Term.matchpi(spec, %{[_ successor_]}) do
+        if passable = spec[:passable]?
+          passable_set = M1::PatternSet(Term).select(passable, data)
+        end
+
+        if impassable = spec[:impassable]?
+          impassable_set = M1::PatternSet(Term).select(impassable, data)
+        end
+
+        yield rewriter(successor, data), passable_set, impassable_set
+      end
+    end
 
     def rewriter!(spec : Term, data : Term) : Rewriter
       Term.case(spec) do
@@ -282,16 +312,22 @@ module Ww
           exhR(rewriter(successor, data))
         end
 
-        matchpi %{[ascR successor_]} do
-          ascR(rewriter(successor, data))
+        matchpi %{[ascR _]} do
+          dirR(spec, data) do |successorR, passable_set, impassable_set|
+            ascR(successorR, passable: passable_set, impassable: impassable_set)
+          end
         end
 
-        matchpi %{[descR successor_]} do
-          descR(rewriter(successor, data))
+        matchpi %{[descR _]} do
+          dirR(spec, data) do |successorR, passable_set, impassable_set|
+            descR(successorR, passable: passable_set, impassable: impassable_set)
+          end
         end
 
         matchpi %{[bidiR successor_]} do
-          bidiR(rewriter(successor, data))
+          dirR(spec, data) do |successorR, passable_set, impassable_set|
+            bidiR(successorR, passable: passable_set, impassable: impassable_set)
+          end
         end
 
         otherwise do

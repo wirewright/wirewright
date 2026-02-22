@@ -55,6 +55,10 @@ module Ww::M1
       def initialize(@map : Hash(T, Bucket), @key : Key(T))
       end
 
+      def empty? : Bool
+        @map.empty?
+      end
+
       def bucket?(matchee : Term) : Bucket?
         return unless key = @key.of_matchee?(matchee)
 
@@ -199,6 +203,16 @@ module Ww::M1
       ::Ww::Term.case({{matchee}}, matcher: ::Ww::M1::PatternSet::Matcher, {{kwargs.double_splat}}) {{block}}
     end
 
+    # Returns `true` if there are no patterns in this set.
+    def empty? : Bool
+      @keyed.empty? && @unkeyed.empty?
+    end
+
+    # Returns `true` if there is at least one pattern in this set.
+    def present? : Bool
+      !empty?
+    end
+
     # Yields operators and indices (see `.select`) of patterns that *probably*
     # match *matchee*.
     def each_candidate(matchee : Term, & : M1::Op::Any, UInt32 ->) : Nil
@@ -242,7 +256,7 @@ module Ww::M1
 
     def probe?(matchee : Term) : Bool
       each_candidate(matchee) do |op, _|
-        next unless M1.probe?(op, matchee)
+        next unless M1.probe?(Term[], op, matchee)
         return true
       end
 
