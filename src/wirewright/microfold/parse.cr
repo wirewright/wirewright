@@ -234,9 +234,7 @@ module Ww::Microfold::Parse
           segment = Rtk.view(r) { Rtk.skip_to(r, '-') }
 
           case segment
-          when .empty?
-            raise ArgumentError.new("empty src")
-          when .starts_with?('0'..'9'), "true", "false"
+          when .empty?, .starts_with?('0'..'9'), "true", "false"
             false # revert, it's definitely a value ahead
           else
             key = parse! symbol(segment, issues)
