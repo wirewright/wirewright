@@ -39,6 +39,10 @@ module Ww::Rack
         D7.parent(node.as_d, 2...node.itemsize)
       end
 
+      matchpi %{[keyboard _*]} do
+        D7.gnd(node)
+      end
+
       matchpi %{[module bindings_dict _*]} do
         D7.scope(D7.parent(node.as_d, 2...node.itemsize), bindings: bindings.as_d)
       end
