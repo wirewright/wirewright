@@ -35,6 +35,10 @@ module Ww::Rack
             Slice[Term.morph(child, {:addr, addr})]
           end
 
+          matchpi %{(window _* ⍊ -addr)} do
+            Slice[Term.morph(feature.node, {:addr, addr})]
+          end
+
           matchpi %{{¦ style}} do
             node = feature.node
             strip.each do |key|
