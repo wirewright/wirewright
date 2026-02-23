@@ -1380,6 +1380,13 @@ module Ww
       end
     end
 
+    # NOTE: We should actually compare full hashes first in match?, but for
+    # whatever reason, either because Crystal codegens wrong, or for some
+    # other reason, we have a SEGFAULT if we also store @path on Item and Pair;
+    # which is fixed by making struct Item and struct Pair into class Item and
+    # class Pair, and I don't want to do that, because it makes us slower. Since
+    # this is a temp implementation anyway, we don't *really* care at this point.
+
     # Includers are fetch probes with stored entry type `E` and key type `K`.
     module Fetch(E, K)
       include Pf::Kit::IProbeFetch(E)

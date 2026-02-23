@@ -815,98 +815,6 @@ module Ww
   # Hashing, comparison
 
   struct Term
-    # An object encapsulating hash function state, analogous to `Crystal::Hasher`.
-    #
-    # Currently implements the 64-bit Fowler–Noll–Vo hash function.
-    #
-    # With hashes, we want global stability, meaning stability across all machines
-    # and runs; despite susceptibility to e.g. HashDoS. This is because Wirewright's
-    # Terms are for use in a purely functional setting; randomly seeded hash functions
-    # lead to different dict entry order per run/machine => different return result
-    # for `(hashcode term_)` in particular, which we would consider a bug -- not a feature,
-    # as conventional languages do.
-    #
-    # Note that due to hash collisions and the way symbols are implemented right now,
-    # dictionaries have a special ordered variant of their `each_entry`, namely
-    # `each_entry(Dict::EntriesOrd)`, that one must use if one wants to do globally stable,
-    # ordered pretty printing or entry iteration. This is because the moment we have a collision,
-    # the hash function is of no use ordering entries. And with symbols -- the way we
-    # implement them right now for efficiency -- their hash code roughly depends on
-    # the time they were created at / the order in which they were created, which is
-    # obviously globally indeterminate.
-    #
-    # WARNING: `Hasher` is a mutable struct. Pass it around with care.
-    struct Hasher
-      # Reference: https://softwareengineering.stackexchange.com/a/145633
-
-      # :nodoc:
-      FNV_OFFSET_BASIS = 14695981039346656037u64
-      # :nodoc:
-      FNV_PRIME = 1099511628211u64
-
-      def initialize
-        @state = FNV_OFFSET_BASIS
-      end
-
-      # Breaks up *object* into constituent bytes.
-      def blast(object : UInt8, & : UInt8 ->) : Nil
-        yield object
-      end
-
-      # :ditto:
-      def blast(object : UInt32, & : UInt8 ->) : Nil
-        bytes = object.unsafe_as(StaticArray(UInt8, 4))
-        bytes.each { |byte| yield byte }
-      end
-
-      # :ditto:
-      def blast(object : Int32, & : UInt8 ->) : Nil
-        blast(object.unsafe_as(UInt32)) { |byte| yield byte }
-      end
-
-      # :ditto:
-      def blast(object : UInt64, & : UInt8 ->) : Nil
-        bytes = object.unsafe_as(StaticArray(UInt8, 8))
-        bytes.each { |byte| yield byte }
-      end
-
-      # :ditto:
-      def blast(object : Float64, & : UInt8 ->) : Nil
-        blast(object.unsafe_as(UInt64)) { |byte| yield byte }
-      end
-
-      # :ditto:
-      def blast(object : Enum, & : UInt8 ->) : Nil
-        blast(object.value) { |byte| yield byte }
-      end
-
-      # :ditto:
-      def blast(object : Enumerable, & : UInt8 ->) : Nil
-        object.each do |element|
-          blast(element) { |byte| yield byte }
-        end
-      end
-
-      # Returns the hashcode built so far.
-      def result : UInt64
-        @state
-      end
-
-      # Incorporates *object* into the hash. See `blast` for a list of
-      # supported types.
-      def append(object) : Nil
-        blast(object) do |byte|
-          @state ^= byte
-          @state &*= FNV_PRIME
-        end
-      end
-
-      # Alias of `append`.
-      def <<(object) : Nil
-        append(object)
-      end
-    end
-
     # :nodoc:
     @[Link("xxhash")]
     lib LibXXH64
@@ -915,82 +823,140 @@ module Ww
       fun hashcode = XXH3_64bits(input : Void*, length : LibC::SizeT) : UInt64
     end
 
-    # Returns the hashcode of *object*. See `hashcode(hasher, object)` overloads
-    # to learn about supported types of *object*s.
-    def self.hashcode(object) : UInt64
-      hasher = hashcode(Hasher.new, object)
-      hasher.result
+    @[AlwaysInline]
+    private def self.ror64(v : UInt64, r : UInt64) : UInt64
+      (v >> r) | (v << (64 - r))
     end
 
-    # Fast path for itemspart keys (indices).
-    def self.hashcode(hasher : Hasher, object : Int32) : Hasher
-      hasher << object
-      hasher
-    end
-
-    # Appends the hash of a symbol term *object* to *hasher*.
-    def self.hashcode(hasher : Hasher, object : Sym) : Hasher
-      hasher << TermType::Symbol
-      hasher << object.@bits
-      hasher
-    end
-
-    # Appends the hash of a string term *object* to *hasher*.
-    def self.hashcode(hasher : Hasher, object : Str) : Hasher
-      # Use XXHash for strings. They can be heavy. Everything else isn't so XXHash
-      # is an overkill versus a few multiplies and XORs.
-      bytes = object.to_slice
-      hashcode = LibXXH64.hashcode(bytes, bytes.size)
-
-      hasher << TermType::String
-      hasher << hashcode
-      hasher
-    end
-
-    # Appends the hash of a number term *object* to *hasher*.
-    def self.hashcode(hasher : Hasher, object : Num) : Hasher
-      hasher << TermType::Number
-      hasher << object.hashrepr
-      hasher
-    end
-
-    # Appends the hash of a boolean term *object* to *hasher*.
-    def self.hashcode(hasher : Hasher, object : Boolean) : Hasher
-      hasher << TermType::Boolean
-      hasher << (object.true? ? 1u8 : 0u8)
-      hasher
+    # Reference: https://jonkagstrom.com/bit-mixer-construction/
+    private def self.mxrmx(x : UInt64) : UInt64
+      x &*= 0x94d049bb133111ebu64
+      x ^= ror64(x, 56) ^ ror64(x, 32)
+      x &*= 0xff51afd7ed558ccdu64
+      x ^= x >> 23
+      x
     end
 
     # :nodoc:
-    HASHCODE_DICT_TYPE = begin
-      hasher = Hasher.new
-      hasher << TermType::Dict
-      hasher.result
+    #
+    # TODO: We'd want to get rid of this in the future: there's no point in hashing
+    # indices in the first place. Right now, though, dicts are unstructured, that is,
+    # different insertion order may give different dicts; thus, we must hash index
+    # in while hashing the dict's items. When dicts are structured, and thus iteration
+    # order is globally stable & deterministic, we'd be able to simply hash the chain
+    # of items (that is, at dict nodes, not here in Term.hashcode!)
+    def self.hashcode(index : Int32) : UInt64
+      mxrmx(index.to_u64)
     end
 
-    # Appends the hash of a dict term *object* to *hasher*.
-    def self.hashcode(hasher : Hasher, object : Dict) : Hasher
-      hashcode = object.hashcode do
-        state = HASHCODE_DICT_TYPE
+    # :nodoc:
+    #
+    # Symbols use plain bit mixing.
+    def self.hashcode(term : Term::Sym)
+      mxrmx(term.@bits)
+    end
 
-        object.each_entry do |key, value|
-          pair_hasher = Hasher.new
-          pair_hasher = hashcode(pair_hasher, key)
-          pair_hasher = hashcode(pair_hasher, value)
-          state &+= pair_hasher.result
+    # :nodoc:
+    #
+    # Strings use XXH3.
+    def self.hashcode(term : Term::Str) : UInt64
+      string = term.to(String)
+
+      Term::LibXXH64.hashcode(string.to_unsafe, string.bytesize)
+    end
+
+    # :nodoc:
+    #
+    # Numbers use plain bit mixing.
+    def self.hashcode(term : Term::Num) : UInt64
+      mxrmx(term.hashrepr)
+    end
+
+    # :nodoc:
+    #
+    # Booleans hash into a TRUE or FALSE constant, which are simply random numbers.
+    def self.hashcode(term : Term::Boolean)
+      if term.true?
+        0x473419c1b81a5431u64
+      else
+        0x143ea81786b6282cu64
+      end
+    end
+
+    # :nodoc:
+    DICT_FNV_OFFSET_BASIS = 14695981039346656037u64
+    # :nodoc:
+    DICT_FNV_PRIME = 1099511628211u64
+
+    # :nodoc:
+    #
+    # NOTE: Ideally, in the future, we won't have to do this [here], as
+    # Dict will recalculate its hash live, on change, hierarchically.
+    def self.hashcode(term : Term::Dict) : UInt64
+      term.hashcode do
+        buffer = uninitialized UInt8[16]
+        buffer64 = buffer.to_slice.unsafe_slice_of(UInt64)
+
+        state = 0xae32afc0becc90bbu64
+
+        term.each_item_with_index do |item, index|
+          substate = DICT_FNV_OFFSET_BASIS
+
+          substate ^= TermType::Number.value
+          substate &*= DICT_FNV_PRIME
+
+          substate ^= item.type.value
+          substate &*= DICT_FNV_PRIME
+
+          buffer64.unsafe_put(0, hashcode(index))
+          buffer64.unsafe_put(1, hashcode(item))
+
+          buffer.each do |byte|
+            substate ^= byte
+            substate &*= DICT_FNV_PRIME
+          end
+
+          state &+= substate
+        end
+
+        term.each_entry(in: Term::Dict.pairspart) do |key, value|
+          substate = DICT_FNV_OFFSET_BASIS
+
+          substate ^= key.type.value
+          substate &*= DICT_FNV_PRIME
+
+          substate ^= value.type.value
+          substate &*= DICT_FNV_PRIME
+
+          buffer64.unsafe_put(0, hashcode(key))
+          buffer64.unsafe_put(1, hashcode(value))
+
+          buffer.each do |byte|
+            substate ^= byte
+            substate &*= DICT_FNV_PRIME
+          end
+
+          state &+= substate
         end
 
         state
       end
-
-      hasher << hashcode
-      hasher
     end
 
-    # Appends the hash of a term *object* to *hasher*.
-    def self.hashcode(hasher : Hasher, object : Term) : Hasher
-      hashcode(hasher, Term[object])
+    # :nodoc:
+    def self.hashcode(term : Term)
+      hashcode(Term[term])
     end
+
+    {% if flag?(:docs) %}
+      # Returns a 64-bit digest of *term*.
+      #
+      # NOTE: This is a non-cryptographic hash. It is not meant to be used in
+      # adversarial scenarios. I also cannot attest to its quality as I'm not
+      # a cryptographer.
+      def self.hashcode(term : Term::Any | Term) : UInt64
+      end
+    {% end %}
 
     # Compares two term instances. Comparison is performed on the `TermType` first,
     # and then on the actual value using `<=>` if the types are equal. See `TermType`

@@ -110,7 +110,8 @@
 
 (branches-card (branches_*)) =>
   (z-stack z-index: local
-   (rect z-index: -1
+   (rect
+     z-index: -1
      fill: (oklch 0.2 0 0)
      radius-tl: 10
      radius-tr: 10
@@ -275,6 +276,7 @@
   (align x: 0.5 y: 0.5
     (z-stack z-index: local
       (rect
+        z-index: -1
         fill: white
         radius-tl: (* 1)
         radius-tr: (* 1)
@@ -287,6 +289,7 @@
   (align x: 0.5 y: 0.5
     (z-stack z-index: local
       (rect
+        z-index: -1
         stroke: (oklch 0.8 0 0)
         thickness-l: 1
         thickness-r: 1
@@ -303,7 +306,8 @@
   (z-stack z-index: local
     (^match active
       (when true
-        (rect z-index: -1
+        (rect
+          z-index: -1
           fill:
             (linear-gradient start-l: 0
               (stop 0 (oklch 0.4496 0.0686 143.68))
@@ -313,7 +317,8 @@
           radius-bl: 7
           radius-br: 7))
       (when false
-        (rect z-index: -1
+        (rect
+          z-index: -1
           stroke: (oklch 0.25 0 0)
           thickness-l: 1
           thickness-r: 1
@@ -340,7 +345,8 @@
 
 (status-badge caption_string ¦ _ hue_number) =>
   (z-stack z-index: local
-    (rect z-index: -1
+    (rect
+      z-index: -1
       fill: (oklch 0.3 0.05 ^hue)
       stroke: (oklch 0.5 0.05 ^hue)
       thickness-l: 1
@@ -387,7 +393,8 @@
 
 (people-card people_+ ¦ _ title_string) =>
   (z-stack z-index: local
-    (rect z-index: -1
+    (rect
+      z-index: -1
       stroke: (oklch 0.25 0 0)
       thickness-l: 1
       thickness-r: 1
@@ -675,7 +682,7 @@
 
 (branch-example) =>
   (z-stack z-index: local
-    (rect fill: (oklch 0.3 0 0))
+    (rect fill: (oklch 0.3 0 0) z-index: -1)
     (x-wrap gap-x: 10
       nodes:
        ((branch)
@@ -718,6 +725,7 @@
   (z-stack z-index: local
     (^if active
       (rect
+        z-index: -1
         fill: (oklch 0.4 0 0)
         radius-tl: 5
         radius-tr: 5
@@ -748,7 +756,13 @@
 (branch-sidebar-sm) =>
   (floating x: true y: true z-index: 100 dl: -15
     (z-stack z-index: local
-      (rect fill: (oklch 0.3 0 0) radius-tl: (* 1) radius-tr: (* 1) radius-bl: (* 1) radius-br: (* 1))
+      (rect
+        z-index: -1
+        fill: (oklch 0.3 0 0)
+        radius-tl: (* 1)
+        radius-tr: (* 1)
+        radius-bl: (* 1)
+        radius-br: (* 1))
       (padding pl: 5 pr: 5 pt: 5 pb: 5
         (text
           caption: "\ue5d2"
@@ -826,7 +840,7 @@
     (content x: true y: true root: true dl: 10 dt: 10
       (limit max-w: 900
         (z-stack z-index: local
-          (rect fill: (oklch 0.15 0 0))
+          (rect z-index: -1 fill: (oklch 0.15 0 0))
           (padding z-index: 1 pl: 15 pr: 15 pt: 15 pb: 15
             (y-stack gap: 15
               (y-stack
