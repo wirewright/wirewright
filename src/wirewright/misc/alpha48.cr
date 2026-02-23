@@ -44,13 +44,31 @@ module Ww::Alpha48
   end
 
   # Appends the base alpha-48 representation of *object* to *io* (Big Endian).
-  def encode(io, object : Int) : Nil
-    bytesize = (object.bit_length + 7) // 8
+  def encode(io, object : Int32 | UInt32) : Nil
+    bytesbuf = uninitialized UInt8[4]
+    bytes = bytesbuf.to_slice
+    IO::ByteFormat::BigEndian.encode(object, bytes)
 
-    until bytesize.zero?
-      encode(io, ((object >> bytesize) & 0xff).to_u8!)
-      bytesize -= 1
+    # Skip leading zeros.
+    while bytes.size > 1 && bytes.first == 0
+      bytes += 1
     end
+
+    encode(io, bytes)
+  end
+
+  # :ditto:
+  def encode(io, object : Int64 | UInt64) : Nil
+    bytesbuf = uninitialized UInt8[8]
+    bytes = bytesbuf.to_slice
+    IO::ByteFormat::BigEndian.encode(object, bytes.to_slice)
+
+    # Skip leading zeros.
+    while bytes.size > 1 && bytes.first == 0
+      bytes += 1
+    end
+
+    encode(io, bytes)
   end
 
   # Returns the base alpha-48 representation of *object* as a string.

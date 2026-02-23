@@ -630,16 +630,16 @@
 ;; fond of this either.
 
 (ml
-  (= ⎡◇ => 123⎤ ⎡YbWdRcreJeccNk => 123⎤)
-  (= ⎡◇ => 456⎤ ⎡dLcheqdqbqcFfnfj => 456⎤)
-  (= ⎡(foo ◇) => 123⎤ ⎡(foo fjfdeQeqdpbncAfc) => 123⎤)
-  (= ⎡(foo ◇) => ◇⎤ ⎡(foo MbAddPbEdmbgcn) => MbAddPbEdmbgcn⎤)
-  (= ⎡◇_ => ◇⎤ ⎡ceejdcNbCdgXbV_ => ceejdcNbCdgXbV⎤)
-  (= ⎡◇_ => (456 ◇)⎤ ⎡cAfceNemdhYbXdV_ => (456 cAfceNemdhYbXdV)⎤)
-  (= ⎡(foo ◇_) => ◇⎤ ⎡(foo bfckevdAbLdybGdp_) => bfckevdAbLdybGdp⎤)
-  (= ⎡(foo ◇_: false) => {◇: true}⎤ ⎡(foo aaabceir_: false) => (aaabceir: true)⎤)
+  (= ⎡◇ => 123⎤ ⎡bdcesAfedqYv => 123⎤)
+  (= ⎡◇ => 456⎤ ⎡dcbwbsdqdcdpdLfd => 456⎤)
+  (= ⎡(foo ◇) => 123⎤ ⎡(foo cYfpdPeFeyfafjeM) => 123⎤)
+  (= ⎡(foo ◇) => ◇⎤ ⎡(foo dzzbPeQcpcXMeA) => dzzbPeQcpcXMeA⎤)
+  (= ⎡◇_ => ◇⎤ ⎡bseEeXeBeqeAcedQ_ => bseEeXeBeqeAcedQ⎤)
+  (= ⎡◇_ => (456 ◇)⎤ ⎡dKsdJxcEcAcy_ => (456 dKsdJxcEcAcy)⎤)
+  (= ⎡(foo ◇_) => ◇⎤ ⎡(foo TdMbxdoDcFbfbn_) => TdMbxdoDcFbfbn⎤)
+  (= ⎡(foo ◇_: false) => {◇: true}⎤ ⎡(foo eKeFbicAfjfnaH_: false) => (eKeFbicAfjfnaH: true)⎤)
   (= ⎡{¦ flag x_ ◇_} <> {x: $'(+ →x 1), ◇: true}⎤
-     ⎡{¦ flag x_ dbKbvcRrJbucQ_} <> {x: $'(+ →x 1), dbKbvcRrJbucQ: true}⎤)
+     ⎡{¦ flag x_ dzbJeZLbDdBdbp_} <> {x: $'(+ →x 1), dzbJeZLbDdBdbp: true}⎤)
   (- ⎡(a ⏏◇⏏ b c d)⎤ ⎡cannot use `◇` outside of a rule⎤)
   (- ⎡(a ⏏◇_⏏ b c d)⎤ ⎡cannot use `◇` outside of a rule⎤))
 
@@ -647,9 +647,9 @@
   (doc= ⎡(foo ¦ _ v_number -▢_) <> {v: $'(+ →v 1), ▢: true}
          (foo ¦ _ v_number -▢_) <> {v: $'(* →v 2), ▢: true}
          (foo ¦ _ v_number -▢_) <> {v: $'(/ →v 3), ▢: true}⎤
-        ⎡(foo ¦ _ v_number -faeJeccNmyYbW_) <> {v: $'(+ →v 1), faeJeccNmyYbW: true}
-         (foo ¦ _ v_number -faeJeccNmyYbW_) <> {v: $'(* →v 2), faeJeccNmyYbW: true}
-         (foo ¦ _ v_number -faeJeccNmyYbW_) <> {v: $'(/ →v 3), faeJeccNmyYbW: true}⎤)
+        ⎡(foo ¦ _ v_number -WeAbAbobYbxfadR_) <> {v: $'(+ →v 1), WeAbAbobYbxfadR: true}
+         (foo ¦ _ v_number -WeAbAbobYbxfadR_) <> {v: $'(* →v 2), WeAbAbobYbxfadR: true}
+         (foo ¦ _ v_number -WeAbAbobYbxfadR_) <> {v: $'(/ →v 3), WeAbAbobYbxfadR: true}⎤)
   ;; Multiple rule blocks
   (doc= ⎡(foo ◇ ▢) <> {▢: true}
          (foo ◇ bar ▢) <> {▢: true}
@@ -658,13 +658,13 @@
          (foo ◇ ▢) <> {▢: true}
          (foo ◇ bar ▢) <> {▢: true}
          (foo ◇ BOO ▢) <> {▢: true}⎤
-        ⎡(foo AbccfekdeRbJdu eudxbDdibbcceecT) <> {eudxbDdibbcceecT: true}
-         (foo eDdRcreJeccNmy bar eudxbDdibbcceecT) <> {eudxbDdibbcceecT: true}
-         (foo fheYeEdUcveTetdv baz eudxbDdibbcceecT) <> {eudxbDdibbcceecT: true}
+        ⎡(foo dyecbBcMcfcdAbx cnBcAfqwdLeut) <> {cnBcAfqwdLeut: true}
+         (foo cmfjfbnPfjeDZ bar cnBcAfqwdLeut) <> {cnBcAfqwdLeut: true}
+         (foo eCfqfqeWcGcRfhbz baz cnBcAfqwdLeut) <> {cnBcAfqwdLeut: true}
 
-         (foo AbccfekdeRbJdu cLhpEbkcweVex) <> {cLhpEbkcweVex: true}
-         (foo eDdRcreJeccNmy bar cLhpEbkcweVex) <> {cLhpEbkcweVex: true}
-         (foo dubycYEbmcxeWeA BOO cLhpEbkcweVex) <> {cLhpEbkcweVex: true}⎤)
+         (foo dyecbBcMcfcdAbx NbEejeReydecLdD) <> {NbEejeReydecLdD: true}
+         (foo cmfjfbnPfjeDZ bar NbEejeReydecLdD) <> {NbEejeReydecLdD: true}
+         (foo ecdydYxchdEdudK BOO NbEejeReydecLdD) <> {NbEejeReydecLdD: true}⎤)
   ;; Generation of rule blocks using lexical templates
   (doc= ⎡(do-a⫽b ¦ _ -▢_) <> {▢: true}
 
