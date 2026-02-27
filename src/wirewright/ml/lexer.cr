@@ -797,7 +797,7 @@ module Ww::ML
 
         magn = Kit.decimal(suffix, exact: false)
         if magn.type.number?
-          Term.of(Term::Num.approx(positive ? magn.unsafe_as_n : Term[-1] * magn.unsafe_as_n))
+          Term.of(Term::Num.approx(positive ? magn.as_n : Term[-1] * magn.as_n))
         else
           Term.of(positive ? magn : Term.of(:-, magn))
         end

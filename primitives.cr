@@ -99,7 +99,7 @@ end
 # a lot of related work.
 PRIMITIVES = ProcRuleset.build do
   rulepi1 %[(+ args_number+)] { args.items.reduce { |a, b| a + b } }
-  rulepi1 %[(- arg_number)] { -arg.unsafe_as_n }
+  rulepi1 %[(- arg_number)] { -arg.as_n }
   rulepi1 %[(- args_number+)] { args.items.reduce { |a, b| a - b } }
   rulepi1 %[(* args_number+)] { args.items.reduce { |a, b| a * b } }
 
@@ -157,19 +157,19 @@ PRIMITIVES = ProcRuleset.build do
   end
 
   rulepi1 %[(< a_number b_number)] do
-    a.unsafe_as_n < b.unsafe_as_n
+    a.as_n < b.as_n
   end
 
   rulepi1 %[(<= a_number b_number)] do
-    a.unsafe_as_n <= b.unsafe_as_n
+    a.as_n <= b.as_n
   end
 
   rulepi1 %[(> a_number b_number)] do
-    a.unsafe_as_n > b.unsafe_as_n
+    a.as_n > b.as_n
   end
 
   rulepi1 %[(>= a_number b_number)] do
-    a.unsafe_as_n >= b.unsafe_as_n
+    a.as_n >= b.as_n
   end
 
   rulepi1 %[(= a_ bs_+)] do
@@ -295,22 +295,22 @@ PRIMITIVES = ProcRuleset.build do
   # TODO: sum, min, and max should probably ignore non-numbers, and they should operate
   # on dicts (as in, on entry values, not just items),
   rulepi1 %[(sum ())] { 0 }
-  rulepi1 %[(sum (args_number+))] { args.items.reduce { |a, b| a.unsafe_as_n + b.unsafe_as_n } }
+  rulepi1 %[(sum (args_number+))] { args.items.reduce { |a, b| a.as_n + b.as_n } }
 
   rulepi1 %[(product ())] { 0 }
-  rulepi1 %[(product (args_number+))] { args.items.reduce { |a, b| a.unsafe_as_n * b.unsafe_as_n } }
+  rulepi1 %[(product (args_number+))] { args.items.reduce { |a, b| a.as_n * b.as_n } }
 
-  rulepi1 %[(min args_number+)] { args.items.min_by(&.unsafe_as_n) }
-  rulepi1 %[(min (args_number+))] { args.items.min_by(&.unsafe_as_n) }
+  rulepi1 %[(min args_number+)] { args.items.min_by(&.as_n) }
+  rulepi1 %[(min (args_number+))] { args.items.min_by(&.as_n) }
 
-  rulepi1 %[(max args_number+)] { args.items.max_by(&.unsafe_as_n) }
-  rulepi1 %[(max (args_number+))] { args.items.max_by(&.unsafe_as_n) }
+  rulepi1 %[(max args_number+)] { args.items.max_by(&.as_n) }
+  rulepi1 %[(max (args_number+))] { args.items.max_by(&.as_n) }
 
   rulepi1 %[(abs args_number+)] { args.items.reduce { |memo, arg| memo - arg }.abs }
 
-  rulepi1 %[(floor arg_number)] { arg.unsafe_as_n.floor }
-  rulepi1 %[(ceil arg_number)] { arg.unsafe_as_n.ceil }
-  rulepi1 %[(round arg_number)] { arg.unsafe_as_n.round }
+  rulepi1 %[(floor arg_number)] { arg.as_n.floor }
+  rulepi1 %[(ceil arg_number)] { arg.as_n.ceil }
+  rulepi1 %[(round arg_number)] { arg.as_n.round }
 
   # TODO: floor/ceil/round args_number+ is mass-floor
   # TODO: floor/ceil/round on list of numbers
