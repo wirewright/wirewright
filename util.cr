@@ -1,13 +1,3 @@
-macro on_demand(typedecl)
-  getter({{typedecl}}) { {{typedecl.type}}.new }
-
-  protected def has_{{typedecl.var.id}}? : Bool
-    return false unless %collection = @{{typedecl.var.id}}
-    return true unless {{ typedecl.type.resolve.has_method?(:empty?) }}
-    !%collection.empty?
-  end
-end
-
 macro defrecord(name, *properties, includes = [] of ::NoReturn)
   struct {{name.id}}
     {% for dep in includes %}
@@ -119,10 +109,6 @@ macro defcase(cls, *typedecls, inherit = false, equality = :value, caches_hash =
   end
 end
 
-macro subclass(*args, &block)
-  defcase({{args.splat}}, inherit: true) {{ block }}
-end
-
 class ::UnreachableException < Exception
 end
 
@@ -130,49 +116,8 @@ macro unreachable(detail = "unreachable")
   raise ::UnreachableException.new({{detail}})
 end
 
-macro unimplemented
-  {% verbatim do %}
-    raise ::NotImplementedError.new("subclass must implement #{{{@type.name.stringify}}}#{ {{@type.class? ? "." : "#"}} }#{{{@def.name.stringify}}}")
-  {% end %}
-end
-
 def pass(*args, &)
   yield *args
-end
-
-struct MutView(T)
-  include Indexable::Mutable(T)
-
-  def initialize(@operand : Array(T), @begin = 0, @end = operand.size)
-  end
-
-  def slice(index : Int)
-    {MutView.new(@operand, @begin, @begin + index), MutView.new(@operand, @begin + index, @end)}
-  end
-
-  def size
-    @end - @begin
-  end
-
-  def rest
-    MutView.new(@operand, @begin + 1, @end)
-  end
-
-  def unsafe_fetch(index : Int)
-    @operand.unsafe_fetch(@begin + index)
-  end
-
-  def unsafe_put(index : Int, value : T)
-    @operand.unsafe_put(@begin + index, value)
-  end
-
-  def inspect(io)
-    io << "MutView{"
-    join(io, ", ") do |value|
-      io << value
-    end
-    io << "}"
-  end
 end
 
 class Array(T)
@@ -188,12 +133,6 @@ class Array(T)
     Slice.new(to_unsafe, size, read_only: true)
   end
 
-  def fuse(other, & : MutView(T) ->)
-    yield MutView(T).new(concat(other), size - other.size, size)
-
-    self
-  end
-
   def concat(other : Indexable(U), & : U -> T) forall U
     resize_if_cant_insert(other.size)
 
@@ -201,10 +140,6 @@ class Array(T)
       @buffer[@size] = yield el
       @size += 1
     end
-  end
-
-  def view
-    MutView.new(self)
   end
 end
 
@@ -223,47 +158,7 @@ macro def_change
   {% end %}
 end
 
-# Defines a `change` method which functions like `#copy_with` for records. The
-# difference from `def_change` is that for all instance variables an equality check
-# is performed (`Reference#same?` for reference-typed and `Value#==` for value-
-# typed objects). If all instances variables remain unchanged, `self` is returned
-# instead of making a useless copy (as `def_change` would have done).
-macro def_change_eq
-  {% verbatim do %}
-    def change(**kwargs) : self
-      {% begin %}
-        %unchanged = true
-
-        {% for var in @type.instance_vars %}
-          {{var.id}} = kwargs.fetch({{var.symbolize}}, @{{var.id}}).as({{var.type}})
-          {% if var.type.has_method?(:same?) %}
-            %unchanged &&= {{var.id}}.same?(@{{var.id}})
-          {% else %}
-            %unchanged &&= {{var.id}} == @{{var.id}}
-          {% end %}
-        {% end %}
-
-        return self if %unchanged
-
-        {{@type}}.new({{ @type.instance_vars.map { |var| "#{var.id}: #{var.id}".id }.splat }})
-      {% end %}
-    end
-  {% end %}
-end
-
 struct Set(T)
-  def take? : T?
-    return unless object = first?
-    delete(object)
-    object
-  end
-
-  def shift : T
-    object = first
-    delete(object)
-    object
-  end
-
   def reject!(&)
     @hash.reject! { |k, _| yield k }
 
@@ -278,19 +173,6 @@ struct Pf::Map(K, V)
 end
 
 module Enumerable(T)
-  def view : MutView(T)
-    to_a.view
-  end
-
-  def to_compact_set(& : T -> U?) : Set(U) forall U
-    set = Set(U).new
-    each do |object0|
-      next unless object1 = yield object0
-      set << object1
-    end
-    set
-  end
-
   # FIXME: Maybe more idiomatically: first_of? / last_of?
 
   def leftmost?(& : T -> U?) : U? forall U
@@ -314,40 +196,6 @@ module Enumerable(T)
 
   def rightmost?(cls, *classes)
     rightmost?(cls) || rightmost?(*classes)
-  end
-end
-
-class DeepSet(T)
-  include Enumerable(T)
-
-  # Returns the amount of elements in this deep set.
-  getter size
-
-  def initialize
-    @sets = [] of Set(T)
-    @size = 0
-  end
-
-  def includes?(el : T)
-    @sets.any? &.includes?(el)
-  end
-
-  def each(& : T ->)
-    @sets.each do |set|
-      set.each { |el| yield el }
-    end
-  end
-
-  def concat(set : Set(T))
-    @size += set.size
-    @sets << set
-    self
-  end
-
-  def inspect(io)
-    io << "DeepSet{"
-    join(io, ", ")
-    io << "}"
   end
 end
 
@@ -452,42 +300,30 @@ struct ::NamedTuple
   end
 end
 
-def minfirst(*, a, b, & : Symbol ->)
-  if a.size < b.size
-    yield :a
-    yield :b
-  else
-    yield :b
-    yield :a
-  end
-end
-
 module Enumerable(T)
   def select(*types : *U) forall U
     {% begin %}
-      {% for cls in U %}
-        {{ cls.id.downcase.gsub(/[^\w]/, "_") }} = [] of {{cls.instance}}
+      {% for cls, i in U %}
+        %acc{i} = [] of {{cls.instance}}
       {% end %}
 
       each do |object|
         case object
-        {% for cls in U %}
+        {% for cls, i in U %}
         when {{cls.instance}}
-          {{cls.id.downcase.gsub(/[^\w]/, "_")}} << object
+          %acc{i} << object
         {% end %}
         end
       end
 
-      { {% for cls in U %}
-          {{ cls.id.downcase.gsub(/[^\w]/, "_") }},
-        {% end %} }
+      { {% for cls, i in U %} %acc{i}, {% end %} }
     {% end %}
   end
 
   def partition(*types : *U) forall U
     {% begin %}
       {% for cls, i in U %}
-        %tmp{i} = [] of {{cls.instance}}
+        %acc{i} = [] of {{cls.instance}}
       {% end %}
 
       %rest = [] of T
@@ -496,49 +332,17 @@ module Enumerable(T)
         case object
         {% for cls, i in U %}
         when {{cls.instance}}
-          %tmp{i} << object
+          %acc{i} << object
         {% end %}
         else
           %rest << object
         end
       end
 
-      { {% for cls, i in U %} %tmp{i}, {% end %} %rest }
+      { {% for cls, i in U %} %acc{i}, {% end %} %rest }
     {% end %}
   end
 end
-
-# Todo: remove these vvv I don't use them anymore
-
-# :nodoc:
-#
-# Sometimes Crystal goes weird and `embed` stops working because
-# function calls get wrapped in `()`s, for whatever reason. So we
-# have to use this workaround to get the call to work.
-def port_surround(x, &)
-  with x yield
-end
-
-macro port_embed(outer, branches)
-  %source = {{outer}}
-  {% for accept, pipeline in branches %}
-    {% if pipeline.is_a?(Call) && pipeline.name == :redirect %}
-      {% dest = pipeline.args[0] %}
-      {% pipeline = pipeline.args[1] %}
-      %outbound = port_surround(%source.select({{accept}})) { {{pipeline}} }
-      if %outbound.responds_to?(:into)
-        %outbound.into({{dest}})
-      end
-    {% else %}
-      %outbound = port_surround(%source.select({{accept}})) { {{pipeline}} }
-      if %outbound.responds_to?(:into)
-        %outbound.into(%source)
-      end
-    {% end %}
-  {% end %}
-end
-
-# ^^^
 
 abstract struct Int
   def bit_set?(index)
@@ -656,7 +460,7 @@ abstract struct Int
     !zero?
   end
 
-  # Iteration order: LSB to MSB.
+  # Yields bit indices of set bits. Iteration order: LSB to MSB.
   #
   # Reference: https://lemire.me/blog/2018/02/21/iterating-over-set-bits-quickly/
   def each_set_bit(&)
@@ -671,10 +475,6 @@ abstract struct Int
 
       bitset ^= t
     end
-  end
-
-  def lsb_set_index
-    trailing_zeros_count
   end
 end
 
@@ -691,28 +491,6 @@ struct ::BigInt < Int
         divisor += 1
       end
     end
-  end
-end
-
-class Object
-  # Doesn't yield to the block.
-  def orelse(& : ->) : self
-    self
-  end
-
-  def default(object : T) : self forall T
-    self
-  end
-end
-
-struct Nil
-  # Yields to the block.
-  def orelse(& : -> T) : T forall T
-    yield
-  end
-
-  def default(object : T) : T forall T
-    object
   end
 end
 
@@ -2370,48 +2148,6 @@ class String
     {to_slice, nil}
   end
 
-  def digest(algorithm, *, base = 16) : String
-    case base
-    when 16
-      algorithm.hexdigest(self)
-    when 64
-      algorithm.base64digest(self)
-    else
-      raise ArgumentError.new("base not supported: #{base}")
-    end
-  end
-
-  # FIXME: improve, reuse word string
-  def each_word(& : String ->) : Nil
-    l, sep0, r = partition(' ')
-
-    loop do
-      yield l unless l.empty?
-
-      break if sep0.empty?
-
-      if r.empty?
-        yield sep0
-        break
-      end
-
-      succ, sep1, r1 = r.partition(' ')
-
-      l = sep0 + succ
-      sep0 = sep1
-      r = r1
-    end
-  end
-
-  def each_word_with_index(& : String, Int32 ->) : Nil
-    index = 0
-
-    each_word do |word|
-      yield word, index
-      index += 1
-    end
-  end
-
   # Yields string views corresponding to each line in this string. Byte slices
   # will include *trailing* newlines (i.e. this method does not "take away" any
   # characters from the string).
@@ -2431,638 +2167,6 @@ struct BigInt < Int
   def mul!(other)
     LibGMP.mul(mpz, self, other)
     self
-  end
-end
-
-def cat(d, *ds)
-  d = Term.of(d)
-  ds = ds.compact_map do |xs|
-    next unless xs
-    Term.of(xs)
-  end
-  n = d.items.size
-  d.transaction do |commit|
-    ds.each do |xs|
-      xs.items.each do |item|
-        commit.with(n, item)
-        n += 1
-      end
-    end
-    ds.each do |xs|
-      xs.pairspart.each_entry { |k, v| commit.with(k, v) }
-    end
-  end.upcast
-end
-
-struct Pf::Multiset(T)
-  def initialize(@tally = Pf::Map(T, UInt32).new)
-  end
-
-  private def_change
-
-  # size equality
-  def parity?(other : Multiset(T)) : Bool
-    size == other.size
-  end
-
-  # reference equality
-  def same?(other : Multiset(T)) : Bool
-    @tally.same?(other.@tally)
-  end
-
-  def empty? : Bool
-    size.zero?
-  end
-
-  # Number of unique elements
-  def size
-    @tally.size
-  end
-
-  def add(object : T) : Multiset(T)
-    change(tally: @tally.update(object, 1, &.succ))
-  end
-
-  def delete(object : T) : Multiset(T)
-    return self unless count = @tally[object]?
-
-    if count == 1
-      change(tally: @tally.dissoc(object))
-    else
-      change(tally: @tally.assoc(object, count - 1))
-    end
-  end
-end
-
-# abstract class BiList(T)
-#   def self.[] : BiList(T)
-#     Zero(T).new
-#   end
-
-#   def self.[](*objects : T) : BiList(T)
-#     objects.reduce(Zero(T).new) { |lst, object| lst.append(object) }
-#   end
-
-#   def first
-#     first? || raise ArgumentError.new
-#   end
-
-#   def last
-#     last? || raise ArgumentError.new
-#   end
-
-#   def each(& : T ->)
-#     lst = self
-#     while object = lst.first?
-#       yield object
-#       lst = lst.rest
-#     end
-#   end
-
-#   def empty? : Bool
-#     false
-#   end
-
-#   def one? : Bool
-#     false
-#   end
-# end
-
-# class BiList::Zero(T) < BiList(T)
-#   def empty? : Bool
-#     true
-#   end
-
-#   def append(object : T)
-#     One(T).new(object)
-#   end
-
-#   def prepend(object : T)
-#     One(T).new(object)
-#   end
-
-#   def first? : T?
-#   end
-
-#   def last? : T?
-#   end
-
-#   def prior : BiList(T)
-#     self
-#   end
-
-#   def rest : BiList(T)
-#     self
-#   end
-
-#   # From right to left
-#   def reverse_each(*, _root = true, &fn : T, Bool ->)
-#   end
-
-#   def_equals_and_hash
-# end
-
-# class BiList::One(T) < BiList(T)
-#   def initialize(@v : T)
-#   end
-
-#   def one? : Bool
-#     true
-#   end
-
-#   def append(object : T)
-#     Many(T).new(@v, Zero(T).new, object)
-#   end
-
-#   def prepend(object : T)
-#     Many(T).new(object, Zero(T).new, @v)
-#   end
-
-#   def first? : T?
-#     @v
-#   end
-
-#   def last? : T?
-#     @v
-#   end
-
-#   def prior : BiList(T)
-#     Zero(T).new
-#   end
-
-#   def rest : BiList(T)
-#     Zero(T).new
-#   end
-
-#   # From right to left
-#   def reverse_each(*, _root = true, &fn : T, Bool ->)
-#     fn.call(@v, _root)
-#   end
-
-#   def_equals_and_hash @v
-# end
-
-# class BiList::Many(T) < BiList(T)
-#   def initialize(@l : T, @mid : BiList(T), @r : T)
-#   end
-
-#   def append(object : T)
-#     Many(T).new(@l, @mid.append(@r), object)
-#   end
-
-#   def prepend(object : T)
-#     Many(T).new(object, @mid.prepend(@l), @r)
-#   end
-
-#   def first? : T?
-#     @l
-#   end
-
-#   def last? : T?
-#     @r
-#   end
-
-#   def prior : BiList(T)
-#     @mid.prepend(@l)
-#   end
-
-#   def rest : BiList(T)
-#     @mid.append(@r)
-#   end
-
-#   # From right to left
-#   # TODO: convert to iterative
-#   def reverse_each(*, _root = false, &fn : T, Bool ->)
-#     fn.call(@r, false)
-#     @mid.reverse_each(_root: false, &fn)
-#     fn.call(@l, _root)
-#   end
-
-#   def_equals_and_hash @l, @mid, @r
-# end
-
-struct TinyArray(T)
-  include Indexable(T)
-
-  def initialize(object : T)
-    @mem = Pointer(T).malloc(1)
-    @mem[0] = object
-  end
-
-  protected def initialize(@mem : T*)
-  end
-
-  def self.[](object : T)
-    new(object)
-  end
-
-  def self.[](object : T, *objects : T)
-    objects.reduce(self[object]) { |ary, object| ary.append(object) }
-  end
-
-  @[AlwaysInline]
-  private def mem : T*
-    Pointer(T).new(@mem.address & ~0b111)
-  end
-
-  @[AlwaysInline]
-  def unsafe_fetch(index : Int)
-    mem[index]
-  end
-
-  @[AlwaysInline]
-  def size
-    (@mem.address & 0b111) &+ 1
-  end
-
-  @[AlwaysInline]
-  def conceal : Void*
-    @mem.as(Void*)
-  end
-
-  def self.reveal(pointer : Void*) : TinyArray(T)
-    new(pointer.as(T*))
-  end
-
-  def append(object : T)
-    size0 = size
-    if size0 == 8
-      raise IndexError.new
-    end
-
-    size1 = size0 &+ 1
-
-    # Copy and append
-    mem1 = Pointer(T).malloc(size1)
-    mem1.copy_from(mem, size0)
-    mem1[size0] = object
-
-    # Repackage pointer with size embedded
-    mem1 = Pointer(T).new(mem1.address | (size1 &- 1))
-
-    TinyArray.new(mem1)
-  end
-
-  def prepend(object : T)
-    size0 = size
-    if size0 == 8
-      raise IndexError.new
-    end
-
-    size1 = size0 &+ 1
-
-    # Copy and append
-    mem1 = Pointer(T).malloc(size1)
-    (mem1 + 1).copy_from(mem, size0)
-    mem1[0] = object
-
-    # Repackage pointer with size embedded
-    mem1 = Pointer(T).new(mem1.address | (size1 &- 1))
-
-    TinyArray.new(mem1)
-  end
-
-  def rest : TinyArray(T)
-    size0 = size
-    if size0 == 1
-      raise IndexError.new
-    end
-
-    size1 = size0 &- 1
-
-    # Copy and append
-    mem1 = Pointer(T).malloc(size1)
-    mem1.copy_from(mem + 1, size1)
-
-    # Repackage pointer with size embedded
-    mem1 = Pointer(T).new(mem1.address | (size1 &- 1))
-
-    TinyArray.new(mem1)
-  end
-
-  def prior : TinyArray(T)
-    size0 = size
-    if size0 == 1
-      raise IndexError.new
-    end
-
-    size1 = size0 &- 1
-
-    # Copy and append
-    mem1 = Pointer(T).malloc(size1)
-    mem1.copy_from(mem, size1)
-
-    # Repackage pointer with size embedded
-    mem1 = Pointer(T).new(mem1.address | (size1 &- 1))
-
-    TinyArray.new(mem1)
-  end
-
-  def where(index, object : T)
-    size0 = size
-
-    # Copy and append
-    mem1 = Pointer(T).malloc(size0)
-    mem1.copy_from(mem, size0)
-    mem1[index] = object
-
-    # Repackage pointer with size embedded
-    mem1 = Pointer(T).new(mem1.address | (size0 &- 1))
-
-    TinyArray.new(mem1)
-  end
-
-  def ==(other : TinyArray(T)) : Bool
-    equals?(other) { |a, b| a == b }
-  end
-end
-
-CAPACITY = 8
-
-abstract class BiList(T)
-  def self.[] : BiList(T)
-    Zero(T).new
-  end
-
-  def self.[](*objects : T) : BiList(T)
-    objects.reduce(Zero(T).new) { |lst, object| lst.append(object) }
-  end
-
-  def first
-    first? || raise ArgumentError.new
-  end
-
-  def last
-    last? || raise ArgumentError.new
-  end
-
-  def one? : Bool
-    false
-  end
-
-  def self.new : BiList(T)
-    Zero(T).new
-  end
-
-  def empty? : Bool
-    false
-  end
-
-  def each(&fn : T ->) : Nil
-    each(fn)
-  end
-
-  def reverse_each(&fn : T, Bool ->) : Nil
-    reverse_each(true, fn)
-  end
-
-  def reduce(state : U, &fn : U, T -> U) : U forall U
-    each { |object| state = fn.call(state, object) }
-
-    state
-  end
-
-  def to_a : Array(T)
-    objects = [] of T
-    each { |object| objects << object }
-    objects
-  end
-
-  def inspect(io)
-    io << "BiList["
-    index = 0
-    each do |object|
-      io << ", " if index > 0
-      object.inspect(io)
-      index += 1
-    end
-    io << "]"
-  end
-end
-
-class BiList::Zero(T) < BiList(T)
-  def initialize
-  end
-
-  def first? : T?
-  end
-
-  def rest : BiList(T)
-    self
-  end
-
-  def last? : T?
-  end
-
-  def prior : BiList(T)
-    self
-  end
-
-  def prepend(object : T) : BiList(T)
-    One(T).new(object)
-  end
-
-  def append(object : T) : BiList(T)
-    One(T).new(object)
-  end
-
-  def empty? : Bool
-    true
-  end
-
-  def mapfirst(& : T -> T) : BiList(T)
-    self
-  end
-
-  def maplast(& : T -> T) : BiList(T)
-    self
-  end
-
-  def each(fn : T ->) : Nil
-  end
-
-  # From right to left
-  def reverse_each(_root, fn : T, Bool ->)
-  end
-
-  def_equals_and_hash
-end
-
-class BiList::One(T) < BiList(T)
-  def initialize(@object : T)
-  end
-
-  def one?
-    true
-  end
-
-  def first? : T?
-    @object
-  end
-
-  def rest : BiList(T)
-    Zero(T).new
-  end
-
-  def last? : T?
-    @object
-  end
-
-  def prior : BiList(T)
-    Zero(T).new
-  end
-
-  def prepend(object : T) : BiList(T)
-    Many(T).new(TinyArray(T)[object], BiList(Void*).new, TinyArray(T)[@object])
-  end
-
-  def append(object : T) : BiList(T)
-    Many(T).new(TinyArray(T)[@object], BiList(Void*).new, TinyArray(T)[object])
-  end
-
-  def mapfirst(& : T -> T) : BiList(T)
-    One(T).new(yield @object)
-  end
-
-  def maplast(& : T -> T) : BiList(T)
-    One(T).new(yield @object)
-  end
-
-  def each(fn : T ->) : Nil
-    fn.call(@object)
-  end
-
-  # From right to left
-  def reverse_each(_root, fn : T, Bool ->)
-    fn.call(@object, _root)
-  end
-
-  def_equals_and_hash @object
-end
-
-class BiList::Many(T) < BiList(T)
-  def initialize(@l : TinyArray(T), @mid : BiList(Void*), @r : TinyArray(T))
-  end
-
-  def first? : T?
-    @l.first
-  end
-
-  def rest : BiList(T)
-    unless @l.size == 1
-      return Many(T).new(@l.rest, @mid, @r)
-    end
-
-    if @mid.empty?
-      if @r.size == 1
-        return One(T).new(@r.first)
-      else
-        return Many(T).new(TinyArray(T)[@r.first], @mid, @r.rest)
-      end
-    end
-
-    head = TinyArray(T).reveal(@mid.first?.not_nil!)
-    unless head.size == CAPACITY
-      return Many(T).new(head, @mid.rest, @r)
-    end
-
-    Many(T).new(TinyArray(T)[head.first], @mid.mapfirst { |it| TinyArray(T).reveal(it).rest.conceal }, @r)
-  end
-
-  def last? : T?
-    @r.last
-  end
-
-  def prior : BiList(T)
-    unless @r.size == 1
-      return Many(T).new(@l, @mid, @r.prior)
-    end
-
-    if @mid.empty?
-      if @l.size == 1
-        return One(T).new(@l.last)
-      else
-        return Many(T).new(@l.prior, @mid, TinyArray(T)[@l.last])
-      end
-    end
-
-    tail = TinyArray(T).reveal(@mid.last?.not_nil!)
-    unless tail.size == CAPACITY
-      return Many(T).new(@l, @mid.prior, tail)
-    end
-
-    Many(T).new(@l, @mid.maplast { |it| TinyArray(T).reveal(it).prior.conceal }, TinyArray(T)[tail.last])
-  end
-
-  def prepend(object : T) : BiList(T)
-    if @l.size == CAPACITY
-      Many(T).new(TinyArray(T)[object], @mid.prepend(@l.conceal), @r)
-    else
-      Many(T).new(@l.prepend(object), @mid, @r)
-    end
-  end
-
-  def append(object : T) : BiList(T)
-    if @r.size == CAPACITY
-      Many(T).new(@l, @mid.append(@r.conceal), TinyArray(T)[object])
-    else
-      Many(T).new(@l, @mid, @r.append(object))
-    end
-  end
-
-  def mapfirst(& : T -> T) : BiList(T)
-    Many(T).new(@l.where(0, yield @l.first), @mid, @r)
-  end
-
-  def maplast(& : T -> T) : BiList(T)
-    Many(T).new(@l, @mid, @r.where(@r.size - 1, yield @r.last))
-  end
-
-  def each(fn : T ->) : Nil
-    @l.each(&fn)
-    @mid.each do |objects|
-      TinyArray(T).reveal(objects).each(&fn)
-    end
-    @r.each(&fn)
-  end
-
-  def reverse_each(_root, fn : T, Bool ->)
-    @r.reverse_each { |object| fn.call(object, false) }
-    @mid.reverse_each do |objects|
-      TinyArray(T).reveal(objects).reverse_each { |object| fn.call(object, false) }
-    end
-    @l.reverse_each { |object| fn.call(object, _root) }
-  end
-
-  # FIXME: optimize
-  def ==(other : BiList(T))
-    return false unless other.is_a?(Many(T))
-    return false unless @l == other.@l
-    return false unless @r == other.@r
-
-    seen = Set(T).new
-    equals = true
-
-    @mid.each do |objects|
-      TinyArray(T).reveal(objects).each do |object|
-        seen << object
-      end
-    end
-
-    other.@mid.each do |objects|
-      TinyArray(T).reveal(objects).each do |object|
-        equals &&= object.in?(seen)
-      end
-    end
-
-    equals
-  end
-
-  def hash(hasher)
-    each do |object|
-      hasher = object.hash(hasher)
-    end
-    hasher
   end
 end
 
@@ -3169,27 +2273,6 @@ macro pipe(object, call, *calls)
   pipe(pipe({{object}}, {{call}}), {{calls.splat}})
 end
 
-macro try?(head, *tail)
-  pass do
-    %result = {{head}}
-    next if %result.nil?
-
-    {% for node in tail %}
-      {% if node.is_a?(Path) || node.is_a?(TypeNode) %}
-        %result = %result.as?({{node.resolve}})
-      {% elsif node.is_a?(Call) %}
-        %result = %result.{{node}}
-      {% else %}
-        {% node.raise "unsupported node in tail" %}
-      {% end %}
-      next if %result.nil?
-    {% end %}
-
-    %result
-
-  end
-end
-
 abstract struct Enum
   def symbolize : Symbol
     {% begin %}
@@ -3213,120 +2296,7 @@ struct Symbol
   end
 end
 
-def parse(dict : Term::Dict, spec : T) forall T
-  {% begin %}
-    { {% for key, spec in T %}
-        {% if spec.keys.map(&.id).includes?(:default.id) %}
-          {{key}}: dict[{{key.symbolize}}]?
-            .try(&.to?({{spec[:type].instance}}))
-            .default(spec[{{key.symbolize}}][:default]),
-        {% else %}
-          {{key}}: dict[{{key.symbolize}}].to({{spec[:type].instance}}),
-        {% end %}
-      {% end %} }
-  {% end %}
-end
-
-class SleepyQueue(T)
-  enum State : UInt8
-    Asleep
-    Empty
-    Nonempty
-  end
-
-  @state : State
-
-  getter size
-
-  protected def initialize(@queue, @state, @size)
-  end
-
-  def initialize
-    @queue = BiList(T).new
-    @state = :asleep
-    @size = 0u32
-  end
-
-  delegate :asleep?, :empty?, :nonempty?, to: @state
-
-  def enqueue(object : T) : SleepyQueue(T)
-    SleepyQueue.new(@queue.append(object), :nonempty, @size + 1)
-  end
-
-  def interject(object : T) : SleepyQueue(T)
-    SleepyQueue.new(@queue.prepend(object), :nonempty, @size + 1)
-  end
-
-  def dequeue : {SleepyQueue(T), T?}
-    case @queue
-    when .empty? then {SleepyQueue.new(@queue, :asleep, 0), nil}
-    when .one?   then {SleepyQueue.new(@queue.rest, :empty, 0), @queue.first}
-    else
-      {SleepyQueue.new(@queue.rest, :nonempty, @size - 1), @queue.first}
-    end
-  end
-end
-
-class AtomicSleepyQueue(T)
-  def initialize
-    @queue = Atomic(SleepyQueue(T)).new(SleepyQueue(T).new)
-  end
-
-  {% for method in %w(enqueue interject) %}
-    def {{method.id}}(object : T, & : ->) : Nil
-      queue0 = @queue.get(:relaxed)
-      while true
-        queue1 = queue0.{{method.id}}(object)
-        queue0, ok = @queue.compare_and_set(queue0, queue1, :relaxed, :relaxed)
-        break if ok
-      end
-
-      return unless queue0.asleep?
-
-      yield
-    end
-  {% end %}
-
-  def dequeue? : T?
-    queue0 = @queue.get(:relaxed)
-    while true
-      queue1, object = queue0.dequeue
-      queue0, ok = @queue.compare_and_set(queue0, queue1, :relaxed, :relaxed)
-      break if ok
-    end
-    object
-  end
-
-  def wait(limit = 1) : Nil
-    while true
-      queue = @queue.get(:relaxed)
-      break if queue.size < limit
-
-      Intrinsics.pause
-    end
-  end
-end
-
 class Channel
-  Void = begin
-    chan = Channel(Nil).new
-    chan.close
-    chan
-  end
-
-  macro mux(type, ctx, count)
-    %master = Channel({{type}}).new
-    %relays = { {{ (0...count).map { nil }.splat }} }.map { Channel({{type}}).new }
-
-    {{ctx}}.spawn do
-      while object = %master.receive
-        %relays.each &.send(object)
-      end
-    end
-
-    { %master, *%relays }
-  end
-
   def <<(object)
     send(object)
   end
@@ -3571,7 +2541,6 @@ struct Slice(T)
 
     yield trim(newsize)
   end
-
 end
 
 class AssertionError < Exception
@@ -3587,89 +2556,6 @@ end
 
 macro assert(x, msg)
   raise AssertionError.new({{msg}}) unless {{x}}
-end
-
-module Append
-end
-
-module Deepset
-  extend self
-
-  def clean(dict : Term::Dict, step)
-    Term.of(step)
-  end
-
-  def clean(dict : Term::Dict, step, *steps)
-    k = Term.of(step)
-    if v0 = dict[k]?
-      v0 = v0.as_d?
-    end
-    v0 ||= Term[]
-    v1 = clean(v0, *steps)
-    if v1.nil? || (v1.type.dict? && v1.empty?)
-      dict.without(k)
-    else
-      dict.with(k, v1)
-    end
-  end
-
-  def clean(dict : Term::Dict, step : Append.class, *steps)
-    clean(dict, dict.items.size, *steps)
-  end
-
-  def clean(dict : Term::Dict, step : Term::Dict::ItemsView, *steps)
-    unless k = step[0]?
-      return clean(dict, *steps)
-    end
-
-    clean(dict, k, step + 1, *steps)
-  end
-
-  def cleanless(dict : Term::Dict, step)
-    Term.of(step)
-  end
-
-  def cleanless(dict : Term::Dict, step, *steps)
-    k = Term.of(step)
-    if v0 = dict[k]?
-      v0 = v0.as_d?
-    end
-    v0 ||= Term[]
-    v1 = cleanless(v0, *steps)
-    dict.with(k, v1)
-  end
-
-  def cleanless(dict : Term::Dict, step : Append.class, *steps)
-    cleanless(dict, dict.items.size, *steps)
-  end
-
-  def cleanless(dict : Term::Dict, step : Term::Dict::ItemsView, *steps)
-    unless k = step[0]?
-      return cleanless(dict, *steps)
-    end
-
-    cleanless(dict, k, step + 1, *steps)
-  end
-end
-
-def deepset(dict : Term::Dict, *steps, cleanup : Bool = true)
-  cleanup ? Deepset.clean(dict, *steps) : Deepset.cleanless(dict, *steps)
-end
-
-def keypaths(haystack : Term, needle : Term::Match::Pattern, *, cue : Term::Sym? = nil, env env0 = Term[], keypath = Term[], &fn : Term::Dict, Term::Dict ->)
-  if row = needle.match?(env0, haystack)
-    env, _ = row
-    fn.call(keypath, env)
-    return
-  end
-
-  return unless haystack.type.dict?
-  return if cue && !haystack.probably_includes?(cue)
-
-  dict = haystack.unsafe_as_d
-  dict.each_entry do |k, v|
-    keypaths(v, needle, keypath: keypath.append(k), env: env0, &fn)
-  end
 end
 
 struct Time::Span
@@ -3915,12 +2801,6 @@ module Enumerable(T)
 
     min
   end
-
-  def quickselect(k : Int) : T
-    raise ArgumentError.new("k must be positive") if k < 0
-    data = self.is_a?(Array) ? self.dup : self.to_a
-    quickselect_internal(data, 0, data.size - 1, k)
-  end
 end
 
 struct Range(B, E)
@@ -4162,16 +3042,6 @@ end
   end
 {% end %}
 
-struct BigRational
-  def to_u128
-    if integer?
-      to_big_i.to_u128
-    else
-      raise ArgumentError.new # ?!
-    end
-  end
-end
-
 module Indexable(T)
   def each_with_last(& : T, Bool ->) : Nil
     return if empty?
@@ -4242,10 +3112,6 @@ module Disorder
     end
     state
   end
-end
-
-def oklch(l : Float64, c : Float64, h : Float64)
-  Oklch.to_rgb(l, c, h)
 end
 
 struct Float32
@@ -4614,87 +3480,6 @@ struct StaticArray(T, N)
   end
 end
 
-require "bit_array"
-
-class BitList
-  include Indexable::Mutable(Bool)
-
-  GROWTH_FACTOR = 1.5
-
-  def initialize(capacity0 = 32)
-    @bits = BitArray.new(capacity0)
-    @size = 0
-  end
-
-  protected def initialize(*, @size)
-    @bits = BitArray.new(@size)
-  end
-
-  def self.zeros(n)
-    new(size: n)
-  end
-
-  def size : Int32
-    @size
-  end
-
-  def unsafe_fetch(index : Int) : Bool
-    @bits.unsafe_fetch(index)
-  end
-
-  def unsafe_put(index : Int, value : Bool) : Nil
-    @bits.unsafe_put(index, value)
-  end
-
-  def push(value : Bool) : Nil
-    # Resize
-    if @size + 1 > @bits.size
-      bits1 = BitArray.new((@bits.size * GROWTH_FACTOR).to_i)
-      @bits.each_with_index do |bit, index|
-        bits1.unsafe_put(index, bit)
-      end
-      @bits = bits1
-    end
-
-    unsafe_put(@size, value)
-
-    @size += 1
-  end
-
-  def <<(value : Bool) : self
-    push(value)
-
-    self
-  end
-
-  def clear : Nil
-    @size = 0
-  end
-
-  def resize(@size)
-  end
-
-  def each_bucket(&)
-    @bits.each_bucket { |bucket| yield bucket }
-  end
-
-  def nbuckets
-    @bits.nbuckets
-  end
-end
-
-struct BitArray
-  def each_bucket(&)
-    @bits.to_slice(malloc_size).each do |bucket|
-      yield bucket
-    end
-  end
-
-  def nbuckets
-    malloc_size
-  end
-end
-
 struct Time
   def self.measured(& : -> T) : {Time::Span, T} forall T
     b = Time.instant
@@ -4831,32 +3616,6 @@ end
 module InspectToS
   def to_s(io)
     inspect(io)
-  end
-end
-
-def watch(path : Path, &fn : IO ->)
-  File.open(path, "r") do |io|
-    fn.call(io)
-  end
-
-  MT.spawn do
-    modt0 = nil
-
-    loop do
-      info = File.info(path)
-      modt1 = info.modification_time
-      next if modt0 == modt1
-
-      Log.info { "file at #{path} changed" }
-
-      modt0 = modt1
-
-      File.open(path, "r") do |io|
-        fn.call(io)
-      end
-    ensure
-      sleep 300.milliseconds
-    end
   end
 end
 

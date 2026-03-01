@@ -714,7 +714,9 @@ def recR : {(Rewriter -> Rewriter), Rewriter}
 
   set = ->(rewriter : Rewriter) { slot = rewriter }
   rec = Rewriter.new do |ctx, staging|
-    slot.try(&.call(ctx, staging)).default(Rewrite.none)
+    next Rewrite.none unless slot_ = slot
+
+    slot_.call(ctx, staging)
   end
 
   {set, rec}
