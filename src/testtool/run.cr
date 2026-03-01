@@ -115,7 +115,7 @@ module Testtool
         item = dict[index]
 
         Term.matchpi?(item, %{[rule _ _]}) do
-          dict = dict.without_item(index)
+          dict = dict.replace(index, Term.rep)
         end
       end
 

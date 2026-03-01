@@ -150,11 +150,11 @@ module Ww::Rack
           D7.mixture(node, mix0) do |mix1|
             Term.of_case(mix1) do
               matchpi %{(cell @_ children1←[_*])} do
-                node.replace(Term[2]...Term[node.itemsize], &.concat(children1.items))
+                node.replace(2...node.itemsize, Term.rep(children1.items))
               end
 
               otherwise do
-                node.replace(Term[2]...Term[node.itemsize]) { }
+                node.replace(2...node.itemsize, Term.rep)
               end
             end
           end
@@ -187,7 +187,7 @@ module Ww::Rack
 
             children1 = M1.backmap(pattern, Term.of(backspec), children0)
 
-            Term.of(node.replace(Term[2]...Term[node.itemsize], &.concat(children1.items)))
+            Term.of(node.replace(2...node.itemsize, Term.rep(children1.items)))
           end
         end
       end

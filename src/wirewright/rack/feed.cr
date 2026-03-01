@@ -326,7 +326,7 @@ module Ww::Rack::Feed
   # :nodoc:
   def take?(spec : Front, src : D7::Node) : {D7::Patch, Term}?
     Term.matchpi?(src.term, %{[cell @_ values←[value_ _*]]}) do
-      {D7.patch(src, {2, values.without_item(0)}), value}
+      {D7.patch(src, {2, values.replace(0, Term.rep)}), value}
     end
   end
 

@@ -120,7 +120,7 @@ module Ww::Rack::Part
 
     removals.unstable_sort!
     removals.reverse_each do |index|
-      dict1 = dict1.without_item(index)
+      dict1 = dict1.replace(index, Term.rep)
     end
 
     Term.of(dict1)

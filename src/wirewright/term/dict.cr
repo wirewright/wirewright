@@ -444,6 +444,10 @@ module Ww
       @items.size
     end
 
+    def uitemsize
+      @items.size.to_u32
+    end
+
     @[Dncast]
     @[AlwaysInline]
     def pairsize
@@ -913,61 +917,36 @@ module Ww
     end
 
     @[Dncast]
-    def span(b : Num, e : Num) : Dict
-      return Term[] if b == e
-      return items.collect if b == Term[0] && e == Term[size]
-      return Term[] unless b < e <= size
-
-      Term::Dict.build do |commit|
-        (b...e).each do |key|
-          commit.append(self[key])
-        end
-      end
-    end
-
-    @[Dncast]
-    def without_item(index)
-      replace(Term[index]) { }
-    end
-
-    @[Dncast]
-    def without_item(&)
-      dict = self
-
-      each_item_with_index do |item, index|
-        next unless yield item
-
-        dict = dict.without_item(index)
-      end
-
-      dict
-    end
-
-    # Lets the block replace items in the given *range* with zero or more items
-    # by appending to the commit. Returns the modified copy of `self`.
-    @[Dncast]
-    def replace(range : Range(Term::Num, Term::Num), & : Term::Dict::Commit ->) : Term::Dict
+    def replace(range : Range(UInt32, UInt32), rep : Term::Rep) : Dict
       assert range.exclusive?
-      assert Term[0] <= range.begin <= Term[itemsize]
+      assert range.begin <= range.end <= uitemsize
 
       pairspart.transaction do |commit|
         # Copy before
-        (Term[0]...range.begin).each do |index|
+        (0u32...range.begin).each do |index|
           commit << self[index]
         end
 
-        yield commit
+        commit.concat(rep)
 
         # Copy after
-        (range.end...itemsize).each do |index|
+        (range.end...uitemsize).each do |index|
           commit << self[index]
         end
       end
     end
 
     @[Dncast]
-    def replace(index : Term::Num, & : Term::Dict::Commit ->)
-      replace(index...index + 1) { |commit| yield commit }
+    def replace(range : Range(Int32, Int32), rep : Term::Rep) : Dict
+      assert range.exclusive?
+      assert 0 <= range.begin <= range.end
+
+      replace(range.begin.to_u32...range.end.to_u32, rep)
+    end
+
+    @[Dncast]
+    def replace(index : Int32 | UInt32, rep : Term::Rep) : Dict
+      replace(index...index + 1, rep)
     end
 
     private def with_default(key : Term::Any, value : Term) : Dict

@@ -1580,7 +1580,7 @@ module Ww::M1
   def match(ctx, op : Op::Prepend, matchee : Tzip, plan)
     return Fb[] unless dict0 = matchee.term.as_d?
 
-    dict1 = dict0.replace(Term[0]...Term[0], &.concat(op.terms))
+    dict1 = dict0.replace(0...0, Term.rep(op.terms))
 
     cons(ctx, op.successor, Tzip.new(Term.of(dict1), Log.none), plan)
   end

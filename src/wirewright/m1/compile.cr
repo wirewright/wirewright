@@ -533,7 +533,7 @@ module Ww::M1
       end
 
       matchpi %{[%'%all a_ _*]}, cue: :"%all" do
-        rest = Term.of(pattern.replace(Term[1]) { })
+        rest = Term.of(pattern.replace(1, Term.rep))
 
         Op::Both.new(compile(Π.pattern(a)), compile(Π.pattern(rest)))
       end
@@ -551,7 +551,7 @@ module Ww::M1
       end
 
       matchpi %{[%'%any° a_ _*]}, cue: :"%any°" do
-        rest = Term.of(pattern.replace(Term[1]) { })
+        rest = Term.of(pattern.replace(1, Term.rep))
 
         Op::ChoiceSource.new(compile(Π.pattern(a)), compile(Π.pattern(rest)))
       end

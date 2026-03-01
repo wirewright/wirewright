@@ -196,8 +196,7 @@ module Ww::D7
   #   *parent* and the images of *children*.
   record ParentImage, parent : Parent, children : Slice(Term) do
     def node : Term
-      range = Term[parent.range.begin]...Term[parent.range.end]
-      result = parent.node.replace(range, &.concat(children))
+      result = parent.node.replace(parent.range, Term.rep(children))
 
       Term.of(result)
     end

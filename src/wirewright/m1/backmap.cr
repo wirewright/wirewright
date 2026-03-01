@@ -1303,7 +1303,7 @@ module Ww::M1
       if replacements.present?
         replacements.unstable_sort_by! { |r| {r.begin, r.end, r.ord} }
         replacements.reverse_each do |r|
-          dict = dict.replace(Term[r.begin]...Term[r.end], &.concat(r.rep))
+          dict = dict.replace(r.begin...r.end, r.rep)
         end
       end
 

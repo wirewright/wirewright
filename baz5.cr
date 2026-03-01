@@ -410,7 +410,9 @@ end
 # TODO: we should be able to implement this more efficiently in the future!
 private def splice(dict : Term::Dict, splices : Array({Term::Num, Term::Dict}))
   splices.each do |start, splice|
-    dict = dict.replace(start, &.concat(splice.items))
+    next unless index = start.index32?
+
+    dict = dict.replace(index, Term.rep(splice.items))
   end
 
   dict
@@ -605,8 +607,8 @@ def entryR1(ctx0, dict, key, value, successor)
   in Rewrite::One
     Rewrite.one(dict.with(key, rewrite.term))
   in Rewrite::Many
-    if index = dict.index?(key)
-      Rewrite.one(dict.replace(index, &.concat(rewrite.list.items)))
+    if index = dict.index32?(key)
+      Rewrite.one(dict.replace(index, Term.rep(rewrite.list.items)))
     else
       Rewrite.one(dict.with(key, rewrite.list))
     end
@@ -1306,7 +1308,7 @@ def preview1(term, cursor : Term::Dict::ItemsView, leaf : Rewrite::Some)
         Rewrite.one(dict.with(key, rewrite.term))
       in Rewrite::Many
         if index = dict.index?(key)
-          Rewrite.one(dict.replace(index, &.concat(rewrite.list.items)))
+          Rewrite.one(dict.replace(index, Term.rep(rewrite.list)))
         else
           Rewrite.one(dict.with(key, rewrite.list))
         end

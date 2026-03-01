@@ -30,7 +30,7 @@ module Ww::M1
 
       matchpi %{[%'%split [%'%pass] a_ bs←(%'%adjacent _ _* ⍊ bounds: (±lo ..= ?))]}, cue: {:"%split", :"%pass", :"%adjacent"} do
         # Insert *a* before `%adjacent`'s members: (%adjacent ⏏ _ _*).
-        result = bs.replace(Term[1]...Term[1], &.append(a))
+        result = bs.replace(1...1, Term.rep(a))
         # Increment its lower bound.
         Term.morph(result, {:bounds, 0, lo + 1})
       end
@@ -119,7 +119,7 @@ module Ww::M1
             Term.case(members[-1], engine: M0) do
               matchpi %{[%'%slot ref←[%'%ref _]]} do
                 # Eligible
-                return Term[:"%all", {:"%back", ref}, op.without_item(op.itemsize - 1)]
+                return Term[:"%all", {:"%back", ref}, op.replace(op.itemsize - 1, Term.rep)]
               end
 
               otherwise { }
@@ -139,7 +139,7 @@ module Ww::M1
 
               otherwise do
                 # Eligible
-                return Term[:"%all", {:"%front", ref}, op.without_item(1)]
+                return Term[:"%all", {:"%front", ref}, op.replace(1, Term.rep)]
               end
             end
           end
