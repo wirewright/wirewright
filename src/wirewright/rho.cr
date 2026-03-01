@@ -132,7 +132,7 @@ module Ww
       false
     end
 
-    # *Descending rewrite*: pre-order depth-first rewrite of a dictionary *part*.
+    # *Descending rewriter*: pre-order depth-first rewrite of a dictionary *part*.
     def descR(
       successor : Rewriter,
       part : Term::Dict::Part::Any = Term::Dict.itemspart,
@@ -159,7 +159,7 @@ module Ww
       Term.rep(output)
     end
 
-    # *Ascending rewrite*: post-order depth-first rewrite of a dictionary *part*.
+    # *Ascending rewriter*: post-order depth-first rewrite of a dictionary *part*.
     def ascR(
       successor : Rewriter,
       part : Term::Dict::Part::Any = Term::Dict.itemspart,
@@ -181,7 +181,7 @@ module Ww
       successor.call(output)
     end
 
-    # *Bidirectional rewrite*: first, attempts a pre-order rewrite with
+    # *Bidirectional rewriter*: first, attempts a pre-order rewrite with
     # *successor*; if no change, then applies recursively to *part*, if
     # possible; if the rewritten version changed, attempts to apply
     # *successor* again.
@@ -215,6 +215,7 @@ module Ww
       successor.call(output)
     end
 
+    # *Exhaustive rewriter*: rewrite until no change. May not terminate.
     def exhR(successor : Rewriter) : Rewriter
       infinite(->(input : Term) { exhR(input, successor) })
     end
@@ -237,6 +238,19 @@ module Ww
 
         return Term.flatten(rep) { |offspring| exhR(offspring, successor) }
       end
+    end
+
+    # *Chain rewriter*: rewrites with *a* and the result of that with *b*.
+    def chainR(a : Rewriter, b : Rewriter) : Rewriter
+      fn = ->(input : Term) do
+        rep = a.call(input)
+
+        Term.flatten(rep) do |offspring|
+          b.call(offspring)
+        end
+      end
+
+      Rewriter.new(fn, finite: a.finite? && b.finite?)
     end
 
     # :nodoc:
@@ -296,8 +310,100 @@ module Ww
           constR(Term.rep(offspring.items))
         end
 
+        # |@ rho.rulesetR
+        #
+        # |@pattern
+        # (rulesetR ⍊ ⋮selector ⋮discriminator ⋮section exh⋮ false)
+        #
+        # |@key selector m1.operator
+        # The selector pattern. The captures this pattern makes determine the kind
+        # of rule. Namely:
+        #
+        # - If the pattern captures `pattern` and `template`, the ruleset creates
+        #   a *template rule*. The ruleset interprets the captured `pattern` as
+        #   an `m1.operator`, and the `template` as `alloy.template`.
+        #
+        # - If the pattern captures `pattern` and `backspec`, the ruleset creates
+        #   a *backmap rule* (or simply a *backmap*). The ruleset interprets *pattern*
+        #   as an `m1.operator`, and *backspec* as an `m1.backspec`.
+        #
+        # Other captures are ignored. If you try to confuse the ruleset by capturing
+        # all of *pattern*, *template*, and *backspec*, the ruleset will refuse to
+        # create the rule.
+        #
+        # |@key discriminator
+        # The selector is wrapped in a dict pattern with *discriminator* as its head.
+        #
+        # For example, `(rulesetR selector: (rule pattern_ template_) discriminator: main)`
+        # is the same as writing `(rulesetR selector: (rule [main pattern_] template_))`.
+        #
+        # *discriminator* is most useful when you want to leave the selector out, that is,
+        # use the default selector. The default selector is rather lengthy, so it's
+        # nice to be able to avoid typing it out if you only want to wrap it.
+        #
+        # *discriminator* is used to store multiple distinct rulesets in the same rulebase
+        # term. This is most useful in Rack's `rack.rewriter` node, which only allows you
+        # to specify one rulebase.
+        #
+        # |@key section
+        # Defines the section of the rulebase where the ruleset must search for rules.
+        # Sections are most useful with standalone rewriters that are defined as parts
+        # of a document. Consider, for instance, the following ML document:
+        #
+        # ```
+        # --- main
+        # a => 100
+        # b => 200
+        #
+        # --- calculate
+        # (±a ±b) => ^(+ a b)
+        #
+        # --- rewriter
+        # (chainR
+        #   (rulesetR section: main)
+        #   (rulesetR section: calculate))
+        # ```
+        #
+        # Notice how we use *section* to refer to sections of the same document
+        # the rewriter is in. By convention, Rho front-ends search for the `rewriter`
+        # section in any dict they receive. When found, a front-end passes the entire
+        # document to the rewriter. Thus, for instance, a rewriter may access itself.
+        # Writing `(rulesetR section: rewriter)` in the above makes perfect sense;
+        # there is no need to separate the rules from the rewriter provided the overall
+        # scheme makes sense:
+        #
+        # ```
+        # --- rewriter
+        # a => 100
+        # b => 200
+        # (±a ±b) => ^(+ a b)
+        #
+        # (ascR (rulesetR section: rewriter))
+        # ```
+        #
+        # IMPORTANT: The rewriter spec must be located at the very end of the `rewriter`
+        # section for the above to work.
+        #
+        # |@key exh
+        # Enables or disables *exhaustive rule application semantics*. That is,
+        # normally, at rewrite-time, the ruleset receives a term. It finds the most
+        # specific rule that matches the term, and rewrites the term using that rule.
+        # If the rule changed nothing, the ruleset resumes search until it had
+        # seen all rules. If the rule changed the term, the ruleset stops. That's
+        # with *exh* set to `false`. If *exh* is set to `true`, the ruleset will
+        # restart its search after a change. Importantly, the ruleset will ignore
+        # all rules it has matched before. Thus, even though the rewrite is exhaustive,
+        # it is guaranteed to terminate (versus, say, `rho.exhR`). That is, at
+        # some point you will run out of rules.
+        #
+        # |@block
+        # Constructs a *ruleset rewriter*: a rewriter that finds and applies rules
+        # from a *rulebase* to input terms.
         matchpi %{(rulesetR ⍊ exh⋮ false)} do
           selector = spec[:selector]? || Ruleset::DEFAULT_SELECTOR
+
+          discriminator = spec[:discriminator]?
+
           if section = spec[:section]?
             continue unless ruledoc = data.as_d?
             continue unless rulebase = ruledoc[section]?
@@ -305,7 +411,7 @@ module Ww
             rulebase = data
           end
 
-          rulesetR(Ruleset.select(selector, rulebase), exh: exh.true?)
+          rulesetR(Ruleset.select(selector, rulebase, discriminator: discriminator), exh: exh.true?)
         end
 
         matchpi %{[exhR successor_]} do
@@ -324,9 +430,15 @@ module Ww
           end
         end
 
-        matchpi %{[bidiR successor_]} do
+        matchpi %{[bidiR _]} do
           dirR(spec, data) do |successorR, passable_set, impassable_set|
             bidiR(successorR, passable: passable_set, impassable: impassable_set)
+          end
+        end
+
+        matchpi %{[chainR head_ successors_*]} do
+          successors.items.reduce(rewriter(head, data)) do |memoR, successor|
+            chainR(memoR, rewriter(successor, data))
           end
         end
 

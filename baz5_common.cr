@@ -344,19 +344,21 @@ class Ruleset
     rules = [] of Rule::Any
 
     pset = M1::PatternSet(Term).select(selector, *bases, **kwargs) do |normp, env|
-      if template = env[:template]?
-        rule = Rule::Template.new(env[:pattern], template)
-      elsif backspec = env[:backspec]?
-        rule = normp.unwrap do |op|
-          Rule::Backmap.new(env[:pattern], backspec)
-        end
-      else
-        next
+      template = env[:template]?
+      backspec = env[:backspec]?
+      next if template && backspec # confused
+
+      if template
+        rules << Rule::Template.new(env[:pattern], template)
+        next true # ok
       end
 
-      rules << rule
+      if backspec
+        rules << Rule::Backmap.new(env[:pattern], backspec)
+        next true # ok
+      end
 
-      true
+      # skip
     end
 
     new(pset, rules.to_readonly_slice(&.itself))

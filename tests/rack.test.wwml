@@ -4775,6 +4775,63 @@
     (frame pattern: true
       ⟨& (cell @in)
          (cell @out (z (result 300) seen: true))⟩)
+    end)
+
+  ;; chainR, rulesetR discriminator
+  (rack
+    (frame
+      (cell @in ((x y) (a b)))
+      (cell @out)
+      (cell @rewriter
+        (chainR
+          (ascR (rulesetR discriminator: fst))
+          (descR (rulesetR discriminator: snd))))
+      (rewriter (@in -> @rewriter -> @out)
+        (fst x) => 100
+        (fst y) => 200
+        (fst (±a ±b)) => ^(+ a b)
+        (snd (a_ b_dict)) <> {b: ^a, a: ^b}))
+    (frame pattern: true
+      ⟨& (cell @in)
+         (cell @out ((a b) 300))⟩)
+    end)
+
+  ;; chainR -- no change in first
+  (rack
+    (frame
+      (cell @in ((a b) (c d)))
+      (cell @out)
+      (cell @rewriter
+        (chainR
+          (ascR (rulesetR discriminator: fst))
+          (descR (rulesetR discriminator: snd))))
+      (rewriter (@in -> @rewriter -> @out)
+        (fst x) => 100
+        (fst y) => 200
+        (fst (±a ±b)) => ^(+ a b)
+        (snd (a_ b_dict)) <> {b: ^a, a: ^b}))
+    (frame pattern: true
+      ⟨& (cell @in)
+         (cell @out ((c d) (a b)))⟩)
+    end)
+
+  ;; chainR -- no change in second
+  (rack
+    (frame
+      (cell @in ((x y) c))
+      (cell @out)
+      (cell @rewriter
+        (chainR
+          (ascR (rulesetR discriminator: fst))
+          (descR (rulesetR discriminator: snd))))
+      (rewriter (@in -> @rewriter -> @out)
+        (fst x) => 100
+        (fst y) => 200
+        (fst (±a ±b)) => ^(+ a b)
+        (snd (a_ b_dict)) <> {b: ^a, a: ^b}))
+    (frame pattern: true
+      ⟨& (cell @in)
+         (cell @out (300 c))⟩)
     end))
 
 ;; Component instantiation
