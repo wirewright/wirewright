@@ -177,18 +177,25 @@ module Ww
     annotation Assoc
     end
 
-    # `Term` methods marked with this annotation are targets of automatic upcast
-    # (see e.g. `AutoUpcast`).
+    # `Term` methods marked with this annotation are targets of *automatic upcast*
+    # of `Any` to `Term`; meaning, for example, that `Term#foo` annotated with
+    # `Upcast` will define `Term::Num#foo`, `Term::Str#foo` and so on, which calls
+    # `Term#foo` through `Term.of` (see also:`AutoUpcast`)
     annotation Upcast
     end
 
-    # Methods of `Any` members marked with this annotation are targets of
-    # automatic downcast.
+    # Methods of term instances (`Any`) marked with this annotation are targets of
+    # *automatic downcast* of `Term` to `Any`; meaning, for example, that
+    # `Term::Num#foo` annotated with `Dncast` defines `Term#foo`, which casts
+    # the term to `Term::Num` and calls `Term::Num#foo`.
+    #
+    # NOTE: Currently, having the same method name on multiple term instances,
+    # all with `Dncast`, is unsupported.
     annotation Dncast
     end
 
-    # This module implements automatic upcasting from term instances to `Term`s
-    # for calling `Term` methods annotated with `Upcast`.
+    # This module implements automatic upcasting from term instances (`Any`)
+    # to `Term`s to call `Term` methods annotated with `Upcast`.
     module AutoUpcast
       macro finished
         {% for method in Term.methods %}\
