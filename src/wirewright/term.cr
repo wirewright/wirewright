@@ -215,34 +215,16 @@ module Ww
       end
     end
 
-    # :nodoc:
-    TAG_SYM_SUFFIX = 0b01u64
-
     # Represents the pointer tag of a term.
     enum Tag : UInt64
-      # _00
-
-      Dict   = 0b000u64
-      NumRat = 0b100u64
-
-      # _01
-      #
-      # Symbols use the suffix _01: 001 or 101. This lets us have 62 bits
-      # for symbols instead of 61. This helps us have a 2-bit type field
-      # on symbols; giving us a whopping 60 bits for 10x 6-bit chars!
-
-      Sym0 = 0b001u64
-      Sym1 = 0b101u64
-
-      # _10
-
-      Str    = 0b010u64
-      NumFlt = 0b110u64
-
-      # _11
-
-      NumInt  = 0b011u64
-      Boolean = 0b111u64
+      Opaque  = 0u64 # < must be zero!
+      Sym     = 1u64
+      NumRat  = 2u64
+      NumFlt  = 3u64
+      NumInt  = 4u64
+      Str     = 5u64
+      Boolean = 6u64
+      Dict    = 7u64
     end
 
     # :nodoc:
@@ -262,12 +244,33 @@ module Ww
       Tag.new(@mem.address & 0b111u64)
     end
 
+    # Returns `true` if this term's underlying data is stored inline rather
+    # than behind a pointer.
+    def inline? : Bool
+      case tag
+      when .sym?, .num_int?, .num_flt?, .boolean?
+        true
+      else
+        false
+      end
+    end
+
+    # Returns the un-tagged pointer.
+    def unsafe_ptr : Void*
+      Pointer(Void).new(@mem.address & ~0b111u64)
+    end
+
+    # Downcasts this term to an opaque pointer without performing any checks.
+    def unsafe_as_opaque : Void*
+      @mem.as(Void*)
+    end
+
     # Returns the `TermType` corresponding to this term. Guarantees to never
     # return `TermType::Any`.
     @[Upcast]
     def type : TermType
       case tag
-      in .sym0?, .sym1?
+      in .sym?
         TermType::Symbol
       in .dict?
         TermType::Dict
@@ -277,10 +280,19 @@ module Ww
         TermType::String
       in .boolean?
         TermType::Boolean
+      in .opaque?
+        raise ArgumentError.new
       end
     end
 
-    # Constructs a generic `Term` instance from the given number *term*.
+    # Constructs a `Term` wrapping the given opaque pointer *ptr*.
+    def self.unsafe_of_opaque(ptr : Void*) : Term
+      assert (ptr.address & 0b111).zero?, "not tagged"
+
+      new(Pointer(Void).new(ptr.address | Tag::Opaque.value))
+    end
+
+    # Constructs a `Term` wrapping the given number *term* instance.
     def self.of(term : Num) : Term
       case a = term.@k
       in Int64
@@ -297,7 +309,6 @@ module Ww
     end
 
     # Downcasts this term to a number term without performing any checks.
-    @[Upcast]
     def unsafe_as_n : Num
       case tag
       when .num_int?
@@ -311,68 +322,62 @@ module Ww
 
         Num.unsafe_new(value)
       when .num_rat?
-        box = Pointer(BigRational).new(@mem.address & ~0b111u64)
-
-        Num.unsafe_new(box)
+        Num.unsafe_new(unsafe_ptr.as(BigRational*))
       else
         raise TypeCastError.new
       end
     end
 
-    # Constructs a generic `Term` instance from the given string *term*.
+    # Constructs a `Term` wrapping the given string *term* instance.
     def self.of(term : Str) : Term
       Term.new(Pointer(Void).new(term.@value.as(Void*).address | Tag::Str.value))
     end
 
     # Downcasts this term to a string term without performing any checks.
-    @[Upcast]
     def unsafe_as_s : Str
-      Str.new(Pointer(Void).new(@mem.address >> 3 << 3).as(String))
+      Str.new(unsafe_ptr.as(String))
     end
 
-    # Constructs a generic `Term` from the given symbol *term*.
+    # Constructs a `Term` wrapping the given symbol *term* instance.
     def self.of(term : Sym) : Term
       data = term.@bits
 
-      Term.new(Pointer(Void).new((data.to_u64 << 2) | TAG_SYM_SUFFIX))
+      Term.new(Pointer(Void).new((data.to_u64 << 3) | Tag::Sym.value))
     end
 
     # Downcasts this term to a symbol term without performing any checks.
-    @[Upcast]
     def unsafe_as_sym : Sym
-      Sym.new(@mem.address >> 2)
+      Sym.new(@mem.address >> 3)
     end
 
-    # Constructs a generic `Term` from the given boolean *term*.
+    # Constructs a `Term` wrapping the given boolean *term* instance.
     def self.of(term : Boolean) : Term
       if term.true?
-        Term.new(Pointer(Void).new((1 << 3 | Tag::Boolean.value).to_u64))
+        Term.new(Pointer(Void).new((1u64 << 3) | Tag::Boolean.value))
       else
-        Term.new(Pointer(Void).new(Tag::Boolean.value.to_u64))
+        Term.new(Pointer(Void).new(Tag::Boolean.value))
       end
     end
 
     # Downcasts this term to a boolean term without performing any checks.
-    @[Upcast]
     def unsafe_as_b : Boolean
       Boolean.new((@mem.address >> 3) == 1)
     end
 
-    # Constructs a generic `Term` from the given dictionary *term*.
+    # Constructs a `Term` wrapping the given dictionary *term* instance.
     def self.of(term : Dict) : Term
-      Term.new(term.as(Void*))
+      Term.new(Pointer(Void).new(term.as(Void*).address | Tag::Dict.value))
     end
 
     # Downcasts this term to a dictionary term without performing any checks.
-    @[Upcast]
     def unsafe_as_d : Dict
-      @mem.as(Dict)
+      unsafe_ptr.as(Dict)
     end
 
     # Downcasts `Term` to one of term instance types.
     def self.[](term : Term) : Any
       case term.tag
-      in .sym0?, .sym1?
+      in .sym?
         term.unsafe_as_sym
       in .dict?
         term.unsafe_as_d
@@ -382,6 +387,8 @@ module Ww
         term.unsafe_as_s
       in .boolean?
         term.unsafe_as_b
+      in .opaque?
+        raise ArgumentError.new
       end
     end
 
@@ -409,7 +416,7 @@ module Ww
     # Attempts to downcast this term to a symbol term. Returns `nil` if impossible.
     @[Upcast]
     def as_sym? : Sym?
-      (tag.sym0? || tag.sym1?) ? unsafe_as_sym : nil
+      tag.sym? ? unsafe_as_sym : nil
     end
 
     # Attempts to downcast this term to a dictionary term. Returns `nil` if impossible.
@@ -541,8 +548,7 @@ module Ww
 
       # Fast path.
       if tag == other.tag
-        case tag
-        when .sym0?, .sym1?, .num_int?, .num_flt?
+        if inline?
           return false # @mem check fail is enough
         end
       end
@@ -640,37 +646,37 @@ module Ww
       object
     end
 
-    # Constructs a number term from the given number *object*.
+    # Constructs a number term representing the given number *object*.
     def self.[](object : Number) : Num
       Num.exact(object)
     end
 
-    # Constructs a string term from the given string *object*.
+    # Constructs a string term representing the given string *object*.
     def self.[](object : String) : Str
       Str.new(object)
     end
 
-    # Constructs a string term from the given string view *object*.
+    # Constructs a string term representing the given string view *object*.
     def self.[](object : StringView) : Str
       Term[object.to_s]
     end
 
-    # Constructs a string term from the given character *object*.
+    # Constructs a string term representing the given character *object*.
     def self.[](object : Char) : Str
       Term[object.to_s]
     end
 
-    # Constructs a symbol term from the given symbol *object*.
+    # Constructs a symbol term representing the given symbol *object*.
     def self.[](object : Symbol) : Sym
       Sym.new(object.to_s)
     end
 
-    # Constructs a boolean term from the given boolean *object*.
+    # Constructs a boolean term representing the given boolean *object*.
     def self.[](object : Bool) : Boolean
       Boolean.new(object)
     end
 
-    # Constructs a term from the given enum *object*.
+    # Constructs a term representing the given enum *object*.
     #
     # - `Issue::Severity` is encoded with a symbol.
     # - All other enums are encoded using their numeric value.
@@ -694,13 +700,13 @@ module Ww
     {% for spec in { {:UUID, "UUID"}, {:H256, "256-bit term hash"}, {:Path, "path"} } %}
       {% type, name = spec %}
 
-      # Constructs a string term from the given {{name.id}} *object*.
+      # Constructs a string term representing the given {{name.id}} *object*.
       def self.[](object : {{type.id}}) : Str
         Term[object.to_s]
       end
     {% end %}
 
-    # Constructs an indexed dictionary from the given enumerable *object*.
+    # Constructs an indexed dictionary representing the given enumerable *object*.
     # Elements of *object* receive successive keys 0, 1, 2, etc.
     #
     # See also: `#with`.
@@ -713,7 +719,7 @@ module Ww
     end
 
     {% for cls in %w(Hash NamedTuple) %}
-      # Constructs a dictionary from the given hash or named tuple *object*.
+      # Constructs a dictionary representing the given hash or named tuple *object*.
       #
       # See also: `#with`.
       def self.[](object : {{cls.id}}) : Dict
@@ -725,7 +731,7 @@ module Ww
       end
     {% end %}
 
-    # Constructs a dictionary from the given `JSON::Any` *object*.
+    # Constructs a dictionary representing the given `JSON::Any` *object*.
     #
     # Raises `ArgumentError` on `null`.
     def self.[](object : JSON::Any) : Any
@@ -891,14 +897,18 @@ module Ww
     end
 
     # :nodoc:
-    DICT_FNV_OFFSET_BASIS = 14695981039346656037u64
+    def self.hashcode(a : UInt64, b : UInt64) : UInt64
+      mxrmx(a ^ b.rotate_left(5))
+    end
+
     # :nodoc:
-    DICT_FNV_PRIME = 1099511628211u64
+    FNV_OFFSET_BASIS = 14695981039346656037u64
+    # :nodoc:
+    FNV_PRIME = 1099511628211u64
 
     # :nodoc:
     #
-    # NOTE: Ideally, in the future, we won't have to do this [here], as
-    # Dict will recalculate its hash live, on change, hierarchically.
+    # TODO: Remove this and the FNV stuff in favor of Dict#summary's #hashcode.
     def self.hashcode(term : Term::Dict) : UInt64
       term.hashcode do
         buffer = uninitialized UInt8[16]
@@ -907,40 +917,40 @@ module Ww
         state = 0xae32afc0becc90bbu64
 
         term.each_item_with_index do |item, index|
-          substate = DICT_FNV_OFFSET_BASIS
+          substate = FNV_OFFSET_BASIS
 
           substate ^= TermType::Number.value
-          substate &*= DICT_FNV_PRIME
+          substate &*= FNV_PRIME
 
           substate ^= item.type.value
-          substate &*= DICT_FNV_PRIME
+          substate &*= FNV_PRIME
 
           buffer64.unsafe_put(0, hashcode(index))
           buffer64.unsafe_put(1, hashcode(item))
 
           buffer.each do |byte|
             substate ^= byte
-            substate &*= DICT_FNV_PRIME
+            substate &*= FNV_PRIME
           end
 
           state &+= substate
         end
 
         term.each_entry(in: Term::Dict.pairspart) do |key, value|
-          substate = DICT_FNV_OFFSET_BASIS
+          substate = FNV_OFFSET_BASIS
 
           substate ^= key.type.value
-          substate &*= DICT_FNV_PRIME
+          substate &*= FNV_PRIME
 
           substate ^= value.type.value
-          substate &*= DICT_FNV_PRIME
+          substate &*= FNV_PRIME
 
           buffer64.unsafe_put(0, hashcode(key))
           buffer64.unsafe_put(1, hashcode(value))
 
           buffer.each do |byte|
             substate ^= byte
-            substate &*= DICT_FNV_PRIME
+            substate &*= FNV_PRIME
           end
 
           state &+= substate
@@ -1675,8 +1685,7 @@ module Ww
 
     # Constructs a replacement by zero or more *offspring*.
     #
-    # NOTE: if *offspring* is read-only, we use it as-is (i.e., without
-    # copying the slice).
+    # NOTE: if *offspring* is read-only, we skip copying it.
     def self.rep(offspring : Slice(Term)) : Rep
       if term = offspring.single?
         return Rep.new(Rep::One.new(term))

@@ -18,7 +18,7 @@ struct Ww::Term::Sym
     defrecord InlineName, symcode : UInt64
     defrecord RefName, index : UInt32
 
-    LEN = 62
+    LEN = 61
 
     NAME_LIMIT = LEN - (REPR_LEN + BLANK_LEN + NAME_LEN)
 
