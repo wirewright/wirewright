@@ -270,12 +270,10 @@ module Ww
     # Cached hash code for this dict.
     @hash = 0u64
 
-    alias Sketch = UInt64
-
     def initialize
       @items = EMPTY_ITEM_NODE
       @pairs = EMPTY_PAIR_NODE
-      @sketch = Sketch.new(0)
+      @sketch = Sketch.empty
       @maxdepth = 0u32
     end
 
@@ -296,6 +294,15 @@ module Ww
     # depth seen throughout the history of this dict.
     def maxdepth : UInt32
       @maxdepth + 1
+    end
+
+    def summary : Summary
+      raise "not implemented"
+    end
+
+    # TODO: remove in favor of `summary.symbol_sketch`
+    def symbol_sketch
+      @sketch
     end
 
     # Yields one or more `Commit` objects so that you can build one or more
@@ -736,36 +743,13 @@ module Ww
       other.subset_of?(self)
     end
 
-    def like?(other) : Bool
-      (@sketch & other.@sketch) == other.@sketch
-    end
-
     def sketch_superset_of?(subset : Sketch) : Bool
-      (@sketch & subset) == subset
+      Sketch.superset?(@sketch, subset)
     end
 
     @[Dncast]
     def probably_includes?(symbol : Term::Sym) : Bool
-      Dict.probably_includes?(@sketch, symbol)
-    end
-
-    def self.probably_includes?(sketch : Sketch, symbol : Term::Sym) : Bool
-      bucket = Term.hashcode(symbol) % Sketch.bit_width
-
-      sketch.bit(bucket) == 1
-    end
-
-    def self.mix(sketch : Sketch, value : Term)
-      case value.type
-      when .symbol?
-        bucket = Term.hashcode(value.unsafe_as_sym) % Sketch.bit_width
-
-        sketch | (Sketch.new(1) << bucket)
-      when .dict?
-        sketch | value.unsafe_as_d.@sketch
-      else
-        sketch
-      end
+      Sketch.superset?(@sketch, Sketch.symbol(symbol))
     end
 
     def self.mixdepth(depth : UInt32, value : Term) : UInt32
@@ -838,13 +822,13 @@ module Ww
 
     @[Dncast]
     def fresh_sketch
-      sketch = Sketch.new(0)
+      sketch = Sketch.empty
       each_entry do |k, v|
         case v.type
         when .symbol?
-          sketch = Dict.mix(sketch, v)
+          sketch = Sketch.union(sketch, Sketch.symbol(v))
         when .dict?
-          sketch |= v.unsafe_as_d.fresh_sketch
+          sketch = Sketch.union(sketch, v.unsafe_as_d.fresh_sketch)
         end
       end
       sketch
@@ -859,7 +843,7 @@ module Ww
 
       added, items = @items.add(Probes::AssocItemImm.new(index, value))
       unless added # Overridden or completely unchanged
-        return @items.same?(items) ? self : Dict.new(items, @pairs, Dict.mix(@sketch, value), Dict.mixdepth(@maxdepth, value))
+        return @items.same?(items) ? self : Dict.new(items, @pairs, Sketch.union(@sketch, Sketch.symbol(value)), Dict.mixdepth(@maxdepth, value))
       end
 
       items, pairs, _, _ = Gap.promote(index + 1,
@@ -869,7 +853,7 @@ module Ww
         pairs: @pairs,
       )
 
-      Dict.new(items, pairs, Dict.mix(@sketch, value), Dict.mixdepth(@maxdepth, value))
+      Dict.new(items, pairs, Sketch.union(@sketch, Sketch.symbol(value)), Dict.mixdepth(@maxdepth, value))
     end
 
     # :nodoc:
@@ -989,10 +973,10 @@ module Ww
     private def with_default(key : Term::Any, value : Term) : Dict
       added, pairs = @pairs.add(Probes::AssocPairImm.new(Term.of(key), value))
       unless added # Overridden or completely unchanged
-        return @pairs.same?(pairs) ? self : Dict.new(@items, pairs, Dict.mix(@sketch, value), Dict.mixdepth(@maxdepth, value))
+        return @pairs.same?(pairs) ? self : Dict.new(@items, pairs, Sketch.union(@sketch, Sketch.symbol(value)), Dict.mixdepth(@maxdepth, value))
       end
 
-      Dict.new(@items, pairs, Dict.mix(@sketch, value), Dict.mixdepth(@maxdepth, value))
+      Dict.new(@items, pairs, Sketch.union(@sketch, Sketch.symbol(value)), Dict.mixdepth(@maxdepth, value))
     end
 
     # :nodoc:
@@ -1053,7 +1037,7 @@ module Ww
 
       # If value is unchanged (e.g. with(0, :x) followed by with (0, :x)) nothing
       # will happen since the bit has already been set.
-      @sketch = Dict.mix(@sketch, value)
+      @sketch = Sketch.union(@sketch, Sketch.symbol(value))
       @maxdepth = Dict.mixdepth(@maxdepth, value)
       @pairsptr.set(Pointer({Term, Term}).null, :release)
 
@@ -1067,7 +1051,7 @@ module Ww
     protected def with_default!(key : Term::Any, value : Term, author) : Dict
       _, @pairs = @pairs.add(Probes::AssocPairMut.new(Term.of(key), value, author: author))
 
-      @sketch = Dict.mix(@sketch, value)
+      @sketch = Sketch.union(@sketch, Sketch.symbol(value))
       @maxdepth = Dict.mixdepth(@maxdepth, value)
       @pairsptr.set(Pointer({Term, Term}).null, :release)
 
@@ -1230,7 +1214,10 @@ module Ww
       # Sketches of equal dicts have *something* in common. They may be substantially
       # different or even junky if either (or both) dictionaries have "rich histories";
       # but there must exist an intersection of bits.
-      if @sketch > 0 && other.@sketch > 0 && (@sketch & other.@sketch) == 0
+      #
+      # TODO: REMOVE IN FAVOR OF EQUALITY ONCE SKETCH IS LIVE-RECOMPUTED. This is
+      # too ad-hoc. Why should the be > 0, for instance?
+      if @sketch.bits > 0 && other.@sketch.bits > 0 && (@sketch.bits & other.@sketch.bits) == 0
         return false
       end
 
@@ -1535,3 +1522,4 @@ module Ww
 end
 
 require "./dict/items_view"
+require "./dict/sketch"

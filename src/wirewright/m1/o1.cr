@@ -139,18 +139,18 @@ module Ww::M1
     return op unless literals = op[:literals]?
     return op unless literals = literals.as_d?
 
-    sketch = Term::Dict::Sketch.new(0)
+    sketch = Term::Dict::Sketch.empty
 
     literals.each_entry do |literal, _|
       if dict = literal.as_d?
-        sketch |= dict.fresh_sketch
+        sketch = Term::Dict::Sketch.union(sketch, dict.fresh_sketch)
         next
       end
 
-      sketch = Term::Dict.mix(sketch, literal)
+      sketch = Term::Dict::Sketch.union(sketch, Term::Dict::Sketch.symbol(literal))
     end
 
-    op.with(:sketch, sketch)
+    op.with(:sketch, sketch.bits)
   end
 
   # Runs the sketch propagation algorithm on operators in *pattern*.

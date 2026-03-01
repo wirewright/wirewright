@@ -245,7 +245,7 @@ module Ww::M1
 
       matchpi %{(%'%guard successor_ ⍊ sketch_ min-depth_ max-depth_ min-bounds_ max-bounds_)}, cue: :"%guard" do
         Op::Guard.new(
-          sketch: sketch.to(Term::Dict::Sketch),
+          sketch: Term::Dict::Sketch.new(sketch.to(Term::Dict::Sketch::Repr)),
           bounds: {Kit.magn(min_bounds), Kit.magn(max_bounds)},
           depth: {Kit.magn(min_depth), Kit.magn(max_depth)},
           successor: compile(Π.pattern(successor)),
