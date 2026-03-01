@@ -435,13 +435,17 @@ module Ww::DwUIR
       # Key repeat is represented as a sequence of `up - dn`, so in an event stream,
       # you should expect `dn - (up - dn)* - up`. `(...)*` means zero or more.
       #
-      # An alternative pair of events, *on* and *off*, avoid key repeats. When the user
-      # holds down a key, *on* is emitted, and when they release it, *off* is emitted,
-      # no matter how long the key was held.
+      # An alternative pair of events, *on* and *off*, is emitted for clients which want
+      # to avoid key repeats. When the user holds down a key, *on* is emitted, and when
+      # they release the key, *off* is emitted for that key; irrespective of how long
+      # the key was held.
+      #
+      # We guarantee that the order of events is `on`, `dn`, then zero or more `up-dn`;
+      # terminating with `up` followed by `off`.
       #
       # NOTE: *ctrl*, *shift*, and *alt* are going to be defined only if `true`.
-      # In other words, they are *set pairs*. `mod` is going to be defined if any
-      # of them is `true`.
+      # In other words, they are *set pairs*. `mod` (_mod_ifier) is going to be
+      # defined if any of *ctrl*, *shift*, *alt* is `true`.
       #
       # ```wwml
       # (keyboard key left up ctrl: true mod: true)
