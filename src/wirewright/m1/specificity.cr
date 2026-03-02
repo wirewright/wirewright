@@ -196,11 +196,7 @@ module Ww::M1
         end
 
         matchpi %{[%'%literal term_dict]}, cue: :"%literal" do
-          # The *population* of a dict is the number of non-dict leaves. Here,
-          # `population` returns tallies for each type of non-dict term (e.g., how
-          # many numbers, strings, booleans, etc. it has); we're interested in
-          # the total population.
-          literals += term.population.total
+          literals += term.histogram.total
         end
 
         matchpi %{[%'%literal _]}, cue: :"%literal" do

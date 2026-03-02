@@ -34,7 +34,12 @@ class Ww::Term::Dict
     end
 
     # Constructs a *key sketch* given a key *term* and its *hashcode*.
-    def self.key(term : Term | Term::Any, hashcode : UInt64) : Sketch
+    def self.key(term : Term, hashcode : UInt64) : Sketch
+      key(Term[term], hashcode)
+    end
+
+    # :ditto:
+    def self.key(term : Term::Any, hashcode : UInt64) : Sketch
       case Term[term]
       in Term::Sym, Term::Str, Term::Boolean
         one(hashcode)
@@ -44,8 +49,13 @@ class Ww::Term::Dict
     end
 
     # Constructs a *value sketch* given a *term* and its *hashcode*.
-    def self.value(term : Term | Term::Any, hashcode : UInt64) : Sketch
-      case Term[term]
+    def self.value(term : Term, hashcode : UInt64) : Sketch
+      value(Term[term], hashcode)
+    end
+
+    # :ditto:
+    def self.value(term : Term::Any, hashcode : UInt64) : Sketch
+      case term
       in Term::Num, Term::Str, Term::Boolean
         one(hashcode)
       in Term::Sym
@@ -56,7 +66,12 @@ class Ww::Term::Dict
     end
 
     # Constructs a *symbol sketch* given a *term* and its *hashcode*.
-    def self.symbol(term : Term | Term::Any, hashcode : UInt64) : Sketch
+    def self.symbol(term : Term, hashcode : UInt64) : Sketch
+      symbol(Term[term])
+    end
+
+    # :ditto:
+    def self.symbol(term : Term::Any, hashcode : UInt64) : Sketch
       case Term[term]
       in Term::Sym
         one(hashcode)

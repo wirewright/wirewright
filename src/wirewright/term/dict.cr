@@ -305,6 +305,10 @@ module Ww
       @sketch
     end
 
+    def value_sketch
+      raise "not implemented"
+    end
+
     # Yields one or more `Commit` objects so that you can build one or more
     # dictionaries without having to produce many useless intermediate copies.
     #
@@ -781,47 +785,12 @@ module Ww
       maxdepth
     end
 
-    record Population, numbers : Magnitude, symbols : Magnitude, strings : Magnitude, booleans : Magnitude do
-      def self.zero
-        zero = Magnitude.new(0)
-        new(zero, zero, zero, zero)
-      end
-
-      def +(other : Population)
-        Population.new(
-          numbers + other.numbers,
-          symbols + other.symbols,
-          strings + other.strings,
-          booleans + other.booleans,
-        )
-      end
-
-      def +(other : Term)
-        case other.type
-        in .any?
-          unreachable
-        in .number?
-          copy_with(numbers: numbers + 1)
-        in .string?
-          copy_with(strings: strings + 1)
-        in .symbol?
-          copy_with(symbols: symbols + 1)
-        in .boolean?
-          copy_with(booleans: booleans + 1)
-        in .dict?
-          self + other.unsafe_as_d.population
-        end
-      end
-
-      def total : Magnitude
-        numbers + strings + symbols + booleans
-      end
-    end
-
     # TODO: cache on dicts
     @[Dncast]
-    def population
-      ee.sum(Population.zero) { |_, v| v }
+    def histogram
+      ee.reduce(Histogram.zero) do |memo, (_, value)|
+        Histogram.union(memo, Histogram.of(value))
+      end
     end
 
     @[Dncast]
@@ -1502,3 +1471,8 @@ end
 
 require "./dict/items_view"
 require "./dict/sketch"
+require "./dict/histogram"
+{% if flag?(:new_dict) %}
+  require "./dict/cookie"
+  require "./dict/utermtrie32"
+{% end %}

@@ -1756,8 +1756,8 @@ module Ww
         return dict.with(key, rep)
       end
 
-      if index = dict.index?(key)
-        return dict.replace(index, &.concat(rep))
+      if index = dict.index32?(key)
+        return dict.replace(index, rep)
       end
 
       # We're in a pair, as in:
