@@ -34,7 +34,7 @@ class Ww::Term::Dict
       end
     {% end %}
 
-    # Returns the "zero" or empty histogram of a dict.
+    # Returns the "zero" or empty histogram, often used as an initial histogram.
     def self.zero : Histogram
       new(numbers: 0u8, strings: 0u8, symbols: 0u8, trues: 0u8, falses: 0u8)
     end

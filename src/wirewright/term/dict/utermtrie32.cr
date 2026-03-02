@@ -44,13 +44,15 @@ class Ww::Term::Dict
   # Namely, if the UTermTrie of the dict is a sequence, meaning there are no
   # entries past its mex, the entire trie is the itemspart and no work is needed.
   # The question -- about whether there are entries past the mex of the trie -- is
-  # encoded in the comparison `seqsize == summary.size`. With UTermTrie32, it is
-  # effectively two fetches. That is, we cache enough to make this comparison have
+  # encoded in the comparison `seqsize == size` (see `seq_only?`). With UTermTrie32,
+  # it is effectively two fetches. That is, we cache enough to make this comparison have
   # negligible cost, both on assoc- and dissoc-side, and on the comparison side;
   # and thus, the fast path has a fast guard. The guard fires almost always. Very
   # rarely in practice do we have entries with keys past the mex.
   module UTermTrie32
     extend self
+
+    alias Trie = Leaf | Node
 
     defcase Leaf, cookie : Cookie, summary : Summary, children : TermMap16, mutation: true
 
@@ -528,11 +530,15 @@ class Ww::Term::Dict
 
     # NOTE: `seqpart` is stupid; it will faithfully path-copy (and worse!) even
     # if the entirety of *node* is one giant sequence. One remedy is to guard calls
-    # to `seqpart` with `size == seqsize` checks; such checks are basically a
-    # fetch and an integer compare. Most importantly, in practice, such a check
-    # will almost always be `true`.
+    # to `seqpart` with `size == seqsize` checks (aka `seq_only?`); such checks are
+    # basically two fetches and an integer compare. Most importantly, in practice, such
+    # a check  will almost always be `true`.
     def seqpart(node : Leaf | Node, *, cookie : Cookie = Cookie.none)
       seqpart(cookie, node)
+    end
+
+    def seq_only?(node : Leaf | Node) : Bool
+      seqsize(node) == summary(node).size
     end
 
     def equals?(a : Term, b : Term)

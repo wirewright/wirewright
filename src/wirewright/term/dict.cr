@@ -1474,5 +1474,6 @@ require "./dict/sketch"
 require "./dict/histogram"
 {% if flag?(:new_dict) %}
   require "./dict/cookie"
+  require "./dict/summary"
   require "./dict/utermtrie32"
 {% end %}
