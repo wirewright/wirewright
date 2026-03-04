@@ -834,18 +834,14 @@ module Ww
       fun hashcode = XXH3_64bits(input : Void*, length : LibC::SizeT) : UInt64
     end
 
-    @[AlwaysInline]
-    private def self.ror64(v : UInt64, r : UInt64) : UInt64
-      (v >> r) | (v << (64 - r))
-    end
-
-    # Reference: https://jonkagstrom.com/bit-mixer-construction/
-    private def self.mxrmx(x : UInt64) : UInt64
-      x &*= 0x94d049bb133111ebu64
-      x ^= ror64(x, 56) ^ ror64(x, 32)
-      x &*= 0xff51afd7ed558ccdu64
-      x ^= x >> 23
-      x
+    # Reference: https://mostlymangling.blogspot.com/2019/01/better-stronger-mixer-and-test-procedure.html
+    # See also: https://jonkagstrom.com/bit-mixer-construction/
+    private def self.mix(x : UInt64) : UInt64
+      x ^= x.rotate_right(25) ^ x.rotate_right(50)
+      x &*= 0xA24BAED4963EE407u64
+      x ^= x.rotate_right(24) ^ x.rotate_right(49)
+      x &*= 0x9FB21C651E98DF25u64
+      x ^ (x >> 28)
     end
 
     # :nodoc:
@@ -857,14 +853,14 @@ module Ww
     # order is globally stable & deterministic, we'd be able to simply hash the chain
     # of items (that is, at dict nodes, not here in Term.hashcode!)
     def self.hashcode(index : Int32) : UInt64
-      mxrmx(index.to_u64)
+      mix(index.to_u64)
     end
 
     # :nodoc:
     #
     # Symbols use plain bit mixing.
     def self.hashcode(term : Term::Sym)
-      mxrmx(term.@bits)
+      mix(term.@bits)
     end
 
     # :nodoc:
@@ -876,7 +872,7 @@ module Ww
     #
     # Numbers use plain bit mixing.
     def self.hashcode(term : Term::Num) : UInt64
-      mxrmx(term.hashrepr)
+      mix(term.hashrepr)
     end
 
     # :nodoc:
@@ -892,7 +888,7 @@ module Ww
 
     # :nodoc:
     def self.hashcode(a : UInt64, b : UInt64) : UInt64
-      mxrmx(a ^ b.rotate_left(5))
+      mix(a ^ b.rotate_left(5))
     end
 
     # :nodoc:
