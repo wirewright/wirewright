@@ -1123,7 +1123,7 @@ module Ww
       if itemsonly?
         self
       else
-        @itemspart ||= items.collect
+        @itemspart ||= Dict.new(@items, EMPTY_PAIR_NODE, @sketch, @maxdepth)
       end
     end
 

@@ -3,28 +3,17 @@ module Ww
     include Indexable(Term)
 
     def initialize(@dict : Dict, @b : Int32, @e : Int32)
-      assert 0 <= @b <= @e <= node.size # Sanity
+      assert 0 <= @b <= @e <= @dict.itemsize # Sanity
     end
 
     private def_change
 
-    private def node
-      @dict.@items # ?!
-    end
-
-    # Returns the amount of items in this items view.
     def size : Int32
       @e - @b
     end
 
-    # Looks up *index*-th term in this items view without doing a bounds check.
     def unsafe_fetch(index : Int) : Term
-      unless coat = node.fetch?(Probes::FetchItem.new(@b + index))
-        raise ArgumentError.new
-      end
-
-      entry, *_ = coat
-      entry.value
+      @dict[@b + index]
     end
 
     # Returns a view of first *n* items in this view.
@@ -114,20 +103,20 @@ module Ww
     end
 
     def grow(delta : Int32) : ItemsView
-      change(e: (@e + delta).clamp(@b..node.size))
+      change(e: (@e + delta).clamp(@b..@dict.itemsize))
     end
 
     def remaining : ItemsView
-      change(b: @e, e: node.size)
+      change(b: @e, e: @dict.itemsize)
     end
 
     # Expands the view range to enclose all dictionary items.
     def expand : ItemsView
-      change(b: 0, e: node.size)
+      change(b: 0, e: @dict.itemsize)
     end
 
     def covers_fully? : Bool
-      @b == 0 && @e == node.size
+      @b == 0 && @e == @dict.itemsize
     end
 
     # Builds and returns an itemsonly dictionary with items from this items view.
@@ -137,7 +126,7 @@ module Ww
           return @dict
         end
 
-        return Dict.new(node, EMPTY_PAIR_NODE, @dict.@sketch, @dict.@maxdepth)
+        return @dict.itemspart
       end
 
       Dict.build do |commit|
@@ -267,7 +256,7 @@ module Ww
     # point to the same region of those dictionaries.
     def ==(other : ItemsView) : Bool
       return false unless @b == other.@b && @e == other.@e
-      return true if node.same?(other.node)
+      return true if @dict.same?(other.@dict)
 
       other = other.expand
       expand.each_with_index do |item, index|
