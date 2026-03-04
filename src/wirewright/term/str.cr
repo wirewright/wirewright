@@ -1,12 +1,17 @@
 module Ww
   # Represents a string.
   @[Term::Assoc(TermType::String, :unsafe_as_s)]
-  struct Term::Str
+  class Term::Str
     include Equality
     include AutoUpcast
     include TypeConversion
 
+    # Returns the 64-bit hash of this string.
+    getter hashcode : UInt64
+
     def initialize(@value : String)
+      # Strings use XXH3 to compute their hashcode.
+      @hashcode = Term::LibXXH64.hashcode(@value.to_unsafe, @value.bytesize)
     end
 
     def self.new(value : Escaped)

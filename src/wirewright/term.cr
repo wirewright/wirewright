@@ -330,12 +330,12 @@ module Ww
 
     # Constructs a `Term` wrapping the given string *term* instance.
     def self.of(term : Str) : Term
-      Term.new(Pointer(Void).new(term.@value.as(Void*).address | Tag::Str.value))
+      Term.new(Pointer(Void).new(term.as(Void*).address | Tag::Str.value))
     end
 
     # Downcasts this term to a string term without performing any checks.
     def unsafe_as_s : Str
-      Str.new(unsafe_ptr.as(String))
+      unsafe_ptr.as(Str)
     end
 
     # Constructs a `Term` wrapping the given symbol *term* instance.
@@ -870,12 +870,8 @@ module Ww
     end
 
     # :nodoc:
-    #
-    # Strings use XXH3.
     def self.hashcode(term : Term::Str) : UInt64
-      string = term.to(String)
-
-      Term::LibXXH64.hashcode(string.to_unsafe, string.bytesize)
+      term.hashcode
     end
 
     # :nodoc:
