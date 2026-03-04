@@ -18,7 +18,8 @@ class Ww::Term::Dict
   #
   # - *size* tells the number of entries in the dictionary of interest.
   #   It is precise. Overflow is a runtime error which will crash Wirewright.
-  # - *maxdepth* is the depth of the deepest leaf of the dict.
+  # - *maxdepth16* is the saturating depth of the deepest leaf of the dict.
+  #   Use `maxdepth` to access in general-purpose code.
   # - *hashcode* is the hashcode. It is *unordered* for both tries. That is,
   #   hashes of entries are combined commutatively. This is in support of the basic
   #   idea behind dicts; in that even though they have all sorts of complexity &
@@ -39,28 +40,34 @@ class Ww::Term::Dict
   #   measure of terms of each type in the dict and nested dicts.
   record Summary,
     size : UInt32,
-    maxdepth : Magnitude,
+    maxdepth16 : UInt16,
+    size_set : Pf::BitSet16,
     hashcode : UInt64,
     key_sketch : Sketch,
     value_sketch : Sketch,
     symbol_sketch : Sketch,
-    size_set : Pf::BitSet64,
     histogram : Histogram
 
   struct Summary
-    # :nodoc:
-    EMPTY_DICT_HASH = 0x9e3779b97f4a7c15u64
+    # Converts `maxdepth16`, which is a saturating depth, to `Magnitude`;
+    # the saturated state is represented by `Magnitude::INFINITY`. Depths
+    # below that are precise.
+    def maxdepth : Magnitude
+      @maxdepth16 == UInt16::MAX ? Magnitude::INFINITY : Magnitude.new(@maxdepth16)
+    end
+  end
 
+  struct Summary
     # Returns the "zero" or empty summary, often used as an initial summary.
     def self.zero : Summary
       Summary.new(
         size: 0u32,
-        maxdepth: Magnitude.new(0),
-        hashcode: EMPTY_DICT_HASH,
+        maxdepth16: 0u16,
+        size_set: Pf::BitSet16.empty,
+        hashcode: 0u64,
         key_sketch: Sketch.empty,
         value_sketch: Sketch.empty,
         symbol_sketch: Sketch.empty,
-        size_set: Pf::BitSet64.empty,
         histogram: Histogram.zero,
       )
     end
@@ -75,12 +82,12 @@ class Ww::Term::Dict
 
       Summary.new(
         size: 1u32,
-        maxdepth: Magnitude.new(0),
+        maxdepth16: 0u16,
+        size_set: Pf::BitSet16.empty,
         hashcode: hashcode,
         key_sketch: Sketch.empty,
         value_sketch: Sketch.value(item, hashcode),
         symbol_sketch: Sketch.symbol(item, hashcode),
-        size_set: Pf::BitSet64.empty,
         histogram: Histogram.of(item),
       )
     end
@@ -89,23 +96,22 @@ class Ww::Term::Dict
     #
     # For items, even though they are also thought of as entries elsewhere,
     # you must use `.of(Term)`.
-    def self.of(key : Term, value : Term) : Summary
+    def self.of(key : {term: Term, hashcode: UInt64}, value : Term) : Summary
       if dict = value.as_d?
         return dict.summary
       end
 
-      key_hashcode = Term.hashcode(key)
       value_hashcode = Term.hashcode(value)
-      pair_hashcode = Term.hashcode(key_hashcode, value_hashcode)
+      pair_hashcode = Term.hashcode(key[:hashcode], value_hashcode)
 
       Summary.new(
         size: 1u32,
-        maxdepth: Magnitude.new(0),
+        maxdepth16: 0u16,
+        size_set: Pf::BitSet16.empty,
         hashcode: pair_hashcode,
-        key_sketch: Sketch.key(key, key_hashcode),
+        key_sketch: Sketch.key(key[:term], key[:hashcode]),
         value_sketch: Sketch.value(value, value_hashcode),
         symbol_sketch: Sketch.symbol(value, value_hashcode),
-        size_set: BitSet64.empty,
         histogram: Histogram.of(value),
       )
     end
@@ -114,15 +120,25 @@ class Ww::Term::Dict
     def self.union(a : Summary, b : Summary) : Summary
       Summary.new(
         size: a.size + b.size,
-        maxdepth: Math.max(a.maxdepth, b.maxdepth),
+        maxdepth16: Math.max(a.maxdepth16, b.maxdepth16),
+        size_set: a.size_set | b.size_set,
         # ? Do we need to strengthen this anyhow?
         hashcode: a.hashcode &+ b.hashcode,
         key_sketch: Sketch.union(a.key_sketch, b.key_sketch),
         value_sketch: Sketch.union(a.value_sketch, b.value_sketch),
         symbol_sketch: Sketch.union(a.symbol_sketch, b.symbol_sketch),
-        size_set: a.size_set | b.size_set,
         histogram: Histogram.union(a.histogram, b.histogram),
       )
+    end
+
+    # Returns the union of all summaries of objects in *ee*. Uses the block
+    # to summarize an object from *ee*.
+    def self.union(ee : Enumerable(T), & : T -> Summary) : Summary forall T
+      memo = zero
+      ee.each do |object|
+        memo = self.union(memo, yield object)
+      end
+      memo
     end
 
     # Associates *summary* with the given *dict*.
@@ -131,10 +147,17 @@ class Ww::Term::Dict
     # for otherwise purely recursive dict metrics (such as maxdepth; that is,
     # nothing but dicts contribute to the metric).
     def self.assoc(summary : Summary, dict : Term::Dict) : Summary
-      summary.copy_with(
-        maxdepth: 1 + summary.maxdepth,
-        size_set: summary.size_set.add(summary.size.to_u64),
-      )
+      size_set = summary.size_set
+      if summary.size < UInt16::MAX
+        size_set = size_set.add(summary.size.to_u16)
+      end
+
+      maxdepth16 = summary.maxdepth16 &+ 1
+      if maxdepth16.zero? # Overflow
+        maxdepth16 = UInt16::MAX
+      end
+
+      summary.copy_with(maxdepth16: maxdepth16, size_set: size_set)
     end
   end
 end

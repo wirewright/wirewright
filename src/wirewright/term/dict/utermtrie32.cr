@@ -66,28 +66,13 @@ class Ww::Term::Dict
     defcase Node5, seqsize : UInt32, cookie : Cookie, summary : Summary, children : NodeMap16(Node4), mutation: true
     defcase Node6, seqsize : UInt32, cookie : Cookie, summary : Summary, children : NodeMap16(Node5), mutation: true
 
-    # :nodoc:
-    EMPTY_LEAF = Leaf.new(Cookie.none, Summary.zero, TermMap16.empty)
-
-    # :nodoc:
+    EMPTY_LEAF  = Leaf.new(Cookie.none, Summary.zero, TermMap16.empty)
     EMPTY_NODE0 = Node0.new(0u32, Cookie.none, Summary.zero, NodeMap16(Leaf).empty)
-
-    # :nodoc:
     EMPTY_NODE1 = Node1.new(0u32, Cookie.none, Summary.zero, NodeMap16(Node0).empty)
-
-    # :nodoc:
     EMPTY_NODE2 = Node2.new(0u32, Cookie.none, Summary.zero, NodeMap16(Node1).empty)
-
-    # :nodoc:
     EMPTY_NODE3 = Node3.new(0u32, Cookie.none, Summary.zero, NodeMap16(Node2).empty)
-
-    # :nodoc:
     EMPTY_NODE4 = Node4.new(0u32, Cookie.none, Summary.zero, NodeMap16(Node3).empty)
-
-    # :nodoc:
     EMPTY_NODE5 = Node5.new(0u32, Cookie.none, Summary.zero, NodeMap16(Node4).empty)
-
-    # :nodoc:
     EMPTY_NODE6 = Node6.new(0u32, Cookie.none, Summary.zero, NodeMap16(Node5).empty)
 
     private def summarize(children, &) : Summary
@@ -204,8 +189,7 @@ class Ww::Term::Dict
         return EMPTY_NODE0
       end
 
-      children1, changed = Map16.assoc(NodeMap16(Leaf).empty, 0u32, node)
-      assert changed
+      children1 = Map16.ensure_assoc(NodeMap16(Leaf).empty, 0u32, node)
 
       node0(cookie, node.summary, children1)
     end
@@ -216,8 +200,7 @@ class Ww::Term::Dict
           return EMPTY_NODE{{level + 1}}
         end
 
-        children1, changed = Map16.assoc(NodeMap16(Node{{level}}).empty, 0u32, node)
-        assert changed
+        children1 = Map16.ensure_assoc(NodeMap16(Node{{level}}).empty, 0u32, node)
 
         node{{level + 1}}(cookie, node.summary, children1)
       end
@@ -291,6 +274,7 @@ class Ww::Term::Dict
           {% else %}
             child0 = EMPTY_NODE{{level - 1}}
           {% end %}
+
           child1, changed = assoc(cookie, child0, key.successor, value)
           assert changed
 
@@ -521,8 +505,7 @@ class Ww::Term::Dict
         mut = node.cookie.allows_mutation_by?(cookie)
 
         # If tail contains something, we must append it to children.
-        children1, changed = Map16.assoc(children1, size, tail, mut: mut)
-        assert changed
+        children1 = Map16.ensure_assoc(children1, size, tail, mut: mut)
 
         node{{level}}(cookie, children1)
       end
