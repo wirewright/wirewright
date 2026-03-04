@@ -882,7 +882,7 @@ module Ww
       if term.true?
         0x473419c1b81a5431u64
       else
-        0x143ea81786b6282cu64
+        0x143ea81786b6282du64
       end
     end
 
