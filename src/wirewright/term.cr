@@ -340,9 +340,7 @@ module Ww
 
     # Constructs a `Term` wrapping the given symbol *term* instance.
     def self.of(term : Sym) : Term
-      data = term.@bits
-
-      Term.new(Pointer(Void).new((data.to_u64 << 3) | Tag::Sym.value))
+      Term.new(Pointer(Void).new((term.@bits << 3) | Tag::Sym.value))
     end
 
     # Downcasts this term to a symbol term without performing any checks.
