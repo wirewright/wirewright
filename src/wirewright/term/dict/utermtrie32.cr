@@ -1,6 +1,90 @@
 class Ww::Term::Dict
+  alias TermMap16 = SmallMap(Term, UInt16)
+
+  # ????
+  struct NodeMap16(T)
+    def initialize(@map : SmallMap(T, UInt16), @full : Pf::BitSet16)
+    end
+
+    def self.empty
+      new(map: SmallMap(T, UInt16).empty, full: Pf::BitSet16.empty)
+    end
+
+    def self.equals?(a : NodeMap16, b : NodeMap16, &)
+      return false unless a.@full == b.@full
+
+      SmallMap.equals?(a.@map, b.@map) { |x, y| yield x, y }
+    end
+
+    def ix
+      @map.ix
+    end
+
+    def empty?
+      @map.empty?
+    end
+
+    def size
+      @map.size
+    end
+
+    def at?(key)
+      @map.at?(key.to_u16)
+    end
+
+    def seq_only?
+      @map.seq_only?
+    end
+
+    def full?
+      @full.full?
+    end
+
+    def seqsize : UInt32
+      @map.mex.to_u32
+    end
+
+    def each_entry(&)
+      @map.each_entry do |key, value|
+        yield key, value
+      end
+    end
+
+    def each_in_seq(&)
+      seqsize.times do |index|
+        yield @map.ix.unsafe_fetch(index)
+        break unless index.to_u16.in?(@full)
+      end
+    end
+
+    def assoc(key, object, *, mut : Bool)
+      key = key.to_u16
+
+      map, _ = @map.assoc(key, object, mut: mut)
+
+      if object.children.full?
+        full = @full.add(key)
+      else
+        full = @full.delete(key)
+      end
+
+      NodeMap16.new(map, full)
+    end
+
+    def dissoc(key, *, mut : Bool)
+      key = key.to_u16
+
+      map, _ = @map.dissoc(key, mut: mut)
+
+      NodeMap16.new(map, @full.delete(key))
+    end
+  end
+
+  # UTermTrie32 is used in dicts to store all `UInt32` keys.
+  #
   # The design of `UTermTrie32` is very similar in spirit to `Pf::USet32`'s.
-  # Both are heavily inspired by Rich Hickey's persistent vector design.
+  # Both were inspired by Rich Hickey's persistent vector; I'm not sure how
+  # much I'm diverging from them here, though.
   #
   # Some notes:
   #
@@ -28,67 +112,85 @@ class Ww::Term::Dict
   # dicts. The worst offender here is perhaps the `queue` node in Rack, or editR's
   # mailbox. That is, we routinely prepend to them. Backmaps also like to insert in
   # random spots from time to time. However, these operations are done, in average,
-  # on on very small dicts, and by using a finger tree in such small cases, we'd
-  # probably be facing a lot of overhead anyway. I can't say for sure though!
+  # on very small dicts, and by using a finger tree in such small cases, we'd
+  # probably be facing a lot of overhead. I can't say for sure though!
   #
   # UTermTrie32 is used in dicts to store all keys that fall into UInt32 domain.
   # This means that now, compared to the prior impl, we don't have to split anything
   # or move entries between the itemspart and the pairspart, *provided we have
   # an efficient way to separate entries whose key is before mex, and entries
   # whose key is after, in the trie*. Thanks to *presence* and *full* bitmaps,
-  # and in opposition to finger trees, we indeed can do this with UTermTrie32
-  # very quickly. For instance, running `seqpart` on tries of hundreds of thousands
+  # and opposed to finger trees, we indeed can do this very quickly with UTermTrie32.
+  # For instance, running `seqpart` on tries with hundreds of thousands
   # of entries completes in less than a microsecond on my machine.
   #
   # An important fast path when retrieving the itemspart of a dict is supported.
   # Namely, if the UTermTrie of the dict is a sequence, meaning there are no
   # entries past its mex, the entire trie is the itemspart and no work is needed.
   # The question -- about whether there are entries past the mex of the trie -- is
-  # encoded in the comparison `seqsize == size` (see `seq_only?`). With UTermTrie32,
-  # it is effectively two fetches. That is, we cache enough to make this comparison have
-  # negligible cost, both on assoc- and dissoc-side, and on the comparison side;
-  # and thus, the fast path has a fast guard. The guard fires almost always. Very
-  # rarely in practice do we have entries with keys past the mex.
+  # answered by the comparison `seqsize == size` (see `seq_only?`). With UTermTrie32,
+  # it is effectively two fetches and a compare. That is, we cache enough to make
+  # this comparison have negligible cost, both on assoc- and dissoc-side, and on
+  # the comparison side; and thus, the fast path has a fast guard, which is nice.
+  # The guard fires almost always: very rarely in practice do we have entries
+  # with keys past the mex.
+  #
+  # Public API:
+  #
+  # - `empty : R`
+  # - `summary(root : R) : Summary`
+  # - `at?(root : R, key : UInt32) : Term?``
+  # - `each(root : R, & : UInt32, Term ->) : Nil`
+  # - `seqsize(root : R) : UInt32`
+  # - `assoc(root : R, key : UInt32, value : Term, *, cookie : Cookie = Cookie.none) : R`
+  # - `dissoc(root : R, key : UInt32, *, cookie : Cookie = Cookie.none) : R`
+  # - (absent) `gte(root : R, lo : UInt32, *, cookie : Cookie = Cookie.none) : R`
+  # - (absent) `lt(root : R, hi : UInt32, *, cookie : Cookie = Cookie.none) : R`
   module UTermTrie32
     extend self
 
-    alias Trie = Leaf | Node
+    alias Root = Leaf | Node
 
-    defcase Leaf, cookie : Cookie, summary : Summary, children : TermMap16, mutation: true
+    defcase Leaf, summary : Summary, cookie : Cookie, children : TermMap16, mutation: true
 
     alias Node = Node0 | Node1 | Node2 | Node3 | Node4 | Node5 | Node6
 
-    defcase Node0, seqsize : UInt32, cookie : Cookie, summary : Summary, children : NodeMap16(Leaf), mutation: true
-    defcase Node1, seqsize : UInt32, cookie : Cookie, summary : Summary, children : NodeMap16(Node0), mutation: true
-    defcase Node2, seqsize : UInt32, cookie : Cookie, summary : Summary, children : NodeMap16(Node1), mutation: true
-    defcase Node3, seqsize : UInt32, cookie : Cookie, summary : Summary, children : NodeMap16(Node2), mutation: true
-    defcase Node4, seqsize : UInt32, cookie : Cookie, summary : Summary, children : NodeMap16(Node3), mutation: true
-    defcase Node5, seqsize : UInt32, cookie : Cookie, summary : Summary, children : NodeMap16(Node4), mutation: true
-    defcase Node6, seqsize : UInt32, cookie : Cookie, summary : Summary, children : NodeMap16(Node5), mutation: true
+    defcase Node0, summary : Summary, seqsize : UInt32, cookie : Cookie, children : NodeMap16(Leaf), mutation: true
+    defcase Node1, summary : Summary, seqsize : UInt32, cookie : Cookie, children : NodeMap16(Node0), mutation: true
+    defcase Node2, summary : Summary, seqsize : UInt32, cookie : Cookie, children : NodeMap16(Node1), mutation: true
+    defcase Node3, summary : Summary, seqsize : UInt32, cookie : Cookie, children : NodeMap16(Node2), mutation: true
+    defcase Node4, summary : Summary, seqsize : UInt32, cookie : Cookie, children : NodeMap16(Node3), mutation: true
+    defcase Node5, summary : Summary, seqsize : UInt32, cookie : Cookie, children : NodeMap16(Node4), mutation: true
+    defcase Node6, summary : Summary, seqsize : UInt32, cookie : Cookie, children : NodeMap16(Node5), mutation: true
 
-    EMPTY_LEAF  = Leaf.new(Cookie.none, Summary.zero, TermMap16.empty)
-    EMPTY_NODE0 = Node0.new(0u32, Cookie.none, Summary.zero, NodeMap16(Leaf).empty)
-    EMPTY_NODE1 = Node1.new(0u32, Cookie.none, Summary.zero, NodeMap16(Node0).empty)
-    EMPTY_NODE2 = Node2.new(0u32, Cookie.none, Summary.zero, NodeMap16(Node1).empty)
-    EMPTY_NODE3 = Node3.new(0u32, Cookie.none, Summary.zero, NodeMap16(Node2).empty)
-    EMPTY_NODE4 = Node4.new(0u32, Cookie.none, Summary.zero, NodeMap16(Node3).empty)
-    EMPTY_NODE5 = Node5.new(0u32, Cookie.none, Summary.zero, NodeMap16(Node4).empty)
-    EMPTY_NODE6 = Node6.new(0u32, Cookie.none, Summary.zero, NodeMap16(Node5).empty)
+    EMPTY_LEAF  = Leaf.new(Summary.zero, Cookie.none, TermMap16.empty)
+    EMPTY_NODE0 = Node0.new(Summary.zero, 0u32, Cookie.none, NodeMap16(Leaf).empty)
+    EMPTY_NODE1 = Node1.new(Summary.zero, 0u32, Cookie.none, NodeMap16(Node0).empty)
+    EMPTY_NODE2 = Node2.new(Summary.zero, 0u32, Cookie.none, NodeMap16(Node1).empty)
+    EMPTY_NODE3 = Node3.new(Summary.zero, 0u32, Cookie.none, NodeMap16(Node2).empty)
+    EMPTY_NODE4 = Node4.new(Summary.zero, 0u32, Cookie.none, NodeMap16(Node3).empty)
+    EMPTY_NODE5 = Node5.new(Summary.zero, 0u32, Cookie.none, NodeMap16(Node4).empty)
+    EMPTY_NODE6 = Node6.new(Summary.zero, 0u32, Cookie.none, NodeMap16(Node5).empty)
 
-    private def summarize(children, &) : Summary
-      summary = Summary.zero
-      Map16.each_value(children) do |child|
-        summary = Summary.union(summary, yield child)
+    def capacity(node : Leaf | Node)
+      case node
+      in Leaf  then 16u32**1
+      in Node0 then 16u32**2
+      in Node1 then 16u32**3
+      in Node2 then 16u32**4
+      in Node3 then 16u32**5
+      in Node4 then 16u32**6
+      in Node5 then 16u32**7
+      in Node6 then 16u32**8
       end
-      summary
     end
 
     private def summarize(children : TermMap16) : Summary
-      summarize(children) { |child| Summary.of(child) }
+      Summary.union(children.ix) { |child| Summary.of(child) }
     end
 
     private def summarize(children : NodeMap16) : Summary
-      summarize(children, &.summary)
+      Summary.union(children.ix, &.summary)
     end
 
     def empty
@@ -96,7 +198,7 @@ class Ww::Term::Dict
     end
 
     def leaf(cookie : Cookie, summary, children)
-      Leaf.new(cookie, summary, children)
+      Leaf.new(summary, cookie, children)
     end
 
     def leaf(cookie : Cookie, summary, children, *, prototype : Leaf)
@@ -106,7 +208,7 @@ class Ww::Term::Dict
         return prototype
       end
 
-      Leaf.new(cookie, summary, children)
+      leaf(cookie, summary, children)
     end
 
     def leaf(cookie : Cookie, children, **kwargs)
@@ -115,13 +217,13 @@ class Ww::Term::Dict
 
     {% for level in 0..6 %}
       def node{{level}}(cookie : Cookie, summary, children)
-        seqsize = Map16.full?(children) ? summary.size : seqsize(children)
+        seqsize = children.full? ? summary.size : seqsize(children)
 
-        Node{{level}}.new(seqsize, cookie, summary, children)
+        Node{{level}}.new(summary, seqsize, cookie, children)
       end
 
       def node{{level}}(cookie : Cookie, summary, children, *, prototype : Node{{level}})
-        seqsize = Map16.full?(children) ? summary.size : seqsize(children)
+        seqsize = children.full? ? summary.size : seqsize(children)
 
         if prototype.cookie.allows_mutation_by?(cookie)
           prototype.seqsize = seqsize
@@ -130,10 +232,10 @@ class Ww::Term::Dict
           return prototype
         end
 
-        Node{{level}}.new(seqsize, cookie, summary, children)
+        Node{{level}}.new(summary, seqsize, cookie, children)
       end
 
-      def node{{level}}(cookie : Cookie, children, **kwargs)
+      def node{{level}}(cookie : Cookie, children : NodeMap16, **kwargs)
         node{{level}}(cookie, summarize(children), children, **kwargs)
       end
     {% end %}
@@ -185,22 +287,24 @@ class Ww::Term::Dict
     # by `wrap`.
 
     def wrap(cookie : Cookie, node : Leaf)
-      if Map16.empty?(node.children)
+      if node.children.empty?
         return EMPTY_NODE0
       end
 
-      children1 = Map16.ensure_assoc(NodeMap16(Leaf).empty, 0u32, node)
+      children0 = NodeMap16(Leaf).empty
+      children1 = children0.assoc(0u32, node, mut: false)
 
       node0(cookie, node.summary, children1)
     end
 
     {% for level in 0..5 %}
       def wrap(cookie : Cookie, node : Node{{level}})
-        if Map16.empty?(node.children)
+        if node.children.empty?
           return EMPTY_NODE{{level + 1}}
         end
 
-        children1 = Map16.ensure_assoc(NodeMap16(Node{{level}}).empty, 0u32, node)
+        children0 = NodeMap16(Node{{level}}).empty
+        children1 = children0.assoc(0u32, node, mut: false)
 
         node{{level + 1}}(cookie, node.summary, children1)
       end
@@ -222,6 +326,22 @@ class Ww::Term::Dict
 
     def wrap(key : NodeKey6)
       key
+    end
+
+    def unwrap(node : Leaf | Node)
+      loop do
+        return node unless node.is_a?(Node)
+        return node unless node.children.size == 1
+
+        node.children.each_entry do |key, child|
+          unless key.zero?
+            return node
+          end
+
+          node = child
+          break
+        end
+      end
     end
 
     private def eqcast(cookie : Cookie, node, key, &)
@@ -247,14 +367,14 @@ class Ww::Term::Dict
       mut = node.cookie.allows_mutation_by?(cookie)
 
       children0 = node.children
-      children1, changed = Map16.assoc(children0, key.value, value, mut: mut)
+      children1, changed = children0.assoc(key.value.to_u16, value, mut: mut)
       unless changed
         return node, false
       end
 
       # If we're inserting, we don't have to recalculate the summary. We
       # can just union the inserted child into the existing summary.
-      if Map16.size(children0) < Map16.size(children1)
+      if children0.size < children1.size
         summary = Summary.union(node.summary, Summary.of(value))
 
         return leaf(cookie, summary, children1, prototype: node), true
@@ -268,7 +388,7 @@ class Ww::Term::Dict
       private def assoc(cookie : Cookie, node : Node{{level}}, key : NodeKey{{level}}, value : Term) : {Node{{level}}, Bool}
         mut = node.cookie.allows_mutation_by?(cookie)
 
-        unless child0 = Map16.at?(node.children, key.value)
+        unless child0 = node.children.at?(key.value)
           {% if level.zero? %}
             child0 = EMPTY_LEAF
           {% else %}
@@ -281,8 +401,8 @@ class Ww::Term::Dict
           # If we're inserting, we don't have to recalculate the summary. We
           # can just union the inserted child into the existing summary.
           summary1 = Summary.union(node.summary, child1.summary)
+          children1 = node.children.assoc(key.value, child1, mut: mut)
 
-          children1, _ = Map16.assoc(node.children, key.value, child1, mut: mut)
           return node{{level}}(cookie, summary1, children1, prototype: node), true
         end
 
@@ -293,7 +413,8 @@ class Ww::Term::Dict
           return node, false
         end
 
-        children1, _ = Map16.assoc(node.children, key.value, child1, mut: mut)
+        children1 = node.children.assoc(key.value, child1, mut: mut)
+
         {node{{level}}(cookie, children1, prototype: node), true}
       end
     {% end %}
@@ -315,8 +436,7 @@ class Ww::Term::Dict
     private def dissoc(cookie : Cookie, node : Leaf, key : LeafKey) : {Leaf, Bool}
       mut = node.cookie.allows_mutation_by?(cookie)
 
-      children0 = node.children
-      children1, removed = Map16.dissoc(children0, key.value, mut: mut)
+      children1, removed = node.children.dissoc(key.value.to_u16, mut: mut)
       unless removed
         return node, false
       end
@@ -327,7 +447,7 @@ class Ww::Term::Dict
 
     {% for level in 0..6 %}
       private def dissoc(cookie : Cookie, node : Node{{level}}, key : NodeKey{{level}}) : {Node{{level}}, Bool}
-        unless child0 = Map16.at?(node.children, key.value)
+        unless child0 = node.children.at?(key.value)
           return node, false
         end
 
@@ -339,13 +459,12 @@ class Ww::Term::Dict
         mut = node.cookie.allows_mutation_by?(cookie)
 
         if summary(child1).size.zero?
-          children1, removed = Map16.dissoc(node.children, key.value, mut: mut)
-          assert removed
+          children1 = node.children.dissoc(key.value, mut: mut)
 
           return node{{level}}(cookie, children1, prototype: node), true
         end
 
-        children1, _ = Map16.assoc(node.children, key.value, child1, mut: mut)
+        children1 = node.children.assoc(key.value, child1, mut: mut)
 
         {node{{level}}(cookie, children1, prototype: node), true}
       end
@@ -371,12 +490,12 @@ class Ww::Term::Dict
     end
 
     private def at?(node : Leaf, key : LeafKey) : Term?
-      Map16.at?(node.children, key.value)
+      node.children.at?(key.value.to_u16)
     end
 
     {% for level in 0..6 %}
       private def at?(node : Node{{level}}, key : NodeKey{{level}}) : Term?
-        return unless child = Map16.at?(node.children, key.value)
+        return unless child = node.children.at?(key.value)
 
         at?(child, key.successor)
       end
@@ -403,14 +522,14 @@ class Ww::Term::Dict
     end
 
     private def each(prefix : UInt32, node : Leaf, & : UInt32, Term ->) : Nil
-      Map16.each_entry(node.children) do |key, value|
+      node.children.each_entry do |key, value|
         yield (prefix << 4) | key, value
       end
     end
 
     {% for level in 0..6 %}
       private def each(prefix : UInt32, node : Node{{level}}, & : UInt32, Term ->)
-        Map16.each_entry(node.children) do |key, child|
+        node.children.each_entry do |key, child|
           each((prefix << 4) | key, child) do |full_key, value|
             yield full_key, value
           end
@@ -418,7 +537,7 @@ class Ww::Term::Dict
       end
     {% end %}
 
-    # Order: 0 to ∞.
+    # Order: ascending by key.
     def each(node : Leaf | Node, & : UInt32, Term ->)
       each(0u32, node) { |key, value| yield key, value }
     end
@@ -428,11 +547,7 @@ class Ww::Term::Dict
     #
     # In other words, *sequence size* is the mex of the trie.
     def seqsize(node : Leaf) : UInt32
-      if Map16.full?(node.children)
-        return node.summary.size
-      end
-
-      Map16.seqsize(node.children)
+      node.children.mex.to_u32
     end
 
     # :ditto:
@@ -443,104 +558,87 @@ class Ww::Term::Dict
     private def seqsize(children : NodeMap16) : UInt32
       seqsize = 0u32
 
-      Map16.each_in_seq(children) do |child|
+      children.each_in_seq do |child|
         seqsize += seqsize(child)
       end
 
       seqsize
     end
 
-    private def seqpart(cookie : Cookie, node : Leaf) : Leaf
-      if Map16.seq_only?(node.children)
-        return node
+    # *to* is exclusive.
+    #
+    # NOTE: This function does not modify *node*. The only reason you may
+    # want to pass *cookie* is for the nodes created by this function to
+    # have *cookie*; this way, you can avoid copies on subsequent modifications.
+    def view(node : Leaf | Node, from : UInt32, to : UInt32, *, cookie : Cookie = Cookie.none) : Leaf | Node
+      unless from <= to <= capacity(node)
+        return UTermTrie32.empty
       end
 
-      leaf(cookie, Map16.seqpart(node.children))
+      unwrap(view0(cookie, node, from, to))
     end
 
-    private def seqpart(cookie : Cookie, node : Node)
-      if Map16.full?(node.children)
-        return node
-      end
-
-      seqpart0(cookie, node)
-    end
-
-    # seqpart0 is the inner implementation of seqpart. It requires its
-    # *node* argument to be non-full.
-
-    private def seqpart0(cookie : Cookie, node : Leaf)
-      seqpart(cookie, node)
+    # The invariant for `view0` is that both *from* and *to* are in bounds
+    # of the given *node*.
+    private def view0(cookie : Cookie, node : Leaf, from, to)
+      leaf(cookie, node.children.view(from.to_u16, to.to_u16))
     end
 
     {% for level in 0..6 %}
-      private def seqpart0(cookie : Cookie, node : Node{{level}})
-        size = 0u32
-        tail = nil
+      private def view0(cookie : Cookie, node : Node{{level}}, from, to)
+        {% if level == 0 %}
+          map = NodeMap16(Leaf).empty
+        {% else %}
+          map = NodeMap16(Node{{level - 1}}).empty
+        {% end %}
 
-        Map16.each_in_seq(node.children) do |child|
-          if Map16.full?(child.children)
-            size += 1
-            next
+        state = :before_first
+
+        node.children.each_entry do |key, child|
+          capacity = capacity(child)
+
+          case state
+          when :before_first
+            if from > capacity
+              from -= capacity
+              to -= capacity
+              next
+            end
+
+            if to <= capacity
+              subview = view0(cookie, child, from, to)
+              unless subview.children.empty?
+                map = map.assoc(key, subview, mut: true)
+              end
+              break
+            end
+
+            to -= capacity
+
+            subview = view0(cookie, child, from, capacity)
+            unless subview.children.empty?
+              map = map.assoc(key, subview, mut: true)
+            end
+
+            state = :after_first
+          when :after_first
+            if to > capacity
+              to -= capacity
+              map = map.assoc(key, child, mut: true)
+              next
+            end
+
+            # Last
+            subview = view0(cookie, child, 0, to)
+            unless subview.children.empty?
+              map = map.assoc(key, subview, mut: true)
+            end
+            break
           end
-
-          tail = seqpart0(cookie, child)
         end
 
-        if size.zero? && tail.nil?
-          return EMPTY_NODE{{level}}
-        end
-
-        children1 = Map16.trim(node.children, size)
-
-        # If tail is nil, this means all nodes in seq were full. We're
-        # just at the boundary. E.g., seqsize 16, 32, 64 and so on.
-        #
-        # Although it isn't expected that the tail is empty, it could be.
-        # So handle that similarly.
-        if tail.nil? || Map16.empty?(tail.children)
-          return node{{level}}(cookie, children1)
-        end
-
-        mut = node.cookie.allows_mutation_by?(cookie)
-
-        # If tail contains something, we must append it to children.
-        children1 = Map16.ensure_assoc(children1, size, tail, mut: mut)
-
-        node{{level}}(cookie, children1)
+        node{{level}}(cookie, map)
       end
     {% end %}
-
-    # NOTE: `seqpart` is stupid; it will faithfully path-copy (and worse!) even
-    # if the entirety of *node* is one giant sequence. One remedy is to guard calls
-    # to `seqpart` with `size == seqsize` checks (aka `seq_only?`); such checks are
-    # basically two fetches and an integer compare. Most importantly, in practice, such
-    # a check  will almost always be `true`.
-    def seqpart(node : Leaf | Node, *, cookie : Cookie = Cookie.none)
-      seqpart(cookie, node)
-    end
-
-    def seq_only?(node : Leaf | Node) : Bool
-      seqsize(node) == summary(node).size
-    end
-
-    def equals?(a : Term, b : Term)
-      a == b
-    end
-
-    {% for cls in %w[Leaf Node0 Node1 Node2 Node3 Node4 Node5 Node6] %}
-      def equals?(a : {{cls.id}}, b : {{cls.id}}) : Bool
-        return true if a.same?(b)
-        return false unless a.summary == b.summary
-
-        Map16.equals?(a.children, b.children) do |child0, child1|
-          equals?(child0, child1)
-        end
-      end
-    {% end %}
-
-    def equals?(a, b) : Bool
-      false
-    end
   end
 end

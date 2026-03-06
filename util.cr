@@ -2366,6 +2366,30 @@ struct Slice(T)
     Slice(T).new(objects.size, read_only: true) { |index| objects[index].as(T) }
   end
 
+  def self.join(left : Indexable(Slice(T)), mid : Indexable(U), right : Indexable(Slice(V))) forall T, U, V
+    size = left.sum(&.size) + mid.size + right.sum(&.size)
+
+    buffer = Pointer(T | U | V).malloc(size)
+    cursor = buffer
+
+    left.each do |slice|
+      cursor.copy_from(slice.to_unsafe, slice.size)
+      cursor += slice.size
+    end
+
+    mid.each do |object|
+      cursor[0] = object
+      cursor += 1
+    end
+
+    right.each do |slice|
+      cursor.copy_from(slice.to_unsafe, slice.size)
+      cursor += slice.size
+    end
+
+    Slice.new(buffer, size)
+  end
+
   def starts_with?(other : Slice(T)) : Bool
     size >= other.size && self[0...other.size] == other
   end

@@ -2105,5 +2105,9 @@ require "./term/num"
 require "./term/str"
 require "./term/sym"
 require "./term/boolean"
-require "./term/dict"
+{% if flag?(:new_dict_itself) %}
+  require "./term/dict.new"
+{% else %}
+  require "./term/dict"
+{% end %}
 require "./term/case"

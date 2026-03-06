@@ -75,7 +75,7 @@ class Ww::Term::Dict
     # Returns the summary of a dict *item*.
     def self.of(item : Term) : Summary
       if dict = item.as_d?
-        return dict.summary
+        return dict.summary.copy_with(size: 1u32)
       end
 
       hashcode = Term.hashcode(item)
@@ -98,7 +98,7 @@ class Ww::Term::Dict
     # you must use `.of(Term)`.
     def self.of(key : {term: Term, hashcode: UInt64}, value : Term) : Summary
       if dict = value.as_d?
-        return dict.summary
+        return dict.summary.copy_with(size: 1u32)
       end
 
       value_hashcode = Term.hashcode(value)
@@ -131,21 +131,32 @@ class Ww::Term::Dict
       )
     end
 
-    # Returns the union of all summaries of objects in *ee*. Uses the block
-    # to summarize an object from *ee*.
-    def self.union(ee : Enumerable(T), & : T -> Summary) : Summary forall T
-      memo = zero
-      ee.each do |object|
-        memo = self.union(memo, yield object)
+    # Returns the union of all summaries of objects in *ix*. Uses the block
+    # to summarize an object from *ix*.
+    def self.union(ix : Indexable(T), & : T -> Summary) : Summary forall T
+      assert ix.size <= 16
+
+      acc0 = zero
+      acc1 = zero
+
+      i = 0
+      while i < ix.size
+        acc0 = self.union(acc0, yield ix.unsafe_fetch(i))
+        i += 1
+        break unless i < ix.size
+
+        acc1 = self.union(acc1, yield ix.unsafe_fetch(i))
+        i += 1
       end
-      memo
+
+      self.union(acc0, acc1)
     end
 
     # Associates *summary* with the given *dict*.
     #
-    # This function is supposed to host finalization and recursive steps
-    # for otherwise purely recursive dict metrics (such as maxdepth; that is,
-    # nothing but dicts contribute to the metric).
+    # This function is supposed to act as a "commit" or finalization step
+    # which updates purely recursive dict metrics (such as maxdepth; that is,
+    # dicts themselves contribute to such metrics).
     def self.assoc(summary : Summary, dict : Term::Dict) : Summary
       size_set = summary.size_set
       if summary.size < UInt16::MAX

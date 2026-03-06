@@ -1475,5 +1475,6 @@ require "./dict/histogram"
 {% if flag?(:new_dict) %}
   require "./dict/cookie"
   require "./dict/summary"
+  require "./dict/small_map"
   require "./dict/utermtrie32"
 {% end %}
