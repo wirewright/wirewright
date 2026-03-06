@@ -5077,3 +5077,55 @@
         (cell @x 100)
         (group) ;; No parts
         (discard @x)))))
+
+;; BUG: Make sure append and prepend on the same cell are not merged
+;; (and related).
+(group
+  (rack
+    (frame
+      (cell @x (a b))
+      (backsys @x  (front_ _*) <> {(front): ()})
+      (backsys @x  (_* `back) <> {back: 200}))
+    (frame
+      (cell @x (b)) ;; < nodes whose addr is smaller win
+      (backsys @x  (front_ _*) <> {(front): ()})
+      (backsys @x  (_* `back) <> {back: 200}))
+    (frame
+      (cell @x ())
+      (backsys @x  (front_ _*) <> {(front): ()})
+      (backsys @x  (_* `back) <> {back: 200}))
+    (frame
+      (cell @x (200))
+      (backsys @x  (front_ _*) <> {(front): ()})
+      (backsys @x  (_* `back) <> {back: 200}))
+    (frame
+      (cell @x ())
+      (backsys @x  (front_ _*) <> {(front): ()})
+      (backsys @x  (_* `back) <> {back: 200})))
+    ;; ...
+
+  (rack
+    (frame
+      (cell @x (a b))
+      (backsys @x  (_* `back) <> {back: 200})
+      (backsys @x  (front_ _*) <> {(front): ()}))
+    (frame
+      (cell @x (a b 200)) ;; < nodes whose addr is smaller win
+      (backsys @x  (_* `back) <> {back: 200})
+      (backsys @x  (front_ _*) <> {(front): ()}))
+    (frame
+      (cell @x (a b 200 200))
+      (backsys @x  (_* `back) <> {back: 200})
+      (backsys @x  (front_ _*) <> {(front): ()})))
+    ;; ...
+
+  (rack
+    (frame
+      (cell @x (a b))
+      (backsys @x  (_* `back) <> {back: 200})
+      (backsys @x  {¦ -flag_} <> {flag: true}))
+    (frame
+      (cell @x (a b 200 flag: true)) ;; < since the flag backsys doesn't modify itemsize it's merged!
+      (backsys @x  (_* `back) <> {back: 200})
+      (backsys @x  {¦ -flag_} <> {flag: true}))
+    end))

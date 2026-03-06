@@ -303,7 +303,25 @@ module Ww::D7
         return predicate.call(path)
       end
 
-      ref.each_entry do |key, value0|
+      if ref.itemsize == successor.itemsize
+        # Visit items recursively.
+        successor.items.each_with_index do |item1, index|
+          subpath = path.append(Tpath.value(index))
+          item0 = ref[index]
+          return false unless compatible?(item0, item1, subpath, predicate)
+        end
+      else
+        # They're definitely incompatible if one, say, pushed, and the other
+        # popped. We'll mess up the indices if we attempt to merge. Only one
+        # participant gets to modify the itemsize (and everything else along
+        # with it). Thus we mark all items as having been modified.
+        ref.items.each_with_index do |item, index|
+          subpath = path.append(Tpath.value(index))
+          return false unless predicate.call(subpath)
+        end
+      end
+
+      ref.each_entry(in: Term::Dict.pairspart) do |key, value0|
         subpath = path.append(Tpath.value(key))
         unless value1 = successor[key]?
           # Successor removed *key*.
@@ -317,7 +335,7 @@ module Ww::D7
         end
       end
 
-      successor.each_entry do |key, _|
+      successor.each_entry(in: Term::Dict.pairspart) do |key, _|
         next if key.in?(ref)
 
         # Successor added *key*.
