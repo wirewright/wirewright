@@ -503,9 +503,9 @@
         (cell @z 100)))
     end)
 
-  ;; Conflicts like this one rely on a lexicographic comparison of participants
-  ;; deep in the guts of D7 to remain deterministic. The comparison is a method of
-  ;; last resort when it comes to sorting solutions. Here we exercise it.
+  ;; Conflicts like this one rely on addr comparison of participants deep in the guts
+  ;; of D7 to remain deterministic. The comparison is a method of last resort when
+  ;; it comes to sorting solutions. Here we exercise it.
   (rack
     (frame
       (cell @x a)
@@ -515,7 +515,7 @@
       (cell @sink)
       (discard @sink))
     (frame
-      (cell @x)
+      (cell @x) ;; < (cell @x)'s addr is smaller so it wins
       (cell @y b)
       (feed @x @sink)
       (feed @y @sink)
@@ -538,6 +538,44 @@
     (frame
       (cell @x)
       (cell @y)
+      (feed @x @sink)
+      (feed @y @sink)
+      (cell @sink)
+      (discard @sink))
+    end)
+
+  (rack
+    (frame
+      (cell @y b)
+      (cell @x a)
+      (feed @x @sink)
+      (feed @y @sink)
+      (cell @sink)
+      (discard @sink))
+    (frame
+      (cell @y) ;; < (cell @y)'s addr is smaller so it wins
+      (cell @x a)
+      (feed @x @sink)
+      (feed @y @sink)
+      (cell @sink b)
+      (discard @sink))
+    (frame
+      (cell @y)
+      (cell @x a)
+      (feed @x @sink)
+      (feed @y @sink)
+      (cell @sink)
+      (discard @sink))
+    (frame
+      (cell @y)
+      (cell @x)
+      (feed @x @sink)
+      (feed @y @sink)
+      (cell @sink a)
+      (discard @sink))
+    (frame
+      (cell @y)
+      (cell @x)
       (feed @x @sink)
       (feed @y @sink)
       (cell @sink)

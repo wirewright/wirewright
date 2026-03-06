@@ -19,6 +19,11 @@ module Ww::D7
       new(indices, &.itself)
     end
 
+    # Lexicographical comparison of two node addresses.
+    def <=>(other : NodeAddr)
+      compare(other) { |a, b| a <=> b }
+    end
+
     def size : Int32
       @addr.size
     end

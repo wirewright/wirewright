@@ -244,17 +244,17 @@ module Ww::D7
         @degree
       end
 
-      @participants : Slice(Term)?
+      @participants : Slice(NodeAddr)?
 
-      def participants : Slice(Term)
+      def participants : Slice(NodeAddr)
         @participants ||= begin
-          participants = Pf::Kit.stack_array(Term, 8)
+          participants = Pf::Kit.stack_array(NodeAddr, 8)
 
           D7.each_match(match_table) do |match|
-            participants << match.node.term
+            participants << match.node.addr
           end
 
-          participants.sort! { |a, b| Term.compare(a, b) }
+          participants.sort!
           participants.to_readonly_slice(&.itself)
         end
       end
