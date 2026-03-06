@@ -368,7 +368,7 @@ module Ww::Rack::Part
   end
 
   def prepass(hg : D7::Hypergraph, &fn : D7::Hypergraph -> D7::Patch) : D7::Patch
-    unless Part.probably_exists_in?(hg)
+    unless probably_exists_in?(hg)
       return fn.call(hg)
     end
 
