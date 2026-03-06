@@ -1403,11 +1403,11 @@ module Ww::M1
       return fb # Some responses produced a satisfactory key!
     end
 
-    # Search: someone ahead doesn't know how to define op.capture, so we'll have
-    # to find it with brute force.
+    # Search: no one ahead knows how to define op.capture, so we'll have
+    # to find it with brute force ourselves.
     #
     # (%value k v_)
-    matchee.each_entry do |key, value|
+    matchee.each_entry_ord do |key, value|
       fb = eval(propose(ctx, op.capture, key, op.tail, value, plan))
       next if fb.empty?
       return fb
