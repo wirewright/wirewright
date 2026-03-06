@@ -1,90 +1,9 @@
 class Ww::Term::Dict
-  alias TermMap16 = SmallMap(Term, UInt16)
-
-  # ????
-  struct NodeMap16(T)
-    def initialize(@map : SmallMap(T, UInt16), @full : Pf::BitSet16)
-    end
-
-    def self.empty
-      new(map: SmallMap(T, UInt16).empty, full: Pf::BitSet16.empty)
-    end
-
-    def self.equals?(a : NodeMap16, b : NodeMap16, &)
-      return false unless a.@full == b.@full
-
-      SmallMap.equals?(a.@map, b.@map) { |x, y| yield x, y }
-    end
-
-    def ix
-      @map.ix
-    end
-
-    def empty?
-      @map.empty?
-    end
-
-    def size
-      @map.size
-    end
-
-    def at?(key)
-      @map.at?(key.to_u16)
-    end
-
-    def seq_only?
-      @map.seq_only?
-    end
-
-    def full?
-      @full.full?
-    end
-
-    def seqsize : UInt32
-      @map.mex.to_u32
-    end
-
-    def each_entry(&)
-      @map.each_entry do |key, value|
-        yield key, value
-      end
-    end
-
-    def each_in_seq(&)
-      seqsize.times do |index|
-        yield @map.ix.unsafe_fetch(index)
-        break unless index.to_u16.in?(@full)
-      end
-    end
-
-    def assoc(key, object, *, mut : Bool)
-      key = key.to_u16
-
-      map, _ = @map.assoc(key, object, mut: mut)
-
-      if object.children.full?
-        full = @full.add(key)
-      else
-        full = @full.delete(key)
-      end
-
-      NodeMap16.new(map, full)
-    end
-
-    def dissoc(key, *, mut : Bool)
-      key = key.to_u16
-
-      map, _ = @map.dissoc(key, mut: mut)
-
-      NodeMap16.new(map, @full.delete(key))
-    end
-  end
-
   # UTermTrie32 is used in dicts to store all `UInt32` keys.
   #
   # The design of `UTermTrie32` is very similar in spirit to `Pf::USet32`'s.
   # Both were inspired by Rich Hickey's persistent vector; I'm not sure how
-  # much I'm diverging from them here, though.
+  # much I'm diverging from it here, though.
   #
   # Some notes:
   #
@@ -149,39 +68,41 @@ class Ww::Term::Dict
   module UTermTrie32
     extend self
 
+    alias TermMap16 = SmallMap(Term, UInt16)
+
     alias Root = Leaf | Node
 
     defcase Leaf, summary : Summary, cookie : Cookie, children : TermMap16, mutation: true
 
     alias Node = Node0 | Node1 | Node2 | Node3 | Node4 | Node5 | Node6
 
-    defcase Node0, summary : Summary, seqsize : UInt32, cookie : Cookie, children : NodeMap16(Leaf), mutation: true
-    defcase Node1, summary : Summary, seqsize : UInt32, cookie : Cookie, children : NodeMap16(Node0), mutation: true
-    defcase Node2, summary : Summary, seqsize : UInt32, cookie : Cookie, children : NodeMap16(Node1), mutation: true
-    defcase Node3, summary : Summary, seqsize : UInt32, cookie : Cookie, children : NodeMap16(Node2), mutation: true
-    defcase Node4, summary : Summary, seqsize : UInt32, cookie : Cookie, children : NodeMap16(Node3), mutation: true
-    defcase Node5, summary : Summary, seqsize : UInt32, cookie : Cookie, children : NodeMap16(Node4), mutation: true
-    defcase Node6, summary : Summary, seqsize : UInt32, cookie : Cookie, children : NodeMap16(Node5), mutation: true
+    defcase Node0, summary : Summary, seqsize : UInt32, cookie : Cookie, children : SmallMap(Leaf, UInt16), mutation: true
+    defcase Node1, summary : Summary, seqsize : UInt32, cookie : Cookie, children : SmallMap(Node0, UInt16), mutation: true
+    defcase Node2, summary : Summary, seqsize : UInt32, cookie : Cookie, children : SmallMap(Node1, UInt16), mutation: true
+    defcase Node3, summary : Summary, seqsize : UInt32, cookie : Cookie, children : SmallMap(Node2, UInt16), mutation: true
+    defcase Node4, summary : Summary, seqsize : UInt32, cookie : Cookie, children : SmallMap(Node3, UInt16), mutation: true
+    defcase Node5, summary : Summary, seqsize : UInt32, cookie : Cookie, children : SmallMap(Node4, UInt16), mutation: true
+    defcase Node6, summary : Summary, seqsize : UInt32, cookie : Cookie, children : SmallMap(Node5, UInt16), mutation: true
 
     EMPTY_LEAF  = Leaf.new(Summary.zero, Cookie.none, TermMap16.empty)
-    EMPTY_NODE0 = Node0.new(Summary.zero, 0u32, Cookie.none, NodeMap16(Leaf).empty)
-    EMPTY_NODE1 = Node1.new(Summary.zero, 0u32, Cookie.none, NodeMap16(Node0).empty)
-    EMPTY_NODE2 = Node2.new(Summary.zero, 0u32, Cookie.none, NodeMap16(Node1).empty)
-    EMPTY_NODE3 = Node3.new(Summary.zero, 0u32, Cookie.none, NodeMap16(Node2).empty)
-    EMPTY_NODE4 = Node4.new(Summary.zero, 0u32, Cookie.none, NodeMap16(Node3).empty)
-    EMPTY_NODE5 = Node5.new(Summary.zero, 0u32, Cookie.none, NodeMap16(Node4).empty)
-    EMPTY_NODE6 = Node6.new(Summary.zero, 0u32, Cookie.none, NodeMap16(Node5).empty)
+    EMPTY_NODE0 = Node0.new(Summary.zero, 0u32, Cookie.none, SmallMap(Leaf, UInt16).empty)
+    EMPTY_NODE1 = Node1.new(Summary.zero, 0u32, Cookie.none, SmallMap(Node0, UInt16).empty)
+    EMPTY_NODE2 = Node2.new(Summary.zero, 0u32, Cookie.none, SmallMap(Node1, UInt16).empty)
+    EMPTY_NODE3 = Node3.new(Summary.zero, 0u32, Cookie.none, SmallMap(Node2, UInt16).empty)
+    EMPTY_NODE4 = Node4.new(Summary.zero, 0u32, Cookie.none, SmallMap(Node3, UInt16).empty)
+    EMPTY_NODE5 = Node5.new(Summary.zero, 0u32, Cookie.none, SmallMap(Node4, UInt16).empty)
+    EMPTY_NODE6 = Node6.new(Summary.zero, 0u32, Cookie.none, SmallMap(Node5, UInt16).empty)
 
-    def capacity(node : Leaf | Node)
+    def capacity(node : Leaf | Node | Leaf.class | Node.class)
       case node
-      in Leaf  then 16u32**1
-      in Node0 then 16u32**2
-      in Node1 then 16u32**3
-      in Node2 then 16u32**4
-      in Node3 then 16u32**5
-      in Node4 then 16u32**6
-      in Node5 then 16u32**7
-      in Node6 then 16u32**8
+      in Leaf, Leaf.class   then 16u32**1
+      in Node0, Node0.class then 16u32**2
+      in Node1, Node1.class then 16u32**3
+      in Node2, Node2.class then 16u32**4
+      in Node3, Node3.class then 16u32**5
+      in Node4, Node4.class then 16u32**6
+      in Node5, Node5.class then 16u32**7
+      in Node6, Node6.class then 16u32**8
       end
     end
 
@@ -189,7 +110,7 @@ class Ww::Term::Dict
       Summary.union(children.ix) { |child| Summary.of(child) }
     end
 
-    private def summarize(children : NodeMap16) : Summary
+    private def summarize(children : SmallMap) : Summary
       Summary.union(children.ix, &.summary)
     end
 
@@ -217,13 +138,13 @@ class Ww::Term::Dict
 
     {% for level in 0..6 %}
       def node{{level}}(cookie : Cookie, summary, children)
-        seqsize = children.full? ? summary.size : seqsize(children)
+        seqsize = summary.size == capacity(Node{{level}}) ? summary.size : seqsize(children)
 
         Node{{level}}.new(summary, seqsize, cookie, children)
       end
 
       def node{{level}}(cookie : Cookie, summary, children, *, prototype : Node{{level}})
-        seqsize = children.full? ? summary.size : seqsize(children)
+        seqsize = summary.size == capacity(Node{{level}}) ? summary.size : seqsize(children)
 
         if prototype.cookie.allows_mutation_by?(cookie)
           prototype.seqsize = seqsize
@@ -235,7 +156,7 @@ class Ww::Term::Dict
         Node{{level}}.new(summary, seqsize, cookie, children)
       end
 
-      def node{{level}}(cookie : Cookie, children : NodeMap16, **kwargs)
+      def node{{level}}(cookie : Cookie, children : SmallMap, **kwargs)
         node{{level}}(cookie, summarize(children), children, **kwargs)
       end
     {% end %}
@@ -291,8 +212,8 @@ class Ww::Term::Dict
         return EMPTY_NODE0
       end
 
-      children0 = NodeMap16(Leaf).empty
-      children1 = children0.assoc(0u32, node, mut: false)
+      children0 = SmallMap(Leaf, UInt16).empty
+      children1, _ = children0.assoc(0u32, node, mut: false)
 
       node0(cookie, node.summary, children1)
     end
@@ -303,8 +224,8 @@ class Ww::Term::Dict
           return EMPTY_NODE{{level + 1}}
         end
 
-        children0 = NodeMap16(Node{{level}}).empty
-        children1 = children0.assoc(0u32, node, mut: false)
+        children0 = SmallMap(Node{{level}}, UInt16).empty
+        children1, _ = children0.assoc(0u32, node, mut: false)
 
         node{{level + 1}}(cookie, node.summary, children1)
       end
@@ -388,7 +309,7 @@ class Ww::Term::Dict
       private def assoc(cookie : Cookie, node : Node{{level}}, key : NodeKey{{level}}, value : Term) : {Node{{level}}, Bool}
         mut = node.cookie.allows_mutation_by?(cookie)
 
-        unless child0 = node.children.at?(key.value)
+        unless child0 = node.children.at?(key.value.to_u16)
           {% if level.zero? %}
             child0 = EMPTY_LEAF
           {% else %}
@@ -401,7 +322,7 @@ class Ww::Term::Dict
           # If we're inserting, we don't have to recalculate the summary. We
           # can just union the inserted child into the existing summary.
           summary1 = Summary.union(node.summary, child1.summary)
-          children1 = node.children.assoc(key.value, child1, mut: mut)
+          children1, _ = node.children.assoc(key.value.to_u16, child1, mut: mut)
 
           return node{{level}}(cookie, summary1, children1, prototype: node), true
         end
@@ -413,7 +334,7 @@ class Ww::Term::Dict
           return node, false
         end
 
-        children1 = node.children.assoc(key.value, child1, mut: mut)
+        children1, _ = node.children.assoc(key.value.to_u16, child1, mut: mut)
 
         {node{{level}}(cookie, children1, prototype: node), true}
       end
@@ -447,7 +368,7 @@ class Ww::Term::Dict
 
     {% for level in 0..6 %}
       private def dissoc(cookie : Cookie, node : Node{{level}}, key : NodeKey{{level}}) : {Node{{level}}, Bool}
-        unless child0 = node.children.at?(key.value)
+        unless child0 = node.children.at?(key.value.to_u16)
           return node, false
         end
 
@@ -459,12 +380,12 @@ class Ww::Term::Dict
         mut = node.cookie.allows_mutation_by?(cookie)
 
         if summary(child1).size.zero?
-          children1 = node.children.dissoc(key.value, mut: mut)
+          children1, _ = node.children.dissoc(key.value.to_u16, mut: mut)
 
           return node{{level}}(cookie, children1, prototype: node), true
         end
 
-        children1 = node.children.assoc(key.value, child1, mut: mut)
+        children1, _ = node.children.assoc(key.value.to_u16, child1, mut: mut)
 
         {node{{level}}(cookie, children1, prototype: node), true}
       end
@@ -495,7 +416,7 @@ class Ww::Term::Dict
 
     {% for level in 0..6 %}
       private def at?(node : Node{{level}}, key : NodeKey{{level}}) : Term?
-        return unless child = node.children.at?(key.value)
+        return unless child = node.children.at?(key.value.to_u16)
 
         at?(child, key.successor)
       end
@@ -555,11 +476,13 @@ class Ww::Term::Dict
       node.seqsize
     end
 
-    private def seqsize(children : NodeMap16) : UInt32
+    private def seqsize(children : SmallMap) : UInt32
       seqsize = 0u32
 
-      children.each_in_seq do |child|
+      children.mex.times do |index|
+        child = children.ix.unsafe_fetch(index)
         seqsize += seqsize(child)
+        break unless summary(child).size == capacity(child) # full
       end
 
       seqsize
@@ -587,9 +510,9 @@ class Ww::Term::Dict
     {% for level in 0..6 %}
       private def view0(cookie : Cookie, node : Node{{level}}, from, to)
         {% if level == 0 %}
-          map = NodeMap16(Leaf).empty
+          map = SmallMap(Leaf, UInt16).empty
         {% else %}
-          map = NodeMap16(Node{{level - 1}}).empty
+          map = SmallMap(Node{{level - 1}}, UInt16).empty
         {% end %}
 
         state = :before_first
@@ -608,7 +531,7 @@ class Ww::Term::Dict
             if to <= capacity
               subview = view0(cookie, child, from, to)
               unless subview.children.empty?
-                map = map.assoc(key, subview, mut: true)
+                map, _ = map.assoc(key.to_u16, subview, mut: true)
               end
               break
             end
@@ -617,21 +540,21 @@ class Ww::Term::Dict
 
             subview = view0(cookie, child, from, capacity)
             unless subview.children.empty?
-              map = map.assoc(key, subview, mut: true)
+              map, _ = map.assoc(key.to_u16, subview, mut: true)
             end
 
             state = :after_first
           when :after_first
             if to > capacity
               to -= capacity
-              map = map.assoc(key, child, mut: true)
+              map, _ = map.assoc(key.to_u16, child, mut: true)
               next
             end
 
             # Last
             subview = view0(cookie, child, 0, to)
             unless subview.children.empty?
-              map = map.assoc(key, subview, mut: true)
+              map, _ = map.assoc(key.to_u16, subview, mut: true)
             end
             break
           end
