@@ -1,188 +1,86 @@
-# TODO: our current dictionary implementation is very very bad. It has served
-# me for over a year with minor changes, but now it is becoming more and more
-# cumbersome to use and extend it. It isn't as simple as it should be, with a
-# lot of overcomplication; nor as fast as it should be. When I first wrote it
-# only a small portion of the system relied on Dicts. Now almost everything relies
-# on dicts.
-#
-# So, a quick and dirty "blueprint of a blueprint":
-#
-#  - Finger trees for item-like storage (Pf::Vec)
-#  - USet32 for itemspart tracking. All item keys are stored in the finger tree, but
-#    we only consider as *itemspart* ones that start at 0 and continue until the first
-#    gap (aka USet32#prefix).
-#  - HAMT for pairspart (updated Pf::Map). Post-prefix USet32 is also pairspart.
-#
-# Both Pf::Map and Pf::Vec must support the same type of metadata object, which they place
-# on every node and which they let clients query later on. This enables something I call
-# "sketch-" or metadata-guided descent. This should speed up ⟨...⟩ which are e.g. heavily
-# used in editR; preventing a full scan every time. The pattern matching engine can tell us
-# a great deal about what the thing we're trying to find is "like", and the trees (finger tree
-# or HAMT) can help us get there.
-#
-# Pf::Map should be implemented using 16-way branching instead of 32 at each node. This lets
-# us do some cool optimizations/bitwise trickery. Sparse16 must be paged, meaning we don't call
-# malloc() every time but instead refer to "pages" allocated ahead of time for each type of interest.
-# This is a trade-off: increased GC strain versus very fast (<~20ns with locks, ~10ns without locks
-# on my machine), and sometimes non-copying appends.
-#
-# - Pf::Map MUST be structural because we require cheap equality. That is, different order gives
-#   the same structure. Collisions are stored in a separate, lexicographically sorted slice, which
-#   is copied fully on each append.
-# - Pf::Map nodes and Pf::Vec nodes MUST be content-addressed (see also: hash-consing). We waste
-#   an enormous amount of memory constructing things that end up being the same. The same behavior
-#   also generates the worst case for equality for us: two dicts that are different objects but
-#   same by content. Content-addressing turns must comparisons to object address comparisons.
-#
-# As for per-node metadata, we must store:
-#  - Key sketch (64-bit Bloom filter containing keys in the node and its subtree)
-#  - Value sketch (64-bit Bloom filter containing string, number values in the node and its subtree; `true` and `false` both have a reserved bit)
-#  - Symbol sketch (64-bit Bloom filter containing symbols in the node and its subtree).
-#  - Population (64-bit: u16 nums, u16 strs, u16 syms, u8 trues, u8 falses); MAX of each is reserved for "infinity".
-#  - Depth (32-bit: maximum depth of node and its subtree)
-#  - Size (32-bit: number of items/entries in node and its subtree)
-#
-# This totals at 40 bytes of metadata per node. The cap is 64 bytes, so we still have some room left.
-# Although the less memory it uses, the better, of course.
-#
-# NOTE: Pf manages the hashcode since its semantics differ. Hashcode can be read
-#   off the node..
-#
-# Pf must update (recalculate) Metadata with each new update to the node. Each update
-# to a node must trigger the recalculation of metadata on the updated node.
-#
-# For content-addressing, we first simulate adding to the hash or removing from it instead
-# of allocating nodes etc. If the resulting hash's bucket exists in the cache and satisfies
-# the change we return that instead of allocating. Otherwise we construct a new node and update
-# the cache appropriately. It is important that the cache is thread-safe. A simple solution,
-# such as a RW lock, could work, although we'd have to "double tap": first take the R lock and
-# see if the thing exists, and then take a W lock and also check; and then, while having the W
-# lock, if the thing is missing, we construct and insert and return it.
-#
-# It would be nice for nodes to have the size cap of 64 bytes.
-#
-# It would be nice for small dictionaries (e.g. size < 16) to be optimized, and be e.g.
-# simply Slices under the hood. However, I'm not sure how nicely our Metadata will play
-# with this. If a 2-element Term::Dict takes 56 bytes (e.g. 40 Metadata + 8 bytes hashcode + 8 bytes ptr),
-# then is that *really* better than just nil-initializing some pointers and focusing instead
-# on the memory consumption of USet32, Vec, and Map *individually*? As in, *they* are the ones
-# doing the small-size opt, not Dict. Also, by doing small-size opt on Dict, we'll lose content-
-# addressing...The metadata problem still persists if we do small-size in Dict rather than on Dict,
-# but at least it is displaced somewhat manageably. In that case, Dict could simply be
-# USet32 + Vec + Map. All of them are still pretty large though. If we assume 24 + 16 + 16 then
-# it's still 56 bytes of control per dict (not even payload!!!) And then each node of Vec and Map
-# is maybe 64 bytes but probably more like 80-ish bytes!!! This is crazy huge!
+require "./dict/sketch"
+require "./dict/histogram"
+require "./dict/cookie"
+require "./dict/summary"
+require "./dict/small_map"
+require "./dict/utermtrie32"
+require "./dict/term_trie"
 
 module Ww
-  # Represents a dictionary: an immutable, persistent collection of key-value
-  # pairs supporting efficient, near-O(1) insert, delete, and lookup.
   @[Term::Assoc(TermType::Dict, :unsafe_as_d)]
   class Term::Dict
     include Equality
     include AutoUpcast
     include TypeConversion
 
-    # :nodoc:
-    alias ItemNode = Pf::Kit::Node(Item)
+    EMPTY = new
 
-    # :nodoc:
-    alias PairNode = Pf::Kit::Node(Pair)
-
-    # :nodoc:
-    struct Item
-      getter index, value
-
-      def initialize(@index : Int32, @value : Term)
-      end
+    def initialize
+      @utrie = UTermTrie32.empty
+      @ttrie = TermTrie.empty
     end
 
     # :nodoc:
-    struct Pair
-      getter key, value
-
-      def initialize(@key : Term, @value : Term)
-      end
+    def initialize(@utrie : UTermTrie32::Root, @ttrie : TermTrie::Root)
     end
 
     # Commits allow you to compose multiple edits into one, big edit of a dict.
     # Thus you avoid having to create many useless intermediate copies.
     class Commit
-      @@id : Atomic(Pf::Kit::AuthorId) = Atomic(Pf::Kit::AuthorId).new(Pf::Kit::AUTHOR_FIRST)
-
-      # :nodoc:
-      def self.genid
-        @@id.add(1)
+      def initialize(@state : Dict)
+        @cookie = Cookie.new
       end
 
-      @dict : Dict?
-
-      protected def initialize(@parent : Dict, @fiber : UInt64)
-        @id = Pf::Kit::AuthorId.new(Commit.genid)
-        @resolved = false
+      def result : Dict
+        @state
       end
 
       # Runs `Dict#includes?` on the dictionary built so far.
       def includes?(object) : Bool
-        (@dict || @parent).includes?(object)
+        @state.includes?(object)
       end
 
       # Runs `Dict#size` on the dictionary built so far.
       def size : Int32
-        (@dict || @parent).size
+        @state.size
       end
 
       # Runs `Dict#itemsize` on the dictionary built so far.
       def itemsize : Int32
-        (@dict || @parent).itemsize
+        @state.itemsize
       end
 
       def pairsize : Int32
-        (@dict || @parent).pairsize
+        @state.pairsize
       end
 
       # Runs `Dict#[]?` on the dictionary built so far.
       def []?(key) : Term?
-        (@dict || @parent)[key]?
+        @state[key]?
       end
 
       # Runs `Dict#[]` on the dictionary built so far.
       def [](key) : Term
-        (@dict || @parent)[key]
+        @state[key]
       end
 
       # Adds an entry to the dictionary built so far. See also: `Dict#with`.
-      #
-      # Raises `ResolvedError` if this commit is used outside of the transaction
-      # that produced it (see `Dict#transaction`).
-      #
-      # Raises `ReadonlyError` if called by a fiber other than the fiber that
-      # initiated the transaction.
       def with(key, value) : self
         return without(key) if value.nil?
 
-        raise Pf::ResolvedError.new if @resolved
-        raise Pf::ReadonlyError.new unless @fiber == Pf.fiber_id
-
-        dict = @dict ||= Dict.new(*@parent.state)
-        dict.with!(key, value, @id)
+        @state = @state.with!(key, value, @cookie)
 
         self
       end
 
-      # Removes entries with the given *keys* from the dictionary built so far.
-      # See also: `Dict#without`.
-      #
-      # Raises `ResolvedError` if this commit is used outside of the transaction
-      # that produced it (see `Dict#transaction`).
-      #
-      # Raises `ReadonlyError` if called by a fiber other than the fiber that
-      # initiated the transaction.
-      def without(*keys) : self
-        raise Pf::ResolvedError.new if @resolved
-        raise Pf::ReadonlyError.new unless @fiber == Pf.fiber_id
+      def without(key) : self
+        @state = @state.without!(key, @cookie)
 
-        dict = @dict ||= Dict.new(*@parent.state)
-        keys.each { |key| dict.without!(key, @id) }
+        self
+      end
+
+      def without(*keys) : self
+        keys.each { |key| without(key) }
 
         self
       end
@@ -207,15 +105,6 @@ module Ww
 
       def concat(ee : Enumerable(Term)) : self
         concat(ee, &.itself)
-      end
-
-      # :nodoc:
-      def resolve
-        raise Pf::ResolvedError.new if @resolved
-        raise Pf::ReadonlyError.new unless @fiber == Pf.fiber_id
-
-        @resolved = true
-        @dict || @parent
       end
     end
 
@@ -258,55 +147,33 @@ module Ww
       Part::EntriesOrd.new
     end
 
-    # :nodoc:
-    EMPTY = new
-
-    # :nodoc:
-    EMPTY_ITEM_NODE = ItemNode.new
-
-    # :nodoc:
-    EMPTY_PAIR_NODE = PairNode.new
-
-    # Cached hash code for this dict.
-    @hash = 0u64
-
-    def initialize
-      @items = EMPTY_ITEM_NODE
-      @pairs = EMPTY_PAIR_NODE
-      @sketch = Sketch.empty
-      @maxdepth = 0u32
-    end
-
-    protected def initialize(@items, @pairs, @sketch, @maxdepth)
-    end
-
-    # Must be possible to do `initialize(*state)`. Must not include any cached
-    # data: dictionaries constructed from `state` are expected be mutated without
-    # notice -- and stale cache will make the dictionary dysfunctional.
-    protected def state
-      {@items, @pairs, @sketch, @maxdepth}
-    end
-
-    # Returns the maximum-ever depth of this dictionary.
-    #
-    # In other words, this method **does not** return the current maximum depth;
-    # it can be said to return the "maximum maximum depth", that is, the largest
-    # depth seen throughout the history of this dict.
-    def maxdepth : UInt32
-      @maxdepth + 1
-    end
-
     def summary : Summary
-      raise "not implemented"
+      summary = Summary.union(UTermTrie32.summary(@utrie), TermTrie.summary(@ttrie))
+
+      Summary.assoc(summary, self)
     end
 
-    # TODO: remove in favor of `summary.symbol_sketch`
+    # TODO: remove in favor of `summary.maxdepth`
+    @[Dncast]
+    def maxdepth : Magnitude
+      summary.maxdepth
+    end
+
     def symbol_sketch
-      @sketch
+      summary.symbol_sketch
+    end
+
+    def key_sketch
+      summary.key_sketch
     end
 
     def value_sketch
-      raise "not implemented"
+      summary.value_sketch
+    end
+
+    @[Dncast]
+    def histogram
+      summary.histogram
     end
 
     # Yields one or more `Commit` objects so that you can build one or more
@@ -424,50 +291,59 @@ module Ww
       size <=> other.size
     end
 
-    # Returns `true` if this dictionary contains items only.
-    @[Dncast]
-    def itemsonly? : Bool
-      @pairs.size.zero?
+    # :nodoc:
+    def uitemsize : UInt32
+      UTermTrie32.seqsize(@utrie)
     end
 
-    # Returns `true` if this dictionary contains pairs only.
+    # :nodoc:
+    def upairsize : UInt32
+      usize - uitemsize
+    end
+
+    # :nodoc:
+    def usize : UInt32
+      summary.size
+    end
+
     @[Dncast]
-    def pairsonly? : Bool
-      @items.size.zero?
+    def itemsize : Int32
+      uitemsize.to_i
+    end
+
+    @[Dncast]
+    def pairsize : Int32
+      upairsize.to_i
     end
 
     # Returns the number of entries in this dictionary.
     @[Dncast]
     def size : Int32
-      itemsize + pairsize
-    end
-
-    @[Dncast]
-    @[AlwaysInline]
-    def itemsize
-      @items.size
-    end
-
-    def uitemsize
-      @items.size.to_u32
-    end
-
-    @[Dncast]
-    @[AlwaysInline]
-    def pairsize
-      @pairs.size
+      usize.to_i
     end
 
     # Returns `true` if this dictionary contains no entries.
     @[Dncast]
     def empty? : Bool
-      size.zero?
+      usize.zero?
     end
 
     # Shorthand for `!empty?`.
     @[Dncast]
     def nonempty? : Bool
       !empty?
+    end
+
+    # Returns `true` if this dictionary contains items only.
+    @[Dncast]
+    def itemsonly? : Bool
+      upairsize.zero?
+    end
+
+    # Returns `true` if this dictionary contains pairs only.
+    @[Dncast]
+    def pairsonly? : Bool
+      uitemsize.zero?
     end
 
     # Returns `true` if this dictionary contains the given *key*.
@@ -514,15 +390,18 @@ module Ww
     # O(1) Nth entry in `each_entry`-order (items unordered, pairs unordered).
     @[Dncast]
     def nth?(index : Int32) : {Term, Term}?
-      if 0 <= index < itemsize
-        entry = @items.nth?(index) || return
+      nth?(index.to_u32)
+    end
 
-        {Term.of(entry.index), entry.value}
-      elsif itemsize <= index < size
-        entry = @pairs.nth?(index - itemsize) || return
-
-        {entry.key, entry.value}
+    def nth?(index : UInt32) : {Term, Term}?
+      if 0 <= index < UTermTrie32.summary(@utrie).size
+        value = UTermTrie32.at?(@utrie, index) || raise IndexError.new
+        return Term.of(index), value
       end
+
+      index -= UTermTrie32.summary(@utrie).size
+
+      TermTrie.nth?(@ttrie, index)
     end
 
     @[Dncast]
@@ -547,35 +426,28 @@ module Ww
       ordnth?(index) || raise IndexError.new
     end
 
-    private def at_default?(key : Term::Any) : Term?
-      # why the f is it called a COAT?
-      return unless coat = @pairs.fetch?(Probes::FetchPair.new(Term.of(key)))
-
-      entry, *_ = coat
-      entry.value
+    # :nodoc:
+    @[Dncast]
+    def []?(key : UInt32) : Term?
+      UTermTrie32.at?(@utrie, key)
     end
 
     # :nodoc:
     @[Dncast]
-    def []?(key : Term::Num) : Term?
-      return at_default?(key) unless i = index32?(key)
-      return at_default?(key) unless coat = @items.fetch?(Probes::FetchItem.new(i.to_i))
-
-      entry, *_ = coat
-      entry.value
-    end
-
-    # :nodoc:
-    @[Dncast]
-    def []?(key : Term::Any) : Term?
-      at_default?(key)
+    def []?(key : Int32) : Term?
+      self[key.to_u32]?
     end
 
     # Returns the value associated with the given *key*, or nil if *key*
     # is not associated with any value.
     @[Dncast]
     def []?(key) : Term?
-      self[Term[key]]?
+      key = Term.of(key)
+      if index = key.index32?
+        return self[index]?
+      end
+
+      TermTrie.at?(@ttrie, key)
     end
 
     # Returns the value associated with the given *key*, or raises `KeyError`
@@ -611,8 +483,13 @@ module Ww
     # implementation-defined.**
     @[Dncast]
     def each_entry(& : Term, Term ->) : Nil
-      @items.each { |entry| yield Term.of(entry.index), entry.value }
-      @pairs.each { |entry| yield entry.key, entry.value }
+      UTermTrie32.each(@utrie) do |key, value|
+        yield Term.of(key), Term.of(value)
+      end
+
+      TermTrie.each(@ttrie) do |key, value|
+        yield key, value
+      end
     end
 
     # Yields each itemspart entry whose key is in range, ordered 0
@@ -647,7 +524,7 @@ module Ww
     # Yields each pairspart entry, out of order.
     @[Dncast]
     def each_entry(*, in part : Dict::Part::Pairs, & : Term, Term ->)
-      @pairs.each { |entry| yield entry.key, entry.value }
+      pairspart.each_entry { |key, value| yield key, value }
     end
 
     # Yields each pairspart entry, ordered lexicographically.
@@ -705,13 +582,18 @@ module Ww
     # Yields itemspart entry values and keys (as Int32), out of order.
     @[Dncast]
     def each_item_with_index(& : Term, Int32 ->) : Nil
-      @items.each { |entry| yield entry.value, entry.index }
+      hi = itemsize
+
+      UTermTrie32.each(@utrie) do |key, value|
+        next unless key < hi
+        yield value, key.to_i
+      end
     end
 
     # Yields itemspart entry values, out of order.
     @[Dncast]
     def each_item_unordered(& : Term ->) : Nil
-      @items.each { |entry| yield entry.value }
+      each_item_with_index { |item, _| yield item }
     end
 
     # :nodoc:
@@ -752,107 +634,106 @@ module Ww
     end
 
     def sketch_superset_of?(subset : Sketch) : Bool
-      Sketch.superset?(@sketch, subset)
+      Sketch.superset?(symbol_sketch, subset)
     end
 
     @[Dncast]
     def probably_includes?(symbol : Term::Sym) : Bool
-      Sketch.superset?(@sketch, Sketch.symbol(symbol))
+      Sketch.superset?(symbol_sketch, Sketch.symbol(symbol))
     end
 
-    def self.mixdepth(depth : UInt32, value : Term) : UInt32
-      case value.type
-      when .dict?
-        Math.max(depth, value.unsafe_as_d.maxdepth + 1)
-      else
-        depth
-      end
-    end
-
-    # Recurses into entry values only.
-    #
-    # Counts itself too (smallest possible value is 1).
     @[Dncast]
     def fresh_maxdepth : Magnitude
-      maxdepth = Magnitude.new(1)
-
-      each_entry do |k, v|
-        if vdict = v.as_d?
-          maxdepth = Math.max(maxdepth, vdict.fresh_maxdepth + 1)
-        end
-      end
-
       maxdepth
-    end
-
-    # TODO: cache on dicts
-    @[Dncast]
-    def histogram
-      ee.reduce(Histogram.zero) do |memo, (_, value)|
-        Histogram.union(memo, Histogram.of(value))
-      end
     end
 
     @[Dncast]
     def fresh_sketch
-      sketch = Sketch.empty
-      each_entry do |k, v|
-        case v.type
-        when .symbol?
-          sketch = Sketch.union(sketch, Sketch.symbol(v))
-        when .dict?
-          sketch = Sketch.union(sketch, v.unsafe_as_d.fresh_sketch)
-        end
-      end
-      sketch
-    end
-
-    # :nodoc:
-    def with(key : Term::Num, value : Term) : Dict
-      return with_default(key, value) unless key.natural?
-      return with_default(key, value) unless key <= Term[@items.size]
-
-      index = key.to(Int32)
-
-      added, items = @items.add(Probes::AssocItemImm.new(index, value))
-      unless added # Overridden or completely unchanged
-        return @items.same?(items) ? self : Dict.new(items, @pairs, Sketch.union(@sketch, Sketch.symbol(value)), Dict.mixdepth(@maxdepth, value))
-      end
-
-      items, pairs, _, _ = Gap.promote(index + 1,
-        nitems: @items.size + 1,
-        npairs: @pairs.size,
-        items: items,
-        pairs: @pairs,
-      )
-
-      Dict.new(items, pairs, Sketch.union(@sketch, Sketch.symbol(value)), Dict.mixdepth(@maxdepth, value))
-    end
-
-    # :nodoc:
-    def with(key : Term::Any, value : Term) : Dict
-      with_default(key, value)
+      symbol_sketch
     end
 
     # Returns a copy of this dictionary extended with an association between
-    # *key* and *value*. If *key* was present already its value is updated
-    # in the copy.
-    #
-    # If *value* is `nil` acts as `without`. This is mainly useful during
-    # conversion from JSON (via `Term.[]`), treating `null` as absence.
+    # *key* and *value*. If *key* exists, its value is replaced with *value*.
     @[Dncast]
     def with(key, value) : Dict
-      if value.nil? || value.is_a?(JSON::Any) && value.raw.nil?
-        return without(key)
-      end
-
-      self.with(Term[key], Term.of(value))
+      with!(key, value, cookie: Cookie.none)
     end
 
-    # TODO: have an optimized version of this
+    # :nodoc:
+    def with!(key : UInt32, value, cookie : Cookie) : Dict
+      if value.nil?
+        return without!(key, cookie)
+      end
+
+      value = Term.of(value)
+
+      utrie1 = UTermTrie32.assoc(@utrie, key, value, cookie: cookie)
+      if @utrie.same?(utrie1)
+        return self
+      end
+
+      Dict.new(utrie1, @ttrie)
+    end
+
+    # :nodoc:
+    def with!(key : Int32, value, cookie : Cookie) : Dict
+      with!(key.to_u32, value, cookie)
+    end
+
+    # :nodoc:
+    def with!(key, value, cookie : Cookie) : Dict
+      if value.nil?
+        return without!(key, cookie)
+      end
+
+      key = Term.of(key)
+      if index = key.index32?
+        return with!(index, value, cookie)
+      end
+
+      value = Term.of(value)
+
+      ttrie1 = TermTrie.assoc(@ttrie, key, value, cookie: cookie)
+      if @ttrie.same?(ttrie1)
+        return self
+      end
+
+      Dict.new(@utrie, ttrie1)
+    end
+
     @[Dncast]
-    def with(key, & : Term? -> _)
-      self.with(key, yield self[key]?)
+    def without(key) : Dict
+      without!(key, cookie: Cookie.none)
+    end
+
+    # :nodoc:
+    def without!(key : UInt32, cookie : Cookie) : Dict
+      utrie1 = UTermTrie32.dissoc(@utrie, key, cookie: cookie)
+      if @utrie.same?(utrie1)
+        return self
+      end
+
+      Dict.new(utrie1, @ttrie)
+    end
+
+    # :nodoc:
+    def without!(key : Int32, cookie : Cookie) : Dict
+      without!(key.to_u32, cookie)
+    end
+
+    # :nodoc:
+    def without!(key, cookie : Cookie) : Dict
+      key = Term.of(key)
+      if index = key.index32?
+        return without!(index, cookie)
+      end
+
+      ttrie1 = TermTrie.dissoc(@ttrie, key, cookie: cookie)
+      if @ttrie.same?(ttrie1)
+        return self
+      end
+
+      Dict.new(@utrie, ttrie1)
     end
 
     @[Dncast]
@@ -918,134 +799,6 @@ module Ww
       replace(index...index + 1, rep)
     end
 
-    private def with_default(key : Term::Any, value : Term) : Dict
-      added, pairs = @pairs.add(Probes::AssocPairImm.new(Term.of(key), value))
-      unless added # Overridden or completely unchanged
-        return @pairs.same?(pairs) ? self : Dict.new(@items, pairs, Sketch.union(@sketch, Sketch.symbol(value)), Dict.mixdepth(@maxdepth, value))
-      end
-
-      Dict.new(@items, pairs, Sketch.union(@sketch, Sketch.symbol(value)), Dict.mixdepth(@maxdepth, value))
-    end
-
-    # :nodoc:
-    def without(key : Term::Num) : Dict
-      return without_default(key) unless index = index32?(key)
-
-      items, pairs, _, _ = Gap.demote(
-        end_exclusive: index.to_i,
-        rdrop: true, # < will remove the item
-        nitems: @items.size,
-        npairs: @pairs.size,
-        items: @items,
-        pairs: @pairs,
-      )
-
-      Dict.new(items, pairs, @sketch, @maxdepth)
-    end
-
-    # :nodoc:
-    def without(key : Term::Any) : Dict
-      without_default(key)
-    end
-
-    # :nodoc:
-    def without(key : Term) : Dict
-      without(Term[key])
-    end
-
-    # Returns a copy of this dictionary that is guaranteed not to contain
-    # an association with the given *key*.
-    @[Dncast]
-    def without(key) : Dict
-      without(Term.of(key))
-    end
-
-    private def without_default(key : Term::Any) : Dict
-      removed, pairs = @pairs.delete(Probes::DissocPairImm.new(Term.of(key)))
-      removed ? Dict.new(@items, pairs, @sketch, @maxdepth) : self
-    end
-
-    protected def with!(key : Term::Num, value : Term, author) : Dict
-      return with_default!(key, value, author) unless key.natural?
-      return with_default!(key, value, author) unless key <= Term[@items.size]
-
-      index = key.to(Int32)
-      added, @items = @items.add(Probes::AssocItemMut.new(index, value, author: author))
-
-      if added # Try to promote successive (index + 1) pairs to items, if any.
-        @items, @pairs, _, _ = Gap.promote(
-          end_exclusive: index + 1,
-          author: author,
-          nitems: @items.size + 1, # < new item was added
-          npairs: @pairs.size,
-          items: @items,
-          pairs: @pairs,
-        )
-      end
-
-      # If value is unchanged (e.g. with(0, :x) followed by with (0, :x)) nothing
-      # will happen since the bit has already been set.
-      @sketch = Sketch.union(@sketch, Sketch.symbol(value))
-      @maxdepth = Dict.mixdepth(@maxdepth, value)
-      @pairsptr.set(Pointer({Term, Term}).null, :release)
-
-      self
-    end
-
-    protected def with!(key : Term::Any, value : Term, author) : Dict
-      with_default!(key, value, author)
-    end
-
-    protected def with_default!(key : Term::Any, value : Term, author) : Dict
-      _, @pairs = @pairs.add(Probes::AssocPairMut.new(Term.of(key), value, author: author))
-
-      @sketch = Sketch.union(@sketch, Sketch.symbol(value))
-      @maxdepth = Dict.mixdepth(@maxdepth, value)
-      @pairsptr.set(Pointer({Term, Term}).null, :release)
-
-      self
-    end
-
-    protected def with!(key, value, author) : Dict
-      with!(Term[key], Term.of(value), author)
-    end
-
-    protected def without!(key : Term::Num, author) : Dict
-      return without_default!(key, author) unless index = index32?(key)
-
-      @items, @pairs, _, _ = Gap.demote(
-        end_exclusive: index.to_i,
-        author: author,
-        rdrop: true, # < will remove the item
-        nitems: @items.size,
-        npairs: @pairs.size,
-        items: @items,
-        pairs: @pairs,
-      )
-      @pairsptr.set(Pointer({Term, Term}).null, :release)
-
-      self
-    end
-
-    protected def without!(key : Term::Any, author) : Dict
-      without_default!(key, author)
-    end
-
-    private def without_default!(key : Term::Any, author) : Dict
-      _, @pairs = @pairs.delete(Probes::DissocPairMut.new(Term.of(key), hole: Pointer(Term).null, author: author))
-      @pairsptr.set(Pointer({Term, Term}).null, :release)
-
-      self
-    end
-
-    protected def without!(key : Term, author) : Dict
-      without!(Term[key], author)
-    end
-
-    protected def without!(key, author) : Dict
-      without!(Term[key], author)
-    end
-
     # Yields a `Commit` object which allows you to mutate a copy of `self`.
     #
     # - The commit object is marked as resolved after the block. You should not
@@ -1064,9 +817,10 @@ module Ww
     # will return a new dictionary.
     @[Dncast]
     def transaction(& : Dict::Commit ->) : Dict
-      commit = Commit.new(self, Pf.fiber_id)
+      commit = stack_alloc Commit.new(self)
       yield commit
-      commit.resolve
+
+      commit.result
     end
 
     # Returns `true` if `self` and *other* share one or more keys.
@@ -1079,14 +833,6 @@ module Ww
 
       false # does not intersect
     end
-
-    # In practice `partition` and `pairs` are called very often. Therefore by
-    # losing 8 bytes per existing dict, we gain a lot more -- because otherwise
-    # for each new dict created by `partition` we lose 32 bytes (if without @pairspart).
-    # Thus despite having more to store on every dict, we get better memory
-    # performance overall.
-    @itemspart : Dict?
-    @pairspart : Dict?
 
     # Splits this dictionary into *items* and *pairs*. Returns an `ItemsView`
     # over the items and a `pairsonly?` `Dict` with the pairs.
@@ -1109,7 +855,7 @@ module Ww
     # the pairs part.
     @[Dncast]
     def items : Dict::ItemsView
-      ItemsView.new(self, b: 0, e: @items.size)
+      ItemsView.new(self, b: 0, e: itemsize)
     end
 
     @[Dncast]
@@ -1120,67 +866,68 @@ module Ww
     # Returns the items part of `partition` (see the latter for more info).
     @[Dncast]
     def itemspart : Dict
-      if itemsonly?
-        self
-      else
-        @itemspart ||= Dict.new(@items, EMPTY_PAIR_NODE, @sketch, @maxdepth)
+      ut_seqsize = UTermTrie32.seqsize(@utrie)
+      ut_size = UTermTrie32.summary(@utrie).size
+      tt_size = TermTrie.summary(@ttrie).size
+
+      # We make a lot of defensive `itemspart` calls specifically when pattern-matching.
+      # Thus, the main path is the one where this dict is already itemsonly.
+      if ut_seqsize == ut_size && tt_size.zero?
+        return self
       end
+
+      # Another fast path is when we *do* have pairs but not in our UTermTrie32.
+      # That is, we have an itemsonly UTermTrie32 without extra entries in
+      # there, and we also have some pairs in TermTrie.
+      if ut_seqsize == ut_size
+        return Dict.new(@utrie, TermTrie.empty)
+      end
+
+      # Perform sequence partitioning. This is the slow path for `itemspart`. It is
+      # only hit when we have extra entries in UTermTrie32. That is, for instance, if
+      # we have gaps, such as in `{0: ~, 1: "John", 3: "Barbara"}`. Notice the missing
+      # `2`, which creates a gap at which we must split with `view`.
+      Dict.new(UTermTrie32.view(@utrie, 0u32, ut_seqsize), TermTrie.empty)
     end
 
     # Returns the pairs part of `partition` (see the latter for more info).
     @[Dncast]
-    def pairspart : Dict
-      if pairsonly?
-        self
-      else
-        @pairspart ||= Dict.new(EMPTY_ITEM_NODE, @pairs, @sketch, @maxdepth)
+    def pairspart
+      ut_size = UTermTrie32.summary(@utrie).size
+      if ut_size.zero?
+        return self
       end
+
+      ut_seqsize = UTermTrie32.seqsize(@utrie)
+      if ut_size == ut_seqsize
+        return Dict.new(UTermTrie32.empty, @ttrie)
+      end
+
+      Dict.new(UTermTrie32.view(@utrie, ut_seqsize, UTermTrie32.capacity(@utrie)), @ttrie)
     end
 
     # :nodoc:
-    def hashcode(& : -> UInt64) : UInt64
-      if @hash.nonzero?
-        return @hash
-      end
-
-      hashcode = yield
-
-      # Take away one slot from the hash function for our own use. This
-      # sadly means we have to collide all 0-hash values with all 1-
-      # hash ones.
-      if hashcode.zero?
-        hashcode = 1u64
-      end
-
-      @hash = hashcode
+    def hashcode : UInt64
+      summary.hashcode
     end
 
     # Returns `true` if this and *other* dictionaries are equal.
     def ==(other : Dict) : Bool
       return true if same?(other)
+      return false unless summary == other.summary
 
-      # Sketches of equal dicts have *something* in common. They may be substantially
-      # different or even junky if either (or both) dictionaries have "rich histories";
-      # but there must exist an intersection of bits.
-      #
-      # TODO: REMOVE IN FAVOR OF EQUALITY ONCE SKETCH IS LIVE-RECOMPUTED. This is
-      # too ad-hoc. Why should the be > 0, for instance?
-      if @sketch.bits > 0 && other.@sketch.bits > 0 && (@sketch.bits & other.@sketch.bits) == 0
-        return false
+      unless @utrie.same?(other.@utrie)
+        UTermTrie32.each(@utrie) do |key, value0|
+          return false unless value1 = UTermTrie32.at?(other.@utrie, key)
+          return false unless value0 == value1
+        end
       end
 
-      # TODO: use @maxdepth somehow as well
-
-      return false unless @items.size == other.@items.size && @pairs.size == other.@pairs.size
-
-      h0 = @hash
-      h1 = other.@hash
-
-      return false if h0.nonzero? && h1.nonzero? && h0 != h1
-
-      each_entry do |k, v1|
-        return false unless v2 = other[k]?
-        return false unless v1 == v2
+      unless @ttrie.same?(other.@ttrie)
+        TermTrie.each(@ttrie) do |key, value0|
+          return false unless value1 = TermTrie.at?(other.@ttrie, key)
+          return false unless value0 == value1
+        end
       end
 
       true
@@ -1194,287 +941,12 @@ module Ww
       inspect(io)
     end
   end
-
-  private module Term::Dict::Gap
-    # Demotes *end exclusive*-th and successive items so they become pairs. Changes
-    # are authored by *author*, thereby saving a few copies.
-    #
-    # Returns new `Dict` state tuple from which you can initialize a `Dict`,
-    # or mutate an existing one. See also: `Dict#state`.
-    #
-    # ```text
-    #  ITEMS                     PAIRS
-    # +-----------------------+
-    # | 0   1   2   3   4   5 |  x   y
-    # +-----------------------+
-    #
-    #              | Gap.demote(3)
-    #              v
-    #  ITEMS         PAIRS
-    # +-----------+
-    # | 0   1   2 |  3   4   5   x   y
-    # +-----------+
-    # ```
-    #
-    # If *rdrop* is `true` the *end exclusive*-th item is removed rather than
-    # becoming a pair.
-    #
-    # ```text
-    #  ITEMS                     PAIRS
-    # +-----------------------+
-    # | 0   1   2   3   4   5 |  x   y
-    # +-----------------------+
-    #
-    #              | Gap.demote(3, rdrop: true)
-    #              v
-    #  ITEMS         PAIRS
-    # +-----------+
-    # | 0   1   2 |  4   5   x   y
-    # +-----------+
-    # ```
-    def self.demote(end_exclusive, rdrop, items, pairs, nitems, npairs, author = nil)
-      (end_exclusive...nitems).each do |index|
-        hole = uninitialized Term
-        author ||= Commit.genid
-
-        removed, items = items.delete(Probes::DissocItemMut.new(index, hole: pointerof(hole), author: author))
-        unless removed
-          raise "BUG: Gap.demote(): invalid state: item was not removed"
-        end
-
-        nitems -= 1
-
-        next if rdrop && index == end_exclusive
-
-        added, pairs = pairs.add(Probes::AssocPairMut.new(Term.of(index), value: hole, author: author))
-        unless added
-          raise "BUG: Gap.demote(): invalid state: pair was not added"
-        end
-
-        npairs += 1
-      end
-
-      {items, pairs, nitems, npairs}
-    end
-
-    # Promotes *end exclusive*-th pair and successive pairs so they become items.
-    # Changes are authored by *author*, thereby saving a few copies.
-    #
-    # Returns new `Dict` state tuple from which you can initialize a `Dict`,
-    # or mutate an existing one.
-    #
-    # Inverse of `demote`:
-    #
-    # ```text
-    #  ITEMS         PAIRS
-    # +-----------+
-    # | 0   1   2 |  3   4   5   x   y
-    # +-----------+
-    #
-    #               | Gap.promote(3)
-    #               v
-    #  ITEMS                     PAIRS
-    # +-----------------------+
-    # | 0   1   2   3   4   5 |  x   y
-    # +-----------------------+
-    # ```
-    def self.promote(end_exclusive, items, pairs, nitems, npairs, author = nil)
-      return items, pairs, nitems, npairs unless npairs > 0
-
-      while true
-        hole = uninitialized Term
-        author ||= Commit.genid
-
-        removed, pairs = pairs.delete(Probes::DissocPairMut.new(Term.of(end_exclusive), hole: pointerof(hole), author: author))
-        break unless removed # Next gap or no more items
-
-        npairs -= 1
-
-        added, items = items.add(Probes::AssocItemMut.new(key: end_exclusive, value: hole, author: author))
-        unless added
-          raise "BUG: Gap.promote(): item was not added"
-        end
-
-        end_exclusive += 1
-        nitems += 1
-      end
-
-      {items, pairs, nitems, npairs}
-    end
-  end
-
-  private module Term::Dict::Probes
-    # :nodoc:
-    macro compose(cls, *incls, &ext)
-      struct {{cls}}
-        {% for incl in incls %}
-          include {{incl}}
-        {% end %}
-
-        {{yield}}
-      end
-    end
-
-    # NOTE: We should actually compare full hashes first in match?, but for
-    # whatever reason, either because Crystal codegens wrong, or for some
-    # other reason, we have a SEGFAULT if we also store @path on Item and Pair;
-    # which is fixed by making struct Item and struct Pair into class Item and
-    # class Pair, and I don't want to do that, because it makes us slower. Since
-    # this is a temp implementation anyway, we don't *really* care at this point.
-
-    # Includers are fetch probes with stored entry type `E` and key type `K`.
-    module Fetch(E, K)
-      include Pf::Kit::IProbeFetch(E)
-
-      def initialize(@key : K)
-      end
-
-      abstract def keyof(stored : E) : K
-
-      def path : UInt64
-        Term.hashcode(@key)
-      end
-
-      def match?(stored : E) : Bool
-        @key == keyof(stored)
-      end
-    end
-
-    # Includers are add probes with stored entry type `E` and key type `K`.
-    module Assoc(E, K)
-      include Pf::Kit::IProbeAdd(E)
-
-      getter path : UInt64
-
-      @key : K
-      @value : Term
-
-      abstract def keyof(stored : E) : K
-
-      def match?(stored : E) : Bool
-        @key == keyof(stored)
-      end
-
-      def replace?(stored : E) : Bool
-        !@value.same?(stored.value)
-      end
-
-      def value : E
-        E.new(@key, @value)
-      end
-    end
-
-    # Includers are delete probes with stored entry type `E` and key type `K`.
-    module Dissoc(E, K)
-      include Pf::Kit::IProbeDelete(E)
-
-      getter path : UInt64
-
-      @key : K
-
-      abstract def keyof(stored : E) : K
-
-      def match?(stored : E) : Bool
-        @key == keyof(stored)
-      end
-    end
-
-    # Includers do not have authorship rights, therefore they always copy
-    # the underlying nodes before changing them.
-    module NoAuthor
-      def author : Pf::Kit::AuthorId
-        Pf::Kit::AUTHOR_NONE
-      end
-    end
-
-    # Includers have authorship rights, therefore they can copy the underlying
-    # nodes only once before changing them, and then can change them without
-    # copying forever.
-    module Authored
-      getter author : Pf::Kit::AuthorId
-    end
-
-    module PairStored
-      def keyof(stored : Pair) : Term
-        stored.key
-      end
-    end
-
-    module ItemStored
-      def keyof(stored : Item) : Int32
-        stored.index
-      end
-    end
-
-    module KVInitialize
-      def initialize(@key, @value)
-        @path = Term.hashcode(@key)
-      end
-    end
-
-    module KInitialize
-      def initialize(@key)
-        @path = Term.hashcode(@key)
-      end
-    end
-
-    compose FetchPair, Fetch(Pair, Term), PairStored
-    compose FetchItem, Fetch(Item, Int32), ItemStored
-
-    compose AssocPairImm, Assoc(Pair, Term), PairStored, NoAuthor, KVInitialize
-    compose AssocItemImm, Assoc(Item, Int32), ItemStored, NoAuthor, KVInitialize
-
-    compose DissocPairImm, Dissoc(Pair, Term), PairStored, NoAuthor, KInitialize
-    compose DissocItemImm, Dissoc(Item, Int32), ItemStored, NoAuthor, KInitialize
-
-    compose AssocPairMut, Assoc(Pair, Term), PairStored, Authored, KVInitialize do
-      def initialize(*args, @author, **kwargs)
-        super(*args, **kwargs)
-      end
-    end
-
-    compose AssocItemMut, Assoc(Item, Int32), ItemStored, Authored, KVInitialize do
-      def initialize(*args, @author, **kwargs)
-        super(*args, **kwargs)
-      end
-    end
-
-    compose DissocPairMut, Dissoc(Pair, Term), PairStored, Authored, KInitialize do
-      def initialize(*args, @hole : Term*, @author, **kwargs)
-        super(*args, **kwargs)
-      end
-
-      def match?(stored : Pair) : Bool
-        matched = super
-        if matched && !@hole.null?
-          @hole.value = stored.value
-        end
-        matched
-      end
-    end
-
-    compose DissocItemMut, Dissoc(Item, Int32), ItemStored, Authored, KInitialize do
-      def initialize(*args, @hole : Term*, @author, **kwargs)
-        super(*args, **kwargs)
-      end
-
-      def match?(stored : Item) : Bool
-        matched = super
-        if matched && !@hole.null?
-          @hole.value = stored.value
-        end
-        matched
-      end
-    end
-  end
 end
 
 require "./dict/items_view"
 require "./dict/sketch"
 require "./dict/histogram"
-{% if flag?(:new_dict) %}
-  require "./dict/cookie"
-  require "./dict/summary"
-  require "./dict/small_map"
-  require "./dict/utermtrie32"
-{% end %}
+require "./dict/cookie"
+require "./dict/summary"
+require "./dict/small_map"
+require "./dict/utermtrie32"
