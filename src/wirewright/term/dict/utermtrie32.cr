@@ -134,11 +134,7 @@ class Ww::Term::Dict
         return prototype
       end
 
-      leaf(cookie, summary, children)
-    end
-
-    def leaf(cookie : Cookie, children, **kwargs)
-      leaf(cookie, summarize(children), children, **kwargs)
+      Leaf.new(summary, cookie, children)
     end
 
     {% for level in 0..6 %}
@@ -167,10 +163,6 @@ class Ww::Term::Dict
         end
 
         Node{{level}}.new(summary, seqsize, cookie, children)
-      end
-
-      def node{{level}}(cookie : Cookie, children : SmallMap, **kwargs)
-        node{{level}}(cookie, summarize(children), children, **kwargs)
       end
     {% end %}
 
@@ -216,9 +208,8 @@ class Ww::Term::Dict
     end
 
     # NOTE: Wrap needs *cookie* because we'd like the nodes it creates (if any)
-    # to be owned by *cookie*. This way, later, if we mutate using *cookie*,
-    # we'll mutate right away, without having to path-copy the nodes created
-    # by `wrap`.
+    # to be owned by *cookie*. This way, if we mutate them using *cookie* later,
+    # we'll mutate them right away, without having to copy.
 
     def wrap(cookie : Cookie, node : Leaf)
       if node.children.empty?
@@ -297,25 +288,26 @@ class Ww::Term::Dict
       yield node, key
     end
 
-    private def assoc(cookie : Cookie, node : Leaf, key : LeafKey, item : Item) : {Leaf, Bool}
+    private def assoc(cookie : Cookie, node : Leaf, key : LeafKey, item item1 : Item) : {Leaf, Bool}
       mut = node.cookie.allows_mutation_by?(cookie)
 
-      children0 = node.children
-      children1, changed = children0.assoc(key.value.to_u16, item, mut: mut)
+      size0 = node.children.size
+
+      children1, changed = node.children.assoc(key.value.to_u16, item1, mut: mut)
       unless changed
         return node, false
       end
 
-      # If we're inserting, we don't have to recalculate the summary. We
+      # When we're inserting, we don't have to recalculate the summary. We
       # can just union the inserted child into the existing summary.
-      if children0.size < children1.size
-        summary = Summary.union(node.summary, Summary.of(item.key, item.term))
+      if size0 < children1.size
+        summary = Summary.union(node.summary, Summary.of(item1.key, item1.term))
 
         return leaf(cookie, summary, children1, prototype: node), true
       end
 
-      # Recalculate the summary from scratch.
-      {leaf(cookie, children1, prototype: node), true}
+      # Recalculate.
+      {leaf(cookie, summarize(children1), children1, prototype: node), true}
     end
 
     {% for level in 0..6 %}
@@ -340,6 +332,8 @@ class Ww::Term::Dict
           return node{{level}}(cookie, summary1, children1, prototype: node), true
         end
 
+        child0_summary = child0.summary
+
         # If we're updating, we have to recalculate the summary from scratch.
         # Use smart constructors for this.
         child1, changed = assoc(cookie, child0, key.successor, item)
@@ -347,9 +341,17 @@ class Ww::Term::Dict
           return node, false
         end
 
+        child1_summary = child1.summary
+
         children1, _ = node.children.assoc(key.value.to_u16, child1, mut: mut)
 
-        {node{{level}}(cookie, children1, prototype: node), true}
+        if Summary.compatible?(child0_summary, child1_summary)
+          summary = Summary.update(node.summary, child0_summary, child1_summary)
+
+          return node{{level}}(cookie, summary, children1, prototype: node), true
+        end
+
+        {node{{level}}(cookie, summarize(children1), children1, prototype: node), true}
       end
     {% end %}
 
@@ -376,7 +378,7 @@ class Ww::Term::Dict
       end
 
       # Recalculate the summary from scratch.
-      {leaf(cookie, children1, prototype: node), true}
+      {leaf(cookie, summarize(children1), children1, prototype: node), true}
     end
 
     {% for level in 0..6 %}
@@ -395,12 +397,12 @@ class Ww::Term::Dict
         if summary(child1).size.zero?
           children1, _ = node.children.dissoc(key.value.to_u16, mut: mut)
 
-          return node{{level}}(cookie, children1, prototype: node), true
+          return node{{level}}(cookie, summarize(children1), children1, prototype: node), true
         end
 
         children1, _ = node.children.assoc(key.value.to_u16, child1, mut: mut)
 
-        {node{{level}}(cookie, children1, prototype: node), true}
+        {node{{level}}(cookie, summarize(children1), children1, prototype: node), true}
       end
     {% end %}
 
@@ -519,7 +521,9 @@ class Ww::Term::Dict
     # The invariant for `view0` is that both *from* and *to* are in bounds
     # of the given *node*.
     private def view0(cookie : Cookie, node : Leaf, from, to)
-      leaf(cookie, node.children.view(from.to_u16, to.to_u16))
+      children = node.children.view(from.to_u16, to.to_u16)
+
+      leaf(cookie, summarize(children), children)
     end
 
     {% for level in 0..6 %}
@@ -575,7 +579,7 @@ class Ww::Term::Dict
           end
         end
 
-        node{{level}}(cookie, map)
+        node{{level}}(cookie, summarize(map), map)
       end
     {% end %}
   end

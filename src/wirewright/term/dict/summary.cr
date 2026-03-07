@@ -182,5 +182,27 @@ class Ww::Term::Dict
 
       summary.copy_with(maxdepth16: maxdepth16, size_set: size_set)
     end
+
+    # Returns `true` if two summaries are *compatible*. Compatible summaries
+    # can be given to `update` to avoid summary recalculation.
+    def self.compatible?(before : Summary, after : Summary) : Bool
+      return false unless before.key_sketch == after.key_sketch
+      return false unless before.value_sketch == after.value_sketch
+      return false unless before.symbol_sketch == after.symbol_sketch
+      return false unless before.histogram == after.histogram
+      return false unless before.maxdepth16 == after.maxdepth16
+      return false unless before.size_set == after.size_set
+
+      true
+    end
+
+    # Updates a *parent* summary from two compatible summaries *before*
+    # and *after*.
+    def self.update(parent : Summary, before : Summary, after : Summary)
+      parent.copy_with(
+        size: parent.size - before.size + after.size,
+        hashcode: parent.hashcode &- before.hashcode &+ after.hashcode,
+      )
+    end
   end
 end
