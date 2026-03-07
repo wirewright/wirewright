@@ -143,13 +143,21 @@ class Ww::Term::Dict
 
     {% for level in 0..6 %}
       def node{{level}}(cookie : Cookie, summary, children)
-        seqsize = summary.size == capacity(Node{{level}}) ? summary.size : seqsize(children)
+        if summary.size == capacity(Node{{level}})
+          seqsize = summary.size
+        else
+          seqsize = seqsize(children)
+        end
 
         Node{{level}}.new(summary, seqsize, cookie, children)
       end
 
       def node{{level}}(cookie : Cookie, summary, children, *, prototype : Node{{level}})
-        seqsize = summary.size == capacity(Node{{level}}) ? summary.size : seqsize(children)
+        if summary.size == capacity(Node{{level}})
+          seqsize = summary.size
+        else
+          seqsize = seqsize(children)
+        end
 
         if prototype.cookie.allows_mutation_by?(cookie)
           prototype.seqsize = seqsize
