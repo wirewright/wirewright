@@ -153,29 +153,6 @@ module Ww
       Summary.assoc(summary, self)
     end
 
-    # TODO: remove in favor of `summary.maxdepth`
-    @[Dncast]
-    def maxdepth : Magnitude
-      summary.maxdepth
-    end
-
-    def symbol_sketch
-      summary.symbol_sketch
-    end
-
-    def key_sketch
-      summary.key_sketch
-    end
-
-    def value_sketch
-      summary.value_sketch
-    end
-
-    @[Dncast]
-    def histogram
-      summary.histogram
-    end
-
     # Yields one or more `Commit` objects so that you can build one or more
     # dictionaries without having to produce many useless intermediate copies.
     #
@@ -634,22 +611,12 @@ module Ww
     end
 
     def sketch_superset_of?(subset : Sketch) : Bool
-      Sketch.superset?(symbol_sketch, subset)
+      Sketch.superset?(summary.symbol_sketch, subset)
     end
 
     @[Dncast]
     def probably_includes?(symbol : Term::Sym) : Bool
-      Sketch.superset?(symbol_sketch, Sketch.symbol(symbol))
-    end
-
-    @[Dncast]
-    def fresh_maxdepth : Magnitude
-      maxdepth
-    end
-
-    @[Dncast]
-    def fresh_sketch
-      symbol_sketch
+      Sketch.superset?(summary.symbol_sketch, Sketch.symbol(symbol))
     end
 
     # Returns a copy of this dictionary extended with an association between

@@ -195,8 +195,8 @@ module Ww::M1
           literals += 1
         end
 
-        matchpi %{[%'%literal term_dict]}, cue: :"%literal" do
-          literals += term.histogram.total
+        matchpiT %{[%'%literal term_dict]}, cue: :"%literal" do
+          literals += term.summary.histogram.total
         end
 
         matchpi %{[%'%literal _]}, cue: :"%literal" do

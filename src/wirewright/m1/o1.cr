@@ -142,11 +142,6 @@ module Ww::M1
     sketch = Term::Dict::Sketch.empty
 
     literals.each_entry do |literal, _|
-      if dict = literal.as_d?
-        sketch = Term::Dict::Sketch.union(sketch, dict.fresh_sketch)
-        next
-      end
-
       sketch = Term::Dict::Sketch.union(sketch, Term::Dict::Sketch.symbol(literal))
     end
 

@@ -50,7 +50,7 @@ class Ww::Term::Dict
       in .any?
         raise ArgumentError.new
       in .dict?
-        term.unsafe_as_d.histogram
+        term.unsafe_as_d.summary.histogram
       in .number?
         ONE_NUMBER
       in .string?

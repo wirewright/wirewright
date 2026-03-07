@@ -61,7 +61,7 @@ class Ww::Term::Dict
       in Term::Sym
         empty
       in Term::Dict
-        term.value_sketch
+        term.summary.value_sketch
       end
     end
 
@@ -78,7 +78,7 @@ class Ww::Term::Dict
       in Term::Num, Term::Str, Term::Boolean
         empty
       in Term::Dict
-        term.symbol_sketch
+        term.summary.symbol_sketch
       end
     end
 
@@ -92,7 +92,7 @@ class Ww::Term::Dict
       in Term::Num, Term::Str, Term::Boolean
         empty
       in Term::Dict
-        term.symbol_sketch
+        term.summary.symbol_sketch
       end
     end
 
