@@ -641,9 +641,13 @@ module Ww::M1
   # :nodoc:
   def probably_matches?(op : Op::Guard, matchee : Term) : Bool
     return false unless dict = matchee.as_d?
-    return false unless dict.sketch_superset_of?(op.sketch)
-    return false unless op.bounds[0] <= dict.size <= op.bounds[1]
-    return false unless op.depth[0] <= dict.summary.maxdepth <= op.depth[1]
+
+    summary = dict.summary
+
+    return false unless op.symbol_sketch.subset_of?(summary.symbol_sketch)
+    return false unless op.value_sketch.subset_of?(summary.value_sketch)
+    return false unless op.bounds[0] <= summary.size <= op.bounds[1]
+    return false unless op.depth[0] <= summary.maxdepth <= op.depth[1]
 
     # NOTE: We *really* don't care about last_matched. If it happens to help
     # us, we call ourselves lucky. If we mess up (esp. with others running

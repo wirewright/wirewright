@@ -610,13 +610,10 @@ module Ww
       other.subset_of?(self)
     end
 
-    def sketch_superset_of?(subset : Sketch) : Bool
-      Sketch.superset?(summary.symbol_sketch, subset)
-    end
-
     @[Dncast]
     def probably_includes?(symbol : Term::Sym) : Bool
-      Sketch.superset?(summary.symbol_sketch, Sketch.symbol(symbol))
+      sketch = Sketch.symbol(symbol, hashcode: Term.hashcode(symbol))
+      sketch.subset_of?(summary.symbol_sketch)
     end
 
     # Returns a copy of this dictionary extended with an association between

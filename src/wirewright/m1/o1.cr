@@ -139,13 +139,20 @@ module Ww::M1
     return op unless literals = op[:literals]?
     return op unless literals = literals.as_d?
 
-    sketch = Term::Dict::Sketch.empty
+    value_sketch = Term::Dict::Sketch.empty
+    symbol_sketch = Term::Dict::Sketch.empty
 
     literals.each_entry do |literal, _|
-      sketch = Term::Dict::Sketch.union(sketch, Term::Dict::Sketch.symbol(literal))
+      hashcode = Term.hashcode(literal)
+
+      value_sketch = Term::Dict::Sketch.union(value_sketch, Term::Dict::Sketch.value(literal, hashcode))
+      symbol_sketch = Term::Dict::Sketch.union(symbol_sketch, Term::Dict::Sketch.symbol(literal, hashcode))
     end
 
-    op.with(:sketch, sketch.bits)
+    op.transaction do |commit|
+      commit.with(:"value-sketch", value_sketch.bits)
+      commit.with(:"symbol-sketch", symbol_sketch.bits)
+    end
   end
 
   # Runs the sketch propagation algorithm on operators in *pattern*.
@@ -166,14 +173,14 @@ module Ww::M1
   #
   # Dictionaries matched against the pattern are expected to be supersets of
   # the returned sketch.
-  def sketch(pattern : Normp) : Term::Dict::Sketch
+  def symbol_sketch(pattern : Normp) : Term::Dict::Sketch
     unless pattern.annotations.sketches?
       pattern = sketchp(pattern)
     end
 
     pattern.unwrap do |op|
-      if sketch = op[:sketch]?
-        return sketch.to(Term::Dict::Sketch)
+      if symbol_sketch = op[:"symbol-sketch"]?
+        return symbol_sketch.to(Term::Dict::Sketch)
       end
 
       Term::Dict::Sketch.new(0)
@@ -278,16 +285,48 @@ module Ww::M1
     captures(pattern).to_set { |(name, _)| name }
   end
 
+  private struct FieldReader
+    def initialize(@dict : Term::Dict)
+      @read_count = 0
+      @missing_count = 0
+    end
+
+    def read(key, *, default) : Term
+      default = Term.of(default)
+
+      @read_count += 1
+
+      if (value = @dict[key]?) && value != default
+        return value
+      end
+
+      @missing_count += 1
+
+      default
+    end
+
+    def all_missing? : Bool
+      @read_count == @missing_count
+    end
+  end
+
   private def guarded1(op : Term::Dict) : Term::Dict
     Term.case(op, engine: M0) do
+      # NOTE: `guarded` works only if one of the fields below is defined and is
+      # nondefault. Only in that case do we know that we're to match a dict. On
+      # the other hand, the presence of guarded itself, or of the fields below
+      # with default values, does not guarantee that we're to match a dict.
       matchpi %{{¦ guarded}} do
-        min_depth = op[:"min-depth"]? || Term.of(0)
-        max_depth = op[:"max-depth"]? || Term.of(:∞)
-        min_bounds = op[:"min-bounds"]? || Term.of(0)
-        max_bounds = op[:"max-bounds"]? || Term.of(:∞)
-        sketch = op[:sketch]? || Term.of(0)
+        fields = FieldReader.new(op)
 
-        if sketch == Term.of(0) && {min_depth, max_depth} == {Term.of(0), Term.of(:"∞")} && {min_bounds, max_bounds} == {Term.of(0), Term.of(:"∞")}
+        min_depth = fields.read(:"min-depth", default: 0)
+        max_depth = fields.read(:"max-depth", default: :∞)
+        min_bounds = fields.read(:"min-bounds", default: 0)
+        max_bounds = fields.read(:"max-bounds", default: :∞)
+        value_sketch = fields.read(:"value-sketch", default: 0)
+        symbol_sketch = fields.read(:"symbol-sketch", default: 0)
+
+        if fields.all_missing?
           return op
         end
 
@@ -296,7 +335,8 @@ module Ww::M1
           "max-depth": max_depth,
           "min-bounds": min_bounds,
           "max-bounds": max_bounds,
-          "sketch": sketch,
+          "value-sketch": value_sketch,
+          "symbol-sketch": symbol_sketch,
         ]
       end
 

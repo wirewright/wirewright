@@ -67,12 +67,12 @@ class Ww::Term::Dict
 
     # Constructs a *symbol sketch* given a *term* and its *hashcode*.
     def self.symbol(term : Term, hashcode : UInt64) : Sketch
-      symbol(Term[term])
+      symbol(Term[term], hashcode)
     end
 
     # :ditto:
     def self.symbol(term : Term::Any, hashcode : UInt64) : Sketch
-      case Term[term]
+      case term
       in Term::Sym
         one(hashcode)
       in Term::Num, Term::Str, Term::Boolean
@@ -82,28 +82,14 @@ class Ww::Term::Dict
       end
     end
 
-    # Constructs a *symbol sketch* given a *term* and its *hashcode*.
-    #
-    # TODO: remove!!!
-    def self.symbol(term : Term | Term::Any) : Sketch
-      case term = Term[term]
-      in Term::Sym
-        one(Term.hashcode(term))
-      in Term::Num, Term::Str, Term::Boolean
-        empty
-      in Term::Dict
-        term.summary.symbol_sketch
-      end
-    end
-
-    # Returns `true` if *a* contains all elements in *b*.
-    def self.superset?(a : Sketch, b : Sketch) : Bool
-      (a.bits & b.bits) == b.bits
-    end
-
     # Returns the union of two sketches *a* and *b*.
     def self.union(a : Sketch, b : Sketch) : Sketch
       new(a.bits | b.bits)
+    end
+
+    # Returns `true` if all elements of this sketch are contained in *other*.
+    def subset_of?(other : Sketch) : Bool
+      (other.bits & bits) == bits
     end
   end
 end
