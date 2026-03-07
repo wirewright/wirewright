@@ -109,10 +109,10 @@ module Ww::M1
   module Token
     @dict : Term::Dict
 
-    def_change
+    def_copy_with
 
     def map(& : Term::Dict -> Term::Dict)
-      change(dict: yield @dict)
+      copy_with(dict: yield @dict)
     end
 
     def unwrap(& : Term::Dict ->)
@@ -142,7 +142,7 @@ module Ww::M1
 
     # :nodoc:
     def with_annotation(ann : Annotation)
-      change(annotations: @annotations | ann)
+      copy_with(annotations: @annotations | ann)
     end
   end
 

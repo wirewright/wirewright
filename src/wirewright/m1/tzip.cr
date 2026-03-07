@@ -695,7 +695,7 @@ module Ww::M1
     end
 
     # :nodoc:
-    def_change
+    def_copy_with
 
     # Returns the number of items in this view.
     def size : Int32
@@ -708,12 +708,12 @@ module Ww::M1
 
     # Returns an empty view before this one's beginning.
     def before_begin : ItemsView
-      change(end: @begin)
+      copy_with(end: @begin)
     end
 
     # Returns an empty view after this one's end.
     def after_end : ItemsView
-      change(begin: @end)
+      copy_with(begin: @end)
     end
 
     # Returns `true` if this view starts at the beginning of the underlying
@@ -744,43 +744,43 @@ module Ww::M1
 
     # Returns a view of the first item. If none, returns an empty view.
     def head : ItemsView
-      empty? ? change(end: @begin) : change(end: @begin + 1)
+      empty? ? copy_with(end: @begin) : copy_with(end: @begin + 1)
     end
 
     # Returns a view of all items following the first one. If this view
     # is empty, returns an empty view.
     def rest : ItemsView
-      empty? ? change(begin: @end) : change(begin: @begin + 1)
+      empty? ? copy_with(begin: @end) : copy_with(begin: @begin + 1)
     end
 
     # Returns a view of all items preceding the last one. If this view
     # is empty, returns an empty view.
     def prior : ItemsView
-      empty? ? change(end: @begin) : change(end: @end - 1)
+      empty? ? copy_with(end: @begin) : copy_with(end: @end - 1)
     end
 
     # Returns a view of the last item. If none, returns an empty view.
     def tail : ItemsView
-      empty? ? change(begin: @end) : change(begin: @end - 1)
+      empty? ? copy_with(begin: @end) : copy_with(begin: @end - 1)
     end
 
     # Returns a view of all items before this view's begin in the underlying
     # dict itemspart.
     def behind : ItemsView
-      change(begin: 0u32, end: @begin)
+      copy_with(begin: 0u32, end: @begin)
     end
 
     # Returns a view of all items after this view's end in the underlying
     # dict itemspart.
     def ahead : ItemsView
-      change(begin: @end, end: @tzip.term.itemsize.to_u32)
+      copy_with(begin: @end, end: @tzip.term.itemsize.to_u32)
     end
 
     # Changes the begin and end of this view to *begin1*, *end1* (in absolute coordinates).
     def reshape(begin1 : UInt32, end1 : UInt32) : ItemsView
       assert begin1 <= end1 <= @tzip.term.itemsize
 
-      change(begin: begin1, end: end1)
+      copy_with(begin: begin1, end: end1)
     end
 
     # Skips at most *n* items from left.
@@ -817,14 +817,14 @@ module Ww::M1
     def first(n : Int32) : ItemsView
       assert n <= size
 
-      change(end: @begin + n)
+      copy_with(end: @begin + n)
     end
 
     # Returns a view of the last *n* items of this view.
     def last(n : Int32) : ItemsView
       assert n <= size
 
-      change(begin: @end - n)
+      copy_with(begin: @end - n)
     end
 
     # Returns the part of this view before and excluding *pivot*.
@@ -834,7 +834,7 @@ module Ww::M1
     def before(pivot : Int) : ItemsView
       assert 0 <= pivot <= size
 
-      change(end: @begin + pivot.to_u32)
+      copy_with(end: @begin + pivot.to_u32)
     end
 
     # Returns the part of this view after and including *pivot*.
@@ -844,7 +844,7 @@ module Ww::M1
     def starting_at(pivot : Int) : ItemsView
       assert 0 <= pivot <= size
 
-      change(begin: @begin + pivot.to_u32)
+      copy_with(begin: @begin + pivot.to_u32)
     end
 
     # Constructs a log corresponding to this items view. The log stems
@@ -919,7 +919,7 @@ module Ww::M1
       n.times do |i|
         to = from + step
         to += 1 if i < rem
-        yield change(begin: from, end: to), i
+        yield copy_with(begin: from, end: to), i
 
         from = to
       end

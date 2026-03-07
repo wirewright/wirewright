@@ -6,7 +6,8 @@ module Ww
       assert 0 <= @b <= @e <= @dict.itemsize # Sanity
     end
 
-    private def_change
+    # :nodoc:
+    def_copy_with
 
     def size : Int32
       @e - @b
@@ -22,7 +23,7 @@ module Ww
     def first(n : Int) : ItemsView
       assert 0 <= n <= size
 
-      change(e: n)
+      copy_with(e: n)
     end
 
     # Returns a view of last *n* items in this view.
@@ -31,7 +32,7 @@ module Ww
     def last(n : Int) : ItemsView
       assert 0 <= n <= size
 
-      change(b: @e - n)
+      copy_with(b: @e - n)
     end
 
     # Alias of `first`. This is sometimes more readable, especially when paired
@@ -43,7 +44,7 @@ module Ww
     def starting_at(n : Int) : ItemsView
       assert 0 <= n <= size
 
-      change(b: n)
+      copy_with(b: n)
     end
 
     # Returns an empty items view pointing at the beginning of this items view.
@@ -54,7 +55,7 @@ module Ww
     # V1.begin  [.]
     # ```
     def begin : ItemsView
-      change(e: @b)
+      copy_with(e: @b)
     end
 
     # Returns an empty items view pointing at the end of this items view. Can be
@@ -66,7 +67,7 @@ module Ww
     # V1.end        [.]
     # ```
     def end : ItemsView
-      change(b: @e)
+      copy_with(b: @e)
     end
 
     # Moves the beginning of this items view *delta* items forward (`delta > 0`) or
@@ -89,7 +90,7 @@ module Ww
     # V1.move(3)           [.]
     # ```
     def move(delta : Int32) : ItemsView
-      change(b: (@b + delta).clamp(0..@e))
+      copy_with(b: (@b + delta).clamp(0..@e))
     end
 
     # Shorthand for `move`.
@@ -103,16 +104,16 @@ module Ww
     end
 
     def grow(delta : Int32) : ItemsView
-      change(e: (@e + delta).clamp(@b..@dict.itemsize))
+      copy_with(e: (@e + delta).clamp(@b..@dict.itemsize))
     end
 
     def remaining : ItemsView
-      change(b: @e, e: @dict.itemsize)
+      copy_with(b: @e, e: @dict.itemsize)
     end
 
     # Expands the view range to enclose all dictionary items.
     def expand : ItemsView
-      change(b: 0, e: @dict.itemsize)
+      copy_with(b: 0, e: @dict.itemsize)
     end
 
     def covers_fully? : Bool
@@ -169,7 +170,7 @@ module Ww
         raise ArgumentError.new
       end
 
-      change(e: Math.min(other.@b, @e))
+      copy_with(e: Math.min(other.@b, @e))
     end
 
     def past(other : ItemsView) : ItemsView
@@ -177,7 +178,7 @@ module Ww
         raise ArgumentError.new
       end
 
-      change(b: Math.max(other.@e, @b))
+      copy_with(b: Math.max(other.@e, @b))
     end
 
     def join(other : ItemsView) : ItemsView
@@ -185,7 +186,7 @@ module Ww
         raise ArgumentError.new
       end
 
-      change(e: Math.max(other.@e, @e))
+      copy_with(e: Math.max(other.@e, @e))
     end
 
     def thru? : {Term, ItemsView}?
@@ -246,7 +247,7 @@ module Ww
       n.times do |i|
         to = from + step - 1
         to += 1 if i < rem
-        yield change(b: from, e: to + 1), i
+        yield copy_with(b: from, e: to + 1), i
         from = to + 1
       end
     end

@@ -143,10 +143,10 @@ class Array(T)
   end
 end
 
-# Defines a `change` method which functions like `#copy_with` for records.
-macro def_change
+# Defines a `copy_with` method which functions like `#copy_with` of records.
+macro def_copy_with
   {% verbatim do %}
-    def change(**kwargs) : self
+    def copy_with(**kwargs) : self
       {% begin %}
         {{@type}}.new(
           {% for var in @type.instance_vars %}
@@ -2174,7 +2174,7 @@ class Pf::MapBox(K, V)
   def initialize(@map = Pf::Map(K, V).new)
   end
 
-  private def_change
+  private def_copy_with
 
   def size
     @map.size
@@ -2197,11 +2197,11 @@ class Pf::MapBox(K, V)
   end
 
   def assoc(k : K, v : V)
-    change(map: @map.assoc(k, v))
+    copy_with(map: @map.assoc(k, v))
   end
 
   def dissoc(k : K)
-    change(map: @map.dissoc(k))
+    copy_with(map: @map.dissoc(k))
   end
 end
 
@@ -2209,7 +2209,7 @@ class Pf::SetBox(T)
   def initialize(@set = Pf::Set(T).new)
   end
 
-  private def_change
+  private def_copy_with
 
   delegate :size, :empty?, to: @set
 
@@ -2222,11 +2222,11 @@ class Pf::SetBox(T)
   end
 
   def add(v : T)
-    change(set: @set.add(v))
+    copy_with(set: @set.add(v))
   end
 
   def delete(v : T)
-    change(set: @set.delete(v))
+    copy_with(set: @set.delete(v))
   end
 end
 
@@ -2234,7 +2234,7 @@ class Pf::BidiMapBox(K, V)
   def initialize(@map = Pf::BidiMap(K, V).new)
   end
 
-  private def_change
+  private def_copy_with
 
   def key_for(v : V) : K
     @map.key_for(v)
@@ -2253,15 +2253,15 @@ class Pf::BidiMapBox(K, V)
   end
 
   def assoc(k : K, v : V)
-    change(map: @map.assoc(k, v))
+    copy_with(map: @map.assoc(k, v))
   end
 
   def dissoc_by_key(k : K)
-    change(map: @map.dissoc_by_key(k))
+    copy_with(map: @map.dissoc_by_key(k))
   end
 
   def dissoc_by_value(v : V)
-    change(map: @map.dissoc_by_value(v))
+    copy_with(map: @map.dissoc_by_value(v))
   end
 end
 

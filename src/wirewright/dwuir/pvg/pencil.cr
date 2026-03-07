@@ -56,18 +56,19 @@ module Ww::DwUIR
       @config.face.kerning(@state, ch, @config.size)
     end
 
-    protected def_change
+    # :nodoc:
+    def_copy_with
 
     def after_writing(ch : Char) : PvgPencil
       case ch
       when '\r', '\0'
         return self
       when '\n'
-        return change(state: ch, tip: Point.new(0.0f32, @tip.y + @config.line_height))
+        return copy_with(state: ch, tip: Point.new(0.0f32, @tip.y + @config.line_height))
       when ' '
-        return change(state: ch, tip: @tip + Point.new(@config.wsstep, 0))
+        return copy_with(state: ch, tip: @tip + Point.new(@config.wsstep, 0))
       when '\t'
-        return change(state: ch, tip: @tip + Point.new(@config.wsstep * 4, 0))
+        return copy_with(state: ch, tip: @tip + Point.new(@config.wsstep * 4, 0))
       end
 
       # NOTE: I'm not sure this way to measure things is correct; this is
@@ -80,7 +81,7 @@ module Ww::DwUIR
 
       step = Point.new(kerning(ch) + letter_spacing(ch) + advance, 0)
 
-      change(state: ch, tip: @tip + step)
+      copy_with(state: ch, tip: @tip + step)
     end
   end
 

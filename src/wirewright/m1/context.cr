@@ -115,7 +115,7 @@ module Ww::M1
       end
     end
 
-    def change(
+    def copy_with(
       envtab = self.envtab,
       csttab = self.csttab,
       reftab = self.reftab,
@@ -217,23 +217,23 @@ module Ww::M1
         return self, true
       end
 
-      {change(envtab: EnvMap.assoc(envtabs, envtab, capture, value1)), true}
+      {copy_with(envtab: EnvMap.assoc(envtabs, envtab, capture, value1)), true}
     end
 
     # WARNING: overwrites the current capture at *key*. This probably isn't
     # what you're looking for.
     def assoc(key : Term, value : Tzip)
-      change(envtab: EnvMap.assoc(envtabs, envtab, key, value))
+      copy_with(envtab: EnvMap.assoc(envtabs, envtab, key, value))
     end
 
     def join(key : Term, cst : Cst::Any)
       cst0 = csttab.fetch(key) do
-        return change(csttab: CstMap.assoc(csttabs, csttab, key, cst))
+        return copy_with(csttab: CstMap.assoc(csttabs, csttab, key, cst))
       end
 
       cst1 = Cst.join(cst0, cst)
 
-      change(csttab: CstMap.assoc(csttabs, csttab, key, cst1))
+      copy_with(csttab: CstMap.assoc(csttabs, csttab, key, cst1))
     end
 
     def join(key : Term, ref : Log::None)
@@ -242,22 +242,22 @@ module Ww::M1
 
     def join(key : Term, ref : Log::Sealed)
       ref0 = reftab.fetch(key) do
-        return change(reftab: RefMap.assoc(reftabs, reftab, key, ref))
+        return copy_with(reftab: RefMap.assoc(reftabs, reftab, key, ref))
       end
 
       ref1 = Log.seal(Log.join(ref0, ref))
 
-      change(reftab: RefMap.assoc(reftabs, reftab, key, ref1))
+      copy_with(reftab: RefMap.assoc(reftabs, reftab, key, ref1))
     end
 
     def intersect(key : Term, choices : Pf::Set(Term) | Set(Term)) : Context?
       current = choicetab[key]?
       if current.nil?
-        return change(choicetab: choicetab.assoc(key, choices.to_pf_set))
+        return copy_with(choicetab: choicetab.assoc(key, choices.to_pf_set))
       end
 
       mid = current & choices.to_pf_set
-      change(choicetab: choicetab.assoc(key, mid))
+      copy_with(choicetab: choicetab.assoc(key, mid))
     end
   end
 end
