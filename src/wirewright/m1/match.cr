@@ -643,9 +643,7 @@ module Ww::M1
     return false unless dict = matchee.as_d?
     return false unless dict.sketch_superset_of?(op.sketch)
     return false unless op.bounds[0] <= dict.size <= op.bounds[1]
-    # FIXME: Use op.depth[1] (max bound) when we make dict recalculate
-    # its depth automatically! Right now op.depth[1] is too strict.
-    return false unless op.depth[0] <= dict.summary.maxdepth
+    return false unless op.depth[0] <= dict.summary.maxdepth <= op.depth[1]
 
     # NOTE: We *really* don't care about last_matched. If it happens to help
     # us, we call ourselves lucky. If we mess up (esp. with others running
