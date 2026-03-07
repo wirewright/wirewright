@@ -845,34 +845,27 @@ module Ww
     end
 
     # :nodoc:
-    #
-    # TODO: We'd want to get rid of this in the future: there's no point in hashing
-    # indices in the first place. Right now, though, dicts are unstructured, that is,
-    # different insertion order may give different dicts; thus, we must hash index
-    # in while hashing the dict's items. When dicts are structured, and thus iteration
-    # order is globally stable & deterministic, we'd be able to simply hash the chain
-    # of items (that is, at dict nodes, not here in Term.hashcode!)
-    def self.hashcode(index : Int32) : UInt64
-      mix(index.to_u64)
+    def self.hashcode(a : UInt64, b : UInt64) : UInt64
+      mix(a ^ b.rotate_left(5))
     end
 
     # :nodoc:
     #
     # Symbols use plain bit mixing.
     def self.hashcode(term : Term::Sym)
-      mix(term.@bits)
+      hashcode(TermType::Symbol.value.to_u64, mix(term.@bits))
     end
 
     # :nodoc:
     def self.hashcode(term : Term::Str) : UInt64
-      term.hashcode
+      hashcode(TermType::String.value.to_u64, term.hashcode)
     end
 
     # :nodoc:
     #
     # Numbers use plain bit mixing.
     def self.hashcode(term : Term::Num) : UInt64
-      mix(term.hashrepr)
+      hashcode(TermType::Number.value.to_u64, mix(term.hashrepr))
     end
 
     # :nodoc:
@@ -880,75 +873,89 @@ module Ww
     # Booleans hash into a TRUE or FALSE constant, which are simply random numbers.
     def self.hashcode(term : Term::Boolean)
       if term.true?
-        0x473419c1b81a5431u64
+        hashcode(TermType::Boolean.value.to_u64, 0x473419c1b81a5431u64)
       else
-        0x143ea81786b6282du64
+        hashcode(TermType::Boolean.value.to_u64, 0x143ea81786b6282du64)
       end
     end
 
-    # :nodoc:
-    def self.hashcode(a : UInt64, b : UInt64) : UInt64
-      mix(a ^ b.rotate_left(5))
-    end
-
-    # :nodoc:
-    FNV_OFFSET_BASIS = 14695981039346656037u64
-    # :nodoc:
-    FNV_PRIME = 1099511628211u64
-
-    # :nodoc:
-    #
-    # TODO: Remove this and the FNV stuff in favor of Dict#summary's #hashcode.
-    def self.hashcode(term : Term::Dict) : UInt64
-      term.hashcode do
-        buffer = uninitialized UInt8[16]
-        buffer64 = buffer.to_slice.unsafe_slice_of(UInt64)
-
-        state = 0xae32afc0becc90bbu64
-
-        term.each_item_with_index do |item, index|
-          substate = FNV_OFFSET_BASIS
-
-          substate ^= TermType::Number.value
-          substate &*= FNV_PRIME
-
-          substate ^= item.type.value
-          substate &*= FNV_PRIME
-
-          buffer64.unsafe_put(0, hashcode(index))
-          buffer64.unsafe_put(1, hashcode(item))
-
-          buffer.each do |byte|
-            substate ^= byte
-            substate &*= FNV_PRIME
-          end
-
-          state &+= substate
-        end
-
-        term.each_entry(in: Term::Dict.pairspart) do |key, value|
-          substate = FNV_OFFSET_BASIS
-
-          substate ^= key.type.value
-          substate &*= FNV_PRIME
-
-          substate ^= value.type.value
-          substate &*= FNV_PRIME
-
-          buffer64.unsafe_put(0, hashcode(key))
-          buffer64.unsafe_put(1, hashcode(value))
-
-          buffer.each do |byte|
-            substate ^= byte
-            substate &*= FNV_PRIME
-          end
-
-          state &+= substate
-        end
-
-        state
+    {% if flag?(:new_dict) %}
+      # :nodoc:
+      def self.hashcode(term : Term::Dict) : UInt64
+        hashcode(TermType::Dict.value.to_u64, term.hashcode)
       end
-    end
+    {% else %}
+      # :nodoc:
+      FNV_OFFSET_BASIS = 14695981039346656037u64
+      # :nodoc:
+      FNV_PRIME = 1099511628211u64
+
+      # :nodoc:
+      #
+      # TODO: We'd want to get rid of this in the future: there's no point in hashing
+      # indices in the first place. Right now, though, dicts are unstructured, that is,
+      # different insertion order may give different dicts; thus, we must hash index
+      # in while hashing the dict's items. When dicts are structured, and thus iteration
+      # order is globally stable & deterministic, we'd be able to simply hash the chain
+      # of items (that is, at dict nodes, not here in Term.hashcode!)
+      def self.hashcode(index : Int32) : UInt64
+        mix(index.to_u64)
+      end
+
+      # :nodoc:
+      #
+      # TODO: Remove this and the FNV stuff in favor of Dict#summary's #hashcode.
+      def self.hashcode(term : Term::Dict) : UInt64
+        term.hashcode do
+          buffer = uninitialized UInt8[16]
+          buffer64 = buffer.to_slice.unsafe_slice_of(UInt64)
+
+          state = 0xae32afc0becc90bbu64
+
+          term.each_item_with_index do |item, index|
+            substate = FNV_OFFSET_BASIS
+
+            substate ^= TermType::Number.value
+            substate &*= FNV_PRIME
+
+            substate ^= item.type.value
+            substate &*= FNV_PRIME
+
+            buffer64.unsafe_put(0, hashcode(index))
+            buffer64.unsafe_put(1, hashcode(item))
+
+            buffer.each do |byte|
+              substate ^= byte
+              substate &*= FNV_PRIME
+            end
+
+            state &+= substate
+          end
+
+          term.each_entry(in: Term::Dict.pairspart) do |key, value|
+            substate = FNV_OFFSET_BASIS
+
+            substate ^= key.type.value
+            substate &*= FNV_PRIME
+
+            substate ^= value.type.value
+            substate &*= FNV_PRIME
+
+            buffer64.unsafe_put(0, hashcode(key))
+            buffer64.unsafe_put(1, hashcode(value))
+
+            buffer.each do |byte|
+              substate ^= byte
+              substate &*= FNV_PRIME
+            end
+
+            state &+= substate
+          end
+
+          state
+        end
+      end
+    {% end %}
 
     # :nodoc:
     def self.hashcode(term : Term)

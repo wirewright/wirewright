@@ -20,6 +20,11 @@ class Ww::Term::Dict
   #   It is precise. Overflow is a runtime error which will crash Wirewright.
   # - *maxdepth16* is the saturating depth of the deepest leaf of the dict.
   #   Use `maxdepth` to access in general-purpose code.
+  # - *size set* is a set of dict sizes 0-15. Consider, for instance, the pattern
+  #   `⟨(_ _)⟩`. Even though it doesn't provide any useful content-based cues, we
+  #   can still use its very shape, which may or may not be rare in the matchee; and
+  #   thus, it may or may not provide shortcuts & early rejections. That is, we're
+  #   going to look for things of size 2, ignoring as much other stuff as possible.
   # - *hashcode* is the hashcode. It is *unordered* for both tries. That is,
   #   hashes of entries are combined commutatively. This is in support of the basic
   #   idea behind dicts; in that even though they have all sorts of complexity &
@@ -32,10 +37,6 @@ class Ww::Term::Dict
   # - *symbol sketch* is reserved for symbols exclusively. Since symbols are relatively
   #   sparsely distributed, symbol sketches are one of the most useful optimizations
   #   in Wirewright so far. A lot of patterns can reject early thanks to symbol sketches.
-  # - *size set* is a set of dict sizes up to 64. Consider, for instance, the pattern
-  #   `⟨(_ _)⟩`. Even though it doesn't provide any useful info in terms of content,
-  #   we can still its very shape, which may or may not be rare in the matchee, and
-  #   thus, provide shorthands & early rejections.
   # - *histogram* is an approximate (in the sense "precisely N", or "too many to count")
   #   measure of terms of each type in the dict and nested dicts.
   record Summary,
@@ -72,10 +73,17 @@ class Ww::Term::Dict
       )
     end
 
-    # Returns the summary of a dict *item*.
-    def self.of(item : Term) : Summary
+    # Returns the summary of a dict *item* at *key*.
+    def self.of(key : UInt32, item : Term) : Summary
+      key = key.to_u64
+
       if dict = item.as_d?
-        return dict.summary.copy_with(size: 1u32)
+        summary = dict.summary
+
+        return summary.copy_with(
+          size: 1u32,
+          hashcode: Term.hashcode(key, summary.hashcode),
+        )
       end
 
       hashcode = Term.hashcode(item)
@@ -84,7 +92,7 @@ class Ww::Term::Dict
         size: 1u32,
         maxdepth16: 0u16,
         size_set: Pf::BitSet16.empty,
-        hashcode: hashcode,
+        hashcode: Term.hashcode(key, hashcode),
         key_sketch: Sketch.empty,
         value_sketch: Sketch.value(item, hashcode),
         symbol_sketch: Sketch.symbol(item, hashcode),
@@ -98,17 +106,21 @@ class Ww::Term::Dict
     # you must use `.of(Term)`.
     def self.of(key : {term: Term, hashcode: UInt64}, value : Term) : Summary
       if dict = value.as_d?
-        return dict.summary.copy_with(size: 1u32)
+        summary = dict.summary
+
+        return dict.summary.copy_with(
+          size: 1u32,
+          hashcode: Term.hashcode(key[:hashcode], summary.hashcode),
+        )
       end
 
       value_hashcode = Term.hashcode(value)
-      pair_hashcode = Term.hashcode(key[:hashcode], value_hashcode)
 
       Summary.new(
         size: 1u32,
         maxdepth16: 0u16,
         size_set: Pf::BitSet16.empty,
-        hashcode: pair_hashcode,
+        hashcode: Term.hashcode(key[:hashcode], value_hashcode),
         key_sketch: Sketch.key(key[:term], key[:hashcode]),
         value_sketch: Sketch.value(value, value_hashcode),
         symbol_sketch: Sketch.symbol(value, value_hashcode),

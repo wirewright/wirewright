@@ -4,7 +4,7 @@ class Ww::Term::Dict
   #
   # - *Symbol* sketches store symbols.
   # - *Key* sketches store symbol, string, and boolean keys.
-  # - *Value* sketches store string, number, and boolean keys.
+  # - *Value* sketches store string, number, and boolean terms.
   #
   # All sketches are recursive, in that they are union-d with child dicts.
   # For example, my key sketch includes my keys as well as the keys of my

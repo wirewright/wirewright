@@ -907,7 +907,7 @@ module Ww
     end
 
     # :nodoc:
-    def hashcode(& : -> UInt64) : UInt64
+    def hashcode : UInt64
       summary.hashcode
     end
 

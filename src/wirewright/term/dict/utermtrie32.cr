@@ -68,11 +68,16 @@ class Ww::Term::Dict
   module UTermTrie32
     extend self
 
-    alias TermMap16 = SmallMap(Term, UInt16)
+    alias ItemMap16 = SmallMap(Item, UInt16)
+
+    # We want a hashcode that depends on order (kind of). The easiest way is to include
+    # the key when summarizing stuff. So this structure stores a key along the term so
+    # that summarize() calls know the global key when recalculating summaries.
+    defrecord Item, key : UInt32, term : Term
 
     alias Root = Leaf | Node
 
-    defcase Leaf, summary : Summary, cookie : Cookie, children : TermMap16, mutation: true
+    defcase Leaf, summary : Summary, cookie : Cookie, children : ItemMap16, mutation: true
 
     alias Node = Node0 | Node1 | Node2 | Node3 | Node4 | Node5 | Node6
 
@@ -84,7 +89,7 @@ class Ww::Term::Dict
     defcase Node5, summary : Summary, seqsize : UInt32, cookie : Cookie, children : SmallMap(Node4, UInt16), mutation: true
     defcase Node6, summary : Summary, seqsize : UInt32, cookie : Cookie, children : SmallMap(Node5, UInt16), mutation: true
 
-    EMPTY_LEAF  = Leaf.new(Summary.zero, Cookie.none, TermMap16.empty)
+    EMPTY_LEAF  = Leaf.new(Summary.zero, Cookie.none, ItemMap16.empty)
     EMPTY_NODE0 = Node0.new(Summary.zero, 0u32, Cookie.none, SmallMap(Leaf, UInt16).empty)
     EMPTY_NODE1 = Node1.new(Summary.zero, 0u32, Cookie.none, SmallMap(Node0, UInt16).empty)
     EMPTY_NODE2 = Node2.new(Summary.zero, 0u32, Cookie.none, SmallMap(Node1, UInt16).empty)
@@ -106,8 +111,8 @@ class Ww::Term::Dict
       end
     end
 
-    private def summarize(children : TermMap16) : Summary
-      Summary.union(children.ix) { |child| Summary.of(child) }
+    private def summarize(children : ItemMap16) : Summary
+      Summary.union(children.ix) { |item| Summary.of(item.key, item.term) }
     end
 
     private def summarize(children : SmallMap) : Summary
@@ -284,11 +289,11 @@ class Ww::Term::Dict
       yield node, key
     end
 
-    private def assoc(cookie : Cookie, node : Leaf, key : LeafKey, value : Term) : {Leaf, Bool}
+    private def assoc(cookie : Cookie, node : Leaf, key : LeafKey, item : Item) : {Leaf, Bool}
       mut = node.cookie.allows_mutation_by?(cookie)
 
       children0 = node.children
-      children1, changed = children0.assoc(key.value.to_u16, value, mut: mut)
+      children1, changed = children0.assoc(key.value.to_u16, item, mut: mut)
       unless changed
         return node, false
       end
@@ -296,7 +301,7 @@ class Ww::Term::Dict
       # If we're inserting, we don't have to recalculate the summary. We
       # can just union the inserted child into the existing summary.
       if children0.size < children1.size
-        summary = Summary.union(node.summary, Summary.of(value))
+        summary = Summary.union(node.summary, Summary.of(item.key, item.term))
 
         return leaf(cookie, summary, children1, prototype: node), true
       end
@@ -306,7 +311,7 @@ class Ww::Term::Dict
     end
 
     {% for level in 0..6 %}
-      private def assoc(cookie : Cookie, node : Node{{level}}, key : NodeKey{{level}}, value : Term) : {Node{{level}}, Bool}
+      private def assoc(cookie : Cookie, node : Node{{level}}, key : NodeKey{{level}}, item : Item) : {Node{{level}}, Bool}
         mut = node.cookie.allows_mutation_by?(cookie)
 
         unless child0 = node.children.at?(key.value.to_u16)
@@ -316,7 +321,7 @@ class Ww::Term::Dict
             child0 = EMPTY_NODE{{level - 1}}
           {% end %}
 
-          child1, changed = assoc(cookie, child0, key.successor, value)
+          child1, changed = assoc(cookie, child0, key.successor, item)
           assert changed
 
           # If we're inserting, we don't have to recalculate the summary. We
@@ -329,7 +334,7 @@ class Ww::Term::Dict
 
         # If we're updating, we have to recalculate the summary from scratch.
         # Use smart constructors for this.
-        child1, changed = assoc(cookie, child0, key.successor, value)
+        child1, changed = assoc(cookie, child0, key.successor, item)
         unless changed
           return node, false
         end
@@ -340,17 +345,17 @@ class Ww::Term::Dict
       end
     {% end %}
 
-    private def assoc(cookie : Cookie, node : Leaf | Node, key : LeafKey | NodeKey, value : Term)
+    private def assoc(cookie : Cookie, node : Leaf | Node, key : LeafKey | NodeKey, item : Item)
       eqcast(cookie, node, key) do |eq_node, eq_key|
         # At this point, eq node class = eq key class, and thus, since we guarantee
         # that equal class overloads are present, we will never hit infinite
         # recursion here.
-        assoc(cookie, eq_node, eq_key, value)
+        assoc(cookie, eq_node, eq_key, item)
       end
     end
 
     def assoc(root : Leaf | Node, key : UInt32, value : Term, *, cookie : Cookie = Cookie.none)
-      root1, _ = assoc(cookie, root, decompose(key), value)
+      root1, _ = assoc(cookie, root, decompose(key), Item.new(key, value))
       root1
     end
 
@@ -411,7 +416,9 @@ class Ww::Term::Dict
     end
 
     private def at?(node : Leaf, key : LeafKey) : Term?
-      node.children.at?(key.value.to_u16)
+      return unless item = node.children.at?(key.value.to_u16)
+
+      item.term
     end
 
     {% for level in 0..6 %}
@@ -443,8 +450,8 @@ class Ww::Term::Dict
     end
 
     private def each(prefix : UInt32, node : Leaf, & : UInt32, Term ->) : Nil
-      node.children.each_entry do |key, value|
-        yield (prefix << 4) | key, value
+      node.children.each_entry do |key, item|
+        yield (prefix << 4) | key, item.term
       end
     end
 
