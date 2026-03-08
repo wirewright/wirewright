@@ -7,6 +7,34 @@ require "./dict/utermtrie32"
 require "./dict/term_trie"
 
 module Ww
+  # Dictionary terms enable term composition.
+  #
+  # For the outside, the dictionary is a very simple data structure.
+  # Its *Entries* are associations between a key (a `Term`) and a value
+  # (also a `Term`). A dictionary is a set of entries.
+  #
+  # One particularly interesting kind of entry is *items*. *Items* are entries
+  # whose key is either zero, or a natural number for which a predecessor item
+  # can be found in the dict. Such entries form a "chain" attached to zero.
+  # The range bound here is `UInt32`. That is, roughly past four billion, we
+  # stop considering such entries as items even if they are properly attached.
+  # If present, we call it the dict's *itemspart*. All other entries are
+  # the dict's *pairspart*.
+  #
+  # Notice how by removals, we can segment the chain. If you have entries with
+  # keys `0-1-2-3-4`, you can remove `2`, producing two chains: the itemspart
+  # `0-1` and the detached `3-4` "floating" in the pairspart. By reinserting
+  # `2` you can connect them again.
+  #
+  # Internally, we try to use an efficient representation to minimize the amount
+  # of work for both operations on items and operations on pairs. We also focus
+  # heavily on optimizing the separation of items and pairs (called *partitioning*;
+  # hence M1's `%partition`, the dict's `partition` method, and so on); making sure
+  # it is near-constant time.
+  #
+  # Dictionaries also index heavily and recursively, providing a general `Summary`.
+  # They also let you iterate while skipping blocks of entries after examining their
+  # recursive summaries.
   @[Term::Assoc(TermType::Dict, :unsafe_as_d)]
   class Term::Dict
     include Equality
@@ -798,16 +826,8 @@ module Ww
       false # does not intersect
     end
 
-    # Splits this dictionary into *items* and *pairs*. Returns an `ItemsView`
-    # over the items and a `pairsonly?` `Dict` with the pairs.
-    #
-    # - *Entries* are associations between a key (a `Term`) and a value (also a `Term`).
-    #   Dictionaries consist of such entries.
-    # - *Items* are entries whose key is a natural number (including zero) that is
-    #   either zero, or for which a predecessor can be found in the dict. They are
-    #   treated specially for efficiency, and are considered the best andmost efficient
-    #   way to represent arrays in Term-land.
-    # - *Pairs* are all other entries, i.e., all entries that are not items.
+    # Separates the items and pairs of this dictionary. The first returned dict is
+    # thus itemsonly, and the second one is pairsonly.
     @[Dncast]
     def partition : {Dict, Dict}
       {itemspart, pairspart}
@@ -827,7 +847,13 @@ module Ww
       ItemsView.new(self, b, e)
     end
 
-    # Returns the items part of `partition` (see the latter for more info).
+    # NOTE: Project-wide, allocating a Dict on every partition call (and maybe
+    # UTermTrie32/TermTrie nodes if we're on the sad path) happens to be much
+    # more expensive than storing two atomic ptrs on every dict.
+
+    @itemspart = Atomic(Term::Dict?).new(nil)
+
+    # Returns the *itemspart* of this dictionary.
     @[Dncast]
     def itemspart : Dict
       ut_seqsize = UTermTrie32.seqsize(@utrie)
@@ -840,34 +866,48 @@ module Ww
         return self
       end
 
-      # Another fast path is when we *do* have pairs but not in our UTermTrie32.
-      # That is, we have an itemsonly UTermTrie32 without extra entries in
-      # there, and we also have some pairs in TermTrie.
-      if ut_seqsize == ut_size
-        return Dict.new(@utrie, TermTrie.empty)
+      if itemspart = @itemspart.get(:acquire)
+        return itemspart
       end
 
-      # Perform sequence partitioning. This is the slow path for `itemspart`. It is
-      # only hit when we have extra entries in UTermTrie32. That is, for instance, if
-      # we have gaps, such as in `{0: ~, 1: "John", 3: "Barbara"}`. Notice the missing
-      # `2`, which creates a gap at which we must split with `view`.
-      Dict.new(UTermTrie32.view(@utrie, 0u32, ut_seqsize), TermTrie.empty)
+      if ut_seqsize == ut_size
+        # Another fast path is when we *do* have pairs but not in our UTermTrie32.
+        # That is, we have an itemsonly UTermTrie32 without extra entries in
+        # there, and we also have some pairs in TermTrie.
+        itemspart = Dict.new(@utrie, TermTrie.empty)
+      else
+        # Perform sequence partitioning. This is the slow path for `itemspart`. It is
+        # only hit when we have extra entries in UTermTrie32. That is, for instance, if
+        # we have gaps, such as in `{0: ~, 1: "John", 3: "Barbara"}`. Notice the missing
+        # `2`, which creates a gap at which we must split with `view`.
+        itemspart = Dict.new(UTermTrie32.view(@utrie, 0u32, ut_seqsize), TermTrie.empty)
+      end
+
+      @itemspart.set(itemspart, :release)
     end
 
-    # Returns the pairs part of `partition` (see the latter for more info).
+    @pairspart = Atomic(Term::Dict?).new(nil)
+
+    # Returns the *pairspart* of this dictionary.
     @[Dncast]
-    def pairspart
+    def pairspart : Dict
       ut_size = UTermTrie32.summary(@utrie).size
       if ut_size.zero?
         return self
       end
 
-      ut_seqsize = UTermTrie32.seqsize(@utrie)
-      if ut_size == ut_seqsize
-        return Dict.new(UTermTrie32.empty, @ttrie)
+      if pairspart = @pairspart.get(:acquire)
+        return pairspart
       end
 
-      Dict.new(UTermTrie32.view(@utrie, ut_seqsize, UTermTrie32.capacity(@utrie)), @ttrie)
+      ut_seqsize = UTermTrie32.seqsize(@utrie)
+      if ut_size == ut_seqsize
+        pairspart = Dict.new(UTermTrie32.empty, @ttrie)
+      else
+        pairspart = Dict.new(UTermTrie32.view(@utrie, ut_seqsize, UTermTrie32.capacity(@utrie)), @ttrie)
+      end
+
+      @pairspart.set(pairspart, :release)
     end
 
     # :nodoc:
