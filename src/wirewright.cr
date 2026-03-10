@@ -20,6 +20,8 @@ require "./wirewright/term"
 require "./wirewright/m0"
 require "./wirewright/tpath"
 require "./wirewright/file_server"
+require "./wirewright/path_monitor"
+require "./wirewright/path_server"
 require "./wirewright/issue"
 require "./wirewright/ml"
 require "./wirewright/pigment"
@@ -79,6 +81,3 @@ module Ww
     {% end %}
   end
 end
-
-require "socket"
-require "openssl"

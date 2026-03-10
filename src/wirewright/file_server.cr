@@ -4,8 +4,8 @@ module Ww
   end
 
   class ::File
-    def self.tempfile(random : ::Random)
-      fileno, path, blocking = Crystal::System::File.mktemp(prefix: nil, suffix: nil, dir: Dir.tempdir, random: random)
+    def self.tempfile(random : ::Random, *, tempdir : String | Path = Dir.tempdir)
+      fileno, path, blocking = Crystal::System::File.mktemp(prefix: nil, suffix: nil, dir: tempdir.to_s, random: random)
       new(path, fileno, blocking: blocking)
     end
   end
