@@ -7,11 +7,12 @@ require "./dict/utermtrie32"
 require "./dict/term_trie"
 
 module Ww
-  # Dictionary terms enable term composition.
+  # Dictionaries let you build complex structures out of terms. As dictionaries
+  # are also terms, this can happen recursively.
   #
-  # For the outside, the dictionary is a very simple data structure.
-  # Its *Entries* are associations between a key (a `Term`) and a value
-  # (also a `Term`). A dictionary is a set of entries.
+  # From the outside, a dictionary is a very simple data structure. A dictionary
+  # is a set of entries. An *entry* is an association between a key (a `Term`)
+  # and a value (also a `Term`).
   #
   # One particularly interesting kind of entry is *items*. *Items* are entries
   # whose key is either zero, or a natural number for which a predecessor item
