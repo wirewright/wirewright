@@ -2184,6 +2184,10 @@ class Pf::MapBox(K, V)
     @map.includes?(k)
   end
 
+  def each(&)
+    @map.each { |k, v| yield k, v }
+  end
+
   def [](k : K) : V
     @map[k]
   end
@@ -2362,8 +2366,10 @@ module Indexable(T)
 end
 
 struct Slice(T)
-  def self.with(*objects)
-    Slice(T).new(objects.size, read_only: true) { |index| objects[index].as(T) }
+  def self.of(*objects)
+    Slice(typeof(Enumerable.element_type(objects))).new(objects.size, read_only: true) do |index|
+      objects[index].as(typeof(Enumerable.element_type(objects)))
+    end
   end
 
   def self.join(left : Indexable(Slice(T)), mid : Indexable(U), right : Indexable(Slice(V))) forall T, U, V
@@ -3253,6 +3259,10 @@ class Bimap(L, R)
 
   # Constructs a bidirectional map with an optional *initial capacity*.
   def initialize(*, initial_capacity cap0 = nil)
+    {% if L.resolve == R.resolve %}
+      {% raise "cannot use bimap with the same L and R type" %}
+    {% end %}
+
     @l = Hash(L, R).new(initial_capacity: cap0)
     @r = Hash(R, L).new(initial_capacity: cap0)
   end
@@ -3279,6 +3289,15 @@ class Bimap(L, R)
   # Returns `nil` if no such association exists.
   def []?(object : R) : L?
     @r[object]?
+  end
+
+  def [](object)
+    value = self[object]?
+    if value.nil?
+      raise KeyError.new
+    end
+
+    value
   end
 
   # Creates an association between an object of type `L`, *key*, and an object
@@ -3339,6 +3358,15 @@ class Bimap(L, R)
   def delete(object : R) : L?
     if value = @r.delete(object)
       @l.delete(value)
+    end
+
+    value
+  end
+
+  def delete!(object)
+    value = delete(object)
+    if value.nil?
+      raise KeyError.new
     end
 
     value
@@ -3663,6 +3691,34 @@ class Log::AsyncInMemoryBackend < Log::Backend
   end
 end
 
+
+class BlockingSignal
+  def initialize
+    @state = 0
+    @mutex = Sync::Mutex.new
+    @cv = Sync::ConditionVariable.new(@mutex)
+  end
+
+  def wait
+    @mutex.synchronize do
+      loop do
+        if @state > 0
+          @state -= 1
+          return
+        end
+
+        @cv.wait
+      end
+    end
+  end
+
+  def call
+    @mutex.synchronize do
+      @state += 1
+      @cv.broadcast
+    end
+  end
+end
 
 class BlockingSlot(T)
   defrecord Empty
@@ -4154,5 +4210,17 @@ SYNC_RAND_LOCK = Sync::Mutex.new
 def sync_rand(arg)
   SYNC_RAND_LOCK.synchronize do
     SYNC_RAND.rand(arg)
+  end
+end
+
+module ::Compress::Gzip
+  def self.compress(data : Bytes) : Bytes
+    io = IO::Memory.new(data)
+    Compress::Gzip::Reader.open(io, &.getb_to_end)
+  end
+
+  def self.decompress(data : Bytes, *, level = BEST_SPEED) : Bytes
+    io = IO::Memory.new
+    Compress::Gzip::Writer.open(io, level: level, &.write(content))
   end
 end
