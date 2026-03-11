@@ -11,15 +11,6 @@ module Ww::ML
     def initialize(@term, @srcmap)
     end
 
-    # *src* gives the preferred location, if any. Otherwise, `ctx.location` is used.
-    def self.of(text : StringView?, object, *, src : StringView? = nil)
-      if location = src || text
-        new(Term.of(object), srcmap: SrcMapHash{Tpath[] => location})
-      else
-        new(Term.of(object), srcmap: SrcMapHash.new)
-      end
-    end
-
     def self.of(text : StringView?, object : TrackedTsrc, *, src : StringView? = nil)
       object
     end
@@ -27,6 +18,15 @@ module Ww::ML
     def self.of(text : StringView?, object : Tuple, *, src : StringView? = nil)
       build(text) do |commit|
         object.each { |item| commit << TrackedTsrc.of(text, item) }
+      end
+    end
+
+    # *src* gives the preferred location, if any. Otherwise, `ctx.location` is used.
+    def self.of(text : StringView?, object, *, src : StringView? = nil)
+      if location = src || text
+        new(Term.of(object), srcmap: SrcMapHash{Tpath[] => location})
+      else
+        new(Term.of(object), srcmap: SrcMapHash.new)
       end
     end
 
@@ -178,10 +178,6 @@ module Ww::ML
     def initialize(@term)
     end
 
-    def self.of(text : StringView?, object, *, src : StringView? = nil)
-      new(Term.of(object))
-    end
-
     def self.of(text : StringView?, object : UntrackedTsrc, *, src : StringView? = nil)
       object
     end
@@ -190,6 +186,10 @@ module Ww::ML
       build(text) do |commit|
         object.each { |item| commit << UntrackedTsrc.of(text, item) }
       end
+    end
+
+    def self.of(text : StringView?, object, *, src : StringView? = nil)
+      new(Term.of(object))
     end
 
     def self.build(text : StringView?, &)
