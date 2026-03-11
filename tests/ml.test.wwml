@@ -374,7 +374,7 @@
 
 ;; %item and %item°
 (ml
-  (- ⎡⟨⏏⟩⎤ ⎡expected at least one item in split part⎤)
+  (- ⎡⟨⏏⟩⎤ ⎡expected at least one item⎤)
   (= ⎡⟨a⟩⎤ ⎡(%item a)⎤)
   (= ⎡⟨a⟩°⎤ ⎡(%item° a)⎤)
   (= ⎡⟨a b c⟩⎤ ⎡(%item a b c)⎤)
@@ -387,59 +387,47 @@
   (- ⎡⟨a (+ 1 2) ⏏⎤ ⎡expected an item, `…`, an interfix, or `⟩` to end the split⎤))
 
 ;; General %split
-;(ml
-  (- ⎡⟨⏏…⟩⎤ ⎡expected at least one item in split part⎤)
-  (- ⎡⟨a … ⏏⟩⎤ ⎡expected at least one item in split part⎤)
-  (- ⎡⏏⟨a … b … c … d … e … f⟩⏏⎤ ⎡expected 1-5 split parts, not 6⎤))
-
-;; %split with two arguments
-;;
-;; Match pivots, dropping the left- and right-hand side as
-;; anything between them.
-;(ml
-  (= ⎡⟨a … b⟩⎤ ⎡(%split _ a (%split _ b _))⎤)
-  (= ⎡⟨a b … c d⟩⎤ ⎡(%split _ a (%split (b _*) c (d _*)))⎤)
-  (= ⎡⟨a b c … d e f⟩⎤ ⎡(%split _ a (%split (b c _*) d (e f _*)))⎤)
-  (= ⎡⟨a b c … d e f ¦ _ x⟩⎤ ⎡(%partition (%split _ a (%split (b c _*) d (e f _*))) {¦ x})⎤)
-  (= ⎡⟨a b c … d e f ¦ _ x⟩°⎤ ⎡(%partition (%split° _ a (%split° (b c _*) d (e f _*))) {¦ x})⎤))
-
-;; %split with three arguments
-;;
-;; Match pivot and the left and right-hand side.
-;(ml
-  (= ⎡⟨lhs … pivot … rhs⟩⎤ ⎡(%split lhs pivot rhs)⎤)
-  (= ⎡⟨lhs … a b c … rhs⟩⎤ ⎡(%split lhs a (b c (%group rhs _*)))⎤)
-  (- ⎡⏏⟨a b … x … rhs⟩⏏⎤ ⎡expected the left part to contain exactly one item⎤)
-  (- ⎡⏏⟨lhs … x … a b⟩⏏⎤ ⎡expected the right part to contain exactly one item⎤))
-
-;; %split with four arguments
-;;
-;; Cut at B and then cut at the first C after it.
-;; Drop the middle part.
-;; Capture left under A, right under D.
-;;
-;; 1.
-;; x y z b foo bar c baz boo
-;;
-;; 2.
-;; x y z | b foo bar c baz boo
-;;
-;; 3.
-;; x y z | b foo bar c | baz boo
-;;
-;; 4.
-;; x y z ø baz boo
-;; -----  -------
-;;   a      d
-;(ml
-  (= ⎡⟨a … b … c … d⟩⎤ ⎡(%split a b (%split _ c d))⎤)
-  (= ⎡⟨a … b … c … d⟩⎤ ⎡⟨a … b … _ … c … d⟩⎤))
-
-;; %split with five arguments
-;(ml
-  (= ⎡⟨xs … a … ys … b … zs⟩⎤ ⎡(%split xs a (%split ys b zs))⎤)
-  (= ⎡⟨xs … a b c … ys … d e f … zs⟩⎤ ⎡(%split xs a (%split (b c (%group ys _*)) d (e f (%group zs _*))))⎤)
-  (= ⎡⟨a b c … d e f⟩°⎤ ⎡(%split° _ a (%split° (b c _*) d (e f _*)))⎤))
+(ml
+  ;; 2 parts
+  (= ⎡⟨a … b⟩⎤ ⎡(%split (a) (b))⎤)
+  (= ⎡⟨a b … c d⟩⎤ ⎡(%split (a b) (c d))⎤)
+  ;; 3 parts
+  (= ⎡⟨a … b … c⟩⎤ ⎡(%split (a) b (c))⎤)
+  (= ⎡⟨a b … c … d⟩⎤ ⎡(%split (a b) c (d))⎤)
+  (= ⎡⟨a b … c d … e⟩⎤ ⎡(%split (a b) c d (e))⎤)
+  (= ⎡⟨a b … c d … e f⟩⎤ ⎡(%split (a b) c d (e f))⎤)
+  (= ⎡⟨x y z … a b c … d e f⟩⎤ ⎡(%split (x y z) a b c (d e f))⎤)
+  (= ⎡⟨x y z … a b c … d e f⟩°⎤ ⎡(%split° (x y z) a b c (d e f))⎤)
+  (= ⎡⟨x y z … a b c … d e f ¦ rest_ x_ y_⟩°⎤ ⎡(%partition ⟨x y z … a b c … d e f⟩° (%layer rest_ {| x_ y_}))⎤)
+  ;; 4 parts
+  (= ⎡⟨a … b … c … d⟩⎤ ⎡(%split (a) b (%split (c) (d)))⎤)
+  (= ⎡⟨a b c … d … e … f⟩⎤ ⎡(%split (a b c) d (%split (e) (f)))⎤)
+  (= ⎡⟨a b c … d e f … g … i⟩⎤ ⎡(%split (a b c) d e f (%split (g) (i)))⎤)
+  (= ⎡⟨a b c … d e f … g i j … k⟩⎤ ⎡(%split (a b c) d e f (%split (g i j) (k)))⎤)
+  (= ⎡⟨a b c … d e f … g i j … k l m⟩⎤ ⎡(%split (a b c) d e f (%split (g i j) (k l m)))⎤)
+  ;; 5 parts
+  (= ⎡⟨a … b … c … d … e⟩⎤ ⎡(%split (a) b (%split (c) d (e)))⎤)
+  (= ⎡⟨a b … c … d … e … f⟩⎤ ⎡(%split (a b) c (%split (d) e (f)))⎤)
+  (= ⎡⟨a b … c d … e … f … g⟩⎤ ⎡(%split (a b) c d (%split (e) f (g)))⎤)
+  (= ⎡⟨a b … c d … e f … g … i⟩⎤ ⎡(%split (a b) c d (%split (e f) g (i)))⎤)
+  (= ⎡⟨a b … c d … e f … g i … j⟩⎤ ⎡(%split (a b) c d (%split (e f) g i (j)))⎤)
+  (= ⎡⟨a b … c d … e f … g i … j k⟩⎤ ⎡(%split (a b) c d (%split (e f) g i (j k)))⎤)
+  ;; Misc
+  (= ⎡⟨l_* … < … m_* … > … r_*⟩⎤
+     ⎡(%split (l_*) < (%split (m_*) > (r_*)))⎤)
+  ;; Edge cases
+  (= ⎡⟨…⟩⎤ ⎡(%split () ())⎤)
+  (= ⎡⟨a …⟩⎤ ⎡(%split (a) ())⎤)
+  (= ⎡⟨a … b⟩⎤ ⎡(%split (a) (b))⎤)
+  (= ⎡⟨a b … c d⟩⎤ ⎡(%split (a b) (c d))⎤)
+  (- ⎡⟨a b … ⏏… c d⟩⎤ ⎡expected at least one item in split part⎤)
+  (= ⎡⟨… a …⟩⎤ ⎡(%split () a ())⎤)
+  (= ⎡⟨… a … …⟩⎤ ⎡(%split () a (%split () ()))⎤)
+  (= ⎡⟨… a … … b⟩⎤ ⎡(%split () a (%split () (b)))⎤)
+  (= ⎡⟨… a … b … c⟩⎤ ⎡(%split () a (%split (b) (c)))⎤)
+  (= ⎡⟨… a … b … c …⟩⎤ ⎡(%split () a (%split (b) c ()))⎤)
+  (= ⎡⟨… a … b … c … d⟩⎤ ⎡(%split () a (%split (b) c (d)))⎤)
+  (- ⎡⟨… a … b … ⏏… d⟩⎤ ⎡expected at least one item in split part⎤))
 
 ;; itemspart %partition
 (ml

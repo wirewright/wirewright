@@ -14,6 +14,7 @@ module Ww::ML
                      AllItem |
                      AllLeaf |
                      PairDict |
+                     ItemFirst |
                      Split |
                      Dict |
                      DictExtend |
@@ -130,6 +131,7 @@ module Ww::ML
     defcase Layer, residue : Expr?, selection : Array(Selector)
     defcase LayerIgnoreResidue, child : Expr
 
+    defcase ItemFirst, part : SplitPart, pairside : Layer?, source : Bool
     defcase Split, parts : Array(SplitPart), pairside : Layer?, source : Bool
 
     alias SplitPart = SplitPartNode | Location(SplitPartNode)

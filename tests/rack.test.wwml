@@ -1814,19 +1814,19 @@
       (backsys (@x)
         ((`front _*)) <> {front: "First rule"}
         ((_* `back)) <> {back: "Second rule"}
-        ((%split (_* `slot) b _)) <> {slot: "Slot before b"}))
+        (⟨_* `slot … b … _*⟩) <> {slot: "Slot before b"}))
     (frame
       (cell @x ("First rule" a "Slot before b" b c "Second rule"))
       (backsys (@x)
         ((`front _*)) <> {front: "First rule"}
         ((_* `back)) <> {back: "Second rule"}
-        ((%split (_* `slot) b _)) <> {slot: "Slot before b"}))
+        (⟨_* `slot … b … _*⟩) <> {slot: "Slot before b"}))
     (frame
       (cell @x ("First rule" "First rule" a "Slot before b" "Slot before b" b c "Second rule" "Second rule"))
       (backsys (@x)
         ((`front _*)) <> {front: "First rule"}
         ((_* `back)) <> {back: "Second rule"}
-        ((%split (_* `slot) b _)) <> {slot: "Slot before b"})))
+        (⟨_* `slot … b … _*⟩) <> {slot: "Slot before b"})))
     ;; ...
 
   ;; Basic deletion
@@ -1963,15 +1963,15 @@
     ;; walls break when their durability is zero
     (frame
       (cell @x (r . . . l))
-      (backsys (@x)
-        (⟨a←. b←l⟩°) <> {a: ^b, b: ^a}
-        (⟨a←r b←.⟩°) <> {a: ^b, b: ^a}
-        (⟨a←r b←l⟩) <> {a: l, (b): ((I 3) r)}
-        ((a←l _*)) <> {a: r}
-        ((_* a←r)) <> {a: l}
-        ((%split° (_* a←r) (I D←(%number _ > 0)) _)) <> {a: l, D: ^(- D 1)}
-        ((%split° _ (I D←(%number _ > 0)) (a←l _*))) <> {a: r, D: ^(- D 1)}
-        (⟨W←(I 0)⟩°) <> {(W): ()}))
+      (backsys @x
+        ⟨a←. b←l⟩° <> {a: ^b, b: ^a}
+        ⟨a←r b←.⟩° <> {a: ^b, b: ^a}
+        ⟨a←r b←l⟩ <> {a: l, (b): ((I 3) r)}
+        (a←l _*) <> {a: r}
+        (_* a←r) <> {a: l}
+        ⟨_* a←r … (I D←(%number _ > 0)) … _*⟩° <> {a: l, D: ^(- D 1)}
+        ⟨_* … (I D←(%number _ > 0)) … a←l _*⟩° <> {a: r, D: ^(- D 1)}
+        ⟨W←(I 0)⟩° <> {(W): ()}))
     (frame pattern: true
       ⟨(cell @x (. r . l .))⟩)
     (frame pattern: true

@@ -324,18 +324,10 @@ module Ww::ML
       dict(ctx, node.pairs) { |pair| render(ctx, pair) }
     end
 
-    private def render0(ctx : RenderContext, node : Tree::Split) : Tsrc
-      assert node.parts.present?
-
-      unless node.parts.size == 1
-        raise "%split shorthand family not available yet", node
-      end
-
-      node.parts.each do |part|
-        assert child = Tree.topmost(part, as: Tree::SplitPartNode)
-        next if child.items.present?
-
-        raise "expected at least one item in split part", part
+    private def render0(ctx : RenderContext, node : Tree::ItemFirst) : Tsrc
+      child = Tree.topmost(node.part, as: Tree::SplitPartNode)
+      if child.items.empty?
+        raise "expected at least one item", node.part
       end
 
       if pairside = node.pairside
@@ -350,14 +342,74 @@ module Ww::ML
         decorate = ->(itemspart : Tsrc) { itemspart }
       end
 
-      part = render(ctx, node.parts[0])
-
       interior = tsrc(ctx) do |commit|
         commit << tsrc(ctx, node.source ? :"%item°" : :"%item")
-        commit.concat(part)
+        commit.concat(render(ctx, node.part))
       end
 
       decorate.call(interior)
+    end
+
+    private def render0(ctx : RenderContext, node : Tree::Split) : Tsrc
+      assert node.parts.size > 1
+
+      segments = node.parts.to_readonly_slice do |part|
+        {part, render(ctx, part)}
+      end
+
+      if pairside = node.pairside
+        pairspart = render(ctx, pairside)
+
+        # ⟨a b … c d ⍊ x: 100⟩
+        decorate = ->(itemspart : Tsrc) do
+          tsrc(ctx, {:"%partition", itemspart, pairspart})
+        end
+      else
+        # ⟨a b … c d⟩
+        decorate = ->(itemspart : Tsrc) { itemspart }
+      end
+
+      head = node.source ? tsrc(ctx, :"%split°") : tsrc(ctx, :"%split")
+      interior = render_split(ctx, segments, head)
+
+      decorate.call(interior)
+    end
+
+    private def render_split(ctx : RenderContext, segments : Slice, head : Tsrc) : Tsrc
+      case segments.size
+      when 1
+        # ⟨a … b … ⏏c d e⏏⟩ -> (%split (a) b ⏏(c d e)⏏)
+        segment, *_ = segments
+        _, members = segment
+
+        tsrc(ctx, &.concat(members))
+      when 2
+        # ⟨a b … c d⟩ -> (%split (a b) (c d))
+        segment0, segment1 = segments
+        _, members0 = segment0
+        _, members1 = segment1
+
+        tsrc(ctx,
+          {head,
+           tsrc(ctx, &.concat(members0)),
+           tsrc(ctx, &.concat(members1))})
+      else
+        assert segments.size > 2
+
+        segment0, segment1 = segments
+        _, members0 = segment0
+        part1, members1 = segment1
+
+        if members1.empty?
+          raise "expected at least one item in split part", part1
+        end
+
+        tsrc(ctx) do |commit|
+          commit << head << tsrc(ctx, &.concat(members0))
+          commit.concat(members1)
+          commit << render_split(ctx, segments + 2, head: tsrc(ctx, :"%split"))
+        end
+      end
     end
 
     private def render0(ctx : RenderContext, node : Tree::SplitPartNode) : Array(Tsrc)

@@ -868,11 +868,20 @@ qoox
 
 #### Shorthands for `%split` and `%split°`
 
-> [!NOTE]
-> Not implemented
+The following defines a right-recursive `%split`: `⟨x y z … a b c⟩` and so on with
+more *parts*, delimited by `…`. Similarly there exists the source version:
+`⟨x y z … a b c⟩°`. Interfixes are supported as well: `⟨x y z … a b c ¦ pairs_⟩`.
 
-`⟨x y z … a b c⟩` and so on with more *parts* (delimited by `…`). Similarly there exists the source
-version: `⟨x y z … a b c⟩°`. Interfixes are supported as well: `⟨x y z … a b c ¦ pairs_⟩`.
+Examples:
+- `⟨a … b⟩` is the same as writing `(%split (a) (b))`.
+- `⟨a … b … c⟩` is the same as writing `(%split (a) b (c))`.
+- `⟨a … b c … d⟩` is the same as writing `(%split (a) b c (d))`.
+- `⟨a … b c … d … e⟩` is the same as writing `(%split (a) b c (%split (d) (e)))`.
+- `⟨a … b c … d … e … f⟩` is the same as writing `(%split (a) b c (%split (d) e (f)))`.
+
+... and so on, rceursively. Parts designated for the middle (above that would be
+`… b …`, `… b c …`, `… e …`) must be nonempty. Other parts (left and right parts)
+may be empty.
 
 #### Shorthands for itemspart `%partition`
 

@@ -558,14 +558,14 @@ module Ww::ML
         if ahead?(:rangle)
           parts << tracked(Tree::SplitPartNode.new(part), span_end.call)
           forward
-          return Tree::Split.new(parts, pairside: nil, source: false)
+          return split(parts, pairside: nil, source: false)
         end
 
         # ⟨a b c⏏⟩°
         if ahead?(:rangle_source)
           parts << tracked(Tree::SplitPartNode.new(part), span_end.call)
           forward
-          return Tree::Split.new(parts, pairside: nil, source: true)
+          return split(parts, pairside: nil, source: true)
         end
 
         case π = interfix(:rangle, :rangle_source)
@@ -577,14 +577,14 @@ module Ww::ML
           if ahead?(:rangle)
             parts << tracked(Tree::SplitPartNode.new(part), span_end.call)
             forward
-            return Tree::Split.new(parts, pairside: π, source: false)
+            return split(parts, pairside: π, source: false)
           end
 
           # ⟨a b c ¦ _⏏⟩°
           if ahead?(:rangle_source)
             parts << tracked(Tree::SplitPartNode.new(part), span_end.call)
             forward
-            return Tree::Split.new(parts, pairside: π, source: true)
+            return split(parts, pairside: π, source: true)
           end
 
           return failure("expected `⟩` to end the split", ahead.text.before_begin)
@@ -602,6 +602,15 @@ module Ww::ML
         # ⟨a ⏏b c⟩
         part << value!(slot, expect: "expected an item, `…`, an interfix, or `⟩` to end the split")
       end
+    end
+
+    # Smart constructor for Split or FirstItem.
+    private def split(parts : Array(Tree::SplitPart), *, pairside, source : Bool)
+      if parts.size == 1
+        return Tree::ItemFirst.new(parts.first, pairside, source)
+      end
+
+      Tree::Split.new(parts, pairside, source)
     end
 
     # ⏏⟨& a b c⟩
