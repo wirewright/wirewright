@@ -18,8 +18,9 @@ module Ww::M1
   #   We use the term *mutation* (and derived) to refer to components of a backspec, as in
   #   `{x: ⏏^y⏏, y: ⏏^x⏏}`. Mutations do not have a name; they are *associated* with
   #   a name. Among other metadata, they carry e.g. multiplicity, which is written
-  #   as `{⏏(x)⏏: ^y}`. This could be confusing because multiplicity is very close to
-  #   the name while not actually being part of the mutation.
+  #   as `{⏏(x)⏏: ^y}`. This could be confusing because multiplicity, part of a mutation,
+  #   is very close to the name syntactically, but the name is not actually part of
+  #   the mutation.
   # - We partition the tree into levels (each level populated/defined/delimited
   #   by `LevelNode`s), similar to breadth-first search.
   # - The levels are traversed bottom-up.
