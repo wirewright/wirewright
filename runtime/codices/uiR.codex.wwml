@@ -225,7 +225,7 @@
 ;;
 
 ;; Intercept and release dn-w/h.
-(percents _ ⍊ ±dn-w⫽h: λ) <> {λ: (arg ^λ)}
+(percents _ ⍊ dn-w⫽h: ±λ) <> {λ: (arg ^λ)}
 (percents {¦ -dn-w⫽h: λ'} ⍊ dn-w⫽h: Λ←[arg ±λ]) <> {λ': ^λ, (Λ): ()}
 
 ;; Scale.
@@ -241,7 +241,7 @@
   <> {λ': ^λ, desired-w⫽h: ^λ, (λ): ()}
 
 ;; Intercept dn-w/h.
-(x⫽y-signal _ ⍊ ±dn-w⫽h: λ) <> {λ: (arg ^λ)}
+(x⫽y-signal _ ⍊ dn-w⫽h: ±λ) <> {λ: (arg ^λ)}
 (x⫽y-signal {¦ -dn-w⫽h: λ'} ⍊ dn-w⫽h: Λ←[arg ±λ]) <> {λ': ^λ, (Λ): ()}
 
 ;; Check if intercepted dn-w/h fits.

@@ -198,16 +198,16 @@ Use the double parens to alternate over sequences of characters:
 Here is a (much?) more sophisticated example:
 
 ```wwml
-(padding {¦ ±up-w⫽h: src} ⍊ ±px⫽y -up-w⫽h: dst)
+(padding {¦ up-w⫽h: ±src} ⍊ ±px⫽y -up-w⫽h: dst)
   <> {dst: $'(+ →src →px⫽y), (src): ()}
 ```
 
 ...which expands to the following:
 
 ```wwml
-(padding {¦ ±up-w: src} ⍊ ±px -up-w: dst)
+(padding {¦ up-w: ±src} ⍊ ±px -up-w: dst)
   <> {dst: $'(+ →src →px), (src): ()}
-(padding {¦ ±up-h: src} ⍊ ±py -up-h: dst)
+(padding {¦ up-h: ±src} ⍊ ±py -up-h: dst)
   <> {dst: $'(+ →src →py), (src): ()}
 ```
 
@@ -955,7 +955,6 @@ The residue term is optional.
 - `<name>_<type>⋮ <value>` is the same as writing `<name>: (%optional <initial value of type> <value>)`.
 - `⋮<name>` is the same as writing `<name>: (%- (%never) <name>)`.
 - `±<name>` is the same as writing `<name>: (%let <name> _number)`.
-- `±<key>: <name>` is the same as writing `<key>: (%let <name> _number)` (DEPRECATED: write `<key>: ±<name>` instead)
 - `@<name>_` is the same as writing `<name>: @<name>_`.
 
 ###### Initial values

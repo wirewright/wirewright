@@ -765,13 +765,9 @@ module Ww::ML
         Tree::SelectorNegative.new(key, name)
       when past?(:plus_minus)
         # ±⏏x
-        # ±⏏x: foo
         key = value!(atom)
-        if past?(:colon_right)
-          rename = value!(atom)
-        end
 
-        Tree::SelectorNumber.new(key, rename)
+        Tree::SelectorNumber.new(key)
       when past?(:at_sign)
         selector = try? do
           # @⏏x_

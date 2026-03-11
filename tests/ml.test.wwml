@@ -554,8 +554,7 @@
 
 (ml
   (= ⎡±x⎤ ⎡x←_number⎤ ⎡(%let x _number)⎤)
-  (= ⎡{¦ ±x}⎤ ⎡{¦ x: x←_number}⎤ ⎡{¦ x: (%let x _number)}⎤)
-  (= ⎡{¦ ±x: y}⎤ ⎡{¦ x: y←_number}⎤ ⎡{¦ x: (%let y _number)}⎤))
+  (= ⎡{¦ ±x}⎤ ⎡{¦ x: x←_number}⎤ ⎡{¦ x: (%let x _number)}⎤))
 
 ;; Dictionary set and multiset
 (ml
@@ -795,12 +794,12 @@
 ;; Rule expansion
 (ml
   (doc=
-    ⎡(padding {¦ ±up-w⫽h: src} ⍊ ±px⫽y -up-w⫽h: dst)
+    ⎡(padding {¦ up-w⫽h: ±src} ⍊ ±px⫽y -up-w⫽h: dst)
        <> {dst: $'(+ →src →px⫽y), (src): ()}⎤
 
-    ⎡(padding {¦ ±up-w: src} ⍊ ±px -up-w: dst)
+    ⎡(padding {¦ up-w: ±src} ⍊ ±px -up-w: dst)
        <> {dst: $'(+ →src →px), (src): ()}
-     (padding {¦ ±up-h: src} ⍊ ±py -up-h: dst)
+     (padding {¦ up-h: ±src} ⍊ ±py -up-h: dst)
        <> {dst: $'(+ →src →py), (src): ()}⎤)
 
   (doc=
@@ -861,10 +860,10 @@
        y: 200)⎤
      ⎡(x: 100 y: 200)⎤)
   (doc= ⎡⟦rect,svg⟧⎤ ⎡rect svg⎤)
-  (doc= ⎡(⟦rect,svg⟧ ⍊ ±dn-w⫽h: λ, ⋮final-w⫽h) <> {final-w⫽h: →λ, (λ): ()}⎤
-        ⎡(rect ⍊ ±dn-w⫽h: λ, ⋮final-w⫽h) <> {final-w⫽h: →λ, (λ): ()}
+  (doc= ⎡(⟦rect,svg⟧ ⍊ dn-w⫽h: ±λ, ⋮final-w⫽h) <> {final-w⫽h: →λ, (λ): ()}⎤
+        ⎡(rect ⍊ dn-w⫽h: ±λ, ⋮final-w⫽h) <> {final-w⫽h: →λ, (λ): ()}
 
-         (svg ⍊ ±dn-w⫽h: λ, ⋮final-w⫽h) <> {final-w⫽h: →λ, (λ): ()}⎤))
+         (svg ⍊ dn-w⫽h: ±λ, ⋮final-w⫽h) <> {final-w⫽h: →λ, (λ): ()}⎤))
 
 ;; Duplicate rule and pair
 (ml

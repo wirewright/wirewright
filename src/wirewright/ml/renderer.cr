@@ -593,11 +593,9 @@ module Ww::ML
 
     private def render0(ctx : RenderContext, node : Tree::SelectorNumber)
       key = render(ctx, node.key)
-      rename = render(ctx, node.rename)
 
       # ±x -> x: x←_number
-      # ±x: foo -> x: foo←_number
-      assign(node.key, key, tsrc(ctx, {:"%let", rename || key, :_number}))
+      assign(node.key, key, tsrc(ctx, {:"%let", key, :_number}))
     end
 
     private def render0(ctx : RenderContext, node : Tree::SelectorEdge)

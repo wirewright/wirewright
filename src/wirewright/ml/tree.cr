@@ -120,7 +120,7 @@ module Ww::ML
     defcase SelectorPairDefault, key : Expr, value : Expr
     defcase SelectorPairRequired, key : Expr, value : Expr
     defcase SelectorNegative, key : Expr, capture : Expr?
-    defcase SelectorNumber, key : Expr, rename : Expr?
+    defcase SelectorNumber, key : Expr
     defcase SelectorEdge, key : Expr
 
     defcase Pairspattern, itemsname : Expr?, selection : Array(Selector)
