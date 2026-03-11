@@ -1167,22 +1167,22 @@ prune:
 
 ;; Move upward/downward cues from style to cues which acts like
 ;; an upward/downward slope.
-{¦ µ-cues_dict⋮ (_* `T) µ-⟦style,preset⟧: ⟨C←(cue-⸨up,dn⸩ id_)⟩}
+{¦ µ-cues: (%optional () (_* `T)) µ-⟦style,preset⟧: ⟨C←(cue-⸨up,dn⸩ id_)⟩}
   <> {T: (⸨up,dn⸩-out ^id), (C): ()}
 
 ;; Send up-out to parent.
-⟨{¦ µ-cues_dict⋮ (C←[up-out id_] _*)} ⍊ µ-cues_dict⋮ (_* `T)⟩
+⟨{¦ µ-cues: (C←[up-out id_] _*)} ⍊ µ-cues: (%optional () (_* `T))⟩
   <> {T: (up-in ^id), (C): ()}
 
 ;; Broadcast dn-out to all children.
-⟨{¦ µ-cues_dict⋮ (_* `T)} ⍊ µ-cues: ((dn-out c_ ⍊ -◇_) _*)⟩°
+⟨{¦ µ-cues: (%optional () (_* `T))} ⍊ µ-cues: ((dn-out c_ ⍊ -◇_) _*)⟩°
   <> {T: (dn-in ^c), ◇: true}
 
 ;; If child doesn't know what else to do with the cue, remove it.
 ⟨{¦ µ-cues: (C_ _*)}⟩° <> {(C): ()}
 
 ;; Keep track of cues received from above and below.
-{¦ µ-cues: ([⸨up,dn⸩-in id_] _*) µ-cues-⸨up,dn⸩_dict⋮ (%-value id received)}
+{¦ µ-cues: ([⸨up,dn⸩-in id_] _*) µ-cues-⸨up,dn⸩: (%optional () (%-value id received))}
   <> {received: true}
 
 ;; If we've received a cue that a condition depends on, resolve that condition.

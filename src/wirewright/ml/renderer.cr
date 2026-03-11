@@ -520,10 +520,10 @@ module Ww::ML
             tsrc(ctx, {:"%optional", value, key}))
         end
 
-        # x_<type>⋮ y -> x: (%optional <default for type> y)
+        # x_<type>⋮ y -> x: (%optional <default for type> (%let x (%all _<type> y)))
         assign(node.key,
           tsrc(ctx, blank.name, src: node.key),
-          tsrc(ctx, {:"%optional", ML.initial(blank.type), value}))
+          tsrc(ctx, {:"%optional", ML.initial(blank.type), {:"%let", blank.name, {:"%all", blank.type.blank, value}}}))
       end
     end
 

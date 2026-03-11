@@ -18504,9 +18504,9 @@ N←{¦ fallback: (¦ () source_ rem_)}
   <> {(N): (), log-dst: →log, stats-dst: →stats, state: sizing}
 
 ;; Calculate up-w/h.
-(x-wrap ¦ _ state_: sizing gap-x_number⋮ gap_ stats: {¦ Sp_number Np_number} -up-w: w)
+(x-wrap ¦ _ state_: sizing gap-x: (%optional 0 gap_) stats: {¦ Sp_number Np_number} -up-w: w)
   <> {state: sized, w: $(+ →Sp (* →gap (- →Np 1)))}
-(y-wrap ¦ _ state_: sizing gap-y_number⋮ gap_ stats: {¦ Sp_number Np_number} -up-h: h)
+(y-wrap ¦ _ state_: sizing gap-y: (%optional 0 gap_) stats: {¦ Sp_number Np_number} -up-h: h)
   <> {state: sized, h: $(+ →Sp (* →gap (- →Np 1)))}
 
 ;; Consume dn-w/h until in sized state.

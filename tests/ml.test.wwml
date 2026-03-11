@@ -1046,3 +1046,10 @@
   (= ⎡{|: 100}⎤ ⎡{ |: 100}⎤ ⎡(|: 100)⎤)
   (- ⎡{| :⏏ ⏏100}⎤ ⎡whitespace after prefix `:` not allowed⎤)
   (= ⎡{| :100}⎤ ⎡{100: 100}⎤))
+
+;; Some %optional shorthands
+(ml
+  (= ⎡{| x_number⋮ (%number +i32)}⎤
+     ⎡{x: (%optional 0 x←(%all _number (%number +i32)))}⎤)
+  (= ⎡{| x_string⋮ _}⎤
+     ⎡{x: (%optional "" x←(%all _string _))}⎤))
