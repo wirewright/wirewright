@@ -217,14 +217,13 @@ module Ww
 
     # Represents the pointer tag of a term.
     enum Tag : UInt64
-      Opaque  = 0u64 # < must be zero!
+      Dict    = 0u64 # < must be zero!
       Sym     = 1u64
       NumRat  = 2u64
       NumFlt  = 3u64
       NumInt  = 4u64
       Str     = 5u64
       Boolean = 6u64
-      Dict    = 7u64
     end
 
     # :nodoc:
@@ -260,11 +259,6 @@ module Ww
       Pointer(Void).new(@mem.address & ~0b111u64)
     end
 
-    # Downcasts this term to an opaque pointer without performing any checks.
-    def unsafe_as_opaque : Void*
-      @mem.as(Void*)
-    end
-
     # Returns the `TermType` corresponding to this term. Guarantees to never
     # return `TermType::Any`.
     @[Upcast]
@@ -280,16 +274,7 @@ module Ww
         TermType::String
       in .boolean?
         TermType::Boolean
-      in .opaque?
-        raise ArgumentError.new
       end
-    end
-
-    # Constructs a `Term` wrapping the given opaque pointer *ptr*.
-    def self.unsafe_of_opaque(ptr : Void*) : Term
-      assert (ptr.address & 0b111).zero?, "not tagged"
-
-      new(Pointer(Void).new(ptr.address | Tag::Opaque.value))
     end
 
     # Constructs a `Term` wrapping the given number *term* instance.
@@ -364,12 +349,12 @@ module Ww
 
     # Constructs a `Term` wrapping the given dictionary *term* instance.
     def self.of(term : Dict) : Term
-      Term.new(Pointer(Void).new(term.as(Void*).address | Tag::Dict.value))
+      Term.new(term.as(Void*))
     end
 
     # Downcasts this term to a dictionary term without performing any checks.
     def unsafe_as_d : Dict
-      unsafe_ptr.as(Dict)
+      @mem.as(Dict)
     end
 
     # Downcasts `Term` to one of term instance types.
@@ -385,8 +370,6 @@ module Ww
         term.unsafe_as_s
       in .boolean?
         term.unsafe_as_b
-      in .opaque?
-        raise ArgumentError.new
       end
     end
 
