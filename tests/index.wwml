@@ -1,7 +1,5 @@
-;;
 ;; `testtool` uses this file to figure out the tests it needs to run and
 ;; their assets.
-;;
 
 ;; Variables used in pattern tests: `(var= _ _*)`.
 ;;
@@ -23,8 +21,8 @@ editR: {codex: "../runtime/codices/editR.codex.wwml"}
 uiR: {codex: "../runtime/codices/uiR.codex.wwml"}
 
 ;; Tests are listed in loose dependency order: ML tests are the most "primitive"
-;; and depend on the least amount of further machinery, then go patterns and so on.
-;; This doesn't work as cleanly in practice because the whole idea of Wirewright on
+;; and depend on the least amount of machinery, then go patterns and so on. This
+;; doesn't work as cleanly in practice because the whole idea of Wirewright on
 ;; the implementation end is to have everything depend on (or at least accessible to)
 ;; everything else, so most of these tests require some form of "bootstrapping", as in,
 ;; "everything else must *mostly* work for this particular test to work". Apply this
@@ -55,7 +53,7 @@ uiR: {codex: "../runtime/codices/uiR.codex.wwml"}
   color: (oklch 0.7 0.1 blue)
   tags: (ufold))
 
-(test "rack.test.wwml" ;; "d7.test.wwml"
+(test "rack.test.wwml"
   color: (oklch 0.7 0.1 violet)
   tags: (d7 delta7 rack))
 
