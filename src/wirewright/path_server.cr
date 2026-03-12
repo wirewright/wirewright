@@ -29,7 +29,7 @@ module Ww
 
     Log = ::Log.for(self)
 
-    alias Fact = IsFile | IsDir | FileFact | DirFact
+    alias Fact = IsFile | IsDir | FileEntryFact | DirEntryFact
 
     defrecord IsFile,
       content : Bytes,
@@ -41,12 +41,12 @@ module Ww
 
     defrecord IsDir
 
-    alias FileFact = FilePresent | FileAbsent
+    alias FileEntryFact = FilePresent | FileAbsent
 
     defrecord FilePresent, name : String
     defrecord FileAbsent, name : String
 
-    alias DirFact = DirPresent | DirAbsent
+    alias DirEntryFact = DirPresent | DirAbsent
 
     defrecord DirPresent, name : String
     defrecord DirAbsent, name : String
@@ -66,15 +66,19 @@ module Ww
       return false if a == b
 
       case {a, b}
-      when {IsDir, FileFact},
-           {FileFact, IsDir},
-           {IsDir, DirFact},
-           {DirFact, IsDir}
+      when {IsDir, FileEntryFact},
+           {FileEntryFact, IsDir},
+           {IsDir, DirEntryFact},
+           {DirEntryFact, IsDir}
         false
-      when {FileFact, FileFact},
-           {FileFact, DirFact},
-           {DirFact, FileFact},
-           {DirFact, DirFact}
+      when {FilePresent, DirAbsent},
+           {DirAbsent, FilePresent}
+        # E.g. (file "x") and (-dir "x") aren't contradictory.
+        false
+      when {FileEntryFact, FileEntryFact},
+           {FileEntryFact, DirEntryFact},
+           {DirEntryFact, FileEntryFact},
+           {DirEntryFact, DirEntryFact}
         a.name == b.name
       else
         true
@@ -126,7 +130,7 @@ module Ww
     SAFE_FILE_BYTESIZE = 32 * 1024 * 1024 # 32 MiB
 
     DEMAND_TTL                = 5.seconds
-    DEMAND_TTL_ALMOST_EXPIRED = DEMAND_TTL * 0.8 # 80%
+    DEMAND_TTL_ALMOST_EXPIRED = DEMAND_TTL * 0.6 # 60%
 
     # Read loop
     private def rloop : Nil
@@ -149,7 +153,7 @@ module Ww
             @@r_demand.each do |path, accessed_at|
               next if instant - accessed_at <= DEMAND_TTL
 
-              Log.debug { "#{path} was not accessed in #{DEMAND_TTL.humanize}, removing" }
+              Log.debug { "#{path} was not accessed in #{DEMAND_TTL.humanize}, removing from demands" }
 
               txn.dissoc(path)
             end

@@ -539,7 +539,7 @@ module Ww
     # Maximum age of subscriptions, in heartbeats. Subscriptions past this age
     # "die" -- they are garbage collected. Accessing a subscription resets
     # its age.
-    MAX_AGE_HBS = 8
+    MAX_AGE_HBS = 12
 
     private def execute?(command : Prune) : Bool
       notify = false
