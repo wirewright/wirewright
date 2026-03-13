@@ -523,7 +523,7 @@ module Ww
 
     # Loads the file at *path* into memory and returns its content, as a slice
     # of bytes. Raises `Error` if the file cannot be read.
-    def read(path : Path) : Blob
+    def read(path : Path) : Term::Blob
       loop do
         listing = view(path)
         if listing.is_a?(Wait)
@@ -546,14 +546,16 @@ module Ww
     #
     # Raises `Error` if the file cannot be read.
     def read_string(path : Path, **kwargs) : String
-      String.new(read(path, **kwargs))
+      blob = read(path, **kwargs)
+
+      String.new(blob.bytes)
     end
 
     # Overwrites the content of the file at *path* with *content*.
     #
     # NOTE: This function may block for an indefinite amount of time, since it
     # waits for the proof that the file really was written to disk.
-    def write(path : Path, content : Blob) : Nil
+    def write(path : Path, content : Term::Blob) : Nil
       digest = Digest::SHA256.hexdigest(content)
 
       loop do
