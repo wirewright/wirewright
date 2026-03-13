@@ -155,15 +155,9 @@ module Ww
           {@@r_demand, @@r_supply}
         end
 
-        has_almost_expired = false
-
         # Process demands.
         supply1 = Pf::Map(Path, Supply).transaction do |txn|
           demand.each do |path, accessed_at|
-            if instant - accessed_at > DEMAND_TTL_ALMOST_EXPIRED
-              has_almost_expired = true
-            end
-
             state = supply0[path]?
 
             case status = PathMonitor.status(path)
@@ -244,8 +238,6 @@ module Ww
         @@r_lock.synchronize do
           @@r_supply = supply1
         end
-
-        next unless has_almost_expired || supply0 != supply1
 
         Log.trace { "rloop: wait_cv broadcast" }
 
