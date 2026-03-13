@@ -3695,7 +3695,7 @@ end
 
 class BlockingSignal
   def initialize
-    @state = 0
+    @pending = false
     @mutex = Sync::Mutex.new
     @cv = Sync::ConditionVariable.new(@mutex)
   end
@@ -3703,8 +3703,8 @@ class BlockingSignal
   def wait
     @mutex.synchronize do
       loop do
-        if @state > 0
-          @state -= 1
+        if @pending
+          @pending = false
           return
         end
 
@@ -3715,7 +3715,7 @@ class BlockingSignal
 
   def call
     @mutex.synchronize do
-      @state += 1
+      @pending = true
       @cv.broadcast
     end
   end
