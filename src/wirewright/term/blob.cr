@@ -255,5 +255,24 @@ module Ww
 
       new(media_type, media_params)
     end
+
+    # :nodoc:
+    MEDIA_TYPE_PLAIN = Term["text/plain"]
+    # :nodoc:
+    MEDIA_CHARSET_UTF8 = Term["UTF-8"]
+    # :nodoc:
+    MEDIA_CHARSET_ASCII = Term["US-ASCII"]
+
+    # Returns `true` if the blob this classification describes looks like UTF-8
+    # plaintext. This can be used to e.g. convert the blob to a `Term::Str` which
+    # is much more convenient for previewing and working with UTF-8.
+    def utf8? : Bool
+      return false unless media_type == MEDIA_TYPE_PLAIN
+      return false unless charset = media_params[:charset]?
+      return false unless charset = charset.as_s?
+      return false unless charset.upcase.in?(MEDIA_CHARSET_UTF8, MEDIA_CHARSET_ASCII)
+
+      true
+    end
   end
 end
