@@ -70,7 +70,7 @@ module Ww
       def initialize(capacity : UInt64)
         @digester = DIGEST_ALGORITHM.new
 
-        @capacity = Math.min(capacity, MIN_CAPACITY)
+        @capacity = Math.max(capacity, MIN_CAPACITY)
 
         # TODO: Can we use malloc_atomic here somehow? Maybe we should just switch to
         # a separate buffer approach after all? Since Classif is a reference pointing
@@ -89,7 +89,7 @@ module Ww
         return if slice.empty?
 
         if @size + slice.size > @capacity
-          @capacity *= 2
+          @capacity = (@size + slice.size) * 2
           @mem = GC.realloc(@mem, HEADER_SIZE + @capacity).as(UInt8*)
         end
 
