@@ -7,6 +7,7 @@ module Ww
     Symbol  = 3
     Boolean = 4
     Dict    = 5
+    Blob    = 6
 
     def self.parse(cls : Term::Num.class)
       TermType::Number
@@ -28,6 +29,10 @@ module Ww
       TermType::Dict
     end
 
+    def self.parse(cls : Term::Blob.class)
+      TermType::Blob
+    end
+
     def self.parse(cls : Term.class)
       TermType::Any
     end
@@ -40,6 +45,7 @@ module Ww
       when SYM_BLANK_SYMBOL  then Symbol
       when SYM_BLANK_BOOLEAN then Boolean
       when SYM_BLANK_DICT    then Dict
+      when SYM_BLANK_BLOB    then Blob
       end
     end
 
@@ -63,6 +69,7 @@ module Ww
       in .symbol?  then SYM_BLANK_SYMBOL
       in .boolean? then SYM_BLANK_BOOLEAN
       in .dict?    then SYM_BLANK_DICT
+      in .blob?    then SYM_BLANK_BLOB
       end
     end
   end
@@ -81,7 +88,7 @@ module Ww
       # However, sometimes (e.g., for method overloading), we may want to "unpack"
       # the tagged pointer to obtain a normal Crystal tagged union -- of type `Any`
       # (see `Term.[]`).
-      alias Any = Sym | Num | Str | Boolean | Dict
+      alias Any = Sym | Num | Str | Boolean | Blob | Dict
 
       {% unless Tag.constants.size <= 8 %}
         {% raise "enum #{Tag} must contain at most 8 values" %}
@@ -224,6 +231,7 @@ module Ww
       NumInt  = 4u64
       Str     = 5u64
       Boolean = 6u64
+      Blob    = 7u64
     end
 
     # :nodoc:
@@ -274,12 +282,14 @@ module Ww
         TermType::String
       in .boolean?
         TermType::Boolean
+      in .blob?
+        TermType::Blob
       end
     end
 
-    # Constructs a `Term` wrapping the given number *term* instance.
-    def self.of(term : Num) : Term
-      case a = term.@k
+    # Constructs a `Term` wrapping the given number term *instance*.
+    def self.of(instance : Num) : Term
+      case a = instance.@k
       in Int64
         bits = Num::Int61.bits(a) # 61 bit, 3 MSB clear
         address = (bits << 3) | Tag::NumInt.value
@@ -313,9 +323,9 @@ module Ww
       end
     end
 
-    # Constructs a `Term` wrapping the given string *term* instance.
-    def self.of(term : Str) : Term
-      Term.new(Pointer(Void).new(term.as(Void*).address | Tag::Str.value))
+    # Constructs a `Term` wrapping the given string term *instance*.
+    def self.of(instance : Str) : Term
+      Term.new(Pointer(Void).new(instance.as(Void*).address | Tag::Str.value))
     end
 
     # Downcasts this term to a string term without performing any checks.
@@ -323,9 +333,9 @@ module Ww
       unsafe_ptr.as(Str)
     end
 
-    # Constructs a `Term` wrapping the given symbol *term* instance.
-    def self.of(term : Sym) : Term
-      Term.new(Pointer(Void).new((term.@bits << 3) | Tag::Sym.value))
+    # Constructs a `Term` wrapping the given symbol term *instance*.
+    def self.of(instance : Sym) : Term
+      Term.new(Pointer(Void).new((instance.@bits << 3) | Tag::Sym.value))
     end
 
     # Downcasts this term to a symbol term without performing any checks.
@@ -333,9 +343,9 @@ module Ww
       Sym.new(@mem.address >> 3)
     end
 
-    # Constructs a `Term` wrapping the given boolean *term* instance.
-    def self.of(term : Boolean) : Term
-      if term.true?
+    # Constructs a `Term` wrapping the given boolean term *instance*.
+    def self.of(instance : Boolean) : Term
+      if instance.true?
         Term.new(Pointer(Void).new((1u64 << 3) | Tag::Boolean.value))
       else
         Term.new(Pointer(Void).new(Tag::Boolean.value))
@@ -347,9 +357,9 @@ module Ww
       Boolean.new((@mem.address >> 3) == 1)
     end
 
-    # Constructs a `Term` wrapping the given dictionary *term* instance.
-    def self.of(term : Dict) : Term
-      Term.new(term.as(Void*))
+    # Constructs a `Term` wrapping the given dictionary term *instance*.
+    def self.of(instance : Dict) : Term
+      Term.new(instance.as(Void*))
     end
 
     # Downcasts this term to a dictionary term without performing any checks.
@@ -357,7 +367,17 @@ module Ww
       @mem.as(Dict)
     end
 
-    # Downcasts `Term` to one of term instance types.
+    # Constructs a `Term` wrapping the given blob term *instance*.
+    def self.of(instance : Blob) : Term
+      Term.new(Pointer(Void).new(instance.as(Void*).address | Tag::Blob.value))
+    end
+
+    # Downcasts this term to a blob term without performing any checks.
+    def unsafe_as_blob : Blob
+      unsafe_ptr.as(Blob)
+    end
+
+    # Downcasts `Term` to one of the term instance types.
     def self.[](term : Term) : Any
       case term.tag
       in .sym?
@@ -370,6 +390,8 @@ module Ww
         term.unsafe_as_s
       in .boolean?
         term.unsafe_as_b
+      in .blob?
+        term.unsafe_as_blob
       end
     end
 
@@ -454,7 +476,14 @@ module Ww
       dict.pairspart
     end
 
-    {% for method in %w[as_n as_s as_b as_sym as_d] %}
+    # Attempts to downcast this term to a blob term. Returns `nil` if this is
+    # not possible.
+    @[Upcast]
+    def as_blob? : Blob?
+      tag.blob? ? unsafe_as_blob : nil
+    end
+
+    {% for method in %w[as_n as_s as_b as_sym as_d as_blob] %}
       # Same as `{{method.id}}?`, but raises `TypeCastError` with *detail*
       # instead of returning `nil`.
       @[Upcast]
@@ -723,6 +752,14 @@ module Ww
       Term[value]
     end
 
+    # Constructs a blob term from the given *bytes*.
+    #
+    # WARNING: the bytes are copied. Use `Blob.build` to avoid this (in other words,
+    # start from blobs instead of converting into blobs).
+    def self.[](object : Bytes) : Any
+      Blob.new(object)
+    end
+
     # Passes `nil` through so you can safely construct off nilable types
     # and get a nilable term as the result.
     def self.[](object : Nil) : Nil
@@ -868,6 +905,11 @@ module Ww
     end
 
     # :nodoc:
+    def self.hashcode(term : Term::Blob) : UInt64
+      hashcode(TermType::Blob.value.to_u64, term.hashcode)
+    end
+
+    # :nodoc:
     def self.hashcode(term : Term)
       hashcode(Term[term])
     end
@@ -896,6 +938,7 @@ module Ww
         in Sym     then return a <=> b.as(Sym)
         in Boolean then return a <=> b.as(Boolean)
         in Dict    then return a <=> b.as(Dict)
+        in Blob    then return a <=> b.as(Blob)
         end
       end
 
@@ -2023,4 +2066,5 @@ require "./term/str"
 require "./term/sym"
 require "./term/boolean"
 require "./term/dict"
+require "./term/blob"
 require "./term/case"

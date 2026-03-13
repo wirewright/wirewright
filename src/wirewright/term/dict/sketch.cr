@@ -3,8 +3,8 @@ class Ww::Term::Dict
   # Wirewright: *symbol*, *key*, and *value* sketch.
   #
   # - *Symbol* sketches store symbols.
-  # - *Key* sketches store symbol, string, and boolean keys.
-  # - *Value* sketches store string, number, and boolean terms.
+  # - *Key* sketches store symbol, string, boolean, and blob keys.
+  # - *Value* sketches store string, number, boolean, and blob terms.
   #
   # All sketches are recursive, in that they are union-d with child dicts.
   # For example, my key sketch includes my keys as well as the keys of my
@@ -41,7 +41,7 @@ class Ww::Term::Dict
     # :ditto:
     def self.key(term : Term::Any, hashcode : UInt64) : Sketch
       case Term[term]
-      in Term::Sym, Term::Str, Term::Boolean
+      in Term::Sym, Term::Str, Term::Boolean, Term::Blob
         one(hashcode)
       in Term::Num, Term::Dict
         empty
@@ -56,7 +56,7 @@ class Ww::Term::Dict
     # :ditto:
     def self.value(term : Term::Any, hashcode : UInt64) : Sketch
       case term
-      in Term::Num, Term::Str, Term::Boolean
+      in Term::Num, Term::Str, Term::Boolean, Term::Blob
         one(hashcode)
       in Term::Sym
         empty
@@ -75,7 +75,7 @@ class Ww::Term::Dict
       case term
       in Term::Sym
         one(hashcode)
-      in Term::Num, Term::Str, Term::Boolean
+      in Term::Num, Term::Str, Term::Boolean, Term::Blob
         empty
       in Term::Dict
         term.summary.symbol_sketch

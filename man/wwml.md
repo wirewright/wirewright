@@ -26,8 +26,8 @@ is little "language" or intentional "language design" above S-expressions; only 
 that manage to interact with each other in one way or another, forming larger, emergent
 (in the simplest sense of the word) syntactic complexes.
 
-WwML is a rather complicated *constructor* or *(de)serialization* engine for the five
-kinds of terms: dictionary, number, string, symbol, and boolean terms. There is no AST --
+WwML is a rather complicated *constructor* or *(de)serialization* engine for the six
+kinds of terms: dictionary, number, string, symbol, boolean, and blob terms. There is no AST --
 terms *are* the AST. Any dictionary representation can be rewritten in terms
 of another; and any shorthand lowered to its expansion without leaving the representation.
 This is because they are ultimately still describing the same data structure: a dictionary,
@@ -38,13 +38,7 @@ a term's text representation is usually much more efficient in terms of its byte
 the corresponding in-memory term. Something like `(+ 1 2)` takes only a few bytes in ASCII
 but may very well take hundreds of bytes in-memory with all the indexing and control structure
 overhead (I am working actively on reducing the memory footprint of dictionaries specifically,
-but there are limits). The general inefficiency of parsing, in other words, appears to be
-the price one has to pay for compactness.
-
-How would one build algorithms that use characters directly as their *only* memory/state,
-without such constructions exploding with algorithmic and/or operational complexity? I suppose
-this is an unsolved problem and an interesting avenue for exploration, very much in line
-with Wirewright. But let's leave that aside for now :^)
+but there are limits).
 
 > [!NOTE]
 > Character sets are expressed in [Crystal character set notation](https://crystal-lang.org/api/1.16.2/Char.html#in_set%3F%28%2Asets%3AString%29%3ABool-instance-method).
@@ -119,6 +113,7 @@ own complications.
 | `≈`       |                   | <kbd>Compose</kbd> + <kbd>~</kbd> + <kbd>~</kbd>              | yes                                  |
 | `⟪`       |                   | <kbd>Compose</kbd> + <kbd>"</kbd> + <kbd>{</kbd>              | **no**                               |
 | `⟫`       |                   | <kbd>Compose</kbd> + <kbd>"</kbd> + <kbd>}</kbd>              | **no**                               |
+| `∥`       |                   | <kbd>Compose</kbd> + <kbd>\</kbd> + <kbd>\</kbd>              | **no**                               |
 
 ### XCompose
 
@@ -155,6 +150,7 @@ Here are the XCompose mappings for the table above. This should be put in `.XCom
 <Multi_key> <underscore> <slash> : "⸝"
 <Multi_key> <quotedbl> <braceleft> : "⟪"
 <Multi_key> <quotedbl> <braceright> : "⟫"
+<Multi_key> <backslash> <backslash> : "∥"
 
 # Used sometimes in docs and comments. Not used in WwML.
 <Multi_key> <asciicircum> <asciicircum> : "⏏"
@@ -696,6 +692,83 @@ support escape sequences or interpolation.
 
 ```wwml
 ⎡hello ⎡nested⎤ world⎤
+```
+
+## Blob terms
+
+Blobs are very much like strings except strings are used for plaintext data,
+and their design and optimizations bias strongly toward Unicode. Blobs, on
+the other hand, are simply vectors of bytes, with no presuppositions about
+their content.
+
+Blobs start and end with the character `∥`. Blobs are written in hexadecimal:
+between `∥`s goes a sequence of zero or more hexadecimal *digit*s. Whitespace
+can be used to delimit the digits into *digit blocks*.
+
+```wwml
+∥deadbeef∥
+
+;; This is the recommended style. This style is also used when pretty-printing.
+;; Byte boundaries are clearly visible.
+∥de ad be ef∥
+
+∥d e a d b e e f∥
+
+∥89 50 4e 47 0d 0a 1a 0a∥
+
+;; Long sequences can be put on their own lines.
+∥89 50 4e 47 0d 0a 1a 0a 00 00 00 0d 49 48 44 52 00 00 00 20 00 00 00 19 08 02 00 00 00 df
+ 6d bb c6 00 00 00 01 73 52 47 42 01 d9 c9 2c 7f 00 00 00 04 67 41 4d 41 00 00 b1 8f 0b fc
+ 61 05 00 00 00 20 63 48 52 4d 00 00 7a 26 00 00 80 84 00 00 fa 00 00 00 80 e8 00 00 75 30
+ 00 00 ea 60 00 00 3a 98 00 00 17 70 9c ba 51 3c 00 00 00 09 70 48 59 73 00 00 0e c4 00 00
+ 0e c4 01 95 2b 0e 1b 00 00 00 07 74 49 4d 45 07 ea 03 0c 16 3b 19 36 0f cf 16 00 00 05 5d
+ 49 44 41 54 48 c7 85 56 cb 6f d3 4c 10 df f5 fa 8d 9d 47 e3 34 0f 3b 0f 9a 34 a2 12 15 1c
+ 22 8a 84 40 82 2b 42 fc 0b 1c 10 07 c4 85 ff 0d 09 89 03 aa 94 03 08 d1 96 97 68 43 aa 86
+ 20 37 21 26 4d ea 3c 6c 27 eb b5 bf c3 a2 34 90 f6 63 4e b3 af f9 ed fc 66 76 66 21 cb b2
+ 61 18 02 00 00 00 10 c2 b9 be 28 74 f2 9f ab 73 7d 51 d0 e2 c2 22 d2 7c 07 21 24 0c c3 3b
+ 77 ee dc bc 79 33 93 c9 0c 06 03 c7 71 c2 30 5c dc f3 3f f0 90 61 18 70 b1 f0 3c ff f4 e9
+ d3 6a b5 2a 8a 62 a7 d3 f1 3c ef e7 cf 9f 83 c1 60 34 1a 1d 1e 1e 7e f8 f0 21 08 82 65 d3
+ f3 19 08 21 fa eb 22 8b a2 69 da f3 e7 cf cb e5 32 84 b0 db ed 52 6f 08 21 0c c3 ac ac ac
+ c8 b2 9c 4a a5 74 5d 37 4d 73 19 60 ae b3 17 59 87 10 1a 86 91 cd 66 07 83 01 21 44 14 45
+ 55 55 05 41 f0 7d ff fb f7 ef b6 6d eb ba ae eb 3a c7 71 bd 5e ef eb d7 af cb 51 f9 23 06
+ cb 52 28 14 ee df bf ef ba 6e 3e 9f 77 1c c7 f7 7d 8c b1 e3 38 3c cf a7 52 a9 5c 2e 77 70
+ 70 80 10 4a 24 12 8a a2 cc 66 b3 7e bf 7f ae 07 68 39 06 d1 68 f4 fa f5 eb 5b 5b 5b e9 74
+ da 75 5d cf f3 20 84 82 20 30 0c c3 71 1c 00 00 21 24 08 02 35 d4 ef f7 55 55 a5 c0 61 18
+ 86 61 e8 fb fe 1f 00 8b 03 8e e3 0c c3 b8 7d fb b6 24 49 08 a1 c1 60 a0 aa aa a2 28 c3 e1
+ d0 f7 7d 9e e7 65 59 0e 82 60 38 1c 2a 8a 62 9a e6 78 3c d6 34 ad d7 eb 99 a6 09 21 4c a5
+ 52 5b 5b 5b eb eb eb 8d 46 83 c2 ff 11 e4 72 b9 fc e8 d1 a3 78 3c be ba ba 1a 04 01 c6 58
+ 51 94 42 a1 e0 fb 3e 42 c8 30 8c 64 32 69 db 76 10 04 bd 5e 0f 00 90 4c 26 db ed b6 20 08
+ b3 d9 4c 51 94 4e a7 23 8a e2 da da 9a 28 8a ad 56 cb 71 1c 6a f9 37 45 aa aa 3e 7b f6 4c
+ 10 84 58 2c 66 59 56 a1 50 c0 18 6f 6e 6e 6a 9a 86 31 e6 38 6e 7d 7d 7d 3a 9d a6 d3 e9 6a
+ b5 3a 99 4c 9a cd 66 2a 95 9a 4e a7 00 80 f1 78 9c cb e5 28 81 b9 5c 2e 93 c9 e4 f3 f9 8f
+ 1f 3f 12 42 00 00 0c 8d 38 c3 30 0c c3 94 4a a5 d1 68 64 59 96 28 8a f9 7c 3e 9b cd aa aa
+ da ef f7 45 51 8c 46 a3 89 44 42 10 84 f1 78 9c c9 64 0c c3 e8 f5 7a 6b 6b 6b 95 4a 65 63
+ 63 03 21 a4 28 4a b5 5a e5 38 ee d2 a5 4b 91 48 44 51 14 4a cc ef 08 d3 eb 38 8e 63 18 06
+ 65 99 66 05 cf f3 d4 71 1a db 54 2a a5 69 5a 3a 9d 56 14 65 34 1a c5 e3 71 96 65 65 59 86
+ 10 32 0c 43 08 c9 66 b3 91 48 64 36 9b 8d 46 a3 33 00 8e e3 1e 3f 7e 5c 2c 16 55 55 0d 82
+ 20 9b cd 3a 8e b3 ba ba 4a 01 04 41 d0 34 cd 30 8c ab 57 af aa aa 3a 99 4c 26 93 09 21 c4
+ 30 0c fa 2c 4c d3 24 84 b4 5a ad 56 ab c5 f3 7c b3 d9 bc 72 e5 ca e6 e6 e6 59 16 85 61 18
+ 8d 46 2b 95 8a ef fb b6 6d 7b 9e 47 03 2b 49 92 28 8a cd 66 33 93 c9 20 84 3c cf 13 04 e1
+ cd 9b 37 9f 3f 7f 3e 3d 3d 8d c5 62 61 18 fe fa f5 0b 63 3c 9b cd 5c d7 2d 14 0a 92 24 61
+ 8c 4b a5 52 26 93 a9 d5 6a 84 90 df 59 54 af d7 d3 e9 34 cf f3 08 21 5d d7 83 20 50 55 95
+ 92 00 00 d8 df df 27 84 f8 be 2f cb 72 34 1a 9d 4e a7 96 65 d1 9b ed ed ed f1 3c 6f db b6
+ a2 28 94 25 8c 71 24 12 79 fb f6 ed de de de 1f d5 74 67 67 e7 fd fb f7 08 a1 cb 97 2f f3
+ 3c 6f 59 16 c6 98 65 d9 52 a9 c4 b2 ac 69 9a a7 a7 a7 8e e3 ec ee ee d6 eb f5 48 24 22 8a
+ 22 c7 71 9e e7 49 92 d4 ed 76 e9 8b c1 18 b7 5a ad 7a bd fe e2 c5 8b d9 6c 06 00 80 08 a1
+ c5 d2 c1 b2 ec c3 87 0f ab d5 2a 21 44 d3 b4 46 a3 51 2c 16 57 56 56 c2 30 c4 18 03 00 04
+ 41 70 5d b7 db ed 86 61 e8 79 9e 2c cb 47 47 47 bd 5e af 58 2c 1e 1f 1f 6f 6f 6f 9f 9c 9c
+ 60 8c e9 bd 21 84 88 61 98 f9 00 42 18 04 c1 c1 c1 c1 f1 f1 f1 b5 6b d7 74 5d 97 65 79 7f
+ 7f 1f 21 e4 38 4e 10 04 34 4d 2d cb 22 84 9c 9c 9c 48 92 94 48 24 68 99 3a 3c 3c 7c f5 ea
+ d5 70 38 a4 05 fc ac 2e 21 84 96 7b 16 84 30 9f cf 3f 79 f2 84 76 1b d7 75 db ed 76 bf df
+ a7 49 99 4e a7 3d cf cb e5 72 1c c7 11 42 b6 b7 b7 6b b5 da 78 3c be b0 a3 2d 17 54 08 a1
+ 6d db 8d 46 43 d3 b4 9d 9d 1d 86 61 14 45 b9 71 e3 c6 dd bb 77 3b 9d 4e 3c 1e 9f 4e a7 c3
+ e1 90 e3 b8 97 2f 5f be 7e fd 9a d2 7d 7e d9 47 e8 77 a6 2e 83 43 08 2b 95 4a 3e 9f a7 ef
+ dc f3 bc 07 0f 1e b4 db ed 77 ef de f1 3c 4f 08 e9 f7 fb 9f 3e 7d 5a 3e b8 38 c3 2c d2 32
+ f7 66 ae 1c 1d 1d e9 ba be b1 b1 11 8f c7 cb e5 72 2c 16 fb f1 e3 47 34 1a 05 00 f8 be ff
+ e5 cb 97 f3 fb f0 02 2b 88 61 98 bf 3a f8 a2 1e 04 41 32 99 bc 75 eb 16 21 e4 db b7 6f bb
+ bb bb a3 d1 e8 de bd 7b 9e e7 d5 6a 35 d7 75 2f fa 64 9c 59 5b fc b6 9c 2b 41 10 cc 5d 9c
+ 97 5e db b6 a9 fe d7 d9 e5 2f cc 19 c0 45 ff 8e 7f ca 45 18 54 f9 0f ce e6 fc d5 af 7f 05
+ 7a 00 00 00 00 49 45 4e 44 ae 42 60 82∥
 ```
 
 ## Dictionary terms

@@ -12,6 +12,8 @@ module Ww::M1
   NORMAL_BLANK_SYMBOL = Term.of(:"%symbol", depth: 0)
   # :nodoc:
   NORMAL_BLANK_BOOLEAN = Term.of(:"%boolean", depth: 0)
+  # :nodoc:
+  NORMAL_BLANK_BLOB = Term.of(:"%blob", depth: 0)
 
   # :nodoc:
   NORMAL_EDGE_ANY = Term.of(:"%edge", :_, depth: {:+, :envelope, 1})
@@ -25,6 +27,8 @@ module Ww::M1
   NORMAL_EDGE_DICT = Term.of(:"%edge", :_dict, depth: {:+, :envelope, 1})
   # :nodoc:
   NORMAL_EDGE_BOOLEAN = Term.of(:"%edge", :_boolean, depth: 1)
+  # :nodoc:
+  NORMAL_EDGE_BLOB = Term.of(:"%edge", :_blob, depth: 1)
 
   # :nodoc:
   STRING_NONEMPTY = Term.of(:"%all", {:"%not", ""}, :_string)
@@ -201,18 +205,6 @@ module Ww::M1
       # |@ m1.operator.seq.polyblank
       #
       # |@pattern
-      # %'_*
-      # %'_number*
-      # %'_string*
-      # %'_symbol*
-      # %'_boolean*
-      # %'_dict*
-      # %'_+
-      # %'_number+
-      # %'_string+
-      # %'_symbol+
-      # %'_boolean+
-      # %'_dict+
       # _symbol
       #
       # |@block
@@ -247,7 +239,7 @@ module Ww::M1
       # |@block
       # Anything that is not an item sequence operator is treated as a *singular*.
       # Singulars are interpreted as operators (`m1.operator`).
-      matchpi %{_symbol}, %{_number}, %{_string}, %{_boolean} do
+      matchpi %{_symbol}, %{_number}, %{_string}, %{_boolean}, %{_blob} do
         Normalize.singular(normalize(Π.pattern(item)))
       end
 
@@ -1091,11 +1083,12 @@ module Ww::M1
       #
       # |@pattern
       # %'_
-      # %'_dict
       # %'_number
       # %'_string
       # %'_symbol
       # %'_boolean
+      # %'_dict
+      # %'_blob
       # (%symbol blank _ _)
       #
       # |@block
@@ -1109,6 +1102,7 @@ module Ww::M1
       # | `_symbol`       | -     | +     | `_symbol*`                                             | `_symbol+`                                             |
       # | `_boolean`      | -     | +     | `_boolean*`                                            | `_boolean+`                                            |
       # | `_dict`         | -     | +     | `_dict*`                                               | `_dict+`                                               |
+      # | `_blob`         | -     | +     | `_blob*`                                               | `_blob+`                                               |
       # | `author_`       | +     | -     | `author_*` (but usually you'd use plural: `authors_*`) | `author_+` (but usually you'd use plural: `authors_+`) |
       # | `author_string` | +     | +     | `author_string*` (ditto, `authors_string*`)            | `author_string+` (ditto, `author_string+`)             |
       #
@@ -1149,6 +1143,7 @@ module Ww::M1
         when SYM_BLANK_SYMBOL  then NORMAL_BLANK_SYMBOL
         when SYM_BLANK_BOOLEAN then NORMAL_BLANK_BOOLEAN
         when SYM_BLANK_DICT    then NORMAL_BLANK_DICT
+        when SYM_BLANK_BLOB    then NORMAL_BLANK_BLOB
         else
           continue unless blank = sym.blank?
           continue unless blank.singular?
@@ -1165,11 +1160,12 @@ module Ww::M1
       # _number
       # _string
       # _boolean
+      # _blob
       #
       # |@block
       # Numbers such as `100`, strings (e.g. `"hello world"`), booleans (`true`, `false`),
-      # non-blank symbols (e.g. `qux`), and polyblanks at top-level (e.g. `xs_*`) are treated
-      # as shorthands for `(%literal ⏏)`: `(%literal 100)`, `(%literal "hello world")`,
+      # non-blank symbols (e.g. `qux`), blobs, and polyblanks at top-level (e.g. `xs_*`)
+      # are treated as shorthands for `(%literal ⏏)`: `(%literal 100)`, `(%literal "hello world")`,
       # `(%literal true)`, and so on, correspondingly.
       #
       # Just as with `%literal`, they require an exact match.
@@ -1182,7 +1178,7 @@ module Ww::M1
       #
       # (xor true false) ;; => true
       # ```
-      matchpi %{_symbol}, %{_number}, %{_string}, %{_boolean} do
+      matchpi %{_symbol}, %{_number}, %{_string}, %{_boolean}, %{_blob} do
         Normalize.literal(pattern)
       end
 
@@ -1270,12 +1266,13 @@ module Ww::M1
         continue unless blank.singular?
 
         case blank.type
-        in .symbol?  then norm = NORMAL_EDGE_SYMBOL
-        in .string?  then norm = NORMAL_EDGE_STRING
-        in .number?  then norm = NORMAL_EDGE_NUMBER
-        in .dict?    then norm = NORMAL_EDGE_DICT
-        in .boolean? then norm = NORMAL_EDGE_BOOLEAN
         in .any?     then norm = NORMAL_EDGE_ANY
+        in .number?  then norm = NORMAL_EDGE_NUMBER
+        in .string?  then norm = NORMAL_EDGE_STRING
+        in .symbol?  then norm = NORMAL_EDGE_SYMBOL
+        in .boolean? then norm = NORMAL_EDGE_BOOLEAN
+        in .dict?    then norm = NORMAL_EDGE_DICT
+        in .blob?    then norm = NORMAL_EDGE_BLOB
         end
 
         if name = blank.name?
@@ -2892,6 +2889,33 @@ module Ww::M1
 
           Term.of(normal)
         end
+      end
+
+      # |@ m1.operator.mime
+      #
+      # |@pattern
+      # (%'%mime type_string params_)
+      #
+      # |@key type
+      # MIME type to match. See e.g. https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/MIME_types
+      # for reference.
+      #
+      # |key params m1.operator
+      # An operator for matching MIME parameters. MIME parameters look like this:
+      # `charset=UTF-8; x-a=foo; x-b=bar`. We encode them as a dictionary like so:
+      # `{charset: "UTF-8", x-a: "foo", x-b: "bar"}`. Notice that symbols are used
+      # for attributes (parameter names), and strings are used for parameter values.
+      #
+      # |@block
+      # Matches a blob with the given MIME type and parameters.
+      #
+      # ```
+      # (describe (%mime "text/plain" {charset: "UTF-8"})) => "This is a UTF-8 text"
+      # (describe (%mime "text/plain" _)) => "This is some other text"
+      # (describe (%mime "image/png" _)) => "This is an image"
+      # ```
+      matchpi %{[%'%mime type_string params_]}, cue: :"%mime" do
+        Term.of(:"%mime", type, Normalize.sealed(Π.pattern(params)))
       end
 
       # NOTE: Insert new matchpis here, especially if they are infrequent. Below we

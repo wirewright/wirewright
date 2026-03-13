@@ -153,6 +153,7 @@ module Ww::ML
         RawString
         RawSymbol
         Substring
+        Blob
       end
     end
 

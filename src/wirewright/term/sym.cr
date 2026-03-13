@@ -282,6 +282,7 @@ module Ww
   SYM_BLANK_SYMBOL  = Term[:_symbol]
   SYM_BLANK_STRING  = Term[:_string]
   SYM_BLANK_BOOLEAN = Term[:_boolean]
+  SYM_BLANK_BLOB    = Term[:_blob]
 end
 
 require "./sym/symcode"

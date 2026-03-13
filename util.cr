@@ -781,7 +781,8 @@ end
 # (aka join consecutive); everything else can be built on top of them.
 #
 # TODO: StringView is actually a *selection* in the text editor sense, and should
-# be renamed when I finally decide to move it to permafrost.
+# be renamed when I finally decide to move it to permafrost. It should probably be
+# called StringSeln to have the same number of characters.
 struct StringView
   # WARNING: This will return the original string into which the view
   # is pointing! You probably want `to_s`.

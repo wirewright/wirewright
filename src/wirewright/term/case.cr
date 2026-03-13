@@ -87,10 +87,10 @@
 # NOTE: `Term#to` is used for type casting.
 module Ww::Term::Case
   # The regex used to find captures in `i` variants such as `matchpi`.
-  RE_CAPTURES = /([#a-zA-Z_][\w-]*?)(?:_(?:any|number|symbol|string|boolean|dict)?[+*⋮]?\b|←|⋮)|[±]([\w-]+)|\((?:%let)\s+([a-zA-Z][\w-]*)/
+  RE_CAPTURES = /([#a-zA-Z_][\w-]*?)(?:_(?:any|number|symbol|string|boolean|dict|blob)?[+*⋮]?\b|←|⋮)|[±]([\w-]+)|\((?:%let)\s+([a-zA-Z][\w-]*)/
 
   # :nodoc:
-  RE_TYPES_BLANK = /(?!<\w)([#a-zA-Z_][\w-]*?)(?:_(number|symbol|string|boolean|dict)⋮?|⋮)(?![\w+-])/
+  RE_TYPES_BLANK = /(?!<\w)([#a-zA-Z_][\w-]*?)(?:_(number|symbol|string|boolean|dict|blob)⋮?|⋮)(?![\w+-])/
   # :nodoc:
   RE_TYPES_PLUSMINUS = /(?!<\w)±([#a-zA-Z_][\w-]*)/
   # :nodoc:
@@ -113,7 +113,7 @@ module Ww::Term::Case
 
   # :nodoc:
   #
-  # MACRO-ONLY: describes how to extract type from pattern in ML strings given
+  # MACRO-ONLY: describes how to extract types from ML string patterns given
   # to *iT variants.
   #
   # - `pattern` points to the regex to use.
@@ -131,6 +131,7 @@ module Ww::Term::Case
         {2, "symbol"}  => ::Term::Sym,
         {2, "boolean"} => ::Term::Boolean,
         {2, "dict"}    => ::Term::Dict,
+        {2, "blob"}    => ::Term::Blob,
       },
     },
     {

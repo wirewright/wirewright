@@ -183,6 +183,13 @@ module Ww::M1
       end
 
       matchpi(
+        %{[%'%entry/required [%'%key key_] [%'%blob]]},
+        cue: {:"%entry/required", :"%key", :"%blob"},
+      ) do
+        Op::Entry::Present.new(key, type: :blob)
+      end
+
+      matchpi(
         %{[%'%entry/required [%'%key key_] successor_]},
         cue: {:"%entry/required", :"%key"},
       ) do
@@ -356,6 +363,10 @@ module Ww::M1
         Op::INSTANCE_DICT
       end
 
+      matchpi %{[%'%blob]}, cue: :"%blob" do
+        Op::INSTANCE_BLOB
+      end
+
       matchpi %{[%'%itemsonly]}, cue: :"%itemsonly" do
         Op::Itemsonly.new
       end
@@ -390,6 +401,10 @@ module Ww::M1
 
       matchpi %{[%'%edge %'_dict]}, cue: {:"%edge", :_dict} do
         Op::Edge.new(:dict)
+      end
+
+      matchpi %{[%'%edge %'_blob]}, cue: {:"%edge", :_blob} do
+        Op::Edge.new(:blob)
       end
 
       matchpi %{[%'%seq _*]} do
@@ -737,11 +752,15 @@ module Ww::M1
         )
       end
 
-      matchpi %{(%'%matches successor_ subpattern_ ⍊ min_ max_)} do
+      matchpi %{(%'%matches successor_ subpattern_ ⍊ min_ max_)}, cue: :"%matches" do
         Op::Matches.new(compile(Π.pattern(successor)), compile(Π.pattern(subpattern)),
           min: Kit.magn(min),
           max: Kit.magn(max),
         )
+      end
+
+      matchpiT %{[%'%mime type_string params_]}, cue: :"%mime" do
+        Op::Mime.new(type, compile(Π.pattern(params)))
       end
     end
   end

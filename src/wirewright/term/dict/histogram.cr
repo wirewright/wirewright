@@ -15,13 +15,14 @@ class Ww::Term::Dict
     #
     #    MSB ...             LSB
     # 0x 00 00 00 00 00 00 00 00
-    #             n  q  s  t  f
+    #           n  q  s  t  f  b
     #
     # n - number
     # q - string
     # s - symbol
     # t - true
     # f - false
+    # b - blob
     getter bits : UInt64
 
     # :nodoc:
@@ -29,15 +30,17 @@ class Ww::Term::Dict
     end
 
     # :nodoc:
-    ONE_NUMBER = new(0x01_00_00_00_00u64)
+    ONE_NUMBER = new(0x01_00_00_00_00_00u64)
     # :nodoc:
-    ONE_STRING = new(0x00_01_00_00_00u64)
+    ONE_STRING = new(0x00_01_00_00_00_00u64)
     # :nodoc:
-    ONE_SYMBOL = new(0x00_00_01_00_00u64)
+    ONE_SYMBOL = new(0x00_00_01_00_00_00u64)
     # :nodoc:
-    ONE_TRUE = new(0x00_00_00_01_00u64)
+    ONE_TRUE = new(0x00_00_00_01_00_00u64)
     # :nodoc:
-    ONE_FALSE = new(0x00_00_00_00_01u64)
+    ONE_FALSE = new(0x00_00_00_00_01_00u64)
+    # :nodoc:
+    ONE_BLOB = new(0x00_00_00_00_00_01u64)
 
     @[AlwaysInline]
     def self.zero : Histogram
@@ -59,6 +62,8 @@ class Ww::Term::Dict
         ONE_SYMBOL
       in .boolean?
         term.true? ? ONE_TRUE : ONE_FALSE
+      in .blob?
+        ONE_BLOB
       end
     end
 
@@ -99,41 +104,46 @@ class Ww::Term::Dict
       sum
     end
 
+    # Saturating UInt8 to Magnitude.
+    private def sat_byte_to_magn(byte : UInt64) : Magnitude
+      byte == 0xffu64 ? Magnitude::INFINITY : Magnitude.new(byte)
+    end
+
     # Returns the amount of numbers in the dict this histogram describes.
     def numbers : Magnitude
-      value = (@bits & 0xff_00_00_00_00u64) >> 4*8
-      value == 0xffu64 ? Magnitude::INFINITY : Magnitude.new(value)
+      sat_byte_to_magn((@bits & 0xff_00_00_00_00_00u64) >> 5*8)
     end
 
     # Returns the amount of strings in the dict this histogram describes.
     def strings : Magnitude
-      value = (@bits & 0x00_ff_00_00_00u64) >> 3*8
-      value == 0xffu64 ? Magnitude::INFINITY : Magnitude.new(value)
+      sat_byte_to_magn((@bits & 0x00_ff_00_00_00_00u64) >> 4*8)
     end
 
     # Returns the amount of symbols in the dict this histogram describes.
     def symbols : Magnitude
-      value = (@bits & 0x00_00_ff_00_00u64) >> 2*8
-      value == 0xffu64 ? Magnitude::INFINITY : Magnitude.new(value)
+      sat_byte_to_magn((@bits & 0x00_00_ff_00_00_00u64) >> 3*8)
     end
 
     # Returns the amount of `true` booleans in the dict this histogram describes.
     def trues : Magnitude
-      value = (@bits & 0x00_00_00_ff_00u64) >> 8
-      value == 0xffu64 ? Magnitude::INFINITY : Magnitude.new(value)
+      sat_byte_to_magn((@bits & 0x00_00_00_ff_00_00u64) >> 2*8)
     end
 
     # Returns the amount of `false` booleans in the dict this histogram describes.
     def falses : Magnitude
-      value = (@bits & 0x00_00_00_00_ffu64) >> 0
-      value == 0xffu64 ? Magnitude::INFINITY : Magnitude.new(value)
+      sat_byte_to_magn((@bits & 0x00_00_00_00_ff_00u64) >> 1*8)
+    end
+
+    # Returns the amount of blobs in the dict this histogram describes.
+    def blobs : Magnitude
+      sat_byte_to_magn((@bits & 0x00_00_00_00_00_ffu64) >> 0*8)
     end
 
     # Returns the sum total of accounted terms. This method may return
     # `Magnitude::INFINITY` (aka unknown, aka too many to keep track of)
     # if one of the counts is infinite.
     def total : Magnitude
-      numbers + strings + symbols + trues + falses
+      numbers + strings + symbols + trues + falses + blobs
     end
 
     def inspect(io)
@@ -142,7 +152,8 @@ class Ww::Term::Dict
       io << "strings=" << strings << ", "
       io << "symbols=" << symbols << ", "
       io << "trues=" << trues << ", "
-      io << "falses=" << falses
+      io << "falses=" << falses << ", "
+      io << "blobs=" << blobs
       io << ")"
     end
   end

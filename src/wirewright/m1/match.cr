@@ -367,7 +367,11 @@ module Ww::M1
     !op.blacklist.includes?(matchee)
   end
 
-  {% for cls, type in {Op::Str => :string, Op::Sym => :symbol, Op::Boolean => :boolean, Op::Dict => :dict} %}
+  {% for cls, type in {Op::Str     => :string,
+                       Op::Sym     => :symbol,
+                       Op::Boolean => :boolean,
+                       Op::Dict    => :dict,
+                       Op::Blob    => :blob} %}
     # :nodoc:
     #
     # _string  _symbol
@@ -1290,6 +1294,18 @@ module Ww::M1
         end
       end
     end
+  end
+
+  # :nodoc:
+  #
+  # (%mime "text/plain" {charset: "UTF-8"})  (%mime "image/png" _)
+  def match(ctx, op : Op::Mime, matchee : Tzip, plan)
+    return Fb[] unless blob = matchee.term.as_blob?
+
+    classif = blob.classif
+    return Fb[] unless classif.media_type == op.type
+
+    match(ctx, op.params, Tzip.new(Term.of(classif.media_params), Log.none), plan)
   end
 
   # :nodoc:

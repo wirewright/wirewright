@@ -219,6 +219,26 @@ module Ww::ML
     io << rbracket
   end
 
+  # :nodoc:
+  def compact(io : IO, term : Term::Blob) : Nil
+    io << '∥'
+
+    term.bytes.join(io, " ") do |byte|
+      digit0 = byte >> 4
+      digit1 = byte & 0xf
+
+      io.write_byte(to_hex(digit0))
+      io.write_byte(to_hex(digit1))
+    end
+
+    io << '∥'
+  end
+
+  # https://github.com/crystal-lang/crystal/blob/a3178c32b00565fff87ec3375882bfd42a7cb11c/src/slice.cr#L794-L796
+  private def to_hex(digit)
+    ((digit < 10 ? 48u8 : 87u8) + digit)
+  end
+
   # Appends the compact WwML representation of *term* to *io*.
   #
   # See also: `compact(term : Term | Term::Any)`.

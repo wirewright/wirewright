@@ -1,3 +1,4 @@
+# TODO: Remove in favor of `StringView` (moving most of these methods there).
 module Rtk
   extend self
 

@@ -130,7 +130,10 @@ module Ww::ML
     end
 
     # Moves the cursor past zero or more runes accepted by the block. Returns
-    # `true` if the cursor moved, `false` otherwise (EOI ahead).
+    # `true` if the cursor moved, `false` if EOI ahead.
+    #
+    # TODO: Can we refactor this away in favor of `skip?`? Why do we have two
+    # skip functions?
     private def skip(& : Rune -> Bool) : Bool
       while yield ahead
         return false unless forward
@@ -141,11 +144,12 @@ module Ww::ML
 
     # Moves the cursor past zero or more runes accepted by the block. Returns
     # `true` if skipped at least one rune, `false` otherwise.
-    private def skip?(& : Rune -> Bool) : Bool
+    private def skip?(*, limit = Int32::MAX, & : Rune -> Bool) : Bool
       result = false
 
-      while yield ahead
+      while limit > 0 && (yield ahead)
         result = true
+        limit -= 1
 
         break unless forward
       end
@@ -614,6 +618,55 @@ module Ww::ML
       ready(Lexeme::Many.new(lexemes))
     end
 
+    private def blob : TxnResponse
+      unless past?('∥')
+        return revert
+      end
+
+      # ∥⏏dead beef∥
+      text, blob = view_and_object do
+        Term::Blob.build(classify: true) do |io|
+          buffer = Pf::Kit.stack_array(Char, 2)
+
+          loop do
+            case
+            when ahead == '∥'
+              # ∥dead beef⏏∥
+              unless buffer.empty?
+                raise "missing digits in blob: size must be even, use zero to pad (e.g. `∥ab c⏏∥` -> `∥ab c0∥`)", ahead1.before_begin
+              end
+
+              forward
+              # ∥dead beef∥⏏
+              break
+            when past?(&.space?)
+              # ∥dead ⏏beef∥
+            when ahead.hexdigit?
+              # ∥⏏dead beef∥  ∥d⏏ead beef∥  ∥de⏏ad beef∥  . . .
+              buffer << ahead.chr
+              if buffer.size == 2
+                # ∥de⏏ad beef∥  ∥dead⏏ beef∥  ∥dead be⏏ef∥  . . .
+                digit0 = buffer.unsafe_fetch(0).to_u8(base: 16)
+                digit1 = buffer.unsafe_fetch(1).to_u8(base: 16)
+                byte = (digit0 << 4) | digit1
+                io.write_byte(byte)
+
+                buffer.clear
+              end
+
+              forward
+            else
+              raise "expected hex digit(s) or `∥` to end the blob"
+            end
+          end
+
+          assert buffer.empty?
+        end
+      end
+
+      ready(Lexeme::Datum.new(:blob, Term.of(blob), text))
+    end
+
     private def template_stop? : Bool
       return true unless ahead.symbolic?
 
@@ -1002,7 +1055,7 @@ module Ww::ML
         return lexeme
       end
 
-      if lexeme = choice?(symbolic, vspace, string, raw_string, raw_symbol, number_approx, superscript, subscript)
+      if lexeme = choice?(symbolic, vspace, string, raw_string, raw_symbol, blob, number_approx, superscript, subscript)
         return lexeme
       end
     end
@@ -1049,6 +1102,10 @@ module Ww::ML
       end
 
       top
+    end
+
+    def inspect(io)
+      @source.to_s.insert(@rune_index, "⏏").to_s(io)
     end
   end
 end

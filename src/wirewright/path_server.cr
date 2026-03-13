@@ -31,14 +31,7 @@ module Ww
 
     alias Fact = IsFile | IsDir | FileEntryFact | DirEntryFact
 
-    defrecord IsFile,
-      content : Bytes,
-      digest : String
-
-    struct IsFile
-      def_equals_and_hash digest
-    end
-
+    defrecord IsFile, content : Term::Blob
     defrecord IsDir
 
     alias FileEntryFact = FilePresent | FileAbsent
@@ -54,7 +47,7 @@ module Ww
     alias Listing = DirListing | FileListing
 
     defrecord DirListing, timestamp : Time, entries : Array(DirListingEntry)
-    defrecord FileListing, timestamp : Time, content : Bytes, digest : String
+    defrecord FileListing, timestamp : Time, content : Term::Blob
 
     alias DirListingEntry = FileEntry | DirEntry
 
@@ -227,8 +220,13 @@ module Ww
                   next
                 end
 
-                content = File.open(path, "rb", &.getb_to_end)
-                listing = FileListing.new(info.modification_time, content, Digest::SHA256.hexdigest(content))
+                content = File.open(path, "rb") do |src|
+                  Term::Blob.build(classify: true) do |dst|
+                    IO.copy(src, dst)
+                  end
+                end
+
+                listing = FileListing.new(info.modification_time, content)
               else
                 next
               end
@@ -262,7 +260,7 @@ module Ww
     # These @@vars are only accessed in unify() which is called exclusively
     # by wloop so they don't need any protection.
     @@w_rng = Random::PCG32.new
-    @@w_model = {} of Path => String
+    @@w_model = {} of Path => Bytes
     @@w_model_lock = Sync::Mutex.new
 
     # Write loop
@@ -327,7 +325,7 @@ module Ww
         # users can modify the file externally and the program can observe it and
         # "fix" the file instead of trying to enforce the old version.
         if digest = @@w_model[path]?
-          return if digest == fact.digest
+          return if digest == fact.content.digest
         end
       end
 
@@ -337,7 +335,7 @@ module Ww
       tmp_path = tmp_file.path
 
       begin
-        tmp_file.write(fact.content)
+        tmp_file.write(fact.content.bytes)
         tmp_file.fsync
       ensure
         tmp_file.close
@@ -345,9 +343,9 @@ module Ww
 
       File.rename(tmp_path, path)
 
-      @@w_model[path] = fact.digest
+      @@w_model[path] = fact.content.digest
 
-      Log.debug { "wloop: wrote to #{path}: #{fact.digest}" }
+      Log.debug { "wloop: wrote to #{path}: #{fact.content.digest}" }
     rescue e : File::Error
       Log.debug(exception: e) { "wloop: error while writing to #{path}" }
     end
@@ -525,7 +523,7 @@ module Ww
 
     # Loads the file at *path* into memory and returns its content, as a slice
     # of bytes. Raises `Error` if the file cannot be read.
-    def read(path : Path) : Bytes
+    def read(path : Path) : Blob
       loop do
         listing = view(path)
         if listing.is_a?(Wait)
@@ -555,11 +553,11 @@ module Ww
     #
     # NOTE: This function may block for an indefinite amount of time, since it
     # waits for the proof that the file really was written to disk.
-    def write(path : Path, content : Bytes) : Nil
+    def write(path : Path, content : Blob) : Nil
       digest = Digest::SHA256.hexdigest(content)
 
       loop do
-        converge(path, IsFile.new(content, digest))
+        converge(path, IsFile.new(content))
 
         view = view(path)
 

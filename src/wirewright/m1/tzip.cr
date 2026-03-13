@@ -95,7 +95,7 @@ module Ww::M1
     {% end %}
 
     # Queries the type of this tzip's term. See also: `type`.
-    delegate :number?, :string?, :symbol?, :boolean?, :dict?, to: type
+    delegate :number?, :string?, :symbol?, :boolean?, :dict?, :blob?, to: type
 
     # Returns the type of this tzip's term. See also: `Term#type`.
     def type : TermType

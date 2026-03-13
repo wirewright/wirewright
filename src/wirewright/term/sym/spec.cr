@@ -188,6 +188,9 @@ struct Ww::Term::Sym
     def parse(arg : String | Bytes) : Repr
       bytes = arg.is_a?(String) ? arg.to_slice : arg
       if bytes.present?
+        # TODO: Can we do some bit magic type of stuff here or SIMD to make these
+        # comparisons simultaneously? This is a pretty hot place.
+
         # ..._
         bytes.rchop('_') do |bytes|
           return blank(bytes, :any, :one)
@@ -208,6 +211,9 @@ struct Ww::Term::Sym
         end
         bytes.rchop('_', 'd', 'i', 'c', 't') do |bytes|
           return blank(bytes, :dict, :one)
+        end
+        bytes.rchop('_', 'b', 'l', 'o', 'b') do |bytes|
+          return blank(bytes, :blob, :one)
         end
 
         # ..._...*
@@ -230,6 +236,9 @@ struct Ww::Term::Sym
           bytes.rchop('_', 'd', 'i', 'c', 't') do |bytes|
             return blank(bytes, :dict, :zero_or_more)
           end
+          bytes.rchop('_', 'b', 'l', 'o', 'b') do |bytes|
+            return blank(bytes, :blob, :zero_or_more)
+          end
         end
 
         # ..._...+
@@ -251,6 +260,9 @@ struct Ww::Term::Sym
           end
           bytes.rchop('_', 'd', 'i', 'c', 't') do |bytes|
             return blank(bytes, :dict, :one_or_more)
+          end
+          bytes.rchop('_', 'b', 'l', 'o', 'b') do |bytes|
+            return blank(bytes, :blob, :one_or_more)
           end
         end
       end
@@ -430,6 +442,7 @@ struct Ww::Term::Sym
       in .symbol?  then io << "_symbol"
       in .boolean? then io << "_boolean"
       in .dict?    then io << "_dict"
+      in .blob?    then io << "_blob"
       end
 
       case repr.mult

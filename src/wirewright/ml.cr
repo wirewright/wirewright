@@ -226,11 +226,12 @@ module Ww::ML
   def initial(type : TermType) : Term
     case type
     in .any?     then raise ArgumentError.new("TermType::Any initial value is undefined")
-    in .boolean? then Term.of(false)
-    in .dict?    then Term.of
     in .number?  then Term.of(0)
     in .string?  then Term.of("")
     in .symbol?  then Term.of(:unset)
+    in .boolean? then Term.of(false)
+    in .dict?    then Term.of
+    in .blob?    then Term.of(Term::Blob.empty)
     end
   end
 
