@@ -516,7 +516,15 @@ module Ww
     # really the only @@var waiters care about.
 
     private def execute?(command : SetPresent) : Bool
-      @@statuses[command.path] = Present.new(@@clock)
+      status1 = Present.new(@@clock)
+
+      if status0 = @@statuses[command.path]?
+        if status0.is_a?(Garbage)
+          status1 = Garbage.new(status1)
+        end
+      end
+
+      @@statuses[command.path] = status1
       @@clock += 1
 
       true # notify
@@ -525,6 +533,10 @@ module Ww
     private def execute?(command : SetAbsent) : Bool
       status0 = @@statuses[command.path]?
       status1 = Absent.new
+      if status0.is_a?(Garbage)
+        status1 = Garbage.new(status1)
+      end
+
       if status0 == status1
         return false # don't notify
       end
