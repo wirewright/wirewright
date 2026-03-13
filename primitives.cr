@@ -147,13 +147,34 @@ PRIMITIVES = ProcRuleset.build do
     Term::Str.new(s.as_s.escaped)
   end
 
-  rulepi1 %[(ml->term ml_string ¦ () shadow⋮ true)] do
+  rulepi1 %[(ml/term ml_string)] do
     term = ML.term(ml.to(String))
 
-    {:"ml/ok", term}
-  rescue ML::SyntaxError
-    # TODO: line col message
-    {:"ml/err"}
+    {:ok, term}
+  rescue e : ML::SyntaxError
+    excerpt, line, column = ML::SyntaxError.lookaround(e.text)
+
+    Term.of(:err, detail: e.detail, excerpt: excerpt, line: line, column: column)
+  end
+
+  rulepi1 %[(ml/terms ml_string)] do
+    terms = ML.terms(ml.to(String))
+
+    {:ok, terms}
+  rescue e : ML::SyntaxError
+    excerpt, line, column = ML::SyntaxError.lookaround(e.text)
+
+    Term.of(:err, detail: e.detail, excerpt: excerpt, line: line, column: column)
+  end
+
+  rulepi1 %[(ml/document ml_string)] do
+    document = ML.document(ml.to(String))
+
+    {:ok, document}
+  rescue e : ML::SyntaxError
+    excerpt, line, column = ML::SyntaxError.lookaround(e.text)
+
+    Term.of(:err, detail: e.detail, excerpt: excerpt, line: line, column: column)
   end
 
   rulepi1 %[(< a_number b_number)] do

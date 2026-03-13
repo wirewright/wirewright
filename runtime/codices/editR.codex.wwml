@@ -801,12 +801,12 @@ D←⟨C←[[I M←[unnest] _*] _*]⟩
   <> {M: (submit (ml ^(~ l r)) ⸨left,right⸩)}
 
 [I [submit result←(ml ml_string) _] _*]
-  <> {(result): (^ml ^(ml->term ml))}
+  <> {(result): (^ml ^(ml/term ml))}
 
-[[I M←[submit text_string (ml/ok term_) ⸨left,right⸩] _*] (l_string * r_string) _]
+[[I M←[submit text_string (ok term_) ⸨left,right⸩] _*] (l_string * r_string) _]
   <> {(M): ((history add ^text) (clear input) (insert (term ^term) ⸨left,right⸩) ok)}
 
-[I M←[submit _string (ml/err) _] _*]
+[I M←[submit _string [err] _] _*]
   <> {M: err}
 
 C←[[I M←[insert (term T_) left] _*] _ _]
@@ -876,12 +876,12 @@ D←⟨C←[[I [edit dict] _*] (l_string * r_string) _]⟩
 ;; obviously arrives to us as text; or if they paste from the text input itself
 ;; rather than `,x` or `,y`.
 [(I M←[paste item ⸨left,right⸩] _* ⍊ clipboard: (text text_string)) _*]
-  <> {M: (paste ^(ml->term text) ⸨left,right⸩)}
+  <> {M: (paste ^(ml/term text) ⸨left,right⸩)}
 
 ;; Paste if parsed as ML successfully.
-⟨C←[[I M←[paste (ml/ok term_) left] _*] _*]⟩
+⟨C←[[I M←[paste (ok term_) left] _*] _*]⟩
   <> {(M): (), (C): (^term ^(up C))}
-⟨C←[[I M←[paste (ml/ok term_) right] _*] _*]⟩
+⟨C←[[I M←[paste (ok term_) right] _*] _*]⟩
   <> {(M): (), (C): (^(up C) ^term)}
 
 ;; NOTE: the only place where the rewriter cannot go is keys. We use it as
