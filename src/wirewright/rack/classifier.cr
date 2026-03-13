@@ -642,39 +642,39 @@ module Ww::Rack
   end
 
   # Returns the components defined in *circuit*.
-  def components(circuit : Term) : Array(Component)
+  def components(libraries : Enumerable(Term)) : Array(Component)
     # TODO: Store by head where possible!!
     components = [] of Component
 
-    unless dict = circuit.as_d?
-      return components
-    end
-
     seq = 0u32
 
-    dict.items.each do |item|
-      Term.case(item) do
-        matchpi %{[rule pattern_ [component recipe_*]]} do
-          normp = M1.normal(pattern)
-          specificity = M1.specificity(normp)
-          op = M1.operator(normp)
+    libraries.each do |term|
+      next unless library = term.as_d?
 
-          component = DeviceComponent.new(seq, op, specificity, recipe)
-          components << component
-          seq += 1
+      library.items.each do |item|
+        Term.case(item) do
+          matchpi %{[rule pattern_ [component recipe_*]]} do
+            normp = M1.normal(pattern)
+            specificity = M1.specificity(normp)
+            op = M1.operator(normp)
+
+            component = DeviceComponent.new(seq, op, specificity, recipe)
+            components << component
+            seq += 1
+          end
+
+          matchpi %{[rule pattern_ template_]} do
+            normp = M1.normal(pattern)
+            specificity = M1.specificity(normp)
+            op = M1.operator(normp)
+
+            component = TemplateComponent.new(seq, op, specificity, template)
+            components << component
+            seq += 1
+          end
+
+          otherwise { }
         end
-
-        matchpi %{[rule pattern_ template_]} do
-          normp = M1.normal(pattern)
-          specificity = M1.specificity(normp)
-          op = M1.operator(normp)
-
-          component = TemplateComponent.new(seq, op, specificity, template)
-          components << component
-          seq += 1
-        end
-
-        otherwise { }
       end
     end
 
@@ -683,6 +683,7 @@ module Ww::Rack
     components
   end
 
+  # :nodoc:
   def instantiate(components, trace, circuit : Term) : Term
     D7.map(clf, circuit) do |_, feature|
       if feature.is_a?(D7::Inert)
@@ -728,8 +729,8 @@ module Ww::Rack
   # (notice the same pattern repeated twice for different rules). On `(C x)`, this would
   # expand to `(C 0)` -> `(C 1)` (we preserve user rule order in case the patterns are
   # the same). It goes without saying that you shouldn't do this.
-  def instantiate(circuit : Term) : Term
-    components = components(circuit)
+  def instantiate(circuit : Term, libraries : Enumerable(Term)) : Term
+    components = components([circuit].concat(libraries))
 
     instantiate(components, Pf::USet32.new, circuit)
   end
