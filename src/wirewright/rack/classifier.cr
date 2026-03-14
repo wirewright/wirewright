@@ -729,7 +729,7 @@ module Ww::Rack
   # (notice the same pattern repeated twice for different rules). On `(C x)`, this would
   # expand to `(C 0)` -> `(C 1)` (we preserve user rule order in case the patterns are
   # the same). It goes without saying that you shouldn't do this.
-  def instantiate(circuit : Term, libraries : Enumerable(Term)) : Term
+  def instantiate(circuit : Term, libraries : Enumerable(Term) = Slice(Term).empty) : Term
     components = components([circuit].concat(libraries))
 
     instantiate(components, Pf::USet32.new, circuit)
