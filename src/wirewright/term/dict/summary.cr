@@ -39,6 +39,37 @@ class Ww::Term::Dict
   #   in Wirewright so far. A lot of patterns can reject early thanks to symbol sketches.
   # - *histogram* is an approximate (in the sense "precisely N", or "too many to count")
   #   measure of terms of each type in the dict and nested dicts.
+  #
+  # TODO: It remains future work to make all summary operations cheap. Currently they
+  # are very expensive for the amount of times we call them, and cost us a great
+  # deal of performance. Even though all of this is mostly just simple arithmetic, we
+  # need to do it tens of millions of times per second, and ideally even faster. Summaries
+  # should also be packed -- somehow -- so that perhaps after storing them in a flat
+  # array on `UTermTrie32` and `TermTrie` nodes, it becomes possible to use SIMD
+  # for union-ing them (which is currently the biggest performance issue
+  # with summaries). I'm not sure if SIMD would help, but maybe it could. No idea.
+  # In theory, we could try to sacrifice stuff to get a layout like this:
+  #
+  # ```
+  # # 16 bytes
+  # size : 4 bytes
+  #
+  # hashcode : 6 bytes
+  # # 48-bit hash, not sure how good it is in practice, ~16 million entries
+  # # to get >50% collision prob. (?)
+  #
+  # histogram : 6 bytes
+  #
+  # # 16 bytes
+  # keys : 4 bytes    # a bit more useful
+  # values : 3 bytes  # least useful sketch in practice
+  # symbols : 7 bytes # highly useful in practice
+  # maxdepth : 1 byte
+  # size_set : 1 byte
+  # ```
+  #
+  # The above totals at 32 bytes, which is basically 2xu128 per summary. Two summaries
+  # fit in a cache line (64 bytes) which is interesting as we union summaries by two.
   record Summary,
     size : UInt32,
     maxdepth16 : UInt16,
@@ -75,28 +106,21 @@ class Ww::Term::Dict
 
     # Returns the summary of a dict *item* at *key*.
     def self.of(key : UInt32, item : Term) : Summary
-      key = key.to_u64
+      hashcode = Term.hashcode(item)
 
       if dict = item.as_d?
-        summary = dict.summary
-
-        return summary.copy_with(
-          size: 1u32,
-          hashcode: Term.hashcode(key, summary.hashcode),
+        base = dict.summary
+      else
+        base = zero.copy_with(
+          value_sketch: Sketch.value(item, hashcode),
+          symbol_sketch: Sketch.symbol(item, hashcode),
+          histogram: Histogram.of(item),
         )
       end
 
-      hashcode = Term.hashcode(item)
-
-      Summary.new(
+      base.copy_with(
         size: 1u32,
-        maxdepth16: 0u16,
-        size_set: Pf::BitSet16.empty,
-        hashcode: Term.hashcode(key, hashcode),
-        key_sketch: Sketch.empty,
-        value_sketch: Sketch.value(item, hashcode),
-        symbol_sketch: Sketch.symbol(item, hashcode),
-        histogram: Histogram.of(item),
+        hashcode: Term.hashcode(key.to_u64, hashcode),
       )
     end
 
@@ -105,26 +129,22 @@ class Ww::Term::Dict
     # For items, even though they are also thought of as entries elsewhere,
     # you must use `.of(Term)`.
     def self.of(key : {term: Term, hashcode: UInt64}, value : Term) : Summary
-      if dict = value.as_d?
-        summary = dict.summary
+      value_hashcode = Term.hashcode(value)
 
-        return dict.summary.copy_with(
-          size: 1u32,
-          hashcode: Term.hashcode(key[:hashcode], summary.hashcode),
+      if dict = value.as_d?
+        base = dict.summary
+      else
+        base = zero.copy_with(
+          value_sketch: Sketch.value(value, value_hashcode),
+          symbol_sketch: Sketch.symbol(value, value_hashcode),
+          histogram: Histogram.of(value),
         )
       end
 
-      value_hashcode = Term.hashcode(value)
-
-      Summary.new(
+      base.copy_with(
         size: 1u32,
-        maxdepth16: 0u16,
-        size_set: Pf::BitSet16.empty,
         hashcode: Term.hashcode(key[:hashcode], value_hashcode),
-        key_sketch: Sketch.key(key[:term], key[:hashcode]),
-        value_sketch: Sketch.value(value, value_hashcode),
-        symbol_sketch: Sketch.symbol(value, value_hashcode),
-        histogram: Histogram.of(value),
+        key_sketch: Sketch.union(base.key_sketch, Sketch.key(key[:term], key[:hashcode])),
       )
     end
 
