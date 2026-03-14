@@ -1200,23 +1200,17 @@ module Ww
     #
     # If *term* is a dict, its depth is `1` plus the maximum depth of its
     # children. If *term* is a non-dict, its depth is always `0`.
-    def self.depth(term : Dict) : UInt32
-      depth = 0u32
-
-      term.each_entry do |key, value|
-        depth = Math.max(depth, depth(value))
-      end
-
-      1u32 + depth
+    def self.depth(term : Dict) : Magnitude
+      term.summary.maxdepth
     end
 
     # :ditto:
-    def self.depth(term : Any) : UInt32
-      0u32
+    def self.depth(term : Any) : Magnitude
+      Magnitude.new(0)
     end
 
     # :ditto:
-    def self.depth(term : Term) : UInt32
+    def self.depth(term : Term) : Magnitude
       depth(Term[term])
     end
 
