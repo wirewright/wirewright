@@ -316,6 +316,43 @@ module Ww::Rack
 
         D7.patch(dst, {2, out_term})
       end
+
+      rule(<<-WWML) do |dev, dst|
+      [path (view path_string ⍊ presentation_⋮ binary) @edge_] dev
+        -> (one edge) [cell @edge_ _?] {name: dst}
+      WWML
+        path, text = D7.fetch(dev, :path, :presentation)
+
+        case view = PathServer.view(path.to(Path))
+        in PathServer::Wait
+          # We could treat `Wait` as `Absent` but let's not to reduce flickering
+          # and hide the fact we do periodic refreshes.
+        in PathServer::Absent
+          D7.patch(dst, {2, nil})
+        in PathServer::Listing
+          case text
+          when Term.of(:text)
+            presentation = PathServer::Presentation::Text
+          when Term.of(:auto)
+            presentation = PathServer::Presentation::Auto
+          else
+            presentation = PathServer::Presentation::Binary
+          end
+
+          D7.patch(dst, {2, PathServer.render(view, presentation: presentation)})
+        end
+      end
+
+      rule(<<-WWML) do |dev, src|
+      [path (goal path_string) @edge_] dev
+        -> (one edge) [cell @edge_ spec_] {name: src}
+      WWML
+        path = D7.fetch(dev, :path).to(Path)
+        spec = D7.fetch(src, :spec)
+        facts = PathServer.parse(spec)
+
+        PathServer.converge(path, facts) # nil
+      end
     end
   end
 end

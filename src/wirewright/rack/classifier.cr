@@ -448,6 +448,28 @@ module Ww::Rack
         D7.mixture(node, defn) { node }
       end
 
+      matchpi %{[path [view _string] @edge_]} do
+        D7.gnd(node, edge)
+      end
+
+      matchpi %{[path [goal _string] @edge_]} do
+        D7.gnd(node, edge)
+      end
+
+      matchpi %{[path head←[(%any view goal) _string] spec0_]} do
+        defn = Term::Dict.build do |commit|
+          commit << :module << Term[]
+          commit << {:cell, {:edge, :spec}, spec0}
+          commit << {:path, head, {:edge, :spec}}
+        end
+
+        D7.mixture(node, defn) do |mix|
+          Term.matchpi(mix, %{(module _ (cell @_ spec1_) _)}) do
+            Term.morph(node, {2, spec1})
+          end
+        end
+      end
+
       otherwise do
         D7.inert(node)
       end

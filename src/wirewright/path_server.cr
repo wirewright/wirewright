@@ -591,5 +591,89 @@ module Ww
         end
       end
     end
+
+    enum Presentation
+      Auto
+      Binary
+      Text
+    end
+
+    # Converts *listing* to a term.
+    def render(listing : FileListing | DirListing, *, presentation : Presentation = :binary) : Term
+      render(listing, presentation)
+    end
+
+    # :nodoc:
+    def render(listing : FileListing, presentation : Presentation) : Term
+      content = listing.content
+      if presentation.text? || (presentation.auto? && content.classif.utf8?)
+        content = Term.of(String.new(content.bytes))
+      end
+
+      Term.of(:file, content, timestamp: listing.timestamp.to_s)
+    end
+
+    # :nodoc:
+    def render(listing : DirListing, presentation : Presentation) : Term
+      dict = Term::Dict.build do |commit|
+        commit << :dir
+        commit.with(:timestamp, listing.timestamp.to_s)
+        commit.concat(listing.entries) { |entry| render(entry) }
+      end
+
+      Term.of(dict)
+    end
+
+    private def render(entry : FileEntry)
+      Term.of(:file, entry.path, timestamp: entry.timestamp.to_s)
+    end
+
+    private def render(entry : DirEntry)
+      Term.of(:dir, entry.path, timestamp: entry.timestamp.to_s)
+    end
+
+    # Parses a term *spec* into a set of facts. If *spec* itself is not recognized,
+    # returns an empty set. If one of entries is not recognized, it is ignored.
+    def parse(spec : Term) : Pf::Set(Fact)
+      Pf::Set(Fact).transaction do |txn|
+        Term.case(spec) do
+          matchpi %{[file content_string]}, content: String do
+            txn.add(IsFile.new(Term::Blob.new(content.to_slice)))
+          end
+
+          matchpiT %{[file content_blob]} do
+            txn.add(IsFile.new(content))
+          end
+
+          matchpi %{[dir entries_*]} do
+            txn.add(IsDir.new)
+
+            entries.items.each do |entry|
+              Term.case(entry) do
+                matchpi %{[file name_string]}, name: String do
+                  txn.add(FilePresent.new(name))
+                end
+
+                matchpi %{[dir name_string]}, name: String do
+                  txn.add(DirPresent.new(name))
+                end
+
+                matchpi %{[-file name_string]}, name: String do
+                  txn.add(FileAbsent.new(name))
+                end
+
+                matchpi %{[-dir name_string]}, name: String do
+                  txn.add(DirAbsent.new(name))
+                end
+
+                otherwise { }
+              end
+            end
+          end
+
+          otherwise { }
+        end
+      end
+    end
   end
 end
