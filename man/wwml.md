@@ -183,7 +183,8 @@ Lexical choice can be of two general forms:
 - `⸨⸩` specifies a comma-separated choice between symbolics
 
 Both forms operate on *blocks*. Blocks are regions of source code delimited by
-one or more blank lines, the document section delimiter `---`, or end-of-input.
+one or more blank lines, the document section delimiter `---`, the block delimiter
+`∥`, or end-of-input.
 
 > [!IMPORTANT]
 > All choices in a block must have the same *arity* -- the same number of options.
@@ -1118,6 +1119,165 @@ generated specifically for the current *block*.
 (foo ¦ _ v_number -▢_) <> {v: $'(/ →v 3), ▢: true}
 ```
 
+#### Manually delimiting blocks
+
+Manually delimiting blocks is most often useful when you're using lexical choice.
+Lexical choice always instantiates within the same block. For example, the following:
+
+```wwml
+(⸨foo,bar⸩ -▢_) <> {▢: true}
+
+(⸨alpha,beta⸩ -▢_) <> {▢: true}
+```
+
+... expands to:
+
+```wwml
+(foo -▢_) <> {▢: true}
+(bar -▢_) <> {▢: true}
+
+(alpha -▢_) <> {▢: true}
+(beta -▢_) <> {▢: true}
+```
+
+... which then turns into something like:
+
+```wwml
+(backmap (foo (- BeCVbGdsfdeXca_)) {BeCVbGdsfdeXca: true})
+(backmap (bar (- BeCVbGdsfdeXca_)) {BeCVbGdsfdeXca: true})
+(backmap (alpha (- dgeMTbmQUcBbJ_)) {dgeMTbmQUcBbJ: true})
+(backmap (beta (- dgeMTbmQUcBbJ_)) {dgeMTbmQUcBbJ: true})
+```
+
+Notice how `▢` is the same for `foo` and `bar`, and for `alpha` and `beta`.
+
+This may not always be desired. That is, you may want to have each instance of
+lexical choice be in its own block. This is especially useful when you use both 0-
+and 1-delayed choice to generate rules in the block.
+
+You can use `∥` brackets to delimit blocks.
+
+```wwml
+∥ (⸨foo,bar⸩ -▢_) <> {▢: true}
+∥ (⸨alpha,beta⸩ -▢_) <> {▢: true}
+```
+
+This expands to the following:
+
+```wwml
+∥ (foo -▢_) <> {▢: true}
+∥ (bar -▢_) <> {▢: true}
+
+∥ (alpha -▢_) <> {▢: true}
+∥ (beta -▢_) <> {▢: true}
+```
+
+Notice how `∥` is copied along with each instance. This turns to something like:
+
+```wwml
+(backmap (foo (- HeWdpdtcfbkbpdL_)) {HeWdpdtcfbkbpdL: true})
+(backmap (bar (- fbecdgcZFeqce_)) {fbecdgcZFeqce: true})
+(backmap (alpha (- fpbtRcRjcbCdw_)) {fpbtRcRjcbCdw: true})
+(backmap (beta (- dpeZdqdcLdmbobt_)) {dpeZdqdcLdmbobt: true})
+```
+
+All `▢`s expanded into different block ids, meaning each backmap was its own block,
+just as expected with `∥`.
+
+You can also use `∥` to manually delimit blocks in general, for example, in situations
+where newlines look ugly. Consider, for instance, the `rewriter` node in Rack:
+
+```wwml
+(rewriter (@in -> ascR -> @out)
+  (⸨a,b⸩ -◇_) <> {◇: true}
+  (⸨c,d⸩ -◇_) <> {◇: true})
+```
+
+Currently this will instantiate the entire rewriter like so:
+
+```wwml
+(rewriter (@in -> ascR -> @out)
+  (a -◇_) <> {◇: true}
+  (c -◇_) <> {◇: true})
+(rewriter (@in -> ascR -> @out)
+  (b -◇_) <> {◇: true}
+  (d -◇_) <> {◇: true})
+```
+
+This is definitely not what we want. We can add whitespace:
+
+```wwml
+(rewriter (@in -> ascR -> @out)
+
+  (⸨a,b⸩ -◇_) <> {◇: true}
+
+  (⸨c,d⸩ -◇_) <> {◇: true}
+
+)
+```
+
+But this looks very ugly. Sometimes it is acceptable though, as in:
+
+
+```wwml
+(rewriter (@in -> ascR -> @out)
+  ;; Doc string 1
+  (⸨a,b⸩ -◇_) <> {◇: true}
+
+  ;; Doc string 2
+  (⸨c,d⸩ -◇_) <> {◇: true}
+
+  ;; Some non-templated rule that also happens to prevent `rewriter`s closing
+  ;; paren from being duplicated during lexical choice instantiation.
+  (foo) => (bar))
+```
+
+Here, other rules and doc comments "cushion" the newlines, making them look more
+natural. In the original case, though, you can use `∥` like so:
+
+```wwml
+(rewriter (@in -> ascR -> @out)
+  ∥(⸨a,b⸩ -◇_) <> {◇: true}∥
+  ∥(⸨c,d⸩ -◇_) <> {◇: true}∥)
+```
+
+... which expands to something like:
+
+```wwml
+((rewriter
+  (@in -> ascR -> @out)
+  (backmap (a (- bqbXcmeaehYcNez_)) {bqbXcmeaehYcNez: true})
+  (backmap (b (- eYbFtdXcwcudief_)) {eYbFtdXcwcudief: true})
+  (backmap (c (- bfdQcdgfdevcjdp_)) {bfdQcdgfdevcjdp: true})
+  (backmap (d (- cVdNGdWfnAcAT_)) {cVdNGdWfnAcAT: true})))
+```
+
+Notice that we're delimiting with `∥` both before and after each rule here. While
+this is not strictly necessary for the rules before the last one, for the last one
+it is. Otherwise, we'd be copying `rewriter`'s closing paren multiple times, which
+is a syntax error:
+
+```wwml
+(rewriter (@in -> ascR -> @out)
+  ∥(⸨a,b⸩ -◇_) <> {◇: true}
+  ∥(⸨c,d⸩ -◇_) <> {◇: true})
+```
+
+... expands to:
+
+```wwml
+(rewriter (@in -> ascR -> @out)
+  ∥(a -◇_) <> {◇: true}
+  ∥(b -◇_) <> {◇: true}
+  ∥(c -◇_) <> {◇: true}) ;; < OOPS, extra paren copied!
+  ∥(d -◇_) <> {◇: true}) ;; <
+```
+
+Remember we're in lexical templating land. There is no syntax yet, so lexical
+choices can make syntax errors if used carelessly.
+
+Which is exactly what we want here.
+
 #### Minor notes
 
 - `◇` will be replaced by the current rule's id, which is a base-48 rendition
@@ -1135,9 +1295,9 @@ generated specifically for the current *block*.
 
 ### Backmaps and rewriter circuits
 
-> [!NOTE]
-> These are scheduled for removal once all relevant rulesets are ported to
-> Alloy backmaps.
+> [!WARNING]
+> These shorthands are DEPRECATED. They are not used by anything anymore and
+> are scheduled for removal.
 
 - `→<term>` is the same as writing `($my <term>)`
 - `↑<term>` is the same as writing `($up <term>)`

@@ -937,6 +937,52 @@
          qux⎤
         ⎡default: (), a: (qux), b: (qux), c: (qux)⎤))
 
+;; Manual block delimiter
+(ml
+  (doc=
+    ⎡(rewriter (@in -> ascR -> @out)
+       ∥(⸨a,b⸩ -◇_) <> {◇: true}∥
+       ∥(⸨c,d⸩ -◇_) <> {◇: true}∥)⎤
+    ⎡(rewriter (@in -> ascR -> @out)
+       ∥(a -◇_) <> {◇: true}∥
+       ∥(b -◇_) <> {◇: true}∥
+       ∥(c -◇_) <> {◇: true}∥
+       ∥(d -◇_) <> {◇: true}∥)⎤
+    ⎡(rewriter (@in -> ascR -> @out)
+       (a -◇_) <> {◇: true}
+       (b -◇_) <> {◇: true}
+       (c -◇_) <> {◇: true}
+       (d -◇_) <> {◇: true})⎤)
+  (doc=
+    ⎡(qux
+       ∥(⸨a,b⸩ -▢_) <> {▢: true}
+        (⸨c,d⸩ -▢_) <> {▢: true}∥
+       ∥(⸨foo,bar⸩ -▢_) <> {▢: true}∥)⎤
+    ⎡(qux
+       ∥(a -▢_) <> {▢: true}
+        (c -▢_) <> {▢: true}∥
+       ∥(b -▢_) <> {▢: true}
+        (d -▢_) <> {▢: true}∥
+       ∥(foo -▢_) <> {▢: true}∥
+       ∥(bar -▢_) <> {▢: true}∥)⎤
+    ⎡(qux
+       (a -▢_) <> {▢: true}
+       (c -▢_) <> {▢: true}
+
+       (b -▢_) <> {▢: true}
+       (d -▢_) <> {▢: true}
+
+       (foo -▢_) <> {▢: true}
+
+       (bar -▢_) <> {▢: true})⎤)
+  (doc=
+    ⎡∥(⸨foo,bar⸩ -▢_) <> {▢: true}⎤
+    ⎡∥(foo -▢_) <> {▢: true}
+     ∥(bar -▢_) <> {▢: true}⎤
+    ⎡(foo -▢_) <> {▢: true}
+
+     (bar -▢_) <> {▢: true}⎤))
+
 ;; Bugfixes
 (group
   ;; Extra input must terminate parsing.

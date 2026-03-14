@@ -971,8 +971,8 @@ module Ww::ML
         else
           return token(:minus)
         end
-      when past?('▪')
-        return token(:white_rectangle)
+      when past?('∥')
+        return token(:double_pipe)
       when past?('%')
         if past?('\'')
           return nows("%'") { token(:percent_quote) }

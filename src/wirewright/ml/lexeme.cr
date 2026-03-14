@@ -122,7 +122,7 @@ module Ww::ML
         PlusMinus
         VspaceTripleDash
         VspaceTripleDashVspace
-        WhiteRectangle
+        DoublePipe
         BlankLine
         DoubleBlankLine
         FatArrowRight
@@ -217,7 +217,7 @@ module Ww::ML
         BlockBoundaryResponse::Exclusive
       when .vspace_triple_dash?,
            .vspace_triple_dash_vspace?,
-           .white_rectangle?
+           .double_pipe?
         BlockBoundaryResponse::Front
       else
         BlockBoundaryResponse::No

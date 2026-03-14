@@ -1125,7 +1125,7 @@ module Ww::ML
     end
 
     private def block_delimiter?(λ : Lexeme::Token) : Bool
-      λ.type.blank_line? || λ.type.double_blank_line? || λ.type.white_rectangle?
+      λ.type.blank_line? || λ.type.double_blank_line? || λ.type.double_pipe?
     end
 
     private def block_delimiter?(λ) : Bool

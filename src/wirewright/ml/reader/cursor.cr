@@ -24,7 +24,7 @@ struct Ww::ML::Reader
     # Returns `true` if *lexeme* is generally ignored by term reader cursors.
     def self.ignores?(lexeme : Lexeme::Token) : Bool
       case lexeme.type
-      when .line_comment?, .blank_line?, .double_blank_line?, .white_rectangle?
+      when .line_comment?, .blank_line?, .double_blank_line?, .double_pipe?
         true
       else
         false

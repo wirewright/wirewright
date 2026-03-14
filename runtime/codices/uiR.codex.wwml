@@ -328,30 +328,30 @@
   <> {x⫽y-stride: ^up-w⫽h, (up-w⫽h): ()}
 
 ;; Max of widths/heights.
-▪ {¦ mail/mid: (metrics {¦ w⫽h-max_: ?} ⍊ -▢_) -up-w⫽h shrink: (%- (%any true w⫽h)) ±x⫽y-stride}
+∥ {¦ mail/mid: (metrics {¦ w⫽h-max_: ?} ⍊ -▢_) -up-w⫽h shrink: (%- (%any true w⫽h)) ±x⫽y-stride}
     <> {w⫽h-max: ^x⫽y-stride, ▢: true}
   {¦ mail/mid: (metrics {¦ ±w⫽h-max} ⍊ -▢_) -up-w⫽h shrink: (%- (%any true w⫽h)) ±x⫽y-stride}
     <> {w⫽h-max: ^(max w⫽h-max x⫽y-stride), ▢: true}
 
 ;; Sum of widths/heights excluding fr children.
-▪ {¦ mail/mid: (metrics {¦ w⫽h-lo_: ?} ⍊ -▢_) -fr -up-w⫽h ±x⫽y-stride}
+∥ {¦ mail/mid: (metrics {¦ w⫽h-lo_: ?} ⍊ -▢_) -fr -up-w⫽h ±x⫽y-stride}
     <> {w⫽h-lo: ^x⫽y-stride, ▢: true}
   {¦ mail/mid: (metrics {¦ ±w⫽h-lo} ⍊ -▢_) -fr -up-w⫽h ±x⫽y-stride}
     <> {w⫽h-lo: ^(+ w⫽h-lo x⫽y-stride), ▢: true}
 
 ;; Sum of widths/heights including fr children.
-▪ {¦ mail/mid: (metrics {¦ w⫽h-hi_: ?} ⍊ -▢_) -up-w⫽h ±x⫽y-stride}
+∥ {¦ mail/mid: (metrics {¦ w⫽h-hi_: ?} ⍊ -▢_) -up-w⫽h ±x⫽y-stride}
     <> {w⫽h-hi: ^x⫽y-stride, ▢: true}
   {¦ mail/mid: (metrics {¦ ±w⫽h-hi} ⍊ -▢_) -up-w⫽h ±x⫽y-stride}
     <> {w⫽h-hi: ^(+ w⫽h-hi x⫽y-stride), ▢: true}
 
 ;; Sum of frs.
-▪ {¦ mail/mid: (metrics {¦ ±fr-sum} ⍊ -▢_) ±fr}
+∥ {¦ mail/mid: (metrics {¦ ±fr-sum} ⍊ -▢_) ±fr}
     <> {fr-sum: ^(+ fr-sum fr), ▢: true}
 
 ;; No. of participants: if I modified the metrics then increment
 ;; the participants count.
-▪ {¦ mail/mid: (metrics {¦ N⋮ 0} ¦ (%not ()) -▢_)}
+∥ {¦ mail/mid: (metrics {¦ N⋮ 0} ¦ (%not ()) -▢_)}
     <> {N: ^(+ N 1), ▢: true}
 
 ;;
