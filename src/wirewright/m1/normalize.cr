@@ -97,14 +97,27 @@ module Ww::M1
 
     # Constructs a literal operator for *term*.
     def literal(term : Term) : Term
-      if dict = term.as_d?
-        return terminal(Term.of(:"%literal", term,
-          depth: Term.depth(dict),
-          bounds: dict.size,
-        ))
+      op = Term::Dict.build do |commit|
+        commit << :"%literal" << term
+
+        if dict = term.as_d?
+          commit.with(:depth, Term.depth(dict))
+          commit.with(:bounds, dict.size)
+
+          key_set = Term::Dict.build do |keys|
+            dict.each_entry { |key, _| keys.with(key, true) }
+          end
+
+          commit.with(:keys, key_set)
+        else
+          commit.with(:depth, 0)
+          commit.with(:bounds, 0)
+        end
+
+        commit.with(:literals, Term.set(term))
       end
 
-      terminal(Term.of(:"%literal", term, depth: 0, bounds: 0))
+      terminal(Term.of(op))
     end
 
     # Constructs a singular sequence operator around *successor*.
@@ -951,6 +964,7 @@ module Ww::M1
           entry: true,
           depth: {:+, :envelope, 1},
           bounds: 1,
+          keys: Term.set(key),
         )
       end
     end
@@ -2464,7 +2478,7 @@ module Ww::M1
 
           normal = opts.transaction do |commit|
             commit << :"%filter" << {:"%payload", deps}
-            commit << normalize(Π.pattern(selector))
+            commit << Normalize.sealed(Π.pattern(selector))
             commit << Normalize.sealed(Π.pattern(successor))
 
             commit.with(:guarded, true)

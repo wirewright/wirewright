@@ -250,8 +250,9 @@ module Ww::M1
         Op::Literal.new(term)
       end
 
-      matchpi %{(%'%guard successor_ ⍊ value-sketch_ symbol-sketch_ min-depth_ max-depth_ min-bounds_ max-bounds_)}, cue: :"%guard" do
+      matchpi %{(%'%guard successor_ ⍊ key-sketch_ value-sketch_ symbol-sketch_ min-depth_ max-depth_ min-bounds_ max-bounds_)}, cue: :"%guard" do
         Op::Guard.new(
+          key_sketch: Term::Dict::Sketch.new(key_sketch.to(Term::Dict::Sketch::Repr)),
           value_sketch: Term::Dict::Sketch.new(value_sketch.to(Term::Dict::Sketch::Repr)),
           symbol_sketch: Term::Dict::Sketch.new(symbol_sketch.to(Term::Dict::Sketch::Repr)),
           bounds: {Kit.magn(min_bounds), Kit.magn(max_bounds)},

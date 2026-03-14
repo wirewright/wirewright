@@ -87,6 +87,11 @@ class Ww::Term::Dict
       new(a.bits | b.bits)
     end
 
+    # Returns `true` if this sketch contains no elements.
+    def empty? : Bool
+      self == Sketch.empty
+    end
+
     # Returns `true` if all elements of this sketch are contained in *other*.
     def subset_of?(other : Sketch) : Bool
       (other.bits & bits) == bits

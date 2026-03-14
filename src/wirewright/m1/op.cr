@@ -72,6 +72,7 @@ module Ww::M1
 
     # *bounds* and *depth* ranges are inclusive.
     defcase Guard,
+      key_sketch : Term::Dict::Sketch,
       value_sketch : Term::Dict::Sketch,
       symbol_sketch : Term::Dict::Sketch,
       bounds : {Magnitude, Magnitude},

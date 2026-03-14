@@ -132,6 +132,7 @@ module Ww::M1
       Literals
       Sketches
       Captures
+      Keys
     end
 
     getter annotations : Annotation
@@ -292,7 +293,7 @@ module Ww::M1
 
   # Returns `O1`-optimized *pattern*.
   def optimal(pattern : Normp, level : O1.class) : Guardedp
-    pipe(pattern, depthp, boundsp, literalp, sketchp, guard)
+    pipe(pattern, depthp, boundsp, literalp, keyp, sketchp, guard)
   end
 
   # Returns `O2`-optimized *pattern*.

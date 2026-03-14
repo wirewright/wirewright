@@ -649,6 +649,7 @@ module Ww::M1
     summary = dict.summary
 
     return false unless op.symbol_sketch.subset_of?(summary.symbol_sketch)
+    return false unless op.key_sketch.subset_of?(summary.key_sketch)
     return false unless op.value_sketch.subset_of?(summary.value_sketch)
     return false unless op.bounds[0] <= summary.size <= op.bounds[1]
     return false unless op.depth[0] <= summary.maxdepth <= op.depth[1]

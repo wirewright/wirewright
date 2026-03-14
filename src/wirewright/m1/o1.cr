@@ -100,91 +100,119 @@ module Ww::M1
   # The literal propagation algorithm, executed by every operator in the normal
   # pattern tree during the literal propagation pass.
   private def literalp1(op : Term::Dict) : Term::Dict
-    Term.case(op, engine: M0) do
-      matchpi %{[%'%literal term_]}, cue: :"%literal" do
-        op.with(:literals, Term.set(term))
-      end
+    literals0 = op[:literals]? || Term[]
+    literals1 = literals0.transaction do |commit|
+      Kit.each_member(op) do |member|
+        next if member[:sealed]?
+        next unless member_literals = member[:literals]?
 
-      otherwise do
-        level = Term::Dict.build do |commit|
-          Kit.each_member(op) do |member|
-            next if member[:sealed]?
-            next unless literals = member[:literals]?
-
-            literals.each_entry do |literal, _|
-              commit.with(literal, true)
-            end
-          end
+        member_literals.each_entry do |literal, _|
+          commit.with(literal, true)
         end
-
-        op.with(:literals, level)
       end
     end
+
+    if literals1.empty?
+      return op
+    end
+
+    op.with(:literals, literals1)
   end
 
   # Runs the literal propagation algorithm on operators in *pattern*.
   #
-  # Literals flow up, from leaves to the root. After literal propagation, all
-  # operators have a set `literals`. It is a dict set of literals required
-  # by an operator and its non-sealed subtree.
+  # Literals flow & merge up from operators labeled with `literals: {...}`. After
+  # literal propagation, some operators will have a nonempty dict set `literals`.
+  # It contains literals required by an operator and its non-sealed subtree.
   def literalp(pattern : Normp) : Normp
     pattern
       .map { |op| Kit.ascend(op, &->literalp1(Term::Dict)) }
       .with_annotation(:literals)
   end
 
+  # The key propagation algorithm, executed by every operator in the normal
+  # pattern tree during the key propagation pass.
+  private def keyp1(op : Term::Dict) : Term::Dict
+    keys0 = op[:keys]? || Term[]
+    keys1 = keys0.transaction do |commit|
+      Kit.each_member(op) do |member|
+        next if member[:sealed]?
+        next unless member_keys = member[:keys]?
+
+        member_keys.each_entry do |key, _|
+          commit.with(key, true)
+        end
+      end
+    end
+
+    if keys1.empty?
+      return op
+    end
+
+    op.with(:keys, keys1)
+  end
+
+  # Runs the key propagation algorithm on operators in *pattern*.
+  #
+  # Keys flow & merge up from operators labeled with `keys: {...}`. After key
+  # propagation, some operators will have a nonempty dict set `keys`. It
+  # contains keys required by an operator and its non-sealed subtree.
+  def keyp(pattern : Normp) : Normp
+    pattern
+      .map { |op| Kit.ascend(op, &->keyp1(Term::Dict)) }
+      .with_annotation(:keys)
+  end
+
   # The sketch propagation algorithm, executed by every operator in the normal
   # pattern tree during the sketch propagation pass.
   private def sketchp1(op : Term::Dict) : Term::Dict
-    return op unless literals = op[:literals]?
-    return op unless literals = literals.as_d?
+    keys = op[:keys]?.try(&.as_d?) || Term[]
+    literals = op[:literals]?.try(&.as_d?) || Term[]
 
+    key_sketch = Term::Dict::Sketch.empty
     value_sketch = Term::Dict::Sketch.empty
     symbol_sketch = Term::Dict::Sketch.empty
 
-    literals.each_entry do |literal, _|
-      hashcode = Term.hashcode(literal)
+    unless keys.empty?
+      keys.each_entry do |key, _|
+        hashcode = Term.hashcode(key)
+        key_sketch = Term::Dict::Sketch.union(key_sketch, Term::Dict::Sketch.key(key, hashcode))
+      end
+    end
 
-      value_sketch = Term::Dict::Sketch.union(value_sketch, Term::Dict::Sketch.value(literal, hashcode))
-      symbol_sketch = Term::Dict::Sketch.union(symbol_sketch, Term::Dict::Sketch.symbol(literal, hashcode))
+    unless literals.empty?
+      literals.each_entry do |literal, _|
+        hashcode = Term.hashcode(literal)
+        value_sketch = Term::Dict::Sketch.union(value_sketch, Term::Dict::Sketch.value(literal, hashcode))
+        symbol_sketch = Term::Dict::Sketch.union(symbol_sketch, Term::Dict::Sketch.symbol(literal, hashcode))
+      end
     end
 
     op.transaction do |commit|
-      commit.with(:"value-sketch", value_sketch.bits)
-      commit.with(:"symbol-sketch", symbol_sketch.bits)
+      unless key_sketch.empty?
+        commit.with(:"key-sketch", key_sketch.bits)
+      end
+      unless value_sketch.empty?
+        commit.with(:"value-sketch", value_sketch.bits)
+      end
+      unless symbol_sketch.empty?
+        commit.with(:"symbol-sketch", symbol_sketch.bits)
+      end
     end
   end
 
   # Runs the sketch propagation algorithm on operators in *pattern*.
   #
-  # Sketch propagation depends on literal propagation. It currently takes
-  # into account only symbol literals found in literal sets.
-  #
-  # Thus, `sketchp` requires *pattern* to have been processed by `literalp` first.
+  # Sketch propagation depends on literal propagation and key propagation.
+  # Thus, `sketchp` requires *pattern* to have been processed by `literalp`
+  # and `keyp` first.
   def sketchp(pattern : Normp) : Normp
     assert pattern.annotations.literals?
+    assert pattern.annotations.keys?
 
     pattern
       .map { |op| Kit.ascend(op, &->sketchp1(Term::Dict)) }
       .with_annotation(:sketches)
-  end
-
-  # Returns the dict sketch accepted by *pattern*.
-  #
-  # Dictionaries matched against the pattern are expected to be supersets of
-  # the returned sketch.
-  def symbol_sketch(pattern : Normp) : Term::Dict::Sketch
-    unless pattern.annotations.sketches?
-      pattern = sketchp(pattern)
-    end
-
-    pattern.unwrap do |op|
-      if symbol_sketch = op[:"symbol-sketch"]?
-        return symbol_sketch.to(Term::Dict::Sketch)
-      end
-
-      Term::Dict::Sketch.new(0)
-    end
   end
 
   # The capture propagation algorithm, executed by every operator in the normal
@@ -323,6 +351,7 @@ module Ww::M1
         max_depth = fields.read(:"max-depth", default: :∞)
         min_bounds = fields.read(:"min-bounds", default: 0)
         max_bounds = fields.read(:"max-bounds", default: :∞)
+        key_sketch = fields.read(:"key-sketch", default: 0)
         value_sketch = fields.read(:"value-sketch", default: 0)
         symbol_sketch = fields.read(:"symbol-sketch", default: 0)
 
@@ -335,6 +364,7 @@ module Ww::M1
           "max-depth": max_depth,
           "min-bounds": min_bounds,
           "max-bounds": max_bounds,
+          "key-sketch": key_sketch,
           "value-sketch": value_sketch,
           "symbol-sketch": symbol_sketch,
         ]
