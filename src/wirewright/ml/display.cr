@@ -221,7 +221,7 @@ module Ww::ML
 
   # :nodoc:
   def compact(io : IO, term : Term::Blob) : Nil
-    io << '∥'
+    io << '⟬'
 
     term.bytes.join(io, " ") do |byte|
       digit0 = byte >> 4
@@ -231,7 +231,7 @@ module Ww::ML
       io.write_byte(to_hex(digit1))
     end
 
-    io << '∥'
+    io << '⟭'
   end
 
   # https://github.com/crystal-lang/crystal/blob/a3178c32b00565fff87ec3375882bfd42a7cb11c/src/slice.cr#L794-L796

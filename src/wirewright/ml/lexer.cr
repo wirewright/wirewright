@@ -619,33 +619,33 @@ module Ww::ML
     end
 
     private def blob : TxnResponse
-      unless past?('∥')
+      unless past?('⟬')
         return revert
       end
 
-      # ∥⏏dead beef∥
+      # ⟬⏏dead beef⟭
       text, blob = view_and_object do
         Term::Blob.build(classify: true) do |io|
           buffer = Pf::Kit.stack_array(Char, 2)
 
           loop do
             case
-            when ahead == '∥'
-              # ∥dead beef⏏∥
+            when ahead == '⟭'
+              # ⟬dead beef⏏⟭
               unless buffer.empty?
-                raise "missing digits in blob: size must be even, use zero to pad (e.g. `∥ab c⏏∥` -> `∥ab c0∥`)", ahead1.before_begin
+                raise "missing digits in blob: size must be even, use zero to pad (e.g. `⟬ab c⏏⟭` -> `⟬ab c0⟭`)", ahead1.before_begin
               end
 
               forward
-              # ∥dead beef∥⏏
+              # ⟬dead beef⟭⏏
               break
             when past?(&.space?)
-              # ∥dead ⏏beef∥
+              # ⟬dead ⏏beef⟭
             when ahead.hexdigit?
-              # ∥⏏dead beef∥  ∥d⏏ead beef∥  ∥de⏏ad beef∥  . . .
+              # ⟬⏏dead beef⟭  ⟬d⏏ead beef⟭  ⟬de⏏ad beef⟭  . . .
               buffer << ahead.chr
               if buffer.size == 2
-                # ∥de⏏ad beef∥  ∥dead⏏ beef∥  ∥dead be⏏ef∥  . . .
+                # ⟬de⏏ad beef⟭  ⟬dead⏏ beef⟭  ⟬dead be⏏ef⟭  . . .
                 digit0 = buffer.unsafe_fetch(0).to_u8(base: 16)
                 digit1 = buffer.unsafe_fetch(1).to_u8(base: 16)
                 byte = (digit0 << 4) | digit1
@@ -656,7 +656,7 @@ module Ww::ML
 
               forward
             else
-              raise "expected hex digit(s) or `∥` to end the blob"
+              raise "expected hex digit(s) or `⟭` to end the blob"
             end
           end
 

@@ -87,9 +87,9 @@ module Ww::ML
     # Memory is cheap these days so we can afford this monstrosity.
     TABLE = Slice(Rune).new(0xd7ff + 1) do |index|
       case chr = index.unsafe_chr
-      when '(', '[', '{', '⟨', '"', '⎡', '⸢', '⸨', '⟦', '⸤', '⸍', '∥'
+      when '(', '[', '{', '⟨', '"', '⎡', '⸢', '⸨', '⟦', '⸤', '⸍', '⟬'
         new(:paired_left, chr)
-      when ')', ']', '}', '⟩', '⎤', '⸣', '⸩', '⟧', '⸥', '⸝'
+      when ')', ']', '}', '⟩', '⎤', '⸣', '⸩', '⟧', '⸥', '⸝', '⟭'
         new(:paired_right, chr)
       when ' ', '\t', '\r'
         new(:hspace, chr)

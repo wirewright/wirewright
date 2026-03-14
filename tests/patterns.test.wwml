@@ -18,15 +18,15 @@
 
 ;; Typecheck
 (group
-  (pattern _ (+ 1 "John Doe" qux true () ∥feed∥))
-  (pattern _number (+ 1) (- "John Doe" qux true () ∥feed∥))
-  (pattern _string (+ "John Doe") (- 1 qux true () ∥feed∥))
-  (pattern _symbol (+ qux) (- 1 "John Doe" true () ∥feed∥))
-  (pattern _boolean (+ true false) (- 1 "John Doe" qux () ∥feed∥))
+  (pattern _ (+ 1 "John Doe" qux true () ⟬feed⟭))
+  (pattern _number (+ 1) (- "John Doe" qux true () ⟬feed⟭))
+  (pattern _string (+ "John Doe") (- 1 qux true () ⟬feed⟭))
+  (pattern _symbol (+ qux) (- 1 "John Doe" true () ⟬feed⟭))
+  (pattern _boolean (+ true false) (- 1 "John Doe" qux () ⟬feed⟭))
   (pattern _dict
     (+ () (1) {x: "John Doe"} (qux 1 x: "John Doe"))
-    (- 1 "John Doe" qux true ∥feed∥))
-  (pattern _blob (+ ∥feed∥) (- 1 "John Doe" qux () true false)))
+    (- 1 "John Doe" qux true ⟬feed⟭))
+  (pattern _blob (+ ⟬feed⟭) (- 1 "John Doe" qux () true false)))
 
 ;; %atom
 (pattern (%atom)
@@ -112,13 +112,13 @@
 ;; %mime
 (pattern (%mime "text/plain" _)
   (- 1 "John Doe" qux () true false)
-  (+ ∥feed∥))
+  (+ ⟬feed⟭))
 
 ;; %mime
 (pattern (%mime "image/png" _)
   (- 1 "John Doe" qux () true false)
-  (- ∥feed∥)
-  (+ ∥89 50 4e 47 0d 0a 1a 0a 00 00 00 0d 49 48 44 52 00 00 00 08
+  (- ⟬feed⟭)
+  (+ ⟬89 50 4e 47 0d 0a 1a 0a 00 00 00 0d 49 48 44 52 00 00 00 08
       00 00 00 08 08 02 00 00 00 4b 6d 29 dc 00 00 00 01 73 52 47
       42 01 d9 c9 2c 7f 00 00 00 04 67 41 4d 41 00 00 b1 8f 0b fc
       61 05 00 00 00 20 63 48 52 4d 00 00 7a 26 00 00 80 84 00 00
@@ -127,7 +127,7 @@
       2e 23 01 78 a5 3f 76 00 00 00 2e 49 44 41 54 08 d7 63 6c 6c
       6c 64 c0 06 98 18 70 00 26 06 06 86 fa fa 7a 34 12 8b 0e b8
       c9 50 09 b8 42 74 1d 98 4e c0 69 39 23 2e e7 02 00 ce ee 0d
-      8c bc 32 74 55 00 00 00 00 49 45 4e 44 ae 42 60 82∥))
+      8c bc 32 74 55 00 00 00 00 49 45 4e 44 ae 42 60 82⟭))
 
 ;; %partition
 (pattern (%partition p_ q_)

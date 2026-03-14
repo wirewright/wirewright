@@ -114,6 +114,8 @@ own complications.
 | `⟪`       |                   | <kbd>Compose</kbd> + <kbd>"</kbd> + <kbd>{</kbd>              | **no**                               |
 | `⟫`       |                   | <kbd>Compose</kbd> + <kbd>"</kbd> + <kbd>}</kbd>              | **no**                               |
 | `∥`       |                   | <kbd>Compose</kbd> + <kbd>\</kbd> + <kbd>\</kbd>              | **no**                               |
+| `⟬`       |                   | <kbd>Compose</kbd> + <kbd>\</kbd> + <kbd>[</kbd>              | **no**                               |
+| `⟭`       |                   | <kbd>Compose</kbd> + <kbd>\</kbd> + <kbd>]</kbd>              | **no**                               |
 
 ### XCompose
 
@@ -151,6 +153,8 @@ Here are the XCompose mappings for the table above. This should be put in `.XCom
 <Multi_key> <quotedbl> <braceleft> : "⟪"
 <Multi_key> <quotedbl> <braceright> : "⟫"
 <Multi_key> <backslash> <backslash> : "∥"
+<Multi_key> <backslash> <bracketleft> : "⟬"
+<Multi_key> <backslash> <bracketright> : "⟭"
 
 # Used sometimes in docs and comments. Not used in WwML.
 <Multi_key> <asciicircum> <asciicircum> : "⏏"
@@ -701,23 +705,23 @@ and their design and optimizations bias strongly toward Unicode. Blobs, on
 the other hand, are simply vectors of bytes, with no presuppositions about
 their content.
 
-Blobs start and end with the character `∥`. Blobs are written in hexadecimal:
-between `∥`s goes a sequence of zero or more hexadecimal *digit*s. Whitespace
-can be used to delimit the digits into *digit blocks*.
+Blobs start with `⟬` and end `⟭`. Blobs are written in hexadecimal: between `⟬⟭`s goes
+a sequence of zero or more hexadecimal *digit*s. Whitespace can be used to delimit
+digits into *digit blocks*.
 
 ```wwml
-∥deadbeef∥
+⟬deadbeef⟭
 
 ;; This is the recommended style. This style is also used when pretty-printing.
 ;; Byte boundaries are clearly visible.
-∥de ad be ef∥
+⟬de ad be ef⟭
 
-∥d e a d b e e f∥
+⟬d e a d b e e f⟭
 
-∥89 50 4e 47 0d 0a 1a 0a∥
+⟬89 50 4e 47 0d 0a 1a 0a⟭
 
 ;; Long sequences can be put on their own lines.
-∥89 50 4e 47 0d 0a 1a 0a 00 00 00 0d 49 48 44 52 00 00 00 20 00 00 00 19 08 02 00 00 00 df
+⟬89 50 4e 47 0d 0a 1a 0a 00 00 00 0d 49 48 44 52 00 00 00 20 00 00 00 19 08 02 00 00 00 df
  6d bb c6 00 00 00 01 73 52 47 42 01 d9 c9 2c 7f 00 00 00 04 67 41 4d 41 00 00 b1 8f 0b fc
  61 05 00 00 00 20 63 48 52 4d 00 00 7a 26 00 00 80 84 00 00 fa 00 00 00 80 e8 00 00 75 30
  00 00 ea 60 00 00 3a 98 00 00 17 70 9c ba 51 3c 00 00 00 09 70 48 59 73 00 00 0e c4 00 00
@@ -768,7 +772,7 @@ can be used to delimit the digits into *digit blocks*.
  e5 cb 97 f3 fb f0 02 2b 88 61 98 bf 3a f8 a2 1e 04 41 32 99 bc 75 eb 16 21 e4 db b7 6f bb
  bb bb a3 d1 e8 de bd 7b 9e e7 d5 6a 35 d7 75 2f fa 64 9c 59 5b fc b6 9c 2b 41 10 cc 5d 9c
  97 5e db b6 a9 fe d7 d9 e5 2f cc 19 c0 45 ff 8e 7f ca 45 18 54 f9 0f ce e6 fc d5 af 7f 05
- 7a 00 00 00 00 49 45 4e 44 ae 42 60 82∥
+ 7a 00 00 00 00 49 45 4e 44 ae 42 60 82⟭
 ```
 
 ## Dictionary terms
