@@ -2,20 +2,17 @@ module Ww
   # Blobs represent opaque binary data.
   #
   # Blobs are very much like strings except strings are used for plaintext data,
-  # and their design and optimizations bias strongly toward Unicode. Blobs, on
+  # and their design and optimizations bias strongly toward UTF-8. Blobs, on
   # the other hand, are simply vectors of bytes, with no presuppositions about
   # their content.
   #
-  # We perform cryptocraphically secure hashing (using `DIGEST_ALGORITHM`) on all
-  # blobs because having such a hash is very useful in practice, so the small added
-  # cost of computing digests on construction is justified. For example, equality
-  # and hashcode become O(1) for arbitrary blobs.
+  # We hash blobs on construction using a cryptographic hash function (see `DIGEST_ALGORITHM`),
+  # because having such a hash is very useful in practice; so the small added
+  # overhead of computing a hash is justified. For example, equality and hashcode
+  # become O(1) for arbitrary blobs.
   #
-  # Like Crystal's own `String` type, blobs store their byte content inline in memory:
-  # the payload follows directly after a small header.
-  #
-  # Unlike String, we try to use `UInt64`s instead of `Int32` for size and capacity
-  # because, compared with other types, ~4 GiB is something one can easily imagine.
+  # We use `UInt64`s instead of `Int32` for size and capacity because, unlike
+  # most other types, ~4 GiB is something one can easily imagine with blobs.
   #
   # Reference: https://github.com/crystal-lang/crystal/blob/master/src/string.cr
   @[Term::Assoc(TermType::Blob, :unsafe_as_blob)]
@@ -30,23 +27,30 @@ module Ww
     # The algorithm used to compute blob digest.
     DIGEST_ALGORITHM = Digest::SHA256
 
-    @size = uninitialized UInt64
-    @digest = uninitialized UInt8[32]
-    @classif = uninitialized Atomic(Classif?)
-    @first = uninitialized UInt8
+    @size : UInt64
+    @digest : UInt8[32]
+    @classif : Atomic(Classif?)
+    @mem : UInt8*
 
-    protected def initialize_header(@size, digester)
+    # :nodoc:
+    def initialize(@size, @mem, digester, classif = nil)
       @digest = uninitialized UInt8[32]
       digester.final(@digest.to_slice)
 
-      @classif = Atomic(Classif?).new(nil)
+      @classif = Atomic(Classif?).new(classif)
     end
 
     # Constructs a blob with the given byte *slice*.
     #
-    # WARNING: *bytes* are copied. Build blobs with `build` to avoid extra copies
-    # (i.e., start with blobs instead of converting into blobs).
+    # WARNING: If *slice* is read-only, the underlying pointer is reused; otherwise,
+    # *slice* is copied.
     def self.new(slice : Bytes, *, classif : Classif? = nil) : Blob
+      if slice.read_only?
+        digester = DIGEST_ALGORITHM.new
+        digester.update(slice)
+        return new(slice.size.to_u64, slice.to_unsafe, digester, classif)
+      end
+
       capacity = slice.size.to_u64
 
       builder = stack_alloc Builder.new(capacity)
@@ -54,30 +58,22 @@ module Ww
       builder.to_blob(classif)
     end
 
-    # :nodoc:
-    HEADER_SIZE = offsetof(self, @first)
-
     # The minimum capacity for blobs, used in methods like `build`. Blobs are
     # down-sized if possible once their real size is known; before that point,
     # however, allocations are at least of `MIN_CAPACITY` (bytes).
     MIN_CAPACITY = 32u64
 
     # The builder object lets you build a blob incrementally.
+    #
+    # Reference: https://github.com/crystal-lang/crystal/blob/master/src/string/builder.cr
     class Builder < IO
       @digester : ::Digest
       @capacity : UInt64
 
       def initialize(capacity : UInt64)
         @digester = DIGEST_ALGORITHM.new
-
         @capacity = Math.max(capacity, MIN_CAPACITY)
-
-        # TODO: Can we use malloc_atomic here somehow? Maybe we should just switch to
-        # a separate buffer approach after all? Since Classif is a reference pointing
-        # to other things, we can't use malloc_atomic right now. I'm not sure we want
-        # to strain the GC here because Blobs are the only type that can be very large.
-        @mem = GC.malloc(HEADER_SIZE + @capacity).as(UInt8*)
-
+        @mem = Pointer(UInt8).malloc(@capacity)
         @size = 0u64
       end
 
@@ -89,42 +85,40 @@ module Ww
         return if slice.empty?
 
         if @size + slice.size > @capacity
-          @capacity = (@size + slice.size) * 2
-          @mem = GC.realloc(@mem, HEADER_SIZE + @capacity).as(UInt8*)
+          # TODO: Maybe we should put some kind of cap on this one? Or would the GC blow
+          # up anyway? Can this be exploited adversarially?
+          @capacity = Math.pw2ceil(@size + slice.size)
+          @mem = @mem.realloc(@capacity)
         end
 
-        slice.copy_to(@mem.as(Blob).to_unsafe + @size, slice.size)
+        slice.copy_to(@mem + @size, slice.size)
 
         @size += slice.size
         @digester.update(slice)
       end
 
       # :nodoc:
-      def to_uninitialized_blob : Blob
+      def to_unclassified_blob : Blob
         mem = @mem
 
         # Try to reclaim some memory if capacity is bigger than what was requested
         if @size < @capacity
-          mem = GC.realloc(@mem, HEADER_SIZE + @size).as(UInt8*)
+          mem = mem.realloc(@size)
         end
 
-        Blob.set_crystal_type_id(mem)
-
-        mem.as(Blob)
+        Blob.new(@size, mem, @digester)
       end
 
       # :nodoc:
       def to_blob(classif : Classif? = nil) : Blob
-        instance = to_uninitialized_blob
-        instance.initialize_header(@size, @digester)
+        instance = to_unclassified_blob
         instance.classify!(classif)
         instance
       end
 
       # :nodoc:
       def to_classif_blob : Blob
-        instance = to_uninitialized_blob
-        instance.initialize_header(@size, @digester)
+        instance = to_unclassified_blob
         instance.classify!(classif: nil)
         instance
       end
@@ -132,8 +126,8 @@ module Ww
 
     # Yields a builder object to incrementally construct a blob.
     #
-    # WARNING: The builder must not outlive the block, as it is allocated on
-    # the stack.
+    # WARNING: The builder must not outlive the block, because it is allocated on
+    # the stack. If it does, that's UB.
     def self.build(*, capacity : UInt64 = MIN_CAPACITY, classify : Bool = false, & : Builder ->) : Blob
       builder = stack_alloc Builder.new(capacity)
       yield builder
@@ -147,7 +141,7 @@ module Ww
 
     # :nodoc:
     def to_unsafe : UInt8*
-      pointerof(@first)
+      @mem
     end
 
     # Returns the byte content of this blob.
