@@ -209,28 +209,6 @@ module Ww
   end
 
   class Term::Blob::Classif
-    # :nodoc:
-    class_getter magic_handle : LibMagic::Handle do
-      handle = LibMagic.magic_open(LibMagic::OpenFlags.mime)
-      if handle.nil?
-        raise "libmagic: could not initialize"
-      end
-
-      at_exit { LibMagic.magic_close(handle) }
-
-      LibMagic.magic_load(handle, nil)
-      if error = LibMagic.magic_error(handle)
-        raise String.new(error)
-      end
-
-      handle
-    end
-
-    # As I have absolutely no clue about what's going on inside libmagic wrt
-    # thread-safety, let's assume it's thread-unsafe and synchronize all
-    # access to it from our side.
-    @@magic_lock = Sync::Mutex.new
-
     getter media_type : Term::Str
     getter media_params : Term::Dict
 
@@ -239,11 +217,7 @@ module Ww
 
     # Constructs a classification object for *slice*.
     def self.of(slice : Bytes) : Classif?
-      mime_string = @@magic_lock.synchronize do
-        LibMagic.magic_buffer(magic_handle, slice, slice.size) || raise "libmagic: could not classify buffer"
-      end
-
-      mime = MIME::MediaType.parse(String.new(mime_string))
+      mime = Magic.mime(slice)
 
       media_type = Term[mime.media_type]
       media_params = Term::Dict.build do |commit|

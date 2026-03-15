@@ -60,7 +60,7 @@ lib LibMagic
     NO_CHECK_CDF = 262144
     # Don't check for CSV files
     NO_CHECK_CSV = 524288
-    #  Don't check tokens
+    # Don't check tokens
     NO_CHECK_TOKENS = 1048576
     # Don't check text encodings
     NO_CHECK_ENCODING = 2097152
@@ -77,20 +77,46 @@ lib LibMagic
 
   fun magic_open(flags : OpenFlags) : Handle
   fun magic_close(x0 : Handle)
-  fun magic_getpath(x0 : LibC::Char*, x1 : LibC::Int) : LibC::Char*
-  fun magic_file(x0 : Handle, x1 : LibC::Char*) : LibC::Char*
-  fun magic_descriptor(x0 : Handle, x1 : LibC::Int) : LibC::Char*
   fun magic_buffer(x0 : Handle, x1 : Void*, x2 : LibC::SizeT) : LibC::Char*
   fun magic_error(x0 : Handle) : LibC::Char*
-  fun magic_getflags(x0 : Handle) : LibC::Int
-  fun magic_setflags(x0 : Handle, x1 : LibC::Int) : LibC::Int
-  fun magic_version : LibC::Int
   fun magic_load(x0 : Handle, x1 : LibC::Char*) : LibC::Int
-  fun magic_load_buffers(x0 : Handle, x1 : Void**, x2 : LibC::SizeT*, x3 : LibC::SizeT) : LibC::Int
-  fun magic_compile(x0 : Handle, x1 : LibC::Char*) : LibC::Int
-  fun magic_check(x0 : Handle, x1 : LibC::Char*) : LibC::Int
-  fun magic_list(x0 : Handle, x1 : LibC::Char*) : LibC::Int
-  fun magic_errno(x0 : Handle) : LibC::Int
-  fun magic_setparam(x0 : Handle, x1 : LibC::Int, x2 : Void*) : LibC::Int
-  fun magic_getparam(x0 : Handle, x1 : LibC::Int, x2 : Void*) : LibC::Int
+end
+
+# Bindings to libmagic.
+module Ww::Magic
+  extend self
+
+  # As I have absolutely no clue about what's going on inside libmagic wrt
+  # thread-safety, let's assume it's thread-unsafe and synchronize all
+  # access to it from our side.
+  @@lock = Sync::Mutex.new
+  @@handle : LibMagic::Handle?
+
+  # WARNING: Assumes @@lock is taken.
+  private def handle
+    @@handle ||= begin
+      handle = LibMagic.magic_open(LibMagic::OpenFlags.mime)
+      if handle.nil?
+        abort "libmagic: could not initialize"
+      end
+
+      at_exit { LibMagic.magic_close(handle) }
+
+      LibMagic.magic_load(handle, nil)
+      if error = LibMagic.magic_error(handle)
+        abort String.new(error)
+      end
+
+      handle
+    end
+  end
+
+  # Detects the MIME type of *slice*.
+  def mime(slice : Bytes) : MIME::MediaType
+    string = @@lock.synchronize do
+      LibMagic.magic_buffer(handle, slice, slice.size) || raise "libmagic: could not classify buffer"
+    end
+
+    MIME::MediaType.parse(String.new(string))
+  end
 end
