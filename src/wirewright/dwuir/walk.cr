@@ -4,7 +4,6 @@ module Ww::DwUIR
     view : View,
     layer : LayerRank,
     tf : Tf,
-    opacity : Float32,
     pivot : Point,
     bounds : Rect,
     keypath : Term::Dict?
@@ -32,7 +31,6 @@ module Ww::DwUIR
       view: viewport.inf? ? Slice(Quad).empty : Slice[viewport.quad],
       layer: LayerRank[],
       tf: Tf.new,
-      opacity: 1.0f32,
       pivot: Point.new(0, 0),
       bounds: Rect.empty,
       keypath: keypath,
