@@ -5,13 +5,9 @@ module Ww::DwUIR
   struct PvgPlatform
     include Platform
 
-    def initialize(@files : FileServer)
+    def initialize
       @fonts = PvgFontFaceStore.new
-      @images = PvgImageServer.new(files)
-    end
-
-    def files : FileServer
-      @files
+      @images = PvgImageServer.new
     end
 
     def pencils : PencilServer

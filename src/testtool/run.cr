@@ -569,7 +569,7 @@ module Testtool
 
       warn("Oops, images are different. Writing artifact to #{tempdst}")
 
-      assets.files.write(tempdst, ppm)
+      PathServer.write(tempdst, Term::Blob.new(ppm))
     end
 
     complaints << complaint("Images are different")

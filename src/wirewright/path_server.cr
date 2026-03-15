@@ -44,10 +44,11 @@ module Ww
     defrecord DirPresent, name : String
     defrecord DirAbsent, name : String
 
-    alias Listing = DirListing | FileListing
+    alias Listing = DirListing | FileListing | LargeFileListing
 
     defrecord DirListing, timestamp : Time, entries : Array(DirListingEntry)
     defrecord FileListing, timestamp : Time, content : Term::Blob
+    defrecord LargeFileListing, timestamp : Time, digest : Bytes, bytesize : Int64
 
     alias DirListingEntry = FileEntry | DirEntry
 
@@ -222,17 +223,29 @@ module Ww
                 listing = DirListing.new(info.modification_time, entries)
               elsif info.file?
                 if info.size > SAFE_FILE_BYTESIZE
-                  Log.info { "ignoring #{path} because it exceeds safe file size of #{SAFE_FILE_BYTESIZE.humanize_bytes}" }
-                  next
-                end
+                  digest = File.open(path, "rb") do |src|
+                    buffer = Bytes.new(8192)
 
-                content = File.open(path, "rb") do |src|
-                  Term::Blob.build(classify: true) do |dst|
-                    IO.copy(src, dst)
+                    Term::Blob::DIGEST_ALGORITHM.digest do |dst|
+                      loop do
+                        size = src.read(buffer)
+                        break if size.zero?
+
+                        dst.update(buffer.trim(size))
+                      end
+                    end
                   end
-                end
 
-                listing = FileListing.new(info.modification_time, content)
+                  listing = LargeFileListing.new(info.modification_time, digest, info.size)
+                else
+                  content = File.open(path, "rb") do |src|
+                    Term::Blob.build(classify: true) do |dst|
+                      IO.copy(src, dst)
+                    end
+                  end
+
+                  listing = FileListing.new(info.modification_time, content)
+                end
               else
                 next
               end
@@ -528,6 +541,8 @@ module Ww
           return listing.content
         in DirListing
           raise Error.new("could not read: path is a directory: #{path}")
+        in LargeFileListing
+          raise Error.new("file exceeds safe file size of #{SAFE_FILE_BYTESIZE.humanize_bytes}")
         in Absent
           raise Error.new("could not read: file absent: #{path}")
         end
@@ -548,7 +563,6 @@ module Ww
     # NOTE: This function may block for an indefinite amount of time, since it
     # waits for the proof that the file really was written to disk.
     def write(path : Path, content : Term::Blob) : Nil
-      digest = Digest::SHA256.hexdigest(content)
       epoch = 0u64
 
       loop do
@@ -559,9 +573,11 @@ module Ww
         case view
         in Wait, Absent
         in FileListing
-          return if digest == view.digest
+          return if content == view.content
         in DirListing
           raise Error.new("path is a directory")
+        in LargeFileListing
+          return if content.digest == view.digest
         end
 
         epoch = wait(epoch)
@@ -585,7 +601,7 @@ module Ww
 
         view = view(path)
         case view
-        in Wait, Listing
+        in Wait, Listing, TooLarge
           wait
         in Absent
           return # ok
@@ -603,7 +619,7 @@ module Ww
     end
 
     # Converts *listing* to a term.
-    def render(listing : FileListing | DirListing, *, presentation : Presentation = :binary) : Term
+    def render(listing : Listing, *, presentation : Presentation = :binary) : Term
       render(listing, presentation)
     end
 
@@ -615,6 +631,11 @@ module Ww
       end
 
       Term.of(:file, content, timestamp: listing.timestamp.to_s)
+    end
+
+    # :nodoc:
+    def render(listing : LargeFileListing, presentation : Presentation) : Term
+      Term.of(:file, timestamp: listing.timestamp.to_s, digest: listing.digest)
     end
 
     # :nodoc:

@@ -28,7 +28,6 @@ module Testtool
     theme : Microfold::Theme?,
     editR : Rewriter?,
     uiR : Rewriter?,
-    files : FileServer,
     dw : Channel(DwUIR::Request)
 
   alias AssertionNode = AssertionLoc | AssertionTerm | AssertionFn

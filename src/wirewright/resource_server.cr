@@ -2,7 +2,7 @@ module Ww
   # The main idea behind Wirewright's ResourceServer is that it should provide
   # a dirt cheap polling API for fetching resources (described by `Query`).
   #
-  # Consider `ResourceServer.get_string(ResourceServer.file("/tmp/foo.wwml"))`.
+  # Consider `ResourceServer.read_string(ResourceServer.file("/tmp/foo.wwml"))`.
   # ResourceServer lets you invoke this as many times as you want -- say, every
   # microsecond. ResourceServer acts as a "cushion" for such polls; so clients
   # simply poll, whereas under the hood, we are using inotify, caching, exponential
@@ -52,6 +52,30 @@ module Ww
     defrecord CodepointsQuery, family : String
     defrecord RemoteQuery, uri : URI
 
+    def runtime(path : Path) : RuntimeQuery
+      RuntimeQuery.new(path)
+    end
+
+    def codex(name : String) : CodexQuery
+      CodexQuery.new(path)
+    end
+
+    def file(path : Path) : FileQuery
+      FileQuery.new(path)
+    end
+
+    def font(family : String, weight : Int32, italic : Bool) : FontQuery
+      FontQuery.new(family, weight, italic)
+    end
+
+    def codepoints(family : String) : CodepointsQuery
+      CodepointsQuery.new(family)
+    end
+
+    def remote(uri : URI) : RemoteQuery
+      RemoteQuery.new(uri)
+    end
+
     alias Response = Present | Absent | Wait
 
     defrecord Present, content : Term::Blob
@@ -74,6 +98,8 @@ module Ww
         Absent.new(detail: "path does not exist")
       in PathServer::DirListing
         Absent.new(detail: "path is a directory")
+      in PathServer::LargeFileListing
+        Absent.new(detail: "file at path is too large to load into memory")
       in PathServer::FileListing
         Present.new(response.content)
       end
@@ -235,33 +261,36 @@ module Ww
     class Error < Exception
     end
 
-    # NOTE: This function exists for compatibility reasons and experimentation. By
-    # blocking, it goes against the very philosophy `ResourceServer` is trying to
-    # implement. Try not to use it.
-    def get_blob(query : Query) : Term::Blob
+    def wait(epoch : UInt64) : UInt64
+      @@changed.wait(epoch)
+    end
+
+    def wait(query : Query) : Present | Absent
       epoch = 0u64
 
       loop do
         case response = get(query)
         in Wait
           epoch = wait(epoch)
-        in Absent
-          raise Error.new(response.detail)
-        in Present
-          return response.content
+        in Present, Absent
+          return response
         end
       end
     end
 
-    # :ditto:
-    def get_string(query : Query) : String
-      blob = get_blob(query)
-
-      String.new(blob.bytes)
+    def read_blob(query : Query) : Term::Blob
+      case response = wait(query)
+      in Present
+        response.content
+      in Absent
+        raise Error.new(response.detail)
+      end
     end
 
-    def wait(epoch : UInt64) : UInt64
-      @@changed.wait(epoch)
+    def read_string(query : Query) : String
+      blob = read_blob(query)
+
+      String.new(blob.bytes)
     end
 
     # Parses *term* into a query.

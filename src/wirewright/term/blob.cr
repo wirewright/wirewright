@@ -151,9 +151,14 @@ module Ww
     end
 
     # Returns the byte content of this blob.
+    def to_slice : Bytes
+      Slice.new(to_unsafe, @size, read_only: true)
+    end
+
+    # :ditto:
     @[Dncast]
     def bytes : Bytes
-      Slice.new(to_unsafe, @size, read_only: true)
+      to_slice
     end
 
     # Returns the classification of this blob.

@@ -15,32 +15,32 @@ module Testtool
 
   # Parses and resolves a comparand *term*.
   #
-  # May raise `FileServerError`.
+  # May raise `ResourceServer::Error`.
   # May raise `ArgumentError`.
-  def comparand(files : FileServer, base : Path, term : Term) : Comparand
+  def comparand(base : Path, term : Term) : Comparand
     Term.case(term, engine: M0) do
       matchpi %{(ml path_string)}, path: Path do
-        MLdoc.new(files.read_string(base / path))
+        MLdoc.new(pipe(base / path, ResourceServer.file, ResourceServer.read_string))
       end
 
       matchpi %{(lr.gz path_string)}, path: Path do
-        LRdoc.new(files.read(base / path, compression: :gzip))
+        LRdoc.new(pipe(base / path, ResourceServer.file, ResourceServer.read_blob, Compress::Gzip.decompress))
       end
 
       matchpi %{(dwuir path_string ¦ vars_)}, path: Path, vars: Term::Dict do
-        DwDoc.new(files.read_string(base / path), vars, temp: "dwuir")
+        DwDoc.new(pipe(base / path, ResourceServer.file, ResourceServer.read_string), vars, temp: "dwuir")
       end
 
       matchpi %{(uir path_string ¦ globals_)}, path: Path, globals: Term::Dict do
-        UIRdoc.new(files.read_string(base / path), globals, temp: "uir")
+        UIRdoc.new(pipe(base / path, ResourceServer.file, ResourceServer.read_string), globals, temp: "uir")
       end
 
       matchpi %{(ppm path_string)}, path: Path do
-        Ppm.new(files.read(base / path))
+        Ppm.new(pipe(base / path, ResourceServer.file, ResourceServer.read_blob).to_slice)
       end
 
       matchpi %{(ppm.gz path_string)}, path: Path do
-        Ppm.new(files.read(base / path, compression: :gzip))
+        Ppm.new(pipe(base / path, ResourceServer.file, ResourceServer.read_blob, Compress::Gzip.decompress))
       end
     end
   end

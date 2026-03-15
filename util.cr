@@ -4218,14 +4218,15 @@ def sync_rand(arg)
 end
 
 module ::Compress::Gzip
-  def self.compress(data : Bytes) : Bytes
-    io = IO::Memory.new(data)
-    Compress::Gzip::Reader.open(io, &.getb_to_end)
+  def self.compress(data) : Bytes
+    io = IO::Memory.new
+    Compress::Gzip::Writer.open(io, level: level, &.write(data.to_slice))
+    io.to_slice
   end
 
-  def self.decompress(data : Bytes, *, level = BEST_SPEED) : Bytes
-    io = IO::Memory.new
-    Compress::Gzip::Writer.open(io, level: level, &.write(content))
+  def self.decompress(data, *, level = BEST_SPEED) : Bytes
+    io = IO::Memory.new(data.to_slice)
+    Compress::Gzip::Reader.open(io, &.getb_to_end)
   end
 end
 
@@ -4277,5 +4278,12 @@ struct ::Path
     end
 
     !(behind == '.' || behind.in?(separators))
+  end
+end
+
+class ::File
+  def self.tempfile(random : ::Random, *, tempdir : String | Path = Dir.tempdir)
+    fileno, path, blocking = Crystal::System::File.mktemp(prefix: nil, suffix: nil, dir: tempdir.to_s, random: random)
+    new(path, fileno, blocking: blocking)
   end
 end

@@ -195,12 +195,14 @@ module Ww
   # going to run, but it should still be in the microsceond range in worst cases).
   #
   # ```
+  # epoch = 0u64
+  #
   # pp PathMonitor.status(Path["/tmp/a"]) # => PathMonitor::Wait()
   #
   # # You can use wait to wait for the next status change if you don't want
   # # to poll; but it's as coarse as it gets. We expect event or rewrite
   # # loops to call wait() on fixpoint and resume polling for status() afterwards.
-  # PathMonitor.wait
+  # epoch = PathMonitor.wait(epoch)
   #
   # pp PathMonitor.status(Path["/tmp/a"]) # => PathMonitor::Absent()
   #
@@ -214,12 +216,12 @@ module Ww
   #   File.write(Path["/tmp/a"], "Bye World")
   # end
   #
-  # PathMonitor.wait
+  # epoch = PathMonitor.wait(epoch)
   #
   # pp PathMonitor.status(Path["/tmp/a"])
   # # => PathMonitor::Present(@version=0) [due to create with "Hello World"]
   #
-  # PathMonitor.wait
+  # epoch = PathMonitor.wait(epoch)
   #
   # pp PathMonitor.status(Path["/tmp/a"])
   # # => PathMonitor::Present(@version=1) [due to update with "Bye World"]

@@ -5,9 +5,6 @@ module Ww::DwUIR
   # Platforms also host / point to a suite of related objects, such as the pencil
   # server `pencils` or the image server `images`.
   module Platform
-    # Returns the file server associated with this platform.
-    abstract def files : FileServer
-
     # Returns a proc that handles pencil requests.
     abstract def pencils : PencilServer
 

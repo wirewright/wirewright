@@ -141,7 +141,7 @@ module Testtool
   end
 
   # Resolves variables defined in *index*.
-  def vars(files : FileServer, index : Term::Dict, base : Path) : Hash(Term, Term)
+  def vars(index : Term::Dict, base : Path) : Hash(Term, Term)
     hash = {} of Term => Term
     return hash unless vars = index[:vars]?
     return hash unless vars.type.dict?
@@ -151,8 +151,13 @@ module Testtool
         matchpi %{(json (file path_string))}, path: Path do
           log("Reading JSON from #{(base / path).normalize} for var #{var}")
 
-          hash[var] = Term.of(JSON.parse(files.read_string(base / path)))
-        rescue e : FileServerError | JSON::Error
+          hash[var] = pipe(base / path,
+            ResourceServer.file,
+            ResourceServer.read_string,
+            JSON.parse,
+            Term.of,
+          )
+        rescue e : ResourceServer::Error | JSON::Error
           warn("Ignoring var #{var}: #{e.message || "???"}")
         end
 
@@ -170,7 +175,7 @@ module Testtool
   end
 
   # Constructs a Microfold theme based on definitions from *index*, if any.
-  def theme?(files : FileServer, index : Term::Dict, base : Path) : Microfold::Theme?
+  def theme?(index : Term::Dict, base : Path) : Microfold::Theme?
     theme_path = index[:microfold, :theme]?.try(&.to?(Path))
     theme_rem = index[:microfold, :rem]?.try(&.as_n?)
     return unless theme_path && theme_rem
@@ -178,8 +183,14 @@ module Testtool
     log("Loading Microfold theme #{theme_path}, rem: #{theme_rem}")
 
     begin
-      Microfold.theme(ML.document(files.read_string(base / theme_path)), rem: theme_rem)
-    rescue e : FileServerError
+      pipe(
+        base / theme_path,
+        ResourceServer.file,
+        ResourceServer.read_string,
+        ML.document,
+        Microfold.theme(rem: theme_rem),
+      )
+    rescue e : ResourceServer::Error
       err(e.message || "???")
     rescue e : ML::SyntaxError
       err("Syntax error in #{(base / theme_path).normalize}")
@@ -188,22 +199,32 @@ module Testtool
   end
 
   # Constructs an editR rewriter based on definitions from *index*, if any.
-  def editR?(files : FileServer, index : Term::Dict, base : Path) : Rewriter?
+  def editR?(index : Term::Dict, base : Path) : Rewriter?
     return unless path = index[:editR, :codex]?.try(&.to?(Path))
 
     log("Loading editR codex at #{(base / path).normalize}")
 
-    codex = ML.document(files.read_string(base / path))
+    codex = pipe(base / path,
+      ResourceServer.file,
+      ResourceServer.read_string,
+      ML.document,
+    )
+
     Soma.editR(codex)
   end
 
   # Constructs a (graphics) uiR rewriter based on definitions from *index*, if any.
-  def uiR?(files : FileServer, index : Term::Dict, dw : Channel(DwUIR::Request), base : Path) : Rewriter?
+  def uiR?(index : Term::Dict, dw : Channel(DwUIR::Request), base : Path) : Rewriter?
     return unless path = index[:uiR, :codex]?.try(&.to?(Path))
 
     log("Loading uiR codex at #{(base / path).normalize}")
 
-    ruleset = Ruleset.select(Ruleset::DEFAULT_SELECTOR, ML.document(files.read_string(base / path)))
+    ruleset = pipe(base / path,
+      ResourceServer.file,
+      ResourceServer.read_string,
+      ML.document,
+      Ruleset.select,
+    )
 
     metricsR = callR do |term|
       reply = Sync::Future(Term).new
@@ -216,8 +237,8 @@ module Testtool
 
   # Constructs `AssertionAssets` based on *conf* and contents of the index
   # file, *index*. May not run the block in case of an error.
-  def assets(files : FileServer, conf : ArgConf, index : Term::Dict, & : AssertionAssets ->) : Nil
-    dw_platform = DwUIR::PvgPlatform.new(files)
+  def assets(conf : ArgConf, index : Term::Dict, & : AssertionAssets ->) : Nil
+    dw_platform = DwUIR::PvgPlatform.new
     dw_compositor = DwUIR::Compositor.new
     dw_ctx = DwUIR::Viewer::Context.new(dw_compositor, dw_platform)
 
@@ -226,26 +247,26 @@ module Testtool
     DwUIR.serve(dw_ctx) do |dw|
       log("DwUIR server running")
 
-      vars = vars(files, index, base: conf.tests_path)
+      vars = vars(index, base: conf.tests_path)
 
       if conf.assets
-        unless theme = theme?(files, index, base: conf.tests_path)
+        unless theme = theme?(index, base: conf.tests_path)
           err("Microfold theme path and rem not recognized or undefined, aborting")
           return
         end
 
-        unless editR = editR?(files, index, base: conf.tests_path)
+        unless editR = editR?(index, base: conf.tests_path)
           err("editR codex not recognized or undefined, aborting")
           return
         end
 
-        unless uiR = uiR?(files, index, dw, base: conf.tests_path)
+        unless uiR = uiR?(index, dw, base: conf.tests_path)
           err("uiR codex not recognized or undefined, aborting")
           return
         end
       end
 
-      yield AssertionAssets.new(vars, theme, editR, uiR, files, dw)
+      yield AssertionAssets.new(vars, theme, editR, uiR, dw)
     end
   end
 
@@ -258,18 +279,21 @@ module Testtool
 
   # **Entrypoint to testtool.** Returns when the testtool finishes.
   def main(argv : Array(String)) : Nil
-    files = SyncDisk.new(Path[Dir.current])
-
-    main(files, argparse(argv))
+    main(argparse(argv))
   end
 
-  def main(files : FileServer, conf : ArgConf) : Nil
+  def main(conf : ArgConf) : Nil
     banner
 
     log("Reading #{conf.index_path}")
 
     begin
-      index, indexsrc = ML.document_and_srcmap(files.read_string(conf.index_path), filename: conf.index_path.to_s)
+      index, indexsrc = pipe(conf.index_path,
+        ResourceServer.file,
+        ResourceServer.read_string,
+        ML.document_and_srcmap(filename: conf.index_path.to_s),
+      )
+
       index = index.as_d
     rescue e : File::Error
       err(e.message || "???")
@@ -280,18 +304,18 @@ module Testtool
       return
     end
 
-    outline = outline(files, conf, index, indexsrc)
+    outline = outline(conf, index, indexsrc)
 
-    assets(files, conf, index) do |assets|
+    assets(conf, index) do |assets|
       main(assets, conf, outline)
     end
   end
 
-  def main(files : FileServer, argp : ArgErr) : Nil
+  def main(argp : ArgErr) : Nil
     err(argp.detail)
   end
 
-  def main(files : FileServer, argp : ArgHelp) : Nil
+  def main(argp : ArgHelp) : Nil
     help
   end
 
@@ -338,7 +362,7 @@ module Testtool
     hr
 
     if stats_path = conf.stats_path
-      wstat(assets.files, stats_path, tests, test_results)
+      wstat(stats_path, tests, test_results)
     end
 
     mmt = test_results.sum(&.mmt) + comparison_results.sum(&.mmt)
@@ -389,7 +413,7 @@ module Testtool
     end
   end
 
-  def outline(files : FileServer, conf : ArgConf, index : Term::Dict, indexsrc : ML::SrcMap) : Array(Topic)
+  def outline(conf : ArgConf, index : Term::Dict, indexsrc : ML::SrcMap) : Array(Topic)
     outline = [] of Topic
 
     index.items.each_with_index do |item, index|
@@ -408,8 +432,12 @@ module Testtool
             log("Reading #{path}")
 
             begin
-              document, documentsrc = ML.document_and_srcmap(files.read_string(path), filename: path.to_s)
-            rescue e : FileServerError
+              document, documentsrc = pipe(path,
+                ResourceServer.file,
+                ResourceServer.read_string,
+                ML.document_and_srcmap(filename: path.to_s),
+              )
+            rescue e : ResourceServer::Error
               warn(e.message || "???")
               next
             rescue e : ML::SyntaxError
@@ -431,9 +459,9 @@ module Testtool
             next unless enabled?(conf, tags)
 
             begin
-              l = comparand(files, conf.tests_path, a)
-              r = comparand(files, conf.tests_path, b)
-            rescue e : FileServerError
+              l = comparand(conf.tests_path, a)
+              r = comparand(conf.tests_path, b)
+            rescue e : ResourceServer::Error
               warn("Invalid comparison: #{e.message || "???"}")
             rescue e : ArgumentError
               warn("Invalid comparison: #{e.message}")
@@ -481,7 +509,7 @@ module Testtool
   end
 
   # Writes statistics for *tests* and their *results* to *path*.
-  def wstat(files : FileServer, path : Path, tests : Array(Assertion(Test)), results : Array(AssertionResult)) : Nil
+  def wstat(path : Path, tests : Array(Assertion(Test)), results : Array(AssertionResult)) : Nil
     log("Writing stats CSV to #{path}")
 
     # Sort by measurement score.
@@ -489,7 +517,7 @@ module Testtool
     indexed.sort_by! { |result, _| result.mmt }
 
     # Write file.
-    files.write(path) do |io|
+    blob = Term::Blob.build do |io|
       counter = IO::BytesizeCounter.new
       sink = IO::MultiWriter.new(io, counter)
 
@@ -504,7 +532,9 @@ module Testtool
         end
       end
 
-      log("Wrote #{counter.bytesize.humanize_bytes}")
+      log("Writing #{counter.bytesize.humanize_bytes}")
     end
+
+    PathServer.write(path, blob)
   end
 end

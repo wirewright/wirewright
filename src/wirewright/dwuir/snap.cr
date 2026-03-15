@@ -70,27 +70,4 @@ module Ww::DwUIR
     image = DwUIR.show(ctx, conf)
     format.call(io, image)
   end
-
-  # Captures a snapshot based on *conf*, and writes the resulting image
-  # to *path* (accessed through the given file server *files*).
-  def snap(ctx : Viewer::Context, conf : ShowConf, path : Path) : Nil
-    extension = path.extension
-    compression = FileServer::WriteCompression.from_file_extension(extension)
-    unless compression.none?
-      extension = Path[path.stem].extension
-    end
-
-    if extension.prefixed_by?('.')
-      format = SnapFormat[extension.lchop]?
-    end
-
-    unless format
-      raise SnapError.new("unsupported image extension `#{extension}`; supported extensions are: #{SnapFormat.supported.join(", ")}")
-      return
-    end
-
-    ctx.platform.files.write(path, compression: compression.best) do |io|
-      snap(io, ctx, conf, format)
-    end
-  end
 end

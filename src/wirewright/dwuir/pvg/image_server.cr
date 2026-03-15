@@ -5,11 +5,7 @@ module Ww::DwUIR
 
     Log = ::Log.for(self)
 
-    # Constructs an image server.
-    #
-    # The file server at *files* lets the image server read the paths that
-    # the user provides.
-    def initialize(@files : FileServer)
+    def initialize
       @cache = {} of Term => PvgImage
     end
 
@@ -18,10 +14,11 @@ module Ww::DwUIR
         matchpi %{(file path_string)} do |path|
           path = Path[path.to(String)]
 
-          begin
-            data = @files.read(path)
-          rescue e : FileServerError
-            raise ImageServerError.new("could not read image file", cause: e)
+          case response = ResourceServer.wait(ResourceServer.file(path))
+          in ResourceServer::Present
+            data = response.content.bytes
+          in ResourceServer::Absent
+            raise ImageServerError.new("could not read image file: #{response.detail}")
           end
 
           case path.extension
