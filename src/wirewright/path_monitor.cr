@@ -258,8 +258,7 @@ module Ww
     @@ages = {} of Path => Int32
     @@finalizers = [] of (Array(Path) ->)
 
-    @@wait_lock = Sync::Mutex.new
-    @@wait_cv = Sync::ConditionVariable.new(@@wait_lock)
+    @@changed = BlockingSignal.new
 
     private def ensure_server_running! : Nil
       return if @@running.swap(true)
@@ -366,9 +365,9 @@ module Ww
           end
 
           if any_notifies
-            Log.trace { "msgloop: wait_cv broadcast" }
+            Log.trace { "msgloop: wake up waiters" }
 
-            @@wait_cv.broadcast
+            @@changed.call
           end
         ensure
           commands.clear
@@ -427,20 +426,20 @@ module Ww
     private def handle(state : MsgState, msg : PathsRemoved, &sink : Command ->) : Nil
       msg.paths.each do |path|
         if state.polling.delete(path)
-          Log.debug { "poll: removing #{path}" }
+          Log.debug { "poll: unwatch #{path}" }
 
           state.polling_modified_at.delete(path)
           next
         end
 
-        Log.debug { "inotify: removing #{path}" }
+        Log.debug { "inotify: unwatch #{path}" }
 
         ref = state.watching.delete!(path)
 
         begin
           Inotify.unwatch(state.ictx, ref)
         rescue e : Inotify::Error
-          Log.error(exception: e) { "unexpected inotify error while removing watch" }
+          Log.error(exception: e) { "unexpected inotify error in unwatch" }
         end
       end
     end
@@ -558,8 +557,8 @@ module Ww
       pruned = [] of Path
 
       @@ages.each do |path, age|
-        unless age > MAX_AGE_HBS
-          @@ages[path] = age + 1
+        unless age.zero?
+          @@ages[path] = age - 1
           next
         end
 
@@ -599,16 +598,18 @@ module Ww
     # now. The caller should call later to get a `Status`.
     defrecord Wait
 
-    # Returns the status of *path*. The returned status is a snapshot of the file
-    # system at some unspecified point in time. The status is *eventually consistent*:
-    # it may not reflect the instantaneous state of the file system.
+    # Returns the status of *path*. The returned status is based on the latest
+    # snapshot of the file system at some unspecified point in the past. `PathMonitor`
+    # makes such snapshots in response to changes on the disk. The status is thus
+    # *eventually consistent*. It is not guaranteed to reflect the instantaneous
+    # state of the file system.
     def status(path : Path) : Status | Wait
       ensure_server_running!
 
-      path = path.normalize
+      path = path.normal? ? path : path.normalize
 
       @@lock.synchronize do
-        @@ages[path] = 0
+        @@ages[path] = Math.max(@@ages[path]? || 0, MAX_AGE_HBS)
 
         if status = @@statuses[path]?
           if status.is_a?(Garbage)
@@ -630,16 +631,42 @@ module Ww
       end
     end
 
+    # If *keepalive* is `true`, decay and garbage collection are going to be
+    # effectively disabled for *path*, meaning we guarantee to keep the latest
+    # snapshot of its status in memory up-to-date. Use this parameter carefully,
+    # as you are basically creating a resource that cannot be freed other than
+    # by terminating the application.
+    def keepalive!(path : Path) : Nil
+      @@lock.synchronize do
+        @@ages[path] = Int32::MAX
+      end
+    end
+
     # Blocks the current fiber until the status of some path changes, or until
     # garbage collection marks some path as garbage, or spuriously.
     #
     # In all cases, callers should call `status` to learn about the change or
     # resurrect paths they care about until it's too late. We assume each caller
     # knows what they're waiting for.
-    def wait : Nil
-      @@wait_lock.synchronize { @@wait_cv.wait }
+    #
+    # *epoch* is the waiter's local memory of the current epoch. It is needed because
+    # the waiter needs to know whether `PathMonitor` changed. The latter notifies about
+    # changes by effectively incrementing a version number. Thus, *epoch* is really
+    # the last such version number the waiter has seen. *epoch* should be initialized
+    # to zero. This function returns the next epoch to store. So the pattern
+    # becomes, roughly:
+    #
+    # ```
+    # epoch = 0u64
+    # # ...
+    # epoch = PathMonitor.wait(epoch)
+    # # ...
+    # ```
+    def wait(epoch : UInt64) : UInt64
+      @@changed.wait(epoch)
     end
 
+    # :nodoc:
     def paths_finalize(&fn : Array(Path) ->) : ->
       @@lock.synchronize { @@finalizers << fn }
 

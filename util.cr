@@ -3195,6 +3195,10 @@ class SyncCache(K, V)
   include ICache(K, V)
 
   def initialize(@capacity : Int32, *, preallocate : Bool, byref : Bool = false)
+    {% if V.nilable? %}
+      {% @type.raise "cannot use nilable value type in SyncCache yet" %}
+    {% end %}
+
     if preallocate
       @data = Hash(K, V).new(initial_capacity: @capacity)
     else
@@ -3695,17 +3699,16 @@ end
 
 class BlockingSignal
   def initialize
-    @pending = false
+    @epoch = 0u64
     @mutex = Sync::Mutex.new
     @cv = Sync::ConditionVariable.new(@mutex)
   end
 
-  def wait
+  def wait(epoch : UInt64) : UInt64
     @mutex.synchronize do
       loop do
-        if @pending
-          @pending = false
-          return
+        if @epoch > epoch
+          return @epoch
         end
 
         @cv.wait
@@ -3715,7 +3718,7 @@ class BlockingSignal
 
   def call
     @mutex.synchronize do
-      @pending = true
+      @epoch += 1
       @cv.broadcast
     end
   end
@@ -4223,5 +4226,56 @@ module ::Compress::Gzip
   def self.decompress(data : Bytes, *, level = BEST_SPEED) : Bytes
     io = IO::Memory.new
     Compress::Gzip::Writer.open(io, level: level, &.write(content))
+  end
+end
+
+struct ::Path
+  def extension?(*extensions : String)
+    return false if @name.bytesize < 3
+
+    bytes = @name.to_slice
+    separators = self.separators.map &.ord
+
+    # Ignore trailing separators
+    offset = bytes.size - 1
+    while bytes.unsafe_fetch(offset).in? separators
+      return false if offset == 0
+      offset -= 1
+    end
+
+    # Get the first occurrence of a separator or a '.' past the trailing separators
+    dot_index = bytes.rindex(offset: offset) { |byte| byte === '.' || byte.in? separators }
+
+    # Return "" if '.' is the first character (ex. ".dotfile"),
+    # or if the '.' character follows after a separator (ex. "pathto/.dotfile")
+    # or if the character at the returned index is a separator (ex. "no/extension")
+    # or if the filename ends with a '.'
+    return false unless dot_index
+    return false if dot_index == 0
+    return false if dot_index == offset
+    return false if bytes.unsafe_fetch(dot_index - 1).in?(separators)
+    return false if bytes.unsafe_fetch(dot_index).in?(separators)
+
+    extensions.any? do |extension|
+      extension.to_slice == bytes[dot_index, offset - dot_index + 1]
+    end
+  end
+
+  def normal? : Bool
+    return false if windows? # Because who the f would use Windows!!!1
+    return false if @name.empty?
+
+    behind = '\0'
+
+    @name.each_char do |ahead|
+      return false if behind == '.' && ahead == '.'
+      return false if behind == '.' && ahead.in?(separators)
+      return false if behind.in?(separators) && ahead == '.'
+      return false if behind.in?(separators) && ahead.in?(separators)
+
+      behind = ahead
+    end
+
+    !(behind == '.' || behind.in?(separators))
   end
 end

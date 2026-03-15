@@ -95,21 +95,44 @@ module Ww
     private def ensure_server_running! : Nil
       return if @@running.swap(true)
 
+      # Since PathMonitor is global we could get somebody else's paths here but then
+      # they won't be present in r_demand or w_model so that's fine.
+      PathMonitor.paths_finalize do |paths|
+        Log.debug { "PathServer: finalize #{paths}" }
+
+        @@r_lock.synchronize do
+          @@r_demand = @@r_demand.reject(&.in?(paths))
+        end
+
+        @@w_model_lock.synchronize do
+          paths.each do |path|
+            @@w_model.delete(path)
+          end
+        end
+
+        Log.debug { "PathServer: finalized" }
+      end
+
       spawn(name: "PathServer read loop") { rloop }
       spawn(name: "PathServer write loop") { wloop }
-      spawn(name: "PathServer monitor alarm loop") do
-        loop do
-          PathMonitor.wait
+      spawn(name: "PathServer monitor loop") do
+        epoch = 0u64
 
-          @@r_alarm.call
+        loop do
+          epoch = PathMonitor.wait(epoch)
+
+          @@r_world_changed.call
         end
       end
     end
 
     @@r_lock = Sync::Mutex.new
-    @@r_alarm = BlockingSignal.new
-    @@r_demand = Pf::Map(Path, Time::Instant).new
+    @@r_submissions = Pf::Set(Path).new
+    @@r_demand = Pf::Set(Path).new
     @@r_supply = Pf::Map(Path, Supply).new
+
+    @@r_world_changed = BlockingSignal.new
+    @@r_supply_changed = BlockingSignal.new
 
     alias Supply = Present | Absent
 
@@ -122,42 +145,31 @@ module Ww
     # small files.
     SAFE_FILE_BYTESIZE = 32 * 1024 * 1024 # 32 MiB
 
-    DEMAND_TTL                = 5.seconds
-    DEMAND_TTL_ALMOST_EXPIRED = DEMAND_TTL * 0.6 # 60%
-
     # Read loop
     private def rloop : Nil
       Log.debug { "rloop: running" }
 
+      epoch = 0u64
+
       loop do
-        @@r_alarm.wait
+        epoch = @@r_world_changed.wait(epoch)
 
         Log.trace { "rloop: woke up" }
 
-        instant = Time.instant
-
-        # Atomically decay entries in the demand map, and sample it and the current supply.
+        # Move submissions to demands. Atomically read demands and supply.
         #
         # Note that we're the only ones writing to @@r_supply. Everybody else's access
         # is read-only. On the other hand for @@r_demand, we can prune it and we can
         # read from it, that's it. More discrete modifications are not ours.
         demand, supply0 = @@r_lock.synchronize do
-          @@r_demand = @@r_demand.transaction do |txn|
-            @@r_demand.each do |path, accessed_at|
-              next if instant - accessed_at <= DEMAND_TTL
-
-              Log.debug { "#{path} was not accessed in #{DEMAND_TTL.humanize}, removing from demands" }
-
-              txn.dissoc(path)
-            end
-          end
-
+          @@r_demand = @@r_demand.concat(@@r_submissions)
+          @@r_submissions = Pf::Set(Path).new
           {@@r_demand, @@r_supply}
         end
 
         # Process demands.
         supply1 = Pf::Map(Path, Supply).transaction do |txn|
-          demand.each do |path, accessed_at|
+          demand.each do |path|
             state = supply0[path]?
 
             case status = PathMonitor.status(path)
@@ -239,13 +251,13 @@ module Ww
           @@r_supply = supply1
         end
 
-        Log.trace { "rloop: wait_cv broadcast" }
+        Log.trace { "rloop: wake up waiters (supply changed)" }
 
-        @@wait_cv.broadcast
+        @@r_supply_changed.call
       end
     end
 
-    @@w_alarm = BlockingSignal.new
+    @@w_supply_changed = BlockingSignal.new
     @@w_supply = Pf::Map(Path, Pf::Set(Fact)).new
     @@w_supply_lock = Sync::Mutex.new
 
@@ -259,23 +271,10 @@ module Ww
     private def wloop : Nil
       Log.debug { "wloop: running" }
 
-      # If nobody asked about paths recently, then wloop did not ask about paths
-      # recently; thus they can be removed from @@w_model safely regardless of
-      # whether they exist there.
-      PathMonitor.paths_finalize do |paths|
-        Log.debug { "wloop: finalize #{paths}" }
-
-        @@w_model_lock.synchronize do
-          paths.each do |path|
-            @@w_model.delete(path)
-          end
-        end
-
-        Log.debug { "wloop: finalized" }
-      end
+      epoch = 0u64
 
       loop do
-        @@w_alarm.wait
+        epoch = @@w_supply_changed.wait(epoch)
 
         Log.trace { "wloop: woke up" }
 
@@ -435,12 +434,12 @@ module Ww
     # system at some unspecified point in time. The view is *eventually consistent*:
     # it may not reflect the instantaneous state of the file system.
     def view(path : Path) : View | Wait
-      path = path.normalize
+      path = path.normal? ? path : path.normalize
 
       ensure_server_running!
 
       @@r_lock.synchronize do
-        @@r_demand = @@r_demand.assoc(path, Time.instant)
+        @@r_submissions = @@r_submissions.add(path)
 
         case state = @@r_supply[path]?
         in Nil
@@ -448,22 +447,21 @@ module Ww
         in Present then return state.listing
         end
 
-        @@r_alarm.call
+        @@r_world_changed.call
 
         Wait.new
       end
     end
-
-    @@wait_cv_lock = Sync::Mutex.new
-    @@wait_cv = Sync::ConditionVariable.new(@@wait_cv_lock)
 
     # Blocks the current fiber until the view of some path changes, or spuriously.
     #
     # In all cases, callers should call `view` to learn about the change or
     # resurrect paths they care about until it's too late. We assume each caller
     # knows what they're waiting for.
-    def wait : Nil
-      @@wait_cv_lock.synchronize { @@wait_cv.wait }
+    #
+    # For more info (esp. on *epoch*), see `PathMonitor.wait`.
+    def wait(epoch : UInt64) : UInt64
+      @@r_supply_changed.wait(epoch)
     end
 
     # Associates a set of *facts* with *path*.
@@ -488,7 +486,7 @@ module Ww
     # are in favor in the kilobyte to megabyte file range. You are expected to use a different
     # subsystem for handling large files.
     def converge(path : Path, facts facts1 : Pf::Set(Fact)) : Nil
-      path = path.normalize
+      path = path.normal? ? path : path.normalize
 
       ensure_server_running!
 
@@ -498,7 +496,7 @@ module Ww
         end
 
         @@w_supply = @@w_supply.assoc(path, facts1)
-        @@w_alarm.call
+        @@w_supply_changed.call
       end
     end
 
@@ -516,10 +514,12 @@ module Ww
     # Loads the file at *path* into memory and returns its content, as a slice
     # of bytes. Raises `Error` if the file cannot be read.
     def read(path : Path) : Term::Blob
+      epoch = 0u64
+
       loop do
         listing = view(path)
         if listing.is_a?(Wait)
-          wait
+          epoch = wait(epoch)
           next
         end
 
@@ -549,6 +549,7 @@ module Ww
     # waits for the proof that the file really was written to disk.
     def write(path : Path, content : Term::Blob) : Nil
       digest = Digest::SHA256.hexdigest(content)
+      epoch = 0u64
 
       loop do
         converge(path, IsFile.new(content))
@@ -563,7 +564,7 @@ module Ww
           raise Error.new("path is a directory")
         end
 
-        wait
+        epoch = wait(epoch)
       end
     end
 
@@ -593,8 +594,11 @@ module Ww
     end
 
     enum Presentation
+      # Present as a string if UTF-8, otherwise as a blob.
       Auto
+      # Present as a blob.
       Binary
+      # Present as a string even if non-UTF-8.
       Text
     end
 
