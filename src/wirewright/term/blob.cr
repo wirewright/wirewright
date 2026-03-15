@@ -182,7 +182,7 @@ module Ww
     #
     # The hash is computed by `DIGEST_ALGORITHM`.
     def digest : Bytes
-      @digest.to_slice
+      Slice.new(@digest.to_unsafe, @digest.size, read_only: true)
     end
 
     # Blobs are compared lexicographically like Crystal slices. See `Slice#<=>`.
