@@ -27,6 +27,10 @@ module Ww::Rack
         D7.gnd(node, u)
       end
 
+      matchpi %{[discard @u_ _]} do
+        D7.gnd(node, u)
+      end
+
       matchpi %{[part (@src_ @dst_) _]} do
         D7.gnd(node, src, dst)
       end

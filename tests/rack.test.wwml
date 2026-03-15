@@ -721,6 +721,57 @@
     (cell @1 100)))
   ;; ...
 
+;; Discard with pattern
+(group
+  (rack
+    (frame
+      (cell @a)
+      (discard @a _symbol))
+    end)
+  (rack
+    (frame
+      (cell @a x)
+      (discard @a _symbol))
+    (frame
+      (cell @a)
+      (discard @a _symbol))
+    end)
+  (rack
+    (frame
+      (cell @a 100)
+      (discard @a _symbol))
+    end)
+  (rack
+    (frame
+      (cell @a x)
+      (cell @b y)
+      (discard @a _symbol))
+    (frame
+      (cell @a)
+      (cell @b y)
+      (discard @a _symbol))
+    end)
+  (rack
+    (frame
+      (cell @a x)
+      (cell @a y)
+      (discard @a _symbol))
+    (frame
+      (cell @a)
+      (cell @a)
+      (discard @a _symbol))
+    end)
+  (rack
+    (frame
+      (cell @a x)
+      (cell @a 100)
+      (discard @a _symbol))
+    (frame
+      (cell @a)
+      (cell @a 100)
+      (discard @a _symbol))
+    end))
+
 ;; Group
 (rack
   (frame

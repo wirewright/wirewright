@@ -20,9 +20,27 @@ module Ww::Rack
     D7.case(clf, circuit, decorator: prepass) do
       rule(<<-WWML) do |tgt|
       [discard @u_] dev
-        -> (one u) [cell @u_ value_] {name: tgt, max: ∞}
+        -> (one u) [cell @u_ _] {name: tgt, max: ∞}
       WWML
         D7.patch(tgt, {2, nil})
+      end
+
+      rule(<<-WWML) do |dev, tgt|
+      [discard @u_ pattern_] dev
+        -> (one u) [cell @u_ value_] {name: tgt, max: ∞}
+      WWML
+        pattern = D7.fetch(dev, :pattern)
+
+        patches = Pf::Kit.stack_array(D7::Patch, 4)
+
+        tgt.each do |match|
+          value = D7.fetch(match, :value)
+          next unless M1.probe?(pattern, value)
+
+          patches << D7.patch(match, {2, nil})
+        end
+
+        D7.patches(patches)
       end
 
       rule(<<-WWML) do |dev, src, dst|
