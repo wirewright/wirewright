@@ -620,6 +620,14 @@ module Ww
       Binary
       # Present as a string even if non-UTF-8.
       Text
+
+      def present(blob : Term::Blob)
+        if text? || (auto? && blob.classif.utf8?)
+          return Term.of(String.new(blob.bytes))
+        end
+
+        blob
+      end
     end
 
     # Converts *listing* to a term.
@@ -629,12 +637,7 @@ module Ww
 
     # :nodoc:
     def render(listing : FileListing, presentation : Presentation) : Term
-      content = listing.content
-      if presentation.text? || (presentation.auto? && content.classif.utf8?)
-        content = Term.of(String.new(content.bytes))
-      end
-
-      Term.of(:file, content, timestamp: listing.timestamp.to_s)
+      Term.of(:file, presentation.present(listing.content), timestamp: listing.timestamp.to_s)
     end
 
     # :nodoc:
