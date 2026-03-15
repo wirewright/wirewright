@@ -6,7 +6,6 @@ module Ww::DwUIR
 
     # :nodoc:
     def initialize(@fonts : PvgFontFaceStore,
-                   @images : PvgImageServer,
                    width : Int32,
                    height : Int32)
       unless @surface = PlutoVG.surface_create(width, height)
@@ -28,11 +27,11 @@ module Ww::DwUIR
     #
     # - Uses the font store at *fonts* to load PlutoVG fonts.
     # - Uses the image server at *images* to fetch raster and SVG images.
-    def self.layer_for(fonts : PvgFontFaceStore, images : PvgImageServer, key : DrawKey) : Layer
+    def self.layer_for(fonts : PvgFontFaceStore, key : DrawKey) : Layer
       bounds = Rect.new(Point.new(0, 0), key.extent).round
       tfbounds = key.tf.map(bounds).round
 
-      painter = new(fonts, images, *tfbounds.iwh)
+      painter = new(fonts, *tfbounds.iwh)
 
       begin
         painter.layer_for(key, bounds, tfbounds)
@@ -137,18 +136,12 @@ module Ww::DwUIR
       end
     end
 
-    # TODO: instead of/along with warnings, draw as a red rect with text saying
-    # something went wrong! Similarly for Paint::Invalid.
-
     private def paint(shape : SvgShape, bounds : Rect) : Nil
-      begin
-        svg = @images.load(shape.src)
-
-        unless svg.is_a?(PvgSvgImage)
-          raise ImageServerError.new("expected an SVG image")
-        end
-      rescue e : ImageServerError
-        Log.warn(exception: e) { "failed to load SVG #{shape.src}" }
+      # TODO: do not use wait(), maybe paint some kind of widget that says "loading" or something
+      # along those lines, Idk. Same for error. We don't want to log here!!
+      svg = PvgImageServer.wait(shape.src)
+      unless svg.is_a?(PvgSvgImage)
+        Log.warn { "failed to load SVG #{shape.src}" }
         return
       end
 
@@ -277,15 +270,11 @@ module Ww::DwUIR
     end
 
     private def set_paint(paint : Paint::Image, bounds : Rect)
-      begin
-        image = @images.load(paint.src)
-
-        unless image.is_a?(PvgRasterImage)
-          raise ImageServerError.new("expected a raster image to paint with")
-        end
-      rescue e : ImageServerError
-        Log.warn(exception: e) { "could not paint with image" }
-
+      # TODO: do not use wait(), maybe paint some kind of widget that says "loading" or something
+      # along those lines, Idk. Same for error. We don't want to log here!!
+      image = PvgImageServer.wait(paint.src)
+      unless image.is_a?(PvgRasterImage)
+        Log.warn { "could not paint with image" }
         return set_paint(Paint::Invalid.new, bounds)
       end
 

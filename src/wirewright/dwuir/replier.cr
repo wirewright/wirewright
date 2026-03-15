@@ -8,7 +8,7 @@ module Ww::DwUIR
   # by the answer.
   #
   # See `soma.dwuir.replier` in the doctool to learn more.
-  def reply(platform : Platform, subject : Term) : Term
+  def reply(platform : PvgPlatform, subject : Term) : Term
     # Fast paths for the vast majority of subjects.
     return subject unless subject.type.dict?
     return subject unless subject.includes?(:"dw-request")
@@ -66,17 +66,16 @@ module Ww::DwUIR
       #
       # TODO: cache
       matchpi %{(svg ⍊ src_ dw-request: (measure wout_symbol hout_symbol ⍊ status_symbol))} do
-        begin
-          image = platform.images.load(src)
-        rescue e : ImageServerError
-          Log.debug(exception: e) { "failed to measure svg at #{src}" }
+        case response = PvgImageServer.wait(src)
+        in PvgImage
+          size = response.size
 
-          next Term.morph(subject, {:"dw-request", nil}, {status, {:err, e.message}})
+          Term.morph(subject, {:"dw-request", nil}, {wout, size.x}, {hout, size.y}, {status, :ok})
+        in PvgImageServer::Absent
+          Log.debug { "failed to measure svg at #{src}" }
+
+          Term.morph(subject, {:"dw-request", nil}, {status, {:err, response.detail}})
         end
-
-        size = image.size
-
-        Term.morph(subject, {:"dw-request", nil}, {wout, size.x}, {hout, size.y}, {status, :ok})
       end
 
       # |@ soma.dwuir.replier.rect
@@ -86,17 +85,16 @@ module Ww::DwUIR
       # The image's dimensions will be retrieved and used to answer the query.
       # |@endblock
       matchpi %{(rect ⍊ fill_: [image src_] dw-request: (measure wout_symbol hout_symbol ⍊ status_symbol))} do
-        begin
-          image = platform.images.load(src)
-        rescue e : ImageServerError
-          Log.debug(exception: e) { "failed to measure rect image at #{src}" }
+        case response = PvgImageServer.wait(src)
+        in PvgImage
+          size = response.size
 
-          next Term.morph(subject, {:"dw-request", nil}, {status, {:err, e.message}})
+          Term.morph(subject, {:"dw-request", nil}, {status, :ok}, {wout, size.x}, {hout, size.y})
+        in PvgImageServer::Absent
+          Log.debug { "failed to measure rect image at #{src}" }
+
+          Term.morph(subject, {:"dw-request", nil}, {status, {:err, response.detail}})
         end
-
-        size = image.size
-
-        Term.morph(subject, {:"dw-request", nil}, {status, :ok}, {wout, size.x}, {hout, size.y})
       end
 
       otherwise { subject }

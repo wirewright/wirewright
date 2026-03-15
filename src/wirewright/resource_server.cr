@@ -94,7 +94,7 @@ module Ww
       def self.closest(n : Int32)
         weights = {100, 200, 300, 400, 450, 500, 600, 700, 800, 900}
         weight = weights.min_by { |weight| (weight - n).abs }
-        new(weights.index!(weight).to_u8)
+        new(weights.index!(weight))
       end
 
       def self.find(haystack : String)
@@ -139,7 +139,7 @@ module Ww
         Wait.new
       in PathServer::Absent
         Absent.new(detail: "font family not found in font database")
-      in PathServer::FileListing
+      in PathServer::FileListing, PathServer::LargeFileListing
         Absent.new(detail: "font family is not a directory")
       in PathServer::DirListing
         weight = FontWeight.closest(query.weight)
@@ -171,7 +171,7 @@ module Ww
         Wait.new
       in PathServer::Absent
         Absent.new(detail: "font family not found in font database")
-      in PathServer::FileListing
+      in PathServer::FileListing, PathServer::LargeFileListing
         Absent.new(detail: "font family is not a directory")
       in PathServer::DirListing
         view.entries.each do |entry|
@@ -197,7 +197,7 @@ module Ww
     @@running = Atomic(Bool).new(false)
     @@changed = BlockingSignal.new
 
-    def ensure_server_running!
+    private def ensure_server_running!
       return if @@running.swap(true)
 
       spawn(name: "ResourceServer path wait") do

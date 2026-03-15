@@ -29,12 +29,12 @@ require "./dwuir/hit"
 
 require "./dwuir/pixel_rect"
 require "./dwuir/compositor"
-require "./dwuir/platform"
 require "./dwuir/viewer"
 require "./dwuir/replier"
 require "./dwuir/snap"
 
 require "./dwuir/pvg"
+require "./dwuir/pvg_image_server"
 
 require "./dwuir/window"
 require "./dwuir/textual"

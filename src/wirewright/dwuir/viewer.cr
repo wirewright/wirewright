@@ -7,11 +7,11 @@ module Ww::DwUIR
     # Represents the context of a DwUIR viewer `Viewer`.
     record Context,
       compositor : Compositor,
-      platform : Platform
+      platform : PvgPlatform
 
     @picture : Picture?
 
-    def initialize(@screen : PixelRect, @compositor : Compositor, @platform : Platform)
+    def initialize(@screen : PixelRect, @compositor : Compositor, @platform : PvgPlatform)
       unless @screen.bounds.xy == {0, 0}
         raise ArgumentError.new("expected a pixel rect with x=0 y=0")
       end

@@ -123,6 +123,7 @@ module Ww
           epoch = PathMonitor.wait(epoch)
 
           @@r_world_changed.call
+          @@r_waiters_signal.call
         end
       end
     end
@@ -133,7 +134,7 @@ module Ww
     @@r_supply = Pf::Map(Path, Supply).new
 
     @@r_world_changed = BlockingSignal.new
-    @@r_supply_changed = BlockingSignal.new
+    @@r_waiters_signal = BlockingSignal.new
 
     alias Supply = Present | Absent
 
@@ -259,6 +260,8 @@ module Ww
           end
         end
 
+        next if supply0 == supply1
+
         # Commit new supply atomically.
         @@r_lock.synchronize do
           @@r_supply = supply1
@@ -266,7 +269,7 @@ module Ww
 
         Log.trace { "rloop: wake up waiters (supply changed)" }
 
-        @@r_supply_changed.call
+        @@r_waiters_signal.call
       end
     end
 
@@ -466,7 +469,8 @@ module Ww
       end
     end
 
-    # Blocks the current fiber until the view of some path changes, or spuriously.
+    # Blocks the current fiber until the view of some path changes, or `PathMonitor` reports
+    # a change, or spuriously.
     #
     # In all cases, callers should call `view` to learn about the change or
     # resurrect paths they care about until it's too late. We assume each caller
@@ -474,7 +478,7 @@ module Ww
     #
     # For more info (esp. on *epoch*), see `PathMonitor.wait`.
     def wait(epoch : UInt64) : UInt64
-      @@r_supply_changed.wait(epoch)
+      @@r_waiters_signal.wait(epoch)
     end
 
     # Associates a set of *facts* with *path*.
