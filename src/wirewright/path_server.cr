@@ -447,7 +447,7 @@ module Ww
     # system at some unspecified point in time. The view is *eventually consistent*:
     # it may not reflect the instantaneous state of the file system.
     def view(path : Path) : View | Wait
-      path = path.normal? ? path : path.normalize
+      path = Ww.normalize(path)
 
       ensure_server_running!
 
@@ -499,7 +499,7 @@ module Ww
     # are in favor in the kilobyte to megabyte file range. You are expected to use a different
     # subsystem for handling large files.
     def converge(path : Path, facts facts1 : Pf::Set(Fact)) : Nil
-      path = path.normal? ? path : path.normalize
+      path = Ww.normalize(path)
 
       ensure_server_running!
 

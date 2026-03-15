@@ -48,7 +48,7 @@ module Ww::HSL
     s = s.clamp(0.0..1.0)
     l = l.clamp(0.0..1.0)
 
-    if Approx.equals?(s, 0)
+    if s.approx?(0)
       return l, l, l
     end
 

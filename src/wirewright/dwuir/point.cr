@@ -40,7 +40,7 @@ module Ww::DwUIR
 
     # Checks whether both the x and y components are approximately zero.
     def zero? : Bool
-      Approx.equals?(x, 0.0f32) && Approx.equals?(y, 0.0f32)
+      x.approx?(0) && y.approx?(0)
     end
 
     # Returns a new point with both x and y components negated.

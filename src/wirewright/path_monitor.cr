@@ -608,7 +608,7 @@ module Ww
     def status(path : Path) : Status | Wait
       ensure_server_running!
 
-      path = path.normal? ? path : path.normalize
+      path = Ww.normalize(path)
 
       @@lock.synchronize do
         @@ages[path] = Math.max(@@ages[path]? || 0, MAX_AGE_HBS)

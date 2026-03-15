@@ -16,33 +16,6 @@ module Ww
   module ResourceServer
     extend self
 
-    defrecord RootSet, cwd : Path, runtime : Path
-
-    class_getter roots : RootSet do
-      cwd = Path[Dir.current]
-
-      runtime = pass do
-        if setting = ENV["WW_RUNTIME"]?
-          next Path[setting]
-        end
-
-        {Process.executable_path, cwd}.leftmost? do |origin|
-          next unless origin
-
-          path = Path[origin] / "runtime"
-          next unless Dir.exists?(path)
-
-          path
-        end
-      end
-
-      unless runtime
-        abort "Wirewright runtime directory not found"
-      end
-
-      RootSet.new(cwd, runtime)
-    end
-
     alias Query = FileQuery | CodexQuery | RuntimeQuery | FontQuery | CodepointsQuery | RemoteQuery
 
     defrecord RuntimeQuery, path : Path
@@ -57,7 +30,7 @@ module Ww
     end
 
     def codex(name : String) : CodexQuery
-      CodexQuery.new(path)
+      CodexQuery.new(name)
     end
 
     def file(path : Path) : FileQuery
@@ -87,7 +60,7 @@ module Ww
     end
 
     private def get_impl(query : RuntimeQuery) : Response
-      get_impl(FileQuery.new(roots.runtime / query.path))
+      get_impl(FileQuery.new(Ww.roots.runtime / query.path))
     end
 
     private def get_impl(query : FileQuery) : Response
@@ -161,7 +134,7 @@ module Ww
     end
 
     private def get_impl(query : FontQuery) : Response
-      case view = PathServer.view(roots.runtime / "fonts" / query.family)
+      case view = PathServer.view(Ww.roots.runtime / "fonts" / query.family)
       in PathServer::Wait
         Wait.new
       in PathServer::Absent
@@ -193,7 +166,7 @@ module Ww
     end
 
     private def get_impl(query : CodepointsQuery) : Response
-      case view = PathServer.view(roots.runtime / "fonts" / query.family)
+      case view = PathServer.view(Ww.roots.runtime / "fonts" / query.family)
       in PathServer::Wait
         Wait.new
       in PathServer::Absent

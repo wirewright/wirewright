@@ -1,8 +1,8 @@
 module Ww::DwUIR
   # Represents a quadrilateral.
   #
-  # Written almost entirely by an LLM, with major refactors on my end (but
-  # with absolutely no understanding of the underlying math!)
+  # WARNING: Written almost entirely by an LLM, with major refactors on my end
+  # (but with absolutely no understanding of the underlying math!)
   struct Quad
     @rect : Bool
 
@@ -13,15 +13,13 @@ module Ww::DwUIR
       cd = d - c
       da = a - d
 
-      right_angles =
-        Approx.equals?(ab.dot(da), 0.0f32) &&
-          Approx.equals?(bc.dot(ab), 0.0f32) &&
-          Approx.equals?(cd.dot(bc), 0.0f32) &&
-          Approx.equals?(da.dot(cd), 0.0f32)
+      right_angles = ab.dot(da).approx?(0) &&
+                     bc.dot(ab).approx?(0) &&
+                     cd.dot(bc).approx?(0) &&
+                     da.dot(cd).approx?(0)
 
-      equal_sides =
-        ab.length_squared == cd.length_squared &&
-          bc.length_squared == da.length_squared
+      equal_sides = ab.length_squared == cd.length_squared &&
+                    bc.length_squared == da.length_squared
 
       @rect = right_angles && equal_sides
     end

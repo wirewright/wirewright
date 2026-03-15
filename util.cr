@@ -3145,7 +3145,7 @@ module Disorder
   end
 end
 
-struct Float32
+struct Float
   def approx?(other : Float32, *, eps = 0.001f32)
     (self - other).abs <= eps
   end

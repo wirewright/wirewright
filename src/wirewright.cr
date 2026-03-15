@@ -53,35 +53,77 @@ require "./wirewright/rack"
 Log.setup_from_env(default_level: :warn, backend: Log::IOBackend.new(STDERR))
 
 module Ww
-  VERSION = "0.0.0-kappa"
-
-  # TODO: This is lame!! We must have much more control over when all these
-  # checks happen.
-  RUNTIME_PATH = begin
-    candidates = {
-      ENV["WW_RUNTIME"]?.try { |string| Path[string] },
-      Process.executable_path.try { |string| Path[string].parent / "runtime" },
-      Path[Dir.current] / "runtime",
-    }
-
-    rtpath = candidates.find { |candidate| candidate && Dir.exists?(candidate) }
-    rtpath || abort "Wirewright runtime directory not found"
-  end
-
-  MT = Fiber::ExecutionContext::Parallel.new("Wirewright", Fiber::ExecutionContext.default_workers_count)
-
   alias Magnitude = Float32
 
-  # FIXME: WTF is this? Seriously . . .
-  module Approx
-    extend self
+  VERSION = "0.0.0-iota"
 
-    EPS = 0.001
+  # The default execution context used by Wirewright.
+  MT = Fiber::ExecutionContext::Parallel.new("Wirewright", maximum: Fiber::ExecutionContext.default_workers_count)
 
-    {% for type in %w(Float32 Float64) %}
-      def equals?(a : {{type.id}}, b : {{type.id}}) : Bool
-        (a - b).abs < EPS
+  # Represents the root path set of Wirewright.
+  #
+  # - *cwd* points to the current working directory.
+  # - *home* points to the home directory (in case `~` is used in paths).
+  # - *runtime* points to the runtime directory. The runtime directory contains
+  #   assets used by Wirewright itself, such as codices and fonts.
+  #
+  # Note that you aren't the intended user of `RootSet` (nor `normalize`);
+  # `ResourceServer`, `PathServer`, and others are. You should use them instead
+  # of reading files or directories with Crystal's `File` or `Dir` API.
+  defrecord RootSet, cwd : Path, home : Path, runtime : Path
+
+  # Returns the root path set of Wirewright.
+  #
+  # See `RootSet` for more info.
+  class_getter roots : RootSet do
+    cwd = pass do
+      if setting = ENV["WW_CWD"]?
+        next Path[setting]
       end
-    {% end %}
+
+      Path[Dir.current]
+    end
+
+    home = pass do
+      if setting = ENV["WW_HOME"]?
+        next Path[setting]
+      end
+
+      Path.home
+    end
+
+    runtime = pass do
+      if setting = ENV["WW_RUNTIME"]?
+        next Path[setting]
+      end
+
+      {Process.executable_path, cwd}.leftmost? do |origin|
+        next unless origin
+
+        path = Path[origin] / "runtime"
+        next unless Dir.exists?(path)
+
+        path
+      end
+    end
+
+    unless runtime
+      abort "Wirewright runtime directory not found"
+    end
+
+    RootSet.new(cwd, home, runtime)
+  end
+
+  # Normalizes the given *path* with respect to Wirewright's root path set `roots`.
+  def self.normalize(path : Path) : Path
+    unless path.normal?
+      path = path.normalize
+    end
+
+    unless path.absolute?
+      path = path.expand(base: roots.cwd, home: roots.home, expand_base: false)
+    end
+
+    path
   end
 end
