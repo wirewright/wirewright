@@ -1,3 +1,10 @@
+# :showdoc:
+#
+# Reference: https://github.com/sammycage/plutovg
+#
+# WARNING: I don't know if PlutoVG is thread-safe or not (in the sense of maybe
+# using  some kind of mutable global). In any case, it's best to assume it's
+# thread-unsafe and lock appropriately.
 @[Link(ldflags: "#{__DIR__}/libplutovg.a")]
 @[Link("m")]
 lib PlutoVG

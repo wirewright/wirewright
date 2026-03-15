@@ -15,7 +15,5 @@ module Ww::DwUIR
   end
 end
 
-require "./pvg/libplutovg"
-require "./pvg/libplutosvg"
 require "./pvg/pencil"
 require "./pvg/painter"
