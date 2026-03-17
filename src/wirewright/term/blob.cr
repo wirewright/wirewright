@@ -174,7 +174,10 @@ module Ww
       classify!(classif: nil)
     end
 
-    protected def classify!(classif : Classif?) : Classif
+    # :nodoc:
+    #
+    # WARNING: Only call this if the blob wasn't published yet!
+    def classify!(classif : Classif?) : Classif
       @classif.set(classif || Classif.of(bytes), :release)
     end
 
@@ -217,8 +220,12 @@ module Ww
 
     # Constructs a classification object for *slice*.
     def self.of(slice : Bytes) : Classif?
-      mime = Magic.mime(slice)
+      of(Magic.mime(slice))
+    end
 
+    # Constructs a classification object based on a known *mime* type. We normally
+    # do this for HTTP responses which can tell us their MIME.
+    def self.of(mime : MIME::MediaType) : Classif?
       media_type = Term[mime.media_type]
       media_params = Term::Dict.build do |commit|
         mime.each_parameter do |key, value|
