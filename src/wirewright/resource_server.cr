@@ -16,14 +16,14 @@ module Ww
   module ResourceServer
     extend self
 
-    alias Query = FileQuery | CodexQuery | RuntimeQuery | FontQuery | CodepointsQuery | RemoteQuery
+    alias Query = FileQuery | CodexQuery | RuntimeQuery | FontQuery | CodepointsQuery | URIQuery
 
     defrecord RuntimeQuery, path : Path
     defrecord CodexQuery, name : String
     defrecord FileQuery, path : Path
     defrecord FontQuery, family : String, weight : Int32, italic : Bool
     defrecord CodepointsQuery, family : String
-    defrecord RemoteQuery, uri : URI
+    defrecord URIQuery, uri : URI
 
     def runtime(path : Path) : RuntimeQuery
       RuntimeQuery.new(path)
@@ -45,8 +45,8 @@ module Ww
       CodepointsQuery.new(family)
     end
 
-    def remote(uri : URI) : RemoteQuery
-      RemoteQuery.new(uri)
+    def uri(uri : URI) : URIQuery
+      URIQuery.new(uri)
     end
 
     alias Response = Present | Absent | Wait
@@ -183,7 +183,7 @@ module Ww
       end
     end
 
-    private def get_impl(query : RemoteQuery) : Response
+    private def get_impl(query : URIQuery) : Response
       case status = URIServer.get(query.uri)
       in URIServer::Wait
         Wait.new
@@ -281,8 +281,8 @@ module Ww
           CodepointsQuery.new(family)
         end
 
-        matchpi %{(remote uri_string)}, uri: String do
-          RemoteQuery.new(URI.parse(uri))
+        matchpi %{(uri uri_string)}, uri: String do
+          URIQuery.new(URI.parse(uri))
         end
 
         otherwise { }
