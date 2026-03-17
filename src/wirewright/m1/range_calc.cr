@@ -36,9 +36,9 @@ module Ww::M1
 
     private def aggregate?(objects, fn)
       Term.case(fn, engine: M0) do
-        matchpi %{sum}, cue: :sum { objects.sum { |object| Kit.magn(object) } }
-        matchpi %{min}, cue: :min { objects.min_by? { |object| Kit.magn(object) } }
-        matchpi %{max}, cue: :max { objects.max_by? { |object| Kit.magn(object) } }
+        matchpi %{sum}, cue: :sum { objects.sum { |object| Ww.magn(object) } }
+        matchpi %{min}, cue: :min { objects.min_by? { |object| Ww.magn(object) } }
+        matchpi %{max}, cue: :max { objects.max_by? { |object| Ww.magn(object) } }
       end
     end
 
@@ -164,8 +164,8 @@ module Ww::M1
           w = eval(b, kmin, kmax, op)
 
           Term.givenpi({v, w}, %{(min0_ ..= max0_) (min1_ ..= max1_)}, engine: M0) do
-            min = {min0, min1}.min_by { |bound| Kit.magn(bound) }
-            max = {max0, max1}.max_by { |bound| Kit.magn(bound) }
+            min = {min0, min1}.min_by { |bound| Ww.magn(bound) }
+            max = {max0, max1}.max_by { |bound| Ww.magn(bound) }
 
             Term.of(min, :"..=", max)
           end
@@ -182,8 +182,8 @@ module Ww::M1
           w = eval(b, kmin, kmax, op)
 
           Term.givenpi({v, w}, %{(min0_ ..= max0_) (min1_ ..= max1_)}, engine: M0) do
-            min = {min0, min1}.max_by { |bound| Kit.magn(bound) }
-            max = {max0, max1}.min_by { |bound| Kit.magn(bound) }
+            min = {min0, min1}.max_by { |bound| Ww.magn(bound) }
+            max = {max0, max1}.min_by { |bound| Ww.magn(bound) }
 
             Term.of(min, :"..=", max)
           end

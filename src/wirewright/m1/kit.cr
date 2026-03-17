@@ -3,14 +3,6 @@ module Ww::M1
   module Kit
     extend self
 
-    # Attempts to interpret *term* as `Magnitude`.
-    #
-    # - `∞` gives `Magnitude::INFINITY`.
-    # - Otherwise uses `Term#to`, which will raise `TypeCastError` on failure.
-    def magn(term : Term) : Magnitude
-      term == Term.of(:∞) ? Magnitude::INFINITY : term.to(Magnitude)
-    end
-
     # Returns `true` if a normal *op* is the singular sequence operator.
     def singular?(op : Term) : Bool
       Term.case(op, engine: M0) do

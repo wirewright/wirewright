@@ -56,6 +56,14 @@ Log.setup_from_env(default_level: :warn, backend: Log::IOBackend.new(STDERR))
 module Ww
   alias Magnitude = Float32
 
+  # Attempts to interpret *term* as a `Magnitude`.
+  #
+  # - `∞` gives `Magnitude::INFINITY`.
+  # - Otherwise uses `Term#to`, which will raise `TypeCastError` on failure.
+  def self.magn(term : Term) : Magnitude
+    term == Term.of(:∞) ? Magnitude::INFINITY : term.to(Magnitude)
+  end
+
   VERSION = "0.0.0-iota"
 
   # The default execution context used by Wirewright.

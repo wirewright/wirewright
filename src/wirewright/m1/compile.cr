@@ -29,8 +29,8 @@ module Ww::M1
         Op::Item::PluralDistrib.new(
           capture: nil,
           type: TermType.parse(type.as_sym),
-          min: Kit.magn(min),
-          max: Kit.magn(max),
+          min: Ww.magn(min),
+          max: Ww.magn(max),
         )
       end
 
@@ -38,8 +38,8 @@ module Ww::M1
         Op::Item::PluralDistrib.new(
           capture: capture,
           type: TermType.parse(type.as_sym),
-          min: Kit.magn(min),
-          max: Kit.magn(max),
+          min: Ww.magn(min),
+          max: Ww.magn(max),
         )
       end
 
@@ -47,8 +47,8 @@ module Ww::M1
         Op::Item::PluralMin.new(
           capture: nil,
           type: TermType.parse(type.as_sym),
-          min: Kit.magn(min),
-          max: Kit.magn(max),
+          min: Ww.magn(min),
+          max: Ww.magn(max),
         )
       end
 
@@ -56,8 +56,8 @@ module Ww::M1
         Op::Item::PluralMin.new(
           capture: capture,
           type: TermType.parse(type.as_sym),
-          min: Kit.magn(min),
-          max: Kit.magn(max),
+          min: Ww.magn(min),
+          max: Ww.magn(max),
         )
       end
 
@@ -65,16 +65,16 @@ module Ww::M1
         Op::Item::PluralMax.new(
           capture: nil,
           type: TermType.parse(type.as_sym),
-          min: Kit.magn(min),
-          max: Kit.magn(max),
+          min: Ww.magn(min),
+          max: Ww.magn(max),
         )
       end
 
       matchpi %{(%'%plural/max [%'%capture capture_] ⍊ type_symbol min_ max_)}, cue: {:"%plural/max", :"%capture"} do
         Op::Item::PluralMax.new(capture,
           type: TermType.parse(type.as_sym),
-          min: Kit.magn(min),
-          max: Kit.magn(max),
+          min: Ww.magn(min),
+          max: Ww.magn(max),
         )
       end
 
@@ -84,8 +84,8 @@ module Ww::M1
 
         Op::Item::ManyMax.new(compile(Π.pattern(successor)),
           Op::Item.spatial(member_ops),
-          min: Kit.magn(min),
-          max: Kit.magn(max),
+          min: Ww.magn(min),
+          max: Ww.magn(max),
         )
       end
 
@@ -94,8 +94,8 @@ module Ww::M1
         member_ops = compile(Π.items(ordsrc, members))
 
         Op::Item::PastMin.new(Op::Item.spatial(member_ops),
-          min: Kit.magn(min),
-          max: Kit.magn(max),
+          min: Ww.magn(min),
+          max: Ww.magn(max),
         )
       end
 
@@ -104,8 +104,8 @@ module Ww::M1
         member_ops = compile(Π.items(ordsrc, members))
 
         Op::Item::PastMax.new(Op::Item.spatial(member_ops),
-          min: Kit.magn(min),
-          max: Kit.magn(max),
+          min: Ww.magn(min),
+          max: Ww.magn(max),
         )
       end
 
@@ -255,8 +255,8 @@ module Ww::M1
           key_sketch: Term::Dict::Sketch.new(key_sketch.to(Term::Dict::Sketch::Repr)),
           value_sketch: Term::Dict::Sketch.new(value_sketch.to(Term::Dict::Sketch::Repr)),
           symbol_sketch: Term::Dict::Sketch.new(symbol_sketch.to(Term::Dict::Sketch::Repr)),
-          bounds: {Kit.magn(min_bounds), Kit.magn(max_bounds)},
-          depth: {Kit.magn(min_depth), Kit.magn(max_depth)},
+          bounds: {Ww.magn(min_bounds), Ww.magn(max_bounds)},
+          depth: {Ww.magn(min_depth), Ww.magn(max_depth)},
           successor: compile(Π.pattern(successor)),
         )
       end
@@ -590,8 +590,8 @@ module Ww::M1
 
         Op::ScanAll.new(compile(Π.pattern(successor)),
           seq: compile(Π.patterns(members)),
-          min: Kit.magn(min),
-          max: Kit.magn(max),
+          min: Ww.magn(min),
+          max: Ww.magn(max),
         )
       end
 
@@ -607,8 +607,8 @@ module Ww::M1
         Op::EntriesAll.new(compile(Π.pattern(successor)),
           compile(Π.pattern(key)),
           compile(Π.pattern(value)),
-          min: Kit.magn(min),
-          max: Kit.magn(max),
+          min: Ww.magn(min),
+          max: Ww.magn(max),
         )
       end
 
@@ -645,8 +645,8 @@ module Ww::M1
         Op::DfsAll.new(alg,
           successor: compile(Π.pattern(successor)),
           seq: compile(Π.patterns(members)),
-          min: Kit.magn(min),
-          max: Kit.magn(max),
+          min: Ww.magn(min),
+          max: Ww.magn(max),
         )
       end
 
@@ -683,8 +683,8 @@ module Ww::M1
         Op::BfsAll.new(alg,
           successor: compile(Π.pattern(successor)),
           seq: compile(Π.patterns(members)),
-          min: Kit.magn(min),
-          max: Kit.magn(max),
+          min: Ww.magn(min),
+          max: Ww.magn(max),
         )
       end
 
@@ -720,8 +720,8 @@ module Ww::M1
           compile(Π.pattern(lhs)),
           compile(Π.patterns(mid)),
           compile(Π.pattern(rhs)),
-          min: Kit.magn(min),
-          max: Kit.magn(max),
+          min: Ww.magn(min),
+          max: Ww.magn(max),
           wide: wide.true?,
         )
       end
@@ -748,15 +748,15 @@ module Ww::M1
         Op::Filter.new(compile(Π.pattern(successor)),
           deps: deps.items.to_pf_set,
           selector: compile(Π.pattern(selector)),
-          min: Kit.magn(min),
-          max: Kit.magn(max),
+          min: Ww.magn(min),
+          max: Ww.magn(max),
         )
       end
 
       matchpi %{(%'%matches successor_ subpattern_ ⍊ min_ max_)}, cue: :"%matches" do
         Op::Matches.new(compile(Π.pattern(successor)), compile(Π.pattern(subpattern)),
-          min: Kit.magn(min),
-          max: Kit.magn(max),
+          min: Ww.magn(min),
+          max: Ww.magn(max),
         )
       end
 
