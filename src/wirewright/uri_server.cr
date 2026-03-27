@@ -12,6 +12,14 @@ module Ww
     defrecord Present, content : Term::Blob
     defrecord Absent, detail : String
 
+    @@running : Atomic(Bool) = Atomic.new(false)
+
+    private def ensure_server_running!
+      return if @@running.swap(true)
+
+      spawn(name: "URIServer rloop") { rloop }
+    end
+
     @@r_lock = Sync::Mutex.new
     @@r_demand = Pf::Set(URI).new
     @@r_supply = Pf::Map(URI, Present | Absent).new
@@ -20,20 +28,8 @@ module Ww
 
     @@r_waiters_signal = BlockingSignal.new
 
-    alias Msg = URIAdded
-
-    defrecord URIAdded, uri : URI
-
-    @@running : Atomic(Bool) = Atomic.new(false)
-
-    def ensure_server_running!
-      return if @@running.swap(true)
-
-      spawn(name: "URIServer msgloop") { msgloop }
-    end
-
-    def msgloop
-      Log.debug { "msgloop: running" }
+    def rloop
+      Log.debug { "rloop: running" }
 
       epoch = 0u64
 
