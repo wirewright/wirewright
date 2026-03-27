@@ -277,7 +277,7 @@ module Ww
           FileQuery.new(path)
         end
 
-        matchpi %{(font family_string ¦ weight_: (%number +i32) italic⋮ false)}, family: String, weight: Int32, italic: Bool do
+        matchpi %{(font family_string ¦ weight_: (%optional 450 (%number +i32)) italic⋮ false)}, family: String, weight: Int32, italic: Bool do
           FontQuery.new(family, weight, italic)
         end
 
