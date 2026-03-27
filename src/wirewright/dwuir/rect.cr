@@ -407,5 +407,9 @@ module Ww::DwUIR
     def intersects?(quads : Slice(Quad)) : Bool
       quads.all? { |quad| intersects?(quad) }
     end
+
+    def inspect(io)
+      io << "■(tl: " << tl << ", br: " << br << ")"
+    end
   end
 end

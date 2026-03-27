@@ -47,12 +47,14 @@ module Ww::Pigment
       a.approx?(0.0)
     end
 
-    def to_s(io)
+    def inspect(io)
       io << "rgba("
-      io << r << " " << g << " " << b << " " << a
-      io << " / "
-      io << r8 << " " << g8 << " " << b8 << " " << a8
+      io << r << ", " << g << ", " << b << ", " << a
       io << ")"
+    end
+
+    def to_s(io)
+      inspect(io)
     end
   end
 

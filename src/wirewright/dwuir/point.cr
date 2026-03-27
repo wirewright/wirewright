@@ -153,5 +153,9 @@ module Ww::DwUIR
     def iy : Int32
       y.ceil.to_i
     end
+
+    def inspect(io)
+      io << x << "●" << y
+    end
   end
 end
