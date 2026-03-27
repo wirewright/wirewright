@@ -328,7 +328,7 @@ module Ww::DwUIR
           TextCommand.each_with_bounds(Pencil.new, spec.wrap, spec.caption, selection: nil) do |command, bounds|
             case command
             when TextCommand::PushInline, TextCommand::PushVirtual
-              size |= bounds
+              size = Rect.union(size, bounds)
             when TextCommand::NextLine
               size = size.grow(dh: 1)
             end
@@ -350,7 +350,7 @@ module Ww::DwUIR
           TextCommand.each_with_bounds(Pencil.new, spec.wrap, spec.caption, selection: nil) do |command, bounds|
             case command
             when TextCommand::PushInline, TextCommand::PushVirtual
-              size |= bounds
+              size = Rect.union(size, bounds)
             when TextCommand::NextLine
               size = size.grow(dh: 1)
             end

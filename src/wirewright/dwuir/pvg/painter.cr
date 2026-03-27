@@ -294,7 +294,7 @@ module Ww::DwUIR
       case fit = paint.fit
       in Paint::ImageFit::Align
         transform = Tf[
-          Tf.translate(bounds.align(target_bounds, fit.normpt).tl),
+          Tf.translate(Rect.align(bounds, target_bounds, fit.normpt).tl),
           Tf.scale(scale),
         ]
       in Paint::ImageFit::Pan

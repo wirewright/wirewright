@@ -49,7 +49,7 @@ module Ww::DwUIR
     # This f**ks up any optimization efforts due to spread.
 
     private def composite(dst, clip, command : DrawShape, dmg : Rect)
-      return if (command.dmgbounds & dmg).empty? # not damaged
+      return if Rect.xsect(command.dmgbounds, dmg).empty? # not damaged
 
       x, y, _, _ = command.tfbounds.round.ixywh
 
@@ -71,7 +71,7 @@ module Ww::DwUIR
     end
 
     private def composite(dst, clip, command : DrawComposite, dmg : Rect)
-      return if (command.dmgbounds & dmg).empty? # not damaged
+      return if Rect.xsect(command.dmgbounds, dmg).empty? # not damaged
 
       dst1 = PixelRect.new(*command.tfbounds.round.ixywh)
 

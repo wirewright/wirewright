@@ -96,7 +96,7 @@ module Ww::DwUIR
 
       picture1.damage(picture0) do |dmgrect|
         rects << dmgrect
-        dmgbounds = dmgbounds ? dmgbounds | dmgrect : dmgrect
+        dmgbounds = dmgbounds ? Rect.union(dmgbounds, dmgrect) : dmgrect
       end
 
       # Nothing damaged, meaning there is no change between the pictures.

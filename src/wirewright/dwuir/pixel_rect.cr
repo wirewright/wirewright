@@ -35,7 +35,7 @@ module Ww::DwUIR
     # Returns a smaller piece of this pixel rect whose *absolute* bounding box is
     # defined by *rect* (and clamped to this pixel rect's bounding box).
     def region(rect : Rect) : Region
-      Region.new(self, *(bounds & rect).ixywh)
+      Region.new(self, *Rect.xsect(bounds, rect).ixywh)
     end
 
     private def pixel_and_offset(x : Int32, y : Int32) : {Pixel, Int32}

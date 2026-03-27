@@ -42,6 +42,10 @@ module Ww::DwUIR
       bounds
     end
 
+    def self.union(a : Rect, b : Rect) : Rect
+      new(a.tl.min(b.tl), a.br.max(b.br))
+    end
+
     # Returns the intersection of *quads*' bounding boxes.
     def self.xsect(quads : Enumerable(Quad)) : Rect
       bounds = Rect.inf
@@ -49,6 +53,21 @@ module Ww::DwUIR
         bounds &= quad.bounds
       end
       bounds
+    end
+
+    def self.xsect(a : Rect, b : Rect) : Rect
+      xrect = new(tl: a.tl.max(b.tl), br: a.br.min(b.br))
+      xrect.negative? ? Rect.empty : xrect
+    end
+
+    # Returns a translated copy of *a* so that normalized *point*s of
+    # both rectangles match.
+    def self.align(a : Rect, b : Rect, point : Point) : Rect
+      a.translate(a.denormalize(point) - b.denormalize(point))
+    end
+
+    def self.map(rect : Rect, unit : Rect) : Rect
+      new(tl: rect.map(unit.tl), br: rect.map(unit.br))
     end
 
     # Returns the size (width and height) of this rectangle.
@@ -279,17 +298,6 @@ module Ww::DwUIR
       tr - Point.new(radii.tr, 0)
     end
 
-    # Returns the intersection rect of this and *other* rectangles.
-    def &(other : Rect) : Rect
-      xrect = Rect.new(tl: tl.max(other.tl), br: br.min(other.br))
-      xrect.negative? ? Rect.empty : xrect
-    end
-
-    # Returns the union rect of this and *other* rectangles.
-    def |(other : Rect) : Rect
-      Rect.new(tl.min(other.tl), br.max(other.br))
-    end
-
     # Returns a copy of this rectangle whose location and size are rounded to
     # the nearest multiple as defined by the provided *grain*.
     def round(*, grain = Point.new(1, 1)) : Rect
@@ -320,6 +328,13 @@ module Ww::DwUIR
     # Returns a copy of this rectangle padded by *n*.
     def pad(n : Float32) : Rect
       Rect.new(tl: tl + n, br: br - n)
+    end
+
+    def pad(sides : {l: Float32, r: Float32, t: Float32, b: Float32})
+      Rect.new(
+        tl: tl + Point[sides[:l], sides[:t]],
+        size: size - Point[sides[:l] + sides[:r], sides[:t] + sides[:b]],
+      )
     end
 
     # Returns a copy of this rectangle with size changed to *w* and *h*.
@@ -366,12 +381,6 @@ module Ww::DwUIR
     # Maps a point from [0,1]x[0,1] back into rectangle space.
     def denormalize(point : Point) : Point
       tl + point * size
-    end
-
-    # Returns a translated copy of `self` so that normalized *point*s of
-    # both rectangles match.
-    def align(other : Rect, point : Point) : Rect
-      translate(denormalize(point) - other.denormalize(point))
     end
 
     # Returns the four points that this rectangle is defined by.

@@ -50,7 +50,7 @@ module Ww::DwUIR
 
       @sequence.sort_by!(&.ord)
       @sequence.each do |command|
-        @tfbounds |= command.tfbounds
+        @tfbounds = Rect.union(@tfbounds, command.tfbounds)
       end
 
       @finished = true
@@ -101,7 +101,7 @@ module Ww::DwUIR
       while command0 = intact.shift?
         damaged.each do |command1|
           # Skip if damage does not touch intact command.
-          next if (command1.dmgbounds & command0.dmgbounds).empty?
+          next if Rect.xsect(command1.dmgbounds, command0.dmgbounds).empty?
 
           damaged << command0
 

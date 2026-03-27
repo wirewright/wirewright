@@ -30,7 +30,7 @@ module Ww::DwUIR
         size = Rect[0, 0, 0, spec.leading.resolve(spec.size)]
         pencil = platform.pencils.call(PencilRequest.new(font, spec.size, spec.leading, spec.tracking))
         spec.each_text_drawable(pencil) do |dw|
-          size |= dw.bounds
+          size = Rect.union(size, dw.bounds)
         end
 
         Term.morph(subject, {kout, size.h}, {status, :ok}, {:"dw-request", nil})
@@ -52,7 +52,7 @@ module Ww::DwUIR
         size = Rect[0, 0, 0, spec.leading.resolve(spec.size)]
         pencil = platform.pencils.call(PencilRequest.new(font, spec.size, spec.leading, spec.tracking))
         spec.each_text_drawable(pencil) do |dw|
-          size |= dw.bounds
+          size = Rect.union(size, dw.bounds)
         end
 
         Term.morph(subject, {wout, size.w}, {hout, size.h}, {status, :ok}, {:"dw-request", nil})
