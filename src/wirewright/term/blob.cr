@@ -84,12 +84,7 @@ module Ww
       def write(slice : Bytes) : Nil
         return if slice.empty?
 
-        if @size + slice.size > @capacity
-          # TODO: Maybe we should put some kind of cap on this one? Or would the GC blow
-          # up anyway? Can this be exploited adversarially?
-          @capacity = Math.pw2ceil(@size + slice.size)
-          @mem = @mem.realloc(@capacity)
-        end
+        reserve(@size + slice.size)
 
         slice.copy_to(@mem + @size, slice.size)
 
@@ -97,16 +92,26 @@ module Ww
         @digester.update(slice)
       end
 
+      private def reserve(newsize : UInt64) : Nil
+        return if @size + newsize <= @capacity
+
+        @capacity = Math.max(@capacity + newsize, @capacity + @capacity//2)
+        @mem = @mem.realloc(@capacity)
+      end
+
+      # Tries to reclaim some memory if capacity is bigger than what was requested.
+      private def shrink_to_fit
+        return unless @size < @capacity
+
+        @capacity = @size
+        @mem = @mem.realloc(@size)
+      end
+
       # :nodoc:
       def to_unclassified_blob : Blob
-        mem = @mem
+        shrink_to_fit
 
-        # Try to reclaim some memory if capacity is bigger than what was requested
-        if @size < @capacity
-          mem = mem.realloc(@size)
-        end
-
-        Blob.new(@size, mem, @digester)
+        Blob.new(@size, @mem, @digester)
       end
 
       # :nodoc:
@@ -136,6 +141,13 @@ module Ww
         builder.to_classif_blob
       else
         builder.to_blob
+      end
+    end
+
+    # Constructs a blob from the given *string*.
+    def self.new(string : String) : Blob
+      build(capacity: string.bytesize.to_u64, classify: true) do |io|
+        io.write(string.to_slice)
       end
     end
 
