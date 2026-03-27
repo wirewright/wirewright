@@ -514,11 +514,11 @@ module Ww::Rack
     end
   end
 
-  @@cache = SyncCache(Term, D7::Feature).new(512, preallocate: true)
+  @@cache = SyncLRU(Term, D7::Feature).new(capacity: 512)
 
   # :nodoc:
   def classify(node : Term) : D7::Feature
-    @@cache.put_if_absent(node) { classify!(node) }
+    @@cache.put_if_absent(node) { classify!(node).as(D7::Feature) }
   end
 
   alias Component = DeviceComponent | TemplateComponent

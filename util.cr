@@ -3151,92 +3151,6 @@ struct Float
   end
 end
 
-module ICache(K, V)
-  abstract def []?(key : K) : V?
-  abstract def []=(key : K, value : V) : V
-
-  def fetch?(key : K, &) : {Bool, V}
-    if value = self[key]?
-      return true, value
-    end
-
-    value = yield
-
-    self[key] = value
-
-    {false, value}
-  end
-
-  def fetch(key : K, &) : V
-    _, value = fetch?(key) { yield }
-
-    value
-  end
-
-  def put_if_absent(key, &)
-    fetch(key) { yield }
-  end
-end
-
-# FIFO fixed-capacity cache.
-#
-# TODO: this will obviously "leak" memory, in the sense that it keeps
-# pointers to K/V, and thus very large caches will keep in memory something
-# that may have been collected by the GC already. We need a WeakRef impl
-# of this, but as far as I understand, Hash based stuff is very clumsy with
-# WeakRef; so we'll probably have to consider a hand-written HAMT based solution.
-# But then finding the node to delete would be clumsy. We can do it as HAMT to
-# map key to index + Binary Tree but this requires balancing in any case if we
-# want some kind of order -- which is tough...
-#
-# TODO: lots of very hot places rely on this. split into buckets & in general
-# see SOTA parallel hashes !!! Sync Map is buggy and causes occasional deadlocks.
-class SyncCache(K, V)
-  include ICache(K, V)
-
-  def initialize(@capacity : Int32, *, preallocate : Bool, byref : Bool = false)
-    {% if V.nilable? %}
-      {% @type.raise "cannot use nilable value type in SyncCache yet" %}
-    {% end %}
-
-    if preallocate
-      @data = Hash(K, V).new(initial_capacity: @capacity)
-    else
-      @data = {} of K => V
-    end
-    @data.compare_by_identity if byref
-    @lock = Sync::RWLock.new
-  end
-
-  def size
-    @lock.read { @data.size }
-  end
-
-  def []?(key : K) : V?
-    @lock.read { @data[key]? }
-  end
-
-  def []=(key : K, value : V) : V
-    @lock.write do
-      if @data.size > @capacity
-        @data.delete(@data.first_key)
-      end
-      @data[key] = value
-    end
-  end
-end
-
-struct Uncached(K, V)
-  include ICache(K, V)
-
-  def []?(key : K) : V?
-  end
-
-  def []=(key : K, value : V) : V
-    value
-  end
-end
-
 module Iterator(T)
   def next! : T
     object = self.next
@@ -3808,6 +3722,7 @@ class BlockingQueue(T)
   end
 end
 
+# FIXME: This is a very bizarre module that we should probably just move to Pigment.
 module Parseout
   extend self
 
@@ -3862,7 +3777,7 @@ module Parseout
   record Rej
 
   def cached(cache : ICache, term : Term, issues : Issue::Sink, &)
-    if cached = cache[term]?
+    if cached = cache.get?(term)
       return cached
     end
 
@@ -3871,7 +3786,7 @@ module Parseout
     version1 = issues.version
 
     if version0 == version1 && !π.is_a?(Nok)
-      cache[term] = π
+      cache.put(term, π)
     end
 
     π

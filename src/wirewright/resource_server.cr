@@ -115,21 +115,25 @@ module Ww
     FONT_EXTENSIONS = {".otf", ".ttf"}
 
     # :nodoc:
-    FONT_LISTING_CACHE = SyncCache(PathServer::DirListing, Array(FontEntry)).new(capacity: 32, preallocate: true)
+    FONT_LISTING_CACHE = SyncLRU(PathServer::DirListing, Slice(FontEntry)).new(capacity: 32)
 
-    private def font_listing(view : PathServer::DirListing) : Array(FontEntry)
+    private def font_listing(view : PathServer::DirListing) : Slice(FontEntry)
       FONT_LISTING_CACHE.put_if_absent(view) do
-        view.entries.compact_map do |entry|
+        entries = Pf::Kit.stack_array(FontEntry, 8)
+
+        view.entries.each do |entry|
           next unless entry.is_a?(PathServer::FileEntry)
           next unless entry.path.extension.in?(FONT_EXTENSIONS)
 
           stem = entry.path.stem.downcase
 
-          FontEntry.new(entry.path,
+          entries << FontEntry.new(entry.path,
             weight: FontWeight.find(stem),
             italic: stem.includes?("italic"),
           )
         end
+
+        entries.to_unsafe_readonly_slice!
       end
     end
 

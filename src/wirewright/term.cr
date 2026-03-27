@@ -1060,7 +1060,7 @@ module Ww
 
   struct Term
     # :nodoc:
-    MATCHERS = SyncCache(UInt32, Case::Matcher).new(capacity: 512, preallocate: true)
+    MATCHERS = SyncHash(UInt32, Case::Matcher).new(initial_capacity: 512)
 
     # Advanced: Direct form of `Term.case` allowing explicit control over the matcher
     # instance and the initial environment.

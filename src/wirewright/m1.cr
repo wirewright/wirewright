@@ -354,8 +354,7 @@ module Ww::M1
     operator(pattern, opt: DEFAULT_OPT)
   end
 
-  # :nodoc:
-  OPCACHE = SyncCache(Term, Op::Any).new(4096, preallocate: true)
+  @@op_cache = SyncLRU(Term, Op::Any).new(capacity: 4096)
 
   # Compiles the given M1 *pattern* to an operator.
   #
@@ -365,7 +364,7 @@ module Ww::M1
   #
   # Compilations are cached.
   def operator(pattern : Term, *, opt : Opt = DEFAULT_OPT) : Op::Any
-    OPCACHE.put_if_absent(pattern) do
+    @@op_cache.put_if_absent(pattern) do
       operator(normal(pattern), opt: opt)
     end
   end

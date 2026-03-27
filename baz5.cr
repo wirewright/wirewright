@@ -769,15 +769,15 @@ def rejR(selector : Term, successor : Rewriter) : Rewriter
   rejR(M1.operator(selector), successor)
 end
 
-SELR_SELECTOR_CACHE = SyncCache(String, Term).new(1024, preallocate: true, byref: true)
+SELR_SELECTOR_CACHE = SyncLRU(String, Term).new(1024, by_ref: true)
 
 # See the main overload (`Term`) for more info.
 def selR(selector : String, successor : Rewriter) : Rewriter
-  selR(SELR_SELECTOR_CACHE.fetch(selector) { ML.term(selector) }, successor)
+  selR(SELR_SELECTOR_CACHE.put_if_absent(selector) { ML.term(selector) }, successor)
 end
 
 def rejR(selector : String, successor : Rewriter) : Rewriter
-  rejR(SELR_SELECTOR_CACHE.fetch(selector) { ML.term(selector) }, successor)
+  rejR(SELR_SELECTOR_CACHE.put_if_absent(selector) { ML.term(selector) }, successor)
 end
 
 # Generates a `choiceR` with more than two branches for you to reduce typing.

@@ -32,7 +32,7 @@ module Ww::Soma
   # uiR is a rewriter that is needed inside the system but at the same time, it is
   # implemented using that same system.
   def uiR(metricsR : Rewriter, ruleset : Ruleset)
-    cache = SyncCache(Term, Rewrite::Any).new(capacity: 2**16, preallocate: true)
+    cache = LRU(Term, Rewrite::Any).new(capacity: 2**16)
 
     set_main, rec_main = recR
 

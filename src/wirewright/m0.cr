@@ -506,11 +506,11 @@ module Ww::M0
   end
 
   # :nodoc:
-  CACHE = SyncCache(Term, Slice(Insn)).new(512, preallocate: true)
+  @@insn_cache = SyncLRU(Term, Slice(Insn)).new(capacity: 512)
 
   # Compiles an M0 pattern into a sequence of M0 instructions.
   def compile(pattern : Term) : Slice(Insn)
-    CACHE.put_if_absent(pattern) do
+    @@insn_cache.put_if_absent(pattern) do
       # There usually aren't a lot of instructions. So we can use stack space.
       # This lets us know, later on, the exact amount of memory to allocate,
       # which is neat.

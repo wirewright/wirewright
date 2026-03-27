@@ -448,7 +448,7 @@ module Ww
       end
     end
 
-    REWRITER_CACHE = SyncCache({Term, Term}, Rewriter).new(capacity: 32, preallocate: true)
+    REWRITER_CACHE = SyncLRU({Term, Term}, Rewriter).new(capacity: 32)
 
     def rewriter(spec : Term, data : Term) : Rewriter
       REWRITER_CACHE.put_if_absent({spec, data}) do
