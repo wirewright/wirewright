@@ -77,6 +77,10 @@ module Ww
         @size = 0u64
       end
 
+      def bytesize : UInt64
+        @size
+      end
+
       def read(slice : Bytes) : NoReturn
         raise EOFError.new
       end
@@ -93,9 +97,9 @@ module Ww
       end
 
       private def reserve(newsize : UInt64) : Nil
-        return if @size + newsize <= @capacity
+        return if newsize <= @capacity
 
-        @capacity = Math.max(@capacity + newsize, @capacity + @capacity//2)
+        @capacity = Math.max(newsize, @capacity + @capacity//2)
         @mem = @mem.realloc(@capacity)
       end
 
@@ -159,6 +163,11 @@ module Ww
     # Returns the byte content of this blob.
     def to_slice : Bytes
       Slice.new(to_unsafe, @size, read_only: true)
+    end
+
+    # Unconditionally converts this blob to a Crystal string.
+    def to_string : String
+      String.new(bytes)
     end
 
     # :ditto:
