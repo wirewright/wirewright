@@ -10,6 +10,10 @@ module Ww
     # compute the value. After the value is computed, puts it in cache. Returns
     # the resulting value. The boolean returned alongside the value indicates whether
     # the value was read from cache (`true`) or computed (`false`).
+    #
+    # NOTE: This is simply a get followed by a put. In other words, atomicity
+    # is not guaranteed; someone else may insert a value for *key* between us
+    # checking it and inserting it.
     def put_if_absent?(key : K, &) : {Bool, V}
       if value = get?(key)
         return true, value
@@ -30,6 +34,12 @@ module Ww
   struct Uncached(K, V)
     include ICache(K, V)
 
+    def initialize
+      {% if V.nilable? %}
+        {% V.raise "cannot use nilable V with ICache" %}
+      {% end %}
+    end
+
     def get?(key : K) : V?
     end
 
@@ -44,6 +54,10 @@ module Ww
 
     # See `LRU#initialize` for info on *args* and *kwargs*.
     def initialize(*args, **kwargs)
+      {% if V.nilable? %}
+        {% V.raise "cannot use nilable V with ICache" %}
+      {% end %}
+
       @cache = LRU(K, V).new(*args, **kwargs)
       @lock = Sync::Mutex.new
     end
@@ -75,6 +89,10 @@ module Ww
     # *by ref* can be set to `true` to make keys hash by reference instead of value
     # (see `Hash#compare_by_identity` for more info).
     def initialize(@capacity : Int32, by_ref : Bool = false)
+      {% if V.nilable? %}
+        {% V.raise "cannot use nilable V with ICache" %}
+      {% end %}
+
       @entries = Dll.empty(Entry(K, V))
       @table = Hash(K, Dll::Item(Entry(K, V))).new(initial_capacity: @capacity)
       if by_ref
