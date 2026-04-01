@@ -276,8 +276,9 @@ module Ww
     INOTIFY_MASK = LibInotify::ALL_EVENTS ^
                    LibInotify::Mask::Access ^
                    LibInotify::Mask::Open ^
-                   LibInotify::Mask::CloseWrite ^
-                   LibInotify::Mask::CloseNoWrite
+                   LibInotify::Mask::CloseNoWrite ^
+                   LibInotify::Mask::DeleteSelf ^
+                   LibInotify::Mask::MoveSelf
 
     # How much to wait between heartbeats.
     #

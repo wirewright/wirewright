@@ -22,8 +22,24 @@ module Ww
   # and if you wait until `view` reports your file exists with the content you
   # wanted it to have, then everything is OK and the write is a success.
   #
-  # Metaphorically speaking, jon't believe your arms moved (file system state changed)
-  # on your command (`converge`) until you see it with your own eyes (`view`).
+  # Metaphorically speaking, you can't know your arms really moved (file system
+  # state changed) after you commanded them to (`converge`) until you see it happen
+  # with your eyes (`view`).
+  #
+  # NOTE: Unfortunately, PathServer won't and can't fix the mess that the dominant OS/file
+  # system designs/abstractions are. In a sense, it's the opposite; PathServer is almost
+  # designed to exaggerate them. In particular, there is always a chance of a race. So
+  # for example, when you `read`, you actually aren't guaranteed to get the full file
+  # due to mid-read writes. Even though we have light protections for mid-read writes,
+  # making them exceedingly rare even in degenerate cases (e.g. spam writing while PathServer
+  # is trying to read) -- we actually never know what a "full file" even is. The moment
+  # PathServer decides to read, someone else may decide to write to the same file, and
+  # so on. Moreover, between PathServer's decision to read and PathMonitor's notification
+  # that a path changed, we have an arbitrary amount of time, and during that time, someone
+  # may have done something. I doubt there is a good solution for this in general, other
+  # than designing one's own file system and OS, but that never ends well regardless of one's
+  # intentions. All in all, we can only decrease the probability of something mid-read
+  # write happening on our end, by rejecting suspicious stuff aggressively.
   module PathServer
     extend self
 
@@ -192,15 +208,15 @@ module Ww
 
             begin
               # If the version number changed, request metadata from disk.
-              info = File.info(path)
+              info0 = File.info(path)
 
               # If timestamps changed, proceed. If they haven't, we had some sort of
               # spurious version change which we ignore.
-              next if state.is_a?(Present) && state.listing.timestamp == info.modification_time
+              next if state.is_a?(Present) && state.listing.timestamp == info0.modification_time
 
               # Otherwise, something really did change and we re-inspect the underlying
               # file system entity.
-              if info.directory?
+              if info0.directory?
                 entries = [] of DirListingEntry
 
                 Dir.each_child(path) do |entry|
@@ -221,12 +237,12 @@ module Ww
                   end
                 end
 
-                listing = DirListing.new(info.modification_time, entries)
-              elsif info.file?
-                if info.size > SAFE_FILE_BYTESIZE
-                  digest = File.open(path, "rb") do |src|
-                    buffer = Bytes.new(8192)
+                listing = DirListing.new(info0.modification_time, entries)
+              elsif info0.file?
+                buffer = Bytes.new(8192)
 
+                if info0.size > SAFE_FILE_BYTESIZE
+                  digest = File.open(path, "rb") do |src|
                     Term::Blob::DIGEST_ALGORITHM.digest do |dst|
                       loop do
                         size = src.read(buffer)
@@ -237,15 +253,41 @@ module Ww
                     end
                   end
 
-                  listing = LargeFileListing.new(info.modification_time, digest, info.size)
+                  listing = LargeFileListing.new(info0.modification_time, digest, info0.size)
                 else
                   content = File.open(path, "rb") do |src|
                     Term::Blob.build(classify: true) do |dst|
-                      IO.copy(src, dst)
+                      loop do
+                        blksize = src.read(buffer)
+                        break if blksize.zero?
+
+                        dst.write(buffer.trim(blksize))
+
+                        if dst.bytesize > info0.size
+                          raise IO::Error.new("unexpected bytesize (file is being modified in flight)")
+                        end
+                      end
                     end
                   end
 
-                  listing = FileListing.new(info.modification_time, content)
+                  # Yes, sadly, I think this is the best we can do, and even this will let stuff
+                  # through sometimes (think modification time granularity 1s, we read during
+                  # the second, someone writes right afterwards, we do this check, we think
+                  # it wasn't modified, but it was...)
+                  modified = pass do
+                    info1 = File.info(path)
+                    next true unless info0.size == info1.size
+                    next true unless info0.modification_time == info1.modification_time
+
+                    false
+                  end
+
+                  if modified
+                    Log.debug { "file #{path} was modified in flight" }
+                    next
+                  end
+
+                  listing = FileListing.new(info0.modification_time, content)
                 end
               else
                 next
@@ -557,9 +599,7 @@ module Ww
     #
     # Raises `Error` if the file cannot be read.
     def read_string(path : Path, **kwargs) : String
-      blob = read(path, **kwargs)
-
-      String.new(blob.bytes)
+      read(path, **kwargs).to_string
     end
 
     # Overwrites the content of the file at *path* with *content*.
