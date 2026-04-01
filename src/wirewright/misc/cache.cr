@@ -31,6 +31,7 @@ module Ww
   end
 
   # Disables caching.
+  @[Sync::Safe]
   struct Uncached(K, V)
     include ICache(K, V)
 
@@ -49,15 +50,12 @@ module Ww
   end
 
   # Thread-safe wrapper for `LRU`.
+  @[Sync::Safe]
   class SyncLRU(K, V)
     include ICache(K, V)
 
     # See `LRU#initialize` for info on *args* and *kwargs*.
     def initialize(*args, **kwargs)
-      {% if V.nilable? %}
-        {% V.raise "cannot use nilable V with ICache" %}
-      {% end %}
-
       @cache = LRU(K, V).new(*args, **kwargs)
       @lock = Sync::Mutex.new
     end
@@ -133,6 +131,13 @@ module Ww
 
       value
     end
+
+    # :nodoc:
+    def delete(key : K) : Nil
+      return unless item = @table.delete(key)
+
+      Dll.delete(item)
+    end
   end
 
   # :nodoc:
@@ -142,7 +147,7 @@ module Ww
     extend self
 
     defcase Head(T), r : Item(T) | Tail(T), mutation: true
-    defcase Tail(T), l : Item(T) | Head(T), mutation: true
+    defcase Tail(T), l : Head(T) | Item(T), mutation: true
     defcase Item(T), l : Head(T) | Item(T) | Nil, m : T, r : Tail(T) | Item(T) | Nil, mutation: true
 
     defrecord List(T), head : Head(T), tail : Tail(T)
@@ -161,7 +166,7 @@ module Ww
     end
 
     def prepend(list : List(T), object : T) : Item(T) forall T
-      prepend(list, Item.new(list.head, object, list.tail))
+      prepend(list, Item.new(nil, object, nil))
     end
 
     def prepend(list : List(T), item : Item(T)) : Item(T) forall T
@@ -197,6 +202,61 @@ module Ww
       end
 
       delete(item)
+    end
+  end
+
+  # An LRU cache that also uses weak references for `V`.
+  #
+  # This let's the GC collect `V`s when there's memory pressure. Simultaneously,
+  # if the number of `V`s exceeds *capacity*, we start evicting as in a normal
+  # LRU cache.
+  class WeakLRU(K, V)
+    include ICache(K, V)
+
+    # See `LRU#initialize` for info on *args* and *kwargs*.
+    def initialize(*args, **kwargs)
+      {% if V.nilable? %}
+        {% V.raise "cannot use nilable V with ICache" %}
+      {% end %}
+
+      @lru = LRU(K, WeakRef(V)).new(*args, **kwargs)
+    end
+
+    def get?(key : K) : V?
+      return unless ref = @lru.get?(key)
+
+      unless value = ref.value
+        @lru.delete(key)
+        return
+      end
+
+      value
+    end
+
+    def put(key : K, value : V) : V
+      @lru.put(key, value: WeakRef.new(value))
+
+      value
+    end
+  end
+
+  # Thread-safe wrapper for `WeakLRU`.
+  @[Sync::Safe]
+  class SyncWeakLRU(K, V)
+    include ICache(K, V)
+
+    # See `LRU#initialize` for info on *args* and *kwargs*.
+    def initialize(*args, **kwargs)
+      @lru = WeakLRU(K, V).new(*args, **kwargs)
+      @lock = Sync::Mutex.new
+    end
+
+    def get?(key : K) : V?
+      @lock.synchronize { @lru.get?(key) }
+    end
+
+    def put(key : K, value : V) : V
+      @lock.synchronize { @lru.put(key, value) }
     end
   end
 end

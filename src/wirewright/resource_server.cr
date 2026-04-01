@@ -16,7 +16,7 @@ module Ww
   module ResourceServer
     extend self
 
-    alias Query = FileQuery | CodexQuery | RuntimeQuery | FontQuery | CodepointsQuery | URIQuery
+    alias Query = FileQuery | CodexQuery | RuntimeQuery | FontQuery | CodepointsQuery | URIQuery | IdQuery
 
     defrecord RuntimeQuery, path : Path
     defrecord CodexQuery, name : String
@@ -24,6 +24,7 @@ module Ww
     defrecord FontQuery, family : String, weight : Int32, italic : Bool
     defrecord CodepointsQuery, family : String
     defrecord URIQuery, uri : URI
+    defrecord IdQuery, content : Term::Blob
 
     def runtime(path : Path) : RuntimeQuery
       RuntimeQuery.new(path)
@@ -198,6 +199,10 @@ module Ww
       end
     end
 
+    private def get_impl(query : IdQuery) : Response
+      Present.new(query.content)
+    end
+
     @@running = Atomic(Bool).new(false)
     @@changed = BlockingSignal.new
 
@@ -287,6 +292,14 @@ module Ww
 
         matchpi %{(uri uri_string)}, uri: String do
           URIQuery.new(URI.parse(uri))
+        end
+
+        matchpi %{(literal content_string)}, content: String do
+          IdQuery.new(Term::Blob.new(content))
+        end
+
+        matchpi %{(literal content_blob)}, content: Term::Blob do
+          IdQuery.new(content)
         end
 
         otherwise { }
