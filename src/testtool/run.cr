@@ -452,8 +452,8 @@ module Testtool
         normp = M1.normal(pattern)
         range = measure(stat) { M1.{{kind.id}}(normp) }
         actual = Term.of(
-          min: range[0] == Magnitude::INFINITY ? nil : range[0],
-          max: range[1] == Magnitude::INFINITY ? nil : range[1],
+          min: range[0] == Magnitude::INFINITY ? nil : range[0].to_i,
+          max: range[1] == Magnitude::INFINITY ? nil : range[1].to_i,
         )
 
         next if test.{{kind.id}} == actual

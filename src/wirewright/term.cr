@@ -657,8 +657,13 @@ module Ww
     end
 
     # Constructs a number term representing the given number *object*.
-    def self.[](object : Number) : Num
+    def self.[](object : Int | BigDecimal | BigRational) : Num
       Num.exact(object)
+    end
+
+    # :ditto:
+    def self.[](object : Float) : Num
+      Num.approx(object)
     end
 
     # Constructs a string term representing the given string *object*.
