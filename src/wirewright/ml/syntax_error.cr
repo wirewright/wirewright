@@ -101,8 +101,6 @@ module Ww::ML
     # *styled* can be used to enable/disable emission of ANSI escape
     # sequences for colors, emphasis, etc.
     def humanize(io, *, styled : Bool = Colorize.enabled?) : Nil
-      # TODO: Implement this using Ω once it is capable enough (mainly in terms
-      # of rich text).
       extended, line, column = SyntaxError.lookaround(@text)
 
       styles = StyleStack.new do |style0, style1|
