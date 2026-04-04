@@ -1,5 +1,7 @@
 # Hosts issue-reporting machinery that is used by multiple subsystems of Wirewright,
 # for instance by `Microfold` and `Alloy`.
+#
+# DEPRECATED: Use `Outcome` instead.
 module Ww::Issue
   extend self
 

@@ -8,12 +8,12 @@ backdrop: (oklch 0.9 0 0)
 ;; due to precision errors).
 (group dt: 0
   (rect
-    fill: 3917298175 ;; #e97d39ff
+    fill: (rgb 233 125 57)
     dl: 0
     final-w: 20
     final-h: 20)
   (rect
-    fill: "#e97d39ff"
+    fill: "#e97d39"
     dl: 20
     final-w: 20
     final-h: 20)
