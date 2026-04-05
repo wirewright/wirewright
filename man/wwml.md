@@ -968,7 +968,7 @@ may be empty.
 #### Shorthands for `%layer`
 
 - `{¦ <selectors>}` is the same as writing `(%layer _ <selectors>)`.
-- `{<term>¦ <selectors>}` is the same as writing `(%partition (%let <term> _) <selectors>)`.
+- `{<term>¦ <selectors>}` is the same as writing `(%partition (%let <term> _) (%layer _ <selectors>))`.
 - `{+¦ <term list>}` is the same as writing `(%layer _ {<each term from term list>: true})`
 - `{-¦ <term list>}` is the same as writing `(%layer _ {<each term from term list>: false})`
 
@@ -1058,12 +1058,11 @@ The residue term is optional.
 
 **Absence of whitespace between prefix and term is mandatory**.
 
-- `<BACKQUOTE><term>` is the same as writing `(%slot <term>)`. Note: We spell it out because Markdown appears
-  to act silly when the actual backquote character is found inside another backquote.
+- `` `<term> `` is the same as writing `(%slot <term>)`.
 - `≡<term>` is the same as writing `(%nonself <term>)`.
 - `%'<term>` is the same as writing `(%literal <term>)`.
 - `±<term>` is the same as writing `(%let <term> _number)`.
-- `⁰x` is the same as writing `(x _*)`, `¹x` is `(_ x _*)`, `³x` is `(_ _ x _*)` and so on.
+- `⁰x` is the same as writing `(x _*)`, `¹x` is `(_ x _*)`, `²x` is `(_ _ x _*)` and so on.
 - `⁰⁻⁰x` is the same as writing `((x _*) _*)`, `¹⁻⁰x` is `(_ (x _*) _*)`, `¹⁻²x` is
   `(_ (_ _ x _*) _*)` and so on. Nesting can proceed indefinitely. For example, `⁰⁻¹⁻²x`
   is the same as writing `((_ (_ _ x _*) _*) _*)`.
