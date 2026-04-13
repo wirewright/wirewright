@@ -842,9 +842,14 @@ module Ww
     def self.of(object : Nil) : Nil
     end
 
+    # Passes *object* through.
+    def self.of(object : Term) : Term
+      object
+    end
+
     # Same as `.[]` but upcasts to generic `Term` for you.
     def self.of(*args, **kwargs)
-      Term.of(Term[*args, **kwargs])
+      of(Term[*args, **kwargs])
     end
   end
 
