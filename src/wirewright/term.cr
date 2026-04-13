@@ -255,7 +255,7 @@ module Ww
     # than behind a pointer.
     def inline? : Bool
       case tag
-      when .sym?, .num_int?, .num_flt?, .boolean?
+      when .sym?, .num_int?, .boolean?
         true
       else
         false

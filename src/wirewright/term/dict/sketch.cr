@@ -56,7 +56,14 @@ class Ww::Term::Dict
     # :ditto:
     def self.value(term : Term::Any, hashcode : UInt64) : Sketch
       case term
-      in Term::Num, Term::Str, Term::Boolean, Term::Blob
+      in Term::Num
+        # Approximate numbers are not included in the value sketch.
+        if term.approx?
+          return empty
+        end
+
+        one(hashcode)
+      in Term::Str, Term::Boolean, Term::Blob
         one(hashcode)
       in Term::Sym
         empty

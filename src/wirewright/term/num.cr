@@ -346,6 +346,7 @@ module Ww
         return a.to_u32
       end
 
+      return if approx? # Approximate numbers, even ≈0 or ≈1, aren't valid indices.
       return unless natural?
 
       to?(UInt32)
@@ -795,12 +796,41 @@ module Ww
       ML.compact(io, self)
     end
 
+    # :nodoc:
+    DISTURBANCE_APPROX = 2761370561472851u64
+
     def hashrepr : UInt64
       case @k
-      in Int64, Float64
+      in Int64
         @k.unsafe_as(UInt64)
+      in Float64
+        # Distrurb approx values with DISTURBANCE_APPROX so that our hashcode doesn't collide
+        # with Int64 and BigRational as readily but most importantly so that hashcode behaves
+        # like equality, which requires both parties to be of the approximate kind.
+        Term.hashcode(DISTURBANCE_APPROX, @k.unsafe_as(UInt64))
       in Pointer(BigRational)
         to(Float64).unsafe_as(UInt64)
+      end
+    end
+
+    def ==(other : Num) : Bool
+      l, r = @k, other.@k
+
+      if l.is_a?(Int64) # Fast path
+        return l == r
+      end
+
+      # NOTE: Num always uses the fittest representation, that's an invariant.
+      # So for two numbers to be equal, their reprs must necessarily be equal.
+      case {l, r}
+      when {Int64, Int64}
+        l == r
+      when {Float64, Float64}
+        l == r # Repeat ourselves for stricter restrictions on l and r
+      when {Pointer(BigRational), Pointer(BigRational)}
+        l.value == r.value
+      else
+        false
       end
     end
   end
@@ -810,6 +840,6 @@ struct Number
   include Comparable(::Ww::Term::Num)
 
   def <=>(other : ::Ww::Term::Num)
-    ::Ww::Term::Num.exact(self) <=> other
+    ::Ww::Term[self] <=> other
   end
 end
