@@ -2866,6 +2866,6 @@ module Ww::M1
       end
     end
 
-    Intrinsics.unreachable
+    unreachable
   end
 end
