@@ -14,7 +14,7 @@ module Ww
     # NOTE: This is simply a get followed by a put. In other words, atomicity
     # is not guaranteed; someone else may insert a value for *key* between us
     # checking it and inserting it.
-    def put_if_absent?(key : K, &) : {Bool, V}
+    def put_if_absent?(key : K, & : -> V) : {Bool, V}
       if value = get?(key)
         return true, value
       end
@@ -115,7 +115,7 @@ module Ww
     def put(key : K, value : V) : V
       # Update.
       if item = @table[key]?
-        Dll.update(item, Entry.new(key, value))
+        Dll.update(item, Entry(K, V).new(key, value))
         hit(item)
         return value
       end
@@ -126,7 +126,7 @@ module Ww
       end
 
       # Insert.
-      item = Dll.prepend(@entries, Entry.new(key, value))
+      item = Dll.prepend(@entries, Entry(K, V).new(key, value))
       @table[key] = item
 
       value
