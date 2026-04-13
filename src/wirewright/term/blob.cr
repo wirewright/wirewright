@@ -121,7 +121,9 @@ module Ww
       # :nodoc:
       def to_blob(classif : Classif? = nil) : Blob
         instance = to_unclassified_blob
-        instance.classify!(classif)
+        if classif
+          instance.classify!(classif)
+        end
         instance
       end
 
