@@ -166,7 +166,7 @@ module Ww::M1
       self.select(*args, **kwargs) { true }
     end
 
-    struct Matcher
+    class Matcher
       include Term::Case::Matcher
 
       def initialize(@pset : PatternSet(Term), @table : Slice(Int32))
@@ -192,12 +192,17 @@ module Ww::M1
         new(pset, table)
       end
 
-      def scan(matchee : Term, *, env : Term::Dict)
-        @pset.query(matchee, env: env).compact_map do |envs, index|
-          next unless env_ = envs.single?
+      def scan(matchee : Term, *, env : Term::Dict, &)
+        @pset.each_candidate(matchee) do |op, index|
+          next unless env_ = M1.match?(env, op, matchee)
 
-          {env_, @table[index]}
+          result = yield env_, @table[index]
+          unless result.is_a?(Term::Case::Continue.class)
+            return result
+          end
         end
+
+        Term::Case::Continue
       end
     end
 

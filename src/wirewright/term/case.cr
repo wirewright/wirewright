@@ -163,12 +163,6 @@ module Ww::Term::Case
     },
   }
 
-  # :nodoc:
-  #
-  # MACRO-ONLY: a global counter that gives each `of` expansion a unique id,
-  # used for caching the associated matchers.
-  CASE_ID = [0u32]
-
   # The low-level description of a `match` clause which all other variants
   # are reduced to in `Case.scan` (`Term.case`).
   defrecord MatchSpec,
@@ -202,43 +196,14 @@ module Ww::Term::Case
       extend ::Ww::Term::Case::MatcherClass
     end
 
-    # The `Int32` emitted by the iterator is the index of the matching match spec
-    # in the slice passed to `MatcherClass.compile`.
-    abstract def scan(matchee : Term, *, env : Term::Dict)
+    # Yields match envs and indices for each matching spec. Indices refer into
+    # the slice passed to `MatcherClass.compile`.
+    abstract def scan(matchee : Term, *, env : Term::Dict, & : Term::Dict, Int32 ->)
   end
 
   # Class-side requirements of `Matcher`.
   module MatcherClass
     abstract def compile(specs : Slice(MatchSpec)) : Matcher
-  end
-
-  # :nodoc:
-  class ScanIterator(T)
-    include Iterator({Term::Dict, Int32})
-
-    def initialize(
-      @source : Slice(T),
-      @matchee : Term,
-      @env : Term::Dict,
-      @sink : T, Int32, Term, Term::Dict -> {Term::Dict, Int32}?,
-    )
-      @index = 0
-    end
-
-    def next
-      loop do
-        if @index == @source.size
-          return Iterator.stop
-        end
-
-        assert 0 <= @index < @source.size
-
-        object = @source.unsafe_fetch(@index)
-        result = @sink.call(object, @index, @matchee, @env)
-        @index += 1
-        return result if result
-      end
-    end
   end
 
   # A case matcher that uses *Engine*.
@@ -258,20 +223,23 @@ module Ww::Term::Case
       new(specs)
     end
 
-    private def sink
-      sink = ->(spec : MatchSpec, index : Int32, matchee : Term, env : Term::Dict) do
-        if dict = matchee.as_d?
-          return unless MatchSpec.match_possible?(spec, dict)
+    def scan(matchee : Term, *, env : Term::Dict, &)
+      dict = matchee.as_d?
+
+      @specs.each_with_index do |spec, index|
+        if dict
+          next unless MatchSpec.match_possible?(spec, dict)
         end
 
-        return unless env1 = Engine.match?(spec.pattern, matchee, env: env)
+        next unless env1 = Engine.match?(spec.pattern, matchee, env: env)
 
-        {env1, index}
+        result = yield env1, index
+        unless result.is_a?(Continue.class)
+          return result
+        end
       end
-    end
 
-    def scan(matchee : Term, *, env : Term::Dict)
-      ScanIterator.new(@specs, matchee, env, sink)
+      Continue
     end
   end
 
@@ -287,21 +255,23 @@ module Ww::Term::Case
       new(arms: specs.to_readonly_slice { |spec| {M0.compile(spec.pattern), spec} })
     end
 
-    private def sink
-      ->(arm : {Slice(M0::Insn), MatchSpec}, index : Int32, matchee : Term, env : Term::Dict) do
-        insns, spec = arm
-        if dict = matchee.as_d?
-          return unless MatchSpec.match_possible?(spec, dict)
+    def scan(matchee : Term, *, env : Term::Dict, &)
+      dict = matchee.as_d?
+
+      @arms.each_with_index do |(insns, spec), index|
+        if dict
+          next unless MatchSpec.match_possible?(spec, dict)
         end
 
-        return unless env1 = M0.match?(env, insns, matchee)
+        next unless env1 = M0.match?(env, insns, matchee)
 
-        {env1, index}
+        result = yield env1, index
+        unless result.is_a?(Continue.class)
+          return result
+        end
       end
-    end
 
-    def scan(matchee : Term, *, env : Term::Dict)
-      ScanIterator.new(@arms, matchee, env, sink)
+      Continue
     end
   end
 
@@ -318,27 +288,75 @@ module Ww::Term::Case
       new(arms: specs.to_readonly_slice { |spec| {M1.operator(spec.pattern), spec} })
     end
 
-    private def sink
-      ->(arm : {M1::Op::Any, MatchSpec}, index : Int32, matchee : Term, env : Term::Dict) do
-        op, spec = arm
-        if dict = matchee.as_d?
-          return unless MatchSpec.match_possible?(spec, dict)
+    def scan(matchee : Term, *, env : Term::Dict, &)
+      dict = matchee.as_d?
+
+      @arms.each_with_index do |(op, spec), index|
+        if dict
+          next unless MatchSpec.match_possible?(spec, dict)
         end
 
-        return unless M1.probably_matches?(op, matchee)
-        return unless env1 = M1.match?(env, op, matchee)
+        next unless M1.probably_matches?(op, matchee)
+        next unless env1 = M1.match?(env, op, matchee)
 
-        {env1, index}
+        result = yield env1, index
+        unless result.is_a?(Continue.class)
+          return result
+        end
       end
-    end
 
-    def scan(matchee : Term, *, env : Term::Dict)
-      ScanIterator.new(@arms, matchee, env, sink)
+      Continue
     end
   end
 
   # See `continue`.
   module Continue
+  end
+
+  # :nodoc:
+  MATCHERS = MatcherArray(MATCHERS_CAPACITY).new
+
+  # :nodoc:
+  #
+  # You should increase this if the matcher array overflows. There's no good
+  # way to do this automatically in Crystal (none that I can think of that is).
+  MATCHERS_CAPACITY = 256
+
+  # :nodoc:
+  #
+  # WARNING: Never ever access this at runtime. Only at compile-time.
+  MATCHERS_SIZE = [0]
+
+  # :nodoc:
+  struct MatcherArray(N)
+    alias MatcherRef = Case::Matcher*
+
+    def initialize
+      @matchers = Slice(MatcherRef).new(N, MatcherRef.null)
+    end
+
+    def put_if_absent(id : Int32, &fn : -> Case::Matcher) : Case::Matcher
+      unless 0 <= id < @matchers.size
+        raise IndexError.new
+      end
+
+      # See e.g. https://github.com/crystal-lang/crystal/issues/9078
+      #
+      # For now we'll use :nodoc: Atomic::Ops
+      ref = Atomic::Ops.load(@matchers.to_unsafe + id, :acquire, volatile: true)
+      unless ref.null?
+        return ref.value
+      end
+
+      matcher = fn.call
+
+      ref = MatcherRef.malloc(1)
+      ref.value = matcher
+
+      Atomic::Ops.store(@matchers.to_unsafe + id, ref, :release, volatile: true)
+
+      matcher
+    end
   end
 
   # A higher-order macro used to *define* a case macro like `Case.scan`. This
@@ -390,8 +408,14 @@ module Ww::Term::Case
     macro {{call.name}}({{call.args.splat(",")}} &block)
       \{%
         # Obtain a fresh case id.
-        %case_id = {{@type}}::CASE_ID[0]
-        {{@type}}::CASE_ID[0] += 1
+        %matchers_size = ::Ww::Term::Case::MATCHERS_SIZE[0]
+        %matchers_capacity = ::Ww::Term::Case::MATCHERS_CAPACITY
+        if %matchers_size + 1 > %matchers_capacity
+          ::Ww::Term::Case::MATCHERS_CAPACITY.raise "matcher array capacity too small (#{%matchers_size + 1} > #{%matchers_capacity}; increase capacity)"
+        end
+
+        %matcher_id = %matchers_size
+        ::Ww::Term::Case::MATCHERS_SIZE[0] += 1
 
         # Normalize body to an array of "statements".
         %stmts = block.body
@@ -489,7 +513,7 @@ module Ww::Term::Case
             #   matchpi %{b} { puts "Hi" }
             #   matchpi %{c} { puts "Hi" }
             %stmt.args.each_with_index do |%arg, %index|
-              %desc = {{@type}}::DESCTAB[%stmt.name.symbolize]
+              %desc = ::Ww::Term::Case::DESCTAB[%stmt.name.symbolize]
               %location = "#{%arg.filename.id}:#{%arg.line_number}:#{%arg.column_number}"
 
               # Validate arguments of calls like `matchpi`, `givenpi` etc.
@@ -518,7 +542,7 @@ module Ww::Term::Case
 
               if %desc[:infer]
                 %icaps = %arg
-                  .scan({{@type}}::RE_CAPTURES)
+                  .scan(::Ww::Term::Case::RE_CAPTURES)
                   .map { |%match| (%match[1] || %match[2]).id }
                   .uniq
               end
@@ -556,7 +580,7 @@ module Ww::Term::Case
               end
 
               if %desc[:infer] && %desc[:typed]
-                {{@type}}::TYPETAB.each do |%row|
+                ::Ww::Term::Case::TYPETAB.each do |%row|
                   %arg.scan(%row[:pattern].resolve).each do |%match|
                     %icap = %match[%row[:name]].id
                     %norm = %icap.gsub(/-/, "_").gsub(/#/, "").symbolize
@@ -582,7 +606,7 @@ module Ww::Term::Case
               elsif %desc[:tag] == :"ml/terms"
                 %call = "::Ww::ML.terms(#{%arg})".id
               else
-                {{@type}}::DESCTAB.raise "invalid tag: #{%tag}"
+                ::Ww::Term::Case::DESCTAB.raise "invalid tag: #{%tag}"
               end
 
               # Submit the branch.
@@ -598,7 +622,7 @@ module Ww::Term::Case
           end
         end
 
-        {{id}} = %case_id
+        {{id}} = %matcher_id
         {{branches}} = %branches
         {{sink}} = %sink
       %}
@@ -607,85 +631,69 @@ module Ww::Term::Case
     end
   end
 
-  # NOTE: The whole gymnastics with how ScanIterator/scan() and friends work is me trying to
-  # avoid what appears to be a codegen bug in Crystal. We don't need an iterator here. Moreover,
-  # it's malicious to have an iterator in such a hot path. But if I use a block instead of an iterator
-  # (i.e., `scan(..., & : <match env>, <index> ->)`), I get bizarre crashes under stress (but
-  # not generally). E.g. UIR crashes whereas everything else does not. It feels related somehow
-  # to Crystal "unifying" types to get the result type of a block, which results in some type
-  # being ignored or something along those lines, leading calling code to misinterpret and so on.
-  # But this is just a hunch. I've no idea how the thing actually works, and I'm not sure it's
-  # easy to repro the bug.
-
   # The implementation of `Term.case`.
   #
-  # - *matchers* is an object that must respond to `put_if_absent`. It is used to cache
-  #   case matchers.
   # - *matcher* is the case matcher *class* to use for compiling and matching patterns.
   # - *matchee* is the term to match.
   # - *env* is the base environment.
-  def_caselike scan(matchers, matcher, matchee, env) do |id, branches, sink|
+  def_caselike scan(matcher, matchee, env) do |id, branches, sink|
     {% begin %}
       {% if branches.empty? %}
         {% raise "empty case not allowed" %}
       {% end %}\
 
-      %matcher = {{matchers}}.put_if_absent({{id}}) do
+      %matcher = ::Ww::Term::Case::MATCHERS.put_if_absent({{id}}) do
         %specs = Slice[
           {% for branch in branches %}\
             {% call = branch[:pattern][:call]
                cue0 = branch[:cues][0]
                cue1 = branch[:cues][1]
                cue2 = branch[:cues][2] %}\
-            {{@type}}::MatchSpec.new({{call}}, Term[{{cue0}}], Term[{{cue1}}], Term[{{cue2}}]),
+            ::Ww::Term::Case::MatchSpec.new({{call}}, Term[{{cue0}}], Term[{{cue1}}], Term[{{cue2}}]),
           {% end %}\
         ]
 
         {{matcher}}.compile(%specs)
       end
 
-      %matchee = {{matchee}}
-      %matches = %matcher.scan(%matchee, env: {{env}})
+      %matchee = Term.of({{matchee}})
 
-      loop do
-        %match = %matches.next
-        if %match.is_a?(Iterator::Stop)
-          {% if sink %}\
-            break(pass {{sink}})
-          {% else %}\
-            raise ArgumentError.new("unrecognized term: #{ML.compact(%matchee)}")
-          {% end %}\
-        end
-
-        %env, %index = %match
-
+      # NOTE: The cast is necessary because otherwise, the thing would do
+      # dynamic dispatch, copying the block some number of times (in our case
+      # maybe 8-ish?). Inside each copy of the block at that point is a giant
+      # `case` with dozens to hundreds of `when`s. Each `when` opens a scope
+      # with `pass { }` and does its work. All of this is copied. That's
+      # catastrophic. Thousands of locals. Hundreds of thousands of instructions.
+      # It took me a few hours to debug this blowup; so that's the reason why
+      # the cast must be here.
+      %result = %matcher.as({{matcher}}).scan(%matchee, env: {{env}}) do |%env, %index|
         case %index
         {% for branch, i in branches %}\
         when {{i}}
-          {% if branch[:captures].empty? %}\
-            %result{i} = pass do
-              {{branch[:body]}}
-            end
-          {% else %}\
-            %result{i} = pass do
-              {% for capture, var, j in branch[:captures] %}\
-                %value{i, j} = %env[{{capture}}]? || raise("#{ {{branch[:location]}} }: missing capture `{{capture.id}}`")
-                {% if type = branch[:cast][var] %}\
-                  {{var.id}} = %value{i, j}.to({{type}})
-                {% else %}\
-                  {{var.id}} = %value{i, j}
-                {% end %}\
+          pass do
+            {% for capture, var in branch[:captures] %}\
+              {% if type = branch[:cast][var] %}\
+                {{var.id}} = (%env[{{capture}}]? || raise("#{ {{branch[:location]}} }: missing capture `{{capture.id}}`")).to({{type}})
+              {% else %}\
+                {{var.id}} = %env[{{capture}}]? || raise("#{ {{branch[:location]}} }: missing capture `{{capture.id}}`")
               {% end %}\
-              {{branch[:body]}}
-            end
-          {% end %}\
-          unless %result{i}.is_a?({{@type}}::Continue.class)
-            break %result{i}
+            {% end %}
+            {{branch[:body]}}
           end
         {% end %}
         else
           unreachable
         end
+      end
+
+      if %result.is_a?(::Ww::Term::Case::Continue.class)
+        {% if sink %}
+        pass {{sink}}
+        {% else %}
+        raise ArgumentError.new("unrecognized term: #{ML.compact(%matchee)}")
+        {% end %}
+      else
+        %result
       end
     {% end %}
   end

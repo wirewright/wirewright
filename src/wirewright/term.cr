@@ -287,6 +287,10 @@ module Ww
       end
     end
 
+    def subtype?(candidate : TermType) : Bool
+      type.subtype?(candidate)
+    end
+
     # Constructs a `Term` wrapping the given number term *instance*.
     def self.of(instance : Num) : Term
       case a = instance.@k
@@ -1069,9 +1073,6 @@ module Ww
   # Pattern matching
 
   struct Term
-    # :nodoc:
-    MATCHERS = SyncHash(UInt32, Case::Matcher).new(initial_capacity: 512)
-
     # Advanced: Direct form of `Term.case` allowing explicit control over the matcher
     # instance and the initial environment.
     #
@@ -1080,7 +1081,7 @@ module Ww
       {% unless kwargs.empty? %}\
         {% raise "unrecognized keyword arguments passed to Term.case" %}
       {% end %}\
-      {{@type}}::Case.scan({{@type}}::MATCHERS, {{matcher}}, Term.of({{matchee}}), {{env}}) {{block}}
+      {{@type}}::Case.scan({{matcher}}, Term.of({{matchee}}), {{env}}) {{block}}
     end
 
     # Advanced: Lets you pick an engine explicitly (e.g. `M0`, `M1`), constructing
