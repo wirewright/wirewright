@@ -1,9 +1,9 @@
 module Ww::ML
-  # Represents a WwML-specific classification of some Unicode character.
+  # Represents a WwML-specific classification of a Unicode character.
   #
-  # Classification of characters is useful to rid the lexeme reader -- which
-  # is likely to attempt to look at the same character "from different
-  # perspectives" -- from extra work.
+  # Classification of characters is useful to relieve the lexeme reader of extra
+  # unnecessary work; as it is likely going to attempt to look at the same character
+  # many times but within different contexts.
   struct Rune
     # Lists the available character categories.
     enum Category : UInt8

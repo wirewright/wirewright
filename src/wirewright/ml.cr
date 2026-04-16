@@ -1,3 +1,4 @@
+# The implementation of _W_ire_w_right _M_ain _L_anguage, WwML.
 module Ww::ML
   extend self
 

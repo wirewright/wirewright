@@ -14,7 +14,7 @@ module Ww::ML
     #
     # If the view of *path* itself is unavailable, the view of its prior is
     # tried, and so on, until the path is empty or something is found. This
-    # way, if the exact *path* is unavailable, at least the path of its parent
+    # way, if the exact *path* is unavailable, at least the source of its parent
     # (or grandparent, etc.) is returned.
     def []?(path) : StringView?
       tpath = Tpath[path]

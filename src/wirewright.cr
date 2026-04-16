@@ -55,6 +55,7 @@ require "./wirewright/rack"
 Log.setup_from_env(default_level: :warn, backend: Log::IOBackend.new(STDERR))
 
 module Ww
+  # TODO: Come up with a better name. Magnitude doesn't quite fit.
   alias Magnitude = Float32
 
   # Attempts to interpret *term* as a `Magnitude`.

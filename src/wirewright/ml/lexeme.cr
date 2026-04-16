@@ -24,7 +24,7 @@ module Ww::ML
     #
     # - *type* determines the type of the token.
     # - *text* points to the fragment of the source string that generated
-    #   this datum.
+    #   this token.
     record Token, type : Type, text : StringView do
       # Lists the available types of tokens.
       enum Type : UInt8

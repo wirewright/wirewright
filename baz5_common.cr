@@ -172,6 +172,8 @@ end
 
 # In `ProcRuleset`, rules are Crystal procs (later, native code). Useful for
 # implementing primitives.
+#
+# TODO: This is DEPRECATED and will be removed.
 struct ProcRuleset
   alias ProcRule = Term::Dict -> Rewrite::Any
   alias ProcBackmap = Term::Dict -> Term::Dict
@@ -364,6 +366,8 @@ class Ruleset
     new(pset, rules.to_readonly_slice(&.itself))
   end
 
+  # FIXME: It would make more sense for this to return `{Ruleset, Term}` instead, so
+  # that we can pass through *base* if it's not a dict.
   def self.ruleset_and_rest(selector, base, **kwargs) : {Ruleset, Term::Dict}
     ruleset = self.select(selector, base)
 

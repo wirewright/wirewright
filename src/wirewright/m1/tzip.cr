@@ -191,14 +191,6 @@ module Ww::M1
       # Items and pairs are emitted in memory order (`Term::Dict#each_entry`). This can
       # be significantly faster and will not allocate, but the order will not be human-
       # comprehensible (it is defined by the hash function, `Term.hashcode`).
-      #
-      # FIXME: Right now memory-order is not guaranteed to be stable. It looks stable in
-      # practice, but the order of *collisions* is currently undefined, and thus depends
-      # on insertion order. It remains future work to fix this by sorting collisions --
-      # the current implementation of Pf::Map does not support this. Also, Pf::Map currently
-      # does not enforce structural equality and thus is generally insertion order-dependent
-      # as well: a group of insertions followed by a group of deletions, when mixing within
-      # the groups, may result in a different order of entries.
       Memory
 
       # Parses *term* and returns a pair containing the resulting items and

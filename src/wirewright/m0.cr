@@ -130,7 +130,7 @@ module Ww::M0
   # end
   # ```
   #
-  # *open* allows pairs other than those specified in the schema.)
+  # *open* allows pairs other than those specified in the schema.
   macro schema(matchee, *, open = false, &block)
     {%
       unless block && {1, 2}.includes?(block.args.size)

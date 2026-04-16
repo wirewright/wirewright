@@ -74,7 +74,8 @@
 #
 # Here, `dependency` matches zero or more adjacent nodes at that edge. All
 # Rack nodes happen to conform to this shape: there is a "main" node, *the pivot*,
-# or *the query node*; and it has some number of *dependencies*.
+# or *the query node*; and it has some number of *dependencies*. In other words,
+# we're dealing with the *hub and spoke* (aka *star*) topology.
 #
 # One can imagine defining this structure recursively, but since each
 # dependency matches zero-or-many, the definition would not be trivial,
@@ -84,8 +85,7 @@
 # above as WwML can get.
 #
 # D7 is basically a high-performance matcher for rules that have the shape above.
-# D7 does not support any other kind of rule shape -- specialization is a necessary
-# compromise in getting rid of NP.
+# D7 does not support any other kind of rule shape.
 #
 # The high-performance part is mostly a TODO at the moment, by the way. It's fast
 # enough for this prototype stage; the problem is we lack heavy examples to benchmark
