@@ -61,7 +61,11 @@ module Ww
     end
 
     private def get_impl(query : RuntimeQuery) : Response
-      get_impl(FileQuery.new(Ww.roots.runtime / query.path))
+      unless runtime = Ww.roots.runtime
+        return Absent.new("Wirewright runtime directory does not exist")
+      end
+
+      get_impl(FileQuery.new(runtime / query.path))
     end
 
     private def get_impl(query : FileQuery) : Response
@@ -139,7 +143,11 @@ module Ww
     end
 
     private def get_impl(query : FontQuery) : Response
-      case view = PathServer.view(Ww.roots.runtime / "fonts" / query.family)
+      unless runtime = Ww.roots.runtime
+        return Absent.new(detail: "Wirewright runtime directory does not exist")
+      end
+
+      case view = PathServer.view(runtime / "fonts" / query.family)
       in PathServer::Wait
         Wait.new
       in PathServer::Absent
@@ -171,7 +179,11 @@ module Ww
     end
 
     private def get_impl(query : CodepointsQuery) : Response
-      case view = PathServer.view(Ww.roots.runtime / "fonts" / query.family)
+      unless runtime = Ww.roots.runtime
+        return Absent.new(detail: "Wirewright runtime directory does not exist")
+      end
+
+      case view = PathServer.view(runtime / "fonts" / query.family)
       in PathServer::Wait
         Wait.new
       in PathServer::Absent

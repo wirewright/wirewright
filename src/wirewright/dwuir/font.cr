@@ -34,7 +34,7 @@ module Ww::DwUIR
   end
 
   # Specifies where to start searching for fonts.
-  FONTS_FOLDER = Ww.roots.runtime / "fonts"
+  FONTS_FOLDER = Ww.roots.runtime.not_nil! / "fonts"
 
   # Font entry parser can parse candidate font or font-related paths into
   # `FontEntry` objects.

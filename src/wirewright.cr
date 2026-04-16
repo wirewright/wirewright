@@ -73,15 +73,22 @@ module Ww
 
   # Represents the root path set of Wirewright.
   #
-  # - *cwd* points to the current working directory.
-  # - *home* points to the home directory (in case `~` is used in paths).
-  # - *runtime* points to the runtime directory. The runtime directory contains
-  #   assets used by Wirewright itself, such as codices and fonts.
+  # - *cwd* points to the current working directory. It defaults to `Dir.current`,
+  #   but can be overridden using the `WW_CWD` environment variable.
   #
-  # Note that you aren't the intended user of `RootSet` (nor `normalize`);
-  # `ResourceServer`, `PathServer`, and others are. You should use them instead
-  # of reading files or directories with Crystal's `File` or `Dir` API.
-  defrecord RootSet, cwd : Path, home : Path, runtime : Path
+  # - *home* points to the home directory (in case `~` is used in paths). It
+  #   defaults to `Path.home`, but can be overridden using the `WW_HOME`
+  #   environment variable.
+  #
+  # - *runtime* points to the runtime directory. The runtime directory contains
+  #   assets used by Wirewright itself, such as codices and fonts. It defaults
+  #   `runtime/` sibling of the executable path, or `runtime/` in CWD in case
+  #   that doesn't work. The runtime directory can be overridden using
+  #   the `WW_RUNTIME` environment variable. If the runtime directory cannot
+  #   be determined, it is set to `nil`. Note that due to races and TOCTOU type
+  #   of stuff, the fact that *runtime* is not nil does not mean it exists at
+  #   the current moment; it only means that it existed at the time of check.
+  defrecord RootSet, cwd : Path, home : Path, runtime : Path?
 
   # Returns the root path set of Wirewright.
   #
@@ -116,10 +123,6 @@ module Ww
 
         path
       end
-    end
-
-    unless runtime
-      abort "Wirewright runtime directory not found"
     end
 
     RootSet.new(cwd, home, runtime)
