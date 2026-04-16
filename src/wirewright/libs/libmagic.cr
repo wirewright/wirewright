@@ -100,8 +100,6 @@ module Ww::Magic
         abort "libmagic: could not initialize"
       end
 
-      at_exit { LibMagic.magic_close(handle) }
-
       LibMagic.magic_load(handle, nil)
       if error = LibMagic.magic_error(handle)
         abort String.new(error)
