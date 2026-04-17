@@ -1,4 +1,4 @@
-macro defrecord(name, *properties, includes = [] of ::NoReturn)
+macro defrecord(name, *properties, includes = [] of ::NoReturn, copying = false)
   struct {{name.id}}
     {% for dep in includes %}
       include {{dep}}
@@ -17,13 +17,48 @@ macro defrecord(name, *properties, includes = [] of ::NoReturn)
     def initialize({{ properties.map { |field| "@#{field.id}".id }.splat }})
       {{yield}}
     end
+
+    # :nodoc:
+    #
+    # This lets us let Crystal infer generic args which is very useful.
+    def self.__copy_with(*args, **kwargs)
+      \{%begin %}
+        \{{@type.name(generic_args: false)}}.new(*args, **kwargs)
+      \{% end %}
+    end
+
+    {% if copying %}
+      def copy_with({{
+                      properties.map do |property|
+                        if property.is_a?(Assign)
+                          "#{property.target.id} _#{property.target.id} = @#{property.target.id}".id
+                        elsif property.is_a?(TypeDeclaration)
+                          "#{property.var.id} _#{property.var.id} = @#{property.var.id}".id
+                        else
+                          "#{property.id} _#{property.id} = @#{property.id}".id
+                        end
+                      end.splat
+                    }})
+        self.class.__copy_with({{
+                         properties.map do |property|
+                           if property.is_a?(Assign)
+                             "_#{property.target.id}".id
+                           elsif property.is_a?(TypeDeclaration)
+                             "_#{property.var.id}".id
+                           else
+                             "_#{property.id}".id
+                           end
+                         end.splat
+                       }})
+      end
+    {% end %}
   end
 end
 
 annotation DefcaseField
 end
 
-macro defcase(cls, *typedecls, inherit = false, equality = :value, caches_hash = false, copying = true, mutation = false, &)
+macro defcase(cls, *properties, inherit = false, equality = :value, caches_hash = false, copying = true, mutation = false, &)
   {% unless equality == :value || equality == :ref %}
     {% raise "equality must be :value or :ref"%}
   {% end %}
@@ -36,7 +71,7 @@ macro defcase(cls, *typedecls, inherit = false, equality = :value, caches_hash =
   {% end %}
 
   {%
-    names = typedecls.map do |typedecl|
+    names = properties.map do |typedecl|
       if typedecl.is_a?(Assign)
         typedecl.target.id
       elsif typedecl.is_a?(TypeDeclaration)
@@ -63,12 +98,24 @@ macro defcase(cls, *typedecls, inherit = false, equality = :value, caches_hash =
       {% end %}
     {% end %}
 
-    def initialize({{typedecls.map { |typedecl| "@#{typedecl}".id }.splat}})
+    def initialize({{properties.map { |typedecl| "@#{typedecl}".id }.splat}})
+      {% if caches_hash %}
+        _ = hash # Run for the side effect of initializing @hash
+      {% end %}
+    end
+
+    # :nodoc:
+    #
+    # This lets us let Crystal infer generic args which is very useful.
+    def self.__copy_with(*args, **kwargs)
+      \{%begin %}
+        \{{@type.name(generic_args: false)}}.new(*args, **kwargs)
+      \{% end %}
     end
 
     {% if copying %}
       def copy_with({{
-                      typedecls.map do |property|
+                      properties.map do |property|
                         if property.is_a?(Assign)
                           "#{property.target.id} _#{property.target.id} = @#{property.target.id}".id
                         elsif property.is_a?(TypeDeclaration)
@@ -78,8 +125,8 @@ macro defcase(cls, *typedecls, inherit = false, equality = :value, caches_hash =
                         end
                       end.splat
                     }})
-        self.class.new({{
-                         typedecls.map do |property|
+        self.class.__copy_with({{
+                         properties.map do |property|
                            if property.is_a?(Assign)
                              "_#{property.target.id}".id
                            elsif property.is_a?(TypeDeclaration)
@@ -97,11 +144,21 @@ macro defcase(cls, *typedecls, inherit = false, equality = :value, caches_hash =
     {% end %}
 
     {% if caches_hash && equality == :value %}
-      @hash : UInt64?
+      @_hash : Atomic(UInt64) = Atomic.new(0u64)
 
       def hash(hasher)
-        h64 = @hash ||= previous_def(Crystal::Hasher.new).result
-        h64.hash(hasher)
+        hash = @_hash.get(:acquire)
+
+        # NOTE: If the hash alg itself emits zero then we'll always recalculate,
+        # but that's practically impossible so that's fine.
+        if hash == 0u64
+          hash = previous_def(Crystal::Hasher.new).result
+          @_hash.set(hash, :release)
+        end
+
+        # Unfortunately there doesn't seem to be an easier way to combine our
+        # cached hash with what *hasher* is accumulating right now.
+        hash.hash(hasher)
       end
     {% end %}
 
@@ -895,6 +952,30 @@ struct StringView
     StringView.new(@string, byte_end, byte_end, ascii_only: true)
   end
 
+  def before(other : StringView) : StringView
+    unless @string.same?(other.string)
+      raise ArgumentError.new
+    end
+
+    unless byte_start <= other.byte_start
+      raise ArgumentError.new
+    end
+
+    StringView.new(@string, byte_start, other.byte_start, ascii_only: ascii_only?)
+  end
+
+  def after(other : StringView) : StringView
+    unless @string.same?(other.string)
+      raise ArgumentError.new
+    end
+
+    unless other.byte_end <= byte_end
+      raise ArgumentError.new
+    end
+
+    StringView.new(@string, other.byte_end, byte_end, ascii_only: ascii_only?)
+  end
+
   def char_start : Int32
     if @byte_start == @string.bytesize
       return @string.size
@@ -1018,8 +1099,20 @@ struct StringView
     (to_unsafe + bytesize - postfix.bytesize).memcmp(postfix.to_unsafe, postfix.bytesize) == 0
   end
 
+  def starts_after?(other : StringView) : Bool
+    @string.same?(other.string) && byte_start > other.byte_start
+  end
+
+  def ends_before?(other : StringView) : Bool
+    @string.same?(other.string) && byte_end >= other.byte_start
+  end
+
   def precedes?(other : StringView)
     @string.same?(other.string) && byte_end == other.byte_start
+  end
+
+  def fully_inside?(other : StringView) : Bool
+    @string.same?(other.string) && other.byte_start <= byte_start <= byte_end <= other.byte_end
   end
 
   def covers_fully? : Bool
@@ -2491,7 +2584,6 @@ struct Slice(T)
   def chunk_by(accessor : T -> U, & : U, Slice(T) ->) forall U
     start = self
     size = 0
-    chunks = [] of {T, Slice(T)}
 
     state0 = NullState
 
@@ -2508,14 +2600,16 @@ struct Slice(T)
         next
       end
 
-      yield state0, start[0, size]
+      yield state0, start.trim(size)
 
       state0 = state1
       start += size
       size = 0
     end
 
-    chunks
+    unless state0.is_a?(NullState.class)
+      yield state0, start.trim(size)
+    end
   end
 
   def split(object : T, &)
@@ -2553,6 +2647,21 @@ struct Slice(T)
     end
 
     Slice(T).new(@pointer, newsize, read_only: @read_only)
+  end
+
+  # Alias for `to_unsafe`.
+  def ptr
+    to_unsafe
+  end
+
+  # Leaves elements from the start of this slice up to but not
+  # including *other*.
+  #
+  # NOTE: The caller must guarantee that `self` and other come from the same allocation.
+  def upto(other : Slice(T)) : Slice(T)
+    assert to_unsafe <= other.to_unsafe
+
+    trim(other.to_unsafe - to_unsafe)
   end
 
   def -(n : Int) : Slice(T)
@@ -3033,32 +3142,6 @@ struct Int
   end
 end
 
-# TODO: capacity and eviction.
-class Pf::Cache(K, V)
-  def initialize
-    @storage = Atomic(Pf::MapBox(K, V)).new(Pf::MapBox(K, V).new)
-  end
-
-  def fetch(key : K, *, fresh = false, & : -> V) : V
-    if fresh
-      return yield
-    end
-
-    storage0 = @storage.get(:acquire)
-    proposal = nil
-    while true
-      if value = storage0[key]?
-        return value
-      end
-      proposal ||= yield
-      storage1 = storage0.assoc(key, proposal)
-      storage0, ok = @storage.compare_and_set(storage0, storage1, :release, :acquire)
-      break if ok
-    end
-    proposal
-  end
-end
-
 {% for width in %w(8 16 32 64 128) %}
   struct UInt{{width.id}}
     def self.bit_width
@@ -3090,13 +3173,26 @@ module Indexable(T)
 end
 
 module Enumerable(T)
+  def to_compact_readonly_slice(& : T, Int32 -> U?) : Slice(U) forall U
+    buffer = Pf::Kit.stack_array(U, 32)
+
+    each_with_index do |object0, index|
+      object1 = (yield object0, index)
+      next if object1.nil?
+
+      buffer << object1
+    end
+
+    buffer.to_unsafe_readonly_slice!
+  end
+
   def to_readonly_slice(& : T, Int32 -> U) : Slice(U) forall U
-    buffer = stack_alloc Pf::Kit::HybridArray(U, 32).new
+    buffer = Pf::Kit.stack_array(U, 32)
     each_with_index do |item, index|
       buffer << (yield item, index)
     end
 
-    buffer.to_readonly_slice(&.itself)
+    buffer.to_unsafe_readonly_slice!
   end
 end
 
@@ -3630,6 +3726,14 @@ class BlockingSignal
     end
   end
 
+  def each(&) : Nil
+    epoch = 0u64
+    loop do
+      epoch = wait(epoch)
+      yield
+    end
+  end
+
   def call
     @mutex.synchronize do
       @epoch += 1
@@ -3722,80 +3826,19 @@ class BlockingQueue(T)
   end
 end
 
-# FIXME: This is a very bizarre module that we should probably just move to Pigment.
-module Parseout
-  extend self
-
-  # :nodoc:
-  macro try(branch)
-      {{branch}}
-    end
-
-  # :nodoc:
-  macro try(branch, *branches)
-      {{@type}}.either({{branch}}) { {{@type}}.try({{branches.splat}}) }
-    end
-
-  # :nodoc:
-  def either(π, &)
-    π
-  end
-
-  # :nodoc:
-  def either(π : Rej, &)
-    yield
-  end
-
-  # :nodoc:
-  def map(π, &)
-    assert !π.is_a?(Nok)
-
-    yield π
-  end
-
-  # :nodoc:
-  def map(π : Nok, &)
-    π
-  end
-
-  # :nodoc:
-  def map(a, b, &)
-    map(a) do |x|
-      map(b) do |y|
-        yield x, y
-      end
-    end
-  end
-
-  alias Nok = Err | Rej
-
-  # Represents a failed parse. Issues were reported to the issue sink.
-  record Err
-
-  # Represents a rejection: not necessarily a failure, but rather, a failure
-  # to recognize that didn't generate any issues.
-  record Rej
-
-  def cached(cache : ICache, term : Term, issues : Issue::Sink, &)
-    if cached = cache.get?(term)
-      return cached
-    end
-
-    version0 = issues.version
-    π = yield
-    version1 = issues.version
-
-    if version0 == version1 && !π.is_a?(Nok)
-      cache.put(term, π)
-    end
-
-    π
+class ::Sync::Future
+  def inspect(io)
+    io << "#<Sync::Future:0x"
+    object_id.to_s(io, 16)
+    io << " ...>"
   end
 end
 
-class ::Sync::Future
+class ::WaitGroup
   def inspect(io)
-    io << "Sync::Future(...)"
+    io << "#<WaitGroup:0x"
+    object_id.to_s(io, 16)
+    io << " ...>"
   end
 end
 
@@ -3913,7 +3956,8 @@ class Arena(T, N)
   # It is entirely your responsibility to make sure memory stays tidy.
   def self.scope(&)
     mem = uninitialized ReferenceStorage(T)[N]
-    arena = stack_alloc self.new(mem.to_unsafe)
+    arena = stack_alloc Arena(T, N).new(mem.to_unsafe)
+
     yield arena
   end
 
@@ -3924,7 +3968,7 @@ class Arena(T, N)
   def construct(*args, **kwargs) : T
     if @memsize + 1 > N
       if @auxsize + 1 > @auxcap
-        @auxcap = Math.max(MINCAP, (@auxcap * 1.5).to_i)
+        @auxcap = Math.max(MINCAP, @auxcap + @auxcap//2)
         @aux = typeof(@aux).malloc(@auxcap)
         @auxsize = 0
       end
@@ -4201,4 +4245,236 @@ class ::File
     fileno, path, blocking = Crystal::System::File.mktemp(prefix: nil, suffix: nil, dir: tempdir.to_s, random: random)
     new(path, fileno, blocking: blocking)
   end
+end
+
+module Enumerable(T)
+  def adjoin_by(&)
+    clusters = [] of Slice(T)
+    cluster = Pf::Kit.stack_array(T, 8)
+    trait = Tuple.new
+
+    each_with_index do |object, index|
+      trait1 = {(yield object, index)}
+      if trait == trait1
+        cluster << object
+        next
+      end
+
+      if trait.empty?
+        cluster << object
+        trait = trait1
+        next
+      end
+
+      clusters << cluster.to_readonly_slice(&.itself)
+      cluster.clear
+      cluster << object
+      trait = trait1
+    end
+
+    unless trait.empty?
+      clusters << cluster.to_readonly_slice(&.itself)
+      cluster.clear
+    end
+
+    clusters
+  end
+end
+
+struct Range(B, E)
+  def adjoin_by(&)
+    {% unless B == E && B < ::Int %}
+      {% raise "expected a range with the same begin and end integer type" %}
+    {% end %}
+
+    unless exclusive?
+      raise ArgumentError.new("expected an exclusive range")
+    end
+
+    clusters = [] of Range(B, E)
+    cluster = B.zero...B.zero
+    trait = Tuple.new
+
+    each do |object|
+      trait1 = {yield object}
+      if trait == trait1
+        cluster = cluster.begin...cluster.end + 1
+        next
+      end
+
+      if trait.empty?
+        cluster = cluster.begin...cluster.end + 1
+        trait = trait1
+        next
+      end
+
+      clusters << cluster
+      cluster = cluster.end...cluster.end + 1
+      trait = trait1
+    end
+
+    unless trait.empty?
+      clusters << cluster
+    end
+
+    clusters
+  end
+end
+
+class Promise(T)
+  struct Accepted(T)
+    getter object : T
+
+    # :nodoc:
+    def initialize(@object)
+    end
+
+    def unwrap(cls : U.class = T) forall U
+      @object.as(U)
+    end
+
+    def unwrap?
+      @object
+    end
+  end
+
+  struct Rejected
+    getter detail : String
+
+    def initialize(@detail)
+    end
+
+    def unwrap(cls)
+      raise RejectedError.new(@detail)
+    end
+
+    def unwrap
+      raise RejectedError.new(@detail)
+    end
+
+    def unwrap?
+    end
+  end
+
+  class RejectedError < Exception
+  end
+
+  # :nodoc:
+  def initialize(@poll : -> Accepted(T) | Rejected | Nil, @wait : -> Accepted(T) | Rejected)
+  end
+
+  def self.accepted(object)
+    Accepted(T).new(object).as(Accepted(T) | Rejected)
+  end
+
+  def self.rejected(detail : String)
+    Rejected.new(detail)
+  end
+
+  def self.resolved(object)
+    poll = -> { Promise(T).accepted(object).as(Accepted(T) | Rejected | Nil)}
+    wait = -> { Promise(T).accepted(object) }
+
+    new(poll, wait)
+  end
+
+  def self.new(future : Sync::Future(T)) forall T
+    poll = -> do
+      if object = future.get?
+        Accepted(T).new(object).as(Accepted(T) | Rejected)
+      end
+    end
+
+    wait = -> do
+      object = future.get
+
+      Accepted(T).new(object).as(Accepted(T) | Rejected)
+    end
+
+    new(poll, wait)
+  end
+
+  def wait : Accepted(T) | Rejected
+    @wait.call
+  end
+
+  def poll? : Accepted(T) | Rejected | Nil
+    @poll.call
+  end
+
+  def map(&fn : T -> Accepted(U) | Rejected) forall U
+    poll = -> do
+      state = @poll.call
+
+      case state
+      in Nil
+      in Accepted(T) then fn.call(state.object)
+      in Rejected    then state
+      end
+    end
+
+    wait = -> do
+      state = @wait.call
+
+      case state
+      in Accepted(T) then fn.call(state.object)
+      in Rejected    then state
+      end
+    end
+
+    Promise(U).new(poll, wait)
+  end
+
+  def bind(&fn : T -> Promise(U)) : Promise(U) forall U
+    inner = nil
+    lock = Sync::Mutex.new
+
+    poll = -> do
+      result = lock.synchronize do
+        if tmp = inner
+          next tmp
+        end
+
+        state = @poll.call
+
+        case state
+        in Nil
+        in Accepted(T)
+          tmp = fn.call(state.object)
+          inner = tmp
+          tmp
+        in Rejected
+          state
+        end
+      end
+
+      case result
+      in Nil
+      in Promise(U) then result.poll?
+      in Rejected then result
+      end
+    end
+
+    wait = -> do
+      state = @wait.call
+
+      case state
+      in Accepted(T)
+      in Rejected
+        return state
+      end
+
+      promise = lock.synchronize do
+        (inner ||= fn.call(state.object)).not_nil!
+      end
+
+      promise.wait
+    end
+
+    Promise(U).new(poll, wait)
+  end
+end
+
+lib LibC
+  fun fdopendir(fd : LibC::Int) : DIR*  # ?!?!?!?!?
 end
