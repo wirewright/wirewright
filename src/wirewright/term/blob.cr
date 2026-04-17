@@ -241,9 +241,11 @@ module Ww
 
   class Term::Blob::Classif
     getter media_type : Term::Str
+    getter type : Term::Str
+    getter? subtype : Term::Str?
     getter media_params : Term::Dict
 
-    def initialize(@media_type, @media_params)
+    def initialize(@media_type, @type, @subtype, @media_params)
     end
 
     # Constructs a classification object for *slice*.
@@ -254,18 +256,17 @@ module Ww
     # Constructs a classification object based on a known *mime* type. We normally
     # do this for HTTP responses which can tell us their MIME.
     def self.of(mime : MIME::MediaType) : Classif?
-      media_type = Term[mime.media_type]
       media_params = Term::Dict.build do |commit|
         mime.each_parameter do |key, value|
           commit.with(Term::Sym.new(key), Term.of(value))
         end
       end
 
-      new(media_type, media_params)
+      new(Term[mime.media_type], Term[mime.type], Term[mime.sub_type], media_params)
     end
 
     # :nodoc:
-    MEDIA_TYPE_PLAIN = Term["text/plain"]
+    MEDIA_TYPE_TEXT = Term["text"]
     # :nodoc:
     MEDIA_CHARSET_UTF8 = Term["UTF-8"]
     # :nodoc:
@@ -275,7 +276,7 @@ module Ww
     # plaintext. This can be used to e.g. convert the blob to a `Term::Str` which
     # is much more convenient for previewing and working with UTF-8.
     def utf8? : Bool
-      return false unless media_type == MEDIA_TYPE_PLAIN
+      return false unless type == MEDIA_TYPE_TEXT
       return false unless charset = media_params[:charset]?
       return false unless charset = charset.as_s?
       return false unless charset.upcase.in?(MEDIA_CHARSET_UTF8, MEDIA_CHARSET_ASCII)

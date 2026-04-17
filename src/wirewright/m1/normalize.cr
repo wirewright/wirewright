@@ -2932,6 +2932,9 @@ module Ww::M1
         Term.of(:"%mime", type, Normalize.sealed(Π.pattern(params)))
       end
 
+      # TODO: (%mime type_string subtype_string params_)
+      # E.g. (%mime "text" _ {charset: "utf-8"})
+
       # NOTE: Insert new matchpis here, especially if they are infrequent. Below we
       # have raw dict/literal treatment. If your matchpi does not start with a %,
       # make sure to update the dict fast path above.
