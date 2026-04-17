@@ -8,7 +8,7 @@ module Ww
     def initialize(@path : Slice(Spot), @entity : Entity)
     end
 
-    # Describes an object (entity) the evaluation process wants to highlight.
+    # Describes an object (entity) an evaluation process wants to highlight.
     module Entity
     end
 
@@ -47,7 +47,7 @@ module Ww
     end
   end
 
-  # Outcomes allow you to attach diagnostics to an object (`Accepted`), and supports
+  # Outcomes allow you to attach diagnostics to an object (`Accepted`), and support
   # alternation (via `Rejected`).
   #
   # An outcome is not the same as a result, and `Rejected` is not the same as
@@ -55,26 +55,58 @@ module Ww
   # and `Accepted` tells it that the callee processed the input, and the caller
   # should not try the remaining alternatives.
   #
-  # Indeed, a result type (or something result-ish, such as a nilable type) can
-  # be the payload for `Accepted`, as in `Accepted(Int32?)` or `Accepted(Term?)`.
+  # A result type (or something result-ish, such as a nilable type) is often
+  # the payload of `Accepted` in practice, as in `Accepted(Int32?)`
+  # or `Accepted(Term?)`.
   module Outcome
     extend self
 
     # A function, unit, agent, etc. evaluated the input successfully, providing zero
     # or more diagnostic messages alongside the result.
-    defrecord Accepted(T), object : T, diagnostics : Slice(Diagnostic)
+    struct Accepted(T)
+      getter result : T
+      getter diagnostics : Slice(Diagnostic)
+
+      # :nodoc:
+      def initialize(@result : T, @diagnostics : Slice(Diagnostic))
+      end
+
+      # Shorthand for `Outcome.elaborate(Diagnostic.key(key), self)`.
+      def at(key)
+        if @diagnostics.empty? # Fast path
+          return self
+        end
+
+        Outcome.elaborate(Diagnostic.key(key), self)
+      end
+
+      # Shorthand for `Outcome.amend(self, &)`.
+      def amend(&)
+        Outcome.amend(self) { |result| yield result }
+      end
+
+      # Shorthand for `Outcome.map(self, &)`.
+      def map(&)
+        Outcome.map(self) { |result| yield result }
+      end
+
+      # Shorthand for `Outcome.fmap(self, &)`.
+      def fmap(&)
+        Outcome.fmap(self) { |result| yield result }
+      end
+    end
 
     # A function, unit, agent, etc. rejected the input without further elaboration:
     # it did not recognize the input in any meaningful way; the input "fell through".
     # The caller should try something else.
     defrecord Rejected
 
-    def ok(object) : Accepted
-      Accepted.new(object, diagnostics: Slice(Diagnostic).empty)
+    def ok(result) : Accepted
+      Accepted.new(result, diagnostics: Slice(Diagnostic).empty)
     end
 
-    def ok_despite(object, *args) : Accepted
-      Accepted.new(object, diagnostics: Slice[Diagnostic.new(Slice(Diagnostic::Spot).empty, Diagnostic.of(*args))])
+    def ok_despite(result, *args) : Accepted
+      Accepted.new(result, diagnostics: Slice[Diagnostic.new(Slice(Diagnostic::Spot).empty, Diagnostic.of(*args))])
     end
 
     def rej : Rejected
@@ -86,29 +118,58 @@ module Ww
     end
 
     def unwrap?(outcome : Accepted)
-      outcome.object
+      outcome.result
     end
 
     def unwrap?(outcome : Rejected)
     end
 
     def as_just_ok?(outcome : Accepted)
-      outcome.diagnostics.empty? ? outcome.object : nil
+      outcome.diagnostics.empty? ? outcome.result : nil
     end
 
     def as_just_ok?(outcome : Rejected)
     end
 
-    def fmap(outcome : Accepted, & : _ -> Accepted | Rejected)
-      result = yield outcome.object
-      unless result.is_a?(Accepted)
-        return result
+    def map(outcome : Accepted, &)
+      Accepted.new((yield outcome.result), outcome.diagnostics)
+    end
+
+    def map(outcome : Rejected, &)
+      outcome
+    end
+
+    def fmap(outcome outcome0 : Accepted, &)
+      outcome1 = yield outcome0.result
+      unless outcome1.is_a?(Accepted)
+        return outcome1
       end
 
-      Accepted.new(result.object, outcome.diagnostics + result.diagnostics)
+      if outcome0.diagnostics.empty?
+        return outcome1
+      end
+
+      Accepted.new(outcome1.result, outcome0.diagnostics + outcome1.diagnostics)
     end
 
     def fmap(outcome : Rejected, &)
+      Rejected.new
+    end
+
+    def amend(outcome outcome0 : Accepted, &)
+      outcome1 = yield outcome0.result
+      unless outcome1.is_a?(Accepted)
+        return outcome1
+      end
+
+      if outcome1.diagnostics.empty?
+        return outcome1
+      end
+
+      Accepted.new(outcome1.result, outcome0.diagnostics + outcome1.diagnostics)
+    end
+
+    def amend(outcome : Rejected, &)
       Rejected.new
     end
 
@@ -143,7 +204,7 @@ module Ww
         elaborate(spot, bt)
       end
 
-      Accepted.new(outcome.object, diagnostics)
+      Accepted.new(outcome.result, diagnostics)
     end
 
     def elaborate(outcome : Rejected, &)
@@ -179,11 +240,11 @@ module Ww
         self
       end
 
-      # Returns *outcome*'s object, accumulating diagnostics simultaneously.
+      # Returns *outcome*'s result, accumulating diagnostics.
       def unwrap(outcome : Accepted)
         @diagnostics.concat(outcome.diagnostics)
 
-        outcome.object
+        outcome.result
       end
 
       def unwrap(outcome : Accepted, *, rej)
@@ -203,18 +264,18 @@ module Ww
     def accumulate(*, amend : Bool = false, & : Accumulator -> Accepted | Rejected)
       diagnostics = Pf::Kit.stack_array(Diagnostic)
 
-      result = yield Accumulator.new(diagnostics)
-      if result.is_a?(Rejected)
-        return result
+      outcome = yield Accumulator.new(diagnostics)
+      if outcome.is_a?(Rejected)
+        return outcome
       end
 
-      if amend && result.diagnostics.empty?
-        return result
+      if amend && outcome.diagnostics.empty?
+        return outcome
       end
 
-      diagnostics.concat(result.diagnostics)
+      diagnostics.concat(outcome.diagnostics)
 
-      Accepted.new(result.object, diagnostics.to_unsafe_readonly_slice!)
+      Accepted.new(outcome.result, diagnostics.to_unsafe_readonly_slice!)
     end
   end
 end
