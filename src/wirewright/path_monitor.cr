@@ -47,6 +47,8 @@ module Ww
   # waiting callers (if any) to resurrect paths they're still interested in.
   # An unaddressed garbage path is removed on the next turn of collection
   # unconditionally.
+  #
+  # DEPRECATED: Use `PathMonitorService` instead.
   module PathMonitor
     extend self
 
@@ -417,10 +419,10 @@ module Ww
     defrecord Wait
 
     # Returns the status of *path*. The returned status is based on the latest
-    # snapshot of the file system at some unspecified point in the past. `PathMonitor`
-    # makes such snapshots in response to changes on the disk. The status is thus
-    # *eventually consistent*. It is not guaranteed to reflect the instantaneous
-    # state of the file system.
+    # snapshot of the file system presence states at some unspecified point in
+    # the past. `PathMonitor` makes such snapshots in response to changes on
+    # the disk. The returned status is thus *eventually consistent*. It is not
+    # guaranteed to reflect the instantaneous state of the file system.
     def status(path : Path) : Status | Wait
       ensure_server_running!
 

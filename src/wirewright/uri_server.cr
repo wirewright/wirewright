@@ -4,6 +4,8 @@ module Ww
   # We'll see. Right now we only do basic fetch and retry if failed (with backoff).
   # Once we've fetched we permanently store the response in memory and never fetch
   # again. It's not the best way to do it but would work for now.
+  #
+  # DEPRECATED: Use `HTTPService` instead.
   module URIServer
     extend self
 
@@ -36,20 +38,16 @@ module Ww
       loop do
         epoch = @@r_changed.wait(epoch)
 
-        demand = @@r_lock.synchronize do
-          demand0 = @@r_demand
-          demand1 = Pf::Set(URI).new
-          @@r_demand = demand1
-          demand0
-        end
+        Log.trace { "rloop: woke up" }
 
+        demand = @@r_lock.synchronize { @@r_demand }
         next if demand.empty?
+
+        Log.trace { "rloop: fetch #{demand.size} demand(s)" }
 
         wg = WaitGroup.new(demand.size)
 
         demand.each do |uri|
-          wg.add(1)
-
           spawn(name: "fetch worker") do
             case fetch(uri)
             in .fetched?
@@ -60,6 +58,10 @@ module Ww
               retry(uri)
             end
           end
+        end
+
+        @@r_lock.synchronize do
+          @@r_demand -= demand
         end
 
         wg.wait
@@ -88,6 +90,11 @@ module Ww
         break if supply
 
         uri = chain.last
+
+        unless follow?(uri)
+          supply = Absent.new("could not follow URI #{uri}")
+          break
+        end
 
         begin
           Log.debug { "fetch(#{initial_uri}): requesting #{uri}" }
@@ -145,12 +152,18 @@ module Ww
         # of them). We'll assoc() the resulting Present/Absent response to *all* of
         # these URIs (for now; I don't know if that's the expected behavior generally).
         chain.each do |uri|
+          next if @@r_supply[uri]? == supply
+
           @@r_supply = @@r_supply.assoc(uri, supply)
           @@r_waiters_signal.call
         end
       end
 
       fetch_result
+    end
+
+    private def follow?(uri : URI) : Bool
+      uri.scheme.in?("http", "https") # FIXME: is this enough?
     end
 
     # Spawns a fiber to retry *uri* with exponential decay if not already retrying.
@@ -165,18 +178,16 @@ module Ww
       rng = Random::PCG32.new
 
       (0..).each do |cycle|
+        # Quite obviously I've no idea what I'm doing . . .
         case cycle
         when 0
-          nap = (50..100).sample(rng).milliseconds
+          nap = (300..500).sample(rng).milliseconds
         when 1
-          nap = (100..300).sample(rng).milliseconds
+          nap = (400..800).sample(rng).milliseconds
         when 2
-          nap = (50..500).sample(rng).milliseconds
-        when 3..5
-          k = 2**cycle - 1
-          nap = (k * 50..k * 80).sample(rng).milliseconds
+          nap = (100..600).sample(rng).milliseconds
         else
-          k = 2**6 - 1
+          k = 2**Math.min(9, cycle) - 1
           nap = (k * 50..k * 80).sample(rng).milliseconds
         end
 
@@ -188,6 +199,9 @@ module Ww
 
         case fetch(uri)
         in .fetched?
+          @@r_lock.synchronize do
+            @@r_retrying = @@r_retrying.delete(uri)
+          end
           break
         in .retry_later?
           # OK, keep trying.

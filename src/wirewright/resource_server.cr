@@ -13,6 +13,8 @@ module Ww
   # servers, which follow a similar architecture & goals: `PathServer`, `URIServer`.
   # Everything else differs too much for unification to make sense. So refer to
   # `PathServer`, `URIServer` and so on for e.g. *writing* or *deletion*.
+  #
+  # DEPRECATED: Use `ResourceService` instead.
   module ResourceServer
     extend self
 

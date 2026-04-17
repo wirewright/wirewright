@@ -28,7 +28,7 @@ module Ww
   #
   # NOTE: Unfortunately, PathServer won't and can't fix the mess that the dominant OS/file
   # system designs/abstractions are. In a sense, it's the opposite; PathServer is almost
-  # designed to exaggerate them. In particular, there is always a chance of a race. So
+  # designed to exaggerate them. In particular, there is always the chance of a race. So
   # for example, when you `read`, you actually aren't guaranteed to get the full file
   # due to mid-read writes. Even though we have light protections for mid-read writes,
   # making them exceedingly rare even in degenerate cases (e.g. spam writing while PathServer
@@ -40,6 +40,8 @@ module Ww
   # than designing one's own file system and OS, but that never ends well regardless of one's
   # intentions. All in all, we can only decrease the probability of something mid-read
   # write happening on our end, by rejecting suspicious stuff aggressively.
+  #
+  # DEPRECATED: Use `PathService` instead.
   module PathServer
     extend self
 
@@ -192,6 +194,7 @@ module Ww
 
             case status = PathMonitor.status(path)
             in PathMonitor::Wait
+              txn.assoc(path, state) if state
               next
             in PathMonitor::Absent
               txn.assoc(path, Absent.new)
@@ -212,12 +215,17 @@ module Ww
 
               # If timestamps changed, proceed. If they haven't, we had some sort of
               # spurious version change which we ignore.
-              next if state.is_a?(Present) && state.listing.timestamp == info0.modification_time
+              if state.is_a?(Present) && state.listing.timestamp == info0.modification_time
+                txn.assoc(path, state)
+                next
+              end
 
               # Otherwise, something really did change and we re-inspect the underlying
               # file system entity.
               if info0.directory?
                 entries = [] of DirListingEntry
+
+                Log.info { "inspecting directory entries at #{path}" }
 
                 Dir.each_child(path) do |entry|
                   entry_path = path / entry
@@ -242,6 +250,8 @@ module Ww
                 buffer = Bytes.new(8192)
 
                 if info0.size > SAFE_FILE_BYTESIZE
+                  Log.info { "computing digest for large file at #{path}" }
+
                   digest = File.open(path, "rb") do |src|
                     Term::Blob::DIGEST_ALGORITHM.digest do |dst|
                       loop do
@@ -255,6 +265,8 @@ module Ww
 
                   listing = LargeFileListing.new(info0.modification_time, digest, info0.size)
                 else
+                  Log.info { "reading file at #{path}" }
+
                   content = File.open(path, "rb") do |src|
                     Term::Blob.build(classify: true) do |dst|
                       loop do
@@ -283,7 +295,7 @@ module Ww
                   end
 
                   if modified
-                    Log.debug { "file #{path} was modified in flight" }
+                    Log.info { "file #{path} was modified in flight" }
                     next
                   end
 
@@ -294,7 +306,7 @@ module Ww
               end
 
               txn.assoc(path, Present.new(listing, status.version))
-            rescue e : File::Error | IO::Error
+            rescue e : File::Error | IO::Error | MIME::Error
               Log.trace(exception: e) { "error while inspecting #{path}" }
 
               # Skip a cycle for this path until things settle down.
@@ -312,6 +324,8 @@ module Ww
         Log.trace { "rloop: wake up waiters (supply changed)" }
 
         @@r_waiters_signal.call
+
+        Log.trace { "rloop: woke up waiters (supply changed)" }
       end
     end
 
@@ -394,7 +408,7 @@ module Ww
 
       @@w_model[path] = fact.content.digest
 
-      Log.debug { "wloop: wrote to #{path}: #{fact.content.digest}" }
+      Log.info { "wloop: wrote to #{path}: #{fact.content.digest}" }
     rescue e : File::Error
       Log.debug(exception: e) { "wloop: error while writing to #{path}" }
     end
@@ -403,7 +417,7 @@ module Ww
       case PathMonitor.status(path)
       in PathMonitor::Wait
       in PathMonitor::Absent
-        Log.debug { "wloop: creating directory #{path}" }
+        Log.info { "wloop: creating directory #{path}" }
 
         begin
           Dir.mkdir(path)
@@ -420,7 +434,7 @@ module Ww
       case PathMonitor.status(entry_path)
       in PathMonitor::Wait
       in PathMonitor::Absent
-        Log.debug { "wloop: creating file #{entry_path}" }
+        Log.info { "wloop: creating file #{entry_path}" }
 
         begin
           File.touch(entry_path)
@@ -438,7 +452,7 @@ module Ww
       in PathMonitor::Wait
       in PathMonitor::Absent
       in PathMonitor::Present
-        Log.debug { "wloop: removing file #{entry_path}" }
+        Log.info { "wloop: removing file #{entry_path}" }
 
         begin
           File.delete(entry_path)
@@ -454,7 +468,7 @@ module Ww
       case PathMonitor.status(entry_path)
       in PathMonitor::Wait
       in PathMonitor::Absent
-        Log.debug { "wloop: creating directory #{entry_path}" }
+        Log.info { "wloop: creating directory #{entry_path}" }
 
         begin
           Dir.mkdir(entry_path)
@@ -472,7 +486,7 @@ module Ww
       in PathMonitor::Wait
       in PathMonitor::Absent
       in PathMonitor::Present
-        Log.debug { "wloop: removing directory #{entry_path}" }
+        Log.info { "wloop: removing directory #{entry_path}" }
 
         begin
           Dir.delete(entry_path)
@@ -570,9 +584,16 @@ module Ww
     class Error < Exception
     end
 
-    # Loads the file at *path* into memory and returns its content, as a slice
-    # of bytes. Raises `Error` if the file cannot be read.
-    def read(path : Path) : Term::Blob
+    # TODO: Instead of using our smart cache thingy with read(), write(), and delete(),
+    # we should invert the order: the cache thingy should eventually call read(), write(),
+    # and delete(). That is, instead of doing convergence loops in read() and so on, we
+    # should make the convergence process call read(), write(), or delete() instead. So
+    # we get the best of both worlds: callers wanting blocking behavior (including the convergence
+    # process itself!) use Crystal's native File.read and friends; whereas callers wanting
+    # cheap polling use view() and converge(), which are, effectively, cushions around
+    # read(), write(), and delete().
+
+    def listing(path : Path) : Listing | Absent
       epoch = 0u64
 
       loop do
@@ -582,16 +603,22 @@ module Ww
           next
         end
 
-        case listing
-        in FileListing
-          return listing.content
-        in DirListing
-          raise Error.new("could not read: path is a directory: #{path}")
-        in LargeFileListing
-          raise Error.new("file exceeds safe file size of #{SAFE_FILE_BYTESIZE.humanize_bytes}")
-        in Absent
-          raise Error.new("could not read: file absent: #{path}")
-        end
+        return listing
+      end
+    end
+
+    # Loads the file at *path* into memory and returns its content, as a slice
+    # of bytes. Raises `Error` if the file cannot be read.
+    def read(path : Path) : Term::Blob
+      case listing = listing(path)
+      in FileListing
+        listing.content
+      in DirListing
+        raise Error.new("could not read: path is a directory: #{path}")
+      in LargeFileListing
+        raise Error.new("file exceeds safe file size of #{SAFE_FILE_BYTESIZE.humanize_bytes}")
+      in Absent
+        raise Error.new("could not read: file absent: #{path}")
       end
     end
 

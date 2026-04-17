@@ -24,6 +24,8 @@ require "./wirewright/term"
 require "./wirewright/m0"
 require "./wirewright/tpath"
 require "./wirewright/outcome"
+require "./wirewright/service/*"
+
 require "./wirewright/path_monitor"
 require "./wirewright/path_server"
 require "./wirewright/uri_server"
