@@ -178,6 +178,11 @@ module Ww
       to_slice
     end
 
+    # Returns the bytesize of this Blob as a `UInt64`.
+    def ubytesize64 : UInt64
+      @size
+    end
+
     # Returns the classification of this blob.
     #
     # NOTE: The classification is computed on-demand unless it was explicitly provided
