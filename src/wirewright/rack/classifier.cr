@@ -452,62 +452,6 @@ module Ww::Rack
         D7.mixture(node, defn) { node }
       end
 
-      matchpi %{[resource _ @edge_]} do
-        D7.gnd(node, edge)
-      end
-
-      matchpi %{[resource query_]}, %{[resource query_ _]} do
-        spec0 = node[2]?
-
-        defn = Term::Dict.build do |commit|
-          commit << :module << Term[]
-          commit << {:cell, {:edge, :spec}, spec0}
-          commit << {:resource, query, {:edge, :spec}}
-        end
-
-        D7.mixture(node, defn) do |mix|
-          Term.case(mix) do
-            matchpi %{(module _ (cell @_ spec1_) _)} do
-              Term.morph(node, {2, spec1})
-            end
-
-            otherwise do
-              node
-            end
-          end
-        end
-      end
-
-      matchpi %{[path [view _string] @edge_]} do
-        D7.gnd(node, edge)
-      end
-
-      matchpi %{[path [goal _string] @edge_]} do
-        D7.gnd(node, edge)
-      end
-
-      matchpi %{[path head←[(%any goal view) _string] _]} do
-        spec0 = node[2]?
-
-        defn = Term::Dict.build do |commit|
-          commit << :module << Term[]
-          commit << {:cell, {:edge, :spec}, spec0}
-          commit << {:path, head, {:edge, :spec}}
-        end
-
-        D7.mixture(node, defn) do |mix|
-          Term.case(mix) do
-            matchpi %{(module _ (cell @_ spec1_) _)} do
-              Term.morph(node, {2, spec1})
-            end
-
-            otherwise do
-              node
-            end
-          end
-        end
-      end
-
       otherwise do
         D7.inert(node)
       end
