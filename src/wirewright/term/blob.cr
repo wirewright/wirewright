@@ -190,7 +190,7 @@ module Ww
     # is pretty expensive. Its expected runtime is in the high hundreds of microseconds to
     # milliseconds even for very small blobs (e.g., on my machine, 300 bytes is detected as
     # plaintext in about 1 millisecond). The classification is cached thereafter. Constructors
-    # which do expensive stuff anyway (e.g. `PathServer`, when reading a file) usually
+    # which do expensive stuff anyway (e.g. `PathService`, when reading a file) usually
     # precompute `Classif` as well, so that clients never have to go through this expense.
     # Worst-case analysis, however, must account for missing `Classif`.
     @[Dncast]
