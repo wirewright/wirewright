@@ -658,14 +658,16 @@ module Ww::Term::Case
 
       %matchee = Term.of({{matchee}})
 
-      # NOTE: The cast is necessary because otherwise, the thing would do
-      # dynamic dispatch, copying the block some number of times (in our case
-      # maybe 8-ish?). Inside each copy of the block at that point is a giant
-      # `case` with dozens to hundreds of `when`s. Each `when` opens a scope
-      # with `pass { }` and does its work. All of this is copied. That's
-      # catastrophic. Thousands of locals. Hundreds of thousands of instructions.
-      # It took me a few hours to debug this blowup; so that's the reason why
-      # the cast must be here.
+      {%
+        # NOTE: The cast is necessary because otherwise, the thing would do
+        # dynamic dispatch, copying the block some number of times (in our case
+        # maybe 8-ish?). Inside each copy of the block at that point is a giant
+        # `case` with dozens to hundreds of `when`s. Each `when` opens a scope
+        # with `pass { }` and does its work. All of this is copied. That's
+        # catastrophic. Thousands of locals. Hundreds of thousands of instructions.
+        # It took me a few hours to debug this blowup; so that's the reason why
+        # the cast must be here.
+      %}
       %result = %matcher.as({{matcher}}).scan(%matchee, env: {{env}}) do |%env, %index|
         case %index
         {% for branch, i in branches %}\
