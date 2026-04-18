@@ -151,13 +151,8 @@ module Testtool
         matchpi %{(json (file path_string))}, path: Path do
           log("Reading JSON from #{(base / path).normalize} for var #{var}")
 
-          hash[var] = pipe(base / path,
-            ResourceServer.file,
-            ResourceServer.read_string,
-            JSON.parse,
-            Term.of,
-          )
-        rescue e : ResourceServer::Error | JSON::Error
+          hash[var] = pipe(base / path, ResourceService.file, ResourceService.read_string, JSON.parse, Term.of)
+        rescue e : ResourceService::Error | JSON::Error
           warn("Ignoring var #{var}: #{e.message || "???"}")
         end
 
@@ -185,12 +180,12 @@ module Testtool
     begin
       pipe(
         base / theme_path,
-        ResourceServer.file,
-        ResourceServer.read_string,
+        ResourceService.file,
+        ResourceService.read_string,
         ML.document,
         Microfold.theme(rem: theme_rem),
       )
-    rescue e : ResourceServer::Error
+    rescue e : ResourceService::Error
       err(e.message || "???")
     rescue e : ML::SyntaxError
       err("Syntax error in #{(base / theme_path).normalize}")
@@ -205,8 +200,8 @@ module Testtool
     log("Loading editR codex at #{(base / path).normalize}")
 
     codex = pipe(base / path,
-      ResourceServer.file,
-      ResourceServer.read_string,
+      ResourceService.file,
+      ResourceService.read_string,
       ML.document,
     )
 
@@ -220,8 +215,8 @@ module Testtool
     log("Loading uiR codex at #{(base / path).normalize}")
 
     ruleset = pipe(base / path,
-      ResourceServer.file,
-      ResourceServer.read_string,
+      ResourceService.file,
+      ResourceService.read_string,
       ML.document,
       Ruleset.select,
     )
@@ -289,8 +284,8 @@ module Testtool
 
     begin
       index, indexsrc = pipe(conf.index_path,
-        ResourceServer.file,
-        ResourceServer.read_string,
+        ResourceService.file,
+        ResourceService.read_string,
         ML.document_and_srcmap(filename: conf.index_path.to_s),
       )
 
@@ -433,11 +428,11 @@ module Testtool
 
             begin
               document, documentsrc = pipe(path,
-                ResourceServer.file,
-                ResourceServer.read_string,
+                ResourceService.file,
+                ResourceService.read_string,
                 ML.document_and_srcmap(filename: path.to_s),
               )
-            rescue e : ResourceServer::Error
+            rescue e : ResourceService::Error
               warn(e.message || "???")
               next
             rescue e : ML::SyntaxError
@@ -461,7 +456,7 @@ module Testtool
             begin
               l = comparand(conf.tests_path, a)
               r = comparand(conf.tests_path, b)
-            rescue e : ResourceServer::Error
+            rescue e : ResourceService::Error
               warn("Invalid comparison: #{e.message || "???"}")
             rescue e : ArgumentError
               warn("Invalid comparison: #{e.message}")
@@ -535,6 +530,6 @@ module Testtool
       log("Writing #{counter.bytesize.humanize_bytes}")
     end
 
-    PathServer.write(path, blob)
+    PathService.write(path, blob)
   end
 end
