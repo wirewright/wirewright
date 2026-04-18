@@ -30,13 +30,18 @@ require "./wirewright/path_monitor"
 require "./wirewright/path_server"
 require "./wirewright/uri_server"
 require "./wirewright/resource_server"
+
 require "./wirewright/issue"
 require "./wirewright/ml"
-require "./wirewright/pigment"
-require "./wirewright/dwuir"
-require "./wirewright/microfold"
-require "./wirewright/soma"
 require "./wirewright/lr"
+
+require "./wirewright/pigment"
+require "./wirewright/nitrene"
+require "./wirewright/scenery"
+
+require "./wirewright/dwuir"
+require "./wirewright/soma"
+require "./wirewright/microfold"
 
 module Ww
 end

@@ -68,23 +68,46 @@ NOTE: this frontend is no longer supported on this branch. See kappa.
 
 <img width="1804" height="961" alt="Screenshot showing Wirewright Rack terminal UI atop UIR tests" src="https://github.com/user-attachments/assets/975fd033-b2d0-4745-827e-cb30ffd5a6f3" />
 
-## References
+## Influenced by
 
-Wirewright implements the ideas inspired by or directly taken from these amazing people: Francisco Varela, Humberto Maturana, Stephen Wolfram, Niklas Luhmann, Michael Levin, Bret Victor, ... (this list will grow, as there are many more of them!)
+Wirewright is influenced by various ideas from these amazing people: Francisco Varela, Humberto Maturana,
+Stephen Wolfram, Niklas Luhmann, Michael Levin, Bret Victor, ... (this list will grow, as there
+are many more of them!)
 
-Wirewright wouldn't be possible without these technologies:
-
-- [Crystal](https://github.com/crystal-lang/crystal)
-- [PlutoVG](https://github.com/sammycage/plutovg)
-- [PlutoSVG](https://github.com/sammycage/plutosvg)
-- [termbox2](https://github.com/termbox/termbox2)
-- [SDL](https://www.libsdl.org/)
+Since the project is in active development right now, it is very early to pinpoint exactly
+which ideas were inspired by (or taken from!) whom. Hopefully, this would be possible later.
 
 ## Building
 
-Wirewright can be built with Crystal 1.18.0 or later. If I forget to update the version number here, please
+Wirewright currently only runs on Linux.
+
+Wirewright can be built with Crystal 1.19.0 or later. If I forget to update the version number here, please
 remember that Wirewright more than likely depends on the newest features and bug-fixes in Crystal. So you are
 advised to build Wirewright with the latest version of Crystal.
+
+### Dependencies
+
+You will need to install [Crystal](https://github.com/crystal-lang/crystal) before building Wirewright.
+
+Wirewright requires the following libraries. You should install them before building
+the project. Most Linux distributions have these in their package registry.
+
+- [SDL2](https://www.libsdl.org/)
+- [Unibreak](https://github.com/adah1972/libunibreak/)
+- [Raqm](https://github.com/HOST-Oman/libraqm)
+- [XXhash](https://github.com/Cyan4973/xxHash)
+- `libmagic` (not sure what to link here)
+- [Zstd](https://github.com/facebook/zstd)
+- [GMP](https://gmplib.org/)
+- [PCRE2](https://github.com/PCRE2Project/pcre2)
+
+If you get a linker error, this probably means I forgot to include something in
+the list above. Let me know if that's the case so that it can be made more accurate.
+
+Wirewright vendors the following libraries (see the vendor/ directory):
+
+- [PlutoVG](https://github.com/sammycage/plutovg)
+- [PlutoSVG](https://github.com/sammycage/plutosvg)
 
 ### Building the dev tool
 

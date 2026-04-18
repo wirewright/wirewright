@@ -64,7 +64,10 @@ module Ww
     # A function, unit, agent, etc. evaluated the input successfully, providing zero
     # or more diagnostic messages alongside the result.
     struct Accepted(T)
+      # :nodoc:
       getter result : T
+
+      # Returns the diagnostics associated with this outcome.
       getter diagnostics : Slice(Diagnostic)
 
       # :nodoc:
@@ -94,12 +97,22 @@ module Ww
       def fmap(&)
         Outcome.fmap(self) { |result| yield result }
       end
+
+      def unwrap : T
+        @result
+      end
     end
 
     # A function, unit, agent, etc. rejected the input without further elaboration:
     # it did not recognize the input in any meaningful way; the input "fell through".
     # The caller should try something else.
-    defrecord Rejected
+    struct Rejected
+      def unwrap
+        raise ArgumentError.new
+      end
+    end
+
+    # TODO: Some functions below belong to the instance-side of Accepted and Rejected!!
 
     def ok(result) : Accepted
       Accepted.new(result, diagnostics: Slice(Diagnostic).empty)

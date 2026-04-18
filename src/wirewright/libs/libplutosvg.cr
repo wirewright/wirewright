@@ -5,7 +5,7 @@
 # WARNING: I don't know if PlutoSVG is thread-safe or not (in the sense of maybe
 # using  some kind of mutable global). In any case, it's best to assume it's
 # thread-unsafe and lock appropriately.
-@[Link(ldflags: "#{__DIR__}/libplutosvg.a")]
+@[Link(ldflags: "#{__DIR__}/../../../vendor/plutosvg/lib/libplutosvg.a #{__DIR__}/../../../vendor/plutovg/lib/libplutovg.a")]
 lib PlutoSVG
   type Document = Void*
 

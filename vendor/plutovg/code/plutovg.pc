@@ -1,0 +1,11 @@
+prefix=${pcfiledir}/../../
+includedir=${prefix}/include
+libdir=${prefix}/lib
+
+Name: PlutoVG
+Description: Tiny 2D vector graphics library in C
+Version: 1.3.2
+
+Cflags: -I${includedir}/plutovg -DPLUTOVG_BUILD_STATIC
+Libs: -L${libdir} -lplutovg
+Libs.private: -lm

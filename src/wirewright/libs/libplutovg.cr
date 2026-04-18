@@ -5,7 +5,7 @@
 # WARNING: I don't know if PlutoVG is thread-safe or not (in the sense of maybe
 # using  some kind of mutable global). In any case, it's best to assume it's
 # thread-unsafe and lock appropriately.
-@[Link(ldflags: "#{__DIR__}/libplutovg.a")]
+@[Link(ldflags: "#{__DIR__}/../../../vendor/plutovg/lib/libplutovg.a")]
 @[Link("m")]
 lib PlutoVG
   type Surface = Void*
@@ -101,6 +101,13 @@ lib PlutoVG
   fun face_from_file = plutovg_font_face_load_from_file(filename : UInt8*, ttcindex : LibC::Int) : FontFace
   fun face_from_data = plutovg_font_face_load_from_data(data : UInt8*, length : LibC::Int, ttcindex : LibC::Int, destroy_func : Void*, closure : Void*) : FontFace
   fun face_destroy = plutovg_font_face_destroy(face : FontFace)
+
+  fun font_face_get_metrics = plutovg_font_face_get_metrics(face : FontFace, size : LibC::Float, ascent : LibC::Float*, descent : LibC::Float*, line_gap : LibC::Float*, extents : Rect*)
+  fun font_face_get_glyph_index = plutovg_font_face_get_glyph_index(face : FontFace, codepoint : UInt32) : LibC::Int
+  fun font_face_get_glyph_metrics_by_index = plutovg_font_face_get_glyph_metrics_by_index(face : FontFace, size : LibC::Float, index : LibC::Int, advance_width : Float32*, left_side_bearing : Float32*, extents : Rect*)
+
+  fun face_pixels_to_scale = plutovg_font_face_pixels_to_scale(face : FontFace, pixels : LibC::Float, scale : LibC::Float*)
+
   fun face_get_glyph_metrics = plutovg_font_face_get_glyph_metrics(face : FontFace, size : LibC::Float, codepoint : UInt32, advance_width : Float32*, left_side_bearing : Float32*, extents : Rect*)
   fun face_get_kerning = plutovg_font_face_get_kerning(face : FontFace, size : LibC::Float, codepoint1 : UInt32, codepoint2 : UInt32, kerning : Int32*)
 
@@ -122,6 +129,7 @@ lib PlutoVG
   fun canvas_add_path = plutovg_canvas_add_path(canvas : Canvas, path : Path)
   fun canvas_add_rect = plutovg_canvas_rect(canvas : Canvas, x : LibC::Float, y : LibC::Float, w : LibC::Float, h : LibC::Float)
   fun canvas_add_glyph = plutovg_canvas_add_glyph(canvas : Canvas, codepoint : UInt32, x : LibC::Float, y : LibC::Float)
+  fun canvas_add_glyph_by_index = plutovg_canvas_add_glyph_by_index(canvas : Canvas, index : LibC::Int, x : LibC::Float, y : LibC::Float)
   fun canvas_set_color = plutovg_canvas_set_color(canvas : Canvas, color : Color*)
   fun canvas_set_fill_rule = plutovg_canvas_set_fill_rule(canvas : Canvas, winding : FillRule)
 
@@ -185,7 +193,7 @@ lib PlutoVG
   fun canvas_stroke_rect = plutovg_canvas_stroke_rect(canvas : Canvas, x : LibC::Float, y : LibC::Float, w : LibC::Float, h : LibC::Float)
   fun canvas_map = plutovg_canvas_map(canvas : Canvas, x : LibC::Float, y : LibC::Float, xx : LibC::Float*, yy : LibC::Float*)
 
-  fun font_face_text_extents = plutovg_font_face_text_extents(face : FontFace, size : LibC::Float, text : Void*, length : LibC::Int, encoding : TextEncoding, extent : Rect*)
+  fun font_face_text_extents = plutovg_font_face_text_extents(face : FontFace, size : LibC::Float, text : Void*, length : LibC::Int, encoding : TextEncoding, extents : Rect*) : LibC::Float
 
   fun convert_argb_to_rgba = plutovg_convert_argb_to_rgba(dst : UInt8*, src : UInt8*, width : LibC::Int, height : LibC::Int, stride : LibC::Int)
   fun canvas_round_rect = plutovg_canvas_round_rect(canvas : Canvas, x : LibC::Float, y : LibC::Float, w : LibC::Float, h : LibC::Float, rx : LibC::Float, ry : LibC::Float)

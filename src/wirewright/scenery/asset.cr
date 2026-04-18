@@ -1,0 +1,441 @@
+module Ww::Scenery
+  # The asset subsystem of Scenery integrates `ResourceService` with internal
+  # representations for assets (such as `PlutoVG::FontFace`).
+  #
+  # See also: `Asset::Any`, `Scenery.wait`, `Scenery.poll`.
+  module Asset
+    extend self
+
+    alias Query = FontQuery | CodepointsQuery | ImageQuery | SvgQuery
+
+    # The result of *response* will be interpreted as a `Font` asset.
+    defrecord FontQuery, resource : ResourceService::Query
+
+    # The result of *response* will be interpreted as a `Codepoint` asset.
+    defrecord CodepointsQuery, resource : ResourceService::Query
+
+    # The result of *response* will be interpreted as an `Image` asset.
+    defrecord ImageQuery, resource : ResourceService::Query
+
+    # The result of *response* will be interpreted as an `Svg` asset.
+    defrecord SvgQuery, resource : ResourceService::Query
+
+    # All asset types respond to `digest`, which returns its hash digest (to
+    # learn about the algorithm used, see `Term::Blob::DIGEST_ALGORITHM`).
+    #
+    # This means all assets can be very cheaply compared. We use this particular
+    # feature for dirt cheap and effortless cache invalidation. Do keep in mind
+    # however that we must always talk to the resource server first. The resource
+    # server gives us what it thinks is the latest blob for a particular asset,
+    # and then we see if that blob's digest is the same as the one we have in
+    # cache; if it is, perfect, reuse the asset. If it's not, we parse, producing
+    # a new asset. Everything downstream will now see the new asset's digest is
+    # different from the old one, producing a "cascade" of invalidation.
+    #
+    # NOTE: The logic described above is managed in `poll` and `wait`. `Asset`
+    # only provides the data types for assets, and parsing (i.e., constructors
+    # for those data types).
+    alias Any = PvgFont | PvgRasterImage | PvgSvgImage | CodepointsMap
+
+    # Represents a font.
+    class PvgFont
+      getter digest
+
+      # :nodoc:
+      def initialize(@pvg_face : PlutoVG::FontFace, @ft_face : FreeType::Face, @digest : Bytes)
+        @metrics = LRU(Int32, FontMetrics).new(16)
+        @indices = LRU(Char, Int32).new(256)
+        @measurements = LRU({Int32, Int32}, GlyphMeasurement).new(256)
+      end
+
+      # Clamps *size* into acceptable bounds.
+      def self.clamp(size : Magnitude) : Magnitude
+        size.clamp(Magnitude.new(5)..Magnitude.new(1024)).floor
+      end
+
+      def finalize
+        PlutoVG.face_destroy(@pvg_face)
+        FreeType.done_face(@ft_face)
+      end
+
+      # :nodoc:
+      def as_pvg : PlutoVG::FontFace
+        @pvg_face
+      end
+
+      # :nodoc:
+      def as_ft : FreeType::Face
+        @ft_face
+      end
+
+      # Returns the index of the glyph for *codepoint*. Returns `0` if there is no
+      # such glyph.
+      def index(codepoint : Char) : Int32
+        @indices.put_if_absent(codepoint) do
+          PlutoVG.font_face_get_glyph_index(@pvg_face, codepoint.ord.to_u32)
+        end
+      end
+
+      # Measures the glyph with the given *index* at *size*.
+      def measure(index : Int32, size : Magnitude) : GlyphMeasurement
+        size = PvgFont.clamp(size)
+
+        @measurements.put_if_absent({index, size.to_i}) do
+          PlutoVG.font_face_get_glyph_metrics_by_index(@pvg_face, size, index, out advance, nil, out extents)
+
+          GlyphMeasurement.new(advance, Rect[extents.x, extents.y, extents.w, extents.h])
+        end
+      end
+
+      # Calculates the *spacing* for this font at *size*, which is defined as
+      # the width (advance) of the whitespace character at that size.
+      def spacing(size : Magnitude) : Magnitude
+        measurement = measure(index(' '), size)
+        measurement.advance
+      end
+
+      # Returns the `FontMetrics` for this font at *size*.
+      def metrics(size : Magnitude) : FontMetrics
+        size = PvgFont.clamp(size)
+
+        @metrics.put_if_absent(size.to_i) do
+          PlutoVG.font_face_get_metrics(@pvg_face, size, out ascent, out descent, out line_gap, nil)
+
+          FontMetrics.new(ascent, descent, line_gap)
+        end
+      end
+
+      def inspect(io)
+        io << "font(" << @digest[...5].hexstring << "):0x" << object_id.to_s(base: 16)
+      end
+
+      def_equals_and_hash @digest
+    end
+
+    alias PvgImage = PvgRasterImage | PvgSvgImage
+
+    # Represents a raster image. Points to the underlying PlutoVG surface, which
+    # will therefore be reused for all instances of the image.
+    class PvgRasterImage
+      getter digest : Bytes
+      getter size : Point
+
+      # :nodoc:
+      def initialize(@surface : PlutoVG::Surface, @digest)
+        @size = Point[
+          PlutoVG.surface_get_width(surface),
+          PlutoVG.surface_get_height(surface),
+        ]
+      end
+
+      def finalize
+        PlutoVG.surface_destroy(@surface)
+      end
+
+      def to_unsafe : PlutoVG::Surface
+        @surface
+      end
+
+      def inspect(io)
+        io << "#<PvgRasterImage:0x"
+        object_id.to_s(io, base: 16)
+        io << " " << @digest.hexstring
+        io << " [" << @size.x << " x " << @size.y << "]>"
+      end
+
+      def_equals_and_hash @digest
+    end
+
+    # Represents an SVG image.
+    #
+    # It looks like PlutoSVG documents are expended by rendering them; therefore,
+    # `document` yields a new document every time it is called. Only the underlying
+    # SVG bytes (markup) are reused.
+    class PvgSvgImage
+      getter digest : Bytes
+      getter size : Point
+
+      # :nodoc:
+      #
+      # WARNING: The caller must ensure that *data* is a valid SVG document (such that
+      # `PlutoSVG.document_load_from_data` is guaranteed to succeed under nominal conditions).
+      def initialize(@data : Bytes, @size : Point, @digest)
+      end
+
+      # WARNING: you **must not** retain the yielded document. It is destroyed
+      # after the block.
+      def document(vwh : Point, & : PlutoSVG::Document ->)
+        document = PlutoSVG.document_load_from_data(@data, @data.size, vwh.x, vwh.y, nil, nil)
+        assert document
+
+        begin
+          yield document
+        ensure
+          PlutoSVG.document_destroy(document)
+        end
+      end
+
+      def inspect(io)
+        io << "#<PvgSvgImage:0x"
+        object_id.to_s(io, base: 16)
+        io << " " << @digest.hexstring
+        io << " [" << @size.x << " x " << @size.y << "]>"
+      end
+
+      def_equals_and_hash @digest
+    end
+
+    # Represents a map of codepoint names to codepoints, the result of parsing
+    # a `.codepoint` file.
+    class CodepointsMap
+      # :nodoc:
+      def initialize(@map : Hash(String, Char), @digest : Bytes)
+      end
+
+      # Returns the codepoint with the given *name*.
+      def []?(name : String) : Char?
+        @map[name]?
+      end
+
+      def inspect(io)
+        io << "#<CodepointsMap:0x"
+        object_id.to_s(io, base: 16)
+        io << " " << @digest.hexstring
+        io << " [" << @map.size << " codepoint(s)" << "]>"
+      end
+
+      def_equals_and_hash @digest
+    end
+
+    # Media types supported by `PvgFont`.
+    MEDIA_TYPES_FONT = {
+      # TTF/OTF (?)
+      #
+      # See e.g. https://www.iana.org/assignments/media-types/font/sfnt
+      #
+      # I'm not going to pretend I understand a word of what's being said there though . . .
+      Term["font/sfnt"],
+
+      # TTF
+      Term["font/ttf"],
+      Term["application/x-font-ttf"],
+      Term["application/x-font-truetype"],
+
+      # OTF
+      Term["font/otf"],
+      Term["application/vnd.ms-opentype"],
+      Term["application/x-font-opentype"],
+    }
+
+    @@ft : FreeType::Library? = nil
+
+    # :nodoc:
+    def parse(query : FontQuery, blob : Term::Blob) : Outcome::Accepted(PvgFont?)
+      response = pass do
+        next unless blob.classif.media_type.in?(MEDIA_TYPES_FONT)
+
+        ttcindex = 0
+        next unless pvg_face = PlutoVG.face_from_data(blob.bytes, blob.bytes.size, ttcindex, destroy_func: nil, closure: nil)
+
+        ft = @@ft ||= begin
+          status = FreeType.init_freetype(out library)
+          unless status.zero?
+            abort "failed to initialize FreeType"
+          end
+          library
+        end
+
+        status = FreeType.new_memory_face(ft, blob.bytes, blob.bytes.size, ttcindex, out ft_face)
+        next unless status.zero?
+
+        # NOTE: Here and below we'll dup the digest so that the GC can free the blob
+        # if it wants to. Blobs are usually big so that's beneficial. That is, by default
+        # blob.digest makes us refer to the blob (because it's a view into the memory
+        # allocated for the blob).
+        PvgFont.new(pvg_face, ft_face, blob.digest.dup)
+      end
+
+      unless response
+        return Outcome.ok_despite(nil.as(PvgFont?), <<-MSG)
+        unrecognized or malformed font with media type #{blob.classif.media_type.to(String)}; \
+        expected one of: #{MEDIA_TYPES_FONT.join(", ", &.to(String))}
+        MSG
+      end
+
+      Outcome.ok(response.as(PvgFont?))
+    end
+
+    # Media types supported by `PvgRasterImage`.
+    MEDIA_TYPES_RASTER = {
+      Term["image/png"],
+      Term["image/jpeg"],
+      Term["image/bmp"],
+      Term["image/gif"],
+      Term["image/x-portable-pixmap"],
+    }
+
+    # :nodoc:
+    def parse(query : ImageQuery, blob : Term::Blob) : Outcome::Accepted(PvgRasterImage?)
+      response = pass do
+        next unless blob.classif.media_type.in?(MEDIA_TYPES_RASTER)
+        next unless surface = PlutoVG.surface_load_from_image_data(blob.bytes, blob.bytes.size)
+
+        PvgRasterImage.new(surface, blob.digest.dup)
+      end
+
+      unless response
+        return Outcome.ok_despite(nil.as(PvgRasterImage?), <<-SVG)
+         unrecognized or malformed image with media type #{blob.classif.media_type.to(String)}; \
+         expected one of #{MEDIA_TYPES_RASTER.join(", ", &.to(String))}
+         SVG
+      end
+
+      Outcome.ok(response.as(PvgRasterImage?))
+    end
+
+    # Media types supported by `PvgSvgImage`.
+    MEDIA_TYPES_SVG = {Term["image/svg+xml"]}
+
+    # Constructs a `PvgSvgImage` asset from an in-memory *blob*. Returns `nil` if
+    # *blob* is not a valid (supported) SVG image.
+    def svg?(blob : Term::Blob) : PvgSvgImage?
+      return unless document = PlutoSVG.document_load_from_data(blob.bytes, blob.bytes.size, 0, 0, nil, nil)
+
+      size = Point[0, 0]
+      if PlutoSVG.document_extents(document, nil, out extents)
+        size = Point[extents.w, extents.h]
+      end
+
+      PvgSvgImage.new(blob.bytes, size, blob.digest.dup)
+    end
+
+    # Same as `svg?`, but raises `ArgumentError` instead of returning `nil` if *blob* is
+    # not a valid (supported) SVG image.
+    def svg(blob : Term::Blob) : PvgSvgImage
+      svg?(blob) || raise ArgumentError.new
+    end
+
+    # :nodoc:
+    def parse(query : SvgQuery, blob : Term::Blob) : Outcome::Accepted(PvgSvgImage?)
+      response = pass do
+        next unless blob.classif.media_type.in?(MEDIA_TYPES_SVG)
+
+        svg?(blob)
+      end
+
+      unless response
+        return Outcome.ok_despite(nil.as(PvgSvgImage?), <<-SVG)
+        unrecognized or malformed SVG with media type #{blob.classif.media_type.to(String)}; \
+        expected one of #{MEDIA_TYPES_SVG.join(", ", &.to(String))}"
+        SVG
+      end
+
+      Outcome.ok(response.as(PvgSvgImage?))
+    end
+
+    # :nodoc:
+    def parse(query : CodepointsQuery, blob : Term::Blob) : Outcome::Accepted(CodepointsMap)
+      Outcome.accumulate do |acc|
+        map = {} of String => Char
+        lineno = 1
+
+        io = IO::Memory.new(blob.bytes)
+        io.each_line do |line|
+          parts = line.split(' ', limit: 2, remove_empty: true)
+          unless parts.size == 2
+            acc << Diagnostic.of("line #{lineno} does not contain a codepoint definition")
+            next
+          end
+
+          name, hexcode = parts
+          unless codepoint = hexcode.to_i?(base: 16)
+            acc << Diagnostic.of("codepoint on line #{lineno} is not a valid hex number")
+            next
+          end
+
+          map[name] = codepoint.chr
+        ensure
+          lineno += 1
+        end
+
+        Outcome.ok(CodepointsMap.new(map, blob.digest.dup))
+      end
+    end
+
+    alias Map = Hash(Query, Any)
+
+    defrecord QueryRef, query : Query, includes: {Diagnostic::Spot}
+  end
+
+  private def fetch(cache, queries : QuerySet, &) : Outcome::Accepted(Asset::Map)
+    assets = {} of Asset::Query => Asset::Any
+
+    # First, call get() for all resources. This schedules reads that aren't in
+    # ResourceService's cache. When we later yield, the block calls #wait or #poll?
+    # on get()'s promise. All get()s are already scheduled at this point, and thus,
+    # while we're waiting for the first get(), all get()s can execute concurrently.
+    promises = queries.map do |query|
+      {query, ResourceService.get(query.resource)}
+    end
+
+    Outcome.accumulate do |acc|
+      promises.each do |query, promise|
+        result = yield promise
+
+        case result
+        in Nil
+          acc << Outcome.elaborate(Asset::QueryRef.new(query), Diagnostic.of("asset not available yet"))
+          next
+        in Promise::Accepted
+          response = result.object
+        in Promise::Rejected
+          # This is caused by Crystal-side rejections of some sort.
+          acc << Outcome.elaborate(Asset::QueryRef.new(query), Diagnostic.of("could not load asset: #{result.detail}"))
+          next
+        end
+
+        case response
+        in ResourceService::Absent
+          # This is caused by things like HTTP 4xx or file system ENOENT.
+          acc << Outcome.elaborate(Asset::QueryRef.new(query), Diagnostic.of("could not load asset: #{response.detail}"))
+        in ResourceService::Present
+          parseout = cache.put_if_absent({query, response.content}) do
+            Outcome.map(Asset.parse(query, response.content), &.as(Asset::Any?))
+          end
+
+          asset = acc.unwrap(Outcome.elaborate(Asset::QueryRef.new(query), parseout))
+          next unless asset
+
+          assets[query] = asset
+        end
+      end
+
+      Outcome.ok(assets)
+    end
+  end
+
+  private def poll(cache, queries : QuerySet) : Outcome::Accepted(Asset::Map)
+    fetch(cache, queries, &.poll?)
+  end
+
+  private def wait(cache, queries : QuerySet) : Outcome::Accepted(Asset::Map)
+    fetch(cache, queries, &.wait)
+  end
+
+  # Polls the resource server for *queries*. Queries that are resolved (either
+  # as present, or absent) at the particular moment are added to the resulting
+  # asset map.
+  #
+  # Notes related to *queries* are attached as diagnostics to the outcome.
+  def poll(cache : CacheSet, queries : QuerySet) : Outcome::Accepted(Asset::Map)
+    cache.assets.epoch { poll(cache.assets, queries) }
+  end
+
+  # Waits for all *queries* to resolve (either as present, or absent). Returns
+  # the resulting asset map.
+  #
+  # Notes related to *queries* are attached as diagnostics to the outcome.
+  def wait(cache : CacheSet, queries : QuerySet) : Outcome::Accepted(Asset::Map)
+    cache.assets.epoch { wait(cache.assets, queries) }
+  end
+end
