@@ -272,9 +272,12 @@ module Testtool
     conf.focused.empty? || tags.items.any?(&.in?(conf.focused))
   end
 
-  # **Entrypoint to testtool.** Returns when the testtool finishes.
+  # **Entrypoint of testtool.** Returns when the testtool finishes.
   def main(argv : Array(String)) : Nil
-    main(argparse(argv))
+    ctx = Fiber::ExecutionContext::Isolated.new("Testtool", spawn_context: MT) do
+      main(argparse(argv))
+    end
+    ctx.wait
   end
 
   def main(conf : ArgConf) : Nil

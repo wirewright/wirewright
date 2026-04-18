@@ -1,6 +1,22 @@
 module Testtool
   extend self
 
+  alias DisplayEntity = Banner |
+                        Help |
+                        TestSuccessPixel |
+                        TestFailurePixel |
+                        Status |
+                        LogMessage |
+                        WarnMessage |
+                        ErrMessage |
+                        Text |
+                        Hr |
+                        AssertionReportHeader |
+                        ComparisonReportHeader |
+                        ComplaintRef |
+                        ComplaintList |
+                        ComplaintAttachment
+
   defrecord Banner
   defrecord Help
 
@@ -22,154 +38,181 @@ module Testtool
   defrecord ComplaintList, complaints : Array(Complaint)
   defrecord ComplaintAttachment, text : String
 
-  # Reference: https://www.asciiart.eu/image-to-ascii
-  def display(entity : Banner)
-    STDERR << <<-'BANNER'
+  @@display_running = Atomic(Bool).new(false)
+  @@display_chan = Channel(DisplayEntity).new
 
-     ##############
-     ##############
-     #####    #####    Wirewright
-     ####      ####    https://github.com/wirewright/wirewright [iota]
-     #####    #####
-      ############
-        ########
+  private def ensure_display_running! : Nil
+    return if @@display_running.swap(true)
 
-
-    BANNER
-  end
-
-  def display(entity : Help)
-    puts HELP
-  end
-
-  def display(entity : LogMessage) : Nil
-    Colorize.with.dark_gray.surround(STDERR) do
-      instant = Time.local.to_s("%F %T")
-
-      STDERR << " LOG  " << instant << "  "
-      STDERR.puts entity.message
-    end
-  end
-
-  def display(entity : WarnMessage) : Nil
-    instant = Time.local.to_s("%F %T")
-
-    STDERR << "WARN  ".colorize.yellow << instant << "  "
-    STDERR.puts entity.message
-  end
-
-  def display(entity : ErrMessage) : Nil
-    instant = Time.local.to_s("%F %T")
-
-    STDERR << " ERR  ".colorize.red.bold << instant << "  "
-    STDERR.puts entity.message
-  end
-
-  def display(entity : Text) : Nil
-    STDERR.puts entity.text
-  end
-
-  def display(entity : Hr) : Nil
-    STDERR.puts
-  end
-
-  def display(entity : TestSuccessPixel)
-    # NOTE: I find it very tiring/headache-y when the same glyph (e.g. `.`) repeats
-    # over and over in peripheral vision, so let's add some texture. Also, color is
-    # much easier to distinguish with texture.
-    glyph = {
-      "⠁", "⠂", "⠃", "⠄", "⠅", "⠆", "⠇", "⠈", "⠉", "⠊", "⠋", "⠌", "⠍", "⠎", "⠏",
-      "⠐", "⠑", "⠒", "⠓", "⠔", "⠕", "⠖", "⠗", "⠘", "⠙", "⠚", "⠛", "⠜", "⠝", "⠞", "⠟",
-      "⠠", "⠡", "⠢", "⠣", "⠤", "⠥", "⠦", "⠧", "⠨", "⠩", "⠪", "⠫", "⠬", "⠭", "⠮", "⠯",
-      "⠰", "⠱", "⠲", "⠳", "⠴", "⠵", "⠶", "⠷", "⠸", "⠹", "⠺", "⠻", "⠼", "⠽", "⠾", "⠿",
-    }.sample
-
-    STDERR.print glyph.colorize.fore(*entity.color.rgb8)
-  end
-
-  def display(entity : TestFailurePixel)
-    STDERR.print "X".colorize.red
-  end
-
-  def display(entity : Status) : Nil
-    if entity.failures.zero?
-      STDERR.puts "▊ #{entity.successes} assertion(s) succeeded.".colorize.light_green.bold
-    else
-      STDERR.puts "  #{entity.successes} assertion(s) succeeded."
-      STDERR.puts "▊ #{entity.failures} assertion(s) failed.".colorize.red.bold
-    end
-
-    STDERR.print " " # ?!
-    STDERR.puts entity.mmt
-  end
-
-  def display(entity : AssertionReportHeader) : Nil
-    text = ML.display(entity.term, endl: false)
-
-    decorated = wrap(text, maxw: 80)
-      .each_line(chomp: true)
-      .map { |line| " │ ".colorize.dark_gray.to_s + line } # ?!
-      .join('\n')
-
-    STDERR.puts " ASSERTION".colorize.bold # ?!
-    STDERR.puts decorated
-  end
-
-  def display(entity : ComparisonReportHeader) : Nil
-    text = ML.display(entity.term, endl: false)
-
-    decorated = wrap(text, maxw: 80)
-      .each_line(chomp: true)
-      .map { |line| " │ ".colorize.dark_gray.to_s + line } # ?!
-      .join('\n')
-
-    STDERR.puts " COMPARISON".colorize.bold # ?!
-    STDERR.puts decorated
-  end
-
-  def display(entity : ComplaintRef) : Nil
-    STDERR.puts "▍#{entity.ref.colorize.underline}"
-  end
-
-  def display(entity : ComplaintList) : Nil
-    STDERR.puts " COMPLAINTS".colorize.bold
-
-    entity.complaints.each do |complaint|
-      STDERR.puts "   #{complaint.title}"
-
-      complaint.attachments.each do |label, attachment|
-        STDERR.puts "     ⦾ #{label.capitalize}"
-
-        display(ComplaintAttachment, attachment)
+    spawn(name: "testtool display") do
+      display = Display.new
+      loop do
+        msg = @@display_chan.receive
+        display.show(msg)
       end
     end
   end
 
-  def display(entity : ComplaintAttachment) : Nil
-    decorated = wrap(entity.text, maxw: 80)
-      .each_line(chomp: true)
-      .map { |line| "     │ ".colorize.dark_gray.to_s + line } # ?!
-      .join('\n')
+  private class Display
+    def initialize
+      @rng = Random::PCG32.new
+    end
 
-    STDERR.puts decorated
+    # Reference: https://www.asciiart.eu/image-to-ascii
+    def show(entity : Banner)
+      STDERR << <<-'BANNER'
+
+       ##############
+       ##############
+       #####    #####    Wirewright
+       ####      ####    https://github.com/wirewright/wirewright [iota]
+       #####    #####
+        ############
+          ########
+
+
+      BANNER
+    end
+
+    def show(entity : Help)
+      puts HELP
+    end
+
+    def show(entity : LogMessage) : Nil
+      Colorize.with.dark_gray.surround(STDERR) do
+        instant = Time.local.to_s("%F %T")
+
+        STDERR << " LOG  " << instant << "  "
+        STDERR.puts entity.message
+      end
+    end
+
+    def show(entity : WarnMessage) : Nil
+      instant = Time.local.to_s("%F %T")
+
+      STDERR << "WARN  ".colorize.yellow << instant << "  "
+      STDERR.puts entity.message
+    end
+
+    def show(entity : ErrMessage) : Nil
+      instant = Time.local.to_s("%F %T")
+
+      STDERR << " ERR  ".colorize.red.bold << instant << "  "
+      STDERR.puts entity.message
+    end
+
+    def show(entity : Text) : Nil
+      STDERR.puts entity.text
+    end
+
+    def show(entity : Hr) : Nil
+      STDERR.puts
+    end
+
+    def show(entity : TestSuccessPixel)
+      # NOTE: I find it very tiring/headache-y when the same glyph (e.g. `.`) repeats
+      # over and over in peripheral vision, so let's add some texture. Also, color is
+      # much easier to distinguish with texture.
+      glyph = {
+        "⠁", "⠂", "⠃", "⠄", "⠅", "⠆", "⠇", "⠈", "⠉", "⠊", "⠋", "⠌", "⠍", "⠎", "⠏",
+        "⠐", "⠑", "⠒", "⠓", "⠔", "⠕", "⠖", "⠗", "⠘", "⠙", "⠚", "⠛", "⠜", "⠝", "⠞", "⠟",
+        "⠠", "⠡", "⠢", "⠣", "⠤", "⠥", "⠦", "⠧", "⠨", "⠩", "⠪", "⠫", "⠬", "⠭", "⠮", "⠯",
+        "⠰", "⠱", "⠲", "⠳", "⠴", "⠵", "⠶", "⠷", "⠸", "⠹", "⠺", "⠻", "⠼", "⠽", "⠾", "⠿",
+      }.sample(@rng)
+
+      STDERR.print glyph.colorize.fore(*entity.color.rgb8)
+    end
+
+    def show(entity : TestFailurePixel)
+      STDERR.print "X".colorize.red
+    end
+
+    def show(entity : Status) : Nil
+      if entity.failures.zero?
+        STDERR.puts "▊ #{entity.successes} assertion(s) succeeded.".colorize.light_green.bold
+      else
+        STDERR.puts "  #{entity.successes} assertion(s) succeeded."
+        STDERR.puts "▊ #{entity.failures} assertion(s) failed.".colorize.red.bold
+      end
+
+      STDERR.print " " # ?!
+      STDERR.puts entity.mmt
+    end
+
+    def show(entity : AssertionReportHeader) : Nil
+      text = ML.display(entity.term, endl: false)
+
+      decorated = wrap(text, maxw: 80)
+        .each_line(chomp: true)
+        .map { |line| " │ ".colorize.dark_gray.to_s + line } # ?!
+        .join('\n')
+
+      STDERR.puts " ASSERTION".colorize.bold # ?!
+      STDERR.puts decorated
+    end
+
+    def show(entity : ComparisonReportHeader) : Nil
+      text = ML.display(entity.term, endl: false)
+
+      decorated = wrap(text, maxw: 80)
+        .each_line(chomp: true)
+        .map { |line| " │ ".colorize.dark_gray.to_s + line } # ?!
+        .join('\n')
+
+      STDERR.puts " COMPARISON".colorize.bold # ?!
+      STDERR.puts decorated
+    end
+
+    def show(entity : ComplaintRef) : Nil
+      STDERR.puts "▍#{entity.ref.colorize.underline}"
+    end
+
+    def show(entity : ComplaintList) : Nil
+      STDERR.puts " COMPLAINTS".colorize.bold
+
+      entity.complaints.each do |complaint|
+        STDERR.puts "   #{complaint.title}"
+
+        complaint.attachments.each do |label, attachment|
+          STDERR.puts "     ⦾ #{label.capitalize}"
+
+          show(ComplaintAttachment, attachment)
+        end
+      end
+    end
+
+    def show(entity : ComplaintAttachment) : Nil
+      decorated = wrap(entity.text, maxw: 80)
+        .each_line(chomp: true)
+        .map { |line| "     │ ".colorize.dark_gray.to_s + line } # ?!
+        .join('\n')
+
+      STDERR.puts decorated
+    end
+
+    def show(entity : ComplaintAttachment.class, attachment : Term) : Nil
+      text = ML.display(attachment, endl: false)
+
+      show(ComplaintAttachment.new(text))
+    end
+
+    def show(entity : ComplaintAttachment.class, attachment : ML::SyntaxError) : Nil
+      text = attachment.humanize(styled: false)
+
+      show(ComplaintAttachment.new(text))
+    end
+
+    def show(entity : ComplaintAttachment.class, attachment : Exception) : Nil
+      text = attachment.inspect_with_backtrace.chomp
+
+      show(ComplaintAttachment.new(text))
+    end
   end
 
-  def display(entity : ComplaintAttachment.class, attachment : Term) : Nil
-    text = ML.display(attachment, endl: false)
+  def display(entity : DisplayEntity) : Nil
+    ensure_display_running!
 
-    display(ComplaintAttachment.new(text))
-  end
-
-  def display(entity : ComplaintAttachment.class, attachment : ML::SyntaxError) : Nil
-    text = attachment.humanize(styled: false)
-
-    display(ComplaintAttachment.new(text))
-  end
-
-  def display(entity : ComplaintAttachment.class, attachment : Exception) : Nil
-    text = attachment.inspect_with_backtrace.chomp
-
-    display(ComplaintAttachment.new(text))
+    @@display_chan << entity
   end
 
   # Displays a log message.
