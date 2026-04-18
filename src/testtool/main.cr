@@ -140,35 +140,6 @@ module Testtool
     ArgConf.new(index_path, focused, ignored, stats_path, interactive, display_assertion, assets)
   end
 
-  # Resolves variables defined in *index*.
-  def vars(index : Term::Dict, base : Path) : Hash(Term, Term)
-    hash = {} of Term => Term
-    return hash unless vars = index[:vars]?
-    return hash unless vars.type.dict?
-
-    vars.each_entry do |var, defn|
-      Term.case(defn, engine: M0) do
-        matchpi %{(json (file path_string))}, path: Path do
-          log("Reading JSON from #{(base / path).normalize} for var #{var}")
-
-          hash[var] = pipe(base / path, ResourceService.file, ResourceService.read_string, JSON.parse, Term.of)
-        rescue e : ResourceService::Error | JSON::Error
-          warn("Ignoring var #{var}: #{e.message || "???"}")
-        end
-
-        otherwise do
-          warn(<<-MSG)
-          Ignoring var #{var} with unrecognized definition #{defn}, expected one of:
-
-          - (json (file path_string))
-          MSG
-        end
-      end
-    end
-
-    hash
-  end
-
   # Constructs a Microfold theme based on definitions from *index*, if any.
   def theme?(index : Term::Dict, base : Path) : Microfold::Theme?
     theme_path = index[:microfold, :theme]?.try(&.to?(Path))
@@ -233,35 +204,47 @@ module Testtool
   # Constructs `AssertionAssets` based on *conf* and contents of the index
   # file, *index*. May not run the block in case of an error.
   def assets(conf : ArgConf, index : Term::Dict, & : AssertionAssets ->) : Nil
-    dw_platform = DwUIR::PvgPlatform.new
-    dw_compositor = DwUIR::Compositor.new
-    dw_ctx = DwUIR::Viewer::Context.new(dw_compositor, dw_platform)
+    server = HTTP::Server.new([HTTP::StaticFileHandler.new((conf.tests_path / "public").to_s, fallthrough: false, directory_listing: false)])
 
-    log("Starting DwUIR server")
+    server_ctx = Fiber::ExecutionContext::Isolated.new("testtool public/ server") do
+      log("HTTP server for #{conf.tests_path / "public"} started on http://127.0.0.1:9812")
+      server.bind_tcp "127.0.0.1", 9812
+      server.listen
+      log("HTTP server for #{conf.tests_path / "public"} is down")
+    end
 
-    DwUIR.serve(dw_ctx) do |dw|
-      log("DwUIR server running")
+    begin
+      dw_platform = DwUIR::PvgPlatform.new
+      dw_compositor = DwUIR::Compositor.new
+      dw_ctx = DwUIR::Viewer::Context.new(dw_compositor, dw_platform)
 
-      vars = vars(index, base: conf.tests_path)
+      log("Starting DwUIR server")
 
-      if conf.assets
-        unless theme = theme?(index, base: conf.tests_path)
-          err("Microfold theme path and rem not recognized or undefined, aborting")
-          return
+      DwUIR.serve(dw_ctx) do |dw|
+        log("DwUIR server running")
+
+        if conf.assets
+          unless theme = theme?(index, base: conf.tests_path)
+            err("Microfold theme path and rem not recognized or undefined, aborting")
+            return
+          end
+
+          unless editR = editR?(index, base: conf.tests_path)
+            err("editR codex not recognized or undefined, aborting")
+            return
+          end
+
+          unless uiR = uiR?(index, dw, base: conf.tests_path)
+            err("uiR codex not recognized or undefined, aborting")
+            return
+          end
         end
 
-        unless editR = editR?(index, base: conf.tests_path)
-          err("editR codex not recognized or undefined, aborting")
-          return
-        end
-
-        unless uiR = uiR?(index, dw, base: conf.tests_path)
-          err("uiR codex not recognized or undefined, aborting")
-          return
-        end
+        yield AssertionAssets.new(theme, editR, uiR, dw)
       end
-
-      yield AssertionAssets.new(vars, theme, editR, uiR, dw)
+    ensure
+      server.close
+      server_ctx.wait
     end
   end
 
@@ -276,7 +259,12 @@ module Testtool
   def main(argv : Array(String)) : Nil
     ctx = Fiber::ExecutionContext::Isolated.new("Testtool", spawn_context: MT) do
       main(argparse(argv))
+
+      # Let other fibers (esp. the logging fiber) finish before we exit. I'm
+      # not sure if there's a better way to do this.
+      sleep 1.second
     end
+
     ctx.wait
   end
 

@@ -15,6 +15,16 @@ module Testtool
     assertions(comparison.op).map { |asn| Assertion.new(asn, comparison) }
   end
 
+  defrecord Failure, detail : String
+
+  def assertions(production : Failure) : Array(AssertionNode)
+    asn = ->(assets : AssertionAssets) do
+      AssertionResult.new(Mmt.zero, [complaint(production.detail)])
+    end
+
+    [asn] of AssertionNode
+  end
+
   defrecord Top, path : Path, term : Term
 
   def assertions(production : Top, srcmap : ML::SrcMap) : Array(AssertionNode)
@@ -439,25 +449,47 @@ module Testtool
     pattern, decl = production.pattern, production.term
 
     Term.case(decl, engine: M0) do
-      # |@ testtool.pattern.var=
+      # |@ testtool.pattern.resource=
       #
       # |@pattern
-      # (var= name_ envs_*)
+      # (resource= resource_ envs_*)
       #
-      # |@key name
-      # Name of the variable.
+      # |@key resource resource
+      # Query to retrieve the resource.
       #
       # |@key envs
       # Zero or more expected match envs.
       #
       # |@block
-      # Variable match test. Variables point to external resources. They
-      # are defined in testtool's `index.wwml`.
-      matchpi %{(var= name_ _*)} do
-        envs = decl.items.move(2)
-        test = PatternVarEq.new(pattern, name, envs.to_set)
+      # Resource match test.
+      #
+      # Supported resource media types are:
+      # - `application/json`
+      matchpi %{(resource= resource_ _*)} do
+        unless query = ResourceService.query?(resource)
+          return annotated(assertions(Failure.new("invalid resource query #{resource}")), decl, srcmap)
+        end
 
-        annotated(assertions(test), decl, srcmap)
+        begin
+          blob = ResourceService.read_blob(query)
+        rescue e : ResourceService::Error
+          return annotated(assertions(Failure.new("could not load #{resource}: #{e.message}")), decl, srcmap)
+        end
+
+        case type = blob.classif.media_type
+        when Term["application/json"]
+          begin
+            matchee = Term.of(JSON.parse(blob.to_string))
+          rescue e : JSON::ParseException
+            return annotated(assertions(Failure.new("invalid JSON: #{e.message}")), decl, srcmap)
+          end
+
+          matches = decl.items.move(2)
+          test = PatternEq.new(pattern, matchee, matches.to_set)
+          annotated(assertions(test), decl, srcmap)
+        else
+          annotated(assertions(Failure.new("unsupported resource media type #{type}")), decl, srcmap)
+        end
       end
 
       # |@ testtool.pattern.=

@@ -2469,7 +2469,7 @@
 
   ;; Match first person whose age is >= 40
   (pattern (%item (%layer _ "name": name_string "age": (%number _ >= 40)))
-    (var= PEOPLE {name: "Fay Mcmahon"}))
+    (resource= (uri "http://127.0.0.1:9812/people.json") {name: "Fay Mcmahon"}))
 
   ;; From doc
   (pattern (first-common ⟨x_⟩ ⟨x_⟩)
@@ -2514,10 +2514,11 @@
   (pattern (%item° (%layer _  "name": name_string
                               "friends": ()
                               "age": (%number _ >= 25)))
-    (var= PEOPLE {name: "Herrera Price"}
-                 {name: "Addie Franco"}
-                 {name: "Fay Mcmahon"}
-                 {name: "Talley Jarvis"})))
+    (resource= (uri "http://127.0.0.1:9812/people.json")
+      {name: "Herrera Price"}
+      {name: "Addie Franco"}
+      {name: "Fay Mcmahon"}
+      {name: "Talley Jarvis"})))
 
 ;; %items
 (group

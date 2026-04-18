@@ -1,13 +1,6 @@
 ;; `testtool` uses this file to figure out the tests it needs to run and
 ;; their assets.
 
-;; Variables used in pattern tests: `(var= _ _*)`.
-;;
-;; Right now we only support (file path_string).
-vars: {
-  PEOPLE: (json (file "../data/people.json")),
-}
-
 ;; Theme and rem that should be used for running Microfold tests.
 microfold: {
   theme: "../theme.ufold.wwml",

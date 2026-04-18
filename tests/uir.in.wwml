@@ -873,10 +873,10 @@
                     comment: "On discuss")))
               (x-stack gap: 15
                 (people-card fr: 8 title: "Team Collaboration"
-                  (person-entry name: "Samantha Doe" avatar: (svg src: (file "data/avatar-girl.svg")) task: "Project Repository" badge: (status-badge "Completed" hue: 143.68))
-                  (person-entry name: "John Doe" avatar: (avatar-img src: (file "data/avatar-male1-32.jpg")) task: "Auth" badge: (status-badge "Pending" hue: 0))
-                  (person-entry name: "Sarah Doe" avatar: (avatar-img src: (file "data/avatar-female1-32.jpg")) task: "UX design" badge: (status-badge "In Progress" hue: 70))
-                  (person-entry name: "Kate Doe" avatar: (avatar-img src: (file "data/avatar-female2-32.jpg")) task: "Admin Panel"))
+                  (person-entry name: "Samantha Doe" avatar: (svg src: (uri "http://127.0.0.1:9812/avatar-girl.svg")) task: "Project Repository" badge: (status-badge "Completed" hue: 143.68))
+                  (person-entry name: "John Doe" avatar: (avatar-img src: (uri "http://127.0.0.1:9812/avatar-male1-32.jpg")) task: "Auth" badge: (status-badge "Pending" hue: 0))
+                  (person-entry name: "Sarah Doe" avatar: (avatar-img src: (uri "http://127.0.0.1:9812/avatar-female1-32.jpg")) task: "UX design" badge: (status-badge "In Progress" hue: 70))
+                  (person-entry name: "Kate Doe" avatar: (avatar-img src: (uri "http://127.0.0.1:9812/avatar-female2-32.jpg")) task: "Admin Panel"))
                 (group fr: 4
                   (projects-card))))))))
 

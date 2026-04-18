@@ -7,7 +7,6 @@ module Testtool
                BackmapEq |
                BackmapNeg |
                BacksysTest |
-               PatternVarEq |
                PatternEq |
                PatternPos |
                PatternNeg |
@@ -239,22 +238,9 @@ module Testtool
     matches.not_nil!
   end
 
-  defrecord PatternVarEq, pattern : Term, name : Term, matches : Set(Term)
   defrecord PatternEq, pattern : Term, matchee : Term, matches : Set(Term)
   defrecord PatternPos, pattern : Term, whitelist : Set(Term)
   defrecord PatternNeg, pattern : Term, blacklist : Set(Term)
-
-  def run(test : PatternVarEq, assets, stat, complaints) : Nil
-    unless matchee = assets.vars[test.name]?
-      complaints << complaint("Var not found")
-      return
-    end
-
-    envs = measure(stat) { match(test.pattern, matchee) }
-    return if envs.to_set == test.matches # ok
-
-    complaints << complaint("Pattern mismatch", matched: Term.of(envs))
-  end
 
   def run(test : PatternEq, assets, stat, complaints) : Nil
     envs = measure(stat) { match(test.pattern, test.matchee) }

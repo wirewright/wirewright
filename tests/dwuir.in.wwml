@@ -2160,7 +2160,7 @@ backdrop: (oklch 0.9 0 0)
       final-w: 100
       final-h: 30)
     (rect
-      fill: (image (file "data/214-500x400.jpg"))
+      fill: (image (uri "http://127.0.0.1:9812/city.jpg"))
       radius-tl: 10
       radius-br: 10
       final-w: 100
@@ -2177,7 +2177,7 @@ backdrop: (oklch 0.9 0 0)
     (rect
       fill:
         (image fit: (align)
-          (file "data/214-500x400.jpg"))
+          (uri "http://127.0.0.1:9812/city.jpg"))
       final-w: 100
       final-h: 100))
   ;; fit: align centers
@@ -2192,7 +2192,7 @@ backdrop: (oklch 0.9 0 0)
     (rect
       fill:
         (image fit: (align l: 0.5 t: 0.5)
-          (file "data/214-500x400.jpg"))
+          (uri "http://127.0.0.1:9812/city.jpg"))
       final-w: 100
       final-h: 100))
   ;; fit: align bottom right
@@ -2207,7 +2207,7 @@ backdrop: (oklch 0.9 0 0)
     (rect
       fill:
         (image fit: (align l: 1 t: 1)
-          (file "data/214-500x400.jpg"))
+          (uri "http://127.0.0.1:9812/city.jpg"))
       final-w: 100
       final-h: 100))
   ;; fit: pan
@@ -2222,7 +2222,7 @@ backdrop: (oklch 0.9 0 0)
     (rect
       fill:
         (image fit: (pan l: -100 t: -100)
-          (file "data/214-500x400.jpg"))
+          (uri "http://127.0.0.1:9812/city.jpg"))
       final-w: 100
       final-h: 100))
   ;; fit: align, tile, resize
@@ -2240,7 +2240,7 @@ backdrop: (oklch 0.9 0 0)
                    tile: true
                    resize-w: 32
                    resize-h: 32
-        (file "data/soma-256x256-white.png"))
+        (uri "http://127.0.0.1:9812/soma-256x256-white.png"))
       final-w: 100
       final-h: 100))
   ;; Show logo
@@ -2251,7 +2251,7 @@ backdrop: (oklch 0.9 0 0)
                    resize-w: (= 64)
                    resize-h: (= 64)
                    opacity: 0.8
-        (file "data/soma-256x256-white.png"))
+        (uri "http://127.0.0.1:9812/soma-256x256-white.png"))
       final-w: 100
       final-h: 100)
     (rect
@@ -2438,7 +2438,7 @@ backdrop: (oklch 0.9 0 0)
    z-index: 1
    fill: (translucent (rgb 0 0 0) 0.5))
  (svg
-   src: (file "data/soma-logo.svg")
+   src: (uri "http://127.0.0.1:9812/soma-logo.svg")
    color: black
    resize: clip))
 
@@ -2457,7 +2457,7 @@ backdrop: (oklch 0.9 0 0)
    z-index: 1
    fill: (translucent (rgb 0 0 0) 0.5))
  (svg
-   src: (file "data/soma-logo.svg")
+   src: (uri "http://127.0.0.1:9812/soma-logo.svg")
    color: black
    resize: stretch))
 
@@ -2476,7 +2476,7 @@ backdrop: (oklch 0.9 0 0)
    z-index: 1
    fill: (translucent (rgb 0 0 0) 0.5))
  (svg
-   src: (file "data/soma-logo.svg")
+   src: (uri "http://127.0.0.1:9812/soma-logo.svg")
    color: green
    resize: keep-ratio))
 
@@ -2497,7 +2497,7 @@ backdrop: (oklch 0.9 0 0)
    z-index: 1
    fill: (translucent (rgb 0 0 0) 0.5))
  (svg
-   src: (file "data/soma-logo.svg")
+   src: (uri "http://127.0.0.1:9812/soma-logo.svg")
    color: black
    resize: stretch))
 
@@ -2528,7 +2528,7 @@ backdrop: (oklch 0.9 0 0)
        z-index: 1
        fill: (translucent (rgb 0 0 0) 0.5))
      (svg
-       src: (file "data/soma-logo.svg")
+       src: (uri "http://127.0.0.1:9812/soma-logo.svg")
        color: black
        resize: stretch))))
 

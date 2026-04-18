@@ -24,7 +24,6 @@ module Testtool
   alias Comparison::Any = TermComparison | ImageComparison
 
   defcase AssertionAssets,
-    vars : Hash(Term, Term),
     theme : Microfold::Theme?,
     editR : Rewriter?,
     uiR : Rewriter?,
