@@ -1,0 +1,156 @@
+backdrop: (oklch 0.2 0 0)
+width: 500
+height: 1000
+
+(BoundedText ¦ props_)
+  => (z-stack
+       (rect stroke: red thickness-l: 1 thickness-r: 1 thickness-t: 1 thickness-b: 1)
+       (padding pl: 1 pr: 1 pt: 1 pb: 1
+         (text ^… props)))
+
+(y-stack gap: 10 fr: 1
+  ;; Caption
+  (x-stack gap: 5
+    (BoundedText caption: "" color: white)
+    (BoundedText caption: "A" color: white)
+    (BoundedText caption: "Hello" color: white))
+
+  ;; Size, color
+  (y-stack gap: 5
+    (BoundedText caption: "The quick brown fox jumps over the lazy dog." color: white size: 11)
+    (BoundedText caption: "The quick brown fox jumps over the lazy dog." color: white size: 14)
+    (BoundedText caption: "The quick brown fox jumps over the lazy dog." color: white size: 24)
+    (BoundedText caption: "The quick brown fox jumps over the lazy dog." color: white size: 32))
+  (x-stack gap: 5
+    (BoundedText caption: "Hi" color: (oklch 0.9 0 0) size: 9)
+    (BoundedText caption: "Hi" color: (oklch 0.8 0.1 red) size: 11)
+    (BoundedText caption: "Hi" color: (oklch 0.8 0.1 green) size: 14)
+    (BoundedText caption: "Hi" color: (oklch 0.8 0.1 blue) size: 16)
+    (BoundedText caption: "Hi" color: (oklch 0.9 0.15 yellow) size: 24)
+    (BoundedText caption: "Hi" color: (oklch 0.7 0.2 violet) size: 32)
+    (BoundedText caption: "Hi" color: (oklch 0.7 0.2 teal) size: 48)
+    (BoundedText caption: "Hi" color: (oklch 0.7 0.2 magenta) size: 64))
+
+  ;; Leading
+  (x-stack gap: 5
+    (y-stack fr: 1
+      (text caption: "leading: default" color: gray size: 14)
+      (BoundedText
+        caption: "The quick brown fox jumps over\nthe lazy dog."
+        color: white))
+    (y-stack fr: 1
+      (text caption: "leading: 1.5" color: gray size: 14)
+      (BoundedText
+        caption: "The quick brown fox jumps over\nthe lazy dog."
+        color: white
+        leading: 1.5))
+    (y-stack fr: 1
+      (text caption: "leading: 25px" color: gray size: 14)
+      (BoundedText
+        caption: "The quick brown fox jumps over\nthe lazy dog."
+        color: white
+        leading: (25 px))))
+
+  ;; Tracking
+  (x-stack gap: 5
+    (y-stack fr: 1
+      (text caption: "tracking: default" color: gray size: 14)
+      (BoundedText
+        caption: "The quick brown fox jumps over\nthe lazy dog."
+        color: white))
+    (y-stack fr: 1
+      (text caption: "tracking: 0.5" color: gray size: 14)
+      (BoundedText
+        caption: "The quick brown fox jumps over\nthe lazy dog."
+        color: white
+        tracking: 0.5))
+    (y-stack fr: 1
+      (text caption: "tracking: -0.5" color: gray size: 14)
+      (BoundedText
+        caption: "The quick brown fox jumps over\nthe lazy dog."
+        color: white
+        tracking: -0.5))
+    (y-stack fr: 1
+      (text caption: "tracking: 5px" color: gray size: 14)
+      (BoundedText
+        caption: "The quick brown fox jumps over\nthe lazy dog."
+        color: white
+        tracking: (5 px))))
+
+  ;; Empty lines
+  (x-stack gap: 5
+    (content y: true fr: 1
+      (BoundedText
+        caption: "Text with\n\none empty line followed by two\n\n\nempty lines."
+        color: white
+        size: 11))
+    (content y: true fr: 1
+      (BoundedText
+        caption: "\nLeading empty line"
+        color: white))
+    (content y: true fr: 1
+      (BoundedText
+        caption: "Trailing empty line\n"
+        color: white)))
+
+  ;; Trailing whitespace and single newline
+  (x-stack gap: 5
+    (content y: true
+      (limit max-w: 170
+        (BoundedText
+          color: white
+          caption: "Text with  \ntrailing    and  repeated whitespace   ")))
+    (y-stack
+      (text caption: "Just a newline" color: gray)
+      (content x: true y: true
+        (BoundedText
+          color: white
+          caption: "\n"))))
+
+  ;; Font
+  (x-stack gap: 5
+    (y-stack fr: 1
+      (text caption: "Unifont" color: gray)
+      (BoundedText
+        color: white
+        caption: "The quick brown fox jumped over the lazy dog."
+        font: "Unifont"
+        size: 14))
+    (y-stack fr: 1
+      (text caption: "Noto Sans" color: gray)
+      (BoundedText
+        color: white
+        caption: "The quick brown fox jumped over the lazy dog."
+        font: "Noto Sans"
+        size: 14))
+    (y-stack fr: 1
+      (text caption: "IBM Plex Mono" color: gray)
+      (BoundedText
+        color: white
+        caption: "The quick brown fox jumped over the lazy dog."
+        font: "IBM Plex Mono"
+        size: 14)))
+
+  ;; Font stacking
+  (y-stack
+    (text caption: "IBM Plex Mono" color: gray)
+    (BoundedText
+      color: white
+      caption:
+        "(limit _ ⍊ up-w⫽h: (arg ±λ ⍊ -◇_) ±⟦min,max⟧-w⫽h)\n  \
+           <> {λ: ^(⟦max,min⟧ ⟦min,max⟧-w⫽h λ), ◇: true}"
+      font:
+        (list
+          (font "IBM Plex Mono"))))
+  (y-stack
+    (text caption: "IBM Plex Mono + Julia Mono" color: gray)
+    (BoundedText
+      color: white
+      caption:
+        "(limit _ ⍊ up-w⫽h: (arg ±λ ⍊ -◇_) ±⟦min,max⟧-w⫽h)\n  \
+           <> {λ: ^(⟦max,min⟧ ⟦min,max⟧-w⫽h λ), ◇: true}"
+      font:
+        (list
+          (font "IBM Plex Mono")
+          (font "Julia Mono")))))
+

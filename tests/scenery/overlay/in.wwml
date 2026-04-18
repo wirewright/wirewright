@@ -1,0 +1,39 @@
+;; TODO: test nested overlays and pages!
+
+backdrop: (oklch 0.2 0 0)
+width: 150
+height: 100
+
+(limit max-w: 50
+  (transform dl: 10 dt: 10 pivot-l: 0.5 pivot-r: 0.5 angle: -10
+    (z-stack
+      (page
+        (x-wrap gap-x: 3 gap-y: 3
+          (text color: white caption: "A")
+          (text color: white caption: "B")
+          (overlay
+            (transform dt: 25
+              (z-stack
+                (rect
+                  fill: (oklch 0.4 0 0)
+                  radius-tl: 5
+                  radius-tr: 5
+                  radius-bl: 5
+                  radius-br: 5)
+                (limit max-w: 16 max-h: 16
+                  (transform dl: 4 dt: -3 pivot-l: 0.5 pivot-t: 0.5 angle: 30
+                    (rect fill: (oklch 0.4 0 0))))
+                (padding pl: 10 pr: 10 pb: 10 pt: 10
+                  (text color: white size: 14 caption: "Tooltip")))))
+          (text color: white caption: "C")
+          (text color: white caption: "D")
+          (text color: white caption: "E")
+          (text color: white caption: "F")))
+      (limit max-h: 50
+        (transform dl: 20 dt: 30
+          (rect
+            fill: (translucent blue 0.5)
+            radius-tl: (* 1)
+            radius-tr: (* 1)
+            radius-bl: (* 1)
+            radius-br: (* 1)))))))

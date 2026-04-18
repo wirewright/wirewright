@@ -134,7 +134,7 @@ module Testtool
 
   # Returns the location ref for *asn*. It refers to the line in the index file
   # that requested comparison.
-  def location(asn : Assertion(Comparison)) : String
+  def location(asn : Assertion(SceneryGroup) | Assertion(Comparison)) : String
     asn.topic.ref
   end
 
@@ -150,11 +150,16 @@ module Testtool
   end
 
   # Returns the term associated with assertion *asn*.
-  def term(asn : Assertion(Comparison)) : Term
+  def term(asn : Assertion(SceneryGroup) | Assertion(Comparison)) : Term
     asn.topic.term
   end
 
   # Returns the term associated with assertion *asn*, if any.
+  def term?(asn : Assertion(SceneryGroup)) : Term
+    asn.topic.term
+  end
+
+  # :ditto:
   def term?(asn : Assertion(Test) | AssertionLoc) : Term?
     term?(asn.successor)
   end

@@ -1,0 +1,112 @@
+backdrop: (oklch 0.2 0 0)
+width: 500
+height: 170
+
+(BoundedText ¦ props_)
+  => (z-stack
+       (rect stroke: red thickness-l: 1 thickness-r: 1 thickness-t: 1 thickness-b: 1)
+       (padding pl: 1 pr: 1 pt: 1 pb: 1
+         (text ^… props)))
+
+(x-wrap gap-x: 10 gap-y: 10
+  ;; Empty caption
+  (BoundedText
+    caption: ""
+    color: white
+    underline: true
+    underline-anchor: 0
+    underline-span: 0)
+  ;; One, span 0
+  (BoundedText
+    caption: "A"
+    color: white
+    underline: true
+    underline-anchor: 0
+    underline-span: 0)
+  ;; One, span 1
+  (BoundedText
+    caption: "A"
+    color: white
+    underline: true
+    underline-anchor: 0
+    underline-span: 1)
+  (BoundedText
+    caption: "Full underline"
+    color: white
+    underline: true
+    underline-anchor: 0
+    underline-span: -1)
+  (BoundedText
+    caption: "underline-fill"
+    color: white
+    underline: true
+    underline-fill: yellow
+    underline-anchor: 0
+    underline-span: 5)
+  (BoundedText
+    caption: "Underline even"
+    color: white
+    underline: true
+    underline-anchor: 0
+    underline-span: 1
+    underline-fill: yellow
+    underlines:
+      ({underline-anchor: 2, underline-span: 1, underline-fill: green}
+       {underline-anchor: 4, underline-span: 1, underline-fill: lightblue}
+       {underline-anchor: 6, underline-span: 1, underline-fill: green}
+       {underline-anchor: 8, underline-span: 1, underline-fill: yellow}
+       {underline-anchor: 10, underline-span: 1, underline-fill: green}
+       {underline-anchor: 12, underline-span: 1, underline-fill: violet}))
+  (BoundedText
+    caption: "Underline odd"
+    color: white
+    underline: true
+    underline-anchor: 1
+    underline-span: 1
+    underline-fill: yellow
+    underlines:
+      ({underline-anchor: 3, underline-span: 1, underline-fill: green}
+       {underline-anchor: 5, underline-span: 1, underline-fill: lightblue}
+       {underline-anchor: 7, underline-span: 1, underline-fill: green}
+       {underline-anchor: 9, underline-span: 1, underline-fill: yellow}
+       {underline-anchor: 11, underline-span: 1, underline-fill: green}))
+  (BoundedText
+    caption: "Underline on\nmultiple\nlines"
+    color: white
+    underline: true
+    underline-anchor: 3
+    underline-span: 23)
+  (limit max-w: 80
+    (BoundedText
+      caption: "Underline on wrapped lines"
+      color: white
+      underline: true
+      underline-anchor: -2
+      underline-span: 5))
+  ;; red wins
+  (BoundedText
+    caption: "Overlapping underlines"
+    color: white
+    underline: true
+    underlines:
+      ({underline-anchor: 3, underline-span: 5, underline-fill: red}
+       {underline-anchor: 4, underline-span: 7, underline-fill: green}))
+  ;; green wins
+  (BoundedText
+    caption: "Overlapping underlines"
+    color: white
+    underline: true
+    underlines:
+      ({underline-anchor: 3, underline-span: 5, underline-fill: green}
+       {underline-anchor: 4, underline-span: 7, underline-fill: red}))
+  (BoundedText
+    caption: "Underlines and selections"
+    color: white
+    underline: true
+    underlines:
+      ({underline-anchor: 0, underline-span: 5}
+       {underline-anchor: 7, underline-span: 5})
+    selection: true
+    selections:
+      ({selection-anchor: 1, selection-span: 3, selection-color: green, selection-fill: (translucent white 0.2)}
+       {selection-anchor: 8, selection-span: 3, selection-color: violet, selection-fill: (translucent black 0.5)})))

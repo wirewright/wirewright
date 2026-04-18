@@ -1,0 +1,332 @@
+width: 500
+height: 300
+backdrop: (oklch 0.2 0 0)
+
+(y-stack gap: 20
+  ;; Fill
+  (x-wrap gap-x: 10 gap-y: 10
+    ;; OkLCH fill, raw
+    (x-stack
+      (rect fill: (oklch 0.7 0.1 43))
+      (rect fill: (oklch 0.7 0.1 136))
+      (rect fill: (oklch 0.5 0.0543 215.25)))
+
+    ;; OkLCH: Invalid L
+    (x-stack
+      (rect fill: (oklch 1.0 0.1 43))
+      (rect fill: (oklch 1.5 0.1 43)))
+
+    ;; OkLCH: Invalid C
+    (x-stack
+      (rect fill: (oklch 0.7 0.36 43))
+      (rect fill: (oklch 0.7 100 43)))
+
+    ;; OkLCH: Invalid H
+    (x-stack
+      (rect fill: (oklch 0.7 0.1 360))
+      (rect fill: (oklch 0.7 0.1 500)))
+
+    ;; OkLCH fill, named
+    (x-stack
+      (rect fill: (oklch 0.7 0.1 yellow))
+      (rect fill: (oklch 0.5 0.2 blue))
+      (rect fill: (oklch 0.7 0.3 "violet")))
+
+    ;; HSL fill, raw
+    (x-stack
+      (rect fill: (hsl 17.44 0.54 0.62))
+      (rect fill: (hsl 100.66 0.28 0.55))
+      (rect fill: (hsl 191.77 0.33 0.35)))
+
+    ;; HSL: Invalid H
+    (x-stack
+      (rect fill: (hsl 360 0.54 0.62))
+      (rect fill: (hsl 500 0.54 0.62)))
+
+    ;; HSL: Invalid S
+    (x-stack
+      (rect fill: (hsl 17 1 0.62))
+      (rect fill: (hsl 17 100 0.62)))
+
+    ;; HSL: Invalid L
+    (x-stack
+      (rect fill: (hsl 17 0.54 1))
+      (rect fill: (hsl 17 0.54 100)))
+
+    ;; RGB fill
+    (x-stack
+      (rect fill: (rgb 255 0 0))
+      (rect fill: (rgb 0 128 0))
+      (rect fill: (rgb 0 0 255)))
+
+    ;; RGB: invalid R
+    (x-stack
+      (rect fill: (rgb 255 128 128))
+      (rect fill: (rgb 500 128 128)))
+
+    ;; RGB: invalid G
+    (x-stack
+      (rect fill: (rgb 128 255 128))
+      (rect fill: (rgb 128 500 128)))
+
+    ;; RGB: invalid B
+    (x-stack
+      (rect fill: (rgb 128 128 255))
+      (rect fill: (rgb 128 128 500)))
+
+    ;; RGBA fill
+    (x-stack
+      (rect fill: (rgba 0 255 0 255))
+      (transform dl: -4
+        (rect fill: (rgba 255 0 0 128)))
+      (rect fill: (rgba 0 0 255 0)))
+
+    ;; RGBA: invalid A
+    (x-stack
+      (rect fill: (rgba 255 0 0 255))
+      (rect fill: (rgba 255 0 0 500)))
+
+    ;; LRGB fill
+    (x-stack
+      (rect fill: (lrgb 0.5 0.2 0.8))
+      (rect fill: (lrgb 1.0 1.0 1.0))
+      (rect fill: (lrgb 0.0 0.0 0.0)))
+
+    ;; CSS named color fill
+    (x-stack
+      (rect fill: red)
+      (rect fill: "blue")
+      (rect fill: lightsalmon))
+
+    ;; CSS short hex fill
+    (x-stack
+      (rect fill: "#f00")
+      (rect fill: "#0f0")
+      (rect fill: "#00f"))
+
+    ;; CSS hex fill
+    (x-stack
+      (rect fill: "#ff0000")
+      (rect fill: "#00ff00")
+      (rect fill: "#0000ff"))
+
+    ;; CSS hex fill variants
+    (x-stack
+      (rect fill: "#d2849c")
+      ;; TODO
+      ;(rect fill: d2849c₁₆))
+
+    ;; Translucent function
+    (x-stack
+      (rect fill: (translucent red 0.5))
+      (transform dl: -10
+        (rect fill: (translucent green 0.3)))
+      (transform dl: -10
+        (rect fill: (translucent blue 0.8))))
+
+    ;; Mix function
+    (rect fill: (mix red green 0.4))
+
+    ;; Linear gradient: default coordinates (vertical top-to-bottom)
+    (x-stack
+      (rect fill: (linear-gradient (stop 0 red) (stop 1 blue)))
+      (rect fill: (linear-gradient (stop 0.2 "#ff0000") (stop 0.8 "#0000ff"))))
+
+    ;; Linear gradient: horizontal
+    (x-stack
+      (rect fill: (linear-gradient (stop 0 yellow) (stop 1 green) begin-l: 0 begin-t: 0.5 end-l: 1 end-t: 0.5))
+      (rect fill: (linear-gradient (stop 0 white) (stop 1 black) begin-l: 1 begin-t: 0.5 end-l: 0 end-t: 0.5)))
+
+    ;; Linear gradient: diagonal
+    (x-stack
+      (rect fill: (linear-gradient (stop 0 "magenta") (stop 1 "cyan") begin-l: 0 begin-t: 0 end-l: 1 end-t: 1))
+      (rect fill: (linear-gradient (stop 0.1 red) (stop 0.9 blue) begin-l: 1 begin-t: 0 end-l: 0 end-t: 1)))
+
+    ;; Linear gradient: multiple stops
+    (x-stack
+      (rect fill: (linear-gradient (stop 0 red) (stop 0.5 yellow) (stop 1 green)))
+      (rect fill: (linear-gradient (stop 0.1 blue) (stop 0.5 white) (stop 0.9 red))))
+
+    ;; Linear gradient: single stop
+    (x-stack
+      (rect fill: (linear-gradient (stop 0.5 purple)))
+      (rect fill: (linear-gradient (stop 1 orange))))
+
+    ;; Standard centered gradient
+    (x-stack
+      (limit max-w: 32 max-h: 32
+        (rect fill: (radial-gradient (stop 0 white) (stop 1 black) center-radius: 0.5)))
+      (limit max-w: 32 max-h: 32
+        (rect fill: (radial-gradient (stop 0 "#ff0000") (stop 1 "#000000") center-radius: 0.8))))
+
+    ;; Custom center position
+    (x-stack
+      ;; Top-left center
+      (limit max-w: 32 max-h: 32
+        (rect fill: (radial-gradient (stop 0 yellow) (stop 1 red) center-radius: 1 center-l: 0 center-t: 0)))
+      ;; Bottom-right center
+      (limit max-w: 32 max-h: 32
+        (rect fill: (radial-gradient (stop 0 cyan) (stop 1 blue) center-radius: 1 center-l: 1 center-t: 1))))
+
+    ;; Offset focus
+    (x-stack
+      ;; Light source shifted to the top-left
+      (limit max-w: 32 max-h: 32
+        (rect fill: (radial-gradient (stop 0 white) (stop 1 "navy") center-radius: 0.7 focus-l: 0.3 focus-t: 0.3)))
+      ;; Light source shifted heavily to the right
+      (limit max-w: 32 max-h: 32
+        (rect fill: (radial-gradient (stop 0 "#fff") (stop 1 "#333") center-radius: 0.6 focus-l: 0.8 focus-t: 0.5))))
+
+    ;; Focus radius (flat inner start)
+    (x-stack
+      ;; A large inner circle of white before fading to purple
+      (limit max-w: 32 max-h: 32
+        (rect fill: (radial-gradient (stop 0 white) (stop 1 purple) center-radius: 0.5 focus-radius: 0.2)))
+      ;; A tight focus radius
+      (limit max-w: 32 max-h: 32
+        (rect fill: (radial-gradient (stop 0 yellow) (stop 1 orange) center-radius: 0.8 focus-radius: 0.05))))
+
+    ;; Complex multi-stop radial
+    (x-stack
+      (limit max-w: 32 max-h: 32
+        (rect
+          fill:
+            (radial-gradient
+              (stop 0 "white")
+              (stop 0.3 "yellow")
+              (stop 0.6 "orange")
+              (stop 1 "transparent")
+              center-radius: 0.5)))
+      (limit max-w: 32 max-h: 32
+        (rect
+          fill:
+            (radial-gradient
+              (stop 0 blue)
+              (stop 0.5 white)
+              (stop 1 red)
+              center-radius: 1))))
+
+    ;; Small, large center radius
+    (x-stack
+      ;; Tiny radius (creates a small dot)
+      (limit max-w: 32 max-h: 32
+        (rect fill: (radial-gradient (stop 0 black) (stop 1 white) center-radius: 0.1)))
+      ;; Large radius (overflowing the container)
+      (limit max-w: 32 max-h: 32
+        (rect fill: (radial-gradient (stop 0 white) (stop 1 green) center-radius: 2.0)))))
+
+  ;; Thickness and stroke
+  (x-wrap gap-x: 10 gap-y: 10
+    ;; Transparent fill
+    (x-stack gap: 5
+      (rect thickness-l: 3 stroke: orange)
+      (rect thickness-r: 3 stroke: orange)
+      (rect thickness-t: 3 stroke: orange)
+      (rect thickness-b: 3 stroke: orange)
+      (rect
+        stroke: orange
+        thickness-l: 3
+        thickness-r: 3
+        thickness-t: 3
+        thickness-b: 3))
+    ;; Solid fill
+    (x-stack gap: 5
+      (rect fill: gray thickness-l: 3 stroke: orange)
+      (rect fill: gray thickness-r: 3 stroke: orange)
+      (rect fill: gray thickness-t: 3 stroke: orange)
+      (rect fill: gray thickness-b: 3 stroke: orange)
+      (rect
+        fill: gray
+        stroke: orange
+        thickness-l: 3
+        thickness-r: 3
+        thickness-t: 3
+        thickness-b: 3))
+    ;; Varying thicknesses, transparent fill
+    (rect
+      stroke: orange
+      thickness-l: 3
+      thickness-r: 1
+      thickness-t: 4
+      thickness-b: 6)
+    ;; Varying thicknesses, solid fill
+    (rect
+      fill: gray
+      stroke: orange
+      thickness-l: 3
+      thickness-r: 1
+      thickness-t: 4
+      thickness-b: 6)
+    ;; Relative thickness, gradient stroke
+    (rect
+      fill: gray
+      stroke: (linear-gradient (stop 0 yellow) (stop 1 red) begin-l: 0 end-l: 1)
+      thickness-l: (* 0.5)
+      thickness-r: (* 1)
+      thickness-t: (* 0.8)
+      thickness-b: (* 1)))
+
+  ;; Radius
+  (x-wrap gap-x: 10 gap-y: 10
+    ;; With stroke
+    (x-stack gap: 5
+      (rect stroke: orange thickness-l: 1 thickness-r: 1 thickness-t: 1 thickness-b: 1 radius-tl: 5)
+      (rect stroke: orange thickness-l: 1 thickness-r: 1 thickness-t: 1 thickness-b: 1 radius-tr: 5)
+      (rect stroke: orange thickness-l: 1 thickness-r: 1 thickness-t: 1 thickness-b: 1 radius-bl: 5)
+      (rect stroke: orange thickness-l: 1 thickness-r: 1 thickness-t: 1 thickness-b: 1 radius-br: 5)
+      (rect
+        stroke: orange
+        thickness-l: 1
+        thickness-r: 1
+        thickness-t: 1
+        thickness-b: 1
+        radius-tl: 5
+        radius-tr: 5
+        radius-bl: 5
+        radius-br: 5))
+    ;; With fill
+    (x-stack gap: 5
+      (rect fill: gray radius-tl: 5)
+      (rect fill: gray radius-tr: 5)
+      (rect fill: gray radius-bl: 5)
+      (rect fill: gray radius-br: 5)
+      (rect fill: gray radius-tl: 5 radius-tr: 5 radius-bl: 5 radius-br: 5))
+    ;; Varying, stroke
+    (rect
+      stroke: orange
+      thickness-l: 3
+      thickness-r: 3
+      thickness-t: 3
+      thickness-b: 3
+      radius-tl: 5
+      radius-tr: 3
+      radius-bl: 4
+      radius-br: 7)
+    ;; Varying, fill
+    (rect
+      fill: gray
+      stroke: orange
+      thickness-l: 3
+      thickness-r: 3
+      thickness-t: 3
+      thickness-b: 3
+      radius-tl: 5
+      radius-tr: 3
+      radius-bl: 4
+      radius-br: 7)
+    ;; Relative
+    (x-stack gap: 5
+      (rect fill: gray radius-tl: (* 1))
+      (rect fill: gray radius-tr: (* 1))
+      (rect fill: gray radius-bl: (* 1))
+      (rect fill: gray radius-br: (* 1))
+      (rect fill: gray radius-tl: (* 1) radius-tr: (* 1) radius-bl: (* 1) radius-br: (* 1))))
+
+  ;; Make sure that if fill: transparent and stroke is opaque,
+  ;; the middle is indeed a hole.
+  (z-stack
+    (limit max-w: 32 max-h: 32
+      (transform dl: 10 dt: 10
+        (rect fill: gray)))
+    (limit max-w: 64 max-h: 64
+      (rect stroke: yellow thickness-l: 5 thickness-r: 5 thickness-t: 5 thickness-b: 5))))

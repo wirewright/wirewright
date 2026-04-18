@@ -1,0 +1,85 @@
+backdrop: (oklch 0.2 0 0)
+width: 500
+height: 300
+
+(BoundedBox children_* ¦ props_)
+  => (limit
+       (z-stack
+         (rect stroke: red thickness-l: 1 thickness-r: 1 thickness-t: 1 thickness-b: 1)
+         (padding pl: 1 pr: 1 pt: 1 pb: 1
+           ^*children))
+      ^… props)
+
+(y-stack gap: 10
+  (y-stack
+    (text caption: "Composite, rotate, origin, pivot" color: gray)
+    (BoundedBox
+      (transform dl: 40 dt: 50
+        (z-stack
+          (content x: true y: true
+            (composite opacity: 0.5
+              (z-stack
+                (rect fill: (oklch 0.4 0.2 green))
+                (padding pl: 10 pr: 10 pt: 10 pb: 10
+                  (y-stack
+                    (text color: white caption: "John")
+                    (text color: white caption: "Doe"))))))
+          (content x: true y: true
+            (transform origin-l: 0.5 origin-t: 0.5 pivot-l: 0.5 pivot-t: 0.5 angle: -90
+              (composite opacity: 0.5
+                (z-stack
+                  (rect fill: (oklch 0.4 0.2 violet))
+                  (padding pl: 10 pr: 10 pt: 10 pb: 10
+                    (y-stack
+                      (text color: white caption: "Samantha")
+                      (text color: white caption: "Doe")))))))))))
+
+  (transform dt: 50
+    (y-stack
+      (text caption: "Scale (0.5, 0.5)" color: gray)
+      (transform dl: 30 dt: 5
+        (content x: true y: true
+          (BoundedBox
+            (transform scale: 2.5 pivot-l: 0.5 pivot-t: 0.5
+              (text caption: "Hello" color: white)))))))
+
+  (transform dt: 70
+    (y-stack
+      (text caption: "Basic rotate(0.5, 0), scale(1, 1)" color: gray)
+      (z-stack
+        (rect stroke: red thickness-t: 1)
+        (content x: true y: true
+          (x-stack gap: 30
+            (transform scale: 1.5 pivot-l: 1 pivot-r: 1
+              (transform pivot-l: 0.5 pivot-r: 0 angle: 0
+                (BoundedBox
+                  (text caption: "Hello" color: white))))
+            (transform scale: 1.5 pivot-l: 1 pivot-r: 1
+              (transform pivot-l: 0.5 pivot-r: 0 angle: 5
+                (BoundedBox
+                  (text caption: "Hello" color: white))))
+            (transform scale: 1.5 pivot-l: 1 pivot-r: 1
+              (transform pivot-l: 0.5 pivot-r: 0 angle: 10
+                (BoundedBox
+                  (text caption: "Hello" color: white))))
+            (transform scale: 1.5 pivot-l: 1 pivot-r: 1
+              (transform pivot-l: 0.5 pivot-r: 0 angle: 20
+                (BoundedBox
+                  (text caption: "Hello" color: white))))
+            (transform scale: 1.5 pivot-l: 1 pivot-r: 1
+              (transform pivot-l: 0.5 pivot-r: 0 angle: 30
+                (BoundedBox
+                  (text caption: "Hello" color: white))))
+            (transform scale: 1.5 pivot-l: 1 pivot-r: 1
+              (transform pivot-l: 0.5 pivot-r: 0 angle: 40
+                (BoundedBox
+                  (text caption: "Hello" color: white))))
+            (transform scale: 1.5 pivot-l: 1 pivot-r: 1
+              (transform pivot-l: 0.5 pivot-r: 0 angle: 50
+                (BoundedBox
+                  (text caption: "Hello" color: white))))
+            (transform scale: 1.5 pivot-l: 1 pivot-r: 1
+              (transform pivot-l: 0.5 pivot-r: 0 angle: 90
+                (BoundedBox
+                  (text caption: "Hello" color: white))))))))))
+

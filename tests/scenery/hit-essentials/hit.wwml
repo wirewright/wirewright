@@ -1,0 +1,152 @@
+;; NOTE: I hate hate hate these tests because of how brittle they are, but
+;; we must have this at least as a regression test nonetheless.
+
+;; Hit the image.
+(hit (point 80 20)
+  (observer {¦ hit-dl: ≈4 hit-dt: ≈5 hit-w: ≈0 hit-h: ≈0} ⍊ id: img))
+
+;; Hit the "Bye World" text with many spaces. We hit it at a whitespace
+;; to see where the hit lands.
+(hit (point 55 118)
+  (observer
+    (text
+      (line ⍊ hit-anchor: 5 hit-span: 0)
+      (word ⍊ hit-anchor: 5 hit-span: 0)
+      (word ⍊ -hit-anchor -hit-span)
+     ⍊ hit-anchor: 5 hit-span: 0)
+   ⍊ id: space-text))
+
+;; Now select from "ye" through some spaces and "Wo".
+(hit (single (anchor 15 120) (focus 110 125))
+  (observer
+    (text
+      (line ⍊ hit-anchor: 1 hit-span: 10)
+      (word ⍊ hit-anchor: 1 hit-span: 8 span: 9)
+      (word ⍊ hit-anchor: 0 hit-span: 2 span: 5)
+     ⍊ hit-anchor: 1 hit-span: 10)
+   ⍊ id: space-text))
+
+;; Hit scaled text after "W"
+(hit (point 394 381)
+  (observer
+    (text
+      (line ⍊ hit-anchor: 7 hit-span: 0)
+      (word ⍊ -hit-anchor -hit-span)
+      (word ⍊ hit-anchor: 1 hit-span: 0)
+     ⍊ hit-anchor: 7 hit-span: 0)
+   ⍊ id: scaled-transformed-text))
+
+;; Select "por" in viewport text.
+(hit (single (anchor 310 21) (focus 335 21))
+  (observer
+    (text
+      (line ⍊ -hit-anchor -hit-span)
+      (line ⍊ hit-anchor: 4 hit-span: 3)
+      (word ⍊ -hit-anchor -hit-span)
+      (word ⍊ hit-anchor: 4 hit-span: 3)
+     ⍊ hit-anchor: 11 hit-span: 3 hit-dl: ≈30 hit-dt: ≈31)
+   ⍊ id: viewport-text))
+
+;; Hit rotated text before NUL.
+(hit (point 400 198)
+  (observer
+    (text
+      (line ⍊ hit-anchor: 11 hit-span: 0)
+      (line ⍊ -hit-anchor -hit-span)
+      (word ⍊ -hit-anchor -hit-span)
+      (word ⍊ hit-anchor: 5 hit-span: 0)
+      (word ⍊ -hit-anchor -hit-span)
+      (word ⍊ -hit-anchor -hit-span)
+     ⍊ hit-anchor: 11 hit-span: 0)
+    ⍊ id: unitext))
+
+;; Hit rotated text after NUL.
+(hit (point 415 209)
+  (observer
+    (text
+      (line ⍊ hit-anchor: 12 hit-span: 0)
+      (line ⍊ -hit-anchor -hit-span)
+      (word ⍊ -hit-anchor -hit-span)
+      (word ⍊ hit-anchor: 6 hit-span: 0)
+      (word ⍊ -hit-anchor -hit-span)
+      (word ⍊ -hit-anchor -hit-span)
+     ⍊ hit-anchor: 12 hit-span: 0)
+    ⍊ id: unitext))
+
+;; Select NUL in rotated text.
+(hit (single (anchor 400 198) (focus 415 209))
+  (observer
+    (text
+      (line ⍊ hit-anchor: 11 hit-span: 1)
+      (line ⍊ -hit-anchor -hit-span)
+      (word ⍊ -hit-anchor -hit-span)
+      (word ⍊ hit-anchor: 5 hit-span: 1)
+      (word ⍊ -hit-anchor -hit-span)
+      (word ⍊ -hit-anchor -hit-span)
+     ⍊ hit-anchor: 11 hit-span: 1)
+    ⍊ id: unitext))
+
+;; Select NUL in reverse.
+(hit (single (anchor 415 209) (focus 400 198))
+  (observer
+    (text
+      (line ⍊ hit-anchor: 12 hit-span: -1)
+      (line ⍊ -hit-anchor -hit-span)
+      (word ⍊ -hit-anchor -hit-span)
+      (word ⍊ hit-anchor: 6 hit-span: -1)
+      (word ⍊ -hit-anchor -hit-span)
+      (word ⍊ -hit-anchor -hit-span)
+     ⍊ hit-anchor: 12 hit-span: -1)
+    ⍊ id: unitext))
+
+;; Select through lines in rotated text.
+(hit (single (anchor 310 116) (focus 345 180))
+  (observer
+    (text
+      (line ⍊ hit-anchor: 1 hit-span: 11)
+      (line ⍊ hit-anchor: 0 hit-span: 7)
+      (word ⍊ hit-anchor: 1 hit-span: 5 span: 6) ;; "H[ello ]"
+      (word ⍊ hit-anchor: 0 hit-span: 6 span: 6) ;; "[World\0]"
+      (word ⍊ hit-anchor: 0 hit-span: 4) ;; "[Bye ]"
+      (word ⍊ hit-anchor: 0 hit-span: 3 span: 5) ;; "[wor]ld"
+     ⍊ hit-anchor: 1 hit-span: 19)
+    ⍊ id: unitext))
+
+;; Select through lines in rotated text in reverse.
+(hit (single (anchor 345 180) (focus 310 116))
+  (observer
+    (text
+      (line ⍊ hit-anchor: 12 hit-span: -11)
+      (line ⍊ hit-anchor: 7 hit-span: -7)
+      (word ⍊ hit-anchor: 6 hit-span: -5 span: 6) ;; "H[ello ]"
+      (word ⍊ hit-anchor: 6 hit-span: -6 span: 6) ;; "[World\0]"
+      (word ⍊ hit-anchor: 4 hit-span: -4) ;; "[Bye ]"
+      (word ⍊ hit-anchor: 3 hit-span: -3 span: 5) ;; "[wor]ld"
+     ⍊ hit-anchor: 20 hit-span: -19)
+   ⍊ id: unitext))
+
+;; Hit within selection, check selection left-leaning
+(hit (point 48 150)
+  (observer
+    (text
+      (line ⍊ selection-anchor: 3 selection-span: 10 hit-anchor: 6 hit-span: 0)
+      (line ⍊ -hit-anchor -hit-span)
+      (word ⍊ -hit-anchor -hit-span selection-anchor: 3 selection-span: 2)
+      (word ⍊ hit-anchor: 1 hit-span: 0 selection-anchor: 0 selection-span: 8)
+      (word ⍊ -hit-anchor -hit-span)
+      (word ⍊ -hit-anchor -hit-span)
+     ⍊ hit-anchor: 6 hit-span: 0 selection-anchor: 3 selection-span: 10)
+   ⍊ id: l-sel-text))
+
+;; Hit within selection, check selection right-leaning
+(hit (point 48 203)
+  (observer
+    (text
+      (line ⍊ selection-anchor: 13 selection-span: -10 hit-anchor: 6 hit-span: 0)
+      (line ⍊ -hit-anchor -hit-span)
+      (word ⍊ -hit-anchor -hit-span selection-anchor: 5 selection-span: -2)
+      (word ⍊ hit-anchor: 1 hit-span: 0 selection-anchor: 8 selection-span: -8)
+      (word ⍊ -hit-anchor -hit-span)
+      (word ⍊ -hit-anchor -hit-span)
+     ⍊ hit-anchor: 6 hit-span: 0 selection-anchor: 13 selection-span: -10)
+   ⍊ id: r-sel-text))

@@ -1,0 +1,113 @@
+backdrop: (oklch 0.2 0 0)
+width: 500
+height: 800
+
+(BoundedBox children_* ¦ props_)
+  => (limit
+       (z-stack
+         (rect stroke: red thickness-l: 1 thickness-r: 1 thickness-t: 1 thickness-b: 1)
+         (padding pl: 1 pr: 1 pt: 1 pb: 1
+           ^*children))
+      ^… props)
+
+(y-stack gap: 20
+  (y-stack
+    (text color: gray caption: "Basic, color, fit: stretch")
+    (x-stack gap: 20
+      (BoundedBox max-w: 32 max-h: 32
+        (svg
+          src: (uri "http://127.0.0.1:9812/d7-logo.svg")
+          color: palevioletred))
+      (BoundedBox max-w: 64 max-h: 64
+        (svg
+          src: (uri "http://127.0.0.1:9812/d7-logo.svg")
+          color: lightblue))
+      (BoundedBox max-w: 128 max-h: 64
+        (svg
+          src: (uri "http://127.0.0.1:9812/d7-logo.svg")
+          color: lightgreen))
+      (BoundedBox max-w: 64 max-h: 128
+        (svg
+          src: (uri "http://127.0.0.1:9812/d7-logo.svg")
+          color: yellow))))
+
+  ;; fit: clip
+  (y-stack
+    (text color: gray caption: "fit: clip")
+    (x-stack gap: 10
+      (BoundedBox max-w: 32 max-h: 32
+        (svg
+          src: (uri "http://127.0.0.1:9812/d7-logo.svg")
+          fit: clip
+          color: palevioletred))
+      (BoundedBox max-w: 64 max-h: 64
+        (svg
+          src: (uri "http://127.0.0.1:9812/d7-logo.svg")
+          fit: clip
+          color: lightblue))
+      (BoundedBox max-w: 128 max-h: 64
+        (svg
+          src: (uri "http://127.0.0.1:9812/d7-logo.svg")
+          fit: clip
+          color: lightgreen))
+      (BoundedBox max-w: 64 max-h: 128
+        (svg
+          src: (uri "http://127.0.0.1:9812/d7-logo.svg")
+          fit: clip
+          color: yellow))))
+
+  ;; fit: keep-ratio
+  (y-stack
+    (text color: gray caption: "fit: keep-ratio")
+    (x-stack gap: 10
+      (BoundedBox max-w: 32 max-h: 32
+        (svg
+          src: (uri "http://127.0.0.1:9812/d7-logo.svg")
+          fit: keep-ratio
+          color: palevioletred))
+      (BoundedBox max-w: 64 max-h: 64
+        (svg
+          src: (uri "http://127.0.0.1:9812/d7-logo.svg")
+          fit: keep-ratio
+          color: lightblue))
+      (BoundedBox max-w: 128 max-h: 64
+        (svg
+          src: (uri "http://127.0.0.1:9812/d7-logo.svg")
+          fit: keep-ratio
+          color: lightgreen))
+      (BoundedBox max-w: 64 max-h: 128
+        (svg
+          src: (uri "http://127.0.0.1:9812/d7-logo.svg")
+          fit: keep-ratio
+          color: yellow))))
+
+  ;; Placeholder
+  (y-stack
+    (text color: gray caption: "default placeholder")
+    (limit max-w: 64 max-h: 64
+      (BoundedBox
+        (svg
+          src: (uri "does-not-exist")))))
+
+  (y-stack
+    (text color: gray caption: "custom placeholder")
+    (limit max-w: 64 max-h: 64
+      (BoundedBox
+        (svg
+          src: (uri "does-not-exist")
+          placeholder: (rect fill: gray radius-tl: (* 1) radius-tr: (* 1) radius-bl: (* 1) radius-br: (* 1))))))
+
+  ;; Inline
+  (y-stack
+    (text color: gray caption: "Inline, alignment")
+    (x-stack gap: 5
+      (align y: 0.5
+        (BoundedBox
+          (svg
+            src: '⎡<svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 0 24 24" width="24px" fill="#e3e3e3"><path d="M0 0h24v24H0V0z" fill="none"/><circle cx="7" cy="6" r="2"/><path d="M11.15 12c-.31-.22-.59-.46-.82-.72l-1.4-1.55c-.19-.21-.43-.38-.69-.5-.29-.14-.62-.23-.96-.23h-.03C6.01 9 5 10.01 5 11.25V12H2v8c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2v-8H11.15zM7 20H5v-6h2v6zm4 0H9v-6h2v6zm4 0h-2v-6h2v6zm4 0h-2v-6h2v6zM17.42 7.21c.57.62.82 1.41.67 2.2l-.11.59h1.91l.06-.43c.21-1.36-.27-2.71-1.3-3.71l-.07-.07c-.57-.62-.82-1.41-.67-2.2L18 3h-1.89l-.06.43c-.2 1.36.27 2.71 1.3 3.72l.07.06zm-4 0c.57.62.82 1.41.67 2.2l-.11.59h1.91l.06-.43c.21-1.36-.27-2.71-1.3-3.71l-.07-.07c-.57-.62-.82-1.41-.67-2.2L14 3h-1.89l-.06.43c-.2 1.36.27 2.71 1.3 3.72l.07.06z"/></svg>⎤
+            color: white
+            fit: keep-ratio)))
+      (align y: 0.5
+        (BoundedBox
+          (text size: 14 caption: "Bathtub" color: white))))))
+

@@ -5,7 +5,7 @@ require "./wirewright"
 module Testtool
   include Ww
 
-  alias Topic = Test | Comparison
+  alias Topic = Test | SceneryGroup | Comparison
 
   defcase Test,
     path : Path,
@@ -13,6 +13,12 @@ module Testtool
     srcmap : ML::SrcMap,
     color : Pigment::RGBA,
     ref : String
+
+  defcase SceneryGroup,
+    path : Path,
+    color : Pigment::RGBA,
+    ref : String,
+    term : Term
 
   defcase Comparison,
     title : String,

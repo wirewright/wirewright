@@ -1,0 +1,98 @@
+backdrop: (oklch 0.2 0 0)
+width: 500
+height: 1000
+
+(BoundedBox children_* ¦ props_ stroke_⋮ red)
+  => (limit
+       (z-stack
+         (rect ^:stroke thickness-l: 1 thickness-r: 1 thickness-t: 1 thickness-b: 1)
+         ^*(view children))
+      ^… props)
+
+(Resizable)
+  => (dyn
+       (when (>= max-w 500)
+         (text caption: "lg" color: white))
+       (when (>= max-w 350)
+         (text caption: "md" color: white))
+       (when (>= max-w 200)
+         (text caption: "sm" color: white))
+       (when true
+         (text caption: "xs" color: white)))
+
+(Card)
+  => (dyn
+       (when (>= max-w 400) (CardLg))
+       (when _ (CardSm)))
+
+;; Reference (loosely based on): https://tailwindcss.com/docs/responsive-design#overview
+(Card⸨Sm,Lg⸩)
+  => (z-stack
+       (rect
+         fill: (oklch 0.33 0 0)
+         radius-tl: 10
+         radius-tr: 10
+         radius-bl: 10
+         radius-br: 10)
+         (y⫽x-stack gap: 10
+           (limit max-h⫽w: 128
+             (floating x⫽y: true ;; < take Lg: this disables Y-upflow so only text affects
+                                 ;;   x-stack's height, and thus makes the image change
+                                 ;;   its height to match the text's accordingly.
+               (img
+                 radius-tl: 10
+                 radius-⸨tr,bl⸩: 10
+                 src: (uri "http://127.0.0.1:9812/city.jpg")
+                 fit: (align l: 0.5 t: 0.7))))
+           (padding pl: 10 pr: 10 pt: 10 pb: 10 fr: 1
+             (y-stack gap: 5
+               (text
+                 caption: "Visit a city"
+                 color: violet)
+               (y-stack gap: 3
+                 (text
+                   caption: "Lorem ipsum dolor sit amet"
+                   color: (oklch 0.98 0 0)
+                   size: 18)
+                 (text
+                   caption: "Looking to take your team away on a retreat to enjoy awesome food and take in some sunshine? We have a list of places to do just that."
+                   color: (oklch 0.85 0 0)))))))
+
+(InnerSize node_)
+  => (dyn
+       (when (>= w 100)
+         (y-stack
+           (text caption: ">= 100px" color: yellow)
+           ^(view node)))
+       (when true
+         (y-stack
+           (text caption: "< 100px" color: yellow)
+           ^(view node))))
+
+(y-stack gap: 10
+  (limit max-w: 500
+    (BoundedBox (Resizable)))
+  (limit max-w: 400
+    (BoundedBox (Resizable)))
+  (limit max-w: 350
+    (BoundedBox (Resizable)))
+  (limit max-w: 300
+    (BoundedBox (Resizable)))
+  (limit max-w: 200
+    (BoundedBox (Resizable)))
+  (limit max-w: 150
+    (BoundedBox (Resizable)))
+  (limit max-w: 500
+    (y-stack
+      (text caption: "max-w: 500" color: gray)
+      (Card)))
+  (limit max-w: 400
+    (y-stack
+      (text caption: "max-w: 400" color: gray)
+      (Card)))
+  (limit max-w: 300
+    (y-stack
+      (text caption: "max-w: 300" color: gray)
+      (Card)))
+  (InnerSize (text caption: "Hello World" color: white))
+  (InnerSize (text caption: "Hello World, I am longer than 100px!" color: white)))

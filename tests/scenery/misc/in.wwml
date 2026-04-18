@@ -1,0 +1,71 @@
+;; Miscellaneous tests.
+
+width: 500
+height: 650
+backdrop: (oklch 0.2 0 0)
+
+(Debug children_*)
+  => (z-stack
+       ^*(view children)
+       (rect stroke: red thickness-l: 1 thickness-r: 1 thickness-t: 1 thickness-b: 1))
+
+(Item)
+  => (limit min-w: 64
+       (rect fill: gray radius-tl: 10 radius-tr: 10 radius-bl: 10 radius-br: 10))
+
+(Line)
+  => (limit max-w: 200 ;; NOTE: Right now, y-wrap only sizes according to content size. So
+                       ;; we must hard-code max-w here for some wrapping to happen. Otherwise
+                       ;; we'll just see it overflow -- as x-wraps won't do any wrapping, because
+                       ;; they're content-sized (just as y-wrap requests).
+       (x-wrap gap-x: 10 gap-y: 10
+         (Item)
+         (Item)
+         (Item)
+         (Item)
+         (Item)
+         (Item)
+         (Item)
+         (Item)
+         (Item)))
+
+(y-stack gap: 20
+  (y-stack
+    (text caption: "y-wrap of x-wraps" color: gray)
+    (limit max-h: 300
+      (Debug
+        (y-wrap shares: fr gap-x: 20 gap-y: 20
+          (Line)
+          (Line)
+          (Line)
+          (limit max-h: 100
+            (img src: (uri "http://127.0.0.1:9812/city.jpg")))
+          (Line)
+          (Line)))))
+
+  (y-stack
+    (text caption: "suspense: ok" color: gray)
+    (limit max-h: 100
+      (suspense
+        (z-stack
+          (rect fill: (oklch 0.25 0 0) radius-tl: (* 1) radius-br: (* 1))
+          (align x: 0.5 y: 0.5
+            (text caption: "Loading, please wait..." color: gray)))
+        (img src: (uri "http://127.0.0.1:9812/city.jpg")
+             fit: (align l: 0.5 t: 0.5)
+             radius-tl: (* 1)
+             radius-br: (* 1)))))
+
+  (y-stack
+    (text caption: "suspense: not available" color: gray)
+    (limit max-h: 100
+      (suspense
+        (z-stack
+          (rect fill: (oklch 0.25 0 0) radius-tl: (* 1) radius-br: (* 1))
+          (align x: 0.5 y: 0.5
+            (text caption: "Loading, please wait..." color: gray)))
+        (img src: (uri "does-not-exist")
+             fit: (align l: 0.5 t: 0.5)
+             radius-tl: (* 1)
+             radius-br: (* 1))))))
+

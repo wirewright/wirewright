@@ -1,0 +1,71 @@
+backdrop: (oklch 0.2 0 0)
+width: 500
+height: 470
+
+(BoundedText ¦ props_)
+  => (z-stack
+       (rect stroke: red thickness-l: 1 thickness-r: 1 thickness-t: 1 thickness-b: 1)
+       (padding pl: 1 pr: 1 pt: 1 pb: 1
+         (text ^… props)))
+
+(BoundedContentIcon ¦ props_)
+  => (content x: true y: true
+      (z-stack
+        (rect stroke: red thickness-l: 1 thickness-r: 1 thickness-t: 1 thickness-b: 1)
+        (padding pl: 1 pr: 1 pt: 1 pb: 1
+          (icon ^… props))))
+
+(y-stack gap: 10
+  (y-stack
+    (text color: gray caption: "No font")
+    (BoundedContentIcon name: "zoom_in"))
+  (y-stack
+    (text color: gray caption: "Missing font")
+    (BoundedContentIcon name: "zoom_in" font: "qux"))
+  (y-stack
+    (text color: gray caption: "Missing font, nondefault placeholder")
+    (BoundedContentIcon name: "zoom_in" font: "qux" placeholder: (rect fill: gray)))
+  (y-stack
+    (text color: gray caption: "Material icons")
+    (x-stack gap: 5
+      (BoundedContentIcon name: "zoom_in" size: 14 color: white font: "Material Icons")
+      (BoundedContentIcon name: "zoom_in" color: white font: "Material Icons")
+      (BoundedContentIcon name: "zoom_in" size: 24 color: white font: "Material Icons")
+      (BoundedContentIcon name: "zoom_in" size: 32 color: white font: "Material Icons")
+      (BoundedContentIcon name: "zoom_in" size: 48 color: white font: "Material Icons")))
+  (y-stack
+    (text color: gray caption: "Align icon and text, eq")
+    (x-stack gap: 5
+      (align y: 0.5
+        (BoundedContentIcon name: "zoom_in" color: white size: 24 font: "Material Icons"))
+      (align y: 0.5
+        (BoundedText  caption: "Zoom in" color: white size: 24))))
+  (y-stack
+    (text color: gray caption: "Align icon and text, icon sm")
+    (x-stack gap: 5
+      (align y: 0.5
+        (BoundedContentIcon name: "zoom_in" color: white size: 16 font: "Material Icons"))
+      (align y: 0.5
+        (BoundedText caption: "Zoom in" color: white size: 24))))
+  (y-stack
+    (text color: gray caption: "Align icon and text, text sm")
+    (x-stack gap: 5
+      (align y: 0.5
+        (BoundedContentIcon name: "zoom_in" color: white size: 24 font: "Material Icons"))
+      (align y: 0.5
+        (BoundedText caption: "Zoom in" color: white size: 16))))
+
+  (y-stack
+    (text color: gray caption: "Remote load icon font")
+    (BoundedContentIcon
+      name: "zoom_in"
+      size: 24
+      color: white
+      font: (uri "http://127.0.0.1:9812/Material%20Icons/MaterialIconsOutlined-Regular.otf")
+      codepoints: (uri "http://127.0.0.1:9812/Material%20Icons/MaterialIconsOutlined-Regular.codepoints")))
+
+  ;(y-stack
+    (text color: gray caption: "BUGFIX: Icon bounds computed correctly")
+    (limit max-w: 32 max-h: 32
+      (viewport
+        (icon size: 48 font: "Material Icons" name: "account_box" color: white)))))

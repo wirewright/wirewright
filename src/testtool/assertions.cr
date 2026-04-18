@@ -15,6 +15,87 @@ module Testtool
     assertions(comparison.op).map { |asn| Assertion.new(asn, comparison) }
   end
 
+  # Returns an array of assertions made in a Scenery *test*.
+  def assertions(topic : SceneryGroup) : Array(Assertion(SceneryGroup))
+    listing = PathService.listing(topic.path).wait.unwrap
+    unless listing.is_a?(PathService::DirListing)
+      raise ArgumentError.new("path is not a directory")
+    end
+
+    # Schedule reads so they're all happening simultaneously.
+    test_cases = listing.entries.compact_map do |entry|
+      next unless entry.is_a?(PathService::DirEntry)
+
+      {entry.path,
+       {in:  PathService.read(entry.path / "in.wwml"),
+        out: PathService.read(entry.path / "out.ppm"),
+        hit: PathService.read(entry.path / "hit.wwml")}}
+    end
+
+    # Wait for all reads to finish.
+    test_cases = test_cases.map do |(path, test_case)|
+      {path, test_case.transform { |_, promise| promise.wait }}
+    end
+
+    # Only consider ContentReading.
+    test_cases = test_cases.map do |(path, test_case)|
+      {path, test_case.transform do |key, result|
+        case reading = result.unwrap
+        in PathService::ContentReading
+          reading.blob
+        in PathService::DigestReading, PathService::Absent
+        end
+      end}
+    end
+
+    # Parse and remove nils.
+    test_cases = test_cases.compact_map do |path, test_case|
+      in_blob = test_case[:in]
+      out_blob = test_case[:out]
+      hit_blob = test_case[:hit]
+      unless in_blob && out_blob
+        warn("Skipping malformed test: must contain in.wwml and out.ppm", path)
+        next
+      end
+
+      begin
+        in_doc = ML.document(in_blob.to_string, filename: "in.wwml")
+        if hit_blob
+          hit_doc = ML.document(hit_blob.to_string, filename: "hit.wwml")
+        end
+      rescue e : ML::SyntaxError
+        warn("Skipping file due to syntax error: #{e.inline}", path / (e.filename? || ""))
+        next
+      end
+
+      {path: path, in: in_doc, out: out_blob, hit: hit_doc}
+    end
+
+    test_cases.flat_map do |test_case|
+      Term.case(test_case[:in]) do
+        matchpi %{{¦ ±width ±height backdrop_}} do
+          test = SceneryTest.new(
+            path: test_case[:path],
+            in: test_case[:in],
+            out_ppm: test_case[:out],
+            hit: test_case[:hit],
+            width: width.to(Magnitude),
+            height: height.to(Magnitude),
+            backdrop: Pigment.rgba(backdrop),
+          )
+
+          assertions(test).map { |asn| Assertion.new(asn, topic) }
+        end
+
+        otherwise do
+          warn("Invalid in.wwml, expected {¦ ±width ±height backdrop_}", test_case[:path])
+
+          [] of Assertion(SceneryGroup)
+        end
+      end
+    end
+  end
+
   defrecord Failure, detail : String
 
   def assertions(production : Failure) : Array(AssertionNode)

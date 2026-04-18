@@ -438,6 +438,18 @@ module Testtool
           end
         end
 
+        matchpi %{[scenery path_string]}, path: Path do |path|
+          M0.schema(item) do |s|
+            color = s.key(:color, value: Term, default: Term.of(:white))
+            tags = s.key(:tags, value: Term::Dict, default: Term[])
+            next unless enabled?(conf, tags)
+
+            path = path.expand(conf.tests_path, expand_base: false)
+            rgba = Pigment.rgba(color, fallback: Pigment.named("white"))
+            outline << SceneryGroup.new(path, rgba, ref, term: item)
+          end
+        end
+
         matchpi %{[comparison title_string a_ b_]}, title: String do
           M0.schema(item) do |s|
             color = s.key(:color, value: Term, default: Term.of(:white))
@@ -476,7 +488,7 @@ module Testtool
   # Finds assertions in *outline*. Returns two arrays: one of `Test` assertions
   # and another of `Comparison` ones.
   def assertions(outline : Array(Topic))
-    tests = [] of Assertion(Test)
+    tests = [] of Assertion(Test) | Assertion(SceneryGroup)
     comparisons = [] of Assertion(Comparison)
 
     outline.each do |topic|
@@ -484,6 +496,8 @@ module Testtool
       asns.each do |asn|
         case asn
         in Assertion(Test)
+          tests << asn
+        in Assertion(SceneryGroup)
           tests << asn
         in Assertion(Comparison)
           comparisons << asn
@@ -495,7 +509,7 @@ module Testtool
   end
 
   # Writes statistics for *tests* and their *results* to *path*.
-  def wstat(path : Path, tests : Array(Assertion(Test)), results : Array(AssertionResult)) : Nil
+  def wstat(path : Path, tests, results : Array(AssertionResult)) : Nil
     log("Writing stats CSV to #{path}")
 
     # Sort by measurement score.

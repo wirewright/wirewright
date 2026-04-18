@@ -1,0 +1,256 @@
+backdrop: (oklch 0.2 0 0)
+width: 500
+height: 900
+
+(BoundedBox children_* ¦ props_ stroke_⋮ red)
+  => (limit
+       (z-stack
+         (rect ^:stroke thickness-l: 1 thickness-r: 1 thickness-t: 1 thickness-b: 1)
+         (padding pl: 1 pr: 1 pt: 1 pb: 1
+           ^*children))
+      ^… props)
+
+(SelnTest ¦ anchor_: (%number i32) span_: (%number i32))
+  => (limit max-w: 32 max-h: 32
+      (BoundedBox stroke: yellow
+         (viewport
+           (content x: true y: true
+             (text
+               selection: true
+               selection-fill: white
+               selection-color: black
+               selection-thickness: 2
+               selection-aim: true
+               selection-anchor: ^anchor
+               selection-clearance: 10
+               selection-span: ^span
+               color: white
+               caption: "Hello World\nBye world")))))
+
+(y-stack gap: 10
+  (y-stack
+    (text caption: "page-x/y absolute" color: gray)
+    (x-stack gap: 10
+      ;; Basic viewport
+      (limit max-w: 32 max-h: 32
+        (BoundedBox stroke: yellow
+          (viewport
+            (content x: true y: true
+              (text caption: "Hello World\nBye world" color: white)))))
+
+      ;; Page-x
+      (limit max-w: 32 max-h: 32
+        (BoundedBox stroke: yellow
+          (viewport page-x: (20 px)
+            (content x: true y: true
+              (text caption: "Hello World\nBye world" color: white)))))
+      (limit max-w: 32 max-h: 32
+        (BoundedBox stroke: yellow
+          (viewport page-x: (-20 px)
+            (content x: true y: true
+              (text caption: "Hello World\nBye world" color: white)))))
+
+      ;; Page-y
+      (limit max-w: 32 max-h: 32
+        (BoundedBox stroke: yellow
+          (viewport page-y: (13 px)
+            (content x: true y: true
+              (text caption: "Hello World\nBye world" color: white)))))
+      (limit max-w: 32 max-h: 32
+        (BoundedBox stroke: yellow
+          (viewport page-y: (-13 px)
+            (content x: true y: true
+              (text caption: "Hello World\nBye world" color: white)))))
+
+      ;; Page-x, page-y
+      (limit max-w: 32 max-h: 32
+        (BoundedBox stroke: yellow
+          (viewport page-x: (13 px) page-y: (13 px)
+            (content x: true y: true
+              (text caption: "Hello World\nBye world" color: white)))))))
+
+  (y-stack
+    (text caption: "page-x/y relative" color: gray)
+    (x-stack gap: 10
+      (limit max-w: 32 max-h: 32
+        (BoundedBox stroke: yellow
+          (viewport page-x: (* 0.25)
+            (content x: true y: true
+              (text caption: "Hello World\nBye world" color: white)))))
+      (limit max-w: 32 max-h: 32
+        (BoundedBox stroke: yellow
+          (viewport page-x: (* 0.5)
+            (content x: true y: true
+              (text caption: "Hello World\nBye world" color: white)))))
+      (limit max-w: 32 max-h: 32
+        (BoundedBox stroke: yellow
+          (viewport page-x: (* 0.75)
+            (content x: true y: true
+              (text caption: "Hello World\nBye world" color: white)))))
+      (limit max-w: 32 max-h: 32
+        (BoundedBox stroke: yellow
+          (viewport page-x: (* 1)
+            (content x: true y: true
+              (text caption: "Hello World\nBye world" color: white)))))
+      (limit max-w: 32 max-h: 32
+        (BoundedBox stroke: yellow
+          (viewport page-y: (* 0.25)
+            (content x: true y: true
+              (text caption: "Hello World\nBye world" color: white)))))
+      (limit max-w: 32 max-h: 32
+        (BoundedBox stroke: yellow
+          (viewport page-y: (* 0.5)
+            (content x: true y: true
+              (text caption: "Hello World\nBye world" color: white)))))
+      (limit max-w: 32 max-h: 32
+        (BoundedBox stroke: yellow
+          (viewport page-y: (* 0.75)
+            (content x: true y: true
+              (text caption: "Hello World\nBye world" color: white)))))
+      (limit max-w: 32 max-h: 32
+        (BoundedBox stroke: yellow
+          (viewport page-y: (* 1)
+            (content x: true y: true
+              (text caption: "Hello World\nBye world" color: white)))))
+      (limit max-w: 32 max-h: 32
+        (BoundedBox stroke: yellow
+          (viewport page-x: (* 0.5) page-y: (* 0.5)
+            (content x: true y: true
+              (text caption: "Hello World\nBye world" color: white)))))
+      (limit max-w: 32 max-h: 32
+        (BoundedBox stroke: yellow
+          (viewport page-x: (* 1) page-y: (* 1)
+            (content x: true y: true
+              (text caption: "Hello World\nBye world" color: white)))))))
+
+  (y-stack
+    (text caption: "radius" color: gray)
+    (x-stack gap: 10
+      (limit max-w: 32 max-h: 32
+        (viewport radius-tl: (* 1)
+          (content x: true y: true
+            (BoundedBox
+              (text caption: "Hello World\nBye world" color: white)))))
+      (limit max-w: 32 max-h: 32
+        (viewport radius-tr: (* 1)
+          (content x: true y: true
+            (BoundedBox
+              (text caption: "Hello World\nBye world" color: white)))))
+      (limit max-w: 32 max-h: 32
+        (viewport radius-bl: (* 1)
+          (content x: true y: true
+            (BoundedBox
+              (text caption: "Hello World\nBye world" color: white)))))
+      (limit max-w: 32 max-h: 32
+        (viewport radius-br: (* 1)
+          (content x: true y: true
+            (BoundedBox
+              (text caption: "Hello World\nBye world" color: white)))))
+      (limit max-w: 32 max-h: 32
+        (viewport radius-tl: (* 1) radius-tr: (* 1) radius-bl: (* 1) radius-br: (* 1)
+          (content x: true y: true
+            (BoundedBox
+              (text caption: "Hello World\nBye world" color: white)))))
+      (limit max-w: 32 max-h: 32
+        (viewport page-x: (* 0.5)
+                  page-y: (* 0.5)
+                  radius-tl: (* 1)
+                  radius-tr: (* 1)
+                  radius-bl: (* 1)
+                  radius-br: (* 1)
+          (content x: true y: true
+            (BoundedBox
+              (text caption: "Hello World\nBye world" color: white)))))))
+
+  (y-stack
+    (text caption: "Basic aim" color: gray)
+    (padding pl: 10 pt: 10
+      (limit max-w: 50 max-h: 50
+        (transform pivot-l: 0.5 pivot-t: 0.5 angle: 50
+          (z-stack
+            (rect
+              radius-tl: 5
+              radius-tr: 10
+              radius-bl: 3
+              radius-br: 25
+              thickness-l: 1
+              thickness-r: 1
+              thickness-t: 1
+              thickness-b: 1
+              stroke: red)
+            (padding pl: 1 pr: 1 pt: 1 pb: 1
+              (viewport radius-tl: 5
+                        radius-tr: 10
+                        radius-bl: 3
+                        radius-br: 25
+                (content x: true y: true
+                  (y-stack
+                    (text color: white caption: "Buy apples")
+                    (text color: white caption: "Buy tomatoes")
+                    (text color: white caption: "Evade taxes")
+                    (aim (text color: lightgreen caption: "Be happy")))))))))))
+
+  (y-stack
+    (text caption: "no aim (1,1) -> tf, aim -> tf, aim loses to aim: false" color: gray)
+    (x-stack gap: 10
+      (limit max-w: 50 max-h: 50
+        (BoundedBox stroke: yellow
+          (viewport page-x: (* 1) page-y: (* 1)
+            (content x: true y: true
+              (y-stack
+                (text color: white caption: "Buy apples")
+                (text color: white caption: "Buy tomatoes")
+                (text color: white caption: "Evade taxes")
+                (transform dl: 40 dt: 10 pivot-l: 0.5 pivot-t: 0.5 angle: 10
+                  (text color: lightgreen caption: "Be happy")))))))
+      (limit max-w: 50 max-h: 50
+        (BoundedBox stroke: yellow
+          (viewport page-x: (* 0.5) page-y: (* 0.5) ;; but aim wins!
+            (content x: true y: true
+              (y-stack
+                (text color: white caption: "Buy apples")
+                (text color: white caption: "Buy tomatoes")
+                (text color: white caption: "Evade taxes")
+                (transform dl: 40 dt: 10 pivot-l: 0.5 pivot-t: 0.5 angle: 10
+                  (aim (text color: lightgreen caption: "Be happy"))))))))
+      (limit max-w: 50 max-h: 50
+        (BoundedBox stroke: yellow
+          (viewport page-x: (* 0.5) page-y: (* 0.5) aim: false ;; aim loses now
+            (content x: true y: true
+              (y-stack
+                (text color: white caption: "Buy apples")
+                (text color: white caption: "Buy tomatoes")
+                (text color: white caption: "Evade taxes")
+                (transform dl: 40 dt: 10 pivot-l: 0.5 pivot-t: 0.5 angle: 10
+                  (aim (text color: lightgreen caption: "Be happy"))))))))))
+
+  (y-stack
+    (text caption: "selection-aim, span: 0" color: gray)
+    (x-wrap gap-x: 10 gap-y: 10
+      (^each ((iota 22) as anchor_)
+        (SelnTest ^:anchor span: 0))))
+
+  (y-stack
+    (text caption: "selection-aim, span: 1" color: gray)
+    (x-wrap gap-x: 10 gap-y: 10
+      (^each ((iota 21) as anchor_)
+        (SelnTest ^:anchor span: 1))))
+
+  (y-stack
+    (text caption: "selection-aim, span: growing" color: gray)
+    (x-wrap gap-x: 10 gap-y: 10
+      (^each ((iota 21) as span_)
+        (SelnTest anchor: 0 ^:span))))
+
+  (y-stack
+    (text caption: "selection-aim, move from left" color: gray)
+    (x-wrap gap-x: 10 gap-y: 10
+      (^each ((iota 22) as n_)
+        (SelnTest anchor: ^n span: ^(- n)))))
+
+  (y-stack
+    (text caption: "selection-aim, grow from right" color: gray)
+    (x-wrap gap-x: 10 gap-y: 10
+      (^each ((iota 22) as n_)
+        (SelnTest anchor: 21 span: ^(- n))))))
+

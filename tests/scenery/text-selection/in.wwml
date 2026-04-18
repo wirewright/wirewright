@@ -1,0 +1,334 @@
+width: 500
+height: 500
+backdrop: (oklch 0.2 0 0)
+
+(BoundedText ¦ props_)
+  => (z-stack
+       (rect stroke: red thickness-l: 1 thickness-r: 1 thickness-t: 1 thickness-b: 1)
+       (padding pl: 1 pr: 1 pt: 1 pb: 1
+         (text ^… props)))
+
+(x-wrap gap-x: 10 gap-y: 10
+  ;; I-beam empty
+  (BoundedText
+    caption: ""
+    color: white
+    selection: true
+    selection-color: black
+    selection-fill: white
+    selection-anchor: 0
+    selection-span: 0)
+  ;; Single-char I-beam before
+  (BoundedText
+    caption: "A"
+    color: white
+    selection: true
+    selection-color: black
+    selection-fill: white
+    selection-anchor: 0
+    selection-span: 0)
+  ;; Single-char I-beam after
+  (BoundedText
+    caption: "A"
+    color: white
+    selection: true
+    selection-fill: white
+    selection-color: black
+    selection-anchor: 1
+    selection-span: 0)
+  ;; Single-char one
+  (BoundedText
+    caption: "A"
+    color: white
+    selection: true
+    selection-fill: white
+    selection-color: black
+    selection-anchor: 0
+    selection-span: 1)
+  ;; Merge empty: white I-beam wins
+  (BoundedText
+    caption: ""
+    color: white
+    selection: true
+    selections:
+      ({selection-anchor: 0, selection-span: 0, selection-color: black, selection-fill: white}
+       {selection-anchor: 0, selection-span: 0, selection-fill: green}))
+  ;; Merge empty: green I-beam wins
+  (BoundedText
+    caption: ""
+    color: white
+    selection: true
+    selections:
+      ({selection-anchor: 0, selection-span: 0, selection-fill: green}
+       {selection-anchor: 0, selection-span: 0, selection-color: black, selection-fill: white}))
+  ;; Two I-beams
+  (BoundedText
+    caption: "A"
+    color: white
+    selection: true
+    selections:
+      ({selection-anchor: 0, selection-span: 0, selection-fill: (oklch 0.5 0.25 blue)}
+       {selection-anchor: 1, selection-span: 0, selection-fill: (oklch 0.5 0.25 green)}))
+  ;; Thorough
+  (BoundedText
+    caption: "Hello, dear\nWorld"
+    color: white
+    selection: true
+    selections:
+      ({selection-anchor: 0, selection-span: 0, selection-fill: white}
+       {selection-anchor: 1, selection-span: 0, selection-fill: white}
+       {selection-anchor: 2, selection-span: 0, selection-fill: white}
+       {selection-anchor: 3, selection-span: 0, selection-fill: white}
+       {selection-anchor: 4, selection-span: 0, selection-fill: white}
+       {selection-anchor: 5, selection-span: 0, selection-fill: white}
+       {selection-anchor: 6, selection-span: 0, selection-fill: white}
+       {selection-anchor: 7, selection-span: 0, selection-fill: white}
+       {selection-anchor: 8, selection-span: 0, selection-fill: white}
+       {selection-anchor: 9, selection-span: 0, selection-fill: white}
+       {selection-anchor: 10, selection-span: 0, selection-fill: white}
+       {selection-anchor: 11, selection-span: 0, selection-fill: white}
+       {selection-anchor: 12, selection-span: 0, selection-fill: white}
+       {selection-anchor: 13, selection-span: 0, selection-fill: white}
+       {selection-anchor: 14, selection-span: 0, selection-fill: white}
+       {selection-anchor: 15, selection-span: 0, selection-fill: white}
+       {selection-anchor: 16, selection-span: 0, selection-fill: white}
+       {selection-anchor: 17, selection-span: 0, selection-fill: white}))
+  ;; Thorough, wrapped
+  (limit max-w: 80
+    (BoundedText
+      caption: "Hello, dear World"
+      color: white
+      selection: true
+      selections:
+        ({selection-anchor: 0, selection-span: 0, selection-fill: white}
+         {selection-anchor: 1, selection-span: 0, selection-fill: white}
+         {selection-anchor: 2, selection-span: 0, selection-fill: white}
+         {selection-anchor: 3, selection-span: 0, selection-fill: white}
+         {selection-anchor: 4, selection-span: 0, selection-fill: white}
+         {selection-anchor: 5, selection-span: 0, selection-fill: white}
+         {selection-anchor: 6, selection-span: 0, selection-fill: white}
+         {selection-anchor: 7, selection-span: 0, selection-fill: white}
+         {selection-anchor: 8, selection-span: 0, selection-fill: white}
+         {selection-anchor: 9, selection-span: 0, selection-fill: white}
+         {selection-anchor: 10, selection-span: 0, selection-fill: white}
+         {selection-anchor: 11, selection-span: 0, selection-fill: white}
+         {selection-anchor: 12, selection-span: 0, selection-fill: white}
+         {selection-anchor: 13, selection-span: 0, selection-fill: white}
+         {selection-anchor: 14, selection-span: 0, selection-fill: white}
+         {selection-anchor: 15, selection-span: 0, selection-fill: white}
+         {selection-anchor: 16, selection-span: 0, selection-fill: white}
+         {selection-anchor: 17, selection-span: 0, selection-fill: white})))
+  ;; Trailing newline, I-beam
+  (BoundedText
+    caption: "Trailing newline\n"
+    color: white
+    selection: true
+    selection-fill: white
+    selection-anchor: -1
+    selection-span: 0)
+  ;; I-beam thickness
+  (BoundedText
+    caption: "Thickness"
+    color: white
+    selection: true
+    selection-fill: white
+    selection-anchor: 2
+    selection-span: 0
+    selection-thickness: 3)
+  (BoundedText
+    caption: "Thickness"
+    color: white
+    selection: true
+    selection-fill: white
+    selection-anchor: -1
+    selection-span: 0
+    selection-thickness: 3)
+  ;; Fill, selection
+  (BoundedText
+    caption: "Normal, filled selection"
+    color: white
+    selection: true
+    selection-fill: (oklch 0.7 0.2 blue)
+    selection-anchor: 3
+    selection-span: -2)
+  ;; Even selection
+  (BoundedText
+    caption: "Hello, dear\nworld!"
+    color: white
+    selection: true
+    selections:
+      ({selection-anchor: 0, selection-span: 1, selection-endl: true, selection-fill: (oklch 0.7 0.2 blue)}
+       {selection-anchor: 2, selection-span: 1, selection-endl: true, selection-fill: (oklch 0.7 0.2 blue)}
+       {selection-anchor: 4, selection-span: 1, selection-endl: true, selection-fill: (oklch 0.7 0.2 blue)}
+       {selection-anchor: 6, selection-span: 1, selection-endl: true, selection-fill: (oklch 0.7 0.2 blue)}
+       {selection-anchor: 8, selection-span: 1, selection-endl: true, selection-fill: (oklch 0.7 0.2 blue)}
+       {selection-anchor: 10, selection-span: 1, selection-endl: true, selection-fill: (oklch 0.7 0.2 blue)}
+       {selection-anchor: 12, selection-span: 1, selection-endl: true, selection-fill: (oklch 0.7 0.2 blue)}
+       {selection-anchor: 14, selection-span: 1, selection-endl: true, selection-fill: (oklch 0.7 0.2 blue)}
+       {selection-anchor: 16, selection-span: 1, selection-endl: true, selection-fill: (oklch 0.7 0.2 blue)}))
+  ;; Even selection, wrapped
+  (limit max-w: 80
+    (BoundedText
+      caption: "Hello, dear world!"
+      color: white
+      selection: true
+      selections:
+        ({selection-anchor: 0, selection-span: 1, selection-endl: true, selection-fill: (oklch 0.7 0.2 blue)}
+         {selection-anchor: 2, selection-span: 1, selection-endl: true, selection-fill: (oklch 0.7 0.2 blue)}
+         {selection-anchor: 4, selection-span: 1, selection-endl: true, selection-fill: (oklch 0.7 0.2 blue)}
+         {selection-anchor: 6, selection-span: 1, selection-endl: true, selection-fill: (oklch 0.7 0.2 blue)}
+         {selection-anchor: 8, selection-span: 1, selection-endl: true, selection-fill: (oklch 0.7 0.2 blue)}
+         {selection-anchor: 10, selection-span: 1, selection-endl: true, selection-fill: (oklch 0.7 0.2 blue)}
+         {selection-anchor: 12, selection-span: 1, selection-endl: true, selection-fill: (oklch 0.7 0.2 blue)}
+         {selection-anchor: 14, selection-span: 1, selection-endl: true, selection-fill: (oklch 0.7 0.2 blue)}
+         {selection-anchor: 16, selection-span: 1, selection-endl: true, selection-fill: (oklch 0.7 0.2 blue)})))
+  ;; Odd selection
+  (BoundedText
+    caption: "Hello, dear\nworld!"
+    color: white
+    selection: true
+    selections:
+      ({selection-anchor: 1, selection-span: 1, selection-endl: true, selection-fill: (oklch 0.7 0.2 blue)}
+       {selection-anchor: 3, selection-span: 1, selection-endl: true, selection-fill: (oklch 0.7 0.2 blue)}
+       {selection-anchor: 5, selection-span: 1, selection-endl: true, selection-fill: (oklch 0.7 0.2 blue)}
+       {selection-anchor: 7, selection-span: 1, selection-endl: true, selection-fill: (oklch 0.7 0.2 blue)}
+       {selection-anchor: 9, selection-span: 1, selection-endl: true, selection-fill: (oklch 0.7 0.2 blue)}
+       {selection-anchor: 11, selection-span: 1, selection-endl: true, selection-fill: (oklch 0.7 0.2 blue)}
+       {selection-anchor: 13, selection-span: 1, selection-endl: true, selection-fill: (oklch 0.7 0.2 blue)}
+       {selection-anchor: 15, selection-span: 1, selection-endl: true, selection-fill: (oklch 0.7 0.2 blue)}
+       {selection-anchor: 17, selection-span: 1, selection-endl: true, selection-fill: (oklch 0.7 0.2 blue)}))
+  ;; Odd selection, wrapped
+  (limit max-w: 80
+    (BoundedText
+      caption: "Hello, dear world!"
+      color: white
+      selection: true
+      selections:
+        ({selection-anchor: 1, selection-span: 1, selection-endl: true, selection-fill: (oklch 0.7 0.2 blue)}
+         {selection-anchor: 3, selection-span: 1, selection-endl: true, selection-fill: (oklch 0.7 0.2 blue)}
+         {selection-anchor: 5, selection-span: 1, selection-endl: true, selection-fill: (oklch 0.7 0.2 blue)}
+         {selection-anchor: 7, selection-span: 1, selection-endl: true, selection-fill: (oklch 0.7 0.2 blue)}
+         {selection-anchor: 9, selection-span: 1, selection-endl: true, selection-fill: (oklch 0.7 0.2 blue)}
+         {selection-anchor: 11, selection-span: 1, selection-endl: true, selection-fill: (oklch 0.7 0.2 blue)}
+         {selection-anchor: 13, selection-span: 1, selection-endl: true, selection-fill: (oklch 0.7 0.2 blue)}
+         {selection-anchor: 15, selection-span: 1, selection-endl: true, selection-fill: (oklch 0.7 0.2 blue)}
+         {selection-anchor: 17, selection-span: 1, selection-endl: true, selection-fill: (oklch 0.7 0.2 blue)})))
+  ;; Selection merge none
+  (BoundedText
+    color: white
+    caption: "Hello World"
+    selection: true
+    selections:
+      ({selection-anchor: 1, selection-span: 5, selection-fill: (oklch 0.7 0.2 blue)}
+       {selection-anchor: 7, selection-span: 3, selection-fill: (oklch 0.7 0.2 green)}))
+  ;; Selection merge all
+  (BoundedText
+    color: white
+    caption: "Hello World"
+    selection: true
+    selections:
+      ({selection-anchor: 1, selection-span: 5, selection-fill: (oklch 0.7 0.2 blue)} ;; wins
+       {selection-anchor: 6, selection-span: 1, selection-fill: (oklch 0.7 0.2 red)}
+       {selection-anchor: 7, selection-span: 3, selection-fill: (oklch 0.7 0.2 green)}))
+  ;; Selection merge some
+  (BoundedText
+    color: white
+    caption: "Hello, dear World"
+    selection: true
+    selections:
+      ({selection-anchor: 1, selection-span: 5, selection-fill: (oklch 0.7 0.2 blue)} ;; wins
+       {selection-anchor: 6, selection-span: 1, selection-fill: (oklch 0.7 0.2 red)}
+       {selection-anchor: 7, selection-span: 3, selection-fill: (oklch 0.7 0.2 green)}
+       {selection-anchor: 11, selection-span: 5, selection-fill: (oklch 0.7 0.2 magenta)}))
+  ;; Non-overlapping selections
+  (BoundedText
+    caption: "More example selections"
+    color: white
+    selection: true
+    selections:
+      ({selection-anchor: 0, selection-span: 3, selection-radius: 3, selection-fill: red}
+       {selection-anchor: 5, selection-span: 6, selection-radius: 5, selection-fill: green}
+       {selection-anchor: 16, selection-span: -3}))
+  ;; Selection-l,r,t,b
+  (BoundedText
+    caption: "Funky selection"
+    color: white
+    selection: true
+    selection-anchor: 5
+    selection-span: -4
+    selection-l: 0.1
+    selection-r: 0.9
+    selection-t: 0.5
+    selection-b: 0.9
+    selection-fill: green)
+  (BoundedText
+    caption: "A selection that\nspans\nmultiple lines"
+    color: white
+    selection: true
+    selection-fill: (oklch 0.7 0.2 blue)
+    selection-endl: true
+    selection-anchor: 12
+    selection-span: 11
+    selection-radius: 5)
+  (BoundedText
+    caption: "A selection that\nspans\nup to but not including a newline"
+    color: white
+    selection: true
+    selection-fill: (oklch 0.7 0.2 blue)
+    selection-endl: true
+    selection-anchor: 12
+    selection-span: 10
+    selection-radius: 5)
+  (BoundedText
+    caption: "Selection through empty lines\n\n\n\nand radius"
+    color: white
+    selection: true
+    selection-fill: (oklch 0.7 0.2 blue)
+    selection-endl: true
+    selection-anchor: -11
+    selection-span: -5
+    selection-radius: 5)
+  (BoundedText
+    caption: "A selection with\njust\na newline"
+    color: white
+    selection-fill: (oklch 0.7 0.2 blue)
+    selection: true
+    selection-endl: true
+    selection-anchor: -10
+    selection-span: -1)
+  (BoundedText
+    caption: "A selection with\nbigger endl-w"
+    color: white
+    selection-fill: (oklch 0.7 0.2 blue)
+    selection: true
+    selection-endl: true
+    selection-endl-w: 20
+    selection-anchor: 5
+    selection-span: 13)
+  (limit max-w: 80
+    (BoundedText
+      caption: "Selection through wrapped lines, no endl"
+      color: white
+      selection: true
+      selection-fill: (oklch 0.7 0.2 blue)
+      selection-endl: true
+      selection-anchor: 3
+      selection-span: 25))
+  (BoundedText
+    caption: "Select whole text"
+    color: white
+    selection: true
+    selection-fill: (oklch 0.7 0.2 blue)
+    selection-radius: 5
+    selection-endl: true
+    selection-anchor: 0
+    selection-span: -1)
+  (BoundedText
+    caption: "Trailing newline\n"
+    color: white
+    selection: true
+    selection-fill: (oklch 0.7 0.2 blue)
+    selection-radius: 5
+    selection-endl: true
+    selection-anchor: 0
+    selection-span: -1))

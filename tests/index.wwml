@@ -54,6 +54,10 @@ uiR: {codex: "../runtime/codices/uiR.codex.wwml"}
   color: (oklch 0.7 0.1 indigo)
   tags: (edit))
 
+(scenery "scenery/"
+  color: (oklch 0.7 0.1 pink)
+  tags: (graphics scenery))
+
 (comparison "DwUIR regressions"
   (dwuir "dwuir.in.wwml" wheel: 0 mouse-x: 0 mouse-y: 0)
   (ppm.gz "dwuir.expected.ppm.gz")

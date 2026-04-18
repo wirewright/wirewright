@@ -1,0 +1,184 @@
+backdrop: (oklch 0.2 0 0)
+width: 1000
+height: 900
+
+(BoundedBox children_* ¦ props_)
+  => (limit
+       (z-stack
+         (rect stroke: red thickness-l: 1 thickness-r: 1 thickness-t: 1 thickness-b: 1)
+         (padding pl: 1 pr: 1 pt: 1 pb: 1
+           ^*children))
+      ^… props)
+
+(x-stack gap: 20
+  (y-stack
+    (y-stack
+      (text caption: "fit: stretch" color: gray)
+      (x-stack gap: 10
+        (BoundedBox max-w: 64 max-h: 48
+          (img
+            fit: stretch
+            src: (uri "http://127.0.0.1:9812/city.jpg")))
+        (BoundedBox max-w: 128 max-h: 96
+          (img
+            fit: stretch
+            src: (uri "http://127.0.0.1:9812/city.jpg")))
+        (BoundedBox max-w: 256 max-h: 196
+          (img
+            fit: stretch
+            src: (uri "http://127.0.0.1:9812/city.jpg")))))
+
+    (y-stack
+      (text caption: "fit: align (center)" color: gray)
+      (x-stack gap: 10
+        (BoundedBox max-w: 64 max-h: 48
+          (img
+            fit: (align l: 0.5 t: 0.5)
+            src: (uri "http://127.0.0.1:9812/city.jpg")))
+        (BoundedBox max-w: 128 max-h: 96
+          (img
+            fit: (align l: 0.5 t: 0.5)
+            src: (uri "http://127.0.0.1:9812/city.jpg")))
+        (BoundedBox max-w: 256 max-h: 196
+          (img
+            fit: (align l: 0.5 t: 0.5)
+            src: (uri "http://127.0.0.1:9812/city.jpg")))))
+
+    (y-stack
+      (text caption: "fit: align (bottom-right)" color: gray)
+      (x-stack gap: 10
+        (BoundedBox max-w: 64 max-h: 48
+          (img
+            fit: (align l: 1.0 t: 1.0)
+            src: (uri "http://127.0.0.1:9812/city.jpg")))
+        (BoundedBox max-w: 128 max-h: 96
+          (img
+            fit: (align l: 1.0 t: 1.0)
+            src: (uri "http://127.0.0.1:9812/city.jpg")))
+        (BoundedBox max-w: 256 max-h: 196
+          (img
+            fit: (align l: 1.0 t: 1.0)
+            src: (uri "http://127.0.0.1:9812/city.jpg")))))
+
+    (y-stack
+      (text caption: "fit: pan (0 0)" color: gray)
+      (x-stack gap: 10
+        (BoundedBox max-w: 64 max-h: 48
+          (img
+            fit: (pan l: 0 t: 0)
+            src: (uri "http://127.0.0.1:9812/city.jpg")))
+        (BoundedBox max-w: 128 max-h: 96
+          (img
+            fit: (pan l: 0 t: 0)
+            src: (uri "http://127.0.0.1:9812/city.jpg")))
+        (BoundedBox max-w: 256 max-h: 196
+          (img
+            fit: (pan l: 0 t: 0)
+            src: (uri "http://127.0.0.1:9812/city.jpg"))))))
+
+  (y-stack
+    (y-stack
+      (text caption: "fit: pan (-150 -10)" color: gray)
+      (x-stack gap: 10
+        (BoundedBox max-w: 64 max-h: 48
+          (img
+            fit: (pan l: -150 t: -10)
+            src: (uri "http://127.0.0.1:9812/city.jpg")))
+        (BoundedBox max-w: 128 max-h: 96
+          (img
+            fit: (pan l: -150 t: -10)
+            src: (uri "http://127.0.0.1:9812/city.jpg")))
+        (BoundedBox max-w: 256 max-h: 196
+          (img
+            fit: (pan l: -150 t: -10)
+            src: (uri "http://127.0.0.1:9812/city.jpg")))))
+
+    (y-stack
+      (text caption: "full size" color: gray)
+      (BoundedBox
+        (img
+          fit: (pan)
+          src: (uri "http://127.0.0.1:9812/city.jpg"))))
+
+    (x-stack gap: 5
+      (y-stack
+        (text caption: "opacity: 1" color: gray)
+        (BoundedBox max-w: 64 max-h: 64
+          (rect fill: (oklch 0.4 0.2 green))
+          (img
+            src: (uri "http://127.0.0.1:9812/soma-256x256-white.png"))))
+
+      (y-stack
+        (text caption: "0.5" color: gray)
+        (BoundedBox max-w: 64 max-h: 64
+          (rect fill: (oklch 0.4 0.2 green))
+          (img
+            src: (uri "http://127.0.0.1:9812/soma-256x256-white.png")
+            opacity: 0.5)))
+
+      (y-stack
+        (text caption: "0.1" color: gray)
+        (BoundedBox max-w: 64 max-h: 64
+          (rect fill: (oklch 0.4 0.2 green))
+          (img
+            src: (uri "http://127.0.0.1:9812/soma-256x256-white.png")
+            opacity: 0.1)))
+
+      (y-stack
+        (text caption: "0" color: gray)
+        (BoundedBox max-w: 64 max-h: 64
+          (rect fill: (oklch 0.4 0.2 green))
+          (img
+            src: (uri "http://127.0.0.1:9812/soma-256x256-white.png")
+            opacity: 0))))
+
+    (x-stack gap: 5
+      (y-stack
+        (text caption: "radius: 0" color: gray)
+        (BoundedBox max-w: 64 max-h: 64
+          (img
+            src: (uri "http://127.0.0.1:9812/avatar-female1-32.jpg"))))
+
+      (y-stack
+        (text caption: "50%" color: gray)
+        (BoundedBox max-w: 64 max-h: 64
+          (img
+            src: (uri "http://127.0.0.1:9812/avatar-female1-32.jpg")
+            radius-tl: (* 0.5)
+            radius-tr: (* 0.5)
+            radius-bl: (* 0.5)
+            radius-br: (* 0.5))))
+
+      (y-stack
+        (text caption: "100%" color: gray)
+        (BoundedBox max-w: 64 max-h: 64
+          (img
+            src: (uri "http://127.0.0.1:9812/avatar-female1-32.jpg")
+            radius-tl: (* 1)
+            radius-tr: (* 1)
+            radius-bl: (* 1)
+            radius-br: (* 1)))))
+
+    (x-stack gap: 10
+      (y-stack
+        (text caption: "tile, resize-w, resize-h" color: gray)
+        (BoundedBox max-w: 128 max-h: 64
+          (img
+            src: (uri "http://127.0.0.1:9812/soma-256x256-white.png")
+            fit: (pan)
+            resize-w: 32
+            resize-h: 32
+            tile: true)))
+
+      (y-stack
+        (text caption: "Placeholder" color: gray)
+        (BoundedBox max-w: 64 max-h: 64
+          (img
+            src: (uri "does-not-exist"))))
+
+      (y-stack
+        (text caption: "Custom placeholder" color: gray)
+        (BoundedBox max-w: 64 max-h: 64
+          (img
+            src: (uri "does-not-exist")
+            placeholder: (rect fill: gray radius-tl: (* 1) radius-tr: (* 1) radius-bl: (* 1) radius-br: (* 1))))))))

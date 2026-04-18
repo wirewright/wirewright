@@ -1,0 +1,303 @@
+width: 500
+height: 1030
+backdrop: (oklch 0.2 0 0)
+
+(BoundedText ¦ props_)
+  => (z-stack
+       (rect stroke: red thickness-l: 1 thickness-r: 1 thickness-t: 1 thickness-b: 1)
+       (padding pl: 1 pr: 1 pt: 1 pb: 1
+         (text ^… props)))
+
+(y-stack gap: 10
+  ;; Basic text wrapping
+  (x-stack gap: 5
+    (y-stack
+      (text caption: "w: 10 (o/f)" color: gray)
+      (limit max-w: 10
+        (BoundedText
+          color: white
+          caption: "The quick brown fox jumped over the lazy dog."
+          size: 14)))
+    (y-stack
+      (text caption: "w: 45" color: gray)
+      (limit max-w: 45
+        (BoundedText
+          color: white
+          caption: "The quick brown fox jumped over the lazy dog."
+          size: 14)))
+    (y-stack
+      (text caption: "w: 60" color: gray)
+      (limit max-w: 60
+        (BoundedText
+          color: white
+          caption: "The quick brown fox jumped over the lazy dog."
+          size: 14)))
+    (y-stack
+      (text caption: "w: 80" color: gray)
+      (limit max-w: 80
+        (BoundedText
+          color: white
+          caption: "The quick brown fox jumped over the lazy dog."
+          size: 14)))
+    (y-stack
+      (text caption: "w: 150" color: gray)
+      (limit max-w: 150
+        (BoundedText
+          color: white
+          caption: "The quick brown fox jumped over the lazy dog."
+          size: 14))))
+  (y-stack
+    (text caption: "w: 300" color: gray)
+    (limit max-w: 300
+      (BoundedText
+        color: white
+        caption: "The quick brown fox jumped over the lazy dog."
+        size: 14)))
+
+  ;; Disable line wrap.
+  ;;
+  ;; Unlike DwUIR, Scenery doesn't provide wrap-* properties on `text`. Instead,
+  ;; for the sake of simplicity, it wraps line-wraps always. So to disable
+  ;; line wrapping, you have to create the right conditions *around* the text,
+  ;; instead of asking the text itself. Here, we simply make width constraint
+  ;; infinite; this is enough to disable wrapping.
+  (y-stack
+    (text caption: "no wrap" color: gray)
+    (limit max-w: 30
+      (z-stack
+        (rect stroke: red thickness-l: 1 thickness-r: 1 thickness-t: 1 thickness-b: 1)
+        (content x: true
+          (text
+            color: white
+            caption: "The quick brown fox jumped over the lazy dog."
+            size: 14)))))
+
+  ;; Italic
+  (x-stack gap: 10
+    (text
+      caption: "Italic text"
+      color: white
+      italic: true)
+    (text
+      caption: "Italic text"
+      color: white
+      font: "IBM Plex Serif"
+      italic: true))
+
+  ;; Italic prune
+  (x-stack gap: 10
+    (y-stack fr: 1
+      (text caption: "Italic o/f d0%" color: gray)
+      (z-stack
+        (rect stroke: yellow thickness-l: 1 thickness-r: 1 thickness-t: 1 thickness-b: 1)
+        (viewport page-x: (-20 px)
+          (content x: true y: true
+            (BoundedText
+              caption: "foo"
+              size: 48
+              color: white
+              font: "IBM Plex Serif"
+              italic: true)))))
+    (y-stack fr: 1
+      (text caption: "o/f d50%" color: gray)
+      (z-stack
+        (rect stroke: yellow thickness-l: 1 thickness-r: 1 thickness-t: 1 thickness-b: 1)
+        (viewport page-x: (-50 px)
+          (content x: true y: true
+            (BoundedText
+              caption: "foo"
+              size: 48
+              color: white
+              font: "IBM Plex Serif"
+              italic: true)))))
+    (y-stack fr: 1
+      (text caption: "o/f d90%" color: gray)
+      (z-stack
+        (rect stroke: yellow thickness-l: 1 thickness-r: 1 thickness-t: 1 thickness-b: 1)
+        (viewport page-x: (-100 px)
+          (content x: true y: true
+            (BoundedText
+              caption: "foo"
+              size: 48
+              color: white
+              font: "IBM Plex Serif"
+              italic: true)))))
+    (y-stack fr: 1
+      (text caption: "o/f d≈100% (vis)" color: gray)
+      (z-stack
+        (rect stroke: yellow thickness-l: 1 thickness-r: 1 thickness-t: 1 thickness-b: 1)
+        (viewport page-x: (-134 px)
+          (content x: true y: true
+            (BoundedText
+              caption: "foo"
+              size: 48
+              color: white
+              font: "IBM Plex Serif"
+              italic: true))))))
+
+  ;; Emoji
+  ;;
+  ;; Reference: https://www.emoji.family/blog/emoji-unicode-guide
+  ;;
+  ;; NOTE: Color emojis are not supported yet. When they are, we should be able
+  ;; to test them here also.
+  (x-stack gap: 5
+    ;; man
+    (BoundedText
+      color: white
+      size: 18
+      caption: "👨"
+      font: "Noto Emoji")
+    ;; man + zwj + cook
+    (BoundedText
+      color: white
+      size: 18
+      caption: "👨\u{200D}🍳"
+      font: "Noto Emoji")
+    ;; woman + zwj + laptop
+    (BoundedText
+      color: white
+      size: 18
+      caption: "👩\u{200D}💻"
+      font: "Noto Emoji")
+    ;; flag + zwj + rainbow = rainbow flag
+    (BoundedText
+      color: white
+      size: 18
+      caption: "🏳️\u{200D}🌈"
+      font: "Noto Emoji")
+    ;; skin tone
+    (BoundedText
+      color: white
+      size: 18
+      caption: "👋\u{1F3FE}"
+      font: "Noto Emoji")
+    ;; heart
+    (BoundedText
+      color: white
+      size: 18
+      caption: "\u{2764}\u{FE0F}"
+      font: "Noto Emoji"))
+
+  ;; Mixed script
+  (y-stack
+    (text caption: "w: content" color: gray)
+    (BoundedText
+      color: white
+      caption:
+        "Hello החוקרים חלוקים בשאלה זו World ▢ ◇ चूंकि के सभी सदस्योंbye"
+      font:
+        (list
+          (font "IBM Plex Sans")
+          (font "Noto Sans")
+          (font "Noto Sans Hebrew")
+          (font "Unifont"))
+      size: 18))
+  (y-stack
+    (text caption: "w: 250" color: gray)
+    (limit max-w: 250
+      (BoundedText
+        color: white
+        caption:
+          "Hello החוקרים חלוקים בשאלה זו World ▢ ◇ चूंकि के सभी सदस्योंbye"
+        font:
+          (list
+            (font "IBM Plex Sans")
+            (font "Noto Sans")
+            (font "Noto Sans Hebrew")
+            (font "Unifont"))
+        size: 18)))
+
+  ;; Font weight
+  (y-stack
+    (text caption: "Font weight" color: gray)
+    (x-stack gap: 5
+      (BoundedText color: white caption: "100" weight: 100)
+      (BoundedText color: white caption: "150" weight: 150)
+      (BoundedText color: white caption: "200" weight: 200)
+      (BoundedText color: white caption: "300" weight: 300)
+      (BoundedText color: white caption: "400" weight: 400)
+      (BoundedText color: white caption: "450" weight: 450)
+      (BoundedText color: white caption: "500" weight: 500)
+      (BoundedText color: white caption: "600" weight: 600)
+      (BoundedText color: white caption: "700" weight: 700)
+      (BoundedText color: white caption: "800" weight: 800)
+      (BoundedText color: white caption: "900" weight: 900)
+      (BoundedText color: white caption: "950" weight: 950)
+      (BoundedText color: white caption: "1000" weight: 1000)))
+
+  ;; Font weight italic
+  (y-stack
+    (text caption: "Font weight italic" color: gray)
+    (x-stack gap: 5
+      (BoundedText color: white caption: "100" weight: 100 italic: true)
+      (BoundedText color: white caption: "200" weight: 200 italic: true)
+      (BoundedText color: white caption: "300" weight: 300 italic: true)
+      (BoundedText color: white caption: "400" weight: 400 italic: true)
+      (BoundedText color: white caption: "500" weight: 500 italic: true)
+      (BoundedText color: white caption: "600" weight: 600 italic: true)
+      (BoundedText color: white caption: "700" weight: 700 italic: true)
+      (BoundedText color: white caption: "800" weight: 800 italic: true)
+      (BoundedText color: white caption: "900" weight: 900 italic: true)))
+
+  ;; Missing weight
+  (y-stack
+    (text caption: "Missing weight" color: gray)
+    (x-stack gap: 5
+      (BoundedText color: white caption: "100" weight: 100 font: "Unifont" italic: true)
+      (BoundedText color: white caption: "400" weight: 400 font: "Unifont" italic: true)
+      (BoundedText color: white caption: "500" weight: 700 font: "Unifont" italic: true)))
+
+  ;; Missing italic
+  (BoundedText caption: "Missing italic" font: "Unifont" color: white italic: true)
+
+  ;; Missing weight italic
+  (BoundedText caption: "Missing weight italic" font: "Unifont" color: white weight: 800 italic: true)
+
+  ;; Transform
+  (x-wrap gap-x: 5 gap-y: 5
+    (BoundedText
+      color: white
+      caption: "tRansForM: upcasE"
+      transform: {+ upcase})
+    (BoundedText
+      color: white
+      caption: "TRANSFORM: DnCase"
+      transform: {+ dncase})
+    (BoundedText
+      color: white
+      caption: "   No   strip   ")
+    (BoundedText
+      color: white
+      caption: "   Yes   strip   "
+      transform: {+ strip})
+    (content y: true
+      (BoundedText
+        color: white
+        caption: "   Pretty   strip   "
+        transform: {+ pretty}))
+    (content y: true
+      (BoundedText
+        color: white
+        caption: "   No\n\nnl  strip\n\n   "))
+    (content y: true
+      (BoundedText
+        color: white
+        caption: "   \n\nnl  strip\n\n   "
+        transform: {+ pretty})))
+
+  (x-stack gap: 10
+    ;; Remote font
+    (y-stack
+      (text caption: "Remote font" color: gray)
+      (BoundedText
+        caption: "Hello World"
+        color: white
+        font: (uri "http://127.0.0.1:9812/Julia%20Mono/JuliaMono-Regular.ttf")))
+    ;; Placeholder
+    (y-stack
+      (text caption: "Text placeholder with wrapping" color: gray)
+      (limit max-w: 300
+        (BoundedText
+          caption: "The quick brown fox jumped over the lazy dog."
+          font: "foobar")))))

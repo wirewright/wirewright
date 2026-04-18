@@ -19,6 +19,7 @@ module Testtool
                RackTest |
                RackInstantiateTest |
                EditTest |
+               SceneryTest |
                TermComparison |
                ImageComparison
 
@@ -215,6 +216,50 @@ module Testtool
     return if state == test.result # ok
 
     complaints << complaint("editR state mismatch", expected: test.result, got: state)
+  end
+
+  defrecord SceneryTest,
+    path : Path,
+    in : Term,
+    out_ppm : Term::Blob,
+    hit : Term?,
+    width : Magnitude,
+    height : Magnitude,
+    backdrop : Pigment::RGBA
+
+  def run(test : SceneryTest, assets, stat, complaints) : Nil
+    in_ruleset, in_rest = Ruleset.ruleset_and_rest(Ruleset::DEFAULT_SELECTOR, test.in)
+    in_instance = Alloy.compose(in_ruleset, Term[], Alloy.template(Term[], Term.of(in_rest)))
+
+    scene, ppm = measure(stat) do
+      cache = Scenery::Safe.cache_set
+      scene = Scenery::Safe.scene(cache, in_instance, test.width, test.height).unwrap
+      raster = Scenery::Safe.rasterize(cache, scene, backdrop: test.backdrop)
+      {scene, raster.to_ppm}
+    end
+
+    unless ppm == test.out_ppm
+      fail_path = Path["/tmp/scenery.#{test.path.stem}.fail.ppm"]
+      complaints << complaint("in.wwml does not match out.ppm (writing to #{fail_path})")
+      PathService.write(fail_path, ppm).wait
+      return
+    end
+
+    return unless hit_doc = test.hit # ok
+
+    hit_doc.items.each do |item|
+      Term.case(item) do
+        matchpi %{[hit query_ pattern_]} do
+          hit_query = Scenery::HitQuery.parse(query)
+          _, observers = Scenery::Safe.describe(scene, Slice[hit_query])
+          unless observers.any? { |observer| M1.probe?(pattern, observer) }
+            complaints << complaint("did not hit according to", query: query, pattern: pattern)
+          end
+        end
+
+        otherwise { }
+      end
+    end
   end
 
   def match(pattern : Term, matchee : Term) : Slice(Term::Dict)
