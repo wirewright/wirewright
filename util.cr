@@ -345,14 +345,10 @@ struct ::NamedTuple
       self
     {% else %}
       {
-        {% for key, cls in T %}
-          {{key.id}}: (yield {{key.symbolize}}, self[{{key.symbolize}}]).as({{cls.instance}}),
+        {% for key in T %}
+          {{key.id}}: (yield {{key.symbolize}}, self[{{key.symbolize}}]),
         {% end %}
-  }.as({
-      {% for key, cls in T %}
-        {{key.id}}: {{cls.instance}},
-      {% end %}
-  })
+      }
     {% end %}
   end
 end
