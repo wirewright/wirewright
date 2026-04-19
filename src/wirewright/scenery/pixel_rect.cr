@@ -10,6 +10,9 @@ module Ww::Scenery
     # Returns the clear color, which we call *backdrop*.
     getter backdrop : Pigment::RGBA
 
+    # Returns `true` if this pixel rect consists exclusively of `backdrop` pixels.
+    getter? clear : Bool
+
     def initialize(@pixels : Slice(Pixel), @width, @height, @backdrop, @clear : Bool)
     end
 
@@ -38,6 +41,11 @@ module Ww::Scenery
     # Marks this pixel rect as dirty.
     def dirty : Nil
       @clear = false
+    end
+
+    # Returns `true` if this pixel rect is dirty.
+    def dirty? : Bool
+      !clear?
     end
 
     # Clears this pixel rect with the backdrop color if it is dirty.
