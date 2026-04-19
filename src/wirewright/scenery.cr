@@ -10,10 +10,10 @@
 # NOTE: Scenery is **not** thread-safe, nor do we assume its dependencies are
 # thread-safe. None of the objects under `Scenery` are thread-safe either
 # (barring "accidental" thread-safety). You must use Scenery **only** through
-# `SceneryService`, which centralizes all access to Scenery, and must be the sole
-# caller of functions defined under `Scenery` for stuff to work properly.
+# `Safe`, which centralizes all access to Scenery with a global lock, and must
+# be the sole caller of functions defined under `Scenery` for stuff to work properly.
 #
-# Front-facing functions are found in the module `Safe`. Functions directly under
+# Front-facing functions can be found in the module `Safe`. Functions directly under
 # `Scenery` are public for documentation purposes only. Most public objects under
 # the namespace `Scenery` are public for the same reason; you almost never
 # interact with them directly.
