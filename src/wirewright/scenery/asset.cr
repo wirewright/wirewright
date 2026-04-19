@@ -365,48 +365,53 @@ module Ww::Scenery
     alias Map = Hash(Query, Any)
 
     defrecord QueryRef, query : Query, includes: {Diagnostic::Spot}
+
+    defrecord Pending,
+      query : Query,
+      promise : Promise(ResourceService::Response)
   end
 
-  private def fetch(cache, queries : QuerySet, &) : Outcome::Accepted(Asset::Map)
+  # Schedules the loading of assets queried by the given `QuerySet`.
+  #
+  # See also: `poll`.
+  def schedule(queries : QuerySet) : Slice(Asset::Pending)
+    queries.to_readonly_slice do |query|
+      Asset::Pending.new(query, promise: ResourceService.get(query.resource))
+    end
+  end
+
+  private def poll(cache, pending : Slice(Asset::Pending)) : Outcome::Accepted(Asset::Map)
     assets = {} of Asset::Query => Asset::Any
 
-    # First, call get() for all resources. This schedules reads that aren't in
-    # ResourceService's cache. When we later yield, the block calls #wait or #poll?
-    # on get()'s promise. All get()s are already scheduled at this point, and thus,
-    # while we're waiting for the first get(), all get()s can execute concurrently.
-    promises = queries.map do |query|
-      {query, ResourceService.get(query.resource)}
-    end
-
     Outcome.accumulate do |acc|
-      promises.each do |query, promise|
-        result = yield promise
+      pending.each do |entry|
+        result = entry.promise.poll?
 
         case result
         in Nil
-          acc << Outcome.elaborate(Asset::QueryRef.new(query), Diagnostic.of("asset not available yet"))
+          # Pending
           next
         in Promise::Accepted
           response = result.object
         in Promise::Rejected
           # This is caused by Crystal-side rejections of some sort.
-          acc << Outcome.elaborate(Asset::QueryRef.new(query), Diagnostic.of("could not load asset: #{result.detail}"))
+          acc << Outcome.elaborate(Asset::QueryRef.new(entry.query), Diagnostic.of("could not load asset: #{result.detail}"))
           next
         end
 
         case response
         in ResourceService::Absent
           # This is caused by things like HTTP 4xx or file system ENOENT.
-          acc << Outcome.elaborate(Asset::QueryRef.new(query), Diagnostic.of("could not load asset: #{response.detail}"))
+          acc << Outcome.elaborate(Asset::QueryRef.new(entry.query), Diagnostic.of("could not load asset: #{response.detail}"))
         in ResourceService::Present
-          parseout = cache.put_if_absent({query, response.content}) do
-            Outcome.map(Asset.parse(query, response.content), &.as(Asset::Any?))
+          parseout = cache.put_if_absent({entry.query, response.content}) do
+            Outcome.map(Asset.parse(entry.query, response.content), &.as(Asset::Any?))
           end
 
-          asset = acc.unwrap(Outcome.elaborate(Asset::QueryRef.new(query), parseout))
+          asset = acc.unwrap(Outcome.elaborate(Asset::QueryRef.new(entry.query), parseout))
           next unless asset
 
-          assets[query] = asset
+          assets[entry.query] = asset
         end
       end
 
@@ -414,28 +419,11 @@ module Ww::Scenery
     end
   end
 
-  private def poll(cache, queries : QuerySet) : Outcome::Accepted(Asset::Map)
-    fetch(cache, queries, &.poll?)
-  end
-
-  private def wait(cache, queries : QuerySet) : Outcome::Accepted(Asset::Map)
-    fetch(cache, queries, &.wait)
-  end
-
-  # Polls the resource server for *queries*. Queries that are resolved (either
-  # as present, or absent) at the particular moment are added to the resulting
-  # asset map.
+  # Polls the resource server for *pending* queries. Queries that are *currently*
+  # resolved (either as present, or absent) are added to the resulting asset map.
   #
   # Notes related to *queries* are attached as diagnostics to the outcome.
-  def poll(cache : CacheSet, queries : QuerySet) : Outcome::Accepted(Asset::Map)
-    cache.assets.epoch { poll(cache.assets, queries) }
-  end
-
-  # Waits for all *queries* to resolve (either as present, or absent). Returns
-  # the resulting asset map.
-  #
-  # Notes related to *queries* are attached as diagnostics to the outcome.
-  def wait(cache : CacheSet, queries : QuerySet) : Outcome::Accepted(Asset::Map)
-    cache.assets.epoch { wait(cache.assets, queries) }
+  def poll(cache : CacheSet, pending : Slice(Asset::Pending)) : Outcome::Accepted(Asset::Map)
+    cache.assets.epoch { poll(cache.assets, pending) }
   end
 end

@@ -20,7 +20,9 @@
 module Ww::Scenery
   extend self
 
-  # An immutable representation of a compiled Scenery scene.
+  # An immutable representation of a Scenery scene at a particular instant.
+  #
+  # It is safe to pass scenes around between different threads.
   class Scene
     # :nodoc:
     getter width : Magnitude
@@ -36,6 +38,30 @@ module Ww::Scenery
     # :nodoc:
     def initialize(@width, @height, @root, @box, @vbox)
     end
+  end
+
+  # Acts as a source of Scenery `Scene`s: represents the potential for a "time
+  # sequence" of `Scene`s.
+  #
+  # Scene sources are immutable. It is safe to pass them around between different threads.
+  class SceneSource
+    # :nodoc:
+    getter width : Magnitude
+
+    # :nodoc:
+    getter height : Magnitude
+
+    # :nodoc:
+    getter recognized_root : Root(RecognizedNode)
+
+    # :nodoc:
+    getter pending : Slice(Asset::Pending)
+
+    # :nodoc:
+    def initialize(@width, @height, @recognized_root, @pending)
+    end
+
+    def_equals_and_hash width, height, recognized_root
   end
 
   # Front-facing, thread-safe API for `Scenery`.
@@ -67,41 +93,45 @@ module Ww::Scenery
     #   window width).
     # - *height* is the height to use for layout at the top-level (e.g., screen or
     #   window height).
-    # - *blocking* determines whether to wait (`true`) or poll (`false`) for assets.
-    #   If `true`, this function blocks the calling fiber until all assets are loaded.
-    #   If `false`, this function schedules the loading of *document*'s assets and
-    #   polls once. Assets that are already loaded will be available to the scene.
-    #   Nodes that depend on assets that aren't available will display a placeholder
-    #   or something similar (see e.g. `scenery.suspense`). You usually set `blocking: true`
-    #   for one-shot renders, and `blocking: false` for interactive graphics, calling
-    #   `scene` on every frame.
-    #
-    # The returned scene is immutable. Therefore, it is safe to pass it around
-    # between different threads.
-    def scene(cache : CacheSet, document : Term, width : Magnitude, height : Magnitude, *, blocking : Bool = true) : Outcome::Accepted(Scene)
+    def scenesrc(cache : CacheSet, document : Term, width : Magnitude, height : Magnitude) : SceneSource
       @@lock.synchronize do
-        query_tree = Scenery.recognize(cache, document: document)
-        asset_queries = Scenery.queries(cache, query_tree)
+        recognized_root = Scenery.recognize(cache, document: document)
+        queries = Scenery.queries(cache, recognized_root)
+        pending = Scenery.schedule(queries)
 
-        if blocking
-          # TODO: Make it possible to release the lock while waiting for assets...
-          asset_reply = Scenery.wait(cache, asset_queries)
-        else
-          asset_reply = Scenery.poll(cache, asset_queries)
-        end
+        SceneSource.new(width, height, recognized_root, pending)
+      end
+    end
 
-        asset_reply.map do |assets|
-          asset_resn = Scenery.resolve(cache, assets, query_tree)
-          shaped_tree = Scenery.shape(cache, asset_resn)
-          sized_tree, size_tree = Scenery.size(cache, shaped_tree, Cst.new(0, width, 0, height))
-          box_tree = Scenery.box(cache, sized_tree, size_tree)
-          elevated_tree, elevated_box = Scenery.elevate(cache, sized_tree, box_tree)
-          aimed_tree = Scenery.aim(cache, elevated_tree, elevated_box)
-          vbox = Scenery.vbox(cache, aimed_tree, elevated_box)
+    # Polls assets and returns the resulting `Scene`. Pending assets usually show as
+    # a placeholder of some sort.
+    def poll(cache : CacheSet, scenesrc : SceneSource) : Outcome::Accepted(Scene)
+      @@lock.synchronize do
+        Scenery.poll(cache, scenesrc.pending).map do |assets|
+          asset_resn = Scenery.resolve(cache, assets, scenesrc.recognized_root)
+          shaped_root = Scenery.shape(cache, asset_resn)
+          sized_root, size_root = Scenery.size(cache, shaped_root, Cst.new(0, scenesrc.width, 0, scenesrc.height))
+          box_root = Scenery.box(cache, sized_root, size_root)
+          elevated_root, elevated_box = Scenery.elevate(cache, sized_root, box_root)
+          aimed_root = Scenery.aim(cache, elevated_root, elevated_box)
+          vbox = Scenery.vbox(cache, aimed_root, elevated_box)
 
-          Scene.new(width, height, aimed_tree, elevated_box, vbox)
+          Scene.new(scenesrc.width, scenesrc.height, aimed_root, elevated_box, vbox)
         end
       end
+    end
+
+    # Waits for all assets to load (or fail) and returns the resulting `Scene`.
+    def wait(cache : CacheSet, scenesrc : SceneSource) : Outcome::Accepted(Scene)
+      scenesrc.pending.each(&.promise.wait)
+
+      poll(cache, scenesrc)
+    end
+
+    # A shorthand for constructing a scene source (see `scenesrc`) and waiting for
+    # all assets to load.
+    def scene(cache : CacheSet, document : Term, width : Magnitude, height : Magnitude) : Outcome::Accepted(Scene)
+      wait(cache, scenesrc: scenesrc(cache, document, width, height))
     end
 
     # Converts a compiled *scene* to a tree of draw commands. The draw commands can
