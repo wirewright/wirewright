@@ -76,16 +76,22 @@ module Ww
   # more "surgical". Whether or not this needs improvement is a question I am
   # not yet ready to answer.
   #
-  # Instead of polling every second, you can wait for the invalidation of one or more
-  # paths. You are recommended to use `wait` (unless you have reasons to prefer
-  # `PathMonitorService#wait` and its overloads). `wait` is recommended because it
-  # is guaranteed to fire after the invalidation of `PathService`'s cache. This means
-  # you are guaranteed to receive the up-to-date reading/listing of your path
-  # after `wait` returns. On the other hand, if you trigger re-reads based on
-  # something else, `PathService` may not wake up quick enough & invalidate before
-  # you call `read` or `listing`. Thus, you'll receive an outdated (cached) version
-  # and go to sleep again. You should design with this in mind; for example, by
-  # using invalidations sent by `wait` as an additional trigger for wakeups.
+  # Instead of polling (e.g., every second, as in the example above), you can listen
+  # for notifications from the service. See `listen`. You are recommended to use `listen`
+  # for watching files (unless you have reasons to prefer `PathMonitorService#wait` and
+  # its overloads).
+  #
+  # `listen` is recommended, in particular, because it is guaranteed to fire *after*
+  # the invalidation of `PathService`'s cache. Both updates to the cache and removals
+  # from it count as invalidations.
+  #
+  # This means you are guaranteed to receive the up-to-date reading/listing of your path
+  # after `listen` tells you to. On the other hand, if you trigger re-reads based on some
+  # other signal, `PathService` may not wake up quickly enough to invalidate before you
+  # call `read` or `listing` on your own call. Thus, you'll receive an outdated (cached)
+  # version and go to sleep again, ignoring the invalidation that PathService schedules
+  # immediately after. You should design with this in mind; for example, by using
+  # notifications sent by `listen` as an additional trigger for wakeups.
   module PathService
     extend self
 
@@ -370,6 +376,12 @@ module Ww
       @@report_lock.synchronize do
         @@report_workspace.delete(path)
       end
+
+      @@listener_queue_lock.synchronize do
+        @@listener_queues.each do |queue|
+          queue << ReportReady.new(path)
+        end
+      end
     end
 
     # :nodoc:
@@ -386,18 +398,32 @@ module Ww
       @@read_lock.synchronize do
         @@read_workspace.delete(path)
       end
+
+      @@listener_queue_lock.synchronize do
+        @@listener_queues.each do |queue|
+          queue << ReadingReady.new(path)
+        end
+      end
     end
 
-    @@invalidation_queue_lock = Sync::Mutex.new
-    @@invalidation_queues = Set(BlockingQueue(Invalidation)).new.compare_by_identity
+    @@listener_queue_lock = Sync::Mutex.new
+    @@listener_queues = Set(BlockingQueue(Notification)).new.compare_by_identity
 
-    alias Invalidation = ReportInvalidation | ReadingInvalidation
+    alias Notification = ReportInvalid | ReadingInvalid | ReportReady | ReadingReady
 
     # Signals that the `Report` for *path* was invalidated.
-    defrecord ReportInvalidation, path : Path
+    defrecord ReportInvalid, path : Path
 
     # Signals that the `Reading` for *path* was invalidated.
-    defrecord ReadingInvalidation, path : Path
+    defrecord ReadingInvalid, path : Path
+
+    # Signals that a `Report` for *path* is ready; its corresponding promise was
+    # fulfilled and discarded.
+    defrecord ReportReady, path : Path
+
+    # Signals that a `Reading` for *path* is ready; its corresponding promise was
+    # fulfilled and discarded.
+    defrecord ReadingReady, path : Path
 
     # :nodoc:
     def invalidate(path : Path, cls : Report.class) : Nil
@@ -405,9 +431,9 @@ module Ww
         @@report_cache.delete(path)
       end
 
-      @@invalidation_queue_lock.synchronize do
-        @@invalidation_queues.each do |queue|
-          queue << ReportInvalidation.new(path)
+      @@listener_queue_lock.synchronize do
+        @@listener_queues.each do |queue|
+          queue << ReportInvalid.new(path)
         end
       end
     end
@@ -418,9 +444,9 @@ module Ww
         @@read_cache.delete(path)
       end
 
-      @@invalidation_queue_lock.synchronize do
-        @@invalidation_queues.each do |queue|
-          queue << ReadingInvalidation.new(path)
+      @@listener_queue_lock.synchronize do
+        @@listener_queues.each do |queue|
+          queue << ReadingInvalid.new(path)
         end
       end
     end
@@ -564,39 +590,40 @@ module Ww
     end
 
     # Blocks the calling fiber until any of *paths* is invalidated.
-    def wait(& : Invalidation ->) : Nil
-      queue = BlockingQueue(Invalidation).new
+    def listen(& : Notification ->) : Nil
+      queue = BlockingQueue(Notification).new
 
-      @@invalidation_queue_lock.synchronize do
-        @@invalidation_queues << queue
+      @@listener_queue_lock.synchronize do
+        @@listener_queues << queue
       end
 
       begin
         loop do
-          invalidation = queue.shift
-          yield invalidation
+          notification = queue.shift
+          yield notification
         end
       ensure
-        @@invalidation_queue_lock.synchronize do
-          @@invalidation_queues.delete(queue)
+        @@listener_queue_lock.synchronize do
+          @@listener_queues.delete(queue)
         end
       end
     end
 
-    # Blocks the calling fiber until the `Reading` of any path in *paths* is invalidated.
-    def wait_before_reading(paths : Set(Path)) : Nil
-      wait do |invalidation|
-        next unless invalidation.is_a?(ReadingInvalidation)
-        next unless invalidation.path.in?(paths)
+    # Blocks the calling fiber until a notification mentions any path from
+    # the given set of *paths*.
+    def wait(paths : Set(Path))
+      listen do |notification|
+        next unless notification.path.in?(paths)
         break
       end
     end
 
-    # Blocks the calling fiber until the `Listing` of any path in *paths* is invalidated.
-    def wait_before_listing(paths : Set(Path)) : Nil
-      wait do |invalidation|
-        next unless invalidation.is_a?(ListingInvalidation)
-        next unless invalidation.path.in?(paths)
+    # Blocks the calling fiber until a notification whose class is in *mask*
+    # mentions any path from the given set of *paths*.
+    def wait(paths : Set(Path), mask : Enumerable(Notification.class)) : Nil
+      listen do |notification|
+        next unless notification.class.in?(mask)
+        next unless notification.path.in?(paths)
         break
       end
     end
