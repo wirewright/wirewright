@@ -75,6 +75,17 @@ module Ww
   # work. In fact, we are pretty dumb here, preferring full scans over something
   # more "surgical". Whether or not this needs improvement is a question I am
   # not yet ready to answer.
+  #
+  # Instead of polling every second, you can wait for the invalidation of one or more
+  # paths. You are recommended to use `wait` (unless you have reasons to prefer
+  # `PathMonitorService#wait` and its overloads). `wait` is recommended because it
+  # is guaranteed to fire after the invalidation of `PathService`'s cache. This means
+  # you are guaranteed to receive the up-to-date reading/listing of your path
+  # after `wait` returns. On the other hand, if you trigger re-reads based on
+  # something else, `PathService` may not wake up quick enough & invalidate before
+  # you call `read` or `listing`. Thus, you'll receive an outdated (cached) version
+  # and go to sleep again. You should design with this in mind; for example, by
+  # using invalidations sent by `wait` as an additional trigger for wakeups.
   module PathService
     extend self
 
@@ -303,6 +314,48 @@ module Ww
     @@report_workspace = {} of Path => Sync::Future(Report)
     @@report_cache = LRU(Path, Report).new(REPORT_CACHE_CAPACITY)
 
+    @@read_lock = Sync::Mutex.new
+    @@read_workspace = {} of Path => Sync::Future(Reading)
+    @@read_cache = ReadingCache.new
+
+    private class ReadingCache
+      defcase ReadingRef, reading : Reading do
+        # NOTE: Approximate
+        def bytesize : UInt64
+          case tmp = reading
+          in ContentReading then tmp.blob.ubytesize64
+          in DigestReading  then tmp.digest.size.to_u64
+          in Absent         then sizeof(Absent).to_u64
+          end
+        end
+      end
+
+      def initialize
+        @lru = ThresholdLRU(Path, ReadingRef).new(
+          READING_CACHE_CAPACITY,
+          READING_CACHE_THRESHOLD_BYTES,
+        )
+      end
+
+      def get?(path : Path) : Reading?
+        return unless reading_ref = @lru.get?(path)
+
+        reading_ref.reading
+      end
+
+      def put(path : Path, reading : Reading) : Reading
+        @lru.put(path, ReadingRef.new(reading))
+
+        reading
+      end
+
+      def delete(path : Path) : Reading?
+        return unless reading_ref = @lru.delete(path)
+
+        reading_ref.reading
+      end
+    end
+
     # :nodoc:
     def broadcast(path : Path, report : Report, *, as cls : Report.class) : Nil
       result = @@report_lock.synchronize do
@@ -320,9 +373,55 @@ module Ww
     end
 
     # :nodoc:
+    def broadcast(path : Path, reading : Reading, *, as cls : Reading.class) : Nil
+      result = @@read_lock.synchronize do
+        @@read_cache.put(path, reading)
+        @@read_workspace[path]?
+      end
+
+      return unless result # ?!
+
+      result.set(reading)
+
+      @@read_lock.synchronize do
+        @@read_workspace.delete(path)
+      end
+    end
+
+    @@invalidation_queue_lock = Sync::Mutex.new
+    @@invalidation_queues = Set(BlockingQueue(Invalidation)).new.compare_by_identity
+
+    alias Invalidation = ReportInvalidation | ReadingInvalidation
+
+    # Signals that the `Report` for *path* was invalidated.
+    defrecord ReportInvalidation, path : Path
+
+    # Signals that the `Reading` for *path* was invalidated.
+    defrecord ReadingInvalidation, path : Path
+
+    # :nodoc:
     def invalidate(path : Path, cls : Report.class) : Nil
       @@report_lock.synchronize do
         @@report_cache.delete(path)
+      end
+
+      @@invalidation_queue_lock.synchronize do
+        @@invalidation_queues.each do |queue|
+          queue << ReportInvalidation.new(path)
+        end
+      end
+    end
+
+    # :nodoc:
+    def invalidate(path : Path, cls : Reading.class) : Nil
+      @@read_lock.synchronize do
+        @@read_cache.delete(path)
+      end
+
+      @@invalidation_queue_lock.synchronize do
+        @@invalidation_queues.each do |queue|
+          queue << ReadingInvalidation.new(path)
+        end
       end
     end
 
@@ -377,71 +476,6 @@ module Ww
         in Listing then Promise(Listing).accepted(report)
         in Absent  then Promise(Listing).rejected(report.detail)
         end
-      end
-    end
-
-    @@read_lock = Sync::Mutex.new
-    @@read_workspace = {} of Path => Sync::Future(Reading)
-    @@read_cache = ReadingCache.new
-
-    private class ReadingCache
-      defcase ReadingRef, reading : Reading do
-        # NOTE: Approximate
-        def bytesize : UInt64
-          case tmp = reading
-          in ContentReading then tmp.blob.ubytesize64
-          in DigestReading  then tmp.digest.size.to_u64
-          in Absent         then sizeof(Absent).to_u64
-          end
-        end
-      end
-
-      def initialize
-        @lru = ThresholdLRU(Path, ReadingRef).new(
-          READING_CACHE_CAPACITY,
-          READING_CACHE_THRESHOLD_BYTES,
-        )
-      end
-
-      def get?(path : Path) : Reading?
-        return unless reading_ref = @lru.get?(path)
-
-        reading_ref.reading
-      end
-
-      def put(path : Path, reading : Reading) : Reading
-        @lru.put(path, ReadingRef.new(reading))
-
-        reading
-      end
-
-      def delete(path : Path) : Reading?
-        return unless reading_ref = @lru.delete(path)
-
-        reading_ref.reading
-      end
-    end
-
-    # :nodoc:
-    def broadcast(path : Path, reading : Reading, *, as cls : Reading.class) : Nil
-      result = @@read_lock.synchronize do
-        @@read_cache.put(path, reading)
-        @@read_workspace[path]?
-      end
-
-      return unless result # ?!
-
-      result.set(reading)
-
-      @@read_lock.synchronize do
-        @@read_workspace.delete(path)
-      end
-    end
-
-    # :nodoc:
-    def invalidate(path : Path, cls : Reading.class) : Nil
-      @@read_lock.synchronize do
-        @@read_cache.delete(path)
       end
     end
 
@@ -527,6 +561,44 @@ module Ww
 
       invalidate(path, Report)
       invalidate(path, Reading)
+    end
+
+    # Blocks the calling fiber until any of *paths* is invalidated.
+    def wait(& : Invalidation ->) : Nil
+      queue = BlockingQueue(Invalidation).new
+
+      @@invalidation_queue_lock.synchronize do
+        @@invalidation_queues << queue
+      end
+
+      begin
+        loop do
+          invalidation = queue.shift
+          yield invalidation
+        end
+      ensure
+        @@invalidation_queue_lock.synchronize do
+          @@invalidation_queues.delete(queue)
+        end
+      end
+    end
+
+    # Blocks the calling fiber until the `Reading` of any path in *paths* is invalidated.
+    def wait_before_reading(paths : Set(Path)) : Nil
+      wait do |invalidation|
+        next unless invalidation.is_a?(ReadingInvalidation)
+        next unless invalidation.path.in?(paths)
+        break
+      end
+    end
+
+    # Blocks the calling fiber until the `Listing` of any path in *paths* is invalidated.
+    def wait_before_listing(paths : Set(Path)) : Nil
+      wait do |invalidation|
+        next unless invalidation.is_a?(ListingInvalidation)
+        next unless invalidation.path.in?(paths)
+        break
+      end
     end
 
     # Performs an atomic write of *blob* at *path* on the service's message loop
