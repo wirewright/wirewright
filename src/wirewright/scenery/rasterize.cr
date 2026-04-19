@@ -40,13 +40,13 @@ module Ww::Scenery
     diff(command0.child, command1.child)
   end
 
-  # FIXME: This is probably not valid!
   private def diffx(command0 : DrawClip, command1 : DrawClip) : Slice(Rect)
     unless command0.visible == command1.visible
       return Slice[command0.bounds, command1.bounds]
     end
 
-    diff(command0.child, command1.child)
+    child_dirty_rects = diff(command0.child, command1.child)
+    child_dirty_rects.map { |dirty_rect| Rect.intersection(command1.visible.bounds, dirty_rect) }
   end
 
   private def diffx(command0 : DrawCommand, command1 : DrawCommand) : Slice(Rect)
