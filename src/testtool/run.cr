@@ -232,7 +232,7 @@ module Testtool
     in_instance = Alloy.compose(in_ruleset, Term[], Alloy.template(Term[], Term.of(in_rest)))
 
     scene, ppm = measure(stat) do
-      cache = Scenery::Safe.cache_set
+      cache = Scenery::Safe.cache
       scene = Scenery::Safe.scene(cache, in_instance, test.width, test.height).unwrap
       raster = Scenery::Safe.rasterize(cache, scene, backdrop: test.backdrop)
       {scene, raster.to_ppm}

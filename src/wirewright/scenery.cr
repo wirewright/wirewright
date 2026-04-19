@@ -56,8 +56,8 @@ module Ww::Scenery
     # the same cache set from different fibers-- since at any point, either `CacheSet`
     # is not being mutated, or it is being mutated by the single fiber that currently
     # has access to `Scenery` due to `Safe`.
-    def cache_set : CacheSet
-      Scenery.cache_set
+    def cache : CacheSet
+      CacheSet.new
     end
 
     # Compiles a *document* into a scene.

@@ -83,9 +83,4 @@ module Ww::Scenery
       @depict = GenerationalCache({AimedNode, OriginBox}, DrawCommand).new
     end
   end
-
-  # See `Safe.cache_set`.
-  def cache_set : CacheSet
-    CacheSet.new
-  end
 end
