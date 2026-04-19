@@ -270,8 +270,8 @@ module Ww
     # Blocks the calling fiber until a notification mentions any path from
     # the given set of *paths*.
     def wait(paths : Set(Path)) : Nil
-      listen do |msg|
-        next unless msg.path.in?(paths)
+      listen do |notification|
+        next unless notification.path.in?(paths)
         break
       end
     end
@@ -279,9 +279,9 @@ module Ww
     # Blocks the calling fiber until a notification whose class is in *mask*
     # mentions any path from the given set of *paths*.
     def wait(paths : Set(Path), mask : Enumerable(Notification.class)) : Nil
-      listen do |msg|
-        next unless msg.class.in?(mask)
-        next unless msg.path.in?(paths)
+      listen do |notification|
+        next unless notification.class.in?(mask)
+        next unless notification.path.in?(paths)
         break
       end
     end
