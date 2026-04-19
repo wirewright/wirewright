@@ -229,13 +229,13 @@ module Ww
       end
     end
 
-    @@listeners_lock = Sync::Mutex.new
-    @@listeners_list = Set(BlockingQueue(Notification)).new
+    @@listener_queue_lock = Sync::Mutex.new
+    @@listener_queues = Set(BlockingQueue(Notification)).new.compare_by_identity
 
     # :nodoc:
     def broadcast(notification : Notification) : Nil
-      @@listeners_lock.synchronize do
-        @@listeners_list.each do |queue|
+      @@listener_queue_lock.synchronize do
+        @@listener_queues.each do |queue|
           queue << notification
         end
       end
@@ -246,8 +246,8 @@ module Ww
     def listen(& : Notification ->)
       queue = BlockingQueue(Notification).new
 
-      @@listeners_lock.synchronize do
-        @@listeners_list << queue
+      @@listener_queue_lock.synchronize do
+        @@listener_queues << queue
       end
 
       begin
@@ -256,8 +256,8 @@ module Ww
           yield notification
         end
       ensure
-        @@listeners_lock.synchronize do
-          @@listeners_list.delete(queue)
+        @@listener_queue_lock.synchronize do
+          @@listener_queues.delete(queue)
         end
       end
     end
