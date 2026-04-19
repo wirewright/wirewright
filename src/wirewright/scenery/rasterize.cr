@@ -40,6 +40,7 @@ module Ww::Scenery
     diff(command0.child, command1.child)
   end
 
+  # FIXME: This is probably not valid!
   private def diffx(command0 : DrawClip, command1 : DrawClip) : Slice(Rect)
     unless command0.visible == command1.visible
       return Slice[command0.bounds, command1.bounds]
@@ -210,7 +211,7 @@ module Ww::Scenery
     PlutoVG.canvas_save(canvas)
     rasterize_add_rrect(canvas, command.visible)
     PlutoVG.canvas_clip(canvas)
-    rasterize(canvas, command.child, dirty)
+    rasterize(canvas, command.child, Rect.intersection(command.visible.bounds, dirty))
     PlutoVG.canvas_restore(canvas)
   end
 

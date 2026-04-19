@@ -110,8 +110,7 @@ module Ww::Scenery
     # *cache* is the cache set to use (see `cache_set`).
     def depict(cache : CacheSet, scene : Scene) : DrawCommand
       @@lock.synchronize do
-        command = Scenery.depict(cache, scene.root, scene.box)
-        Scenery.prune(command, Rect[0, 0, scene.width, scene.height])
+        Scenery.depict(cache, scene.root, scene.box)
       end
     end
 
@@ -268,7 +267,6 @@ require "./scenery/elevate"
 require "./scenery/aim"
 require "./scenery/vbox"
 require "./scenery/depict"
-require "./scenery/prune"
 require "./scenery/pixel"
 require "./scenery/pixel_rect"
 require "./scenery/rasterize"
